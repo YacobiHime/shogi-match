@@ -24,9 +24,10 @@ export const boardParams = {
       "box-shadow": "inset 0 0 0 4px rgba(255, 255, 255, 0.78)",
     },
     legalDestination: {
-      "background-color": "rgba(255, 255, 255, 0.38)",
+      background:
+        "radial-gradient(ellipse at center, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.07) 48%, rgba(255, 255, 255, 0.14) 72%, rgba(255, 239, 190, 0.24) 90%, rgba(222, 171, 54, 0.4) 100%)",
       "box-shadow":
-        "inset 0 0 0 4px rgba(255, 255, 255, 0.88), 0 0 8px 2px rgba(255, 255, 255, 0.62)",
+        "inset 0 0 10px 1px rgba(255, 255, 255, 0.38), inset 0 0 0 3px rgba(218, 164, 43, 0.88)",
     },
     lastMoveTo: { "background-color": "#44cc44", opacity: "0.8" },
     lastMoveFrom: { "background-color": "#44cc44", opacity: "0.4" },
