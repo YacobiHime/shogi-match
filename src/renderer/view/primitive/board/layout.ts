@@ -66,6 +66,7 @@ export type BoardSquare = {
   style: { [key: string]: string };
   backgroundStyle: { [key: string]: string };
   selectionStyle: { [key: string]: string };
+  selectionClass: string;
 };
 
 export type Promotion = {

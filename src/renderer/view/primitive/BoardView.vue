@@ -45,6 +45,7 @@
         <div
           v-for="square in board.squares"
           :key="'selection-' + square.id"
+          :class="square.selectionClass"
           :style="square.selectionStyle"
         ></div>
       </div>
@@ -1115,6 +1116,34 @@ const whitePlayerTimeSeverity = computed(() => {
 }
 .board-background.drop-shadows {
   box-shadow: 3px 3px 6px var(--shadow-color);
+}
+.legal-destination::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.07) 48%,
+    rgba(255, 250, 232, 0.15) 76%,
+    rgba(255, 238, 184, 0.2) 100%
+  );
+  animation: legal-destination-breathe 3.2s ease-in-out infinite;
+}
+@keyframes legal-destination-breathe {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .legal-destination::after {
+    animation: none;
+    opacity: 0.72;
+  }
 }
 .hand > * {
   position: absolute;

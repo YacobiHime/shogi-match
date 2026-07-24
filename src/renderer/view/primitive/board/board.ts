@@ -208,23 +208,22 @@ export class BoardLayoutBuilder {
           ...boardParams.highlight.lastMoveFrom,
         };
       }
-      if (legalDestinations.some((destination) => destination.equals(square))) {
-        backgroundStyle = {
-          ...backgroundStyle,
-          ...boardParams.highlight.legalDestination,
-        };
-      }
+      const isLegalDestination = legalDestinations.some((destination) =>
+        destination.equals(square),
+      );
       let selectionStyle = { ...style, display: "none" };
+      let selectionClass = "";
       if (pointer) {
         selectionStyle = {
           ...style,
           ...boardParams.highlight.selectionDimmer,
         };
-        if (legalDestinations.some((destination) => destination.equals(square))) {
+        if (isLegalDestination) {
           selectionStyle = {
             ...style,
             ...boardParams.highlight.legalDestination,
           };
+          selectionClass = "legal-destination";
         } else if (pointer instanceof Square && pointer.equals(square)) {
           selectionStyle = {
             ...style,
@@ -239,6 +238,7 @@ export class BoardLayoutBuilder {
         style,
         backgroundStyle,
         selectionStyle,
+        selectionClass,
       });
     });
     return squares;

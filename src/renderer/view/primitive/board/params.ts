@@ -25,7 +25,7 @@ export const boardParams = {
     },
     legalDestination: {
       background:
-        "radial-gradient(ellipse at center, rgba(255, 255, 255, 0.02) 0%, rgba(255, 250, 232, 0.06) 48%, rgba(255, 240, 190, 0.13) 72%, rgba(246, 207, 112, 0.24) 89%, rgba(166, 111, 18, 0.38) 100%)",
+        "radial-gradient(ellipse at center, rgba(255, 248, 220, 0.01) 0%, rgba(244, 206, 112, 0.05) 60%, rgba(218, 165, 57, 0.16) 88%, rgba(135, 86, 11, 0.32) 100%)",
       "box-shadow":
         "inset 0 0 9px 1px rgba(255, 232, 158, 0.42), inset 0 0 0 2px rgba(224, 178, 70, 0.96), inset 0 0 0 3px rgba(104, 63, 8, 0.88)",
     },
