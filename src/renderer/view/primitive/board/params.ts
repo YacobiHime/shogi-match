@@ -17,16 +17,16 @@ export const boardParams = {
   highlight: {
     selected: { "background-color": "#0088ff", opacity: "0.8" },
     selectionDimmer: {
-      "background-color": "rgba(0, 0, 0, 0.55)",
+      "background-color": "rgba(0, 0, 0, 0.34)",
     },
     selectedSource: {
-      "background-color": "rgba(255, 255, 255, 0.14)",
-      "box-shadow": "inset 0 0 0 6px rgba(255, 255, 255, 0.95)",
+      "background-color": "rgba(255, 255, 255, 0.08)",
+      "box-shadow": "inset 0 0 0 4px rgba(255, 255, 255, 0.78)",
     },
     legalDestination: {
-      "background-color": "rgba(255, 255, 255, 0.74)",
+      "background-color": "rgba(255, 255, 255, 0.38)",
       "box-shadow":
-        "inset 0 0 0 5px rgba(255, 255, 255, 1), 0 0 16px 5px rgba(255, 255, 255, 0.95)",
+        "inset 0 0 0 4px rgba(255, 255, 255, 0.88), 0 0 8px 2px rgba(255, 255, 255, 0.62)",
     },
     lastMoveTo: { "background-color": "#44cc44", opacity: "0.8" },
     lastMoveFrom: { "background-color": "#44cc44", opacity: "0.4" },
