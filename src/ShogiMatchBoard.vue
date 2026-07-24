@@ -32,12 +32,12 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Move } from "tsshogi";
 import BoardView from "./renderer/view/primitive/BoardView.vue";
 import { RectSize } from "./common/assets/geometry";
 import {
   CandidateInput,
   candidateMovesFromUsi,
+  lastMoveFromUsi,
   positionFromSfen,
 } from "./position";
 import {
@@ -85,8 +85,9 @@ const position = computed(() => {
     return null;
   }
 });
-const toMove = (usi: string): Move | null => position.value?.createMoveByUSI(usi) || null;
-const lastMoveObject = computed(() => props.lastMove ? toMove(props.lastMove) : null);
+const lastMoveObject = computed(() =>
+  position.value && props.lastMove ? lastMoveFromUsi(position.value, props.lastMove) : null
+);
 const candidateMoves = computed(() =>
   position.value ? candidateMovesFromUsi(position.value, props.candidates) : []
 );

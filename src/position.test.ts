@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { candidateMovesFromUsi, positionFromSfen } from "./position";
+import {
+  candidateMovesFromUsi,
+  lastMoveFromUsi,
+  positionFromSfen,
+} from "./position";
 
 const START_SFEN =
   "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
@@ -16,5 +20,18 @@ describe("ShogiHome board adapter contract", () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0].move.usi).toBe("7g7f");
     expect(candidates[0].score).toBe(120);
+  });
+
+  it("restores the last move from the position after that move", () => {
+    const position = positionFromSfen(START_SFEN) as ReturnType<typeof positionFromSfen> & {
+      doMove: (move: NonNullable<ReturnType<typeof positionFromSfen>["createMoveByUSI"]>) => boolean;
+    };
+    const move = position.createMoveByUSI("7g7f");
+    expect(move).not.toBeNull();
+    expect(position.doMove(move!)).toBe(true);
+
+    const lastMove = lastMoveFromUsi(position, "7g7f");
+    expect(lastMove?.from.usi).toBe("7g");
+    expect(lastMove?.to.usi).toBe("7f");
   });
 });
