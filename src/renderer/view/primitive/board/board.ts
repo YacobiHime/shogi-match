@@ -214,11 +214,23 @@ export class BoardLayoutBuilder {
           ...boardParams.highlight.legalDestination,
         };
       }
-      if (pointer instanceof Square && pointer.equals(square)) {
-        backgroundStyle = {
-          ...backgroundStyle,
-          ...boardParams.highlight.selected,
+      let selectionStyle = { ...style, display: "none" };
+      if (pointer) {
+        selectionStyle = {
+          ...style,
+          ...boardParams.highlight.selectionDimmer,
         };
+        if (legalDestinations.some((destination) => destination.equals(square))) {
+          selectionStyle = {
+            ...style,
+            ...boardParams.highlight.legalDestination,
+          };
+        } else if (pointer instanceof Square && pointer.equals(square)) {
+          selectionStyle = {
+            ...style,
+            ...boardParams.highlight.selectedSource,
+          };
+        }
       }
       squares.push({
         id,
@@ -226,6 +238,7 @@ export class BoardLayoutBuilder {
         rank,
         style,
         backgroundStyle,
+        selectionStyle,
       });
     });
     return squares;

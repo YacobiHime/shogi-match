@@ -42,6 +42,11 @@
         <div v-for="label in board.labels" :key="label.id" :style="label.style">
           {{ label.character }}
         </div>
+        <div
+          v-for="square in board.squares"
+          :key="'selection-' + square.id"
+          :style="square.selectionStyle"
+        ></div>
       </div>
 
       <!-- 先手の駒台 -->
