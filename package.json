@@ -1,9 +1,10 @@
 {
   "name": "@yacobihime/shogi-match-ui",
-  "version": "0.1.0",
-  "description": "Reusable browser shogi board UI with SFEN input and USI move events.",
+  "version": "0.2.0",
+  "description": "Reusable ShogiHome board UI with SFEN input, USI events, and candidate arrows.",
   "type": "module",
   "license": "MIT",
+  "files": ["dist", "public", "LICENSE", "NOTICE.md", "README.md"],
   "scripts": {
     "build": "vite build",
     "test": "vitest run"
