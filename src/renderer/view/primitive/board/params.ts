@@ -16,6 +16,10 @@ export const boardParams = {
   topPiecePadding: 18.5,
   highlight: {
     selected: { "background-color": "#0088ff", opacity: "0.8" },
+    legalDestination: {
+      "background-color": "rgba(20, 135, 255, 0.28)",
+      "box-shadow": "inset 0 0 0 7px rgba(0, 92, 190, 0.9)",
+    },
     lastMoveTo: { "background-color": "#44cc44", opacity: "0.8" },
     lastMoveFrom: { "background-color": "#44cc44", opacity: "0.4" },
   },

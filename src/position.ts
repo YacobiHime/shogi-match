@@ -25,6 +25,17 @@ export function candidateMovesFromUsi(
   });
 }
 
+export function legalDestinationSquares(
+  position: ImmutablePosition,
+  source: Square | PieceType,
+): Square[] {
+  return Square.all.filter((square) => {
+    const move = position.createMove(source, square);
+    return move !== null &&
+      (position.isValidMove(move) || position.isValidMove(move.withPromote()));
+  });
+}
+
 export function lastMoveFromUsi(
   position: ImmutablePosition,
   usi: string,

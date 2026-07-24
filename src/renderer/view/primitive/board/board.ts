@@ -169,7 +169,11 @@ export class BoardLayoutBuilder {
     return pieces;
   }
 
-  private getSquares(lastMove?: Move | null, pointer?: Square | Piece | null): BoardSquare[] {
+  private getSquares(
+    lastMove?: Move | null,
+    pointer?: Square | Piece | null,
+    legalDestinations: Square[] = [],
+  ): BoardSquare[] {
     const squares: BoardSquare[] = [];
     Square.all.forEach((square) => {
       const id = square.index;
@@ -202,6 +206,12 @@ export class BoardLayoutBuilder {
         backgroundStyle = {
           ...backgroundStyle,
           ...boardParams.highlight.lastMoveFrom,
+        };
+      }
+      if (legalDestinations.some((destination) => destination.equals(square))) {
+        backgroundStyle = {
+          ...backgroundStyle,
+          ...boardParams.highlight.legalDestination,
         };
       }
       if (pointer instanceof Square && pointer.equals(square)) {
@@ -279,13 +289,14 @@ export class BoardLayoutBuilder {
     pointer?: Square | Piece | null,
     reservedMoveForPromotion?: Move | null,
     dragSourceSquare?: Square,
+    legalDestinations: Square[] = [],
   ): Board {
     const [promote, doNotPromote] = this.getPromotionControls(reservedMoveForPromotion);
     return {
       background: this.background,
       labels: this.labels,
       pieces: this.getPieces(board, dragSourceSquare),
-      squares: this.getSquares(lastMove, pointer),
+      squares: this.getSquares(lastMove, pointer, legalDestinations),
       promote,
       doNotPromote,
     };
