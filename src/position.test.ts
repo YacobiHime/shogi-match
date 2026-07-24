@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   candidateMovesFromUsi,
+  legalDestinationSquares,
   lastMoveFromUsi,
   positionFromSfen,
 } from "./position";
+import { PieceType, Square } from "tsshogi";
 
 const START_SFEN =
   "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
@@ -33,5 +35,13 @@ describe("ShogiHome board adapter contract", () => {
     const lastMove = lastMoveFromUsi(position, "7g7f");
     expect(lastMove?.from.usi).toBe("7g");
     expect(lastMove?.to.usi).toBe("7f");
+  });
+
+  it("lists legal destinations for board pieces and drops", () => {
+    const position = positionFromSfen(START_SFEN);
+
+    expect(legalDestinationSquares(position, new Square(7, 7)).map((square) => square.usi))
+      .toEqual(["7f"]);
+    expect(legalDestinationSquares(position, PieceType.PAWN)).toEqual([]);
   });
 });

@@ -245,6 +245,7 @@ import { BoardLayoutType } from "@/common/settings/layout";
 import { CompactLayoutBuilder } from "./board/compact";
 import BoardGrid from "./BoardGrid.vue";
 import { t } from "@/common/i18n";
+import { legalDestinationSquares } from "@/position";
 import {
   boardParams,
   commonParams,
@@ -924,12 +925,23 @@ const boardLayoutBuilder = computed(() => {
 
 const board = computed(() => {
   const dragSourceSquare = drag.active && drag.source instanceof Square ? drag.source : undefined;
+  const selectedSource =
+    state.pointer instanceof Square
+      ? state.pointer
+      : state.pointer instanceof Piece
+        ? state.pointer.type
+        : null;
+  const legalDestinations =
+    props.allowMove && selectedSource !== null
+      ? legalDestinationSquares(props.position, selectedSource)
+      : [];
   return boardLayoutBuilder.value.build(
     props.position.board,
     props.lastMove,
     state.pointer,
     state.reservedMove,
     dragSourceSquare,
+    legalDestinations,
   );
 });
 
