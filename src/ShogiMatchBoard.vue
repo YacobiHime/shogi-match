@@ -99,8 +99,10 @@ function onResize(size: RectSize) {
 }
 function measure() {
   if (!root.value) return;
-  const width = Math.max(280, root.value.clientWidth || 900);
-  maxSize.value = new RectSize(width, Math.min(760, Math.max(420, width * 0.68)));
+  const width = Math.round(Math.max(280, root.value.clientWidth || 900));
+  const height = Math.round(Math.min(760, Math.max(420, width * 0.68)));
+  if (maxSize.value.width === width && maxSize.value.height === height) return;
+  maxSize.value = new RectSize(width, height);
 }
 onMounted(() => {
   measure();
