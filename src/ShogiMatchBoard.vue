@@ -65,7 +65,7 @@ const props = defineProps({
 });
 const emit = defineEmits(["usi-move", "invalid-sfen", "resize"]);
 const root = ref<HTMLElement | null>(null);
-const maxSize = ref(new RectSize(720, 520));
+const maxSize = ref(new RectSize(900, 620));
 let resizeObserver: ResizeObserver | undefined;
 
 const normalizedAssetBase = computed(() => props.assetBaseUrl.replace(/\/$/, ""));
@@ -99,8 +99,8 @@ function onResize(size: RectSize) {
 }
 function measure() {
   if (!root.value) return;
-  const width = Math.max(280, root.value.clientWidth || 720);
-  maxSize.value = new RectSize(width, Math.min(620, Math.max(360, width * 0.72)));
+  const width = Math.max(280, root.value.clientWidth || 900);
+  maxSize.value = new RectSize(width, Math.min(760, Math.max(420, width * 0.68)));
 }
 onMounted(() => {
   measure();
