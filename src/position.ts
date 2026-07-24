@@ -21,7 +21,11 @@ export function candidateMovesFromUsi(
 ): CandidateMove[] {
   return candidates.flatMap((candidate) => {
     const move = position.createMoveByUSI(candidate.usi);
-    return move ? [{ move, score: candidate.score }] : [];
+    const score =
+      typeof candidate.score === "number" && Number.isFinite(candidate.score)
+        ? candidate.score
+        : undefined;
+    return move ? [{ move, score }] : [];
   });
 }
 
