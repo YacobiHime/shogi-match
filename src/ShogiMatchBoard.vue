@@ -1,67 +1,134 @@
 <template>
-  <section class="match-board" :class="{ flipped: flip }" aria-label="将棋盤">
-    <div class="hand white"><button v-for="entry in whiteHand" :key="entry.type" :disabled="!canSelectHand('white', entry.type)" @click="selectHand('white', entry.type)">{{ label(entry.type) }}{{ entry.count > 1 ? entry.count : '' }}</button></div>
-    <div class="grid" role="grid">
-      <button v-for="square in squares" :key="square.id" class="square" :class="{ selected: selected?.id === square.id }" :aria-label="square.id" @click="selectSquare(square)">
-        <img v-if="square.piece" :src="imageUrl(square.piece)" :alt="label(square.piece.type)" @error="hideImage" />
-        <span v-if="square.piece" class="fallback">{{ label(square.piece.type) }}</span>
-      </button>
-    </div>
-    <div class="hand black"><button v-for="entry in blackHand" :key="entry.type" :disabled="!canSelectHand('black', entry.type)" @click="selectHand('black', entry.type)">{{ label(entry.type) }}{{ entry.count > 1 ? entry.count : '' }}</button></div>
-    <div v-if="promotion" class="promotion" role="dialog" aria-label="成りの選択"><button @click="emitMove(false)">成らない</button><button @click="emitMove(true)">成る</button></div>
-  </section>
+  <div ref="root" class="shogi-match-root">
+    <BoardView
+      v-if="position"
+      :layout-type="layoutType"
+      :board-image-type="BoardImageType.CUSTOM_IMAGE"
+      :custom-board-image-url="`${normalizedAssetBase}/board/wood_light2.png`"
+      :piece-image-url-template="pieceImageTemplate"
+      :king-piece-type="KingPieceType.GYOKU_AND_OSHO"
+      :piece-stand-image-type="PieceStandImageType.CUSTOM_IMAGE"
+      :custom-piece-stand-image-url="`${normalizedAssetBase}/stand/wood_dark.png`"
+      :hand-piece-order="HandPieceOrder.STRONGER_TO_LEFT"
+      :promotion-selector-style="PromotionSelectorStyle.HORIZONTAL"
+      :board-label-type="BoardLabelType.STANDARD"
+      :max-size="maxSize"
+      :position="position"
+      :last-move="lastMoveObject"
+      :candidates="candidateMoves"
+      :flip="flip"
+      :mobile="mobile"
+      :allow-move="allowMove"
+      :enable-drag-and-drop="enableDragAndDrop"
+      :black-player-name="blackPlayerName"
+      :white-player-name="whitePlayerName"
+      :arrow-image-url="`${normalizedAssetBase}/arrow/arrow.svg`"
+      @move="onMove"
+      @resize="onResize"
+    />
+    <p v-else class="error" role="alert">局面を表示できません。</p>
+  </div>
 </template>
 
-<script setup>
-import { computed, ref, watch } from "vue";
-import { Color, Piece, PieceType, Position, Square } from "tsshogi";
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { Move } from "tsshogi";
+import BoardView from "./renderer/view/primitive/BoardView.vue";
+import { RectSize } from "./common/assets/geometry";
+import {
+  CandidateInput,
+  candidateMovesFromUsi,
+  positionFromSfen,
+} from "./position";
+import {
+  BoardImageType,
+  BoardLabelType,
+  HandPieceOrder,
+  KingPieceType,
+  PieceStandImageType,
+  PromotionSelectorStyle,
+} from "./common/settings/app";
+import { BoardLayoutType } from "./common/settings/layout";
 
 const props = defineProps({
   sfen: { type: String, required: true },
+  candidates: { type: Array as () => CandidateInput[], default: () => [] },
+  lastMove: { type: String, default: "" },
   allowMove: { type: Boolean, default: true },
+  enableDragAndDrop: { type: Boolean, default: true },
   flip: { type: Boolean, default: false },
-  assetBaseUrl: { type: String, default: "https://sunfish-shogi.github.io/shogi-images/hitomoji/" },
+  mobile: { type: Boolean, default: false },
+  layout: { type: String, default: BoardLayoutType.STANDARD },
+  assetBaseUrl: { type: String, default: "." },
+  blackPlayerName: { type: String, default: "先手" },
+  whitePlayerName: { type: String, default: "後手" },
 });
-const emit = defineEmits(["usi-move", "invalid-sfen"]);
-const selected = ref(null);
-const promotion = ref(null);
-const position = computed(() => {
-  try { return Position.newBySFEN(props.sfen); } catch (error) { emit("invalid-sfen", error); return null; }
-});
-watch(() => props.sfen, () => { selected.value = null; promotion.value = null; });
+const emit = defineEmits(["usi-move", "invalid-sfen", "resize"]);
+const root = ref<HTMLElement | null>(null);
+const maxSize = ref(new RectSize(720, 520));
+let resizeObserver: ResizeObserver | undefined;
 
-const typeNames = { pawn: "歩", lance: "香", knight: "桂", silver: "銀", gold: "金", bishop: "角", rook: "飛", king: "王", promPawn: "と", promLance: "杏", promKnight: "圭", promSilver: "全", horse: "馬", dragon: "龍" };
-const fileName = { pawn: "pawn", lance: "lance", knight: "knight", silver: "silver", gold: "gold", bishop: "bishop", rook: "rook", king: "king", promPawn: "tokin", promLance: "promoted_lance", promKnight: "promoted_knight", promSilver: "promoted_silver", horse: "horse", dragon: "dragon" };
-const files = [9,8,7,6,5,4,3,2,1];
-const ranks = [1,2,3,4,5,6,7,8,9];
-const squares = computed(() => position.value ? ranks.flatMap((rank) => files.map((file) => {
-  const square = new Square(file, rank); const piece = position.value.board.at(square);
-  return { id: `${file}${String.fromCharCode(96 + rank)}`, square, piece };
-})) : []);
-const hand = (color) => Object.values(PieceType).filter((type) => typeof type === "string").map((type) => ({ type, count: position.value?.hand(color).count(type) || 0 })).filter((entry) => entry.count);
-const blackHand = computed(() => hand(Color.BLACK));
-const whiteHand = computed(() => hand(Color.WHITE));
-const label = (type) => typeNames[type] || type;
-const imageUrl = (piece) => `${props.assetBaseUrl}${piece.color === Color.BLACK ? "black" : "white"}_${fileName[piece.type]}.png`;
-const hideImage = (event) => { event.target.style.display = "none"; };
-const canSelectHand = (color, type) => props.allowMove && position.value?.color === (color === "black" ? Color.BLACK : Color.WHITE) && position.value.hand(color === "black" ? Color.BLACK : Color.WHITE).count(type) > 0;
-const selectHand = (color, type) => { selected.value = new Piece(color === "black" ? Color.BLACK : Color.WHITE, type); };
-function selectSquare(target) {
-  if (!props.allowMove || !position.value) return;
-  if (!selected.value) { if (target.piece?.color === position.value.color) selected.value = target.square; return; }
-  const from = selected.value instanceof Square ? selected.value : selected.value.type;
-  const move = position.value.createMove(from, target.square);
-  selected.value = null;
-  if (!move) return;
-  const normal = position.value.isValidMove(move);
-  const promoted = position.value.isValidMove(move.withPromote());
-  if (normal && promoted) promotion.value = move;
-  else if (normal) emit("usi-move", move.usi);
-  else if (promoted) emit("usi-move", move.withPromote().usi);
+const normalizedAssetBase = computed(() => props.assetBaseUrl.replace(/\/$/, ""));
+const pieceImageTemplate = computed(
+  () => `${normalizedAssetBase.value}/piece/hitomoji_wood/\${piece}.png`,
+);
+const layoutType = computed(() =>
+  Object.values(BoardLayoutType).includes(props.layout as BoardLayoutType)
+    ? props.layout as BoardLayoutType
+    : BoardLayoutType.STANDARD,
+);
+const position = computed(() => {
+  try {
+    return positionFromSfen(props.sfen);
+  } catch (error) {
+    emit("invalid-sfen", error);
+    return null;
+  }
+});
+const toMove = (usi: string): Move | null => position.value?.createMoveByUSI(usi) || null;
+const lastMoveObject = computed(() => props.lastMove ? toMove(props.lastMove) : null);
+const candidateMoves = computed(() =>
+  position.value ? candidateMovesFromUsi(position.value, props.candidates) : []
+);
+
+function onMove(move: Move) {
+  emit("usi-move", move.usi);
 }
-function emitMove(promote) { emit("usi-move", promote ? promotion.value.withPromote().usi : promotion.value.usi); promotion.value = null; }
+function onResize(size: RectSize) {
+  emit("resize", { width: size.width, height: size.height });
+}
+function measure() {
+  if (!root.value) return;
+  const width = Math.max(280, root.value.clientWidth || 720);
+  maxSize.value = new RectSize(width, Math.min(620, Math.max(360, width * 0.72)));
+}
+onMounted(() => {
+  measure();
+  resizeObserver = new ResizeObserver(measure);
+  if (root.value) resizeObserver.observe(root.value);
+});
+onBeforeUnmount(() => resizeObserver?.disconnect());
+watch(() => props.sfen, () => measure());
 </script>
 
 <style>
-:host { display: block; } .match-board { position: relative; display: grid; grid-template-columns: 1fr minmax(0, 9fr) 1fr; gap: .4rem; max-width: 720px; margin: auto; color: #2b1609; } .grid { aspect-ratio: 1; display: grid; grid-template-columns: repeat(9, 1fr); border: 4px solid #71401e; background: #d9a85e; } .square { position: relative; border: .5px solid #71401e; padding: 0; background: transparent; cursor: pointer; } .square.selected { outline: 3px solid #e34f26; outline-offset: -3px; } img,.fallback { position: absolute; inset: 4%; width: 92%; height: 92%; object-fit: contain; } .fallback { display: grid; place-items: center; font: 700 clamp(14px, 3.6vw, 32px) serif; } img + .fallback { display: none; } .hand { display: flex; flex-direction: column; gap: .25rem; justify-content: center; } .hand button,.promotion button { border: 1px solid #71401e; border-radius: .25rem; background: #f2d89f; padding: .35rem; color: inherit; font-weight: 700; } .promotion { position: absolute; inset: 35% 20%; display: grid; place-content: center; gap: .5rem; padding: 1rem; background: #fff7e8; border: 3px solid #71401e; box-shadow: 0 3px 16px #0008; } .flipped .grid { transform: rotate(180deg); } .flipped .square img,.flipped .fallback { transform: rotate(180deg); }
+:host { display: block; width: 100%; }
+.shogi-match-root {
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  --text-color: black;
+  --text-bg-color: white;
+  --text-bg-color-warning: #ffff88;
+  --text-bg-color-danger: red;
+  --text-color-danger: white;
+  --promote-bg-color: white;
+  --not-promote-bg-color: gray;
+  --turn-label-color: lightyellow;
+  --turn-label-bg-color: #2424e6;
+  --turn-label-border-color: midnightblue;
+  width: 100%;
+  min-height: 360px;
+  overflow: hidden;
+}
+.shogi-match-root .full { width: 100%; height: 100%; }
+.error { padding: 1rem; color: #b91c1c; background: #fee2e2; }
 </style>
