@@ -24,6 +24,13 @@ describe("ShogiHome board adapter contract", () => {
     expect(candidates[0].score).toBe(120);
   });
 
+  it("omits non-finite candidate scores from arrow labels", () => {
+    const position = positionFromSfen(START_SFEN);
+    const candidates = candidateMovesFromUsi(position, [{ usi: "7g7f", score: Number.NaN }]);
+
+    expect(candidates[0].score).toBeUndefined();
+  });
+
   it("restores the last move from the position after that move", () => {
     const position = positionFromSfen(START_SFEN) as ReturnType<typeof positionFromSfen> & {
       doMove: (move: NonNullable<ReturnType<typeof positionFromSfen>["createMoveByUSI"]>) => boolean;
