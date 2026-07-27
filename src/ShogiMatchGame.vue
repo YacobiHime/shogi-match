@@ -1,7 +1,7 @@
 <template>
   <section class="shogi-game" aria-label="将棋対局">
     <header class="shogi-game__header">
-      <div>
+      <div class="shogi-game__status" aria-live="polite">
         <strong>{{ statusText }}</strong>
         <span class="shogi-game__meta">{{ modeText }}・{{ moveCount }}手</span>
       </div>
@@ -161,6 +161,7 @@ const statusText = computed(() => {
     return result.value.winner === Color.BLACK ? "先手の勝ち" : "後手の勝ち";
   }
   if (normalizedMode.value === "cpu" && !engineReady.value) return "やねうら王を起動中…";
+  if (thinking.value) return `${props.cpuPlayerName}が考えています…`;
   return record.value.position.color === Color.BLACK ? "先手番です" : "後手番です";
 });
 
@@ -441,14 +442,30 @@ queueMicrotask(() => {
   font-family: system-ui, sans-serif;
 }
 .shogi-game__header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 2.2fr);
   gap: 1rem;
   align-items: center;
-  justify-content: space-between;
+  min-height: 4.75rem;
   padding: 0.75rem 1rem;
   border: 1px solid #b99b6b;
   border-radius: 0.6rem;
   background: #fff8e8;
+}
+.shogi-game__status {
+  display: flex;
+  min-width: 0;
+  min-height: 3.25rem;
+  flex-direction: column;
+  justify-content: center;
+}
+.shogi-game__status strong {
+  display: block;
+  min-height: 1.5rem;
+  overflow: hidden;
+  line-height: 1.5rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .shogi-game__meta {
   display: block;
@@ -460,6 +477,9 @@ queueMicrotask(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: 100%;
 }
 .shogi-game__strength {
   display: flex;
@@ -470,7 +490,7 @@ queueMicrotask(() => {
 }
 .shogi-game__strength select {
   box-sizing: border-box;
-  width: 7.5rem;
+  width: 11.5rem;
   min-height: 2.5rem;
   padding: 0.4rem 0.55rem;
   border: 1px solid #876d45;
@@ -513,15 +533,30 @@ queueMicrotask(() => {
   color: #991b1b;
   background: #fee2e2;
 }
+@media (max-width: 780px) {
+  .shogi-game__header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .shogi-game__actions {
+    justify-content: flex-start;
+  }
+}
 @media (max-width: 540px) {
   .shogi-game__header {
-    align-items: stretch;
-    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.65rem;
+  }
+  .shogi-game__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .shogi-game__actions button {
-    flex: 1;
+    width: 100%;
   }
   .shogi-game__strength {
+    box-sizing: border-box;
+    grid-column: 1 / -1;
     width: 100%;
   }
   .shogi-game__strength select {
