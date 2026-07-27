@@ -7,7 +7,7 @@ import {
 } from './hiragana-suisho-formations.mjs';
 
 const master = JSON.parse(await readFile(
-  new URL('../../../data/hiragana_suisho_formations.json', import.meta.url),
+  new URL('../data/hiragana_suisho_formations.json', import.meta.url),
   'utf8',
 ));
 

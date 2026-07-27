@@ -54,7 +54,7 @@ import { loadEngineFactories } from "./core/engine-loader.mjs";
 import { findNewFormationCallouts } from "./core/formation-callouts.mjs";
 import { findNewHiraganaSuishoFormations } from "./core/hiragana-suisho-formations.mjs";
 import { formatHintMove, getHintMoves } from "./core/match-assists.mjs";
-import hiraganaFormationMaster from "../../data/hiragana_suisho_formations.json";
+import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const formationCalloutMaster = {
   version: 1,
