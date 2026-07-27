@@ -67,6 +67,7 @@ import { loadEngineFactories } from "./core/engine-loader.mjs";
 import { findNewFormationCallouts } from "./core/formation-callouts.mjs";
 import { findNewHiraganaSuishoFormations } from "./core/hiragana-suisho-formations.mjs";
 import { formatHintMove, getHintMoves } from "./core/match-assists.mjs";
+import { selectMoveByRank } from "./core/move-selection.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const formationCalloutMaster = {
@@ -158,6 +159,14 @@ function normalizeNodes(value: number): number {
       Math.abs(candidate - nodes) < Math.abs(nearest - nodes) ? candidate : nearest,
     30000,
   );
+}
+
+function strengthSearchSettings(nodes: number) {
+  if (nodes <= 1000) return { multiPv: 10, moveRank: { min: 5, max: 10 } };
+  if (nodes <= 10000) return { multiPv: 7, moveRank: { min: 3, max: 7 } };
+  if (nodes <= 30000) return { multiPv: 5, moveRank: { min: 2, max: 5 } };
+  if (nodes <= 100000) return { multiPv: 3, moveRank: { min: 1, max: 3 } };
+  return { multiPv: 1, moveRank: { min: 1, max: 1 } };
 }
 
 function createRecord(): Record {
@@ -279,14 +288,17 @@ async function scheduleCpuMove() {
     try {
       let usi = "";
       if (engine && engineReady.value) {
+        const strength = strengthSearchSettings(searchNodes.value);
+        engine.applyStrengthOptions({ multiPv: strength.multiPv });
         const base = props.initialSfen === STANDARD_SFEN
           ? "startpos"
           : `sfen ${props.initialSfen}`;
         engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
-        usi = (await engine.go({
+        const search = await engine.go({
           nodes: searchNodes.value,
           maxTimeMs: 60000,
-        })).move;
+        });
+        usi = selectMoveByRank(search, strength.moveRank).move;
       } else {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
       }
