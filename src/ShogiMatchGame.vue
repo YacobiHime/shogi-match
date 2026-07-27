@@ -67,7 +67,8 @@
         :allow-move="canMove"
         :enable-drag-and-drop="enableDragAndDrop"
         :flip="flipBoard"
-        :mobile="mobile"
+        :mobile="mobile || boardLayout === 'portrait'"
+        :layout="boardLayout"
         :asset-base-url="assetBaseUrl"
         :black-player-name="blackPlayerName"
         :white-player-name="effectiveWhitePlayerName"
@@ -107,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Color, Record } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import {
@@ -179,10 +180,16 @@ const guideText = ref(formationCalloutMaster.initial_speech);
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
 const settingsOpen = ref(false);
+const boardLayout = ref<"standard" | "compact" | "portrait">("standard");
 const announcedFormations = new Set<string>();
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
+
+function updateResponsiveLayout() {
+  const width = window.innerWidth;
+  boardLayout.value = width < 680 ? "portrait" : width < 1100 ? "compact" : "standard";
+}
 
 const normalizedMode = computed<GameMode>(() => props.mode === "local" ? "local" : "cpu");
 const humanColor = computed(() => props.playerColor === "white" ? Color.WHITE : Color.BLACK);
@@ -518,6 +525,11 @@ watch(() => props.engineNodes, (value) => {
 onBeforeUnmount(() => {
   if (cpuTimer) clearTimeout(cpuTimer);
   engine?.quit();
+  window.removeEventListener("resize", updateResponsiveLayout);
+});
+onMounted(() => {
+  updateResponsiveLayout();
+  window.addEventListener("resize", updateResponsiveLayout, { passive: true });
 });
 
 queueMicrotask(() => {
@@ -549,6 +561,11 @@ queueMicrotask(() => {
     linear-gradient(145deg, #861f38 0%, #d8495c 38%, #f5969e 66%, #6e1831 100%);
   box-shadow: inset 0 0 5rem rgba(39, 3, 15, 0.55), 0 1rem 3rem rgba(0, 0, 0, 0.38);
   font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+}
+.shogi-game *,
+.shogi-game *::before,
+.shogi-game *::after {
+  box-sizing: border-box;
 }
 .shogi-game::before {
   position: absolute;
@@ -735,7 +752,10 @@ queueMicrotask(() => {
   font: inherit;
 }
 .shogi-game__board-shell {
+  width: 100%;
+  min-width: 0;
   padding: 0.45rem;
+  overflow: hidden;
   border: 3px solid var(--gold);
   background: rgba(27, 9, 14, 0.88);
   box-shadow: 0 0.6rem 1.4rem rgba(25, 0, 8, 0.55);
@@ -798,7 +818,8 @@ queueMicrotask(() => {
     padding-inline: 0;
   }
   .shogi-game__command {
-    min-width: 6.5rem;
+    min-width: 5.25rem;
+    padding-inline: 0.65rem;
   }
   .shogi-game__turn {
     padding-inline: 0.5rem;
@@ -824,7 +845,9 @@ queueMicrotask(() => {
   }
   .shogi-game__player-card {
     grid-template-columns: auto 1fr;
+    min-width: 0;
     padding: 0.55rem;
+    font-size: 0.85rem;
   }
   .shogi-game__player-card > small {
     display: none;
@@ -840,6 +863,41 @@ queueMicrotask(() => {
     flex: 1;
     padding-inline: 0.45rem;
     font-size: 0.82rem;
+  }
+  .shogi-game__strength {
+    min-width: 0;
+    font-size: 0.85rem;
+  }
+  .shogi-game__strength select {
+    min-width: 0;
+    width: 62%;
+  }
+}
+@media (max-width: 360px) {
+  .shogi-game__toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .shogi-game__command {
+    width: 100%;
+    min-width: 0;
+  }
+  .shogi-game__turn {
+    grid-column: 1 / -1;
+    margin-left: 0;
+    text-align: center;
+  }
+  .shogi-game__player-zone--opponent,
+  .shogi-game__player-zone--player {
+    padding-right: 5.5rem;
+    padding-left: 0;
+  }
+  .shogi-game__player-zone--player {
+    padding-left: 5.5rem;
+    padding-right: 0;
+  }
+  .shogi-game__portrait {
+    width: 6.25rem;
   }
 }
 </style>

@@ -140,8 +140,11 @@ function onResize(size: RectSize) {
 }
 function measure() {
   if (!root.value) return;
-  const width = Math.round(Math.max(280, root.value.clientWidth || 900));
-  const height = Math.round(Math.min(760, Math.max(420, width * 0.68)));
+  const width = Math.max(1, Math.round(root.value.clientWidth || 900));
+  const heightRatio = layoutType.value === BoardLayoutType.PORTRAIT
+    ? 1.34
+    : layoutType.value === BoardLayoutType.COMPACT ? 0.94 : 0.66;
+  const height = Math.max(1, Math.round(width * heightRatio));
   if (maxSize.value.width === width && maxSize.value.height === height) return;
   maxSize.value = new RectSize(width, height);
 }
@@ -151,7 +154,7 @@ onMounted(() => {
   if (root.value) resizeObserver.observe(root.value);
 });
 onBeforeUnmount(() => resizeObserver?.disconnect());
-watch(() => props.sfen, () => measure());
+watch(() => [props.sfen, props.layout], () => measure());
 watch(selectedBoardTheme, (theme) => storage?.setItem("shogi-match-board-theme", theme));
 watch(selectedPieceTheme, (theme) => storage?.setItem("shogi-match-piece-theme", theme));
 </script>
@@ -171,8 +174,12 @@ watch(selectedPieceTheme, (theme) => storage?.setItem("shogi-match-piece-theme",
   --turn-label-bg-color: #2424e6;
   --turn-label-border-color: midnightblue;
   width: 100%;
-  min-height: 360px;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
+}
+.shogi-match-root .frame {
+  margin-inline: auto;
 }
 .shogi-match-root .full { width: 100%; height: 100%; }
 .shogi-match-theme-controls {
