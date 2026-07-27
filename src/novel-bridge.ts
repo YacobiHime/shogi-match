@@ -16,6 +16,7 @@ export type ShogiMatchFrameOptions = {
   blackName?: string;
   whiteName?: string;
   cpuName?: string;
+  engineNodes?: number;
 };
 
 export type ShogiMatchResultMessage = {
@@ -63,6 +64,9 @@ export function buildGameUrl(
     ["cpu_name", value.cpuName],
   ]) {
     if (parameter) url.searchParams.set(key, parameter);
+  }
+  if (Number.isFinite(value.engineNodes) && value.engineNodes! > 0) {
+    url.searchParams.set("engine_nodes", String(Math.trunc(value.engineNodes!)));
   }
   return url;
 }
@@ -159,6 +163,7 @@ export function registerTyranoShogiMatch(
       black_name: defaults.blackName ?? "",
       white_name: defaults.whiteName ?? "",
       cpu_name: defaults.cpuName ?? "",
+      engine_nodes: defaults.engineNodes ? String(defaults.engineNodes) : "",
     },
     start(pm: Record<string, string>) {
       const kag = this.kag;
@@ -171,6 +176,7 @@ export function registerTyranoShogiMatch(
         blackName: pm.black_name || undefined,
         whiteName: pm.white_name || undefined,
         cpuName: pm.cpu_name || undefined,
+        engineNodes: Number(pm.engine_nodes) > 0 ? Number(pm.engine_nodes) : undefined,
       }).then((message) => {
         kag.stat.f.match_result = message.result;
         kag.ftag.nextOrder();

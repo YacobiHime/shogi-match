@@ -6,6 +6,18 @@
         <span class="shogi-game__meta">{{ modeText }}・{{ moveCount }}手</span>
       </div>
       <div class="shogi-game__actions">
+        <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
+          <span>探索量</span>
+          <input
+            v-model.number="searchNodes"
+            type="number"
+            min="1"
+            step="10000"
+            inputmode="numeric"
+            aria-label="CPUの探索量"
+            @change="normalizeSearchNodes"
+          >
+        </label>
         <button type="button" :disabled="!canUseHint" @click="showHint">ヒント（残り{{ hintsRemaining }}）</button>
         <button type="button" :disabled="!canUndo" @click="undoTurn">待った（残り{{ undosRemaining }}）</button>
         <button type="button" :disabled="!active" @click="resign">投了</button>
@@ -99,6 +111,7 @@ const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: string }[]>([]);
 const hintText = ref("");
 const guideText = ref(formationCalloutMaster.initial_speech);
+const searchNodes = ref(normalizeNodes(props.engineNodes));
 const announcedFormations = new Set<string>();
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
@@ -136,6 +149,14 @@ const statusText = computed(() => {
   if (thinking.value) return `${props.cpuPlayerName}が考えています…`;
   return record.value.position.color === Color.BLACK ? "先手番です" : "後手番です";
 });
+
+function normalizeNodes(value: number): number {
+  return Math.max(1, Math.trunc(Number.isFinite(value) ? value : 30000));
+}
+
+function normalizeSearchNodes() {
+  searchNodes.value = normalizeNodes(searchNodes.value);
+}
 
 function createRecord(): Record {
   try {
@@ -203,7 +224,7 @@ async function showHint() {
     engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
     engine.applyStrengthOptions({ multiPv: 3 });
     const search = await engine.go({
-      nodes: Math.max(1, Math.trunc(props.engineNodes)),
+      nodes: searchNodes.value,
       maxTimeMs: 5000,
     });
     const moves = getHintMoves(search, 3);
@@ -261,7 +282,7 @@ async function scheduleCpuMove() {
           : `sfen ${props.initialSfen}`;
         engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
         usi = (await engine.go({
-          nodes: Math.max(1, Math.trunc(props.engineNodes)),
+          nodes: searchNodes.value,
           maxTimeMs: 5000,
         })).move;
       } else {
@@ -331,6 +352,9 @@ watch(
   () => [props.initialSfen, props.mode, props.playerColor],
   () => restart(),
 );
+watch(() => props.engineNodes, (value) => {
+  searchNodes.value = normalizeNodes(value);
+});
 onBeforeUnmount(() => {
   if (cpuTimer) clearTimeout(cpuTimer);
   engine?.quit();
@@ -374,6 +398,24 @@ queueMicrotask(() => {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+.shogi-game__strength {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  color: #695b48;
+  font-size: 0.85rem;
+}
+.shogi-game__strength input {
+  box-sizing: border-box;
+  width: 7.5rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #876d45;
+  border-radius: 0.4rem;
+  background: white;
+  color: #20180d;
+  font: inherit;
+}
 .shogi-game__guide,
 .shogi-game__hint {
   display: flex;
@@ -414,6 +456,12 @@ queueMicrotask(() => {
     flex-direction: column;
   }
   .shogi-game__actions button {
+    flex: 1;
+  }
+  .shogi-game__strength {
+    width: 100%;
+  }
+  .shogi-game__strength input {
     flex: 1;
   }
 }

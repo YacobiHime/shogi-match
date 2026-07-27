@@ -36,6 +36,7 @@ game.html?mode=cpu&player_color=black&match_id=chapter1-boss
 - `player_color=black|white`: CPU対局で人間が持つ側
 - `initial_sfen`: 任意の開始局面
 - `match_id`: ノベル側で対局を識別するID
+- `engine_nodes`: CPUが1手ごとに読む探索量（既定値は30000）
 
 やねうら王を取得・起動できない場合だけ、合法手から選ぶ軽量CPUへ自動的に切り替わります。
 棋力を必要とする場合は、別配布のUSIエンジンアダプターを使用してください。
@@ -77,6 +78,9 @@ npm run deploy
 連続王手、再戦に加えて、やこび姫の戦形判定、候補手を盤上表示するヒント、
 プレイヤー着手前へ戻す「待った」を管理します。既定回数はヒント3回、待った1回で、
 `hint-count`と`undo-count`属性から変更できます。
+CPU対局では画面上の「探索量」へ数値を入力すると、次のCPU着手から強さを変更できます。
+数値が大きいほど多く読み、強くなる代わりに思考時間が長くなります。埋め込み時は
+`engine-nodes`属性、URLでは`engine_nodes`パラメーターから初期値を指定できます。
 
 主なイベント:
 
