@@ -1,10 +1,10 @@
 {
   "name": "@yacobihime/shogi-match",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Complete embeddable shogi match runtime for the web, RPGs, and visual novels.",
   "type": "module",
   "license": "GPL-3.0-or-later",
-  "files": ["dist", "vendor", "yaneuraou.data", "yaneuraou.wasm", "yaneuraou.worker.js", "game.html", "integrations", "LICENSE", "NOTICE.md", "README.md"],
+  "files": ["dist", "vendor", "third_party", "yaneuraou.data", "yaneuraou.wasm", "yaneuraou.worker.js", "game.html", "integrations", "LICENSE", "NOTICE.md", "README.md"],
   "scripts": {
     "build": "vite build",
     "test": "vitest run"
