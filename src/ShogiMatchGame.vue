@@ -844,6 +844,39 @@ queueMicrotask(() => {
     grid-template-columns: 1fr;
   }
 }
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
+  .shogi-game {
+    --panel: #2b171d;
+  }
+  .shogi-game__player-zone--opponent {
+    padding-right: 7.5rem;
+  }
+  .shogi-game__portrait--opponent {
+    width: 7rem;
+    height: 8rem;
+  }
+  .shogi-game__portrait--player {
+    width: 8rem;
+    height: 9rem;
+  }
+  .shogi-game__assist-actions,
+  .shogi-game__player-zone--player .shogi-game__player-card {
+    margin-left: 8.5rem;
+  }
+  .shogi-game__assist-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .shogi-game__assist-actions button:last-child {
+    grid-column: 1 / -1;
+  }
+  .shogi-game button:disabled {
+    border-color: #8f6d68;
+    color: #c7b4b1;
+    background: #5a3b43;
+    filter: grayscale(0.35);
+    opacity: 1;
+  }
+}
 @media (max-width: 899px), (max-aspect-ratio: 5/4) {
   .shogi-game {
     grid-template-columns: minmax(0, 1fr);
@@ -897,6 +930,7 @@ queueMicrotask(() => {
   }
   .shogi-game__assist-actions {
     display: flex;
+    margin-left: 0;
     grid-column: 2;
     grid-row: 1 / 3;
     flex-direction: column;
@@ -906,6 +940,9 @@ queueMicrotask(() => {
   .shogi-game__assist-actions button {
     min-height: 2.35rem;
     padding: 0.4rem 0.75rem;
+  }
+  .shogi-game__assist-actions button:last-child {
+    grid-column: auto;
   }
 }
 @media (max-width: 540px) {
