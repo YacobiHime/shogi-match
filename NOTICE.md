@@ -35,3 +35,4 @@ SOFTWARE.
 - The bundled piece images originate from
   [shogi-images](https://sunfish-shogi.github.io/shogi-images/) and are
   dedicated to the public domain under CC0 1.0.
+- The selectable board images also originate from shogi-images under CC0 1.0.
