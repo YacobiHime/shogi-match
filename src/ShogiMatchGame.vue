@@ -14,7 +14,7 @@
       <div class="shogi-game__portrait shogi-game__portrait--opponent">
         <img
           class="shogi-game__character"
-          :src="`${assetBaseUrl}/characters/mifune-hane.png`"
+          :src="`${assetBaseUrl}/characters/mifune-hane-portrait.png`"
           alt=""
         >
       </div>
@@ -81,7 +81,7 @@
       <div class="shogi-game__portrait shogi-game__portrait--player">
         <img
           class="shogi-game__character"
-          :src="`${assetBaseUrl}/characters/sakurano-momoka.png`"
+          :src="`${assetBaseUrl}/characters/sakurano-momoka-portrait.png`"
           alt=""
         >
       </div>
@@ -681,10 +681,8 @@ queueMicrotask(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 18%;
+  object-position: center;
   filter: drop-shadow(0 0.65rem 0.6rem rgba(20, 0, 8, 0.48));
-  transform: scale(1.85);
-  transform-origin: 50% 18%;
 }
 .shogi-game__portrait--opponent {
   right: 0;
