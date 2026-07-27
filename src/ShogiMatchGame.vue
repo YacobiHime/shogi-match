@@ -756,9 +756,13 @@ queueMicrotask(() => {
   flex-wrap: wrap;
 }
 .shogi-game__awakening {
-  border-color: #f5a8ff !important;
-  background: linear-gradient(135deg, #3826ad, #b421c0) !important;
-  text-shadow: 0 0 0.5rem white;
+  border-color: #fff0a6 !important;
+  background: linear-gradient(135deg, #6f3d08 0%, #d99b22 45%, #fff0a0 58%, #a65d08 100%) !important;
+  box-shadow:
+    inset 0 0 0 2px rgba(83, 42, 0, 0.7),
+    0 0 0.75rem rgba(255, 193, 59, 0.7) !important;
+  color: #fffbea !important;
+  text-shadow: 0 1px 2px #4a2600, 0 0 0.45rem #fff3ad;
 }
 .shogi-game__error {
   margin: 0.7rem 0 0;
