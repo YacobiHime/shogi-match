@@ -1,10 +1,10 @@
 {
-  "name": "@yacobihime/shogi-match-ui",
-  "version": "0.2.0",
-  "description": "Reusable ShogiHome board UI with SFEN input, USI events, and candidate arrows.",
+  "name": "@yacobihime/shogi-match",
+  "version": "0.5.0",
+  "description": "Complete embeddable shogi match runtime for the web, RPGs, and visual novels.",
   "type": "module",
-  "license": "MIT",
-  "files": ["dist", "public", "LICENSE", "NOTICE.md", "README.md"],
+  "license": "GPL-3.0-or-later",
+  "files": ["dist", "vendor", "yaneuraou.data", "yaneuraou.wasm", "yaneuraou.worker.js", "game.html", "integrations", "LICENSE", "NOTICE.md", "README.md"],
   "scripts": {
     "build": "vite build",
     "test": "vitest run"
