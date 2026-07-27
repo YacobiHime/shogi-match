@@ -60,7 +60,7 @@
       </div>
     </div>
 
-    <div class="shogi-game__board-shell">
+    <div ref="boardShell" class="shogi-game__board-shell">
       <ShogiMatchBoard
         :sfen="currentSfen"
         :last-move="lastMove"
@@ -181,14 +181,29 @@ const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
 const settingsOpen = ref(false);
 const boardLayout = ref<"standard" | "compact" | "portrait">("standard");
+const boardShell = ref<HTMLElement | null>(null);
 const announcedFormations = new Set<string>();
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
+let boardResizeObserver: ResizeObserver | undefined;
 
 function updateResponsiveLayout() {
-  const width = window.innerWidth;
-  boardLayout.value = width < 680 ? "portrait" : width < 1100 ? "compact" : "standard";
+  if (!boardShell.value) return;
+  const width = boardShell.value.clientWidth;
+  const height = boardShell.value.clientHeight;
+  const layouts = [
+    { name: "standard" as const, width: 1471, height: 959 },
+    { name: "compact" as const, width: 1088, height: 1015 },
+    { name: "portrait" as const, width: 878, height: 1168 },
+  ];
+  boardLayout.value = layouts.reduce((best, candidate) => {
+    const bestScale = Math.min(width / best.width, height / best.height);
+    const candidateScale = Math.min(width / candidate.width, height / candidate.height);
+    const bestArea = best.width * best.height * bestScale * bestScale;
+    const candidateArea = candidate.width * candidate.height * candidateScale * candidateScale;
+    return candidateArea > bestArea ? candidate : best;
+  }).name;
 }
 
 const normalizedMode = computed<GameMode>(() => props.mode === "local" ? "local" : "cpu");
@@ -525,11 +540,12 @@ watch(() => props.engineNodes, (value) => {
 onBeforeUnmount(() => {
   if (cpuTimer) clearTimeout(cpuTimer);
   engine?.quit();
-  window.removeEventListener("resize", updateResponsiveLayout);
+  boardResizeObserver?.disconnect();
 });
 onMounted(() => {
   updateResponsiveLayout();
-  window.addEventListener("resize", updateResponsiveLayout, { passive: true });
+  boardResizeObserver = new ResizeObserver(updateResponsiveLayout);
+  if (boardShell.value) boardResizeObserver.observe(boardShell.value);
 });
 
 queueMicrotask(() => {
@@ -547,7 +563,7 @@ queueMicrotask(() => {
   box-sizing: border-box;
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 18rem;
+  grid-template-columns: minmax(0, 1fr) 20rem;
   grid-template-rows: auto minmax(0, 0.8fr) minmax(0, 1.2fr);
   width: 100%;
   max-width: 1600px;
@@ -587,7 +603,8 @@ queueMicrotask(() => {
   z-index: 1;
 }
 .shogi-game__toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 0.75rem;
   align-items: center;
   padding: 0.25rem 0.5rem 0.65rem;
@@ -611,7 +628,8 @@ queueMicrotask(() => {
   opacity: 0.45;
 }
 .shogi-game__command {
-  min-width: 8rem;
+  width: 100%;
+  min-width: 0;
   clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
 }
 .shogi-game__command--danger {
@@ -621,7 +639,7 @@ queueMicrotask(() => {
   background: linear-gradient(#0788bc, #075074);
 }
 .shogi-game__turn {
-  margin-left: auto;
+  margin-left: 0;
   padding: 0.55rem 0.85rem;
   border: 1px solid var(--gold);
   border-radius: 0.35rem;
@@ -648,7 +666,8 @@ queueMicrotask(() => {
   grid-template-columns: 1fr;
   gap: 0.45rem;
   min-height: 0;
-  padding: 0.5rem 0 0 7rem;
+  padding: 0.5rem 0 0;
+  align-content: end;
 }
 .shogi-game__portrait {
   position: absolute;
@@ -791,10 +810,18 @@ queueMicrotask(() => {
 }
 .shogi-game__assist-actions {
   z-index: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.55rem;
   align-items: center;
-  flex-wrap: wrap;
+}
+.shogi-game__assist-actions button {
+  min-width: 0;
+  padding-inline: 0.35rem;
+  font-size: 0.86rem;
+}
+.shogi-game__player-zone--player .shogi-game__player-card {
+  margin-left: 6.5rem;
 }
 .shogi-game__awakening {
   border-color: #fff0a6 !important;
@@ -817,11 +844,12 @@ queueMicrotask(() => {
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 1099px) {
+@media (max-width: 899px), (max-aspect-ratio: 5/4) {
   .shogi-game {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 8.75rem;
     height: calc(100dvh - clamp(0px, 3vw, 32px));
+    padding: 0.5rem;
   }
   .shogi-game__toolbar {
     grid-column: 1;
@@ -831,7 +859,7 @@ queueMicrotask(() => {
     grid-column: 1;
     grid-row: 2;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    min-height: 5.8rem;
+    min-height: 0;
     padding-right: 6.5rem;
   }
   .shogi-game__board-shell {
@@ -842,22 +870,47 @@ queueMicrotask(() => {
     grid-column: 1;
     grid-row: 4;
     grid-template-columns: minmax(0, 1fr) auto;
-    min-height: 7.5rem;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 0;
     padding-left: 6.5rem;
   }
+  .shogi-game__portrait--opponent {
+    width: 6.5rem;
+    height: 5.5rem;
+  }
+  .shogi-game__portrait--player {
+    width: 6.5rem;
+    height: 8.75rem;
+  }
   .shogi-game__dialogue {
-    min-height: 3rem;
-    max-height: 3.5rem;
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
+    max-height: none;
+    padding: 0.55rem 0.75rem;
   }
   .shogi-game__player-zone--player .shogi-game__player-card {
     grid-column: 1;
+    grid-row: 2;
+    margin-left: 0;
+    padding: 0.45rem 0.65rem;
   }
   .shogi-game__assist-actions {
-    grid-column: 1 / -1;
+    display: flex;
+    grid-column: 2;
+    grid-row: 1 / 3;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+  .shogi-game__assist-actions button {
+    min-height: 2.35rem;
+    padding: 0.4rem 0.75rem;
   }
 }
 @media (max-width: 540px) {
   .shogi-game {
+    grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) 3.4rem;
     padding: 0.4rem;
     border-radius: 0;
   }
@@ -878,17 +931,22 @@ queueMicrotask(() => {
   }
   .shogi-game__player-zone--opponent {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
-    min-height: 5.1rem;
-    padding-right: 5rem;
+    min-height: 0;
+    padding-right: 4.25rem;
   }
   .shogi-game__player-zone--player {
     grid-template-columns: minmax(0, 1fr);
-    min-height: 7rem;
-    padding-left: 5rem;
+    grid-template-rows: 1fr;
+    min-height: 0;
+    padding-left: 3.6rem;
   }
   .shogi-game__portrait {
-    width: 5.5rem;
-    height: 7rem;
+    width: 4.25rem;
+    height: 4.5rem;
+  }
+  .shogi-game__portrait--player {
+    width: 3.6rem;
+    height: 3.4rem;
   }
   .shogi-game__character {
     object-position: center 17%;
@@ -908,7 +966,9 @@ queueMicrotask(() => {
     padding: 0.5rem;
   }
   .shogi-game__assist-actions {
-    grid-column: 1 / -1;
+    grid-column: 1;
+    grid-row: 1;
+    flex-direction: row;
     flex-wrap: nowrap;
   }
   .shogi-game__assist-actions button {
