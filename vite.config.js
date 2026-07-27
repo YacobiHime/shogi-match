@@ -13,9 +13,9 @@ export default defineConfig({
   build: {
     lib: {
       entry: "src/index.js",
-      name: "ShogiMatchUI",
+      name: "ShogiMatch",
       formats: ["es"],
-      fileName: "shogi-match-ui",
+      fileName: "shogi-match",
     },
   },
 });

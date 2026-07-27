@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>shogi-match</title>
+  <link rel="stylesheet" href="./dist/shogi-match.css">
+  <style>
+    html { background: #2d2419; }
+    body { margin: 0; padding: 16px; }
+  </style>
+</head>
+<body>
+  <shogi-match-game id="game" asset-base-url="./dist" engine-base-url="./"></shogi-match-game>
+  <script type="module" src="./dist/shogi-match.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const game = document.getElementById("game");
+    for (const [query, attribute] of [
+      ["mode", "mode"],
+      ["player_color", "player-color"],
+      ["initial_sfen", "initial-sfen"],
+      ["black_name", "black-player-name"],
+      ["white_name", "white-player-name"],
+      ["cpu_name", "cpu-player-name"],
+    ]) {
+      if (params.has(query)) game.setAttribute(attribute, params.get(query));
+    }
+  </script>
+</body>
+</html>

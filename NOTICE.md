@@ -1,5 +1,8 @@
 # Upstream and assets
 
+The complete shogi-match runtime is distributed under GPL-3.0-or-later.
+The following embedded upstream components retain their original permissive terms.
+
 This package contains an extracted and adapted copy of the board primitive from
 [ShogiHome 1.28.0](https://github.com/sunfish-shogi/shogihome), including its
 board geometry, interaction, promotion selector, last-move marker, and

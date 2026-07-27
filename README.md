@@ -1,27 +1,140 @@
-# shogi-match-ui
+# shogi-match
 
-ブラウザで使える、SFEN入力・USI出力の再利用可能な将棋盤UIです。ShogiHome 1.28.0の盤面部品を切り出し、対局エンジン、RPG進行、保存、通信を含めないWeb Componentとして提供します。
+ブラウザ、RPG、ノベルゲームへ埋め込める、単独動作可能な将棋対局ランタイムです。
+ShogiHome 1.28.0由来の盤面と`tsshogi`を使い、サーバーなしで動作します。
+
+## 完全対局ランタイム
+
+0.5.0以降はYaneuraOu.wasm本体も同梱し、`game.html`をWebサーバーから開くだけで対局できます。
+将棋RPGで実績のある次の機能もパッケージ本体から公開します。
+
+- YaneuraOu.wasmのUSI通信、起動・応答タイムアウト
+- NNUEの初期化前ロードと内蔵評価へのフォールバック
+- 標準定跡DB、敵固有定跡、`go searchmoves`
+- 探索ノード数、難易度、MultiPV候補ランク
+- リアルタイムヒント解析、候補手・評価・読み筋整形
+- 待った用の手番履歴
+- 入玉宣言、千日手、連続王手、打ち歩詰め
+- 戦形・敵・アイテム・解禁条件の検証
+- 戦形検出、候補矢印、直前手・合法手強調
+- 対局準備、消費棋具、セーブ連携を含む将棋RPG用ランタイム
+
+`integrations/shogi-rpg.js`が完全なRPG対局画面を起動します。RPG側には、
+マスタJSON、セーブAPI、エンジン・評価関数・定跡資産と、終局結果を進行へ反映する
+ホスト層だけを残します。
+
+## すぐ遊ぶ
+
+`game.html`、`dist/`を同じ階層へ配置し、HTTPサーバーから`game.html`を開きます。
+
+```text
+game.html?mode=cpu&player_color=black&match_id=chapter1-boss
+```
+
+- `mode=cpu`: 同梱のやねうら王と対局
+- `mode=local`: 1台の端末で先手・後手を交互に操作
+- `player_color=black|white`: CPU対局で人間が持つ側
+- `initial_sfen`: 任意の開始局面
+- `match_id`: ノベル側で対局を識別するID
+
+やねうら王を取得・起動できない場合だけ、合法手から選ぶ軽量CPUへ自動的に切り替わります。
+棋力を必要とする場合は、別配布のUSIエンジンアダプターを使用してください。
+
+## ゲームとして埋め込む
 
 ```html
-<link rel="stylesheet" href="./shogi-match-ui.css">
-<script type="module" src="./shogi-match-ui.js"></script>
-<shogi-match-board sfen="lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1"></shogi-match-board>
-<script>
-  document.querySelector("shogi-match-board").addEventListener("usi-move", (event) => {
-    console.log(event.detail[0]); // 例: 7g7f
-  });
+<link rel="stylesheet" href="./shogi-match.css">
+<script type="module" src="./shogi-match.js"></script>
+
+<shogi-match-game
+  mode="cpu"
+  player-color="black"
+  asset-base-url="."
+  cpu-player-name="将棋CPU"
+></shogi-match-game>
+```
+
+`<shogi-match-game>`は対局進行、合法手適用、軽量CPU、投了、詰み、千日手、
+連続王手、再戦を管理します。
+
+主なイベント:
+
+- `match-ready`: 対局の準備完了
+- `match-move`: 着手完了
+- `match-end`: 終局。勝者、理由、手数、USI指し手列、最終SFENを返す
+- `match-error`: 開始局面などのエラー
+
+VueのCustom Elementイベントでは、イベント値は`event.detail[0]`に入ります。
+
+```js
+document.querySelector("shogi-match-game").addEventListener("match-end", (event) => {
+  console.log(event.detail[0]);
+});
+```
+
+## ティラノスクリプトなどから呼ぶ
+
+`game.html`を同一オリジンのiframeで開きます。終局時は親ウィンドウへ次の
+`postMessage`を送信します。
+
+```js
+{
+  type: "shogi-match:result",
+  version: 1,
+  matchId: "chapter1-boss",
+  result: {
+    outcome: "black-win",
+    winner: "black",
+    reason: "checkmate",
+    moveCount: 57,
+    moves: ["7g7f", "3c3d"],
+    finalSfen: "..."
+  }
+}
+```
+
+受信側は`event.origin`、`event.source`、`matchId`を検証してください。
+
+ティラノスクリプトでは、初期化後に一度だけタグを登録します。
+
+```html
+<script type="module">
+  import { registerTyranoShogiMatch } from "./shogi-match.js";
+  registerTyranoShogiMatch(window.tyrano, { gameUrl: "./game.html" });
 </script>
 ```
 
-`dist/`の2ファイルと、`public/`配下の`piece`、`board`、`stand`、`arrow`
-ディレクトリを同じサイトから配信してください。
+以降はシナリオからタグだけで対局できます。
+
+```ks
+[shogi_match match_id="chapter1:boss" mode="cpu" player_color="black"]
+```
+
+終局結果は`f.match_result`へ入り、シナリオ処理が次へ進みます。`openShogiMatch()`を
+直接呼べば、ティラノ以外のノベルエンジンでも同じ全画面iframeと結果検証を利用できます。
+
+## 盤面だけを使う互換API
+
+従来の`<shogi-match-board>`も引き続き利用できます。
+
+```html
+<shogi-match-board
+  sfen="lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1"
+></shogi-match-board>
+```
 
 - `sfen`: 表示するSFEN
-- `allow-move`: `false` にすると閲覧専用
-- `flip`: 盤面を反転
-- `asset-base-url`: 同梱した盤・駒・駒台・矢印画像の公開先
-- `candidates`: `{ usi, score? }[]`。候補手をShogiHomeと同じ矢印で表示
+- `allow-move`: `false`にすると閲覧専用
+- `flip`: 盤面反転
+- `asset-base-url`: 盤・駒・駒台・矢印画像の公開先
+- `candidates`: `{ usi, score? }[]`
 - `last-move`: 直前手のUSI
-- `usi-move`: 合法手をUSI文字列で発火。ホストは局面を更新して` sfen `を再設定します。
+- `usi-move`: 合法手をUSI文字列で通知
 
-MITライセンスです。ShogiHome由来コードの著作権表示と素材の出典は[NOTICE.md](./NOTICE.md)を参照してください。
+## ライセンス
+
+完全対局ランタイムはGPL-3.0-or-laterです。ShogiHome、tsshogiなどMIT由来コードと
+素材の出典は[NOTICE.md](./NOTICE.md)を参照してください。
+
+npmパッケージ自体にYaneuraOuのWASMバイナリ、NNUE、定跡DBは含めません。AI対局で
+それらを同梱配布する場合は、各資産のライセンスと対応ソース提供条件も満たしてください。
