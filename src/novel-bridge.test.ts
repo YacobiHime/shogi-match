@@ -14,9 +14,10 @@ describe("visual novel bridge", () => {
       gameUrl: "./game.html",
       mode: "cpu",
       playerColor: "white",
+      engineNodes: 120000,
     }, "https://example.test/novel/index.html");
     expect(url.href).toBe(
-      "https://example.test/novel/game.html?match_id=chapter1%3Aboss&mode=cpu&player_color=white",
+      "https://example.test/novel/game.html?match_id=chapter1%3Aboss&mode=cpu&player_color=white&engine_nodes=120000",
     );
   });
 
