@@ -89,7 +89,7 @@
       </div>
       <div class="shogi-game__assist-actions">
         <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
-          棋桜覚醒 <small>×{{ hintsRemaining }}</small>
+          閃き <small>×{{ hintsRemaining }}</small>
         </button>
         <button type="button" :disabled="!canUndo" @click="undoTurn">待った ×{{ undosRemaining }}</button>
         <button type="button" @click="restart">最初から</button>
