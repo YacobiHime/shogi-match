@@ -1,10 +1,10 @@
 const ENGINE_PROFILES = Object.freeze({
   builtin: Object.freeze({
-    scriptPath: './vendor/yaneuraou.js',
+    scriptPath: './vendor/yaneuraou.js?v=20260727-2',
     globalName: 'YaneuraOu',
   }),
   halfkpNoEval: Object.freeze({
-    scriptPath: './vendor/yaneuraou.halfkp.noeval.js',
+    scriptPath: './vendor/yaneuraou.halfkp.noeval.js?v=20260727-2',
     globalName: 'YaneuraOu_HalfKP_noeval',
   }),
 });
