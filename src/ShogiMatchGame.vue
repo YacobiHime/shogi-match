@@ -6,9 +6,9 @@
         <span class="shogi-game__meta">{{ modeText }}・{{ moveCount }}手</span>
       </div>
       <div class="shogi-game__actions">
-        <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
+        <label v-if="normalizedMode === 'cpu' && !engineUnavailable" class="shogi-game__strength">
           <span>CPU強さ</span>
-          <select v-model.number="searchNodes" aria-label="CPUの強さ">
+          <select v-model.number="searchNodes" :disabled="!engineReady" aria-label="CPUの強さ">
             <option :value="1000">入門（約1〜2手先）</option>
             <option :value="10000">やさしい（約2〜4手先）</option>
             <option :value="30000">ふつう（約4〜6手先）</option>
@@ -16,6 +16,9 @@
             <option :value="300000">かなり強い（約8〜10手先）</option>
           </select>
         </label>
+        <span v-else-if="normalizedMode === 'cpu'" class="shogi-game__strength">
+          簡易CPU（強さ変更不可）
+        </span>
         <button type="button" :disabled="!canUseHint" @click="showHint">ヒント（残り{{ hintsRemaining }}）</button>
         <button type="button" :disabled="!canUndo" @click="undoTurn">待った（残り{{ undosRemaining }}）</button>
         <button type="button" :disabled="!active" @click="resign">投了</button>
