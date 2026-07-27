@@ -173,8 +173,11 @@ watch(selectedPieceTheme, (theme) => storage?.setItem("shogi-match-piece-theme",
   --turn-label-color: lightyellow;
   --turn-label-bg-color: #2424e6;
   --turn-label-border-color: midnightblue;
+  display: flex;
   width: 100%;
   height: 100%;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
