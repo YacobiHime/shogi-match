@@ -7,16 +7,14 @@
       </div>
       <div class="shogi-game__actions">
         <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
-          <span>探索量</span>
-          <input
-            v-model.number="searchNodes"
-            type="number"
-            min="1"
-            step="10000"
-            inputmode="numeric"
-            aria-label="CPUの探索量"
-            @change="normalizeSearchNodes"
-          >
+          <span>CPU強さ</span>
+          <select v-model.number="searchNodes" aria-label="CPUの強さ">
+            <option :value="1000">入門（約1〜2手先）</option>
+            <option :value="10000">やさしい（約2〜4手先）</option>
+            <option :value="30000">ふつう（約4〜6手先）</option>
+            <option :value="100000">強い（約6〜8手先）</option>
+            <option :value="300000">かなり強い（約8〜10手先）</option>
+          </select>
         </label>
         <button type="button" :disabled="!canUseHint" @click="showHint">ヒント（残り{{ hintsRemaining }}）</button>
         <button type="button" :disabled="!canUndo" @click="undoTurn">待った（残り{{ undosRemaining }}）</button>
@@ -151,11 +149,12 @@ const statusText = computed(() => {
 });
 
 function normalizeNodes(value: number): number {
-  return Math.max(1, Math.trunc(Number.isFinite(value) ? value : 30000));
-}
-
-function normalizeSearchNodes() {
-  searchNodes.value = normalizeNodes(searchNodes.value);
+  const nodes = Number.isFinite(value) ? value : 30000;
+  return [1000, 10000, 30000, 100000, 300000].reduce(
+    (nearest, candidate) =>
+      Math.abs(candidate - nodes) < Math.abs(nearest - nodes) ? candidate : nearest,
+    30000,
+  );
 }
 
 function createRecord(): Record {
@@ -225,7 +224,7 @@ async function showHint() {
     engine.applyStrengthOptions({ multiPv: 3 });
     const search = await engine.go({
       nodes: searchNodes.value,
-      maxTimeMs: 5000,
+      maxTimeMs: 60000,
     });
     const moves = getHintMoves(search, 3);
     hintCandidates.value = moves.map(({ rank, move }) => ({
@@ -283,7 +282,7 @@ async function scheduleCpuMove() {
         engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
         usi = (await engine.go({
           nodes: searchNodes.value,
-          maxTimeMs: 5000,
+          maxTimeMs: 60000,
         })).move;
       } else {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
@@ -405,7 +404,7 @@ queueMicrotask(() => {
   color: #695b48;
   font-size: 0.85rem;
 }
-.shogi-game__strength input {
+.shogi-game__strength select {
   box-sizing: border-box;
   width: 7.5rem;
   min-height: 2.5rem;
@@ -461,7 +460,7 @@ queueMicrotask(() => {
   .shogi-game__strength {
     width: 100%;
   }
-  .shogi-game__strength input {
+  .shogi-game__strength select {
     flex: 1;
   }
 }
