@@ -55,7 +55,9 @@ game.html?mode=cpu&player_color=black&match_id=chapter1-boss
 ```
 
 `<shogi-match-game>`は対局進行、合法手適用、軽量CPU、投了、詰み、千日手、
-連続王手、再戦を管理します。
+連続王手、再戦に加えて、やこび姫の戦形判定、候補手を盤上表示するヒント、
+プレイヤー着手前へ戻す「待った」を管理します。既定回数はヒント3回、待った1回で、
+`hint-count`と`undo-count`属性から変更できます。
 
 主なイベント:
 
