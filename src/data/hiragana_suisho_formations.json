@@ -1,0 +1,2088 @@
+{
+  "version": 1,
+  "source": "tayayan/HiraganaSuisho tac_match.py",
+  "license": "MIT",
+  "rules": [
+    {
+      "id": "enc_match_1",
+      "group": "enc_match",
+      "name": "銀冠",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/7S1/6G2/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5K1K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_2",
+      "group": "enc_match",
+      "name": "高美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/5G3/6S2/5G3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_3",
+      "group": "enc_match",
+      "name": "ダイヤモンド美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/5S3/4G1S2/5G3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_4",
+      "group": "enc_match",
+      "name": "四枚美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/5S3/5G3/6S2/5G3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_5",
+      "group": "enc_match",
+      "name": "大山美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/6S2/6S2/5G3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_6",
+      "group": "enc_match",
+      "name": "ちょんまげ美濃",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/7P1/5PP2/6SK1/5G3 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_7",
+      "group": "enc_match",
+      "name": "坊主美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/6SK1/5G3 b - 1"
+            }
+          },
+          {
+            "not": {
+              "match": {
+                "mode": "any",
+                "sfen": "sfen 9/9/9/9/7P1/7P1/7P1/9/9 b - 1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_8",
+      "group": "enc_match",
+      "name": "本美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/7P1/4G1S2/5G3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_9",
+      "group": "enc_match",
+      "name": "ヒラメ囲い",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/6S2/4GG3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_10",
+      "group": "enc_match",
+      "name": "木村美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/5S1P1/6G2/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_11",
+      "group": "enc_match",
+      "name": "金美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/7P1/5SG2/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_12",
+      "group": "enc_match",
+      "name": "銀美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/7P1/4S1S2/5G3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_13",
+      "group": "enc_match",
+      "name": "片美濃",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/7P1/6S2/5G3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_14",
+      "group": "enc_match",
+      "name": "金立美濃",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/5GK2/6S2 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_15",
+      "group": "enc_match",
+      "name": "ずれ美濃",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/5SK2/4G4 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_16",
+      "group": "enc_match",
+      "name": "振り飛車エルモ",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/5SK2/6G2 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_17",
+      "group": "enc_match",
+      "name": "早美濃",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/5SK2/5G3 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_18",
+      "group": "enc_match",
+      "name": "右矢倉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/6S2/6G2/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5K1K1/6K2 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_19",
+      "group": "enc_match",
+      "name": "振り飛車穴熊",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/7SL/7NK b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_20",
+      "group": "enc_match",
+      "name": "振り飛車ミレニアム",
+      "expression": {
+        "any": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/7S1/6GK1 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/6G2/6SK1 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_21",
+      "group": "enc_match",
+      "name": "金無双",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/4GGK2/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_22",
+      "group": "enc_match",
+      "name": "離れ金無双",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/3GG4/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KK2/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_23",
+      "group": "enc_match",
+      "name": "舟囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/1BK1G4/2SG5 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_24",
+      "group": "enc_match",
+      "name": "エルモ囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/2KS5/2G6 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_25",
+      "group": "enc_match",
+      "name": "ビッグ4",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/1SS6/LGG6/KN7 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_26",
+      "group": "enc_match",
+      "name": "四枚穴熊",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/2S6/LSG6/KNG6 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_27",
+      "group": "enc_match",
+      "name": "松尾流穴熊",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/LSG6/KNS6 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_28",
+      "group": "enc_match",
+      "name": "銀冠穴熊",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/1S7/L8/KN7 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_29",
+      "group": "enc_match",
+      "name": "居飛車穴熊",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/LS7/KN7 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_30",
+      "group": "enc_match",
+      "name": "ミレニアム",
+      "expression": {
+        "any": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/1S7/1KG6 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/2G6/1KS6 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_31",
+      "group": "enc_match",
+      "name": "銀冠",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/1S7/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1K1KK4/2KKK4 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_32",
+      "group": "enc_match",
+      "name": "右玉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KK2/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/7R1/7R1 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_33",
+      "group": "enc_match",
+      "name": "端玉銀冠",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/1S7/K8/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_34",
+      "group": "enc_match",
+      "name": "天守閣美濃",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/1K7/2S6/3G5 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_35",
+      "group": "enc_match",
+      "name": "左美濃",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/1KS6/3G5 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_36",
+      "group": "enc_match",
+      "name": "ボナンザ囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/2S6/2KGG4/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_37",
+      "group": "enc_match",
+      "name": "銀冠金無双",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/1S7/2KGG4/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_38",
+      "group": "enc_match",
+      "name": "串カツ囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/P8/KS7/LN7 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_39",
+      "group": "enc_match",
+      "name": "箱入り娘",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/2KG5/2SG5 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_40",
+      "group": "enc_match",
+      "name": "居飛車金無双",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/2P6/1P1P5/1BKGG4/2S6 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_41",
+      "group": "enc_match",
+      "name": "菱矢倉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/3P5/3S5/2SG5/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1K1K5/2KKK4 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_42",
+      "group": "enc_match",
+      "name": "総矢倉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/2SGS4/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1K1K5/2KKK4 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_43",
+      "group": "enc_match",
+      "name": "金矢倉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/2SG5/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1K1K5/2KKK4 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_44",
+      "group": "enc_match",
+      "name": "銀矢倉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/2SS5/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1K1K5/2KKK4 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_45",
+      "group": "enc_match",
+      "name": "菊水矢倉",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/2NG5/1SG6/1K7 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_46",
+      "group": "enc_match",
+      "name": "土居矢倉",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/2SG5/2K1G4/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_47",
+      "group": "enc_match",
+      "name": "天野矢倉",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/2SG5/2KG5/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_48",
+      "group": "enc_match",
+      "name": "銀立ち矢倉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/2P6/2S6/3G5/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1KK6/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_49",
+      "group": "enc_match",
+      "name": "矢倉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/2S6/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1K7/2K6 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_50",
+      "group": "enc_match",
+      "name": "雁木",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/3S5/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1K1K5/2KK5 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_51",
+      "group": "enc_match",
+      "name": "早囲い",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/2S6/2K6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1B7/2B6 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_52",
+      "group": "enc_match",
+      "name": "居角左美濃",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/1BS6/2KG5 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_53",
+      "group": "enc_match",
+      "name": "中原囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/2G2S3/2SKG4 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_54",
+      "group": "enc_match",
+      "name": "カニ囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/2GSG4/3K5 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_55",
+      "group": "enc_match",
+      "name": "イチゴ囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/2GKG4/2S6 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_56",
+      "group": "enc_match",
+      "name": "アヒル囲い",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/3SKS3/6G2 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/2G6/2G6 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_57",
+      "group": "enc_match",
+      "name": "中住まい",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/4K4/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5GG2/5G3 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "enc_match_58",
+      "group": "enc_match",
+      "name": "無敵囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/3SRS3/3GKG3 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match1_59",
+      "group": "bt_match1",
+      "name": "一手損角換わり",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/1r7/9/1p7/9/9/9/1+b5R1/2S6 b b 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/7P1/7P1/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "bt_match1_60",
+      "group": "bt_match1",
+      "name": "矢倉",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/1r7/9/9/9/9/2S6/1B5R1/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/7P1/7P1/7P1/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "bt_match1_61",
+      "group": "bt_match1",
+      "name": "相掛かり",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/1r4gb1/6p2/9/1p5P1/9/2P6/1BG4R1/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match1_62",
+      "group": "bt_match1",
+      "name": "横歩取り",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1snl/6gb1/p1pppp2p/6R2/9/1rP6/P2PPPP1P/1BG6/LNS1KGSNL w 3P2p 16"
+        }
+      }
+    },
+    {
+      "id": "bt_match1_63",
+      "group": "bt_match1",
+      "name": "角換わり",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/1r7/9/9/9/9/9/7R1/9 b Bb 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/7P1/7P1/9/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/1p7/1p7/9/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "bt_match1_64",
+      "group": "bt_match1",
+      "name": "相中飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/4r4/1p7/9/9/9/7P1/4R4/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match1_65",
+      "group": "bt_match1",
+      "name": "相振り飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/1p7/9/9/9/7P1/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1RRRR4/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/4rrrr1/9/9/9/9/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "bt_match1_66",
+      "group": "bt_match1",
+      "name": "鬼殺し",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/1r5b1/9/6p2/2P6/9/2N6/1BR6/2S6 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match2_67",
+      "group": "bt_match2",
+      "name": "四間飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/7P1/3R5/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match2_68",
+      "group": "bt_match2",
+      "name": "三間飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/7P1/2R6/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match2_69",
+      "group": "bt_match2",
+      "name": "向かい飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/7P1/1R7/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match2_70",
+      "group": "bt_match2",
+      "name": "中飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/7P1/4R4/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match2_71",
+      "group": "bt_match2",
+      "name": "嬉野流",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/1r5b1/9/6p2/2P6/9/2N6/1BR6/2S6 b - 1"
+        }
+      }
+    },
+    {
+      "id": "bt_match2_72",
+      "group": "bt_match2",
+      "name": "筋違い角",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 2sgk4/1r5s1/3ppp3/6p2/5B3/9/9/9/9 w - 1"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_73",
+      "group": "sente_tac_match",
+      "name": "4八金・2九飛車型",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/5G3/7R1 b - 1"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_74",
+      "group": "sente_tac_match",
+      "name": "角換わり29手目基本図",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen ln1g3nl/1r3kg2/3sppsp1/p1pp2p1p/1p5P1/P1PP1PP1P/1PS1P1N2/2GK2SR1/LN3G2L w Bb 30"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_75",
+      "group": "sente_tac_match",
+      "name": "角換わり37手目基本図",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lr5nl/3g1kg2/2n1ppsp1/p1pps1p1p/1p5P1/P1PPSPP1P/1PS1P1N2/2GK1G3/LN5RL w Bb 38"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_76",
+      "group": "sente_tac_match",
+      "name": "4五桂速攻",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/1r7/9/9/5N1P1/9/2S6/7R1/5G3 b Bb 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5SS2/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/3K5/4K4 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sente_tac_match_77",
+      "group": "sente_tac_match",
+      "name": "AlphaZero流相掛かり",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen ln1gk1snl/1rs3gb1/p1ppppppp/9/1p5P1/P8/1PPPPPP1P/1BG3SR1/LNS1KG1NL w - 10"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_78",
+      "group": "sente_tac_match",
+      "name": "横歩取り青野流",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1snl/6g2/p1ppppb1p/6R2/9/1rP6/P2PPPP1P/1BG1K4/LNS2GSNL w 3P2p 18"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_79",
+      "group": "sente_tac_match",
+      "name": "横歩取り勇気流",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1snl/6g2/p1ppppb1p/6R2/9/1rP6/P2PPPP1P/1BGK5/LNS2GSNL w 3P2p 18"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_80",
+      "group": "sente_tac_match",
+      "name": "竹部スペシャル",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1snl/6g2/p1pppp+R1p/9/9/1rP6/P2PPPP1P/1BG6/LNS1KGSNL w B3P2p 18"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_81",
+      "group": "sente_tac_match",
+      "name": "丸山ワクチン",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgkgsnl/4r2+B1/pppp1p1pp/4p1p2/7P1/2P6/PP1PPPP1P/7R1/LNSGKGSNL w B 8"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_82",
+      "group": "sente_tac_match",
+      "name": "超速3七銀",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/4r4/6b2/9/4p2P1/2P6/3PPPS2/1B1K3R1/2SG1G3 w - 1"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_83",
+      "group": "sente_tac_match",
+      "name": "5八金右超急戦",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgkgsnl/4r2b1/pppp1p1pp/4p1p2/7P1/2P6/PP1PPPP1P/1B2G2R1/LNSGK1SNL w - 8"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_84",
+      "group": "sente_tac_match",
+      "name": "5七銀左急戦",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/4S4/2K1GS3/3G5 b - 1"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_85",
+      "group": "sente_tac_match",
+      "name": "4五歩早仕掛け",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/6b2/5p3/5P3/4P4/9/2K4R1/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/5rr2/9/9/9/9/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sente_tac_match_86",
+      "group": "sente_tac_match",
+      "name": "早石田",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/1r7/9/9/2P6/9/3P5/1BR6/9 b - 1"
+            }
+          },
+          {
+            "not": {
+              "match": {
+                "mode": "any",
+                "sfen": "sfen 9/9/9/9/6p2/9/9/9/9 b - 1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sente_tac_match_87",
+      "group": "sente_tac_match",
+      "name": "7八飛戦法",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1BR6/LNSGKGSNL w - 2"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_88",
+      "group": "sente_tac_match",
+      "name": "天彦流向かい飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/1r7/9/9/9/2PB5/1P1P5/1R7/3GKGS2 b - 1"
+        }
+      }
+    },
+    {
+      "id": "sente_tac_match_89",
+      "group": "sente_tac_match",
+      "name": "角頭歩",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/1PP6/P2PPPPPP/1B5R1/LNSGKGSNL w - 4"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_90",
+      "group": "gote_tac_match",
+      "name": "6二金・8一飛車型",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 1r7/3g5/9/9/9/9/9/9/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_91",
+      "group": "gote_tac_match",
+      "name": "相掛かり横歩取らせ",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 1r7/3g5/9/9/9/9/9/9/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_92",
+      "group": "gote_tac_match",
+      "name": "横歩取り2三歩戦法",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1snl/1r4gb1/p1pppp1pp/6pR1/1p7/2P6/PP1PPPP1P/1BG6/LNS1KGSNL b P 13"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_93",
+      "group": "gote_tac_match",
+      "name": "横歩取り3三角戦法",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1snl/6g2/p1ppppb1p/6R2/9/1rP6/P2PPPP1P/1BG6/LNS1KGSNL b 3P2p 17"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_94",
+      "group": "gote_tac_match",
+      "name": "横歩取り3三桂戦法",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1s1l/6gb1/p1ppppn1p/6R2/9/1rP6/P2PPPP1P/1BG6/LNS1KGSNL b 3P2p 17"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_95",
+      "group": "gote_tac_match",
+      "name": "相横歩取り",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1snl/6g2/p1pppp2p/6R2/9/2r6/P2PPPP1P/1SG6/LN2KGSNL b B3Pb3p 19"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_96",
+      "group": "gote_tac_match",
+      "name": "横歩取り4五角戦法",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk1snl/6g2/p1pppp2p/6R2/5b3/1rP6/P2PPPP1P/1SG4S1/LN2KG1NL b B4Pp 21"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_97",
+      "group": "gote_tac_match",
+      "name": "横歩取り8五飛戦法",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgk2nl/6gs1/p1ppppb1p/9/1r7/2P3R2/PP1PPPP1P/1BG6/LNS1KGSNL b 2P2p 21"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_98",
+      "group": "gote_tac_match",
+      "name": "対矢倉右桂速攻",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 3gk1s2/1r5b1/2n2p3/2p3p2/1p7/2P6/2S6/2G4R1/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 2s6/2ss5/9/9/9/9/9/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/7b1/6b2/9/9/9/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gote_tac_match_99",
+      "group": "gote_tac_match",
+      "name": "後手超速",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 3g1gs2/1r3k1b1/2sppp3/6p2/1p2P4/9/9/1B2R4/9 w - 1"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_100",
+      "group": "gote_tac_match",
+      "name": "5三銀左急戦",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 5g3/3sg1k2/4s4/9/9/9/9/9/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_101",
+      "group": "gote_tac_match",
+      "name": "6五歩早仕掛け",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/1r4k2/9/4p4/3p5/3P5/2B6/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/2RR5/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gote_tac_match_102",
+      "group": "gote_tac_match",
+      "name": "2手目3二飛戦法",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen lnsgkgsnl/6rb1/ppppppppp/9/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL b - 3"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_103",
+      "group": "gote_tac_match",
+      "name": "阪田流向かい飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/7r1/6gp1/9/7P1/9/9/7R1/9 b Bb 1"
+        }
+      }
+    },
+    {
+      "id": "gote_tac_match_104",
+      "group": "gote_tac_match",
+      "name": "菜々河流向かい飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/7r1/5p1p1/5b3/7P1/9/9/1B5R1/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_105",
+      "group": "tac_match",
+      "name": "原始棒銀",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/7S1/9/1B5R1/4KG3 b - 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_106",
+      "group": "tac_match",
+      "name": "棒銀",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/7S1/9/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/7R1/7R1/7R1 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_107",
+      "group": "tac_match",
+      "name": "早繰り銀",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/5SP2/5P3/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/7R1/7R1/7R1/7R1 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_108",
+      "group": "tac_match",
+      "name": "腰掛け銀",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/4SP3/4P4/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/7R1/7R1/7R1/7R1 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_109",
+      "group": "tac_match",
+      "name": "右四間飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/5R3/9 b - 1"
+            }
+          },
+          {
+            "not": {
+              "match": {
+                "mode": "any",
+                "sfen": "sfen 9/9/9/9/9/9/9/6KK1/5KK2 b - 1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_110",
+      "group": "tac_match",
+      "name": "袖飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/6P2/9/6R2/9 b - 1"
+            }
+          },
+          {
+            "not": {
+              "match": {
+                "mode": "any",
+                "sfen": "sfen 9/9/9/9/9/9/9/7K1/5KK2 b - 1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_111",
+      "group": "tac_match",
+      "name": "浮き飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/7R1/9/9/9 b - 1"
+            }
+          },
+          {
+            "not": {
+              "match": {
+                "mode": "any",
+                "sfen": "sfen 9/9/9/9/9/9/7P1/9/9 b - 1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_112",
+      "group": "tac_match",
+      "name": "ひねり飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/2G6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/1RR6/9/9/9 b - 1"
+            }
+          },
+          {
+            "not": {
+              "match": {
+                "mode": "any",
+                "sfen": "sfen 9/9/9/9/7P1/7P1/1PP4P1/9/9 b - 1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_113",
+      "group": "tac_match",
+      "name": "雀刺し",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/9/8R/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/8L/8L/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_114",
+      "group": "tac_match",
+      "name": "ポンポン桂",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/6b2/5p3/5N3/9/5P3/1BK4R1/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/5rr2/9/9/9/9/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_115",
+      "group": "tac_match",
+      "name": "棒金",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/6r2/9/9/7G1/7R1/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_116",
+      "group": "tac_match",
+      "name": "ショーダンシステム",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/2NSS4/1R7/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/4rrrr1/9/9/9/9/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_117",
+      "group": "tac_match",
+      "name": "へなちょこ急戦",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/6b2/5p3/5P1P1/6P2/3PP1N2/1BK1GS1R1/2SG5 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/5rr2/9/9/9/9/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_118",
+      "group": "tac_match",
+      "name": "金無双急戦",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/7P1/4P1PRP/5PN2/1BKGG4/2S6 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/5rr2/9/9/9/9/9/9/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_119",
+      "group": "tac_match",
+      "name": "居合抜き超速",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/4r4/6b2/9/4p2P1/9/2PPPPS2/1B1K3R1/2SG1G3 w - 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_120",
+      "group": "tac_match",
+      "name": "ノーマル四間飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/2PP5/9/3R5/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KKK1/4K1KKK b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_121",
+      "group": "tac_match",
+      "name": "ノーマル三間飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/2PP5/9/2R6/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KKK1/4K1KKK b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_122",
+      "group": "tac_match",
+      "name": "角交換四間飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/2P6/3P5/3R5/9 b Bb 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KKK1/4K1KKK b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_123",
+      "group": "tac_match",
+      "name": "角交換三間飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/2P6/3P5/2R6/9 b Bb 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KKK1/4K1KKK b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_124",
+      "group": "tac_match",
+      "name": "ゴキゲン中飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/1r7/9/9/9/2P6/3P5/4R4/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/4P4/4P4/9/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KKK1/4K1KKK b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_125",
+      "group": "tac_match",
+      "name": "陽動振り飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/7P1/9/9/3GKG3 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/1RRR5/9 b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_126",
+      "group": "tac_match",
+      "name": "ダイレクト向かい飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 2sgkg3/7r1/ppppppspp/6p2/9/9/9/1S5R1/3GKG3 b Bb 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_127",
+      "group": "tac_match",
+      "name": "メリケン向かい飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/1r7/9/9/1pP6/3P5/1PBS5/1RG6/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_128",
+      "group": "tac_match",
+      "name": "レグスペ",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/2S6/3R4L/7NK b B 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_129",
+      "group": "tac_match",
+      "name": "立石流四間飛車",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/1r7/9/9/2PP5/9/9/1BGR5/2S6 b - 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_130",
+      "group": "tac_match",
+      "name": "石田流",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/2P6/2R6/7P1/9/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KKK1/4K1KKK b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_131",
+      "group": "tac_match",
+      "name": "端角中飛車",
+      "expression": {
+        "all": [
+          {
+            "match": {
+              "mode": "all",
+              "sfen": "sfen 9/9/9/9/9/9/B1P6/4R4/9 b - 1"
+            }
+          },
+          {
+            "match": {
+              "mode": "any",
+              "sfen": "sfen 9/9/9/9/9/9/9/5KKK1/4K1KKK b - 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "tac_match_132",
+      "group": "tac_match",
+      "name": "パックマン",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/7b1/5p3/6p2/9/3P5/1PP1PPPP1/1B5R1/2SGKGS2 b - 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_133",
+      "group": "tac_match",
+      "name": "シン・パックマン",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/7b1/5p3/6p2/9/3P5/1PP1PPPP1/1BS4R1/3GKGS2 b - 1"
+        }
+      }
+    }
+  ]
+}

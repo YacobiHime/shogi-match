@@ -40,6 +40,25 @@ game.html?mode=cpu&player_color=black&match_id=chapter1-boss
 やねうら王を取得・起動できない場合だけ、合法手から選ぶ軽量CPUへ自動的に切り替わります。
 棋力を必要とする場合は、別配布のUSIエンジンアダプターを使用してください。
 
+## Firebase Hostingへ公開
+
+依存関係をインストールし、公開用ファイルを生成します。
+
+```sh
+npm install
+npm run build:hosting
+```
+
+Firebase CLIでログイン済みなら、次のコマンドで`.firebaserc`に設定されたプロジェクトへ
+デプロイできます。
+
+```sh
+npm run deploy
+```
+
+公開用ファイルは`firebase-public/`へ生成されます。このフォルダーと`.firebase/`は
+生成物のためGitには含めません。
+
 ## ゲームとして埋め込む
 
 ```html
