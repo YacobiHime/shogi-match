@@ -16,6 +16,17 @@
             <option :value="300000">かなり強い（約8〜10手先）</option>
           </select>
         </label>
+        <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
+          <span>相手の作戦</span>
+          <select v-model="cpuStrategy" aria-label="相手の作戦">
+            <option value="random">おまかせ</option>
+            <option value="ibisha">居飛車</option>
+            <option value="shiken">四間飛車</option>
+            <option value="sangen">三間飛車</option>
+            <option value="nakabisha">中飛車</option>
+            <option value="yagura">矢倉</option>
+          </select>
+        </label>
         <span v-else-if="normalizedMode === 'cpu'" class="shogi-game__strength">
           簡易CPU（強さ変更不可）
         </span>
@@ -55,6 +66,7 @@ import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import {
   appendUsiMove,
   createGameRecord,
+  enumerateLegalMoves,
   GameMode,
   MatchResult,
   resignationResult,
@@ -114,6 +126,7 @@ const hintCandidates = ref<{ usi: string; score?: string }[]>([]);
 const hintText = ref("");
 const guideText = ref(formationCalloutMaster.initial_speech);
 const searchNodes = ref(normalizeNodes(props.engineNodes));
+const cpuStrategy = ref("random");
 const announcedFormations = new Set<string>();
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
@@ -167,6 +180,41 @@ function strengthSearchSettings(nodes: number) {
   if (nodes <= 30000) return { multiPv: 5, moveRank: { min: 2, max: 5 } };
   if (nodes <= 100000) return { multiPv: 3, moveRank: { min: 1, max: 3 } };
   return { multiPv: 1, moveRank: { min: 1, max: 1 } };
+}
+
+const STRATEGY_MOVES: { [key: string]: { black: string[]; white: string[] } } = {
+  ibisha: {
+    black: ["2g2f", "2f2e", "3i3h", "3h2g"],
+    white: ["8c8d", "8d8e", "7a7b", "7b8c"],
+  },
+  shiken: {
+    black: ["7g7f", "2h6h", "6g6f", "3i4h"],
+    white: ["3c3d", "8b4b", "4c4d", "3a4b"],
+  },
+  sangen: {
+    black: ["7g7f", "2h7h", "6g6f", "3i4h"],
+    white: ["3c3d", "8b3b", "3a4b", "4a3b"],
+  },
+  nakabisha: {
+    black: ["5g5f", "2h5h", "7g7f", "3i4h"],
+    white: ["5c5d", "8b5b", "3c3d", "3a4b"],
+  },
+  yagura: {
+    black: ["7g7f", "2g2f", "3i4h", "4i5h", "5i6h", "6i7h", "4h3g"],
+    white: ["3c3d", "8c8d", "7a6b", "6a5b", "5a4b", "4a3b", "6b7c"],
+  },
+};
+
+function strategyMove(): string | undefined {
+  const plan = STRATEGY_MOVES[cpuStrategy.value];
+  if (!plan) return undefined;
+  const cpuIsBlack = humanColor.value === Color.WHITE;
+  const cpuMoves = moveHistory.filter((_, index) => (index % 2 === 0) === cpuIsBlack);
+  const desired = plan[cpuIsBlack ? "black" : "white"][cpuMoves.length];
+  if (!desired) return undefined;
+  return enumerateLegalMoves(record.value.position).some((move) => move.usi === desired)
+    ? desired
+    : undefined;
 }
 
 function createRecord(): Record {
@@ -290,6 +338,7 @@ async function scheduleCpuMove() {
       if (engine && engineReady.value) {
         const strength = strengthSearchSettings(searchNodes.value);
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        const openingMove = strategyMove();
         const base = props.initialSfen === STANDARD_SFEN
           ? "startpos"
           : `sfen ${props.initialSfen}`;
@@ -297,6 +346,7 @@ async function scheduleCpuMove() {
         const search = await engine.go({
           nodes: searchNodes.value,
           maxTimeMs: 60000,
+          searchMoves: openingMove ? [openingMove] : undefined,
         });
         usi = selectMoveByRank(search, strength.moveRank).move;
       } else {
