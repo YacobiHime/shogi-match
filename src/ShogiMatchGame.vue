@@ -1,11 +1,36 @@
 <template>
   <section class="shogi-game" aria-label="将棋対局">
-    <header class="shogi-game__header">
+    <header class="shogi-game__toolbar">
+      <button type="button" class="shogi-game__command shogi-game__command--danger" :disabled="!active" @click="resign">
+        投了
+      </button>
+      <button type="button" class="shogi-game__command shogi-game__command--settings" @click="settingsOpen = !settingsOpen">
+        設定
+      </button>
+      <span class="shogi-game__turn">{{ moveCount }}手目</span>
+    </header>
+
+    <section class="shogi-game__player-zone shogi-game__player-zone--opponent">
+      <img
+        class="shogi-game__character shogi-game__character--opponent"
+        :src="`${assetBaseUrl}/characters/mifune-hane.png`"
+        alt=""
+      >
+      <div class="shogi-game__player-card">
+        <span>{{ opponentSideLabel }}</span>
+        <strong>{{ normalizedMode === "cpu" ? cpuPlayerName : whitePlayerName }}</strong>
+        <small>{{ normalizedMode === "cpu" ? strengthLabel : modeText }}</small>
+        <div><b>戦形</b>{{ opponentFormationText }}</div>
+      </div>
       <div class="shogi-game__status" aria-live="polite">
         <strong>{{ statusText }}</strong>
-        <span class="shogi-game__meta">{{ modeText }}・{{ moveCount }}手</span>
+        <span>{{ modeText }}・{{ moveCount }}手</span>
       </div>
-      <div class="shogi-game__actions">
+    </section>
+
+    <div v-if="settingsOpen" class="shogi-game__settings">
+      <div class="shogi-game__settings-title">対局設定</div>
+      <div class="shogi-game__settings-grid">
         <label v-if="normalizedMode === 'cpu' && !engineUnavailable" class="shogi-game__strength">
           <span>CPU強さ</span>
           <select v-model.number="searchNodes" :disabled="!engineReady" aria-label="CPUの強さ">
@@ -30,38 +55,49 @@
         <span v-else-if="normalizedMode === 'cpu'" class="shogi-game__strength">
           簡易CPU（強さ変更不可）
         </span>
-        <button type="button" :disabled="!canUseHint" @click="showHint">ヒント（残り{{ hintsRemaining }}）</button>
-        <button type="button" :disabled="!canUndo" @click="undoTurn">待った（残り{{ undosRemaining }}）</button>
-        <button type="button" :disabled="!active" @click="resign">投了</button>
+      </div>
+    </div>
+
+    <div class="shogi-game__board-shell">
+      <ShogiMatchBoard
+        :sfen="currentSfen"
+        :last-move="lastMove"
+        :allow-move="canMove"
+        :enable-drag-and-drop="enableDragAndDrop"
+        :flip="flipBoard"
+        :mobile="mobile"
+        :asset-base-url="assetBaseUrl"
+        :black-player-name="blackPlayerName"
+        :white-player-name="effectiveWhitePlayerName"
+        :candidates="hintCandidates"
+        @usi-move="onPlayerMove"
+      />
+    </div>
+
+    <section class="shogi-game__player-zone shogi-game__player-zone--player">
+      <img
+        class="shogi-game__character shogi-game__character--player"
+        :src="`${assetBaseUrl}/characters/sakurano-momoka.png`"
+        alt=""
+      >
+      <div class="shogi-game__dialogue">
+        {{ hintText || guideText }}
+      </div>
+      <div class="shogi-game__assist-actions">
+        <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
+          棋桜覚醒 <small>×{{ hintsRemaining }}</small>
+        </button>
+        <button type="button" :disabled="!canUndo" @click="undoTurn">待った ×{{ undosRemaining }}</button>
         <button type="button" @click="restart">最初から</button>
       </div>
-    </header>
-
-    <ShogiMatchBoard
-      :sfen="currentSfen"
-      :last-move="lastMove"
-      :allow-move="canMove"
-      :enable-drag-and-drop="enableDragAndDrop"
-      :flip="flipBoard"
-      :mobile="mobile"
-      :asset-base-url="assetBaseUrl"
-      :black-player-name="blackPlayerName"
-      :white-player-name="effectiveWhitePlayerName"
-      :candidates="hintCandidates"
-      @usi-move="onPlayerMove"
-    />
-
-    <aside class="shogi-game__formations" aria-label="戦形判定">
-      <div>
-        <strong>{{ normalizedMode === "cpu" ? "自分の戦形" : "先手の戦形" }}</strong>
-        <span>{{ playerFormationText }}</span>
+      <div class="shogi-game__player-card">
+        <span>{{ playerSideLabel }}</span>
+        <strong>{{ humanPlayerName }}</strong>
+        <small>{{ normalizedMode === "cpu" ? "あなた" : modeText }}</small>
+        <div><b>戦形</b>{{ playerFormationText }}</div>
       </div>
-      <div>
-        <strong>{{ normalizedMode === "cpu" ? "相手の戦形" : "後手の戦形" }}</strong>
-        <span>{{ opponentFormationText }}</span>
-      </div>
-    </aside>
-    <p v-if="hintText" class="shogi-game__hint" role="status">{{ hintText }}</p>
+    </section>
+
     <p v-if="errorMessage" class="shogi-game__error" role="alert">{{ errorMessage }}</p>
   </section>
 </template>
@@ -138,6 +174,7 @@ const hintText = ref("");
 const guideText = ref(formationCalloutMaster.initial_speech);
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
+const settingsOpen = ref(false);
 const announcedFormations = new Set<string>();
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
@@ -153,6 +190,26 @@ const effectiveWhitePlayerName = computed(() =>
     : props.whitePlayerName,
 );
 const modeText = computed(() => normalizedMode.value === "cpu" ? "CPU対局" : "ローカル対局");
+const humanPlayerName = computed(() =>
+  humanColor.value === Color.BLACK ? props.blackPlayerName : props.whitePlayerName
+);
+const playerSideLabel = computed(() =>
+  normalizedMode.value === "cpu"
+    ? (humanColor.value === Color.BLACK ? "先手" : "後手")
+    : "先手"
+);
+const opponentSideLabel = computed(() =>
+  normalizedMode.value === "cpu"
+    ? (humanColor.value === Color.BLACK ? "後手" : "先手")
+    : "後手"
+);
+const strengthLabel = computed(() => ({
+  1000: "入門",
+  10000: "やさしい",
+  30000: "ふつう",
+  100000: "強い",
+  300000: "かなり強い",
+}[searchNodes.value] ?? "ふつう"));
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
@@ -468,163 +525,302 @@ queueMicrotask(() => {
 
 <style>
 .shogi-game {
+  --gold: #d8ad55;
+  --ink: #fff8ec;
+  --panel: rgba(38, 17, 24, 0.92);
   box-sizing: border-box;
+  position: relative;
   display: block;
   width: 100%;
-  max-width: 960px;
+  max-width: 1040px;
   margin: 0 auto;
-  color: #20180d;
-  font-family: system-ui, sans-serif;
+  padding: clamp(0.5rem, 1.6vw, 1.25rem);
+  overflow: hidden;
+  border: 1px solid rgba(255, 216, 140, 0.45);
+  border-radius: 1rem;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% 20%, rgba(255, 226, 230, 0.78) 0 7%, transparent 22%),
+    radial-gradient(circle at 90% 10%, rgba(255, 182, 194, 0.7) 0 5%, transparent 24%),
+    linear-gradient(145deg, #861f38 0%, #d8495c 38%, #f5969e 66%, #6e1831 100%);
+  box-shadow: inset 0 0 5rem rgba(39, 3, 15, 0.55), 0 1rem 3rem rgba(0, 0, 0, 0.38);
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
 }
-.shogi-game__header {
-  display: grid;
-  grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 2.2fr);
-  gap: 1rem;
+.shogi-game::before {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(255,255,255,.08) 50%, transparent 51%),
+    linear-gradient(0deg, transparent 49%, rgba(255,255,255,.06) 50%, transparent 51%);
+  background-size: 5rem 5rem;
+  content: "";
+  opacity: 0.35;
+  pointer-events: none;
+}
+.shogi-game > * {
+  position: relative;
+  z-index: 1;
+}
+.shogi-game__toolbar {
+  display: flex;
+  gap: 0.75rem;
   align-items: center;
-  min-height: 4.75rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid #b99b6b;
-  border-radius: 0.6rem;
-  background: #fff8e8;
+  padding: 0.25rem 0.5rem 0.65rem;
+}
+.shogi-game button {
+  min-height: 2.65rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid #f0cb70;
+  border-radius: 0.5rem;
+  color: white;
+  background: linear-gradient(#6f2c32, #3f151d);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.45), 0 0.25rem 0.55rem rgba(0, 0, 0, 0.35);
+  font: 700 1rem/1 "Yu Mincho", serif;
+  cursor: pointer;
+}
+.shogi-game button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.65);
+  opacity: 0.45;
+}
+.shogi-game__command {
+  min-width: 8rem;
+  clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+}
+.shogi-game__command--danger {
+  background: linear-gradient(#d96734, #9d261d);
+}
+.shogi-game__command--settings {
+  background: linear-gradient(#0788bc, #075074);
+}
+.shogi-game__turn {
+  margin-left: auto;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--gold);
+  border-radius: 0.35rem;
+  background: var(--panel);
+  font-weight: 700;
+}
+.shogi-game__player-zone {
+  position: relative;
+  display: grid;
+  min-height: 9rem;
+  align-items: end;
+}
+.shogi-game__player-zone--opponent {
+  grid-template-columns: minmax(15rem, 0.9fr) minmax(12rem, 1.3fr);
+  padding-right: clamp(9rem, 25vw, 17rem);
+}
+.shogi-game__player-zone--player {
+  grid-template-columns: minmax(10rem, 1fr) minmax(12rem, 1fr);
+  gap: 0.7rem;
+  min-height: 13rem;
+  padding-left: clamp(8rem, 24vw, 16rem);
+  padding-top: 0.7rem;
+}
+.shogi-game__character {
+  position: absolute;
+  z-index: 0;
+  width: clamp(10rem, 28vw, 18rem);
+  height: clamp(14rem, 36vw, 24rem);
+  object-fit: contain;
+  object-position: center top;
+  pointer-events: none;
+  filter: drop-shadow(0 0.65rem 0.6rem rgba(20, 0, 8, 0.48));
+}
+.shogi-game__character--opponent {
+  right: 0;
+  bottom: -0.8rem;
+}
+.shogi-game__character--player {
+  bottom: -2.4rem;
+  left: -1.1rem;
+}
+.shogi-game__player-card,
+.shogi-game__status,
+.shogi-game__dialogue {
+  z-index: 1;
+  box-sizing: border-box;
+  border: 2px solid var(--gold);
+  background: var(--panel);
+  box-shadow: inset 0 0 1.5rem rgba(110, 34, 53, 0.35);
+}
+.shogi-game__player-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.3rem 0.6rem;
+  align-items: center;
+  min-width: 0;
+  padding: 0.7rem 0.9rem;
+}
+.shogi-game__player-card > span,
+.shogi-game__player-card > small {
+  color: #e7d8cf;
+}
+.shogi-game__player-card > div {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(216, 173, 85, 0.55);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game__player-card b {
+  margin-right: 0.7rem;
+  color: #f4d890;
 }
 .shogi-game__status {
   display: flex;
-  min-width: 0;
-  min-height: 3.25rem;
+  min-height: 5.2rem;
+  padding: 0.8rem 1rem;
   flex-direction: column;
   justify-content: center;
+  text-align: center;
 }
 .shogi-game__status strong {
-  display: block;
   min-height: 1.5rem;
   overflow: hidden;
   line-height: 1.5rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.shogi-game__meta {
-  display: block;
-  margin-top: 0.2rem;
-  color: #695b48;
+.shogi-game__status span {
+  margin-top: 0.25rem;
+  color: #d5c3bd;
   font-size: 0.85rem;
 }
-.shogi-game__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  justify-content: flex-end;
-  max-width: 100%;
+.shogi-game__settings {
+  margin: 0.55rem 0;
+  padding: 0.8rem;
+  border: 2px solid var(--gold);
+  border-radius: 0.45rem;
+  background: rgba(24, 13, 18, 0.96);
+}
+.shogi-game__settings-title {
+  margin-bottom: 0.6rem;
+  color: #f4d890;
+  font-weight: 700;
+}
+.shogi-game__settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
 }
 .shogi-game__strength {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.55rem;
   align-items: center;
-  color: #695b48;
-  font-size: 0.85rem;
+  justify-content: space-between;
 }
 .shogi-game__strength select {
   box-sizing: border-box;
-  width: 11.5rem;
+  width: min(13rem, 65%);
   min-height: 2.5rem;
   padding: 0.4rem 0.55rem;
-  border: 1px solid #876d45;
+  border: 1px solid var(--gold);
   border-radius: 0.4rem;
-  background: white;
-  color: #20180d;
+  background: #fff9ea;
+  color: #2b1618;
   font: inherit;
 }
-.shogi-game__formations,
-.shogi-game__hint {
+.shogi-game__board-shell {
+  padding: 0.45rem;
+  border: 3px solid var(--gold);
+  background: rgba(27, 9, 14, 0.88);
+  box-shadow: 0 0.6rem 1.4rem rgba(25, 0, 8, 0.55);
+}
+.shogi-game__board-shell .shogi-match-theme-controls {
+  display: none;
+}
+.shogi-game__dialogue {
+  grid-column: 1 / -1;
+  min-height: 5.8rem;
+  padding: 0.85rem 1rem;
+}
+.shogi-game__assist-actions {
+  z-index: 1;
   display: flex;
-  gap: 0.65rem;
-  margin: 0.75rem 0 0;
-  padding: 0.75rem 1rem;
-  border-radius: 0.6rem;
-  background: #fff8e8;
+  gap: 0.55rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
-.shogi-game__formations {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.shogi-game__formations > div {
-  display: flex;
-  gap: 0.65rem;
-  min-width: 0;
-}
-.shogi-game__formations > div + div {
-  padding-left: 1rem;
-  border-left: 1px solid #ddc9a8;
-}
-.shogi-game__formations strong {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  color: #a33a24;
-}
-.shogi-game__formations span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.shogi-game__hint {
-  background: #eef7df;
-}
-.shogi-game button {
-  min-height: 2.5rem;
-  padding: 0.45rem 0.85rem;
-  border: 1px solid #876d45;
-  border-radius: 0.4rem;
-  background: white;
-  color: inherit;
-  cursor: pointer;
-}
-.shogi-game button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
+.shogi-game__awakening {
+  border-color: #f5a8ff !important;
+  background: linear-gradient(135deg, #3826ad, #b421c0) !important;
+  text-shadow: 0 0 0.5rem white;
 }
 .shogi-game__error {
+  margin: 0.7rem 0 0;
   padding: 0.75rem;
-  color: #991b1b;
-  background: #fee2e2;
+  border: 1px solid #ff8d8d;
+  color: #fff;
+  background: rgba(110, 10, 20, 0.94);
 }
 @media (max-width: 780px) {
-  .shogi-game__header {
+  .shogi-game__player-zone--opponent {
     grid-template-columns: 1fr;
-    align-items: stretch;
+    gap: 0.55rem;
+    padding-right: clamp(7rem, 24vw, 11rem);
   }
-  .shogi-game__actions {
-    justify-content: flex-start;
+  .shogi-game__player-zone--player {
+    grid-template-columns: 1fr;
+    padding-left: clamp(7rem, 24vw, 11rem);
+  }
+  .shogi-game__settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .shogi-game__dialogue {
+    grid-column: auto;
   }
 }
 @media (max-width: 540px) {
-  .shogi-game__header {
-    gap: 0.65rem;
-    padding: 0.65rem;
+  .shogi-game {
+    padding: 0.4rem;
+    border-radius: 0;
   }
-  .shogi-game__actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .shogi-game__toolbar {
+    gap: 0.4rem;
+    padding-inline: 0;
   }
-  .shogi-game__actions button {
-    width: 100%;
+  .shogi-game__command {
+    min-width: 6.5rem;
   }
-  .shogi-game__strength {
-    box-sizing: border-box;
+  .shogi-game__turn {
+    padding-inline: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .shogi-game__player-zone {
+    min-height: 7.4rem;
+  }
+  .shogi-game__player-zone--opponent {
+    padding-right: 6.7rem;
+  }
+  .shogi-game__player-zone--player {
+    min-height: 15rem;
+    padding-left: 6.7rem;
+  }
+  .shogi-game__character {
+    width: 8.5rem;
+    height: 13rem;
+  }
+  .shogi-game__player-card {
+    grid-template-columns: auto 1fr;
+    padding: 0.55rem;
+  }
+  .shogi-game__player-card > small {
+    display: none;
+  }
+  .shogi-game__status {
+    min-height: 3.8rem;
+    padding: 0.5rem;
+  }
+  .shogi-game__assist-actions {
     grid-column: 1 / -1;
-    width: 100%;
   }
-  .shogi-game__strength select {
+  .shogi-game__assist-actions button {
     flex: 1;
-  }
-  .shogi-game__formations {
-    grid-template-columns: 1fr;
-  }
-  .shogi-game__formations > div + div {
-    margin-top: 0.6rem;
-    padding-top: 0.6rem;
-    padding-left: 0;
-    border-top: 1px solid #ddc9a8;
-    border-left: 0;
+    padding-inline: 0.45rem;
+    font-size: 0.82rem;
   }
 }
 </style>
