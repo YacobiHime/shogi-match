@@ -547,7 +547,7 @@ queueMicrotask(() => {
   box-sizing: border-box;
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+  grid-template-columns: minmax(0, 1fr) 18rem;
   grid-template-rows: auto minmax(0, 0.8fr) minmax(0, 1.2fr);
   width: 100%;
   max-width: 1600px;
