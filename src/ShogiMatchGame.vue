@@ -6,6 +6,8 @@
         <span class="shogi-game__meta">{{ modeText }}・{{ moveCount }}手</span>
       </div>
       <div class="shogi-game__actions">
+        <button type="button" :disabled="!canUseHint" @click="showHint">ヒント（残り{{ hintsRemaining }}）</button>
+        <button type="button" :disabled="!canUndo" @click="undoTurn">待った（残り{{ undosRemaining }}）</button>
         <button type="button" :disabled="!active" @click="resign">投了</button>
         <button type="button" @click="restart">最初から</button>
       </div>
@@ -21,9 +23,14 @@
       :asset-base-url="assetBaseUrl"
       :black-player-name="blackPlayerName"
       :white-player-name="effectiveWhitePlayerName"
+      :candidates="hintCandidates"
       @usi-move="onPlayerMove"
     />
 
+    <aside class="shogi-game__guide" aria-label="やこび姫の戦形ガイド">
+      <strong>やこび姫</strong><span>{{ guideText }}</span>
+    </aside>
+    <p v-if="hintText" class="shogi-game__hint" role="status">{{ hintText }}</p>
     <p v-if="errorMessage" class="shogi-game__error" role="alert">{{ errorMessage }}</p>
   </section>
 </template>
@@ -44,6 +51,21 @@ import {
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
+import { findNewFormationCallouts } from "./core/formation-callouts.mjs";
+import { findNewHiraganaSuishoFormations } from "./core/hiragana-suisho-formations.mjs";
+import { formatHintMove, getHintMoves } from "./core/match-assists.mjs";
+import hiraganaFormationMaster from "../../data/hiragana_suisho_formations.json";
+
+const formationCalloutMaster = {
+  version: 1,
+  initial_speech: "戦形が見えたら知らせるね！",
+  undo_speech: "もう一度、盤面を見てみよう！",
+  callouts: [
+    { callout_id: "bogin", name: "棒銀", speech: "棒銀！" },
+    { callout_id: "gold_yagura", name: "金矢倉囲い", speech: "金矢倉囲い！" },
+    { callout_id: "right_shiken", name: "右四間飛車", speech: "右四間飛車！" },
+  ],
+};
 
 const props = defineProps({
   mode: { type: String as () => GameMode, default: "cpu" },
@@ -56,6 +78,8 @@ const props = defineProps({
   cpuDelayMs: { type: Number, default: 350 },
   engineBaseUrl: { type: String, default: "." },
   engineNodes: { type: Number, default: 30000 },
+  hintCount: { type: Number, default: 3 },
+  undoCount: { type: Number, default: 1 },
   mobile: { type: Boolean, default: false },
   enableDragAndDrop: { type: Boolean, default: true },
 });
@@ -70,6 +94,12 @@ const thinking = ref(false);
 const engineReady = ref(false);
 const engineUnavailable = ref(false);
 const result = ref<MatchResult | null>(null);
+const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
+const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
+const hintCandidates = ref<{ usi: string; score?: string }[]>([]);
+const hintText = ref("");
+const guideText = ref(formationCalloutMaster.initial_speech);
+const announcedFormations = new Set<string>();
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
@@ -88,6 +118,14 @@ const canMove = computed(() =>
   active.value &&
   !thinking.value &&
   (normalizedMode.value === "local" || record.value.position.color === humanColor.value)
+);
+const canUseHint = computed(() => canMove.value && engineReady.value && hintsRemaining.value > 0);
+const canUndo = computed(() =>
+  active.value
+  && !thinking.value
+  && undosRemaining.value > 0
+  && (normalizedMode.value === "local" ? moveHistory.length > 0 : moveHistory.length >= 2)
+  && (normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
 const statusText = computed(() => {
   if (result.value) {
@@ -116,6 +154,18 @@ function syncPosition(usi = "") {
   lastMove.value = usi;
 }
 
+function announceFormation() {
+  const direct = findNewFormationCallouts(currentSfen.value, formationCalloutMaster, announcedFormations);
+  const detailed = findNewHiraganaSuishoFormations(
+    currentSfen.value, hiraganaFormationMaster, announcedFormations,
+  );
+  const found = direct[0] ?? detailed[0];
+  if (!found) return;
+  const key = "callout_id" in found ? found.callout_id : `hiragana:${found.name}`;
+  announcedFormations.add(key);
+  guideText.value = "speech" in found ? found.speech : `「${found.name}」の戦形だね！`;
+}
+
 function finish(matchResult: MatchResult) {
   active.value = false;
   thinking.value = false;
@@ -135,10 +185,58 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   if (!active.value || !appendUsiMove(record.value, usi)) return false;
   syncPosition(usi);
   moveHistory.push(usi);
+  hintCandidates.value = [];
+  hintText.value = "";
+  announceFormation();
   emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
   const terminalResult = resultAfterMove(record.value);
   if (terminalResult) finish(terminalResult);
   return true;
+}
+
+async function showHint() {
+  if (!canUseHint.value || !engine) return;
+  thinking.value = true;
+  hintText.value = "やこび姫が候補手を考えています…";
+  try {
+    const base = props.initialSfen === STANDARD_SFEN ? "startpos" : `sfen ${props.initialSfen}`;
+    engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
+    engine.applyStrengthOptions({ multiPv: 3 });
+    const search = await engine.go({
+      nodes: Math.max(1, Math.trunc(props.engineNodes)),
+      maxTimeMs: 5000,
+    });
+    const moves = getHintMoves(search, 3);
+    hintCandidates.value = moves.map(({ rank, move }) => ({
+      usi: move, score: rank === 1 ? "本命" : `候補${rank}`,
+    }));
+    hintText.value = `おすすめは ${formatHintMove(moves[0].move, currentSfen.value)} だよ！`;
+    hintsRemaining.value -= 1;
+  } catch (error) {
+    hintText.value = `ヒントを出せませんでした: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    engine?.applyStrengthOptions({ multiPv: 1 });
+    thinking.value = false;
+  }
+}
+
+function rebuildRecord(moves: string[]) {
+  const next = createGameRecord(props.initialSfen);
+  for (const move of moves) appendUsiMove(next, move);
+  record.value = next;
+  moveHistory = [...moves];
+  syncPosition(moveHistory.at(-1) ?? "");
+}
+
+function undoTurn() {
+  if (!canUndo.value) return;
+  if (cpuTimer) clearTimeout(cpuTimer);
+  const removeCount = normalizedMode.value === "cpu" && moveHistory.length >= 2 ? 2 : 1;
+  rebuildRecord(moveHistory.slice(0, -removeCount));
+  undosRemaining.value -= 1;
+  hintCandidates.value = [];
+  hintText.value = "";
+  guideText.value = formationCalloutMaster.undo_speech;
 }
 
 function onPlayerMove(usi: string) {
@@ -217,6 +315,12 @@ function restart() {
   thinking.value = false;
   result.value = null;
   moveHistory = [];
+  hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
+  undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));
+  hintCandidates.value = [];
+  hintText.value = "";
+  guideText.value = formationCalloutMaster.initial_speech;
+  announcedFormations.clear();
   syncPosition();
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
   initializeEngine();
@@ -267,7 +371,24 @@ queueMicrotask(() => {
 }
 .shogi-game__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+.shogi-game__guide,
+.shogi-game__hint {
+  display: flex;
+  gap: 0.65rem;
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  background: #fff8e8;
+}
+.shogi-game__guide strong {
+  white-space: nowrap;
+  color: #a33a24;
+}
+.shogi-game__hint {
+  background: #eef7df;
 }
 .shogi-game button {
   min-height: 2.5rem;

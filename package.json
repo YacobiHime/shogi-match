@@ -1,6 +1,6 @@
 {
   "name": "@yacobihime/shogi-match",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Complete embeddable shogi match runtime for the web, RPGs, and visual novels.",
   "type": "module",
   "license": "GPL-3.0-or-later",
