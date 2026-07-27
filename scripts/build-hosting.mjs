@@ -8,6 +8,7 @@ await mkdir(output, { recursive: true });
 for (const path of [
   "game.html",
   "dist",
+  "vendor",
   "yaneuraou.data",
   "yaneuraou.wasm",
   "yaneuraou.worker.js",
