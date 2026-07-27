@@ -144,7 +144,7 @@ function measure() {
   const heightRatio = layoutType.value === BoardLayoutType.PORTRAIT
     ? 1.34
     : layoutType.value === BoardLayoutType.COMPACT ? 0.94 : 0.66;
-  const height = Math.max(1, Math.round(width * heightRatio));
+  const height = Math.max(1, Math.round(root.value.clientHeight || width * heightRatio));
   if (maxSize.value.width === width && maxSize.value.height === height) return;
   maxSize.value = new RectSize(width, height);
 }
@@ -160,7 +160,7 @@ watch(selectedPieceTheme, (theme) => storage?.setItem("shogi-match-piece-theme",
 </script>
 
 <style>
-:host { display: block; width: 100%; }
+:host { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .shogi-match-root {
   --shadow-color: rgba(0, 0, 0, 0.5);
   --text-color: black;
@@ -174,6 +174,7 @@ watch(selectedPieceTheme, (theme) => storage?.setItem("shogi-match-piece-theme",
   --turn-label-bg-color: #2424e6;
   --turn-label-border-color: midnightblue;
   width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
