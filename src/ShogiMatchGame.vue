@@ -621,20 +621,20 @@ queueMicrotask(() => {
 .shogi-game__character {
   position: absolute;
   z-index: 0;
-  width: clamp(10rem, 28vw, 18rem);
-  height: clamp(14rem, 36vw, 24rem);
-  object-fit: contain;
-  object-position: center top;
+  width: clamp(9rem, 24vw, 15rem);
+  height: clamp(8rem, 20vw, 11rem);
+  object-fit: cover;
+  object-position: center 18%;
   pointer-events: none;
   filter: drop-shadow(0 0.65rem 0.6rem rgba(20, 0, 8, 0.48));
 }
 .shogi-game__character--opponent {
   right: 0;
-  bottom: -0.8rem;
+  bottom: 0;
 }
 .shogi-game__character--player {
-  bottom: -2.4rem;
-  left: -1.1rem;
+  bottom: 0;
+  left: 0;
 }
 .shogi-game__player-card,
 .shogi-game__status,
@@ -800,8 +800,9 @@ queueMicrotask(() => {
     padding-left: 6.7rem;
   }
   .shogi-game__character {
-    width: 8.5rem;
-    height: 13rem;
+    width: 7.5rem;
+    height: 9.5rem;
+    object-position: center 17%;
   }
   .shogi-game__player-card {
     grid-template-columns: auto 1fr;
