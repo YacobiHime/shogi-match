@@ -51,8 +51,15 @@
       @usi-move="onPlayerMove"
     />
 
-    <aside class="shogi-game__guide" aria-label="やこび姫の戦形ガイド">
-      <strong>やこび姫</strong><span>{{ guideText }}</span>
+    <aside class="shogi-game__formations" aria-label="戦形判定">
+      <div>
+        <strong>{{ normalizedMode === "cpu" ? "自分の戦形" : "先手の戦形" }}</strong>
+        <span>{{ playerFormationText }}</span>
+      </div>
+      <div>
+        <strong>{{ normalizedMode === "cpu" ? "相手の戦形" : "後手の戦形" }}</strong>
+        <span>{{ opponentFormationText }}</span>
+      </div>
     </aside>
     <p v-if="hintText" class="shogi-game__hint" role="status">{{ hintText }}</p>
     <p v-if="errorMessage" class="shogi-game__error" role="alert">{{ errorMessage }}</p>
@@ -77,7 +84,11 @@ import {
 import { ShogiEngine } from "./core/engine.js";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
 import { findNewFormationCallouts } from "./core/formation-callouts.mjs";
-import { findNewHiraganaSuishoFormations } from "./core/hiragana-suisho-formations.mjs";
+import {
+  detectHiraganaSuishoFormations,
+  findNewHiraganaSuishoFormations,
+  invertHiraganaSuishoSfen,
+} from "./core/hiragana-suisho-formations.mjs";
 import { formatHintMove, getHintMoves } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
@@ -164,6 +175,30 @@ const statusText = computed(() => {
   if (thinking.value) return `${props.cpuPlayerName}が考えています…`;
   return record.value.position.color === Color.BLACK ? "先手番です" : "後手番です";
 });
+const blackFormationText = computed(() => formationTextForColor(currentSfen.value, Color.BLACK));
+const whiteFormationText = computed(() => formationTextForColor(currentSfen.value, Color.WHITE));
+const playerFormationText = computed(() =>
+  normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
+    ? whiteFormationText.value
+    : blackFormationText.value
+);
+const opponentFormationText = computed(() =>
+  normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
+    ? blackFormationText.value
+    : whiteFormationText.value
+);
+
+function formationTextForColor(sfen: string, color: Color): string {
+  let perspective = color === Color.BLACK ? sfen : invertHiraganaSuishoSfen(sfen);
+  const fields = perspective.split(/\s+/);
+  fields[1] = "w";
+  perspective = fields.join(" ");
+  const names = [...new Set(
+    detectHiraganaSuishoFormations(perspective, hiraganaFormationMaster)
+      .map((formation) => formation.name),
+  )].slice(0, 3);
+  return names.length ? names.join("・") : "まだ未判定";
+}
 
 function normalizeNodes(value: number): number {
   const nodes = Number.isFinite(value) ? value : 30000;
@@ -499,7 +534,7 @@ queueMicrotask(() => {
   color: #20180d;
   font: inherit;
 }
-.shogi-game__guide,
+.shogi-game__formations,
 .shogi-game__hint {
   display: flex;
   gap: 0.65rem;
@@ -508,9 +543,28 @@ queueMicrotask(() => {
   border-radius: 0.6rem;
   background: #fff8e8;
 }
-.shogi-game__guide strong {
+.shogi-game__formations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.shogi-game__formations > div {
+  display: flex;
+  gap: 0.65rem;
+  min-width: 0;
+}
+.shogi-game__formations > div + div {
+  padding-left: 1rem;
+  border-left: 1px solid #ddc9a8;
+}
+.shogi-game__formations strong {
+  flex: 0 0 auto;
   white-space: nowrap;
   color: #a33a24;
+}
+.shogi-game__formations span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .shogi-game__hint {
   background: #eef7df;
@@ -561,6 +615,16 @@ queueMicrotask(() => {
   }
   .shogi-game__strength select {
     flex: 1;
+  }
+  .shogi-game__formations {
+    grid-template-columns: 1fr;
+  }
+  .shogi-game__formations > div + div {
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    padding-left: 0;
+    border-top: 1px solid #ddc9a8;
+    border-left: 0;
   }
 }
 </style>
