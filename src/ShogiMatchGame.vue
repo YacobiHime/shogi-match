@@ -11,11 +11,13 @@
     </header>
 
     <section class="shogi-game__player-zone shogi-game__player-zone--opponent">
-      <img
-        class="shogi-game__character shogi-game__character--opponent"
-        :src="`${assetBaseUrl}/characters/mifune-hane.png`"
-        alt=""
-      >
+      <div class="shogi-game__portrait shogi-game__portrait--opponent">
+        <img
+          class="shogi-game__character"
+          :src="`${assetBaseUrl}/characters/mifune-hane.png`"
+          alt=""
+        >
+      </div>
       <div class="shogi-game__player-card">
         <span>{{ opponentSideLabel }}</span>
         <strong>{{ normalizedMode === "cpu" ? cpuPlayerName : whitePlayerName }}</strong>
@@ -75,11 +77,13 @@
     </div>
 
     <section class="shogi-game__player-zone shogi-game__player-zone--player">
-      <img
-        class="shogi-game__character shogi-game__character--player"
-        :src="`${assetBaseUrl}/characters/sakurano-momoka.png`"
-        alt=""
-      >
+      <div class="shogi-game__portrait shogi-game__portrait--player">
+        <img
+          class="shogi-game__character"
+          :src="`${assetBaseUrl}/characters/sakurano-momoka.png`"
+          alt=""
+        >
+      </div>
       <div class="shogi-game__dialogue">
         {{ hintText || guideText }}
       </div>
@@ -618,21 +622,28 @@ queueMicrotask(() => {
   padding-left: clamp(8rem, 24vw, 16rem);
   padding-top: 0.7rem;
 }
-.shogi-game__character {
+.shogi-game__portrait {
   position: absolute;
   z-index: 0;
   width: clamp(9rem, 24vw, 15rem);
   height: clamp(8rem, 20vw, 11rem);
+  overflow: hidden;
+  pointer-events: none;
+}
+.shogi-game__character {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   object-position: center 18%;
-  pointer-events: none;
   filter: drop-shadow(0 0.65rem 0.6rem rgba(20, 0, 8, 0.48));
+  transform: scale(1.85);
+  transform-origin: 50% 18%;
 }
-.shogi-game__character--opponent {
+.shogi-game__portrait--opponent {
   right: 0;
   bottom: 0;
 }
-.shogi-game__character--player {
+.shogi-game__portrait--player {
   bottom: 0;
   left: 0;
 }
@@ -799,10 +810,13 @@ queueMicrotask(() => {
     min-height: 15rem;
     padding-left: 6.7rem;
   }
-  .shogi-game__character {
+  .shogi-game__portrait {
     width: 7.5rem;
     height: 9.5rem;
+  }
+  .shogi-game__character {
     object-position: center 17%;
+    transform-origin: 50% 17%;
   }
   .shogi-game__player-card {
     grid-template-columns: auto 1fr;
