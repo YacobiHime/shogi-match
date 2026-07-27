@@ -161,7 +161,6 @@ const statusText = computed(() => {
     return result.value.winner === Color.BLACK ? "先手の勝ち" : "後手の勝ち";
   }
   if (normalizedMode.value === "cpu" && !engineReady.value) return "やねうら王を起動中…";
-  if (thinking.value) return `${props.cpuPlayerName}が考えています…`;
   return record.value.position.color === Color.BLACK ? "先手番です" : "後手番です";
 });
 
