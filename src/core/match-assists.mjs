@@ -40,7 +40,7 @@ export function getHintMoves(searchResult, limit = 3) {
       seenMoves.add(candidate.move);
       return true;
     })
-    .map(({ rank, move }) => ({ rank, move }));
+    .map(({ rank, move, score }) => ({ rank, move, score }));
   if (moves.length === 0) {
     throw new Error('ヒントの指し手を取得できませんでした');
   }
@@ -130,6 +130,18 @@ export function formatHintEvaluation(score) {
   }
   const value = score.value / 100;
   return `評価値 ${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
+}
+
+/** エンジン評価を、矢印の比較に使う手番側視点の整数値へ変換する。 */
+export function hintScoreForArrow(score) {
+  if (!score || !['cp', 'mate'].includes(score.type) || !Number.isFinite(score.value)) {
+    return undefined;
+  }
+  if (score.type === 'cp') return Math.trunc(score.value);
+  // 詰みは通常評価より常に優先し、短い詰みほど高く、被詰みは長いほど高く扱う。
+  if (score.value > 0) return 100000 - score.value;
+  if (score.value < 0) return -100000 + Math.abs(score.value);
+  return 100000;
 }
 
 function validateSnapshot(snapshot) {
