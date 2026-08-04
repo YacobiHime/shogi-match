@@ -144,6 +144,13 @@ export function hintScoreForArrow(score) {
   return 100000;
 }
 
+/** 通常対局の強さ設定とは独立した、端末負荷を抑えた閃き専用探索設定。 */
+export function getHintSearchSettings(mobile = false) {
+  return mobile
+    ? { nodes: 300000, maxTimeMs: 6000, multiPv: 3 }
+    : { nodes: 1000000, maxTimeMs: 10000, multiPv: 3 };
+}
+
 function validateSnapshot(snapshot) {
   if (!snapshot || typeof snapshot.sfen !== 'string'
     || !Number.isInteger(snapshot.moveHistoryLength) || snapshot.moveHistoryLength < 0

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getHintMoves, hintScoreForArrow } from './match-assists.mjs';
+import { getHintMoves, getHintSearchSettings, hintScoreForArrow } from './match-assists.mjs';
 
 describe('hint arrow evaluations', () => {
   it('keeps engine scores when selecting hint candidates', () => {
@@ -21,5 +21,18 @@ describe('hint arrow evaluations', () => {
       .toBeGreaterThan(hintScoreForArrow({ type: 'cp', value: 9999 }));
     expect(hintScoreForArrow({ type: 'mate', value: -7 }))
       .toBeLessThan(hintScoreForArrow({ type: 'cp', value: -9999 }));
+  });
+
+  it('uses a stronger bounded search for hints', () => {
+    expect(getHintSearchSettings(false)).toEqual({
+      nodes: 1000000,
+      maxTimeMs: 10000,
+      multiPv: 3,
+    });
+    expect(getHintSearchSettings(true)).toEqual({
+      nodes: 300000,
+      maxTimeMs: 6000,
+      multiPv: 3,
+    });
   });
 });
