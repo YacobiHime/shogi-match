@@ -130,7 +130,12 @@ import {
   findNewHiraganaSuishoFormations,
   invertHiraganaSuishoSfen,
 } from "./core/hiragana-suisho-formations.mjs";
-import { formatHintMove, getHintMoves, hintScoreForArrow } from "./core/match-assists.mjs";
+import {
+  formatHintMove,
+  getHintMoves,
+  getHintSearchSettings,
+  hintScoreForArrow,
+} from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
@@ -399,10 +404,11 @@ async function showHint() {
   try {
     const base = props.initialSfen === STANDARD_SFEN ? "startpos" : `sfen ${props.initialSfen}`;
     engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
-    engine.applyStrengthOptions({ multiPv: 3 });
+    const hintSearch = getHintSearchSettings(props.mobile || boardLayout.value === "portrait");
+    engine.applyStrengthOptions({ multiPv: hintSearch.multiPv });
     const search = await engine.go({
-      nodes: searchNodes.value,
-      maxTimeMs: 60000,
+      nodes: hintSearch.nodes,
+      maxTimeMs: hintSearch.maxTimeMs,
     });
     const moves = getHintMoves(search, 3);
     hintCandidates.value = moves.map(({ move, score }) => ({
