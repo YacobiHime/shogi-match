@@ -130,7 +130,7 @@ import {
   findNewHiraganaSuishoFormations,
   invertHiraganaSuishoSfen,
 } from "./core/hiragana-suisho-formations.mjs";
-import { formatHintMove, getHintMoves } from "./core/match-assists.mjs";
+import { formatHintMove, getHintMoves, hintScoreForArrow } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
@@ -174,7 +174,7 @@ const engineUnavailable = ref(false);
 const result = ref<MatchResult | null>(null);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
-const hintCandidates = ref<{ usi: string; score?: string }[]>([]);
+const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
 const hintText = ref("");
 const guideText = ref(formationCalloutMaster.initial_speech);
 const searchNodes = ref(normalizeNodes(props.engineNodes));
@@ -405,8 +405,8 @@ async function showHint() {
       maxTimeMs: 60000,
     });
     const moves = getHintMoves(search, 3);
-    hintCandidates.value = moves.map(({ rank, move }) => ({
-      usi: move, score: rank === 1 ? "本命" : `候補${rank}`,
+    hintCandidates.value = moves.map(({ move, score }) => ({
+      usi: move, score: hintScoreForArrow(score),
     }));
     hintText.value = `おすすめは ${formatHintMove(moves[0].move, currentSfen.value)} だよ！`;
     hintsRemaining.value -= 1;
@@ -984,8 +984,7 @@ queueMicrotask(() => {
     height: 3.4rem;
   }
   .shogi-game__character {
-    object-position: center 17%;
-    transform-origin: 50% 17%;
+    object-position: center;
   }
   .shogi-game__player-card {
     grid-template-columns: auto 1fr;

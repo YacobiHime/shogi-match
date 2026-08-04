@@ -1030,7 +1030,7 @@ const arrows = computed(() => {
       scoreRank =
         1 +
         props.candidates.filter((c) => c.score !== undefined && c.score > candidate.score!).length;
-      labelText = diff === 0 ? "Best" : `${diff}`;
+      labelText = diff === 0 ? "最善" : `${diff}`;
     } else {
       scoreRank = index + 1;
       labelText = "";

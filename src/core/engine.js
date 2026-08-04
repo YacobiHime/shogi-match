@@ -334,11 +334,16 @@ export class ShogiEngine {
           this._listeners.splice(this._listeners.indexOf(listener), 1);
           if (timeoutId !== null) clearTimeout(timeoutId);
           candidates.set(1, parts[1]);
+          const bestDetail = candidateDetails.get(1);
+          candidateDetails.set(1, {
+            ...(bestDetail || {}),
+            rank: 1,
+            move: parts[1],
+          });
           resolve({
             move: parts[1],
             ponder: parts[3],
-            candidates: [...candidates.entries()]
-              .map(([rank, move]) => ({ rank, move }))
+            candidates: [...candidateDetails.values()]
               .sort((left, right) => left.rank - right.rank),
           });
         }
