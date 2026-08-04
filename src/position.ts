@@ -9,7 +9,7 @@ import {
 } from "tsshogi";
 
 export type CandidateInput = { usi: string; score?: number };
-export type CandidateMove = { move: Move; score?: number };
+export type CandidateMove = { move: Move; score?: number; promotion?: "成" | "不成" };
 
 export function positionFromSfen(sfen: string): ImmutablePosition {
   return Position.newBySFEN(sfen);
@@ -25,7 +25,15 @@ export function candidateMovesFromUsi(
       typeof candidate.score === "number" && Number.isFinite(candidate.score)
         ? candidate.score
         : undefined;
-    return move ? [{ move, score }] : [];
+    if (!move) return [];
+    let promotion: CandidateMove["promotion"];
+    if (move.promote) {
+      promotion = "成";
+    } else if (/^[1-9][a-i][1-9][a-i]$/.test(candidate.usi)) {
+      const promoted = position.createMoveByUSI(`${candidate.usi}+`);
+      if (promoted && position.isValidMove(promoted)) promotion = "不成";
+    }
+    return [{ move, score, promotion }];
   });
 }
 
