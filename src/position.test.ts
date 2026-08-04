@@ -31,6 +31,17 @@ describe("ShogiHome board adapter contract", () => {
     expect(candidates[0].score).toBeUndefined();
   });
 
+  it("marks promote and non-promote recommendations only when promotion is available", () => {
+    const position = positionFromSfen("4k4/9/9/4P4/9/9/9/9/4K4 b - 1");
+    const candidates = candidateMovesFromUsi(position, [
+      { usi: "5d5c+", score: 100 },
+      { usi: "5d5c", score: 80 },
+    ]);
+
+    expect(candidates.map(({ promotion }) => promotion)).toEqual(["成", "不成"]);
+    expect(candidateMovesFromUsi(position, [{ usi: "5d5e" }])[0].promotion).toBeUndefined();
+  });
+
   it("restores the last move from the position after that move", () => {
     const position = positionFromSfen(START_SFEN) as ReturnType<typeof positionFromSfen> & {
       doMove: (move: NonNullable<ReturnType<typeof positionFromSfen>["createMoveByUSI"]>) => boolean;

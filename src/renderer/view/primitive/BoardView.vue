@@ -263,6 +263,7 @@ import {
 type CandidateMove = {
   move: Move;
   score?: number; // 手番側視点の数値スコア（showArrowScore が有効な場合のみ設定）
+  promotion?: "成" | "不成";
 };
 
 type State = {
@@ -1023,18 +1024,19 @@ const arrows = computed(() => {
     const distance = start.distanceTo(end);
     const angle = start.angleTo(end) - Math.PI;
     // z-index 決定のためスコアに基づいてランクを計算（同率は同順位）
-    let labelText: string;
+    let evaluationLabel: string;
     let scoreRank: number;
     if (candidate.score !== undefined && bestScore !== undefined) {
       const diff = candidate.score - bestScore;
       scoreRank =
         1 +
         props.candidates.filter((c) => c.score !== undefined && c.score > candidate.score!).length;
-      labelText = diff === 0 ? "最善" : `${diff}`;
+      evaluationLabel = diff === 0 ? "最善" : `${diff}`;
     } else {
       scoreRank = index + 1;
-      labelText = "";
+      evaluationLabel = "";
     }
+    const labelText = [evaluationLabel, candidate.promotion].filter(Boolean).join("・");
     const x = middle.x - distance / 2;
     const y = middle.y - arrowWidth / 2;
     // 矢印が水平に近いほどラベルをずらす（最大でフォントサイズ12px分）
