@@ -4,9 +4,9 @@ import { getStrengthSearchSettings } from './strength-settings.mjs';
 describe('CPU strength settings', () => {
   it('keeps lower difficulties within plausible candidate moves', () => {
     expect(getStrengthSearchSettings(1000)).toEqual({
-      nodes: 12000,
-      multiPv: 4,
-      moveRank: { min: 2, max: 4 },
+      nodes: 8000,
+      multiPv: 5,
+      moveRank: { min: 2, max: 5 },
     });
     expect(getStrengthSearchSettings(10000)).toEqual({
       nodes: 30000,
