@@ -573,6 +573,13 @@ queueMicrotask(() => {
 </script>
 
 <style>
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
 .shogi-game {
   --gold: #d8ad55;
   --ink: #fff8ec;
@@ -583,14 +590,14 @@ queueMicrotask(() => {
   grid-template-columns: minmax(0, 1fr) 20rem;
   grid-template-rows: auto minmax(0, 0.8fr) minmax(0, 1.2fr);
   width: 100%;
-  max-width: 1600px;
-  height: calc(100dvh - clamp(0px, 3vw, 32px));
+  max-width: none;
+  height: 100dvh;
   min-height: 0;
   margin: 0 auto;
   padding: clamp(0.5rem, 1.6vw, 1.25rem);
   overflow: hidden;
   border: 1px solid rgba(255, 216, 140, 0.45);
-  border-radius: 1rem;
+  border-radius: 0;
   color: var(--ink);
   background:
     radial-gradient(circle at 12% 20%, rgba(255, 226, 230, 0.78) 0 7%, transparent 22%),
@@ -900,9 +907,9 @@ queueMicrotask(() => {
 @media (min-width: 1100px) and (min-aspect-ratio: 5/4) {
   .shogi-game {
     grid-template-columns:
-      clamp(13rem, 16vw, 16rem)
-      minmax(0, 1fr)
-      clamp(15rem, 18vw, 18rem);
+      minmax(13rem, 1fr)
+      minmax(40rem, 68rem)
+      minmax(15rem, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
     gap: 0.65rem;
     padding: 0.75rem;
@@ -997,7 +1004,7 @@ queueMicrotask(() => {
   .shogi-game {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 8.75rem;
-    height: calc(100dvh - clamp(0px, 3vw, 32px));
+    height: 100dvh;
     padding: 0.5rem;
   }
   .shogi-game__toolbar {
