@@ -72,6 +72,7 @@
         </label>
       </div>
       <div class="shogi-game__settings-actions">
+        <button type="button" class="shogi-game__settings-restart" @click="restart">最初から</button>
         <button type="button" @click="settingsOpen = false">閉じる</button>
       </div>
     </div>
@@ -769,6 +770,7 @@ function startReview() {
 
 function restart() {
   if (cpuTimer) clearTimeout(cpuTimer);
+  settingsOpen.value = false;
   record.value = createRecord();
   active.value = true;
   thinking.value = false;
@@ -1049,8 +1051,13 @@ queueMicrotask(() => {
 }
 .shogi-game__settings-actions {
   display: flex;
+  gap: 0.6rem;
   justify-content: flex-end;
   margin-top: 0.8rem;
+}
+.shogi-game__settings-restart {
+  border-color: #e6a66f !important;
+  background: linear-gradient(#9b4a32, #57251e) !important;
 }
 .shogi-game__settings-actions button {
   min-width: 6.5rem;
