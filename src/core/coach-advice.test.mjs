@@ -2,8 +2,10 @@ import { describe, expect, test } from 'vitest';
 
 import {
   getCoachAdvice,
+  getMoveFeedback,
   isSideToMoveInCheck,
   scoreAfterOpponentMove,
+  scoreFromOpponentPerspective,
 } from './coach-advice.mjs';
 
 describe('対局中の応援・助言', () => {
@@ -12,6 +14,8 @@ describe('対局中の応援・助言', () => {
       .toEqual({ type: 'cp', value: -320 });
     expect(scoreAfterOpponentMove({ type: 'mate', value: -8 }))
       .toEqual({ type: 'mate', value: 7 });
+    expect(scoreFromOpponentPerspective({ type: 'cp', value: 1235 }))
+      .toEqual({ type: 'cp', value: -1235 });
   });
 
   test('序盤の有利・不利に応じて応援する', () => {
@@ -44,5 +48,34 @@ describe('対局中の応援・助言', () => {
 
   test('助言なしでは何も表示しない', () => {
     expect(getCoachAdvice({ level: 'off', score: { type: 'mate', value: 7 } })).toBeNull();
+  });
+
+  test('詳しい助言では大きな評価低下を悪手として指摘する', () => {
+    expect(getMoveFeedback({
+      level: 'detailed',
+      beforeScore: { type: 'cp', value: 100 },
+      afterScore: { type: 'cp', value: -500 },
+    })?.text).toBe('悪手だね…評価値-500だよ。');
+    expect(getMoveFeedback({
+      level: 'detailed',
+      beforeScore: { type: 'cp', value: 200 },
+      afterScore: { type: 'cp', value: -1235 },
+    })?.text).toBe('あちゃ～。やっちゃった…評価値-1235だよ。');
+  });
+
+  test('被詰みが確定した局面では投了を示唆する', () => {
+    expect(getMoveFeedback({
+      level: 'detailed',
+      beforeScore: { type: 'cp', value: -500 },
+      afterScore: { type: 'mate', value: -7 },
+    })?.text).toContain('投了する…？');
+  });
+
+  test('不利でも評価を改善した手は悪手扱いしない', () => {
+    expect(getMoveFeedback({
+      level: 'detailed',
+      beforeScore: { type: 'cp', value: -4000 },
+      afterScore: { type: 'cp', value: -3000 },
+    })).toBeNull();
   });
 });

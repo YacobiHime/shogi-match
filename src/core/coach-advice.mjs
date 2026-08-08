@@ -21,6 +21,58 @@ export function scoreAfterOpponentMove(score) {
   return { type: 'mate', value: score.value > 0 ? -remaining : remaining };
 }
 
+/** 現局面の相手視点評価をプレイヤー視点へ反転する。 */
+export function scoreFromOpponentPerspective(score) {
+  if (!score || !['cp', 'mate'].includes(score.type) || !Number.isFinite(score.value)) {
+    return undefined;
+  }
+  return { type: score.type, value: -score.value };
+}
+
+function comparableScore(score) {
+  if (score?.type === 'cp' && Number.isFinite(score.value)) return score.value;
+  if (score?.type === 'mate' && Number.isFinite(score.value)) {
+    if (score.value > 0) return 100000 - score.value;
+    if (score.value < 0) return -100000 + Math.abs(score.value);
+  }
+  return undefined;
+}
+
+function formatEvaluation(value) {
+  const integer = Math.trunc(value);
+  return `${integer >= 0 ? '+' : ''}${integer}`;
+}
+
+/** 着手前後のプレイヤー視点評価から、大きな評価低下だけを指摘する。 */
+export function getMoveFeedback({ level = 'encourage', beforeScore, afterScore } = {}) {
+  if (level !== 'detailed') return null;
+  const before = comparableScore(beforeScore);
+  const after = comparableScore(afterScore);
+  if (before === undefined || after === undefined) return null;
+  const loss = before - after;
+
+  if (loss >= 500 && afterScore?.type === 'mate' && afterScore.value < 0) {
+    return { key: 'move-lost', text: 'うぅ、もう勝ち目が無いよ…投了する…？' };
+  }
+  if (loss >= 500 && afterScore?.type === 'cp' && afterScore.value <= -3000) {
+    return { key: 'move-nearly-lost', text: 'うぅ、もう勝ち目がほとんど無いよ…投了する…？' };
+  }
+
+  if (loss >= 1000 && afterScore?.type === 'cp') {
+    return {
+      key: `move-blunder-${Math.trunc(afterScore.value)}`,
+      text: `あちゃ～。やっちゃった…評価値${formatEvaluation(afterScore.value)}だよ。`,
+    };
+  }
+  if (loss >= 500 && afterScore?.type === 'cp') {
+    return {
+      key: `move-mistake-${Math.trunc(afterScore.value)}`,
+      text: `悪手だね…評価値${formatEvaluation(afterScore.value)}だよ。`,
+    };
+  }
+  return null;
+}
+
 export function isSideToMoveInCheck(sfen) {
   try {
     const shogi = new Shogi();
