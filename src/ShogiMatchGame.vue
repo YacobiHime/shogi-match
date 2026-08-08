@@ -112,6 +112,28 @@
     </section>
 
     <p v-if="errorMessage" class="shogi-game__error" role="alert">{{ errorMessage }}</p>
+
+    <div
+      v-if="result && resultPresentation"
+      class="shogi-game__result"
+      :class="`shogi-game__result--${resultPresentation.tone}`"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="match-result-title"
+    >
+      <div v-if="resultPresentation.tone === 'victory'" class="shogi-game__confetti" aria-hidden="true">
+        <i v-for="index in 12" :key="index" />
+      </div>
+      <div class="shogi-game__result-panel">
+        <p class="shogi-game__result-kicker">{{ resultPresentation.kicker }}</p>
+        <h2 id="match-result-title">{{ resultPresentation.title }}</h2>
+        <p class="shogi-game__result-caption">{{ resultPresentation.caption }}</p>
+        <p class="shogi-game__result-detail">{{ resultPresentation.detail }}</p>
+        <button type="button" class="shogi-game__rematch" @click="restart">
+          もう一度対局する
+        </button>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -274,6 +296,38 @@ const statusText = computed(() => {
   if (normalizedMode.value === "cpu" && !engineReady.value) return "やねうら王を起動中…";
   if (thinking.value) return `${props.cpuPlayerName}が考えています…`;
   return record.value.position.color === Color.BLACK ? "先手番です" : "後手番です";
+});
+const resultPresentation = computed(() => {
+  if (!result.value) return null;
+  const reason = ({
+    checkmate: "詰みにより決着",
+    resignation: "投了により決着",
+    repetition: "千日手",
+    "perpetual-check": "連続王手の千日手",
+  } as const)[result.value.reason];
+  const detail = `${reason}・${result.value.moveCount}手`;
+  if (!result.value.winner) {
+    return {
+      tone: "draw",
+      kicker: "対局終了",
+      title: "引き分け",
+      caption: "互角の勝負でした",
+      detail,
+    };
+  }
+  if (normalizedMode.value === "local") {
+    return {
+      tone: "victory",
+      kicker: "対局終了",
+      title: result.value.winner === Color.BLACK ? "先手勝利" : "後手勝利",
+      caption: "勝負あり！",
+      detail,
+    };
+  }
+  const playerWon = result.value.winner === humanColor.value;
+  return playerWon
+    ? { tone: "victory", kicker: "WIN", title: "勝利", caption: "お見事です！", detail }
+    : { tone: "defeat", kicker: "LOSE", title: "敗北", caption: "もう一度挑戦しよう", detail };
 });
 const blackFormationText = computed(() => formationTextForColor(currentSfen.value, Color.BLACK));
 const whiteFormationText = computed(() => formationTextForColor(currentSfen.value, Color.WHITE));
@@ -858,6 +912,131 @@ queueMicrotask(() => {
   border: 1px solid #ff8d8d;
   color: #fff;
   background: rgba(110, 10, 20, 0.94);
+}
+.shogi-game__result {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(9, 3, 7, 0.78);
+  backdrop-filter: blur(0.35rem);
+  animation: result-backdrop-in 360ms ease-out both;
+}
+.shogi-game__result-panel {
+  position: relative;
+  width: min(32rem, 92vw);
+  padding: clamp(1.8rem, 5vw, 3.5rem);
+  border: 3px solid var(--result-accent);
+  border-radius: 1rem;
+  color: #fff8ec;
+  background:
+    radial-gradient(circle at 50% 5%, var(--result-glow), transparent 55%),
+    linear-gradient(155deg, rgba(63, 24, 34, 0.98), rgba(24, 10, 16, 0.98));
+  box-shadow:
+    inset 0 0 2.5rem var(--result-glow),
+    0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 1.2rem 4rem rgba(0, 0, 0, 0.65),
+    0 0 2.5rem var(--result-glow);
+  text-align: center;
+  animation: result-panel-in 620ms cubic-bezier(0.2, 1.3, 0.3, 1) both;
+}
+.shogi-game__result--victory {
+  --result-accent: #ffe17a;
+  --result-glow: rgba(255, 198, 43, 0.38);
+}
+.shogi-game__result--defeat {
+  --result-accent: #c97782;
+  --result-glow: rgba(142, 30, 48, 0.34);
+}
+.shogi-game__result--draw {
+  --result-accent: #c8b9d9;
+  --result-glow: rgba(147, 123, 178, 0.28);
+}
+.shogi-game__result-kicker {
+  margin: 0 0 0.35rem;
+  color: var(--result-accent);
+  font-weight: 800;
+  letter-spacing: 0.28em;
+}
+.shogi-game__result h2 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(3.3rem, 10vw, 6.5rem);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+  text-shadow: 0 0 1.4rem var(--result-accent), 0 0.18rem 0 #541d25;
+}
+.shogi-game__result--defeat h2 {
+  animation: result-defeat-pulse 2.2s ease-in-out infinite;
+}
+.shogi-game__result-caption {
+  margin: 1rem 0 0;
+  font-size: clamp(1.15rem, 3vw, 1.55rem);
+  font-weight: 700;
+}
+.shogi-game__result-detail {
+  margin: 0.55rem 0 1.5rem;
+  color: #dfd0cc;
+}
+.shogi-game__rematch {
+  min-width: min(16rem, 100%);
+  border-color: var(--result-accent) !important;
+  background: linear-gradient(#7a3540, #42151e) !important;
+  box-shadow: 0 0 1.2rem var(--result-glow) !important;
+}
+.shogi-game__confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.shogi-game__confetti i {
+  position: absolute;
+  top: -8%;
+  left: 50%;
+  width: 0.65rem;
+  height: 1.15rem;
+  background: #ffe17a;
+  animation: result-confetti-fall 2.8s ease-in infinite;
+}
+.shogi-game__confetti i:nth-child(3n) { background: #ff7f9b; }
+.shogi-game__confetti i:nth-child(3n + 1) { background: #fff4c2; }
+.shogi-game__confetti i:nth-child(1) { left: 8%; animation-delay: -0.4s; }
+.shogi-game__confetti i:nth-child(2) { left: 16%; animation-delay: -1.9s; }
+.shogi-game__confetti i:nth-child(3) { left: 25%; animation-delay: -0.8s; }
+.shogi-game__confetti i:nth-child(4) { left: 34%; animation-delay: -2.3s; }
+.shogi-game__confetti i:nth-child(5) { left: 42%; animation-delay: -1.2s; }
+.shogi-game__confetti i:nth-child(6) { left: 49%; animation-delay: -2.6s; }
+.shogi-game__confetti i:nth-child(7) { left: 57%; animation-delay: -0.2s; }
+.shogi-game__confetti i:nth-child(8) { left: 65%; animation-delay: -1.6s; }
+.shogi-game__confetti i:nth-child(9) { left: 73%; animation-delay: -2.1s; }
+.shogi-game__confetti i:nth-child(10) { left: 81%; animation-delay: -0.7s; }
+.shogi-game__confetti i:nth-child(11) { left: 89%; animation-delay: -1.4s; }
+.shogi-game__confetti i:nth-child(12) { left: 95%; animation-delay: -2.5s; }
+@keyframes result-backdrop-in {
+  from { opacity: 0; }
+}
+@keyframes result-panel-in {
+  from { transform: scale(0.65) translateY(2rem); opacity: 0; }
+}
+@keyframes result-defeat-pulse {
+  50% { opacity: 0.72; text-shadow: 0 0 0.7rem var(--result-accent); }
+}
+@keyframes result-confetti-fall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translateY(115vh) rotate(720deg); opacity: 0.25; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__result,
+  .shogi-game__result-panel,
+  .shogi-game__result h2,
+  .shogi-game__confetti i {
+    animation: none;
+  }
 }
 @media (max-width: 780px) {
   .shogi-game__settings-grid {
