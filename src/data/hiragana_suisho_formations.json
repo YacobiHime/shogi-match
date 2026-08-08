@@ -8,20 +8,10 @@
       "group": "enc_match",
       "name": "銀冠",
       "expression": {
-        "all": [
-          {
-            "match": {
-              "mode": "all",
-              "sfen": "sfen 9/9/9/9/9/9/7S1/6G2/9 b - 1"
-            }
-          },
-          {
-            "match": {
-              "mode": "any",
-              "sfen": "sfen 9/9/9/9/9/9/9/5K1K1/6K2 b - 1"
-            }
-          }
-        ]
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/5G1S1/6GK1/9 b - 1"
+        }
       }
     },
     {
@@ -500,20 +490,10 @@
       "group": "enc_match",
       "name": "銀冠",
       "expression": {
-        "all": [
-          {
-            "match": {
-              "mode": "all",
-              "sfen": "sfen 9/9/9/9/9/9/1S7/2G6/9 b - 1"
-            }
-          },
-          {
-            "match": {
-              "mode": "any",
-              "sfen": "sfen 9/9/9/9/9/9/9/1K1KK4/2KKK4 b - 1"
-            }
-          }
-        ]
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/1S1G5/1KG6/9 b - 1"
+        }
       }
     },
     {
