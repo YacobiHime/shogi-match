@@ -688,7 +688,7 @@ queueMicrotask(() => {
   height: 100%;
   object-fit: cover;
   object-position: center;
-  filter: drop-shadow(0 0.65rem 0.6rem rgba(20, 0, 8, 0.48));
+  image-rendering: auto;
 }
 .shogi-game__portrait--opponent {
   right: 0;
