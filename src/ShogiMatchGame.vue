@@ -110,7 +110,6 @@
           閃き <small>×{{ hintsRemaining }}</small>
         </button>
         <button type="button" :disabled="!canUndo" @click="undoTurn">待った ×{{ undosRemaining }}</button>
-        <button type="button" @click="restart">最初から</button>
       </div>
       <div class="shogi-game__player-card">
         <span>{{ playerSideLabel }}</span>
@@ -959,7 +958,7 @@ queueMicrotask(() => {
 .shogi-game__assist-actions {
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
   align-items: center;
 }
@@ -1148,9 +1147,6 @@ queueMicrotask(() => {
   .shogi-game__assist-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .shogi-game__assist-actions button:last-child {
-    grid-column: 1 / -1;
-  }
   .shogi-game button:disabled {
     border-color: #8f6d68;
     color: #c7b4b1;
@@ -1246,9 +1242,6 @@ queueMicrotask(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-left: 0;
   }
-  .shogi-game__assist-actions button:last-child {
-    grid-column: 1 / -1;
-  }
   .shogi-game__player-zone--player .shogi-game__player-card {
     grid-column: 1;
     grid-row: 4;
@@ -1318,9 +1311,6 @@ queueMicrotask(() => {
   .shogi-game__assist-actions button {
     min-height: 2.35rem;
     padding: 0.4rem 0.75rem;
-  }
-  .shogi-game__assist-actions button:last-child {
-    grid-column: auto;
   }
 }
 @media (min-width: 541px) and (max-aspect-ratio: 5/4) {
