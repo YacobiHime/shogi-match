@@ -25,19 +25,41 @@ function parseSfenBoard(sfen) {
   return board;
 }
 
-function matchPattern(board, patternSfen, mode) {
+function parseSfenHands(sfen) {
+  const [, , hand] = splitSfen(sfen);
+  const hands = new Map();
+  if (hand === '-') return hands;
+  let countText = '';
+  for (const symbol of hand) {
+    if (/\d/.test(symbol)) {
+      countText += symbol;
+      continue;
+    }
+    if (!/[RBGSNLPrbgsnlp]/.test(symbol)) throw new Error('SFENの持駒表現が不正です');
+    hands.set(symbol, countText ? Number(countText) : 1);
+    countText = '';
+  }
+  if (countText) throw new Error('SFENの持駒表現が不正です');
+  return hands;
+}
+
+function matchPattern(board, hands, patternSfen, mode) {
   const pattern = parseSfenBoard(patternSfen);
-  const checks = [...pattern].map(([square, piece]) => board.get(square) === piece);
+  const patternHands = parseSfenHands(patternSfen);
+  const checks = [
+    ...[...pattern].map(([square, piece]) => board.get(square) === piece),
+    ...[...patternHands].map(([piece, count]) => hands.get(piece) === count),
+  ];
   return mode === 'all' ? checks.every(Boolean) : checks.some(Boolean);
 }
 
-function evaluate(board, expression) {
+function evaluate(board, hands, expression) {
   if (expression.match) {
-    return matchPattern(board, expression.match.sfen, expression.match.mode);
+    return matchPattern(board, hands, expression.match.sfen, expression.match.mode);
   }
-  if (expression.not) return !evaluate(board, expression.not);
-  if (expression.all) return expression.all.every((item) => evaluate(board, item));
-  if (expression.any) return expression.any.some((item) => evaluate(board, item));
+  if (expression.not) return !evaluate(board, hands, expression.not);
+  if (expression.all) return expression.all.every((item) => evaluate(board, hands, item));
+  if (expression.any) return expression.any.some((item) => evaluate(board, hands, item));
   return false;
 }
 
@@ -114,6 +136,7 @@ function validateExpression(expression) {
       throw new Error('HiraganaSuisho部分SFEN判定が不正です');
     }
     parseSfenBoard(sfen);
+    parseSfenHands(sfen);
     return;
   }
   if (expression.not) {
@@ -153,19 +176,24 @@ export function detectHiraganaSuishoFormations(sfen, master) {
   const [, turn] = splitSfen(sfen);
   const isSentePosition = turn === 'w';
   const directBoard = parseSfenBoard(sfen);
-  const invertedBoard = parseSfenBoard(invertHiraganaSuishoSfen(sfen));
+  const directHands = parseSfenHands(sfen);
+  const invertedSfen = invertHiraganaSuishoSfen(sfen);
+  const invertedBoard = parseSfenBoard(invertedSfen);
+  const invertedHands = parseSfenHands(invertedSfen);
   const rules = validateHiraganaSuishoFormations(master).rules;
   const firstOnly = new Set(['enc_match', 'bt_match1', 'bt_match2']);
   const foundGroups = new Set();
   return rules.filter((rule) => {
     let board = directBoard;
+    let hands = directHands;
     if (rule.group === 'sente_tac_match' && !isSentePosition) return false;
     if (rule.group === 'gote_tac_match' && isSentePosition) return false;
     if (rule.group === 'enc_match' || rule.group === 'bt_match2' || rule.group === 'tac_match') {
       board = isSentePosition ? directBoard : invertedBoard;
+      hands = isSentePosition ? directHands : invertedHands;
     }
     if (firstOnly.has(rule.group) && foundGroups.has(rule.group)) return false;
-    if (!evaluate(board, rule.expression)) return false;
+    if (!evaluate(board, hands, rule.expression)) return false;
     if (firstOnly.has(rule.group)) foundGroups.add(rule.group);
     return true;
   });
