@@ -145,6 +145,7 @@ import {
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
+import { getStrengthSearchSettings } from "./core/strength-settings.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const formationCalloutMaster = {
@@ -308,14 +309,6 @@ function normalizeNodes(value: number): number {
   );
 }
 
-function strengthSearchSettings(nodes: number) {
-  if (nodes <= 1000) return { multiPv: 10, moveRank: { min: 5, max: 10 } };
-  if (nodes <= 10000) return { multiPv: 7, moveRank: { min: 3, max: 7 } };
-  if (nodes <= 30000) return { multiPv: 5, moveRank: { min: 2, max: 5 } };
-  if (nodes <= 100000) return { multiPv: 3, moveRank: { min: 1, max: 3 } };
-  return { multiPv: 1, moveRank: { min: 1, max: 1 } };
-}
-
 const STRATEGY_MOVES: { [key: string]: { black: string[]; white: string[] } } = {
   ibisha: {
     black: ["2g2f", "2f2e", "3i3h", "3h2g"],
@@ -471,7 +464,7 @@ async function scheduleCpuMove() {
     try {
       let usi = "";
       if (engine && engineReady.value) {
-        const strength = strengthSearchSettings(searchNodes.value);
+        const strength = getStrengthSearchSettings(searchNodes.value);
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
         const openingMove = strategyMove();
         const base = props.initialSfen === STANDARD_SFEN
@@ -479,7 +472,7 @@ async function scheduleCpuMove() {
           : `sfen ${props.initialSfen}`;
         engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
         const search = await engine.go({
-          nodes: searchNodes.value,
+          nodes: strength.nodes,
           maxTimeMs: 60000,
           searchMoves: openingMove ? [openingMove] : undefined,
         });
