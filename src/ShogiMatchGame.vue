@@ -124,7 +124,30 @@
         <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
           閃き <small>×{{ reviewMode ? "∞" : hintsRemaining }}</small>
         </button>
-        <button type="button" :disabled="!canUndo" @click="undoTurn">待った ×{{ reviewMode ? "∞" : undosRemaining }}</button>
+        <button type="button" :disabled="!canUndo" @click="reviewMode ? toggleReviewNavigation() : undoTurn()">
+          待った ×{{ reviewMode ? "∞" : undosRemaining }}
+        </button>
+        <div v-if="reviewMode && reviewNavigationOpen" class="shogi-game__review-navigation">
+          <button
+            type="button"
+            aria-label="一手戻る"
+            :disabled="reviewNavigation.cursor === 0"
+            @click="navigateReview(-1)"
+          >←</button>
+          <span>{{ reviewNavigation.cursor }} / {{ reviewNavigation.line.length }}手</span>
+          <button
+            type="button"
+            aria-label="一手進む"
+            :disabled="reviewNavigation.cursor >= reviewNavigation.line.length"
+            @click="navigateReview(1)"
+          >→</button>
+          <button
+            v-if="reviewNavigation.branch"
+            type="button"
+            class="shogi-game__review-main-line"
+            @click="returnToMainLine"
+          >本筋へ戻る</button>
+        </div>
       </div>
       <div class="shogi-game__player-card">
         <span>{{ playerSideLabel }}</span>
@@ -213,6 +236,13 @@ import {
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
 import { getStrengthSearchSettings } from "./core/strength-settings.mjs";
+import {
+  appendReviewMove,
+  createReviewNavigation,
+  moveReviewCursor,
+  returnReviewToMainLine,
+  visibleReviewMoves,
+} from "./core/review-navigation.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
@@ -248,6 +278,8 @@ const engineUnavailable = ref(false);
 const result = ref<MatchResult | null>(null);
 const resultDialogOpen = ref(false);
 const reviewMode = ref(false);
+const reviewNavigationOpen = ref(false);
+const reviewNavigation = ref(createReviewNavigation());
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
@@ -335,7 +367,9 @@ const canUndo = computed(() =>
   active.value
   && !thinking.value
   && (reviewMode.value || undosRemaining.value > 0)
-  && (reviewMode.value || normalizedMode.value === "local" ? moveHistory.length > 0 : moveHistory.length >= 2)
+  && (reviewMode.value
+    ? reviewNavigation.value.line.length > 0
+    : normalizedMode.value === "local" ? moveHistory.length > 0 : moveHistory.length >= 2)
   && (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
 const statusText = computed(() => {
@@ -605,9 +639,32 @@ function undoTurn() {
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
 }
 
+function toggleReviewNavigation() {
+  reviewNavigationOpen.value = !reviewNavigationOpen.value;
+}
+
+function navigateReview(delta: number) {
+  reviewNavigation.value = moveReviewCursor(reviewNavigation.value, delta);
+  rebuildRecord(visibleReviewMoves(reviewNavigation.value));
+  hintCandidates.value = [];
+  hintText.value = "";
+}
+
+function returnToMainLine() {
+  reviewNavigation.value = returnReviewToMainLine(reviewNavigation.value);
+  rebuildRecord(visibleReviewMoves(reviewNavigation.value));
+  hintCandidates.value = [];
+  hintText.value = "";
+  guideText.value = coachLevel.value === "off" ? "" : "本筋の局面に戻したよ！";
+}
+
 function onPlayerMove(usi: string) {
   if (!canMove.value || !applyMove(usi, "player")) return;
-  if (!reviewMode.value) scheduleCpuMove();
+  if (reviewMode.value) {
+    reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
+  } else {
+    scheduleCpuMove();
+  }
 }
 
 async function scheduleCpuMove() {
@@ -700,6 +757,8 @@ function startReview() {
   if (cpuTimer) clearTimeout(cpuTimer);
   resultDialogOpen.value = false;
   reviewMode.value = true;
+  reviewNavigationOpen.value = false;
+  reviewNavigation.value = createReviewNavigation(moveHistory);
   active.value = true;
   thinking.value = false;
   hintCandidates.value = [];
@@ -716,6 +775,8 @@ function restart() {
   result.value = null;
   resultDialogOpen.value = false;
   reviewMode.value = false;
+  reviewNavigationOpen.value = false;
+  reviewNavigation.value = createReviewNavigation();
   playerTurnScore = undefined;
   moveHistory = [];
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
@@ -1059,11 +1120,44 @@ queueMicrotask(() => {
   min-width: 0;
 }
 .shogi-game__assist-actions {
+  position: relative;
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
   align-items: center;
+}
+.shogi-game__review-navigation {
+  position: absolute;
+  z-index: 12;
+  right: 0;
+  bottom: calc(100% + 0.45rem);
+  display: grid;
+  grid-template-columns: 3rem minmax(5.5rem, 1fr) 3rem;
+  gap: 0.4rem;
+  width: min(18rem, calc(100vw - 1rem));
+  padding: 0.55rem;
+  border: 2px solid #78d4ff;
+  border-radius: 0.55rem;
+  background: rgba(20, 26, 39, 0.97);
+  box-shadow: 0 0.5rem 1.4rem rgba(0, 0, 0, 0.55), 0 0 1rem rgba(66, 181, 255, 0.3);
+}
+.shogi-game__review-navigation > span {
+  align-self: center;
+  color: #d9f3ff;
+  text-align: center;
+  white-space: nowrap;
+}
+.shogi-game__review-navigation button {
+  min-height: 2.35rem;
+  padding: 0.35rem;
+  border-color: #78d4ff;
+  background: linear-gradient(#285f82, #173247);
+  font-size: 1.1rem;
+}
+.shogi-game__review-navigation .shogi-game__review-main-line {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
 }
 .shogi-game__assist-actions button {
   min-width: 0;
