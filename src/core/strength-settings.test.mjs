@@ -9,14 +9,14 @@ describe('CPU strength settings', () => {
       moveRank: { min: 2, max: 5 },
     });
     expect(getStrengthSearchSettings(10000)).toEqual({
-      nodes: 30000,
-      multiPv: 3,
-      moveRank: { min: 1, max: 3 },
+      nodes: 22000,
+      multiPv: 4,
+      moveRank: { min: 1, max: 4 },
     });
     expect(getStrengthSearchSettings(30000)).toEqual({
-      nodes: 60000,
-      multiPv: 2,
-      moveRank: { min: 1, max: 2 },
+      nodes: 45000,
+      multiPv: 3,
+      moveRank: { min: 1, max: 3 },
     });
   });
 
