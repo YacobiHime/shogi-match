@@ -71,6 +71,9 @@
           </select>
         </label>
       </div>
+      <div class="shogi-game__settings-actions">
+        <button type="button" @click="settingsOpen = false">閉じる</button>
+      </div>
     </div>
 
     <div ref="boardShell" class="shogi-game__board-shell">
@@ -927,6 +930,15 @@ queueMicrotask(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.65rem;
+}
+.shogi-game__settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+.shogi-game__settings-actions button {
+  min-width: 6.5rem;
+  padding: 0.55rem 1rem;
 }
 .shogi-game__strength {
   display: flex;
