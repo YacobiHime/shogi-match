@@ -4,6 +4,7 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
   [30000, { nodes: 45000, multiPv: 3, moveRank: { min: 1, max: 3 } }],
   [100000, { nodes: 100000, multiPv: 3, moveRank: { min: 1, max: 3 } }],
   [300000, { nodes: 300000, multiPv: 1, moveRank: { min: 1, max: 1 } }],
+  [1000000, { nodes: 1000000, multiPv: 1, moveRank: { min: 1, max: 1 } }],
 ]);
 
 /**
