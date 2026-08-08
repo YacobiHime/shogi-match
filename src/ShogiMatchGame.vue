@@ -40,11 +40,11 @@
         <label v-if="normalizedMode === 'cpu' && !engineUnavailable" class="shogi-game__strength">
           <span>CPU強さ</span>
           <select v-model.number="searchNodes" :disabled="!engineReady" aria-label="CPUの強さ">
-            <option :value="1000">入門（約1〜2手先）</option>
-            <option :value="10000">やさしい（約2〜4手先）</option>
-            <option :value="30000">ふつう（約4〜6手先）</option>
-            <option :value="100000">強い（約6〜8手先）</option>
-            <option :value="300000">かなり強い（約8〜10手先）</option>
+            <option :value="1000">入門（初心者向け）</option>
+            <option :value="10000">やさしい（10〜5級目安）</option>
+            <option :value="30000">ふつう（4〜1級目安）</option>
+            <option :value="100000">強い（初〜二段目安）</option>
+            <option :value="300000">かなり強い（三段目安）</option>
             <option :value="480000">藤井聡太並み（推定）</option>
           </select>
         </label>
