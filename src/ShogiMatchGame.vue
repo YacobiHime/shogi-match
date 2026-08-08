@@ -1,7 +1,7 @@
 <template>
   <section class="shogi-game" aria-label="将棋対局">
     <header class="shogi-game__toolbar">
-      <button type="button" class="shogi-game__command shogi-game__command--danger" :disabled="!active" @click="resign">
+      <button type="button" class="shogi-game__command shogi-game__command--danger" :disabled="!active || reviewMode" @click="resign">
         投了
       </button>
       <button type="button" class="shogi-game__command shogi-game__command--settings" @click="settingsOpen = !settingsOpen">
@@ -122,9 +122,9 @@
       </div>
       <div class="shogi-game__assist-actions">
         <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
-          閃き <small>×{{ hintsRemaining }}</small>
+          閃き <small>×{{ reviewMode ? "∞" : hintsRemaining }}</small>
         </button>
-        <button type="button" :disabled="!canUndo" @click="undoTurn">待った ×{{ undosRemaining }}</button>
+        <button type="button" :disabled="!canUndo" @click="undoTurn">待った ×{{ reviewMode ? "∞" : undosRemaining }}</button>
       </div>
       <div class="shogi-game__player-card">
         <span>{{ playerSideLabel }}</span>
@@ -137,7 +137,7 @@
     <p v-if="errorMessage" class="shogi-game__error" role="alert">{{ errorMessage }}</p>
 
     <div
-      v-if="result && resultPresentation"
+      v-if="resultDialogOpen && result && resultPresentation"
       class="shogi-game__result"
       :class="`shogi-game__result--${resultPresentation.tone}`"
       role="dialog"
@@ -167,9 +167,11 @@
             <dd>{{ resultPresentation.detail }}</dd>
           </div>
         </dl>
-        <button type="button" class="shogi-game__rematch" @click="restart">
-          もう一度対局する
-        </button>
+        <div class="shogi-game__result-actions">
+          <button type="button" class="shogi-game__rematch" @click="restart">もう一度対局</button>
+          <button type="button" class="shogi-game__review" @click="startReview">感想戦</button>
+          <button type="button" class="shogi-game__result-close" @click="closeResult">閉じる</button>
+        </div>
       </div>
     </div>
   </section>
@@ -198,8 +200,10 @@ import {
 } from "./core/hiragana-suisho-formations.mjs";
 import {
   getCoachAdvice,
+  getMoveFeedback,
   isSideToMoveInCheck,
   scoreAfterOpponentMove,
+  scoreFromOpponentPerspective,
 } from "./core/coach-advice.mjs";
 import {
   formatHintMove,
@@ -242,6 +246,8 @@ const thinking = ref(false);
 const engineReady = ref(false);
 const engineUnavailable = ref(false);
 const result = ref<MatchResult | null>(null);
+const resultDialogOpen = ref(false);
+const reviewMode = ref(false);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
@@ -256,6 +262,7 @@ const boardLayout = ref<"standard" | "compact" | "portrait">("standard");
 const boardShell = ref<HTMLElement | null>(null);
 const advisedCoachTopics = new Set<string>();
 let lastCoachKey = "";
+let playerTurnScore: { type: "cp" | "mate"; value: number } | undefined;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
@@ -316,17 +323,23 @@ const strengthLabel = computed(() => ({
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
-  (normalizedMode.value === "local" || record.value.position.color === humanColor.value)
+  (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
-const canUseHint = computed(() => canMove.value && engineReady.value && hintsRemaining.value > 0);
+const canUseHint = computed(() =>
+  canMove.value
+  && engineReady.value
+  && (reviewMode.value || hintsRemaining.value > 0)
+  && (!reviewMode.value || enumerateLegalMoves(record.value.position).length > 0)
+);
 const canUndo = computed(() =>
   active.value
   && !thinking.value
-  && undosRemaining.value > 0
-  && (normalizedMode.value === "local" ? moveHistory.length > 0 : moveHistory.length >= 2)
-  && (normalizedMode.value === "local" || record.value.position.color === humanColor.value)
+  && (reviewMode.value || undosRemaining.value > 0)
+  && (reviewMode.value || normalizedMode.value === "local" ? moveHistory.length > 0 : moveHistory.length >= 2)
+  && (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
 const statusText = computed(() => {
+  if (reviewMode.value) return "感想戦中です";
   if (result.value) {
     if (!result.value.winner) return "引き分け";
     return result.value.winner === Color.BLACK ? "先手の勝ち" : "後手の勝ち";
@@ -486,9 +499,18 @@ function syncPosition(usi = "") {
   observeFormations(currentSfen.value);
 }
 
-function updateCoachAdvice(cpuScore?: { type: "cp" | "mate"; value: number }) {
+function updateCoachAdvice(
+  cpuScore?: { type: "cp" | "mate"; value: number },
+  moveFeedback?: { key: string; text: string } | null,
+) {
+  playerTurnScore = scoreAfterOpponentMove(cpuScore);
   if (coachLevel.value === "off") {
     guideText.value = "";
+    return;
+  }
+  if (moveFeedback) {
+    lastCoachKey = moveFeedback.key;
+    guideText.value = moveFeedback.text;
     return;
   }
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
@@ -510,6 +532,7 @@ function finish(matchResult: MatchResult) {
   active.value = false;
   thinking.value = false;
   result.value = matchResult;
+  resultDialogOpen.value = true;
   emit("match-end", matchResult);
   if (window.parent !== window) {
     window.parent.postMessage({
@@ -527,9 +550,11 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   moveHistory.push(usi);
   hintCandidates.value = [];
   hintText.value = "";
-  emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
-  const terminalResult = resultAfterMove(record.value);
-  if (terminalResult) finish(terminalResult);
+  if (!reviewMode.value) {
+    emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
+    const terminalResult = resultAfterMove(record.value);
+    if (terminalResult) finish(terminalResult);
+  }
   return true;
 }
 
@@ -551,7 +576,7 @@ async function showHint() {
       usi: move, score: hintScoreForArrow(score),
     }));
     hintText.value = `おすすめは ${formatHintMove(moves[0].move, currentSfen.value)} だよ！`;
-    hintsRemaining.value -= 1;
+    if (!reviewMode.value) hintsRemaining.value -= 1;
   } catch (error) {
     hintText.value = `ヒントを出せませんでした: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
@@ -571,9 +596,10 @@ function rebuildRecord(moves: string[]) {
 function undoTurn() {
   if (!canUndo.value) return;
   if (cpuTimer) clearTimeout(cpuTimer);
-  const removeCount = normalizedMode.value === "cpu" && moveHistory.length >= 2 ? 2 : 1;
+  const removeCount = !reviewMode.value && normalizedMode.value === "cpu" && moveHistory.length >= 2 ? 2 : 1;
   rebuildRecord(moveHistory.slice(0, -removeCount));
-  undosRemaining.value -= 1;
+  if (!reviewMode.value) undosRemaining.value -= 1;
+  playerTurnScore = undefined;
   hintCandidates.value = [];
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
@@ -581,12 +607,13 @@ function undoTurn() {
 
 function onPlayerMove(usi: string) {
   if (!canMove.value || !applyMove(usi, "player")) return;
-  scheduleCpuMove();
+  if (!reviewMode.value) scheduleCpuMove();
 }
 
 async function scheduleCpuMove() {
   if (
     !active.value ||
+    reviewMode.value ||
     normalizedMode.value !== "cpu" ||
     record.value.position.color === humanColor.value
   ) return;
@@ -596,6 +623,7 @@ async function scheduleCpuMove() {
     try {
       let usi = "";
       let coachScore: { type: "cp" | "mate"; value: number } | undefined;
+      let moveFeedback: { key: string; text: string } | null = null;
       if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
@@ -609,6 +637,14 @@ async function scheduleCpuMove() {
           maxTimeMs: 60000,
           searchMoves: openingMove ? [openingMove] : undefined,
         });
+        const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
+        if (!openingMove) {
+          moveFeedback = getMoveFeedback({
+            level: coachLevel.value,
+            beforeScore: playerTurnScore,
+            afterScore: scoreFromOpponentPerspective(bestCpuScore),
+          });
+        }
         const selection = selectMoveByRank(search, strength.moveRank);
         usi = selection.move;
         coachScore = search.candidates.find((candidate) => candidate.rank === selection.rank)?.score;
@@ -621,7 +657,7 @@ async function scheduleCpuMove() {
         if (terminalResult) finish(terminalResult);
         return;
       }
-      if (applyMove(usi, "cpu") && active.value) updateCoachAdvice(coachScore);
+      if (applyMove(usi, "cpu") && active.value) updateCoachAdvice(coachScore, moveFeedback);
     } catch (error) {
       thinking.value = false;
       const message = error instanceof Error ? error.message : String(error);
@@ -634,7 +670,7 @@ async function scheduleCpuMove() {
 }
 
 async function initializeEngine() {
-  if (normalizedMode.value !== "cpu" || engineReady.value) return;
+  if ((normalizedMode.value !== "cpu" && !reviewMode.value) || engineReady.value) return;
   try {
     const factories = await loadEngineFactories(null, { engineBaseUrl: props.engineBaseUrl });
     engine = new ShogiEngine({ factory: factories.factory });
@@ -653,7 +689,23 @@ async function initializeEngine() {
 }
 
 function resign() {
-  if (active.value) finish(resignationResult(record.value));
+  if (active.value && !reviewMode.value) finish(resignationResult(record.value));
+}
+
+function closeResult() {
+  resultDialogOpen.value = false;
+}
+
+function startReview() {
+  if (cpuTimer) clearTimeout(cpuTimer);
+  resultDialogOpen.value = false;
+  reviewMode.value = true;
+  active.value = true;
+  thinking.value = false;
+  hintCandidates.value = [];
+  hintText.value = "";
+  guideText.value = coachLevel.value === "off" ? "" : "感想戦だね。気になる手を一緒に調べよう！";
+  initializeEngine();
 }
 
 function restart() {
@@ -662,6 +714,9 @@ function restart() {
   active.value = true;
   thinking.value = false;
   result.value = null;
+  resultDialogOpen.value = false;
+  reviewMode.value = false;
+  playerTurnScore = undefined;
   moveHistory = [];
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
   undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));
@@ -1113,10 +1168,26 @@ queueMicrotask(() => {
   color: #fff8ec;
 }
 .shogi-game__rematch {
-  min-width: min(16rem, 100%);
   border-color: var(--result-accent) !important;
   background: linear-gradient(#7a3540, #42151e) !important;
   box-shadow: 0 0 1.2rem var(--result-glow) !important;
+}
+.shogi-game__result-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.65rem;
+}
+.shogi-game__result-actions button {
+  min-width: 0;
+  padding: 0.7rem 0.55rem;
+}
+.shogi-game__review {
+  border-color: #78d4ff !important;
+  background: linear-gradient(#285f82, #173247) !important;
+  box-shadow: 0 0 1rem rgba(66, 181, 255, 0.38) !important;
+}
+.shogi-game__result-close {
+  background: linear-gradient(#5d4b50, #302329) !important;
 }
 .shogi-game__confetti {
   position: absolute;
