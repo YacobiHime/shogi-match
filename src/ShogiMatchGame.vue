@@ -1303,6 +1303,32 @@ queueMicrotask(() => {
     grid-column: auto;
   }
 }
+@media (min-width: 541px) and (max-aspect-ratio: 5/4) {
+  .shogi-game {
+    grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 10rem;
+  }
+  .shogi-game__player-zone--player {
+    padding-left: 9rem;
+  }
+  .shogi-game__portrait--player {
+    width: 9rem;
+    height: 10rem;
+  }
+  .shogi-game__assist-actions {
+    width: 5rem;
+    gap: 0.25rem;
+    justify-self: end;
+  }
+  .shogi-game__assist-actions button {
+    min-height: 1.8rem;
+    padding: 0.25rem 0.3rem;
+    font-size: 0.75rem;
+    line-height: 1.1;
+  }
+  .shogi-game__assist-actions button small {
+    font-size: 0.68rem;
+  }
+}
 @media (max-width: 540px) {
   .shogi-game {
     grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) 3.4rem;
