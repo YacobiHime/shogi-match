@@ -125,10 +125,25 @@
         <i v-for="index in 12" :key="index" />
       </div>
       <div class="shogi-game__result-panel">
-        <p class="shogi-game__result-kicker">{{ resultPresentation.kicker }}</p>
         <h2 id="match-result-title">{{ resultPresentation.title }}</h2>
-        <p class="shogi-game__result-caption">{{ resultPresentation.caption }}</p>
-        <p class="shogi-game__result-detail">{{ resultPresentation.detail }}</p>
+        <dl class="shogi-game__result-details">
+          <div>
+            <dt>手合割</dt>
+            <dd>{{ resultPresentation.handicap }}</dd>
+          </div>
+          <div>
+            <dt>先手戦型</dt>
+            <dd>{{ resultPresentation.blackFormations }}</dd>
+          </div>
+          <div>
+            <dt>後手戦型</dt>
+            <dd>{{ resultPresentation.whiteFormations }}</dd>
+          </div>
+          <div>
+            <dt>結果</dt>
+            <dd>{{ resultPresentation.detail }}</dd>
+          </div>
+        </dl>
         <button type="button" class="shogi-game__rematch" @click="restart">
           もう一度対局する
         </button>
@@ -192,6 +207,7 @@ const props = defineProps({
   cpuDelayMs: { type: Number, default: 350 },
   engineBaseUrl: { type: String, default: "." },
   engineNodes: { type: Number, default: 30000 },
+  handicapName: { type: String, default: "" },
   hintCount: { type: Number, default: 3 },
   undoCount: { type: Number, default: 1 },
   mobile: { type: Boolean, default: false },
@@ -213,6 +229,7 @@ const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
 const hintText = ref("");
 const guideText = ref(formationCalloutMaster.initial_speech);
+const observedFormationNames = ref<{ black: string[]; white: string[] }>({ black: [], white: [] });
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
 const settingsOpen = ref(false);
@@ -299,35 +316,42 @@ const statusText = computed(() => {
 });
 const resultPresentation = computed(() => {
   if (!result.value) return null;
-  const reason = ({
-    checkmate: "詰みにより決着",
-    resignation: "投了により決着",
-    repetition: "千日手",
-    "perpetual-check": "連続王手の千日手",
+  const loser = result.value.winner === Color.BLACK ? "後手" : "先手";
+  const finalMove = formatFinalMove(result.value);
+  const prefix = finalMove
+    ? `${finalMove}まで${result.value.moveCount}手で`
+    : `${result.value.moveCount}手で`;
+  const detail = ({
+    checkmate: `${prefix}${loser}の詰み`,
+    resignation: `${prefix}${loser}投了`,
+    repetition: `${prefix}千日手成立`,
+    "perpetual-check": `${prefix}${loser}の反則負け（連続王手の千日手）`,
   } as const)[result.value.reason];
-  const detail = `${reason}・${result.value.moveCount}手`;
+  const common = {
+    detail,
+    handicap: props.handicapName.trim()
+      || (props.initialSfen === STANDARD_SFEN ? "平手" : "その他"),
+    blackFormations: observedFormationNames.value.black.join("・") || "未判定",
+    whiteFormations: observedFormationNames.value.white.join("・") || "未判定",
+  };
   if (!result.value.winner) {
     return {
       tone: "draw",
-      kicker: "対局終了",
       title: "引き分け",
-      caption: "互角の勝負でした",
-      detail,
+      ...common,
     };
   }
   if (normalizedMode.value === "local") {
     return {
       tone: "victory",
-      kicker: "対局終了",
       title: result.value.winner === Color.BLACK ? "先手勝利" : "後手勝利",
-      caption: "勝負あり！",
-      detail,
+      ...common,
     };
   }
   const playerWon = result.value.winner === humanColor.value;
   return playerWon
-    ? { tone: "victory", kicker: "WIN", title: "勝利", caption: "お見事です！", detail }
-    : { tone: "defeat", kicker: "LOSE", title: "敗北", caption: "もう一度挑戦しよう", detail };
+    ? { tone: "victory", title: "勝利", ...common }
+    : { tone: "defeat", title: "敗北", ...common };
 });
 const blackFormationText = computed(() => formationTextForColor(currentSfen.value, Color.BLACK));
 const whiteFormationText = computed(() => formationTextForColor(currentSfen.value, Color.WHITE));
@@ -342,16 +366,41 @@ const opponentFormationText = computed(() =>
     : whiteFormationText.value
 );
 
-function formationTextForColor(sfen: string, color: Color): string {
+function formationNamesForColor(sfen: string, color: Color): string[] {
   let perspective = color === Color.BLACK ? sfen : invertHiraganaSuishoSfen(sfen);
   const fields = perspective.split(/\s+/);
   fields[1] = "w";
   perspective = fields.join(" ");
-  const names = [...new Set(
+  return [...new Set(
     detectHiraganaSuishoFormations(perspective, hiraganaFormationMaster)
       .map((formation) => formation.name),
   )].slice(0, 3);
+}
+
+function formationTextForColor(sfen: string, color: Color): string {
+  const names = formationNamesForColor(sfen, color);
   return names.length ? names.join("・") : "まだ未判定";
+}
+
+function observeFormations(sfen: string) {
+  for (const [key, color] of [["black", Color.BLACK], ["white", Color.WHITE]] as const) {
+    const observed = new Set(observedFormationNames.value[key]);
+    formationNamesForColor(sfen, color).forEach((name) => observed.add(name));
+    observedFormationNames.value[key] = [...observed];
+  }
+}
+
+function formatFinalMove(matchResult: MatchResult): string {
+  const lastMove = matchResult.moves.at(-1);
+  if (!lastMove) return "";
+  try {
+    const beforeLast = createGameRecord(props.initialSfen);
+    for (const move of matchResult.moves.slice(0, -1)) appendUsiMove(beforeLast, move);
+    return formatHintMove(lastMove, beforeLast.position.sfen)
+      .replace(/^[1-9]/, (file) => "０１２３４５６７８９"[Number(file)]);
+  } catch {
+    return lastMove;
+  }
 }
 
 function normalizeNodes(value: number): number {
@@ -413,6 +462,7 @@ function createRecord(): Record {
 function syncPosition(usi = "") {
   currentSfen.value = record.value.position.sfen;
   lastMove.value = usi;
+  observeFormations(currentSfen.value);
 }
 
 function announceFormation() {
@@ -588,6 +638,7 @@ function restart() {
   hintText.value = "";
   guideText.value = formationCalloutMaster.initial_speech;
   announcedFormations.clear();
+  observedFormationNames.value = { black: [], white: [] };
   syncPosition();
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
   initializeEngine();
@@ -613,6 +664,7 @@ onMounted(() => {
 });
 
 queueMicrotask(() => {
+  observeFormations(currentSfen.value);
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
   initializeEngine();
   scheduleCpuMove();
@@ -955,12 +1007,6 @@ queueMicrotask(() => {
   --result-accent: #c8b9d9;
   --result-glow: rgba(147, 123, 178, 0.28);
 }
-.shogi-game__result-kicker {
-  margin: 0 0 0.35rem;
-  color: var(--result-accent);
-  font-weight: 800;
-  letter-spacing: 0.28em;
-}
 .shogi-game__result h2 {
   margin: 0;
   color: #fff;
@@ -973,14 +1019,29 @@ queueMicrotask(() => {
 .shogi-game__result--defeat h2 {
   animation: result-defeat-pulse 2.2s ease-in-out infinite;
 }
-.shogi-game__result-caption {
-  margin: 1rem 0 0;
-  font-size: clamp(1.15rem, 3vw, 1.55rem);
+.shogi-game__result-details {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1.35rem 0 1.5rem;
+  text-align: left;
+}
+.shogi-game__result-details > div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid rgba(255, 225, 122, 0.32);
+  background: rgba(16, 7, 11, 0.28);
+}
+.shogi-game__result-details dt {
+  color: var(--result-accent);
   font-weight: 700;
 }
-.shogi-game__result-detail {
-  margin: 0.55rem 0 1.5rem;
-  color: #dfd0cc;
+.shogi-game__result-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #fff8ec;
 }
 .shogi-game__rematch {
   min-width: min(16rem, 100%);
