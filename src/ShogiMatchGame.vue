@@ -103,7 +103,19 @@
         >
       </picture>
       <div v-if="hintText || guideText" class="shogi-game__dialogue">
-        {{ hintText || guideText }}
+        <span class="shogi-game__dialogue-icon" aria-hidden="true">
+          <svg viewBox="0 0 26 32" focusable="false">
+            <path
+              class="shogi-game__flame-outer"
+              d="M13 1.5c1.1 4.8-1.6 7-3.6 9.7-2.1 2.9-3.8 5.6-3.8 9.1 0 5.8 3.8 10.2 8.9 10.2 5.8 0 9.9-4.2 9.9-10.1 0-4.8-2.7-9.2-7.2-13.5.3 3.3-.7 5.6-2.6 7.3.5-5.4-1.1-9.3-1.6-12.7Z"
+            />
+            <path
+              class="shogi-game__flame-inner"
+              d="M14.8 15.1c.2 2.1-.5 3.4-1.7 4.7-1.1 1.3-1.8 2.6-1.8 4.2 0 2.6 1.7 4.6 4.2 4.6 2.7 0 4.6-2 4.6-4.7 0-2.5-1.6-5.2-5.3-8.8Z"
+            />
+          </svg>
+        </span>
+        <span class="shogi-game__dialogue-text">{{ hintText || guideText }}</span>
       </div>
       <div class="shogi-game__assist-actions">
         <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
@@ -950,10 +962,34 @@ queueMicrotask(() => {
   display: none;
 }
 .shogi-game__dialogue {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
   min-height: 3.5rem;
   max-height: 5rem;
   overflow: auto;
   padding: 0.85rem 1rem;
+}
+.shogi-game__dialogue-icon {
+  display: inline-flex;
+  width: 1.45rem;
+  height: 1.8rem;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 0 0.3rem rgba(62, 176, 255, 0.9));
+}
+.shogi-game__dialogue-icon svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.shogi-game__flame-outer {
+  fill: #237be8;
+}
+.shogi-game__flame-inner {
+  fill: #9deaff;
+}
+.shogi-game__dialogue-text {
+  min-width: 0;
 }
 .shogi-game__assist-actions {
   z-index: 1;
