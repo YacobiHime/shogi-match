@@ -20,7 +20,7 @@ describe('CPU strength settings', () => {
     });
   });
 
-  it('does not change strong and strongest presets', () => {
+  it('keeps strong presets on their best available candidates', () => {
     expect(getStrengthSearchSettings(100000)).toEqual({
       nodes: 100000,
       multiPv: 3,
@@ -28,6 +28,11 @@ describe('CPU strength settings', () => {
     });
     expect(getStrengthSearchSettings(300000)).toEqual({
       nodes: 300000,
+      multiPv: 1,
+      moveRank: { min: 1, max: 1 },
+    });
+    expect(getStrengthSearchSettings(1000000)).toEqual({
+      nodes: 1000000,
       multiPv: 1,
       moveRank: { min: 1, max: 1 },
     });
