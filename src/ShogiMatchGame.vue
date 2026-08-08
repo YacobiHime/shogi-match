@@ -62,6 +62,14 @@
         <span v-else-if="normalizedMode === 'cpu'" class="shogi-game__strength">
           簡易CPU（強さ変更不可）
         </span>
+        <label class="shogi-game__strength">
+          <span>対局中の助言</span>
+          <select v-model="coachLevel" aria-label="対局中の助言">
+            <option value="off">なし</option>
+            <option value="encourage">応援のみ</option>
+            <option value="detailed">詳しい助言</option>
+          </select>
+        </label>
       </div>
     </div>
 
@@ -94,7 +102,7 @@
           alt=""
         >
       </picture>
-      <div class="shogi-game__dialogue">
+      <div v-if="hintText || guideText" class="shogi-game__dialogue">
         {{ hintText || guideText }}
       </div>
       <div class="shogi-game__assist-actions">
@@ -170,12 +178,15 @@ import {
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
-import { findNewFormationCallouts } from "./core/formation-callouts.mjs";
 import {
   detectHiraganaSuishoFormations,
-  findNewHiraganaSuishoFormations,
   invertHiraganaSuishoSfen,
 } from "./core/hiragana-suisho-formations.mjs";
+import {
+  getCoachAdvice,
+  isSideToMoveInCheck,
+  scoreAfterOpponentMove,
+} from "./core/coach-advice.mjs";
 import {
   formatHintMove,
   getHintMoves,
@@ -186,16 +197,8 @@ import { selectMoveByRank } from "./core/move-selection.mjs";
 import { getStrengthSearchSettings } from "./core/strength-settings.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
-const formationCalloutMaster = {
-  version: 1,
-  initial_speech: "戦型が見えたら知らせるね！",
-  undo_speech: "もう一度、盤面を見てみよう！",
-  callouts: [
-    { callout_id: "bogin", name: "棒銀", speech: "棒銀！" },
-    { callout_id: "gold_yagura", name: "金矢倉囲い", speech: "金矢倉囲い！" },
-    { callout_id: "right_shiken", name: "右四間飛車", speech: "右四間飛車！" },
-  ],
-};
+const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
+const UNDO_GUIDE_TEXT = "もう一度、落ち着いて考えてみよう！";
 
 const props = defineProps({
   mode: { type: String as () => GameMode, default: "cpu" },
@@ -229,14 +232,16 @@ const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
 const hintText = ref("");
-const guideText = ref(formationCalloutMaster.initial_speech);
+const guideText = ref(INITIAL_GUIDE_TEXT);
 const observedFormationNames = ref<{ black: string[]; white: string[] }>({ black: [], white: [] });
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
+const coachLevel = ref<"off" | "encourage" | "detailed">("encourage");
 const settingsOpen = ref(false);
 const boardLayout = ref<"standard" | "compact" | "portrait">("standard");
 const boardShell = ref<HTMLElement | null>(null);
-const announcedFormations = new Set<string>();
+const advisedCoachTopics = new Set<string>();
+let lastCoachKey = "";
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
@@ -467,16 +472,24 @@ function syncPosition(usi = "") {
   observeFormations(currentSfen.value);
 }
 
-function announceFormation() {
-  const direct = findNewFormationCallouts(currentSfen.value, formationCalloutMaster, announcedFormations);
-  const detailed = findNewHiraganaSuishoFormations(
-    currentSfen.value, hiraganaFormationMaster, announcedFormations,
-  );
-  const found = direct[0] ?? detailed[0];
-  if (!found) return;
-  const key = "callout_id" in found ? found.callout_id : `hiragana:${found.name}`;
-  announcedFormations.add(key);
-  guideText.value = "speech" in found ? found.speech : `「${found.name}」の戦型だね！`;
+function updateCoachAdvice(cpuScore?: { type: "cp" | "mate"; value: number }) {
+  if (coachLevel.value === "off") {
+    guideText.value = "";
+    return;
+  }
+  const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
+  const advice = getCoachAdvice({
+    level: coachLevel.value,
+    score: scoreAfterOpponentMove(cpuScore),
+    moveCount: moveCount.value,
+    inCheck: isSideToMoveInCheck(currentSfen.value),
+    opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
+    advisedTopics: advisedCoachTopics,
+  });
+  if (!advice || advice.key === lastCoachKey) return;
+  lastCoachKey = advice.key;
+  if (advice.topic) advisedCoachTopics.add(advice.topic);
+  guideText.value = advice.text;
 }
 
 function finish(matchResult: MatchResult) {
@@ -500,7 +513,6 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   moveHistory.push(usi);
   hintCandidates.value = [];
   hintText.value = "";
-  announceFormation();
   emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
   const terminalResult = resultAfterMove(record.value);
   if (terminalResult) finish(terminalResult);
@@ -550,7 +562,7 @@ function undoTurn() {
   undosRemaining.value -= 1;
   hintCandidates.value = [];
   hintText.value = "";
-  guideText.value = formationCalloutMaster.undo_speech;
+  guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
 }
 
 function onPlayerMove(usi: string) {
@@ -569,6 +581,7 @@ async function scheduleCpuMove() {
   cpuTimer = setTimeout(async () => {
     try {
       let usi = "";
+      let coachScore: { type: "cp" | "mate"; value: number } | undefined;
       if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
@@ -582,7 +595,9 @@ async function scheduleCpuMove() {
           maxTimeMs: 60000,
           searchMoves: openingMove ? [openingMove] : undefined,
         });
-        usi = selectMoveByRank(search, strength.moveRank).move;
+        const selection = selectMoveByRank(search, strength.moveRank);
+        usi = selection.move;
+        coachScore = search.candidates.find((candidate) => candidate.rank === selection.rank)?.score;
       } else {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
       }
@@ -592,14 +607,14 @@ async function scheduleCpuMove() {
         if (terminalResult) finish(terminalResult);
         return;
       }
-      applyMove(usi, "cpu");
+      if (applyMove(usi, "cpu") && active.value) updateCoachAdvice(coachScore);
     } catch (error) {
       thinking.value = false;
       const message = error instanceof Error ? error.message : String(error);
       errorMessage.value = `やねうら王の思考に失敗しました: ${message}`;
       emit("match-error", { message });
       const move = selectCpuMove(record.value.position);
-      if (move) applyMove(move.usi, "cpu");
+      if (move && applyMove(move.usi, "cpu") && active.value) updateCoachAdvice();
     }
   }, Math.max(0, props.cpuDelayMs));
 }
@@ -638,8 +653,9 @@ function restart() {
   undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));
   hintCandidates.value = [];
   hintText.value = "";
-  guideText.value = formationCalloutMaster.initial_speech;
-  announcedFormations.clear();
+  guideText.value = coachLevel.value === "off" ? "" : INITIAL_GUIDE_TEXT;
+  advisedCoachTopics.clear();
+  lastCoachKey = "";
   observedFormationNames.value = { black: [], white: [] };
   syncPosition();
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
@@ -653,6 +669,10 @@ watch(
 );
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
+});
+watch(coachLevel, (level) => {
+  lastCoachKey = "";
+  guideText.value = level === "off" ? "" : INITIAL_GUIDE_TEXT;
 });
 onBeforeUnmount(() => {
   if (cpuTimer) clearTimeout(cpuTimer);
