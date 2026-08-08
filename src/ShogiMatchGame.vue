@@ -11,18 +11,22 @@
     </header>
 
     <section class="shogi-game__player-zone shogi-game__player-zone--opponent">
-      <div class="shogi-game__portrait shogi-game__portrait--opponent">
+      <picture class="shogi-game__portrait shogi-game__portrait--opponent">
+        <source
+          media="(min-width: 1100px) and (min-aspect-ratio: 5/4)"
+          :srcset="`${assetBaseUrl}/characters/mifune-hane.png`"
+        >
         <img
           class="shogi-game__character"
           :src="`${assetBaseUrl}/characters/mifune-hane-portrait.png`"
           alt=""
         >
-      </div>
+      </picture>
       <div class="shogi-game__player-card">
         <span>{{ opponentSideLabel }}</span>
         <strong>{{ normalizedMode === "cpu" ? cpuPlayerName : whitePlayerName }}</strong>
         <small>{{ normalizedMode === "cpu" ? strengthLabel : modeText }}</small>
-        <div><b>戦形</b>{{ opponentFormationText }}</div>
+        <div><b>戦型</b><span>{{ opponentFormationText }}</span></div>
       </div>
       <div class="shogi-game__status" aria-live="polite">
         <strong>{{ statusText }}</strong>
@@ -78,13 +82,17 @@
     </div>
 
     <section class="shogi-game__player-zone shogi-game__player-zone--player">
-      <div class="shogi-game__portrait shogi-game__portrait--player">
+      <picture class="shogi-game__portrait shogi-game__portrait--player">
+        <source
+          media="(min-width: 1100px) and (min-aspect-ratio: 5/4)"
+          :srcset="`${assetBaseUrl}/characters/sakurano-momoka.png`"
+        >
         <img
           class="shogi-game__character"
           :src="`${assetBaseUrl}/characters/sakurano-momoka-portrait.png`"
           alt=""
         >
-      </div>
+      </picture>
       <div class="shogi-game__dialogue">
         {{ hintText || guideText }}
       </div>
@@ -99,7 +107,7 @@
         <span>{{ playerSideLabel }}</span>
         <strong>{{ humanPlayerName }}</strong>
         <small>{{ normalizedMode === "cpu" ? "あなた" : modeText }}</small>
-        <div><b>戦形</b>{{ playerFormationText }}</div>
+        <div><b>戦型</b><span>{{ playerFormationText }}</span></div>
       </div>
     </section>
 
@@ -141,7 +149,7 @@ import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const formationCalloutMaster = {
   version: 1,
-  initial_speech: "戦形が見えたら知らせるね！",
+  initial_speech: "戦型が見えたら知らせるね！",
   undo_speech: "もう一度、盤面を見てみよう！",
   callouts: [
     { callout_id: "bogin", name: "棒銀", speech: "棒銀！" },
@@ -201,7 +209,10 @@ function updateResponsiveLayout() {
     { name: "standard" as const, width: 1471, height: 959 },
     { name: "compact" as const, width: 1088, height: 1015 },
     { name: "portrait" as const, width: 878, height: 1168 },
-  ];
+  ].filter(({ name }) =>
+    name !== "standard"
+    || !window.matchMedia("(min-width: 1100px) and (min-aspect-ratio: 5/4)").matches
+  );
   boardLayout.value = layouts.reduce((best, candidate) => {
     const bestScale = Math.min(width / best.width, height / best.height);
     const candidateScale = Math.min(width / candidate.width, height / candidate.height);
@@ -366,7 +377,7 @@ function announceFormation() {
   if (!found) return;
   const key = "callout_id" in found ? found.callout_id : `hiragana:${found.name}`;
   announcedFormations.add(key);
-  guideText.value = "speech" in found ? found.speech : `「${found.name}」の戦形だね！`;
+  guideText.value = "speech" in found ? found.speech : `「${found.name}」の戦型だね！`;
 }
 
 function finish(matchResult: MatchResult) {
@@ -721,14 +732,19 @@ queueMicrotask(() => {
 }
 .shogi-game__player-card > div {
   grid-column: 1 / -1;
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: start;
   padding-top: 0.45rem;
   border-top: 1px solid rgba(216, 173, 85, 0.55);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+}
+.shogi-game__player-card > div > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .shogi-game__player-card b {
-  margin-right: 0.7rem;
   color: #f4d890;
 }
 .shogi-game__status {
@@ -879,6 +895,102 @@ queueMicrotask(() => {
     background: #5a3b43;
     filter: grayscale(0.35);
     opacity: 1;
+  }
+}
+@media (min-width: 1100px) and (min-aspect-ratio: 5/4) {
+  .shogi-game {
+    grid-template-columns:
+      clamp(13rem, 16vw, 16rem)
+      minmax(0, 1fr)
+      clamp(15rem, 18vw, 18rem);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.65rem;
+    padding: 0.75rem;
+  }
+  .shogi-game__toolbar {
+    grid-column: 3;
+    grid-row: 1;
+    gap: 0.45rem;
+    padding: 0 0 0.1rem;
+  }
+  .shogi-game__toolbar button,
+  .shogi-game__turn {
+    min-width: 0;
+    padding-inline: 0.55rem;
+  }
+  .shogi-game__board-shell {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    padding: 0.25rem;
+  }
+  .shogi-game__player-zone--opponent,
+  .shogi-game__player-zone--player {
+    min-height: 0;
+    gap: 0.55rem;
+    padding: 0;
+    overflow: hidden;
+    align-content: stretch;
+    align-items: stretch;
+  }
+  .shogi-game__player-zone--opponent {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+  }
+  .shogi-game__player-zone--player {
+    grid-column: 3;
+    grid-row: 2;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto auto;
+  }
+  .shogi-game__portrait,
+  .shogi-game__portrait--opponent,
+  .shogi-game__portrait--player {
+    position: relative;
+    inset: auto;
+    grid-column: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    background: linear-gradient(180deg, rgba(43, 23, 29, 0.08), rgba(43, 23, 29, 0.58));
+  }
+  .shogi-game__portrait--opponent {
+    grid-row: 1;
+  }
+  .shogi-game__portrait--player {
+    grid-row: 1;
+  }
+  .shogi-game__character {
+    object-fit: cover;
+    object-position: center top;
+  }
+  .shogi-game__player-zone--opponent .shogi-game__player-card {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .shogi-game__player-zone--opponent .shogi-game__status {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .shogi-game__dialogue {
+    grid-column: 1;
+    grid-row: 2;
+    max-height: none;
+  }
+  .shogi-game__assist-actions {
+    grid-column: 1;
+    grid-row: 3;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-left: 0;
+  }
+  .shogi-game__assist-actions button:last-child {
+    grid-column: 1 / -1;
+  }
+  .shogi-game__player-zone--player .shogi-game__player-card {
+    grid-column: 1;
+    grid-row: 4;
+    margin-left: 0;
   }
 }
 @media (max-width: 899px), (max-aspect-ratio: 5/4) {
