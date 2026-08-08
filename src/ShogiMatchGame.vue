@@ -194,7 +194,6 @@
         <div class="shogi-game__result-actions">
           <button type="button" class="shogi-game__rematch" @click="restart">もう一度対局</button>
           <button type="button" class="shogi-game__review" @click="startReview">感想戦</button>
-          <button type="button" class="shogi-game__result-close" @click="closeResult">閉じる</button>
         </div>
       </div>
     </div>
@@ -750,10 +749,6 @@ function resign() {
   if (active.value && !reviewMode.value) finish(resignationResult(record.value));
 }
 
-function closeResult() {
-  resultDialogOpen.value = false;
-}
-
 function startReview() {
   if (cpuTimer) clearTimeout(cpuTimer);
   resultDialogOpen.value = false;
@@ -1286,9 +1281,6 @@ queueMicrotask(() => {
   border-color: #78d4ff !important;
   background: linear-gradient(#285f82, #173247) !important;
   box-shadow: 0 0 1rem rgba(66, 181, 255, 0.38) !important;
-}
-.shogi-game__result-close {
-  background: linear-gradient(#5d4b50, #302329) !important;
 }
 .shogi-game__confetti {
   position: absolute;
