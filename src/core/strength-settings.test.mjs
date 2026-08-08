@@ -31,8 +31,8 @@ describe('CPU strength settings', () => {
       multiPv: 1,
       moveRank: { min: 1, max: 1 },
     });
-    expect(getStrengthSearchSettings(1000000)).toEqual({
-      nodes: 1000000,
+    expect(getStrengthSearchSettings(480000)).toEqual({
+      nodes: 480000,
       multiPv: 1,
       moveRank: { min: 1, max: 1 },
     });

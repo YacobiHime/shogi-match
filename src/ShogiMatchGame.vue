@@ -45,7 +45,7 @@
             <option :value="30000">ふつう（約4〜6手先）</option>
             <option :value="100000">強い（約6〜8手先）</option>
             <option :value="300000">かなり強い（約8〜10手先）</option>
-            <option :value="1000000">藤井聡太並み（推定）</option>
+            <option :value="480000">藤井聡太並み（推定）</option>
           </select>
         </label>
         <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
@@ -292,7 +292,7 @@ const strengthLabel = computed(() => ({
   30000: "ふつう",
   100000: "強い",
   300000: "かなり強い",
-  1000000: "藤井聡太並み",
+  480000: "藤井聡太並み",
 }[searchNodes.value] ?? "ふつう"));
 const canMove = computed(() =>
   active.value &&
@@ -407,7 +407,7 @@ function formatFinalMove(matchResult: MatchResult): string {
 
 function normalizeNodes(value: number): number {
   const nodes = Number.isFinite(value) ? value : 30000;
-  return [1000, 10000, 30000, 100000, 300000, 1000000].reduce(
+  return [1000, 10000, 30000, 100000, 300000, 480000].reduce(
     (nearest, candidate) =>
       Math.abs(candidate - nodes) < Math.abs(nearest - nodes) ? candidate : nearest,
     30000,
