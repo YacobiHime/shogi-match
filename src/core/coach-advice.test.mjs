@@ -2,11 +2,38 @@ import { describe, expect, test } from 'vitest';
 
 import {
   getCoachAdvice,
+  getCandidateRiskAdvice,
   getMoveFeedback,
   isSideToMoveInCheck,
   scoreAfterOpponentMove,
   scoreFromOpponentPerspective,
 } from './coach-advice.mjs';
+
+describe('候補手ごとの危険度助言', () => {
+  test('最善手でも被詰みなら詰み手数を表示する', () => {
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'mate', value: -7 } },
+    ])?.text).toBe('詰んじゃった……7手詰めだね。');
+  });
+
+  test('詰む候補手の順位に応じて警告を変える', () => {
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 20 } },
+      { rank: 2, score: { type: 'mate', value: -5 } },
+    ])?.text).toBe('間違えたら詰みだよ。慎重に受けよう。');
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 20 } },
+      { rank: 4, score: { type: 'mate', value: -5 } },
+    ])?.text).toBe('私たち、なんだか詰みそうだね…');
+  });
+
+  test('上位候補に大きな評価差があれば注意を促す', () => {
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 500 } },
+      { rank: 2, score: { type: 'cp', value: -250 } },
+    ])?.text).toBe('何かあるよ、気を付けて！');
+  });
+});
 
 describe('対局中の応援・助言', () => {
   test('CPU視点の評価値を着手後のプレイヤー視点へ反転する', () => {
