@@ -157,13 +157,17 @@ export function getCoachAdvice({
 
   if (score?.type !== 'cp' || !Number.isFinite(score.value)) return null;
   if (moveCount <= 30) {
-    if (score.value >= 250) return { key: 'opening-good', text: '良い出だしだね！' };
-    if (score.value <= -250) {
+    if (score.value >= 180) return { key: 'opening-good', text: '良い出だしだね！' };
+    if (score.value <= -180) {
       return { key: 'opening-behind', text: '少し押されているけど、まだまだやれるよ！' };
     }
+    return { key: 'opening-even', text: '互角の出だしだね。じっくり指していこう！' };
   } else if (moveCount <= 80) {
-    if (score.value >= 400) return { key: 'middle-good', text: '良い流れだね！' };
-    if (score.value <= -400) return { key: 'middle-behind', text: 'まだまだやれるよ！' };
+    if (score.value >= 300) return { key: 'middle-good', text: '良い流れだね！' };
+    if (score.value <= -300) return { key: 'middle-behind', text: 'まだまだやれるよ！' };
+    return { key: 'middle-even', text: 'まだ互角だよ。焦らずいこう！' };
   }
-  return null;
+  if (score.value >= 500) return { key: 'endgame-good', text: '終盤は私たちが良さそうだよ！' };
+  if (score.value <= -500) return { key: 'endgame-behind', text: '苦しい終盤だけど、最後まで手を探そう！' };
+  return { key: 'endgame-even', text: '勝負どころだね。慎重に読もう！' };
 }
