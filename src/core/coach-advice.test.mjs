@@ -16,15 +16,20 @@ describe('候補手ごとの危険度助言', () => {
     ])?.text).toBe('詰んじゃった……7手詰めだね。');
   });
 
-  test('詰む候補手の順位に応じて警告を変える', () => {
+  test('王手と厳密な詰めろを区別して警告する', () => {
     expect(getCandidateRiskAdvice([
       { rank: 1, score: { type: 'cp', value: 20 } },
-      { rank: 2, score: { type: 'mate', value: -5 } },
-    ])?.text).toBe('間違えたら詰みだよ。慎重に受けよう。');
+    ], { inCheck: true })?.text).toBe('王手きたーっ！！');
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 20 } },
+    ], { mateThreat: true })?.text).toBe('間違えたら詰みだよ。慎重に受けよう。');
+  });
+
+  test('4～5番手で被詰みになる場合は詰みの気配を伝える', () => {
     expect(getCandidateRiskAdvice([
       { rank: 1, score: { type: 'cp', value: 20 } },
       { rank: 4, score: { type: 'mate', value: -5 } },
-    ])?.text).toBe('私たち、なんだか詰みそうだね…');
+    ])?.text).toBe('詰みがありそうな気がするな～？');
   });
 
   test('上位候補に大きな評価差があれば注意を促す', () => {

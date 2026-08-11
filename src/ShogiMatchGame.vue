@@ -225,6 +225,7 @@ import {
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
+import { detectStrictMateThreat } from "./core/mate-threat";
 import { getStrengthSearchSettings } from "./core/strength-settings.mjs";
 import {
   appendReviewMove,
@@ -617,7 +618,13 @@ async function updateDedicatedCoachAdvice(
     if (mate.status === "mate") score = { type: "mate", value: mate.moves.length };
   }
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
-  const riskAdvice = coachLevel.value === "detailed" ? getCandidateRiskAdvice(candidates) : null;
+  const inCheck = isSideToMoveInCheck(currentSfen.value);
+  const mateThreat = coachLevel.value === "detailed" && !inCheck
+    ? detectStrictMateThreat(currentSfen.value).isThreat
+    : false;
+  const riskAdvice = coachLevel.value === "detailed"
+    ? getCandidateRiskAdvice(candidates, { inCheck, mateThreat })
+    : null;
   updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice);
 }
 
@@ -636,7 +643,13 @@ function scheduleReviewCoachAdvice() {
       );
       if (generation !== reviewCoachGeneration || !reviewMode.value) return;
       const score = candidates.find((candidate) => candidate.rank === 1)?.score;
-      const riskAdvice = coachLevel.value === "detailed" ? getCandidateRiskAdvice(candidates) : null;
+      const inCheck = isSideToMoveInCheck(currentSfen.value);
+      const mateThreat = coachLevel.value === "detailed" && !inCheck
+        ? detectStrictMateThreat(currentSfen.value).isThreat
+        : false;
+      const riskAdvice = coachLevel.value === "detailed"
+        ? getCandidateRiskAdvice(candidates, { inCheck, mateThreat })
+        : null;
       updateCoachAdviceFromPlayerScore(score, riskAdvice);
     } finally {
       if (generation === reviewCoachGeneration) thinking.value = false;
