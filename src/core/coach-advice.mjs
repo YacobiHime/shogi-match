@@ -39,7 +39,7 @@ function comparableScore(score) {
 }
 
 /** 上位候補の評価差から、一手の選択が勝敗へ直結する局面を知らせる。 */
-export function getCandidateRiskAdvice(candidates = []) {
+export function getCandidateRiskAdvice(candidates = [], { inCheck = false, mateThreat = false } = {}) {
   const ranked = [...candidates]
     .filter((candidate) => Number.isInteger(candidate?.rank) && candidate.rank >= 1)
     .sort((left, right) => left.rank - right.rank);
@@ -50,17 +50,17 @@ export function getCandidateRiskAdvice(candidates = []) {
       text: `詰んじゃった……${Math.abs(best.score.value)}手詰めだね。`,
     };
   }
-  if (ranked.some((candidate) => (
-    candidate.rank >= 2 && candidate.rank <= 3
-    && candidate.score?.type === 'mate' && candidate.score.value < 0
-  ))) {
+  if (inCheck) {
+    return { key: 'king-in-check', text: '王手きたーっ！！' };
+  }
+  if (mateThreat) {
     return { key: 'mate-risk-top3', text: '間違えたら詰みだよ。慎重に受けよう。' };
   }
   if (ranked.some((candidate) => (
     candidate.rank >= 4 && candidate.rank <= 5
     && candidate.score?.type === 'mate' && candidate.score.value < 0
   ))) {
-    return { key: 'mate-risk-top5', text: '私たち、なんだか詰みそうだね…' };
+    return { key: 'mate-risk-top5', text: '詰みがありそうな気がするな～？' };
   }
   const bestValue = comparableScore(best?.score);
   if (bestValue !== undefined && ranked.some((candidate) => {
