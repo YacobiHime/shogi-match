@@ -19,6 +19,63 @@ function firstByGroup(rules, group) {
   return rules.find((rule) => rule.group === group)?.name ?? '';
 }
 
+// 具体的な派生戦型が判定されたときに、同時表示しない一般名。
+// 棒銀など複数の戦型で現れる作戦は、誤って親子扱いしない。
+const FORMATION_PARENTS_BY_SPECIFIC = new Map([
+  ['ゴキゲン中飛車', ['中飛車']],
+  ['端角中飛車', ['中飛車']],
+  ['ノーマル四間飛車', ['四間飛車']],
+  ['角交換四間飛車', ['四間飛車']],
+  ['立石流四間飛車', ['四間飛車']],
+  ['ノーマル三間飛車', ['三間飛車']],
+  ['角交換三間飛車', ['三間飛車']],
+  ['石田流', ['三間飛車']],
+  ['早石田', ['三間飛車']],
+  ['7八飛戦法', ['三間飛車']],
+  ['2手目3二飛戦法', ['三間飛車']],
+  ['ダイレクト向かい飛車', ['向かい飛車']],
+  ['メリケン向かい飛車', ['向かい飛車']],
+  ['阪田流向かい飛車', ['向かい飛車']],
+  ['菜々河流向かい飛車', ['向かい飛車']],
+  ['天彦流向かい飛車', ['向かい飛車']],
+  ['一手損角換わり', ['角換わり']],
+  ['角換わり29手目基本図', ['角換わり']],
+  ['角換わり37手目基本図', ['角換わり']],
+  ['4五桂速攻', ['角換わり']],
+  ['横歩取り青野流', ['横歩取り']],
+  ['横歩取り勇気流', ['横歩取り']],
+  ['横歩取り2三歩戦法', ['横歩取り']],
+  ['横歩取り3三角戦法', ['横歩取り']],
+  ['横歩取り3三桂戦法', ['横歩取り']],
+  ['相横歩取り', ['横歩取り']],
+  ['横歩取り4五角戦法', ['横歩取り']],
+  ['横歩取り8五飛戦法', ['横歩取り']],
+  ['AlphaZero流相掛かり', ['相掛かり']],
+  ['6二金・8一飛車型', ['相掛かり']],
+  ['相掛かり横歩取らせ', ['相掛かり']],
+  ['菱矢倉', ['矢倉']],
+  ['総矢倉', ['矢倉']],
+  ['金矢倉', ['矢倉']],
+  ['銀矢倉', ['矢倉']],
+  ['菊水矢倉', ['矢倉']],
+  ['土居矢倉', ['矢倉']],
+  ['天野矢倉', ['矢倉']],
+  ['銀立ち矢倉', ['矢倉']],
+  ['右矢倉', ['矢倉']],
+  ['シン・パックマン', ['パックマン']],
+]);
+
+export function preferSpecificFormationNames(names) {
+  const unique = [...new Set(names.filter(Boolean))];
+  const hiddenParents = new Set();
+  for (const name of unique) {
+    for (const parent of FORMATION_PARENTS_BY_SPECIFIC.get(name) ?? []) {
+      hiddenParents.add(parent);
+    }
+  }
+  return unique.filter((name) => !hiddenParents.has(name));
+}
+
 export function createFormationState() {
   return {
     battle: '',
@@ -76,12 +133,12 @@ export function formationNamesFromState(state, color, limit = Infinity) {
   const battle = state.battle === '一手損角換わり' && color === 'black'
     ? []
     : [state.battle];
-  return [...new Set([
+  return preferSpecificFormationNames([
     ...battle,
     side.rook,
     side.castle,
     ...side.tactics,
-  ].filter(Boolean))].slice(0, limit);
+  ]).slice(0, limit);
 }
 
 export function formationNamesFromSnapshot(snapshot, color) {

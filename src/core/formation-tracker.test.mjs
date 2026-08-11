@@ -5,6 +5,7 @@ import {
   createFormationState,
   detectFormationSnapshot,
   formationNamesFromState,
+  preferSpecificFormationNames,
   updateFormationState,
 } from './formation-tracker.mjs';
 
@@ -82,5 +83,23 @@ describe('戦型の役割別追跡', () => {
     });
     expect(state.black.tactics).toHaveLength(3);
     expect(formationNamesFromState(state, 'black', 3)).toHaveLength(3);
+  });
+
+  test.each([
+    [['中飛車', 'ゴキゲン中飛車'], ['ゴキゲン中飛車']],
+    [['四間飛車', 'ノーマル四間飛車'], ['ノーマル四間飛車']],
+    [['三間飛車', '石田流'], ['石田流']],
+    [['向かい飛車', 'ダイレクト向かい飛車'], ['ダイレクト向かい飛車']],
+    [['角換わり', '角換わり29手目基本図'], ['角換わり29手目基本図']],
+    [['横歩取り', '横歩取り青野流'], ['横歩取り青野流']],
+    [['相掛かり', 'AlphaZero流相掛かり'], ['AlphaZero流相掛かり']],
+    [['矢倉', '金矢倉'], ['金矢倉']],
+  ])('具体的な派生戦型があれば一般名を隠す: %j', (names, expected) => {
+    expect(preferSpecificFormationNames(names)).toEqual(expected);
+  });
+
+  test('親子関係のない戦型や作戦は残す', () => {
+    expect(preferSpecificFormationNames(['角換わり', '棒銀', '腰掛け銀']))
+      .toEqual(['角換わり', '棒銀', '腰掛け銀']);
   });
 });
