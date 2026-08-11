@@ -1392,23 +1392,27 @@ queueMicrotask(() => {
     grid-row: 2;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto auto auto;
+    isolation: isolate;
   }
-  .shogi-game__portrait,
   .shogi-game__portrait--advisor {
-    position: relative;
-    inset: auto;
-    grid-column: 1;
+    position: absolute;
+    z-index: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
     min-height: 0;
-    background: linear-gradient(180deg, rgba(43, 23, 29, 0.08), rgba(43, 23, 29, 0.58));
+    background:
+      linear-gradient(180deg, rgba(43, 23, 29, 0.02) 0 42%, rgba(43, 23, 29, 0.32) 68%, rgba(43, 23, 29, 0.72) 100%);
   }
-  .shogi-game__portrait--advisor {
-    grid-row: 1;
+  .shogi-game__portrait--advisor .shogi-game__character {
+    object-fit: cover;
+    object-position: center top;
   }
-  .shogi-game__character {
-    object-fit: contain;
-    object-position: center bottom;
+  .shogi-game__dialogue,
+  .shogi-game__assist-actions,
+  .shogi-game__player-zone--player .shogi-game__player-card {
+    position: relative;
+    z-index: 2;
   }
   .shogi-game__player-zone--opponent .shogi-game__player-card {
     grid-column: 1;
