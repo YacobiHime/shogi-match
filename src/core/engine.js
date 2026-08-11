@@ -304,8 +304,9 @@ export class ShogiEngine {
             nodes: nodesMatch ? Number(nodesMatch[1]) : latestStats.nodes,
             nps: npsMatch ? Number(npsMatch[1]) : latestStats.nps,
           };
-          if (rankMatch && pvMatch) {
-            const rank = Number(rankMatch[1]);
+          if (pvMatch) {
+            // MultiPV=1 のとき `multipv 1` を省略するUSIエンジンもある。
+            const rank = rankMatch ? Number(rankMatch[1]) : 1;
             const pv = pvMatch[1].trim().split(/\s+/).filter((move) => USI_MOVE_PATTERN.test(move));
             if (pv.length === 0) return;
             const detail = {

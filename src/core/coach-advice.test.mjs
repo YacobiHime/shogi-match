@@ -57,6 +57,17 @@ describe('対局中の応援・助言', () => {
       .toContain('まだまだやれるよ');
   });
 
+  test('互角の局面と81手目以降にも助言する', () => {
+    expect(getCoachAdvice({ score: { type: 'cp', value: 0 }, moveCount: 20 })?.key)
+      .toBe('opening-even');
+    expect(getCoachAdvice({ score: { type: 'cp', value: 0 }, moveCount: 50 })?.key)
+      .toBe('middle-even');
+    expect(getCoachAdvice({ score: { type: 'cp', value: 0 }, moveCount: 100 })?.key)
+      .toBe('endgame-even');
+    expect(getCoachAdvice({ score: { type: 'cp', value: -700 }, moveCount: 100 })?.key)
+      .toBe('endgame-behind');
+  });
+
   test('詳しい助言では詰み手数と詰めろを知らせる', () => {
     expect(getCoachAdvice({ level: 'detailed', score: { type: 'mate', value: 7 } })?.text)
       .toBe('7手詰めだね、頑張って！');

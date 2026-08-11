@@ -27,3 +27,23 @@ describe('USI詰み専用探索', () => {
       .resolves.toEqual({ status: 'unsupported', moves: [] });
   });
 });
+
+describe('USI通常探索', () => {
+  test('multipv表記が省略されても最善手の評価値を保持する', async () => {
+    const engine = new ShogiEngine({ factory: async () => ({}) });
+    engine.instance = {
+      postMessage(command) {
+        if (!command.startsWith('go ')) return;
+        queueMicrotask(() => {
+          engine._emit('info depth 8 score cp 235 nodes 1000 pv 7g7f 3c3d');
+          engine._emit('bestmove 7g7f ponder 3c3d');
+        });
+      },
+    };
+
+    await expect(engine.go({ nodes: 1000, maxTimeMs: 200 })).resolves.toMatchObject({
+      move: '7g7f',
+      candidates: [{ rank: 1, move: '7g7f', score: { type: 'cp', value: 235 } }],
+    });
+  });
+});

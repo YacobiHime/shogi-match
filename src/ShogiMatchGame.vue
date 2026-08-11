@@ -282,12 +282,12 @@ const guideText = ref(INITIAL_GUIDE_TEXT);
 const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
-const coachLevel = ref<"off" | "encourage" | "detailed">("encourage");
+const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
 const boardLayout = ref<"standard" | "compact" | "portrait">("standard");
 const boardShell = ref<HTMLElement | null>(null);
 const advisedCoachTopics = new Set<string>();
-let lastCoachKey = "";
+const coachAdviceLastShownAt = new Map<string, number>();
 let playerTurnScore: { type: "cp" | "mate"; value: number } | undefined;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
@@ -526,6 +526,15 @@ function syncPosition(usi = "") {
   observeFormations(currentSfen.value);
 }
 
+function showCoachAdvice(advice?: { key: string; text: string; topic?: string } | null) {
+  if (!advice) return;
+  const lastShownAt = coachAdviceLastShownAt.get(advice.key);
+  if (lastShownAt !== undefined && moveCount.value - lastShownAt < 8) return;
+  coachAdviceLastShownAt.set(advice.key, moveCount.value);
+  if (advice.topic) advisedCoachTopics.add(advice.topic);
+  guideText.value = advice.text;
+}
+
 function updateCoachAdvice(
   cpuScore?: { type: "cp" | "mate"; value: number },
   moveFeedback?: { key: string; text: string } | null,
@@ -536,8 +545,7 @@ function updateCoachAdvice(
     return;
   }
   if (moveFeedback) {
-    lastCoachKey = moveFeedback.key;
-    guideText.value = moveFeedback.text;
+    showCoachAdvice(moveFeedback);
     return;
   }
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
@@ -549,10 +557,7 @@ function updateCoachAdvice(
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
     advisedTopics: advisedCoachTopics,
   });
-  if (!advice || advice.key === lastCoachKey) return;
-  lastCoachKey = advice.key;
-  if (advice.topic) advisedCoachTopics.add(advice.topic);
-  guideText.value = advice.text;
+  showCoachAdvice(advice);
 }
 
 function currentEnginePosition() {
@@ -578,8 +583,7 @@ function updateCoachAdviceFromPlayerScore(
     return;
   }
   if (moveFeedback) {
-    lastCoachKey = moveFeedback.key;
-    guideText.value = moveFeedback.text;
+    showCoachAdvice(moveFeedback);
     return;
   }
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
@@ -591,10 +595,7 @@ function updateCoachAdviceFromPlayerScore(
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
     advisedTopics: advisedCoachTopics,
   });
-  if (!advice || advice.key === lastCoachKey) return;
-  lastCoachKey = advice.key;
-  if (advice.topic) advisedCoachTopics.add(advice.topic);
-  guideText.value = advice.text;
+  showCoachAdvice(advice);
 }
 
 async function updateDedicatedCoachAdvice(
@@ -901,7 +902,7 @@ function restart() {
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : INITIAL_GUIDE_TEXT;
   advisedCoachTopics.clear();
-  lastCoachKey = "";
+  coachAdviceLastShownAt.clear();
   formationState.value = createFormationState();
   syncPosition();
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
@@ -917,9 +918,16 @@ watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
 watch(coachLevel, (level) => {
-  lastCoachKey = "";
+  coachAdviceLastShownAt.clear();
   guideText.value = level === "off" ? "" : INITIAL_GUIDE_TEXT;
-  if (reviewMode.value && level !== "off") scheduleReviewCoachAdvice();
+  if (reviewMode.value && level !== "off") {
+    scheduleReviewCoachAdvice();
+  } else if (
+    level !== "off" && engineReady.value && active.value && !thinking.value
+    && record.value.position.color === humanColor.value
+  ) {
+    void updateDedicatedCoachAdvice();
+  }
 });
 onBeforeUnmount(() => {
   reviewCoachGeneration += 1;
