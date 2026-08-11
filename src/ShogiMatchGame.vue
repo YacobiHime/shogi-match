@@ -126,7 +126,7 @@
           閃き <small>×{{ reviewMode ? "∞" : hintsRemaining }}</small>
         </button>
         <button type="button" :disabled="!canUndo" @click="reviewMode ? toggleReviewNavigation() : undoTurn()">
-          待った ×{{ reviewMode ? "∞" : undosRemaining }}
+          {{ reviewMode ? "局面移動" : `待った ×${undosRemaining}` }}
         </button>
         <div v-if="reviewMode && reviewNavigationOpen" class="shogi-game__review-navigation">
           <button
