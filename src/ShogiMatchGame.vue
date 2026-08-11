@@ -207,9 +207,12 @@ import {
 import { ShogiEngine } from "./core/engine.js";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
 import {
-  detectHiraganaSuishoFormations,
-  invertHiraganaSuishoSfen,
-} from "./core/hiragana-suisho-formations.mjs";
+  createFormationState,
+  detectFormationSnapshot,
+  formationNamesFromSnapshot,
+  formationNamesFromState,
+  updateFormationState,
+} from "./core/formation-tracker.mjs";
 import {
   getCandidateRiskAdvice,
   getCoachAdvice,
@@ -276,7 +279,7 @@ const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
-const observedFormationNames = ref<{ black: string[]; white: string[] }>({ black: [], white: [] });
+const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
 const coachLevel = ref<"off" | "encourage" | "detailed">("encourage");
@@ -392,8 +395,8 @@ const resultPresentation = computed(() => {
     detail,
     handicap: props.handicapName.trim()
       || (props.initialSfen === STANDARD_SFEN ? "平手" : "その他"),
-    blackFormations: observedFormationNames.value.black.join("・") || "未判定",
-    whiteFormations: observedFormationNames.value.white.join("・") || "未判定",
+    blackFormations: formationNamesFromState(formationState.value, "black").join("・") || "未判定",
+    whiteFormations: formationNamesFromState(formationState.value, "white").join("・") || "未判定",
   };
   if (!result.value.winner) {
     return {
@@ -414,8 +417,8 @@ const resultPresentation = computed(() => {
     ? { tone: "victory", title: "勝利", ...common }
     : { tone: "defeat", title: "敗北", ...common };
 });
-const blackFormationText = computed(() => formationTextForColor(currentSfen.value, Color.BLACK));
-const whiteFormationText = computed(() => formationTextForColor(currentSfen.value, Color.WHITE));
+const blackFormationText = computed(() => formationTextForColor(Color.BLACK));
+const whiteFormationText = computed(() => formationTextForColor(Color.WHITE));
 const playerFormationText = computed(() =>
   normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
     ? whiteFormationText.value
@@ -428,42 +431,24 @@ const opponentFormationText = computed(() =>
 );
 
 function formationNamesForColor(sfen: string, color: Color): string[] {
-  const canonicalFields = sfen.split(/\s+/);
-  canonicalFields[1] = "w";
-  const battleRules = detectHiraganaSuishoFormations(
-    canonicalFields.join(" "),
-    hiraganaFormationMaster,
-  ).filter((formation) => formation.group.startsWith("bt_match"));
-
-  let perspective = color === Color.BLACK ? sfen : invertHiraganaSuishoSfen(sfen);
-  const fields = perspective.split(/\s+/);
-  fields[1] = "w";
-  perspective = fields.join(" ");
-  const perspectiveRules = detectHiraganaSuishoFormations(perspective, hiraganaFormationMaster)
-    .filter((formation) => !formation.group.startsWith("bt_match"));
-  const applicableBattleRules = battleRules.filter((formation) => (
-    formation.name !== "一手損角換わり" || color === Color.WHITE
-  ));
-  return [...new Set(
-    [...applicableBattleRules, ...perspectiveRules].map((formation) => formation.name),
-  )].slice(0, 3);
+  const key = color === Color.BLACK ? "black" : "white";
+  return formationNamesFromSnapshot(
+    detectFormationSnapshot(sfen, hiraganaFormationMaster),
+    key,
+  );
 }
 
-function formationTextForColor(sfen: string, color: Color): string {
-  const observedKey = color === Color.BLACK ? "black" : "white";
-  const names = [...new Set([
-    ...formationNamesForColor(sfen, color),
-    ...observedFormationNames.value[observedKey],
-  ])].slice(0, 3);
+function formationTextForColor(color: Color): string {
+  const key = color === Color.BLACK ? "black" : "white";
+  const names = formationNamesFromState(formationState.value, key, 3);
   return names.length ? names.join("・") : "まだ未判定";
 }
 
 function observeFormations(sfen: string) {
-  for (const [key, color] of [["black", Color.BLACK], ["white", Color.WHITE]] as const) {
-    const observed = new Set(observedFormationNames.value[key]);
-    formationNamesForColor(sfen, color).forEach((name) => observed.add(name));
-    observedFormationNames.value[key] = [...observed];
-  }
+  formationState.value = updateFormationState(
+    formationState.value,
+    detectFormationSnapshot(sfen, hiraganaFormationMaster),
+  );
 }
 
 function formatFinalMove(matchResult: MatchResult): string {
@@ -917,7 +902,7 @@ function restart() {
   guideText.value = coachLevel.value === "off" ? "" : INITIAL_GUIDE_TEXT;
   advisedCoachTopics.clear();
   lastCoachKey = "";
-  observedFormationNames.value = { black: [], white: [] };
+  formationState.value = createFormationState();
   syncPosition();
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
   initializeEngine();
