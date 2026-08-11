@@ -551,6 +551,37 @@ function updateCoachAdvice(
   guideText.value = advice.text;
 }
 
+async function updateDedicatedMateAdvice() {
+  if (!engine || !active.value || reviewMode.value || coachLevel.value !== "detailed") return;
+  const analyzedHistoryLength = moveHistory.length;
+  const base = props.initialSfen === STANDARD_SFEN ? "startpos" : `sfen ${props.initialSfen}`;
+  engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
+  const movetime = props.mobile || boardLayout.value === "portrait" ? 1800 : 3500;
+  const mate = await engine.goMate({ movetime, maxTimeMs: movetime + 1500 });
+  if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
+  let matePly = mate.status === "mate" ? mate.moves.length : 0;
+  // 古い通常対局版のやねうら王はgo mate未対応なので、強めの通常探索へ切り替える。
+  if (mate.status === "unsupported") {
+    engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
+    engine.applyStrengthOptions({ multiPv: 1 });
+    const analysis = await engine.go({
+      nodes: props.mobile || boardLayout.value === "portrait" ? 200000 : 500000,
+      maxTimeMs: props.mobile || boardLayout.value === "portrait" ? 3500 : 6000,
+    });
+    const score = analysis.candidates.find((candidate) => candidate.rank === 1)?.score;
+    if (score?.type === "mate" && score.value > 0) matePly = score.value;
+  }
+  if (!active.value || moveHistory.length !== analyzedHistoryLength || matePly < 1) return;
+  const advice = getCoachAdvice({
+    level: "detailed",
+    score: { type: "mate", value: matePly },
+  });
+  if (!advice) return;
+  playerTurnScore = { type: "mate", value: matePly };
+  lastCoachKey = advice.key;
+  guideText.value = advice.text;
+}
+
 function finish(matchResult: MatchResult) {
   active.value = false;
   thinking.value = false;
@@ -697,13 +728,21 @@ async function scheduleCpuMove() {
       } else {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
       }
-      thinking.value = false;
       if (!usi) {
+        thinking.value = false;
         const terminalResult = resultAfterMove(record.value);
         if (terminalResult) finish(terminalResult);
         return;
       }
-      if (applyMove(usi, "cpu") && active.value) updateCoachAdvice(coachScore, moveFeedback);
+      if (applyMove(usi, "cpu") && active.value) {
+        updateCoachAdvice(coachScore, moveFeedback);
+        try {
+          await updateDedicatedMateAdvice();
+        } catch {
+          // 助言用探索の失敗で対局進行やCPU着手をやり直さない。
+        }
+      }
+      thinking.value = false;
     } catch (error) {
       thinking.value = false;
       const message = error instanceof Error ? error.message : String(error);

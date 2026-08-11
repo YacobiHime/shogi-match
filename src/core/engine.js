@@ -353,6 +353,52 @@ export class ShogiEngine {
     });
   }
 
+  /**
+   * USIの詰み専用探索を実行する。通常評価探索とは独立しているため、
+   * CPU難易度のnodes設定に左右されず、詰み手順そのものを返せる。
+   * @param {{ movetime?: number, maxTimeMs?: number }} options
+   * @returns {Promise<{ status: 'mate'|'nomate'|'timeout'|'unsupported', moves: string[] }>}
+   */
+  async goMate(options = {}) {
+    const movetime = options.movetime ?? 3000;
+    const maxTimeMs = options.maxTimeMs ?? movetime + 1500;
+    if (!Number.isInteger(movetime) || movetime < 1) {
+      throw new Error('詰み探索時間は1以上の整数にしてください');
+    }
+    if (!Number.isInteger(maxTimeMs) || maxTimeMs < movetime) {
+      throw new Error('詰み探索の上限時間が不正です');
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        const index = this._listeners.indexOf(listener);
+        if (index >= 0) this._listeners.splice(index, 1);
+        resolve(result);
+      };
+      const listener = (line) => {
+        if (!line.startsWith('checkmate')) return;
+        const payload = line.slice('checkmate'.length).trim();
+        if (payload === 'nomate') return finish({ status: 'nomate', moves: [] });
+        if (payload === 'timeout') return finish({ status: 'timeout', moves: [] });
+        if (payload === 'notimplemented') return finish({ status: 'unsupported', moves: [] });
+        const moves = payload.split(/\s+/).filter((move) => USI_MOVE_PATTERN.test(move));
+        finish(moves.length > 0
+          ? { status: 'mate', moves }
+          : { status: 'unsupported', moves: [] });
+      };
+      const timeoutId = setTimeout(() => {
+        try { this.send('stop'); } catch { /* 終了処理中なら何もしない */ }
+        finish({ status: 'timeout', moves: [] });
+      }, maxTimeMs);
+      this.onOutput(listener);
+      this.send(`go mate ${movetime}`);
+    });
+  }
+
   /** 実行中の探索を停止し、bestmoveの応答を待たせる。 */
   stop() {
     this.send('stop');
