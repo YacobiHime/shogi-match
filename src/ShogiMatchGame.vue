@@ -11,17 +11,6 @@
     </header>
 
     <section class="shogi-game__player-zone shogi-game__player-zone--opponent">
-      <picture class="shogi-game__portrait shogi-game__portrait--opponent">
-        <source
-          media="(min-width: 1100px) and (min-aspect-ratio: 5/4)"
-          :srcset="`${assetBaseUrl}/characters/mifune-hane.png`"
-        >
-        <img
-          class="shogi-game__character"
-          :src="`${assetBaseUrl}/characters/mifune-hane-portrait.png`"
-          alt=""
-        >
-      </picture>
       <div class="shogi-game__player-card">
         <span>{{ opponentSideLabel }}</span>
         <strong>{{ normalizedMode === "cpu" ? cpuPlayerName : whitePlayerName }}</strong>
@@ -95,7 +84,7 @@
     </div>
 
     <section class="shogi-game__player-zone shogi-game__player-zone--player">
-      <picture class="shogi-game__portrait shogi-game__portrait--player">
+      <picture class="shogi-game__portrait shogi-game__portrait--advisor">
         <source
           media="(min-width: 1100px) and (min-aspect-ratio: 5/4)"
           :srcset="`${assetBaseUrl}/characters/sakurano-momoka.png`"
@@ -103,7 +92,7 @@
         <img
           class="shogi-game__character"
           :src="`${assetBaseUrl}/characters/sakurano-momoka-portrait.png`"
-          alt=""
+          alt="助言役のやこび姫"
         >
       </picture>
       <div v-if="hintText || guideText" class="shogi-game__dialogue">
@@ -930,7 +919,7 @@ queueMicrotask(() => {
   grid-template-columns: 1fr;
   gap: 0.5rem;
   min-height: 0;
-  padding-right: 7rem;
+  padding-right: 0;
 }
 .shogi-game__player-zone--player {
   grid-column: 2;
@@ -956,11 +945,7 @@ queueMicrotask(() => {
   object-position: center;
   image-rendering: auto;
 }
-.shogi-game__portrait--opponent {
-  right: 0;
-  bottom: 0;
-}
-.shogi-game__portrait--player {
+.shogi-game__portrait--advisor {
   bottom: 0;
   left: 0;
 }
@@ -1341,14 +1326,7 @@ queueMicrotask(() => {
   .shogi-game {
     --panel: #2b171d;
   }
-  .shogi-game__player-zone--opponent {
-    padding-right: 7.5rem;
-  }
-  .shogi-game__portrait--opponent {
-    width: 7rem;
-    height: 8rem;
-  }
-  .shogi-game__portrait--player {
+  .shogi-game__portrait--advisor {
     width: 8rem;
     height: 9rem;
   }
@@ -1406,7 +1384,8 @@ queueMicrotask(() => {
     grid-column: 1;
     grid-row: 1 / -1;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    align-content: start;
   }
   .shogi-game__player-zone--player {
     grid-column: 3;
@@ -1415,8 +1394,7 @@ queueMicrotask(() => {
     grid-template-rows: minmax(0, 1fr) auto auto auto;
   }
   .shogi-game__portrait,
-  .shogi-game__portrait--opponent,
-  .shogi-game__portrait--player {
+  .shogi-game__portrait--advisor {
     position: relative;
     inset: auto;
     grid-column: 1;
@@ -1425,23 +1403,20 @@ queueMicrotask(() => {
     min-height: 0;
     background: linear-gradient(180deg, rgba(43, 23, 29, 0.08), rgba(43, 23, 29, 0.58));
   }
-  .shogi-game__portrait--opponent {
-    grid-row: 1;
-  }
-  .shogi-game__portrait--player {
+  .shogi-game__portrait--advisor {
     grid-row: 1;
   }
   .shogi-game__character {
-    object-fit: cover;
-    object-position: center top;
+    object-fit: contain;
+    object-position: center bottom;
   }
   .shogi-game__player-zone--opponent .shogi-game__player-card {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 1;
   }
   .shogi-game__player-zone--opponent .shogi-game__status {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 2;
   }
   .shogi-game__dialogue {
     grid-column: 1;
@@ -1476,7 +1451,7 @@ queueMicrotask(() => {
     grid-row: 2;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     min-height: 0;
-    padding-right: 6.5rem;
+    padding-right: 0;
   }
   .shogi-game__board-shell {
     grid-column: 1;
@@ -1490,11 +1465,7 @@ queueMicrotask(() => {
     min-height: 0;
     padding-left: 6.5rem;
   }
-  .shogi-game__portrait--opponent {
-    width: 6.5rem;
-    height: 5.5rem;
-  }
-  .shogi-game__portrait--player {
+  .shogi-game__portrait--advisor {
     width: 6.5rem;
     height: 8.75rem;
   }
@@ -1532,7 +1503,7 @@ queueMicrotask(() => {
   .shogi-game__player-zone--player {
     padding-left: 9rem;
   }
-  .shogi-game__portrait--player {
+  .shogi-game__portrait--advisor {
     width: 9rem;
     height: 10rem;
   }
@@ -1575,7 +1546,7 @@ queueMicrotask(() => {
   .shogi-game__player-zone--opponent {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
     min-height: 0;
-    padding-right: 4.25rem;
+    padding-right: 0;
   }
   .shogi-game__player-zone--player {
     grid-template-columns: minmax(0, 1fr);
@@ -1587,7 +1558,7 @@ queueMicrotask(() => {
     width: 4.25rem;
     height: 4.5rem;
   }
-  .shogi-game__portrait--player {
+  .shogi-game__portrait--advisor {
     width: 3.6rem;
     height: 3.4rem;
   }
@@ -1649,7 +1620,7 @@ queueMicrotask(() => {
   }
   .shogi-game__player-zone--opponent,
   .shogi-game__player-zone--player {
-    padding-right: 4.5rem;
+    padding-right: 0;
     padding-left: 0;
   }
   .shogi-game__player-zone--player {
