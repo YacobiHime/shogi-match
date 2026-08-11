@@ -38,6 +38,41 @@ function comparableScore(score) {
   return undefined;
 }
 
+/** 上位候補の評価差から、一手の選択が勝敗へ直結する局面を知らせる。 */
+export function getCandidateRiskAdvice(candidates = []) {
+  const ranked = [...candidates]
+    .filter((candidate) => Number.isInteger(candidate?.rank) && candidate.rank >= 1)
+    .sort((left, right) => left.rank - right.rank);
+  const best = ranked.find((candidate) => candidate.rank === 1);
+  if (best?.score?.type === 'mate' && best.score.value < 0) {
+    return {
+      key: `forced-mate-loss-${Math.abs(best.score.value)}`,
+      text: `詰んじゃった……${Math.abs(best.score.value)}手詰めだね。`,
+    };
+  }
+  if (ranked.some((candidate) => (
+    candidate.rank >= 2 && candidate.rank <= 3
+    && candidate.score?.type === 'mate' && candidate.score.value < 0
+  ))) {
+    return { key: 'mate-risk-top3', text: '間違えたら詰みだよ。慎重に受けよう。' };
+  }
+  if (ranked.some((candidate) => (
+    candidate.rank >= 4 && candidate.rank <= 5
+    && candidate.score?.type === 'mate' && candidate.score.value < 0
+  ))) {
+    return { key: 'mate-risk-top5', text: '私たち、なんだか詰みそうだね…' };
+  }
+  const bestValue = comparableScore(best?.score);
+  if (bestValue !== undefined && ranked.some((candidate) => {
+    if (candidate.rank < 2 || candidate.rank > 5) return false;
+    const value = comparableScore(candidate.score);
+    return value !== undefined && bestValue - value >= 700;
+  })) {
+    return { key: 'candidate-evaluation-cliff', text: '何かあるよ、気を付けて！' };
+  }
+  return null;
+}
+
 function formatEvaluation(value) {
   const integer = Math.trunc(value);
   return `${integer >= 0 ? '+' : ''}${integer}`;

@@ -211,6 +211,7 @@ import {
   invertHiraganaSuishoSfen,
 } from "./core/hiragana-suisho-formations.mjs";
 import {
+  getCandidateRiskAdvice,
   getCoachAdvice,
   getMoveFeedback,
   isSideToMoveInCheck,
@@ -288,6 +289,8 @@ let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
 let boardResizeObserver: ResizeObserver | undefined;
+let reviewCoachGeneration = 0;
+let reviewCoachQueue: Promise<void> = Promise.resolve();
 
 function updateResponsiveLayout() {
   if (!boardShell.value) return;
@@ -556,12 +559,12 @@ function currentEnginePosition() {
   return `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
 }
 
-async function analyzeCoachPosition(nodes: number, maxTimeMs: number) {
-  if (!engine) return undefined;
+async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 1) {
+  if (!engine) return [];
   engine.setPosition(currentEnginePosition());
-  engine.applyStrengthOptions({ multiPv: 1 });
+  engine.applyStrengthOptions({ multiPv });
   const analysis = await engine.go({ nodes, maxTimeMs });
-  return analysis.candidates.find((candidate) => candidate.rank === 1)?.score;
+  return analysis.candidates;
 }
 
 function updateCoachAdviceFromPlayerScore(
@@ -599,7 +602,12 @@ async function updateDedicatedCoachAdvice(
   if (!engine || !active.value || reviewMode.value || coachLevel.value === "off") return;
   const analyzedHistoryLength = moveHistory.length;
   const compact = props.mobile || boardLayout.value === "portrait";
-  let score = await analyzeCoachPosition(compact ? 150000 : 400000, compact ? 3000 : 5500);
+  const candidates = await analyzeCoachPosition(
+    compact ? 150000 : 400000,
+    compact ? 3000 : 5500,
+    coachLevel.value === "detailed" ? 5 : 1,
+  );
+  let score = candidates.find((candidate) => candidate.rank === 1)?.score;
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
   // 勝勢に近い局面は専用詰み探索でも確認し、通常探索が見落とす長い詰みを補う。
   if (coachLevel.value === "detailed" && score?.type === "cp" && score.value >= 1000) {
@@ -609,7 +617,31 @@ async function updateDedicatedCoachAdvice(
     if (mate.status === "mate") score = { type: "mate", value: mate.moves.length };
   }
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
-  updateCoachAdviceFromPlayerScore(score, moveFeedback);
+  const riskAdvice = coachLevel.value === "detailed" ? getCandidateRiskAdvice(candidates) : null;
+  updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice);
+}
+
+function scheduleReviewCoachAdvice() {
+  if (!reviewMode.value || coachLevel.value === "off") return;
+  const generation = ++reviewCoachGeneration;
+  reviewCoachQueue = reviewCoachQueue.catch(() => undefined).then(async () => {
+    if (generation !== reviewCoachGeneration || !reviewMode.value || !engineReady.value) return;
+    thinking.value = true;
+    try {
+      const compact = props.mobile || boardLayout.value === "portrait";
+      const candidates = await analyzeCoachPosition(
+        compact ? 150000 : 400000,
+        compact ? 3000 : 5500,
+        coachLevel.value === "detailed" ? 5 : 1,
+      );
+      if (generation !== reviewCoachGeneration || !reviewMode.value) return;
+      const score = candidates.find((candidate) => candidate.rank === 1)?.score;
+      const riskAdvice = coachLevel.value === "detailed" ? getCandidateRiskAdvice(candidates) : null;
+      updateCoachAdviceFromPlayerScore(score, riskAdvice);
+    } finally {
+      if (generation === reviewCoachGeneration) thinking.value = false;
+    }
+  });
 }
 
 function finish(matchResult: MatchResult) {
@@ -698,6 +730,7 @@ function navigateReview(delta: number) {
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   hintCandidates.value = [];
   hintText.value = "";
+  scheduleReviewCoachAdvice();
 }
 
 function returnToMainLine() {
@@ -706,12 +739,14 @@ function returnToMainLine() {
   hintCandidates.value = [];
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : "本筋の局面に戻したよ！";
+  scheduleReviewCoachAdvice();
 }
 
 function onPlayerMove(usi: string) {
   if (!canMove.value || !applyMove(usi, "player")) return;
   if (reviewMode.value) {
     reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
+    scheduleReviewCoachAdvice();
   } else {
     scheduleCpuMove();
   }
@@ -738,10 +773,11 @@ async function scheduleCpuMove() {
         if (coachLevel.value === "detailed") {
           const compact = props.mobile || boardLayout.value === "portrait";
           try {
-            const cpuPerspective = await analyzeCoachPosition(
+            const coachCandidates = await analyzeCoachPosition(
               compact ? 100000 : 250000,
               compact ? 2200 : 4000,
             );
+            const cpuPerspective = coachCandidates.find((candidate) => candidate.rank === 1)?.score;
             dedicatedAfterPlayerScore = scoreFromOpponentPerspective(cpuPerspective);
           } catch {
             // CPU本体の探索を続け、後段でその評価値を代用する。
@@ -829,7 +865,7 @@ function startReview() {
   hintCandidates.value = [];
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : "感想戦だね。気になる手を一緒に調べよう！";
-  initializeEngine();
+  void initializeEngine().then(() => scheduleReviewCoachAdvice());
 }
 
 function restart() {
@@ -841,6 +877,7 @@ function restart() {
   result.value = null;
   resultDialogOpen.value = false;
   reviewMode.value = false;
+  reviewCoachGeneration += 1;
   reviewNavigationOpen.value = false;
   reviewNavigation.value = createReviewNavigation();
   playerTurnScore = undefined;
@@ -869,8 +906,10 @@ watch(() => props.engineNodes, (value) => {
 watch(coachLevel, (level) => {
   lastCoachKey = "";
   guideText.value = level === "off" ? "" : INITIAL_GUIDE_TEXT;
+  if (reviewMode.value && level !== "off") scheduleReviewCoachAdvice();
 });
 onBeforeUnmount(() => {
+  reviewCoachGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
   engine?.quit();
   boardResizeObserver?.disconnect();
