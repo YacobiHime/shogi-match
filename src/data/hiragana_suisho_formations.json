@@ -912,7 +912,7 @@
           {
             "match": {
               "mode": "all",
-              "sfen": "sfen 9/1r7/9/1p7/9/9/9/1+b5R1/2S6 b b 1"
+              "sfen": "sfen 9/1r7/1p7/9/9/9/9/7R1/9 b Bb 1"
             }
           },
           {
@@ -983,12 +983,6 @@
             "match": {
               "mode": "any",
               "sfen": "sfen 9/9/9/9/7P1/7P1/9/9/9 b - 1"
-            }
-          },
-          {
-            "match": {
-              "mode": "any",
-              "sfen": "sfen 9/9/9/1p7/1p7/9/9/9/9 b - 1"
             }
           }
         ]

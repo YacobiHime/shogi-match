@@ -62,6 +62,24 @@ describe('HiraganaSuisho原典互換判定', () => {
       .toContain('角換わり');
   });
 
+  test('後手が8筋歩を突かずに角交換した手順を一手損角換わりと判定する', () => {
+    const record = createGameRecord();
+    const moves = ['7g7f', '3c3d', '2g2f', '2b8h+', '7i8h'];
+    for (const move of moves) expect(appendUsiMove(record, move)).toBe(true);
+    const names = detectHiraganaSuishoFormations(record.position.sfen, master)
+      .map(({ name }) => name);
+    expect(names).toContain('一手損角換わり');
+  });
+
+  test('角換わりの基本判定は後手8筋歩の位置を必須にしない', () => {
+    const genericRule = master.rules.find((rule) => rule.name === '角換わり');
+    const oneTempoLoss = '4k4/1r7/1p7/9/9/7P1/9/7R1/4K4 w Bb 5';
+    expect(detectHiraganaSuishoFormations(
+      oneTempoLoss,
+      { version: 1, rules: [genericRule] },
+    ).map(({ name }) => name)).toContain('角換わり');
+  });
+
   test('銀と金だけの不完全な形を銀冠と誤判定しない', () => {
     const incomplete = '4k4/9/9/9/9/9/5G1S1/6G1K/9 w - 1';
     expect(detectHiraganaSuishoFormations(incomplete, master).map(({ name }) => name))

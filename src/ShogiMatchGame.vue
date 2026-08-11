@@ -428,18 +428,33 @@ const opponentFormationText = computed(() =>
 );
 
 function formationNamesForColor(sfen: string, color: Color): string[] {
+  const canonicalFields = sfen.split(/\s+/);
+  canonicalFields[1] = "w";
+  const battleRules = detectHiraganaSuishoFormations(
+    canonicalFields.join(" "),
+    hiraganaFormationMaster,
+  ).filter((formation) => formation.group.startsWith("bt_match"));
+
   let perspective = color === Color.BLACK ? sfen : invertHiraganaSuishoSfen(sfen);
   const fields = perspective.split(/\s+/);
   fields[1] = "w";
   perspective = fields.join(" ");
+  const perspectiveRules = detectHiraganaSuishoFormations(perspective, hiraganaFormationMaster)
+    .filter((formation) => !formation.group.startsWith("bt_match"));
+  const applicableBattleRules = battleRules.filter((formation) => (
+    formation.name !== "一手損角換わり" || color === Color.WHITE
+  ));
   return [...new Set(
-    detectHiraganaSuishoFormations(perspective, hiraganaFormationMaster)
-      .map((formation) => formation.name),
+    [...applicableBattleRules, ...perspectiveRules].map((formation) => formation.name),
   )].slice(0, 3);
 }
 
 function formationTextForColor(sfen: string, color: Color): string {
-  const names = formationNamesForColor(sfen, color);
+  const observedKey = color === Color.BLACK ? "black" : "white";
+  const names = [...new Set([
+    ...formationNamesForColor(sfen, color),
+    ...observedFormationNames.value[observedKey],
+  ])].slice(0, 3);
   return names.length ? names.join("・") : "まだ未判定";
 }
 
