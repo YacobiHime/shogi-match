@@ -551,35 +551,65 @@ function updateCoachAdvice(
   guideText.value = advice.text;
 }
 
-async function updateDedicatedMateAdvice() {
-  if (!engine || !active.value || reviewMode.value || coachLevel.value !== "detailed") return;
-  const analyzedHistoryLength = moveHistory.length;
+function currentEnginePosition() {
   const base = props.initialSfen === STANDARD_SFEN ? "startpos" : `sfen ${props.initialSfen}`;
-  engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
-  const movetime = props.mobile || boardLayout.value === "portrait" ? 1800 : 3500;
-  const mate = await engine.goMate({ movetime, maxTimeMs: movetime + 1500 });
-  if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
-  let matePly = mate.status === "mate" ? mate.moves.length : 0;
-  // 古い通常対局版のやねうら王はgo mate未対応なので、強めの通常探索へ切り替える。
-  if (mate.status === "unsupported") {
-    engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
-    engine.applyStrengthOptions({ multiPv: 1 });
-    const analysis = await engine.go({
-      nodes: props.mobile || boardLayout.value === "portrait" ? 200000 : 500000,
-      maxTimeMs: props.mobile || boardLayout.value === "portrait" ? 3500 : 6000,
-    });
-    const score = analysis.candidates.find((candidate) => candidate.rank === 1)?.score;
-    if (score?.type === "mate" && score.value > 0) matePly = score.value;
+  return `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
+}
+
+async function analyzeCoachPosition(nodes: number, maxTimeMs: number) {
+  if (!engine) return undefined;
+  engine.setPosition(currentEnginePosition());
+  engine.applyStrengthOptions({ multiPv: 1 });
+  const analysis = await engine.go({ nodes, maxTimeMs });
+  return analysis.candidates.find((candidate) => candidate.rank === 1)?.score;
+}
+
+function updateCoachAdviceFromPlayerScore(
+  score?: { type: "cp" | "mate"; value: number },
+  moveFeedback?: { key: string; text: string } | null,
+) {
+  playerTurnScore = score;
+  if (coachLevel.value === "off") {
+    guideText.value = "";
+    return;
   }
-  if (!active.value || moveHistory.length !== analyzedHistoryLength || matePly < 1) return;
+  if (moveFeedback) {
+    lastCoachKey = moveFeedback.key;
+    guideText.value = moveFeedback.text;
+    return;
+  }
+  const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   const advice = getCoachAdvice({
-    level: "detailed",
-    score: { type: "mate", value: matePly },
+    level: coachLevel.value,
+    score,
+    moveCount: moveCount.value,
+    inCheck: isSideToMoveInCheck(currentSfen.value),
+    opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
+    advisedTopics: advisedCoachTopics,
   });
-  if (!advice) return;
-  playerTurnScore = { type: "mate", value: matePly };
+  if (!advice || advice.key === lastCoachKey) return;
   lastCoachKey = advice.key;
+  if (advice.topic) advisedCoachTopics.add(advice.topic);
   guideText.value = advice.text;
+}
+
+async function updateDedicatedCoachAdvice(
+  moveFeedback?: { key: string; text: string } | null,
+) {
+  if (!engine || !active.value || reviewMode.value || coachLevel.value === "off") return;
+  const analyzedHistoryLength = moveHistory.length;
+  const compact = props.mobile || boardLayout.value === "portrait";
+  let score = await analyzeCoachPosition(compact ? 150000 : 400000, compact ? 3000 : 5500);
+  if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
+  // 勝勢に近い局面は専用詰み探索でも確認し、通常探索が見落とす長い詰みを補う。
+  if (coachLevel.value === "detailed" && score?.type === "cp" && score.value >= 1000) {
+    engine.setPosition(currentEnginePosition());
+    const movetime = compact ? 1800 : 3500;
+    const mate = await engine.goMate({ movetime, maxTimeMs: movetime + 1500 });
+    if (mate.status === "mate") score = { type: "mate", value: mate.moves.length };
+  }
+  if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
+  updateCoachAdviceFromPlayerScore(score, moveFeedback);
 }
 
 function finish(matchResult: MatchResult) {
@@ -703,8 +733,21 @@ async function scheduleCpuMove() {
       let moveFeedback: { key: string; text: string } | null = null;
       if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
-        engine.applyStrengthOptions({ multiPv: strength.multiPv });
         const openingMove = strategyMove();
+        let dedicatedAfterPlayerScore: { type: "cp" | "mate"; value: number } | undefined;
+        if (coachLevel.value === "detailed") {
+          const compact = props.mobile || boardLayout.value === "portrait";
+          try {
+            const cpuPerspective = await analyzeCoachPosition(
+              compact ? 100000 : 250000,
+              compact ? 2200 : 4000,
+            );
+            dedicatedAfterPlayerScore = scoreFromOpponentPerspective(cpuPerspective);
+          } catch {
+            // CPU本体の探索を続け、後段でその評価値を代用する。
+          }
+        }
+        engine.applyStrengthOptions({ multiPv: strength.multiPv });
         const base = props.initialSfen === STANDARD_SFEN
           ? "startpos"
           : `sfen ${props.initialSfen}`;
@@ -715,13 +758,11 @@ async function scheduleCpuMove() {
           searchMoves: openingMove ? [openingMove] : undefined,
         });
         const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
-        if (!openingMove) {
-          moveFeedback = getMoveFeedback({
-            level: coachLevel.value,
-            beforeScore: playerTurnScore,
-            afterScore: scoreFromOpponentPerspective(bestCpuScore),
-          });
-        }
+        moveFeedback = getMoveFeedback({
+          level: coachLevel.value,
+          beforeScore: playerTurnScore,
+          afterScore: dedicatedAfterPlayerScore ?? scoreFromOpponentPerspective(bestCpuScore),
+        });
         const selection = selectMoveByRank(search, strength.moveRank);
         usi = selection.move;
         coachScore = search.candidates.find((candidate) => candidate.rank === selection.rank)?.score;
@@ -737,7 +778,7 @@ async function scheduleCpuMove() {
       if (applyMove(usi, "cpu") && active.value) {
         updateCoachAdvice(coachScore, moveFeedback);
         try {
-          await updateDedicatedMateAdvice();
+          await updateDedicatedCoachAdvice(moveFeedback);
         } catch {
           // 助言用探索の失敗で対局進行やCPU着手をやり直さない。
         }
