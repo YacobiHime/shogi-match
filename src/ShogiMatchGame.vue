@@ -296,6 +296,7 @@ let boardResizeObserver: ResizeObserver | undefined;
 let reviewCoachGeneration = 0;
 let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
+let dedicatedCoachRunning = false;
 
 function updateResponsiveLayout() {
   if (!boardShell.value) return;
@@ -580,9 +581,12 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
 function updateCoachAdviceFromPlayerScore(
   score?: { type: "cp" | "mate"; value: number },
   moveFeedback?: { key: string; text: string } | null,
+  storeMoveBaseline = true,
 ) {
-  playerTurnScore = score;
-  playerTurnScoreHistoryLength = score ? moveHistory.length : -1;
+  if (storeMoveBaseline) {
+    playerTurnScore = score;
+    playerTurnScoreHistoryLength = score ? moveHistory.length : -1;
+  }
   if (coachLevel.value === "off") {
     guideText.value = "";
     return;
@@ -640,7 +644,7 @@ async function updateDedicatedCoachAdvice(
   const riskAdvice = coachLevel.value === "detailed"
     ? getCandidateRiskAdvice(normalizedCandidates, { inCheck, mateThreat })
     : null;
-  updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice);
+  updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice, false);
 }
 
 function scheduleDedicatedCoachAdvice(
@@ -648,7 +652,14 @@ function scheduleDedicatedCoachAdvice(
 ) {
   dedicatedCoachQueue = dedicatedCoachQueue
     .catch(() => undefined)
-    .then(() => updateDedicatedCoachAdvice(moveFeedback))
+    .then(async () => {
+      dedicatedCoachRunning = true;
+      try {
+        await updateDedicatedCoachAdvice(moveFeedback);
+      } finally {
+        dedicatedCoachRunning = false;
+      }
+    })
     .catch(() => undefined);
 }
 
@@ -788,6 +799,8 @@ function returnToMainLine() {
 
 function onPlayerMove(usi: string) {
   if (!canMove.value || !applyMove(usi, "player")) return;
+  // プレイヤーが指したら裏の助言探索を中断し、CPU本体へエンジンを明け渡す。
+  if (!reviewMode.value && dedicatedCoachRunning) engine?.stop();
   if (reviewMode.value) {
     reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
     scheduleReviewCoachAdvice();
@@ -814,6 +827,7 @@ async function scheduleCpuMove() {
         return;
       }
       let usi = "";
+      let selectedCpuScore: { type: "cp" | "mate"; value: number } | undefined;
       let moveFeedback: { key: string; text: string } | null = null;
       const playerMoveHistoryLength = moveHistory.length;
       const comparableBeforeScore = playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
@@ -822,24 +836,6 @@ async function scheduleCpuMove() {
       if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
         const openingMove = strategyMove();
-        let dedicatedAfterPlayerScore: { type: "cp" | "mate"; value: number } | undefined;
-        if (coachLevel.value === "detailed") {
-          const compact = props.mobile || boardLayout.value === "portrait";
-          try {
-            const coachCandidates = await analyzeCoachPosition(
-              compact ? 100000 : 250000,
-              compact ? 2200 : 4000,
-            );
-            const cpuPerspective = coachCandidates.find((candidate) => candidate.rank === 1)?.score;
-            dedicatedAfterPlayerScore = scoreForPlayer(
-              cpuPerspective,
-              record.value.position.color,
-              humanColor.value,
-            );
-          } catch {
-            // CPU本体の探索を続け、後段でその評価値を代用する。
-          }
-        }
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
         const base = props.initialSfen === STANDARD_SFEN
           ? "startpos"
@@ -854,7 +850,7 @@ async function scheduleCpuMove() {
         moveFeedback = getMoveFeedback({
           level: coachLevel.value,
           beforeScore: comparableBeforeScore,
-          afterScore: dedicatedAfterPlayerScore ?? scoreForPlayer(
+          afterScore: scoreForPlayer(
             bestCpuScore,
             record.value.position.color,
             humanColor.value,
@@ -866,8 +862,16 @@ async function scheduleCpuMove() {
           showCoachAdvice(moveFeedback);
           await nextTick();
         }
-        const selection = selectMoveByRank(search, strength.moveRank);
+        const selection = selectMoveByRank(
+          search,
+          strength.moveRank,
+          Math.random,
+          { maxScoreLoss: strength.maxScoreLoss },
+        );
         usi = selection.move;
+        selectedCpuScore = search.candidates.find(
+          (candidate) => candidate.rank === selection.rank,
+        )?.score;
       } else {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
       }
@@ -878,11 +882,7 @@ async function scheduleCpuMove() {
         return;
       }
       if (applyMove(usi, "cpu") && active.value) {
-        // CPU探索の候補値（難易度により第2～5候補の場合がある）は、次の着手評価や
-        // 形勢助言へ流用しない。着手後局面の専用探索だけを正しい基準値にする。
-        playerTurnScore = undefined;
-        playerTurnScoreHistoryLength = -1;
-        // CPUの着手が見えた時点でプレイヤーへ操作を返す。
+        updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
         scheduleDedicatedCoachAdvice();
       }
