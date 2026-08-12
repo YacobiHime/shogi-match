@@ -105,13 +105,13 @@ export function getMoveFeedback({ level = 'encourage', beforeScore, afterScore }
   if (loss >= 1000 && afterScore?.type === 'cp') {
     return {
       key: `move-blunder-${Math.trunc(change)}`,
-      text: `あちゃ～。やっちゃった…評価値変動${formatEvaluation(change)}だよ。`,
+      text: `あちゃ～。今の私たちの手、やっちゃった…評価値変動${formatEvaluation(change)}だよ。`,
     };
   }
   if (loss >= 500 && afterScore?.type === 'cp') {
     return {
       key: `move-mistake-${Math.trunc(change)}`,
-      text: `悪手だね…評価値変動${formatEvaluation(change)}だよ。`,
+      text: `今の私たちの手は悪手だね…評価値変動${formatEvaluation(change)}だよ。`,
     };
   }
   return null;
