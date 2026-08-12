@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getStrengthSearchSettings } from './strength-settings.mjs';
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from './strength-settings.mjs';
 
 describe('CPU strength settings', () => {
   it('keeps lower difficulties within plausible candidate moves', () => {
@@ -13,14 +13,29 @@ describe('CPU strength settings', () => {
       nodes: 20000,
       multiPv: 4,
       moveRank: { min: 2, max: 4 },
-      maxScoreLoss: 650,
+      maxScoreLoss: 700,
     });
-    expect(getStrengthSearchSettings(30000)).toEqual({
-      nodes: 60000,
+    expect(getStrengthSearchSettings(20000)).toEqual({
+      nodes: 30000,
       multiPv: 4,
       moveRank: { min: 1, max: 4 },
-      maxScoreLoss: 350,
+      maxScoreLoss: 600,
     });
+    expect(getStrengthSearchSettings(30000)).toEqual({
+      nodes: 40000,
+      multiPv: 4,
+      moveRank: { min: 1, max: 4 },
+      maxScoreLoss: 500,
+    });
+  });
+
+  it('offers ten gradual UI presets', () => {
+    expect(CPU_STRENGTH_PRESETS.map(({ label }) => label)).toEqual([
+      '入門', '初級', 'やさしい', 'やややさしい', 'ふつう',
+      'やや強い', '強い', '上級', 'かなり強い', '藤井聡太並み',
+    ]);
+    expect(CPU_STRENGTH_PRESETS.map(({ value }) => value))
+      .toEqual([1000, 5000, 10000, 20000, 30000, 60000, 100000, 200000, 300000, 480000]);
   });
 
   it('steps strong presets toward the best candidate', () => {
