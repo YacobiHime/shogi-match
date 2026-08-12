@@ -254,7 +254,7 @@ const props = defineProps({
   engineNodes: { type: Number, default: 30000 },
   handicapName: { type: String, default: "" },
   hintCount: { type: Number, default: 3 },
-  undoCount: { type: Number, default: 1 },
+  undoCount: { type: Number, default: 3 },
   mobile: { type: Boolean, default: false },
   enableDragAndDrop: { type: Boolean, default: true },
 });
