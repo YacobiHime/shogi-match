@@ -29,12 +29,9 @@
         <label v-if="normalizedMode === 'cpu' && !engineUnavailable" class="shogi-game__strength">
           <span>CPU強さ</span>
           <select v-model.number="searchNodes" :disabled="!engineReady" aria-label="CPUの強さ">
-            <option :value="1000">入門（初心者向け）</option>
-            <option :value="10000">やさしい（10〜5級目安）</option>
-            <option :value="30000">ふつう（4〜1級目安）</option>
-            <option :value="100000">強い（初〜二段目安）</option>
-            <option :value="300000">かなり強い（三段目安）</option>
-            <option :value="480000">藤井聡太並み（推定）</option>
+            <option v-for="preset in CPU_STRENGTH_PRESETS" :key="preset.value" :value="preset.value">
+              {{ preset.label }}（{{ preset.guide }}）
+            </option>
           </select>
         </label>
         <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
@@ -228,7 +225,7 @@ import {
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
 import { detectStrictMateThreat } from "./core/mate-threat";
-import { getStrengthSearchSettings } from "./core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from "./core/strength-settings.mjs";
 import {
   appendReviewMove,
   createReviewNavigation,
@@ -342,14 +339,9 @@ const opponentSideLabel = computed(() =>
     ? (humanColor.value === Color.BLACK ? "後手" : "先手")
     : "後手"
 );
-const strengthLabel = computed(() => ({
-  1000: "入門",
-  10000: "やさしい",
-  30000: "ふつう",
-  100000: "強い",
-  300000: "かなり強い",
-  480000: "藤井聡太並み",
-}[searchNodes.value] ?? "ふつう"));
+const strengthLabel = computed(() =>
+  CPU_STRENGTH_PRESETS.find(({ value }) => value === searchNodes.value)?.label ?? "ふつう"
+);
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
@@ -468,7 +460,7 @@ function formatFinalMove(matchResult: MatchResult): string {
 
 function normalizeNodes(value: number): number {
   const nodes = Number.isFinite(value) ? value : 30000;
-  return [1000, 10000, 30000, 100000, 300000, 480000].reduce(
+  return CPU_STRENGTH_PRESETS.map(({ value: preset }) => preset).reduce(
     (nearest, candidate) =>
       Math.abs(candidate - nodes) < Math.abs(nearest - nodes) ? candidate : nearest,
     30000,
