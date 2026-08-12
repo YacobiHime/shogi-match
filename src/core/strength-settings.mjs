@@ -17,8 +17,8 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
 export const CPU_STRENGTH_PRESETS = [
   { value: 1000, label: '入門', guide: '初心者向け' },
   { value: 5000, label: '初級', guide: '15〜11級目安' },
-  { value: 10000, label: 'やさしい', guide: '10〜7級目安' },
-  { value: 20000, label: 'やややさしい', guide: '6〜4級目安' },
+  { value: 10000, label: '易しい', guide: '10〜7級目安' },
+  { value: 20000, label: 'やや易しい', guide: '6〜4級目安' },
   { value: 30000, label: 'ふつう', guide: '3〜1級目安' },
   { value: 60000, label: 'やや強い', guide: '初段目安' },
   { value: 100000, label: '強い', guide: '二段目安' },

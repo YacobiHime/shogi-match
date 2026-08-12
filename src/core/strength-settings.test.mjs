@@ -31,7 +31,7 @@ describe('CPU strength settings', () => {
 
   it('offers ten gradual UI presets', () => {
     expect(CPU_STRENGTH_PRESETS.map(({ label }) => label)).toEqual([
-      '入門', '初級', 'やさしい', 'やややさしい', 'ふつう',
+      '入門', '初級', '易しい', 'やや易しい', 'ふつう',
       'やや強い', '強い', '上級', 'かなり強い', '藤井聡太並み',
     ]);
     expect(CPU_STRENGTH_PRESETS.map(({ value }) => value))
