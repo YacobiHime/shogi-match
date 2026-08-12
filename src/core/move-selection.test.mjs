@@ -45,4 +45,19 @@ describe('評価差を考慮したCPU候補選択', () => {
       { maxScoreLoss: 900 },
     )).toEqual({ move: '5c5b', rank: 1 });
   });
+
+  test('指定作戦の手も安全な候補に含まれる場合だけ優先する', () => {
+    expect(selectMoveByRank(
+      search,
+      { min: 1, max: 4 },
+      () => 0.5,
+      { maxScoreLoss: 350, preferredMove: '2g2f' },
+    )).toEqual({ move: '2g2f', rank: 2 });
+    expect(selectMoveByRank(
+      search,
+      { min: 1, max: 4 },
+      () => 0,
+      { maxScoreLoss: 350, preferredMove: '9g9f' },
+    )).toEqual({ move: '7g7f', rank: 1 });
+  });
 });

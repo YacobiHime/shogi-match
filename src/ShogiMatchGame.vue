@@ -836,7 +836,6 @@ async function scheduleCpuMove() {
         const search = await engine.go({
           nodes: strength.nodes,
           maxTimeMs: 60000,
-          searchMoves: openingMove ? [openingMove] : undefined,
         });
         const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
         moveFeedback = getMoveFeedback({
@@ -858,7 +857,7 @@ async function scheduleCpuMove() {
           search,
           strength.moveRank,
           Math.random,
-          { maxScoreLoss: strength.maxScoreLoss },
+          { maxScoreLoss: strength.maxScoreLoss, preferredMove: openingMove },
         );
         usi = selection.move;
         selectedCpuScore = search.candidates.find(
