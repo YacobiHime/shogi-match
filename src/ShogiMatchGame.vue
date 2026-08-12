@@ -299,6 +299,19 @@ let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachRunning = false;
 
+// 助言は対局AIより軽く保つ。局面評価は数万ノードで十分であり、
+// 人間最高峰プリセット（48万ノード）相当の探索を毎手行わない。
+const COACH_SEARCH_BUDGET = {
+  standard: { nodes: 60000, maxTimeMs: 1500, mateTimeMs: 800, threatNodes: 12000 },
+  compact: { nodes: 30000, maxTimeMs: 900, mateTimeMs: 500, threatNodes: 6000 },
+} as const;
+
+function coachSearchBudget() {
+  return COACH_SEARCH_BUDGET[
+    props.mobile || boardLayout.value === "portrait" ? "compact" : "standard"
+  ];
+}
+
 function updateResponsiveLayout() {
   if (!boardShell.value) return;
   const width = boardShell.value.clientWidth;
@@ -609,10 +622,10 @@ async function updateDedicatedCoachAdvice(
   if (!engine || !active.value || reviewMode.value || coachLevel.value === "off") return;
   const analyzedHistoryLength = moveHistory.length;
   const analyzedSideToMove = record.value.position.color;
-  const compact = props.mobile || boardLayout.value === "portrait";
+  const budget = coachSearchBudget();
   const candidates = await analyzeCoachPosition(
-    compact ? 150000 : 400000,
-    compact ? 3000 : 5500,
+    budget.nodes,
+    budget.maxTimeMs,
     coachLevel.value === "detailed" ? 5 : 1,
   );
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
@@ -625,17 +638,17 @@ async function updateDedicatedCoachAdvice(
     ),
   }));
   let score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
-  // 勝勢に近い局面は専用詰み探索でも確認し、通常探索が見落とす長い詰みを補う。
-  if (coachLevel.value === "detailed" && score?.type === "cp" && score.value >= 1000) {
+  // 明確な勝勢だけ専用詰み探索で確認する。軽い優勢局面ごとに実行しない。
+  if (coachLevel.value === "detailed" && score?.type === "cp" && score.value >= 2500) {
     engine.setPosition(currentEnginePosition());
-    const movetime = compact ? 1800 : 3500;
-    const mate = await engine.goMate({ movetime, maxTimeMs: movetime + 1500 });
+    const movetime = budget.mateTimeMs;
+    const mate = await engine.goMate({ movetime, maxTimeMs: movetime + 300 });
     if (mate.status === "mate") score = { type: "mate", value: mate.moves.length };
   }
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
   const inCheck = isSideToMoveInCheck(currentSfen.value);
   const mateThreat = coachLevel.value === "detailed" && !inCheck
-    ? detectStrictMateThreat(currentSfen.value).isThreat
+    ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes).isThreat
     : false;
   const riskAdvice = coachLevel.value === "detailed"
     ? getCandidateRiskAdvice(normalizedCandidates, { inCheck, mateThreat })
@@ -666,11 +679,11 @@ function scheduleReviewCoachAdvice() {
     if (generation !== reviewCoachGeneration || !reviewMode.value || !engineReady.value) return;
     thinking.value = true;
     try {
-      const compact = props.mobile || boardLayout.value === "portrait";
+      const budget = coachSearchBudget();
       const analyzedSideToMove = record.value.position.color;
       const candidates = await analyzeCoachPosition(
-        compact ? 150000 : 400000,
-        compact ? 3000 : 5500,
+        budget.nodes,
+        budget.maxTimeMs,
         coachLevel.value === "detailed" ? 5 : 1,
       );
       if (generation !== reviewCoachGeneration || !reviewMode.value) return;
@@ -682,7 +695,7 @@ function scheduleReviewCoachAdvice() {
       const inCheck = isSideToMoveInCheck(currentSfen.value);
       const isPlayerTurn = analyzedSideToMove === humanColor.value;
       const mateThreat = coachLevel.value === "detailed" && isPlayerTurn && !inCheck
-        ? detectStrictMateThreat(currentSfen.value).isThreat
+        ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes).isThreat
         : false;
       const riskAdvice = coachLevel.value === "detailed" && isPlayerTurn
         ? getCandidateRiskAdvice(normalizedCandidates, { inCheck, mateThreat })
