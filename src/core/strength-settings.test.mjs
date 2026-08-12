@@ -4,27 +4,27 @@ import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from './strength-sett
 describe('CPU strength settings', () => {
   it('keeps lower difficulties within plausible candidate moves', () => {
     expect(getStrengthSearchSettings(1000)).toEqual({
-      nodes: 10000,
-      multiPv: 5,
-      moveRank: { min: 2, max: 5 },
-      maxScoreLoss: 900,
+      nodes: 2000,
+      multiPv: 12,
+      moveRank: { min: 3, max: 12 },
+      maxScoreLoss: 1600,
     });
     expect(getStrengthSearchSettings(10000)).toEqual({
-      nodes: 20000,
-      multiPv: 4,
-      moveRank: { min: 2, max: 4 },
-      maxScoreLoss: 700,
+      nodes: 8000,
+      multiPv: 8,
+      moveRank: { min: 2, max: 8 },
+      maxScoreLoss: 900,
     });
     expect(getStrengthSearchSettings(20000)).toEqual({
-      nodes: 30000,
-      multiPv: 4,
-      moveRank: { min: 1, max: 4 },
-      maxScoreLoss: 600,
+      nodes: 15000,
+      multiPv: 7,
+      moveRank: { min: 1, max: 7 },
+      maxScoreLoss: 700,
     });
     expect(getStrengthSearchSettings(30000)).toEqual({
-      nodes: 40000,
-      multiPv: 4,
-      moveRank: { min: 1, max: 4 },
+      nodes: 25000,
+      multiPv: 6,
+      moveRank: { min: 1, max: 6 },
       maxScoreLoss: 500,
     });
   });

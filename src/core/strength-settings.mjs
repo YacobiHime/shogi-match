@@ -1,11 +1,11 @@
 const STRENGTH_SEARCH_SETTINGS = new Map([
-  [1000, { nodes: 10000, multiPv: 5, moveRank: { min: 2, max: 5 }, maxScoreLoss: 900 }],
-  [5000, { nodes: 15000, multiPv: 5, moveRank: { min: 2, max: 5 }, maxScoreLoss: 800 }],
+  [1000, { nodes: 2000, multiPv: 12, moveRank: { min: 3, max: 12 }, maxScoreLoss: 1600 }],
+  [5000, { nodes: 4000, multiPv: 10, moveRank: { min: 2, max: 10 }, maxScoreLoss: 1200 }],
   // 級位者の幅を一段で飛ばさず、探索量と許容損失を滑らかに変える。
-  [10000, { nodes: 20000, multiPv: 4, moveRank: { min: 2, max: 4 }, maxScoreLoss: 700 }],
-  [20000, { nodes: 30000, multiPv: 4, moveRank: { min: 1, max: 4 }, maxScoreLoss: 600 }],
-  [30000, { nodes: 40000, multiPv: 4, moveRank: { min: 1, max: 4 }, maxScoreLoss: 500 }],
-  [60000, { nodes: 70000, multiPv: 3, moveRank: { min: 1, max: 3 }, maxScoreLoss: 350 }],
+  [10000, { nodes: 8000, multiPv: 8, moveRank: { min: 2, max: 8 }, maxScoreLoss: 900 }],
+  [20000, { nodes: 15000, multiPv: 7, moveRank: { min: 1, max: 7 }, maxScoreLoss: 700 }],
+  [30000, { nodes: 25000, multiPv: 6, moveRank: { min: 1, max: 6 }, maxScoreLoss: 500 }],
+  [60000, { nodes: 50000, multiPv: 5, moveRank: { min: 1, max: 5 }, maxScoreLoss: 350 }],
   [100000, { nodes: 120000, multiPv: 3, moveRank: { min: 1, max: 3 }, maxScoreLoss: 220 }],
   [200000, { nodes: 220000, multiPv: 2, moveRank: { min: 1, max: 2 }, maxScoreLoss: 150 }],
   [300000, { nodes: 300000, multiPv: 2, moveRank: { min: 1, max: 2 }, maxScoreLoss: 100 }],

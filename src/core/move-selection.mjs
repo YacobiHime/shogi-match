@@ -30,7 +30,7 @@ export function selectMoveByRank(
   searchResult,
   moveRank,
   random = Math.random,
-  { maxScoreLoss = Infinity } = {},
+  { maxScoreLoss = Infinity, preferredMove } = {},
 ) {
   calculateEffectiveMoveRank(moveRank, 0);
   if (!searchResult || typeof searchResult.move !== 'string' || searchResult.move === '') {
@@ -74,6 +74,8 @@ export function selectMoveByRank(
   });
 
   if (candidates.length === 0) return { move: searchResult.move, rank: 1 };
+  const preferred = candidates.find(([, candidate]) => candidate.move === preferredMove);
+  if (preferred) return { move: preferred[1].move, rank: preferred[0] };
 
   const randomValue = random();
   if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1) {
