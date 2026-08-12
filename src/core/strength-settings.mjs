@@ -15,7 +15,7 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
 ]);
 
 export const CPU_STRENGTH_PRESETS = [
-  { value: 1000, label: '入門', guide: '初心者向け' },
+  { value: 1000, label: '入門', guide: '駒の動かし方練習' },
   { value: 5000, label: '初級', guide: '15〜11級目安' },
   { value: 10000, label: '易しい', guide: '10〜7級目安' },
   { value: 20000, label: 'やや易しい', guide: '6〜4級目安' },
@@ -26,6 +26,11 @@ export const CPU_STRENGTH_PRESETS = [
   { value: 300000, label: 'かなり強い', guide: '三段目安' },
   { value: 480000, label: '藤井聡太並み', guide: '推定' },
 ];
+
+/** 入門は評価探索を使わず、合法手をランダムに指す練習用CPUとする。 */
+export function usesRandomLegalMove(preset) {
+  return preset === 1000;
+}
 
 /**
  * UIの強さプリセットから、探索量と選択する候補手の範囲を返す。

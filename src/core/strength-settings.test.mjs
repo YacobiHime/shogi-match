@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from './strength-settings.mjs';
+import {
+  CPU_STRENGTH_PRESETS,
+  getStrengthSearchSettings,
+  usesRandomLegalMove,
+} from './strength-settings.mjs';
 
 describe('CPU strength settings', () => {
   it('keeps lower difficulties within plausible candidate moves', () => {
@@ -36,6 +40,12 @@ describe('CPU strength settings', () => {
     ]);
     expect(CPU_STRENGTH_PRESETS.map(({ value }) => value))
       .toEqual([1000, 5000, 10000, 20000, 30000, 60000, 100000, 200000, 300000, 480000]);
+  });
+
+  it('uses a random legal-move CPU only for the introductory level', () => {
+    expect(usesRandomLegalMove(1000)).toBe(true);
+    expect(usesRandomLegalMove(5000)).toBe(false);
+    expect(usesRandomLegalMove(30000)).toBe(false);
   });
 
   it('steps strong presets toward the best candidate', () => {
