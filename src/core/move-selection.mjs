@@ -26,28 +26,52 @@ export function calculateEffectiveMoveRank(moveRank, maxBonus) {
  * @param {() => number} [random]
  * @returns {{ move: string, rank: number }}
  */
-export function selectMoveByRank(searchResult, moveRank, random = Math.random) {
+export function selectMoveByRank(
+  searchResult,
+  moveRank,
+  random = Math.random,
+  { maxScoreLoss = Infinity } = {},
+) {
   calculateEffectiveMoveRank(moveRank, 0);
   if (!searchResult || typeof searchResult.move !== 'string' || searchResult.move === '') {
     throw new Error('searchResult.moveは空でない文字列にしてください');
   }
 
+  if (!(maxScoreLoss === Infinity || (Number.isFinite(maxScoreLoss) && maxScoreLoss >= 0))) {
+    throw new Error('maxScoreLossは0以上の数値にしてください');
+  }
   const byRank = new Map();
   for (const candidate of searchResult.candidates || []) {
     if (Number.isInteger(candidate?.rank) && candidate.rank >= 1
       && typeof candidate.move === 'string' && candidate.move !== '') {
-      byRank.set(candidate.rank, candidate.move);
+      byRank.set(candidate.rank, candidate);
     }
   }
   // bestmoveはエンジンの最終回答なので、info行が欠けても第1候補として必ず使える。
-  byRank.set(1, searchResult.move);
+  const existingBest = byRank.get(1);
+  byRank.set(1, { ...(existingBest || {}), rank: 1, move: searchResult.move });
 
   const highestAvailableRank = Math.max(...byRank.keys());
   const availableMin = Math.min(moveRank.min, highestAvailableRank);
   const availableMax = Math.min(moveRank.max, highestAvailableRank);
-  const candidates = [...byRank.entries()]
+  const rankedCandidates = [...byRank.entries()]
     .filter(([rank]) => rank >= availableMin && rank <= availableMax)
     .sort(([left], [right]) => left - right);
+  const comparable = (score) => {
+    if (score?.type === 'cp' && Number.isFinite(score.value)) return score.value;
+    if (score?.type === 'mate' && Number.isFinite(score.value)) {
+      if (score.value > 0) return 100000 - score.value;
+      if (score.value < 0) return -100000 + Math.abs(score.value);
+      return 100000;
+    }
+    return undefined;
+  };
+  const bestValue = comparable(byRank.get(1)?.score);
+  const candidates = rankedCandidates.filter(([rank, candidate]) => {
+    if (rank === 1 || maxScoreLoss === Infinity) return true;
+    const value = comparable(candidate.score);
+    return bestValue !== undefined && value !== undefined && bestValue - value <= maxScoreLoss;
+  });
 
   if (candidates.length === 0) return { move: searchResult.move, rank: 1 };
 
@@ -55,6 +79,6 @@ export function selectMoveByRank(searchResult, moveRank, random = Math.random) {
   if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1) {
     throw new Error('randomは0以上1未満の数値を返してください');
   }
-  const [rank, move] = candidates[Math.floor(randomValue * candidates.length)];
-  return { move, rank };
+  const [rank, candidate] = candidates[Math.floor(randomValue * candidates.length)];
+  return { move: candidate.move, rank };
 }
