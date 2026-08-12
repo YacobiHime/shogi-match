@@ -94,6 +94,7 @@ describe('戦型の役割別追跡', () => {
     [['横歩取り', '横歩取り青野流'], ['横歩取り青野流']],
     [['相掛かり', 'AlphaZero流相掛かり'], ['AlphaZero流相掛かり']],
     [['矢倉', '金矢倉'], ['金矢倉']],
+    [['鬼殺し', '三間飛車', '早石田'], ['鬼殺し']],
   ])('具体的な派生戦型があれば一般名を隠す: %j', (names, expected) => {
     expect(preferSpecificFormationNames(names)).toEqual(expected);
   });

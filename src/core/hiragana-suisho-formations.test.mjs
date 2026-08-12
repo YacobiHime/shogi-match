@@ -80,6 +80,37 @@ describe('HiraganaSuisho原典互換判定', () => {
     ).map(({ name }) => name)).toContain('角換わり');
   });
 
+  test('鬼殺しの代表形を判定し、嬉野流とは誤判定しない', () => {
+    const record = createGameRecord();
+    for (const move of ['7g7f', '3c3d', '7f7e', '4c4d', '8i7g', '8c8d', '2h7h']) {
+      expect(appendUsiMove(record, move)).toBe(true);
+    }
+    const names = detectHiraganaSuishoFormations(record.position.sfen, master)
+      .map(({ name }) => name);
+    expect(names).toContain('鬼殺し');
+    expect(names).not.toContain('嬉野流');
+  });
+
+  test('嬉野流の代表的な銀上がりを判定し、鬼殺しとは誤判定しない', () => {
+    const record = createGameRecord();
+    for (const move of ['7i6h', '3c3d', '5g5f', '8c8d', '6h5g']) {
+      expect(appendUsiMove(record, move)).toBe(true);
+    }
+    const names = detectHiraganaSuishoFormations(record.position.sfen, master)
+      .map(({ name }) => name);
+    expect(names).toContain('嬉野流');
+    expect(names).not.toContain('鬼殺し');
+  });
+
+  test('角頭歩を代表手順から判定する', () => {
+    const record = createGameRecord();
+    for (const move of ['7g7f', '3c3d', '8g8f']) {
+      expect(appendUsiMove(record, move)).toBe(true);
+    }
+    expect(detectHiraganaSuishoFormations(record.position.sfen, master).map(({ name }) => name))
+      .toContain('角頭歩');
+  });
+
   test('銀と金だけの不完全な形を銀冠と誤判定しない', () => {
     const incomplete = '4k4/9/9/9/9/9/5G1S1/6G1K/9 w - 1';
     expect(detectHiraganaSuishoFormations(incomplete, master).map(({ name }) => name))
