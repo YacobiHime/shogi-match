@@ -84,7 +84,8 @@ export function getMoveFeedback({ level = 'encourage', beforeScore, afterScore }
   const before = comparableScore(beforeScore);
   const after = comparableScore(afterScore);
   if (before === undefined || after === undefined) return null;
-  const loss = before - after;
+  const change = after - before;
+  const loss = -change;
 
   if (loss >= 500 && afterScore?.type === 'mate' && afterScore.value < 0) {
     return { key: 'move-lost', text: 'うぅ、もう勝ち目が無いよ…投了する…？' };
@@ -95,14 +96,14 @@ export function getMoveFeedback({ level = 'encourage', beforeScore, afterScore }
 
   if (loss >= 1000 && afterScore?.type === 'cp') {
     return {
-      key: `move-blunder-${Math.trunc(afterScore.value)}`,
-      text: `あちゃ～。やっちゃった…評価値${formatEvaluation(afterScore.value)}だよ。`,
+      key: `move-blunder-${Math.trunc(change)}`,
+      text: `あちゃ～。やっちゃった…評価値変動${formatEvaluation(change)}だよ。`,
     };
   }
   if (loss >= 500 && afterScore?.type === 'cp') {
     return {
-      key: `move-mistake-${Math.trunc(afterScore.value)}`,
-      text: `悪手だね…評価値${formatEvaluation(afterScore.value)}だよ。`,
+      key: `move-mistake-${Math.trunc(change)}`,
+      text: `悪手だね…評価値変動${formatEvaluation(change)}だよ。`,
     };
   }
   return null;

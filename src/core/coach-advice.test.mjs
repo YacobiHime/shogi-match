@@ -98,12 +98,20 @@ describe('対局中の応援・助言', () => {
       level: 'detailed',
       beforeScore: { type: 'cp', value: 100 },
       afterScore: { type: 'cp', value: -500 },
-    })?.text).toBe('悪手だね…評価値-500だよ。');
+    })?.text).toBe('悪手だね…評価値変動-600だよ。');
     expect(getMoveFeedback({
       level: 'detailed',
       beforeScore: { type: 'cp', value: 200 },
       afterScore: { type: 'cp', value: -1235 },
-    })?.text).toBe('あちゃ～。やっちゃった…評価値-1235だよ。');
+    })?.text).toBe('あちゃ～。やっちゃった…評価値変動-1435だよ。');
+  });
+
+  test('着手後もプラス評価の場合も絶対値ではなく変動量を表示する', () => {
+    expect(getMoveFeedback({
+      level: 'detailed',
+      beforeScore: { type: 'cp', value: 2200 },
+      afterScore: { type: 'cp', value: 1000 },
+    })?.text).toBe('あちゃ～。やっちゃった…評価値変動-1200だよ。');
   });
 
   test('被詰みが確定した局面では投了を示唆する', () => {
