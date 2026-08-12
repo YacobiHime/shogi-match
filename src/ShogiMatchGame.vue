@@ -295,6 +295,7 @@ let moveHistory: string[] = [];
 let boardResizeObserver: ResizeObserver | undefined;
 let reviewCoachGeneration = 0;
 let reviewCoachQueue: Promise<void> = Promise.resolve();
+let dedicatedCoachQueue: Promise<void> = Promise.resolve();
 
 function updateResponsiveLayout() {
   if (!boardShell.value) return;
@@ -629,6 +630,15 @@ async function updateDedicatedCoachAdvice(
   updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice);
 }
 
+function scheduleDedicatedCoachAdvice(
+  moveFeedback?: { key: string; text: string } | null,
+) {
+  dedicatedCoachQueue = dedicatedCoachQueue
+    .catch(() => undefined)
+    .then(() => updateDedicatedCoachAdvice(moveFeedback))
+    .catch(() => undefined);
+}
+
 function scheduleReviewCoachAdvice() {
   if (!reviewMode.value || coachLevel.value === "off") return;
   const generation = ++reviewCoachGeneration;
@@ -777,6 +787,12 @@ async function scheduleCpuMove() {
   thinking.value = true;
   cpuTimer = setTimeout(async () => {
     try {
+      // 操作を妨げずに走らせた助言探索と、CPU本体の探索を同じエンジン上で競合させない。
+      await dedicatedCoachQueue;
+      if (!active.value || reviewMode.value || record.value.position.color === humanColor.value) {
+        thinking.value = false;
+        return;
+      }
       let usi = "";
       let coachScore: { type: "cp" | "mate"; value: number } | undefined;
       let moveFeedback: { key: string; text: string } | null = null;
@@ -827,11 +843,9 @@ async function scheduleCpuMove() {
       }
       if (applyMove(usi, "cpu") && active.value) {
         updateCoachAdvice(coachScore, moveFeedback);
-        try {
-          await updateDedicatedCoachAdvice(moveFeedback);
-        } catch {
-          // 助言用探索の失敗で対局進行やCPU着手をやり直さない。
-        }
+        // CPUの着手が見えた時点でプレイヤーへ操作を返す。
+        thinking.value = false;
+        scheduleDedicatedCoachAdvice(moveFeedback);
       }
       thinking.value = false;
     } catch (error) {
@@ -926,7 +940,7 @@ watch(coachLevel, (level) => {
     level !== "off" && engineReady.value && active.value && !thinking.value
     && record.value.position.color === humanColor.value
   ) {
-    void updateDedicatedCoachAdvice();
+    scheduleDedicatedCoachAdvice();
   }
 });
 onBeforeUnmount(() => {
