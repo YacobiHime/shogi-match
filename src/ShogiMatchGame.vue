@@ -190,7 +190,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Color, Record } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import {
@@ -853,6 +853,12 @@ async function scheduleCpuMove() {
             humanColor.value,
           ),
         });
+        // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
+        // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
+        if (moveFeedback) {
+          showCoachAdvice(moveFeedback);
+          await nextTick();
+        }
         const selection = selectMoveByRank(search, strength.moveRank);
         usi = selection.move;
         coachScore = search.candidates.find((candidate) => candidate.rank === selection.rank)?.score;
@@ -866,10 +872,15 @@ async function scheduleCpuMove() {
         return;
       }
       if (applyMove(usi, "cpu") && active.value) {
-        updateCoachAdvice(coachScore, moveFeedback);
+        if (moveFeedback) {
+          const cpuColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
+          playerTurnScore = scoreForPlayer(coachScore, cpuColor, humanColor.value, 1);
+        } else {
+          updateCoachAdvice(coachScore);
+        }
         // CPUの着手が見えた時点でプレイヤーへ操作を返す。
         thinking.value = false;
-        scheduleDedicatedCoachAdvice(moveFeedback);
+        scheduleDedicatedCoachAdvice();
       }
       thinking.value = false;
     } catch (error) {

@@ -108,12 +108,12 @@ describe('対局中の応援・助言', () => {
       level: 'detailed',
       beforeScore: { type: 'cp', value: 100 },
       afterScore: { type: 'cp', value: -500 },
-    })?.text).toBe('悪手だね…評価値変動-600だよ。');
+    })?.text).toBe('今の私たちの手は悪手だね…評価値変動-600だよ。');
     expect(getMoveFeedback({
       level: 'detailed',
       beforeScore: { type: 'cp', value: 200 },
       afterScore: { type: 'cp', value: -1235 },
-    })?.text).toBe('あちゃ～。やっちゃった…評価値変動-1435だよ。');
+    })?.text).toBe('あちゃ～。今の私たちの手、やっちゃった…評価値変動-1435だよ。');
   });
 
   test('着手後もプラス評価の場合も絶対値ではなく変動量を表示する', () => {
@@ -121,7 +121,7 @@ describe('対局中の応援・助言', () => {
       level: 'detailed',
       beforeScore: { type: 'cp', value: 2200 },
       afterScore: { type: 'cp', value: 1000 },
-    })?.text).toBe('あちゃ～。やっちゃった…評価値変動-1200だよ。');
+    })?.text).toBe('あちゃ～。今の私たちの手、やっちゃった…評価値変動-1200だよ。');
   });
 
   test('着手直後の評価だけでは勝敗を断定せず相対的な悪化を伝える', () => {
@@ -134,7 +134,7 @@ describe('対局中の応援・助言', () => {
       level: 'detailed',
       beforeScore: { type: 'cp', value: 1000 },
       afterScore: { type: 'cp', value: -3500 },
-    })?.text).toBe('あちゃ～。やっちゃった…評価値変動-4500だよ。');
+    })?.text).toBe('あちゃ～。今の私たちの手、やっちゃった…評価値変動-4500だよ。');
   });
 
   test('不利でも評価を改善した手は悪手扱いしない', () => {
