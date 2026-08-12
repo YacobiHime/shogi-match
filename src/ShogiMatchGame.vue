@@ -225,7 +225,11 @@ import {
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
 import { detectStrictMateThreat } from "./core/mate-threat";
-import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from "./core/strength-settings.mjs";
+import {
+  CPU_STRENGTH_PRESETS,
+  getStrengthSearchSettings,
+  usesRandomLegalMove,
+} from "./core/strength-settings.mjs";
 import {
   appendReviewMove,
   createReviewNavigation,
@@ -825,7 +829,9 @@ async function scheduleCpuMove() {
       const comparableBeforeScore = playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
         ? playerTurnScore
         : undefined;
-      if (engine && engineReady.value) {
+      if (usesRandomLegalMove(searchNodes.value)) {
+        usi = selectCpuMove(record.value.position)?.usi ?? "";
+      } else if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
         const openingMove = strategyMove();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
