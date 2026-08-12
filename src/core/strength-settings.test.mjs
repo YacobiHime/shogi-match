@@ -14,22 +14,22 @@ describe('CPU strength settings', () => {
       maxScoreLoss: 1600,
     });
     expect(getStrengthSearchSettings(10000)).toEqual({
+      nodes: 2500,
+      multiPv: 12,
+      moveRank: { min: 4, max: 12 },
+      maxScoreLoss: 1600,
+    });
+    expect(getStrengthSearchSettings(20000)).toEqual({
+      nodes: 4000,
+      multiPv: 10,
+      moveRank: { min: 3, max: 10 },
+      maxScoreLoss: 1200,
+    });
+    expect(getStrengthSearchSettings(30000)).toEqual({
       nodes: 8000,
       multiPv: 8,
       moveRank: { min: 2, max: 8 },
       maxScoreLoss: 900,
-    });
-    expect(getStrengthSearchSettings(20000)).toEqual({
-      nodes: 15000,
-      multiPv: 7,
-      moveRank: { min: 1, max: 7 },
-      maxScoreLoss: 700,
-    });
-    expect(getStrengthSearchSettings(30000)).toEqual({
-      nodes: 25000,
-      multiPv: 6,
-      moveRank: { min: 1, max: 6 },
-      maxScoreLoss: 500,
     });
   });
 
@@ -50,16 +50,16 @@ describe('CPU strength settings', () => {
 
   it('steps strong presets toward the best candidate', () => {
     expect(getStrengthSearchSettings(100000)).toEqual({
+      nodes: 25000,
+      multiPv: 6,
+      moveRank: { min: 1, max: 6 },
+      maxScoreLoss: 500,
+    });
+    expect(getStrengthSearchSettings(300000)).toEqual({
       nodes: 120000,
       multiPv: 3,
       moveRank: { min: 1, max: 3 },
       maxScoreLoss: 220,
-    });
-    expect(getStrengthSearchSettings(300000)).toEqual({
-      nodes: 300000,
-      multiPv: 2,
-      moveRank: { min: 1, max: 2 },
-      maxScoreLoss: 100,
     });
     expect(getStrengthSearchSettings(480000)).toEqual({
       nodes: 480000,
