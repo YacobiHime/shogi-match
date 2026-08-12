@@ -29,6 +29,21 @@ export function scoreFromOpponentPerspective(score) {
   return { type: score.type, value: -score.value };
 }
 
+/** USIの手番側評価を、指定したプレイヤー側の評価へ正規化する。 */
+export function scoreForPlayer(score, sideToMove, playerColor, pliesElapsed = 0) {
+  if (
+    !score || !['cp', 'mate'].includes(score.type) || !Number.isFinite(score.value)
+    || !['black', 'white'].includes(sideToMove) || !['black', 'white'].includes(playerColor)
+  ) {
+    return undefined;
+  }
+  let value = score.value;
+  if (score.type === 'mate' && value !== 0 && pliesElapsed > 0) {
+    value = Math.sign(value) * Math.max(1, Math.abs(value) - Math.trunc(pliesElapsed));
+  }
+  return { type: score.type, value: sideToMove === playerColor ? value : -value };
+}
+
 function comparableScore(score) {
   if (score?.type === 'cp' && Number.isFinite(score.value)) return score.value;
   if (score?.type === 'mate' && Number.isFinite(score.value)) {
@@ -86,13 +101,6 @@ export function getMoveFeedback({ level = 'encourage', beforeScore, afterScore }
   if (before === undefined || after === undefined) return null;
   const change = after - before;
   const loss = -change;
-
-  if (loss >= 500 && afterScore?.type === 'mate' && afterScore.value < 0) {
-    return { key: 'move-lost', text: 'うぅ、もう勝ち目が無いよ…投了する…？' };
-  }
-  if (loss >= 500 && afterScore?.type === 'cp' && afterScore.value <= -3000) {
-    return { key: 'move-nearly-lost', text: 'うぅ、もう勝ち目がほとんど無いよ…投了する…？' };
-  }
 
   if (loss >= 1000 && afterScore?.type === 'cp') {
     return {

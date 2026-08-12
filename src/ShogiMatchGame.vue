@@ -218,8 +218,7 @@ import {
   getCoachAdvice,
   getMoveFeedback,
   isSideToMoveInCheck,
-  scoreAfterOpponentMove,
-  scoreFromOpponentPerspective,
+  scoreForPlayer,
 } from "./core/coach-advice.mjs";
 import {
   formatHintMove,
@@ -540,7 +539,9 @@ function updateCoachAdvice(
   cpuScore?: { type: "cp" | "mate"; value: number },
   moveFeedback?: { key: string; text: string } | null,
 ) {
-  playerTurnScore = scoreAfterOpponentMove(cpuScore);
+  const cpuColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
+  const score = scoreForPlayer(cpuScore, cpuColor, humanColor.value, 1);
+  playerTurnScore = score;
   if (coachLevel.value === "off") {
     guideText.value = "";
     return;
@@ -552,7 +553,7 @@ function updateCoachAdvice(
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   const advice = getCoachAdvice({
     level: coachLevel.value,
-    score: scoreAfterOpponentMove(cpuScore),
+    score,
     moveCount: moveCount.value,
     inCheck: isSideToMoveInCheck(currentSfen.value),
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
@@ -604,14 +605,23 @@ async function updateDedicatedCoachAdvice(
 ) {
   if (!engine || !active.value || reviewMode.value || coachLevel.value === "off") return;
   const analyzedHistoryLength = moveHistory.length;
+  const analyzedSideToMove = record.value.position.color;
   const compact = props.mobile || boardLayout.value === "portrait";
   const candidates = await analyzeCoachPosition(
     compact ? 150000 : 400000,
     compact ? 3000 : 5500,
     coachLevel.value === "detailed" ? 5 : 1,
   );
-  let score = candidates.find((candidate) => candidate.rank === 1)?.score;
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
+  const normalizedCandidates = candidates.map((candidate) => ({
+    ...candidate,
+    score: scoreForPlayer(
+      candidate.score,
+      analyzedSideToMove,
+      humanColor.value,
+    ),
+  }));
+  let score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
   // 勝勢に近い局面は専用詰み探索でも確認し、通常探索が見落とす長い詰みを補う。
   if (coachLevel.value === "detailed" && score?.type === "cp" && score.value >= 1000) {
     engine.setPosition(currentEnginePosition());
@@ -625,7 +635,7 @@ async function updateDedicatedCoachAdvice(
     ? detectStrictMateThreat(currentSfen.value).isThreat
     : false;
   const riskAdvice = coachLevel.value === "detailed"
-    ? getCandidateRiskAdvice(candidates, { inCheck, mateThreat })
+    ? getCandidateRiskAdvice(normalizedCandidates, { inCheck, mateThreat })
     : null;
   updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice);
 }
@@ -647,19 +657,25 @@ function scheduleReviewCoachAdvice() {
     thinking.value = true;
     try {
       const compact = props.mobile || boardLayout.value === "portrait";
+      const analyzedSideToMove = record.value.position.color;
       const candidates = await analyzeCoachPosition(
         compact ? 150000 : 400000,
         compact ? 3000 : 5500,
         coachLevel.value === "detailed" ? 5 : 1,
       );
       if (generation !== reviewCoachGeneration || !reviewMode.value) return;
-      const score = candidates.find((candidate) => candidate.rank === 1)?.score;
+      const normalizedCandidates = candidates.map((candidate) => ({
+        ...candidate,
+        score: scoreForPlayer(candidate.score, analyzedSideToMove, humanColor.value),
+      }));
+      const score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
       const inCheck = isSideToMoveInCheck(currentSfen.value);
-      const mateThreat = coachLevel.value === "detailed" && !inCheck
+      const isPlayerTurn = analyzedSideToMove === humanColor.value;
+      const mateThreat = coachLevel.value === "detailed" && isPlayerTurn && !inCheck
         ? detectStrictMateThreat(currentSfen.value).isThreat
         : false;
-      const riskAdvice = coachLevel.value === "detailed"
-        ? getCandidateRiskAdvice(candidates, { inCheck, mateThreat })
+      const riskAdvice = coachLevel.value === "detailed" && isPlayerTurn
+        ? getCandidateRiskAdvice(normalizedCandidates, { inCheck, mateThreat })
         : null;
       updateCoachAdviceFromPlayerScore(score, riskAdvice);
     } finally {
@@ -808,7 +824,11 @@ async function scheduleCpuMove() {
               compact ? 2200 : 4000,
             );
             const cpuPerspective = coachCandidates.find((candidate) => candidate.rank === 1)?.score;
-            dedicatedAfterPlayerScore = scoreFromOpponentPerspective(cpuPerspective);
+            dedicatedAfterPlayerScore = scoreForPlayer(
+              cpuPerspective,
+              record.value.position.color,
+              humanColor.value,
+            );
           } catch {
             // CPU本体の探索を続け、後段でその評価値を代用する。
           }
@@ -827,7 +847,11 @@ async function scheduleCpuMove() {
         moveFeedback = getMoveFeedback({
           level: coachLevel.value,
           beforeScore: playerTurnScore,
-          afterScore: dedicatedAfterPlayerScore ?? scoreFromOpponentPerspective(bestCpuScore),
+          afterScore: dedicatedAfterPlayerScore ?? scoreForPlayer(
+            bestCpuScore,
+            record.value.position.color,
+            humanColor.value,
+          ),
         });
         const selection = selectMoveByRank(search, strength.moveRank);
         usi = selection.move;
