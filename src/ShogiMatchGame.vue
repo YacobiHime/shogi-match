@@ -288,6 +288,7 @@ const boardShell = ref<HTMLElement | null>(null);
 const advisedCoachTopics = new Set<string>();
 const coachAdviceLastShownAt = new Map<string, number>();
 let playerTurnScore: { type: "cp" | "mate"; value: number } | undefined;
+let playerTurnScoreHistoryLength = -1;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
@@ -542,6 +543,7 @@ function updateCoachAdvice(
   const cpuColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   const score = scoreForPlayer(cpuScore, cpuColor, humanColor.value, 1);
   playerTurnScore = score;
+  playerTurnScoreHistoryLength = score ? moveHistory.length : -1;
   if (coachLevel.value === "off") {
     guideText.value = "";
     return;
@@ -580,6 +582,7 @@ function updateCoachAdviceFromPlayerScore(
   moveFeedback?: { key: string; text: string } | null,
 ) {
   playerTurnScore = score;
+  playerTurnScoreHistoryLength = score ? moveHistory.length : -1;
   if (coachLevel.value === "off") {
     guideText.value = "";
     return;
@@ -756,6 +759,7 @@ function undoTurn() {
   rebuildRecord(moveHistory.slice(0, -removeCount));
   if (!reviewMode.value) undosRemaining.value -= 1;
   playerTurnScore = undefined;
+  playerTurnScoreHistoryLength = -1;
   hintCandidates.value = [];
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
@@ -810,8 +814,11 @@ async function scheduleCpuMove() {
         return;
       }
       let usi = "";
-      let coachScore: { type: "cp" | "mate"; value: number } | undefined;
       let moveFeedback: { key: string; text: string } | null = null;
+      const playerMoveHistoryLength = moveHistory.length;
+      const comparableBeforeScore = playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
+        ? playerTurnScore
+        : undefined;
       if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
         const openingMove = strategyMove();
@@ -846,7 +853,7 @@ async function scheduleCpuMove() {
         const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
         moveFeedback = getMoveFeedback({
           level: coachLevel.value,
-          beforeScore: playerTurnScore,
+          beforeScore: comparableBeforeScore,
           afterScore: dedicatedAfterPlayerScore ?? scoreForPlayer(
             bestCpuScore,
             record.value.position.color,
@@ -861,7 +868,6 @@ async function scheduleCpuMove() {
         }
         const selection = selectMoveByRank(search, strength.moveRank);
         usi = selection.move;
-        coachScore = search.candidates.find((candidate) => candidate.rank === selection.rank)?.score;
       } else {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
       }
@@ -872,12 +878,10 @@ async function scheduleCpuMove() {
         return;
       }
       if (applyMove(usi, "cpu") && active.value) {
-        if (moveFeedback) {
-          const cpuColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
-          playerTurnScore = scoreForPlayer(coachScore, cpuColor, humanColor.value, 1);
-        } else {
-          updateCoachAdvice(coachScore);
-        }
+        // CPU探索の候補値（難易度により第2～5候補の場合がある）は、次の着手評価や
+        // 形勢助言へ流用しない。着手後局面の専用探索だけを正しい基準値にする。
+        playerTurnScore = undefined;
+        playerTurnScoreHistoryLength = -1;
         // CPUの着手が見えた時点でプレイヤーへ操作を返す。
         thinking.value = false;
         scheduleDedicatedCoachAdvice();
@@ -944,6 +948,7 @@ function restart() {
   reviewNavigationOpen.value = false;
   reviewNavigation.value = createReviewNavigation();
   playerTurnScore = undefined;
+  playerTurnScoreHistoryLength = -1;
   moveHistory = [];
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
   undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));
