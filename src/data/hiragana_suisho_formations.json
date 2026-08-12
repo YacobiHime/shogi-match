@@ -1088,7 +1088,7 @@
       "expression": {
         "match": {
           "mode": "all",
-          "sfen": "sfen 9/1r5b1/9/6p2/2P6/9/2N6/1BR6/2S6 b - 1"
+          "sfen": "sfen 9/9/9/9/9/4P4/4S4/1B5R1/4K4 b - 1"
         }
       }
     },
