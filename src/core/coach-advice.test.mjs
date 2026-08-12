@@ -7,6 +7,7 @@ import {
   isSideToMoveInCheck,
   scoreAfterOpponentMove,
   scoreFromOpponentPerspective,
+  scoreForPlayer,
 } from './coach-advice.mjs';
 
 describe('候補手ごとの危険度助言', () => {
@@ -48,6 +49,15 @@ describe('対局中の応援・助言', () => {
       .toEqual({ type: 'mate', value: 7 });
     expect(scoreFromOpponentPerspective({ type: 'cp', value: 1235 }))
       .toEqual({ type: 'cp', value: -1235 });
+  });
+
+  test('探索時の手番とプレイヤーの先後から評価値を明示的に正規化する', () => {
+    expect(scoreForPlayer({ type: 'cp', value: 900 }, 'black', 'black'))
+      .toEqual({ type: 'cp', value: 900 });
+    expect(scoreForPlayer({ type: 'cp', value: 900 }, 'black', 'white'))
+      .toEqual({ type: 'cp', value: -900 });
+    expect(scoreForPlayer({ type: 'mate', value: 7 }, 'white', 'black', 1))
+      .toEqual({ type: 'mate', value: -6 });
   });
 
   test('序盤の有利・不利に応じて応援する', () => {
@@ -114,12 +124,17 @@ describe('対局中の応援・助言', () => {
     })?.text).toBe('あちゃ～。やっちゃった…評価値変動-1200だよ。');
   });
 
-  test('被詰みが確定した局面では投了を示唆する', () => {
+  test('着手直後の評価だけでは勝敗を断定せず相対的な悪化を伝える', () => {
     expect(getMoveFeedback({
       level: 'detailed',
       beforeScore: { type: 'cp', value: -500 },
       afterScore: { type: 'mate', value: -7 },
-    })?.text).toContain('投了する…？');
+    })).toBeNull();
+    expect(getMoveFeedback({
+      level: 'detailed',
+      beforeScore: { type: 'cp', value: 1000 },
+      afterScore: { type: 'cp', value: -3500 },
+    })?.text).toBe('あちゃ～。やっちゃった…評価値変動-4500だよ。');
   });
 
   test('不利でも評価を改善した手は悪手扱いしない', () => {
