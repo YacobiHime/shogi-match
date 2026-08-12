@@ -1,6 +1,6 @@
 const STRENGTH_SEARCH_SETTINGS = new Map([
   [1000, { nodes: 2000, multiPv: 12, moveRank: { min: 3, max: 12 }, maxScoreLoss: 1600 }],
-  // 「ふつう」をぴよ将棋Lv12（6級）相当の基準点として、上下を滑らかにする。
+  // 「ふつう」を6級程度の基準点として、上下を滑らかにする。
   // 級位帯では探索量だけでなく、意図的に選ぶ候補順位と許容評価損も広げる。
   [5000, { nodes: 1500, multiPv: 12, moveRank: { min: 5, max: 12 }, maxScoreLoss: 2000 }],
   [10000, { nodes: 2500, multiPv: 12, moveRank: { min: 4, max: 12 }, maxScoreLoss: 1600 }],
@@ -20,7 +20,7 @@ export const CPU_STRENGTH_PRESETS = [
   { value: 5000, label: '初級', guide: '15〜12級目安' },
   { value: 10000, label: '易しい', guide: '11〜9級目安' },
   { value: 20000, label: 'やや易しい', guide: '8〜7級目安' },
-  { value: 30000, label: 'ふつう', guide: 'ぴよ将棋Lv12・6級目安' },
+  { value: 30000, label: 'ふつう', guide: '6級目安' },
   { value: 60000, label: 'やや強い', guide: '5〜3級目安' },
   { value: 100000, label: '強い', guide: '2〜1級目安' },
   { value: 200000, label: '上級', guide: '初段目安' },
