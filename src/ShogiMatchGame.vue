@@ -347,6 +347,7 @@ import {
   selectCpuOpeningRepertoire,
   shouldUseCpuOpening,
 } from "./core/cpu-opening-repertoire.mjs";
+import { createPositionAnalysisCache } from "./core/position-analysis-cache.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
@@ -436,6 +437,7 @@ let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachRunning = false;
 let cpuOpeningPlan: { strategyId: string; castleId: string; label: string } | null = null;
+const positionAnalysisCache = createPositionAnalysisCache();
 
 // 助言は対局AIより軽く保つ。局面評価は数万ノードで十分であり、
 // 人間最高峰プリセット（48万ノード）相当の探索を毎手行わない。
@@ -782,9 +784,13 @@ function currentEnginePosition() {
 
 async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 1) {
   if (!engine) return [];
-  engine.setPosition(currentEnginePosition());
+  const positionKey = currentEnginePosition();
+  const cached = positionAnalysisCache.get(positionKey, { nodes, multiPv });
+  if (cached) return cached;
+  engine.setPosition(positionKey);
   engine.applyStrengthOptions({ multiPv });
   const analysis = await engine.go({ nodes, maxTimeMs });
+  positionAnalysisCache.set(positionKey, analysis.candidates, { nodes, multiPv });
   return analysis.candidates;
 }
 
@@ -1014,14 +1020,14 @@ async function showHint() {
   thinking.value = true;
   hintText.value = "やこび姫が候補手を考えています…";
   try {
-    const base = props.initialSfen === STANDARD_SFEN ? "startpos" : `sfen ${props.initialSfen}`;
-    engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
+    await dedicatedCoachQueue.catch(() => undefined);
     const hintSearch = getHintSearchSettings(props.mobile || boardLayout.value === "portrait");
-    engine.applyStrengthOptions({ multiPv: hintSearch.multiPv });
-    const search = await engine.go({
-      nodes: hintSearch.nodes,
-      maxTimeMs: hintSearch.maxTimeMs,
-    });
+    const candidates = await analyzeCoachPosition(
+      hintSearch.nodes,
+      hintSearch.maxTimeMs,
+      hintSearch.multiPv,
+    );
+    const search = { move: candidates.find(({ rank }) => rank === 1)?.move ?? "", candidates };
     const moves = getHintMoves(search, 3);
     hintCandidates.value = moves.map(({ move, score }) => ({
       usi: move, score: hintScoreForArrow(score),
@@ -1527,6 +1533,7 @@ function restart() {
   playerTurnScore = undefined;
   playerTurnScoreHistoryLength = -1;
   cpuOpeningPlan = null;
+  positionAnalysisCache.clear();
   moveHistory = [];
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
   undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));

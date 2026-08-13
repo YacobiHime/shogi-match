@@ -4,10 +4,23 @@
   "description": "Complete embeddable shogi match runtime for the web, RPGs, and visual novels.",
   "type": "module",
   "license": "GPL-3.0-or-later",
-  "files": ["dist", "vendor", "third_party", "yaneuraou.data", "yaneuraou.wasm", "yaneuraou.worker.js", "game.html", "integrations", "LICENSE", "NOTICE.md", "README.md"],
+  "files": [
+    "dist",
+    "vendor",
+    "third_party",
+    "yaneuraou.data",
+    "yaneuraou.wasm",
+    "yaneuraou.worker.js",
+    "game.html",
+    "integrations",
+    "LICENSE",
+    "NOTICE.md",
+    "README.md"
+  ],
   "scripts": {
     "build": "vite build",
     "build:hosting": "npm run build && node scripts/build-hosting.mjs",
+    "optimize:images": "node scripts/optimize-images.mjs",
     "deploy": "npm run build:hosting && npx firebase-tools deploy --only hosting",
     "test": "vitest run"
   },
@@ -17,6 +30,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.7",
+    "sharp": "^0.35.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.9"
   }

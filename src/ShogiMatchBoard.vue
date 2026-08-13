@@ -26,7 +26,7 @@
       :piece-image-url-template="pieceImageTemplate"
       :king-piece-type="KingPieceType.GYOKU_AND_OSHO"
       :piece-stand-image-type="PieceStandImageType.CUSTOM_IMAGE"
-      :custom-piece-stand-image-url="`${normalizedAssetBase}/stand/wood_dark.png`"
+      :custom-piece-stand-image-url="`${normalizedAssetBase}/stand/wood_dark.webp`"
       :hand-piece-order="HandPieceOrder.STRONGER_TO_LEFT"
       :promotion-selector-style="PromotionSelectorStyle.HORIZONTAL"
       :board-label-type="BoardLabelType.STANDARD"
@@ -87,11 +87,11 @@ const maxSize = ref(new RectSize(900, 620));
 let resizeObserver: ResizeObserver | undefined;
 
 const boardThemes = [
-  { id: "wood_light2", name: "木目・明るめ", file: "wood_light2.png" },
-  { id: "sunfish_light", name: "白木", file: "sunfish_light.png" },
-  { id: "sunfish_warm", name: "暖色木目", file: "sunfish_warm.png" },
-  { id: "sunfish_dark", name: "濃色", file: "sunfish_dark.png" },
-  { id: "sunfish_resin", name: "樹脂", file: "sunfish_resin.png" },
+  { id: "wood_light2", name: "木目・明るめ", file: "wood_light2.webp" },
+  { id: "sunfish_light", name: "白木", file: "sunfish_light.webp" },
+  { id: "sunfish_warm", name: "暖色木目", file: "sunfish_warm.webp" },
+  { id: "sunfish_dark", name: "濃色", file: "sunfish_dark.webp" },
+  { id: "sunfish_resin", name: "樹脂", file: "sunfish_resin.webp" },
 ];
 const pieceThemes = [
   { id: "hitomoji_wood", name: "一文字・木目" },
@@ -110,7 +110,7 @@ const boardImageUrl = computed(() => {
   return `${normalizedAssetBase.value}/board/${theme.file}`;
 });
 const pieceImageTemplate = computed(
-  () => `${normalizedAssetBase.value}/piece/${selectedPieceTheme.value}/\${piece}.png`,
+  () => `${normalizedAssetBase.value}/piece/${selectedPieceTheme.value}/\${piece}.webp`,
 );
 const layoutType = computed(() =>
   Object.values(BoardLayoutType).includes(props.layout as BoardLayoutType)
