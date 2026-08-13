@@ -20,16 +20,27 @@
       <rect class="evaluation-graph__hit-area" :x="plot.left" :y="plot.top" :width="plot.width" :height="plot.height" />
       <polyline v-if="linePoints" class="evaluation-graph__line" :points="linePoints" />
       <line class="evaluation-graph__current" :x1="plyX(currentPly)" :x2="plyX(currentPly)" :y1="plot.top" :y2="plot.top + plot.height" />
-      <g v-for="point in points" :key="point.ply">
+      <g v-for="point in annotatedPoints" :key="point.ply">
         <polygon
           class="evaluation-graph__point"
-          :class="{ 'evaluation-graph__point--current': point.ply === currentPly }"
-          :points="trianglePoints(point.ply, point.graphValue)"
+          :class="[
+            `evaluation-graph__point--${point.annotation!.kind}`,
+            { 'evaluation-graph__point--current': point.ply === currentPly },
+          ]"
+          :points="trianglePoints(point.ply, point.graphValue, point.annotation!.mover)"
         >
-          <title>{{ point.label }}：{{ point.scoreLabel }}</title>
+          <title>{{ point.label }}：{{ point.annotation!.label }}（{{ point.scoreLabel }}）</title>
         </polygon>
       </g>
     </svg>
+    <div class="evaluation-graph__legend" aria-label="評価記号の凡例">
+      <span class="evaluation-graph__legend-brilliant">◆ 神の一手</span>
+      <span class="evaluation-graph__legend-good">◆ 好手</span>
+      <span class="evaluation-graph__legend-dubious">◆ 疑問手</span>
+      <span class="evaluation-graph__legend-mistake">◆ 悪手</span>
+      <span class="evaluation-graph__legend-blunder">◆ 大悪手</span>
+      <small>先手△／後手▽</small>
+    </div>
     <div class="evaluation-graph__selection" aria-live="polite">
       <strong>{{ selectedPoint?.label ?? `${currentPly}手目` }}</strong>
       <span>{{ selectedPoint?.scoreLabel ?? "解析中…" }}</span>
@@ -45,6 +56,11 @@ type AnalysisPoint = {
   graphValue: number;
   label: string;
   scoreLabel: string;
+  annotation?: {
+    kind: "blunder" | "mistake" | "dubious" | "good" | "brilliant";
+    label: string;
+    mover: "black" | "white";
+  } | null;
 };
 
 const props = defineProps<{
@@ -61,6 +77,7 @@ const plyX = (ply: number) => plot.left + (Math.max(0, Math.min(maxPly.value, pl
 const scoreY = (score: number) => plot.top + ((graphLimit - Math.max(-graphLimit, Math.min(graphLimit, score))) / (graphLimit * 2)) * plot.height;
 const linePoints = computed(() => props.points.map((point) => `${plyX(point.ply)},${scoreY(point.graphValue)}`).join(" "));
 const selectedPoint = computed(() => props.points.find((point) => point.ply === props.currentPly));
+const annotatedPoints = computed(() => props.points.filter((point) => point.annotation));
 const yTicks = computed(() => [6000, 4000, 2000, 0, -2000, -4000, -6000].map((value) => ({
   value,
   y: scoreY(value),
@@ -68,10 +85,12 @@ const yTicks = computed(() => [6000, 4000, 2000, 0, -2000, -4000, -6000].map((va
 })));
 const xTicks = computed(() => [...new Set([0, .25, .5, .75, 1].map((ratio) => Math.round(maxPly.value * ratio)))]
   .map((value) => ({ value, x: plyX(value) })));
-const trianglePoints = (ply: number, score: number) => {
+const trianglePoints = (ply: number, score: number, mover: "black" | "white") => {
   const x = plyX(ply);
   const y = scoreY(score);
-  return `${x - 5},${y - 4} ${x + 5},${y - 4} ${x},${y + 5}`;
+  return mover === "black"
+    ? `${x - 5},${y + 4} ${x + 5},${y + 4} ${x},${y - 5}`
+    : `${x - 5},${y - 4} ${x + 5},${y - 4} ${x},${y + 5}`;
 };
 
 function selectNearestPly(event: PointerEvent) {
@@ -92,9 +111,21 @@ function selectNearestPly(event: PointerEvent) {
 .evaluation-graph__zero { stroke: #555; stroke-width: 1.25; }
 .evaluation-graph__line { fill: none; stroke: #163fff; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
 .evaluation-graph__current { stroke: #ff3152; stroke-width: 2; }
-.evaluation-graph__point { fill: #f4212e; stroke: #f4212e; stroke-width: 1; }
+.evaluation-graph__point { stroke-width: 1; }
+.evaluation-graph__point--blunder { fill: #a00000; stroke: #6f0000; }
+.evaluation-graph__point--mistake { fill: #f4212e; stroke: #c10d16; }
+.evaluation-graph__point--dubious { fill: #f08a16; stroke: #c66200; }
+.evaluation-graph__point--good { fill: #168bd2; stroke: #075f9b; }
+.evaluation-graph__point--brilliant { fill: #9a43c9; stroke: #6a2194; }
 .evaluation-graph__point--current { fill: #ff3152; stroke: #fff; stroke-width: 1.5; }
 .evaluation-graph__hit-area { fill: transparent; }
+.evaluation-graph__legend { display: flex; gap: .55rem; align-items: center; min-height: 1.2rem; padding: .1rem .2rem 0; color: #333; font: 11px Arial, "Yu Gothic", sans-serif; white-space: nowrap; }
+.evaluation-graph__legend-brilliant { color: #7a279f; }
+.evaluation-graph__legend-good { color: #075f9b; }
+.evaluation-graph__legend-dubious { color: #b85800; }
+.evaluation-graph__legend-mistake { color: #c10d16; }
+.evaluation-graph__legend-blunder { color: #780000; }
+.evaluation-graph__legend small { margin-left: auto; color: #444; }
 .evaluation-graph__selection { display: flex; gap: .8rem; justify-content: flex-end; min-height: 1.2rem; margin-top: .15rem; color: #111; font-size: .78rem; }
 .evaluation-graph__selection span { color: #333; }
 </style>

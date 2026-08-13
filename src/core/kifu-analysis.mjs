@@ -34,4 +34,50 @@ export function formatAnalysisScore(score) {
   return `評価値 ${value >= 0 ? '+' : ''}${value}`;
 }
 
+function comparableScore(score) {
+  if (score?.type === 'cp' && Number.isFinite(score.value)) return score.value;
+  if (score?.type === 'mate' && Number.isFinite(score.value)) {
+    if (score.value > 0) return 100000 - Math.min(999, Math.abs(score.value));
+    if (score.value < 0) return -100000 + Math.min(999, Math.abs(score.value));
+    return 0;
+  }
+  return undefined;
+}
+
+/**
+ * 着手前の最善評価と実着手後の評価を着手者目線で比較する。
+ * 好手系は「最善手だった」だけでは付けず、次善手との差が大きい局面に限定する。
+ */
+export function classifyAnalyzedMove({
+  ply,
+  playedMove,
+  bestMove,
+  beforeBestScore,
+  beforeSecondScore,
+  afterScore,
+} = {}) {
+  if (!Number.isInteger(ply) || ply < 1 || typeof playedMove !== 'string') return null;
+  const before = comparableScore(beforeBestScore);
+  const after = comparableScore(afterScore);
+  if (before === undefined || after === undefined) return null;
+  const mover = ply % 2 === 1 ? 'black' : 'white';
+  const loss = Math.max(0, mover === 'black' ? before - after : after - before);
+
+  if (loss >= 1800) return { kind: 'blunder', label: '大悪手', mover, loss };
+  if (loss >= 800) return { kind: 'mistake', label: '悪手', mover, loss };
+  if (loss >= 300) return { kind: 'dubious', label: '疑問手', mover, loss };
+
+  if (playedMove !== bestMove) return null;
+  const second = comparableScore(beforeSecondScore);
+  if (second === undefined) return null;
+  const bestGap = Math.max(0, mover === 'black' ? before - second : second - before);
+  if (bestGap >= 1200) {
+    return { kind: 'brilliant', label: '神の一手', mover, loss, bestGap };
+  }
+  if (bestGap >= 350) {
+    return { kind: 'good', label: '好手', mover, loss, bestGap };
+  }
+  return null;
+}
+
 export const KIFU_ANALYSIS_GRAPH_LIMIT = GRAPH_SCORE_LIMIT;
