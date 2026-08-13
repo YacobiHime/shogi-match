@@ -279,6 +279,7 @@ import {
   scoreForPlayer,
 } from "./core/coach-advice.mjs";
 import { createCoachAdviceScheduler } from "./core/coach-advice-scheduler.mjs";
+import { getIdleCoachAdvice, IDLE_COACH_DELAY_MS } from "./core/idle-coach-advice.mjs";
 import {
   formatHintMove,
   getHintMoves,
@@ -380,6 +381,8 @@ const coachAdviceLastShownAt = new Map<string, number>();
 let playerTurnScore: { type: "cp" | "mate"; value: number } | undefined;
 let playerTurnScoreHistoryLength = -1;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
+let idleCoachTimer: ReturnType<typeof setTimeout> | undefined;
+let idleCoachGeneration = 0;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
 let boardResizeObserver: ResizeObserver | undefined;
@@ -784,6 +787,74 @@ function scheduleDedicatedCoachAdvice(
     .catch(() => undefined);
 }
 
+function cancelPlayerIdleAdvice() {
+  idleCoachGeneration += 1;
+  if (idleCoachTimer) {
+    clearTimeout(idleCoachTimer);
+    idleCoachTimer = undefined;
+  }
+}
+
+function candidateGivesCheck(usi: string): boolean {
+  try {
+    const preview = createGameRecord(props.initialSfen);
+    for (const move of moveHistory) appendUsiMove(preview, move);
+    return appendUsiMove(preview, usi) && isSideToMoveInCheck(preview.position.sfen);
+  } catch {
+    return false;
+  }
+}
+
+function schedulePlayerIdleAdvice() {
+  cancelPlayerIdleAdvice();
+  if (
+    !active.value || reviewMode.value || normalizedMode.value !== "cpu"
+    || coachLevel.value !== "detailed" || !engineReady.value
+    || record.value.position.color !== humanColor.value
+  ) return;
+  const generation = idleCoachGeneration;
+  const historyLength = moveHistory.length;
+  idleCoachTimer = setTimeout(() => {
+    idleCoachTimer = undefined;
+    dedicatedCoachQueue = dedicatedCoachQueue
+      .catch(() => undefined)
+      .then(async () => {
+        if (
+          generation !== idleCoachGeneration || !active.value || reviewMode.value
+          || moveHistory.length !== historyLength
+          || record.value.position.color !== humanColor.value
+        ) return;
+        dedicatedCoachRunning = true;
+        try {
+          const candidates = await analyzeCoachPosition(20000, 800, 3);
+          if (
+            generation !== idleCoachGeneration || !active.value || reviewMode.value
+            || moveHistory.length !== historyLength
+            || record.value.position.color !== humanColor.value
+          ) return;
+          const best = candidates.find((candidate) => candidate.rank === 1);
+          if (!best?.move || best.score?.type === "mate") return;
+          const move = record.value.position.createMoveByUSI(best.move);
+          if (!move) return;
+          showCoachAdvice(getIdleCoachAdvice({
+            usi: best.move,
+            formattedMove: formatHintMove(best.move, currentSfen.value),
+            pieceType: move.pieceType,
+            capturedPieceType: move.capturedPieceType ?? "",
+            toRank: move.to.rank,
+            color: move.color,
+            lastMove: lastMove.value,
+            givesCheck: candidateGivesCheck(best.move),
+          }));
+        } finally {
+          engine?.applyStrengthOptions({ multiPv: 1 });
+          dedicatedCoachRunning = false;
+        }
+      })
+      .catch(() => undefined);
+  }, IDLE_COACH_DELAY_MS);
+}
+
 function scheduleReviewCoachAdvice() {
   if (!reviewMode.value || reviewCpuEnabled.value || analysisRunning.value || coachLevel.value === "off") return;
   const generation = ++reviewCoachGeneration;
@@ -820,6 +891,7 @@ function scheduleReviewCoachAdvice() {
 }
 
 function finish(matchResult: MatchResult) {
+  cancelPlayerIdleAdvice();
   active.value = false;
   thinking.value = false;
   result.value = matchResult;
@@ -886,6 +958,7 @@ function rebuildRecord(moves: string[]) {
 
 function undoTurn() {
   if (!canUndo.value) return;
+  cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   if (cpuTimer) clearTimeout(cpuTimer);
   const removeCount = !reviewMode.value && normalizedMode.value === "cpu" && moveHistory.length >= 2 ? 2 : 1;
@@ -896,6 +969,7 @@ function undoTurn() {
   hintCandidates.value = [];
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
+  schedulePlayerIdleAdvice();
 }
 
 function onReviewSliderInput(event: Event) {
@@ -969,6 +1043,7 @@ function returnToMainLine() {
 
 function onPlayerMove(usi: string) {
   if (!canMove.value || !applyMove(usi, "player")) return;
+  cancelPlayerIdleAdvice();
   // プレイヤーが指したら裏の助言探索を中断し、CPU本体へエンジンを明け渡す。
   if (!reviewMode.value && dedicatedCoachRunning) engine?.stop();
   if (reviewMode.value) {
@@ -1142,6 +1217,7 @@ async function scheduleCpuMove() {
         updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
         scheduleDedicatedCoachAdvice();
+        schedulePlayerIdleAdvice();
       }
       thinking.value = false;
     } catch (error) {
@@ -1150,7 +1226,10 @@ async function scheduleCpuMove() {
       errorMessage.value = `やねうら王の思考に失敗しました: ${message}`;
       emit("match-error", { message });
       const move = selectCpuMove(record.value.position);
-      if (move && applyMove(move.usi, "cpu") && active.value) updateCoachAdvice();
+      if (move && applyMove(move.usi, "cpu") && active.value) {
+        updateCoachAdvice();
+        schedulePlayerIdleAdvice();
+      }
     }
   }, Math.max(0, props.cpuDelayMs));
 }
@@ -1165,6 +1244,7 @@ async function initializeEngine() {
     engine.newGame();
     engineReady.value = true;
     scheduleCpuMove();
+    schedulePlayerIdleAdvice();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     errorMessage.value = `やねうら王を起動できないため簡易CPUで続行します: ${message}`;
@@ -1180,6 +1260,7 @@ function resign() {
 
 function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう！") {
   if (cpuTimer) clearTimeout(cpuTimer);
+  cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   reviewCpuGeneration += 1;
   reviewCpuEnabled.value = false;
@@ -1330,6 +1411,7 @@ function goToAnalysisPly(ply: number) {
 
 function restart() {
   if (cpuTimer) clearTimeout(cpuTimer);
+  cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   reviewCpuGeneration += 1;
   reviewCpuEnabled.value = false;
@@ -1365,6 +1447,7 @@ function restart() {
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
   initializeEngine();
   scheduleCpuMove();
+  schedulePlayerIdleAdvice();
 }
 
 watch(
@@ -1375,6 +1458,7 @@ watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
 watch(coachLevel, (level) => {
+  cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   coachAdviceLastShownAt.clear();
   guideText.value = level === "off" ? "" : INITIAL_GUIDE_TEXT;
@@ -1385,9 +1469,11 @@ watch(coachLevel, (level) => {
     && record.value.position.color === humanColor.value
   ) {
     scheduleDedicatedCoachAdvice();
+    if (level === "detailed") schedulePlayerIdleAdvice();
   }
 });
 onBeforeUnmount(() => {
+  cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   analysisGeneration += 1;
   reviewCoachGeneration += 1;
