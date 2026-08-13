@@ -2748,6 +2748,9 @@ queueMicrotask(() => {
     grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.65fr) minmax(15rem, 1.5fr);
   }
   .shogi-game__opening-guide {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
     gap: 0.12rem;
     padding: 0.18rem 0.3rem;
   }
