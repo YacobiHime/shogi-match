@@ -114,6 +114,13 @@
         <button type="button" :disabled="!canUndo" @click="reviewMode ? toggleReviewNavigation() : undoTurn()">
           {{ reviewMode ? "局面移動" : `待った ×${undosRemaining}` }}
         </button>
+        <button
+          v-if="reviewMode"
+          type="button"
+          class="shogi-game__analysis-button"
+          :disabled="thinking && !analysisRunning"
+          @click="openKifuAnalysis"
+        >{{ analysisRunning ? "解析中…" : analysisPoints.length ? "解析グラフ" : "棋譜解析" }}</button>
         <div v-if="reviewMode && reviewNavigationOpen" class="shogi-game__review-navigation">
           <button
             type="button"
@@ -141,6 +148,32 @@
         <strong>{{ humanPlayerName }}</strong>
         <small>{{ normalizedMode === "cpu" ? "あなた" : modeText }}</small>
         <div><b>戦型</b><span>{{ playerFormationText }}</span></div>
+      </div>
+    </section>
+
+    <section
+      v-if="reviewMode && analysisOpen"
+      class="shogi-game__analysis"
+      aria-label="棋譜解析"
+    >
+      <header class="shogi-game__analysis-header">
+        <div>
+          <strong>棋譜解析</strong>
+          <span v-if="analysisRunning">{{ analysisProgress }} / {{ analysisTotal }}局面</span>
+          <span v-else>{{ analysisPoints.length }}局面を解析済み</span>
+        </div>
+        <progress v-if="analysisRunning" :value="analysisProgress" :max="analysisTotal" />
+      </header>
+      <EvaluationGraph
+        :points="analysisPoints"
+        :current-ply="reviewNavigation.cursor"
+        :total-ply="reviewNavigation.mainLine.length"
+        @select="goToAnalysisPly"
+      />
+      <div class="shogi-game__analysis-actions">
+        <button v-if="analysisRunning" type="button" @click="cancelKifuAnalysis">解析を中止</button>
+        <button v-else type="button" @click="runKifuAnalysis">もう一度解析</button>
+        <button type="button" @click="analysisOpen = false">グラフを閉じる</button>
       </div>
     </section>
 
@@ -180,6 +213,7 @@
         <div class="shogi-game__result-actions">
           <button type="button" class="shogi-game__rematch" @click="restart">もう一度対局</button>
           <button type="button" class="shogi-game__review" @click="startReview">感想戦</button>
+          <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
         </div>
       </div>
     </div>
@@ -190,6 +224,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Color, Record } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
+import EvaluationGraph from "./EvaluationGraph.vue";
 import {
   appendUsiMove,
   createGameRecord,
@@ -225,6 +260,11 @@ import {
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
 import { detectStrictMateThreat } from "./core/mate-threat";
+import {
+  formatAnalysisScore,
+  scoreForBlack,
+  scoreToGraphValue,
+} from "./core/kifu-analysis.mjs";
 import {
   CPU_STRENGTH_PRESETS,
   getStrengthSearchSettings,
@@ -274,6 +314,17 @@ const resultDialogOpen = ref(false);
 const reviewMode = ref(false);
 const reviewNavigationOpen = ref(false);
 const reviewNavigation = ref(createReviewNavigation());
+type AnalysisPoint = {
+  ply: number;
+  graphValue: number;
+  label: string;
+  scoreLabel: string;
+};
+const analysisOpen = ref(false);
+const analysisRunning = ref(false);
+const analysisProgress = ref(0);
+const analysisTotal = ref(0);
+const analysisPoints = ref<AnalysisPoint[]>([]);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
@@ -295,6 +346,7 @@ let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
 let boardResizeObserver: ResizeObserver | undefined;
 let reviewCoachGeneration = 0;
+let analysisGeneration = 0;
 let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachRunning = false;
@@ -673,7 +725,7 @@ function scheduleDedicatedCoachAdvice(
 }
 
 function scheduleReviewCoachAdvice() {
-  if (!reviewMode.value || coachLevel.value === "off") return;
+  if (!reviewMode.value || analysisRunning.value || coachLevel.value === "off") return;
   const generation = ++reviewCoachGeneration;
   reviewCoachQueue = reviewCoachQueue.catch(() => undefined).then(async () => {
     if (generation !== reviewCoachGeneration || !reviewMode.value || !engineReady.value) return;
@@ -931,7 +983,7 @@ function resign() {
   if (active.value && !reviewMode.value) finish(resignationResult(record.value));
 }
 
-function startReview() {
+function enterReviewMode(message = "感想戦だね。気になる手を一緒に調べよう！") {
   if (cpuTimer) clearTimeout(cpuTimer);
   resultDialogOpen.value = false;
   reviewMode.value = true;
@@ -941,12 +993,132 @@ function startReview() {
   thinking.value = false;
   hintCandidates.value = [];
   hintText.value = "";
-  guideText.value = coachLevel.value === "off" ? "" : "感想戦だね。気になる手を一緒に調べよう！";
+  guideText.value = coachLevel.value === "off" ? "" : message;
+}
+
+function startReview() {
+  enterReviewMode();
   void initializeEngine().then(() => scheduleReviewCoachAdvice());
+}
+
+async function startKifuAnalysis() {
+  enterReviewMode("棋譜を最初から調べてみるね！");
+  analysisOpen.value = true;
+  await initializeEngine();
+  await runKifuAnalysis();
+}
+
+function openKifuAnalysis() {
+  analysisOpen.value = true;
+  if (analysisPoints.value.length === 0 && !analysisRunning.value) void runKifuAnalysis();
+}
+
+async function runKifuAnalysis() {
+  if (!engine || !engineReady.value || analysisRunning.value) return;
+  const generation = ++analysisGeneration;
+  analysisRunning.value = true;
+  analysisProgress.value = 0;
+  analysisTotal.value = reviewNavigation.value.mainLine.length + 1;
+  analysisOpen.value = true;
+  analysisPoints.value = [];
+  reviewCoachGeneration += 1;
+  engine.stop();
+  try {
+    // 同じUSIエンジンを使う助言探索を止めてから、棋譜解析へ専有させる。
+    await Promise.all([
+      dedicatedCoachQueue.catch(() => undefined),
+      reviewCoachQueue.catch(() => undefined),
+    ]);
+    if (generation !== analysisGeneration || !reviewMode.value) return;
+    thinking.value = true;
+    const moves = [...reviewNavigation.value.mainLine];
+    const base = props.initialSfen === STANDARD_SFEN
+      ? "startpos"
+      : `sfen ${props.initialSfen}`;
+    const replay = createGameRecord(props.initialSfen);
+    const positions = [{ sideToMove: replay.position.color, label: "開始局面" }];
+    for (let index = 0; index < moves.length; index += 1) {
+      const label = (() => {
+        try {
+          return `${index + 1}手目 ${formatHintMove(moves[index], replay.position.sfen)}`;
+        } catch {
+          return `${index + 1}手目`;
+        }
+      })();
+      appendUsiMove(replay, moves[index]);
+      positions.push({
+        sideToMove: replay.position.color,
+        label,
+      });
+    }
+    analysisTotal.value = positions.length;
+    const compact = props.mobile || boardLayout.value === "portrait";
+    engine.applyStrengthOptions({ multiPv: 1 });
+    for (let ply = 0; ply < positions.length; ply += 1) {
+      if (generation !== analysisGeneration || !reviewMode.value) break;
+      const prefixMoves = moves.slice(0, ply);
+      engine.setPosition(`${base}${prefixMoves.length ? ` moves ${prefixMoves.join(" ")}` : ""}`);
+      const search = await engine.go({
+        nodes: compact ? 6000 : 12000,
+        maxTimeMs: compact ? 800 : 1200,
+      });
+      if (generation !== analysisGeneration || !reviewMode.value) break;
+      const rawScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
+      const score = scoreForBlack(rawScore, positions[ply].sideToMove);
+      const graphValue = scoreToGraphValue(score);
+      if (score && graphValue !== undefined) {
+        analysisPoints.value.push({
+          ply,
+          graphValue,
+          label: positions[ply].label,
+          scoreLabel: formatAnalysisScore(score),
+        });
+      }
+      analysisProgress.value = ply + 1;
+      await nextTick();
+    }
+    if (generation === analysisGeneration && analysisProgress.value === analysisTotal.value) {
+      guideText.value = coachLevel.value === "off"
+        ? ""
+        : "棋譜解析が終わったよ。グラフから気になる局面を選んでね！";
+    }
+  } catch (error) {
+    if (generation === analysisGeneration) {
+      const message = error instanceof Error ? error.message : String(error);
+      errorMessage.value = `棋譜解析に失敗しました: ${message}`;
+    }
+  } finally {
+    analysisRunning.value = false;
+    thinking.value = false;
+  }
+}
+
+function cancelKifuAnalysis() {
+  if (!analysisRunning.value) return;
+  analysisGeneration += 1;
+  engine?.stop();
+  guideText.value = coachLevel.value === "off" ? "" : "棋譜解析を中止したよ。";
+}
+
+function goToAnalysisPly(ply: number) {
+  const mainLine = reviewNavigation.value.mainLine;
+  const cursor = Math.max(0, Math.min(mainLine.length, Math.trunc(ply)));
+  reviewNavigation.value = {
+    ...reviewNavigation.value,
+    line: [...mainLine],
+    cursor,
+    branch: false,
+  };
+  rebuildRecord(mainLine.slice(0, cursor));
+  hintCandidates.value = [];
+  hintText.value = "";
+  if (!analysisRunning.value) scheduleReviewCoachAdvice();
 }
 
 function restart() {
   if (cpuTimer) clearTimeout(cpuTimer);
+  analysisGeneration += 1;
+  if (analysisRunning.value) engine?.stop();
   settingsOpen.value = false;
   record.value = createRecord();
   active.value = true;
@@ -954,6 +1126,11 @@ function restart() {
   result.value = null;
   resultDialogOpen.value = false;
   reviewMode.value = false;
+  analysisOpen.value = false;
+  analysisRunning.value = false;
+  analysisProgress.value = 0;
+  analysisTotal.value = 0;
+  analysisPoints.value = [];
   reviewCoachGeneration += 1;
   reviewNavigationOpen.value = false;
   reviewNavigation.value = createReviewNavigation();
@@ -984,7 +1161,7 @@ watch(() => props.engineNodes, (value) => {
 watch(coachLevel, (level) => {
   coachAdviceLastShownAt.clear();
   guideText.value = level === "off" ? "" : INITIAL_GUIDE_TEXT;
-  if (reviewMode.value && level !== "off") {
+  if (reviewMode.value && !analysisRunning.value && level !== "off") {
     scheduleReviewCoachAdvice();
   } else if (
     level !== "off" && engineReady.value && active.value && !thinking.value
@@ -994,6 +1171,7 @@ watch(coachLevel, (level) => {
   }
 });
 onBeforeUnmount(() => {
+  analysisGeneration += 1;
   reviewCoachGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
   engine?.quit();
@@ -1354,6 +1532,65 @@ queueMicrotask(() => {
   min-width: 0;
   padding-inline: 0.35rem;
   font-size: 0.86rem;
+}
+.shogi-game__assist-actions > .shogi-game__analysis-button {
+  grid-column: 1 / -1;
+}
+.shogi-game__analysis-button {
+  border-color: #78d4ff !important;
+  background: linear-gradient(#285f82, #173247) !important;
+  box-shadow: 0 0 .8rem rgba(66, 181, 255, .3) !important;
+}
+.shogi-game__analysis {
+  position: absolute;
+  z-index: 60;
+  bottom: .6rem;
+  left: 50%;
+  width: min(58rem, calc(100% - 1.2rem));
+  max-height: calc(100% - 1.2rem);
+  padding: .8rem;
+  overflow: auto;
+  transform: translateX(-50%);
+  border: 2px solid var(--gold);
+  border-radius: .7rem;
+  color: var(--ink);
+  background: rgba(25, 12, 18, .97);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, .7), 0 0 1.2rem rgba(66, 181, 255, .24);
+}
+.shogi-game__analysis-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 18rem);
+  gap: .7rem;
+  align-items: center;
+  margin-bottom: .55rem;
+}
+.shogi-game__analysis-header > div {
+  display: flex;
+  gap: .8rem;
+  align-items: baseline;
+}
+.shogi-game__analysis-header strong {
+  color: #f4d890;
+  font-size: 1.1rem;
+}
+.shogi-game__analysis-header span {
+  color: #d7c7c0;
+  font-size: .85rem;
+}
+.shogi-game__analysis-header progress {
+  width: 100%;
+  accent-color: #48bce9;
+}
+.shogi-game__analysis-actions {
+  display: flex;
+  gap: .55rem;
+  justify-content: flex-end;
+  margin-top: .55rem;
+}
+.shogi-game__analysis-actions button {
+  min-height: 2.25rem;
+  padding: .4rem .8rem;
+  font-size: .82rem;
 }
 .shogi-game__player-zone--player .shogi-game__player-card {
   margin-left: 6.5rem;
@@ -1731,6 +1968,15 @@ queueMicrotask(() => {
   }
 }
 @media (max-width: 540px) {
+  .shogi-game__analysis {
+    bottom: .3rem;
+    width: calc(100% - .6rem);
+    padding: .55rem;
+  }
+  .shogi-game__analysis-header {
+    grid-template-columns: 1fr;
+    gap: .35rem;
+  }
   .shogi-game {
     grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) 3.4rem;
     padding: 0.4rem;
