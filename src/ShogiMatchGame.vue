@@ -25,8 +25,8 @@
         <strong>{{ statusText }}</strong>
         <span>{{ modeText }}・{{ moveCount }}手</span>
       </div>
-      <section class="shogi-game__opening-guide" aria-label="戦法と囲いの道しるべ">
-        <h2>やこび姫の道しるべ</h2>
+      <section class="shogi-game__opening-guide" aria-label="やこび姫補助">
+        <h2>やこび姫補助</h2>
         <div class="shogi-game__opening-presets">
           <button
             v-for="preset in OPENING_PRESETS"
@@ -65,7 +65,7 @@
           class="shogi-game__opening-clear"
           @click="clearOpeningGuide"
         >
-          道しるべを終了
+          補助を終了
         </button>
       </section>
     </section>
@@ -651,7 +651,7 @@ function selectOpeningPreset(strategyId: string, castleId: string) {
 function clearOpeningGuide() {
   selectedStrategy.value = "";
   selectedCastle.value = "";
-  if (coachLevel.value !== "off") guideText.value = "道しるべを終了したよ。";
+  if (coachLevel.value !== "off") guideText.value = "補助を終了したよ。";
 }
 
 function formationNamesForColor(sfen: string, color: Color): string[] {
