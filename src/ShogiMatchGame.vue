@@ -48,14 +48,6 @@
           </label>
         </div>
         <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
-        <button
-          v-if="selectedStrategy || selectedCastle"
-          type="button"
-          class="shogi-game__opening-clear"
-          @click="clearOpeningGuide"
-        >
-          補助を終了
-        </button>
       </section>
     </section>
 
@@ -195,14 +187,6 @@
         </label>
       </div>
       <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
-      <button
-        v-if="selectedStrategy || selectedCastle"
-        type="button"
-        class="shogi-game__opening-clear"
-        @click="clearOpeningGuide"
-      >
-        補助を終了
-      </button>
     </section>
 
     <section
@@ -668,12 +652,6 @@ function announceOpeningGuide() {
   if (label && coachLevel.value !== "off") {
     guideText.value = `${label}を目指そう。盤の矢印を参考にしてね！`;
   }
-}
-
-function clearOpeningGuide() {
-  selectedStrategy.value = "";
-  selectedCastle.value = "";
-  if (coachLevel.value !== "off") guideText.value = "補助を終了したよ。";
 }
 
 function formationNamesForColor(sfen: string, color: Color): string[] {
@@ -1795,14 +1773,6 @@ queueMicrotask(() => {
   font-size: 0.74rem;
   line-height: 1.35;
 }
-.shogi-game__opening-clear {
-  min-width: 0;
-  margin-top: 0;
-  padding: 0.35rem;
-  border-radius: 0.35rem;
-  font-size: 0.78rem;
-  line-height: 1.25;
-}
 .shogi-game__player-zone--player {
   grid-column: 2;
   grid-row: 3;
@@ -2407,13 +2377,6 @@ queueMicrotask(() => {
     font-size: 0.9rem;
     text-align: center;
   }
-  .shogi-game__opening-clear {
-    min-width: 0;
-    padding: 0.35rem;
-    border-radius: 0.35rem;
-    font-size: 0.78rem;
-    line-height: 1.25;
-  }
   .shogi-game__opening-selects {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2443,9 +2406,6 @@ queueMicrotask(() => {
     background: rgba(7, 80, 116, 0.23);
     font-size: 0.74rem;
     line-height: 1.35;
-  }
-  .shogi-game__opening-clear {
-    margin-top: 0;
   }
   .shogi-game__dialogue {
     grid-column: 1;
@@ -2521,11 +2481,6 @@ queueMicrotask(() => {
   }
   .shogi-game__opening-guide p {
     padding: 0.22rem 0.35rem;
-  }
-  .shogi-game__opening-clear {
-    min-height: 1.7rem;
-    padding: 0.2rem;
-    font-size: 0.68rem;
   }
   .shogi-game__board-shell {
     grid-column: 1;
@@ -2729,11 +2684,6 @@ queueMicrotask(() => {
     min-height: 0;
     overflow: auto;
   }
-  .shogi-game__opening-clear {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: end;
-  }
   .shogi-game__player-zone--player .shogi-game__player-card {
     display: none;
   }
@@ -2803,10 +2753,6 @@ queueMicrotask(() => {
     padding: 0.12rem 0.25rem;
     line-height: 1.15;
   }
-  .shogi-game__opening-clear {
-    min-height: 1.4rem;
-    padding: 0.08rem;
-  }
   .shogi-game__player-zone--player {
     padding-left: 5rem;
   }
@@ -2844,12 +2790,13 @@ queueMicrotask(() => {
     display: grid;
     grid-column: 1;
     grid-row: 5;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.2rem 0.35rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 0.2rem;
     align-self: stretch;
     min-height: 0;
     padding: 0.3rem;
+    overflow: hidden;
   }
   .shogi-game__opening-guide--portrait h2 {
     display: none;
@@ -2858,21 +2805,18 @@ queueMicrotask(() => {
     grid-column: 1;
     grid-row: 1;
   }
+  .shogi-game__opening-guide--portrait .shogi-game__opening-selects label {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
   .shogi-game__opening-guide--portrait p {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
     min-height: 0;
-    overflow: auto;
+    overflow: visible;
     padding: 0.2rem 0.35rem;
     font-size: 0.68rem;
-  }
-  .shogi-game__opening-guide--portrait .shogi-game__opening-clear {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: end;
-    min-height: 1.7rem;
-    padding: 0.2rem;
-    font-size: 0.68rem;
+    line-height: 1.2;
   }
 }
 @media (max-width: 540px) and (max-aspect-ratio: 5/4) {
