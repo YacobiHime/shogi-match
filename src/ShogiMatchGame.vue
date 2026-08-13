@@ -8,7 +8,7 @@
       <button type="button" class="shogi-game__command shogi-game__command--danger" :disabled="!active || reviewMode" @click="resign">
         投了
       </button>
-      <button type="button" class="shogi-game__command shogi-game__command--settings" @click="settingsOpen = !settingsOpen">
+      <button type="button" class="shogi-game__command shogi-game__command--settings" @click="toggleSettings">
         設定
       </button>
       <span class="shogi-game__turn">{{ moveCount }}手目</span>
@@ -86,8 +86,8 @@
         </label>
       </div>
       <div class="shogi-game__settings-actions">
-        <button type="button" class="shogi-game__settings-restart" @click="restart">最初から</button>
-        <button type="button" @click="settingsOpen = false">閉じる</button>
+        <button type="button" class="shogi-game__settings-restart" @click="restartWithSettings">最初から</button>
+        <button type="button" @click="closeSettings">閉じる</button>
       </div>
     </div>
 
@@ -174,6 +174,13 @@
             <option v-for="strategy in OPENING_STRATEGIES" :key="strategy.id" :value="strategy.id">
               {{ strategy.label }}
             </option>
+          </select>
+        </label>
+        <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
+          <span>手番</span>
+          <select v-model="selectedPlayerColor" aria-label="自分の手番">
+            <option value="black">先手</option>
+            <option value="white">後手</option>
           </select>
         </label>
         <label>
@@ -435,6 +442,8 @@ const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
 const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
+const activePlayerColor = ref<"black" | "white">(normalizePlayerColor(props.playerColor));
+const selectedPlayerColor = ref<"black" | "white">(activePlayerColor.value);
 const boardLayout = ref<"standard" | "compact" | "portrait">("standard");
 const boardShell = ref<HTMLElement | null>(null);
 const advisedCoachTopics = new Set<string>();
@@ -491,7 +500,7 @@ function updateResponsiveLayout() {
 }
 
 const normalizedMode = computed<GameMode>(() => props.mode === "local" ? "local" : "cpu");
-const humanColor = computed(() => props.playerColor === "white" ? Color.WHITE : Color.BLACK);
+const humanColor = computed(() => activePlayerColor.value === "white" ? Color.WHITE : Color.BLACK);
 const moveCount = computed(() => record.value.current.ply);
 const flipBoard = computed(() => (
   normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
@@ -696,6 +705,25 @@ function normalizeNodes(value: number): number {
       Math.abs(candidate - nodes) < Math.abs(nearest - nodes) ? candidate : nearest,
     30000,
   );
+}
+
+function normalizePlayerColor(value: string): "black" | "white" {
+  return value === "white" ? "white" : "black";
+}
+
+function toggleSettings() {
+  if (!settingsOpen.value) selectedPlayerColor.value = activePlayerColor.value;
+  settingsOpen.value = !settingsOpen.value;
+}
+
+function closeSettings() {
+  selectedPlayerColor.value = activePlayerColor.value;
+  settingsOpen.value = false;
+}
+
+function restartWithSettings() {
+  activePlayerColor.value = selectedPlayerColor.value;
+  restart();
 }
 
 function strategyMove(): string | undefined {
@@ -1562,9 +1590,14 @@ function restart() {
 }
 
 watch(
-  () => [props.initialSfen, props.mode, props.playerColor],
+  () => [props.initialSfen, props.mode],
   () => restart(),
 );
+watch(() => props.playerColor, (value) => {
+  activePlayerColor.value = normalizePlayerColor(value);
+  selectedPlayerColor.value = activePlayerColor.value;
+  restart();
+});
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
