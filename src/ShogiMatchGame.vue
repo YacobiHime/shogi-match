@@ -122,19 +122,25 @@
           @click="openKifuAnalysis"
         >{{ analysisRunning ? "解析中…" : analysisPoints.length ? "解析グラフ" : "棋譜解析" }}</button>
         <div v-if="reviewMode && reviewNavigationOpen" class="shogi-game__review-navigation">
-          <button
-            type="button"
-            aria-label="一手戻る"
-            :disabled="reviewNavigation.cursor === 0"
-            @click="navigateReview(-1)"
-          >←</button>
-          <span>{{ reviewNavigation.cursor }} / {{ reviewNavigation.line.length }}手</span>
-          <button
-            type="button"
-            aria-label="一手進む"
-            :disabled="reviewNavigation.cursor >= reviewNavigation.line.length"
-            @click="navigateReview(1)"
-          >→</button>
+          <div class="shogi-game__review-position">
+            <strong>{{ reviewNavigation.cursor }}手目</strong>
+            <span>/ {{ reviewNavigation.line.length }}手</span>
+          </div>
+          <div class="shogi-game__review-slider-row">
+            <span>0</span>
+            <input
+              type="range"
+              min="0"
+              :max="reviewNavigation.line.length"
+              step="1"
+              :value="reviewNavigation.cursor"
+              :disabled="thinking || analysisRunning"
+              aria-label="表示する局面の手数"
+              @input="onReviewSliderInput"
+              @change="scheduleReviewCoachAdvice()"
+            >
+            <span>{{ reviewNavigation.line.length }}</span>
+          </div>
           <button
             v-if="reviewNavigation.branch"
             type="button"
@@ -841,12 +847,19 @@ function toggleReviewNavigation() {
   reviewNavigationOpen.value = !reviewNavigationOpen.value;
 }
 
-function navigateReview(delta: number) {
-  reviewNavigation.value = moveReviewCursor(reviewNavigation.value, delta);
+function onReviewSliderInput(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const cursor = Math.max(0, Math.min(
+    reviewNavigation.value.line.length,
+    Math.trunc(Number(target.value)),
+  ));
+  reviewNavigation.value = moveReviewCursor(
+    reviewNavigation.value,
+    cursor - reviewNavigation.value.cursor,
+  );
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   hintCandidates.value = [];
   hintText.value = "";
-  scheduleReviewCoachAdvice();
 }
 
 function returnToMainLine() {
@@ -1502,20 +1515,48 @@ queueMicrotask(() => {
   right: 0;
   bottom: calc(100% + 0.45rem);
   display: grid;
-  grid-template-columns: 3rem minmax(5.5rem, 1fr) 3rem;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.4rem;
-  width: min(18rem, calc(100vw - 1rem));
-  padding: 0.55rem;
+  width: min(23rem, calc(100vw - 1rem));
+  padding: 0.7rem;
   border: 2px solid #78d4ff;
   border-radius: 0.55rem;
   background: rgba(20, 26, 39, 0.97);
   box-shadow: 0 0.5rem 1.4rem rgba(0, 0, 0, 0.55), 0 0 1rem rgba(66, 181, 255, 0.3);
 }
-.shogi-game__review-navigation > span {
-  align-self: center;
+.shogi-game__review-position {
+  display: flex;
+  gap: .35rem;
+  align-items: baseline;
+  justify-content: center;
   color: #d9f3ff;
   text-align: center;
   white-space: nowrap;
+}
+.shogi-game__review-position strong {
+  color: #78d4ff;
+  font-size: 1.05rem;
+}
+.shogi-game__review-slider-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: .55rem;
+  align-items: center;
+  color: #b9d9e8;
+  font: .75rem/1 sans-serif;
+}
+.shogi-game__review-slider-row input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  height: 2rem;
+  margin: 0;
+  accent-color: #5ccfff;
+  cursor: ew-resize;
+  touch-action: pan-x;
+}
+.shogi-game__review-slider-row input[type="range"]:disabled {
+  cursor: wait;
+  opacity: .55;
 }
 .shogi-game__review-navigation button {
   min-height: 2.35rem;
@@ -1525,7 +1566,6 @@ queueMicrotask(() => {
   font-size: 1.1rem;
 }
 .shogi-game__review-navigation .shogi-game__review-main-line {
-  grid-column: 1 / -1;
   font-size: 0.85rem;
 }
 .shogi-game__assist-actions button {
