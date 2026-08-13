@@ -47,7 +47,7 @@
             </select>
           </label>
         </div>
-        <p>{{ openingGuideStatus }}</p>
+        <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
         <button
           v-if="selectedStrategy || selectedCastle"
           type="button"
@@ -616,7 +616,7 @@ const boardCandidates = computed(() => (
     : openingPlanCandidate.value ? [{ usi: openingPlanCandidate.value.usi }] : []
 ));
 const openingGuideStatus = computed(() => {
-  if (!selectedStrategy.value && !selectedCastle.value) return "作りたい戦法と囲いを選んでね。";
+  if (!selectedStrategy.value && !selectedCastle.value) return "";
   if (reviewMode.value) return "道しるべは対局中に表示するよ。";
   if (!canMove.value) return "あなたの手番になったら、次の一手を矢印で示すよ。";
   if (!openingPlanCandidate.value) return "形が完成したか、今の局面では予定手を指せないみたい。";
