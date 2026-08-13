@@ -4,6 +4,17 @@
   "license": "MIT",
   "rules": [
     {
+      "id": "enc_match_renmei_mino",
+      "group": "enc_match",
+      "name": "連盟美濃",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/5G1K1/4G1S2 b - 1"
+        }
+      }
+    },
+    {
       "id": "enc_match_1",
       "group": "enc_match",
       "name": "銀冠",

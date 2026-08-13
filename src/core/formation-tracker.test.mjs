@@ -36,6 +36,13 @@ describe('戦型の役割別追跡', () => {
     expect(snapshot.white.rook).toBe('');
   });
 
+  test('連盟美濃を先手・後手それぞれの囲いとして割り当てる', () => {
+    const sente = '4k4/9/9/9/9/9/4PPPPP/5G1K1/4G1SNL b - 1';
+    const gote = 'lns1g4/1k1g5/ppppp4/9/9/9/9/9/4K4 b - 1';
+    expect(detectFormationSnapshot(sente, master).black.castle).toBe('連盟美濃');
+    expect(detectFormationSnapshot(gote, master).white.castle).toBe('連盟美濃');
+  });
+
   test('後手専用の2手目3二飛戦法を元盤面から判定する', () => {
     const record = createGameRecord();
     for (const move of ['7g7f', '8b3b']) expect(appendUsiMove(record, move)).toBe(true);
