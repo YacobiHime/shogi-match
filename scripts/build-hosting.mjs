@@ -9,9 +9,6 @@ for (const path of [
   "game.html",
   "dist",
   "vendor",
-  "yaneuraou.data",
-  "yaneuraou.wasm",
-  "yaneuraou.worker.js",
 ]) {
   await cp(new URL(`../${path}`, import.meta.url), new URL(path, output), {
     recursive: true,
