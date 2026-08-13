@@ -543,6 +543,7 @@ const opponentFormationText = computed(() =>
 
 function formationNamesForColor(sfen: string, color: Color): string[] {
   const key = color === Color.BLACK ? "black" : "white";
+  if (!reviewMode.value) return formationNamesFromState(formationState.value, key);
   return formationNamesFromSnapshot(
     detectFormationSnapshot(sfen, hiraganaFormationMaster),
     key,
@@ -663,12 +664,14 @@ function updateCoachAdvice(
     return;
   }
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
+  const playerFormations = formationNamesForColor(currentSfen.value, humanColor.value);
   const advice = getCoachAdvice({
     level: coachLevel.value,
     score,
     moveCount: moveCount.value,
     inCheck: isSideToMoveInCheck(currentSfen.value),
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
+    playerFormations,
     advisedTopics: advisedCoachTopics,
   });
   showCoachAdvice(advice);
@@ -705,12 +708,14 @@ function updateCoachAdviceFromPlayerScore(
     return;
   }
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
+  const playerFormations = formationNamesForColor(currentSfen.value, humanColor.value);
   const advice = getCoachAdvice({
     level: coachLevel.value,
     score,
     moveCount: moveCount.value,
     inCheck: isSideToMoveInCheck(currentSfen.value),
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
+    playerFormations,
     advisedTopics: advisedCoachTopics,
   });
   showCoachAdvice(advice);

@@ -95,8 +95,36 @@ describe('対局中の応援・助言', () => {
       level: 'detailed', opponentFormations: ['エルモ囲い'], advisedTopics: [],
     })?.text).toContain('上からの攻め');
     expect(getCoachAdvice({
-      level: 'detailed', opponentFormations: ['エルモ囲い'], advisedTopics: ['elmo'],
+      level: 'detailed', opponentFormations: ['エルモ囲い'], advisedTopics: ['castle-elmo'],
     })).toBeNull();
+  });
+
+  test('相手の戦法には適した囲いを一度だけ提案する', () => {
+    const first = getCoachAdvice({
+      level: 'detailed', opponentFormations: ['ノーマル四間飛車', '本美濃'],
+    });
+    expect(first?.topic).toBe('strategy-swinging-rook');
+    expect(first?.text).toContain('舟囲い');
+    const next = getCoachAdvice({
+      level: 'detailed', opponentFormations: ['ノーマル四間飛車', '本美濃'],
+      advisedTopics: ['strategy-swinging-rook'],
+    });
+    expect(next?.topic).toBe('castle-mino');
+    expect(next?.text).toContain('端攻め');
+  });
+
+  test('こちらも振り飛車なら相振り向けの囲いを提案する', () => {
+    expect(getCoachAdvice({
+      level: 'detailed',
+      opponentFormations: ['三間飛車'],
+      playerFormations: ['四間飛車'],
+    })?.text).toContain('金無双');
+  });
+
+  test('横歩取りには深く囲わず中住まいを提案する', () => {
+    expect(getCoachAdvice({
+      level: 'detailed', opponentFormations: ['横歩取り3三角戦法'],
+    })?.text).toContain('中住まい');
   });
 
   test('助言なしでは何も表示しない', () => {
