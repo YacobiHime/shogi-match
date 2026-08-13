@@ -13,8 +13,8 @@ const master = JSON.parse(await readFile(
 ));
 
 describe('HiraganaSuisho原典互換判定', () => {
-  test('全133件を変換する', () => {
-    expect(master.rules).toHaveLength(133);
+  test('原典133件と追加囲いを読み込む', () => {
+    expect(master.rules).toHaveLength(134);
     expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(29);
   });
 
@@ -121,5 +121,24 @@ describe('HiraganaSuisho原典互換判定', () => {
     const silverCrown = '4k4/9/9/9/9/9/5G1S1/6GK1/9 w - 1';
     expect(detectHiraganaSuishoFormations(silverCrown, master).map(({ name }) => name))
       .toContain('銀冠');
+  });
+
+  test('先手の連盟美濃を主要4駒から判定する', () => {
+    const renmeiMino = '4k4/9/9/9/9/9/4PPPPP/5G1K1/4G1SNL w - 1';
+    expect(detectHiraganaSuishoFormations(renmeiMino, master).map(({ name }) => name))
+      .toContain('連盟美濃');
+  });
+
+  test('後手の連盟美濃を盤面反転して判定する', () => {
+    const sente = '4k4/9/9/9/9/9/4PPPPP/5G1K1/4G1SNL w - 1';
+    const gote = invertHiraganaSuishoSfen(sente);
+    expect(detectHiraganaSuishoFormations(gote, master).map(({ name }) => name))
+      .toContain('連盟美濃');
+  });
+
+  test('5九金がない片連盟美濃を連盟美濃と誤判定しない', () => {
+    const incomplete = '4k4/9/9/9/9/9/4PPPPP/5G1K1/6SNL w - 1';
+    expect(detectHiraganaSuishoFormations(incomplete, master).map(({ name }) => name))
+      .not.toContain('連盟美濃');
   });
 });

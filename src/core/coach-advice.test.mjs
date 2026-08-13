@@ -99,6 +99,14 @@ describe('対局中の応援・助言', () => {
     })).toBeNull();
   });
 
+  test('連盟美濃には横から攻める助言を返す', () => {
+    const advice = getCoachAdvice({
+      level: 'detailed', opponentFormations: ['連盟美濃'], advisedTopics: [],
+    });
+    expect(advice?.topic).toBe('castle-renmei-mino');
+    expect(advice?.text).toContain('横からの攻め');
+  });
+
   test('相手の戦法には適した囲いを一度だけ提案する', () => {
     const first = getCoachAdvice({
       level: 'detailed', opponentFormations: ['ノーマル四間飛車', '本美濃'],
