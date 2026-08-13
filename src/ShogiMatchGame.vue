@@ -866,6 +866,19 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
   return analysis.candidates;
 }
 
+async function analyzeOpeningFollowupPosition() {
+  if (!engine) return [];
+  const positionKey = currentEnginePosition();
+  const cached = positionAnalysisCache.get(positionKey, { nodes: 0, multiPv: 3 });
+  if (cached) return cached;
+  engine.setPosition(positionKey);
+  engine.applyStrengthOptions({ multiPv: 3 });
+  // nodes指定は端末差で停止が遅れることがあるため、自動表示だけは短い時間探索にする。
+  const analysis = await engine.go({ movetime: 500, maxTimeMs: 1200 });
+  positionAnalysisCache.set(positionKey, analysis.candidates, { nodes: 0, multiPv: 3 });
+  return analysis.candidates;
+}
+
 function resetOpeningFollowup() {
   openingFollowupGeneration += 1;
   openingFollowupLoading = false;
@@ -898,8 +911,8 @@ function scheduleOpeningFollowupCandidates() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      // 自動表示は閃きと同じ3候補だが、毎手番使うため探索量は軽く保つ。
-      const candidates = await analyzeCoachPosition(3000, 1000, 3);
+      // 自動表示は閃きと同じ3候補だが、毎手番使うため探索時間は短く保つ。
+      const candidates = await analyzeOpeningFollowupPosition();
       if (
         generation !== openingFollowupGeneration || !active.value || reviewMode.value
         || moveHistory.length !== historyLength
