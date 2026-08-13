@@ -71,4 +71,22 @@ describe("opening guide", () => {
     });
     expect(next).toBeNull();
   });
+
+  it("does not finish Right King guidance after only moving the king to 4h", () => {
+    const next = nextOpeningPlanMove({
+      strategyId: "",
+      castleId: "right-king",
+      playedMoves: ["5i4h"],
+      legalMoves: ["7g7f", "6g6f"],
+      detectedFormations: ["右玉"],
+    });
+    expect(next).toEqual({ usi: "7g7f", phase: "castle" });
+  });
+
+  it("guides Right King through the twin-silver shape and rook retreat", () => {
+    expect(openingPlanSteps("", "right-king").map(({ usi }) => usi)).toEqual([
+      "7g7f", "6g6f", "7i6h", "6h6g", "3i4h", "4g4f",
+      "4h4g", "3g3f", "6i7h", "5i4h", "2i3g", "2h2i",
+    ]);
+  });
 });
