@@ -272,6 +272,7 @@ import {
 import { selectMoveByRank } from "./core/move-selection.mjs";
 import { detectStrictMateThreat } from "./core/mate-threat";
 import {
+  classifyAnalyzedMove,
   formatAnalysisScore,
   scoreForBlack,
   scoreToGraphValue,
@@ -331,6 +332,13 @@ type AnalysisPoint = {
   scoreLabel: string;
   bestMove?: string;
   pv?: string[];
+  score?: { type: "cp" | "mate"; value: number };
+  secondScore?: { type: "cp" | "mate"; value: number };
+  annotation?: {
+    kind: "blunder" | "mistake" | "dubious" | "good" | "brilliant";
+    label: string;
+    mover: "black" | "white";
+  } | null;
 };
 const analysisOpen = ref(false);
 const analysisRunning = ref(false);
@@ -1108,7 +1116,7 @@ async function runKifuAnalysis() {
     }
     analysisTotal.value = positions.length;
     const compact = props.mobile || boardLayout.value === "portrait";
-    engine.applyStrengthOptions({ multiPv: 1 });
+    engine.applyStrengthOptions({ multiPv: 2 });
     for (let ply = 0; ply < positions.length; ply += 1) {
       if (generation !== analysisGeneration || !reviewMode.value) break;
       const prefixMoves = moves.slice(0, ply);
@@ -1119,10 +1127,23 @@ async function runKifuAnalysis() {
       });
       if (generation !== analysisGeneration || !reviewMode.value) break;
       const bestCandidate = search.candidates.find((candidate) => candidate.rank === 1);
+      const secondCandidate = search.candidates.find((candidate) => candidate.rank === 2);
       const rawScore = bestCandidate?.score;
       const score = scoreForBlack(rawScore, positions[ply].sideToMove);
+      const secondScore = scoreForBlack(secondCandidate?.score, positions[ply].sideToMove);
       const graphValue = scoreToGraphValue(score);
       if (score && graphValue !== undefined) {
+        const previous = analysisPoints.value.at(-1);
+        const annotation = ply > 0 && previous
+          ? classifyAnalyzedMove({
+              ply,
+              playedMove: moves[ply - 1],
+              bestMove: previous.bestMove,
+              beforeBestScore: previous.score,
+              beforeSecondScore: previous.secondScore,
+              afterScore: score,
+            })
+          : null;
         analysisPoints.value.push({
           ply,
           graphValue,
@@ -1130,6 +1151,9 @@ async function runKifuAnalysis() {
           scoreLabel: formatAnalysisScore(score),
           bestMove: bestCandidate?.move,
           pv: bestCandidate?.pv,
+          score,
+          secondScore,
+          annotation,
         });
       }
       analysisProgress.value = ply + 1;
