@@ -1,4 +1,4 @@
-export const IDLE_COACH_DELAY_MS = 15000;
+export const IDLE_COACH_DELAY_MS = 10000;
 
 /** 探索した最善手の性質から、考慮中に出す軽い助言を組み立てる。 */
 export function getIdleCoachAdvice({

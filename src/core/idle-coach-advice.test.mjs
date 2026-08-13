@@ -3,8 +3,8 @@ import { describe, expect, test } from 'vitest';
 import { getIdleCoachAdvice, IDLE_COACH_DELAY_MS } from './idle-coach-advice.mjs';
 
 describe('長考中の軽い助言', () => {
-  test('15秒後に発火する設定にする', () => {
-    expect(IDLE_COACH_DELAY_MS).toBe(15000);
+  test('10秒後に発火する設定にする', () => {
+    expect(IDLE_COACH_DELAY_MS).toBe(10000);
   });
 
   test('探索最善手が歩の取り返しなら同歩を提案する', () => {
