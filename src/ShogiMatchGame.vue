@@ -111,8 +111,8 @@
         <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
           閃き <small>×{{ reviewMode ? "∞" : hintsRemaining }}</small>
         </button>
-        <button type="button" :disabled="!canUndo" @click="reviewMode ? toggleReviewNavigation() : undoTurn()">
-          {{ reviewMode ? "局面移動" : `待った ×${undosRemaining}` }}
+        <button v-if="!reviewMode" type="button" :disabled="!canUndo" @click="undoTurn">
+          待った ×{{ undosRemaining }}
         </button>
         <button
           v-if="reviewMode"
@@ -121,33 +121,6 @@
           :disabled="thinking && !analysisRunning"
           @click="openKifuAnalysis"
         >{{ analysisRunning ? "解析中…" : analysisPoints.length ? "解析グラフ" : "棋譜解析" }}</button>
-        <div v-if="reviewMode && reviewNavigationOpen" class="shogi-game__review-navigation">
-          <div class="shogi-game__review-position">
-            <strong>{{ reviewNavigation.cursor }}手目</strong>
-            <span>/ {{ reviewNavigation.line.length }}手</span>
-          </div>
-          <div class="shogi-game__review-slider-row">
-            <span>0</span>
-            <input
-              type="range"
-              min="0"
-              :max="reviewNavigation.line.length"
-              step="1"
-              :value="reviewNavigation.cursor"
-              :disabled="thinking || analysisRunning"
-              aria-label="表示する局面の手数"
-              @input="onReviewSliderInput"
-              @change="scheduleReviewCoachAdvice()"
-            >
-            <span>{{ reviewNavigation.line.length }}</span>
-          </div>
-          <button
-            v-if="reviewNavigation.branch"
-            type="button"
-            class="shogi-game__review-main-line"
-            @click="returnToMainLine"
-          >本筋へ戻る</button>
-        </div>
       </div>
       <div class="shogi-game__player-card">
         <span>{{ playerSideLabel }}</span>
@@ -170,6 +143,44 @@
         </div>
         <progress v-if="analysisRunning" :value="analysisProgress" :max="analysisTotal" />
       </header>
+      <div class="shogi-game__analysis-navigation">
+        <button
+          type="button"
+          aria-label="一手戻る"
+          :disabled="reviewNavigation.cursor === 0"
+          @click="navigateAnalysis(-1)"
+        >←</button>
+        <div class="shogi-game__review-slider-row">
+          <span>0</span>
+          <input
+            type="range"
+            min="0"
+            :max="reviewNavigation.line.length"
+            step="1"
+            :value="reviewNavigation.cursor"
+            aria-label="表示する局面の手数"
+            @input="onReviewSliderInput"
+            @change="scheduleReviewCoachAdvice()"
+          >
+          <span>{{ reviewNavigation.line.length }}</span>
+        </div>
+        <button
+          type="button"
+          aria-label="一手進む"
+          :disabled="reviewNavigation.cursor >= reviewNavigation.line.length"
+          @click="navigateAnalysis(1)"
+        >→</button>
+        <div class="shogi-game__review-position">
+          <strong>{{ reviewNavigation.cursor }}手目</strong>
+          <span>/ {{ reviewNavigation.line.length }}手</span>
+        </div>
+        <button
+          v-if="reviewNavigation.branch"
+          type="button"
+          class="shogi-game__review-main-line"
+          @click="returnToMainLine"
+        >本筋へ戻る</button>
+      </div>
       <EvaluationGraph
         :points="analysisPoints"
         :current-ply="reviewNavigation.cursor"
@@ -218,7 +229,6 @@
         </dl>
         <div class="shogi-game__result-actions">
           <button type="button" class="shogi-game__rematch" @click="restart">もう一度対局</button>
-          <button type="button" class="shogi-game__review" @click="startReview">感想戦</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
         </div>
       </div>
@@ -318,7 +328,6 @@ const engineUnavailable = ref(false);
 const result = ref<MatchResult | null>(null);
 const resultDialogOpen = ref(false);
 const reviewMode = ref(false);
-const reviewNavigationOpen = ref(false);
 const reviewNavigation = ref(createReviewNavigation());
 type AnalysisPoint = {
   ply: number;
@@ -438,7 +447,7 @@ const canUndo = computed(() =>
   && (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
 const statusText = computed(() => {
-  if (reviewMode.value) return "感想戦中です";
+  if (reviewMode.value) return "棋譜解析中です";
   if (result.value) {
     if (!result.value.winner) return "引き分け";
     return result.value.winner === Color.BLACK ? "先手の勝ち" : "後手の勝ち";
@@ -843,10 +852,6 @@ function undoTurn() {
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
 }
 
-function toggleReviewNavigation() {
-  reviewNavigationOpen.value = !reviewNavigationOpen.value;
-}
-
 function onReviewSliderInput(event: Event) {
   const target = event.target as HTMLInputElement;
   const cursor = Math.max(0, Math.min(
@@ -860,6 +865,14 @@ function onReviewSliderInput(event: Event) {
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   hintCandidates.value = [];
   hintText.value = "";
+}
+
+function navigateAnalysis(delta: number) {
+  reviewNavigation.value = moveReviewCursor(reviewNavigation.value, delta);
+  rebuildRecord(visibleReviewMoves(reviewNavigation.value));
+  hintCandidates.value = [];
+  hintText.value = "";
+  scheduleReviewCoachAdvice();
 }
 
 function returnToMainLine() {
@@ -996,11 +1009,10 @@ function resign() {
   if (active.value && !reviewMode.value) finish(resignationResult(record.value));
 }
 
-function enterReviewMode(message = "感想戦だね。気になる手を一緒に調べよう！") {
+function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう！") {
   if (cpuTimer) clearTimeout(cpuTimer);
   resultDialogOpen.value = false;
   reviewMode.value = true;
-  reviewNavigationOpen.value = false;
   reviewNavigation.value = createReviewNavigation(moveHistory);
   active.value = true;
   thinking.value = false;
@@ -1009,13 +1021,8 @@ function enterReviewMode(message = "感想戦だね。気になる手を一緒�
   guideText.value = coachLevel.value === "off" ? "" : message;
 }
 
-function startReview() {
-  enterReviewMode();
-  void initializeEngine().then(() => scheduleReviewCoachAdvice());
-}
-
 async function startKifuAnalysis() {
-  enterReviewMode("棋譜を最初から調べてみるね！");
+  enterAnalysisMode("棋譜を最初から調べてみるね！");
   analysisOpen.value = true;
   await initializeEngine();
   await runKifuAnalysis();
@@ -1145,7 +1152,6 @@ function restart() {
   analysisTotal.value = 0;
   analysisPoints.value = [];
   reviewCoachGeneration += 1;
-  reviewNavigationOpen.value = false;
   reviewNavigation.value = createReviewNavigation();
   playerTurnScore = undefined;
   playerTurnScoreHistoryLength = -1;
@@ -1509,20 +1515,16 @@ queueMicrotask(() => {
   gap: 0.55rem;
   align-items: center;
 }
-.shogi-game__review-navigation {
-  position: absolute;
-  z-index: 12;
-  right: 0;
-  bottom: calc(100% + 0.45rem);
+.shogi-game__analysis-navigation {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.4rem;
-  width: min(23rem, calc(100vw - 1rem));
-  padding: 0.7rem;
-  border: 2px solid #78d4ff;
-  border-radius: 0.55rem;
-  background: rgba(20, 26, 39, 0.97);
-  box-shadow: 0 0.5rem 1.4rem rgba(0, 0, 0, 0.55), 0 0 1rem rgba(66, 181, 255, 0.3);
+  grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+  gap: .45rem;
+  align-items: center;
+  margin-bottom: .55rem;
+  padding: .55rem;
+  border: 1px solid rgba(120, 212, 255, .65);
+  border-radius: .5rem;
+  background: rgba(20, 26, 39, .86);
 }
 .shogi-game__review-position {
   display: flex;
@@ -1532,6 +1534,7 @@ queueMicrotask(() => {
   color: #d9f3ff;
   text-align: center;
   white-space: nowrap;
+  grid-column: 1 / -1;
 }
 .shogi-game__review-position strong {
   color: #78d4ff;
@@ -1558,14 +1561,15 @@ queueMicrotask(() => {
   cursor: wait;
   opacity: .55;
 }
-.shogi-game__review-navigation button {
+.shogi-game__analysis-navigation button {
   min-height: 2.35rem;
   padding: 0.35rem;
   border-color: #78d4ff;
   background: linear-gradient(#285f82, #173247);
   font-size: 1.1rem;
 }
-.shogi-game__review-navigation .shogi-game__review-main-line {
+.shogi-game__analysis-navigation .shogi-game__review-main-line {
+  grid-column: 1 / -1;
   font-size: 0.85rem;
 }
 .shogi-game__assist-actions button {
@@ -1742,11 +1746,6 @@ queueMicrotask(() => {
 .shogi-game__result-actions button {
   min-width: 0;
   padding: 0.7rem 0.55rem;
-}
-.shogi-game__review {
-  border-color: #78d4ff !important;
-  background: linear-gradient(#285f82, #173247) !important;
-  box-shadow: 0 0 1rem rgba(66, 181, 255, 0.38) !important;
 }
 .shogi-game__confetti {
   position: absolute;
