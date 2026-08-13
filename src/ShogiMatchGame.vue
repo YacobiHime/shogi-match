@@ -25,6 +25,49 @@
         <strong>{{ statusText }}</strong>
         <span>{{ modeText }}・{{ moveCount }}手</span>
       </div>
+      <section class="shogi-game__opening-guide" aria-label="戦法と囲いの道しるべ">
+        <h2>やこび姫の道しるべ</h2>
+        <div class="shogi-game__opening-presets">
+          <button
+            v-for="preset in OPENING_PRESETS"
+            :key="preset.label"
+            type="button"
+            :class="{ 'is-selected': selectedStrategy === preset.strategyId && selectedCastle === preset.castleId }"
+            @click="selectOpeningPreset(preset.strategyId, preset.castleId)"
+          >
+            {{ preset.label }}
+          </button>
+        </div>
+        <div class="shogi-game__opening-selects">
+          <label>
+            <span>戦法</span>
+            <select v-model="selectedStrategy" @change="announceOpeningGuide">
+              <option value="">選択しない</option>
+              <option v-for="strategy in OPENING_STRATEGIES" :key="strategy.id" :value="strategy.id">
+                {{ strategy.label }}
+              </option>
+            </select>
+          </label>
+          <label>
+            <span>囲い</span>
+            <select v-model="selectedCastle" @change="announceOpeningGuide">
+              <option value="">選択しない</option>
+              <option v-for="castle in OPENING_CASTLES" :key="castle.id" :value="castle.id">
+                {{ castle.label }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <p>{{ openingGuideStatus }}</p>
+        <button
+          v-if="selectedStrategy || selectedCastle"
+          type="button"
+          class="shogi-game__opening-clear"
+          @click="clearOpeningGuide"
+        >
+          道しるべを終了
+        </button>
+      </section>
     </section>
 
     <div v-if="settingsOpen" class="shogi-game__settings">
@@ -79,7 +122,7 @@
         :asset-base-url="assetBaseUrl"
         :black-player-name="blackPlayerName"
         :white-player-name="effectiveWhitePlayerName"
-        :candidates="hintCandidates"
+        :candidates="boardCandidates"
         @usi-move="onPlayerMove"
       />
     </div>
@@ -306,6 +349,12 @@ import {
   returnReviewToMainLine,
   visibleReviewMoves,
 } from "./core/review-navigation.mjs";
+import {
+  nextOpeningPlanMove,
+  OPENING_CASTLES,
+  OPENING_PRESETS,
+  OPENING_STRATEGIES,
+} from "./core/opening-guide.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
@@ -369,6 +418,8 @@ const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
+const selectedStrategy = ref("");
+const selectedCastle = ref("");
 const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
@@ -544,6 +595,64 @@ const opponentFormationText = computed(() =>
     ? blackFormationText.value
     : whiteFormationText.value
 );
+const openingPlanCandidate = computed(() => {
+  // currentSfen is intentionally read here so the non-ref move history is reconsidered after every move.
+  const sfen = currentSfen.value;
+  if (
+    reviewMode.value
+    || !active.value
+    || !canMove.value
+    || (!selectedStrategy.value && !selectedCastle.value)
+  ) return null;
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+  return nextOpeningPlanMove({
+    strategyId: selectedStrategy.value,
+    castleId: selectedCastle.value,
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: playerMoves,
+    legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi),
+    detectedFormations: formationNamesForColor(sfen, humanColor.value),
+  });
+});
+const boardCandidates = computed(() => (
+  hintCandidates.value.length
+    ? hintCandidates.value
+    : openingPlanCandidate.value ? [{ usi: openingPlanCandidate.value.usi }] : []
+));
+const openingGuideStatus = computed(() => {
+  if (!selectedStrategy.value && !selectedCastle.value) return "作りたい戦法と囲いを選んでね。";
+  if (reviewMode.value) return "道しるべは対局中に表示するよ。";
+  if (!canMove.value) return "あなたの手番になったら、次の一手を矢印で示すよ。";
+  if (!openingPlanCandidate.value) return "形が完成したか、今の局面では予定手を指せないみたい。";
+  const phase = openingPlanCandidate.value.phase === "strategy" ? "戦法" : "囲い";
+  return `${phase}の次の一手：${formatHintMove(openingPlanCandidate.value.usi, currentSfen.value)}`;
+});
+
+function selectedOpeningLabel() {
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value)?.label;
+  const castle = OPENING_CASTLES.find(({ id }) => id === selectedCastle.value)?.label;
+  return [strategy, castle].filter(Boolean).join("＋");
+}
+
+function announceOpeningGuide() {
+  const label = selectedOpeningLabel();
+  if (label && coachLevel.value !== "off") {
+    guideText.value = `${label}を目指そう。盤の矢印を参考にしてね！`;
+  }
+}
+
+function selectOpeningPreset(strategyId: string, castleId: string) {
+  selectedStrategy.value = strategyId;
+  selectedCastle.value = castleId;
+  announceOpeningGuide();
+}
+
+function clearOpeningGuide() {
+  selectedStrategy.value = "";
+  selectedCastle.value = "";
+  if (coachLevel.value !== "off") guideText.value = "道しるべを終了したよ。";
+}
 
 function formationNamesForColor(sfen: string, color: Color): string[] {
   const key = color === Color.BLACK ? "black" : "white";
@@ -1608,6 +1717,9 @@ queueMicrotask(() => {
   min-height: 0;
   padding-right: 0;
 }
+.shogi-game__opening-guide {
+  display: none;
+}
 .shogi-game__player-zone--player {
   grid-column: 2;
   grid-row: 3;
@@ -2188,6 +2300,75 @@ queueMicrotask(() => {
   .shogi-game__player-zone--opponent .shogi-game__status {
     grid-column: 1;
     grid-row: 2;
+  }
+  .shogi-game__opening-guide {
+    display: flex;
+    grid-column: 1;
+    grid-row: 3;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 0.8rem;
+    overflow: auto;
+    border: 2px solid var(--gold);
+    background: linear-gradient(155deg, rgba(69, 29, 40, 0.98), rgba(34, 18, 23, 0.98));
+    box-shadow: inset 0 0 1.5rem rgba(110, 34, 53, 0.42);
+  }
+  .shogi-game__opening-guide h2 {
+    margin: 0;
+    color: #f4d890;
+    font-size: 1rem;
+    text-align: center;
+  }
+  .shogi-game__opening-presets {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .shogi-game__opening-presets button,
+  .shogi-game__opening-clear {
+    min-width: 0;
+    padding: 0.45rem 0.35rem;
+    border-radius: 0.35rem;
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+  .shogi-game__opening-presets button.is-selected {
+    color: #281219;
+    background: linear-gradient(#f8e1a0, #c79237);
+    box-shadow: 0 0 0.55rem rgba(244, 216, 144, 0.45);
+  }
+  .shogi-game__opening-selects {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+  }
+  .shogi-game__opening-selects label {
+    display: grid;
+    min-width: 0;
+    gap: 0.2rem;
+    color: #f4d890;
+    font-size: 0.75rem;
+  }
+  .shogi-game__opening-selects select {
+    width: 100%;
+    min-width: 0;
+    padding: 0.35rem 0.2rem;
+    border: 1px solid var(--gold);
+    color: #fff8ee;
+    background: #25151a;
+    font: inherit;
+  }
+  .shogi-game__opening-guide p {
+    margin: 0;
+    padding: 0.55rem;
+    border-left: 3px solid #55bfe9;
+    color: #f7eee8;
+    background: rgba(7, 80, 116, 0.23);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+  .shogi-game__opening-clear {
+    margin-top: auto;
   }
   .shogi-game__dialogue {
     grid-column: 1;
