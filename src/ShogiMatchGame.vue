@@ -73,6 +73,13 @@
             <option value="yagura">矢倉</option>
           </select>
         </label>
+        <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
+          <span>手番</span>
+          <select v-model="selectedPlayerColor" aria-label="自分の手番">
+            <option value="black">先手</option>
+            <option value="white">後手</option>
+          </select>
+        </label>
         <span v-else-if="normalizedMode === 'cpu'" class="shogi-game__strength">
           簡易CPU（強さ変更不可）
         </span>
@@ -174,13 +181,6 @@
             <option v-for="strategy in OPENING_STRATEGIES" :key="strategy.id" :value="strategy.id">
               {{ strategy.label }}
             </option>
-          </select>
-        </label>
-        <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
-          <span>手番</span>
-          <select v-model="selectedPlayerColor" aria-label="自分の手番">
-            <option value="black">先手</option>
-            <option value="white">後手</option>
           </select>
         </label>
         <label>
