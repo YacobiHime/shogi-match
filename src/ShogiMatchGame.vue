@@ -27,17 +27,6 @@
       </div>
       <section class="shogi-game__opening-guide" aria-label="やこび姫補助">
         <h2>やこび姫補助</h2>
-        <div class="shogi-game__opening-presets">
-          <button
-            v-for="preset in OPENING_PRESETS"
-            :key="preset.label"
-            type="button"
-            :class="{ 'is-selected': selectedStrategy === preset.strategyId && selectedCastle === preset.castleId }"
-            @click="selectOpeningPreset(preset.strategyId, preset.castleId)"
-          >
-            {{ preset.label }}
-          </button>
-        </div>
         <div class="shogi-game__opening-selects">
           <label>
             <span>戦法</span>
@@ -352,7 +341,6 @@ import {
 import {
   nextOpeningPlanMove,
   OPENING_CASTLES,
-  OPENING_PRESETS,
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
@@ -640,12 +628,6 @@ function announceOpeningGuide() {
   if (label && coachLevel.value !== "off") {
     guideText.value = `${label}を目指そう。盤の矢印を参考にしてね！`;
   }
-}
-
-function selectOpeningPreset(strategyId: string, castleId: string) {
-  selectedStrategy.value = strategyId;
-  selectedCastle.value = castleId;
-  announceOpeningGuide();
 }
 
 function clearOpeningGuide() {
@@ -2305,10 +2287,11 @@ queueMicrotask(() => {
     display: flex;
     grid-column: 1;
     grid-row: 3;
-    min-height: 0;
+    align-self: end;
+    max-height: 100%;
     flex-direction: column;
-    gap: 0.55rem;
-    padding: 0.8rem;
+    gap: 0.4rem;
+    padding: 0.6rem;
     overflow: auto;
     border: 2px solid var(--gold);
     background: linear-gradient(155deg, rgba(69, 29, 40, 0.98), rgba(34, 18, 23, 0.98));
@@ -2317,25 +2300,15 @@ queueMicrotask(() => {
   .shogi-game__opening-guide h2 {
     margin: 0;
     color: #f4d890;
-    font-size: 1rem;
+    font-size: 0.9rem;
     text-align: center;
   }
-  .shogi-game__opening-presets {
-    display: grid;
-    gap: 0.35rem;
-  }
-  .shogi-game__opening-presets button,
   .shogi-game__opening-clear {
     min-width: 0;
-    padding: 0.45rem 0.35rem;
+    padding: 0.35rem;
     border-radius: 0.35rem;
     font-size: 0.78rem;
     line-height: 1.25;
-  }
-  .shogi-game__opening-presets button.is-selected {
-    color: #281219;
-    background: linear-gradient(#f8e1a0, #c79237);
-    box-shadow: 0 0 0.55rem rgba(244, 216, 144, 0.45);
   }
   .shogi-game__opening-selects {
     display: grid;
@@ -2360,15 +2333,15 @@ queueMicrotask(() => {
   }
   .shogi-game__opening-guide p {
     margin: 0;
-    padding: 0.55rem;
+    padding: 0.4rem 0.5rem;
     border-left: 3px solid #55bfe9;
     color: #f7eee8;
     background: rgba(7, 80, 116, 0.23);
-    font-size: 0.78rem;
-    line-height: 1.45;
+    font-size: 0.74rem;
+    line-height: 1.35;
   }
   .shogi-game__opening-clear {
-    margin-top: auto;
+    margin-top: 0;
   }
   .shogi-game__dialogue {
     grid-column: 1;
