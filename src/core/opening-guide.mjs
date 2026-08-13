@@ -258,3 +258,39 @@ export function nextOpeningPlanMove({
     && legal.has(usi)
   )) ?? null;
 }
+
+export function isOpeningPlanComplete({
+  strategyId,
+  castleId,
+  color = "black",
+  playedMoves = [],
+  detectedFormations = [],
+}) {
+  if (!strategyId && !castleId) return false;
+  const detected = new Set(detectedFormations);
+  const played = new Set(playedMoves);
+  const steps = openingPlanSteps(strategyId, castleId, color);
+  const phaseComplete = (id, phase, entries) => {
+    if (!id) return true;
+    const definitions = phase === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
+    const definition = definitions.find(({ id: candidateId }) => candidateId === id);
+    if (!definition) return false;
+    if (definition.detectionNames.some((name) => detected.has(name))) return true;
+    return entries.length > 0 && entries.every(({ usi }) => played.has(usi));
+  };
+  return phaseComplete(
+    strategyId,
+    "strategy",
+    steps.filter(({ phase }) => phase === "strategy"),
+  ) && phaseComplete(
+    castleId,
+    "castle",
+    steps.filter(({ phase }) => phase === "castle"),
+  );
+}
+
+export function openingFollowupCount(random = Math.random) {
+  const value = Number(random());
+  const normalized = Number.isFinite(value) ? Math.max(0, Math.min(0.999999, value)) : 0;
+  return 3 + Math.floor(normalized * 3);
+}

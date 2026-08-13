@@ -363,7 +363,9 @@ import {
   visibleReviewMoves,
 } from "./core/review-navigation.mjs";
 import {
+  isOpeningPlanComplete,
   nextOpeningPlanMove,
+  openingFollowupCount,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
@@ -433,6 +435,9 @@ const reviewCpuEnabled = ref(false);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
+const openingFollowupCandidates = ref<{ usi: string; score?: number }[]>([]);
+const openingFollowupRemaining = ref(0);
+const openingFollowupStarted = ref(false);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const selectedStrategy = ref("");
@@ -462,6 +467,8 @@ let reviewCpuGeneration = 0;
 let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachRunning = false;
+let openingFollowupGeneration = 0;
+let openingFollowupLoading = false;
 let cpuOpeningPlan: { strategyId: string; castleId: string; label: string } | null = null;
 const positionAnalysisCache = createPositionAnalysisCache();
 
@@ -636,15 +643,39 @@ const openingPlanCandidate = computed(() => {
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
   });
 });
+const openingPlanComplete = computed(() => {
+  const sfen = currentSfen.value;
+  if (reviewMode.value || !active.value || (!selectedStrategy.value && !selectedCastle.value)) {
+    return false;
+  }
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+  return isOpeningPlanComplete({
+    strategyId: selectedStrategy.value,
+    castleId: selectedCastle.value,
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: playerMoves,
+    detectedFormations: formationNamesForColor(sfen, humanColor.value),
+  });
+});
 const boardCandidates = computed(() => (
   hintCandidates.value.length
     ? hintCandidates.value
-    : openingPlanCandidate.value ? [{ usi: openingPlanCandidate.value.usi }] : []
+    : openingPlanCandidate.value
+      ? [{ usi: openingPlanCandidate.value.usi }]
+      : openingFollowupCandidates.value
 ));
 const openingGuideStatus = computed(() => {
   if (!selectedStrategy.value && !selectedCastle.value) return "";
   if (reviewMode.value) return "道しるべは対局中に表示するよ。";
   if (!canMove.value) return "あなたの手番になったら、次の一手を矢印で示すよ。";
+  if (openingFollowupCandidates.value.length) {
+    return openingFollowupRemaining.value > 0
+      ? `完成後の候補手を3手表示中（あと${openingFollowupRemaining.value}回）`
+      : "完成後の候補手を3手表示中（今回で最後）";
+  }
+  if (openingPlanComplete.value && openingFollowupLoading) return "形が完成したね。次の3手を考えているよ…";
+  if (openingPlanComplete.value && openingFollowupStarted.value) return "形が完成したね！";
   if (!openingPlanCandidate.value) return "形が完成したか、今の局面では予定手を指せないみたい。";
   const phase = openingPlanCandidate.value.phase === "strategy" ? "戦法" : "囲い";
   return `${phase}の次の一手：${formatHintMove(openingPlanCandidate.value.usi, currentSfen.value)}`;
@@ -657,10 +688,12 @@ function selectedOpeningLabel() {
 }
 
 function announceOpeningGuide() {
+  resetOpeningFollowup();
   const label = selectedOpeningLabel();
   if (label && coachLevel.value !== "off") {
     guideText.value = `${label}を目指そう。盤の矢印を参考にしてね！`;
   }
+  scheduleOpeningFollowupCandidates();
 }
 
 function formationNamesForColor(sfen: string, color: Color): string[] {
@@ -831,6 +864,63 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
   const analysis = await engine.go({ nodes, maxTimeMs });
   positionAnalysisCache.set(positionKey, analysis.candidates, { nodes, multiPv });
   return analysis.candidates;
+}
+
+function resetOpeningFollowup() {
+  openingFollowupGeneration += 1;
+  openingFollowupLoading = false;
+  openingFollowupCandidates.value = [];
+  openingFollowupRemaining.value = 0;
+  openingFollowupStarted.value = false;
+}
+
+function scheduleOpeningFollowupCandidates() {
+  if (
+    !engineReady.value || !engine || !active.value || reviewMode.value
+    || normalizedMode.value !== "cpu" || record.value.position.color !== humanColor.value
+    || !openingPlanComplete.value || openingFollowupLoading
+    || openingFollowupCandidates.value.length > 0
+  ) return;
+  if (!openingFollowupStarted.value) {
+    openingFollowupStarted.value = true;
+    openingFollowupRemaining.value = openingFollowupCount();
+  }
+  if (openingFollowupRemaining.value <= 0) return;
+
+  const generation = openingFollowupGeneration;
+  const historyLength = moveHistory.length;
+  openingFollowupLoading = true;
+  dedicatedCoachQueue = dedicatedCoachQueue
+    .catch(() => undefined)
+    .then(async () => {
+      if (
+        generation !== openingFollowupGeneration || !active.value || reviewMode.value
+        || moveHistory.length !== historyLength
+        || record.value.position.color !== humanColor.value
+      ) return;
+      const candidates = await analyzeCoachPosition(20000, 900, 3);
+      if (
+        generation !== openingFollowupGeneration || !active.value || reviewMode.value
+        || moveHistory.length !== historyLength
+        || record.value.position.color !== humanColor.value
+      ) return;
+      const moves = getHintMoves({
+        move: candidates.find(({ rank }) => rank === 1)?.move ?? "",
+        candidates,
+      }, 3);
+      openingFollowupCandidates.value = moves.map(({ move, score }) => ({
+        usi: move,
+        score: hintScoreForArrow(score),
+      }));
+      openingFollowupRemaining.value -= 1;
+      if (coachLevel.value !== "off") {
+        guideText.value = "形が完成したね！この先はAIの候補手を3手示すよ。";
+      }
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      if (generation === openingFollowupGeneration) openingFollowupLoading = false;
+    });
 }
 
 function updateCoachAdviceFromPlayerScore(
@@ -1045,6 +1135,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   syncPosition(usi);
   moveHistory.push(usi);
   hintCandidates.value = [];
+  openingFollowupCandidates.value = [];
   hintText.value = "";
   if (!reviewMode.value) {
     emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
@@ -1100,6 +1191,7 @@ function undoTurn() {
   playerTurnScore = undefined;
   playerTurnScoreHistoryLength = -1;
   hintCandidates.value = [];
+  resetOpeningFollowup();
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
   schedulePlayerIdleAdvice();
@@ -1354,6 +1446,7 @@ async function scheduleCpuMove() {
         updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
         scheduleDedicatedCoachAdvice();
+        scheduleOpeningFollowupCandidates();
         schedulePlayerIdleAdvice();
       }
       thinking.value = false;
@@ -1365,6 +1458,7 @@ async function scheduleCpuMove() {
       const move = selectCpuMove(record.value.position);
       if (move && applyMove(move.usi, "cpu") && active.value) {
         updateCoachAdvice();
+        scheduleOpeningFollowupCandidates();
         schedulePlayerIdleAdvice();
       }
     }
@@ -1381,6 +1475,7 @@ async function initializeEngine() {
     engine.newGame();
     engineReady.value = true;
     scheduleCpuMove();
+    scheduleOpeningFollowupCandidates();
     schedulePlayerIdleAdvice();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1407,6 +1502,7 @@ function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう
   active.value = true;
   thinking.value = false;
   hintCandidates.value = [];
+  resetOpeningFollowup();
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : message;
 }
@@ -1574,6 +1670,7 @@ function restart() {
   cpuOpeningPlan = null;
   positionAnalysisCache.clear();
   moveHistory = [];
+  resetOpeningFollowup();
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
   undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));
   hintCandidates.value = [];

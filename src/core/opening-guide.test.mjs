@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { appendUsiMove, createGameRecord } from "../game-state";
 import {
+  isOpeningPlanComplete,
   mirrorUsiMove,
   nextOpeningPlanMove,
+  openingFollowupCount,
   openingPlanSteps,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
@@ -25,6 +27,26 @@ function expectPlanLegal(strategyId, castleId, color, opponentDependent = []) {
 }
 
 describe("opening guide", () => {
+  it("distinguishes a completed plan from a temporarily unavailable next move", () => {
+    expect(isOpeningPlanComplete({
+      strategyId: "shiken",
+      playedMoves: ["7g7f", "6g6f"],
+    })).toBe(false);
+    expect(isOpeningPlanComplete({
+      strategyId: "shiken",
+      playedMoves: ["7g7f", "6g6f", "2h6h"],
+    })).toBe(true);
+    expect(isOpeningPlanComplete({
+      strategyId: "shiken",
+      detectedFormations: ["四間飛車"],
+    })).toBe(true);
+  });
+
+  it("shows three to five AI follow-up arrows", () => {
+    expect([0, 0.34, 0.99].map((value) => openingFollowupCount(() => value)))
+      .toEqual([3, 4, 5]);
+  });
+
   it("mirrors black guidance for a white player", () => {
     expect(mirrorUsiMove("7g7f")).toBe("3c3d");
     expect(mirrorUsiMove("2h6h")).toBe("8b4b");
