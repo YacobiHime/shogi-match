@@ -898,7 +898,8 @@ function scheduleOpeningFollowupCandidates() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      const candidates = await analyzeCoachPosition(20000, 900, 3);
+      // 自動表示は閃きと同じ3候補だが、毎手番使うため探索量は軽く保つ。
+      const candidates = await analyzeCoachPosition(3000, 1000, 3);
       if (
         generation !== openingFollowupGeneration || !active.value || reviewMode.value
         || moveHistory.length !== historyLength
