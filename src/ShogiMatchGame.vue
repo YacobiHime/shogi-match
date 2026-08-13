@@ -120,11 +120,11 @@
       <picture class="shogi-game__portrait shogi-game__portrait--advisor">
         <source
           media="(min-width: 1100px) and (min-aspect-ratio: 5/4)"
-          :srcset="`${assetBaseUrl}/characters/sakurano-momoka.png`"
+          :srcset="`${assetBaseUrl}/characters/sakurano-momoka.webp`"
         >
         <img
           class="shogi-game__character"
-          :src="`${assetBaseUrl}/characters/sakurano-momoka-portrait.png`"
+          :src="`${assetBaseUrl}/characters/sakurano-momoka.webp`"
           alt="助言役のやこび姫"
         >
       </picture>
@@ -1734,6 +1734,9 @@ queueMicrotask(() => {
 .shogi-game__portrait--advisor {
   bottom: 0;
   left: 0;
+}
+.shogi-game__portrait--advisor .shogi-game__character {
+  object-position: center top;
 }
 .shogi-game__player-card,
 .shogi-game__status,
