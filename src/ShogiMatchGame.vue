@@ -1,5 +1,9 @@
 <template>
-  <section class="shogi-game" aria-label="将棋対局">
+  <section
+    class="shogi-game"
+    :class="{ 'shogi-game--analysis': reviewMode && analysisOpen }"
+    aria-label="将棋対局"
+  >
     <header class="shogi-game__toolbar">
       <button type="button" class="shogi-game__command shogi-game__command--danger" :disabled="!active || reviewMode" @click="resign">
         投了
@@ -1586,20 +1590,31 @@ queueMicrotask(() => {
   box-shadow: 0 0 .8rem rgba(66, 181, 255, .3) !important;
 }
 .shogi-game__analysis {
-  position: absolute;
-  z-index: 60;
-  bottom: .6rem;
-  left: 50%;
-  width: min(58rem, calc(100% - 1.2rem));
-  max-height: calc(100% - 1.2rem);
+  z-index: 2;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
   padding: .8rem;
   overflow: auto;
-  transform: translateX(-50%);
   border: 2px solid var(--gold);
   border-radius: .7rem;
   color: var(--ink);
   background: rgba(25, 12, 18, .97);
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, .7), 0 0 1.2rem rgba(66, 181, 255, .24);
+}
+.shogi-game--analysis {
+  grid-template-rows: auto minmax(0, 1fr) minmax(16rem, 30vh);
+}
+.shogi-game--analysis .shogi-game__board-shell {
+  grid-row: 1 / 3;
+}
+.shogi-game--analysis .shogi-game__analysis {
+  grid-column: 1;
+  grid-row: 3;
+}
+.shogi-game__analysis .evaluation-graph__svg {
+  height: clamp(8rem, 18vh, 11rem);
+  min-height: 0;
 }
 .shogi-game__analysis-header {
   display: grid;
@@ -1918,6 +1933,23 @@ queueMicrotask(() => {
     grid-row: 4;
     margin-left: 0;
   }
+  .shogi-game--analysis {
+    grid-template-rows: auto minmax(0, 1fr) minmax(15rem, 30vh);
+  }
+  .shogi-game--analysis .shogi-game__board-shell {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+  .shogi-game--analysis .shogi-game__player-zone--opponent {
+    grid-row: 1 / 3;
+  }
+  .shogi-game--analysis .shogi-game__player-zone--player {
+    grid-row: 2;
+  }
+  .shogi-game--analysis .shogi-game__analysis {
+    grid-column: 2 / 4;
+    grid-row: 3;
+  }
 }
 @media (max-width: 899px), (max-aspect-ratio: 5/4) {
   .shogi-game {
@@ -1979,6 +2011,20 @@ queueMicrotask(() => {
     min-height: 2.35rem;
     padding: 0.4rem 0.75rem;
   }
+  .shogi-game--analysis {
+    grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) minmax(18rem, 32vh) 8.75rem;
+  }
+  .shogi-game--analysis .shogi-game__analysis {
+    grid-column: 1;
+    grid-row: 4;
+  }
+  .shogi-game--analysis .shogi-game__board-shell {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .shogi-game--analysis .shogi-game__player-zone--player {
+    grid-row: 5;
+  }
 }
 @media (min-width: 541px) and (max-aspect-ratio: 5/4) {
   .shogi-game {
@@ -2007,11 +2053,7 @@ queueMicrotask(() => {
   }
 }
 @media (max-width: 540px) {
-  .shogi-game__analysis {
-    bottom: .3rem;
-    width: calc(100% - .6rem);
-    padding: .55rem;
-  }
+  .shogi-game__analysis { padding: .55rem; }
   .shogi-game__analysis-header {
     grid-template-columns: 1fr;
     gap: .35rem;
@@ -2020,6 +2062,9 @@ queueMicrotask(() => {
     grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) 3.4rem;
     padding: 0.4rem;
     border-radius: 0;
+  }
+  .shogi-game--analysis {
+    grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) minmax(16rem, 34vh) 3.4rem;
   }
   .shogi-game__toolbar {
     gap: 0.4rem;
