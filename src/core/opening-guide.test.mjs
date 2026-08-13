@@ -4,7 +4,8 @@ import {
   mirrorUsiMove,
   nextOpeningPlanMove,
   openingPlanSteps,
-  OPENING_PRESETS,
+  OPENING_CASTLES,
+  OPENING_STRATEGIES,
 } from "./opening-guide.mjs";
 
 function withTurn(sfen, color) {
@@ -13,11 +14,13 @@ function withTurn(sfen, color) {
   return fields.join(" ");
 }
 
-function expectPlanLegal(strategyId, castleId, color) {
+function expectPlanLegal(strategyId, castleId, color, opponentDependent = []) {
   let record = createGameRecord();
   for (const { usi } of openingPlanSteps(strategyId, castleId, color)) {
     record = createGameRecord(withTurn(record.position.sfen, color));
-    expect(appendUsiMove(record, usi), `${color}: ${usi}`).toBe(true);
+    const applied = appendUsiMove(record, usi);
+    if (!applied && opponentDependent.includes(usi)) continue;
+    expect(applied, `${color}: ${usi}`).toBe(true);
   }
 }
 
@@ -27,9 +30,16 @@ describe("opening guide", () => {
     expect(mirrorUsiMove("2h6h")).toBe("8b4b");
   });
 
-  it.each(OPENING_PRESETS)("uses a legal sequence for $label", ({ strategyId, castleId }) => {
-    expectPlanLegal(strategyId, castleId, "black");
-    expectPlanLegal(strategyId, castleId, "white");
+  it.each(OPENING_STRATEGIES)("uses a legal strategy sequence for $label", ({ id }) => {
+    const blackConditional = id === "kakugawari" ? ["8h2b+"] : [];
+    const whiteConditional = id === "kakugawari" ? ["2b8h+"] : [];
+    expectPlanLegal(id, "", "black", blackConditional);
+    expectPlanLegal(id, "", "white", whiteConditional);
+  });
+
+  it.each(OPENING_CASTLES)("uses a legal castle sequence for $label", ({ id }) => {
+    expectPlanLegal("", id, "black");
+    expectPlanLegal("", id, "white");
   });
 
   it("skips played and currently illegal steps", () => {
