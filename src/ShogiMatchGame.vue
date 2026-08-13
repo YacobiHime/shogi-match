@@ -125,6 +125,12 @@
           :disabled="thinking && !analysisRunning"
           @click="openKifuAnalysis"
         >{{ analysisRunning ? "解析中…" : analysisPoints.length ? "解析グラフ" : "棋譜解析" }}</button>
+        <button
+          v-if="reviewMode && reviewCpuEnabled"
+          type="button"
+          class="shogi-game__review-cpu-stop"
+          @click="stopReviewCpu"
+        >対CPU検討を終了</button>
       </div>
       <div class="shogi-game__player-card">
         <span>{{ playerSideLabel }}</span>
@@ -149,6 +155,7 @@
             :max="reviewNavigation.line.length"
             step="1"
             :value="reviewNavigation.cursor"
+            :disabled="reviewCpuEnabled"
             aria-label="表示する局面の手数"
             @input="onReviewSliderInput"
             @change="scheduleReviewCoachAdvice()"
@@ -156,6 +163,7 @@
         </div>
         <select
           :value="reviewNavigation.cursor"
+          :disabled="reviewCpuEnabled"
           aria-label="表示する局面"
           @change="onAnalysisPositionSelect"
         >
@@ -174,17 +182,24 @@
         @select="goToAnalysisPly"
       />
       <div class="shogi-game__analysis-actions">
-        <button type="button" aria-label="開始局面へ" :disabled="reviewNavigation.cursor === 0" @click="goToAnalysisPly(0)">&lt;&lt;</button>
-        <button type="button" aria-label="一手戻る" :disabled="reviewNavigation.cursor === 0" @click="navigateAnalysis(-1)">&lt;</button>
-        <button type="button" aria-label="一手進む" :disabled="reviewNavigation.cursor >= reviewNavigation.line.length" @click="navigateAnalysis(1)">&gt;</button>
-        <button type="button" aria-label="最終局面へ" :disabled="reviewNavigation.cursor >= reviewNavigation.line.length" @click="goToAnalysisPly(reviewNavigation.line.length)">&gt;&gt;</button>
+        <button type="button" aria-label="開始局面へ" :disabled="reviewCpuEnabled || reviewNavigation.cursor === 0" @click="goToAnalysisPly(0)">&lt;&lt;</button>
+        <button type="button" aria-label="一手戻る" :disabled="reviewCpuEnabled || reviewNavigation.cursor === 0" @click="navigateAnalysis(-1)">&lt;</button>
+        <button type="button" aria-label="一手進む" :disabled="reviewCpuEnabled || reviewNavigation.cursor >= reviewNavigation.line.length" @click="navigateAnalysis(1)">&gt;</button>
+        <button type="button" aria-label="最終局面へ" :disabled="reviewCpuEnabled || reviewNavigation.cursor >= reviewNavigation.line.length" @click="goToAnalysisPly(reviewNavigation.line.length)">&gt;&gt;</button>
         <button type="button" :disabled="!canUseHint" @click="showHint">ヒント</button>
         <button type="button" :disabled="!analysisCurrentPoint?.bestMove" @click="showAnalysisRecommendation">推奨</button>
         <button type="button" :disabled="!analysisCurrentPoint?.pv?.length" @click="showAnalysisLine">読み</button>
         <button type="button" @click="analysisFlip = !analysisFlip">反転</button>
         <button v-if="reviewNavigation.branch" type="button" @click="returnToMainLine">本筋</button>
         <button v-if="analysisRunning" type="button" @click="cancelKifuAnalysis">中止</button>
-        <button v-else type="button" @click="runKifuAnalysis">再解析</button>
+        <button v-else type="button" :disabled="reviewCpuEnabled" @click="runKifuAnalysis">再解析</button>
+        <button
+          v-if="!reviewCpuEnabled"
+          type="button"
+          :disabled="analysisRunning || thinking || !engineReady"
+          @click="startReviewCpu"
+        >ここから対CPU</button>
+        <button v-else type="button" @click="stopReviewCpu">対CPU終了</button>
         <button type="button" @click="analysisOpen = false">閉じる</button>
       </div>
     </section>
@@ -346,6 +361,7 @@ const analysisProgress = ref(0);
 const analysisTotal = ref(0);
 const analysisPoints = ref<AnalysisPoint[]>([]);
 const analysisFlip = ref(false);
+const reviewCpuEnabled = ref(false);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
@@ -368,6 +384,7 @@ let moveHistory: string[] = [];
 let boardResizeObserver: ResizeObserver | undefined;
 let reviewCoachGeneration = 0;
 let analysisGeneration = 0;
+let reviewCpuGeneration = 0;
 let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachRunning = false;
@@ -440,7 +457,9 @@ const strengthLabel = computed(() =>
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
-  (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
+  (reviewMode.value
+    ? (!reviewCpuEnabled.value || record.value.position.color === humanColor.value)
+    : normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
 const canUseHint = computed(() =>
   canMove.value
@@ -458,6 +477,9 @@ const canUndo = computed(() =>
   && (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
 const statusText = computed(() => {
+  if (reviewMode.value && reviewCpuEnabled.value) {
+    return thinking.value ? `${props.cpuPlayerName}が考えています…` : "対CPU検討中です";
+  }
   if (reviewMode.value) return "棋譜解析中です";
   if (result.value) {
     if (!result.value.winner) return "引き分け";
@@ -751,7 +773,7 @@ function scheduleDedicatedCoachAdvice(
 }
 
 function scheduleReviewCoachAdvice() {
-  if (!reviewMode.value || analysisRunning.value || coachLevel.value === "off") return;
+  if (!reviewMode.value || reviewCpuEnabled.value || analysisRunning.value || coachLevel.value === "off") return;
   const generation = ++reviewCoachGeneration;
   reviewCoachQueue = reviewCoachQueue.catch(() => undefined).then(async () => {
     if (generation !== reviewCoachGeneration || !reviewMode.value || !engineReady.value) return;
@@ -864,6 +886,7 @@ function undoTurn() {
 }
 
 function onReviewSliderInput(event: Event) {
+  if (reviewCpuEnabled.value) return;
   const target = event.target as HTMLInputElement;
   const cursor = Math.max(0, Math.min(
     reviewNavigation.value.line.length,
@@ -879,6 +902,7 @@ function onReviewSliderInput(event: Event) {
 }
 
 function onAnalysisPositionSelect(event: Event) {
+  if (reviewCpuEnabled.value) return;
   goToAnalysisPly(Number((event.target as HTMLSelectElement).value));
 }
 
@@ -911,6 +935,7 @@ function showAnalysisLine() {
 }
 
 function navigateAnalysis(delta: number) {
+  if (reviewCpuEnabled.value) return;
   reviewNavigation.value = moveReviewCursor(reviewNavigation.value, delta);
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   hintCandidates.value = [];
@@ -919,6 +944,7 @@ function navigateAnalysis(delta: number) {
 }
 
 function returnToMainLine() {
+  if (reviewCpuEnabled.value) return;
   reviewNavigation.value = returnReviewToMainLine(reviewNavigation.value);
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   hintCandidates.value = [];
@@ -933,10 +959,94 @@ function onPlayerMove(usi: string) {
   if (!reviewMode.value && dedicatedCoachRunning) engine?.stop();
   if (reviewMode.value) {
     reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
-    scheduleReviewCoachAdvice();
+    if (reviewCpuEnabled.value) {
+      scheduleReviewCpuMove();
+    } else {
+      scheduleReviewCoachAdvice();
+    }
   } else {
     scheduleCpuMove();
   }
+}
+
+function startReviewCpu() {
+  if (!reviewMode.value || !engineReady.value || analysisRunning.value || thinking.value) return;
+  reviewCoachGeneration += 1;
+  reviewCpuGeneration += 1;
+  reviewCpuEnabled.value = true;
+  analysisOpen.value = false;
+  hintCandidates.value = [];
+  hintText.value = "";
+  guideText.value = coachLevel.value === "off"
+    ? ""
+    : "ここから相手をするね。閃きは何度でも使えるよ！";
+  scheduleReviewCpuMove();
+}
+
+function stopReviewCpu() {
+  if (!reviewCpuEnabled.value) return;
+  reviewCpuEnabled.value = false;
+  reviewCpuGeneration += 1;
+  if (cpuTimer) {
+    clearTimeout(cpuTimer);
+    cpuTimer = undefined;
+  }
+  if (thinking.value) engine?.stop();
+  thinking.value = false;
+  guideText.value = coachLevel.value === "off" ? "" : "対CPU検討を終了したよ。";
+}
+
+function scheduleReviewCpuMove() {
+  if (
+    !reviewMode.value || !reviewCpuEnabled.value || !active.value
+    || record.value.position.color === humanColor.value || thinking.value
+  ) return;
+  const generation = reviewCpuGeneration;
+  thinking.value = true;
+  cpuTimer = setTimeout(async () => {
+    try {
+      if (
+        generation !== reviewCpuGeneration || !reviewCpuEnabled.value
+        || record.value.position.color === humanColor.value
+      ) return;
+      let usi = "";
+      if (usesRandomLegalMove(searchNodes.value)) {
+        usi = selectCpuMove(record.value.position)?.usi ?? "";
+      } else if (engine && engineReady.value) {
+        const strength = getStrengthSearchSettings(searchNodes.value);
+        engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        engine.setPosition(currentEnginePosition());
+        const search = await engine.go({
+          nodes: strength.nodes,
+          maxTimeMs: 8000,
+        });
+        if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
+        usi = selectMoveByRank(
+          search,
+          strength.moveRank,
+          Math.random,
+          { maxScoreLoss: strength.maxScoreLoss },
+        ).move;
+      } else {
+        usi = selectCpuMove(record.value.position)?.usi ?? "";
+      }
+      if (!usi) {
+        reviewCpuEnabled.value = false;
+        guideText.value = coachLevel.value === "off" ? "" : "この局面はもう指せる手がないね。";
+        return;
+      }
+      if (applyMove(usi, "cpu")) {
+        reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
+        guideText.value = coachLevel.value === "off" ? "" : "相手が指したよ。じっくり考えてみよう！";
+      }
+    } catch (error) {
+      if (generation !== reviewCpuGeneration) return;
+      const message = error instanceof Error ? error.message : String(error);
+      errorMessage.value = `対CPU検討の思考に失敗しました: ${message}`;
+    } finally {
+      if (generation === reviewCpuGeneration) thinking.value = false;
+    }
+  }, Math.max(0, props.cpuDelayMs));
 }
 
 async function scheduleCpuMove() {
@@ -1054,6 +1164,8 @@ function resign() {
 
 function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう！") {
   if (cpuTimer) clearTimeout(cpuTimer);
+  reviewCpuGeneration += 1;
+  reviewCpuEnabled.value = false;
   resultDialogOpen.value = false;
   reviewMode.value = true;
   reviewNavigation.value = createReviewNavigation(moveHistory);
@@ -1077,7 +1189,7 @@ function openKifuAnalysis() {
 }
 
 async function runKifuAnalysis() {
-  if (!engine || !engineReady.value || analysisRunning.value) return;
+  if (!engine || !engineReady.value || analysisRunning.value || reviewCpuEnabled.value) return;
   const generation = ++analysisGeneration;
   analysisRunning.value = true;
   analysisProgress.value = 0;
@@ -1183,6 +1295,7 @@ function cancelKifuAnalysis() {
 }
 
 function goToAnalysisPly(ply: number) {
+  if (reviewCpuEnabled.value) return;
   const mainLine = reviewNavigation.value.mainLine;
   const cursor = Math.max(0, Math.min(mainLine.length, Math.trunc(ply)));
   reviewNavigation.value = {
@@ -1199,6 +1312,8 @@ function goToAnalysisPly(ply: number) {
 
 function restart() {
   if (cpuTimer) clearTimeout(cpuTimer);
+  reviewCpuGeneration += 1;
+  reviewCpuEnabled.value = false;
   analysisGeneration += 1;
   if (analysisRunning.value) engine?.stop();
   settingsOpen.value = false;
@@ -1243,7 +1358,7 @@ watch(() => props.engineNodes, (value) => {
 watch(coachLevel, (level) => {
   coachAdviceLastShownAt.clear();
   guideText.value = level === "off" ? "" : INITIAL_GUIDE_TEXT;
-  if (reviewMode.value && !analysisRunning.value && level !== "off") {
+  if (reviewMode.value && !reviewCpuEnabled.value && !analysisRunning.value && level !== "off") {
     scheduleReviewCoachAdvice();
   } else if (
     level !== "off" && engineReady.value && active.value && !thinking.value
@@ -1255,6 +1370,7 @@ watch(coachLevel, (level) => {
 onBeforeUnmount(() => {
   analysisGeneration += 1;
   reviewCoachGeneration += 1;
+  reviewCpuGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
   engine?.quit();
   boardResizeObserver?.disconnect();
