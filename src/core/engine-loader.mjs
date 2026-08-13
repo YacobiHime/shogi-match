@@ -12,6 +12,25 @@ const ENGINE_PROFILES = Object.freeze({
 const scriptPromisesByDocument = new WeakMap();
 const DEFAULT_LOADER_TIMEOUT_MS = 30_000;
 
+function engineAssetUrl(path, scriptUrl) {
+  try {
+    return new URL(path, new URL('.', scriptUrl)).href;
+  } catch {
+    const cleanScriptUrl = String(scriptUrl).split(/[?#]/, 1)[0];
+    const lastSlash = cleanScriptUrl.lastIndexOf('/');
+    return `${lastSlash >= 0 ? cleanScriptUrl.slice(0, lastSlash + 1) : ''}${path}`;
+  }
+}
+
+/** Emscriptenのdata/wasmをローダーと同じディレクトリから取得させる。 */
+export function withEngineAssetLocation(factory, scriptUrl) {
+  return (moduleOptions = {}) => factory({
+    ...moduleOptions,
+    locateFile: moduleOptions.locateFile
+      ?? ((path) => engineAssetUrl(path, scriptUrl)),
+  });
+}
+
 /**
  * classic script形式のEmscriptenローダーを一度だけ読み込み、ファクトリ関数を返す。
  */
@@ -27,14 +46,17 @@ export async function loadEngineFactory(
   const profile = ENGINE_PROFILES[profileName];
   if (!profile) throw new Error(`不明なエンジンプロファイルです: ${profileName}`);
 
-  if (typeof globalObject[profile.globalName] === 'function') {
-    return globalObject[profile.globalName];
-  }
   if (!documentObject?.head) {
     throw new Error('エンジンローダーを読み込むdocumentがありません');
   }
   if (!Number.isInteger(loaderTimeoutMs) || loaderTimeoutMs < 1) {
     throw new Error('loaderTimeoutMsは1以上の整数にしてください');
+  }
+  const scriptUrl = documentObject.baseURI
+    ? new URL(profile.scriptPath, new URL(engineBaseUrl, documentObject.baseURI)).href
+    : profile.scriptPath;
+  if (typeof globalObject[profile.globalName] === 'function') {
+    return withEngineAssetLocation(globalObject[profile.globalName], scriptUrl);
   }
   let scriptPromises = scriptPromisesByDocument.get(documentObject);
   if (!scriptPromises) {
@@ -45,9 +67,7 @@ export async function loadEngineFactory(
   if (!scriptPromises.has(profileName)) {
     const promise = new Promise((resolve, reject) => {
       const script = documentObject.createElement('script');
-      script.src = documentObject.baseURI
-        ? new URL(profile.scriptPath, new URL(engineBaseUrl, documentObject.baseURI)).href
-        : profile.scriptPath;
+      script.src = scriptUrl;
       script.async = true;
       const timeoutId = setTimeout(() => {
         reject(new Error(
@@ -58,7 +78,7 @@ export async function loadEngineFactory(
         clearTimeout(timeoutId);
         const factory = globalObject[profile.globalName];
         if (typeof factory === 'function') {
-          resolve(factory);
+          resolve(withEngineAssetLocation(factory, scriptUrl));
         } else {
           reject(new Error(`${profile.globalName} が公開されませんでした`));
         }
