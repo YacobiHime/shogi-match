@@ -15,6 +15,17 @@
       }
     },
     {
+      "id": "tac_match_fujii_system",
+      "group": "tac_match",
+      "name": "藤井システム",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/2PP4P/2B6/2SRG1S2/4K4 b - 1"
+        }
+      }
+    },
+    {
       "id": "enc_match_1",
       "group": "enc_match",
       "name": "銀冠",

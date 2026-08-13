@@ -30,6 +30,12 @@ export const OPENING_STRATEGIES = [
     blackMoves: ["7g7f", "6g6f", "2h6h"],
   },
   {
+    id: "fujii-system",
+    label: "藤井システム",
+    detectionNames: ["藤井システム"],
+    blackMoves: ["7g7f", "6g6f", "2h6h", "1g1f", "8h7g", "3i3h", "6i5h", "7i7h"],
+  },
+  {
     id: "sangen",
     label: "三間飛車",
     detectionNames: ["三間飛車", "ノーマル三間飛車"],
