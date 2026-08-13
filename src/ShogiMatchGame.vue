@@ -25,7 +25,7 @@
         <strong>{{ statusText }}</strong>
         <span>{{ modeText }}・{{ moveCount }}手</span>
       </div>
-      <section class="shogi-game__opening-guide" aria-label="やこび姫補助">
+      <section class="shogi-game__opening-guide shogi-game__opening-guide--primary" aria-label="やこび姫補助">
         <h2>やこび姫補助</h2>
         <div class="shogi-game__opening-selects">
           <label>
@@ -170,6 +170,39 @@
         <small>{{ normalizedMode === "cpu" ? "あなた" : modeText }}</small>
         <div><b>戦型</b><span>{{ playerFormationText }}</span></div>
       </div>
+    </section>
+
+    <section class="shogi-game__opening-guide shogi-game__opening-guide--portrait" aria-label="やこび姫補助">
+      <h2>やこび姫補助</h2>
+      <div class="shogi-game__opening-selects">
+        <label>
+          <span>戦法</span>
+          <select v-model="selectedStrategy" @change="announceOpeningGuide">
+            <option value="">選択しない</option>
+            <option v-for="strategy in OPENING_STRATEGIES" :key="strategy.id" :value="strategy.id">
+              {{ strategy.label }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span>囲い</span>
+          <select v-model="selectedCastle" @change="announceOpeningGuide">
+            <option value="">選択しない</option>
+            <option v-for="castle in OPENING_CASTLES" :key="castle.id" :value="castle.id">
+              {{ castle.label }}
+            </option>
+          </select>
+        </label>
+      </div>
+      <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
+      <button
+        v-if="selectedStrategy || selectedCastle"
+        type="button"
+        class="shogi-game__opening-clear"
+        @click="clearOpeningGuide"
+      >
+        補助を終了
+      </button>
     </section>
 
     <section
@@ -1723,6 +1756,9 @@ queueMicrotask(() => {
   background: linear-gradient(155deg, rgba(69, 29, 40, 0.98), rgba(34, 18, 23, 0.98));
   box-shadow: inset 0 0 1.5rem rgba(110, 34, 53, 0.42);
 }
+.shogi-game__opening-guide--portrait {
+  display: none;
+}
 .shogi-game__opening-guide h2 {
   margin: 0;
   color: #f4d890;
@@ -2789,6 +2825,64 @@ queueMicrotask(() => {
     min-height: 1.6rem;
     padding: 0.15rem 0.25rem;
     font-size: 0.7rem;
+  }
+}
+@media (max-aspect-ratio: 5/4) {
+  .shogi-game:not(.shogi-game--analysis) {
+    grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 10rem 5rem;
+  }
+  .shogi-game:not(.shogi-game--analysis) .shogi-game__player-zone--opponent {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .shogi-game:not(.shogi-game--analysis) .shogi-game__opening-guide--primary {
+    display: none;
+  }
+  .shogi-game:not(.shogi-game--analysis) .shogi-game__opening-guide--portrait {
+    display: grid;
+    grid-column: 1;
+    grid-row: 5;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.2rem 0.35rem;
+    align-self: stretch;
+    min-height: 0;
+    padding: 0.3rem;
+  }
+  .shogi-game__opening-guide--portrait h2 {
+    display: none;
+  }
+  .shogi-game__opening-guide--portrait .shogi-game__opening-selects {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .shogi-game__opening-guide--portrait p {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.2rem 0.35rem;
+    font-size: 0.68rem;
+  }
+  .shogi-game__opening-guide--portrait .shogi-game__opening-clear {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    min-height: 1.7rem;
+    padding: 0.2rem;
+    font-size: 0.68rem;
+  }
+}
+@media (max-width: 540px) and (max-aspect-ratio: 5/4) {
+  .shogi-game:not(.shogi-game--analysis) {
+    grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) 6.5rem 4.5rem;
+  }
+  .shogi-game:not(.shogi-game--analysis) .shogi-game__player-zone--opponent {
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+@media (max-width: 360px) and (max-aspect-ratio: 5/4) {
+  .shogi-game:not(.shogi-game--analysis) {
+    grid-template-rows: 5.5rem 4.5rem minmax(0, 1fr) 6.5rem 4.5rem;
   }
 }
 </style>
