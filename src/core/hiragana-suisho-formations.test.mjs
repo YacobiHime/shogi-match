@@ -14,8 +14,8 @@ const master = JSON.parse(await readFile(
 
 describe('HiraganaSuisho原典互換判定', () => {
   test('原典133件と追加囲いを読み込む', () => {
-    expect(master.rules).toHaveLength(134);
-    expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(29);
+    expect(master.rules).toHaveLength(135);
+    expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(30);
   });
 
   test('先手と後手の共通作戦を盤面反転して判定する', () => {
@@ -140,5 +140,21 @@ describe('HiraganaSuisho原典互換判定', () => {
     const incomplete = '4k4/9/9/9/9/9/4PPPPP/5G1K1/6SNL w - 1';
     expect(detectHiraganaSuishoFormations(incomplete, master).map(({ name }) => name))
       .not.toContain('連盟美濃');
+  });
+
+  test('居玉で金銀を整えた四間飛車を藤井システムと判定する', () => {
+    const record = createGameRecord();
+    for (const move of ['7g7f', '3c3d', '6g6f', '8c8d', '2h6h', '6a6b', '1g1f', '4a4b', '8h7g', '4b3b', '3i3h', '5a4b', '6i5h', '7a7b', '7i7h']) {
+      expect(appendUsiMove(record, move)).toBe(true);
+    }
+    const names = detectHiraganaSuishoFormations(record.position.sfen, master)
+      .map(({ name }) => name);
+    expect(names).toContain('藤井システム');
+  });
+
+  test('通常の四間飛車を藤井システムと誤判定しない', () => {
+    const ordinary = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/3P5/PPP1PPPPP/1B1R5/LNSGKGSNL w - 1';
+    expect(detectHiraganaSuishoFormations(ordinary, master).map(({ name }) => name))
+      .not.toContain('藤井システム');
   });
 });

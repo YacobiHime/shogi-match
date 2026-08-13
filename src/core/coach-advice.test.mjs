@@ -121,6 +121,14 @@ describe('対局中の応援・助言', () => {
     expect(next?.text).toContain('端攻め');
   });
 
+  test('藤井システムには居飛車穴熊を急がない助言を返す', () => {
+    const advice = getCoachAdvice({
+      level: 'detailed', opponentFormations: ['藤井システム'], playerFormations: [],
+    });
+    expect(advice?.topic).toBe('strategy-fujii-system');
+    expect(advice?.text).toContain('舟囲い');
+  });
+
   test('こちらも振り飛車なら相振り向けの囲いを提案する', () => {
     expect(getCoachAdvice({
       level: 'detailed',

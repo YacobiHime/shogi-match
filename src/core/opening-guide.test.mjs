@@ -61,4 +61,14 @@ describe("opening guide", () => {
     });
     expect(next).toEqual({ usi: "5i4h", phase: "castle" });
   });
+
+  it("finishes Fujii System guidance once the formation is recognized", () => {
+    const next = nextOpeningPlanMove({
+      strategyId: "fujii-system",
+      castleId: "",
+      legalMoves: ["7g7f", "6g6f", "2h6h"],
+      detectedFormations: ["藤井システム"],
+    });
+    expect(next).toBeNull();
+  });
 });
