@@ -343,6 +343,10 @@ import {
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
+import {
+  selectCpuOpeningRepertoire,
+  shouldUseCpuOpening,
+} from "./core/cpu-opening-repertoire.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
@@ -431,6 +435,7 @@ let reviewCpuGeneration = 0;
 let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachRunning = false;
+let cpuOpeningPlan: { strategyId: string; castleId: string; label: string } | null = null;
 
 // 助言は対局AIより軽く保つ。局面評価は数万ノードで十分であり、
 // 人間最高峰プリセット（48万ノード）相当の探索を毎手行わない。
@@ -680,39 +685,31 @@ function normalizeNodes(value: number): number {
   );
 }
 
-const STRATEGY_MOVES: { [key: string]: { black: string[]; white: string[] } } = {
-  ibisha: {
-    black: ["2g2f", "2f2e", "3i3h", "3h2g"],
-    white: ["8c8d", "8d8e", "7a7b", "7b8c"],
-  },
-  shiken: {
-    black: ["7g7f", "2h6h", "6g6f", "3i4h"],
-    white: ["3c3d", "8b4b", "4c4d", "3a4b"],
-  },
-  sangen: {
-    black: ["7g7f", "2h7h", "6g6f", "3i4h"],
-    white: ["3c3d", "8b3b", "3a4b", "4a3b"],
-  },
-  nakabisha: {
-    black: ["5g5f", "2h5h", "7g7f", "3i4h"],
-    white: ["5c5d", "8b5b", "3c3d", "3a4b"],
-  },
-  yagura: {
-    black: ["7g7f", "2g2f", "3i4h", "4i5h", "5i6h", "6i7h", "4h3g"],
-    white: ["3c3d", "8c8d", "7a6b", "6a5b", "5a4b", "4a3b", "6b7c"],
-  },
-};
-
 function strategyMove(): string | undefined {
-  const plan = STRATEGY_MOVES[cpuStrategy.value];
-  if (!plan) return undefined;
+  // 駒落ちや途中局面では平手用定跡を当てはめない。
+  if (props.initialSfen !== STANDARD_SFEN) return undefined;
   const cpuIsBlack = humanColor.value === Color.WHITE;
   const cpuMoves = moveHistory.filter((_, index) => (index % 2 === 0) === cpuIsBlack);
-  const desired = plan[cpuIsBlack ? "black" : "white"][cpuMoves.length];
-  if (!desired) return undefined;
-  return enumerateLegalMoves(record.value.position).some((move) => move.usi === desired)
-    ? desired
-    : undefined;
+  if (!shouldUseCpuOpening({
+    ply: moveHistory.length,
+    cpuMoveCount: cpuMoves.length,
+    inCheck: isSideToMoveInCheck(currentSfen.value),
+    lastMoveWasCapture: Boolean(record.value.current.move?.capturedPieceType),
+  })) return undefined;
+  cpuOpeningPlan ??= selectCpuOpeningRepertoire({
+    configuredStrategy: cpuStrategy.value,
+    cpuColor: cpuIsBlack ? "black" : "white",
+    moves: moveHistory,
+  });
+  const cpuColor = cpuIsBlack ? Color.BLACK : Color.WHITE;
+  return nextOpeningPlanMove({
+    strategyId: cpuOpeningPlan.strategyId,
+    castleId: cpuOpeningPlan.castleId,
+    color: cpuIsBlack ? "black" : "white",
+    playedMoves: cpuMoves,
+    legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi),
+    detectedFormations: formationNamesForColor(currentSfen.value, cpuColor),
+  })?.usi;
 }
 
 function createRecord(): Record {
@@ -1255,11 +1252,15 @@ async function scheduleCpuMove() {
       const comparableBeforeScore = playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
         ? playerTurnScore
         : undefined;
-      if (usesRandomLegalMove(searchNodes.value)) {
+      const openingMove = strategyMove();
+      // 序盤は難易度用の候補順位ずらしより、自然な定跡の駒組みを優先する。
+      // 王手中・駒が取られた直後・定跡終了後は強制せず、通常探索へ戻す。
+      if (openingMove) {
+        usi = openingMove;
+      } else if (usesRandomLegalMove(searchNodes.value)) {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
       } else if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
-        const openingMove = strategyMove();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
         const base = props.initialSfen === STANDARD_SFEN
           ? "startpos"
@@ -1289,7 +1290,7 @@ async function scheduleCpuMove() {
           search,
           strength.moveRank,
           Math.random,
-          { maxScoreLoss: strength.maxScoreLoss, preferredMove: openingMove },
+          { maxScoreLoss: strength.maxScoreLoss },
         );
         usi = selection.move;
         selectedCpuScore = search.candidates.find(
@@ -1525,6 +1526,7 @@ function restart() {
   reviewNavigation.value = createReviewNavigation();
   playerTurnScore = undefined;
   playerTurnScoreHistoryLength = -1;
+  cpuOpeningPlan = null;
   moveHistory = [];
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
   undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));
@@ -1547,6 +1549,9 @@ watch(
 );
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
+});
+watch(cpuStrategy, () => {
+  cpuOpeningPlan = null;
 });
 watch(coachLevel, (level) => {
   cancelPlayerIdleAdvice();
