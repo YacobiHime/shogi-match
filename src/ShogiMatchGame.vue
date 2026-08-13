@@ -2106,10 +2106,10 @@ queueMicrotask(() => {
     grid-row: 1 / 3;
   }
   .shogi-game--analysis .shogi-game__player-zone--opponent {
-    grid-row: 1 / 3;
+    grid-row: 1 / -1;
   }
   .shogi-game--analysis .shogi-game__player-zone--player {
-    grid-row: 2;
+    grid-row: 2 / -1;
   }
   .shogi-game--analysis .shogi-game__analysis {
     grid-column: 2;
