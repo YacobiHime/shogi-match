@@ -11,11 +11,11 @@ describe('棋譜解析の評価値', () => {
       .toEqual({ type: 'mate', value: -7 });
   });
 
-  test('グラフ表示を±2000へ収め、詰みを上下端へ置く', () => {
-    expect(scoreToGraphValue({ type: 'cp', value: 2600 })).toBe(2000);
-    expect(scoreToGraphValue({ type: 'cp', value: -2400 })).toBe(-2000);
-    expect(scoreToGraphValue({ type: 'mate', value: 5 })).toBe(2000);
-    expect(scoreToGraphValue({ type: 'mate', value: -3 })).toBe(-2000);
+  test('グラフ表示を±6000へ収め、詰みを上下端へ置く', () => {
+    expect(scoreToGraphValue({ type: 'cp', value: 7200 })).toBe(6000);
+    expect(scoreToGraphValue({ type: 'cp', value: -6800 })).toBe(-6000);
+    expect(scoreToGraphValue({ type: 'mate', value: 5 })).toBe(6000);
+    expect(scoreToGraphValue({ type: 'mate', value: -3 })).toBe(-6000);
   });
 
   test('評価値と詰みを日本語で表示する', () => {
