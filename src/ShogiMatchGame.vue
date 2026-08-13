@@ -2746,9 +2746,11 @@ queueMicrotask(() => {
   }
   .shogi-game__player-zone--opponent {
     grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.65fr) minmax(15rem, 1.5fr);
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
   }
   .shogi-game__opening-guide {
-    height: 100%;
+    height: auto;
     min-height: 0;
     max-height: 100%;
     gap: 0.12rem;
