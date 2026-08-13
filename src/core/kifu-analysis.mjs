@@ -1,4 +1,4 @@
-const GRAPH_SCORE_LIMIT = 2000;
+const GRAPH_SCORE_LIMIT = 6000;
 const MATE_GRAPH_SCORE = GRAPH_SCORE_LIMIT;
 
 /** USIエンジンの手番側評価を、評価値グラフ用の先手視点へ揃える。 */
@@ -10,7 +10,7 @@ export function scoreForBlack(score, sideToMove) {
   return { type: score.type, value };
 }
 
-/** 詰みを含む評価値を、±2000のグラフ座標へ変換する。 */
+/** 詰みを含む評価値を、±6000のグラフ座標へ変換する。 */
 export function scoreToGraphValue(score) {
   if (!score || !['cp', 'mate'].includes(score.type) || !Number.isFinite(score.value)) {
     return undefined;
