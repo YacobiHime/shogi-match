@@ -850,7 +850,7 @@ function updateCoachAdvice(
 }
 
 function currentEnginePosition() {
-  const base = props.initialSfen === STANDARD_SFEN ? "startpos" : `sfen ${props.initialSfen}`;
+  const base = props.initialSfen === STANDARD_SFEN ? "startpos" : props.initialSfen;
   return `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
 }
 
