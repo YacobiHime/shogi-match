@@ -2827,6 +2827,9 @@ queueMicrotask(() => {
     font-size: 0.7rem;
   }
 }
+.shogi-game__opening-guide.shogi-game__opening-guide--portrait {
+  display: none;
+}
 @media (max-aspect-ratio: 5/4) {
   .shogi-game:not(.shogi-game--analysis) {
     grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 10rem 5rem;
@@ -2837,7 +2840,7 @@ queueMicrotask(() => {
   .shogi-game:not(.shogi-game--analysis) .shogi-game__opening-guide--primary {
     display: none;
   }
-  .shogi-game:not(.shogi-game--analysis) .shogi-game__opening-guide--portrait {
+  .shogi-game:not(.shogi-game--analysis) .shogi-game__opening-guide.shogi-game__opening-guide--portrait {
     display: grid;
     grid-column: 1;
     grid-row: 5;
