@@ -278,6 +278,7 @@ import {
   isSideToMoveInCheck,
   scoreForPlayer,
 } from "./core/coach-advice.mjs";
+import { createCoachAdviceScheduler } from "./core/coach-advice-scheduler.mjs";
 import {
   formatHintMove,
   getHintMoves,
@@ -638,13 +639,19 @@ function syncPosition(usi = "") {
   observeFormations(currentSfen.value);
 }
 
-function showCoachAdvice(advice?: { key: string; text: string; topic?: string } | null) {
-  if (!advice) return;
+function displayCoachAdvice(advice: { key: string; text: string; topic?: string }): boolean {
   const lastShownAt = coachAdviceLastShownAt.get(advice.key);
-  if (lastShownAt !== undefined && moveCount.value - lastShownAt < 8) return;
+  if (lastShownAt !== undefined && moveCount.value - lastShownAt < 8) return false;
   coachAdviceLastShownAt.set(advice.key, moveCount.value);
   if (advice.topic) advisedCoachTopics.add(advice.topic);
   guideText.value = advice.text;
+  return true;
+}
+
+const coachAdviceScheduler = createCoachAdviceScheduler({ display: displayCoachAdvice });
+
+function showCoachAdvice(advice?: { key: string; text: string; topic?: string } | null) {
+  coachAdviceScheduler.present(advice);
 }
 
 function updateCoachAdvice(
@@ -879,6 +886,7 @@ function rebuildRecord(moves: string[]) {
 
 function undoTurn() {
   if (!canUndo.value) return;
+  coachAdviceScheduler.reset();
   if (cpuTimer) clearTimeout(cpuTimer);
   const removeCount = !reviewMode.value && normalizedMode.value === "cpu" && moveHistory.length >= 2 ? 2 : 1;
   rebuildRecord(moveHistory.slice(0, -removeCount));
@@ -950,6 +958,7 @@ function navigateAnalysis(delta: number) {
 
 function returnToMainLine() {
   if (reviewCpuEnabled.value) return;
+  coachAdviceScheduler.reset();
   reviewNavigation.value = returnReviewToMainLine(reviewNavigation.value);
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   hintCandidates.value = [];
@@ -976,6 +985,7 @@ function onPlayerMove(usi: string) {
 
 function startReviewCpu() {
   if (!reviewMode.value || !engineReady.value || analysisRunning.value || thinking.value) return;
+  coachAdviceScheduler.reset();
   reviewCoachGeneration += 1;
   reviewCpuGeneration += 1;
   reviewCpuEnabled.value = true;
@@ -990,6 +1000,7 @@ function startReviewCpu() {
 
 function stopReviewCpu() {
   if (!reviewCpuEnabled.value) return;
+  coachAdviceScheduler.reset();
   reviewCpuEnabled.value = false;
   reviewCpuGeneration += 1;
   if (cpuTimer) {
@@ -1169,6 +1180,7 @@ function resign() {
 
 function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう！") {
   if (cpuTimer) clearTimeout(cpuTimer);
+  coachAdviceScheduler.reset();
   reviewCpuGeneration += 1;
   reviewCpuEnabled.value = false;
   resultDialogOpen.value = false;
@@ -1294,6 +1306,7 @@ async function runKifuAnalysis() {
 
 function cancelKifuAnalysis() {
   if (!analysisRunning.value) return;
+  coachAdviceScheduler.reset();
   analysisGeneration += 1;
   engine?.stop();
   guideText.value = coachLevel.value === "off" ? "" : "棋譜解析を中止したよ。";
@@ -1317,6 +1330,7 @@ function goToAnalysisPly(ply: number) {
 
 function restart() {
   if (cpuTimer) clearTimeout(cpuTimer);
+  coachAdviceScheduler.reset();
   reviewCpuGeneration += 1;
   reviewCpuEnabled.value = false;
   analysisGeneration += 1;
@@ -1361,6 +1375,7 @@ watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
 watch(coachLevel, (level) => {
+  coachAdviceScheduler.reset();
   coachAdviceLastShownAt.clear();
   guideText.value = level === "off" ? "" : INITIAL_GUIDE_TEXT;
   if (reviewMode.value && !reviewCpuEnabled.value && !analysisRunning.value && level !== "off") {
@@ -1373,6 +1388,7 @@ watch(coachLevel, (level) => {
   }
 });
 onBeforeUnmount(() => {
+  coachAdviceScheduler.reset();
   analysisGeneration += 1;
   reviewCoachGeneration += 1;
   reviewCpuGeneration += 1;
