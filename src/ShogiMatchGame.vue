@@ -2740,4 +2740,50 @@ queueMicrotask(() => {
     width: 5rem;
   }
 }
+@media (min-width: 541px) and (max-width: 899px) and (max-height: 500px) {
+  .shogi-game {
+    grid-template-rows: 3.25rem 4.25rem minmax(0, 1fr) 5.5rem;
+  }
+  .shogi-game__player-zone--opponent {
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.65fr) minmax(15rem, 1.5fr);
+  }
+  .shogi-game__opening-guide {
+    gap: 0.12rem;
+    padding: 0.18rem 0.3rem;
+  }
+  .shogi-game__opening-guide h2 {
+    display: none;
+  }
+  .shogi-game__opening-selects label,
+  .shogi-game__opening-guide p {
+    font-size: 0.62rem;
+  }
+  .shogi-game__opening-guide p {
+    padding: 0.12rem 0.25rem;
+    line-height: 1.15;
+  }
+  .shogi-game__opening-clear {
+    min-height: 1.4rem;
+    padding: 0.08rem;
+  }
+  .shogi-game__player-zone--player {
+    padding-left: 5rem;
+  }
+  .shogi-game__portrait--advisor {
+    width: 5rem;
+    height: 5.5rem;
+  }
+  .shogi-game__dialogue {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  .shogi-game__assist-actions {
+    gap: 0.2rem;
+  }
+  .shogi-game__assist-actions button {
+    min-height: 1.6rem;
+    padding: 0.15rem 0.25rem;
+    font-size: 0.7rem;
+  }
+}
 </style>
