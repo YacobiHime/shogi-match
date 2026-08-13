@@ -6,9 +6,128 @@ const CASTLE_TIPS = [
   {
     key: 'elmo',
     names: ['エルモ囲い', '振り飛車エルモ'],
-    text: '相手はエルモ囲いだから、上からの攻めが狙い目だよ！',
+    text: '相手はエルモ囲いだね。横からは堅いけど、金の頭を狙う上からの攻めが有効だよ！',
+  },
+  {
+    key: 'mino',
+    names: ['銀冠', '高美濃', 'ダイヤモンド美濃', '四枚美濃', '大山美濃', 'ちょんまげ美濃', '坊主美濃', '本美濃', '木村美濃', '金美濃', '銀美濃', '片美濃', '金立美濃', 'ずれ美濃', '早美濃'],
+    text: '相手は美濃囲い系だね。横からは堅いけど、端攻めや玉頭からの攻めが急所だよ！',
+  },
+  {
+    key: 'anaguma',
+    names: ['振り飛車穴熊', '居飛車穴熊', '四枚穴熊', '松尾流穴熊', '銀冠穴熊', 'ビッグ4'],
+    text: '相手は穴熊系だね。玉は遠いから、端を絡めて外側の金銀を一枚ずつはがしていこう！',
+  },
+  {
+    key: 'yagura',
+    names: ['菱矢倉', '総矢倉', '金矢倉', '銀矢倉', '菊水矢倉', '土居矢倉', '天野矢倉', '銀立ち矢倉', '矢倉', '右矢倉'],
+    text: '相手は矢倉系だね。正面は厚いから、端攻めや右四間飛車の形で角筋を生かすのが狙い目だよ！',
+  },
+  {
+    key: 'funagakoi',
+    names: ['舟囲い', '箱入り娘'],
+    text: '相手は舟囲い系だね。組み上がりは速いけど薄めだから、玉頭や横から大駒を近づけると攻めやすいよ！',
+  },
+  {
+    key: 'king-head',
+    names: ['左美濃', '天守閣美濃', '端玉銀冠', '銀冠金無双', '金無双', '離れ金無双', '居飛車金無双'],
+    text: '相手の囲いは横からの攻めに強い形だね。端と玉頭に歩や桂を集めて攻めるのが急所だよ！',
+  },
+  {
+    key: 'right-king',
+    names: ['右玉'],
+    text: '相手は右玉だね。広さはあるけど玉が戦場に近いから、端攻めと飛車交換を絡めて逃げ道を狭めよう！',
+  },
+  {
+    key: 'gangi',
+    names: ['雁木'],
+    text: '相手は雁木だね。中央は厚いから、飛車角を使って端や玉側から攻めるのが狙い目だよ！',
+  },
+  {
+    key: 'central-king',
+    names: ['中住まい', '中原囲い', 'カニ囲い', 'イチゴ囲い', '無敵囲い'],
+    text: '相手玉は中央寄りで広いけど、囲いは薄めだね。大駒交換のあとに飛車や角を打ち込む攻めが有効だよ！',
   },
 ];
+
+const FURIBISHA_NAMES = [
+  '四間飛車', '三間飛車', '向かい飛車', '中飛車', 'ゴキゲン中飛車',
+  'ノーマル四間飛車', 'ノーマル三間飛車', '角交換四間飛車', '角交換三間飛車',
+  '立石流四間飛車', '石田流', '早石田', '端角中飛車', 'ダイレクト向かい飛車',
+  'メリケン向かい飛車', '阪田流向かい飛車', '菜々河流向かい飛車', '天彦流向かい飛車',
+  '7八飛戦法', '2手目3二飛戦法', '鬼殺し',
+];
+
+const STRATEGY_TIPS = [
+  {
+    key: 'aifuribisha',
+    names: ['相振り飛車', '相中飛車'],
+    text: '相振り飛車だね。金無双か美濃囲いにして、相手の攻める筋を見て組み替えるのがおすすめだよ！',
+  },
+  {
+    key: 'fast-swinging-rook',
+    names: ['鬼殺し', '早石田', '7八飛戦法', '2手目3二飛戦法'],
+    text: '相手は速攻型の振り飛車だね。まず舟囲いなど短手数の囲いで、戦いに備えるのがおすすめだよ！',
+    furibishaText: '相手は速攻型だね。金無双や片美濃のような、短手数の囲いで戦いに備えよう！',
+  },
+  {
+    key: 'swinging-rook',
+    names: FURIBISHA_NAMES,
+    text: '相手は振り飛車だね。こちらが居飛車なら、急戦は舟囲い、持久戦は左美濃や居飛車穴熊が候補だよ！',
+    furibishaText: '相振り飛車になりそうだね。短手数で組める金無双か美濃囲いが使いやすいよ！',
+  },
+  {
+    key: 'yagura-opening',
+    names: ['矢倉'],
+    text: '相手は矢倉戦法だね。こちらも矢倉で厚くするか、雁木で手早く囲うのが候補だよ！',
+  },
+  {
+    key: 'bishop-exchange',
+    names: ['角換わり', '一手損角換わり', '角換わり29手目基本図', '角換わり37手目基本図', '4五桂速攻'],
+    text: '角換わりだね。角の打ち込みに備えて、金銀を低く保つ早囲いや右玉が候補だよ！',
+  },
+  {
+    key: 'side-pawn',
+    names: ['横歩取り', '横歩取り青野流', '横歩取り勇気流', '横歩取り2三歩戦法', '横歩取り3三角戦法', '横歩取り3三桂戦法', '相横歩取り', '横歩取り4五角戦法', '横歩取り8五飛戦法'],
+    text: '横歩取りの戦いだね。深く囲うより、中住まいで玉を広くして大駒の打ち込みに備えよう！',
+  },
+  {
+    key: 'double-wing',
+    names: ['相掛かり', 'AlphaZero流相掛かり', '6二金・8一飛車型', '相掛かり横歩取らせ'],
+    text: '相掛かりだね。中住まいや中原囲いのような、広くて手数のかからない囲いが向いているよ！',
+  },
+  {
+    key: 'rapid-attack',
+    names: ['原始棒銀', '棒銀', '右四間飛車', '袖飛車', '雀刺し'],
+    text: '相手は速い攻めを狙っているね。舟囲いや早囲いのような、短手数で金銀が連結する囲いを優先しよう！',
+  },
+];
+
+function includesAny(names, candidates) {
+  return candidates.some((name) => names.includes(name));
+}
+
+function formationAdvice(opponentFormations, playerFormations, advisedTopics) {
+  const seen = new Set(advisedTopics);
+  for (const tip of STRATEGY_TIPS) {
+    if (seen.has(`strategy-${tip.key}`) || !includesAny(opponentFormations, tip.names)) continue;
+    const playerUsesFuribisha = includesAny(playerFormations, FURIBISHA_NAMES);
+    const text = playerUsesFuribisha
+      ? tip.furibishaText ?? 'こちらが振り飛車なら、美濃囲いか振り飛車穴熊が組みやすいよ！'
+      : tip.text;
+    return {
+      key: `strategy-${tip.key}`,
+      topic: `strategy-${tip.key}`,
+      text,
+    };
+  }
+  for (const tip of CASTLE_TIPS) {
+    if (!seen.has(`castle-${tip.key}`) && includesAny(opponentFormations, tip.names)) {
+      return { key: `castle-${tip.key}`, topic: `castle-${tip.key}`, text: tip.text };
+    }
+  }
+  return null;
+}
 
 /** CPU着手前のCPU視点評価を、着手後のプレイヤー視点へ変換する。 */
 export function scoreAfterOpponentMove(score) {
@@ -137,6 +256,7 @@ export function getCoachAdvice({
   moveCount = 0,
   inCheck = false,
   opponentFormations = [],
+  playerFormations = [],
   advisedTopics = [],
 } = {}) {
   if (level === 'off') return null;
@@ -156,12 +276,8 @@ export function getCoachAdvice({
   }
 
   if (level === 'detailed') {
-    const seen = new Set(advisedTopics);
-    for (const tip of CASTLE_TIPS) {
-      if (!seen.has(tip.key) && tip.names.some((name) => opponentFormations.includes(name))) {
-        return { key: `castle-${tip.key}`, topic: tip.key, text: tip.text };
-      }
-    }
+    const advice = formationAdvice(opponentFormations, playerFormations, advisedTopics);
+    if (advice) return advice;
   }
 
   if (score?.type !== 'cp' || !Number.isFinite(score.value)) return null;
