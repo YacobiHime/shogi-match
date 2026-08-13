@@ -179,8 +179,12 @@ export const OPENING_CASTLES = [
   {
     id: "right-king",
     label: "右玉",
-    detectionNames: ["右玉"],
-    blackMoves: ["5i4h", "7i6h", "6i5h"],
+    // 右玉の戦型判定は4八玉だけでも成立するため、補助の完成判定には使わない。
+    detectionNames: [],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h6g", "3i4h", "4g4f",
+      "4h4g", "3g3f", "6i7h", "5i4h", "2i3g", "2h2i",
+    ],
   },
   {
     id: "kinmusou",
