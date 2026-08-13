@@ -8,7 +8,7 @@ import {
   visibleReviewMoves,
 } from './review-navigation.mjs';
 
-describe('感想戦の棋譜ナビゲーション', () => {
+describe('棋譜解析の棋譜ナビゲーション', () => {
   const main = ['7g7f', '3c3d', '2g2f', '8c8d'];
 
   test('左右移動で本筋を戻ったり進んだりできる', () => {
