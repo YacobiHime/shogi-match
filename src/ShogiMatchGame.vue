@@ -1709,11 +1709,13 @@ queueMicrotask(() => {
 }
 .shogi-game__analysis {
   z-index: 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   width: 100%;
   min-width: 0;
   min-height: 0;
-  padding: .25rem .35rem .3rem;
-  overflow: auto;
+  padding: 0;
+  overflow: hidden;
   border: 2px solid #e8842c;
   border-radius: 0;
   color: #111;
@@ -1721,20 +1723,29 @@ queueMicrotask(() => {
   box-shadow: none;
   font-family: Arial, "Yu Gothic", sans-serif;
 }
-.shogi-game--analysis {
+.shogi-game.shogi-game--analysis {
   grid-template-rows: auto minmax(0, 1fr) minmax(15rem, 30vh);
+  row-gap: 0;
+  padding-block: 0;
 }
 .shogi-game--analysis .shogi-game__board-shell {
   grid-row: 1 / 3;
+  padding-block: 0;
 }
 .shogi-game--analysis .shogi-game__analysis {
   grid-column: 1;
   grid-row: 3;
 }
-.shogi-game__analysis .evaluation-graph__svg {
-  height: auto;
+.shogi-game__analysis .evaluation-graph {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
-  aspect-ratio: 5 / 1;
+  overflow: hidden;
+}
+.shogi-game__analysis .evaluation-graph__svg {
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
 }
 .shogi-game__analysis .evaluation-graph__selection {
   display: none;
@@ -1745,7 +1756,7 @@ queueMicrotask(() => {
   min-height: 1.6rem;
   gap: .35rem;
   align-items: center;
-  padding: 0 .15rem .2rem;
+  padding: 0 .15rem;
   color: #111;
   font-size: .82rem;
   white-space: nowrap;
@@ -1784,7 +1795,7 @@ queueMicrotask(() => {
   display: flex;
   gap: .25rem;
   justify-content: flex-start;
-  margin-top: .25rem;
+  margin-top: 0;
   flex-wrap: wrap;
 }
 .shogi-game__analysis-actions button {
