@@ -294,3 +294,70 @@ export function openingFollowupCount(random = Math.random) {
   const normalized = Number.isFinite(value) ? Math.max(0, Math.min(0.999999, value)) : 0;
   return 3 + Math.floor(normalized * 3);
 }
+
+/** 相手の定跡進行に対し、形作りより先に必要となる応手を返す。 */
+export function openingUrgentResponse({
+  strategyId,
+  color = "black",
+  moveHistory = [],
+  legalMoves = [],
+}) {
+  if (strategyId !== "aigakari") return null;
+  const played = new Set(moveHistory);
+  const legal = new Set(legalMoves);
+  const lastMove = moveHistory.at(-1);
+  if (
+    color === "black"
+    && lastMove === "8d8e"
+    && played.has("2g2f") && played.has("2f2e")
+    && legal.has("6i7h")
+  ) {
+    return {
+      usi: "6i7h",
+      reason: "相手が8五歩まで伸ばしたから、先に7八金で角頭を守ろう！",
+    };
+  }
+  if (
+    color === "white"
+    && lastMove === "2f2e"
+    && played.has("8c8d")
+    && legal.has("4a3b")
+  ) {
+    return {
+      usi: "4a3b",
+      reason: "相手が2五歩まで伸ばしたから、先に3二金で角頭を守ろう！",
+    };
+  }
+  return null;
+}
+
+function comparableOpeningScore(score) {
+  if (score?.type === "cp" && Number.isFinite(score.value)) return score.value;
+  if (score?.type === "mate" && Number.isFinite(score.value)) {
+    if (score.value > 0) return 100000 - score.value;
+    if (score.value < 0) return -100000 + Math.abs(score.value);
+  }
+  return undefined;
+}
+
+/** 固定手順がAI上位候補から外れる、または大きく評価を落とす場合は安全な手へ差し替える。 */
+export function chooseSafeOpeningMove(plannedMove, candidates = [], maxScoreLoss = 250) {
+  const ranked = [...candidates]
+    .filter(({ rank, move }) => Number.isInteger(rank) && rank >= 1 && typeof move === "string")
+    .sort((left, right) => left.rank - right.rank);
+  const best = ranked.find(({ rank }) => rank === 1);
+  if (!plannedMove || !best?.move) return plannedMove
+    ? { usi: plannedMove, source: "plan", scoreLoss: 0 }
+    : null;
+  const planned = ranked.find(({ move }) => move === plannedMove);
+  if (!planned) return { usi: best.move, source: "ai", scoreLoss: undefined };
+  const bestScore = comparableOpeningScore(best.score);
+  const plannedScore = comparableOpeningScore(planned.score);
+  if (bestScore === undefined || plannedScore === undefined) {
+    return { usi: plannedMove, source: "plan", scoreLoss: 0 };
+  }
+  const scoreLoss = bestScore - plannedScore;
+  return scoreLoss >= maxScoreLoss
+    ? { usi: best.move, source: "ai", scoreLoss }
+    : { usi: plannedMove, source: "plan", scoreLoss };
+}

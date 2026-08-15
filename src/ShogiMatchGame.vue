@@ -342,6 +342,7 @@ import {
   getHintSearchSettings,
   getIdleCoachSearchSettings,
   getOpeningFollowupSearchSettings,
+  getOpeningGuideSafetySearchSettings,
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
@@ -365,9 +366,11 @@ import {
   visibleReviewMoves,
 } from "./core/review-navigation.mjs";
 import {
+  chooseSafeOpeningMove,
   isOpeningPlanComplete,
   nextOpeningPlanMove,
   openingFollowupCount,
+  openingUrgentResponse,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
@@ -440,6 +443,14 @@ const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
 const openingFollowupCandidates = ref<{ usi: string; score?: number }[]>([]);
 const openingFollowupRemaining = ref(0);
 const openingFollowupStarted = ref(false);
+type OpeningGuideDecision = {
+  usi: string;
+  source: "plan" | "urgent" | "ai";
+  phase?: "strategy" | "castle";
+  reason?: string;
+};
+const openingGuideDecision = ref<OpeningGuideDecision | null>(null);
+const openingGuideSafetyLoading = ref(false);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const selectedStrategy = ref("");
@@ -471,6 +482,7 @@ let dedicatedCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachRunning = false;
 let openingFollowupGeneration = 0;
 let openingFollowupLoading = false;
+let openingGuideSafetyGeneration = 0;
 let cpuOpeningPlan: { strategyId: string; castleId: string; label: string } | null = null;
 const positionAnalysisCache = createPositionAnalysisCache();
 
@@ -663,14 +675,24 @@ const openingPlanComplete = computed(() => {
 const boardCandidates = computed(() => (
   hintCandidates.value.length
     ? hintCandidates.value
-    : openingPlanCandidate.value
-      ? [{ usi: openingPlanCandidate.value.usi }]
+    : openingGuideDecision.value
+      ? [{
+          usi: openingGuideDecision.value.usi,
+          guideKind: openingGuideDecision.value.source,
+        }]
       : openingFollowupCandidates.value
 ));
 const openingGuideStatus = computed(() => {
   if (!selectedStrategy.value && !selectedCastle.value) return "";
   if (reviewMode.value) return "道しるべは対局中に表示するよ。";
   if (!canMove.value) return "あなたの手番になったら、次の一手を矢印で示すよ。";
+  if (openingGuideSafetyLoading.value) return "予定手が安全か確認しているよ…";
+  if (openingGuideDecision.value?.source === "urgent") {
+    return `先に受けよう：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
+  }
+  if (openingGuideDecision.value?.source === "ai") {
+    return `安全な寄り道：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
+  }
   if (openingFollowupCandidates.value.length) {
     return openingFollowupRemaining.value > 0
       ? `完成後の候補手を3手表示中（あと${openingFollowupRemaining.value}回）`
@@ -678,9 +700,9 @@ const openingGuideStatus = computed(() => {
   }
   if (openingPlanComplete.value && openingFollowupLoading) return "形が完成したね。次の3手を考えているよ…";
   if (openingPlanComplete.value && openingFollowupStarted.value) return "形が完成したね！";
-  if (!openingPlanCandidate.value) return "形が完成したか、今の局面では予定手を指せないみたい。";
-  const phase = openingPlanCandidate.value.phase === "strategy" ? "戦法" : "囲い";
-  return `${phase}の次の一手：${formatHintMove(openingPlanCandidate.value.usi, currentSfen.value)}`;
+  if (!openingGuideDecision.value) return "形が完成したか、今の局面では予定手を指せないみたい。";
+  const phase = openingGuideDecision.value.phase === "strategy" ? "戦法" : "囲い";
+  return `${phase}の次の一手：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
 });
 
 function selectedOpeningLabel() {
@@ -691,10 +713,12 @@ function selectedOpeningLabel() {
 
 function announceOpeningGuide() {
   resetOpeningFollowup();
+  resetOpeningGuideSafety();
   const label = selectedOpeningLabel();
   if (label && coachLevel.value !== "off") {
     guideText.value = `${label}を目指そう。盤の矢印を参考にしてね！`;
   }
+  scheduleOpeningGuideSafety();
   scheduleOpeningFollowupCandidates();
 }
 
@@ -875,6 +899,107 @@ async function analyzeOpeningFollowupPosition() {
   return analyzeCoachPosition(settings.nodes, settings.maxTimeMs, settings.multiPv);
 }
 
+function resetOpeningGuideSafety() {
+  openingGuideSafetyGeneration += 1;
+  openingGuideSafetyLoading.value = false;
+  openingGuideDecision.value = null;
+}
+
+function scheduleOpeningGuideSafety() {
+  const generation = ++openingGuideSafetyGeneration;
+  openingGuideSafetyLoading.value = false;
+  openingGuideDecision.value = null;
+  if (
+    !active.value || reviewMode.value || normalizedMode.value !== "cpu"
+    || record.value.position.color !== humanColor.value
+    || (!selectedStrategy.value && !selectedCastle.value)
+  ) return;
+
+  const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
+  const urgent = openingUrgentResponse({
+    strategyId: selectedStrategy.value,
+    color: humanColor.value === Color.BLACK ? "black" : "white",
+    moveHistory,
+    legalMoves,
+  });
+  if (urgent) {
+    openingGuideDecision.value = { ...urgent, source: "urgent" };
+    if (coachLevel.value !== "off") guideText.value = urgent.reason;
+    return;
+  }
+
+  const planned = openingPlanCandidate.value;
+  if (!planned) return;
+  if (!engineReady.value || !engine) {
+    openingGuideDecision.value = { ...planned, source: "plan" };
+    return;
+  }
+
+  const historyLength = moveHistory.length;
+  openingGuideSafetyLoading.value = true;
+  dedicatedCoachQueue = dedicatedCoachQueue
+    .catch(() => undefined)
+    .then(async () => {
+      if (
+        generation !== openingGuideSafetyGeneration || !active.value || reviewMode.value
+        || moveHistory.length !== historyLength
+        || record.value.position.color !== humanColor.value
+      ) return;
+      const settings = getOpeningGuideSafetySearchSettings(
+        props.mobile || boardLayout.value === "portrait",
+      );
+      let candidates = await analyzeCoachPosition(
+        settings.nodes,
+        settings.maxTimeMs,
+        settings.multiPv,
+      );
+      if (
+        generation !== openingGuideSafetyGeneration || !active.value || reviewMode.value
+        || moveHistory.length !== historyLength
+        || record.value.position.color !== humanColor.value
+      ) return;
+      if (!candidates.some(({ move }) => move === planned.usi)) {
+        engine!.setPosition(currentEnginePosition());
+        engine!.applyStrengthOptions({ multiPv: 1 });
+        const forced = await engine!.go({
+          nodes: settings.forcedNodes,
+          maxTimeMs: settings.forcedMaxTimeMs,
+          searchMoves: [planned.usi],
+        });
+        const forcedCandidate = forced.candidates.find(({ rank }) => rank === 1);
+        if (forcedCandidate) {
+          candidates = [
+            ...candidates,
+            { ...forcedCandidate, rank: settings.multiPv + 1, move: planned.usi },
+          ];
+        }
+      }
+      if (
+        generation !== openingGuideSafetyGeneration || !active.value || reviewMode.value
+        || moveHistory.length !== historyLength
+        || record.value.position.color !== humanColor.value
+      ) return;
+      const choice = chooseSafeOpeningMove(planned.usi, candidates);
+      if (!choice) return;
+      openingGuideDecision.value = {
+        usi: choice.usi,
+        source: choice.source,
+        phase: planned.phase,
+      };
+      if (choice.source === "ai" && coachLevel.value !== "off") {
+        guideText.value = `今は形作りより、${formatHintMove(choice.usi, currentSfen.value)}を先に指そう！形作りはその後で続けられるよ。`;
+      }
+    })
+    .catch(() => {
+      if (generation === openingGuideSafetyGeneration) {
+        openingGuideDecision.value = { ...planned, source: "plan" };
+      }
+    })
+    .finally(() => {
+      if (generation === openingGuideSafetyGeneration) openingGuideSafetyLoading.value = false;
+    });
+}
+
 function resetOpeningFollowup() {
   openingFollowupGeneration += 1;
   openingFollowupLoading = false;
@@ -888,6 +1013,7 @@ function scheduleOpeningFollowupCandidates() {
     !engineReady.value || !engine || !active.value || reviewMode.value
     || normalizedMode.value !== "cpu" || record.value.position.color !== humanColor.value
     || !openingPlanComplete.value || openingFollowupLoading
+    || openingGuideSafetyLoading.value || openingGuideDecision.value
     || openingFollowupCandidates.value.length > 0
   ) return;
   if (!openingFollowupStarted.value) {
@@ -1151,6 +1277,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   if (!active.value || !appendUsiMove(record.value, usi)) return false;
   syncPosition(usi);
   moveHistory.push(usi);
+  resetOpeningGuideSafety();
   hintCandidates.value = [];
   openingFollowupCandidates.value = [];
   hintText.value = "";
@@ -1209,8 +1336,10 @@ function undoTurn() {
   playerTurnScoreHistoryLength = -1;
   hintCandidates.value = [];
   resetOpeningFollowup();
+  resetOpeningGuideSafety();
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
+  scheduleOpeningGuideSafety();
   schedulePlayerIdleAdvice();
 }
 
@@ -1462,6 +1591,7 @@ async function scheduleCpuMove() {
       if (applyMove(usi, "cpu") && active.value) {
         updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
+        scheduleOpeningGuideSafety();
         scheduleDedicatedCoachAdvice();
         scheduleOpeningFollowupCandidates();
         schedulePlayerIdleAdvice();
@@ -1475,6 +1605,7 @@ async function scheduleCpuMove() {
       const move = selectCpuMove(record.value.position);
       if (move && applyMove(move.usi, "cpu") && active.value) {
         updateCoachAdvice();
+        scheduleOpeningGuideSafety();
         scheduleOpeningFollowupCandidates();
         schedulePlayerIdleAdvice();
       }
@@ -1492,6 +1623,7 @@ async function initializeEngine() {
     engine.newGame();
     engineReady.value = true;
     scheduleCpuMove();
+    scheduleOpeningGuideSafety();
     scheduleOpeningFollowupCandidates();
     schedulePlayerIdleAdvice();
   } catch (error) {
@@ -1520,6 +1652,7 @@ function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう
   thinking.value = false;
   hintCandidates.value = [];
   resetOpeningFollowup();
+  resetOpeningGuideSafety();
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : message;
 }
@@ -1688,6 +1821,7 @@ function restart() {
   positionAnalysisCache.clear();
   moveHistory = [];
   resetOpeningFollowup();
+  resetOpeningGuideSafety();
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
   undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));
   hintCandidates.value = [];
@@ -1700,6 +1834,7 @@ function restart() {
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
   initializeEngine();
   scheduleCpuMove();
+  scheduleOpeningGuideSafety();
   schedulePlayerIdleAdvice();
 }
 

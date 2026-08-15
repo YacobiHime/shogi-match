@@ -165,6 +165,19 @@ export function getOpeningFollowupSearchSettings(mobile = false) {
     : { nodes: 500000, maxTimeMs: 6000, multiPv: 3 };
 }
 
+/** 形作り中の予定手を毎手安全確認する探索設定。 */
+export function getOpeningGuideSafetySearchSettings(mobile = false) {
+  return mobile
+    ? {
+        nodes: 120000, maxTimeMs: 2200, multiPv: 5,
+        forcedNodes: 60000, forcedMaxTimeMs: 1200,
+      }
+    : {
+        nodes: 250000, maxTimeMs: 3500, multiPv: 5,
+        forcedNodes: 120000, forcedMaxTimeMs: 2000,
+      };
+}
+
 function validateSnapshot(snapshot) {
   if (!snapshot || typeof snapshot.sfen !== 'string'
     || !Number.isInteger(snapshot.moveHistoryLength) || snapshot.moveHistoryLength < 0

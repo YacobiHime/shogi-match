@@ -4,6 +4,7 @@ import {
   getHintSearchSettings,
   getIdleCoachSearchSettings,
   getOpeningFollowupSearchSettings,
+  getOpeningGuideSafetySearchSettings,
   hintScoreForArrow,
 } from './match-assists.mjs';
 
@@ -65,6 +66,23 @@ describe('hint arrow evaluations', () => {
       nodes: 200000,
       maxTimeMs: 3500,
       multiPv: 3,
+    });
+  });
+
+  it('bounds the five-candidate safety check used while building a formation', () => {
+    expect(getOpeningGuideSafetySearchSettings(false)).toEqual({
+      nodes: 250000,
+      maxTimeMs: 3500,
+      multiPv: 5,
+      forcedNodes: 120000,
+      forcedMaxTimeMs: 2000,
+    });
+    expect(getOpeningGuideSafetySearchSettings(true)).toEqual({
+      nodes: 120000,
+      maxTimeMs: 2200,
+      multiPv: 5,
+      forcedNodes: 60000,
+      forcedMaxTimeMs: 1200,
     });
   });
 });
