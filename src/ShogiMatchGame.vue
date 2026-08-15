@@ -655,6 +655,7 @@ const openingPlanCandidate = computed(() => {
     playedMoves: playerMoves,
     legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi),
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
+    currentSfen: sfen,
   });
 });
 const openingPlanComplete = computed(() => {
@@ -670,6 +671,7 @@ const openingPlanComplete = computed(() => {
     color: playerIsBlack ? "black" : "white",
     playedMoves: playerMoves,
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
+    currentSfen: sfen,
   });
 });
 const boardCandidates = computed(() => (
@@ -809,6 +811,7 @@ function strategyMove(): string | undefined {
     playedMoves: cpuMoves,
     legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi),
     detectedFormations: formationNamesForColor(currentSfen.value, cpuColor),
+    currentSfen: currentSfen.value,
   })?.usi;
 }
 
@@ -929,9 +932,10 @@ function scheduleOpeningGuideSafety() {
   }
 
   const planned = openingPlanCandidate.value;
-  if (!planned) return;
+  const planBlocked = !planned && !openingPlanComplete.value;
+  if (!planned && !planBlocked) return;
   if (!engineReady.value || !engine) {
-    openingGuideDecision.value = { ...planned, source: "plan" };
+    if (planned) openingGuideDecision.value = { ...planned, source: "plan" };
     return;
   }
 
@@ -958,7 +962,7 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      if (!candidates.some(({ move }) => move === planned.usi)) {
+      if (planned && !candidates.some(({ move }) => move === planned.usi)) {
         engine!.setPosition(currentEnginePosition());
         engine!.applyStrengthOptions({ multiPv: 1 });
         const forced = await engine!.go({
@@ -979,19 +983,26 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      const choice = chooseSafeOpeningMove(planned.usi, candidates);
+      const choice = planned
+        ? chooseSafeOpeningMove(planned.usi, candidates)
+        : candidates
+            .filter(({ rank, move }) => Number.isInteger(rank) && typeof move === "string")
+            .sort((left, right) => left.rank - right.rank)
+            .map(({ move }) => ({ usi: move, source: "ai" as const }))[0];
       if (!choice) return;
       openingGuideDecision.value = {
         usi: choice.usi,
         source: choice.source,
-        phase: planned.phase,
+        phase: planned?.phase,
       };
       if (choice.source === "ai" && coachLevel.value !== "off") {
-        guideText.value = `今は形作りより、${formatHintMove(choice.usi, currentSfen.value)}を先に指そう！形作りはその後で続けられるよ。`;
+        guideText.value = planBlocked
+          ? `予定の形へすぐ進めないから、まずは${formatHintMove(choice.usi, currentSfen.value)}で局面を整えよう。`
+          : `今は形作りより、${formatHintMove(choice.usi, currentSfen.value)}を先に指そう！形作りはその後で続けられるよ。`;
       }
     })
     .catch(() => {
-      if (generation === openingGuideSafetyGeneration) {
+      if (planned && generation === openingGuideSafetyGeneration) {
         openingGuideDecision.value = { ...planned, source: "plan" };
       }
     })

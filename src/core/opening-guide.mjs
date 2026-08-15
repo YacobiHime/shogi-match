@@ -168,6 +168,10 @@ export const OPENING_CASTLES = [
     id: "ibisha-anaguma",
     label: "居飛車穴熊",
     detectionNames: ["居飛車穴熊", "松尾流穴熊"],
+    strictOrder: true,
+    completionSquares: [
+      ["9i", "K"], ["9h", "L"], ["8h", "S"], ["7h", "G"], ["7g", "N"],
+    ],
     blackMoves: ["9i9h", "7g7f", "8h6f", "8i7g", "7i8h", "6i7h", "5i6i", "6i7i", "7i8i", "8i9i"],
   },
   {
@@ -179,8 +183,13 @@ export const OPENING_CASTLES = [
   {
     id: "right-king",
     label: "右玉",
-    // 右玉の戦型判定は4八玉だけでも成立するため、補助の完成判定には使わない。
+    // 戦型判定は4八玉だけでも成立するため、補助では完成形を直接確認する。
     detectionNames: [],
+    strictOrder: true,
+    completionSquares: [
+      ["4h", "K"], ["7h", "G"], ["6g", "S"],
+      ["4g", "S"], ["3g", "N"], ["2i", "R"],
+    ],
     blackMoves: [
       "7g7f", "6g6f", "7i6h", "6h6g", "3i4h", "4g4f",
       "4h4g", "3g3f", "6i7h", "5i4h", "2i3g", "2h2i",
@@ -190,7 +199,14 @@ export const OPENING_CASTLES = [
     id: "kinmusou",
     label: "金無双",
     detectionNames: ["金無双", "離れ金無双", "銀冠金無双"],
-    blackMoves: ["5i4h", "4h3h", "4i4h", "6i5h"],
+    strictOrder: true,
+    completionSquares: [
+      ["3h", "K"], ["2h", "S"], ["4h", "G"], ["5h", "G"], ["6h", "R"],
+    ],
+    // 金無双を単独で選んでも、先に四間へ振って玉の退路と2八銀の場所を空ける。
+    blackMoves: [
+      "7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i2h", "4i4h", "6i5h",
+    ],
   },
   {
     id: "nakazumai",
@@ -235,6 +251,48 @@ export function openingPlanSteps(strategyId, castleId, color = "black") {
   });
 }
 
+function parseSfenBoard(sfen) {
+  const boardPart = String(sfen ?? "").trim().split(/\s+/)[0];
+  const ranks = boardPart.split("/");
+  if (ranks.length !== 9) return new Map();
+  const board = new Map();
+  ranks.forEach((rank, rankIndex) => {
+    let file = 9;
+    let promoted = false;
+    for (const symbol of rank) {
+      if (/[1-9]/.test(symbol)) {
+        file -= Number(symbol);
+      } else if (symbol === "+") {
+        promoted = true;
+      } else {
+        board.set(`${file}${String.fromCharCode(97 + rankIndex)}`, {
+          color: symbol === symbol.toUpperCase() ? "black" : "white",
+          kind: `${promoted ? "+" : ""}${symbol.toUpperCase()}`,
+        });
+        file -= 1;
+        promoted = false;
+      }
+    }
+  });
+  return board;
+}
+
+function matchesCompletionSquares(definition, currentSfen, color) {
+  if (!definition?.completionSquares?.length || !currentSfen) return undefined;
+  const board = parseSfenBoard(currentSfen);
+  return definition.completionSquares.every(([blackSquare, kind]) => {
+    const square = color === "white" ? mirrorUsiMove(blackSquare) : blackSquare;
+    const piece = board.get(square);
+    return piece?.color === color && piece.kind === kind;
+  });
+}
+
+function definitionDetectedComplete(definition, detected, currentSfen, color) {
+  const exact = matchesCompletionSquares(definition, currentSfen, color);
+  if (exact !== undefined) return exact;
+  return definition?.detectionNames.some((name) => detected.has(name)) ?? false;
+}
+
 export function nextOpeningPlanMove({
   strategyId,
   castleId,
@@ -242,21 +300,31 @@ export function nextOpeningPlanMove({
   playedMoves = [],
   legalMoves = [],
   detectedFormations = [],
+  currentSfen = "",
 }) {
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
   const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
   const detected = new Set(detectedFormations);
-  const strategyComplete = strategy?.detectionNames.some((name) => detected.has(name)) ?? false;
-  const castleComplete = castle?.detectionNames.some((name) => detected.has(name)) ?? false;
+  const strategyComplete = definitionDetectedComplete(strategy, detected, currentSfen, color);
+  const castleComplete = definitionDetectedComplete(castle, detected, currentSfen, color);
   const played = new Set(playedMoves);
   const legal = new Set(legalMoves);
 
-  return openingPlanSteps(strategyId, castleId, color).find(({ usi, phase }) => (
-    !(phase === "strategy" && strategyComplete)
-    && !(phase === "castle" && castleComplete)
-    && !played.has(usi)
-    && legal.has(usi)
-  )) ?? null;
+  const steps = openingPlanSteps(strategyId, castleId, color);
+  for (const phase of ["strategy", "castle"]) {
+    const definition = phase === "strategy" ? strategy : castle;
+    const complete = phase === "strategy" ? strategyComplete : castleComplete;
+    if (!definition || complete) continue;
+    const pending = steps.filter((entry) => entry.phase === phase && !played.has(entry.usi));
+    if (definition.strictOrder) {
+      const next = pending[0];
+      if (next) return legal.has(next.usi) ? next : null;
+      continue;
+    }
+    const next = pending.find(({ usi }) => legal.has(usi));
+    if (next) return next;
+  }
+  return null;
 }
 
 export function isOpeningPlanComplete({
@@ -265,6 +333,7 @@ export function isOpeningPlanComplete({
   color = "black",
   playedMoves = [],
   detectedFormations = [],
+  currentSfen = "",
 }) {
   if (!strategyId && !castleId) return false;
   const detected = new Set(detectedFormations);
@@ -275,6 +344,8 @@ export function isOpeningPlanComplete({
     const definitions = phase === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
     const definition = definitions.find(({ id: candidateId }) => candidateId === id);
     if (!definition) return false;
+    const exact = matchesCompletionSquares(definition, currentSfen, color);
+    if (exact !== undefined) return exact;
     if (definition.detectionNames.some((name) => detected.has(name))) return true;
     return entries.length > 0 && entries.every(({ usi }) => played.has(usi));
   };
