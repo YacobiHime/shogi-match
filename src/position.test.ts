@@ -31,6 +31,12 @@ describe("ShogiHome board adapter contract", () => {
     expect(candidates[0].score).toBeUndefined();
   });
 
+  it("preserves the opening-guide kind used to color safety arrows", () => {
+    const position = positionFromSfen(START_SFEN);
+    const candidates = candidateMovesFromUsi(position, [{ usi: "7g7f", guideKind: "urgent" }]);
+    expect(candidates[0].guideKind).toBe("urgent");
+  });
+
   it("marks promote and non-promote recommendations only when promotion is available", () => {
     const position = positionFromSfen("4k4/9/9/4P4/9/9/9/9/4K4 b - 1");
     const candidates = candidateMovesFromUsi(position, [

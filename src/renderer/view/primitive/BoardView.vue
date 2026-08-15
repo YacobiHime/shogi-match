@@ -273,6 +273,7 @@ type CandidateMove = {
   move: Move;
   score?: number; // 手番側視点の数値スコア（showArrowScore が有効な場合のみ設定）
   promotion?: "成" | "不成";
+  guideKind?: "plan" | "urgent" | "ai";
 };
 
 type State = {
@@ -1088,6 +1089,9 @@ const arrows = computed(() => {
         width: main.value.frame.size.width + "px",
         height: main.value.frame.size.height + "px",
         zIndex: 100 + n - scoreRank,
+        "--arrow-color": candidate.guideKind === "plan"
+          ? "#f4c64f"
+          : candidate.guideKind === "ai" ? "#36d67a" : "#fe0000",
       },
       labelStyle: {
         left: middle.x + "px",
@@ -1253,11 +1257,11 @@ const whitePlayerTimeSeverity = computed(() => {
   overflow: visible;
 }
 .arrow-shaft {
-  stroke: #fe0000;
+  stroke: var(--arrow-color, #fe0000);
   stroke-linecap: round;
 }
 .arrow-head {
-  fill: #fe0000;
+  fill: var(--arrow-color, #fe0000);
 }
 .arrow-label {
   position: absolute;

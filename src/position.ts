@@ -8,8 +8,14 @@ import {
   unpromotedPieceType,
 } from "tsshogi";
 
-export type CandidateInput = { usi: string; score?: number };
-export type CandidateMove = { move: Move; score?: number; promotion?: "成" | "不成" };
+export type CandidateGuideKind = "plan" | "urgent" | "ai";
+export type CandidateInput = { usi: string; score?: number; guideKind?: CandidateGuideKind };
+export type CandidateMove = {
+  move: Move;
+  score?: number;
+  promotion?: "成" | "不成";
+  guideKind?: CandidateGuideKind;
+};
 
 export function positionFromSfen(sfen: string): ImmutablePosition {
   return Position.newBySFEN(sfen);
@@ -33,7 +39,7 @@ export function candidateMovesFromUsi(
       const promoted = position.createMoveByUSI(`${candidate.usi}+`);
       if (promoted && position.isValidMove(promoted)) promotion = "不成";
     }
-    return [{ move, score, promotion }];
+    return [{ move, score, promotion, guideKind: candidate.guideKind }];
   });
 }
 

@@ -4,6 +4,8 @@ import {
   isOpeningPlanComplete,
   mirrorUsiMove,
   nextOpeningPlanMove,
+  openingUrgentResponse,
+  chooseSafeOpeningMove,
   openingFollowupCount,
   openingPlanSteps,
   OPENING_CASTLES,
@@ -110,5 +112,47 @@ describe("opening guide", () => {
       "7g7f", "6g6f", "7i6h", "6h6g", "3i4h", "4g4f",
       "4h4g", "3g3f", "6i7h", "5i4h", "2i3g", "2h2i",
     ]);
+  });
+
+  it("prioritizes 7h gold against the fourth-file rook-pawn push in Aigakari", () => {
+    expect(openingUrgentResponse({
+      strategyId: "aigakari",
+      color: "black",
+      moveHistory: ["2g2f", "8c8d", "2f2e", "8d8e"],
+      legalMoves: ["6i7h", "7g7f"],
+    })).toEqual({
+      usi: "6i7h",
+      reason: "相手が8五歩まで伸ばしたから、先に7八金で角頭を守ろう！",
+    });
+  });
+
+  it("mirrors the Aigakari gold defense for a white player", () => {
+    expect(openingUrgentResponse({
+      strategyId: "aigakari",
+      color: "white",
+      moveHistory: ["2g2f", "8c8d", "2f2e"],
+      legalMoves: ["4a3b", "3c3d"],
+    })?.usi).toBe("4a3b");
+  });
+
+  it("replaces a plan move that falls outside the safe top candidates", () => {
+    expect(chooseSafeOpeningMove("2g2f", [
+      { rank: 1, move: "6i7h", score: { type: "cp", value: 80 } },
+      { rank: 2, move: "7g7f", score: { type: "cp", value: 20 } },
+    ])).toEqual({ usi: "6i7h", source: "ai", scoreLoss: undefined });
+  });
+
+  it("keeps a plan move when its evaluation loss is small", () => {
+    expect(chooseSafeOpeningMove("2g2f", [
+      { rank: 1, move: "7g7f", score: { type: "cp", value: 90 } },
+      { rank: 2, move: "2g2f", score: { type: "cp", value: -40 } },
+    ])).toEqual({ usi: "2g2f", source: "plan", scoreLoss: 130 });
+  });
+
+  it("rejects a plan move with a large evaluation drop", () => {
+    expect(chooseSafeOpeningMove("2g2f", [
+      { rank: 1, move: "6i7h", score: { type: "cp", value: 120 } },
+      { rank: 4, move: "2g2f", score: { type: "cp", value: -500 } },
+    ])).toEqual({ usi: "6i7h", source: "ai", scoreLoss: 620 });
   });
 });
