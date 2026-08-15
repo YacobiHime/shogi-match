@@ -1071,7 +1071,7 @@ const arrows = computed(() => {
       labelText,
       start,
       shaftEnd,
-      shaftWidth: arrowWidth * 0.68,
+      shaftWidth: arrowWidth * 0.36,
       headPoints: [
         end,
         new Point(
@@ -1089,9 +1089,6 @@ const arrows = computed(() => {
         width: main.value.frame.size.width + "px",
         height: main.value.frame.size.height + "px",
         zIndex: 100 + n - scoreRank,
-        "--arrow-color": candidate.guideKind === "plan"
-          ? "#f4c64f"
-          : candidate.guideKind === "ai" ? "#36d67a" : "#fe0000",
       },
       labelStyle: {
         left: middle.x + "px",
@@ -1257,11 +1254,11 @@ const whitePlayerTimeSeverity = computed(() => {
   overflow: visible;
 }
 .arrow-shaft {
-  stroke: var(--arrow-color, #fe0000);
+  stroke: #fe0000;
   stroke-linecap: round;
 }
 .arrow-head {
-  fill: var(--arrow-color, #fe0000);
+  fill: #fe0000;
 }
 .arrow-label {
   position: absolute;
