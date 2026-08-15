@@ -28,6 +28,15 @@ function expectPlanLegal(strategyId, castleId, color, opponentDependent = []) {
   }
 }
 
+function sfenAfterMoves(moves, color = "black") {
+  let record = createGameRecord();
+  for (const usi of moves) {
+    record = createGameRecord(withTurn(record.position.sfen, color));
+    expect(appendUsiMove(record, usi), `${color}: ${usi}`).toBe(true);
+  }
+  return record.position.sfen;
+}
+
 describe("opening guide", () => {
   it("distinguishes a completed plan from a temporarily unavailable next move", () => {
     expect(isOpeningPlanComplete({
@@ -112,6 +121,59 @@ describe("opening guide", () => {
       "7g7f", "6g6f", "7i6h", "6h6g", "3i4h", "4g4f",
       "4h4g", "3g3f", "6i7h", "5i4h", "2i3g", "2h2i",
     ]);
+  });
+
+  it("requires the complete Right King position instead of move history alone", () => {
+    const moves = openingPlanSteps("", "right-king").map(({ usi }) => usi);
+    expect(isOpeningPlanComplete({
+      castleId: "right-king",
+      playedMoves: moves,
+      currentSfen: createGameRecord().position.sfen,
+    })).toBe(false);
+    expect(isOpeningPlanComplete({
+      castleId: "right-king",
+      playedMoves: moves,
+      currentSfen: sfenAfterMoves(moves),
+    })).toBe(true);
+  });
+
+  it("prepares a fourth-file rook before building Kinmusou", () => {
+    const moves = openingPlanSteps("", "kinmusou").map(({ usi }) => usi);
+    expect(moves).toEqual([
+      "7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i2h", "4i4h", "6i5h",
+    ]);
+    expect(isOpeningPlanComplete({
+      castleId: "kinmusou",
+      detectedFormations: ["金無双"],
+      currentSfen: createGameRecord().position.sfen,
+    })).toBe(false);
+    expect(isOpeningPlanComplete({
+      castleId: "kinmusou",
+      playedMoves: moves,
+      currentSfen: sfenAfterMoves(moves),
+    })).toBe(true);
+  });
+
+  it("does not skip a blocked prerequisite in the Static Rook Anaguma sequence", () => {
+    expect(nextOpeningPlanMove({
+      castleId: "ibisha-anaguma",
+      playedMoves: ["9i9h", "7g7f"],
+      legalMoves: ["8i7g", "7i8h", "6i7h"],
+    })).toBeNull();
+  });
+
+  it("does not accept a premature Static Rook Anaguma detection", () => {
+    const moves = openingPlanSteps("", "ibisha-anaguma").map(({ usi }) => usi);
+    expect(isOpeningPlanComplete({
+      castleId: "ibisha-anaguma",
+      detectedFormations: ["居飛車穴熊"],
+      currentSfen: createGameRecord().position.sfen,
+    })).toBe(false);
+    expect(isOpeningPlanComplete({
+      castleId: "ibisha-anaguma",
+      playedMoves: moves,
+      currentSfen: sfenAfterMoves(moves),
+    })).toBe(true);
   });
 
   it("prioritizes 7h gold against the fourth-file rook-pawn push in Aigakari", () => {
