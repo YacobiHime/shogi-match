@@ -72,14 +72,23 @@
         </div>
       </div>
 
-      <img
+      <svg
         v-for="arrow in arrows"
         :key="arrow.id"
         class="arrows"
-        :src="arrowImageUrl"
         :style="arrow.style"
-        style="object-fit: cover; object-position: left top"
-      />
+        aria-hidden="true"
+      >
+        <line
+          :x1="arrow.start.x"
+          :y1="arrow.start.y"
+          :x2="arrow.shaftEnd.x"
+          :y2="arrow.shaftEnd.y"
+          :stroke-width="arrow.shaftWidth"
+          class="arrow-shaft"
+        />
+        <polygon :points="arrow.headPoints" class="arrow-head" />
+      </svg>
       <div
         v-for="arrow in arrows"
         v-show="arrow.labelText"
@@ -1022,7 +1031,22 @@ const arrows = computed(() => {
     const end = boardBase.add(boardLayoutBuilder.value.centerOfSquare(move.to));
     const middle = start.add(end).multiply(0.5);
     const distance = start.distanceTo(end);
-    const angle = start.angleTo(end) - Math.PI;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const unitX = distance > 0 ? dx / distance : 0;
+    const unitY = distance > 0 ? dy / distance : 0;
+    const perpendicularX = -unitY;
+    const perpendicularY = unitX;
+    const headLength = Math.min(arrowWidth, distance * 0.4);
+    const headHalfWidth = arrowWidth * 0.5;
+    const headBase = new Point(
+      end.x - unitX * headLength,
+      end.y - unitY * headLength,
+    );
+    const shaftEnd = new Point(
+      end.x - unitX * headLength * 0.72,
+      end.y - unitY * headLength * 0.72,
+    );
     // z-index 決定のためスコアに基づいてランクを計算（同率は同順位）
     let evaluationLabel: string;
     let scoreRank: number;
@@ -1037,23 +1061,32 @@ const arrows = computed(() => {
       evaluationLabel = "";
     }
     const labelText = [evaluationLabel, candidate.promotion].filter(Boolean).join("・");
-    const x = middle.x - distance / 2;
-    const y = middle.y - arrowWidth / 2;
     // 矢印が水平に近いほどラベルをずらす（最大でフォントサイズ12px分）
     // 矢印が水平より下向き（dy > |dx|）のときは上方向にオフセット
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
     const horizontalFactor = distance > 0 ? Math.abs(dx) / distance : 0;
     const labelOffsetY = dy > 0 ? -horizontalFactor * 12 : horizontalFactor * 12;
     return {
       id: move.usi,
       labelText,
+      start,
+      shaftEnd,
+      shaftWidth: arrowWidth * 0.68,
+      headPoints: [
+        end,
+        new Point(
+          headBase.x + perpendicularX * headHalfWidth,
+          headBase.y + perpendicularY * headHalfWidth,
+        ),
+        new Point(
+          headBase.x - perpendicularX * headHalfWidth,
+          headBase.y - perpendicularY * headHalfWidth,
+        ),
+      ].map(({ x, y }) => `${x},${y}`).join(" "),
       style: {
-        left: x + "px",
-        top: y + "px",
-        width: distance + "px",
-        height: arrowWidth + "px",
-        transform: `rotate(${angle}rad)`,
+        left: "0px",
+        top: "0px",
+        width: main.value.frame.size.width + "px",
+        height: main.value.frame.size.height + "px",
         zIndex: 100 + n - scoreRank,
       },
       labelStyle: {
@@ -1217,6 +1250,14 @@ const whitePlayerTimeSeverity = computed(() => {
 .arrows {
   z-index: 20;
   pointer-events: none;
+  overflow: visible;
+}
+.arrow-shaft {
+  stroke: #fe0000;
+  stroke-linecap: round;
+}
+.arrow-head {
+  fill: #fe0000;
 }
 .arrow-label {
   position: absolute;
