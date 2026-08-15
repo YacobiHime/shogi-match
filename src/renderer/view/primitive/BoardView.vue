@@ -85,9 +85,10 @@
           :x2="arrow.shaftEnd.x"
           :y2="arrow.shaftEnd.y"
           :stroke-width="arrow.shaftWidth"
+          stroke="#fe0000"
           class="arrow-shaft"
         />
-        <polygon :points="arrow.headPoints" class="arrow-head" />
+        <polygon :points="arrow.headPoints" fill="#fe0000" class="arrow-head" />
       </svg>
       <div
         v-for="arrow in arrows"
