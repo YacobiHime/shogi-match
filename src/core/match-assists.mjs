@@ -151,6 +151,20 @@ export function getHintSearchSettings(mobile = false) {
     : { nodes: 1000000, maxTimeMs: 10000, multiPv: 3 };
 }
 
+/** 10秒後の軽い助言は、候補を広げず最善手1本へ探索を集中する。 */
+export function getIdleCoachSearchSettings(mobile = false) {
+  return mobile
+    ? { nodes: 100000, maxTimeMs: 1800, multiPv: 1 }
+    : { nodes: 200000, maxTimeMs: 2500, multiPv: 1 };
+}
+
+/** 戦法完成後の自動3候補。閃きより軽く、通常助言より深く読む。 */
+export function getOpeningFollowupSearchSettings(mobile = false) {
+  return mobile
+    ? { nodes: 200000, maxTimeMs: 3500, multiPv: 3 }
+    : { nodes: 500000, maxTimeMs: 6000, multiPv: 3 };
+}
+
 function validateSnapshot(snapshot) {
   if (!snapshot || typeof snapshot.sfen !== 'string'
     || !Number.isInteger(snapshot.moveHistoryLength) || snapshot.moveHistoryLength < 0

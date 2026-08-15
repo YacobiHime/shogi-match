@@ -340,6 +340,8 @@ import {
   formatHintMove,
   getHintMoves,
   getHintSearchSettings,
+  getIdleCoachSearchSettings,
+  getOpeningFollowupSearchSettings,
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
@@ -867,16 +869,10 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
 }
 
 async function analyzeOpeningFollowupPosition() {
-  if (!engine) return [];
-  const positionKey = currentEnginePosition();
-  const cached = positionAnalysisCache.get(positionKey, { nodes: 0, multiPv: 3 });
-  if (cached) return cached;
-  engine.setPosition(positionKey);
-  engine.applyStrengthOptions({ multiPv: 3 });
-  // nodes指定は端末差で停止が遅れることがあるため、自動表示だけは短い時間探索にする。
-  const analysis = await engine.go({ movetime: 500, maxTimeMs: 1200 });
-  positionAnalysisCache.set(positionKey, analysis.candidates, { nodes: 0, multiPv: 3 });
-  return analysis.candidates;
+  const settings = getOpeningFollowupSearchSettings(
+    props.mobile || boardLayout.value === "portrait",
+  );
+  return analyzeCoachPosition(settings.nodes, settings.maxTimeMs, settings.multiPv);
 }
 
 function resetOpeningFollowup() {
@@ -911,7 +907,7 @@ function scheduleOpeningFollowupCandidates() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      // 自動表示は閃きと同じ3候補だが、毎手番使うため探索時間は短く保つ。
+      // 自動表示は閃きと同じ3候補。閃き未満の負荷で、通常助言より深く読む。
       const candidates = await analyzeOpeningFollowupPosition();
       if (
         generation !== openingFollowupGeneration || !active.value || reviewMode.value
@@ -1063,7 +1059,14 @@ function schedulePlayerIdleAdvice() {
         ) return;
         dedicatedCoachRunning = true;
         try {
-          const candidates = await analyzeCoachPosition(20000, 800, 3);
+          const settings = getIdleCoachSearchSettings(
+            props.mobile || boardLayout.value === "portrait",
+          );
+          const candidates = await analyzeCoachPosition(
+            settings.nodes,
+            settings.maxTimeMs,
+            settings.multiPv,
+          );
           if (
             generation !== idleCoachGeneration || !active.value || reviewMode.value
             || moveHistory.length !== historyLength
