@@ -246,7 +246,7 @@ import {
   PieceStandImageType,
   PromotionSelectorStyle,
 } from "@/common/settings/app";
-import { RectSize } from "@/common/assets/geometry";
+import { Point, RectSize } from "@/common/assets/geometry";
 import { newConfig } from "./board/config";
 import { StandardLayoutBuilder } from "./board/standard";
 import { PortraitLayoutBuilder } from "./board/portrait";
