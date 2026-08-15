@@ -151,6 +151,17 @@ export function getHintSearchSettings(mobile = false) {
     : { nodes: 1000000, maxTimeMs: 10000, multiPv: 3 };
 }
 
+/** 閃きと同じ探索内で、最善手との差を着手評価へ再利用する。 */
+export function hintMoveAssessment(candidates = [], move = '') {
+  const best = candidates.find((candidate) => candidate?.rank === 1);
+  const selected = candidates.find((candidate) => candidate?.move === move);
+  if (!best?.score || !selected?.score) return null;
+  return {
+    beforeScore: best.score,
+    afterScore: selected.score,
+  };
+}
+
 /** 10秒後の軽い助言は、候補を広げず最善手1本へ探索を集中する。 */
 export function getIdleCoachSearchSettings(mobile = false) {
   return mobile

@@ -5,6 +5,7 @@ import {
   getIdleCoachSearchSettings,
   getOpeningFollowupSearchSettings,
   getOpeningGuideSafetySearchSettings,
+  hintMoveAssessment,
   hintScoreForArrow,
 } from './match-assists.mjs';
 
@@ -41,6 +42,22 @@ describe('hint arrow evaluations', () => {
       maxTimeMs: 6000,
       multiPv: 3,
     });
+  });
+
+  it('reuses one hint search when assessing the move that was played', () => {
+    const candidates = [
+      { rank: 1, move: '7g7f', score: { type: 'cp', value: 180 } },
+      { rank: 2, move: '2g2f', score: { type: 'cp', value: -120 } },
+    ];
+    expect(hintMoveAssessment(candidates, '7g7f')).toEqual({
+      beforeScore: { type: 'cp', value: 180 },
+      afterScore: { type: 'cp', value: 180 },
+    });
+    expect(hintMoveAssessment(candidates, '2g2f')).toEqual({
+      beforeScore: { type: 'cp', value: 180 },
+      afterScore: { type: 'cp', value: -120 },
+    });
+    expect(hintMoveAssessment(candidates, '5g5f')).toBeNull();
   });
 
   it('concentrates idle coaching on one practical best-move search', () => {

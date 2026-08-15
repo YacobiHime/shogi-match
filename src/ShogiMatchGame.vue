@@ -343,6 +343,7 @@ import {
   getIdleCoachSearchSettings,
   getOpeningFollowupSearchSettings,
   getOpeningGuideSafetySearchSettings,
+  hintMoveAssessment,
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
@@ -468,6 +469,16 @@ const advisedCoachTopics = new Set<string>();
 const coachAdviceLastShownAt = new Map<string, number>();
 let playerTurnScore: { type: "cp" | "mate"; value: number } | undefined;
 let playerTurnScoreHistoryLength = -1;
+type EngineEvaluation = { type: "cp" | "mate"; value: number };
+let latestHintAnalysis: {
+  historyLength: number;
+  candidates: { rank: number; move: string; score?: EngineEvaluation }[];
+} | undefined;
+let playerMoveHintAssessment: {
+  historyLength: number;
+  beforeScore: EngineEvaluation;
+  afterScore: EngineEvaluation;
+} | undefined;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let idleCoachTimer: ReturnType<typeof setTimeout> | undefined;
 let idleCoachGeneration = 0;
@@ -1285,9 +1296,20 @@ function finish(matchResult: MatchResult) {
 }
 
 function applyMove(usi: string, actor: "player" | "cpu") {
+  const reusedHint = actor === "player" && latestHintAnalysis?.historyLength === moveHistory.length
+    ? hintMoveAssessment(latestHintAnalysis.candidates, usi)
+    : null;
   if (!active.value || !appendUsiMove(record.value, usi)) return false;
   syncPosition(usi);
   moveHistory.push(usi);
+  if (actor === "player") {
+    playerMoveHintAssessment = reusedHint ? {
+      historyLength: moveHistory.length,
+      beforeScore: reusedHint.beforeScore,
+      afterScore: reusedHint.afterScore,
+    } : undefined;
+    latestHintAnalysis = undefined;
+  }
   resetOpeningGuideSafety();
   hintCandidates.value = [];
   openingFollowupCandidates.value = [];
@@ -1312,6 +1334,25 @@ async function showHint() {
       hintSearch.maxTimeMs,
       hintSearch.multiPv,
     );
+    latestHintAnalysis = {
+      historyLength: moveHistory.length,
+      candidates: candidates
+        .filter(({ rank, move, score }) => (
+          Number.isInteger(rank) && typeof move === "string"
+          && (score?.type === "cp" || score?.type === "mate")
+          && Number.isFinite(score.value)
+        ))
+        .map(({ rank, move, score }) => ({
+          rank,
+          move,
+          score: score as EngineEvaluation,
+        })),
+    };
+    const hintBestScore = latestHintAnalysis.candidates.find(({ rank }) => rank === 1)?.score;
+    if (!reviewMode.value && record.value.position.color === humanColor.value && hintBestScore) {
+      playerTurnScore = hintBestScore;
+      playerTurnScoreHistoryLength = moveHistory.length;
+    }
     const search = { move: candidates.find(({ rank }) => rank === 1)?.move ?? "", candidates };
     const moves = getHintMoves(search, 3);
     hintCandidates.value = moves.map(({ move, score }) => ({
@@ -1345,6 +1386,8 @@ function undoTurn() {
   if (!reviewMode.value) undosRemaining.value -= 1;
   playerTurnScore = undefined;
   playerTurnScoreHistoryLength = -1;
+  latestHintAnalysis = undefined;
+  playerMoveHintAssessment = undefined;
   hintCandidates.value = [];
   resetOpeningFollowup();
   resetOpeningGuideSafety();
@@ -1543,9 +1586,14 @@ async function scheduleCpuMove() {
       let selectedCpuScore: { type: "cp" | "mate"; value: number } | undefined;
       let moveFeedback: { key: string; text: string } | null = null;
       const playerMoveHistoryLength = moveHistory.length;
-      const comparableBeforeScore = playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
-        ? playerTurnScore
+      const reusedHintAssessment = playerMoveHintAssessment?.historyLength === playerMoveHistoryLength
+        ? playerMoveHintAssessment
         : undefined;
+      playerMoveHintAssessment = undefined;
+      const comparableBeforeScore = reusedHintAssessment?.beforeScore
+        ?? (playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
+          ? playerTurnScore
+          : undefined);
       const openingMove = strategyMove();
       // 序盤は難易度用の候補順位ずらしより、自然な定跡の駒組みを優先する。
       // 王手中・駒が取られた直後・定跡終了後は強制せず、通常探索へ戻す。
@@ -1568,11 +1616,12 @@ async function scheduleCpuMove() {
         moveFeedback = getMoveFeedback({
           level: coachLevel.value,
           beforeScore: comparableBeforeScore,
-          afterScore: scoreForPlayer(
-            bestCpuScore,
-            record.value.position.color,
-            humanColor.value,
-          ),
+          // 閃き候補を指した場合は、深さの違う再探索と混ぜず同じ探索内で比較する。
+          afterScore: reusedHintAssessment?.afterScore ?? scoreForPlayer(
+              bestCpuScore,
+              record.value.position.color,
+              humanColor.value,
+            ),
         });
         // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
         // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
@@ -1828,6 +1877,8 @@ function restart() {
   reviewNavigation.value = createReviewNavigation();
   playerTurnScore = undefined;
   playerTurnScoreHistoryLength = -1;
+  latestHintAnalysis = undefined;
+  playerMoveHintAssessment = undefined;
   cpuOpeningPlan = null;
   positionAnalysisCache.clear();
   moveHistory = [];
