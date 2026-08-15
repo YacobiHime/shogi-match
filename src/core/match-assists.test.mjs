@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getHintMoves, getHintSearchSettings, hintScoreForArrow } from './match-assists.mjs';
+import {
+  getHintMoves,
+  getHintSearchSettings,
+  getIdleCoachSearchSettings,
+  getOpeningFollowupSearchSettings,
+  hintScoreForArrow,
+} from './match-assists.mjs';
 
 describe('hint arrow evaluations', () => {
   it('keeps engine scores when selecting hint candidates', () => {
@@ -32,6 +38,32 @@ describe('hint arrow evaluations', () => {
     expect(getHintSearchSettings(true)).toEqual({
       nodes: 300000,
       maxTimeMs: 6000,
+      multiPv: 3,
+    });
+  });
+
+  it('concentrates idle coaching on one practical best-move search', () => {
+    expect(getIdleCoachSearchSettings(false)).toEqual({
+      nodes: 200000,
+      maxTimeMs: 2500,
+      multiPv: 1,
+    });
+    expect(getIdleCoachSearchSettings(true)).toEqual({
+      nodes: 100000,
+      maxTimeMs: 1800,
+      multiPv: 1,
+    });
+  });
+
+  it('gives automatic opening follow-ups enough budget for three useful choices', () => {
+    expect(getOpeningFollowupSearchSettings(false)).toEqual({
+      nodes: 500000,
+      maxTimeMs: 6000,
+      multiPv: 3,
+    });
+    expect(getOpeningFollowupSearchSettings(true)).toEqual({
+      nodes: 200000,
+      maxTimeMs: 3500,
       multiPv: 3,
     });
   });
