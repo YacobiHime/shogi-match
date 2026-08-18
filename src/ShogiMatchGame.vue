@@ -155,7 +155,7 @@
         </label>
       </div>
       <div class="shogi-game__settings-actions">
-        <button type="button" class="shogi-game__settings-restart" @click="restartWithSettings">最初から</button>
+        <button type="button" class="shogi-game__settings-restart" @click="openPregame">最初から</button>
         <button type="button" @click="closeSettings">閉じる</button>
       </div>
     </div>
@@ -858,11 +858,6 @@ function closeSettings() {
   settingsOpen.value = false;
 }
 
-function restartWithSettings() {
-  activePlayerColor.value = selectedPlayerColor.value;
-  restart();
-}
-
 function beginMatch() {
   activePlayerColor.value = selectedPlayerColor.value;
   matchStarted.value = true;
@@ -886,7 +881,6 @@ function openPregame() {
   resultDialogOpen.value = false;
   reviewMode.value = false;
   analysisOpen.value = false;
-  selectedPlayerColor.value = activePlayerColor.value;
 }
 
 function strategyMove(): string | undefined {
