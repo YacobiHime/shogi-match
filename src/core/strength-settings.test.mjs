@@ -26,10 +26,10 @@ describe('CPU strength settings', () => {
       maxScoreLoss: 1200,
     });
     expect(getStrengthSearchSettings(30000)).toEqual({
-      nodes: 8000,
+      nodes: 11000,
       multiPv: 8,
-      moveRank: { min: 2, max: 8 },
-      maxScoreLoss: 900,
+      moveRank: { min: 2, max: 7 },
+      maxScoreLoss: 800,
     });
   });
 
