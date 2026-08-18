@@ -14,6 +14,68 @@
       <span class="shogi-game__turn">{{ moveCount }}手目</span>
     </header>
 
+    <div
+      v-if="pregameOpen"
+      class="shogi-game__pregame"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pregame-title"
+    >
+      <div class="shogi-game__pregame-panel">
+        <div class="shogi-game__pregame-heading">
+          <span>対局準備</span>
+          <h2 id="pregame-title">対局条件を選んでね</h2>
+        </div>
+        <div class="shogi-game__pregame-grid">
+          <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
+            <span>敵の強さ</span>
+            <select v-model.number="searchNodes" aria-label="対局前の敵の強さ">
+              <option v-for="preset in CPU_STRENGTH_PRESETS" :key="preset.value" :value="preset.value">
+                {{ preset.label }}（{{ preset.guide }}）
+              </option>
+            </select>
+          </label>
+          <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
+            <span>敵の作戦</span>
+            <select v-model="cpuStrategy" aria-label="対局前の敵の作戦">
+              <option value="random">おまかせ</option>
+              <option value="ibisha">居飛車</option>
+              <option value="shiken">四間飛車</option>
+              <option value="sangen">三間飛車</option>
+              <option value="nakabisha">中飛車</option>
+              <option value="yagura">矢倉</option>
+            </select>
+          </label>
+          <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
+            <span>自分の手番</span>
+            <select v-model="selectedPlayerColor" aria-label="対局前の自分の手番">
+              <option value="black">先手</option>
+              <option value="white">後手</option>
+            </select>
+          </label>
+          <label class="shogi-game__pregame-field">
+            <span>やこび姫の助言</span>
+            <select v-model="coachLevel" aria-label="対局前の助言設定">
+              <option value="off">なし</option>
+              <option value="encourage">応援のみ</option>
+              <option value="detailed">詳しい助言</option>
+            </select>
+          </label>
+        </div>
+        <p v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-note">
+          {{ engineUnavailable ? "簡易CPUで対局します" : engineReady ? "準備できました" : "対局AIを準備しています…" }}
+        </p>
+        <button
+          type="button"
+          class="shogi-game__pregame-start"
+          :disabled="normalizedMode === 'cpu' && !engineReady && !engineUnavailable"
+          @click="beginMatch"
+        >
+          {{ normalizedMode === "cpu" && !engineReady && !engineUnavailable ? "準備中…" : "対局開始" }}
+        </button>
+      </div>
+    </div>
+
     <section class="shogi-game__player-zone shogi-game__player-zone--opponent">
       <div class="shogi-game__player-card">
         <span>{{ opponentSideLabel }}</span>
@@ -294,7 +356,7 @@
           </div>
         </dl>
         <div class="shogi-game__result-actions">
-          <button type="button" class="shogi-game__rematch" @click="restart">もう一度対局</button>
+          <button type="button" class="shogi-game__rematch" @click="openPregame">もう一度対局</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
         </div>
       </div>
@@ -408,7 +470,9 @@ const errorMessage = ref("");
 const record = ref<Record>(createRecord());
 const currentSfen = ref(record.value.position.sfen);
 const lastMove = ref("");
-const active = ref(true);
+const active = ref(false);
+const matchStarted = ref(false);
+const pregameOpen = ref(true);
 const thinking = ref(false);
 const engineReady = ref(false);
 const engineUnavailable = ref(false);
@@ -585,6 +649,7 @@ const canUndo = computed(() =>
   && (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
 const statusText = computed(() => {
+  if (!matchStarted.value) return "対局条件を選んでください";
   if (reviewMode.value && reviewCpuEnabled.value) {
     return thinking.value ? `${props.cpuPlayerName}が考えています…` : "対CPU検討中です";
   }
@@ -796,6 +861,32 @@ function closeSettings() {
 function restartWithSettings() {
   activePlayerColor.value = selectedPlayerColor.value;
   restart();
+}
+
+function beginMatch() {
+  activePlayerColor.value = selectedPlayerColor.value;
+  matchStarted.value = true;
+  pregameOpen.value = false;
+  restart();
+}
+
+function openPregame() {
+  if (cpuTimer) clearTimeout(cpuTimer);
+  cancelPlayerIdleAdvice();
+  coachAdviceScheduler.reset();
+  analysisGeneration += 1;
+  reviewCoachGeneration += 1;
+  reviewCpuGeneration += 1;
+  if (analysisRunning.value) engine?.stop();
+  active.value = false;
+  thinking.value = false;
+  matchStarted.value = false;
+  pregameOpen.value = true;
+  settingsOpen.value = false;
+  resultDialogOpen.value = false;
+  reviewMode.value = false;
+  analysisOpen.value = false;
+  selectedPlayerColor.value = activePlayerColor.value;
 }
 
 function strategyMove(): string | undefined {
@@ -1860,6 +1951,8 @@ function restart() {
   reviewCpuEnabled.value = false;
   analysisGeneration += 1;
   if (analysisRunning.value) engine?.stop();
+  matchStarted.value = true;
+  pregameOpen.value = false;
   settingsOpen.value = false;
   record.value = createRecord();
   active.value = true;
@@ -1902,12 +1995,14 @@ function restart() {
 
 watch(
   () => [props.initialSfen, props.mode],
-  () => restart(),
+  () => {
+    if (matchStarted.value) restart();
+  },
 );
 watch(() => props.playerColor, (value) => {
   activePlayerColor.value = normalizePlayerColor(value);
   selectedPlayerColor.value = activePlayerColor.value;
-  restart();
+  if (matchStarted.value) restart();
 });
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
@@ -1948,9 +2043,7 @@ onMounted(() => {
 
 queueMicrotask(() => {
   observeFormations(currentSfen.value);
-  emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
   initializeEngine();
-  scheduleCpuMove();
 });
 </script>
 
@@ -2205,6 +2298,88 @@ queueMicrotask(() => {
   margin-top: 0.25rem;
   color: #d5c3bd;
   font-size: 0.85rem;
+}
+.shogi-game__pregame {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  background:
+    radial-gradient(circle at 72% 24%, rgba(255, 169, 185, 0.32), transparent 35%),
+    linear-gradient(135deg, rgba(26, 10, 16, 0.96), rgba(105, 28, 47, 0.96));
+  backdrop-filter: blur(0.25rem);
+}
+.shogi-game__pregame-panel {
+  width: min(44rem, 100%);
+  padding: clamp(1.2rem, 3vw, 2.25rem);
+  border: 2px solid var(--gold);
+  border-radius: 1rem;
+  color: #fff5e8;
+  background: linear-gradient(160deg, rgba(62, 26, 36, 0.98), rgba(31, 15, 21, 0.98));
+  box-shadow: 0 1.2rem 3.5rem rgba(0, 0, 0, 0.48), inset 0 0 2rem rgba(255, 183, 197, 0.08);
+}
+.shogi-game__pregame-heading {
+  margin-bottom: 1.25rem;
+  text-align: center;
+}
+.shogi-game__pregame-heading > span {
+  color: #f4d890;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+.shogi-game__pregame-heading h2 {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.35rem, 3vw, 2rem);
+}
+.shogi-game__pregame-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+.shogi-game__pregame-field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid rgba(240, 196, 95, 0.58);
+  border-radius: 0.55rem;
+  background: rgba(16, 8, 12, 0.38);
+}
+.shogi-game__pregame-field span {
+  color: #f7d88f;
+  font-weight: 700;
+}
+.shogi-game__pregame-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d9a84f;
+  border-radius: 0.4rem;
+  color: #2b1618;
+  background: #fff9ea;
+  font: inherit;
+}
+.shogi-game__pregame-note {
+  min-height: 1.5rem;
+  margin: 1rem 0 0;
+  color: #dccbc5;
+  text-align: center;
+}
+.shogi-game__pregame-start {
+  display: block;
+  width: min(18rem, 100%);
+  min-height: 3.25rem;
+  margin: 1rem auto 0;
+  border-color: #ffe39b !important;
+  color: #fff9e9 !important;
+  background: linear-gradient(#ae3f58, #681d31) !important;
+  box-shadow: 0 0 1.1rem rgba(255, 166, 184, 0.28);
+  font-size: 1.1rem !important;
+  font-weight: 800;
 }
 .shogi-game__settings {
   position: absolute;
@@ -2597,6 +2772,33 @@ queueMicrotask(() => {
   }
 }
 @media (max-width: 780px) {
+  .shogi-game__pregame {
+    padding: 0.65rem;
+  }
+  .shogi-game__pregame-panel {
+    max-height: 100%;
+    padding: 0.9rem;
+    overflow: auto;
+  }
+  .shogi-game__pregame-heading {
+    margin-bottom: 0.7rem;
+  }
+  .shogi-game__pregame-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .shogi-game__pregame-field {
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    align-items: center;
+    padding: 0.45rem 0.55rem;
+  }
+  .shogi-game__pregame-note {
+    margin-top: 0.65rem;
+  }
+  .shogi-game__pregame-start {
+    min-height: 2.8rem;
+    margin-top: 0.65rem;
+  }
   .shogi-game__settings-grid {
     grid-template-columns: 1fr;
   }
