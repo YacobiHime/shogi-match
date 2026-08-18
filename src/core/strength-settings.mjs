@@ -5,7 +5,14 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
   [5000, { nodes: 1500, multiPv: 12, moveRank: { min: 5, max: 12 }, maxScoreLoss: 2000 }],
   [10000, { nodes: 2500, multiPv: 12, moveRank: { min: 4, max: 12 }, maxScoreLoss: 1600 }],
   [20000, { nodes: 4000, multiPv: 10, moveRank: { min: 3, max: 10 }, maxScoreLoss: 1200 }],
-  [30000, { nodes: 11000, multiPv: 8, moveRank: { min: 2, max: 7 }, maxScoreLoss: 800 }],
+  // 「ふつう」は評価差による重み付き抽選で、極端な強弱の振れを抑える。
+  [30000, {
+    nodes: 11000,
+    multiPv: 8,
+    moveRank: { min: 1, max: 7 },
+    maxScoreLoss: 800,
+    scoreTemperature: 450,
+  }],
   [60000, { nodes: 15000, multiPv: 7, moveRank: { min: 2, max: 7 }, maxScoreLoss: 700 }],
   [100000, { nodes: 25000, multiPv: 6, moveRank: { min: 1, max: 6 }, maxScoreLoss: 500 }],
   [200000, { nodes: 50000, multiPv: 5, moveRank: { min: 1, max: 5 }, maxScoreLoss: 350 }],
@@ -41,10 +48,14 @@ export function usesRandomLegalMove(preset) {
 export function getStrengthSearchSettings(preset) {
   const settings = STRENGTH_SEARCH_SETTINGS.get(preset)
     ?? STRENGTH_SEARCH_SETTINGS.get(30000);
-  return {
+  const result = {
     nodes: settings.nodes,
     multiPv: settings.multiPv,
     moveRank: { ...settings.moveRank },
     maxScoreLoss: settings.maxScoreLoss,
   };
+  if (Number.isFinite(settings.scoreTemperature)) {
+    result.scoreTemperature = settings.scoreTemperature;
+  }
+  return result;
 }

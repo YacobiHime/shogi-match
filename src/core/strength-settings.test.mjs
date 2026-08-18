@@ -28,8 +28,9 @@ describe('CPU strength settings', () => {
     expect(getStrengthSearchSettings(30000)).toEqual({
       nodes: 11000,
       multiPv: 8,
-      moveRank: { min: 2, max: 7 },
+      moveRank: { min: 1, max: 7 },
       maxScoreLoss: 800,
+      scoreTemperature: 450,
     });
   });
 

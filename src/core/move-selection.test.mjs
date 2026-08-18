@@ -60,4 +60,19 @@ describe('評価差を考慮したCPU候補選択', () => {
       { maxScoreLoss: 350, preferredMove: '9g9f' },
     )).toEqual({ move: '7g7f', rank: 1 });
   });
+
+  test('評価差による重み付き抽選では同じ乱数でも悪い下位候補を選びにくい', () => {
+    expect(selectMoveByRank(
+      search,
+      { min: 1, max: 4 },
+      () => 0.8,
+      { maxScoreLoss: Infinity, scoreTemperature: 200 },
+    )).toEqual({ move: '2g2f', rank: 2 });
+    expect(selectMoveByRank(
+      search,
+      { min: 1, max: 4 },
+      () => 0.8,
+      { maxScoreLoss: Infinity },
+    )).toEqual({ move: '9g9f', rank: 4 });
+  });
 });

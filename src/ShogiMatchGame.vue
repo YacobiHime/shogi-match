@@ -1632,7 +1632,7 @@ function scheduleReviewCpuMove() {
           search,
           strength.moveRank,
           Math.random,
-          { maxScoreLoss: strength.maxScoreLoss },
+          { maxScoreLoss: strength.maxScoreLoss, scoreTemperature: strength.scoreTemperature },
         ).move;
       } else {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
@@ -1724,7 +1724,7 @@ async function scheduleCpuMove() {
           search,
           strength.moveRank,
           Math.random,
-          { maxScoreLoss: strength.maxScoreLoss },
+          { maxScoreLoss: strength.maxScoreLoss, scoreTemperature: strength.scoreTemperature },
         );
         usi = selection.move;
         selectedCpuScore = search.candidates.find(
