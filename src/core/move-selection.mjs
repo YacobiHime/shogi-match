@@ -30,7 +30,7 @@ export function selectMoveByRank(
   searchResult,
   moveRank,
   random = Math.random,
-  { maxScoreLoss = Infinity, preferredMove } = {},
+  { maxScoreLoss = Infinity, preferredMove, scoreTemperature = Infinity } = {},
 ) {
   calculateEffectiveMoveRank(moveRank, 0);
   if (!searchResult || typeof searchResult.move !== 'string' || searchResult.move === '') {
@@ -39,6 +39,10 @@ export function selectMoveByRank(
 
   if (!(maxScoreLoss === Infinity || (Number.isFinite(maxScoreLoss) && maxScoreLoss >= 0))) {
     throw new Error('maxScoreLossは0以上の数値にしてください');
+  }
+  if (!(scoreTemperature === Infinity
+    || (Number.isFinite(scoreTemperature) && scoreTemperature > 0))) {
+    throw new Error('scoreTemperatureは0より大きい数値にしてください');
   }
   const byRank = new Map();
   for (const candidate of searchResult.candidates || []) {
@@ -80,6 +84,21 @@ export function selectMoveByRank(
   const randomValue = random();
   if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1) {
     throw new Error('randomは0以上1未満の数値を返してください');
+  }
+  if (scoreTemperature !== Infinity && bestValue !== undefined) {
+    const weighted = candidates.map(([rank, candidate]) => {
+      const value = comparable(candidate.score);
+      const loss = value === undefined ? maxScoreLoss : Math.max(0, bestValue - value);
+      return { rank, candidate, weight: Math.exp(-loss / scoreTemperature) };
+    });
+    const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+    let target = randomValue * totalWeight;
+    for (const entry of weighted) {
+      target -= entry.weight;
+      if (target <= 0) return { move: entry.candidate.move, rank: entry.rank };
+    }
+    const fallback = weighted.at(-1);
+    return { move: fallback.candidate.move, rank: fallback.rank };
   }
   const [rank, candidate] = candidates[Math.floor(randomValue * candidates.length)];
   return { move: candidate.move, rank };
