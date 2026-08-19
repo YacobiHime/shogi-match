@@ -18,12 +18,14 @@ describe('CPU strength settings', () => {
       multiPv: 12,
       moveRank: { min: 4, max: 12 },
       maxScoreLoss: 1600,
+      scoreTemperature: 1100,
     });
     expect(getStrengthSearchSettings(20000)).toEqual({
       nodes: 4000,
       multiPv: 10,
       moveRank: { min: 3, max: 10 },
       maxScoreLoss: 1200,
+      scoreTemperature: 800,
     });
     expect(getStrengthSearchSettings(30000)).toEqual({
       nodes: 11000,
@@ -55,12 +57,14 @@ describe('CPU strength settings', () => {
       multiPv: 6,
       moveRank: { min: 1, max: 6 },
       maxScoreLoss: 500,
+      scoreTemperature: 220,
     });
     expect(getStrengthSearchSettings(300000)).toEqual({
       nodes: 120000,
       multiPv: 3,
       moveRank: { min: 1, max: 3 },
       maxScoreLoss: 220,
+      scoreTemperature: 80,
     });
     expect(getStrengthSearchSettings(480000)).toEqual({
       nodes: 480000,
@@ -72,5 +76,13 @@ describe('CPU strength settings', () => {
 
   it('falls back to normal for an unknown preset', () => {
     expect(getStrengthSearchSettings(999)).toEqual(getStrengthSearchSettings(30000));
+  });
+
+  it('reduces selection temperature as difficulty rises', () => {
+    const temperatures = [5000, 10000, 20000, 30000, 60000, 100000, 200000, 300000]
+      .map((preset) => getStrengthSearchSettings(preset).scoreTemperature);
+    expect(temperatures).toEqual([1400, 1100, 800, 450, 320, 220, 140, 80]);
+    expect(temperatures.every((value, index) => index === 0 || value < temperatures[index - 1]))
+      .toBe(true);
   });
 });
