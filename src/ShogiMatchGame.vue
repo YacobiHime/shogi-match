@@ -900,12 +900,21 @@ function strategyMove(): string | undefined {
     moves: moveHistory,
   });
   const cpuColor = cpuIsBlack ? Color.BLACK : Color.WHITE;
+  const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
+  // 定跡の予定手より、飛車先を破られないための3二金／7八金を優先する。
+  const urgent = openingUrgentResponse({
+    strategyId: cpuOpeningPlan.strategyId,
+    color: cpuIsBlack ? "black" : "white",
+    moveHistory,
+    legalMoves,
+  });
+  if (urgent) return urgent.usi;
   return nextOpeningPlanMove({
     strategyId: cpuOpeningPlan.strategyId,
     castleId: cpuOpeningPlan.castleId,
     color: cpuIsBlack ? "black" : "white",
     playedMoves: cpuMoves,
-    legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi),
+    legalMoves,
     detectedFormations: formationNamesForColor(currentSfen.value, cpuColor),
     currentSfen: currentSfen.value,
   })?.usi;
@@ -1680,9 +1689,8 @@ async function scheduleCpuMove() {
           ? playerTurnScore
           : undefined);
       const openingMove = strategyMove();
-      // 序盤は難易度用の候補順位ずらしより、自然な定跡の駒組みを優先する。
-      // 王手中・駒が取られた直後・定跡終了後は強制せず、通常探索へ戻す。
-      if (openingMove) {
+      // 入門だけは定跡の形を優先する。それ以外は定跡手も探索で安全確認する。
+      if (openingMove && usesRandomLegalMove(searchNodes.value)) {
         usi = openingMove;
       } else if (usesRandomLegalMove(searchNodes.value)) {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
@@ -1714,12 +1722,20 @@ async function scheduleCpuMove() {
           showCoachAdvice(moveFeedback);
           await nextTick();
         }
-        const selection = selectMoveByRank(
-          search,
-          strength.moveRank,
-          Math.random,
-          { maxScoreLoss: strength.maxScoreLoss, scoreTemperature: strength.scoreTemperature },
-        );
+        const safeOpening = openingMove
+          ? chooseSafeOpeningMove(openingMove, search.candidates, Math.min(250, strength.maxScoreLoss))
+          : null;
+        const selection = safeOpening
+          ? {
+              move: safeOpening.usi,
+              rank: search.candidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
+            }
+          : selectMoveByRank(
+              search,
+              strength.moveRank,
+              Math.random,
+              { maxScoreLoss: strength.maxScoreLoss, scoreTemperature: strength.scoreTemperature },
+            );
         usi = selection.move;
         selectedCpuScore = search.candidates.find(
           (candidate) => candidate.rank === selection.rank,
