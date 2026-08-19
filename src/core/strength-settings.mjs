@@ -14,17 +14,18 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
     nodes: 4000, multiPv: 10, moveRank: { min: 3, max: 10 },
     maxScoreLoss: 1200, scoreTemperature: 800,
   }],
-  // 「ふつう」は評価差による重み付き抽選で、極端な強弱の振れを抑える。
+  // 「ふつう」は「やや強い」と明確に差を付けつつ、評価差による抽選で安定させる。
   [30000, {
-    nodes: 11000,
+    nodes: 8000,
     multiPv: 8,
-    moveRank: { min: 1, max: 7 },
-    maxScoreLoss: 800,
-    scoreTemperature: 450,
+    moveRank: { min: 1, max: 8 },
+    maxScoreLoss: 900,
+    scoreTemperature: 650,
   }],
+  // 直前までの「ふつう」の強さを「やや強い」の基準として引き継ぐ。
   [60000, {
-    nodes: 15000, multiPv: 7, moveRank: { min: 1, max: 7 },
-    maxScoreLoss: 700, scoreTemperature: 320,
+    nodes: 11000, multiPv: 8, moveRank: { min: 1, max: 7 },
+    maxScoreLoss: 800, scoreTemperature: 450,
   }],
   [100000, {
     nodes: 25000, multiPv: 6, moveRank: { min: 1, max: 6 },
