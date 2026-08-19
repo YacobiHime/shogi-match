@@ -2846,7 +2846,7 @@ queueMicrotask(() => {
     gap: 0.5rem;
   }
   .shogi-game__pregame-field {
-    grid-template-columns: 6.5rem minmax(0, 1fr);
+    grid-template-columns: 8rem minmax(0, 1fr);
     align-items: center;
     padding: 0.45rem 0.55rem;
   }
@@ -3434,6 +3434,269 @@ queueMicrotask(() => {
 @media (max-width: 360px) and (max-aspect-ratio: 5/4) {
   .shogi-game:not(.shogi-game--analysis) {
     grid-template-rows: 5.5rem 4.5rem minmax(0, 1fr) 6.5rem 4.5rem;
+  }
+}
+
+/* Night-magic theme — based on the supplied navy, amber, ivory and lavender palette. */
+.shogi-game {
+  --night: #1d3343;
+  --night-deep: #142736;
+  --slate: #2e4a60;
+  --slate-light: #3b5a70;
+  --amber: #f5a645;
+  --ivory: #fffdf4;
+  --lavender: #d7ceff;
+  --gold: var(--amber);
+  --ink: var(--ivory);
+  --panel: rgba(20, 39, 54, 0.94);
+  border: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 8% 18%, rgba(245, 166, 69, 0.16) 0 2px, transparent 3px),
+    radial-gradient(circle at 91% 13%, rgba(215, 206, 255, 0.18) 0 2px, transparent 3px),
+    radial-gradient(circle at 83% 78%, rgba(255, 253, 244, 0.13) 0 1px, transparent 2px),
+    var(--night);
+  box-shadow: none;
+  font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+.shogi-game::before {
+  background: linear-gradient(135deg, transparent 0 68%, rgba(46, 74, 96, 0.18) 68% 100%);
+  opacity: 1;
+}
+.shogi-game button {
+  border: 1px solid rgba(245, 166, 69, 0.68);
+  border-radius: 0.2rem;
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72);
+  font-family: inherit;
+  text-shadow: none;
+  transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
+}
+.shogi-game button:not(:disabled):hover {
+  border-color: var(--amber);
+  background: var(--slate-light);
+  transform: translateY(-1px);
+}
+.shogi-game button:focus-visible,
+.shogi-game select:focus-visible,
+.shogi-game input:focus-visible {
+  outline: 2px solid var(--lavender);
+  outline-offset: 2px;
+}
+.shogi-game button:disabled {
+  border-color: rgba(174, 184, 189, 0.28);
+  color: rgba(255, 253, 244, 0.45);
+  background: #263e50;
+  box-shadow: none;
+  filter: none;
+}
+.shogi-game__command {
+  clip-path: none;
+}
+.shogi-game__command--danger {
+  border-color: rgba(245, 166, 69, 0.82);
+  background: #735036;
+}
+.shogi-game__command--settings,
+.shogi-game__analysis-button {
+  border-color: rgba(215, 206, 255, 0.62) !important;
+  background: var(--slate) !important;
+  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72) !important;
+}
+.shogi-game__turn {
+  border: 1px solid rgba(245, 166, 69, 0.72);
+  border-radius: 0.2rem;
+  color: var(--amber);
+  background: var(--night-deep);
+}
+.shogi-game__player-card,
+.shogi-game__status,
+.shogi-game__dialogue,
+.shogi-game__opening-guide {
+  border: 1px solid rgba(245, 166, 69, 0.5);
+  border-left: 3px solid var(--amber);
+  color: var(--ivory);
+  background: var(--panel);
+  box-shadow: none;
+}
+.shogi-game__opening-guide {
+  background: rgba(20, 39, 54, 0.96);
+}
+.shogi-game__opening-guide h2,
+.shogi-game__opening-selects label,
+.shogi-game__player-card b,
+.shogi-game__settings-title,
+.shogi-game__pregame-heading > span,
+.shogi-game__pregame-field span {
+  color: var(--amber);
+}
+.shogi-game__player-card > span,
+.shogi-game__player-card > small,
+.shogi-game__status span,
+.shogi-game__pregame-note {
+  color: #becbd2;
+}
+.shogi-game__player-card > div {
+  border-top-color: rgba(245, 166, 69, 0.35);
+}
+.shogi-game__opening-selects select,
+.shogi-game__strength select {
+  border: 1px solid rgba(245, 166, 69, 0.6);
+  border-radius: 0.15rem;
+  color: var(--ivory);
+  background: var(--night-deep);
+}
+.shogi-game__opening-guide p {
+  border-left-color: var(--lavender);
+  color: var(--ivory);
+  background: rgba(46, 74, 96, 0.58);
+}
+.shogi-game__board-shell {
+  padding: 0.3rem;
+  border: 1px solid rgba(245, 166, 69, 0.64);
+  background: var(--night-deep);
+  box-shadow: 0 0.45rem 1.2rem rgba(8, 20, 29, 0.38);
+}
+.shogi-game__pregame {
+  background: rgba(20, 39, 54, 0.96);
+  backdrop-filter: blur(0.4rem);
+}
+.shogi-game__pregame-panel {
+  border: 1px solid rgba(245, 166, 69, 0.72);
+  border-top: 4px solid var(--amber);
+  border-radius: 0.3rem;
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 1.2rem 3rem rgba(7, 18, 26, 0.52);
+}
+.shogi-game__pregame-field {
+  border: 1px solid rgba(215, 206, 255, 0.24);
+  border-radius: 0.2rem;
+  background: rgba(20, 39, 54, 0.58);
+}
+.shogi-game__pregame-field select {
+  border: 1px solid rgba(245, 166, 69, 0.68);
+  border-radius: 0.15rem;
+  color: var(--night-deep);
+  background: var(--ivory);
+}
+.shogi-game__pregame-start {
+  border-color: var(--amber) !important;
+  color: var(--night-deep) !important;
+  background: var(--amber) !important;
+  box-shadow: 0 3px 0 #a96924 !important;
+}
+.shogi-game__settings {
+  border: 1px solid rgba(245, 166, 69, 0.72);
+  border-top: 3px solid var(--amber);
+  border-radius: 0.2rem;
+  background: rgba(20, 39, 54, 0.98);
+  box-shadow: 0 0.8rem 2rem rgba(7, 18, 26, 0.5);
+}
+.shogi-game__settings-restart,
+.shogi-game__rematch {
+  border-color: var(--amber) !important;
+  background: #735036 !important;
+  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72) !important;
+}
+.shogi-game__awakening {
+  border-color: var(--amber) !important;
+  color: var(--night-deep) !important;
+  background: var(--amber) !important;
+  box-shadow: 0 2px 0 #a96924 !important;
+  text-shadow: none;
+}
+.shogi-game__flame-outer { fill: var(--amber); }
+.shogi-game__flame-inner { fill: var(--ivory); }
+.shogi-game__dialogue-icon {
+  filter: drop-shadow(0 0 0.25rem rgba(245, 166, 69, 0.45));
+}
+.shogi-game__analysis {
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--ivory);
+}
+.shogi-game__analysis-info,
+.shogi-game__analysis-info select {
+  color: var(--night-deep);
+}
+.shogi-game__analysis-slider input[type="range"] {
+  accent-color: var(--amber);
+}
+.shogi-game__analysis-actions button {
+  border-color: var(--slate);
+  color: var(--night-deep);
+  background: var(--ivory);
+  box-shadow: none;
+}
+.shogi-game__result {
+  background: rgba(14, 29, 40, 0.86);
+}
+.shogi-game__result-panel {
+  border-width: 1px;
+  border-top-width: 4px;
+  border-radius: 0.3rem;
+  color: var(--ivory);
+  background: var(--night-deep);
+  box-shadow: 0 1.2rem 3.2rem rgba(7, 18, 26, 0.62);
+}
+.shogi-game__result--victory {
+  --result-accent: var(--amber);
+  --result-glow: rgba(245, 166, 69, 0.18);
+}
+.shogi-game__result--defeat {
+  --result-accent: #d7ceff;
+  --result-glow: rgba(215, 206, 255, 0.16);
+}
+.shogi-game__result--draw {
+  --result-accent: #aeb8bd;
+  --result-glow: rgba(174, 184, 189, 0.14);
+}
+.shogi-game__result h2 {
+  color: var(--ivory);
+  text-shadow: 0 0.15rem 0 var(--slate);
+}
+.shogi-game__result-details > div {
+  border-bottom-color: rgba(245, 166, 69, 0.3);
+  background: rgba(46, 74, 96, 0.35);
+}
+.shogi-game__confetti i { background: var(--amber); }
+.shogi-game__confetti i:nth-child(3n) { background: var(--lavender); }
+.shogi-game__confetti i:nth-child(3n + 1) { background: var(--ivory); }
+.shogi-game__error {
+  border-color: #f5a645;
+  background: #604634;
+}
+@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
+  .shogi-game { --panel: rgba(20, 39, 54, 0.94); }
+  .shogi-game button:disabled {
+    border-color: rgba(174, 184, 189, 0.28);
+    color: rgba(255, 253, 244, 0.45);
+    background: #263e50;
+  }
+}
+@media (min-width: 1100px) and (min-aspect-ratio: 5/4) {
+  .shogi-game__portrait--advisor {
+    background: linear-gradient(180deg, rgba(29, 51, 67, 0.02) 0 42%, rgba(29, 51, 67, 0.36) 68%, rgba(20, 39, 54, 0.82) 100%);
+  }
+  .shogi-game__opening-guide {
+    border: 1px solid rgba(245, 166, 69, 0.5);
+    border-left: 3px solid var(--amber);
+    background: rgba(20, 39, 54, 0.96);
+    box-shadow: none;
+  }
+  .shogi-game__opening-guide h2,
+  .shogi-game__opening-selects label { color: var(--amber); }
+  .shogi-game__opening-selects select {
+    border-color: rgba(245, 166, 69, 0.6);
+    color: var(--ivory);
+    background: var(--night-deep);
+  }
+  .shogi-game__opening-guide p {
+    border-left-color: var(--lavender);
+    color: var(--ivory);
+    background: rgba(46, 74, 96, 0.58);
   }
 }
 </style>
