@@ -103,29 +103,29 @@ function selectNearestPly(event: PointerEvent) {
 </script>
 
 <style scoped>
-.evaluation-graph { min-width: 0; color: #111; font-family: Arial, "Yu Gothic", sans-serif; }
-.evaluation-graph__svg { display: block; width: 100%; min-height: 5rem; border: 2px solid #464646; background: #fff8e7; cursor: crosshair; touch-action: none; }
-.evaluation-graph__background { fill: #fff8e7; }
-.evaluation-graph__grid line { stroke: #979797; stroke-width: 1; }
-.evaluation-graph__labels { fill: #111; font: 12px Arial, sans-serif; }
-.evaluation-graph__zero { stroke: #555; stroke-width: 1.25; }
-.evaluation-graph__line { fill: none; stroke: #163fff; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
-.evaluation-graph__current { stroke: #ff3152; stroke-width: 2; }
+.evaluation-graph { min-width: 0; color: #1d3343; font-family: Arial, "Yu Gothic", sans-serif; }
+.evaluation-graph__svg { display: block; width: 100%; min-height: 5rem; border: 1px solid #2e4a60; background: #fffdf4; cursor: crosshair; touch-action: none; }
+.evaluation-graph__background { fill: #fffdf4; }
+.evaluation-graph__grid line { stroke: #aeb8bd; stroke-width: 1; }
+.evaluation-graph__labels { fill: #1d3343; font: 12px Arial, sans-serif; }
+.evaluation-graph__zero { stroke: #2e4a60; stroke-width: 1.25; }
+.evaluation-graph__line { fill: none; stroke: #2e4a60; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.evaluation-graph__current { stroke: #f5a645; stroke-width: 2; }
 .evaluation-graph__point { stroke-width: 1; }
 .evaluation-graph__point--blunder { fill: #a00000; stroke: #6f0000; }
 .evaluation-graph__point--mistake { fill: #f4212e; stroke: #c10d16; }
-.evaluation-graph__point--dubious { fill: #f08a16; stroke: #c66200; }
-.evaluation-graph__point--good { fill: #168bd2; stroke: #075f9b; }
-.evaluation-graph__point--brilliant { fill: #9a43c9; stroke: #6a2194; }
-.evaluation-graph__point--current { fill: #ff3152; stroke: #fff; stroke-width: 1.5; }
+.evaluation-graph__point--dubious { fill: #f5a645; stroke: #b96e1e; }
+.evaluation-graph__point--good { fill: #2e6f88; stroke: #1d4c61; }
+.evaluation-graph__point--brilliant { fill: #a493df; stroke: #6957a9; }
+.evaluation-graph__point--current { fill: #f5a645; stroke: #fffdf4; stroke-width: 1.5; }
 .evaluation-graph__hit-area { fill: transparent; }
-.evaluation-graph__legend { display: flex; gap: .55rem; align-items: center; min-height: 1.2rem; padding: .1rem .2rem 0; color: #333; font: 11px Arial, "Yu Gothic", sans-serif; white-space: nowrap; }
-.evaluation-graph__legend-brilliant { color: #7a279f; }
-.evaluation-graph__legend-good { color: #075f9b; }
-.evaluation-graph__legend-dubious { color: #b85800; }
+.evaluation-graph__legend { display: flex; gap: .55rem; align-items: center; min-height: 1.2rem; padding: .1rem .2rem 0; color: #2e4a60; font: 11px Arial, "Yu Gothic", sans-serif; white-space: nowrap; }
+.evaluation-graph__legend-brilliant { color: #6957a9; }
+.evaluation-graph__legend-good { color: #1d4c61; }
+.evaluation-graph__legend-dubious { color: #a45f16; }
 .evaluation-graph__legend-mistake { color: #c10d16; }
 .evaluation-graph__legend-blunder { color: #780000; }
-.evaluation-graph__legend small { margin-left: auto; color: #444; }
-.evaluation-graph__selection { display: flex; gap: .8rem; justify-content: flex-end; min-height: 1.2rem; margin-top: .15rem; color: #111; font-size: .78rem; }
-.evaluation-graph__selection span { color: #333; }
+.evaluation-graph__legend small { margin-left: auto; color: #526878; }
+.evaluation-graph__selection { display: flex; gap: .8rem; justify-content: flex-end; min-height: 1.2rem; margin-top: .15rem; color: #1d3343; font-size: .78rem; }
+.evaluation-graph__selection span { color: #526878; }
 </style>
