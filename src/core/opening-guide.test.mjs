@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { appendUsiMove, createGameRecord } from "../game-state";
 import {
+  availableOpeningDefinitions,
   isOpeningPlanComplete,
   mirrorUsiMove,
   nextOpeningPlanMove,
@@ -38,6 +39,60 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
+  it("shows Pacman only to White after Black opens the bishop diagonal", () => {
+    const pacman = OPENING_STRATEGIES.find(({ id }) => id === "pacman");
+    expect(availableOpeningDefinitions({
+      definitions: [pacman],
+      kind: "strategy",
+      color: "white",
+      moveHistory: ["7g7f"],
+      legalMoves: ["4c4d"],
+    }).map(({ id }) => id)).toEqual(["pacman"]);
+    expect(availableOpeningDefinitions({
+      definitions: [pacman],
+      kind: "strategy",
+      color: "white",
+      moveHistory: ["2g2f"],
+      legalMoves: ["4c4d"],
+    })).toEqual([]);
+    expect(availableOpeningDefinitions({
+      definitions: [pacman],
+      kind: "strategy",
+      color: "black",
+      legalMoves: ["6g6f"],
+    })).toEqual([]);
+  });
+
+  it("hides an opening whose remaining planned moves cannot be played", () => {
+    const shiken = OPENING_STRATEGIES.find(({ id }) => id === "shiken");
+    expect(availableOpeningDefinitions({
+      definitions: [shiken],
+      kind: "strategy",
+      color: "black",
+      legalMoves: ["2g2f", "5g5f"],
+    })).toEqual([]);
+  });
+
+  it("stops Pacman guidance when the offered pawn is not captured", () => {
+    const pacman = OPENING_STRATEGIES.find(({ id }) => id === "pacman");
+    expect(availableOpeningDefinitions({
+      definitions: [pacman],
+      kind: "strategy",
+      color: "white",
+      playedMoves: ["4c4d"],
+      moveHistory: ["7g7f", "4c4d", "2g2f"],
+      legalMoves: ["8b4b"],
+    })).toEqual([]);
+    expect(availableOpeningDefinitions({
+      definitions: [pacman],
+      kind: "strategy",
+      color: "white",
+      playedMoves: ["4c4d"],
+      moveHistory: ["7g7f", "4c4d", "8h4d"],
+      legalMoves: ["8b4b"],
+    }).map(({ id }) => id)).toEqual(["pacman"]);
+  });
+
   it("distinguishes a completed plan from a temporarily unavailable next move", () => {
     expect(isOpeningPlanComplete({
       strategyId: "shiken",

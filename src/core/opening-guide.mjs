@@ -102,6 +102,18 @@ export const OPENING_STRATEGIES = [
     blackMoves: ["7g7f", "7f7e", "8i7g"],
   },
   {
+    id: "pacman",
+    label: "パックマン",
+    detectionNames: ["パックマン", "シン・パックマン"],
+    // 後手が初手7六歩へ4四歩と誘い、角で取られた場合だけ成立する。
+    availability: {
+      colors: ["white"],
+      opponentFirstMove: "7g7f",
+      requiredHistoryBeforeMoves: [{ move: "8b4b", required: "8h4d" }],
+    },
+    blackMoves: ["6g6f", "2h6h"],
+  },
+  {
     id: "ureshino",
     label: "嬉野流",
     detectionNames: ["嬉野流"],
@@ -291,6 +303,55 @@ function definitionDetectedComplete(definition, detected, currentSfen, color) {
   const exact = matchesCompletionSquares(definition, currentSfen, color);
   if (exact !== undefined) return exact;
   return definition?.detectionNames.some((name) => detected.has(name)) ?? false;
+}
+
+/** 現在の局面から着手可能な手順が残っている戦法・囲いだけを返す。 */
+export function availableOpeningDefinitions({
+  definitions,
+  kind,
+  color = "black",
+  playedMoves = [],
+  moveHistory = [],
+  legalMoves = [],
+  detectedFormations = [],
+  currentSfen = "",
+}) {
+  const played = new Set(playedMoves);
+  const history = new Set(moveHistory);
+  const detected = new Set(detectedFormations);
+  return definitions.filter((definition) => {
+    const steps = openingPlanSteps(
+      kind === "strategy" ? definition.id : "",
+      kind === "castle" ? definition.id : "",
+      color,
+    );
+    const started = steps.some(({ usi }) => played.has(usi));
+    const availability = definition.availability;
+    if (availability?.colors && !availability.colors.includes(color)) return false;
+    if (!started && availability) {
+      if (
+        availability.opponentFirstMove
+        && moveHistory[0] !== availability.opponentFirstMove
+      ) return false;
+    }
+    if (definitionDetectedComplete(definition, detected, currentSfen, color)) return true;
+    if (steps.length > 0 && steps.every(({ usi }) => played.has(usi))) return true;
+
+    const next = nextOpeningPlanMove({
+      strategyId: kind === "strategy" ? definition.id : "",
+      castleId: kind === "castle" ? definition.id : "",
+      color,
+      playedMoves,
+      legalMoves,
+      detectedFormations,
+      currentSfen,
+    });
+    if (!next) return false;
+    const requirement = availability?.requiredHistoryBeforeMoves?.find(
+      ({ move }) => move === next.usi,
+    );
+    return !requirement || history.has(requirement.required);
+  });
 }
 
 export function nextOpeningPlanMove({

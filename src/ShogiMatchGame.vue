@@ -94,7 +94,7 @@
             <span>戦法</span>
             <select v-model="selectedStrategy" @change="announceOpeningGuide">
               <option value="">選択しない</option>
-              <option v-for="strategy in OPENING_STRATEGIES" :key="strategy.id" :value="strategy.id">
+              <option v-for="strategy in availableOpeningStrategies" :key="strategy.id" :value="strategy.id">
                 {{ strategy.label }}
               </option>
             </select>
@@ -103,7 +103,7 @@
             <span>囲い</span>
             <select v-model="selectedCastle" @change="announceOpeningGuide">
               <option value="">選択しない</option>
-              <option v-for="castle in OPENING_CASTLES" :key="castle.id" :value="castle.id">
+              <option v-for="castle in availableOpeningCastles" :key="castle.id" :value="castle.id">
                 {{ castle.label }}
               </option>
             </select>
@@ -240,7 +240,7 @@
           <span>戦法</span>
           <select v-model="selectedStrategy" @change="announceOpeningGuide">
             <option value="">選択しない</option>
-            <option v-for="strategy in OPENING_STRATEGIES" :key="strategy.id" :value="strategy.id">
+            <option v-for="strategy in availableOpeningStrategies" :key="strategy.id" :value="strategy.id">
               {{ strategy.label }}
             </option>
           </select>
@@ -249,7 +249,7 @@
           <span>囲い</span>
           <select v-model="selectedCastle" @change="announceOpeningGuide">
             <option value="">選択しない</option>
-            <option v-for="castle in OPENING_CASTLES" :key="castle.id" :value="castle.id">
+            <option v-for="castle in availableOpeningCastles" :key="castle.id" :value="castle.id">
               {{ castle.label }}
             </option>
           </select>
@@ -429,6 +429,7 @@ import {
   visibleReviewMoves,
 } from "./core/review-navigation.mjs";
 import {
+  availableOpeningDefinitions,
   chooseSafeOpeningMove,
   isOpeningPlanComplete,
   nextOpeningPlanMove,
@@ -713,6 +714,53 @@ const opponentFormationText = computed(() =>
     ? blackFormationText.value
     : whiteFormationText.value
 );
+function openingGuideLegalMoves(): string[] {
+  const fields = currentSfen.value.split(" ");
+  if (fields.length < 2) return [];
+  fields[1] = humanColor.value === Color.BLACK ? "b" : "w";
+  try {
+    return enumerateLegalMoves(createGameRecord(fields.join(" ")).position).map(({ usi }) => usi);
+  } catch {
+    return [];
+  }
+}
+function availableOpeningOptions(kind: "strategy" | "castle") {
+  const sfen = currentSfen.value;
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+  const currentFormations = formationNamesFromSnapshot(
+    detectFormationSnapshot(sfen, hiraganaFormationMaster),
+    playerIsBlack ? "black" : "white",
+  );
+  return availableOpeningDefinitions({
+    definitions: kind === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES,
+    kind,
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: playerMoves,
+    moveHistory,
+    legalMoves: openingGuideLegalMoves(),
+    // 過去に一度成立した形ではなく、現在の盤面だけで利用可否を決める。
+    detectedFormations: currentFormations,
+    currentSfen: sfen,
+  });
+}
+const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));
+const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
+watch([availableOpeningStrategies, availableOpeningCastles], ([strategies, castles]) => {
+  let changed = false;
+  if (selectedStrategy.value && !strategies.some(({ id }) => id === selectedStrategy.value)) {
+    selectedStrategy.value = "";
+    changed = true;
+  }
+  if (selectedCastle.value && !castles.some(({ id }) => id === selectedCastle.value)) {
+    selectedCastle.value = "";
+    changed = true;
+  }
+  if (changed) {
+    resetOpeningFollowup();
+    resetOpeningGuideSafety();
+  }
+});
 const openingPlanCandidate = computed(() => {
   // currentSfen is intentionally read here so the non-ref move history is reconsidered after every move.
   const sfen = currentSfen.value;
