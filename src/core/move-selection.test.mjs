@@ -75,4 +75,14 @@ describe('評価差を考慮したCPU候補選択', () => {
       { maxScoreLoss: Infinity },
     )).toEqual({ move: '9g9f', rank: 4 });
   });
+
+  test('温度を下げるほど同じ局面と乱数で上位候補へ集中する', () => {
+    const selectedRanks = [1200, 200, 80].map((scoreTemperature) => selectMoveByRank(
+      search,
+      { min: 1, max: 4 },
+      () => 0.8,
+      { maxScoreLoss: Infinity, scoreTemperature },
+    ).rank);
+    expect(selectedRanks).toEqual([3, 2, 1]);
+  });
 });

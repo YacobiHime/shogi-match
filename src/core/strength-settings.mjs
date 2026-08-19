@@ -2,9 +2,18 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
   [1000, { nodes: 2000, multiPv: 12, moveRank: { min: 3, max: 12 }, maxScoreLoss: 1600 }],
   // 「ふつう」を6級程度の基準点として、上下を滑らかにする。
   // 級位帯では探索量だけでなく、意図的に選ぶ候補順位と許容評価損も広げる。
-  [5000, { nodes: 1500, multiPv: 12, moveRank: { min: 5, max: 12 }, maxScoreLoss: 2000 }],
-  [10000, { nodes: 2500, multiPv: 12, moveRank: { min: 4, max: 12 }, maxScoreLoss: 1600 }],
-  [20000, { nodes: 4000, multiPv: 10, moveRank: { min: 3, max: 10 }, maxScoreLoss: 1200 }],
+  [5000, {
+    nodes: 1500, multiPv: 12, moveRank: { min: 5, max: 12 },
+    maxScoreLoss: 2000, scoreTemperature: 1400,
+  }],
+  [10000, {
+    nodes: 2500, multiPv: 12, moveRank: { min: 4, max: 12 },
+    maxScoreLoss: 1600, scoreTemperature: 1100,
+  }],
+  [20000, {
+    nodes: 4000, multiPv: 10, moveRank: { min: 3, max: 10 },
+    maxScoreLoss: 1200, scoreTemperature: 800,
+  }],
   // 「ふつう」は評価差による重み付き抽選で、極端な強弱の振れを抑える。
   [30000, {
     nodes: 11000,
@@ -13,10 +22,22 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
     maxScoreLoss: 800,
     scoreTemperature: 450,
   }],
-  [60000, { nodes: 15000, multiPv: 7, moveRank: { min: 2, max: 7 }, maxScoreLoss: 700 }],
-  [100000, { nodes: 25000, multiPv: 6, moveRank: { min: 1, max: 6 }, maxScoreLoss: 500 }],
-  [200000, { nodes: 50000, multiPv: 5, moveRank: { min: 1, max: 5 }, maxScoreLoss: 350 }],
-  [300000, { nodes: 120000, multiPv: 3, moveRank: { min: 1, max: 3 }, maxScoreLoss: 220 }],
+  [60000, {
+    nodes: 15000, multiPv: 7, moveRank: { min: 1, max: 7 },
+    maxScoreLoss: 700, scoreTemperature: 320,
+  }],
+  [100000, {
+    nodes: 25000, multiPv: 6, moveRank: { min: 1, max: 6 },
+    maxScoreLoss: 500, scoreTemperature: 220,
+  }],
+  [200000, {
+    nodes: 50000, multiPv: 5, moveRank: { min: 1, max: 5 },
+    maxScoreLoss: 350, scoreTemperature: 140,
+  }],
+  [300000, {
+    nodes: 120000, multiPv: 3, moveRank: { min: 1, max: 3 },
+    maxScoreLoss: 220, scoreTemperature: 80,
+  }],
   // CSA会誌Vol.29の人間対局向け実測（48万nodesで将棋倶楽部24のR3381相当）を
   // 人間最高峰の目安として採用。エンジン差があるため表示上も「推定」とする。
   [480000, { nodes: 480000, multiPv: 1, moveRank: { min: 1, max: 1 }, maxScoreLoss: 0 }],
