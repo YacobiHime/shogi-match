@@ -240,12 +240,58 @@ export const OPENING_CASTLES = [
   },
 ];
 
+const STATIC_ROOK_STRATEGIES = new Set([
+  "ibisha", "aigakari", "kakugawari", "yagura-strategy", "bougin",
+  "right-shiken", "hayaguri-gin", "koshikake-gin", "ureshino",
+]);
+const RANGING_ROOK_STRATEGIES = new Set([
+  "shiken", "fujii-system", "sangen", "nakabisha", "gokigen",
+  "mukai", "ishida", "sodebisha",
+]);
+const STATIC_ROOK_CASTLES = new Set([
+  "funagakoi", "yagura", "elmo", "gangi", "left-mino", "ibisha-anaguma",
+  "right-king", "nakazumai", "kanigakoi", "bonanza",
+]);
+const RANGING_ROOK_CASTLES = new Set([
+  "mino", "high-mino", "silver-crown", "furibisha-anaguma", "kinmusou",
+]);
+
+export function openingDefinitionRookStyle(id, kind) {
+  const staticIds = kind === "strategy" ? STATIC_ROOK_STRATEGIES : STATIC_ROOK_CASTLES;
+  const rangingIds = kind === "strategy" ? RANGING_ROOK_STRATEGIES : RANGING_ROOK_CASTLES;
+  if (staticIds.has(id)) return "static";
+  if (rangingIds.has(id)) return "ranging";
+  return undefined;
+}
+
 export function mirrorUsiMove(usi) {
   return usi.replace(/([1-9])([a-i])/g, (_, file, rank) => (
     `${10 - Number(file)}${String.fromCharCode(
       "a".charCodeAt(0) + "i".charCodeAt(0) - rank.charCodeAt(0),
     )}`
   ));
+}
+
+/** 現在の飛車位置と序盤の着手から、居飛車／振り飛車への確定を判定する。 */
+export function inferOpeningRookStyle({ color = "black", playedMoves = [], currentSfen = "" }) {
+  const canonicalMoves = color === "white" ? playedMoves.map(mirrorUsiMove) : playedMoves;
+  const board = parseSfenBoard(currentSfen);
+  const rook = [...board.entries()].find(([, piece]) => (
+    piece.color === color && piece.kind === "R"
+  ));
+  if (rook) {
+    const square = color === "white" ? mirrorUsiMove(rook[0]) : rook[0];
+    // 初期筋以外へ飛車を振っていれば、他の手順より強い確定材料とする。
+    // 4筋へ出す右四間飛車だけは、飛車を横へ動かしても居飛車として扱う。
+    if (square[0] !== "2") return square[0] === "4" ? "static" : "ranging";
+  }
+  if (canonicalMoves.some((move) => /^2h4[a-i]/.test(move))) return "static";
+  if (canonicalMoves.some((move) => /^2h[3-9][a-i]/.test(move))) return "ranging";
+  // 飛車先、4八銀、角交換はいずれも居飛車側へ進んだ明確な手掛かり。
+  if (canonicalMoves.some((move) => (
+    move === "2g2f" || move === "2f2e" || move === "3i4h" || move === "8h2b+"
+  ))) return "static";
+  return undefined;
 }
 
 export function openingPlanSteps(strategyId, castleId, color = "black") {
@@ -315,11 +361,14 @@ export function availableOpeningDefinitions({
   legalMoves = [],
   detectedFormations = [],
   currentSfen = "",
+  rookStyle,
 }) {
   const played = new Set(playedMoves);
   const history = new Set(moveHistory);
   const detected = new Set(detectedFormations);
   return definitions.filter((definition) => {
+    const definitionStyle = openingDefinitionRookStyle(definition.id, kind);
+    if (rookStyle && definitionStyle && rookStyle !== definitionStyle) return false;
     const steps = openingPlanSteps(
       kind === "strategy" ? definition.id : "",
       kind === "castle" ? definition.id : "",
