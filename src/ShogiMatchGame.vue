@@ -431,8 +431,10 @@ import {
 import {
   availableOpeningDefinitions,
   chooseSafeOpeningMove,
+  inferOpeningRookStyle,
   isOpeningPlanComplete,
   nextOpeningPlanMove,
+  openingDefinitionRookStyle,
   openingFollowupCount,
   openingUrgentResponse,
   OPENING_CASTLES,
@@ -732,6 +734,14 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
     detectFormationSnapshot(sfen, hiraganaFormationMaster),
     playerIsBlack ? "black" : "white",
   );
+  const committedRookStyle = inferOpeningRookStyle({
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: playerMoves,
+    currentSfen: sfen,
+  });
+  const selectedCounterpartStyle = kind === "strategy"
+    ? openingDefinitionRookStyle(selectedCastle.value, "castle")
+    : openingDefinitionRookStyle(selectedStrategy.value, "strategy");
   return availableOpeningDefinitions({
     definitions: kind === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES,
     kind,
@@ -742,6 +752,8 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
     // 過去に一度成立した形ではなく、現在の盤面だけで利用可否を決める。
     detectedFormations: currentFormations,
     currentSfen: sfen,
+    // 実際の着手による確定を優先し、未確定なら選択中の相方へ合わせる。
+    rookStyle: committedRookStyle ?? selectedCounterpartStyle,
   });
 }
 const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));

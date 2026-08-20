@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { appendUsiMove, createGameRecord } from "../game-state";
 import {
   availableOpeningDefinitions,
+  inferOpeningRookStyle,
   isOpeningPlanComplete,
   mirrorUsiMove,
   nextOpeningPlanMove,
@@ -39,6 +40,55 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
+  it("recognizes Static Rook commitment from the rook pawn, 4h silver, or bishop exchange", () => {
+    expect(inferOpeningRookStyle({ playedMoves: ["2g2f"] })).toBe("static");
+    expect(inferOpeningRookStyle({ playedMoves: ["7g7f", "3i4h"] })).toBe("static");
+    expect(inferOpeningRookStyle({ playedMoves: ["7g7f", "8h2b+"] })).toBe("static");
+    expect(inferOpeningRookStyle({ color: "white", playedMoves: ["8c8d"] })).toBe("static");
+  });
+
+  it("recognizes Ranging Rook commitment after moving the rook off its home file", () => {
+    expect(inferOpeningRookStyle({ playedMoves: ["7g7f", "2h6h"] })).toBe("ranging");
+    expect(inferOpeningRookStyle({ color: "white", playedMoves: ["3c3d", "8b4b"] }))
+      .toBe("ranging");
+  });
+
+  it("keeps Right Fourth-file Rook in the Static Rook family", () => {
+    expect(inferOpeningRookStyle({ playedMoves: ["4g4f", "2h4h"] })).toBe("static");
+    expect(inferOpeningRookStyle({ color: "white", playedMoves: ["6c6d", "8b6b"] }))
+      .toBe("static");
+  });
+
+  it("hides Ranging Rook castles and strategies after Static Rook commitment", () => {
+    expect(availableOpeningDefinitions({
+      definitions: OPENING_CASTLES.filter(({ id }) => ["mino", "yagura"].includes(id)),
+      kind: "castle",
+      rookStyle: "static",
+      legalMoves: ["2h6h", "7g7f"],
+    }).map(({ id }) => id)).toEqual(["yagura"]);
+    expect(availableOpeningDefinitions({
+      definitions: OPENING_STRATEGIES.filter(({ id }) => ["shiken", "bougin"].includes(id)),
+      kind: "strategy",
+      rookStyle: "static",
+      legalMoves: ["2h6h", "2g2f"],
+    }).map(({ id }) => id)).toEqual(["bougin"]);
+  });
+
+  it("hides Static Rook castles and strategies after Ranging Rook commitment", () => {
+    expect(availableOpeningDefinitions({
+      definitions: OPENING_CASTLES.filter(({ id }) => ["mino", "yagura"].includes(id)),
+      kind: "castle",
+      rookStyle: "ranging",
+      legalMoves: ["2h6h", "7g7f"],
+    }).map(({ id }) => id)).toEqual(["mino"]);
+    expect(availableOpeningDefinitions({
+      definitions: OPENING_STRATEGIES.filter(({ id }) => ["shiken", "bougin"].includes(id)),
+      kind: "strategy",
+      rookStyle: "ranging",
+      legalMoves: ["2h6h", "2g2f"],
+    }).map(({ id }) => id)).toEqual(["shiken"]);
+  });
+
   it("shows Pacman only to White after Black opens the bishop diagonal", () => {
     const pacman = OPENING_STRATEGIES.find(({ id }) => id === "pacman");
     expect(availableOpeningDefinitions({
