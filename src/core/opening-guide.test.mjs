@@ -40,6 +40,16 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
+  it("classifies every strategy for the guide menu", () => {
+    expect(OPENING_STRATEGIES.every(({ category }) =>
+      ["basic", "attack", "special"].includes(category)
+    )).toBe(true);
+    expect(OPENING_STRATEGIES.filter(({ category }) => category === "attack").map(({ label }) => label))
+      .toEqual(["棒銀", "早繰り銀", "腰掛け銀"]);
+    expect(OPENING_STRATEGIES.filter(({ category }) => category === "special").map(({ label }) => label))
+      .toEqual(["やばボーズ流", "鬼殺し", "パックマン", "嬉野流"]);
+  });
+
   it("offers Yababozu only to White after Black opens the bishop diagonal", () => {
     const yababozu = OPENING_STRATEGIES.find(({ id }) => id === "yababozu");
     expect(availableOpeningDefinitions({
