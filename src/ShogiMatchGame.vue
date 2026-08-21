@@ -5,8 +5,14 @@
     aria-label="将棋対局"
   >
     <header class="shogi-game__toolbar">
-      <button type="button" class="shogi-game__command shogi-game__command--danger" :disabled="!active || reviewMode" @click="resign">
-        投了
+      <button
+        type="button"
+        class="shogi-game__command"
+        :class="reviewMode ? 'shogi-game__command--complete' : 'shogi-game__command--danger'"
+        :disabled="!active"
+        @click="reviewMode ? completeReview() : resign()"
+      >
+        {{ reviewMode ? "完了" : "投了" }}
       </button>
       <button type="button" class="shogi-game__command shogi-game__command--settings" @click="toggleSettings">
         設定
@@ -159,7 +165,6 @@
         </label>
       </div>
       <div class="shogi-game__settings-actions">
-        <button type="button" class="shogi-game__settings-restart" @click="openPregame">最初から</button>
         <button type="button" @click="closeSettings">閉じる</button>
       </div>
     </div>
@@ -1878,6 +1883,28 @@ function resign() {
   if (active.value && !reviewMode.value) finish(resignationResult(record.value));
 }
 
+function completeReview() {
+  if (!reviewMode.value) return;
+  if (cpuTimer) clearTimeout(cpuTimer);
+  cancelPlayerIdleAdvice();
+  coachAdviceScheduler.reset();
+  analysisGeneration += 1;
+  reviewCoachGeneration += 1;
+  reviewCpuGeneration += 1;
+  engine?.stop();
+  reviewCpuEnabled.value = false;
+  rebuildRecord(reviewNavigation.value.mainLine);
+  active.value = false;
+  thinking.value = false;
+  reviewMode.value = false;
+  analysisOpen.value = false;
+  analysisRunning.value = false;
+  settingsOpen.value = false;
+  hintCandidates.value = [];
+  hintText.value = "";
+  resultDialogOpen.value = Boolean(result.value);
+}
+
 function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう！") {
   if (cpuTimer) clearTimeout(cpuTimer);
   cancelPlayerIdleAdvice();
@@ -2226,6 +2253,10 @@ queueMicrotask(() => {
 .shogi-game__command--danger {
   background: linear-gradient(#d96734, #9d261d);
 }
+.shogi-game__command--complete {
+  color: #25151a;
+  background: linear-gradient(#f7d58b, #d49a43);
+}
 .shogi-game__command--settings {
   background: linear-gradient(#0788bc, #075074);
 }
@@ -2500,10 +2531,6 @@ queueMicrotask(() => {
   gap: 0.6rem;
   justify-content: flex-end;
   margin-top: 0.8rem;
-}
-.shogi-game__settings-restart {
-  border-color: #e6a66f !important;
-  background: linear-gradient(#9b4a32, #57251e) !important;
 }
 .shogi-game__settings-actions button {
   min-width: 6.5rem;
@@ -3532,6 +3559,12 @@ queueMicrotask(() => {
   border-color: rgba(245, 166, 69, 0.82);
   background: #735036;
 }
+.shogi-game__command--complete {
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--amber);
+  box-shadow: 0 2px 0 #a96924;
+}
 .shogi-game__command--settings,
 .shogi-game__analysis-button {
   border-color: rgba(215, 206, 255, 0.62) !important;
@@ -3628,7 +3661,6 @@ queueMicrotask(() => {
   background: rgba(20, 39, 54, 0.98);
   box-shadow: 0 0.8rem 2rem rgba(7, 18, 26, 0.5);
 }
-.shogi-game__settings-restart,
 .shogi-game__rematch {
   border-color: var(--amber) !important;
   background: #735036 !important;
