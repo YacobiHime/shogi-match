@@ -44,12 +44,21 @@
           <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
             <span>敵の作戦</span>
             <select v-model="cpuStrategy" aria-label="対局前の敵の作戦">
-              <option value="random">おまかせ</option>
-              <option value="ibisha">居飛車</option>
-              <option value="shiken">四間飛車</option>
-              <option value="sangen">三間飛車</option>
-              <option value="nakabisha">中飛車</option>
-              <option value="yagura">矢倉</option>
+              <option value="random">おまかせ（定番中心）</option>
+              <option value="static">居飛車からランダム</option>
+              <option value="ranging">振り飛車からランダム</option>
+              <option value="surprise">奇襲戦法からランダム</option>
+              <option value="detailed">詳しく設定</option>
+            </select>
+          </label>
+          <label v-if="normalizedMode === 'cpu' && cpuStrategy === 'detailed'" class="shogi-game__pregame-field">
+            <span>敵の戦法を指定</span>
+            <select v-model="cpuDetailedStrategy" aria-label="対局前の敵の戦法を指定">
+              <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
+                <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                  {{ strategy.label }}
+                </option>
+              </optgroup>
             </select>
           </label>
           <label class="shogi-game__pregame-field">
@@ -148,12 +157,21 @@
         <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
           <span>相手の作戦</span>
           <select v-model="cpuStrategy" aria-label="相手の作戦">
-            <option value="random">おまかせ</option>
-            <option value="ibisha">居飛車</option>
-            <option value="shiken">四間飛車</option>
-            <option value="sangen">三間飛車</option>
-            <option value="nakabisha">中飛車</option>
-            <option value="yagura">矢倉</option>
+            <option value="random">おまかせ（定番中心）</option>
+            <option value="static">居飛車からランダム</option>
+            <option value="ranging">振り飛車からランダム</option>
+            <option value="surprise">奇襲戦法からランダム</option>
+            <option value="detailed">詳しく設定</option>
+          </select>
+        </label>
+        <label v-if="normalizedMode === 'cpu' && cpuStrategy === 'detailed'" class="shogi-game__strength">
+          <span>戦法を指定</span>
+          <select v-model="cpuDetailedStrategy" aria-label="相手の戦法を指定">
+            <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
+              <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                {{ strategy.label }}
+              </option>
+            </optgroup>
           </select>
         </label>
         <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
@@ -465,6 +483,7 @@ import {
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
 import {
+  CPU_OPENING_STRATEGY_IDS,
   selectCpuOpeningRepertoire,
   shouldUseCpuOpening,
 } from "./core/cpu-opening-repertoire.mjs";
@@ -552,6 +571,7 @@ const selectedCastle = ref("");
 const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
+const cpuDetailedStrategy = ref("ibisha");
 const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
 const activePlayerColor = ref<"black" | "white">(normalizePlayerColor(props.playerColor));
@@ -803,8 +823,16 @@ const groupedOpeningStrategies = computed(() => groupOpeningStrategies(available
 const pregameGroupedOpeningStrategies = computed(() => groupOpeningStrategies(
   OPENING_STRATEGIES.filter(({ availability }) => (
     !availability?.colors || availability.colors.includes(selectedPlayerColor.value)
-  )),
+)),
 ));
+const cpuDetailedStrategyGroups = computed(() => {
+  const cpuColor = selectedPlayerColor.value === "black" ? "white" : "black";
+  const supported = new Set(CPU_OPENING_STRATEGY_IDS);
+  return groupOpeningStrategies(OPENING_STRATEGIES.filter(({ id, availability }) => (
+    supported.has(id)
+    && (!availability?.colors || availability.colors.includes(cpuColor))
+  )));
+});
 const groupedOpeningCastles = computed(() => [
   { id: "static", label: "居飛車用" },
   { id: "ranging", label: "振り飛車用" },
@@ -1032,7 +1060,9 @@ function strategyMove(): string | undefined {
     lastMoveWasCapture: Boolean(record.value.current.move?.capturedPieceType),
   })) return undefined;
   cpuOpeningPlan ??= selectCpuOpeningRepertoire({
-    configuredStrategy: cpuStrategy.value,
+    configuredStrategy: cpuStrategy.value === "detailed"
+      ? cpuDetailedStrategy.value
+      : cpuStrategy.value,
     cpuColor: cpuIsBlack ? "black" : "white",
     moves: moveHistory,
   });
@@ -2176,13 +2206,17 @@ watch(() => props.playerColor, (value) => {
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
-watch(cpuStrategy, () => {
+watch([cpuStrategy, cpuDetailedStrategy], () => {
   cpuOpeningPlan = null;
 });
 watch(selectedPlayerColor, (color) => {
   const selected = OPENING_STRATEGIES.find(({ id }) => id === pregameSelectedStrategy.value);
   if (selected?.availability?.colors && !selected.availability.colors.includes(color)) {
     pregameSelectedStrategy.value = "";
+  }
+  const detailedOptions = cpuDetailedStrategyGroups.value.flatMap(({ options }) => options);
+  if (!detailedOptions.some(({ id }) => id === cpuDetailedStrategy.value)) {
+    cpuDetailedStrategy.value = detailedOptions[0]?.id ?? "ibisha";
   }
 });
 watch(coachLevel, (level) => {
