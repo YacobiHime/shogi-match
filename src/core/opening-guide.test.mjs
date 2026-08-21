@@ -40,13 +40,19 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
-  it("classifies every strategy for the guide menu", () => {
-    expect(OPENING_STRATEGIES.every(({ category }) =>
-      ["basic", "attack", "special"].includes(category)
+  it("places every strategy in an opening family for the guide menu", () => {
+    expect(OPENING_STRATEGIES.every(({ family }) =>
+      ["ibisha", "kakugawari", "shiken", "sangen", "nakabisha", "mukai", "special"].includes(family)
     )).toBe(true);
-    expect(OPENING_STRATEGIES.filter(({ category }) => category === "attack").map(({ label }) => label))
-      .toEqual(["棒銀", "早繰り銀", "腰掛け銀"]);
-    expect(OPENING_STRATEGIES.filter(({ category }) => category === "special").map(({ label }) => label))
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "shiken").map(({ label }) => label))
+      .toEqual(["四間飛車", "藤井システム"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "sangen").map(({ label }) => label))
+      .toEqual(["三間飛車", "石田流"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "nakabisha").map(({ label }) => label))
+      .toEqual(["中飛車", "ゴキゲン中飛車"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "kakugawari").map(({ label }) => label))
+      .toEqual(["角換わり", "棒銀", "早繰り銀", "腰掛け銀"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "special").map(({ label }) => label))
       .toEqual(["やばボーズ流", "鬼殺し", "パックマン", "嬉野流"]);
   });
 
