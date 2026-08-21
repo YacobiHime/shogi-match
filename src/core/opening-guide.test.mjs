@@ -6,6 +6,7 @@ import {
   isOpeningPlanComplete,
   mirrorUsiMove,
   nextOpeningPlanMove,
+  openingDefinitionRookStyle,
   openingUrgentResponse,
   chooseSafeOpeningMove,
   openingFollowupCount,
@@ -40,6 +41,20 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
+  it("classifies every castle as static-rook, ranging-rook, or dual-use", () => {
+    const groups = Object.groupBy(OPENING_CASTLES, ({ id }) => (
+      openingDefinitionRookStyle(id, "castle") ?? "both"
+    ));
+    expect(groups.static?.map(({ label }) => label)).toEqual([
+      "舟囲い", "矢倉", "エルモ囲い", "雁木", "左美濃", "居飛車穴熊",
+      "右玉", "中住まい", "カニ囲い", "ボナンザ囲い",
+    ]);
+    expect(groups.ranging?.map(({ label }) => label)).toEqual([
+      "美濃囲い", "高美濃囲い", "銀冠", "振り飛車穴熊", "金無双",
+    ]);
+    expect(groups.both?.map(({ label }) => label)).toEqual(["ミレニアム"]);
+  });
+
   it("places every strategy in an opening family for the guide menu", () => {
     expect(OPENING_STRATEGIES.every(({ family }) =>
       ["ibisha", "kakugawari", "shiken", "sangen", "nakabisha", "mukai", "special"].includes(family)
