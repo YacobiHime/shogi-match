@@ -112,9 +112,11 @@
             <span>囲い</span>
             <select v-model="selectedCastle" @change="announceOpeningGuide">
               <option value="">選択しない</option>
-              <option v-for="castle in availableOpeningCastles" :key="castle.id" :value="castle.id">
-                {{ castle.label }}
-              </option>
+              <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
+                <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
+                  {{ castle.label }}
+                </option>
+              </optgroup>
             </select>
           </label>
         </div>
@@ -260,9 +262,11 @@
           <span>囲い</span>
           <select v-model="selectedCastle" @change="announceOpeningGuide">
             <option value="">選択しない</option>
-            <option v-for="castle in availableOpeningCastles" :key="castle.id" :value="castle.id">
-              {{ castle.label }}
-            </option>
+            <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
+              <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
+                {{ castle.label }}
+              </option>
+            </optgroup>
           </select>
         </label>
       </div>
@@ -780,6 +784,16 @@ const groupedOpeningStrategies = computed(() => [
 ].map((group) => ({
   ...group,
   options: availableOpeningStrategies.value.filter(({ family }) => family === group.id),
+})).filter(({ options }) => options.length));
+const groupedOpeningCastles = computed(() => [
+  { id: "static", label: "居飛車用" },
+  { id: "ranging", label: "振り飛車用" },
+  { id: "both", label: "両用" },
+].map((group) => ({
+  ...group,
+  options: availableOpeningCastles.value.filter(({ id }) => (
+    (openingDefinitionRookStyle(id, "castle") ?? "both") === group.id
+  )),
 })).filter(({ options }) => options.length));
 watch([availableOpeningStrategies, availableOpeningCastles], ([strategies, castles]) => {
   let changed = false;
