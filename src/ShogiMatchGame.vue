@@ -95,9 +95,11 @@
             <span>戦法</span>
             <select v-model="selectedStrategy" @change="announceOpeningGuide">
               <option value="">選択しない</option>
-              <option v-for="strategy in availableOpeningStrategies" :key="strategy.id" :value="strategy.id">
-                {{ strategy.label }}
-              </option>
+              <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
+                <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                  {{ strategy.label }}
+                </option>
+              </optgroup>
             </select>
           </label>
           <label>
@@ -242,9 +244,11 @@
           <span>戦法</span>
           <select v-model="selectedStrategy" @change="announceOpeningGuide">
             <option value="">選択しない</option>
-            <option v-for="strategy in availableOpeningStrategies" :key="strategy.id" :value="strategy.id">
-              {{ strategy.label }}
-            </option>
+            <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
+              <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                {{ strategy.label }}
+              </option>
+            </optgroup>
           </select>
         </label>
         <label>
@@ -760,6 +764,14 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
 }
 const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));
 const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
+const groupedOpeningStrategies = computed(() => [
+  { id: "basic", label: "基本戦法" },
+  { id: "attack", label: "攻め方" },
+  { id: "special", label: "奇襲・特殊戦法" },
+].map((group) => ({
+  ...group,
+  options: availableOpeningStrategies.value.filter(({ category }) => category === group.id),
+})).filter(({ options }) => options.length));
 watch([availableOpeningStrategies, availableOpeningCastles], ([strategies, castles]) => {
   let changed = false;
   if (selectedStrategy.value && !strategies.some(({ id }) => id === selectedStrategy.value)) {
