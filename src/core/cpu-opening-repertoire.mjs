@@ -41,6 +41,24 @@ const BLACK_REPERTOIRE_WEIGHTS = [
   ["nakabisha", 9],
 ];
 
+const CONFIGURED_FIRST_MOVES = Object.freeze({
+  "bishop-diagonal": "7g7f",
+  "rook-pawn": "2g2f",
+  "center-pawn": "5g5f",
+});
+
+/** 後手の練習用に、先手CPUの初手だけを指定する。 */
+export function configuredCpuFirstMove({
+  configuredFirstMove = "random",
+  cpuColor = "white",
+  cpuMoveCount = 0,
+  legalMoves = [],
+} = {}) {
+  if (cpuColor !== "black" || cpuMoveCount !== 0) return undefined;
+  const move = CONFIGURED_FIRST_MOVES[configuredFirstMove];
+  return move && legalMoves.includes(move) ? move : undefined;
+}
+
 function weightedChoice(entries, random) {
   const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
   let cursor = Math.max(0, Math.min(0.999999999, random())) * total;

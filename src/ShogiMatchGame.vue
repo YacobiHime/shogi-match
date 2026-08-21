@@ -54,6 +54,7 @@
                 <label>
                   <span>戦法</span>
                   <select v-model="cpuDetailedStrategy" aria-label="対局前の相手の戦法を指定">
+                    <option value="">指定なし</option>
                     <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
                       <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
                         {{ strategy.label }}
@@ -64,6 +65,7 @@
                 <label>
                   <span>囲い</span>
                   <select v-model="cpuDetailedCastle" aria-label="対局前の相手の囲いを指定">
+                    <option value="">指定なし</option>
                     <optgroup v-for="group in cpuDetailedCastleGroups" :key="group.id" :label="group.label">
                       <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
                         {{ castle.label }}
@@ -82,6 +84,18 @@
             <select v-model="selectedPlayerColor" aria-label="対局前の自分の手番">
               <option value="black">先手</option>
               <option value="white">後手</option>
+            </select>
+          </label>
+          <label
+            v-if="normalizedMode === 'cpu' && selectedPlayerColor === 'white'"
+            class="shogi-game__pregame-field"
+          >
+            <span>相手の初手</span>
+            <select v-model="cpuFirstMove" aria-label="対局前の相手の初手">
+              <option value="random">おまかせ</option>
+              <option value="bishop-diagonal">角道を開ける（7六歩）</option>
+              <option value="rook-pawn">飛車先を突く（2六歩）</option>
+              <option value="center-pawn">中央の歩を突く（5六歩）</option>
             </select>
           </label>
           <label class="shogi-game__pregame-field">
@@ -191,6 +205,7 @@
               <label>
                 <span>戦法</span>
                 <select v-model="cpuDetailedStrategy" aria-label="相手の戦法を指定">
+                  <option value="">指定なし</option>
                   <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
                     <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
                       {{ strategy.label }}
@@ -201,6 +216,7 @@
               <label>
                 <span>囲い</span>
                 <select v-model="cpuDetailedCastle" aria-label="相手の囲いを指定">
+                  <option value="">指定なし</option>
                   <optgroup v-for="group in cpuDetailedCastleGroups" :key="group.id" :label="group.label">
                     <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
                       {{ castle.label }}
@@ -569,6 +585,7 @@ import {
 } from "./core/opening-guide.mjs";
 import {
   CPU_OPENING_STRATEGY_IDS,
+  configuredCpuFirstMove,
   selectCpuOpeningRepertoire,
   shouldUseCpuOpening,
 } from "./core/cpu-opening-repertoire.mjs";
@@ -659,6 +676,7 @@ const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
 const cpuDetailedStrategy = ref("ibisha");
 const cpuDetailedCastle = ref("funagakoi");
+const cpuFirstMove = ref("random");
 const cpuStrategyDetailsOpen = ref(false);
 const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
@@ -1152,6 +1170,14 @@ function strategyMove(): string | undefined {
   if (props.initialSfen !== STANDARD_SFEN) return undefined;
   const cpuIsBlack = humanColor.value === Color.WHITE;
   const cpuMoves = moveHistory.filter((_, index) => (index % 2 === 0) === cpuIsBlack);
+  const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
+  const requestedFirstMove = configuredCpuFirstMove({
+    configuredFirstMove: cpuFirstMove.value,
+    cpuColor: cpuIsBlack ? "black" : "white",
+    cpuMoveCount: cpuMoves.length,
+    legalMoves,
+  });
+  if (requestedFirstMove) return requestedFirstMove;
   if (!shouldUseCpuOpening({
     ply: moveHistory.length,
     cpuMoveCount: cpuMoves.length,
@@ -1161,12 +1187,12 @@ function strategyMove(): string | undefined {
   if (!cpuOpeningPlan) {
     const selectedPlan = selectCpuOpeningRepertoire({
       configuredStrategy: cpuStrategyDetailsOpen.value
-        ? cpuDetailedStrategy.value
+        ? (cpuDetailedStrategy.value || cpuStrategy.value)
         : cpuStrategy.value,
       cpuColor: cpuIsBlack ? "black" : "white",
       moves: moveHistory,
     });
-    cpuOpeningPlan = cpuStrategyDetailsOpen.value
+    cpuOpeningPlan = cpuStrategyDetailsOpen.value && cpuDetailedCastle.value
       ? {
           ...selectedPlan,
           castleId: cpuDetailedCastle.value,
@@ -1178,7 +1204,6 @@ function strategyMove(): string | undefined {
       : selectedPlan;
   }
   const cpuColor = cpuIsBlack ? Color.BLACK : Color.WHITE;
-  const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   // 定跡の予定手より、飛車先を破られないための3二金／7八金を優先する。
   const urgent = openingUrgentResponse({
     strategyId: cpuOpeningPlan.strategyId,
@@ -2301,16 +2326,16 @@ watch(() => props.playerColor, (value) => {
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
-watch([cpuStrategy, cpuDetailedStrategy, cpuDetailedCastle, cpuStrategyDetailsOpen], () => {
+watch([cpuStrategy, cpuDetailedStrategy, cpuDetailedCastle, cpuFirstMove, cpuStrategyDetailsOpen], () => {
   cpuOpeningPlan = null;
 });
 watch([selectedPlayerColor, cpuDetailedStrategy], () => {
   const detailedOptions = cpuDetailedStrategyGroups.value.flatMap(({ options }) => options);
-  if (!detailedOptions.some(({ id }) => id === cpuDetailedStrategy.value)) {
+  if (cpuDetailedStrategy.value && !detailedOptions.some(({ id }) => id === cpuDetailedStrategy.value)) {
     cpuDetailedStrategy.value = detailedOptions[0]?.id ?? "ibisha";
   }
   const castleOptions = cpuDetailedCastleGroups.value.flatMap(({ options }) => options);
-  if (!castleOptions.some(({ id }) => id === cpuDetailedCastle.value)) {
+  if (cpuDetailedCastle.value && !castleOptions.some(({ id }) => id === cpuDetailedCastle.value)) {
     cpuDetailedCastle.value = castleOptions[0]?.id ?? "funagakoi";
   }
 });
