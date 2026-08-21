@@ -184,64 +184,8 @@
     <div v-if="settingsOpen" class="shogi-game__settings">
       <div class="shogi-game__settings-title">対局設定</div>
       <div class="shogi-game__settings-grid">
-        <label v-if="normalizedMode === 'cpu' && !engineUnavailable" class="shogi-game__strength">
-          <span>CPU強さ</span>
-          <select v-model.number="searchNodes" :disabled="!engineReady" aria-label="CPUの強さ">
-            <option v-for="preset in CPU_STRENGTH_PRESETS" :key="preset.value" :value="preset.value">
-              {{ preset.label }}（{{ preset.guide }}）
-            </option>
-          </select>
-        </label>
-        <div v-if="normalizedMode === 'cpu'" class="shogi-game__strength shogi-game__strength--strategy">
-          <span>相手の作戦</span>
-          <div class="shogi-game__strategy-setting">
-            <select v-if="!cpuStrategyDetailsOpen" v-model="cpuStrategy" aria-label="相手の作戦">
-              <option value="random">おまかせ</option>
-              <option value="static">居飛車</option>
-              <option value="ranging">振り飛車</option>
-              <option value="surprise">奇襲戦法</option>
-            </select>
-            <div v-else class="shogi-game__strategy-details">
-              <label>
-                <span>戦法</span>
-                <select v-model="cpuDetailedStrategy" aria-label="相手の戦法を指定">
-                  <option value="">指定なし</option>
-                  <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
-                    <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
-                      {{ strategy.label }}
-                    </option>
-                  </optgroup>
-                </select>
-              </label>
-              <label>
-                <span>囲い</span>
-                <select v-model="cpuDetailedCastle" aria-label="相手の囲いを指定">
-                  <option value="">指定なし</option>
-                  <optgroup v-for="group in cpuDetailedCastleGroups" :key="group.id" :label="group.label">
-                    <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
-                      {{ castle.label }}
-                    </option>
-                  </optgroup>
-                </select>
-              </label>
-            </div>
-            <button type="button" class="shogi-game__strategy-toggle" @click="toggleCpuStrategyDetails">
-              {{ cpuStrategyDetailsOpen ? "戻る" : "詳しく設定" }}
-            </button>
-          </div>
-        </div>
-        <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
-          <span>手番</span>
-          <select v-model="selectedPlayerColor" aria-label="自分の手番">
-            <option value="black">先手</option>
-            <option value="white">後手</option>
-          </select>
-        </label>
-        <span v-else-if="normalizedMode === 'cpu'" class="shogi-game__strength">
-          簡易CPU（強さ変更不可）
-        </span>
         <label class="shogi-game__strength">
-          <span>対局中の助言</span>
+          <span>やこび姫の助言</span>
           <select v-model="coachLevel" aria-label="対局中の助言">
             <option value="off">なし</option>
             <option value="encourage">応援のみ</option>
@@ -1139,12 +1083,10 @@ function normalizePlayerColor(value: string): "black" | "white" {
 }
 
 function toggleSettings() {
-  if (!settingsOpen.value) selectedPlayerColor.value = activePlayerColor.value;
   settingsOpen.value = !settingsOpen.value;
 }
 
 function closeSettings() {
-  selectedPlayerColor.value = activePlayerColor.value;
   settingsOpen.value = false;
 }
 
@@ -2851,7 +2793,7 @@ queueMicrotask(() => {
   z-index: 20;
   top: 4.5rem;
   right: 1rem;
-  width: min(36rem, calc(100% - 2rem));
+  width: min(20rem, calc(100% - 2rem));
   margin: 0.55rem 0;
   padding: 0.8rem;
   border: 2px solid var(--gold);
@@ -2865,7 +2807,7 @@ queueMicrotask(() => {
 }
 .shogi-game__settings-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.65rem;
 }
 .shogi-game__settings-actions {
