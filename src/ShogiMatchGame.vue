@@ -41,7 +41,7 @@
               </option>
             </select>
           </label>
-          <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
+          <div v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
             <span>相手の作戦</span>
             <div class="shogi-game__strategy-setting">
               <select v-if="!cpuStrategyDetailsOpen" v-model="cpuStrategy" aria-label="対局前の相手の作戦">
@@ -50,18 +50,33 @@
                 <option value="ranging">振り飛車</option>
                 <option value="surprise">奇襲戦法</option>
               </select>
-              <select v-else v-model="cpuDetailedStrategy" aria-label="対局前の相手の戦法を指定">
-                <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
-                  <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
-                    {{ strategy.label }}
-                  </option>
-                </optgroup>
-              </select>
-              <button type="button" @click.prevent="toggleCpuStrategyDetails">
+              <div v-else class="shogi-game__strategy-details">
+                <label>
+                  <span>戦法</span>
+                  <select v-model="cpuDetailedStrategy" aria-label="対局前の相手の戦法を指定">
+                    <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
+                      <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                        {{ strategy.label }}
+                      </option>
+                    </optgroup>
+                  </select>
+                </label>
+                <label>
+                  <span>囲い</span>
+                  <select v-model="cpuDetailedCastle" aria-label="対局前の相手の囲いを指定">
+                    <optgroup v-for="group in cpuDetailedCastleGroups" :key="group.id" :label="group.label">
+                      <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
+                        {{ castle.label }}
+                      </option>
+                    </optgroup>
+                  </select>
+                </label>
+              </div>
+              <button type="button" class="shogi-game__strategy-toggle" @click="toggleCpuStrategyDetails">
                 {{ cpuStrategyDetailsOpen ? "戻る" : "詳しく設定" }}
               </button>
             </div>
-          </label>
+          </div>
           <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
             <span>自分の手番</span>
             <select v-model="selectedPlayerColor" aria-label="対局前の自分の手番">
@@ -144,7 +159,7 @@
             </option>
           </select>
         </label>
-        <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
+        <div v-if="normalizedMode === 'cpu'" class="shogi-game__strength shogi-game__strength--strategy">
           <span>相手の作戦</span>
           <div class="shogi-game__strategy-setting">
             <select v-if="!cpuStrategyDetailsOpen" v-model="cpuStrategy" aria-label="相手の作戦">
@@ -153,18 +168,33 @@
               <option value="ranging">振り飛車</option>
               <option value="surprise">奇襲戦法</option>
             </select>
-            <select v-else v-model="cpuDetailedStrategy" aria-label="相手の戦法を指定">
-              <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
-                <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
-                  {{ strategy.label }}
-                </option>
-              </optgroup>
-            </select>
-            <button type="button" @click.prevent="toggleCpuStrategyDetails">
+            <div v-else class="shogi-game__strategy-details">
+              <label>
+                <span>戦法</span>
+                <select v-model="cpuDetailedStrategy" aria-label="相手の戦法を指定">
+                  <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
+                    <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                      {{ strategy.label }}
+                    </option>
+                  </optgroup>
+                </select>
+              </label>
+              <label>
+                <span>囲い</span>
+                <select v-model="cpuDetailedCastle" aria-label="相手の囲いを指定">
+                  <optgroup v-for="group in cpuDetailedCastleGroups" :key="group.id" :label="group.label">
+                    <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
+                      {{ castle.label }}
+                    </option>
+                  </optgroup>
+                </select>
+              </label>
+            </div>
+            <button type="button" class="shogi-game__strategy-toggle" @click="toggleCpuStrategyDetails">
               {{ cpuStrategyDetailsOpen ? "戻る" : "詳しく設定" }}
             </button>
           </div>
-        </label>
+        </div>
         <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
           <span>手番</span>
           <select v-model="selectedPlayerColor" aria-label="自分の手番">
@@ -561,6 +591,7 @@ const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
 const cpuDetailedStrategy = ref("ibisha");
+const cpuDetailedCastle = ref("funagakoi");
 const cpuStrategyDetailsOpen = ref(false);
 const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
@@ -818,6 +849,22 @@ const cpuDetailedStrategyGroups = computed(() => {
     && (!availability?.colors || availability.colors.includes(cpuColor))
   )));
 });
+const CPU_CASTLE_GROUPS = [
+  { id: "static", label: "居飛車用" },
+  { id: "ranging", label: "振り飛車用" },
+  { id: "both", label: "両用" },
+];
+const cpuDetailedCastleGroups = computed(() => {
+  const strategyStyle = openingDefinitionRookStyle(cpuDetailedStrategy.value, "strategy");
+  return CPU_CASTLE_GROUPS.map((group) => ({
+    ...group,
+    options: OPENING_CASTLES.filter(({ id }) => {
+      const castleStyle = openingDefinitionRookStyle(id, "castle") ?? "both";
+      return group.id === castleStyle
+        && (!strategyStyle || castleStyle === strategyStyle || castleStyle === "both");
+    }),
+  })).filter(({ options }) => options.length);
+});
 const groupedOpeningCastles = computed(() => [
   { id: "static", label: "居飛車用" },
   { id: "ranging", label: "振り飛車用" },
@@ -1029,13 +1076,25 @@ function strategyMove(): string | undefined {
     inCheck: isSideToMoveInCheck(currentSfen.value),
     lastMoveWasCapture: Boolean(record.value.current.move?.capturedPieceType),
   })) return undefined;
-  cpuOpeningPlan ??= selectCpuOpeningRepertoire({
-    configuredStrategy: cpuStrategyDetailsOpen.value
-      ? cpuDetailedStrategy.value
-      : cpuStrategy.value,
-    cpuColor: cpuIsBlack ? "black" : "white",
-    moves: moveHistory,
-  });
+  if (!cpuOpeningPlan) {
+    const selectedPlan = selectCpuOpeningRepertoire({
+      configuredStrategy: cpuStrategyDetailsOpen.value
+        ? cpuDetailedStrategy.value
+        : cpuStrategy.value,
+      cpuColor: cpuIsBlack ? "black" : "white",
+      moves: moveHistory,
+    });
+    cpuOpeningPlan = cpuStrategyDetailsOpen.value
+      ? {
+          ...selectedPlan,
+          castleId: cpuDetailedCastle.value,
+          label: [
+            OPENING_STRATEGIES.find(({ id }) => id === selectedPlan.strategyId)?.label,
+            OPENING_CASTLES.find(({ id }) => id === cpuDetailedCastle.value)?.label,
+          ].filter(Boolean).join("＋"),
+        }
+      : selectedPlan;
+  }
   const cpuColor = cpuIsBlack ? Color.BLACK : Color.WHITE;
   const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   // 定跡の予定手より、飛車先を破られないための3二金／7八金を優先する。
@@ -2176,13 +2235,17 @@ watch(() => props.playerColor, (value) => {
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
-watch([cpuStrategy, cpuDetailedStrategy, cpuStrategyDetailsOpen], () => {
+watch([cpuStrategy, cpuDetailedStrategy, cpuDetailedCastle, cpuStrategyDetailsOpen], () => {
   cpuOpeningPlan = null;
 });
-watch(selectedPlayerColor, (color) => {
+watch([selectedPlayerColor, cpuDetailedStrategy], () => {
   const detailedOptions = cpuDetailedStrategyGroups.value.flatMap(({ options }) => options);
   if (!detailedOptions.some(({ id }) => id === cpuDetailedStrategy.value)) {
     cpuDetailedStrategy.value = detailedOptions[0]?.id ?? "ibisha";
+  }
+  const castleOptions = cpuDetailedCastleGroups.value.flatMap(({ options }) => options);
+  if (!castleOptions.some(({ id }) => id === cpuDetailedCastle.value)) {
+    cpuDetailedCastle.value = castleOptions[0]?.id ?? "funagakoi";
   }
 });
 watch(coachLevel, (level) => {
@@ -2544,17 +2607,35 @@ queueMicrotask(() => {
 }
 .shogi-game__strategy-setting {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.4rem;
+  gap: 0.65rem;
   min-width: 0;
 }
 .shogi-game__strategy-setting select {
   width: 100% !important;
 }
-.shogi-game__strategy-setting button {
-  min-width: 5.5rem;
-  padding: 0.45rem 0.65rem;
+.shogi-game__strategy-toggle {
+  justify-self: end;
+  min-width: 4.7rem;
+  margin-top: 0.15rem;
+  padding: 0.28rem 0.55rem !important;
   white-space: nowrap;
+  font-size: 0.78rem !important;
+  opacity: 0.9;
+}
+.shogi-game__strategy-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+.shogi-game__strategy-details label {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+}
+.shogi-game__strategy-details label > span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.86;
 }
 .shogi-game__pregame-note {
   min-height: 1.5rem;
@@ -2625,6 +2706,9 @@ queueMicrotask(() => {
 }
 .shogi-game__strength .shogi-game__strategy-setting {
   width: min(20rem, 72%);
+}
+.shogi-game__strength--strategy {
+  align-items: start;
 }
 .shogi-game__board-shell {
   grid-column: 1;
