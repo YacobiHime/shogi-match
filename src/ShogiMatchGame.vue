@@ -42,35 +42,25 @@
             </select>
           </label>
           <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
-            <span>敵の作戦</span>
-            <select v-model="cpuStrategy" aria-label="対局前の敵の作戦">
-              <option value="random">おまかせ（定番中心）</option>
-              <option value="static">居飛車からランダム</option>
-              <option value="ranging">振り飛車からランダム</option>
-              <option value="surprise">奇襲戦法からランダム</option>
-              <option value="detailed">詳しく設定</option>
-            </select>
-          </label>
-          <label v-if="normalizedMode === 'cpu' && cpuStrategy === 'detailed'" class="shogi-game__pregame-field">
-            <span>敵の戦法を指定</span>
-            <select v-model="cpuDetailedStrategy" aria-label="対局前の敵の戦法を指定">
-              <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
-                <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
-                  {{ strategy.label }}
-                </option>
-              </optgroup>
-            </select>
-          </label>
-          <label class="shogi-game__pregame-field">
-            <span>自分の作戦</span>
-            <select v-model="pregameSelectedStrategy" aria-label="対局前の自分の作戦">
-              <option value="">対局中に選ぶ</option>
-              <optgroup v-for="group in pregameGroupedOpeningStrategies" :key="group.id" :label="group.label">
-                <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
-                  {{ strategy.label }}
-                </option>
-              </optgroup>
-            </select>
+            <span>相手の作戦</span>
+            <div class="shogi-game__strategy-setting">
+              <select v-if="!cpuStrategyDetailsOpen" v-model="cpuStrategy" aria-label="対局前の相手の作戦">
+                <option value="random">おまかせ</option>
+                <option value="static">居飛車</option>
+                <option value="ranging">振り飛車</option>
+                <option value="surprise">奇襲戦法</option>
+              </select>
+              <select v-else v-model="cpuDetailedStrategy" aria-label="対局前の相手の戦法を指定">
+                <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
+                  <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                    {{ strategy.label }}
+                  </option>
+                </optgroup>
+              </select>
+              <button type="button" @click.prevent="toggleCpuStrategyDetails">
+                {{ cpuStrategyDetailsOpen ? "戻る" : "詳しく設定" }}
+              </button>
+            </div>
           </label>
           <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
             <span>自分の手番</span>
@@ -156,23 +146,24 @@
         </label>
         <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
           <span>相手の作戦</span>
-          <select v-model="cpuStrategy" aria-label="相手の作戦">
-            <option value="random">おまかせ（定番中心）</option>
-            <option value="static">居飛車からランダム</option>
-            <option value="ranging">振り飛車からランダム</option>
-            <option value="surprise">奇襲戦法からランダム</option>
-            <option value="detailed">詳しく設定</option>
-          </select>
-        </label>
-        <label v-if="normalizedMode === 'cpu' && cpuStrategy === 'detailed'" class="shogi-game__strength">
-          <span>戦法を指定</span>
-          <select v-model="cpuDetailedStrategy" aria-label="相手の戦法を指定">
-            <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
-              <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
-                {{ strategy.label }}
-              </option>
-            </optgroup>
-          </select>
+          <div class="shogi-game__strategy-setting">
+            <select v-if="!cpuStrategyDetailsOpen" v-model="cpuStrategy" aria-label="相手の作戦">
+              <option value="random">おまかせ</option>
+              <option value="static">居飛車</option>
+              <option value="ranging">振り飛車</option>
+              <option value="surprise">奇襲戦法</option>
+            </select>
+            <select v-else v-model="cpuDetailedStrategy" aria-label="相手の戦法を指定">
+              <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
+                <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                  {{ strategy.label }}
+                </option>
+              </optgroup>
+            </select>
+            <button type="button" @click.prevent="toggleCpuStrategyDetails">
+              {{ cpuStrategyDetailsOpen ? "戻る" : "詳しく設定" }}
+            </button>
+          </div>
         </label>
         <label v-if="normalizedMode === 'cpu'" class="shogi-game__strength">
           <span>手番</span>
@@ -565,13 +556,12 @@ const openingGuideSafetyLoading = ref(false);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const selectedStrategy = ref("");
-const pregameSelectedStrategy = ref("");
-const pendingOpeningStrategy = ref("");
 const selectedCastle = ref("");
 const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
 const cpuDetailedStrategy = ref("ibisha");
+const cpuStrategyDetailsOpen = ref(false);
 const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
 const activePlayerColor = ref<"black" | "white">(normalizePlayerColor(props.playerColor));
@@ -820,11 +810,6 @@ function groupOpeningStrategies(options: typeof OPENING_STRATEGIES) {
   })).filter(({ options: groupOptions }) => groupOptions.length);
 }
 const groupedOpeningStrategies = computed(() => groupOpeningStrategies(availableOpeningStrategies.value));
-const pregameGroupedOpeningStrategies = computed(() => groupOpeningStrategies(
-  OPENING_STRATEGIES.filter(({ availability }) => (
-    !availability?.colors || availability.colors.includes(selectedPlayerColor.value)
-)),
-));
 const cpuDetailedStrategyGroups = computed(() => {
   const cpuColor = selectedPlayerColor.value === "black" ? "white" : "black";
   const supported = new Set(CPU_OPENING_STRATEGY_IDS);
@@ -845,16 +830,6 @@ const groupedOpeningCastles = computed(() => [
 })).filter(({ options }) => options.length));
 watch([availableOpeningStrategies, availableOpeningCastles], ([strategies, castles]) => {
   let changed = false;
-  if (
-    pendingOpeningStrategy.value
-    && strategies.some(({ id }) => id === pendingOpeningStrategy.value)
-  ) {
-    selectedStrategy.value = pendingOpeningStrategy.value;
-    pendingOpeningStrategy.value = "";
-    changed = true;
-  } else if (pendingOpeningStrategy.value && moveHistory.length > 0) {
-    pendingOpeningStrategy.value = "";
-  }
   if (selectedStrategy.value && !strategies.some(({ id }) => id === selectedStrategy.value)) {
     selectedStrategy.value = "";
     changed = true;
@@ -1013,12 +988,15 @@ function closeSettings() {
   settingsOpen.value = false;
 }
 
+function toggleCpuStrategyDetails() {
+  cpuStrategyDetailsOpen.value = !cpuStrategyDetailsOpen.value;
+  cpuOpeningPlan = null;
+}
+
 function beginMatch() {
   activePlayerColor.value = selectedPlayerColor.value;
   matchStarted.value = true;
   pregameOpen.value = false;
-  pendingOpeningStrategy.value = pregameSelectedStrategy.value;
-  selectedStrategy.value = "";
   restart();
 }
 
@@ -1034,8 +1012,6 @@ function openPregame() {
   thinking.value = false;
   matchStarted.value = false;
   pregameOpen.value = true;
-  pregameSelectedStrategy.value = selectedStrategy.value || pendingOpeningStrategy.value;
-  pendingOpeningStrategy.value = "";
   settingsOpen.value = false;
   resultDialogOpen.value = false;
   reviewMode.value = false;
@@ -1046,12 +1022,6 @@ function strategyMove(): string | undefined {
   // 駒落ちや途中局面では平手用定跡を当てはめない。
   if (props.initialSfen !== STANDARD_SFEN) return undefined;
   const cpuIsBlack = humanColor.value === Color.WHITE;
-  // やばボーズ流を自分の作戦に選んだ対局では、成立条件の初手7六歩から始める。
-  if (
-    cpuIsBlack
-    && moveHistory.length === 0
-    && pendingOpeningStrategy.value === "yababozu"
-  ) return "7g7f";
   const cpuMoves = moveHistory.filter((_, index) => (index % 2 === 0) === cpuIsBlack);
   if (!shouldUseCpuOpening({
     ply: moveHistory.length,
@@ -1060,7 +1030,7 @@ function strategyMove(): string | undefined {
     lastMoveWasCapture: Boolean(record.value.current.move?.capturedPieceType),
   })) return undefined;
   cpuOpeningPlan ??= selectCpuOpeningRepertoire({
-    configuredStrategy: cpuStrategy.value === "detailed"
+    configuredStrategy: cpuStrategyDetailsOpen.value
       ? cpuDetailedStrategy.value
       : cpuStrategy.value,
     cpuColor: cpuIsBlack ? "black" : "white",
@@ -2206,14 +2176,10 @@ watch(() => props.playerColor, (value) => {
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
-watch([cpuStrategy, cpuDetailedStrategy], () => {
+watch([cpuStrategy, cpuDetailedStrategy, cpuStrategyDetailsOpen], () => {
   cpuOpeningPlan = null;
 });
 watch(selectedPlayerColor, (color) => {
-  const selected = OPENING_STRATEGIES.find(({ id }) => id === pregameSelectedStrategy.value);
-  if (selected?.availability?.colors && !selected.availability.colors.includes(color)) {
-    pregameSelectedStrategy.value = "";
-  }
   const detailedOptions = cpuDetailedStrategyGroups.value.flatMap(({ options }) => options);
   if (!detailedOptions.some(({ id }) => id === cpuDetailedStrategy.value)) {
     cpuDetailedStrategy.value = detailedOptions[0]?.id ?? "ibisha";
@@ -2576,6 +2542,20 @@ queueMicrotask(() => {
   background: #fff9ea;
   font: inherit;
 }
+.shogi-game__strategy-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.shogi-game__strategy-setting select {
+  width: 100% !important;
+}
+.shogi-game__strategy-setting button {
+  min-width: 5.5rem;
+  padding: 0.45rem 0.65rem;
+  white-space: nowrap;
+}
 .shogi-game__pregame-note {
   min-height: 1.5rem;
   margin: 1rem 0 0;
@@ -2642,6 +2622,9 @@ queueMicrotask(() => {
   background: #fff9ea;
   color: #2b1618;
   font: inherit;
+}
+.shogi-game__strength .shogi-game__strategy-setting {
+  width: min(20rem, 72%);
 }
 .shogi-game__board-shell {
   grid-column: 1;
