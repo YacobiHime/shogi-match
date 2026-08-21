@@ -12,6 +12,18 @@ describe("CPU opening repertoire", () => {
     );
   });
 
+  it("offers configured Yababozu only when the CPU is White", () => {
+    expect(selectCpuOpeningRepertoire({
+      configuredStrategy: "yababozu",
+      cpuColor: "white",
+    })).toEqual(CPU_OPENING_REPERTOIRES.yababozu);
+    expect(selectCpuOpeningRepertoire({
+      configuredStrategy: "yababozu",
+      cpuColor: "black",
+      random: () => 0,
+    })).toEqual(CPU_OPENING_REPERTOIRES.ibisha);
+  });
+
   it("answers 2六歩 with a common double-wing plan", () => {
     expect(selectCpuOpeningRepertoire({ moves: ["2g2f"] })).toEqual(
       CPU_OPENING_REPERTOIRES.aigakari,

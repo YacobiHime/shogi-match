@@ -2079,6 +2079,17 @@
           "sfen": "sfen 9/7b1/5p3/6p2/9/3P5/1PP1PPPP1/1BS4R1/3GKGS2 b - 1"
         }
       }
+    },
+    {
+      "id": "tac_match_134",
+      "group": "tac_match",
+      "name": "やばボーズ流",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/2GS5/3R5/9 b Bb 1"
+        }
+      }
     }
   ]
 }

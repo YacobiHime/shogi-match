@@ -41,6 +41,7 @@
               <option value="random">おまかせ</option>
               <option value="ibisha">居飛車</option>
               <option value="shiken">四間飛車</option>
+              <option v-if="selectedPlayerColor === 'black'" value="yababozu">やばボーズ流</option>
               <option value="sangen">三間飛車</option>
               <option value="nakabisha">中飛車</option>
               <option value="yagura">矢倉</option>
@@ -130,6 +131,7 @@
             <option value="random">おまかせ</option>
             <option value="ibisha">居飛車</option>
             <option value="shiken">四間飛車</option>
+            <option v-if="selectedPlayerColor === 'black'" value="yababozu">やばボーズ流</option>
             <option value="sangen">三間飛車</option>
             <option value="nakabisha">中飛車</option>
             <option value="yagura">矢倉</option>
@@ -2079,6 +2081,10 @@ watch(() => props.engineNodes, (value) => {
 });
 watch(cpuStrategy, () => {
   cpuOpeningPlan = null;
+});
+watch(selectedPlayerColor, (color) => {
+  // やばボーズ流は後手番専用なので、CPUが先手になる設定では維持しない。
+  if (color === "white" && cpuStrategy.value === "yababozu") cpuStrategy.value = "random";
 });
 watch(coachLevel, (level) => {
   cancelPlayerIdleAdvice();
