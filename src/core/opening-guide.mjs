@@ -30,6 +30,21 @@ export const OPENING_STRATEGIES = [
     blackMoves: ["7g7f", "6g6f", "2h6h"],
   },
   {
+    id: "yababozu",
+    label: "やばボーズ流",
+    detectionNames: ["やばボーズ流"],
+    strictOrder: true,
+    // 後手の△4二飛・△4三銀・△3二金型を、先手側へ正規化した完成形。
+    completionSquares: [["6h", "R"], ["6g", "S"], ["7h", "G"]],
+    availability: {
+      colors: ["white"],
+      requiredHistory: ["7g7f"],
+      requiredHistoryBeforeMoves: [{ move: "4c4d", required: "7i8h" }],
+    },
+    // 後手では△3四歩、△8八角成、△4四歩、△4二銀、△4三銀、△4二飛、△3二金。
+    blackMoves: ["7g7f", "8h2b+", "6g6f", "7i6h", "6h6g", "2h6h", "6i7h"],
+  },
+  {
     id: "fujii-system",
     label: "藤井システム",
     detectionNames: ["藤井システム"],
@@ -245,7 +260,7 @@ const STATIC_ROOK_STRATEGIES = new Set([
   "right-shiken", "hayaguri-gin", "koshikake-gin", "ureshino",
 ]);
 const RANGING_ROOK_STRATEGIES = new Set([
-  "shiken", "fujii-system", "sangen", "nakabisha", "gokigen",
+  "shiken", "yababozu", "fujii-system", "sangen", "nakabisha", "gokigen",
   "mukai", "ishida", "sodebisha",
 ]);
 const STATIC_ROOK_CASTLES = new Set([
@@ -378,6 +393,10 @@ export function availableOpeningDefinitions({
     const availability = definition.availability;
     if (availability?.colors && !availability.colors.includes(color)) return false;
     if (!started && availability) {
+      if (
+        availability.requiredHistory
+        && !availability.requiredHistory.every((move) => history.has(move))
+      ) return false;
       if (
         availability.opponentFirstMove
         && moveHistory[0] !== availability.opponentFirstMove

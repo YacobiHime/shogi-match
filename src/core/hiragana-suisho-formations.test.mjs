@@ -14,8 +14,8 @@ const master = JSON.parse(await readFile(
 
 describe('HiraganaSuisho原典互換判定', () => {
   test('原典133件と追加囲いを読み込む', () => {
-    expect(master.rules).toHaveLength(135);
-    expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(30);
+    expect(master.rules).toHaveLength(136);
+    expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(31);
   });
 
   test('先手と後手の共通作戦を盤面反転して判定する', () => {

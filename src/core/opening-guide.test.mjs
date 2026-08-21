@@ -40,6 +40,50 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
+  it("offers Yababozu only to White after Black opens the bishop diagonal", () => {
+    const yababozu = OPENING_STRATEGIES.find(({ id }) => id === "yababozu");
+    expect(availableOpeningDefinitions({
+      definitions: [yababozu],
+      kind: "strategy",
+      color: "white",
+      moveHistory: ["7g7f"],
+      legalMoves: ["3c3d"],
+    }).map(({ id }) => id)).toEqual(["yababozu"]);
+    expect(availableOpeningDefinitions({
+      definitions: [yababozu],
+      kind: "strategy",
+      color: "white",
+      moveHistory: ["2g2f"],
+      legalMoves: ["3c3d"],
+    })).toEqual([]);
+    expect(availableOpeningDefinitions({
+      definitions: [yababozu],
+      kind: "strategy",
+      color: "black",
+      moveHistory: ["7g7f"],
+      legalMoves: ["7g7f"],
+    })).toEqual([]);
+  });
+
+  it("requires Black to recapture the exchanged bishop before continuing Yababozu", () => {
+    const yababozu = OPENING_STRATEGIES.find(({ id }) => id === "yababozu");
+    const common = {
+      definitions: [yababozu],
+      kind: "strategy",
+      color: "white",
+      playedMoves: ["3c3d", "2b8h+"],
+      legalMoves: ["4c4d"],
+    };
+    expect(availableOpeningDefinitions({
+      ...common,
+      moveHistory: ["7g7f", "3c3d", "2g2f", "2b8h+", "2f2e"],
+    })).toEqual([]);
+    expect(availableOpeningDefinitions({
+      ...common,
+      moveHistory: ["7g7f", "3c3d", "2g2f", "2b8h+", "7i8h"],
+    }).map(({ id }) => id)).toEqual(["yababozu"]);
+  });
+
   it("recognizes Static Rook commitment from the rook pawn, 4h silver, or bishop exchange", () => {
     expect(inferOpeningRookStyle({ playedMoves: ["2g2f"] })).toBe("static");
     expect(inferOpeningRookStyle({ playedMoves: ["7g7f", "3i4h"] })).toBe("static");
@@ -169,8 +213,9 @@ describe("opening guide", () => {
   });
 
   it.each(OPENING_STRATEGIES)("uses a legal strategy sequence for $label", ({ id }) => {
-    const blackConditional = id === "kakugawari" ? ["8h2b+"] : [];
-    const whiteConditional = id === "kakugawari" ? ["2b8h+"] : [];
+    const exchangeDependent = id === "kakugawari" || id === "yababozu";
+    const blackConditional = exchangeDependent ? ["8h2b+"] : [];
+    const whiteConditional = exchangeDependent ? ["2b8h+"] : [];
     expectPlanLegal(id, "", "black", blackConditional);
     expectPlanLegal(id, "", "white", whiteConditional);
   });

@@ -51,6 +51,13 @@ describe('戦型の役割別追跡', () => {
     expect(snapshot.black.tactics).not.toContain('2手目3二飛戦法');
   });
 
+  test('やばボーズ流の4三銀・3二金・4二飛型を先後とも判定する', () => {
+    const sente = '9/9/9/9/9/9/2GS5/3R5/4K4 b Bb 1';
+    const gote = '4k4/5r3/5sg2/9/9/9/9/9/9 w bB 1';
+    expect(detectFormationSnapshot(sente, master).black.tactics).toContain('やばボーズ流');
+    expect(detectFormationSnapshot(gote, master).white.tactics).toContain('やばボーズ流');
+  });
+
   test('基本戦型と飛車位置系は最初の判定を保持する', () => {
     const initial = createFormationState();
     const first = updateFormationState(initial, {
@@ -103,6 +110,7 @@ describe('戦型の役割別追跡', () => {
     [['相掛かり', 'AlphaZero流相掛かり'], ['AlphaZero流相掛かり']],
     [['矢倉', '金矢倉'], ['金矢倉']],
     [['鬼殺し', '三間飛車', '早石田'], ['鬼殺し']],
+    [['やばボーズ流', '角交換四間飛車', '四間飛車'], ['やばボーズ流']],
   ])('具体的な派生戦型があれば一般名を隠す: %j', (names, expected) => {
     expect(preferSpecificFormationNames(names)).toEqual(expected);
   });
