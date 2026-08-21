@@ -2,11 +2,40 @@ import { describe, expect, it } from "vitest";
 import {
   CPU_OPENING_CATEGORY_IDS,
   CPU_OPENING_REPERTOIRES,
+  configuredCpuFirstMove,
   selectCpuOpeningRepertoire,
   shouldUseCpuOpening,
 } from "./cpu-opening-repertoire.mjs";
 
 describe("CPU opening repertoire", () => {
+  it.each([
+    ["bishop-diagonal", "7g7f"],
+    ["rook-pawn", "2g2f"],
+    ["center-pawn", "5g5f"],
+  ])("forces the requested first move for Black: %s", (setting, move) => {
+    expect(configuredCpuFirstMove({
+      configuredFirstMove: setting,
+      cpuColor: "black",
+      legalMoves: [move],
+    })).toBe(move);
+  });
+
+  it("does not force a first move for White, later positions, or random mode", () => {
+    expect(configuredCpuFirstMove({ configuredFirstMove: "random", cpuColor: "black" }))
+      .toBeUndefined();
+    expect(configuredCpuFirstMove({
+      configuredFirstMove: "bishop-diagonal",
+      cpuColor: "white",
+      legalMoves: ["7g7f"],
+    })).toBeUndefined();
+    expect(configuredCpuFirstMove({
+      configuredFirstMove: "bishop-diagonal",
+      cpuColor: "black",
+      cpuMoveCount: 1,
+      legalMoves: ["7g7f"],
+    })).toBeUndefined();
+  });
+
   it("respects an explicitly configured strategy", () => {
     expect(selectCpuOpeningRepertoire({ configuredStrategy: "shiken" })).toEqual(
       CPU_OPENING_REPERTOIRES.shiken,
