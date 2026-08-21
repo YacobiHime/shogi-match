@@ -121,30 +121,31 @@
       <section class="shogi-game__opening-guide shogi-game__opening-guide--primary" aria-label="やこび姫補助">
         <h2>やこび姫補助</h2>
         <div class="shogi-game__opening-selects">
-          <label>
-            <span class="shogi-game__opening-label">
+          <div class="shogi-game__opening-strategy-field">
+            <label>
               <span>戦法</span>
-              <button
-                v-if="selectedStrategyExplanation"
-                type="button"
-                class="shogi-game__opening-explanation-trigger"
-                @click.prevent="strategyExplanationOpen = true"
-              >解説</button>
-            </span>
-            <select v-model="selectedStrategy" @change="announceOpeningGuide">
-              <option value="">選択しない</option>
-              <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
-                <option
-                  v-for="strategy in group.options"
-                  :key="strategy.id"
-                  :value="strategy.id"
-                  :disabled="strategy.disabled"
-                >
-                  {{ strategy.label }}
-                </option>
-              </optgroup>
-            </select>
-          </label>
+              <select v-model="selectedStrategy" aria-label="戦法" @change="announceOpeningGuide">
+                <option value="">選択しない</option>
+                <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
+                  <option
+                    v-for="strategy in group.options"
+                    :key="strategy.id"
+                    :value="strategy.id"
+                    :disabled="strategy.disabled"
+                  >
+                    {{ strategy.label }}
+                  </option>
+                </optgroup>
+              </select>
+            </label>
+            <button
+              v-if="selectedStrategyExplanation"
+              type="button"
+              class="shogi-game__opening-explanation-trigger"
+              :aria-label="`${selectedStrategyDefinition?.label}の解説`"
+              @click="strategyExplanationOpen = true"
+            >解説</button>
+          </div>
           <label>
             <span>囲い</span>
             <select v-model="selectedCastle" @change="announceOpeningGuide">
@@ -313,30 +314,31 @@
     <section class="shogi-game__opening-guide shogi-game__opening-guide--portrait" aria-label="やこび姫補助">
       <h2>やこび姫補助</h2>
       <div class="shogi-game__opening-selects">
-        <label>
-          <span class="shogi-game__opening-label">
+        <div class="shogi-game__opening-strategy-field">
+          <label>
             <span>戦法</span>
-            <button
-              v-if="selectedStrategyExplanation"
-              type="button"
-              class="shogi-game__opening-explanation-trigger"
-              @click.prevent="strategyExplanationOpen = true"
-            >解説</button>
-          </span>
-          <select v-model="selectedStrategy" @change="announceOpeningGuide">
-            <option value="">選択しない</option>
-            <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
-              <option
-                v-for="strategy in group.options"
-                :key="strategy.id"
-                :value="strategy.id"
-                :disabled="strategy.disabled"
-              >
-                {{ strategy.label }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
+            <select v-model="selectedStrategy" aria-label="戦法" @change="announceOpeningGuide">
+              <option value="">選択しない</option>
+              <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
+                <option
+                  v-for="strategy in group.options"
+                  :key="strategy.id"
+                  :value="strategy.id"
+                  :disabled="strategy.disabled"
+                >
+                  {{ strategy.label }}
+                </option>
+              </optgroup>
+            </select>
+          </label>
+          <button
+            v-if="selectedStrategyExplanation"
+            type="button"
+            class="shogi-game__opening-explanation-trigger"
+            :aria-label="`${selectedStrategyDefinition?.label}の解説`"
+            @click="strategyExplanationOpen = true"
+          >解説</button>
+        </div>
         <label>
           <span>囲い</span>
           <select v-model="selectedCastle" @change="announceOpeningGuide">
@@ -2498,13 +2500,18 @@ queueMicrotask(() => {
   color: #f4d890;
   font-size: 0.75rem;
 }
-.shogi-game__opening-label {
-  display: flex;
+.shogi-game__opening-strategy-field {
+  position: relative;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
+}
+.shogi-game__opening-strategy-field > label {
+  height: 100%;
 }
 .shogi-game__opening-explanation-trigger {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
   min-width: 2.5rem !important;
   min-height: 1.15rem !important;
   padding: 0.05rem 0.32rem !important;
