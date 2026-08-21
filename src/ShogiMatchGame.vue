@@ -47,10 +47,20 @@
               <option value="random">おまかせ</option>
               <option value="ibisha">居飛車</option>
               <option value="shiken">四間飛車</option>
-              <option v-if="selectedPlayerColor === 'black'" value="yababozu">やばボーズ流</option>
               <option value="sangen">三間飛車</option>
               <option value="nakabisha">中飛車</option>
               <option value="yagura">矢倉</option>
+            </select>
+          </label>
+          <label class="shogi-game__pregame-field">
+            <span>自分の作戦</span>
+            <select v-model="pregameSelectedStrategy" aria-label="対局前の自分の作戦">
+              <option value="">対局中に選ぶ</option>
+              <optgroup v-for="group in pregameGroupedOpeningStrategies" :key="group.id" :label="group.label">
+                <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                  {{ strategy.label }}
+                </option>
+              </optgroup>
             </select>
           </label>
           <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
@@ -141,7 +151,6 @@
             <option value="random">おまかせ</option>
             <option value="ibisha">居飛車</option>
             <option value="shiken">四間飛車</option>
-            <option v-if="selectedPlayerColor === 'black'" value="yababozu">やばボーズ流</option>
             <option value="sangen">三間飛車</option>
             <option value="nakabisha">中飛車</option>
             <option value="yagura">矢倉</option>
@@ -537,6 +546,8 @@ const openingGuideSafetyLoading = ref(false);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const selectedStrategy = ref("");
+const pregameSelectedStrategy = ref("");
+const pendingOpeningStrategy = ref("");
 const selectedCastle = ref("");
 const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
@@ -773,7 +784,7 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
 }
 const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));
 const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
-const groupedOpeningStrategies = computed(() => [
+const OPENING_STRATEGY_GROUPS = [
   { id: "ibisha", label: "居飛車" },
   { id: "kakugawari", label: "角換わり" },
   { id: "shiken", label: "四間飛車" },
@@ -781,10 +792,19 @@ const groupedOpeningStrategies = computed(() => [
   { id: "nakabisha", label: "中飛車" },
   { id: "mukai", label: "向かい飛車" },
   { id: "special", label: "奇襲・特殊戦法" },
-].map((group) => ({
-  ...group,
-  options: availableOpeningStrategies.value.filter(({ family }) => family === group.id),
-})).filter(({ options }) => options.length));
+];
+function groupOpeningStrategies(options: typeof OPENING_STRATEGIES) {
+  return OPENING_STRATEGY_GROUPS.map((group) => ({
+    ...group,
+    options: options.filter(({ family }) => family === group.id),
+  })).filter(({ options: groupOptions }) => groupOptions.length);
+}
+const groupedOpeningStrategies = computed(() => groupOpeningStrategies(availableOpeningStrategies.value));
+const pregameGroupedOpeningStrategies = computed(() => groupOpeningStrategies(
+  OPENING_STRATEGIES.filter(({ availability }) => (
+    !availability?.colors || availability.colors.includes(selectedPlayerColor.value)
+  )),
+));
 const groupedOpeningCastles = computed(() => [
   { id: "static", label: "居飛車用" },
   { id: "ranging", label: "振り飛車用" },
@@ -797,6 +817,16 @@ const groupedOpeningCastles = computed(() => [
 })).filter(({ options }) => options.length));
 watch([availableOpeningStrategies, availableOpeningCastles], ([strategies, castles]) => {
   let changed = false;
+  if (
+    pendingOpeningStrategy.value
+    && strategies.some(({ id }) => id === pendingOpeningStrategy.value)
+  ) {
+    selectedStrategy.value = pendingOpeningStrategy.value;
+    pendingOpeningStrategy.value = "";
+    changed = true;
+  } else if (pendingOpeningStrategy.value && moveHistory.length > 0) {
+    pendingOpeningStrategy.value = "";
+  }
   if (selectedStrategy.value && !strategies.some(({ id }) => id === selectedStrategy.value)) {
     selectedStrategy.value = "";
     changed = true;
@@ -959,6 +989,8 @@ function beginMatch() {
   activePlayerColor.value = selectedPlayerColor.value;
   matchStarted.value = true;
   pregameOpen.value = false;
+  pendingOpeningStrategy.value = pregameSelectedStrategy.value;
+  selectedStrategy.value = "";
   restart();
 }
 
@@ -974,6 +1006,8 @@ function openPregame() {
   thinking.value = false;
   matchStarted.value = false;
   pregameOpen.value = true;
+  pregameSelectedStrategy.value = selectedStrategy.value || pendingOpeningStrategy.value;
+  pendingOpeningStrategy.value = "";
   settingsOpen.value = false;
   resultDialogOpen.value = false;
   reviewMode.value = false;
@@ -984,6 +1018,12 @@ function strategyMove(): string | undefined {
   // 駒落ちや途中局面では平手用定跡を当てはめない。
   if (props.initialSfen !== STANDARD_SFEN) return undefined;
   const cpuIsBlack = humanColor.value === Color.WHITE;
+  // やばボーズ流を自分の作戦に選んだ対局では、成立条件の初手7六歩から始める。
+  if (
+    cpuIsBlack
+    && moveHistory.length === 0
+    && pendingOpeningStrategy.value === "yababozu"
+  ) return "7g7f";
   const cpuMoves = moveHistory.filter((_, index) => (index % 2 === 0) === cpuIsBlack);
   if (!shouldUseCpuOpening({
     ply: moveHistory.length,
@@ -2140,8 +2180,10 @@ watch(cpuStrategy, () => {
   cpuOpeningPlan = null;
 });
 watch(selectedPlayerColor, (color) => {
-  // やばボーズ流は後手番専用なので、CPUが先手になる設定では維持しない。
-  if (color === "white" && cpuStrategy.value === "yababozu") cpuStrategy.value = "random";
+  const selected = OPENING_STRATEGIES.find(({ id }) => id === pregameSelectedStrategy.value);
+  if (selected?.availability?.colors && !selected.availability.colors.includes(color)) {
+    pregameSelectedStrategy.value = "";
+  }
 });
 watch(coachLevel, (level) => {
   cancelPlayerIdleAdvice();

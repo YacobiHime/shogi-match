@@ -4,7 +4,6 @@ const REPERTOIRES = {
   kakugawari: { strategyId: "kakugawari", castleId: "right-king", label: "角換わり＋右玉" },
   yagura: { strategyId: "yagura-strategy", castleId: "yagura", label: "矢倉戦法＋矢倉" },
   shiken: { strategyId: "shiken", castleId: "mino", label: "四間飛車＋美濃囲い" },
-  yababozu: { strategyId: "yababozu", castleId: "mino", label: "やばボーズ流＋美濃囲い" },
   sangen: { strategyId: "sangen", castleId: "mino", label: "三間飛車＋美濃囲い" },
   nakabisha: { strategyId: "gokigen", castleId: "mino", label: "中飛車＋美濃囲い" },
 };
@@ -12,7 +11,6 @@ const REPERTOIRES = {
 const CONFIGURED_STRATEGY_MAP = {
   ibisha: "ibisha",
   shiken: "shiken",
-  yababozu: "yababozu",
   sangen: "sangen",
   nakabisha: "nakabisha",
   yagura: "yagura",
@@ -48,7 +46,7 @@ export function selectCpuOpeningRepertoire({
   random = Math.random,
 } = {}) {
   const configured = CONFIGURED_STRATEGY_MAP[configuredStrategy];
-  if (configured && (configured !== "yababozu" || cpuColor === "white")) {
+  if (configured) {
     return { ...REPERTOIRES[configured] };
   }
 
