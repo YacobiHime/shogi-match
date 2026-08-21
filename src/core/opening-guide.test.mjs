@@ -117,7 +117,7 @@ describe("opening guide", () => {
       kind: "strategy",
       color: "white",
       playedMoves: ["3c3d", "2b8h+"],
-      legalMoves: ["4c4d"],
+      legalMoves: ["4a3b"],
     };
     expect(availableOpeningDefinitions({
       ...common,
@@ -257,6 +257,13 @@ describe("opening guide", () => {
     expect(mirrorUsiMove("2h6h")).toBe("8b4b");
   });
 
+  it("develops the gold and silver before opening the fourth file in Yababozu", () => {
+    const moves = openingPlanSteps("yababozu", "", "white").map(({ usi }) => usi);
+    expect(moves).toEqual(["3c3d", "2b8h+", "4a3b", "3a4b", "4c4d", "4b4c", "8b4b"]);
+    expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("4a3b"));
+    expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("3a4b"));
+  });
+
   it.each(OPENING_STRATEGIES)("uses a legal strategy sequence for $label", ({ id }) => {
     const exchangeDependent = id === "kakugawari" || id === "yababozu";
     const blackConditional = exchangeDependent ? ["8h2b+"] : [];
@@ -336,8 +343,8 @@ describe("opening guide", () => {
     const moves = openingPlanSteps("yababozu", "", "white").map(({ usi }) => usi);
     const game = createGameRecord();
     const actualLine = [
-      "7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4c4d", "2f2e",
-      "3a4b", "6g6f", "4b4c", "6f6e", "8b4b", "5g5f", "4a3b",
+      "7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4a3b", "2f2e",
+      "3a4b", "6g6f", "4c4d", "6f6e", "4b4c", "5g5f", "8b4b",
     ];
     for (const usi of actualLine) expect(appendUsiMove(game, usi), usi).toBe(true);
     expect(isOpeningPlanComplete({

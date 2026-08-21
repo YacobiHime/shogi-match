@@ -47,10 +47,11 @@ export const OPENING_STRATEGIES = [
     availability: {
       colors: ["white"],
       requiredHistory: ["7g7f"],
-      requiredHistoryBeforeMoves: [{ move: "4c4d", required: "7i8h" }],
+      requiredHistoryBeforeMoves: [{ move: "4a3b", required: "7i8h" }],
     },
-    // 後手では△3四歩、△8八角成、△4四歩、△4二銀、△4三銀、△4二飛、△3二金。
-    blackMoves: ["7g7f", "8h2b+", "6g6f", "7i6h", "6h6g", "2h6h", "6i7h"],
+    // 後手では△3四歩、△8八角成、△3二金、△4二銀、△4四歩、△4三銀、△4二飛。
+    // △4四歩は角交換直後に急がず、金・銀を整えてから銀の通路を開ける。
+    blackMoves: ["7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g", "2h6h"],
   },
   {
     id: "fujii-system",
