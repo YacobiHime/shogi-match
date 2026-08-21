@@ -122,7 +122,15 @@
         <h2>やこび姫補助</h2>
         <div class="shogi-game__opening-selects">
           <label>
-            <span>戦法</span>
+            <span class="shogi-game__opening-label">
+              <span>戦法</span>
+              <button
+                v-if="selectedStrategyExplanation"
+                type="button"
+                class="shogi-game__opening-explanation-trigger"
+                @click.prevent="strategyExplanationOpen = true"
+              >解説</button>
+            </span>
             <select v-model="selectedStrategy" @change="announceOpeningGuide">
               <option value="">選択しない</option>
               <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
@@ -306,7 +314,15 @@
       <h2>やこび姫補助</h2>
       <div class="shogi-game__opening-selects">
         <label>
-          <span>戦法</span>
+          <span class="shogi-game__opening-label">
+            <span>戦法</span>
+            <button
+              v-if="selectedStrategyExplanation"
+              type="button"
+              class="shogi-game__opening-explanation-trigger"
+              @click.prevent="strategyExplanationOpen = true"
+            >解説</button>
+          </span>
           <select v-model="selectedStrategy" @change="announceOpeningGuide">
             <option value="">選択しない</option>
             <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
@@ -340,6 +356,32 @@
       </div>
       <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
     </section>
+
+    <div
+      v-if="strategyExplanationOpen && selectedStrategyDefinition && selectedStrategyExplanation"
+      class="shogi-game__opening-explanation"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="opening-explanation-title"
+      @click.self="strategyExplanationOpen = false"
+    >
+      <article class="shogi-game__opening-explanation-panel">
+        <small>戦法解説</small>
+        <h2 id="opening-explanation-title">{{ selectedStrategyDefinition.label }}</h2>
+        <p>{{ selectedStrategyExplanation.overview }}</p>
+        <dl>
+          <div>
+            <dt>狙い</dt>
+            <dd>{{ selectedStrategyExplanation.aim }}</dd>
+          </div>
+          <div>
+            <dt>注意点</dt>
+            <dd>{{ selectedStrategyExplanation.caution }}</dd>
+          </div>
+        </dl>
+        <button type="button" @click="strategyExplanationOpen = false">閉じる</button>
+      </article>
+    </div>
 
     <section
       v-if="reviewMode && analysisOpen"
@@ -529,6 +571,7 @@ import {
   shouldUseCpuOpening,
 } from "./core/cpu-opening-repertoire.mjs";
 import { createPositionAnalysisCache } from "./core/position-analysis-cache.mjs";
+import { openingExplanation } from "./core/opening-explanations.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
@@ -608,6 +651,7 @@ const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const selectedStrategy = ref("");
 const selectedCastle = ref("");
+const strategyExplanationOpen = ref(false);
 const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
@@ -909,6 +953,10 @@ const groupedOpeningCastles = computed(() => {
     })),
   })).filter(({ options }) => options.length);
 });
+const selectedStrategyDefinition = computed(() => (
+  OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value) ?? null
+));
+const selectedStrategyExplanation = computed(() => openingExplanation(selectedStrategy.value));
 const OPENING_GUIDE_MAX_PLIES = 40;
 const openingPlanExpired = computed(() => {
   // currentSfenを購読し、非refのmoveHistoryが進むたび再評価する。
@@ -997,6 +1045,7 @@ function selectedOpeningLabel() {
 }
 
 function announceOpeningGuide() {
+  strategyExplanationOpen.value = false;
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   openingGuideStartedAtPly.value = moveHistory.length;
@@ -2448,6 +2497,80 @@ queueMicrotask(() => {
   gap: 0.2rem;
   color: #f4d890;
   font-size: 0.75rem;
+}
+.shogi-game__opening-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+}
+.shogi-game__opening-explanation-trigger {
+  min-width: 2.5rem !important;
+  min-height: 1.15rem !important;
+  padding: 0.05rem 0.32rem !important;
+  border-color: rgba(215, 206, 255, 0.6) !important;
+  border-radius: 0.15rem !important;
+  color: #f7f1ff !important;
+  background: rgba(46, 74, 96, 0.9) !important;
+  box-shadow: none !important;
+  font-size: 0.65rem !important;
+  line-height: 1 !important;
+}
+.shogi-game__opening-explanation {
+  position: absolute;
+  z-index: 95;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(7, 18, 26, 0.78);
+  backdrop-filter: blur(0.2rem);
+}
+.shogi-game__opening-explanation-panel {
+  width: min(31rem, 100%);
+  padding: 1.1rem;
+  border: 1px solid rgba(245, 166, 69, 0.78);
+  border-top: 4px solid var(--amber);
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 1rem 2.5rem rgba(7, 18, 26, 0.58);
+}
+.shogi-game__opening-explanation-panel small {
+  color: var(--amber);
+  font-weight: 700;
+}
+.shogi-game__opening-explanation-panel h2 {
+  margin: 0.15rem 0 0.7rem;
+  color: var(--ivory);
+}
+.shogi-game__opening-explanation-panel p {
+  margin: 0 0 0.8rem;
+  line-height: 1.7;
+}
+.shogi-game__opening-explanation-panel dl {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+.shogi-game__opening-explanation-panel dl > div {
+  padding: 0.65rem;
+  border-left: 3px solid var(--lavender);
+  background: rgba(20, 39, 54, 0.72);
+}
+.shogi-game__opening-explanation-panel dt {
+  margin-bottom: 0.2rem;
+  color: var(--amber);
+  font-weight: 800;
+}
+.shogi-game__opening-explanation-panel dd {
+  margin: 0;
+  line-height: 1.6;
+}
+.shogi-game__opening-explanation-panel > button {
+  display: block;
+  min-width: 7rem;
+  margin: 0.9rem 0 0 auto;
+  padding: 0.5rem 0.9rem;
 }
 .shogi-game__opening-selects select {
   width: 100%;
