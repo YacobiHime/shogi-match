@@ -40,6 +40,8 @@ export const OPENING_STRATEGIES = [
     family: "special",
     detectionNames: ["やばボーズ流"],
     strictOrder: true,
+    // 角交換四間飛車＋銀・金の骨格を一度組めば、その後に攻めへ転じても完成扱いを保つ。
+    historyCompletes: true,
     // 後手の△4二飛・△4三銀・△3二金型を、先手側へ正規化した完成形。
     completionSquares: [["6h", "R"], ["6g", "S"], ["7h", "G"]],
     availability: {
@@ -494,7 +496,8 @@ export function isOpeningPlanComplete({
     const definition = definitions.find(({ id: candidateId }) => candidateId === id);
     if (!definition) return false;
     const exact = matchesCompletionSquares(definition, currentSfen, color);
-    if (exact !== undefined) return exact;
+    if (exact === true) return true;
+    if (exact === false && !definition?.historyCompletes) return false;
     if (definition.detectionNames.some((name) => detected.has(name))) return true;
     return entries.length > 0 && entries.every(({ usi }) => played.has(usi));
   };

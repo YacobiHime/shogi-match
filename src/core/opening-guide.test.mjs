@@ -318,6 +318,34 @@ describe("opening guide", () => {
     })).toBe(true);
   });
 
+  it("keeps Yababozu complete after its pieces move on to the middlegame", () => {
+    const moves = openingPlanSteps("yababozu", "", "white").map(({ usi }) => usi);
+    const game = createGameRecord();
+    const actualLine = [
+      "7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4c4d", "2f2e",
+      "3a4b", "6g6f", "4b4c", "6f6e", "8b4b", "5g5f", "4a3b",
+    ];
+    for (const usi of actualLine) expect(appendUsiMove(game, usi), usi).toBe(true);
+    expect(isOpeningPlanComplete({
+      strategyId: "yababozu",
+      color: "white",
+      currentSfen: game.position.sfen,
+    })).toBe(true);
+    expect(isOpeningPlanComplete({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: moves.slice(0, -1),
+      currentSfen: createGameRecord().position.sfen,
+    })).toBe(false);
+    expect(isOpeningPlanComplete({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: moves,
+      // 完成後に駒が動いた局面を想定し、現在形ではなく履歴で完成を維持する。
+      currentSfen: createGameRecord().position.sfen,
+    })).toBe(true);
+  });
+
   it("prepares a fourth-file rook before building Kinmusou", () => {
     const moves = openingPlanSteps("", "kinmusou").map(({ usi }) => usi);
     expect(moves).toEqual([
