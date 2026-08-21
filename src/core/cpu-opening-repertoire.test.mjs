@@ -12,14 +12,10 @@ describe("CPU opening repertoire", () => {
     );
   });
 
-  it("offers configured Yababozu only when the CPU is White", () => {
+  it("does not expose Yababozu as a CPU strategy", () => {
+    expect(CPU_OPENING_REPERTOIRES.yababozu).toBeUndefined();
     expect(selectCpuOpeningRepertoire({
       configuredStrategy: "yababozu",
-      cpuColor: "white",
-    })).toEqual(CPU_OPENING_REPERTOIRES.yababozu);
-    expect(selectCpuOpeningRepertoire({
-      configuredStrategy: "yababozu",
-      cpuColor: "black",
       random: () => 0,
     })).toEqual(CPU_OPENING_REPERTOIRES.ibisha);
   });
