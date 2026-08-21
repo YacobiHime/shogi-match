@@ -603,6 +603,7 @@ type OpeningGuideDecision = {
 };
 const openingGuideDecision = ref<OpeningGuideDecision | null>(null);
 const openingGuideSafetyLoading = ref(false);
+const openingGuideStartedAtPly = ref(0);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const selectedStrategy = ref("");
@@ -908,6 +909,13 @@ const groupedOpeningCastles = computed(() => {
     })),
   })).filter(({ options }) => options.length);
 });
+const OPENING_GUIDE_MAX_PLIES = 40;
+const openingPlanExpired = computed(() => {
+  // currentSfenを購読し、非refのmoveHistoryが進むたび再評価する。
+  currentSfen.value;
+  return Boolean(selectedStrategy.value || selectedCastle.value)
+    && moveHistory.length - openingGuideStartedAtPly.value >= OPENING_GUIDE_MAX_PLIES;
+});
 const openingPlanCandidate = computed(() => {
   // currentSfen is intentionally read here so the non-ref move history is reconsidered after every move.
   const sfen = currentSfen.value;
@@ -915,6 +923,7 @@ const openingPlanCandidate = computed(() => {
     reviewMode.value
     || !active.value
     || !canMove.value
+    || openingPlanExpired.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return null;
   const playerIsBlack = humanColor.value === Color.BLACK;
@@ -945,6 +954,7 @@ const openingPlanComplete = computed(() => {
     currentSfen: sfen,
   });
 });
+const openingPlanSettled = computed(() => openingPlanComplete.value || openingPlanExpired.value);
 const boardCandidates = computed(() => (
   hintCandidates.value.length
     ? hintCandidates.value
@@ -971,6 +981,8 @@ const openingGuideStatus = computed(() => {
       ? `完成後の候補手を3手表示中（あと${openingFollowupRemaining.value}回）`
       : "完成後の候補手を3手表示中（今回で最後）";
   }
+  if (openingPlanExpired.value && openingFollowupLoading) return "ここからの候補手を3手考えているよ…";
+  if (openingPlanExpired.value && openingFollowupStarted.value) return "形作りはここまで。ここからは局面に合わせて指そう！";
   if (openingPlanComplete.value && openingFollowupLoading) return "形が完成したね。次の3手を考えているよ…";
   if (openingPlanComplete.value && openingFollowupStarted.value) return "形が完成したね！";
   if (!openingGuideDecision.value) return "形が完成したか、今の局面では予定手を指せないみたい。";
@@ -987,6 +999,7 @@ function selectedOpeningLabel() {
 function announceOpeningGuide() {
   resetOpeningFollowup();
   resetOpeningGuideSafety();
+  openingGuideStartedAtPly.value = moveHistory.length;
   const label = selectedOpeningLabel();
   if (label && coachLevel.value !== "off") {
     guideText.value = `${label}を目指そう。盤の矢印を参考にしてね！`;
@@ -1251,7 +1264,7 @@ function scheduleOpeningGuideSafety() {
   }
 
   const planned = openingPlanCandidate.value;
-  const planBlocked = !planned && !openingPlanComplete.value;
+  const planBlocked = !planned && !openingPlanSettled.value;
   if (!planned && !planBlocked) return;
   if (!engineReady.value || !engine) {
     if (planned) openingGuideDecision.value = { ...planned, source: "plan" };
@@ -1342,7 +1355,7 @@ function scheduleOpeningFollowupCandidates() {
   if (
     !engineReady.value || !engine || !active.value || reviewMode.value
     || normalizedMode.value !== "cpu" || record.value.position.color !== humanColor.value
-    || !openingPlanComplete.value || openingFollowupLoading
+    || !openingPlanSettled.value || openingFollowupLoading
     || openingGuideSafetyLoading.value || openingGuideDecision.value
     || openingFollowupCandidates.value.length > 0
   ) return;
@@ -2204,6 +2217,7 @@ function restart() {
   cpuOpeningPlan = null;
   positionAnalysisCache.clear();
   moveHistory = [];
+  openingGuideStartedAtPly.value = 0;
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
