@@ -439,7 +439,7 @@
           </div>
         </dl>
         <div class="shogi-game__result-actions">
-          <button type="button" class="shogi-game__rematch" @click="openPregame">もう一度対局</button>
+          <button type="button" class="shogi-game__rematch" @click="openPregame">対局準備</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
         </div>
       </div>
@@ -2016,24 +2016,7 @@ function resign() {
 
 function completeReview() {
   if (!reviewMode.value) return;
-  if (cpuTimer) clearTimeout(cpuTimer);
-  cancelPlayerIdleAdvice();
-  coachAdviceScheduler.reset();
-  analysisGeneration += 1;
-  reviewCoachGeneration += 1;
-  reviewCpuGeneration += 1;
-  engine?.stop();
-  reviewCpuEnabled.value = false;
-  rebuildRecord(reviewNavigation.value.mainLine);
-  active.value = false;
-  thinking.value = false;
-  reviewMode.value = false;
-  analysisOpen.value = false;
-  analysisRunning.value = false;
-  settingsOpen.value = false;
-  hintCandidates.value = [];
-  hintText.value = "";
-  resultDialogOpen.value = Boolean(result.value);
+  openPregame();
 }
 
 function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう！") {
