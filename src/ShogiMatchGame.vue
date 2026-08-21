@@ -765,12 +765,16 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
 const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));
 const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
 const groupedOpeningStrategies = computed(() => [
-  { id: "basic", label: "基本戦法" },
-  { id: "attack", label: "攻め方" },
+  { id: "ibisha", label: "居飛車" },
+  { id: "kakugawari", label: "角換わり" },
+  { id: "shiken", label: "四間飛車" },
+  { id: "sangen", label: "三間飛車" },
+  { id: "nakabisha", label: "中飛車" },
+  { id: "mukai", label: "向かい飛車" },
   { id: "special", label: "奇襲・特殊戦法" },
 ].map((group) => ({
   ...group,
-  options: availableOpeningStrategies.value.filter(({ category }) => category === group.id),
+  options: availableOpeningStrategies.value.filter(({ family }) => family === group.id),
 })).filter(({ options }) => options.length));
 watch([availableOpeningStrategies, availableOpeningCastles], ([strategies, castles]) => {
   let changed = false;
