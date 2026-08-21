@@ -40,6 +40,7 @@ export const OPENING_STRATEGIES = [
     family: "special",
     detectionNames: ["やばボーズ流"],
     strictOrder: true,
+    adaptiveOrder: true,
     // 角交換四間飛車＋銀・金の骨格を一度組めば、その後に攻めへ転じても完成扱いを保つ。
     historyCompletes: true,
     // 後手の△4二飛・△4三銀・△3二金型を、先手側へ正規化した完成形。
@@ -47,11 +48,23 @@ export const OPENING_STRATEGIES = [
     availability: {
       colors: ["white"],
       requiredHistory: ["7g7f"],
-      requiredHistoryBeforeMoves: [{ move: "4a3b", required: "7i8h" }],
+      requiredHistoryBeforeMoves: [
+        { move: "4a3b", required: "7i8h" },
+        { move: "3a4b", required: "7i8h" },
+      ],
     },
     // 後手では△3四歩、△8八角成、△3二金、△4二銀、△4四歩、△4三銀、△4二飛。
     // △4四歩は角交換直後に急がず、金・銀を整えてから銀の通路を開ける。
     blackMoves: ["7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g", "2h6h"],
+    movePrerequisites: {
+      "8h2b+": ["7g7f"],
+      "6i7h": ["8h2b+"],
+      // 金と銀は、角交換後なら局面の評価値に応じてどちらを先にしてもよい。
+      "7i6h": ["8h2b+"],
+      "6g6f": ["6i7h", "7i6h"],
+      "6h6g": ["6g6f", "7i6h"],
+      "2h6h": ["6h6g"],
+    },
   },
   {
     id: "fujii-system",
@@ -433,6 +446,7 @@ export function availableOpeningDefinitions({
       castleId: kind === "castle" ? definition.id : "",
       color,
       playedMoves,
+      moveHistory,
       legalMoves,
       detectedFormations,
       currentSfen,
@@ -445,11 +459,12 @@ export function availableOpeningDefinitions({
   });
 }
 
-export function nextOpeningPlanMove({
+export function openingPlanCandidates({
   strategyId,
   castleId,
   color = "black",
   playedMoves = [],
+  moveHistory = [],
   legalMoves = [],
   detectedFormations = [],
   currentSfen = "",
@@ -460,7 +475,9 @@ export function nextOpeningPlanMove({
   const strategyComplete = definitionDetectedComplete(strategy, detected, currentSfen, color);
   const castleComplete = definitionDetectedComplete(castle, detected, currentSfen, color);
   const played = new Set(playedMoves);
+  const history = new Set(moveHistory);
   const legal = new Set(legalMoves);
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
 
   const steps = openingPlanSteps(strategyId, castleId, color);
   for (const phase of ["strategy", "castle"]) {
@@ -468,15 +485,30 @@ export function nextOpeningPlanMove({
     const complete = phase === "strategy" ? strategyComplete : castleComplete;
     if (!definition || complete) continue;
     const pending = steps.filter((entry) => entry.phase === phase && !played.has(entry.usi));
-    if (definition.strictOrder) {
+    const prerequisites = new Map(Object.entries(definition.movePrerequisites ?? {}).map(
+      ([move, required]) => [convert(move), required.map(convert)],
+    ));
+    const isReady = (entry) => {
+      if (!legal.has(entry.usi)) return false;
+      if (!(prerequisites.get(entry.usi) ?? []).every((move) => played.has(move))) return false;
+      const historyRequirement = definition.availability?.requiredHistoryBeforeMoves?.find(
+        ({ move }) => move === entry.usi,
+      );
+      return !historyRequirement || history.size === 0 || history.has(historyRequirement.required);
+    };
+    if (definition.strictOrder && !definition.adaptiveOrder) {
       const next = pending[0];
-      if (next) return legal.has(next.usi) ? next : null;
+      if (next) return isReady(next) ? [next] : [];
       continue;
     }
-    const next = pending.find(({ usi }) => legal.has(usi));
-    if (next) return next;
+    const candidates = pending.filter(isReady);
+    if (candidates.length) return candidates;
   }
-  return null;
+  return [];
+}
+
+export function nextOpeningPlanMove(options) {
+  return openingPlanCandidates(options)[0] ?? null;
 }
 
 export function isOpeningPlanComplete({
@@ -584,6 +616,25 @@ export function chooseSafeOpeningMove(plannedMove, candidates = [], maxScoreLoss
   return scoreLoss >= maxScoreLoss
     ? { usi: best.move, source: "ai", scoreLoss }
     : { usi: plannedMove, source: "plan", scoreLoss };
+}
+
+/** 前提条件を満たす複数の予定手から評価値の良い手を選び、危険ならAI最善手へ退避する。 */
+export function chooseAdaptiveOpeningMove(plannedMoves = [], candidates = [], maxScoreLoss = 250) {
+  const plans = plannedMoves.map((entry) => typeof entry === "string" ? entry : entry?.usi).filter(Boolean);
+  if (!plans.length) return chooseSafeOpeningMove(null, candidates, maxScoreLoss);
+  const ranked = [...candidates]
+    .filter(({ rank, move }) => Number.isInteger(rank) && rank >= 1 && typeof move === "string")
+    .sort((left, right) => left.rank - right.rank);
+  const availablePlans = plans
+    .map((move, order) => ({ move, order, candidate: ranked.find((entry) => entry.move === move) }))
+    .filter(({ candidate }) => candidate);
+  if (!availablePlans.length) return chooseSafeOpeningMove(plans[0], candidates, maxScoreLoss);
+  const scoredPlans = availablePlans
+    .map((entry) => ({ ...entry, value: comparableOpeningScore(entry.candidate.score) }))
+    .filter(({ value }) => value !== undefined)
+    .sort((left, right) => right.value - left.value || left.order - right.order);
+  const selectedPlan = scoredPlans[0] ?? availablePlans[0];
+  return chooseSafeOpeningMove(selectedPlan.move, candidates, maxScoreLoss);
 }
 
 /** 戦法固有の予定手をどこまで評価値より優先するか。 */

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { appendUsiMove, createGameRecord } from "../game-state";
 import {
   availableOpeningDefinitions,
+  chooseAdaptiveOpeningMove,
   inferOpeningRookStyle,
   isOpeningPlanComplete,
   mirrorUsiMove,
@@ -11,6 +12,7 @@ import {
   chooseSafeOpeningMove,
   openingFollowupCount,
   openingGuideScoreLossLimit,
+  openingPlanCandidates,
   openingPlanSteps,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
@@ -50,6 +52,8 @@ describe("opening guide", () => {
       expect(openingExplanation(id)).toMatchObject({
         overview: expect.any(String),
         aim: expect.any(String),
+        castles: expect.any(String),
+        followup: expect.any(String),
         caution: expect.any(String),
       });
     }
@@ -264,6 +268,30 @@ describe("opening guide", () => {
     expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("3a4b"));
   });
 
+  it("exposes only Yababozu moves whose prerequisites are complete", () => {
+    expect(openingPlanCandidates({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: ["3c3d", "2b8h+"],
+      moveHistory: ["7g7f", "3c3d", "2g2f", "2b8h+", "7i8h"],
+      legalMoves: ["4a3b", "3a4b", "4c4d"],
+    }).map(({ usi }) => usi)).toEqual(["4a3b", "3a4b"]);
+    expect(openingPlanCandidates({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: ["3c3d", "2b8h+", "4a3b"],
+      moveHistory: ["7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4a3b"],
+      legalMoves: ["3a4b", "4c4d"],
+    }).map(({ usi }) => usi)).toEqual(["3a4b"]);
+    expect(openingPlanCandidates({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: ["3c3d", "2b8h+", "4a3b", "3a4b"],
+      moveHistory: ["7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4a3b", "2f2e", "3a4b"],
+      legalMoves: ["4c4d", "8b4b"],
+    }).map(({ usi }) => usi)).toEqual(["4c4d"]);
+  });
+
   it.each(OPENING_STRATEGIES)("uses a legal strategy sequence for $label", ({ id }) => {
     const exchangeDependent = id === "kakugawari" || id === "yababozu";
     const blackConditional = exchangeDependent ? ["8h2b+"] : [];
@@ -439,6 +467,16 @@ describe("opening guide", () => {
       { rank: 1, move: "7g7f", score: { type: "cp", value: 90 } },
       { rank: 2, move: "2g2f", score: { type: "cp", value: -40 } },
     ])).toEqual({ usi: "2g2f", source: "plan", scoreLoss: 130 });
+  });
+
+  it("reorders ready plan moves by evaluation without leaving the plan", () => {
+    expect(chooseAdaptiveOpeningMove(
+      [{ usi: "7g7f" }, { usi: "2g2f" }],
+      [
+        { rank: 1, move: "2g2f", score: { type: "cp", value: 90 } },
+        { rank: 2, move: "7g7f", score: { type: "cp", value: 20 } },
+      ],
+    )).toEqual({ usi: "2g2f", source: "plan", scoreLoss: 0 });
   });
 
   it("rejects a plan move with a large evaluation drop", () => {

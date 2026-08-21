@@ -393,6 +393,14 @@
             <dd>{{ selectedStrategyExplanation.aim }}</dd>
           </div>
           <div>
+            <dt>相性の良い囲い</dt>
+            <dd>{{ selectedStrategyExplanation.castles }}</dd>
+          </div>
+          <div>
+            <dt>形ができた後</dt>
+            <dd>{{ selectedStrategyExplanation.followup }}</dd>
+          </div>
+          <div>
             <dt>注意点</dt>
             <dd>{{ selectedStrategyExplanation.caution }}</dd>
           </div>
@@ -573,6 +581,7 @@ import {
 } from "./core/review-navigation.mjs";
 import {
   availableOpeningDefinitions,
+  chooseAdaptiveOpeningMove,
   chooseSafeOpeningMove,
   inferOpeningRookStyle,
   isOpeningPlanComplete,
@@ -580,6 +589,7 @@ import {
   openingDefinitionRookStyle,
   openingFollowupCount,
   openingGuideScoreLossLimit,
+  openingPlanCandidates as getOpeningPlanCandidates,
   openingUrgentResponse,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
@@ -985,7 +995,7 @@ const openingPlanExpired = computed(() => {
   return Boolean(selectedStrategy.value || selectedCastle.value)
     && moveHistory.length - openingGuideStartedAtPly.value >= OPENING_GUIDE_MAX_PLIES;
 });
-const openingPlanCandidate = computed(() => {
+const openingPlanCandidates = computed(() => {
   // currentSfen is intentionally read here so the non-ref move history is reconsidered after every move.
   const sfen = currentSfen.value;
   if (
@@ -994,19 +1004,21 @@ const openingPlanCandidate = computed(() => {
     || !canMove.value
     || openingPlanExpired.value
     || (!selectedStrategy.value && !selectedCastle.value)
-  ) return null;
+  ) return [];
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
-  return nextOpeningPlanMove({
+  return getOpeningPlanCandidates({
     strategyId: selectedStrategy.value,
     castleId: selectedCastle.value,
     color: playerIsBlack ? "black" : "white",
     playedMoves: playerMoves,
+    moveHistory,
     legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi),
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
     currentSfen: sfen,
   });
 });
+const openingPlanCandidate = computed(() => openingPlanCandidates.value[0] ?? null);
 const openingPlanComplete = computed(() => {
   const sfen = currentSfen.value;
   if (reviewMode.value || !active.value || (!selectedStrategy.value && !selectedCastle.value)) {
@@ -1218,6 +1230,7 @@ function strategyMove(): string | undefined {
     castleId: cpuOpeningPlan.castleId,
     color: cpuIsBlack ? "black" : "white",
     playedMoves: cpuMoves,
+    moveHistory,
     legalMoves,
     detectedFormations: formationNamesForColor(currentSfen.value, cpuColor),
     currentSfen: currentSfen.value,
@@ -1340,8 +1353,9 @@ function scheduleOpeningGuideSafety() {
     return;
   }
 
-  const planned = openingPlanCandidate.value;
-  const planBlocked = !planned && !openingPlanSettled.value;
+  const plannedOptions = openingPlanCandidates.value;
+  const planned = plannedOptions[0] ?? null;
+  const planBlocked = plannedOptions.length === 0 && !openingPlanSettled.value;
   if (!planned && !planBlocked) return;
   if (!engineReady.value || !engine) {
     if (planned) openingGuideDecision.value = { ...planned, source: "plan" };
@@ -1371,7 +1385,7 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      if (planned && !candidates.some(({ move }) => move === planned.usi)) {
+      if (planned && !plannedOptions.some(({ usi }) => candidates.some(({ move }) => move === usi))) {
         engine!.setPosition(currentEnginePosition());
         engine!.applyStrengthOptions({ multiPv: 1 });
         const forced = await engine!.go({
@@ -1392,9 +1406,9 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      const choice = planned
-        ? chooseSafeOpeningMove(
-            planned.usi,
+      const choice = plannedOptions.length
+        ? chooseAdaptiveOpeningMove(
+            plannedOptions,
             candidates,
             openingGuideScoreLossLimit(selectedStrategy.value, planned.phase),
           )
@@ -1406,7 +1420,7 @@ function scheduleOpeningGuideSafety() {
       openingGuideDecision.value = {
         usi: choice.usi,
         source: choice.source,
-        phase: planned?.phase,
+        phase: plannedOptions.find(({ usi }) => usi === choice.usi)?.phase ?? planned?.phase,
       };
       if (choice.source === "ai" && coachLevel.value !== "off") {
         guideText.value = planBlocked
@@ -2565,6 +2579,8 @@ queueMicrotask(() => {
 }
 .shogi-game__opening-explanation-panel {
   width: min(31rem, 100%);
+  max-height: calc(100% - 1rem);
+  overflow-y: auto;
   padding: 1.1rem;
   border: 1px solid rgba(245, 166, 69, 0.78);
   border-top: 4px solid var(--amber);
