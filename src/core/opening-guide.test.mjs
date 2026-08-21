@@ -14,6 +14,7 @@ import {
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./opening-guide.mjs";
+import { OPENING_EXPLANATIONS, openingExplanation } from "./opening-explanations.mjs";
 
 function withTurn(sfen, color) {
   const fields = sfen.split(" ");
@@ -41,6 +42,18 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
+  it("has an explanation for every selectable strategy", () => {
+    expect(Object.keys(OPENING_EXPLANATIONS).sort())
+      .toEqual(OPENING_STRATEGIES.map(({ id }) => id).sort());
+    for (const { id } of OPENING_STRATEGIES) {
+      expect(openingExplanation(id)).toMatchObject({
+        overview: expect.any(String),
+        aim: expect.any(String),
+        caution: expect.any(String),
+      });
+    }
+  });
+
   it("classifies every castle as static-rook, ranging-rook, or dual-use", () => {
     const groups = Object.groupBy(OPENING_CASTLES, ({ id }) => (
       openingDefinitionRookStyle(id, "castle") ?? "both"
