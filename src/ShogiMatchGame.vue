@@ -126,7 +126,12 @@
             <select v-model="selectedStrategy" @change="announceOpeningGuide">
               <option value="">選択しない</option>
               <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
-                <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                <option
+                  v-for="strategy in group.options"
+                  :key="strategy.id"
+                  :value="strategy.id"
+                  :disabled="strategy.disabled"
+                >
                   {{ strategy.label }}
                 </option>
               </optgroup>
@@ -137,7 +142,12 @@
             <select v-model="selectedCastle" @change="announceOpeningGuide">
               <option value="">選択しない</option>
               <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
-                <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
+                <option
+                  v-for="castle in group.options"
+                  :key="castle.id"
+                  :value="castle.id"
+                  :disabled="castle.disabled"
+                >
                   {{ castle.label }}
                 </option>
               </optgroup>
@@ -300,7 +310,12 @@
           <select v-model="selectedStrategy" @change="announceOpeningGuide">
             <option value="">選択しない</option>
             <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
-              <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+              <option
+                v-for="strategy in group.options"
+                :key="strategy.id"
+                :value="strategy.id"
+                :disabled="strategy.disabled"
+              >
                 {{ strategy.label }}
               </option>
             </optgroup>
@@ -311,7 +326,12 @@
           <select v-model="selectedCastle" @change="announceOpeningGuide">
             <option value="">選択しない</option>
             <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
-              <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
+              <option
+                v-for="castle in group.options"
+                :key="castle.id"
+                :value="castle.id"
+                :disabled="castle.disabled"
+              >
                 {{ castle.label }}
               </option>
             </optgroup>
@@ -834,13 +854,20 @@ const OPENING_STRATEGY_GROUPS = [
   { id: "mukai", label: "向かい飛車" },
   { id: "special", label: "奇襲・特殊戦法" },
 ];
-function groupOpeningStrategies(options: typeof OPENING_STRATEGIES) {
+function groupOpeningStrategies<T extends (typeof OPENING_STRATEGIES)[number]>(options: T[]) {
   return OPENING_STRATEGY_GROUPS.map((group) => ({
     ...group,
     options: options.filter(({ family }) => family === group.id),
   })).filter(({ options: groupOptions }) => groupOptions.length);
 }
-const groupedOpeningStrategies = computed(() => groupOpeningStrategies(availableOpeningStrategies.value));
+const groupedOpeningStrategies = computed(() => {
+  const availableIds = new Set(availableOpeningStrategies.value.map(({ id }) => id));
+  return groupOpeningStrategies(OPENING_STRATEGIES.map((strategy) => ({
+    ...strategy,
+    // 進行中の補助は、相手の応手を待つ一時的な局面でも解除しない。
+    disabled: strategy.id !== selectedStrategy.value && !availableIds.has(strategy.id),
+  })));
+});
 const cpuDetailedStrategyGroups = computed(() => {
   const cpuColor = selectedPlayerColor.value === "black" ? "white" : "black";
   const supported = new Set(CPU_OPENING_STRATEGY_IDS);
@@ -865,30 +892,21 @@ const cpuDetailedCastleGroups = computed(() => {
     }),
   })).filter(({ options }) => options.length);
 });
-const groupedOpeningCastles = computed(() => [
-  { id: "static", label: "居飛車用" },
-  { id: "ranging", label: "振り飛車用" },
-  { id: "both", label: "両用" },
-].map((group) => ({
-  ...group,
-  options: availableOpeningCastles.value.filter(({ id }) => (
-    (openingDefinitionRookStyle(id, "castle") ?? "both") === group.id
-  )),
-})).filter(({ options }) => options.length));
-watch([availableOpeningStrategies, availableOpeningCastles], ([strategies, castles]) => {
-  let changed = false;
-  if (selectedStrategy.value && !strategies.some(({ id }) => id === selectedStrategy.value)) {
-    selectedStrategy.value = "";
-    changed = true;
-  }
-  if (selectedCastle.value && !castles.some(({ id }) => id === selectedCastle.value)) {
-    selectedCastle.value = "";
-    changed = true;
-  }
-  if (changed) {
-    resetOpeningFollowup();
-    resetOpeningGuideSafety();
-  }
+const groupedOpeningCastles = computed(() => {
+  const availableIds = new Set(availableOpeningCastles.value.map(({ id }) => id));
+  return [
+    { id: "static", label: "居飛車用" },
+    { id: "ranging", label: "振り飛車用" },
+    { id: "both", label: "両用" },
+  ].map((group) => ({
+    ...group,
+    options: OPENING_CASTLES.filter(({ id }) => (
+      (openingDefinitionRookStyle(id, "castle") ?? "both") === group.id
+    )).map((castle) => ({
+      ...castle,
+      disabled: castle.id !== selectedCastle.value && !availableIds.has(castle.id),
+    })),
+  })).filter(({ options }) => options.length);
 });
 const openingPlanCandidate = computed(() => {
   // currentSfen is intentionally read here so the non-ref move history is reconsidered after every move.
