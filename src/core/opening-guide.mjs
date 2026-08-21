@@ -584,3 +584,11 @@ export function chooseSafeOpeningMove(plannedMove, candidates = [], maxScoreLoss
     ? { usi: best.move, source: "ai", scoreLoss }
     : { usi: plannedMove, source: "plan", scoreLoss };
 }
+
+/** 戦法固有の予定手をどこまで評価値より優先するか。 */
+export function openingGuideScoreLossLimit(strategyId, phase = "strategy") {
+  // やばボーズ流は角交換・4三銀・4二飛の骨格を作ること自体が練習目的。
+  // 駒損級の悪化は避けつつ、通常より広い評価値差まで定跡手を維持する。
+  if (strategyId === "yababozu" && phase === "strategy") return 600;
+  return 250;
+}

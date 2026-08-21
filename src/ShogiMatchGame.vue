@@ -579,6 +579,7 @@ import {
   nextOpeningPlanMove,
   openingDefinitionRookStyle,
   openingFollowupCount,
+  openingGuideScoreLossLimit,
   openingUrgentResponse,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
@@ -1392,7 +1393,11 @@ function scheduleOpeningGuideSafety() {
         || record.value.position.color !== humanColor.value
       ) return;
       const choice = planned
-        ? chooseSafeOpeningMove(planned.usi, candidates)
+        ? chooseSafeOpeningMove(
+            planned.usi,
+            candidates,
+            openingGuideScoreLossLimit(selectedStrategy.value, planned.phase),
+          )
         : candidates
             .filter(({ rank, move }) => Number.isInteger(rank) && typeof move === "string")
             .sort((left, right) => left.rank - right.rank)
