@@ -10,6 +10,7 @@ import {
   openingUrgentResponse,
   chooseSafeOpeningMove,
   openingFollowupCount,
+  openingGuideScoreLossLimit,
   openingPlanSteps,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
@@ -438,5 +439,26 @@ describe("opening guide", () => {
       { rank: 1, move: "6i7h", score: { type: "cp", value: 120 } },
       { rank: 4, move: "2g2f", score: { type: "cp", value: -500 } },
     ])).toEqual({ usi: "6i7h", source: "ai", scoreLoss: 620 });
+  });
+
+  it("prioritizes the Yababozu book line within a wider safety margin", () => {
+    expect(openingGuideScoreLossLimit("yababozu", "strategy")).toBe(600);
+    expect(openingGuideScoreLossLimit("shiken", "strategy")).toBe(250);
+    expect(openingGuideScoreLossLimit("yababozu", "castle")).toBe(250);
+
+    const candidates = [
+      { rank: 1, move: "8b8d", score: { type: "cp", value: 180 } },
+      { rank: 4, move: "8b4b", score: { type: "cp", value: -320 } },
+    ];
+    expect(chooseSafeOpeningMove(
+      "8b4b",
+      candidates,
+      openingGuideScoreLossLimit("yababozu", "strategy"),
+    )).toEqual({ usi: "8b4b", source: "plan", scoreLoss: 500 });
+    expect(chooseSafeOpeningMove(
+      "8b4b",
+      candidates,
+      openingGuideScoreLossLimit("shiken", "strategy"),
+    )).toEqual({ usi: "8b8d", source: "ai", scoreLoss: 500 });
   });
 });
