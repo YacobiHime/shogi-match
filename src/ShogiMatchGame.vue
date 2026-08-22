@@ -539,6 +539,7 @@ import {
   openingDefinitionRookStyle,
   openingFollowupCount,
   openingGuideScoreLossLimit,
+  openingPlanBranchMessage,
   openingPlanInterruption,
   openingPlanCandidates as getOpeningPlanCandidates,
   openingUrgentResponse,
@@ -628,6 +629,8 @@ type OpeningGuideDecision = {
 const openingGuideDecision = ref<OpeningGuideDecision | null>(null);
 const openingGuideSafetyLoading = ref(false);
 const openingGuideStartedAtPly = ref(0);
+const openingGuideBranchNotice = ref("");
+const openingGuideBranchNoticePly = ref(-1);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const selectedStrategy = ref("");
@@ -1041,6 +1044,8 @@ function announceOpeningGuide() {
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   openingGuideStartedAtPly.value = moveHistory.length;
+  openingGuideBranchNotice.value = "";
+  openingGuideBranchNoticePly.value = -1;
   const label = selectedOpeningLabel();
   if (label && coachLevel.value !== "off") {
     guideText.value = `${label}を目指そう。盤の矢印を参考にしてね！`;
@@ -1174,6 +1179,8 @@ function strategyMove(): string | undefined {
       : selectedPlan;
   }
   const cpuColor = cpuIsBlack ? Color.BLACK : Color.WHITE;
+  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== cpuIsBlack);
+  const opponentColor = cpuColor === Color.BLACK ? Color.WHITE : Color.BLACK;
   // 定跡の予定手より、飛車先を破られないための3二金／7八金を優先する。
   const urgent = openingUrgentResponse({
     strategyId: cpuOpeningPlan.strategyId,
@@ -1187,9 +1194,11 @@ function strategyMove(): string | undefined {
     castleId: cpuOpeningPlan.castleId,
     color: cpuIsBlack ? "black" : "white",
     playedMoves: cpuMoves,
+    opponentMoves,
     moveHistory,
     legalMoves,
     detectedFormations: formationNamesForColor(currentSfen.value, cpuColor),
+    opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
     currentSfen: currentSfen.value,
   })?.usi;
 }
@@ -1315,6 +1324,22 @@ function scheduleOpeningGuideSafety() {
     return;
   }
 
+  const branchMessage = openingPlanBranchMessage({
+    strategyId: selectedStrategy.value,
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: playerMoves,
+    opponentMoves,
+  });
+  if (
+    branchMessage
+    && branchMessage !== openingGuideBranchNotice.value
+    && coachLevel.value !== "off"
+  ) {
+    openingGuideBranchNotice.value = branchMessage;
+    openingGuideBranchNoticePly.value = moveHistory.length;
+    guideText.value = branchMessage;
+  }
+
   const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   const urgent = openingUrgentResponse({
     strategyId: selectedStrategy.value,
@@ -1405,7 +1430,11 @@ function scheduleOpeningGuideSafety() {
         source: choice.source,
         phase: plannedOptions.find(({ usi }) => usi === choice.usi)?.phase ?? planned?.phase,
       };
-      if (choice.source === "ai" && coachLevel.value !== "off") {
+      if (
+        choice.source === "ai"
+        && coachLevel.value !== "off"
+        && openingGuideBranchNoticePly.value !== historyLength
+      ) {
         guideText.value = planBlocked
           ? `予定の形へすぐ進めないから、まずは${formatHintMove(choice.usi, currentSfen.value)}で局面を整えよう。`
           : `今は形作りより、${formatHintMove(choice.usi, currentSfen.value)}を先に指そう！形作りはその後で続けられるよ。`;

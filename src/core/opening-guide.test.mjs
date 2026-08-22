@@ -13,6 +13,7 @@ import {
   chooseSafeOpeningMove,
   openingFollowupCount,
   openingGuideScoreLossLimit,
+  openingPlanBranchMessage,
   openingPlanCandidates,
   openingPlanInterruption,
   openingPlanSteps,
@@ -321,6 +322,42 @@ describe("opening guide", () => {
       ...context,
       legalMoves: ["8b4b", "4c5d", "5a6b"],
     }).map(({ usi }) => usi)).toEqual(["4c5d"]);
+  });
+
+  it("builds the standard White Gokigen Central Rook with 5c silver and 7b king", () => {
+    expect(openingPlanSteps("gokigen", "", "white").map(({ usi }) => usi)).toEqual([
+      "3c3d", "5c5d", "8b5b", "5d5e", "3a4b", "4b5c", "5a6b", "6b7b",
+    ]);
+  });
+
+  it("switches Gokigen to the silver opposition against Super-Speed Silver", () => {
+    const context = { opponentMoves: ["3g3f", "3i3h", "3h3g", "3g4f"] };
+    expect(openingPlanSteps("gokigen", "", "white", context).map(({ usi }) => usi)).toEqual([
+      "3c3d", "5c5d", "8b5b", "5d5e", "3a4b", "4b5c", "5c4d", "5a6b", "6b7b",
+    ]);
+    expect(openingPlanBranchMessage({
+      strategyId: "gokigen", color: "white", ...context,
+    })).toContain("4二銀から5三銀、4四銀");
+  });
+
+  it("switches Gokigen through recapture and Opposing Rook against Maruyama Vaccine", () => {
+    const context = { opponentMoves: ["8h2b+"] };
+    expect(openingPlanSteps("gokigen", "", "white", context).map(({ usi }) => usi)).toEqual([
+      "3c3d", "5c5d", "8b5b", "3a2b", "2b3c", "5b2b", "5a6b", "6b7b",
+    ]);
+    expect(openingPlanBranchMessage({
+      strategyId: "gokigen", color: "white", ...context,
+    })).toContain("丸山ワクチン");
+  });
+
+  it("avoids the ultra-rapid line when the opponent shows right gold on 5h", () => {
+    const context = { opponentMoves: ["4i5h"] };
+    expect(openingPlanSteps("gokigen", "", "white", context).map(({ usi }) => usi)).toEqual([
+      "3c3d", "5c5d", "8b5b", "5a6b", "6b7b", "7b8b", "7a7b",
+    ]);
+    expect(openingPlanBranchMessage({
+      strategyId: "gokigen", color: "white", ...context,
+    })).toContain("5八金右は超急戦の合図");
   });
 
   it("does not abandon the normal Yababozu branch after the rook has moved", () => {
