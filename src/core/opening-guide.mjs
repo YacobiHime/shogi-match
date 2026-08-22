@@ -167,7 +167,63 @@ export const OPENING_STRATEGIES = [
     label: "ゴキゲン中飛車",
     family: "nakabisha",
     detectionNames: ["ゴキゲン中飛車"],
-    blackMoves: ["5g5f", "2h5h", "7g7f"],
+    strictOrder: true,
+    adaptiveOrder: true,
+    historyCompletes: true,
+    completionVariants: [
+      [["5h", "R"], ["5e", "P"], ["5g", "S"], ["3h", "K"]],
+      [["5h", "R"], ["5e", "P"], ["6f", "S"], ["3h", "K"]],
+      [["8h", "R"], ["7g", "S"], ["3h", "K"]],
+      [["5h", "R"], ["2h", "K"], ["3h", "S"]],
+    ],
+    blackMoves: [
+      "7g7f", "5g5f", "2h5h", "5f5e", "7i6h", "6h5g", "5i4h", "4h3h",
+    ],
+    planVariants: {
+      superSpeedSilver: [
+        "7g7f", "5g5f", "2h5h", "5f5e", "7i6h", "6h5g", "5g6f", "5i4h", "4h3h",
+      ],
+      maruyamaVaccine: [
+        "7g7f", "5g5f", "2h5h", "7i8h", "8h7g", "5h8h", "5i4h", "4h3h",
+      ],
+      avoidUltraRapid: [
+        "7g7f", "5g5f", "2h5h", "5i4h", "4h3h", "3h2h", "3i3h",
+      ],
+    },
+    movePrerequisites: {
+      "5g5f": ["7g7f"],
+      "2h5h": ["5g5f"],
+      "5f5e": ["2h5h"],
+      "7i6h": ["2h5h"],
+      "6h5g": ["7i6h"],
+      "5i4h": ["2h5h"],
+      "4h3h": ["5i4h"],
+    },
+    movePrerequisitesByVariant: {
+      superSpeedSilver: {
+        "5g6f": ["6h5g"],
+        "5i4h": ["5g6f"],
+      },
+      maruyamaVaccine: {
+        "7i8h": ["2h5h"],
+        "8h7g": ["7i8h"],
+        "5h8h": ["8h7g"],
+        "5i4h": ["5h8h"],
+      },
+      avoidUltraRapid: {
+        "5i4h": ["2h5h"],
+        "4h3h": ["5i4h"],
+        "3h2h": ["4h3h"],
+        "3i3h": ["3h2h"],
+      },
+    },
+    planReservations: [
+      {
+        until: "2h5h",
+        squares: ["3h", "4h", "5h"],
+        fromSquares: ["2h"],
+      },
+    ],
   },
   {
     id: "mukai",
@@ -644,6 +700,39 @@ function openingStrategyPlan(strategy, {
   opponentFormations = [],
 } = {}) {
   if (!strategy) return { moves: [], variant: "default" };
+  if (strategy.id === "gokigen") {
+    const played = new Set(canonicalMovesForColor(playedMoves, color));
+    const opponent = new Set(canonicalMovesForColor(
+      opponentMoves,
+      color === "black" ? "white" : "black",
+    ));
+    const vaccineLocked = played.has("5h8h");
+    const superSpeedLocked = played.has("5g6f");
+    const ultraAvoidanceLocked = played.has("3h2h") || played.has("3i3h");
+    const opponentExchangedBishop = opponent.has("8h2b+");
+    const opponentShowsUltraRapid = opponent.has("4i5h") && !played.has("5f5e");
+    const opponentShowsSuperSpeed = ["3g3f", "3i3h", "3h3g", "3g4f"]
+      .some((move) => opponent.has(move));
+    if (vaccineLocked || opponentExchangedBishop) {
+      return {
+        moves: strategy.planVariants?.maruyamaVaccine ?? strategy.blackMoves,
+        variant: "maruyamaVaccine",
+      };
+    }
+    if (ultraAvoidanceLocked || opponentShowsUltraRapid) {
+      return {
+        moves: strategy.planVariants?.avoidUltraRapid ?? strategy.blackMoves,
+        variant: "avoidUltraRapid",
+      };
+    }
+    if (superSpeedLocked || opponentShowsSuperSpeed) {
+      return {
+        moves: strategy.planVariants?.superSpeedSilver ?? strategy.blackMoves,
+        variant: "superSpeedSilver",
+      };
+    }
+    return { moves: strategy.blackMoves ?? [], variant: "default" };
+  }
   if (strategy.id === "ahiru") {
     const opponent = new Set(canonicalMovesForColor(
       opponentMoves,
@@ -853,6 +942,30 @@ export function openingPlanInterruption({
   }
 
   return null;
+}
+
+/** 相手の対策に応じて選ばれたゴキゲン中飛車の分岐を、やこび姫の台詞にする。 */
+export function openingPlanBranchMessage({
+  strategyId,
+  color = "black",
+  playedMoves = [],
+  opponentMoves = [],
+} = {}) {
+  if (strategyId !== "gokigen") return "";
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  const { variant } = openingStrategyPlan(strategy, { color, playedMoves, opponentMoves });
+  if (variant === "superSpeedSilver") {
+    return color === "white"
+      ? "相手は超速3七銀を狙っているね。4二銀から5三銀、4四銀へ進めて銀対抗で受けよう！"
+      : "相手は超速7三銀を狙っているね。6八銀から5七銀、6六銀へ進めて銀対抗で受けよう！";
+  }
+  if (variant === "maruyamaVaccine") {
+    return "丸山ワクチンだね。同銀から銀を一つ進め、向かい飛車へ切り替えてゆっくり囲おう！";
+  }
+  if (variant === "avoidUltraRapid") {
+    return "5八金右は超急戦の合図だよ。今回は5五歩を急がず、先に美濃囲いへ入って乱戦を避けよう。";
+  }
+  return "";
 }
 
 export function openingPlanCandidates({
