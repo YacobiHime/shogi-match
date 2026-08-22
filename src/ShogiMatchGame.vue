@@ -877,7 +877,11 @@ const availableOpeningStrategies = computed(() => availableOpeningOptions("strat
 const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
 const OPENING_STRATEGY_GROUPS = [
   { id: "ibisha", label: "居飛車" },
-  { id: "kakugawari", label: "角換わり" },
+  { id: "aigakari", label: "相居飛車／相掛かり" },
+  { id: "yokofudori", label: "相居飛車／横歩取り" },
+  { id: "yagura", label: "相居飛車／矢倉" },
+  { id: "kakugawari", label: "相居飛車／角換わり" },
+  { id: "gangi", label: "相居飛車／雁木" },
   { id: "shiken", label: "四間飛車" },
   { id: "sangen", label: "三間飛車" },
   { id: "nakabisha", label: "中飛車" },

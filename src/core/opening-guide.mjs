@@ -9,14 +9,14 @@ export const OPENING_STRATEGIES = [
   {
     id: "aigakari",
     label: "相掛かり",
-    family: "ibisha",
+    family: "aigakari",
     detectionNames: ["相掛かり", "AlphaZero流相掛かり"],
     blackMoves: ["2g2f", "2f2e"],
   },
   {
     id: "yokofudori",
     label: "横歩取り",
-    family: "ibisha",
+    family: "yokofudori",
     detectionNames: ["横歩取り"],
     strictOrder: true,
     historyCompletes: true,
@@ -25,7 +25,7 @@ export const OPENING_STRATEGIES = [
   {
     id: "hineribisha",
     label: "ひねり飛車",
-    family: "ibisha",
+    family: "aigakari",
     detectionNames: ["ひねり飛車"],
     strictOrder: true,
     historyCompletes: true,
@@ -38,7 +38,7 @@ export const OPENING_STRATEGIES = [
   {
     id: "gangi-strategy",
     label: "雁木戦法",
-    family: "ibisha",
+    family: "gangi",
     detectionNames: ["雁木"],
     strictOrder: true,
     completionSquares: [
@@ -56,9 +56,79 @@ export const OPENING_STRATEGIES = [
   {
     id: "yagura-strategy",
     label: "矢倉戦法",
-    family: "ibisha",
+    family: "yagura",
     detectionNames: ["矢倉", "金矢倉"],
     blackMoves: ["7g7f", "6g6f", "7i6h", "6h7g"],
+  },
+  {
+    id: "suzume-zashi",
+    label: "雀刺し",
+    family: "yagura",
+    detectionNames: ["雀刺し"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["7g", "S"], ["1g", "L"], ["1h", "R"]],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h7g", "1g1f", "1f1e", "1i1g", "2h1h",
+    ],
+  },
+  {
+    id: "yagura-37-silver",
+    label: "矢倉3七銀",
+    family: "yagura",
+    detectionNames: ["矢倉3七銀", "矢倉３七銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["7g", "S"], ["3g", "S"]],
+    blackMoves: ["7g7f", "6g6f", "7i6h", "6h7g", "3g3f", "3i4h", "4h3g"],
+  },
+  {
+    id: "morishita-system",
+    label: "森下システム",
+    family: "yagura",
+    detectionNames: ["森下システム"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["7g", "S"], ["3g", "S"], ["6i", "K"], ["7h", "G"]],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h7g", "3g3f", "3i4h", "4h3g",
+      "4g4f", "6i7h", "5i6i",
+    ],
+  },
+  {
+    id: "kakugawari-45-knight",
+    label: "角換わり4五桂速攻",
+    family: "kakugawari",
+    detectionNames: ["角換わり4五桂速攻", "角換わり４五桂速攻"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["4e", "N"]],
+    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "3g3f", "2i3g", "3g4e"],
+  },
+  {
+    id: "aono-ryu",
+    label: "横歩取り青野流",
+    family: "yokofudori",
+    detectionNames: ["横歩取り青野流", "青野流"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["3d", "R"], ["3f", "P"]],
+    blackMoves: [
+      "7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d",
+      "3g3f", "8i7g",
+    ],
+  },
+  {
+    id: "gangi-right-shiken",
+    label: "雁木右四間",
+    family: "gangi",
+    detectionNames: ["雁木右四間", "右四間飛車"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["6g", "S"], ["5g", "S"], ["4h", "R"]],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h6g", "5g5f", "4g4f", "3i4h", "4h5g", "2h4h",
+    ],
   },
   {
     id: "shiken",
@@ -632,7 +702,8 @@ export const OPENING_CASTLES = [
 
 const STATIC_ROOK_STRATEGIES = new Set([
   "ibisha", "aigakari", "yokofudori", "hineribisha", "gangi-strategy",
-  "kakugawari", "yagura-strategy", "bougin",
+  "kakugawari", "yagura-strategy", "suzume-zashi", "yagura-37-silver",
+  "morishita-system", "kakugawari-45-knight", "aono-ryu", "gangi-right-shiken", "bougin",
   "right-shiken", "hayaguri-gin", "koshikake-gin", "ureshino",
   "sujichigai-kaku", "kakuto-fu", "torizashi", "ahiru",
 ]);
