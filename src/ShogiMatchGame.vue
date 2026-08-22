@@ -79,25 +79,30 @@
               </button>
             </div>
           </div>
-          <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
-            <span>自分の手番</span>
-            <select v-model="selectedPlayerColor" aria-label="対局前の自分の手番">
-              <option value="black">先手</option>
-              <option value="white">後手</option>
-            </select>
-          </label>
-          <label
-            v-if="normalizedMode === 'cpu' && selectedPlayerColor === 'white'"
-            class="shogi-game__pregame-field"
+          <div
+            v-if="normalizedMode === 'cpu'"
+            class="shogi-game__pregame-field shogi-game__pregame-field--turn"
           >
-            <span>相手の初手</span>
-            <select v-model="cpuFirstMove" aria-label="対局前の相手の初手">
-              <option value="random">おまかせ</option>
-              <option value="bishop-diagonal">角道を開ける（7六歩）</option>
-              <option value="rook-pawn">飛車先を突く（2六歩）</option>
-              <option value="center-pawn">中央の歩を突く（5六歩）</option>
-            </select>
-          </label>
+            <label class="shogi-game__pregame-control">
+              <span>自分の手番</span>
+              <select v-model="selectedPlayerColor" aria-label="対局前の自分の手番">
+                <option value="black">先手</option>
+                <option value="white">後手</option>
+              </select>
+            </label>
+            <label
+              v-if="selectedPlayerColor === 'white'"
+              class="shogi-game__pregame-control shogi-game__pregame-control--sub"
+            >
+              <span>相手の初手</span>
+              <select v-model="cpuFirstMove" aria-label="対局前の相手の初手">
+                <option value="random">おまかせ</option>
+                <option value="bishop-diagonal">角道を開ける（7六歩）</option>
+                <option value="rook-pawn">飛車先を突く（2六歩）</option>
+                <option value="center-pawn">中央の歩を突く（5六歩）</option>
+              </select>
+            </label>
+          </div>
           <label class="shogi-game__pregame-field">
             <span>やこび姫の助言</span>
             <select v-model="coachLevel" aria-label="対局前の助言設定">
@@ -2756,6 +2761,15 @@ queueMicrotask(() => {
   background: #fff9ea;
   font: inherit;
 }
+.shogi-game__pregame-control {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.shogi-game__pregame-control--sub {
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(240, 196, 95, 0.3);
+}
 .shogi-game__strategy-setting {
   display: grid;
   gap: 0.65rem;
@@ -3218,6 +3232,13 @@ queueMicrotask(() => {
     grid-template-columns: 8rem minmax(0, 1fr);
     align-items: center;
     padding: 0.45rem 0.55rem;
+  }
+  .shogi-game__pregame-field--turn {
+    grid-template-columns: 1fr;
+  }
+  .shogi-game__pregame-control {
+    grid-template-columns: 8rem minmax(0, 1fr);
+    align-items: center;
   }
   .shogi-game__pregame-note {
     margin-top: 0.65rem;
