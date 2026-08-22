@@ -2123,6 +2123,28 @@
           "sfen": "sfen 9/9/9/9/9/9/2GS5/3R5/9 b Bb 1"
         }
       }
+    },
+    {
+      "id": "tac_match_135",
+      "group": "tac_match",
+      "name": "新鬼殺し",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/2P6/2R6/2N4P1/9/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "tac_match_136",
+      "group": "tac_match",
+      "name": "鳥刺し",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/4PS3/9/9/2B6 b - 1"
+        }
+      }
     }
   ]
 }

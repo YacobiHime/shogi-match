@@ -193,6 +193,93 @@ export const OPENING_STRATEGIES = [
     blackMoves: ["7g7f", "7f7e", "8i7g"],
   },
   {
+    id: "sujichigai-kaku",
+    label: "筋違い角",
+    family: "special",
+    detectionNames: ["筋違い角"],
+    strictOrder: true,
+    availability: {
+      colors: ["black"],
+      requiredHistory: ["3c3d"],
+      requiredHistoryBeforeMoves: [
+        { move: "8h2b+", required: "3c3d" },
+        { move: "B*4e", required: "3a2b" },
+      ],
+    },
+    blackMoves: ["7g7f", "8h2b+", "B*4e", "4e3d", "6g6f"],
+  },
+  {
+    id: "kakuto-fu",
+    label: "角頭歩戦法",
+    family: "special",
+    detectionNames: ["角頭歩"],
+    strictOrder: true,
+    availability: {
+      colors: ["black"],
+      requiredHistory: ["3c3d"],
+    },
+    blackMoves: ["7g7f", "8g8f", "8f8e", "8h7g"],
+  },
+  {
+    id: "hashikaku-nakabisha",
+    label: "端角中飛車",
+    family: "special",
+    detectionNames: ["端角中飛車"],
+    strictOrder: true,
+    blackMoves: ["9g9f", "8h9g", "5g5f", "2h5h", "7i6h", "6h5g"],
+  },
+  {
+    id: "shin-onigoroshi",
+    label: "新鬼殺し",
+    family: "special",
+    detectionNames: ["新鬼殺し"],
+    strictOrder: true,
+    availability: { colors: ["black"] },
+    blackMoves: ["7g7f", "7f7e", "2h7h", "7h7f", "8i7g", "7i6h"],
+  },
+  {
+    id: "first-78-rook",
+    label: "7八飛戦法",
+    family: "special",
+    detectionNames: ["7八飛戦法"],
+    strictOrder: true,
+    availability: { colors: ["black"], maxHistoryLength: 0 },
+    blackMoves: ["2h7h", "7g7f", "7f7e", "7h7f"],
+  },
+  {
+    id: "second-32-rook",
+    label: "2手目3二飛戦法",
+    family: "special",
+    detectionNames: ["2手目3二飛戦法"],
+    strictOrder: true,
+    availability: {
+      colors: ["white"],
+      opponentFirstMove: "7g7f",
+      maxHistoryLength: 1,
+    },
+    // 先手側の7八飛を180度反転すると、後手の3二飛になる。
+    blackMoves: ["2h7h", "7g7f", "7f7e", "7h7f"],
+  },
+  {
+    id: "torizashi",
+    label: "鳥刺し",
+    family: "special",
+    detectionNames: ["鳥刺し"],
+    strictOrder: true,
+    blackMoves: ["7g7f", "5g5f", "7i6h", "6h5g", "8h7i", "5g4f"],
+  },
+  {
+    id: "ahiru",
+    label: "アヒル戦法",
+    family: "special",
+    detectionNames: ["アヒル囲い", "アヒル戦法"],
+    strictOrder: true,
+    completionSquares: [
+      ["5h", "K"], ["3h", "G"], ["7h", "G"], ["2f", "R"],
+    ],
+    blackMoves: ["2g2f", "2f2e", "2h2f", "5i5h", "4i3h", "6i7h", "9g9f", "1g1f"],
+  },
+  {
     id: "pacman",
     label: "パックマン",
     family: "special",
@@ -449,10 +536,12 @@ export const OPENING_CASTLES = [
 const STATIC_ROOK_STRATEGIES = new Set([
   "ibisha", "aigakari", "kakugawari", "yagura-strategy", "bougin",
   "right-shiken", "hayaguri-gin", "koshikake-gin", "ureshino",
+  "sujichigai-kaku", "kakuto-fu", "torizashi", "ahiru",
 ]);
 const RANGING_ROOK_STRATEGIES = new Set([
   "shiken", "yababozu", "fujii-system", "sangen", "nakabisha", "gokigen",
-  "mukai", "ishida", "sodebisha",
+  "mukai", "ishida", "sodebisha", "hashikaku-nakabisha", "shin-onigoroshi",
+  "first-78-rook", "second-32-rook",
 ]);
 const STATIC_ROOK_CASTLES = new Set([
   "funagakoi", "early-castle", "yagura", "doi-yagura", "kikusui-yagura", "elmo",
@@ -623,6 +712,10 @@ export function availableOpeningDefinitions({
     if (availability?.colors && !availability.colors.includes(color)) return false;
     if (!started && availability) {
       if (
+        Number.isInteger(availability.maxHistoryLength)
+        && moveHistory.length > availability.maxHistoryLength
+      ) return false;
+      if (
         availability.requiredHistory
         && !availability.requiredHistory.every((move) => history.has(move))
       ) return false;
@@ -650,6 +743,59 @@ export function availableOpeningDefinitions({
     );
     return !requirement || history.has(requirement.required);
   });
+}
+
+/**
+ * 相手の応手によって奇襲の成立条件が失われたかを判定する。
+ * 一時的に予定手が指せないだけの局面とは分け、確実に不成立になった場合だけ返す。
+ */
+export function openingPlanInterruption({
+  strategyId,
+  color = "black",
+  playedMoves = [],
+  opponentMoves = [],
+  moveHistory = [],
+} = {}) {
+  const own = new Set(canonicalMovesForColor(playedMoves, color));
+  const opponent = new Set(canonicalMovesForColor(
+    opponentMoves,
+    color === "black" ? "white" : "black",
+  ));
+  const lastMove = moveHistory.at(-1);
+
+  if (
+    strategyId === "yababozu"
+    && own.has("7g7f") && !own.has("8h2b+")
+    && opponent.has("6g6f")
+  ) {
+    return {
+      fallbackStrategyId: "shiken",
+      message: "うわー！相手が角道を閉じちゃった。うぅ～やばボーズ流はできないね。普通の四間飛車で攻めよっか。",
+    };
+  }
+
+  if (strategyId === "pacman" && own.has("6g6f") && moveHistory.length >= 3) {
+    const requiredCapture = color === "white" ? "8h4d" : "2b6f";
+    if (!moveHistory.includes(requiredCapture)) {
+      return {
+        fallbackStrategyId: "shiken",
+        message: "あっ、相手は歩を取らなかったね。パックマンは不成立だから、普通の四間飛車に切り替えよっか。",
+      };
+    }
+  }
+
+  if (
+    strategyId === "sujichigai-kaku"
+    && own.has("8h2b+") && !own.has("B*4e")
+    && lastMove && !["3a2b", "3c2b", "4a2b"].includes(lastMove)
+  ) {
+    return {
+      fallbackStrategyId: "ibisha",
+      message: "角交換の受け方が想定と違うね。筋違い角を無理に続けず、角の打ち込みに気を付けて居飛車で戦おう。",
+    };
+  }
+
+  return null;
 }
 
 export function openingPlanCandidates({
