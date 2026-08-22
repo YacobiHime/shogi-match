@@ -80,7 +80,7 @@ describe("opening guide", () => {
 
   it("places every strategy in an opening family for the guide menu", () => {
     expect(OPENING_STRATEGIES.every(({ family }) =>
-      ["ibisha", "kakugawari", "shiken", "sangen", "nakabisha", "mukai", "special"].includes(family)
+      ["ibisha", "aigakari", "yokofudori", "yagura", "kakugawari", "gangi", "shiken", "sangen", "nakabisha", "mukai", "special"].includes(family)
     )).toBe(true);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "shiken").map(({ label }) => label))
       .toEqual(["四間飛車", "藤井システム"]);
@@ -89,7 +89,15 @@ describe("opening guide", () => {
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "nakabisha").map(({ label }) => label))
       .toEqual(["中飛車", "ゴキゲン中飛車"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "kakugawari").map(({ label }) => label))
-      .toEqual(["角換わり", "棒銀", "早繰り銀", "腰掛け銀"]);
+      .toEqual(["角換わり", "角換わり4五桂速攻", "棒銀", "早繰り銀", "腰掛け銀"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "aigakari").map(({ label }) => label))
+      .toEqual(["相掛かり", "ひねり飛車"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "yokofudori").map(({ label }) => label))
+      .toEqual(["横歩取り", "横歩取り青野流"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "yagura").map(({ label }) => label))
+      .toEqual(["矢倉戦法", "雀刺し", "矢倉3七銀", "森下システム"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "gangi").map(({ label }) => label))
+      .toEqual(["雁木戦法", "雁木右四間"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "special").map(({ label }) => label))
       .toEqual([
         "やばボーズ流", "鬼殺し", "筋違い角", "角頭歩戦法", "端角中飛車", "新鬼殺し",
@@ -398,11 +406,13 @@ describe("opening guide", () => {
   });
 
   it.each(OPENING_STRATEGIES)("uses a legal strategy sequence for $label", ({ id }) => {
-    const exchangeDependent = id === "kakugawari" || id === "yababozu";
+    const exchangeDependent = ["kakugawari", "kakugawari-45-knight", "yababozu"].includes(id);
     const blackConditional = id === "sujichigai-kaku"
       ? ["8h2b+", "B*4e", "4e3d"]
       : id === "yokofudori"
         ? ["2h2d", "2d3d"]
+        : id === "aono-ryu"
+          ? ["2h2d", "2d3d"]
         : id === "hineribisha"
           ? ["2h2d", "2d2f", "2f3f"]
       : exchangeDependent ? ["8h2b+"] : [];
@@ -410,6 +420,8 @@ describe("opening guide", () => {
       ? ["2b8h+", "B*6e", "6e7f"]
       : id === "yokofudori"
         ? ["8b8f", "8f7f"]
+        : id === "aono-ryu"
+          ? ["8b8f", "8f7f"]
         : id === "hineribisha"
           ? ["8b8f", "8f8d", "8d7d"]
       : exchangeDependent ? ["2b8h+"] : [];
