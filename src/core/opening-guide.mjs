@@ -41,10 +41,10 @@ export const OPENING_STRATEGIES = [
     detectionNames: ["やばボーズ流"],
     strictOrder: true,
     adaptiveOrder: true,
-    // 角交換四間飛車＋銀・金の骨格を一度組めば、その後に攻めへ転じても完成扱いを保つ。
+    // 角交換四間飛車＋銀・金＋7二玉型を一度組めば、その後に攻めへ転じても完成扱いを保つ。
     historyCompletes: true,
-    // 後手の△4二飛・△4三銀・△3二金型を、先手側へ正規化した完成形。
-    completionSquares: [["6h", "R"], ["6g", "S"], ["7h", "G"]],
+    // 後手の△4二飛・△4三銀・△3二金・△7二玉型を、先手側へ正規化した完成形。
+    completionSquares: [["6h", "R"], ["6g", "S"], ["7h", "G"], ["3h", "K"]],
     availability: {
       colors: ["white"],
       requiredHistory: ["7g7f"],
@@ -53,9 +53,9 @@ export const OPENING_STRATEGIES = [
         { move: "3a4b", required: "7i8h" },
       ],
     },
-    // 後手では△3四歩、△8八角成、△3二金、△4二銀、△4四歩、△4三銀、△4二飛。
+    // 後手では△3四歩、△8八角成、△3二金、△4二銀、△4四歩、△4三銀、△4二飛、△6二玉、△7二玉。
     // △4四歩は角交換直後に急がず、金・銀を整えてから銀の通路を開ける。
-    blackMoves: ["7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g", "2h6h"],
+    blackMoves: ["7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g", "2h6h", "5i4h", "4h3h"],
     movePrerequisites: {
       "8h2b+": ["7g7f"],
       "6i7h": ["8h2b+"],
@@ -64,6 +64,8 @@ export const OPENING_STRATEGIES = [
       "6g6f": ["6i7h", "7i6h"],
       "6h6g": ["6g6f", "7i6h"],
       "2h6h": ["6h6g"],
+      "5i4h": ["2h6h"],
+      "4h3h": ["5i4h"],
     },
     // 飛車を四間へ振るまでは、金などが横移動の経路を塞がないようにする。
     planReservations: [
@@ -71,6 +73,11 @@ export const OPENING_STRATEGIES = [
         until: "2h6h",
         squares: ["3h", "4h", "5h", "6h"],
         fromSquares: ["2h", "6i", "7i", "6g", "6h", "7h"],
+      },
+      {
+        until: "4h3h",
+        squares: ["4h", "3h"],
+        fromSquares: ["5i", "4h"],
       },
     ],
   },
