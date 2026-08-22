@@ -14,6 +14,7 @@ import {
   openingFollowupCount,
   openingGuideScoreLossLimit,
   openingPlanCandidates,
+  openingPlanInterruption,
   openingPlanSteps,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
@@ -89,7 +90,10 @@ describe("opening guide", () => {
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "kakugawari").map(({ label }) => label))
       .toEqual(["角換わり", "棒銀", "早繰り銀", "腰掛け銀"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "special").map(({ label }) => label))
-      .toEqual(["やばボーズ流", "鬼殺し", "パックマン", "嬉野流"]);
+      .toEqual([
+        "やばボーズ流", "鬼殺し", "筋違い角", "角頭歩戦法", "端角中飛車", "新鬼殺し",
+        "7八飛戦法", "2手目3二飛戦法", "鳥刺し", "アヒル戦法", "パックマン", "嬉野流",
+      ]);
   });
 
   it("offers Yababozu only to White after Black opens the bishop diagonal", () => {
@@ -207,6 +211,32 @@ describe("opening guide", () => {
       color: "black",
       legalMoves: ["6g6f"],
     })).toEqual([]);
+  });
+
+  it("offers first-move and reply-dependent surprise openings only in their exact window", () => {
+    const sujichigai = OPENING_STRATEGIES.find(({ id }) => id === "sujichigai-kaku");
+    const first78 = OPENING_STRATEGIES.find(({ id }) => id === "first-78-rook");
+    const second32 = OPENING_STRATEGIES.find(({ id }) => id === "second-32-rook");
+    expect(availableOpeningDefinitions({
+      definitions: [sujichigai], kind: "strategy", color: "black",
+      playedMoves: ["7g7f"], moveHistory: ["7g7f", "3c3d"], legalMoves: ["8h2b+"],
+    }).map(({ id }) => id)).toEqual(["sujichigai-kaku"]);
+    expect(availableOpeningDefinitions({
+      definitions: [sujichigai], kind: "strategy", color: "black",
+      playedMoves: ["7g7f"], moveHistory: ["7g7f", "8c8d"], legalMoves: ["8h2b+"],
+    })).toEqual([]);
+    expect(availableOpeningDefinitions({
+      definitions: [first78], kind: "strategy", color: "black",
+      moveHistory: [], legalMoves: ["2h7h"],
+    }).map(({ id }) => id)).toEqual(["first-78-rook"]);
+    expect(availableOpeningDefinitions({
+      definitions: [first78], kind: "strategy", color: "black",
+      moveHistory: ["7g7f", "3c3d"], legalMoves: ["2h7h"],
+    })).toEqual([]);
+    expect(availableOpeningDefinitions({
+      definitions: [second32], kind: "strategy", color: "white",
+      moveHistory: ["7g7f"], legalMoves: ["8b3b"],
+    }).map(({ id }) => id)).toEqual(["second-32-rook"]);
   });
 
   it("hides an opening whose remaining planned moves cannot be played", () => {
@@ -332,10 +362,44 @@ describe("opening guide", () => {
 
   it.each(OPENING_STRATEGIES)("uses a legal strategy sequence for $label", ({ id }) => {
     const exchangeDependent = id === "kakugawari" || id === "yababozu";
-    const blackConditional = exchangeDependent ? ["8h2b+"] : [];
-    const whiteConditional = exchangeDependent ? ["2b8h+"] : [];
+    const blackConditional = id === "sujichigai-kaku"
+      ? ["8h2b+", "B*4e", "4e3d"]
+      : exchangeDependent ? ["8h2b+"] : [];
+    const whiteConditional = id === "sujichigai-kaku"
+      ? ["2b8h+", "B*6e", "6e7f"]
+      : exchangeDependent ? ["2b8h+"] : [];
     expectPlanLegal(id, "", "black", blackConditional);
     expectPlanLegal(id, "", "white", whiteConditional);
+  });
+
+  it("abandons Yababozu with an explanation when the opponent closes the bishop diagonal", () => {
+    expect(openingPlanInterruption({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: ["3c3d"],
+      opponentMoves: ["7g7f", "6g6f"],
+      moveHistory: ["7g7f", "3c3d", "6g6f"],
+    })).toMatchObject({
+      fallbackStrategyId: "shiken",
+      message: expect.stringContaining("角道を閉じちゃった"),
+    });
+  });
+
+  it("abandons Pacman after the offered pawn is ignored", () => {
+    expect(openingPlanInterruption({
+      strategyId: "pacman",
+      color: "white",
+      playedMoves: ["4c4d"],
+      opponentMoves: ["7g7f", "2g2f"],
+      moveHistory: ["7g7f", "4c4d", "2g2f"],
+    })).toMatchObject({ fallbackStrategyId: "shiken" });
+    expect(openingPlanInterruption({
+      strategyId: "pacman",
+      color: "white",
+      playedMoves: ["4c4d"],
+      opponentMoves: ["7g7f", "8h4d"],
+      moveHistory: ["7g7f", "4c4d", "8h4d"],
+    })).toBeNull();
   });
 
   it.each(OPENING_CASTLES)("uses a legal castle sequence for $label", ({ id }) => {

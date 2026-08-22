@@ -539,6 +539,7 @@ import {
   openingDefinitionRookStyle,
   openingFollowupCount,
   openingGuideScoreLossLimit,
+  openingPlanInterruption,
   openingPlanCandidates as getOpeningPlanCandidates,
   openingUrgentResponse,
   OPENING_CASTLES,
@@ -1296,6 +1297,24 @@ function scheduleOpeningGuideSafety() {
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return;
 
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const interruption = openingPlanInterruption({
+    strategyId: selectedStrategy.value,
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: playerMoves,
+    opponentMoves,
+    moveHistory,
+  });
+  if (interruption) {
+    selectedStrategy.value = interruption.fallbackStrategyId;
+    openingGuideStartedAtPly.value = moveHistory.length;
+    guideText.value = coachLevel.value === "off" ? "" : interruption.message;
+    scheduleOpeningGuideSafety();
+    return;
+  }
+
   const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   const urgent = openingUrgentResponse({
     strategyId: selectedStrategy.value,
@@ -1362,7 +1381,6 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      const playerIsBlack = humanColor.value === Color.BLACK;
       const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
       const compatibleCandidates = filterOpeningCompatibleCandidates({
         strategyId: selectedStrategy.value,

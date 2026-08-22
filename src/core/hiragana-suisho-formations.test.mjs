@@ -14,8 +14,17 @@ const master = JSON.parse(await readFile(
 
 describe('HiraganaSuisho原典互換判定', () => {
   test('原典133件と追加囲いを読み込む', () => {
-    expect(master.rules).toHaveLength(139);
-    expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(31);
+    expect(master.rules).toHaveLength(141);
+    expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(33);
+  });
+
+  test('追加した新鬼殺しと鳥刺しを判定する', () => {
+    const newOni = '9/9/9/9/2P6/2R6/2N4P1/9/9 w - 1';
+    const torizashi = '9/9/9/9/9/4PS3/9/9/2B6 w - 1';
+    expect(detectHiraganaSuishoFormations(newOni, master).map(({ name }) => name))
+      .toContain('新鬼殺し');
+    expect(detectHiraganaSuishoFormations(torizashi, master).map(({ name }) => name))
+      .toContain('鳥刺し');
   });
 
   test('先手と後手の共通作戦を盤面反転して判定する', () => {
