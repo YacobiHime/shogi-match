@@ -262,13 +262,46 @@ describe("opening guide", () => {
     expect(mirrorUsiMove("2h6h")).toBe("8b4b");
   });
 
-  it("develops the gold and silver before opening the fourth file in Yababozu", () => {
+  it("builds the normal Yababozu shape through the rook retreat", () => {
     const moves = openingPlanSteps("yababozu", "", "white").map(({ usi }) => usi);
     expect(moves).toEqual([
       "3c3d", "2b8h+", "4a3b", "3a4b", "4c4d", "4b4c", "8b4b", "5a6b", "6b7b",
+      "3d3e", "2a3c", "4b4a",
     ]);
     expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("4a3b"));
     expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("3a4b"));
+  });
+
+  it("keeps the rook at home and counters with 5f silver against sixth-file Koshikake pressure", () => {
+    const context = {
+      playedMoves: ["3c3d", "2b8h+", "4a3b", "3a4b", "4c4d", "4b4c"],
+      opponentMoves: ["6g6f", "3i4h", "4h4g", "4g5f"],
+      opponentFormations: ["腰掛け銀"],
+    };
+    expect(openingPlanSteps("yababozu", "", "white", context).map(({ usi }) => usi))
+      .toEqual([
+        "3c3d", "2b8h+", "4a3b", "3a4b", "4c4d", "4b4c",
+        "4c5d", "5a6b", "6b7b", "2a3c",
+      ]);
+    expect(openingPlanCandidates({
+      strategyId: "yababozu",
+      color: "white",
+      ...context,
+      legalMoves: ["8b4b", "4c5d", "5a6b"],
+    }).map(({ usi }) => usi)).toEqual(["4c5d"]);
+  });
+
+  it("does not abandon the normal Yababozu branch after the rook has moved", () => {
+    expect(openingPlanSteps("yababozu", "", "white", {
+      playedMoves: ["8b4b"],
+      opponentMoves: ["6g6f", "6f6e"],
+      opponentFormations: ["腰掛け銀"],
+    }).map(({ usi }) => usi)).toContain("4b4a");
+    expect(openingPlanSteps("yababozu", "", "white", {
+      playedMoves: ["8b4b"],
+      opponentMoves: ["6g6f", "6f6e"],
+      opponentFormations: ["腰掛け銀"],
+    }).map(({ usi }) => usi)).not.toContain("4c5d");
   });
 
   it("exposes only Yababozu moves whose prerequisites are complete", () => {
@@ -278,7 +311,7 @@ describe("opening guide", () => {
       playedMoves: ["3c3d", "2b8h+"],
       moveHistory: ["7g7f", "3c3d", "2g2f", "2b8h+", "7i8h"],
       legalMoves: ["4a3b", "3a4b", "4c4d"],
-    }).map(({ usi }) => usi)).toEqual(["4a3b", "3a4b"]);
+    }).map(({ usi }) => usi)).toEqual(["4a3b"]);
     expect(openingPlanCandidates({
       strategyId: "yababozu",
       color: "white",
@@ -374,15 +407,17 @@ describe("opening guide", () => {
     const moves = openingPlanSteps("yababozu", "", "white").map(({ usi }) => usi);
     const game = createGameRecord();
     const actualLine = [
-      "7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4a3b", "2f2e",
-      "3a4b", "6g6f", "4c4d", "6f6e", "4b4c", "5g5f", "8b4b",
-      "9g9f", "5a6b", "9f9e", "6b7b",
+      "7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4a3b",
+      "2f2e", "3a4b", "6g6f", "4c4d", "6f6e", "4b4c",
+      "5g5f", "8b4b", "9g9f", "5a6b", "9f9e", "6b7b",
+      "1g1f", "3d3e", "1f1e", "2a3c", "5f5e", "4b4a",
     ];
     for (const usi of actualLine) expect(appendUsiMove(game, usi), usi).toBe(true);
+    const completedSfen = game.position.sfen;
     expect(isOpeningPlanComplete({
       strategyId: "yababozu",
       color: "white",
-      currentSfen: game.position.sfen,
+      currentSfen: completedSfen,
     })).toBe(true);
     expect(isOpeningPlanComplete({
       strategyId: "yababozu",

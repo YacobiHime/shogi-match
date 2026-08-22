@@ -952,14 +952,18 @@ const openingPlanCandidates = computed(() => {
   ) return [];
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   return getOpeningPlanCandidates({
     strategyId: selectedStrategy.value,
     castleId: selectedCastle.value,
     color: playerIsBlack ? "black" : "white",
     playedMoves: playerMoves,
+    opponentMoves,
     moveHistory,
     legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi),
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
+    opponentFormations: formationNamesForColor(sfen, opponentColor),
     currentSfen: sfen,
   });
 });
@@ -971,12 +975,16 @@ const openingPlanComplete = computed(() => {
   }
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   return isOpeningPlanComplete({
     strategyId: selectedStrategy.value,
     castleId: selectedCastle.value,
     color: playerIsBlack ? "black" : "white",
     playedMoves: playerMoves,
+    opponentMoves,
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
+    opponentFormations: formationNamesForColor(sfen, opponentColor),
     currentSfen: sfen,
   });
 });
