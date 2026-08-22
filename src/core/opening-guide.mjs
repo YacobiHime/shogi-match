@@ -14,6 +14,39 @@ export const OPENING_STRATEGIES = [
     blackMoves: ["2g2f", "2f2e"],
   },
   {
+    id: "yokofudori",
+    label: "横歩取り",
+    family: "ibisha",
+    detectionNames: ["横歩取り"],
+    strictOrder: true,
+    historyCompletes: true,
+    blackMoves: ["7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d"],
+  },
+  {
+    id: "hineribisha",
+    label: "ひねり飛車",
+    family: "ibisha",
+    detectionNames: ["ひねり飛車"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["3f", "R"], ["7g", "N"], ["7h", "G"]],
+    blackMoves: [
+      "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d2f", "2f3f",
+      "7g7f", "8i7g",
+    ],
+  },
+  {
+    id: "gangi-strategy",
+    label: "雁木戦法",
+    family: "ibisha",
+    detectionNames: ["雁木"],
+    strictOrder: true,
+    completionSquares: [
+      ["6g", "S"], ["7h", "G"], ["5h", "G"], ["6i", "K"],
+    ],
+    blackMoves: ["7g7f", "6g6f", "7i6h", "6h6g", "6i7h", "4i5h", "5i6i"],
+  },
+  {
     id: "kakugawari",
     label: "角換わり",
     family: "kakugawari",
@@ -270,14 +303,22 @@ export const OPENING_STRATEGIES = [
   },
   {
     id: "ahiru",
-    label: "アヒル戦法",
+    label: "アヒル囲い",
     family: "special",
     detectionNames: ["アヒル囲い", "アヒル戦法"],
     strictOrder: true,
+    historyCompletes: true,
     completionSquares: [
-      ["5h", "K"], ["3h", "G"], ["7h", "G"], ["2f", "R"],
+      ["5h", "K"], ["3i", "G"], ["7i", "G"], ["2f", "R"],
+      ["4h", "S"], ["6h", "S"], ["9g", "B"],
     ],
-    blackMoves: ["2g2f", "2f2e", "2h2f", "5i5h", "4i3h", "6i7h", "9g9f", "1g1f"],
+    blackMoves: [
+      "2g2f", "2f2e", "3i4h", "9g9f", "2h2f", "7i6h",
+      "6i7i", "8h9g", "4i3i", "5i5h", "1g1f",
+    ],
+    planVariants: {
+      bishopHeadAttack: ["2g2f", "2f2e", "3i4h", "2h2f", "2f3f"],
+    },
   },
   {
     id: "pacman",
@@ -534,7 +575,8 @@ export const OPENING_CASTLES = [
 ];
 
 const STATIC_ROOK_STRATEGIES = new Set([
-  "ibisha", "aigakari", "kakugawari", "yagura-strategy", "bougin",
+  "ibisha", "aigakari", "yokofudori", "hineribisha", "gangi-strategy",
+  "kakugawari", "yagura-strategy", "bougin",
   "right-shiken", "hayaguri-gin", "koshikake-gin", "ureshino",
   "sujichigai-kaku", "kakuto-fu", "torizashi", "ahiru",
 ]);
@@ -602,6 +644,21 @@ function openingStrategyPlan(strategy, {
   opponentFormations = [],
 } = {}) {
   if (!strategy) return { moves: [], variant: "default" };
+  if (strategy.id === "ahiru") {
+    const opponent = new Set(canonicalMovesForColor(
+      opponentMoves,
+      color === "black" ? "white" : "black",
+    ));
+    const played = new Set(canonicalMovesForColor(playedMoves, color));
+    const attackLocked = played.has("2f3f");
+    const fullCastleLocked = ["9g9f", "7i6h", "6i7i", "8h9g", "4i3i", "5i5h"]
+      .some((move) => played.has(move));
+    // 相手側へ正規化すると、こちらから見た3四歩・3三角は7六歩・7七角になる。
+    const opponentHasBishopWall = opponent.has("7g7f") && opponent.has("8h7g");
+    return attackLocked || (!fullCastleLocked && opponentHasBishopWall)
+      ? { moves: strategy.planVariants?.bishopHeadAttack ?? strategy.blackMoves, variant: "bishopHeadAttack" }
+      : { moves: strategy.blackMoves ?? [], variant: "default" };
+  }
   if (strategy.id !== "yababozu") {
     return { moves: strategy.blackMoves ?? [], variant: "default" };
   }
