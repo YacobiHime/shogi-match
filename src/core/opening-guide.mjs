@@ -41,10 +41,13 @@ export const OPENING_STRATEGIES = [
     detectionNames: ["やばボーズ流"],
     strictOrder: true,
     adaptiveOrder: true,
-    // 角交換四間飛車＋銀・金＋7二玉型を一度組めば、その後に攻めへ転じても完成扱いを保つ。
+    // 角交換後の金・銀・右玉型を一度組めば、その後に攻めへ転じても完成扱いを保つ。
     historyCompletes: true,
-    // 後手の△4二飛・△4三銀・△3二金・△7二玉型を、先手側へ正規化した完成形。
-    completionSquares: [["6h", "R"], ["6g", "S"], ["7h", "G"], ["3h", "K"]],
+    // 通常形（6九飛・7七桂）と、腰掛け銀へ5六銀で対抗する形のどちらも完成形とする。
+    completionVariants: [
+      [["6i", "R"], ["6g", "S"], ["7h", "G"], ["7g", "N"], ["3h", "K"]],
+      [["2h", "R"], ["5f", "S"], ["7h", "G"], ["3h", "K"]],
+    ],
     availability: {
       colors: ["white"],
       requiredHistory: ["7g7f"],
@@ -53,19 +56,40 @@ export const OPENING_STRATEGIES = [
         { move: "3a4b", required: "7i8h" },
       ],
     },
-    // 後手では△3四歩、△8八角成、△3二金、△4二銀、△4四歩、△4三銀、△4二飛、△6二玉、△7二玉。
-    // △4四歩は角交換直後に急がず、金・銀を整えてから銀の通路を開ける。
-    blackMoves: ["7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g", "2h6h", "5i4h", "4h3h"],
+    // 先手側へ正規化した通常形。後手では左右反転して案内する。
+    // 7六歩は角交換前に済むため、終盤の「7筋を突く」は7五歩として扱う。
+    blackMoves: [
+      "7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g",
+      "2h6h", "5i4h", "4h3h", "7f7e", "8i7g", "6h6i",
+    ],
+    planVariants: {
+      // 相手の腰掛け銀が6筋へ歩を進めた場合は、飛車を振らず5六銀で争点を受ける。
+      koshikakeSixthFile: [
+        "7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g",
+        "6g5f", "5i4h", "4h3h", "8i7g",
+      ],
+    },
     movePrerequisites: {
       "8h2b+": ["7g7f"],
       "6i7h": ["8h2b+"],
-      // 金と銀は、角交換後なら局面の評価値に応じてどちらを先にしてもよい。
-      "7i6h": ["8h2b+"],
+      // やばボーズ流の土台は「角交換→7八金」。銀より先に必ず金を上がる。
+      "7i6h": ["6i7h"],
       "6g6f": ["6i7h", "7i6h"],
       "6h6g": ["6g6f", "7i6h"],
       "2h6h": ["6h6g"],
       "5i4h": ["2h6h"],
       "4h3h": ["5i4h"],
+      "7f7e": ["4h3h"],
+      "8i7g": ["7f7e"],
+      "6h6i": ["8i7g"],
+    },
+    movePrerequisitesByVariant: {
+      koshikakeSixthFile: {
+        "6g5f": ["6h6g"],
+        "5i4h": ["6g5f"],
+        "4h3h": ["5i4h"],
+        "8i7g": ["4h3h"],
+      },
     },
     // 飛車を四間へ振るまでは、金などが横移動の経路を塞がないようにする。
     planReservations: [
@@ -78,6 +102,11 @@ export const OPENING_STRATEGIES = [
         until: "4h3h",
         squares: ["4h", "3h"],
         fromSquares: ["5i", "4h"],
+      },
+      {
+        until: "6h6i",
+        squares: ["6i"],
+        fromSquares: ["6h"],
       },
     ],
   },
@@ -360,13 +389,44 @@ export function inferOpeningRookStyle({ color = "black", playedMoves = [], curre
   return undefined;
 }
 
-export function openingPlanSteps(strategyId, castleId, color = "black") {
+function canonicalMovesForColor(moves, color) {
+  return color === "white" ? moves.map(mirrorUsiMove) : moves;
+}
+
+function openingStrategyPlan(strategy, {
+  color = "black",
+  playedMoves = [],
+  opponentMoves = [],
+  opponentFormations = [],
+} = {}) {
+  if (!strategy) return { moves: [], variant: "default" };
+  if (strategy.id !== "yababozu") {
+    return { moves: strategy.blackMoves ?? [], variant: "default" };
+  }
+  const played = new Set(canonicalMovesForColor(playedMoves, color));
+  const opponent = new Set(canonicalMovesForColor(
+    opponentMoves,
+    color === "black" ? "white" : "black",
+  ));
+  // 一度飛車を振った後で別枝へ切り替えたり、5六銀型から飛車を振ったりしない。
+  const normalLocked = played.has("2h6h") || played.has("6h6i");
+  const counterLocked = played.has("6g5f");
+  const koshikakeDetected = opponentFormations.includes("腰掛け銀");
+  const sixthFilePressure = opponent.has("6g6f") || opponent.has("6f6e");
+  const useCounter = counterLocked || (!normalLocked && koshikakeDetected && sixthFilePressure);
+  return useCounter
+    ? { moves: strategy.planVariants?.koshikakeSixthFile ?? strategy.blackMoves, variant: "koshikakeSixthFile" }
+    : { moves: strategy.blackMoves ?? [], variant: "default" };
+}
+
+export function openingPlanSteps(strategyId, castleId, color = "black", context = {}) {
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
   const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  const strategyPlan = openingStrategyPlan(strategy, { ...context, color });
   const seen = new Set();
   return [
-    ...(strategy?.blackMoves ?? []).map((usi) => ({ usi: convert(usi), phase: "strategy" })),
+    ...strategyPlan.moves.map((usi) => ({ usi: convert(usi), phase: "strategy" })),
     ...(castle?.blackMoves ?? []).map((usi) => ({ usi: convert(usi), phase: "castle" })),
   ].filter(({ usi }) => {
     if (seen.has(usi)) return false;
@@ -402,13 +462,18 @@ function parseSfenBoard(sfen) {
 }
 
 function matchesCompletionSquares(definition, currentSfen, color) {
-  if (!definition?.completionSquares?.length || !currentSfen) return undefined;
+  const variants = definition?.completionVariants?.length
+    ? definition.completionVariants
+    : definition?.completionSquares?.length
+      ? [definition.completionSquares]
+      : [];
+  if (!variants.length || !currentSfen) return undefined;
   const board = parseSfenBoard(currentSfen);
-  return definition.completionSquares.every(([blackSquare, kind]) => {
+  return variants.some((squares) => squares.every(([blackSquare, kind]) => {
     const square = color === "white" ? mirrorUsiMove(blackSquare) : blackSquare;
     const piece = board.get(square);
     return piece?.color === color && piece.kind === kind;
-  });
+  }));
 }
 
 function definitionDetectedComplete(definition, detected, currentSfen, color) {
@@ -482,6 +547,8 @@ export function openingPlanCandidates({
   moveHistory = [],
   legalMoves = [],
   detectedFormations = [],
+  opponentFormations = [],
+  opponentMoves = [],
   currentSfen = "",
 }) {
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
@@ -494,13 +561,21 @@ export function openingPlanCandidates({
   const legal = new Set(legalMoves);
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
 
-  const steps = openingPlanSteps(strategyId, castleId, color);
+  const planContext = { playedMoves, opponentMoves, opponentFormations };
+  const steps = openingPlanSteps(strategyId, castleId, color, planContext);
+  const strategyVariant = openingStrategyPlan(strategy, { ...planContext, color }).variant;
   for (const phase of ["strategy", "castle"]) {
     const definition = phase === "strategy" ? strategy : castle;
     const complete = phase === "strategy" ? strategyComplete : castleComplete;
     if (!definition || complete) continue;
     const pending = steps.filter((entry) => entry.phase === phase && !played.has(entry.usi));
-    const prerequisites = new Map(Object.entries(definition.movePrerequisites ?? {}).map(
+    const combinedPrerequisites = {
+      ...(definition.movePrerequisites ?? {}),
+      ...(phase === "strategy"
+        ? definition.movePrerequisitesByVariant?.[strategyVariant] ?? {}
+        : {}),
+    };
+    const prerequisites = new Map(Object.entries(combinedPrerequisites).map(
       ([move, required]) => [convert(move), required.map(convert)],
     ));
     const isReady = (entry) => {
@@ -532,12 +607,16 @@ export function isOpeningPlanComplete({
   color = "black",
   playedMoves = [],
   detectedFormations = [],
+  opponentFormations = [],
+  opponentMoves = [],
   currentSfen = "",
 }) {
   if (!strategyId && !castleId) return false;
   const detected = new Set(detectedFormations);
   const played = new Set(playedMoves);
-  const steps = openingPlanSteps(strategyId, castleId, color);
+  const steps = openingPlanSteps(strategyId, castleId, color, {
+    playedMoves, opponentMoves, opponentFormations,
+  });
   const phaseComplete = (id, phase, entries) => {
     if (!id) return true;
     const definitions = phase === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
