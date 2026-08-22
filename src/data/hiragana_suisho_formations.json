@@ -4,6 +4,39 @@
   "license": "MIT",
   "rules": [
     {
+      "id": "enc_match_right_elmo",
+      "group": "enc_match",
+      "name": "右エルモ",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/4GSK2/6G2 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_half_kinmusou",
+      "group": "enc_match",
+      "name": "片金無双",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/5GKS1/9 b - 1"
+        }
+      }
+    },
+    {
+      "id": "enc_match_osumi",
+      "group": "enc_match",
+      "name": "大隅囲い",
+      "expression": {
+        "match": {
+          "mode": "all",
+          "sfen": "sfen 9/9/9/9/9/9/9/5GK2/9 b - 1"
+        }
+      }
+    },
+    {
       "id": "enc_match_renmei_mino",
       "group": "enc_match",
       "name": "連盟美濃",

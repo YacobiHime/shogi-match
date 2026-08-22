@@ -65,13 +65,15 @@ describe("opening guide", () => {
       openingDefinitionRookStyle(id, "castle") ?? "both"
     ));
     expect(groups.static?.map(({ label }) => label)).toEqual([
-      "舟囲い", "矢倉", "エルモ囲い", "雁木", "左美濃", "居飛車穴熊",
+      "舟囲い", "早囲い", "矢倉", "土居矢倉", "菊水矢倉", "エルモ囲い",
+      "雁木", "左美濃", "天守閣美濃", "居飛車穴熊", "松尾流穴熊",
       "右玉", "中住まい", "カニ囲い", "ボナンザ囲い",
     ]);
     expect(groups.ranging?.map(({ label }) => label)).toEqual([
-      "美濃囲い", "高美濃囲い", "銀冠", "振り飛車穴熊", "金無双",
+      "片美濃", "美濃囲い", "高美濃囲い", "ダイヤモンド美濃", "連盟美濃",
+      "銀冠", "振り飛車穴熊", "振り飛車エルモ", "右エルモ", "金無双", "片金無双",
     ]);
-    expect(groups.both?.map(({ label }) => label)).toEqual(["ミレニアム"]);
+    expect(groups.both?.map(({ label }) => label)).toEqual(["ミレニアム", "大隅囲い"]);
   });
 
   it("places every strategy in an opening family for the guide menu", () => {
