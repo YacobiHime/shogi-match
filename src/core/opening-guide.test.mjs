@@ -264,7 +264,9 @@ describe("opening guide", () => {
 
   it("develops the gold and silver before opening the fourth file in Yababozu", () => {
     const moves = openingPlanSteps("yababozu", "", "white").map(({ usi }) => usi);
-    expect(moves).toEqual(["3c3d", "2b8h+", "4a3b", "3a4b", "4c4d", "4b4c", "8b4b"]);
+    expect(moves).toEqual([
+      "3c3d", "2b8h+", "4a3b", "3a4b", "4c4d", "4b4c", "8b4b", "5a6b", "6b7b",
+    ]);
     expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("4a3b"));
     expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("3a4b"));
   });
@@ -374,6 +376,7 @@ describe("opening guide", () => {
     const actualLine = [
       "7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4a3b", "2f2e",
       "3a4b", "6g6f", "4c4d", "6f6e", "4b4c", "5g5f", "8b4b",
+      "9g9f", "5a6b", "9f9e", "6b7b",
     ];
     for (const usi of actualLine) expect(appendUsiMove(game, usi), usi).toBe(true);
     expect(isOpeningPlanComplete({
@@ -504,6 +507,23 @@ describe("opening guide", () => {
       playedMoves: ["8b4b"],
       candidates,
     })).toEqual(candidates);
+  });
+
+  it("keeps the 6b and 7b king route open until Yababozu reaches the 7b king shape", () => {
+    expect(filterOpeningCompatibleCandidates({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: ["8b4b"],
+      plannedMoves: [{ usi: "5a6b" }],
+      candidates: [
+        { rank: 1, move: "6a6b", score: { type: "cp", value: 100 } },
+        { rank: 2, move: "5a6b", score: { type: "cp", value: 80 } },
+        { rank: 3, move: "9c9d", score: { type: "cp", value: 60 } },
+      ],
+    }).map(({ rank, move }) => ({ rank, move }))).toEqual([
+      { rank: 1, move: "5a6b" },
+      { rank: 2, move: "9c9d" },
+    ]);
   });
 
   it("rejects a plan move with a large evaluation drop", () => {
