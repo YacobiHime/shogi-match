@@ -216,6 +216,14 @@ export const OPENING_STRATEGIES = [
 
 export const OPENING_CASTLES = [
   {
+    id: "half-mino",
+    label: "片美濃",
+    detectionNames: ["片美濃"],
+    strictOrder: true,
+    completionSquares: [["2h", "K"], ["3h", "S"], ["4i", "G"], ["6h", "R"]],
+    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3h2h", "3i3h"],
+  },
+  {
     id: "mino",
     label: "美濃囲い",
     detectionNames: ["美濃囲い", "本美濃", "高美濃囲い", "銀冠"],
@@ -226,6 +234,27 @@ export const OPENING_CASTLES = [
     label: "高美濃囲い",
     detectionNames: ["高美濃", "高美濃囲い"],
     blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h", "4g4f", "5h4g"],
+  },
+  {
+    id: "diamond-mino",
+    label: "ダイヤモンド美濃",
+    detectionNames: ["ダイヤモンド美濃"],
+    strictOrder: true,
+    completionSquares: [
+      ["2h", "K"], ["3h", "S"], ["4g", "S"], ["4i", "G"], ["5h", "G"], ["6h", "R"],
+    ],
+    blackMoves: [
+      "7g7f", "6g6f", "5g5f", "4g4f", "7i6h", "6h5g", "5g4h", "4h4g",
+      "2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h",
+    ],
+  },
+  {
+    id: "renmei-mino",
+    label: "連盟美濃",
+    detectionNames: ["連盟美濃"],
+    strictOrder: true,
+    completionSquares: [["2h", "K"], ["3i", "S"], ["4h", "G"], ["5i", "G"], ["6h", "R"]],
+    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3h2h", "4i4h", "6i5i"],
   },
   {
     id: "silver-crown",
@@ -240,16 +269,62 @@ export const OPENING_CASTLES = [
     blackMoves: ["2h6h", "1i1h", "5i4h", "4h3h", "3h2h", "2h1i", "3i2h"],
   },
   {
+    id: "furibisha-elmo",
+    label: "振り飛車エルモ",
+    detectionNames: ["振り飛車エルモ"],
+    strictOrder: true,
+    completionSquares: [["3h", "K"], ["4h", "S"], ["3i", "G"], ["6h", "R"]],
+    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i4h", "4i3i"],
+  },
+  {
+    id: "right-elmo",
+    label: "右エルモ",
+    detectionNames: ["右エルモ"],
+    strictOrder: true,
+    completionSquares: [["3h", "K"], ["4h", "S"], ["3i", "G"], ["5h", "G"], ["6h", "R"]],
+    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i4h", "4i3i", "6i5h"],
+  },
+  {
     id: "funagakoi",
     label: "舟囲い",
     detectionNames: ["舟囲い", "箱入り娘"],
     blackMoves: ["5i6h", "6h7h", "4i5h"],
   },
   {
+    id: "early-castle",
+    label: "早囲い",
+    detectionNames: ["早囲い"],
+    strictOrder: true,
+    completionSquares: [["7h", "K"], ["7g", "S"], ["8h", "B"]],
+    blackMoves: ["7g7f", "7i6h", "6h7g", "5i6h", "6h7h"],
+  },
+  {
     id: "yagura",
     label: "矢倉",
     detectionNames: ["矢倉", "金矢倉", "銀矢倉", "総矢倉"],
     blackMoves: ["7g7f", "8h6f", "7i6h", "6h7g", "5i6h", "6h7i", "7i8h", "6i7h", "4i5h", "5h6h"],
+  },
+  {
+    id: "doi-yagura",
+    label: "土居矢倉",
+    detectionNames: ["土居矢倉"],
+    strictOrder: true,
+    completionSquares: [["7h", "K"], ["7g", "S"], ["6g", "G"], ["5h", "G"]],
+    blackMoves: [
+      "7g7f", "8h6f", "6f5e", "6g6f", "7i6h", "6h7g", "5i6h", "6h7h",
+      "6i6h", "6h6g", "4i5h",
+    ],
+  },
+  {
+    id: "kikusui-yagura",
+    label: "菊水矢倉",
+    detectionNames: ["菊水矢倉"],
+    strictOrder: true,
+    completionSquares: [["8i", "K"], ["8h", "S"], ["7h", "G"], ["7g", "N"], ["6g", "G"]],
+    blackMoves: [
+      "7g7f", "8h6f", "6f5e", "6g6f", "7i6h", "6h7g", "7g8h", "8i7g",
+      "5i6h", "6h7h", "7h8i", "6i7h", "4i5h", "5h6h", "6h6g",
+    ],
   },
   {
     id: "elmo",
@@ -270,6 +345,14 @@ export const OPENING_CASTLES = [
     blackMoves: ["7g7f", "8h6f", "7i7h", "5i6h", "6h7i", "7i8h", "6i6h"],
   },
   {
+    id: "tenshukaku-mino",
+    label: "天守閣美濃",
+    detectionNames: ["天守閣美濃"],
+    strictOrder: true,
+    completionSquares: [["8g", "K"], ["7h", "S"], ["6i", "G"]],
+    blackMoves: ["7g7f", "8g8f", "8h6f", "7i7h", "5i6h", "6h7i", "7i8h", "8h8g"],
+  },
+  {
     id: "ibisha-anaguma",
     label: "居飛車穴熊",
     detectionNames: ["居飛車穴熊", "松尾流穴熊"],
@@ -278,6 +361,20 @@ export const OPENING_CASTLES = [
       ["9i", "K"], ["9h", "L"], ["8h", "S"], ["7h", "G"], ["7g", "N"],
     ],
     blackMoves: ["9i9h", "7g7f", "8h6f", "8i7g", "7i8h", "6i7h", "5i6i", "6i7i", "7i8i", "8i9i"],
+  },
+  {
+    id: "matsuo-anaguma",
+    label: "松尾流穴熊",
+    detectionNames: ["松尾流穴熊"],
+    strictOrder: true,
+    completionSquares: [
+      ["9i", "K"], ["9h", "L"], ["8i", "N"], ["8h", "S"], ["7i", "S"], ["7h", "G"],
+    ],
+    blackMoves: [
+      "9i9h", "7g7f", "8h6f", "6f5e", "6g6f", "7i6h", "6h7g",
+      "5i6h", "6h7i", "7i8h", "8h9i", "7g8h",
+      "5g5f", "3i4h", "4h5g", "5g6h", "6h7i", "6i7h",
+    ],
   },
   {
     id: "millennium",
@@ -314,6 +411,22 @@ export const OPENING_CASTLES = [
     ],
   },
   {
+    id: "half-kinmusou",
+    label: "片金無双",
+    detectionNames: ["片金無双"],
+    strictOrder: true,
+    completionSquares: [["3h", "K"], ["2h", "S"], ["4h", "G"], ["6h", "R"]],
+    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i2h", "4i4h"],
+  },
+  {
+    id: "osumi",
+    label: "大隅囲い",
+    detectionNames: ["大隅囲い"],
+    strictOrder: true,
+    completionSquares: [["3h", "K"], ["4h", "G"]],
+    blackMoves: ["5i4h", "4h3h", "4i4h"],
+  },
+  {
     id: "nakazumai",
     label: "中住まい",
     detectionNames: ["中住まい", "中原囲い"],
@@ -342,11 +455,13 @@ const RANGING_ROOK_STRATEGIES = new Set([
   "mukai", "ishida", "sodebisha",
 ]);
 const STATIC_ROOK_CASTLES = new Set([
-  "funagakoi", "yagura", "elmo", "gangi", "left-mino", "ibisha-anaguma",
+  "funagakoi", "early-castle", "yagura", "doi-yagura", "kikusui-yagura", "elmo",
+  "gangi", "left-mino", "tenshukaku-mino", "ibisha-anaguma", "matsuo-anaguma",
   "right-king", "nakazumai", "kanigakoi", "bonanza",
 ]);
 const RANGING_ROOK_CASTLES = new Set([
-  "mino", "high-mino", "silver-crown", "furibisha-anaguma", "kinmusou",
+  "half-mino", "mino", "high-mino", "diamond-mino", "renmei-mino", "silver-crown",
+  "furibisha-anaguma", "furibisha-elmo", "right-elmo", "kinmusou", "half-kinmusou",
 ]);
 
 export function openingDefinitionRookStyle(id, kind) {

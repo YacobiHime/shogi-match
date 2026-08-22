@@ -14,7 +14,7 @@ const master = JSON.parse(await readFile(
 
 describe('HiraganaSuisho原典互換判定', () => {
   test('原典133件と追加囲いを読み込む', () => {
-    expect(master.rules).toHaveLength(136);
+    expect(master.rules).toHaveLength(139);
     expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(31);
   });
 
@@ -140,6 +140,18 @@ describe('HiraganaSuisho原典互換判定', () => {
     const incomplete = '4k4/9/9/9/9/9/4PPPPP/5G1K1/6SNL w - 1';
     expect(detectHiraganaSuishoFormations(incomplete, master).map(({ name }) => name))
       .not.toContain('連盟美濃');
+  });
+
+  test.each([
+    ['右エルモ', '4k4/9/9/9/9/9/9/4GSK2/6G2 w - 1'],
+    ['片金無双', '4k4/9/9/9/9/9/9/5GKS1/9 w - 1'],
+    ['大隅囲い', '4k4/9/9/9/9/9/9/5GK2/9 w - 1'],
+  ])('%sを先手・後手の両方で判定する', (name, sente) => {
+    const gote = invertHiraganaSuishoSfen(sente);
+    expect(detectHiraganaSuishoFormations(sente, master).map((rule) => rule.name))
+      .toContain(name);
+    expect(detectHiraganaSuishoFormations(gote, master).map((rule) => rule.name))
+      .toContain(name);
   });
 
   test('居玉で金銀を整えた四間飛車を藤井システムと判定する', () => {
