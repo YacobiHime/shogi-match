@@ -92,7 +92,7 @@ describe("opening guide", () => {
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "special").map(({ label }) => label))
       .toEqual([
         "やばボーズ流", "鬼殺し", "筋違い角", "角頭歩戦法", "端角中飛車", "新鬼殺し",
-        "7八飛戦法", "2手目3二飛戦法", "鳥刺し", "アヒル戦法", "パックマン", "嬉野流",
+        "7八飛戦法", "2手目3二飛戦法", "鳥刺し", "アヒル囲い", "パックマン", "嬉野流",
       ]);
   });
 
@@ -364,12 +364,53 @@ describe("opening guide", () => {
     const exchangeDependent = id === "kakugawari" || id === "yababozu";
     const blackConditional = id === "sujichigai-kaku"
       ? ["8h2b+", "B*4e", "4e3d"]
+      : id === "yokofudori"
+        ? ["2h2d", "2d3d"]
+        : id === "hineribisha"
+          ? ["2h2d", "2d2f", "2f3f"]
       : exchangeDependent ? ["8h2b+"] : [];
     const whiteConditional = id === "sujichigai-kaku"
       ? ["2b8h+", "B*6e", "6e7f"]
+      : id === "yokofudori"
+        ? ["8b8f", "8f7f"]
+        : id === "hineribisha"
+          ? ["8b8f", "8f8d", "8d7d"]
       : exchangeDependent ? ["2b8h+"] : [];
     expectPlanLegal(id, "", "black", blackConditional);
     expectPlanLegal(id, "", "white", whiteConditional);
+  });
+
+  it("builds the complete Ahiru castle in the requested order", () => {
+    expect(openingPlanSteps("ahiru", "", "black").map(({ usi }) => usi)).toEqual([
+      "2g2f", "2f2e", "3i4h", "9g9f", "2h2f", "7i6h",
+      "6i7i", "8h9g", "4i3i", "5i5h", "1g1f",
+    ]);
+  });
+
+  it("switches Ahiru to the third-file rook attack against 3d pawn and 3c bishop", () => {
+    expect(openingPlanSteps("ahiru", "", "black", {
+      playedMoves: ["2g2f", "2f2e", "3i4h"],
+      opponentMoves: ["3c3d", "2b3c"],
+    }).map(({ usi }) => usi)).toEqual(["2g2f", "2f2e", "3i4h", "2h2f", "2f3f"]);
+  });
+
+  it("plays the Yokofudori guide through a legal alternating main line", () => {
+    const record = createGameRecord();
+    const line = [
+      "7g7f", "3c3d", "2g2f", "8c8d", "2f2e", "8d8e", "6i7h", "4a3b",
+      "2e2d", "2c2d", "2h2d", "8e8f", "8g8f", "8b8f", "2d3d",
+    ];
+    for (const usi of line) expect(appendUsiMove(record, usi), usi).toBe(true);
+  });
+
+  it("plays the Twisting Rook guide after the mutual rook-pawn exchange", () => {
+    const record = createGameRecord();
+    const line = [
+      "2g2f", "8c8d", "2f2e", "8d8e", "6i7h", "4a3b", "2e2d", "2c2d",
+      "2h2d", "8e8f", "8g8f", "8b8f", "2d2f", "4c4d", "2f3f", "6c6d",
+      "7g7f", "5c5d", "8i7g",
+    ];
+    for (const usi of line) expect(appendUsiMove(record, usi), usi).toBe(true);
   });
 
   it("abandons Yababozu with an explanation when the opponent closes the bishop diagonal", () => {
