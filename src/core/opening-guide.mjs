@@ -65,6 +65,14 @@ export const OPENING_STRATEGIES = [
       "6h6g": ["6g6f", "7i6h"],
       "2h6h": ["6h6g"],
     },
+    // 飛車を四間へ振るまでは、金などが横移動の経路を塞がないようにする。
+    planReservations: [
+      {
+        until: "2h6h",
+        squares: ["3h", "4h", "5h", "6h"],
+        fromSquares: ["2h", "6i", "7i", "6g", "6h", "7h"],
+      },
+    ],
   },
   {
     id: "fujii-system",
@@ -635,6 +643,43 @@ export function chooseAdaptiveOpeningMove(plannedMoves = [], candidates = [], ma
     .sort((left, right) => right.value - left.value || left.order - right.order);
   const selectedPlan = scoredPlans[0] ?? availablePlans[0];
   return chooseSafeOpeningMove(selectedPlan.move, candidates, maxScoreLoss);
+}
+
+/** 残りの駒組みを不可能にする「安全な寄り道」を候補から外す。 */
+export function filterOpeningCompatibleCandidates({
+  strategyId,
+  color = "black",
+  playedMoves = [],
+  plannedMoves = [],
+  candidates = [],
+}) {
+  const definition = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  if (!definition?.planReservations?.length) return candidates;
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  const played = new Set(playedMoves);
+  const planned = new Set(plannedMoves.map((entry) => typeof entry === "string" ? entry : entry?.usi));
+  const activeReservations = definition.planReservations
+    .map(({ until, squares, fromSquares = [] }) => ({
+      until: convert(until),
+      squares: new Set(squares.map((square) => color === "white" ? mirrorUsiMove(square) : square)),
+      fromSquares: new Set(fromSquares.map(
+        (square) => color === "white" ? mirrorUsiMove(square) : square,
+      )),
+    }))
+    .filter(({ until }) => !played.has(until));
+  if (!activeReservations.length) return candidates;
+  return candidates
+    .filter(({ move }) => {
+      if (planned.has(move)) return true;
+      const normalizedMove = typeof move === "string" ? move.replace("+", "") : "";
+      const origin = normalizedMove.slice(0, 2);
+      const destination = normalizedMove.slice(-2);
+      return !activeReservations.some(({ squares, fromSquares }) => (
+        squares.has(destination) || fromSquares.has(origin)
+      ));
+    })
+    .sort((left, right) => left.rank - right.rank)
+    .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
 }
 
 /** 戦法固有の予定手をどこまで評価値より優先するか。 */

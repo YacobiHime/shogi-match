@@ -527,6 +527,7 @@ import {
   availableOpeningDefinitions,
   chooseAdaptiveOpeningMove,
   chooseSafeOpeningMove,
+  filterOpeningCompatibleCandidates,
   inferOpeningRookStyle,
   isOpeningPlanComplete,
   nextOpeningPlanMove,
@@ -1348,13 +1349,22 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
+      const playerIsBlack = humanColor.value === Color.BLACK;
+      const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+      const compatibleCandidates = filterOpeningCompatibleCandidates({
+        strategyId: selectedStrategy.value,
+        color: playerIsBlack ? "black" : "white",
+        playedMoves: playerMoves,
+        plannedMoves: plannedOptions,
+        candidates,
+      });
       const choice = plannedOptions.length
         ? chooseAdaptiveOpeningMove(
             plannedOptions,
-            candidates,
+            compatibleCandidates,
             openingGuideScoreLossLimit(selectedStrategy.value, planned.phase),
           )
-        : candidates
+        : compatibleCandidates
             .filter(({ rank, move }) => Number.isInteger(rank) && typeof move === "string")
             .sort((left, right) => left.rank - right.rank)
             .map(({ move }) => ({ usi: move, source: "ai" as const }))[0];

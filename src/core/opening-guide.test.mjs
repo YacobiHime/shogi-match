@@ -3,6 +3,7 @@ import { appendUsiMove, createGameRecord } from "../game-state";
 import {
   availableOpeningDefinitions,
   chooseAdaptiveOpeningMove,
+  filterOpeningCompatibleCandidates,
   inferOpeningRookStyle,
   isOpeningPlanComplete,
   mirrorUsiMove,
@@ -477,6 +478,32 @@ describe("opening guide", () => {
         { rank: 2, move: "7g7f", score: { type: "cp", value: 20 } },
       ],
     )).toEqual({ usi: "2g2f", source: "plan", scoreLoss: 0 });
+  });
+
+  it("rejects Yababozu detours that block the rook before it reaches the fourth file", () => {
+    const candidates = [
+      { rank: 1, move: "6a5b", score: { type: "cp", value: 120 } },
+      { rank: 2, move: "4a5b", score: { type: "cp", value: 100 } },
+      { rank: 3, move: "8b9b", score: { type: "cp", value: 90 } },
+      { rank: 4, move: "9c9d", score: { type: "cp", value: 80 } },
+      { rank: 5, move: "8b4b", score: { type: "cp", value: 60 } },
+    ];
+    expect(filterOpeningCompatibleCandidates({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: ["3c3d", "2b8h+", "4a3b", "3a4b", "4c4d", "4b4c"],
+      plannedMoves: [{ usi: "8b4b" }],
+      candidates,
+    }).map(({ rank, move }) => ({ rank, move }))).toEqual([
+      { rank: 1, move: "9c9d" },
+      { rank: 2, move: "8b4b" },
+    ]);
+    expect(filterOpeningCompatibleCandidates({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: ["8b4b"],
+      candidates,
+    })).toEqual(candidates);
   });
 
   it("rejects a plan move with a large evaluation drop", () => {
