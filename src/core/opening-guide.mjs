@@ -57,10 +57,9 @@ export const OPENING_STRATEGIES = [
       ],
     },
     // 先手側へ正規化した通常形。後手では左右反転して案内する。
-    // 7六歩は角交換前に済むため、終盤の「7筋を突く」は7五歩として扱う。
     blackMoves: [
       "7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g",
-      "2h6h", "5i4h", "4h3h", "7f7e", "8i7g", "6h6i",
+      "2h6h", "5i4h", "4h3h", "8i7g", "6h6i",
     ],
     planVariants: {
       // 相手の腰掛け銀が6筋へ歩を進めた場合は、飛車を振らず5六銀で争点を受ける。
@@ -79,8 +78,7 @@ export const OPENING_STRATEGIES = [
       "2h6h": ["6h6g"],
       "5i4h": ["2h6h"],
       "4h3h": ["5i4h"],
-      "7f7e": ["4h3h"],
-      "8i7g": ["7f7e"],
+      "8i7g": ["4h3h"],
       "6h6i": ["8i7g"],
     },
     movePrerequisitesByVariant: {
