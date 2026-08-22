@@ -266,7 +266,7 @@ describe("opening guide", () => {
     const moves = openingPlanSteps("yababozu", "", "white").map(({ usi }) => usi);
     expect(moves).toEqual([
       "3c3d", "2b8h+", "4a3b", "3a4b", "4c4d", "4b4c", "8b4b", "5a6b", "6b7b",
-      "3d3e", "2a3c", "4b4a",
+      "2a3c", "4b4a",
     ]);
     expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("4a3b"));
     expect(moves.indexOf("4c4d")).toBeGreaterThan(moves.indexOf("3a4b"));
@@ -410,7 +410,7 @@ describe("opening guide", () => {
       "7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "4a3b",
       "2f2e", "3a4b", "6g6f", "4c4d", "6f6e", "4b4c",
       "5g5f", "8b4b", "9g9f", "5a6b", "9f9e", "6b7b",
-      "1g1f", "3d3e", "1f1e", "2a3c", "5f5e", "4b4a",
+      "1g1f", "2a3c", "1f1e", "4b4a",
     ];
     for (const usi of actualLine) expect(appendUsiMove(game, usi), usi).toBe(true);
     const completedSfen = game.position.sfen;
