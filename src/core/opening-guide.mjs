@@ -3,6 +3,9 @@ export const OPENING_STRATEGIES = [
     id: "ibisha",
     label: "居飛車",
     family: "ibisha",
+    // 「居飛車」は戦法ではなく大きな方針なので、プレイヤー向け候補には表示しない。
+    // CPUや奇襲不成立時の内部フォールバックとしてID自体は維持する。
+    guideSelectable: false,
     detectionNames: [],
     blackMoves: ["2g2f", "2f2e"],
   },
@@ -312,7 +315,8 @@ export const OPENING_STRATEGIES = [
   {
     id: "bougin",
     label: "棒銀",
-    family: "kakugawari",
+    // 相掛かり・角換わり・矢倉・対振り飛車などで使われる戦型横断の作戦。
+    family: "ibisha",
     detectionNames: ["棒銀"],
     blackMoves: ["2g2f", "2f2e", "3i3h", "3h2g", "2g2f"],
   },
@@ -326,14 +330,14 @@ export const OPENING_STRATEGIES = [
   {
     id: "hayaguri-gin",
     label: "早繰り銀",
-    family: "kakugawari",
+    family: "ibisha",
     detectionNames: ["早繰り銀"],
     blackMoves: ["3g3f", "3i4h", "4h3g", "3g4f"],
   },
   {
     id: "koshikake-gin",
     label: "腰掛け銀",
-    family: "kakugawari",
+    family: "ibisha",
     detectionNames: ["腰掛け銀"],
     blackMoves: ["4g4f", "3i4h", "4h4g", "4g5f"],
   },
@@ -1188,6 +1192,31 @@ function comparableOpeningScore(score) {
     if (score.value < 0) return -100000 + Math.abs(score.value);
   }
   return undefined;
+}
+
+/**
+ * 序盤補助の期限を判定する。
+ *
+ * 選択時点からの猶予だけでなく対局全体の手数にも上限を設ける。これにより、
+ * 中終盤で戦法や囲いを選び直しても「安全な寄り道」が再び長時間続かない。
+ */
+export function isOpeningGuideExpired(currentPly, startedAtPly = 0, maxPlies = 40) {
+  const current = Math.max(0, Math.trunc(Number(currentPly) || 0));
+  const started = Math.max(0, Math.trunc(Number(startedAtPly) || 0));
+  const limit = Math.max(0, Math.trunc(Number(maxPlies) || 0));
+  return current >= limit || current - started >= limit;
+}
+
+/** 予定手へ戻れないまま許容する「安全な寄り道」の手数。 */
+export const OPENING_GUIDE_MAX_DETOURS = 3;
+
+export function shouldAbandonOpeningGuide(
+  detourCount,
+  maxDetours = OPENING_GUIDE_MAX_DETOURS,
+) {
+  const count = Math.max(0, Math.trunc(Number(detourCount) || 0));
+  const limit = Math.max(1, Math.trunc(Number(maxDetours) || 1));
+  return count >= limit;
 }
 
 /** 固定手順がAI上位候補から外れる、または大きく評価を落とす場合は安全な手へ差し替える。 */
