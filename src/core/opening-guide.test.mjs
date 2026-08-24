@@ -20,6 +20,7 @@ import {
   openingPlanSteps,
   shouldAbandonOpeningGuide,
   shouldShowOpeningFollowup,
+  OPENING_CASTLE_GROUPS,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./opening-guide.mjs";
@@ -109,15 +110,37 @@ describe("opening guide", () => {
       openingDefinitionRookStyle(id, "castle") ?? "both"
     ));
     expect(groups.static?.map(({ label }) => label)).toEqual([
-      "舟囲い", "早囲い", "矢倉", "土居矢倉", "菊水矢倉", "エルモ囲い",
+      "舟囲い", "箱入り娘", "早囲い", "金矢倉", "土居矢倉", "菊水矢倉", "エルモ囲い",
       "雁木", "左美濃", "天守閣美濃", "居飛車穴熊", "松尾流穴熊",
-      "右玉", "中住まい", "カニ囲い", "ボナンザ囲い",
+      "右玉", "中住まい", "中原囲い", "カニ囲い", "ボナンザ囲い",
     ]);
     expect(groups.ranging?.map(({ label }) => label)).toEqual([
-      "片美濃", "美濃囲い", "高美濃囲い", "ダイヤモンド美濃", "連盟美濃",
-      "銀冠", "振り飛車穴熊", "振り飛車エルモ", "右エルモ", "金無双", "片金無双",
+      "片美濃", "本美濃", "高美濃", "ダイヤモンド美濃", "連盟美濃",
+      "振り飛車銀冠", "振り飛車穴熊", "振り飛車エルモ", "右エルモ",
+      "金無双", "片金無双", "右矢倉",
     ]);
     expect(groups.both?.map(({ label }) => label)).toEqual(["ミレニアム", "大隅囲い"]);
+  });
+
+  it("classifies every castle by family, contexts, and a visible menu group", () => {
+    const menuGroupIds = new Set(OPENING_CASTLE_GROUPS.map(({ id }) => id));
+    expect(OPENING_CASTLES.every(({ family, contexts, menuGroup }) => (
+      typeof family === "string"
+      && Array.isArray(contexts)
+      && contexts.length > 0
+      && menuGroupIds.has(menuGroup)
+    ))).toBe(true);
+    expect(OPENING_CASTLES.find(({ id }) => id === "mino")).toMatchObject({
+      label: "本美濃",
+      family: "mino",
+      contexts: ["anti-static-ranging", "double-ranging"],
+      menuGroup: "ranging-mino",
+    });
+    expect(OPENING_CASTLES.find(({ id }) => id === "right-yagura")).toMatchObject({
+      family: "yagura",
+      contexts: ["double-ranging"],
+      menuGroup: "double-ranging",
+    });
   });
 
   it("places every strategy in an opening family for the guide menu", () => {
@@ -561,6 +584,23 @@ describe("opening guide", () => {
     expectPlanLegal("", id, "black");
     expectPlanLegal("", id, "white");
   });
+
+  it.each(["hakoiri-musume", "nakahara", "right-yagura"])(
+    "reaches the registered completion position for %s",
+    (castleId) => {
+      const moves = openingPlanSteps("", castleId).map(({ usi }) => usi);
+      expect(isOpeningPlanComplete({
+        castleId,
+        playedMoves: moves,
+        currentSfen: sfenAfterMoves(moves),
+      })).toBe(true);
+      expect(isOpeningPlanComplete({
+        castleId,
+        playedMoves: moves,
+        currentSfen: createGameRecord().position.sfen,
+      })).toBe(false);
+    },
+  );
 
   it("skips played and currently illegal steps", () => {
     const next = nextOpeningPlanMove({
