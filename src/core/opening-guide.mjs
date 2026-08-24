@@ -13,6 +13,7 @@ export const OPENING_STRATEGIES = [
     id: "aigakari",
     label: "相掛かり",
     family: "aigakari",
+    guideSelectable: false,
     detectionNames: ["相掛かり", "AlphaZero流相掛かり"],
     blackMoves: ["2g2f", "2f2e"],
   },
@@ -20,6 +21,7 @@ export const OPENING_STRATEGIES = [
     id: "yokofudori",
     label: "横歩取り",
     family: "yokofudori",
+    guideSelectable: false,
     detectionNames: ["横歩取り"],
     strictOrder: true,
     historyCompletes: true,
@@ -39,9 +41,43 @@ export const OPENING_STRATEGIES = [
     ],
   },
   {
+    id: "aigakari-bougin",
+    label: "相掛かり棒銀",
+    family: "aigakari",
+    detectionNames: ["相掛かり棒銀", "棒銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["2f", "S"]],
+    completionRequiredMoves: ["2g2f", "2f2e", "6i7h"],
+    blackMoves: ["2g2f", "2f2e", "6i7h", "3i3h", "3h2g", "2g2f"],
+  },
+  {
+    id: "aigakari-hayaguri-gin",
+    label: "相掛かり早繰り銀",
+    family: "aigakari",
+    detectionNames: ["相掛かり早繰り銀", "早繰り銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["4f", "S"]],
+    completionRequiredMoves: ["2g2f", "2f2e", "6i7h"],
+    blackMoves: ["2g2f", "2f2e", "6i7h", "3g3f", "3i4h", "4h3g", "3g4f"],
+  },
+  {
+    id: "aigakari-koshikake-gin",
+    label: "相掛かり腰掛け銀",
+    family: "aigakari",
+    detectionNames: ["相掛かり腰掛け銀", "腰掛け銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["5f", "S"]],
+    completionRequiredMoves: ["2g2f", "2f2e", "6i7h"],
+    blackMoves: ["2g2f", "2f2e", "6i7h", "4g4f", "3i4h", "4h4g", "4g5f"],
+  },
+  {
     id: "gangi-strategy",
     label: "雁木戦法",
     family: "gangi",
+    guideSelectable: false,
     detectionNames: ["雁木"],
     strictOrder: true,
     completionSquares: [
@@ -53,15 +89,89 @@ export const OPENING_STRATEGIES = [
     id: "kakugawari",
     label: "角換わり",
     family: "kakugawari",
+    guideSelectable: false,
     detectionNames: ["角換わり", "一手損角換わり"],
     blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+"],
+  },
+  {
+    id: "kakugawari-bougin",
+    label: "角換わり棒銀",
+    family: "kakugawari",
+    detectionNames: ["角換わり棒銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["2f", "S"]],
+    completionRequiredMoves: ["8h2b+"],
+    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "3i3h", "3h2g", "2g2f"],
+  },
+  {
+    id: "kakugawari-hayaguri-gin",
+    label: "角換わり早繰り銀",
+    family: "kakugawari",
+    detectionNames: ["角換わり早繰り銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["4f", "S"]],
+    completionRequiredMoves: ["8h2b+"],
+    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "3g3f", "3i4h", "4h3g", "3g4f"],
+  },
+  {
+    id: "kakugawari-koshikake-gin",
+    label: "角換わり腰掛け銀",
+    family: "kakugawari",
+    detectionNames: ["角換わり腰掛け銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["5f", "S"]],
+    completionRequiredMoves: ["8h2b+"],
+    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "4g4f", "3i4h", "4h4g", "4g5f"],
   },
   {
     id: "yagura-strategy",
     label: "矢倉戦法",
     family: "yagura",
+    guideSelectable: false,
     detectionNames: ["矢倉", "金矢倉"],
     blackMoves: ["7g7f", "6g6f", "7i6h", "6h7g"],
+  },
+  {
+    id: "yagura-bougin",
+    label: "矢倉棒銀",
+    family: "yagura",
+    detectionNames: ["矢倉棒銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["7g", "S"], ["2f", "S"]],
+    completionRequiredMoves: ["6h7g"],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h7g", "2g2f", "2f2e", "3i3h", "3h2g", "2g2f",
+    ],
+  },
+  {
+    id: "yagura-hayaguri-gin",
+    label: "急戦矢倉早繰り銀",
+    family: "yagura",
+    detectionNames: ["急戦矢倉早繰り銀", "矢倉早繰り銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["7g", "S"], ["4f", "S"]],
+    completionRequiredMoves: ["6h7g"],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h7g", "3g3f", "3i4h", "4h3g", "3g4f",
+    ],
+  },
+  {
+    id: "yagura-koshikake-gin",
+    label: "矢倉腰掛け銀",
+    family: "yagura",
+    detectionNames: ["矢倉腰掛け銀"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["7g", "S"], ["5f", "S"]],
+    completionRequiredMoves: ["6h7g"],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h7g", "4g4f", "3i4h", "4h4g", "4g5f",
+    ],
   },
   {
     id: "suzume-zashi",
@@ -135,7 +245,7 @@ export const OPENING_STRATEGIES = [
   },
   {
     id: "shiken",
-    label: "四間飛車",
+    label: "ノーマル四間飛車",
     family: "shiken",
     detectionNames: ["四間飛車", "ノーマル四間飛車"],
     blackMoves: ["7g7f", "6g6f", "2h6h"],
@@ -223,17 +333,20 @@ export const OPENING_STRATEGIES = [
   },
   {
     id: "sangen",
-    label: "三間飛車",
+    label: "ノーマル三間飛車",
     family: "sangen",
     detectionNames: ["三間飛車", "ノーマル三間飛車"],
     blackMoves: ["7g7f", "6g6f", "2h7h"],
   },
   {
     id: "nakabisha",
-    label: "中飛車",
+    label: "原始中飛車",
     family: "nakabisha",
     detectionNames: ["中飛車", "ゴキゲン中飛車"],
-    blackMoves: ["5g5f", "2h5h"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["5h", "R"], ["5e", "P"], ["5g", "S"]],
+    blackMoves: ["5g5f", "2h5h", "5f5e", "7i6h", "6h5g"],
   },
   {
     id: "gokigen",
@@ -300,21 +413,21 @@ export const OPENING_STRATEGIES = [
   },
   {
     id: "mukai",
-    label: "向かい飛車",
+    label: "ノーマル向かい飛車",
     family: "mukai",
     detectionNames: ["向かい飛車", "ダイレクト向かい飛車"],
     blackMoves: ["7g7f", "8h7g", "2h8h"],
   },
   {
     id: "ishida",
-    label: "石田流",
+    label: "早石田",
     family: "sangen",
     detectionNames: ["石田流", "早石田"],
     blackMoves: ["7g7f", "7f7e", "2h7h", "7h7f"],
   },
   {
     id: "bougin",
-    label: "棒銀",
+    label: "原始棒銀",
     // 相掛かり・角換わり・矢倉・対振り飛車などで使われる戦型横断の作戦。
     family: "ibisha",
     detectionNames: ["棒銀"],
@@ -323,7 +436,7 @@ export const OPENING_STRATEGIES = [
   {
     id: "right-shiken",
     label: "右四間飛車",
-    family: "ibisha",
+    family: "anti-ranging",
     detectionNames: ["右四間飛車"],
     blackMoves: ["7g7f", "6g6f", "5g5f", "4g4f", "3i4h", "4h4g", "2h4h"],
   },
@@ -331,6 +444,7 @@ export const OPENING_STRATEGIES = [
     id: "hayaguri-gin",
     label: "早繰り銀",
     family: "ibisha",
+    guideSelectable: false,
     detectionNames: ["早繰り銀"],
     blackMoves: ["3g3f", "3i4h", "4h3g", "3g4f"],
   },
@@ -338,13 +452,14 @@ export const OPENING_STRATEGIES = [
     id: "koshikake-gin",
     label: "腰掛け銀",
     family: "ibisha",
+    guideSelectable: false,
     detectionNames: ["腰掛け銀"],
     blackMoves: ["4g4f", "3i4h", "4h4g", "4g5f"],
   },
   {
     id: "sodebisha",
     label: "袖飛車",
-    family: "ibisha",
+    family: "anti-ranging",
     detectionNames: ["袖飛車"],
     blackMoves: ["3g3f", "2h3h"],
   },
@@ -386,7 +501,7 @@ export const OPENING_STRATEGIES = [
   {
     id: "hashikaku-nakabisha",
     label: "端角中飛車",
-    family: "special",
+    family: "nakabisha",
     detectionNames: ["端角中飛車"],
     strictOrder: true,
     blackMoves: ["9g9f", "8h9g", "5g5f", "2h5h", "7i6h", "6h5g"],
@@ -394,7 +509,7 @@ export const OPENING_STRATEGIES = [
   {
     id: "shin-onigoroshi",
     label: "新鬼殺し",
-    family: "special",
+    family: "sangen",
     detectionNames: ["新鬼殺し"],
     strictOrder: true,
     availability: { colors: ["black"] },
@@ -403,7 +518,7 @@ export const OPENING_STRATEGIES = [
   {
     id: "first-78-rook",
     label: "7八飛戦法",
-    family: "special",
+    family: "sangen",
     detectionNames: ["7八飛戦法"],
     strictOrder: true,
     availability: { colors: ["black"], maxHistoryLength: 0 },
@@ -412,7 +527,7 @@ export const OPENING_STRATEGIES = [
   {
     id: "second-32-rook",
     label: "2手目3二飛戦法",
-    family: "special",
+    family: "sangen",
     detectionNames: ["2手目3二飛戦法"],
     strictOrder: true,
     availability: {
@@ -426,7 +541,7 @@ export const OPENING_STRATEGIES = [
   {
     id: "torizashi",
     label: "鳥刺し",
-    family: "special",
+    family: "anti-ranging",
     detectionNames: ["鳥刺し"],
     strictOrder: true,
     blackMoves: ["7g7f", "5g5f", "7i6h", "6h5g", "8h7i", "5g4f"],
@@ -706,14 +821,17 @@ export const OPENING_CASTLES = [
 
 const STATIC_ROOK_STRATEGIES = new Set([
   "ibisha", "aigakari", "yokofudori", "hineribisha", "gangi-strategy",
+  "aigakari-bougin", "aigakari-hayaguri-gin", "aigakari-koshikake-gin",
   "kakugawari", "yagura-strategy", "suzume-zashi", "yagura-37-silver",
+  "kakugawari-bougin", "kakugawari-hayaguri-gin", "kakugawari-koshikake-gin",
+  "yagura-bougin", "yagura-hayaguri-gin", "yagura-koshikake-gin",
   "morishita-system", "kakugawari-45-knight", "aono-ryu", "gangi-right-shiken", "bougin",
   "right-shiken", "hayaguri-gin", "koshikake-gin", "ureshino",
-  "sujichigai-kaku", "kakuto-fu", "torizashi", "ahiru",
+  "sujichigai-kaku", "kakuto-fu", "torizashi", "ahiru", "sodebisha",
 ]);
 const RANGING_ROOK_STRATEGIES = new Set([
   "shiken", "yababozu", "fujii-system", "sangen", "nakabisha", "gokigen",
-  "mukai", "ishida", "sodebisha", "hashikaku-nakabisha", "shin-onigoroshi",
+  "mukai", "ishida", "hashikaku-nakabisha", "shin-onigoroshi",
   "first-78-rook", "second-32-rook",
 ]);
 const STATIC_ROOK_CASTLES = new Set([
@@ -1126,6 +1244,10 @@ export function isOpeningPlanComplete({
     const definitions = phase === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
     const definition = definitions.find(({ id: candidateId }) => candidateId === id);
     if (!definition) return false;
+    const requiredMoves = (definition.completionRequiredMoves ?? []).map(
+      color === "white" ? mirrorUsiMove : (move) => move,
+    );
+    if (!requiredMoves.every((move) => played.has(move))) return false;
     const exact = matchesCompletionSquares(definition, currentSfen, color);
     if (exact === true) return true;
     if (exact === false && !definition?.historyCompletes) return false;
@@ -1147,6 +1269,16 @@ export function openingFollowupCount(random = Math.random) {
   const value = Number(random());
   const normalized = Number.isFinite(value) ? Math.max(0, Math.min(0.999999, value)) : 0;
   return 3 + Math.floor(normalized * 3);
+}
+
+/** 戦法だけを選び、その戦法が完成した場合に限り完成後の候補手を表示する。 */
+export function shouldShowOpeningFollowup({
+  strategyId = "",
+  castleId = "",
+  planComplete = false,
+  planExpired = false,
+} = {}) {
+  return Boolean(strategyId && !castleId && planComplete && !planExpired);
 }
 
 /** 相手の定跡進行に対し、形作りより先に必要となる応手を返す。 */

@@ -545,6 +545,7 @@ import {
   openingPlanCandidates as getOpeningPlanCandidates,
   openingUrgentResponse,
   shouldAbandonOpeningGuide,
+  shouldShowOpeningFollowup,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
@@ -880,12 +881,13 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
 const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));
 const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
 const OPENING_STRATEGY_GROUPS = [
-  { id: "ibisha", label: "居飛車／戦型横断の作戦" },
+  { id: "ibisha", label: "居飛車／単独作戦" },
   { id: "aigakari", label: "相居飛車／相掛かり" },
   { id: "yokofudori", label: "相居飛車／横歩取り" },
   { id: "yagura", label: "相居飛車／矢倉" },
   { id: "kakugawari", label: "相居飛車／角換わり" },
   { id: "gangi", label: "相居飛車／雁木" },
+  { id: "anti-ranging", label: "対抗型／居飛車側" },
   { id: "shiken", label: "四間飛車" },
   { id: "sangen", label: "三間飛車" },
   { id: "nakabisha", label: "中飛車" },
@@ -1020,6 +1022,12 @@ const openingPlanComplete = computed(() => {
   });
 });
 const openingPlanSettled = computed(() => openingPlanComplete.value || openingPlanExpired.value);
+const openingFollowupEligible = computed(() => shouldShowOpeningFollowup({
+  strategyId: selectedStrategy.value,
+  castleId: selectedCastle.value,
+  planComplete: openingPlanComplete.value,
+  planExpired: openingPlanExpired.value,
+}));
 const boardCandidates = computed(() => (
   hintCandidates.value.length
     ? hintCandidates.value
@@ -1049,10 +1057,14 @@ const openingGuideStatus = computed(() => {
       ? `完成後の候補手を3手表示中（あと${openingFollowupRemaining.value}回）`
       : "完成後の候補手を3手表示中（今回で最後）";
   }
-  if (openingPlanExpired.value && openingFollowupLoading) return "ここからの候補手を3手考えているよ…";
-  if (openingPlanExpired.value && openingFollowupStarted.value) return "形作りはここまで。ここからは局面に合わせて指そう！";
-  if (openingPlanComplete.value && openingFollowupLoading) return "形が完成したね。次の3手を考えているよ…";
-  if (openingPlanComplete.value && openingFollowupStarted.value) return "形が完成したね！";
+  if (openingPlanExpired.value) return "形作りはここまで。ここからは局面に合わせて指そう！";
+  if (openingFollowupEligible.value && openingFollowupLoading) {
+    return "戦法が完成したね。次の3手を考えているよ…";
+  }
+  if (openingFollowupEligible.value && openingFollowupStarted.value) return "戦法が完成したね！";
+  if (openingPlanComplete.value && selectedCastle.value) {
+    return selectedStrategy.value ? "戦法と囲いが完成したね！" : "囲いが完成したね！";
+  }
   if (!openingGuideDecision.value) return "形が完成したか、今の局面では予定手を指せないみたい。";
   const phase = openingGuideDecision.value.phase === "strategy" ? "戦法" : "囲い";
   return `${phase}の次の一手：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
@@ -1493,7 +1505,7 @@ function scheduleOpeningFollowupCandidates() {
     !engineReady.value || !engine || !active.value || reviewMode.value
     || normalizedMode.value !== "cpu" || record.value.position.color !== humanColor.value
     || openingGuideAbandoned.value
-    || !openingPlanSettled.value || openingFollowupLoading
+    || !openingFollowupEligible.value || openingFollowupLoading
     || openingGuideSafetyLoading.value || openingGuideDecision.value
     || openingFollowupCandidates.value.length > 0
   ) return;
@@ -1531,7 +1543,7 @@ function scheduleOpeningFollowupCandidates() {
       }));
       openingFollowupRemaining.value -= 1;
       if (coachLevel.value !== "off") {
-        guideText.value = "形が完成したね！この先はAIの候補手を3手示すよ。";
+        guideText.value = "戦法が完成したね！この先はAIの候補手を3手示すよ。";
       }
     })
     .catch(() => undefined)
