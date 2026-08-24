@@ -89,8 +89,8 @@ const trianglePoints = (ply: number, score: number, mover: "black" | "white") =>
   const x = plyX(ply);
   const y = scoreY(score);
   return mover === "black"
-    ? `${x - 5},${y + 4} ${x + 5},${y + 4} ${x},${y - 5}`
-    : `${x - 5},${y - 4} ${x + 5},${y - 4} ${x},${y + 5}`;
+    ? `${x - 6},${y + 5} ${x + 6},${y + 5} ${x},${y - 7}`
+    : `${x - 6},${y - 5} ${x + 6},${y - 5} ${x},${y + 7}`;
 };
 
 function selectNearestPly(event: PointerEvent) {
@@ -111,20 +111,34 @@ function selectNearestPly(event: PointerEvent) {
 .evaluation-graph__zero { stroke: #2e4a60; stroke-width: 1.25; }
 .evaluation-graph__line { fill: none; stroke: #2e4a60; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
 .evaluation-graph__current { stroke: #f5a645; stroke-width: 2; }
-.evaluation-graph__point { stroke-width: 1; }
-.evaluation-graph__point--blunder { fill: #a00000; stroke: #6f0000; }
-.evaluation-graph__point--mistake { fill: #f4212e; stroke: #c10d16; }
-.evaluation-graph__point--dubious { fill: #f5a645; stroke: #b96e1e; }
-.evaluation-graph__point--good { fill: #2e6f88; stroke: #1d4c61; }
-.evaluation-graph__point--brilliant { fill: #a493df; stroke: #6957a9; }
-.evaluation-graph__point--current { fill: #f5a645; stroke: #fffdf4; stroke-width: 1.5; }
+.evaluation-graph__point { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.evaluation-graph__point--blunder {
+  fill: #ff4b00;
+  stroke: #641d00;
+  stroke-width: 3;
+  transform: scale(1.15);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.evaluation-graph__point--mistake { fill: #f6aa00; stroke: #714b00; stroke-width: 2.25; }
+.evaluation-graph__point--dubious { fill: #fff100; stroke: #665f00; }
+.evaluation-graph__point--good { fill: #03af7a; stroke: #00583e; }
+.evaluation-graph__point--brilliant {
+  fill: #990099;
+  stroke: #4d004d;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 2px #fffdf4);
+}
+.evaluation-graph__point--current {
+  filter: drop-shadow(0 0 1.5px #111827);
+}
 .evaluation-graph__hit-area { fill: transparent; }
 .evaluation-graph__legend { display: flex; gap: .55rem; align-items: center; min-height: 1.2rem; padding: .1rem .2rem 0; color: #2e4a60; font: 11px Arial, "Yu Gothic", sans-serif; white-space: nowrap; }
-.evaluation-graph__legend-brilliant { color: #6957a9; }
-.evaluation-graph__legend-good { color: #1d4c61; }
-.evaluation-graph__legend-dubious { color: #a45f16; }
-.evaluation-graph__legend-mistake { color: #c10d16; }
-.evaluation-graph__legend-blunder { color: #780000; }
+.evaluation-graph__legend-brilliant { color: #790079; }
+.evaluation-graph__legend-good { color: #007a55; }
+.evaluation-graph__legend-dubious { color: #665f00; }
+.evaluation-graph__legend-mistake { color: #8a5b00; }
+.evaluation-graph__legend-blunder { color: #b53500; }
 .evaluation-graph__legend small { margin-left: auto; color: #526878; }
 .evaluation-graph__selection { display: flex; gap: .8rem; justify-content: flex-end; min-height: 1.2rem; margin-top: .15rem; color: #1d3343; font-size: .78rem; }
 .evaluation-graph__selection span { color: #526878; }
