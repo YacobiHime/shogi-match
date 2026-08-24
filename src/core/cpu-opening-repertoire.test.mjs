@@ -4,6 +4,7 @@ import {
   CPU_OPENING_REPERTOIRES,
   configuredCpuFirstMove,
   selectCpuOpeningRepertoire,
+  shouldForceConfiguredCpuOpening,
   shouldUseCpuOpening,
 } from "./cpu-opening-repertoire.mjs";
 
@@ -40,6 +41,26 @@ describe("CPU opening repertoire", () => {
     expect(selectCpuOpeningRepertoire({ configuredStrategy: "shiken" })).toEqual(
       CPU_OPENING_REPERTOIRES.shiken,
     );
+  });
+
+  it("forces an explicitly configured opening instead of replacing its move with another style", () => {
+    expect(shouldForceConfiguredCpuOpening({
+      configuredStrategy: "ranging",
+      openingMove: "8b4b",
+    })).toBe(true);
+    expect(shouldForceConfiguredCpuOpening({
+      configuredStrategy: "shiken",
+      openingMove: "8b4b",
+    })).toBe(true);
+    expect(shouldForceConfiguredCpuOpening({
+      configuredStrategy: "random",
+      openingMove: "8b4b",
+    })).toBe(false);
+    expect(shouldForceConfiguredCpuOpening({
+      configuredStrategy: "random",
+      configuredFirstMove: "bishop-diagonal",
+      openingMove: "7g7f",
+    })).toBe(true);
   });
 
   it.each([

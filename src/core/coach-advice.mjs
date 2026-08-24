@@ -5,7 +5,7 @@ const { Shogi } = shogiLib;
 const CASTLE_TIPS = [
   {
     key: 'elmo',
-    names: ['エルモ囲い', '振り飛車エルモ', '右エルモ'],
+    names: ['エルモ囲い', '振り飛車エルモ'],
     text: '相手はエルモ囲いだね。横からは堅いけど、金の頭を狙う上からの攻めが有効だよ！',
   },
   {

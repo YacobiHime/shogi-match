@@ -182,6 +182,17 @@
             </select>
           </label>
         </div>
+        <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
+          <span>この囲いでは、先に飛車を振る場所を選んでね</span>
+          <div>
+            <button
+              v-for="choice in rangingRookChoices"
+              :key="choice.id"
+              type="button"
+              @click="chooseRangingRookStrategy(choice.id)"
+            >{{ choice.label }}</button>
+          </div>
+        </div>
         <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
       </section>
     </section>
@@ -320,6 +331,17 @@
             </optgroup>
           </select>
         </label>
+      </div>
+      <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
+        <span>この囲いでは、先に飛車を振る場所を選んでね</span>
+        <div>
+          <button
+            v-for="choice in rangingRookChoices"
+            :key="choice.id"
+            type="button"
+            @click="chooseRangingRookStrategy(choice.id)"
+          >{{ choice.label }}</button>
+        </div>
       </div>
       <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
     </section>
@@ -543,6 +565,7 @@ import {
   openingPlanBranchMessage,
   openingPlanInterruption,
   openingPlanCandidates as getOpeningPlanCandidates,
+  rangingRookStrategyChoices,
   openingUrgentResponse,
   shouldAbandonOpeningGuide,
   shouldShowOpeningFollowup,
@@ -554,6 +577,7 @@ import {
   CPU_OPENING_STRATEGY_IDS,
   configuredCpuFirstMove,
   selectCpuOpeningRepertoire,
+  shouldForceConfiguredCpuOpening,
   shouldUseCpuOpening,
 } from "./core/cpu-opening-repertoire.mjs";
 import { createPositionAnalysisCache } from "./core/position-analysis-cache.mjs";
@@ -881,6 +905,14 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
 }
 const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));
 const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
+const rangingRookChoiceRequired = computed(() => (
+  openingDefinitionRookStyle(selectedCastle.value, "castle") === "ranging"
+  && openingDefinitionRookStyle(selectedStrategy.value, "strategy") !== "ranging"
+));
+const rangingRookChoices = computed(() => rangingRookStrategyChoices(
+  selectedCastle.value,
+  availableOpeningStrategies.value.map(({ id }) => id),
+));
 const OPENING_STRATEGY_GROUPS = [
   { id: "ibisha", label: "居飛車／単独作戦" },
   { id: "aigakari", label: "相居飛車／相掛かり" },
@@ -909,9 +941,8 @@ const groupedOpeningStrategies = computed(() => {
       .map((strategy) => ({
         ...strategy,
         // 進行中の補助は、相手の応手を待つ一時的な局面でも解除しない。
-        // 寄り道で中断した場合は、別案へ切り替えられるよう候補を再び開放する。
-        disabled: !openingGuideAbandoned.value
-          && strategy.id !== selectedStrategy.value
+        // 中断後も、現在局面から到達できる別案だけを選択可能にする。
+        disabled: strategy.id !== selectedStrategy.value
           && !availableIds.has(strategy.id),
       })),
   );
@@ -941,8 +972,7 @@ const groupedOpeningCastles = computed(() => {
   const availableIds = new Set(availableOpeningCastles.value.map(({ id }) => id));
   return groupOpeningCastles(OPENING_CASTLES.map((castle) => ({
       ...castle,
-      disabled: !openingGuideAbandoned.value
-        && castle.id !== selectedCastle.value
+      disabled: castle.id !== selectedCastle.value
         && !availableIds.has(castle.id),
     })));
 });
@@ -970,6 +1000,7 @@ const openingPlanCandidates = computed(() => {
     || !canMove.value
     || openingGuideAbandoned.value
     || openingPlanExpired.value
+    || rangingRookChoiceRequired.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return [];
   const playerIsBlack = humanColor.value === Color.BLACK;
@@ -1029,6 +1060,11 @@ const boardCandidates = computed(() => (
 ));
 const openingGuideStatus = computed(() => {
   if (!selectedStrategy.value && !selectedCastle.value) return "";
+  if (rangingRookChoiceRequired.value) {
+    return rangingRookChoices.value.length
+      ? "四間飛車が基本だよ。三間・中・向かい飛車も、今の局面から選べるよ！"
+      : "この局面から選べる振り先がないみたい。別の囲いを選び直そう。";
+  }
   if (reviewMode.value) return "道しるべは対局中に表示するよ。";
   if (!canMove.value) return "あなたの手番になったら、次の一手を矢印で示すよ。";
   if (openingGuideAbandoned.value) {
@@ -1080,6 +1116,17 @@ function announceOpeningGuide() {
   }
   scheduleOpeningGuideSafety();
   scheduleOpeningFollowupCandidates();
+}
+
+function chooseRangingRookStrategy(strategyId: string) {
+  const choice = rangingRookChoices.value.find(({ id }) => id === strategyId);
+  if (!choice) return;
+  selectedStrategy.value = strategyId;
+  announceOpeningGuide();
+  if (coachLevel.value !== "off") {
+    const castle = OPENING_CASTLES.find(({ id }) => id === selectedCastle.value)?.label;
+    guideText.value = `${choice.label}に振ってから、${castle ?? "囲い"}を組もう！`;
+  }
 }
 
 function formationNamesForColor(sfen: string, color: Color): string[] {
@@ -1168,6 +1215,12 @@ function openPregame() {
   analysisOpen.value = false;
 }
 
+function configuredCpuOpeningStrategy(): string {
+  return cpuStrategyDetailsOpen.value
+    ? (cpuDetailedStrategy.value || cpuStrategy.value)
+    : cpuStrategy.value;
+}
+
 function strategyMove(): string | undefined {
   // 駒落ちや途中局面では平手用定跡を当てはめない。
   if (props.initialSfen !== STANDARD_SFEN) return undefined;
@@ -1189,9 +1242,7 @@ function strategyMove(): string | undefined {
   })) return undefined;
   if (!cpuOpeningPlan) {
     const selectedPlan = selectCpuOpeningRepertoire({
-      configuredStrategy: cpuStrategyDetailsOpen.value
-        ? (cpuDetailedStrategy.value || cpuStrategy.value)
-        : cpuStrategy.value,
+      configuredStrategy: configuredCpuOpeningStrategy(),
       cpuColor: cpuIsBlack ? "black" : "white",
       moves: moveHistory,
     });
@@ -1332,6 +1383,7 @@ function scheduleOpeningGuideSafety() {
     !active.value || reviewMode.value || normalizedMode.value !== "cpu"
     || record.value.position.color !== humanColor.value
     || openingGuideAbandoned.value
+    || rangingRookChoiceRequired.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return;
 
@@ -2072,6 +2124,11 @@ async function scheduleCpuMove() {
           ? playerTurnScore
           : undefined);
       const openingMove = strategyMove();
+      const forceConfiguredOpening = shouldForceConfiguredCpuOpening({
+        configuredStrategy: configuredCpuOpeningStrategy(),
+        configuredFirstMove: cpuFirstMove.value,
+        openingMove,
+      });
       // 入門だけは定跡の形を優先する。それ以外は定跡手も探索で安全確認する。
       if (openingMove && usesRandomLegalMove(searchNodes.value)) {
         usi = openingMove;
@@ -2105,10 +2162,12 @@ async function scheduleCpuMove() {
           showCoachAdvice(moveFeedback);
           await nextTick();
         }
-        const safeOpening = openingMove
+        const safeOpening = openingMove && !forceConfiguredOpening
           ? chooseSafeOpeningMove(openingMove, search.candidates, Math.min(250, strength.maxScoreLoss))
           : null;
-        const selection = safeOpening
+        const selection = forceConfiguredOpening
+          ? { move: openingMove }
+          : safeOpening
           ? {
               move: safeOpening.usi,
               rank: search.candidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
@@ -2121,10 +2180,12 @@ async function scheduleCpuMove() {
             );
         usi = selection.move;
         selectedCpuScore = search.candidates.find(
-          (candidate) => candidate.rank === selection.rank,
+          (candidate) => candidate.move === selection.move,
         )?.score;
       } else {
-        usi = selectCpuMove(record.value.position)?.usi ?? "";
+        usi = forceConfiguredOpening
+          ? openingMove
+          : selectCpuMove(record.value.position)?.usi ?? "";
       }
       if (!usi) {
         thinking.value = false;
@@ -2146,8 +2207,15 @@ async function scheduleCpuMove() {
       const message = error instanceof Error ? error.message : String(error);
       errorMessage.value = `やねうら王の思考に失敗しました: ${message}`;
       emit("match-error", { message });
-      const move = selectCpuMove(record.value.position);
-      if (move && applyMove(move.usi, "cpu") && active.value) {
+      const fallbackOpeningMove = strategyMove();
+      const fallbackUsi = shouldForceConfiguredCpuOpening({
+        configuredStrategy: configuredCpuOpeningStrategy(),
+        configuredFirstMove: cpuFirstMove.value,
+        openingMove: fallbackOpeningMove,
+      })
+        ? fallbackOpeningMove
+        : selectCpuMove(record.value.position)?.usi;
+      if (fallbackUsi && applyMove(fallbackUsi, "cpu") && active.value) {
         updateCoachAdvice();
         scheduleOpeningGuideSafety();
         scheduleOpeningFollowupCandidates();
@@ -2373,9 +2441,14 @@ function restart() {
   cpuOpeningPlan = null;
   positionAnalysisCache.clear();
   moveHistory = [];
+  selectedStrategy.value = "";
+  selectedCastle.value = "";
+  strategyExplanationOpen.value = false;
   openingGuideStartedAtPly.value = 0;
   openingGuideDetourCount.value = 0;
   openingGuideAbandoned.value = false;
+  openingGuideBranchNotice.value = "";
+  openingGuideBranchNoticePly.value = -1;
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
@@ -2696,6 +2769,38 @@ queueMicrotask(() => {
   color: #fff8ee;
   background: #25151a;
   font: inherit;
+}
+.shogi-game__rook-choice {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border: 1px solid rgba(244, 216, 144, 0.65);
+  color: #fff8ee;
+  background: rgba(96, 54, 22, 0.34);
+  font-size: 0.72rem;
+}
+.shogi-game__rook-choice > span {
+  color: #f4d890;
+  font-weight: 700;
+}
+.shogi-game__rook-choice > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+.shogi-game__rook-choice button {
+  min-width: 0;
+  padding: 0.3rem 0.25rem;
+  border: 1px solid rgba(85, 191, 233, 0.72);
+  border-radius: 0.2rem;
+  color: #f7f5ff;
+  background: rgba(22, 83, 112, 0.82);
+  font: inherit;
+  cursor: pointer;
+}
+.shogi-game__rook-choice button:first-child {
+  border-color: #f0b45e;
+  background: rgba(124, 68, 24, 0.9);
 }
 .shogi-game__opening-guide p {
   margin: 0;

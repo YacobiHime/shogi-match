@@ -18,6 +18,7 @@ import {
   openingPlanCandidates,
   openingPlanInterruption,
   openingPlanSteps,
+  rangingRookStrategyChoices,
   shouldAbandonOpeningGuide,
   shouldShowOpeningFollowup,
   OPENING_CASTLE_GROUPS,
@@ -52,15 +53,16 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
-  it("expires at the overall opening limit even when the guide was selected late", () => {
+  it("starts a fresh guidance window when a reachable plan is selected late", () => {
     expect(isOpeningGuideExpired(39, 30, 40)).toBe(false);
-    expect(isOpeningGuideExpired(40, 30, 40)).toBe(true);
-    expect(isOpeningGuideExpired(97, 57, 40)).toBe(true);
+    expect(isOpeningGuideExpired(40, 30, 40)).toBe(false);
+    expect(isOpeningGuideExpired(97, 90, 40)).toBe(false);
   });
 
   it("also retains the per-selection limit for nonstandard starting positions", () => {
     expect(isOpeningGuideExpired(39, 0, 40)).toBe(false);
     expect(isOpeningGuideExpired(50, 10, 40)).toBe(true);
+    expect(isOpeningGuideExpired(97, 57, 40)).toBe(true);
   });
 
   it("abandons an opening plan after three followed detours", () => {
@@ -116,7 +118,7 @@ describe("opening guide", () => {
     ]);
     expect(groups.ranging?.map(({ label }) => label)).toEqual([
       "片美濃", "本美濃", "高美濃", "ダイヤモンド美濃", "連盟美濃",
-      "振り飛車銀冠", "振り飛車穴熊", "振り飛車エルモ", "右エルモ",
+      "振り飛車銀冠", "振り飛車穴熊", "振り飛車エルモ",
       "金無双", "片金無双", "右矢倉",
     ]);
     expect(groups.both?.map(({ label }) => label)).toEqual(["ミレニアム", "大隅囲い"]);
@@ -141,6 +143,32 @@ describe("opening guide", () => {
       contexts: ["double-ranging"],
       menuGroup: "double-ranging",
     });
+  });
+
+  it("offers basic rook destinations only for Ranging Rook castles", () => {
+    expect(rangingRookStrategyChoices("half-mino").map(({ id }) => id)).toEqual([
+      "shiken", "sangen", "nakabisha", "mukai",
+    ]);
+    expect(rangingRookStrategyChoices("mino", ["shiken", "sangen"]).map(({ id }) => id))
+      .toEqual(["shiken", "sangen"]);
+    expect(rangingRookStrategyChoices("right-yagura").map(({ id }) => id))
+      .toEqual(["mukai"]);
+    expect(rangingRookStrategyChoices("funagakoi")).toEqual([]);
+  });
+
+  it.each(["shiken", "sangen", "nakabisha", "mukai"])(
+    "builds Half Mino after selecting the %s rook destination",
+    (strategyId) => {
+      expectPlanLegal(strategyId, "half-mino", "black");
+      expectPlanLegal(strategyId, "half-mino", "white");
+    },
+  );
+
+  it("does not move a Third-file Rook back to the fourth file while building Mino", () => {
+    const moves = openingPlanSteps("sangen", "mino").map(({ usi }) => usi);
+    expect(moves).toContain("2h7h");
+    expect(moves).not.toContain("2h6h");
+    expectPlanLegal("sangen", "mino", "black");
   });
 
   it("places every strategy in an opening family for the guide menu", () => {
@@ -286,6 +314,21 @@ describe("opening guide", () => {
     }).map(({ id }) => id)).toEqual(["shiken"]);
   });
 
+  it("offers reachable White-side castles from a partially built Ranging Rook position", () => {
+    const definitions = OPENING_CASTLES.filter(({ id }) => (
+      ["furibisha-elmo", "half-mino", "osumi"].includes(id)
+    ));
+    expect(availableOpeningDefinitions({
+      definitions,
+      kind: "castle",
+      color: "white",
+      rookStyle: "ranging",
+      playedMoves: ["3c3d", "4c4d", "8b4b", "5a6b", "6b7b"],
+      moveHistory: Array.from({ length: 44 }, (_, index) => `move-${index}`),
+      legalMoves: ["7a6b", "7b8b", "6a6b"],
+    }).map(({ id }) => id)).toEqual(["half-mino", "furibisha-elmo", "osumi"]);
+  });
+
   it("shows Pacman only to White after Black opens the bishop diagonal", () => {
     const pacman = OPENING_STRATEGIES.find(({ id }) => id === "pacman");
     expect(availableOpeningDefinitions({
@@ -379,6 +422,41 @@ describe("opening guide", () => {
       strategyId: "shiken",
       detectedFormations: ["四間飛車"],
     })).toBe(true);
+  });
+
+  it("continues Primitive Climbing Silver from 2g silver to the canonical 2f silver shape", () => {
+    const setupMoves = ["2g2f", "2f2e", "3i3h", "3h2g"];
+    const setupSfen = sfenAfterMoves(setupMoves);
+    expect(isOpeningPlanComplete({
+      strategyId: "bougin",
+      playedMoves: setupMoves,
+      detectedFormations: ["棒銀"],
+      currentSfen: setupSfen,
+    })).toBe(false);
+    expect(nextOpeningPlanMove({
+      strategyId: "bougin",
+      playedMoves: setupMoves,
+      detectedFormations: ["棒銀"],
+      currentSfen: setupSfen,
+      legalMoves: ["2g2f"],
+    })).toEqual({ usi: "2g2f", phase: "strategy" });
+
+    const completedMoves = [...setupMoves, "2g2f"];
+    expect(isOpeningPlanComplete({
+      strategyId: "bougin",
+      playedMoves: completedMoves,
+      currentSfen: sfenAfterMoves(completedMoves),
+    })).toBe(true);
+
+    const whiteSetupMoves = ["8c8d", "8d8e", "7a7b", "7b8c"];
+    expect(nextOpeningPlanMove({
+      strategyId: "bougin",
+      color: "white",
+      playedMoves: whiteSetupMoves,
+      detectedFormations: ["棒銀"],
+      currentSfen: sfenAfterMoves(whiteSetupMoves, "white"),
+      legalMoves: ["8c8d"],
+    })).toEqual({ usi: "8c8d", phase: "strategy" });
   });
 
   it("shows three to five AI follow-up arrows", () => {
@@ -561,6 +639,48 @@ describe("opening guide", () => {
       fallbackStrategyId: "shiken",
       message: expect.stringContaining("角道を閉じちゃった"),
     });
+  });
+
+  it.each([
+    "kakugawari",
+    "kakugawari-bougin",
+    "kakugawari-hayaguri-gin",
+    "kakugawari-koshikake-gin",
+    "kakugawari-45-knight",
+  ])("switches %s to Right Fourth-file Rook when White closes the bishop diagonal", (strategyId) => {
+    expect(openingPlanInterruption({
+      strategyId,
+      color: "black",
+      playedMoves: ["7g7f", "2g2f"],
+      opponentMoves: ["3c3d", "4c4d"],
+      moveHistory: ["7g7f", "3c3d", "2g2f", "4c4d"],
+    })).toMatchObject({
+      fallbackStrategyId: "right-shiken",
+      message: expect.stringContaining("△4四歩"),
+    });
+  });
+
+  it("switches a White-side Bishop Exchange plan when Black closes the bishop diagonal", () => {
+    expect(openingPlanInterruption({
+      strategyId: "kakugawari-koshikake-gin",
+      color: "white",
+      playedMoves: ["3c3d", "8c8d"],
+      opponentMoves: ["7g7f", "6g6f"],
+      moveHistory: ["7g7f", "3c3d", "6g6f"],
+    })).toMatchObject({
+      fallbackStrategyId: "right-shiken",
+      message: expect.stringContaining("▲6六歩"),
+    });
+  });
+
+  it("keeps a Bishop Exchange plan after the bishops have already been exchanged", () => {
+    expect(openingPlanInterruption({
+      strategyId: "kakugawari-bougin",
+      color: "black",
+      playedMoves: ["7g7f", "8h2b+"],
+      opponentMoves: ["3c3d", "4c4d"],
+      moveHistory: ["7g7f", "3c3d", "8h2b+", "3a2b", "4c4d"],
+    })).toBeNull();
   });
 
   it("abandons Pacman after the offered pawn is ignored", () => {

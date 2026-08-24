@@ -14,7 +14,7 @@ const master = JSON.parse(await readFile(
 
 describe('HiraganaSuisho原典互換判定', () => {
   test('原典133件と追加囲いを読み込む', () => {
-    expect(master.rules).toHaveLength(141);
+    expect(master.rules).toHaveLength(140);
     expect(master.rules.filter((rule) => rule.group === 'tac_match')).toHaveLength(33);
   });
 
@@ -152,7 +152,6 @@ describe('HiraganaSuisho原典互換判定', () => {
   });
 
   test.each([
-    ['右エルモ', '4k4/9/9/9/9/9/9/4GSK2/6G2 w - 1'],
     ['片金無双', '4k4/9/9/9/9/9/9/5GKS1/9 w - 1'],
     ['大隅囲い', '4k4/9/9/9/9/9/9/5GK2/9 w - 1'],
   ])('%sを先手・後手の両方で判定する', (name, sente) => {
@@ -161,6 +160,15 @@ describe('HiraganaSuisho原典互換判定', () => {
       .toContain(name);
     expect(detectHiraganaSuishoFormations(gote, master).map((rule) => rule.name))
       .toContain(name);
+  });
+
+  test('右金を5八へ上がった形も振り飛車エルモとして判定する', () => {
+    const sente = '4k4/9/9/9/9/9/9/4GSK2/6G2 w - 1';
+    const gote = invertHiraganaSuishoSfen(sente);
+    expect(detectHiraganaSuishoFormations(sente, master).map((rule) => rule.name))
+      .toContain('振り飛車エルモ');
+    expect(detectHiraganaSuishoFormations(gote, master).map((rule) => rule.name))
+      .toContain('振り飛車エルモ');
   });
 
   test('居玉で金銀を整えた四間飛車を藤井システムと判定する', () => {

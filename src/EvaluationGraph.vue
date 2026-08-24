@@ -95,8 +95,17 @@ const trianglePoints = (ply: number, score: number, mover: "black" | "white") =>
 
 function selectNearestPly(event: PointerEvent) {
   const svg = event.currentTarget as SVGSVGElement;
-  const rect = svg.getBoundingClientRect();
-  const viewX = ((event.clientX - rect.left) / rect.width) * 800;
+  const screenMatrix = svg.getScreenCTM();
+  let viewX: number;
+  if (screenMatrix) {
+    const pointer = svg.createSVGPoint();
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    viewX = pointer.matrixTransform(screenMatrix.inverse()).x;
+  } else {
+    const rect = svg.getBoundingClientRect();
+    viewX = ((event.clientX - rect.left) / rect.width) * 800;
+  }
   const ratio = (viewX - plot.left) / plot.width;
   emit("select", Math.max(0, Math.min(props.totalPly, Math.round(ratio * maxPly.value))));
 }

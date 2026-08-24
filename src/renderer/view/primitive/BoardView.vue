@@ -262,6 +262,7 @@ import { CompactLayoutBuilder } from "./board/compact";
 import BoardGrid from "./BoardGrid.vue";
 import { t } from "@/common/i18n";
 import { legalDestinationSquares } from "@/position";
+import { parallelArrowLaneOffsets } from "./arrow-layout";
 import {
   boardParams,
   commonParams,
@@ -1007,7 +1008,7 @@ const arrows = computed(() => {
     (best, c) => (c.score !== undefined && (best === undefined || c.score > best) ? c.score : best),
     undefined,
   );
-  return props.candidates.map((candidate, index) => {
+  const geometries = props.candidates.map((candidate) => {
     const move = candidate.move;
     const boardBase = layoutBuilder.value.boardBasePoint;
     const blackHandBase = layoutBuilder.value.blackHandBasePoint;
@@ -1031,7 +1032,6 @@ const arrows = computed(() => {
               ),
             );
     const end = boardBase.add(boardLayoutBuilder.value.centerOfSquare(move.to));
-    const middle = start.add(end).multiply(0.5);
     const distance = start.distanceTo(end);
     const dx = end.x - start.x;
     const dy = end.y - start.y;
@@ -1039,15 +1039,41 @@ const arrows = computed(() => {
     const unitY = distance > 0 ? dy / distance : 0;
     const perpendicularX = -unitY;
     const perpendicularY = unitX;
+    return {
+      candidate,
+      move,
+      start,
+      end,
+      distance,
+      dx,
+      dy,
+      unitX,
+      unitY,
+      perpendicularX,
+      perpendicularY,
+    };
+  });
+  const laneOffsets = parallelArrowLaneOffsets(geometries, Math.max(18, arrowWidth * 0.6));
+
+  return geometries.map((geometry, index) => {
+    const {
+      candidate, move, start, end, distance, dx, dy,
+      unitX, unitY, perpendicularX, perpendicularY,
+    } = geometry;
+    const laneOffset = laneOffsets[index];
+    const offset = new Point(perpendicularX * laneOffset, perpendicularY * laneOffset);
+    const shiftedStart = start.add(offset);
+    const shiftedEnd = end.add(offset);
+    const middle = shiftedStart.add(shiftedEnd).multiply(0.5);
     const headLength = Math.min(arrowWidth, distance * 0.4);
     const headHalfWidth = arrowWidth * 0.5;
     const headBase = new Point(
-      end.x - unitX * headLength,
-      end.y - unitY * headLength,
+      shiftedEnd.x - unitX * headLength,
+      shiftedEnd.y - unitY * headLength,
     );
     const shaftEnd = new Point(
-      end.x - unitX * headLength * 0.72,
-      end.y - unitY * headLength * 0.72,
+      shiftedEnd.x - unitX * headLength * 0.72,
+      shiftedEnd.y - unitY * headLength * 0.72,
     );
     // z-index 決定のためスコアに基づいてランクを計算（同率は同順位）
     let evaluationLabel: string;
@@ -1070,11 +1096,11 @@ const arrows = computed(() => {
     return {
       id: move.usi,
       labelText,
-      start,
+      start: shiftedStart,
       shaftEnd,
       shaftWidth: arrowWidth * 0.36,
       headPoints: [
-        end,
+        shiftedEnd,
         new Point(
           headBase.x + perpendicularX * headHalfWidth,
           headBase.y + perpendicularY * headHalfWidth,
