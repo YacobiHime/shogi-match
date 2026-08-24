@@ -435,6 +435,8 @@ export const OPENING_STRATEGIES = [
     completionSquares: [["2f", "S"]],
     // 最初の2六歩と同じUSIになるため、現在の駒種を見て最後の2六銀を区別する。
     completionAdvance: { from: "2g", kind: "S", move: "2g2f" },
+    // 2六銀から攻撃へ出た後も、2六歩・2六銀の2回を指した履歴で完成状態を保つ。
+    completionMoveCounts: { "2g2f": 2 },
     blackMoves: ["2g2f", "2f2e", "3i3h", "3h2g", "2g2f"],
   },
   {
@@ -1119,7 +1121,17 @@ function matchesCompletionSquares(definition, currentSfen, color) {
   }));
 }
 
-function definitionDetectedComplete(definition, detected, currentSfen, color) {
+function matchesCompletionMoveCounts(definition, playedMoves, color) {
+  const required = Object.entries(definition?.completionMoveCounts ?? {});
+  if (!required.length) return false;
+  const counts = new Map();
+  for (const move of playedMoves) counts.set(move, (counts.get(move) ?? 0) + 1);
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  return required.every(([move, count]) => (counts.get(convert(move)) ?? 0) >= count);
+}
+
+function definitionDetectedComplete(definition, detected, currentSfen, color, playedMoves = []) {
+  if (matchesCompletionMoveCounts(definition, playedMoves, color)) return true;
   const exact = matchesCompletionSquares(definition, currentSfen, color);
   if (exact !== undefined) return exact;
   return definition?.detectionNames.some((name) => detected.has(name)) ?? false;
@@ -1165,7 +1177,7 @@ export function availableOpeningDefinitions({
         && moveHistory[0] !== availability.opponentFirstMove
       ) return false;
     }
-    if (definitionDetectedComplete(definition, detected, currentSfen, color)) return true;
+    if (definitionDetectedComplete(definition, detected, currentSfen, color, playedMoves)) return true;
     if (steps.length > 0 && steps.every(({ usi }) => played.has(usi))) return true;
 
     const next = nextOpeningPlanMove({
@@ -1292,8 +1304,12 @@ export function openingPlanCandidates({
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
   const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
   const detected = new Set(detectedFormations);
-  const strategyComplete = definitionDetectedComplete(strategy, detected, currentSfen, color);
-  const castleComplete = definitionDetectedComplete(castle, detected, currentSfen, color);
+  const strategyComplete = definitionDetectedComplete(
+    strategy, detected, currentSfen, color, playedMoves,
+  );
+  const castleComplete = definitionDetectedComplete(
+    castle, detected, currentSfen, color, playedMoves,
+  );
   const played = new Set(playedMoves);
   const history = new Set(moveHistory);
   const legal = new Set(legalMoves);
@@ -1374,6 +1390,7 @@ export function isOpeningPlanComplete({
       color === "white" ? mirrorUsiMove : (move) => move,
     );
     if (!requiredMoves.every((move) => played.has(move))) return false;
+    if (matchesCompletionMoveCounts(definition, playedMoves, color)) return true;
     const exact = matchesCompletionSquares(definition, currentSfen, color);
     if (exact === true) return true;
     if (exact === false && !definition?.historyCompletes) return false;
@@ -1395,6 +1412,47 @@ export function openingFollowupCount(random = Math.random) {
   const value = Number(random());
   const normalized = Number.isFinite(value) ? Math.max(0, Math.min(0.999999, value)) : 0;
   return 3 + Math.floor(normalized * 3);
+}
+
+/** 原始棒銀の完成後、AI候補より先に飛車先の歩交換まで案内する定跡手。 */
+export function openingCanonicalFollowupCandidates({
+  strategyId = "",
+  color = "black",
+  currentSfen = "",
+  legalMoves = [],
+} = {}) {
+  if (strategyId !== "bougin" || !currentSfen) return [];
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  const board = parseSfenBoard(currentSfen);
+  const legal = new Set(legalMoves);
+  const ownPiece = (square, kind) => {
+    const piece = board.get(convert(square));
+    return piece?.color === color && piece.kind === kind;
+  };
+  const opponentColor = color === "black" ? "white" : "black";
+  const opponentPiece = (square, kind) => {
+    const piece = board.get(convert(square));
+    return piece?.color === opponentColor && piece.kind === kind;
+  };
+  const candidates = (moves, kind) => moves
+    .map(convert)
+    .filter((usi) => legal.has(usi))
+    .map((usi) => ({ usi, kind }));
+
+  // 2六銀で原始棒銀は完成。中央へ逃げず、端側の1五銀か3五銀へ出る。
+  if (ownPiece("2f", "S")) {
+    return candidates(["2f1e", "2f3e"], "silver-advance");
+  }
+
+  const silverAdvanced = ownPiece("1e", "S") || ownPiece("3e", "S");
+  if (!silverAdvanced) return [];
+  if (ownPiece("2e", "P")) {
+    return candidates(["2e2d"], "pawn-exchange");
+  }
+  if (ownPiece("2h", "R") && opponentPiece("2d", "P")) {
+    return candidates(["2h2d"], "pawn-exchange");
+  }
+  return [];
 }
 
 /** 戦法だけを選び、その戦法が完成した場合に限り完成後の候補手を表示する。 */
@@ -1517,6 +1575,24 @@ export function chooseAdaptiveOpeningMove(plannedMoves = [], candidates = [], ma
     .sort((left, right) => right.value - left.value || left.order - right.order);
   const selectedPlan = scoredPlans[0] ?? availablePlans[0];
   return chooseSafeOpeningMove(selectedPlan.move, candidates, maxScoreLoss);
+}
+
+/** 危険な定跡手1手と、代わりに選べるAI上位3候補を矢印用にまとめる。 */
+export function openingDetourArrowCandidates(plannedMove, candidates = [], limit = 3) {
+  if (typeof plannedMove !== "string" || !plannedMove) return [];
+  const count = Math.max(1, Math.trunc(Number(limit) || 1));
+  const aiMoves = [...candidates]
+    .filter(({ rank, move }) => (
+      Number.isInteger(rank) && rank >= 1 && typeof move === "string"
+      && move && move !== plannedMove
+    ))
+    .sort((left, right) => left.rank - right.rank)
+    .slice(0, count)
+    .map(({ move, score }) => ({ usi: move, source: "ai", score }));
+  return [
+    { usi: plannedMove, source: "unsafe-plan" },
+    ...aiMoves,
+  ];
 }
 
 /** 残りの駒組みを不可能にする「安全な寄り道」を候補から外す。 */

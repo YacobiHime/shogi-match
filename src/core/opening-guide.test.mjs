@@ -10,6 +10,8 @@ import {
   mirrorUsiMove,
   nextOpeningPlanMove,
   openingDefinitionRookStyle,
+  openingCanonicalFollowupCandidates,
+  openingDetourArrowCandidates,
   openingUrgentResponse,
   chooseSafeOpeningMove,
   openingFollowupCount,
@@ -459,6 +461,56 @@ describe("opening guide", () => {
     })).toEqual({ usi: "8c8d", phase: "strategy" });
   });
 
+  it("treats 2f silver as complete, then guides Primitive Climbing Silver through pawn exchange", () => {
+    const completedMoves = ["2g2f", "2f2e", "3i3h", "3h2g", "2g2f"];
+    expect(openingCanonicalFollowupCandidates({
+      strategyId: "bougin",
+      currentSfen: sfenAfterMoves(completedMoves),
+      legalMoves: ["2f1e", "2f2e", "2f3e"],
+    })).toEqual([
+      { usi: "2f1e", kind: "silver-advance" },
+      { usi: "2f3e", kind: "silver-advance" },
+    ]);
+
+    const advancedMoves = [...completedMoves, "2f1e"];
+    expect(isOpeningPlanComplete({
+      strategyId: "bougin",
+      playedMoves: advancedMoves,
+      currentSfen: sfenAfterMoves(advancedMoves),
+    })).toBe(true);
+    expect(openingCanonicalFollowupCandidates({
+      strategyId: "bougin",
+      currentSfen: sfenAfterMoves(advancedMoves),
+      legalMoves: ["2e2d"],
+    })).toEqual([{ usi: "2e2d", kind: "pawn-exchange" }]);
+
+    let record = createGameRecord();
+    for (const usi of [...advancedMoves, "2e2d"]) {
+      record = createGameRecord(withTurn(record.position.sfen, "black"));
+      expect(appendUsiMove(record, usi), `black: ${usi}`).toBe(true);
+    }
+    record = createGameRecord(withTurn(record.position.sfen, "white"));
+    expect(appendUsiMove(record, "2c2d")).toBe(true);
+    expect(openingCanonicalFollowupCandidates({
+      strategyId: "bougin",
+      currentSfen: record.position.sfen,
+      legalMoves: ["2h2d"],
+    })).toEqual([{ usi: "2h2d", kind: "pawn-exchange" }]);
+  });
+
+  it("mirrors Primitive Climbing Silver continuation for White", () => {
+    const completedMoves = ["8c8d", "8d8e", "7a7b", "7b8c", "8c8d"];
+    expect(openingCanonicalFollowupCandidates({
+      strategyId: "bougin",
+      color: "white",
+      currentSfen: sfenAfterMoves(completedMoves, "white"),
+      legalMoves: ["8d9e", "8d7e"],
+    })).toEqual([
+      { usi: "8d9e", kind: "silver-advance" },
+      { usi: "8d7e", kind: "silver-advance" },
+    ]);
+  });
+
   it("shows three to five AI follow-up arrows", () => {
     expect([0, 0.34, 0.99].map((value) => openingFollowupCount(() => value)))
       .toEqual([3, 4, 5]);
@@ -897,6 +949,21 @@ describe("opening guide", () => {
         { rank: 2, move: "7g7f", score: { type: "cp", value: 20 } },
       ],
     )).toEqual({ usi: "2g2f", source: "plan", scoreLoss: 0 });
+  });
+
+  it("shows one unsafe book move together with three AI detour candidates", () => {
+    expect(openingDetourArrowCandidates("2g2f", [
+      { rank: 1, move: "7g7f", score: { type: "cp", value: 120 } },
+      { rank: 2, move: "2g2f", score: { type: "cp", value: -300 } },
+      { rank: 3, move: "6i7h", score: { type: "cp", value: 80 } },
+      { rank: 4, move: "4i5h", score: { type: "cp", value: 60 } },
+      { rank: 5, move: "5i6h", score: { type: "cp", value: 40 } },
+    ])).toEqual([
+      { usi: "2g2f", source: "unsafe-plan" },
+      { usi: "7g7f", source: "ai", score: { type: "cp", value: 120 } },
+      { usi: "6i7h", source: "ai", score: { type: "cp", value: 80 } },
+      { usi: "4i5h", source: "ai", score: { type: "cp", value: 60 } },
+    ]);
   });
 
   it("rejects Yababozu detours that block the rook before it reaches the fourth file", () => {

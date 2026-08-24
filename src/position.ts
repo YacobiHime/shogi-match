@@ -8,7 +8,7 @@ import {
   unpromotedPieceType,
 } from "tsshogi";
 
-export type CandidateGuideKind = "plan" | "urgent" | "ai";
+export type CandidateGuideKind = "plan" | "unsafe-plan" | "urgent" | "ai";
 export type CandidateInput = { usi: string; score?: number; guideKind?: CandidateGuideKind };
 export type CandidateMove = {
   move: Move;

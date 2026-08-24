@@ -33,8 +33,11 @@ describe("ShogiHome board adapter contract", () => {
 
   it("preserves the opening-guide kind used to color safety arrows", () => {
     const position = positionFromSfen(START_SFEN);
-    const candidates = candidateMovesFromUsi(position, [{ usi: "7g7f", guideKind: "urgent" }]);
-    expect(candidates[0].guideKind).toBe("urgent");
+    const candidates = candidateMovesFromUsi(position, [
+      { usi: "7g7f", guideKind: "urgent" },
+      { usi: "2g2f", guideKind: "unsafe-plan" },
+    ]);
+    expect(candidates.map(({ guideKind }) => guideKind)).toEqual(["urgent", "unsafe-plan"]);
   });
 
   it("marks promote and non-promote recommendations only when promotion is available", () => {
