@@ -587,7 +587,7 @@ export const OPENING_STRATEGIES = [
   },
 ];
 
-export const OPENING_CASTLES = [
+const OPENING_CASTLE_DEFINITIONS = [
   {
     id: "half-mino",
     label: "片美濃",
@@ -598,13 +598,13 @@ export const OPENING_CASTLES = [
   },
   {
     id: "mino",
-    label: "美濃囲い",
+    label: "本美濃",
     detectionNames: ["美濃囲い", "本美濃", "高美濃囲い", "銀冠"],
     blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h"],
   },
   {
     id: "high-mino",
-    label: "高美濃囲い",
+    label: "高美濃",
     detectionNames: ["高美濃", "高美濃囲い"],
     blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h", "4g4f", "5h4g"],
   },
@@ -631,7 +631,7 @@ export const OPENING_CASTLES = [
   },
   {
     id: "silver-crown",
-    label: "銀冠",
+    label: "振り飛車銀冠",
     detectionNames: ["銀冠", "端玉銀冠"],
     blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h", "4g4f", "5h4g", "2g2f", "3h2g", "4i3h"],
   },
@@ -664,6 +664,14 @@ export const OPENING_CASTLES = [
     blackMoves: ["5i6h", "6h7h", "4i5h"],
   },
   {
+    id: "hakoiri-musume",
+    label: "箱入り娘",
+    detectionNames: ["箱入り娘"],
+    strictOrder: true,
+    completionSquares: [["7h", "K"], ["6h", "G"], ["6i", "G"], ["8h", "B"]],
+    blackMoves: ["5i6h", "6h7h", "4i5h", "5h6h"],
+  },
+  {
     id: "early-castle",
     label: "早囲い",
     detectionNames: ["早囲い"],
@@ -673,7 +681,7 @@ export const OPENING_CASTLES = [
   },
   {
     id: "yagura",
-    label: "矢倉",
+    label: "金矢倉",
     detectionNames: ["矢倉", "金矢倉", "銀矢倉", "総矢倉"],
     blackMoves: ["7g7f", "8h6f", "7i6h", "6h7g", "5i6h", "6h7i", "7i8h", "6i7h", "4i5h", "5h6h"],
   },
@@ -792,6 +800,17 @@ export const OPENING_CASTLES = [
     blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i2h", "4i4h"],
   },
   {
+    id: "right-yagura",
+    label: "右矢倉",
+    detectionNames: ["右矢倉"],
+    strictOrder: true,
+    completionSquares: [["2h", "K"], ["3g", "S"], ["3h", "G"], ["8h", "R"]],
+    blackMoves: [
+      "7g7f", "8h7g", "2h8h", "3g3f", "3i4h", "4h3g",
+      "5i4h", "4h3h", "3h2h", "4i3h",
+    ],
+  },
+  {
     id: "osumi",
     label: "大隅囲い",
     detectionNames: ["大隅囲い"],
@@ -806,6 +825,14 @@ export const OPENING_CASTLES = [
     blackMoves: ["5i5h", "4i3h", "6i7h"],
   },
   {
+    id: "nakahara",
+    label: "中原囲い",
+    detectionNames: ["中原囲い"],
+    strictOrder: true,
+    completionSquares: [["6i", "K"], ["7h", "G"], ["5i", "G"], ["4h", "S"]],
+    blackMoves: ["6i7h", "3i4h", "5i6i", "4i5i"],
+  },
+  {
     id: "kanigakoi",
     label: "カニ囲い",
     detectionNames: ["カニ囲い"],
@@ -818,6 +845,60 @@ export const OPENING_CASTLES = [
     blackMoves: ["7g7f", "8h6f", "7i7h", "7h7g", "5i6h", "6h7h", "6i6h", "4i5h"],
   },
 ];
+
+export const OPENING_CASTLE_GROUPS = [
+  { id: "static-quick", label: "対抗型・居飛車側／急戦囲い" },
+  { id: "static-left-mino", label: "対抗型・居飛車側／左美濃系" },
+  { id: "static-anaguma", label: "対抗型・居飛車側／穴熊系" },
+  { id: "aibisha-yagura", label: "相居飛車／矢倉系" },
+  { id: "aibisha-gangi", label: "相居飛車／雁木系" },
+  { id: "aibisha-nakazumai", label: "相居飛車／中住まい系" },
+  { id: "aibisha-balance", label: "相居飛車／バランス型・その他" },
+  { id: "ranging-mino", label: "振り飛車側／美濃囲い系" },
+  { id: "ranging-anaguma", label: "振り飛車側／穴熊系" },
+  { id: "ranging-elmo", label: "振り飛車側／エルモ系" },
+  { id: "double-ranging", label: "相振り飛車／金無双・矢倉系" },
+  { id: "shared-other", label: "複数戦型／その他" },
+];
+
+const CASTLE_CLASSIFICATION = {
+  "half-mino": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  mino: { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "high-mino": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "diamond-mino": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "renmei-mino": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "silver-crown": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "furibisha-anaguma": { family: "anaguma", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-anaguma" },
+  "furibisha-elmo": { family: "elmo", contexts: ["anti-static-ranging"], menuGroup: "ranging-elmo" },
+  "right-elmo": { family: "elmo", contexts: ["anti-static-ranging"], menuGroup: "ranging-elmo" },
+  funagakoi: { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
+  "hakoiri-musume": { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
+  "early-castle": { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
+  elmo: { family: "elmo", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
+  yagura: { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
+  "doi-yagura": { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
+  "kikusui-yagura": { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
+  gangi: { family: "gangi", contexts: ["aibisha"], menuGroup: "aibisha-gangi" },
+  "left-mino": { family: "left-mino", contexts: ["anti-ranging-static"], menuGroup: "static-left-mino" },
+  "tenshukaku-mino": { family: "left-mino", contexts: ["anti-ranging-static"], menuGroup: "static-left-mino" },
+  "ibisha-anaguma": { family: "anaguma", contexts: ["anti-ranging-static"], menuGroup: "static-anaguma" },
+  "matsuo-anaguma": { family: "anaguma", contexts: ["anti-ranging-static"], menuGroup: "static-anaguma" },
+  millennium: { family: "millennium", contexts: ["anti-ranging-static", "anti-static-ranging"], menuGroup: "shared-other" },
+  "right-king": { family: "balance", contexts: ["aibisha", "anti-ranging-static"], menuGroup: "aibisha-balance" },
+  kinmusou: { family: "kinmusou", contexts: ["double-ranging"], menuGroup: "double-ranging" },
+  "half-kinmusou": { family: "kinmusou", contexts: ["double-ranging"], menuGroup: "double-ranging" },
+  "right-yagura": { family: "yagura", contexts: ["double-ranging"], menuGroup: "double-ranging" },
+  osumi: { family: "quick", contexts: ["anti-ranging-static", "anti-static-ranging", "double-ranging"], menuGroup: "shared-other" },
+  nakazumai: { family: "nakazumai", contexts: ["aibisha"], menuGroup: "aibisha-nakazumai" },
+  nakahara: { family: "nakazumai", contexts: ["aibisha"], menuGroup: "aibisha-nakazumai" },
+  kanigakoi: { family: "balance", contexts: ["aibisha"], menuGroup: "aibisha-balance" },
+  bonanza: { family: "balance", contexts: ["aibisha"], menuGroup: "aibisha-balance" },
+};
+
+export const OPENING_CASTLES = OPENING_CASTLE_DEFINITIONS.map((castle) => ({
+  ...castle,
+  ...CASTLE_CLASSIFICATION[castle.id],
+}));
 
 const STATIC_ROOK_STRATEGIES = new Set([
   "ibisha", "aigakari", "yokofudori", "hineribisha", "gangi-strategy",
@@ -835,13 +916,13 @@ const RANGING_ROOK_STRATEGIES = new Set([
   "first-78-rook", "second-32-rook",
 ]);
 const STATIC_ROOK_CASTLES = new Set([
-  "funagakoi", "early-castle", "yagura", "doi-yagura", "kikusui-yagura", "elmo",
+  "funagakoi", "hakoiri-musume", "early-castle", "yagura", "doi-yagura", "kikusui-yagura", "elmo",
   "gangi", "left-mino", "tenshukaku-mino", "ibisha-anaguma", "matsuo-anaguma",
-  "right-king", "nakazumai", "kanigakoi", "bonanza",
+  "right-king", "nakazumai", "nakahara", "kanigakoi", "bonanza",
 ]);
 const RANGING_ROOK_CASTLES = new Set([
   "half-mino", "mino", "high-mino", "diamond-mino", "renmei-mino", "silver-crown",
-  "furibisha-anaguma", "furibisha-elmo", "right-elmo", "kinmusou", "half-kinmusou",
+  "furibisha-anaguma", "furibisha-elmo", "right-elmo", "kinmusou", "half-kinmusou", "right-yagura",
 ]);
 
 export function openingDefinitionRookStyle(id, kind) {

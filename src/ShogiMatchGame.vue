@@ -546,6 +546,7 @@ import {
   openingUrgentResponse,
   shouldAbandonOpeningGuide,
   shouldShowOpeningFollowup,
+  OPENING_CASTLE_GROUPS,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
@@ -923,39 +924,27 @@ const cpuDetailedStrategyGroups = computed(() => {
     && (!availability?.colors || availability.colors.includes(cpuColor))
   )));
 });
-const CPU_CASTLE_GROUPS = [
-  { id: "static", label: "居飛車用" },
-  { id: "ranging", label: "振り飛車用" },
-  { id: "both", label: "両用" },
-];
+function groupOpeningCastles<T extends (typeof OPENING_CASTLES)[number]>(options: T[]) {
+  return OPENING_CASTLE_GROUPS.map((group) => ({
+    ...group,
+    options: options.filter(({ menuGroup }) => menuGroup === group.id),
+  })).filter(({ options: groupOptions }) => groupOptions.length);
+}
 const cpuDetailedCastleGroups = computed(() => {
   const strategyStyle = openingDefinitionRookStyle(cpuDetailedStrategy.value, "strategy");
-  return CPU_CASTLE_GROUPS.map((group) => ({
-    ...group,
-    options: OPENING_CASTLES.filter(({ id }) => {
-      const castleStyle = openingDefinitionRookStyle(id, "castle") ?? "both";
-      return group.id === castleStyle
-        && (!strategyStyle || castleStyle === strategyStyle || castleStyle === "both");
-    }),
-  })).filter(({ options }) => options.length);
+  return groupOpeningCastles(OPENING_CASTLES.filter(({ id }) => {
+    const castleStyle = openingDefinitionRookStyle(id, "castle") ?? "both";
+    return !strategyStyle || castleStyle === strategyStyle || castleStyle === "both";
+  }));
 });
 const groupedOpeningCastles = computed(() => {
   const availableIds = new Set(availableOpeningCastles.value.map(({ id }) => id));
-  return [
-    { id: "static", label: "居飛車用" },
-    { id: "ranging", label: "振り飛車用" },
-    { id: "both", label: "両用" },
-  ].map((group) => ({
-    ...group,
-    options: OPENING_CASTLES.filter(({ id }) => (
-      (openingDefinitionRookStyle(id, "castle") ?? "both") === group.id
-    )).map((castle) => ({
+  return groupOpeningCastles(OPENING_CASTLES.map((castle) => ({
       ...castle,
       disabled: !openingGuideAbandoned.value
         && castle.id !== selectedCastle.value
         && !availableIds.has(castle.id),
-    })),
-  })).filter(({ options }) => options.length);
+    })));
 });
 const selectedStrategyDefinition = computed(() => (
   OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value) ?? null
