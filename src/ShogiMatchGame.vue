@@ -559,7 +559,9 @@ import {
   isOpeningGuideExpired,
   isOpeningPlanComplete,
   nextOpeningPlanMove,
+  openingCanonicalFollowupCandidates as getOpeningCanonicalFollowupCandidates,
   openingDefinitionRookStyle,
+  openingDetourArrowCandidates,
   openingFollowupCount,
   openingGuideScoreLossLimit,
   openingPlanBranchMessage,
@@ -655,10 +657,17 @@ type OpeningGuideDecision = {
   reason?: string;
 };
 const openingGuideDecision = ref<OpeningGuideDecision | null>(null);
+const openingGuideDetourCandidates = ref<{
+  usi: string;
+  score?: number;
+  guideKind: "unsafe-plan" | "ai";
+}[]>([]);
 const openingGuideSafetyLoading = ref(false);
 const openingGuideStartedAtPly = ref(0);
 const openingGuideDetourCount = ref(0);
 const openingGuideAbandoned = ref(false);
+// 一度完成した計画は、攻撃や駒組みの進展で完成形が崩れても再開しない。
+const openingPlanCompletionLocked = ref(false);
 const openingGuideBranchNotice = ref("");
 const openingGuideBranchNoticePly = ref(-1);
 const hintText = ref("");
@@ -999,6 +1008,7 @@ const openingPlanCandidates = computed(() => {
     || !active.value
     || !canMove.value
     || openingGuideAbandoned.value
+    || openingPlanCompletionLocked.value
     || openingPlanExpired.value
     || rangingRookChoiceRequired.value
     || (!selectedStrategy.value && !selectedCastle.value)
@@ -1021,7 +1031,7 @@ const openingPlanCandidates = computed(() => {
   });
 });
 const openingPlanCandidate = computed(() => openingPlanCandidates.value[0] ?? null);
-const openingPlanComplete = computed(() => {
+const openingPlanCurrentlyComplete = computed(() => {
   const sfen = currentSfen.value;
   if (reviewMode.value || !active.value || (!selectedStrategy.value && !selectedCastle.value)) {
     return false;
@@ -1041,6 +1051,12 @@ const openingPlanComplete = computed(() => {
     currentSfen: sfen,
   });
 });
+watch(openingPlanCurrentlyComplete, (complete) => {
+  if (complete) openingPlanCompletionLocked.value = true;
+}, { flush: "sync" });
+const openingPlanComplete = computed(() => (
+  openingPlanCompletionLocked.value || openingPlanCurrentlyComplete.value
+));
 const openingPlanSettled = computed(() => openingPlanComplete.value || openingPlanExpired.value);
 const openingFollowupEligible = computed(() => shouldShowOpeningFollowup({
   strategyId: selectedStrategy.value,
@@ -1048,16 +1064,38 @@ const openingFollowupEligible = computed(() => shouldShowOpeningFollowup({
   planComplete: openingPlanComplete.value,
   planExpired: openingPlanExpired.value,
 }));
-const boardCandidates = computed(() => (
-  hintCandidates.value.length
-    ? hintCandidates.value
-    : openingGuideDecision.value
-      ? [{
-          usi: openingGuideDecision.value.usi,
-          guideKind: openingGuideDecision.value.source,
-        }]
-      : openingFollowupCandidates.value
-));
+const openingCanonicalFollowupCandidates = computed(() => {
+  const sfen = currentSfen.value;
+  if (!canMove.value || !openingFollowupEligible.value) return [];
+  return getOpeningCanonicalFollowupCandidates({
+    strategyId: selectedStrategy.value,
+    color: humanColor.value === Color.BLACK ? "black" : "white",
+    currentSfen: sfen,
+    legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi),
+  });
+});
+const openingCombinedFollowupCandidates = computed(() => {
+  const seen = new Set<string>();
+  return [
+    ...openingCanonicalFollowupCandidates.value,
+    ...openingFollowupCandidates.value,
+  ].filter(({ usi }) => {
+    if (seen.has(usi)) return false;
+    seen.add(usi);
+    return true;
+  });
+});
+const boardCandidates = computed(() => {
+  if (hintCandidates.value.length) return hintCandidates.value;
+  if (openingGuideDetourCandidates.value.length) return openingGuideDetourCandidates.value;
+  if (openingGuideDecision.value) {
+    return [{
+      usi: openingGuideDecision.value.usi,
+      guideKind: openingGuideDecision.value.source,
+    }];
+  }
+  return openingCombinedFollowupCandidates.value;
+});
 const openingGuideStatus = computed(() => {
   if (!selectedStrategy.value && !selectedCastle.value) return "";
   if (rangingRookChoiceRequired.value) {
@@ -1075,7 +1113,14 @@ const openingGuideStatus = computed(() => {
     return `先に受けよう：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
   }
   if (openingGuideDecision.value?.source === "ai") {
-    return `安全な寄り道：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
+    return openingGuideDetourCandidates.value.length >= 4
+      ? "黄色は危険な定跡手、赤色は安全を優先したAI候補3手だよ。"
+      : `安全な寄り道：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
+  }
+  if (openingCanonicalFollowupCandidates.value.length) {
+    return openingCanonicalFollowupCandidates.value[0]?.kind === "silver-advance"
+      ? "原始棒銀が完成したね！AI候補に加え、1五銀・3五銀の定跡手から歩交換まで案内するよ。"
+      : "AI候補に加え、定跡手で飛車先の歩交換まで案内するよ。";
   }
   if (openingFollowupCandidates.value.length) {
     return openingFollowupRemaining.value > 0
@@ -1103,6 +1148,7 @@ function selectedOpeningLabel() {
 
 function announceOpeningGuide() {
   strategyExplanationOpen.value = false;
+  openingPlanCompletionLocked.value = false;
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   openingGuideStartedAtPly.value = moveHistory.length;
@@ -1110,6 +1156,8 @@ function announceOpeningGuide() {
   openingGuideAbandoned.value = false;
   openingGuideBranchNotice.value = "";
   openingGuideBranchNoticePly.value = -1;
+  // 既に完成形の局面で戦法・囲いを選んだ場合も、その完成状態を保持する。
+  if (openingPlanCurrentlyComplete.value) openingPlanCompletionLocked.value = true;
   const label = selectedOpeningLabel();
   if (label && coachLevel.value !== "off") {
     guideText.value = `${label}を目指そう。盤の矢印を参考にしてね！`;
@@ -1373,12 +1421,14 @@ function resetOpeningGuideSafety() {
   openingGuideSafetyGeneration += 1;
   openingGuideSafetyLoading.value = false;
   openingGuideDecision.value = null;
+  openingGuideDetourCandidates.value = [];
 }
 
 function scheduleOpeningGuideSafety() {
   const generation = ++openingGuideSafetyGeneration;
   openingGuideSafetyLoading.value = false;
   openingGuideDecision.value = null;
+  openingGuideDetourCandidates.value = [];
   if (
     !active.value || reviewMode.value || normalizedMode.value !== "cpu"
     || record.value.position.color !== humanColor.value
@@ -1386,6 +1436,9 @@ function scheduleOpeningGuideSafety() {
     || rangingRookChoiceRequired.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return;
+
+  // 完成後は候補手表示へ完全に移行し、序盤計画・寄り道判定へ戻さない。
+  if (openingPlanComplete.value) return;
 
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
@@ -1400,6 +1453,7 @@ function scheduleOpeningGuideSafety() {
   if (interruption) {
     const fallback = OPENING_STRATEGIES.find(({ id }) => id === interruption.fallbackStrategyId);
     selectedStrategy.value = fallback?.guideSelectable === false ? "" : interruption.fallbackStrategyId;
+    openingPlanCompletionLocked.value = false;
     openingGuideStartedAtPly.value = moveHistory.length;
     openingGuideDetourCount.value = 0;
     guideText.value = coachLevel.value === "off" ? "" : interruption.message;
@@ -1513,14 +1567,34 @@ function scheduleOpeningGuideSafety() {
         source: choice.source,
         phase: plannedOptions.find(({ usi }) => usi === choice.usi)?.phase ?? planned?.phase,
       };
+      if (choice.source === "ai" && planned) {
+        openingGuideDetourCandidates.value = openingDetourArrowCandidates(
+          planned.usi,
+          candidates,
+          3,
+        ).map(({ usi, source, score }) => ({
+          usi,
+          guideKind: source === "unsafe-plan" ? "unsafe-plan" : "ai",
+          score: hintScoreForArrow(score),
+        }));
+      }
       if (
         choice.source === "ai"
         && coachLevel.value !== "off"
         && openingGuideBranchNoticePly.value !== historyLength
       ) {
-        guideText.value = planBlocked
-          ? `予定の形へすぐ進めないから、まずは${formatHintMove(choice.usi, currentSfen.value)}で局面を整えよう。`
-          : `今は形作りより、${formatHintMove(choice.usi, currentSfen.value)}を先に指そう！形作りはその後で続けられるよ。`;
+        if (planBlocked || !planned) {
+          guideText.value = `予定の形へすぐ進めないから、まずは${formatHintMove(choice.usi, currentSfen.value)}で局面を整えよう。`;
+        } else {
+          const plannedText = formatHintMove(planned.usi, currentSfen.value);
+          const scoreLoss = typeof choice.scoreLoss === "number" && Number.isFinite(choice.scoreLoss)
+            ? choice.scoreLoss
+            : undefined;
+          const riskText = scoreLoss !== undefined
+            ? `AI最善手より評価が約${(scoreLoss / 100).toFixed(1)}点下がり`
+            : "AIの上位候補にも入らず";
+          guideText.value = `黄色の${plannedText}が定跡手だよ。でも今はその手だと${riskText}、形作りを続ける間に駒損や攻め込みを許す危険があるよ。赤いAI候補3手から安全な寄り道を選ぼう！`;
+        }
       }
     })
     .catch(() => {
@@ -1808,9 +1882,18 @@ function finish(matchResult: MatchResult) {
 }
 
 function applyMove(usi: string, actor: "player" | "cpu") {
+  const detourCandidate = actor === "player"
+    ? openingGuideDetourCandidates.value.find(({ usi: candidateUsi }) => candidateUsi === usi)
+    : undefined;
   const followedOpeningDecision = actor === "player" && openingGuideDecision.value?.usi === usi
     ? openingGuideDecision.value
-    : null;
+    : detourCandidate
+      ? {
+          usi,
+          source: detourCandidate.guideKind === "ai" ? "ai" as const : "plan" as const,
+          phase: openingGuideDecision.value?.phase,
+        }
+      : null;
   const reusedHint = actor === "player" && latestHintAnalysis?.historyLength === moveHistory.length
     ? hintMoveAssessment(latestHintAnalysis.candidates, usi)
     : null;
@@ -1908,8 +1991,10 @@ function undoTurn() {
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   if (cpuTimer) clearTimeout(cpuTimer);
+  openingPlanCompletionLocked.value = false;
   const removeCount = !reviewMode.value && normalizedMode.value === "cpu" && moveHistory.length >= 2 ? 2 : 1;
   rebuildRecord(moveHistory.slice(0, -removeCount));
+  if (openingPlanCurrentlyComplete.value) openingPlanCompletionLocked.value = true;
   if (!reviewMode.value) undosRemaining.value -= 1;
   playerTurnScore = undefined;
   playerTurnScoreHistoryLength = -1;
@@ -2447,6 +2532,7 @@ function restart() {
   openingGuideStartedAtPly.value = 0;
   openingGuideDetourCount.value = 0;
   openingGuideAbandoned.value = false;
+  openingPlanCompletionLocked.value = false;
   openingGuideBranchNotice.value = "";
   openingGuideBranchNoticePly.value = -1;
   resetOpeningFollowup();

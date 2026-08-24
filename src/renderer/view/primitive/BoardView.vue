@@ -85,10 +85,10 @@
           :x2="arrow.shaftEnd.x"
           :y2="arrow.shaftEnd.y"
           :stroke-width="arrow.shaftWidth"
-          stroke="#fe0000"
+          :stroke="arrow.color"
           class="arrow-shaft"
         />
-        <polygon :points="arrow.headPoints" fill="#fe0000" class="arrow-head" />
+        <polygon :points="arrow.headPoints" :fill="arrow.color" class="arrow-head" />
       </svg>
       <div
         v-for="arrow in arrows"
@@ -275,7 +275,7 @@ type CandidateMove = {
   move: Move;
   score?: number; // 手番側視点の数値スコア（showArrowScore が有効な場合のみ設定）
   promotion?: "成" | "不成";
-  guideKind?: "plan" | "urgent" | "ai";
+  guideKind?: "plan" | "unsafe-plan" | "urgent" | "ai";
 };
 
 type State = {
@@ -1078,7 +1078,10 @@ const arrows = computed(() => {
     // z-index 決定のためスコアに基づいてランクを計算（同率は同順位）
     let evaluationLabel: string;
     let scoreRank: number;
-    if (candidate.score !== undefined && bestScore !== undefined) {
+    if (candidate.guideKind === "unsafe-plan") {
+      scoreRank = index + 1;
+      evaluationLabel = "定跡注意";
+    } else if (candidate.score !== undefined && bestScore !== undefined) {
       const diff = candidate.score - bestScore;
       scoreRank =
         1 +
@@ -1095,6 +1098,7 @@ const arrows = computed(() => {
     const labelOffsetY = dy > 0 ? -horizontalFactor * 12 : horizontalFactor * 12;
     return {
       id: move.usi,
+      color: candidate.guideKind === "unsafe-plan" ? "#ff9d00" : "#fe0000",
       labelText,
       start: shiftedStart,
       shaftEnd,
@@ -1120,6 +1124,7 @@ const arrows = computed(() => {
       labelStyle: {
         left: middle.x + "px",
         top: middle.y + labelOffsetY + "px",
+        color: candidate.guideKind === "unsafe-plan" ? "#d96b00" : "#fe0000",
         zIndex: 100 + 2 * n - scoreRank,
       },
     };
@@ -1281,11 +1286,7 @@ const whitePlayerTimeSeverity = computed(() => {
   overflow: visible;
 }
 .arrow-shaft {
-  stroke: #fe0000;
   stroke-linecap: round;
-}
-.arrow-head {
-  fill: #fe0000;
 }
 .arrow-label {
   position: absolute;
