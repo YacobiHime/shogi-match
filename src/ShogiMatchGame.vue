@@ -534,6 +534,7 @@ import {
   chooseSafeOpeningMove,
   filterOpeningCompatibleCandidates,
   inferOpeningRookStyle,
+  isOpeningGuideExpired,
   isOpeningPlanComplete,
   nextOpeningPlanMove,
   openingDefinitionRookStyle,
@@ -543,6 +544,7 @@ import {
   openingPlanInterruption,
   openingPlanCandidates as getOpeningPlanCandidates,
   openingUrgentResponse,
+  shouldAbandonOpeningGuide,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
@@ -629,6 +631,8 @@ type OpeningGuideDecision = {
 const openingGuideDecision = ref<OpeningGuideDecision | null>(null);
 const openingGuideSafetyLoading = ref(false);
 const openingGuideStartedAtPly = ref(0);
+const openingGuideDetourCount = ref(0);
+const openingGuideAbandoned = ref(false);
 const openingGuideBranchNotice = ref("");
 const openingGuideBranchNoticePly = ref(-1);
 const hintText = ref("");
@@ -876,7 +880,7 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
 const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));
 const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
 const OPENING_STRATEGY_GROUPS = [
-  { id: "ibisha", label: "居飛車" },
+  { id: "ibisha", label: "居飛車／戦型横断の作戦" },
   { id: "aigakari", label: "相居飛車／相掛かり" },
   { id: "yokofudori", label: "相居飛車／横歩取り" },
   { id: "yagura", label: "相居飛車／矢倉" },
@@ -896,11 +900,18 @@ function groupOpeningStrategies<T extends (typeof OPENING_STRATEGIES)[number]>(o
 }
 const groupedOpeningStrategies = computed(() => {
   const availableIds = new Set(availableOpeningStrategies.value.map(({ id }) => id));
-  return groupOpeningStrategies(OPENING_STRATEGIES.map((strategy) => ({
-    ...strategy,
-    // 進行中の補助は、相手の応手を待つ一時的な局面でも解除しない。
-    disabled: strategy.id !== selectedStrategy.value && !availableIds.has(strategy.id),
-  })));
+  return groupOpeningStrategies(
+    OPENING_STRATEGIES
+      .filter(({ guideSelectable }) => guideSelectable !== false)
+      .map((strategy) => ({
+        ...strategy,
+        // 進行中の補助は、相手の応手を待つ一時的な局面でも解除しない。
+        // 寄り道で中断した場合は、別案へ切り替えられるよう候補を再び開放する。
+        disabled: !openingGuideAbandoned.value
+          && strategy.id !== selectedStrategy.value
+          && !availableIds.has(strategy.id),
+      })),
+  );
 });
 const cpuDetailedStrategyGroups = computed(() => {
   const cpuColor = selectedPlayerColor.value === "black" ? "white" : "black";
@@ -938,7 +949,9 @@ const groupedOpeningCastles = computed(() => {
       (openingDefinitionRookStyle(id, "castle") ?? "both") === group.id
     )).map((castle) => ({
       ...castle,
-      disabled: castle.id !== selectedCastle.value && !availableIds.has(castle.id),
+      disabled: !openingGuideAbandoned.value
+        && castle.id !== selectedCastle.value
+        && !availableIds.has(castle.id),
     })),
   })).filter(({ options }) => options.length);
 });
@@ -951,7 +964,11 @@ const openingPlanExpired = computed(() => {
   // currentSfenを購読し、非refのmoveHistoryが進むたび再評価する。
   currentSfen.value;
   return Boolean(selectedStrategy.value || selectedCastle.value)
-    && moveHistory.length - openingGuideStartedAtPly.value >= OPENING_GUIDE_MAX_PLIES;
+    && isOpeningGuideExpired(
+      moveHistory.length,
+      openingGuideStartedAtPly.value,
+      OPENING_GUIDE_MAX_PLIES,
+    );
 });
 const openingPlanCandidates = computed(() => {
   // currentSfen is intentionally read here so the non-ref move history is reconsidered after every move.
@@ -960,6 +977,7 @@ const openingPlanCandidates = computed(() => {
     reviewMode.value
     || !active.value
     || !canMove.value
+    || openingGuideAbandoned.value
     || openingPlanExpired.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return [];
@@ -1016,6 +1034,9 @@ const openingGuideStatus = computed(() => {
   if (!selectedStrategy.value && !selectedCastle.value) return "";
   if (reviewMode.value) return "道しるべは対局中に表示するよ。";
   if (!canMove.value) return "あなたの手番になったら、次の一手を矢印で示すよ。";
+  if (openingGuideAbandoned.value) {
+    return "この形へ戻るのは難しそう。別の戦法や囲いを選び直そう！";
+  }
   if (openingGuideSafetyLoading.value) return "予定手が安全か確認しているよ…";
   if (openingGuideDecision.value?.source === "urgent") {
     return `先に受けよう：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
@@ -1048,6 +1069,8 @@ function announceOpeningGuide() {
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   openingGuideStartedAtPly.value = moveHistory.length;
+  openingGuideDetourCount.value = 0;
+  openingGuideAbandoned.value = false;
   openingGuideBranchNotice.value = "";
   openingGuideBranchNoticePly.value = -1;
   const label = selectedOpeningLabel();
@@ -1307,6 +1330,7 @@ function scheduleOpeningGuideSafety() {
   if (
     !active.value || reviewMode.value || normalizedMode.value !== "cpu"
     || record.value.position.color !== humanColor.value
+    || openingGuideAbandoned.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return;
 
@@ -1321,8 +1345,10 @@ function scheduleOpeningGuideSafety() {
     moveHistory,
   });
   if (interruption) {
-    selectedStrategy.value = interruption.fallbackStrategyId;
+    const fallback = OPENING_STRATEGIES.find(({ id }) => id === interruption.fallbackStrategyId);
+    selectedStrategy.value = fallback?.guideSelectable === false ? "" : interruption.fallbackStrategyId;
     openingGuideStartedAtPly.value = moveHistory.length;
+    openingGuideDetourCount.value = 0;
     guideText.value = coachLevel.value === "off" ? "" : interruption.message;
     scheduleOpeningGuideSafety();
     return;
@@ -1466,6 +1492,7 @@ function scheduleOpeningFollowupCandidates() {
   if (
     !engineReady.value || !engine || !active.value || reviewMode.value
     || normalizedMode.value !== "cpu" || record.value.position.color !== humanColor.value
+    || openingGuideAbandoned.value
     || !openingPlanSettled.value || openingFollowupLoading
     || openingGuideSafetyLoading.value || openingGuideDecision.value
     || openingFollowupCandidates.value.length > 0
@@ -1728,6 +1755,9 @@ function finish(matchResult: MatchResult) {
 }
 
 function applyMove(usi: string, actor: "player" | "cpu") {
+  const followedOpeningDecision = actor === "player" && openingGuideDecision.value?.usi === usi
+    ? openingGuideDecision.value
+    : null;
   const reusedHint = actor === "player" && latestHintAnalysis?.historyLength === moveHistory.length
     ? hintMoveAssessment(latestHintAnalysis.candidates, usi)
     : null;
@@ -1735,6 +1765,18 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   syncPosition(usi);
   moveHistory.push(usi);
   if (actor === "player") {
+    if (followedOpeningDecision?.source === "ai") {
+      openingGuideDetourCount.value += 1;
+      if (shouldAbandonOpeningGuide(openingGuideDetourCount.value)) {
+        openingGuideAbandoned.value = true;
+        guideText.value = coachLevel.value === "off"
+          ? ""
+          : "何手か寄り道したけれど、この形へ戻るのは難しそうだね。別の戦法や囲いを選び直そう！";
+      }
+    } else if (followedOpeningDecision?.source === "plan") {
+      // 予定手へ復帰できたら、寄り道の連続数を数え直す。
+      openingGuideDetourCount.value = 0;
+    }
     playerMoveHintAssessment = reusedHint ? {
       historyLength: moveHistory.length,
       beforeScore: reusedHint.beforeScore,
@@ -1823,6 +1865,8 @@ function undoTurn() {
   hintCandidates.value = [];
   resetOpeningFollowup();
   resetOpeningGuideSafety();
+  openingGuideDetourCount.value = 0;
+  openingGuideAbandoned.value = false;
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
   scheduleOpeningGuideSafety();
@@ -2329,6 +2373,8 @@ function restart() {
   positionAnalysisCache.clear();
   moveHistory = [];
   openingGuideStartedAtPly.value = 0;
+  openingGuideDetourCount.value = 0;
+  openingGuideAbandoned.value = false;
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));

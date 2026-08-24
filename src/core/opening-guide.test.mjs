@@ -5,6 +5,7 @@ import {
   chooseAdaptiveOpeningMove,
   filterOpeningCompatibleCandidates,
   inferOpeningRookStyle,
+  isOpeningGuideExpired,
   isOpeningPlanComplete,
   mirrorUsiMove,
   nextOpeningPlanMove,
@@ -17,6 +18,7 @@ import {
   openingPlanCandidates,
   openingPlanInterruption,
   openingPlanSteps,
+  shouldAbandonOpeningGuide,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./opening-guide.mjs";
@@ -48,6 +50,24 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
+  it("expires at the overall opening limit even when the guide was selected late", () => {
+    expect(isOpeningGuideExpired(39, 30, 40)).toBe(false);
+    expect(isOpeningGuideExpired(40, 30, 40)).toBe(true);
+    expect(isOpeningGuideExpired(97, 57, 40)).toBe(true);
+  });
+
+  it("also retains the per-selection limit for nonstandard starting positions", () => {
+    expect(isOpeningGuideExpired(39, 0, 40)).toBe(false);
+    expect(isOpeningGuideExpired(50, 10, 40)).toBe(true);
+  });
+
+  it("abandons an opening plan after three followed detours", () => {
+    expect(shouldAbandonOpeningGuide(2)).toBe(false);
+    expect(shouldAbandonOpeningGuide(3)).toBe(true);
+    expect(shouldAbandonOpeningGuide(4)).toBe(true);
+    expect(shouldAbandonOpeningGuide(5)).toBe(true);
+  });
+
   it("has an explanation for every selectable strategy", () => {
     expect(Object.keys(OPENING_EXPLANATIONS).sort())
       .toEqual(OPENING_STRATEGIES.map(({ id }) => id).sort());
@@ -88,8 +108,10 @@ describe("opening guide", () => {
       .toEqual(["三間飛車", "石田流"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "nakabisha").map(({ label }) => label))
       .toEqual(["中飛車", "ゴキゲン中飛車"]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "ibisha").map(({ label }) => label))
+      .toEqual(["居飛車", "棒銀", "右四間飛車", "早繰り銀", "腰掛け銀", "袖飛車"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "kakugawari").map(({ label }) => label))
-      .toEqual(["角換わり", "角換わり4五桂速攻", "棒銀", "早繰り銀", "腰掛け銀"]);
+      .toEqual(["角換わり", "角換わり4五桂速攻"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "aigakari").map(({ label }) => label))
       .toEqual(["相掛かり", "ひねり飛車"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "yokofudori").map(({ label }) => label))
@@ -103,6 +125,7 @@ describe("opening guide", () => {
         "やばボーズ流", "鬼殺し", "筋違い角", "角頭歩戦法", "端角中飛車", "新鬼殺し",
         "7八飛戦法", "2手目3二飛戦法", "鳥刺し", "アヒル囲い", "パックマン", "嬉野流",
       ]);
+    expect(OPENING_STRATEGIES.find(({ id }) => id === "ibisha")?.guideSelectable).toBe(false);
   });
 
   it("offers Yababozu only to White after Black opens the bishop diagonal", () => {
