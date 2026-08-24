@@ -19,6 +19,7 @@ import {
   openingPlanInterruption,
   openingPlanSteps,
   shouldAbandonOpeningGuide,
+  shouldShowOpeningFollowup,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./opening-guide.mjs";
@@ -68,6 +69,27 @@ describe("opening guide", () => {
     expect(shouldAbandonOpeningGuide(5)).toBe(true);
   });
 
+  it("shows completion followups only for a completed strategy without a castle", () => {
+    expect(shouldShowOpeningFollowup({
+      strategyId: "aigakari-bougin",
+      planComplete: true,
+    })).toBe(true);
+    expect(shouldShowOpeningFollowup({
+      castleId: "minogakoi",
+      planComplete: true,
+    })).toBe(false);
+    expect(shouldShowOpeningFollowup({
+      strategyId: "aigakari-bougin",
+      castleId: "nakazumai",
+      planComplete: true,
+    })).toBe(false);
+    expect(shouldShowOpeningFollowup({
+      strategyId: "aigakari-bougin",
+      planComplete: true,
+      planExpired: true,
+    })).toBe(false);
+  });
+
   it("has an explanation for every selectable strategy", () => {
     expect(Object.keys(OPENING_EXPLANATIONS).sort())
       .toEqual(OPENING_STRATEGIES.map(({ id }) => id).sort());
@@ -100,32 +122,52 @@ describe("opening guide", () => {
 
   it("places every strategy in an opening family for the guide menu", () => {
     expect(OPENING_STRATEGIES.every(({ family }) =>
-      ["ibisha", "aigakari", "yokofudori", "yagura", "kakugawari", "gangi", "shiken", "sangen", "nakabisha", "mukai", "special"].includes(family)
+      ["ibisha", "aigakari", "yokofudori", "yagura", "kakugawari", "gangi", "anti-ranging", "shiken", "sangen", "nakabisha", "mukai", "special"].includes(family)
     )).toBe(true);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "shiken").map(({ label }) => label))
-      .toEqual(["四間飛車", "藤井システム"]);
+      .toEqual(["ノーマル四間飛車", "藤井システム"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "sangen").map(({ label }) => label))
-      .toEqual(["三間飛車", "石田流"]);
+      .toEqual(["ノーマル三間飛車", "早石田", "新鬼殺し", "7八飛戦法", "2手目3二飛戦法"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "nakabisha").map(({ label }) => label))
-      .toEqual(["中飛車", "ゴキゲン中飛車"]);
+      .toEqual(["原始中飛車", "ゴキゲン中飛車", "端角中飛車"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "ibisha").map(({ label }) => label))
-      .toEqual(["居飛車", "棒銀", "右四間飛車", "早繰り銀", "腰掛け銀", "袖飛車"]);
+      .toEqual(["居飛車", "原始棒銀", "早繰り銀", "腰掛け銀"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "kakugawari").map(({ label }) => label))
-      .toEqual(["角換わり", "角換わり4五桂速攻"]);
+      .toEqual(["角換わり", "角換わり棒銀", "角換わり早繰り銀", "角換わり腰掛け銀", "角換わり4五桂速攻"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "aigakari").map(({ label }) => label))
-      .toEqual(["相掛かり", "ひねり飛車"]);
+      .toEqual(["相掛かり", "ひねり飛車", "相掛かり棒銀", "相掛かり早繰り銀", "相掛かり腰掛け銀"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "yokofudori").map(({ label }) => label))
       .toEqual(["横歩取り", "横歩取り青野流"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "yagura").map(({ label }) => label))
-      .toEqual(["矢倉戦法", "雀刺し", "矢倉3七銀", "森下システム"]);
+      .toEqual(["矢倉戦法", "矢倉棒銀", "急戦矢倉早繰り銀", "矢倉腰掛け銀", "雀刺し", "矢倉3七銀", "森下システム"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "gangi").map(({ label }) => label))
       .toEqual(["雁木戦法", "雁木右四間"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "special").map(({ label }) => label))
       .toEqual([
-        "やばボーズ流", "鬼殺し", "筋違い角", "角頭歩戦法", "端角中飛車", "新鬼殺し",
-        "7八飛戦法", "2手目3二飛戦法", "鳥刺し", "アヒル囲い", "パックマン", "嬉野流",
+        "やばボーズ流", "鬼殺し", "筋違い角", "角頭歩戦法",
+        "アヒル囲い", "パックマン", "嬉野流",
       ]);
+    expect(OPENING_STRATEGIES.filter(({ family }) => family === "anti-ranging").map(({ label }) => label))
+      .toEqual(["右四間飛車", "袖飛車", "鳥刺し"]);
     expect(OPENING_STRATEGIES.find(({ id }) => id === "ibisha")?.guideSelectable).toBe(false);
+    expect(OPENING_STRATEGIES.filter(({ guideSelectable }) => guideSelectable === false).map(({ id }) => id))
+      .toEqual([
+        "ibisha", "aigakari", "yokofudori", "gangi-strategy", "kakugawari",
+        "yagura-strategy", "hayaguri-gin", "koshikake-gin",
+      ]);
+  });
+
+  it("does not complete a contextual silver strategy without its base opening", () => {
+    expect(isOpeningPlanComplete({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves: ["7g7f", "2g2f", "2f2e", "4g4f", "3i4h", "4h4g", "4g5f"],
+    })).toBe(false);
+    expect(isOpeningPlanComplete({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves: [
+        "7g7f", "2g2f", "2f2e", "8h2b+", "4g4f", "3i4h", "4h4g", "4g5f",
+      ],
+    })).toBe(true);
   });
 
   it("offers Yababozu only to White after Black opens the bishop diagonal", () => {
@@ -429,7 +471,7 @@ describe("opening guide", () => {
   });
 
   it.each(OPENING_STRATEGIES)("uses a legal strategy sequence for $label", ({ id }) => {
-    const exchangeDependent = ["kakugawari", "kakugawari-45-knight", "yababozu"].includes(id);
+    const exchangeDependent = id.startsWith("kakugawari") || id === "yababozu";
     const blackConditional = id === "sujichigai-kaku"
       ? ["8h2b+", "B*4e", "4e3d"]
       : id === "yokofudori"
