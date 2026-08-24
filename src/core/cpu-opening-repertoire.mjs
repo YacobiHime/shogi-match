@@ -59,6 +59,18 @@ export function configuredCpuFirstMove({
   return move && legalMoves.includes(move) ? move : undefined;
 }
 
+/** 明示された作戦・初手は、AI候補による別戦型への差し替えより優先する。 */
+export function shouldForceConfiguredCpuOpening({
+  configuredStrategy = "random",
+  configuredFirstMove = "random",
+  openingMove = "",
+} = {}) {
+  return Boolean(
+    openingMove
+    && (configuredStrategy !== "random" || configuredFirstMove !== "random")
+  );
+}
+
 function weightedChoice(entries, random) {
   const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
   let cursor = Math.max(0, Math.min(0.999999999, random())) * total;

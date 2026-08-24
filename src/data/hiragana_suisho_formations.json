@@ -4,17 +4,6 @@
   "license": "MIT",
   "rules": [
     {
-      "id": "enc_match_right_elmo",
-      "group": "enc_match",
-      "name": "右エルモ",
-      "expression": {
-        "match": {
-          "mode": "all",
-          "sfen": "sfen 9/9/9/9/9/9/9/4GSK2/6G2 b - 1"
-        }
-      }
-    },
-    {
       "id": "enc_match_half_kinmusou",
       "group": "enc_match",
       "name": "片金無双",

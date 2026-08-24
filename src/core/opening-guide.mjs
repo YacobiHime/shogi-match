@@ -431,6 +431,10 @@ export const OPENING_STRATEGIES = [
     // 相掛かり・角換わり・矢倉・対振り飛車などで使われる戦型横断の作戦。
     family: "ibisha",
     detectionNames: ["棒銀"],
+    // 2七銀はまだ途中。盤面検出が「棒銀」を返しても、2六銀までは定跡手として案内する。
+    completionSquares: [["2f", "S"]],
+    // 最初の2六歩と同じUSIになるため、現在の駒種を見て最後の2六銀を区別する。
+    completionAdvance: { from: "2g", kind: "S", move: "2g2f" },
     blackMoves: ["2g2f", "2f2e", "3i3h", "3h2g", "2g2f"],
   },
   {
@@ -593,7 +597,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     label: "片美濃",
     detectionNames: ["片美濃"],
     strictOrder: true,
-    completionSquares: [["2h", "K"], ["3h", "S"], ["4i", "G"], ["6h", "R"]],
+    completionSquares: [["2h", "K"], ["3h", "S"], ["4i", "G"]],
     blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3h2h", "3i3h"],
   },
   {
@@ -614,7 +618,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     detectionNames: ["ダイヤモンド美濃"],
     strictOrder: true,
     completionSquares: [
-      ["2h", "K"], ["3h", "S"], ["4g", "S"], ["4i", "G"], ["5h", "G"], ["6h", "R"],
+      ["2h", "K"], ["3h", "S"], ["4g", "S"], ["4i", "G"], ["5h", "G"],
     ],
     blackMoves: [
       "7g7f", "6g6f", "5g5f", "4g4f", "7i6h", "6h5g", "5g4h", "4h4g",
@@ -626,7 +630,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     label: "連盟美濃",
     detectionNames: ["連盟美濃"],
     strictOrder: true,
-    completionSquares: [["2h", "K"], ["3i", "S"], ["4h", "G"], ["5i", "G"], ["6h", "R"]],
+    completionSquares: [["2h", "K"], ["3i", "S"], ["4h", "G"], ["5i", "G"]],
     blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3h2h", "4i4h", "6i5i"],
   },
   {
@@ -646,16 +650,8 @@ const OPENING_CASTLE_DEFINITIONS = [
     label: "振り飛車エルモ",
     detectionNames: ["振り飛車エルモ"],
     strictOrder: true,
-    completionSquares: [["3h", "K"], ["4h", "S"], ["3i", "G"], ["6h", "R"]],
+    completionSquares: [["3h", "K"], ["4h", "S"], ["3i", "G"]],
     blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i4h", "4i3i"],
-  },
-  {
-    id: "right-elmo",
-    label: "右エルモ",
-    detectionNames: ["右エルモ"],
-    strictOrder: true,
-    completionSquares: [["3h", "K"], ["4h", "S"], ["3i", "G"], ["5h", "G"], ["6h", "R"]],
-    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i4h", "4i3i", "6i5h"],
   },
   {
     id: "funagakoi",
@@ -784,7 +780,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     detectionNames: ["金無双", "離れ金無双", "銀冠金無双"],
     strictOrder: true,
     completionSquares: [
-      ["3h", "K"], ["2h", "S"], ["4h", "G"], ["5h", "G"], ["6h", "R"],
+      ["3h", "K"], ["2h", "S"], ["4h", "G"], ["5h", "G"],
     ],
     // 金無双を単独で選んでも、先に四間へ振って玉の退路と2八銀の場所を空ける。
     blackMoves: [
@@ -796,7 +792,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     label: "片金無双",
     detectionNames: ["片金無双"],
     strictOrder: true,
-    completionSquares: [["3h", "K"], ["2h", "S"], ["4h", "G"], ["6h", "R"]],
+    completionSquares: [["3h", "K"], ["2h", "S"], ["4h", "G"]],
     blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i2h", "4i4h"],
   },
   {
@@ -870,7 +866,6 @@ const CASTLE_CLASSIFICATION = {
   "silver-crown": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
   "furibisha-anaguma": { family: "anaguma", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-anaguma" },
   "furibisha-elmo": { family: "elmo", contexts: ["anti-static-ranging"], menuGroup: "ranging-elmo" },
-  "right-elmo": { family: "elmo", contexts: ["anti-static-ranging"], menuGroup: "ranging-elmo" },
   funagakoi: { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
   "hakoiri-musume": { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
   "early-castle": { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
@@ -922,7 +917,7 @@ const STATIC_ROOK_CASTLES = new Set([
 ]);
 const RANGING_ROOK_CASTLES = new Set([
   "half-mino", "mino", "high-mino", "diamond-mino", "renmei-mino", "silver-crown",
-  "furibisha-anaguma", "furibisha-elmo", "right-elmo", "kinmusou", "half-kinmusou", "right-yagura",
+  "furibisha-anaguma", "furibisha-elmo", "kinmusou", "half-kinmusou", "right-yagura",
 ]);
 
 export function openingDefinitionRookStyle(id, kind) {
@@ -931,6 +926,28 @@ export function openingDefinitionRookStyle(id, kind) {
   if (staticIds.has(id)) return "static";
   if (rangingIds.has(id)) return "ranging";
   return undefined;
+}
+
+const BASIC_RANGING_ROOK_CHOICES = Object.freeze([
+  { id: "shiken", label: "四間飛車（基本）" },
+  { id: "sangen", label: "三間飛車" },
+  { id: "nakabisha", label: "中飛車" },
+  { id: "mukai", label: "向かい飛車" },
+]);
+
+/** 振り飛車専用の囲いを選んだとき、先に選ばせる基本的な振り先。 */
+export function rangingRookStrategyChoices(castleId, availableStrategyIds) {
+  if (openingDefinitionRookStyle(castleId, "castle") !== "ranging") return [];
+  const compatibleIds = castleId === "right-yagura"
+    ? new Set(["mukai"])
+    : null;
+  const available = Array.isArray(availableStrategyIds)
+    ? new Set(availableStrategyIds)
+    : null;
+  return BASIC_RANGING_ROOK_CHOICES.filter(({ id }) => (
+    (!compatibleIds || compatibleIds.has(id))
+    && (!available || available.has(id))
+  ));
 }
 
 export function mirrorUsiMove(usi) {
@@ -1046,10 +1063,14 @@ export function openingPlanSteps(strategyId, castleId, color = "black", context 
   const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
   const strategyPlan = openingStrategyPlan(strategy, { ...context, color });
+  const strategyRookMove = strategyPlan.moves.find((move) => /^2h[3-9]h$/.test(move));
+  const castleMoves = (castle?.blackMoves ?? []).filter((move) => (
+    !strategyRookMove || !/^2h[3-9]h$/.test(move) || move === strategyRookMove
+  ));
   const seen = new Set();
   return [
     ...strategyPlan.moves.map((usi) => ({ usi: convert(usi), phase: "strategy" })),
-    ...(castle?.blackMoves ?? []).map((usi) => ({ usi: convert(usi), phase: "castle" })),
+    ...castleMoves.map((usi) => ({ usi: convert(usi), phase: "castle" })),
   ].filter(({ usi }) => {
     if (seen.has(usi)) return false;
     seen.add(usi);
@@ -1182,6 +1203,20 @@ export function openingPlanInterruption({
     color === "black" ? "white" : "black",
   ));
   const lastMove = moveHistory.at(-1);
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+
+  if (
+    strategy?.family === "kakugawari"
+    && opponent.has("6g6f")
+    && !own.has("8h2b+")
+    && !opponent.has("8h2b+")
+  ) {
+    const closingMove = color === "black" ? "△4四歩" : "▲6六歩";
+    return {
+      fallbackStrategyId: "right-shiken",
+      message: `${closingMove}で相手が角道を閉じたね。角交換ができないから角換わりはここで中断して、閉じた角道を狙いやすい右四間飛車へ切り替えよう！`,
+    };
+  }
 
   if (
     strategyId === "yababozu"
@@ -1263,6 +1298,16 @@ export function openingPlanCandidates({
   const history = new Set(moveHistory);
   const legal = new Set(legalMoves);
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
+
+  const completionAdvance = strategy?.completionAdvance;
+  if (strategy && !strategyComplete && completionAdvance && currentSfen) {
+    const source = convert(completionAdvance.from);
+    const move = convert(completionAdvance.move);
+    const piece = parseSfenBoard(currentSfen).get(source);
+    if (piece?.color === color && piece.kind === completionAdvance.kind && legal.has(move)) {
+      return [{ usi: move, phase: "strategy" }];
+    }
+  }
 
   const planContext = { playedMoves, opponentMoves, opponentFormations };
   const steps = openingPlanSteps(strategyId, castleId, color, planContext);
@@ -1411,13 +1456,14 @@ function comparableOpeningScore(score) {
  * 序盤補助の期限を判定する。
  *
  * 選択時点からの猶予だけでなく対局全体の手数にも上限を設ける。これにより、
- * 中終盤で戦法や囲いを選び直しても「安全な寄り道」が再び長時間続かない。
+ * 戦法や囲いを選んだ時点から、形作りを長時間続けないための期限を設ける。
+ * 対局全体の手数では打ち切らない。途中局面からでも到達可能な囲いを選び直せるようにする。
  */
 export function isOpeningGuideExpired(currentPly, startedAtPly = 0, maxPlies = 40) {
   const current = Math.max(0, Math.trunc(Number(currentPly) || 0));
   const started = Math.max(0, Math.trunc(Number(startedAtPly) || 0));
   const limit = Math.max(0, Math.trunc(Number(maxPlies) || 0));
-  return current >= limit || current - started >= limit;
+  return current - started >= limit;
 }
 
 /** 予定手へ戻れないまま許容する「安全な寄り道」の手数。 */
