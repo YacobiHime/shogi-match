@@ -69,9 +69,10 @@ describe("opening guide", () => {
 
   it("abandons an opening plan after three followed detours", () => {
     expect(shouldAbandonOpeningGuide(2)).toBe(false);
-    expect(shouldAbandonOpeningGuide(3)).toBe(true);
-    expect(shouldAbandonOpeningGuide(4)).toBe(true);
-    expect(shouldAbandonOpeningGuide(5)).toBe(true);
+    expect(shouldAbandonOpeningGuide(3)).toBe(false);
+    expect(shouldAbandonOpeningGuide(5)).toBe(false);
+    expect(shouldAbandonOpeningGuide(6)).toBe(true);
+    expect(shouldAbandonOpeningGuide(7)).toBe(true);
   });
 
   it("shows completion followups only for a completed strategy without a castle", () => {
@@ -116,14 +117,14 @@ describe("opening guide", () => {
     expect(groups.static?.map(({ label }) => label)).toEqual([
       "舟囲い", "箱入り娘", "早囲い", "金矢倉", "土居矢倉", "菊水矢倉", "エルモ囲い",
       "雁木", "左美濃", "天守閣美濃", "居飛車穴熊", "松尾流穴熊",
-      "右玉", "中住まい", "中原囲い", "カニ囲い", "ボナンザ囲い",
+      "右玉", "大隅囲い", "中住まい", "中原囲い", "カニ囲い", "ボナンザ囲い",
     ]);
     expect(groups.ranging?.map(({ label }) => label)).toEqual([
       "片美濃", "本美濃", "高美濃", "ダイヤモンド美濃", "連盟美濃",
       "振り飛車銀冠", "振り飛車穴熊", "振り飛車エルモ",
       "金無双", "片金無双", "右矢倉",
     ]);
-    expect(groups.both?.map(({ label }) => label)).toEqual(["ミレニアム", "大隅囲い"]);
+    expect(groups.both?.map(({ label }) => label)).toEqual(["ミレニアム"]);
   });
 
   it("classifies every castle by family, contexts, and a visible menu group", () => {
@@ -218,9 +219,49 @@ describe("opening guide", () => {
     expect(isOpeningPlanComplete({
       strategyId: "kakugawari-koshikake-gin",
       playedMoves: [
-        "7g7f", "2g2f", "2f2e", "8h2b+", "4g4f", "3i4h", "4h4g", "4g5f",
+        "7g7f", "2g2f", "2f2e", "8h2b+", "7i8h",
+        "4g4f", "3i4h", "4h4g", "4g5f",
       ],
     })).toBe(true);
+  });
+
+  it("guides the left silver to 8h immediately after a Bishop Exchange", () => {
+    expect(nextOpeningPlanMove({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves: ["7g7f", "2g2f", "2f2e", "8h2b+"],
+      legalMoves: ["7i8h", "4g4f", "3i4h"],
+    })).toEqual({ usi: "7i8h", phase: "strategy" });
+  });
+
+  it("keeps an AI detour from moving the piece or occupying the square needed next", () => {
+    expect(filterOpeningCompatibleCandidates({
+      plannedMoves: [{ usi: "5i6h", phase: "castle" }],
+      candidates: [
+        { rank: 1, move: "5i4h" },
+        { rank: 2, move: "4g4f" },
+        { rank: 3, move: "7g6h" },
+        { rank: 4, move: "5i6h" },
+      ],
+    }).map(({ move }) => move)).toEqual(["4g4f", "5i6h"]);
+  });
+
+  it("uses the researched Doi and Kikusui Fortress shapes", () => {
+    expect(OPENING_CASTLES.find(({ id }) => id === "doi-yagura")?.completionSquares).toEqual([
+      ["7h", "K"], ["7g", "S"], ["6g", "G"], ["5h", "G"],
+    ]);
+    expect(OPENING_CASTLES.find(({ id }) => id === "kikusui-yagura")?.completionSquares).toEqual([
+      ["8i", "K"], ["8h", "S"], ["7h", "G"], ["7g", "N"], ["6g", "G"],
+    ]);
+  });
+
+  it("uses the researched Ureshino, Bird Spear, and Bishop Exchange 4e Knight skeletons", () => {
+    expect(openingPlanSteps("ureshino", "").map(({ usi }) => usi)).toEqual([
+      "7i6h", "5g5f", "6h5g",
+    ]);
+    expect(openingPlanSteps("torizashi", "").map(({ usi }) => usi)).toEqual([
+      "5g5f", "7i6h", "6h5g", "8h7i", "5g4f",
+    ]);
+    expect(openingPlanSteps("kakugawari-45-knight", "").map(({ usi }) => usi)).toContain("7i8h");
   });
 
   it("offers Yababozu only to White after Black opens the bishop diagonal", () => {
@@ -328,7 +369,7 @@ describe("opening guide", () => {
       playedMoves: ["3c3d", "4c4d", "8b4b", "5a6b", "6b7b"],
       moveHistory: Array.from({ length: 44 }, (_, index) => `move-${index}`),
       legalMoves: ["7a6b", "7b8b", "6a6b"],
-    }).map(({ id }) => id)).toEqual(["half-mino", "furibisha-elmo", "osumi"]);
+    }).map(({ id }) => id)).toEqual(["half-mino", "furibisha-elmo"]);
   });
 
   it("shows Pacman only to White after Black opens the bishop diagonal", () => {
@@ -633,7 +674,7 @@ describe("opening guide", () => {
           ? ["2h2d", "2d3d"]
         : id === "hineribisha"
           ? ["2h2d", "2d2f", "2f3f"]
-      : exchangeDependent ? ["8h2b+"] : [];
+      : exchangeDependent ? ["8h2b+", "7i8h"] : [];
     const whiteConditional = id === "sujichigai-kaku"
       ? ["2b8h+", "B*6e", "6e7f"]
       : id === "yokofudori"
@@ -642,7 +683,7 @@ describe("opening guide", () => {
           ? ["8b8f", "8f7f"]
         : id === "hineribisha"
           ? ["8b8f", "8f8d", "8d7d"]
-      : exchangeDependent ? ["2b8h+"] : [];
+      : exchangeDependent ? ["2b8h+", "3a2b"] : [];
     expectPlanLegal(id, "", "black", blackConditional);
     expectPlanLegal(id, "", "white", whiteConditional);
   });
@@ -753,14 +794,17 @@ describe("opening guide", () => {
   });
 
   it.each(OPENING_CASTLES)("uses a legal castle sequence for $label", ({ id }) => {
-    expectPlanLegal("", id, "black");
-    expectPlanLegal("", id, "white");
+    const style = openingDefinitionRookStyle(id, "castle");
+    const strategyId = style === "ranging" ? (id === "right-yagura" ? "mukai" : "shiken") : "";
+    expectPlanLegal(strategyId, id, "black");
+    expectPlanLegal(strategyId, id, "white");
   });
 
   it.each(["hakoiri-musume", "nakahara", "right-yagura"])(
     "reaches the registered completion position for %s",
     (castleId) => {
-      const moves = openingPlanSteps("", castleId).map(({ usi }) => usi);
+      const strategyId = castleId === "right-yagura" ? "mukai" : "";
+      const moves = openingPlanSteps(strategyId, castleId).map(({ usi }) => usi);
       expect(isOpeningPlanComplete({
         castleId,
         playedMoves: moves,
@@ -773,6 +817,21 @@ describe("opening guide", () => {
       })).toBe(false);
     },
   );
+
+  it.each(OPENING_CASTLES.filter(({ completionSquares, completionVariants }) => (
+    completionSquares?.length || completionVariants?.length
+  )))("reaches the exact registered shape for $label", ({ id: castleId }) => {
+    const style = openingDefinitionRookStyle(castleId, "castle");
+    const strategyId = style === "ranging"
+      ? (castleId === "right-yagura" ? "mukai" : "shiken")
+      : "";
+    const moves = openingPlanSteps(strategyId, castleId).map(({ usi }) => usi);
+    expect(isOpeningPlanComplete({
+      castleId,
+      playedMoves: moves,
+      currentSfen: sfenAfterMoves(moves),
+    })).toBe(true);
+  });
 
   it("skips played and currently illegal steps", () => {
     const next = nextOpeningPlanMove({
@@ -867,11 +926,12 @@ describe("opening guide", () => {
     })).toBe(true);
   });
 
-  it("prepares a fourth-file rook before building Kinmusou", () => {
-    const moves = openingPlanSteps("", "kinmusou").map(({ usi }) => usi);
-    expect(moves).toEqual([
-      "7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i2h", "4i4h", "6i5h",
+  it("does not overwrite the selected Ranging Rook while building Kinmusou", () => {
+    const castleMoves = openingPlanSteps("", "kinmusou").map(({ usi }) => usi);
+    expect(castleMoves).toEqual([
+      "5i4h", "4h3h", "3i2h", "4i4h", "6i5h",
     ]);
+    const moves = openingPlanSteps("shiken", "kinmusou").map(({ usi }) => usi);
     expect(isOpeningPlanComplete({
       castleId: "kinmusou",
       detectedFormations: ["金無双"],
@@ -1019,7 +1079,7 @@ describe("opening guide", () => {
   it("prioritizes the Yababozu book line within a wider safety margin", () => {
     expect(openingGuideScoreLossLimit("yababozu", "strategy")).toBe(600);
     expect(openingGuideScoreLossLimit("shiken", "strategy")).toBe(250);
-    expect(openingGuideScoreLossLimit("yababozu", "castle")).toBe(250);
+    expect(openingGuideScoreLossLimit("yababozu", "castle")).toBe(500);
 
     const candidates = [
       { rank: 1, move: "8b8d", score: { type: "cp", value: 180 } },
