@@ -101,8 +101,8 @@ export const OPENING_STRATEGIES = [
     strictOrder: true,
     historyCompletes: true,
     completionSquares: [["2f", "S"]],
-    completionRequiredMoves: ["8h2b+"],
-    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "3i3h", "3h2g", "2g2f"],
+    completionRequiredMoves: ["8h2b+", "7i8h"],
+    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "7i8h", "3i3h", "3h2g", "2g2f"],
   },
   {
     id: "kakugawari-hayaguri-gin",
@@ -112,8 +112,8 @@ export const OPENING_STRATEGIES = [
     strictOrder: true,
     historyCompletes: true,
     completionSquares: [["4f", "S"]],
-    completionRequiredMoves: ["8h2b+"],
-    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "3g3f", "3i4h", "4h3g", "3g4f"],
+    completionRequiredMoves: ["8h2b+", "7i8h"],
+    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "7i8h", "3g3f", "3i4h", "4h3g", "3g4f"],
   },
   {
     id: "kakugawari-koshikake-gin",
@@ -123,8 +123,8 @@ export const OPENING_STRATEGIES = [
     strictOrder: true,
     historyCompletes: true,
     completionSquares: [["5f", "S"]],
-    completionRequiredMoves: ["8h2b+"],
-    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "4g4f", "3i4h", "4h4g", "4g5f"],
+    completionRequiredMoves: ["8h2b+", "7i8h"],
+    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "7i8h", "4g4f", "3i4h", "4h4g", "4g5f"],
   },
   {
     id: "yagura-strategy",
@@ -216,7 +216,11 @@ export const OPENING_STRATEGIES = [
     strictOrder: true,
     historyCompletes: true,
     completionSquares: [["4e", "N"]],
-    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "3g3f", "2i3g", "3g4e"],
+    completionRequiredMoves: ["8h2b+", "7i8h"],
+    blackMoves: [
+      "7g7f", "2g2f", "2f2e", "8h2b+", "7i8h",
+      "4g4f", "3g3f", "2i3g", "3g4e",
+    ],
   },
   {
     id: "aono-ryu",
@@ -444,7 +448,10 @@ export const OPENING_STRATEGIES = [
     label: "右四間飛車",
     family: "anti-ranging",
     detectionNames: ["右四間飛車"],
-    blackMoves: ["7g7f", "6g6f", "5g5f", "4g4f", "3i4h", "4h4g", "2h4h"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["4h", "R"], ["5f", "S"], ["4f", "P"]],
+    blackMoves: ["7g7f", "4g4f", "3i4h", "4h4g", "4g5f", "2h4h"],
   },
   {
     id: "hayaguri-gin",
@@ -467,6 +474,8 @@ export const OPENING_STRATEGIES = [
     label: "袖飛車",
     family: "anti-ranging",
     detectionNames: ["袖飛車"],
+    strictOrder: true,
+    completionSquares: [["3h", "R"], ["3f", "P"]],
     blackMoves: ["3g3f", "2h3h"],
   },
   {
@@ -510,7 +519,14 @@ export const OPENING_STRATEGIES = [
     family: "nakabisha",
     detectionNames: ["端角中飛車"],
     strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["9g", "B"], ["5h", "R"], ["5g", "S"]],
     blackMoves: ["9g9f", "8h9g", "5g5f", "2h5h", "7i6h", "6h5g"],
+    planReservations: [
+      { until: "8h9g", squares: ["9g"], fromSquares: ["8h"] },
+      { until: "2h5h", squares: ["5h"], fromSquares: ["2h"] },
+      { until: "6h5g", squares: ["6h", "5g"], fromSquares: ["7i", "6h"] },
+    ],
   },
   {
     id: "shin-onigoroshi",
@@ -550,7 +566,8 @@ export const OPENING_STRATEGIES = [
     family: "anti-ranging",
     detectionNames: ["鳥刺し"],
     strictOrder: true,
-    blackMoves: ["7g7f", "5g5f", "7i6h", "6h5g", "8h7i", "5g4f"],
+    completionSquares: [["7i", "B"], ["4f", "S"]],
+    blackMoves: ["5g5f", "7i6h", "6h5g", "8h7i", "5g4f"],
   },
   {
     id: "ahiru",
@@ -589,7 +606,9 @@ export const OPENING_STRATEGIES = [
     label: "嬉野流",
     family: "special",
     detectionNames: ["嬉野流"],
-    blackMoves: ["6g6f", "7i6h", "6h6g"],
+    strictOrder: true,
+    completionSquares: [["5g", "S"]],
+    blackMoves: ["7i6h", "5g5f", "6h5g"],
   },
 ];
 
@@ -600,18 +619,20 @@ const OPENING_CASTLE_DEFINITIONS = [
     detectionNames: ["片美濃"],
     strictOrder: true,
     completionSquares: [["2h", "K"], ["3h", "S"], ["4i", "G"]],
-    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3h2h", "3i3h"],
+    blackMoves: ["5i4h", "4h3h", "3h2h", "3i3h"],
   },
   {
     id: "mino",
     label: "本美濃",
     detectionNames: ["美濃囲い", "本美濃", "高美濃囲い", "銀冠"],
+    completionSquares: [["2h", "K"], ["3h", "S"], ["5h", "G"]],
     blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h"],
   },
   {
     id: "high-mino",
     label: "高美濃",
     detectionNames: ["高美濃", "高美濃囲い"],
+    completionSquares: [["2h", "K"], ["3h", "S"], ["4g", "G"], ["4i", "G"]],
     blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h", "4g4f", "5h4g"],
   },
   {
@@ -623,7 +644,7 @@ const OPENING_CASTLE_DEFINITIONS = [
       ["2h", "K"], ["3h", "S"], ["4g", "S"], ["4i", "G"], ["5h", "G"],
     ],
     blackMoves: [
-      "7g7f", "6g6f", "5g5f", "4g4f", "7i6h", "6h5g", "5g4h", "4h4g",
+      "5g5f", "5f5e", "4g4f", "7i7h", "7h6g", "6g5f", "5f4g",
       "2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h",
     ],
   },
@@ -639,13 +660,19 @@ const OPENING_CASTLE_DEFINITIONS = [
     id: "silver-crown",
     label: "振り飛車銀冠",
     detectionNames: ["銀冠", "端玉銀冠"],
+    completionSquares: [["2h", "K"], ["2g", "S"], ["3h", "G"], ["4g", "G"]],
     blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h", "4g4f", "5h4g", "2g2f", "3h2g", "4i3h"],
   },
   {
     id: "furibisha-anaguma",
     label: "振り飛車穴熊",
     detectionNames: ["振り飛車穴熊", "四枚穴熊", "銀冠穴熊"],
-    blackMoves: ["2h6h", "1i1h", "5i4h", "4h3h", "3h2h", "2h1i", "3i2h"],
+    strictOrder: true,
+    completionSquares: [["1i", "K"], ["2h", "S"], ["3i", "G"], ["3h", "G"]],
+    blackMoves: [
+      "5i4h", "4h3h", "3h2h", "1i1h", "2h1i", "3i2h",
+      "4i3i", "6i5h", "5h4h", "4h3h",
+    ],
   },
   {
     id: "furibisha-elmo",
@@ -653,7 +680,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     detectionNames: ["振り飛車エルモ"],
     strictOrder: true,
     completionSquares: [["3h", "K"], ["4h", "S"], ["3i", "G"]],
-    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i4h", "4i3i"],
+    blackMoves: ["5i4h", "4h3h", "3i4h", "4i3i"],
   },
   {
     id: "funagakoi",
@@ -674,14 +701,24 @@ const OPENING_CASTLE_DEFINITIONS = [
     label: "早囲い",
     detectionNames: ["早囲い"],
     strictOrder: true,
-    completionSquares: [["7h", "K"], ["7g", "S"], ["8h", "B"]],
-    blackMoves: ["7g7f", "7i6h", "6h7g", "5i6h", "6h7h"],
+    completionSquares: [
+      ["8h", "K"], ["7g", "S"], ["7h", "G"], ["6g", "G"], ["7i", "B"],
+    ],
+    blackMoves: [
+      "7g7f", "7i6h", "6h7g", "4i5h", "6g6f", "5h6g",
+      "8h7i", "5i6h", "6h7h", "7h8h", "6i7h",
+    ],
   },
   {
     id: "yagura",
     label: "金矢倉",
     detectionNames: ["矢倉", "金矢倉", "銀矢倉", "総矢倉"],
-    blackMoves: ["7g7f", "8h6f", "7i6h", "6h7g", "5i6h", "6h7i", "7i8h", "6i7h", "4i5h", "5h6h"],
+    strictOrder: true,
+    completionSquares: [["8h", "K"], ["7g", "S"], ["7h", "G"], ["6g", "G"]],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h7g", "8h7i",
+      "4i5h", "5h6g", "5i6h", "6h7h", "7h8h", "6i7h",
+    ],
   },
   {
     id: "doi-yagura",
@@ -709,18 +746,29 @@ const OPENING_CASTLE_DEFINITIONS = [
     id: "elmo",
     label: "エルモ囲い",
     detectionNames: ["エルモ囲い"],
-    blackMoves: ["7i6h", "6i7i", "5i6i", "6i7h"],
+    strictOrder: true,
+    completionSquares: [["7h", "K"], ["6h", "S"], ["7i", "G"], ["5i", "G"]],
+    blackMoves: ["5i6h", "6h7h", "7i6h", "6i7i", "4i5i"],
   },
   {
     id: "gangi",
     label: "雁木",
     detectionNames: ["雁木"],
-    blackMoves: ["7g7f", "8h7g", "6g6f", "7i6h", "6h6g", "5i6h", "6h7i", "7i8h", "6i7h"],
+    strictOrder: true,
+    completionSquares: [
+      ["6i", "K"], ["7h", "G"], ["5h", "G"], ["6g", "S"], ["5g", "S"],
+    ],
+    blackMoves: [
+      "7g7f", "6g6f", "7i6h", "6h6g", "6i7h", "4i5h",
+      "5i6i", "3i4h", "5g5f", "4h5g",
+    ],
   },
   {
     id: "left-mino",
     label: "左美濃",
     detectionNames: ["左美濃", "居角左美濃", "天守閣美濃"],
+    strictOrder: true,
+    completionSquares: [["8h", "K"], ["7h", "S"], ["6h", "G"], ["6f", "B"]],
     blackMoves: ["7g7f", "8h6f", "7i7h", "5i6h", "6h7i", "7i8h", "6i6h"],
   },
   {
@@ -739,7 +787,10 @@ const OPENING_CASTLE_DEFINITIONS = [
     completionSquares: [
       ["9i", "K"], ["9h", "L"], ["8h", "S"], ["7h", "G"], ["7g", "N"],
     ],
-    blackMoves: ["9i9h", "7g7f", "8h6f", "8i7g", "7i8h", "6i7h", "5i6i", "6i7i", "7i8i", "8i9i"],
+    blackMoves: [
+      "7g7f", "8h6f", "8i7g", "7i8h", "6i7h", "9i9h",
+      "5i6i", "6i7i", "7i8i", "8i9i",
+    ],
   },
   {
     id: "matsuo-anaguma",
@@ -747,19 +798,28 @@ const OPENING_CASTLE_DEFINITIONS = [
     detectionNames: ["松尾流穴熊"],
     strictOrder: true,
     completionSquares: [
-      ["9i", "K"], ["9h", "L"], ["8i", "N"], ["8h", "S"], ["7i", "S"], ["7h", "G"],
+      ["9i", "K"], ["9h", "L"], ["8i", "N"], ["8h", "S"],
+      ["7i", "S"], ["7h", "G"], ["6g", "G"],
     ],
     blackMoves: [
-      "9i9h", "7g7f", "8h6f", "6f5e", "6g6f", "7i6h", "6h7g",
-      "5i6h", "6h7i", "7i8h", "8h9i", "7g8h",
-      "5g5f", "3i4h", "4h5g", "5g6h", "6h7i", "6i7h",
+      "7g7f", "8h6f", "6f5e", "6g6f", "5g5f",
+      "5i6h", "6h7h", "7h8h", "9i9h", "8h9i",
+      "7i8h", "6i7h", "4i5h", "5h6g",
+      "3i4h", "4h5g", "5g6h", "6h7i",
     ],
   },
   {
     id: "millennium",
     label: "ミレニアム",
     detectionNames: ["ミレニアム", "振り飛車ミレニアム"],
-    blackMoves: ["7g7f", "8h6f", "8i7g", "7i8h", "6i7i", "5i6h", "6h7h", "7h8i"],
+    strictOrder: true,
+    completionSquares: [
+      ["8i", "K"], ["8h", "S"], ["7h", "G"], ["7i", "G"], ["7g", "N"],
+    ],
+    blackMoves: [
+      "7g7f", "3i4h", "5g5f", "4i5h", "5i6h", "6h7h",
+      "8h6f", "8i7g", "7i8h", "6i7i", "7h8i", "5h6h", "6h7h",
+    ],
   },
   {
     id: "right-king",
@@ -784,9 +844,8 @@ const OPENING_CASTLE_DEFINITIONS = [
     completionSquares: [
       ["3h", "K"], ["2h", "S"], ["4h", "G"], ["5h", "G"],
     ],
-    // 金無双を単独で選んでも、先に四間へ振って玉の退路と2八銀の場所を空ける。
     blackMoves: [
-      "7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i2h", "4i4h", "6i5h",
+      "5i4h", "4h3h", "3i2h", "4i4h", "6i5h",
     ],
   },
   {
@@ -795,7 +854,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     detectionNames: ["片金無双"],
     strictOrder: true,
     completionSquares: [["3h", "K"], ["2h", "S"], ["4h", "G"]],
-    blackMoves: ["7g7f", "6g6f", "2h6h", "5i4h", "4h3h", "3i2h", "4i4h"],
+    blackMoves: ["5i4h", "4h3h", "3i2h", "4i4h"],
   },
   {
     id: "right-yagura",
@@ -804,7 +863,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     strictOrder: true,
     completionSquares: [["2h", "K"], ["3g", "S"], ["3h", "G"], ["8h", "R"]],
     blackMoves: [
-      "7g7f", "8h7g", "2h8h", "3g3f", "3i4h", "4h3g",
+      "3g3f", "3i4h", "4h3g",
       "5i4h", "4h3h", "3h2h", "4i3h",
     ],
   },
@@ -820,7 +879,9 @@ const OPENING_CASTLE_DEFINITIONS = [
     id: "nakazumai",
     label: "中住まい",
     detectionNames: ["中住まい", "中原囲い"],
-    blackMoves: ["5i5h", "4i3h", "6i7h"],
+    strictOrder: true,
+    completionSquares: [["5h", "K"], ["3h", "G"], ["7h", "G"], ["4h", "S"]],
+    blackMoves: ["5i5h", "6i7h", "4i3h", "3i4h"],
   },
   {
     id: "nakahara",
@@ -834,6 +895,8 @@ const OPENING_CASTLE_DEFINITIONS = [
     id: "kanigakoi",
     label: "カニ囲い",
     detectionNames: ["カニ囲い"],
+    strictOrder: true,
+    completionSquares: [["6i", "K"], ["7h", "G"], ["6h", "S"], ["5h", "G"]],
     blackMoves: ["6i7h", "7i6h", "5i6i", "4i5h"],
   },
   {
@@ -870,7 +933,7 @@ const CASTLE_CLASSIFICATION = {
   "furibisha-elmo": { family: "elmo", contexts: ["anti-static-ranging"], menuGroup: "ranging-elmo" },
   funagakoi: { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
   "hakoiri-musume": { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
-  "early-castle": { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
+  "early-castle": { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
   elmo: { family: "elmo", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
   yagura: { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
   "doi-yagura": { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
@@ -885,7 +948,7 @@ const CASTLE_CLASSIFICATION = {
   kinmusou: { family: "kinmusou", contexts: ["double-ranging"], menuGroup: "double-ranging" },
   "half-kinmusou": { family: "kinmusou", contexts: ["double-ranging"], menuGroup: "double-ranging" },
   "right-yagura": { family: "yagura", contexts: ["double-ranging"], menuGroup: "double-ranging" },
-  osumi: { family: "quick", contexts: ["anti-ranging-static", "anti-static-ranging", "double-ranging"], menuGroup: "shared-other" },
+  osumi: { family: "funagakoi", contexts: ["anti-ranging-static"], menuGroup: "static-quick" },
   nakazumai: { family: "nakazumai", contexts: ["aibisha"], menuGroup: "aibisha-nakazumai" },
   nakahara: { family: "nakazumai", contexts: ["aibisha"], menuGroup: "aibisha-nakazumai" },
   kanigakoi: { family: "balance", contexts: ["aibisha"], menuGroup: "aibisha-balance" },
@@ -915,7 +978,7 @@ const RANGING_ROOK_STRATEGIES = new Set([
 const STATIC_ROOK_CASTLES = new Set([
   "funagakoi", "hakoiri-musume", "early-castle", "yagura", "doi-yagura", "kikusui-yagura", "elmo",
   "gangi", "left-mino", "tenshukaku-mino", "ibisha-anaguma", "matsuo-anaguma",
-  "right-king", "nakazumai", "nakahara", "kanigakoi", "bonanza",
+  "right-king", "osumi", "nakazumai", "nakahara", "kanigakoi", "bonanza",
 ]);
 const RANGING_ROOK_CASTLES = new Set([
   "half-mino", "mino", "high-mino", "diamond-mino", "renmei-mino", "silver-crown",
@@ -1069,15 +1132,16 @@ export function openingPlanSteps(strategyId, castleId, color = "black", context 
   const castleMoves = (castle?.blackMoves ?? []).filter((move) => (
     !strategyRookMove || !/^2h[3-9]h$/.test(move) || move === strategyRookMove
   ));
-  const seen = new Set();
+  const strategyMoves = strategyPlan.moves.map(convert);
+  const sharedWithStrategy = new Set(strategyMoves);
   return [
-    ...strategyPlan.moves.map((usi) => ({ usi: convert(usi), phase: "strategy" })),
-    ...castleMoves.map((usi) => ({ usi: convert(usi), phase: "castle" })),
-  ].filter(({ usi }) => {
-    if (seen.has(usi)) return false;
-    seen.add(usi);
-    return true;
-  });
+    // 同じ表記の手を別の駒で後から指す手順があるため、同一フェーズ内は重複を残す。
+    ...strategyMoves.map((usi) => ({ usi, phase: "strategy" })),
+    // 戦法と囲いの双方に含まれる序盤の一手だけは一度指せばよい。
+    ...castleMoves.map(convert)
+      .filter((usi) => !sharedWithStrategy.has(usi))
+      .map((usi) => ({ usi, phase: "castle" })),
+  ];
 }
 
 function parseSfenBoard(sfen) {
@@ -1332,7 +1396,17 @@ export function openingPlanCandidates({
     const definition = phase === "strategy" ? strategy : castle;
     const complete = phase === "strategy" ? strategyComplete : castleComplete;
     if (!definition || complete) continue;
-    const pending = steps.filter((entry) => entry.phase === phase && !played.has(entry.usi));
+    // 同じUSIでも、駒が入れ替わって後からもう一度現れる手がある
+    // （例: ミレニアムの玉7八と金7八）。履歴を集合に潰さず出現回数で消化する。
+    const playedCounts = new Map();
+    for (const move of playedMoves) playedCounts.set(move, (playedCounts.get(move) ?? 0) + 1);
+    const pending = steps.filter((entry) => {
+      if (entry.phase !== phase) return false;
+      const remaining = playedCounts.get(entry.usi) ?? 0;
+      if (remaining <= 0) return true;
+      playedCounts.set(entry.usi, remaining - 1);
+      return false;
+    });
     const combinedPrerequisites = {
       ...(definition.movePrerequisites ?? {}),
       ...(phase === "strategy"
@@ -1525,7 +1599,9 @@ export function isOpeningGuideExpired(currentPly, startedAtPly = 0, maxPlies = 4
 }
 
 /** 予定手へ戻れないまま許容する「安全な寄り道」の手数。 */
-export const OPENING_GUIDE_MAX_DETOURS = 3;
+// やこび姫が安全策として案内した寄り道だけで、補助が早々に終了しないようにする。
+// 形作り全体には isOpeningGuideExpired の期限が別にある。
+export const OPENING_GUIDE_MAX_DETOURS = 6;
 
 export function shouldAbandonOpeningGuide(
   detourCount,
@@ -1604,11 +1680,14 @@ export function filterOpeningCompatibleCandidates({
   candidates = [],
 }) {
   const definition = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
-  if (!definition?.planReservations?.length) return candidates;
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
   const played = new Set(playedMoves);
   const planned = new Set(plannedMoves.map((entry) => typeof entry === "string" ? entry : entry?.usi));
-  const activeReservations = definition.planReservations
+  const plannedOrigins = new Set([...planned].map((move) => move?.slice(0, 2)).filter(Boolean));
+  const plannedDestinations = new Set(
+    [...planned].map((move) => move?.replace("+", "").slice(-2)).filter(Boolean),
+  );
+  const activeReservations = (definition?.planReservations ?? [])
     .map(({ until, squares, fromSquares = [] }) => ({
       until: convert(until),
       squares: new Set(squares.map((square) => color === "white" ? mirrorUsiMove(square) : square)),
@@ -1617,13 +1696,14 @@ export function filterOpeningCompatibleCandidates({
       )),
     }))
     .filter(({ until }) => !played.has(until));
-  if (!activeReservations.length) return candidates;
   return candidates
     .filter(({ move }) => {
       if (planned.has(move)) return true;
       const normalizedMove = typeof move === "string" ? move.replace("+", "") : "";
       const origin = normalizedMove.slice(0, 2);
       const destination = normalizedMove.slice(-2);
+      // 次の囲い手・戦法手に使う駒や着地点を、AIの寄り道で先に壊さない。
+      if (plannedOrigins.has(origin) || plannedDestinations.has(destination)) return false;
       return !activeReservations.some(({ squares, fromSquares }) => (
         squares.has(destination) || fromSquares.has(origin)
       ));
@@ -1637,5 +1717,7 @@ export function openingGuideScoreLossLimit(strategyId, phase = "strategy") {
   // やばボーズ流は角交換・4三銀・4二飛の骨格を作ること自体が練習目的。
   // 駒損級の悪化は避けつつ、通常より広い評価値差まで定跡手を維持する。
   if (strategyId === "yababozu" && phase === "strategy") return 600;
+  // 囲い補助では完成を優先する。ただし駒損級の悪化では従来どおり安全な寄り道へ切り替える。
+  if (phase === "castle") return 500;
   return 250;
 }
