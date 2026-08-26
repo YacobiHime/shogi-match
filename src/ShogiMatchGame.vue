@@ -1,7 +1,10 @@
 <template>
   <section
     class="shogi-game"
-    :class="{ 'shogi-game--analysis': reviewMode && analysisOpen }"
+    :class="{
+      'shogi-game--analysis': reviewMode && analysisOpen,
+      'shogi-game--rook-choice': rangingRookChoiceRequired,
+    }"
     aria-label="将棋対局"
   >
     <header class="shogi-game__toolbar">
@@ -127,15 +130,15 @@
     </div>
 
     <section class="shogi-game__player-zone shogi-game__player-zone--opponent">
-      <div class="shogi-game__player-card">
-        <span>{{ opponentSideLabel }}</span>
-        <strong>{{ normalizedMode === "cpu" ? cpuPlayerName : whitePlayerName }}</strong>
-        <small>{{ normalizedMode === "cpu" ? strengthLabel : modeText }}</small>
-        <div><b>戦型</b><span>{{ opponentFormationText }}</span></div>
-      </div>
-      <div class="shogi-game__status" aria-live="polite">
-        <strong>{{ statusText }}</strong>
-        <span>{{ modeText }}・{{ moveCount }}手</span>
+      <div class="shogi-game__match-summary" aria-live="polite">
+        <div class="shogi-game__match-summary-status">
+          <strong>{{ statusText }}</strong>
+          <span>{{ modeText }}・{{ moveCount }}手</span>
+        </div>
+        <div class="shogi-game__formation-summary">
+          <div><b>先手・戦型</b><span>{{ blackFormationText }}</span></div>
+          <div><b>後手・戦型</b><span>{{ whiteFormationText }}</span></div>
+        </div>
       </div>
       <section class="shogi-game__opening-guide shogi-game__opening-guide--primary" aria-label="やこび姫補助">
         <h2>やこび姫補助</h2>
@@ -278,12 +281,6 @@
           class="shogi-game__review-cpu-stop"
           @click="stopReviewCpu"
         >対CPU検討を終了</button>
-      </div>
-      <div class="shogi-game__player-card">
-        <span>{{ playerSideLabel }}</span>
-        <strong>{{ humanPlayerName }}</strong>
-        <small>{{ normalizedMode === "cpu" ? "あなた" : modeText }}</small>
-        <div><b>戦型</b><span>{{ playerFormationText }}</span></div>
       </div>
     </section>
 
@@ -769,22 +766,6 @@ const effectiveWhitePlayerName = computed(() =>
     : props.whitePlayerName,
 );
 const modeText = computed(() => normalizedMode.value === "cpu" ? "CPU対局" : "ローカル対局");
-const humanPlayerName = computed(() =>
-  humanColor.value === Color.BLACK ? props.blackPlayerName : props.whitePlayerName
-);
-const playerSideLabel = computed(() =>
-  normalizedMode.value === "cpu"
-    ? (humanColor.value === Color.BLACK ? "先手" : "後手")
-    : "先手"
-);
-const opponentSideLabel = computed(() =>
-  normalizedMode.value === "cpu"
-    ? (humanColor.value === Color.BLACK ? "後手" : "先手")
-    : "後手"
-);
-const strengthLabel = computed(() =>
-  CPU_STRENGTH_PRESETS.find(({ value }) => value === searchNodes.value)?.label ?? "ふつう"
-);
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
@@ -862,16 +843,6 @@ const resultPresentation = computed(() => {
 });
 const blackFormationText = computed(() => formationTextForColor(Color.BLACK));
 const whiteFormationText = computed(() => formationTextForColor(Color.WHITE));
-const playerFormationText = computed(() =>
-  normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
-    ? whiteFormationText.value
-    : blackFormationText.value
-);
-const opponentFormationText = computed(() =>
-  normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
-    ? blackFormationText.value
-    : whiteFormationText.value
-);
 function openingGuideLegalMoves(): string[] {
   const fields = currentSfen.value.split(" ");
   if (fields.length < 2) return [];
@@ -2928,6 +2899,7 @@ queueMicrotask(() => {
 .shogi-game__portrait--advisor .shogi-game__character {
   object-position: center top;
 }
+.shogi-game__match-summary,
 .shogi-game__player-card,
 .shogi-game__status,
 .shogi-game__dialogue {
@@ -2936,6 +2908,56 @@ queueMicrotask(() => {
   border: 2px solid var(--gold);
   background: var(--panel);
   box-shadow: inset 0 0 1.5rem rgba(110, 34, 53, 0.35);
+}
+.shogi-game__match-summary {
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+}
+.shogi-game__match-summary-status {
+  display: flex;
+  min-width: 0;
+  gap: 0.5rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.shogi-game__match-summary-status strong {
+  min-width: 0;
+  overflow: hidden;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game__match-summary-status span {
+  flex: none;
+  color: #d5c3bd;
+  font-size: 0.75rem;
+}
+.shogi-game__formation-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(216, 173, 85, 0.55);
+}
+.shogi-game__formation-summary > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+.shogi-game__formation-summary b {
+  color: #f4d890;
+  font-size: 0.68rem;
+}
+.shogi-game__formation-summary span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .shogi-game__player-card {
   display: grid;
@@ -3602,7 +3624,7 @@ queueMicrotask(() => {
     grid-column: 1;
     grid-row: 1 / -1;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     align-content: start;
   }
   .shogi-game__player-zone--player {
@@ -3632,18 +3654,14 @@ queueMicrotask(() => {
     position: relative;
     z-index: 2;
   }
-  .shogi-game__player-zone--opponent .shogi-game__player-card {
+  .shogi-game__player-zone--opponent .shogi-game__match-summary {
     grid-column: 1;
     grid-row: 1;
-  }
-  .shogi-game__player-zone--opponent .shogi-game__status {
-    grid-column: 1;
-    grid-row: 2;
   }
   .shogi-game__opening-guide {
     display: flex;
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 2;
     align-self: end;
     max-height: 100%;
     flex-direction: column;
@@ -3741,6 +3759,11 @@ queueMicrotask(() => {
     grid-template-columns: minmax(0, 0.85fr) minmax(0, 0.75fr) minmax(12rem, 1.25fr);
     min-height: 0;
     padding-right: 0;
+  }
+  .shogi-game__match-summary {
+    grid-column: 1 / 3;
+    grid-row: 1;
+    align-self: stretch;
   }
   .shogi-game__opening-guide {
     grid-column: 3;
@@ -3885,6 +3908,18 @@ queueMicrotask(() => {
     grid-template-rows: 4.5rem minmax(0, 1fr);
     min-height: 0;
     padding-right: 0;
+  }
+  .shogi-game__match-summary {
+    grid-column: 1 / -1;
+    padding: 0.35rem 0.5rem;
+    gap: 0.25rem;
+  }
+  .shogi-game__match-summary-status strong {
+    font-size: 0.85rem;
+  }
+  .shogi-game__formation-summary {
+    gap: 0.4rem;
+    padding-top: 0.25rem;
   }
   .shogi-game__player-zone--player {
     grid-template-columns: minmax(0, 1fr) 4.8rem;
@@ -4063,6 +4098,9 @@ queueMicrotask(() => {
   .shogi-game:not(.shogi-game--analysis) {
     grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 10rem 5rem;
   }
+  .shogi-game:not(.shogi-game--analysis).shogi-game--rook-choice {
+    grid-template-rows: 3.5rem 5rem minmax(0, 1fr) 9rem 9rem;
+  }
   .shogi-game:not(.shogi-game--analysis) .shogi-game__player-zone--opponent {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4074,12 +4112,12 @@ queueMicrotask(() => {
     grid-column: 1;
     grid-row: 5;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
     gap: 0.2rem;
     align-self: stretch;
     min-height: 0;
     padding: 0.3rem;
-    overflow: hidden;
+    overflow-y: auto;
   }
   .shogi-game__opening-guide--portrait h2 {
     display: none;
@@ -4092,9 +4130,16 @@ queueMicrotask(() => {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
   }
-  .shogi-game__opening-guide--portrait p {
+  .shogi-game__opening-guide--portrait .shogi-game__rook-choice {
     grid-column: 1;
     grid-row: 2;
+  }
+  .shogi-game__opening-guide--portrait .shogi-game__rook-choice button {
+    min-height: 1.8rem;
+  }
+  .shogi-game__opening-guide--portrait p {
+    grid-column: 1;
+    grid-row: 3;
     min-height: 0;
     overflow: visible;
     padding: 0.2rem 0.35rem;
@@ -4109,10 +4154,16 @@ queueMicrotask(() => {
   .shogi-game:not(.shogi-game--analysis) .shogi-game__player-zone--opponent {
     grid-template-rows: minmax(0, 1fr);
   }
+  .shogi-game:not(.shogi-game--analysis).shogi-game--rook-choice {
+    grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) 6rem 9rem;
+  }
 }
 @media (max-width: 360px) and (max-aspect-ratio: 5/4) {
   .shogi-game:not(.shogi-game--analysis) {
     grid-template-rows: 5.5rem 4.5rem minmax(0, 1fr) 6.5rem 4.5rem;
+  }
+  .shogi-game:not(.shogi-game--analysis).shogi-game--rook-choice {
+    grid-template-rows: 5.5rem 4.5rem minmax(0, 1fr) 6rem 9rem;
   }
 }
 
@@ -4195,6 +4246,7 @@ queueMicrotask(() => {
   color: var(--amber);
   background: var(--night-deep);
 }
+.shogi-game__match-summary,
 .shogi-game__player-card,
 .shogi-game__status,
 .shogi-game__dialogue,
@@ -4210,6 +4262,7 @@ queueMicrotask(() => {
 }
 .shogi-game__opening-guide h2,
 .shogi-game__opening-selects label,
+.shogi-game__formation-summary b,
 .shogi-game__player-card b,
 .shogi-game__settings-title,
 .shogi-game__pregame-heading > span,
@@ -4218,11 +4271,13 @@ queueMicrotask(() => {
 }
 .shogi-game__player-card > span,
 .shogi-game__player-card > small,
+.shogi-game__match-summary-status span,
 .shogi-game__status span,
 .shogi-game__pregame-note {
   color: #becbd2;
 }
-.shogi-game__player-card > div {
+.shogi-game__player-card > div,
+.shogi-game__formation-summary {
   border-top-color: rgba(245, 166, 69, 0.35);
 }
 .shogi-game__opening-selects select,
