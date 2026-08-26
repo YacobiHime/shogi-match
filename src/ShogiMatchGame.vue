@@ -581,6 +581,12 @@ import {
 } from "./core/cpu-opening-repertoire.mjs";
 import { createPositionAnalysisCache } from "./core/position-analysis-cache.mjs";
 import { openingExplanation } from "./core/opening-explanations.mjs";
+import {
+  clearMatchSnapshot,
+  loadMatchSnapshot,
+  matchSnapshotKey,
+  saveMatchSnapshot,
+} from "./core/match-persistence.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
@@ -716,6 +722,23 @@ let openingFollowupLoading = false;
 let openingGuideSafetyGeneration = 0;
 let cpuOpeningPlan: { strategyId: string; castleId: string; label: string } | null = null;
 const positionAnalysisCache = createPositionAnalysisCache();
+let restoringSavedMatch = false;
+
+function browserStorage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+const matchStorage = browserStorage();
+const matchStorageKey = typeof window === "undefined"
+  ? ""
+  : matchSnapshotKey({
+      pathname: window.location.pathname,
+      matchId: new URLSearchParams(window.location.search).get("match_id") ?? "",
+    });
 
 // 助言は対局AIより軽く保つ。局面評価は数万ノードで十分であり、
 // 人間最高峰プリセット（48万ノード）相当の探索を毎手行わない。
@@ -1232,6 +1255,7 @@ function openPregame() {
   resultDialogOpen.value = false;
   reviewMode.value = false;
   analysisOpen.value = false;
+  discardPersistedMatch();
 }
 
 function configuredCpuOpeningStrategy(): string {
@@ -1317,6 +1341,153 @@ function syncPosition(usi = "") {
   currentSfen.value = record.value.position.sfen;
   lastMove.value = usi;
   observeFormations(currentSfen.value);
+}
+
+function savedMatchNumber(value: unknown, fallback: number, min = 0, max = Number.MAX_SAFE_INTEGER) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(min, Math.min(max, Math.trunc(value)))
+    : fallback;
+}
+
+function recordAndFormationsFromMoves(moves: string[]) {
+  const nextRecord = createGameRecord(props.initialSfen);
+  let nextFormationState = createFormationState();
+  nextFormationState = updateFormationState(
+    nextFormationState,
+    detectFormationSnapshot(nextRecord.position.sfen, hiraganaFormationMaster),
+  );
+  for (const move of moves) {
+    if (!appendUsiMove(nextRecord, move)) throw new Error("保存棋譜に不正な指し手があります。");
+    nextFormationState = updateFormationState(
+      nextFormationState,
+      detectFormationSnapshot(nextRecord.position.sfen, hiraganaFormationMaster),
+    );
+  }
+  return { nextRecord, nextFormationState };
+}
+
+function persistedResult(value: unknown, moves: string[], finalSfen: string): MatchResult | null {
+  if (value === null || value === undefined) return null;
+  if (!value || typeof value !== "object") throw new Error("保存された終局結果が不正です。");
+  const candidate = value as MatchResult;
+  const outcomes = ["black-win", "white-win", "draw"];
+  const reasons = ["checkmate", "resignation", "repetition", "perpetual-check"];
+  const validWinner = candidate.winner === Color.BLACK
+    || candidate.winner === Color.WHITE
+    || candidate.winner === null;
+  const sameMoves = Array.isArray(candidate.moves)
+    && candidate.moves.length === moves.length
+    && candidate.moves.every((move, index) => move === moves[index]);
+  if (
+    !outcomes.includes(candidate.outcome)
+    || !reasons.includes(candidate.reason)
+    || !validWinner
+    || candidate.moveCount !== moves.length
+    || candidate.finalSfen !== finalSfen
+    || !sameMoves
+  ) throw new Error("保存された終局結果が棋譜と一致しません。");
+  return candidate;
+}
+
+function persistMatchState() {
+  if (
+    restoringSavedMatch || !matchStorage || !matchStorageKey
+    || !matchStarted.value || pregameOpen.value || reviewMode.value
+  ) return;
+  saveMatchSnapshot(matchStorage, matchStorageKey, {
+    initialSfen: props.initialSfen,
+    mode: normalizedMode.value,
+    moves: [...moveHistory],
+    active: active.value,
+    result: result.value,
+    activePlayerColor: activePlayerColor.value,
+    selectedPlayerColor: selectedPlayerColor.value,
+    searchNodes: searchNodes.value,
+    cpuStrategy: cpuStrategy.value,
+    cpuDetailedStrategy: cpuDetailedStrategy.value,
+    cpuDetailedCastle: cpuDetailedCastle.value,
+    cpuFirstMove: cpuFirstMove.value,
+    cpuStrategyDetailsOpen: cpuStrategyDetailsOpen.value,
+    coachLevel: coachLevel.value,
+    selectedStrategy: selectedStrategy.value,
+    selectedCastle: selectedCastle.value,
+    hintsRemaining: hintsRemaining.value,
+    undosRemaining: undosRemaining.value,
+    openingGuideStartedAtPly: openingGuideStartedAtPly.value,
+    openingGuideDetourCount: openingGuideDetourCount.value,
+    openingGuideAbandoned: openingGuideAbandoned.value,
+    openingPlanCompletionLocked: openingPlanCompletionLocked.value,
+  });
+}
+
+function discardPersistedMatch() {
+  clearMatchSnapshot(matchStorage, matchStorageKey);
+}
+
+function restorePersistedMatch(): boolean {
+  const snapshot = loadMatchSnapshot(matchStorage, matchStorageKey, {
+    initialSfen: props.initialSfen,
+    mode: normalizedMode.value,
+  });
+  if (!snapshot) return false;
+  restoringSavedMatch = true;
+  try {
+    if (
+      !Array.isArray(snapshot.moves)
+      || snapshot.moves.length > 1000
+      || snapshot.moves.some((move: unknown) => typeof move !== "string" || move.length > 8)
+    ) throw new Error("保存棋譜が不正です。");
+    const moves = snapshot.moves as string[];
+    const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(moves);
+    const restoredResult = persistedResult(snapshot.result, moves, nextRecord.position.sfen);
+    if (snapshot.active !== true && !restoredResult) throw new Error("保存された対局状態が不正です。");
+
+    record.value = nextRecord;
+    moveHistory = [...moves];
+    formationState.value = nextFormationState;
+    currentSfen.value = nextRecord.position.sfen;
+    lastMove.value = moves.at(-1) ?? "";
+    activePlayerColor.value = snapshot.activePlayerColor === "white" ? "white" : "black";
+    selectedPlayerColor.value = snapshot.selectedPlayerColor === "white"
+      ? "white"
+      : activePlayerColor.value;
+    searchNodes.value = normalizeNodes(snapshot.searchNodes);
+    cpuStrategy.value = typeof snapshot.cpuStrategy === "string" ? snapshot.cpuStrategy : "random";
+    cpuDetailedStrategy.value = typeof snapshot.cpuDetailedStrategy === "string"
+      ? snapshot.cpuDetailedStrategy
+      : "ibisha";
+    cpuDetailedCastle.value = typeof snapshot.cpuDetailedCastle === "string"
+      ? snapshot.cpuDetailedCastle
+      : "funagakoi";
+    cpuFirstMove.value = typeof snapshot.cpuFirstMove === "string" ? snapshot.cpuFirstMove : "random";
+    cpuStrategyDetailsOpen.value = snapshot.cpuStrategyDetailsOpen === true;
+    coachLevel.value = ["off", "encourage", "detailed"].includes(snapshot.coachLevel)
+      ? snapshot.coachLevel
+      : "detailed";
+    selectedStrategy.value = typeof snapshot.selectedStrategy === "string"
+      ? snapshot.selectedStrategy
+      : "";
+    selectedCastle.value = typeof snapshot.selectedCastle === "string" ? snapshot.selectedCastle : "";
+    hintsRemaining.value = savedMatchNumber(snapshot.hintsRemaining, props.hintCount, 0, props.hintCount);
+    undosRemaining.value = savedMatchNumber(snapshot.undosRemaining, props.undoCount, 0, props.undoCount);
+    openingGuideStartedAtPly.value = savedMatchNumber(snapshot.openingGuideStartedAtPly, 0, 0, moves.length);
+    openingGuideDetourCount.value = savedMatchNumber(snapshot.openingGuideDetourCount, 0, 0, 3);
+    openingGuideAbandoned.value = snapshot.openingGuideAbandoned === true;
+    openingPlanCompletionLocked.value = snapshot.openingPlanCompletionLocked === true;
+    result.value = restoredResult;
+    resultDialogOpen.value = Boolean(restoredResult);
+    matchStarted.value = true;
+    pregameOpen.value = false;
+    active.value = snapshot.active === true && !restoredResult;
+    thinking.value = false;
+    guideText.value = coachLevel.value === "off" ? "" : "前の局面から対局を再開したよ！";
+    return true;
+  } catch {
+    discardPersistedMatch();
+    return false;
+  } finally {
+    restoringSavedMatch = false;
+  }
 }
 
 function displayCoachAdvice(advice: { key: string; text: string; topic?: string }): boolean {
@@ -1841,6 +2012,7 @@ function finish(matchResult: MatchResult) {
   thinking.value = false;
   result.value = matchResult;
   resultDialogOpen.value = true;
+  persistMatchState();
   emit("match-end", matchResult);
   if (window.parent !== window) {
     window.parent.postMessage({
@@ -1899,6 +2071,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
     emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
     const terminalResult = resultAfterMove(record.value);
     if (terminalResult) finish(terminalResult);
+    else persistMatchState();
   }
   return true;
 }
@@ -1950,9 +2123,9 @@ async function showHint() {
 }
 
 function rebuildRecord(moves: string[]) {
-  const next = createGameRecord(props.initialSfen);
-  for (const move of moves) appendUsiMove(next, move);
-  record.value = next;
+  const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(moves);
+  record.value = nextRecord;
+  formationState.value = nextFormationState;
   moveHistory = [...moves];
   syncPosition(moveHistory.at(-1) ?? "");
 }
@@ -1980,6 +2153,7 @@ function undoTurn() {
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
   scheduleOpeningGuideSafety();
   schedulePlayerIdleAdvice();
+  persistMatchState();
 }
 
 function onReviewSliderInput(event: Event) {
@@ -2522,6 +2696,7 @@ function restart() {
   scheduleCpuMove();
   scheduleOpeningGuideSafety();
   schedulePlayerIdleAdvice();
+  persistMatchState();
 }
 
 watch(
@@ -2541,6 +2716,25 @@ watch(() => props.engineNodes, (value) => {
 watch([cpuStrategy, cpuDetailedStrategy, cpuDetailedCastle, cpuFirstMove, cpuStrategyDetailsOpen], () => {
   cpuOpeningPlan = null;
 });
+watch([
+  activePlayerColor,
+  selectedPlayerColor,
+  searchNodes,
+  cpuStrategy,
+  cpuDetailedStrategy,
+  cpuDetailedCastle,
+  cpuFirstMove,
+  cpuStrategyDetailsOpen,
+  coachLevel,
+  selectedStrategy,
+  selectedCastle,
+  hintsRemaining,
+  undosRemaining,
+  openingGuideStartedAtPly,
+  openingGuideDetourCount,
+  openingGuideAbandoned,
+  openingPlanCompletionLocked,
+], persistMatchState);
 watch([selectedPlayerColor, cpuDetailedStrategy], () => {
   const detailedOptions = cpuDetailedStrategyGroups.value.flatMap(({ options }) => options);
   if (cpuDetailedStrategy.value && !detailedOptions.some(({ id }) => id === cpuDetailedStrategy.value)) {
@@ -2566,6 +2760,9 @@ watch(coachLevel, (level) => {
     if (level === "detailed") schedulePlayerIdleAdvice();
   }
 });
+function handlePageHide() {
+  persistMatchState();
+}
 onBeforeUnmount(() => {
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
@@ -2575,15 +2772,21 @@ onBeforeUnmount(() => {
   if (cpuTimer) clearTimeout(cpuTimer);
   engine?.quit();
   boardResizeObserver?.disconnect();
+  if (typeof window !== "undefined") window.removeEventListener("pagehide", handlePageHide);
 });
 onMounted(() => {
   updateResponsiveLayout();
   boardResizeObserver = new ResizeObserver(updateResponsiveLayout);
   if (boardShell.value) boardResizeObserver.observe(boardShell.value);
+  window.addEventListener("pagehide", handlePageHide);
 });
 
+const restoredPersistedMatch = restorePersistedMatch();
 queueMicrotask(() => {
   observeFormations(currentSfen.value);
+  if (restoredPersistedMatch) {
+    emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value, restored: true });
+  }
   initializeEngine();
 });
 </script>
