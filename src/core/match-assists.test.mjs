@@ -60,16 +60,16 @@ describe('hint arrow evaluations', () => {
     expect(hintMoveAssessment(candidates, '5g5f')).toBeNull();
   });
 
-  it('concentrates idle coaching on one practical best-move search', () => {
+  it('shares the stronger hint search with idle coaching so both recommend the same best move', () => {
     expect(getIdleCoachSearchSettings(false)).toEqual({
-      nodes: 200000,
-      maxTimeMs: 2500,
-      multiPv: 1,
+      nodes: 1000000,
+      maxTimeMs: 10000,
+      multiPv: 3,
     });
     expect(getIdleCoachSearchSettings(true)).toEqual({
-      nodes: 100000,
-      maxTimeMs: 1800,
-      multiPv: 1,
+      nodes: 300000,
+      maxTimeMs: 6000,
+      multiPv: 3,
     });
   });
 

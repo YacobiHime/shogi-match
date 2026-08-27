@@ -162,11 +162,12 @@ export function hintMoveAssessment(candidates = [], move = '') {
   };
 }
 
-/** 10秒後の軽い助言は、候補を広げず最善手1本へ探索を集中する。 */
+/**
+ * 長考中の助言は閃きと同じ探索条件を使う。
+ * 同一局面の解析結果をキャッシュで共有し、推奨する最善手を食い違わせない。
+ */
 export function getIdleCoachSearchSettings(mobile = false) {
-  return mobile
-    ? { nodes: 100000, maxTimeMs: 1800, multiPv: 1 }
-    : { nodes: 200000, maxTimeMs: 2500, multiPv: 1 };
+  return getHintSearchSettings(mobile);
 }
 
 /** 戦法完成後の自動3候補。閃きより軽く、通常助言より深く読む。 */
