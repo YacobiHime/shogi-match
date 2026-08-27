@@ -42,6 +42,25 @@ export const OPENING_STRATEGIES = [
     blackMoves: ["7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d"],
   },
   {
+    id: "yokofudori-33-bishop",
+    label: "横歩取り3三角型",
+    family: "yokofudori",
+    detectionNames: ["横歩取り3三角戦法", "横歩取り3三角型"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [["2f", "R"], ["7h", "G"], ["7f", "P"]],
+    movePositionPrerequisites: {
+      ...YOKOFUDORI_MOVE_POSITION_PREREQUISITES,
+      // 青野流へ進まず、△3三角には3六飛、△8四飛には2六飛と引く従来型。
+      "3d3f": [{ square: "3c", owner: "opponent", kind: "B" }],
+      "3f2f": [{ square: "8d", owner: "opponent", kind: "R" }],
+    },
+    blackMoves: [
+      "7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d",
+      "3d3f", "3f2f",
+    ],
+  },
+  {
     id: "hineribisha",
     label: "ひねり飛車",
     family: "aigakari",
@@ -983,7 +1002,7 @@ export const OPENING_CASTLES = OPENING_CASTLE_DEFINITIONS.map((castle) => ({
 }));
 
 const STATIC_ROOK_STRATEGIES = new Set([
-  "ibisha", "aigakari", "yokofudori", "hineribisha", "gangi-strategy",
+  "ibisha", "aigakari", "yokofudori", "yokofudori-33-bishop", "hineribisha", "gangi-strategy",
   "aigakari-bougin", "aigakari-hayaguri-gin", "aigakari-koshikake-gin",
   "kakugawari", "yagura-strategy", "suzume-zashi", "yagura-37-silver",
   "kakugawari-bougin", "kakugawari-hayaguri-gin", "kakugawari-koshikake-gin",

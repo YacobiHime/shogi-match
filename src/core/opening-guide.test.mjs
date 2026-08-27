@@ -191,7 +191,7 @@ describe("opening guide", () => {
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "aigakari").map(({ label }) => label))
       .toEqual(["相掛かり", "ひねり飛車", "相掛かり棒銀", "相掛かり早繰り銀", "相掛かり腰掛け銀"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "yokofudori").map(({ label }) => label))
-      .toEqual(["横歩取り", "横歩取り青野流"]);
+      .toEqual(["横歩取り", "横歩取り3三角型", "横歩取り青野流"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "yagura").map(({ label }) => label))
       .toEqual(["矢倉戦法", "矢倉棒銀", "急戦矢倉早繰り銀", "矢倉腰掛け銀", "雀刺し", "矢倉3七銀", "森下システム"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "gangi").map(({ label }) => label))
@@ -670,6 +670,8 @@ describe("opening guide", () => {
       ? ["8h2b+", "B*4e", "4e3d"]
       : id === "yokofudori"
         ? ["2h2d", "2d3d"]
+        : id === "yokofudori-33-bishop"
+          ? ["2h2d", "2d3d", "3d3f", "3f2f"]
         : id === "aono-ryu"
           ? ["2h2d", "2d3d"]
         : id === "hineribisha"
@@ -679,6 +681,8 @@ describe("opening guide", () => {
       ? ["2b8h+", "B*6e", "6e7f"]
       : id === "yokofudori"
         ? ["8b8f", "8f7f"]
+        : id === "yokofudori-33-bishop"
+          ? ["8b8f", "8f7f", "7f7d", "7d8d"]
         : id === "aono-ryu"
           ? ["8b8f", "8f7f"]
         : id === "hineribisha"
@@ -768,6 +772,25 @@ describe("opening guide", () => {
     const moves = openingPlanSteps("aono-ryu", "").map(({ usi }) => usi);
     expect(moves.slice(-3)).toEqual(["5i5h", "3g3f", "2i3g"]);
     expect(moves).not.toContain("8i7g");
+  });
+
+  it("adds the traditional Bishop-33 Yokofudori guide as a selectable line", () => {
+    const strategy = OPENING_STRATEGIES.find(({ id }) => id === "yokofudori-33-bishop");
+    expect(strategy).toMatchObject({
+      label: "横歩取り3三角型",
+      family: "yokofudori",
+    });
+    expect(strategy?.guideSelectable).not.toBe(false);
+    expect(openingPlanSteps(strategy.id, "").map(({ usi }) => usi).slice(-2))
+      .toEqual(["3d3f", "3f2f"]);
+
+    const record = createGameRecord();
+    const line = [
+      "7g7f", "3c3d", "2g2f", "8c8d", "2f2e", "8d8e", "6i7h", "4a3b",
+      "2e2d", "2c2d", "2h2d", "8e8f", "8g8f", "8b8f", "2d3d", "2b3c",
+      "3d3f", "8f8d", "3f2f",
+    ];
+    for (const usi of line) expect(appendUsiMove(record, usi), usi).toBe(true);
   });
 
   it("plays the Twisting Rook guide after the mutual rook-pawn exchange", () => {
