@@ -1001,6 +1001,16 @@ describe("opening guide", () => {
     ])).toEqual({ usi: "2g2f", source: "plan", scoreLoss: 130 });
   });
 
+  it("falls back to the best move when a lower-ranked plan has no comparable score", () => {
+    expect(chooseSafeOpeningMove("2g2f", [
+      { rank: 1, move: "7g7f" },
+      { rank: 2, move: "2g2f" },
+    ])).toEqual({ usi: "7g7f", source: "ai", scoreLoss: undefined });
+    expect(chooseSafeOpeningMove("7g7f", [
+      { rank: 1, move: "7g7f" },
+    ])).toEqual({ usi: "7g7f", source: "plan", scoreLoss: 0 });
+  });
+
   it("reorders ready plan moves by evaluation without leaving the plan", () => {
     expect(chooseAdaptiveOpeningMove(
       [{ usi: "7g7f" }, { usi: "2g2f" }],

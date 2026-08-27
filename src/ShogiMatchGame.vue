@@ -82,6 +82,41 @@
               </button>
             </div>
           </div>
+          <div v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field shogi-game__pregame-field--opening-tendency">
+            <span>相手の序盤傾向</span>
+            <div class="shogi-game__opening-tendency">
+              <label>
+                <span>角道</span>
+                <select v-model="cpuBishopPreference" aria-label="対局前の相手の角道">
+                  <option value="">選択しない</option>
+                  <option value="open">早めに開ける</option>
+                  <option value="closed">閉じたまま指す</option>
+                </select>
+              </label>
+              <label>
+                <span>飛車</span>
+                <select v-model="cpuRookPreference" aria-label="対局前の相手の飛車の方針">
+                  <option value="">選択しない</option>
+                  <option value="rook-pawn">飛車先を優先</option>
+                  <option value="static">居飛車を維持</option>
+                  <option value="ranging">振り飛車を目指す</option>
+                  <option value="adaptive">相手を見て決める</option>
+                </select>
+              </label>
+              <label>
+                <span>指し方</span>
+                <select v-model="cpuTempoPreference" aria-label="対局前の相手の序盤の指し方">
+                  <option value="">選択しない</option>
+                  <option value="balanced">バランス型</option>
+                  <option value="aggressive">積極的</option>
+                  <option value="patient">じっくり</option>
+                  <option value="castle-first">囲い優先</option>
+                  <option value="attack-first">攻め優先</option>
+                </select>
+              </label>
+            </div>
+            <small>作戦・戦法・初手を指定した場合は、そちらを優先します。</small>
+          </div>
           <div
             v-if="normalizedMode === 'cpu'"
             class="shogi-game__pregame-field shogi-game__pregame-field--turn"
@@ -688,6 +723,9 @@ const cpuStrategy = ref("random");
 const cpuDetailedStrategy = ref("ibisha");
 const cpuDetailedCastle = ref("funagakoi");
 const cpuFirstMove = ref("random");
+const cpuBishopPreference = ref("");
+const cpuRookPreference = ref("");
+const cpuTempoPreference = ref("");
 const cpuStrategyDetailsOpen = ref(false);
 const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
@@ -1273,15 +1311,24 @@ function configuredCpuOpeningStrategy(): string {
     : cpuStrategy.value;
 }
 
+function currentCpuOpeningTurn() {
+  const cpuIsBlack = humanColor.value === Color.WHITE;
+  const cpuMoves = moveHistory.filter((_, index) => (index % 2 === 0) === cpuIsBlack);
+  return {
+    cpuIsBlack,
+    cpuMoves,
+    cpuColor: cpuIsBlack ? "black" as const : "white" as const,
+  };
+}
+
 function strategyMove(): string | undefined {
   // 駒落ちや途中局面では平手用定跡を当てはめない。
   if (props.initialSfen !== STANDARD_SFEN) return undefined;
-  const cpuIsBlack = humanColor.value === Color.WHITE;
-  const cpuMoves = moveHistory.filter((_, index) => (index % 2 === 0) === cpuIsBlack);
+  const { cpuIsBlack, cpuMoves, cpuColor: configuredCpuColor } = currentCpuOpeningTurn();
   const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   const requestedFirstMove = configuredCpuFirstMove({
     configuredFirstMove: cpuFirstMove.value,
-    cpuColor: cpuIsBlack ? "black" : "white",
+    cpuColor: configuredCpuColor,
     cpuMoveCount: cpuMoves.length,
     legalMoves,
   });
@@ -1295,8 +1342,11 @@ function strategyMove(): string | undefined {
   if (!cpuOpeningPlan) {
     const selectedPlan = selectCpuOpeningRepertoire({
       configuredStrategy: configuredCpuOpeningStrategy(),
-      cpuColor: cpuIsBlack ? "black" : "white",
+      cpuColor: configuredCpuColor,
       moves: moveHistory,
+      bishopPreference: cpuBishopPreference.value,
+      rookPreference: cpuRookPreference.value,
+      tempoPreference: cpuTempoPreference.value,
     });
     cpuOpeningPlan = cpuStrategyDetailsOpen.value && cpuDetailedCastle.value
       ? {
@@ -1416,6 +1466,9 @@ function persistMatchState() {
     cpuDetailedStrategy: cpuDetailedStrategy.value,
     cpuDetailedCastle: cpuDetailedCastle.value,
     cpuFirstMove: cpuFirstMove.value,
+    cpuBishopPreference: cpuBishopPreference.value,
+    cpuRookPreference: cpuRookPreference.value,
+    cpuTempoPreference: cpuTempoPreference.value,
     cpuStrategyDetailsOpen: cpuStrategyDetailsOpen.value,
     coachLevel: coachLevel.value,
     selectedStrategy: selectedStrategy.value,
@@ -1469,6 +1522,15 @@ function restorePersistedMatch(): boolean {
       ? snapshot.cpuDetailedCastle
       : "funagakoi";
     cpuFirstMove.value = typeof snapshot.cpuFirstMove === "string" ? snapshot.cpuFirstMove : "random";
+    cpuBishopPreference.value = ["", "open", "closed"].includes(snapshot.cpuBishopPreference)
+      ? snapshot.cpuBishopPreference
+      : "";
+    cpuRookPreference.value = ["", "rook-pawn", "static", "ranging", "adaptive"].includes(snapshot.cpuRookPreference)
+      ? snapshot.cpuRookPreference
+      : "";
+    cpuTempoPreference.value = ["", "balanced", "aggressive", "patient", "castle-first", "attack-first"].includes(snapshot.cpuTempoPreference)
+      ? snapshot.cpuTempoPreference
+      : "";
     cpuStrategyDetailsOpen.value = snapshot.cpuStrategyDetailsOpen === true;
     coachLevel.value = ["off", "encourage", "detailed"].includes(snapshot.coachLevel)
       ? snapshot.coachLevel
@@ -2476,10 +2538,12 @@ async function scheduleCpuMove() {
           ? playerTurnScore
           : undefined);
       const openingMove = strategyMove();
+      const cpuOpeningTurn = currentCpuOpeningTurn();
       const forceConfiguredOpening = shouldForceConfiguredCpuOpening({
-        configuredStrategy: configuredCpuOpeningStrategy(),
         configuredFirstMove: cpuFirstMove.value,
         openingMove,
+        cpuColor: cpuOpeningTurn.cpuColor,
+        cpuMoveCount: cpuOpeningTurn.cpuMoves.length,
       });
       // 入門だけは定跡の形を優先する。それ以外は定跡手も探索で安全確認する。
       if (openingMove && usesRandomLegalMove(searchNodes.value)) {
@@ -2537,9 +2601,8 @@ async function scheduleCpuMove() {
           (candidate) => candidate.move === selection.move,
         )?.score;
       } else {
-        usi = forceConfiguredOpening
-          ? openingMove
-          : selectCpuMove(record.value.position)?.usi ?? "";
+        // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
+        usi = openingMove ?? selectCpuMove(record.value.position)?.usi ?? "";
       }
       if (!usi) {
         thinking.value = false;
@@ -2562,13 +2625,7 @@ async function scheduleCpuMove() {
       errorMessage.value = `やねうら王の思考に失敗しました: ${message}`;
       emit("match-error", { message });
       const fallbackOpeningMove = strategyMove();
-      const fallbackUsi = shouldForceConfiguredCpuOpening({
-        configuredStrategy: configuredCpuOpeningStrategy(),
-        configuredFirstMove: cpuFirstMove.value,
-        openingMove: fallbackOpeningMove,
-      })
-        ? fallbackOpeningMove
-        : selectCpuMove(record.value.position)?.usi;
+      const fallbackUsi = fallbackOpeningMove ?? selectCpuMove(record.value.position)?.usi;
       if (fallbackUsi && applyMove(fallbackUsi, "cpu") && active.value) {
         updateCoachAdvice();
         scheduleOpeningGuideSafety();
@@ -2838,7 +2895,16 @@ watch(() => props.playerColor, (value) => {
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
 });
-watch([cpuStrategy, cpuDetailedStrategy, cpuDetailedCastle, cpuFirstMove, cpuStrategyDetailsOpen], () => {
+watch([
+  cpuStrategy,
+  cpuDetailedStrategy,
+  cpuDetailedCastle,
+  cpuFirstMove,
+  cpuBishopPreference,
+  cpuRookPreference,
+  cpuTempoPreference,
+  cpuStrategyDetailsOpen,
+], () => {
   cpuOpeningPlan = null;
 });
 watch([
@@ -2849,6 +2915,9 @@ watch([
   cpuDetailedStrategy,
   cpuDetailedCastle,
   cpuFirstMove,
+  cpuBishopPreference,
+  cpuRookPreference,
+  cpuTempoPreference,
   cpuStrategyDetailsOpen,
   coachLevel,
   selectedStrategy,
@@ -3442,6 +3511,28 @@ queueMicrotask(() => {
   font-weight: 600;
   opacity: 0.86;
 }
+.shogi-game__pregame-field--opening-tendency {
+  grid-column: 1 / -1;
+}
+.shogi-game__opening-tendency {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+.shogi-game__opening-tendency label {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+}
+.shogi-game__opening-tendency label > span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.86;
+}
+.shogi-game__pregame-field--opening-tendency > small {
+  color: #d5c3bd;
+  font-size: 0.75rem;
+}
 .shogi-game__pregame-note {
   min-height: 1.5rem;
   margin: 1rem 0 0;
@@ -3874,6 +3965,12 @@ queueMicrotask(() => {
     padding: 0.45rem 0.55rem;
   }
   .shogi-game__pregame-field--turn {
+    grid-template-columns: 1fr;
+  }
+  .shogi-game__pregame-field--opening-tendency {
+    grid-template-columns: 1fr;
+  }
+  .shogi-game__opening-tendency {
     grid-template-columns: 1fr;
   }
   .shogi-game__pregame-control {
