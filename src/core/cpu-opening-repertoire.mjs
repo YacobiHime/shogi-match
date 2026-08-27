@@ -32,6 +32,34 @@ const CATEGORY_POOLS = {
   surprise: ["onigoroshi", "pacman", "ureshino"],
 };
 
+const BISHOP_STYLE_POOLS = {
+  open: [
+    "kakugawari", "yagura-strategy", "right-shiken", "shiken", "fujii-system",
+    "sangen", "ishida", "gokigen", "mukai", "onigoroshi",
+  ],
+  closed: [
+    "ibisha", "aigakari", "bougin", "hayaguri-gin", "koshikake-gin",
+    "nakabisha", "sodebisha", "pacman", "ureshino",
+  ],
+};
+
+const ROOK_STYLE_POOLS = {
+  "rook-pawn": ["ibisha", "aigakari", "kakugawari", "bougin", "hayaguri-gin", "koshikake-gin"],
+  static: [...CATEGORY_POOLS.static, "ureshino"],
+  ranging: [...CATEGORY_POOLS.ranging],
+};
+
+const TEMPO_STYLE_POOLS = {
+  balanced: ["ibisha", "aigakari", "yagura-strategy", "shiken", "sangen", "nakabisha"],
+  aggressive: [
+    "bougin", "right-shiken", "hayaguri-gin", "ishida", "gokigen", "sodebisha",
+    "onigoroshi", "pacman",
+  ],
+  patient: ["yagura-strategy", "koshikake-gin", "shiken", "fujii-system", "sangen", "mukai", "ureshino"],
+  "castle-first": ["ibisha", "yagura-strategy", "shiken", "sangen", "mukai", "ureshino"],
+  "attack-first": ["bougin", "right-shiken", "hayaguri-gin", "ishida", "gokigen", "sodebisha", "onigoroshi"],
+};
+
 const BLACK_REPERTOIRE_WEIGHTS = [
   ["ibisha", 32],
   ["yagura-strategy", 20],
@@ -59,15 +87,18 @@ export function configuredCpuFirstMove({
   return move && legalMoves.includes(move) ? move : undefined;
 }
 
-/** 明示された作戦・初手は、AI候補による別戦型への差し替えより優先する。 */
+/** 明示された初手だけは、その1手に限ってAI候補より優先する。 */
 export function shouldForceConfiguredCpuOpening({
-  configuredStrategy = "random",
   configuredFirstMove = "random",
   openingMove = "",
+  cpuColor = "white",
+  cpuMoveCount = 0,
 } = {}) {
   return Boolean(
     openingMove
-    && (configuredStrategy !== "random" || configuredFirstMove !== "random")
+    && configuredFirstMove !== "random"
+    && cpuColor === "black"
+    && cpuMoveCount === 0
   );
 }
 
@@ -92,6 +123,35 @@ function randomChoice(ids, random) {
   return ids[index];
 }
 
+function narrowByPreference(ids, preference, pools) {
+  const pool = pools[preference];
+  if (!pool) return ids;
+  const allowed = new Set(pool);
+  const narrowed = ids.filter((id) => allowed.has(id));
+  // 組み合わせが空になる場合は、それ以前の有効な指定を維持する。
+  return narrowed.length ? narrowed : ids;
+}
+
+function selectPreferredRepertoire({
+  cpuColor,
+  moves,
+  bishopPreference,
+  rookPreference,
+  tempoPreference,
+  random,
+}) {
+  const restrictiveRookPreference = rookPreference === "adaptive" ? "" : rookPreference;
+  if (!bishopPreference && !restrictiveRookPreference && !tempoPreference) return undefined;
+  let eligible = Object.keys(REPERTOIRES)
+    .filter((id) => repertoireIsAvailable(id, cpuColor, moves));
+  eligible = narrowByPreference(eligible, bishopPreference, BISHOP_STYLE_POOLS);
+  // 「相手を見て決める」は既存の応手選択へ任せるため、絞り込まない。
+  eligible = narrowByPreference(eligible, restrictiveRookPreference, ROOK_STYLE_POOLS);
+  eligible = narrowByPreference(eligible, tempoPreference, TEMPO_STYLE_POOLS);
+  const id = randomChoice(eligible, random);
+  return id ? { ...REPERTOIRES[id] } : undefined;
+}
+
 /**
  * CPUが序盤に維持する作戦を一局につき一度だけ決める。
  * 後手では初手への自然な応手を優先し、それ以外は主要作戦から重み付きで選ぶ。
@@ -100,6 +160,9 @@ export function selectCpuOpeningRepertoire({
   configuredStrategy = "random",
   cpuColor = "white",
   moves = [],
+  bishopPreference = "",
+  rookPreference = "",
+  tempoPreference = "",
   random = Math.random,
 } = {}) {
   if (Object.hasOwn(REPERTOIRES, configuredStrategy)
@@ -113,6 +176,16 @@ export function selectCpuOpeningRepertoire({
     const categoryId = randomChoice(eligible, random);
     if (categoryId) return { ...REPERTOIRES[categoryId] };
   }
+
+  const preferred = selectPreferredRepertoire({
+    cpuColor,
+    moves,
+    bishopPreference,
+    rookPreference,
+    tempoPreference,
+    random,
+  });
+  if (preferred) return preferred;
 
   let id;
   if (cpuColor === "white") {

@@ -1626,7 +1626,9 @@ export function chooseSafeOpeningMove(plannedMove, candidates = [], maxScoreLoss
   const bestScore = comparableOpeningScore(best.score);
   const plannedScore = comparableOpeningScore(planned.score);
   if (bestScore === undefined || plannedScore === undefined) {
-    return { usi: plannedMove, source: "plan", scoreLoss: 0 };
+    return planned.rank === 1
+      ? { usi: plannedMove, source: "plan", scoreLoss: 0 }
+      : { usi: best.move, source: "ai", scoreLoss: undefined };
   }
   const scoreLoss = bestScore - plannedScore;
   return scoreLoss >= maxScoreLoss

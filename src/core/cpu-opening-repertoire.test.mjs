@@ -7,6 +7,7 @@ import {
   shouldForceConfiguredCpuOpening,
   shouldUseCpuOpening,
 } from "./cpu-opening-repertoire.mjs";
+import { OPENING_STRATEGIES } from "./opening-guide.mjs";
 
 describe("CPU opening repertoire", () => {
   it.each([
@@ -43,24 +44,40 @@ describe("CPU opening repertoire", () => {
     );
   });
 
-  it("forces an explicitly configured opening instead of replacing its move with another style", () => {
+  it("treats a configured strategy as a preference that still receives an engine safety check", () => {
     expect(shouldForceConfiguredCpuOpening({
       configuredStrategy: "ranging",
       openingMove: "8b4b",
-    })).toBe(true);
+    })).toBe(false);
     expect(shouldForceConfiguredCpuOpening({
       configuredStrategy: "shiken",
-      openingMove: "8b4b",
-    })).toBe(true);
-    expect(shouldForceConfiguredCpuOpening({
-      configuredStrategy: "random",
       openingMove: "8b4b",
     })).toBe(false);
     expect(shouldForceConfiguredCpuOpening({
       configuredStrategy: "random",
+      openingMove: "8b4b",
+    })).toBe(false);
+  });
+
+  it("forces only the explicitly selected first move for a Black CPU", () => {
+    expect(shouldForceConfiguredCpuOpening({
       configuredFirstMove: "bishop-diagonal",
       openingMove: "7g7f",
+      cpuColor: "black",
+      cpuMoveCount: 0,
     })).toBe(true);
+    expect(shouldForceConfiguredCpuOpening({
+      configuredFirstMove: "bishop-diagonal",
+      openingMove: "2g2f",
+      cpuColor: "black",
+      cpuMoveCount: 1,
+    })).toBe(false);
+    expect(shouldForceConfiguredCpuOpening({
+      configuredFirstMove: "bishop-diagonal",
+      openingMove: "3c3d",
+      cpuColor: "white",
+      cpuMoveCount: 0,
+    })).toBe(false);
   });
 
   it.each([
@@ -123,6 +140,71 @@ describe("CPU opening repertoire", () => {
       random: () => value,
     }).strategyId);
     expect(ids).toEqual(["yagura-strategy", "shiken", "sangen"]);
+  });
+
+  it("keeps the existing automatic choice when every opening tendency is unselected", () => {
+    expect(selectCpuOpeningRepertoire({
+      cpuColor: "white",
+      moves: ["2g2f"],
+      bishopPreference: "",
+      rookPreference: "",
+      tempoPreference: "",
+    })).toEqual(CPU_OPENING_REPERTOIRES.aigakari);
+  });
+
+  it("keeps choosing from the opponent move when the rook style is adaptive", () => {
+    expect(selectCpuOpeningRepertoire({
+      cpuColor: "white",
+      moves: ["2g2f"],
+      rookPreference: "adaptive",
+    })).toEqual(CPU_OPENING_REPERTOIRES.aigakari);
+  });
+
+  it("selects a repertoire that opens or keeps closed the bishop diagonal", () => {
+    expect(selectCpuOpeningRepertoire({
+      cpuColor: "black", bishopPreference: "open", random: () => 0,
+    }).strategyId).toBe("kakugawari");
+    expect(selectCpuOpeningRepertoire({
+      cpuColor: "black", bishopPreference: "closed", random: () => 0,
+    }).strategyId).toBe("ibisha");
+
+    const definitions = new Map(OPENING_STRATEGIES.map((strategy) => [strategy.id, strategy]));
+    for (let index = 0; index < 20; index += 1) {
+      const random = () => index / 20;
+      const open = selectCpuOpeningRepertoire({
+        cpuColor: "black", bishopPreference: "open", random,
+      });
+      const closed = selectCpuOpeningRepertoire({
+        cpuColor: "black", bishopPreference: "closed", random,
+      });
+      expect(definitions.get(open.strategyId)?.blackMoves).toContain("7g7f");
+      expect(definitions.get(closed.strategyId)?.blackMoves).not.toContain("7g7f");
+    }
+  });
+
+  it("combines rook and tempo tendencies when a compatible repertoire exists", () => {
+    expect(selectCpuOpeningRepertoire({
+      cpuColor: "black",
+      rookPreference: "ranging",
+      tempoPreference: "aggressive",
+      random: () => 0,
+    }).strategyId).toBe("ishida");
+    expect(selectCpuOpeningRepertoire({
+      cpuColor: "black",
+      rookPreference: "static",
+      tempoPreference: "castle-first",
+      random: () => 0,
+    }).strategyId).toBe("ibisha");
+  });
+
+  it("gives an explicitly selected strategy priority over opening tendencies", () => {
+    expect(selectCpuOpeningRepertoire({
+      configuredStrategy: "shiken",
+      cpuColor: "black",
+      bishopPreference: "closed",
+      rookPreference: "static",
+      tempoPreference: "attack-first",
+    })).toEqual(CPU_OPENING_REPERTOIRES.shiken);
   });
 
   it("does not force book moves in check or after the opening", () => {
