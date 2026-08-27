@@ -99,6 +99,51 @@ describe('対局中の応援・助言', () => {
     })).toBeNull();
   });
 
+  test('王手で最善手が玉の移動なら逃げる助言を優先する', () => {
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: -20 } },
+    ], { inCheck: true, bestMoveIsKingMove: true })?.text)
+      .toBe('う～ん、王手だね…ここは逃げるべきかも。');
+  });
+
+  test('最善手で狙われた飛車を救える場合だけ逃がすよう勧める', () => {
+    const candidates = [{ rank: 1, score: { type: 'cp', value: 50 } }];
+    expect(getCandidateRiskAdvice(candidates, {
+      rookUnderThreat: true, bestMoveSavesRook: true,
+    })?.text).toBe('次に飛車を取られそうだね……先に逃がしておこう。');
+    expect(getCandidateRiskAdvice(candidates, {
+      rookUnderThreat: true, bestMoveSavesRook: false,
+    })?.key).not.toBe('save-threatened-rook');
+  });
+
+  test('劣勢時の最善手が王手なら攻めて手番を握るよう勧める', () => {
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: -1500 } },
+    ], { bestMoveGivesCheck: true })?.text)
+      .toBe('受け切るのは難しいから、王手で手番を握ろう！');
+  });
+
+  test('評価値と最善手の性質に応じて守備・攻め継続・励ましを選ぶ', () => {
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: -100 } },
+    ], { bestMoveIsDefensive: true })?.text)
+      .toBe('今は攻めるより守った方が良いかも。');
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 100 } },
+    ], {
+      mateThreatChecked: true,
+      bestMoveIsAttacking: true, opponentHasCheckingMove: true, moveCount: 50,
+    })?.text).toBe('詰めろじゃないから、受けなくてもまだ耐えられるよ！');
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 100 } },
+    ], {
+      bestMoveIsAttacking: true, opponentHasCheckingMove: true, moveCount: 50,
+    })?.key).not.toBe('not-mate-threat-keep-attacking');
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: -900 } },
+    ])?.text).toBe('まだ耐えられるよ！頑張ろう！');
+  });
+
   test('連盟美濃には横から攻める助言を返す', () => {
     const advice = getCoachAdvice({
       level: 'detailed', opponentFormations: ['連盟美濃'], advisedTopics: [],
@@ -187,5 +232,20 @@ describe('対局中の応援・助言', () => {
       beforeScore: { type: 'cp', value: -4000 },
       afterScore: { type: 'cp', value: -3000 },
     })).toBeNull();
+  });
+
+  test('評価を大きく損ねない成りや敵陣への駒打ちを盛り上げる', () => {
+    expect(getMoveFeedback({
+      level: 'detailed',
+      beforeScore: { type: 'cp', value: 100 },
+      afterScore: { type: 'cp', value: 50 },
+      wasPromotion: true,
+    })?.text).toBe('かち込むよ～！');
+    expect(getMoveFeedback({
+      level: 'detailed',
+      beforeScore: { type: 'cp', value: 0 },
+      afterScore: { type: 'cp', value: -900 },
+      wasEnemyCampDrop: true,
+    })?.key).toBe('move-mistake--900');
   });
 });
