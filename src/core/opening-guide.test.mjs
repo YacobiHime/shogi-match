@@ -711,6 +711,57 @@ describe("opening guide", () => {
     for (const usi of line) expect(appendUsiMove(record, usi), usi).toBe(true);
   });
 
+  it("waits for the opponent before showing Yokofudori capture moves", () => {
+    const beforeEighthFileExchange = createGameRecord();
+    const firstPart = [
+      "7g7f", "3c3d", "2g2f", "8c8d", "2f2e", "8d8e", "6i7h", "4a3b",
+      "2e2d", "2c2d", "2h2d", "5a4b",
+    ];
+    for (const usi of firstPart) expect(appendUsiMove(beforeEighthFileExchange, usi), usi).toBe(true);
+    const ownMoves = firstPart.filter((_, index) => index % 2 === 0);
+    expect(openingPlanCandidates({
+      strategyId: "yokofudori",
+      playedMoves: ownMoves,
+      moveHistory: firstPart,
+      legalMoves: ["8g8f"],
+      currentSfen: beforeEighthFileExchange.position.sfen,
+    })).toEqual([]);
+
+    const throughPawnPush = createGameRecord();
+    const withEighthFilePush = [...firstPart.slice(0, -1), "8e8f"];
+    for (const usi of withEighthFilePush) expect(appendUsiMove(throughPawnPush, usi), usi).toBe(true);
+    expect(openingPlanCandidates({
+      strategyId: "yokofudori",
+      playedMoves: ownMoves,
+      moveHistory: withEighthFilePush,
+      legalMoves: ["8g8f"],
+      currentSfen: throughPawnPush.position.sfen,
+    }).map(({ usi }) => usi)).toEqual(["8g8f"]);
+
+    expect(appendUsiMove(throughPawnPush, "8g8f")).toBe(true);
+    expect(openingPlanCandidates({
+      strategyId: "yokofudori",
+      playedMoves: [...ownMoves, "8g8f"],
+      moveHistory: [...withEighthFilePush, "8g8f"],
+      legalMoves: ["2d3d"],
+      currentSfen: throughPawnPush.position.sfen,
+    })).toEqual([]);
+    expect(appendUsiMove(throughPawnPush, "8b8f")).toBe(true);
+    expect(openingPlanCandidates({
+      strategyId: "yokofudori",
+      playedMoves: [...ownMoves, "8g8f"],
+      moveHistory: [...withEighthFilePush, "8g8f", "8b8f"],
+      legalMoves: ["2d3d"],
+      currentSfen: throughPawnPush.position.sfen,
+    }).map(({ usi }) => usi)).toEqual(["2d3d"]);
+  });
+
+  it("uses 5八玉・3六歩・3七桂 for the Aono variation", () => {
+    const moves = openingPlanSteps("aono-ryu", "").map(({ usi }) => usi);
+    expect(moves.slice(-3)).toEqual(["5i5h", "3g3f", "2i3g"]);
+    expect(moves).not.toContain("8i7g");
+  });
+
   it("plays the Twisting Rook guide after the mutual rook-pawn exchange", () => {
     const record = createGameRecord();
     const line = [
