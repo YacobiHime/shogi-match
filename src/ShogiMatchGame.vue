@@ -581,6 +581,7 @@ import {
 } from "./core/cpu-opening-repertoire.mjs";
 import { createPositionAnalysisCache } from "./core/position-analysis-cache.mjs";
 import { openingExplanation } from "./core/opening-explanations.mjs";
+import { selectMoveSound, type MoveSoundKind } from "./core/move-sound";
 import {
   clearMatchSnapshot,
   loadMatchSnapshot,
@@ -591,6 +592,9 @@ import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
 const UNDO_GUIDE_TEXT = "もう一度、落ち着いて考えてみよう！";
+
+type MoveSoundTemplates = { [K in MoveSoundKind]: HTMLAudioElement };
+let moveSoundTemplates: MoveSoundTemplates | null = null;
 
 const props = defineProps({
   mode: { type: String as () => GameMode, default: "cpu" },
@@ -1914,6 +1918,30 @@ function candidateGivesCheck(usi: string): boolean {
   }
 }
 
+function moveSoundUrl(fileName: string): string {
+  return `${props.assetBaseUrl.replace(/\/$/, "")}/audio/${fileName}`;
+}
+
+function ensureMoveSounds(): MoveSoundTemplates | null {
+  if (moveSoundTemplates || typeof Audio === "undefined") return moveSoundTemplates;
+  moveSoundTemplates = {
+    normal: new Audio(moveSoundUrl("komaoto_normal.mp3")),
+    strong: new Audio(moveSoundUrl("komaoto_strong.mp3")),
+  };
+  for (const audio of Object.values(moveSoundTemplates)) {
+    audio.preload = "auto";
+    audio.load();
+  }
+  return moveSoundTemplates;
+}
+
+function playMoveSound(kind: MoveSoundKind) {
+  const template = ensureMoveSounds()?.[kind];
+  if (!template) return;
+  const audio = template.cloneNode(true) as HTMLAudioElement;
+  void audio.play().catch(() => undefined);
+}
+
 function schedulePlayerIdleAdvice() {
   cancelPlayerIdleAdvice();
   if (
@@ -1935,6 +1963,7 @@ function schedulePlayerIdleAdvice() {
         ) return;
         dedicatedCoachRunning = true;
         try {
+          // 閃きと同じ高精度の解析結果を共有し、異なる手を勧めない。
           const settings = getIdleCoachSearchSettings(
             props.mobile || boardLayout.value === "portrait",
           );
@@ -2040,7 +2069,8 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   const reusedHint = actor === "player" && latestHintAnalysis?.historyLength === moveHistory.length
     ? hintMoveAssessment(latestHintAnalysis.candidates, usi)
     : null;
-  if (!active.value || !appendUsiMove(record.value, usi)) return false;
+  const move = active.value ? record.value.position.createMoveByUSI(usi) : null;
+  if (!move || !record.value.append(move)) return false;
   syncPosition(usi);
   moveHistory.push(usi);
   if (actor === "player") {
@@ -2070,6 +2100,10 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   if (!reviewMode.value) {
     emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
     const terminalResult = resultAfterMove(record.value);
+    playMoveSound(selectMoveSound(
+      move.capturedPieceType,
+      terminalResult?.reason === "checkmate" || isSideToMoveInCheck(currentSfen.value),
+    ));
     if (terminalResult) finish(terminalResult);
     else persistMatchState();
   }
@@ -2775,6 +2809,7 @@ onBeforeUnmount(() => {
   if (typeof window !== "undefined") window.removeEventListener("pagehide", handlePageHide);
 });
 onMounted(() => {
+  ensureMoveSounds();
   updateResponsiveLayout();
   boardResizeObserver = new ResizeObserver(updateResponsiveLayout);
   if (boardShell.value) boardResizeObserver.observe(boardShell.value);
