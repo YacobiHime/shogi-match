@@ -202,7 +202,7 @@ describe("opening guide", () => {
         "アヒル囲い", "パックマン", "嬉野流",
       ]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "anti-ranging").map(({ label }) => label))
-      .toEqual(["右四間飛車", "袖飛車", "鳥刺し"]);
+      .toEqual(["右四間飛車", "袖飛車", "地下鉄飛車", "鳥刺し"]);
     expect(OPENING_STRATEGIES.find(({ id }) => id === "ibisha")?.guideSelectable).toBe(false);
     expect(OPENING_STRATEGIES.filter(({ guideSelectable }) => guideSelectable === false).map(({ id }) => id))
       .toEqual([
@@ -791,6 +791,26 @@ describe("opening guide", () => {
       "3d3f", "8f8d", "3f2f",
     ];
     for (const usi of line) expect(appendUsiMove(record, usi), usi).toBe(true);
+  });
+
+  it("builds the Subway Rook track and attack pieces", () => {
+    const moves = openingPlanSteps("chikatetsu-bisha", "").map(({ usi }) => usi);
+    expect(moves).toEqual([
+      "7g7f", "8h6f", "7i8h", "8i7g",
+      "6i6h", "5i6i", "6i7h", "4i5h", "5g5f",
+      "9i9h", "3g3f", "2i3g", "3i4h", "2h2i", "2i9i",
+    ]);
+    const finalSfen = sfenAfterMoves(moves);
+    expect(isOpeningPlanComplete({
+      strategyId: "chikatetsu-bisha",
+      playedMoves: moves,
+      currentSfen: finalSfen,
+    })).toBe(true);
+    expect(isOpeningPlanComplete({
+      strategyId: "chikatetsu-bisha",
+      playedMoves: moves.slice(0, -1),
+      currentSfen: sfenAfterMoves(moves.slice(0, -1)),
+    })).toBe(false);
   });
 
   it("plays the Twisting Rook guide after the mutual rook-pawn exchange", () => {

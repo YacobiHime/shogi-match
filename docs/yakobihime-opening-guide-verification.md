@@ -123,6 +123,7 @@
 - 横歩取りの8六歩は、相手が8六へ突いた場合の「同歩」としてのみ案内する。2四同飛・3四飛も相手駒の配置が成立した局面に限定する。
 - 横歩取り・横歩取り青野流では、基本定跡どおり自分の角道を開ける7六歩を手順に含める。
 - 青野流とは別に「横歩取り3三角型」を選択可能な補助として追加する。3三角に3六飛、8四飛に2六飛と引く従来型を案内する。
+- 「地下鉄飛車」を対振り飛車系の補助へ追加する。6六角・7七桂・9八香・3七桂・4八銀で一段目を空け、2九飛から9九飛へ回る代表形を案内する。
 - 横歩取り青野流の誤った8一桂→7七桂を削除し、5八玉・3六歩・2九桂→3七桂の基本形へ修正する。
 
 主な照合資料:
@@ -130,6 +131,9 @@
 - Wikibooks「将棋/横歩取り」: https://ja.wikibooks.org/wiki/将棋/横歩取り
 - Wikipedia「Side Pawn Capture」: https://en.wikipedia.org/wiki/Side_Pawn_Capture
 - note「なんとなく横歩取り指せるようになりたい人へ（青野流編）」: https://note.com/miyakurakyo/n/n51e90e56fe4c
+- Wikipedia「Subway Rook」: https://en.wikipedia.org/wiki/Subway_Rook
+- 日本将棋連盟オンラインストア「地下鉄飛車 徹底ガイド」: https://store.shogi.or.jp/view/item/000000002561
+- 将棋ジム「地下鉄飛車の組み方と弱点」: https://shogi-gym.com/kakoi/chikatetsu/
 
 - Wikipedia「Mino castle」: https://en.wikipedia.org/wiki/Mino_castle
 - Wikipedia「Fortress castle（矢倉囲い）」: https://en.wikipedia.org/wiki/Fortress_castle

@@ -518,6 +518,34 @@ export const OPENING_STRATEGIES = [
     blackMoves: ["3g3f", "2h3h"],
   },
   {
+    id: "chikatetsu-bisha",
+    label: "地下鉄飛車",
+    family: "anti-ranging",
+    detectionNames: ["地下鉄飛車"],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [
+      ["9i", "R"], ["9h", "L"], ["6f", "B"], ["7g", "N"],
+      ["8h", "S"], ["7h", "K"], ["3g", "N"], ["4h", "S"],
+    ],
+    blackMoves: [
+      "7g7f", "8h6f", "7i8h", "8i7g",
+      "6i6h", "5i6i", "6i7h", "4i5h", "5g5f",
+      "9i9h", "3g3f", "2i3g", "3i4h", "2h2i", "2i9i",
+    ],
+    // 一段目の線路と、端攻めに使う角・桂・香を寄り道で壊さない。
+    planReservations: [
+      {
+        until: "2i9i",
+        squares: [
+          "2i", "3i", "4i", "5i", "6i", "7i", "8i", "9i",
+          "6f", "7g", "8h", "6h", "7h", "5h", "9h", "3g", "4h",
+        ],
+        fromSquares: ["2h", "2i", "3i", "4i", "5i", "6i", "7i", "8i", "9i"],
+      },
+    ],
+  },
+  {
     id: "onigoroshi",
     label: "鬼殺し",
     family: "special",
@@ -1009,7 +1037,7 @@ const STATIC_ROOK_STRATEGIES = new Set([
   "yagura-bougin", "yagura-hayaguri-gin", "yagura-koshikake-gin",
   "morishita-system", "kakugawari-45-knight", "aono-ryu", "gangi-right-shiken", "bougin",
   "right-shiken", "hayaguri-gin", "koshikake-gin", "ureshino",
-  "sujichigai-kaku", "kakuto-fu", "torizashi", "ahiru", "sodebisha",
+  "sujichigai-kaku", "kakuto-fu", "torizashi", "ahiru", "sodebisha", "chikatetsu-bisha",
 ]);
 const RANGING_ROOK_STRATEGIES = new Set([
   "shiken", "yababozu", "fujii-system", "sangen", "nakabisha", "gokigen",
