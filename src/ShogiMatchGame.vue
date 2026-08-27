@@ -485,7 +485,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Color, Record } from "tsshogi";
+import { Color, PieceType, Position, Record, Square, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import {
@@ -708,6 +708,11 @@ let playerMoveHintAssessment: {
   historyLength: number;
   beforeScore: EngineEvaluation;
   afterScore: EngineEvaluation;
+} | undefined;
+let playerMoveFlair: {
+  historyLength: number;
+  wasPromotion: boolean;
+  wasEnemyCampDrop: boolean;
 } | undefined;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let idleCoachTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1875,11 +1880,19 @@ async function updateDedicatedCoachAdvice(
   }
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
   const inCheck = isSideToMoveInCheck(currentSfen.value);
-  const mateThreat = coachLevel.value === "detailed" && !inCheck
-    ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes).isThreat
-    : false;
+  const mateThreatResult = coachLevel.value === "detailed" && !inCheck
+    ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes)
+    : null;
+  const mateThreat = mateThreatResult?.isThreat ?? false;
+  const bestMove = candidates.find((candidate) => candidate.rank === 1)?.move;
   const riskAdvice = coachLevel.value === "detailed"
-    ? getCandidateRiskAdvice(normalizedCandidates, { inCheck, mateThreat })
+    ? getCandidateRiskAdvice(normalizedCandidates, {
+        inCheck,
+        mateThreat,
+        mateThreatChecked: mateThreatResult !== null && !mateThreatResult.exhausted,
+        moveCount: moveCount.value,
+        ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
+      })
     : null;
   updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice, false);
 }
@@ -1916,6 +1929,62 @@ function candidateGivesCheck(usi: string): boolean {
   } catch {
     return false;
   }
+}
+
+function sideToMoveRookCaptureTargets(position: Position): Set<string> {
+  return new Set(enumerateLegalMoves(position)
+    .filter(({ capturedPieceType }) => capturedPieceType === PieceType.ROOK)
+    .map(({ to }) => to.usi));
+}
+
+function sideToMoveHasCheckingMove(position: Position): boolean {
+  return enumerateLegalMoves(position).some((candidate) => {
+    const next = position.clone();
+    const move = next.createMoveByUSI(candidate.usi);
+    return Boolean(move && next.doMove(move) && next.checked);
+  });
+}
+
+function bestMoveTacticalContext(usi: string) {
+  const position = record.value.position;
+  const move = position.createMoveByUSI(usi);
+  if (!move) return {};
+
+  // 相手が今すぐ実行できる合法手だけを脅威として扱う。
+  const opponentPosition = position.clone();
+  opponentPosition.setColor(reverseColor(position.color));
+  const threatenedRooks = sideToMoveRookCaptureTargets(opponentPosition);
+  const rookUnderThreat = threatenedRooks.size > 0;
+  const opponentHasCheckingMove = sideToMoveHasCheckingMove(opponentPosition);
+
+  const preview = position.clone();
+  const applied = preview.doMove(preview.createMoveByUSI(usi)!);
+  const givesCheck = applied && preview.checked;
+  const movedThreatenedRook = move.from instanceof Square && threatenedRooks.has(move.from.usi);
+  const rookCaptureTargetsAfterMove = applied
+    ? sideToMoveRookCaptureTargets(preview)
+    : new Set<string>();
+  const bestMoveSavesRook = movedThreatenedRook
+    && applied
+    && !rookCaptureTargetsAfterMove.has(move.to.usi);
+  const ownCamp = move.color === Color.BLACK ? move.to.rank >= 7 : move.to.rank <= 3;
+  const enemyCamp = move.color === Color.BLACK ? move.to.rank <= 3 : move.to.rank >= 7;
+  const bestMoveIsDefensive = !move.capturedPieceType && (
+    move.pieceType === PieceType.KING
+    || (ownCamp && (move.pieceType === PieceType.GOLD || move.pieceType === PieceType.SILVER))
+  );
+
+  return {
+    bestMoveIsKingMove: move.pieceType === PieceType.KING,
+    bestMoveGivesCheck: givesCheck,
+    bestMoveIsDefensive,
+    bestMoveIsAttacking: Boolean(
+      givesCheck || move.capturedPieceType || move.promote || enemyCamp,
+    ),
+    rookUnderThreat,
+    bestMoveSavesRook,
+    opponentHasCheckingMove,
+  };
 }
 
 function moveSoundUrl(fileName: string): string {
@@ -2022,11 +2091,19 @@ function scheduleReviewCoachAdvice() {
       const score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
       const inCheck = isSideToMoveInCheck(currentSfen.value);
       const isPlayerTurn = analyzedSideToMove === humanColor.value;
-      const mateThreat = coachLevel.value === "detailed" && isPlayerTurn && !inCheck
-        ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes).isThreat
-        : false;
+      const mateThreatResult = coachLevel.value === "detailed" && isPlayerTurn && !inCheck
+        ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes)
+        : null;
+      const mateThreat = mateThreatResult?.isThreat ?? false;
+      const bestMove = candidates.find((candidate) => candidate.rank === 1)?.move;
       const riskAdvice = coachLevel.value === "detailed" && isPlayerTurn
-        ? getCandidateRiskAdvice(normalizedCandidates, { inCheck, mateThreat })
+        ? getCandidateRiskAdvice(normalizedCandidates, {
+            inCheck,
+            mateThreat,
+            mateThreatChecked: mateThreatResult !== null && !mateThreatResult.exhausted,
+            moveCount: moveCount.value,
+            ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
+          })
         : null;
       updateCoachAdviceFromPlayerScore(score, riskAdvice);
     } finally {
@@ -2074,6 +2151,12 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   syncPosition(usi);
   moveHistory.push(usi);
   if (actor === "player") {
+    const enemyCamp = move.color === Color.BLACK ? move.to.rank <= 3 : move.to.rank >= 7;
+    playerMoveFlair = {
+      historyLength: moveHistory.length,
+      wasPromotion: move.promote,
+      wasEnemyCampDrop: usi.includes("*") && enemyCamp,
+    };
     if (followedOpeningDecision?.source === "ai") {
       openingGuideDetourCount.value += 1;
       if (shouldAbandonOpeningGuide(openingGuideDetourCount.value)) {
@@ -2178,6 +2261,7 @@ function undoTurn() {
   playerTurnScoreHistoryLength = -1;
   latestHintAnalysis = undefined;
   playerMoveHintAssessment = undefined;
+  playerMoveFlair = undefined;
   hintCandidates.value = [];
   resetOpeningFollowup();
   resetOpeningGuideSafety();
@@ -2383,6 +2467,10 @@ async function scheduleCpuMove() {
         ? playerMoveHintAssessment
         : undefined;
       playerMoveHintAssessment = undefined;
+      const moveFlair = playerMoveFlair?.historyLength === playerMoveHistoryLength
+        ? playerMoveFlair
+        : undefined;
+      playerMoveFlair = undefined;
       const comparableBeforeScore = reusedHintAssessment?.beforeScore
         ?? (playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
           ? playerTurnScore
@@ -2419,6 +2507,8 @@ async function scheduleCpuMove() {
               record.value.position.color,
               humanColor.value,
             ),
+          wasPromotion: moveFlair?.wasPromotion,
+          wasEnemyCampDrop: moveFlair?.wasEnemyCampDrop,
         });
         // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
         // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
@@ -2702,6 +2792,7 @@ function restart() {
   playerTurnScoreHistoryLength = -1;
   latestHintAnalysis = undefined;
   playerMoveHintAssessment = undefined;
+  playerMoveFlair = undefined;
   cpuOpeningPlan = null;
   positionAnalysisCache.clear();
   moveHistory = [];

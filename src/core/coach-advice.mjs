@@ -189,7 +189,19 @@ function comparableScore(score) {
 }
 
 /** 上位候補の評価差から、一手の選択が勝敗へ直結する局面を知らせる。 */
-export function getCandidateRiskAdvice(candidates = [], { inCheck = false, mateThreat = false } = {}) {
+export function getCandidateRiskAdvice(candidates = [], {
+  inCheck = false,
+  mateThreat = false,
+  mateThreatChecked = false,
+  bestMoveIsKingMove = false,
+  bestMoveGivesCheck = false,
+  bestMoveIsDefensive = false,
+  bestMoveIsAttacking = false,
+  rookUnderThreat = false,
+  bestMoveSavesRook = false,
+  opponentHasCheckingMove = false,
+  moveCount = 0,
+} = {}) {
   const ranked = [...candidates]
     .filter((candidate) => Number.isInteger(candidate?.rank) && candidate.rank >= 1)
     .sort((left, right) => left.rank - right.rank);
@@ -201,7 +213,9 @@ export function getCandidateRiskAdvice(candidates = [], { inCheck = false, mateT
     };
   }
   if (inCheck) {
-    return { key: 'king-in-check', text: '王手きたーっ！！' };
+    return bestMoveIsKingMove
+      ? { key: 'king-in-check-escape', text: 'う～ん、王手だね…ここは逃げるべきかも。' }
+      : { key: 'king-in-check', text: '王手きたーっ！！' };
   }
   if (mateThreat) {
     return { key: 'mate-risk-top3', text: '間違えたら詰みだよ。慎重に受けよう。' };
@@ -220,6 +234,33 @@ export function getCandidateRiskAdvice(candidates = [], { inCheck = false, mateT
   })) {
     return { key: 'candidate-evaluation-cliff', text: '何かあるよ、気を付けて！' };
   }
+  if (rookUnderThreat && bestMoveSavesRook) {
+    return {
+      key: 'save-threatened-rook',
+      text: '次に飛車を取られそうだね……先に逃がしておこう。',
+    };
+  }
+  if (bestValue !== undefined && bestValue <= -1200 && bestMoveGivesCheck) {
+    return {
+      key: 'countercheck-while-losing',
+      text: '受け切るのは難しいから、王手で手番を握ろう！',
+    };
+  }
+  if (bestValue !== undefined && bestValue <= 200 && bestMoveIsDefensive) {
+    return { key: 'prefer-defense', text: '今は攻めるより守った方が良いかも。' };
+  }
+  if (
+    mateThreatChecked && bestValue !== undefined && bestValue >= -600 && moveCount >= 35
+    && opponentHasCheckingMove && bestMoveIsAttacking
+  ) {
+    return {
+      key: 'not-mate-threat-keep-attacking',
+      text: '詰めろじゃないから、受けなくてもまだ耐えられるよ！',
+    };
+  }
+  if (bestValue !== undefined && bestValue >= -3000 && bestValue <= -700) {
+    return { key: 'still-resilient', text: 'まだ耐えられるよ！頑張ろう！' };
+  }
   return null;
 }
 
@@ -229,7 +270,13 @@ function formatEvaluation(value) {
 }
 
 /** 着手前後のプレイヤー視点評価から、大きな評価低下だけを指摘する。 */
-export function getMoveFeedback({ level = 'encourage', beforeScore, afterScore } = {}) {
+export function getMoveFeedback({
+  level = 'encourage',
+  beforeScore,
+  afterScore,
+  wasPromotion = false,
+  wasEnemyCampDrop = false,
+} = {}) {
   if (level !== 'detailed') return null;
   const before = comparableScore(beforeScore);
   const after = comparableScore(afterScore);
@@ -248,6 +295,9 @@ export function getMoveFeedback({ level = 'encourage', beforeScore, afterScore }
       key: `move-mistake-${Math.trunc(change)}`,
       text: `今の私たちの手は悪手だね…評価値変動${formatEvaluation(change)}だよ。`,
     };
+  }
+  if ((wasPromotion || wasEnemyCampDrop) && after >= -500 && change >= -300) {
+    return { key: 'enter-enemy-camp', text: 'かち込むよ～！' };
   }
   return null;
 }
