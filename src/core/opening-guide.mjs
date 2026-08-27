@@ -1,3 +1,14 @@
+const YOKOFUDORI_MOVE_POSITION_PREREQUISITES = Object.freeze({
+  // ▲同飛・▲同歩は、相手の歩がその地点へ来たときだけ案内する。
+  "2h2d": [{ square: "2d", owner: "opponent", kind: "P" }],
+  "8g8f": [{ square: "8f", owner: "opponent", kind: "P" }],
+  // 標準形の▲3四飛は、△同飛まで8筋を交換し、3四歩が残る局面で案内する。
+  "2d3d": [
+    { square: "8f", owner: "opponent", kind: "R" },
+    { square: "3d", owner: "opponent", kind: "P" },
+  ],
+});
+
 export const OPENING_STRATEGIES = [
   {
     id: "ibisha",
@@ -25,8 +36,9 @@ export const OPENING_STRATEGIES = [
     detectionNames: ["横歩取り"],
     strictOrder: true,
     historyCompletes: true,
-    // 横歩を取って3四へ回った飛車と、3六歩を基準に盤面からも判定する。
-    completionSquares: [["3d", "R"], ["3f", "P"]],
+    // 3四の横歩を取った飛車を基準に盤面からも判定する。
+    completionSquares: [["3d", "R"]],
+    movePositionPrerequisites: YOKOFUDORI_MOVE_POSITION_PREREQUISITES,
     blackMoves: ["7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d"],
   },
   {
@@ -37,6 +49,7 @@ export const OPENING_STRATEGIES = [
     strictOrder: true,
     historyCompletes: true,
     completionSquares: [["3f", "R"], ["7g", "N"], ["7h", "G"]],
+    movePositionPrerequisites: YOKOFUDORI_MOVE_POSITION_PREREQUISITES,
     blackMoves: [
       "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d2f", "2f3f",
       "7g7f", "8i7g",
@@ -231,10 +244,15 @@ export const OPENING_STRATEGIES = [
     detectionNames: ["横歩取り青野流", "青野流"],
     strictOrder: true,
     historyCompletes: true,
-    completionSquares: [["3d", "R"], ["3f", "P"]],
+    completionSquares: [["3d", "R"], ["5h", "K"], ["3f", "P"], ["3g", "N"]],
+    movePositionPrerequisites: {
+      ...YOKOFUDORI_MOVE_POSITION_PREREQUISITES,
+      // 青野流は△3三角に対して5八玉と上がり、右桂を3七へ活用する。
+      "5i5h": [{ square: "3c", owner: "opponent", kind: "B" }],
+    },
     blackMoves: [
       "7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d",
-      "3g3f", "8i7g",
+      "5i5h", "3g3f", "2i3g",
     ],
   },
   {
@@ -1382,6 +1400,8 @@ export function openingPlanCandidates({
   const history = new Set(moveHistory);
   const legal = new Set(legalMoves);
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  const board = parseSfenBoard(currentSfen);
+  const opponentColor = color === "black" ? "white" : "black";
 
   const completionAdvance = strategy?.completionAdvance;
   if (strategy && !strategyComplete && completionAdvance && currentSfen) {
@@ -1420,9 +1440,17 @@ export function openingPlanCandidates({
     const prerequisites = new Map(Object.entries(combinedPrerequisites).map(
       ([move, required]) => [convert(move), required.map(convert)],
     ));
+    const positionPrerequisites = new Map(Object.entries(
+      definition.movePositionPrerequisites ?? {},
+    ).map(([move, required]) => [convert(move), required]));
     const isReady = (entry) => {
       if (!legal.has(entry.usi)) return false;
       if (!(prerequisites.get(entry.usi) ?? []).every((move) => played.has(move))) return false;
+      if (!(positionPrerequisites.get(entry.usi) ?? []).every(({ square, owner, kind }) => {
+        const piece = board.get(convert(square));
+        const requiredColor = owner === "opponent" ? opponentColor : color;
+        return piece?.color === requiredColor && piece.kind === kind;
+      })) return false;
       const historyRequirement = definition.availability?.requiredHistoryBeforeMoves?.find(
         ({ move }) => move === entry.usi,
       );

@@ -118,10 +118,16 @@
 ## 2026-08-28 実装・自動テスト記録（実対局での再検証待ち）
 
 - 戦型判定を補助の完成形定義と連動させた。全囲いを先手・後手とも完成形から検出し、既存の原典データにない形も補助と同じ名称で表示する。
-- 横歩取りは、標準の定跡局面だけでなく「3四飛・3六歩」の補助完成形でも判定する。
+- 横歩取りは、標準の定跡局面だけでなく、3四の横歩を飛車で取った補助完成形でも判定する。
 - 舟囲い・ボナンザ囲いにも完成形を明示し、全囲いの検出を自動テストで網羅する。
+- 横歩取りの8六歩は、相手が8六へ突いた場合の「同歩」としてのみ案内する。2四同飛・3四飛も相手駒の配置が成立した局面に限定する。
+- 横歩取り青野流の誤った8一桂→7七桂を削除し、5八玉・3六歩・2九桂→3七桂の基本形へ修正する。
 
 主な照合資料:
+
+- Wikibooks「将棋/横歩取り」: https://ja.wikibooks.org/wiki/将棋/横歩取り
+- Wikipedia「Side Pawn Capture」: https://en.wikipedia.org/wiki/Side_Pawn_Capture
+- note「なんとなく横歩取り指せるようになりたい人へ（青野流編）」: https://note.com/miyakurakyo/n/n51e90e56fe4c
 
 - Wikipedia「Mino castle」: https://en.wikipedia.org/wiki/Mino_castle
 - Wikipedia「Fortress castle（矢倉囲い）」: https://en.wikipedia.org/wiki/Fortress_castle
