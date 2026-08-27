@@ -39,7 +39,7 @@ export const OPENING_STRATEGIES = [
     // 3四の横歩を取った飛車を基準に盤面からも判定する。
     completionSquares: [["3d", "R"]],
     movePositionPrerequisites: YOKOFUDORI_MOVE_POSITION_PREREQUISITES,
-    blackMoves: ["7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d"],
+    blackMoves: ["2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d"],
   },
   {
     id: "hineribisha",
@@ -251,7 +251,7 @@ export const OPENING_STRATEGIES = [
       "5i5h": [{ square: "3c", owner: "opponent", kind: "B" }],
     },
     blackMoves: [
-      "7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d",
+      "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d",
       "5i5h", "3g3f", "2i3g",
     ],
   },
