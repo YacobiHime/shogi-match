@@ -705,24 +705,24 @@ describe("opening guide", () => {
   it("plays the Yokofudori guide through a legal alternating main line", () => {
     const record = createGameRecord();
     const line = [
-      "2g2f", "3c3d", "2f2e", "8c8d", "6i7h", "8d8e",
+      "7g7f", "3c3d", "2g2f", "8c8d", "2f2e", "8d8e", "6i7h", "4a3b",
       "2e2d", "2c2d", "2h2d", "8e8f", "8g8f", "8b8f", "2d3d",
     ];
     for (const usi of line) expect(appendUsiMove(record, usi), usi).toBe(true);
   });
 
   it.each(["yokofudori", "aono-ryu"])(
-    "does not open the player's bishop diagonal in %s",
+    "opens the player's bishop diagonal in %s",
     (strategyId) => {
-      expect(openingPlanSteps(strategyId, "").map(({ usi }) => usi)).not.toContain("7g7f");
-      expect(openingPlanSteps(strategyId, "", "white").map(({ usi }) => usi)).not.toContain("3c3d");
+      expect(openingPlanSteps(strategyId, "").map(({ usi }) => usi)).toContain("7g7f");
+      expect(openingPlanSteps(strategyId, "", "white").map(({ usi }) => usi)).toContain("3c3d");
     },
   );
 
   it("waits for the opponent before showing Yokofudori capture moves", () => {
     const beforeEighthFileExchange = createGameRecord();
     const firstPart = [
-      "2g2f", "3c3d", "2f2e", "8c8d", "6i7h", "8d8e",
+      "7g7f", "3c3d", "2g2f", "8c8d", "2f2e", "8d8e", "6i7h", "4a3b",
       "2e2d", "2c2d", "2h2d", "5a4b",
     ];
     for (const usi of firstPart) expect(appendUsiMove(beforeEighthFileExchange, usi), usi).toBe(true);
