@@ -8,11 +8,37 @@ import {
   preferSpecificFormationNames,
   updateFormationState,
 } from './formation-tracker.mjs';
+import { mirrorUsiMove, OPENING_CASTLES } from './opening-guide.mjs';
 
 const master = JSON.parse(await readFile(
   new URL('../data/hiragana_suisho_formations.json', import.meta.url),
   'utf8',
 ));
+
+function sfenForCompletionSquares(squares, color = 'black') {
+  const pieces = new Map();
+  for (const [blackSquare, kind] of squares) {
+    const square = color === 'white' ? mirrorUsiMove(blackSquare) : blackSquare;
+    pieces.set(square, color === 'black' ? kind : kind.toLowerCase());
+  }
+  const ranks = [];
+  for (let rank = 1; rank <= 9; rank += 1) {
+    let empty = 0;
+    let encoded = '';
+    for (let file = 9; file >= 1; file -= 1) {
+      const piece = pieces.get(`${file}${String.fromCharCode(96 + rank)}`);
+      if (!piece) {
+        empty += 1;
+      } else {
+        if (empty) encoded += empty;
+        empty = 0;
+        encoded += piece;
+      }
+    }
+    ranks.push(encoded + (empty || ''));
+  }
+  return `${ranks.join('/')} b - 1`;
+}
 
 describe('戦型の役割別追跡', () => {
   test('一手損角換わりを後手側だけへ表示する', () => {
@@ -57,6 +83,23 @@ describe('戦型の役割別追跡', () => {
     expect(detectFormationSnapshot(sente, master).black.tactics).toContain('やばボーズ流');
     expect(detectFormationSnapshot(gote, master).white.tactics).toContain('やばボーズ流');
   });
+
+  test('補助の横歩取り完成形を標準局面以外でも判定する', () => {
+    const sfen = '9/9/9/6R2/9/6P2/9/9/9 b - 1';
+    expect(detectFormationSnapshot(sfen, master).battle).toBe('横歩取り');
+  });
+
+  test.each(OPENING_CASTLES)(
+    '補助で完成扱いの囲い $label を先後とも判定する',
+    (castle) => {
+      const squares = castle.completionVariants?.[0] ?? castle.completionSquares;
+      expect(squares, `${castle.label} の完成形`).toBeTruthy();
+      expect(detectFormationSnapshot(sfenForCompletionSquares(squares), master).black.castle)
+        .toBe(castle.label);
+      expect(detectFormationSnapshot(sfenForCompletionSquares(squares, 'white'), master).white.castle)
+        .toBe(castle.label);
+    },
+  );
 
   test('基本戦型と飛車位置系は最初の判定を保持する', () => {
     const initial = createFormationState();

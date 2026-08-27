@@ -2,6 +2,11 @@ import {
   detectHiraganaSuishoFormations,
   invertHiraganaSuishoSfen,
 } from './hiragana-suisho-formations.mjs';
+import {
+  mirrorUsiMove,
+  OPENING_CASTLES,
+  OPENING_STRATEGIES,
+} from './opening-guide.mjs';
 
 function withTurn(sfen, turn) {
   const fields = String(sfen).replace(/^sfen\s+/, '').trim().split(/\s+/);
@@ -17,6 +22,78 @@ function namesByGroup(rules, groups) {
 
 function firstByGroup(rules, group) {
   return rules.find((rule) => rule.group === group)?.name ?? '';
+}
+
+function parseSfenBoard(sfen) {
+  const ranks = String(sfen).replace(/^sfen\s+/, '').trim().split(/\s+/)[0].split('/');
+  const board = new Map();
+  ranks.forEach((rank, rankIndex) => {
+    let file = 9;
+    let promoted = false;
+    for (const symbol of rank) {
+      if (/[1-9]/.test(symbol)) {
+        file -= Number(symbol);
+      } else if (symbol === '+') {
+        promoted = true;
+      } else {
+        board.set(`${file}${String.fromCharCode(97 + rankIndex)}`, {
+          color: symbol === symbol.toUpperCase() ? 'black' : 'white',
+          kind: `${promoted ? '+' : ''}${symbol.toUpperCase()}`,
+        });
+        file -= 1;
+        promoted = false;
+      }
+    }
+  });
+  return board;
+}
+
+function completionVariants(definition) {
+  if (definition.completionVariants?.length) return definition.completionVariants;
+  return definition.completionSquares?.length ? [definition.completionSquares] : [];
+}
+
+/** 補助が完成扱いにする形を、戦型表示でも同じ基準で拾う。 */
+function matchesGuideCompletion(definition, board, color) {
+  return completionVariants(definition).some((squares) => squares.every(([blackSquare, kind]) => {
+    const square = color === 'white' ? mirrorUsiMove(blackSquare) : blackSquare;
+    const piece = board.get(square);
+    return piece?.color === color && piece.kind === kind;
+  }));
+}
+
+function mostSpecificGuideMatch(definitions, board, color) {
+  return definitions
+    .filter((definition) => matchesGuideCompletion(definition, board, color))
+    .sort((left, right) => (
+      Math.max(...completionVariants(right).map((squares) => squares.length))
+      - Math.max(...completionVariants(left).map((squares) => squares.length))
+    ))[0];
+}
+
+function guideCastleName(board, color) {
+  return mostSpecificGuideMatch(OPENING_CASTLES, board, color)?.label ?? '';
+}
+
+function guideTacticNames(board, color) {
+  return OPENING_STRATEGIES
+    .filter((definition) => definition.id !== 'yokofudori')
+    .filter((definition) => matchesGuideCompletion(definition, board, color))
+    .map((definition) => definition.label);
+}
+
+function guideBattleName(board) {
+  const blackYokofudori = mostSpecificGuideMatch(
+    OPENING_STRATEGIES.filter((definition) => definition.id === 'yokofudori'),
+    board,
+    'black',
+  );
+  const whiteYokofudori = mostSpecificGuideMatch(
+    OPENING_STRATEGIES.filter((definition) => definition.id === 'yokofudori'),
+    board,
+    'white',
+  );
+  return blackYokofudori || whiteYokofudori ? '横歩取り' : '';
 }
 
 // 具体的な派生戦型が判定されたときに、同時表示しない一般名。
@@ -96,19 +173,30 @@ export function detectFormationSnapshot(sfen, master) {
   const directRules = detectHiraganaSuishoFormations(direct, master);
   const invertedRules = detectHiraganaSuishoFormations(inverted, master);
   const goteRules = detectHiraganaSuishoFormations(goteDirect, master);
+  const board = parseSfenBoard(sfen);
+  const blackGuideCastle = guideCastleName(board, 'black');
+  const whiteGuideCastle = guideCastleName(board, 'white');
+  const blackGuideTactics = guideTacticNames(board, 'black');
+  const whiteGuideTactics = guideTacticNames(board, 'white');
   return {
-    battle: firstByGroup(directRules, 'bt_match1'),
+    battle: firstByGroup(directRules, 'bt_match1') || guideBattleName(board),
     black: {
       rook: firstByGroup(directRules, 'bt_match2'),
-      castle: firstByGroup(directRules, 'enc_match'),
-      tactics: namesByGroup(directRules, ['sente_tac_match', 'tac_match']),
+      castle: blackGuideCastle || firstByGroup(directRules, 'enc_match'),
+      tactics: [...new Set([
+        ...namesByGroup(directRules, ['sente_tac_match', 'tac_match']),
+        ...blackGuideTactics,
+      ])],
     },
     white: {
       rook: firstByGroup(invertedRules, 'bt_match2'),
-      castle: firstByGroup(invertedRules, 'enc_match'),
+      castle: whiteGuideCastle || firstByGroup(invertedRules, 'enc_match'),
       tactics: [
-        ...namesByGroup(goteRules, ['gote_tac_match']),
-        ...namesByGroup(invertedRules, ['tac_match']),
+        ...new Set([
+          ...namesByGroup(goteRules, ['gote_tac_match']),
+          ...namesByGroup(invertedRules, ['tac_match']),
+          ...whiteGuideTactics,
+        ]),
       ],
     },
   };
