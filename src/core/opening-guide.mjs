@@ -25,6 +25,8 @@ export const OPENING_STRATEGIES = [
     detectionNames: ["横歩取り"],
     strictOrder: true,
     historyCompletes: true,
+    // 横歩を取って3四へ回った飛車と、3六歩を基準に盤面からも判定する。
+    completionSquares: [["3d", "R"], ["3f", "P"]],
     blackMoves: ["7g7f", "2g2f", "2f2e", "6i7h", "2e2d", "2h2d", "8g8f", "2d3d"],
   },
   {
@@ -686,6 +688,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     id: "funagakoi",
     label: "舟囲い",
     detectionNames: ["舟囲い", "箱入り娘"],
+    completionSquares: [["7h", "K"], ["5h", "G"], ["7i", "S"], ["8h", "B"]],
     blackMoves: ["5i6h", "6h7h", "4i5h"],
   },
   {
@@ -903,6 +906,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     id: "bonanza",
     label: "ボナンザ囲い",
     detectionNames: ["ボナンザ囲い"],
+    completionSquares: [["6f", "B"], ["7g", "S"], ["7h", "K"], ["6h", "G"], ["5h", "G"]],
     blackMoves: ["7g7f", "8h6f", "7i7h", "7h7g", "5i6h", "6h7h", "6i6h", "4i5h"],
   },
 ];
