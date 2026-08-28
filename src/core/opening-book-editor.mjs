@@ -1,0 +1,94 @@
+import { Position } from "tsshogi";
+
+export const OPENING_BOOK_SCHEMA_VERSION = 1;
+export const OPENING_BOOK_STORAGE_KEY = "shogi-match-opening-book-draft-v1";
+
+export function createOpeningBookDraft({ definition, kind = "strategy", side = "black", initialSfen }) {
+  const now = new Date().toISOString().slice(0, 10);
+  return {
+    schemaVersion: OPENING_BOOK_SCHEMA_VERSION,
+    id: definition?.id ?? "new-opening",
+    label: definition?.label ?? "新しい定跡",
+    kind,
+    side,
+    initialSfen,
+    guideMoves: [...(definition?.blackMoves ?? [])],
+    sources: [{ title: "", url: "", checkedAt: now }],
+    branches: [{ id: "main", label: "本線", moves: [] }],
+    notes: "",
+    engineReview: { checked: false, note: "" },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function replayOpeningBranch(book, branch, moveCount = branch?.moves?.length ?? 0) {
+  let position;
+  try {
+    position = Position.newBySFEN(book?.initialSfen);
+    if (!position) throw new Error();
+  } catch {
+    return { position: null, applied: 0, error: "開始局面のSFENが不正です。" };
+  }
+  const limit = Math.min(moveCount, branch?.moves?.length ?? 0);
+  for (let index = 0; index < limit; index += 1) {
+    const usi = branch.moves[index]?.usi;
+    const move = typeof usi === "string" ? position.createMoveByUSI(usi) : null;
+    if (!move || !position.isValidMove(move) || !position.doMove(move)) {
+      return { position, applied: index, error: `${index + 1}手目「${usi || "空欄"}」は、この局面では指せません。` };
+    }
+  }
+  return { position, applied: limit, error: null };
+}
+
+export function validateOpeningBook(book) {
+  const errors = [];
+  const warnings = [];
+  if (book?.schemaVersion !== OPENING_BOOK_SCHEMA_VERSION) errors.push("未対応のschemaVersionです。");
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(book?.id ?? "")) errors.push("IDは半角英小文字・数字・ハイフンで入力してください。");
+  if (!String(book?.label ?? "").trim()) errors.push("名称を入力してください。");
+  if (!["strategy", "castle"].includes(book?.kind)) errors.push("種類は戦法か囲いにしてください。");
+  if (!["black", "white", "both"].includes(book?.side)) errors.push("対象手番が不正です。");
+
+  const branchIds = new Set();
+  const exactLines = new Set();
+  for (const [branchIndex, branch] of (book?.branches ?? []).entries()) {
+    const prefix = `変化${branchIndex + 1}`;
+    if (!branch?.id || branchIds.has(branch.id)) errors.push(`${prefix}: 分岐IDが空か重複しています。`);
+    branchIds.add(branch?.id);
+    if (!branch?.moves?.length) errors.push(`${prefix}: 指し手を1手以上登録してください。`);
+    const replay = replayOpeningBranch(book, branch);
+    if (replay.error) errors.push(`${prefix}: ${replay.error}`);
+    const line = (branch?.moves ?? []).map(({ usi }) => usi).join(" ");
+    if (line && exactLines.has(line)) errors.push(`${prefix}: 同一手順の分岐が重複しています。`);
+    exactLines.add(line);
+  }
+  if (!(book?.branches?.length > 0)) errors.push("分岐を1つ以上作成してください。");
+
+  const validSources = (book?.sources ?? []).filter((source) => source?.title || source?.url);
+  if (!validSources.length) errors.push("Wikipedia等で確認した出典を1件以上登録してください。");
+  for (const [index, source] of validSources.entries()) {
+    if (!String(source.title ?? "").trim()) errors.push(`出典${index + 1}: ページ名が必要です。`);
+    try {
+      const url = new URL(source.url);
+      if (url.protocol !== "https:") throw new Error();
+    } catch {
+      errors.push(`出典${index + 1}: HTTPSのURLを入力してください。`);
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(source.checkedAt ?? "")) errors.push(`出典${index + 1}: 確認日はYYYY-MM-DDで入力してください。`);
+  }
+  if (book?.guideMoves?.length && !(book?.branches ?? []).some(({ moves }) => moves?.length)) {
+    warnings.push("既存の案内手だけを取り込んだ状態です。相手の応手を含む実戦手順を盤上で登録してください。");
+  }
+  if (!book?.engineReview?.checked) warnings.push("エンジン安全確認が未実施です。実装へ反映する前に評価値も確認してください。");
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+export function serializeOpeningBook(book) {
+  return `${JSON.stringify({ ...book, schemaVersion: OPENING_BOOK_SCHEMA_VERSION, updatedAt: new Date().toISOString() }, null, 2)}\n`;
+}
+
+export function parseOpeningBook(text) {
+  const value = JSON.parse(text);
+  if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("JSONの最上位はオブジェクトにしてください。");
+  return value;
+}

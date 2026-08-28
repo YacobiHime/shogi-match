@@ -20,6 +20,7 @@
   "scripts": {
     "build": "vite build",
     "build:hosting": "npm run build && node scripts/build-hosting.mjs",
+    "opening-editor": "vite --host 127.0.0.1 --open /opening-editor.html",
     "optimize:images": "node scripts/optimize-images.mjs",
     "deploy": "npm run build:hosting && npx firebase-tools deploy --only hosting",
     "test": "vitest run"
