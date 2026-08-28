@@ -1337,10 +1337,14 @@ export function availableOpeningDefinitions({
  */
 export function openingPlanInterruption({
   strategyId,
+  castleId,
   color = "black",
   playedMoves = [],
   opponentMoves = [],
   moveHistory = [],
+  detectedFormations = [],
+  opponentFormations = [],
+  currentSfen = "",
 } = {}) {
   const own = new Set(canonicalMovesForColor(playedMoves, color));
   const opponent = new Set(canonicalMovesForColor(
@@ -1349,6 +1353,33 @@ export function openingPlanInterruption({
   ));
   const lastMove = moveHistory.at(-1);
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+
+  if (
+    strategy?.family === "yokofudori"
+    && opponent.has("8h2b+")
+    && !own.has("2d3d")
+  ) {
+    return {
+      requiresReselection: true,
+      clearStrategy: true,
+      clearCastle: true,
+      message: "あー！角換わりされちゃった。横歩取りできないから、角換わり腰掛け銀や右玉に切り替えよう！",
+    };
+  }
+
+  if (
+    strategy?.family === "yokofudori"
+    && own.has("8h2b+")
+    && !own.has("2d3d")
+  ) {
+    return {
+      requiresReselection: true,
+      clearStrategy: true,
+      clearCastle: true,
+      message: "あっ、こちらから角交換したので横歩取りの定跡には進めないね。ここで中断して、角換わり腰掛け銀や右玉に切り替えよう！",
+    };
+  }
 
   if (
     strategy?.family === "kakugawari"
@@ -1359,6 +1390,8 @@ export function openingPlanInterruption({
     const closingMove = color === "black" ? "△4四歩" : "▲6六歩";
     return {
       fallbackStrategyId: "right-shiken",
+      requiresReselection: true,
+      clearStrategy: true,
       message: `${closingMove}で相手が角道を閉じたね。角交換ができないから角換わりはここで中断して、閉じた角道を狙いやすい右四間飛車へ切り替えよう！`,
     };
   }
@@ -1370,6 +1403,8 @@ export function openingPlanInterruption({
   ) {
     return {
       fallbackStrategyId: "shiken",
+      requiresReselection: true,
+      clearStrategy: true,
       message: "うわー！相手が角道を閉じちゃった。うぅ～やばボーズ流はできないね。普通の四間飛車で攻めよっか。",
     };
   }
@@ -1379,6 +1414,8 @@ export function openingPlanInterruption({
     if (!moveHistory.includes(requiredCapture)) {
       return {
         fallbackStrategyId: "shiken",
+        requiresReselection: true,
+        clearStrategy: true,
         message: "あっ、相手は歩を取らなかったね。パックマンは不成立だから、普通の四間飛車に切り替えよっか。",
       };
     }
@@ -1391,8 +1428,54 @@ export function openingPlanInterruption({
   ) {
     return {
       fallbackStrategyId: "ibisha",
+      requiresReselection: true,
+      clearStrategy: true,
       message: "角交換の受け方が想定と違うね。筋違い角を無理に続けず、角の打ち込みに気を付けて居飛車で戦おう。",
     };
+  }
+
+  // 次の定跡手に使う駒が元の升から消えていれば、待っても固定手順には戻れない。
+  // 相手の応手待ちや王手回避など、駒が所定位置に残る一時的な停止はここでは中断しない。
+  if (currentSfen) {
+    const board = parseSfenBoard(currentSfen);
+    const detected = new Set(detectedFormations);
+    const steps = openingPlanSteps(strategyId, castleId, color, {
+      playedMoves, opponentMoves, opponentFormations,
+    });
+    for (const phase of ["strategy", "castle"]) {
+      const definition = phase === "strategy" ? strategy : castle;
+      if (!definition || definitionDetectedComplete(
+        definition, detected, currentSfen, color, playedMoves,
+      )) continue;
+      const playedCounts = new Map();
+      for (const move of playedMoves) {
+        playedCounts.set(move, (playedCounts.get(move) ?? 0) + 1);
+      }
+      const pending = steps.filter((entry) => {
+        if (entry.phase !== phase) return false;
+        const remaining = playedCounts.get(entry.usi) ?? 0;
+        if (remaining <= 0) return true;
+        playedCounts.set(entry.usi, remaining - 1);
+        return false;
+      });
+      const candidates = definition.strictOrder && !definition.adaptiveOrder
+        ? pending.slice(0, 1)
+        : pending;
+      const boardMoves = candidates.filter(({ usi }) => /^[1-9][a-i][1-9][a-i]\+?$/.test(usi));
+      if (
+        boardMoves.length > 0
+        && boardMoves.every(({ usi }) => board.get(usi.slice(0, 2))?.color !== color)
+      ) {
+        return {
+          requiresReselection: true,
+          clearStrategy: phase === "strategy",
+          clearCastle: phase === "castle",
+          message: phase === "strategy"
+            ? `${strategy.label}の定跡へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の戦法を選ぼう！`
+            : `${castle.label}の形へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の囲いを選ぼう！`,
+        };
+      }
+    }
   }
 
   return null;
@@ -1680,7 +1763,7 @@ export function isOpeningGuideExpired(currentPly, startedAtPly = 0, maxPlies = 4
 /** 予定手へ戻れないまま許容する「安全な寄り道」の手数。 */
 // やこび姫が安全策として案内した寄り道だけで、補助が早々に終了しないようにする。
 // 形作り全体には isOpeningGuideExpired の期限が別にある。
-export const OPENING_GUIDE_MAX_DETOURS = 6;
+export const OPENING_GUIDE_MAX_DETOURS = 3;
 
 export function shouldAbandonOpeningGuide(
   detourCount,

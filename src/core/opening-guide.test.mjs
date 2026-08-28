@@ -69,10 +69,8 @@ describe("opening guide", () => {
 
   it("abandons an opening plan after three followed detours", () => {
     expect(shouldAbandonOpeningGuide(2)).toBe(false);
-    expect(shouldAbandonOpeningGuide(3)).toBe(false);
-    expect(shouldAbandonOpeningGuide(5)).toBe(false);
-    expect(shouldAbandonOpeningGuide(6)).toBe(true);
-    expect(shouldAbandonOpeningGuide(7)).toBe(true);
+    expect(shouldAbandonOpeningGuide(3)).toBe(true);
+    expect(shouldAbandonOpeningGuide(4)).toBe(true);
   });
 
   it("shows completion followups only for a completed strategy without a castle", () => {
@@ -876,6 +874,63 @@ describe("opening guide", () => {
       opponentMoves: ["3c3d", "4c4d"],
       moveHistory: ["7g7f", "3c3d", "8h2b+", "3a2b", "4c4d"],
     })).toBeNull();
+  });
+
+  it.each(["yokofudori", "yokofudori-33-bishop", "aono-ryu"])(
+    "immediately stops %s when the opponent changes it into a Bishop Exchange",
+    (strategyId) => {
+      expect(openingPlanInterruption({
+        strategyId,
+        color: "black",
+        playedMoves: ["7g7f", "2g2f"],
+        opponentMoves: ["3c3d", "2b8h+"],
+        moveHistory: ["7g7f", "3c3d", "2g2f", "2b8h+"],
+      })).toMatchObject({
+        requiresReselection: true,
+        clearStrategy: true,
+        clearCastle: true,
+        message: "あー！角換わりされちゃった。横歩取りできないから、角換わり腰掛け銀や右玉に切り替えよう！",
+      });
+    },
+  );
+
+  it("does not stop Yokofudori after the rook has already taken the side pawn", () => {
+    expect(openingPlanInterruption({
+      strategyId: "yokofudori-33-bishop",
+      color: "black",
+      playedMoves: ["7g7f", "2g2f", "2f2e", "2e2d", "2h2d", "2d3d"],
+      opponentMoves: ["3c3d", "8c8d", "8d8e", "2c2d", "2b8h+"],
+      moveHistory: ["7g7f", "3c3d", "2g2f", "8c8d", "2f2e", "8d8e", "2e2d", "2c2d", "2h2d", "2b8h+", "2d3d"],
+    })).toBeNull();
+  });
+
+  it("stops Yokofudori with accurate wording after the player exchanges bishops", () => {
+    expect(openingPlanInterruption({
+      strategyId: "aono-ryu",
+      color: "black",
+      playedMoves: ["7g7f", "8h2b+"],
+      opponentMoves: ["3c3d"],
+      moveHistory: ["7g7f", "3c3d", "8h2b+"],
+    })).toMatchObject({
+      requiresReselection: true,
+      clearStrategy: true,
+      message: expect.stringContaining("こちらから角交換"),
+    });
+  });
+
+  it("immediately stops a fixed plan when its next piece has left the route", () => {
+    const currentSfen = sfenAfterMoves(["3g3f", "2h1h"]);
+    expect(openingPlanInterruption({
+      strategyId: "sodebisha",
+      color: "black",
+      playedMoves: ["3g3f", "2h1h"],
+      moveHistory: ["3g3f", "2h1h"],
+      currentSfen,
+    })).toMatchObject({
+      requiresReselection: true,
+      clearStrategy: true,
+      message: expect.stringContaining("寄り道はせずここで中断"),
+    });
   });
 
   it("abandons Pacman after the offered pawn is ignored", () => {
