@@ -2036,6 +2036,23 @@ function candidateGivesCheck(usi: string): boolean {
   }
 }
 
+function schedulePostCpuAssists() {
+  const historyLength = moveHistory.length;
+  // WASMエンジンはメインスレッドで動く。CPUの駒を描画した次のフレームまで待ってから、
+  // 必要な序盤補助だけを短時間で解析する。
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      if (
+        !active.value || reviewMode.value || moveHistory.length !== historyLength
+        || record.value.position.color !== humanColor.value
+      ) return;
+      scheduleOpeningGuideSafety();
+      scheduleOpeningFollowupCandidates();
+      schedulePlayerIdleAdvice();
+    }, 0);
+  });
+}
+
 function sideToMoveRookCaptureTargets(position: Position): Set<string> {
   return new Set(enumerateLegalMoves(position)
     .filter(({ capturedPieceType }) => capturedPieceType === PieceType.ROOK)
@@ -2687,10 +2704,7 @@ async function scheduleCpuMove() {
       if (applyMove(usi, "cpu") && active.value) {
         updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
-        scheduleOpeningGuideSafety();
-        scheduleDedicatedCoachAdvice();
-        scheduleOpeningFollowupCandidates();
-        schedulePlayerIdleAdvice();
+        schedulePostCpuAssists();
       }
       thinking.value = false;
     } catch (error) {
@@ -2702,9 +2716,7 @@ async function scheduleCpuMove() {
       const fallbackUsi = fallbackOpeningMove ?? selectCpuMove(record.value.position)?.usi;
       if (fallbackUsi && applyMove(fallbackUsi, "cpu") && active.value) {
         updateCoachAdvice();
-        scheduleOpeningGuideSafety();
-        scheduleOpeningFollowupCandidates();
-        schedulePlayerIdleAdvice();
+        schedulePostCpuAssists();
       }
     }
   }, Math.max(0, props.cpuDelayMs));
