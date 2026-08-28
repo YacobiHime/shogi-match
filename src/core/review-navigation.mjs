@@ -33,6 +33,18 @@ export function appendReviewMove(state, move) {
   };
 }
 
+/** 対CPU検討の開始局面より前へ戻らないよう、直近の指し手を巻き戻す。 */
+export function rewindReviewMoves(state, count, minimumCursor = 0) {
+  if (
+    !state || !Number.isInteger(state.cursor) || !Number.isInteger(count) || count < 0
+    || !Number.isInteger(minimumCursor) || minimumCursor < 0
+  ) {
+    throw new Error('棋譜解析の待った位置が不正です');
+  }
+  const floor = Math.min(state.line.length, minimumCursor);
+  return { ...state, cursor: Math.max(floor, state.cursor - count) };
+}
+
 export function returnReviewToMainLine(state) {
   if (!state || !Array.isArray(state.mainLine) || !Number.isInteger(state.cursor)) {
     throw new Error('棋譜解析の本筋が不正です');

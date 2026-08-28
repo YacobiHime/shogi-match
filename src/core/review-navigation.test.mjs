@@ -4,6 +4,7 @@ import {
   appendReviewMove,
   createReviewNavigation,
   moveReviewCursor,
+  rewindReviewMoves,
   returnReviewToMainLine,
   visibleReviewMoves,
 } from './review-navigation.mjs';
@@ -32,5 +33,16 @@ describe('棋譜解析の棋譜ナビゲーション', () => {
     state = returnReviewToMainLine(state);
     expect(state.branch).toBe(false);
     expect(visibleReviewMoves(state)).toEqual(main.slice(0, 3));
+  });
+
+  test('対CPU検討の待ったは一往復戻し、開始局面より前へ戻らない', () => {
+    let state = moveReviewCursor(createReviewNavigation(main), -2);
+    const startedAt = state.cursor;
+    state = appendReviewMove(state, '5g5f');
+    state = appendReviewMove(state, '5c5d');
+    state = rewindReviewMoves(state, 2, startedAt);
+    expect(state.cursor).toBe(startedAt);
+    expect(visibleReviewMoves(state)).toEqual(main.slice(0, startedAt));
+    expect(rewindReviewMoves(state, 2, startedAt).cursor).toBe(startedAt);
   });
 });
