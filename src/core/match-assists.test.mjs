@@ -73,33 +73,33 @@ describe('hint arrow evaluations', () => {
     });
   });
 
-  it('gives automatic opening follow-ups enough budget for three useful choices', () => {
+  it('keeps automatic opening follow-ups short enough for the main thread', () => {
     expect(getOpeningFollowupSearchSettings(false)).toEqual({
-      nodes: 500000,
-      maxTimeMs: 6000,
+      nodes: 12000,
+      maxTimeMs: 500,
       multiPv: 3,
     });
     expect(getOpeningFollowupSearchSettings(true)).toEqual({
-      nodes: 200000,
-      maxTimeMs: 3500,
+      nodes: 6000,
+      maxTimeMs: 300,
       multiPv: 3,
     });
   });
 
-  it('bounds the five-candidate safety check used while building a formation', () => {
+  it('bounds the safety check used while building a formation', () => {
     expect(getOpeningGuideSafetySearchSettings(false)).toEqual({
-      nodes: 250000,
-      maxTimeMs: 3500,
-      multiPv: 5,
-      forcedNodes: 120000,
-      forcedMaxTimeMs: 2000,
+      nodes: 8000,
+      maxTimeMs: 400,
+      multiPv: 4,
+      forcedNodes: 4000,
+      forcedMaxTimeMs: 200,
     });
     expect(getOpeningGuideSafetySearchSettings(true)).toEqual({
-      nodes: 120000,
-      maxTimeMs: 2200,
-      multiPv: 5,
-      forcedNodes: 60000,
-      forcedMaxTimeMs: 1200,
+      nodes: 4000,
+      maxTimeMs: 250,
+      multiPv: 4,
+      forcedNodes: 2000,
+      forcedMaxTimeMs: 150,
     });
   });
 });

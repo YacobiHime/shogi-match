@@ -170,23 +170,23 @@ export function getIdleCoachSearchSettings(mobile = false) {
   return getHintSearchSettings(mobile);
 }
 
-/** 戦法完成後の自動3候補。閃きより軽く、通常助言より深く読む。 */
+/** 戦法完成後の自動3候補。メインスレッドを止めない短時間探索に限定する。 */
 export function getOpeningFollowupSearchSettings(mobile = false) {
   return mobile
-    ? { nodes: 200000, maxTimeMs: 3500, multiPv: 3 }
-    : { nodes: 500000, maxTimeMs: 6000, multiPv: 3 };
+    ? { nodes: 6000, maxTimeMs: 300, multiPv: 3 }
+    : { nodes: 12000, maxTimeMs: 500, multiPv: 3 };
 }
 
-/** 形作り中の予定手を毎手安全確認する探索設定。 */
+/** 形作り中の予定手を毎手安全確認する、描画を妨げない短時間探索設定。 */
 export function getOpeningGuideSafetySearchSettings(mobile = false) {
   return mobile
     ? {
-        nodes: 120000, maxTimeMs: 2200, multiPv: 5,
-        forcedNodes: 60000, forcedMaxTimeMs: 1200,
+        nodes: 4000, maxTimeMs: 250, multiPv: 4,
+        forcedNodes: 2000, forcedMaxTimeMs: 150,
       }
     : {
-        nodes: 250000, maxTimeMs: 3500, multiPv: 5,
-        forcedNodes: 120000, forcedMaxTimeMs: 2000,
+        nodes: 8000, maxTimeMs: 400, multiPv: 4,
+        forcedNodes: 4000, forcedMaxTimeMs: 200,
       };
 }
 
