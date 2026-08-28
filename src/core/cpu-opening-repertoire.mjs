@@ -34,8 +34,12 @@ const CATEGORY_POOLS = {
 
 const BISHOP_STYLE_POOLS = {
   open: [
-    "kakugawari", "yagura-strategy", "right-shiken", "shiken", "fujii-system",
-    "sangen", "ishida", "gokigen", "mukai", "onigoroshi",
+    "right-shiken", "ishida", "gokigen", "mukai", "onigoroshi",
+  ],
+  "open-close": ["yagura-strategy", "shiken", "fujii-system", "sangen"],
+  exchange: ["kakugawari"],
+  "invite-exchange": [
+    "right-shiken", "ishida", "gokigen", "mukai", "onigoroshi",
   ],
   closed: [
     "ibisha", "aigakari", "bougin", "hayaguri-gin", "koshikake-gin",
@@ -87,19 +91,55 @@ export function configuredCpuFirstMove({
   return move && legalMoves.includes(move) ? move : undefined;
 }
 
+/** 対局準備で指定した角道の変化を、CPU側から見た実際の一手へ変換する。 */
+export function configuredCpuBishopMove({
+  bishopPreference = "",
+  cpuColor = "white",
+  cpuMoves = [],
+  legalMoves = [],
+} = {}) {
+  const moves = cpuColor === "black"
+    ? { open: "7g7f", close: "6g6f", exchange: "8h2b+" }
+    : { open: "3c3d", close: "4c4d", exchange: "2b8h+" };
+  const played = new Set(cpuMoves);
+  if (["open", "open-close", "exchange", "invite-exchange"].includes(bishopPreference)) {
+    if (!played.has(moves.open) && legalMoves.includes(moves.open)) return moves.open;
+  }
+  if (
+    bishopPreference === "open-close"
+    && played.has(moves.open) && !played.has(moves.close)
+    && legalMoves.includes(moves.close)
+  ) return moves.close;
+  if (
+    bishopPreference === "exchange"
+    && played.has(moves.open) && !played.has(moves.exchange)
+    && legalMoves.includes(moves.exchange)
+  ) return moves.exchange;
+  return undefined;
+}
+
 /** 明示された初手だけは、その1手に限ってAI候補より優先する。 */
 export function shouldForceConfiguredCpuOpening({
   configuredFirstMove = "random",
+  bishopPreference = "",
   openingMove = "",
   cpuColor = "white",
   cpuMoveCount = 0,
+  cpuMoves = [],
 } = {}) {
-  return Boolean(
+  const forceFirstMove = Boolean(
     openingMove
     && configuredFirstMove !== "random"
     && cpuColor === "black"
     && cpuMoveCount === 0
   );
+  if (forceFirstMove) return true;
+  return configuredCpuBishopMove({
+    bishopPreference,
+    cpuColor,
+    cpuMoves,
+    legalMoves: openingMove ? [openingMove] : [],
+  }) === openingMove;
 }
 
 function weightedChoice(entries, random) {

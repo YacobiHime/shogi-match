@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CPU_OPENING_CATEGORY_IDS,
   CPU_OPENING_REPERTOIRES,
+  configuredCpuBishopMove,
   configuredCpuFirstMove,
   selectCpuOpeningRepertoire,
   shouldForceConfiguredCpuOpening,
@@ -35,6 +36,35 @@ describe("CPU opening repertoire", () => {
       cpuColor: "black",
       cpuMoveCount: 1,
       legalMoves: ["7g7f"],
+    })).toBeUndefined();
+  });
+
+  it.each([
+    ["black", "open-close", [], ["7g7f"], "7g7f"],
+    ["black", "open-close", ["7g7f"], ["6g6f"], "6g6f"],
+    ["white", "open-close", [], ["3c3d"], "3c3d"],
+    ["white", "open-close", ["3c3d"], ["4c4d"], "4c4d"],
+    ["black", "exchange", ["7g7f"], ["8h2b+"], "8h2b+"],
+    ["white", "exchange", ["3c3d"], ["2b8h+"], "2b8h+"],
+  ])("turns the %s-side %s bishop setting into %s", (
+    cpuColor, bishopPreference, cpuMoves, legalMoves, expected,
+  ) => {
+    expect(configuredCpuBishopMove({
+      bishopPreference, cpuColor, cpuMoves, legalMoves,
+    })).toBe(expected);
+  });
+
+  it("opens the diagonal but does not force an exchange while waiting for the opponent", () => {
+    expect(configuredCpuBishopMove({
+      bishopPreference: "invite-exchange",
+      cpuColor: "black",
+      legalMoves: ["7g7f"],
+    })).toBe("7g7f");
+    expect(configuredCpuBishopMove({
+      bishopPreference: "invite-exchange",
+      cpuColor: "black",
+      cpuMoves: ["7g7f"],
+      legalMoves: ["8h2b+"],
     })).toBeUndefined();
   });
 
@@ -78,6 +108,13 @@ describe("CPU opening repertoire", () => {
       cpuColor: "white",
       cpuMoveCount: 0,
     })).toBe(false);
+    expect(shouldForceConfiguredCpuOpening({
+      bishopPreference: "open-close",
+      openingMove: "6g6f",
+      cpuColor: "black",
+      cpuMoveCount: 1,
+      cpuMoves: ["7g7f"],
+    })).toBe(true);
   });
 
   it.each([
@@ -163,7 +200,7 @@ describe("CPU opening repertoire", () => {
   it("selects a repertoire that opens or keeps closed the bishop diagonal", () => {
     expect(selectCpuOpeningRepertoire({
       cpuColor: "black", bishopPreference: "open", random: () => 0,
-    }).strategyId).toBe("kakugawari");
+    }).strategyId).toBe("right-shiken");
     expect(selectCpuOpeningRepertoire({
       cpuColor: "black", bishopPreference: "closed", random: () => 0,
     }).strategyId).toBe("ibisha");
@@ -178,8 +215,20 @@ describe("CPU opening repertoire", () => {
         cpuColor: "black", bishopPreference: "closed", random,
       });
       expect(definitions.get(open.strategyId)?.blackMoves).toContain("7g7f");
+      expect(definitions.get(open.strategyId)?.blackMoves).not.toContain("6g6f");
+      expect(definitions.get(open.strategyId)?.blackMoves).not.toContain("8h2b+");
       expect(definitions.get(closed.strategyId)?.blackMoves).not.toContain("7g7f");
     }
+  });
+
+  it.each([
+    ["open-close", "yagura-strategy"],
+    ["exchange", "kakugawari"],
+    ["invite-exchange", "right-shiken"],
+  ])("selects a repertoire compatible with bishop behavior %s", (preference, strategyId) => {
+    expect(selectCpuOpeningRepertoire({
+      cpuColor: "black", bishopPreference: preference, random: () => 0,
+    }).strategyId).toBe(strategyId);
   });
 
   it("combines rook and tempo tendencies when a compatible repertoire exists", () => {

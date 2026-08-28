@@ -89,7 +89,10 @@
                 <span>角道</span>
                 <select v-model="cpuBishopPreference" aria-label="対局前の相手の角道">
                   <option value="">選択しない</option>
-                  <option value="open">早めに開ける</option>
+                  <option value="open">開けたまま</option>
+                  <option value="open-close">開けてから閉じる</option>
+                  <option value="exchange">CPUから角交換</option>
+                  <option value="invite-exchange">こちらからの角交換を待つ</option>
                   <option value="closed">閉じたまま指す</option>
                 </select>
               </label>
@@ -115,7 +118,7 @@
                 </select>
               </label>
             </div>
-            <small>作戦・戦法・初手を指定した場合は、そちらを優先します。</small>
+            <small>初手を最優先し、その後は角道の具体的な指定を定跡より優先します。</small>
           </div>
           <div
             v-if="normalizedMode === 'cpu'"
@@ -300,8 +303,8 @@
         <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
           閃き <small>×{{ reviewMode ? "∞" : hintsRemaining }}</small>
         </button>
-        <button v-if="!reviewMode" type="button" :disabled="!canUndo" @click="undoTurn">
-          待った ×{{ undosRemaining }}
+        <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
+          待った ×{{ reviewMode ? "∞" : undosRemaining }}
         </button>
         <button
           v-if="reviewMode"
@@ -579,6 +582,7 @@ import {
   appendReviewMove,
   createReviewNavigation,
   moveReviewCursor,
+  rewindReviewMoves,
   returnReviewToMainLine,
   visibleReviewMoves,
 } from "./core/review-navigation.mjs";
@@ -609,6 +613,7 @@ import {
 } from "./core/opening-guide.mjs";
 import {
   CPU_OPENING_STRATEGY_IDS,
+  configuredCpuBishopMove,
   configuredCpuFirstMove,
   selectCpuOpeningRepertoire,
   shouldForceConfiguredCpuOpening,
@@ -686,6 +691,7 @@ const analysisTotal = ref(0);
 const analysisPoints = ref<AnalysisPoint[]>([]);
 const analysisFlip = ref(false);
 const reviewCpuEnabled = ref(false);
+const reviewCpuStartedAtPly = ref(0);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
@@ -854,7 +860,7 @@ const canUndo = computed(() =>
   && !thinking.value
   && (reviewMode.value || undosRemaining.value > 0)
   && (reviewMode.value
-    ? reviewNavigation.value.line.length > 0
+    ? reviewCpuEnabled.value && moveHistory.length - reviewCpuStartedAtPly.value >= 2
     : normalizedMode.value === "local" ? moveHistory.length > 0 : moveHistory.length >= 2)
   && (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
@@ -1333,6 +1339,13 @@ function strategyMove(): string | undefined {
     legalMoves,
   });
   if (requestedFirstMove) return requestedFirstMove;
+  const requestedBishopMove = configuredCpuBishopMove({
+    bishopPreference: cpuBishopPreference.value,
+    cpuColor: configuredCpuColor,
+    cpuMoves,
+    legalMoves,
+  });
+  if (requestedBishopMove) return requestedBishopMove;
   if (!shouldUseCpuOpening({
     ply: moveHistory.length,
     cpuMoveCount: cpuMoves.length,
@@ -1522,7 +1535,9 @@ function restorePersistedMatch(): boolean {
       ? snapshot.cpuDetailedCastle
       : "funagakoi";
     cpuFirstMove.value = typeof snapshot.cpuFirstMove === "string" ? snapshot.cpuFirstMove : "random";
-    cpuBishopPreference.value = ["", "open", "closed"].includes(snapshot.cpuBishopPreference)
+    cpuBishopPreference.value = [
+      "", "open", "open-close", "exchange", "invite-exchange", "closed",
+    ].includes(snapshot.cpuBishopPreference)
       ? snapshot.cpuBishopPreference
       : "";
     cpuRookPreference.value = ["", "rook-pawn", "static", "ranging", "adaptive"].includes(snapshot.cpuRookPreference)
@@ -2329,9 +2344,22 @@ function undoTurn() {
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   if (cpuTimer) clearTimeout(cpuTimer);
+  if (reviewMode.value) reviewCpuGeneration += 1;
   openingPlanCompletionLocked.value = false;
-  const removeCount = !reviewMode.value && normalizedMode.value === "cpu" && moveHistory.length >= 2 ? 2 : 1;
-  rebuildRecord(moveHistory.slice(0, -removeCount));
+  const removeCount = (reviewMode.value && reviewCpuEnabled.value)
+    || (!reviewMode.value && normalizedMode.value === "cpu" && moveHistory.length >= 2)
+    ? 2
+    : 1;
+  if (reviewMode.value) {
+    reviewNavigation.value = rewindReviewMoves(
+      reviewNavigation.value,
+      removeCount,
+      reviewCpuStartedAtPly.value,
+    );
+    rebuildRecord(visibleReviewMoves(reviewNavigation.value));
+  } else {
+    rebuildRecord(moveHistory.slice(0, -removeCount));
+  }
   if (openingPlanCurrentlyComplete.value) openingPlanCompletionLocked.value = true;
   if (!reviewMode.value) undosRemaining.value -= 1;
   playerTurnScore = undefined;
@@ -2346,9 +2374,13 @@ function undoTurn() {
   openingGuideAbandoned.value = false;
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
-  scheduleOpeningGuideSafety();
-  schedulePlayerIdleAdvice();
-  persistMatchState();
+  if (reviewMode.value) {
+    scheduleReviewCpuMove();
+  } else {
+    scheduleOpeningGuideSafety();
+    schedulePlayerIdleAdvice();
+    persistMatchState();
+  }
 }
 
 function onReviewSliderInput(event: Event) {
@@ -2442,13 +2474,14 @@ function startReviewCpu() {
   coachAdviceScheduler.reset();
   reviewCoachGeneration += 1;
   reviewCpuGeneration += 1;
+  reviewCpuStartedAtPly.value = moveHistory.length;
   reviewCpuEnabled.value = true;
   analysisOpen.value = false;
   hintCandidates.value = [];
   hintText.value = "";
   guideText.value = coachLevel.value === "off"
     ? ""
-    : "ここから相手をするね。閃きは何度でも使えるよ！";
+    : "ここから相手をするね。閃きと待ったは何度でも使えるよ！";
   scheduleReviewCpuMove();
 }
 
@@ -2456,6 +2489,7 @@ function stopReviewCpu() {
   if (!reviewCpuEnabled.value) return;
   coachAdviceScheduler.reset();
   reviewCpuEnabled.value = false;
+  reviewCpuStartedAtPly.value = 0;
   reviewCpuGeneration += 1;
   if (cpuTimer) {
     clearTimeout(cpuTimer);
@@ -2556,9 +2590,11 @@ async function scheduleCpuMove() {
       const cpuOpeningTurn = currentCpuOpeningTurn();
       const forceConfiguredOpening = shouldForceConfiguredCpuOpening({
         configuredFirstMove: cpuFirstMove.value,
+        bishopPreference: cpuBishopPreference.value,
         openingMove,
         cpuColor: cpuOpeningTurn.cpuColor,
         cpuMoveCount: cpuOpeningTurn.cpuMoves.length,
+        cpuMoves: cpuOpeningTurn.cpuMoves,
       });
       // 入門だけは定跡の形を優先する。それ以外は定跡手も探索で安全確認する。
       if (openingMove && usesRandomLegalMove(searchNodes.value)) {
@@ -2688,6 +2724,7 @@ function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう
   coachAdviceScheduler.reset();
   reviewCpuGeneration += 1;
   reviewCpuEnabled.value = false;
+  reviewCpuStartedAtPly.value = 0;
   resultDialogOpen.value = false;
   reviewMode.value = true;
   reviewNavigation.value = createReviewNavigation(moveHistory);
@@ -2841,6 +2878,7 @@ function restart() {
   coachAdviceScheduler.reset();
   reviewCpuGeneration += 1;
   reviewCpuEnabled.value = false;
+  reviewCpuStartedAtPly.value = 0;
   analysisGeneration += 1;
   if (analysisRunning.value) engine?.stop();
   matchStarted.value = true;
