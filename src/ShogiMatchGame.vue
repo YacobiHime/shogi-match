@@ -1658,19 +1658,32 @@ function scheduleOpeningGuideSafety() {
   const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
   const interruption = openingPlanInterruption({
     strategyId: selectedStrategy.value,
+    castleId: selectedCastle.value,
     color: playerIsBlack ? "black" : "white",
     playedMoves: playerMoves,
     opponentMoves,
     moveHistory,
+    detectedFormations: formationNamesForColor(currentSfen.value, humanColor.value),
+    opponentFormations: formationNamesForColor(
+      currentSfen.value,
+      humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK,
+    ),
+    currentSfen: currentSfen.value,
   });
   if (interruption) {
-    const fallback = OPENING_STRATEGIES.find(({ id }) => id === interruption.fallbackStrategyId);
-    selectedStrategy.value = fallback?.guideSelectable === false ? "" : interruption.fallbackStrategyId;
+    if (interruption.requiresReselection) {
+      if (interruption.clearStrategy) selectedStrategy.value = "";
+      if (interruption.clearCastle) selectedCastle.value = "";
+    } else {
+      const fallback = OPENING_STRATEGIES.find(({ id }) => id === interruption.fallbackStrategyId);
+      selectedStrategy.value = fallback?.guideSelectable === false ? "" : interruption.fallbackStrategyId;
+    }
     openingPlanCompletionLocked.value = false;
     openingGuideStartedAtPly.value = moveHistory.length;
     openingGuideDetourCount.value = 0;
+    openingGuideAbandoned.value = false;
     guideText.value = coachLevel.value === "off" ? "" : interruption.message;
-    scheduleOpeningGuideSafety();
+    if (selectedStrategy.value || selectedCastle.value) scheduleOpeningGuideSafety();
     return;
   }
 
@@ -2222,10 +2235,12 @@ function applyMove(usi: string, actor: "player" | "cpu") {
     if (followedOpeningDecision?.source === "ai") {
       openingGuideDetourCount.value += 1;
       if (shouldAbandonOpeningGuide(openingGuideDetourCount.value)) {
+        selectedStrategy.value = "";
+        selectedCastle.value = "";
         openingGuideAbandoned.value = true;
         guideText.value = coachLevel.value === "off"
           ? ""
-          : "何手か寄り道したけれど、この形へ戻るのは難しそうだね。別の戦法や囲いを選び直そう！";
+          : "3手寄り道したけれど、この形へ戻るのは難しそうだね。ここで中断して、別の戦法や囲いを選び直そう！";
       }
     } else if (followedOpeningDecision?.source === "plan") {
       // 予定手へ復帰できたら、寄り道の連続数を数え直す。
