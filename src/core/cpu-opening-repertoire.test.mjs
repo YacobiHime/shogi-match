@@ -4,6 +4,7 @@ import {
   CPU_OPENING_REPERTOIRES,
   configuredCpuBishopMove,
   configuredCpuFirstMove,
+  cpuMoveMatchesBishopPreference,
   selectCpuOpeningRepertoire,
   shouldForceConfiguredCpuOpening,
   shouldUseCpuOpening,
@@ -66,6 +67,40 @@ describe("CPU opening repertoire", () => {
       cpuMoves: ["7g7f"],
       legalMoves: ["8h2b+"],
     })).toBeUndefined();
+  });
+
+  it.each(["open", "open-close", "invite-exchange", "closed"])(
+    "prevents the CPU bishop from initiating an exchange in %s mode",
+    (bishopPreference) => {
+      expect(cpuMoveMatchesBishopPreference({
+        bishopPreference,
+        cpuColor: "white",
+        usi: "6f8h+",
+        pieceType: "bishop",
+        capturedPieceType: "bishop",
+      })).toBe(false);
+    },
+  );
+
+  it("allows a CPU-initiated bishop exchange only in exchange mode", () => {
+    expect(cpuMoveMatchesBishopPreference({
+      bishopPreference: "exchange",
+      usi: "6f8h+",
+      pieceType: "bishop",
+      capturedPieceType: "bishop",
+    })).toBe(true);
+  });
+
+  it("keeps open and closed diagonal settings after the opening book ends", () => {
+    expect(cpuMoveMatchesBishopPreference({
+      bishopPreference: "closed", cpuColor: "black", usi: "7g7f",
+    })).toBe(false);
+    expect(cpuMoveMatchesBishopPreference({
+      bishopPreference: "open", cpuColor: "black", usi: "6g6f",
+    })).toBe(false);
+    expect(cpuMoveMatchesBishopPreference({
+      bishopPreference: "open-close", cpuColor: "white", usi: "4d4e",
+    })).toBe(false);
   });
 
   it("respects an explicitly configured strategy", () => {
