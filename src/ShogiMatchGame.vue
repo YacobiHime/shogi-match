@@ -615,6 +615,7 @@ import {
   CPU_OPENING_STRATEGY_IDS,
   configuredCpuBishopMove,
   configuredCpuFirstMove,
+  cpuMoveMatchesBishopPreference,
   selectCpuOpeningRepertoire,
   shouldForceConfiguredCpuOpening,
   shouldUseCpuOpening,
@@ -1395,6 +1396,20 @@ function strategyMove(): string | undefined {
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
     currentSfen: currentSfen.value,
   })?.usi;
+}
+
+function cpuMovesAllowedByBishopSetting() {
+  const { cpuColor } = currentCpuOpeningTurn();
+  const legal = enumerateLegalMoves(record.value.position);
+  const allowed = legal.filter((move) => cpuMoveMatchesBishopPreference({
+    bishopPreference: cpuBishopPreference.value,
+    cpuColor,
+    usi: move.usi,
+    pieceType: move.pieceType,
+    capturedPieceType: move.capturedPieceType ?? "",
+  }));
+  // 王手回避などで指定を守る合法手が一つもない場合だけ、対局続行を優先する。
+  return allowed.length ? allowed : legal;
 }
 
 function createRecord(): Record {
@@ -2587,20 +2602,25 @@ async function scheduleCpuMove() {
           ? playerTurnScore
           : undefined);
       const openingMove = strategyMove();
+      const allowedCpuMoves = cpuMovesAllowedByBishopSetting();
+      const allowedCpuMoveIds = new Set(allowedCpuMoves.map(({ usi: moveUsi }) => moveUsi));
+      const allowedOpeningMove = openingMove && allowedCpuMoveIds.has(openingMove)
+        ? openingMove
+        : undefined;
       const cpuOpeningTurn = currentCpuOpeningTurn();
       const forceConfiguredOpening = shouldForceConfiguredCpuOpening({
         configuredFirstMove: cpuFirstMove.value,
         bishopPreference: cpuBishopPreference.value,
-        openingMove,
+        openingMove: allowedOpeningMove,
         cpuColor: cpuOpeningTurn.cpuColor,
         cpuMoveCount: cpuOpeningTurn.cpuMoves.length,
         cpuMoves: cpuOpeningTurn.cpuMoves,
       });
       // 入門だけは定跡の形を優先する。それ以外は定跡手も探索で安全確認する。
-      if (openingMove && usesRandomLegalMove(searchNodes.value)) {
-        usi = openingMove;
+      if (allowedOpeningMove && usesRandomLegalMove(searchNodes.value)) {
+        usi = allowedOpeningMove;
       } else if (usesRandomLegalMove(searchNodes.value)) {
-        usi = selectCpuMove(record.value.position)?.usi ?? "";
+        usi = allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi ?? "";
       } else if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
@@ -2611,6 +2631,7 @@ async function scheduleCpuMove() {
         const search = await engine.go({
           nodes: strength.nodes,
           maxTimeMs: 60000,
+          searchMoves: [...allowedCpuMoveIds],
         });
         const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
         moveFeedback = getMoveFeedback({
@@ -2631,11 +2652,11 @@ async function scheduleCpuMove() {
           showCoachAdvice(moveFeedback);
           await nextTick();
         }
-        const safeOpening = openingMove && !forceConfiguredOpening
-          ? chooseSafeOpeningMove(openingMove, search.candidates, Math.min(250, strength.maxScoreLoss))
+        const safeOpening = allowedOpeningMove && !forceConfiguredOpening
+          ? chooseSafeOpeningMove(allowedOpeningMove, search.candidates, Math.min(250, strength.maxScoreLoss))
           : null;
-        const selection = forceConfiguredOpening
-          ? { move: openingMove }
+        const selection = forceConfiguredOpening && allowedOpeningMove
+          ? { move: allowedOpeningMove }
           : safeOpening
           ? {
               move: safeOpening.usi,
@@ -2653,7 +2674,9 @@ async function scheduleCpuMove() {
         )?.score;
       } else {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
-        usi = openingMove ?? selectCpuMove(record.value.position)?.usi ?? "";
+        usi = allowedOpeningMove
+          ?? allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi
+          ?? "";
       }
       if (!usi) {
         thinking.value = false;

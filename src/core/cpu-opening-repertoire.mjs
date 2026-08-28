@@ -118,6 +118,26 @@ export function configuredCpuBishopMove({
   return undefined;
 }
 
+/** 角道設定に反するCPU着手を、定跡終了後のAI候補からも除外する。 */
+export function cpuMoveMatchesBishopPreference({
+  bishopPreference = "",
+  cpuColor = "white",
+  usi = "",
+  pieceType = "",
+  capturedPieceType = "",
+} = {}) {
+  if (!bishopPreference || bishopPreference === "exchange") return true;
+  // 「交換待ち」「閉じて戦う」などでは、CPUの角から相手の角を取りに行かない。
+  if (pieceType === "bishop" && capturedPieceType === "bishop") return false;
+  const moves = cpuColor === "black"
+    ? { open: "7g7f", close: "6g6f", reopen: "6f6e" }
+    : { open: "3c3d", close: "4c4d", reopen: "4d4e" };
+  if (bishopPreference === "closed" && usi === moves.open) return false;
+  if (["open", "invite-exchange"].includes(bishopPreference) && usi === moves.close) return false;
+  if (["closed", "open-close"].includes(bishopPreference) && usi === moves.reopen) return false;
+  return true;
+}
+
 /** 明示された初手だけは、その1手に限ってAI候補より優先する。 */
 export function shouldForceConfiguredCpuOpening({
   configuredFirstMove = "random",
