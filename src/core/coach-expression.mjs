@@ -4,6 +4,9 @@ export const COACH_EXPRESSION_FILES = Object.freeze({
   worried: 'sakurano-momoka-worried.webp',
 });
 
+// 画像を差し替えた際に、長期キャッシュ済みの旧画像を避けるための識別子。
+export const COACH_EXPRESSION_ASSET_VERSION = '2';
+
 const WRY_MISTAKE_PATTERN = /あちゃ|やっちゃった|悪手/;
 const WORRIED_PATTERN = /王手|詰み|詰めろ|負け|危険|苦しい|押され|取られ|気を付け|慎重に受け|中断|難しそう|出せません|指せる手がない/;
 const WRY_PATTERN = /[？?]|かな|かも|みたい|互角|焦らず|考え|勝負どころ|寄り道|選び直|読み筋|じっくり/;
