@@ -276,11 +276,12 @@
       <picture class="shogi-game__portrait shogi-game__portrait--advisor">
         <source
           media="(min-width: 1100px) and (min-aspect-ratio: 5/4)"
-          :srcset="`${assetBaseUrl}/characters/sakurano-momoka.webp`"
+          :srcset="coachPortraitUrl"
         >
         <img
           class="shogi-game__character"
-          :src="`${assetBaseUrl}/characters/sakurano-momoka.webp`"
+          :src="coachPortraitUrl"
+          :data-expression="coachExpression"
           alt="助言役のやこび姫"
         >
       </picture>
@@ -554,6 +555,11 @@ import {
   scoreForPlayer,
 } from "./core/coach-advice.mjs";
 import { createCoachAdviceScheduler } from "./core/coach-advice-scheduler.mjs";
+import {
+  COACH_EXPRESSION_FILES,
+  coachExpressionFilename,
+  coachExpressionForText,
+} from "./core/coach-expression.mjs";
 import { getIdleCoachAdvice, IDLE_COACH_DELAY_MS } from "./core/idle-coach-advice.mjs";
 import {
   formatHintMove,
@@ -721,6 +727,11 @@ const openingGuideBranchNotice = ref("");
 const openingGuideBranchNoticePly = ref(-1);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
+const activeCoachText = computed(() => hintText.value || guideText.value);
+const coachExpression = computed(() => coachExpressionForText(activeCoachText.value));
+const coachPortraitUrl = computed(() => (
+  `${props.assetBaseUrl}/characters/${coachExpressionFilename(activeCoachText.value)}`
+));
 const selectedStrategy = ref("");
 const selectedCastle = ref("");
 const strategyExplanationOpen = ref(false);
@@ -3057,6 +3068,10 @@ onBeforeUnmount(() => {
   if (typeof window !== "undefined") window.removeEventListener("pagehide", handlePageHide);
 });
 onMounted(() => {
+  for (const filename of Object.values(COACH_EXPRESSION_FILES)) {
+    const portrait = new Image();
+    portrait.src = `${props.assetBaseUrl}/characters/${filename}`;
+  }
   ensureMoveSounds();
   updateResponsiveLayout();
   boardResizeObserver = new ResizeObserver(updateResponsiveLayout);
