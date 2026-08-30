@@ -556,6 +556,7 @@ import {
 } from "./core/coach-advice.mjs";
 import { createCoachAdviceScheduler } from "./core/coach-advice-scheduler.mjs";
 import {
+  COACH_EXPRESSION_ASSET_VERSION,
   COACH_EXPRESSION_FILES,
   coachExpressionFilename,
   coachExpressionForText,
@@ -730,7 +731,7 @@ const guideText = ref(INITIAL_GUIDE_TEXT);
 const activeCoachText = computed(() => hintText.value || guideText.value);
 const coachExpression = computed(() => coachExpressionForText(activeCoachText.value));
 const coachPortraitUrl = computed(() => (
-  `${props.assetBaseUrl}/characters/${coachExpressionFilename(activeCoachText.value)}`
+  `${props.assetBaseUrl}/characters/${coachExpressionFilename(activeCoachText.value)}?v=${COACH_EXPRESSION_ASSET_VERSION}`
 ));
 const selectedStrategy = ref("");
 const selectedCastle = ref("");
@@ -3070,7 +3071,7 @@ onBeforeUnmount(() => {
 onMounted(() => {
   for (const filename of Object.values(COACH_EXPRESSION_FILES)) {
     const portrait = new Image();
-    portrait.src = `${props.assetBaseUrl}/characters/${filename}`;
+    portrait.src = `${props.assetBaseUrl}/characters/${filename}?v=${COACH_EXPRESSION_ASSET_VERSION}`;
   }
   ensureMoveSounds();
   updateResponsiveLayout();
