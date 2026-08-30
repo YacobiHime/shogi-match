@@ -3,12 +3,12 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
   // 「ふつう」を6級程度の基準点として、上下を滑らかにする。
   // 級位帯では探索量だけでなく、意図的に選ぶ候補順位と許容評価損も広げる。
   [5000, {
-    nodes: 1500, multiPv: 12, moveRank: { min: 5, max: 12 },
-    maxScoreLoss: 2000, scoreTemperature: 1400,
+    nodes: 700, multiPv: 16, moveRank: { min: 8, max: 16 },
+    maxScoreLoss: 3200, scoreTemperature: 2400,
   }],
   [10000, {
-    nodes: 2500, multiPv: 12, moveRank: { min: 4, max: 12 },
-    maxScoreLoss: 1600, scoreTemperature: 1100,
+    nodes: 1500, multiPv: 14, moveRank: { min: 6, max: 14 },
+    maxScoreLoss: 2400, scoreTemperature: 1600,
   }],
   [20000, {
     nodes: 4000, multiPv: 10, moveRank: { min: 3, max: 10 },

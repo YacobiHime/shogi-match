@@ -14,11 +14,11 @@ describe('CPU strength settings', () => {
       maxScoreLoss: 1600,
     });
     expect(getStrengthSearchSettings(10000)).toEqual({
-      nodes: 2500,
-      multiPv: 12,
-      moveRank: { min: 4, max: 12 },
-      maxScoreLoss: 1600,
-      scoreTemperature: 1100,
+      nodes: 1500,
+      multiPv: 14,
+      moveRank: { min: 6, max: 14 },
+      maxScoreLoss: 2400,
+      scoreTemperature: 1600,
     });
     expect(getStrengthSearchSettings(20000)).toEqual({
       nodes: 4000,
@@ -41,6 +41,22 @@ describe('CPU strength settings', () => {
       maxScoreLoss: 800,
       scoreTemperature: 450,
     });
+  });
+
+  it('keeps beginner and easy clearly below slightly easy', () => {
+    expect(getStrengthSearchSettings(5000)).toEqual({
+      nodes: 700,
+      multiPv: 16,
+      moveRank: { min: 8, max: 16 },
+      maxScoreLoss: 3200,
+      scoreTemperature: 2400,
+    });
+    const easy = getStrengthSearchSettings(10000);
+    const slightlyEasy = getStrengthSearchSettings(20000);
+    expect(easy.nodes).toBeLessThan(slightlyEasy.nodes);
+    expect(easy.moveRank.min).toBeGreaterThan(slightlyEasy.moveRank.min);
+    expect(easy.maxScoreLoss).toBeGreaterThan(slightlyEasy.maxScoreLoss);
+    expect(easy.scoreTemperature).toBeGreaterThan(slightlyEasy.scoreTemperature);
   });
 
   it('offers ten gradual UI presets', () => {
@@ -88,7 +104,7 @@ describe('CPU strength settings', () => {
   it('reduces selection temperature as difficulty rises', () => {
     const temperatures = [5000, 10000, 20000, 30000, 60000, 100000, 200000, 300000]
       .map((preset) => getStrengthSearchSettings(preset).scoreTemperature);
-    expect(temperatures).toEqual([1400, 1100, 800, 650, 450, 220, 140, 80]);
+    expect(temperatures).toEqual([2400, 1600, 800, 650, 450, 220, 140, 80]);
     expect(temperatures.every((value, index) => index === 0 || value < temperatures[index - 1]))
       .toBe(true);
   });
