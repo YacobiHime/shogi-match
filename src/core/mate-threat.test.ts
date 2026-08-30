@@ -1,5 +1,19 @@
 import { describe, expect, test } from "vitest";
-import { detectStrictMateThreat } from "./mate-threat";
+import { detectStrictMateThreat, findMateInOne } from "./mate-threat";
+
+describe("1手詰め判定", () => {
+  test("現在の手番側に金打ちの1手詰めがあれば指し手を返す", () => {
+    expect(findMateInOne(
+      "4k4/9/9/9/9/6b2/9/3P1P3/3PKP3 w g 1",
+    )).toBe("G*5h");
+  });
+
+  test("1手では詰まない局面ではnullを返す", () => {
+    expect(findMateInOne(
+      "4k4/9/9/9/9/9/9/3P1P3/3PKP3 b - 1",
+    )).toBeNull();
+  });
+});
 
 describe("厳密な詰めろ判定", () => {
   test("手番を渡すと金打ちの一手詰めになる局面を検出する", () => {

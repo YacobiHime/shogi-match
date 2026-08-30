@@ -3,6 +3,19 @@ import { enumerateLegalMoves } from "../game-state";
 
 type SearchResult = number | null | undefined;
 
+/** 現在の手番側に合法な1手詰めがあれば、そのUSI指し手を返す。 */
+export function findMateInOne(sfen: string): string | null {
+  const position = Position.newBySFEN(sfen);
+  if (!position) return null;
+  for (const { usi } of enumerateLegalMoves(position)) {
+    const next = position.clone();
+    const move = next.createMoveByUSI(usi);
+    if (!move || !next.doMove(move) || !next.checked) continue;
+    if (enumerateLegalMoves(next).length === 0) return usi;
+  }
+  return null;
+}
+
 function forcedMatePly(
   position: Position,
   attacker: ReturnType<typeof reverseColor>,

@@ -19,6 +19,7 @@ export function createCoachAdviceScheduler({
 } = {}) {
   let displayedAt = Number.NEGATIVE_INFINITY;
   let displayedKey = '';
+  let displayedPriority = 0;
   let pending = null;
   let timer = null;
 
@@ -31,6 +32,7 @@ export function createCoachAdviceScheduler({
     if (display?.(advice) === false) return false;
     displayedAt = now();
     displayedKey = advice.key;
+    displayedPriority = coachAdvicePriority(advice);
     return true;
   }
 
@@ -44,14 +46,22 @@ export function createCoachAdviceScheduler({
   function present(advice) {
     if (!advice?.key || !advice?.text) return;
     const remaining = minimumDisplayMs - (now() - displayedAt);
+    const priority = coachAdvicePriority(advice);
     if (remaining <= 0) {
       cancelTimer();
       pending = null;
       displayNow(advice);
       return;
     }
+    // 詰み・王手などは局面が進む前に伝える必要があるため、通常助言の保持時間を待たない。
+    if (priority >= 100 && displayedPriority < 100) {
+      cancelTimer();
+      pending = null;
+      displayNow(advice);
+      return;
+    }
     if (advice.key === displayedKey) return;
-    if (!pending || coachAdvicePriority(advice) >= coachAdvicePriority(pending)) {
+    if (!pending || priority >= coachAdvicePriority(pending)) {
       pending = advice;
     }
     if (timer === null) timer = setTimer(flush, remaining);
@@ -62,6 +72,7 @@ export function createCoachAdviceScheduler({
     pending = null;
     displayedAt = Number.NEGATIVE_INFINITY;
     displayedKey = '';
+    displayedPriority = 0;
   }
 
   return { present, reset };

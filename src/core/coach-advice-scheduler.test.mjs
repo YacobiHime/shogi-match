@@ -34,6 +34,17 @@ describe('助言の表示時間', () => {
     vi.useRealTimers();
   });
 
+  test('詰み助言は通常助言の表示時間を待たず即時表示する', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const shown = [];
+    const scheduler = createCoachAdviceScheduler({ display: (advice) => shown.push(advice.key) });
+    scheduler.present({ key: 'opening-even', text: '互角' });
+    scheduler.present({ key: 'mate-win-1', text: '1手詰めだね、頑張って！' });
+    expect(shown).toEqual(['opening-even', 'mate-win-1']);
+    vi.useRealTimers();
+  });
+
   test('リセットすると待機中の助言を表示しない', () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);

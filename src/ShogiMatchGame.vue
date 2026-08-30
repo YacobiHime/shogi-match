@@ -554,7 +554,10 @@ import {
   isSideToMoveInCheck,
   scoreForPlayer,
 } from "./core/coach-advice.mjs";
-import { createCoachAdviceScheduler } from "./core/coach-advice-scheduler.mjs";
+import {
+  coachAdvicePriority,
+  createCoachAdviceScheduler,
+} from "./core/coach-advice-scheduler.mjs";
 import {
   COACH_EXPRESSION_ASSET_VERSION,
   COACH_EXPRESSION_FILES,
@@ -573,7 +576,7 @@ import {
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
 import { selectMoveByRank } from "./core/move-selection.mjs";
-import { detectStrictMateThreat } from "./core/mate-threat";
+import { detectStrictMateThreat, findMateInOne } from "./core/mate-threat";
 import {
   classifyAnalyzedMove,
   formatAnalysisScore,
@@ -1605,7 +1608,10 @@ function restorePersistedMatch(): boolean {
 
 function displayCoachAdvice(advice: { key: string; text: string; topic?: string }): boolean {
   const lastShownAt = coachAdviceLastShownAt.get(advice.key);
-  if (lastShownAt !== undefined && moveCount.value - lastShownAt < 8) return false;
+  if (
+    lastShownAt !== undefined && moveCount.value - lastShownAt < 8
+    && coachAdvicePriority(advice) < 100
+  ) return false;
   coachAdviceLastShownAt.set(advice.key, moveCount.value);
   if (advice.topic) advisedCoachTopics.add(advice.topic);
   guideText.value = advice.text;
@@ -2058,6 +2064,12 @@ function schedulePostCpuAssists() {
         !active.value || reviewMode.value || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
+      if (coachLevel.value === "detailed" && findMateInOne(currentSfen.value)) {
+        showCoachAdvice(getCoachAdvice({
+          level: coachLevel.value,
+          score: { type: "mate", value: 1 },
+        }));
+      }
       scheduleOpeningGuideSafety();
       scheduleOpeningFollowupCandidates();
       schedulePlayerIdleAdvice();
