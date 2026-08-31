@@ -85,4 +85,28 @@ describe('評価差を考慮したCPU候補選択', () => {
     ).rank);
     expect(selectedRanks).toEqual([3, 2, 1]);
   });
+
+  test('難易度で指定した確率だけ最善手を直接選ぶ', () => {
+    expect(selectMoveByRank(
+      search,
+      { min: 2, max: 4 },
+      () => 0.419,
+      { maxScoreLoss: Infinity, bestMoveRate: 0.42 },
+    )).toEqual({ move: '7g7f', rank: 1 });
+    expect(selectMoveByRank(
+      search,
+      { min: 2, max: 4 },
+      () => 0.42,
+      { maxScoreLoss: Infinity, bestMoveRate: 0.42 },
+    )).toEqual({ move: '2g2f', rank: 2 });
+  });
+
+  test('最善手率の範囲を検証する', () => {
+    expect(() => selectMoveByRank(
+      search,
+      { min: 1, max: 4 },
+      () => 0.5,
+      { bestMoveRate: 1.1 },
+    )).toThrow('bestMoveRateは0以上1以下');
+  });
 });

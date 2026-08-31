@@ -30,7 +30,12 @@ export function selectMoveByRank(
   searchResult,
   moveRank,
   random = Math.random,
-  { maxScoreLoss = Infinity, preferredMove, scoreTemperature = Infinity } = {},
+  {
+    maxScoreLoss = Infinity,
+    preferredMove,
+    scoreTemperature = Infinity,
+    bestMoveRate = 0,
+  } = {},
 ) {
   calculateEffectiveMoveRank(moveRank, 0);
   if (!searchResult || typeof searchResult.move !== 'string' || searchResult.move === '') {
@@ -43,6 +48,9 @@ export function selectMoveByRank(
   if (!(scoreTemperature === Infinity
     || (Number.isFinite(scoreTemperature) && scoreTemperature > 0))) {
     throw new Error('scoreTemperatureは0より大きい数値にしてください');
+  }
+  if (!Number.isFinite(bestMoveRate) || bestMoveRate < 0 || bestMoveRate > 1) {
+    throw new Error('bestMoveRateは0以上1以下の数値にしてください');
   }
   const byRank = new Map();
   for (const candidate of searchResult.candidates || []) {
@@ -85,6 +93,12 @@ export function selectMoveByRank(
   if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue >= 1) {
     throw new Error('randomは0以上1未満の数値を返してください');
   }
+  // 難易度ごとの割合で最善手を明示的に選ぶ。残りの確率は0〜1へ
+  // 再正規化し、候補順位と評価差による従来の抽選へ渡す。
+  if (randomValue < bestMoveRate || bestMoveRate === 1) {
+    return { move: searchResult.move, rank: 1 };
+  }
+  const selectionRandom = (randomValue - bestMoveRate) / (1 - bestMoveRate);
   if (scoreTemperature !== Infinity && bestValue !== undefined) {
     const weighted = candidates.map(([rank, candidate]) => {
       const value = comparable(candidate.score);
@@ -92,7 +106,7 @@ export function selectMoveByRank(
       return { rank, candidate, weight: Math.exp(-loss / scoreTemperature) };
     });
     const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
-    let target = randomValue * totalWeight;
+    let target = selectionRandom * totalWeight;
     for (const entry of weighted) {
       target -= entry.weight;
       if (target <= 0) return { move: entry.candidate.move, rank: entry.rank };
@@ -100,6 +114,6 @@ export function selectMoveByRank(
     const fallback = weighted.at(-1);
     return { move: fallback.candidate.move, rank: fallback.rank };
   }
-  const [rank, candidate] = candidates[Math.floor(randomValue * candidates.length)];
+  const [rank, candidate] = candidates[Math.floor(selectionRandom * candidates.length)];
   return { move: candidate.move, rank };
 }
