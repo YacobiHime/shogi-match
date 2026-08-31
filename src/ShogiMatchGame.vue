@@ -2574,19 +2574,26 @@ function scheduleReviewCpuMove() {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
       } else if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
-        engine.applyStrengthOptions({ multiPv: strength.multiPv });
-        engine.setPosition(currentEnginePosition());
-        const search = await engine.go({
-          nodes: strength.nodes,
-          maxTimeMs: 8000,
-        });
-        if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
-        usi = selectMoveByRank(
-          search,
-          strength.moveRank,
-          Math.random,
-          { maxScoreLoss: strength.maxScoreLoss, scoreTemperature: strength.scoreTemperature, bestMoveRate: strength.bestMoveRate },
-        ).move;
+        if (Math.random() < strength.randomLegalRate) {
+          usi = selectCpuMove(record.value.position)?.usi ?? "";
+        } else {
+          engine.applyStrengthOptions({ multiPv: strength.multiPv });
+          engine.setPosition(currentEnginePosition());
+          const search = await engine.go({
+            nodes: strength.nodes,
+            maxTimeMs: 8000,
+          });
+          if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
+          const fallbackMove = strength.randomFallback
+            ? selectCpuMove(record.value.position)?.usi
+            : undefined;
+          usi = selectMoveByRank(
+            search,
+            strength.moveRank,
+            Math.random,
+            { maxScoreLoss: strength.maxScoreLoss, scoreTemperature: strength.scoreTemperature, bestMoveRate: strength.bestMoveRate, fallbackMove },
+          ).move;
+        }
       } else {
         usi = selectCpuMove(record.value.position)?.usi ?? "";
       }
@@ -2657,62 +2664,75 @@ async function scheduleCpuMove() {
         cpuMoveCount: cpuOpeningTurn.cpuMoves.length,
         cpuMoves: cpuOpeningTurn.cpuMoves,
       });
-      // 入門だけは定跡の形を優先する。それ以外は定跡手も探索で安全確認する。
+      // 完全不規則指しでも、対局設定で指定された序盤の作戦手は優先する。
       if (allowedOpeningMove && usesRandomLegalMove(searchNodes.value)) {
         usi = allowedOpeningMove;
       } else if (usesRandomLegalMove(searchNodes.value)) {
         usi = allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi ?? "";
       } else if (engine && engineReady.value) {
         const strength = getStrengthSearchSettings(searchNodes.value);
-        engine.applyStrengthOptions({ multiPv: strength.multiPv });
-        const base = props.initialSfen === STANDARD_SFEN
-          ? "startpos"
-          : `sfen ${props.initialSfen}`;
-        engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
-        const search = await engine.go({
-          nodes: strength.nodes,
-          maxTimeMs: 60000,
-          searchMoves: [...allowedCpuMoveIds],
-        });
-        const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
-        moveFeedback = getMoveFeedback({
-          level: coachLevel.value,
-          beforeScore: comparableBeforeScore,
+        if (Math.random() < strength.randomLegalRate) {
+          usi = allowedOpeningMove
+            ?? allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi
+            ?? "";
+        } else {
+          engine.applyStrengthOptions({ multiPv: strength.multiPv });
+          const base = props.initialSfen === STANDARD_SFEN
+            ? "startpos"
+            : `sfen ${props.initialSfen}`;
+          engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
+          const search = await engine.go({
+            nodes: strength.nodes,
+            maxTimeMs: 60000,
+            searchMoves: [...allowedCpuMoveIds],
+          });
+          const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
+          moveFeedback = getMoveFeedback({
+            level: coachLevel.value,
+            beforeScore: comparableBeforeScore,
           // 閃き候補を指した場合は、深さの違う再探索と混ぜず同じ探索内で比較する。
-          afterScore: reusedHintAssessment?.afterScore ?? scoreForPlayer(
+            afterScore: reusedHintAssessment?.afterScore ?? scoreForPlayer(
               bestCpuScore,
               record.value.position.color,
               humanColor.value,
             ),
-          wasPromotion: moveFlair?.wasPromotion,
-          wasEnemyCampDrop: moveFlair?.wasEnemyCampDrop,
-        });
+            wasPromotion: moveFlair?.wasPromotion,
+            wasEnemyCampDrop: moveFlair?.wasEnemyCampDrop,
+          });
         // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
         // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
-        if (moveFeedback) {
-          showCoachAdvice(moveFeedback);
-          await nextTick();
-        }
-        const safeOpening = allowedOpeningMove && !forceConfiguredOpening
-          ? chooseSafeOpeningMove(allowedOpeningMove, search.candidates, Math.min(250, strength.maxScoreLoss))
-          : null;
-        const selection = forceConfiguredOpening && allowedOpeningMove
-          ? { move: allowedOpeningMove }
-          : safeOpening
-          ? {
+          if (moveFeedback) {
+            showCoachAdvice(moveFeedback);
+            await nextTick();
+          }
+          const safeOpening = allowedOpeningMove && !forceConfiguredOpening
+            ? chooseSafeOpeningMove(allowedOpeningMove, search.candidates, Math.min(250, strength.maxScoreLoss))
+            : null;
+          const selection = forceConfiguredOpening && allowedOpeningMove
+            ? { move: allowedOpeningMove }
+            : safeOpening
+            ? {
               move: safeOpening.usi,
               rank: search.candidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
-            }
-          : selectMoveByRank(
+              }
+            : selectMoveByRank(
               search,
               strength.moveRank,
               Math.random,
-              { maxScoreLoss: strength.maxScoreLoss, scoreTemperature: strength.scoreTemperature, bestMoveRate: strength.bestMoveRate },
+              {
+                maxScoreLoss: strength.maxScoreLoss,
+                scoreTemperature: strength.scoreTemperature,
+                bestMoveRate: strength.bestMoveRate,
+                fallbackMove: strength.randomFallback
+                  ? allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi
+                  : undefined,
+              },
             );
-        usi = selection.move;
-        selectedCpuScore = search.candidates.find(
-          (candidate) => candidate.move === selection.move,
-        )?.score;
+          usi = selection.move;
+          selectedCpuScore = search.candidates.find(
+            (candidate) => candidate.move === selection.move,
+          )?.score;
+        }
       } else {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
         usi = allowedOpeningMove

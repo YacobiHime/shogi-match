@@ -1,7 +1,11 @@
 const STRENGTH_SEARCH_SETTINGS = new Map([
   // valueは既存URL・保存データとの互換用識別値。実探索量はnodesを使う。
-  [1000, { nodes: 500, multiPv: 16, moveRank: { min: 8, max: 16 }, maxScoreLoss: 3600, scoreTemperature: 2600, bestMoveRate: 0 }],
-  [5000, { nodes: 500, multiPv: 16, moveRank: { min: 8, max: 16 }, maxScoreLoss: 3600, scoreTemperature: 2600, bestMoveRate: 0.03 }],
+  [1000, { nodes: 0, multiPv: 1, moveRank: { min: 1, max: 1 }, maxScoreLoss: 0, bestMoveRate: 0, randomLegalRate: 1, randomFallback: true }],
+  [2000, { nodes: 100, multiPv: 24, moveRank: { min: 12, max: 24 }, maxScoreLoss: 8000, scoreTemperature: 5000, bestMoveRate: 0.01, randomLegalRate: 0.90, randomFallback: true }],
+  [3000, { nodes: 180, multiPv: 22, moveRank: { min: 10, max: 22 }, maxScoreLoss: 7000, scoreTemperature: 4500, bestMoveRate: 0.01, randomLegalRate: 0.75, randomFallback: true }],
+  [4000, { nodes: 280, multiPv: 20, moveRank: { min: 9, max: 20 }, maxScoreLoss: 6000, scoreTemperature: 4000, bestMoveRate: 0.02, randomLegalRate: 0.55, randomFallback: true }],
+  [4500, { nodes: 400, multiPv: 18, moveRank: { min: 8, max: 18 }, maxScoreLoss: 5000, scoreTemperature: 3200, bestMoveRate: 0.02, randomLegalRate: 0.30, randomFallback: true }],
+  [5000, { nodes: 500, multiPv: 16, moveRank: { min: 8, max: 16 }, maxScoreLoss: 3600, scoreTemperature: 2600, bestMoveRate: 0.03, randomFallback: true }],
   [6000, { nodes: 650, multiPv: 16, moveRank: { min: 7, max: 16 }, maxScoreLoss: 3300, scoreTemperature: 2400, bestMoveRate: 0.05 }],
   [7000, { nodes: 850, multiPv: 16, moveRank: { min: 6, max: 16 }, maxScoreLoss: 3000, scoreTemperature: 2200, bestMoveRate: 0.08 }],
   [8000, { nodes: 1100, multiPv: 15, moveRank: { min: 6, max: 15 }, maxScoreLoss: 2700, scoreTemperature: 1900, bestMoveRate: 0.12 }],
@@ -25,30 +29,34 @@ const STRENGTH_SEARCH_SETTINGS = new Map([
 ]);
 
 export const CPU_STRENGTH_PRESETS = [
-  { level: 0, value: 1000, label: '駒の動かし方練習' },
-  { level: 1, value: 5000, label: '十五級程度' },
-  { level: 2, value: 6000, label: '十四級程度' },
-  { level: 3, value: 7000, label: '十三級程度' },
-  { level: 4, value: 8000, label: '十二級程度' },
-  { level: 5, value: 10000, label: '十一級程度' },
-  { level: 6, value: 12000, label: '十級程度' },
-  { level: 7, value: 15000, label: '九級程度' },
-  { level: 8, value: 20000, label: '八級程度' },
-  { level: 9, value: 25000, label: '七級程度' },
-  { level: 10, value: 30000, label: '六級程度' },
-  { level: 11, value: 60000, label: '五級程度' },
-  { level: 12, value: 70000, label: '四級程度' },
-  { level: 13, value: 80000, label: '三級程度' },
-  { level: 14, value: 100000, label: '二級程度' },
-  { level: 15, value: 150000, label: '一級程度' },
-  { level: 16, value: 200000, label: 'アマ初段程度' },
-  { level: 17, value: 250000, label: 'アマ二段程度' },
-  { level: 18, value: 300000, label: 'アマ三段程度' },
-  { level: 19, value: 400000, label: 'アマ四〜五段程度' },
-  { level: 20, value: 480000, label: '藤井聡太並み' },
+  { level: 0, value: 1000, label: '完全不規則指し' },
+  { level: 1, value: 2000, label: '十九級程度' },
+  { level: 2, value: 3000, label: '十八級程度' },
+  { level: 3, value: 4000, label: '十七級程度' },
+  { level: 4, value: 4500, label: '十六級程度' },
+  { level: 5, value: 5000, label: '十五級程度' },
+  { level: 6, value: 6000, label: '十四級程度' },
+  { level: 7, value: 7000, label: '十三級程度' },
+  { level: 8, value: 8000, label: '十二級程度' },
+  { level: 9, value: 10000, label: '十一級程度' },
+  { level: 10, value: 12000, label: '十級程度' },
+  { level: 11, value: 15000, label: '九級程度' },
+  { level: 12, value: 20000, label: '八級程度' },
+  { level: 13, value: 25000, label: '七級程度' },
+  { level: 14, value: 30000, label: '六級程度' },
+  { level: 15, value: 60000, label: '五級程度' },
+  { level: 16, value: 70000, label: '四級程度' },
+  { level: 17, value: 80000, label: '三級程度' },
+  { level: 18, value: 100000, label: '二級程度' },
+  { level: 19, value: 150000, label: '一級程度' },
+  { level: 20, value: 200000, label: 'アマ初段程度' },
+  { level: 21, value: 250000, label: 'アマ二段程度' },
+  { level: 22, value: 300000, label: 'アマ三段程度' },
+  { level: 23, value: 400000, label: 'アマ四〜五段程度' },
+  { level: 24, value: 480000, label: '藤井聡太並み' },
 ];
 
-/** Lv0は評価探索を使わず、合法手をランダムに指す練習用CPUとする。 */
+/** Lv0は評価探索を使わず、合法手をランダムに指すCPUとする。 */
 export function usesRandomLegalMove(preset) {
   return preset === 1000;
 }
@@ -63,6 +71,8 @@ export function getStrengthSearchSettings(preset) {
     moveRank: { ...settings.moveRank },
     maxScoreLoss: settings.maxScoreLoss,
     bestMoveRate: settings.bestMoveRate,
+    randomLegalRate: settings.randomLegalRate ?? 0,
+    randomFallback: settings.randomFallback === true,
   };
   if (Number.isFinite(settings.scoreTemperature)) result.scoreTemperature = settings.scoreTemperature;
   return result;

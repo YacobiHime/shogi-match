@@ -6,18 +6,19 @@ import {
 } from './strength-settings.mjs';
 
 describe('CPU strength settings', () => {
-  it('offers every level from 0 through 20', () => {
-    expect(CPU_STRENGTH_PRESETS).toHaveLength(21);
+  it('offers every level from 0 through 24', () => {
+    expect(CPU_STRENGTH_PRESETS).toHaveLength(25);
     expect(CPU_STRENGTH_PRESETS.map(({ level }) => level))
-      .toEqual(Array.from({ length: 21 }, (_, level) => level));
-    expect(CPU_STRENGTH_PRESETS[10].label).toBe('六級程度');
+      .toEqual(Array.from({ length: 25 }, (_, level) => level));
+    expect(CPU_STRENGTH_PRESETS[0].label).toBe('完全不規則指し');
+    expect(CPU_STRENGTH_PRESETS[14].label).toBe('六級程度');
     expect(CPU_STRENGTH_PRESETS.at(-2)).toMatchObject({
-      level: 19,
+      level: 23,
       value: 400000,
       label: 'アマ四〜五段程度',
     });
     expect(CPU_STRENGTH_PRESETS.at(-1)).toMatchObject({
-      level: 20,
+      level: 24,
       value: 480000,
       label: '藤井聡太並み',
     });
@@ -45,7 +46,8 @@ describe('CPU strength settings', () => {
       index === 0 || entry.nodes >= settings[index - 1].nodes
     ))).toBe(true);
     expect(settings.map(({ bestMoveRate }) => bestMoveRate)).toEqual([
-      0.03, 0.05, 0.08, 0.12, 0.16,
+      0.01, 0.01, 0.02, 0.02, 0.03,
+      0.05, 0.08, 0.12, 0.16,
       0.20, 0.25, 0.30, 0.35, 0.42,
       0.50, 0.58, 0.66, 0.74, 0.82,
       0.88, 0.92, 0.95, 0.98, 1,
@@ -53,6 +55,9 @@ describe('CPU strength settings', () => {
     expect(settings.every((entry, index) => (
       index === 0 || entry.maxScoreLoss <= settings[index - 1].maxScoreLoss
     ))).toBe(true);
+    expect(settings.map(({ randomLegalRate }) => randomLegalRate)).toEqual([
+      0.9, 0.75, 0.55, 0.3, ...Array(20).fill(0),
+    ]);
   });
 
   it('preserves the intended anchor settings', () => {
@@ -63,6 +68,8 @@ describe('CPU strength settings', () => {
       maxScoreLoss: 900,
       scoreTemperature: 650,
       bestMoveRate: 0.42,
+      randomLegalRate: 0,
+      randomFallback: false,
     });
     expect(getStrengthSearchSettings(400000)).toEqual({
       nodes: 240000,
@@ -71,6 +78,8 @@ describe('CPU strength settings', () => {
       maxScoreLoss: 140,
       scoreTemperature: 45,
       bestMoveRate: 0.98,
+      randomLegalRate: 0,
+      randomFallback: false,
     });
     expect(getStrengthSearchSettings(480000)).toEqual({
       nodes: 480000,
@@ -78,10 +87,12 @@ describe('CPU strength settings', () => {
       moveRank: { min: 1, max: 1 },
       maxScoreLoss: 0,
       bestMoveRate: 1,
+      randomLegalRate: 0,
+      randomFallback: false,
     });
   });
 
-  it('falls back to level ten for an unknown preset', () => {
+  it('falls back to level fourteen for an unknown preset', () => {
     expect(getStrengthSearchSettings(999)).toEqual(getStrengthSearchSettings(30000));
   });
 });
