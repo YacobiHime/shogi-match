@@ -434,7 +434,7 @@
             :disabled="reviewCpuEnabled"
             aria-label="表示する局面の手数"
             @input="onReviewSliderInput"
-            @change="scheduleReviewCoachAdvice()"
+            @change="refreshReviewCoachAdvice()"
           >
         </div>
         <select
@@ -558,6 +558,12 @@ import {
   coachAdvicePriority,
   createCoachAdviceScheduler,
 } from "./core/coach-advice-scheduler.mjs";
+import {
+  coachAdviceForPosition,
+  normalizeCoachAdviceHistory,
+  pruneCoachAdviceAfterPly,
+  recordCoachAdvice,
+} from "./core/coach-advice-history.mjs";
 import {
   COACH_EXPRESSION_ASSET_VERSION,
   COACH_EXPRESSION_FILES,
@@ -760,6 +766,13 @@ const coachAdviceLastShownAt = new Map<string, number>();
 let playerTurnScore: { type: "cp" | "mate"; value: number } | undefined;
 let playerTurnScoreHistoryLength = -1;
 type EngineEvaluation = { type: "cp" | "mate"; value: number };
+type RecordedCoachAdvice = {
+  ply: number;
+  sfen: string;
+  key: string;
+  text: string;
+  topic?: string;
+};
 let latestHintAnalysis: {
   historyLength: number;
   candidates: { rank: number; move: string; score?: EngineEvaluation }[];
@@ -779,6 +792,8 @@ let idleCoachTimer: ReturnType<typeof setTimeout> | undefined;
 let idleCoachGeneration = 0;
 let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
+let coachAdviceHistory: RecordedCoachAdvice[] = [];
+let displayingStructuredCoachAdvice = false;
 let boardResizeObserver: ResizeObserver | undefined;
 let reviewCoachGeneration = 0;
 let analysisGeneration = 0;
@@ -1522,6 +1537,7 @@ function persistMatchState() {
     openingGuideDetourCount: openingGuideDetourCount.value,
     openingGuideAbandoned: openingGuideAbandoned.value,
     openingPlanCompletionLocked: openingPlanCompletionLocked.value,
+    coachAdviceHistory,
   });
 }
 
@@ -1590,6 +1606,7 @@ function restorePersistedMatch(): boolean {
     openingGuideDetourCount.value = savedMatchNumber(snapshot.openingGuideDetourCount, 0, 0, 3);
     openingGuideAbandoned.value = snapshot.openingGuideAbandoned === true;
     openingPlanCompletionLocked.value = snapshot.openingPlanCompletionLocked === true;
+    coachAdviceHistory = normalizeCoachAdviceHistory(snapshot.coachAdviceHistory, moves.length);
     result.value = restoredResult;
     resultDialogOpen.value = Boolean(restoredResult);
     matchStarted.value = true;
@@ -1606,7 +1623,13 @@ function restorePersistedMatch(): boolean {
   }
 }
 
-function displayCoachAdvice(advice: { key: string; text: string; topic?: string }): boolean {
+function displayCoachAdvice(advice: {
+  key: string;
+  text: string;
+  topic?: string;
+  sfen?: string;
+  ply?: number;
+}): boolean {
   const lastShownAt = coachAdviceLastShownAt.get(advice.key);
   if (
     lastShownAt !== undefined && moveCount.value - lastShownAt < 8
@@ -1614,14 +1637,30 @@ function displayCoachAdvice(advice: { key: string; text: string; topic?: string 
   ) return false;
   coachAdviceLastShownAt.set(advice.key, moveCount.value);
   if (advice.topic) advisedCoachTopics.add(advice.topic);
-  guideText.value = advice.text;
+  displayingStructuredCoachAdvice = true;
+  try {
+    guideText.value = advice.text;
+  } finally {
+    displayingStructuredCoachAdvice = false;
+  }
+  if (
+    !reviewMode.value && typeof advice.sfen === "string"
+    && typeof advice.ply === "number" && Number.isInteger(advice.ply) && advice.ply >= 0
+  ) {
+    coachAdviceHistory = recordCoachAdvice(coachAdviceHistory, advice as RecordedCoachAdvice);
+    persistMatchState();
+  }
   return true;
 }
 
 const coachAdviceScheduler = createCoachAdviceScheduler({ display: displayCoachAdvice });
 
 function showCoachAdvice(advice?: { key: string; text: string; topic?: string } | null) {
-  coachAdviceScheduler.present(advice);
+  coachAdviceScheduler.present(advice ? {
+    ...advice,
+    sfen: currentSfen.value,
+    ply: moveCount.value,
+  } : advice);
 }
 
 function updateCoachAdvice(
@@ -2217,6 +2256,11 @@ function schedulePlayerIdleAdvice() {
 
 function scheduleReviewCoachAdvice() {
   if (!reviewMode.value || reviewCpuEnabled.value || analysisRunning.value || coachLevel.value === "off") return;
+  if (showRecordedCoachAdvice()) {
+    reviewCoachGeneration += 1;
+    thinking.value = false;
+    return;
+  }
   const generation = ++reviewCoachGeneration;
   reviewCoachQueue = reviewCoachQueue.catch(() => undefined).then(async () => {
     if (generation !== reviewCoachGeneration || !reviewMode.value || !engineReady.value) return;
@@ -2256,6 +2300,32 @@ function scheduleReviewCoachAdvice() {
       if (generation === reviewCoachGeneration) thinking.value = false;
     }
   });
+}
+
+function showRecordedCoachAdvice(): boolean {
+  if (!reviewMode.value || coachLevel.value === "off") return false;
+  const advice = coachAdviceForPosition(coachAdviceHistory, currentSfen.value) as RecordedCoachAdvice | null;
+  if (!advice) return false;
+  if (advice.topic) advisedCoachTopics.add(advice.topic);
+  guideText.value = advice.text;
+  return true;
+}
+
+function refreshReviewCoachAdvice({ analyze = true } = {}): boolean {
+  if (!reviewMode.value || reviewCpuEnabled.value) return false;
+  coachAdviceScheduler.reset();
+  reviewCoachGeneration += 1;
+  if (coachLevel.value === "off") {
+    guideText.value = "";
+    return false;
+  }
+  if (showRecordedCoachAdvice()) {
+    thinking.value = false;
+    return true;
+  }
+  guideText.value = "この局面を見てみよう。";
+  if (analyze && !analysisRunning.value) scheduleReviewCoachAdvice();
+  return false;
 }
 
 function finish(matchResult: MatchResult) {
@@ -2415,6 +2485,7 @@ function undoTurn() {
     rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   } else {
     rebuildRecord(moveHistory.slice(0, -removeCount));
+    coachAdviceHistory = pruneCoachAdviceAfterPly(coachAdviceHistory, moveHistory.length);
   }
   if (openingPlanCurrentlyComplete.value) openingPlanCompletionLocked.value = true;
   if (!reviewMode.value) undosRemaining.value -= 1;
@@ -2453,6 +2524,7 @@ function onReviewSliderInput(event: Event) {
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   hintCandidates.value = [];
   hintText.value = "";
+  refreshReviewCoachAdvice({ analyze: false });
 }
 
 function onAnalysisPositionSelect(event: Event) {
@@ -2494,7 +2566,7 @@ function navigateAnalysis(delta: number) {
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
   hintCandidates.value = [];
   hintText.value = "";
-  scheduleReviewCoachAdvice();
+  refreshReviewCoachAdvice();
 }
 
 function returnToMainLine() {
@@ -2505,7 +2577,7 @@ function returnToMainLine() {
   hintCandidates.value = [];
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : "本筋の局面に戻したよ！";
-  scheduleReviewCoachAdvice();
+  refreshReviewCoachAdvice();
 }
 
 function onPlayerMove(usi: string) {
@@ -2814,6 +2886,7 @@ function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう
   resetOpeningGuideSafety();
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : message;
+  showRecordedCoachAdvice();
 }
 
 async function startKifuAnalysis() {
@@ -2825,6 +2898,7 @@ async function startKifuAnalysis() {
 
 function openKifuAnalysis() {
   analysisOpen.value = true;
+  showRecordedCoachAdvice();
   if (analysisPoints.value.length === 0 && !analysisRunning.value) void runKifuAnalysis();
 }
 
@@ -2912,9 +2986,11 @@ async function runKifuAnalysis() {
       await nextTick();
     }
     if (generation === analysisGeneration && analysisProgress.value === analysisTotal.value) {
-      guideText.value = coachLevel.value === "off"
-        ? ""
-        : "棋譜解析が終わったよ。グラフから気になる局面を選んでね！";
+      if (!showRecordedCoachAdvice()) {
+        guideText.value = coachLevel.value === "off"
+          ? ""
+          : "棋譜解析が終わったよ。グラフから気になる局面を選んでね！";
+      }
     }
   } catch (error) {
     if (generation === analysisGeneration) {
@@ -2948,7 +3024,7 @@ function goToAnalysisPly(ply: number) {
   rebuildRecord(mainLine.slice(0, cursor));
   hintCandidates.value = [];
   hintText.value = "";
-  if (!analysisRunning.value) scheduleReviewCoachAdvice();
+  refreshReviewCoachAdvice();
 }
 
 function restart() {
@@ -2985,6 +3061,7 @@ function restart() {
   cpuOpeningPlan = null;
   positionAnalysisCache.clear();
   moveHistory = [];
+  coachAdviceHistory = [];
   selectedStrategy.value = "";
   selectedCastle.value = "";
   strategyExplanationOpen.value = false;
@@ -3071,13 +3148,26 @@ watch([selectedPlayerColor, cpuDetailedStrategy], () => {
     cpuDetailedCastle.value = castleOptions[0]?.id ?? "funagakoi";
   }
 });
+watch(guideText, (text) => {
+  if (
+    displayingStructuredCoachAdvice || restoringSavedMatch || reviewMode.value
+    || !matchStarted.value || pregameOpen.value || !text || hintText.value
+  ) return;
+  coachAdviceHistory = recordCoachAdvice(coachAdviceHistory, {
+    ply: moveCount.value,
+    sfen: currentSfen.value,
+    key: "guide-message",
+    text,
+  });
+  persistMatchState();
+}, { flush: "sync" });
 watch(coachLevel, (level) => {
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   coachAdviceLastShownAt.clear();
   guideText.value = level === "off" ? "" : INITIAL_GUIDE_TEXT;
   if (reviewMode.value && !reviewCpuEnabled.value && !analysisRunning.value && level !== "off") {
-    scheduleReviewCoachAdvice();
+    refreshReviewCoachAdvice();
   } else if (
     level !== "off" && engineReady.value && active.value && !thinking.value
     && record.value.position.color === humanColor.value
