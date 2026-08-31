@@ -61,6 +61,15 @@ describe('評価差を考慮したCPU候補選択', () => {
     )).toEqual({ move: '7g7f', rank: 1 });
   });
 
+  test('低難度では候補不足時に指定したランダム合法手へ退避できる', () => {
+    expect(selectMoveByRank(
+      search,
+      { min: 2, max: 4 },
+      () => 0.5,
+      { maxScoreLoss: 100, fallbackMove: '8g8f' },
+    )).toEqual({ move: '8g8f', rank: 0 });
+  });
+
   test('評価差による重み付き抽選では同じ乱数でも悪い下位候補を選びにくい', () => {
     expect(selectMoveByRank(
       search,

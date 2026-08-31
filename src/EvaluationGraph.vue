@@ -17,7 +17,14 @@
         <text v-for="tick in xTicks" :key="`x-${tick.value}`" :x="tick.x" :y="plot.top + plot.height + 22" text-anchor="middle">{{ tick.value }}手</text>
       </g>
       <line class="evaluation-graph__zero" :x1="plot.left" :x2="plot.left + plot.width" :y1="scoreY(0)" :y2="scoreY(0)" />
-      <rect class="evaluation-graph__hit-area" :x="plot.left" :y="plot.top" :width="plot.width" :height="plot.height" />
+      <rect
+        ref="hitArea"
+        class="evaluation-graph__hit-area"
+        :x="plot.left"
+        :y="plot.top"
+        :width="plot.width"
+        :height="plot.height"
+      />
       <polyline v-if="linePoints" class="evaluation-graph__line" :points="linePoints" />
       <line class="evaluation-graph__current" :x1="plyX(currentPly)" :x2="plyX(currentPly)" :y1="plot.top" :y2="plot.top + plot.height" />
       <g v-for="point in annotatedPoints" :key="point.ply">
@@ -49,7 +56,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { nearestPlyFromPlotPoint } from "./core/evaluation-graph-selection.mjs";
 
 type AnalysisPoint = {
   ply: number;
@@ -69,6 +77,7 @@ const props = defineProps<{
   totalPly: number;
 }>();
 const emit = defineEmits<{ select: [ply: number] }>();
+const hitArea = ref<SVGRectElement | null>(null);
 
 const plot = { left: 58, top: 5, width: 724, height: 125 };
 const graphLimit = 6000;
@@ -94,20 +103,9 @@ const trianglePoints = (ply: number, score: number, mover: "black" | "white") =>
 };
 
 function selectNearestPly(event: PointerEvent) {
-  const svg = event.currentTarget as SVGSVGElement;
-  const screenMatrix = svg.getScreenCTM();
-  let viewX: number;
-  if (screenMatrix) {
-    const pointer = svg.createSVGPoint();
-    pointer.x = event.clientX;
-    pointer.y = event.clientY;
-    viewX = pointer.matrixTransform(screenMatrix.inverse()).x;
-  } else {
-    const rect = svg.getBoundingClientRect();
-    viewX = ((event.clientX - rect.left) / rect.width) * 800;
-  }
-  const ratio = (viewX - plot.left) / plot.width;
-  emit("select", Math.max(0, Math.min(props.totalPly, Math.round(ratio * maxPly.value))));
+  const rect = hitArea.value?.getBoundingClientRect();
+  if (!rect) return;
+  emit("select", nearestPlyFromPlotPoint(event.clientX, rect.left, rect.width, props.totalPly));
 }
 </script>
 

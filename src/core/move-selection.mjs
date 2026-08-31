@@ -33,6 +33,7 @@ export function selectMoveByRank(
   {
     maxScoreLoss = Infinity,
     preferredMove,
+    fallbackMove,
     scoreTemperature = Infinity,
     bestMoveRate = 0,
   } = {},
@@ -51,6 +52,9 @@ export function selectMoveByRank(
   }
   if (!Number.isFinite(bestMoveRate) || bestMoveRate < 0 || bestMoveRate > 1) {
     throw new Error('bestMoveRateは0以上1以下の数値にしてください');
+  }
+  if (fallbackMove !== undefined && (typeof fallbackMove !== 'string' || fallbackMove === '')) {
+    throw new Error('fallbackMoveは空でない文字列にしてください');
   }
   const byRank = new Map();
   for (const candidate of searchResult.candidates || []) {
@@ -85,7 +89,11 @@ export function selectMoveByRank(
     return bestValue !== undefined && value !== undefined && bestValue - value <= maxScoreLoss;
   });
 
-  if (candidates.length === 0) return { move: searchResult.move, rank: 1 };
+  if (candidates.length === 0) {
+    return fallbackMove === undefined
+      ? { move: searchResult.move, rank: 1 }
+      : { move: fallbackMove, rank: 0 };
+  }
   const preferred = candidates.find(([, candidate]) => candidate.move === preferredMove);
   if (preferred) return { move: preferred[1].move, rank: preferred[0] };
 
