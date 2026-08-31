@@ -40,7 +40,7 @@
             <span>敵の強さ</span>
             <select v-model.number="searchNodes" aria-label="対局前の敵の強さ">
               <option v-for="preset in CPU_STRENGTH_PRESETS" :key="preset.value" :value="preset.value">
-                Lv{{ preset.level }} {{ preset.label }}
+                Lv.{{ preset.level }} {{ preset.label }}
               </option>
             </select>
           </label>

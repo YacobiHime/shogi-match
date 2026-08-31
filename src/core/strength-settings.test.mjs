@@ -10,6 +10,7 @@ describe('CPU strength settings', () => {
     expect(CPU_STRENGTH_PRESETS).toHaveLength(21);
     expect(CPU_STRENGTH_PRESETS.map(({ level }) => level))
       .toEqual(Array.from({ length: 21 }, (_, level) => level));
+    expect(CPU_STRENGTH_PRESETS[10].label).toBe('六級程度');
     expect(CPU_STRENGTH_PRESETS.at(-2)).toMatchObject({
       level: 19,
       value: 400000,
