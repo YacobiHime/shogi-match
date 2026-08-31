@@ -1,72 +1,59 @@
 const STRENGTH_SEARCH_SETTINGS = new Map([
-  [1000, { nodes: 2000, multiPv: 12, moveRank: { min: 3, max: 12 }, maxScoreLoss: 1600 }],
-  // 「ふつう」を6級程度の基準点として、上下を滑らかにする。
-  // 級位帯では探索量だけでなく、意図的に選ぶ候補順位と許容評価損も広げる。
-  [5000, {
-    nodes: 700, multiPv: 16, moveRank: { min: 8, max: 16 },
-    maxScoreLoss: 3200, scoreTemperature: 2400,
-  }],
-  [10000, {
-    nodes: 1500, multiPv: 14, moveRank: { min: 6, max: 14 },
-    maxScoreLoss: 2400, scoreTemperature: 1600,
-  }],
-  [20000, {
-    nodes: 4000, multiPv: 10, moveRank: { min: 3, max: 10 },
-    maxScoreLoss: 1200, scoreTemperature: 800,
-  }],
-  // 「ふつう」は「やや強い」と明確に差を付けつつ、評価差による抽選で安定させる。
-  [30000, {
-    nodes: 8000,
-    multiPv: 8,
-    moveRank: { min: 1, max: 8 },
-    maxScoreLoss: 900,
-    scoreTemperature: 650,
-  }],
-  // 直前までの「ふつう」の強さを「やや強い」の基準として引き継ぐ。
-  [60000, {
-    nodes: 11000, multiPv: 8, moveRank: { min: 1, max: 7 },
-    maxScoreLoss: 800, scoreTemperature: 450,
-  }],
-  [100000, {
-    nodes: 25000, multiPv: 6, moveRank: { min: 1, max: 6 },
-    maxScoreLoss: 500, scoreTemperature: 220,
-  }],
-  [200000, {
-    nodes: 50000, multiPv: 5, moveRank: { min: 1, max: 5 },
-    maxScoreLoss: 350, scoreTemperature: 140,
-  }],
-  [300000, {
-    nodes: 120000, multiPv: 3, moveRank: { min: 1, max: 3 },
-    maxScoreLoss: 220, scoreTemperature: 80,
-  }],
-  // CSA会誌Vol.29の人間対局向け実測（48万nodesで将棋倶楽部24のR3381相当）を
-  // 人間最高峰の目安として採用。エンジン差があるため表示上も「推定」とする。
-  [480000, { nodes: 480000, multiPv: 1, moveRank: { min: 1, max: 1 }, maxScoreLoss: 0 }],
+  // valueは既存URL・保存データとの互換用識別値。実探索量はnodesを使う。
+  [1000, { nodes: 500, multiPv: 16, moveRank: { min: 8, max: 16 }, maxScoreLoss: 3600, scoreTemperature: 2600, bestMoveRate: 0 }],
+  [5000, { nodes: 500, multiPv: 16, moveRank: { min: 8, max: 16 }, maxScoreLoss: 3600, scoreTemperature: 2600, bestMoveRate: 0.03 }],
+  [6000, { nodes: 650, multiPv: 16, moveRank: { min: 7, max: 16 }, maxScoreLoss: 3300, scoreTemperature: 2400, bestMoveRate: 0.05 }],
+  [7000, { nodes: 850, multiPv: 16, moveRank: { min: 6, max: 16 }, maxScoreLoss: 3000, scoreTemperature: 2200, bestMoveRate: 0.08 }],
+  [8000, { nodes: 1100, multiPv: 15, moveRank: { min: 6, max: 15 }, maxScoreLoss: 2700, scoreTemperature: 1900, bestMoveRate: 0.12 }],
+  [10000, { nodes: 1500, multiPv: 14, moveRank: { min: 5, max: 14 }, maxScoreLoss: 2400, scoreTemperature: 1600, bestMoveRate: 0.16 }],
+  [12000, { nodes: 2000, multiPv: 14, moveRank: { min: 5, max: 14 }, maxScoreLoss: 2100, scoreTemperature: 1400, bestMoveRate: 0.20 }],
+  [15000, { nodes: 2800, multiPv: 13, moveRank: { min: 4, max: 13 }, maxScoreLoss: 1800, scoreTemperature: 1200, bestMoveRate: 0.25 }],
+  [20000, { nodes: 4000, multiPv: 12, moveRank: { min: 3, max: 12 }, maxScoreLoss: 1500, scoreTemperature: 950, bestMoveRate: 0.30 }],
+  [25000, { nodes: 5500, multiPv: 11, moveRank: { min: 3, max: 11 }, maxScoreLoss: 1250, scoreTemperature: 800, bestMoveRate: 0.35 }],
+  [30000, { nodes: 8000, multiPv: 9, moveRank: { min: 2, max: 9 }, maxScoreLoss: 900, scoreTemperature: 650, bestMoveRate: 0.42 }],
+  [60000, { nodes: 11000, multiPv: 8, moveRank: { min: 2, max: 8 }, maxScoreLoss: 800, scoreTemperature: 520, bestMoveRate: 0.50 }],
+  [70000, { nodes: 15000, multiPv: 8, moveRank: { min: 2, max: 8 }, maxScoreLoss: 700, scoreTemperature: 440, bestMoveRate: 0.58 }],
+  [80000, { nodes: 22000, multiPv: 7, moveRank: { min: 2, max: 7 }, maxScoreLoss: 600, scoreTemperature: 360, bestMoveRate: 0.66 }],
+  [100000, { nodes: 32000, multiPv: 6, moveRank: { min: 2, max: 6 }, maxScoreLoss: 500, scoreTemperature: 280, bestMoveRate: 0.74 }],
+  [150000, { nodes: 45000, multiPv: 5, moveRank: { min: 2, max: 5 }, maxScoreLoss: 420, scoreTemperature: 220, bestMoveRate: 0.82 }],
+  [200000, { nodes: 65000, multiPv: 5, moveRank: { min: 2, max: 5 }, maxScoreLoss: 350, scoreTemperature: 170, bestMoveRate: 0.88 }],
+  [250000, { nodes: 95000, multiPv: 4, moveRank: { min: 2, max: 4 }, maxScoreLoss: 280, scoreTemperature: 120, bestMoveRate: 0.92 }],
+  [300000, { nodes: 140000, multiPv: 3, moveRank: { min: 2, max: 3 }, maxScoreLoss: 220, scoreTemperature: 80, bestMoveRate: 0.95 }],
+  [400000, { nodes: 240000, multiPv: 2, moveRank: { min: 2, max: 2 }, maxScoreLoss: 140, scoreTemperature: 45, bestMoveRate: 0.98 }],
+  // CSA会誌Vol.29の人間対局向け推定を最高難度の基準として維持する。
+  [480000, { nodes: 480000, multiPv: 1, moveRank: { min: 1, max: 1 }, maxScoreLoss: 0, bestMoveRate: 1 }],
 ]);
 
 export const CPU_STRENGTH_PRESETS = [
-  { value: 1000, label: '入門', guide: '駒の動かし方練習' },
-  { value: 5000, label: '初級', guide: '15〜12級目安' },
-  { value: 10000, label: '易しい', guide: '11〜9級目安' },
-  { value: 20000, label: 'やや易しい', guide: '8〜7級目安' },
-  { value: 30000, label: 'ふつう', guide: '6級目安' },
-  { value: 60000, label: 'やや強い', guide: '5〜3級目安' },
-  { value: 100000, label: '強い', guide: '2〜1級目安' },
-  { value: 200000, label: '上級', guide: '初段目安' },
-  { value: 300000, label: 'かなり強い', guide: '二〜三段目安' },
-  { value: 480000, label: '藤井聡太並み', guide: '推定' },
+  { level: 0, value: 1000, label: '駒の動かし方練習' },
+  { level: 1, value: 5000, label: '15級目安' },
+  { level: 2, value: 6000, label: '14級目安' },
+  { level: 3, value: 7000, label: '13級目安' },
+  { level: 4, value: 8000, label: '12級目安' },
+  { level: 5, value: 10000, label: '11級目安' },
+  { level: 6, value: 12000, label: '10級目安' },
+  { level: 7, value: 15000, label: '9級目安' },
+  { level: 8, value: 20000, label: '8級目安' },
+  { level: 9, value: 25000, label: '7級目安' },
+  { level: 10, value: 30000, label: '6級目安' },
+  { level: 11, value: 60000, label: '5級目安' },
+  { level: 12, value: 70000, label: '4級目安' },
+  { level: 13, value: 80000, label: '3級目安' },
+  { level: 14, value: 100000, label: '2級目安' },
+  { level: 15, value: 150000, label: '1級目安' },
+  { level: 16, value: 200000, label: 'アマ初段程度' },
+  { level: 17, value: 250000, label: 'アマ二段程度' },
+  { level: 18, value: 300000, label: 'アマ三段程度' },
+  { level: 19, value: 400000, label: 'アマ四〜五段程度' },
+  { level: 20, value: 480000, label: '藤井聡太並み' },
 ];
 
-/** 入門は評価探索を使わず、合法手をランダムに指す練習用CPUとする。 */
+/** Lv0は評価探索を使わず、合法手をランダムに指す練習用CPUとする。 */
 export function usesRandomLegalMove(preset) {
   return preset === 1000;
 }
 
-/**
- * UIの強さプリセットから、探索量と選択する候補手の範囲を返す。
- * 低難易度でも将棋として不自然な下位候補を選びすぎないようにする。
- * @param {number} preset
- */
+/** UIの強さ識別値から探索量と候補選択設定を返す。 */
 export function getStrengthSearchSettings(preset) {
   const settings = STRENGTH_SEARCH_SETTINGS.get(preset)
     ?? STRENGTH_SEARCH_SETTINGS.get(30000);
@@ -75,9 +62,8 @@ export function getStrengthSearchSettings(preset) {
     multiPv: settings.multiPv,
     moveRank: { ...settings.moveRank },
     maxScoreLoss: settings.maxScoreLoss,
+    bestMoveRate: settings.bestMoveRate,
   };
-  if (Number.isFinite(settings.scoreTemperature)) {
-    result.scoreTemperature = settings.scoreTemperature;
-  }
+  if (Number.isFinite(settings.scoreTemperature)) result.scoreTemperature = settings.scoreTemperature;
   return result;
 }

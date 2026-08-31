@@ -6,106 +6,81 @@ import {
 } from './strength-settings.mjs';
 
 describe('CPU strength settings', () => {
-  it('keeps lower difficulties within plausible candidate moves', () => {
-    expect(getStrengthSearchSettings(1000)).toEqual({
-      nodes: 2000,
-      multiPv: 12,
-      moveRank: { min: 3, max: 12 },
-      maxScoreLoss: 1600,
+  it('offers every level from 0 through 20', () => {
+    expect(CPU_STRENGTH_PRESETS).toHaveLength(21);
+    expect(CPU_STRENGTH_PRESETS.map(({ level }) => level))
+      .toEqual(Array.from({ length: 21 }, (_, level) => level));
+    expect(CPU_STRENGTH_PRESETS.at(-2)).toMatchObject({
+      level: 19,
+      value: 400000,
+      label: 'アマ四〜五段程度',
     });
-    expect(getStrengthSearchSettings(10000)).toEqual({
-      nodes: 1500,
-      multiPv: 14,
-      moveRank: { min: 6, max: 14 },
-      maxScoreLoss: 2400,
-      scoreTemperature: 1600,
+    expect(CPU_STRENGTH_PRESETS.at(-1)).toMatchObject({
+      level: 20,
+      value: 480000,
+      label: '藤井聡太並み',
     });
-    expect(getStrengthSearchSettings(20000)).toEqual({
-      nodes: 4000,
-      multiPv: 10,
-      moveRank: { min: 3, max: 10 },
-      maxScoreLoss: 1200,
-      scoreTemperature: 800,
-    });
+  });
+
+  it('keeps every legacy preset value available', () => {
+    const values = CPU_STRENGTH_PRESETS.map(({ value }) => value);
+    expect(values).toEqual(expect.arrayContaining([
+      1000, 5000, 10000, 20000, 30000,
+      60000, 100000, 200000, 300000, 480000,
+    ]));
+  });
+
+  it('uses a random legal-move CPU only for level zero', () => {
+    expect(usesRandomLegalMove(1000)).toBe(true);
+    for (const { level, value } of CPU_STRENGTH_PRESETS.slice(1)) {
+      expect(usesRandomLegalMove(value), `Lv${level}`).toBe(false);
+    }
+  });
+
+  it('makes search and best-move choice progressively stronger', () => {
+    const settings = CPU_STRENGTH_PRESETS.slice(1)
+      .map(({ value }) => getStrengthSearchSettings(value));
+    expect(settings.every((entry, index) => (
+      index === 0 || entry.nodes >= settings[index - 1].nodes
+    ))).toBe(true);
+    expect(settings.map(({ bestMoveRate }) => bestMoveRate)).toEqual([
+      0.03, 0.05, 0.08, 0.12, 0.16,
+      0.20, 0.25, 0.30, 0.35, 0.42,
+      0.50, 0.58, 0.66, 0.74, 0.82,
+      0.88, 0.92, 0.95, 0.98, 1,
+    ]);
+    expect(settings.every((entry, index) => (
+      index === 0 || entry.maxScoreLoss <= settings[index - 1].maxScoreLoss
+    ))).toBe(true);
+  });
+
+  it('preserves the intended anchor settings', () => {
     expect(getStrengthSearchSettings(30000)).toEqual({
       nodes: 8000,
-      multiPv: 8,
-      moveRank: { min: 1, max: 8 },
+      multiPv: 9,
+      moveRank: { min: 2, max: 9 },
       maxScoreLoss: 900,
       scoreTemperature: 650,
+      bestMoveRate: 0.42,
     });
-    expect(getStrengthSearchSettings(60000)).toEqual({
-      nodes: 11000,
-      multiPv: 8,
-      moveRank: { min: 1, max: 7 },
-      maxScoreLoss: 800,
-      scoreTemperature: 450,
-    });
-  });
-
-  it('keeps beginner and easy clearly below slightly easy', () => {
-    expect(getStrengthSearchSettings(5000)).toEqual({
-      nodes: 700,
-      multiPv: 16,
-      moveRank: { min: 8, max: 16 },
-      maxScoreLoss: 3200,
-      scoreTemperature: 2400,
-    });
-    const easy = getStrengthSearchSettings(10000);
-    const slightlyEasy = getStrengthSearchSettings(20000);
-    expect(easy.nodes).toBeLessThan(slightlyEasy.nodes);
-    expect(easy.moveRank.min).toBeGreaterThan(slightlyEasy.moveRank.min);
-    expect(easy.maxScoreLoss).toBeGreaterThan(slightlyEasy.maxScoreLoss);
-    expect(easy.scoreTemperature).toBeGreaterThan(slightlyEasy.scoreTemperature);
-  });
-
-  it('offers ten gradual UI presets', () => {
-    expect(CPU_STRENGTH_PRESETS.map(({ label }) => label)).toEqual([
-      '入門', '初級', '易しい', 'やや易しい', 'ふつう',
-      'やや強い', '強い', '上級', 'かなり強い', '藤井聡太並み',
-    ]);
-    expect(CPU_STRENGTH_PRESETS.map(({ value }) => value))
-      .toEqual([1000, 5000, 10000, 20000, 30000, 60000, 100000, 200000, 300000, 480000]);
-  });
-
-  it('uses a random legal-move CPU only for the introductory level', () => {
-    expect(usesRandomLegalMove(1000)).toBe(true);
-    expect(usesRandomLegalMove(5000)).toBe(false);
-    expect(usesRandomLegalMove(30000)).toBe(false);
-  });
-
-  it('steps strong presets toward the best candidate', () => {
-    expect(getStrengthSearchSettings(100000)).toEqual({
-      nodes: 25000,
-      multiPv: 6,
-      moveRank: { min: 1, max: 6 },
-      maxScoreLoss: 500,
-      scoreTemperature: 220,
-    });
-    expect(getStrengthSearchSettings(300000)).toEqual({
-      nodes: 120000,
-      multiPv: 3,
-      moveRank: { min: 1, max: 3 },
-      maxScoreLoss: 220,
-      scoreTemperature: 80,
+    expect(getStrengthSearchSettings(400000)).toEqual({
+      nodes: 240000,
+      multiPv: 2,
+      moveRank: { min: 2, max: 2 },
+      maxScoreLoss: 140,
+      scoreTemperature: 45,
+      bestMoveRate: 0.98,
     });
     expect(getStrengthSearchSettings(480000)).toEqual({
       nodes: 480000,
       multiPv: 1,
       moveRank: { min: 1, max: 1 },
       maxScoreLoss: 0,
+      bestMoveRate: 1,
     });
   });
 
-  it('falls back to normal for an unknown preset', () => {
+  it('falls back to level ten for an unknown preset', () => {
     expect(getStrengthSearchSettings(999)).toEqual(getStrengthSearchSettings(30000));
-  });
-
-  it('reduces selection temperature as difficulty rises', () => {
-    const temperatures = [5000, 10000, 20000, 30000, 60000, 100000, 200000, 300000]
-      .map((preset) => getStrengthSearchSettings(preset).scoreTemperature);
-    expect(temperatures).toEqual([2400, 1600, 800, 650, 450, 220, 140, 80]);
-    expect(temperatures.every((value, index) => index === 0 || value < temperatures[index - 1]))
-      .toBe(true);
   });
 });
