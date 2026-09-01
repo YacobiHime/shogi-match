@@ -96,11 +96,31 @@
                 <button type="button" class="move-preview" :aria-label="`${formattedGuideMove(index)}を盤上に表示`" @click="previewGuideMove(index)">
                   <strong>{{ formattedGuideMove(index) }}</strong><small>{{ book.guideMoves[index] || "未入力" }} · クリックで矢印</small>
                 </button>
-                <input v-model.trim="book.guideMoves[index]" :aria-label="`案内手${index + 1}のUSI`" placeholder="例: 7g7f" spellcheck="false" @input="clearPreview" />
+                <input v-model.trim="book.guideMoves[index]" :aria-label="`案内手${index + 1}のUSI`" placeholder="例: 7g7f" spellcheck="false" @focus="beginGuideMoveEdit(index)" @input="clearPreview" @change="finishGuideMoveEdit(index)" />
               </div>
               <button type="button" class="icon" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">↑</button>
               <button type="button" class="icon" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">↓</button>
               <button type="button" class="icon danger" aria-label="削除" @click="removeGuideMove(index)">×</button>
+              <div class="move-conditions">
+                <div class="move-condition-heading">
+                  <span>この手を案内する局面条件 <small>すべて満たす場合（AND）</small></span>
+                  <button type="button" @click="addMoveCondition(index)">条件 ＋</button>
+                </div>
+                <div v-for="(condition, conditionIndex) in moveConditions(index)" :key="conditionIndex" class="move-condition-row">
+                  <select v-model="condition.owner" :aria-label="`案内手${index + 1} 条件${conditionIndex + 1}の駒の所有者`">
+                    <option value="opponent">相手の</option>
+                    <option value="player">自分の</option>
+                  </select>
+                  <select v-model="condition.square" :aria-label="`案内手${index + 1} 条件${conditionIndex + 1}のマス`">
+                    <option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option>
+                  </select>
+                  <select v-model="condition.kind" :aria-label="`案内手${index + 1} 条件${conditionIndex + 1}の駒`">
+                    <option v-for="piece in conditionPieceOptions" :key="piece.value" :value="piece.value">{{ piece.label }}</option>
+                  </select>
+                  <span>がいる</span>
+                  <button type="button" class="icon danger" :aria-label="`条件${conditionIndex + 1}を削除`" @click="removeMoveCondition(index, conditionIndex)">×</button>
+                </div>
+              </div>
             </li>
           </ol>
           <p v-if="!book.guideMoves.length" class="empty">案内手がありません。「手を追加」から入力してください。</p>
@@ -165,7 +185,19 @@ const toast = ref("");
 const selectedGuideIndex = ref<number | null>(null);
 const previewUsi = ref("");
 const completionChoiceToAdd = ref("");
+const guideMoveBeforeEdit = ref<{ index: number; value: string } | null>(null);
 let toastTimer = 0;
+
+const conditionSquareOptions = Array.from({ length: 81 }, (_, index) => {
+  const file = 9 - Math.floor(index / 9);
+  const rankIndex = index % 9;
+  return { value: `${file}${String.fromCharCode(97 + rankIndex)}`, label: `${"０１２３４５６７８９"[file]}${"一二三四五六七八九"[rankIndex]}` };
+});
+const conditionPieceOptions = [
+  { value: "P", label: "歩" }, { value: "L", label: "香" }, { value: "N", label: "桂" },
+  { value: "S", label: "銀" }, { value: "G", label: "金" }, { value: "B", label: "角" },
+  { value: "R", label: "飛" }, { value: "K", label: "玉" },
+];
 
 const activeBranch = computed(() => book.branches[activeBranchIndex.value] ?? book.branches[0]);
 const replay = computed(() => replayOpeningBranch(book, activeBranch.value, cursor.value));
@@ -195,7 +227,7 @@ const canInsertNextGuideMove = computed(() => {
 function safeParse(text: string) { try { return parseOpeningBook(text); } catch { return null; } }
 function normalize(value: any) {
   const fallback = createOpeningBookDraft({ initialSfen: STANDARD_SFEN });
-  return { ...fallback, ...value, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
+  return { ...fallback, ...value, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], movePositionPrerequisites: value?.movePositionPrerequisites && typeof value.movePositionPrerequisites === "object" ? value.movePositionPrerequisites : {}, sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
 }
 function announce(message: string) { toast.value = message; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.value = "", 2600); }
 function replaceBook(next: any) { Object.keys(book).forEach((key) => delete book[key]); Object.assign(book, normalize(next)); activeBranchIndex.value = 0; cursor.value = book.branches[0]?.moves?.length ?? 0; clearPreview(); }
@@ -314,6 +346,33 @@ function moveRole(index: number) {
     : { label: expected ? `案内外（予定 ${expected}）` : "案内外", className: "outside" };
 }
 function addGuideMove() { clearPreview(); book.guideMoves.push(""); }
+function beginGuideMoveEdit(index: number) { guideMoveBeforeEdit.value = { index, value: book.guideMoves[index] ?? "" }; }
+function finishGuideMoveEdit(index: number) {
+  const previous = guideMoveBeforeEdit.value?.index === index ? guideMoveBeforeEdit.value.value : "";
+  const next = book.guideMoves[index] ?? "";
+  if (previous && previous !== next && book.movePositionPrerequisites[previous]) {
+    book.movePositionPrerequisites[next] = [
+      ...(book.movePositionPrerequisites[next] ?? []),
+      ...book.movePositionPrerequisites[previous],
+    ];
+    delete book.movePositionPrerequisites[previous];
+  }
+  guideMoveBeforeEdit.value = null;
+}
+function moveConditions(index: number) { return book.movePositionPrerequisites[book.guideMoves[index]] ?? []; }
+function addMoveCondition(index: number) {
+  const move = book.guideMoves[index];
+  if (!move) return announce("先に案内手を入力してください。");
+  if (!book.movePositionPrerequisites[move]) book.movePositionPrerequisites[move] = [];
+  book.movePositionPrerequisites[move].push({ square: "8e", owner: "opponent", kind: "P" });
+}
+function removeMoveCondition(index: number, conditionIndex: number) {
+  const move = book.guideMoves[index];
+  const conditions = book.movePositionPrerequisites[move];
+  if (!conditions) return;
+  conditions.splice(conditionIndex, 1);
+  if (!conditions.length) delete book.movePositionPrerequisites[move];
+}
 function strategyLabel(strategyId: string) { return strategies.find((strategy: any) => strategy.id === strategyId)?.label ?? "不明な戦法"; }
 function addCompletionChoice() {
   if (!completionChoiceToAdd.value || book.completionChoices.strategyIds.includes(completionChoiceToAdd.value)) return;
@@ -323,7 +382,7 @@ function addCompletionChoice() {
 function removeCompletionChoice(strategyId: string) {
   book.completionChoices.strategyIds = book.completionChoices.strategyIds.filter((id: string) => id !== strategyId);
 }
-function removeGuideMove(index: number) { clearPreview(); book.guideMoves.splice(index, 1); }
+function removeGuideMove(index: number) { clearPreview(); delete book.movePositionPrerequisites[book.guideMoves[index]]; book.guideMoves.splice(index, 1); }
 function moveGuideMove(index: number, offset: number) {
   clearPreview();
   const target = index + offset;

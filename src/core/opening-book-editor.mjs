@@ -13,6 +13,9 @@ export function createOpeningBookDraft({ definition, kind = "strategy", side = "
     side,
     initialSfen,
     guideMoves: [...(definition?.blackMoves ?? [])],
+    movePositionPrerequisites: Object.fromEntries(Object.entries(
+      definition?.movePositionPrerequisites ?? {},
+    ).map(([move, conditions]) => [move, conditions.map((condition) => ({ ...condition }))])),
     completionChoices: {
       enabled: Boolean(definition?.completionChoices?.strategyIds?.length),
       prompt: definition?.completionChoices?.prompt ?? "",
@@ -59,6 +62,19 @@ export function validateOpeningBook(book) {
     const choiceIds = book.completionChoices.strategyIds ?? [];
     if (!Array.isArray(choiceIds) || !choiceIds.length) errors.push("完成後に選ばせる派生戦法を1つ以上追加してください。");
     if (new Set(choiceIds).size !== choiceIds.length) errors.push("完成後の派生戦法が重複しています。");
+  }
+  for (const [move, conditions] of Object.entries(book?.movePositionPrerequisites ?? {})) {
+    if (!(book?.guideMoves ?? []).includes(move)) errors.push(`条件対象の案内手「${move}」が案内手一覧にありません。`);
+    if (!Array.isArray(conditions) || !conditions.length) {
+      errors.push(`案内手「${move}」の局面条件が空です。`);
+      continue;
+    }
+    for (const [index, condition] of conditions.entries()) {
+      const prefix = `案内手「${move}」の条件${index + 1}`;
+      if (!/^[1-9][a-i]$/.test(condition?.square ?? "")) errors.push(`${prefix}: マスが不正です。`);
+      if (!["player", "opponent"].includes(condition?.owner)) errors.push(`${prefix}: 駒の所有者が不正です。`);
+      if (!["P", "L", "N", "S", "G", "B", "R", "K"].includes(condition?.kind)) errors.push(`${prefix}: 駒種が不正です。`);
+    }
   }
 
   const branchIds = new Set();

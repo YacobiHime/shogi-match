@@ -49,4 +49,20 @@ describe("opening book editor", () => {
     book.completionChoices.strategyIds = [];
     expect(validateOpeningBook(book).errors).toContain("完成後に選ばせる派生戦法を1つ以上追加してください。");
   });
+
+  it("stores AND conditions for a guide move", () => {
+    const book = draft();
+    book.movePositionPrerequisites = {
+      "6i7h": [
+        { square: "8e", owner: "opponent", kind: "P" },
+        { square: "8b", owner: "opponent", kind: "R" },
+      ],
+    };
+    book.guideMoves.push("6i7h");
+    book.branches[0].moves = [{ usi: "7g7f" }];
+    book.sources = [{ title: "参考", url: "https://example.com", checkedAt: "2026-09-02" }];
+    expect(validateOpeningBook(book).errors).toEqual([]);
+    book.movePositionPrerequisites["6i7h"][0].square = "8五";
+    expect(validateOpeningBook(book).errors).toContain("案内手「6i7h」の条件1: マスが不正です。");
+  });
 });
