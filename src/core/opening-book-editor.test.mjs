@@ -35,4 +35,18 @@ describe("opening book editor", () => {
   it("round-trips versioned JSON", () => {
     expect(parseOpeningBook(serializeOpeningBook(draft()))).toMatchObject({ schemaVersion: 1, id: "sample" });
   });
+
+  it("stores and validates completion choices", () => {
+    const book = draft();
+    book.completionChoices = {
+      enabled: true,
+      prompt: "次の戦法を選んでね",
+      strategyIds: ["bougin", "hayaguri-gin"],
+    };
+    book.branches[0].moves = [{ usi: "7g7f" }];
+    book.sources = [{ title: "参考", url: "https://example.com", checkedAt: "2026-09-02" }];
+    expect(validateOpeningBook(book).errors).toEqual([]);
+    book.completionChoices.strategyIds = [];
+    expect(validateOpeningBook(book).errors).toContain("完成後に選ばせる派生戦法を1つ以上追加してください。");
+  });
 });

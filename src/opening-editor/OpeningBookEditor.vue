@@ -34,10 +34,29 @@
         <label>ID<input v-model.trim="book.id" pattern="[a-z0-9-]+" /></label>
         <label>名称<input v-model.trim="book.label" /></label>
         <label>開始局面（SFEN）<textarea v-model.trim="book.initialSfen" rows="3" @change="cursor = 0" /></label>
-        <label>既存の案内手（先手基準・1行1手）
-          <textarea :value="guideMovesText" rows="7" spellcheck="false" @input="setGuideMoves" />
-        </label>
-        <p class="hint">ここは現行のやこび姫が使う手順です。右の実戦分岐は相手の応手も含めて交互に入力します。</p>
+        <div class="guide-help">
+          <strong>案内手は右側で編集します</strong>
+          <p>既存データを選ぶと、現行の案内手が「案内手と実戦分岐」に表示されます。相手の指し手は固定条件ではなく、案内手が実戦でも指せるか確認するために入力します。</p>
+        </div>
+        <div v-if="book.kind === 'strategy'" class="completion-settings">
+          <label class="check-label"><input v-model="book.completionChoices.enabled" type="checkbox" /> 完成後に次の戦法を選ばせる</label>
+          <template v-if="book.completionChoices.enabled">
+            <label>選択時の案内文<input v-model.trim="book.completionChoices.prompt" placeholder="次に目指す戦法を選んでね" /></label>
+            <div class="completion-choice-list">
+              <div v-for="strategyId in book.completionChoices.strategyIds" :key="strategyId">
+                <span>{{ strategyLabel(strategyId) }} <small>{{ strategyId }}</small></span>
+                <button type="button" class="icon danger" @click="removeCompletionChoice(strategyId)">削除</button>
+              </div>
+            </div>
+            <div class="completion-choice-add">
+              <select v-model="completionChoiceToAdd" aria-label="派生戦法を追加">
+                <option value="">派生戦法を選択</option>
+                <option v-for="strategy in availableCompletionStrategies" :key="strategy.id" :value="strategy.id">{{ strategy.label }}</option>
+              </select>
+              <button type="button" :disabled="!completionChoiceToAdd" @click="addCompletionChoice">追加</button>
+            </div>
+          </template>
+        </div>
       </aside>
 
       <section class="board-column">
@@ -46,6 +65,7 @@
           <ShogiMatchBoard
             :sfen="currentSfen"
             :last-move="lastMove"
+            :candidates="previewCandidates"
             :flip="book.side === 'white'"
             asset-base-url="."
             layout="standard"
@@ -55,6 +75,7 @@
         <div class="move-actions">
           <button type="button" :disabled="cursor === 0" @click="undo">1手戻す</button>
           <button type="button" :disabled="cursor >= activeBranch.moves.length" @click="cursor++">1手進む</button>
+          <button type="button" class="primary" :disabled="!canInsertNextGuideMove" @click="insertNextGuideMove">次の案内手を入力<span v-if="nextGuideMove">（{{ nextGuideMove }}）</span></button>
           <button type="button" @click="branchHere">この局面から分岐</button>
           <button type="button" class="danger" :disabled="book.branches.length === 1" @click="removeBranch">分岐を削除</button>
         </div>
@@ -62,12 +83,34 @@
       </section>
 
       <aside class="panel branch-panel">
-        <div class="panel-heading"><h2>実戦分岐</h2><button type="button" @click="branchHere">＋</button></div>
+        <div class="panel-heading"><h2>案内手と実戦分岐</h2><button type="button" @click="branchHere">分岐 ＋</button></div>
+        <section class="guide-sequence" aria-labelledby="guide-sequence-title">
+          <div class="subheading">
+            <div><h3 id="guide-sequence-title">やこび姫の案内手</h3><p>先手基準。ここを編集すると、書き出す案内手が変わります。</p></div>
+            <button type="button" @click="addGuideMove">手を追加</button>
+          </div>
+          <ol class="guide-move-list">
+            <li v-for="(_move, index) in book.guideMoves" :key="index" :class="{ selected: selectedGuideIndex === index }">
+              <span>{{ index + 1 }}</span>
+              <div class="guide-move-edit">
+                <button type="button" class="move-preview" :aria-label="`${formattedGuideMove(index)}を盤上に表示`" @click="previewGuideMove(index)">
+                  <strong>{{ formattedGuideMove(index) }}</strong><small>{{ book.guideMoves[index] || "未入力" }} · クリックで矢印</small>
+                </button>
+                <input v-model.trim="book.guideMoves[index]" :aria-label="`案内手${index + 1}のUSI`" placeholder="例: 7g7f" spellcheck="false" @input="clearPreview" />
+              </div>
+              <button type="button" class="icon" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">↑</button>
+              <button type="button" class="icon" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">↓</button>
+              <button type="button" class="icon danger" aria-label="削除" @click="removeGuideMove(index)">×</button>
+            </li>
+          </ol>
+          <p v-if="!book.guideMoves.length" class="empty">案内手がありません。「手を追加」から入力してください。</p>
+        </section>
+        <div class="branch-divider"><strong>相手の応手を含む確認手順</strong><span>相手が別の手を指しても、案内手が合法なら補助は続きます。</span></div>
         <label>分岐<select v-model.number="activeBranchIndex" @change="cursor = activeBranch.moves.length"><option v-for="(branch, index) in book.branches" :key="branch.id + index" :value="index">{{ branch.label || branch.id }}</option></select></label>
         <div class="two-columns"><label>分岐ID<input v-model.trim="activeBranch.id" /></label><label>表示名<input v-model.trim="activeBranch.label" /></label></div>
         <ol class="move-list">
           <li v-for="(move, index) in activeBranch.moves" :key="`${index}:${move.usi}`" :class="{ current: index + 1 === cursor }">
-            <button type="button" @click="cursor = index + 1"><span>{{ index + 1 }}.</span><strong>{{ move.usi }}</strong><small>{{ index % 2 ? '後手' : '先手' }}</small></button>
+            <button type="button" @click="previewBranchMove(index)"><span>{{ index + 1 }}.</span><span class="move-notation"><strong>{{ formattedBranchMove(index) }}</strong><code>{{ move.usi }}</code></span><small :class="moveRole(index).className">{{ moveRole(index).label }}</small></button>
             <input v-model="move.note" aria-label="指し手メモ" placeholder="この手の意味・条件" />
           </li>
         </ol>
@@ -108,6 +151,7 @@ import ShogiMatchBoard from "../ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "../game-state";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "../core/opening-guide.mjs";
 import { createOpeningBookDraft, OPENING_BOOK_STORAGE_KEY, parseOpeningBook, replayOpeningBranch, serializeOpeningBook, validateOpeningBook } from "../core/opening-book-editor.mjs";
+import { formatHintMove } from "../core/match-assists.mjs";
 
 const strategies = OPENING_STRATEGIES;
 const castles = OPENING_CASTLES;
@@ -118,6 +162,9 @@ const selectedDefinitionKey = ref("new");
 const activeBranchIndex = ref(0);
 const cursor = ref(book.branches?.[0]?.moves?.length ?? 0);
 const toast = ref("");
+const selectedGuideIndex = ref<number | null>(null);
+const previewUsi = ref("");
+const completionChoiceToAdd = ref("");
 let toastTimer = 0;
 
 const activeBranch = computed(() => book.branches[activeBranchIndex.value] ?? book.branches[0]);
@@ -127,15 +174,31 @@ const replayError = computed(() => replay.value.error);
 const lastMove = computed(() => cursor.value ? activeBranch.value.moves[cursor.value - 1]?.usi ?? "" : "");
 const turnLabel = computed(() => currentSfen.value.split(" ")[1] === "w" ? "後手番" : "先手番");
 const validation = computed(() => validateOpeningBook(book));
-const guideMovesText = computed(() => (book.guideMoves ?? []).join("\n"));
+const availableCompletionStrategies = computed(() => strategies.filter((strategy: any) => (
+  strategy.id !== book.id && !book.completionChoices.strategyIds.includes(strategy.id)
+)));
+const previewCandidates = computed(() => {
+  if (!previewUsi.value || replayError.value) return [];
+  const move = replay.value.position?.createMoveByUSI(previewUsi.value);
+  return move && replay.value.position?.isValidMove(move) ? [{ usi: previewUsi.value }] : [];
+});
+const nextGuideMove = computed(() => {
+  const guideIndex = guideMoveIndexAtCursor();
+  return isGuideSidePly(cursor.value) ? book.guideMoves[guideIndex] ?? "" : "";
+});
+const canInsertNextGuideMove = computed(() => {
+  if (!nextGuideMove.value || replayError.value) return false;
+  const move = replay.value.position?.createMoveByUSI(nextGuideMove.value);
+  return Boolean(move && replay.value.position?.isValidMove(move));
+});
 
 function safeParse(text: string) { try { return parseOpeningBook(text); } catch { return null; } }
 function normalize(value: any) {
   const fallback = createOpeningBookDraft({ initialSfen: STANDARD_SFEN });
-  return { ...fallback, ...value, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview } };
+  return { ...fallback, ...value, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
 }
 function announce(message: string) { toast.value = message; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.value = "", 2600); }
-function replaceBook(next: any) { Object.keys(book).forEach((key) => delete book[key]); Object.assign(book, normalize(next)); activeBranchIndex.value = 0; cursor.value = book.branches[0]?.moves?.length ?? 0; }
+function replaceBook(next: any) { Object.keys(book).forEach((key) => delete book[key]); Object.assign(book, normalize(next)); activeBranchIndex.value = 0; cursor.value = book.branches[0]?.moves?.length ?? 0; clearPreview(); }
 function loadDefinition() {
   if (selectedDefinitionKey.value === "new") { replaceBook(createOpeningBookDraft({ initialSfen: STANDARD_SFEN })); return; }
   const [kind, id] = selectedDefinitionKey.value.split(":");
@@ -143,7 +206,135 @@ function loadDefinition() {
   replaceBook(createOpeningBookDraft({ definition, kind, initialSfen: STANDARD_SFEN }));
   announce(`${definition.label}の現行案内手を取り込みました。`);
 }
-function setGuideMoves(event: Event) { book.guideMoves = (event.target as HTMLTextAreaElement).value.split(/\s+/).filter(Boolean); }
+function guideSide() { return book.side === "white" ? "w" : "b"; }
+function initialTurn() { return String(book.initialSfen ?? "").trim().split(/\s+/)[1] === "w" ? "w" : "b"; }
+function isGuideSidePly(index: number) {
+  const mover = index % 2 === 0 ? initialTurn() : (initialTurn() === "b" ? "w" : "b");
+  return mover === guideSide();
+}
+function guideMoveIndexAtCursor() {
+  let count = 0;
+  for (let index = 0; index < cursor.value; index += 1) if (isGuideSidePly(index)) count += 1;
+  return count;
+}
+function sideMark(index: number) { return isGuideSidePly(index) ? (guideSide() === "b" ? "▲" : "△") : (guideSide() === "b" ? "△" : "▲"); }
+function coordinateNotation(usi: string) {
+  const ranks = "一二三四五六七八九";
+  const fullWidth = "０１２３４５６７８９";
+  const drop = String(usi ?? "").match(/^([PLNSGBR])\*([1-9])([a-i])$/);
+  const move = String(usi ?? "").match(/^([1-9])([a-i])([1-9])([a-i])(\+)?$/);
+  const square = (file: string, rank: string) => `${fullWidth[Number(file)]}${ranks[rank.charCodeAt(0) - 97]}`;
+  if (drop) return `${square(drop[2], drop[3])}へ駒打ち`;
+  if (move) return `${square(move[1], move[2])}→${square(move[3], move[4])}${move[5] ? "（成）" : ""}`;
+  return usi || "未入力";
+}
+function guideJapaneseNotation(index: number) {
+  const pieceNames: Record<string, string> = { P: "歩", L: "香", N: "桂", S: "銀", G: "金", B: "角", R: "飛", K: "玉" };
+  const ranks = String(book.initialSfen ?? "").trim().split(/\s+/)[0]?.split("/") ?? [];
+  const board = new Map<string, string>();
+  ranks.forEach((rank: string, rankIndex: number) => {
+    let file = 9;
+    let promoted = false;
+    for (const symbol of rank) {
+      if (/[1-9]/.test(symbol)) file -= Number(symbol);
+      else if (symbol === "+") promoted = true;
+      else {
+        board.set(`${file}${String.fromCharCode(97 + rankIndex)}`, `${promoted ? "+" : ""}${symbol.toUpperCase()}`);
+        file -= 1;
+        promoted = false;
+      }
+    }
+  });
+  for (let moveIndex = 0; moveIndex <= index; moveIndex += 1) {
+    const usi = String(book.guideMoves[moveIndex] ?? "");
+    const drop = usi.match(/^([PLNSGBR])\*([1-9][a-i])$/);
+    const move = usi.match(/^([1-9][a-i])([1-9][a-i])(\+)?$/);
+    if (drop) {
+      if (moveIndex === index) return `${coordinateNotation(`1a${drop[2]}`).split("→")[1]}${pieceNames[drop[1]]}打`;
+      board.set(drop[2], drop[1]);
+    } else if (move) {
+      const kind = (board.get(move[1]) ?? "").replace("+", "");
+      if (moveIndex === index && kind) {
+        const destination = coordinateNotation(usi).split("→")[1]?.replace("（成）", "") ?? usi;
+        return `${destination}${pieceNames[kind] ?? kind}${move[3] ? "成" : ""}`;
+      }
+      board.delete(move[1]);
+      board.set(move[2], `${move[3] ? "+" : ""}${kind}`);
+    }
+  }
+  return coordinateNotation(book.guideMoves[index]);
+}
+function formattedBranchMove(index: number) {
+  const before = replayOpeningBranch(book, activeBranch.value, index);
+  const usi = activeBranch.value.moves[index]?.usi ?? "";
+  try { return `${sideMark(index)}${formatHintMove(usi, before.position?.sfen ?? "")}`; }
+  catch { return `${sideMark(index)}${coordinateNotation(usi)}`; }
+}
+function branchIndexForGuideMove(guideIndex: number) {
+  let seen = 0;
+  for (let index = 0; index < activeBranch.value.moves.length; index += 1) {
+    if (!isGuideSidePly(index)) continue;
+    if (seen === guideIndex) return index;
+    seen += 1;
+  }
+  return -1;
+}
+function formattedGuideMove(index: number) {
+  const branchIndex = branchIndexForGuideMove(index);
+  if (branchIndex >= 0 && activeBranch.value.moves[branchIndex]?.usi === book.guideMoves[index]) return formattedBranchMove(branchIndex);
+  return `${guideSide() === "b" ? "▲" : "△"}${guideJapaneseNotation(index)}`;
+}
+function clearPreview() { selectedGuideIndex.value = null; previewUsi.value = ""; }
+function previewBranchMove(index: number) {
+  cursor.value = index;
+  selectedGuideIndex.value = isGuideSidePly(index) ? guideMoveIndexAtCursor() : null;
+  previewUsi.value = activeBranch.value.moves[index]?.usi ?? "";
+}
+function previewGuideMove(index: number) {
+  selectedGuideIndex.value = index;
+  const branchIndex = branchIndexForGuideMove(index);
+  if (branchIndex >= 0 && activeBranch.value.moves[branchIndex]?.usi === book.guideMoves[index]) cursor.value = branchIndex;
+  else {
+    const nextIndex = guideMoveIndexAtCursor();
+    if (nextIndex !== index || !isGuideSidePly(cursor.value)) {
+      previewUsi.value = "";
+      return announce("この手の矢印を見るには、確認手順をこの案内手の直前まで入力してください。");
+    }
+  }
+  previewUsi.value = book.guideMoves[index] ?? "";
+  if (!previewCandidates.value.length) announce("この案内手は現在の局面では指せません。相手の応手を確認してください。");
+}
+function moveRole(index: number) {
+  if (!isGuideSidePly(index)) return { label: "相手の応手", className: "opponent" };
+  let guideIndex = 0;
+  for (let previous = 0; previous < index; previous += 1) if (isGuideSidePly(previous)) guideIndex += 1;
+  const expected = book.guideMoves[guideIndex];
+  return expected === activeBranch.value.moves[index]?.usi
+    ? { label: `案内手${guideIndex + 1}`, className: "guide" }
+    : { label: expected ? `案内外（予定 ${expected}）` : "案内外", className: "outside" };
+}
+function addGuideMove() { clearPreview(); book.guideMoves.push(""); }
+function strategyLabel(strategyId: string) { return strategies.find((strategy: any) => strategy.id === strategyId)?.label ?? "不明な戦法"; }
+function addCompletionChoice() {
+  if (!completionChoiceToAdd.value || book.completionChoices.strategyIds.includes(completionChoiceToAdd.value)) return;
+  book.completionChoices.strategyIds.push(completionChoiceToAdd.value);
+  completionChoiceToAdd.value = "";
+}
+function removeCompletionChoice(strategyId: string) {
+  book.completionChoices.strategyIds = book.completionChoices.strategyIds.filter((id: string) => id !== strategyId);
+}
+function removeGuideMove(index: number) { clearPreview(); book.guideMoves.splice(index, 1); }
+function moveGuideMove(index: number, offset: number) {
+  clearPreview();
+  const target = index + offset;
+  if (target < 0 || target >= book.guideMoves.length) return;
+  const [move] = book.guideMoves.splice(index, 1);
+  book.guideMoves.splice(target, 0, move);
+}
+function insertNextGuideMove() {
+  if (!canInsertNextGuideMove.value) return announce("次の案内手は現在の局面では指せません。相手の応手か案内手を見直してください。");
+  appendMove(nextGuideMove.value);
+}
 function appendMove(event: CustomEvent | string) {
   const usi = typeof event === "string" ? event : event.detail ?? event;
   if (replayError.value) return announce("不正な手順を先に修正してください。");
@@ -151,8 +342,9 @@ function appendMove(event: CustomEvent | string) {
   if (!move || !replay.value.position?.isValidMove(move)) return announce("その手は現在の局面では指せません。");
   activeBranch.value.moves.splice(cursor.value, activeBranch.value.moves.length - cursor.value, { usi: String(usi), note: "" });
   cursor.value += 1;
+  clearPreview();
 }
-function undo() { if (cursor.value > 0) { activeBranch.value.moves.splice(cursor.value - 1, 1); cursor.value -= 1; } }
+function undo() { if (cursor.value > 0) { activeBranch.value.moves.splice(cursor.value - 1, 1); cursor.value -= 1; clearPreview(); } }
 function branchHere() {
   const number = book.branches.length + 1;
   book.branches.push({ id: `branch-${number}`, label: `変化${number}`, moves: activeBranch.value.moves.slice(0, cursor.value).map((move: any) => ({ ...move })) });

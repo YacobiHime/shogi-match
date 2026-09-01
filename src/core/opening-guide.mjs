@@ -14,9 +14,12 @@ export const OPENING_STRATEGIES = [
     id: "ibisha",
     label: "居飛車",
     family: "ibisha",
-    // 「居飛車」は戦法ではなく大きな方針なので、プレイヤー向け候補には表示しない。
-    // CPUや奇襲不成立時の内部フォールバックとしてID自体は維持する。
-    guideSelectable: false,
+    guideSelectable: true,
+    // 大きな方針を完成させてから、銀の使い方を派生戦法として選ばせる。
+    completionChoices: {
+      prompt: "居飛車の形ができたよ。次に目指す攻め方を選んでね",
+      strategyIds: ["bougin", "hayaguri-gin", "koshikake-gin"],
+    },
     detectionNames: [],
     blackMoves: ["2g2f", "2f2e"],
   },
@@ -1082,6 +1085,16 @@ export function rangingRookStrategyChoices(castleId, availableStrategyIds) {
     (!compatibleIds || compatibleIds.has(id))
     && (!available || available.has(id))
   ));
+}
+
+/** 大分類の戦法が完成したあと、続けて選べる派生戦法を返す。 */
+export function openingStrategyCompletionChoices(strategyId, availableStrategyIds) {
+  const definition = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  const configuredIds = definition?.completionChoices?.strategyIds;
+  if (!Array.isArray(configuredIds) || !configuredIds.length) return [];
+  const available = Array.isArray(availableStrategyIds) ? new Set(availableStrategyIds) : null;
+  return configuredIds.map((id) => OPENING_STRATEGIES.find((strategy) => strategy.id === id))
+    .filter((strategy) => strategy && strategy.id !== strategyId && (!available || available.has(strategy.id)));
 }
 
 export function mirrorUsiMove(usi) {
