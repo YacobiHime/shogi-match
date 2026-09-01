@@ -21,6 +21,7 @@ import {
   openingPlanInterruption,
   openingPlanSteps,
   rangingRookStrategyChoices,
+  openingStrategyCompletionChoices,
   shouldAbandonOpeningGuide,
   shouldShowOpeningFollowup,
   OPENING_CASTLE_GROUPS,
@@ -157,6 +158,15 @@ describe("opening guide", () => {
     expect(rangingRookStrategyChoices("funagakoi")).toEqual([]);
   });
 
+  it("offers configured continuations after completing Static Rook", () => {
+    expect(openingStrategyCompletionChoices("ibisha").map(({ id }) => id)).toEqual([
+      "bougin", "hayaguri-gin", "koshikake-gin",
+    ]);
+    expect(openingStrategyCompletionChoices("ibisha", ["bougin", "koshikake-gin"])
+      .map(({ id }) => id)).toEqual(["bougin", "koshikake-gin"]);
+    expect(openingStrategyCompletionChoices("shiken")).toEqual([]);
+  });
+
   it.each(["shiken", "sangen", "nakabisha", "mukai"])(
     "builds Half Mino after selecting the %s rook destination",
     (strategyId) => {
@@ -201,10 +211,10 @@ describe("opening guide", () => {
       ]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "anti-ranging").map(({ label }) => label))
       .toEqual(["右四間飛車", "袖飛車", "地下鉄飛車", "鳥刺し"]);
-    expect(OPENING_STRATEGIES.find(({ id }) => id === "ibisha")?.guideSelectable).toBe(false);
+    expect(OPENING_STRATEGIES.find(({ id }) => id === "ibisha")?.guideSelectable).toBe(true);
     expect(OPENING_STRATEGIES.filter(({ guideSelectable }) => guideSelectable === false).map(({ id }) => id))
       .toEqual([
-        "ibisha", "aigakari", "yokofudori", "gangi-strategy", "kakugawari",
+        "aigakari", "yokofudori", "gangi-strategy", "kakugawari",
         "yagura-strategy", "hayaguri-gin", "koshikake-gin",
       ]);
   });

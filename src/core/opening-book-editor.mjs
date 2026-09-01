@@ -13,6 +13,11 @@ export function createOpeningBookDraft({ definition, kind = "strategy", side = "
     side,
     initialSfen,
     guideMoves: [...(definition?.blackMoves ?? [])],
+    completionChoices: {
+      enabled: Boolean(definition?.completionChoices?.strategyIds?.length),
+      prompt: definition?.completionChoices?.prompt ?? "",
+      strategyIds: [...(definition?.completionChoices?.strategyIds ?? [])],
+    },
     sources: [{ title: "", url: "", checkedAt: now }],
     branches: [{ id: "main", label: "本線", moves: [] }],
     notes: "",
@@ -48,6 +53,13 @@ export function validateOpeningBook(book) {
   if (!String(book?.label ?? "").trim()) errors.push("名称を入力してください。");
   if (!["strategy", "castle"].includes(book?.kind)) errors.push("種類は戦法か囲いにしてください。");
   if (!["black", "white", "both"].includes(book?.side)) errors.push("対象手番が不正です。");
+  if (book?.completionChoices?.enabled) {
+    if (book.kind !== "strategy") errors.push("完成後の派生選択は戦法だけに設定できます。");
+    if (!String(book.completionChoices.prompt ?? "").trim()) errors.push("完成後の選択案内文を入力してください。");
+    const choiceIds = book.completionChoices.strategyIds ?? [];
+    if (!Array.isArray(choiceIds) || !choiceIds.length) errors.push("完成後に選ばせる派生戦法を1つ以上追加してください。");
+    if (new Set(choiceIds).size !== choiceIds.length) errors.push("完成後の派生戦法が重複しています。");
+  }
 
   const branchIds = new Set();
   const exactLines = new Set();

@@ -234,6 +234,17 @@
             >{{ choice.label }}</button>
           </div>
         </div>
+        <div v-if="strategyCompletionChoiceRequired" class="shogi-game__rook-choice shogi-game__strategy-choice">
+          <span>{{ strategyCompletionPrompt }}</span>
+          <div>
+            <button
+              v-for="choice in strategyCompletionChoices"
+              :key="choice.id"
+              type="button"
+              @click="chooseStrategyCompletion(choice.id)"
+            >{{ choice.label }}</button>
+          </div>
+        </div>
         <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
       </section>
     </section>
@@ -376,6 +387,17 @@
             :key="choice.id"
             type="button"
             @click="chooseRangingRookStrategy(choice.id)"
+          >{{ choice.label }}</button>
+        </div>
+      </div>
+      <div v-if="strategyCompletionChoiceRequired" class="shogi-game__rook-choice shogi-game__strategy-choice">
+        <span>{{ strategyCompletionPrompt }}</span>
+        <div>
+          <button
+            v-for="choice in strategyCompletionChoices"
+            :key="choice.id"
+            type="button"
+            @click="chooseStrategyCompletion(choice.id)"
           >{{ choice.label }}</button>
         </div>
       </div>
@@ -619,6 +641,7 @@ import {
   openingPlanBranchMessage,
   openingPlanInterruption,
   openingPlanCandidates as getOpeningPlanCandidates,
+  openingStrategyCompletionChoices,
   rangingRookStrategyChoices,
   openingUrgentResponse,
   shouldAbandonOpeningGuide,
@@ -1000,6 +1023,35 @@ const rangingRookChoices = computed(() => rangingRookStrategyChoices(
   selectedCastle.value,
   availableOpeningStrategies.value.map(({ id }) => id),
 ));
+const strategyPhaseComplete = computed(() => {
+  const sfen = currentSfen.value;
+  if (!selectedStrategy.value || reviewMode.value || !active.value) return false;
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const opponentColor = playerIsBlack ? Color.WHITE : Color.BLACK;
+  return isOpeningPlanComplete({
+    strategyId: selectedStrategy.value,
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: playerMoves,
+    opponentMoves,
+    detectedFormations: formationNamesForColor(sfen, humanColor.value),
+    opponentFormations: formationNamesForColor(sfen, opponentColor),
+    currentSfen: sfen,
+  });
+});
+const strategyCompletionChoices = computed(() => openingStrategyCompletionChoices(
+  selectedStrategy.value,
+  availableOpeningStrategies.value.map(({ id }) => id),
+));
+const strategyCompletionChoiceRequired = computed(() => (
+  strategyPhaseComplete.value
+  && Boolean(selectedStrategyDefinition.value?.completionChoices?.strategyIds?.length)
+));
+const strategyCompletionPrompt = computed(() => (
+  selectedStrategyDefinition.value?.completionChoices?.prompt
+  ?? "次に目指す戦法を選んでね"
+));
 const OPENING_STRATEGY_GROUPS = [
   { id: "ibisha", label: "居飛車／単独作戦" },
   { id: "aigakari", label: "相居飛車／相掛かり" },
@@ -1024,7 +1076,8 @@ const groupedOpeningStrategies = computed(() => {
   const availableIds = new Set(availableOpeningStrategies.value.map(({ id }) => id));
   return groupOpeningStrategies(
     OPENING_STRATEGIES
-      .filter(({ guideSelectable }) => guideSelectable !== false)
+      // 完成後ボタンから選んだ内部派生も、選択中はプルダウンへ表示する。
+      .filter(({ id, guideSelectable }) => guideSelectable !== false || id === selectedStrategy.value)
       .map((strategy) => ({
         ...strategy,
         // 進行中の補助は、相手の応手を待つ一時的な局面でも解除しない。
@@ -1089,6 +1142,7 @@ const openingPlanCandidates = computed(() => {
     || openingPlanCompletionLocked.value
     || openingPlanExpired.value
     || rangingRookChoiceRequired.value
+    || strategyCompletionChoiceRequired.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return [];
   const playerIsBlack = humanColor.value === Color.BLACK;
@@ -1181,6 +1235,11 @@ const openingGuideStatus = computed(() => {
       ? "四間飛車が基本だよ。三間・中・向かい飛車も、今の局面から選べるよ！"
       : "この局面から選べる振り先がないみたい。別の囲いを選び直そう。";
   }
+  if (strategyCompletionChoiceRequired.value) {
+    return strategyCompletionChoices.value.length
+      ? strategyCompletionPrompt.value
+      : "この局面から続けられる派生戦法がないみたい。別の戦法を選び直そう。";
+  }
   if (reviewMode.value) return "道しるべは対局中に表示するよ。";
   if (!canMove.value) return "あなたの手番になったら、次の一手を矢印で示すよ。";
   if (openingGuideAbandoned.value) {
@@ -1252,6 +1311,17 @@ function chooseRangingRookStrategy(strategyId: string) {
   if (coachLevel.value !== "off") {
     const castle = OPENING_CASTLES.find(({ id }) => id === selectedCastle.value)?.label;
     guideText.value = `${choice.label}に振ってから、${castle ?? "囲い"}を組もう！`;
+  }
+}
+
+function chooseStrategyCompletion(strategyId: string) {
+  const choice = strategyCompletionChoices.value.find(({ id }) => id === strategyId);
+  if (!choice) return;
+  const previous = selectedStrategyDefinition.value?.label;
+  selectedStrategy.value = strategyId;
+  announceOpeningGuide();
+  if (coachLevel.value !== "off") {
+    guideText.value = `${previous ?? "基本の形"}ができたね。次は${choice.label}を目指そう！`;
   }
 }
 
