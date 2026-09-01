@@ -59,6 +59,14 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .guide-move-edit .move-preview small { overflow: hidden; max-width: 100%; color: #806e58; font-size: .66rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .guide-move-list input { padding: 6px 8px; font-family: ui-monospace, monospace; font-size: .75rem; }
 .guide-move-list .icon { min-height: 34px; padding: 4px; }
+.move-conditions { grid-column: 2 / -1; padding: 6px 7px; border-left: 3px solid #9aa865; border-radius: 5px; background: #f8faef; }
+.move-condition-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; color: #53602e; font-size: .72rem; font-weight: 800; }
+.move-condition-heading small { display: block; color: #7e875d; font-weight: 500; }
+.move-condition-heading button { min-height: 29px; padding: 3px 7px; font-size: .7rem; white-space: nowrap; }
+.move-condition-row { display: grid; grid-template-columns: 1fr .8fr .8fr auto 30px; gap: 3px; align-items: center; margin-top: 5px; }
+.move-condition-row select { min-width: 0; padding: 5px 3px; font-size: .7rem; }
+.move-condition-row > span { color: #5f6744; font-size: .68rem; white-space: nowrap; }
+.move-condition-row .icon { min-height: 30px; }
 .branch-divider { display: grid; gap: 3px; margin: 0 0 13px; padding-top: 14px; border-top: 1px solid #ddd0ba; }
 .branch-divider span { color: #7d6c57; font-size: .75rem; line-height: 1.4; }
 .move-list { max-height: 540px; overflow: auto; margin: 10px 0 0; padding: 0; list-style: none; }
