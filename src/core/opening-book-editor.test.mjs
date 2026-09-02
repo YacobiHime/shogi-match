@@ -3,7 +3,7 @@ import { STANDARD_SFEN } from "../game-state";
 import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningBookFromLibrary, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "./opening-book-editor.mjs";
 
 function draft() {
-  return createOpeningBookDraft({ definition: { id: "sample", label: "サンプル", family: "ibisha", rookStyle: "static", blackMoves: ["7g7f"] }, initialSfen: STANDARD_SFEN });
+  return createOpeningBookDraft({ definition: { id: "sample", label: "サンプル", classificationName: "居飛車/基本戦法", family: "ibisha", rookStyle: "static", blackMoves: ["7g7f"] }, initialSfen: STANDARD_SFEN });
 }
 
 describe("opening book editor", () => {
@@ -37,14 +37,14 @@ describe("opening book editor", () => {
   });
 
   it("stores strategy and castle classifications", () => {
-    expect(draft().classification).toEqual({ family: "ibisha", rookStyle: "static", menuGroup: "", contexts: [] });
+    expect(draft().classification).toEqual({ name: "居飛車/基本戦法", family: "ibisha", rookStyle: "static", menuGroup: "", contexts: [] });
     const castle = createOpeningBookDraft({
-      definition: { id: "mino", label: "本美濃", family: "mino", rookStyle: "ranging", menuGroup: "ranging-mino", contexts: ["anti-static-ranging", "double-ranging"] },
+      definition: { id: "mino", label: "本美濃", classificationName: "振り飛車側／美濃囲い系", family: "mino", rookStyle: "ranging", menuGroup: "ranging-mino", contexts: ["anti-static-ranging", "double-ranging"] },
       kind: "castle",
       initialSfen: STANDARD_SFEN,
     });
     expect(castle.classification).toEqual({
-      family: "mino", rookStyle: "ranging", menuGroup: "ranging-mino",
+      name: "振り飛車側／美濃囲い系", family: "mino", rookStyle: "ranging", menuGroup: "ranging-mino",
       contexts: ["anti-static-ranging", "double-ranging"],
     });
   });
@@ -107,6 +107,7 @@ describe("opening book editor", () => {
       definition: {
         id: "sample-castle",
         label: "サンプル囲い",
+        classificationName: "振り飛車側／美濃囲い系",
         family: "mino",
         rookStyle: "ranging",
         menuGroup: "ranging-mino",
