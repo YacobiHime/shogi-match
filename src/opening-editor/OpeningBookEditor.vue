@@ -33,13 +33,16 @@
         <div class="classification-settings">
           <strong>分類</strong>
           <template v-if="book.kind === 'strategy'">
-            <label>戦法メニューの分類名
-              <input v-model.trim="book.classification.family" list="strategy-family-options" placeholder="候補から選択、または分類名を入力" />
+            <label>戦法メニューの分類ID
+              <input v-model.trim="book.classification.family" list="strategy-family-options" placeholder="例: ibisha" />
             </label>
             <datalist id="strategy-family-options"><option v-for="option in strategyFamilyOptions" :key="option.id" :value="option.id">{{ option.label }}</option></datalist>
           </template>
-          <label v-else>囲いの系統<input v-model.trim="book.classification.family" list="castle-family-options" placeholder="例: mino" /></label>
+          <label v-else>囲いの系統ID<input v-model.trim="book.classification.family" list="castle-family-options" placeholder="例: mino" /></label>
           <datalist id="castle-family-options"><option v-for="family in castleFamilyOptions" :key="family" :value="family" /></datalist>
+          <label>分類名
+            <input v-model.trim="book.classification.name" placeholder="例: 居飛車/基本戦法" />
+          </label>
           <label>飛車の分類
             <select v-model="book.classification.rookStyle">
               <option value="">選択してください</option>
@@ -49,8 +52,8 @@
             </select>
           </label>
           <template v-if="book.kind === 'castle'">
-            <label>囲い一覧の分類名
-              <input v-model.trim="book.classification.menuGroup" list="castle-group-options" placeholder="候補から選択、または分類名を入力" />
+            <label>囲い一覧の分類ID
+              <input v-model.trim="book.classification.menuGroup" list="castle-group-options" placeholder="例: ranging-mino" />
             </label>
             <datalist id="castle-group-options"><option v-for="group in castleGroups" :key="group.id" :value="group.id">{{ group.label }}</option></datalist>
             <fieldset class="context-options">
@@ -280,6 +283,20 @@ const lastMove = computed(() => cursor.value ? activeBranch.value.moves[cursor.v
 const turnLabel = computed(() => currentSfen.value.split(" ")[1] === "w" ? "後手番" : "先手番");
 const validation = computed(() => validateOpeningBook(book));
 const hasCurrentSavedDraft = computed(() => Boolean(draftLibrary.value.books[openingBookDraftKey(book)]));
+const savedClassificationNames = computed(() => {
+  const names = new Map<string, string>();
+  const savedBooks = Object.values(draftLibrary.value.books) as any[];
+  savedBooks.sort((left, right) => String(left?.updatedAt ?? "").localeCompare(String(right?.updatedAt ?? "")));
+  for (const saved of savedBooks) {
+    const kind = saved?.kind === "castle" ? "castle" : "strategy";
+    const rawGroup = kind === "castle"
+      ? saved?.classification?.menuGroup || saved?.classification?.family
+      : saved?.classification?.family;
+    const name = String(saved?.classification?.name ?? "").trim();
+    if (rawGroup && name) names.set(`${kind}:${rawGroup}`, name);
+  }
+  return names;
+});
 const existingDefinitionGroups = computed(() => {
   const groups = new Map<string, { id: string; label: string; items: any[] }>();
   const add = (kind: string, id: string, label: string, definition: any, saved: any) => {
@@ -288,10 +305,13 @@ const existingDefinitionGroups = computed(() => {
       menuGroup: definition.menuGroup,
     } : {}), ...saved?.classification };
     const rawGroup = kind === "castle" ? classification.menuGroup || classification.family : classification.family;
-    const groupName = kind === "castle"
-      ? castleGroupLabels.get(rawGroup) ?? rawGroup ?? "未分類"
-      : strategyFamilyLabels.get(rawGroup) ?? rawGroup ?? "未分類";
     const groupId = `${kind}:${rawGroup || "unclassified"}`;
+    const groupName = savedClassificationNames.value.get(groupId) ?? (
+      String(classification.name ?? "").trim()
+      || (kind === "castle" ? castleGroupLabels.get(rawGroup) : strategyFamilyLabels.get(rawGroup))
+      || rawGroup
+      || "未分類"
+    );
     if (!groups.has(groupId)) groups.set(groupId, {
       id: groupId,
       label: `${kind === "castle" ? "囲い" : "戦法"}／${groupName}`,
@@ -335,7 +355,11 @@ const canInsertNextGuideMove = computed(() => {
 function safeParse(text: string) { try { return parseOpeningBook(text); } catch { return null; } }
 function safeParseLibrary(text: string | null) { try { return parseOpeningBookLibrary(text ?? ""); } catch { return createOpeningBookLibrary(); } }
 function definitionForEditor(definition: any, kind: string) {
-  return definition ? { ...definition, rookStyle: openingDefinitionRookStyle(definition.id, kind) ?? "both" } : definition;
+  if (!definition) return definition;
+  const classificationName = kind === "castle"
+    ? castleGroupLabels.get(definition.menuGroup) ?? definition.menuGroup ?? definition.family ?? "未分類"
+    : strategyFamilyLabels.get(definition.family) ?? definition.family ?? "未分類";
+  return { ...definition, classificationName, rookStyle: openingDefinitionRookStyle(definition.id, kind) ?? "both" };
 }
 function normalize(value: any) {
   const definition = (value?.kind === "castle" ? castles : strategies).find((item: any) => item.id === value?.id);
@@ -350,6 +374,8 @@ function loadDefinition() {
   const definition = (kind === "castle" ? castles : strategies).find((item: any) => item.id === id);
   const saved = draftLibrary.value.books[selectedDefinitionKey.value];
   const base = createOpeningBookDraft({ definition: definitionForEditor(definition, kind), kind, initialSfen: STANDARD_SFEN });
+  const rawGroup = kind === "castle" ? base.classification.menuGroup || base.classification.family : base.classification.family;
+  base.classification.name = savedClassificationNames.value.get(`${kind}:${rawGroup}`) ?? base.classification.name;
   replaceBook(saved ? { ...base, ...saved, classification: { ...base.classification, ...saved.classification } } : base);
   const label = saved?.label ?? definition?.label ?? id;
   announce(saved ? `${label}の保存済み下書きを読み込みました。` : `${label}の現行案内手を取り込みました。`);
