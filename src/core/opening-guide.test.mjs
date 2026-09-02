@@ -76,7 +76,7 @@ describe("opening guide", () => {
 
   it("shows completion followups only for a completed strategy without a castle", () => {
     expect(shouldShowOpeningFollowup({
-      strategyId: "aigakari-bougin",
+      strategyId: "bougin",
       planComplete: true,
     })).toBe(true);
     expect(shouldShowOpeningFollowup({
@@ -84,12 +84,12 @@ describe("opening guide", () => {
       planComplete: true,
     })).toBe(false);
     expect(shouldShowOpeningFollowup({
-      strategyId: "aigakari-bougin",
+      strategyId: "bougin",
       castleId: "nakazumai",
       planComplete: true,
     })).toBe(false);
     expect(shouldShowOpeningFollowup({
-      strategyId: "aigakari-bougin",
+      strategyId: "bougin",
       planComplete: true,
       planExpired: true,
     })).toBe(false);
@@ -193,15 +193,15 @@ describe("opening guide", () => {
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "nakabisha").map(({ label }) => label))
       .toEqual(["原始中飛車", "ゴキゲン中飛車", "端角中飛車"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "ibisha").map(({ label }) => label))
-      .toEqual(["居飛車", "原始棒銀", "早繰り銀", "腰掛け銀"]);
+      .toEqual(["居飛車", "棒銀", "早繰り銀", "腰掛け銀"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "kakugawari").map(({ label }) => label))
-      .toEqual(["角換わり", "角換わり棒銀", "角換わり早繰り銀", "角換わり腰掛け銀", "角換わり4五桂速攻"]);
+      .toEqual(["角換わり", "角換わり腰掛け銀", "角換わり4五桂速攻"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "aigakari").map(({ label }) => label))
-      .toEqual(["相掛かり", "ひねり飛車", "相掛かり棒銀", "相掛かり早繰り銀", "相掛かり腰掛け銀"]);
+      .toEqual(["相掛かり", "ひねり飛車"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "yokofudori").map(({ label }) => label))
       .toEqual(["横歩取り", "横歩取り3三角型", "横歩取り青野流"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "yagura").map(({ label }) => label))
-      .toEqual(["矢倉戦法", "矢倉棒銀", "急戦矢倉早繰り銀", "矢倉腰掛け銀", "雀刺し", "矢倉3七銀", "森下システム"]);
+      .toEqual(["矢倉戦法", "雀刺し", "矢倉3七銀", "森下システム"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "gangi").map(({ label }) => label))
       .toEqual(["雁木戦法", "雁木右四間"]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "special").map(({ label }) => label))
@@ -846,8 +846,6 @@ describe("opening guide", () => {
 
   it.each([
     "kakugawari",
-    "kakugawari-bougin",
-    "kakugawari-hayaguri-gin",
     "kakugawari-koshikake-gin",
     "kakugawari-45-knight",
   ])("switches %s to Right Fourth-file Rook when White closes the bishop diagonal", (strategyId) => {
@@ -878,7 +876,7 @@ describe("opening guide", () => {
 
   it("keeps a Bishop Exchange plan after the bishops have already been exchanged", () => {
     expect(openingPlanInterruption({
-      strategyId: "kakugawari-bougin",
+      strategyId: "kakugawari-koshikake-gin",
       color: "black",
       playedMoves: ["7g7f", "8h2b+"],
       opponentMoves: ["3c3d", "4c4d"],
