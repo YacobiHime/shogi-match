@@ -110,10 +110,10 @@ export function validateOpeningBook(book) {
   if (!String(book?.label ?? "").trim()) errors.push("名称を入力してください。");
   if (!["strategy", "castle"].includes(book?.kind)) errors.push("種類は戦法か囲いにしてください。");
   if (!["black", "white", "both"].includes(book?.side)) errors.push("対象手番が不正です。");
-  if (!String(book?.classification?.family ?? "").trim()) errors.push("分類の系統を選択してください。");
+  if (!String(book?.classification?.family ?? "").trim()) errors.push("分類名を入力してください。");
   if (!["static", "ranging", "both"].includes(book?.classification?.rookStyle)) errors.push("居飛車／振り飛車分類を選択してください。");
   if (book?.kind === "castle") {
-    if (!String(book?.classification?.menuGroup ?? "").trim()) errors.push("囲いの表示グループを選択してください。");
+    if (!String(book?.classification?.menuGroup ?? "").trim()) errors.push("囲い一覧の分類名を入力してください。");
     if (!Array.isArray(book?.classification?.contexts) || !book.classification.contexts.length) errors.push("囲いが対応する対局分類を1つ以上選択してください。");
   }
   if (book?.completionChoices?.enabled) {
