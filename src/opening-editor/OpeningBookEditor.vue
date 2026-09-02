@@ -229,7 +229,7 @@ const strategies = OPENING_STRATEGIES;
 const castles = OPENING_CASTLES;
 const castleGroups = OPENING_CASTLE_GROUPS;
 const strategyFamilyOptions = [
-  { id: "ibisha", label: "基本戦法" }, { id: "aigakari", label: "相居飛車／相掛かり" },
+  { id: "ibisha", label: "居飛車/基本戦法" }, { id: "aigakari", label: "相居飛車／相掛かり" },
   { id: "yokofudori", label: "相居飛車／横歩取り" }, { id: "yagura", label: "相居飛車／矢倉" },
   { id: "kakugawari", label: "相居飛車／角換わり" }, { id: "gangi", label: "相居飛車／雁木" },
   { id: "anti-ranging", label: "対抗型／居飛車側" }, { id: "shiken", label: "四間飛車" },

@@ -1053,7 +1053,7 @@ const strategyCompletionPrompt = computed(() => (
   ?? "次に目指す戦法を選んでね"
 ));
 const OPENING_STRATEGY_GROUPS = [
-  { id: "ibisha", label: "基本戦法" },
+  { id: "ibisha", label: "居飛車/基本戦法" },
   { id: "aigakari", label: "相居飛車／相掛かり" },
   { id: "yokofudori", label: "相居飛車／横歩取り" },
   { id: "yagura", label: "相居飛車／矢倉" },
