@@ -21,14 +21,8 @@
         <label>既存データ
           <select v-model="selectedDefinitionKey" @change="loadDefinition">
             <option value="new">新規作成</option>
-            <optgroup label="戦法">
-              <option v-for="item in strategies" :key="`strategy:${item.id}`" :value="`strategy:${item.id}`">{{ item.label }}{{ hasSavedDraft('strategy', item.id) ? '（保存済み）' : '' }}</option>
-            </optgroup>
-            <optgroup label="囲い">
-              <option v-for="item in castles" :key="`castle:${item.id}`" :value="`castle:${item.id}`">{{ item.label }}{{ hasSavedDraft('castle', item.id) ? '（保存済み）' : '' }}</option>
-            </optgroup>
-            <optgroup v-if="customSavedDrafts.length" label="保存した新規定跡">
-              <option v-for="item in customSavedDrafts" :key="item.key" :value="item.key">{{ item.label }}（保存済み）</option>
+            <optgroup v-for="group in existingDefinitionGroups" :key="group.id" :label="group.label">
+              <option v-for="item in group.items" :key="item.key" :value="item.key">{{ item.label }}{{ item.saved ? '（保存済み）' : '' }}</option>
             </optgroup>
           </select>
         </label>
@@ -38,12 +32,12 @@
         </div>
         <div class="classification-settings">
           <strong>分類</strong>
-          <label v-if="book.kind === 'strategy'">戦法メニューの分類
-            <select v-model="book.classification.family">
-              <option value="">選択してください</option>
-              <option v-for="option in strategyFamilyOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
-            </select>
-          </label>
+          <template v-if="book.kind === 'strategy'">
+            <label>戦法メニューの分類名
+              <input v-model.trim="book.classification.family" list="strategy-family-options" placeholder="候補から選択、または分類名を入力" />
+            </label>
+            <datalist id="strategy-family-options"><option v-for="option in strategyFamilyOptions" :key="option.id" :value="option.id">{{ option.label }}</option></datalist>
+          </template>
           <label v-else>囲いの系統<input v-model.trim="book.classification.family" list="castle-family-options" placeholder="例: mino" /></label>
           <datalist id="castle-family-options"><option v-for="family in castleFamilyOptions" :key="family" :value="family" /></datalist>
           <label>飛車の分類
@@ -55,12 +49,10 @@
             </select>
           </label>
           <template v-if="book.kind === 'castle'">
-            <label>囲い一覧の表示グループ
-              <select v-model="book.classification.menuGroup">
-                <option value="">選択してください</option>
-                <option v-for="group in castleGroups" :key="group.id" :value="group.id">{{ group.label }}</option>
-              </select>
+            <label>囲い一覧の分類名
+              <input v-model.trim="book.classification.menuGroup" list="castle-group-options" placeholder="候補から選択、または分類名を入力" />
             </label>
+            <datalist id="castle-group-options"><option v-for="group in castleGroups" :key="group.id" :value="group.id">{{ group.label }}</option></datalist>
             <fieldset class="context-options">
               <legend>対応する対局分類（複数可）</legend>
               <label v-for="context in castleContextOptions" :key="context.id" class="check-label"><input v-model="book.classification.contexts" type="checkbox" :value="context.id" /> {{ context.label }}</label>
@@ -251,6 +243,8 @@ const castleContextOptions = [
   { id: "double-ranging", label: "相振り飛車" },
 ];
 const castleFamilyOptions = [...new Set(castles.map((castle: any) => castle.family).filter(Boolean))];
+const strategyFamilyLabels = new Map(strategyFamilyOptions.map((option) => [option.id, option.label]));
+const castleGroupLabels = new Map(castleGroups.map((group: any) => [group.id, group.label]));
 const storedLibrary = safeParseLibrary(localStorage.getItem(OPENING_BOOK_LIBRARY_STORAGE_KEY));
 const stored = localStorage.getItem(OPENING_BOOK_STORAGE_KEY);
 const legacyInitial = stored ? safeParse(stored) : null;
@@ -286,11 +280,34 @@ const lastMove = computed(() => cursor.value ? activeBranch.value.moves[cursor.v
 const turnLabel = computed(() => currentSfen.value.split(" ")[1] === "w" ? "後手番" : "先手番");
 const validation = computed(() => validateOpeningBook(book));
 const hasCurrentSavedDraft = computed(() => Boolean(draftLibrary.value.books[openingBookDraftKey(book)]));
-const customSavedDrafts = computed(() => Object.entries(draftLibrary.value.books).flatMap(([key, value]: [string, any]) => {
-  const [kind, id] = key.split(":");
-  const definitions = kind === "castle" ? castles : strategies;
-  return definitions.some((item: any) => item.id === id) ? [] : [{ key, label: value?.label ?? id }];
-}));
+const existingDefinitionGroups = computed(() => {
+  const groups = new Map<string, { id: string; label: string; items: any[] }>();
+  const add = (kind: string, id: string, label: string, definition: any, saved: any) => {
+    const classification = { ...(definition ? {
+      family: definition.family,
+      menuGroup: definition.menuGroup,
+    } : {}), ...saved?.classification };
+    const rawGroup = kind === "castle" ? classification.menuGroup || classification.family : classification.family;
+    const groupName = kind === "castle"
+      ? castleGroupLabels.get(rawGroup) ?? rawGroup ?? "未分類"
+      : strategyFamilyLabels.get(rawGroup) ?? rawGroup ?? "未分類";
+    const groupId = `${kind}:${rawGroup || "unclassified"}`;
+    if (!groups.has(groupId)) groups.set(groupId, {
+      id: groupId,
+      label: `${kind === "castle" ? "囲い" : "戦法"}／${groupName}`,
+      items: [],
+    });
+    groups.get(groupId)?.items.push({ key: `${kind}:${id}`, label: saved?.label ?? label ?? id, saved: Boolean(saved) });
+  };
+  for (const strategy of strategies) add("strategy", strategy.id, strategy.label, strategy, draftLibrary.value.books[`strategy:${strategy.id}`]);
+  for (const castle of castles) add("castle", castle.id, castle.label, castle, draftLibrary.value.books[`castle:${castle.id}`]);
+  for (const [key, saved] of Object.entries(draftLibrary.value.books) as [string, any][]) {
+    const [kind, id] = key.split(":");
+    const definitions = kind === "castle" ? castles : strategies;
+    if (!definitions.some((item: any) => item.id === id)) add(kind, id, saved?.label ?? id, null, saved);
+  }
+  return [...groups.values()];
+});
 const currentDraftSaved = computed(() => {
   const saved = draftLibrary.value.books[openingBookDraftKey(book)];
   if (!saved) return false;
