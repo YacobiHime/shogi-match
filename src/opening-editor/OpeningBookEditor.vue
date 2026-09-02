@@ -142,16 +142,31 @@
         <section class="guide-sequence" aria-labelledby="guide-sequence-title">
           <div class="subheading">
             <div><h3 id="guide-sequence-title">やこび姫の案内手</h3><p>先手基準。ここを編集すると、書き出す案内手が変わります。</p></div>
-            <button type="button" @click="addGuideMove">手を追加</button>
+            <button type="button" @click="showGuideMoveAdder = !showGuideMoveAdder">マスを選んで追加</button>
+          </div>
+          <div v-if="showGuideMoveAdder" class="guide-move-adder">
+            <strong>追加する手</strong>
+            <label>移動元<select v-model="newGuideFrom"><option value="">選択</option><option v-for="square in conditionSquareOptions" :key="`from-${square.value}`" :value="square.value">{{ square.label }}</option></select></label>
+            <span>から</span>
+            <label>移動先<select v-model="newGuideTo"><option value="">選択</option><option v-for="square in conditionSquareOptions" :key="`to-${square.value}`" :value="square.value">{{ square.label }}</option></select></label>
+            <label class="promote-check"><input v-model="newGuidePromote" type="checkbox" /> 成る</label>
+            <button type="button" class="primary" :disabled="!newGuideFrom || !newGuideTo || newGuideFrom === newGuideTo" @click="addGuideMoveFromSquares">この手を追加</button>
+            <small>例: 「２六」から「２五」を選ぶと、▲２五歩として追加されます。</small>
           </div>
           <ol class="guide-move-list">
             <li v-for="(_move, index) in book.guideMoves" :key="index" :class="{ selected: selectedGuideIndex === index }">
               <span>{{ index + 1 }}</span>
               <div class="guide-move-edit">
                 <button type="button" class="move-preview" :aria-label="`${formattedGuideMove(index)}を盤上に表示`" @click="previewGuideMove(index)">
-                  <strong>{{ formattedGuideMove(index) }}</strong><small>{{ book.guideMoves[index] || "未入力" }} · クリックで矢印</small>
+                  <strong>{{ formattedGuideMove(index) }}</strong><small>クリックで盤上に矢印を表示</small>
                 </button>
-                <input v-model.trim="book.guideMoves[index]" :aria-label="`案内手${index + 1}のUSI`" placeholder="例: 7g7f" spellcheck="false" @focus="beginGuideMoveEdit(index)" @input="clearPreview" @change="finishGuideMoveEdit(index)" />
+                <div v-if="guideMoveParts(index)" class="guide-square-editor">
+                  <label>移動元<select :value="guideMoveParts(index)?.from" @change="updateGuideMoveSquare(index, 'from', $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
+                  <span>→</span>
+                  <label>移動先<select :value="guideMoveParts(index)?.to" @change="updateGuideMoveSquare(index, 'to', $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
+                  <label class="promote-check"><input type="checkbox" :checked="guideMoveParts(index)?.promote" @change="updateGuideMovePromotion(index, $event)" /> 成る</label>
+                </div>
+                <details class="usi-details"><summary>詳細（USI）</summary><input v-model.trim="book.guideMoves[index]" :aria-label="`案内手${index + 1}のUSI`" placeholder="例: 7g7f" spellcheck="false" @focus="beginGuideMoveEdit(index)" @input="clearPreview" @change="finishGuideMoveEdit(index)" /></details>
               </div>
               <button type="button" class="icon" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">↑</button>
               <button type="button" class="icon" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">↓</button>
@@ -187,7 +202,7 @@
               </div>
             </li>
           </ol>
-          <p v-if="!book.guideMoves.length" class="empty">案内手がありません。「手を追加」から入力してください。</p>
+          <p v-if="!book.guideMoves.length" class="empty">案内手がありません。「マスを選んで追加」を押し、移動元と移動先を選んでください。</p>
         </section>
         <details class="branch-verification">
           <summary><strong>実戦確認（任意）</strong><span>相手の応手や複数の分岐を盤上で確認するときだけ開きます。</span></summary>
@@ -276,6 +291,10 @@ const selectedGuideIndex = ref<number | null>(null);
 const previewUsi = ref("");
 const completionChoiceToAdd = ref("");
 const guideMoveBeforeEdit = ref<{ index: number; value: string } | null>(null);
+const showGuideMoveAdder = ref(false);
+const newGuideFrom = ref("");
+const newGuideTo = ref("");
+const newGuidePromote = ref(false);
 let toastTimer = 0;
 
 const conditionSquareOptions = Array.from({ length: 81 }, (_, index) => {
@@ -505,11 +524,12 @@ function moveRole(index: number) {
     ? { label: `案内手${guideIndex + 1}`, className: "guide" }
     : { label: expected ? `案内外（予定 ${expected}）` : "案内外", className: "outside" };
 }
-function addGuideMove() { clearPreview(); book.guideMoves.push(""); }
-function beginGuideMoveEdit(index: number) { guideMoveBeforeEdit.value = { index, value: book.guideMoves[index] ?? "" }; }
-function finishGuideMoveEdit(index: number) {
-  const previous = guideMoveBeforeEdit.value?.index === index ? guideMoveBeforeEdit.value.value : "";
-  const next = book.guideMoves[index] ?? "";
+function guideMoveParts(index: number) {
+  const match = String(book.guideMoves[index] ?? "").match(/^([1-9][a-i])([1-9][a-i])(\+)?$/);
+  return match ? { from: match[1], to: match[2], promote: Boolean(match[3]) } : null;
+}
+function replaceGuideMove(index: number, next: string, previousValue?: string) {
+  const previous = previousValue ?? book.guideMoves[index] ?? "";
   if (previous && previous !== next && book.movePositionPrerequisites[previous]) {
     book.movePositionPrerequisites[next] = [
       ...(book.movePositionPrerequisites[next] ?? []),
@@ -517,6 +537,37 @@ function finishGuideMoveEdit(index: number) {
     ];
     delete book.movePositionPrerequisites[previous];
   }
+  book.guideMoves[index] = next;
+  clearPreview();
+}
+function updateGuideMoveSquare(index: number, part: "from" | "to", event: Event) {
+  const current = guideMoveParts(index);
+  if (!current) return;
+  const value = (event.target as HTMLSelectElement).value;
+  replaceGuideMove(index, `${part === "from" ? value : current.from}${part === "to" ? value : current.to}${current.promote ? "+" : ""}`);
+}
+function updateGuideMovePromotion(index: number, event: Event) {
+  const current = guideMoveParts(index);
+  if (!current) return;
+  replaceGuideMove(index, `${current.from}${current.to}${(event.target as HTMLInputElement).checked ? "+" : ""}`);
+}
+function addGuideMoveFromSquares() {
+  if (!newGuideFrom.value || !newGuideTo.value || newGuideFrom.value === newGuideTo.value) return;
+  clearPreview();
+  book.guideMoves.push(`${newGuideFrom.value}${newGuideTo.value}${newGuidePromote.value ? "+" : ""}`);
+  const addedIndex = book.guideMoves.length - 1;
+  selectedGuideIndex.value = addedIndex;
+  newGuideFrom.value = "";
+  newGuideTo.value = "";
+  newGuidePromote.value = false;
+  showGuideMoveAdder.value = false;
+  announce(`${formattedGuideMove(addedIndex)}を案内手に追加しました。`);
+}
+function beginGuideMoveEdit(index: number) { guideMoveBeforeEdit.value = { index, value: book.guideMoves[index] ?? "" }; }
+function finishGuideMoveEdit(index: number) {
+  const previous = guideMoveBeforeEdit.value?.index === index ? guideMoveBeforeEdit.value.value : "";
+  const next = book.guideMoves[index] ?? "";
+  if (previous !== next) replaceGuideMove(index, next, previous);
   guideMoveBeforeEdit.value = null;
 }
 function moveConditionGroups(index: number) { return book.movePositionPrerequisites[book.guideMoves[index]] ?? []; }
