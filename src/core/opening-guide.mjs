@@ -1422,6 +1422,22 @@ export function openingPlanBranchMessage({
   return "";
 }
 
+export function matchesMovePositionPrerequisites(conditions, {
+  pieceAt,
+  convertSquare = (square) => square,
+  color = "black",
+  opponentColor = color === "black" ? "white" : "black",
+}) {
+  return (conditions ?? []).every((group) => {
+    const alternatives = Array.isArray(group?.alternatives) ? group.alternatives : [group];
+    return alternatives.some(({ square, owner, kind }) => {
+      const piece = pieceAt(convertSquare(square));
+      const requiredColor = owner === "opponent" ? opponentColor : color;
+      return piece?.color === requiredColor && piece.kind === kind;
+    });
+  });
+}
+
 export function openingPlanCandidates({
   strategyId,
   castleId,
@@ -1493,10 +1509,11 @@ export function openingPlanCandidates({
     const isReady = (entry) => {
       if (!legal.has(entry.usi)) return false;
       if (!(prerequisites.get(entry.usi) ?? []).every((move) => played.has(move))) return false;
-      if (!(positionPrerequisites.get(entry.usi) ?? []).every(({ square, owner, kind }) => {
-        const piece = board.get(convert(square));
-        const requiredColor = owner === "opponent" ? opponentColor : color;
-        return piece?.color === requiredColor && piece.kind === kind;
+      if (!matchesMovePositionPrerequisites(positionPrerequisites.get(entry.usi), {
+        pieceAt: (square) => board.get(square),
+        convertSquare: convert,
+        color,
+        opponentColor,
       })) return false;
       const historyRequirement = definition.availability?.requiredHistoryBeforeMoves?.find(
         ({ move }) => move === entry.usi,

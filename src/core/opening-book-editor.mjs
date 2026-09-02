@@ -10,7 +10,7 @@ export function openingBookDraftKey(book) {
 }
 
 export function createOpeningBookLibrary() {
-  return { schemaVersion: OPENING_BOOK_SCHEMA_VERSION, activeKey: "", books: {} };
+  return { schemaVersion: OPENING_BOOK_SCHEMA_VERSION, activeKey: "", books: {}, deletedKeys: [] };
 }
 
 export function parseOpeningBookLibrary(text) {
@@ -21,6 +21,7 @@ export function parseOpeningBookLibrary(text) {
     schemaVersion: OPENING_BOOK_SCHEMA_VERSION,
     activeKey: typeof value.activeKey === "string" ? value.activeKey : "",
     books: value.books && !Array.isArray(value.books) && typeof value.books === "object" ? value.books : {},
+    deletedKeys: Array.isArray(value.deletedKeys) ? [...new Set(value.deletedKeys.filter((key) => typeof key === "string"))] : [],
   };
 }
 
@@ -30,6 +31,7 @@ export function saveOpeningBookToLibrary(library, book) {
     schemaVersion: OPENING_BOOK_SCHEMA_VERSION,
     activeKey: key,
     books: { ...(library?.books ?? {}), [key]: JSON.parse(serializeOpeningBook(book)) },
+    deletedKeys: (library?.deletedKeys ?? []).filter((deletedKey) => deletedKey !== key),
   };
 }
 
@@ -40,11 +42,35 @@ export function deleteOpeningBookFromLibrary(library, key) {
     schemaVersion: OPENING_BOOK_SCHEMA_VERSION,
     activeKey: library?.activeKey === key ? "" : library?.activeKey ?? "",
     books,
+    deletedKeys: [...(library?.deletedKeys ?? [])],
+  };
+}
+
+export function deleteOpeningDefinitionFromLibrary(library, key) {
+  const next = deleteOpeningBookFromLibrary(library, key);
+  return {
+    ...next,
+    deletedKeys: [...new Set([...(next.deletedKeys ?? []), key])],
   };
 }
 
 export function serializeOpeningBookLibrary(library) {
   return `${JSON.stringify({ ...createOpeningBookLibrary(), ...library }, null, 2)}\n`;
+}
+
+export function normalizeMovePositionPrerequisiteGroups(conditions) {
+  if (!Array.isArray(conditions)) return [];
+  return conditions.map((group) => ({
+    alternatives: (Array.isArray(group?.alternatives) ? group.alternatives : [group])
+      .map((condition) => ({ ...condition })),
+  }));
+}
+
+export function normalizeMovePositionPrerequisites(prerequisites) {
+  if (!prerequisites || Array.isArray(prerequisites) || typeof prerequisites !== "object") return {};
+  return Object.fromEntries(Object.entries(prerequisites).map(
+    ([move, conditions]) => [move, normalizeMovePositionPrerequisiteGroups(conditions)],
+  ));
 }
 
 export function createOpeningBookDraft({ definition, kind = "strategy", side = "black", initialSfen }) {
@@ -68,9 +94,7 @@ export function createOpeningBookDraft({ definition, kind = "strategy", side = "
       ? definition.completionVariants
       : definition?.completionSquares?.length ? [definition.completionSquares] : []
     ).map((variant) => variant.map(([square, kind]) => [square, kind])),
-    movePositionPrerequisites: Object.fromEntries(Object.entries(
-      definition?.movePositionPrerequisites ?? {},
-    ).map(([move, conditions]) => [move, conditions.map((condition) => ({ ...condition }))])),
+    movePositionPrerequisites: normalizeMovePositionPrerequisites(definition?.movePositionPrerequisites),
     completionChoices: {
       enabled: Boolean(definition?.completionChoices?.strategyIds?.length),
       prompt: definition?.completionChoices?.prompt ?? "",
@@ -131,11 +155,19 @@ export function validateOpeningBook(book) {
       errors.push(`案内手「${move}」の局面条件が空です。`);
       continue;
     }
-    for (const [index, condition] of conditions.entries()) {
-      const prefix = `案内手「${move}」の条件${index + 1}`;
-      if (!/^[1-9][a-i]$/.test(condition?.square ?? "")) errors.push(`${prefix}: マスが不正です。`);
-      if (!["player", "opponent"].includes(condition?.owner)) errors.push(`${prefix}: 駒の所有者が不正です。`);
-      if (!["P", "L", "N", "S", "G", "B", "R", "K"].includes(condition?.kind)) errors.push(`${prefix}: 駒種が不正です。`);
+    for (const [groupIndex, group] of conditions.entries()) {
+      const alternatives = Array.isArray(group?.alternatives) ? group.alternatives : [group];
+      if (!alternatives.length) {
+        errors.push(`案内手「${move}」の条件${groupIndex + 1}: OR候補が空です。`);
+        continue;
+      }
+      for (const [alternativeIndex, condition] of alternatives.entries()) {
+        const suffix = alternatives.length > 1 ? `のOR候補${alternativeIndex + 1}` : "";
+        const prefix = `案内手「${move}」の条件${groupIndex + 1}${suffix}`;
+        if (!/^[1-9][a-i]$/.test(condition?.square ?? "")) errors.push(`${prefix}: マスが不正です。`);
+        if (!["player", "opponent"].includes(condition?.owner)) errors.push(`${prefix}: 駒の所有者が不正です。`);
+        if (!["P", "L", "N", "S", "G", "B", "R", "K"].includes(condition?.kind)) errors.push(`${prefix}: 駒種が不正です。`);
+      }
     }
   }
   if (book?.kind === "castle") {
@@ -165,7 +197,7 @@ export function validateOpeningBook(book) {
     const prefix = `変化${branchIndex + 1}`;
     if (!branch?.id || branchIds.has(branch.id)) errors.push(`${prefix}: 分岐IDが空か重複しています。`);
     branchIds.add(branch?.id);
-    if (!branch?.moves?.length) errors.push(`${prefix}: 指し手を1手以上登録してください。`);
+    if (!branch?.moves?.length) continue;
     const replay = replayOpeningBranch(book, branch);
     if (replay.error) errors.push(`${prefix}: ${replay.error}`);
     const line = (branch?.moves ?? []).map(({ usi }) => usi).join(" ");
@@ -185,9 +217,6 @@ export function validateOpeningBook(book) {
       errors.push(`出典${index + 1}: HTTPSのURLを入力してください。`);
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(source.checkedAt ?? "")) errors.push(`出典${index + 1}: 確認日はYYYY-MM-DDで入力してください。`);
-  }
-  if (book?.guideMoves?.length && !(book?.branches ?? []).some(({ moves }) => moves?.length)) {
-    warnings.push("既存の案内手だけを取り込んだ状態です。相手の応手を含む実戦手順を盤上で登録してください。");
   }
   if (!book?.engineReview?.checked) warnings.push("エンジン安全確認が未実施です。実装へ反映する前に評価値も確認してください。");
   return { valid: errors.length === 0, errors, warnings };

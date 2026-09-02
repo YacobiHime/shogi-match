@@ -9,7 +9,7 @@
       <div class="header-actions">
         <span class="draft-save-status">{{ currentDraftSaved ? "この定跡は保存済み" : "この定跡は未保存" }}</span>
         <button type="button" class="secondary" @click="saveDraft">この定跡を保存</button>
-        <button type="button" class="danger" :disabled="!hasCurrentSavedDraft" @click="deleteDraft">保存した定跡を削除</button>
+        <button type="button" class="danger" :disabled="selectedDefinitionKey === 'new'" @click="deleteSelectedOpening">選択した定跡を削除</button>
         <button type="button" class="primary" @click="exportJson">この定跡をJSON保存</button>
         <label class="file-button">JSONを読み込む<input type="file" accept="application/json,.json" @change="importJson" /></label>
       </div>
@@ -138,7 +138,7 @@
       </section>
 
       <aside class="panel branch-panel">
-        <div class="panel-heading"><h2>案内手と実戦分岐</h2><button type="button" @click="branchHere">分岐 ＋</button></div>
+        <div class="panel-heading"><h2>案内手の編集</h2></div>
         <section class="guide-sequence" aria-labelledby="guide-sequence-title">
           <div class="subheading">
             <div><h3 id="guide-sequence-title">やこび姫の案内手</h3><p>先手基準。ここを編集すると、書き出す案内手が変わります。</p></div>
@@ -158,38 +158,52 @@
               <button type="button" class="icon danger" aria-label="削除" @click="removeGuideMove(index)">×</button>
               <div class="move-conditions">
                 <div class="move-condition-heading">
-                  <span>この手を案内する局面条件 <small>すべて満たす場合（AND）</small></span>
-                  <button type="button" @click="addMoveCondition(index)">条件 ＋</button>
+                  <span>この手を案内する局面条件 <small>条件グループ同士はAND、グループ内の候補はOR</small></span>
+                  <button type="button" @click="addMoveConditionGroup(index)">AND条件 ＋</button>
                 </div>
-                <div v-for="(condition, conditionIndex) in moveConditions(index)" :key="conditionIndex" class="move-condition-row">
-                  <select v-model="condition.owner" :aria-label="`案内手${index + 1} 条件${conditionIndex + 1}の駒の所有者`">
-                    <option value="opponent">相手の</option>
-                    <option value="player">自分の</option>
-                  </select>
-                  <select v-model="condition.square" :aria-label="`案内手${index + 1} 条件${conditionIndex + 1}のマス`">
-                    <option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option>
-                  </select>
-                  <select v-model="condition.kind" :aria-label="`案内手${index + 1} 条件${conditionIndex + 1}の駒`">
-                    <option v-for="piece in conditionPieceOptions" :key="piece.value" :value="piece.value">{{ piece.label }}</option>
-                  </select>
-                  <span>がいる</span>
-                  <button type="button" class="icon danger" :aria-label="`条件${conditionIndex + 1}を削除`" @click="removeMoveCondition(index, conditionIndex)">×</button>
+                <div v-for="(group, groupIndex) in moveConditionGroups(index)" :key="groupIndex" class="move-condition-group">
+                  <div class="move-condition-group-heading">
+                    <strong>条件 {{ groupIndex + 1 }}</strong>
+                    <span v-if="groupIndex > 0">かつ（AND）</span>
+                    <button type="button" class="danger" :aria-label="`条件${groupIndex + 1}を削除`" @click="removeMoveConditionGroup(index, groupIndex)">条件を削除</button>
+                  </div>
+                  <div v-for="(condition, alternativeIndex) in group.alternatives" :key="alternativeIndex" class="move-condition-row">
+                    <strong>{{ alternativeIndex ? "または" : "候補" }}<small>{{ alternativeIndex ? " OR" : "" }}</small></strong>
+                    <select v-model="condition.owner" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}の駒の所有者`">
+                      <option value="opponent">相手の</option>
+                      <option value="player">自分の</option>
+                    </select>
+                    <select v-model="condition.square" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}のマス`">
+                      <option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option>
+                    </select>
+                    <select v-model="condition.kind" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}の駒`">
+                      <option v-for="piece in conditionPieceOptions" :key="piece.value" :value="piece.value">{{ piece.label }}</option>
+                    </select>
+                    <span>がいる</span>
+                    <button type="button" class="icon danger" :aria-label="`条件${groupIndex + 1}のOR候補${alternativeIndex + 1}を削除`" @click="removeMoveConditionAlternative(index, groupIndex, alternativeIndex)">×</button>
+                  </div>
+                  <button type="button" class="add-or-condition" @click="addMoveConditionAlternative(index, groupIndex)">または（OR）候補 ＋</button>
                 </div>
               </div>
             </li>
           </ol>
           <p v-if="!book.guideMoves.length" class="empty">案内手がありません。「手を追加」から入力してください。</p>
         </section>
-        <div class="branch-divider"><strong>相手の応手を含む確認手順</strong><span>相手が別の手を指しても、案内手が合法なら補助は続きます。</span></div>
-        <label>分岐<select v-model.number="activeBranchIndex" @change="cursor = activeBranch.moves.length"><option v-for="(branch, index) in book.branches" :key="branch.id + index" :value="index">{{ branch.label || branch.id }}</option></select></label>
-        <div class="two-columns"><label>分岐ID<input v-model.trim="activeBranch.id" /></label><label>表示名<input v-model.trim="activeBranch.label" /></label></div>
-        <ol class="move-list">
-          <li v-for="(move, index) in activeBranch.moves" :key="`${index}:${move.usi}`" :class="{ current: index + 1 === cursor }">
-            <button type="button" @click="previewBranchMove(index)"><span>{{ index + 1 }}.</span><span class="move-notation"><strong>{{ formattedBranchMove(index) }}</strong><code>{{ move.usi }}</code></span><small :class="moveRole(index).className">{{ moveRole(index).label }}</small></button>
-            <input v-model="move.note" aria-label="指し手メモ" placeholder="この手の意味・条件" />
-          </li>
-        </ol>
-        <p v-if="!activeBranch.moves.length" class="empty">盤上で初手を指してください。</p>
+        <details class="branch-verification">
+          <summary><strong>実戦確認（任意）</strong><span>相手の応手や複数の分岐を盤上で確認するときだけ開きます。</span></summary>
+          <div class="branch-verification-body">
+            <div class="optional-heading"><span>相手が別の手を指しても、次の案内手が合法なら補助は続きます。</span><button type="button" @click="branchHere">分岐 ＋</button></div>
+            <label>分岐<select v-model.number="activeBranchIndex" @change="cursor = activeBranch.moves.length"><option v-for="(branch, index) in book.branches" :key="branch.id + index" :value="index">{{ branch.label || branch.id }}</option></select></label>
+            <div class="two-columns"><label>分岐ID<input v-model.trim="activeBranch.id" /></label><label>表示名<input v-model.trim="activeBranch.label" /></label></div>
+            <ol class="move-list">
+              <li v-for="(move, index) in activeBranch.moves" :key="`${index}:${move.usi}`" :class="{ current: index + 1 === cursor }">
+                <button type="button" @click="previewBranchMove(index)"><span>{{ index + 1 }}.</span><span class="move-notation"><strong>{{ formattedBranchMove(index) }}</strong><code>{{ move.usi }}</code></span><small :class="moveRole(index).className">{{ moveRole(index).label }}</small></button>
+                <input v-model="move.note" aria-label="指し手メモ" placeholder="この手の意味・条件" />
+              </li>
+            </ol>
+            <p v-if="!activeBranch.moves.length" class="empty">必要なら盤上で初手から確認手順を入力してください。</p>
+          </div>
+        </details>
       </aside>
     </section>
 
@@ -225,7 +239,7 @@ import { computed, reactive, ref } from "vue";
 import ShogiMatchBoard from "../ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "../game-state";
 import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
-import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningBookFromLibrary, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
+import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningDefinitionFromLibrary, normalizeMovePositionPrerequisites, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
 import { formatHintMove } from "../core/match-assists.mjs";
 
 const strategies = OPENING_STRATEGIES;
@@ -282,7 +296,6 @@ const replayError = computed(() => replay.value.error);
 const lastMove = computed(() => cursor.value ? activeBranch.value.moves[cursor.value - 1]?.usi ?? "" : "");
 const turnLabel = computed(() => currentSfen.value.split(" ")[1] === "w" ? "後手番" : "先手番");
 const validation = computed(() => validateOpeningBook(book));
-const hasCurrentSavedDraft = computed(() => Boolean(draftLibrary.value.books[openingBookDraftKey(book)]));
 const savedClassificationNames = computed(() => {
   const names = new Map<string, string>();
   const savedBooks = Object.values(draftLibrary.value.books) as any[];
@@ -319,8 +332,13 @@ const existingDefinitionGroups = computed(() => {
     });
     groups.get(groupId)?.items.push({ key: `${kind}:${id}`, label: saved?.label ?? label ?? id, saved: Boolean(saved) });
   };
-  for (const strategy of strategies) add("strategy", strategy.id, strategy.label, strategy, draftLibrary.value.books[`strategy:${strategy.id}`]);
-  for (const castle of castles) add("castle", castle.id, castle.label, castle, draftLibrary.value.books[`castle:${castle.id}`]);
+  const deletedKeys = new Set(draftLibrary.value.deletedKeys ?? []);
+  for (const strategy of strategies) {
+    if (!deletedKeys.has(`strategy:${strategy.id}`)) add("strategy", strategy.id, strategy.label, strategy, draftLibrary.value.books[`strategy:${strategy.id}`]);
+  }
+  for (const castle of castles) {
+    if (!deletedKeys.has(`castle:${castle.id}`)) add("castle", castle.id, castle.label, castle, draftLibrary.value.books[`castle:${castle.id}`]);
+  }
   for (const [key, saved] of Object.entries(draftLibrary.value.books) as [string, any][]) {
     const [kind, id] = key.split(":");
     const definitions = kind === "castle" ? castles : strategies;
@@ -364,7 +382,7 @@ function definitionForEditor(definition: any, kind: string) {
 function normalize(value: any) {
   const definition = (value?.kind === "castle" ? castles : strategies).find((item: any) => item.id === value?.id);
   const fallback = createOpeningBookDraft({ definition: definitionForEditor(definition, value?.kind ?? "strategy"), kind: value?.kind ?? "strategy", initialSfen: STANDARD_SFEN });
-  return { ...fallback, ...value, classification: { ...fallback.classification, ...value?.classification, contexts: Array.isArray(value?.classification?.contexts) ? value.classification.contexts : fallback.classification.contexts }, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], completionVariants: Array.isArray(value?.completionVariants) ? value.completionVariants : fallback.completionVariants, movePositionPrerequisites: value?.movePositionPrerequisites && typeof value.movePositionPrerequisites === "object" ? value.movePositionPrerequisites : {}, sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
+  return { ...fallback, ...value, classification: { ...fallback.classification, ...value?.classification, contexts: Array.isArray(value?.classification?.contexts) ? value.classification.contexts : fallback.classification.contexts }, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], completionVariants: Array.isArray(value?.completionVariants) ? value.completionVariants : fallback.completionVariants, movePositionPrerequisites: normalizeMovePositionPrerequisites(value?.movePositionPrerequisites), sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
 }
 function announce(message: string) { toast.value = message; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.value = "", 2600); }
 function replaceBook(next: any) { Object.keys(book).forEach((key) => delete book[key]); Object.assign(book, normalize(next)); activeBranchIndex.value = 0; cursor.value = book.branches[0]?.moves?.length ?? 0; clearPreview(); }
@@ -501,19 +519,29 @@ function finishGuideMoveEdit(index: number) {
   }
   guideMoveBeforeEdit.value = null;
 }
-function moveConditions(index: number) { return book.movePositionPrerequisites[book.guideMoves[index]] ?? []; }
-function addMoveCondition(index: number) {
+function moveConditionGroups(index: number) { return book.movePositionPrerequisites[book.guideMoves[index]] ?? []; }
+function defaultMoveCondition() { return { square: "8e", owner: "opponent", kind: "P" }; }
+function addMoveConditionGroup(index: number) {
   const move = book.guideMoves[index];
   if (!move) return announce("先に案内手を入力してください。");
   if (!book.movePositionPrerequisites[move]) book.movePositionPrerequisites[move] = [];
-  book.movePositionPrerequisites[move].push({ square: "8e", owner: "opponent", kind: "P" });
+  book.movePositionPrerequisites[move].push({ alternatives: [defaultMoveCondition()] });
 }
-function removeMoveCondition(index: number, conditionIndex: number) {
+function addMoveConditionAlternative(index: number, groupIndex: number) {
+  moveConditionGroups(index)[groupIndex]?.alternatives.push(defaultMoveCondition());
+}
+function removeMoveConditionGroup(index: number, groupIndex: number) {
   const move = book.guideMoves[index];
-  const conditions = book.movePositionPrerequisites[move];
-  if (!conditions) return;
-  conditions.splice(conditionIndex, 1);
-  if (!conditions.length) delete book.movePositionPrerequisites[move];
+  const groups = book.movePositionPrerequisites[move];
+  if (!groups) return;
+  groups.splice(groupIndex, 1);
+  if (!groups.length) delete book.movePositionPrerequisites[move];
+}
+function removeMoveConditionAlternative(index: number, groupIndex: number, alternativeIndex: number) {
+  const group = moveConditionGroups(index)[groupIndex];
+  if (!group) return;
+  group.alternatives.splice(alternativeIndex, 1);
+  if (!group.alternatives.length) removeMoveConditionGroup(index, groupIndex);
 }
 function strategyLabel(strategyId: string) { return strategies.find((strategy: any) => strategy.id === strategyId)?.label ?? "不明な戦法"; }
 function addCompletionChoice() {
@@ -566,25 +594,18 @@ function saveDraft() {
   localStorage.setItem(OPENING_BOOK_STORAGE_KEY, serializeOpeningBook(book));
   announce(`${book.label}だけをこのブラウザに保存しました。`);
 }
-function deleteDraft() {
-  const key = openingBookDraftKey(book);
-  if (!draftLibrary.value.books[key]) return;
-  if (!window.confirm(`保存した「${book.label}」を削除しますか？\n内蔵定跡の場合は元の内容へ戻ります。`)) return;
-  draftLibrary.value = deleteOpeningBookFromLibrary(draftLibrary.value, key);
+function deleteSelectedOpening() {
+  const key = selectedDefinitionKey.value;
+  if (key === "new") return;
+  if (!window.confirm(`既存データから「${book.label}」を削除しますか？\nこのブラウザの定跡一覧に表示されなくなります。`)) return;
+  draftLibrary.value = deleteOpeningDefinitionFromLibrary(draftLibrary.value, key);
   localStorage.setItem(OPENING_BOOK_LIBRARY_STORAGE_KEY, serializeOpeningBookLibrary(draftLibrary.value));
   const legacy = safeParse(localStorage.getItem(OPENING_BOOK_STORAGE_KEY) ?? "");
   if (legacy && openingBookDraftKey(legacy) === key) localStorage.removeItem(OPENING_BOOK_STORAGE_KEY);
-  const [kind, id] = key.split(":");
-  const definition = (kind === "castle" ? castles : strategies).find((item: any) => item.id === id);
-  if (definition) {
-    replaceBook(createOpeningBookDraft({ definition: definitionForEditor(definition, kind), kind, initialSfen: STANDARD_SFEN }));
-    selectedDefinitionKey.value = key;
-    announce(`${book.label}の保存内容を削除し、内蔵定跡へ戻しました。`);
-  } else {
-    replaceBook(createOpeningBookDraft({ initialSfen: STANDARD_SFEN }));
-    selectedDefinitionKey.value = "new";
-    announce("保存した新規定跡を削除しました。");
-  }
+  const deletedLabel = book.label;
+  replaceBook(createOpeningBookDraft({ initialSfen: STANDARD_SFEN }));
+  selectedDefinitionKey.value = "new";
+  announce(`${deletedLabel}を既存データから削除しました。`);
 }
 function exportJson() {
   if (!validation.value.valid) return announce("赤い検査項目を修正してから書き出してください。");
