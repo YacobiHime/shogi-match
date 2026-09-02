@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { STANDARD_SFEN } from "../game-state";
-import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningBookFromLibrary, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "./opening-book-editor.mjs";
+import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningBookFromLibrary, deleteOpeningDefinitionFromLibrary, normalizeMovePositionPrerequisites, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "./opening-book-editor.mjs";
 
 function draft() {
   return createOpeningBookDraft({ definition: { id: "sample", label: "サンプル", classificationName: "居飛車/基本戦法", family: "ibisha", rookStyle: "static", blackMoves: ["7g7f"] }, initialSfen: STANDARD_SFEN });
@@ -34,6 +34,14 @@ describe("opening book editor", () => {
 
   it("round-trips versioned JSON", () => {
     expect(parseOpeningBook(serializeOpeningBook(draft()))).toMatchObject({ schemaVersion: 1, id: "sample" });
+  });
+
+  it("allows guide moves without recording opponent replies", () => {
+    const book = draft();
+    book.sources = [{ title: "参考", url: "https://example.com", checkedAt: "2026-09-02" }];
+    expect(book.branches[0].moves).toEqual([]);
+    expect(validateOpeningBook(book).errors).toEqual([]);
+    expect(validateOpeningBook(book).warnings).not.toContain(expect.stringContaining("相手の応手"));
   });
 
   it("stores strategy and castle classifications", () => {
@@ -70,6 +78,19 @@ describe("opening book editor", () => {
     library = deleteOpeningBookFromLibrary(library, "strategy:other");
     expect(Object.keys(library.books)).toEqual(["strategy:sample"]);
     expect(library.activeKey).toBe("");
+    expect(library.deletedKeys).toEqual([]);
+  });
+
+  it("marks a selected built-in opening as deleted", () => {
+    let library = saveOpeningBookToLibrary(createOpeningBookLibrary(), draft());
+    library = deleteOpeningDefinitionFromLibrary(library, "strategy:sample");
+    expect(library.books["strategy:sample"]).toBeUndefined();
+    expect(library.deletedKeys).toEqual(["strategy:sample"]);
+    const restored = parseOpeningBookLibrary(serializeOpeningBookLibrary(library));
+    expect(restored.deletedKeys).toEqual(["strategy:sample"]);
+
+    library = saveOpeningBookToLibrary(library, draft());
+    expect(library.deletedKeys).toEqual([]);
   });
 
   it("stores and validates completion choices", () => {
@@ -100,6 +121,32 @@ describe("opening book editor", () => {
     expect(validateOpeningBook(book).errors).toEqual([]);
     book.movePositionPrerequisites["6i7h"][0].square = "8五";
     expect(validateOpeningBook(book).errors).toContain("案内手「6i7h」の条件1: マスが不正です。");
+  });
+
+  it("stores OR alternatives inside AND condition groups", () => {
+    const book = draft();
+    book.guideMoves.push("6i7h");
+    book.movePositionPrerequisites = {
+      "6i7h": [
+        { alternatives: [{ square: "8b", owner: "opponent", kind: "R" }] },
+        { alternatives: [
+          { square: "8d", owner: "opponent", kind: "P" },
+          { square: "8e", owner: "opponent", kind: "P" },
+        ] },
+      ],
+    };
+    book.sources = [{ title: "参考", url: "https://example.com", checkedAt: "2026-09-02" }];
+    expect(validateOpeningBook(book).errors).toEqual([]);
+    book.movePositionPrerequisites["6i7h"][1].alternatives[1].square = "8五";
+    expect(validateOpeningBook(book).errors).toContain("案内手「6i7h」の条件2のOR候補2: マスが不正です。");
+  });
+
+  it("converts legacy flat conditions into single-alternative groups", () => {
+    expect(normalizeMovePositionPrerequisites({
+      "6i7h": [{ square: "8b", owner: "opponent", kind: "R" }],
+    })).toEqual({
+      "6i7h": [{ alternatives: [{ square: "8b", owner: "opponent", kind: "R" }] }],
+    });
   });
 
   it("imports and validates castle completion variants", () => {

@@ -7,6 +7,7 @@ import {
   inferOpeningRookStyle,
   isOpeningGuideExpired,
   isOpeningPlanComplete,
+  matchesMovePositionPrerequisites,
   mirrorUsiMove,
   nextOpeningPlanMove,
   openingDefinitionRookStyle,
@@ -28,6 +29,23 @@ import {
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from "./opening-guide.mjs";
+
+it("matches AND groups containing OR position alternatives", () => {
+  const pieces = new Map([
+    ["8b", { color: "white", kind: "R" }],
+    ["8e", { color: "white", kind: "P" }],
+  ]);
+  const conditions = [
+    { alternatives: [{ square: "8b", owner: "opponent", kind: "R" }] },
+    { alternatives: [
+      { square: "8d", owner: "opponent", kind: "P" },
+      { square: "8e", owner: "opponent", kind: "P" },
+    ] },
+  ];
+  expect(matchesMovePositionPrerequisites(conditions, { pieceAt: (square) => pieces.get(square) })).toBe(true);
+  pieces.delete("8e");
+  expect(matchesMovePositionPrerequisites(conditions, { pieceAt: (square) => pieces.get(square) })).toBe(false);
+});
 import { OPENING_EXPLANATIONS, openingExplanation } from "./opening-explanations.mjs";
 
 function withTurn(sfen, color) {
