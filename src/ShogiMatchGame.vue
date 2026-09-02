@@ -1053,7 +1053,7 @@ const strategyCompletionPrompt = computed(() => (
   ?? "次に目指す戦法を選んでね"
 ));
 const OPENING_STRATEGY_GROUPS = [
-  { id: "ibisha", label: "居飛車／単独作戦" },
+  { id: "ibisha", label: "基本戦法" },
   { id: "aigakari", label: "相居飛車／相掛かり" },
   { id: "yokofudori", label: "相居飛車／横歩取り" },
   { id: "yagura", label: "相居飛車／矢倉" },
@@ -1256,7 +1256,7 @@ const openingGuideStatus = computed(() => {
   }
   if (openingCanonicalFollowupCandidates.value.length) {
     return openingCanonicalFollowupCandidates.value[0]?.kind === "silver-advance"
-      ? "原始棒銀が完成したね！AI候補に加え、1五銀・3五銀の定跡手から歩交換まで案内するよ。"
+      ? "棒銀が完成したね！AI候補に加え、1五銀・3五銀の定跡手から歩交換まで案内するよ。"
       : "AI候補に加え、定跡手で飛車先の歩交換まで案内するよ。";
   }
   if (openingFollowupCandidates.value.length) {

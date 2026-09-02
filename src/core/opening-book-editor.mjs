@@ -2,6 +2,50 @@ import { Position } from "tsshogi";
 
 export const OPENING_BOOK_SCHEMA_VERSION = 1;
 export const OPENING_BOOK_STORAGE_KEY = "shogi-match-opening-book-draft-v1";
+export const OPENING_BOOK_LIBRARY_STORAGE_KEY = "shogi-match-opening-book-library-v1";
+
+export function openingBookDraftKey(book) {
+  const kind = ["strategy", "castle"].includes(book?.kind) ? book.kind : "strategy";
+  return `${kind}:${String(book?.id ?? "new-opening")}`;
+}
+
+export function createOpeningBookLibrary() {
+  return { schemaVersion: OPENING_BOOK_SCHEMA_VERSION, activeKey: "", books: {} };
+}
+
+export function parseOpeningBookLibrary(text) {
+  if (!text) return createOpeningBookLibrary();
+  const value = JSON.parse(text);
+  if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("下書き一覧が不正です。");
+  return {
+    schemaVersion: OPENING_BOOK_SCHEMA_VERSION,
+    activeKey: typeof value.activeKey === "string" ? value.activeKey : "",
+    books: value.books && !Array.isArray(value.books) && typeof value.books === "object" ? value.books : {},
+  };
+}
+
+export function saveOpeningBookToLibrary(library, book) {
+  const key = openingBookDraftKey(book);
+  return {
+    schemaVersion: OPENING_BOOK_SCHEMA_VERSION,
+    activeKey: key,
+    books: { ...(library?.books ?? {}), [key]: JSON.parse(serializeOpeningBook(book)) },
+  };
+}
+
+export function deleteOpeningBookFromLibrary(library, key) {
+  const books = { ...(library?.books ?? {}) };
+  delete books[key];
+  return {
+    schemaVersion: OPENING_BOOK_SCHEMA_VERSION,
+    activeKey: library?.activeKey === key ? "" : library?.activeKey ?? "",
+    books,
+  };
+}
+
+export function serializeOpeningBookLibrary(library) {
+  return `${JSON.stringify({ ...createOpeningBookLibrary(), ...library }, null, 2)}\n`;
+}
 
 export function createOpeningBookDraft({ definition, kind = "strategy", side = "black", initialSfen }) {
   const now = new Date().toISOString().slice(0, 10);
@@ -11,8 +55,18 @@ export function createOpeningBookDraft({ definition, kind = "strategy", side = "
     label: definition?.label ?? "新しい定跡",
     kind,
     side,
+    classification: {
+      family: definition?.family ?? "",
+      rookStyle: definition?.rookStyle ?? "",
+      menuGroup: definition?.menuGroup ?? "",
+      contexts: [...(definition?.contexts ?? [])],
+    },
     initialSfen,
     guideMoves: [...(definition?.blackMoves ?? [])],
+    completionVariants: (definition?.completionVariants?.length
+      ? definition.completionVariants
+      : definition?.completionSquares?.length ? [definition.completionSquares] : []
+    ).map((variant) => variant.map(([square, kind]) => [square, kind])),
     movePositionPrerequisites: Object.fromEntries(Object.entries(
       definition?.movePositionPrerequisites ?? {},
     ).map(([move, conditions]) => [move, conditions.map((condition) => ({ ...condition }))])),
@@ -56,6 +110,12 @@ export function validateOpeningBook(book) {
   if (!String(book?.label ?? "").trim()) errors.push("名称を入力してください。");
   if (!["strategy", "castle"].includes(book?.kind)) errors.push("種類は戦法か囲いにしてください。");
   if (!["black", "white", "both"].includes(book?.side)) errors.push("対象手番が不正です。");
+  if (!String(book?.classification?.family ?? "").trim()) errors.push("分類の系統を選択してください。");
+  if (!["static", "ranging", "both"].includes(book?.classification?.rookStyle)) errors.push("居飛車／振り飛車分類を選択してください。");
+  if (book?.kind === "castle") {
+    if (!String(book?.classification?.menuGroup ?? "").trim()) errors.push("囲いの表示グループを選択してください。");
+    if (!Array.isArray(book?.classification?.contexts) || !book.classification.contexts.length) errors.push("囲いが対応する対局分類を1つ以上選択してください。");
+  }
   if (book?.completionChoices?.enabled) {
     if (book.kind !== "strategy") errors.push("完成後の派生選択は戦法だけに設定できます。");
     if (!String(book.completionChoices.prompt ?? "").trim()) errors.push("完成後の選択案内文を入力してください。");
@@ -74,6 +134,26 @@ export function validateOpeningBook(book) {
       if (!/^[1-9][a-i]$/.test(condition?.square ?? "")) errors.push(`${prefix}: マスが不正です。`);
       if (!["player", "opponent"].includes(condition?.owner)) errors.push(`${prefix}: 駒の所有者が不正です。`);
       if (!["P", "L", "N", "S", "G", "B", "R", "K"].includes(condition?.kind)) errors.push(`${prefix}: 駒種が不正です。`);
+    }
+  }
+  if (book?.kind === "castle") {
+    if (!Array.isArray(book?.completionVariants) || !book.completionVariants.length) {
+      errors.push("囲いの完成形を1つ以上登録してください。");
+    }
+    for (const [variantIndex, variant] of (book?.completionVariants ?? []).entries()) {
+      if (!Array.isArray(variant) || !variant.length) {
+        errors.push(`完成形${variantIndex + 1}: 必要な駒を1つ以上登録してください。`);
+        continue;
+      }
+      const seenSquares = new Set();
+      for (const [pieceIndex, piece] of variant.entries()) {
+        const [square, kind] = Array.isArray(piece) ? piece : [];
+        const prefix = `完成形${variantIndex + 1}の駒${pieceIndex + 1}`;
+        if (!/^[1-9][a-i]$/.test(square ?? "")) errors.push(`${prefix}: マスが不正です。`);
+        if (!["P", "L", "N", "S", "G", "B", "R", "K"].includes(kind)) errors.push(`${prefix}: 駒種が不正です。`);
+        if (seenSquares.has(square)) errors.push(`完成形${variantIndex + 1}: 同じマス「${square}」が重複しています。`);
+        seenSquares.add(square);
+      }
     }
   }
 

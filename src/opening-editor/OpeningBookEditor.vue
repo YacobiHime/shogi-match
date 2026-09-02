@@ -7,8 +7,10 @@
         <p>先後の応手を盤上で入力し、根拠と一緒に検証可能なJSONへ保存します。</p>
       </div>
       <div class="header-actions">
-        <button type="button" class="secondary" @click="saveDraft">下書き保存</button>
-        <button type="button" class="primary" @click="exportJson">JSONを書き出す</button>
+        <span class="draft-save-status">{{ currentDraftSaved ? "この定跡は保存済み" : "この定跡は未保存" }}</span>
+        <button type="button" class="secondary" @click="saveDraft">この定跡を保存</button>
+        <button type="button" class="danger" :disabled="!hasCurrentSavedDraft" @click="deleteDraft">保存した定跡を削除</button>
+        <button type="button" class="primary" @click="exportJson">この定跡をJSON保存</button>
         <label class="file-button">JSONを読み込む<input type="file" accept="application/json,.json" @change="importJson" /></label>
       </div>
     </header>
@@ -20,16 +22,50 @@
           <select v-model="selectedDefinitionKey" @change="loadDefinition">
             <option value="new">新規作成</option>
             <optgroup label="戦法">
-              <option v-for="item in strategies" :key="`strategy:${item.id}`" :value="`strategy:${item.id}`">{{ item.label }}</option>
+              <option v-for="item in strategies" :key="`strategy:${item.id}`" :value="`strategy:${item.id}`">{{ item.label }}{{ hasSavedDraft('strategy', item.id) ? '（保存済み）' : '' }}</option>
             </optgroup>
             <optgroup label="囲い">
-              <option v-for="item in castles" :key="`castle:${item.id}`" :value="`castle:${item.id}`">{{ item.label }}</option>
+              <option v-for="item in castles" :key="`castle:${item.id}`" :value="`castle:${item.id}`">{{ item.label }}{{ hasSavedDraft('castle', item.id) ? '（保存済み）' : '' }}</option>
+            </optgroup>
+            <optgroup v-if="customSavedDrafts.length" label="保存した新規定跡">
+              <option v-for="item in customSavedDrafts" :key="item.key" :value="item.key">{{ item.label }}（保存済み）</option>
             </optgroup>
           </select>
         </label>
         <div class="two-columns">
           <label>種類<select v-model="book.kind"><option value="strategy">戦法</option><option value="castle">囲い</option></select></label>
           <label>対象<select v-model="book.side"><option value="black">先手</option><option value="white">後手</option><option value="both">先後共通</option></select></label>
+        </div>
+        <div class="classification-settings">
+          <strong>分類</strong>
+          <label v-if="book.kind === 'strategy'">戦法メニューの分類
+            <select v-model="book.classification.family">
+              <option value="">選択してください</option>
+              <option v-for="option in strategyFamilyOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+            </select>
+          </label>
+          <label v-else>囲いの系統<input v-model.trim="book.classification.family" list="castle-family-options" placeholder="例: mino" /></label>
+          <datalist id="castle-family-options"><option v-for="family in castleFamilyOptions" :key="family" :value="family" /></datalist>
+          <label>飛車の分類
+            <select v-model="book.classification.rookStyle">
+              <option value="">選択してください</option>
+              <option value="static">居飛車</option>
+              <option value="ranging">振り飛車</option>
+              <option value="both">どちらでも使う</option>
+            </select>
+          </label>
+          <template v-if="book.kind === 'castle'">
+            <label>囲い一覧の表示グループ
+              <select v-model="book.classification.menuGroup">
+                <option value="">選択してください</option>
+                <option v-for="group in castleGroups" :key="group.id" :value="group.id">{{ group.label }}</option>
+              </select>
+            </label>
+            <fieldset class="context-options">
+              <legend>対応する対局分類（複数可）</legend>
+              <label v-for="context in castleContextOptions" :key="context.id" class="check-label"><input v-model="book.classification.contexts" type="checkbox" :value="context.id" /> {{ context.label }}</label>
+            </fieldset>
+          </template>
         </div>
         <label>ID<input v-model.trim="book.id" pattern="[a-z0-9-]+" /></label>
         <label>名称<input v-model.trim="book.label" /></label>
@@ -56,6 +92,30 @@
               <button type="button" :disabled="!completionChoiceToAdd" @click="addCompletionChoice">追加</button>
             </div>
           </template>
+        </div>
+        <div v-if="book.kind === 'castle'" class="castle-completion-settings">
+          <div class="castle-completion-heading">
+            <div><strong>囲いの完成形</strong><small>登録した駒がすべて揃うと完成。複数形はOR判定です。</small></div>
+            <button type="button" @click="addCompletionVariant">完成形 ＋</button>
+          </div>
+          <section v-for="(variant, variantIndex) in book.completionVariants" :key="variantIndex" class="completion-variant">
+            <div class="completion-variant-heading">
+              <strong>完成形 {{ variantIndex + 1 }}</strong>
+              <button type="button" class="danger" @click="removeCompletionVariant(variantIndex)">完成形を削除</button>
+            </div>
+            <div v-for="(piece, pieceIndex) in variant" :key="pieceIndex" class="completion-piece-row">
+              <select v-model="piece[0]" :aria-label="`完成形${variantIndex + 1} 駒${pieceIndex + 1}のマス`">
+                <option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option>
+              </select>
+              <span>に</span>
+              <select v-model="piece[1]" :aria-label="`完成形${variantIndex + 1} 駒${pieceIndex + 1}の駒種`">
+                <option v-for="pieceOption in conditionPieceOptions" :key="pieceOption.value" :value="pieceOption.value">{{ pieceOption.label }}</option>
+              </select>
+              <button type="button" class="icon danger" :aria-label="`完成形${variantIndex + 1}の駒${pieceIndex + 1}を削除`" @click="removeCompletionPiece(variantIndex, pieceIndex)">×</button>
+            </div>
+            <button type="button" class="completion-piece-add" @click="addCompletionPiece(variantIndex)">必要な駒 ＋</button>
+          </section>
+          <p v-if="!book.completionVariants.length" class="empty">「完成形 ＋」から囲いの完成条件を追加してください。</p>
         </div>
       </aside>
 
@@ -169,16 +229,35 @@
 import { computed, reactive, ref } from "vue";
 import ShogiMatchBoard from "../ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "../game-state";
-import { OPENING_CASTLES, OPENING_STRATEGIES } from "../core/opening-guide.mjs";
-import { createOpeningBookDraft, OPENING_BOOK_STORAGE_KEY, parseOpeningBook, replayOpeningBranch, serializeOpeningBook, validateOpeningBook } from "../core/opening-book-editor.mjs";
+import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
+import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningBookFromLibrary, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
 import { formatHintMove } from "../core/match-assists.mjs";
 
 const strategies = OPENING_STRATEGIES;
 const castles = OPENING_CASTLES;
+const castleGroups = OPENING_CASTLE_GROUPS;
+const strategyFamilyOptions = [
+  { id: "ibisha", label: "基本戦法" }, { id: "aigakari", label: "相居飛車／相掛かり" },
+  { id: "yokofudori", label: "相居飛車／横歩取り" }, { id: "yagura", label: "相居飛車／矢倉" },
+  { id: "kakugawari", label: "相居飛車／角換わり" }, { id: "gangi", label: "相居飛車／雁木" },
+  { id: "anti-ranging", label: "対抗型／居飛車側" }, { id: "shiken", label: "四間飛車" },
+  { id: "sangen", label: "三間飛車" }, { id: "nakabisha", label: "中飛車" },
+  { id: "mukai", label: "向かい飛車" }, { id: "special", label: "奇襲・特殊戦法" },
+];
+const castleContextOptions = [
+  { id: "aibisha", label: "相居飛車" },
+  { id: "anti-ranging-static", label: "対抗型・居飛車側" },
+  { id: "anti-static-ranging", label: "対抗型・振り飛車側" },
+  { id: "double-ranging", label: "相振り飛車" },
+];
+const castleFamilyOptions = [...new Set(castles.map((castle: any) => castle.family).filter(Boolean))];
+const storedLibrary = safeParseLibrary(localStorage.getItem(OPENING_BOOK_LIBRARY_STORAGE_KEY));
 const stored = localStorage.getItem(OPENING_BOOK_STORAGE_KEY);
-const initial = stored ? safeParse(stored) : null;
+const legacyInitial = stored ? safeParse(stored) : null;
+const initial = storedLibrary.activeKey ? storedLibrary.books[storedLibrary.activeKey] ?? legacyInitial : legacyInitial;
 const book = reactive<any>(normalize(initial ?? createOpeningBookDraft({ initialSfen: STANDARD_SFEN })));
-const selectedDefinitionKey = ref("new");
+const selectedDefinitionKey = ref(initial && (storedLibrary.books[openingBookDraftKey(initial)] || [...strategies, ...castles].some((item: any) => item.id === initial.id)) ? openingBookDraftKey(initial) : "new");
+const draftLibrary = ref<any>(storedLibrary);
 const activeBranchIndex = ref(0);
 const cursor = ref(book.branches?.[0]?.moves?.length ?? 0);
 const toast = ref("");
@@ -206,6 +285,18 @@ const replayError = computed(() => replay.value.error);
 const lastMove = computed(() => cursor.value ? activeBranch.value.moves[cursor.value - 1]?.usi ?? "" : "");
 const turnLabel = computed(() => currentSfen.value.split(" ")[1] === "w" ? "後手番" : "先手番");
 const validation = computed(() => validateOpeningBook(book));
+const hasCurrentSavedDraft = computed(() => Boolean(draftLibrary.value.books[openingBookDraftKey(book)]));
+const customSavedDrafts = computed(() => Object.entries(draftLibrary.value.books).flatMap(([key, value]: [string, any]) => {
+  const [kind, id] = key.split(":");
+  const definitions = kind === "castle" ? castles : strategies;
+  return definitions.some((item: any) => item.id === id) ? [] : [{ key, label: value?.label ?? id }];
+}));
+const currentDraftSaved = computed(() => {
+  const saved = draftLibrary.value.books[openingBookDraftKey(book)];
+  if (!saved) return false;
+  const withoutTimestamp = (value: any) => { const copy = { ...value }; delete copy.updatedAt; return copy; };
+  return JSON.stringify(withoutTimestamp(saved)) === JSON.stringify(withoutTimestamp(book));
+});
 const availableCompletionStrategies = computed(() => strategies.filter((strategy: any) => (
   strategy.id !== book.id && !book.completionChoices.strategyIds.includes(strategy.id)
 )));
@@ -225,9 +316,14 @@ const canInsertNextGuideMove = computed(() => {
 });
 
 function safeParse(text: string) { try { return parseOpeningBook(text); } catch { return null; } }
+function safeParseLibrary(text: string | null) { try { return parseOpeningBookLibrary(text ?? ""); } catch { return createOpeningBookLibrary(); } }
+function definitionForEditor(definition: any, kind: string) {
+  return definition ? { ...definition, rookStyle: openingDefinitionRookStyle(definition.id, kind) ?? "both" } : definition;
+}
 function normalize(value: any) {
-  const fallback = createOpeningBookDraft({ initialSfen: STANDARD_SFEN });
-  return { ...fallback, ...value, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], movePositionPrerequisites: value?.movePositionPrerequisites && typeof value.movePositionPrerequisites === "object" ? value.movePositionPrerequisites : {}, sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
+  const definition = (value?.kind === "castle" ? castles : strategies).find((item: any) => item.id === value?.id);
+  const fallback = createOpeningBookDraft({ definition: definitionForEditor(definition, value?.kind ?? "strategy"), kind: value?.kind ?? "strategy", initialSfen: STANDARD_SFEN });
+  return { ...fallback, ...value, classification: { ...fallback.classification, ...value?.classification, contexts: Array.isArray(value?.classification?.contexts) ? value.classification.contexts : fallback.classification.contexts }, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], completionVariants: Array.isArray(value?.completionVariants) ? value.completionVariants : fallback.completionVariants, movePositionPrerequisites: value?.movePositionPrerequisites && typeof value.movePositionPrerequisites === "object" ? value.movePositionPrerequisites : {}, sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
 }
 function announce(message: string) { toast.value = message; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.value = "", 2600); }
 function replaceBook(next: any) { Object.keys(book).forEach((key) => delete book[key]); Object.assign(book, normalize(next)); activeBranchIndex.value = 0; cursor.value = book.branches[0]?.moves?.length ?? 0; clearPreview(); }
@@ -235,8 +331,11 @@ function loadDefinition() {
   if (selectedDefinitionKey.value === "new") { replaceBook(createOpeningBookDraft({ initialSfen: STANDARD_SFEN })); return; }
   const [kind, id] = selectedDefinitionKey.value.split(":");
   const definition = (kind === "castle" ? castles : strategies).find((item: any) => item.id === id);
-  replaceBook(createOpeningBookDraft({ definition, kind, initialSfen: STANDARD_SFEN }));
-  announce(`${definition.label}の現行案内手を取り込みました。`);
+  const saved = draftLibrary.value.books[selectedDefinitionKey.value];
+  const base = createOpeningBookDraft({ definition: definitionForEditor(definition, kind), kind, initialSfen: STANDARD_SFEN });
+  replaceBook(saved ? { ...base, ...saved, classification: { ...base.classification, ...saved.classification } } : base);
+  const label = saved?.label ?? definition?.label ?? id;
+  announce(saved ? `${label}の保存済み下書きを読み込みました。` : `${label}の現行案内手を取り込みました。`);
 }
 function guideSide() { return book.side === "white" ? "w" : "b"; }
 function initialTurn() { return String(book.initialSfen ?? "").trim().split(/\s+/)[1] === "w" ? "w" : "b"; }
@@ -382,6 +481,10 @@ function addCompletionChoice() {
 function removeCompletionChoice(strategyId: string) {
   book.completionChoices.strategyIds = book.completionChoices.strategyIds.filter((id: string) => id !== strategyId);
 }
+function addCompletionVariant() { book.completionVariants.push([["5i", "K"]]); }
+function removeCompletionVariant(variantIndex: number) { book.completionVariants.splice(variantIndex, 1); }
+function addCompletionPiece(variantIndex: number) { book.completionVariants[variantIndex].push(["5i", "K"]); }
+function removeCompletionPiece(variantIndex: number, pieceIndex: number) { book.completionVariants[variantIndex].splice(pieceIndex, 1); }
 function removeGuideMove(index: number) { clearPreview(); delete book.movePositionPrerequisites[book.guideMoves[index]]; book.guideMoves.splice(index, 1); }
 function moveGuideMove(index: number, offset: number) {
   clearPreview();
@@ -412,7 +515,34 @@ function branchHere() {
 }
 function removeBranch() { if (book.branches.length > 1) { book.branches.splice(activeBranchIndex.value, 1); activeBranchIndex.value = 0; cursor.value = activeBranch.value.moves.length; } }
 function addSource() { book.sources.push({ title: "", url: "", checkedAt: new Date().toISOString().slice(0, 10) }); }
-function saveDraft() { localStorage.setItem(OPENING_BOOK_STORAGE_KEY, serializeOpeningBook(book)); announce("このブラウザに下書きを保存しました。"); }
+function hasSavedDraft(kind: string, id: string) { return Boolean(draftLibrary.value.books[`${kind}:${id}`]); }
+function saveDraft() {
+  draftLibrary.value = saveOpeningBookToLibrary(draftLibrary.value, book);
+  localStorage.setItem(OPENING_BOOK_LIBRARY_STORAGE_KEY, serializeOpeningBookLibrary(draftLibrary.value));
+  // 旧版で保存した下書きも引き続き復元できるよう、現在の1件を互換キーにも残す。
+  localStorage.setItem(OPENING_BOOK_STORAGE_KEY, serializeOpeningBook(book));
+  announce(`${book.label}だけをこのブラウザに保存しました。`);
+}
+function deleteDraft() {
+  const key = openingBookDraftKey(book);
+  if (!draftLibrary.value.books[key]) return;
+  if (!window.confirm(`保存した「${book.label}」を削除しますか？\n内蔵定跡の場合は元の内容へ戻ります。`)) return;
+  draftLibrary.value = deleteOpeningBookFromLibrary(draftLibrary.value, key);
+  localStorage.setItem(OPENING_BOOK_LIBRARY_STORAGE_KEY, serializeOpeningBookLibrary(draftLibrary.value));
+  const legacy = safeParse(localStorage.getItem(OPENING_BOOK_STORAGE_KEY) ?? "");
+  if (legacy && openingBookDraftKey(legacy) === key) localStorage.removeItem(OPENING_BOOK_STORAGE_KEY);
+  const [kind, id] = key.split(":");
+  const definition = (kind === "castle" ? castles : strategies).find((item: any) => item.id === id);
+  if (definition) {
+    replaceBook(createOpeningBookDraft({ definition: definitionForEditor(definition, kind), kind, initialSfen: STANDARD_SFEN }));
+    selectedDefinitionKey.value = key;
+    announce(`${book.label}の保存内容を削除し、内蔵定跡へ戻しました。`);
+  } else {
+    replaceBook(createOpeningBookDraft({ initialSfen: STANDARD_SFEN }));
+    selectedDefinitionKey.value = "new";
+    announce("保存した新規定跡を削除しました。");
+  }
+}
 function exportJson() {
   if (!validation.value.valid) return announce("赤い検査項目を修正してから書き出してください。");
   const blob = new Blob([serializeOpeningBook(book)], { type: "application/json" });
