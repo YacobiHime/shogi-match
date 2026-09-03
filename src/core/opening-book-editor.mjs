@@ -207,16 +207,16 @@ export function validateOpeningBook(book) {
   if (!(book?.branches?.length > 0)) errors.push("分岐を1つ以上作成してください。");
 
   const validSources = (book?.sources ?? []).filter((source) => source?.title || source?.url);
-  if (!validSources.length) errors.push("Wikipedia等で確認した出典を1件以上登録してください。");
   for (const [index, source] of validSources.entries()) {
-    if (!String(source.title ?? "").trim()) errors.push(`出典${index + 1}: ページ名が必要です。`);
-    try {
-      const url = new URL(source.url);
-      if (url.protocol !== "https:") throw new Error();
-    } catch {
-      errors.push(`出典${index + 1}: HTTPSのURLを入力してください。`);
+    if (String(source.url ?? "").trim()) {
+      try {
+        const url = new URL(source.url);
+        if (url.protocol !== "https:") throw new Error();
+      } catch {
+        errors.push(`出典${index + 1}: HTTPSのURLを入力してください。`);
+      }
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(source.checkedAt ?? "")) errors.push(`出典${index + 1}: 確認日はYYYY-MM-DDで入力してください。`);
+    if (source.checkedAt && !/^\d{4}-\d{2}-\d{2}$/.test(source.checkedAt)) errors.push(`出典${index + 1}: 確認日はYYYY-MM-DDで入力してください。`);
   }
   if (!book?.engineReview?.checked) warnings.push("エンジン安全確認が未実施です。実装へ反映する前に評価値も確認してください。");
   return { valid: errors.length === 0, errors, warnings };

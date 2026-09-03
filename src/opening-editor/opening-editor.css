@@ -62,6 +62,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .message.error { color: #8d241b; background: #fbe4e1; }
 .panel-heading { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
 .panel-heading button { min-height: 32px; padding: 4px 9px; }
+.panel-heading .section-note { margin: -9px 0 10px; color: #7d6c57; font-size: .74rem; line-height: 1.4; }
 .guide-sequence { margin: 2px 0 16px; padding: 12px; border: 1px solid #dfc99e; border-radius: 10px; background: #fff8e9; }
 .subheading { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
 .subheading h3 { margin: 0; font-size: .95rem; }
