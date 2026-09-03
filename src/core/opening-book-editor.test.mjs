@@ -44,6 +44,14 @@ describe("opening book editor", () => {
     expect(validateOpeningBook(book).warnings).not.toContain(expect.stringContaining("相手の応手"));
   });
 
+  it("allows saving an opening without a reference URL", () => {
+    const book = draft();
+    book.sources = [];
+    expect(validateOpeningBook(book).errors).toEqual([]);
+    book.sources = [{ title: "手元のメモ", url: "", checkedAt: "" }];
+    expect(validateOpeningBook(book).errors).toEqual([]);
+  });
+
   it("stores strategy and castle classifications", () => {
     expect(draft().classification).toEqual({ name: "居飛車/基本戦法", family: "ibisha", rookStyle: "static", menuGroup: "", contexts: [] });
     const castle = createOpeningBookDraft({

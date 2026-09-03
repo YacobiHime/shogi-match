@@ -225,7 +225,7 @@
 
     <section class="bottom-grid">
       <div class="panel">
-        <div class="panel-heading"><h2>出典</h2><button type="button" @click="addSource">＋ 追加</button></div>
+        <div class="panel-heading"><div><h2>出典（任意）</h2><p class="section-note">参照元がない場合は、何も入力せず保存できます。</p></div><button type="button" @click="addSource">＋ 追加</button></div>
         <div v-for="(source, index) in book.sources" :key="index" class="source-row">
           <input v-model.trim="source.title" placeholder="ページ名（例: 将棋の戦法一覧）" aria-label="出典ページ名" />
           <input v-model.trim="source.url" type="url" placeholder="https://..." aria-label="出典URL" />
@@ -243,7 +243,7 @@
         <p :class="validation.valid ? 'status ok' : 'status ng'">{{ validation.valid ? 'JSONとして保存できます' : `${validation.errors.length}件の修正が必要です` }}</p>
         <ul v-if="validation.errors.length" class="issues errors"><li v-for="item in validation.errors" :key="item">{{ item }}</li></ul>
         <ul v-if="validation.warnings.length" class="issues warnings"><li v-for="item in validation.warnings" :key="item">{{ item }}</li></ul>
-        <p v-if="!validation.errors.length && !validation.warnings.length" class="all-clear">合法手・手番・分岐・出典の検査を通過しました。</p>
+        <p v-if="!validation.errors.length && !validation.warnings.length" class="all-clear">合法手・手番・分岐の検査を通過しました。</p>
       </div>
     </section>
     <p v-if="toast" class="toast" role="status">{{ toast }}</p>
