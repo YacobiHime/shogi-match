@@ -115,12 +115,13 @@
       </aside>
 
       <section class="board-column">
-        <div class="turn-banner"><span>{{ turnLabel }}</span><strong>{{ cursor + 1 }}手目を入力</strong></div>
+        <div class="turn-banner"><span>{{ guideOnlyPreview ? `案内手${(selectedGuideIndex ?? 0) + 1}の確認` : turnLabel }}</span><strong>{{ guideOnlyPreview ? "相手の応手なしで表示中" : `${cursor + 1}手目を入力` }}</strong></div>
         <div class="board-wrap">
           <ShogiMatchBoard
-            :sfen="currentSfen"
-            :last-move="lastMove"
+            :sfen="boardSfen"
+            :last-move="boardLastMove"
             :candidates="previewCandidates"
+            :allow-move="!guideOnlyPreview"
             :flip="book.side === 'white'"
             asset-base-url="."
             layout="standard"
@@ -251,6 +252,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
+import { Position } from "tsshogi";
 import ShogiMatchBoard from "../ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "../game-state";
 import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
@@ -289,6 +291,7 @@ const cursor = ref(book.branches?.[0]?.moves?.length ?? 0);
 const toast = ref("");
 const selectedGuideIndex = ref<number | null>(null);
 const previewUsi = ref("");
+const guideOnlyPreview = ref(false);
 const completionChoiceToAdd = ref("");
 const guideMoveBeforeEdit = ref<{ index: number; value: string } | null>(null);
 const showGuideMoveAdder = ref(false);
@@ -313,6 +316,8 @@ const replay = computed(() => replayOpeningBranch(book, activeBranch.value, curs
 const currentSfen = computed(() => replay.value.position?.sfen ?? STANDARD_SFEN);
 const replayError = computed(() => replay.value.error);
 const lastMove = computed(() => cursor.value ? activeBranch.value.moves[cursor.value - 1]?.usi ?? "" : "");
+const boardSfen = computed(() => guideOnlyPreview.value && selectedGuideIndex.value !== null ? guidePreviewSfen(selectedGuideIndex.value) : currentSfen.value);
+const boardLastMove = computed(() => guideOnlyPreview.value ? "" : lastMove.value);
 const turnLabel = computed(() => currentSfen.value.split(" ")[1] === "w" ? "後手番" : "先手番");
 const validation = computed(() => validateOpeningBook(book));
 const savedClassificationNames = computed(() => {
@@ -375,9 +380,10 @@ const availableCompletionStrategies = computed(() => strategies.filter((strategy
   strategy.id !== book.id && !book.completionChoices.strategyIds.includes(strategy.id)
 )));
 const previewCandidates = computed(() => {
-  if (!previewUsi.value || replayError.value) return [];
-  const move = replay.value.position?.createMoveByUSI(previewUsi.value);
-  return move && replay.value.position?.isValidMove(move) ? [{ usi: previewUsi.value }] : [];
+  if (!previewUsi.value || (!guideOnlyPreview.value && replayError.value)) return [];
+  const position = guideOnlyPreview.value ? Position.newBySFEN(boardSfen.value) : replay.value.position;
+  const move = position?.createMoveByUSI(previewUsi.value);
+  return move && (guideOnlyPreview.value || position?.isValidMove(move)) ? [{ usi: previewUsi.value }] : [];
 });
 const nextGuideMove = computed(() => {
   const guideIndex = guideMoveIndexAtCursor();
@@ -439,6 +445,51 @@ function coordinateNotation(usi: string) {
   if (move) return `${square(move[1], move[2])}→${square(move[3], move[4])}${move[5] ? "（成）" : ""}`;
   return usi || "未入力";
 }
+function guidePreviewSfen(index: number) {
+  const parts = String(book.initialSfen || STANDARD_SFEN).trim().split(/\s+/);
+  const ranks = parts[0].split("/");
+  const board = new Map<string, string>();
+  ranks.forEach((rank: string, rankIndex: number) => {
+    let file = 9;
+    let promoted = false;
+    for (const symbol of rank) {
+      if (/[1-9]/.test(symbol)) file -= Number(symbol);
+      else if (symbol === "+") promoted = true;
+      else {
+        board.set(`${file}${String.fromCharCode(97 + rankIndex)}`, `${promoted ? "+" : ""}${symbol}`);
+        file -= 1;
+        promoted = false;
+      }
+    }
+  });
+  for (let moveIndex = 0; moveIndex < index; moveIndex += 1) {
+    const usi = String(book.guideMoves[moveIndex] ?? "");
+    const drop = usi.match(/^([PLNSGBR])\*([1-9][a-i])$/);
+    const move = usi.match(/^([1-9][a-i])([1-9][a-i])(\+)?$/);
+    if (drop) board.set(drop[2], guideSide() === "b" ? drop[1] : drop[1].toLowerCase());
+    else if (move) {
+      const piece = board.get(move[1]);
+      if (!piece) continue;
+      board.delete(move[1]);
+      board.set(move[2], `${move[3] && !piece.startsWith("+") ? "+" : ""}${piece}`);
+    }
+  }
+  const boardToken = Array.from({ length: 9 }, (_, rankIndex) => {
+    let row = "";
+    let empty = 0;
+    for (let file = 9; file >= 1; file -= 1) {
+      const piece = board.get(`${file}${String.fromCharCode(97 + rankIndex)}`);
+      if (!piece) empty += 1;
+      else {
+        if (empty) row += String(empty);
+        row += piece;
+        empty = 0;
+      }
+    }
+    return `${row}${empty || ""}`;
+  }).join("/");
+  return `${boardToken} ${guideSide()} ${parts[2] ?? "-"} ${parts[3] ?? "1"}`;
+}
 function guideJapaneseNotation(index: number) {
   const pieceNames: Record<string, string> = { P: "歩", L: "香", N: "桂", S: "銀", G: "金", B: "角", R: "飛", K: "玉" };
   const ranks = String(book.initialSfen ?? "").trim().split(/\s+/)[0]?.split("/") ?? [];
@@ -495,8 +546,9 @@ function formattedGuideMove(index: number) {
   if (branchIndex >= 0 && activeBranch.value.moves[branchIndex]?.usi === book.guideMoves[index]) return formattedBranchMove(branchIndex);
   return `${guideSide() === "b" ? "▲" : "△"}${guideJapaneseNotation(index)}`;
 }
-function clearPreview() { selectedGuideIndex.value = null; previewUsi.value = ""; }
+function clearPreview() { selectedGuideIndex.value = null; previewUsi.value = ""; guideOnlyPreview.value = false; }
 function previewBranchMove(index: number) {
+  guideOnlyPreview.value = false;
   cursor.value = index;
   selectedGuideIndex.value = isGuideSidePly(index) ? guideMoveIndexAtCursor() : null;
   previewUsi.value = activeBranch.value.moves[index]?.usi ?? "";
@@ -504,16 +556,12 @@ function previewBranchMove(index: number) {
 function previewGuideMove(index: number) {
   selectedGuideIndex.value = index;
   const branchIndex = branchIndexForGuideMove(index);
-  if (branchIndex >= 0 && activeBranch.value.moves[branchIndex]?.usi === book.guideMoves[index]) cursor.value = branchIndex;
-  else {
-    const nextIndex = guideMoveIndexAtCursor();
-    if (nextIndex !== index || !isGuideSidePly(cursor.value)) {
-      previewUsi.value = "";
-      return announce("この手の矢印を見るには、確認手順をこの案内手の直前まで入力してください。");
-    }
-  }
+  if (branchIndex >= 0 && activeBranch.value.moves[branchIndex]?.usi === book.guideMoves[index]) {
+    guideOnlyPreview.value = false;
+    cursor.value = branchIndex;
+  } else guideOnlyPreview.value = true;
   previewUsi.value = book.guideMoves[index] ?? "";
-  if (!previewCandidates.value.length) announce("この案内手は現在の局面では指せません。相手の応手を確認してください。");
+  if (!previewCandidates.value.length) announce("移動元に駒がないため、この案内手の矢印を表示できません。");
 }
 function moveRole(index: number) {
   if (!isGuideSidePly(index)) return { label: "相手の応手", className: "opponent" };
