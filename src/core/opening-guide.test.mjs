@@ -17,6 +17,7 @@ import {
   chooseSafeOpeningMove,
   openingFollowupCount,
   openingGuideScoreLossLimit,
+  openingGuideRoutineStatus,
   openingPlanBranchMessage,
   openingPlanCandidates,
   openingPlanInterruption,
@@ -27,6 +28,7 @@ import {
   shouldShowOpeningFollowup,
   OPENING_CASTLE_GROUPS,
   OPENING_CASTLES,
+  OPENING_GUIDE_ROUTINES,
   OPENING_STRATEGIES,
 } from "./opening-guide.mjs";
 
@@ -76,8 +78,8 @@ function sfenAfterMoves(moves, color = "black") {
 describe("opening guide", () => {
   it("keeps preparing Kakugawari until the opponent opens the bishop diagonal", () => {
     const strategy = OPENING_STRATEGIES.find(({ id }) => id === "kakugawari-koshikake-gin");
-    expect(strategy.blackMoves.slice(0, 4)).toEqual(["7g7f", "2g2f", "2f2e", "8h2b+"]);
-    expect(strategy.moveConditionBranches["8h2b+"]).toEqual(["2g2f", "2f2e"]);
+    expect(OPENING_GUIDE_ROUTINES.map(({ token }) => token)).toContain("@kakugawari");
+    expect(strategy.blackMoves.slice(0, 2)).toEqual(["7g7f", "@kakugawari"]);
 
     const waiting = createGameRecord();
     for (const usi of ["7g7f", "8c8d"]) expect(appendUsiMove(waiting, usi), usi).toBe(true);
@@ -115,6 +117,81 @@ describe("opening guide", () => {
       legalMoves: ["2b8h+", "8c8d"],
       currentSfen: whiteExchange.position.sfen,
     })?.usi).toBe("2b8h+");
+  });
+
+  it("plays remaining setup moves after an immediate exchange", () => {
+    const exchanged = createGameRecord();
+    const line = ["7g7f", "3c3d", "8h2b+", "3a2b", "7i8h"];
+    for (const usi of line) expect(appendUsiMove(exchanged, usi), usi).toBe(true);
+
+    expect(nextOpeningPlanMove({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves: ["7g7f", "8h2b+", "7i8h"],
+      moveHistory: line,
+      legalMoves: ["2g2f", "4g4f"],
+      currentSfen: exchanged.position.sfen,
+    })?.usi).toBe("2g2f");
+  });
+
+  it("skips waiting moves already played before the exchange", () => {
+    const exchanged = createGameRecord();
+    const line = [
+      "7g7f", "8c8d", "2g2f", "4a3b", "2f2e", "6a5b",
+      "6i7h", "3c3d", "8h2b+", "3a2b", "7i8h",
+    ];
+    for (const usi of line) expect(appendUsiMove(exchanged, usi), usi).toBe(true);
+
+    expect(nextOpeningPlanMove({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves: ["7g7f", "2g2f", "2f2e", "6i7h", "8h2b+", "7i8h"],
+      moveHistory: line,
+      legalMoves: ["4g4f"],
+      currentSfen: exchanged.position.sfen,
+    })?.usi).toBe("4g4f");
+  });
+
+  it("answers an eighth-file pawn push before exchanging bishops from 7g", () => {
+    const line = ["7g7f", "8c8d", "2g2f", "8d8e"];
+    const defended = createGameRecord();
+    for (const usi of line) expect(appendUsiMove(defended, usi), usi).toBe(true);
+    expect(openingGuideRoutineStatus({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves: ["7g7f", "2g2f"],
+      legalMoves: ["8h7g", "2f2e"],
+      currentSfen: defended.position.sfen,
+    }).candidates[0]?.usi).toBe("8h7g");
+
+    const prepared = createGameRecord();
+    const preparedLine = [...line, "8h7g", "4a3b"];
+    for (const usi of preparedLine) expect(appendUsiMove(prepared, usi), usi).toBe(true);
+    expect(nextOpeningPlanMove({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves: ["7g7f", "2g2f", "8h7g"],
+      legalMoves: ["7i8h", "2f2e"],
+      currentSfen: prepared.position.sfen,
+    })?.usi).toBe("7i8h");
+
+    expect(appendUsiMove(prepared, "7i8h")).toBe(true);
+    expect(appendUsiMove(prepared, "3c3d")).toBe(true);
+    expect(nextOpeningPlanMove({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves: ["7g7f", "2g2f", "8h7g", "7i8h"],
+      legalMoves: ["7g2b+", "2f2e"],
+      currentSfen: prepared.position.sfen,
+    })?.usi).toBe("7g2b+");
+  });
+
+  it("abandons the Kakugawari routine after all waiting moves are exhausted", () => {
+    const playedMoves = ["7g7f", "2g2f", "2f2e", "6i7h"];
+    expect(openingPlanInterruption({
+      strategyId: "kakugawari-koshikake-gin",
+      playedMoves,
+      currentSfen: sfenAfterMoves(playedMoves),
+    })).toMatchObject({
+      requiresReselection: true,
+      clearStrategy: true,
+      message: expect.stringContaining("角換わり手順はここで失敗"),
+    });
   });
 
   it("starts a fresh guidance window when a reachable plan is selected late", () => {
@@ -288,7 +365,7 @@ describe("opening guide", () => {
     expect(isOpeningPlanComplete({
       strategyId: "kakugawari-koshikake-gin",
       playedMoves: [
-        "7g7f", "2g2f", "2f2e", "8h2b+", "7i8h",
+        "7g7f", "2g2f", "2f2e", "6i7h", "8h2b+", "7i8h",
         "4g4f", "3i4h", "4h4g", "4g5f",
       ],
     })).toBe(true);

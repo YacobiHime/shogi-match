@@ -147,7 +147,10 @@
         <section class="guide-sequence" aria-labelledby="guide-sequence-title">
           <div class="subheading">
             <div><h3 id="guide-sequence-title">やこび姫の案内手</h3><p>先手基準。ここを編集すると、書き出す案内手が変わります。</p></div>
-            <button type="button" @click="toggleGuideMoveAdder">マスを選んで追加</button>
+            <div class="guide-add-actions">
+              <button type="button" @click="addGuideRoutine('@kakugawari')">角換わり手順 ＋</button>
+              <button type="button" @click="toggleGuideMoveAdder">マスを選んで追加</button>
+            </div>
           </div>
           <div v-if="showGuideMoveAdder" class="guide-move-adder">
             <strong>追加する手</strong>
@@ -178,22 +181,26 @@
                 @dragend="finishGuideMoveDrag"
               ><span>{{ index + 1 }}</span><small>⠿</small></button>
               <div class="guide-move-edit">
-                <button type="button" class="move-preview" :aria-label="`${formattedGuideMove(index)}を盤上に表示`" @click="previewGuideMove(index)">
+                <button v-if="guideRoutine(index)" type="button" class="move-preview routine" :aria-label="`${guideRoutine(index)?.label}の説明を表示`" @click="showGuideRoutineHelp(index)">
+                  <strong>{{ guideRoutine(index)?.label }}</strong><small>{{ guideRoutine(index)?.description }}</small>
+                </button>
+                <button v-else type="button" class="move-preview" :aria-label="`${formattedGuideMove(index)}を盤上に表示`" @click="previewGuideMove(index)">
                   <strong>{{ formattedGuideMove(index) }}</strong><small>盤に矢印を表示</small>
                 </button>
-                <div v-if="guideMoveParts(index)" class="guide-square-editor">
+                <div v-if="!guideRoutine(index) && guideMoveParts(index)" class="guide-square-editor">
                   <label>移動元<select :value="guideMoveParts(index)?.from" @change="updateGuideMoveSquare(index, 'from', $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
                   <span>→</span>
                   <label>移動先<select :value="guideMoveParts(index)?.to" @change="updateGuideMoveSquare(index, 'to', $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
                 </div>
               </div>
               <div class="guide-move-order" aria-label="案内手の操作">
-                <label class="promote-check" title="成る手にする"><input type="checkbox" :checked="guideMoveParts(index)?.promote" @change="updateGuideMovePromotion(index, $event)" /> 成</label>
+                <span v-if="guideRoutine(index)" class="routine-badge">定型</span>
+                <label v-else class="promote-check" title="成る手にする"><input type="checkbox" :checked="guideMoveParts(index)?.promote" @change="updateGuideMovePromotion(index, $event)" /> 成</label>
                 <button type="button" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">上</button>
                 <button type="button" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">下</button>
                 <button type="button" class="danger" aria-label="削除" @click="removeGuideMove(index)">削除</button>
               </div>
-              <details class="move-conditions">
+              <details v-if="!guideRoutine(index)" class="move-conditions">
                 <summary>
                   <span>案内条件</span>
                   <small>{{ moveConditionGroups(index).length ? `${moveConditionGroups(index).length}グループ設定済み` : "条件なし（常に候補）" }}</small>
@@ -296,12 +303,13 @@ import { computed, reactive, ref } from "vue";
 import { Position } from "tsshogi";
 import ShogiMatchBoard from "../ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "../game-state";
-import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
+import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_GUIDE_ROUTINES, OPENING_STRATEGIES, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
 import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningDefinitionFromLibrary, normalizeMoveConditionBranches, normalizeMovePositionPrerequisites, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
 import { formatHintMove } from "../core/match-assists.mjs";
 
 const strategies = OPENING_STRATEGIES;
 const castles = OPENING_CASTLES;
+const guideRoutines = OPENING_GUIDE_ROUTINES;
 const castleGroups = OPENING_CASTLE_GROUPS;
 const strategyFamilyOptions = [
   { id: "ibisha", label: "居飛車/基本戦法" }, { id: "aigakari", label: "相居飛車／相掛かり" },
@@ -433,7 +441,7 @@ const previewCandidates = computed(() => {
 });
 const nextGuideMove = computed(() => {
   const guideIndex = guideMoveIndexAtCursor();
-  return isGuideSidePly(cursor.value) ? book.guideMoves[guideIndex] ?? "" : "";
+  return isGuideSidePly(cursor.value) ? concreteGuideMoves()[guideIndex] ?? "" : "";
 });
 const canInsertNextGuideMove = computed(() => {
   if (!nextGuideMove.value || replayError.value) return false;
@@ -443,6 +451,10 @@ const canInsertNextGuideMove = computed(() => {
 
 function safeParse(text: string) { try { return parseOpeningBook(text); } catch { return null; } }
 function safeParseLibrary(text: string | null) { try { return parseOpeningBookLibrary(text ?? ""); } catch { return createOpeningBookLibrary(); } }
+function guideRoutine(index: number) {
+  return guideRoutines.find((routine: any) => routine.token === book.guideMoves[index]) ?? null;
+}
+function concreteGuideMoves() { return book.guideMoves.filter((move: string) => !guideRoutines.some((routine: any) => routine.token === move)); }
 function definitionForEditor(definition: any, kind: string) {
   if (!definition) return definition;
   const classificationName = kind === "castle"
@@ -537,6 +549,8 @@ function guidePreviewSfen(index: number) {
   return `${boardToken} ${guideSide()} ${parts[2] ?? "-"} ${parts[3] ?? "1"}`;
 }
 function guideJapaneseNotation(index: number) {
+  const routine = guideRoutine(index);
+  if (routine) return routine.label;
   const pieceNames: Record<string, string> = { P: "歩", L: "香", N: "桂", S: "銀", G: "金", B: "角", R: "飛", K: "玉" };
   const ranks = String(book.initialSfen ?? "").trim().split(/\s+/)[0]?.split("/") ?? [];
   const board = new Map<string, string>();
@@ -579,15 +593,20 @@ function formattedBranchMove(index: number) {
   catch { return `${sideMark(index)}${coordinateNotation(usi)}`; }
 }
 function branchIndexForGuideMove(guideIndex: number) {
+  if (guideRoutine(guideIndex)) return -1;
+  const concreteIndex = book.guideMoves.slice(0, guideIndex + 1)
+    .filter((move: string) => !guideRoutines.some((routine: any) => routine.token === move)).length - 1;
   let seen = 0;
   for (let index = 0; index < activeBranch.value.moves.length; index += 1) {
     if (!isGuideSidePly(index)) continue;
-    if (seen === guideIndex) return index;
+    if (seen === concreteIndex) return index;
     seen += 1;
   }
   return -1;
 }
 function formattedGuideMove(index: number) {
+  const routine = guideRoutine(index);
+  if (routine) return routine.label;
   const branchIndex = branchIndexForGuideMove(index);
   if (branchIndex >= 0 && activeBranch.value.moves[branchIndex]?.usi === book.guideMoves[index]) return formattedBranchMove(branchIndex);
   return `${guideSide() === "b" ? "▲" : "△"}${guideJapaneseNotation(index)}`;
@@ -600,6 +619,7 @@ function previewBranchMove(index: number) {
   previewUsi.value = activeBranch.value.moves[index]?.usi ?? "";
 }
 function previewGuideMove(index: number) {
+  if (guideRoutine(index)) return showGuideRoutineHelp(index);
   selectedGuideIndex.value = index;
   const branchIndex = branchIndexForGuideMove(index);
   if (branchIndex >= 0 && activeBranch.value.moves[branchIndex]?.usi === book.guideMoves[index]) {
@@ -613,7 +633,7 @@ function moveRole(index: number) {
   if (!isGuideSidePly(index)) return { label: "相手の応手", className: "opponent" };
   let guideIndex = 0;
   for (let previous = 0; previous < index; previous += 1) if (isGuideSidePly(previous)) guideIndex += 1;
-  const expected = book.guideMoves[guideIndex];
+  const expected = concreteGuideMoves()[guideIndex];
   return expected === activeBranch.value.moves[index]?.usi
     ? { label: `案内手${guideIndex + 1}`, className: "guide" }
     : { label: expected ? `案内外（予定 ${expected}）` : "案内外", className: "outside" };
@@ -674,6 +694,22 @@ function insertGuideMove(usi: string) {
   newGuidePromote.value = false;
   showGuideMoveAdder.value = false;
   announce(`${formattedGuideMove(addedIndex)}を${addedIndex + 1}番目の案内手として追加しました。`);
+}
+function addGuideRoutine(token: string) {
+  const routine = guideRoutines.find((candidate: any) => candidate.token === token);
+  if (!routine) return;
+  if (book.guideMoves.includes(token)) return announce(`${routine.label}はすでに案内手へ入っています。`);
+  clearPreview();
+  book.guideMoves.push(token);
+  selectedGuideIndex.value = book.guideMoves.length - 1;
+  announce(`${routine.label}を末尾へ追加しました。左の取っ手で実行したい位置へ移動できます。`);
+}
+function showGuideRoutineHelp(index: number) {
+  const routine = guideRoutine(index);
+  if (!routine) return;
+  clearPreview();
+  selectedGuideIndex.value = index;
+  announce(`${routine.label}: ${routine.description}`);
 }
 function addGuideMoveFromSquares() {
   if (!newGuideFrom.value || !newGuideTo.value || newGuideFrom.value === newGuideTo.value) return;

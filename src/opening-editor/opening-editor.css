@@ -75,6 +75,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .subheading h3 { margin: 0; font-size: .95rem; }
 .subheading p { margin: 3px 0 8px; color: #7d6c57; font-size: .74rem; line-height: 1.4; }
 .subheading button { min-height: 32px; padding: 4px 8px; white-space: nowrap; }
+.guide-add-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .guide-move-list { display: grid; gap: 8px; max-height: clamp(360px, calc(100vh - 330px), 720px); overflow-y: auto; margin: 0; padding: 0 5px 0 0; list-style: none; scrollbar-gutter: stable; }
 .guide-move-list li { display: grid; grid-template-columns: 44px minmax(0, 1fr) 145px; gap: 8px; align-items: center; padding: 9px; border: 1px solid #e3d4b8; border-radius: 10px; background: #fffdf8; transition: border-color .12s ease, box-shadow .12s ease, opacity .12s ease, transform .12s ease; }
 .guide-move-list li.selected { border-color: #c28a2e; background: #f7e7c3; }
@@ -88,6 +89,9 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .guide-move-edit .move-preview { display: grid; justify-items: start; min-width: 0; min-height: 58px; padding: 7px 10px; text-align: left; }
 .guide-move-edit .move-preview strong { font-size: 1rem; }
 .guide-move-edit .move-preview small { overflow: hidden; max-width: 100%; color: #806e58; font-size: .7rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.guide-move-edit .move-preview.routine { grid-column: 1 / -1; border-color: #83a66c; background: #edf6df; }
+.guide-move-edit .move-preview.routine strong { color: #315f3a; }
+.guide-move-edit .move-preview.routine small { white-space: normal; text-align: left; }
 .guide-move-list input { padding: 6px 8px; font-family: ui-monospace, monospace; font-size: .75rem; }
 .guide-move-adder { display: grid; grid-template-columns: auto minmax(150px, 1fr) auto minmax(150px, 1fr) auto minmax(150px, .8fr); gap: 8px; align-items: end; margin: 8px 0 12px; padding: 12px; border: 1px solid #d8bf91; border-radius: 8px; background: #fff8e8; }
 .guide-move-adder > strong { align-self: center; color: #76531e; font-size: .82rem; }
@@ -108,6 +112,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .guide-move-order { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; align-self: center; }
 .guide-move-order button { min-width: 0; min-height: 34px; padding: 3px 0; font-size: .66rem; white-space: nowrap; }
 .guide-move-order .promote-check { justify-content: center; min-height: 34px; margin: 0; padding: 3px; border: 1px solid #cdbb9d; border-radius: 7px; background: #fff; color: #5a4630; font-size: .68rem; }
+.guide-move-order .routine-badge { display: grid; place-items: center; min-height: 34px; border: 1px solid #9fbd87; border-radius: 7px; color: #315f3a; background: #edf6df; font-size: .68rem; font-weight: 800; }
 .move-conditions { grid-column: 2 / -1; border: 1px solid #dce2bd; border-radius: 7px; background: #f8faef; }
 .move-conditions > summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; color: #53602e; font-size: .75rem; font-weight: 800; }
 .move-conditions > summary::marker { color: #7b8b49; }

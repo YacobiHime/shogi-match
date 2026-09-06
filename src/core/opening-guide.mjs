@@ -9,6 +9,15 @@ const YOKOFUDORI_MOVE_POSITION_PREREQUISITES = Object.freeze({
   ],
 });
 
+export const OPENING_GUIDE_ROUTINES = Object.freeze([
+  Object.freeze({
+    id: "kakugawari",
+    token: "@kakugawari",
+    label: "角換わり手順",
+    description: "角道が開くまで2六歩・2五歩・7八金で待ち、8五歩には7七角・8八銀で備えます。",
+  }),
+]);
+
 export const OPENING_STRATEGIES = [
   {
     id: "ibisha",
@@ -105,16 +114,14 @@ export const OPENING_STRATEGIES = [
     strictOrder: true,
     historyCompletes: true,
     completionSquares: [["5f", "S"]],
-    completionRequiredMoves: ["8h2b+", "7i8h"],
-    // △3四歩ならすぐ角交換し、まだなら飛車先の準備を進めながら待つ。
-    // △3四歩が後から指されても、条件手を最優先して同じ本線へ合流する。
-    movePositionPrerequisites: {
-      "8h2b+": [{ square: "3d", owner: "opponent", kind: "P" }],
-    },
-    moveConditionBranches: {
-      "8h2b+": ["2g2f", "2f2e"],
-    },
-    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "7i8h", "4g4f", "3i4h", "4h4g", "4g5f"],
+    completionRequiredMoves: ["7i8h"],
+    completionRequiredMoveGroups: [["8h2b+", "7g2b+"]],
+    // 待機中に指した2六歩・2五歩・7八金・8八銀は、後続手順では着手履歴により消化済みになる。
+    // 角交換がすぐ成立した場合には、定型の完了後に未着手のものだけを案内する。
+    blackMoves: [
+      "7g7f", "@kakugawari", "2g2f", "2f2e", "6i7h", "7i8h",
+      "4g4f", "3i4h", "4h4g", "4g5f",
+    ],
   },
   {
     id: "yagura-strategy",
@@ -1126,7 +1133,7 @@ export function openingPlanSteps(strategyId, castleId, color = "black", context 
   const castleMoves = (castle?.blackMoves ?? []).filter((move) => (
     !strategyRookMove || !/^2h[3-9]h$/.test(move) || move === strategyRookMove
   ));
-  const strategyMoves = strategyPlan.moves.map(convert);
+  const strategyMoves = strategyPlan.moves.filter((move) => !move.startsWith("@")).map(convert);
   const sharedWithStrategy = new Set(strategyMoves);
   return [
     // 同じ表記の手を別の駒で後から指す手順があるため、同一フェーズ内は重複を残す。
@@ -1321,6 +1328,20 @@ export function openingPlanInterruption({
     };
   }
 
+  const routineStatus = openingGuideRoutineStatus({
+    strategyId,
+    color,
+    playedMoves,
+    currentSfen,
+  });
+  if (routineStatus.status === "failed") {
+    return {
+      requiresReselection: true,
+      clearStrategy: true,
+      message: `角換わり手順はここで失敗だね。${routineStatus.reason} 今の局面からできる別の戦法を選ぼう！`,
+    };
+  }
+
   if (
     strategyId === "yababozu"
     && own.has("7g7f") && !own.has("8h2b+")
@@ -1446,6 +1467,95 @@ export function matchesMovePositionPrerequisites(conditions, {
   });
 }
 
+export function openingGuideRoutineStatus({
+  strategyId,
+  color = "black",
+  playedMoves = [],
+  legalMoves = [],
+  currentSfen = "",
+} = {}) {
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  const routineIndex = strategy?.blackMoves?.indexOf("@kakugawari") ?? -1;
+  if (routineIndex < 0) return { status: "inactive", candidates: [] };
+
+  const own = new Set(canonicalMovesForColor(playedMoves, color));
+  const prefix = strategy.blackMoves.slice(0, routineIndex).filter((move) => !move.startsWith("@"));
+  if (!prefix.every((move) => own.has(move))) return { status: "inactive", candidates: [] };
+
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  const legal = new Set(legalMoves);
+  const board = parseSfenBoard(currentSfen);
+  const opponentColor = color === "black" ? "white" : "black";
+  const pieceAt = (square) => board.get(convert(square));
+  const ownPiece = (square, kind) => {
+    const piece = pieceAt(square);
+    return piece?.color === color && piece.kind === kind;
+  };
+  const opponentPiece = (square, kind) => {
+    const piece = pieceAt(square);
+    return piece?.color === opponentColor && piece.kind === kind;
+  };
+  const candidate = (usi) => {
+    const converted = convert(usi);
+    return legal.has(converted) ? { usi: converted, phase: "strategy" } : null;
+  };
+
+  const exchanged = own.has("8h2b+") || own.has("7g2b+");
+  const silverReady = own.has("7i8h") || ownPiece("8h", "S");
+  if (exchanged) {
+    if (silverReady) return { status: "complete", candidates: [] };
+    const silver = candidate("7i8h", "角交換後に8八銀で角の打ち込みへ備える");
+    return silver
+      ? { status: "active", candidates: [silver] }
+      : { status: "blocked", candidates: [], reason: "角交換後の8八銀を待っています。" };
+  }
+  if (!currentSfen) return { status: "blocked", candidates: [] };
+
+  if (!opponentPiece("2b", "B")) {
+    return { status: "failed", candidates: [], reason: "相手の角が2二から移動しました。" };
+  }
+
+  const eighthFilePressure = opponentPiece("8e", "P");
+  if (eighthFilePressure && ownPiece("8h", "B")) {
+    const defend = candidate("8h7g", "8五歩には7七角と上がって角頭を受ける");
+    return defend
+      ? { status: "active", candidates: [defend] }
+      : { status: "blocked", candidates: [], reason: "8五歩への7七角を待っています。" };
+  }
+  if (ownPiece("7g", "B") && !silverReady) {
+    const prepare = candidate("7i8h", "7七角の後は8八銀で角換わりへ備える");
+    return prepare
+      ? { status: "active", candidates: [prepare] }
+      : { status: "blocked", candidates: [], reason: "7七角の後の8八銀を待っています。" };
+  }
+  if (!ownPiece("8h", "B") && !ownPiece("7g", "B")) {
+    return { status: "failed", candidates: [], reason: "角が角換わり手順の位置から外れました。" };
+  }
+
+  if (opponentPiece("3d", "P")) {
+    const exchange = ownPiece("7g", "B")
+      ? candidate("7g2b+", "角道が開いたので7七角から2二角成")
+      : candidate("8h2b+", "角道が開いたので8八角から2二角成");
+    if (exchange) return { status: "active", candidates: [exchange] };
+  }
+
+  for (const [usi, reason] of [
+    ["2g2f", "角道が開くまで2六歩で待つ"],
+    ["2f2e", "角道が開くまで2五歩で待つ"],
+    ["6i7h", "角道が開くまで7八金で待つ"],
+  ]) {
+    if (own.has(usi)) continue;
+    const waitingMove = candidate(usi, reason);
+    if (waitingMove) return { status: "active", candidates: [waitingMove] };
+  }
+
+  return {
+    status: "failed",
+    candidates: [],
+    reason: "2六歩・2五歩・7八金で待っても角道が開きませんでした。",
+  };
+}
+
 export function openingPlanCandidates({
   strategyId,
   castleId,
@@ -1483,6 +1593,18 @@ export function openingPlanCandidates({
       return [{ usi: move, phase: "strategy" }];
     }
   }
+
+  const routineStatus = openingGuideRoutineStatus({
+    strategyId,
+    color,
+    playedMoves,
+    legalMoves,
+    currentSfen,
+  });
+  if (
+    strategy && !strategyComplete
+    && !["inactive", "complete"].includes(routineStatus.status)
+  ) return routineStatus.candidates;
 
   const planContext = { playedMoves, opponentMoves, opponentFormations };
   const steps = openingPlanSteps(strategyId, castleId, color, planContext);
@@ -1583,6 +1705,10 @@ export function isOpeningPlanComplete({
       color === "white" ? mirrorUsiMove : (move) => move,
     );
     if (!requiredMoves.every((move) => played.has(move))) return false;
+    const requiredMoveGroups = (definition.completionRequiredMoveGroups ?? []).map(
+      (moves) => moves.map(color === "white" ? mirrorUsiMove : (move) => move),
+    );
+    if (!requiredMoveGroups.every((moves) => moves.some((move) => played.has(move)))) return false;
     if (matchesCompletionMoveCounts(definition, playedMoves, color)) return true;
     const exact = matchesCompletionSquares(definition, currentSfen, color);
     if (exact === true) return true;

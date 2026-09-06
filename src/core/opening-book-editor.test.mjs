@@ -36,6 +36,14 @@ describe("opening book editor", () => {
     expect(parseOpeningBook(serializeOpeningBook(draft()))).toMatchObject({ schemaVersion: 1, id: "sample" });
   });
 
+  it("keeps reusable guide routines when saving and loading", () => {
+    const book = createOpeningBookDraft({
+      definition: { id: "routine", label: "角換わり", blackMoves: ["7g7f", "@kakugawari"] },
+      initialSfen: STANDARD_SFEN,
+    });
+    expect(parseOpeningBook(serializeOpeningBook(book)).guideMoves).toEqual(["7g7f", "@kakugawari"]);
+  });
+
   it("allows guide moves without recording opponent replies", () => {
     const book = draft();
     book.sources = [{ title: "参考", url: "https://example.com", checkedAt: "2026-09-02" }];
