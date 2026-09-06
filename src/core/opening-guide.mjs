@@ -1609,16 +1609,31 @@ export function openingGuideRoutineStatus({
       ? candidate("7g2b+", "角道が開いたので7七角から2二角成")
       : candidate("8h2b+", "角道が開いたので8八角から2二角成");
     if (exchange) return { status: "active", candidates: [exchange] };
+    // 中断判定からは合法手一覧を渡さないため、ここで交換手が候補にならなくても
+    // 「角道が開いていない」とはみなさない。実際の合法手が得られるまで待つ。
+    return {
+      status: "blocked",
+      candidates: [],
+      reason: "角道は開いています。2二角成が指せる局面を待っています。",
+    };
   }
 
+  let hasRemainingWaitingMove = false;
   for (const [usi, reason] of [
     ["2g2f", "角道が開くまで2六歩で待つ"],
     ["2f2e", "角道が開くまで2五歩で待つ"],
     ["6i7h", "角道が開くまで7八金で待つ"],
   ]) {
     if (own.has(usi)) continue;
+    hasRemainingWaitingMove = true;
     const waitingMove = candidate(usi, reason);
     if (waitingMove) return { status: "active", candidates: [waitingMove] };
+  }
+
+  // 合法手一覧がない中断判定や、王手対応などで待機手を一時的に指せない局面を、
+  // 待機手を使い切った状態と区別する。
+  if (hasRemainingWaitingMove) {
+    return { status: "blocked", candidates: [], reason: "角道が開くまで待機手を進めます。" };
   }
 
   return {

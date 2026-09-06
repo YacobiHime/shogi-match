@@ -100,6 +100,13 @@ describe("opening guide", () => {
       legalMoves: ["2g2f"],
       currentSfen: waiting.position.sfen,
     })?.usi).toBe("2g2f");
+    expect(openingPlanInterruption({
+      strategyId: strategy.id,
+      color: "black",
+      playedMoves: ["7g7f"],
+      moveHistory: ["7g7f", "8c8d"],
+      currentSfen: waiting.position.sfen,
+    })).toBeNull();
 
     const openedLater = createGameRecord();
     for (const usi of ["7g7f", "8c8d", "2g2f", "3c3d"]) {
@@ -113,6 +120,13 @@ describe("opening guide", () => {
       legalMoves: ["8h2b+", "2f2e"],
       currentSfen: openedLater.position.sfen,
     })?.usi).toBe("8h2b+");
+    expect(openingPlanInterruption({
+      strategyId: strategy.id,
+      color: "black",
+      playedMoves: ["7g7f", "2g2f"],
+      moveHistory: ["7g7f", "8c8d", "2g2f", "3c3d"],
+      currentSfen: openedLater.position.sfen,
+    })).toBeNull();
 
     const whiteExchange = createGameRecord();
     for (const usi of ["2g2f", "3c3d", "7g7f"]) {
