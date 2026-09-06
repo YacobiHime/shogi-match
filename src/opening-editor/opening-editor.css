@@ -93,12 +93,12 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .guide-move-edit .move-preview.routine strong { color: #315f3a; }
 .guide-move-edit .move-preview.routine small { white-space: normal; text-align: left; }
 .guide-move-list input { padding: 6px 8px; font-family: ui-monospace, monospace; font-size: .75rem; }
-.guide-move-adder { display: grid; grid-template-columns: auto minmax(150px, 1fr) auto minmax(150px, 1fr) auto minmax(150px, .8fr); gap: 8px; align-items: end; margin: 8px 0 12px; padding: 12px; border: 1px solid #d8bf91; border-radius: 8px; background: #fff8e8; }
-.guide-move-adder > strong { align-self: center; color: #76531e; font-size: .82rem; }
+.guide-move-adder { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(110px, 1fr) auto minmax(110px, 1fr); gap: 8px; align-items: end; margin: 8px 0 12px; padding: 12px; border: 1px solid #d8bf91; border-radius: 8px; background: #fff8e8; }
+.guide-move-adder > strong { grid-column: 1 / -1; align-self: center; color: #76531e; font-size: .82rem; }
 .guide-move-adder label { display: grid; gap: 2px; color: #725f48; font-size: .66rem; }
 .guide-move-adder select { min-width: 0; width: 100%; padding: 7px 8px; font-size: .82rem; }
 .guide-move-adder > .promote-check { align-self: center; }
-.guide-move-adder > button { grid-column: 2 / -1; width: 100%; }
+.guide-move-adder > button { grid-column: 3 / -1; width: 100%; }
 .guide-move-adder > small { grid-column: 1 / -1; color: #806e58; }
 .guide-square-editor { display: grid; grid-template-columns: minmax(100px, 1fr) 24px minmax(100px, 1fr); gap: 7px; align-items: center; padding: 7px; border-radius: 6px; background: #f7f2e8; }
 .guide-square-editor label { display: grid; gap: 2px; margin-bottom: 0; color: #766550; font-size: .63rem; }
@@ -113,6 +113,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .guide-move-order button { min-width: 0; min-height: 34px; padding: 3px 0; font-size: .66rem; white-space: nowrap; }
 .guide-move-order .promote-check { justify-content: center; min-height: 34px; margin: 0; padding: 3px; border: 1px solid #cdbb9d; border-radius: 7px; background: #fff; color: #5a4630; font-size: .68rem; }
 .guide-move-order .routine-badge { display: grid; place-items: center; min-height: 34px; border: 1px solid #9fbd87; border-radius: 7px; color: #315f3a; background: #edf6df; font-size: .68rem; font-weight: 800; }
+.drop-badge { display: grid; place-items: center; min-height: 34px; padding: 3px 7px; border: 1px solid #b69bd0; border-radius: 7px; color: #5b3678; background: #f5ecfb; font-size: .68rem; font-weight: 800; white-space: nowrap; }
 .move-conditions { grid-column: 2 / -1; border: 1px solid #dce2bd; border-radius: 7px; background: #f8faef; }
 .move-conditions > summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; color: #53602e; font-size: .75rem; font-weight: 800; }
 .move-conditions > summary::marker { color: #7b8b49; }
@@ -191,6 +192,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
   .guide-move-adder { grid-template-columns: minmax(90px, 1fr) auto minmax(90px, 1fr); }
   .guide-move-adder > strong, .guide-move-adder > button, .guide-move-adder > small, .guide-insert-position { grid-column: 1 / -1; }
   .guide-move-adder > .promote-check { grid-column: 1 / -1; }
+  .guide-move-adder > .drop-badge { grid-column: 1 / -1; }
   .guide-move-list li { grid-template-columns: 42px minmax(0, 1fr); }
   .guide-move-list { max-height: none; overflow: visible; padding-right: 0; }
   .guide-move-edit { grid-template-columns: 1fr; }

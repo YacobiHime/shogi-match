@@ -115,7 +115,7 @@
       </aside>
 
       <section class="board-column">
-        <div class="turn-banner" :class="{ 'guide-input': showGuideMoveAdder }"><span>{{ showGuideMoveAdder ? `案内手${newGuideInsertIndex + 1}を盤から入力` : guideOnlyPreview ? `案内手${(selectedGuideIndex ?? 0) + 1}の確認` : turnLabel }}</span><strong>{{ showGuideMoveAdder ? "駒 → 移動先をクリック" : guideOnlyPreview ? (selectedGuideIndex !== null && guideRoutine(selectedGuideIndex) ? "代表進行後の局面" : "相手の応手なしで表示中") : `${cursor + 1}手目を入力` }}</strong></div>
+        <div class="turn-banner" :class="{ 'guide-input': showGuideMoveAdder }"><span>{{ showGuideMoveAdder ? `案内手${newGuideInsertIndex + 1}を盤から入力` : guideOnlyPreview ? `案内手${(selectedGuideIndex ?? 0) + 1}の確認` : turnLabel }}</span><strong>{{ showGuideMoveAdder ? "盤上の駒または持ち駒 → 移動先をクリック" : guideOnlyPreview ? (selectedGuideIndex !== null && guideRoutine(selectedGuideIndex) ? "代表進行後の局面" : "相手の応手なしで表示中") : `${cursor + 1}手目を入力` }}</strong></div>
         <div class="board-wrap" :class="{ 'guide-input': showGuideMoveAdder }">
           <ShogiMatchBoard
             :sfen="boardSfen"
@@ -129,7 +129,7 @@
           />
         </div>
         <div v-if="showGuideMoveAdder" class="guide-board-help">
-          <span>盤上の駒と移動先を順にクリックすると、選択した位置へ案内手を追加します。</span>
+          <span>盤上の駒、または盤の横にある持ち駒をクリックしてから移動先を選ぶと、案内手を追加します。</span>
           <button type="button" @click="toggleGuideMoveAdder">盤入力をやめる</button>
         </div>
         <div v-else class="move-actions">
@@ -154,13 +154,16 @@
           </div>
           <div v-if="showGuideMoveAdder" class="guide-move-adder">
             <strong>追加する手</strong>
-            <label>移動元<select v-model="newGuideFrom"><option value="">選択</option><option v-for="square in conditionSquareOptions" :key="`from-${square.value}`" :value="square.value">{{ square.label }}</option></select></label>
-            <span>から</span>
+            <label>手の種類<select v-model="newGuideMode"><option value="move">盤上の駒を動かす</option><option value="drop">持ち駒を打つ</option></select></label>
+            <label v-if="newGuideMode === 'move'">移動元<select v-model="newGuideFrom"><option value="">選択</option><option v-for="square in conditionSquareOptions" :key="`from-${square.value}`" :value="square.value">{{ square.label }}</option></select></label>
+            <label v-else>持ち駒<select v-model="newGuideDropPiece"><option v-for="piece in dropPieceOptions" :key="piece.value" :value="piece.value">{{ piece.label }}</option></select></label>
+            <span>{{ newGuideMode === "move" ? "から" : "を" }}</span>
             <label>移動先<select v-model="newGuideTo"><option value="">選択</option><option v-for="square in conditionSquareOptions" :key="`to-${square.value}`" :value="square.value">{{ square.label }}</option></select></label>
-            <label class="promote-check"><input v-model="newGuidePromote" type="checkbox" /> 成る</label>
+            <label v-if="newGuideMode === 'move'" class="promote-check"><input v-model="newGuidePromote" type="checkbox" /> 成る</label>
+            <span v-else class="drop-badge">駒打ち</span>
             <label class="guide-insert-position">追加位置<select v-model.number="newGuideInsertIndex"><option v-for="position in book.guideMoves.length + 1" :key="position" :value="position - 1">{{ position }}番目{{ position === book.guideMoves.length + 1 ? "（末尾）" : "" }}</option></select></label>
-            <button type="button" class="primary" :disabled="!newGuideFrom || !newGuideTo || newGuideFrom === newGuideTo" @click="addGuideMoveFromSquares">この手を追加</button>
-            <small>例: 「２六」から「２五」を選ぶと、▲２五歩として追加されます。</small>
+            <button type="button" class="primary" :disabled="!canAddGuideMoveFromFields" @click="addGuideMoveFromFields">この手を追加</button>
+            <small>{{ newGuideMode === "move" ? "例: 「２六」から「２五」で、▲２五歩として追加。" : "例: 持ち駒で「角」、移動先で「５五」を選ぶと、▲５五角打として追加。" }}</small>
           </div>
           <ol class="guide-move-list">
             <li
@@ -192,9 +195,15 @@
                   <span>→</span>
                   <label>移動先<select :value="guideMoveParts(index)?.to" @change="updateGuideMoveSquare(index, 'to', $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
                 </div>
+                <div v-else-if="!guideRoutine(index) && guideDropParts(index)" class="guide-square-editor guide-drop-editor">
+                  <label>持ち駒<select :value="guideDropParts(index)?.piece" @change="updateGuideDropPiece(index, $event)"><option v-for="piece in dropPieceOptions" :key="piece.value" :value="piece.value">{{ piece.label }}</option></select></label>
+                  <span>を</span>
+                  <label>移動先<select :value="guideDropParts(index)?.to" @change="updateGuideDropTo(index, $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
+                </div>
               </div>
               <div class="guide-move-order" aria-label="案内手の操作">
                 <span v-if="guideRoutine(index)" class="routine-badge">定型</span>
+                <span v-else-if="guideDropParts(index)" class="drop-badge">駒打</span>
                 <label v-else class="promote-check" title="成る手にする"><input type="checkbox" :checked="guideMoveParts(index)?.promote" @change="updateGuideMovePromotion(index, $event)" /> 成</label>
                 <button type="button" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">上</button>
                 <button type="button" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">下</button>
@@ -346,9 +355,11 @@ const guideOnlyPreview = ref(false);
 const completionChoiceToAdd = ref("");
 const guideMoveBeforeEdit = ref<{ index: number; value: string } | null>(null);
 const showGuideMoveAdder = ref(false);
+const newGuideMode = ref<"move" | "drop">("move");
 const newGuideFrom = ref("");
 const newGuideTo = ref("");
 const newGuidePromote = ref(false);
+const newGuideDropPiece = ref("B");
 const newGuideInsertIndex = ref(book.guideMoves.length);
 let toastTimer = 0;
 
@@ -362,6 +373,7 @@ const conditionPieceOptions = [
   { value: "S", label: "銀" }, { value: "G", label: "金" }, { value: "B", label: "角" },
   { value: "R", label: "飛" }, { value: "K", label: "玉" },
 ];
+const dropPieceOptions = conditionPieceOptions.filter((piece) => piece.value !== "K");
 
 const activeBranch = computed(() => book.branches[activeBranchIndex.value] ?? book.branches[0]);
 const replay = computed(() => replayOpeningBranch(book, activeBranch.value, cursor.value));
@@ -450,6 +462,11 @@ const canInsertNextGuideMove = computed(() => {
   const move = replay.value.position?.createMoveByUSI(nextGuideMove.value);
   return Boolean(move && replay.value.position?.isValidMove(move));
 });
+const canAddGuideMoveFromFields = computed(() => Boolean(
+  newGuideTo.value && (newGuideMode.value === "drop"
+    ? newGuideDropPiece.value
+    : newGuideFrom.value && newGuideFrom.value !== newGuideTo.value),
+));
 
 function safeParse(text: string) { try { return parseOpeningBook(text); } catch { return null; } }
 function safeParseLibrary(text: string | null) { try { return parseOpeningBookLibrary(text ?? ""); } catch { return createOpeningBookLibrary(); } }
@@ -509,6 +526,16 @@ function guidePreviewSfen(index: number) {
   const parts = String(book.initialSfen || STANDARD_SFEN).trim().split(/\s+/);
   const ranks = parts[0].split("/");
   const board = new Map<string, string>();
+  const hands = new Map<string, number>();
+  const handToken = parts[2] ?? "-";
+  let handCount = "";
+  for (const symbol of handToken) {
+    if (/\d/.test(symbol)) handCount += symbol;
+    else if (/[PLNSGBRplnsgbr]/.test(symbol)) {
+      hands.set(symbol, (hands.get(symbol) ?? 0) + (Number(handCount) || 1));
+      handCount = "";
+    }
+  }
   ranks.forEach((rank: string, rankIndex: number) => {
     let file = 9;
     let promoted = false;
@@ -525,10 +552,23 @@ function guidePreviewSfen(index: number) {
   const applyPreviewMove = (usi: string) => {
     const drop = usi.match(/^([PLNSGBR])\*([1-9][a-i])$/);
     const move = usi.match(/^([1-9][a-i])([1-9][a-i])(\+)?$/);
-    if (drop) board.set(drop[2], guideSide() === "b" ? drop[1] : drop[1].toLowerCase());
+    if (drop) {
+      const symbol = guideSide() === "b" ? drop[1] : drop[1].toLowerCase();
+      const count = hands.get(symbol) ?? 0;
+      if (count > 1) hands.set(symbol, count - 1);
+      else hands.delete(symbol);
+      board.set(drop[2], symbol);
+    }
     else if (move) {
       const piece = board.get(move[1]);
       if (!piece) return;
+      const captured = board.get(move[2]);
+      if (captured) {
+        const capturedKind = captured.replace("+", "").toUpperCase();
+        const moverIsBlack = piece.replace("+", "") === piece.replace("+", "").toUpperCase();
+        const handSymbol = moverIsBlack ? capturedKind : capturedKind.toLowerCase();
+        hands.set(handSymbol, (hands.get(handSymbol) ?? 0) + 1);
+      }
       board.delete(move[1]);
       board.set(move[2], `${move[3] && !piece.startsWith("+") ? "+" : ""}${piece}`);
     }
@@ -555,7 +595,11 @@ function guidePreviewSfen(index: number) {
     }
     return `${row}${empty || ""}`;
   }).join("/");
-  return `${boardToken} ${guideSide()} ${parts[2] ?? "-"} ${parts[3] ?? "1"}`;
+  const serializedHands = ["R", "B", "G", "S", "N", "L", "P", "r", "b", "g", "s", "n", "l", "p"].map((symbol) => {
+    const count = hands.get(symbol) ?? 0;
+    return count ? `${count > 1 ? count : ""}${symbol}` : "";
+  }).join("") || "-";
+  return `${boardToken} ${guideSide()} ${serializedHands} ${parts[3] ?? "1"}`;
 }
 function guideJapaneseNotation(index: number) {
   const routine = guideRoutine(index);
@@ -651,6 +695,10 @@ function guideMoveParts(index: number) {
   const match = String(book.guideMoves[index] ?? "").match(/^([1-9][a-i])([1-9][a-i])(\+)?$/);
   return match ? { from: match[1], to: match[2], promote: Boolean(match[3]) } : null;
 }
+function guideDropParts(index: number) {
+  const match = String(book.guideMoves[index] ?? "").match(/^([PLNSGBR])\*([1-9][a-i])$/);
+  return match ? { piece: match[1], to: match[2] } : null;
+}
 function replaceGuideMove(index: number, next: string, previousValue?: string) {
   const previous = previousValue ?? book.guideMoves[index] ?? "";
   if (previous && previous !== next && book.movePositionPrerequisites[previous]) {
@@ -684,6 +732,16 @@ function updateGuideMovePromotion(index: number, event: Event) {
   const current = guideMoveParts(index);
   if (!current) return;
   replaceGuideMove(index, `${current.from}${current.to}${(event.target as HTMLInputElement).checked ? "+" : ""}`);
+}
+function updateGuideDropPiece(index: number, event: Event) {
+  const current = guideDropParts(index);
+  if (!current) return;
+  replaceGuideMove(index, `${(event.target as HTMLSelectElement).value}*${current.to}`);
+}
+function updateGuideDropTo(index: number, event: Event) {
+  const current = guideDropParts(index);
+  if (!current) return;
+  replaceGuideMove(index, `${current.piece}*${(event.target as HTMLSelectElement).value}`);
 }
 function toggleGuideMoveAdder() {
   showGuideMoveAdder.value = !showGuideMoveAdder.value;
@@ -721,9 +779,10 @@ function showGuideRoutineHelp(index: number) {
   guideOnlyPreview.value = true;
   announce(`${routine.label}: ${routine.description} 盤面には角交換して相手が取り返した直後の代表局面を表示しています。`);
 }
-function addGuideMoveFromSquares() {
-  if (!newGuideFrom.value || !newGuideTo.value || newGuideFrom.value === newGuideTo.value) return;
-  insertGuideMove(`${newGuideFrom.value}${newGuideTo.value}${newGuidePromote.value ? "+" : ""}`);
+function addGuideMoveFromFields() {
+  if (!canAddGuideMoveFromFields.value) return;
+  if (newGuideMode.value === "drop") insertGuideMove(`${newGuideDropPiece.value}*${newGuideTo.value}`);
+  else insertGuideMove(`${newGuideFrom.value}${newGuideTo.value}${newGuidePromote.value ? "+" : ""}`);
 }
 function handleBoardMove(event: CustomEvent | string) {
   const usi = String(typeof event === "string" ? event : event.detail ?? event);
