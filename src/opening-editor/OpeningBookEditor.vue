@@ -182,10 +182,11 @@
                   <label>移動先<select :value="guideMoveParts(index)?.to" @change="updateGuideMoveSquare(index, 'to', $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
                 </div>
               </div>
-              <div class="guide-move-order" aria-label="案内手の並べ替えと削除">
+              <div class="guide-move-order" aria-label="案内手の操作">
                 <label class="promote-check" title="成る手にする"><input type="checkbox" :checked="guideMoveParts(index)?.promote" @change="updateGuideMovePromotion(index, $event)" /> 成</label>
                 <button type="button" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">上</button>
                 <button type="button" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">下</button>
+                <button type="button" :aria-label="`案内手${index + 1}を複製`" @click="duplicateGuideMove(index)">複製</button>
                 <button type="button" class="danger" aria-label="削除" @click="removeGuideMove(index)">削除</button>
               </div>
               <details class="move-conditions">
@@ -606,9 +607,10 @@ function replaceGuideMove(index: number, next: string, previousValue?: string) {
   if (previous && previous !== next && book.movePositionPrerequisites[previous]) {
     book.movePositionPrerequisites[next] = [
       ...(book.movePositionPrerequisites[next] ?? []),
-      ...book.movePositionPrerequisites[previous],
+      ...normalizeMovePositionPrerequisites({ [previous]: book.movePositionPrerequisites[previous] })[previous],
     ];
-    delete book.movePositionPrerequisites[previous];
+    const usedByAnotherGuideMove = book.guideMoves.some((move: string, moveIndex: number) => moveIndex !== index && move === previous);
+    if (!usedByAnotherGuideMove) delete book.movePositionPrerequisites[previous];
   }
   book.guideMoves[index] = next;
   clearPreview();
@@ -680,7 +682,20 @@ function addCompletionVariant() { book.completionVariants.push([["5i", "K"]]); }
 function removeCompletionVariant(variantIndex: number) { book.completionVariants.splice(variantIndex, 1); }
 function addCompletionPiece(variantIndex: number) { book.completionVariants[variantIndex].push(["5i", "K"]); }
 function removeCompletionPiece(variantIndex: number, pieceIndex: number) { book.completionVariants[variantIndex].splice(pieceIndex, 1); }
-function removeGuideMove(index: number) { clearPreview(); delete book.movePositionPrerequisites[book.guideMoves[index]]; book.guideMoves.splice(index, 1); }
+function removeGuideMove(index: number) {
+  clearPreview();
+  const [removedMove] = book.guideMoves.splice(index, 1);
+  if (removedMove && !book.guideMoves.includes(removedMove)) delete book.movePositionPrerequisites[removedMove];
+}
+function duplicateGuideMove(index: number) {
+  clearPreview();
+  const move = book.guideMoves[index];
+  if (!move) return;
+  const duplicatedIndex = index + 1;
+  book.guideMoves.splice(duplicatedIndex, 0, move);
+  selectedGuideIndex.value = duplicatedIndex;
+  announce(`案内手${index + 1}を${duplicatedIndex + 1}番目へ複製しました。移動元・移動先や条件を編集できます。`);
+}
 function beginGuideMoveDrag(index: number, event: DragEvent) {
   draggingGuideIndex.value = index;
   dragOverGuideIndex.value = index;

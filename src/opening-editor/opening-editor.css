@@ -100,8 +100,8 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .usi-details { grid-column: 1 / -1; color: #84735f; font-size: .66rem; }
 .usi-details summary { cursor: pointer; }
 .usi-details input { width: 100%; margin-top: 4px; }
-.guide-move-order { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; align-self: center; }
-.guide-move-order button { min-width: 0; min-height: 34px; padding: 3px; font-size: .68rem; }
+.guide-move-order { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; align-self: center; }
+.guide-move-order button { min-width: 0; min-height: 34px; padding: 3px 0; font-size: .66rem; white-space: nowrap; }
 .guide-move-order .promote-check { justify-content: center; min-height: 34px; margin: 0; padding: 3px; border: 1px solid #cdbb9d; border-radius: 7px; background: #fff; color: #5a4630; font-size: .68rem; }
 .move-conditions { grid-column: 2 / -1; border: 1px solid #dce2bd; border-radius: 7px; background: #f8faef; }
 .move-conditions > summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; color: #53602e; font-size: .75rem; font-weight: 800; }
@@ -154,8 +154,8 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
 .toast { position: fixed; right: 22px; bottom: 22px; z-index: 10; max-width: 420px; margin: 0; padding: 12px 17px; border-radius: 10px; color: white; background: #262018; box-shadow: 0 6px 25px #0005; }
 @media (max-width: 1350px) {
   .editor-grid { grid-template-columns: minmax(430px, 500px) minmax(610px, 1fr); grid-template-areas: "board guide" "settings settings"; }
-  .guide-move-list li { grid-template-columns: 42px minmax(0, 1fr) 132px; }
-  .guide-move-edit { grid-template-columns: minmax(120px, .6fr) minmax(245px, 1.4fr); }
+  .guide-move-list li { grid-template-columns: 42px minmax(0, 1fr) 150px; }
+  .guide-move-edit { grid-template-columns: minmax(120px, .6fr) minmax(225px, 1.4fr); }
   .guide-move-adder { grid-template-columns: auto minmax(120px, 1fr) auto minmax(120px, 1fr); }
   .guide-move-adder > .promote-check { grid-column: 1 / 2; }
   .guide-move-adder > button { grid-column: 2 / -1; }
@@ -181,7 +181,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid #e9bd6648; border
   .guide-move-list li { grid-template-columns: 42px minmax(0, 1fr); }
   .guide-move-list { max-height: none; overflow: visible; padding-right: 0; }
   .guide-move-edit { grid-template-columns: 1fr; }
-  .guide-move-order { grid-column: 2; grid-template-columns: repeat(4, 1fr); }
+  .guide-move-order { grid-column: 2; grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .move-conditions { grid-column: 1 / -1; }
   .guide-square-editor { grid-template-columns: minmax(90px, 1fr) 20px minmax(90px, 1fr); }
   .move-condition-row { grid-template-columns: 48px 1fr 1fr 1fr 30px; }
