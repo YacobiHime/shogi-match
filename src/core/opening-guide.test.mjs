@@ -78,8 +78,17 @@ function sfenAfterMoves(moves, color = "black") {
 describe("opening guide", () => {
   it("keeps preparing Kakugawari until the opponent opens the bishop diagonal", () => {
     const strategy = OPENING_STRATEGIES.find(({ id }) => id === "kakugawari-koshikake-gin");
-    expect(OPENING_GUIDE_ROUTINES.map(({ token }) => token)).toContain("@kakugawari");
-    expect(strategy.blackMoves.slice(0, 2)).toEqual(["7g7f", "@kakugawari"]);
+    const routine = OPENING_GUIDE_ROUTINES.find(({ token }) => token === "@kakugawari");
+    expect(routine?.previewMoves).toEqual(["7g7f", "3c3d", "8h2b+", "3a2b"]);
+    expect(strategy.blackMoves[0]).toBe("@kakugawari");
+
+    expect(nextOpeningPlanMove({
+      strategyId: strategy.id,
+      color: "black",
+      playedMoves: [],
+      legalMoves: ["7g7f", "2g2f"],
+      currentSfen: createGameRecord().position.sfen,
+    })?.usi).toBe("7g7f");
 
     const waiting = createGameRecord();
     for (const usi of ["7g7f", "8c8d"]) expect(appendUsiMove(waiting, usi), usi).toBe(true);

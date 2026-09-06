@@ -14,7 +14,8 @@ export const OPENING_GUIDE_ROUTINES = Object.freeze([
     id: "kakugawari",
     token: "@kakugawari",
     label: "角換わり手順",
-    description: "角道が開くまで2六歩・2五歩・7八金で待ち、8五歩には7七角・8八銀で備えます。",
+    description: "7六歩で角道を開け、2二角成を狙います。待つ間は2六歩・2五歩・7八金、8五歩には7七角・8八銀で備えます。",
+    previewMoves: Object.freeze(["7g7f", "3c3d", "8h2b+", "3a2b"]),
   }),
 ]);
 
@@ -119,7 +120,7 @@ export const OPENING_STRATEGIES = [
     // 待機中に指した2六歩・2五歩・7八金・8八銀は、後続手順では着手履歴により消化済みになる。
     // 角交換がすぐ成立した場合には、定型の完了後に未着手のものだけを案内する。
     blackMoves: [
-      "7g7f", "@kakugawari", "2g2f", "2f2e", "6i7h", "7i8h",
+      "@kakugawari", "2g2f", "2f2e", "6i7h", "7i8h",
       "4g4f", "3i4h", "4h4g", "4g5f",
     ],
   },
@@ -1499,6 +1500,13 @@ export function openingGuideRoutineStatus({
     const converted = convert(usi);
     return legal.has(converted) ? { usi: converted, phase: "strategy" } : null;
   };
+
+  if (!own.has("7g7f")) {
+    const openDiagonal = candidate("7g7f");
+    return openDiagonal
+      ? { status: "active", candidates: [openDiagonal] }
+      : { status: "blocked", candidates: [], reason: "角換わりを始める7六歩を待っています。" };
+  }
 
   const exchanged = own.has("8h2b+") || own.has("7g2b+");
   const silverReady = own.has("7i8h") || ownPiece("8h", "S");

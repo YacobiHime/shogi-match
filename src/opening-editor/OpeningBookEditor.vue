@@ -115,7 +115,7 @@
       </aside>
 
       <section class="board-column">
-        <div class="turn-banner" :class="{ 'guide-input': showGuideMoveAdder }"><span>{{ showGuideMoveAdder ? `案内手${newGuideInsertIndex + 1}を盤から入力` : guideOnlyPreview ? `案内手${(selectedGuideIndex ?? 0) + 1}の確認` : turnLabel }}</span><strong>{{ showGuideMoveAdder ? "駒 → 移動先をクリック" : guideOnlyPreview ? "相手の応手なしで表示中" : `${cursor + 1}手目を入力` }}</strong></div>
+        <div class="turn-banner" :class="{ 'guide-input': showGuideMoveAdder }"><span>{{ showGuideMoveAdder ? `案内手${newGuideInsertIndex + 1}を盤から入力` : guideOnlyPreview ? `案内手${(selectedGuideIndex ?? 0) + 1}の確認` : turnLabel }}</span><strong>{{ showGuideMoveAdder ? "駒 → 移動先をクリック" : guideOnlyPreview ? (selectedGuideIndex !== null && guideRoutine(selectedGuideIndex) ? "代表進行後の局面" : "相手の応手なしで表示中") : `${cursor + 1}手目を入力` }}</strong></div>
         <div class="board-wrap" :class="{ 'guide-input': showGuideMoveAdder }">
           <ShogiMatchBoard
             :sfen="boardSfen"
@@ -303,7 +303,7 @@ import { computed, reactive, ref } from "vue";
 import { Position } from "tsshogi";
 import ShogiMatchBoard from "../ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "../game-state";
-import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_GUIDE_ROUTINES, OPENING_STRATEGIES, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
+import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_GUIDE_ROUTINES, OPENING_STRATEGIES, mirrorUsiMove, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
 import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningDefinitionFromLibrary, normalizeMoveConditionBranches, normalizeMovePositionPrerequisites, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
 import { formatHintMove } from "../core/match-assists.mjs";
 
@@ -370,7 +370,9 @@ const replayError = computed(() => replay.value.error);
 const lastMove = computed(() => cursor.value ? activeBranch.value.moves[cursor.value - 1]?.usi ?? "" : "");
 const boardSfen = computed(() => showGuideMoveAdder.value
   ? guidePreviewSfen(Math.max(0, Math.min(Number(newGuideInsertIndex.value), book.guideMoves.length)))
-  : guideOnlyPreview.value && selectedGuideIndex.value !== null ? guidePreviewSfen(selectedGuideIndex.value) : currentSfen.value);
+  : guideOnlyPreview.value && selectedGuideIndex.value !== null
+    ? guidePreviewSfen(selectedGuideIndex.value + (guideRoutine(selectedGuideIndex.value) ? 1 : 0))
+    : currentSfen.value);
 const boardLastMove = computed(() => showGuideMoveAdder.value || guideOnlyPreview.value ? "" : lastMove.value);
 const turnLabel = computed(() => currentSfen.value.split(" ")[1] === "w" ? "後手番" : "先手番");
 const validation = computed(() => validateOpeningBook(book));
@@ -520,16 +522,23 @@ function guidePreviewSfen(index: number) {
       }
     }
   });
-  for (let moveIndex = 0; moveIndex < index; moveIndex += 1) {
-    const usi = String(book.guideMoves[moveIndex] ?? "");
+  const applyPreviewMove = (usi: string) => {
     const drop = usi.match(/^([PLNSGBR])\*([1-9][a-i])$/);
     const move = usi.match(/^([1-9][a-i])([1-9][a-i])(\+)?$/);
     if (drop) board.set(drop[2], guideSide() === "b" ? drop[1] : drop[1].toLowerCase());
     else if (move) {
       const piece = board.get(move[1]);
-      if (!piece) continue;
+      if (!piece) return;
       board.delete(move[1]);
       board.set(move[2], `${move[3] && !piece.startsWith("+") ? "+" : ""}${piece}`);
+    }
+  };
+  for (let moveIndex = 0; moveIndex < index; moveIndex += 1) {
+    const usi = String(book.guideMoves[moveIndex] ?? "");
+    const routine = guideRoutines.find((candidate: any) => candidate.token === usi);
+    const previewMoves = routine?.previewMoves ?? [usi];
+    for (const previewMove of previewMoves) {
+      applyPreviewMove(guideSide() === "w" ? mirrorUsiMove(previewMove) : previewMove);
     }
   }
   const boardToken = Array.from({ length: 9 }, (_, rankIndex) => {
@@ -700,16 +709,17 @@ function addGuideRoutine(token: string) {
   if (!routine) return;
   if (book.guideMoves.includes(token)) return announce(`${routine.label}はすでに案内手へ入っています。`);
   clearPreview();
-  book.guideMoves.push(token);
-  selectedGuideIndex.value = book.guideMoves.length - 1;
-  announce(`${routine.label}を末尾へ追加しました。左の取っ手で実行したい位置へ移動できます。`);
+  book.guideMoves.unshift(token);
+  selectedGuideIndex.value = 0;
+  announce(`${routine.label}を案内手の先頭へ追加しました。`);
 }
 function showGuideRoutineHelp(index: number) {
   const routine = guideRoutine(index);
   if (!routine) return;
   clearPreview();
   selectedGuideIndex.value = index;
-  announce(`${routine.label}: ${routine.description}`);
+  guideOnlyPreview.value = true;
+  announce(`${routine.label}: ${routine.description} 盤面には角交換して相手が取り返した直後の代表局面を表示しています。`);
 }
 function addGuideMoveFromSquares() {
   if (!newGuideFrom.value || !newGuideTo.value || newGuideFrom.value === newGuideTo.value) return;
