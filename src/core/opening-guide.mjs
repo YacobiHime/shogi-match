@@ -1,3 +1,9 @@
+import { OPENING_GUIDE_OVERRIDES } from "../data/opening-guide-overrides.mjs";
+
+// The built-in catalogue remains the stable fixture for the core unit tests. The
+// generated editor data is configuration, and is enabled in browser/production builds.
+const EDITOR_OVERRIDES_ENABLED = typeof process === "undefined" || process.env.VITEST !== "true";
+
 const YOKOFUDORI_MOVE_POSITION_PREREQUISITES = Object.freeze({
   // ▲同飛・▲同歩は、相手の歩がその地点へ来たときだけ案内する。
   "2h2d": [{ square: "2d", owner: "opponent", kind: "P" }],
@@ -19,7 +25,52 @@ export const OPENING_GUIDE_ROUTINES = Object.freeze([
   }),
 ]);
 
-export const OPENING_STRATEGIES = [
+function applyEditorOverride(definition, kind) {
+  if (!EDITOR_OVERRIDES_ENABLED) return definition;
+  const saved = OPENING_GUIDE_OVERRIDES[`${kind}:${definition.id}`];
+  if (!saved) return definition;
+  const completion = saved.completionVariants?.length === 1
+    ? { completionSquares: saved.completionVariants[0], completionVariants: undefined }
+    : { completionSquares: undefined, completionVariants: saved.completionVariants ?? [] };
+  return {
+    ...definition,
+    label: saved.label,
+    family: saved.classification?.family || definition.family,
+    ...(kind === "castle" ? {
+      menuGroup: saved.classification?.menuGroup || definition.menuGroup,
+      contexts: saved.classification?.contexts?.length ? saved.classification.contexts : definition.contexts,
+    } : {}),
+    blackMoves: saved.guideMoves,
+    movePositionPrerequisites: saved.movePositionPrerequisites,
+    moveConditionBranches: saved.moveConditionBranches,
+    completionChoices: saved.completionChoices?.enabled ? {
+      prompt: saved.completionChoices.prompt,
+      strategyIds: saved.completionChoices.strategyIds,
+    } : undefined,
+    ...completion,
+  };
+}
+
+function definitionsWithEditorOverrides(definitions, kind) {
+  if (!EDITOR_OVERRIDES_ENABLED) return definitions;
+  const byId = new Map(definitions.map((definition) => [definition.id, definition]));
+  const result = definitions.map((definition) => applyEditorOverride(definition, kind));
+  for (const saved of Object.values(OPENING_GUIDE_OVERRIDES)) {
+    if (saved.kind !== kind || byId.has(saved.id)) continue;
+    result.push(applyEditorOverride({
+      id: saved.id,
+      label: saved.label,
+      family: saved.classification?.family,
+      detectionNames: [saved.label],
+      strictOrder: true,
+      historyCompletes: true,
+      blackMoves: [],
+    }, kind));
+  }
+  return result;
+}
+
+const OPENING_STRATEGY_DEFINITIONS = [
   {
     id: "ibisha",
     label: "居飛車",
@@ -604,6 +655,8 @@ export const OPENING_STRATEGIES = [
   },
 ];
 
+export const OPENING_STRATEGIES = definitionsWithEditorOverrides(OPENING_STRATEGY_DEFINITIONS, "strategy");
+
 const OPENING_CASTLE_DEFINITIONS = [
   {
     id: "half-mino",
@@ -949,10 +1002,10 @@ const CASTLE_CLASSIFICATION = {
   bonanza: { family: "balance", contexts: ["aibisha"], menuGroup: "aibisha-balance" },
 };
 
-export const OPENING_CASTLES = OPENING_CASTLE_DEFINITIONS.map((castle) => ({
+export const OPENING_CASTLES = definitionsWithEditorOverrides(OPENING_CASTLE_DEFINITIONS.map((castle) => ({
   ...castle,
   ...CASTLE_CLASSIFICATION[castle.id],
-}));
+})), "castle");
 
 const STATIC_ROOK_STRATEGIES = new Set([
   "ibisha", "aigakari", "yokofudori", "yokofudori-33-bishop", "hineribisha", "gangi-strategy",
@@ -978,6 +1031,10 @@ const RANGING_ROOK_CASTLES = new Set([
 ]);
 
 export function openingDefinitionRookStyle(id, kind) {
+  const configured = EDITOR_OVERRIDES_ENABLED
+    ? OPENING_GUIDE_OVERRIDES[`${kind}:${id}`]?.classification?.rookStyle
+    : undefined;
+  if (["static", "ranging", "both"].includes(configured)) return configured;
   const staticIds = kind === "strategy" ? STATIC_ROOK_STRATEGIES : STATIC_ROOK_CASTLES;
   const rangingIds = kind === "strategy" ? RANGING_ROOK_STRATEGIES : RANGING_ROOK_CASTLES;
   if (staticIds.has(id)) return "static";
@@ -1131,9 +1188,11 @@ export function openingPlanSteps(strategyId, castleId, color = "black", context 
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
   const strategyPlan = openingStrategyPlan(strategy, { ...context, color });
   const strategyRookMove = strategyPlan.moves.find((move) => /^2h[3-9]h$/.test(move));
-  const castleMoves = (castle?.blackMoves ?? []).filter((move) => (
-    !strategyRookMove || !/^2h[3-9]h$/.test(move) || move === strategyRookMove
-  ));
+  const castleMoves = (castle?.blackMoves ?? [])
+    .filter((move) => !move.startsWith("@"))
+    .filter((move) => (
+      !strategyRookMove || !/^2h[3-9]h$/.test(move) || move === strategyRookMove
+    ));
   const strategyMoves = strategyPlan.moves.filter((move) => !move.startsWith("@")).map(convert);
   const sharedWithStrategy = new Set(strategyMoves);
   return [
@@ -1331,6 +1390,7 @@ export function openingPlanInterruption({
 
   const routineStatus = openingGuideRoutineStatus({
     strategyId,
+    castleId,
     color,
     playedMoves,
     currentSfen,
@@ -1470,17 +1530,21 @@ export function matchesMovePositionPrerequisites(conditions, {
 
 export function openingGuideRoutineStatus({
   strategyId,
+  castleId,
   color = "black",
   playedMoves = [],
   legalMoves = [],
   currentSfen = "",
 } = {}) {
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
-  const routineIndex = strategy?.blackMoves?.indexOf("@kakugawari") ?? -1;
+  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  const definition = [strategy, castle].find((candidate) => candidate?.blackMoves?.includes("@kakugawari"));
+  const phase = definition === castle ? "castle" : "strategy";
+  const routineIndex = definition?.blackMoves?.indexOf("@kakugawari") ?? -1;
   if (routineIndex < 0) return { status: "inactive", candidates: [] };
 
   const own = new Set(canonicalMovesForColor(playedMoves, color));
-  const prefix = strategy.blackMoves.slice(0, routineIndex).filter((move) => !move.startsWith("@"));
+  const prefix = definition.blackMoves.slice(0, routineIndex).filter((move) => !move.startsWith("@"));
   if (!prefix.every((move) => own.has(move))) return { status: "inactive", candidates: [] };
 
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
@@ -1498,7 +1562,7 @@ export function openingGuideRoutineStatus({
   };
   const candidate = (usi) => {
     const converted = convert(usi);
-    return legal.has(converted) ? { usi: converted, phase: "strategy" } : null;
+    return legal.has(converted) ? { usi: converted, phase } : null;
   };
 
   if (!own.has("7g7f")) {
@@ -1604,6 +1668,7 @@ export function openingPlanCandidates({
 
   const routineStatus = openingGuideRoutineStatus({
     strategyId,
+    castleId,
     color,
     playedMoves,
     legalMoves,

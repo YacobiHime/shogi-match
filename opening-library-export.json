@@ -1,0 +1,2041 @@
+{
+  "schemaVersion": 1,
+  "activeKey": "castle:muteki",
+  "books": {
+    "strategy:right-shiken": {
+      "schemaVersion": 1,
+      "id": "right-shiken",
+      "label": "右四間飛車",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "対抗型／居飛車側",
+        "family": "anti-ranging",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "2g2f",
+        "3i4h",
+        "4g4f",
+        "4h4g",
+        "4g5f",
+        "2h4h"
+      ],
+      "completionVariants": [
+        [
+          [
+            "4h",
+            "R"
+          ],
+          [
+            "5f",
+            "S"
+          ],
+          [
+            "4f",
+            "P"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-04"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-04T13:35:54.974Z"
+    },
+    "strategy:hayaguri-gin": {
+      "schemaVersion": 1,
+      "id": "hayaguri-gin",
+      "label": "早繰り銀",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "居飛車/基本戦法",
+        "family": "ibisha",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "2g2f",
+        "2f2e",
+        "3i4h",
+        "3g3f",
+        "4h3g",
+        "3g4f"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T02:14:10.009Z"
+    },
+    "strategy:koshikake-gin": {
+      "schemaVersion": 1,
+      "id": "koshikake-gin",
+      "label": "腰掛け銀",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "居飛車/基本戦法",
+        "family": "ibisha",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "3i4h",
+        "4g4f",
+        "4h4g",
+        "4g5f"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T02:16:21.436Z"
+    },
+    "strategy:kakugawari-koshikake-gin": {
+      "schemaVersion": 1,
+      "id": "kakugawari-koshikake-gin",
+      "label": "角換わり腰掛け銀▲4八金▲2九飛型",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／角換わり",
+        "family": "kakugawari",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "@kakugawari",
+        "7i8h",
+        "8h7g",
+        "6i7h",
+        "2g2f",
+        "3i4h",
+        "3g3f",
+        "2i3g",
+        "2h2i",
+        "4g4f",
+        "4h4g",
+        "4i4h",
+        "5i6h",
+        "4g5f"
+      ],
+      "completionVariants": [
+        [
+          [
+            "5f",
+            "S"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {
+        "8h2b+": [
+          {
+            "alternatives": [
+              {
+                "square": "3d",
+                "owner": "opponent",
+                "kind": "P"
+              }
+            ]
+          }
+        ]
+      },
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T08:43:49.416Z"
+    },
+    "castle:gangi": {
+      "schemaVersion": 1,
+      "id": "gangi",
+      "label": "雁木",
+      "kind": "castle",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／雁木系",
+        "family": "gangi",
+        "rookStyle": "static",
+        "menuGroup": "aibisha-gangi",
+        "contexts": [
+          "aibisha"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "6g6f",
+        "8h7g",
+        "7i7h",
+        "7h6g",
+        "6i7h",
+        "4i5h",
+        "5i6i",
+        "3i4h",
+        "5g5f",
+        "4h5g"
+      ],
+      "completionVariants": [
+        [
+          [
+            "6i",
+            "K"
+          ],
+          [
+            "7h",
+            "G"
+          ],
+          [
+            "5h",
+            "G"
+          ],
+          [
+            "6g",
+            "S"
+          ],
+          [
+            "5g",
+            "S"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T04:33:16.995Z"
+    },
+    "castle:ibisha-anaguma": {
+      "schemaVersion": 1,
+      "id": "ibisha-anaguma",
+      "label": "居飛車穴熊",
+      "kind": "castle",
+      "side": "black",
+      "classification": {
+        "name": "対抗型・居飛車側／穴熊系",
+        "family": "anaguma",
+        "rookStyle": "static",
+        "menuGroup": "static-anaguma",
+        "contexts": [
+          "anti-ranging-static"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "6g6f",
+        "8h7g",
+        "5i6h",
+        "6h7h",
+        "7h8h",
+        "9i9h",
+        "8h9i",
+        "7i8h",
+        "6i7i",
+        "4i5i",
+        "5i6i",
+        "6i7h"
+      ],
+      "completionVariants": [
+        [
+          [
+            "9i",
+            "K"
+          ],
+          [
+            "9h",
+            "L"
+          ],
+          [
+            "8h",
+            "S"
+          ],
+          [
+            "7h",
+            "G"
+          ],
+          [
+            "7g",
+            "N"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T04:39:34.252Z"
+    },
+    "castle:right-king": {
+      "schemaVersion": 1,
+      "id": "right-king",
+      "label": "右玉",
+      "kind": "castle",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／バランス型・その他",
+        "family": "balance",
+        "rookStyle": "static",
+        "menuGroup": "aibisha-balance",
+        "contexts": [
+          "aibisha",
+          "anti-ranging-static"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "2g2f",
+        "2f2e",
+        "3i4h",
+        "3g3f",
+        "2i3g",
+        "2h2i",
+        "4g4f",
+        "4h4g",
+        "4i4h",
+        "5i4i",
+        "4i3h"
+      ],
+      "completionVariants": [
+        [
+          [
+            "4h",
+            "K"
+          ],
+          [
+            "7h",
+            "G"
+          ],
+          [
+            "6g",
+            "S"
+          ],
+          [
+            "4g",
+            "S"
+          ],
+          [
+            "3g",
+            "N"
+          ],
+          [
+            "2i",
+            "R"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T04:45:17.678Z"
+    },
+    "castle:migigyoku-habu": {
+      "schemaVersion": 1,
+      "id": "migigyoku-habu",
+      "label": "羽生流右玉",
+      "kind": "castle",
+      "side": "both",
+      "classification": {
+        "name": "",
+        "family": "balance",
+        "rookStyle": "static",
+        "menuGroup": "aibisha-balance",
+        "contexts": [
+          "aibisha"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "@kakugawari",
+        "7i8h",
+        "8h7g",
+        "6i7h",
+        "3i4h",
+        "3g3f",
+        "2i3g",
+        "2h2i",
+        "4g4f",
+        "4h4g",
+        "4i3h",
+        "5i4h"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T08:44:04.730Z"
+    },
+    "strategy:bougin": {
+      "schemaVersion": 1,
+      "id": "bougin",
+      "label": "原始棒銀",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "居飛車/基本戦法",
+        "family": "ibisha",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "2g2f",
+        "2f2e",
+        "3i3h",
+        "3h2g",
+        "2g2f"
+      ],
+      "completionVariants": [
+        [
+          [
+            "2f",
+            "S"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T08:27:28.117Z"
+    },
+    "strategy:kakugawari": {
+      "schemaVersion": 1,
+      "id": "kakugawari",
+      "label": "角換わり",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／角換わり",
+        "family": "kakugawari",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "@kakugawari",
+        "7i8h",
+        "8h7g"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": true,
+        "prompt": "",
+        "strategyIds": [
+          "koshikake-gin",
+          "bougin",
+          "hayaguri-gin"
+        ]
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T08:43:43.184Z"
+    },
+    "strategy:aigakari": {
+      "schemaVersion": 1,
+      "id": "aigakari",
+      "label": "相掛かり",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／相掛かり",
+        "family": "aigakari",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "2g2f",
+        "2f2e",
+        "6i7h",
+        "5i5h",
+        "3i3h"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": true,
+        "prompt": "",
+        "strategyIds": [
+          "yokofudori",
+          "hineribisha"
+        ]
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": [
+            {
+              "usi": "5i5h",
+              "note": ""
+            }
+          ]
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T09:00:38.355Z"
+    },
+    "strategy:hineribisha": {
+      "schemaVersion": 1,
+      "id": "hineribisha",
+      "label": "ひねり飛車",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／相掛かり",
+        "family": "aigakari",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "2g2f",
+        "2f2e",
+        "6i7h",
+        "2e2d",
+        "2h2d",
+        "2d2f",
+        "3i3h",
+        "2f3f",
+        "7g7f",
+        "8i7g",
+        "7f7e",
+        "3f7f"
+      ],
+      "completionVariants": [
+        [
+          [
+            "3f",
+            "R"
+          ],
+          [
+            "7g",
+            "N"
+          ],
+          [
+            "7h",
+            "G"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {
+        "2h2d": [
+          {
+            "alternatives": [
+              {
+                "square": "2d",
+                "owner": "opponent",
+                "kind": "P"
+              }
+            ]
+          }
+        ],
+        "2d3d": [
+          {
+            "alternatives": [
+              {
+                "square": "8f",
+                "owner": "opponent",
+                "kind": "R"
+              }
+            ]
+          },
+          {
+            "alternatives": [
+              {
+                "square": "3d",
+                "owner": "opponent",
+                "kind": "P"
+              }
+            ]
+          }
+        ]
+      },
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T10:00:18.303Z"
+    },
+    "strategy:kakugawari-45-knight": {
+      "schemaVersion": 1,
+      "id": "kakugawari-45-knight",
+      "label": "角換わり4五桂速攻",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／角換わり",
+        "family": "kakugawari",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "@kakugawari",
+        "7i8h",
+        "8h7g",
+        "3i4h",
+        "4g4f",
+        "3g3f",
+        "2i3g",
+        "3g4e"
+      ],
+      "completionVariants": [
+        [
+          [
+            "4e",
+            "N"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {
+        "3g4e": [
+          {
+            "alternatives": [
+              {
+                "square": "3c",
+                "owner": "opponent",
+                "kind": "S"
+              }
+            ]
+          }
+        ]
+      },
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T10:06:36.380Z"
+    },
+    "strategy:suzume-zashi": {
+      "schemaVersion": 1,
+      "id": "suzume-zashi",
+      "label": "雀刺し",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／矢倉",
+        "family": "yagura",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "6g6f",
+        "7i7h",
+        "7h7g",
+        "1g1f",
+        "3i4h",
+        "3g3f",
+        "2i3g",
+        "1i1g",
+        "2h1h",
+        "1f1e",
+        "3g2e"
+      ],
+      "completionVariants": [
+        [
+          [
+            "7g",
+            "S"
+          ],
+          [
+            "1g",
+            "L"
+          ],
+          [
+            "1h",
+            "R"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T10:10:56.808Z"
+    },
+    "strategy:morishita-system": {
+      "schemaVersion": 1,
+      "id": "morishita-system",
+      "label": "森下システム",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／矢倉",
+        "family": "yagura",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "6g6f",
+        "7i7h",
+        "7h7g",
+        "4i5h",
+        "6i7h",
+        "5h6g",
+        "8h7i",
+        "3i4h",
+        "3g3f",
+        "5i6i",
+        "7i6h",
+        "2g2f",
+        "2f2e"
+      ],
+      "completionVariants": [
+        [
+          [
+            "7g",
+            "S"
+          ],
+          [
+            "3g",
+            "S"
+          ],
+          [
+            "6i",
+            "K"
+          ],
+          [
+            "7h",
+            "G"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T10:20:26.081Z"
+    },
+    "strategy:nakabisha": {
+      "schemaVersion": 1,
+      "id": "nakabisha",
+      "label": "原始中飛車",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "中飛車",
+        "family": "nakabisha",
+        "rookStyle": "ranging",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "5g5f",
+        "2h5h",
+        "6i7h",
+        "5f5e",
+        "7i6h",
+        "6h5g",
+        "5g5f"
+      ],
+      "completionVariants": [
+        [
+          [
+            "5h",
+            "R"
+          ],
+          [
+            "5e",
+            "P"
+          ],
+          [
+            "5g",
+            "S"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T10:55:46.199Z"
+    },
+    "strategy:fujii-system": {
+      "schemaVersion": 1,
+      "id": "fujii-system",
+      "label": "藤井システム",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "四間飛車",
+        "family": "shiken",
+        "rookStyle": "ranging",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "6g6f",
+        "2h6h",
+        "1g1f",
+        "8h7g",
+        "3i3h",
+        "6i5h",
+        "7i7h",
+        "4g4f"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T11:07:06.949Z"
+    },
+    "strategy:onigoroshi": {
+      "schemaVersion": 1,
+      "id": "onigoroshi",
+      "label": "原始鬼殺し",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "奇襲・特殊戦法",
+        "family": "special",
+        "rookStyle": "both",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "8i7g",
+        "8h2b+",
+        "7g6e",
+        "B*5e"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {
+        "8h2b+": [
+          {
+            "alternatives": [
+              {
+                "square": "3d",
+                "owner": "opponent",
+                "kind": "B"
+              }
+            ]
+          }
+        ],
+        "B*5e": [
+          {
+            "alternatives": [
+              {
+                "square": "6d",
+                "owner": "opponent",
+                "kind": "P"
+              }
+            ]
+          },
+          {
+            "alternatives": [
+              {
+                "square": "6b",
+                "owner": "opponent",
+                "kind": "S"
+              }
+            ]
+          },
+          {
+            "alternatives": [
+              {
+                "square": "2b",
+                "owner": "opponent",
+                "kind": "S"
+              }
+            ]
+          }
+        ]
+      },
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T11:32:44.575Z"
+    },
+    "strategy:sujichigai-kaku": {
+      "schemaVersion": 1,
+      "id": "sujichigai-kaku",
+      "label": "筋違い角",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "奇襲・特殊戦法",
+        "family": "special",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "@kakugawari",
+        "B*4e"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T11:36:09.491Z"
+    },
+    "strategy:kakuto-fu": {
+      "schemaVersion": 1,
+      "id": "kakuto-fu",
+      "label": "角頭歩戦法",
+      "kind": "strategy",
+      "side": "both",
+      "classification": {
+        "name": "奇襲・特殊戦法",
+        "family": "special",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "8g8f",
+        "8h7g",
+        "@kakugawari",
+        "8i7g"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T11:55:17.846Z"
+    },
+    "strategy:pacman": {
+      "schemaVersion": 1,
+      "id": "pacman",
+      "label": "パックマン",
+      "kind": "strategy",
+      "side": "white",
+      "classification": {
+        "name": "奇襲・特殊戦法",
+        "family": "special",
+        "rookStyle": "both",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "6g6f",
+        "2h6h"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {
+        "6g6f": [
+          {
+            "alternatives": [
+              {
+                "square": "3d",
+                "owner": "opponent",
+                "kind": "P"
+              }
+            ]
+          }
+        ]
+      },
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T11:56:39.872Z"
+    },
+    "strategy:ureshino": {
+      "schemaVersion": 1,
+      "id": "ureshino",
+      "label": "嬉野流",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "奇襲・特殊戦法",
+        "family": "special",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7i6h",
+        "5g5f",
+        "6h5g"
+      ],
+      "completionVariants": [
+        [
+          [
+            "5g",
+            "S"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T11:59:06.276Z"
+    },
+    "castle:doi-yagura": {
+      "schemaVersion": 1,
+      "id": "doi-yagura",
+      "label": "土居矢倉",
+      "kind": "castle",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／矢倉系",
+        "family": "yagura",
+        "rookStyle": "static",
+        "menuGroup": "aibisha-yagura",
+        "contexts": [
+          "aibisha"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "6g6f",
+        "7i7h",
+        "7h7g",
+        "4i5h",
+        "5h6g",
+        "6i5h",
+        "5i6h",
+        "6h7h",
+        "8h7i",
+        "5g5f"
+      ],
+      "completionVariants": [
+        [
+          [
+            "7h",
+            "K"
+          ],
+          [
+            "7g",
+            "S"
+          ],
+          [
+            "6g",
+            "G"
+          ],
+          [
+            "5h",
+            "G"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T12:03:03.520Z"
+    },
+    "castle:kikusui-yagura": {
+      "schemaVersion": 1,
+      "id": "kikusui-yagura",
+      "label": "菊水矢倉",
+      "kind": "castle",
+      "side": "black",
+      "classification": {
+        "name": "相居飛車／矢倉系",
+        "family": "yagura",
+        "rookStyle": "static",
+        "menuGroup": "aibisha-yagura",
+        "contexts": [
+          "aibisha"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "6f5e",
+        "6g6f",
+        "7i7h",
+        "7h7g",
+        "6i7h",
+        "4i5h",
+        "5h6g",
+        "5i6i",
+        "8h7i",
+        "5g5f",
+        "7i6h",
+        "6i7i",
+        "7g8h",
+        "8i7g",
+        "7i8i"
+      ],
+      "completionVariants": [
+        [
+          [
+            "8i",
+            "K"
+          ],
+          [
+            "8h",
+            "S"
+          ],
+          [
+            "7h",
+            "G"
+          ],
+          [
+            "7g",
+            "N"
+          ],
+          [
+            "6g",
+            "G"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T12:07:53.257Z"
+    },
+    "castle:matsuo-anaguma": {
+      "schemaVersion": 1,
+      "id": "matsuo-anaguma",
+      "label": "松尾流穴熊",
+      "kind": "castle",
+      "side": "black",
+      "classification": {
+        "name": "対抗型・居飛車側／穴熊系",
+        "family": "anaguma",
+        "rookStyle": "static",
+        "menuGroup": "static-anaguma",
+        "contexts": [
+          "anti-ranging-static"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "6g6f",
+        "8h7g",
+        "6g6f",
+        "5g5f",
+        "5i6h",
+        "6h7h",
+        "7h8h",
+        "9i9h",
+        "8h9i",
+        "7i8h",
+        "6i7h",
+        "4i5h",
+        "5h6g",
+        "3i4h",
+        "4h5g",
+        "5g6h",
+        "6h7i"
+      ],
+      "completionVariants": [
+        [
+          [
+            "9i",
+            "K"
+          ],
+          [
+            "9h",
+            "L"
+          ],
+          [
+            "8i",
+            "N"
+          ],
+          [
+            "8h",
+            "S"
+          ],
+          [
+            "7i",
+            "S"
+          ],
+          [
+            "7h",
+            "G"
+          ],
+          [
+            "6g",
+            "G"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T12:09:54.783Z"
+    },
+    "castle:millennium": {
+      "schemaVersion": 1,
+      "id": "millennium",
+      "label": "ミレニアム",
+      "kind": "castle",
+      "side": "black",
+      "classification": {
+        "name": "複数戦型／その他",
+        "family": "millennium",
+        "rookStyle": "both",
+        "menuGroup": "shared-other",
+        "contexts": [
+          "anti-ranging-static",
+          "anti-static-ranging"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "3i4h",
+        "5g5f",
+        "4i5h",
+        "5i6h",
+        "6h7h",
+        "8h6f",
+        "8i7g",
+        "7i8h",
+        "7h8i",
+        "6i7i",
+        "5h6h",
+        "6h7h",
+        "4h5i",
+        "5i6h",
+        "6f5g"
+      ],
+      "completionVariants": [
+        [
+          [
+            "8i",
+            "K"
+          ],
+          [
+            "8h",
+            "S"
+          ],
+          [
+            "7h",
+            "G"
+          ],
+          [
+            "7i",
+            "G"
+          ],
+          [
+            "7g",
+            "N"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T12:13:52.737Z"
+    },
+    "castle:tenshukaku-mino": {
+      "schemaVersion": 1,
+      "id": "tenshukaku-mino",
+      "label": "天守閣美濃",
+      "kind": "castle",
+      "side": "black",
+      "classification": {
+        "name": "対抗型・居飛車側／左美濃系",
+        "family": "left-mino",
+        "rookStyle": "static",
+        "menuGroup": "static-left-mino",
+        "contexts": [
+          "anti-ranging-static"
+        ]
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "3i4h",
+        "5g5f",
+        "5i6h",
+        "6h7h",
+        "4h5g",
+        "4i5h",
+        "9g9f",
+        "8g8f",
+        "7h8g",
+        "7i7h"
+      ],
+      "completionVariants": [
+        [
+          [
+            "8g",
+            "K"
+          ],
+          [
+            "7h",
+            "S"
+          ],
+          [
+            "6i",
+            "G"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T12:18:15.726Z"
+    },
+    "strategy:chikatetsu-bisha": {
+      "schemaVersion": 1,
+      "id": "chikatetsu-bisha",
+      "label": "地下鉄飛車",
+      "kind": "strategy",
+      "side": "black",
+      "classification": {
+        "name": "対抗型／居飛車側",
+        "family": "anti-ranging",
+        "rookStyle": "static",
+        "menuGroup": "",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "7g7f",
+        "8h6f",
+        "7i8h",
+        "8i7g",
+        "6i6h",
+        "5i6i",
+        "6i7h",
+        "4i5h",
+        "5g5f",
+        "9i9h",
+        "3g3f",
+        "2i3g",
+        "3i4h",
+        "2h2i",
+        "2i9i"
+      ],
+      "completionVariants": [
+        [
+          [
+            "9i",
+            "R"
+          ],
+          [
+            "9h",
+            "L"
+          ],
+          [
+            "6f",
+            "B"
+          ],
+          [
+            "7g",
+            "N"
+          ],
+          [
+            "8h",
+            "S"
+          ],
+          [
+            "7h",
+            "K"
+          ],
+          [
+            "3g",
+            "N"
+          ],
+          [
+            "4h",
+            "S"
+          ]
+        ]
+      ],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T12:19:25.011Z"
+    },
+    "castle:muteki": {
+      "schemaVersion": 1,
+      "id": "muteki",
+      "label": "無敵囲い",
+      "kind": "castle",
+      "side": "both",
+      "classification": {
+        "name": "",
+        "family": "muteki",
+        "rookStyle": "ranging",
+        "menuGroup": "shared-other",
+        "contexts": []
+      },
+      "initialSfen": "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      "guideMoves": [
+        "2h5h",
+        "3i4h",
+        "7i6h"
+      ],
+      "completionVariants": [],
+      "movePositionPrerequisites": {},
+      "moveConditionBranches": {},
+      "completionChoices": {
+        "enabled": false,
+        "prompt": "",
+        "strategyIds": []
+      },
+      "sources": [
+        {
+          "title": "",
+          "url": "",
+          "checkedAt": "2026-09-06"
+        }
+      ],
+      "branches": [
+        {
+          "id": "main",
+          "label": "本線",
+          "moves": []
+        }
+      ],
+      "notes": "",
+      "engineReview": {
+        "checked": false,
+        "note": ""
+      },
+      "updatedAt": "2026-09-06T12:23:20.739Z"
+    }
+  },
+  "deletedKeys": [
+    "strategy:ibisha",
+    "strategy:new-opening",
+    "strategy:gangi-strategy",
+    "strategy:yagura-strategy",
+    "strategy:gangi-right-shiken",
+    "strategy:aono-ryu",
+    "strategy:yokofudori-33-bishop"
+  ]
+}
