@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { STANDARD_SFEN } from "../game-state";
-import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningBookFromLibrary, deleteOpeningDefinitionFromLibrary, normalizeMovePositionPrerequisites, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "./opening-book-editor.mjs";
+import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningBookFromLibrary, deleteOpeningDefinitionFromLibrary, normalizeMoveConditionBranches, normalizeMovePositionPrerequisites, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "./opening-book-editor.mjs";
 
 function draft() {
   return createOpeningBookDraft({ definition: { id: "sample", label: "サンプル", classificationName: "居飛車/基本戦法", family: "ibisha", rookStyle: "static", blackMoves: ["7g7f"] }, initialSfen: STANDARD_SFEN });
@@ -155,6 +155,22 @@ describe("opening book editor", () => {
     })).toEqual({
       "6i7h": [{ alternatives: [{ square: "8b", owner: "opponent", kind: "R" }] }],
     });
+  });
+
+  it("stores and validates moves that may be played while a condition is pending", () => {
+    const book = draft();
+    book.guideMoves = ["7g7f", "2g2f", "2f2e", "8h2b+"];
+    book.movePositionPrerequisites = {
+      "8h2b+": [{ alternatives: [{ square: "3d", owner: "opponent", kind: "P" }] }],
+    };
+    book.moveConditionBranches = { "8h2b+": ["2g2f", "2f2e"] };
+    expect(validateOpeningBook(book).errors).toEqual([]);
+    expect(normalizeMoveConditionBranches({ "8h2b+": ["2g2f", "2g2f", "2f2e"] }))
+      .toEqual({ "8h2b+": ["2g2f", "2f2e"] });
+    book.moveConditionBranches["8h2b+"] = ["7i8h"];
+    expect(validateOpeningBook(book).errors).toContain(
+      "案内手「8h2b+」の分岐手「7i8h」は、分岐元より前の案内手にしてください。",
+    );
   });
 
   it("imports and validates castle completion variants", () => {

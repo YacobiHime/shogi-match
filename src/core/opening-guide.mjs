@@ -106,6 +106,14 @@ export const OPENING_STRATEGIES = [
     historyCompletes: true,
     completionSquares: [["5f", "S"]],
     completionRequiredMoves: ["8h2b+", "7i8h"],
+    // △3四歩ならすぐ角交換し、まだなら飛車先の準備を進めながら待つ。
+    // △3四歩が後から指されても、条件手を最優先して同じ本線へ合流する。
+    movePositionPrerequisites: {
+      "8h2b+": [{ square: "3d", owner: "opponent", kind: "P" }],
+    },
+    moveConditionBranches: {
+      "8h2b+": ["2g2f", "2f2e"],
+    },
     blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+", "7i8h", "4g4f", "3i4h", "4h4g", "4g5f"],
   },
   {
@@ -1506,6 +1514,9 @@ export function openingPlanCandidates({
     const positionPrerequisites = new Map(Object.entries(
       definition.movePositionPrerequisites ?? {},
     ).map(([move, required]) => [convert(move), required]));
+    const conditionBranches = new Map(Object.entries(
+      definition.moveConditionBranches ?? {},
+    ).map(([move, branchMoves]) => [convert(move), branchMoves.map(convert)]));
     const isReady = (entry) => {
       if (!legal.has(entry.usi)) return false;
       if (!(prerequisites.get(entry.usi) ?? []).every((move) => played.has(move))) return false;
@@ -1522,6 +1533,18 @@ export function openingPlanCandidates({
     };
     if (definition.strictOrder && !definition.adaptiveOrder) {
       const next = pending[0];
+      // 条件手より前にある準備手を待機分岐にすると、準備手を進めながら
+      // 毎手条件を再確認できる。成立した時点で条件手を優先して本線へ合流する。
+      for (const [conditionMove, branchMoves] of conditionBranches) {
+        const conditionEntry = pending.find((entry) => entry.usi === conditionMove);
+        if (!conditionEntry || (next?.usi !== conditionMove && !branchMoves.includes(next?.usi))) continue;
+        if (isReady(conditionEntry)) return [conditionEntry];
+        for (const branchMove of branchMoves) {
+          const branchEntry = pending.find((entry) => entry.usi === branchMove);
+          if (branchEntry && isReady(branchEntry)) return [branchEntry];
+        }
+        return [];
+      }
       if (next) return isReady(next) ? [next] : [];
       continue;
     }

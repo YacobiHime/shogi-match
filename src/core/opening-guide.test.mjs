@@ -74,6 +74,49 @@ function sfenAfterMoves(moves, color = "black") {
 }
 
 describe("opening guide", () => {
+  it("keeps preparing Kakugawari until the opponent opens the bishop diagonal", () => {
+    const strategy = OPENING_STRATEGIES.find(({ id }) => id === "kakugawari-koshikake-gin");
+    expect(strategy.blackMoves.slice(0, 4)).toEqual(["7g7f", "2g2f", "2f2e", "8h2b+"]);
+    expect(strategy.moveConditionBranches["8h2b+"]).toEqual(["2g2f", "2f2e"]);
+
+    const waiting = createGameRecord();
+    for (const usi of ["7g7f", "8c8d"]) expect(appendUsiMove(waiting, usi), usi).toBe(true);
+    expect(nextOpeningPlanMove({
+      strategyId: strategy.id,
+      color: "black",
+      playedMoves: ["7g7f"],
+      moveHistory: ["7g7f", "8c8d"],
+      legalMoves: ["2g2f"],
+      currentSfen: waiting.position.sfen,
+    })?.usi).toBe("2g2f");
+
+    const openedLater = createGameRecord();
+    for (const usi of ["7g7f", "8c8d", "2g2f", "3c3d"]) {
+      expect(appendUsiMove(openedLater, usi), usi).toBe(true);
+    }
+    expect(nextOpeningPlanMove({
+      strategyId: strategy.id,
+      color: "black",
+      playedMoves: ["7g7f", "2g2f"],
+      moveHistory: ["7g7f", "8c8d", "2g2f", "3c3d"],
+      legalMoves: ["8h2b+", "2f2e"],
+      currentSfen: openedLater.position.sfen,
+    })?.usi).toBe("8h2b+");
+
+    const whiteExchange = createGameRecord();
+    for (const usi of ["2g2f", "3c3d", "7g7f"]) {
+      expect(appendUsiMove(whiteExchange, usi), usi).toBe(true);
+    }
+    expect(nextOpeningPlanMove({
+      strategyId: strategy.id,
+      color: "white",
+      playedMoves: ["3c3d"],
+      moveHistory: ["2g2f", "3c3d", "7g7f"],
+      legalMoves: ["2b8h+", "8c8d"],
+      currentSfen: whiteExchange.position.sfen,
+    })?.usi).toBe("2b8h+");
+  });
+
   it("starts a fresh guidance window when a reachable plan is selected late", () => {
     expect(isOpeningGuideExpired(39, 30, 40)).toBe(false);
     expect(isOpeningGuideExpired(40, 30, 40)).toBe(false);

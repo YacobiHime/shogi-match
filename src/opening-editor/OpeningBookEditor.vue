@@ -115,20 +115,24 @@
       </aside>
 
       <section class="board-column">
-        <div class="turn-banner"><span>{{ guideOnlyPreview ? `案内手${(selectedGuideIndex ?? 0) + 1}の確認` : turnLabel }}</span><strong>{{ guideOnlyPreview ? "相手の応手なしで表示中" : `${cursor + 1}手目を入力` }}</strong></div>
-        <div class="board-wrap">
+        <div class="turn-banner" :class="{ 'guide-input': showGuideMoveAdder }"><span>{{ showGuideMoveAdder ? `案内手${newGuideInsertIndex + 1}を盤から入力` : guideOnlyPreview ? `案内手${(selectedGuideIndex ?? 0) + 1}の確認` : turnLabel }}</span><strong>{{ showGuideMoveAdder ? "駒 → 移動先をクリック" : guideOnlyPreview ? "相手の応手なしで表示中" : `${cursor + 1}手目を入力` }}</strong></div>
+        <div class="board-wrap" :class="{ 'guide-input': showGuideMoveAdder }">
           <ShogiMatchBoard
             :sfen="boardSfen"
             :last-move="boardLastMove"
             :candidates="previewCandidates"
-            :allow-move="!guideOnlyPreview"
+            :allow-move="showGuideMoveAdder || !guideOnlyPreview"
             :flip="book.side === 'white'"
             asset-base-url="."
             layout="standard"
-            @usi-move="appendMove"
+            @usi-move="handleBoardMove"
           />
         </div>
-        <div class="move-actions">
+        <div v-if="showGuideMoveAdder" class="guide-board-help">
+          <span>盤上の駒と移動先を順にクリックすると、選択した位置へ案内手を追加します。</span>
+          <button type="button" @click="toggleGuideMoveAdder">盤入力をやめる</button>
+        </div>
+        <div v-else class="move-actions">
           <button type="button" :disabled="cursor === 0" @click="undo">1手戻す</button>
           <button type="button" :disabled="cursor >= activeBranch.moves.length" @click="cursor++">1手進む</button>
           <button type="button" class="primary" :disabled="!canInsertNextGuideMove" @click="insertNextGuideMove">次の案内手を入力<span v-if="nextGuideMove">（{{ nextGuideMove }}）</span></button>
@@ -143,7 +147,7 @@
         <section class="guide-sequence" aria-labelledby="guide-sequence-title">
           <div class="subheading">
             <div><h3 id="guide-sequence-title">やこび姫の案内手</h3><p>先手基準。ここを編集すると、書き出す案内手が変わります。</p></div>
-            <button type="button" @click="showGuideMoveAdder = !showGuideMoveAdder">マスを選んで追加</button>
+            <button type="button" @click="toggleGuideMoveAdder">マスを選んで追加</button>
           </div>
           <div v-if="showGuideMoveAdder" class="guide-move-adder">
             <strong>追加する手</strong>
@@ -151,6 +155,7 @@
             <span>から</span>
             <label>移動先<select v-model="newGuideTo"><option value="">選択</option><option v-for="square in conditionSquareOptions" :key="`to-${square.value}`" :value="square.value">{{ square.label }}</option></select></label>
             <label class="promote-check"><input v-model="newGuidePromote" type="checkbox" /> 成る</label>
+            <label class="guide-insert-position">追加位置<select v-model.number="newGuideInsertIndex"><option v-for="position in book.guideMoves.length + 1" :key="position" :value="position - 1">{{ position }}番目{{ position === book.guideMoves.length + 1 ? "（末尾）" : "" }}</option></select></label>
             <button type="button" class="primary" :disabled="!newGuideFrom || !newGuideTo || newGuideFrom === newGuideTo" @click="addGuideMoveFromSquares">この手を追加</button>
             <small>例: 「２六」から「２五」を選ぶと、▲２五歩として追加されます。</small>
           </div>
@@ -186,7 +191,6 @@
                 <label class="promote-check" title="成る手にする"><input type="checkbox" :checked="guideMoveParts(index)?.promote" @change="updateGuideMovePromotion(index, $event)" /> 成</label>
                 <button type="button" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">上</button>
                 <button type="button" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">下</button>
-                <button type="button" :aria-label="`案内手${index + 1}を複製`" @click="duplicateGuideMove(index)">複製</button>
                 <button type="button" class="danger" aria-label="削除" @click="removeGuideMove(index)">削除</button>
               </div>
               <details class="move-conditions">
@@ -221,6 +225,19 @@
                       <button type="button" class="icon danger" :aria-label="`条件${groupIndex + 1}のOR候補${alternativeIndex + 1}を削除`" @click="removeMoveConditionAlternative(index, groupIndex, alternativeIndex)">×</button>
                     </div>
                     <button type="button" class="add-or-condition" @click="addMoveConditionAlternative(index, groupIndex)">または（OR）候補 ＋</button>
+                  </div>
+                  <div v-if="moveConditionGroups(index).length" class="move-condition-branch">
+                    <div>
+                      <strong>条件待ちの分岐</strong>
+                      <small>条件が揃うまでは選んだ直前の準備手を案内し、揃った時点でこの手へ分岐します。</small>
+                    </div>
+                    <label>
+                      待ちながら案内する準備手
+                      <select :value="moveConditionBranchDepth(index)" :aria-label="`案内手${index + 1}の条件待ち分岐`" @change="updateMoveConditionBranchDepth(index, $event)">
+                        <option :value="0">分岐しない（この手を待つ）</option>
+                        <option v-for="depth in index" :key="depth" :value="depth">{{ conditionBranchOptionLabel(index, depth) }}</option>
+                      </select>
+                    </label>
                   </div>
                   <details class="usi-details"><summary>上級者向け：USI表記を直接編集</summary><input v-model.trim="book.guideMoves[index]" :aria-label="`案内手${index + 1}のUSI`" placeholder="例: 7g7f" spellcheck="false" @focus="beginGuideMoveEdit(index)" @input="clearPreview" @change="finishGuideMoveEdit(index)" /></details>
                 </div>
@@ -280,7 +297,7 @@ import { Position } from "tsshogi";
 import ShogiMatchBoard from "../ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "../game-state";
 import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
-import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningDefinitionFromLibrary, normalizeMovePositionPrerequisites, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
+import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningDefinitionFromLibrary, normalizeMoveConditionBranches, normalizeMovePositionPrerequisites, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
 import { formatHintMove } from "../core/match-assists.mjs";
 
 const strategies = OPENING_STRATEGIES;
@@ -324,10 +341,11 @@ const showGuideMoveAdder = ref(false);
 const newGuideFrom = ref("");
 const newGuideTo = ref("");
 const newGuidePromote = ref(false);
+const newGuideInsertIndex = ref(book.guideMoves.length);
 let toastTimer = 0;
 
 const conditionSquareOptions = Array.from({ length: 81 }, (_, index) => {
-  const file = 9 - Math.floor(index / 9);
+  const file = 1 + Math.floor(index / 9);
   const rankIndex = index % 9;
   return { value: `${file}${String.fromCharCode(97 + rankIndex)}`, label: `${"０１２３４５６７８９"[file]}${"一二三四五六七八九"[rankIndex]}` };
 });
@@ -342,8 +360,10 @@ const replay = computed(() => replayOpeningBranch(book, activeBranch.value, curs
 const currentSfen = computed(() => replay.value.position?.sfen ?? STANDARD_SFEN);
 const replayError = computed(() => replay.value.error);
 const lastMove = computed(() => cursor.value ? activeBranch.value.moves[cursor.value - 1]?.usi ?? "" : "");
-const boardSfen = computed(() => guideOnlyPreview.value && selectedGuideIndex.value !== null ? guidePreviewSfen(selectedGuideIndex.value) : currentSfen.value);
-const boardLastMove = computed(() => guideOnlyPreview.value ? "" : lastMove.value);
+const boardSfen = computed(() => showGuideMoveAdder.value
+  ? guidePreviewSfen(Math.max(0, Math.min(Number(newGuideInsertIndex.value), book.guideMoves.length)))
+  : guideOnlyPreview.value && selectedGuideIndex.value !== null ? guidePreviewSfen(selectedGuideIndex.value) : currentSfen.value);
+const boardLastMove = computed(() => showGuideMoveAdder.value || guideOnlyPreview.value ? "" : lastMove.value);
 const turnLabel = computed(() => currentSfen.value.split(" ")[1] === "w" ? "後手番" : "先手番");
 const validation = computed(() => validateOpeningBook(book));
 const savedClassificationNames = computed(() => {
@@ -433,7 +453,7 @@ function definitionForEditor(definition: any, kind: string) {
 function normalize(value: any) {
   const definition = (value?.kind === "castle" ? castles : strategies).find((item: any) => item.id === value?.id);
   const fallback = createOpeningBookDraft({ definition: definitionForEditor(definition, value?.kind ?? "strategy"), kind: value?.kind ?? "strategy", initialSfen: STANDARD_SFEN });
-  return { ...fallback, ...value, classification: { ...fallback.classification, ...value?.classification, contexts: Array.isArray(value?.classification?.contexts) ? value.classification.contexts : fallback.classification.contexts }, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], completionVariants: Array.isArray(value?.completionVariants) ? value.completionVariants : fallback.completionVariants, movePositionPrerequisites: normalizeMovePositionPrerequisites(value?.movePositionPrerequisites), sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
+  return { ...fallback, ...value, classification: { ...fallback.classification, ...value?.classification, contexts: Array.isArray(value?.classification?.contexts) ? value.classification.contexts : fallback.classification.contexts }, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], completionVariants: Array.isArray(value?.completionVariants) ? value.completionVariants : fallback.completionVariants, movePositionPrerequisites: normalizeMovePositionPrerequisites(value?.movePositionPrerequisites), moveConditionBranches: normalizeMoveConditionBranches(value?.moveConditionBranches), sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
 }
 function announce(message: string) { toast.value = message; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.value = "", 2600); }
 function replaceBook(next: any) { Object.keys(book).forEach((key) => delete book[key]); Object.assign(book, normalize(next)); activeBranchIndex.value = 0; cursor.value = book.branches[0]?.moves?.length ?? 0; clearPreview(); }
@@ -612,7 +632,17 @@ function replaceGuideMove(index: number, next: string, previousValue?: string) {
     const usedByAnotherGuideMove = book.guideMoves.some((move: string, moveIndex: number) => moveIndex !== index && move === previous);
     if (!usedByAnotherGuideMove) delete book.movePositionPrerequisites[previous];
   }
+  if (previous && previous !== next && book.moveConditionBranches[previous]) {
+    book.moveConditionBranches[next] = [...book.moveConditionBranches[previous]];
+    delete book.moveConditionBranches[previous];
+  }
+  for (const branchMoves of Object.values(book.moveConditionBranches) as string[][]) {
+    for (let branchIndex = 0; branchIndex < branchMoves.length; branchIndex += 1) {
+      if (branchMoves[branchIndex] === previous) branchMoves[branchIndex] = next;
+    }
+  }
   book.guideMoves[index] = next;
+  refreshMoveConditionBranches();
   clearPreview();
 }
 function updateGuideMoveSquare(index: number, part: "from" | "to", event: Event) {
@@ -626,17 +656,36 @@ function updateGuideMovePromotion(index: number, event: Event) {
   if (!current) return;
   replaceGuideMove(index, `${current.from}${current.to}${(event.target as HTMLInputElement).checked ? "+" : ""}`);
 }
-function addGuideMoveFromSquares() {
-  if (!newGuideFrom.value || !newGuideTo.value || newGuideFrom.value === newGuideTo.value) return;
+function toggleGuideMoveAdder() {
+  showGuideMoveAdder.value = !showGuideMoveAdder.value;
+  if (showGuideMoveAdder.value) {
+    clearPreview();
+    newGuideInsertIndex.value = book.guideMoves.length;
+  }
+}
+function insertGuideMove(usi: string) {
   clearPreview();
-  book.guideMoves.push(`${newGuideFrom.value}${newGuideTo.value}${newGuidePromote.value ? "+" : ""}`);
-  const addedIndex = book.guideMoves.length - 1;
+  const addedIndex = Math.max(0, Math.min(Number(newGuideInsertIndex.value), book.guideMoves.length));
+  book.guideMoves.splice(addedIndex, 0, usi);
+  refreshMoveConditionBranches();
   selectedGuideIndex.value = addedIndex;
   newGuideFrom.value = "";
   newGuideTo.value = "";
   newGuidePromote.value = false;
   showGuideMoveAdder.value = false;
-  announce(`${formattedGuideMove(addedIndex)}を案内手に追加しました。`);
+  announce(`${formattedGuideMove(addedIndex)}を${addedIndex + 1}番目の案内手として追加しました。`);
+}
+function addGuideMoveFromSquares() {
+  if (!newGuideFrom.value || !newGuideTo.value || newGuideFrom.value === newGuideTo.value) return;
+  insertGuideMove(`${newGuideFrom.value}${newGuideTo.value}${newGuidePromote.value ? "+" : ""}`);
+}
+function handleBoardMove(event: CustomEvent | string) {
+  const usi = String(typeof event === "string" ? event : event.detail ?? event);
+  if (!showGuideMoveAdder.value) return appendMove(usi);
+  const position = Position.newBySFEN(boardSfen.value);
+  const move = position?.createMoveByUSI(usi);
+  if (!move || !position?.isValidMove(move)) return announce("その手は案内手として追加できません。");
+  insertGuideMove(usi);
 }
 function beginGuideMoveEdit(index: number) { guideMoveBeforeEdit.value = { index, value: book.guideMoves[index] ?? "" }; }
 function finishGuideMoveEdit(index: number) {
@@ -646,6 +695,34 @@ function finishGuideMoveEdit(index: number) {
   guideMoveBeforeEdit.value = null;
 }
 function moveConditionGroups(index: number) { return book.movePositionPrerequisites[book.guideMoves[index]] ?? []; }
+function moveConditionBranchDepth(index: number) {
+  return book.moveConditionBranches[book.guideMoves[index]]?.length ?? 0;
+}
+function conditionBranchOptionLabel(index: number, depth: number) {
+  const firstIndex = index - depth;
+  return `直前${depth}手（案内手${firstIndex + 1}・${formattedGuideMove(firstIndex)}から）`;
+}
+function updateMoveConditionBranchDepth(index: number, event: Event) {
+  const move = book.guideMoves[index];
+  const depth = Number((event.target as HTMLSelectElement).value);
+  if (!move || !depth) {
+    if (move) delete book.moveConditionBranches[move];
+    return;
+  }
+  book.moveConditionBranches[move] = book.guideMoves.slice(index - depth, index);
+  announce(`${formattedGuideMove(index)}の条件を確認しながら、直前${depth}手を準備手として案内します。`);
+}
+function refreshMoveConditionBranches() {
+  for (const [move, branchMoves] of Object.entries(book.moveConditionBranches) as [string, string[]][]) {
+    const index = book.guideMoves.indexOf(move);
+    if (index < 0 || !book.movePositionPrerequisites[move]?.length || !branchMoves.length) {
+      delete book.moveConditionBranches[move];
+      continue;
+    }
+    book.moveConditionBranches[move] = book.guideMoves.slice(Math.max(0, index - branchMoves.length), index);
+    if (!book.moveConditionBranches[move].length) delete book.moveConditionBranches[move];
+  }
+}
 function defaultMoveCondition() { return { square: "8e", owner: "opponent", kind: "P" }; }
 function addMoveConditionGroup(index: number) {
   const move = book.guideMoves[index];
@@ -661,7 +738,10 @@ function removeMoveConditionGroup(index: number, groupIndex: number) {
   const groups = book.movePositionPrerequisites[move];
   if (!groups) return;
   groups.splice(groupIndex, 1);
-  if (!groups.length) delete book.movePositionPrerequisites[move];
+  if (!groups.length) {
+    delete book.movePositionPrerequisites[move];
+    delete book.moveConditionBranches[move];
+  }
 }
 function removeMoveConditionAlternative(index: number, groupIndex: number, alternativeIndex: number) {
   const group = moveConditionGroups(index)[groupIndex];
@@ -685,16 +765,11 @@ function removeCompletionPiece(variantIndex: number, pieceIndex: number) { book.
 function removeGuideMove(index: number) {
   clearPreview();
   const [removedMove] = book.guideMoves.splice(index, 1);
-  if (removedMove && !book.guideMoves.includes(removedMove)) delete book.movePositionPrerequisites[removedMove];
-}
-function duplicateGuideMove(index: number) {
-  clearPreview();
-  const move = book.guideMoves[index];
-  if (!move) return;
-  const duplicatedIndex = index + 1;
-  book.guideMoves.splice(duplicatedIndex, 0, move);
-  selectedGuideIndex.value = duplicatedIndex;
-  announce(`案内手${index + 1}を${duplicatedIndex + 1}番目へ複製しました。移動元・移動先や条件を編集できます。`);
+  if (removedMove && !book.guideMoves.includes(removedMove)) {
+    delete book.movePositionPrerequisites[removedMove];
+    delete book.moveConditionBranches[removedMove];
+  }
+  refreshMoveConditionBranches();
 }
 function beginGuideMoveDrag(index: number, event: DragEvent) {
   draggingGuideIndex.value = index;
@@ -717,6 +792,7 @@ function dropGuideMove(target: number) {
   const selected = selectedGuideIndex.value;
   const [move] = book.guideMoves.splice(source, 1);
   book.guideMoves.splice(target, 0, move);
+  refreshMoveConditionBranches();
   let nextSelected = selected;
   if (selected === source) nextSelected = target;
   else if (selected !== null && source < target && selected > source && selected <= target) nextSelected = selected - 1;
@@ -731,6 +807,7 @@ function moveGuideMove(index: number, offset: number) {
   if (target < 0 || target >= book.guideMoves.length) return;
   const [move] = book.guideMoves.splice(index, 1);
   book.guideMoves.splice(target, 0, move);
+  refreshMoveConditionBranches();
 }
 function insertNextGuideMove() {
   if (!canInsertNextGuideMove.value) return announce("次の案内手は現在の局面では指せません。相手の応手か案内手を見直してください。");

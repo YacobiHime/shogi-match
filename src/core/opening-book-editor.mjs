@@ -73,6 +73,16 @@ export function normalizeMovePositionPrerequisites(prerequisites) {
   ));
 }
 
+export function normalizeMoveConditionBranches(branches) {
+  if (!branches || Array.isArray(branches) || typeof branches !== "object") return {};
+  return Object.fromEntries(Object.entries(branches).map(([move, branchMoves]) => [
+    move,
+    Array.isArray(branchMoves)
+      ? [...new Set(branchMoves.filter((branchMove) => typeof branchMove === "string"))]
+      : [],
+  ]));
+}
+
 export function createOpeningBookDraft({ definition, kind = "strategy", side = "black", initialSfen }) {
   const now = new Date().toISOString().slice(0, 10);
   return {
@@ -95,6 +105,7 @@ export function createOpeningBookDraft({ definition, kind = "strategy", side = "
       : definition?.completionSquares?.length ? [definition.completionSquares] : []
     ).map((variant) => variant.map(([square, kind]) => [square, kind])),
     movePositionPrerequisites: normalizeMovePositionPrerequisites(definition?.movePositionPrerequisites),
+    moveConditionBranches: normalizeMoveConditionBranches(definition?.moveConditionBranches),
     completionChoices: {
       enabled: Boolean(definition?.completionChoices?.strategyIds?.length),
       prompt: definition?.completionChoices?.prompt ?? "",
@@ -168,6 +179,19 @@ export function validateOpeningBook(book) {
         if (!["player", "opponent"].includes(condition?.owner)) errors.push(`${prefix}: 駒の所有者が不正です。`);
         if (!["P", "L", "N", "S", "G", "B", "R", "K"].includes(condition?.kind)) errors.push(`${prefix}: 駒種が不正です。`);
       }
+    }
+  }
+  for (const [move, branchMoves] of Object.entries(book?.moveConditionBranches ?? {})) {
+    if (!(book?.guideMoves ?? []).includes(move)) errors.push(`分岐元の案内手「${move}」が案内手一覧にありません。`);
+    if (!(book?.movePositionPrerequisites?.[move]?.length > 0)) errors.push(`分岐元の案内手「${move}」に局面条件がありません。`);
+    if (!Array.isArray(branchMoves) || !branchMoves.length) {
+      errors.push(`案内手「${move}」の条件待ち分岐が空です。`);
+      continue;
+    }
+    const sourceIndex = (book?.guideMoves ?? []).indexOf(move);
+    for (const branchMove of branchMoves) {
+      const branchIndex = (book?.guideMoves ?? []).lastIndexOf(branchMove, sourceIndex - 1);
+      if (branchIndex < 0) errors.push(`案内手「${move}」の分岐手「${branchMove}」は、分岐元より前の案内手にしてください。`);
     }
   }
   if (book?.kind === "castle") {
