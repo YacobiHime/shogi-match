@@ -3132,8 +3132,6 @@ function restart() {
   positionAnalysisCache.clear();
   moveHistory = [];
   coachAdviceHistory = [];
-  selectedStrategy.value = "";
-  selectedCastle.value = "";
   strategyExplanationOpen.value = false;
   openingGuideStartedAtPly.value = 0;
   openingGuideDetourCount.value = 0;
@@ -3163,13 +3161,21 @@ function restart() {
 watch(
   () => [props.initialSfen, props.mode],
   () => {
-    if (matchStarted.value) restart();
+    if (matchStarted.value) {
+      selectedStrategy.value = "";
+      selectedCastle.value = "";
+      restart();
+    }
   },
 );
 watch(() => props.playerColor, (value) => {
   activePlayerColor.value = normalizePlayerColor(value);
   selectedPlayerColor.value = activePlayerColor.value;
-  if (matchStarted.value) restart();
+  if (matchStarted.value) {
+    selectedStrategy.value = "";
+    selectedCastle.value = "";
+    restart();
+  }
 });
 watch(() => props.engineNodes, (value) => {
   searchNodes.value = normalizeNodes(value);
