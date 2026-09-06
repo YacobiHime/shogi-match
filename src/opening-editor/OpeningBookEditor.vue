@@ -155,52 +155,75 @@
             <small>例: 「２六」から「２五」を選ぶと、▲２五歩として追加されます。</small>
           </div>
           <ol class="guide-move-list">
-            <li v-for="(_move, index) in book.guideMoves" :key="index" :class="{ selected: selectedGuideIndex === index }">
-              <span>{{ index + 1 }}</span>
+            <li
+              v-for="(_move, index) in book.guideMoves"
+              :key="index"
+              :class="{ selected: selectedGuideIndex === index, dragging: draggingGuideIndex === index, 'drop-target': dragOverGuideIndex === index && draggingGuideIndex !== index }"
+              @dragenter.prevent="markGuideMoveDropTarget(index)"
+              @dragover.prevent
+              @drop.prevent="dropGuideMove(index)"
+            >
+              <button
+                type="button"
+                class="guide-move-drag-handle"
+                draggable="true"
+                :aria-label="`案内手${index + 1}をドラッグして並べ替え`"
+                title="掴んで並べ替え"
+                @dragstart="beginGuideMoveDrag(index, $event)"
+                @dragend="finishGuideMoveDrag"
+              ><span>{{ index + 1 }}</span><small>⠿</small></button>
               <div class="guide-move-edit">
                 <button type="button" class="move-preview" :aria-label="`${formattedGuideMove(index)}を盤上に表示`" @click="previewGuideMove(index)">
-                  <strong>{{ formattedGuideMove(index) }}</strong><small>クリックで盤上に矢印を表示</small>
+                  <strong>{{ formattedGuideMove(index) }}</strong><small>盤に矢印を表示</small>
                 </button>
                 <div v-if="guideMoveParts(index)" class="guide-square-editor">
                   <label>移動元<select :value="guideMoveParts(index)?.from" @change="updateGuideMoveSquare(index, 'from', $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
                   <span>→</span>
                   <label>移動先<select :value="guideMoveParts(index)?.to" @change="updateGuideMoveSquare(index, 'to', $event)"><option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option></select></label>
-                  <label class="promote-check"><input type="checkbox" :checked="guideMoveParts(index)?.promote" @change="updateGuideMovePromotion(index, $event)" /> 成る</label>
-                </div>
-                <details class="usi-details"><summary>詳細（USI）</summary><input v-model.trim="book.guideMoves[index]" :aria-label="`案内手${index + 1}のUSI`" placeholder="例: 7g7f" spellcheck="false" @focus="beginGuideMoveEdit(index)" @input="clearPreview" @change="finishGuideMoveEdit(index)" /></details>
-              </div>
-              <button type="button" class="icon" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">↑</button>
-              <button type="button" class="icon" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">↓</button>
-              <button type="button" class="icon danger" aria-label="削除" @click="removeGuideMove(index)">×</button>
-              <div class="move-conditions">
-                <div class="move-condition-heading">
-                  <span>この手を案内する局面条件 <small>条件グループ同士はAND、グループ内の候補はOR</small></span>
-                  <button type="button" @click="addMoveConditionGroup(index)">AND条件 ＋</button>
-                </div>
-                <div v-for="(group, groupIndex) in moveConditionGroups(index)" :key="groupIndex" class="move-condition-group">
-                  <div class="move-condition-group-heading">
-                    <strong>条件 {{ groupIndex + 1 }}</strong>
-                    <span v-if="groupIndex > 0">かつ（AND）</span>
-                    <button type="button" class="danger" :aria-label="`条件${groupIndex + 1}を削除`" @click="removeMoveConditionGroup(index, groupIndex)">条件を削除</button>
-                  </div>
-                  <div v-for="(condition, alternativeIndex) in group.alternatives" :key="alternativeIndex" class="move-condition-row">
-                    <strong>{{ alternativeIndex ? "または" : "候補" }}<small>{{ alternativeIndex ? " OR" : "" }}</small></strong>
-                    <select v-model="condition.owner" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}の駒の所有者`">
-                      <option value="opponent">相手の</option>
-                      <option value="player">自分の</option>
-                    </select>
-                    <select v-model="condition.square" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}のマス`">
-                      <option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option>
-                    </select>
-                    <select v-model="condition.kind" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}の駒`">
-                      <option v-for="piece in conditionPieceOptions" :key="piece.value" :value="piece.value">{{ piece.label }}</option>
-                    </select>
-                    <span>がいる</span>
-                    <button type="button" class="icon danger" :aria-label="`条件${groupIndex + 1}のOR候補${alternativeIndex + 1}を削除`" @click="removeMoveConditionAlternative(index, groupIndex, alternativeIndex)">×</button>
-                  </div>
-                  <button type="button" class="add-or-condition" @click="addMoveConditionAlternative(index, groupIndex)">または（OR）候補 ＋</button>
                 </div>
               </div>
+              <div class="guide-move-order" aria-label="案内手の並べ替えと削除">
+                <label class="promote-check" title="成る手にする"><input type="checkbox" :checked="guideMoveParts(index)?.promote" @change="updateGuideMovePromotion(index, $event)" /> 成</label>
+                <button type="button" :disabled="index === 0" aria-label="上へ移動" @click="moveGuideMove(index, -1)">上</button>
+                <button type="button" :disabled="index === book.guideMoves.length - 1" aria-label="下へ移動" @click="moveGuideMove(index, 1)">下</button>
+                <button type="button" class="danger" aria-label="削除" @click="removeGuideMove(index)">削除</button>
+              </div>
+              <details class="move-conditions">
+                <summary>
+                  <span>案内条件</span>
+                  <small>{{ moveConditionGroups(index).length ? `${moveConditionGroups(index).length}グループ設定済み` : "条件なし（常に候補）" }}</small>
+                </summary>
+                <div class="move-condition-body">
+                  <div class="move-condition-heading">
+                    <span>この手を案内する局面条件 <small>条件同士はAND、各条件内はORです。</small></span>
+                    <button type="button" @click="addMoveConditionGroup(index)">AND条件 ＋</button>
+                  </div>
+                  <div v-for="(group, groupIndex) in moveConditionGroups(index)" :key="groupIndex" class="move-condition-group">
+                    <div class="move-condition-group-heading">
+                      <strong>条件 {{ groupIndex + 1 }}</strong>
+                      <span v-if="groupIndex > 0">かつ（AND）</span>
+                      <button type="button" class="danger" :aria-label="`条件${groupIndex + 1}を削除`" @click="removeMoveConditionGroup(index, groupIndex)">条件を削除</button>
+                    </div>
+                    <div v-for="(condition, alternativeIndex) in group.alternatives" :key="alternativeIndex" class="move-condition-row">
+                      <strong>{{ alternativeIndex ? "または" : "候補" }}<small>{{ alternativeIndex ? " OR" : "" }}</small></strong>
+                      <select v-model="condition.owner" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}の駒の所有者`">
+                        <option value="opponent">相手の</option>
+                        <option value="player">自分の</option>
+                      </select>
+                      <select v-model="condition.square" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}のマス`">
+                        <option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option>
+                      </select>
+                      <select v-model="condition.kind" :aria-label="`案内手${index + 1} 条件${groupIndex + 1} OR候補${alternativeIndex + 1}の駒`">
+                        <option v-for="piece in conditionPieceOptions" :key="piece.value" :value="piece.value">{{ piece.label }}</option>
+                      </select>
+                      <span>がいる</span>
+                      <button type="button" class="icon danger" :aria-label="`条件${groupIndex + 1}のOR候補${alternativeIndex + 1}を削除`" @click="removeMoveConditionAlternative(index, groupIndex, alternativeIndex)">×</button>
+                    </div>
+                    <button type="button" class="add-or-condition" @click="addMoveConditionAlternative(index, groupIndex)">または（OR）候補 ＋</button>
+                  </div>
+                  <details class="usi-details"><summary>上級者向け：USI表記を直接編集</summary><input v-model.trim="book.guideMoves[index]" :aria-label="`案内手${index + 1}のUSI`" placeholder="例: 7g7f" spellcheck="false" @focus="beginGuideMoveEdit(index)" @input="clearPreview" @change="finishGuideMoveEdit(index)" /></details>
+                </div>
+              </details>
             </li>
           </ol>
           <p v-if="!book.guideMoves.length" class="empty">案内手がありません。「マスを選んで追加」を押し、移動元と移動先を選んでください。</p>
@@ -290,6 +313,8 @@ const activeBranchIndex = ref(0);
 const cursor = ref(book.branches?.[0]?.moves?.length ?? 0);
 const toast = ref("");
 const selectedGuideIndex = ref<number | null>(null);
+const draggingGuideIndex = ref<number | null>(null);
+const dragOverGuideIndex = ref<number | null>(null);
 const previewUsi = ref("");
 const guideOnlyPreview = ref(false);
 const completionChoiceToAdd = ref("");
@@ -656,6 +681,35 @@ function removeCompletionVariant(variantIndex: number) { book.completionVariants
 function addCompletionPiece(variantIndex: number) { book.completionVariants[variantIndex].push(["5i", "K"]); }
 function removeCompletionPiece(variantIndex: number, pieceIndex: number) { book.completionVariants[variantIndex].splice(pieceIndex, 1); }
 function removeGuideMove(index: number) { clearPreview(); delete book.movePositionPrerequisites[book.guideMoves[index]]; book.guideMoves.splice(index, 1); }
+function beginGuideMoveDrag(index: number, event: DragEvent) {
+  draggingGuideIndex.value = index;
+  dragOverGuideIndex.value = index;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(index));
+  }
+}
+function markGuideMoveDropTarget(index: number) {
+  if (draggingGuideIndex.value !== null) dragOverGuideIndex.value = index;
+}
+function finishGuideMoveDrag() {
+  draggingGuideIndex.value = null;
+  dragOverGuideIndex.value = null;
+}
+function dropGuideMove(target: number) {
+  const source = draggingGuideIndex.value;
+  if (source === null || source === target) return finishGuideMoveDrag();
+  const selected = selectedGuideIndex.value;
+  const [move] = book.guideMoves.splice(source, 1);
+  book.guideMoves.splice(target, 0, move);
+  let nextSelected = selected;
+  if (selected === source) nextSelected = target;
+  else if (selected !== null && source < target && selected > source && selected <= target) nextSelected = selected - 1;
+  else if (selected !== null && source > target && selected >= target && selected < source) nextSelected = selected + 1;
+  finishGuideMoveDrag();
+  if (nextSelected !== null) previewGuideMove(nextSelected);
+  announce(`${formattedGuideMove(target)}を${target + 1}番目へ移動しました。`);
+}
 function moveGuideMove(index: number, offset: number) {
   clearPreview();
   const target = index + offset;
