@@ -4,9 +4,97 @@
     :class="{
       'shogi-game--analysis': reviewMode && analysisOpen,
       'shogi-game--rook-choice': rangingRookChoiceRequired,
+      'shogi-game--home': homeOpen,
     }"
     aria-label="将棋対局"
   >
+    <div v-if="homeOpen" class="shogi-home" aria-label="ホーム">
+      <span
+        v-for="star in HOME_STARS"
+        :key="star.id"
+        class="shogi-home__star"
+        :style="star.style"
+        aria-hidden="true"
+      ></span>
+      <span class="shogi-home__moon" aria-hidden="true"></span>
+      <div class="shogi-home__title">
+        <h1>shogi-match</h1>
+        <p>将棋でつながる、もっと楽しく</p>
+      </div>
+      <nav class="shogi-home__menu" aria-label="メニュー">
+        <button type="button" class="shogi-home__card" @click="closeHome">
+          <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <g fill="#f2e3c2">
+              <rect x="2" y="2" width="12" height="1" />
+              <rect x="2" y="13" width="12" height="1" />
+              <rect x="2" y="2" width="1" height="12" />
+              <rect x="13" y="2" width="1" height="12" />
+              <rect x="5" y="2" width="1" height="12" />
+              <rect x="8" y="2" width="1" height="12" />
+              <rect x="11" y="2" width="1" height="12" />
+              <rect x="2" y="5" width="12" height="1" />
+              <rect x="2" y="8" width="12" height="1" />
+              <rect x="2" y="11" width="12" height="1" />
+            </g>
+            <g fill="#e8a04c">
+              <rect x="3" y="3" width="2" height="2" />
+              <rect x="12" y="9" width="2" height="2" />
+            </g>
+          </svg>
+          <span class="shogi-home__label">対局画面</span>
+        </button>
+        <button type="button" class="shogi-home__card" disabled>
+          <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <g fill="#f2e3c2">
+              <rect x="2" y="3" width="5" height="10" />
+              <rect x="9" y="3" width="5" height="10" />
+              <rect x="7" y="2" width="2" height="12" />
+            </g>
+            <g fill="#e8a04c">
+              <rect x="3" y="4" width="3" height="1" />
+              <rect x="3" y="6" width="3" height="1" />
+              <rect x="3" y="8" width="3" height="1" />
+              <rect x="10" y="4" width="3" height="1" />
+              <rect x="10" y="6" width="3" height="1" />
+              <rect x="10" y="8" width="3" height="1" />
+            </g>
+          </svg>
+          <span class="shogi-home__label">定跡図鑑</span>
+          <span class="shogi-home__soon">準備中</span>
+        </button>
+        <button type="button" class="shogi-home__card" disabled>
+          <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <g fill="#e8a04c">
+              <rect x="5" y="1" width="6" height="1" />
+              <rect x="4" y="2" width="8" height="2" />
+              <rect x="3" y="4" width="10" height="8" />
+              <rect x="4" y="12" width="8" height="2" />
+              <rect x="5" y="14" width="6" height="1" />
+            </g>
+            <text x="8" y="11" class="shogi-home__koma-char" aria-hidden="true">飛</text>
+          </svg>
+          <span class="shogi-home__label">駒図鑑</span>
+          <span class="shogi-home__soon">準備中</span>
+        </button>
+        <button type="button" class="shogi-home__card" disabled>
+          <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <g fill="#f2e3c2">
+              <rect x="3" y="2" width="10" height="12" />
+              <rect x="2" y="1" width="2" height="14" />
+            </g>
+            <g fill="#e8a04c">
+              <rect x="6" y="4" width="6" height="1" />
+              <rect x="6" y="6" width="6" height="1" />
+              <rect x="6" y="8" width="6" height="1" />
+              <rect x="6" y="10" width="4" height="1" />
+            </g>
+          </svg>
+          <span class="shogi-home__label">ルール図鑑</span>
+          <span class="shogi-home__soon">準備中</span>
+        </button>
+      </nav>
+    </div>
+
     <header class="shogi-game__toolbar">
       <button
         type="button"
@@ -692,6 +780,7 @@ const props = defineProps({
   undoCount: { type: Number, default: 3 },
   mobile: { type: Boolean, default: false },
   enableDragAndDrop: { type: Boolean, default: true },
+  showHome: { type: Boolean, default: false },
 });
 const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error"]);
 
@@ -702,6 +791,7 @@ const lastMove = ref("");
 const active = ref(false);
 const matchStarted = ref(false);
 const pregameOpen = ref(true);
+const homeOpen = ref(props.showHome);
 const thinking = ref(false);
 const engineReady = ref(false);
 const engineUnavailable = ref(false);
@@ -1391,6 +1481,26 @@ function beginMatch() {
   matchStarted.value = true;
   pregameOpen.value = false;
   restart();
+}
+
+// ホーム画面の装飾(星)の配置。left/topはパーセント、色は夜空の配色に合わせる。
+const HOME_STARS = [
+  { id: "s1", style: "left:9%;top:16%;width:12px;height:12px;color:#f2e3c2;" },
+  { id: "s2", style: "left:16%;top:38%;width:8px;height:8px;color:#e8a04c;" },
+  { id: "s3", style: "left:24%;top:10%;width:6px;height:6px;color:#cfc8f0;" },
+  { id: "s4", style: "left:33%;top:26%;width:8px;height:8px;color:#f2e3c2;" },
+  { id: "s5", style: "left:52%;top:12%;width:6px;height:6px;color:#e8a04c;" },
+  { id: "s6", style: "left:63%;top:22%;width:12px;height:12px;color:#f2e3c2;" },
+  { id: "s7", style: "left:72%;top:8%;width:8px;height:8px;color:#cfc8f0;" },
+  { id: "s8", style: "left:84%;top:30%;width:8px;height:8px;color:#e8a04c;" },
+  { id: "s9", style: "left:90%;top:14%;width:14px;height:14px;color:#f2e3c2;" },
+  { id: "s10", style: "left:12%;top:70%;width:8px;height:8px;color:#e8a04c;" },
+  { id: "s11", style: "left:70%;top:74%;width:10px;height:10px;color:#f2e3c2;" },
+  { id: "s12", style: "left:88%;top:66%;width:8px;height:8px;color:#cfc8f0;" },
+];
+
+function closeHome() {
+  homeOpen.value = false;
 }
 
 function openPregame() {
@@ -5165,5 +5275,118 @@ queueMicrotask(() => {
     color: var(--ivory);
     background: rgba(46, 74, 96, 0.58);
   }
+}
+
+/* ===== ホーム画面(原型) ===== */
+/* 縦画面メディアクエリの portrait 補助表示(display: grid)より優先させる。 */
+.shogi-game--home > :not(.shogi-home) { display: none !important; }
+.shogi-home {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  padding: 24px;
+  overflow: hidden;
+  background: #1d2b3a;
+  color: var(--ink, #fff8ec);
+  font-family: "Courier New", "Hiragino Kaku Gothic ProN", "Yu Gothic", monospace;
+}
+.shogi-home__star { position: absolute; pointer-events: none; }
+.shogi-home__star::before,
+.shogi-home__star::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+}
+.shogi-home__star::before {
+  left: 33%;
+  top: 0;
+  width: 34%;
+  height: 100%;
+}
+.shogi-home__star::after {
+  left: 0;
+  top: 33%;
+  width: 100%;
+  height: 34%;
+}
+.shogi-home__moon {
+  position: absolute;
+  right: 12%;
+  top: 10%;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #f2e3c2;
+  box-shadow: inset -12px -6px 0 0 #1d2b3a;
+}
+.shogi-home__title { text-align: center; }
+.shogi-home__title h1 {
+  margin: 0;
+  font-size: clamp(36px, 7vw, 64px);
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: #f6f2e8;
+  text-shadow: 3px 3px 0 #14212e;
+}
+.shogi-home__title p {
+  margin: 10px 0 0;
+  font-size: clamp(14px, 2.4vw, 20px);
+  letter-spacing: 0.24em;
+  color: #e9e2d2;
+}
+.shogi-home__menu {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 180px));
+  gap: clamp(12px, 2.5vw, 28px);
+}
+.shogi-home__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 10px 18px;
+  border: 2px solid rgba(242, 227, 194, 0.4);
+  border-radius: 8px;
+  background: rgba(37, 58, 77, 0.9);
+  box-shadow: 4px 4px 0 rgba(16, 26, 36, 0.8);
+  color: #f6f2e8;
+  font: inherit;
+  cursor: pointer;
+}
+.shogi-home__card:not(:disabled):hover {
+  border-color: #e8a04c;
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 rgba(16, 26, 36, 0.8);
+}
+.shogi-home__card:disabled { cursor: default; opacity: 0.72; }
+.shogi-home__icon { width: 56px; height: 56px; }
+.shogi-home__label { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; }
+.shogi-home__soon {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #e8a04c;
+  color: #1d2b3a;
+  font-size: 10px;
+  font-weight: 700;
+}
+.shogi-home__koma-char {
+  font-size: 9px;
+  font-weight: 700;
+  fill: #1d2b3a;
+  text-anchor: middle;
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+}
+@media (max-width: 640px) {
+  .shogi-home { gap: 28px; }
+  .shogi-home__menu { grid-template-columns: repeat(2, minmax(120px, 1fr)); width: 100%; max-width: 360px; }
+  .shogi-home__icon { width: 44px; height: 44px; }
 }
 </style>

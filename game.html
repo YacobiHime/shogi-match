@@ -30,6 +30,11 @@
     ]) {
       if (params.has(query)) game.setAttribute(attribute, params.get(query));
     }
+    // 単体アクセスでは対局準備の前にホーム画面を出す。小説埋め込み等の
+    // 直接対局パラメーターがあるときはスキップする。
+    if (!params.has("mode") && !params.has("initial_sfen")) {
+      game.setAttribute("show-home", "");
+    }
   </script>
 </body>
 </html>
