@@ -119,6 +119,8 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
     },
     "guideMoves": [
       "@kakugawari",
+      "7i8h",
+      "8h7g",
       "6i7h",
       "2g2f",
       "3i4h",
@@ -351,6 +353,8 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
     },
     "guideMoves": [
       "@kakugawari",
+      "7i8h",
+      "8h7g",
       "6i7h",
       "3i4h",
       "3g3f",
@@ -451,7 +455,9 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "contexts": []
     },
     "guideMoves": [
-      "@kakugawari"
+      "@kakugawari",
+      "7i8h",
+      "8h7g"
     ],
     "completionVariants": [],
     "movePositionPrerequisites": {},
@@ -576,6 +582,8 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
     },
     "guideMoves": [
       "@kakugawari",
+      "7i8h",
+      "8h7g",
       "3i4h",
       "4g4f",
       "3g3f",

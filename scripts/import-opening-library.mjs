@@ -34,14 +34,7 @@ const choicePrompts = {
 const overrides = {};
 for (const [key, saved] of Object.entries(library.books ?? {})) {
   const fixup = saved.kind === "castle" ? castleFixups[saved.id] : undefined;
-  const rawGuideMoves = [...(saved.guideMoves ?? [])];
-  const routineIndex = rawGuideMoves.indexOf("@kakugawari");
-  // The routine itself already handles 7七角 and 8八銀. Old editor previews could
-  // leave these immediately after the routine token, which would otherwise try to
-  // move the silver on 8八 as though it were still the bishop.
-  const guideMoves = rawGuideMoves.filter((move, index) => (
-    routineIndex < 0 || index <= routineIndex || !["8h7g", "7i8h"].includes(move)
-  ));
+  const guideMoves = [...(saved.guideMoves ?? [])];
   const movePositionPrerequisites = Object.fromEntries(
     Object.entries(saved.movePositionPrerequisites ?? {}).filter(([move]) => guideMoves.includes(move)),
   );
