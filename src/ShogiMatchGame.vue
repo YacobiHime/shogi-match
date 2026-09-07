@@ -19,7 +19,6 @@
       <span class="shogi-home__moon" aria-hidden="true"></span>
       <div class="shogi-home__title">
         <h1>shogi-match</h1>
-        <p>将棋でつながる、もっと楽しく</p>
       </div>
       <nav class="shogi-home__menu" aria-label="メニュー">
         <button type="button" class="shogi-home__card" @click="closeHome">
@@ -118,6 +117,15 @@
       aria-modal="true"
       aria-labelledby="pregame-title"
     >
+      <!-- ホーム画面を表示する構成のときだけタイトルへ戻れる。 -->
+      <button
+        v-if="showHome"
+        type="button"
+        class="shogi-game__pregame-back"
+        @click="openHome"
+      >
+        <span aria-hidden="true">←</span> タイトルへ戻る
+      </button>
       <div class="shogi-game__pregame-panel">
         <div class="shogi-game__pregame-heading">
           <span>対局準備</span>
@@ -1501,6 +1509,10 @@ const HOME_STARS = [
 
 function closeHome() {
   homeOpen.value = false;
+}
+
+function openHome() {
+  homeOpen.value = true;
 }
 
 function openPregame() {
@@ -3830,6 +3842,11 @@ queueMicrotask(() => {
     linear-gradient(135deg, rgba(26, 10, 16, 0.96), rgba(105, 28, 47, 0.96));
   backdrop-filter: blur(0.25rem);
 }
+.shogi-game__pregame-back {
+  position: absolute;
+  top: clamp(0.75rem, 2vw, 1.5rem);
+  left: clamp(0.75rem, 2vw, 1.5rem);
+}
 .shogi-game__pregame-panel {
   width: min(44rem, 100%);
   padding: clamp(1.2rem, 3vw, 2.25rem);
@@ -5331,12 +5348,6 @@ queueMicrotask(() => {
   font-weight: 700;
   color: #f6f2e8;
   text-shadow: 3px 3px 0 #14212e;
-}
-.shogi-home__title p {
-  margin: 10px 0 0;
-  font-size: clamp(14px, 2.4vw, 20px);
-  letter-spacing: 0.24em;
-  color: #e9e2d2;
 }
 .shogi-home__menu {
   display: grid;
