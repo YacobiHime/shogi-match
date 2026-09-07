@@ -36,6 +36,8 @@ function applyEditorOverride(definition, kind) {
     ...definition,
     label: saved.label,
     family: saved.classification?.family || definition.family,
+    // エディターの定跡一覧に並んでいる以上、内部補助ではなく選択可能な戦法として扱う。
+    ...(kind === "strategy" ? { guideSelectable: true } : {}),
     ...(kind === "castle" ? {
       menuGroup: saved.classification?.menuGroup || definition.menuGroup,
       contexts: saved.classification?.contexts?.length ? saved.classification.contexts : definition.contexts,
