@@ -17,6 +17,12 @@
         aria-hidden="true"
       ></span>
       <span class="shogi-home__moon" aria-hidden="true"></span>
+      <img
+        class="shogi-home__chara"
+        :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+        alt=""
+        aria-hidden="true"
+      >
       <div class="shogi-home__title">
         <h1>shogi-match</h1>
       </div>
@@ -5339,6 +5345,25 @@ queueMicrotask(() => {
   border-radius: 50%;
   background: #f2e3c2;
   box-shadow: inset -12px -6px 0 0 #1d2b3a;
+}
+.shogi-home__chara {
+  position: absolute;
+  left: max(12px, 3vw);
+  bottom: 3vh;
+  height: clamp(130px, 26vh, 220px);
+  width: auto;
+  pointer-events: none;
+  image-rendering: pixelated;
+  animation: shogi-home-chara-float 4.5s ease-in-out infinite;
+}
+@keyframes shogi-home-chara-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 .shogi-home__title { text-align: center; }
 .shogi-home__title h1 {
