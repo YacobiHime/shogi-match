@@ -257,8 +257,6 @@ describe("opening guide", () => {
   });
 
   it("has an explanation for every selectable strategy", () => {
-    expect(Object.keys(OPENING_EXPLANATIONS).sort())
-      .toEqual(OPENING_STRATEGIES.map(({ id }) => id).sort());
     for (const { id } of OPENING_STRATEGIES) {
       expect(openingExplanation(id)).toMatchObject({
         overview: expect.any(String),
@@ -266,6 +264,19 @@ describe("opening guide", () => {
         castles: expect.any(String),
         followup: expect.any(String),
         caution: expect.any(String),
+      });
+    }
+  });
+
+  it("has an explanation for every castle", () => {
+    expect(Object.keys(OPENING_EXPLANATIONS).sort())
+      .toEqual([...OPENING_STRATEGIES, ...OPENING_CASTLES].map(({ id }) => id).sort());
+    for (const { id } of OPENING_CASTLES) {
+      expect(openingExplanation(id)).toMatchObject({
+        overview: expect.any(String),
+        feature: expect.any(String),
+        weakness: expect.any(String),
+        development: expect.any(String),
       });
     }
   });

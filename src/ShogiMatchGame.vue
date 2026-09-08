@@ -48,7 +48,7 @@
           </svg>
           <span class="shogi-home__label">対局画面</span>
         </button>
-        <button type="button" class="shogi-home__card" disabled>
+        <button type="button" class="shogi-home__card" @click="dexOpen = true">
           <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
             <g fill="#f2e3c2">
               <rect x="2" y="3" width="5" height="10" />
@@ -65,7 +65,6 @@
             </g>
           </svg>
           <span class="shogi-home__label">定跡図鑑</span>
-          <span class="shogi-home__soon">準備中</span>
         </button>
         <button type="button" class="shogi-home__card" disabled>
           <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
@@ -99,6 +98,12 @@
         </button>
       </nav>
     </div>
+
+    <ShogiOpeningDex
+      v-if="dexOpen"
+      :asset-base-url="assetBaseUrl"
+      @close="dexOpen = false"
+    />
 
     <header class="shogi-game__toolbar">
       <button
@@ -650,6 +655,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Color, PieceType, Position, Record, Square, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
+import ShogiOpeningDex from "./ShogiOpeningDex.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import {
   appendUsiMove,
@@ -806,6 +812,7 @@ const active = ref(false);
 const matchStarted = ref(false);
 const pregameOpen = ref(true);
 const homeOpen = ref(props.showHome);
+const dexOpen = ref(false);
 const thinking = ref(false);
 const engineReady = ref(false);
 const engineUnavailable = ref(false);
@@ -5333,7 +5340,8 @@ queueMicrotask(() => {
 
 /* ===== ホーム画面(原型) ===== */
 /* 縦画面メディアクエリの portrait 補助表示(display: grid)より優先させる。 */
-.shogi-game--home > :not(.shogi-home) { display: none !important; }
+/* ホーム画面では対局UIを隠す。定跡図鑑はホームから開くため例外。 */
+.shogi-game--home > :not(.shogi-home):not(.shogi-dex) { display: none !important; }
 .shogi-home {
   position: absolute;
   inset: 0;
@@ -5379,7 +5387,7 @@ queueMicrotask(() => {
 }
 .shogi-home__chara {
   position: absolute;
-  left: max(12px, 3vw);
+  left: 50%;
   bottom: 3vh;
   height: clamp(130px, 26vh, 220px);
   width: auto;
@@ -5387,13 +5395,14 @@ queueMicrotask(() => {
   image-rendering: pixelated;
   animation: shogi-home-chara-float 4.5s ease-in-out infinite;
 }
+/* 中央寄せはアニメーションのtransformと競合するため、keyframes側で行う。 */
 @keyframes shogi-home-chara-float {
   0%,
   100% {
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
   }
   50% {
-    transform: translateY(-8px);
+    transform: translateX(-50%) translateY(-8px);
   }
 }
 .shogi-home__title { text-align: center; }
