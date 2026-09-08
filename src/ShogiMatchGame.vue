@@ -1556,7 +1556,7 @@ function currentCpuOpeningTurn() {
   };
 }
 
-function strategyMove(): string | undefined {
+function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefined {
   // 駒落ちや途中局面では平手用定跡を当てはめない。
   if (props.initialSfen !== STANDARD_SFEN) return undefined;
   const { cpuIsBlack, cpuMoves, cpuColor: configuredCpuColor } = currentCpuOpeningTurn();
@@ -1567,14 +1567,14 @@ function strategyMove(): string | undefined {
     cpuMoveCount: cpuMoves.length,
     legalMoves,
   });
-  if (requestedFirstMove) return requestedFirstMove;
+  if (requestedFirstMove) return { usi: requestedFirstMove, phase: "strategy" };
   const requestedBishopMove = configuredCpuBishopMove({
     bishopPreference: cpuBishopPreference.value,
     cpuColor: configuredCpuColor,
     cpuMoves,
     legalMoves,
   });
-  if (requestedBishopMove) return requestedBishopMove;
+  if (requestedBishopMove) return { usi: requestedBishopMove, phase: "strategy" };
   if (!shouldUseCpuOpening({
     ply: moveHistory.length,
     cpuMoveCount: cpuMoves.length,
@@ -1611,8 +1611,8 @@ function strategyMove(): string | undefined {
     moveHistory,
     legalMoves,
   });
-  if (urgent) return urgent.usi;
-  return nextOpeningPlanMove({
+  if (urgent) return { usi: urgent.usi, phase: "strategy" as const };
+  const planMove = nextOpeningPlanMove({
     strategyId: cpuOpeningPlan.strategyId,
     castleId: cpuOpeningPlan.castleId,
     color: cpuIsBlack ? "black" : "white",
@@ -1623,7 +1623,8 @@ function strategyMove(): string | undefined {
     detectedFormations: formationNamesForColor(currentSfen.value, cpuColor),
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
     currentSfen: currentSfen.value,
-  })?.usi;
+  });
+  return planMove ? { usi: planMove.usi, phase: planMove.phase === "castle" ? "castle" as const : "strategy" as const } : undefined;
 }
 
 function cpuMovesAllowedByBishopSetting() {
@@ -2919,7 +2920,9 @@ async function scheduleCpuMove() {
         ?? (playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
           ? playerTurnScore
           : undefined);
-      const openingMove = strategyMove();
+      const openingPlanMove = strategyMove();
+      const openingMove = openingPlanMove?.usi;
+      const openingMovePhase = openingPlanMove?.phase ?? "strategy";
       const allowedCpuMoves = cpuMovesAllowedByBishopSetting();
       const allowedCpuMoveIds = new Set(allowedCpuMoves.map(({ usi: moveUsi }) => moveUsi));
       const allowedOpeningMove = openingMove && allowedCpuMoveIds.has(openingMove)
@@ -2950,7 +2953,8 @@ async function scheduleCpuMove() {
           const base = props.initialSfen === STANDARD_SFEN
             ? "startpos"
             : `sfen ${props.initialSfen}`;
-          engine.setPosition(`${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`);
+          const enginePosition = `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
+          engine.setPosition(enginePosition);
           const search = await engine.go({
             nodes: strength.nodes,
             maxTimeMs: 60000,
@@ -2975,15 +2979,42 @@ async function scheduleCpuMove() {
             showCoachAdvice(moveFeedback);
             await nextTick();
           }
+          // MultiPVの候補数は合法手より少ないため、作戦の定跡手が候補に入っていない
+          // 局面でも専用探索で評価してから、AI最善手との比較を行う。
+          let searchedCandidates = search.candidates;
+          if (
+            allowedOpeningMove && !forceConfiguredOpening
+            && !searchedCandidates.some(({ move }) => move === allowedOpeningMove)
+          ) {
+            engine.setPosition(enginePosition);
+            const forced = await engine.go({
+              nodes: strength.nodes,
+              maxTimeMs: 60000,
+              searchMoves: [allowedOpeningMove],
+            });
+            const forcedCandidate = forced.candidates.find(({ rank }) => rank === 1);
+            if (forcedCandidate) {
+              searchedCandidates = [
+                ...searchedCandidates,
+                { ...forcedCandidate, rank: strength.multiPv + 1, move: allowedOpeningMove },
+              ];
+            }
+          }
+          // 作戦手の評価差許容は、やこび姫補助と同じ戦法・囲いの基準に合わせる。
+          // ただし強いCPUほどAI最善を優先するため、探索設定の上限は超えない。
+          const planScoreLimit = Math.min(
+            openingGuideScoreLossLimit(cpuOpeningPlan?.strategyId ?? "", openingMovePhase),
+            strength.maxScoreLoss,
+          );
           const safeOpening = allowedOpeningMove && !forceConfiguredOpening
-            ? chooseSafeOpeningMove(allowedOpeningMove, search.candidates, Math.min(250, strength.maxScoreLoss))
+            ? chooseSafeOpeningMove(allowedOpeningMove, searchedCandidates, planScoreLimit)
             : null;
           const selection = forceConfiguredOpening && allowedOpeningMove
             ? { move: allowedOpeningMove }
             : safeOpening
             ? {
               move: safeOpening.usi,
-              rank: search.candidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
+              rank: searchedCandidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
               }
             : selectMoveByRank(
               search,
@@ -2999,7 +3030,7 @@ async function scheduleCpuMove() {
               },
             );
           usi = selection.move;
-          selectedCpuScore = search.candidates.find(
+          selectedCpuScore = searchedCandidates.find(
             (candidate) => candidate.move === selection.move,
           )?.score;
         }
@@ -3027,7 +3058,7 @@ async function scheduleCpuMove() {
       errorMessage.value = `やねうら王の思考に失敗しました: ${message}`;
       emit("match-error", { message });
       const fallbackOpeningMove = strategyMove();
-      const fallbackUsi = fallbackOpeningMove ?? selectCpuMove(record.value.position)?.usi;
+      const fallbackUsi = fallbackOpeningMove?.usi ?? selectCpuMove(record.value.position)?.usi;
       if (fallbackUsi && applyMove(fallbackUsi, "cpu") && active.value) {
         updateCoachAdvice();
         schedulePostCpuAssists();
