@@ -5,23 +5,36 @@
         <span aria-hidden="true">←</span> タイトルへ戻る
       </button>
       <h1 id="shogi-dex-title">定跡図鑑</h1>
-      <div class="shogi-dex__tabs" role="tablist" aria-label="定跡の種類">
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="tab === 'strategy'"
-          :class="{ 'shogi-dex__tab--active': tab === 'strategy' }"
-          @click="switchTab('strategy')"
-        >戦法</button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="tab === 'castle'"
-          :class="{ 'shogi-dex__tab--active': tab === 'castle' }"
-          @click="switchTab('castle')"
-        >囲い</button>
-      </div>
     </header>
+
+    <div class="shogi-dex__modes" role="tablist" aria-label="定跡の種類">
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="tab === 'strategy'"
+        :class="{ 'shogi-dex__mode--active': tab === 'strategy' }"
+        @click="switchTab('strategy')"
+      >
+        <span class="shogi-dex__mode-icon" aria-hidden="true">攻</span>
+        <span class="shogi-dex__mode-text">
+          <span class="shogi-dex__mode-label">戦法</span>
+          <span class="shogi-dex__mode-desc">攻め方・戦い方の手順（全{{ strategyCount }}種）</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="tab === 'castle'"
+        :class="{ 'shogi-dex__mode--active': tab === 'castle' }"
+        @click="switchTab('castle')"
+      >
+        <span class="shogi-dex__mode-icon" aria-hidden="true">守</span>
+        <span class="shogi-dex__mode-text">
+          <span class="shogi-dex__mode-label">囲い</span>
+          <span class="shogi-dex__mode-desc">守りを固める陣形（全{{ castleCount }}種）</span>
+        </span>
+      </button>
+    </div>
 
     <div class="shogi-dex__body">
       <nav class="shogi-dex__list" aria-label="定跡一覧">
@@ -158,6 +171,8 @@ const moveListEl = ref<HTMLElement | null>(null);
 const definitions = computed<DexDefinition[]>(() => (
   tab.value === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES
 ));
+const strategyCount = OPENING_STRATEGIES.length;
+const castleCount = OPENING_CASTLES.length;
 const groups = computed(() => {
   const items = definitions.value;
   if (tab.value === "strategy") {
@@ -239,8 +254,9 @@ const steps = computed<DexStep[]>(() => buildOpeningDexSteps(
   },
 ));
 
-watch(selectedId, () => { stepIndex.value = 0; });
-watch(steps, () => { stepIndex.value = 0; });
+// 定跡を選んだ直後は完成形を表示する。
+watch(selectedId, () => { stepIndex.value = steps.value.length - 1; });
+watch(steps, () => { stepIndex.value = steps.value.length - 1; }, { immediate: true });
 watch(stepIndex, async () => {
   await nextTick();
   moveListEl.value?.querySelector(".shogi-dex__move--current")
@@ -283,26 +299,62 @@ watch(stepIndex, async () => {
   font-family: inherit;
   cursor: pointer;
 }
-.shogi-game .shogi-dex__tabs {
+.shogi-game .shogi-dex__modes {
   display: flex;
-  gap: 0.4rem;
-  margin-left: auto;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem 0;
 }
-.shogi-game .shogi-dex .shogi-dex__tabs button {
-  min-height: 2rem;
-  padding: 0.3rem 1.1rem;
+.shogi-game .shogi-dex .shogi-dex__modes button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 20rem;
+  min-height: 3rem;
+  padding: 0.4rem 0.9rem;
   border: 1px solid rgba(242, 227, 194, 0.5);
-  border-radius: 999px;
+  border-radius: 0.6rem;
   color: #f2e3c2;
-  background: transparent;
-  font: 700 0.9rem/1.2 inherit;
+  background: rgba(242, 227, 194, 0.06);
   font-family: inherit;
+  text-align: left;
   cursor: pointer;
 }
-.shogi-game .shogi-dex .shogi-dex__tabs button.shogi-dex__tab--active {
+.shogi-game .shogi-dex .shogi-dex__modes button:hover {
+  background: rgba(242, 227, 194, 0.14);
+}
+.shogi-game .shogi-dex .shogi-dex__modes button.shogi-dex__mode--active {
   color: #25151a;
   background: #e8a04c;
   border-color: #e8a04c;
+}
+.shogi-dex__mode-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid currentcolor;
+  border-radius: 50%;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.shogi-dex__mode-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.shogi-dex__mode-label {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+.shogi-dex__mode-desc {
+  font-size: 0.68rem;
+  line-height: 1.3;
+  opacity: 0.85;
 }
 .shogi-game .shogi-dex__body {
   display: grid;
@@ -521,6 +573,24 @@ watch(stepIndex, async () => {
   line-height: 1.55;
 }
 @media (max-width: 56rem) {
+  .shogi-game .shogi-dex__modes {
+    gap: 0.4rem;
+    padding: 0.5rem 0.6rem 0;
+  }
+  .shogi-game .shogi-dex .shogi-dex__modes button {
+    gap: 0.4rem;
+    max-width: none;
+    min-height: 2.6rem;
+    padding: 0.3rem 0.6rem;
+  }
+  .shogi-dex__mode-icon {
+    width: 1.8rem;
+    height: 1.8rem;
+    font-size: 0.9rem;
+  }
+  .shogi-dex__mode-label {
+    font-size: 0.9rem;
+  }
   .shogi-game .shogi-dex__body {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 9rem) minmax(0, 1fr);
