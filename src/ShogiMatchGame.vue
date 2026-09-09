@@ -128,16 +128,16 @@
       aria-modal="true"
       aria-labelledby="pregame-title"
     >
-      <!-- ホーム画面を表示する構成のときだけタイトルへ戻れる。 -->
-      <button
-        v-if="showHome"
-        type="button"
-        class="shogi-game__pregame-back"
-        @click="openHome"
-      >
-        <span aria-hidden="true">←</span> タイトルへ戻る
-      </button>
       <div class="shogi-game__pregame-panel">
+        <!-- ホーム画面を表示する構成のときだけタイトルへ戻れる。 -->
+        <button
+          v-if="showHome"
+          type="button"
+          class="shogi-game__pregame-back"
+          @click="openHome"
+        >
+          <span aria-hidden="true">←</span> タイトルへ戻る
+        </button>
         <div class="shogi-game__pregame-heading">
           <span>対局準備</span>
           <h2 id="pregame-title">対局条件を選んでね</h2>
@@ -1521,6 +1521,8 @@ const HOME_STARS = [
 ];
 
 function closeHome() {
+  // 「対局画面」は常に対局準備から始める。openPregameが中断保存を破棄する。
+  openPregame();
   homeOpen.value = false;
 }
 
@@ -3887,9 +3889,15 @@ queueMicrotask(() => {
   backdrop-filter: blur(0.25rem);
 }
 .shogi-game__pregame-back {
-  position: absolute;
-  top: clamp(0.75rem, 2vw, 1.5rem);
-  left: clamp(0.75rem, 2vw, 1.5rem);
+  margin-bottom: 0.9rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid rgba(242, 227, 194, 0.5);
+  border-radius: 999px;
+  color: #f2e3c2;
+  background: transparent;
+  font: 700 0.8rem/1.2 inherit;
+  font-family: inherit;
+  cursor: pointer;
 }
 .shogi-game__pregame-panel {
   width: min(44rem, 100%);

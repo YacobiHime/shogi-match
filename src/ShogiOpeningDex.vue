@@ -16,10 +16,7 @@
         @click="switchTab('strategy')"
       >
         <span class="shogi-dex__mode-icon" aria-hidden="true">攻</span>
-        <span class="shogi-dex__mode-text">
-          <span class="shogi-dex__mode-label">戦法</span>
-          <span class="shogi-dex__mode-desc">攻め方・戦い方の手順（全{{ strategyCount }}種）</span>
-        </span>
+        <span class="shogi-dex__mode-label">戦法</span>
       </button>
       <button
         type="button"
@@ -29,15 +26,37 @@
         @click="switchTab('castle')"
       >
         <span class="shogi-dex__mode-icon" aria-hidden="true">守</span>
-        <span class="shogi-dex__mode-text">
-          <span class="shogi-dex__mode-label">囲い</span>
-          <span class="shogi-dex__mode-desc">守りを固める陣形（全{{ castleCount }}種）</span>
-        </span>
+        <span class="shogi-dex__mode-label">囲い</span>
       </button>
     </div>
 
+    <!-- 小さい画面では定跡一覧をハンバーガーメニューにまとめる。 -->
+    <button
+      v-if="isNarrow"
+      type="button"
+      class="shogi-dex__list-toggle"
+      :aria-expanded="listOpen"
+      aria-controls="shogi-dex-list"
+      @click="listOpen = !listOpen"
+    >
+      <span aria-hidden="true">☰</span>
+      <span>定跡一覧</span>
+      <small v-if="selectedDefinition">現在：{{ selectedDefinition.label }}</small>
+    </button>
+
     <div class="shogi-dex__body">
-      <nav class="shogi-dex__list" aria-label="定跡一覧">
+      <nav
+        id="shogi-dex-list"
+        class="shogi-dex__list"
+        :class="{ 'shogi-dex__list--open': listOpen }"
+        aria-label="定跡一覧"
+      >
+        <button
+          v-if="isNarrow"
+          type="button"
+          class="shogi-dex__list-close"
+          @click="listOpen = false"
+        >✕ 閉じる</button>
         <section v-for="group in groups" :key="group.id" class="shogi-dex__group">
           <h2>{{ group.label }}</h2>
           <ul>
@@ -56,78 +75,105 @@
       </nav>
 
       <section v-if="selectedDefinition" class="shogi-dex__detail">
-        <div class="shogi-dex__detail-head">
-          <h2>{{ selectedDefinition.label }}</h2>
-          <span v-if="isWhiteSide" class="shogi-dex__side-note">後手から見た盤面</span>
-        </div>
-        <div class="shogi-dex__board" :class="{ 'shogi-dex__board--done': stepIndex >= steps.length - 1 }">
-          <ShogiMatchBoard
-            :sfen="currentStep.sfen"
-            :last-move="currentStep.lastMove"
-            :allow-move="false"
-            :enable-drag-and-drop="false"
-            :flip="isWhiteSide"
-            :asset-base-url="assetBaseUrl"
-            layout="standard"
-          />
-        </div>
-        <div class="shogi-dex__controls">
-          <button type="button" :disabled="stepIndex === 0" @click="stepIndex = 0">最初へ</button>
-          <button type="button" :disabled="stepIndex === 0" @click="stepIndex -= 1">◀ 戻る</button>
-          <span class="shogi-dex__step-count">{{ stepIndex }}/{{ steps.length - 1 }}手目</span>
-          <button type="button" :disabled="stepIndex >= steps.length - 1" @click="stepIndex += 1">進む ▶</button>
-          <button type="button" :disabled="stepIndex >= steps.length - 1" @click="stepIndex = steps.length - 1">完成形へ</button>
-        </div>
-        <ol class="shogi-dex__moves" ref="moveListEl">
-          <li v-for="(step, index) in steps" :key="index">
+        <div class="shogi-dex__main">
+          <div class="shogi-dex__detail-head">
+            <h2>{{ selectedDefinition.label }}</h2>
+            <span v-if="isWhiteSide" class="shogi-dex__side-note">後手から見た盤面</span>
+          </div>
+          <div class="shogi-dex__stage">
+            <!-- 小さい画面では盤の横の矢印だけで前後できる。 -->
             <button
+              v-if="isNarrow"
               type="button"
-              :class="{ 'shogi-dex__move--current': stepIndex === index }"
-              :aria-current="stepIndex === index ? 'step' : undefined"
-              @click="stepIndex = index"
-            >
-              <span v-if="index === 0">初期局面</span>
-              <template v-else>
-                <span>{{ index }}</span><span>{{ step.label }}</span>
-                <small v-if="step.routine" class="shogi-dex__move-routine">代表局面</small>
-              </template>
-            </button>
-          </li>
-        </ol>
+              class="shogi-dex__stage-nav"
+              aria-label="前の局面へ戻る"
+              :disabled="stepIndex === 0"
+              @click="stepIndex -= 1"
+            >◀</button>
+            <div class="shogi-dex__board" :class="{ 'shogi-dex__board--done': stepIndex >= steps.length - 1 }">
+              <ShogiMatchBoard
+                :sfen="currentStep.sfen"
+                :last-move="currentStep.lastMove"
+                :allow-move="false"
+                :enable-drag-and-drop="false"
+                :flip="isWhiteSide"
+                :mobile="isNarrow"
+                :layout="isNarrow ? 'portrait' : 'standard'"
+                :asset-base-url="assetBaseUrl"
+              />
+            </div>
+            <button
+              v-if="isNarrow"
+              type="button"
+              class="shogi-dex__stage-nav"
+              aria-label="次の局面へ進む"
+              :disabled="stepIndex >= steps.length - 1"
+              @click="stepIndex += 1"
+            >▶</button>
+          </div>
+          <div v-if="isNarrow" class="shogi-dex__stage-count" aria-live="polite">
+            {{ stepIndex }}/{{ steps.length - 1 }}手目
+          </div>
+          <div v-if="!isNarrow" class="shogi-dex__controls">
+            <button type="button" :disabled="stepIndex === 0" @click="stepIndex = 0">最初へ</button>
+            <button type="button" :disabled="stepIndex === 0" @click="stepIndex -= 1">◀ 戻る</button>
+            <span class="shogi-dex__step-count">{{ stepIndex }}/{{ steps.length - 1 }}手目</span>
+            <button type="button" :disabled="stepIndex >= steps.length - 1" @click="stepIndex += 1">進む ▶</button>
+            <button type="button" :disabled="stepIndex >= steps.length - 1" @click="stepIndex = steps.length - 1">完成形へ</button>
+          </div>
+          <ol v-if="!isNarrow" class="shogi-dex__moves" ref="moveListEl">
+            <li v-for="(step, index) in steps" :key="index">
+              <button
+                type="button"
+                :class="{ 'shogi-dex__move--current': stepIndex === index }"
+                :aria-current="stepIndex === index ? 'step' : undefined"
+                @click="stepIndex = index"
+              >
+                <span v-if="index === 0">初期局面</span>
+                <template v-else>
+                  <span>{{ index }}</span><span>{{ step.label }}</span>
+                  <small v-if="step.routine" class="shogi-dex__move-routine">代表局面</small>
+                </template>
+              </button>
+            </li>
+          </ol>
+        </div>
 
-        <div v-if="explanation" class="shogi-dex__explanation">
-          <div class="shogi-dex__speech">
+        <div class="shogi-dex__explanation-col">
+          <div v-if="explanation" class="shogi-dex__explanation">
+            <div class="shogi-dex__speech">
+              <img
+                class="shogi-dex__chara"
+                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+                alt=""
+                aria-hidden="true"
+              >
+              <p>{{ explanation.overview }}</p>
+            </div>
+            <dl>
+              <div v-for="row in explanationRows" :key="row.label">
+                <dt>{{ row.label }}</dt>
+                <dd>{{ row.text }}</dd>
+              </div>
+            </dl>
+          </div>
+          <p v-else class="shogi-dex__no-explanation">
             <img
               class="shogi-dex__chara"
               :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
               alt=""
               aria-hidden="true"
             >
-            <p>{{ explanation.overview }}</p>
-          </div>
-          <dl>
-            <div v-for="row in explanationRows" :key="row.label">
-              <dt>{{ row.label }}</dt>
-              <dd>{{ row.text }}</dd>
-            </div>
-          </dl>
+            この定跡の解説はまだ用意できてないんだ……ごめんね！手順と盤面は見られるよ！
+          </p>
         </div>
-        <p v-else class="shogi-dex__no-explanation">
-          <img
-            class="shogi-dex__chara"
-            :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
-            alt=""
-            aria-hidden="true"
-          >
-          この定跡の解説はまだ用意できてないんだ……ごめんね！手順と盤面は見られるよ！
-        </p>
       </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "./game-state";
 import {
@@ -166,13 +212,24 @@ const STRATEGY_GROUP_LABELS = [
 const tab = ref<"strategy" | "castle">("strategy");
 const selectedId = ref("ibisha");
 const stepIndex = ref(0);
+const listOpen = ref(false);
 const moveListEl = ref<HTMLElement | null>(null);
+
+// 狭い画面では縦長レイアウトの盤に切り替え、駒を見やすくする。
+const narrowMediaQuery = typeof window !== "undefined" && window.matchMedia
+  ? window.matchMedia("(max-width: 56rem)")
+  : null;
+const isNarrow = ref(Boolean(narrowMediaQuery?.matches));
+function onNarrowChange(event: MediaQueryListEvent) {
+  isNarrow.value = event.matches;
+  if (!event.matches) listOpen.value = false;
+}
+onMounted(() => narrowMediaQuery?.addEventListener("change", onNarrowChange));
+onBeforeUnmount(() => narrowMediaQuery?.removeEventListener("change", onNarrowChange));
 
 const definitions = computed<DexDefinition[]>(() => (
   tab.value === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES
 ));
-const strategyCount = OPENING_STRATEGIES.length;
-const castleCount = OPENING_CASTLES.length;
 const groups = computed(() => {
   const items = definitions.value;
   if (tab.value === "strategy") {
@@ -240,6 +297,8 @@ function switchTab(next: "strategy" | "castle") {
 }
 function selectItem(id: string) {
   selectedId.value = id;
+  // 一覧から選んだらメニューを閉じる。
+  listOpen.value = false;
 }
 
 // 定跡の手順を平手の初期局面から再生する。後手専用の戦法は左右を反転し、
@@ -308,16 +367,16 @@ watch(stepIndex, async () => {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  max-width: 20rem;
-  min-height: 3rem;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: 14rem;
+  min-height: 2.9rem;
   padding: 0.4rem 0.9rem;
   border: 1px solid rgba(242, 227, 194, 0.5);
   border-radius: 0.6rem;
   color: #f2e3c2;
   background: rgba(242, 227, 194, 0.06);
   font-family: inherit;
-  text-align: left;
   cursor: pointer;
 }
 .shogi-game .shogi-dex .shogi-dex__modes button:hover {
@@ -333,39 +392,68 @@ watch(stepIndex, async () => {
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 1.9rem;
+  height: 1.9rem;
   border: 1px solid currentcolor;
   border-radius: 50%;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
-}
-.shogi-dex__mode-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
 }
 .shogi-dex__mode-label {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: 0.15em;
-}
-.shogi-dex__mode-desc {
-  font-size: 0.68rem;
-  line-height: 1.3;
-  opacity: 0.85;
 }
 .shogi-game .shogi-dex__body {
   display: grid;
   grid-template-columns: 16rem minmax(0, 1fr);
   flex: 1;
   min-height: 0;
+  /* 盤面内部の巨大なz-index要素が一覧オーバーレイの上に出ないよう、
+     独自のstacking contextに閉じ込める。 */
+  position: relative;
+  z-index: 0;
 }
 .shogi-game .shogi-dex__list {
   overflow-y: auto;
   padding: 0.5rem 0.4rem 1rem;
   border-right: 1px solid rgba(242, 227, 194, 0.25);
+}
+.shogi-game .shogi-dex .shogi-dex__list-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.55rem 0.6rem 0;
+  min-height: 2.7rem;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid rgba(242, 227, 194, 0.5);
+  border-radius: 0.5rem;
+  color: #f2e3c2;
+  background: rgba(242, 227, 194, 0.08);
+  font: 700 0.9rem/1.2 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+.shogi-game .shogi-dex__list-toggle small {
+  margin-left: auto;
+  overflow: hidden;
+  color: #e8a04c;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game .shogi-dex .shogi-dex__list-close {
+  min-height: 2.2rem;
+  margin: 0.5rem 0.4rem 0.2rem;
+  padding: 0.25rem 0.8rem;
+  border: 1px solid rgba(242, 227, 194, 0.5);
+  border-radius: 999px;
+  color: #f2e3c2;
+  background: transparent;
+  font: 700 0.8rem/1.2 inherit;
+  font-family: inherit;
+  cursor: pointer;
 }
 .shogi-game .shogi-dex__group h2 {
   margin: 0.6rem 0.3rem 0.25rem;
@@ -416,16 +504,35 @@ watch(stepIndex, async () => {
 }
 .shogi-game .shogi-dex__detail {
   display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
+  align-items: stretch;
+  gap: 0.7rem;
   min-width: 0;
   padding: 0.6rem 1rem 1rem;
+  overflow-y: auto;
+}
+/* 左列：盤と操作系。右列：解説。盤は残った高さいっぱいに広がる。 */
+/* 左列のbasisを0にし、盤の幅が解説列を押し潰さないようにする。 */
+.shogi-game .shogi-dex__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+.shogi-game .shogi-dex__explanation-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 0 1 clamp(15rem, 24vw, 22rem);
+  min-width: min(14rem, 40vw);
   overflow-y: auto;
 }
 .shogi-dex__detail-head {
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
+  flex: none;
 }
 .shogi-game .shogi-dex__detail-head h2 {
   margin: 0;
@@ -435,12 +542,45 @@ watch(stepIndex, async () => {
   color: #e8a04c;
   font-size: 0.72rem;
 }
+.shogi-game .shogi-dex__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex: 1 1 0;
+  min-height: 11rem;
+  width: 100%;
+}
+.shogi-game .shogi-dex__stage-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 3rem;
+  height: 4.5rem;
+  border: 1px solid rgba(242, 227, 194, 0.5);
+  border-radius: 0.5rem;
+  color: #f2e3c2;
+  background: rgba(242, 227, 194, 0.08);
+  font: 700 1.1rem/1 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+.shogi-game .shogi-dex__stage-nav:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
 .shogi-game .shogi-dex__board {
-  align-self: center;
-  width: min(100%, 30rem);
-  /* 標準レイアウトの盤の縦横比(0.66)に合わせ、はみ出しを防ぐ。 */
-  height: calc(min(100%, 30rem) * 0.66);
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
+  /* 標準レイアウトの盤の縦横比(1471/959)。高さに合わせて幅を決める。 */
+  aspect-ratio: 1471 / 959;
+}
+.shogi-game .shogi-dex__stage-count {
+  align-self: center;
+  font-size: 0.85rem;
 }
 /* 対局画面と同様、図鑑では盤・駒の着せ替えUIを隠す。 */
 .shogi-game .shogi-dex .shogi-match-theme-controls {
@@ -452,6 +592,7 @@ watch(stepIndex, async () => {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
+  flex: none;
 }
 .shogi-game .shogi-dex .shogi-dex__controls button {
   min-height: 2rem;
@@ -477,6 +618,7 @@ watch(stepIndex, async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
+  flex: none;
   margin: 0;
   padding: 0.4rem;
   list-style: none;
@@ -578,40 +720,57 @@ watch(stepIndex, async () => {
     padding: 0.5rem 0.6rem 0;
   }
   .shogi-game .shogi-dex .shogi-dex__modes button {
-    gap: 0.4rem;
-    max-width: none;
     min-height: 2.6rem;
     padding: 0.3rem 0.6rem;
   }
-  .shogi-dex__mode-icon {
-    width: 1.8rem;
-    height: 1.8rem;
-    font-size: 0.9rem;
-  }
-  .shogi-dex__mode-label {
-    font-size: 0.9rem;
-  }
   .shogi-game .shogi-dex__body {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 9rem) minmax(0, 1fr);
+    /* 詳細の高さは内容に任せ、はみ出した盤が解説に被らないようにする。 */
+    grid-template-rows: auto;
     overflow-y: auto;
   }
+  /* 一覧は非表示にし、ハンバーガーからオーバーレイで開く。
+     fixedにして詳細のスクロールから切り離し、盤面内部の巨大なz-index
+     (1000000)を超える値で最前面に置く。 */
   .shogi-game .shogi-dex__list {
-    overflow-y: auto;
+    display: none;
     border-right: 0;
-    border-bottom: 1px solid rgba(242, 227, 194, 0.25);
   }
-  .shogi-game .shogi-dex__group {
-    display: inline-block;
-    vertical-align: top;
-    margin-right: 0.8rem;
+  .shogi-game .shogi-dex__list--open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1000001;
+    background: #1d2b3a;
+    padding-bottom: 1rem;
   }
   .shogi-game .shogi-dex__detail {
+    flex-direction: column;
+    overflow-y: visible;
+    padding: 0.5rem 0.6rem 1rem;
+  }
+  .shogi-game .shogi-dex__main {
+    flex: none;
+  }
+  .shogi-game .shogi-dex__explanation-col {
+    flex: none;
     overflow-y: visible;
   }
+  .shogi-game .shogi-dex__stage {
+    flex: none;
+    align-self: center;
+    width: 100%;
+    max-width: 28rem;
+  }
   .shogi-game .shogi-dex__board {
-    width: min(100%, 24rem);
-    height: calc(min(100%, 24rem) * 0.66);
+    flex: 1;
+    height: auto;
+    /* 縦長レイアウトの盤の縦横比(878/1168)に合わせ、盤を最大化する。 */
+    aspect-ratio: 878 / 1168;
+  }
+  .shogi-game .shogi-dex__stage-nav {
+    width: 2.6rem;
+    height: 4rem;
   }
 }
 </style>
