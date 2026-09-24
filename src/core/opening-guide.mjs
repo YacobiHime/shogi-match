@@ -1209,6 +1209,87 @@ export function openingPlanSteps(strategyId, castleId, color = "black", context 
   ];
 }
 
+const INITIAL_PLAN_SFEN = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+
+function planStepsWithKinds(steps, color) {
+  const pieces = new Map([...parseSfenBoard(INITIAL_PLAN_SFEN)]
+    .filter(([, piece]) => piece.color === color)
+    .map(([square, piece]) => [square, piece.kind]));
+  return steps.map((entry) => {
+    const drop = /^([PLNSGBR])\*([1-9][a-i])$/.exec(entry.usi);
+    if (drop) {
+      pieces.set(drop[2], drop[1]);
+      return { ...entry, expectedKind: drop[1] };
+    }
+    const from = entry.usi.slice(0, 2);
+    const to = entry.usi.slice(2, 4);
+    const kind = pieces.get(from);
+    const resultingKind = kind && entry.usi.endsWith("+") && !kind.startsWith("+")
+      ? `+${kind}` : kind;
+    if (kind) {
+      pieces.delete(from);
+      pieces.set(to, resultingKind);
+    }
+    return { ...entry, expectedKind: resultingKind };
+  });
+}
+
+/** 履歴の出現回数を優先し、残りは現在の駒種と到達先で消化する。 */
+function pendingPlanSteps(steps, phase, playedMoves, currentSfen, color) {
+  const entries = planStepsWithKinds(steps, color).filter((entry) => entry.phase === phase);
+  const counts = new Map();
+  for (const move of playedMoves) counts.set(move, (counts.get(move) ?? 0) + 1);
+  const consumed = new Set();
+  entries.forEach((entry, index) => {
+    const remaining = counts.get(entry.usi) ?? 0;
+    if (remaining > 0) {
+      consumed.add(index);
+      counts.set(entry.usi, remaining - 1);
+    }
+  });
+  if (currentSfen) {
+    const board = parseSfenBoard(currentSfen);
+    const reached = new Map();
+    entries.forEach((entry, index) => {
+      if (consumed.has(index) || !entry.expectedKind) return;
+      const to = entry.usi.slice(2, 4);
+      const piece = board.get(to);
+      if (piece?.color === color && piece.kind === entry.expectedKind) {
+        reached.set(`${to}:${entry.expectedKind}`, index);
+      }
+    });
+    // 同じ駒が別経路で後の升へ達した場合、そこまでの連続した手順も消化する。
+    for (const index of reached.values()) {
+      let cursor = index;
+      while (!consumed.has(cursor)) {
+        consumed.add(cursor);
+        const entry = entries[cursor];
+        const from = entry.usi.slice(0, 2);
+        const previous = entries.findLastIndex((candidate, candidateIndex) => (
+          candidateIndex < cursor && candidate.usi.slice(2, 4) === from
+          && candidate.expectedKind === entry.expectedKind
+        ));
+        if (previous < 0) break;
+        cursor = previous;
+      }
+    }
+  }
+  return entries.filter((_, index) => !consumed.has(index));
+}
+
+function alternativePlanMove(entry, legalMoves, board, color) {
+  if (!entry.expectedKind || !Array.isArray(legalMoves)) return null;
+  if (board.get(entry.usi.slice(0, 2))?.color === color) return null;
+  const destination = entry.usi.slice(2, 4);
+  const move = legalMoves.find((usi) => (
+    usi.slice(2, 4) === destination
+    && usi.slice(0, 2) !== entry.usi.slice(0, 2)
+    && board.get(usi.slice(0, 2))?.color === color
+    && board.get(usi.slice(0, 2))?.kind === entry.expectedKind
+  ));
+  return move ? { usi: move, phase: entry.phase } : null;
+}
+
 function parseSfenBoard(sfen) {
   const boardPart = String(sfen ?? "").trim().split(/\s+/)[0];
   const ranks = boardPart.split("/");
@@ -1332,7 +1413,9 @@ export function availableOpeningDefinitions({
       ) return false;
     }
     if (definitionDetectedComplete(definition, detected, currentSfen, color, playedMoves)) return true;
-    if (steps.length > 0 && steps.every(({ usi }) => played.has(usi))) return true;
+    if (steps.length > 0 && pendingPlanSteps(
+      steps, kind, playedMoves, currentSfen, color,
+    ).length === 0) return true;
 
     const next = nextOpeningPlanMove({
       strategyId: kind === "strategy" ? definition.id : "",
@@ -1366,6 +1449,7 @@ export function openingPlanInterruption({
   detectedFormations = [],
   opponentFormations = [],
   currentSfen = "",
+  legalMoves,
 } = {}) {
   const own = new Set(canonicalMovesForColor(playedMoves, color));
   const opponent = new Set(canonicalMovesForColor(
@@ -1483,17 +1567,7 @@ export function openingPlanInterruption({
       if (!definition || definitionDetectedComplete(
         definition, detected, currentSfen, color, playedMoves,
       )) continue;
-      const playedCounts = new Map();
-      for (const move of playedMoves) {
-        playedCounts.set(move, (playedCounts.get(move) ?? 0) + 1);
-      }
-      const pending = steps.filter((entry) => {
-        if (entry.phase !== phase) return false;
-        const remaining = playedCounts.get(entry.usi) ?? 0;
-        if (remaining <= 0) return true;
-        playedCounts.set(entry.usi, remaining - 1);
-        return false;
-      });
+      const pending = pendingPlanSteps(steps, phase, playedMoves, currentSfen, color);
       const candidates = definition.strictOrder && !definition.adaptiveOrder
         ? pending.slice(0, 1)
         : pending;
@@ -1501,6 +1575,7 @@ export function openingPlanInterruption({
       if (
         boardMoves.length > 0
         && boardMoves.every(({ usi }) => board.get(usi.slice(0, 2))?.color !== color)
+        && !boardMoves.some((entry) => alternativePlanMove(entry, legalMoves, board, color))
       ) {
         return {
           requiresReselection: true,
@@ -1757,17 +1832,7 @@ export function openingPlanCandidates({
     const definition = phase === "strategy" ? strategy : castle;
     const complete = phase === "strategy" ? strategyComplete : castleComplete;
     if (!definition || complete) continue;
-    // 同じUSIでも、駒が入れ替わって後からもう一度現れる手がある
-    // （例: ミレニアムの玉7八と金7八）。履歴を集合に潰さず出現回数で消化する。
-    const playedCounts = new Map();
-    for (const move of playedMoves) playedCounts.set(move, (playedCounts.get(move) ?? 0) + 1);
-    const pending = steps.filter((entry) => {
-      if (entry.phase !== phase) return false;
-      const remaining = playedCounts.get(entry.usi) ?? 0;
-      if (remaining <= 0) return true;
-      playedCounts.set(entry.usi, remaining - 1);
-      return false;
-    });
+    const pending = pendingPlanSteps(steps, phase, playedMoves, currentSfen, color);
     const combinedPrerequisites = {
       ...(definition.movePrerequisites ?? {}),
       ...(phase === "strategy"
@@ -1784,7 +1849,6 @@ export function openingPlanCandidates({
       definition.moveConditionBranches ?? {},
     ).map(([move, branchMoves]) => [convert(move), branchMoves.map(convert)]));
     const isReady = (entry) => {
-      if (!legal.has(entry.usi)) return false;
       if (!(prerequisites.get(entry.usi) ?? []).every((move) => played.has(move))) return false;
       if (!matchesMovePositionPrerequisites(positionPrerequisites.get(entry.usi), {
         pieceAt: (square) => board.get(square),
@@ -1797,6 +1861,11 @@ export function openingPlanCandidates({
       );
       return !historyRequirement || history.size === 0 || history.has(historyRequirement.required);
     };
+    const availableMove = (entry) => {
+      if (!isReady(entry)) return null;
+      if (legal.has(entry.usi)) return { usi: entry.usi, phase: entry.phase };
+      return alternativePlanMove(entry, legalMoves, board, color);
+    };
     if (definition.strictOrder && !definition.adaptiveOrder) {
       const next = pending[0];
       // 条件手より前にある準備手を待機分岐にすると、準備手を進めながら
@@ -1804,17 +1873,22 @@ export function openingPlanCandidates({
       for (const [conditionMove, branchMoves] of conditionBranches) {
         const conditionEntry = pending.find((entry) => entry.usi === conditionMove);
         if (!conditionEntry || (next?.usi !== conditionMove && !branchMoves.includes(next?.usi))) continue;
-        if (isReady(conditionEntry)) return [conditionEntry];
+        const conditionCandidate = availableMove(conditionEntry);
+        if (conditionCandidate) return [conditionCandidate];
         for (const branchMove of branchMoves) {
           const branchEntry = pending.find((entry) => entry.usi === branchMove);
-          if (branchEntry && isReady(branchEntry)) return [branchEntry];
+          const branchCandidate = branchEntry && availableMove(branchEntry);
+          if (branchCandidate) return [branchCandidate];
         }
         return [];
       }
-      if (next) return isReady(next) ? [next] : [];
+      if (next) {
+        const candidate = availableMove(next);
+        return candidate ? [candidate] : [];
+      }
       continue;
     }
-    const candidates = pending.filter(isReady);
+    const candidates = pending.map(availableMove).filter(Boolean);
     if (candidates.length) return candidates;
   }
   return [];
@@ -1847,21 +1921,25 @@ export function isOpeningPlanComplete({
     if (!definition) return false;
     if (definition.completionRequiresBishopExchange
       && !completedBishopExchange(currentSfen, color, playedMoves)) return false;
+    const pending = pendingPlanSteps(steps, phase, playedMoves, currentSfen, color);
+    const satisfied = (move) => played.has(move)
+      || (entries.some((entry) => entry.usi === move)
+        && !pending.some((entry) => entry.usi === move));
     const requiredMoves = (definition.completionRequiredMoves ?? []).map(
       color === "white" ? mirrorUsiMove : (move) => move,
     );
-    if (!requiredMoves.every((move) => played.has(move))) return false;
+    if (!requiredMoves.every(satisfied)) return false;
     const requiredMoveGroups = (definition.completionRequiredMoveGroups ?? []).map(
       (moves) => moves.map(color === "white" ? mirrorUsiMove : (move) => move),
     );
-    if (!requiredMoveGroups.every((moves) => moves.some((move) => played.has(move)))) return false;
+    if (!requiredMoveGroups.every((moves) => moves.some(satisfied))) return false;
     if (matchesCompletionMoveCounts(definition, playedMoves, color)) return true;
     const exact = matchesCompletionSquares(definition, currentSfen, color);
     if (exact === true) return true;
     if (exact === false && !definition?.historyCompletes) return false;
     if (definition.detectionNames.some((name) => detected.has(name))) return true;
     return (entries.length > 0 || definition.completionRequiresBishopExchange)
-      && entries.every(({ usi }) => played.has(usi));
+      && pending.length === 0;
   };
   return phaseComplete(
     strategyId,

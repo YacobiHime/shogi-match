@@ -1951,6 +1951,7 @@ function scheduleOpeningGuideSafety() {
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
   const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   const interruption = openingPlanInterruption({
     strategyId: selectedStrategy.value,
     castleId: selectedCastle.value,
@@ -1964,6 +1965,7 @@ function scheduleOpeningGuideSafety() {
       humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK,
     ),
     currentSfen: currentSfen.value,
+    legalMoves,
   });
   if (interruption) {
     if (interruption.requiresReselection) {
@@ -1998,7 +2000,6 @@ function scheduleOpeningGuideSafety() {
     guideText.value = branchMessage;
   }
 
-  const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   const urgent = openingUrgentResponse({
     strategyId: selectedStrategy.value,
     color: humanColor.value === Color.BLACK ? "black" : "white",

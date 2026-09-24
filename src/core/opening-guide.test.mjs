@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendUsiMove, createGameRecord } from "../game-state";
+import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
 import {
   availableOpeningDefinitions,
   bishopExchangeState,
@@ -126,18 +126,26 @@ describe("opening guide", () => {
     })).toBe(true);
   });
 
-  it("continues a Bishop Exchange after the opponent promotes on 7g", () => {
-    const line = ["7g7f", "3c3d", "8h7g", "8c8d", "7i8h", "2b7g+"];
+  it.each([
+    ["black", ["7g7f", "3c3d", "8h7g", "8c8d", "7i8h", "2b7g+"], "8h7g"],
+    ["white", ["7g7f", "3c3d", "8h7g", "2b3c", "2g2f", "3a2b", "7g3c+"], "2b3c"],
+  ])("continues a Bishop Exchange after the opponent promotes into the prepared camp as %s", (color, line, recapture) => {
     const record = createGameRecord();
     for (const usi of line) expect(appendUsiMove(record, usi), usi).toBe(true);
-    expect(bishopExchangeState(record.position.sfen, "black")).toBe("awaiting-recapture");
+    expect(bishopExchangeState(record.position.sfen, color)).toBe("awaiting-recapture");
     expect(openingGuideRoutineStatus({
-      strategyId: "kakugawari-koshikake-gin", color: "black",
-      playedMoves: line.filter((_, index) => index % 2 === 0),
-      legalMoves: ["8h7g"], currentSfen: record.position.sfen,
-    })).toMatchObject({ status: "active", candidates: [{ usi: "8h7g" }] });
-    expect(appendUsiMove(record, "8h7g")).toBe(true);
-    expect(bishopExchangeState(record.position.sfen, "black")).toBe("exchanged");
+      strategyId: "kakugawari-koshikake-gin", color,
+      playedMoves: line.filter((_, index) => (index % 2 === 0) === (color === "black")),
+      legalMoves: [recapture], currentSfen: record.position.sfen,
+    })).toMatchObject({ status: "active", candidates: [{ usi: recapture }] });
+    expect(openingPlanInterruption({
+      strategyId: "kakugawari-koshikake-gin", color,
+      playedMoves: line.filter((_, index) => (index % 2 === 0) === (color === "black")),
+      opponentMoves: line.filter((_, index) => (index % 2 === 0) !== (color === "black")),
+      moveHistory: line, legalMoves: [recapture], currentSfen: record.position.sfen,
+    })).toBeNull();
+    expect(appendUsiMove(record, recapture)).toBe(true);
+    expect(bishopExchangeState(record.position.sfen, color)).toBe("exchanged");
   });
 
   it("keeps a bishop on 3c as a reachable exchange target", () => {
@@ -195,11 +203,7 @@ describe("opening guide", () => {
     } finally {
       process.env.VITEST = original;
     }
-    const opening = createGameRecord();
-    for (const usi of ["7g7f", "3c3d", "2g2f", "2b8h+", "7i8h"]) {
-      expect(appendUsiMove(opening, usi), usi).toBe(true);
-    }
-    for (const [strategyId, continuation] of [
+    const plans = [
       ["kakugawari", ["8h7g"]],
       ["kakugawari-koshikake-gin", [
         "8h7g", "6i7h", "3i4h", "3g3f", "2i3g", "2h2i",
@@ -208,22 +212,33 @@ describe("opening guide", () => {
       ["kakugawari-45-knight", [
         "8h7g", "3i4h", "4g4f", "3g3f", "2i3g", "3g4e",
       ]],
-    ]) {
-      const definition = production.OPENING_STRATEGIES.find(({ id }) => id === strategyId);
-      expect(definition.blackMoves[0]).toBe("@kakugawari");
-      expect(definition.completionRequiresBishopExchange).toBe(true);
-      expect(definition.completionRequiredMoves ?? []).not.toContain("8h2b+");
-      let record = createGameRecord(opening.position.sfen);
-      const playedMoves = ["7g7f", "2g2f", "7i8h"];
-      for (const usi of continuation) {
-        record = createGameRecord(withTurn(record.position.sfen, "black"));
-        expect(appendUsiMove(record, usi), `${strategyId}: ${usi}`).toBe(true);
-        playedMoves.push(usi);
+    ];
+    for (const color of ["black", "white"]) {
+      const opening = createGameRecord();
+      const prefix = color === "black"
+        ? ["7g7f", "3c3d", "2g2f", "2b8h+", "7i8h"]
+        : ["7g7f", "3c3d", "2g2f", "8c8d", "8h2b+", "3a2b"];
+      for (const usi of prefix) expect(appendUsiMove(opening, usi), usi).toBe(true);
+      const convert = color === "white" ? mirrorUsiMove : (move) => move;
+      for (const [strategyId, continuation] of plans) {
+        const definition = production.OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+        expect(definition.blackMoves[0]).toBe("@kakugawari");
+        expect(definition.completionRequiresBishopExchange).toBe(true);
+        expect(definition.completionRequiredMoves ?? []).not.toContain("8h2b+");
+        let record = createGameRecord(opening.position.sfen);
+        const playedMoves = ["7g7f", "2g2f", "7i8h"].map(convert);
+        for (const move of continuation) {
+          const usi = convert(move);
+          record = createGameRecord(withTurn(record.position.sfen, color));
+          expect(appendUsiMove(record, usi), `${color} ${strategyId}: ${usi}`).toBe(true);
+          playedMoves.push(usi);
+        }
+        expect(production.isOpeningPlanComplete({
+          strategyId, color, playedMoves,
+          opponentMoves: prefix.filter((_, index) => (index % 2 === 0) !== (color === "black")),
+          currentSfen: record.position.sfen,
+        }), `${color} ${strategyId}`).toBe(true);
       }
-      expect(production.isOpeningPlanComplete({
-        strategyId, color: "black", playedMoves,
-        opponentMoves: ["3c3d", "2b8h+"], currentSfen: record.position.sfen,
-      }), strategyId).toBe(true);
     }
   });
   it("keeps preparing Kakugawari until the opponent opens the bishop diagonal", () => {
@@ -1261,6 +1276,68 @@ describe("opening guide", () => {
       clearStrategy: true,
       message: expect.stringContaining("寄り道はせずここで中断"),
     });
+  });
+
+  it.each(["black", "white"])("consumes a Bishop destination reached by another route as %s", (color) => {
+    const convert = color === "white" ? mirrorUsiMove : (move) => move;
+    const playedMoves = ["7g7f", "8h7g", "7g6f"].map(convert);
+    const currentSfen = sfenAfterMoves(playedMoves, color);
+    const next = convert("7i8h");
+    expect(openingPlanInterruption({
+      strategyId: "chikatetsu-bisha", color, playedMoves, currentSfen,
+    })).toBeNull();
+    expect(nextOpeningPlanMove({
+      strategyId: "chikatetsu-bisha", color, playedMoves,
+      legalMoves: [next], currentSfen,
+    })?.usi).toBe(next);
+  });
+
+  it.each(["black", "white"])("guides a substitute rook when the planned rook has moved as %s", (color) => {
+    const convert = color === "white" ? mirrorUsiMove : (move) => move;
+    const playedMoves = ["3g3f", "2h4h"].map(convert);
+    const currentSfen = sfenAfterMoves(playedMoves, color);
+    const alternative = convert("4h3h");
+    const legalMoves = enumerateLegalMoves(
+      createGameRecord(withTurn(currentSfen, color)).position,
+    ).map(({ usi }) => usi);
+    expect(legalMoves).toContain(alternative);
+    expect(openingPlanInterruption({
+      strategyId: "sodebisha", color, playedMoves,
+      legalMoves, currentSfen,
+    })).toBeNull();
+    expect(nextOpeningPlanMove({
+      strategyId: "sodebisha", color, playedMoves,
+      legalMoves, currentSfen,
+    })?.usi).toBe(alternative);
+    expect(openingPlanInterruption({
+      strategyId: "sodebisha", color, playedMoves, legalMoves: [], currentSfen,
+    })).toMatchObject({ requiresReselection: true });
+    const completed = sfenAfterMoves([...playedMoves, alternative], color);
+    expect(isOpeningPlanComplete({
+      strategyId: "sodebisha", color,
+      playedMoves: [...playedMoves, alternative], currentSfen: completed,
+    })).toBe(true);
+  });
+
+  it.each(["black", "white"])("keeps Millennium's second 6h7h after the king used that move as %s", (color) => {
+    const convert = color === "white" ? mirrorUsiMove : (move) => move;
+    const firstTwelve = [
+      "7g7f", "3i4h", "5g5f", "4i5h", "5i6h", "6h7h",
+      "8h6f", "8i7g", "7i8h", "6i7i", "7h8i", "5h6h",
+    ].map(convert);
+    const last = convert("6h7h");
+    const currentSfen = sfenAfterMoves(firstTwelve, color);
+    expect(nextOpeningPlanMove({
+      castleId: "millennium", color, playedMoves: firstTwelve,
+      legalMoves: [last], currentSfen,
+    })?.usi).toBe(last);
+    expect(isOpeningPlanComplete({
+      castleId: "millennium", color, playedMoves: firstTwelve, currentSfen,
+    })).toBe(false);
+    expect(isOpeningPlanComplete({
+      castleId: "millennium", color, playedMoves: [...firstTwelve, last],
+      currentSfen: sfenAfterMoves([...firstTwelve, last], color),
+    })).toBe(true);
   });
 
   it("abandons Pacman after the offered pawn is ignored", () => {
