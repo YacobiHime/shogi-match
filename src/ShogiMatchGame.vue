@@ -525,7 +525,7 @@
         <p>{{ selectedStrategyExplanation.overview }}</p>
         <dl>
           <div>
-            <dt>狙い</dt>
+            <dt>目的</dt>
             <dd>{{ selectedStrategyExplanation.aim }}</dd>
           </div>
           <div>

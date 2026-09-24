@@ -276,16 +276,16 @@ const explanationRows = computed(() => {
   if (!entry) return [];
   if (tab.value === "castle") {
     return [
-      { label: "弱点は？", text: entry.weakness },
+      { label: "弱点", text: entry.weakness },
       { label: "発展形", text: entry.development },
       { label: "相性の良い戦法", text: entry.compatibleStrategies },
     ].filter((row) => row.text);
   }
   return [
-    { label: "狙いは？", text: entry.aim },
-    { label: "相性のいい囲い", text: entry.castles },
+    { label: "目的", text: entry.aim },
+    { label: "相性の良い囲い", text: entry.castles },
     { label: "コツ", text: entry.tip },
-    { label: "気をつけたいこと", text: entry.caution },
+    { label: "注意点", text: entry.caution },
   ].filter((row) => row.text);
 });
 
