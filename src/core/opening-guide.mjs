@@ -158,7 +158,8 @@ const OPENING_STRATEGY_DEFINITIONS = [
     family: "kakugawari",
     guideSelectable: false,
     detectionNames: ["角換わり", "一手損角換わり"],
-    blackMoves: ["7g7f", "2g2f", "2f2e", "8h2b+"],
+    completionRequiresBishopExchange: true,
+    blackMoves: ["@kakugawari", "2g2f", "2f2e"],
   },
   {
     id: "kakugawari-koshikake-gin",
@@ -169,7 +170,7 @@ const OPENING_STRATEGY_DEFINITIONS = [
     historyCompletes: true,
     completionSquares: [["5f", "S"]],
     completionRequiredMoves: ["7i8h"],
-    completionRequiredMoveGroups: [["8h2b+", "7g2b+"]],
+    completionRequiresBishopExchange: true,
     // 待機中に指した2六歩・2五歩・7八金・8八銀は、後続手順では着手履歴により消化済みになる。
     // 角交換がすぐ成立した場合には、定型の完了後に未着手のものだけを案内する。
     blackMoves: [
@@ -228,9 +229,10 @@ const OPENING_STRATEGY_DEFINITIONS = [
     strictOrder: true,
     historyCompletes: true,
     completionSquares: [["4e", "N"]],
-    completionRequiredMoves: ["8h2b+", "7i8h"],
+    completionRequiredMoves: ["7i8h"],
+    completionRequiresBishopExchange: true,
     blackMoves: [
-      "7g7f", "2g2f", "2f2e", "8h2b+", "7i8h",
+      "@kakugawari", "2g2f", "2f2e", "7i8h",
       "4g4f", "3g3f", "2i3g", "3g4e",
     ],
   },
@@ -1233,6 +1235,29 @@ function parseSfenBoard(sfen) {
   return board;
 }
 
+/** 角の所在で交換を判定する。着手者や手順前後には依存しない。 */
+export function bishopExchangeState(currentSfen, color = "black") {
+  if (!currentSfen) return "none";
+  const board = parseSfenBoard(currentSfen);
+  const ownCamp = color === "white" ? ["2b", "3c"] : ["8h", "7g"];
+  const hands = String(currentSfen).trim().split(/\s+/)[2] ?? "";
+  const opponentHasBishop = hands.includes(color === "white" ? "B" : "b");
+  const ownBishopOnBoard = [...board.values()].some(
+    ({ color: owner, kind }) => owner === color && (kind === "B" || kind === "+B"),
+  );
+  if (opponentHasBishop && !ownBishopOnBoard && ownCamp.some((square) => (
+    board.get(square)?.color !== color && board.get(square)?.kind === "+B"
+  ))) return "awaiting-recapture";
+  if ([...board.values()].some(({ kind }) => kind === "B" || kind === "+B")) return "none";
+  return hands.includes("B") && hands.includes("b") ? "exchanged" : "none";
+}
+
+function completedBishopExchange(currentSfen, color, playedMoves) {
+  if (currentSfen) return bishopExchangeState(currentSfen, color) === "exchanged";
+  const own = new Set(canonicalMovesForColor(playedMoves, color));
+  return own.has("8h2b+") || own.has("7g2b+") || own.has("8h3c+") || own.has("7g3c+");
+}
+
 function matchesCompletionSquares(definition, currentSfen, color) {
   const variants = definition?.completionVariants?.length
     ? definition.completionVariants
@@ -1258,6 +1283,8 @@ function matchesCompletionMoveCounts(definition, playedMoves, color) {
 }
 
 function definitionDetectedComplete(definition, detected, currentSfen, color, playedMoves = []) {
+  if (definition?.completionRequiresBishopExchange
+    && !completedBishopExchange(currentSfen, color, playedMoves)) return false;
   if (matchesCompletionMoveCounts(definition, playedMoves, color)) return true;
   const exact = matchesCompletionSquares(definition, currentSfen, color);
   if (exact !== undefined) return exact;
@@ -1567,6 +1594,25 @@ export function openingGuideRoutineStatus({
     return legal.has(converted) ? { usi: converted, phase } : null;
   };
 
+  const exchangeState = bishopExchangeState(currentSfen, color);
+  if (exchangeState === "awaiting-recapture") {
+    const horseSquare = ["8h", "7g"].find((square) => opponentPiece(square, "+B"));
+    const destination = horseSquare && convert(horseSquare);
+    const recaptures = [...legal]
+      .filter((usi) => destination && usi.slice(2, 4) === destination)
+      .map((usi) => ({ usi, kind: board.get(usi.slice(0, 2))?.kind }))
+      .filter(({ kind }) => kind)
+      .sort((left, right) => {
+        const priority = (entry) => entry.usi === convert("7i8h")
+          ? -1 : ["S", "G", "N"].includes(entry.kind)
+            ? ["S", "G", "N"].indexOf(entry.kind) : 3;
+        return priority(left) - priority(right);
+      });
+    return recaptures.length
+      ? { status: "active", candidates: [{ usi: recaptures[0].usi, phase }] }
+      : { status: "blocked", candidates: [], reason: "相手の馬の取り返しを待っています。" };
+  }
+
   if (!own.has("7g7f")) {
     const openDiagonal = candidate("7g7f");
     return openDiagonal
@@ -1574,7 +1620,8 @@ export function openingGuideRoutineStatus({
       : { status: "blocked", candidates: [], reason: "角換わりを始める7六歩を待っています。" };
   }
 
-  const exchanged = own.has("8h2b+") || own.has("7g2b+");
+  const exchanged = exchangeState === "exchanged"
+    || ["8h2b+", "7g2b+", "8h3c+", "7g3c+"].some((usi) => own.has(usi));
   const silverReady = own.has("7i8h") || ownPiece("8h", "S");
   if (exchanged) {
     if (silverReady) return { status: "complete", candidates: [] };
@@ -1585,7 +1632,7 @@ export function openingGuideRoutineStatus({
   }
   if (!currentSfen) return { status: "blocked", candidates: [] };
 
-  if (!opponentPiece("2b", "B")) {
+  if (!opponentPiece("2b", "B") && !opponentPiece("3c", "B")) {
     return { status: "failed", candidates: [], reason: "相手の角が2二から移動しました。" };
   }
 
@@ -1604,6 +1651,13 @@ export function openingGuideRoutineStatus({
   }
   if (!ownPiece("8h", "B") && !ownPiece("7g", "B")) {
     return { status: "failed", candidates: [], reason: "角が角換わり手順の位置から外れました。" };
+  }
+
+  if (opponentPiece("3c", "B")) {
+    const exchange = ownPiece("7g", "B")
+      ? candidate("7g3c+") : candidate("8h3c+");
+    if (exchange) return { status: "active", candidates: [exchange] };
+    return { status: "blocked", candidates: [], reason: "3三角を取れる局面を待っています。" };
   }
 
   if (opponentPiece("3d", "P")) {
@@ -1791,6 +1845,8 @@ export function isOpeningPlanComplete({
     const definitions = phase === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
     const definition = definitions.find(({ id: candidateId }) => candidateId === id);
     if (!definition) return false;
+    if (definition.completionRequiresBishopExchange
+      && !completedBishopExchange(currentSfen, color, playedMoves)) return false;
     const requiredMoves = (definition.completionRequiredMoves ?? []).map(
       color === "white" ? mirrorUsiMove : (move) => move,
     );
@@ -1804,7 +1860,8 @@ export function isOpeningPlanComplete({
     if (exact === true) return true;
     if (exact === false && !definition?.historyCompletes) return false;
     if (definition.detectionNames.some((name) => detected.has(name))) return true;
-    return entries.length > 0 && entries.every(({ usi }) => played.has(usi));
+    return (entries.length > 0 || definition.completionRequiresBishopExchange)
+      && entries.every(({ usi }) => played.has(usi));
   };
   return phaseComplete(
     strategyId,
