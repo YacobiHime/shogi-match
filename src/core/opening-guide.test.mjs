@@ -262,7 +262,7 @@ describe("opening guide", () => {
         overview: expect.any(String),
         aim: expect.any(String),
         castles: expect.any(String),
-        followup: expect.any(String),
+        tip: expect.any(String),
         caution: expect.any(String),
       });
     }
@@ -274,9 +274,9 @@ describe("opening guide", () => {
     for (const { id } of OPENING_CASTLES) {
       expect(openingExplanation(id)).toMatchObject({
         overview: expect.any(String),
-        feature: expect.any(String),
         weakness: expect.any(String),
         development: expect.any(String),
+        compatibleStrategies: expect.any(String),
       });
     }
   });

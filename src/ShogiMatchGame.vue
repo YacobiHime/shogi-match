@@ -533,8 +533,8 @@
             <dd>{{ selectedStrategyExplanation.castles }}</dd>
           </div>
           <div>
-            <dt>形ができた後</dt>
-            <dd>{{ selectedStrategyExplanation.followup }}</dd>
+            <dt>コツ</dt>
+            <dd>{{ selectedStrategyExplanation.tip }}</dd>
           </div>
           <div>
             <dt>注意点</dt>

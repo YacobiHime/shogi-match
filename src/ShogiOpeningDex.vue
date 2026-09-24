@@ -270,21 +270,21 @@ const currentStep = computed(() => (
   steps.value[Math.min(stepIndex.value, steps.value.length - 1)] ?? { sfen: STANDARD_SFEN, label: "", lastMove: "", routine: null }
 ));
 const explanation = computed(() => openingExplanation(selectedId.value));
-// 戦法と囲いで解説の項目を切り替える。囲いは「特徴／弱点／発展形」の3項目。
+// 戦法と囲いで解説の項目を切り替える。囲いは「弱点／発展形／相性の良い戦法」の3項目。
 const explanationRows = computed(() => {
   const entry = explanation.value as any;
   if (!entry) return [];
   if (tab.value === "castle") {
     return [
-      { label: "特徴は？", text: entry.feature },
       { label: "弱点は？", text: entry.weakness },
       { label: "発展形", text: entry.development },
+      { label: "相性の良い戦法", text: entry.compatibleStrategies },
     ].filter((row) => row.text);
   }
   return [
     { label: "狙いは？", text: entry.aim },
     { label: "相性のいい囲い", text: entry.castles },
-    { label: "形ができたら？", text: entry.followup },
+    { label: "コツ", text: entry.tip },
     { label: "気をつけたいこと", text: entry.caution },
   ].filter((row) => row.text);
 });
