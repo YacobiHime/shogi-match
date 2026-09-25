@@ -995,10 +995,16 @@ function updateResponsiveLayout() {
     { name: "standard" as const, width: 1471, height: 959 },
     { name: "compact" as const, width: 1088, height: 1015 },
     { name: "portrait" as const, width: 878, height: 1168 },
-  ].filter(({ name }) =>
-    name !== "standard"
-    || !window.matchMedia("(min-width: 1100px) and (min-aspect-ratio: 5/4)").matches
-  );
+  ].filter(({ name }) => {
+    if (name === "standard") {
+      return !window.matchMedia("(min-width: 1100px) and (min-aspect-ratio: 5/4)").matches;
+    }
+    // 横長画面では盤エリアが縦長でも駒台を下に回さず、左右配置を保つ。
+    if (name === "portrait") {
+      return !window.matchMedia("(orientation: landscape)").matches;
+    }
+    return true;
+  });
   boardLayout.value = layouts.reduce((best, candidate) => {
     const bestScale = Math.min(width / best.width, height / best.height);
     const candidateScale = Math.min(width / candidate.width, height / candidate.height);
