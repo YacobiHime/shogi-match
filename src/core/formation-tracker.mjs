@@ -3,10 +3,12 @@ import {
   invertHiraganaSuishoSfen,
 } from './hiragana-suisho-formations.mjs';
 import {
+  bishopExchangeState,
   mirrorUsiMove,
   OPENING_CASTLES,
   OPENING_STRATEGIES,
 } from './opening-guide.mjs';
+import { parseSfenBoard } from './sfen-board.mjs';
 
 function withTurn(sfen, turn) {
   const fields = String(sfen).replace(/^sfen\s+/, '').trim().split(/\s+/);
@@ -24,74 +26,55 @@ function firstByGroup(rules, group) {
   return rules.find((rule) => rule.group === group)?.name ?? '';
 }
 
-function parseSfenBoard(sfen) {
-  const ranks = String(sfen).replace(/^sfen\s+/, '').trim().split(/\s+/)[0].split('/');
-  const board = new Map();
-  ranks.forEach((rank, rankIndex) => {
-    let file = 9;
-    let promoted = false;
-    for (const symbol of rank) {
-      if (/[1-9]/.test(symbol)) {
-        file -= Number(symbol);
-      } else if (symbol === '+') {
-        promoted = true;
-      } else {
-        board.set(`${file}${String.fromCharCode(97 + rankIndex)}`, {
-          color: symbol === symbol.toUpperCase() ? 'black' : 'white',
-          kind: `${promoted ? '+' : ''}${symbol.toUpperCase()}`,
-        });
-        file -= 1;
-        promoted = false;
-      }
-    }
-  });
-  return board;
-}
-
 function completionVariants(definition) {
   if (definition.completionVariants?.length) return definition.completionVariants;
   return definition.completionSquares?.length ? [definition.completionSquares] : [];
 }
 
 /** 補助が完成扱いにする形を、戦型表示でも同じ基準で拾う。 */
-function matchesGuideCompletion(definition, board, color) {
-  return completionVariants(definition).some((squares) => squares.every(([blackSquare, kind]) => {
+function matchesGuideCompletion(definition, board, color, sfen) {
+  if (definition.completionRequiresBishopExchange
+    && bishopExchangeState(sfen, color) !== 'exchanged') return false;
+  return completionVariants(definition).some((squares) => (
+    (squares.length >= 2 || definition.id === 'yokofudori')
+    && squares.every(([blackSquare, kind]) => {
     const square = color === 'white' ? mirrorUsiMove(blackSquare) : blackSquare;
     const piece = board.get(square);
     return piece?.color === color && piece.kind === kind;
-  }));
+    })
+  ));
 }
 
-function mostSpecificGuideMatch(definitions, board, color) {
+function mostSpecificGuideMatch(definitions, board, color, sfen) {
   return definitions
-    .filter((definition) => matchesGuideCompletion(definition, board, color))
+    .filter((definition) => matchesGuideCompletion(definition, board, color, sfen))
     .sort((left, right) => (
       Math.max(...completionVariants(right).map((squares) => squares.length))
       - Math.max(...completionVariants(left).map((squares) => squares.length))
     ))[0];
 }
 
-function guideCastleName(board, color) {
-  return mostSpecificGuideMatch(OPENING_CASTLES, board, color)?.label ?? '';
+function guideCastleName(board, color, sfen) {
+  return mostSpecificGuideMatch(OPENING_CASTLES, board, color, sfen)?.label ?? '';
 }
 
-function guideTacticNames(board, color) {
+function guideTacticNames(board, color, sfen) {
   return OPENING_STRATEGIES
     .filter((definition) => definition.id !== 'yokofudori')
-    .filter((definition) => matchesGuideCompletion(definition, board, color))
+    .filter((definition) => matchesGuideCompletion(definition, board, color, sfen))
     .map((definition) => definition.label);
 }
 
-function guideBattleName(board) {
+function guideBattleName(board, sfen) {
   const blackYokofudori = mostSpecificGuideMatch(
     OPENING_STRATEGIES.filter((definition) => definition.id === 'yokofudori'),
     board,
-    'black',
+    'black', sfen,
   );
   const whiteYokofudori = mostSpecificGuideMatch(
     OPENING_STRATEGIES.filter((definition) => definition.id === 'yokofudori'),
     board,
-    'white',
+    'white', sfen,
   );
   return blackYokofudori || whiteYokofudori ? '横歩取り' : '';
 }
@@ -175,12 +158,12 @@ export function detectFormationSnapshot(sfen, master) {
   const invertedRules = detectHiraganaSuishoFormations(inverted, master);
   const goteRules = detectHiraganaSuishoFormations(goteDirect, master);
   const board = parseSfenBoard(sfen);
-  const blackGuideCastle = guideCastleName(board, 'black');
-  const whiteGuideCastle = guideCastleName(board, 'white');
-  const blackGuideTactics = guideTacticNames(board, 'black');
-  const whiteGuideTactics = guideTacticNames(board, 'white');
+  const blackGuideCastle = guideCastleName(board, 'black', sfen);
+  const whiteGuideCastle = guideCastleName(board, 'white', sfen);
+  const blackGuideTactics = guideTacticNames(board, 'black', sfen);
+  const whiteGuideTactics = guideTacticNames(board, 'white', sfen);
   return {
-    battle: firstByGroup(directRules, 'bt_match1') || guideBattleName(board),
+    battle: firstByGroup(directRules, 'bt_match1') || guideBattleName(board, sfen),
     black: {
       rook: firstByGroup(directRules, 'bt_match2'),
       castle: blackGuideCastle || firstByGroup(directRules, 'enc_match'),

@@ -1,4 +1,5 @@
 import { OPENING_GUIDE_OVERRIDES } from "../data/opening-guide-overrides.mjs";
+import { parseSfenBoard } from "./sfen-board.mjs";
 
 // The built-in catalogue remains the stable fixture for the core unit tests. The
 // generated editor data is configuration, and is enabled in browser/production builds.
@@ -1291,32 +1292,6 @@ function alternativePlanMove(entry, legalMoves, board, color) {
   return move ? { usi: move, phase: entry.phase } : null;
 }
 
-function parseSfenBoard(sfen) {
-  const boardPart = String(sfen ?? "").trim().split(/\s+/)[0];
-  const ranks = boardPart.split("/");
-  if (ranks.length !== 9) return new Map();
-  const board = new Map();
-  ranks.forEach((rank, rankIndex) => {
-    let file = 9;
-    let promoted = false;
-    for (const symbol of rank) {
-      if (/[1-9]/.test(symbol)) {
-        file -= Number(symbol);
-      } else if (symbol === "+") {
-        promoted = true;
-      } else {
-        board.set(`${file}${String.fromCharCode(97 + rankIndex)}`, {
-          color: symbol === symbol.toUpperCase() ? "black" : "white",
-          kind: `${promoted ? "+" : ""}${symbol.toUpperCase()}`,
-        });
-        file -= 1;
-        promoted = false;
-      }
-    }
-  });
-  return board;
-}
-
 /** 角の所在で交換を判定する。着手者や手順前後には依存しない。 */
 const BISHOP_EXCHANGE_MOVES = Object.freeze(["8h2b+", "7g2b+", "8h3c+", "7g3c+"]);
 
@@ -1398,7 +1373,9 @@ export function availableOpeningDefinitions({
       kind === "castle" ? definition.id : "",
       color,
     );
-    const started = steps.some(({ usi }) => played.has(usi));
+    // 共通の歩突きだけでは奇襲が始まったとはみなさない。
+    const distinctive = steps.filter(({ usi }) => !["7g7f", "3c3d", "2g2f", "8c8d"].includes(usi));
+    const started = distinctive.some(({ usi }) => played.has(usi));
     const availability = definition.availability;
     if (availability?.colors && !availability.colors.includes(color)) return false;
     if (!started && availability) {

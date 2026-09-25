@@ -764,6 +764,10 @@ describe("opening guide", () => {
       moveHistory: ["7g7f", "3c3d"], legalMoves: ["2h7h"],
     })).toEqual([]);
     expect(availableOpeningDefinitions({
+      definitions: [first78], kind: "strategy", color: "black",
+      playedMoves: ["7g7f"], moveHistory: ["7g7f", "3c3d"], legalMoves: ["2h7h"],
+    })).toEqual([]);
+    expect(availableOpeningDefinitions({
       definitions: [second32], kind: "strategy", color: "white",
       moveHistory: ["7g7f"], legalMoves: ["8b3b"],
     }).map(({ id }) => id)).toEqual(["second-32-rook"]);

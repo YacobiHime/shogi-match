@@ -8,7 +8,7 @@ import {
   preferSpecificFormationNames,
   updateFormationState,
 } from './formation-tracker.mjs';
-import { mirrorUsiMove, OPENING_CASTLES } from './opening-guide.mjs';
+import { mirrorUsiMove, OPENING_CASTLES, OPENING_STRATEGIES } from './opening-guide.mjs';
 
 const master = JSON.parse(await readFile(
   new URL('../data/hiragana_suisho_formations.json', import.meta.url),
@@ -41,6 +41,19 @@ function sfenForCompletionSquares(squares, color = 'black') {
 }
 
 describe('戦型の役割別追跡', () => {
+  test.each(['black', 'white'])('角交換前に角換わり腰掛け銀を完成扱いしない: %s', (color) => {
+    const definition = OPENING_STRATEGIES.find(({ id }) => id === 'kakugawari-koshikake-gin');
+    const sfen = sfenForCompletionSquares(definition.completionSquares, color);
+    const snapshot = detectFormationSnapshot(sfen, master);
+    expect(snapshot[color].tactics).not.toContain(definition.label);
+  });
+
+  test.each(['black', 'white'])('1升だけの完成形で嬉野流を検出しない: %s', (color) => {
+    const definition = OPENING_STRATEGIES.find(({ id }) => id === 'ureshino');
+    const sfen = sfenForCompletionSquares(definition.completionSquares, color);
+    const snapshot = detectFormationSnapshot(sfen, master);
+    expect(snapshot[color].tactics).not.toContain(definition.label);
+  });
   test('一手損角換わりを後手側だけへ表示する', () => {
     const record = createGameRecord();
     for (const move of ['7g7f', '3c3d', '2g2f', '2b8h+', '7i8h']) {

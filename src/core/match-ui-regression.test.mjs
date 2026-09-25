@@ -19,4 +19,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/cpuPlayerName/);
     expect(source).not.toMatch(/手合割・対戦相手/);
   });
+
+  it("draws detour arrows from opening-compatible candidates", () => {
+    expect(source).toMatch(/openingDetourArrowCandidates\(\s*planned\.usi,\s*compatibleCandidates,/);
+  });
 });

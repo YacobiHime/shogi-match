@@ -2166,7 +2166,7 @@ function scheduleOpeningGuideSafety() {
       if (choice.source === "ai" && planned) {
         openingGuideDetourCandidates.value = openingDetourArrowCandidates(
           planned.usi,
-          candidates,
+          compatibleCandidates,
           3,
         ).map(({ usi, source, score }) => ({
           usi,
