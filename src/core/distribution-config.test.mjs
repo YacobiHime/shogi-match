@@ -11,6 +11,10 @@ it("publishes the built entry without duplicate root engine assets", () => {
   expect(manifest.scripts.prepack).toBe("npm run build");
   expect(manifest.files).not.toContain("yaneuraou.wasm");
   expect(manifest.files).not.toContain("yaneuraou.data");
+  expect(manifest.dependencies ?? {}).not.toHaveProperty("vue");
+  expect(manifest.dependencies ?? {}).not.toHaveProperty("tsshogi");
+  expect(manifest.devDependencies).toHaveProperty("vue");
+  expect(manifest.devDependencies).toHaveProperty("tsshogi");
 });
 
 it("sets root HTML cache and basic response security headers", () => {
