@@ -31,7 +31,7 @@ ShogiHome 1.28.0由来の盤面と`tsshogi`を使い、サーバーなしで動�
 
 ## すぐ遊ぶ
 
-`game.html`、`dist/`を同じ階層へ配置し、HTTPサーバーから`game.html`を開きます。
+`game.html`、`dist/`、`vendor/`を同じ階層へ配置し、HTTPサーバーから`game.html`を開きます。WASMエンジンに必要な`SharedArrayBuffer`を使うため、サーバーは`Cross-Origin-Opener-Policy: same-origin`と`Cross-Origin-Embedder-Policy: require-corp`を返してください。埋め込み先でも同等の分離設定が必要です。
 
 ```text
 game.html?mode=cpu&player_color=black&match_id=chapter1-boss
@@ -43,6 +43,10 @@ game.html?mode=cpu&player_color=black&match_id=chapter1-boss
 - `initial_sfen`: 任意の開始局面
 - `match_id`: ノベル側で対局を識別するID
 - `engine_nodes`: CPUが1手ごとに読む探索量（既定値は30000）
+- `black_name`、`white_name`、`cpu_name`: 結果画面などに表示する対局者名
+- `handicap`: 手合割名
+
+`engine_nodes`は指定値に最も近い難易度プリセットへ丸められます。Custom Elementでは`cpu-delay-ms`、`engine-base-url`、`handicap-name`、`mobile`、`enable-drag-and-drop`、`show-home`属性も指定できます。
 
 やねうら王を取得・起動できない場合だけ、合法手から選ぶ軽量CPUへ自動的に切り替わります。
 棋力を必要とする場合は、別配布のUSIエンジンアダプターを使用してください。
@@ -54,6 +58,7 @@ game.html?mode=cpu&player_color=black&match_id=chapter1-boss
 対局時の助言を再表示します。「ひふみんアイ」で切り替えた盤面の向きも同じ対局のリロード後に復元します。
 新しい対局では向きを初期化し、棋譜検討中に切り替えた向きは保存しません。
 結果画面から「対局準備」へ戻ると保存を削除し、次の対局は未選択状態から始まります。
+保存の識別子はURLのパスと`match_id`です。開始SFENと対局モードが同じなら、リロード時に保存済みの先後・CPU強さを復元し、URLの`player_color`や`engine_nodes`より優先します。
 
 ## Firebase Hostingへ公開
 

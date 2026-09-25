@@ -16,6 +16,7 @@ export function saveMatchSnapshot(storage, key, snapshot, now = Date.now()) {
     }));
     return true;
   } catch {
+    try { storage.removeItem(key); } catch { /* Storage is unavailable. */ }
     return false;
   }
 }
@@ -30,6 +31,7 @@ export function loadMatchSnapshot(storage, key, expected, now = Date.now()) {
       && typeof snapshot === "object"
       && snapshot.version === MATCH_SNAPSHOT_VERSION
       && typeof snapshot.savedAt === "number"
+      && snapshot.savedAt <= now
       && now - snapshot.savedAt <= MATCH_SNAPSHOT_MAX_AGE_MS
       && snapshot.initialSfen === expected.initialSfen
       && snapshot.mode === expected.mode;

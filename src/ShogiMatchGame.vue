@@ -3143,7 +3143,9 @@ async function initializeEngine() {
     engine?.quit();
     engine = null;
     const message = error instanceof Error ? error.message : String(error);
-    errorMessage.value = `やねうら王を起動できないため簡易CPUで続行します: ${message}`;
+    const isolationHint = globalThis.crossOriginIsolated === false
+      ? " SharedArrayBufferを使うにはCOOP/COEPヘッダーが必要です。" : "";
+    errorMessage.value = `やねうら王を起動できないため簡易CPUで続行します: ${message}${isolationHint}`;
     engineUnavailable.value = true;
     emit("match-error", { message });
     scheduleCpuMove();

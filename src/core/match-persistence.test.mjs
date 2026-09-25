@@ -66,4 +66,32 @@ describe("match persistence", () => {
     expect(clearMatchSnapshot(storage, key)).toBe(true);
     expect(storage.getItem(key)).toBeNull();
   });
+
+  it("rejects a snapshot saved in the future", () => {
+    const storage = memoryStorage();
+    const key = matchSnapshotKey();
+    saveMatchSnapshot(storage, key, { initialSfen: "start", mode: "cpu" }, 300);
+    expect(loadMatchSnapshot(storage, key, { initialSfen: "start", mode: "cpu" }, 200)).toBeNull();
+    expect(storage.getItem(key)).toBeNull();
+  });
+
+  it("rejects a different snapshot version or mode", () => {
+    const storage = memoryStorage();
+    const key = matchSnapshotKey();
+    saveMatchSnapshot(storage, key, { initialSfen: "start", mode: "cpu" }, 100);
+    expect(loadMatchSnapshot(storage, key, { initialSfen: "start", mode: "local" }, 200)).toBeNull();
+    storage.setItem(key, JSON.stringify({ version: 2, savedAt: 100, initialSfen: "start", mode: "cpu" }));
+    expect(loadMatchSnapshot(storage, key, { initialSfen: "start", mode: "cpu" }, 200)).toBeNull();
+  });
+
+  it("clears an older snapshot if saving throws", () => {
+    const values = new Map([["match", "old"]]);
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: () => { throw new Error("quota exceeded"); },
+      removeItem: (key) => values.delete(key),
+    };
+    expect(saveMatchSnapshot(storage, "match", { initialSfen: "start", mode: "cpu" })).toBe(false);
+    expect(storage.getItem("match")).toBeNull();
+  });
 });
