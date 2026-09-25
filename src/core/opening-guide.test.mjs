@@ -1347,6 +1347,31 @@ describe("opening guide", () => {
     })).not.toContainEqual({ usi: wrongMove, phase: "castle" });
   });
 
+  it.each(["black", "white"])("keeps a completed castle locked after its shape changes as %s", (color) => {
+    const convert = color === "white" ? mirrorUsiMove : (move) => move;
+    const legalMoves = [convert("2h6h")];
+    expect(openingPlanCandidates({ castleId: "mino", color, legalMoves })).toEqual([
+      { usi: legalMoves[0], phase: "castle" },
+    ]);
+    expect(openingPlanCandidates({
+      castleId: "mino", color, legalMoves,
+      completedPhases: { castle: true },
+    })).toEqual([]);
+    expect(isOpeningPlanComplete({
+      castleId: "mino", color,
+      completedPhases: { castle: true },
+    })).toBe(true);
+  });
+
+  it.each(["black", "white"])("keeps a completed strategy locked while guiding an unfinished castle as %s", (color) => {
+    const convert = color === "white" ? mirrorUsiMove : (move) => move;
+    expect(openingPlanCandidates({
+      strategyId: "shiken", castleId: "mino", color,
+      legalMoves: [convert("7g7f"), convert("5i4h")],
+      completedPhases: { strategy: true },
+    })).toEqual([{ usi: convert("5i4h"), phase: "castle" }]);
+  });
+
   it.each(["black", "white"])("keeps Millennium's second 6h7h after the king used that move as %s", (color) => {
     const convert = color === "white" ? mirrorUsiMove : (move) => move;
     const firstTwelve = [

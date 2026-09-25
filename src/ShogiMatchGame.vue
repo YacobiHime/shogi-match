@@ -877,6 +877,8 @@ const openingGuideDetourCount = ref(0);
 const openingGuideAbandoned = ref(false);
 // 一度完成した計画は、攻撃や駒組みの進展で完成形が崩れても再開しない。
 const openingPlanCompletionLocked = ref(false);
+const strategyCompletionLocked = ref(false);
+const castleCompletionLocked = ref(false);
 const openingGuideBranchNotice = ref("");
 const openingGuideBranchNoticePly = ref(-1);
 const hintText = ref("");
@@ -1158,6 +1160,7 @@ const rangingRookChoices = computed(() => rangingRookStrategyChoices(
 const strategyPhaseComplete = computed(() => {
   const sfen = currentSfen.value;
   if (!selectedStrategy.value || reviewMode.value || !active.value) return false;
+  if (strategyCompletionLocked.value) return true;
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
   const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
@@ -1172,6 +1175,28 @@ const strategyPhaseComplete = computed(() => {
     currentSfen: sfen,
   });
 });
+const castlePhaseComplete = computed(() => {
+  const sfen = currentSfen.value;
+  if (!selectedCastle.value || reviewMode.value || !active.value) return false;
+  if (castleCompletionLocked.value) return true;
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const opponentColor = playerIsBlack ? Color.WHITE : Color.BLACK;
+  return isOpeningPlanComplete({
+    castleId: selectedCastle.value,
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack),
+    opponentMoves: moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack),
+    detectedFormations: formationNamesForColor(sfen, humanColor.value),
+    opponentFormations: formationNamesForColor(sfen, opponentColor),
+    currentSfen: sfen,
+  });
+});
+watch(strategyPhaseComplete, (complete) => {
+  if (complete) strategyCompletionLocked.value = true;
+}, { flush: "sync" });
+watch(castlePhaseComplete, (complete) => {
+  if (complete) castleCompletionLocked.value = true;
+}, { flush: "sync" });
 const strategyCompletionChoices = computed(() => openingStrategyCompletionChoices(
   selectedStrategy.value,
   availableOpeningStrategies.value.map(({ id }) => id),
@@ -1292,6 +1317,10 @@ const openingPlanCandidates = computed(() => {
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
     opponentFormations: formationNamesForColor(sfen, opponentColor),
     currentSfen: sfen,
+    completedPhases: {
+      strategy: strategyCompletionLocked.value,
+      castle: castleCompletionLocked.value,
+    },
   });
 });
 const openingPlanCandidate = computed(() => openingPlanCandidates.value[0] ?? null);
@@ -1313,6 +1342,10 @@ const openingPlanCurrentlyComplete = computed(() => {
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
     opponentFormations: formationNamesForColor(sfen, opponentColor),
     currentSfen: sfen,
+    completedPhases: {
+      strategy: strategyCompletionLocked.value,
+      castle: castleCompletionLocked.value,
+    },
   });
 });
 watch(openingPlanCurrentlyComplete, (complete) => {
@@ -1418,6 +1451,8 @@ function selectedOpeningLabel() {
 function announceOpeningGuide() {
   strategyExplanationOpen.value = false;
   openingPlanCompletionLocked.value = false;
+  strategyCompletionLocked.value = false;
+  castleCompletionLocked.value = false;
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   openingGuideStartedAtPly.value = moveHistory.length;
@@ -1770,6 +1805,8 @@ function persistMatchState() {
     openingGuideDetourCount: openingGuideDetourCount.value,
     openingGuideAbandoned: openingGuideAbandoned.value,
     openingPlanCompletionLocked: openingPlanCompletionLocked.value,
+    strategyCompletionLocked: strategyCompletionLocked.value,
+    castleCompletionLocked: castleCompletionLocked.value,
     coachAdviceHistory,
   });
 }
@@ -1840,6 +1877,8 @@ function restorePersistedMatch(): boolean {
     openingGuideDetourCount.value = savedMatchNumber(snapshot.openingGuideDetourCount, 0, 0, 3);
     openingGuideAbandoned.value = snapshot.openingGuideAbandoned === true;
     openingPlanCompletionLocked.value = snapshot.openingPlanCompletionLocked === true;
+    strategyCompletionLocked.value = snapshot.strategyCompletionLocked === true;
+    castleCompletionLocked.value = snapshot.castleCompletionLocked === true;
     coachAdviceHistory = normalizeCoachAdviceHistory(snapshot.coachAdviceHistory, moves.length);
     result.value = restoredResult;
     resultDialogOpen.value = Boolean(restoredResult);
@@ -1980,6 +2019,10 @@ function scheduleOpeningGuideSafety() {
   const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
   const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   const interruption = openingPlanInterruption({
+    completedPhases: {
+      strategy: strategyCompletionLocked.value,
+      castle: castleCompletionLocked.value,
+    },
     strategyId: selectedStrategy.value,
     castleId: selectedCastle.value,
     color: playerIsBlack ? "black" : "white",
@@ -2003,6 +2046,8 @@ function scheduleOpeningGuideSafety() {
       selectedStrategy.value = fallback?.guideSelectable === false ? "" : interruption.fallbackStrategyId;
     }
     openingPlanCompletionLocked.value = false;
+    if (interruption.clearStrategy) strategyCompletionLocked.value = false;
+    if (interruption.clearCastle) castleCompletionLocked.value = false;
     openingGuideStartedAtPly.value = moveHistory.length;
     openingGuideDetourCount.value = 0;
     openingGuideAbandoned.value = false;
@@ -2712,6 +2757,8 @@ function undoTurn() {
   if (cpuTimer) clearTimeout(cpuTimer);
   if (reviewMode.value) reviewCpuGeneration += 1;
   openingPlanCompletionLocked.value = false;
+  strategyCompletionLocked.value = false;
+  castleCompletionLocked.value = false;
   const removeCount = (reviewMode.value && reviewCpuEnabled.value)
     || (!reviewMode.value && normalizedMode.value === "cpu" && moveHistory.length >= 2)
     ? 2
@@ -3364,6 +3411,8 @@ function restart() {
   openingGuideDetourCount.value = 0;
   openingGuideAbandoned.value = false;
   openingPlanCompletionLocked.value = false;
+  strategyCompletionLocked.value = false;
+  castleCompletionLocked.value = false;
   openingGuideBranchNotice.value = "";
   openingGuideBranchNoticePly.value = -1;
   resetOpeningFollowup();
@@ -3441,6 +3490,8 @@ watch([
   openingGuideDetourCount,
   openingGuideAbandoned,
   openingPlanCompletionLocked,
+  strategyCompletionLocked,
+  castleCompletionLocked,
 ], persistMatchState);
 watch([selectedPlayerColor, cpuDetailedStrategy], () => {
   const detailedOptions = cpuDetailedStrategyGroups.value.flatMap(({ options }) => options);

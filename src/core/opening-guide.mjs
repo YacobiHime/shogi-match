@@ -1453,6 +1453,7 @@ export function openingPlanInterruption({
   opponentFormations = [],
   currentSfen = "",
   legalMoves,
+  completedPhases = {},
 } = {}) {
   const own = new Set(canonicalMovesForColor(playedMoves, color));
   const opponent = new Set(canonicalMovesForColor(
@@ -1463,6 +1464,7 @@ export function openingPlanInterruption({
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
   const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
 
+  if (!completedPhases.strategy) {
   if (
     strategy?.family === "yokofudori"
     && opponent.has("8h2b+")
@@ -1556,6 +1558,7 @@ export function openingPlanInterruption({
       message: "角交換の受け方が想定と違うね。筋違い角を無理に続けず、角の打ち込みに気を付けて居飛車で戦おう。",
     };
   }
+  }
 
   // 次の定跡手に使う駒が元の升から消えていれば、待っても固定手順には戻れない。
   // 相手の応手待ちや王手回避など、駒が所定位置に残る一時的な停止はここでは中断しない。
@@ -1567,7 +1570,7 @@ export function openingPlanInterruption({
     });
     for (const phase of ["strategy", "castle"]) {
       const definition = phase === "strategy" ? strategy : castle;
-      if (!definition || definitionDetectedComplete(
+      if (!definition || completedPhases[phase] || definitionDetectedComplete(
         definition, detected, currentSfen, color, playedMoves,
       )) continue;
       const pending = pendingPlanSteps(steps, phase, playedMoves, currentSfen, color);
@@ -1790,14 +1793,15 @@ export function openingPlanCandidates({
   opponentFormations = [],
   opponentMoves = [],
   currentSfen = "",
+  completedPhases = {},
 }) {
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
   const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
   const detected = new Set(detectedFormations);
-  const strategyComplete = definitionDetectedComplete(
+  const strategyComplete = completedPhases.strategy || definitionDetectedComplete(
     strategy, detected, currentSfen, color, playedMoves,
   );
-  const castleComplete = definitionDetectedComplete(
+  const castleComplete = completedPhases.castle || definitionDetectedComplete(
     castle, detected, currentSfen, color, playedMoves,
   );
   const played = new Set(playedMoves);
@@ -1916,6 +1920,7 @@ export function isOpeningPlanComplete({
   opponentFormations = [],
   opponentMoves = [],
   currentSfen = "",
+  completedPhases = {},
 }) {
   if (!strategyId && !castleId) return false;
   const detected = new Set(detectedFormations);
@@ -1924,6 +1929,7 @@ export function isOpeningPlanComplete({
     playedMoves, opponentMoves, opponentFormations,
   });
   const phaseComplete = (id, phase, entries) => {
+    if (completedPhases[phase]) return true;
     if (!id) return true;
     const definitions = phase === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
     const definition = definitions.find(({ id: candidateId }) => candidateId === id);
