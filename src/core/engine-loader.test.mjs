@@ -12,9 +12,9 @@ describe('やねうら王の配信アセット位置', () => {
     const options = wrapped({ preRun: [] });
 
     expect(options.locateFile('yaneuraou.data'))
-      .toBe('https://shogi-64125.web.app/vendor/yaneuraou.data');
+      .toBe('https://shogi-64125.web.app/vendor/yaneuraou.data?v=20260727-2');
     expect(options.locateFile('yaneuraou.wasm'))
-      .toBe('https://shogi-64125.web.app/vendor/yaneuraou.wasm');
+      .toBe('https://shogi-64125.web.app/vendor/yaneuraou.wasm?v=20260727-2');
     expect(factory).toHaveBeenCalledOnce();
   });
 

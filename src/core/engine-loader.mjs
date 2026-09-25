@@ -14,7 +14,10 @@ const DEFAULT_LOADER_TIMEOUT_MS = 30_000;
 
 function engineAssetUrl(path, scriptUrl) {
   try {
-    return new URL(path, new URL('.', scriptUrl)).href;
+    const script = new URL(scriptUrl);
+    const asset = new URL(path, new URL('.', script));
+    asset.search = script.search;
+    return asset.href;
   } catch {
     const cleanScriptUrl = String(scriptUrl).split(/[?#]/, 1)[0];
     const lastSlash = cleanScriptUrl.lastIndexOf('/');
