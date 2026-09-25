@@ -284,13 +284,23 @@ export class ShogiEngine {
       cmd += ' searchmoves ' + searchMoves.join(' ');
     }
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const candidates = new Map();
       const candidateDetails = new Map();
       let latestStats = {};
-      const timeoutId = goOptions.maxTimeMs
-        ? setTimeout(() => this.send('stop'), goOptions.maxTimeMs)
-        : null;
+      let stopTimer = null;
+      let responseTimer = null;
+      let settled = false;
+      const finish = (result, error) => {
+        if (settled) return;
+        settled = true;
+        if (stopTimer !== null) clearTimeout(stopTimer);
+        if (responseTimer !== null) clearTimeout(responseTimer);
+        const index = this._listeners.indexOf(listener);
+        if (index >= 0) this._listeners.splice(index, 1);
+        if (error) reject(error);
+        else resolve(result);
+      };
       const listener = (line) => {
         if (line.startsWith('info ')) {
           const rankMatch = line.match(/\bmultipv\s+(\d+)\b/);
@@ -332,8 +342,6 @@ export class ShogiEngine {
         }
         if (line.startsWith('bestmove')) {
           const parts = line.split(' ');
-          this._listeners.splice(this._listeners.indexOf(listener), 1);
-          if (timeoutId !== null) clearTimeout(timeoutId);
           candidates.set(1, parts[1]);
           const bestDetail = candidateDetails.get(1);
           candidateDetails.set(1, {
@@ -341,7 +349,7 @@ export class ShogiEngine {
             rank: 1,
             move: parts[1],
           });
-          resolve({
+          finish({
             move: parts[1],
             ponder: parts[3],
             candidates: [...candidateDetails.values()]
@@ -350,7 +358,18 @@ export class ShogiEngine {
         }
       };
       this.onOutput(listener);
-      this.send(cmd);
+      if (goOptions.maxTimeMs) {
+        stopTimer = setTimeout(() => {
+          try { this.send('stop'); } catch { /* 応答期限は別のタイマーで処理する */ }
+        }, goOptions.maxTimeMs);
+        responseTimer = setTimeout(() => finish(null, new Error('探索応答が期限内に返りませんでした')),
+          goOptions.maxTimeMs + 2000);
+      }
+      try {
+        this.send(cmd);
+      } catch (error) {
+        finish(null, error);
+      }
     });
   }
 

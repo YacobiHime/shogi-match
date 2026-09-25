@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { ShogiEngine } from './engine.js';
 
 function mockEngine(response) {
@@ -29,6 +29,31 @@ describe('USI詰み専用探索', () => {
 });
 
 describe('USI通常探索', () => {
+  test('bestmoveが返らなければ期限後にlistenerを外して失敗する', async () => {
+    vi.useFakeTimers();
+    try {
+      const engine = new ShogiEngine({ factory: async () => ({}) });
+      const commands = [];
+      engine.instance = { postMessage: (command) => commands.push(command) };
+      const search = engine.go({ nodes: 1000, maxTimeMs: 100 });
+      const settled = vi.fn();
+      search.then(settled, settled);
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(settled).toHaveBeenCalledOnce();
+      await expect(search).rejects.toThrow(/応答|期限|タイムアウト/);
+      expect(commands).toContain('stop');
+      expect(engine._listeners).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('goの送信例外でもlistenerを残さない', async () => {
+    const engine = new ShogiEngine({ factory: async () => ({}) });
+    engine.instance = { postMessage: () => { throw new Error('send failed'); } };
+    await expect(engine.go({ nodes: 1000, maxTimeMs: 100 })).rejects.toThrow('send failed');
+    expect(engine._listeners).toHaveLength(0);
+  });
   test('multipv表記が省略されても最善手の評価値を保持する', async () => {
     const engine = new ShogiEngine({ factory: async () => ({}) });
     engine.instance = {

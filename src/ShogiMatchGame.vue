@@ -932,6 +932,10 @@ let playerMoveFlair: {
   wasEnemyCampDrop: boolean;
 } | undefined;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
+let matchGeneration = 0;
+let cpuSearchRunning = false;
+let cpuSearchGeneration = -1;
+let enginePromise: Promise<void> | null = null;
 let idleCoachTimer: ReturnType<typeof setTimeout> | undefined;
 let idleCoachGeneration = 0;
 let engine: ShogiEngine | null = null;
@@ -1548,7 +1552,10 @@ function openHome() {
 }
 
 function openPregame() {
+  matchGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
+  cpuTimer = undefined;
+  if (cpuSearchRunning) engine?.stop();
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   analysisGeneration += 1;
@@ -2558,6 +2565,10 @@ function refreshReviewCoachAdvice({ analyze = true } = {}): boolean {
 }
 
 function finish(matchResult: MatchResult) {
+  matchGeneration += 1;
+  if (cpuTimer) clearTimeout(cpuTimer);
+  cpuTimer = undefined;
+  if (cpuSearchRunning) engine?.stop();
   cancelPlayerIdleAdvice();
   active.value = false;
   thinking.value = false;
@@ -2926,10 +2937,13 @@ async function scheduleCpuMove() {
   ) return;
   if (!engineReady.value && !engineUnavailable.value) return;
   thinking.value = true;
+  const generation = matchGeneration;
   cpuTimer = setTimeout(async () => {
+    cpuTimer = undefined;
     try {
       // 操作を妨げずに走らせた助言探索と、CPU本体の探索を同じエンジン上で競合させない。
       await dedicatedCoachQueue;
+      if (generation !== matchGeneration) return;
       if (!active.value || reviewMode.value || record.value.position.color === humanColor.value) {
         thinking.value = false;
         return;
@@ -2985,11 +2999,15 @@ async function scheduleCpuMove() {
             : `sfen ${props.initialSfen}`;
           const enginePosition = `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
           engine.setPosition(enginePosition);
+          cpuSearchRunning = true;
+          cpuSearchGeneration = generation;
           const search = await engine.go({
             nodes: strength.nodes,
             maxTimeMs: 60000,
             searchMoves: [...allowedCpuMoveIds],
           });
+          if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+          if (generation !== matchGeneration) return;
           const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
           moveFeedback = getMoveFeedback({
             level: coachLevel.value,
@@ -3008,6 +3026,7 @@ async function scheduleCpuMove() {
           if (moveFeedback) {
             showCoachAdvice(moveFeedback);
             await nextTick();
+            if (generation !== matchGeneration) return;
           }
           // MultiPVの候補数は合法手より少ないため、作戦の定跡手が候補に入っていない
           // 局面でも専用探索で評価してから、AI最善手との比較を行う。
@@ -3017,11 +3036,15 @@ async function scheduleCpuMove() {
             && !searchedCandidates.some(({ move }) => move === allowedOpeningMove)
           ) {
             engine.setPosition(enginePosition);
+            cpuSearchRunning = true;
+            cpuSearchGeneration = generation;
             const forced = await engine.go({
               nodes: strength.nodes,
               maxTimeMs: 60000,
               searchMoves: [allowedOpeningMove],
             });
+            if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+            if (generation !== matchGeneration) return;
             const forcedCandidate = forced.candidates.find(({ rank }) => rank === 1);
             if (forcedCandidate) {
               searchedCandidates = [
@@ -3070,6 +3093,7 @@ async function scheduleCpuMove() {
           ?? allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi
           ?? "";
       }
+      if (generation !== matchGeneration) return;
       if (!usi) {
         thinking.value = false;
         const terminalResult = resultAfterMove(record.value);
@@ -3083,6 +3107,7 @@ async function scheduleCpuMove() {
       }
       thinking.value = false;
     } catch (error) {
+      if (generation !== matchGeneration) return;
       thinking.value = false;
       const message = error instanceof Error ? error.message : String(error);
       errorMessage.value = `やねうら王の思考に失敗しました: ${message}`;
@@ -3093,13 +3118,17 @@ async function scheduleCpuMove() {
         updateCoachAdvice();
         schedulePostCpuAssists();
       }
+    } finally {
+      if (cpuSearchGeneration === generation) cpuSearchRunning = false;
     }
   }, Math.max(0, props.cpuDelayMs));
 }
 
 async function initializeEngine() {
   if ((normalizedMode.value !== "cpu" && !reviewMode.value) || engineReady.value) return;
-  try {
+  if (enginePromise) return enginePromise;
+  enginePromise = (async () => {
+   try {
     const factories = await loadEngineFactories(null, { engineBaseUrl: props.engineBaseUrl });
     engine = new ShogiEngine({ factory: factories.factory });
     await engine.init();
@@ -3111,12 +3140,16 @@ async function initializeEngine() {
     scheduleOpeningFollowupCandidates();
     schedulePlayerIdleAdvice();
   } catch (error) {
+    engine?.quit();
+    engine = null;
     const message = error instanceof Error ? error.message : String(error);
     errorMessage.value = `やねうら王を起動できないため簡易CPUで続行します: ${message}`;
     engineUnavailable.value = true;
     emit("match-error", { message });
     scheduleCpuMove();
   }
+  })();
+  try { await enginePromise; } finally { enginePromise = null; }
 }
 
 function resign() {
@@ -3287,7 +3320,10 @@ function goToAnalysisPly(ply: number) {
 }
 
 function restart() {
+  matchGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
+  cpuTimer = undefined;
+  if (cpuSearchRunning) engine?.stop();
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   reviewCpuGeneration += 1;
@@ -3446,12 +3482,14 @@ function handlePageHide() {
   persistMatchState();
 }
 onBeforeUnmount(() => {
+  matchGeneration += 1;
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   analysisGeneration += 1;
   reviewCoachGeneration += 1;
   reviewCpuGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
+  cpuTimer = undefined;
   engine?.quit();
   boardResizeObserver?.disconnect();
   if (typeof window !== "undefined") window.removeEventListener("pagehide", handlePageHide);
