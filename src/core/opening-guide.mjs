@@ -1057,6 +1057,11 @@ const BASIC_RANGING_ROOK_CHOICES = Object.freeze([
 /** 振り飛車専用の囲いを選んだとき、先に選ばせる基本的な振り先。 */
 export function rangingRookStrategyChoices(castleId, availableStrategyIds) {
   if (openingDefinitionRookStyle(castleId, "castle") !== "ranging") return [];
+  const incompatible = new Set(
+    castleId === "diamond-mino" ? ["sangen", "nakabisha", "mukai"]
+      : ["mino", "high-mino", "silver-crown", "furibisha-anaguma", "kinmusou"].includes(castleId)
+        ? ["nakabisha"] : [],
+  );
   const compatibleIds = castleId === "right-yagura"
     ? new Set(["mukai"])
     : null;
@@ -1064,6 +1069,8 @@ export function rangingRookStrategyChoices(castleId, availableStrategyIds) {
     ? new Set(availableStrategyIds)
     : null;
   return BASIC_RANGING_ROOK_CHOICES.filter(({ id }) => (
+    !incompatible.has(id)
+    &&
     (!compatibleIds || compatibleIds.has(id))
     && (!available || available.has(id))
   ));
