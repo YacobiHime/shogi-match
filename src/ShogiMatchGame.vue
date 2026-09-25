@@ -1628,7 +1628,8 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
   // 駒落ちや途中局面では平手用定跡を当てはめない。
   if (props.initialSfen !== STANDARD_SFEN) return undefined;
   const { cpuIsBlack, cpuMoves, cpuColor: configuredCpuColor } = currentCpuOpeningTurn();
-  const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
+  const legalMoveDetails = enumerateLegalMoves(record.value.position);
+  const legalMoves = legalMoveDetails.map(({ usi }) => usi);
   const requestedFirstMove = configuredCpuFirstMove({
     configuredFirstMove: cpuFirstMove.value,
     cpuColor: configuredCpuColor,
@@ -1641,6 +1642,7 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
     cpuColor: configuredCpuColor,
     cpuMoves,
     legalMoves,
+    legalMoveDetails,
   });
   if (requestedBishopMove) return { usi: requestedBishopMove, phase: "strategy" };
   if (!shouldUseCpuOpening({

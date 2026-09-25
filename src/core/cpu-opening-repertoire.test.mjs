@@ -91,6 +91,31 @@ describe("CPU opening repertoire", () => {
     })).toBe(true);
   });
 
+  it.each(["black", "white"])("captures a bishop that moved from its home square as %s", (cpuColor) => {
+    const usi = cpuColor === "black" ? "8h3c+" : "2b7g+";
+    expect(configuredCpuBishopMove({
+      bishopPreference: "exchange", cpuColor,
+      cpuMoves: [cpuColor === "black" ? "7g7f" : "3c3d"],
+      legalMoves: [usi],
+      legalMoveDetails: [{ usi, pieceType: "bishop", capturedPieceType: "bishop" }],
+    })).toBe(usi);
+  });
+
+  it.each(["black", "white"])("does not close the diagonal after exchange mode leaves the book as %s", (cpuColor) => {
+    expect(cpuMoveMatchesBishopPreference({
+      bishopPreference: "exchange", cpuColor,
+      usi: cpuColor === "black" ? "6g6f" : "4c4d",
+    })).toBe(false);
+  });
+
+  it("does not choose a right-king plan that opens the diagonal in closed mode", () => {
+    for (const configuredStrategy of ["hayaguri-gin", "koshikake-gin"]) {
+      expect(selectCpuOpeningRepertoire({
+        configuredStrategy, bishopPreference: "closed", cpuColor: "black", random: () => 0,
+      }).castleId).not.toBe("right-king");
+    }
+  });
+
   it("keeps open and closed diagonal settings after the opening book ends", () => {
     expect(cpuMoveMatchesBishopPreference({
       bishopPreference: "closed", cpuColor: "black", usi: "7g7f",

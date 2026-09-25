@@ -1,3 +1,5 @@
+import { openingPlanSteps } from "./opening-guide.mjs";
+
 const REPERTOIRES = {
   ibisha: { strategyId: "ibisha", castleId: "funagakoi", label: "居飛車＋舟囲い" },
   aigakari: { strategyId: "aigakari", castleId: "nakazumai", label: "相掛かり＋中住まい" },
@@ -97,6 +99,7 @@ export function configuredCpuBishopMove({
   cpuColor = "white",
   cpuMoves = [],
   legalMoves = [],
+  legalMoveDetails = [],
 } = {}) {
   const moves = cpuColor === "black"
     ? { open: "7g7f", close: "6g6f", exchange: "8h2b+" }
@@ -113,8 +116,13 @@ export function configuredCpuBishopMove({
   if (
     bishopPreference === "exchange"
     && played.has(moves.open) && !played.has(moves.exchange)
-    && legalMoves.includes(moves.exchange)
-  ) return moves.exchange;
+  ) {
+    const capture = legalMoveDetails.find(({ usi, pieceType, capturedPieceType }) => (
+      legalMoves.includes(usi) && pieceType === "bishop" && capturedPieceType === "bishop"
+    ));
+    if (capture) return capture.usi;
+    if (legalMoves.includes(moves.exchange)) return moves.exchange;
+  }
   return undefined;
 }
 
@@ -126,12 +134,14 @@ export function cpuMoveMatchesBishopPreference({
   pieceType = "",
   capturedPieceType = "",
 } = {}) {
-  if (!bishopPreference || bishopPreference === "exchange") return true;
+  if (!bishopPreference) return true;
   // 「交換待ち」「閉じて戦う」などでは、CPUの角から相手の角を取りに行かない。
-  if (pieceType === "bishop" && capturedPieceType === "bishop") return false;
+  if (bishopPreference !== "exchange"
+    && pieceType === "bishop" && capturedPieceType === "bishop") return false;
   const moves = cpuColor === "black"
     ? { open: "7g7f", close: "6g6f", reopen: "6f6e" }
     : { open: "3c3d", close: "4c4d", reopen: "4d4e" };
+  if (bishopPreference === "exchange" && usi === moves.close) return false;
   if (bishopPreference === "closed" && usi === moves.open) return false;
   if (["open", "invite-exchange"].includes(bishopPreference) && usi === moves.close) return false;
   if (["closed", "open-close"].includes(bishopPreference) && usi === moves.reopen) return false;
@@ -177,6 +187,11 @@ function repertoireIsAvailable(id, cpuColor, moves) {
   return Object.hasOwn(REPERTOIRES, id);
 }
 
+function repertoireMatchesBishopPreference(id, bishopPreference) {
+  if (bishopPreference !== "closed") return true;
+  return !openingPlanSteps("", REPERTOIRES[id].castleId).some(({ usi }) => usi === "7g7f");
+}
+
 function randomChoice(ids, random) {
   if (ids.length === 0) return undefined;
   const index = Math.floor(Math.max(0, Math.min(0.999999999, random())) * ids.length);
@@ -203,7 +218,8 @@ function selectPreferredRepertoire({
   const restrictiveRookPreference = rookPreference === "adaptive" ? "" : rookPreference;
   if (!bishopPreference && !restrictiveRookPreference && !tempoPreference) return undefined;
   let eligible = Object.keys(REPERTOIRES)
-    .filter((id) => repertoireIsAvailable(id, cpuColor, moves));
+    .filter((id) => repertoireIsAvailable(id, cpuColor, moves)
+      && repertoireMatchesBishopPreference(id, bishopPreference));
   eligible = narrowByPreference(eligible, bishopPreference, BISHOP_STYLE_POOLS);
   // 「相手を見て決める」は既存の応手選択へ任せるため、絞り込まない。
   eligible = narrowByPreference(eligible, restrictiveRookPreference, ROOK_STYLE_POOLS);
@@ -226,13 +242,15 @@ export function selectCpuOpeningRepertoire({
   random = Math.random,
 } = {}) {
   if (Object.hasOwn(REPERTOIRES, configuredStrategy)
-    && repertoireIsAvailable(configuredStrategy, cpuColor, moves)) {
+    && repertoireIsAvailable(configuredStrategy, cpuColor, moves)
+    && repertoireMatchesBishopPreference(configuredStrategy, bishopPreference)) {
     return { ...REPERTOIRES[configuredStrategy] };
   }
 
   const categoryPool = CATEGORY_POOLS[configuredStrategy];
   if (categoryPool) {
-    const eligible = categoryPool.filter((id) => repertoireIsAvailable(id, cpuColor, moves));
+    const eligible = categoryPool.filter((id) => repertoireIsAvailable(id, cpuColor, moves)
+      && repertoireMatchesBishopPreference(id, bishopPreference));
     const categoryId = randomChoice(eligible, random);
     if (categoryId) return { ...REPERTOIRES[categoryId] };
   }
