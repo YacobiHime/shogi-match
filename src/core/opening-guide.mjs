@@ -1317,6 +1317,8 @@ function parseSfenBoard(sfen) {
 }
 
 /** 角の所在で交換を判定する。着手者や手順前後には依存しない。 */
+const BISHOP_EXCHANGE_MOVES = Object.freeze(["8h2b+", "7g2b+", "8h3c+", "7g3c+"]);
+
 export function bishopExchangeState(currentSfen, color = "black") {
   if (!currentSfen) return "none";
   const board = parseSfenBoard(currentSfen);
@@ -1327,16 +1329,16 @@ export function bishopExchangeState(currentSfen, color = "black") {
     ({ color: owner, kind }) => owner === color && (kind === "B" || kind === "+B"),
   );
   if (opponentHasBishop && !ownBishopOnBoard && ownCamp.some((square) => (
-    board.get(square)?.color !== color && board.get(square)?.kind === "+B"
+    board.get(square)?.color !== color && ["B", "+B"].includes(board.get(square)?.kind)
   ))) return "awaiting-recapture";
   if ([...board.values()].some(({ kind }) => kind === "B" || kind === "+B")) return "none";
   return hands.includes("B") && hands.includes("b") ? "exchanged" : "none";
 }
 
 function completedBishopExchange(currentSfen, color, playedMoves) {
-  if (currentSfen) return bishopExchangeState(currentSfen, color) === "exchanged";
+  if (currentSfen && bishopExchangeState(currentSfen, color) === "exchanged") return true;
   const own = new Set(canonicalMovesForColor(playedMoves, color));
-  return own.has("8h2b+") || own.has("7g2b+") || own.has("8h3c+") || own.has("7g3c+");
+  return BISHOP_EXCHANGE_MOVES.some((move) => own.has(move));
 }
 
 function matchesCompletionSquares(definition, currentSfen, color) {
@@ -1489,8 +1491,8 @@ export function openingPlanInterruption({
   if (
     strategy?.family === "kakugawari"
     && opponent.has("6g6f")
-    && !own.has("8h2b+")
-    && !opponent.has("8h2b+")
+    && bishopExchangeState(currentSfen, color) === "none"
+    && !BISHOP_EXCHANGE_MOVES.some((move) => own.has(move) || opponent.has(move))
   ) {
     const closingMove = color === "black" ? "△4四歩" : "▲6六歩";
     return {
@@ -1671,7 +1673,9 @@ export function openingGuideRoutineStatus({
 
   const exchangeState = bishopExchangeState(currentSfen, color);
   if (exchangeState === "awaiting-recapture") {
-    const horseSquare = ["8h", "7g"].find((square) => opponentPiece(square, "+B"));
+    const horseSquare = ["8h", "7g"].find((square) => (
+      opponentPiece(square, "+B") || opponentPiece(square, "B")
+    ));
     const destination = horseSquare && convert(horseSquare);
     const recaptures = [...legal]
       .filter((usi) => destination && usi.slice(2, 4) === destination)
@@ -1696,7 +1700,7 @@ export function openingGuideRoutineStatus({
   }
 
   const exchanged = exchangeState === "exchanged"
-    || ["8h2b+", "7g2b+", "8h3c+", "7g3c+"].some((usi) => own.has(usi));
+    || BISHOP_EXCHANGE_MOVES.some((usi) => own.has(usi));
   const silverReady = own.has("7i8h") || ownPiece("8h", "S");
   if (exchanged) {
     if (silverReady) return { status: "complete", candidates: [] };

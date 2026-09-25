@@ -80,6 +80,8 @@ describe("opening guide", () => {
   it.each([
     ["black", ["7g7f", "3c3d", "2g2f", "2b8h+"], "7i8h"],
     ["white", ["7g7f", "3c3d", "8h2b+"], "3a2b"],
+    ["black", ["7g7f", "3c3d", "2g2f", "2b8h"], "7i8h"],
+    ["white", ["7g7f", "3c3d", "8h2b"], "3a2b"],
   ])("recaptures the opponent's bishop as %s and resumes both Bishop Exchange plans", (color, prefix, recapture) => {
     const record = createGameRecord();
     for (const usi of prefix) expect(appendUsiMove(record, usi), usi).toBe(true);
@@ -1276,6 +1278,21 @@ describe("opening guide", () => {
       clearStrategy: true,
       message: expect.stringContaining("寄り道はせずここで中断"),
     });
+  });
+
+  it.each([
+    ["black", ["7g7f", "3c3d", "8h2b+", "3a2b", "B*6e", "4c4d"]],
+    ["white", ["7g7f", "3c3d", "2g2f", "2b8h+", "7i8h", "B*4e", "6g6f"]],
+  ])("does not close an exchanged bishop plan after a later bishop drop as %s", (color, line) => {
+    const record = createGameRecord();
+    for (const usi of line) expect(appendUsiMove(record, usi), usi).toBe(true);
+    const own = line.filter((_, index) => (index % 2 === 0) === (color === "black"));
+    const opponent = line.filter((_, index) => (index % 2 === 0) !== (color === "black"));
+    expect(openingPlanInterruption({
+      strategyId: "kakugawari-koshikake-gin", color,
+      playedMoves: own, opponentMoves: opponent, moveHistory: line,
+      currentSfen: record.position.sfen,
+    })).toBeNull();
   });
 
   it.each(["black", "white"])("consumes a Bishop destination reached by another route as %s", (color) => {
