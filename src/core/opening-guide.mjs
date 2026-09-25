@@ -1279,7 +1279,8 @@ function pendingPlanSteps(steps, phase, playedMoves, currentSfen, color) {
 
 function alternativePlanMove(entry, legalMoves, board, color) {
   if (!entry.expectedKind || !Array.isArray(legalMoves)) return null;
-  if (board.get(entry.usi.slice(0, 2))?.color === color) return null;
+  if (board.get(entry.usi.slice(0, 2))?.color === color
+    && board.get(entry.usi.slice(0, 2))?.kind === entry.expectedKind) return null;
   const destination = entry.usi.slice(2, 4);
   const move = legalMoves.find((usi) => (
     usi.slice(2, 4) === destination
@@ -1867,7 +1868,11 @@ export function openingPlanCandidates({
     };
     const availableMove = (entry) => {
       if (!isReady(entry)) return null;
-      if (legal.has(entry.usi)) return { usi: entry.usi, phase: entry.phase };
+      const source = board.get(entry.usi.slice(0, 2));
+      if (legal.has(entry.usi) && (!currentSfen || !entry.expectedKind
+        || (source?.color === color && source.kind === entry.expectedKind))) {
+        return { usi: entry.usi, phase: entry.phase };
+      }
       return alternativePlanMove(entry, legalMoves, board, color);
     };
     if (definition.strictOrder && !definition.adaptiveOrder) {

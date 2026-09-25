@@ -1336,6 +1336,17 @@ describe("opening guide", () => {
     })).toBe(true);
   });
 
+  it.each(["black", "white"])("does not guide a rook move as the Mino king step as %s", (color) => {
+    const convert = color === "white" ? mirrorUsiMove : (move) => move;
+    const currentSfen = sfenAfterMoves(["3g3f", "2h3h", "5i4h"].map(convert), color);
+    const wrongMove = convert("3h2h");
+    expect(openingPlanCandidates({
+      castleId: "mino", color,
+      playedMoves: ["2h6h", "5i4h", "4h3h"].map(convert),
+      legalMoves: [wrongMove], currentSfen,
+    })).not.toContainEqual({ usi: wrongMove, phase: "castle" });
+  });
+
   it.each(["black", "white"])("keeps Millennium's second 6h7h after the king used that move as %s", (color) => {
     const convert = color === "white" ? mirrorUsiMove : (move) => move;
     const firstTwelve = [
