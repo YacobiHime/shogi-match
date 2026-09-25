@@ -118,6 +118,13 @@
       <button type="button" class="shogi-game__command shogi-game__command--settings" @click="toggleSettings">
         設定
       </button>
+      <button
+        type="button"
+        class="shogi-game__command shogi-game__command--flip"
+        aria-label="盤面を上下反転（ひふみんアイ）"
+        :aria-pressed="boardFlipOverride"
+        @click="boardFlipOverride = !boardFlipOverride"
+      >ひふみんアイ</button>
       <span class="shogi-game__turn">{{ moveCount }}手目</span>
     </header>
 
@@ -594,7 +601,6 @@
         <button type="button" :disabled="!canUseHint" @click="showHint">ヒント</button>
         <button type="button" :disabled="!analysisCurrentPoint?.bestMove" @click="showAnalysisRecommendation">推奨</button>
         <button type="button" :disabled="!analysisCurrentPoint?.pv?.length" @click="showAnalysisLine">読み</button>
-        <button type="button" @click="analysisFlip = !analysisFlip">反転</button>
         <button v-if="reviewNavigation.branch" type="button" @click="returnToMainLine">本筋</button>
         <button v-if="analysisRunning" type="button" @click="cancelKifuAnalysis">中止</button>
         <button v-else type="button" :disabled="reviewCpuEnabled" @click="runKifuAnalysis">再解析</button>
@@ -628,6 +634,10 @@
           <div>
             <dt>手合割</dt>
             <dd>{{ resultPresentation.handicap }}</dd>
+          </div>
+          <div v-if="normalizedMode === 'cpu'">
+            <dt>対戦相手</dt>
+            <dd>{{ resultPresentation.opponent }}</dd>
           </div>
           <div>
             <dt>先手戦型</dt>
@@ -840,7 +850,7 @@ const analysisRunning = ref(false);
 const analysisProgress = ref(0);
 const analysisTotal = ref(0);
 const analysisPoints = ref<AnalysisPoint[]>([]);
-const analysisFlip = ref(false);
+const boardFlipOverride = ref(false);
 const reviewCpuEnabled = ref(false);
 const reviewCpuStartedAtPly = ref(0);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
@@ -997,7 +1007,7 @@ const humanColor = computed(() => activePlayerColor.value === "white" ? Color.WH
 const moveCount = computed(() => record.value.current.ply);
 const flipBoard = computed(() => (
   normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
-) !== (reviewMode.value && analysisFlip.value));
+) !== boardFlipOverride.value);
 const analysisCurrentPoint = computed(() =>
   analysisPoints.value.find(({ ply }) => ply === reviewNavigation.value.cursor)
 );
@@ -1056,10 +1066,17 @@ const resultPresentation = computed(() => {
     repetition: `${prefix}千日手成立`,
     "perpetual-check": `${prefix}${loser}の反則負け（連続王手の千日手）`,
   } as const)[result.value.reason];
+  const handicap = props.handicapName.trim()
+    || (props.initialSfen === STANDARD_SFEN ? "平手" : "その他");
+  const opponentPreset = normalizedMode.value === "cpu"
+    ? CPU_STRENGTH_PRESETS.find((preset) => preset.value === searchNodes.value)
+    : undefined;
   const common = {
     detail,
-    handicap: props.handicapName.trim()
-      || (props.initialSfen === STANDARD_SFEN ? "平手" : "その他"),
+    handicap,
+    opponent: opponentPreset
+      ? `${props.cpuPlayerName.trim() || "CPU"} Lv.${opponentPreset.level} ${opponentPreset.label}`
+      : props.cpuPlayerName.trim() || "CPU",
     blackFormations: formationNamesFromState(formationState.value, "black").join("・") || "未判定",
     whiteFormations: formationNamesFromState(formationState.value, "white").join("・") || "未判定",
   };
@@ -1726,6 +1743,7 @@ function persistMatchState() {
     active: active.value,
     result: result.value,
     activePlayerColor: activePlayerColor.value,
+    boardFlipOverride: boardFlipOverride.value,
     selectedPlayerColor: selectedPlayerColor.value,
     searchNodes: searchNodes.value,
     cpuStrategy: cpuStrategy.value,
@@ -1777,6 +1795,7 @@ function restorePersistedMatch(): boolean {
     currentSfen.value = nextRecord.position.sfen;
     lastMove.value = moves.at(-1) ?? "";
     activePlayerColor.value = snapshot.activePlayerColor === "white" ? "white" : "black";
+    boardFlipOverride.value = snapshot.boardFlipOverride === true;
     selectedPlayerColor.value = snapshot.selectedPlayerColor === "white"
       ? "white"
       : activePlayerColor.value;
@@ -1819,6 +1838,7 @@ function restorePersistedMatch(): boolean {
     resultDialogOpen.value = Boolean(restoredResult);
     matchStarted.value = true;
     pregameOpen.value = false;
+    homeOpen.value = false;
     active.value = snapshot.active === true && !restoredResult;
     thinking.value = false;
     guideText.value = coachLevel.value === "off" ? "" : "前の局面から対局を再開したよ！";
@@ -3289,7 +3309,7 @@ function restart() {
   analysisProgress.value = 0;
   analysisTotal.value = 0;
   analysisPoints.value = [];
-  analysisFlip.value = false;
+  boardFlipOverride.value = false;
   reviewCoachGeneration += 1;
   reviewNavigation.value = createReviewNavigation();
   playerTurnScore = undefined;
@@ -3363,6 +3383,7 @@ watch([
 });
 watch([
   activePlayerColor,
+  boardFlipOverride,
   selectedPlayerColor,
   searchNodes,
   cpuStrategy,
@@ -3513,7 +3534,7 @@ queueMicrotask(() => {
 }
 .shogi-game__toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
   align-items: center;
   padding: 0.25rem 0.5rem 0.65rem;
@@ -3550,6 +3571,10 @@ queueMicrotask(() => {
 }
 .shogi-game__command--settings {
   background: linear-gradient(#0788bc, #075074);
+}
+.shogi-game__command--flip[aria-pressed="true"] {
+  border-color: #cfc8f0;
+  background: #465a8a;
 }
 .shogi-game__turn {
   margin-left: 0;
@@ -4660,6 +4685,7 @@ queueMicrotask(() => {
   .shogi-game__toolbar {
     grid-column: 1;
     grid-row: 1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .shogi-game__player-zone--opponent {
     grid-column: 1;
@@ -4793,16 +4819,18 @@ queueMicrotask(() => {
     padding: 0.4rem;
     border-radius: 0;
   }
-  .shogi-game--analysis {
+  .shogi-game.shogi-game--analysis {
     grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) minmax(15rem, 32vh) 3.4rem;
   }
   .shogi-game__toolbar {
     gap: 0.4rem;
     padding-inline: 0;
   }
-  .shogi-game__command {
-    min-width: 5.25rem;
-    padding-inline: 0.65rem;
+  .shogi-game__toolbar .shogi-game__command {
+    min-width: 0;
+    padding-inline: 0.3rem;
+    font-size: 0.72rem;
+    white-space: nowrap;
   }
   .shogi-game__turn {
     padding-inline: 0.5rem;
@@ -4924,7 +4952,7 @@ queueMicrotask(() => {
 }
 @media (max-width: 360px) {
   .shogi-game {
-    grid-template-rows: 5.5rem 9.5rem minmax(0, 1fr) 6.5rem;
+    grid-template-rows: 6rem 9.5rem minmax(0, 1fr) 6.5rem;
   }
   .shogi-game__toolbar {
     display: grid;
@@ -4935,7 +4963,8 @@ queueMicrotask(() => {
     min-width: 0;
   }
   .shogi-game__turn {
-    grid-column: 1 / -1;
+    grid-column: 2;
+    grid-row: 2;
     margin-left: 0;
     text-align: center;
   }
@@ -5068,10 +5097,13 @@ queueMicrotask(() => {
 }
 @media (max-width: 360px) and (max-aspect-ratio: 5/4) {
   .shogi-game:not(.shogi-game--analysis) {
-    grid-template-rows: 5.5rem 4.5rem minmax(0, 1fr) 6.5rem 4.5rem;
+    grid-template-rows: 6rem 4.5rem minmax(0, 1fr) 6.5rem 4.5rem;
   }
   .shogi-game:not(.shogi-game--analysis).shogi-game--rook-choice {
-    grid-template-rows: 5.5rem 4.5rem minmax(0, 1fr) 6rem 9rem;
+    grid-template-rows: 6rem 4.5rem minmax(0, 1fr) 6rem 9rem;
+  }
+  .shogi-game.shogi-game--analysis {
+    grid-template-rows: 6rem 4.5rem minmax(0, 1fr) minmax(15rem, 32vh) 3.4rem;
   }
 }
 
@@ -5111,10 +5143,18 @@ queueMicrotask(() => {
   text-shadow: none;
   transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
 }
-.shogi-game button:not(:disabled):hover {
-  border-color: var(--amber);
-  background: var(--slate-light);
-  transform: translateY(-1px);
+@media (hover: hover) {
+  .shogi-game button:not(:disabled):hover {
+    border-color: var(--amber);
+    background: var(--slate-light);
+    transform: translateY(-1px);
+  }
+}
+.shogi-game button.shogi-game__command--flip[aria-pressed="true"] {
+  border-color: var(--lavender);
+  color: var(--night-deep);
+  background: var(--lavender);
+  box-shadow: 0 2px 0 #736c98, inset 0 0 0 2px var(--night-deep);
 }
 .shogi-game button:focus-visible,
 .shogi-game select:focus-visible,

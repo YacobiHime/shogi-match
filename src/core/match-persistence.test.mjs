@@ -31,6 +31,15 @@ describe("match persistence", () => {
       .toMatchObject(snapshot);
   });
 
+  it("round-trips the board flip state", () => {
+    const storage = memoryStorage();
+    const key = matchSnapshotKey();
+    const snapshot = { initialSfen: "start", mode: "cpu", boardFlipOverride: true };
+    expect(saveMatchSnapshot(storage, key, snapshot, 100)).toBe(true);
+    expect(loadMatchSnapshot(storage, key, { initialSfen: "start", mode: "cpu" }, 200))
+      .toMatchObject({ boardFlipOverride: true });
+  });
+
   it("removes incompatible, expired, and malformed snapshots", () => {
     const storage = memoryStorage();
     const key = matchSnapshotKey();
