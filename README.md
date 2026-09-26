@@ -43,7 +43,7 @@ game.html?mode=cpu&player_color=black&match_id=chapter1-boss
 - `initial_sfen`: 任意の開始局面
 - `match_id`: ノベル側で対局を識別するID
 - `engine_nodes`: CPUが1手ごとに読む探索量（既定値は30000）
-- `black_name`、`white_name`、`cpu_name`: 結果画面などに表示する対局者名
+- `black_name`、`white_name`、`cpu_name`: 盤・結果画面などに表示する対局者名（CPU対局ではCPU側の名前に「Lv.14」などのレベルと棋力の目安を添えて表示）
 - `handicap`: 手合割名
 
 `engine_nodes`は指定値に最も近い難易度プリセットへ丸められます。Custom Elementでは`cpu-delay-ms`、`engine-base-url`、`handicap-name`、`mobile`、`enable-drag-and-drop`、`show-home`属性も指定できます。

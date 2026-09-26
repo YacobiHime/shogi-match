@@ -346,10 +346,13 @@
       </div>
     </div>
 
-    <section class="shogi-game__summary" aria-label="戦型">
+    <section class="shogi-game__summary" aria-label="対戦相手と戦型">
+      <div v-if="cpuColor !== null" class="shogi-game__summary-opponent">
+        <b>対戦相手</b>
+        <span>{{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}<small v-if="cpuStrengthLabel">{{ cpuStrengthLabel }}</small></span>
+      </div>
       <div><b>先手</b><span>{{ blackFormationText }}</span></div>
       <div><b>後手</b><span>{{ whiteFormationText }}</span></div>
-      <small class="shogi-game__summary-mode">{{ modeText }}</small>
     </section>
 
     <section class="shogi-game__opening-guide" aria-label="やこび姫補助">
@@ -461,8 +464,10 @@
         :mobile="mobile || boardLayout === 'portrait'"
         :layout="boardLayout"
         :asset-base-url="assetBaseUrl"
-        :black-player-name="blackPlayerName"
+        :black-player-name="effectiveBlackPlayerName"
         :white-player-name="effectiveWhitePlayerName"
+        :black-player-detail="cpuColor === Color.BLACK ? cpuStrengthLabel : ''"
+        :white-player-detail="cpuColor === Color.WHITE ? cpuStrengthLabel : ''"
         :candidates="boardCandidates"
         @usi-move="onPlayerMove"
       />
@@ -1062,8 +1067,8 @@ const BOARD_FRAMES = {
 type BoardFrameName = keyof typeof BOARD_FRAMES;
 // 縦積みで盤以外（見出し・戦型・助言・補助・操作ボタン）に要る高さの見積もり。文字サイズ基準。
 // 横並びと比べて盤が大きくなる方を選ぶためだけに使い、実際の盤の枠は残りの高さから決める。
-const STACK_RESERVED_EM = 18;
-const STACK_ANALYSIS_RESERVED_EM = 25;
+const STACK_RESERVED_EM = 19;
+const STACK_ANALYSIS_RESERVED_EM = 26;
 // 横並びの情報欄1列の最小幅。2列分以上余れば盤を中央に置く。
 const SIDE_COLUMN_MIN_EM = 17;
 const WIDE_COLUMNS_MIN_EM = 33;
@@ -1188,12 +1193,22 @@ const flipBoard = computed(() => (
 const analysisCurrentPoint = computed(() =>
   analysisPoints.value.find(({ ply }) => ply === reviewNavigation.value.cursor)
 );
-const effectiveWhitePlayerName = computed(() =>
-  normalizedMode.value === "cpu" && humanColor.value === Color.BLACK
-    ? props.cpuPlayerName
-    : props.whitePlayerName,
+// CPU対局ではCPU側の名前にレベルを添え、棋力の説明を2行目に出す。
+const cpuColor = computed(() => (normalizedMode.value === "cpu" ? reverseColor(humanColor.value) : null));
+const cpuStrengthPreset = computed(() =>
+  CPU_STRENGTH_PRESETS.find((preset) => preset.value === searchNodes.value),
 );
-const modeText = computed(() => normalizedMode.value === "cpu" ? "CPU対局" : "ローカル対局");
+const cpuDisplayName = computed(() => {
+  const name = props.cpuPlayerName.trim() || "CPU";
+  return cpuStrengthPreset.value ? `${name} Lv.${cpuStrengthPreset.value.level}` : name;
+});
+const cpuStrengthLabel = computed(() => cpuStrengthPreset.value?.label ?? "");
+const effectiveBlackPlayerName = computed(() =>
+  cpuColor.value === Color.BLACK ? cpuDisplayName.value : props.blackPlayerName,
+);
+const effectiveWhitePlayerName = computed(() =>
+  cpuColor.value === Color.WHITE ? cpuDisplayName.value : props.whitePlayerName,
+);
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
@@ -1245,15 +1260,10 @@ const resultPresentation = computed(() => {
   } as const)[result.value.reason];
   const handicap = props.handicapName.trim()
     || (props.initialSfen === STANDARD_SFEN ? "平手" : "その他");
-  const opponentPreset = normalizedMode.value === "cpu"
-    ? CPU_STRENGTH_PRESETS.find((preset) => preset.value === searchNodes.value)
-    : undefined;
   const common = {
     detail,
     handicap,
-    opponent: opponentPreset
-      ? `${props.cpuPlayerName.trim() || "CPU"} Lv.${opponentPreset.level} ${opponentPreset.label}`
-      : props.cpuPlayerName.trim() || "CPU",
+    opponent: [cpuDisplayName.value, cpuStrengthLabel.value].filter(Boolean).join(" "),
     blackFormations: formationNamesFromState(formationState.value, "black").join("・") || "未判定",
     whiteFormations: formationNamesFromState(formationState.value, "white").join("・") || "未判定",
   };
@@ -4278,9 +4288,17 @@ queueMicrotask(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.shogi-game__summary-mode {
-  display: none;
+/* 盤上の名前欄は盤と一緒に縮むため、読める大きさの対戦相手表示をここにも置く。 */
+.shogi-game__summary {
+  flex-wrap: wrap;
+}
+.shogi-game .shogi-game__summary-opponent {
+  flex: 1 1 100%;
+}
+.shogi-game__summary-opponent small {
+  margin-left: 0.5em;
   color: var(--muted);
+  font-size: 0.92em;
 }
 
 /* ===== やこび姫補助 ===== */
@@ -4864,6 +4882,7 @@ queueMicrotask(() => {
 }
 .shogi-game--wide .shogi-game__summary {
   flex-direction: column;
+  flex-wrap: nowrap;
   align-items: stretch;
   gap: 0.3em;
   padding: 0.5em 0.7em;
@@ -4871,10 +4890,6 @@ queueMicrotask(() => {
 }
 .shogi-game--wide .shogi-game__summary span {
   white-space: normal;
-}
-.shogi-game--wide .shogi-game__summary-mode {
-  display: block;
-  order: -1;
 }
 .shogi-game--wide .shogi-game__opening-guide {
   max-height: 26em;

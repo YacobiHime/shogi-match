@@ -158,10 +158,12 @@
       <!-- 先手の対局者名 -->
       <div
         class="player-name"
-        :class="{ active: position.color == 'black' }"
+        :class="{ active: position.color == 'black', 'player-name--detail': blackPlayerDetail }"
         :style="main.blackPlayerName.style"
+        :title="blackPlayerDetail ? `${blackPlayerName} ${blackPlayerDetail}` : undefined"
       >
         <span class="player-name-text">☗{{ blackPlayerName }}</span>
+        <span v-if="blackPlayerDetail" class="player-name-detail">{{ blackPlayerDetail }}</span>
       </div>
 
       <!-- 先手の持ち時間 -->
@@ -177,10 +179,12 @@
       <!-- 後手の対局者名 -->
       <div
         class="player-name"
-        :class="{ active: position.color == 'white' }"
+        :class="{ active: position.color == 'white', 'player-name--detail': whitePlayerDetail }"
         :style="main.whitePlayerName.style"
+        :title="whitePlayerDetail ? `${whitePlayerName} ${whitePlayerDetail}` : undefined"
       >
         <span class="player-name-text">☖{{ whitePlayerName }}</span>
+        <span v-if="whitePlayerDetail" class="player-name-detail">{{ whitePlayerDetail }}</span>
       </div>
 
       <!-- 後手の持ち時間 -->
@@ -398,6 +402,17 @@ const props = defineProps({
     type: String,
     required: false,
     default: "後手",
+  },
+  // 対局者名の下に小さく添える補足（CPUの棋力など）。
+  blackPlayerDetail: {
+    type: String,
+    required: false,
+    default: "",
+  },
+  whitePlayerDetail: {
+    type: String,
+    required: false,
+    default: "",
   },
   blackPlayerTime: {
     type: Number,
@@ -1232,6 +1247,25 @@ const whitePlayerTimeSeverity = computed(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 補足があるときは2行にし、名前欄の幅が狭い縦画面でも省略されないようにする。 */
+.player-name--detail {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  line-height: 1.1;
+}
+.player-name--detail .player-name-text {
+  max-width: calc(100% - 5px);
+  font-size: 0.8em;
+}
+.player-name-detail {
+  max-width: calc(100% - 5px);
+  margin-left: 5px;
+  overflow: hidden;
+  font-size: 0.62em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .clock {
   background-color: var(--text-bg-color);

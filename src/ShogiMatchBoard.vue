@@ -40,6 +40,8 @@
       :enable-drag-and-drop="enableDragAndDrop"
       :black-player-name="blackPlayerName"
       :white-player-name="whitePlayerName"
+      :black-player-detail="blackPlayerDetail"
+      :white-player-detail="whitePlayerDetail"
       :arrow-image-url="`${normalizedAssetBase}/arrow/arrow.svg`"
       @move="onMove"
       @resize="onResize"
@@ -80,6 +82,8 @@ const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   blackPlayerName: { type: String, default: "先手" },
   whitePlayerName: { type: String, default: "後手" },
+  blackPlayerDetail: { type: String, default: "" },
+  whitePlayerDetail: { type: String, default: "" },
 });
 const emit = defineEmits(["usi-move", "invalid-sfen", "resize"]);
 const root = ref<HTMLElement | null>(null);
