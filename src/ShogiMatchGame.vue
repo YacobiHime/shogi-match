@@ -35,7 +35,7 @@
       <nav class="shogi-home__menu" aria-label="メニュー">
         <button type="button" class="shogi-home__card" @click="closeHome">
           <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#f2e3c2">
+            <g fill="#fffcf4">
               <rect x="2" y="2" width="12" height="1" />
               <rect x="2" y="13" width="12" height="1" />
               <rect x="2" y="2" width="1" height="12" />
@@ -47,7 +47,7 @@
               <rect x="2" y="8" width="12" height="1" />
               <rect x="2" y="11" width="12" height="1" />
             </g>
-            <g fill="#e8a04c">
+            <g fill="#f1a54c">
               <rect x="3" y="3" width="2" height="2" />
               <rect x="12" y="9" width="2" height="2" />
             </g>
@@ -56,12 +56,12 @@
         </button>
         <button type="button" class="shogi-home__card" @click="dexOpen = true">
           <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#f2e3c2">
+            <g fill="#fffcf4">
               <rect x="2" y="3" width="5" height="10" />
               <rect x="9" y="3" width="5" height="10" />
               <rect x="7" y="2" width="2" height="12" />
             </g>
-            <g fill="#e8a04c">
+            <g fill="#f1a54c">
               <rect x="3" y="4" width="3" height="1" />
               <rect x="3" y="6" width="3" height="1" />
               <rect x="3" y="8" width="3" height="1" />
@@ -74,7 +74,7 @@
         </button>
         <button type="button" class="shogi-home__card" disabled>
           <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#e8a04c">
+            <g fill="#f1a54c">
               <rect x="5" y="1" width="6" height="1" />
               <rect x="4" y="2" width="8" height="2" />
               <rect x="3" y="4" width="10" height="8" />
@@ -88,11 +88,11 @@
         </button>
         <button type="button" class="shogi-home__card" disabled>
           <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#f2e3c2">
+            <g fill="#fffcf4">
               <rect x="3" y="2" width="10" height="12" />
               <rect x="2" y="1" width="2" height="14" />
             </g>
-            <g fill="#e8a04c">
+            <g fill="#f1a54c">
               <rect x="6" y="4" width="6" height="1" />
               <rect x="6" y="6" width="6" height="1" />
               <rect x="6" y="8" width="6" height="1" />
@@ -1857,18 +1857,18 @@ function beginMatch() {
 
 // ホーム画面の装飾(星)の配置。left/topはパーセント、色は夜空の配色に合わせる。
 const HOME_STARS = [
-  { id: "s1", style: "left:9%;top:16%;width:12px;height:12px;color:#f2e3c2;" },
-  { id: "s2", style: "left:16%;top:38%;width:8px;height:8px;color:#e8a04c;" },
-  { id: "s3", style: "left:24%;top:10%;width:6px;height:6px;color:#cfc8f0;" },
-  { id: "s4", style: "left:33%;top:26%;width:8px;height:8px;color:#f2e3c2;" },
-  { id: "s5", style: "left:52%;top:12%;width:6px;height:6px;color:#e8a04c;" },
-  { id: "s6", style: "left:63%;top:22%;width:12px;height:12px;color:#f2e3c2;" },
-  { id: "s7", style: "left:72%;top:8%;width:8px;height:8px;color:#cfc8f0;" },
-  { id: "s8", style: "left:84%;top:30%;width:8px;height:8px;color:#e8a04c;" },
-  { id: "s9", style: "left:90%;top:14%;width:14px;height:14px;color:#f2e3c2;" },
-  { id: "s10", style: "left:12%;top:70%;width:8px;height:8px;color:#e8a04c;" },
-  { id: "s11", style: "left:70%;top:74%;width:10px;height:10px;color:#f2e3c2;" },
-  { id: "s12", style: "left:88%;top:66%;width:8px;height:8px;color:#cfc8f0;" },
+  { id: "s1", style: "left:9%;top:16%;width:12px;height:12px;color:#fffcf4;" },
+  { id: "s2", style: "left:16%;top:38%;width:8px;height:8px;color:#f1a54c;" },
+  { id: "s3", style: "left:24%;top:10%;width:6px;height:6px;color:#d7d1fd;" },
+  { id: "s4", style: "left:33%;top:26%;width:8px;height:8px;color:#fffcf4;" },
+  { id: "s5", style: "left:52%;top:12%;width:6px;height:6px;color:#f1a54c;" },
+  { id: "s6", style: "left:63%;top:22%;width:12px;height:12px;color:#fffcf4;" },
+  { id: "s7", style: "left:72%;top:8%;width:8px;height:8px;color:#d7d1fd;" },
+  { id: "s8", style: "left:84%;top:30%;width:8px;height:8px;color:#f1a54c;" },
+  { id: "s9", style: "left:90%;top:14%;width:14px;height:14px;color:#fffcf4;" },
+  { id: "s10", style: "left:12%;top:70%;width:8px;height:8px;color:#f1a54c;" },
+  { id: "s11", style: "left:70%;top:74%;width:10px;height:10px;color:#fffcf4;" },
+  { id: "s12", style: "left:88%;top:66%;width:8px;height:8px;color:#d7d1fd;" },
 ];
 
 function closeHome() {
@@ -4001,18 +4001,22 @@ queueMicrotask(() => {
  * 文字サイズ --ui-font も同じ関数が決めるため、ここでは em を基準に寸法を指定する。
  */
 .shogi-game {
-  --night: #1d3343;
-  --night-deep: #142736;
-  --slate: #2e4a60;
-  --slate-light: #3b5a70;
-  --amber: #f5a645;
-  --ivory: #fffdf4;
-  --lavender: #d7ceff;
-  --muted: #becbd2;
+  /* 配色はやこび姫のドット絵の色に合わせる。 */
+  --night: #1d303f;
+  --night-deep: #172632;
+  --slate: #2b465b;
+  --slate-light: #445c6d;
+  --amber: #f1a54c;
+  --amber-shadow: #b57c39;
+  --ivory: #fffcf4;
+  --lavender: #d7d1fd;
+  --peach: #fbd6bc;
+  --rust: #e3914e;
+  --muted: rgba(255, 252, 244, 0.72);
   --gold: var(--amber);
   --ink: var(--ivory);
-  --panel: rgba(20, 39, 54, 0.94);
-  --line: rgba(245, 166, 69, 0.5);
+  --panel: rgba(23, 38, 50, 0.94);
+  --line: rgba(241, 165, 76, 0.5);
   box-sizing: border-box;
   position: relative;
   display: grid;
@@ -4025,10 +4029,10 @@ queueMicrotask(() => {
   overflow: hidden;
   color: var(--ink);
   background:
-    radial-gradient(circle at 8% 18%, rgba(245, 166, 69, 0.16) 0 2px, transparent 3px),
-    radial-gradient(circle at 91% 13%, rgba(215, 206, 255, 0.18) 0 2px, transparent 3px),
-    radial-gradient(circle at 83% 78%, rgba(255, 253, 244, 0.13) 0 1px, transparent 2px),
-    linear-gradient(135deg, transparent 0 68%, rgba(46, 74, 96, 0.18) 68% 100%),
+    radial-gradient(circle at 8% 18%, rgba(241, 165, 76, 0.16) 0 2px, transparent 3px),
+    radial-gradient(circle at 91% 13%, rgba(215, 209, 253, 0.18) 0 2px, transparent 3px),
+    radial-gradient(circle at 83% 78%, rgba(255, 252, 244, 0.13) 0 1px, transparent 2px),
+    linear-gradient(135deg, transparent 0 68%, rgba(43, 70, 91, 0.18) 68% 100%),
     var(--night);
   font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
   font-size: var(--ui-font, 15px);
@@ -4046,7 +4050,7 @@ queueMicrotask(() => {
 .shogi-game button {
   min-height: 2.6em;
   padding: 0.45em 0.9em;
-  border: 1px solid rgba(245, 166, 69, 0.68);
+  border: 1px solid rgba(241, 165, 76, 0.68);
   border-radius: 0.3em;
   color: var(--ivory);
   background: var(--slate);
@@ -4067,9 +4071,9 @@ queueMicrotask(() => {
   }
 }
 .shogi-game button:disabled {
-  border-color: rgba(174, 184, 189, 0.28);
-  color: rgba(255, 253, 244, 0.45);
-  background: #263e50;
+  border-color: rgba(255, 252, 244, 0.2);
+  color: rgba(255, 252, 244, 0.45);
+  background: rgba(43, 70, 91, 0.5);
   box-shadow: none;
   cursor: not-allowed;
 }
@@ -4143,20 +4147,20 @@ queueMicrotask(() => {
   white-space: nowrap;
 }
 .shogi-game__command--danger {
-  border-color: rgba(245, 166, 69, 0.82);
-  background: #735036;
+  border-color: var(--rust);
+  color: var(--peach) !important;
 }
 .shogi-game__command--complete {
   border-color: var(--amber);
   color: var(--night-deep) !important;
   background: var(--amber) !important;
-  box-shadow: 0 2px 0 #a96924;
+  box-shadow: 0 2px 0 var(--amber-shadow);
 }
 .shogi-game button.shogi-game__command--flip[aria-pressed="true"] {
   border-color: var(--lavender);
   color: var(--night-deep);
   background: var(--lavender);
-  box-shadow: 0 2px 0 #736c98, inset 0 0 0 2px var(--night-deep);
+  box-shadow: 0 2px 0 rgba(23, 38, 50, 0.6), inset 0 0 0 2px var(--night-deep);
 }
 .shogi-game__menu-toggle {
   display: inline-flex;
@@ -4164,7 +4168,7 @@ queueMicrotask(() => {
   justify-content: center;
   min-width: 2.8em;
   padding-inline: 0.65em;
-  border-color: rgba(215, 206, 255, 0.62) !important;
+  border-color: rgba(215, 209, 253, 0.62) !important;
 }
 .shogi-game__menu-toggle svg {
   display: block;
@@ -4190,10 +4194,10 @@ queueMicrotask(() => {
   gap: 0.55em;
   width: min(19em, calc(100vw - 1.2em));
   padding: 0.8em;
-  border: 1px solid rgba(245, 166, 69, 0.72);
+  border: 1px solid rgba(241, 165, 76, 0.72);
   border-top: 3px solid var(--amber);
   border-radius: 0.3em;
-  background: rgba(20, 39, 54, 0.98);
+  background: rgba(23, 38, 50, 0.98);
   box-shadow: 0 0.8em 2em rgba(7, 18, 26, 0.55);
   animation: shogi-menu-in 140ms ease-out both;
 }
@@ -4214,7 +4218,8 @@ queueMicrotask(() => {
   color: var(--lavender);
 }
 .shogi-game__menu-item--danger {
-  background: #735036 !important;
+  border-color: var(--rust) !important;
+  color: var(--peach) !important;
 }
 .shogi-game__menu-item--complete {
   color: var(--night-deep) !important;
@@ -4231,7 +4236,7 @@ queueMicrotask(() => {
   width: 100%;
   min-height: 2.6em;
   padding: 0.3em 0.5em;
-  border: 1px solid rgba(245, 166, 69, 0.6);
+  border: 1px solid rgba(241, 165, 76, 0.6);
   border-radius: 0.2em;
   color: var(--ivory);
   background: var(--night-deep);
@@ -4289,7 +4294,7 @@ queueMicrotask(() => {
   padding: 0.5em 0.6em;
   overflow: auto;
   overscroll-behavior: contain;
-  background: rgba(20, 39, 54, 0.96);
+  background: rgba(23, 38, 50, 0.96);
 }
 .shogi-game__opening-guide h2,
 .shogi-game__kifu h2 {
@@ -4316,7 +4321,7 @@ queueMicrotask(() => {
   min-width: 0;
   min-height: 2.5em;
   padding: 0.3em 0.4em;
-  border: 1px solid rgba(245, 166, 69, 0.6);
+  border: 1px solid rgba(241, 165, 76, 0.6);
   border-radius: 0.2em;
   color: var(--ivory);
   background: var(--night-deep);
@@ -4337,10 +4342,10 @@ queueMicrotask(() => {
   right: 0;
   min-height: 1.7em;
   padding: 0.1em 0.6em;
-  border-color: rgba(215, 206, 255, 0.6);
+  border-color: rgba(215, 209, 253, 0.6);
   border-radius: 0.2em;
-  color: #f7f1ff;
-  background: rgba(46, 74, 96, 0.9);
+  color: var(--ivory);
+  background: rgba(43, 70, 91, 0.9);
   box-shadow: none;
   font-size: 0.75em;
 }
@@ -4348,13 +4353,13 @@ queueMicrotask(() => {
   display: grid;
   gap: 0.4em;
   padding: 0.5em;
-  border: 1px solid rgba(244, 216, 144, 0.65);
+  border: 1px solid rgba(241, 165, 76, 0.55);
   color: var(--ivory);
-  background: rgba(96, 54, 22, 0.34);
+  background: rgba(43, 70, 91, 0.6);
   font-size: 0.9em;
 }
 .shogi-game__rook-choice > span {
-  color: #f4d890;
+  color: var(--amber);
   font-weight: 700;
 }
 .shogi-game__rook-choice > div {
@@ -4366,20 +4371,21 @@ queueMicrotask(() => {
   min-width: 0;
   min-height: 2.5em;
   padding: 0.35em 0.4em;
-  border-color: rgba(85, 191, 233, 0.72);
-  color: #f7f5ff;
-  background: rgba(22, 83, 112, 0.82);
+  border-color: rgba(215, 209, 253, 0.6);
+  color: var(--ivory);
+  background: var(--slate);
 }
 .shogi-game .shogi-game__rook-choice button:first-child {
-  border-color: #f0b45e;
-  background: rgba(124, 68, 24, 0.9);
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--amber);
 }
 .shogi-game__opening-guide p {
   margin: 0;
   padding: 0.45em 0.6em;
   border-left: 3px solid var(--lavender);
   color: var(--ivory);
-  background: rgba(46, 74, 96, 0.58);
+  background: rgba(43, 70, 91, 0.58);
   font-size: 0.92em;
   line-height: 1.5;
 }
@@ -4437,7 +4443,8 @@ queueMicrotask(() => {
 }
 .shogi-game .shogi-game__kifu-current > * {
   color: var(--ivory);
-  background: rgba(245, 166, 69, 0.24);
+  background: var(--slate);
+  box-shadow: inset 3px 0 0 var(--amber);
   font-weight: 700;
 }
 .shogi-game__kifu-empty {
@@ -4502,7 +4509,7 @@ queueMicrotask(() => {
   flex: none;
   width: 1.2em;
   height: 1.5em;
-  filter: drop-shadow(0 0 0.25rem rgba(245, 166, 69, 0.45));
+  filter: drop-shadow(0 0 0.25rem rgba(241, 165, 76, 0.45));
 }
 .shogi-game__dialogue-icon svg {
   width: 100%;
@@ -4539,16 +4546,16 @@ queueMicrotask(() => {
   border-color: var(--amber);
   color: var(--night-deep);
   background: var(--amber);
-  box-shadow: 0 2px 0 #a96924;
+  box-shadow: 0 2px 0 var(--amber-shadow);
 }
 .shogi-game .shogi-game__awakening:disabled {
-  border-color: rgba(174, 184, 189, 0.28);
-  color: rgba(255, 253, 244, 0.45);
-  background: #263e50;
+  border-color: rgba(255, 252, 244, 0.2);
+  color: rgba(255, 252, 244, 0.45);
+  background: rgba(43, 70, 91, 0.5);
   box-shadow: none;
 }
 .shogi-game .shogi-game__analysis-button {
-  border-color: rgba(215, 206, 255, 0.62);
+  border-color: rgba(215, 209, 253, 0.62);
   background: var(--slate);
 }
 
@@ -4583,14 +4590,14 @@ queueMicrotask(() => {
   min-width: 0;
   max-width: 18em;
   min-height: 2.2em;
-  border: 1px solid #6b7a86;
+  border: 1px solid var(--slate);
   border-radius: 0.2em;
   color: var(--night-deep);
   background: #fff;
   font-size: 1em;
 }
 .shogi-game__analysis-progress {
-  color: #a74316;
+  color: var(--slate);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -4796,7 +4803,7 @@ queueMicrotask(() => {
 .shogi-game--side:not(.shogi-game--short):not(.shogi-game--analysis) .shogi-game__portrait::after {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, transparent 0 55%, rgba(20, 39, 54, 0.6) 100%);
+  background: linear-gradient(180deg, transparent 0 55%, rgba(23, 38, 50, 0.6) 100%);
   content: "";
 }
 .shogi-game--wide .shogi-game__dialogue,
@@ -4886,8 +4893,9 @@ queueMicrotask(() => {
   padding: 0.55em 0.55em 0.55em 0.9em;
   border: 1px solid var(--amber);
   border-radius: 0.3em;
+  border-color: var(--rust);
   color: var(--ivory);
-  background: #604634;
+  background: var(--slate);
   box-shadow: 0 0.6em 1.6em rgba(7, 18, 26, 0.5);
   font-size: 0.88em;
   transform: translateX(-50%);
@@ -4918,7 +4926,7 @@ queueMicrotask(() => {
 .shogi-game__confirm-panel {
   width: min(22em, 100%);
   padding: 1.2em;
-  border: 1px solid rgba(245, 166, 69, 0.78);
+  border: 1px solid rgba(241, 165, 76, 0.78);
   border-top: 4px solid var(--amber);
   border-radius: 0.3em;
   background: var(--slate);
@@ -4939,14 +4947,16 @@ queueMicrotask(() => {
   gap: 0.6em;
 }
 .shogi-game .shogi-game__confirm-danger {
-  background: #735036;
+  border-color: var(--rust);
+  color: var(--night-deep);
+  background: var(--rust);
 }
 .shogi-game__opening-explanation-panel {
   width: min(31em, 100%);
   max-height: calc(100% - 1em);
   overflow-y: auto;
   padding: 1.1em;
-  border: 1px solid rgba(245, 166, 69, 0.78);
+  border: 1px solid rgba(241, 165, 76, 0.78);
   border-top: 4px solid var(--amber);
   color: var(--ivory);
   background: var(--slate);
@@ -4972,7 +4982,7 @@ queueMicrotask(() => {
 .shogi-game__opening-explanation-panel dl > div {
   padding: 0.65em;
   border-left: 3px solid var(--lavender);
-  background: rgba(20, 39, 54, 0.72);
+  background: rgba(23, 38, 50, 0.72);
 }
 .shogi-game__opening-explanation-panel dt {
   margin-bottom: 0.2em;
@@ -4997,7 +5007,7 @@ queueMicrotask(() => {
   display: grid;
   place-items: center;
   padding: clamp(0.6em, 3vw, 2.5em);
-  background: rgba(20, 39, 54, 0.96);
+  background: rgba(23, 38, 50, 0.96);
   backdrop-filter: blur(0.4rem);
 }
 .shogi-game__pregame-panel {
@@ -5006,7 +5016,7 @@ queueMicrotask(() => {
   padding: clamp(0.9em, 3vw, 2em);
   overflow: auto;
   overscroll-behavior: contain;
-  border: 1px solid rgba(245, 166, 69, 0.72);
+  border: 1px solid rgba(241, 165, 76, 0.72);
   border-top: 4px solid var(--amber);
   border-radius: 0.3em;
   color: var(--ivory);
@@ -5017,9 +5027,9 @@ queueMicrotask(() => {
   min-height: 2.2em;
   margin-bottom: 0.8em;
   padding: 0.3em 0.9em;
-  border: 1px solid rgba(242, 227, 194, 0.5);
+  border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 999px;
-  color: #f2e3c2;
+  color: #fffcf4;
   background: transparent;
   box-shadow: none;
   font-size: 0.85em;
@@ -5049,9 +5059,9 @@ queueMicrotask(() => {
   align-content: start;
   min-width: 0;
   padding: 0.75em;
-  border: 1px solid rgba(215, 206, 255, 0.24);
+  border: 1px solid rgba(215, 209, 253, 0.24);
   border-radius: 0.2em;
-  background: rgba(20, 39, 54, 0.58);
+  background: rgba(23, 38, 50, 0.58);
 }
 .shogi-game__pregame-field span {
   color: var(--amber);
@@ -5061,7 +5071,7 @@ queueMicrotask(() => {
   width: 100%;
   min-height: 2.8em;
   padding: 0.4em 0.6em;
-  border: 1px solid rgba(245, 166, 69, 0.68);
+  border: 1px solid rgba(241, 165, 76, 0.68);
   border-radius: 0.15em;
   color: var(--night-deep);
   background: var(--ivory);
@@ -5074,7 +5084,7 @@ queueMicrotask(() => {
 }
 .shogi-game__pregame-control--sub {
   padding-top: 0.65em;
-  border-top: 1px solid rgba(240, 196, 95, 0.3);
+  border-top: 1px solid rgba(241, 165, 76, 0.3);
 }
 .shogi-game__strategy-setting {
   display: grid;
@@ -5153,7 +5163,7 @@ queueMicrotask(() => {
   border-color: var(--amber);
   color: var(--night-deep);
   background: var(--amber);
-  box-shadow: 0 3px 0 #a96924;
+  box-shadow: 0 3px 0 var(--amber-shadow);
   font-size: 1.1em;
   font-weight: 800;
 }
@@ -5177,7 +5187,7 @@ queueMicrotask(() => {
   bottom: calc(-1 * clamp(0.9em, 3vw, 2em));
   margin-inline: calc(-1 * clamp(0.9em, 3vw, 2em));
   padding: 0.6em clamp(0.9em, 3vw, 2em) clamp(0.9em, 3vw, 2em);
-  background: linear-gradient(180deg, rgba(46, 74, 96, 0) 0, var(--slate) 0.8em);
+  background: linear-gradient(180deg, rgba(43, 70, 91, 0) 0, var(--slate) 0.8em);
 }
 
 /* ===== 終局 ===== */
@@ -5189,7 +5199,7 @@ queueMicrotask(() => {
   overflow: hidden;
   place-items: center;
   padding: 1em;
-  background: rgba(14, 29, 40, 0.86);
+  background: rgba(23, 38, 50, 0.86);
   backdrop-filter: blur(0.35rem);
   animation: result-backdrop-in 360ms ease-out both;
 }
@@ -5210,15 +5220,15 @@ queueMicrotask(() => {
 }
 .shogi-game__result--victory {
   --result-accent: var(--amber);
-  --result-glow: rgba(245, 166, 69, 0.18);
+  --result-glow: rgba(241, 165, 76, 0.18);
 }
 .shogi-game__result--defeat {
-  --result-accent: #d7ceff;
-  --result-glow: rgba(215, 206, 255, 0.16);
+  --result-accent: var(--lavender);
+  --result-glow: rgba(215, 209, 253, 0.16);
 }
 .shogi-game__result--draw {
-  --result-accent: #aeb8bd;
-  --result-glow: rgba(174, 184, 189, 0.14);
+  --result-accent: rgba(255, 252, 244, 0.7);
+  --result-glow: rgba(255, 252, 244, 0.12);
 }
 .shogi-game__result h2 {
   margin: 0;
@@ -5243,8 +5253,8 @@ queueMicrotask(() => {
   grid-template-columns: 5.5em minmax(0, 1fr);
   gap: 0.75em;
   padding: 0.5em 0.65em;
-  border-bottom: 1px solid rgba(245, 166, 69, 0.3);
-  background: rgba(46, 74, 96, 0.35);
+  border-bottom: 1px solid rgba(241, 165, 76, 0.3);
+  background: rgba(43, 70, 91, 0.35);
 }
 .shogi-game__result-details dt {
   color: var(--result-accent);
@@ -5257,7 +5267,9 @@ queueMicrotask(() => {
 }
 .shogi-game .shogi-game__rematch {
   border-color: var(--amber);
-  background: #735036;
+  color: var(--night-deep);
+  background: var(--amber);
+  box-shadow: 0 2px 0 var(--amber-shadow);
 }
 .shogi-game__result-actions {
   display: grid;
@@ -5341,8 +5353,8 @@ queueMicrotask(() => {
   gap: 40px;
   padding: 24px;
   overflow: hidden;
-  background: #1d2b3a;
-  color: var(--ink, #fff8ec);
+  background: #1d303f;
+  color: var(--ink, #fffcf4);
   font-family: "Courier New", "Hiragino Kaku Gothic ProN", "Yu Gothic", monospace;
 }
 .shogi-home__star { position: absolute; pointer-events: none; }
@@ -5371,8 +5383,8 @@ queueMicrotask(() => {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: #f2e3c2;
-  box-shadow: inset -12px -6px 0 0 #1d2b3a;
+  background: #fffcf4;
+  box-shadow: inset -12px -6px 0 0 #1d303f;
 }
 .shogi-home__chara {
   position: absolute;
@@ -5400,8 +5412,8 @@ queueMicrotask(() => {
   font-size: clamp(36px, 7vw, 64px);
   letter-spacing: 0.06em;
   font-weight: 700;
-  color: #f6f2e8;
-  text-shadow: 3px 3px 0 #14212e;
+  color: #fffcf4;
+  text-shadow: 3px 3px 0 #172632;
 }
 .shogi-home__menu {
   display: grid;
@@ -5415,18 +5427,18 @@ queueMicrotask(() => {
   align-items: center;
   gap: 12px;
   padding: 22px 10px 18px;
-  border: 2px solid rgba(242, 227, 194, 0.4);
+  border: 2px solid rgba(255, 252, 244, 0.4);
   border-radius: 8px;
-  background: rgba(37, 58, 77, 0.9);
-  box-shadow: 4px 4px 0 rgba(16, 26, 36, 0.8);
-  color: #f6f2e8;
+  background: rgba(43, 70, 91, 0.9);
+  box-shadow: 4px 4px 0 rgba(23, 38, 50, 0.8);
+  color: #fffcf4;
   font: inherit;
   cursor: pointer;
 }
 .shogi-home__card:not(:disabled):hover {
-  border-color: #e8a04c;
+  border-color: #f1a54c;
   transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 rgba(16, 26, 36, 0.8);
+  box-shadow: 5px 5px 0 rgba(23, 38, 50, 0.8);
 }
 .shogi-home__card:disabled { cursor: default; opacity: 0.72; }
 .shogi-home__icon { width: 56px; height: 56px; }
@@ -5437,15 +5449,15 @@ queueMicrotask(() => {
   top: 6px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: #e8a04c;
-  color: #1d2b3a;
+  background: #f1a54c;
+  color: #1d303f;
   font-size: 10px;
   font-weight: 700;
 }
 .shogi-home__koma-char {
   font-size: 9px;
   font-weight: 700;
-  fill: #1d2b3a;
+  fill: #1d303f;
   text-anchor: middle;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
 }
