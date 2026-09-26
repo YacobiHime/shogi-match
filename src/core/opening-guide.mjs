@@ -1,5 +1,14 @@
 import { OPENING_GUIDE_OVERRIDES } from "../data/opening-guide-overrides.mjs";
 import { parseSfenBoard } from "./sfen-board.mjs";
+import {
+  formationDistance,
+  formationProgressMoves,
+  formationVariantsForColor,
+  mirrorSquare,
+  OPENING_GUIDE_MAX_DISTANCE,
+} from "./opening-distance.mjs";
+
+export { OPENING_GUIDE_MAX_DISTANCE };
 
 // The built-in catalogue remains the stable fixture for the core unit tests. The
 // generated editor data is configuration, and is enabled in browser/production builds.
@@ -43,6 +52,10 @@ function applyEditorOverride(definition, kind) {
       menuGroup: saved.classification?.menuGroup || definition.menuGroup,
       contexts: saved.classification?.contexts?.length ? saved.classification.contexts : definition.contexts,
     } : {}),
+    // エディターで未設定なら組み込みのほぼ完成形を残す。
+    nearCompletions: Array.isArray(saved.nearCompletions)
+      ? saved.nearCompletions
+      : definition.nearCompletions,
     blackMoves: saved.guideMoves,
     movePositionPrerequisites: saved.movePositionPrerequisites,
     moveConditionBranches: saved.moveConditionBranches,
@@ -660,7 +673,32 @@ const OPENING_STRATEGY_DEFINITIONS = [
   },
 ];
 
-export const OPENING_STRATEGIES = definitionsWithEditorOverrides(OPENING_STRATEGY_DEFINITIONS, "strategy");
+// 戦法の「ほぼ完成形」。達したら完全形まで続けるか選ばせる。升は先手基準。
+const STRATEGY_NEAR_COMPLETIONS = {
+  "right-shiken": [{
+    id: "before-rook-swing", label: "右四間飛車（飛車を回る前）", squares: [["5f", "S"], ["4f", "P"]],
+  }],
+  "morishita-system": [{
+    id: "yagura-37-silver", label: "矢倉3七銀の形", squares: [["7g", "S"], ["3g", "S"], ["7h", "G"]],
+  }],
+  "chikatetsu-bisha": [{
+    id: "before-rook-swing",
+    label: "地下鉄飛車（飛車を回す前）",
+    squares: [["9h", "L"], ["6f", "B"], ["7g", "N"], ["8h", "S"], ["7h", "K"], ["3g", "N"], ["4h", "S"]],
+  }],
+  ahiru: [{
+    id: "before-edge-bishop",
+    label: "アヒル囲い（端角の前）",
+    squares: [["5h", "K"], ["3i", "G"], ["7i", "G"], ["2f", "R"], ["4h", "S"], ["6h", "S"]],
+  }],
+};
+
+export const OPENING_STRATEGIES = definitionsWithEditorOverrides(
+  OPENING_STRATEGY_DEFINITIONS.map((strategy) => (STRATEGY_NEAR_COMPLETIONS[strategy.id]
+    ? { ...strategy, nearCompletions: STRATEGY_NEAR_COMPLETIONS[strategy.id] }
+    : strategy)),
+  "strategy",
+);
 
 const OPENING_CASTLE_DEFINITIONS = [
   {
@@ -1007,9 +1045,47 @@ const CASTLE_CLASSIFICATION = {
   bonanza: { family: "balance", contexts: ["aibisha"], menuGroup: "aibisha-balance" },
 };
 
+// 実戦でよく止まる「ほぼ完成形」。達したら完全形まで続けるか選ばせる。升は先手基準。
+const CASTLE_NEAR_COMPLETIONS = {
+  mino: [{ id: "kata-mino", label: "片美濃", squares: [["2h", "K"], ["3h", "S"], ["4i", "G"]] }],
+  "high-mino": [{ id: "kata-mino", label: "片美濃", squares: [["2h", "K"], ["3h", "S"], ["4i", "G"]] }],
+  "silver-crown": [{
+    id: "taka-mino", label: "高美濃", squares: [["2h", "K"], ["3h", "S"], ["4g", "G"], ["4i", "G"]],
+  }],
+  "diamond-mino": [{
+    id: "hon-mino", label: "本美濃", squares: [["2h", "K"], ["3h", "S"], ["4i", "G"], ["5h", "G"]],
+  }],
+  "furibisha-anaguma": [{
+    id: "kin-ichimai-anaguma", label: "穴熊（金1枚）", squares: [["1i", "K"], ["2h", "S"], ["3i", "G"]],
+  }],
+  yagura: [{
+    id: "nyujo-mae-yagura", label: "入城前の矢倉", squares: [["7i", "K"], ["7g", "S"], ["7h", "G"], ["6g", "G"]],
+  }],
+  "ibisha-anaguma": [{
+    id: "gin-anaguma", label: "銀穴熊（金寄り前）", squares: [["9i", "K"], ["9h", "L"], ["8h", "S"]],
+  }],
+  "matsuo-anaguma": [{
+    id: "ibisha-anaguma", label: "居飛車穴熊", squares: [["9i", "K"], ["9h", "L"], ["8h", "S"], ["7h", "G"]],
+  }],
+  kinmusou: [{ id: "kata-kinmusou", label: "片金無双", squares: [["3h", "K"], ["2h", "S"], ["4h", "G"]] }],
+  "left-mino": [{
+    id: "kinyose-mae-left-mino", label: "金寄り前の左美濃", squares: [["8h", "K"], ["7h", "S"], ["6f", "B"]],
+  }],
+  elmo: [{
+    id: "kinyose-mae-elmo", label: "金寄り前のエルモ", squares: [["7h", "K"], ["6h", "S"], ["7i", "G"]],
+  }],
+  gangi: [{
+    id: "migigin-mae-gangi", label: "右銀上がり前の雁木", squares: [["6i", "K"], ["7h", "G"], ["5h", "G"], ["6g", "S"]],
+  }],
+  funagakoi: [{
+    id: "kin-mae-funagakoi", label: "金上がり前の舟囲い", squares: [["7h", "K"], ["7i", "S"], ["8h", "B"]],
+  }],
+};
+
 export const OPENING_CASTLES = definitionsWithEditorOverrides(OPENING_CASTLE_DEFINITIONS.map((castle) => ({
   ...castle,
   ...CASTLE_CLASSIFICATION[castle.id],
+  ...(CASTLE_NEAR_COMPLETIONS[castle.id] ? { nearCompletions: CASTLE_NEAR_COMPLETIONS[castle.id] } : {}),
 })), "castle");
 
 const STATIC_ROOK_STRATEGIES = new Set([
@@ -1244,7 +1320,10 @@ function planStepsWithKinds(steps, color) {
 
 /** 履歴の出現回数を優先し、残りは現在の駒種と到達先で消化する。 */
 function pendingPlanSteps(steps, phase, playedMoves, currentSfen, color) {
-  const entries = planStepsWithKinds(steps, color).filter((entry) => entry.phase === phase);
+  // indexはフェーズ内の手順番号。同じUSIが複数回出る手順でも区間を特定できるようにする。
+  const entries = planStepsWithKinds(steps, color)
+    .filter((entry) => entry.phase === phase)
+    .map((entry, index) => ({ ...entry, index }));
   const counts = new Map();
   for (const move of playedMoves) counts.set(move, (counts.get(move) ?? 0) + 1);
   const consumed = new Set();
@@ -1339,6 +1418,438 @@ function matchesCompletionSquares(definition, currentSfen, color) {
   }));
 }
 
+function completionVariantsOf(definition) {
+  if (definition?.completionVariants?.length) return definition.completionVariants;
+  return definition?.completionSquares?.length ? [definition.completionSquares] : [];
+}
+
+const INITIAL_BOARD = parseSfenBoard(INITIAL_PLAN_SFEN);
+const castleDistanceLimits = new Map();
+
+function castleDistanceLimit(castle) {
+  // 大きな囲いは初期局面から既に8手を超えるため、その手数までは中断しない。
+  if (!castleDistanceLimits.has(castle.id)) {
+    const initial = formationDistance(INITIAL_BOARD, "black", completionVariantsOf(castle));
+    castleDistanceLimits.set(
+      castle.id,
+      Math.max(OPENING_GUIDE_MAX_DISTANCE, initial.unreachable ? 0 : initial.distance),
+    );
+  }
+  return castleDistanceLimits.get(castle.id);
+}
+
+/** 囲いの完成形までの距離。完成形が未定義ならnullを返す。 */
+export function openingCastleDistance({ castleId, color = "black", currentSfen = "" }) {
+  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  const variants = completionVariantsOf(castle);
+  if (!castle || !variants.length || !currentSfen) return null;
+  const result = formationDistance(
+    parseSfenBoard(currentSfen),
+    color,
+    formationVariantsForColor(variants, color),
+  );
+  return { ...result, limit: castleDistanceLimit(castle) };
+}
+
+/** 現在局面から近い囲いを、残り手数の少ない順に返す。 */
+export function nearestOpeningCastles({
+  color = "black",
+  currentSfen = "",
+  excludeIds = [],
+  rookStyle,
+  limit = 3,
+} = {}) {
+  const excluded = new Set(excludeIds);
+  return OPENING_CASTLES
+    .map((castle, order) => ({ castle, order }))
+    .filter(({ castle }) => {
+      if (excluded.has(castle.id)) return false;
+      const style = openingDefinitionRookStyle(castle.id, "castle");
+      return !rookStyle || !style || style === "both" || style === rookStyle;
+    })
+    .map((entry) => ({
+      ...entry,
+      result: openingCastleDistance({ castleId: entry.castle.id, color, currentSfen }),
+    }))
+    .filter(({ result }) => result && !result.unreachable
+      && result.distance > 0 && result.distance <= result.limit)
+    .sort((left, right) => left.result.distance - right.result.distance || left.order - right.order)
+    .slice(0, limit)
+    .map(({ castle, result }) => ({ id: castle.id, label: castle.label, distance: result.distance }));
+}
+
+/** 囲いに届かなくなったときのやこび姫の台詞。 */
+export function openingCastleReselectionMessage(castleLabel, suggestions = []) {
+  if (!suggestions.length) {
+    return `${castleLabel}の形にはもう届かないみたい。今の局面からできる別の囲いを選ぼう！`;
+  }
+  const [first, ...rest] = suggestions;
+  const others = rest.map(({ label, distance }) => `${label}（あと${distance}手）`).join("、");
+  return `${castleLabel}は難しくなったけど、${first.label}ならあと${first.distance}手だよ！`
+    + (others ? `${others}も選べるよ。` : "");
+}
+
+/** 距離の縮まない手番が続いたときの、囲いの補助の打ち切り基準。 */
+export const OPENING_GUIDE_MAX_UNSAFE_TURNS = 3;
+
+/**
+ * 今の囲いを諦めるときに、飛車の方針に合う近い囲いと台詞をまとめて返す。
+ * @param {{ castleId: string, strategyId?: string, color?: string, playedMoves?: string[], currentSfen?: string }} options
+ */
+export function openingCastleReselection({
+  castleId,
+  strategyId = "",
+  color = "black",
+  playedMoves = [],
+  currentSfen = "",
+}) {
+  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  const castleSuggestions = nearestOpeningCastles({
+    color,
+    currentSfen,
+    excludeIds: [castleId],
+    rookStyle: inferOpeningRookStyle({ color, playedMoves, currentSfen })
+      ?? openingDefinitionRookStyle(strategyId, "strategy")
+      ?? openingDefinitionRookStyle(castleId, "castle"),
+  });
+  return {
+    castleSuggestions,
+    message: openingCastleReselectionMessage(castle?.label ?? "この囲い", castleSuggestions),
+  };
+}
+
+/** 完全形の手前の「ほぼ完成形」に達していれば、その形と残り手数を返す。 */
+export function openingCastleNearCompletion({ castleId, color = "black", currentSfen = "" }) {
+  const near = openingNearCompletion({ kind: "castle", id: castleId, color, currentSfen });
+  return near && {
+    id: near.id,
+    label: near.label,
+    castleId,
+    castleLabel: near.definitionLabel,
+    remaining: near.remaining,
+  };
+}
+
+const OFF_ROUTE_CANDIDATES = 3;
+
+/**
+ * 完成形までの距離を縮める手を囲いの候補にする。
+ * 従来の手順に残っている手を優先し、手順から外れたら距離の縮む手を案内する。
+ */
+function castleProgressCandidates(castle, steps, playedMoves, currentSfen, color, legalMoves) {
+  const board = parseSfenBoard(currentSfen);
+  const variants = formationVariantsForColor(completionVariantsOf(castle), color);
+  const { moves } = formationProgressMoves(board, color, variants, legalMoves ?? []);
+  if (!moves.length) return [];
+  const pending = pendingPlanSteps(steps, "castle", playedMoves, currentSfen, color);
+  const pendingOrder = new Map();
+  pending.forEach(({ usi }, index) => {
+    if (!pendingOrder.has(usi)) pendingOrder.set(usi, index);
+  });
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  const planMoves = (castle.blackMoves ?? []).filter((move) => !move.startsWith("@")).map(convert);
+  const unranked = Number.MAX_SAFE_INTEGER;
+  const ranked = moves.map((move) => {
+    const destinationIndex = planMoves.findIndex((plan) => plan.slice(2, 4) === move.usi.slice(2, 4));
+    return {
+      ...move,
+      planIndex: pendingOrder.get(move.usi) ?? unranked,
+      destinationIndex: destinationIndex < 0 ? unranked : destinationIndex,
+    };
+  }).sort((left, right) => (
+    left.planIndex - right.planIndex
+    || left.distance - right.distance
+    || left.destinationIndex - right.destinationIndex
+    || (left.usi < right.usi ? -1 : 1)
+  ));
+  const onRoute = ranked.filter(({ planIndex }) => planIndex !== unranked);
+  const chosen = onRoute.length
+    ? (castle.strictOrder && !castle.adaptiveOrder ? onRoute.slice(0, 1) : onRoute)
+    : ranked.slice(0, OFF_ROUTE_CANDIDATES);
+  return chosen.map(({ usi, distance }) => ({ usi, phase: "castle", distance }));
+}
+
+/** これより相手陣寄りへの着手は、歩の突き捨てや駒交換など順番が重要な手として扱う。 */
+const ORDER_SENSITIVE_MAX_RANK = 4;
+/** 歩以外の駒がこの段まで出る手(桂跳ね・銀の進出など)も攻めの開始として順番を守る。 */
+const ORDER_SENSITIVE_PIECE_MAX_RANK = 5;
+
+function orderSensitiveMoveSet(definition, variant) {
+  const moves = new Set([
+    ...Object.keys(definition?.movePrerequisites ?? {}),
+    ...Object.keys(definition?.movePrerequisitesByVariant?.[variant] ?? {}),
+    ...Object.keys(definition?.movePositionPrerequisites ?? {}),
+    ...(definition?.availability?.requiredHistoryBeforeMoves ?? []).map(({ move }) => move),
+  ]);
+  for (const [move, branchMoves] of Object.entries(definition?.moveConditionBranches ?? {})) {
+    moves.add(move);
+    for (const branchMove of branchMoves) moves.add(branchMove);
+  }
+  return moves;
+}
+
+/**
+ * 戦法の手順の1手を分類する。先手基準のUSIと、動かす駒の種類で判定する。
+ * "order": 定型手順・駒打ち・成り・相手陣寄りの手・前提条件つきの手。従来どおり手順に従う。
+ * "shape": 形を作るだけの駒組み。完成形までの距離で案内する。
+ */
+export function classifyStrategyStep(blackUsi, definition, variant, pieceKind) {
+  if (blackUsi.startsWith("@") || blackUsi.includes("*") || blackUsi.endsWith("+")) return "order";
+  const rank = blackUsi.charCodeAt(3) - 96;
+  if (rank <= ORDER_SENSITIVE_MAX_RANK) return "order";
+  if (rank <= ORDER_SENSITIVE_PIECE_MAX_RANK && pieceKind && pieceKind !== "P") return "order";
+  return orderSensitiveMoveSet(definition, variant).has(blackUsi) ? "order" : "shape";
+}
+
+/** 戦法ごとの手順分類の一覧(先手基準)。 */
+export function openingStrategyStepClassification(strategyId) {
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  if (!strategy) return [];
+  const { moves, variant } = openingStrategyPlan(strategy, { color: "black" });
+  const kinds = new Map([...INITIAL_BOARD]
+    .filter(([, piece]) => piece.color === "black")
+    .map(([square, piece]) => [square, piece.kind]));
+  return moves.map((usi) => {
+    const kind = classifyStrategyStep(usi, strategy, variant, kinds.get(usi.slice(0, 2)));
+    const move = /^([1-9][a-i])([1-9][a-i])/.exec(usi);
+    if (move && kinds.has(move[1])) {
+      kinds.set(move[2], kinds.get(move[1]));
+      kinds.delete(move[1]);
+    }
+    return { usi, kind };
+  });
+}
+
+/**
+ * 戦法の手順を初期局面から再現し、連続する駒組みの手を区間にまとめる。
+ * 区間ごとに、その区間で動かした駒の最終位置を目標形とする。
+ */
+const strategyShapeBlockCache = new Map();
+
+function strategyShapeBlocks(strategy, steps, color, variant) {
+  const strategySteps = steps.filter(({ phase }) => phase === "strategy").map(({ usi }) => usi);
+  const cacheKey = `${strategy.id}:${color}:${variant}:${strategySteps.join(",")}`;
+  if (!strategyShapeBlockCache.has(cacheKey)) {
+    strategyShapeBlockCache.set(cacheKey, buildStrategyShapeBlocks(strategy, strategySteps, color, variant));
+  }
+  return strategyShapeBlockCache.get(cacheKey);
+}
+
+function buildStrategyShapeBlocks(strategy, strategySteps, color, variant) {
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  // 手順は手番側の座標なので、先手の初期配置を手番側へ写して再現する。
+  const pieces = new Map([...INITIAL_BOARD]
+    .filter(([, piece]) => piece.color === "black")
+    .map(([square, piece], id) => [
+      color === "white" ? mirrorSquare(square) : square,
+      { id, kind: piece.kind },
+    ]));
+  const boardOf = () => new Map([...pieces].map(([square, { kind }]) => [square, { color, kind }]));
+  let nextId = 100;
+  const blocks = [];
+  let current = null;
+  const close = () => {
+    if (!current) return;
+    current.target = [...pieces]
+      .filter(([, { id }]) => current.ids.has(id))
+      .map(([square, { kind }]) => [square, kind]);
+    const planned = formationDistance(current.startBoard, color, [current.target]);
+    current.plannedDistance = planned.unreachable ? 0 : planned.distance;
+    current = null;
+  };
+  strategySteps.forEach((usi, index) => {
+    const parsed = /^([PLNSGBR])\*([1-9][a-i])$/.exec(usi)
+      ?? /^([1-9][a-i])([1-9][a-i])(\+?)$/.exec(usi);
+    const movingKind = parsed && !usi.includes("*") ? pieces.get(parsed[1])?.kind : undefined;
+    const kind = classifyStrategyStep(convert(usi), strategy, variant, movingKind);
+    if (kind === "shape" && !current) {
+      current = { indices: [], ids: new Set(), startBoard: boardOf() };
+      blocks.push(current);
+    }
+    if (kind === "order") close();
+    if (!parsed) return;
+    let id;
+    if (usi.includes("*")) {
+      id = nextId++;
+      pieces.set(parsed[2], { id, kind: parsed[1] });
+    } else {
+      const piece = pieces.get(parsed[1]);
+      if (!piece) return;
+      pieces.delete(parsed[1]);
+      id = piece.id;
+      pieces.set(parsed[2], {
+        id,
+        kind: parsed[3] && !piece.kind.startsWith("+") ? `+${piece.kind}` : piece.kind,
+      });
+    }
+    if (kind === "shape") {
+      current.indices.push(index);
+      current.ids.add(id);
+    }
+  });
+  close();
+  return blocks;
+}
+
+/** 保留中の最初の手が駒組みなら、その区間の目標形と現在の距離を返す。 */
+function strategyShapeState({ strategy, steps, pending, board, color, variant }) {
+  const first = pending[0];
+  if (!first || !Number.isInteger(first.index)) return null;
+  const block = strategyShapeBlocks(strategy, steps, color, variant)
+    .find(({ indices }) => indices.includes(first.index));
+  if (!block?.target.length) return null;
+  const distance = formationDistance(board, color, [block.target]);
+  return {
+    block,
+    distance,
+    limit: Math.max(OPENING_GUIDE_MAX_DISTANCE, block.plannedDistance),
+  };
+}
+
+/**
+ * 近い戦法の提案に使う目標形。完成形があればそれを使い、なければ手順全体で動かす駒の最終位置を使う。
+ * 駒組みだけを数えると、順番が重要な手の多い戦法が実際より近く見えるため。
+ */
+const strategySuggestionTargets = new Map();
+
+function strategySuggestionTarget(strategy, color) {
+  const key = `${strategy.id}:${color}`;
+  if (!strategySuggestionTargets.has(key)) {
+    let variants = formationVariantsForColor(completionVariantsOf(strategy), color);
+    if (!variants.length) {
+      const pieces = new Map([...INITIAL_BOARD]
+        .filter(([, piece]) => piece.color === "black")
+        .map(([square, piece], id) => [square, { id, kind: piece.kind }]));
+      const moved = new Set();
+      for (const usi of openingStrategyPlan(strategy, { color: "black" }).moves) {
+        const move = /^([1-9][a-i])([1-9][a-i])(\+?)$/.exec(usi);
+        const piece = move && pieces.get(move[1]);
+        if (!piece) continue;
+        pieces.delete(move[1]);
+        pieces.set(move[2], { id: piece.id, kind: move[3] && !piece.kind.startsWith("+") ? `+${piece.kind}` : piece.kind });
+        moved.add(piece.id);
+      }
+      const squares = [...pieces].filter(([, { id }]) => moved.has(id)).map(([square, { kind }]) => [square, kind]);
+      variants = squares.length ? formationVariantsForColor([squares], color) : [];
+    }
+    const startBoard = new Map([...INITIAL_BOARD]
+      .filter(([, piece]) => piece.color === "black")
+      .map(([square, piece]) => [
+        color === "white" ? mirrorSquare(square) : square,
+        { color, kind: piece.kind },
+      ]));
+    const planned = variants.length ? formationDistance(startBoard, color, variants) : null;
+    strategySuggestionTargets.set(key, {
+      variants,
+      limit: Math.max(OPENING_GUIDE_MAX_DISTANCE, planned && !planned.unreachable ? planned.distance : 0),
+    });
+  }
+  return strategySuggestionTargets.get(key);
+}
+
+/** 現在局面から近い戦法を、残り手数の少ない順に返す。 */
+export function nearestOpeningStrategies({
+  color = "black",
+  currentSfen = "",
+  moveHistory = [],
+  excludeIds = [],
+  rookStyle,
+  limit = 3,
+} = {}) {
+  if (!currentSfen) return [];
+  const board = parseSfenBoard(currentSfen);
+  const excluded = new Set(excludeIds);
+  const exchanged = bishopExchangeState(currentSfen, color) === "exchanged";
+  return OPENING_STRATEGIES
+    .map((strategy, order) => ({ strategy, order }))
+    .filter(({ strategy }) => {
+      if (excluded.has(strategy.id) || strategy.guideSelectable === false) return false;
+      const style = openingDefinitionRookStyle(strategy.id, "strategy");
+      if (rookStyle && style && style !== "both" && style !== rookStyle) return false;
+      const availability = strategy.availability;
+      if (availability?.colors && !availability.colors.includes(color)) return false;
+      if (Number.isInteger(availability?.maxHistoryLength)
+        && moveHistory.length > availability.maxHistoryLength) return false;
+      if (availability?.requiredHistory?.some((move) => !moveHistory.includes(move))) return false;
+      if (availability?.opponentFirstMove && moveHistory[0] !== availability.opponentFirstMove) return false;
+      return !strategy.completionRequiresBishopExchange || exchanged;
+    })
+    .map((entry) => {
+      const target = strategySuggestionTarget(entry.strategy, color);
+      const result = target.variants.length
+        ? formationDistance(board, color, target.variants)
+        : { unreachable: true };
+      return { ...entry, result, targetLimit: target.limit };
+    })
+    .filter(({ result, targetLimit }) => !result.unreachable
+      && result.distance > 0 && result.distance <= targetLimit)
+    .sort((left, right) => left.result.distance - right.result.distance || left.order - right.order)
+    .slice(0, limit)
+    .map(({ strategy, result }) => ({ id: strategy.id, label: strategy.label, distance: result.distance }));
+}
+
+/** 相手の駒を除いても完成形へ届かない(必要な駒を失った、歩が行き過ぎた)なら、待っても戻れない。 */
+function strategyCompletionUnreachable(strategy, currentSfen, color) {
+  const variants = completionVariantsOf(strategy);
+  if (!variants.length || !currentSfen) return false;
+  const ownBoard = new Map([...parseSfenBoard(currentSfen)].filter(([, piece]) => piece.color === color));
+  return formationDistance(ownBoard, color, formationVariantsForColor(variants, color)).unreachable;
+}
+
+/** 戦法に届かなくなったときの近い戦法と台詞。 */
+export function openingStrategyReselection({
+  strategyId,
+  color = "black",
+  playedMoves = [],
+  moveHistory = [],
+  currentSfen = "",
+  fallbackMessage = "",
+}) {
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  const strategySuggestions = nearestOpeningStrategies({
+    color,
+    currentSfen,
+    moveHistory,
+    excludeIds: [strategyId],
+    rookStyle: inferOpeningRookStyle({ color, playedMoves, currentSfen })
+      ?? openingDefinitionRookStyle(strategyId, "strategy"),
+  });
+  if (!strategySuggestions.length) return { strategySuggestions, message: fallbackMessage };
+  const [first, ...rest] = strategySuggestions;
+  const others = rest.map(({ label, distance }) => `${label}（あと${distance}手）`).join("、");
+  return {
+    strategySuggestions,
+    message: `${strategy?.label ?? "この戦法"}は難しくなったけど、${first.label}ならあと${first.distance}手だよ！`
+      + (others ? `${others}も選べるよ。` : ""),
+  };
+}
+
+/** 戦法・囲い共通の「ほぼ完成形」判定。 */
+export function openingNearCompletion({ kind, id, color = "black", currentSfen = "" }) {
+  const definitions = kind === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
+  const definition = definitions.find((entry) => entry.id === id);
+  if (!definition?.nearCompletions?.length || !currentSfen) return null;
+  if (matchesCompletionSquares(definition, currentSfen, color)) return null;
+  const board = parseSfenBoard(currentSfen);
+  const near = definition.nearCompletions.find(({ squares }) => squares?.length && squares.every(
+    ([blackSquare, pieceKind]) => {
+      const piece = board.get(color === "white" ? mirrorSquare(blackSquare) : blackSquare);
+      return piece?.color === color && piece.kind === pieceKind;
+    },
+  ));
+  if (!near) return null;
+  const variants = formationVariantsForColor(completionVariantsOf(definition), color);
+  const distance = variants.length ? formationDistance(board, color, variants) : null;
+  return {
+    id: near.id,
+    label: near.label,
+    kind,
+    definitionId: id,
+    definitionLabel: definition.label,
+    remaining: distance && !distance.unreachable ? distance.distance : undefined,
+  };
+}
+
 function matchesCompletionMoveCounts(definition, playedMoves, color) {
   const required = Object.entries(definition?.completionMoveCounts ?? {});
   if (!required.length) return false;
@@ -1400,6 +1911,13 @@ export function availableOpeningDefinitions({
       ) return false;
     }
     if (definitionDetectedComplete(definition, detected, currentSfen, color, playedMoves)) return true;
+    if (kind === "castle" && currentSfen && completionVariantsOf(definition).length) {
+      const distance = openingCastleDistance({ castleId: definition.id, color, currentSfen });
+      return !distance.unreachable && distance.distance <= distance.limit;
+    }
+    if (kind === "strategy" && currentSfen && strategyCompletionUnreachable(definition, currentSfen, color)) {
+      return false;
+    }
     if (steps.length > 0 && pendingPlanSteps(
       steps, kind, playedMoves, currentSfen, color,
     ).length === 0) return true;
@@ -1557,6 +2075,34 @@ export function openingPlanInterruption({
       if (!definition || completedPhases[phase] || definitionDetectedComplete(
         definition, detected, currentSfen, color, playedMoves,
       )) continue;
+      // 囲いは駒の元位置ではなく、完成形までの距離で続行可否を決める。
+      if (phase === "castle" && completionVariantsOf(definition).length) {
+        const distance = openingCastleDistance({ castleId: definition.id, color, currentSfen });
+        if (!distance.unreachable && distance.distance <= distance.limit) continue;
+        return {
+          requiresReselection: true,
+          clearCastle: true,
+          reason: distance.unreachable ? "unreachable" : "too-far",
+          ...openingCastleReselection({
+            castleId: definition.id, strategyId, color, playedMoves, currentSfen,
+          }),
+        };
+      }
+      if (phase === "strategy" && strategyCompletionUnreachable(definition, currentSfen, color)) {
+        return {
+          requiresReselection: true,
+          clearStrategy: true,
+          reason: "unreachable",
+          ...openingStrategyReselection({
+            strategyId,
+            color,
+            playedMoves,
+            moveHistory,
+            currentSfen,
+            fallbackMessage: `${strategy.label}の形にはもう届かないみたい。今の局面からできる別の戦法を選ぼう！`,
+          }),
+        };
+      }
       const pending = pendingPlanSteps(steps, phase, playedMoves, currentSfen, color);
       const candidates = definition.strictOrder && !definition.adaptiveOrder
         ? pending.slice(0, 1)
@@ -1567,13 +2113,37 @@ export function openingPlanInterruption({
         && boardMoves.every(({ usi }) => board.get(usi.slice(0, 2))?.color !== color)
         && !boardMoves.some((entry) => alternativePlanMove(entry, legalMoves, board, color))
       ) {
+        if (phase === "castle") {
+          return {
+            requiresReselection: true,
+            clearCastle: true,
+            message: `${castle.label}の形へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の囲いを選ぼう！`,
+          };
+        }
+        // 駒組みの区間なら、駒が元の位置になくても目標形まで届く限り続ける。
+        const shape = strategyShapeState({
+          strategy,
+          steps,
+          pending,
+          board,
+          color,
+          variant: openingStrategyPlan(strategy, {
+            playedMoves, opponentMoves, opponentFormations, color,
+          }).variant,
+        });
+        if (shape && !shape.distance.unreachable && shape.distance.distance <= shape.limit) continue;
         return {
           requiresReselection: true,
-          clearStrategy: phase === "strategy",
-          clearCastle: phase === "castle",
-          message: phase === "strategy"
-            ? `${strategy.label}の定跡へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の戦法を選ぼう！`
-            : `${castle.label}の形へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の囲いを選ぼう！`,
+          clearStrategy: true,
+          reason: shape ? "unreachable" : "order-broken",
+          ...openingStrategyReselection({
+            strategyId,
+            color,
+            playedMoves,
+            moveHistory,
+            currentSfen,
+            fallbackMessage: `${strategy.label}の定跡へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の戦法を選ぼう！`,
+          }),
         };
       }
     }
@@ -1825,6 +2395,13 @@ export function openingPlanCandidates({
     const definition = phase === "strategy" ? strategy : castle;
     const complete = phase === "strategy" ? strategyComplete : castleComplete;
     if (!definition || complete) continue;
+    if (phase === "castle" && currentSfen && completionVariantsOf(definition).length) {
+      const progress = castleProgressCandidates(
+        definition, steps, playedMoves, currentSfen, color, legalMoves,
+      );
+      if (progress.length) return progress;
+      continue;
+    }
     const pending = pendingPlanSteps(steps, phase, playedMoves, currentSfen, color);
     const combinedPrerequisites = {
       ...(definition.movePrerequisites ?? {}),
@@ -1863,6 +2440,33 @@ export function openingPlanCandidates({
       }
       return alternativePlanMove(entry, legalMoves, board, color);
     };
+    // 駒組みの区間で予定手が指せないときだけ、区間の目標形までの距離を縮める手を案内する。
+    // 順番が重要な手は代わりを探さず、従来どおり手順に従う。
+    const shapeFallback = () => {
+      if (phase !== "strategy" || !currentSfen) return [];
+      const shape = strategyShapeState({
+        strategy: definition, steps, pending, board, color, variant: strategyVariant,
+      });
+      if (!shape || shape.distance.unreachable || shape.distance.distance > shape.limit) return [];
+      const lastIndex = Math.max(...shape.block.indices);
+      if (shape.distance.distance === 0) {
+        const after = pending.find(({ index }) => index > lastIndex);
+        const candidate = after && availableMove(after);
+        return candidate ? [candidate] : [];
+      }
+      const { moves } = formationProgressMoves(board, color, [shape.block.target], legalMoves ?? []);
+      const blockOrder = new Map(pending
+        .filter(({ index }) => shape.block.indices.includes(index))
+        .map(({ usi }, order) => [usi, order]));
+      const unranked = Number.MAX_SAFE_INTEGER;
+      return moves
+        .map((move) => ({ ...move, order: blockOrder.get(move.usi) ?? unranked }))
+        .sort((left, right) => (
+          left.order - right.order || left.distance - right.distance || (left.usi < right.usi ? -1 : 1)
+        ))
+        .slice(0, OFF_ROUTE_CANDIDATES)
+        .map(({ usi, distance }) => ({ usi, phase: "strategy", distance }));
+    };
     if (definition.strictOrder && !definition.adaptiveOrder) {
       const next = pending[0];
       // 条件手より前にある準備手を待機分岐にすると、準備手を進めながら
@@ -1881,12 +2485,14 @@ export function openingPlanCandidates({
       }
       if (next) {
         const candidate = availableMove(next);
-        return candidate ? [candidate] : [];
+        return candidate ? [candidate] : shapeFallback();
       }
       continue;
     }
     const candidates = pending.map(availableMove).filter(Boolean);
     if (candidates.length) return candidates;
+    const fallback = shapeFallback();
+    if (fallback.length) return fallback;
   }
   return [];
 }

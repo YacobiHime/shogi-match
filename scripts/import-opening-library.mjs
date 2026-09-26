@@ -55,6 +55,9 @@ for (const [key, saved] of Object.entries(library.books ?? {})) {
     classification: { ...(saved.classification ?? {}), ...(fixup?.classification ?? {}) },
     guideMoves,
     completionVariants: fixup?.completionVariants ?? saved.completionVariants ?? [],
+    ...(Array.isArray(saved.nearCompletions)
+      ? { nearCompletions: saved.nearCompletions }
+      : {}),
     movePositionPrerequisites,
     moveConditionBranches,
     completionChoices,

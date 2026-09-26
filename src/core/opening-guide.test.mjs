@@ -1269,7 +1269,9 @@ describe("opening guide", () => {
     });
   });
 
-  it("immediately stops a fixed plan when its next piece has left the route", () => {
+  // 駒組みの区間は、駒が元の位置になくても完成形までの距離で続行可否を決める仕様へ変更した。
+  // 飛車が1八へ動いても3八へ戻せるため中断しない。
+  it("keeps a shape-building plan when its piece left the route but can still reach the target", () => {
     const currentSfen = sfenAfterMoves(["3g3f", "2h1h"]);
     expect(openingPlanInterruption({
       strategyId: "sodebisha",
@@ -1277,10 +1279,33 @@ describe("opening guide", () => {
       playedMoves: ["3g3f", "2h1h"],
       moveHistory: ["3g3f", "2h1h"],
       currentSfen,
+    })).toBeNull();
+    const legalMoves = enumerateLegalMoves(
+      createGameRecord(withTurn(currentSfen, "black")).position,
+    ).map(({ usi }) => usi);
+    expect(nextOpeningPlanMove({
+      strategyId: "sodebisha",
+      color: "black",
+      playedMoves: ["3g3f", "2h1h"],
+      legalMoves,
+      currentSfen,
+    })?.usi).toBe("1h3h");
+  });
+
+  it("stops a shape-building plan when the target can no longer be reached", () => {
+    // 3筋の歩を3五まで突くと、袖飛車の3六歩へは戻れない。
+    const playedMoves = ["3g3f", "3f3e", "2h1h"];
+    const currentSfen = sfenAfterMoves(playedMoves);
+    expect(openingPlanInterruption({
+      strategyId: "sodebisha",
+      color: "black",
+      playedMoves,
+      moveHistory: playedMoves,
+      currentSfen,
     })).toMatchObject({
       requiresReselection: true,
       clearStrategy: true,
-      message: expect.stringContaining("寄り道はせずここで中断"),
+      reason: "unreachable",
     });
   });
 
@@ -1330,9 +1355,10 @@ describe("opening guide", () => {
       strategyId: "sodebisha", color, playedMoves,
       legalMoves, currentSfen,
     })?.usi).toBe(alternative);
+    // 駒組みは距離で判定する仕様へ変更したため、合法手一覧がなくても3八へ届く限り中断しない。
     expect(openingPlanInterruption({
       strategyId: "sodebisha", color, playedMoves, legalMoves: [], currentSfen,
-    })).toMatchObject({ requiresReselection: true });
+    })).toBeNull();
     const completed = sfenAfterMoves([...playedMoves, alternative], color);
     expect(isOpeningPlanComplete({
       strategyId: "sodebisha", color,
