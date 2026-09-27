@@ -265,7 +265,13 @@ export class ShogiEngine {
    * @returns {Promise<{
    *   move: string,
    *   ponder?: string,
-   *   candidates: { rank: number, move: string }[]
+   *   candidates: {
+   *     rank: number,
+   *     move: string,
+   *     pv?: string[],
+   *     depth?: number,
+   *     score?: { type: 'cp' | 'mate', value: number }
+   *   }[]
    * }>}
    */
   async go(goOptions = {}) {

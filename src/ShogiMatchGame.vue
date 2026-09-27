@@ -773,12 +773,17 @@ import {
   getHintMoves,
   getHintSearchSettings,
   getIdleCoachSearchSettings,
+  getMateCheckSearchSettings,
   getOpeningFollowupSearchSettings,
   getOpeningGuideSafetySearchSettings,
   getPraiseBaselineSearchSettings,
   hintMoveAssessment,
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
+import {
+  isContinuousCheckMate,
+  parseMateScore,
+} from "./core/engine-mate-check.mjs";
 import { chooseCpuMove, chooseNaturalMove } from "./core/cpu-move-choice.mjs";
 import { detectStrictMateThreat, findForcedMate, findMateInOne } from "./core/mate-threat";
 import {
@@ -2577,6 +2582,30 @@ function updateCoachAdviceFromPlayerScore(
     advisedTopics: advisedCoachTopics,
   });
   showCoachAdvice(advice);
+}
+
+/**
+ * エンジン所有権を持つ呼び出し元専用。待ち行列へは積まず、通常探索で連続王手詰みを調べる。
+ */
+async function engineMateCheck(
+  sfen: string,
+  options: { nodes: number; maxTimeMs: number; maxPly?: number },
+): Promise<{ status: "mate"; plies: number } | { status: "no-mate" | "unknown" }> {
+  if (!engine || !engineReady.value) return { status: "unknown" };
+  const maxPly = options.maxPly ?? 7;
+  try {
+    engine.setPosition(sfen);
+    engine.applyStrengthOptions({ multiPv: 1 });
+    const search = await engine.go({ nodes: options.nodes, maxTimeMs: options.maxTimeMs });
+    const best = search.candidates.find((candidate) => candidate.rank === 1);
+    const plies = parseMateScore(best);
+    if (plies && plies <= maxPly && isContinuousCheckMate(sfen, best?.pv, plies)) {
+      return { status: "mate", plies };
+    }
+    return { status: "no-mate" };
+  } catch {
+    return { status: "unknown" };
+  }
 }
 
 async function updateDedicatedCoachAdvice(

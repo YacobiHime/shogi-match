@@ -223,6 +223,13 @@ export function getPraiseBaselineSearchSettings(mobile = false) {
       };
 }
 
+/** 7手以内の連続王手詰みを通常探索で確認する短時間予算。 */
+export function getMateCheckSearchSettings(mobile = false) {
+  return mobile
+    ? { nodes: 15000, maxTimeMs: 250 }
+    : { nodes: 30000, maxTimeMs: 150 };
+}
+
 function validateSnapshot(snapshot) {
   if (!snapshot || typeof snapshot.sfen !== 'string'
     || !Number.isInteger(snapshot.moveHistoryLength) || snapshot.moveHistoryLength < 0
