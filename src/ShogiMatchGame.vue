@@ -714,6 +714,7 @@ import { Color, PieceType, Position, Record, Square, promotedPieceType, reverseC
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
+import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import {
   appendUsiMove,
   createGameRecord,
@@ -846,6 +847,9 @@ import {
   clearMatchSnapshot,
   loadMatchSnapshot,
   matchSnapshotKey,
+  persistedResult,
+  recordAndFormationsFromMoves,
+  savedMatchNumber,
   saveMatchSnapshot,
 } from "./core/match-persistence.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
@@ -912,6 +916,7 @@ const analysisRunning = ref(false);
 const analysisProgress = ref(0);
 const analysisTotal = ref(0);
 const analysisPoints = ref<AnalysisPoint[]>([]);
+const analysisVisible = computed(() => reviewMode.value && analysisOpen.value);
 const boardFlipOverride = ref(false);
 const reviewCpuEnabled = ref(false);
 const reviewCpuStartedAtPly = ref(0);
@@ -976,22 +981,17 @@ const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
 const activePlayerColor = ref<"black" | "white">(normalizePlayerColor(props.playerColor));
 const selectedPlayerColor = ref<"black" | "white">(activePlayerColor.value);
-const boardLayout = ref<"standard" | "compact" | "portrait">("standard");
-const boardShell = ref<HTMLElement | null>(null);
-const gameRoot = ref<HTMLElement | null>(null);
 const kifuList = ref<HTMLElement | null>(null);
-// wide: 盤を中央、左右に情報欄。side: 盤の右に情報欄1列。stack: 縦に積む。
-const uiLayout = ref<"wide" | "side" | "stack">("stack");
-const uiFontPx = ref(15);
-const uiBoardSize = ref({ width: 0, height: 0 });
-const uiShort = ref(false);
-const uiNarrow = ref(false);
-const menuCollapsed = computed(() => uiLayout.value !== "wide");
-const uiLayoutStyle = computed(() => ({
-  "--ui-font": `${uiFontPx.value}px`,
-  "--board-w": `${Math.floor(uiBoardSize.value.width)}px`,
-  "--board-h": `${Math.floor(uiBoardSize.value.height)}px`,
-}));
+const {
+  boardLayout,
+  boardShell,
+  gameRoot,
+  menuCollapsed,
+  uiLayout,
+  uiLayoutStyle,
+  uiNarrow,
+  uiShort,
+} = useResponsiveLayout({ analysisVisible });
 const resignConfirmOpen = ref(false);
 const analysisMenuOpen = ref(false);
 const pregameTendencyOpen = ref(false);
@@ -1047,7 +1047,6 @@ let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
 let coachAdviceHistory: RecordedCoachAdvice[] = [];
 let displayingStructuredCoachAdvice = false;
-let boardResizeObserver: ResizeObserver | undefined;
 let reviewCoachGeneration = 0;
 let analysisGeneration = 0;
 let reviewCpuGeneration = 0;
@@ -1088,113 +1087,6 @@ function coachSearchBudget() {
   return COACH_SEARCH_BUDGET[
     props.mobile || boardLayout.value === "portrait" ? "compact" : "standard"
   ];
-}
-
-// 盤描画の外枠寸法（src/renderer/view/primitive/board/params.ts）。どれも9x9の盤は878x960。
-const BOARD_FRAMES = {
-  standard: { width: 1471, height: 959 },
-  compact: { width: 1088, height: 1015 },
-  portrait: { width: 878, height: 1168 },
-} as const;
-type BoardFrameName = keyof typeof BOARD_FRAMES;
-// 縦積みで盤以外（見出し・戦型・助言・補助・操作ボタン）に要る高さの見積もり。文字サイズ基準。
-// 横並びと比べて盤が大きくなる方を選ぶためだけに使い、実際の盤の枠は残りの高さから決める。
-const STACK_RESERVED_EM = 19;
-const STACK_ANALYSIS_RESERVED_EM = 26;
-// 横並びの情報欄1列の最小幅。2列分以上余れば盤を中央に置く。
-const SIDE_COLUMN_MIN_EM = 17;
-const WIDE_COLUMNS_MIN_EM = 33;
-
-// スマホ程度に縦長な画面では、駒台を盤の上下に置いて横幅を盤に回す。
-const PHONE_ASPECT_RATIO = 1.5;
-const PHONE_PORTRAIT_TOLERANCE = 0.8;
-
-function fitBoardFrame(
-  names: BoardFrameName[],
-  width: number,
-  height: number,
-  preferred: { name: BoardFrameName; tolerance: number } = { name: "compact", tolerance: 0.9 },
-) {
-  const fits = names.map((name) => {
-    const frame = BOARD_FRAMES[name];
-    const scale = Math.max(0, Math.min(width / frame.width, height / frame.height));
-    return { name, scale, width: frame.width * scale, height: frame.height * scale };
-  });
-  const best = fits.reduce((a, b) => (b.scale > a.scale ? b : a));
-  // 盤の大きさがほぼ同じなら、画面に合う駒台配置を優先する。
-  const favored = fits.find(({ name }) => name === preferred.name);
-  return favored && favored.scale >= best.scale * preferred.tolerance ? favored : best;
-}
-
-/** 縦積みで優先する駒台配置。スマホの縦長画面では上下、それ以外は駒台の小さいcompact。 */
-function stackPreferredFrame(width: number, height: number) {
-  return height / width >= PHONE_ASPECT_RATIO
-    ? { name: "portrait" as const, tolerance: PHONE_PORTRAIT_TOLERANCE }
-    : { name: "compact" as const, tolerance: 0.9 };
-}
-
-function clampNumber(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function updateUiLayout() {
-  const root = gameRoot.value;
-  if (!root) return;
-  const width = root.clientWidth;
-  const height = root.clientHeight;
-  if (!width || !height) return;
-  const analysis = reviewMode.value && analysisOpen.value;
-
-  // 横並び: 盤を高さいっぱいに置き、残りの横幅を情報欄にする。
-  const sideFont = clampNumber(Math.min(height / 50, width / 70), 13, 20);
-  const sidePad = sideFont * 0.6;
-  const sideBoard = fitBoardFrame(
-    ["compact", "standard"],
-    width - sideFont * SIDE_COLUMN_MIN_EM - sidePad * 3,
-    height - sidePad * 2,
-  );
-
-  // 縦積み: 盤を横幅いっぱいに置き、盤以外の高さを先に確保する。
-  const stackFont = clampNumber(Math.min(width / 26, height / 46), 13, 18);
-  const stackPad = stackFont * 0.45;
-  const stackBoard = fitBoardFrame(
-    ["portrait", "compact", "standard"],
-    width - stackPad * 2,
-    height - stackPad * 2 - stackFont * (analysis ? STACK_ANALYSIS_RESERVED_EM : STACK_RESERVED_EM),
-    stackPreferredFrame(width, height),
-  );
-
-  if (sideBoard.scale > stackBoard.scale) {
-    const sideSpace = width - sideBoard.width - sidePad * 3;
-    uiLayout.value = sideSpace >= sideFont * WIDE_COLUMNS_MIN_EM ? "wide" : "side";
-    uiFontPx.value = Math.round(sideFont * 10) / 10;
-    uiBoardSize.value = { width: sideBoard.width, height: sideBoard.height };
-    boardLayout.value = sideBoard.name;
-    uiShort.value = height < 560;
-    uiNarrow.value = false;
-  } else {
-    uiLayout.value = "stack";
-    uiFontPx.value = Math.round(stackFont * 10) / 10;
-    uiBoardSize.value = { width: stackBoard.width, height: stackBoard.height };
-    uiShort.value = height < 700;
-    uiNarrow.value = width < 600;
-    updateStackBoardFrame();
-  }
-}
-
-// 縦積みでは盤の行が残りの高さを受け持つため、実際の枠の寸法から駒台の配置を選ぶ。
-function updateStackBoardFrame() {
-  const shell = boardShell.value;
-  if (uiLayout.value !== "stack" || !shell) return;
-  const { clientWidth, clientHeight } = shell;
-  const root = gameRoot.value;
-  if (!clientWidth || !clientHeight || !root) return;
-  boardLayout.value = fitBoardFrame(
-    ["portrait", "compact", "standard"],
-    clientWidth,
-    clientHeight,
-    stackPreferredFrame(root.clientWidth, root.clientHeight),
-  ).name;
 }
 
 const kifuEntries = computed(() => {
@@ -2091,52 +1983,6 @@ function syncPosition(usi = "") {
   observeFormations(currentSfen.value);
 }
 
-function savedMatchNumber(value: unknown, fallback: number, min = 0, max = Number.MAX_SAFE_INTEGER) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(min, Math.min(max, Math.trunc(value)))
-    : fallback;
-}
-
-function recordAndFormationsFromMoves(moves: string[]) {
-  const nextRecord = createGameRecord(props.initialSfen);
-  let nextFormationState = createFormationState();
-  nextFormationState = updateFormationState(
-    nextFormationState,
-    detectFormationSnapshot(nextRecord.position.sfen, hiraganaFormationMaster),
-  );
-  for (const move of moves) {
-    if (!appendUsiMove(nextRecord, move)) throw new Error("保存棋譜に不正な指し手があります。");
-    nextFormationState = updateFormationState(
-      nextFormationState,
-      detectFormationSnapshot(nextRecord.position.sfen, hiraganaFormationMaster),
-    );
-  }
-  return { nextRecord, nextFormationState };
-}
-
-function persistedResult(value: unknown, moves: string[], finalSfen: string): MatchResult | null {
-  if (value === null || value === undefined) return null;
-  if (!value || typeof value !== "object") throw new Error("保存された終局結果が不正です。");
-  const candidate = value as MatchResult;
-  const outcomes = ["black-win", "white-win", "draw"];
-  const reasons = ["checkmate", "resignation", "repetition", "perpetual-check"];
-  const validWinner = candidate.winner === Color.BLACK
-    || candidate.winner === Color.WHITE
-    || candidate.winner === null;
-  const sameMoves = Array.isArray(candidate.moves)
-    && candidate.moves.length === moves.length
-    && candidate.moves.every((move, index) => move === moves[index]);
-  if (
-    !outcomes.includes(candidate.outcome)
-    || !reasons.includes(candidate.reason)
-    || !validWinner
-    || candidate.moveCount !== moves.length
-    || candidate.finalSfen !== finalSfen
-    || !sameMoves
-  ) throw new Error("保存された終局結果が棋譜と一致しません。");
-  return candidate;
-}
-
 function persistMatchState() {
   if (
     restoringSavedMatch || !matchStorage || !matchStorageKey
@@ -2195,7 +2041,11 @@ function restorePersistedMatch(): boolean {
       || snapshot.moves.some((move: unknown) => typeof move !== "string" || move.length > 8)
     ) throw new Error("保存棋譜が不正です。");
     const moves = snapshot.moves as string[];
-    const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(moves);
+    const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(
+      props.initialSfen,
+      moves,
+      hiraganaFormationMaster,
+    );
     const restoredResult = persistedResult(snapshot.result, moves, nextRecord.position.sfen);
     if (snapshot.active !== true && !restoredResult) throw new Error("保存された対局状態が不正です。");
 
@@ -3313,7 +3163,11 @@ async function showHint() {
 }
 
 function rebuildRecord(moves: string[]) {
-  const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(moves);
+  const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(
+    props.initialSfen,
+    moves,
+    hiraganaFormationMaster,
+  );
   record.value = nextRecord;
   formationState.value = nextFormationState;
   moveHistory = [...moves];
@@ -4153,7 +4007,6 @@ function handleGlobalKeydown(event: KeyboardEvent) {
   analysisMenuOpen.value = false;
 }
 // 盤以外の欄の構成が変わると盤に使える高さも変わる。
-watch(() => reviewMode.value && analysisOpen.value, () => nextTick(updateUiLayout));
 // 棋譜欄は最新手（検討中は表示中の手）が見えるように追従する。
 // scrollIntoViewは overflow:hidden の祖先まで動かすため、一覧だけをスクロールする。
 watch([currentKifuPly, () => kifuEntries.value.length], () => nextTick(() => {
@@ -4176,7 +4029,6 @@ onBeforeUnmount(() => {
   if (cpuTimer) clearTimeout(cpuTimer);
   cpuTimer = undefined;
   engine?.quit();
-  boardResizeObserver?.disconnect();
   if (typeof window !== "undefined") {
     window.removeEventListener("pagehide", handlePageHide);
     window.removeEventListener("keydown", handleGlobalKeydown);
@@ -4188,13 +4040,6 @@ onMounted(() => {
     portrait.src = `${props.assetBaseUrl}/characters/${filename}?v=${COACH_EXPRESSION_ASSET_VERSION}`;
   }
   ensureMoveSounds();
-  updateUiLayout();
-  boardResizeObserver = new ResizeObserver((entries) => {
-    if (entries.some(({ target }) => target === gameRoot.value)) updateUiLayout();
-    else updateStackBoardFrame();
-  });
-  if (gameRoot.value) boardResizeObserver.observe(gameRoot.value);
-  if (boardShell.value) boardResizeObserver.observe(boardShell.value);
   window.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("pagehide", handlePageHide);
 });

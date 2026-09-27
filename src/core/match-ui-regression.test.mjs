@@ -2,13 +2,17 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../ShogiMatchGame.vue", import.meta.url), "utf8");
+const responsiveSource = readFileSync(
+  new URL("../composables/useResponsiveLayout.ts", import.meta.url),
+  "utf8",
+);
 
 describe("match screen regressions", () => {
   it("keeps the flip control readable and reachable on every layout", () => {
     expect(source).toMatch(/class="shogi-game__command shogi-game__command--flip"[\s\S]*?aria-label="盤面を上下反転（ひふみんアイ）"/);
     expect(source).toMatch(/\.shogi-game__command\s*\{[^}]*white-space:\s*nowrap/s);
     // PC以外では見出しにボタンを並べず、メニューの中に反転を置く。
-    expect(source).toMatch(/const menuCollapsed = computed\(\(\) => uiLayout\.value !== "wide"\)/);
+    expect(responsiveSource).toMatch(/const menuCollapsed = computed\(\(\) => uiLayout\.value !== "wide"\)/);
     expect(source).toMatch(/role="menuitemcheckbox"[\s\S]*?ひふみんアイ（盤を反転）/);
   });
 
@@ -38,9 +42,9 @@ describe("match screen regressions", () => {
   });
 
   it("puts the hands above and below the board on phone-shaped screens", () => {
-    expect(source).toMatch(/const PHONE_ASPECT_RATIO = 1\.5;/);
-    expect(source).toMatch(/height \/ width >= PHONE_ASPECT_RATIO\s*\?\s*\{ name: "portrait" as const/);
-    expect(source.match(/stackPreferredFrame\(/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(responsiveSource).toMatch(/const PHONE_ASPECT_RATIO = 1\.5;/);
+    expect(responsiveSource).toMatch(/height \/ width >= PHONE_ASPECT_RATIO\s*\?\s*\{ name: "portrait" as const/);
+    expect(responsiveSource.match(/stackPreferredFrame\(/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
   it("praises good moves only after mistakes are ruled out", () => {

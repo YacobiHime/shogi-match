@@ -4,8 +4,14 @@ import {
   loadMatchSnapshot,
   matchSnapshotKey,
   MATCH_SNAPSHOT_MAX_AGE_MS,
+  persistedResult,
+  recordAndFormationsFromMoves,
+  savedMatchNumber,
   saveMatchSnapshot,
 } from "./match-persistence.mjs";
+import { Color } from "tsshogi";
+import { STANDARD_SFEN } from "../game-state";
+import hiraganaFormationMaster from "../data/hiragana_suisho_formations.json";
 
 function memoryStorage() {
   const values = new Map();
@@ -93,5 +99,43 @@ describe("match persistence", () => {
     };
     expect(saveMatchSnapshot(storage, "match", { initialSfen: "start", mode: "cpu" })).toBe(false);
     expect(storage.getItem("match")).toBeNull();
+  });
+
+  it("normalizes numeric counters within their saved bounds", () => {
+    expect(savedMatchNumber(4.8, 0, 0, 3)).toBe(3);
+    expect(savedMatchNumber(-2, 0, 0, 3)).toBe(0);
+    expect(savedMatchNumber("2", 1, 0, 3)).toBe(1);
+  });
+
+  it("reconstructs a record and formations from saved moves", () => {
+    const restored = recordAndFormationsFromMoves(
+      STANDARD_SFEN,
+      ["7g7f", "3c3d"],
+      hiraganaFormationMaster,
+    );
+    expect(restored.nextRecord.position.sfen).toContain(" b ");
+    expect(restored.nextRecord.moves).toHaveLength(3);
+    expect(restored.nextFormationState).toBeTruthy();
+    expect(() => recordAndFormationsFromMoves(
+      STANDARD_SFEN,
+      ["invalid"],
+      hiraganaFormationMaster,
+    )).toThrow("保存棋譜に不正な指し手があります。");
+  });
+
+  it("accepts only a result matching the restored record", () => {
+    const moves = ["7g7f"];
+    const finalSfen = "final";
+    const result = {
+      outcome: "black-win",
+      winner: Color.BLACK,
+      reason: "resignation",
+      moveCount: 1,
+      moves,
+      finalSfen,
+    };
+    expect(persistedResult(result, moves, finalSfen)).toBe(result);
+    expect(() => persistedResult({ ...result, moveCount: 2 }, moves, finalSfen))
+      .toThrow("保存された終局結果が棋譜と一致しません。");
   });
 });
