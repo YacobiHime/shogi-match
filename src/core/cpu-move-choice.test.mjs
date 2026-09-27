@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { Position } from 'tsshogi';
 import { enumerateLegalMoves, STANDARD_SFEN } from '../game-state.ts';
 import { chooseCpuMove, chooseNaturalMove, pickWeighted } from './cpu-move-choice.mjs';
-import { createNaturalnessEvaluator } from './move-naturalness.mjs';
+import { createNaturalnessEvaluator, PIECE_SACRIFICE_TAG } from './move-naturalness.mjs';
 import { getStrengthSearchSettings } from './strength-settings.mjs';
 
 function seededRandom(seed) {
@@ -183,6 +183,46 @@ describe('CPU着手の共通選択', () => {
     const verify = vi.fn();
     const result = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search, verify, random: () => 0 });
     expect(result.kind).not.toBe('natural');
+  });
+
+  test('最善手より大きく悪い駒捨ては、探索の2番手以下にあっても選ばない', async () => {
+    const strength = {
+      ...lowStrength, oversightRate: 0, bestMoveRate: 0, naturalnessAlpha: 0,
+      maxScoreLoss: 1000, scoreTemperature: 100000,
+    };
+    const withSacrifice = (score) => ({
+      move: '2g2f',
+      candidates: [
+        { rank: 1, move: '2g2f', score: cp(60) },
+        { rank: 2, move: '8h3c+', score: cp(score) },
+      ],
+    });
+    const random = seededRandom(9);
+    const count = async (search) => {
+      let picked = 0;
+      for (let i = 0; i < 400; i += 1) {
+        const { move } = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search, random });
+        if (move === '8h3c+') picked += 1;
+      }
+      return picked;
+    };
+    // 最善手との差が400なら選ばない。
+    expect(await count(withSacrifice(-340))).toBe(0);
+    // エンジンがほぼ互角と見る捨て駒の手筋は残す。
+    expect(await count(withSacrifice(-40))).toBeGreaterThan(100);
+  });
+
+  test('読まない手でも、駒をただで渡す手は選ばない', async () => {
+    const strength = { ...lowStrength, naturalMoveRate: 1, oversightRate: 0 };
+    const evaluate = createNaturalnessEvaluator(sfen, { moveHistory });
+    const random = seededRandom(13);
+    for (let i = 0; i < 500; i += 1) {
+      const result = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search, random });
+      expect(result.kind).toBe('natural');
+      const { tags } = evaluate(result.move);
+      expect(tags, result.move).not.toContain(PIECE_SACRIFICE_TAG);
+      expect(tags, result.move).not.toContain('sacrifice');
+    }
   });
 
   test('最高難度は常に最善手を選ぶ', async () => {

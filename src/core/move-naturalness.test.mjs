@@ -5,6 +5,7 @@ import {
   createNaturalnessEvaluator,
   LOW_NATURALNESS_THRESHOLD,
   NATURALNESS_MIN,
+  PIECE_SACRIFICE_TAG,
 } from './move-naturalness.mjs';
 
 function positionAfter(moves, sfen = STANDARD_SFEN) {
@@ -60,6 +61,17 @@ describe('指し手の自然さ', () => {
     const sacrifice = evaluate('8h4d');
     expect(sacrifice.tags).toContain('sacrifice');
     expect(sacrifice.weight).toBeLessThan(0.1);
+  });
+
+  test('歩以外をただで渡す手は、王手や成りの加点があっても軽く、駒捨てとして印を付ける', () => {
+    const { evaluate } = evaluatorAfter(['7g7f', '3c3d']);
+    // ▲3三角成は王手だが、2一の桂でただで取られる。
+    const checkSacrifice = evaluate('8h3c+');
+    expect(checkSacrifice.tags).toContain(PIECE_SACRIFICE_TAG);
+    expect(checkSacrifice.weight).toBeLessThanOrEqual(0.05);
+    // 角交換は駒を渡す手ではない。
+    expect(evaluate('8h2b+').tags).not.toContain(PIECE_SACRIFICE_TAG);
+    expect(evaluate('2g2f').tags).not.toContain(PIECE_SACRIFICE_TAG);
   });
 
   test('王手をかけられた局面では回避手を減点せず、王手駒を取る手を最も重くする', () => {

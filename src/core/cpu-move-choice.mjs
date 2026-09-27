@@ -1,5 +1,5 @@
 import { comparableScore, selectMoveByRank } from "./move-selection.mjs";
-import { createNaturalnessEvaluator } from "./move-naturalness.mjs";
+import { createNaturalnessEvaluator, PIECE_SACRIFICE_TAG } from "./move-naturalness.mjs";
 
 /** 深い読みで判明する損失がこれ以上なら「見落とし」とみなす。 */
 export const OVERSIGHT_MIN_DEEP_LOSS = 300;
@@ -10,6 +10,11 @@ export const OVERSIGHT_MIN_NATURALNESS = 0.5;
 export const OVERSIGHT_MAX_TRAPS = 5;
 /** 探索候補に加えて、浅く読み直す「目に付く自然な手」の数。 */
 export const OVERSIGHT_NATURAL_MOVES = 8;
+/**
+ * 探索の2番手以下にある駒捨て(駒をただで渡す手)は、最善手との差がこれ以下の場合だけ選ぶ。
+ * 浅い読みで悪く見えない駒捨ても、多くは深く読むと大損で、人間には意味の無い手に見える。
+ */
+export const SACRIFICE_CANDIDATE_MAX_LOSS = 150;
 
 function drawRandom(random) {
   const value = random();
@@ -32,13 +37,23 @@ export function pickWeighted(entries, random = Math.random) {
   return entries.at(-1);
 }
 
-function naturalnessMemo(sfen, moveHistory) {
+function evaluationMemo(sfen, moveHistory) {
   const evaluate = createNaturalnessEvaluator(sfen, { moveHistory });
   const cache = new Map();
   return (usi) => {
-    if (!cache.has(usi)) cache.set(usi, evaluate(usi).weight);
+    if (!cache.has(usi)) cache.set(usi, evaluate(usi));
     return cache.get(usi);
   };
+}
+
+function naturalnessMemo(sfen, moveHistory, evaluation = evaluationMemo(sfen, moveHistory)) {
+  const weight = (usi) => evaluation(usi).weight;
+  // 自分から駒をただで渡す手(歩の突き捨てを含む)。
+  weight.isSacrifice = (usi) => {
+    const { tags } = evaluation(usi);
+    return tags.includes(PIECE_SACRIFICE_TAG) || tags.includes("sacrifice");
+  };
+  return weight;
 }
 
 /** エンジンを使わず、合法手を自然さ^alphaで重み付けして選ぶ。 */
@@ -159,11 +174,22 @@ export async function chooseCpuMove({
   if (!search?.move || !allowed.has(search.move)) {
     return chooseNaturalMove({ sfen, legalMoves, moveHistory, alpha, random, naturalness });
   }
-  const candidates = (search.candidates ?? []).filter(({ move }) => allowed.has(move));
+  const bestScore = comparableScore(search.candidates?.find(({ move }) => move === search.move)?.score);
+  // 最善手との差が大きい駒捨ては、2番手以下の候補から外す。
+  const candidates = (search.candidates ?? []).filter(({ move, score }) => {
+    if (!allowed.has(move)) return false;
+    if (move === search.move || !naturalness.isSacrifice(move)) return true;
+    const value = comparableScore(score);
+    return bestScore !== undefined && value !== undefined && bestScore - value <= SACRIFICE_CANDIDATE_MAX_LOSS;
+  });
 
-  // 低レベルでは読まずに見た目だけで指す手を混ぜる。相手の狙いを見逃し、駒をただで取られることもある。
+  // 低レベルでは読まずに見た目だけで指す手を混ぜる。相手の狙いを見逃し、取られそうな駒を放置することもある。
+  // ただし、自分から駒をただで渡す手は意味の無い手に見えるため選ばない。
   if (strength.naturalMoveRate > 0 && drawRandom(random) < strength.naturalMoveRate) {
-    return chooseNaturalMove({ sfen, legalMoves, moveHistory, alpha, random, naturalness });
+    const unread = legalMoves.filter((move) => !naturalness.isSacrifice(move));
+    return chooseNaturalMove({
+      sfen, legalMoves: unread.length ? unread : legalMoves, moveHistory, alpha, random, naturalness,
+    });
   }
 
   if (strength.oversightRate > 0 && verify && drawRandom(random) < strength.oversightRate) {

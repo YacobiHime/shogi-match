@@ -16,6 +16,8 @@ import {
 
 export const NATURALNESS_MIN = 0.02;
 export const NATURALNESS_MAX = 8;
+/** 歩以外の駒を、取り返しの見込みなく相手に渡す手に付けるタグ。 */
+export const PIECE_SACRIFICE_TAG = "piece-sacrifice";
 /** これ未満の重みを「人間が指しにくい手」として集計する。 */
 export const LOW_NATURALNESS_THRESHOLD = 0.3;
 
@@ -175,6 +177,15 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply } = {})
       if (BIG_PIECES.has(moverKind)) apply(0.05, "sacrifice");
       else if (moverKind === "P") apply(0.4, "sacrifice");
       else apply(0.1, "sacrifice");
+    }
+
+    // 歩以外の駒を、取り返しの見込みなく相手に渡す手。王手や成りの加点で打ち消さない。
+    const lostValue = hangingAfter
+      ? pieceValue(originalKind) - (applied.captured ? pieceValue(applied.captured.kind) : 0)
+      : 0;
+    if (originalKind !== "P" && lostValue >= 2) {
+      tags.push(PIECE_SACRIFICE_TAG);
+      weight = Math.min(weight, BIG_PIECES.has(originalKind) ? 0.05 : 0.1);
     }
 
     return {
