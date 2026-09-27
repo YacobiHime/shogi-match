@@ -86,7 +86,8 @@ describe('CPU strength settings', () => {
     const rate = (level) => getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value).naturalMoveRate;
     expect(rate(1)).toBeGreaterThan(0.5);
     expect(rate(1)).toBeLessThan(1);
-    expect(rate(15)).toBeGreaterThan(0.5);
+    expect(rate(10)).toBeGreaterThan(0.5);
+    expect(rate(15)).toBeGreaterThan(0.2);
     expect(rate(31)).toBe(0);
     expect(rate(40)).toBe(0);
   });

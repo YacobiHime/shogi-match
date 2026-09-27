@@ -78,6 +78,7 @@ function targetCurve(anchorRating, topRating) {
     else low = middle;
   }
   const b = (low + high) / 2;
+  if (Math.abs(miss(b)) > 1) throw new Error("目標曲線が基準と最上位を通りません。--first-stepを変えてください");
   const a = scaleFor(b);
   return (level) => firstStep * level + a * growth(b, level);
 }
