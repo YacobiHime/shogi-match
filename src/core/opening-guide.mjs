@@ -301,13 +301,24 @@ const OPENING_STRATEGY_DEFINITIONS = [
       [["6i", "R"], ["6g", "S"], ["7h", "G"], ["7g", "N"], ["3h", "K"]],
       [["2h", "R"], ["5f", "S"], ["7h", "G"], ["3h", "K"]],
     ],
+    // 相手が角道を開けた後に角を交換し、相手が銀で取り返してから金銀を上がる。
     availability: {
-      colors: ["white"],
-      requiredHistory: ["7g7f"],
-      requiredHistoryBeforeMoves: [
-        { move: "4a3b", required: "7i8h" },
-        { move: "3a4b", required: "7i8h" },
-      ],
+      byColor: {
+        black: {
+          requiredHistory: ["3c3d"],
+          requiredHistoryBeforeMoves: [
+            { move: "6i7h", required: "3a2b" },
+            { move: "7i6h", required: "3a2b" },
+          ],
+        },
+        white: {
+          requiredHistory: ["7g7f"],
+          requiredHistoryBeforeMoves: [
+            { move: "4a3b", required: "7i8h" },
+            { move: "3a4b", required: "7i8h" },
+          ],
+        },
+      },
     },
     // 先手側へ正規化した通常形。後手では左右反転して案内する。
     blackMoves: [
@@ -1123,6 +1134,25 @@ export function openingDefinitionRookStyle(id, kind) {
   return undefined;
 }
 
+/** 先後で成立条件が異なる戦法の、手番側に適用する利用条件。 */
+export function openingAvailabilityForColor(definition, color = "black") {
+  const availability = definition?.availability;
+  if (!availability) return undefined;
+  const { byColor, ...shared } = availability;
+  return byColor?.[color] ? { ...shared, ...byColor[color] } : shared;
+}
+
+// 戦法と囲いが一体になっており、もう片方と組み合わせられない定義。
+const STANDALONE_OPENING_IDS = Object.freeze({
+  strategy: new Set(["ahiru"]),
+  castle: new Set(["right-king", "migigyoku-habu"]),
+});
+
+/** 選ぶと相方(戦法なら囲い、囲いなら戦法)を選べなくなる定義か。 */
+export function isStandaloneOpening(id, kind) {
+  return Boolean(id) && (STANDALONE_OPENING_IDS[kind]?.has(id) ?? false);
+}
+
 const BASIC_RANGING_ROOK_CHOICES = Object.freeze([
   { id: "shiken", label: "四間飛車（基本）" },
   { id: "sangen", label: "三間飛車" },
@@ -1314,7 +1344,8 @@ function planStepsWithKinds(steps, color) {
       pieces.delete(from);
       pieces.set(to, resultingKind);
     }
-    return { ...entry, expectedKind: resultingKind };
+    // 成る手では、移動元にある駒(成る前)と到達後の駒種が異なる。
+    return { ...entry, expectedKind: resultingKind, sourceKind: kind };
   });
 }
 
@@ -1354,7 +1385,7 @@ function pendingPlanSteps(steps, phase, playedMoves, currentSfen, color) {
         const from = entry.usi.slice(0, 2);
         const previous = entries.findLastIndex((candidate, candidateIndex) => (
           candidateIndex < cursor && candidate.usi.slice(2, 4) === from
-          && candidate.expectedKind === entry.expectedKind
+          && candidate.expectedKind === (entry.sourceKind ?? entry.expectedKind)
         ));
         if (previous < 0) break;
         cursor = previous;
@@ -1365,15 +1396,18 @@ function pendingPlanSteps(steps, phase, playedMoves, currentSfen, color) {
 }
 
 function alternativePlanMove(entry, legalMoves, board, color) {
-  if (!entry.expectedKind || !Array.isArray(legalMoves)) return null;
+  const sourceKind = entry.sourceKind ?? entry.expectedKind;
+  if (!sourceKind || !Array.isArray(legalMoves)) return null;
   if (board.get(entry.usi.slice(0, 2))?.color === color
-    && board.get(entry.usi.slice(0, 2))?.kind === entry.expectedKind) return null;
+    && board.get(entry.usi.slice(0, 2))?.kind === sourceKind) return null;
   const destination = entry.usi.slice(2, 4);
+  const promotes = entry.usi.endsWith("+");
   const move = legalMoves.find((usi) => (
     usi.slice(2, 4) === destination
+    && usi.endsWith("+") === promotes
     && usi.slice(0, 2) !== entry.usi.slice(0, 2)
     && board.get(usi.slice(0, 2))?.color === color
-    && board.get(usi.slice(0, 2))?.kind === entry.expectedKind
+    && board.get(usi.slice(0, 2))?.kind === sourceKind
   ));
   return move ? { usi: move, phase: entry.phase } : null;
 }
@@ -1579,7 +1613,9 @@ function orderSensitiveMoveSet(definition, variant) {
     ...Object.keys(definition?.movePrerequisites ?? {}),
     ...Object.keys(definition?.movePrerequisitesByVariant?.[variant] ?? {}),
     ...Object.keys(definition?.movePositionPrerequisites ?? {}),
-    ...(definition?.availability?.requiredHistoryBeforeMoves ?? []).map(({ move }) => move),
+    ...["black", "white"].flatMap((color) => (
+      openingAvailabilityForColor(definition, color)?.requiredHistoryBeforeMoves ?? []
+    )).map(({ move }) => move),
   ]);
   for (const [move, branchMoves] of Object.entries(definition?.moveConditionBranches ?? {})) {
     moves.add(move);
@@ -1766,7 +1802,7 @@ export function nearestOpeningStrategies({
       if (excluded.has(strategy.id) || strategy.guideSelectable === false) return false;
       const style = openingDefinitionRookStyle(strategy.id, "strategy");
       if (rookStyle && style && style !== "both" && style !== rookStyle) return false;
-      const availability = strategy.availability;
+      const availability = openingAvailabilityForColor(strategy, color);
       if (availability?.colors && !availability.colors.includes(color)) return false;
       if (Number.isInteger(availability?.maxHistoryLength)
         && moveHistory.length > availability.maxHistoryLength) return false;
@@ -1894,7 +1930,7 @@ export function availableOpeningDefinitions({
     // 共通の歩突きだけでは奇襲が始まったとはみなさない。
     const distinctive = steps.filter(({ usi }) => !["7g7f", "3c3d", "2g2f", "8c8d"].includes(usi));
     const started = distinctive.some(({ usi }) => played.has(usi));
-    const availability = definition.availability;
+    const availability = openingAvailabilityForColor(definition, color);
     if (availability?.colors && !availability.colors.includes(color)) return false;
     if (!started && availability) {
       if (
@@ -2426,7 +2462,7 @@ export function openingPlanCandidates({
         color,
         opponentColor,
       })) return false;
-      const historyRequirement = definition.availability?.requiredHistoryBeforeMoves?.find(
+      const historyRequirement = openingAvailabilityForColor(definition, color)?.requiredHistoryBeforeMoves?.find(
         ({ move }) => move === entry.usi,
       );
       return !historyRequirement || history.size === 0 || history.has(historyRequirement.required);
@@ -2434,8 +2470,10 @@ export function openingPlanCandidates({
     const availableMove = (entry) => {
       if (!isReady(entry)) return null;
       const source = board.get(entry.usi.slice(0, 2));
-      if (legal.has(entry.usi) && (!currentSfen || !entry.expectedKind
-        || (source?.color === color && source.kind === entry.expectedKind))) {
+      // 駒打ちは盤上に移動元がないため、合法手であることだけを確認する。
+      const sourceKind = entry.usi.includes("*") ? undefined : entry.sourceKind ?? entry.expectedKind;
+      if (legal.has(entry.usi) && (!currentSfen || !sourceKind
+        || (source?.color === color && source.kind === sourceKind))) {
         return { usi: entry.usi, phase: entry.phase };
       }
       return alternativePlanMove(entry, legalMoves, board, color);
@@ -2499,6 +2537,97 @@ export function openingPlanCandidates({
 
 export function nextOpeningPlanMove(options) {
   return openingPlanCandidates(options)[0] ?? null;
+}
+
+/** 盤上の移動で、移動元と移動先の間に挟まる升。縦・横・斜め以外の移動は空。 */
+function squaresBetween(usi) {
+  if (!/^[1-9][a-i][1-9][a-i]/.test(usi)) return [];
+  const fromFile = Number(usi[0]);
+  const fromRank = usi.charCodeAt(1) - 96;
+  const fileDistance = Math.abs(Number(usi[2]) - fromFile);
+  const rankDistance = Math.abs(usi.charCodeAt(3) - 96 - fromRank);
+  if (fileDistance && rankDistance && fileDistance !== rankDistance) return [];
+  const fileStep = Math.sign(Number(usi[2]) - fromFile);
+  const rankStep = Math.sign(usi.charCodeAt(3) - 96 - fromRank);
+  return Array.from({ length: Math.max(fileDistance, rankDistance) - 1 }, (_, index) => (
+    `${fromFile + fileStep * (index + 1)}${String.fromCharCode(96 + fromRank + rankStep * (index + 1))}`
+  ));
+}
+
+/** 残りの戦法手が使う駒の元位置と、着地点・通り道。囲いの手でここを塞がない。 */
+function pendingStrategyReservations(strategy, steps, playedMoves, currentSfen, color) {
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  const played = new Set(playedMoves);
+  const origins = new Set();
+  const squares = new Set();
+  for (const entry of pendingPlanSteps(steps, "strategy", playedMoves, currentSfen, color)) {
+    const drop = /^[PLNSGBR]\*([1-9][a-i])$/.exec(entry.usi);
+    if (drop) {
+      squares.add(drop[1]);
+      continue;
+    }
+    if (!/^[1-9][a-i][1-9][a-i]/.test(entry.usi)) continue;
+    origins.add(entry.usi.slice(0, 2));
+    squares.add(entry.usi.slice(2, 4));
+    for (const square of squaresBetween(entry.usi)) squares.add(square);
+  }
+  for (const { until, squares: reserved, fromSquares = [] } of strategy?.planReservations ?? []) {
+    if (played.has(convert(until))) continue;
+    for (const square of reserved) squares.add(convert(square));
+    for (const square of fromSquares) origins.add(convert(square));
+  }
+  return { origins, squares };
+}
+
+/**
+ * 戦法の次の一手に、戦法の駒組みを邪魔しない囲いの次の一手を加えて返す。
+ * 実戦のように攻めと囲いを並行して進めるため、どちらを先に指すかは呼び出し側が
+ * エンジン評価で決める。戦法手を先頭に置き、評価が並んだ場合は戦法を優先させる。
+ */
+export function openingPlanParallelCandidates(options = {}) {
+  const {
+    strategyId,
+    castleId,
+    color = "black",
+    playedMoves = [],
+    opponentMoves = [],
+    opponentFormations = [],
+    legalMoves = [],
+    currentSfen = "",
+    completedPhases = {},
+  } = options;
+  const candidates = openingPlanCandidates(options);
+  if (!strategyId || !castleId || completedPhases.castle) return candidates;
+  if (!candidates.length || candidates.some(({ phase }) => phase !== "strategy")) return candidates;
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  // 角換わり手順や完成直前の前進は順番そのものが手順なので、囲いを割り込ませない。
+  const routine = openingGuideRoutineStatus({
+    strategyId, castleId, color, playedMoves, legalMoves, currentSfen,
+  });
+  if (!["inactive", "complete"].includes(routine.status)) return candidates;
+  const convert = color === "white" ? mirrorUsiMove : (move) => move;
+  if (strategy?.completionAdvance && candidates.some(({ usi }) => (
+    usi === convert(strategy.completionAdvance.move)
+  ))) return candidates;
+
+  const castleCandidates = openingPlanCandidates({
+    ...options,
+    completedPhases: { ...completedPhases, strategy: true },
+  }).filter(({ phase }) => phase === "castle");
+  if (!castleCandidates.length) return candidates;
+  const steps = openingPlanSteps(strategyId, castleId, color, {
+    playedMoves, opponentMoves, opponentFormations,
+  });
+  const reserved = pendingStrategyReservations(strategy, steps, playedMoves, currentSfen, color);
+  const strategyMoves = new Set(candidates.map(({ usi }) => usi));
+  return [
+    ...candidates,
+    ...castleCandidates.filter(({ usi }) => (
+      !strategyMoves.has(usi)
+      && !reserved.origins.has(usi.slice(0, 2))
+      && !reserved.squares.has(usi.slice(2, 4))
+    )),
+  ];
 }
 
 export function isOpeningPlanComplete({
@@ -2711,23 +2840,38 @@ export function chooseSafeOpeningMove(plannedMove, candidates = [], maxScoreLoss
     : { usi: plannedMove, source: "plan", scoreLoss };
 }
 
-/** 前提条件を満たす複数の予定手から評価値の良い手を選び、危険ならAI最善手へ退避する。 */
-export function chooseAdaptiveOpeningMove(plannedMoves = [], candidates = [], maxScoreLoss = 250) {
+/**
+ * 評価値が最も良い予定手を返す。評価が並んだ、または評価できない場合は並び順を優先する。
+ * 戦法手と囲い手が混在する場合も、同じ基準で先に指す手を決める。
+ */
+export function selectBestOpeningPlan(plannedMoves = [], candidates = []) {
   const plans = plannedMoves.map((entry) => typeof entry === "string" ? entry : entry?.usi).filter(Boolean);
-  if (!plans.length) return chooseSafeOpeningMove(null, candidates, maxScoreLoss);
+  if (!plans.length) return null;
   const ranked = [...candidates]
     .filter(({ rank, move }) => Number.isInteger(rank) && rank >= 1 && typeof move === "string")
     .sort((left, right) => left.rank - right.rank);
   const availablePlans = plans
     .map((move, order) => ({ move, order, candidate: ranked.find((entry) => entry.move === move) }))
     .filter(({ candidate }) => candidate);
-  if (!availablePlans.length) return chooseSafeOpeningMove(plans[0], candidates, maxScoreLoss);
+  if (!availablePlans.length) return plans[0];
   const scoredPlans = availablePlans
     .map((entry) => ({ ...entry, value: comparableOpeningScore(entry.candidate.score) }))
     .filter(({ value }) => value !== undefined)
     .sort((left, right) => right.value - left.value || left.order - right.order);
-  const selectedPlan = scoredPlans[0] ?? availablePlans[0];
-  return chooseSafeOpeningMove(selectedPlan.move, candidates, maxScoreLoss);
+  return (scoredPlans[0] ?? availablePlans[0]).move;
+}
+
+/**
+ * 前提条件を満たす複数の予定手から評価値の良い手を選び、危険ならAI最善手へ退避する。
+ * maxScoreLossは数値、または選んだ予定手ごとに上限を返す関数。
+ * @param {Array<string | { usi: string }>} [plannedMoves]
+ * @param {Array<{ rank: number, move: string, score?: { type: string, value: number } }>} [candidates]
+ * @param {number | ((plannedMove: string | null) => number)} [maxScoreLoss]
+ */
+export function chooseAdaptiveOpeningMove(plannedMoves = [], candidates = [], maxScoreLoss = 250) {
+  const selectedPlan = selectBestOpeningPlan(plannedMoves, candidates);
+  const limit = typeof maxScoreLoss === "function" ? maxScoreLoss(selectedPlan) : maxScoreLoss;
+  return chooseSafeOpeningMove(selectedPlan, candidates, limit);
 }
 
 /** 危険な定跡手1手と、代わりに選べるAI上位3候補を矢印用にまとめる。 */

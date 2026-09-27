@@ -225,8 +225,12 @@
               <div v-else class="shogi-game__strategy-details">
                 <label>
                   <span>戦法</span>
-                  <select v-model="cpuDetailedStrategy" aria-label="対局前の相手の戦法を指定">
-                    <option value="">指定なし</option>
+                  <select
+                    v-model="cpuDetailedStrategy"
+                    aria-label="対局前の相手の戦法を指定"
+                    :disabled="cpuStrategySelectLocked"
+                  >
+                    <option value="">{{ cpuStrategySelectLocked ? "囲いと一体のため選べません" : "指定なし" }}</option>
                     <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
                       <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
                         {{ strategy.label }}
@@ -236,8 +240,12 @@
                 </label>
                 <label>
                   <span>囲い</span>
-                  <select v-model="cpuDetailedCastle" aria-label="対局前の相手の囲いを指定">
-                    <option value="">指定なし</option>
+                  <select
+                    v-model="cpuDetailedCastle"
+                    aria-label="対局前の相手の囲いを指定"
+                    :disabled="cpuCastleSelectLocked"
+                  >
+                    <option value="">{{ cpuCastleSelectLocked ? "戦法と一体のため選べません" : "指定なし" }}</option>
                     <optgroup v-for="group in cpuDetailedCastleGroups" :key="group.id" :label="group.label">
                       <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
                         {{ castle.label }}
@@ -361,8 +369,13 @@
         <div class="shogi-game__opening-strategy-field">
           <label>
             <span>戦法</span>
-            <select v-model="selectedStrategy" aria-label="戦法" @change="announceOpeningGuide">
-              <option value="">選択しない</option>
+            <select
+              v-model="selectedStrategy"
+              aria-label="戦法"
+              :disabled="strategySelectLocked"
+              @change="announceOpeningGuide"
+            >
+              <option value="">{{ strategySelectLocked ? "囲いと一体のため選べません" : "選択しない" }}</option>
               <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
                 <option
                   v-for="strategy in group.options"
@@ -385,8 +398,13 @@
         </div>
         <label>
           <span>囲い</span>
-          <select v-model="selectedCastle" aria-label="囲い" @change="announceOpeningGuide">
-            <option value="">選択しない</option>
+          <select
+            v-model="selectedCastle"
+            aria-label="囲い"
+            :disabled="castleSelectLocked"
+            @change="announceOpeningGuide"
+          >
+            <option value="">{{ castleSelectLocked ? "戦法と一体のため選べません" : "選択しない" }}</option>
             <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
               <option
                 v-for="castle in group.options"
@@ -816,6 +834,7 @@ import {
   inferOpeningRookStyle,
   isOpeningGuideExpired,
   isOpeningPlanComplete,
+  isStandaloneOpening,
   nextOpeningPlanMove,
   openingCanonicalFollowupCandidates as getOpeningCanonicalFollowupCandidates,
   openingCastleDistance,
@@ -827,10 +846,11 @@ import {
   openingGuideScoreLossLimit,
   openingPlanBranchMessage,
   openingPlanInterruption,
-  openingPlanCandidates as getOpeningPlanCandidates,
+  openingPlanParallelCandidates,
   openingStrategyCompletionChoices,
   rangingRookStrategyChoices,
   openingUrgentResponse,
+  selectBestOpeningPlan,
   shouldAbandonOpeningGuide,
   shouldShowOpeningFollowup,
   OPENING_CASTLE_GROUPS,
@@ -1458,6 +1478,29 @@ const groupedOpeningCastles = computed(() => {
     ? [{ id: "suggested", label: "今の局面から近い囲い", options: suggested }, ...groups]
     : groups;
 });
+// アヒル囲い・右玉のように戦法と囲いが一体の定義を選んだら、相方は選べなくする。
+const strategySelectLocked = computed(() => isStandaloneOpening(selectedCastle.value, "castle"));
+const castleSelectLocked = computed(() => isStandaloneOpening(selectedStrategy.value, "strategy"));
+const cpuStrategySelectLocked = computed(() => isStandaloneOpening(cpuDetailedCastle.value, "castle"));
+const cpuCastleSelectLocked = computed(() => isStandaloneOpening(cpuDetailedStrategy.value, "strategy"));
+// 復元や自動切り替えで組み合わせられない対が揃った場合も、後から設定した側を優先する。
+function exclusiveOpeningWatch(
+  own: typeof selectedStrategy,
+  counterpart: typeof selectedStrategy,
+  ownKind: "strategy" | "castle",
+) {
+  const counterpartKind = ownKind === "strategy" ? "castle" : "strategy";
+  watch(own, (id) => {
+    if (!id || !counterpart.value) return;
+    if (isStandaloneOpening(id, ownKind) || isStandaloneOpening(counterpart.value, counterpartKind)) {
+      counterpart.value = "";
+    }
+  }, { flush: "sync" });
+}
+exclusiveOpeningWatch(selectedStrategy, selectedCastle, "strategy");
+exclusiveOpeningWatch(selectedCastle, selectedStrategy, "castle");
+exclusiveOpeningWatch(cpuDetailedStrategy, cpuDetailedCastle, "strategy");
+exclusiveOpeningWatch(cpuDetailedCastle, cpuDetailedStrategy, "castle");
 const selectedStrategyDefinition = computed(() => (
   OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value) ?? null
 ));
@@ -1474,10 +1517,14 @@ const openingPlanExpired = computed(() => {
     );
 });
 const playerColorKey = computed(() => (humanColor.value === Color.BLACK ? "black" : "white"));
-// 戦法が済んで(または未選択で)、囲いを組んでいる段階か。
+// 囲いが未完成で、戦法と並行して組んでいる段階か。
+const castleGuideInProgress = computed(() => (
+  Boolean(selectedCastle.value) && !castlePhaseComplete.value
+));
+// 戦法が済んで(または未選択で)、囲いだけを組んでいる段階か。
+// 戦法と並行している間は戦法手で囲いが近づかないのが自然なので、寄り道として数えない。
 const castleGuidePhaseActive = computed(() => (
-  Boolean(selectedCastle.value)
-  && !castlePhaseComplete.value
+  castleGuideInProgress.value
   && (!selectedStrategy.value || strategyPhaseComplete.value)
 ));
 // 戦法・囲いの「ほぼ完成形」に達したとき、完全形まで続けるか選ばせる。戦法の段階を先に聞く。
@@ -1491,7 +1538,7 @@ const nearCompletionPrompt = computed(() => {
     selectedStrategy.value && !strategyPhaseComplete.value
       ? { kind: "strategy" as const, id: selectedStrategy.value, handled: strategyNearCompletionHandled.value }
       : null,
-    castleGuidePhaseActive.value
+    castleGuideInProgress.value
       ? { kind: "castle" as const, id: selectedCastle.value, handled: castleNearCompletionHandled.value }
       : null,
   ];
@@ -1505,8 +1552,6 @@ const nearCompletionPrompt = computed(() => {
     });
     const key = near ? `${candidate.id}:${near.id}` : "";
     if (near && candidate.handled !== key) return { ...near, kind: candidate.kind, key };
-    // 戦法の段階ではほぼ完成形でなくても、囲いの確認へは進まない。
-    if (candidate.kind === "strategy") return null;
   }
   return null;
 });
@@ -1535,7 +1580,8 @@ const openingPlanCandidates = computed(() => {
   const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
   const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
-  return getOpeningPlanCandidates({
+  // 戦法と囲いの次の一手を並べ、安全確認のエンジン評価で良い方を案内する。
+  return openingPlanParallelCandidates({
     strategyId: selectedStrategy.value,
     castleId: selectedCastle.value,
     color: playerIsBlack ? "black" : "white",
@@ -1957,12 +2003,16 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
       rookPreference: cpuRookPreference.value,
       tempoPreference: cpuTempoPreference.value,
     });
+    // 戦法と囲いが一体の定義は、もう片方と組み合わせない。
+    const castleOnly = isStandaloneOpening(cpuDetailedCastle.value, "castle");
     cpuOpeningPlan = cpuStrategyDetailsOpen.value && cpuDetailedCastle.value
+      && !isStandaloneOpening(selectedPlan.strategyId, "strategy")
       ? {
           ...selectedPlan,
+          strategyId: castleOnly ? "" : selectedPlan.strategyId,
           castleId: cpuDetailedCastle.value,
           label: [
-            OPENING_STRATEGIES.find(({ id }) => id === selectedPlan.strategyId)?.label,
+            castleOnly ? undefined : OPENING_STRATEGIES.find(({ id }) => id === selectedPlan.strategyId)?.label,
             OPENING_CASTLES.find(({ id }) => id === cpuDetailedCastle.value)?.label,
           ].filter(Boolean).join("＋"),
         }
@@ -2402,24 +2452,34 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      if (planned && !plannedOptions.some(({ usi }) => candidates.some(({ move }) => move === usi))) {
+      // 戦法と囲いを評価値で比べるため、上位候補に入らなかった各フェーズの先頭の予定手も評価する。
+      const unscoredPlans = ["strategy", "castle"]
+        .filter((phase) => !plannedOptions.some((option) => (
+          option.phase === phase && candidates.some(({ move }) => move === option.usi)
+        )))
+        .map((phase) => plannedOptions.find((option) => option.phase === phase)?.usi)
+        .filter((usi): usi is string => Boolean(usi));
+      if (unscoredPlans.length) {
         engine!.setPosition(currentEnginePosition());
-        engine!.applyStrengthOptions({ multiPv: 1 });
+        engine!.applyStrengthOptions({ multiPv: unscoredPlans.length });
         const { value: forced, interrupted } = await assistSearchControl.run(
           () => engine!.go({
             nodes: settings.forcedNodes,
             maxTimeMs: settings.forcedMaxTimeMs,
-            searchMoves: [planned.usi],
+            searchMoves: unscoredPlans,
           }),
         );
         if (interrupted) return;
-        const forcedCandidate = forced.candidates.find(({ rank }) => rank === 1);
-        if (forcedCandidate) {
-          candidates = [
-            ...candidates,
-            { ...forcedCandidate, rank: settings.multiPv + 1, move: planned.usi },
-          ];
-        }
+        const forcedCandidates = forced.candidates
+          .filter(({ move }) => unscoredPlans.includes(move) && !candidates.some((entry) => entry.move === move))
+          .sort((left, right) => left.rank - right.rank);
+        candidates = [
+          ...candidates,
+          ...forcedCandidates.map((candidate, index) => ({
+            ...candidate,
+            rank: settings.multiPv + index + 1,
+          })),
+        ];
       }
       if (
         generation !== openingGuideSafetyGeneration || !active.value || reviewMode.value
@@ -2434,11 +2494,15 @@ function scheduleOpeningGuideSafety() {
         plannedMoves: plannedOptions,
         candidates,
       });
+      const phaseOfPlan = (usi: string | null) => (
+        plannedOptions.find((option) => option.usi === usi)?.phase ?? planned?.phase
+      );
+      const bestPlanUsi = selectBestOpeningPlan(plannedOptions, compatibleCandidates);
       const choice = plannedOptions.length
         ? chooseAdaptiveOpeningMove(
             plannedOptions,
             compatibleCandidates,
-            openingGuideScoreLossLimit(selectedStrategy.value, planned.phase),
+            (usi: string | null) => openingGuideScoreLossLimit(selectedStrategy.value, phaseOfPlan(usi)),
           )
         : compatibleCandidates
             .filter(({ rank, move }) => Number.isInteger(rank) && typeof move === "string")
@@ -2462,9 +2526,11 @@ function scheduleOpeningGuideSafety() {
         source: choice.source,
         phase: plannedOptions.find(({ usi }) => usi === choice.usi)?.phase ?? planned?.phase,
       };
-      if (choice.source === "ai" && planned) {
+      // 危険な定跡手として示すのは、戦法・囲いのうち評価を比べて選んだ予定手。
+      const unsafePlanUsi = bestPlanUsi ?? planned?.usi;
+      if (choice.source === "ai" && unsafePlanUsi) {
         openingGuideDetourCandidates.value = openingDetourArrowCandidates(
-          planned.usi,
+          unsafePlanUsi,
           compatibleCandidates,
           3,
         ).map(({ usi, source, score }) => ({
@@ -2478,10 +2544,10 @@ function scheduleOpeningGuideSafety() {
         && coachLevel.value !== "off"
         && openingGuideBranchNoticePly.value !== historyLength
       ) {
-        if (planBlocked || !planned) {
+        if (planBlocked || !unsafePlanUsi) {
           guideText.value = `予定の形へすぐ進めないから、まずは${formatHintMove(choice.usi, currentSfen.value)}で局面を整えよう。`;
         } else {
-          const plannedText = formatHintMove(planned.usi, currentSfen.value);
+          const plannedText = formatHintMove(unsafePlanUsi, currentSfen.value);
           const scoreLoss = typeof choice.scoreLoss === "number" && Number.isFinite(choice.scoreLoss)
             ? choice.scoreLoss
             : undefined;

@@ -60,6 +60,20 @@ describe("match screen regressions", () => {
   });
 
   it("draws detour arrows from opening-compatible candidates", () => {
-    expect(source).toMatch(/openingDetourArrowCandidates\(\s*planned\.usi,\s*compatibleCandidates,/);
+    expect(source).toMatch(/openingDetourArrowCandidates\(\s*unsafePlanUsi,\s*compatibleCandidates,/);
+  });
+
+  it("guides strategy and castle moves in parallel by evaluation", () => {
+    expect(source).toMatch(/return openingPlanParallelCandidates\(\{/);
+    // 上位候補に入らなかった戦法・囲いの予定手も、同じ探索で評価してから比べる。
+    expect(source).toMatch(/searchMoves: unscoredPlans,/);
+    expect(source).toMatch(/const bestPlanUsi = selectBestOpeningPlan\(plannedOptions, compatibleCandidates\);/);
+  });
+
+  it("locks the counterpart select for combined strategy/castle definitions", () => {
+    expect(source).toMatch(/v-model="selectedStrategy"[\s\S]*?:disabled="strategySelectLocked"/);
+    expect(source).toMatch(/v-model="selectedCastle"[\s\S]*?:disabled="castleSelectLocked"/);
+    expect(source).toMatch(/v-model="cpuDetailedStrategy"[\s\S]*?:disabled="cpuStrategySelectLocked"/);
+    expect(source).toMatch(/v-model="cpuDetailedCastle"[\s\S]*?:disabled="cpuCastleSelectLocked"/);
   });
 });
