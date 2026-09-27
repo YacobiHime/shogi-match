@@ -21,6 +21,7 @@ describe("厳密な詰めろ判定", () => {
       "4k4/9/9/9/9/6b2/9/3P1P3/3PKP3 b g 1",
       5,
       10000,
+      500,
     );
     expect(result).toMatchObject({ isThreat: true, matePly: 1, exhausted: false });
   });
@@ -30,6 +31,7 @@ describe("厳密な詰めろ判定", () => {
       "4k4/9/9/9/9/9/4r4/3P1P3/3PKP3 b - 1",
       5,
       10000,
+      500,
     );
     expect(result.isThreat).toBe(false);
   });
@@ -37,12 +39,27 @@ describe("厳密な詰めろ判定", () => {
 
 describe("手番側の強制詰み判定", () => {
   test("連続王手で詰む局面を検出する", () => {
-    expect(findForcedMate("4k4/9/9/9/9/6b2/9/3P1P3/3PKP3 w g 1", 5, 10000))
+    expect(findForcedMate("4k4/9/9/9/9/6b2/9/3P1P3/3PKP3 w g 1", 5, 10000, 500))
       .toMatchObject({ isMate: true, matePly: 1, exhausted: false });
   });
 
   test("詰めろを受けた後のように詰みが無ければ偽を返す", () => {
-    expect(findForcedMate("4k4/9/9/9/9/9/9/3P1P3/3PKP3 w g 1", 5, 10000))
+    expect(findForcedMate("4k4/9/9/9/9/9/9/3P1P3/3PKP3 w g 1", 5, 10000, 500))
       .toMatchObject({ isMate: false, exhausted: false });
+  });
+
+  test("時間上限に達したら画面を長く止めず打ち切る", () => {
+    expect(findForcedMate(
+      "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      7,
+      60000,
+      0,
+    )).toMatchObject({ isMate: false, exhausted: true });
+    expect(detectStrictMateThreat(
+      "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1",
+      7,
+      60000,
+      0,
+    )).toMatchObject({ isThreat: false, exhausted: true });
   });
 });

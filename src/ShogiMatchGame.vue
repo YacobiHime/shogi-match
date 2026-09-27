@@ -788,7 +788,7 @@ import {
 } from "./core/engine-mate-check.mjs";
 import { chooseCpuMove, chooseNaturalMove } from "./core/cpu-move-choice.mjs";
 import { createAssistSearchControl } from "./core/assist-search-control.mjs";
-import { detectStrictMateThreat, findMateInOne } from "./core/mate-threat";
+import { findMateInOne } from "./core/mate-threat";
 import {
   classifyAnalyzedMove,
   formatAnalysisScore,
@@ -1061,7 +1061,6 @@ let analysisGeneration = 0;
 let reviewCpuGeneration = 0;
 let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
-let dedicatedCoachRunning = false;
 let openingFollowupGeneration = 0;
 let openingFollowupLoading = false;
 let openingGuideSafetyGeneration = 0;
@@ -1089,8 +1088,8 @@ const matchStorageKey = typeof window === "undefined"
 // 助言は対局AIより軽く保つ。局面評価は数万ノードで十分であり、
 // 人間最高峰プリセット（48万ノード）相当の探索を毎手行わない。
 const COACH_SEARCH_BUDGET = {
-  standard: { nodes: 60000, maxTimeMs: 1500, mateTimeMs: 800, threatNodes: 12000 },
-  compact: { nodes: 30000, maxTimeMs: 900, mateTimeMs: 500, threatNodes: 6000 },
+  standard: { nodes: 60000, maxTimeMs: 1500 },
+  compact: { nodes: 30000, maxTimeMs: 900 },
 } as const;
 
 function coachSearchBudget() {
@@ -2639,25 +2638,32 @@ async function updateDedicatedCoachAdvice(
     ),
   }));
   let score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
-  // 明確な勝勢だけ専用詰み探索で確認する。軽い優勢局面ごとに実行しない。
+  // 通常探索がまだmateを返していない明確な勝勢だけ、短時間の通常探索で再確認する。
   if (coachLevel.value === "detailed" && score?.type === "cp" && score.value >= 2500) {
-    engine.setPosition(currentEnginePosition());
-    const movetime = budget.mateTimeMs;
-    const mate = await engine.goMate({ movetime, maxTimeMs: movetime + 300 });
-    if (mate.status === "mate") score = { type: "mate", value: mate.moves.length };
+    const mate = await engineMateCheck(currentSfen.value, {
+      ...getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait"),
+      maxPly: 7,
+    });
+    if (mate.status === "mate") score = { type: "mate", value: mate.plies };
   }
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
   const inCheck = isSideToMoveInCheck(currentSfen.value);
-  const mateThreatResult = coachLevel.value === "detailed" && !inCheck
-    ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes)
+  const threatSfen = coachLevel.value === "detailed" && !inCheck
+    ? flipSideToMove(currentSfen.value)
     : null;
-  const mateThreat = mateThreatResult?.isThreat ?? false;
+  const mateThreatResult = threatSfen
+    ? await engineMateCheck(threatSfen, {
+        ...getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait"),
+        maxPly: 7,
+      })
+    : null;
+  const mateThreat = mateThreatResult?.status === "mate";
   const bestMove = candidates.find((candidate) => candidate.rank === 1)?.move;
   const riskAdvice = coachLevel.value === "detailed"
     ? getCandidateRiskAdvice(normalizedCandidates, {
         inCheck,
         mateThreat,
-        mateThreatChecked: mateThreatResult !== null && !mateThreatResult.exhausted,
+        mateThreatChecked: mateThreatResult !== null && mateThreatResult.status !== "unknown",
         moveCount: moveCount.value,
         ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
       })
@@ -2671,12 +2677,7 @@ function scheduleDedicatedCoachAdvice(
   dedicatedCoachQueue = dedicatedCoachQueue
     .catch(() => undefined)
     .then(async () => {
-      dedicatedCoachRunning = true;
-      try {
-        await updateDedicatedCoachAdvice(moveFeedback);
-      } finally {
-        dedicatedCoachRunning = false;
-      }
+      await updateDedicatedCoachAdvice(moveFeedback);
     })
     .catch(() => undefined);
 }
@@ -2955,7 +2956,6 @@ function schedulePlayerIdleAdvice() {
           || moveHistory.length !== historyLength
           || record.value.position.color !== humanColor.value
         ) return;
-        dedicatedCoachRunning = true;
         try {
           // 閃きと同じ高精度の解析結果を共有し、異なる手を勧めない。
           const settings = getIdleCoachSearchSettings(
@@ -2987,7 +2987,6 @@ function schedulePlayerIdleAdvice() {
           }));
         } finally {
           engine?.applyStrengthOptions({ multiPv: 1 });
-          dedicatedCoachRunning = false;
         }
       })
       .catch(() => undefined);
@@ -3021,16 +3020,23 @@ function scheduleReviewCoachAdvice() {
       const score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
       const inCheck = isSideToMoveInCheck(currentSfen.value);
       const isPlayerTurn = analyzedSideToMove === humanColor.value;
-      const mateThreatResult = coachLevel.value === "detailed" && isPlayerTurn && !inCheck
-        ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes)
+      const threatSfen = coachLevel.value === "detailed" && isPlayerTurn && !inCheck
+        ? flipSideToMove(currentSfen.value)
         : null;
-      const mateThreat = mateThreatResult?.isThreat ?? false;
+      const mateThreatResult = threatSfen
+        ? await engineMateCheck(threatSfen, {
+            ...getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait"),
+            maxPly: 7,
+          })
+        : null;
+      if (generation !== reviewCoachGeneration || !reviewMode.value) return;
+      const mateThreat = mateThreatResult?.status === "mate";
       const bestMove = candidates.find((candidate) => candidate.rank === 1)?.move;
       const riskAdvice = coachLevel.value === "detailed" && isPlayerTurn
         ? getCandidateRiskAdvice(normalizedCandidates, {
             inCheck,
             mateThreat,
-            mateThreatChecked: mateThreatResult !== null && !mateThreatResult.exhausted,
+            mateThreatChecked: mateThreatResult !== null && mateThreatResult.status !== "unknown",
             moveCount: moveCount.value,
             ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
           })
@@ -3398,7 +3404,7 @@ function onPlayerMove(usi: string) {
   cancelPlayerIdleAdvice();
   // プレイヤーが指したら裏の助言探索を中断し、CPU本体へエンジンを明け渡す。
   const assistSearchInterrupted = !reviewMode.value && assistSearchControl.interrupt();
-  if (!reviewMode.value && (dedicatedCoachRunning || assistSearchInterrupted)) engine?.stop();
+  if (assistSearchInterrupted) engine?.stop();
   if (reviewMode.value) {
     reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
     if (reviewCpuEnabled.value) {
