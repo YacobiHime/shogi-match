@@ -3316,13 +3316,14 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   hintCandidates.value = [];
   openingFollowupCandidates.value = [];
   hintText.value = "";
+  const terminalResult = resultAfterMove(record.value);
+  // 棋譜検討中の分岐や「ここから対CPU」でも、実際に指した手には駒音を鳴らす。
+  playMoveSound(selectMoveSound(
+    move.capturedPieceType,
+    terminalResult?.reason === "checkmate" || isSideToMoveInCheck(currentSfen.value),
+  ));
   if (!reviewMode.value) {
     emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
-    const terminalResult = resultAfterMove(record.value);
-    playMoveSound(selectMoveSound(
-      move.capturedPieceType,
-      terminalResult?.reason === "checkmate" || isSideToMoveInCheck(currentSfen.value),
-    ));
     if (terminalResult) finish(terminalResult);
     else persistMatchState();
   }

@@ -78,6 +78,11 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(restoringSavedMatch\) return;\s*cpuOpeningPlan = null;\s*\}, \{ flush: "sync" \}\);/);
   });
 
+  it("plays the move sound for moves made during review, including CPU play from a review position", () => {
+    const applyMove = source.split("function applyMove(")[1]?.split("async function showHint")[0] ?? "";
+    expect(applyMove).toMatch(/playMoveSound\(selectMoveSound\([\s\S]*?\)\);\s*if \(!reviewMode\.value\) \{/);
+  });
+
   it("locks the counterpart select for combined strategy/castle definitions", () => {
     expect(source).toMatch(/v-model="selectedStrategy"[\s\S]*?:disabled="strategySelectLocked"/);
     expect(source).toMatch(/v-model="selectedCastle"[\s\S]*?:disabled="castleSelectLocked"/);
