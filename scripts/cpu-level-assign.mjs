@@ -1,8 +1,9 @@
 // cpu-level-selfplay.mjsの結果から、各レベルの技量(skill)を割り付ける開発用スクリプト。
-// 使い方: node scripts/cpu-level-assign.mjs result.json [--anchor s0.115=17] [--first-step 25] [--top 40]
+// 使い方: node scripts/cpu-level-assign.mjs result.json [--anchor old6000=20] [--curve linear|smooth] [--first-step 35] [--top 40]
 //   基準は結果にある選手名(例: old6000=20)か、技量(例: s0.115=17、測定点の間は補間)で指定する。
 //   s<技量>の選手のレーティングを技量について単調な折れ線にし、最大技量より先は末尾の傾きで1まで延ばす。
-//   レベルごとの目標レーティングは R(L) = 最初の刻み×L + a(e^(bL) - 1 - bL) とし、
+//   --curve linear(既定): Lv0から基準レベルまでと、そこからLv40までを、それぞれ等間隔のレーティングで分ける。
+//   --curve smooth: 目標レーティングを R(L) = 最初の刻み×L + a(e^(bL) - 1 - bL) とし、
 //   Lv0=0、基準レベル=基準のレーティング、Lv40=技量1のレーティングを通るようにa・bを決める。
 //   自己対局では手の選び方のばらつきが減るほど差が大きく出るため、刻みを上位ほど滑らかに広げる。
 import fs from "node:fs";
@@ -59,7 +60,8 @@ function interpolate(curve, rating) {
 const file = process.argv[2];
 if (!file) throw new Error("自動対局の結果JSONを指定してください");
 const { ratings } = JSON.parse(fs.readFileSync(file, "utf8"));
-const [anchorPlayer, anchorLevelText] = option("anchor", "s0.115=17").split("=");
+const [anchorPlayer, anchorLevelText] = option("anchor", "old6000=20").split("=");
+const curveKind = option("curve", "linear");
 const anchorLevel = Number(anchorLevelText);
 const topLevel = Number(option("top", "40"));
 const firstStep = Number(option("first-step", "25"));
@@ -103,7 +105,11 @@ const anchor = ratings.find(({ player }) => player === anchorPlayer);
 if (!anchor && !/^s[\d.]+$/.test(anchorPlayer)) throw new Error(`基準選手${anchorPlayer}が結果にありません`);
 const anchorRating = anchor ? anchor.rating - base.rating : ratingAt(curve, Number(anchorPlayer.slice(1)));
 const topRating = curve.at(-1).rating;
-const target = targetCurve(anchorRating, topRating);
+const target = curveKind === "smooth"
+  ? targetCurve(anchorRating, topRating)
+  : (level) => (level <= anchorLevel
+    ? anchorRating * level / anchorLevel
+    : anchorRating + (topRating - anchorRating) * (level - anchorLevel) / (topLevel - anchorLevel));
 const levels = Array.from({ length: topLevel + 1 }, (_, level) => {
   const rating = target(level);
   return { level, rating: Math.round(rating), skill: Math.round(interpolate(curve, rating) * 1000) / 1000 };
