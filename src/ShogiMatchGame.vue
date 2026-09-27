@@ -859,6 +859,7 @@ const UNDO_GUIDE_TEXT = "もう一度、落ち着いて考えてみよう！";
 
 type MoveSoundTemplates = { [K in MoveSoundKind]: HTMLAudioElement };
 let moveSoundTemplates: MoveSoundTemplates | null = null;
+let cancelDeferredCoachPortraitPreload: (() => void) | undefined;
 
 const props = defineProps({
   mode: { type: String as () => GameMode, default: "cpu" },
@@ -1809,6 +1810,7 @@ function beginMatch() {
   activePlayerColor.value = selectedPlayerColor.value;
   matchStarted.value = true;
   pregameOpen.value = false;
+  scheduleDeferredCoachPortraitPreload();
   restart();
 }
 
@@ -4006,6 +4008,30 @@ function handleGlobalKeydown(event: KeyboardEvent) {
   resignConfirmOpen.value = false;
   analysisMenuOpen.value = false;
 }
+function preloadCoachPortraits(fileNames: string[]) {
+  for (const filename of fileNames) {
+    const portrait = new Image();
+    portrait.src = `${props.assetBaseUrl}/characters/${filename}?v=${COACH_EXPRESSION_ASSET_VERSION}`;
+  }
+}
+function scheduleDeferredCoachPortraitPreload() {
+  if (cancelDeferredCoachPortraitPreload || typeof window === "undefined") return;
+  const fileNames = Object.entries(COACH_EXPRESSION_FILES)
+    .filter(([expression]) => expression !== "neutral")
+    .map(([, filename]) => filename);
+  const load = () => {
+    cancelDeferredCoachPortraitPreload = undefined;
+    preloadCoachPortraits(fileNames);
+  };
+  const requestIdleCallback = window.requestIdleCallback?.bind(window);
+  if (requestIdleCallback) {
+    const idleId = requestIdleCallback(load, { timeout: 2000 });
+    cancelDeferredCoachPortraitPreload = () => window.cancelIdleCallback(idleId);
+  } else {
+    const timeoutId = window.setTimeout(load, 0);
+    cancelDeferredCoachPortraitPreload = () => window.clearTimeout(timeoutId);
+  }
+}
 // 盤以外の欄の構成が変わると盤に使える高さも変わる。
 // 棋譜欄は最新手（検討中は表示中の手）が見えるように追従する。
 // scrollIntoViewは overflow:hidden の祖先まで動かすため、一覧だけをスクロールする。
@@ -4028,6 +4054,8 @@ onBeforeUnmount(() => {
   reviewCpuGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
   cpuTimer = undefined;
+  cancelDeferredCoachPortraitPreload?.();
+  cancelDeferredCoachPortraitPreload = undefined;
   engine?.quit();
   if (typeof window !== "undefined") {
     window.removeEventListener("pagehide", handlePageHide);
@@ -4035,10 +4063,8 @@ onBeforeUnmount(() => {
   }
 });
 onMounted(() => {
-  for (const filename of Object.values(COACH_EXPRESSION_FILES)) {
-    const portrait = new Image();
-    portrait.src = `${props.assetBaseUrl}/characters/${filename}?v=${COACH_EXPRESSION_ASSET_VERSION}`;
-  }
+  preloadCoachPortraits([COACH_EXPRESSION_FILES.neutral]);
+  if (matchStarted.value) scheduleDeferredCoachPortraitPreload();
   ensureMoveSounds();
   window.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("pagehide", handlePageHide);

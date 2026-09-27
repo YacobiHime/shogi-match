@@ -5,7 +5,7 @@ export const COACH_EXPRESSION_FILES = Object.freeze({
 });
 
 // 画像を差し替えた際に、長期キャッシュ済みの旧画像を避けるための識別子。
-export const COACH_EXPRESSION_ASSET_VERSION = '2';
+export const COACH_EXPRESSION_ASSET_VERSION = '3';
 
 // 褒め言葉は「苦しい」「詰めろ」などを含んでも心配顔にしない。
 const PRAISE_PATTERN = /神の一手|好手|詰めろを掛けた|受けきった|駒得|差が縮まって|逆転|粘ってる/;
