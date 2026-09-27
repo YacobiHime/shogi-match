@@ -1834,6 +1834,7 @@ function closeHome() {
   // 「対局画面」は常に対局準備から始める。openPregameが中断保存を破棄する。
   openPregame();
   homeOpen.value = false;
+  void initializeEngine();
 }
 
 function openHome() {
@@ -4076,7 +4077,9 @@ queueMicrotask(() => {
   if (restoredPersistedMatch) {
     emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value, restored: true });
   }
-  initializeEngine();
+  if (restoredPersistedMatch || !homeOpen.value || reviewMode.value) {
+    void initializeEngine();
+  }
 });
 </script>
 
