@@ -1,4 +1,4 @@
-import { openingPlanSteps } from "./opening-guide.mjs";
+import { isStandaloneOpening, openingDefinitionRookStyle, openingPlanSteps } from "./opening-guide.mjs";
 
 const REPERTOIRES = {
   ibisha: { strategyId: "ibisha", castleId: "funagakoi", label: "居飛車＋舟囲い" },
@@ -277,6 +277,73 @@ export function selectCpuOpeningRepertoire({
     id = weightedChoice(BLACK_REPERTOIRE_WEIGHTS, random);
   }
   return { ...REPERTOIRES[id] };
+}
+
+/**
+ * 「おまかせ」で、登録済みの戦法・囲いをランダムに組み合わせる割合。
+ * 低レベルほど定跡どおりの形を作る練習相手にし、高レベルでは主要な作戦を多く選ぶ。
+ */
+export function randomOpeningCombinationRate(skill = 0.5) {
+  const value = Number.isFinite(skill) ? skill : 0.5;
+  return Math.max(0.1, Math.min(1, 1 - value));
+}
+
+// 自分と相手の飛車の方針から、囲い分類の対応戦型を決める。
+function castleContextFor(ownStyle, opponentStyle) {
+  if (!ownStyle || !opponentStyle) return undefined;
+  if (ownStyle === "static") return opponentStyle === "ranging" ? "anti-ranging-static" : "aibisha";
+  return opponentStyle === "static" ? "anti-static-ranging" : "double-ranging";
+}
+
+function stylesCompatible(left, right) {
+  return !left || !right || left === "both" || right === "both" || left === right;
+}
+
+/**
+ * 現在の局面で成立する戦法・囲い(呼び出し側で絞り込んだ定義)から、1局分の作戦をランダムに組む。
+ * 戦法と一体の定義(アヒル囲い・右玉など)は相方と組み合わせない。
+ * 相手の飛車の方針が分かっていれば、その戦型に合う囲いを優先する。
+ * @param {{
+ *   strategies?: { id: string, label: string }[],
+ *   castles?: { id: string, label: string, contexts?: string[] }[],
+ *   opponentRookStyle?: string,
+ *   random?: () => number,
+ * }} [options]
+ * @returns {{ strategyId: string, castleId: string, label: string } | null}
+ */
+export function selectRandomOpeningCombination({
+  strategies = [],
+  castles = [],
+  opponentRookStyle,
+  random = Math.random,
+} = {}) {
+  const standaloneCastles = castles.filter(({ id }) => isStandaloneOpening(id, "castle"));
+  const firstPicks = [
+    ...strategies.map((definition) => ({ kind: "strategy", definition })),
+    ...standaloneCastles.map((definition) => ({ kind: "castle", definition })),
+  ];
+  const first = randomChoice(firstPicks, random);
+  if (!first) return null;
+  if (first.kind === "castle") {
+    return { strategyId: "", castleId: first.definition.id, label: first.definition.label };
+  }
+  const strategy = first.definition;
+  if (isStandaloneOpening(strategy.id, "strategy")) {
+    return { strategyId: strategy.id, castleId: "", label: strategy.label };
+  }
+  const style = openingDefinitionRookStyle(strategy.id, "strategy");
+  const compatible = castles.filter(({ id }) => (
+    !isStandaloneOpening(id, "castle")
+    && stylesCompatible(style, openingDefinitionRookStyle(id, "castle"))
+  ));
+  const context = castleContextFor(style, opponentRookStyle);
+  const fitting = context ? compatible.filter(({ contexts = [] }) => contexts.includes(context)) : [];
+  const castle = randomChoice(fitting.length ? fitting : compatible, random);
+  return {
+    strategyId: strategy.id,
+    castleId: castle?.id ?? "",
+    label: [strategy.label, castle?.label].filter(Boolean).join("＋"),
+  };
 }
 
 export function shouldUseCpuOpening({

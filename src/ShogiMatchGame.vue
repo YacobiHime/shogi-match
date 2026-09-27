@@ -866,7 +866,9 @@ import {
   configuredCpuBishopMove,
   configuredCpuFirstMove,
   cpuMoveMatchesBishopPreference,
+  randomOpeningCombinationRate,
   selectCpuOpeningRepertoire,
+  selectRandomOpeningCombination,
   shouldForceConfiguredCpuOpening,
   shouldUseCpuOpening,
 } from "./core/cpu-opening-repertoire.mjs";
@@ -1990,6 +1992,7 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
     inCheck: isSideToMoveInCheck(currentSfen.value),
     lastMoveWasCapture: Boolean(record.value.current.move?.capturedPieceType),
   })) return undefined;
+  if (!cpuOpeningPlan) cpuOpeningPlan = randomCpuOpeningCombination(cpuMoves, configuredCpuColor, legalMoves);
   if (!cpuOpeningPlan) {
     const selectedPlan = selectCpuOpeningRepertoire({
       configuredStrategy: configuredCpuOpeningStrategy(),
@@ -2038,6 +2041,40 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
     currentSfen: currentSfen.value,
   });
   return planMove ? { usi: planMove.usi, phase: planMove.phase === "castle" ? "castle" as const : "strategy" as const } : undefined;
+}
+
+/**
+ * 「おまかせ」で細かい指定がない場合、登録済みの戦法・囲いから現在の局面で成立するものを組み合わせる。
+ * 低レベルほど高い確率で選び、選ばなかった場合は従来の主要な作戦から選ぶ。
+ */
+function randomCpuOpeningCombination(cpuMoves: string[], color: "black" | "white", legalMoves: string[]) {
+  if (
+    cpuStrategyDetailsOpen.value || cpuStrategy.value !== "random"
+    || cpuBishopPreference.value || cpuTempoPreference.value
+    || (cpuRookPreference.value && cpuRookPreference.value !== "adaptive")
+  ) return null;
+  if (Math.random() >= randomOpeningCombinationRate(strengthPresetFor(searchNodes.value).skill)) return null;
+  const cpuColor = color === "black" ? Color.BLACK : Color.WHITE;
+  const opponentColor = color === "black" ? "white" : "black";
+  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== (color === "black"));
+  const context = {
+    color,
+    playedMoves: cpuMoves,
+    moveHistory,
+    legalMoves,
+    detectedFormations: formationNamesForColor(currentSfen.value, cpuColor),
+    currentSfen: currentSfen.value,
+    rookStyle: inferOpeningRookStyle({ color, playedMoves: cpuMoves, currentSfen: currentSfen.value }),
+  };
+  return selectRandomOpeningCombination({
+    strategies: availableOpeningDefinitions({ ...context, definitions: OPENING_STRATEGIES, kind: "strategy" }),
+    castles: availableOpeningDefinitions({ ...context, definitions: OPENING_CASTLES, kind: "castle" }),
+    opponentRookStyle: inferOpeningRookStyle({
+      color: opponentColor,
+      playedMoves: opponentMoves,
+      currentSfen: currentSfen.value,
+    }),
+  });
 }
 
 function cpuMovesAllowedByBishopSetting() {
@@ -2095,6 +2132,8 @@ function persistMatchState() {
     cpuRookPreference: cpuRookPreference.value,
     cpuTempoPreference: cpuTempoPreference.value,
     cpuStrategyDetailsOpen: cpuStrategyDetailsOpen.value,
+    // おまかせで組んだ作戦をリロード後も引き継ぐ。
+    cpuOpeningPlan,
     coachLevel: coachLevel.value,
     selectedStrategy: selectedStrategy.value,
     selectedCastle: selectedCastle.value,
@@ -2110,6 +2149,16 @@ function persistMatchState() {
     strategyNearCompletionHandled: strategyNearCompletionHandled.value,
     coachAdviceHistory,
   });
+}
+
+function restoredCpuOpeningPlan(value: unknown): typeof cpuOpeningPlan {
+  if (!value || typeof value !== "object") return null;
+  const { strategyId, castleId, label } = value as { [key: string]: unknown };
+  if (typeof strategyId !== "string" || typeof castleId !== "string" || typeof label !== "string") return null;
+  if (strategyId && !OPENING_STRATEGIES.some(({ id }) => id === strategyId)) return null;
+  if (castleId && !OPENING_CASTLES.some(({ id }) => id === castleId)) return null;
+  if (!strategyId && !castleId) return null;
+  return { strategyId, castleId, label: label.slice(0, 80) };
 }
 
 function discardPersistedMatch() {
@@ -2169,6 +2218,7 @@ function restorePersistedMatch(): boolean {
       ? snapshot.cpuTempoPreference
       : "";
     cpuStrategyDetailsOpen.value = snapshot.cpuStrategyDetailsOpen === true;
+    cpuOpeningPlan = restoredCpuOpeningPlan(snapshot.cpuOpeningPlan);
     coachLevel.value = ["off", "encourage", "detailed"].includes(snapshot.coachLevel)
       ? snapshot.coachLevel
       : "detailed";
@@ -3712,8 +3762,10 @@ async function scheduleCpuMove() {
         }
         // 作戦手の評価差許容は、やこび姫補助と同じ戦法・囲いの基準に合わせる。
         // ただし強いCPUほどAI最善を優先するため、探索設定の上限は超えない。
+        // 低レベルほど倍率を大きくし、多少評価が下がっても決めた作戦の形を作り続ける。
         const planScoreLimit = Math.min(
-          openingGuideScoreLossLimit(cpuOpeningPlan?.strategyId ?? "", openingMovePhase),
+          openingGuideScoreLossLimit(cpuOpeningPlan?.strategyId ?? "", openingMovePhase)
+            * strength.openingPlanScoreScale,
           strength.maxScoreLoss,
         );
         const safeOpening = allowedOpeningMove && !forceConfiguredOpening
@@ -4096,8 +4148,10 @@ watch([
   cpuTempoPreference,
   cpuStrategyDetailsOpen,
 ], () => {
+  // 復元中は保存済みの作戦を消さない。復元処理の中で判定できるよう同期で実行する。
+  if (restoringSavedMatch) return;
   cpuOpeningPlan = null;
-});
+}, { flush: "sync" });
 watch([
   activePlayerColor,
   boardFlipOverride,
