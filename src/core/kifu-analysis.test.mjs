@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { GRAPH_MATE_VALUE } from './evaluation-graph-selection.mjs';
 import {
   classifyAnalyzedMove,
   formatAnalysisScore,
@@ -16,11 +17,12 @@ describe('棋譜解析の評価値', () => {
       .toEqual({ type: 'mate', value: -7 });
   });
 
-  test('グラフ表示を±6000へ収め、詰みを上下端へ置く', () => {
-    expect(scoreToGraphValue({ type: 'cp', value: 7200 })).toBe(6000);
-    expect(scoreToGraphValue({ type: 'cp', value: -6800 })).toBe(-6000);
-    expect(scoreToGraphValue({ type: 'mate', value: 5 })).toBe(6000);
-    expect(scoreToGraphValue({ type: 'mate', value: -3 })).toBe(-6000);
+  test('グラフ値は評価値を丸めず、詰みは上下端を表す値にする', () => {
+    expect(scoreToGraphValue({ type: 'cp', value: 7200 })).toBe(7200);
+    expect(scoreToGraphValue({ type: 'cp', value: -6800 })).toBe(-6800);
+    expect(scoreToGraphValue({ type: 'mate', value: 5 })).toBe(GRAPH_MATE_VALUE);
+    expect(scoreToGraphValue({ type: 'mate', value: -3 })).toBe(-GRAPH_MATE_VALUE);
+    expect(scoreToGraphValue({ type: 'mate', value: 0 })).toBe(0);
   });
 
   test('評価値と詰みを日本語で表示する', () => {

@@ -64,7 +64,12 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { graphScoreRatio, nearestPlyFromPlotPoint } from "./core/evaluation-graph-selection.mjs";
+import {
+  graphAxisLimit,
+  graphScoreRatio,
+  graphTickValues,
+  nearestPlyFromPlotPoint,
+} from "./core/evaluation-graph-selection.mjs";
 
 type AnalysisPoint = {
   ply: number;
@@ -87,13 +92,17 @@ const emit = defineEmits<{ select: [ply: number] }>();
 const hitArea = ref<SVGRectElement | null>(null);
 const svgElement = ref<SVGSVGElement | null>(null);
 
+// 縦軸の上限は棋譜の評価値に合わせて広げる。詰みは端に置く。
+const axisLimit = computed(() => graphAxisLimit(props.points.map(({ graphValue }) => graphValue)));
 // 描画座標を表示中の実寸(CSS px)に合わせ、欄の高さを余白にせず使い切る。文字や記号も伸び縮みしない。
 const size = ref({ width: 800, height: 220 });
-const PLOT_MARGIN = { left: 46, right: 10, top: 8, bottom: 22 };
+const PLOT_MARGIN = { right: 10, top: 8, bottom: 22 };
+// 左の余白は、最も長い目盛り(上限。例: "-10000")が欠けない幅にする。12pxの数字1文字を約7pxとみなす。
+const plotLeft = computed(() => Math.max(38, 12 + 7 * `-${axisLimit.value}`.length));
 const plot = computed(() => ({
-  left: PLOT_MARGIN.left,
+  left: plotLeft.value,
   top: PLOT_MARGIN.top,
-  width: Math.max(1, size.value.width - PLOT_MARGIN.left - PLOT_MARGIN.right),
+  width: Math.max(1, size.value.width - plotLeft.value - PLOT_MARGIN.right),
   height: Math.max(1, size.value.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom),
 }));
 let resizeObserver: ResizeObserver | undefined;
@@ -114,15 +123,17 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 
 const maxPly = computed(() => Math.max(1, props.totalPly));
 const plyX = (ply: number) => plot.value.left + (Math.max(0, Math.min(maxPly.value, ply)) / maxPly.value) * plot.value.width;
-const scoreY = (score: number) => plot.value.top + ((1 - graphScoreRatio(score)) / 2) * plot.value.height;
+const scoreY = (score: number) => (
+  plot.value.top + ((1 - graphScoreRatio(score, axisLimit.value)) / 2) * plot.value.height
+);
 const linePoints = computed(() => props.points.map((point) => `${plyX(point.ply)},${scoreY(point.graphValue)}`).join(" "));
 const selectedPoint = computed(() => props.points.find((point) => point.ply === props.currentPly));
 const annotatedPoints = computed(() => props.points.filter((point) => point.annotation));
-// 縦軸は勝率に近い曲線。目盛りの文字が重なる低い欄では、内側の目盛りから省く。
+// 目盛りは0と上限を優先し、文字が重なる低い欄では内側の目盛りから省く。
 const Y_TICK_MIN_GAP = 16;
 const yTicks = computed(() => {
   const ticks: { value: number; y: number; label: string }[] = [];
-  for (const value of [0, 1000, -1000, 3000, -3000, 500, -500]) {
+  for (const value of graphTickValues(axisLimit.value)) {
     const y = scoreY(value);
     if (ticks.some((tick) => Math.abs(tick.y - y) < Y_TICK_MIN_GAP)) continue;
     ticks.push({ value, y, label: value === 0 ? "0" : `${value > 0 ? "+" : ""}${value}` });

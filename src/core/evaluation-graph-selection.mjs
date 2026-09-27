@@ -1,14 +1,49 @@
-/** 評価値を勝率に近い曲線へ変換する尺度。600は評価値と勝率の対応でよく使われる値。 */
-export const GRAPH_WIN_RATE_SCALE = 600;
+/** 詰みを表すグラフ値。評価値の最大値に関係なく、縦軸の端に置く。 */
+export const GRAPH_MATE_VALUE = 100000;
+/** 互角に近い棋譜でも変化が見えるよう、縦軸の上限はこれより狭めない。 */
+export const GRAPH_MIN_AXIS_LIMIT = 1000;
+/** この値付近までは評価値に比例させ、それより大きい差はゆるやかに縮める。 */
+export const GRAPH_SOFTNESS = 800;
+const NICE_AXIS_STEPS = [1, 1.5, 2, 3, 4, 5, 6, 8, 10];
+
+/** 詰みのグラフ値か。 */
+export function isMateGraphValue(value) {
+  return Math.abs(value) >= GRAPH_MATE_VALUE;
+}
+
+/**
+ * 棋譜の評価値に合わせた縦軸の上限を返す。固定の上限は設けず、最大の評価値をキリの良い値へ切り上げる。
+ * 詰みは上限の計算に含めない。
+ */
+export function graphAxisLimit(values = []) {
+  const largest = values
+    .filter((value) => Number.isFinite(value) && !isMateGraphValue(value))
+    .reduce((max, value) => Math.max(max, Math.abs(value)), 0);
+  if (largest <= GRAPH_MIN_AXIS_LIMIT) return GRAPH_MIN_AXIS_LIMIT;
+  const magnitude = 10 ** Math.floor(Math.log10(largest));
+  const step = NICE_AXIS_STEPS.find((candidate) => candidate * magnitude >= largest) ?? 10;
+  return step * magnitude;
+}
 
 /**
  * 評価値を、グラフの縦位置に使う-1〜1の値へ変換する。
- * 実戦で多い±2000程度の差を広く、大差の局面を端へ寄せて表示する。
+ * 上限はgraphAxisLimitで棋譜ごとに決め、0付近は比例、大差ほどゆるやかに縮める(asinh)。
+ * 上限を超える値と詰みは端に置く。
  */
-export function graphScoreRatio(score, scale = GRAPH_WIN_RATE_SCALE) {
+export function graphScoreRatio(score, limit = GRAPH_MIN_AXIS_LIMIT, softness = GRAPH_SOFTNESS) {
   if (!Number.isFinite(score)) throw new Error('評価値は有限の数値にしてください');
-  if (!(scale > 0)) throw new Error('尺度は0より大きくしてください');
-  return Math.tanh(score / (scale * 2));
+  if (!(limit > 0) || !(softness > 0)) throw new Error('縦軸の上限と尺度は0より大きくしてください');
+  const clamped = Math.max(-limit, Math.min(limit, score));
+  return Math.asinh(clamped / softness) / Math.asinh(limit / softness);
+}
+
+/**
+ * 縦軸の目盛りの候補を、表示を優先する順に返す。0と上限を先に置き、画面上で重なる候補は呼び出し側で省く。
+ */
+export function graphTickValues(limit) {
+  const inner = [1000, 3000, 500, 2000, 5000, 10000, 20000, 50000]
+    .filter((value) => value < limit);
+  return [0, limit, -limit, ...inner.flatMap((value) => [value, -value])];
 }
 
 /**
