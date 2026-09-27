@@ -53,6 +53,19 @@ function forcedMatePly(
   return longest;
 }
 
+/** 現在の手番側に、連続王手による強制詰みがあるかを調べる。 */
+export function findForcedMate(sfen: string, maxPly = 7, nodeLimit = 60000) {
+  const position = Position.newBySFEN(sfen);
+  if (!position) return { isMate: false, matePly: 0, exhausted: false };
+  const budget = { nodes: 0, limit: nodeLimit };
+  const result = forcedMatePly(position, position.color, maxPly, budget);
+  return {
+    isMate: typeof result === "number" && result > 0,
+    matePly: typeof result === "number" ? result : 0,
+    exhausted: result === undefined,
+  };
+}
+
 /**
  * 現在側がパスしたと仮定し、相手に連続王手による強制詰みがあるかを調べる。
  * 現在王手中の局面は詰めろではないため対象外とする。

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { detectStrictMateThreat, findMateInOne } from "./mate-threat";
+import { detectStrictMateThreat, findForcedMate, findMateInOne } from "./mate-threat";
 
 describe("1手詰め判定", () => {
   test("現在の手番側に金打ちの1手詰めがあれば指し手を返す", () => {
@@ -32,5 +32,17 @@ describe("厳密な詰めろ判定", () => {
       10000,
     );
     expect(result.isThreat).toBe(false);
+  });
+});
+
+describe("手番側の強制詰み判定", () => {
+  test("連続王手で詰む局面を検出する", () => {
+    expect(findForcedMate("4k4/9/9/9/9/6b2/9/3P1P3/3PKP3 w g 1", 5, 10000))
+      .toMatchObject({ isMate: true, matePly: 1, exhausted: false });
+  });
+
+  test("詰めろを受けた後のように詰みが無ければ偽を返す", () => {
+    expect(findForcedMate("4k4/9/9/9/9/9/9/3P1P3/3PKP3 w g 1", 5, 10000))
+      .toMatchObject({ isMate: false, exhausted: false });
   });
 });

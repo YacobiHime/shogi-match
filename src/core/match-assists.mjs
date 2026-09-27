@@ -101,6 +101,23 @@ export function formatHintMove(usiMove, sfen) {
   return formatMoveInPosition(usiMove, positionFromSfen(sfen));
 }
 
+const SPOKEN_PIECE_NAMES = {
+  FU: '歩', KY: '香車', KE: '桂馬', GI: '銀', KI: '金', KA: '角', HI: '飛車', OU: '玉',
+  TO: 'と金', NY: '成香', NK: '成桂', NG: '成銀', UM: '馬', RY: '龍',
+};
+
+/** 閃きで読み上げる「5三飛車成」のような、駒名を略さない表記にする。 */
+export function formatSpokenMove(usiMove, sfen) {
+  const drop = usiMove.match(/^([PLNSGBR])\*([1-9][a-i])$/);
+  if (drop) return `${formatDestination(drop[2])}${SPOKEN_PIECE_NAMES[DROP_KINDS[drop[1]]]}打`;
+  const move = usiMove.match(/^([1-9][a-i])([1-9][a-i])(\+)?$/);
+  if (!move) return formatHintMove(usiMove, sfen);
+  const piece = positionFromSfen(sfen).get(Number(move[1][0]), move[1].charCodeAt(1) - 96);
+  if (!piece) throw new Error(`ヒントの移動元に駒がありません: ${move[1]}`);
+  const name = SPOKEN_PIECE_NAMES[piece.kind] ?? kindToString(piece.kind);
+  return `${formatDestination(move[2])}${name}${move[3] ? '成' : ''}`;
+}
+
 /** PVを局面へ順に適用しながら、日本語の読み筋へ変換する。 */
 export function formatHintPrincipalVariation(usiMoves, sfen, limit = 6) {
   if (!Array.isArray(usiMoves) || !Number.isInteger(limit) || limit < 1) return '';
@@ -187,6 +204,22 @@ export function getOpeningGuideSafetySearchSettings(mobile = false) {
     : {
         nodes: 8000, maxTimeMs: 400, multiPv: 4,
         forcedNodes: 4000, forcedMaxTimeMs: 200,
+      };
+}
+
+/**
+ * 好手・神の一手を判定する手番開始時の解析。浅い読みで見えない最善手かを比べるため、
+ * 極短時間の浅い探索と、次善手との差を測る短時間探索を1回ずつ行う。
+ */
+export function getPraiseBaselineSearchSettings(mobile = false) {
+  return mobile
+    ? {
+        shallow: { nodes: 600, maxTimeMs: 100, multiPv: 3 },
+        deep: { nodes: 10000, maxTimeMs: 450, multiPv: 2 },
+      }
+    : {
+        shallow: { nodes: 1200, maxTimeMs: 150, multiPv: 3 },
+        deep: { nodes: 20000, maxTimeMs: 700, multiPv: 2 },
       };
 }
 

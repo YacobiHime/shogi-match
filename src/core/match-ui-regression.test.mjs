@@ -32,6 +32,29 @@ describe("match screen regressions", () => {
     expect(source).not.toMatch(/手合割・対戦相手/);
   });
 
+  it("keeps the menu above the board name plates", () => {
+    const shell = source.split(".shogi-game__board-shell {")[1]?.split("}")[0] ?? "";
+    expect(shell).toMatch(/isolation:\s*isolate;/);
+  });
+
+  it("puts the hands above and below the board on phone-shaped screens", () => {
+    expect(source).toMatch(/const PHONE_ASPECT_RATIO = 1\.5;/);
+    expect(source).toMatch(/height \/ width >= PHONE_ASPECT_RATIO\s*\?\s*\{ name: "portrait" as const/);
+    expect(source.match(/stackPreferredFrame\(/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("praises good moves only after mistakes are ruled out", () => {
+    expect(source).toMatch(/const mistake = moveFeedback && \/move-\(blunder\|mistake\)\/\.test\(moveFeedback\.key\);/);
+    expect(source).toMatch(/if \(!mistake\) moveFeedback = praise;/);
+    // 好手判定の解析はCPU着手を描画した後、定跡補助の後ろへ積む。
+    expect(source).toMatch(/scheduleOpeningFollowupCandidates\(\);\s*schedulePlayerMoveBaseline\(\);\s*schedulePlayerIdleAdvice\(\);/);
+    expect(source).toMatch(/<ruby v-if="segment\.ruby">/);
+  });
+
+  it("announces the hint like a mentor naming the best move", () => {
+    expect(source).toMatch(/hintText\.value = `最善手は\$\{formatSpokenMove\(moves\[0\]\.move, currentSfen\.value\)\}だよ！`;/);
+  });
+
   it("draws detour arrows from opening-compatible candidates", () => {
     expect(source).toMatch(/openingDetourArrowCandidates\(\s*planned\.usi,\s*compatibleCandidates,/);
   });

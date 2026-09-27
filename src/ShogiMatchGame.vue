@@ -495,7 +495,12 @@
             />
           </svg>
         </span>
-        <span class="shogi-game__dialogue-text">{{ hintText || guideText }}</span>
+        <span class="shogi-game__dialogue-text"><template
+          v-for="(segment, index) in dialogueSegments"
+          :key="index"
+        ><ruby v-if="segment.ruby">{{ segment.text }}<rt>{{ segment.ruby }}</rt></ruby><template
+          v-else
+        >{{ segment.text }}</template></template></span>
       </div>
     </section>
 
@@ -705,7 +710,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
-import { Color, PieceType, Position, Record, Square, reverseColor } from "tsshogi";
+import { Color, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
@@ -750,20 +755,31 @@ import {
   COACH_EXPRESSION_FILES,
   coachExpressionFilename,
   coachExpressionForText,
+  coachTextSegments,
 } from "./core/coach-expression.mjs";
+import {
+  advanceTurningPoints,
+  classifyMoveQuality,
+  createTurningPointState,
+  getMovePraise,
+  materialGain,
+  rewindTurningPointState,
+} from "./core/move-praise.mjs";
 import { getIdleCoachAdvice, IDLE_COACH_DELAY_MS } from "./core/idle-coach-advice.mjs";
 import {
   formatHintMove,
+  formatSpokenMove,
   getHintMoves,
   getHintSearchSettings,
   getIdleCoachSearchSettings,
   getOpeningFollowupSearchSettings,
   getOpeningGuideSafetySearchSettings,
+  getPraiseBaselineSearchSettings,
   hintMoveAssessment,
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
 import { chooseCpuMove, chooseNaturalMove } from "./core/cpu-move-choice.mjs";
-import { detectStrictMateThreat, findMateInOne } from "./core/mate-threat";
+import { detectStrictMateThreat, findForcedMate, findMateInOne } from "./core/mate-threat";
 import {
   classifyAnalyzedMove,
   formatAnalysisScore,
@@ -939,6 +955,7 @@ const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const activeCoachText = computed(() => hintText.value || guideText.value);
 const coachExpression = computed(() => coachExpressionForText(activeCoachText.value));
+const dialogueSegments = computed(() => coachTextSegments(activeCoachText.value));
 const coachPortraitUrl = computed(() => (
   `${props.assetBaseUrl}/characters/${coachExpressionFilename(activeCoachText.value)}?v=${COACH_EXPRESSION_ASSET_VERSION}`
 ));
@@ -1001,9 +1018,24 @@ let playerMoveHintAssessment: {
 } | undefined;
 let playerMoveFlair: {
   historyLength: number;
+  usi: string;
   wasPromotion: boolean;
   wasEnemyCampDrop: boolean;
+  fromHint: boolean;
+  trivial: boolean;
+  materialGain: number;
 } | undefined;
+type PraiseCandidate = { rank: number; move: string; score?: EngineEvaluation };
+// 好手・詰めろ受けの判定用に、プレイヤー手番開始時の解析を1局面分だけ保持する。
+let playerMoveBaseline: {
+  historyLength: number;
+  shallow: PraiseCandidate[];
+  deep: PraiseCandidate[];
+  mateThreat: boolean;
+} | undefined;
+let playerMoveBaselineGeneration = 0;
+let turningPointState = createTurningPointState();
+let lastCpuCapture: { historyLength: number; pieceType: string } | undefined;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let matchGeneration = 0;
 let cpuSearchRunning = false;
@@ -1073,16 +1105,32 @@ const STACK_ANALYSIS_RESERVED_EM = 26;
 const SIDE_COLUMN_MIN_EM = 17;
 const WIDE_COLUMNS_MIN_EM = 33;
 
-function fitBoardFrame(names: BoardFrameName[], width: number, height: number) {
+// スマホ程度に縦長な画面では、駒台を盤の上下に置いて横幅を盤に回す。
+const PHONE_ASPECT_RATIO = 1.5;
+const PHONE_PORTRAIT_TOLERANCE = 0.8;
+
+function fitBoardFrame(
+  names: BoardFrameName[],
+  width: number,
+  height: number,
+  preferred: { name: BoardFrameName; tolerance: number } = { name: "compact", tolerance: 0.9 },
+) {
   const fits = names.map((name) => {
     const frame = BOARD_FRAMES[name];
     const scale = Math.max(0, Math.min(width / frame.width, height / frame.height));
     return { name, scale, width: frame.width * scale, height: frame.height * scale };
   });
   const best = fits.reduce((a, b) => (b.scale > a.scale ? b : a));
-  // 盤の大きさがほぼ同じなら、駒台が場所を取らないcompactを優先する。
-  const compact = fits.find(({ name }) => name === "compact");
-  return compact && compact.scale >= best.scale * 0.9 ? compact : best;
+  // 盤の大きさがほぼ同じなら、画面に合う駒台配置を優先する。
+  const favored = fits.find(({ name }) => name === preferred.name);
+  return favored && favored.scale >= best.scale * preferred.tolerance ? favored : best;
+}
+
+/** 縦積みで優先する駒台配置。スマホの縦長画面では上下、それ以外は駒台の小さいcompact。 */
+function stackPreferredFrame(width: number, height: number) {
+  return height / width >= PHONE_ASPECT_RATIO
+    ? { name: "portrait" as const, tolerance: PHONE_PORTRAIT_TOLERANCE }
+    : { name: "compact" as const, tolerance: 0.9 };
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -1113,6 +1161,7 @@ function updateUiLayout() {
     ["portrait", "compact", "standard"],
     width - stackPad * 2,
     height - stackPad * 2 - stackFont * (analysis ? STACK_ANALYSIS_RESERVED_EM : STACK_RESERVED_EM),
+    stackPreferredFrame(width, height),
   );
 
   if (sideBoard.scale > stackBoard.scale) {
@@ -1138,8 +1187,14 @@ function updateStackBoardFrame() {
   const shell = boardShell.value;
   if (uiLayout.value !== "stack" || !shell) return;
   const { clientWidth, clientHeight } = shell;
-  if (!clientWidth || !clientHeight) return;
-  boardLayout.value = fitBoardFrame(["portrait", "compact", "standard"], clientWidth, clientHeight).name;
+  const root = gameRoot.value;
+  if (!clientWidth || !clientHeight || !root) return;
+  boardLayout.value = fitBoardFrame(
+    ["portrait", "compact", "standard"],
+    clientWidth,
+    clientHeight,
+    stackPreferredFrame(root.clientWidth, root.clientHeight),
+  ).name;
 }
 
 const kifuEntries = computed(() => {
@@ -2703,6 +2758,117 @@ function scheduleDedicatedCoachAdvice(
     .catch(() => undefined);
 }
 
+/**
+ * 好手・神の一手・詰めろ受けを判定するため、プレイヤー手番の開始時に短時間だけ解析する。
+ * CPU着手の描画後に、定跡安全確認の後ろへ直列で積む。
+ */
+function schedulePlayerMoveBaseline() {
+  const generation = ++playerMoveBaselineGeneration;
+  playerMoveBaseline = undefined;
+  if (
+    !engine || !engineReady.value || !active.value || reviewMode.value
+    || normalizedMode.value !== "cpu" || coachLevel.value !== "detailed"
+    || record.value.position.color !== humanColor.value
+  ) return;
+  const historyLength = moveHistory.length;
+  const stale = () => (
+    generation !== playerMoveBaselineGeneration || !active.value || reviewMode.value
+    || moveHistory.length !== historyLength || record.value.position.color !== humanColor.value
+  );
+  dedicatedCoachQueue = dedicatedCoachQueue
+    .catch(() => undefined)
+    .then(async () => {
+      if (stale()) return;
+      const settings = getPraiseBaselineSearchSettings(
+        props.mobile || boardLayout.value === "portrait",
+      );
+      const shallow = await analyzeCoachPosition(
+        settings.shallow.nodes,
+        settings.shallow.maxTimeMs,
+        settings.shallow.multiPv,
+      );
+      if (stale()) return;
+      const deep = await analyzeCoachPosition(
+        settings.deep.nodes,
+        settings.deep.maxTimeMs,
+        settings.deep.multiPv,
+      );
+      if (stale()) return;
+      const sfen = currentSfen.value;
+      const mateThreat = moveHistory.length >= 20 && !isSideToMoveInCheck(sfen)
+        ? detectStrictMateThreat(sfen, 7, coachSearchBudget().threatNodes)
+        : null;
+      if (stale()) return;
+      const pick = (candidates: typeof shallow) => candidates.map(({ rank, move, score }) => ({
+        rank,
+        move,
+        score: score as EngineEvaluation | undefined,
+      }));
+      playerMoveBaseline = {
+        historyLength,
+        shallow: pick(shallow),
+        deep: pick(deep),
+        mateThreat: Boolean(mateThreat?.isThreat && !mateThreat.exhausted),
+      };
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      engine?.applyStrengthOptions({ multiPv: 1 });
+    });
+}
+
+/** 直前のプレイヤー着手について、好手・詰めろ・駒得・形勢の転換点を判定する。 */
+function playerMovePraise(options: {
+  historyLength: number;
+  flair?: NonNullable<typeof playerMoveFlair>;
+  beforeScore?: EngineEvaluation;
+  afterScore?: EngineEvaluation;
+  fallback: { key: string; text: string } | null;
+}) {
+  const { historyLength, flair, beforeScore, afterScore, fallback } = options;
+  const turning = advanceTurningPoints(turningPointState, {
+    ply: historyLength,
+    afterScore,
+    beforeScore,
+  });
+  turningPointState = turning.state;
+  if (coachLevel.value === "off") return null;
+  const baseline = playerMoveBaseline?.historyLength === historyLength - 1
+    ? playerMoveBaseline
+    : undefined;
+  playerMoveBaseline = undefined;
+  const detailed = coachLevel.value === "detailed";
+  const quality = detailed && flair && baseline && !flair.fromHint && !flair.trivial
+    ? classifyMoveQuality({
+        move: flair.usi,
+        deepCandidates: baseline.deep,
+        shallowCandidates: baseline.shallow,
+      })
+    : null;
+  const budget = coachSearchBudget();
+  const sfen = currentSfen.value;
+  // 着手後は相手の手番。相手に詰みが無くなっていれば詰めろを受けきっている。
+  const defendedMateThreat = Boolean(detailed && baseline?.mateThreat && (() => {
+    const mate = findForcedMate(sfen, 7, budget.threatNodes);
+    return !mate.isMate && !mate.exhausted;
+  })());
+  const gaveMateThreat = Boolean(detailed && !defendedMateThreat && historyLength >= 20 && (() => {
+    const threat = detectStrictMateThreat(sfen, 7, budget.threatNodes);
+    return threat.isThreat && !threat.exhausted;
+  })());
+  return getMovePraise({
+    level: coachLevel.value,
+    beforeScore,
+    afterScore,
+    quality,
+    gaveMateThreat,
+    defendedMateThreat,
+    materialGain: flair?.materialGain ?? 0,
+    turningAdvice: turning.advice,
+    fallback,
+  });
+}
+
 function cancelPlayerIdleAdvice() {
   idleCoachGeneration += 1;
   if (idleCoachTimer) {
@@ -2739,6 +2905,7 @@ function schedulePostCpuAssists() {
       }
       scheduleOpeningGuideSafety();
       scheduleOpeningFollowupCandidates();
+      schedulePlayerMoveBaseline();
       schedulePlayerIdleAdvice();
     }, 0);
   });
@@ -3005,6 +3172,9 @@ function applyMove(usi: string, actor: "player" | "cpu") {
       })
     : null;
   const movedWhileInCheck = castleDistanceBefore ? isSideToMoveInCheck(currentSfen.value) : false;
+  const legalMoveCountBefore = actor === "player" && !reviewMode.value
+    ? enumerateLegalMoves(record.value.position.clone()).length
+    : 0;
   const move = active.value ? record.value.position.createMoveByUSI(usi) : null;
   if (!move || !record.value.append(move)) return false;
   syncPosition(usi);
@@ -3026,12 +3196,36 @@ function applyMove(usi: string, actor: "player" | "cpu") {
       }
     }
   }
+  if (actor === "cpu") {
+    lastCpuCapture = move.capturedPieceType
+      ? { historyLength: moveHistory.length, pieceType: move.capturedPieceType }
+      : undefined;
+  }
   if (actor === "player") {
     const enemyCamp = move.color === Color.BLACK ? move.to.rank <= 3 : move.to.rank >= 7;
+    const previousMove = moveHistory.at(-2) ?? "";
+    // USIの3・4文字目が移動先（駒打ちも同じ位置）。
+    const recapture = Boolean(move.capturedPieceType) && previousMove.slice(2, 4) === move.to.usi;
+    const destinationAttacked = Boolean(move.capturedPieceType) && enumerateLegalMoves(record.value.position.clone())
+      .some(({ to }) => to.usi === move.to.usi);
     playerMoveFlair = {
       historyLength: moveHistory.length,
+      usi,
       wasPromotion: move.promote,
       wasEnemyCampDrop: usi.includes("*") && enemyCamp,
+      fromHint: Boolean(reusedHint),
+      // 取り返しや合法手がほぼ無い局面の最善手は、褒めるほどの選択ではない。
+      trivial: recapture || (legalMoveCountBefore > 0 && legalMoveCountBefore <= 2),
+      materialGain: move.capturedPieceType
+        ? materialGain({
+            capturedPieceType: move.capturedPieceType,
+            moverPieceType: move.promote ? promotedPieceType(move.pieceType) : move.pieceType,
+            destinationAttacked,
+            opponentPreviousCapture: lastCpuCapture?.historyLength === moveHistory.length - 1
+              ? lastCpuCapture.pieceType
+              : undefined,
+          })
+        : 0,
     };
     // 囲いの段階は上の距離判定で数え済みなので、ここでは戦法の寄り道だけを数える。
     if (!castleDistanceBefore && followedOpeningDecision?.source === "ai") {
@@ -3108,7 +3302,7 @@ async function showHint() {
     hintCandidates.value = moves.map(({ move, score }) => ({
       usi: move, score: hintScoreForArrow(score),
     }));
-    hintText.value = `おすすめは ${formatHintMove(moves[0].move, currentSfen.value)} だよ！`;
+    hintText.value = `最善手は${formatSpokenMove(moves[0].move, currentSfen.value)}だよ！`;
     if (!reviewMode.value) hintsRemaining.value -= 1;
   } catch (error) {
     hintText.value = `ヒントを出せませんでした: ${error instanceof Error ? error.message : String(error)}`;
@@ -3157,6 +3351,10 @@ function undoTurn() {
   latestHintAnalysis = undefined;
   playerMoveHintAssessment = undefined;
   playerMoveFlair = undefined;
+  playerMoveBaseline = undefined;
+  playerMoveBaselineGeneration += 1;
+  lastCpuCapture = undefined;
+  turningPointState = rewindTurningPointState(turningPointState, moveHistory.length);
   hintCandidates.value = [];
   resetOpeningFollowup();
   resetOpeningGuideSafety();
@@ -3170,6 +3368,7 @@ function undoTurn() {
     scheduleReviewCpuMove();
   } else {
     scheduleOpeningGuideSafety();
+    schedulePlayerMoveBaseline();
     schedulePlayerIdleAdvice();
     persistMatchState();
   }
@@ -3436,18 +3635,29 @@ async function scheduleCpuMove() {
         if (cpuSearchGeneration === generation) cpuSearchRunning = false;
         if (generation !== matchGeneration) return;
         const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
+        // 閃き候補を指した場合は、深さの違う再探索と混ぜず同じ探索内で比較する。
+        const playerAfterScore = reusedHintAssessment?.afterScore ?? scoreForPlayer(
+          bestCpuScore,
+          record.value.position.color,
+          humanColor.value,
+        );
         moveFeedback = getMoveFeedback({
           level: coachLevel.value,
           beforeScore: comparableBeforeScore,
-        // 閃き候補を指した場合は、深さの違う再探索と混ぜず同じ探索内で比較する。
-          afterScore: reusedHintAssessment?.afterScore ?? scoreForPlayer(
-            bestCpuScore,
-            record.value.position.color,
-            humanColor.value,
-          ),
+          afterScore: playerAfterScore,
           wasPromotion: moveFlair?.wasPromotion,
           wasEnemyCampDrop: moveFlair?.wasEnemyCampDrop,
         });
+        // 悪手の指摘を最優先し、それ以外では好手や形勢の転換点を褒める。
+        const mistake = moveFeedback && /move-(blunder|mistake)/.test(moveFeedback.key);
+        const praise = playerMovePraise({
+          historyLength: playerMoveHistoryLength,
+          flair: moveFlair,
+          beforeScore: comparableBeforeScore,
+          afterScore: playerAfterScore,
+          fallback: moveFeedback,
+        });
+        if (!mistake) moveFeedback = praise;
       // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
       // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
         if (moveFeedback) {
@@ -3792,6 +4002,10 @@ function restart() {
   latestHintAnalysis = undefined;
   playerMoveHintAssessment = undefined;
   playerMoveFlair = undefined;
+  playerMoveBaseline = undefined;
+  playerMoveBaselineGeneration += 1;
+  lastCpuCapture = undefined;
+  turningPointState = createTurningPointState();
   cpuOpeningPlan = null;
   positionAnalysisCache.clear();
   moveHistory = [];
@@ -4474,6 +4688,8 @@ queueMicrotask(() => {
 /* ===== 盤 ===== */
 .shogi-game__board-shell {
   position: relative;
+  /* 盤内の名前札・時計（z-index 30）が、見出しから開くメニューより手前に出ないようにする。 */
+  isolation: isolate;
   grid-area: board;
   width: 100%;
   height: 100%;
@@ -4539,6 +4755,10 @@ queueMicrotask(() => {
 .shogi-game__dialogue-text {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.shogi-game__dialogue-text rt {
+  font-size: 0.55em;
+  color: var(--muted);
 }
 .shogi-game__assist-actions {
   display: flex;

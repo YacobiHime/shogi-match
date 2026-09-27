@@ -5,6 +5,8 @@ export function coachAdvicePriority(advice) {
   if (/forced-mate|king-in-check|mate-danger|mate-risk|mate-win/.test(key)) return 100;
   if (/move-blunder|move-mistake/.test(key)) return 90;
   if (/candidate-evaluation-cliff/.test(key)) return 70;
+  // 直前の着手への褒め言葉は、CPU着手後の通常助言に上書きされないようにする。
+  if (/^praise-/.test(key)) return 60;
   if (/strategy-|castle-/.test(key)) return 40;
   return 20;
 }
