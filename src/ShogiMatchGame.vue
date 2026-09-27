@@ -787,6 +787,7 @@ import {
   parseMateScore,
 } from "./core/engine-mate-check.mjs";
 import { chooseCpuMove, chooseNaturalMove } from "./core/cpu-move-choice.mjs";
+import { createAssistSearchControl } from "./core/assist-search-control.mjs";
 import { detectStrictMateThreat, findMateInOne } from "./core/mate-threat";
 import {
   classifyAnalyzedMove,
@@ -1066,6 +1067,7 @@ let openingFollowupLoading = false;
 let openingGuideSafetyGeneration = 0;
 let cpuOpeningPlan: { strategyId: string; castleId: string; label: string } | null = null;
 const positionAnalysisCache = createPositionAnalysisCache();
+const assistSearchControl = createAssistSearchControl();
 let restoringSavedMatch = false;
 
 function browserStorage(): Storage | null {
@@ -2253,7 +2255,10 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
   if (cached) return cached;
   engine.setPosition(positionKey);
   engine.applyStrengthOptions({ multiPv });
-  const analysis = await engine.go({ nodes, maxTimeMs });
+  const { value: analysis, interrupted } = await assistSearchControl.run(
+    () => engine!.go({ nodes, maxTimeMs }),
+  );
+  if (interrupted) return [];
   positionAnalysisCache.set(positionKey, analysis.candidates, { nodes, multiPv });
   return analysis.candidates;
 }
@@ -2401,11 +2406,14 @@ function scheduleOpeningGuideSafety() {
       if (planned && !plannedOptions.some(({ usi }) => candidates.some(({ move }) => move === usi))) {
         engine!.setPosition(currentEnginePosition());
         engine!.applyStrengthOptions({ multiPv: 1 });
-        const forced = await engine!.go({
-          nodes: settings.forcedNodes,
-          maxTimeMs: settings.forcedMaxTimeMs,
-          searchMoves: [planned.usi],
-        });
+        const { value: forced, interrupted } = await assistSearchControl.run(
+          () => engine!.go({
+            nodes: settings.forcedNodes,
+            maxTimeMs: settings.forcedMaxTimeMs,
+            searchMoves: [planned.usi],
+          }),
+        );
+        if (interrupted) return;
         const forcedCandidate = forced.candidates.find(({ rank }) => rank === 1);
         if (forcedCandidate) {
           candidates = [
@@ -2598,7 +2606,10 @@ async function engineMateCheck(
   try {
     engine.setPosition(sfen);
     engine.applyStrengthOptions({ multiPv: 1 });
-    const search = await engine.go({ nodes: options.nodes, maxTimeMs: options.maxTimeMs });
+    const { value: search, interrupted } = await assistSearchControl.run(
+      () => engine!.go({ nodes: options.nodes, maxTimeMs: options.maxTimeMs }),
+    );
+    if (interrupted) return { status: "unknown" };
     const best = search.candidates.find((candidate) => candidate.rank === 1);
     return mateCheckResultFromCandidate(sfen, best, maxPly);
   } catch {
@@ -3386,7 +3397,8 @@ function onPlayerMove(usi: string) {
   if (!canMove.value || !applyMove(usi, "player")) return;
   cancelPlayerIdleAdvice();
   // プレイヤーが指したら裏の助言探索を中断し、CPU本体へエンジンを明け渡す。
-  if (!reviewMode.value && dedicatedCoachRunning) engine?.stop();
+  const assistSearchInterrupted = !reviewMode.value && assistSearchControl.interrupt();
+  if (!reviewMode.value && (dedicatedCoachRunning || assistSearchInterrupted)) engine?.stop();
   if (reviewMode.value) {
     reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
     if (reviewCpuEnabled.value) {
