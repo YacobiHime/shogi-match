@@ -71,6 +71,8 @@ describe('CPU着手の共通選択', () => {
   const sfen = positionAfter(['7g7f', '3c3d']).sfen;
   const moveHistory = ['7g7f', '3c3d'];
   const legalMoves = enumerateLegalMoves(Position.newBySFEN(sfen)).map(({ usi }) => usi);
+  // 読まない手の抽選を外し、探索候補からの選び方と見落としだけを確かめる。
+  const lowStrength = { ...getStrengthSearchSettings(2000), naturalMoveRate: 0 };
   const search = {
     move: '2g2f',
     candidates: [
@@ -91,7 +93,7 @@ describe('CPU着手の共通選択', () => {
   });
 
   test('評価差と自然さを掛けた重みで選び、許容損失を超える手は選ばない', async () => {
-    const strength = { ...getStrengthSearchSettings(2000), oversightRate: 0 };
+    const strength = { ...lowStrength, oversightRate: 0 };
     const random = seededRandom(3);
     const counts = {};
     for (let i = 0; i < 4000; i += 1) {
@@ -108,7 +110,7 @@ describe('CPU着手の共通選択', () => {
   function twoStageVerify(shallowScores, deepScores) {
     return vi.fn(async (moves, nodes) => {
       expect(moves[0]).toBe('2g2f');
-      const scores = nodes === getStrengthSearchSettings(2000).nodes ? shallowScores : deepScores;
+      const scores = nodes === lowStrength.nodes ? shallowScores : deepScores;
       return {
         move: '2g2f',
         candidates: moves
@@ -119,7 +121,7 @@ describe('CPU着手の共通選択', () => {
   }
 
   test('見落としは浅い読みで良く見え深い読みで悪い手を、追加探索を直列2回で選ぶ', async () => {
-    const strength = getStrengthSearchSettings(2000);
+    const strength = lowStrength;
     const verify = twoStageVerify(
       { '2g2f': 60, '6i7h': 50, '7f7e': -600 },
       { '2g2f': 80, '6i7h': -400 },
@@ -137,7 +139,7 @@ describe('CPU着手の共通選択', () => {
   });
 
   test('深い読みでも悪くない手しかなければ通常の抽選に戻る', async () => {
-    const strength = getStrengthSearchSettings(2000);
+    const strength = lowStrength;
     const verify = twoStageVerify(
       { '2g2f': 60, '6i7h': 50 },
       { '2g2f': 80, '6i7h': 60 },
@@ -151,12 +153,36 @@ describe('CPU着手の共通選択', () => {
   });
 
   test('見落とし抽選に外れたら深い探索をしない', async () => {
-    const strength = getStrengthSearchSettings(2000);
+    const strength = lowStrength;
     const verify = vi.fn();
     await chooseCpuMove({
       strength, sfen, legalMoves, moveHistory, search, verify, random: sequence([0.99, 0.5]),
     });
     expect(verify).not.toHaveBeenCalled();
+  });
+
+  test('低レベルは読まない手を一定の割合で混ぜ、探索候補外の手も選ぶ', async () => {
+    const strength = { ...lowStrength, naturalMoveRate: 0.5, oversightRate: 0 };
+    const random = seededRandom(5);
+    let natural = 0;
+    let outsideSearch = 0;
+    const trials = 2000;
+    for (let i = 0; i < trials; i += 1) {
+      const result = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search, random });
+      expect(legalMoves).toContain(result.move);
+      if (result.kind === 'natural') natural += 1;
+      if (!search.candidates.some(({ move }) => move === result.move)) outsideSearch += 1;
+    }
+    expect(natural / trials).toBeCloseTo(0.5, 1);
+    expect(outsideSearch).toBeGreaterThan(trials * 0.2);
+  });
+
+  test('読まない手を混ぜないレベルでは、見落とし以外は探索候補から選ぶ', async () => {
+    const strength = getStrengthSearchSettings(480000);
+    expect(strength.naturalMoveRate).toBe(0);
+    const verify = vi.fn();
+    const result = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search, verify, random: () => 0 });
+    expect(result.kind).not.toBe('natural');
   });
 
   test('最高難度は常に最善手を選ぶ', async () => {
@@ -168,7 +194,7 @@ describe('CPU着手の共通選択', () => {
   });
 
   test('許可されていない手は探索候補にあっても選ばない', async () => {
-    const strength = { ...getStrengthSearchSettings(2000), oversightRate: 0, bestMoveRate: 0 };
+    const strength = { ...lowStrength, oversightRate: 0, bestMoveRate: 0 };
     const random = seededRandom(11);
     for (let i = 0; i < 200; i += 1) {
       const { move } = await chooseCpuMove({

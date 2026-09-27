@@ -130,7 +130,7 @@ async function tryOversight({ search, candidates, legalMoves, strength, naturaln
 
 /**
  * CPUの着手を選ぶ共通処理。
- * search未指定(Lv0・エンジンなし)なら自然さだけで選ぶ。
+ * search未指定(Lv0・エンジンなし)なら自然さだけで選ぶ。探索済みでも、naturalMoveRateの割合で自然さだけで選ぶ。
  * verify(searchMoves, nodes)は見落とし判定用の追加探索(浅い読み直しと深い検証の2回)で、
  * 呼び出し側が直列に実行する。
  * @param {{
@@ -160,6 +160,11 @@ export async function chooseCpuMove({
     return chooseNaturalMove({ sfen, legalMoves, moveHistory, alpha, random, naturalness });
   }
   const candidates = (search.candidates ?? []).filter(({ move }) => allowed.has(move));
+
+  // 低レベルでは読まずに見た目だけで指す手を混ぜる。相手の狙いを見逃し、駒をただで取られることもある。
+  if (strength.naturalMoveRate > 0 && drawRandom(random) < strength.naturalMoveRate) {
+    return chooseNaturalMove({ sfen, legalMoves, moveHistory, alpha, random, naturalness });
+  }
 
   if (strength.oversightRate > 0 && verify && drawRandom(random) < strength.oversightRate) {
     const oversight = await tryOversight({

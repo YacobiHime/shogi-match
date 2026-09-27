@@ -816,6 +816,8 @@ import {
 import {
   CPU_STRENGTH_PRESETS,
   getStrengthSearchSettings,
+  normalizeStrengthValue,
+  strengthPresetFor,
   usesNaturalMoveOnly,
 } from "./core/strength-settings.mjs";
 import {
@@ -1171,9 +1173,7 @@ const analysisCurrentPoint = computed(() =>
 );
 // CPU対局ではCPU側の名前にレベルを添え、棋力の説明を2行目に出す。
 const cpuColor = computed(() => (normalizedMode.value === "cpu" ? reverseColor(humanColor.value) : null));
-const cpuStrengthPreset = computed(() =>
-  CPU_STRENGTH_PRESETS.find((preset) => preset.value === searchNodes.value),
-);
+const cpuStrengthPreset = computed(() => strengthPresetFor(searchNodes.value));
 const cpuDisplayName = computed(() => {
   const name = props.cpuPlayerName.trim() || "CPU";
   return cpuStrengthPreset.value ? `${name} Lv.${cpuStrengthPreset.value.level}` : name;
@@ -1866,13 +1866,9 @@ function formatFinalMove(matchResult: MatchResult): string {
   }
 }
 
+// 旧版の識別値も、同じ段級位の表示名を持つレベルへ対応付ける。
 function normalizeNodes(value: number): number {
-  const nodes = Number.isFinite(value) ? value : 30000;
-  return CPU_STRENGTH_PRESETS.map(({ value: preset }) => preset).reduce(
-    (nearest, candidate) =>
-      Math.abs(candidate - nodes) < Math.abs(nearest - nodes) ? candidate : nearest,
-    30000,
-  );
+  return normalizeStrengthValue(value);
 }
 
 function normalizePlayerColor(value: string): "black" | "white" {

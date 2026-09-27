@@ -42,11 +42,11 @@ game.html?mode=cpu&player_color=black&match_id=chapter1-boss
 - `player_color=black|white`: CPU対局で人間が持つ側
 - `initial_sfen`: 任意の開始局面
 - `match_id`: ノベル側で対局を識別するID
-- `engine_nodes`: CPUが1手ごとに読む探索量（既定値は30000）
-- `black_name`、`white_name`、`cpu_name`: 盤・結果画面などに表示する対局者名（CPU対局ではCPU側の名前に「Lv.14」などのレベルと棋力の目安を添えて表示）
+- `engine_nodes`: CPUの強さの識別値（既定値は30000＝Lv10）。実際の探索量はレベルごとに決まる
+- `black_name`、`white_name`、`cpu_name`: 盤・結果画面などに表示する対局者名（CPU対局ではCPU側の名前に「Lv.15」などのレベルと棋力の目安を添えて表示）
 - `handicap`: 手合割名
 
-`engine_nodes`は指定値に最も近い難易度プリセットへ丸められます。Custom Elementでは`cpu-delay-ms`、`engine-base-url`、`handicap-name`、`mobile`、`enable-drag-and-drop`、`show-home`属性も指定できます。
+`engine_nodes`は指定値に最も近い難易度プリセットへ丸められます。旧版の値（2000〜480000）は、旧版と同じ段級位の表示名を持つレベルへ引き継がれます。Custom Elementでは`cpu-delay-ms`、`engine-base-url`、`handicap-name`、`mobile`、`enable-drag-and-drop`、`show-home`属性も指定できます。
 
 やねうら王を取得・起動できない場合だけ、合法手から選ぶ軽量CPUへ自動的に切り替わります。
 棋力を必要とする場合は、別配布のUSIエンジンアダプターを使用してください。
@@ -128,8 +128,8 @@ npm run opening-editor
 連続王手、再戦に加えて、やこび姫の戦形判定、候補手を盤上表示するヒント、
 プレイヤー着手前へ戻す「待った」を管理します。既定回数はヒント3回、待った3回で、
 `hint-count`と`undo-count`属性から変更できます。
-CPU対局では画面上の「CPU強さ」からLv0〜24の25段階で選べます。各項目には棋力の目安を
-表示します。変更は次のCPU着手から反映されます。埋め込み時は
+CPU対局では画面上の「CPU強さ」から、Lv0とぴよ将棋に合わせたLv1〜40の41段階で選べます。
+各項目には棋力の目安を表示します（Lv1が十五級、Lv15が三級程度）。変更は次のCPU着手から反映されます。埋め込み時は
 `engine-nodes`属性、URLでは`engine_nodes`パラメーターから初期値を指定できます。
 
 主なイベント:
