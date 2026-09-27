@@ -1236,6 +1236,22 @@ const resultPresentation = computed(() => {
 });
 const blackFormationText = computed(() => formationTextForColor(Color.BLACK));
 const whiteFormationText = computed(() => formationTextForColor(Color.WHITE));
+const FORMATION_SNAPSHOT_CACHE_LIMIT = 4;
+const formationSnapshotCache = new Map<string, ReturnType<typeof detectFormationSnapshot>>();
+function formationSnapshotForSfen(sfen: string) {
+  const cached = formationSnapshotCache.get(sfen);
+  if (cached) {
+    formationSnapshotCache.delete(sfen);
+    formationSnapshotCache.set(sfen, cached);
+    return cached;
+  }
+  const snapshot = detectFormationSnapshot(sfen, hiraganaFormationMaster);
+  formationSnapshotCache.set(sfen, snapshot);
+  while (formationSnapshotCache.size > FORMATION_SNAPSHOT_CACHE_LIMIT) {
+    formationSnapshotCache.delete(formationSnapshotCache.keys().next().value!);
+  }
+  return snapshot;
+}
 function openingGuideLegalMoves(): string[] {
   const fields = currentSfen.value.split(" ");
   if (fields.length < 2) return [];
@@ -1246,19 +1262,35 @@ function openingGuideLegalMoves(): string[] {
     return [];
   }
 }
-function availableOpeningOptions(kind: "strategy" | "castle") {
+const openingAvailabilityContext = computed(() => {
   const sfen = currentSfen.value;
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
-  const currentFormations = formationNamesFromSnapshot(
-    detectFormationSnapshot(sfen, hiraganaFormationMaster),
-    playerIsBlack ? "black" : "white",
-  );
-  const committedRookStyle = inferOpeningRookStyle({
-    color: playerIsBlack ? "black" : "white",
-    playedMoves: playerMoves,
-    currentSfen: sfen,
-  });
+  return {
+    sfen,
+    playerIsBlack,
+    playerMoves,
+    legalMoves: openingGuideLegalMoves(),
+    currentFormations: formationNamesFromSnapshot(
+      formationSnapshotForSfen(sfen),
+      playerIsBlack ? "black" : "white",
+    ),
+    committedRookStyle: inferOpeningRookStyle({
+      color: playerIsBlack ? "black" : "white",
+      playedMoves: playerMoves,
+      currentSfen: sfen,
+    }),
+  };
+});
+function availableOpeningOptions(kind: "strategy" | "castle") {
+  const {
+    committedRookStyle,
+    currentFormations,
+    legalMoves,
+    playerIsBlack,
+    playerMoves,
+    sfen,
+  } = openingAvailabilityContext.value;
   const selectedCounterpartStyle = kind === "strategy"
     ? openingDefinitionRookStyle(selectedCastle.value, "castle")
     : openingDefinitionRookStyle(selectedStrategy.value, "strategy");
@@ -1268,7 +1300,7 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
     color: playerIsBlack ? "black" : "white",
     playedMoves: playerMoves,
     moveHistory,
-    legalMoves: openingGuideLegalMoves(),
+    legalMoves,
     // 過去に一度成立した形ではなく、現在の盤面だけで利用可否を決める。
     detectedFormations: currentFormations,
     currentSfen: sfen,
@@ -1749,7 +1781,7 @@ function formationNamesForColor(sfen: string, color: Color): string[] {
   const key = color === Color.BLACK ? "black" : "white";
   if (!reviewMode.value) return formationNamesFromState(formationState.value, key);
   return formationNamesFromSnapshot(
-    detectFormationSnapshot(sfen, hiraganaFormationMaster),
+    formationSnapshotForSfen(sfen),
     key,
   );
 }
@@ -1763,7 +1795,7 @@ function formationTextForColor(color: Color): string {
 function observeFormations(sfen: string) {
   formationState.value = updateFormationState(
     formationState.value,
-    detectFormationSnapshot(sfen, hiraganaFormationMaster),
+    formationSnapshotForSfen(sfen),
   );
 }
 
