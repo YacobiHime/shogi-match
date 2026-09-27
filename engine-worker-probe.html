@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engine Worker Probe</title>
+</head>
+<body>
+  <h1>Engine Worker Probe</h1>
+  <pre id="result">確認中…</pre>
+  <script type="module">
+    import { probeWorkerEngine } from "./src/core/engine-worker-probe.mjs";
+    const output = document.getElementById("result");
+    try {
+      const result = await probeWorkerEngine();
+      output.textContent = JSON.stringify(result, null, 2);
+      document.title = "PASS: Engine Worker Probe";
+    } catch (error) {
+      output.textContent = JSON.stringify({
+        ok: false,
+        crossOriginIsolated,
+        error: error instanceof Error ? error.message : String(error),
+      }, null, 2);
+      document.title = "FAIL: Engine Worker Probe";
+    }
+  </script>
+</body>
+</html>
