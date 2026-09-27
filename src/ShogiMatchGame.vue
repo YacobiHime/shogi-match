@@ -764,6 +764,7 @@ import {
   createTurningPointState,
   getMovePraise,
   materialGain,
+  movePraiseNeedsMateThreatCheck,
   rewindTurningPointState,
 } from "./core/move-praise.mjs";
 import { getIdleCoachAdvice, IDLE_COACH_DELAY_MS } from "./core/idle-coach-advice.mjs";
@@ -781,11 +782,12 @@ import {
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
 import {
-  isContinuousCheckMate,
+  flipSideToMove,
+  mateCheckResultFromCandidate,
   parseMateScore,
 } from "./core/engine-mate-check.mjs";
 import { chooseCpuMove, chooseNaturalMove } from "./core/cpu-move-choice.mjs";
-import { detectStrictMateThreat, findForcedMate, findMateInOne } from "./core/mate-threat";
+import { detectStrictMateThreat, findMateInOne } from "./core/mate-threat";
 import {
   classifyAnalyzedMove,
   formatAnalysisScore,
@@ -2598,11 +2600,7 @@ async function engineMateCheck(
     engine.applyStrengthOptions({ multiPv: 1 });
     const search = await engine.go({ nodes: options.nodes, maxTimeMs: options.maxTimeMs });
     const best = search.candidates.find((candidate) => candidate.rank === 1);
-    const plies = parseMateScore(best);
-    if (plies && plies <= maxPly && isContinuousCheckMate(sfen, best?.pv, plies)) {
-      return { status: "mate", plies };
-    }
-    return { status: "no-mate" };
+    return mateCheckResultFromCandidate(sfen, best, maxPly);
   } catch {
     return { status: "unknown" };
   }
@@ -2708,9 +2706,12 @@ function schedulePlayerMoveBaseline() {
         settings.deep.multiPv,
       );
       if (stale()) return;
-      const sfen = currentSfen.value;
-      const mateThreat = moveHistory.length >= 20 && !isSideToMoveInCheck(sfen)
-        ? detectStrictMateThreat(sfen, 7, coachSearchBudget().threatNodes)
+      const threatSfen = moveHistory.length >= 20 ? flipSideToMove(currentSfen.value) : null;
+      const mateSettings = getMateCheckSearchSettings(
+        props.mobile || boardLayout.value === "portrait",
+      );
+      const mateThreat = threatSfen
+        ? await engineMateCheck(threatSfen, { ...mateSettings, maxPly: 7 })
         : null;
       if (stale()) return;
       const pick = (candidates: typeof shallow) => candidates.map(({ rank, move, score }) => ({
@@ -2722,7 +2723,7 @@ function schedulePlayerMoveBaseline() {
         historyLength,
         shallow: pick(shallow),
         deep: pick(deep),
-        mateThreat: Boolean(mateThreat?.isThreat && !mateThreat.exhausted),
+        mateThreat: mateThreat?.status === "mate",
       };
     })
     .catch(() => undefined)
@@ -2732,14 +2733,18 @@ function schedulePlayerMoveBaseline() {
 }
 
 /** 直前のプレイヤー着手について、好手・詰めろ・駒得・形勢の転換点を判定する。 */
-function playerMovePraise(options: {
+async function playerMovePraise(options: {
   historyLength: number;
   flair?: NonNullable<typeof playerMoveFlair>;
   beforeScore?: EngineEvaluation;
   afterScore?: EngineEvaluation;
   fallback: { key: string; text: string } | null;
+  cpuCandidates: Array<{ rank: number; score?: EngineEvaluation }>;
+  generation: number;
 }) {
-  const { historyLength, flair, beforeScore, afterScore, fallback } = options;
+  const {
+    historyLength, flair, beforeScore, afterScore, fallback, cpuCandidates, generation,
+  } = options;
   const turning = advanceTurningPoints(turningPointState, {
     ply: historyLength,
     afterScore,
@@ -2759,27 +2764,42 @@ function playerMovePraise(options: {
         shallowCandidates: baseline.shallow,
       })
     : null;
-  const budget = coachSearchBudget();
-  const sfen = currentSfen.value;
-  // 着手後は相手の手番。相手に詰みが無くなっていれば詰めろを受けきっている。
-  const defendedMateThreat = Boolean(detailed && baseline?.mateThreat && (() => {
-    const mate = findForcedMate(sfen, 7, budget.threatNodes);
-    return !mate.isMate && !mate.exhausted;
-  })());
-  const gaveMateThreat = Boolean(detailed && !defendedMateThreat && historyLength >= 20 && (() => {
-    const threat = detectStrictMateThreat(sfen, 7, budget.threatNodes);
-    return threat.isThreat && !threat.exhausted;
-  })());
-  return getMovePraise({
+  const cpuMatePly = parseMateScore(cpuCandidates.find(({ rank }) => rank === 1));
+  // CPU本体の探索結果を流用し、追加探索なしで詰めろを受けきったか判定する。
+  const defendedMateThreat = Boolean(
+    detailed && baseline?.mateThreat && !(cpuMatePly && cpuMatePly <= 7),
+  );
+  const praiseOptions = {
     level: coachLevel.value,
+    historyLength,
     beforeScore,
     afterScore,
     quality,
-    gaveMateThreat,
     defendedMateThreat,
     materialGain: flair?.materialGain ?? 0,
     turningAdvice: turning.advice,
     fallback,
+  };
+  let gaveMateThreat = false;
+  if (movePraiseNeedsMateThreatCheck(praiseOptions)) {
+    const threatSfen = flipSideToMove(currentSfen.value);
+    if (threatSfen && engine && engineReady.value) {
+      const settings = getMateCheckSearchSettings(
+        props.mobile || boardLayout.value === "portrait",
+      );
+      cpuSearchRunning = true;
+      cpuSearchGeneration = generation;
+      try {
+        const result = await engineMateCheck(threatSfen, { ...settings, maxPly: 7 });
+        gaveMateThreat = result.status === "mate";
+      } finally {
+        if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+      }
+    }
+  }
+  return getMovePraise({
+    ...praiseOptions,
+    gaveMateThreat,
   });
 }
 
@@ -3568,12 +3588,14 @@ async function scheduleCpuMove() {
         });
         // 悪手の指摘を最優先し、それ以外では好手や形勢の転換点を褒める。
         const mistake = moveFeedback && /move-(blunder|mistake)/.test(moveFeedback.key);
-        const praise = playerMovePraise({
+        const praise = await playerMovePraise({
           historyLength: playerMoveHistoryLength,
           flair: moveFlair,
           beforeScore: comparableBeforeScore,
           afterScore: playerAfterScore,
           fallback: moveFeedback,
+          cpuCandidates: search.candidates,
+          generation,
         });
         if (!mistake) moveFeedback = praise;
       // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。

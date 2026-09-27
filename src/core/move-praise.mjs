@@ -222,3 +222,22 @@ export function getMovePraise({
   }
   return turning ?? fallback ?? endurance ?? null;
 }
+
+/**
+ * 高価な詰めろ判定が、優先順位上の最終結果を変え得る場合だけtrueを返す。
+ * @param {Parameters<typeof getMovePraise>[0] & { historyLength?: number }} [options]
+ */
+export function movePraiseNeedsMateThreatCheck(options = {}) {
+  const preliminary = getMovePraise({ ...options, gaveMateThreat: false });
+  if (['praise-god-move', 'praise-reversal', 'praise-mate-defense'].includes(preliminary?.key)) {
+    return false;
+  }
+  const before = comparableScore(options.beforeScore);
+  const after = comparableScore(options.afterScore);
+  return options.level === 'detailed'
+    && Number.isInteger(options.historyLength)
+    && options.historyLength >= 20
+    && before !== undefined
+    && after !== undefined
+    && after - before >= -PRAISE_MAX_LOSS;
+}

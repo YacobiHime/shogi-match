@@ -7,6 +7,14 @@ export function parseMateScore(candidate) {
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
+/** 通常探索の最善候補を、連続王手詰み判定へ変換する。 */
+export function mateCheckResultFromCandidate(sfen, candidate, maxPly = 7) {
+  const plies = parseMateScore(candidate);
+  return plies && plies <= maxPly && isContinuousCheckMate(sfen, candidate?.pv, plies)
+    ? { status: 'mate', plies }
+    : { status: 'no-mate' };
+}
+
 /**
  * 通常探索のPVが、開始側の連続王手で指定手数後に詰む手順かを検証する。
  * エンジンのmateスコアだけを信用せず、壊れた・短いPVを除外する。

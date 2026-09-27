@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   flipSideToMove,
   isContinuousCheckMate,
+  mateCheckResultFromCandidate,
   parseMateScore,
 } from './engine-mate-check.mjs';
 
@@ -11,6 +12,23 @@ describe('parseMateScore', () => {
     expect(parseMateScore({ score: { type: 'mate', value: -3 } })).toBeNull();
     expect(parseMateScore({ score: { type: 'cp', value: 9999 } })).toBeNull();
     expect(parseMateScore({})).toBeNull();
+  });
+});
+
+describe('mateCheckResultFromCandidate', () => {
+  const sfen = '4k4/9/4P4/9/9/9/9/9/4K4 b G 1';
+
+  it('モックした通常探索候補から連続王手の詰みだけを採用する', () => {
+    expect(mateCheckResultFromCandidate(sfen, {
+      rank: 1,
+      score: { type: 'mate', value: 1 },
+      pv: ['G*5b'],
+    })).toEqual({ status: 'mate', plies: 1 });
+    expect(mateCheckResultFromCandidate(sfen, {
+      rank: 1,
+      score: { type: 'mate', value: 1 },
+      pv: ['G*4b'],
+    })).toEqual({ status: 'no-mate' });
   });
 });
 

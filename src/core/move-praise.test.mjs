@@ -5,6 +5,7 @@ import {
   createTurningPointState,
   getMovePraise,
   materialGain,
+  movePraiseNeedsMateThreatCheck,
   rewindTurningPointState,
 } from './move-praise.mjs';
 import { coachExpressionForText, coachPlainText, coachTextSegments } from './coach-expression.mjs';
@@ -170,6 +171,29 @@ describe('getMovePraise', () => {
     expect(getMovePraise({ ...base, level: 'encourage', materialGain: 5 })).toBeNull();
     expect(getMovePraise({ ...base, level: 'encourage', turningAdvice })).toBe(turningAdvice);
     expect(getMovePraise({ ...base, level: 'off', turningAdvice })).toBeNull();
+  });
+});
+
+describe('movePraiseNeedsMateThreatCheck', () => {
+  const base = {
+    level: 'detailed', historyLength: 20, beforeScore: cp(300), afterScore: cp(280),
+  };
+
+  it('詰めろが次の優先候補になる健全な20手目以降だけ判定する', () => {
+    expect(movePraiseNeedsMateThreatCheck(base)).toBe(true);
+    expect(movePraiseNeedsMateThreatCheck({ ...base, historyLength: 19 })).toBe(false);
+    expect(movePraiseNeedsMateThreatCheck({ ...base, level: 'encourage' })).toBe(false);
+    expect(movePraiseNeedsMateThreatCheck({ ...base, afterScore: cp(0) })).toBe(false);
+  });
+
+  it('神の一手・逆転・詰めろ受けが優先される場合は判定しない', () => {
+    expect(movePraiseNeedsMateThreatCheck({
+      ...base, quality: { kind: 'god', score: cp(1200), gap: 800 },
+    })).toBe(false);
+    expect(movePraiseNeedsMateThreatCheck({
+      ...base, turningAdvice: { key: 'praise-reversal', text: '逆転！' },
+    })).toBe(false);
+    expect(movePraiseNeedsMateThreatCheck({ ...base, defendedMateThreat: true })).toBe(false);
   });
 });
 
