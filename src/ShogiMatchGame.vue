@@ -694,8 +694,15 @@
       </div>
     </section>
 
-    <div class="shogi-game__assist-actions">
-      <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
+    <!-- 棋譜解析中は、閃きを解析パネルの操作列へ移す。 -->
+    <div v-if="!(reviewMode && analysisOpen && !reviewCpuEnabled)" class="shogi-game__assist-actions">
+      <button
+        v-if="!(reviewMode && analysisOpen)"
+        type="button"
+        class="shogi-game__awakening"
+        :disabled="!canUseHint"
+        @click="showHint"
+      >
         閃き <small>×{{ reviewMode ? "∞" : formatAssistCount(hintsRemaining) }}</small>
       </button>
       <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
@@ -804,7 +811,7 @@
           <button type="button" aria-label="最終局面へ" :disabled="reviewCpuEnabled || reviewNavigation.cursor >= reviewNavigation.line.length" @click="goToAnalysisPly(reviewNavigation.line.length)">⏭</button>
         </div>
         <div class="shogi-game__analysis-tools">
-          <button type="button" :disabled="!canUseHint" @click="showHint">ヒント</button>
+          <button type="button" class="shogi-game__analysis-awakening" :disabled="!canUseHint" @click="showHint">閃き</button>
           <button type="button" :disabled="!analysisCurrentPoint?.bestMove" @click="showAnalysisRecommendation">推奨</button>
           <button type="button" :disabled="!analysisCurrentPoint?.pv?.length" @click="showAnalysisLine">読み</button>
           <button
@@ -5393,27 +5400,49 @@ queueMicrotask(() => {
 .shogi-game__analysis .evaluation-graph__selection {
   display: none;
 }
+/* 矢印と解析の操作を1列にまとめ、評価値グラフの高さを確保する。 */
 .shogi-game__analysis-actions {
   position: relative;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35em;
-  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 0.3em;
+  min-width: 0;
 }
 .shogi-game__analysis-nav,
 .shogi-game__analysis-tools {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.3em;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  gap: 0.2em;
+  min-width: 0;
+}
+.shogi-game__analysis-nav {
+  flex-grow: 0.85;
+}
+.shogi-game__analysis-tools {
+  flex-grow: 2;
+}
+/* 「その他」は▾まで収まるよう、ほかの操作より少し広くする。 */
+.shogi-game .shogi-game__analysis-actions .shogi-game__analysis-more {
+  flex-grow: 1.5;
+  padding-inline: 0.1em;
+  font-size: 0.94em;
 }
 .shogi-game .shogi-game__analysis-actions button {
-  min-width: 2.6em;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 2.4em;
-  padding: 0.2em 0.6em;
+  padding: 0.2em 0.25em;
+  white-space: nowrap;
   border-color: var(--slate);
   color: var(--night-deep);
   background: #fff;
   box-shadow: none;
+}
+.shogi-game .shogi-game__analysis-actions .shogi-game__analysis-awakening:not(:disabled) {
+  border-color: var(--amber);
+  background: #fff3df;
+  font-weight: 700;
 }
 .shogi-game .shogi-game__analysis-actions button:disabled {
   border-color: #bbb;
