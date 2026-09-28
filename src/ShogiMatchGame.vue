@@ -33,6 +33,30 @@
         <h1>shogi-match</h1>
       </div>
       <nav class="shogi-home__menu" aria-label="メニュー">
+        <section class="shogi-home__group" aria-labelledby="shogi-home-school">
+          <h2 id="shogi-home-school" class="shogi-home__group-title">入門</h2>
+          <div class="shogi-home__cards">
+            <button type="button" class="shogi-home__card shogi-home__card--school" @click="tutorialOpen = true">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f1a54c">
+                  <rect x="1" y="5" width="14" height="1" />
+                  <rect x="3" y="4" width="10" height="1" />
+                  <rect x="6" y="3" width="4" height="1" />
+                  <rect x="12" y="6" width="1" height="4" />
+                </g>
+                <g fill="#fffcf4">
+                  <rect x="4" y="7" width="8" height="5" />
+                  <rect x="3" y="12" width="10" height="1" />
+                </g>
+                <g fill="#f1a54c">
+                  <rect x="6" y="9" width="4" height="1" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">やこび姫の将棋教室</span>
+              <small class="shogi-home__desc">ルールから戦法まで楽しく学ぼう</small>
+            </button>
+          </div>
+        </section>
         <section class="shogi-home__group" aria-labelledby="shogi-home-match">
           <h2 id="shogi-home-match" class="shogi-home__group-title">対局</h2>
           <div class="shogi-home__cards">
@@ -158,9 +182,18 @@
       :asset-base-url="assetBaseUrl"
       @close="dexOpen = false"
     />
+    <ShogiTutorial
+      v-if="tutorialOpen"
+      :asset-base-url="assetBaseUrl"
+      @close="tutorialOpen = false"
+      @open-dex="openDexFromTutorial"
+      @start-match="startMatchFromTutorial"
+    />
+    <!-- 図鑑は教室の上に重ねて開き、閉じると教室へ戻る。 -->
     <ShogiReferenceDex
       v-if="referenceDexKind"
       :kind="referenceDexKind"
+      :initial-id="referenceDexInitialId"
       :asset-base-url="assetBaseUrl"
       @close="referenceDexKind = ''"
     />
@@ -922,6 +955,7 @@ import { Color, PieceType, Position, Record, Square, promotedPieceType, reverseC
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
 import ShogiReferenceDex from "./ShogiReferenceDex.vue";
+import ShogiTutorial from "./ShogiTutorial.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import {
@@ -1162,6 +1196,9 @@ const homeOpen = ref(props.showHome);
 const dexOpen = ref(false);
 // 駒図鑑・手筋図鑑・将棋界図鑑のうち、開いているもの。
 const referenceDexKind = ref<"" | "piece" | "tesuji" | "world">("");
+const referenceDexInitialId = ref("");
+// やこび姫の将棋教室を開いているか。
+const tutorialOpen = ref(false);
 const thinking = ref(false);
 const engineReady = ref(false);
 const engineUnavailable = ref(false);
@@ -2294,6 +2331,38 @@ function closeHome() {
 function openMatchSetup(kind: MatchKind) {
   matchKind.value = kind;
   closeHome();
+}
+
+/** 教室のレッスンから、関連する図鑑の項目を開く。 */
+function openDexFromTutorial({ kind, id }: { kind: string; id?: string }) {
+  if (kind === "opening") {
+    dexOpen.value = true;
+    return;
+  }
+  if (kind === "piece" || kind === "tesuji" || kind === "world") {
+    referenceDexInitialId.value = id ?? "";
+    referenceDexKind.value = kind;
+  }
+}
+
+/** 教室の「この設定で対局する」から、学習対局の準備画面へ設定を渡す。 */
+function startMatchFromTutorial(preset: {
+  startType?: LearningStartType;
+  handicapId?: string;
+  playerStrategy?: string;
+  playerCastle?: string;
+  opponentStrategy?: string;
+  opponentCastle?: string;
+}) {
+  learningStartType.value = preset.startType ?? "standard";
+  if (preset.handicapId) learningHandicapId.value = preset.handicapId;
+  learningPlayerStrategy.value = preset.playerStrategy ?? "";
+  learningPlayerCastle.value = preset.playerCastle ?? "";
+  learningOpponentStrategy.value = preset.opponentStrategy ?? "";
+  learningOpponentCastle.value = preset.opponentCastle ?? "";
+  selectedPlayerColor.value = "black";
+  tutorialOpen.value = false;
+  openMatchSetup("learning");
 }
 
 function openHome() {
@@ -6161,8 +6230,9 @@ queueMicrotask(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 40px;
-  padding: 24px;
+  gap: 32px;
+  /* 下部のキャラクターの分を空け、メニューがキャラクターに重ならないようにする。 */
+  padding: 24px 24px clamp(150px, 27vh, 250px);
   overflow: hidden;
   background: #1d303f;
   color: var(--ink, #fffcf4);
@@ -6314,13 +6384,25 @@ queueMicrotask(() => {
   .shogi-home__cards--dex { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* メニューが縦に長くなるため、月をタイトルと重ならない右上へ寄せる。 */
   .shogi-home__moon { top: 3%; right: 6%; width: 32px; height: 32px; box-shadow: inset -9px -4px 0 0 #1d303f; }
-  .shogi-home__card { padding: 16px 6px 12px; gap: 8px; }
-  .shogi-home__icon { width: 44px; height: 44px; }
+  /* 入門・対局・図鑑の3段が収まるよう、カードは「アイコン＋名前・説明」の横並びにする。 */
+  .shogi-home__card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: center;
+    justify-items: start;
+    padding: 8px 10px;
+    text-align: left;
+  }
+  .shogi-home__icon { grid-row: 1 / 3; width: 36px; height: 36px; }
+  .shogi-home__desc { text-align: left; }
 }
 @media (max-width: 640px) and (max-height: 760px) {
-  .shogi-home { gap: 18px; padding-bottom: 112px; }
-  .shogi-home__chara { height: 100px; bottom: 8px; }
-  .shogi-home__icon { width: 36px; height: 36px; }
+  .shogi-home { gap: 14px; padding-bottom: 104px; }
+  .shogi-home__chara { height: 92px; bottom: 8px; }
+  .shogi-home__icon { width: 32px; height: 32px; }
 }
 /* ===== 学習対局 ===== */
 .shogi-game__match-kind {

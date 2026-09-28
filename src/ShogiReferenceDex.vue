@@ -179,6 +179,8 @@ type ReferenceEntry = {
 
 const props = defineProps({
   kind: { type: String as () => ReferenceDexKind, required: true },
+  // 教室などから開いたとき、最初に表示する項目。
+  initialId: { type: String, default: "" },
   assetBaseUrl: { type: String, default: "." },
 });
 const emit = defineEmits(["close"]);
@@ -192,9 +194,12 @@ const LEGEND_LABELS = {
 const dex = computed(() => REFERENCE_DEX_KINDS[props.kind]);
 const entries = computed(() => referenceDexEntries(props.kind) as ReferenceEntry[]);
 const groups = computed(() => referenceDexGroups(props.kind));
-const selectedId = ref(entries.value[0]?.id ?? "");
+const initialEntryId = () => (
+  entries.value.some(({ id }) => id === props.initialId) ? props.initialId : entries.value[0]?.id ?? ""
+);
+const selectedId = ref(initialEntryId());
 const listOpen = ref(false);
-watch(() => props.kind, () => { selectedId.value = entries.value[0]?.id ?? ""; });
+watch(() => [props.kind, props.initialId], () => { selectedId.value = initialEntryId(); });
 
 // 狭い画面では縦長レイアウトの盤に切り替え、駒を見やすくする。
 const narrowMediaQuery = typeof window !== "undefined" && window.matchMedia
