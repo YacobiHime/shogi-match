@@ -177,11 +177,6 @@
       </nav>
     </div>
 
-    <ShogiOpeningDex
-      v-if="dexOpen"
-      :asset-base-url="assetBaseUrl"
-      @close="dexOpen = false"
-    />
     <ShogiTutorial
       v-if="tutorialOpen"
       :asset-base-url="assetBaseUrl"
@@ -191,6 +186,12 @@
       @start-match="startMatchFromTutorial"
     />
     <!-- 図鑑は教室の上に重ねて開き、閉じると教室へ戻る。 -->
+    <ShogiOpeningDex
+      v-if="dexOpen"
+      :initial-id="openingDexInitialId"
+      :asset-base-url="assetBaseUrl"
+      @close="dexOpen = false; openingDexInitialId = ''"
+    />
     <ShogiReferenceDex
       v-if="referenceDexKind"
       :kind="referenceDexKind"
@@ -1197,6 +1198,7 @@ const matchStarted = ref(false);
 const pregameOpen = ref(true);
 const homeOpen = ref(props.showHome);
 const dexOpen = ref(false);
+const openingDexInitialId = ref("");
 // 駒図鑑・手筋図鑑・将棋界図鑑のうち、開いているもの。
 const referenceDexKind = ref<"" | "piece" | "tesuji" | "world">("");
 const referenceDexInitialId = ref("");
@@ -2343,6 +2345,7 @@ function openMatchSetup(kind: MatchKind) {
 /** 教室のレッスンから、関連する図鑑の項目を開く。 */
 function openDexFromTutorial({ kind, id }: { kind: string; id?: string }) {
   if (kind === "opening") {
+    openingDexInitialId.value = id ?? "";
     dexOpen.value = true;
     return;
   }

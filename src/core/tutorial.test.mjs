@@ -35,6 +35,7 @@ import {
 import { referenceDexEntries } from "./reference-dex.mjs";
 import { buildFormationStart } from "./learning-setup.mjs";
 import { CPU_STRENGTH_PRESETS } from "./strength-settings.mjs";
+import { OPENING_CASTLES, OPENING_STRATEGIES } from "./opening-guide.mjs";
 
 const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play", "replay"];
 const legalMoves = (sfen) => enumerateLegalMoves(createGameRecord(sfen).position).map(({ usi }) => usi);
@@ -87,6 +88,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
       piece: new Set(referenceDexEntries("piece").map(({ id }) => id)),
       tesuji: new Set(referenceDexEntries("tesuji").map(({ id }) => id)),
       world: new Set(referenceDexEntries("world").map(({ id }) => id)),
+      opening: new Set([...OPENING_STRATEGIES, ...OPENING_CASTLES].map(({ id }) => id)),
     };
     for (const lesson of TUTORIAL_LESSONS.filter(({ comingSoon }) => !comingSoon)) {
       expect(lesson.steps.length, lesson.id).toBeGreaterThan(0);
@@ -148,7 +150,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
           expect(step.answer, label).toBeGreaterThanOrEqual(0);
           expect(step.answer, label).toBeLessThan(step.options.length);
         }
-        if (step.type === "open-dex" && step.kind !== "opening") {
+        if (step.type === "open-dex") {
           expect(dexIds[step.kind]?.has(step.id), label).toBe(true);
         }
         if (step.type === "play" && step.preset.startType === "formation") {

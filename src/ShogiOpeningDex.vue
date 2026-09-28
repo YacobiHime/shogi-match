@@ -188,6 +188,8 @@ import { buildOpeningDexSteps } from "./core/opening-dex-replay.mjs";
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
+  // 教室から開くときに最初に表示する戦法・囲い。囲いのIDなら囲いのタブで開く。
+  initialId: { type: String, default: "" },
 });
 const emit = defineEmits(["close"]);
 
@@ -209,8 +211,10 @@ const STRATEGY_GROUP_LABELS = [
   { id: "special", label: "奇襲・特殊戦法" },
 ];
 
-const tab = ref<"strategy" | "castle">("strategy");
-const selectedId = ref("ibisha");
+const initialIsCastle = OPENING_CASTLES.some((item: any) => item.id === props.initialId);
+const initialIsStrategy = OPENING_STRATEGIES.some((item: any) => item.id === props.initialId);
+const tab = ref<"strategy" | "castle">(initialIsCastle ? "castle" : "strategy");
+const selectedId = ref(initialIsCastle || initialIsStrategy ? props.initialId : "ibisha");
 const stepIndex = ref(0);
 const listOpen = ref(false);
 const moveListEl = ref<HTMLElement | null>(null);

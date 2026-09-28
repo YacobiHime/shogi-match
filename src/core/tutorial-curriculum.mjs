@@ -426,7 +426,7 @@ const VOLUME_3 = {
           steps: [
             { type: "explain", sfen: TESUJI["three-guards"].sfen, marks: TESUJI["three-guards"].marks, speech: "戦う前に、金と銀で玉を守る形を作るよ。これを「囲い」というんだ。この形が「美濃囲い」だよ。" },
             { type: "explain", speech: "囲いの基本は「金銀3枚」。攻めに使う駒と、守りに使う駒を分けて考えよう。" },
-            { type: "open-dex", kind: "opening", speech: "定跡図鑑の「囲い」で、いろいろな囲いを見てみよう！" },
+            { type: "open-dex", kind: "opening", id: "mino", speech: "定跡図鑑の「囲い」で、いろいろな囲いを見てみよう！" },
             { type: "choose", question: "囲いの基本はどれ？", options: ["金銀3枚で玉を守る", "玉をひとりにする", "飛車で玉を守る"], answer: 0, explanation: "玉の守りは金銀3枚が基本だよ！" },
           ],
         },
@@ -622,7 +622,7 @@ function openingDrillLesson(id, strategyId) {
     }
   }
   steps.push({ type: "explain", sfen: replay.at(-1).sfen, speech: `${definition.label}の形ができたね！ ${DRILL_TEXTS[strategyId].next}` });
-  steps.push({ type: "open-dex", kind: "opening", speech: "定跡図鑑で、手順をもう一度確かめてみよう！" });
+  steps.push({ type: "open-dex", kind: "opening", id: strategyId, speech: "定跡図鑑で、手順をもう一度確かめてみよう！" });
   return { id, title: definition.label, summary: DRILL_TEXTS[strategyId].summary, steps };
 }
 
