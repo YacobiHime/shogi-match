@@ -8,6 +8,12 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("passes only the SFEN to the engine because setPosition adds \"position sfen\"", () => {
+    // 「sfen sfen ...」になるとエンジンがbestmoveを返さず、平手以外の対局でCPUが止まる。
+    expect(source).not.toMatch(/`sfen \$\{/);
+    expect(source).toContain('const base = matchInitialSfen.value === STANDARD_SFEN ? "startpos" : matchInitialSfen.value;');
+  });
+
   it("keeps the flip control readable and reachable on every layout", () => {
     expect(source).toMatch(/class="shogi-game__command shogi-game__command--flip"[\s\S]*?aria-label="盤面を上下反転（ひふみんアイ）"/);
     expect(source).toMatch(/\.shogi-game__command\s*\{[^}]*white-space:\s*nowrap/s);

@@ -57,6 +57,8 @@ describe("learning match setup", () => {
     const result = buildFormationStart({ black, white });
     expect(result.ok, result.message).toBe(true);
     expect(() => createGameRecord(result.sfen)).not.toThrow();
+    // 通常の対局と同じく先手番で始まる。
+    expect(result.sfen.split(" ")[1]).toBe("b");
     for (const [color, plan] of [["black", black], ["white", white]]) {
       if (!plan) continue;
       const parity = color === "black" ? 0 : 1;

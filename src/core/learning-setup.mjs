@@ -166,7 +166,8 @@ export function buildFormationStart({ black = null, white = null, maxPlies = 200
   };
 
   for (let ply = 0; ply < maxPlies; ply += 1) {
-    if (complete("black") && complete("white")) {
+    // 通常の対局と同じく、先手の手番で始める。後手番なら後手が形を崩さない待機手を指す。
+    if (complete("black") && complete("white") && record.position.color === Color.BLACK) {
       const fields = record.position.sfen.split(" ");
       fields[3] = "1";
       return { ok: true, sfen: fields.join(" "), moves: [...moveHistory] };

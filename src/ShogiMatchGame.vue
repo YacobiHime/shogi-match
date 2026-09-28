@@ -4112,10 +4112,8 @@ async function scheduleCpuMove() {
         usi = await naturalCpuMove();
       } else if (engine && engineReady.value) {
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
-        const base = matchInitialSfen.value === STANDARD_SFEN
-          ? "startpos"
-          : `sfen ${matchInitialSfen.value}`;
-        const enginePosition = `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
+        // setPositionが「position sfen」を付けるため、SFENだけを渡す。
+        const enginePosition = currentEnginePosition();
         engine.setPosition(enginePosition);
         cpuSearchRunning = true;
         cpuSearchGeneration = generation;
@@ -4358,7 +4356,7 @@ async function runKifuAnalysis() {
     const moves = [...reviewNavigation.value.mainLine];
     const base = matchInitialSfen.value === STANDARD_SFEN
       ? "startpos"
-      : `sfen ${matchInitialSfen.value}`;
+      : matchInitialSfen.value;
     const replay = createGameRecord(matchInitialSfen.value);
     const positions = [{ sideToMove: replay.position.color, label: "開始局面" }];
     for (let index = 0; index < moves.length; index += 1) {
