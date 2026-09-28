@@ -38,30 +38,49 @@ const PIECE_ENTRIES = [
     id: "piece-values", group: "駒の価値", label: "駒の価値 tier表",
     // 盤面の代わりに表を出す項目。点数はよく使われる目安で、局面によって変わる。
     table: [
-      { tier: "別格", pieces: [{ label: "玉将・王将", points: "∞", note: "取られたら負け" }] },
+      { tier: "別格", pieces: [{ label: "玉将・王将", images: ["black_king2", "black_king"], points: "∞" }] },
       { tier: "S", pieces: [
-        { label: "竜王", points: 12, note: "飛車＋斜め1マス" },
-        { label: "竜馬", points: 10, note: "角＋縦横1マス" },
-        { label: "飛車", points: 10, note: "最強の攻め駒" },
+        { label: "竜王", images: ["black_dragon"], points: 12 },
+        { label: "竜馬", images: ["black_horse"], points: 10 },
+        { label: "飛車", images: ["black_rook"], points: 10 },
       ] },
       { tier: "A", pieces: [
-        { label: "角行", points: 8, note: "斜めの大駒" },
-        { label: "と金", points: 7, note: "取られても歩1枚" },
+        { label: "角行", images: ["black_bishop"], points: 8 },
+        { label: "と金", images: ["black_prom_pawn"], points: 7 },
       ] },
       { tier: "B", pieces: [
-        { label: "金将", points: 6, note: "守りの要" },
-        { label: "成銀・成桂・成香", points: 6, note: "金と同じ動き" },
-        { label: "銀将", points: 5, note: "攻めにも守りにも" },
+        { label: "金将", images: ["black_gold"], points: 6 },
+        { label: "成銀・成桂・成香", images: ["black_prom_silver", "black_prom_knight", "black_prom_lance"], points: 6 },
+        { label: "銀将", images: ["black_silver"], points: 5 },
       ] },
       { tier: "C", pieces: [
-        { label: "桂馬", points: 4, note: "両取りが得意" },
-        { label: "香車", points: 3, note: "一直線に突進" },
+        { label: "桂馬", images: ["black_knight"], points: 4 },
+        { label: "香車", images: ["black_lance"], points: 3 },
       ] },
-      { tier: "D", pieces: [{ label: "歩兵", points: 1, note: "数は多いが大切" }] },
+      { tier: "D", pieces: [{ label: "歩兵", images: ["black_pawn"], points: 1 }] },
     ],
+    // やねうら王の探索で、駒得の見積もり（静的交換評価など）に使う駒の値。歩＝90を基準とする。
+    aiTable: {
+      title: "将棋AI（やねうら王）が使う駒の価値",
+      note: "歩を90点としたときの点数。右は歩を1としたときの目安だよ。",
+      pieces: [
+        { label: "歩兵", images: ["black_pawn"], value: 90 },
+        { label: "香車", images: ["black_lance"], value: 315 },
+        { label: "桂馬", images: ["black_knight"], value: 405 },
+        { label: "銀将", images: ["black_silver"], value: 495 },
+        { label: "金将", images: ["black_gold"], value: 540 },
+        { label: "角行", images: ["black_bishop"], value: 855 },
+        { label: "飛車", images: ["black_rook"], value: 990 },
+        { label: "と金・成香・成桂・成銀", images: ["black_prom_pawn", "black_prom_lance", "black_prom_knight", "black_prom_silver"], value: 540 },
+        { label: "竜馬", images: ["black_horse"], value: 945 },
+        { label: "竜王", images: ["black_dragon"], value: 1395 },
+      ],
+    },
     overview: "駒にはだいたいの「価値」があるよ。交換するときの損得の目安にしよう！",
     rows: [
+      ["強さの順番", "成る前の駒は、歩＜香車＜桂馬＜銀＜金＜角＜飛車の順に価値が高いよ。大駒の飛車と角は別格で、金銀は玉の守りに欠かせないんだ。桂は動ける場所こそ少ないけれど、駒を飛び越えて両取りをかけられる分、香より価値が高いとされるよ。"],
       ["使い方", "駒を交換するときは、取った駒と取られた駒の点数を比べよう。たとえば銀（5点）で金（6点）を取れれば1点の得だよ。"],
+      ["将棋AIの見方", "やねうら王も駒の価値を点数で持っていて、歩の約3.5倍が香、約6倍が金、11倍が飛車だよ。ただし実際の形勢判断は、駒の位置や玉の堅さまで含めて評価関数（NNUE）で行うんだ。"],
       ["注意点", "点数はあくまで目安だよ。玉の近くの駒や、攻めに欠かせない駒は、局面によって点数以上の価値になるんだ。"],
       ["格言", "「終盤は駒の損得より速度」。終盤では、駒得よりも早く相手玉に迫ることが大事になるよ。"],
     ],
@@ -188,7 +207,7 @@ const PIECE_ENTRIES = [
   },
 ];
 
-const TESUJI_ENTRIES = [
+const TESUJI_ENTRY_LIST = [
   {
     id: "edge-king-edge-pawn", group: "攻めの格言", label: "端玉には端歩",
     sfen: "8k/9/7pp/9/8P/9/9/9/4K4 b - 1",
@@ -242,6 +261,76 @@ const TESUJI_ENTRIES = [
     ],
   },
   {
+    id: "chasing-check", group: "寄せの格言", label: "王手は追う手",
+    sfen: "9/4k4/9/9/7R1/9/9/9/4K4 b - 1",
+    arrows: ["2e2b"], marks: [["5b", "target"]],
+    overview: "むやみに王手をかけると、相手の玉を逃がしちゃうよ！",
+    rows: [
+      ["意味", "王手をかけても、玉が広い方へ逃げるだけなら、かえって寄せにくくなるという戒めだよ。"],
+      ["例", "盤面の2二飛のような王手は、玉を4一や6三の広い場所へ逃がすだけ。王手より、逃げ道をふさぐ手を考えよう。"],
+    ],
+  },
+  {
+    id: "wrap-the-king", group: "寄せの格言", label: "玉は包むように寄せよ",
+    sfen: "9/4k4/2S3G2/9/9/9/9/9/4K4 b - 1",
+    marks: [["5b", "target"], ["4b", "key"], ["6b", "key"]],
+    overview: "玉は、左右から包み込むように寄せていこう！",
+    rows: [
+      ["意味", "片側からだけ攻めると、玉は反対側へ逃げてしまうよ。逃げ道を両側からふさぐのが寄せのコツなんだ。"],
+      ["例", "盤面では7三の銀と3三の金が、玉の左右の逃げ道をにらんでいるよ。ここから包むように迫ろう。"],
+    ],
+  },
+  {
+    id: "lure-gold-diagonally", group: "寄せの格言", label: "金は斜めに誘え",
+    sfen: "4k4/4g4/9/9/9/9/9/9/4K4 b P 1",
+    arrows: ["P*4c"], marks: [["5b", "target"], ["4c", "key"]],
+    overview: "守りの金は、斜め前へおびき出すと弱くなるよ！",
+    rows: [
+      ["意味", "金は斜め後ろに下がれないから、斜め前へ誘い出すと元の位置に戻れなくなるんだ。"],
+      ["例", "盤面で4三に歩を打ち、同金と取らせると、金は5二へ戻れず玉の守りが薄くなるよ。"],
+    ],
+  },
+  {
+    id: "focal-pawn", group: "歩の手筋", label: "焦点の歩に好手あり",
+    sfen: "4k4/3g1s3/9/9/9/9/9/9/4K4 b P 1",
+    arrows: ["P*5c"], marks: [["5c", "key"], ["6b", "target"], ["4b", "target"]],
+    overview: "相手の駒の利きが集まるマスに歩を打つと、好手になりやすいよ！",
+    rows: [
+      ["意味", "2枚以上の駒が守っているマス（焦点）に歩を打つと、どの駒で取っても、ほかの場所の守りが崩れるんだ。"],
+      ["例", "盤面の5三は、6二の金と4二の銀の両方が守っているマス。ここへ歩を打つと、同金でも同銀でも形が乱れるよ。"],
+    ],
+  },
+  {
+    id: "dangling-pawn", group: "歩の手筋", label: "垂れ歩",
+    sfen: "4k4/9/9/9/9/9/9/9/4K4 b P 1",
+    arrows: ["P*2d"], marks: [["2c", "key"]],
+    overview: "敵陣の一歩手前に歩を打って、と金作りをねらう手筋だよ！",
+    rows: [
+      ["意味", "敵陣の手前（4段目）に打った歩は、次に敵陣へ進んで「と金」になれるよ。これを「垂れ歩」というんだ。"],
+      ["使いどころ", "相手がすぐに取れない場所へ垂らすのがコツ。と金ができると、相手の金銀をはがす強い攻め駒になるよ。"],
+    ],
+  },
+  {
+    id: "tapping-pawn", group: "歩の手筋", label: "叩きの歩",
+    sfen: "4k4/5g3/9/9/9/9/9/9/4K4 b P 1",
+    arrows: ["P*4c"], marks: [["4b", "target"]],
+    overview: "相手の駒の頭に歩を打って、動かしたり取らせたりする手筋だよ！",
+    rows: [
+      ["意味", "駒の真正面に歩を打つ（叩く）と、相手は取るか逃げるかを迫られるよ。駒の位置をずらして、陣形を崩せるんだ。"],
+      ["例", "盤面で4三に歩を打つと、4二の金は取るか逃げるかしかないよ。どちらでも元の守りの形が変わるんだ。"],
+    ],
+  },
+  {
+    id: "one-pawn", group: "歩の手筋", label: "一歩千金",
+    sfen: "4k4/9/7+r1/9/9/9/9/9/7K1 b P 1",
+    arrows: ["P*2h"], marks: [["2i", "target"], ["2h", "key"]],
+    overview: "持ち駒の歩1枚には、千金の値打ちがあるよ！",
+    rows: [
+      ["意味", "歩はたった1点の駒だけど、持ち駒に1枚あるだけで受けも攻めもできる、とても大事な駒という意味だよ。"],
+      ["例", "盤面では竜の王手を、持ち駒の歩を2八に打って止められるよ。歩がなければ、もっと価値の高い駒で受けるしかないんだ。"],
+    ],
+  },
+  {
     id: "early-escape", group: "守りの格言", label: "玉の早逃げ八手の得",
     sfen: "4k4/9/8+r/9/9/9/7PP/7S1/8K b - 1",
     arrows: ["1i2i"], marks: [["1i", "target"], ["2i", "key"]],
@@ -259,6 +348,16 @@ const TESUJI_ENTRIES = [
     rows: [
       ["意味", "最初の5九のままの玉を「居玉」というよ。飛車や角の利きに入りやすく、戦いが始まると危ないんだ。"],
       ["使いどころ", "戦いを始める前に、6八玉などと一手でも玉を動かして囲いを作ろう。"],
+    ],
+  },
+  {
+    id: "three-guards", group: "守りの格言", label: "玉の守りは金銀三枚",
+    sfen: "4k4/9/9/9/9/9/PPPPPPPPP/3RG1SK1/5G3 b - 1",
+    marks: [["5h", "key"], ["3h", "key"], ["4i", "key"]],
+    overview: "玉は、金と銀あわせて3枚で守ると堅いよ！",
+    rows: [
+      ["意味", "囲いは金銀3枚で作るのが基本という教えだよ。2枚では薄く、4枚使うと攻めの駒が足りなくなりやすいんだ。"],
+      ["例", "盤面は振り飛車の「美濃囲い」。3八の銀と4九・5八の金の3枚で、2八の玉をしっかり守っているよ。"],
     ],
   },
   {
@@ -281,7 +380,214 @@ const TESUJI_ENTRIES = [
       ["使いどころ", "端攻めでは、下段の香の後押しで歩を進めると、相手は受けにくくなるよ。"],
     ],
   },
+
+  {
+    id: "head-gold", label: "頭金",
+    sfen: "4k4/9/5S3/9/9/9/9/9/4K4 b G 1",
+    arrows: ["G*5b"], marks: [["5a", "target"], ["5b", "key"]],
+    overview: "玉の頭（真上）に金を打って詰ませる、詰みの一番の基本形だよ！",
+    rows: [
+      ["形", "玉のすぐ上に、ほかの駒の利きで守られた金を打つよ。金は前と横に利くから、下段の玉は逃げ場がなくなるんだ。"],
+      ["例", "盤面では4三の銀が5二を守っているから、5二金で詰み。金を取られない支えがあるかを確かめよう。"],
+    ],
+  },
+  {
+    id: "belly-silver", label: "腹銀（玉の腹から銀を打て）",
+    sfen: "4k4/9/9/9/9/9/9/9/K4L3 b GS 1",
+    arrows: ["S*4a"], marks: [["5a", "target"], ["4a", "key"], ["5b", "key"]],
+    overview: "玉の真横（腹）に銀を打って、逃げ道をふさぐ手筋だよ！",
+    rows: [
+      ["形", "玉の横に打った銀は王手ではないけれど、斜め後ろの利きで玉の上をふさぎ、次の詰みをねらえるんだ。"],
+      ["例", "盤面で4一に銀を打つと（4九の香が銀を守っているよ）、次に5二金と打てば詰み。玉の横からじわっと迫ろう。"],
+    ],
+  },
+  {
+    id: "double-check", label: "鬼より怖い両王手",
+    sfen: "4k4/9/9/9/4N4/9/9/4R4/8K b - 1",
+    arrows: ["5e4c"], marks: [["5a", "target"], ["5h", "key"]],
+    overview: "2つの駒で同時に王手をかける「両王手」は、とっても強力だよ！",
+    rows: [
+      ["意味", "両王手は、合い駒でも王手をかけた駒を取ることでも防げないよ。玉が逃げるしかないんだ。"],
+      ["例", "盤面で桂を4三へ跳ねると、桂の王手と、後ろにいた5八の飛車の王手が同時にかかるよ。"],
+    ],
+  },
+  {
+    id: "gold-bottom-pawn", label: "金底の歩、岩よりも堅し",
+    sfen: "4k4/9/9/9/9/9/9/6GK1/2+r6 b P 1",
+    arrows: ["P*3i"], marks: [["3h", "key"], ["3i", "key"], ["7i", "target"]],
+    overview: "金の真下に打つ歩（金底の歩）は、岩のように堅い守りになるよ！",
+    rows: [
+      ["意味", "一番下の段に打った歩は、横から来る竜や飛車の利きを止めてくれるよ。真上の金が歩を守るから、簡単には取られないんだ。"],
+      ["例", "盤面では、7九の竜が一段目から玉の下をねらっているよ。3九に歩を打てば、竜の横利きが止まるね。"],
+    ],
+  },
+  {
+    id: "joined-pawns", label: "三歩持ったら継ぎ歩と垂れ歩",
+    sfen: "4k4/9/7p1/9/7P1/9/9/7R1/4K4 b 3P 1",
+    arrows: ["2e2d"], marks: [["2c", "target"], ["2d", "key"]],
+    overview: "持ち歩が3枚あれば、歩だけで相手の陣形を崩せるよ！",
+    rows: [
+      ["意味", "歩を突き捨てて取らせ、同じ筋にもう一度歩を打つ「継ぎ歩」や、敵陣の手前に打つ「垂れ歩」を組み合わせると、歩だけで攻めを作れるんだ。"],
+      ["例", "盤面ではまず2四歩と突き捨てて、同歩と取らせたところへ歩を打ち直していくよ。持ち歩の数を数えながら攻めよう。"],
+    ],
+  },
+  {
+    id: "edge-pawn-when-idle", label: "手のない時は端歩を突け",
+    moves: ["7g7f", "3c3d", "2g2f", "8c8d", "2f2e", "8d8e", "6i7h", "4a3b"],
+    arrows: ["1g1f"], marks: [["1g", "key"]],
+    overview: "指す手に迷ったら、端歩を突いておくのがおすすめだよ！",
+    rows: [
+      ["意味", "端歩は、玉の逃げ道を広げたり、あとで端攻めに使えたりする、損の少ない一手なんだ。"],
+      ["使いどころ", "駒組みが一段落して、どちらから動くか様子を見たいときに、1六歩のような端歩が役に立つよ。"],
+    ],
+  },
+  {
+    id: "pawn-against-advanced-silver", label: "歩越し銀には歩で受けよ",
+    sfen: "4k4/9/5ps2/9/5S3/9/5P3/9/4K4 w - 1",
+    arrows: ["4c4d"], marks: [["4e", "target"]],
+    overview: "歩より前に出てきた銀は、歩を突いて追い返そう！",
+    rows: [
+      ["意味", "自分の歩より前に出た銀（歩越し銀）は、後ろ盾がなく不安定なんだ。歩を突いて追い払うのが効果的だよ。"],
+      ["例", "盤面で後手が4四歩と突くと、3三の銀が歩を守っているから、4五の銀は歩を取れずに逃げるしかなくなるよ。"],
+    ],
+  },
+  {
+    id: "knight-check", label: "桂の王手は合駒きかず",
+    sfen: "4k4/9/9/9/9/9/9/9/4K4 b N 1",
+    arrows: ["N*4c"], marks: [["5a", "target"], ["4c", "key"]],
+    overview: "桂馬の王手は、間に駒を置いて防ぐことができないよ！",
+    rows: [
+      ["意味", "桂は駒を飛び越えて利くから、合い駒で王手をさえぎれないんだ。桂を取るか、玉が逃げるしかないよ。"],
+      ["例", "盤面で4三に桂を打つと王手。5一の玉は逃げるしかないね。詰みの仕上げにとても頼りになるよ。"],
+    ],
+  },
+  {
+    id: "silver-zigzag", label: "銀は千鳥に使え",
+    sfen: "4k4/9/9/9/9/9/9/5S3/4K4 b - 1",
+    arrows: ["4h3g"], marks: [["4h", "key"]],
+    overview: "銀は斜めにジグザグと動かすと、力を発揮するよ！",
+    rows: [
+      ["意味", "銀は斜め4方向に動けるから、斜めに進んだり戻ったりを繰り返す「千鳥」の動きが得意なんだ。"],
+      ["例", "盤面では4八の銀を3七へ斜めに上がり、次は4六や2六へと斜めに進めていくよ。棒銀や早繰り銀もこの動きだね。"],
+    ],
+  },
+  {
+    id: "silver-without-promotion", label: "銀は成らずに好手あり",
+    sfen: "k8/9/5S3/9/9/9/9/9/4K4 b - 1",
+    arrows: ["4c3b"], marks: [["3b", "key"]],
+    overview: "敵陣の銀は、あえて成らないほうが強いことがあるよ！",
+    rows: [
+      ["意味", "銀は成ると金と同じ動きになり、斜め後ろに下がれなくなるよ。成らなければ、斜めに引いてまた攻め直せるんだ。"],
+      ["例", "盤面で3二へ成らずに進めば、次に4三や2三へ斜めに引くこともできるよ。"],
+    ],
+  },
+  {
+    id: "silver-attacks-gold-defends", label: "攻めは銀、受けは金",
+    moves: ["2g2f", "8c8d", "2f2e", "8d8e", "3i3h", "4a3b", "3h2g", "7a7b"],
+    arrows: ["2g2f"], marks: [["6i", "key"], ["4i", "key"]],
+    overview: "銀は攻めに、金は守りに使うのが基本だよ！",
+    rows: [
+      ["意味", "前に強い銀は攻めに、横や後ろにも利く金は玉の守りに向いているという教えだよ。"],
+      ["例", "盤面は棒銀。銀を2六へ出して攻める一方、4九と6九の金は玉のそばで守りに残しておくよ。"],
+    ],
+  },
+  {
+    id: "tokin-on-53", label: "5三のと金に負けなし",
+    sfen: "4k4/9/4+P4/9/9/9/9/9/4K4 b - 1",
+    marks: [["5c", "key"]],
+    overview: "敵陣の真ん中（5三）にできたと金は、とっても強いよ！",
+    rows: [
+      ["意味", "5三は相手の玉の頭で、金銀の連結の中心になるマス。ここにと金ができると、相手の守りがばらばらになりやすいんだ。"],
+      ["ポイント", "と金は取られても相手に渡るのは歩1枚だけ。遠慮なく相手の金銀にぶつけていこう。"],
+    ],
+  },
+  {
+    id: "no-center-pawn-after-exchange", label: "角交換に5筋の歩を突くな",
+    moves: ["7g7f", "3c3d", "8h2b+", "3a2b", "7i8h", "2b3c"],
+    marks: [["5g", "key"]],
+    overview: "角交換した後は、5筋の歩を突くと危ないよ！",
+    rows: [
+      ["意味", "角交換の後に5筋の歩を突くと、自陣に角を打ち込まれるすきが増えるという教えだよ。"],
+      ["使いどころ", "角換わりの駒組みでは、5七の歩を突かずに、打ち込まれる場所がない形を保とう。"],
+    ],
+  },
+  {
+    id: "rook-cross-fork", label: "飛車は十字に使え",
+    sfen: "k8/4g4/9/9/7s1/9/9/9/8K b R 1",
+    arrows: ["R*5e"], marks: [["5b", "target"], ["2e", "target"], ["5e", "key"]],
+    overview: "飛車は縦と横の十字に利くから、両取りをかけやすいよ！",
+    rows: [
+      ["意味", "飛車は縦横どこまでも利くので、十字の先にある2枚の駒を同時にねらえるんだ。"],
+      ["例", "盤面で5五に飛車を打つと、縦の5二の金と、横の2五の銀の両取りになるよ。"],
+    ],
+  },
+  {
+    id: "weak-player-loves-rook", label: "へぼ将棋、玉より飛車を可愛がり",
+    sfen: STANDARD,
+    marks: [["5i", "key"], ["2h", "target"]],
+    overview: "飛車を大事にしすぎて、玉を危なくしちゃだめだよ！",
+    rows: [
+      ["意味", "飛車は強い駒だけど、一番大事なのは玉。飛車を守るために玉の守りを後回しにするのは、よくある失敗なんだ。"],
+      ["使いどころ", "飛車を取られそうになっても、玉の安全を優先しよう。飛車を渡しても勝てる局面はたくさんあるよ。"],
+    ],
+  },
+  {
+    id: "dragon-enemy-horse-home", label: "竜は敵陣に馬は自陣に",
+    sfen: "4k4/6+R2/9/9/9/9/9/1K1+B5/9 b - 1",
+    marks: [["3b", "key"], ["6h", "key"]],
+    overview: "竜は攻めに、馬は守りに使うと力を発揮するよ！",
+    rows: [
+      ["意味", "竜は敵陣で横から玉をねらうと強く、馬は自陣に引くと玉のそばを守る強い駒になるという教えだよ。"],
+      ["例", "盤面では3二の竜が相手玉をにらみ、6八の馬が自玉の守りについているよ。"],
+      ["関連", "「馬の守りは金銀三枚」。自陣の馬には、金銀3枚分の守りの力があるといわれるよ。"],
+    ],
+  },
+  {
+    id: "drop-major-far", label: "大駒は離して打て",
+    sfen: "4k4/9/9/9/9/9/9/9/8K b R 1",
+    arrows: ["R*5h"], marks: [["5a", "target"]],
+    overview: "飛車や角は、相手の玉から離して打つのが基本だよ！",
+    rows: [
+      ["意味", "大駒を玉の近くに打つと、玉や金銀に取られたり、逃げられたりしやすいよ。離して打てば取られにくく、利きも長く保てるんだ。"],
+      ["例", "盤面では5八に飛車を打って、遠くから王手。玉が逃げても、飛車の利きがずっと残るよ。"],
+    ],
+  },
+  {
+    id: "attack-pieces", label: "攻めは飛車角銀桂",
+    sfen: STANDARD,
+    marks: [["2h", "key"], ["8h", "key"], ["3i", "key"], ["2i", "key"]],
+    overview: "攻めには、飛車・角・銀・桂の4つの駒を使おう！",
+    rows: [
+      ["意味", "攻めの主力は飛車・角・銀・桂。金は玉の守りに残し、この4枚を連携させて攻めるのが基本だよ。"],
+      ["関連", "「4枚の攻めは切れない」。攻めに4枚の駒が参加していれば、攻めが続きやすいといわれるよ。"],
+    ],
+  },
 ];
+
+/** 手筋図鑑は駒ごとの格言と詰みの形にまとめて並べる。 */
+const TESUJI_GROUPS = [
+  ["詰みの形", ["head-gold", "belly-silver", "one-gap-dragon", "double-check"]],
+  ["歩の格言", [
+    "one-pawn", "gold-bottom-pawn", "focal-pawn", "joined-pawns", "dangling-pawn", "tapping-pawn",
+    "edge-pawn-when-idle", "pawn-against-advanced-silver", "rook-pawn-exchange", "edge-king-edge-pawn",
+  ]],
+  ["香の格言", ["bottom-lance"]],
+  ["桂の格言", ["high-knight", "knight-check", "knight-fork"]],
+  ["銀の格言", ["silver-zigzag", "silver-without-promotion", "silver-attacks-gold-defends"]],
+  ["金の格言", ["lure-gold-diagonally", "tokin-on-53"]],
+  ["角の格言", ["no-center-pawn-after-exchange"]],
+  ["飛車の格言", ["rook-cross-fork", "weak-player-loves-rook"]],
+  ["玉の格言", [
+    "drop-to-bottom", "wrap-the-king", "avoid-idle-king", "early-escape", "three-guards",
+  ]],
+  ["全般の格言", ["chasing-check", "dragon-enemy-horse-home", "drop-major-far", "attack-pieces"]],
+];
+
+const TESUJI_ENTRIES = TESUJI_GROUPS.flatMap(([group, ids]) => ids.map((id) => {
+  const entry = TESUJI_ENTRY_LIST.find((candidate) => candidate.id === id);
+  if (!entry) throw new Error(`手筋図鑑の項目がありません: ${id}`);
+  return { ...entry, group };
+}));
 
 const WORLD_ENTRIES = [
   {

@@ -65,16 +65,48 @@
                 </th>
                 <td>
                   <ul>
-                    <li v-for="piece in row.pieces" :key="piece.label" class="shogi-reference-dex__tier-piece">
-                      <strong>{{ piece.label }}</strong>
+                    <li
+                      v-for="piece in row.pieces"
+                      :key="piece.label"
+                      class="shogi-reference-dex__tier-piece"
+                      :title="piece.label"
+                    >
+                      <span class="shogi-reference-dex__piece-images">
+                        <img
+                          v-for="image in piece.images"
+                          :key="image"
+                          :src="pieceImageUrl(image)"
+                          :alt="piece.label"
+                          draggable="false"
+                        >
+                      </span>
                       <span class="shogi-reference-dex__points">{{ piece.points }}<small v-if="piece.points !== '∞'">点</small></span>
-                      <small>{{ piece.note }}</small>
                     </li>
                   </ul>
                 </td>
               </tr>
             </tbody>
           </table>
+          <section v-if="selectedEntry.aiTable" class="shogi-reference-dex__ai" aria-labelledby="shogi-reference-dex-ai-title">
+            <h3 id="shogi-reference-dex-ai-title">{{ selectedEntry.aiTable.title }}</h3>
+            <p>{{ selectedEntry.aiTable.note }}</p>
+            <ol>
+              <li v-for="piece in aiPieces" :key="piece.label" :title="piece.label">
+                <span class="shogi-reference-dex__ai-bar" :style="{ width: `${piece.ratio * 100}%` }" aria-hidden="true"></span>
+                <span class="shogi-reference-dex__piece-images">
+                  <img
+                    v-for="image in piece.images"
+                    :key="image"
+                    :src="pieceImageUrl(image)"
+                    :alt="piece.label"
+                    draggable="false"
+                  >
+                </span>
+                <strong>{{ piece.value }}</strong>
+                <small>歩×{{ piece.relative }}</small>
+              </li>
+            </ol>
+          </section>
           <div v-else class="shogi-dex__stage">
             <div class="shogi-dex__board">
               <ShogiMatchBoard
@@ -133,11 +165,13 @@ import {
 } from "./core/reference-dex.mjs";
 
 type ReferenceDexKind = "piece" | "tesuji" | "world";
-type TierRow = { tier: string; pieces: { label: string; points: number | string; note: string }[] };
+type TierRow = { tier: string; pieces: { label: string; images: string[]; points: number | string }[] };
+type AiTable = { title: string; note: string; pieces: { label: string; images: string[]; value: number }[] };
 type ReferenceEntry = {
   id: string;
   label: string;
   table?: TierRow[];
+  aiTable?: AiTable;
   overview: string;
   rows: [string, string][];
   arrows?: string[];
@@ -184,6 +218,33 @@ const legend = computed(() => {
   return (Object.keys(LEGEND_LABELS) as (keyof typeof LEGEND_LABELS)[])
     .filter((tone) => tones.has(tone))
     .map((tone) => ({ tone, label: LEGEND_LABELS[tone] }));
+});
+
+// 盤で選んだ駒の書体に合わせて、表の駒画像を表示する。
+function pieceTheme() {
+  try {
+    return localStorage.getItem("shogi-match-piece-theme") || "hitomoji_wood";
+  } catch {
+    return "hitomoji_wood";
+  }
+}
+const theme = pieceTheme();
+function pieceImageUrl(name: string) {
+  return `${props.assetBaseUrl.replace(/\/$/, "")}/piece/${theme}/${name}.webp`;
+}
+// 将棋AIの点数を大きい順に並べ、歩を1とした倍率と棒の長さを添える。
+const aiPieces = computed(() => {
+  const table = selectedEntry.value?.aiTable;
+  if (!table) return [];
+  const pawn = table.pieces.find(({ label }) => label === "歩兵")?.value ?? 90;
+  const max = Math.max(...table.pieces.map(({ value }) => value));
+  return [...table.pieces]
+    .sort((left, right) => right.value - left.value)
+    .map((piece) => ({
+      ...piece,
+      ratio: piece.value / max,
+      relative: Number((piece.value / pawn).toFixed(1)),
+    }));
 });
 
 function tierClass(tier: string) {
@@ -265,23 +326,82 @@ function selectItem(id: string) {
   list-style: none;
 }
 .shogi-game .shogi-reference-dex__tier-piece {
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 0 0.5rem;
-  align-items: baseline;
-  min-width: 7.5rem;
-  padding: 0.35rem 0.55rem;
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.25rem 0.5rem 0.25rem 0.3rem;
   border: 1px solid rgba(241, 165, 76, 0.55);
   border-radius: 0.3rem;
-  background: rgba(20, 33, 46, 0.55);
+  background: rgba(255, 252, 244, 0.92);
 }
-.shogi-game .shogi-reference-dex__tier-piece > small {
-  grid-column: 1 / -1;
-  font-size: 0.72rem;
-  opacity: 0.8;
+.shogi-game .shogi-reference-dex__piece-images {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: none;
+  gap: 0.1rem;
+}
+.shogi-game .shogi-reference-dex__piece-images img {
+  width: 2.3rem;
+  height: 2.5rem;
+  object-fit: contain;
+  user-select: none;
+}
+.shogi-game .shogi-reference-dex__ai {
+  margin-top: 0.9rem;
+}
+.shogi-game .shogi-reference-dex__ai h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+.shogi-game .shogi-reference-dex__ai p {
+  margin: 0 0 0.45rem;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+.shogi-game .shogi-reference-dex__ai ol {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-reference-dex__ai li {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  overflow: hidden;
+  padding: 0.2rem 0.55rem 0.2rem 0.3rem;
+  border-radius: 0.3rem;
+  background: rgba(255, 252, 244, 0.92);
+  color: #14212e;
+}
+.shogi-game .shogi-reference-dex__ai li .shogi-reference-dex__piece-images img {
+  width: 1.9rem;
+  height: 2.05rem;
+}
+.shogi-game .shogi-reference-dex__ai-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(241, 165, 76, 0.4);
+}
+.shogi-game .shogi-reference-dex__ai li strong,
+.shogi-game .shogi-reference-dex__ai li small {
+  position: relative;
+  z-index: 1;
+}
+.shogi-game .shogi-reference-dex__ai li strong {
+  font-size: 1.05rem;
+}
+.shogi-game .shogi-reference-dex__ai li small {
+  min-width: 3.6rem;
+  text-align: right;
+  opacity: 0.75;
 }
 .shogi-game .shogi-reference-dex__points {
-  color: #f1a54c;
+  color: #c2410c;
   font-size: 1.15rem;
   font-weight: 800;
   text-align: right;
