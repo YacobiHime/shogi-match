@@ -421,7 +421,8 @@ const boardArrows = computed(() => (
 const canAdvance = computed(() => {
   const type = currentStep.value?.type;
   if (type === "explain" || type === "open-dex") return true;
-  if (type === "play") return false;
+  // 盤で指すステップは正解すると自動で次へ進むので、「次へ」は出さない。
+  if (type === "play" || autoAdvancesOnSolve(currentStep.value)) return false;
   return stepSolved.value;
 });
 const stepSpeech = computed(() => {
@@ -515,7 +516,7 @@ function onBoardMove(usi: string) {
   stepSolved.value = true;
   hintLevel.value = 0;
   setFeedback(step.type === "mate" ? "詰み！ おみごと！" : "正解！ すごいね！", "good");
-  // 盤で指すステップは、正解を少し見せてから自動で次へ進める（待たずに「次へ」を押してもよい）。
+  // 盤で指すステップは、正解を少し見せてから自動で次へ進める。
   if (autoAdvancesOnSolve(step)) {
     const index = stepIndex.value;
     stepTimers.push(setTimeout(() => {
