@@ -200,7 +200,7 @@ describe("CPU opening repertoire", () => {
       configuredStrategy: "surprise",
       cpuColor: "white",
       moves: ["7g7f"],
-      random: () => 0.5,
+      random: () => 0.3,
     }).strategyId).toBe("pacman");
     expect(selectCpuOpeningRepertoire({
       configuredStrategy: "surprise",
@@ -218,43 +218,57 @@ describe("CPU opening repertoire", () => {
     })).toEqual(CPU_OPENING_REPERTOIRES.ibisha);
   });
 
-  it("partitions all 19 supported CPU strategies without duplicates", () => {
+  it("partitions all 21 supported CPU strategies without duplicates", () => {
     const ids = Object.values(CPU_OPENING_CATEGORY_IDS).flat();
-    expect(ids).toHaveLength(19);
-    expect(new Set(ids).size).toBe(19);
+    expect(ids).toHaveLength(21);
+    expect(new Set(ids).size).toBe(21);
     expect(new Set(ids)).toEqual(new Set(Object.keys(CPU_OPENING_REPERTOIRES)));
   });
 
-  it("answers 2六歩 with a common double-wing plan", () => {
-    expect(selectCpuOpeningRepertoire({ moves: ["2g2f"] })).toEqual(
-      CPU_OPENING_REPERTOIRES.aigakari,
-    );
+  function shares(options, samples = 400) {
+    const counts = new Map();
+    for (let index = 0; index < samples; index += 1) {
+      const { strategyId } = selectCpuOpeningRepertoire({ ...options, random: () => (index + 0.5) / samples });
+      counts.set(strategyId, (counts.get(strategyId) ?? 0) + 1);
+    }
+    const share = (ids) => ids.reduce((sum, id) => sum + (counts.get(id) ?? 0), 0) / samples;
+    return { counts, share };
+  }
+  const RANGING = CPU_OPENING_CATEGORY_IDS.ranging;
+  const PRO_MAIN = ["aigakari", "kakugawari", "kakugawari-koshikake-gin", "kakugawari-45-knight", "yagura-strategy"];
+
+  it("leans toward popular amateur openings at low levels and professional openings at high levels", () => {
+    const beginner = shares({ cpuColor: "black", level: 3 });
+    const professional = shares({ cpuColor: "black", level: 24 });
+    // 級位帯は振り飛車・棒銀が多く、プロ級は角換わり・相掛かり・矢倉が中心になる。
+    expect(beginner.share(RANGING)).toBeGreaterThan(0.4);
+    expect(professional.share(RANGING)).toBeLessThan(0.3);
+    expect(professional.share(PRO_MAIN)).toBeGreaterThan(0.55);
+    expect(beginner.share(PRO_MAIN)).toBeLessThan(0.2);
+    expect(beginner.share(["bougin"])).toBeGreaterThan(professional.share(["bougin"]));
+    // 奇襲はプロ級では選ばない。
+    expect(professional.share(CPU_OPENING_CATEGORY_IDS.surprise)).toBe(0);
+    expect(beginner.share(CPU_OPENING_CATEGORY_IDS.surprise)).toBeGreaterThan(0);
   });
 
-  it("answers 7六歩 from a bounded set of standard plans", () => {
-    const ids = [0, 0.6, 0.9].map((value) => selectCpuOpeningRepertoire({
-      moves: ["7g7f"],
-      random: () => value,
-    }).strategyId);
-    expect(ids).toEqual(["yagura-strategy", "shiken", "sangen"]);
+  it("answers 2六歩 with more double-wing and Bishop Exchange plans than 7六歩", () => {
+    const afterRookPawn = shares({ cpuColor: "white", moves: ["2g2f"], level: 21 });
+    const afterBishopDiagonal = shares({ cpuColor: "white", moves: ["7g7f"], level: 21 });
+    const doubleWing = ["aigakari", "kakugawari", "kakugawari-koshikake-gin", "kakugawari-45-knight"];
+    expect(afterRookPawn.share(doubleWing)).toBeGreaterThan(afterBishopDiagonal.share(doubleWing));
+    expect(afterBishopDiagonal.share(RANGING)).toBeGreaterThan(afterRookPawn.share(RANGING));
   });
 
-  it("keeps the existing automatic choice when every opening tendency is unselected", () => {
+  it("keeps the automatic distribution when every opening tendency is unselected or adaptive", () => {
+    const random = () => 0.42;
+    const automatic = selectCpuOpeningRepertoire({ cpuColor: "white", moves: ["2g2f"], level: 12, random });
     expect(selectCpuOpeningRepertoire({
-      cpuColor: "white",
-      moves: ["2g2f"],
-      bishopPreference: "",
-      rookPreference: "",
-      tempoPreference: "",
-    })).toEqual(CPU_OPENING_REPERTOIRES.aigakari);
-  });
-
-  it("keeps choosing from the opponent move when the rook style is adaptive", () => {
+      cpuColor: "white", moves: ["2g2f"], level: 12, random,
+      bishopPreference: "", rookPreference: "", tempoPreference: "",
+    })).toEqual(automatic);
     expect(selectCpuOpeningRepertoire({
-      cpuColor: "white",
-      moves: ["2g2f"],
-      rookPreference: "adaptive",
-    })).toEqual(CPU_OPENING_REPERTOIRES.aigakari);
+      cpuColor: "white", moves: ["2g2f"], level: 12, random, rookPreference: "adaptive",
+    })).toEqual(automatic);
   });
 
   it("selects a repertoire that opens or keeps closed the bishop diagonal", () => {

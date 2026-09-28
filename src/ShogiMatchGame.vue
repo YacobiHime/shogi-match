@@ -27,75 +27,103 @@
         <h1>shogi-match</h1>
       </div>
       <nav class="shogi-home__menu" aria-label="メニュー">
-        <button type="button" class="shogi-home__card" @click="closeHome">
-          <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#f2e3c2">
-              <rect x="2" y="2" width="12" height="1" />
-              <rect x="2" y="13" width="12" height="1" />
-              <rect x="2" y="2" width="1" height="12" />
-              <rect x="13" y="2" width="1" height="12" />
-              <rect x="5" y="2" width="1" height="12" />
-              <rect x="8" y="2" width="1" height="12" />
-              <rect x="11" y="2" width="1" height="12" />
-              <rect x="2" y="5" width="12" height="1" />
-              <rect x="2" y="8" width="12" height="1" />
-              <rect x="2" y="11" width="12" height="1" />
-            </g>
-            <g fill="#e8a04c">
-              <rect x="3" y="3" width="2" height="2" />
-              <rect x="12" y="9" width="2" height="2" />
-            </g>
-          </svg>
-          <span class="shogi-home__label">対局画面</span>
-        </button>
-        <button type="button" class="shogi-home__card" @click="dexOpen = true">
-          <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#f2e3c2">
-              <rect x="2" y="3" width="5" height="10" />
-              <rect x="9" y="3" width="5" height="10" />
-              <rect x="7" y="2" width="2" height="12" />
-            </g>
-            <g fill="#e8a04c">
-              <rect x="3" y="4" width="3" height="1" />
-              <rect x="3" y="6" width="3" height="1" />
-              <rect x="3" y="8" width="3" height="1" />
-              <rect x="10" y="4" width="3" height="1" />
-              <rect x="10" y="6" width="3" height="1" />
-              <rect x="10" y="8" width="3" height="1" />
-            </g>
-          </svg>
-          <span class="shogi-home__label">定跡図鑑</span>
-        </button>
-        <button type="button" class="shogi-home__card" disabled>
-          <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#e8a04c">
-              <rect x="5" y="1" width="6" height="1" />
-              <rect x="4" y="2" width="8" height="2" />
-              <rect x="3" y="4" width="10" height="8" />
-              <rect x="4" y="12" width="8" height="2" />
-              <rect x="5" y="14" width="6" height="1" />
-            </g>
-            <text x="8" y="11" class="shogi-home__koma-char" aria-hidden="true">飛</text>
-          </svg>
-          <span class="shogi-home__label">駒図鑑</span>
-          <span class="shogi-home__soon">準備中</span>
-        </button>
-        <button type="button" class="shogi-home__card" disabled>
-          <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-            <g fill="#f2e3c2">
-              <rect x="3" y="2" width="10" height="12" />
-              <rect x="2" y="1" width="2" height="14" />
-            </g>
-            <g fill="#e8a04c">
-              <rect x="6" y="4" width="6" height="1" />
-              <rect x="6" y="6" width="6" height="1" />
-              <rect x="6" y="8" width="6" height="1" />
-              <rect x="6" y="10" width="4" height="1" />
-            </g>
-          </svg>
-          <span class="shogi-home__label">ルール図鑑</span>
-          <span class="shogi-home__soon">準備中</span>
-        </button>
+        <section class="shogi-home__group" aria-labelledby="shogi-home-match">
+          <h2 id="shogi-home-match" class="shogi-home__group-title">対局</h2>
+          <div class="shogi-home__cards">
+            <button type="button" class="shogi-home__card" @click="openMatchSetup('normal')">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f2e3c2">
+                  <rect x="2" y="2" width="12" height="1" />
+                  <rect x="2" y="13" width="12" height="1" />
+                  <rect x="2" y="2" width="1" height="12" />
+                  <rect x="13" y="2" width="1" height="12" />
+                  <rect x="5" y="2" width="1" height="12" />
+                  <rect x="8" y="2" width="1" height="12" />
+                  <rect x="11" y="2" width="1" height="12" />
+                  <rect x="2" y="5" width="12" height="1" />
+                  <rect x="2" y="8" width="12" height="1" />
+                  <rect x="2" y="11" width="12" height="1" />
+                </g>
+                <g fill="#e8a04c">
+                  <rect x="3" y="3" width="2" height="2" />
+                  <rect x="12" y="9" width="2" height="2" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">通常対局</span>
+              <small class="shogi-home__desc">平手でCPUと真剣勝負</small>
+            </button>
+            <button type="button" class="shogi-home__card" @click="openMatchSetup('learning')">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f2e3c2">
+                  <rect x="2" y="3" width="12" height="9" />
+                  <rect x="7" y="12" width="2" height="2" />
+                  <rect x="4" y="14" width="8" height="1" />
+                </g>
+                <g fill="#e8a04c">
+                  <rect x="4" y="5" width="2" height="2" />
+                  <rect x="7" y="5" width="2" height="2" />
+                  <rect x="10" y="5" width="2" height="2" />
+                  <rect x="4" y="8" width="8" height="2" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">学習対局</span>
+              <small class="shogi-home__desc">駒落ちや完成形から練習</small>
+            </button>
+          </div>
+        </section>
+        <section class="shogi-home__group" aria-labelledby="shogi-home-dex">
+          <h2 id="shogi-home-dex" class="shogi-home__group-title">図鑑</h2>
+          <div class="shogi-home__cards">
+            <button type="button" class="shogi-home__card" @click="dexOpen = true">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f2e3c2">
+                  <rect x="2" y="3" width="5" height="10" />
+                  <rect x="9" y="3" width="5" height="10" />
+                  <rect x="7" y="2" width="2" height="12" />
+                </g>
+                <g fill="#e8a04c">
+                  <rect x="3" y="4" width="3" height="1" />
+                  <rect x="3" y="6" width="3" height="1" />
+                  <rect x="3" y="8" width="3" height="1" />
+                  <rect x="10" y="4" width="3" height="1" />
+                  <rect x="10" y="6" width="3" height="1" />
+                  <rect x="10" y="8" width="3" height="1" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">定跡図鑑</span>
+            </button>
+            <button type="button" class="shogi-home__card" disabled>
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#e8a04c">
+                  <rect x="5" y="1" width="6" height="1" />
+                  <rect x="4" y="2" width="8" height="2" />
+                  <rect x="3" y="4" width="10" height="8" />
+                  <rect x="4" y="12" width="8" height="2" />
+                  <rect x="5" y="14" width="6" height="1" />
+                </g>
+                <text x="8" y="11" class="shogi-home__koma-char" aria-hidden="true">飛</text>
+              </svg>
+              <span class="shogi-home__label">駒図鑑</span>
+              <span class="shogi-home__soon">準備中</span>
+            </button>
+            <button type="button" class="shogi-home__card" disabled>
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f2e3c2">
+                  <rect x="3" y="2" width="10" height="12" />
+                  <rect x="2" y="1" width="2" height="14" />
+                </g>
+                <g fill="#e8a04c">
+                  <rect x="6" y="4" width="6" height="1" />
+                  <rect x="6" y="6" width="6" height="1" />
+                  <rect x="6" y="8" width="6" height="1" />
+                  <rect x="6" y="10" width="4" height="1" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">ルール図鑑</span>
+              <span class="shogi-home__soon">準備中</span>
+            </button>
+          </div>
+        </section>
       </nav>
     </div>
 
@@ -105,7 +133,10 @@
       @close="dexOpen = false"
     />
 
-    <header class="shogi-game__toolbar">
+    <header
+      class="shogi-game__toolbar"
+      :class="{ 'shogi-game__toolbar--learning': matchKind === 'learning' }"
+    >
       <button
         type="button"
         class="shogi-game__command"
@@ -125,6 +156,14 @@
         :aria-pressed="boardFlipOverride"
         @click="boardFlipOverride = !boardFlipOverride"
       >ひふみんアイ</button>
+      <button
+        v-if="matchKind === 'learning'"
+        type="button"
+        class="shogi-game__command shogi-game__command--attack"
+        aria-label="駒の利きを表示"
+        :aria-pressed="attackGuideEnabled"
+        @click="attackGuideEnabled = !attackGuideEnabled"
+      >駒の利き</button>
       <span class="shogi-game__turn">{{ moveCount }}手目</span>
     </header>
 
@@ -149,6 +188,20 @@
           <span>対局準備</span>
           <h2 id="pregame-title">対局条件を選んでね</h2>
         </div>
+        <div class="shogi-game__match-kind" role="radiogroup" aria-label="対局の種類">
+          <button
+            v-for="kind in MATCH_KIND_OPTIONS"
+            :key="kind.value"
+            type="button"
+            role="radio"
+            :aria-checked="matchKind === kind.value"
+            :class="{ 'shogi-game__match-kind--active': matchKind === kind.value }"
+            @click="matchKind = kind.value"
+          >
+            <strong>{{ kind.label }}</strong>
+            <small>{{ kind.description }}</small>
+          </button>
+        </div>
         <div class="shogi-game__pregame-grid">
           <label v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
             <span>敵の強さ</span>
@@ -158,7 +211,7 @@
               </option>
             </select>
           </label>
-          <div v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field">
+          <div v-if="normalizedMode === 'cpu' && !pregameUsesCustomStart" class="shogi-game__pregame-field">
             <span>相手の作戦</span>
             <div class="shogi-game__strategy-setting">
               <select v-if="!cpuStrategyDetailsOpen" v-model="cpuStrategy" aria-label="対局前の相手の作戦">
@@ -181,8 +234,12 @@
                 </label>
                 <label>
                   <span>囲い</span>
-                  <select v-model="cpuDetailedCastle" aria-label="対局前の相手の囲いを指定">
-                    <option value="">指定なし</option>
+                  <select
+                    v-model="cpuDetailedCastle"
+                    aria-label="対局前の相手の囲いを指定"
+                    :disabled="isIntegratedOpening(cpuDetailedStrategy, 'strategy')"
+                  >
+                    <option value="">{{ isIntegratedOpening(cpuDetailedStrategy, "strategy") ? "戦法に含む" : "指定なし" }}</option>
                     <optgroup v-for="group in cpuDetailedCastleGroups" :key="group.id" :label="group.label">
                       <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
                         {{ castle.label }}
@@ -196,7 +253,10 @@
               </button>
             </div>
           </div>
-          <div v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-field shogi-game__pregame-field--opening-tendency">
+          <div
+            v-if="normalizedMode === 'cpu' && !pregameUsesCustomStart"
+            class="shogi-game__pregame-field shogi-game__pregame-field--opening-tendency"
+          >
             <span>相手の序盤傾向</span>
             <div class="shogi-game__opening-tendency">
               <label>
@@ -235,7 +295,7 @@
             <small>初手を最優先し、その後は角道の具体的な指定を定跡より優先します。</small>
           </div>
           <div
-            v-if="normalizedMode === 'cpu'"
+            v-if="normalizedMode === 'cpu' && !(matchKind === 'learning' && learningStartType === 'handicap')"
             class="shogi-game__pregame-field shogi-game__pregame-field--turn"
           >
             <label class="shogi-game__pregame-control">
@@ -246,7 +306,7 @@
               </select>
             </label>
             <label
-              v-if="selectedPlayerColor === 'white'"
+              v-if="selectedPlayerColor === 'white' && !pregameUsesCustomStart"
               class="shogi-game__pregame-control shogi-game__pregame-control--sub"
             >
               <span>相手の初手</span>
@@ -258,6 +318,112 @@
               </select>
             </label>
           </div>
+          <template v-if="matchKind === 'learning'">
+            <div class="shogi-game__pregame-field shogi-game__pregame-field--learning">
+              <span>開始局面</span>
+              <div class="shogi-game__learning-start">
+                <select v-model="learningStartType" aria-label="学習対局の開始局面">
+                  <option value="standard">平手の初期局面</option>
+                  <option value="handicap">駒落ち</option>
+                  <option value="formation">戦法・囲いが完成した局面</option>
+                </select>
+                <div v-if="learningStartType === 'handicap'" class="shogi-game__opening-tendency">
+                  <label>
+                    <span>駒落ち</span>
+                    <select v-model="learningHandicapId" aria-label="駒落ちの種類">
+                      <option v-for="handicap in LEARNING_HANDICAPS" :key="handicap.id" :value="handicap.id">
+                        {{ handicap.label }}
+                      </option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>駒を落とす側</span>
+                    <select v-model="learningHandicapGiver" aria-label="駒を落とす側">
+                      <option value="cpu">相手（自分は下手）</option>
+                      <option value="player">自分（自分は上手）</option>
+                    </select>
+                  </label>
+                </div>
+                <div v-if="learningStartType === 'formation'" class="shogi-game__learning-plans">
+                  <fieldset
+                    v-for="side in LEARNING_PLAN_SIDES"
+                    :key="side.id"
+                    class="shogi-game__learning-plan"
+                  >
+                    <legend>{{ side.label }}</legend>
+                    <label>
+                      <span>戦法</span>
+                      <select
+                        :value="side.id === 'player' ? learningPlayerStrategy : learningOpponentStrategy"
+                        :aria-label="`${side.label}の完成させる戦法`"
+                        @change="setLearningPlan(side.id, 'strategy', ($event.target as HTMLSelectElement).value)"
+                      >
+                        <option value="">選択しない</option>
+                        <optgroup
+                          v-for="group in (side.id === 'player' ? learningPlayerPlanOptions : learningOpponentPlanOptions).strategies"
+                          :key="group.id"
+                          :label="group.label"
+                        >
+                          <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
+                            {{ strategy.optionLabel }}
+                          </option>
+                        </optgroup>
+                      </select>
+                    </label>
+                    <label>
+                      <span>囲い</span>
+                      <select
+                        :value="side.id === 'player' ? learningPlayerCastle : learningOpponentCastle"
+                        :aria-label="`${side.label}の完成させる囲い`"
+                        :disabled="isIntegratedOpening(side.id === 'player' ? learningPlayerStrategy : learningOpponentStrategy, 'strategy')"
+                        @change="setLearningPlan(side.id, 'castle', ($event.target as HTMLSelectElement).value)"
+                      >
+                        <option value="">
+                          {{ isIntegratedOpening(side.id === "player" ? learningPlayerStrategy : learningOpponentStrategy, "strategy") ? "戦法に含む" : "選択しない" }}
+                        </option>
+                        <optgroup
+                          v-for="group in (side.id === 'player' ? learningPlayerPlanOptions : learningOpponentPlanOptions).castles"
+                          :key="group.id"
+                          :label="group.label"
+                        >
+                          <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
+                            {{ castle.optionLabel }}
+                          </option>
+                        </optgroup>
+                      </select>
+                    </label>
+                  </fieldset>
+                </div>
+                <small
+                  v-if="learningFormationMessage"
+                  :class="{ 'shogi-game__learning-error': learningStartBlocked }"
+                  role="status"
+                >{{ learningFormationMessage }}</small>
+              </div>
+            </div>
+            <div class="shogi-game__pregame-field shogi-game__pregame-field--assist">
+              <span>閃き・待ったの回数</span>
+              <div class="shogi-game__opening-tendency">
+                <label>
+                  <span>閃き</span>
+                  <select v-model.number="learningHintLimit" aria-label="閃きの回数">
+                    <option v-for="limit in LEARNING_ASSIST_LIMITS" :key="limit.value" :value="limit.value">
+                      {{ limit.label }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  <span>待った</span>
+                  <select v-model.number="learningUndoLimit" aria-label="待ったの回数">
+                    <option v-for="limit in LEARNING_ASSIST_LIMITS" :key="limit.value" :value="limit.value">
+                      {{ limit.label }}
+                    </option>
+                  </select>
+                </label>
+              </div>
+              <small>対局中は「駒の利き」ボタンで、各マスに利いている駒の数を表示できます。</small>
+            </div>
+          </template>
           <label class="shogi-game__pregame-field">
             <span>やこび姫の助言</span>
             <select v-model="coachLevel" aria-label="対局前の助言設定">
@@ -273,7 +439,7 @@
         <button
           type="button"
           class="shogi-game__pregame-start"
-          :disabled="normalizedMode === 'cpu' && !engineReady && !engineUnavailable"
+          :disabled="(normalizedMode === 'cpu' && !engineReady && !engineUnavailable) || learningStartBlocked"
           @click="beginMatch"
         >
           {{ normalizedMode === "cpu" && !engineReady && !engineUnavailable ? "準備中…" : "対局開始" }}
@@ -294,12 +460,18 @@
       </div>
       <section class="shogi-game__opening-guide shogi-game__opening-guide--primary" aria-label="やこび姫補助">
         <h2>やこび姫補助</h2>
-        <div class="shogi-game__opening-selects">
+        <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
+        <div v-if="openingGuideAvailable" class="shogi-game__opening-selects">
           <div class="shogi-game__opening-strategy-field">
             <label>
               <span>戦法</span>
-              <select v-model="selectedStrategy" aria-label="戦法" @change="announceOpeningGuide">
-                <option value="">選択しない</option>
+              <select
+                v-model="selectedStrategy"
+                aria-label="戦法"
+                :disabled="strategySelectionLocked"
+                @change="selectOpeningStrategy"
+              >
+                <option value="">{{ strategySelectionLocked ? "囲いに含む" : "選択しない" }}</option>
                 <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
                   <option
                     v-for="strategy in group.options"
@@ -307,7 +479,7 @@
                     :value="strategy.id"
                     :disabled="strategy.disabled"
                   >
-                    {{ strategy.label }}
+                    {{ strategy.optionLabel }}
                   </option>
                 </optgroup>
               </select>
@@ -322,8 +494,13 @@
           </div>
           <label>
             <span>囲い</span>
-            <select v-model="selectedCastle" @change="announceOpeningGuide">
-              <option value="">選択しない</option>
+            <select
+              v-model="selectedCastle"
+              aria-label="囲い"
+              :disabled="castleSelectionLocked"
+              @change="selectOpeningCastle"
+            >
+              <option value="">{{ castleSelectionLocked ? castleSelectionLockedLabel : "選択しない" }}</option>
               <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
                 <option
                   v-for="castle in group.options"
@@ -331,7 +508,7 @@
                   :value="castle.id"
                   :disabled="castle.disabled"
                 >
-                  {{ castle.label }}
+                  {{ castle.optionLabel }}
                 </option>
               </optgroup>
             </select>
@@ -393,6 +570,7 @@
         :black-player-name="blackPlayerName"
         :white-player-name="effectiveWhitePlayerName"
         :candidates="boardCandidates"
+        :attack-marks="boardAttackMarks"
         @usi-move="onPlayerMove"
       />
     </div>
@@ -427,10 +605,10 @@
       </div>
       <div class="shogi-game__assist-actions">
         <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
-          閃き <small>×{{ reviewMode ? "∞" : hintsRemaining }}</small>
+          閃き <small>×{{ reviewMode ? "∞" : formatAssistCount(hintsRemaining) }}</small>
         </button>
         <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
-          待った ×{{ reviewMode ? "∞" : undosRemaining }}
+          待った ×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}
         </button>
         <button
           v-if="reviewMode"
@@ -450,12 +628,18 @@
 
     <section class="shogi-game__opening-guide shogi-game__opening-guide--portrait" aria-label="やこび姫補助">
       <h2>やこび姫補助</h2>
-      <div class="shogi-game__opening-selects">
+      <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
+      <div v-if="openingGuideAvailable" class="shogi-game__opening-selects">
         <div class="shogi-game__opening-strategy-field">
           <label>
             <span>戦法</span>
-            <select v-model="selectedStrategy" aria-label="戦法" @change="announceOpeningGuide">
-              <option value="">選択しない</option>
+            <select
+              v-model="selectedStrategy"
+              aria-label="戦法"
+              :disabled="strategySelectionLocked"
+              @change="selectOpeningStrategy"
+            >
+              <option value="">{{ strategySelectionLocked ? "囲いに含む" : "選択しない" }}</option>
               <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
                 <option
                   v-for="strategy in group.options"
@@ -463,7 +647,7 @@
                   :value="strategy.id"
                   :disabled="strategy.disabled"
                 >
-                  {{ strategy.label }}
+                  {{ strategy.optionLabel }}
                 </option>
               </optgroup>
             </select>
@@ -478,8 +662,13 @@
         </div>
         <label>
           <span>囲い</span>
-          <select v-model="selectedCastle" @change="announceOpeningGuide">
-            <option value="">選択しない</option>
+          <select
+            v-model="selectedCastle"
+            aria-label="囲い"
+            :disabled="castleSelectionLocked"
+            @change="selectOpeningCastle"
+          >
+            <option value="">{{ castleSelectionLocked ? castleSelectionLockedLabel : "選択しない" }}</option>
             <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
               <option
                 v-for="castle in group.options"
@@ -487,7 +676,7 @@
                 :value="castle.id"
                 :disabled="castle.disabled"
               >
-                {{ castle.label }}
+                {{ castle.optionLabel }}
               </option>
             </optgroup>
           </select>
@@ -748,6 +937,7 @@ import {
   chooseSafeOpeningMove,
   filterOpeningCompatibleCandidates,
   inferOpeningRookStyle,
+  isIntegratedOpening,
   isOpeningGuideExpired,
   isOpeningPlanComplete,
   nextOpeningPlanMove,
@@ -770,6 +960,8 @@ import {
 } from "./core/opening-guide.mjs";
 import {
   CPU_OPENING_STRATEGY_IDS,
+  adaptCpuOpeningPlan,
+  createAdaptiveCpuPlan,
   configuredCpuBishopMove,
   configuredCpuFirstMove,
   cpuMoveMatchesBishopPreference,
@@ -779,6 +971,16 @@ import {
 } from "./core/cpu-opening-repertoire.mjs";
 import { createPositionAnalysisCache } from "./core/position-analysis-cache.mjs";
 import { openingExplanation } from "./core/opening-explanations.mjs";
+import {
+  LEARNING_ASSIST_LIMITS,
+  LEARNING_HANDICAPS,
+  assistAllowance,
+  attackMap,
+  buildFormationStart,
+  formatAssistCount,
+  learningStartPosition,
+  normalizeAssistLimit,
+} from "./core/learning-setup.mjs";
 import { selectMoveSound, type MoveSoundKind } from "./core/move-sound";
 import {
   clearMatchSnapshot,
@@ -813,6 +1015,41 @@ const props = defineProps({
   showHome: { type: Boolean, default: false },
 });
 const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error"]);
+
+// 学習対局では駒落ちや戦型完成局面から始めるため、実際の開始局面を別に持つ。
+type MatchKind = "normal" | "learning";
+type LearningStartType = "standard" | "handicap" | "formation";
+const matchKind = ref<MatchKind>("normal");
+const matchInitialSfen = ref(props.initialSfen);
+const learningStartType = ref<LearningStartType>("standard");
+const learningHandicapId = ref("bishop");
+const learningHandicapGiver = ref<"cpu" | "player">("cpu");
+const learningPlayerStrategy = ref("");
+const learningPlayerCastle = ref("");
+const learningOpponentStrategy = ref("");
+const learningOpponentCastle = ref("");
+const learningHintLimit = ref(3);
+const learningUndoLimit = ref(3);
+const learningStartLabel = ref("");
+const attackGuideEnabled = ref(false);
+
+/** 棋譜の手番号が先手の手か。駒落ちでは上手（後手）から指し始める。 */
+function isBlackMoveIndex(index: number) {
+  const blackFirst = matchInitialSfen.value.trim().split(/\s+/)[1] !== "w";
+  return (index % 2 === 0) === blackFirst;
+}
+
+function matchHintAllowance() {
+  return matchKind.value === "learning"
+    ? assistAllowance(learningHintLimit.value)
+    : Math.max(0, Math.trunc(props.hintCount));
+}
+
+function matchUndoAllowance() {
+  return matchKind.value === "learning"
+    ? assistAllowance(learningUndoLimit.value)
+    : Math.max(0, Math.trunc(props.undoCount));
+}
 
 const errorMessage = ref("");
 const record = ref<Record>(createRecord());
@@ -954,7 +1191,17 @@ let dedicatedCoachRunning = false;
 let openingFollowupGeneration = 0;
 let openingFollowupLoading = false;
 let openingGuideSafetyGeneration = 0;
-let cpuOpeningPlan: { strategyId: string; castleId: string; label: string } | null = null;
+type CpuOpeningPlan = {
+  strategyId: string;
+  castleId: string;
+  label: string;
+  adaptCastle?: boolean;
+  adaptStrategy?: boolean;
+  castleStance?: string;
+  exchangeHandled?: boolean;
+  switchedFrom?: string;
+};
+let cpuOpeningPlan: CpuOpeningPlan | null = null;
 const positionAnalysisCache = createPositionAnalysisCache();
 let restoringSavedMatch = false;
 
@@ -1028,7 +1275,10 @@ const effectiveWhitePlayerName = computed(() =>
     ? props.cpuPlayerName
     : props.whitePlayerName,
 );
-const modeText = computed(() => normalizedMode.value === "cpu" ? "CPU対局" : "ローカル対局");
+const modeText = computed(() => {
+  const mode = normalizedMode.value === "cpu" ? "CPU対局" : "ローカル対局";
+  return matchKind.value === "learning" ? `学習・${mode}` : mode;
+});
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
@@ -1079,7 +1329,8 @@ const resultPresentation = computed(() => {
     "perpetual-check": `${prefix}${loser}の反則負け（連続王手の千日手）`,
   } as const)[result.value.reason];
   const handicap = props.handicapName.trim()
-    || (props.initialSfen === STANDARD_SFEN ? "平手" : "その他");
+    || learningStartLabel.value
+    || (matchInitialSfen.value === STANDARD_SFEN ? "平手" : "その他");
   const opponentPreset = normalizedMode.value === "cpu"
     ? CPU_STRENGTH_PRESETS.find((preset) => preset.value === searchNodes.value)
     : undefined;
@@ -1126,7 +1377,7 @@ function openingGuideLegalMoves(): string[] {
 function availableOpeningOptions(kind: "strategy" | "castle") {
   const sfen = currentSfen.value;
   const playerIsBlack = humanColor.value === Color.BLACK;
-  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+  const playerMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
   const currentFormations = formationNamesFromSnapshot(
     detectFormationSnapshot(sfen, hiraganaFormationMaster),
     playerIsBlack ? "black" : "white",
@@ -1168,30 +1419,38 @@ const strategyPhaseComplete = computed(() => {
   if (!selectedStrategy.value || reviewMode.value || !active.value) return false;
   if (strategyCompletionLocked.value) return true;
   const playerIsBlack = humanColor.value === Color.BLACK;
-  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
-  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const playerMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) !== playerIsBlack);
   const opponentColor = playerIsBlack ? Color.WHITE : Color.BLACK;
   return isOpeningPlanComplete({
     strategyId: selectedStrategy.value,
+    castleId: "",
     color: playerIsBlack ? "black" : "white",
     playedMoves: playerMoves,
     opponentMoves,
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
     opponentFormations: formationNamesForColor(sfen, opponentColor),
     currentSfen: sfen,
+    // 一体型の戦法でも、戦法段階の完成は内蔵の囲いと分けて判定する。
+    completedPhases: { castle: true },
   });
 });
 const castlePhaseComplete = computed(() => {
   const sfen = currentSfen.value;
-  if (!selectedCastle.value || reviewMode.value || !active.value) return false;
+  if (reviewMode.value || !active.value) return false;
+  const integratedCastle = OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value)
+    ?.integratedCastle;
+  if (!selectedCastle.value && !integratedCastle) return false;
   if (castleCompletionLocked.value) return true;
   const playerIsBlack = humanColor.value === Color.BLACK;
   const opponentColor = playerIsBlack ? Color.WHITE : Color.BLACK;
   return isOpeningPlanComplete({
+    strategyId: selectedStrategy.value,
     castleId: selectedCastle.value,
+    completedPhases: { strategy: true },
     color: playerIsBlack ? "black" : "white",
-    playedMoves: moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack),
-    opponentMoves: moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack),
+    playedMoves: moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack),
+    opponentMoves: moveHistory.filter((_, index) => isBlackMoveIndex(index) !== playerIsBlack),
     detectedFormations: formationNamesForColor(sfen, humanColor.value),
     opponentFormations: formationNamesForColor(sfen, opponentColor),
     currentSfen: sfen,
@@ -1243,6 +1502,7 @@ const groupedOpeningStrategies = computed(() => {
       .filter(({ id, guideSelectable }) => guideSelectable !== false || id === selectedStrategy.value)
       .map((strategy) => ({
         ...strategy,
+        optionLabel: strategy.integrated ? `${strategy.label}（囲い込み）` : strategy.label,
         // 進行中の補助は、相手の応手を待つ一時的な局面でも解除しない。
         // 中断後も、現在局面から到達できる別案だけを選択可能にする。
         disabled: strategy.id !== selectedStrategy.value
@@ -1275,6 +1535,7 @@ const groupedOpeningCastles = computed(() => {
   const availableIds = new Set(availableOpeningCastles.value.map(({ id }) => id));
   return groupOpeningCastles(OPENING_CASTLES.map((castle) => ({
       ...castle,
+      optionLabel: castle.integrated ? `${castle.label}（戦法込み）` : castle.label,
       disabled: castle.id !== selectedCastle.value
         && !availableIds.has(castle.id),
     })));
@@ -1282,6 +1543,23 @@ const groupedOpeningCastles = computed(() => {
 const selectedStrategyDefinition = computed(() => (
   OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value) ?? null
 ));
+// 戦法と囲いの一体型を選んでいる間は、相方の欄を選ばせない。
+const castleSelectionLocked = computed(() => isIntegratedOpening(selectedStrategy.value, "strategy"));
+const strategySelectionLocked = computed(() => isIntegratedOpening(selectedCastle.value, "castle"));
+const castleSelectionLockedLabel = computed(() => {
+  const label = selectedStrategyDefinition.value?.integratedCastleLabel;
+  return label ? `戦法に含む（${label}）` : "戦法に含む";
+});
+
+function selectOpeningStrategy() {
+  if (castleSelectionLocked.value) selectedCastle.value = "";
+  announceOpeningGuide();
+}
+
+function selectOpeningCastle() {
+  if (strategySelectionLocked.value) selectedStrategy.value = "";
+  announceOpeningGuide();
+}
 const selectedStrategyExplanation = computed(() => openingExplanation(selectedStrategy.value));
 const OPENING_GUIDE_MAX_PLIES = 40;
 const openingPlanExpired = computed(() => {
@@ -1309,8 +1587,8 @@ const openingPlanCandidates = computed(() => {
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return [];
   const playerIsBlack = humanColor.value === Color.BLACK;
-  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
-  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const playerMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) !== playerIsBlack);
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   return getOpeningPlanCandidates({
     strategyId: selectedStrategy.value,
@@ -1336,8 +1614,8 @@ const openingPlanCurrentlyComplete = computed(() => {
     return false;
   }
   const playerIsBlack = humanColor.value === Color.BLACK;
-  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
-  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const playerMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) !== playerIsBlack);
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   return isOpeningPlanComplete({
     strategyId: selectedStrategy.value,
@@ -1440,8 +1718,10 @@ const openingGuideStatus = computed(() => {
     return "戦法が完成したね。次の3手を考えているよ…";
   }
   if (openingFollowupEligible.value && openingFollowupStarted.value) return "戦法が完成したね！";
-  if (openingPlanComplete.value && selectedCastle.value) {
-    return selectedStrategy.value ? "戦法と囲いが完成したね！" : "囲いが完成したね！";
+  if (openingPlanComplete.value && (selectedCastle.value || castleSelectionLocked.value)) {
+    return selectedStrategy.value || strategySelectionLocked.value
+      ? "戦法と囲いが完成したね！"
+      : "囲いが完成したね！";
   }
   if (!openingGuideDecision.value) return "形が完成したか、今の局面では予定手を指せないみたい。";
   const phase = openingGuideDecision.value.phase === "strategy" ? "戦法" : "囲い";
@@ -1524,7 +1804,7 @@ function formatFinalMove(matchResult: MatchResult): string {
   const lastMove = matchResult.moves.at(-1);
   if (!lastMove) return "";
   try {
-    const beforeLast = createGameRecord(props.initialSfen);
+    const beforeLast = createGameRecord(matchInitialSfen.value);
     for (const move of matchResult.moves.slice(0, -1)) appendUsiMove(beforeLast, move);
     return formatHintMove(lastMove, beforeLast.position.sfen)
       .replace(/^[1-9]/, (file) => "０１２３４５６７８９"[Number(file)]);
@@ -1559,8 +1839,110 @@ function toggleCpuStrategyDetails() {
   cpuOpeningPlan = null;
 }
 
+const learningFormationResult = computed(() => {
+  if (matchKind.value !== "learning" || learningStartType.value !== "formation") return null;
+  const playerColor = selectedPlayerColor.value === "white" ? "white" : "black";
+  const opponentColor = playerColor === "black" ? "white" : "black";
+  return buildFormationStart({
+    [playerColor]: { strategyId: learningPlayerStrategy.value, castleId: learningPlayerCastle.value },
+    [opponentColor]: { strategyId: learningOpponentStrategy.value, castleId: learningOpponentCastle.value },
+  });
+});
+const boardAttackMarks = computed(() => (
+  matchKind.value === "learning" && attackGuideEnabled.value && matchStarted.value && !pregameOpen.value
+    ? attackMap(currentSfen.value)
+    : []
+));
+const learningStartBlocked = computed(() => (
+  learningFormationResult.value !== null && !learningFormationResult.value.ok
+));
+// 平手以外の開始局面では、平手用の定跡（やこび姫補助・CPUの定跡）を当てはめない。
+const openingGuideAvailable = computed(() => matchInitialSfen.value === STANDARD_SFEN);
+const pregameUsesCustomStart = computed(() => (
+  matchKind.value === "learning" && learningStartType.value !== "standard"
+));
+
+type LearningPlanGroup = { id: string; label: string; options: { id: string; optionLabel: string }[] };
+
+function learningPlanOptions(color: "black" | "white"): {
+  strategies: LearningPlanGroup[];
+  castles: LearningPlanGroup[];
+} {
+  const strategies = OPENING_STRATEGIES.filter(({ guideSelectable, availability }) => (
+    guideSelectable !== false && (!availability?.colors || availability.colors.includes(color))
+  ));
+  return {
+    strategies: groupOpeningStrategies(strategies.map((strategy) => ({
+      ...strategy,
+      optionLabel: strategy.integrated ? `${strategy.label}（囲い込み）` : strategy.label,
+      disabled: false,
+    }))),
+    castles: groupOpeningCastles(OPENING_CASTLES.map((castle) => ({
+      ...castle,
+      optionLabel: castle.integrated ? `${castle.label}（戦法込み）` : castle.label,
+      disabled: false,
+    }))),
+  };
+}
+const learningPlayerPlanOptions = computed(() => learningPlanOptions(
+  selectedPlayerColor.value === "white" ? "white" : "black",
+));
+const learningOpponentPlanOptions = computed(() => learningPlanOptions(
+  selectedPlayerColor.value === "white" ? "black" : "white",
+));
+
+const MATCH_KIND_OPTIONS = [
+  { value: "normal" as const, label: "通常対局", description: "平手でいつもどおり対局" },
+  { value: "learning" as const, label: "学習対局", description: "開始局面や補助を自由に設定" },
+];
+const LEARNING_PLAN_SIDES = [
+  { id: "player" as const, label: "自分" },
+  { id: "opponent" as const, label: "相手" },
+];
+const learningFormationMessage = computed(() => {
+  const formation = learningFormationResult.value;
+  if (!formation) return "";
+  return formation.ok
+    ? `両者の形が完成した局面（準備に${formation.moves.length}手）から始めるよ。`
+    : formation.message;
+});
+
+/** 一体型を選んだら、相方の欄を空にする。 */
+function setLearningPlan(side: "player" | "opponent", kind: "strategy" | "castle", value: string) {
+  const strategy = side === "player" ? learningPlayerStrategy : learningOpponentStrategy;
+  const castle = side === "player" ? learningPlayerCastle : learningOpponentCastle;
+  if (kind === "strategy") {
+    strategy.value = value;
+    if (isIntegratedOpening(value, "strategy")) castle.value = "";
+  } else {
+    castle.value = value;
+    if (isIntegratedOpening(value, "castle")) strategy.value = "";
+  }
+}
+
 function beginMatch() {
-  activePlayerColor.value = selectedPlayerColor.value;
+  if (matchKind.value === "learning") {
+    const start = learningStartPosition({
+      startType: learningStartType.value,
+      handicapId: learningHandicapId.value,
+      handicapGiver: learningHandicapGiver.value,
+      playerColor: selectedPlayerColor.value,
+      formationSfen: learningFormationResult.value?.ok ? learningFormationResult.value.sfen : "",
+      standardSfen: props.initialSfen,
+    });
+    matchInitialSfen.value = start.sfen;
+    activePlayerColor.value = start.playerColor === "white" ? "white" : "black";
+    learningStartLabel.value = start.label;
+    if (start.sfen !== STANDARD_SFEN) {
+      selectedStrategy.value = "";
+      selectedCastle.value = "";
+    }
+  } else {
+    matchInitialSfen.value = props.initialSfen;
+    activePlayerColor.value = selectedPlayerColor.value;
+    learningStartLabel.value = "";
+    attackGuideEnabled.value = false;
+  }
   matchStarted.value = true;
   pregameOpen.value = false;
   restart();
@@ -1583,9 +1965,14 @@ const HOME_STARS = [
 ];
 
 function closeHome() {
-  // 「対局画面」は常に対局準備から始める。openPregameが中断保存を破棄する。
+  // 対局は常に対局準備から始める。openPregameが中断保存を破棄する。
   openPregame();
   homeOpen.value = false;
+}
+
+function openMatchSetup(kind: MatchKind) {
+  matchKind.value = kind;
+  closeHome();
 }
 
 function openHome() {
@@ -1614,6 +2001,11 @@ function openPregame() {
   discardPersistedMatch();
 }
 
+/** 選択中の強さのLv。戦法の出現比率と囲い選びの傾向に使う。 */
+function cpuStrengthLevel() {
+  return CPU_STRENGTH_PRESETS.find((preset) => preset.value === searchNodes.value)?.level;
+}
+
 function configuredCpuOpeningStrategy(): string {
   return cpuStrategyDetailsOpen.value
     ? (cpuDetailedStrategy.value || cpuStrategy.value)
@@ -1622,7 +2014,7 @@ function configuredCpuOpeningStrategy(): string {
 
 function currentCpuOpeningTurn() {
   const cpuIsBlack = humanColor.value === Color.WHITE;
-  const cpuMoves = moveHistory.filter((_, index) => (index % 2 === 0) === cpuIsBlack);
+  const cpuMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === cpuIsBlack);
   return {
     cpuIsBlack,
     cpuMoves,
@@ -1632,7 +2024,7 @@ function currentCpuOpeningTurn() {
 
 function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefined {
   // 駒落ちや途中局面では平手用定跡を当てはめない。
-  if (props.initialSfen !== STANDARD_SFEN) return undefined;
+  if (matchInitialSfen.value !== STANDARD_SFEN) return undefined;
   const { cpuIsBlack, cpuMoves, cpuColor: configuredCpuColor } = currentCpuOpeningTurn();
   const legalMoveDetails = enumerateLegalMoves(record.value.position);
   const legalMoves = legalMoveDetails.map(({ usi }) => usi);
@@ -1665,8 +2057,11 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
       bishopPreference: cpuBishopPreference.value,
       rookPreference: cpuRookPreference.value,
       tempoPreference: cpuTempoPreference.value,
+      level: cpuStrengthLevel(),
     });
-    cpuOpeningPlan = cpuStrategyDetailsOpen.value && cpuDetailedCastle.value
+    // 一体型の戦法は内蔵の囲いを使うため、囲いの詳細指定を重ねない。
+    const castleSpecified = cpuStrategyDetailsOpen.value && Boolean(cpuDetailedCastle.value);
+    cpuOpeningPlan = castleSpecified && !isIntegratedOpening(selectedPlan.strategyId, "strategy")
       ? {
           ...selectedPlan,
           castleId: cpuDetailedCastle.value,
@@ -1675,10 +2070,22 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
             OPENING_CASTLES.find(({ id }) => id === cpuDetailedCastle.value)?.label,
           ].filter(Boolean).join("＋"),
         }
-      : selectedPlan;
+      // 詳しく指定しなかった囲い・戦法は、相手の指し手を見て組み替える。
+      : createAdaptiveCpuPlan(selectedPlan, {
+          adaptCastle: !castleSpecified,
+          adaptStrategy: !(cpuStrategyDetailsOpen.value && cpuDetailedStrategy.value),
+        });
   }
+  cpuOpeningPlan = adaptCpuOpeningPlan({
+    plan: cpuOpeningPlan,
+    cpuColor: configuredCpuColor,
+    cpuMoves,
+    opponentMoves: moveHistory.filter((_, index) => isBlackMoveIndex(index) !== cpuIsBlack),
+    currentSfen: currentSfen.value,
+    level: cpuStrengthLevel(),
+  }) ?? cpuOpeningPlan;
   const cpuColor = cpuIsBlack ? Color.BLACK : Color.WHITE;
-  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== cpuIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) !== cpuIsBlack);
   const opponentColor = cpuColor === Color.BLACK ? Color.WHITE : Color.BLACK;
   // 定跡の予定手より、飛車先を破られないための3二金／7八金を優先する。
   const urgent = openingUrgentResponse({
@@ -1720,7 +2127,7 @@ function cpuMovesAllowedByBishopSetting() {
 function createRecord(): Record {
   try {
     errorMessage.value = "";
-    return createGameRecord(props.initialSfen);
+    return createGameRecord(matchInitialSfen.value);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     errorMessage.value = message;
@@ -1742,7 +2149,7 @@ function savedMatchNumber(value: unknown, fallback: number, min = 0, max = Numbe
 }
 
 function recordAndFormationsFromMoves(moves: string[]) {
-  const nextRecord = createGameRecord(props.initialSfen);
+  const nextRecord = createGameRecord(matchInitialSfen.value);
   let nextFormationState = createFormationState();
   nextFormationState = updateFormationState(
     nextFormationState,
@@ -1789,6 +2196,21 @@ function persistMatchState() {
   saveMatchSnapshot(matchStorage, matchStorageKey, {
     initialSfen: props.initialSfen,
     mode: normalizedMode.value,
+    matchKind: matchKind.value,
+    startSfen: matchInitialSfen.value,
+    learning: {
+      startType: learningStartType.value,
+      handicapId: learningHandicapId.value,
+      handicapGiver: learningHandicapGiver.value,
+      playerStrategy: learningPlayerStrategy.value,
+      playerCastle: learningPlayerCastle.value,
+      opponentStrategy: learningOpponentStrategy.value,
+      opponentCastle: learningOpponentCastle.value,
+      hintLimit: learningHintLimit.value,
+      undoLimit: learningUndoLimit.value,
+      startLabel: learningStartLabel.value,
+      attackGuide: attackGuideEnabled.value,
+    },
     moves: [...moveHistory],
     active: active.value,
     result: result.value,
@@ -1819,6 +2241,31 @@ function persistMatchState() {
   });
 }
 
+function restoreLearningSettings(snapshot: { [key: string]: any }) {
+  matchKind.value = snapshot.matchKind === "learning" ? "learning" : "normal";
+  // 保存時の開始局面で棋譜を再生する。不正なSFENは復元全体を取り消す。
+  const startSfen = typeof snapshot.startSfen === "string" ? snapshot.startSfen : props.initialSfen;
+  createGameRecord(startSfen);
+  matchInitialSfen.value = startSfen;
+  const learning = snapshot.learning && typeof snapshot.learning === "object" ? snapshot.learning : {};
+  const text = (value: unknown) => typeof value === "string" ? value : "";
+  learningStartType.value = ["standard", "handicap", "formation"].includes(learning.startType)
+    ? learning.startType
+    : "standard";
+  learningHandicapId.value = LEARNING_HANDICAPS.some(({ id }) => id === learning.handicapId)
+    ? learning.handicapId
+    : "bishop";
+  learningHandicapGiver.value = learning.handicapGiver === "player" ? "player" : "cpu";
+  learningPlayerStrategy.value = text(learning.playerStrategy);
+  learningPlayerCastle.value = text(learning.playerCastle);
+  learningOpponentStrategy.value = text(learning.opponentStrategy);
+  learningOpponentCastle.value = text(learning.opponentCastle);
+  learningHintLimit.value = normalizeAssistLimit(learning.hintLimit);
+  learningUndoLimit.value = normalizeAssistLimit(learning.undoLimit);
+  learningStartLabel.value = text(learning.startLabel);
+  attackGuideEnabled.value = matchKind.value === "learning" && learning.attackGuide === true;
+}
+
 function discardPersistedMatch() {
   clearMatchSnapshot(matchStorage, matchStorageKey);
 }
@@ -1837,6 +2284,7 @@ function restorePersistedMatch(): boolean {
       || snapshot.moves.some((move: unknown) => typeof move !== "string" || move.length > 8)
     ) throw new Error("保存棋譜が不正です。");
     const moves = snapshot.moves as string[];
+    restoreLearningSettings(snapshot);
     const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(moves);
     const restoredResult = persistedResult(snapshot.result, moves, nextRecord.position.sfen);
     if (snapshot.active !== true && !restoredResult) throw new Error("保存された対局状態が不正です。");
@@ -1879,8 +2327,8 @@ function restorePersistedMatch(): boolean {
       ? snapshot.selectedStrategy
       : "";
     selectedCastle.value = typeof snapshot.selectedCastle === "string" ? snapshot.selectedCastle : "";
-    hintsRemaining.value = savedMatchNumber(snapshot.hintsRemaining, props.hintCount, 0, props.hintCount);
-    undosRemaining.value = savedMatchNumber(snapshot.undosRemaining, props.undoCount, 0, props.undoCount);
+    hintsRemaining.value = savedMatchNumber(snapshot.hintsRemaining, matchHintAllowance(), 0, matchHintAllowance());
+    undosRemaining.value = savedMatchNumber(snapshot.undosRemaining, matchUndoAllowance(), 0, matchUndoAllowance());
     openingGuideStartedAtPly.value = savedMatchNumber(snapshot.openingGuideStartedAtPly, 0, 0, moves.length);
     openingGuideDetourCount.value = savedMatchNumber(snapshot.openingGuideDetourCount, 0, 0, 3);
     openingGuideAbandoned.value = snapshot.openingGuideAbandoned === true;
@@ -1976,7 +2424,7 @@ function updateCoachAdvice(
 }
 
 function currentEnginePosition() {
-  const base = props.initialSfen === STANDARD_SFEN ? "startpos" : props.initialSfen;
+  const base = matchInitialSfen.value === STANDARD_SFEN ? "startpos" : matchInitialSfen.value;
   return `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
 }
 
@@ -2023,8 +2471,8 @@ function scheduleOpeningGuideSafety() {
   if (openingPlanComplete.value) return;
 
   const playerIsBlack = humanColor.value === Color.BLACK;
-  const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
-  const opponentMoves = moveHistory.filter((_, index) => (index % 2 === 0) !== playerIsBlack);
+  const playerMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
+  const opponentMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) !== playerIsBlack);
   const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi }) => usi);
   const interruption = openingPlanInterruption({
     completedPhases: {
@@ -2145,7 +2593,7 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      const playerMoves = moveHistory.filter((_, index) => (index % 2 === 0) === playerIsBlack);
+      const playerMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
       const compatibleCandidates = filterOpeningCompatibleCandidates({
         strategyId: selectedStrategy.value,
         color: playerIsBlack ? "black" : "white",
@@ -2374,7 +2822,7 @@ function cancelPlayerIdleAdvice() {
 
 function candidateGivesCheck(usi: string): boolean {
   try {
-    const preview = createGameRecord(props.initialSfen);
+    const preview = createGameRecord(matchInitialSfen.value);
     for (const move of moveHistory) appendUsiMove(preview, move);
     return appendUsiMove(preview, usi) && isSideToMoveInCheck(preview.position.sfen);
   } catch {
@@ -3049,9 +3497,9 @@ async function scheduleCpuMove() {
             ?? "";
         } else {
           engine.applyStrengthOptions({ multiPv: strength.multiPv });
-          const base = props.initialSfen === STANDARD_SFEN
+          const base = matchInitialSfen.value === STANDARD_SFEN
             ? "startpos"
-            : `sfen ${props.initialSfen}`;
+            : `sfen ${matchInitialSfen.value}`;
           const enginePosition = `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
           engine.setPosition(enginePosition);
           cpuSearchRunning = true;
@@ -3270,10 +3718,10 @@ async function runKifuAnalysis() {
     if (generation !== analysisGeneration || !reviewMode.value) return;
     thinking.value = true;
     const moves = [...reviewNavigation.value.mainLine];
-    const base = props.initialSfen === STANDARD_SFEN
+    const base = matchInitialSfen.value === STANDARD_SFEN
       ? "startpos"
-      : `sfen ${props.initialSfen}`;
-    const replay = createGameRecord(props.initialSfen);
+      : `sfen ${matchInitialSfen.value}`;
+    const replay = createGameRecord(matchInitialSfen.value);
     const positions = [{ sideToMove: replay.position.color, label: "開始局面" }];
     for (let index = 0; index < moves.length; index += 1) {
       const label = (() => {
@@ -3425,8 +3873,8 @@ function restart() {
   openingGuideBranchNoticePly.value = -1;
   resetOpeningFollowup();
   resetOpeningGuideSafety();
-  hintsRemaining.value = Math.max(0, Math.trunc(props.hintCount));
-  undosRemaining.value = Math.max(0, Math.trunc(props.undoCount));
+  hintsRemaining.value = matchHintAllowance();
+  undosRemaining.value = matchUndoAllowance();
   hintCandidates.value = [];
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : INITIAL_GUIDE_TEXT;
@@ -3448,6 +3896,8 @@ watch(
     if (matchStarted.value) {
       selectedStrategy.value = "";
       selectedCastle.value = "";
+      matchKind.value = "normal";
+      matchInitialSfen.value = props.initialSfen;
       restart();
     }
   },
@@ -3500,11 +3950,16 @@ watch([
   openingPlanCompletionLocked,
   strategyCompletionLocked,
   castleCompletionLocked,
+  attackGuideEnabled,
 ], persistMatchState);
 watch([selectedPlayerColor, cpuDetailedStrategy], () => {
   const detailedOptions = cpuDetailedStrategyGroups.value.flatMap(({ options }) => options);
   if (cpuDetailedStrategy.value && !detailedOptions.some(({ id }) => id === cpuDetailedStrategy.value)) {
     cpuDetailedStrategy.value = detailedOptions[0]?.id ?? "ibisha";
+  }
+  if (isIntegratedOpening(cpuDetailedStrategy.value, "strategy")) {
+    cpuDetailedCastle.value = "";
+    return;
   }
   const castleOptions = cpuDetailedCastleGroups.value.flatMap(({ options }) => options);
   if (cpuDetailedCastle.value && !castleOptions.some(({ id }) => id === cpuDetailedCastle.value)) {
@@ -4119,6 +4574,90 @@ queueMicrotask(() => {
 }
 .shogi-game__pregame-field--opening-tendency {
   grid-column: 1 / -1;
+}
+.shogi-game__match-kind {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+.shogi-game .shogi-game__match-kind button {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(245, 166, 69, 0.45);
+  color: var(--ivory, #fff8ec);
+  background: rgba(20, 39, 54, 0.58);
+  text-align: left;
+}
+.shogi-game .shogi-game__match-kind button.shogi-game__match-kind--active {
+  border-color: var(--amber, #f5a645);
+  color: var(--night-deep, #14212e);
+  background: var(--amber, #f5a645);
+}
+.shogi-game__match-kind small {
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+.shogi-game__pregame-field--learning,
+.shogi-game__pregame-field--assist {
+  grid-column: 1 / -1;
+}
+.shogi-game__learning-start {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.shogi-game__learning-start .shogi-game__opening-tendency {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.shogi-game__pregame-field--assist .shogi-game__opening-tendency {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.shogi-game__learning-plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+.shogi-game__learning-plan {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.5rem 0.6rem 0.6rem;
+  border: 1px solid rgba(215, 206, 255, 0.24);
+  border-radius: 0.2rem;
+}
+.shogi-game__learning-plan legend {
+  padding: 0 0.3rem;
+  color: var(--amber, #f5a645);
+  font-weight: 700;
+}
+.shogi-game__learning-plan label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.shogi-game__learning-plan label > span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  opacity: 0.86;
+}
+.shogi-game__learning-start > small,
+.shogi-game__pregame-field--assist > small {
+  color: #d5c3bd;
+  font-size: 0.75rem;
+}
+.shogi-game__learning-start > small.shogi-game__learning-error {
+  color: #ffb4a8;
+  font-weight: 700;
+}
+.shogi-game__toolbar--learning .shogi-game__turn {
+  grid-column: 1 / -1;
+}
+.shogi-game .shogi-game__command--attack[aria-pressed="true"],
+.shogi-game .shogi-game__command--flip[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--amber, #f5a645);
 }
 .shogi-game__opening-tendency {
   display: grid;
@@ -4786,6 +5325,12 @@ queueMicrotask(() => {
     grid-row: 1;
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+  .shogi-game__toolbar.shogi-game__toolbar--learning {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .shogi-game__toolbar--learning .shogi-game__turn {
+    grid-column: auto;
+  }
   .shogi-game__player-zone--opponent {
     grid-column: 1;
     grid-row: 2;
@@ -4905,6 +5450,10 @@ queueMicrotask(() => {
   }
 }
 @media (max-width: 540px) {
+  .shogi-game__learning-plans,
+  .shogi-game__learning-start .shogi-game__opening-tendency {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .shogi-game__analysis-info {
     flex-wrap: wrap;
     gap: .15rem .3rem;
@@ -5563,9 +6112,35 @@ queueMicrotask(() => {
   text-shadow: 3px 3px 0 #14212e;
 }
 .shogi-home__menu {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(16px, 3vw, 40px);
+}
+.shogi-home__group {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 180px));
-  gap: clamp(12px, 2.5vw, 28px);
+  gap: 10px;
+}
+.shogi-home__group-title {
+  margin: 0;
+  padding-left: 4px;
+  color: #e8a04c;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+}
+.shogi-home__cards {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(118px, 160px);
+  gap: clamp(10px, 2vw, 20px);
+}
+.shogi-home__desc {
+  color: #cfd8de;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
 }
 .shogi-home__card {
   position: relative;
@@ -5609,8 +6184,17 @@ queueMicrotask(() => {
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
 }
 @media (max-width: 640px) {
-  .shogi-home { gap: 28px; }
-  .shogi-home__menu { grid-template-columns: repeat(2, minmax(120px, 1fr)); width: 100%; max-width: 360px; }
+  /* 下部のキャラクターと重ならないよう、メニューを上側へ寄せる。 */
+  .shogi-home { gap: 24px; padding-bottom: clamp(140px, 26vh, 220px); }
+  .shogi-home__label { font-size: 13px; letter-spacing: 0.02em; white-space: nowrap; }
+  .shogi-home__menu { flex-direction: column; align-items: stretch; width: 100%; max-width: 380px; gap: 18px; }
+  .shogi-home__cards { grid-auto-columns: minmax(0, 1fr); }
+  .shogi-home__card { padding: 16px 6px 12px; gap: 8px; }
   .shogi-home__icon { width: 44px; height: 44px; }
+}
+@media (max-width: 640px) and (max-height: 760px) {
+  .shogi-home { gap: 18px; padding-bottom: 112px; }
+  .shogi-home__chara { height: 100px; bottom: 8px; }
+  .shogi-home__icon { width: 36px; height: 36px; }
 }
 </style>

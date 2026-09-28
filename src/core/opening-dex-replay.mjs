@@ -108,26 +108,31 @@ export function buildOpeningDexSteps(definition, { whiteSide = false, initialSfe
   const pushStep = (label, lastMove, routine) => {
     steps.push({ sfen: serializeSfenBoard(state), label, lastMove, routine });
   };
-  for (const token of definition.blackMoves) {
-    if (typeof token === "string" && token.startsWith("@")) {
-      const routine = routines.find((candidate) => candidate.token === token);
-      for (const previewMove of routine?.previewMoves ?? []) {
-        applyBlindMove(
-          state,
-          convert(previewMove),
-          whiteSide ? `${previewMove}`.slice(0, 1).toLowerCase() : "",
-        );
-      }
-      pushStep(routine?.label ?? token, "", routine?.label ?? token);
-      continue;
-    }
+  const pushMove = (token, routine, byOpponent = false) => {
     const usi = convert(token);
     const beforeSfen = serializeSfenBoard(state);
     const isDrop = /^([PLNSGBR])\*/.test(String(token));
     applyBlindMove(state, usi, whiteSide && isDrop ? `${token}`.slice(0, 1).toLowerCase() : "");
     let label = usi;
     try { label = formatLabel?.(usi, beforeSfen) ?? usi; } catch { label = usi; }
-    pushStep(label, usi, null);
+    pushStep(byOpponent ? `相手：${label}` : label, usi, routine);
+  };
+  for (const token of definition.blackMoves) {
+    if (typeof token === "string" && token.startsWith("@")) {
+      const routine = routines.find((candidate) => candidate.token === token);
+      const routineLabel = routine?.label ?? token;
+      const previewMoves = routine?.previewMoves ?? [];
+      if (!previewMoves.length) {
+        pushStep(routineLabel, "", routineLabel);
+        continue;
+      }
+      // 代表進行は自分と相手の手を交互に並べたもの。1手ずつ盤面を確認できるようにする。
+      previewMoves.forEach((previewMove, index) => {
+        pushMove(previewMove, routineLabel, index % 2 === 1);
+      });
+      continue;
+    }
+    pushMove(token, null);
   }
   return steps;
 }

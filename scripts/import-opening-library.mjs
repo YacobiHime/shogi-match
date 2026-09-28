@@ -8,6 +8,12 @@ const outputPath = path.resolve(projectRoot, "src/data/opening-guide-overrides.m
 const library = JSON.parse(fs.readFileSync(inputPath, "utf8"));
 
 const castleFixups = {
+  // 編集データの案内手順（3八玉・4八金・4七銀・3七桂・2九飛）に完成条件を合わせる。
+  "right-king": {
+    completionVariants: [[
+      ["3h", "K"], ["4h", "G"], ["4g", "S"], ["3g", "N"], ["2i", "R"],
+    ]],
+  },
   "migigyoku-habu": {
     classification: { name: "相居飛車／バランス型・その他", contexts: ["aibisha"] },
     completionVariants: [[

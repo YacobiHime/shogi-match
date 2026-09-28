@@ -132,7 +132,7 @@
                 <span v-if="index === 0">初期局面</span>
                 <template v-else>
                   <span>{{ index }}</span><span>{{ step.label }}</span>
-                  <small v-if="step.routine" class="shogi-dex__move-routine">代表局面</small>
+                  <small v-if="step.routine" class="shogi-dex__move-routine">{{ step.routine }}</small>
                 </template>
               </button>
             </li>
@@ -302,7 +302,7 @@ function selectItem(id: string) {
 }
 
 // 定跡の手順を平手の初期局面から再生する。後手専用の戦法は左右を反転し、
-// 「@角換わり」のような定型手順は代表局面の確認手順へ置き換える。
+// 「@角換わり」のような定型手順は、相手の応手を含む代表進行を1手ずつ展開する。
 const steps = computed<DexStep[]>(() => buildOpeningDexSteps(
   selectedDefinition.value,
   {

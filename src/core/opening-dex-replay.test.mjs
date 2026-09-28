@@ -39,7 +39,7 @@ describe("opening dex replay", () => {
     expect(pieceAt(steps.at(-1).sfen, "3d")).toBe("r");
   });
 
-  it("expands routine tokens into a single representative-position step", () => {
+  it("expands routine tokens into one step per representative move", () => {
     const routines = [{
       token: "@kakugawari",
       label: "角換わり手順",
@@ -48,11 +48,31 @@ describe("opening dex replay", () => {
     const steps = buildOpeningDexSteps({
       blackMoves: ["@kakugawari", "7i8h"],
     }, { initialSfen: STANDARD_SFEN, routines });
-    expect(steps).toHaveLength(3);
-    expect(steps[1].routine).toBe("角換わり手順");
-    expect(steps[1].label).toBe("角換わり手順");
-    expect(steps[1].lastMove).toBe("");
+    expect(steps).toHaveLength(6);
+    expect(steps.slice(1, 5).map(({ lastMove }) => lastMove)).toEqual(["7g7f", "3c3d", "8h2b+", "3a2b"]);
+    expect(steps.slice(1, 5).every(({ routine }) => routine === "角換わり手順")).toBe(true);
+    expect(steps[5].routine).toBeNull();
+    // 相手の応手は区別して表示する。
+    expect(steps[1].label).toBe("7g7f");
+    expect(steps[2].label).toBe("相手：3c3d");
+    // 交換前は角が8八に残り、2二角成の局面で初めて馬が2二へ入る。
+    expect(pieceAt(steps[2].sfen, "8h")).toBe("B");
+    expect(pieceAt(steps[3].sfen, "2b")).toBe("+B");
+    expect(pieceAt(steps[4].sfen, "2b")).toBe("s");
     // 7i8hで銀が8八へ（角は交換済みで8hは空いている）。
+    expect(pieceAt(steps.at(-1).sfen, "8h")).toBe("S");
+  });
+
+  it("mirrors routine moves including opponent replies for white-side definitions", () => {
+    const routines = [{
+      token: "@kakugawari",
+      label: "角換わり手順",
+      previewMoves: ["7g7f", "3c3d", "8h2b+", "3a2b"],
+    }];
+    const steps = buildOpeningDexSteps({ blackMoves: ["@kakugawari"] }, {
+      initialSfen: STANDARD_SFEN, routines, whiteSide: true,
+    });
+    expect(steps.slice(1).map(({ lastMove }) => lastMove)).toEqual(["3c3d", "7g7f", "2b8h+", "7i8h"]);
     expect(pieceAt(steps.at(-1).sfen, "8h")).toBe("S");
   });
 

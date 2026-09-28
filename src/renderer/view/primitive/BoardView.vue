@@ -36,8 +36,25 @@
           <BoardGrid class="full" :color="boardGridColor || board.background.gridColor" />
         </div>
         <div v-for="square in board.squares" :key="square.id" :style="square.backgroundStyle"></div>
+        <div
+          v-for="mark in attackMarkViews"
+          :key="'attack-tint-' + mark.id"
+          class="attack-tint"
+          :class="mark.tintClass"
+          :style="mark.style"
+        ></div>
         <div v-for="piece in board.pieces" :key="piece.id" :style="piece.style">
           <img class="piece-image" :src="piece.imagePath" />
+        </div>
+        <div
+          v-for="mark in attackMarkViews"
+          :key="'attack-count-' + mark.id"
+          class="attack-counts"
+          :style="mark.countStyle"
+          aria-hidden="true"
+        >
+          <span v-if="mark.white" class="attack-count attack-count--white">{{ mark.white }}</span>
+          <span v-if="mark.black" class="attack-count attack-count--black">{{ mark.black }}</span>
         </div>
         <div v-for="label in board.labels" :key="label.id" :style="label.style">
           {{ label.character }}
@@ -359,6 +376,11 @@ const props = defineProps({
   },
   candidates: {
     type: Array as PropType<CandidateMove[]>,
+    required: false,
+    default: () => [],
+  },
+  attackMarks: {
+    type: Array as PropType<{ file: number; rank: number; black: number; white: number }[]>,
     required: false,
     default: () => [],
   },
@@ -942,6 +964,28 @@ const boardLayoutBuilder = computed(() => {
   return new BoardLayoutBuilder(config.value, main.value.ratio);
 });
 
+const attackMarkViews = computed(() => {
+  if (!props.attackMarks.length) return [];
+  const marks = new Map(props.attackMarks.map((mark) => [`${mark.file}${mark.rank}`, mark]));
+  return board.value.squares.flatMap((square) => {
+    const mark = marks.get(`${square.file}${square.rank}`);
+    if (!mark) return [];
+    const height = Number.parseFloat(String(square.style.height)) || 0;
+    // 先手だけ・後手だけ・両者が利かせている升を色で分ける。
+    const tintClass = mark.black && mark.white
+      ? "attack-tint--both"
+      : mark.black ? "attack-tint--black" : "attack-tint--white";
+    return [{
+      id: square.id,
+      black: mark.black,
+      white: mark.white,
+      tintClass,
+      style: square.style,
+      countStyle: { ...square.style, fontSize: `${Math.max(9, height * 0.26)}px` },
+    }];
+  });
+});
+
 const board = computed(() => {
   const dragSourceSquare = drag.active && drag.source instanceof Square ? drag.source : undefined;
   const selectedSource =
@@ -1171,6 +1215,43 @@ const whitePlayerTimeSeverity = computed(() => {
 </script>
 
 <style scoped>
+/* 学習対局の「駒の利き」表示。青は先手、赤は後手、紫は両者が利かせている升。 */
+.attack-tint {
+  pointer-events: none;
+}
+.attack-tint--black {
+  background: rgba(37, 99, 235, 0.2);
+}
+.attack-tint--white {
+  background: rgba(220, 38, 38, 0.2);
+}
+.attack-tint--both {
+  background: rgba(147, 51, 234, 0.22);
+}
+.attack-counts {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  font-weight: 800;
+  line-height: 1;
+}
+.attack-count {
+  min-width: 1.15em;
+  padding: 0.08em 0.18em;
+  border-radius: 0.3em;
+  color: #fff;
+  text-align: center;
+}
+.attack-count--white {
+  align-self: flex-start;
+  background: rgba(185, 28, 28, 0.9);
+}
+.attack-count--black {
+  align-self: flex-end;
+  margin-top: auto;
+  background: rgba(29, 78, 216, 0.9);
+}
 .frame {
   color: var(--text-color);
   user-select: none;

@@ -217,9 +217,10 @@ const OPENING_STRATEGY_DEFINITIONS = [
     strictOrder: true,
     historyCompletes: true,
     completionSquares: [["7g", "S"], ["3g", "S"], ["6i", "K"], ["7h", "G"]],
+    // 編集データと同じ手順。角を7九から6八へ引き、玉の入城路を空ける。
     blackMoves: [
-      "7g7f", "6g6f", "7i6h", "6h7g", "3g3f", "3i4h", "4h3g",
-      "4g4f", "6i7h", "5i6i",
+      "7g7f", "6g6f", "7i7h", "7h7g", "4i5h", "6i7h", "5h6g", "8h7i",
+      "3i4h", "3g3f", "5i6i", "7i6h", "2g2f", "2f2e",
     ],
   },
   {
@@ -474,6 +475,28 @@ const OPENING_STRATEGY_DEFINITIONS = [
     blackMoves: ["7g7f", "4g4f", "3i4h", "4h4g", "4g5f", "2h4h"],
   },
   {
+    id: "right-shiken-elmo",
+    label: "右四間飛車エルモ囲い",
+    family: "anti-ranging",
+    // 右四間飛車の完成だけで囲いまで完成扱いにしないよう、戦型名では判定しない。
+    detectionNames: [],
+    strictOrder: true,
+    historyCompletes: true,
+    completionSquares: [
+      ["7h", "K"], ["6h", "S"], ["7i", "G"], ["5i", "G"],
+      ["4h", "R"], ["5f", "S"], ["4f", "P"],
+    ],
+    // 先にエルモ囲いへ玉を入れてから、4筋へ銀・飛車を集める。
+    blackMoves: [
+      "7g7f", "5i6h", "6h7h", "7i6h", "6i7i", "4i5i",
+      "3i4h", "4g4f", "4h4g", "4g5f", "2h4h",
+    ],
+    planReservations: [
+      // 飛車が4八へ回るまで、通り道の3八・4八を寄り道で塞がない。
+      { until: "2h4h", squares: ["3h", "4h"], fromSquares: ["2h"] },
+    ],
+  },
+  {
     id: "hayaguri-gin",
     label: "早繰り銀",
     family: "ibisha",
@@ -660,7 +683,63 @@ const OPENING_STRATEGY_DEFINITIONS = [
   },
 ];
 
-export const OPENING_STRATEGIES = definitionsWithEditorOverrides(OPENING_STRATEGY_DEFINITIONS, "strategy");
+const YAGURA_INTEGRATED_CASTLE = Object.freeze({
+  label: "金矢倉",
+  completionSquares: [["8h", "K"], ["7g", "S"], ["7h", "G"], ["6g", "G"]],
+  blackMoves: ["8h7i", "4i5h", "5h6g", "5i6h", "6h7h", "7h8h", "6i7h"],
+});
+
+/**
+ * 戦法の手順に囲いまで含める一体型。囲い欄は選ばせず、ここで定めた手順を囲いの段階として扱う。
+ * 手順は戦法の完成後に続けて指す前提で、編集データの戦法手順と重なる手は一度だけ案内する。
+ * blackMovesを持たない項目は、戦法の手順そのものが囲いを含む。
+ */
+const INTEGRATED_STRATEGY_CASTLES = Object.freeze({
+  "suzume-zashi": YAGURA_INTEGRATED_CASTLE,
+  "yagura-37-silver": YAGURA_INTEGRATED_CASTLE,
+  "morishita-system": {
+    label: "金矢倉",
+    completionSquares: YAGURA_INTEGRATED_CASTLE.completionSquares,
+    // 6九玉型から、角を6八へ引いて空いた7九を経由して8八へ入城する。
+    blackMoves: ["6i7i", "7i8h"],
+  },
+  "kakugawari-koshikake-gin": {
+    label: "6八玉・4八金・2九飛",
+    completionSquares: [["6h", "K"], ["4h", "G"], ["2i", "R"]],
+    blackMoves: ["3g3f", "2i3g", "2h2i", "4i4h", "5i6h"],
+  },
+  "gangi-right-shiken": {
+    label: "雁木",
+    completionSquares: [["6i", "K"], ["7h", "G"], ["5h", "G"], ["6g", "S"], ["5g", "S"]],
+    blackMoves: ["6i7h", "4i5h", "5i6i"],
+  },
+  "chikatetsu-bisha": { label: "7八玉型" },
+  "right-shiken-elmo": { label: "エルモ囲い" },
+  "fujii-system": { label: "居玉" },
+});
+
+/** 囲いの手順に戦法まで含める一体型。戦法欄は選ばせない。 */
+const INTEGRATED_CASTLE_IDS = new Set(["right-king", "migigyoku-habu"]);
+
+function withIntegratedCastle(strategy) {
+  const integrated = INTEGRATED_STRATEGY_CASTLES[strategy.id];
+  return {
+    ...strategy,
+    integrated: Boolean(integrated),
+    integratedCastleLabel: integrated?.label ?? "",
+    integratedCastle: integrated?.blackMoves ? Object.freeze({
+      id: `${strategy.id}:castle`,
+      label: integrated.label,
+      detectionNames: [],
+      strictOrder: true,
+      completionSquares: integrated.completionSquares,
+      blackMoves: integrated.blackMoves,
+    }) : undefined,
+  };
+}
+
+export const OPENING_STRATEGIES = definitionsWithEditorOverrides(OPENING_STRATEGY_DEFINITIONS, "strategy")
+  .map(withIntegratedCastle);
 
 const OPENING_CASTLE_DEFINITIONS = [
   {
@@ -1010,14 +1089,32 @@ const CASTLE_CLASSIFICATION = {
 export const OPENING_CASTLES = definitionsWithEditorOverrides(OPENING_CASTLE_DEFINITIONS.map((castle) => ({
   ...castle,
   ...CASTLE_CLASSIFICATION[castle.id],
-})), "castle");
+})), "castle").map((castle) => ({ ...castle, integrated: INTEGRATED_CASTLE_IDS.has(castle.id) }));
+
+/**
+ * 選択中の戦法・囲いから、実際に案内する2つの段階の定義を決める。
+ * 一体型の戦法では囲い欄を無視して内蔵の囲い手順を使い、一体型の囲いでは戦法欄を無視する。
+ */
+export function resolveOpeningPlanDefinitions(strategyId, castleId) {
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
+  if (strategy?.integrated) return { strategy, castle: strategy.integratedCastle };
+  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  if (castle?.integrated) return { strategy: undefined, castle };
+  return { strategy, castle };
+}
+
+/** 戦法欄・囲い欄の一方だけで作戦が決まる一体型かを返す。 */
+export function isIntegratedOpening(id, kind) {
+  const definitions = kind === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
+  return Boolean(id && definitions.find((definition) => definition.id === id)?.integrated);
+}
 
 const STATIC_ROOK_STRATEGIES = new Set([
   "ibisha", "aigakari", "yokofudori", "yokofudori-33-bishop", "hineribisha", "gangi-strategy",
   "kakugawari", "yagura-strategy", "suzume-zashi", "yagura-37-silver",
   "kakugawari-koshikake-gin",
   "morishita-system", "kakugawari-45-knight", "aono-ryu", "gangi-right-shiken", "bougin",
-  "right-shiken", "hayaguri-gin", "koshikake-gin", "ureshino",
+  "right-shiken", "right-shiken-elmo", "hayaguri-gin", "koshikake-gin", "ureshino",
   "sujichigai-kaku", "kakuto-fu", "torizashi", "ahiru", "sodebisha", "chikatetsu-bisha",
 ]);
 const RANGING_ROOK_STRATEGIES = new Set([
@@ -1195,8 +1292,7 @@ function openingStrategyPlan(strategy, {
 }
 
 export function openingPlanSteps(strategyId, castleId, color = "black", context = {}) {
-  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
-  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  const { strategy, castle } = resolveOpeningPlanDefinitions(strategyId, castleId);
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
   const strategyPlan = openingStrategyPlan(strategy, { ...context, color });
   const strategyRookMove = strategyPlan.moves.find((move) => /^2h[3-9]h$/.test(move));
@@ -1445,8 +1541,30 @@ export function openingPlanInterruption({
     color === "black" ? "white" : "black",
   ));
   const lastMove = moveHistory.at(-1);
-  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
-  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  const { strategy, castle } = resolveOpeningPlanDefinitions(strategyId, castleId);
+  // 一体型の戦法に内蔵した囲いが崩れた場合は、作戦全体を選び直す。
+  const castleBelongsToStrategy = Boolean(castle && castle === strategy?.integratedCastle);
+
+  // 角換わり手順は、手順を含む側（戦法または囲い）が未完成の間だけ判定する。
+  const routineStatus = openingGuideRoutineStatus({
+    strategyId,
+    castleId,
+    color,
+    playedMoves,
+    currentSfen,
+  });
+  const routineFailure = (phase) => {
+    if (routineStatus.status !== "failed" || routineStatus.phase !== phase || completedPhases[phase]) {
+      return null;
+    }
+    const routineInCastle = phase === "castle";
+    return {
+      requiresReselection: true,
+      clearStrategy: !routineInCastle || castleBelongsToStrategy,
+      clearCastle: routineInCastle,
+      message: `角換わり手順はここで失敗だね。${routineStatus.reason} 今の局面からできる別の${routineInCastle ? "囲い" : "戦法"}を選ぼう！`,
+    };
+  };
 
   if (!completedPhases.strategy) {
   if (
@@ -1490,20 +1608,8 @@ export function openingPlanInterruption({
     };
   }
 
-  const routineStatus = openingGuideRoutineStatus({
-    strategyId,
-    castleId,
-    color,
-    playedMoves,
-    currentSfen,
-  });
-  if (routineStatus.status === "failed") {
-    return {
-      requiresReselection: true,
-      clearStrategy: true,
-      message: `角換わり手順はここで失敗だね。${routineStatus.reason} 今の局面からできる別の戦法を選ぼう！`,
-    };
-  }
+  const strategyRoutineFailure = routineFailure("strategy");
+  if (strategyRoutineFailure) return strategyRoutineFailure;
 
   if (
     strategyId === "yababozu"
@@ -1544,6 +1650,9 @@ export function openingPlanInterruption({
   }
   }
 
+  const castleRoutineFailure = routineFailure("castle");
+  if (castleRoutineFailure) return castleRoutineFailure;
+
   // 次の定跡手に使う駒が元の升から消えていれば、待っても固定手順には戻れない。
   // 相手の応手待ちや王手回避など、駒が所定位置に残る一時的な停止はここでは中断しない。
   if (currentSfen) {
@@ -1552,6 +1661,8 @@ export function openingPlanInterruption({
     const steps = openingPlanSteps(strategyId, castleId, color, {
       playedMoves, opponentMoves, opponentFormations,
     });
+    // 先の段階の残り手で駒が入る升は、後の段階の移動元として空でも中断しない。
+    const upcomingSquares = new Set();
     for (const phase of ["strategy", "castle"]) {
       const definition = phase === "strategy" ? strategy : castle;
       if (!definition || completedPhases[phase] || definitionDetectedComplete(
@@ -1562,18 +1673,24 @@ export function openingPlanInterruption({
         ? pending.slice(0, 1)
         : pending;
       const boardMoves = candidates.filter(({ usi }) => /^[1-9][a-i][1-9][a-i]\+?$/.test(usi));
+      const phaseUpcomingSquares = new Set(upcomingSquares);
+      for (const { usi } of pending) upcomingSquares.add(usi.replace("+", "").slice(-2));
       if (
         boardMoves.length > 0
-        && boardMoves.every(({ usi }) => board.get(usi.slice(0, 2))?.color !== color)
+        && boardMoves.every(({ usi }) => (
+          board.get(usi.slice(0, 2))?.color !== color && !phaseUpcomingSquares.has(usi.slice(0, 2))
+        ))
         && !boardMoves.some((entry) => alternativePlanMove(entry, legalMoves, board, color))
       ) {
         return {
           requiresReselection: true,
-          clearStrategy: phase === "strategy",
+          clearStrategy: phase === "strategy" || castleBelongsToStrategy,
           clearCastle: phase === "castle",
           message: phase === "strategy"
             ? `${strategy.label}の定跡へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の戦法を選ぼう！`
-            : `${castle.label}の形へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の囲いを選ぼう！`,
+            : castleBelongsToStrategy
+              ? `${strategy.label}の${castle.label}へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の戦法を選ぼう！`
+              : `${castle.label}の形へ戻るための駒が元の位置にないね。寄り道はせずここで中断して、今の局面からできる別の囲いを選ぼう！`,
         };
       }
     }
@@ -1630,12 +1747,37 @@ export function openingGuideRoutineStatus({
   legalMoves = [],
   currentSfen = "",
 } = {}) {
-  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
-  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  return routineStatusForDefinitions({
+    ...resolveOpeningPlanDefinitions(strategyId, castleId),
+    color,
+    playedMoves,
+    legalMoves,
+    currentSfen,
+  });
+}
+
+function routineStatusForDefinitions({
+  strategy,
+  castle,
+  color,
+  playedMoves,
+  legalMoves,
+  currentSfen,
+}) {
   const definition = [strategy, castle].find((candidate) => candidate?.blackMoves?.includes("@kakugawari"));
-  const phase = definition === castle ? "castle" : "strategy";
+  // 角換わり手順を含む側。完成判定や中断時の選び直しは、この段階を基準にする。
+  const phase = definition && definition === castle ? "castle" : "strategy";
   const routineIndex = definition?.blackMoves?.indexOf("@kakugawari") ?? -1;
-  if (routineIndex < 0) return { status: "inactive", candidates: [] };
+  if (routineIndex < 0) return { status: "inactive", candidates: [], phase };
+  const withPhase = (result) => ({ ...result, phase });
+  return withPhase(activeRoutineStatus({
+    definition, phase, color, playedMoves, legalMoves, currentSfen, routineIndex,
+  }));
+}
+
+function activeRoutineStatus({
+  definition, phase, color, playedMoves, legalMoves, currentSfen, routineIndex,
+}) {
 
   const own = new Set(canonicalMovesForColor(playedMoves, color));
   const prefix = definition.blackMoves.slice(0, routineIndex).filter((move) => !move.startsWith("@"));
@@ -1779,8 +1921,7 @@ export function openingPlanCandidates({
   currentSfen = "",
   completedPhases = {},
 }) {
-  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId);
-  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  const { strategy, castle } = resolveOpeningPlanDefinitions(strategyId, castleId);
   const detected = new Set(detectedFormations);
   const strategyComplete = completedPhases.strategy || definitionDetectedComplete(
     strategy, detected, currentSfen, color, playedMoves,
@@ -1813,8 +1954,10 @@ export function openingPlanCandidates({
     legalMoves,
     currentSfen,
   });
+  // 囲いに角換わり手順を含む場合も、戦法の有無や完成状態に関係なく手順を案内する。
+  const routinePhaseComplete = routineStatus.phase === "castle" ? castleComplete : strategyComplete;
   if (
-    strategy && !strategyComplete
+    !routinePhaseComplete
     && !["inactive", "complete"].includes(routineStatus.status)
   ) return routineStatus.candidates;
 
@@ -1912,11 +2055,15 @@ export function isOpeningPlanComplete({
   const steps = openingPlanSteps(strategyId, castleId, color, {
     playedMoves, opponentMoves, opponentFormations,
   });
+  const resolved = resolveOpeningPlanDefinitions(strategyId, castleId);
   const phaseComplete = (id, phase, entries) => {
     if (completedPhases[phase]) return true;
-    if (!id) return true;
-    const definitions = phase === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES;
-    const definition = definitions.find(({ id: candidateId }) => candidateId === id);
+    const definition = resolved[phase];
+    // 一体型では相方の欄の選択を無視し、内蔵の囲いがなければその段階は不要とする。
+    const ignored = phase === "strategy"
+      ? resolved.castle?.integrated
+      : resolved.strategy?.integrated;
+    if (!definition && (!id || ignored)) return true;
     if (!definition) return false;
     if (definition.completionRequiresBishopExchange
       && !completedBishopExchange(currentSfen, color, playedMoves)) return false;

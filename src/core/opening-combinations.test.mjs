@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
 import {
-  isOpeningPlanComplete, nextOpeningPlanMove, rangingRookStrategyChoices,
+  rangingRookStrategyChoices,
   OPENING_CASTLES,
 } from "./opening-guide.mjs";
-import { CPU_OPENING_REPERTOIRES } from "./cpu-opening-repertoire.mjs";
+import { CPU_ADAPTIVE_CASTLES, CPU_OPENING_REPERTOIRES } from "./cpu-opening-repertoire.mjs";
+import * as builtInGuide from "./opening-guide.mjs";
 
-function planFailure(strategyId, castleId, color) {
+async function importProductionGuide() {
+  const original = process.env.VITEST;
+  process.env.VITEST = "false";
+  try {
+    return await import("./opening-guide.mjs?production-combinations");
+  } finally {
+    process.env.VITEST = original;
+  }
+}
+
+function planFailure(strategyId, castleId, color, guide = builtInGuide) {
+  const { isOpeningPlanComplete, nextOpeningPlanMove } = guide;
   let record = createGameRecord();
   const playedMoves = [];
   const opponentMoves = [];
@@ -20,7 +32,7 @@ function planFailure(strategyId, castleId, color) {
     moveHistory.push(usi);
     return true;
   };
-  if (strategyId === "kakugawari") {
+  if (strategyId.startsWith("kakugawari")) {
     if (!apply("7g7f", "black") || !apply("3c3d", "white")) return "setup illegal";
   }
   if (strategyId === "pacman" && color === "white" && !apply("7g7f", "black")) {
@@ -62,6 +74,20 @@ describe("戦法と囲いの組み合わせ", () => {
       const reason = planFailure(strategyId, castleId, color);
       return reason ? [`${strategyId}+${castleId}: ${reason}`] : [];
     });
+    expect(failures).toEqual([]);
+  });
+
+  it.each(["black", "white"])("CPUが相手に合わせて選ぶ囲いを、編集データでも最後まで進められる: %s", async (color) => {
+    const production = await importProductionGuide();
+    const failures = [];
+    for (const [strategyId, pools] of Object.entries(CPU_ADAPTIVE_CASTLES)) {
+      for (const castleId of new Set([...pools.static, ...pools.ranging])) {
+        for (const [name, guide] of [["built-in", builtInGuide], ["production", production]]) {
+          const reason = planFailure(strategyId, castleId, color, guide);
+          if (reason) failures.push(`${name} ${strategyId}+${castleId}: ${reason}`);
+        }
+      }
+    }
     expect(failures).toEqual([]);
   });
 });

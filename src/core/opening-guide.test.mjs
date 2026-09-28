@@ -125,6 +125,8 @@ describe("opening guide", () => {
       playedMoves: line.filter((_, index) => index % 2 === 0),
       opponentMoves: line.filter((_, index) => index % 2 === 1),
       currentSfen: record.position.sfen,
+      // 一体型の内蔵囲い（6八玉・4八金・2九飛）は別に判定する。
+      completedPhases: { castle: true },
     })).toBe(true);
   });
 
@@ -193,6 +195,7 @@ describe("opening guide", () => {
     expect(isOpeningPlanComplete({
       strategyId, color: "white", playedMoves,
       opponentMoves: ["7g7f", "8h2b+"], currentSfen: record.position.sfen,
+      completedPhases: { castle: true },
     })).toBe(true);
   });
 
@@ -549,7 +552,7 @@ describe("opening guide", () => {
         "アヒル囲い", "パックマン", "嬉野流",
       ]);
     expect(OPENING_STRATEGIES.filter(({ family }) => family === "anti-ranging").map(({ label }) => label))
-      .toEqual(["右四間飛車", "袖飛車", "地下鉄飛車", "鳥刺し"]);
+      .toEqual(["右四間飛車", "右四間飛車エルモ囲い", "袖飛車", "地下鉄飛車", "鳥刺し"]);
     expect(OPENING_STRATEGIES.find(({ id }) => id === "ibisha")?.guideSelectable).toBe(true);
     expect(OPENING_STRATEGIES.filter(({ guideSelectable }) => guideSelectable === false).map(({ id }) => id))
       .toEqual([
@@ -569,6 +572,7 @@ describe("opening guide", () => {
         "7g7f", "2g2f", "2f2e", "6i7h", "8h2b+", "7i8h",
         "4g4f", "3i4h", "4h4g", "4g5f",
       ],
+      completedPhases: { castle: true },
     })).toBe(true);
   });
 

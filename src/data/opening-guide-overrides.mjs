@@ -303,16 +303,12 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
     "completionVariants": [
       [
         [
-          "4h",
+          "3h",
           "K"
         ],
         [
-          "7h",
+          "4h",
           "G"
-        ],
-        [
-          "6g",
-          "S"
         ],
         [
           "4g",
