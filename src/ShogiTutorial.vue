@@ -77,9 +77,9 @@
       <div class="shogi-tutorial__progress" aria-hidden="true">
         <span :style="{ width: `${(stepIndex / currentLesson.steps.length) * 100}%` }"></span>
       </div>
-      <div class="shogi-dex__detail shogi-tutorial__stage">
+      <div ref="stageEl" class="shogi-dex__detail shogi-tutorial__stage">
         <div v-if="boardSfen" class="shogi-dex__main">
-          <div class="shogi-dex__board">
+          <div class="shogi-dex__board" :style="boardBoxStyle">
             <ShogiMatchBoard
               :sfen="boardSfen"
               :last-move="lastMove"
@@ -91,10 +91,11 @@
               :candidates="boardArrows"
               :mark-squares="boardMarks"
               @usi-move="onBoardMove"
+              @resize="onBoardResize"
             />
           </div>
         </div>
-        <div class="shogi-dex__explanation-col shogi-tutorial__panel">
+        <div ref="panelEl" class="shogi-dex__explanation-col shogi-tutorial__panel">
           <div class="shogi-dex__explanation">
             <div class="shogi-dex__speech">
               <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
@@ -226,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { formatHintMove } from "./core/match-assists.mjs";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
@@ -308,6 +309,43 @@ const isNarrow = ref(Boolean(narrowMediaQuery?.matches));
 function onNarrowChange(event: MediaQueryListEvent) { isNarrow.value = event.matches; }
 onMounted(() => narrowMediaQuery?.addEventListener("change", onNarrowChange));
 onBeforeUnmount(() => narrowMediaQuery?.removeEventListener("change", onNarrowChange));
+
+/*
+ * 盤の枠を、描かれる盤と同じ大きさにする。枠が残りの高さいっぱいに伸びると、縦横比を保って
+ * 縮んだ盤との間に隙間ができ、台詞が盤から離れる。台詞欄の高さを引いた残りに盤の縦横比で収める。
+ */
+const stageEl = ref<HTMLElement | null>(null);
+const panelEl = ref<HTMLElement | null>(null);
+const boardBoxStyle = ref<Record<string, string>>({});
+// 盤の縦横比は描画後に盤から受け取る。初期値は標準レイアウトの比。
+const boardAspect = ref(1471 / 959);
+function onBoardResize({ width, height }: { width: number; height: number }) {
+  if (width > 0 && height > 0 && Math.abs(width / height - boardAspect.value) > 0.005) boardAspect.value = width / height;
+}
+function layoutBoardBox() {
+  const stage = stageEl.value;
+  if (!stage) return;
+  const style = getComputedStyle(stage);
+  const innerWidth = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const innerHeight = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  const panelHeight = panelEl.value?.offsetHeight ?? 0;
+  const gap = parseFloat(style.rowGap) || 0;
+  // 台詞が長くても盤が小さくなりすぎないようにする。収まらない分は画面ごとスクロールする。
+  const minHeight = Math.min(320, window.innerHeight * 0.42);
+  const availableHeight = Math.max(minHeight, innerHeight - panelHeight - gap);
+  const width = Math.max(1, Math.floor(Math.min(innerWidth, availableHeight * boardAspect.value)));
+  const height = Math.max(1, Math.floor(width / boardAspect.value));
+  boardBoxStyle.value = { width: `${width}px`, height: `${height}px` };
+}
+const boardBoxObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => layoutBoardBox()) : null;
+watch([stageEl, panelEl], ([stage, panel]) => {
+  boardBoxObserver?.disconnect();
+  if (stage) boardBoxObserver?.observe(stage);
+  if (panel) boardBoxObserver?.observe(panel);
+  layoutBoardBox();
+});
+watch(boardAspect, layoutBoardBox);
+onBeforeUnmount(() => boardBoxObserver?.disconnect());
 
 const currentVolume = computed(() => volumes.find(({ id }) => id === volumeId.value) ?? null);
 const currentLesson = computed(() => (lessonId.value ? tutorialLesson(lessonId.value) as Lesson | null : null));
@@ -852,30 +890,26 @@ const resultMessage = computed(() => {
 }
 /*
  * レッスン画面。台詞を盤の横に置くと視線が左右に離れて読みにくいので、画面の幅によらず
- * 台詞と操作を盤のすぐ下に置く。盤は残りの高さに収まるよう縦横比を保って縮める。
+ * 台詞と操作を盤の真下に付けて置く。盤の枠の大きさはスクリプトで盤に合わせ、余った高さは台詞の下に残す。
  */
 .shogi-game .shogi-tutorial .shogi-tutorial__stage {
   flex: 1 1 auto;
   flex-direction: column;
   justify-content: flex-start;
-  gap: 0.5rem;
+  gap: 0.25rem;
   min-height: 0;
   padding: 0.4rem clamp(0.5rem, 2vw, 1.5rem) 0.6rem;
   overflow-y: auto;
 }
 .shogi-game .shogi-tutorial .shogi-tutorial__stage > .shogi-dex__main {
-  flex: 1 1 0;
+  flex: none;
   align-items: center;
   min-width: 0;
-  /* 台詞が長くても盤が小さくなりすぎないようにする。収まらない分は画面ごとスクロールする。 */
-  min-height: min(20rem, 42vh);
 }
 .shogi-game .shogi-tutorial .shogi-tutorial__stage .shogi-dex__board {
-  flex: 1 1 0;
-  width: auto;
+  flex: none;
   max-width: 100%;
-  height: 100%;
-  min-height: 0;
+  aspect-ratio: auto;
 }
 .shogi-game .shogi-tutorial .shogi-tutorial__panel {
   flex: none;
