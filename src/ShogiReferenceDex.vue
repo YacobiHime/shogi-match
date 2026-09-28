@@ -56,7 +56,26 @@
             <h2>{{ selectedEntry.label }}</h2>
             <span v-if="kind === 'tesuji' && sideToMove === 'white'" class="shogi-dex__side-note">後手番の局面</span>
           </div>
-          <div class="shogi-dex__stage">
+          <table v-if="selectedEntry.table" class="shogi-reference-dex__tiers">
+            <caption>点数は駒得の目安（局面によって変わるよ）</caption>
+            <tbody>
+              <tr v-for="row in selectedEntry.table" :key="row.tier">
+                <th scope="row" :class="`shogi-reference-dex__tier shogi-reference-dex__tier--${tierClass(row.tier)}`">
+                  {{ row.tier }}
+                </th>
+                <td>
+                  <ul>
+                    <li v-for="piece in row.pieces" :key="piece.label" class="shogi-reference-dex__tier-piece">
+                      <strong>{{ piece.label }}</strong>
+                      <span class="shogi-reference-dex__points">{{ piece.points }}<small v-if="piece.points !== '∞'">点</small></span>
+                      <small>{{ piece.note }}</small>
+                    </li>
+                  </ul>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="shogi-dex__stage">
             <div class="shogi-dex__board">
               <ShogiMatchBoard
                 :sfen="sfen"
@@ -114,9 +133,11 @@ import {
 } from "./core/reference-dex.mjs";
 
 type ReferenceDexKind = "piece" | "tesuji" | "world";
+type TierRow = { tier: string; pieces: { label: string; points: number | string; note: string }[] };
 type ReferenceEntry = {
   id: string;
   label: string;
+  table?: TierRow[];
   overview: string;
   rows: [string, string][];
   arrows?: string[];
@@ -165,6 +186,10 @@ const legend = computed(() => {
     .map((tone) => ({ tone, label: LEGEND_LABELS[tone] }));
 });
 
+function tierClass(tier: string) {
+  return tier === "別格" ? "top" : tier.toLowerCase();
+}
+
 function selectItem(id: string) {
   selectedId.value = id;
   // 一覧から選んだらメニューを閉じる。
@@ -200,5 +225,69 @@ function selectItem(id: string) {
 .shogi-game .shogi-reference-dex__swatch--key {
   background: rgba(234, 179, 8, 0.65);
   box-shadow: inset 0 0 0 2px rgba(202, 138, 4, 0.9);
+}
+.shogi-game .shogi-reference-dex__tiers {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 0.4rem;
+}
+.shogi-game .shogi-reference-dex__tiers caption {
+  margin-bottom: 0.2rem;
+  font-size: 0.8rem;
+  text-align: left;
+  opacity: 0.85;
+}
+.shogi-game .shogi-reference-dex__tier {
+  width: 3.4rem;
+  border-radius: 0.35rem 0 0 0.35rem;
+  color: #14212e;
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-align: center;
+}
+.shogi-game .shogi-reference-dex__tier--top { background: #f6d365; }
+.shogi-game .shogi-reference-dex__tier--s { background: #f28b82; }
+.shogi-game .shogi-reference-dex__tier--a { background: #f7b267; }
+.shogi-game .shogi-reference-dex__tier--b { background: #fde68a; }
+.shogi-game .shogi-reference-dex__tier--c { background: #a7f3d0; }
+.shogi-game .shogi-reference-dex__tier--d { background: #bfdbfe; }
+.shogi-game .shogi-reference-dex__tiers td {
+  padding: 0.35rem;
+  border-radius: 0 0.35rem 0.35rem 0;
+  background: rgba(255, 252, 244, 0.08);
+}
+.shogi-game .shogi-reference-dex__tiers ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-reference-dex__tier-piece {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0 0.5rem;
+  align-items: baseline;
+  min-width: 7.5rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(241, 165, 76, 0.55);
+  border-radius: 0.3rem;
+  background: rgba(20, 33, 46, 0.55);
+}
+.shogi-game .shogi-reference-dex__tier-piece > small {
+  grid-column: 1 / -1;
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+.shogi-game .shogi-reference-dex__points {
+  color: #f1a54c;
+  font-size: 1.15rem;
+  font-weight: 800;
+  text-align: right;
+}
+.shogi-game .shogi-reference-dex__points small {
+  margin-left: 0.1rem;
+  font-size: 0.7rem;
 }
 </style>

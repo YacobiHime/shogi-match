@@ -25,7 +25,7 @@ describe("reference dex", () => {
   });
 
   it.each(KINDS)("shows a legal position with valid arrows and marks for every %s entry", (kind) => {
-    for (const entry of referenceDexEntries(kind)) {
+    for (const entry of referenceDexEntries(kind).filter(({ table }) => !table)) {
       const sfen = referenceEntrySfen(entry);
       const record = createGameRecord(sfen);
       // 手番でない側が王手されている局面は不正。
@@ -69,6 +69,18 @@ describe("reference dex", () => {
     expect(reachOf("dragon")).toHaveLength(20);
     expect(reachOf("horse")).toHaveLength(20);
     expect(reachOf("king")).toHaveLength(8);
+  });
+
+  it("shows the piece value tier table without a board", () => {
+    const entry = referenceDexEntries("piece").find(({ id }) => id === "piece-values");
+    expect(entry.table.map(({ tier }) => tier)).toEqual(["別格", "S", "A", "B", "C", "D"]);
+    expect(referenceEntrySfen(entry)).toBe("");
+    expect(referenceEntryMarks(entry)).toEqual([]);
+    const points = entry.table.flatMap(({ pieces }) => pieces).filter(({ points }) => typeof points === "number");
+    // 上のtierほど点数が高く、同じtierの中でも点数の高い順に並ぶ。
+    expect(points.map(({ points: value }) => value)).toEqual([...points.map(({ points: value }) => value)].sort((a, b) => b - a));
+    expect(points.find(({ label }) => label === "歩兵").points).toBe(1);
+    expect(points.find(({ label }) => label === "飛車").points).toBe(10);
   });
 
   it("demonstrates the head-gold mate and the knight fork", () => {

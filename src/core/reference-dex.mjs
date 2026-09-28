@@ -35,6 +35,38 @@ export const REFERENCE_DEX_KINDS = Object.freeze({
 
 const PIECE_ENTRIES = [
   {
+    id: "piece-values", group: "駒の価値", label: "駒の価値 tier表",
+    // 盤面の代わりに表を出す項目。点数はよく使われる目安で、局面によって変わる。
+    table: [
+      { tier: "別格", pieces: [{ label: "玉将・王将", points: "∞", note: "取られたら負け" }] },
+      { tier: "S", pieces: [
+        { label: "竜王", points: 12, note: "飛車＋斜め1マス" },
+        { label: "竜馬", points: 10, note: "角＋縦横1マス" },
+        { label: "飛車", points: 10, note: "最強の攻め駒" },
+      ] },
+      { tier: "A", pieces: [
+        { label: "角行", points: 8, note: "斜めの大駒" },
+        { label: "と金", points: 7, note: "取られても歩1枚" },
+      ] },
+      { tier: "B", pieces: [
+        { label: "金将", points: 6, note: "守りの要" },
+        { label: "成銀・成桂・成香", points: 6, note: "金と同じ動き" },
+        { label: "銀将", points: 5, note: "攻めにも守りにも" },
+      ] },
+      { tier: "C", pieces: [
+        { label: "桂馬", points: 4, note: "両取りが得意" },
+        { label: "香車", points: 3, note: "一直線に突進" },
+      ] },
+      { tier: "D", pieces: [{ label: "歩兵", points: 1, note: "数は多いが大切" }] },
+    ],
+    overview: "駒にはだいたいの「価値」があるよ。交換するときの損得の目安にしよう！",
+    rows: [
+      ["使い方", "駒を交換するときは、取った駒と取られた駒の点数を比べよう。たとえば銀（5点）で金（6点）を取れれば1点の得だよ。"],
+      ["注意点", "点数はあくまで目安だよ。玉の近くの駒や、攻めに欠かせない駒は、局面によって点数以上の価値になるんだ。"],
+      ["格言", "「終盤は駒の損得より速度」。終盤では、駒得よりも早く相手玉に迫ることが大事になるよ。"],
+    ],
+  },
+  {
     id: "pawn", group: "基本の駒", label: "歩兵（ふ）", pieceSquare: "5e", sfen: lonePieceSfen("P"),
     overview: "一番たくさんある小さな駒だよ。でも、歩の使い方で強さが決まるんだ！",
     rows: [
@@ -384,8 +416,9 @@ export function referenceDexGroups(kind) {
   return groups;
 }
 
-/** 項目の盤面SFEN。手順で指定した項目は平手から指し進める。 */
+/** 項目の盤面SFEN。手順で指定した項目は平手から指し進める。表だけの項目は盤面を持たない。 */
 export function referenceEntrySfen(entry) {
+  if (entry?.table) return "";
   if (entry?.sfen) return entry.sfen;
   const record = createGameRecord(STANDARD);
   for (const usi of entry?.moves ?? []) {
@@ -406,6 +439,7 @@ export function pieceReachSquares(sfen, squareUsi) {
 
 /** 盤面に重ねる色付け。駒の動きは青、ねらう駒は赤、大事なマスは黄色。 */
 export function referenceEntryMarks(entry) {
+  if (entry?.table) return [];
   const sfen = referenceEntrySfen(entry);
   const marks = new Map();
   if (entry?.pieceSquare) {
