@@ -185,7 +185,8 @@
     <ShogiTutorial
       v-if="tutorialOpen"
       :asset-base-url="assetBaseUrl"
-      @close="tutorialOpen = false"
+      :match-report="tutorialReport"
+      @close="tutorialOpen = false; tutorialReport = null"
       @open-dex="openDexFromTutorial"
       @start-match="startMatchFromTutorial"
     />
@@ -941,7 +942,9 @@
           </div>
         </dl>
         <div class="shogi-game__result-actions">
-          <button type="button" class="shogi-game__rematch" @click="openPregame">対局準備</button>
+          <!-- 教室の対局は、やこび姫の一言と★を見に教室へ戻る。 -->
+          <button v-if="tutorialMatch" type="button" class="shogi-game__rematch" @click="returnToTutorial">教室へ戻る</button>
+          <button v-else type="button" class="shogi-game__rematch" @click="openPregame">対局準備</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
         </div>
       </div>
@@ -950,12 +953,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch, type Ref } from "vue";
 import { Color, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
 import ShogiReferenceDex from "./ShogiReferenceDex.vue";
 import ShogiTutorial from "./ShogiTutorial.vue";
+import { tutorialLesson } from "./core/tutorial-curriculum.mjs";
+import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import {
@@ -1199,6 +1204,10 @@ const referenceDexKind = ref<"" | "piece" | "tesuji" | "world">("");
 const referenceDexInitialId = ref("");
 // やこび姫の将棋教室を開いているか。
 const tutorialOpen = ref(false);
+// 教室のレッスンから始めた対局。終局後は教室へ戻り、reportで★を付ける。
+type TutorialMatchReport = { lessonId: string; outcome: "win" | "lose" | "draw"; reason: string; assistsUsed: number };
+const tutorialMatch = ref<{ lessonId: string; playerColor: "black" | "white"; report: TutorialMatchReport | null } | null>(null);
+const tutorialReport = ref<TutorialMatchReport | null>(null);
 const thinking = ref(false);
 const engineReady = ref(false);
 const engineUnavailable = ref(false);
@@ -2345,24 +2354,99 @@ function openDexFromTutorial({ kind, id }: { kind: string; id?: string }) {
   }
 }
 
-/** 教室の「この設定で対局する」から、学習対局の準備画面へ設定を渡す。 */
-function startMatchFromTutorial(preset: {
-  startType?: LearningStartType;
-  handicapId?: string;
-  playerStrategy?: string;
-  playerCastle?: string;
-  opponentStrategy?: string;
-  opponentCastle?: string;
+/** 教室の固定条件で上書きする対局設定。 */
+function tutorialOverriddenSettings(): { [key: string]: Ref<any> } {
+  return {
+    matchKind, searchNodes, coachLevel, selectedPlayerColor, selectedStrategy, selectedCastle,
+    learningStartType, learningHandicapId, learningHandicapGiver,
+    learningPlayerStrategy, learningPlayerCastle, learningOpponentStrategy, learningOpponentCastle,
+    learningHintLimit, learningUndoLimit, attackGuideEnabled,
+    cpuStrategy, cpuDetailedStrategy, cpuDetailedCastle, cpuFirstMove,
+    cpuBishopPreference, cpuRookPreference, cpuTempoPreference, cpuStrategyDetailsOpen,
+  };
+}
+
+/** 上書き前の設定を控える。リロードしても戻せるよう、中断保存にも入れる。 */
+let settingsBeforeTutorial: { [key: string]: unknown } | null = null;
+function captureMatchSettings() {
+  return Object.fromEntries(Object.entries(tutorialOverriddenSettings()).map(([key, entry]) => [key, entry.value]));
+}
+function restoreMatchSettings(saved: { [key: string]: unknown }) {
+  for (const [key, entry] of Object.entries(tutorialOverriddenSettings())) {
+    // 保存値は型が同じときだけ戻す。
+    if (key in saved && typeof saved[key] === typeof entry.value) entry.value = saved[key];
+  }
+}
+
+/** 教室の「対局をはじめる」から、レッスンで決めた条件のまま対局準備を通さずに始める。 */
+function startMatchFromTutorial({ lessonId, preset }: {
+  lessonId: string;
+  preset: {
+    startType: LearningStartType;
+    handicapId?: string;
+    playerStrategy?: string;
+    playerCastle?: string;
+    opponentStrategy?: string;
+    opponentCastle?: string;
+    playerColor: "black" | "white";
+    cpuLevel: number;
+    hintLimit: number;
+    undoLimit: number;
+    attackGuide: boolean;
+    coachLevel: "off" | "encourage" | "detailed";
+  };
 }) {
-  learningStartType.value = preset.startType ?? "standard";
+  // 前の対局を片付けてから、教室の条件で上書きする。
+  openPregame();
+  settingsBeforeTutorial = captureMatchSettings();
+  matchKind.value = "learning";
+  learningStartType.value = preset.startType;
   if (preset.handicapId) learningHandicapId.value = preset.handicapId;
+  learningHandicapGiver.value = "cpu";
   learningPlayerStrategy.value = preset.playerStrategy ?? "";
   learningPlayerCastle.value = preset.playerCastle ?? "";
   learningOpponentStrategy.value = preset.opponentStrategy ?? "";
   learningOpponentCastle.value = preset.opponentCastle ?? "";
-  selectedPlayerColor.value = "black";
+  learningHintLimit.value = normalizeAssistLimit(preset.hintLimit);
+  learningUndoLimit.value = normalizeAssistLimit(preset.undoLimit);
+  attackGuideEnabled.value = preset.attackGuide;
+  coachLevel.value = preset.coachLevel;
+  searchNodes.value = CPU_STRENGTH_PRESETS.find(({ level }) => level === preset.cpuLevel)?.value
+    ?? CPU_STRENGTH_PRESETS[0].value;
+  selectedPlayerColor.value = preset.playerColor;
+  selectedStrategy.value = "";
+  selectedCastle.value = "";
+  cpuStrategy.value = "random";
+  cpuStrategyDetailsOpen.value = false;
+  cpuFirstMove.value = "random";
+  cpuBishopPreference.value = "";
+  cpuRookPreference.value = "";
+  cpuTempoPreference.value = "";
+  tutorialMatch.value = { lessonId, playerColor: preset.playerColor, report: null };
+  tutorialReport.value = null;
   tutorialOpen.value = false;
-  openMatchSetup("learning");
+  homeOpen.value = false;
+  void initializeEngine();
+  beginMatch();
+}
+
+/** 教室の対局を終え、やこび姫の一言と★の結果画面へ戻る。 */
+function returnToTutorial() {
+  const report = tutorialMatch.value?.report ?? null;
+  openPregame();
+  tutorialReport.value = report;
+  homeOpen.value = true;
+  tutorialOpen.value = true;
+}
+
+function tutorialMatchReport(matchResult: MatchResult, lessonId: string, playerColor: "black" | "white"): TutorialMatchReport {
+  const used = (allowance: number, remaining: number) => (Number.isFinite(allowance) ? Math.max(0, allowance - remaining) : 0);
+  return {
+    lessonId,
+    outcome: tutorialMatchOutcome(matchResult, playerColor),
+    reason: matchResult.reason,
+    assistsUsed: used(matchHintAllowance(), hintsRemaining.value) + used(matchUndoAllowance(), undosRemaining.value),
+  };
 }
 
 function openHome() {
@@ -2391,6 +2475,12 @@ function openPregame() {
   reviewMode.value = false;
   analysisOpen.value = false;
   discardPersistedMatch();
+  // 教室の対局から離れたら、教室の固定条件を元の設定へ戻す。
+  if (tutorialMatch.value) {
+    if (settingsBeforeTutorial) restoreMatchSettings(settingsBeforeTutorial);
+    settingsBeforeTutorial = null;
+    tutorialMatch.value = null;
+  }
 }
 
 /** 選択中の強さのLv。戦法の出現比率と囲い選びの傾向に使う。 */
@@ -2594,6 +2684,8 @@ function persistMatchState() {
       startLabel: learningStartLabel.value,
       attackGuide: attackGuideEnabled.value,
     },
+    tutorial: tutorialMatch.value,
+    settingsBeforeTutorial: tutorialMatch.value ? settingsBeforeTutorial : null,
     moves: [...moveHistory],
     active: active.value,
     result: result.value,
@@ -2651,6 +2743,26 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
   learningUndoLimit.value = normalizeAssistLimit(learning.undoLimit);
   learningStartLabel.value = text(learning.startLabel);
   attackGuideEnabled.value = matchKind.value === "learning" && learning.attackGuide === true;
+  tutorialMatch.value = matchKind.value === "learning" ? restoredTutorialMatch(snapshot.tutorial) : null;
+  settingsBeforeTutorial = tutorialMatch.value && snapshot.settingsBeforeTutorial && typeof snapshot.settingsBeforeTutorial === "object"
+    ? snapshot.settingsBeforeTutorial
+    : null;
+}
+
+function restoredTutorialMatch(value: unknown): typeof tutorialMatch.value {
+  if (!value || typeof value !== "object") return null;
+  const { lessonId, playerColor, report } = value as { [key: string]: any };
+  if (typeof lessonId !== "string" || !tutorialLesson(lessonId)) return null;
+  const color = playerColor === "white" ? "white" : "black";
+  const validReport = report && typeof report === "object" && ["win", "lose", "draw"].includes(report.outcome)
+    ? {
+      lessonId,
+      outcome: report.outcome as TutorialMatchReport["outcome"],
+      reason: typeof report.reason === "string" ? report.reason.slice(0, 40) : "",
+      assistsUsed: Number.isFinite(report.assistsUsed) ? Math.max(0, Math.trunc(report.assistsUsed)) : 0,
+    }
+    : null;
+  return { lessonId, playerColor: color, report: validReport };
 }
 
 function restoredCpuOpeningPlan(value: unknown): typeof cpuOpeningPlan {
@@ -3709,6 +3821,10 @@ function finish(matchResult: MatchResult) {
   thinking.value = false;
   result.value = matchResult;
   resultDialogOpen.value = true;
+  if (tutorialMatch.value) {
+    const { lessonId, playerColor } = tutorialMatch.value;
+    tutorialMatch.value = { lessonId, playerColor, report: tutorialMatchReport(matchResult, lessonId, playerColor) };
+  }
   persistMatchState();
   emit("match-end", matchResult);
   if (window.parent !== window) {
@@ -4389,6 +4505,11 @@ function resign() {
 
 function completeReview() {
   if (!reviewMode.value) return;
+  // 教室の対局を振り返ったあとは、教室の結果画面へ戻る。
+  if (tutorialMatch.value?.report) {
+    returnToTutorial();
+    return;
+  }
   openPregame();
 }
 

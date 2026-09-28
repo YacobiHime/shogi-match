@@ -101,6 +101,13 @@
               <p>{{ currentStep.question ?? currentStep.speech }}</p>
             </div>
             <p v-if="currentStep.type === 'choose' && currentStep.speech" class="shogi-tutorial__sub">{{ currentStep.speech }}</p>
+            <!-- 対局の条件はレッスンで固定する。変更はさせず、内容だけ見せる。 -->
+            <dl v-if="currentStep.type === 'play'" class="shogi-tutorial__conditions">
+              <div v-for="condition in playConditions" :key="condition.label">
+                <dt>{{ condition.label }}</dt>
+                <dd>{{ condition.value }}</dd>
+              </div>
+            </dl>
             <div v-if="currentStep.type === 'choose'" class="shogi-tutorial__options">
               <button
                 v-for="(option, index) in currentStep.options"
@@ -128,7 +135,7 @@
                 type="button"
                 class="shogi-tutorial__primary"
                 @click="startMatch"
-              >この設定で対局する</button>
+              >対局をはじめる</button>
               <button
                 v-if="stepInteractive && !stepSolved"
                 type="button"
@@ -153,29 +160,57 @@
     </section>
 
     <!-- 結果 -->
-    <section v-else-if="view === 'result' && currentLesson" class="shogi-tutorial__result" aria-label="レッスンの結果">
-      <div class="shogi-tutorial__stars" :aria-label="`星${resultStars}つ`">
-        <span v-for="index in 3" :key="index" :class="{ 'shogi-tutorial__star--on': index <= resultStars }">★</span>
-      </div>
-      <div class="shogi-dex__speech shogi-tutorial__intro">
+    <!-- やこび姫の一言のあとに、星を1つずつ付ける。画面を押すと演出を飛ばせる。 -->
+    <section
+      v-else-if="view === 'result' && currentLesson"
+      class="shogi-tutorial__result"
+      aria-label="レッスンの結果"
+      @click="finishReveal"
+    >
+      <p v-if="matchOutcomeLabel" class="shogi-tutorial__outcome" :class="`shogi-tutorial__outcome--${matchOutcome}`">
+        {{ matchOutcomeLabel }}
+      </p>
+      <div v-if="matchComment" class="shogi-dex__speech shogi-tutorial__intro">
         <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
-        <p>{{ resultMessage }}</p>
+        <p>{{ matchComment }}</p>
       </div>
-      <div class="shogi-tutorial__result-actions">
-        <button v-if="followingLesson" type="button" class="shogi-tutorial__primary" @click="startLesson(followingLesson.id)">
-          次のレッスン：{{ followingLesson.title }}
-        </button>
-        <button type="button" @click="startLesson(currentLesson.id)">もう一度</button>
-        <button type="button" @click="openVolume(currentLesson.volumeId)">レッスン一覧へ</button>
+      <div
+        class="shogi-tutorial__stars"
+        :class="{ 'shogi-tutorial__stars--hidden': revealStage < 1 }"
+        role="img"
+        :aria-label="`星${resultStars}つ`"
+      >
+        <span
+          v-for="index in 3"
+          :key="index"
+          :class="{ 'shogi-tutorial__star--on': index <= revealedStars }"
+        >★</span>
       </div>
+      <template v-if="revealStage >= 2">
+        <div v-if="!matchComment" class="shogi-dex__speech shogi-tutorial__intro">
+          <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
+          <p>{{ resultMessage }}</p>
+        </div>
+        <p v-else class="shogi-tutorial__star-note">{{ resultMessage }}</p>
+        <div class="shogi-tutorial__result-actions">
+          <button v-if="followingLesson" type="button" class="shogi-tutorial__primary" @click="startLesson(followingLesson.id)">
+            次のレッスン：{{ followingLesson.title }}
+          </button>
+          <button v-if="matchComment" type="button" @click="startMatch">もう一度対局する</button>
+          <button v-else type="button" @click="startLesson(currentLesson.id)">もう一度</button>
+          <button type="button" @click="openVolume(currentLesson.volumeId)">レッスン一覧へ</button>
+        </div>
+      </template>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { formatHintMove } from "./core/match-assists.mjs";
+import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
+import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
 import { TUTORIAL_LESSONS, TUTORIAL_TITLE, TUTORIAL_VOLUMES, tutorialLesson } from "./core/tutorial-curriculum.mjs";
 import {
   INTERACTIVE_STEP_TYPES,
@@ -183,7 +218,10 @@ import {
   attemptTutorialMove,
   createStepState,
   lessonStars,
+  matchLessonComment,
+  matchLessonStars,
   tutorialHint,
+  tutorialMatchSettings,
   tutorialStepMarks,
 } from "./core/tutorial-runner.mjs";
 import {
@@ -200,8 +238,17 @@ import {
 type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string };
 type Volume = (typeof TUTORIAL_VOLUMES)[number];
 
+export type TutorialMatchReport = {
+  lessonId: string;
+  outcome: "win" | "lose" | "draw";
+  reason: string;
+  assistsUsed: number;
+};
+
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
+  // 教室の対局を終えて戻ってきたときの結果。あれば結果画面から始める。
+  matchReport: { type: Object as PropType<TutorialMatchReport | null>, default: null },
 });
 const emit = defineEmits(["close", "open-dex", "start-match"]);
 
@@ -416,14 +463,12 @@ function choose(index: number) {
 function showHint() {
   hints.value += 1;
   hintLevel.value = Math.min(2, hintLevel.value + 1);
-  setFeedback(hintLevel.value >= 2 ? "矢印のとおりに指してみよう！" : "黄色のマスに注目してみてね。", "info");
+  setFeedback(hintLevel.value >= 2 ? "矢印のとおりに指してみよう！" : "緑のマスに注目してみてね。", "info");
 }
 function finishLesson() {
   const lesson = currentLesson.value;
   if (!lesson) return;
-  resultStars.value = lessonStars({ mistakes: mistakes.value, hints: hints.value });
-  updateProgress(recordLessonCleared(progress.value, lesson.id, resultStars.value));
-  view.value = "result";
+  showResult(lessonStars({ mistakes: mistakes.value, hints: hints.value }), null);
 }
 function advance() {
   const lesson = currentLesson.value;
@@ -439,29 +484,115 @@ function skipCurrentLesson() {
   if (following) startLesson(following.id);
   else openVolume(lesson.volumeId);
 }
+// 対局ステップ。条件はレッスンで固定し、クリアと★は終局後に決める。
+const playStep = computed(() => currentLesson.value?.steps?.find(({ type }: { type: string }) => type === "play") ?? null);
+function openingLabel(strategyId?: string, castleId?: string) {
+  const strategy = OPENING_STRATEGIES.find(({ id }: { id: string }) => id === strategyId)?.label;
+  const castle = OPENING_CASTLES.find(({ id }: { id: string }) => id === castleId)?.label;
+  return [strategy, castle].filter(Boolean).join("＋") || "おまかせ";
+}
+function assistLimitLabel(limit: number) {
+  return limit < 0 ? "無制限" : `${limit}回`;
+}
+const playConditions = computed(() => {
+  const step = currentStep.value;
+  if (step?.type !== "play") return [];
+  const settings = tutorialMatchSettings(step.preset);
+  const cpu = CPU_STRENGTH_PRESETS.find(({ level }) => level === settings.cpuLevel);
+  return [
+    { label: "手番", value: settings.playerColor === "white" ? "後手（あなた）" : "先手（あなた）" },
+    ...(settings.startType === "formation"
+      ? [
+        { label: "あなたの形", value: openingLabel(settings.playerStrategy, settings.playerCastle) },
+        { label: "相手の形", value: openingLabel(settings.opponentStrategy, settings.opponentCastle) },
+      ]
+      : []),
+    { label: "相手", value: cpu ? `CPU Lv${cpu.level}（${cpu.label}）` : "CPU" },
+    { label: "閃き・待った", value: `閃き${assistLimitLabel(settings.hintLimit)}・待った${assistLimitLabel(settings.undoLimit)}` },
+  ];
+});
 function startMatch() {
   const lesson = currentLesson.value;
-  const step = currentStep.value;
-  if (!lesson || step?.type !== "play") return;
-  // 対局へ進んだ時点でクリア扱いにする。
-  updateProgress(recordLessonCleared(progress.value, lesson.id, lessonStars({ mistakes: mistakes.value, hints: hints.value })));
-  emit("start-match", step.preset);
+  const step = playStep.value;
+  if (!lesson || !step) return;
+  emit("start-match", { lessonId: lesson.id, preset: tutorialMatchSettings(step.preset) });
 }
 
 // ===== 結果 =====
+const matchResult = ref<TutorialMatchReport | null>(null);
+const matchOutcome = computed(() => matchResult.value?.outcome ?? "");
+const matchOutcomeLabel = computed(() => (
+  matchResult.value ? ({ win: "勝ち！", lose: "負け", draw: "引き分け" })[matchResult.value.outcome] : ""
+));
+const matchComment = computed(() => (
+  matchResult.value ? matchLessonComment(matchResult.value, playStep.value?.comments) : ""
+));
+// 0: 一言だけ / 1: 星を1つずつ付けている / 2: 付け終わり（ボタンを出す）
+const revealStage = ref(2);
+const revealedStars = ref(0);
+let revealTimers: ReturnType<typeof setTimeout>[] = [];
+function clearRevealTimers() {
+  for (const timer of revealTimers) clearTimeout(timer);
+  revealTimers = [];
+}
+function finishReveal() {
+  if (revealStage.value >= 2) return;
+  clearRevealTimers();
+  revealedStars.value = resultStars.value;
+  revealStage.value = 2;
+}
+function showResult(stars: number, report: TutorialMatchReport | null) {
+  const lesson = currentLesson.value;
+  if (!lesson) return;
+  clearRevealTimers();
+  resultStars.value = stars;
+  matchResult.value = report;
+  updateProgress(recordLessonCleared(progress.value, lesson.id, stars));
+  view.value = "result";
+  revealedStars.value = 0;
+  revealStage.value = 0;
+  // 対局のあとは、やこび姫の一言を読む時間を取ってから星を付ける。
+  const start = report ? 1400 : 300;
+  revealTimers.push(setTimeout(() => { revealStage.value = 1; }, start));
+  for (let index = 1; index <= stars; index += 1) {
+    revealTimers.push(setTimeout(() => { revealedStars.value = index; }, start + index * 450));
+  }
+  revealTimers.push(setTimeout(() => { revealStage.value = 2; }, start + stars * 450 + 500));
+}
+onBeforeUnmount(clearRevealTimers);
+onMounted(() => {
+  const report = props.matchReport;
+  if (!report || !tutorialLesson(report.lessonId)) return;
+  lessonId.value = report.lessonId;
+  volumeId.value = currentLesson.value?.volumeId ?? "";
+  showResult(matchLessonStars(report), report);
+});
 const followingLesson = computed(() => {
   const index = lessons.findIndex(({ id }) => id === lessonId.value);
   return lessons.slice(index + 1).find((lesson) => !lesson.comingSoon) ?? null;
 });
-const resultMessage = computed(() => ([
-  "",
-  "クリアおめでとう！ まちがえたところは、もう一度やってみると覚えられるよ。",
-  "よくできました！ あと少しで満点だったね。",
-  "満点！ 完ぺきだね、すごい！",
-])[resultStars.value]);
+const resultMessage = computed(() => {
+  if (matchResult.value) {
+    if (matchResult.value.outcome !== "win") return "最後まで指したから★1つ！ 勝つと★2つ、閃きも待ったも使わずに勝つと★3つだよ。";
+    return resultStars.value >= 3
+      ? "閃きも待ったも使わずに勝ったから★3つ！ 完ぺきだね！"
+      : "勝ったから★2つ！ 次は閃きも待ったも使わずに★3つを目指そう。";
+  }
+  return ([
+    "",
+    "クリアおめでとう！ まちがえたところは、もう一度やってみると覚えられるよ。",
+    "よくできました！ あと少しで満点だったね。",
+    "満点！ 完ぺきだね、すごい！",
+  ])[resultStars.value];
+});
 </script>
 
 <style>
+/* 教室の「大事なマス」は、対局中に駒が動いた升と同じ緑にする（図鑑の黄色はそのまま）。 */
+.shogi-game .shogi-tutorial .square-mark--key {
+  background: rgba(68, 204, 68, 0.45);
+  box-shadow: inset 0 0 0 2px rgba(34, 153, 34, 0.9);
+}
 .shogi-game .shogi-tutorial__shelf,
 .shogi-game .shogi-tutorial__volume-view,
 .shogi-game .shogi-tutorial__result {
@@ -714,10 +845,60 @@ const resultMessage = computed(() => ([
   gap: 0.4rem;
   font-size: clamp(2.5rem, 8vw, 4rem);
   color: rgba(255, 252, 244, 0.25);
+  transition: opacity 300ms ease;
+}
+.shogi-game .shogi-tutorial__stars--hidden {
+  opacity: 0;
 }
 .shogi-game .shogi-tutorial__star--on {
   color: #f6d365;
   text-shadow: 0 0 0.6rem rgba(246, 211, 101, 0.6);
+  animation: shogi-tutorial-star-pop 450ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes shogi-tutorial-star-pop {
+  0% { transform: scale(0.2) rotate(-30deg); opacity: 0; }
+  70% { transform: scale(1.3) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tutorial__star--on { animation: none; }
+}
+.shogi-game .shogi-tutorial__outcome {
+  margin: 0;
+  font-size: clamp(1.8rem, 6vw, 2.8rem);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+.shogi-game .shogi-tutorial__outcome--win { color: #f6d365; }
+.shogi-game .shogi-tutorial__outcome--lose { color: #93c5fd; }
+.shogi-game .shogi-tutorial__outcome--draw { color: #fffcf4; }
+.shogi-game .shogi-tutorial__star-note {
+  max-width: 40rem;
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+}
+.shogi-game .shogi-tutorial__conditions {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid rgba(241, 165, 76, 0.55);
+  border-radius: 0.5rem;
+  background: rgba(29, 48, 63, 0.7);
+}
+.shogi-game .shogi-tutorial__conditions div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.8rem;
+}
+.shogi-game .shogi-tutorial__conditions dt {
+  min-width: 6.5em;
+  color: #f1a54c;
+  font-weight: 700;
+}
+.shogi-game .shogi-tutorial__conditions dd {
+  margin: 0;
 }
 .shogi-game .shogi-tutorial__result-actions {
   display: grid;

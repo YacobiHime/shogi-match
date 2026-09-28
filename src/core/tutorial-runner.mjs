@@ -33,7 +33,7 @@ function toMark(usi, tone) {
   return { file: Number(usi[0]), rank: usi.charCodeAt(1) - 96, tone };
 }
 
-/** ステップの色付け。駒の動きは青い点、ねらう駒は赤、大事なマスは黄色。 */
+/** ステップの色付け。駒の動きは青い点、ねらう駒は赤、大事なマスは緑（対局中の駒の移動先と同じ色）。 */
 export function tutorialStepMarks(step, sfen = tutorialStepSfen(step)) {
   const marks = new Map();
   if (step?.pieceSquare && sfen) {
@@ -148,4 +148,60 @@ export function lessonStars({ mistakes = 0, hints = 0 } = {}) {
   if (misses === 0) return 3;
   if (misses <= 2) return 2;
   return 1;
+}
+
+/**
+ * 教室の対局ステップで使う固定の対局条件。プレイヤーには設定させず、レッスンごとに決める。
+ * cpuLevelは強さのLv（CPU_STRENGTH_PRESETSのlevel）。閃き・待ったは-1で無制限。
+ */
+export const TUTORIAL_MATCH_DEFAULTS = Object.freeze({
+  startType: "standard",
+  playerColor: "black",
+  cpuLevel: 1,
+  hintLimit: 3,
+  undoLimit: 3,
+  attackGuide: false,
+  coachLevel: "detailed",
+});
+
+/**
+ * @typedef {{
+ *   startType: string, playerColor: "black" | "white", cpuLevel: number,
+ *   hintLimit: number, undoLimit: number, attackGuide: boolean, coachLevel: string,
+ *   handicapId?: string, playerStrategy?: string, playerCastle?: string,
+ *   opponentStrategy?: string, opponentCastle?: string,
+ * }} TutorialMatchSettings
+ * @param {Partial<TutorialMatchSettings>} [preset]
+ * @returns {TutorialMatchSettings}
+ */
+export function tutorialMatchSettings(preset = {}) {
+  return { ...TUTORIAL_MATCH_DEFAULTS, ...preset };
+}
+
+/** 終局結果をプレイヤーから見た勝ち・負け・引き分けにする。 */
+export function tutorialMatchOutcome(result, playerColor = "black") {
+  if (!result || result.outcome === "draw") return "draw";
+  return result.outcome === `${playerColor}-win` ? "win" : "lose";
+}
+
+/** 対局ステップの★。勝てば★2、閃き・待ったを使わずに勝てば★3、負け・引き分けでも最後まで指せば★1。 */
+export function matchLessonStars({ outcome, assistsUsed = 0 } = {}) {
+  if (outcome === "win") return assistsUsed > 0 ? 2 : 3;
+  return 1;
+}
+
+/** 対局を終えたあとのやこび姫の一言。レッスンのcommentsに勝敗ごとの一言があれば後ろに添える。 */
+export function matchLessonComment({ outcome, reason } = {}, comments = {}) {
+  const extra = comments?.[outcome] ?? "";
+  return `${baseMatchComment(outcome, reason)}${extra}`;
+}
+
+function baseMatchComment(outcome, reason) {
+  if (outcome === "win") {
+    return reason === "checkmate"
+      ? "相手の玉を詰ませたね、おみごと！"
+      : "相手が投了したよ、勝ちだね！";
+  }
+  if (outcome === "draw") return "引き分けだったね。ねばり強く指せたよ！";
+  return "今回は負けちゃったね。でも、負けた対局からがいちばん強くなれるんだよ。";
 }

@@ -37,7 +37,7 @@ function pieceLesson(id, { entryId, sfen, from, target, maxMoves, targetLabel, q
     steps: [
       { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: `${entry.overview} 青い点が動けるマスだよ。` },
       { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: entry.rows[0][1] },
-      { type: "move-piece", sfen, from, target, maxMoves, speech: `${entry.label.replace(/（.*）/, "")}を${targetLabel}（黄色のマス）まで動かしてみよう！${maxMoves > 1 ? `${maxMoves}手以内でね。` : ""}` },
+      { type: "move-piece", sfen, from, target, maxMoves, speech: `${entry.label.replace(/（.*）/, "")}を${targetLabel}（緑のマス）まで動かしてみよう！${maxMoves > 1 ? `${maxMoves}手以内でね。` : ""}` },
       { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: `${entry.rows[2][0]}：${entry.rows[2][1]}` },
       { type: "choose", ...quiz },
     ],
@@ -59,10 +59,10 @@ const VOLUME_1 = {
           summary: "マスの呼び方を覚えよう",
           steps: [
             { type: "explain", sfen: STANDARD_SFEN, speech: "将棋は、たて9マス×よこ9マス、全部で81マスの盤で遊ぶよ。手前が自分（先手）、向こうが相手（後手）なんだ。" },
-            { type: "explain", sfen: STANDARD_SFEN, marks: FILE_1.map((usi) => [usi, "key"]), speech: "たての列は「筋」というよ。右から1筋、2筋…9筋と数えるんだ。黄色が1筋だよ。" },
-            { type: "explain", sfen: STANDARD_SFEN, marks: RANK_1.map((usi) => [usi, "key"]), speech: "よこの行は「段」というよ。上から一段目、二段目…九段目。黄色が一段目だよ。" },
+            { type: "explain", sfen: STANDARD_SFEN, marks: FILE_1.map((usi) => [usi, "key"]), speech: "たての列は「筋」というよ。右から1筋、2筋…9筋と数えるんだ。緑が1筋だよ。" },
+            { type: "explain", sfen: STANDARD_SFEN, marks: RANK_1.map((usi) => [usi, "key"]), speech: "よこの行は「段」というよ。上から一段目、二段目…九段目。緑が一段目だよ。" },
             { type: "explain", sfen: STANDARD_SFEN, marks: [["5e", "key"]], speech: "マスは「筋→段」の順に呼ぶよ。盤のまん中は「5五（ごのご）」！" },
-            { type: "choose", sfen: STANDARD_SFEN, marks: [["7c", "key"]], question: "黄色のマスはどこかな？", options: ["3七", "7三", "7七"], answer: 1, explanation: "右から7筋目、上から三段目だから「7三」だよ！" },
+            { type: "choose", sfen: STANDARD_SFEN, marks: [["7c", "key"]], question: "緑のマスはどこかな？", options: ["3七", "7三", "7七"], answer: 1, explanation: "右から7筋目、上から三段目だから「7三」だよ！" },
           ],
         },
         {
@@ -341,8 +341,23 @@ const VOLUME_3 = {
             { type: "explain", speech: "四間飛車と美濃囲いが完成した局面から、CPUと指してみよう！ 相手は舟囲いの居飛車だよ。" },
             {
               type: "play",
-              speech: "準備ができたら「この設定で対局する」を押してね。",
-              preset: { startType: "formation", playerStrategy: "shiken", playerCastle: "mino", opponentStrategy: "ibisha", opponentCastle: "funagakoi" },
+              speech: "対局の条件はわたしが決めておいたよ。準備ができたら「対局をはじめる」を押してね！",
+              // 対局条件はレッスンで固定し、プレイヤーには変更させない。
+              preset: {
+                startType: "formation",
+                playerStrategy: "shiken",
+                playerCastle: "mino",
+                opponentStrategy: "ibisha",
+                opponentCastle: "funagakoi",
+                cpuLevel: 1,
+                hintLimit: 3,
+                undoLimit: 3,
+              },
+              comments: {
+                win: "美濃囲いがしっかりしていると、安心して攻められたでしょ？",
+                lose: "美濃囲いは横からの攻めに強いよ。囲いを崩さないように戦ってみよう！",
+                draw: "囲いが堅いと、なかなか負けないんだよ。",
+              },
             },
           ],
         },

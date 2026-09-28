@@ -8,7 +8,11 @@ import {
   createStepState,
   isCheckmate,
   lessonStars,
+  matchLessonComment,
+  matchLessonStars,
   tutorialHint,
+  tutorialMatchOutcome,
+  tutorialMatchSettings,
   tutorialStepSfen,
   withBlackToMove,
 } from "./tutorial-runner.mjs";
@@ -25,6 +29,7 @@ import {
 } from "./tutorial-progress.mjs";
 import { referenceDexEntries } from "./reference-dex.mjs";
 import { buildFormationStart } from "./learning-setup.mjs";
+import { CPU_STRENGTH_PRESETS } from "./strength-settings.mjs";
 
 const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play"];
 const legalMoves = (sfen) => enumerateLegalMoves(createGameRecord(sfen).position).map(({ usi }) => usi);
@@ -172,6 +177,34 @@ describe("やこび姫の将棋教室の正誤判定", () => {
     expect(tutorialHint(find, createStepState(find), 1).arrows).toEqual([]);
     expect(tutorialHint(find, createStepState(find), 2).arrows).toEqual(["7g7f"]);
     expect([lessonStars({}), lessonStars({ mistakes: 1, hints: 1 }), lessonStars({ mistakes: 3 })]).toEqual([3, 2, 1]);
+  });
+});
+
+describe("やこび姫の将棋教室の対局", () => {
+  it("対局ステップは強さや閃き・待ったの回数まで固定の条件を持つ", () => {
+    const plays = TUTORIAL_LESSONS.flatMap(({ steps = [] }) => steps.filter(({ type }) => type === "play"));
+    expect(plays.length).toBeGreaterThan(0);
+    for (const step of plays) {
+      const settings = tutorialMatchSettings(step.preset);
+      expect(CPU_STRENGTH_PRESETS.some(({ level }) => level === settings.cpuLevel)).toBe(true);
+      expect(settings.playerColor).toBe("black");
+      expect(Number.isInteger(settings.hintLimit)).toBe(true);
+      expect(Number.isInteger(settings.undoLimit)).toBe(true);
+      expect(["off", "encourage", "detailed"]).toContain(settings.coachLevel);
+    }
+  });
+
+  it("終局結果から勝敗・★・やこび姫の一言を決める", () => {
+    expect(tutorialMatchOutcome({ outcome: "black-win" }, "black")).toBe("win");
+    expect(tutorialMatchOutcome({ outcome: "black-win" }, "white")).toBe("lose");
+    expect(tutorialMatchOutcome({ outcome: "draw" }, "black")).toBe("draw");
+    expect(matchLessonStars({ outcome: "win", assistsUsed: 0 })).toBe(3);
+    expect(matchLessonStars({ outcome: "win", assistsUsed: 2 })).toBe(2);
+    expect(matchLessonStars({ outcome: "lose" })).toBe(1);
+    expect(matchLessonStars({ outcome: "draw" })).toBe(1);
+    expect(matchLessonComment({ outcome: "win", reason: "checkmate" }, { win: "囲いのおかげだね。" }))
+      .toBe("相手の玉を詰ませたね、おみごと！囲いのおかげだね。");
+    expect(matchLessonComment({ outcome: "lose", reason: "resignation" })).toContain("負けちゃった");
   });
 });
 
