@@ -850,71 +850,50 @@ const resultMessage = computed(() => {
   min-height: 0;
 }
 /*
- * レッスン画面。図鑑の2列レイアウトは盤の列が残りの幅を使い切り、台詞が画面の端に離れるので、
- * 教室では盤と台詞を寄せて中央に置く。盤の枠は残りの高さに合わせ、盤はその中に縦横比を保って収まる。
+ * レッスン画面。台詞を盤の横に置くと視線が左右に離れて読みにくいので、画面の幅によらず
+ * 台詞と操作を盤のすぐ下に置く。盤は残りの高さに収まるよう縦横比を保って縮める。
  */
 .shogi-game .shogi-tutorial .shogi-tutorial__stage {
   flex: 1 1 auto;
-  justify-content: center;
-  gap: clamp(0.6rem, 1.5vw, 1.2rem);
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.5rem;
   min-height: 0;
-  padding: 0.6rem clamp(0.6rem, 2vw, 1.5rem) 0.8rem;
+  padding: 0.4rem clamp(0.5rem, 2vw, 1.5rem) 0.6rem;
   overflow-y: auto;
 }
 .shogi-game .shogi-tutorial .shogi-tutorial__stage > .shogi-dex__main {
-  flex: 0 1 auto;
+  flex: 1 1 0;
+  align-items: center;
   min-width: 0;
+  /* 台詞が長くても盤が小さくなりすぎないようにする。収まらない分は画面ごとスクロールする。 */
+  min-height: min(20rem, 42vh);
 }
 .shogi-game .shogi-tutorial .shogi-tutorial__stage .shogi-dex__board {
+  flex: 1 1 0;
   width: auto;
   max-width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 .shogi-game .shogi-tutorial .shogi-tutorial__panel {
-  flex: 0 1 clamp(18rem, 28vw, 28rem);
-  min-width: min(18rem, 40vw);
-  justify-content: center;
+  flex: none;
+  width: min(100%, 44rem);
+  min-width: 0;
+  align-self: center;
 }
 .shogi-game .shogi-tutorial__panel .shogi-dex__explanation {
   display: grid;
-  gap: 0.6rem;
+  gap: 0.45rem;
+  padding: 0.5rem 0.7rem;
   font-size: var(--dex-text);
 }
-/* 縦長の画面では、台詞と操作を盤のすぐ下に置き、盤は残りの高さに収まるよう縮める。 */
-@media (max-width: 56rem) {
-  .shogi-game .shogi-tutorial .shogi-tutorial__stage {
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 0.5rem;
-    padding: 0.4rem 0.5rem 0.6rem;
-  }
-  .shogi-game .shogi-tutorial .shogi-tutorial__stage > .shogi-dex__main {
-    flex: 1 1 0;
-    align-items: center;
-    /* 台詞が長くても盤が小さくなりすぎないようにする。収まらない分は画面ごとスクロールする。 */
-    min-height: min(20rem, 42vh);
-  }
-  .shogi-game .shogi-tutorial .shogi-tutorial__stage .shogi-dex__board {
-    flex: 1 1 0;
-    height: 100%;
-    min-height: 0;
-  }
-  .shogi-game .shogi-tutorial .shogi-tutorial__panel {
-    flex: none;
-    width: min(100%, 40rem);
-    min-width: 0;
-    align-self: center;
-  }
-  .shogi-game .shogi-tutorial__panel .shogi-dex__explanation {
-    gap: 0.45rem;
-    padding: 0.5rem 0.7rem;
-  }
-  .shogi-game .shogi-tutorial__panel .shogi-dex__speech {
-    align-items: center;
-    margin: 0;
-  }
-  .shogi-game .shogi-tutorial__panel .shogi-dex__chara {
-    height: clamp(52px, 8vh, 80px);
-  }
+.shogi-game .shogi-tutorial__panel .shogi-dex__speech {
+  align-items: center;
+  margin: 0;
+}
+.shogi-game .shogi-tutorial__panel .shogi-dex__chara {
+  height: clamp(52px, 8vh, 80px);
 }
 .shogi-game .shogi-tutorial__sub {
   margin: 0;
