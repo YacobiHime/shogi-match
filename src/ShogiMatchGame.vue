@@ -79,7 +79,38 @@
         </section>
         <section class="shogi-home__group" aria-labelledby="shogi-home-dex">
           <h2 id="shogi-home-dex" class="shogi-home__group-title">図鑑</h2>
-          <div class="shogi-home__cards">
+          <p class="shogi-home__group-note">盤面付きでいろんな解説を収録</p>
+          <div class="shogi-home__cards shogi-home__cards--dex">
+            <button type="button" class="shogi-home__card" @click="referenceDexKind = 'piece'">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f1a54c">
+                  <rect x="5" y="1" width="6" height="1" />
+                  <rect x="4" y="2" width="8" height="2" />
+                  <rect x="3" y="4" width="10" height="8" />
+                  <rect x="4" y="12" width="8" height="2" />
+                  <rect x="5" y="14" width="6" height="1" />
+                </g>
+                <text x="8" y="11" class="shogi-home__koma-char" aria-hidden="true">飛</text>
+              </svg>
+              <span class="shogi-home__label">駒図鑑</span>
+              <small class="shogi-home__desc">動き・役割・弱点</small>
+            </button>
+            <button type="button" class="shogi-home__card" @click="referenceDexKind = 'tesuji'">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#fffcf4">
+                  <rect x="3" y="2" width="10" height="12" />
+                  <rect x="2" y="1" width="2" height="14" />
+                </g>
+                <g fill="#f1a54c">
+                  <rect x="6" y="4" width="6" height="1" />
+                  <rect x="6" y="6" width="6" height="1" />
+                  <rect x="6" y="8" width="6" height="1" />
+                  <rect x="6" y="10" width="4" height="1" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">手筋図鑑</span>
+              <small class="shogi-home__desc">格言と使いどころ</small>
+            </button>
             <button type="button" class="shogi-home__card" @click="dexOpen = true">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
@@ -97,36 +128,25 @@
                 </g>
               </svg>
               <span class="shogi-home__label">定跡図鑑</span>
+              <small class="shogi-home__desc">戦法と囲いの手順</small>
             </button>
-            <button type="button" class="shogi-home__card" disabled>
+            <button type="button" class="shogi-home__card" @click="referenceDexKind = 'world'">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#f1a54c">
-                  <rect x="5" y="1" width="6" height="1" />
-                  <rect x="4" y="2" width="8" height="2" />
-                  <rect x="3" y="4" width="10" height="8" />
-                  <rect x="4" y="12" width="8" height="2" />
-                  <rect x="5" y="14" width="6" height="1" />
+                  <rect x="3" y="2" width="10" height="5" />
+                  <rect x="1" y="3" width="2" height="3" />
+                  <rect x="13" y="3" width="2" height="3" />
+                  <rect x="5" y="7" width="6" height="2" />
+                  <rect x="7" y="9" width="2" height="2" />
+                  <rect x="4" y="11" width="8" height="2" />
                 </g>
-                <text x="8" y="11" class="shogi-home__koma-char" aria-hidden="true">飛</text>
-              </svg>
-              <span class="shogi-home__label">駒図鑑</span>
-              <span class="shogi-home__soon">準備中</span>
-            </button>
-            <button type="button" class="shogi-home__card" disabled>
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
-                  <rect x="3" y="2" width="10" height="12" />
-                  <rect x="2" y="1" width="2" height="14" />
-                </g>
-                <g fill="#f1a54c">
-                  <rect x="6" y="4" width="6" height="1" />
-                  <rect x="6" y="6" width="6" height="1" />
-                  <rect x="6" y="8" width="6" height="1" />
-                  <rect x="6" y="10" width="4" height="1" />
+                  <rect x="7" y="3" width="2" height="3" />
+                  <rect x="3" y="13" width="10" height="1" />
                 </g>
               </svg>
-              <span class="shogi-home__label">ルール図鑑</span>
-              <span class="shogi-home__soon">準備中</span>
+              <span class="shogi-home__label">将棋界図鑑</span>
+              <small class="shogi-home__desc">歴史と名棋士</small>
             </button>
           </div>
         </section>
@@ -137,6 +157,12 @@
       v-if="dexOpen"
       :asset-base-url="assetBaseUrl"
       @close="dexOpen = false"
+    />
+    <ShogiReferenceDex
+      v-if="referenceDexKind"
+      :kind="referenceDexKind"
+      :asset-base-url="assetBaseUrl"
+      @close="referenceDexKind = ''"
     />
 
     <header class="shogi-game__header">
@@ -910,6 +936,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } fro
 import { Color, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
+import ShogiReferenceDex from "./ShogiReferenceDex.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import {
@@ -1148,6 +1175,8 @@ const matchStarted = ref(false);
 const pregameOpen = ref(true);
 const homeOpen = ref(props.showHome);
 const dexOpen = ref(false);
+// 駒図鑑・手筋図鑑・将棋界図鑑のうち、開いているもの。
+const referenceDexKind = ref<"" | "piece" | "tesuji" | "world">("");
 const thinking = ref(false);
 const engineReady = ref(false);
 const engineUnavailable = ref(false);
@@ -6224,6 +6253,12 @@ queueMicrotask(() => {
   grid-auto-columns: minmax(118px, 160px);
   gap: clamp(10px, 2vw, 20px);
 }
+.shogi-home__group-note {
+  margin: -6px 0 0;
+  padding-left: 4px;
+  color: #cfd8de;
+  font-size: 12px;
+}
 .shogi-home__desc {
   color: #cfd8de;
   font-size: 11px;
@@ -6277,6 +6312,10 @@ queueMicrotask(() => {
   .shogi-home__label { font-size: 13px; letter-spacing: 0.02em; white-space: nowrap; }
   .shogi-home__menu { flex-direction: column; align-items: stretch; width: 100%; max-width: 380px; gap: 18px; }
   .shogi-home__cards { grid-auto-columns: minmax(0, 1fr); }
+  /* 図鑑の4枚は、狭い画面では2列2段に並べる。 */
+  .shogi-home__cards--dex { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* メニューが縦に長くなるため、月をタイトルと重ならない右上へ寄せる。 */
+  .shogi-home__moon { top: 3%; right: 6%; width: 32px; height: 32px; box-shadow: inset -9px -4px 0 0 #1d303f; }
   .shogi-home__card { padding: 16px 6px 12px; gap: 8px; }
   .shogi-home__icon { width: 44px; height: 44px; }
 }

@@ -35,6 +35,7 @@
       :last-move="lastMoveObject"
       :candidates="candidateMoves"
       :attack-marks="attackMarks"
+      :mark-squares="markSquares"
       :flip="flip"
       :mobile="mobile"
       :allow-move="allowMove"
@@ -72,12 +73,15 @@ import {
 import { BoardLayoutType } from "./common/settings/layout";
 
 type AttackMark = { file: number; rank: number; black: number; white: number };
+type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" };
 
 const props = defineProps({
   sfen: { type: String, required: true },
   candidates: { type: Array as () => CandidateInput[], default: () => [] },
   // 学習対局の「駒の利き」表示。各升に利いている先手・後手の駒数。
   attackMarks: { type: Array as () => AttackMark[], default: () => [] },
+  // 図鑑で、駒の動きや大事なマスを色付けする。
+  markSquares: { type: Array as () => SquareMark[], default: () => [] },
   lastMove: { type: String, default: "" },
   allowMove: { type: Boolean, default: true },
   enableDragAndDrop: { type: Boolean, default: true },

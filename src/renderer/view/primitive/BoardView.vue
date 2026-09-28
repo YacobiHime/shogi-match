@@ -37,6 +37,13 @@
         </div>
         <div v-for="square in board.squares" :key="square.id" :style="square.backgroundStyle"></div>
         <div
+          v-for="mark in squareMarkViews"
+          :key="'square-mark-' + mark.id"
+          class="square-mark"
+          :class="'square-mark--' + mark.tone"
+          :style="mark.style"
+        ></div>
+        <div
           v-for="mark in attackMarkViews"
           :key="'attack-tint-' + mark.id"
           class="attack-tint"
@@ -385,6 +392,11 @@ const props = defineProps({
   },
   attackMarks: {
     type: Array as PropType<{ file: number; rank: number; black: number; white: number }[]>,
+    required: false,
+    default: () => [],
+  },
+  markSquares: {
+    type: Array as PropType<{ file: number; rank: number; tone: string }[]>,
     required: false,
     default: () => [],
   },
@@ -979,6 +991,15 @@ const boardLayoutBuilder = computed(() => {
   return new BoardLayoutBuilder(config.value, main.value.ratio);
 });
 
+const squareMarkViews = computed(() => {
+  if (!props.markSquares.length) return [];
+  const marks = new Map(props.markSquares.map((mark) => [`${mark.file}${mark.rank}`, mark.tone]));
+  return board.value.squares.flatMap((square) => {
+    const tone = marks.get(`${square.file}${square.rank}`);
+    return tone ? [{ id: square.id, tone, style: square.style }] : [];
+  });
+});
+
 const attackMarkViews = computed(() => {
   if (!props.attackMarks.length) return [];
   const marks = new Map(props.attackMarks.map((mark) => [`${mark.file}${mark.rank}`, mark]));
@@ -1230,6 +1251,23 @@ const whitePlayerTimeSeverity = computed(() => {
 </script>
 
 <style scoped>
+/* 図鑑の升の色付け。青は駒の動き、赤はねらう駒、黄色は大事なマス。 */
+.square-mark {
+  pointer-events: none;
+}
+.square-mark--reach {
+  /* 木目の黄色と混ざって灰色に見えないよう、中央の点で示す。 */
+  background:
+    radial-gradient(circle, rgba(29, 78, 216, 0.9) 0 17%, transparent 19%),
+    rgba(96, 165, 250, 0.22);
+}
+.square-mark--target {
+  background: rgba(220, 38, 38, 0.3);
+}
+.square-mark--key {
+  background: rgba(234, 179, 8, 0.42);
+  box-shadow: inset 0 0 0 2px rgba(202, 138, 4, 0.9);
+}
 /* 学習対局の「駒の利き」表示。青は先手、赤は後手、紫は両者が利かせている升。 */
 .attack-tint {
   pointer-events: none;
