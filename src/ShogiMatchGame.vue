@@ -1116,7 +1116,7 @@ import {
   learningStartPosition,
   normalizeAssistLimit,
 } from "./core/learning-setup.mjs";
-import { selectMoveSound, type MoveSoundKind } from "./core/move-sound";
+import { createMoveSoundPlayer, selectMoveSound } from "./core/move-sound";
 import {
   clearMatchSnapshot,
   loadMatchSnapshot,
@@ -1131,8 +1131,6 @@ import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
 const UNDO_GUIDE_TEXT = "もう一度、落ち着いて考えてみよう！";
 
-type MoveSoundTemplates = { [K in MoveSoundKind]: HTMLAudioElement };
-let moveSoundTemplates: MoveSoundTemplates | null = null;
 let cancelDeferredCoachPortraitPreload: (() => void) | undefined;
 
 const props = defineProps({
@@ -3650,29 +3648,7 @@ function bestMoveTacticalContext(usi: string) {
   };
 }
 
-function moveSoundUrl(fileName: string): string {
-  return `${props.assetBaseUrl.replace(/\/$/, "")}/audio/${fileName}`;
-}
-
-function ensureMoveSounds(): MoveSoundTemplates | null {
-  if (moveSoundTemplates || typeof Audio === "undefined") return moveSoundTemplates;
-  moveSoundTemplates = {
-    normal: new Audio(moveSoundUrl("komaoto_normal.mp3")),
-    strong: new Audio(moveSoundUrl("komaoto_strong.mp3")),
-  };
-  for (const audio of Object.values(moveSoundTemplates)) {
-    audio.preload = "auto";
-    audio.load();
-  }
-  return moveSoundTemplates;
-}
-
-function playMoveSound(kind: MoveSoundKind) {
-  const template = ensureMoveSounds()?.[kind];
-  if (!template) return;
-  const audio = template.cloneNode(true) as HTMLAudioElement;
-  void audio.play().catch(() => undefined);
-}
+const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
 
 function schedulePlayerIdleAdvice() {
   cancelPlayerIdleAdvice();
@@ -3947,7 +3923,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   hintText.value = "";
   const terminalResult = resultAfterMove(record.value);
   // 棋譜検討中の分岐や「ここから対CPU」でも、実際に指した手には駒音を鳴らす。
-  playMoveSound(selectMoveSound(
+  moveSounds.play(selectMoveSound(
     move.capturedPieceType,
     terminalResult?.reason === "checkmate" || isSideToMoveInCheck(currentSfen.value),
   ));
@@ -4923,7 +4899,7 @@ onBeforeUnmount(() => {
 onMounted(() => {
   preloadCoachPortraits([COACH_EXPRESSION_FILES.neutral]);
   if (matchStarted.value) scheduleDeferredCoachPortraitPreload();
-  ensureMoveSounds();
+  moveSounds.preload();
   window.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("pagehide", handlePageHide);
 });

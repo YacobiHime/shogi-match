@@ -1,4 +1,5 @@
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
+import { formatHintMove } from "./match-assists.mjs";
 import { pieceReachSquares } from "./reference-dex.mjs";
 
 /**
@@ -11,6 +12,14 @@ export const STANDARD_SFEN = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LN
 /** 盤を操作するステップの種類。 */
 export const INTERACTIVE_STEP_TYPES = Object.freeze(["move-piece", "find-move", "mate"]);
 
+/** 正解したあと、この時間（ミリ秒）だけ「正解！」を見せてから次のステップへ進める。 */
+export const TUTORIAL_AUTO_ADVANCE_MS = 1100;
+
+/** 正解したら自動で次へ進めるステップか。盤で指すステップだけで、選択肢は解説を読めるよう自動では進めない。 */
+export function autoAdvancesOnSolve(step) {
+  return INTERACTIVE_STEP_TYPES.includes(step?.type);
+}
+
 /** 手番を先手に戻したSFEN。教室では先手の駒だけを動かす。 */
 export function withBlackToMove(sfen) {
   const fields = String(sfen).trim().split(/\s+/);
@@ -18,8 +27,18 @@ export function withBlackToMove(sfen) {
   return fields.join(" ");
 }
 
+/** 観戦ステップの棋譜を、ply手目まで指し進めた局面。 */
+export function replaySfen(step, ply) {
+  const record = createGameRecord(step.sfen ?? STANDARD_SFEN);
+  for (const usi of step.moves.slice(0, ply)) {
+    if (!appendUsiMove(record, usi)) throw new Error(`${usi}を指せません`);
+  }
+  return record.position.sfen;
+}
+
 /** ステップの開始局面。手順で指定したステップは平手から指し進める。 */
 export function tutorialStepSfen(step) {
+  if (step?.type === "replay") return replaySfen(step, step.from ?? 0);
   if (step?.sfen) return step.sfen;
   if (!step?.moves) return "";
   const record = createGameRecord(STANDARD_SFEN);
@@ -50,9 +69,35 @@ export function createStepState(step) {
     sfen,
     square: step?.type === "move-piece" ? step.from : "",
     movesUsed: 0,
-    ply: 0,
+    ply: step?.type === "replay" ? (step.from ?? 0) : 0,
     solved: false,
   };
+}
+
+/** 観戦ステップをply手目の局面へ動かす。最後の手まで見たらsolvedにし、戻っても保つ。 */
+export function seekReplay(step, state, ply) {
+  const target = Math.max(step.from ?? 0, Math.min(step.moves.length, ply));
+  return {
+    ...state,
+    ply: target,
+    sfen: replaySfen(step, target),
+    solved: state.solved || target >= step.moves.length,
+  };
+}
+
+/** 観戦ステップのply手目を「▲7六歩」のように表す。 */
+export function replayMoveLabel(step, ply) {
+  if (ply < 1 || ply > step.moves.length) return "";
+  const before = replaySfen(step, ply - 1);
+  return `${before.split(" ")[1] === "b" ? "▲" : "△"}${formatHintMove(step.moves[ply - 1], before)}`;
+}
+
+/** 観戦ステップのやこび姫の台詞。notesはその手を指した直後の手数をキーにする。 */
+export function replaySpeech(step, ply) {
+  const note = step.notes?.[ply];
+  if (note) return note;
+  if (ply === (step.from ?? 0)) return step.speech;
+  return `${replayMoveLabel(step, ply)}と指したよ。`;
 }
 
 function legalMoves(sfen) {

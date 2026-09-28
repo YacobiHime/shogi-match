@@ -5,11 +5,16 @@ import { TUTORIAL_LESSONS, TUTORIAL_VOLUMES, tutorialLesson } from "./tutorial-c
 import {
   attemptTutorialChoice,
   attemptTutorialMove,
+  autoAdvancesOnSolve,
   createStepState,
   isCheckmate,
   lessonStars,
   matchLessonComment,
   matchLessonStars,
+  replayMoveLabel,
+  replaySfen,
+  replaySpeech,
+  seekReplay,
   tutorialHint,
   tutorialMatchOutcome,
   tutorialMatchSettings,
@@ -31,8 +36,19 @@ import { referenceDexEntries } from "./reference-dex.mjs";
 import { buildFormationStart } from "./learning-setup.mjs";
 import { CPU_STRENGTH_PRESETS } from "./strength-settings.mjs";
 
-const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play"];
+const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play", "replay"];
 const legalMoves = (sfen) => enumerateLegalMoves(createGameRecord(sfen).position).map(({ usi }) => usi);
+
+function afterMove(sfen, usi) {
+  const record = createGameRecord(sfen);
+  record.append(record.position.createMoveByUSI(usi));
+  return record.position.sfen;
+}
+
+/** 王手で1手で詰ませる手の一覧。 */
+function mateInOneMoves(sfen) {
+  return legalMoves(sfen).filter((usi) => isCheckmate(afterMove(sfen, usi)));
+}
 
 /** 指定した駒だけを動かして、maxMoves手以内に目的のマスへ届くか。 */
 function reachable(sfen, from, target, maxMoves) {
@@ -60,7 +76,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     expect(TUTORIAL_VOLUMES.flatMap(({ chapters }) => chapters)).toHaveLength(12);
     const ids = TUTORIAL_LESSONS.map(({ id }) => id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(TUTORIAL_LESSONS.filter(({ comingSoon }) => !comingSoon).length).toBeGreaterThanOrEqual(40);
+    expect(TUTORIAL_LESSONS.filter(({ comingSoon }) => comingSoon)).toEqual([]);
     for (const volume of TUTORIAL_VOLUMES) {
       for (const chapter of volume.chapters) expect(chapter.lessons.length, chapter.id).toBeGreaterThan(0);
     }
@@ -107,6 +123,25 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
             state = result.state;
           }
           expect(isCheckmate(state.sfen), `${label}: 詰みになる`).toBe(true);
+          if (step.solution.length === 3) {
+            // 本当の3手詰め：1手詰めがなく、初手に相手がどう応じても次の1手で詰む。
+            expect(mateInOneMoves(sfen), `${label}: 1手詰めがない`).toEqual([]);
+            const afterFirst = afterMove(sfen, step.solution[0]);
+            for (const reply of legalMoves(afterFirst)) {
+              expect(mateInOneMoves(afterMove(afterFirst, reply)).length, `${label}: ${reply}`).toBeGreaterThan(0);
+            }
+          }
+        }
+        if (step.type === "replay") {
+          expect(step.from, label).toBeGreaterThanOrEqual(0);
+          expect(step.from, label).toBeLessThan(step.moves.length);
+          expect(() => replaySfen(step, step.moves.length), `${label}: 棋譜が指せる`).not.toThrow();
+          for (const ply of Object.keys(step.notes ?? {}).map(Number)) {
+            expect(ply > step.from && ply <= step.moves.length, `${label}: ${ply}手目の解説`).toBe(true);
+            // 解説の先頭に書いた指し手が、棋譜の手と一致している。
+            const mark = step.notes[ply].match(/^[▲△][^。]+/)?.[0];
+            if (mark) expect(replayMoveLabel(step, ply), `${label}: ${ply}手目`).toBe(mark);
+          }
         }
         if (step.type === "choose") {
           expect(step.options.length, label).toBeGreaterThanOrEqual(2);
@@ -125,6 +160,15 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
         }
       });
     }
+  });
+
+  it("台詞に図鑑の見出し向けの「〜こと！」をつながない", () => {
+    for (const lesson of TUTORIAL_LESSONS) {
+      for (const text of [lesson.summary, ...lesson.steps.flatMap(({ speech, question }) => [speech, question])]) {
+        if (text) expect(text, lesson.id).not.toMatch(/こと！/);
+      }
+    }
+    expect(tutorialLesson("v1-king").steps[2].speech).toBe("玉を5七（緑のマス）まで動かしてみよう！ 2手以内で届くよ。");
   });
 
   it("定跡の練習は、図鑑の手順を順番に指させる", () => {
@@ -167,6 +211,41 @@ describe("やこび姫の将棋教室の正誤判定", () => {
     const step = tutorialLesson("v2-mate-head-gold").steps.find(({ type }) => type === "mate");
     expect(attemptTutorialMove(step, createStepState(step), "G*4b").outcome).toBe("wrong");
     expect(attemptTutorialMove(step, createStepState(step), "G*5b").outcome).toBe("correct");
+  });
+
+  it("3手詰めは、決めた応手を返して続きを指させる", () => {
+    const step = tutorialLesson("v2-mate-three").steps.find(({ type }) => type === "mate");
+    const first = attemptTutorialMove(step, createStepState(step), step.solution[0]);
+    expect(first).toMatchObject({ outcome: "continue", reply: step.solution[1] });
+    expect(attemptTutorialMove(step, first.state, step.solution[2]).outcome).toBe("correct");
+  });
+
+  it("観戦は棋譜を1手ずつ進め、最後まで見たら次へ進める", () => {
+    const step = tutorialLesson("v2-watch-opening").steps.find(({ type }) => type === "replay");
+    let state = createStepState(step);
+    expect(state.ply).toBe(0);
+    expect(replaySpeech(step, 0)).toBe(step.speech);
+    state = seekReplay(step, state, -3);
+    expect(state.ply).toBe(0);
+    state = seekReplay(step, state, 1);
+    expect(replayMoveLabel(step, 1)).toBe("▲7六歩");
+    expect(replaySpeech(step, 1)).toBe(step.notes[1]);
+    expect(replaySpeech(step, 2)).toBe("△3四歩と指したよ。");
+    expect(state.solved).toBe(false);
+    state = seekReplay(step, state, step.moves.length + 5);
+    expect(state).toMatchObject({ ply: step.moves.length, solved: true });
+    // 戻っても、最後まで見た記録は残す。
+    expect(seekReplay(step, state, 3).solved).toBe(true);
+
+    const later = tutorialLesson("v2-watch-endgame").steps[0];
+    expect(createStepState(later).ply).toBe(later.from);
+    expect(seekReplay(later, createStepState(later), 0).ply).toBe(later.from);
+  });
+
+  it("盤で指すステップだけ、正解したら自動で次へ進める", () => {
+    expect(["move-piece", "find-move", "mate"].map((type) => autoAdvancesOnSolve({ type }))).toEqual([true, true, true]);
+    expect(["choose", "explain", "replay", "play", "open-dex"].map((type) => autoAdvancesOnSolve({ type })))
+      .toEqual([false, false, false, false, false]);
   });
 
   it("選択肢・ヒント・★を判定する", () => {
@@ -223,10 +302,9 @@ describe("やこび姫の将棋教室の進捗", () => {
   });
 
   it("準備中のレッスンは解放の妨げにならない", () => {
-    let progress = emptyTutorialProgress();
-    const index = lessons.findIndex(({ comingSoon }) => comingSoon);
-    for (const lesson of lessons.slice(0, index)) progress = recordLessonSkipped(progress, lesson.id);
-    expect(isLessonUnlocked(lessons, progress, lessons[index + 1].id)).toBe(true);
+    const withComingSoon = [{ id: "a" }, { id: "b", comingSoon: true }, { id: "c" }];
+    const progress = recordLessonCleared(emptyTutorialProgress(), "a", 3);
+    expect(isLessonUnlocked(withComingSoon, progress, "c")).toBe(true);
   });
 
   it("★は最高記録を残し、スキップでクリア記録を消さない", () => {

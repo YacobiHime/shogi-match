@@ -53,7 +53,7 @@
           >この章をスキップ</button>
         </div>
         <ol class="shogi-tutorial__path">
-          <li v-for="lesson in chapter.lessons" :key="lesson.id">
+          <li v-for="lesson in chapterLessons(chapter)" :key="lesson.id">
             <button
               type="button"
               class="shogi-tutorial__lesson"
@@ -98,7 +98,27 @@
           <div class="shogi-dex__explanation">
             <div class="shogi-dex__speech">
               <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
-              <p>{{ currentStep.question ?? currentStep.speech }}</p>
+              <p>{{ stepSpeech }}</p>
+            </div>
+            <!-- 観戦：棋譜を1手ずつ進める。最後の手まで見ると「次へ」が出る。 -->
+            <div v-if="currentStep.type === 'replay'" class="shogi-tutorial__replay">
+              <p class="shogi-tutorial__replay-move">
+                {{ stepState.ply > 0 ? `${stepState.ply}手目 ${replayLabel}` : "開始局面" }}
+                <small>（{{ stepState.ply }}/{{ currentStep.moves.length }}）</small>
+              </p>
+              <div class="shogi-tutorial__replay-controls">
+                <button
+                  type="button"
+                  :disabled="stepState.ply <= (currentStep.from ?? 0)"
+                  @click="seekReplayBy(-1)"
+                ><span aria-hidden="true">◀</span> 戻る</button>
+                <button
+                  type="button"
+                  class="shogi-tutorial__primary"
+                  :disabled="stepState.ply >= currentStep.moves.length"
+                  @click="seekReplayBy(1)"
+                >次の手 <span aria-hidden="true">▶</span></button>
+              </div>
             </div>
             <p v-if="currentStep.type === 'choose' && currentStep.speech" class="shogi-tutorial__sub">{{ currentStep.speech }}</p>
             <!-- 対局の条件はレッスンで固定する。変更はさせず、内容だけ見せる。 -->
@@ -209,17 +229,23 @@
 import { computed, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { formatHintMove } from "./core/match-assists.mjs";
+import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
 import { TUTORIAL_LESSONS, TUTORIAL_TITLE, TUTORIAL_VOLUMES, tutorialLesson } from "./core/tutorial-curriculum.mjs";
 import {
   INTERACTIVE_STEP_TYPES,
+  TUTORIAL_AUTO_ADVANCE_MS,
   attemptTutorialChoice,
   attemptTutorialMove,
+  autoAdvancesOnSolve,
   createStepState,
   lessonStars,
   matchLessonComment,
   matchLessonStars,
+  replayMoveLabel,
+  replaySpeech,
+  seekReplay,
   tutorialHint,
   tutorialMatchSettings,
   tutorialStepMarks,
@@ -257,6 +283,14 @@ const progress = ref(loadTutorialProgress(storage));
 function updateProgress(next: typeof progress.value) {
   progress.value = next;
   saveTutorialProgress(storage, next);
+}
+
+// 駒音。対局画面と同じ音を、指した手と観戦で進めた手に鳴らす。
+const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
+onMounted(() => moveSounds.preload());
+function playMoveSoundFor(sfen: string, usi: string) {
+  const kind = moveSoundForUsi(sfen, usi);
+  if (kind) moveSounds.play(kind);
 }
 
 const volumes = TUTORIAL_VOLUMES as unknown as Volume[];
@@ -306,6 +340,7 @@ function volumeSummary(volume: Volume) {
   return { ...summary, percent: summary.total ? Math.round((summary.done / summary.total) * 100) : 0 };
 }
 function openVolume(id: string) {
+  clearStepTimers();
   volumeId.value = id;
   view.value = "volume";
 }
@@ -333,6 +368,9 @@ function lessonClass(lesson: Lesson) {
     "shogi-tutorial__lesson--skipped": record.status === "skipped",
     "shogi-tutorial__lesson--next": upcomingLesson.value?.id === lesson.id,
   };
+}
+function chapterLessons(chapter: Volume["chapters"][number]) {
+  return chapter.lessons as unknown as Lesson[];
 }
 function chapterSkippable(chapter: Volume["chapters"][number]) {
   const pending = chapter.lessons.filter((lesson: any) => !lesson.comingSoon && lessonRecord(progress.value, lesson.id).status === "new");
@@ -386,15 +424,44 @@ const canAdvance = computed(() => {
   if (type === "play") return false;
   return stepSolved.value;
 });
+const stepSpeech = computed(() => {
+  const step = currentStep.value;
+  if (step?.type === "replay") return replaySpeech(step, stepState.value.ply);
+  return step?.question ?? step?.speech;
+});
+const replayLabel = computed(() => (
+  currentStep.value?.type === "replay" ? replayMoveLabel(currentStep.value, stepState.value.ply) : ""
+));
+function seekReplayBy(delta: number) {
+  const step = currentStep.value;
+  if (step?.type !== "replay") return;
+  const before = stepState.value;
+  stepState.value = seekReplay(step, before, before.ply + delta);
+  // 進めたときだけ駒音を鳴らす。
+  if (stepState.value.ply > before.ply) playMoveSoundFor(before.sfen, step.moves[before.ply]);
+  stepSolved.value = stepState.value.solved;
+  lastMove.value = step.moves[stepState.value.ply - 1] ?? "";
+}
+
+// 正解のあとに自動で次へ進めるタイマーと、詰将棋で相手の応手の駒音を少し遅らせるタイマー。
+let stepTimers: ReturnType<typeof setTimeout>[] = [];
+function clearStepTimers() {
+  for (const timer of stepTimers) clearTimeout(timer);
+  stepTimers = [];
+}
+onBeforeUnmount(clearStepTimers);
 
 function loadStep(index: number) {
+  clearStepTimers();
   stepIndex.value = index;
   const step = currentLesson.value?.steps?.[index];
   stepState.value = createStepState(step);
   stepSolved.value = false;
   hintLevel.value = 0;
   feedback.value = "";
-  lastMove.value = "";
+  // 棋譜の途中から始めるステップは、直前の手を強調する。
+  const played = step?.type === "replay" ? step.moves.slice(0, step.from ?? 0) : (step?.sfen ? [] : step?.moves ?? []);
+  lastMove.value = played.at(-1) ?? "";
 }
 function startLesson(id: string) {
   lessonId.value = id;
@@ -430,10 +497,15 @@ function onBoardMove(usi: string) {
   }
   stepState.value = result.state;
   lastMove.value = usi;
+  playMoveSoundFor(before, usi);
   if (result.outcome === "continue") {
     if (result.reply) {
-      lastMove.value = result.reply;
-      setFeedback(`相手は${formatHintMove(result.reply, applyBefore(before, usi))}と逃げたよ。続けて詰ませよう！`, "info");
+      const reply = result.reply;
+      const afterMine = applyBefore(before, usi);
+      lastMove.value = reply;
+      // 相手の応手の駒音は、自分の手の音と重ならないよう少し遅らせる。
+      stepTimers.push(setTimeout(() => playMoveSoundFor(afterMine, reply), 350));
+      setFeedback(`相手は${formatHintMove(reply, afterMine)}と応じたよ。続けて詰ませよう！`, "info");
     } else {
       setFeedback("その調子！ 続けて動かそう。", "info");
     }
@@ -443,6 +515,13 @@ function onBoardMove(usi: string) {
   stepSolved.value = true;
   hintLevel.value = 0;
   setFeedback(step.type === "mate" ? "詰み！ おみごと！" : "正解！ すごいね！", "good");
+  // 盤で指すステップは、正解を少し見せてから自動で次へ進める（待たずに「次へ」を押してもよい）。
+  if (autoAdvancesOnSolve(step)) {
+    const index = stepIndex.value;
+    stepTimers.push(setTimeout(() => {
+      if (view.value === "lesson" && stepIndex.value === index) advance();
+    }, TUTORIAL_AUTO_ADVANCE_MS));
+  }
 }
 // 相手の応手を表示するため、自分の手を指した直後の局面を作る。
 function applyBefore(sfen: string, usi: string) {
@@ -471,6 +550,7 @@ function finishLesson() {
   showResult(lessonStars({ mistakes: mistakes.value, hints: hints.value }), null);
 }
 function advance() {
+  clearStepTimers();
   const lesson = currentLesson.value;
   if (!lesson?.steps) return;
   if (stepIndex.value >= lesson.steps.length - 1) finishLesson();
@@ -769,14 +849,72 @@ const resultMessage = computed(() => {
   flex-direction: column;
   min-height: 0;
 }
-.shogi-game .shogi-tutorial__stage {
-  flex: 1;
+/*
+ * レッスン画面。図鑑の2列レイアウトは盤の列が残りの幅を使い切り、台詞が画面の端に離れるので、
+ * 教室では盤と台詞を寄せて中央に置く。盤の枠は残りの高さに合わせ、盤はその中に縦横比を保って収まる。
+ */
+.shogi-game .shogi-tutorial .shogi-tutorial__stage {
+  flex: 1 1 auto;
+  justify-content: center;
+  gap: clamp(0.6rem, 1.5vw, 1.2rem);
   min-height: 0;
+  padding: 0.6rem clamp(0.6rem, 2vw, 1.5rem) 0.8rem;
+  overflow-y: auto;
+}
+.shogi-game .shogi-tutorial .shogi-tutorial__stage > .shogi-dex__main {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.shogi-game .shogi-tutorial .shogi-tutorial__stage .shogi-dex__board {
+  width: auto;
+  max-width: 100%;
+}
+.shogi-game .shogi-tutorial .shogi-tutorial__panel {
+  flex: 0 1 clamp(18rem, 28vw, 28rem);
+  min-width: min(18rem, 40vw);
+  justify-content: center;
 }
 .shogi-game .shogi-tutorial__panel .shogi-dex__explanation {
   display: grid;
   gap: 0.6rem;
   font-size: var(--dex-text);
+}
+/* 縦長の画面では、台詞と操作を盤のすぐ下に置き、盤は残りの高さに収まるよう縮める。 */
+@media (max-width: 56rem) {
+  .shogi-game .shogi-tutorial .shogi-tutorial__stage {
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem 0.6rem;
+  }
+  .shogi-game .shogi-tutorial .shogi-tutorial__stage > .shogi-dex__main {
+    flex: 1 1 0;
+    align-items: center;
+    /* 台詞が長くても盤が小さくなりすぎないようにする。収まらない分は画面ごとスクロールする。 */
+    min-height: min(20rem, 42vh);
+  }
+  .shogi-game .shogi-tutorial .shogi-tutorial__stage .shogi-dex__board {
+    flex: 1 1 0;
+    height: 100%;
+    min-height: 0;
+  }
+  .shogi-game .shogi-tutorial .shogi-tutorial__panel {
+    flex: none;
+    width: min(100%, 40rem);
+    min-width: 0;
+    align-self: center;
+  }
+  .shogi-game .shogi-tutorial__panel .shogi-dex__explanation {
+    gap: 0.45rem;
+    padding: 0.5rem 0.7rem;
+  }
+  .shogi-game .shogi-tutorial__panel .shogi-dex__speech {
+    align-items: center;
+    margin: 0;
+  }
+  .shogi-game .shogi-tutorial__panel .shogi-dex__chara {
+    height: clamp(52px, 8vh, 80px);
+  }
 }
 .shogi-game .shogi-tutorial__sub {
   margin: 0;
@@ -806,6 +944,37 @@ const resultMessage = computed(() => {
   border-color: #6ee7b7;
   opacity: 1;
   background: rgba(16, 185, 129, 0.35);
+}
+.shogi-game .shogi-tutorial__replay {
+  display: grid;
+  gap: 0.45rem;
+}
+.shogi-game .shogi-tutorial__replay-move {
+  margin: 0;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__replay-move small {
+  font-weight: 400;
+  opacity: 0.75;
+}
+.shogi-game .shogi-tutorial__replay-controls {
+  display: flex;
+  gap: 0.45rem;
+}
+.shogi-game .shogi-tutorial__replay-controls button {
+  flex: 1 1 0;
+  min-height: 2.6em;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 0.45rem;
+  color: #fffcf4;
+  background: rgba(29, 48, 63, 0.9);
+  font: inherit;
+  cursor: pointer;
+}
+.shogi-game .shogi-tutorial__replay-controls button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 .shogi-game .shogi-tutorial__actions {
   display: flex;

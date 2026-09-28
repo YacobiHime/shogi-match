@@ -4,6 +4,7 @@ import { buildOpeningDexSteps } from "./opening-dex-replay.mjs";
 import { formatHintMove } from "./match-assists.mjs";
 import { referenceDexEntries } from "./reference-dex.mjs";
 import { STANDARD_SFEN } from "./tutorial-runner.mjs";
+import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI } from "./tutorial-watch-games.mjs";
 
 /**
  * やこび姫の将棋教室のカリキュラム。巻 → 章 → レッスン → ステップの4階層。
@@ -17,6 +18,7 @@ import { STANDARD_SFEN } from "./tutorial-runner.mjs";
  * - choose     選択肢から答える（answerは正解の番号）
  * - open-dex   図鑑の項目を開く（kind: piece / tesuji / world / opening）
  * - play       学習対局の設定を用意して対局へ進む
+ * - replay     棋譜（moves）をfrom手目から1手ずつ再生する。notesは手数ごとの解説。最後の手まで見たら次へ進める
  */
 
 const PIECES = Object.fromEntries(referenceDexEntries("piece").map((entry) => [entry.id, entry]));
@@ -28,17 +30,21 @@ const ENEMY_CAMP = ["a", "b", "c"].flatMap((rank) => [9, 8, 7, 6, 5, 4, 3, 2, 1]
 
 // ===== 第1巻 =====
 
+/** 台詞で呼ぶ駒の名前。図鑑の見出し（歩兵・玉将・王将など）より短く、ふだんの呼び方にする。 */
+const PIECE_NAMES = { pawn: "歩", lance: "香車", knight: "桂馬", silver: "銀", gold: "金", bishop: "角", rook: "飛車", king: "玉" };
+
 function pieceLesson(id, { entryId, sfen, from, target, maxMoves, targetLabel, quiz }) {
   const entry = PIECES[entryId];
+  const name = PIECE_NAMES[entryId];
   return {
     id,
     title: entry.label.replace(/（.*）/, ""),
     summary: entry.overview,
     steps: [
-      { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: `${entry.overview} 青い点が動けるマスだよ。` },
+      { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: `これが「${name}」。${entry.overview} 青い点が、${name}の動けるマスだよ。` },
       { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: entry.rows[0][1] },
-      { type: "move-piece", sfen, from, target, maxMoves, speech: `${entry.label.replace(/（.*）/, "")}を${targetLabel}（緑のマス）まで動かしてみよう！${maxMoves > 1 ? `${maxMoves}手以内でね。` : ""}` },
-      { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: `${entry.rows[2][0]}：${entry.rows[2][1]}` },
+      { type: "move-piece", sfen, from, target, maxMoves, speech: `${name}を${targetLabel}（緑のマス）まで動かしてみよう！${maxMoves > 1 ? ` ${maxMoves}手以内で届くよ。` : ""}` },
+      { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: `${name}にも弱点があるよ。${entry.rows[2][1]}` },
       { type: "choose", ...quiz },
     ],
   };
@@ -163,7 +169,7 @@ const VOLUME_1 = {
           title: "反則に気をつけよう",
           summary: "やってはいけない手",
           steps: [
-            { type: "explain", sfen: "k8/9/9/9/9/9/4P4/9/8K b P 1", marks: ["5a", "5b", "5c", "5d", "5e", "5f", "5h", "5i"].map((usi) => [usi, "target"]), speech: "自分の歩がある筋に、もう1枚歩を打つ「二歩」は反則だよ。盤面なら5筋には歩を打てないんだ。" },
+            { type: "explain", sfen: "k8/9/9/9/9/9/4P4/9/8K b P 1", marks: ["5a", "5b", "5c", "5d", "5e", "5f", "5h", "5i"].map((usi) => [usi, "target"]), speech: "自分の歩がある筋に、もう1枚歩を打つ「二歩」は反則だよ。この盤面だと、5筋には歩を打てないんだ。" },
             { type: "choose", sfen: "k8/9/9/9/9/9/4P4/9/8K b P 1", question: "二歩になってしまうのはどっち？", options: ["4五に歩を打つ", "5五に歩を打つ"], answer: 1, explanation: "5筋にはもう5七の歩があるから、5五に打つと二歩だね。" },
             { type: "explain", sfen: "k8/9/9/9/9/9/9/9/8K b P 1", marks: RANK_1.filter((usi) => usi !== "9a").map((usi) => [usi, "target"]), speech: "一段目に歩や香を打つと、もう前に進めないから反則。桂は一段目と二段目に打てないよ。" },
             { type: "explain", sfen: "4k4/9/4G4/9/9/9/9/9/8K b P 1", marks: [["5b", "target"]], speech: "歩を打って玉を詰ませる「打ち歩詰め」も反則。盤にある歩を突いて詰ませるのはOKだよ。" },
@@ -182,6 +188,24 @@ function tesujiFindStep(entryId, speech) {
   const entry = TESUJI[entryId];
   return { type: "find-move", sfen: entry.sfen, moves: entry.moves, answers: entry.arrows, marks: entry.marks, speech };
 }
+
+/** 観戦の棋譜を、from手目の局面からto手目まで1手ずつ再生する。 */
+function watchReplay(game, from, to, speech, notes) {
+  return { type: "replay", moves: game.slice(0, to), from, speech, notes };
+}
+
+/** 観戦の棋譜のply手目まで進めた局面で、実力者が指した次の一手を当てる。 */
+function watchQuestion(game, ply, speech) {
+  return { type: "find-move", moves: game.slice(0, ply), answers: [game[ply]], speech };
+}
+
+/** 観戦の棋譜の最後の一手（詰み）を指させる。 */
+function watchFinish(game, speech) {
+  return { type: "mate", moves: game.slice(0, -1), solution: [game.at(-1)], speech };
+}
+
+const G1 = WATCH_GAME_FUNAGAKOI;
+const G2 = WATCH_GAME_KURIDASHI;
 
 const VOLUME_2 = {
   id: "v2",
@@ -239,8 +263,69 @@ const VOLUME_2 = {
       id: "v2-c2",
       title: "強い人の対局を観戦しよう",
       lessons: [
-        { id: "v2-watch-opening", title: "序盤の駒組みを観戦しよう", summary: "準備中", comingSoon: true },
-        { id: "v2-watch-endgame", title: "終盤の寄せを観戦しよう", summary: "準備中", comingSoon: true },
+        {
+          id: "v2-watch-opening",
+          title: "序盤の駒組みを観戦しよう",
+          summary: "囲ってから戦いを始める",
+          steps: [
+            { type: "explain", sfen: STANDARD_SFEN, speech: "強い人（先手）と、将棋をおぼえたての人（後手）の対局を観戦しよう！ 戦いが始まるまでに、二人がどんな駒組みをするか注目してね。" },
+            watchReplay(G1, 0, 26, "「次の手」を押して、1手ずつ進めてみよう。戻ることもできるよ。", {
+              1: "▲7六歩。まずは角道を開けて、角が働けるようにしたよ。",
+              3: "▲2六歩。飛車の前の歩を突いて、飛車で攻める準備をしたよ。",
+              4: "△4四歩。後手は角道を止めたね。振り飛車によくある指し方だよ。",
+              5: "▲2五歩。さらに飛車先の歩を伸ばしたよ。",
+              6: "△3三角。後手は角で2筋を守ったね。",
+              7: "▲4八銀。銀を上がって、攻めにも守りにも使える準備だよ。",
+              8: "△4二飛。後手は飛車を4筋に振ったよ。「四間飛車」だね。",
+              11: "▲6八玉。先手は玉を左へ動かし始めたよ。戦いの前に、玉を飛車から遠ざけて囲うんだ。",
+              17: "▲7八玉。玉が7八に入ったよ。",
+              18: "△2二銀。後手の玉は左の7二にいるのに、金と銀が右に残っていて、玉を守れていないよ。",
+              19: "▲5八金。金を玉のそばに寄せたよ。玉を7八、金を5八と6九に置いたこの形が「舟囲い」なんだ。",
+              23: "▲3八飛。飛車を3筋へ回したよ。3筋の歩をぶつけて攻めるための作戦なんだ。",
+              25: "▲5七銀。銀も5七に上がって、囲いと攻めの形がととのったね。",
+            }),
+            watchQuestion(G1, 26, "駒組みを終えた先手は、ここで3筋の歩を3五へ突いて戦いを始めたよ。指してみよう！"),
+            watchReplay(G1, 27, 30, "歩をぶつけて戦いを始めることを「開戦」というよ。続きを見てみよう。", {
+              28: "△5四歩。ここは△3五歩と、ぶつかった歩を取るのが自然だったよ。",
+              29: "▲3四歩。先手は歩を取り込んで、3三の角に当てたよ。3筋の歩が敵陣にせまってきた！",
+              30: "△5一角。後手は角を逃がしたけれど、先手の攻めが一歩リードしたね。",
+            }),
+            { type: "choose", question: "先手が戦いを始める前にやったことは？", options: ["玉を囲った", "すぐに飛車を成り込んだ", "角を交換した"], answer: 0, explanation: "強い人は、戦いを始める前に玉を囲うんだ。囲ってから攻めると、安心して戦えるよ。" },
+          ],
+        },
+        {
+          id: "v2-watch-endgame",
+          title: "終盤の寄せを観戦しよう",
+          summary: "と金で玉をつつみこむ",
+          steps: [
+            watchReplay(G1, 30, 44, "さっきの対局の続きだよ。先手が玉をどうやって寄せていくか見ていこう！", {
+              31: "▲5五歩。3筋に続いて、5筋でも歩をぶつけたよ。",
+              35: "▲5五銀。銀で歩を取り返して、銀が前に出てきたね。",
+              37: "▲3六飛。飛車を3六へ浮いて、横にも利かせたよ。",
+              41: "▲3七桂。桂馬も攻めに加わったよ。飛車・角・銀・桂がそろうと攻めが強くなる。「攻めは飛角銀桂」だね。",
+              43: "▲4五歩。4筋の歩も伸ばして、と金を作るねらいだよ。",
+              44: "△1三銀。後手は端の銀を動かしたけれど、守りには役立たない手だよ。ここは5筋を守るべきだった。",
+            }),
+            watchQuestion(G1, 44, "後手が守らなかった5筋に、先手は持ち駒の歩を打ったよ。5四に歩を打って、次の5三歩成をねらおう！"),
+            watchReplay(G1, 45, 72, "ここから、と金の攻めが始まるよ。", {
+              47: "▲4四歩。4筋の歩をもう一つ進めたよ。",
+              49: "▲4三歩成。と金ができた！ と金は金と同じ動きなのに、取られても相手には歩1枚しか渡らない。攻めにぴったりの駒だよ。",
+              51: "▲5三歩成。2枚目のと金！",
+              53: "▲3三歩成。3筋でもと金を作ったよ。",
+              55: "▲3三飛成。飛車が敵陣に入って、龍になったよ。",
+              57: "▲3六龍。龍をいったん引いて、自分の陣地にも利かせたよ。",
+              59: "▲5二と。と金が1マスずつ玉に近づいていくよ。",
+              61: "▲6二と。と金の攻めはおそく見えて、実はとても速いんだ。「と金のおそはや」という格言があるよ。",
+              65: "▲7一と。と金で角を取ったよ。",
+              67: "▲7二と。こんどは銀を取った！ 後手の玉のまわりがどんどん薄くなっていくね。",
+              69: "▲7三と。金も取ったよ。と金が玉をつつみこんでいくね。",
+              71: "▲7一角打。持ち駒の角を打って、玉の逃げ道をふさいだよ。",
+              72: "△6六歩。後手の最後の反撃。でも、先手にはもう詰みがあるよ。",
+            }),
+            watchFinish(G1, "最後の一手！ 持ち駒の金で、後手の玉を詰ませよう！"),
+            { type: "explain", speech: "先手は、囲ってから歩で戦いを始めて、と金で玉をつつみこんで勝ったね。と金は取られても損が少ないから、どんどん作って攻めよう！" },
+          ],
+        },
       ],
     },
     {
@@ -252,7 +337,7 @@ const VOLUME_2 = {
           title: "王手と詰み",
           summary: "王手のかけ方と防ぎ方",
           steps: [
-            { type: "explain", sfen: "4k4/9/9/9/9/9/9/9/4R3K w - 1", marks: [["5a", "target"], ["5i", "key"]], speech: "次に玉を取ろうとする手を「王手」というよ。盤面では5九の飛車が王手をかけているね。" },
+            { type: "explain", sfen: "4k4/9/9/9/9/9/9/9/4R3K w - 1", marks: [["5a", "target"], ["5i", "key"]], speech: "次に玉を取ろうとする手を「王手」というよ。この盤面では、5九の飛車が王手をかけているね。" },
             { type: "explain", speech: "王手をかけられたら、①玉が逃げる ②王手している駒を取る ③間に駒を置く（合駒）のどれかで防ぐよ。" },
             { type: "explain", sfen: "4k4/4G4/5S3/9/9/9/9/9/4K4 w - 1", marks: [["5a", "target"]], speech: "どの方法でも防げない王手が「詰み」。ここまでくれば勝ちだよ！" },
             { type: "choose", question: "王手の防ぎ方ではないのは？", options: ["玉が逃げる", "間に駒を置く", "ほかの駒を動かして知らんぷり"], answer: 2, explanation: "王手を放っておくのは反則だよ。" },
@@ -285,7 +370,19 @@ const VOLUME_2 = {
             tesujiFindStep("double-check", "桂馬を跳ねて、両王手をかけてみよう！"),
           ],
         },
-        { id: "v2-mate-three", title: "3手詰めに挑戦", summary: "準備中", comingSoon: true },
+        {
+          id: "v2-mate-three",
+          title: "3手詰めに挑戦",
+          summary: "捨て駒で守りをくずす",
+          steps: [
+            { type: "explain", speech: "3手詰めは「王手 → 相手の応手 → 詰み」の3手。三手の読みと同じ順番だね。1手目に、わざと駒を取らせる「捨て駒」がよく出てくるよ。" },
+            { type: "mate", sfen: "7gk/9/7BP/9/9/9/9/9/K8 b G 1", solution: ["G*1b", "2a1b", "1c1b+"], speech: "3手で詰ませてみよう！ 1手目は、取られてもいい場所に金を打つのがポイントだよ。" },
+            { type: "explain", sfen: "8k/8g/7BP/9/9/9/9/9/K8 b g 1", marks: [["1b", "key"]], arrows: ["1c1b+"], speech: "金を捨てると、相手の金が1二へ動いたね。そこを歩で取って成れば詰み！ 捨て駒で、相手の駒を取りやすい場所へおびき寄せたんだ。" },
+            { type: "mate", sfen: "6k2/5g3/6G2/9/9/9/9/9/K8 b GN 1", solution: ["N*4c", "4b4c", "G*3b"], speech: "次の問題！ 玉の横にいる4二の金が、じゃまをしているよ。3手で詰ませてみよう！" },
+            { type: "mate", sfen: "3sk4/2+R2p3/3s2N2/9/9/9/9/9/K8 b NS 1", solution: ["N*4c", "4b4c", "S*4b"], speech: "最後の問題！ 桂馬と銀を使って、3手で詰ませてみよう！" },
+            { type: "explain", speech: "3手詰めクリア！ 捨て駒で相手の守りの駒を動かしてから詰ませる。これが詰みを見つけるコツだよ。" },
+          ],
+        },
         {
           id: "v2-mating-shapes",
           title: "詰みの形を覚えよう",
@@ -318,7 +415,7 @@ const VOLUME_3 = {
           summary: "飛車の使い方で2つに分かれる",
           steps: [
             { type: "explain", moves: ["2g2f", "8c8d", "2f2e", "8d8e"], marks: [["2h", "key"]], speech: "飛車を最初の2筋のまま使って戦うのが「居飛車」だよ。" },
-            { type: "explain", moves: ["7g7f", "3c3d", "6g6f", "8c8d", "2h6h"], marks: [["6h", "key"]], speech: "飛車を左へ動かして戦うのが「振り飛車」。盤面は6筋に振った「四間飛車」だよ。" },
+            { type: "explain", moves: ["7g7f", "3c3d", "6g6f", "8c8d", "2h6h"], marks: [["6h", "key"]], speech: "飛車を左へ動かして戦うのが「振り飛車」。この盤面は、飛車を6筋に振った「四間飛車」だよ。" },
             { type: "choose", question: "飛車を左に動かして戦うのは？", options: ["居飛車", "振り飛車"], answer: 1, explanation: "飛車を振るから「振り飛車」だよ！" },
           ],
         },
@@ -327,7 +424,7 @@ const VOLUME_3 = {
           title: "囲いで玉を守ろう",
           summary: "金銀で玉を囲う",
           steps: [
-            { type: "explain", sfen: TESUJI["three-guards"].sfen, marks: TESUJI["three-guards"].marks, speech: "戦う前に、金と銀で玉を守る形を作るよ。これを「囲い」というんだ。盤面は「美濃囲い」だよ。" },
+            { type: "explain", sfen: TESUJI["three-guards"].sfen, marks: TESUJI["three-guards"].marks, speech: "戦う前に、金と銀で玉を守る形を作るよ。これを「囲い」というんだ。この形が「美濃囲い」だよ。" },
             { type: "explain", speech: "囲いの基本は「金銀3枚」。攻めに使う駒と、守りに使う駒を分けて考えよう。" },
             { type: "open-dex", kind: "opening", speech: "定跡図鑑の「囲い」で、いろいろな囲いを見てみよう！" },
             { type: "choose", question: "囲いの基本はどれ？", options: ["金銀3枚で玉を守る", "玉をひとりにする", "飛車で玉を守る"], answer: 0, explanation: "玉の守りは金銀3枚が基本だよ！" },
@@ -367,7 +464,52 @@ const VOLUME_3 = {
       id: "v3-c2",
       title: "攻めと受けを観戦しよう",
       lessons: [
-        { id: "v3-watch-attack", title: "攻めと受けの対局を観戦しよう", summary: "準備中", comingSoon: true },
+        {
+          id: "v3-watch-attack",
+          title: "攻めと受けの対局を観戦しよう",
+          summary: "銀の繰り出しと玉の早逃げ",
+          steps: [
+            { type: "explain", speech: "こんどは攻めと受けに注目して観戦しよう！ 先手が強い人、後手が将棋をおぼえたての人だよ。" },
+            watchReplay(G2, 18, 30, "駒組みが進んだところから見ていくよ。先手の銀の動きに注目してね。", {
+              19: "▲3八飛。攻めたい3筋へ飛車を回したよ。",
+              20: "△5二飛。後手は飛車を5筋へ動かして「中飛車」にしたよ。",
+              21: "▲5七銀。銀が飛車の応援に向かうよ。",
+              23: "▲7八玉。攻める前に、玉を安全な場所へ移しておくのを忘れないね。",
+              25: "▲3五歩。歩をぶつけて開戦！",
+              27: "▲4六銀。銀を5七から4六へ、さらに前へ出していくよ。",
+              29: "▲3五銀。飛車と銀が3筋に集まった！ 飛車の前に銀を出して、2枚の力で攻めるのが攻めのコツだよ。",
+              30: "△5二金。後手は3筋の攻めに備えていないよ。",
+            }),
+            watchQuestion(G2, 30, "ここで先手は、持ち駒の歩を使った手筋を指したよ。3四に歩を打って、3三の角の頭をたたこう！"),
+            watchReplay(G2, 31, 44, "たたかれた角を、後手はどう受けるかな？", {
+              32: "△7一飛。後手は飛車を動かしたけれど、角を逃がさなかったよ。ここは△4二角と角を逃がすのがよかったんだ。",
+              33: "▲3三歩成。角をただで取ったうえに、と金までできたよ！",
+              35: "▲2四歩。次は2筋の歩で、2三へ成り込むねらいだよ。",
+              37: "▲2三歩成。2枚目のと金！ 歩は敵陣に入ると、と金になって強くなるんだ。",
+              39: "▲4六銀。4五の桂に、銀でねらいをつけたよ。",
+              40: "△5四銀。後手は銀で桂を守ったけれど、ここは△7二玉と、先に玉を安全な場所へ逃がすのがよかったよ。これが「玉の早逃げ」だね。",
+              41: "▲4四角。盤の角を4四へ出して、敵陣をにらんだよ。",
+              43: "▲4五銀。桂を取ったよ。",
+              44: "△9二香。ここでも△7二玉と早逃げするべきだった。受けは、攻められている場所から玉を遠ざけるのが大事だよ。",
+            }),
+            watchReplay(G2, 44, 66, "ここから先手の大駒が敵陣に入っていくよ。", {
+              45: "▲3二飛成。飛車が敵陣に入って龍になった！",
+              47: "▲1一角成。角も香を取って馬になったよ。龍と馬がそろうと、攻めがぐっと強くなるんだ。",
+              49: "▲5五馬。馬を中央へ引いたよ。馬は真ん中にいると、攻めにも守りにもよく利くんだ。",
+              51: "▲1二龍。4二の金に当たった龍を、1二へ逃がしたよ。敵陣にいる龍は、横に動いて相手の駒をねらえるんだ。",
+              53: "▲6五馬。馬で銀を取ったよ。",
+              55: "▲8五桂打。持ち駒の桂馬も、玉の近くに打って攻めに使うよ。",
+              57: "▲3二と。と金が玉に向かって進んでいくよ。",
+              59: "▲4一と。と金で金を取った！",
+              61: "▲5一と。こんどは飛車まで取ったよ。後手の玉の守りがほとんどなくなったね。",
+              63: "▲9二飛打。取った飛車を打って、玉を上からねらうよ。",
+              65: "▲7二香打。香を打って王手！",
+              66: "△7二金。後手は金で香を取ったけれど、ここで先手に詰みがあるよ。",
+            }),
+            watchFinish(G2, "最後の一手！ 9二の飛車で7二の金を取って、詰ませよう！"),
+            { type: "choose", question: "攻められている側が気をつけることは？", options: ["玉を早めに安全な場所へ逃がす", "攻められている場所に玉を近づける", "受けずに駒をたくさん動かす"], answer: 0, explanation: "「玉の早逃げ八手の得」。危なくなる前に玉を逃がしておくと、なかなか詰まされないよ。" },
+          ],
+        },
       ],
     },
     {
@@ -417,6 +559,45 @@ const VOLUME_3 = {
 
 // ===== 第4巻 =====
 
+/**
+ * 定跡の練習の台詞。定跡図鑑の「目的」（〜すること！）は見出し向けの文なので、
+ * 教室では形ができたあとに次にやることを話しかける文を使う。
+ */
+const DRILL_TEXTS = {
+  shiken: {
+    summary: "美濃囲いで受けて、さばいて反撃",
+    next: "ここから美濃囲いで玉を固めて、相手の攻めを受け止めよう！ 攻めてきた駒を飛車と角でさばいて、反撃していこう！",
+  },
+  sangen: {
+    summary: "相手の急戦をさばいて反撃",
+    next: "ここから玉を美濃囲いに入れて、相手の急戦に備えよう！ 攻めてきたら、飛車と角でさばいて反撃していこう！",
+  },
+  nakabisha: {
+    summary: "5筋から中央を突破",
+    next: "ここから5筋に攻め駒を集めて、中央から突破していこう！",
+  },
+  mukai: {
+    summary: "相手の飛車先交換をむかえうつ",
+    next: "ここから、相手が飛車先の歩を交換しに来たら、向かい合った飛車で逆襲していこう！",
+  },
+  bougin: {
+    summary: "銀をまっすぐ出して2筋を突破",
+    next: "ここから銀をさらに前へ進めて、2筋を突破していこう！ 飛車が敵陣で成れたら大成功だよ！",
+  },
+  "hayaguri-gin": {
+    summary: "相手が囲う前に仕掛ける",
+    next: "ここから、相手の駒組みが整う前に、銀と歩で攻めていこう！",
+  },
+  "koshikake-gin": {
+    summary: "銀・桂・飛車で厚く攻める",
+    next: "ここから桂馬も跳ねて、銀・桂・飛車の力で厚く攻めていこう！",
+  },
+  "yagura-strategy": {
+    summary: "堅く囲ってから攻める",
+    next: "ここから矢倉囲いを完成させて、玉を堅くしてから攻めていこう！",
+  },
+};
+
 /** 定跡図鑑の手順をなぞる練習。相手の応手は定跡図鑑と同じく省いた盤面で進める。 */
 function openingDrillLesson(id, strategyId) {
   const definition = OPENING_STRATEGIES.find((strategy) => strategy.id === strategyId);
@@ -426,7 +607,7 @@ function openingDrillLesson(id, strategyId) {
     routines: OPENING_GUIDE_ROUTINES,
     formatLabel: (usi, beforeSfen) => formatHintMove(usi, beforeSfen),
   });
-  const steps = [{ type: "explain", sfen: STANDARD_SFEN, speech: `「${definition.label}」を指してみよう！ ${explanation?.overview ?? ""}` }];
+  const steps = [{ type: "explain", sfen: STANDARD_SFEN, speech: `「${definition.label}」を指してみよう！ ${explanation?.overview ?? ""} 手順どおりに1手ずつ指していくよ。` }];
   for (let index = 1; index < replay.length; index += 1) {
     const step = replay[index];
     if (step.label.startsWith("相手：")) {
@@ -440,9 +621,9 @@ function openingDrillLesson(id, strategyId) {
       });
     }
   }
-  steps.push({ type: "explain", sfen: replay.at(-1).sfen, speech: `${definition.label}の形ができたね！ ${explanation?.aim ?? ""}` });
+  steps.push({ type: "explain", sfen: replay.at(-1).sfen, speech: `${definition.label}の形ができたね！ ${DRILL_TEXTS[strategyId].next}` });
   steps.push({ type: "open-dex", kind: "opening", speech: "定跡図鑑で、手順をもう一度確かめてみよう！" });
-  return { id, title: definition.label, summary: explanation?.aim ?? "", steps };
+  return { id, title: definition.label, summary: DRILL_TEXTS[strategyId].summary, steps };
 }
 
 const VOLUME_4 = {
@@ -480,8 +661,8 @@ function proverbLesson(id, title, entryIds) {
   const steps = entryIds.flatMap((entryId) => {
     const entry = TESUJI[entryId];
     return [
-      { type: "explain", sfen: entry.sfen, moves: entry.moves, marks: entry.marks, speech: `「${entry.label}」 ${entry.overview}` },
-      { type: "find-move", sfen: entry.sfen, moves: entry.moves, answers: entry.arrows, marks: entry.marks, speech: "格言どおりの一手を指してみよう！" },
+      { type: "explain", sfen: entry.sfen, moves: entry.moves, marks: entry.marks, speech: `「${entry.label}」という格言があるよ。${entry.overview}` },
+      { type: "find-move", sfen: entry.sfen, moves: entry.moves, answers: entry.arrows, marks: entry.marks, speech: `この局面で、「${entry.label}」のとおりに指してみよう！` },
       { type: "explain", sfen: entry.sfen, moves: entry.moves, marks: entry.marks, arrows: entry.arrows, speech: entry.rows[0][1] },
     ];
   });
