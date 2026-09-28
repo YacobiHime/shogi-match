@@ -325,6 +325,8 @@ watch(stepIndex, async () => {
 
 <style>
 .shogi-game .shogi-dex {
+  /* 解説の文字は画面幅に合わせて、スマホで約14px、PCで16〜20pxに変える。 */
+  --dex-text: clamp(0.9rem, 0.55rem + 0.6vw, 1.25rem);
   position: absolute;
   inset: 0;
   z-index: 6;
@@ -524,8 +526,8 @@ watch(stepIndex, async () => {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  flex: 0 1 clamp(15rem, 24vw, 22rem);
-  min-width: min(14rem, 40vw);
+  flex: 0 1 clamp(16rem, 30vw, 34rem);
+  min-width: min(15rem, 40vw);
   overflow-y: auto;
 }
 .shogi-dex__detail-head {
@@ -536,7 +538,7 @@ watch(stepIndex, async () => {
 }
 .shogi-game .shogi-dex__detail-head h2 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: calc(var(--dex-text) * 1.3);
 }
 .shogi-game .shogi-dex__side-note {
   color: #f1a54c;
@@ -664,8 +666,9 @@ watch(stepIndex, async () => {
   align-items: flex-end;
   gap: 0.6rem;
   margin: 0 0 0.4rem;
-  font-size: 0.95rem;
+  font-size: calc(var(--dex-text) * 1.08);
   font-weight: 700;
+  line-height: 1.5;
 }
 .shogi-game .shogi-dex__speech p {
   margin: 0;
@@ -693,7 +696,7 @@ watch(stepIndex, async () => {
   gap: 0.6rem;
   margin: 0;
   color: rgba(255, 252, 244, 0.8);
-  font-size: 0.85rem;
+  font-size: var(--dex-text);
 }
 .shogi-game .shogi-dex__explanation dl {
   margin: 0;
@@ -701,18 +704,20 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex__explanation dl > div {
   display: flex;
   gap: 0.6rem;
-  margin-top: 0.4rem;
+  margin-top: 0.55em;
+  font-size: var(--dex-text);
 }
 .shogi-game .shogi-dex__explanation dt {
   flex: none;
-  min-width: 8em;
+  width: 7.5em;
   color: #f1a54c;
-  font-size: 0.78rem;
+  font-size: 0.9em;
+  line-height: 1.7;
 }
 .shogi-game .shogi-dex__explanation dd {
   margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.55;
+  font-size: 1em;
+  line-height: 1.65;
 }
 @media (max-width: 56rem) {
   .shogi-game .shogi-dex__modes {
@@ -755,6 +760,13 @@ watch(stepIndex, async () => {
   .shogi-game .shogi-dex__explanation-col {
     flex: none;
     overflow-y: visible;
+  }
+  .shogi-game .shogi-dex__explanation dl > div {
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+  .shogi-game .shogi-dex__explanation dt {
+    width: auto;
   }
   .shogi-game .shogi-dex__stage {
     flex: none;
