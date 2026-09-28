@@ -73,6 +73,20 @@ export function normalizeMovePositionPrerequisites(prerequisites) {
   ));
 }
 
+/** 囲いの「ほぼ完成形」を {id, label, squares} の配列へ整える。 */
+export function normalizeNearCompletions(nearCompletions) {
+  if (!Array.isArray(nearCompletions)) return [];
+  return nearCompletions
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => ({
+      id: typeof entry.id === "string" ? entry.id : "",
+      label: typeof entry.label === "string" ? entry.label : "",
+      squares: Array.isArray(entry.squares)
+        ? entry.squares.filter(Array.isArray).map(([square, kind]) => [square, kind])
+        : [],
+    }));
+}
+
 export function normalizeMoveConditionBranches(branches) {
   if (!branches || Array.isArray(branches) || typeof branches !== "object") return {};
   return Object.fromEntries(Object.entries(branches).map(([move, branchMoves]) => [
@@ -104,6 +118,7 @@ export function createOpeningBookDraft({ definition, kind = "strategy", side = "
       ? definition.completionVariants
       : definition?.completionSquares?.length ? [definition.completionSquares] : []
     ).map((variant) => variant.map(([square, kind]) => [square, kind])),
+    nearCompletions: normalizeNearCompletions(definition?.nearCompletions),
     movePositionPrerequisites: normalizeMovePositionPrerequisites(definition?.movePositionPrerequisites),
     moveConditionBranches: normalizeMoveConditionBranches(definition?.moveConditionBranches),
     completionChoices: {
@@ -211,6 +226,21 @@ export function validateOpeningBook(book) {
         if (!["P", "L", "N", "S", "G", "B", "R", "K"].includes(kind)) errors.push(`${prefix}: 駒種が不正です。`);
         if (seenSquares.has(square)) errors.push(`完成形${variantIndex + 1}: 同じマス「${square}」が重複しています。`);
         seenSquares.add(square);
+      }
+    }
+    const nearIds = new Set();
+    for (const [nearIndex, near] of (book?.nearCompletions ?? []).entries()) {
+      const prefix = `ほぼ完成形${nearIndex + 1}`;
+      if (!near?.id || nearIds.has(near.id)) errors.push(`${prefix}: IDが空か重複しています。`);
+      nearIds.add(near?.id);
+      if (!near?.label) errors.push(`${prefix}: 表示名を入力してください。`);
+      if (!Array.isArray(near?.squares) || !near.squares.length) {
+        errors.push(`${prefix}: 必要な駒を1つ以上登録してください。`);
+        continue;
+      }
+      for (const [pieceIndex, [square, kind] = []] of near.squares.entries()) {
+        if (!/^[1-9][a-i]$/.test(square ?? "")) errors.push(`${prefix}の駒${pieceIndex + 1}: マスが不正です。`);
+        if (!["P", "L", "N", "S", "G", "B", "R", "K"].includes(kind)) errors.push(`${prefix}の駒${pieceIndex + 1}: 駒種が不正です。`);
       }
     }
   }

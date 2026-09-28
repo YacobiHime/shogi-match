@@ -111,6 +111,28 @@
             <button type="button" class="completion-piece-add" @click="addCompletionPiece(variantIndex)">必要な駒 ＋</button>
           </section>
           <p v-if="!book.completionVariants.length" class="empty">「完成形 ＋」から囲いの完成条件を追加してください。</p>
+          <div class="castle-completion-heading">
+            <div><strong>ほぼ完成形</strong><small>達したら、完全形まで続けるかここで終えるかを選ばせます。</small></div>
+            <button type="button" @click="addNearCompletion">ほぼ完成形 ＋</button>
+          </div>
+          <section v-for="(near, nearIndex) in (book.nearCompletions as NearCompletion[])" :key="nearIndex" class="completion-variant">
+            <div class="completion-variant-heading">
+              <input v-model="near.label" :aria-label="`ほぼ完成形${nearIndex + 1}の表示名`" placeholder="表示名（例：片美濃）">
+              <input v-model="near.id" :aria-label="`ほぼ完成形${nearIndex + 1}のID`" placeholder="ID">
+              <button type="button" class="danger" @click="removeNearCompletion(nearIndex)">削除</button>
+            </div>
+            <div v-for="(piece, pieceIndex) in near.squares" :key="pieceIndex" class="completion-piece-row">
+              <select v-model="piece[0]" :aria-label="`ほぼ完成形${nearIndex + 1} 駒${pieceIndex + 1}のマス`">
+                <option v-for="square in conditionSquareOptions" :key="square.value" :value="square.value">{{ square.label }}</option>
+              </select>
+              <span>に</span>
+              <select v-model="piece[1]" :aria-label="`ほぼ完成形${nearIndex + 1} 駒${pieceIndex + 1}の駒種`">
+                <option v-for="pieceOption in conditionPieceOptions" :key="pieceOption.value" :value="pieceOption.value">{{ pieceOption.label }}</option>
+              </select>
+              <button type="button" class="icon danger" :aria-label="`ほぼ完成形${nearIndex + 1}の駒${pieceIndex + 1}を削除`" @click="removeNearCompletionPiece(nearIndex, pieceIndex)">×</button>
+            </div>
+            <button type="button" class="completion-piece-add" @click="addNearCompletionPiece(nearIndex)">必要な駒 ＋</button>
+          </section>
         </div>
       </aside>
 
@@ -313,7 +335,7 @@ import { Position } from "tsshogi";
 import ShogiMatchBoard from "../ShogiMatchBoard.vue";
 import { STANDARD_SFEN } from "../game-state";
 import { OPENING_CASTLE_GROUPS, OPENING_CASTLES, OPENING_GUIDE_ROUTINES, OPENING_STRATEGIES, mirrorUsiMove, openingDefinitionRookStyle } from "../core/opening-guide.mjs";
-import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningDefinitionFromLibrary, normalizeMoveConditionBranches, normalizeMovePositionPrerequisites, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
+import { createOpeningBookDraft, createOpeningBookLibrary, deleteOpeningDefinitionFromLibrary, normalizeMoveConditionBranches, normalizeMovePositionPrerequisites, normalizeNearCompletions, OPENING_BOOK_LIBRARY_STORAGE_KEY, OPENING_BOOK_STORAGE_KEY, openingBookDraftKey, parseOpeningBook, parseOpeningBookLibrary, replayOpeningBranch, saveOpeningBookToLibrary, serializeOpeningBook, serializeOpeningBookLibrary, validateOpeningBook } from "../core/opening-book-editor.mjs";
 import { formatHintMove } from "../core/match-assists.mjs";
 
 const strategies = OPENING_STRATEGIES;
@@ -341,6 +363,7 @@ const storedLibrary = safeParseLibrary(localStorage.getItem(OPENING_BOOK_LIBRARY
 const stored = localStorage.getItem(OPENING_BOOK_STORAGE_KEY);
 const legacyInitial = stored ? safeParse(stored) : null;
 const initial = storedLibrary.activeKey ? storedLibrary.books[storedLibrary.activeKey] ?? legacyInitial : legacyInitial;
+type NearCompletion = { id: string; label: string; squares: [string, string][] };
 const book = reactive<any>(normalize(initial ?? createOpeningBookDraft({ initialSfen: STANDARD_SFEN })));
 const selectedDefinitionKey = ref(initial && (storedLibrary.books[openingBookDraftKey(initial)] || [...strategies, ...castles].some((item: any) => item.id === initial.id)) ? openingBookDraftKey(initial) : "new");
 const draftLibrary = ref<any>(storedLibrary);
@@ -484,7 +507,7 @@ function definitionForEditor(definition: any, kind: string) {
 function normalize(value: any) {
   const definition = (value?.kind === "castle" ? castles : strategies).find((item: any) => item.id === value?.id);
   const fallback = createOpeningBookDraft({ definition: definitionForEditor(definition, value?.kind ?? "strategy"), kind: value?.kind ?? "strategy", initialSfen: STANDARD_SFEN });
-  return { ...fallback, ...value, classification: { ...fallback.classification, ...value?.classification, contexts: Array.isArray(value?.classification?.contexts) ? value.classification.contexts : fallback.classification.contexts }, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], completionVariants: Array.isArray(value?.completionVariants) ? value.completionVariants : fallback.completionVariants, movePositionPrerequisites: normalizeMovePositionPrerequisites(value?.movePositionPrerequisites), moveConditionBranches: normalizeMoveConditionBranches(value?.moveConditionBranches), sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
+  return { ...fallback, ...value, classification: { ...fallback.classification, ...value?.classification, contexts: Array.isArray(value?.classification?.contexts) ? value.classification.contexts : fallback.classification.contexts }, guideMoves: Array.isArray(value?.guideMoves) ? value.guideMoves : [], completionVariants: Array.isArray(value?.completionVariants) ? value.completionVariants : fallback.completionVariants, nearCompletions: Array.isArray(value?.nearCompletions) ? normalizeNearCompletions(value.nearCompletions) : fallback.nearCompletions, movePositionPrerequisites: normalizeMovePositionPrerequisites(value?.movePositionPrerequisites), moveConditionBranches: normalizeMoveConditionBranches(value?.moveConditionBranches), sources: Array.isArray(value?.sources) ? value.sources : fallback.sources, branches: Array.isArray(value?.branches) && value.branches.length ? value.branches : fallback.branches, engineReview: { ...fallback.engineReview, ...value?.engineReview }, completionChoices: { ...fallback.completionChoices, ...value?.completionChoices, strategyIds: Array.isArray(value?.completionChoices?.strategyIds) ? value.completionChoices.strategyIds : [] } };
 }
 function announce(message: string) { toast.value = message; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.value = "", 2600); }
 function replaceBook(next: any) { Object.keys(book).forEach((key) => delete book[key]); Object.assign(book, normalize(next)); activeBranchIndex.value = 0; cursor.value = book.branches[0]?.moves?.length ?? 0; clearPreview(); }
@@ -867,6 +890,10 @@ function addCompletionVariant() { book.completionVariants.push([["5i", "K"]]); }
 function removeCompletionVariant(variantIndex: number) { book.completionVariants.splice(variantIndex, 1); }
 function addCompletionPiece(variantIndex: number) { book.completionVariants[variantIndex].push(["5i", "K"]); }
 function removeCompletionPiece(variantIndex: number, pieceIndex: number) { book.completionVariants[variantIndex].splice(pieceIndex, 1); }
+function addNearCompletion() { book.nearCompletions.push({ id: `near-${book.nearCompletions.length + 1}`, label: "", squares: [["5i", "K"]] }); }
+function removeNearCompletion(nearIndex: number) { book.nearCompletions.splice(nearIndex, 1); }
+function addNearCompletionPiece(nearIndex: number) { book.nearCompletions[nearIndex].squares.push(["5i", "K"]); }
+function removeNearCompletionPiece(nearIndex: number, pieceIndex: number) { book.nearCompletions[nearIndex].squares.splice(pieceIndex, 1); }
 function removeGuideMove(index: number) {
   clearPreview();
   const [removedMove] = book.guideMoves.splice(index, 1);

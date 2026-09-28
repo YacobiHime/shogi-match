@@ -18,6 +18,17 @@ export function calculateEffectiveMoveRank(moveRank, maxBonus) {
   };
 }
 
+/** 詰みを含む評価値を、大小比較できる数値へ変換する。 */
+export function comparableScore(score) {
+  if (score?.type === 'cp' && Number.isFinite(score.value)) return score.value;
+  if (score?.type === 'mate' && Number.isFinite(score.value)) {
+    if (score.value > 0) return 100000 - score.value;
+    if (score.value < 0) return -100000 + Math.abs(score.value);
+    return 100000;
+  }
+  return undefined;
+}
+
 /**
  * MultiPV候補から指定ランク範囲の手をランダムに選ぶ。
  * 候補不足時は、存在する最大ランクまで選択範囲を縮める。
@@ -36,6 +47,7 @@ export function selectMoveByRank(
     fallbackMove,
     scoreTemperature = Infinity,
     bestMoveRate = 0,
+    candidateWeight,
   } = {},
 ) {
   calculateEffectiveMoveRank(moveRank, 0);
@@ -73,14 +85,22 @@ export function selectMoveByRank(
   const rankedCandidates = [...byRank.entries()]
     .filter(([rank]) => rank >= availableMin && rank <= availableMax)
     .sort(([left], [right]) => left - right);
-  const comparable = (score) => {
-    if (score?.type === 'cp' && Number.isFinite(score.value)) return score.value;
-    if (score?.type === 'mate' && Number.isFinite(score.value)) {
-      if (score.value > 0) return 100000 - score.value;
-      if (score.value < 0) return -100000 + Math.abs(score.value);
-      return 100000;
+  const comparable = comparableScore;
+  const extraWeight = (candidate) => {
+    if (!candidateWeight) return 1;
+    const value = candidateWeight(candidate);
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error('candidateWeightは0以上の数値を返してください');
     }
-    return undefined;
+    return value;
+  };
+  const pickWeighted = (weighted, target) => {
+    for (const entry of weighted) {
+      target -= entry.weight;
+      if (target <= 0) return { move: entry.candidate.move, rank: entry.rank };
+    }
+    const fallback = weighted.at(-1);
+    return { move: fallback.candidate.move, rank: fallback.rank };
   };
   const bestValue = comparable(byRank.get(1)?.score);
   const candidates = rankedCandidates.filter(([rank, candidate]) => {
@@ -111,16 +131,21 @@ export function selectMoveByRank(
     const weighted = candidates.map(([rank, candidate]) => {
       const value = comparable(candidate.score);
       const loss = value === undefined ? maxScoreLoss : Math.max(0, bestValue - value);
-      return { rank, candidate, weight: Math.exp(-loss / scoreTemperature) };
+      return {
+        rank,
+        candidate,
+        weight: Math.exp(-loss / scoreTemperature) * extraWeight(candidate),
+      };
     });
     const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
-    let target = selectionRandom * totalWeight;
-    for (const entry of weighted) {
-      target -= entry.weight;
-      if (target <= 0) return { move: entry.candidate.move, rank: entry.rank };
-    }
-    const fallback = weighted.at(-1);
-    return { move: fallback.candidate.move, rank: fallback.rank };
+    return pickWeighted(weighted, selectionRandom * totalWeight);
+  }
+  if (candidateWeight) {
+    const weighted = candidates.map(([rank, candidate]) => ({
+      rank, candidate, weight: extraWeight(candidate),
+    }));
+    const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+    return pickWeighted(weighted, selectionRandom * totalWeight);
   }
   const [rank, candidate] = candidates[Math.floor(selectionRandom * candidates.length)];
   return { move: candidate.move, rank };

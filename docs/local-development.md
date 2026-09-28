@@ -38,8 +38,11 @@ npm run opening-editor
 
 - 定跡エディター: <http://127.0.0.1:5173/opening-editor.html>
 - 対局画面: <http://127.0.0.1:5173/game.html>
+- Workerエンジン疎通確認: <http://127.0.0.1:5173/engine-worker-probe.html>
 
 自動的に開かない場合は、上記URLをブラウザへ入力してください。終了するときは、起動したターミナルで `Ctrl+C` を押します。
+
+開発サーバーはWASMエンジンのpthread動作に必要なCOOP/COEPヘッダーを返します。Workerエンジン疎通確認では、結果が`ok: true`かつ`crossOriginIsolated: true`になり、表示されるWorker URLが`blob:`ではなく`http:`または`https:`であることを確認してください。
 
 ## 既存の定跡を編集する
 

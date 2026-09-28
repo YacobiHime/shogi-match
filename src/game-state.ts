@@ -65,16 +65,6 @@ export function appendUsiMove(record: Record, usi: string): boolean {
   return Boolean(move && record.append(move));
 }
 
-export function selectCpuMove(
-  position: Position,
-  random: () => number = Math.random,
-): Move | null {
-  const moves = enumerateLegalMoves(position);
-  if (moves.length === 0) return null;
-  const index = Math.min(moves.length - 1, Math.floor(Math.max(0, random()) * moves.length));
-  return moves[index];
-}
-
 export function resultAfterMove(record: Record): MatchResult | null {
   if (record.repetition) {
     const checkingColor = record.perpetualCheck;

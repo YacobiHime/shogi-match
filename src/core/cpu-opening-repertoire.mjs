@@ -3,6 +3,7 @@ import {
   inferOpeningRookStyle,
   isOpeningPlanComplete,
   isIntegratedOpening,
+  isStandaloneOpening,
   mirrorUsiMove,
   openingDefinitionRookStyle,
   openingPlanSteps,
@@ -87,7 +88,7 @@ const TEMPO_STYLE_POOLS = {
 
 /**
  * 「おまかせ」で選ぶ戦法の出現比率（%の目安）。
- * [初級（Lv0〜9）, 級位者（Lv10〜19）, 有段者（Lv20〜22）, プロ級（Lv23〜24）]の順。
+ * [初級（Lv0〜10）, 級位者（Lv11〜20）, 有段者（Lv21〜34）, 高段・プロ級（Lv35〜40）]の順。
  * 将棋ウォーズの級位帯では振り飛車・棒銀・中飛車などの急戦や奇襲が多く、
  * 段位が上がるほど、プロ公式戦のように角換わり・相掛かり・矢倉が中心になる傾向を反映した概数。
  */
@@ -115,12 +116,15 @@ const OPENING_DISTRIBUTION = Object.freeze({
   ureshino: [2, 2, 1, 0],
 });
 
-/** 強さのLvから、戦法分布・囲い選びに使う棋力帯（0〜3）を返す。 */
+/**
+ * 強さのLv（0〜40）から、戦法分布・囲い選びに使う棋力帯（0〜3）を返す。
+ * Lv0〜10は六級程度まで、Lv11〜20は五級〜一級、Lv21〜34はアマ初段〜五段、Lv35以上はアマ六段〜プロ級。
+ */
 export function cpuOpeningTier(level) {
   if (!Number.isFinite(level)) return 1;
-  if (level <= 9) return 0;
-  if (level <= 19) return 1;
-  if (level <= 22) return 2;
+  if (level <= 10) return 0;
+  if (level <= 20) return 1;
+  if (level <= 34) return 2;
   return 3;
 }
 
@@ -486,6 +490,74 @@ export function adaptCpuOpeningPlan({
 }
 
 export { ADAPTIVE_CASTLES as CPU_ADAPTIVE_CASTLES, OPENING_DISTRIBUTION as CPU_OPENING_DISTRIBUTION };
+
+/**
+ * 「おまかせ」で、登録済みの戦法・囲いをランダムに組み合わせる割合。
+ * 基本は実戦の出現比率（OPENING_DISTRIBUTION）で選び、珍しい形の練習になるランダムな組み合わせは
+ * 低レベルでも2割までに抑える。高レベルほど減らし、最高レベルでは選ばない。
+ */
+export function randomOpeningCombinationRate(skill = 0.5) {
+  const value = Number.isFinite(skill) ? Math.max(0, Math.min(1, skill)) : 0.5;
+  return 0.2 * (1 - value);
+}
+
+// 自分と相手の飛車の方針から、囲い分類の対応戦型を決める。
+function castleContextFor(ownStyle, opponentStyle) {
+  if (!ownStyle || !opponentStyle) return undefined;
+  if (ownStyle === "static") return opponentStyle === "ranging" ? "anti-ranging-static" : "aibisha";
+  return opponentStyle === "static" ? "anti-static-ranging" : "double-ranging";
+}
+
+function stylesCompatible(left, right) {
+  return !left || !right || left === "both" || right === "both" || left === right;
+}
+
+/**
+ * 現在の局面で成立する戦法・囲い(呼び出し側で絞り込んだ定義)から、1局分の作戦をランダムに組む。
+ * 戦法と一体の定義(アヒル囲い・右玉など)は相方と組み合わせない。
+ * 相手の飛車の方針が分かっていれば、その戦型に合う囲いを優先する。
+ * @param {{
+ *   strategies?: { id: string, label: string }[],
+ *   castles?: { id: string, label: string, contexts?: string[] }[],
+ *   opponentRookStyle?: string,
+ *   random?: () => number,
+ * }} [options]
+ * @returns {{ strategyId: string, castleId: string, label: string } | null}
+ */
+export function selectRandomOpeningCombination({
+  strategies = [],
+  castles = [],
+  opponentRookStyle,
+  random = Math.random,
+} = {}) {
+  const standaloneCastles = castles.filter(({ id }) => isStandaloneOpening(id, "castle"));
+  const firstPicks = [
+    ...strategies.map((definition) => ({ kind: "strategy", definition })),
+    ...standaloneCastles.map((definition) => ({ kind: "castle", definition })),
+  ];
+  const first = randomChoice(firstPicks, random);
+  if (!first) return null;
+  if (first.kind === "castle") {
+    return { strategyId: "", castleId: first.definition.id, label: first.definition.label };
+  }
+  const strategy = first.definition;
+  if (isStandaloneOpening(strategy.id, "strategy")) {
+    return { strategyId: strategy.id, castleId: "", label: strategy.label };
+  }
+  const style = openingDefinitionRookStyle(strategy.id, "strategy");
+  const compatible = castles.filter(({ id }) => (
+    !isStandaloneOpening(id, "castle")
+    && stylesCompatible(style, openingDefinitionRookStyle(id, "castle"))
+  ));
+  const context = castleContextFor(style, opponentRookStyle);
+  const fitting = context ? compatible.filter(({ contexts = [] }) => contexts.includes(context)) : [];
+  const castle = randomChoice(fitting.length ? fitting : compatible, random);
+  return {
+    strategyId: strategy.id,
+    castleId: castle?.id ?? "",
+    label: [strategy.label, castle?.label].filter(Boolean).join("＋"),
+  };
+}
 
 export function shouldUseCpuOpening({
   ply = 0,

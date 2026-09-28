@@ -27,12 +27,12 @@
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "public, max-age=3600, stale-while-revalidate=86400"
+            "value": "public, max-age=31536000, immutable"
           }
         ]
       },
       {
-        "source": "**/*.@(png|webp|svg|wasm|data)",
+        "source": "**/*.@(png|webp|svg|mp3|wasm|data)",
         "headers": [
           {
             "key": "Cache-Control",
@@ -46,6 +46,15 @@
           {
             "key": "Content-Type",
             "value": "application/wasm"
+          }
+        ]
+      },
+      {
+        "source": "**/*.data",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/octet-stream"
           }
         ]
       },

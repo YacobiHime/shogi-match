@@ -1,5 +1,4 @@
-const GRAPH_SCORE_LIMIT = 6000;
-const MATE_GRAPH_SCORE = GRAPH_SCORE_LIMIT;
+import { GRAPH_MATE_VALUE } from './evaluation-graph-selection.mjs';
 
 /** USIエンジンの手番側評価を、評価値グラフ用の先手視点へ揃える。 */
 export function scoreForBlack(score, sideToMove) {
@@ -10,16 +9,16 @@ export function scoreForBlack(score, sideToMove) {
   return { type: score.type, value };
 }
 
-/** 詰みを含む評価値を、±6000のグラフ座標へ変換する。 */
+/** 詰みを含む評価値をグラフ値へ変換する。評価値は丸めず、詰みはグラフの端を表す値にする。 */
 export function scoreToGraphValue(score) {
   if (!score || !['cp', 'mate'].includes(score.type) || !Number.isFinite(score.value)) {
     return undefined;
   }
   if (score.type === 'mate') {
     if (score.value === 0) return 0;
-    return Math.sign(score.value) * MATE_GRAPH_SCORE;
+    return Math.sign(score.value) * GRAPH_MATE_VALUE;
   }
-  return Math.max(-GRAPH_SCORE_LIMIT, Math.min(GRAPH_SCORE_LIMIT, score.value));
+  return score.value;
 }
 
 export function formatAnalysisScore(score) {
@@ -79,5 +78,3 @@ export function classifyAnalyzedMove({
   }
   return null;
 }
-
-export const KIFU_ANALYSIS_GRAPH_LIMIT = GRAPH_SCORE_LIMIT;

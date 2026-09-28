@@ -10,6 +10,12 @@ export default defineConfig({
     alias: [{ find: "@", replacement: resolve(import.meta.dirname, "src") }],
   },
   plugins: [vue()],
+  server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+    },
+  },
   build: {
     lib: {
       entry: "src/index.js",

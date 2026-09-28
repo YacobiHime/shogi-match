@@ -3,6 +3,7 @@ import {
   getHintMoves,
   getHintSearchSettings,
   getIdleCoachSearchSettings,
+  getMateCheckSearchSettings,
   getOpeningFollowupSearchSettings,
   getOpeningGuideSafetySearchSettings,
   hintMoveAssessment,
@@ -101,5 +102,10 @@ describe('hint arrow evaluations', () => {
       forcedNodes: 2000,
       forcedMaxTimeMs: 150,
     });
+  });
+
+  it('bounds normal engine searches used for mate checks', () => {
+    expect(getMateCheckSearchSettings(false)).toEqual({ nodes: 30000, maxTimeMs: 150 });
+    expect(getMateCheckSearchSettings(true)).toEqual({ nodes: 15000, maxTimeMs: 250 });
   });
 });

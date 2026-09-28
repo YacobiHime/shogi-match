@@ -76,8 +76,8 @@ function playAdaptivePlan({ strategyId, cpuColor, opponentScript, level = 12, ra
 }
 
 describe("CPU opening adaptation", () => {
-  it("maps levels to four strength tiers", () => {
-    expect([0, 9, 10, 19, 20, 22, 23, 24].map(cpuOpeningTier)).toEqual([0, 0, 1, 1, 2, 2, 3, 3]);
+  it("maps the 41 levels to four strength tiers by amateur rank", () => {
+    expect([0, 10, 11, 20, 21, 34, 35, 40].map(cpuOpeningTier)).toEqual([0, 0, 1, 1, 2, 2, 3, 3]);
     expect(cpuOpeningTier(undefined)).toBe(1);
   });
 
@@ -121,8 +121,8 @@ describe("CPU opening adaptation", () => {
     const pick = (level, value) => adapt(plan, moves, "black", { level, random: () => value }).castleId;
     // 低級は舟囲いが大半、プロ級はミレニアムなど手数のかかる囲いを選びやすい。
     expect(pick(3, 0.5)).toBe("funagakoi");
-    expect(pick(24, 0.5)).not.toBe("funagakoi");
-    expect(pick(24, 0.99)).toBe("millennium");
+    expect(pick(40, 0.5)).not.toBe("funagakoi");
+    expect(pick(40, 0.99)).toBe("millennium");
   });
 
   it("keeps the castle once its pieces started moving", () => {

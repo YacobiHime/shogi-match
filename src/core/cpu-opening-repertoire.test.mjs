@@ -5,11 +5,22 @@ import {
   configuredCpuBishopMove,
   configuredCpuFirstMove,
   cpuMoveMatchesBishopPreference,
+  randomOpeningCombinationRate,
   selectCpuOpeningRepertoire,
+  selectRandomOpeningCombination,
   shouldForceConfiguredCpuOpening,
   shouldUseCpuOpening,
 } from "./cpu-opening-repertoire.mjs";
-import { OPENING_STRATEGIES } from "./opening-guide.mjs";
+import { Position } from "tsshogi";
+import { enumerateLegalMoves, STANDARD_SFEN } from "../game-state.ts";
+import {
+  OPENING_CASTLES,
+  OPENING_STRATEGIES,
+  availableOpeningDefinitions,
+  isStandaloneOpening,
+  nextOpeningPlanMove,
+  openingDefinitionRookStyle,
+} from "./opening-guide.mjs";
 
 describe("CPU opening repertoire", () => {
   it.each([
@@ -239,7 +250,7 @@ describe("CPU opening repertoire", () => {
 
   it("leans toward popular amateur openings at low levels and professional openings at high levels", () => {
     const beginner = shares({ cpuColor: "black", level: 3 });
-    const professional = shares({ cpuColor: "black", level: 24 });
+    const professional = shares({ cpuColor: "black", level: 40 });
     // 級位帯は振り飛車・棒銀が多く、プロ級は角換わり・相掛かり・矢倉が中心になる。
     expect(beginner.share(RANGING)).toBeGreaterThan(0.4);
     expect(professional.share(RANGING)).toBeLessThan(0.3);
@@ -336,5 +347,94 @@ describe("CPU opening repertoire", () => {
     expect(shouldUseCpuOpening({ ply: 12, cpuMoveCount: 6, lastMoveWasCapture: true })).toBe(false);
     expect(shouldUseCpuOpening({ ply: 32, cpuMoveCount: 6 })).toBe(false);
     expect(shouldUseCpuOpening({ ply: 20, cpuMoveCount: 16 })).toBe(false);
+  });
+});
+
+describe("おまかせの作戦のランダムな組み合わせ", () => {
+  function seededRandom(seed) {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6D2B79F5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function availableAtStart(color) {
+    const position = Position.newBySFEN(STANDARD_SFEN);
+    const legalMoves = enumerateLegalMoves(position).map(({ usi }) => usi);
+    const context = { color, playedMoves: [], moveHistory: [], legalMoves, currentSfen: STANDARD_SFEN };
+    return {
+      strategies: availableOpeningDefinitions({ ...context, definitions: OPENING_STRATEGIES, kind: "strategy" }),
+      castles: availableOpeningDefinitions({ ...context, definitions: OPENING_CASTLES, kind: "castle" }),
+      legalMoves,
+    };
+  }
+
+  it("ランダムな組み合わせは低レベルでも2割までに抑え、高レベルほど減らす", () => {
+    expect(randomOpeningCombinationRate(0)).toBeCloseTo(0.2);
+    expect(randomOpeningCombinationRate(0.5)).toBeCloseTo(0.1);
+    expect(randomOpeningCombinationRate(1)).toBe(0);
+    const rates = Array.from({ length: 11 }, (_, index) => randomOpeningCombinationRate(index / 10));
+    expect(rates.every((rate, index) => index === 0 || rate <= rates[index - 1])).toBe(true);
+  });
+
+  it("局面で成立する登録済みの戦法と、飛車の方針が合う囲いを組む", () => {
+    const { strategies, castles, legalMoves } = availableAtStart("black");
+    const strategyIds = new Set(strategies.map(({ id }) => id));
+    const castleIds = new Set(castles.map(({ id }) => id));
+    const random = seededRandom(20260927);
+    const picked = new Set();
+    for (let i = 0; i < 400; i += 1) {
+      const plan = selectRandomOpeningCombination({ strategies, castles, random });
+      expect(plan).not.toBeNull();
+      if (plan.strategyId) expect(strategyIds.has(plan.strategyId)).toBe(true);
+      if (plan.castleId) expect(castleIds.has(plan.castleId)).toBe(true);
+      if (!plan.strategyId) expect(isStandaloneOpening(plan.castleId, "castle")).toBe(true);
+      if (isStandaloneOpening(plan.strategyId, "strategy")) expect(plan.castleId).toBe("");
+      if (plan.strategyId && plan.castleId) {
+        const strategyStyle = openingDefinitionRookStyle(plan.strategyId, "strategy");
+        const castleStyle = openingDefinitionRookStyle(plan.castleId, "castle");
+        if (strategyStyle && castleStyle) expect(castleStyle).toBe(strategyStyle);
+      }
+      picked.add(`${plan.strategyId}+${plan.castleId}`);
+    }
+    // 少数の定番だけでなく、登録済みの幅広い組み合わせから選ぶ。
+    expect(picked.size).toBeGreaterThan(40);
+    expect(new Set([...picked].map((key) => key.split("+")[0])).size).toBeGreaterThan(15);
+    // 組んだ作戦は、開始局面から案内手を指し始められる。
+    for (const key of [...picked].slice(0, 30)) {
+      const [strategyId, castleId] = key.split("+");
+      const next = nextOpeningPlanMove({
+        strategyId, castleId, color: "black", playedMoves: [], opponentMoves: [], moveHistory: [],
+        legalMoves, currentSfen: STANDARD_SFEN,
+      });
+      expect(next, key).toBeTruthy();
+      expect(legalMoves).toContain(next.usi);
+    }
+  });
+
+  it("相手の飛車の方針が分かれば、その戦型に合う囲いを選ぶ", () => {
+    const ibisha = OPENING_STRATEGIES.find(({ id }) => id === "ibisha");
+    const random = seededRandom(3);
+    for (let i = 0; i < 50; i += 1) {
+      const plan = selectRandomOpeningCombination({
+        strategies: [ibisha], castles: OPENING_CASTLES, opponentRookStyle: "ranging", random,
+      });
+      const castle = OPENING_CASTLES.find(({ id }) => id === plan.castleId);
+      expect(castle.contexts).toContain("anti-ranging-static");
+    }
+  });
+
+  it("戦法と一体の定義は相方と組み合わせない", () => {
+    const ahiru = OPENING_STRATEGIES.find(({ id }) => id === "ahiru");
+    const rightKing = OPENING_CASTLES.find(({ id }) => id === "right-king");
+    expect(selectRandomOpeningCombination({ strategies: [ahiru], castles: OPENING_CASTLES, random: () => 0 }))
+      .toMatchObject({ strategyId: "ahiru", castleId: "" });
+    expect(selectRandomOpeningCombination({ strategies: [], castles: [rightKing], random: () => 0 }))
+      .toMatchObject({ strategyId: "", castleId: "right-king" });
+    expect(selectRandomOpeningCombination({ strategies: [], castles: [] })).toBeNull();
   });
 });

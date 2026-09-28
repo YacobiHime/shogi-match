@@ -5,7 +5,6 @@ import {
   createGameRecord,
   enumerateLegalMoves,
   resignationResult,
-  selectCpuMove,
 } from "./game-state";
 
 describe("standalone game state", () => {
@@ -23,12 +22,12 @@ describe("standalone game state", () => {
     expect(record.current.ply).toBe(0);
   });
 
-  it("enumerates legal board moves and lets the CPU select one", () => {
+  it("enumerates legal board moves", () => {
     const record = createGameRecord();
     const moves = enumerateLegalMoves(record.position);
     expect(moves.length).toBeGreaterThan(0);
     expect(moves.every((move) => record.position.isValidMove(move))).toBe(true);
-    expect(selectCpuMove(record.position, () => 0)?.usi).toBe(moves[0].usi);
+    // CPUの着手選択は一様ランダムを廃止し、core/cpu-move-choice.test.mjsで確認する。
   });
 
   it("awards resignation to the side that is not on move", () => {

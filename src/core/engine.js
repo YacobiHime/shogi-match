@@ -1,14 +1,13 @@
 /**
  * src/engine/engine.js
  *
- * YaneuraOu.wasm(USIプロトコル)のメインスレッド直接呼び出しラッパー。
+ * YaneuraOu.wasm(USIプロトコル)のブラウザー向け呼び出しラッパー。
  *
  * 実装パターンは tools/m0-verification/index-mainthread.html の initEngine() を
  * そのまま移植したもの。以下の制約は docs/CLAUDE.md「WASM将棋エンジン統合時の必須知識」
  * に従っているので、変更する場合は必ずそちらを読むこと。
  *
- * - Web Workerを一切使わず、メインスレッドから直接エンジンのファクトリ関数を呼び出す
- *   （入れ子Worker構成はcreateObjectURLエラーで動作しないためNG）
+ * - ローダーはメインスレッドから呼ぶが、探索本体はpthread対応WASMが内部Workerで実行する
  * - 評価関数(nn.bin)はpreRunフックでモジュール初期化前に仮想FSへ書き込む
  * - 開発用HTTPサーバーはContent-Lengthヘッダーを明示的に返す必要がある
  *   （tools/m0-verification-suisho5/server.js に実装例あり）
@@ -265,7 +264,13 @@ export class ShogiEngine {
    * @returns {Promise<{
    *   move: string,
    *   ponder?: string,
-   *   candidates: { rank: number, move: string }[]
+   *   candidates: {
+   *     rank: number,
+   *     move: string,
+   *     pv?: string[],
+   *     depth?: number,
+   *     score?: { type: 'cp' | 'mate', value: number }
+   *   }[]
    * }>}
    */
   async go(goOptions = {}) {
@@ -370,52 +375,6 @@ export class ShogiEngine {
       } catch (error) {
         finish(null, error);
       }
-    });
-  }
-
-  /**
-   * USIの詰み専用探索を実行する。通常評価探索とは独立しているため、
-   * CPU難易度のnodes設定に左右されず、詰み手順そのものを返せる。
-   * @param {{ movetime?: number, maxTimeMs?: number }} options
-   * @returns {Promise<{ status: 'mate'|'nomate'|'timeout'|'unsupported', moves: string[] }>}
-   */
-  async goMate(options = {}) {
-    const movetime = options.movetime ?? 3000;
-    const maxTimeMs = options.maxTimeMs ?? movetime + 1500;
-    if (!Number.isInteger(movetime) || movetime < 1) {
-      throw new Error('詰み探索時間は1以上の整数にしてください');
-    }
-    if (!Number.isInteger(maxTimeMs) || maxTimeMs < movetime) {
-      throw new Error('詰み探索の上限時間が不正です');
-    }
-
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = (result) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        const index = this._listeners.indexOf(listener);
-        if (index >= 0) this._listeners.splice(index, 1);
-        resolve(result);
-      };
-      const listener = (line) => {
-        if (!line.startsWith('checkmate')) return;
-        const payload = line.slice('checkmate'.length).trim();
-        if (payload === 'nomate') return finish({ status: 'nomate', moves: [] });
-        if (payload === 'timeout') return finish({ status: 'timeout', moves: [] });
-        if (payload === 'notimplemented') return finish({ status: 'unsupported', moves: [] });
-        const moves = payload.split(/\s+/).filter((move) => USI_MOVE_PATTERN.test(move));
-        finish(moves.length > 0
-          ? { status: 'mate', moves }
-          : { status: 'unsupported', moves: [] });
-      };
-      const timeoutId = setTimeout(() => {
-        try { this.send('stop'); } catch { /* 終了処理中なら何もしない */ }
-        finish({ status: 'timeout', moves: [] });
-      }, maxTimeMs);
-      this.onOutput(listener);
-      this.send(`go mate ${movetime}`);
     });
   }
 

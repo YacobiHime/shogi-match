@@ -139,7 +139,7 @@ describe("integrated strategy and castle plans", () => {
     expect(builtIn.nextOpeningPlanMove({
       ...options,
       legalMoves: enumerateLegalMoves(record.position).map(({ usi }) => usi),
-    })).toEqual({ usi: "8h7i", phase: "castle" });
+    })).toMatchObject({ usi: "8h7i", phase: "castle" });
   });
 });
 

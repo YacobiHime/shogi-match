@@ -1,11 +1,17 @@
 <template>
   <section
+    ref="gameRoot"
     class="shogi-game"
-    :class="{
-      'shogi-game--analysis': reviewMode && analysisOpen,
-      'shogi-game--rook-choice': rangingRookChoiceRequired,
-      'shogi-game--home': homeOpen,
-    }"
+    :class="[
+      `shogi-game--${uiLayout}`,
+      {
+        'shogi-game--analysis': reviewMode && analysisOpen,
+        'shogi-game--short': uiShort,
+        'shogi-game--narrow': uiNarrow,
+        'shogi-game--home': homeOpen,
+      },
+    ]"
+    :style="uiLayoutStyle"
     aria-label="将棋対局"
   >
     <div v-if="homeOpen" class="shogi-home" aria-label="ホーム">
@@ -32,7 +38,7 @@
           <div class="shogi-home__cards">
             <button type="button" class="shogi-home__card" @click="openMatchSetup('normal')">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f2e3c2">
+                <g fill="#fffcf4">
                   <rect x="2" y="2" width="12" height="1" />
                   <rect x="2" y="13" width="12" height="1" />
                   <rect x="2" y="2" width="1" height="12" />
@@ -44,7 +50,7 @@
                   <rect x="2" y="8" width="12" height="1" />
                   <rect x="2" y="11" width="12" height="1" />
                 </g>
-                <g fill="#e8a04c">
+                <g fill="#f1a54c">
                   <rect x="3" y="3" width="2" height="2" />
                   <rect x="12" y="9" width="2" height="2" />
                 </g>
@@ -54,12 +60,12 @@
             </button>
             <button type="button" class="shogi-home__card" @click="openMatchSetup('learning')">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f2e3c2">
+                <g fill="#fffcf4">
                   <rect x="2" y="3" width="12" height="9" />
                   <rect x="7" y="12" width="2" height="2" />
                   <rect x="4" y="14" width="8" height="1" />
                 </g>
-                <g fill="#e8a04c">
+                <g fill="#f1a54c">
                   <rect x="4" y="5" width="2" height="2" />
                   <rect x="7" y="5" width="2" height="2" />
                   <rect x="10" y="5" width="2" height="2" />
@@ -76,12 +82,12 @@
           <div class="shogi-home__cards">
             <button type="button" class="shogi-home__card" @click="dexOpen = true">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f2e3c2">
+                <g fill="#fffcf4">
                   <rect x="2" y="3" width="5" height="10" />
                   <rect x="9" y="3" width="5" height="10" />
                   <rect x="7" y="2" width="2" height="12" />
                 </g>
-                <g fill="#e8a04c">
+                <g fill="#f1a54c">
                   <rect x="3" y="4" width="3" height="1" />
                   <rect x="3" y="6" width="3" height="1" />
                   <rect x="3" y="8" width="3" height="1" />
@@ -94,7 +100,7 @@
             </button>
             <button type="button" class="shogi-home__card" disabled>
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#e8a04c">
+                <g fill="#f1a54c">
                   <rect x="5" y="1" width="6" height="1" />
                   <rect x="4" y="2" width="8" height="2" />
                   <rect x="3" y="4" width="10" height="8" />
@@ -108,11 +114,11 @@
             </button>
             <button type="button" class="shogi-home__card" disabled>
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f2e3c2">
+                <g fill="#fffcf4">
                   <rect x="3" y="2" width="10" height="12" />
                   <rect x="2" y="1" width="2" height="14" />
                 </g>
-                <g fill="#e8a04c">
+                <g fill="#f1a54c">
                   <rect x="6" y="4" width="6" height="1" />
                   <rect x="6" y="6" width="6" height="1" />
                   <rect x="6" y="8" width="6" height="1" />
@@ -133,38 +139,98 @@
       @close="dexOpen = false"
     />
 
-    <header
-      class="shogi-game__toolbar"
-      :class="{ 'shogi-game__toolbar--learning': matchKind === 'learning' }"
-    >
-      <button
-        type="button"
-        class="shogi-game__command"
-        :class="reviewMode ? 'shogi-game__command--complete' : 'shogi-game__command--danger'"
-        :disabled="!active"
-        @click="reviewMode ? completeReview() : resign()"
+    <header class="shogi-game__header">
+      <div class="shogi-game__status" aria-live="polite">
+        <strong>{{ statusText }}</strong>
+        <span>{{ moveCount }}手目</span>
+      </div>
+      <div
+        class="shogi-game__toolbar"
+        :class="{ 'shogi-game__toolbar--learning': matchKind === 'learning' }"
       >
-        {{ reviewMode ? "完了" : "投了" }}
-      </button>
-      <button type="button" class="shogi-game__command shogi-game__command--settings" @click="toggleSettings">
-        設定
-      </button>
-      <button
-        type="button"
-        class="shogi-game__command shogi-game__command--flip"
-        aria-label="盤面を上下反転（ひふみんアイ）"
-        :aria-pressed="boardFlipOverride"
-        @click="boardFlipOverride = !boardFlipOverride"
-      >ひふみんアイ</button>
-      <button
-        v-if="matchKind === 'learning'"
-        type="button"
-        class="shogi-game__command shogi-game__command--attack"
-        aria-label="駒の利きを表示"
-        :aria-pressed="attackGuideEnabled"
-        @click="attackGuideEnabled = !attackGuideEnabled"
-      >駒の利き</button>
-      <span class="shogi-game__turn">{{ moveCount }}手目</span>
+        <template v-if="!menuCollapsed">
+          <button
+            type="button"
+            class="shogi-game__command"
+            :class="reviewMode ? 'shogi-game__command--complete' : 'shogi-game__command--danger'"
+            :disabled="!active"
+            @click="reviewMode ? completeReview() : requestResign()"
+          >{{ reviewMode ? "完了" : "投了" }}</button>
+          <button
+            type="button"
+            class="shogi-game__command shogi-game__command--flip"
+            aria-label="盤面を上下反転（ひふみんアイ）"
+            :aria-pressed="boardFlipOverride"
+            @click="boardFlipOverride = !boardFlipOverride"
+          >ひふみんアイ</button>
+          <button
+            v-if="matchKind === 'learning'"
+            type="button"
+            class="shogi-game__command shogi-game__command--attack"
+            aria-label="駒の利きを表示"
+            :aria-pressed="attackGuideEnabled"
+            @click="attackGuideEnabled = !attackGuideEnabled"
+          >駒の利き</button>
+        </template>
+        <button
+          type="button"
+          class="shogi-game__command shogi-game__menu-toggle"
+          :aria-expanded="settingsOpen"
+          aria-haspopup="menu"
+          :aria-label="menuCollapsed ? 'メニュー' : '設定'"
+          @click="toggleSettings"
+        >
+          <svg v-if="menuCollapsed" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <rect x="3" y="4" width="14" height="2" rx="1" />
+            <rect x="3" y="9" width="14" height="2" rx="1" />
+            <rect x="3" y="14" width="14" height="2" rx="1" />
+          </svg>
+          <span v-else>設定</span>
+        </button>
+      </div>
+      <div v-if="settingsOpen" class="shogi-game__menu-backdrop" aria-hidden="true" @click="closeSettings"></div>
+      <div v-if="settingsOpen" class="shogi-game__menu" role="menu" @keydown.esc="closeSettings">
+        <template v-if="menuCollapsed">
+          <button
+            type="button"
+            role="menuitem"
+            class="shogi-game__menu-item"
+            :class="reviewMode ? 'shogi-game__menu-item--complete' : 'shogi-game__menu-item--danger'"
+            :disabled="!active"
+            @click="closeSettings(); reviewMode ? completeReview() : requestResign()"
+          >{{ reviewMode ? "検討を完了する" : "投了する" }}</button>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            class="shogi-game__menu-item"
+            :aria-checked="boardFlipOverride"
+            @click="boardFlipOverride = !boardFlipOverride"
+          >
+            <span>ひふみんアイ（盤を反転）</span>
+            <b>{{ boardFlipOverride ? "ON" : "OFF" }}</b>
+          </button>
+          <button
+            v-if="matchKind === 'learning'"
+            type="button"
+            role="menuitemcheckbox"
+            class="shogi-game__menu-item"
+            :aria-checked="attackGuideEnabled"
+            @click="attackGuideEnabled = !attackGuideEnabled"
+          >
+            <span>駒の利きを表示</span>
+            <b>{{ attackGuideEnabled ? "ON" : "OFF" }}</b>
+          </button>
+        </template>
+        <label class="shogi-game__menu-field">
+          <span>やこび姫の助言</span>
+          <select v-model="coachLevel" aria-label="対局中の助言">
+            <option value="off">なし</option>
+            <option value="encourage">応援のみ</option>
+            <option value="detailed">詳しい助言</option>
+          </select>
+        </label>
+        <button type="button" class="shogi-game__menu-close" @click="closeSettings">閉じる</button>
+      </div>
     </header>
 
     <div
@@ -223,8 +289,12 @@
               <div v-else class="shogi-game__strategy-details">
                 <label>
                   <span>戦法</span>
-                  <select v-model="cpuDetailedStrategy" aria-label="対局前の相手の戦法を指定">
-                    <option value="">指定なし</option>
+                  <select
+                    v-model="cpuDetailedStrategy"
+                    aria-label="対局前の相手の戦法を指定"
+                    :disabled="cpuStrategySelectLocked"
+                  >
+                    <option value="">{{ cpuStrategySelectLocked ? "囲いと一体のため選べません" : "指定なし" }}</option>
                     <optgroup v-for="group in cpuDetailedStrategyGroups" :key="group.id" :label="group.label">
                       <option v-for="strategy in group.options" :key="strategy.id" :value="strategy.id">
                         {{ strategy.label }}
@@ -237,9 +307,9 @@
                   <select
                     v-model="cpuDetailedCastle"
                     aria-label="対局前の相手の囲いを指定"
-                    :disabled="isIntegratedOpening(cpuDetailedStrategy, 'strategy')"
+                    :disabled="cpuCastleSelectLocked"
                   >
-                    <option value="">{{ isIntegratedOpening(cpuDetailedStrategy, "strategy") ? "戦法に含む" : "指定なし" }}</option>
+                    <option value="">{{ cpuCastleSelectLocked ? "戦法と一体のため選べません" : "指定なし" }}</option>
                     <optgroup v-for="group in cpuDetailedCastleGroups" :key="group.id" :label="group.label">
                       <option v-for="castle in group.options" :key="castle.id" :value="castle.id">
                         {{ castle.label }}
@@ -253,11 +323,16 @@
               </button>
             </div>
           </div>
-          <div
+          <details
             v-if="normalizedMode === 'cpu' && !pregameUsesCustomStart"
             class="shogi-game__pregame-field shogi-game__pregame-field--opening-tendency"
+            :open="pregameTendencyOpen"
+            @toggle="pregameTendencyOpen = ($event.target as HTMLDetailsElement).open"
           >
-            <span>相手の序盤傾向</span>
+            <summary>
+              <span>相手の序盤傾向</span>
+              <small>{{ pregameTendencySummary }}</small>
+            </summary>
             <div class="shogi-game__opening-tendency">
               <label>
                 <span>角道</span>
@@ -292,8 +367,8 @@
                 </select>
               </label>
             </div>
-            <small>初手を最優先し、その後は角道の具体的な指定を定跡より優先します。</small>
-          </div>
+            <small class="shogi-game__pregame-hint">初手を最優先し、その後は角道の具体的な指定を定跡より優先します。</small>
+          </details>
           <div
             v-if="normalizedMode === 'cpu' && !(matchKind === 'learning' && learningStartType === 'handicap')"
             class="shogi-game__pregame-field shogi-game__pregame-field--turn"
@@ -375,11 +450,11 @@
                       <select
                         :value="side.id === 'player' ? learningPlayerCastle : learningOpponentCastle"
                         :aria-label="`${side.label}の完成させる囲い`"
-                        :disabled="isIntegratedOpening(side.id === 'player' ? learningPlayerStrategy : learningOpponentStrategy, 'strategy')"
+                        :disabled="isStandaloneOpening(side.id === 'player' ? learningPlayerStrategy : learningOpponentStrategy, 'strategy')"
                         @change="setLearningPlan(side.id, 'castle', ($event.target as HTMLSelectElement).value)"
                       >
                         <option value="">
-                          {{ isIntegratedOpening(side.id === "player" ? learningPlayerStrategy : learningOpponentStrategy, "strategy") ? "戦法に含む" : "選択しない" }}
+                          {{ isStandaloneOpening(side.id === "player" ? learningPlayerStrategy : learningOpponentStrategy, "strategy") ? "戦法に含む" : "選択しない" }}
                         </option>
                         <optgroup
                           v-for="group in (side.id === 'player' ? learningPlayerPlanOptions : learningOpponentPlanOptions).castles"
@@ -433,200 +508,32 @@
             </select>
           </label>
         </div>
-        <p v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-note">
-          {{ engineUnavailable ? "簡易CPUで対局します" : engineReady ? "準備できました" : "対局AIを準備しています…" }}
-        </p>
-        <button
-          type="button"
-          class="shogi-game__pregame-start"
-          :disabled="(normalizedMode === 'cpu' && !engineReady && !engineUnavailable) || learningStartBlocked"
-          @click="beginMatch"
-        >
-          {{ normalizedMode === "cpu" && !engineReady && !engineUnavailable ? "準備中…" : "対局開始" }}
-        </button>
+        <div class="shogi-game__pregame-footer">
+          <p v-if="normalizedMode === 'cpu'" class="shogi-game__pregame-note">
+            {{ engineUnavailable ? "簡易CPUで対局します" : engineReady ? "準備できました" : "対局AIを準備しています…" }}
+          </p>
+          <button
+            type="button"
+            class="shogi-game__pregame-start"
+            :disabled="(normalizedMode === 'cpu' && !engineReady && !engineUnavailable) || learningStartBlocked"
+            @click="beginMatch"
+          >
+            {{ normalizedMode === "cpu" && !engineReady && !engineUnavailable ? "準備中…" : "対局開始" }}
+          </button>
+        </div>
       </div>
     </div>
 
-    <section class="shogi-game__player-zone shogi-game__player-zone--opponent">
-      <div class="shogi-game__match-summary" aria-live="polite">
-        <div class="shogi-game__match-summary-status">
-          <strong>{{ statusText }}</strong>
-          <span>{{ modeText }}・{{ moveCount }}手</span>
-        </div>
-        <div class="shogi-game__formation-summary">
-          <div><b>先手・戦型</b><span>{{ blackFormationText }}</span></div>
-          <div><b>後手・戦型</b><span>{{ whiteFormationText }}</span></div>
-        </div>
+    <section class="shogi-game__summary" aria-label="対戦相手と戦型">
+      <div v-if="cpuColor !== null" class="shogi-game__summary-opponent">
+        <b>対戦相手</b>
+        <span>{{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}<small v-if="cpuStrengthLabel">{{ cpuStrengthLabel }}</small></span>
       </div>
-      <section class="shogi-game__opening-guide shogi-game__opening-guide--primary" aria-label="やこび姫補助">
-        <h2>やこび姫補助</h2>
-        <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
-        <div v-if="openingGuideAvailable" class="shogi-game__opening-selects">
-          <div class="shogi-game__opening-strategy-field">
-            <label>
-              <span>戦法</span>
-              <select
-                v-model="selectedStrategy"
-                aria-label="戦法"
-                :disabled="strategySelectionLocked"
-                @change="selectOpeningStrategy"
-              >
-                <option value="">{{ strategySelectionLocked ? "囲いに含む" : "選択しない" }}</option>
-                <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
-                  <option
-                    v-for="strategy in group.options"
-                    :key="strategy.id"
-                    :value="strategy.id"
-                    :disabled="strategy.disabled"
-                  >
-                    {{ strategy.optionLabel }}
-                  </option>
-                </optgroup>
-              </select>
-            </label>
-            <button
-              v-if="selectedStrategyExplanation"
-              type="button"
-              class="shogi-game__opening-explanation-trigger"
-              :aria-label="`${selectedStrategyDefinition?.label}の解説`"
-              @click="strategyExplanationOpen = true"
-            >解説</button>
-          </div>
-          <label>
-            <span>囲い</span>
-            <select
-              v-model="selectedCastle"
-              aria-label="囲い"
-              :disabled="castleSelectionLocked"
-              @change="selectOpeningCastle"
-            >
-              <option value="">{{ castleSelectionLocked ? castleSelectionLockedLabel : "選択しない" }}</option>
-              <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
-                <option
-                  v-for="castle in group.options"
-                  :key="castle.id"
-                  :value="castle.id"
-                  :disabled="castle.disabled"
-                >
-                  {{ castle.optionLabel }}
-                </option>
-              </optgroup>
-            </select>
-          </label>
-        </div>
-        <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
-          <span>この囲いでは、先に飛車を振る場所を選んでね</span>
-          <div>
-            <button
-              v-for="choice in rangingRookChoices"
-              :key="choice.id"
-              type="button"
-              @click="chooseRangingRookStrategy(choice.id)"
-            >{{ choice.label }}</button>
-          </div>
-        </div>
-        <div v-if="strategyCompletionChoiceRequired" class="shogi-game__rook-choice shogi-game__strategy-choice">
-          <span>{{ strategyCompletionPrompt }}</span>
-          <div>
-            <button
-              v-for="choice in strategyCompletionChoices"
-              :key="choice.id"
-              type="button"
-              @click="chooseStrategyCompletion(choice.id)"
-            >{{ choice.label }}</button>
-          </div>
-        </div>
-        <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
-      </section>
+      <div><b>先手</b><span>{{ blackFormationText }}</span></div>
+      <div><b>後手</b><span>{{ whiteFormationText }}</span></div>
     </section>
 
-    <div v-if="settingsOpen" class="shogi-game__settings">
-      <div class="shogi-game__settings-title">対局設定</div>
-      <div class="shogi-game__settings-grid">
-        <label class="shogi-game__strength">
-          <span>やこび姫の助言</span>
-          <select v-model="coachLevel" aria-label="対局中の助言">
-            <option value="off">なし</option>
-            <option value="encourage">応援のみ</option>
-            <option value="detailed">詳しい助言</option>
-          </select>
-        </label>
-      </div>
-      <div class="shogi-game__settings-actions">
-        <button type="button" @click="closeSettings">閉じる</button>
-      </div>
-    </div>
-
-    <div ref="boardShell" class="shogi-game__board-shell">
-      <ShogiMatchBoard
-        :sfen="currentSfen"
-        :last-move="lastMove"
-        :allow-move="canMove"
-        :enable-drag-and-drop="enableDragAndDrop"
-        :flip="flipBoard"
-        :mobile="mobile || boardLayout === 'portrait'"
-        :layout="boardLayout"
-        :asset-base-url="assetBaseUrl"
-        :black-player-name="blackPlayerName"
-        :white-player-name="effectiveWhitePlayerName"
-        :candidates="boardCandidates"
-        :attack-marks="boardAttackMarks"
-        @usi-move="onPlayerMove"
-      />
-    </div>
-
-    <section class="shogi-game__player-zone shogi-game__player-zone--player">
-      <picture class="shogi-game__portrait shogi-game__portrait--advisor">
-        <source
-          media="(min-width: 1100px) and (min-aspect-ratio: 5/4)"
-          :srcset="coachPortraitUrl"
-        >
-        <img
-          class="shogi-game__character"
-          :src="coachPortraitUrl"
-          :data-expression="coachExpression"
-          alt="助言役のやこび姫"
-        >
-      </picture>
-      <div v-if="hintText || guideText" class="shogi-game__dialogue">
-        <span class="shogi-game__dialogue-icon" aria-hidden="true">
-          <svg viewBox="0 0 26 32" focusable="false">
-            <path
-              class="shogi-game__flame-outer"
-              d="M13 1.5c1.1 4.8-1.6 7-3.6 9.7-2.1 2.9-3.8 5.6-3.8 9.1 0 5.8 3.8 10.2 8.9 10.2 5.8 0 9.9-4.2 9.9-10.1 0-4.8-2.7-9.2-7.2-13.5.3 3.3-.7 5.6-2.6 7.3.5-5.4-1.1-9.3-1.6-12.7Z"
-            />
-            <path
-              class="shogi-game__flame-inner"
-              d="M14.8 15.1c.2 2.1-.5 3.4-1.7 4.7-1.1 1.3-1.8 2.6-1.8 4.2 0 2.6 1.7 4.6 4.2 4.6 2.7 0 4.6-2 4.6-4.7 0-2.5-1.6-5.2-5.3-8.8Z"
-            />
-          </svg>
-        </span>
-        <span class="shogi-game__dialogue-text">{{ hintText || guideText }}</span>
-      </div>
-      <div class="shogi-game__assist-actions">
-        <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
-          閃き <small>×{{ reviewMode ? "∞" : formatAssistCount(hintsRemaining) }}</small>
-        </button>
-        <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
-          待った ×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}
-        </button>
-        <button
-          v-if="reviewMode"
-          type="button"
-          class="shogi-game__analysis-button"
-          :disabled="thinking && !analysisRunning"
-          @click="openKifuAnalysis"
-        >{{ analysisRunning ? "解析中…" : analysisPoints.length ? "解析グラフ" : "棋譜解析" }}</button>
-        <button
-          v-if="reviewMode && reviewCpuEnabled"
-          type="button"
-          class="shogi-game__review-cpu-stop"
-          @click="stopReviewCpu"
-        >対CPU検討を終了</button>
-      </div>
-    </section>
-
-    <section class="shogi-game__opening-guide shogi-game__opening-guide--portrait" aria-label="やこび姫補助">
+    <section class="shogi-game__opening-guide" aria-label="やこび姫補助">
       <h2>やこび姫補助</h2>
       <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
       <div v-if="openingGuideAvailable" class="shogi-game__opening-selects">
@@ -636,10 +543,10 @@
             <select
               v-model="selectedStrategy"
               aria-label="戦法"
-              :disabled="strategySelectionLocked"
-              @change="selectOpeningStrategy"
+              :disabled="strategySelectLocked"
+              @change="announceOpeningGuide"
             >
-              <option value="">{{ strategySelectionLocked ? "囲いに含む" : "選択しない" }}</option>
+              <option value="">{{ strategySelectLocked ? "囲いと一体のため選べません" : "選択しない" }}</option>
               <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
                 <option
                   v-for="strategy in group.options"
@@ -665,10 +572,10 @@
           <select
             v-model="selectedCastle"
             aria-label="囲い"
-            :disabled="castleSelectionLocked"
-            @change="selectOpeningCastle"
+            :disabled="castleSelectLocked"
+            @change="announceOpeningGuide"
           >
-            <option value="">{{ castleSelectionLocked ? castleSelectionLockedLabel : "選択しない" }}</option>
+            <option value="">{{ castleSelectLocked ? castleSelectionLockedLabel : "選択しない" }}</option>
             <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
               <option
                 v-for="castle in group.options"
@@ -704,8 +611,110 @@
           >{{ choice.label }}</button>
         </div>
       </div>
+      <div
+        v-if="nearCompletionPrompt"
+        class="shogi-game__rook-choice shogi-game__strategy-choice"
+      >
+        <span>{{ nearCompletionPrompt.label }}までできたよ！{{ nearCompletionPrompt.definitionLabel }}まで続ける？</span>
+        <div>
+          <button type="button" @click="continueToFullForm">完全形まで続ける</button>
+          <button type="button" @click="finishAtNearForm">ここで終える</button>
+        </div>
+      </div>
       <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
     </section>
+
+    <section v-if="uiLayout === 'wide'" class="shogi-game__kifu" aria-label="棋譜">
+      <h2>棋譜</h2>
+      <ol ref="kifuList">
+        <li v-if="!kifuEntries.length" class="shogi-game__kifu-empty">まだ指し手はありません</li>
+        <li
+          v-for="entry in kifuEntries"
+          :key="entry.ply"
+          :class="{ 'shogi-game__kifu-current': entry.ply === currentKifuPly }"
+        >
+          <button
+            v-if="reviewMode && !reviewCpuEnabled"
+            type="button"
+            @click="goToReviewLinePly(entry.ply)"
+          ><small>{{ entry.ply }}</small>{{ entry.text }}</button>
+          <span v-else><small>{{ entry.ply }}</small>{{ entry.text }}</span>
+        </li>
+      </ol>
+    </section>
+
+    <div ref="boardShell" class="shogi-game__board-shell">
+      <ShogiMatchBoard
+        :sfen="currentSfen"
+        :last-move="lastMove"
+        :allow-move="canMove"
+        :enable-drag-and-drop="enableDragAndDrop"
+        :flip="flipBoard"
+        :mobile="mobile || boardLayout === 'portrait'"
+        :layout="boardLayout"
+        :asset-base-url="assetBaseUrl"
+        :black-player-name="effectiveBlackPlayerName"
+        :white-player-name="effectiveWhitePlayerName"
+        :black-player-detail="cpuColor === Color.BLACK ? cpuStrengthLabel : ''"
+        :white-player-detail="cpuColor === Color.WHITE ? cpuStrengthLabel : ''"
+        :candidates="boardCandidates"
+        :attack-marks="boardAttackMarks"
+        @usi-move="onPlayerMove"
+      />
+    </div>
+
+    <section class="shogi-game__coach" aria-label="やこび姫">
+      <div class="shogi-game__portrait">
+        <img
+          class="shogi-game__character"
+          :src="coachPortraitUrl"
+          :data-expression="coachExpression"
+          alt="助言役のやこび姫"
+        >
+      </div>
+      <div v-if="hintText || guideText" class="shogi-game__dialogue">
+        <span class="shogi-game__dialogue-icon" aria-hidden="true">
+          <svg viewBox="0 0 26 32" focusable="false">
+            <path
+              class="shogi-game__flame-outer"
+              d="M13 1.5c1.1 4.8-1.6 7-3.6 9.7-2.1 2.9-3.8 5.6-3.8 9.1 0 5.8 3.8 10.2 8.9 10.2 5.8 0 9.9-4.2 9.9-10.1 0-4.8-2.7-9.2-7.2-13.5.3 3.3-.7 5.6-2.6 7.3.5-5.4-1.1-9.3-1.6-12.7Z"
+            />
+            <path
+              class="shogi-game__flame-inner"
+              d="M14.8 15.1c.2 2.1-.5 3.4-1.7 4.7-1.1 1.3-1.8 2.6-1.8 4.2 0 2.6 1.7 4.6 4.2 4.6 2.7 0 4.6-2 4.6-4.7 0-2.5-1.6-5.2-5.3-8.8Z"
+            />
+          </svg>
+        </span>
+        <span class="shogi-game__dialogue-text"><template
+          v-for="(segment, index) in dialogueSegments"
+          :key="index"
+        ><ruby v-if="segment.ruby">{{ segment.text }}<rt>{{ segment.ruby }}</rt></ruby><template
+          v-else
+        >{{ segment.text }}</template></template></span>
+      </div>
+    </section>
+
+    <div class="shogi-game__assist-actions">
+      <button type="button" class="shogi-game__awakening" :disabled="!canUseHint" @click="showHint">
+        閃き <small>×{{ reviewMode ? "∞" : formatAssistCount(hintsRemaining) }}</small>
+      </button>
+      <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
+        待った <small>×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}</small>
+      </button>
+      <button
+        v-if="reviewMode && !analysisOpen"
+        type="button"
+        class="shogi-game__analysis-button"
+        :disabled="thinking && !analysisRunning"
+        @click="openKifuAnalysis"
+      >{{ analysisRunning ? "解析中…" : analysisPoints.length ? "解析グラフ" : "棋譜解析" }}</button>
+      <button
+        v-if="reviewMode && reviewCpuEnabled"
+        type="button"
+        class="shogi-game__review-cpu-stop"
+        @click="stopReviewCpu"
+      >対CPU検討を終了</button>
+    </div>
 
     <div
       v-if="strategyExplanationOpen && selectedStrategyDefinition && selectedStrategyExplanation"
@@ -747,21 +756,7 @@
       aria-label="棋譜解析"
     >
       <div class="shogi-game__analysis-info">
-        <span>先手:{{ blackPlayerName }}</span>
         <strong>{{ record.position.color === Color.BLACK ? "先手番" : "後手番" }}</strong>
-        <div class="shogi-game__analysis-slider">
-          <input
-            type="range"
-            min="0"
-            :max="reviewNavigation.line.length"
-            step="1"
-            :value="reviewNavigation.cursor"
-            :disabled="reviewCpuEnabled"
-            aria-label="表示する局面の手数"
-            @input="onReviewSliderInput"
-            @change="refreshReviewCoachAdvice()"
-          >
-        </div>
         <select
           :value="reviewNavigation.cursor"
           :disabled="reviewCpuEnabled"
@@ -775,6 +770,25 @@
         <span v-if="analysisRunning" class="shogi-game__analysis-progress">
           解析中 {{ analysisProgress }}/{{ analysisTotal }}
         </span>
+        <button
+          type="button"
+          class="shogi-game__analysis-close"
+          aria-label="解析を閉じる"
+          @click="analysisOpen = false; analysisMenuOpen = false"
+        >×</button>
+      </div>
+      <div class="shogi-game__analysis-slider">
+        <input
+          type="range"
+          min="0"
+          :max="reviewNavigation.line.length"
+          step="1"
+          :value="reviewNavigation.cursor"
+          :disabled="reviewCpuEnabled"
+          aria-label="表示する局面の手数"
+          @input="onReviewSliderInput"
+          @change="refreshReviewCoachAdvice()"
+        >
       </div>
       <EvaluationGraph
         :points="analysisPoints"
@@ -783,28 +797,62 @@
         @select="goToAnalysisPly"
       />
       <div class="shogi-game__analysis-actions">
-        <button type="button" aria-label="開始局面へ" :disabled="reviewCpuEnabled || reviewNavigation.cursor === 0" @click="goToAnalysisPly(0)">&lt;&lt;</button>
-        <button type="button" aria-label="一手戻る" :disabled="reviewCpuEnabled || reviewNavigation.cursor === 0" @click="navigateAnalysis(-1)">&lt;</button>
-        <button type="button" aria-label="一手進む" :disabled="reviewCpuEnabled || reviewNavigation.cursor >= reviewNavigation.line.length" @click="navigateAnalysis(1)">&gt;</button>
-        <button type="button" aria-label="最終局面へ" :disabled="reviewCpuEnabled || reviewNavigation.cursor >= reviewNavigation.line.length" @click="goToAnalysisPly(reviewNavigation.line.length)">&gt;&gt;</button>
-        <button type="button" :disabled="!canUseHint" @click="showHint">ヒント</button>
-        <button type="button" :disabled="!analysisCurrentPoint?.bestMove" @click="showAnalysisRecommendation">推奨</button>
-        <button type="button" :disabled="!analysisCurrentPoint?.pv?.length" @click="showAnalysisLine">読み</button>
-        <button v-if="reviewNavigation.branch" type="button" @click="returnToMainLine">本筋</button>
-        <button v-if="analysisRunning" type="button" @click="cancelKifuAnalysis">中止</button>
-        <button v-else type="button" :disabled="reviewCpuEnabled" @click="runKifuAnalysis">再解析</button>
-        <button
-          v-if="!reviewCpuEnabled"
-          type="button"
-          :disabled="analysisRunning || thinking || !engineReady"
-          @click="startReviewCpu"
-        >ここから対CPU</button>
-        <button v-else type="button" @click="stopReviewCpu">対CPU終了</button>
-        <button type="button" @click="analysisOpen = false">閉じる</button>
+        <div class="shogi-game__analysis-nav">
+          <button type="button" aria-label="開始局面へ" :disabled="reviewCpuEnabled || reviewNavigation.cursor === 0" @click="goToAnalysisPly(0)">⏮</button>
+          <button type="button" aria-label="一手戻る" :disabled="reviewCpuEnabled || reviewNavigation.cursor === 0" @click="navigateAnalysis(-1)">◀</button>
+          <button type="button" aria-label="一手進む" :disabled="reviewCpuEnabled || reviewNavigation.cursor >= reviewNavigation.line.length" @click="navigateAnalysis(1)">▶</button>
+          <button type="button" aria-label="最終局面へ" :disabled="reviewCpuEnabled || reviewNavigation.cursor >= reviewNavigation.line.length" @click="goToAnalysisPly(reviewNavigation.line.length)">⏭</button>
+        </div>
+        <div class="shogi-game__analysis-tools">
+          <button type="button" :disabled="!canUseHint" @click="showHint">ヒント</button>
+          <button type="button" :disabled="!analysisCurrentPoint?.bestMove" @click="showAnalysisRecommendation">推奨</button>
+          <button type="button" :disabled="!analysisCurrentPoint?.pv?.length" @click="showAnalysisLine">読み</button>
+          <button
+            type="button"
+            class="shogi-game__analysis-more"
+            :aria-expanded="analysisMenuOpen"
+            aria-haspopup="menu"
+            @click="analysisMenuOpen = !analysisMenuOpen"
+          >その他 <span aria-hidden="true">{{ analysisMenuOpen ? "▴" : "▾" }}</span></button>
+        </div>
+        <div v-if="analysisMenuOpen" class="shogi-game__analysis-menu" role="menu">
+          <button v-if="reviewNavigation.branch" type="button" role="menuitem" @click="analysisMenuOpen = false; returnToMainLine()">本筋に戻る</button>
+          <button v-if="analysisRunning" type="button" role="menuitem" @click="analysisMenuOpen = false; cancelKifuAnalysis()">解析を中止</button>
+          <button v-else type="button" role="menuitem" :disabled="reviewCpuEnabled" @click="analysisMenuOpen = false; runKifuAnalysis()">再解析</button>
+          <button
+            v-if="!reviewCpuEnabled"
+            type="button"
+            role="menuitem"
+            :disabled="analysisRunning || thinking || !engineReady"
+            @click="analysisMenuOpen = false; startReviewCpu()"
+          >ここから対CPU</button>
+          <button v-else type="button" role="menuitem" @click="analysisMenuOpen = false; stopReviewCpu()">対CPU終了</button>
+        </div>
       </div>
     </section>
 
-    <p v-if="errorMessage" class="shogi-game__error" role="alert">{{ errorMessage }}</p>
+    <div v-if="errorMessage" class="shogi-game__error" role="alert">
+      <p>{{ errorMessage }}</p>
+      <button type="button" aria-label="メッセージを閉じる" @click="errorMessage = ''">×</button>
+    </div>
+
+    <div
+      v-if="resignConfirmOpen"
+      class="shogi-game__confirm"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="resign-confirm-title"
+      @click.self="resignConfirmOpen = false"
+    >
+      <div class="shogi-game__confirm-panel">
+        <h2 id="resign-confirm-title">投了しますか？</h2>
+        <p>投了すると対局が終わります。</p>
+        <div>
+          <button type="button" class="shogi-game__confirm-danger" @click="confirmResign">投了する</button>
+          <button type="button" @click="resignConfirmOpen = false">対局を続ける</button>
+        </div>
+      </div>
+    </div>
 
     <div
       v-if="resultDialogOpen && result && resultPresentation"
@@ -851,11 +899,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Color, PieceType, Position, Record, Square, reverseColor } from "tsshogi";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
+import { Color, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
+import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import {
   appendUsiMove,
   createGameRecord,
@@ -864,7 +913,6 @@ import {
   MatchResult,
   resignationResult,
   resultAfterMove,
-  selectCpuMove,
   STANDARD_SFEN,
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
@@ -898,20 +946,39 @@ import {
   COACH_EXPRESSION_FILES,
   coachExpressionFilename,
   coachExpressionForText,
+  coachTextSegments,
 } from "./core/coach-expression.mjs";
+import {
+  advanceTurningPoints,
+  classifyMoveQuality,
+  createTurningPointState,
+  getMovePraise,
+  materialGain,
+  movePraiseNeedsMateThreatCheck,
+  rewindTurningPointState,
+} from "./core/move-praise.mjs";
 import { getIdleCoachAdvice, IDLE_COACH_DELAY_MS } from "./core/idle-coach-advice.mjs";
 import {
   formatHintMove,
+  formatSpokenMove,
   getHintMoves,
   getHintSearchSettings,
   getIdleCoachSearchSettings,
+  getMateCheckSearchSettings,
   getOpeningFollowupSearchSettings,
   getOpeningGuideSafetySearchSettings,
+  getPraiseBaselineSearchSettings,
   hintMoveAssessment,
   hintScoreForArrow,
 } from "./core/match-assists.mjs";
-import { selectMoveByRank } from "./core/move-selection.mjs";
-import { detectStrictMateThreat, findMateInOne } from "./core/mate-threat";
+import {
+  flipSideToMove,
+  mateCheckResultFromCandidate,
+  parseMateScore,
+} from "./core/engine-mate-check.mjs";
+import { chooseCpuMove, chooseNaturalMove } from "./core/cpu-move-choice.mjs";
+import { createAssistSearchControl } from "./core/assist-search-control.mjs";
+import { findMateInOne } from "./core/mate-threat";
 import {
   classifyAnalyzedMove,
   formatAnalysisScore,
@@ -921,7 +988,9 @@ import {
 import {
   CPU_STRENGTH_PRESETS,
   getStrengthSearchSettings,
-  usesRandomLegalMove,
+  normalizeStrengthValue,
+  strengthPresetFor,
+  usesNaturalMoveOnly,
 } from "./core/strength-settings.mjs";
 import {
   appendReviewMove,
@@ -937,25 +1006,31 @@ import {
   chooseSafeOpeningMove,
   filterOpeningCompatibleCandidates,
   inferOpeningRookStyle,
-  isIntegratedOpening,
   isOpeningGuideExpired,
   isOpeningPlanComplete,
+  isStandaloneOpening,
   nextOpeningPlanMove,
   openingCanonicalFollowupCandidates as getOpeningCanonicalFollowupCandidates,
+  openingCastleDistance,
+  openingNearCompletion,
+  openingCastleReselection,
   openingDefinitionRookStyle,
   openingDetourArrowCandidates,
   openingFollowupCount,
   openingGuideScoreLossLimit,
   openingPlanBranchMessage,
   openingPlanInterruption,
-  openingPlanCandidates as getOpeningPlanCandidates,
+  openingPlanParallelCandidates,
   openingStrategyCompletionChoices,
   rangingRookStrategyChoices,
   openingUrgentResponse,
+  selectBestOpeningPlan,
   shouldAbandonOpeningGuide,
   shouldShowOpeningFollowup,
   OPENING_CASTLE_GROUPS,
   OPENING_CASTLES,
+  OPENING_GUIDE_MAX_DETOURS,
+  OPENING_GUIDE_MAX_UNSAFE_TURNS,
   OPENING_STRATEGIES,
 } from "./core/opening-guide.mjs";
 import {
@@ -965,7 +1040,9 @@ import {
   configuredCpuBishopMove,
   configuredCpuFirstMove,
   cpuMoveMatchesBishopPreference,
+  randomOpeningCombinationRate,
   selectCpuOpeningRepertoire,
+  selectRandomOpeningCombination,
   shouldForceConfiguredCpuOpening,
   shouldUseCpuOpening,
 } from "./core/cpu-opening-repertoire.mjs";
@@ -986,6 +1063,9 @@ import {
   clearMatchSnapshot,
   loadMatchSnapshot,
   matchSnapshotKey,
+  persistedResult,
+  recordAndFormationsFromMoves,
+  savedMatchNumber,
   saveMatchSnapshot,
 } from "./core/match-persistence.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
@@ -995,6 +1075,7 @@ const UNDO_GUIDE_TEXT = "もう一度、落ち着いて考えてみよう！";
 
 type MoveSoundTemplates = { [K in MoveSoundKind]: HTMLAudioElement };
 let moveSoundTemplates: MoveSoundTemplates | null = null;
+let cancelDeferredCoachPortraitPreload: (() => void) | undefined;
 
 const props = defineProps({
   mode: { type: String as () => GameMode, default: "cpu" },
@@ -1087,6 +1168,7 @@ const analysisRunning = ref(false);
 const analysisProgress = ref(0);
 const analysisTotal = ref(0);
 const analysisPoints = ref<AnalysisPoint[]>([]);
+const analysisVisible = computed(() => reviewMode.value && analysisOpen.value);
 const boardFlipOverride = ref(false);
 const reviewCpuEnabled = ref(false);
 const reviewCpuStartedAtPly = ref(0);
@@ -1116,12 +1198,21 @@ const openingGuideAbandoned = ref(false);
 const openingPlanCompletionLocked = ref(false);
 const strategyCompletionLocked = ref(false);
 const castleCompletionLocked = ref(false);
+// 囲いの距離を縮める安全な手が見つからなかった手番の連続数。同じ手番を二重に数えない。
+const openingGuideUnsafeTurns = ref(0);
+let openingGuideUnsafeCountedPly = -1;
+const castleSuggestions = ref<{ id: string; label: string; distance: number }[]>([]);
+const strategySuggestions = ref<{ id: string; label: string; distance: number }[]>([]);
+// 「ほぼ完成形」で続行・終了を選んだ囲いと形。同じ形では再度聞かない。
+const castleNearCompletionHandled = ref("");
+const strategyNearCompletionHandled = ref("");
 const openingGuideBranchNotice = ref("");
 const openingGuideBranchNoticePly = ref(-1);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
 const activeCoachText = computed(() => hintText.value || guideText.value);
 const coachExpression = computed(() => coachExpressionForText(activeCoachText.value));
+const dialogueSegments = computed(() => coachTextSegments(activeCoachText.value));
 const coachPortraitUrl = computed(() => (
   `${props.assetBaseUrl}/characters/${coachExpressionFilename(activeCoachText.value)}?v=${COACH_EXPRESSION_ASSET_VERSION}`
 ));
@@ -1142,8 +1233,20 @@ const coachLevel = ref<"off" | "encourage" | "detailed">("detailed");
 const settingsOpen = ref(false);
 const activePlayerColor = ref<"black" | "white">(normalizePlayerColor(props.playerColor));
 const selectedPlayerColor = ref<"black" | "white">(activePlayerColor.value);
-const boardLayout = ref<"standard" | "compact" | "portrait">("standard");
-const boardShell = ref<HTMLElement | null>(null);
+const kifuList = ref<HTMLElement | null>(null);
+const {
+  boardLayout,
+  boardShell,
+  gameRoot,
+  menuCollapsed,
+  uiLayout,
+  uiLayoutStyle,
+  uiNarrow,
+  uiShort,
+} = useResponsiveLayout({ analysisVisible });
+const resignConfirmOpen = ref(false);
+const analysisMenuOpen = ref(false);
+const pregameTendencyOpen = ref(false);
 const advisedCoachTopics = new Set<string>();
 const coachAdviceLastShownAt = new Map<string, number>();
 let playerTurnScore: { type: "cp" | "mate"; value: number } | undefined;
@@ -1167,9 +1270,24 @@ let playerMoveHintAssessment: {
 } | undefined;
 let playerMoveFlair: {
   historyLength: number;
+  usi: string;
   wasPromotion: boolean;
   wasEnemyCampDrop: boolean;
+  fromHint: boolean;
+  trivial: boolean;
+  materialGain: number;
 } | undefined;
+type PraiseCandidate = { rank: number; move: string; score?: EngineEvaluation };
+// 好手・詰めろ受けの判定用に、プレイヤー手番開始時の解析を1局面分だけ保持する。
+let playerMoveBaseline: {
+  historyLength: number;
+  shallow: PraiseCandidate[];
+  deep: PraiseCandidate[];
+  mateThreat: boolean;
+} | undefined;
+let playerMoveBaselineGeneration = 0;
+let turningPointState = createTurningPointState();
+let lastCpuCapture: { historyLength: number; pieceType: string } | undefined;
 let cpuTimer: ReturnType<typeof setTimeout> | undefined;
 let matchGeneration = 0;
 let cpuSearchRunning = false;
@@ -1181,13 +1299,11 @@ let engine: ShogiEngine | null = null;
 let moveHistory: string[] = [];
 let coachAdviceHistory: RecordedCoachAdvice[] = [];
 let displayingStructuredCoachAdvice = false;
-let boardResizeObserver: ResizeObserver | undefined;
 let reviewCoachGeneration = 0;
 let analysisGeneration = 0;
 let reviewCpuGeneration = 0;
 let reviewCoachQueue: Promise<void> = Promise.resolve();
 let dedicatedCoachQueue: Promise<void> = Promise.resolve();
-let dedicatedCoachRunning = false;
 let openingFollowupGeneration = 0;
 let openingFollowupLoading = false;
 let openingGuideSafetyGeneration = 0;
@@ -1203,6 +1319,7 @@ type CpuOpeningPlan = {
 };
 let cpuOpeningPlan: CpuOpeningPlan | null = null;
 const positionAnalysisCache = createPositionAnalysisCache();
+const assistSearchControl = createAssistSearchControl();
 let restoringSavedMatch = false;
 
 function browserStorage(): Storage | null {
@@ -1224,8 +1341,8 @@ const matchStorageKey = typeof window === "undefined"
 // 助言は対局AIより軽く保つ。局面評価は数万ノードで十分であり、
 // 人間最高峰プリセット（48万ノード）相当の探索を毎手行わない。
 const COACH_SEARCH_BUDGET = {
-  standard: { nodes: 60000, maxTimeMs: 1500, mateTimeMs: 800, threatNodes: 12000 },
-  compact: { nodes: 30000, maxTimeMs: 900, mateTimeMs: 500, threatNodes: 6000 },
+  standard: { nodes: 60000, maxTimeMs: 1500 },
+  compact: { nodes: 30000, maxTimeMs: 900 },
 } as const;
 
 function coachSearchBudget() {
@@ -1234,31 +1351,46 @@ function coachSearchBudget() {
   ];
 }
 
-function updateResponsiveLayout() {
-  if (!boardShell.value) return;
-  const width = boardShell.value.clientWidth;
-  const height = boardShell.value.clientHeight;
-  const layouts = [
-    { name: "standard" as const, width: 1471, height: 959 },
-    { name: "compact" as const, width: 1088, height: 1015 },
-    { name: "portrait" as const, width: 878, height: 1168 },
-  ].filter(({ name }) => {
-    if (name === "standard") {
-      return !window.matchMedia("(min-width: 1100px) and (min-aspect-ratio: 5/4)").matches;
+const kifuEntries = computed(() => {
+  if (uiLayout.value !== "wide") return [];
+  try {
+    if (reviewMode.value) {
+      const lineRecord = createGameRecord(matchInitialSfen.value);
+      for (const move of reviewNavigation.value.line) {
+        if (!appendUsiMove(lineRecord, move)) break;
+      }
+      return lineRecord.moves.slice(1).map((entry) => ({ ply: entry.ply, text: entry.displayText }));
     }
-    // 横長画面では盤エリアが縦長でも駒台を下に回さず、左右配置を保つ。
-    if (name === "portrait") {
-      return !window.matchMedia("(orientation: landscape)").matches;
-    }
-    return true;
-  });
-  boardLayout.value = layouts.reduce((best, candidate) => {
-    const bestScale = Math.min(width / best.width, height / best.height);
-    const candidateScale = Math.min(width / candidate.width, height / candidate.height);
-    const bestArea = best.width * best.height * bestScale * bestScale;
-    const candidateArea = candidate.width * candidate.height * candidateScale * candidateScale;
-    return candidateArea > bestArea ? candidate : best;
-  }).name;
+    // recordは差し替えで更新されるが、同一インスタンスへの追加にも追従させる。
+    void currentSfen.value;
+    return toRaw(record.value).moves.slice(1).map((entry) => ({ ply: entry.ply, text: entry.displayText }));
+  } catch {
+    return [];
+  }
+});
+const currentKifuPly = computed(() => (reviewMode.value ? reviewNavigation.value.cursor : moveCount.value));
+
+function goToReviewLinePly(ply: number) {
+  navigateAnalysis(ply - reviewNavigation.value.cursor);
+}
+
+const pregameTendencySummary = computed(() => {
+  const labels = [
+    cpuBishopPreference.value && "角道",
+    cpuRookPreference.value && "飛車",
+    cpuTempoPreference.value && "指し方",
+  ].filter(Boolean);
+  return labels.length ? `${labels.join("・")}を指定中` : "指定なし";
+});
+
+function requestResign() {
+  if (!active.value || reviewMode.value) return;
+  resignConfirmOpen.value = true;
+}
+
+function confirmResign() {
+  resignConfirmOpen.value = false;
+  resign();
 }
 
 const normalizedMode = computed<GameMode>(() => props.mode === "local" ? "local" : "cpu");
@@ -1270,15 +1402,20 @@ const flipBoard = computed(() => (
 const analysisCurrentPoint = computed(() =>
   analysisPoints.value.find(({ ply }) => ply === reviewNavigation.value.cursor)
 );
-const effectiveWhitePlayerName = computed(() =>
-  normalizedMode.value === "cpu" && humanColor.value === Color.BLACK
-    ? props.cpuPlayerName
-    : props.whitePlayerName,
-);
-const modeText = computed(() => {
-  const mode = normalizedMode.value === "cpu" ? "CPU対局" : "ローカル対局";
-  return matchKind.value === "learning" ? `学習・${mode}` : mode;
+// CPU対局ではCPU側の名前にレベルを添え、棋力の説明を2行目に出す。
+const cpuColor = computed(() => (normalizedMode.value === "cpu" ? reverseColor(humanColor.value) : null));
+const cpuStrengthPreset = computed(() => strengthPresetFor(searchNodes.value));
+const cpuDisplayName = computed(() => {
+  const name = props.cpuPlayerName.trim() || "CPU";
+  return cpuStrengthPreset.value ? `${name} Lv.${cpuStrengthPreset.value.level}` : name;
 });
+const cpuStrengthLabel = computed(() => cpuStrengthPreset.value?.label ?? "");
+const effectiveBlackPlayerName = computed(() =>
+  cpuColor.value === Color.BLACK ? cpuDisplayName.value : props.blackPlayerName,
+);
+const effectiveWhitePlayerName = computed(() =>
+  cpuColor.value === Color.WHITE ? cpuDisplayName.value : props.whitePlayerName,
+);
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
@@ -1331,15 +1468,10 @@ const resultPresentation = computed(() => {
   const handicap = props.handicapName.trim()
     || learningStartLabel.value
     || (matchInitialSfen.value === STANDARD_SFEN ? "平手" : "その他");
-  const opponentPreset = normalizedMode.value === "cpu"
-    ? CPU_STRENGTH_PRESETS.find((preset) => preset.value === searchNodes.value)
-    : undefined;
   const common = {
     detail,
     handicap,
-    opponent: opponentPreset
-      ? `${props.cpuPlayerName.trim() || "CPU"} Lv.${opponentPreset.level} ${opponentPreset.label}`
-      : props.cpuPlayerName.trim() || "CPU",
+    opponent: [cpuDisplayName.value, cpuStrengthLabel.value].filter(Boolean).join(" "),
     blackFormations: formationNamesFromState(formationState.value, "black").join("・") || "未判定",
     whiteFormations: formationNamesFromState(formationState.value, "white").join("・") || "未判定",
   };
@@ -1364,6 +1496,22 @@ const resultPresentation = computed(() => {
 });
 const blackFormationText = computed(() => formationTextForColor(Color.BLACK));
 const whiteFormationText = computed(() => formationTextForColor(Color.WHITE));
+const FORMATION_SNAPSHOT_CACHE_LIMIT = 4;
+const formationSnapshotCache = new Map<string, ReturnType<typeof detectFormationSnapshot>>();
+function formationSnapshotForSfen(sfen: string) {
+  const cached = formationSnapshotCache.get(sfen);
+  if (cached) {
+    formationSnapshotCache.delete(sfen);
+    formationSnapshotCache.set(sfen, cached);
+    return cached;
+  }
+  const snapshot = detectFormationSnapshot(sfen, hiraganaFormationMaster);
+  formationSnapshotCache.set(sfen, snapshot);
+  while (formationSnapshotCache.size > FORMATION_SNAPSHOT_CACHE_LIMIT) {
+    formationSnapshotCache.delete(formationSnapshotCache.keys().next().value!);
+  }
+  return snapshot;
+}
 function openingGuideLegalMoves(): string[] {
   const fields = currentSfen.value.split(" ");
   if (fields.length < 2) return [];
@@ -1374,19 +1522,35 @@ function openingGuideLegalMoves(): string[] {
     return [];
   }
 }
-function availableOpeningOptions(kind: "strategy" | "castle") {
+const openingAvailabilityContext = computed(() => {
   const sfen = currentSfen.value;
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
-  const currentFormations = formationNamesFromSnapshot(
-    detectFormationSnapshot(sfen, hiraganaFormationMaster),
-    playerIsBlack ? "black" : "white",
-  );
-  const committedRookStyle = inferOpeningRookStyle({
-    color: playerIsBlack ? "black" : "white",
-    playedMoves: playerMoves,
-    currentSfen: sfen,
-  });
+  return {
+    sfen,
+    playerIsBlack,
+    playerMoves,
+    legalMoves: openingGuideLegalMoves(),
+    currentFormations: formationNamesFromSnapshot(
+      formationSnapshotForSfen(sfen),
+      playerIsBlack ? "black" : "white",
+    ),
+    committedRookStyle: inferOpeningRookStyle({
+      color: playerIsBlack ? "black" : "white",
+      playedMoves: playerMoves,
+      currentSfen: sfen,
+    }),
+  };
+});
+function availableOpeningOptions(kind: "strategy" | "castle") {
+  const {
+    committedRookStyle,
+    currentFormations,
+    legalMoves,
+    playerIsBlack,
+    playerMoves,
+    sfen,
+  } = openingAvailabilityContext.value;
   const selectedCounterpartStyle = kind === "strategy"
     ? openingDefinitionRookStyle(selectedCastle.value, "castle")
     : openingDefinitionRookStyle(selectedStrategy.value, "strategy");
@@ -1396,7 +1560,7 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
     color: playerIsBlack ? "black" : "white",
     playedMoves: playerMoves,
     moveHistory,
-    legalMoves: openingGuideLegalMoves(),
+    legalMoves,
     // 過去に一度成立した形ではなく、現在の盤面だけで利用可否を決める。
     detectedFormations: currentFormations,
     currentSfen: sfen,
@@ -1496,7 +1660,12 @@ function groupOpeningStrategies<T extends (typeof OPENING_STRATEGIES)[number]>(o
 }
 const groupedOpeningStrategies = computed(() => {
   const availableIds = new Set(availableOpeningStrategies.value.map(({ id }) => id));
-  return groupOpeningStrategies(
+  // 戦法に届かなくなったとき、近い戦法を残り手数つきで先頭に並べる。
+  const suggested = strategySuggestions.value.flatMap(({ id, label, distance }) => {
+    const strategy = OPENING_STRATEGIES.find((entry) => entry.id === id);
+    return strategy ? [{ ...strategy, label: `${label}（あと${distance}手）`, disabled: false }] : [];
+  });
+  const groups = groupOpeningStrategies(
     OPENING_STRATEGIES
       // 完成後ボタンから選んだ内部派生も、選択中はプルダウンへ表示する。
       .filter(({ id, guideSelectable }) => guideSelectable !== false || id === selectedStrategy.value)
@@ -1509,6 +1678,9 @@ const groupedOpeningStrategies = computed(() => {
           && !availableIds.has(strategy.id),
       })),
   );
+  return suggested.length
+    ? [{ id: "suggested", label: "今の局面から近い戦法", options: suggested }, ...groups]
+    : groups;
 });
 const cpuDetailedStrategyGroups = computed(() => {
   const cpuColor = selectedPlayerColor.value === "black" ? "white" : "black";
@@ -1533,33 +1705,52 @@ const cpuDetailedCastleGroups = computed(() => {
 });
 const groupedOpeningCastles = computed(() => {
   const availableIds = new Set(availableOpeningCastles.value.map(({ id }) => id));
-  return groupOpeningCastles(OPENING_CASTLES.map((castle) => ({
+  const groups = groupOpeningCastles(OPENING_CASTLES.map((castle) => ({
       ...castle,
       optionLabel: castle.integrated ? `${castle.label}（戦法込み）` : castle.label,
       disabled: castle.id !== selectedCastle.value
         && !availableIds.has(castle.id),
     })));
+  // 囲いに届かなくなったとき、近い囲いを残り手数つきで先頭に並べる。
+  const suggested = castleSuggestions.value.flatMap(({ id, label, distance }) => {
+    const castle = OPENING_CASTLES.find((entry) => entry.id === id);
+    return castle ? [{ ...castle, label: `${label}（あと${distance}手）`, disabled: false }] : [];
+  });
+  return suggested.length
+    ? [{ id: "suggested", label: "今の局面から近い囲い", options: suggested }, ...groups]
+    : groups;
 });
+// アヒル囲い・右玉のように戦法と囲いが一体の定義を選んだら、相方は選べなくする。
+const strategySelectLocked = computed(() => isStandaloneOpening(selectedCastle.value, "castle"));
+const castleSelectLocked = computed(() => isStandaloneOpening(selectedStrategy.value, "strategy"));
+const cpuStrategySelectLocked = computed(() => isStandaloneOpening(cpuDetailedCastle.value, "castle"));
+const cpuCastleSelectLocked = computed(() => isStandaloneOpening(cpuDetailedStrategy.value, "strategy"));
+// 復元や自動切り替えで組み合わせられない対が揃った場合も、後から設定した側を優先する。
+function exclusiveOpeningWatch(
+  own: typeof selectedStrategy,
+  counterpart: typeof selectedStrategy,
+  ownKind: "strategy" | "castle",
+) {
+  const counterpartKind = ownKind === "strategy" ? "castle" : "strategy";
+  watch(own, (id) => {
+    if (!id || !counterpart.value) return;
+    if (isStandaloneOpening(id, ownKind) || isStandaloneOpening(counterpart.value, counterpartKind)) {
+      counterpart.value = "";
+    }
+  }, { flush: "sync" });
+}
+exclusiveOpeningWatch(selectedStrategy, selectedCastle, "strategy");
+exclusiveOpeningWatch(selectedCastle, selectedStrategy, "castle");
+exclusiveOpeningWatch(cpuDetailedStrategy, cpuDetailedCastle, "strategy");
+exclusiveOpeningWatch(cpuDetailedCastle, cpuDetailedStrategy, "castle");
 const selectedStrategyDefinition = computed(() => (
   OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value) ?? null
 ));
-// 戦法と囲いの一体型を選んでいる間は、相方の欄を選ばせない。
-const castleSelectionLocked = computed(() => isIntegratedOpening(selectedStrategy.value, "strategy"));
-const strategySelectionLocked = computed(() => isIntegratedOpening(selectedCastle.value, "castle"));
+// 一体型の戦法では、囲い欄に内蔵の囲いを表示する。
 const castleSelectionLockedLabel = computed(() => {
   const label = selectedStrategyDefinition.value?.integratedCastleLabel;
   return label ? `戦法に含む（${label}）` : "戦法に含む";
 });
-
-function selectOpeningStrategy() {
-  if (castleSelectionLocked.value) selectedCastle.value = "";
-  announceOpeningGuide();
-}
-
-function selectOpeningCastle() {
-  if (strategySelectionLocked.value) selectedStrategy.value = "";
-  announceOpeningGuide();
-}
 const selectedStrategyExplanation = computed(() => openingExplanation(selectedStrategy.value));
 const OPENING_GUIDE_MAX_PLIES = 40;
 const openingPlanExpired = computed(() => {
@@ -1571,6 +1762,51 @@ const openingPlanExpired = computed(() => {
       openingGuideStartedAtPly.value,
       OPENING_GUIDE_MAX_PLIES,
     );
+});
+const playerColorKey = computed(() => (humanColor.value === Color.BLACK ? "black" : "white"));
+// 囲いが未完成で、戦法と並行して組んでいる段階か。
+const castleGuideInProgress = computed(() => (
+  Boolean(selectedCastle.value) && !castlePhaseComplete.value
+));
+// 戦法が済んで(または未選択で)、囲いだけを組んでいる段階か。
+// 戦法と並行している間は戦法手で囲いが近づかないのが自然なので、寄り道として数えない。
+const castleGuidePhaseActive = computed(() => (
+  castleGuideInProgress.value
+  && (!selectedStrategy.value || strategyPhaseComplete.value)
+));
+// 戦法・囲いの「ほぼ完成形」に達したとき、完全形まで続けるか選ばせる。戦法の段階を先に聞く。
+const nearCompletionPrompt = computed(() => {
+  const sfen = currentSfen.value;
+  // 振り飛車用の囲いでは、先に飛車の振り先を選ばせてから聞く。
+  if (
+    openingGuideAbandoned.value || openingPlanExpired.value || rangingRookChoiceRequired.value
+  ) return null;
+  const candidates = [
+    selectedStrategy.value && !strategyPhaseComplete.value
+      ? { kind: "strategy" as const, id: selectedStrategy.value, handled: strategyNearCompletionHandled.value }
+      : null,
+    castleGuideInProgress.value
+      ? { kind: "castle" as const, id: selectedCastle.value, handled: castleNearCompletionHandled.value }
+      : null,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const near = openingNearCompletion({
+      kind: candidate.kind,
+      id: candidate.id,
+      color: playerColorKey.value,
+      currentSfen: sfen,
+    });
+    const key = near ? `${candidate.id}:${near.id}` : "";
+    if (near && candidate.handled !== key) return { ...near, kind: candidate.kind, key };
+  }
+  return null;
+});
+const nearCompletionChoiceRequired = computed(() => Boolean(nearCompletionPrompt.value));
+watch(nearCompletionChoiceRequired, (required) => {
+  const near = nearCompletionPrompt.value;
+  if (!required || !near || coachLevel.value === "off") return;
+  guideText.value = `${near.label}までできたよ！${near.definitionLabel}まで続ける？それともここで終える？`;
 });
 const openingPlanCandidates = computed(() => {
   // currentSfen is intentionally read here so the non-ref move history is reconsidered after every move.
@@ -1584,13 +1820,15 @@ const openingPlanCandidates = computed(() => {
     || openingPlanExpired.value
     || rangingRookChoiceRequired.value
     || strategyCompletionChoiceRequired.value
+    || nearCompletionChoiceRequired.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return [];
   const playerIsBlack = humanColor.value === Color.BLACK;
   const playerMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
   const opponentMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) !== playerIsBlack);
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
-  return getOpeningPlanCandidates({
+  // 戦法と囲いの次の一手を並べ、安全確認のエンジン評価で良い方を案内する。
+  return openingPlanParallelCandidates({
     strategyId: selectedStrategy.value,
     castleId: selectedCastle.value,
     color: playerIsBlack ? "black" : "white",
@@ -1689,6 +1927,9 @@ const openingGuideStatus = computed(() => {
       ? strategyCompletionPrompt.value
       : "この局面から続けられる派生戦法がないみたい。別の戦法を選び直そう。";
   }
+  if (nearCompletionPrompt.value) {
+    return `${nearCompletionPrompt.value.label}までできたよ。${nearCompletionPrompt.value.definitionLabel}まで続けるか選んでね`;
+  }
   if (reviewMode.value) return "道しるべは対局中に表示するよ。";
   if (!canMove.value) return "あなたの手番になったら、次の一手を矢印で示すよ。";
   if (openingGuideAbandoned.value) {
@@ -1718,8 +1959,8 @@ const openingGuideStatus = computed(() => {
     return "戦法が完成したね。次の3手を考えているよ…";
   }
   if (openingFollowupEligible.value && openingFollowupStarted.value) return "戦法が完成したね！";
-  if (openingPlanComplete.value && (selectedCastle.value || castleSelectionLocked.value)) {
-    return selectedStrategy.value || strategySelectionLocked.value
+  if (openingPlanComplete.value && (selectedCastle.value || castleSelectLocked.value)) {
+    return selectedStrategy.value || strategySelectLocked.value
       ? "戦法と囲いが完成したね！"
       : "囲いが完成したね！";
   }
@@ -1741,8 +1982,15 @@ function announceOpeningGuide() {
   castleCompletionLocked.value = false;
   resetOpeningFollowup();
   resetOpeningGuideSafety();
+  // 選び直したら、形作りの期限と寄り道の数え直しを始める。
   openingGuideStartedAtPly.value = moveHistory.length;
   openingGuideDetourCount.value = 0;
+  openingGuideUnsafeTurns.value = 0;
+  openingGuideUnsafeCountedPly = -1;
+  castleSuggestions.value = [];
+  strategySuggestions.value = [];
+  castleNearCompletionHandled.value = "";
+  strategyNearCompletionHandled.value = "";
   openingGuideAbandoned.value = false;
   openingGuideBranchNotice.value = "";
   openingGuideBranchNoticePly.value = -1;
@@ -1767,6 +2015,60 @@ function chooseRangingRookStrategy(strategyId: string) {
   }
 }
 
+function markNearCompletionHandled(near: { kind: "strategy" | "castle"; key: string }) {
+  if (near.kind === "strategy") strategyNearCompletionHandled.value = near.key;
+  else castleNearCompletionHandled.value = near.key;
+}
+
+function continueToFullForm() {
+  const near = nearCompletionPrompt.value;
+  if (!near) return;
+  markNearCompletionHandled(near);
+  if (coachLevel.value !== "off") {
+    guideText.value = near.remaining
+      ? `よし、${near.definitionLabel}まであと${near.remaining}手だよ！`
+      : `${near.definitionLabel}を目指そう！`;
+  }
+  scheduleOpeningGuideSafety();
+  persistMatchState();
+}
+
+function finishAtNearForm() {
+  const near = nearCompletionPrompt.value;
+  if (!near) return;
+  markNearCompletionHandled(near);
+  if (near.kind === "strategy") strategyCompletionLocked.value = true;
+  else castleCompletionLocked.value = true;
+  if (coachLevel.value !== "off") {
+    guideText.value = near.kind === "strategy"
+      ? `${near.label}で戦法は完成にしよう！`
+      : `${near.label}で囲いは完成にしよう！ここからは局面に合わせて指そう。`;
+  }
+  scheduleOpeningGuideSafety();
+  scheduleOpeningFollowupCandidates();
+  persistMatchState();
+}
+
+/** 距離の縮まない手番が続いたときに囲いの補助を外し、近い囲いを提案する。 */
+function abandonCastleGuide(prefix: string) {
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const { castleSuggestions: suggestions, message } = openingCastleReselection({
+    castleId: selectedCastle.value,
+    strategyId: selectedStrategy.value,
+    color: playerColorKey.value,
+    playedMoves: moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack),
+    currentSfen: currentSfen.value,
+  });
+  selectedCastle.value = "";
+  castleCompletionLocked.value = false;
+  openingGuideDetourCount.value = 0;
+  openingGuideUnsafeTurns.value = 0;
+  castleSuggestions.value = suggestions;
+  openingGuideDecision.value = null;
+  openingGuideDetourCandidates.value = [];
+  if (coachLevel.value !== "off") guideText.value = `${prefix}${message}`;
+}
+
 function chooseStrategyCompletion(strategyId: string) {
   const choice = strategyCompletionChoices.value.find(({ id }) => id === strategyId);
   if (!choice) return;
@@ -1782,7 +2084,7 @@ function formationNamesForColor(sfen: string, color: Color): string[] {
   const key = color === Color.BLACK ? "black" : "white";
   if (!reviewMode.value) return formationNamesFromState(formationState.value, key);
   return formationNamesFromSnapshot(
-    detectFormationSnapshot(sfen, hiraganaFormationMaster),
+    formationSnapshotForSfen(sfen),
     key,
   );
 }
@@ -1796,7 +2098,7 @@ function formationTextForColor(color: Color): string {
 function observeFormations(sfen: string) {
   formationState.value = updateFormationState(
     formationState.value,
-    detectFormationSnapshot(sfen, hiraganaFormationMaster),
+    formationSnapshotForSfen(sfen),
   );
 }
 
@@ -1813,13 +2115,9 @@ function formatFinalMove(matchResult: MatchResult): string {
   }
 }
 
+// 旧版の識別値も、同じ段級位の表示名を持つレベルへ対応付ける。
 function normalizeNodes(value: number): number {
-  const nodes = Number.isFinite(value) ? value : 30000;
-  return CPU_STRENGTH_PRESETS.map(({ value: preset }) => preset).reduce(
-    (nearest, candidate) =>
-      Math.abs(candidate - nodes) < Math.abs(nearest - nodes) ? candidate : nearest,
-    30000,
-  );
+  return normalizeStrengthValue(value);
 }
 
 function normalizePlayerColor(value: string): "black" | "white" {
@@ -1913,10 +2211,10 @@ function setLearningPlan(side: "player" | "opponent", kind: "strategy" | "castle
   const castle = side === "player" ? learningPlayerCastle : learningOpponentCastle;
   if (kind === "strategy") {
     strategy.value = value;
-    if (isIntegratedOpening(value, "strategy")) castle.value = "";
+    if (isStandaloneOpening(value, "strategy")) castle.value = "";
   } else {
     castle.value = value;
-    if (isIntegratedOpening(value, "castle")) strategy.value = "";
+    if (isStandaloneOpening(value, "castle")) strategy.value = "";
   }
 }
 
@@ -1945,29 +2243,31 @@ function beginMatch() {
   }
   matchStarted.value = true;
   pregameOpen.value = false;
+  scheduleDeferredCoachPortraitPreload();
   restart();
 }
 
 // ホーム画面の装飾(星)の配置。left/topはパーセント、色は夜空の配色に合わせる。
 const HOME_STARS = [
-  { id: "s1", style: "left:9%;top:16%;width:12px;height:12px;color:#f2e3c2;" },
-  { id: "s2", style: "left:16%;top:38%;width:8px;height:8px;color:#e8a04c;" },
-  { id: "s3", style: "left:24%;top:10%;width:6px;height:6px;color:#cfc8f0;" },
-  { id: "s4", style: "left:33%;top:26%;width:8px;height:8px;color:#f2e3c2;" },
-  { id: "s5", style: "left:52%;top:12%;width:6px;height:6px;color:#e8a04c;" },
-  { id: "s6", style: "left:63%;top:22%;width:12px;height:12px;color:#f2e3c2;" },
-  { id: "s7", style: "left:72%;top:8%;width:8px;height:8px;color:#cfc8f0;" },
-  { id: "s8", style: "left:84%;top:30%;width:8px;height:8px;color:#e8a04c;" },
-  { id: "s9", style: "left:90%;top:14%;width:14px;height:14px;color:#f2e3c2;" },
-  { id: "s10", style: "left:12%;top:70%;width:8px;height:8px;color:#e8a04c;" },
-  { id: "s11", style: "left:70%;top:74%;width:10px;height:10px;color:#f2e3c2;" },
-  { id: "s12", style: "left:88%;top:66%;width:8px;height:8px;color:#cfc8f0;" },
+  { id: "s1", style: "left:9%;top:16%;width:12px;height:12px;color:#fffcf4;" },
+  { id: "s2", style: "left:16%;top:38%;width:8px;height:8px;color:#f1a54c;" },
+  { id: "s3", style: "left:24%;top:10%;width:6px;height:6px;color:#d7d1fd;" },
+  { id: "s4", style: "left:33%;top:26%;width:8px;height:8px;color:#fffcf4;" },
+  { id: "s5", style: "left:52%;top:12%;width:6px;height:6px;color:#f1a54c;" },
+  { id: "s6", style: "left:63%;top:22%;width:12px;height:12px;color:#fffcf4;" },
+  { id: "s7", style: "left:72%;top:8%;width:8px;height:8px;color:#d7d1fd;" },
+  { id: "s8", style: "left:84%;top:30%;width:8px;height:8px;color:#f1a54c;" },
+  { id: "s9", style: "left:90%;top:14%;width:14px;height:14px;color:#fffcf4;" },
+  { id: "s10", style: "left:12%;top:70%;width:8px;height:8px;color:#f1a54c;" },
+  { id: "s11", style: "left:70%;top:74%;width:10px;height:10px;color:#fffcf4;" },
+  { id: "s12", style: "left:88%;top:66%;width:8px;height:8px;color:#d7d1fd;" },
 ];
 
 function closeHome() {
   // 対局は常に対局準備から始める。openPregameが中断保存を破棄する。
   openPregame();
   homeOpen.value = false;
+  void initializeEngine();
 }
 
 function openMatchSetup(kind: MatchKind) {
@@ -1995,6 +2295,8 @@ function openPregame() {
   matchStarted.value = false;
   pregameOpen.value = true;
   settingsOpen.value = false;
+  resignConfirmOpen.value = false;
+  analysisMenuOpen.value = false;
   resultDialogOpen.value = false;
   reviewMode.value = false;
   analysisOpen.value = false;
@@ -2049,6 +2351,7 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
     inCheck: isSideToMoveInCheck(currentSfen.value),
     lastMoveWasCapture: Boolean(record.value.current.move?.capturedPieceType),
   })) return undefined;
+  if (!cpuOpeningPlan) cpuOpeningPlan = randomCpuOpeningCombination(cpuMoves, configuredCpuColor, legalMoves);
   if (!cpuOpeningPlan) {
     const selectedPlan = selectCpuOpeningRepertoire({
       configuredStrategy: configuredCpuOpeningStrategy(),
@@ -2059,14 +2362,16 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
       tempoPreference: cpuTempoPreference.value,
       level: cpuStrengthLevel(),
     });
-    // 一体型の戦法は内蔵の囲いを使うため、囲いの詳細指定を重ねない。
+    // 戦法と囲いが一体の定義は、もう片方と組み合わせない。
     const castleSpecified = cpuStrategyDetailsOpen.value && Boolean(cpuDetailedCastle.value);
-    cpuOpeningPlan = castleSpecified && !isIntegratedOpening(selectedPlan.strategyId, "strategy")
+    const castleOnly = isStandaloneOpening(cpuDetailedCastle.value, "castle");
+    cpuOpeningPlan = castleSpecified && !isStandaloneOpening(selectedPlan.strategyId, "strategy")
       ? {
           ...selectedPlan,
+          strategyId: castleOnly ? "" : selectedPlan.strategyId,
           castleId: cpuDetailedCastle.value,
           label: [
-            OPENING_STRATEGIES.find(({ id }) => id === selectedPlan.strategyId)?.label,
+            castleOnly ? undefined : OPENING_STRATEGIES.find(({ id }) => id === selectedPlan.strategyId)?.label,
             OPENING_CASTLES.find(({ id }) => id === cpuDetailedCastle.value)?.label,
           ].filter(Boolean).join("＋"),
         }
@@ -2110,6 +2415,40 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
   return planMove ? { usi: planMove.usi, phase: planMove.phase === "castle" ? "castle" as const : "strategy" as const } : undefined;
 }
 
+/**
+ * 「おまかせ」で細かい指定がない場合、登録済みの戦法・囲いから現在の局面で成立するものを組み合わせる。
+ * 低レベルほど高い確率で選び、選ばなかった場合は従来の主要な作戦から選ぶ。
+ */
+function randomCpuOpeningCombination(cpuMoves: string[], color: "black" | "white", legalMoves: string[]) {
+  if (
+    cpuStrategyDetailsOpen.value || cpuStrategy.value !== "random"
+    || cpuBishopPreference.value || cpuTempoPreference.value
+    || (cpuRookPreference.value && cpuRookPreference.value !== "adaptive")
+  ) return null;
+  if (Math.random() >= randomOpeningCombinationRate(strengthPresetFor(searchNodes.value).skill)) return null;
+  const cpuColor = color === "black" ? Color.BLACK : Color.WHITE;
+  const opponentColor = color === "black" ? "white" : "black";
+  const opponentMoves = moveHistory.filter((_, index) => isBlackMoveIndex(index) !== (color === "black"));
+  const context = {
+    color,
+    playedMoves: cpuMoves,
+    moveHistory,
+    legalMoves,
+    detectedFormations: formationNamesForColor(currentSfen.value, cpuColor),
+    currentSfen: currentSfen.value,
+    rookStyle: inferOpeningRookStyle({ color, playedMoves: cpuMoves, currentSfen: currentSfen.value }),
+  };
+  return selectRandomOpeningCombination({
+    strategies: availableOpeningDefinitions({ ...context, definitions: OPENING_STRATEGIES, kind: "strategy" }),
+    castles: availableOpeningDefinitions({ ...context, definitions: OPENING_CASTLES, kind: "castle" }),
+    opponentRookStyle: inferOpeningRookStyle({
+      color: opponentColor,
+      playedMoves: opponentMoves,
+      currentSfen: currentSfen.value,
+    }),
+  });
+}
+
 function cpuMovesAllowedByBishopSetting() {
   const { cpuColor } = currentCpuOpeningTurn();
   const legal = enumerateLegalMoves(record.value.position);
@@ -2140,52 +2479,6 @@ function syncPosition(usi = "") {
   currentSfen.value = record.value.position.sfen;
   lastMove.value = usi;
   observeFormations(currentSfen.value);
-}
-
-function savedMatchNumber(value: unknown, fallback: number, min = 0, max = Number.MAX_SAFE_INTEGER) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(min, Math.min(max, Math.trunc(value)))
-    : fallback;
-}
-
-function recordAndFormationsFromMoves(moves: string[]) {
-  const nextRecord = createGameRecord(matchInitialSfen.value);
-  let nextFormationState = createFormationState();
-  nextFormationState = updateFormationState(
-    nextFormationState,
-    detectFormationSnapshot(nextRecord.position.sfen, hiraganaFormationMaster),
-  );
-  for (const move of moves) {
-    if (!appendUsiMove(nextRecord, move)) throw new Error("保存棋譜に不正な指し手があります。");
-    nextFormationState = updateFormationState(
-      nextFormationState,
-      detectFormationSnapshot(nextRecord.position.sfen, hiraganaFormationMaster),
-    );
-  }
-  return { nextRecord, nextFormationState };
-}
-
-function persistedResult(value: unknown, moves: string[], finalSfen: string): MatchResult | null {
-  if (value === null || value === undefined) return null;
-  if (!value || typeof value !== "object") throw new Error("保存された終局結果が不正です。");
-  const candidate = value as MatchResult;
-  const outcomes = ["black-win", "white-win", "draw"];
-  const reasons = ["checkmate", "resignation", "repetition", "perpetual-check"];
-  const validWinner = candidate.winner === Color.BLACK
-    || candidate.winner === Color.WHITE
-    || candidate.winner === null;
-  const sameMoves = Array.isArray(candidate.moves)
-    && candidate.moves.length === moves.length
-    && candidate.moves.every((move, index) => move === moves[index]);
-  if (
-    !outcomes.includes(candidate.outcome)
-    || !reasons.includes(candidate.reason)
-    || !validWinner
-    || candidate.moveCount !== moves.length
-    || candidate.finalSfen !== finalSfen
-    || !sameMoves
-  ) throw new Error("保存された終局結果が棋譜と一致しません。");
-  return candidate;
 }
 
 function persistMatchState() {
@@ -2226,6 +2519,8 @@ function persistMatchState() {
     cpuRookPreference: cpuRookPreference.value,
     cpuTempoPreference: cpuTempoPreference.value,
     cpuStrategyDetailsOpen: cpuStrategyDetailsOpen.value,
+    // おまかせで組んだ作戦をリロード後も引き継ぐ。
+    cpuOpeningPlan,
     coachLevel: coachLevel.value,
     selectedStrategy: selectedStrategy.value,
     selectedCastle: selectedCastle.value,
@@ -2237,6 +2532,8 @@ function persistMatchState() {
     openingPlanCompletionLocked: openingPlanCompletionLocked.value,
     strategyCompletionLocked: strategyCompletionLocked.value,
     castleCompletionLocked: castleCompletionLocked.value,
+    castleNearCompletionHandled: castleNearCompletionHandled.value,
+    strategyNearCompletionHandled: strategyNearCompletionHandled.value,
     coachAdviceHistory,
   });
 }
@@ -2266,6 +2563,26 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
   attackGuideEnabled.value = matchKind.value === "learning" && learning.attackGuide === true;
 }
 
+function restoredCpuOpeningPlan(value: unknown): typeof cpuOpeningPlan {
+  if (!value || typeof value !== "object") return null;
+  const { strategyId, castleId, label, adaptCastle, adaptStrategy, castleStance, exchangeHandled, switchedFrom } = value as { [key: string]: unknown };
+  if (typeof strategyId !== "string" || typeof castleId !== "string" || typeof label !== "string") return null;
+  if (strategyId && !OPENING_STRATEGIES.some(({ id }) => id === strategyId)) return null;
+  if (castleId && !OPENING_CASTLES.some(({ id }) => id === castleId)) return null;
+  if (!strategyId && !castleId) return null;
+  // 相手に合わせた囲いの組み替えや角換わりへの切り替えの状態も、作戦と一緒に戻す。
+  return {
+    strategyId,
+    castleId,
+    label: label.slice(0, 80),
+    adaptCastle: adaptCastle === true,
+    adaptStrategy: adaptStrategy === true,
+    castleStance: castleStance === "static" || castleStance === "ranging" ? castleStance : undefined,
+    exchangeHandled: exchangeHandled === true,
+    switchedFrom: typeof switchedFrom === "string" ? switchedFrom.slice(0, 40) : undefined,
+  };
+}
+
 function discardPersistedMatch() {
   clearMatchSnapshot(matchStorage, matchStorageKey);
 }
@@ -2285,7 +2602,11 @@ function restorePersistedMatch(): boolean {
     ) throw new Error("保存棋譜が不正です。");
     const moves = snapshot.moves as string[];
     restoreLearningSettings(snapshot);
-    const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(moves);
+    const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(
+      matchInitialSfen.value,
+      moves,
+      hiraganaFormationMaster,
+    );
     const restoredResult = persistedResult(snapshot.result, moves, nextRecord.position.sfen);
     if (snapshot.active !== true && !restoredResult) throw new Error("保存された対局状態が不正です。");
 
@@ -2320,6 +2641,7 @@ function restorePersistedMatch(): boolean {
       ? snapshot.cpuTempoPreference
       : "";
     cpuStrategyDetailsOpen.value = snapshot.cpuStrategyDetailsOpen === true;
+    cpuOpeningPlan = restoredCpuOpeningPlan(snapshot.cpuOpeningPlan);
     coachLevel.value = ["off", "encourage", "detailed"].includes(snapshot.coachLevel)
       ? snapshot.coachLevel
       : "detailed";
@@ -2335,6 +2657,12 @@ function restorePersistedMatch(): boolean {
     openingPlanCompletionLocked.value = snapshot.openingPlanCompletionLocked === true;
     strategyCompletionLocked.value = snapshot.strategyCompletionLocked === true;
     castleCompletionLocked.value = snapshot.castleCompletionLocked === true;
+    castleNearCompletionHandled.value = typeof snapshot.castleNearCompletionHandled === "string"
+      ? snapshot.castleNearCompletionHandled
+      : "";
+    strategyNearCompletionHandled.value = typeof snapshot.strategyNearCompletionHandled === "string"
+      ? snapshot.strategyNearCompletionHandled
+      : "";
     coachAdviceHistory = normalizeCoachAdviceHistory(snapshot.coachAdviceHistory, moves.length);
     result.value = restoredResult;
     resultDialogOpen.value = Boolean(restoredResult);
@@ -2428,6 +2756,16 @@ function currentEnginePosition() {
   return `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
 }
 
+/** CPUの「見落とし」判定用に、通常探索の直後へ直列で行う追加探索。 */
+function cpuOversightVerifier(enginePosition: string, isCurrent: () => boolean) {
+  return async (searchMoves: string[], nodes: number) => {
+    if (!engine || !isCurrent()) return undefined;
+    engine.applyStrengthOptions({ multiPv: searchMoves.length });
+    engine.setPosition(enginePosition);
+    return engine.go({ nodes, maxTimeMs: 3000, searchMoves });
+  };
+}
+
 async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 1) {
   if (!engine) return [];
   const positionKey = currentEnginePosition();
@@ -2435,7 +2773,10 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
   if (cached) return cached;
   engine.setPosition(positionKey);
   engine.applyStrengthOptions({ multiPv });
-  const analysis = await engine.go({ nodes, maxTimeMs });
+  const { value: analysis, interrupted } = await assistSearchControl.run(
+    () => engine!.go({ nodes, maxTimeMs }),
+  );
+  if (interrupted) return [];
   positionAnalysisCache.set(positionKey, analysis.candidates, { nodes, multiPv });
   return analysis.candidates;
 }
@@ -2464,6 +2805,7 @@ function scheduleOpeningGuideSafety() {
     || record.value.position.color !== humanColor.value
     || openingGuideAbandoned.value
     || rangingRookChoiceRequired.value
+    || nearCompletionChoiceRequired.value
     || (!selectedStrategy.value && !selectedCastle.value)
   ) return;
 
@@ -2506,7 +2848,14 @@ function scheduleOpeningGuideSafety() {
     if (interruption.clearCastle) castleCompletionLocked.value = false;
     openingGuideStartedAtPly.value = moveHistory.length;
     openingGuideDetourCount.value = 0;
+    openingGuideUnsafeTurns.value = 0;
     openingGuideAbandoned.value = false;
+    castleSuggestions.value = "castleSuggestions" in interruption
+      ? interruption.castleSuggestions
+      : [];
+    strategySuggestions.value = "strategySuggestions" in interruption
+      ? interruption.strategySuggestions
+      : [];
     guideText.value = coachLevel.value === "off" ? "" : interruption.message;
     if (selectedStrategy.value || selectedCastle.value) scheduleOpeningGuideSafety();
     return;
@@ -2572,21 +2921,34 @@ function scheduleOpeningGuideSafety() {
         || moveHistory.length !== historyLength
         || record.value.position.color !== humanColor.value
       ) return;
-      if (planned && !plannedOptions.some(({ usi }) => candidates.some(({ move }) => move === usi))) {
+      // 戦法と囲いを評価値で比べるため、上位候補に入らなかった各フェーズの先頭の予定手も評価する。
+      const unscoredPlans = ["strategy", "castle"]
+        .filter((phase) => !plannedOptions.some((option) => (
+          option.phase === phase && candidates.some(({ move }) => move === option.usi)
+        )))
+        .map((phase) => plannedOptions.find((option) => option.phase === phase)?.usi)
+        .filter((usi): usi is string => Boolean(usi));
+      if (unscoredPlans.length) {
         engine!.setPosition(currentEnginePosition());
-        engine!.applyStrengthOptions({ multiPv: 1 });
-        const forced = await engine!.go({
-          nodes: settings.forcedNodes,
-          maxTimeMs: settings.forcedMaxTimeMs,
-          searchMoves: [planned.usi],
-        });
-        const forcedCandidate = forced.candidates.find(({ rank }) => rank === 1);
-        if (forcedCandidate) {
-          candidates = [
-            ...candidates,
-            { ...forcedCandidate, rank: settings.multiPv + 1, move: planned.usi },
-          ];
-        }
+        engine!.applyStrengthOptions({ multiPv: unscoredPlans.length });
+        const { value: forced, interrupted } = await assistSearchControl.run(
+          () => engine!.go({
+            nodes: settings.forcedNodes,
+            maxTimeMs: settings.forcedMaxTimeMs,
+            searchMoves: unscoredPlans,
+          }),
+        );
+        if (interrupted) return;
+        const forcedCandidates = forced.candidates
+          .filter(({ move }) => unscoredPlans.includes(move) && !candidates.some((entry) => entry.move === move))
+          .sort((left, right) => left.rank - right.rank);
+        candidates = [
+          ...candidates,
+          ...forcedCandidates.map((candidate, index) => ({
+            ...candidate,
+            rank: settings.multiPv + index + 1,
+          })),
+        ];
       }
       if (
         generation !== openingGuideSafetyGeneration || !active.value || reviewMode.value
@@ -2601,25 +2963,43 @@ function scheduleOpeningGuideSafety() {
         plannedMoves: plannedOptions,
         candidates,
       });
+      const phaseOfPlan = (usi: string | null) => (
+        plannedOptions.find((option) => option.usi === usi)?.phase ?? planned?.phase
+      );
+      const bestPlanUsi = selectBestOpeningPlan(plannedOptions, compatibleCandidates);
       const choice = plannedOptions.length
         ? chooseAdaptiveOpeningMove(
             plannedOptions,
             compatibleCandidates,
-            openingGuideScoreLossLimit(selectedStrategy.value, planned.phase),
+            (usi: string | null) => openingGuideScoreLossLimit(selectedStrategy.value, phaseOfPlan(usi)),
           )
         : compatibleCandidates
             .filter(({ rank, move }) => Number.isInteger(rank) && typeof move === "string")
             .sort((left, right) => left.rank - right.rank)
             .map(({ move }) => ({ usi: move, source: "ai" as const }))[0];
       if (!choice) return;
+      if (
+        castleGuidePhaseActive.value
+        && (planned?.phase === "castle" || planBlocked)
+        && openingGuideUnsafeCountedPly !== historyLength
+      ) {
+        openingGuideUnsafeCountedPly = historyLength;
+        openingGuideUnsafeTurns.value = choice.source === "ai" ? openingGuideUnsafeTurns.value + 1 : 0;
+        if (openingGuideUnsafeTurns.value >= OPENING_GUIDE_MAX_UNSAFE_TURNS) {
+          abandonCastleGuide("安全に囲いを進められる手が続けて見つからなかったね。");
+          return;
+        }
+      }
       openingGuideDecision.value = {
         usi: choice.usi,
         source: choice.source,
         phase: plannedOptions.find(({ usi }) => usi === choice.usi)?.phase ?? planned?.phase,
       };
-      if (choice.source === "ai" && planned) {
+      // 危険な定跡手として示すのは、戦法・囲いのうち評価を比べて選んだ予定手。
+      const unsafePlanUsi = bestPlanUsi ?? planned?.usi;
+      if (choice.source === "ai" && unsafePlanUsi) {
         openingGuideDetourCandidates.value = openingDetourArrowCandidates(
-          planned.usi,
+          unsafePlanUsi,
           compatibleCandidates,
           3,
         ).map(({ usi, source, score }) => ({
@@ -2633,10 +3013,10 @@ function scheduleOpeningGuideSafety() {
         && coachLevel.value !== "off"
         && openingGuideBranchNoticePly.value !== historyLength
       ) {
-        if (planBlocked || !planned) {
+        if (planBlocked || !unsafePlanUsi) {
           guideText.value = `予定の形へすぐ進めないから、まずは${formatHintMove(choice.usi, currentSfen.value)}で局面を整えよう。`;
         } else {
-          const plannedText = formatHintMove(planned.usi, currentSfen.value);
+          const plannedText = formatHintMove(unsafePlanUsi, currentSfen.value);
           const scoreLoss = typeof choice.scoreLoss === "number" && Number.isFinite(choice.scoreLoss)
             ? choice.scoreLoss
             : undefined;
@@ -2748,6 +3128,29 @@ function updateCoachAdviceFromPlayerScore(
   showCoachAdvice(advice);
 }
 
+/**
+ * エンジン所有権を持つ呼び出し元専用。待ち行列へは積まず、通常探索で連続王手詰みを調べる。
+ */
+async function engineMateCheck(
+  sfen: string,
+  options: { nodes: number; maxTimeMs: number; maxPly?: number },
+): Promise<{ status: "mate"; plies: number } | { status: "no-mate" | "unknown" }> {
+  if (!engine || !engineReady.value) return { status: "unknown" };
+  const maxPly = options.maxPly ?? 7;
+  try {
+    engine.setPosition(sfen);
+    engine.applyStrengthOptions({ multiPv: 1 });
+    const { value: search, interrupted } = await assistSearchControl.run(
+      () => engine!.go({ nodes: options.nodes, maxTimeMs: options.maxTimeMs }),
+    );
+    if (interrupted) return { status: "unknown" };
+    const best = search.candidates.find((candidate) => candidate.rank === 1);
+    return mateCheckResultFromCandidate(sfen, best, maxPly);
+  } catch {
+    return { status: "unknown" };
+  }
+}
+
 async function updateDedicatedCoachAdvice(
   moveFeedback?: { key: string; text: string } | null,
 ) {
@@ -2770,25 +3173,32 @@ async function updateDedicatedCoachAdvice(
     ),
   }));
   let score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
-  // 明確な勝勢だけ専用詰み探索で確認する。軽い優勢局面ごとに実行しない。
+  // 通常探索がまだmateを返していない明確な勝勢だけ、短時間の通常探索で再確認する。
   if (coachLevel.value === "detailed" && score?.type === "cp" && score.value >= 2500) {
-    engine.setPosition(currentEnginePosition());
-    const movetime = budget.mateTimeMs;
-    const mate = await engine.goMate({ movetime, maxTimeMs: movetime + 300 });
-    if (mate.status === "mate") score = { type: "mate", value: mate.moves.length };
+    const mate = await engineMateCheck(currentSfen.value, {
+      ...getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait"),
+      maxPly: 7,
+    });
+    if (mate.status === "mate") score = { type: "mate", value: mate.plies };
   }
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
   const inCheck = isSideToMoveInCheck(currentSfen.value);
-  const mateThreatResult = coachLevel.value === "detailed" && !inCheck
-    ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes)
+  const threatSfen = coachLevel.value === "detailed" && !inCheck
+    ? flipSideToMove(currentSfen.value)
     : null;
-  const mateThreat = mateThreatResult?.isThreat ?? false;
+  const mateThreatResult = threatSfen
+    ? await engineMateCheck(threatSfen, {
+        ...getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait"),
+        maxPly: 7,
+      })
+    : null;
+  const mateThreat = mateThreatResult?.status === "mate";
   const bestMove = candidates.find((candidate) => candidate.rank === 1)?.move;
   const riskAdvice = coachLevel.value === "detailed"
     ? getCandidateRiskAdvice(normalizedCandidates, {
         inCheck,
         mateThreat,
-        mateThreatChecked: mateThreatResult !== null && !mateThreatResult.exhausted,
+        mateThreatChecked: mateThreatResult !== null && mateThreatResult.status !== "unknown",
         moveCount: moveCount.value,
         ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
       })
@@ -2802,14 +3212,142 @@ function scheduleDedicatedCoachAdvice(
   dedicatedCoachQueue = dedicatedCoachQueue
     .catch(() => undefined)
     .then(async () => {
-      dedicatedCoachRunning = true;
-      try {
-        await updateDedicatedCoachAdvice(moveFeedback);
-      } finally {
-        dedicatedCoachRunning = false;
-      }
+      await updateDedicatedCoachAdvice(moveFeedback);
     })
     .catch(() => undefined);
+}
+
+/**
+ * 好手・神の一手・詰めろ受けを判定するため、プレイヤー手番の開始時に短時間だけ解析する。
+ * CPU着手の描画後に、定跡安全確認の後ろへ直列で積む。
+ */
+function schedulePlayerMoveBaseline() {
+  const generation = ++playerMoveBaselineGeneration;
+  playerMoveBaseline = undefined;
+  if (
+    !engine || !engineReady.value || !active.value || reviewMode.value
+    || normalizedMode.value !== "cpu" || coachLevel.value !== "detailed"
+    || record.value.position.color !== humanColor.value
+  ) return;
+  const historyLength = moveHistory.length;
+  const stale = () => (
+    generation !== playerMoveBaselineGeneration || !active.value || reviewMode.value
+    || moveHistory.length !== historyLength || record.value.position.color !== humanColor.value
+  );
+  dedicatedCoachQueue = dedicatedCoachQueue
+    .catch(() => undefined)
+    .then(async () => {
+      if (stale()) return;
+      const settings = getPraiseBaselineSearchSettings(
+        props.mobile || boardLayout.value === "portrait",
+      );
+      const shallow = await analyzeCoachPosition(
+        settings.shallow.nodes,
+        settings.shallow.maxTimeMs,
+        settings.shallow.multiPv,
+      );
+      if (stale()) return;
+      const deep = await analyzeCoachPosition(
+        settings.deep.nodes,
+        settings.deep.maxTimeMs,
+        settings.deep.multiPv,
+      );
+      if (stale()) return;
+      const threatSfen = moveHistory.length >= 20 ? flipSideToMove(currentSfen.value) : null;
+      const mateSettings = getMateCheckSearchSettings(
+        props.mobile || boardLayout.value === "portrait",
+      );
+      const mateThreat = threatSfen
+        ? await engineMateCheck(threatSfen, { ...mateSettings, maxPly: 7 })
+        : null;
+      if (stale()) return;
+      const pick = (candidates: typeof shallow) => candidates.map(({ rank, move, score }) => ({
+        rank,
+        move,
+        score: score as EngineEvaluation | undefined,
+      }));
+      playerMoveBaseline = {
+        historyLength,
+        shallow: pick(shallow),
+        deep: pick(deep),
+        mateThreat: mateThreat?.status === "mate",
+      };
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      engine?.applyStrengthOptions({ multiPv: 1 });
+    });
+}
+
+/** 直前のプレイヤー着手について、好手・詰めろ・駒得・形勢の転換点を判定する。 */
+async function playerMovePraise(options: {
+  historyLength: number;
+  flair?: NonNullable<typeof playerMoveFlair>;
+  beforeScore?: EngineEvaluation;
+  afterScore?: EngineEvaluation;
+  fallback: { key: string; text: string } | null;
+  cpuCandidates: Array<{ rank: number; score?: EngineEvaluation }>;
+  generation: number;
+}) {
+  const {
+    historyLength, flair, beforeScore, afterScore, fallback, cpuCandidates, generation,
+  } = options;
+  const turning = advanceTurningPoints(turningPointState, {
+    ply: historyLength,
+    afterScore,
+    beforeScore,
+  });
+  turningPointState = turning.state;
+  if (coachLevel.value === "off") return null;
+  const baseline = playerMoveBaseline?.historyLength === historyLength - 1
+    ? playerMoveBaseline
+    : undefined;
+  playerMoveBaseline = undefined;
+  const detailed = coachLevel.value === "detailed";
+  const quality = detailed && flair && baseline && !flair.fromHint && !flair.trivial
+    ? classifyMoveQuality({
+        move: flair.usi,
+        deepCandidates: baseline.deep,
+        shallowCandidates: baseline.shallow,
+      })
+    : null;
+  const cpuMatePly = parseMateScore(cpuCandidates.find(({ rank }) => rank === 1));
+  // CPU本体の探索結果を流用し、追加探索なしで詰めろを受けきったか判定する。
+  const defendedMateThreat = Boolean(
+    detailed && baseline?.mateThreat && !(cpuMatePly && cpuMatePly <= 7),
+  );
+  const praiseOptions = {
+    level: coachLevel.value,
+    historyLength,
+    beforeScore,
+    afterScore,
+    quality,
+    defendedMateThreat,
+    materialGain: flair?.materialGain ?? 0,
+    turningAdvice: turning.advice,
+    fallback,
+  };
+  let gaveMateThreat = false;
+  if (movePraiseNeedsMateThreatCheck(praiseOptions)) {
+    const threatSfen = flipSideToMove(currentSfen.value);
+    if (threatSfen && engine && engineReady.value) {
+      const settings = getMateCheckSearchSettings(
+        props.mobile || boardLayout.value === "portrait",
+      );
+      cpuSearchRunning = true;
+      cpuSearchGeneration = generation;
+      try {
+        const result = await engineMateCheck(threatSfen, { ...settings, maxPly: 7 });
+        gaveMateThreat = result.status === "mate";
+      } finally {
+        if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+      }
+    }
+  }
+  return getMovePraise({
+    ...praiseOptions,
+    gaveMateThreat,
+  });
 }
 
 function cancelPlayerIdleAdvice() {
@@ -2848,6 +3386,7 @@ function schedulePostCpuAssists() {
       }
       scheduleOpeningGuideSafety();
       scheduleOpeningFollowupCandidates();
+      schedulePlayerMoveBaseline();
       schedulePlayerIdleAdvice();
     }, 0);
   });
@@ -2952,7 +3491,6 @@ function schedulePlayerIdleAdvice() {
           || moveHistory.length !== historyLength
           || record.value.position.color !== humanColor.value
         ) return;
-        dedicatedCoachRunning = true;
         try {
           // 閃きと同じ高精度の解析結果を共有し、異なる手を勧めない。
           const settings = getIdleCoachSearchSettings(
@@ -2984,7 +3522,6 @@ function schedulePlayerIdleAdvice() {
           }));
         } finally {
           engine?.applyStrengthOptions({ multiPv: 1 });
-          dedicatedCoachRunning = false;
         }
       })
       .catch(() => undefined);
@@ -3018,16 +3555,23 @@ function scheduleReviewCoachAdvice() {
       const score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
       const inCheck = isSideToMoveInCheck(currentSfen.value);
       const isPlayerTurn = analyzedSideToMove === humanColor.value;
-      const mateThreatResult = coachLevel.value === "detailed" && isPlayerTurn && !inCheck
-        ? detectStrictMateThreat(currentSfen.value, 7, budget.threatNodes)
+      const threatSfen = coachLevel.value === "detailed" && isPlayerTurn && !inCheck
+        ? flipSideToMove(currentSfen.value)
         : null;
-      const mateThreat = mateThreatResult?.isThreat ?? false;
+      const mateThreatResult = threatSfen
+        ? await engineMateCheck(threatSfen, {
+            ...getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait"),
+            maxPly: 7,
+          })
+        : null;
+      if (generation !== reviewCoachGeneration || !reviewMode.value) return;
+      const mateThreat = mateThreatResult?.status === "mate";
       const bestMove = candidates.find((candidate) => candidate.rank === 1)?.move;
       const riskAdvice = coachLevel.value === "detailed" && isPlayerTurn
         ? getCandidateRiskAdvice(normalizedCandidates, {
             inCheck,
             mateThreat,
-            mateThreatChecked: mateThreatResult !== null && !mateThreatResult.exhausted,
+            mateThreatChecked: mateThreatResult !== null && mateThreatResult.status !== "unknown",
             moveCount: moveCount.value,
             ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
           })
@@ -3103,18 +3647,74 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   const reusedHint = actor === "player" && latestHintAnalysis?.historyLength === moveHistory.length
     ? hintMoveAssessment(latestHintAnalysis.candidates, usi)
     : null;
+  // 囲いを組む段階では、完成形までの距離が縮まなかった手だけを寄り道として数える。
+  const castleDistanceBefore = actor === "player" && !reviewMode.value
+    && castleGuidePhaseActive.value && !openingGuideAbandoned.value
+    && !openingPlanExpired.value && !nearCompletionChoiceRequired.value
+    ? openingCastleDistance({
+        castleId: selectedCastle.value,
+        color: playerColorKey.value,
+        currentSfen: currentSfen.value,
+      })
+    : null;
+  const movedWhileInCheck = castleDistanceBefore ? isSideToMoveInCheck(currentSfen.value) : false;
+  const legalMoveCountBefore = actor === "player" && !reviewMode.value
+    ? enumerateLegalMoves(record.value.position.clone()).length
+    : 0;
   const move = active.value ? record.value.position.createMoveByUSI(usi) : null;
   if (!move || !record.value.append(move)) return false;
   syncPosition(usi);
   moveHistory.push(usi);
+  if (castleDistanceBefore && !castleDistanceBefore.unreachable) {
+    const castleDistanceAfter = openingCastleDistance({
+      castleId: selectedCastle.value,
+      color: playerColorKey.value,
+      currentSfen: currentSfen.value,
+    });
+    if (castleDistanceAfter && !castleDistanceAfter.unreachable
+      && castleDistanceAfter.distance < castleDistanceBefore.distance) {
+      openingGuideDetourCount.value = 0;
+    } else if (!movedWhileInCheck) {
+      openingGuideDetourCount.value += 1;
+      if (shouldAbandonOpeningGuide(openingGuideDetourCount.value)) {
+        const castleLabel = OPENING_CASTLES.find(({ id }) => id === selectedCastle.value)?.label ?? "囲い";
+        abandonCastleGuide(`${OPENING_GUIDE_MAX_DETOURS}手続けて${castleLabel}が近づかなかったね。`);
+      }
+    }
+  }
+  if (actor === "cpu") {
+    lastCpuCapture = move.capturedPieceType
+      ? { historyLength: moveHistory.length, pieceType: move.capturedPieceType }
+      : undefined;
+  }
   if (actor === "player") {
     const enemyCamp = move.color === Color.BLACK ? move.to.rank <= 3 : move.to.rank >= 7;
+    const previousMove = moveHistory.at(-2) ?? "";
+    // USIの3・4文字目が移動先（駒打ちも同じ位置）。
+    const recapture = Boolean(move.capturedPieceType) && previousMove.slice(2, 4) === move.to.usi;
+    const destinationAttacked = Boolean(move.capturedPieceType) && enumerateLegalMoves(record.value.position.clone())
+      .some(({ to }) => to.usi === move.to.usi);
     playerMoveFlair = {
       historyLength: moveHistory.length,
+      usi,
       wasPromotion: move.promote,
       wasEnemyCampDrop: usi.includes("*") && enemyCamp,
+      fromHint: Boolean(reusedHint),
+      // 取り返しや合法手がほぼ無い局面の最善手は、褒めるほどの選択ではない。
+      trivial: recapture || (legalMoveCountBefore > 0 && legalMoveCountBefore <= 2),
+      materialGain: move.capturedPieceType
+        ? materialGain({
+            capturedPieceType: move.capturedPieceType,
+            moverPieceType: move.promote ? promotedPieceType(move.pieceType) : move.pieceType,
+            destinationAttacked,
+            opponentPreviousCapture: lastCpuCapture?.historyLength === moveHistory.length - 1
+              ? lastCpuCapture.pieceType
+              : undefined,
+          })
+        : 0,
     };
-    if (followedOpeningDecision?.source === "ai") {
+    // 囲いの段階は上の距離判定で数え済みなので、ここでは戦法の寄り道だけを数える。
+    if (!castleDistanceBefore && followedOpeningDecision?.source === "ai") {
       openingGuideDetourCount.value += 1;
       if (shouldAbandonOpeningGuide(openingGuideDetourCount.value)) {
         selectedStrategy.value = "";
@@ -3124,7 +3724,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
           ? ""
           : "3手寄り道したけれど、この形へ戻るのは難しそうだね。ここで中断して、別の戦法や囲いを選び直そう！";
       }
-    } else if (followedOpeningDecision?.source === "plan") {
+    } else if (!castleDistanceBefore && followedOpeningDecision?.source === "plan") {
       // 予定手へ復帰できたら、寄り道の連続数を数え直す。
       openingGuideDetourCount.value = 0;
     }
@@ -3139,13 +3739,14 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   hintCandidates.value = [];
   openingFollowupCandidates.value = [];
   hintText.value = "";
+  const terminalResult = resultAfterMove(record.value);
+  // 棋譜検討中の分岐や「ここから対CPU」でも、実際に指した手には駒音を鳴らす。
+  playMoveSound(selectMoveSound(
+    move.capturedPieceType,
+    terminalResult?.reason === "checkmate" || isSideToMoveInCheck(currentSfen.value),
+  ));
   if (!reviewMode.value) {
     emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
-    const terminalResult = resultAfterMove(record.value);
-    playMoveSound(selectMoveSound(
-      move.capturedPieceType,
-      terminalResult?.reason === "checkmate" || isSideToMoveInCheck(currentSfen.value),
-    ));
     if (terminalResult) finish(terminalResult);
     else persistMatchState();
   }
@@ -3188,7 +3789,7 @@ async function showHint() {
     hintCandidates.value = moves.map(({ move, score }) => ({
       usi: move, score: hintScoreForArrow(score),
     }));
-    hintText.value = `おすすめは ${formatHintMove(moves[0].move, currentSfen.value)} だよ！`;
+    hintText.value = `最善手は${formatSpokenMove(moves[0].move, currentSfen.value)}だよ！`;
     if (!reviewMode.value) hintsRemaining.value -= 1;
   } catch (error) {
     hintText.value = `ヒントを出せませんでした: ${error instanceof Error ? error.message : String(error)}`;
@@ -3199,7 +3800,11 @@ async function showHint() {
 }
 
 function rebuildRecord(moves: string[]) {
-  const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(moves);
+  const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(
+    matchInitialSfen.value,
+    moves,
+    hiraganaFormationMaster,
+  );
   record.value = nextRecord;
   formationState.value = nextFormationState;
   moveHistory = [...moves];
@@ -3237,10 +3842,16 @@ function undoTurn() {
   latestHintAnalysis = undefined;
   playerMoveHintAssessment = undefined;
   playerMoveFlair = undefined;
+  playerMoveBaseline = undefined;
+  playerMoveBaselineGeneration += 1;
+  lastCpuCapture = undefined;
+  turningPointState = rewindTurningPointState(turningPointState, moveHistory.length);
   hintCandidates.value = [];
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   openingGuideDetourCount.value = 0;
+  openingGuideUnsafeTurns.value = 0;
+  openingGuideUnsafeCountedPly = -1;
   openingGuideAbandoned.value = false;
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : UNDO_GUIDE_TEXT;
@@ -3248,6 +3859,7 @@ function undoTurn() {
     scheduleReviewCpuMove();
   } else {
     scheduleOpeningGuideSafety();
+    schedulePlayerMoveBaseline();
     schedulePlayerIdleAdvice();
     persistMatchState();
   }
@@ -3327,7 +3939,8 @@ function onPlayerMove(usi: string) {
   if (!canMove.value || !applyMove(usi, "player")) return;
   cancelPlayerIdleAdvice();
   // プレイヤーが指したら裏の助言探索を中断し、CPU本体へエンジンを明け渡す。
-  if (!reviewMode.value && dedicatedCoachRunning) engine?.stop();
+  const assistSearchInterrupted = !reviewMode.value && assistSearchControl.interrupt();
+  if (assistSearchInterrupted) engine?.stop();
   if (reviewMode.value) {
     reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
     if (reviewCpuEnabled.value) {
@@ -3384,34 +3997,34 @@ function scheduleReviewCpuMove() {
         generation !== reviewCpuGeneration || !reviewCpuEnabled.value
         || record.value.position.color === humanColor.value
       ) return;
-      let usi = "";
-      if (usesRandomLegalMove(searchNodes.value)) {
-        usi = selectCpuMove(record.value.position)?.usi ?? "";
-      } else if (engine && engineReady.value) {
-        const strength = getStrengthSearchSettings(searchNodes.value);
-        if (Math.random() < strength.randomLegalRate) {
-          usi = selectCpuMove(record.value.position)?.usi ?? "";
-        } else {
-          engine.applyStrengthOptions({ multiPv: strength.multiPv });
-          engine.setPosition(currentEnginePosition());
-          const search = await engine.go({
-            nodes: strength.nodes,
-            maxTimeMs: 8000,
-          });
-          if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
-          const fallbackMove = strength.randomFallback
-            ? selectCpuMove(record.value.position)?.usi
-            : undefined;
-          usi = selectMoveByRank(
-            search,
-            strength.moveRank,
-            Math.random,
-            { maxScoreLoss: strength.maxScoreLoss, scoreTemperature: strength.scoreTemperature, bestMoveRate: strength.bestMoveRate, fallbackMove },
-          ).move;
-        }
-      } else {
-        usi = selectCpuMove(record.value.position)?.usi ?? "";
+      const strength = getStrengthSearchSettings(searchNodes.value);
+      const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi: moveUsi }) => moveUsi);
+      let search;
+      let verify;
+      if (!usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
+        const enginePosition = currentEnginePosition();
+        engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        engine.setPosition(enginePosition);
+        search = await engine.go({
+          nodes: strength.nodes,
+          maxTimeMs: 8000,
+        });
+        if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
+        verify = cpuOversightVerifier(
+          enginePosition,
+          () => generation === reviewCpuGeneration && reviewCpuEnabled.value,
+        );
       }
+      const choice = await chooseCpuMove({
+        strength,
+        sfen: record.value.position.sfen,
+        legalMoves,
+        moveHistory,
+        search,
+        verify,
+      });
+      if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
+      const usi = choice?.move ?? "";
       if (!usi) {
         reviewCpuEnabled.value = false;
         guideText.value = coachLevel.value === "off" ? "" : "この局面はもう指せる手がないね。";
@@ -3484,117 +4097,138 @@ async function scheduleCpuMove() {
         cpuMoveCount: cpuOpeningTurn.cpuMoves.length,
         cpuMoves: cpuOpeningTurn.cpuMoves,
       });
-      // 完全不規則指しでも、対局設定で指定された序盤の作戦手は優先する。
-      if (allowedOpeningMove && usesRandomLegalMove(searchNodes.value)) {
+      const strength = getStrengthSearchSettings(searchNodes.value);
+      const allowedCpuMoveList = allowedCpuMoves.map(({ usi: moveUsi }) => moveUsi);
+      const naturalCpuMove = async () => (await chooseCpuMove({
+        strength,
+        sfen: record.value.position.sfen,
+        legalMoves: allowedCpuMoveList,
+        moveHistory,
+      }))?.move ?? "";
+      // Lv0でも、対局設定で指定された序盤の作戦手は優先する。
+      if (allowedOpeningMove && usesNaturalMoveOnly(searchNodes.value)) {
         usi = allowedOpeningMove;
-      } else if (usesRandomLegalMove(searchNodes.value)) {
-        usi = allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi ?? "";
+      } else if (usesNaturalMoveOnly(searchNodes.value)) {
+        usi = await naturalCpuMove();
       } else if (engine && engineReady.value) {
-        const strength = getStrengthSearchSettings(searchNodes.value);
-        if (Math.random() < strength.randomLegalRate) {
-          usi = allowedOpeningMove
-            ?? allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi
-            ?? "";
-        } else {
-          engine.applyStrengthOptions({ multiPv: strength.multiPv });
-          const base = matchInitialSfen.value === STANDARD_SFEN
-            ? "startpos"
-            : `sfen ${matchInitialSfen.value}`;
-          const enginePosition = `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
+        engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        const base = matchInitialSfen.value === STANDARD_SFEN
+          ? "startpos"
+          : `sfen ${matchInitialSfen.value}`;
+        const enginePosition = `${base}${moveHistory.length ? ` moves ${moveHistory.join(" ")}` : ""}`;
+        engine.setPosition(enginePosition);
+        cpuSearchRunning = true;
+        cpuSearchGeneration = generation;
+        const search = await engine.go({
+          nodes: strength.nodes,
+          maxTimeMs: 60000,
+          searchMoves: [...allowedCpuMoveIds],
+        });
+        if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+        if (generation !== matchGeneration) return;
+        const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
+        // 閃き候補を指した場合は、深さの違う再探索と混ぜず同じ探索内で比較する。
+        const playerAfterScore = reusedHintAssessment?.afterScore ?? scoreForPlayer(
+          bestCpuScore,
+          record.value.position.color,
+          humanColor.value,
+        );
+        moveFeedback = getMoveFeedback({
+          level: coachLevel.value,
+          beforeScore: comparableBeforeScore,
+          afterScore: playerAfterScore,
+          wasPromotion: moveFlair?.wasPromotion,
+          wasEnemyCampDrop: moveFlair?.wasEnemyCampDrop,
+        });
+        // 悪手の指摘を最優先し、それ以外では好手や形勢の転換点を褒める。
+        const mistake = moveFeedback && /move-(blunder|mistake)/.test(moveFeedback.key);
+        const praise = await playerMovePraise({
+          historyLength: playerMoveHistoryLength,
+          flair: moveFlair,
+          beforeScore: comparableBeforeScore,
+          afterScore: playerAfterScore,
+          fallback: moveFeedback,
+          cpuCandidates: search.candidates,
+          generation,
+        });
+        if (!mistake) moveFeedback = praise;
+      // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
+      // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
+        if (moveFeedback) {
+          showCoachAdvice(moveFeedback);
+          await nextTick();
+          if (generation !== matchGeneration) return;
+        }
+        // MultiPVの候補数は合法手より少ないため、作戦の定跡手が候補に入っていない
+        // 局面でも専用探索で評価してから、AI最善手との比較を行う。
+        let searchedCandidates = search.candidates;
+        if (
+          allowedOpeningMove && !forceConfiguredOpening
+          && !searchedCandidates.some(({ move }) => move === allowedOpeningMove)
+        ) {
           engine.setPosition(enginePosition);
           cpuSearchRunning = true;
           cpuSearchGeneration = generation;
-          const search = await engine.go({
+          const forced = await engine.go({
             nodes: strength.nodes,
             maxTimeMs: 60000,
-            searchMoves: [...allowedCpuMoveIds],
+            searchMoves: [allowedOpeningMove],
           });
           if (cpuSearchGeneration === generation) cpuSearchRunning = false;
           if (generation !== matchGeneration) return;
-          const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
-          moveFeedback = getMoveFeedback({
-            level: coachLevel.value,
-            beforeScore: comparableBeforeScore,
-          // 閃き候補を指した場合は、深さの違う再探索と混ぜず同じ探索内で比較する。
-            afterScore: reusedHintAssessment?.afterScore ?? scoreForPlayer(
-              bestCpuScore,
-              record.value.position.color,
-              humanColor.value,
-            ),
-            wasPromotion: moveFlair?.wasPromotion,
-            wasEnemyCampDrop: moveFlair?.wasEnemyCampDrop,
-          });
-        // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
-        // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
-          if (moveFeedback) {
-            showCoachAdvice(moveFeedback);
-            await nextTick();
-            if (generation !== matchGeneration) return;
+          const forcedCandidate = forced.candidates.find(({ rank }) => rank === 1);
+          if (forcedCandidate) {
+            searchedCandidates = [
+              ...searchedCandidates,
+              { ...forcedCandidate, rank: strength.multiPv + 1, move: allowedOpeningMove },
+            ];
           }
-          // MultiPVの候補数は合法手より少ないため、作戦の定跡手が候補に入っていない
-          // 局面でも専用探索で評価してから、AI最善手との比較を行う。
-          let searchedCandidates = search.candidates;
-          if (
-            allowedOpeningMove && !forceConfiguredOpening
-            && !searchedCandidates.some(({ move }) => move === allowedOpeningMove)
-          ) {
-            engine.setPosition(enginePosition);
-            cpuSearchRunning = true;
-            cpuSearchGeneration = generation;
-            const forced = await engine.go({
-              nodes: strength.nodes,
-              maxTimeMs: 60000,
-              searchMoves: [allowedOpeningMove],
-            });
-            if (cpuSearchGeneration === generation) cpuSearchRunning = false;
-            if (generation !== matchGeneration) return;
-            const forcedCandidate = forced.candidates.find(({ rank }) => rank === 1);
-            if (forcedCandidate) {
-              searchedCandidates = [
-                ...searchedCandidates,
-                { ...forcedCandidate, rank: strength.multiPv + 1, move: allowedOpeningMove },
-              ];
-            }
-          }
-          // 作戦手の評価差許容は、やこび姫補助と同じ戦法・囲いの基準に合わせる。
-          // ただし強いCPUほどAI最善を優先するため、探索設定の上限は超えない。
-          const planScoreLimit = Math.min(
-            openingGuideScoreLossLimit(cpuOpeningPlan?.strategyId ?? "", openingMovePhase),
-            strength.maxScoreLoss,
-          );
-          const safeOpening = allowedOpeningMove && !forceConfiguredOpening
-            ? chooseSafeOpeningMove(allowedOpeningMove, searchedCandidates, planScoreLimit)
-            : null;
-          const selection = forceConfiguredOpening && allowedOpeningMove
-            ? { move: allowedOpeningMove }
-            : safeOpening
-            ? {
-              move: safeOpening.usi,
-              rank: searchedCandidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
-              }
-            : selectMoveByRank(
-              search,
-              strength.moveRank,
-              Math.random,
-              {
-                maxScoreLoss: strength.maxScoreLoss,
-                scoreTemperature: strength.scoreTemperature,
-                bestMoveRate: strength.bestMoveRate,
-                fallbackMove: strength.randomFallback
-                  ? allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi
-                  : undefined,
-              },
-            );
-          usi = selection.move;
-          selectedCpuScore = searchedCandidates.find(
-            (candidate) => candidate.move === selection.move,
-          )?.score;
         }
+        // 作戦手の評価差許容は、やこび姫補助と同じ戦法・囲いの基準に合わせる。
+        // ただし強いCPUほどAI最善を優先するため、探索設定の上限は超えない。
+        // 低レベルほど倍率を大きくし、多少評価が下がっても決めた作戦の形を作り続ける。
+        const planScoreLimit = Math.min(
+          openingGuideScoreLossLimit(cpuOpeningPlan?.strategyId ?? "", openingMovePhase)
+            * strength.openingPlanScoreScale,
+          strength.maxScoreLoss,
+        );
+        const safeOpening = allowedOpeningMove && !forceConfiguredOpening
+          ? chooseSafeOpeningMove(allowedOpeningMove, searchedCandidates, planScoreLimit)
+          : null;
+        const selection = forceConfiguredOpening && allowedOpeningMove
+          ? { move: allowedOpeningMove }
+          : safeOpening
+          ? {
+            move: safeOpening.usi,
+            rank: searchedCandidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
+            }
+          : await chooseCpuMove({
+            strength,
+            sfen: record.value.position.sfen,
+            legalMoves: allowedCpuMoveList,
+            moveHistory,
+            search,
+            verify: async (searchMoves: string[], nodes: number) => {
+              cpuSearchRunning = true;
+              cpuSearchGeneration = generation;
+              try {
+                return await cpuOversightVerifier(
+                  enginePosition,
+                  () => generation === matchGeneration,
+                )(searchMoves, nodes);
+              } finally {
+                if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+              }
+            },
+          });
+        if (generation !== matchGeneration) return;
+        usi = selection?.move ?? "";
+        selectedCpuScore = searchedCandidates.find(
+          (candidate) => candidate.move === usi,
+        )?.score;
       } else {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
-        usi = allowedOpeningMove
-          ?? allowedCpuMoves[Math.floor(Math.random() * allowedCpuMoves.length)]?.usi
-          ?? "";
+        usi = allowedOpeningMove ?? await naturalCpuMove();
       }
       if (generation !== matchGeneration) return;
       if (!usi) {
@@ -3616,7 +4250,11 @@ async function scheduleCpuMove() {
       errorMessage.value = `やねうら王の思考に失敗しました: ${message}`;
       emit("match-error", { message });
       const fallbackOpeningMove = strategyMove();
-      const fallbackUsi = fallbackOpeningMove?.usi ?? selectCpuMove(record.value.position)?.usi;
+      const fallbackUsi = fallbackOpeningMove?.usi ?? chooseNaturalMove({
+        sfen: record.value.position.sfen,
+        legalMoves: enumerateLegalMoves(record.value.position).map(({ usi: moveUsi }) => moveUsi),
+        moveHistory,
+      })?.move;
       if (fallbackUsi && applyMove(fallbackUsi, "cpu") && active.value) {
         updateCoachAdvice();
         schedulePostCpuAssists();
@@ -3839,6 +4477,8 @@ function restart() {
   matchStarted.value = true;
   pregameOpen.value = false;
   settingsOpen.value = false;
+  resignConfirmOpen.value = false;
+  analysisMenuOpen.value = false;
   record.value = createRecord();
   active.value = true;
   thinking.value = false;
@@ -3858,6 +4498,10 @@ function restart() {
   latestHintAnalysis = undefined;
   playerMoveHintAssessment = undefined;
   playerMoveFlair = undefined;
+  playerMoveBaseline = undefined;
+  playerMoveBaselineGeneration += 1;
+  lastCpuCapture = undefined;
+  turningPointState = createTurningPointState();
   cpuOpeningPlan = null;
   positionAnalysisCache.clear();
   moveHistory = [];
@@ -3865,6 +4509,12 @@ function restart() {
   strategyExplanationOpen.value = false;
   openingGuideStartedAtPly.value = 0;
   openingGuideDetourCount.value = 0;
+  openingGuideUnsafeTurns.value = 0;
+  openingGuideUnsafeCountedPly = -1;
+  castleSuggestions.value = [];
+  strategySuggestions.value = [];
+  castleNearCompletionHandled.value = "";
+  strategyNearCompletionHandled.value = "";
   openingGuideAbandoned.value = false;
   openingPlanCompletionLocked.value = false;
   strategyCompletionLocked.value = false;
@@ -3924,8 +4574,10 @@ watch([
   cpuTempoPreference,
   cpuStrategyDetailsOpen,
 ], () => {
+  // 復元中は保存済みの作戦を消さない。復元処理の中で判定できるよう同期で実行する。
+  if (restoringSavedMatch) return;
   cpuOpeningPlan = null;
-});
+}, { flush: "sync" });
 watch([
   activePlayerColor,
   boardFlipOverride,
@@ -3951,13 +4603,15 @@ watch([
   strategyCompletionLocked,
   castleCompletionLocked,
   attackGuideEnabled,
+  castleNearCompletionHandled,
+  strategyNearCompletionHandled,
 ], persistMatchState);
 watch([selectedPlayerColor, cpuDetailedStrategy], () => {
   const detailedOptions = cpuDetailedStrategyGroups.value.flatMap(({ options }) => options);
   if (cpuDetailedStrategy.value && !detailedOptions.some(({ id }) => id === cpuDetailedStrategy.value)) {
     cpuDetailedStrategy.value = detailedOptions[0]?.id ?? "ibisha";
   }
-  if (isIntegratedOpening(cpuDetailedStrategy.value, "strategy")) {
+  if (isStandaloneOpening(cpuDetailedStrategy.value, "strategy")) {
     cpuDetailedCastle.value = "";
     return;
   }
@@ -3997,6 +4651,49 @@ watch(coachLevel, (level) => {
 function handlePageHide() {
   persistMatchState();
 }
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if (event.key !== "Escape") return;
+  settingsOpen.value = false;
+  resignConfirmOpen.value = false;
+  analysisMenuOpen.value = false;
+}
+function preloadCoachPortraits(fileNames: string[]) {
+  for (const filename of fileNames) {
+    const portrait = new Image();
+    portrait.src = `${props.assetBaseUrl}/characters/${filename}?v=${COACH_EXPRESSION_ASSET_VERSION}`;
+  }
+}
+function scheduleDeferredCoachPortraitPreload() {
+  if (cancelDeferredCoachPortraitPreload || typeof window === "undefined") return;
+  const fileNames = Object.entries(COACH_EXPRESSION_FILES)
+    .filter(([expression]) => expression !== "neutral")
+    .map(([, filename]) => filename);
+  const load = () => {
+    cancelDeferredCoachPortraitPreload = undefined;
+    preloadCoachPortraits(fileNames);
+  };
+  const requestIdleCallback = window.requestIdleCallback?.bind(window);
+  if (requestIdleCallback) {
+    const idleId = requestIdleCallback(load, { timeout: 2000 });
+    cancelDeferredCoachPortraitPreload = () => window.cancelIdleCallback(idleId);
+  } else {
+    const timeoutId = window.setTimeout(load, 0);
+    cancelDeferredCoachPortraitPreload = () => window.clearTimeout(timeoutId);
+  }
+}
+// 盤以外の欄の構成が変わると盤に使える高さも変わる。
+// 棋譜欄は最新手（検討中は表示中の手）が見えるように追従する。
+// scrollIntoViewは overflow:hidden の祖先まで動かすため、一覧だけをスクロールする。
+watch([currentKifuPly, () => kifuEntries.value.length], () => nextTick(() => {
+  const list = kifuList.value;
+  const current = list?.querySelector<HTMLElement>(".shogi-game__kifu-current");
+  if (!list || !current) return;
+  const top = current.offsetTop; // 一覧は position: relative なので一覧基準の位置になる。
+  if (top < list.scrollTop) list.scrollTop = top;
+  else if (top + current.offsetHeight > list.scrollTop + list.clientHeight) {
+    list.scrollTop = top + current.offsetHeight - list.clientHeight;
+  }
+}));
 onBeforeUnmount(() => {
   matchGeneration += 1;
   cancelPlayerIdleAdvice();
@@ -4006,19 +4703,19 @@ onBeforeUnmount(() => {
   reviewCpuGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
   cpuTimer = undefined;
+  cancelDeferredCoachPortraitPreload?.();
+  cancelDeferredCoachPortraitPreload = undefined;
   engine?.quit();
-  boardResizeObserver?.disconnect();
-  if (typeof window !== "undefined") window.removeEventListener("pagehide", handlePageHide);
+  if (typeof window !== "undefined") {
+    window.removeEventListener("pagehide", handlePageHide);
+    window.removeEventListener("keydown", handleGlobalKeydown);
+  }
 });
 onMounted(() => {
-  for (const filename of Object.values(COACH_EXPRESSION_FILES)) {
-    const portrait = new Image();
-    portrait.src = `${props.assetBaseUrl}/characters/${filename}?v=${COACH_EXPRESSION_ASSET_VERSION}`;
-  }
+  preloadCoachPortraits([COACH_EXPRESSION_FILES.neutral]);
+  if (matchStarted.value) scheduleDeferredCoachPortraitPreload();
   ensureMoveSounds();
-  updateResponsiveLayout();
-  boardResizeObserver = new ResizeObserver(updateResponsiveLayout);
-  if (boardShell.value) boardResizeObserver.observe(boardShell.value);
+  window.addEventListener("keydown", handleGlobalKeydown);
   window.addEventListener("pagehide", handlePageHide);
 });
 
@@ -4028,7 +4725,9 @@ queueMicrotask(() => {
   if (restoredPersistedMatch) {
     emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value, restored: true });
   }
-  initializeEngine();
+  if (restoredPersistedMatch || !homeOpen.value || reviewMode.value) {
+    void initializeEngine();
+  }
 });
 </script>
 
@@ -4040,150 +4739,348 @@ queueMicrotask(() => {
   min-width: 0;
   min-height: 0;
 }
+/*
+ * 画面構成は updateUiLayout() が実寸から決める。
+ *   --wide  : 盤を中央に置き、左に戦型・補助・棋譜、右に操作・やこび姫。
+ *   --side  : 盤の右に情報欄を1列で置く（タブレット横・スマホ横）。
+ *   --stack : 縦に積み、操作ボタンを最下段に置く（スマホ縦・タブレット縦）。
+ * 文字サイズ --ui-font も同じ関数が決めるため、ここでは em を基準に寸法を指定する。
+ */
 .shogi-game {
-  --gold: #d8ad55;
-  --ink: #fff8ec;
-  --panel: rgba(38, 17, 24, 0.92);
+  /* 配色はやこび姫のドット絵の色に合わせる。 */
+  --night: #1d303f;
+  --night-deep: #172632;
+  --slate: #2b465b;
+  --slate-light: #445c6d;
+  --amber: #f1a54c;
+  --amber-shadow: #b57c39;
+  --ivory: #fffcf4;
+  --lavender: #d7d1fd;
+  --peach: #fbd6bc;
+  --rust: #e3914e;
+  --muted: rgba(255, 252, 244, 0.72);
+  --gold: var(--amber);
+  --ink: var(--ivory);
+  --panel: rgba(23, 38, 50, 0.94);
+  --line: rgba(241, 165, 76, 0.5);
   box-sizing: border-box;
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 20rem;
-  grid-template-rows: auto minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 0.6em;
   width: 100%;
-  max-width: none;
   height: 100dvh;
   min-height: 0;
-  margin: 0 auto;
-  padding: clamp(0.5rem, 1.6vw, 1.25rem);
+  margin: 0;
+  padding: 0.6em;
   overflow: hidden;
-  border: 1px solid rgba(255, 216, 140, 0.45);
-  border-radius: 0;
   color: var(--ink);
   background:
-    radial-gradient(circle at 12% 20%, rgba(255, 226, 230, 0.78) 0 7%, transparent 22%),
-    radial-gradient(circle at 90% 10%, rgba(255, 182, 194, 0.7) 0 5%, transparent 24%),
-    linear-gradient(145deg, #861f38 0%, #d8495c 38%, #f5969e 66%, #6e1831 100%);
-  box-shadow: inset 0 0 5rem rgba(39, 3, 15, 0.55), 0 1rem 3rem rgba(0, 0, 0, 0.38);
-  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+    radial-gradient(circle at 8% 18%, rgba(241, 165, 76, 0.16) 0 2px, transparent 3px),
+    radial-gradient(circle at 91% 13%, rgba(215, 209, 253, 0.18) 0 2px, transparent 3px),
+    radial-gradient(circle at 83% 78%, rgba(255, 252, 244, 0.13) 0 1px, transparent 2px),
+    linear-gradient(135deg, transparent 0 68%, rgba(43, 70, 91, 0.18) 68% 100%),
+    var(--night);
+  font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
+  font-size: var(--ui-font, 15px);
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 .shogi-game *,
 .shogi-game *::before,
 .shogi-game *::after {
   box-sizing: border-box;
 }
-.shogi-game::before {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, transparent 49%, rgba(255,255,255,.08) 50%, transparent 51%),
-    linear-gradient(0deg, transparent 49%, rgba(255,255,255,.06) 50%, transparent 51%);
-  background-size: 5rem 5rem;
-  content: "";
-  opacity: 0.35;
-  pointer-events: none;
-}
-.shogi-game > * {
-  position: relative;
-  z-index: 1;
-}
-.shogi-game__toolbar {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-  align-items: center;
-  padding: 0.25rem 0.5rem 0.65rem;
-  grid-column: 2;
-  grid-row: 1;
-}
+
+/* ===== 共通部品 ===== */
 .shogi-game button {
-  min-height: 2.65rem;
-  padding: 0.5rem 1rem;
-  border: 2px solid #f0cb70;
-  border-radius: 0.5rem;
-  color: white;
-  background: linear-gradient(#6f2c32, #3f151d);
-  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.45), 0 0.25rem 0.55rem rgba(0, 0, 0, 0.35);
-  font: 700 1rem/1 "Yu Mincho", serif;
+  min-height: 2.6em;
+  padding: 0.45em 0.9em;
+  border: 1px solid rgba(241, 165, 76, 0.68);
+  border-radius: 0.3em;
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72);
+  font-family: inherit;
+  font-size: 1em;
+  font-weight: 700;
+  line-height: 1.15;
   cursor: pointer;
+  touch-action: manipulation;
+  transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
+}
+@media (hover: hover) {
+  .shogi-game button:not(:disabled):hover {
+    border-color: var(--amber);
+    background-color: var(--slate-light);
+    transform: translateY(-1px);
+  }
 }
 .shogi-game button:disabled {
+  border-color: rgba(255, 252, 244, 0.2);
+  color: rgba(255, 252, 244, 0.45);
+  background: rgba(43, 70, 91, 0.5);
+  box-shadow: none;
   cursor: not-allowed;
-  filter: grayscale(0.65);
-  opacity: 0.45;
+}
+.shogi-game button:focus-visible,
+.shogi-game select:focus-visible,
+.shogi-game input:focus-visible,
+.shogi-game summary:focus-visible {
+  outline: 2px solid var(--lavender);
+  outline-offset: 2px;
+}
+.shogi-game select {
+  font-family: inherit;
+}
+/* iOSは16px未満の入力欄にフォーカスすると画面を拡大するため、タッチ端末では下限を設ける。 */
+@media (pointer: coarse) {
+  .shogi-game select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+.shogi-game__summary,
+.shogi-game__status,
+.shogi-game__dialogue,
+.shogi-game__opening-guide,
+.shogi-game__kifu {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+  color: var(--ivory);
+  background: var(--panel);
+}
+
+/* ===== 見出し・操作 ===== */
+.shogi-game__header {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  grid-area: header;
+  gap: 0.45em;
+  align-items: stretch;
+  min-width: 0;
+}
+.shogi-game__status {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0.6em;
+  align-items: center;
+  min-width: 0;
+  min-height: 2.6em;
+  padding: 0.3em 0.7em;
+}
+.shogi-game__status strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game__status span {
+  flex: none;
+  color: var(--amber);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.shogi-game__toolbar {
+  display: flex;
+  flex: none;
+  gap: 0.45em;
 }
 .shogi-game__command {
-  width: 100%;
   min-width: 0;
-  clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+  padding-inline: 0.8em;
+  white-space: nowrap;
 }
 .shogi-game__command--danger {
-  background: linear-gradient(#d96734, #9d261d);
+  border-color: var(--rust);
+  color: var(--peach) !important;
 }
 .shogi-game__command--complete {
-  color: #25151a;
-  background: linear-gradient(#f7d58b, #d49a43);
+  border-color: var(--amber);
+  color: var(--night-deep) !important;
+  background: var(--amber) !important;
+  box-shadow: 0 2px 0 var(--amber-shadow);
 }
-.shogi-game__command--settings {
-  background: linear-gradient(#0788bc, #075074);
+.shogi-game button.shogi-game__command--flip[aria-pressed="true"] {
+  border-color: var(--lavender);
+  color: var(--night-deep);
+  background: var(--lavender);
+  box-shadow: 0 2px 0 rgba(23, 38, 50, 0.6), inset 0 0 0 2px var(--night-deep);
 }
-.shogi-game__command--flip[aria-pressed="true"] {
-  border-color: #cfc8f0;
-  background: #465a8a;
+.shogi-game__menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.8em;
+  padding-inline: 0.65em;
+  border-color: rgba(215, 209, 253, 0.62) !important;
 }
-.shogi-game__turn {
-  margin-left: 0;
-  padding: 0.55rem 0.85rem;
-  border: 1px solid var(--gold);
-  border-radius: 0.35rem;
-  background: var(--panel);
+.shogi-game__menu-toggle svg {
+  display: block;
+  width: 1.35em;
+  height: 1.35em;
+  fill: currentColor;
+}
+.shogi-game__menu-toggle[aria-expanded="true"] {
+  border-color: var(--lavender) !important;
+  background: var(--slate-light);
+}
+.shogi-game__menu-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+}
+.shogi-game__menu {
+  position: absolute;
+  z-index: 41;
+  top: calc(100% + 0.4em);
+  right: 0;
+  display: grid;
+  gap: 0.55em;
+  width: min(19em, calc(100vw - 1.2em));
+  padding: 0.8em;
+  border: 1px solid rgba(241, 165, 76, 0.72);
+  border-top: 3px solid var(--amber);
+  border-radius: 0.3em;
+  background: rgba(23, 38, 50, 0.98);
+  box-shadow: 0 0.8em 2em rgba(7, 18, 26, 0.55);
+  animation: shogi-menu-in 140ms ease-out both;
+}
+.shogi-game__menu-item {
+  display: flex;
+  gap: 0.6em;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 2.9em !important;
+  text-align: left;
+}
+.shogi-game__menu-item b {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.shogi-game__menu-item[aria-checked="true"] b {
+  color: var(--lavender);
+}
+.shogi-game__menu-item--danger {
+  border-color: var(--rust) !important;
+  color: var(--peach) !important;
+}
+.shogi-game__menu-item--complete {
+  color: var(--night-deep) !important;
+  background: var(--amber) !important;
+}
+.shogi-game__menu-field {
+  display: grid;
+  gap: 0.3em;
+  color: var(--amber);
+  font-size: 0.9em;
   font-weight: 700;
 }
-.shogi-game__player-zone {
-  position: relative;
-  display: grid;
-  min-height: 9rem;
-  align-items: end;
+.shogi-game__menu-field select {
+  width: 100%;
+  min-height: 2.6em;
+  padding: 0.3em 0.5em;
+  border: 1px solid rgba(241, 165, 76, 0.6);
+  border-radius: 0.2em;
+  color: var(--ivory);
+  background: var(--night-deep);
+  font-size: 1.1em;
 }
-.shogi-game__player-zone--opponent {
-  grid-column: 2;
-  grid-row: 2;
-  grid-template-columns: 1fr;
-  gap: 0.5rem;
-  min-height: 0;
-  padding-right: 0;
+.shogi-game__menu-close {
+  justify-self: end;
+  min-width: 6em;
 }
+@keyframes shogi-menu-in {
+  from { opacity: 0; transform: translateY(-0.3em); }
+}
+
+/* ===== 戦型 ===== */
+.shogi-game__summary {
+  display: flex;
+  grid-area: summary;
+  gap: 0.3em 1em;
+  align-items: baseline;
+  min-width: 0;
+  padding: 0.3em 0.7em;
+  font-size: 0.88em;
+}
+.shogi-game__summary > div {
+  display: flex;
+  flex: 1 1 0;
+  gap: 0.45em;
+  align-items: baseline;
+  min-width: 0;
+}
+.shogi-game__summary b {
+  flex: none;
+  color: var(--amber);
+  font-size: 0.9em;
+}
+.shogi-game__summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 盤上の名前欄は盤と一緒に縮むため、読める大きさの対戦相手表示をここにも置く。 */
+.shogi-game__summary {
+  flex-wrap: wrap;
+}
+.shogi-game .shogi-game__summary-opponent {
+  flex: 1 1 100%;
+}
+.shogi-game__summary-opponent small {
+  margin-left: 0.5em;
+  color: var(--muted);
+  font-size: 0.92em;
+}
+
+/* ===== やこび姫補助 ===== */
 .shogi-game__opening-guide {
   display: flex;
-  max-height: 100%;
-  min-width: 0;
+  grid-area: guide;
   flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.6rem;
+  gap: 0.45em;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.5em 0.6em;
   overflow: auto;
-  border: 2px solid var(--gold);
-  background: linear-gradient(155deg, rgba(69, 29, 40, 0.98), rgba(34, 18, 23, 0.98));
-  box-shadow: inset 0 0 1.5rem rgba(110, 34, 53, 0.42);
+  overscroll-behavior: contain;
+  background: rgba(23, 38, 50, 0.96);
 }
-.shogi-game__opening-guide--portrait {
-  display: none;
-}
-.shogi-game__opening-guide h2 {
+.shogi-game__opening-guide h2,
+.shogi-game__kifu h2 {
   margin: 0;
-  color: #f4d890;
-  font-size: 0.9rem;
+  color: var(--amber);
+  font-size: 0.95em;
   text-align: center;
 }
 .shogi-game__opening-selects {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.4rem;
+  gap: 0.45em;
 }
 .shogi-game__opening-selects label {
   display: grid;
+  gap: 0.2em;
   min-width: 0;
-  gap: 0.2rem;
-  color: #f4d890;
-  font-size: 0.75rem;
+  color: var(--amber);
+  font-size: 0.82em;
+  font-weight: 700;
+}
+.shogi-game__opening-selects select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5em;
+  padding: 0.3em 0.4em;
+  border: 1px solid rgba(241, 165, 76, 0.6);
+  border-radius: 0.2em;
+  color: var(--ivory);
+  background: var(--night-deep);
+  font-size: 1.15em;
+  font-weight: 400;
 }
 .shogi-game__opening-strategy-field {
   position: relative;
@@ -4192,67 +5089,660 @@ queueMicrotask(() => {
 .shogi-game__opening-strategy-field > label {
   height: 100%;
 }
-.shogi-game__opening-explanation-trigger {
+.shogi-game .shogi-game__opening-explanation-trigger {
   position: absolute;
   z-index: 1;
-  top: 0;
+  top: -0.2em;
   right: 0;
-  min-width: 2.5rem !important;
-  min-height: 1.15rem !important;
-  padding: 0.05rem 0.32rem !important;
-  border-color: rgba(215, 206, 255, 0.6) !important;
-  border-radius: 0.15rem !important;
-  color: #f7f1ff !important;
-  background: rgba(46, 74, 96, 0.9) !important;
-  box-shadow: none !important;
-  font-size: 0.65rem !important;
-  line-height: 1 !important;
+  min-height: 1.7em;
+  padding: 0.1em 0.6em;
+  border-color: rgba(215, 209, 253, 0.6);
+  border-radius: 0.2em;
+  color: var(--ivory);
+  background: rgba(43, 70, 91, 0.9);
+  box-shadow: none;
+  font-size: 0.75em;
 }
+.shogi-game__rook-choice {
+  display: grid;
+  gap: 0.4em;
+  padding: 0.5em;
+  border: 1px solid rgba(241, 165, 76, 0.55);
+  color: var(--ivory);
+  background: rgba(43, 70, 91, 0.6);
+  font-size: 0.9em;
+}
+.shogi-game__rook-choice > span {
+  color: var(--amber);
+  font-weight: 700;
+}
+.shogi-game__rook-choice > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5em, 1fr));
+  gap: 0.4em;
+}
+.shogi-game .shogi-game__rook-choice button {
+  min-width: 0;
+  min-height: 2.5em;
+  padding: 0.35em 0.4em;
+  border-color: rgba(215, 209, 253, 0.6);
+  color: var(--ivory);
+  background: var(--slate);
+}
+.shogi-game .shogi-game__rook-choice button:first-child {
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--amber);
+}
+.shogi-game__opening-guide p {
+  margin: 0;
+  padding: 0.45em 0.6em;
+  border-left: 3px solid var(--lavender);
+  color: var(--ivory);
+  background: rgba(43, 70, 91, 0.58);
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+
+/* ===== 棋譜（PC） ===== */
+.shogi-game__kifu {
+  display: flex;
+  grid-area: kifu;
+  flex-direction: column;
+  gap: 0.35em;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.5em 0.6em;
+}
+.shogi-game__kifu ol {
+  position: relative;
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 1px 0.3em;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  font-size: 0.92em;
+}
+.shogi-game__kifu li > span,
+.shogi-game .shogi-game__kifu li > button {
+  display: flex;
+  gap: 0.5em;
+  align-items: baseline;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 0;
+  padding: 0.2em 0.45em;
+  border: 0;
+  border-radius: 0.2em;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: nowrap;
+}
+.shogi-game__kifu small {
+  min-width: 1.8em;
+  color: var(--muted);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.shogi-game .shogi-game__kifu-current > * {
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: inset 3px 0 0 var(--amber);
+  font-weight: 700;
+}
+.shogi-game__kifu-empty {
+  grid-column: 1 / -1;
+  padding: 0.3em 0.45em;
+  color: var(--muted);
+}
+
+/* ===== 盤 ===== */
+.shogi-game__board-shell {
+  position: relative;
+  /* 盤内の名前札・時計（z-index 30）が、見出しから開くメニューより手前に出ないようにする。 */
+  isolation: isolate;
+  grid-area: board;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.shogi-game__board-shell .shogi-match-theme-controls {
+  display: none;
+}
+
+/* ===== やこび姫 ===== */
+.shogi-game__coach {
+  position: relative;
+  display: flex;
+  grid-area: coach;
+  gap: 0.5em;
+  align-items: flex-end;
+  min-width: 0;
+  min-height: 0;
+}
+.shogi-game__portrait {
+  flex: none;
+  overflow: hidden;
+  pointer-events: none;
+}
+.shogi-game__character {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+.shogi-game__dialogue {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0.55em;
+  align-items: center;
+  min-width: 0;
+  min-height: 3.2em;
+  max-height: 100%;
+  padding: 0.55em 0.75em;
+  overflow: auto;
+  overscroll-behavior: contain;
+  line-height: 1.5;
+}
+.shogi-game__dialogue-icon {
+  display: inline-flex;
+  flex: none;
+  width: 1.2em;
+  height: 1.5em;
+  filter: drop-shadow(0 0 0.25rem rgba(241, 165, 76, 0.45));
+}
+.shogi-game__dialogue-icon svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.shogi-game__flame-outer { fill: var(--amber); }
+.shogi-game__flame-inner { fill: var(--ivory); }
+.shogi-game__dialogue-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.shogi-game__dialogue-text rt {
+  font-size: 0.55em;
+  color: var(--muted);
+}
+.shogi-game__assist-actions {
+  display: flex;
+  grid-area: actions;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  min-width: 0;
+}
+.shogi-game__assist-actions > button {
+  flex: 1 1 6em;
+  min-width: 0;
+  min-height: 3em;
+  padding: 0.4em 0.5em;
+  font-size: 1.02em;
+  white-space: nowrap;
+}
+.shogi-game__assist-actions small {
+  margin-left: 0.15em;
+  font-size: 0.8em;
+  opacity: 0.85;
+}
+.shogi-game .shogi-game__awakening {
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--amber);
+  box-shadow: 0 2px 0 var(--amber-shadow);
+}
+.shogi-game .shogi-game__awakening:disabled {
+  border-color: rgba(255, 252, 244, 0.2);
+  color: rgba(255, 252, 244, 0.45);
+  background: rgba(43, 70, 91, 0.5);
+  box-shadow: none;
+}
+.shogi-game .shogi-game__analysis-button {
+  border-color: rgba(215, 209, 253, 0.62);
+  background: var(--slate);
+}
+
+/* ===== 棋譜解析 ===== */
+.shogi-game__analysis {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-area: analysis;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 0.3em;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.4em 0.5em;
+  border: 1px solid var(--amber);
+  border-radius: 0.3em;
+  color: var(--night-deep);
+  background: var(--ivory);
+  font-size: 0.92em;
+}
+.shogi-game__analysis-info {
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+  min-width: 0;
+}
+.shogi-game__analysis-info strong {
+  flex: none;
+}
+.shogi-game__analysis-info select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 18em;
+  min-height: 2.2em;
+  border: 1px solid var(--slate);
+  border-radius: 0.2em;
+  color: var(--night-deep);
+  background: #fff;
+  font-size: 1em;
+}
+.shogi-game__analysis-progress {
+  color: var(--slate);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.shogi-game .shogi-game__analysis-close {
+  flex: none;
+  min-width: 2.3em;
+  min-height: 2.3em;
+  margin-left: auto;
+  padding: 0;
+  border-color: var(--slate);
+  color: var(--night-deep);
+  background: #fff;
+  box-shadow: none;
+  font-size: 1.1em;
+}
+.shogi-game__analysis-slider input[type="range"] {
+  width: 100%;
+  height: 1.4em;
+  margin: 0;
+  accent-color: var(--amber);
+  cursor: ew-resize;
+  touch-action: pan-x;
+}
+.shogi-game__analysis .evaluation-graph {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.shogi-game__analysis .evaluation-graph__svg {
+  height: 100%;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+.shogi-game__analysis .evaluation-graph__selection {
+  display: none;
+}
+.shogi-game__analysis-actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+  justify-content: space-between;
+}
+.shogi-game__analysis-nav,
+.shogi-game__analysis-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+}
+.shogi-game .shogi-game__analysis-actions button {
+  min-width: 2.6em;
+  min-height: 2.4em;
+  padding: 0.2em 0.6em;
+  border-color: var(--slate);
+  color: var(--night-deep);
+  background: #fff;
+  box-shadow: none;
+}
+.shogi-game .shogi-game__analysis-actions button:disabled {
+  border-color: #bbb;
+  color: #aaa;
+  background: #eee;
+}
+.shogi-game__analysis-menu {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: calc(100% + 0.3em);
+  display: grid;
+  gap: 0.3em;
+  min-width: 11em;
+  padding: 0.45em;
+  border: 1px solid var(--slate);
+  border-radius: 0.3em;
+  background: #fff;
+  box-shadow: 0 0.5em 1.5em rgba(7, 18, 26, 0.35);
+  animation: shogi-menu-in 140ms ease-out both;
+}
+.shogi-game .shogi-game__analysis-menu button {
+  width: 100%;
+  text-align: left;
+}
+
+/* ===== レイアウト: 縦積み ===== */
+.shogi-game--stack {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  grid-template-areas: "header" "summary" "board" "coach" "guide" "actions";
+  gap: 0.45em;
+  padding: 0.45em;
+  padding-bottom: max(0.45em, env(safe-area-inset-bottom));
+}
+.shogi-game--stack.shogi-game--analysis {
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 13em) auto auto;
+  grid-template-areas: "header" "summary" "board" "analysis" "coach" "actions";
+}
+.shogi-game--stack .shogi-game__opening-guide h2 {
+  display: none;
+}
+/* 補助は内容の高さに合わせ、盤が残りを使う。飛車選択などが出たら盤の方を縮める。 */
+.shogi-game--stack .shogi-game__opening-guide {
+  max-height: 20em;
+}
+.shogi-game--stack .shogi-game__portrait {
+  width: 4em;
+  height: 4.4em;
+  border-bottom: 2px solid var(--amber);
+}
+.shogi-game--stack .shogi-game__dialogue {
+  min-height: 4.4em;
+  max-height: 5.6em;
+}
+.shogi-game--stack.shogi-game--analysis .shogi-game__opening-guide {
+  display: none;
+}
+.shogi-game--stack.shogi-game--analysis .shogi-game__dialogue {
+  min-height: 3em;
+  max-height: 4.6em;
+}
+.shogi-game--stack.shogi-game--analysis .shogi-game__portrait {
+  display: none;
+}
+/* 縦の余裕が少ない端末では、補助の選択欄を横並びの見出し付き1行にする。 */
+.shogi-game--stack.shogi-game--short .shogi-game__opening-selects label {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.35em;
+  align-items: center;
+}
+.shogi-game--stack.shogi-game--short .shogi-game__opening-explanation-trigger {
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 0.2em);
+  left: 0;
+}
+.shogi-game--stack.shogi-game--short .shogi-game__opening-strategy-field:has(.shogi-game__opening-explanation-trigger) {
+  margin-top: 1.2em;
+}
+.shogi-game--stack.shogi-game--short .shogi-game__dialogue {
+  min-height: 3.6em;
+  max-height: 4.6em;
+}
+.shogi-game--stack.shogi-game--short .shogi-game__portrait {
+  width: 3.4em;
+  height: 3.6em;
+}
+
+/* ===== レイアウト: 横並び（情報欄1列） ===== */
+.shogi-game--side {
+  grid-template-columns: var(--board-w) minmax(0, 34em);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "board header" "board summary" "board guide" "board coach" "board actions";
+  justify-content: center;
+}
+.shogi-game--side .shogi-game__board-shell,
+.shogi-game--wide .shogi-game__board-shell {
+  height: var(--board-h);
+  align-self: center;
+}
+.shogi-game--side .shogi-game__opening-guide {
+  max-height: 22em;
+}
+.shogi-game--side.shogi-game--analysis {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "board header" "board summary" "board analysis" "board coach" "board actions";
+}
+.shogi-game--side.shogi-game--analysis .shogi-game__opening-guide {
+  display: none;
+}
+.shogi-game--side.shogi-game--short {
+  gap: 0.4em;
+  padding: 0.4em;
+}
+.shogi-game--side.shogi-game--short .shogi-game__opening-guide h2 {
+  display: none;
+}
+/* 低い横画面では、補助を内容の高さまで広げつつ台詞欄の最低限の高さを残す。 */
+.shogi-game--side.shogi-game--short {
+  grid-template-rows: auto auto minmax(0, max-content) minmax(3.8em, 1fr) auto;
+}
+.shogi-game--side.shogi-game--short.shogi-game--analysis {
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(3.8em, auto) auto;
+}
+.shogi-game--side.shogi-game--short .shogi-game__opening-guide {
+  max-height: none;
+}
+.shogi-game--side.shogi-game--short .shogi-game__assist-actions > button {
+  min-height: 2.6em;
+}
+
+/* 立ち絵を欄いっぱいに表示し、台詞を下に重ねる（PC・タブレット横）。 */
+.shogi-game--wide .shogi-game__coach,
+.shogi-game--side:not(.shogi-game--short):not(.shogi-game--analysis) .shogi-game__coach {
+  min-height: 6em;
+}
+.shogi-game--wide .shogi-game__portrait,
+.shogi-game--side:not(.shogi-game--short):not(.shogi-game--analysis) .shogi-game__portrait {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+}
+.shogi-game--wide .shogi-game__portrait::after,
+.shogi-game--side:not(.shogi-game--short):not(.shogi-game--analysis) .shogi-game__portrait::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0 55%, rgba(23, 38, 50, 0.6) 100%);
+  content: "";
+}
+.shogi-game--wide .shogi-game__dialogue,
+.shogi-game--side:not(.shogi-game--short):not(.shogi-game--analysis) .shogi-game__dialogue {
+  max-height: 60%;
+}
+.shogi-game--side.shogi-game--short .shogi-game__portrait,
+.shogi-game--side.shogi-game--analysis .shogi-game__portrait {
+  width: 3.4em;
+  height: 3.8em;
+  border-bottom: 2px solid var(--amber);
+}
+.shogi-game--side.shogi-game--short .shogi-game__dialogue,
+.shogi-game--side.shogi-game--analysis .shogi-game__dialogue {
+  min-height: 3.8em;
+  max-height: 100%;
+}
+.shogi-game--side.shogi-game--short .shogi-game__coach {
+  align-self: stretch;
+  align-items: stretch;
+}
+.shogi-game--side.shogi-game--short .shogi-game__portrait {
+  align-self: flex-end;
+}
+
+/* ===== レイアウト: PC（盤を中央） ===== */
+.shogi-game--wide {
+  grid-template-columns: minmax(0, 30em) var(--board-w) minmax(0, 30em);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "summary board header"
+    "guide board coach"
+    "kifu board coach"
+    "kifu board actions";
+  justify-content: center;
+}
+.shogi-game--wide.shogi-game--analysis {
+  grid-template-areas:
+    "summary board header"
+    "guide board coach"
+    "analysis board coach"
+    "analysis board actions";
+}
+.shogi-game--wide.shogi-game--analysis .shogi-game__kifu {
+  display: none;
+}
+.shogi-game--wide .shogi-game__header {
+  flex-wrap: wrap;
+}
+.shogi-game--wide .shogi-game__status {
+  flex-basis: 100%;
+}
+.shogi-game--wide .shogi-game__toolbar {
+  flex: 1 1 auto;
+}
+.shogi-game--wide .shogi-game__toolbar > button {
+  flex: 1 1 auto;
+}
+.shogi-game--wide .shogi-game__summary {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.3em;
+  padding: 0.5em 0.7em;
+  font-size: 0.95em;
+}
+.shogi-game--wide .shogi-game__summary span {
+  white-space: normal;
+}
+.shogi-game--wide .shogi-game__opening-guide {
+  max-height: 26em;
+}
+
+/* ===== 補助ダイアログ ===== */
+.shogi-game__error {
+  position: absolute;
+  z-index: 90;
+  top: 3.8em;
+  left: 50%;
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+  width: min(34em, calc(100% - 1.2em));
+  padding: 0.55em 0.55em 0.55em 0.9em;
+  border: 1px solid var(--amber);
+  border-radius: 0.3em;
+  border-color: var(--rust);
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 0.6em 1.6em rgba(7, 18, 26, 0.5);
+  font-size: 0.88em;
+  transform: translateX(-50%);
+}
+.shogi-game__error p {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.shogi-game .shogi-game__error button {
+  flex: none;
+  min-width: 2.2em;
+  min-height: 2.2em;
+  padding: 0;
+}
+.shogi-game__confirm,
 .shogi-game__opening-explanation {
   position: absolute;
   z-index: 95;
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 1rem;
-  background: rgba(7, 18, 26, 0.78);
+  padding: 1em;
+  background: rgba(7, 18, 26, 0.72);
   backdrop-filter: blur(0.2rem);
 }
+.shogi-game__confirm-panel {
+  width: min(22em, 100%);
+  padding: 1.2em;
+  border: 1px solid rgba(241, 165, 76, 0.78);
+  border-top: 4px solid var(--amber);
+  border-radius: 0.3em;
+  background: var(--slate);
+  box-shadow: 0 1em 2.5em rgba(7, 18, 26, 0.58);
+  text-align: center;
+}
+.shogi-game__confirm-panel h2 {
+  margin: 0 0 0.4em;
+  font-size: 1.3em;
+}
+.shogi-game__confirm-panel p {
+  margin: 0 0 1em;
+  color: var(--muted);
+}
+.shogi-game__confirm-panel > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6em;
+}
+.shogi-game .shogi-game__confirm-danger {
+  border-color: var(--rust);
+  color: var(--night-deep);
+  background: var(--rust);
+}
 .shogi-game__opening-explanation-panel {
-  width: min(31rem, 100%);
-  max-height: calc(100% - 1rem);
+  width: min(31em, 100%);
+  max-height: calc(100% - 1em);
   overflow-y: auto;
-  padding: 1.1rem;
-  border: 1px solid rgba(245, 166, 69, 0.78);
+  padding: 1.1em;
+  border: 1px solid rgba(241, 165, 76, 0.78);
   border-top: 4px solid var(--amber);
   color: var(--ivory);
   background: var(--slate);
-  box-shadow: 0 1rem 2.5rem rgba(7, 18, 26, 0.58);
+  box-shadow: 0 1em 2.5em rgba(7, 18, 26, 0.58);
 }
 .shogi-game__opening-explanation-panel small {
   color: var(--amber);
   font-weight: 700;
 }
 .shogi-game__opening-explanation-panel h2 {
-  margin: 0.15rem 0 0.7rem;
+  margin: 0.15em 0 0.7em;
   color: var(--ivory);
 }
 .shogi-game__opening-explanation-panel p {
-  margin: 0 0 0.8rem;
+  margin: 0 0 0.8em;
   line-height: 1.7;
 }
 .shogi-game__opening-explanation-panel dl {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.55em;
   margin: 0;
 }
 .shogi-game__opening-explanation-panel dl > div {
-  padding: 0.65rem;
+  padding: 0.65em;
   border-left: 3px solid var(--lavender);
-  background: rgba(20, 39, 54, 0.72);
+  background: rgba(23, 38, 50, 0.72);
 }
 .shogi-game__opening-explanation-panel dt {
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.2em;
   color: var(--amber);
   font-weight: 800;
 }
@@ -4262,319 +5752,513 @@ queueMicrotask(() => {
 }
 .shogi-game__opening-explanation-panel > button {
   display: block;
-  min-width: 7rem;
-  margin: 0.9rem 0 0 auto;
-  padding: 0.5rem 0.9rem;
+  min-width: 7em;
+  margin: 0.9em 0 0 auto;
 }
-.shogi-game__opening-selects select {
-  width: 100%;
-  min-width: 0;
-  padding: 0.35rem 0.2rem;
-  border: 1px solid var(--gold);
-  color: #fff8ee;
-  background: #25151a;
-  font: inherit;
-}
-.shogi-game__rook-choice {
-  display: grid;
-  gap: 0.35rem;
-  padding: 0.45rem;
-  border: 1px solid rgba(244, 216, 144, 0.65);
-  color: #fff8ee;
-  background: rgba(96, 54, 22, 0.34);
-  font-size: 0.72rem;
-}
-.shogi-game__rook-choice > span {
-  color: #f4d890;
-  font-weight: 700;
-}
-.shogi-game__rook-choice > div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.3rem;
-}
-.shogi-game__rook-choice button {
-  min-width: 0;
-  padding: 0.3rem 0.25rem;
-  border: 1px solid rgba(85, 191, 233, 0.72);
-  border-radius: 0.2rem;
-  color: #f7f5ff;
-  background: rgba(22, 83, 112, 0.82);
-  font: inherit;
-  cursor: pointer;
-}
-.shogi-game__rook-choice button:first-child {
-  border-color: #f0b45e;
-  background: rgba(124, 68, 24, 0.9);
-}
-.shogi-game__opening-guide p {
-  margin: 0;
-  padding: 0.4rem 0.5rem;
-  border-left: 3px solid #55bfe9;
-  color: #f7eee8;
-  background: rgba(7, 80, 116, 0.23);
-  font-size: 0.74rem;
-  line-height: 1.35;
-}
-.shogi-game__player-zone--player {
-  grid-column: 2;
-  grid-row: 3;
-  grid-template-columns: 1fr;
-  gap: 0.45rem;
-  min-height: 0;
-  padding: 0.5rem 0 0;
-  align-content: end;
-}
-.shogi-game__portrait {
-  position: absolute;
-  z-index: 0;
-  width: clamp(9rem, 24vw, 15rem);
-  height: clamp(8rem, 20vw, 11rem);
-  overflow: hidden;
-  pointer-events: none;
-}
-.shogi-game__character {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  image-rendering: auto;
-}
-.shogi-game__portrait--advisor {
-  bottom: 0;
-  left: 0;
-}
-.shogi-game__portrait--advisor .shogi-game__character {
-  object-position: center top;
-}
-.shogi-game__match-summary,
-.shogi-game__player-card,
-.shogi-game__status,
-.shogi-game__dialogue {
-  z-index: 1;
-  box-sizing: border-box;
-  border: 2px solid var(--gold);
-  background: var(--panel);
-  box-shadow: inset 0 0 1.5rem rgba(110, 34, 53, 0.35);
-}
-.shogi-game__match-summary {
-  z-index: 1;
-  display: grid;
-  min-width: 0;
-  gap: 0.45rem;
-  padding: 0.55rem 0.7rem;
-}
-.shogi-game__match-summary-status {
-  display: flex;
-  min-width: 0;
-  gap: 0.5rem;
-  align-items: baseline;
-  justify-content: space-between;
-}
-.shogi-game__match-summary-status strong {
-  min-width: 0;
-  overflow: hidden;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.shogi-game__match-summary-status span {
-  flex: none;
-  color: #d5c3bd;
-  font-size: 0.75rem;
-}
-.shogi-game__formation-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
-  padding-top: 0.4rem;
-  border-top: 1px solid rgba(216, 173, 85, 0.55);
-}
-.shogi-game__formation-summary > div {
-  display: grid;
-  min-width: 0;
-  gap: 0.1rem;
-}
-.shogi-game__formation-summary b {
-  color: #f4d890;
-  font-size: 0.68rem;
-}
-.shogi-game__formation-summary span {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 0.76rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.shogi-game__player-card {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 0.3rem 0.6rem;
-  align-items: center;
-  min-width: 0;
-  padding: 0.7rem 0.9rem;
-}
-.shogi-game__player-card > span,
-.shogi-game__player-card > small {
-  color: #e7d8cf;
-}
-.shogi-game__player-card > div {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.7rem;
-  align-items: start;
-  padding-top: 0.45rem;
-  border-top: 1px solid rgba(216, 173, 85, 0.55);
-  line-height: 1.4;
-}
-.shogi-game__player-card > div > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.shogi-game__player-card b {
-  color: #f4d890;
-}
-.shogi-game__status {
-  display: flex;
-  min-height: 5.2rem;
-  padding: 0.8rem 1rem;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-.shogi-game__status strong {
-  min-height: 1.5rem;
-  overflow: hidden;
-  line-height: 1.5rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.shogi-game__status span {
-  margin-top: 0.25rem;
-  color: #d5c3bd;
-  font-size: 0.85rem;
-}
+
+/* ===== 対局準備 ===== */
 .shogi-game__pregame {
   position: absolute;
   z-index: 100;
   inset: 0;
   display: grid;
   place-items: center;
-  padding: clamp(1rem, 4vw, 3rem);
-  background:
-    radial-gradient(circle at 72% 24%, rgba(255, 169, 185, 0.32), transparent 35%),
-    linear-gradient(135deg, rgba(26, 10, 16, 0.96), rgba(105, 28, 47, 0.96));
-  backdrop-filter: blur(0.25rem);
-}
-.shogi-game__pregame-back {
-  margin-bottom: 0.9rem;
-  padding: 0.3rem 0.8rem;
-  border: 1px solid rgba(242, 227, 194, 0.5);
-  border-radius: 999px;
-  color: #f2e3c2;
-  background: transparent;
-  font: 700 0.8rem/1.2 inherit;
-  font-family: inherit;
-  cursor: pointer;
+  padding: clamp(0.6em, 3vw, 2.5em);
+  background: rgba(23, 38, 50, 0.96);
+  backdrop-filter: blur(0.4rem);
 }
 .shogi-game__pregame-panel {
-  width: min(44rem, 100%);
-  padding: clamp(1.2rem, 3vw, 2.25rem);
-  border: 2px solid var(--gold);
-  border-radius: 1rem;
-  color: #fff5e8;
-  background: linear-gradient(160deg, rgba(62, 26, 36, 0.98), rgba(31, 15, 21, 0.98));
-  box-shadow: 0 1.2rem 3.5rem rgba(0, 0, 0, 0.48), inset 0 0 2rem rgba(255, 183, 197, 0.08);
+  width: min(46em, 100%);
+  max-height: 100%;
+  padding: clamp(0.9em, 3vw, 2em);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(241, 165, 76, 0.72);
+  border-top: 4px solid var(--amber);
+  border-radius: 0.3em;
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 1.2em 3em rgba(7, 18, 26, 0.52);
+}
+.shogi-game .shogi-game__pregame-back {
+  min-height: 2.2em;
+  margin-bottom: 0.8em;
+  padding: 0.3em 0.9em;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 999px;
+  color: #fffcf4;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.85em;
 }
 .shogi-game__pregame-heading {
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.1em;
   text-align: center;
 }
 .shogi-game__pregame-heading > span {
-  color: #f4d890;
-  font-size: 0.82rem;
+  color: var(--amber);
+  font-size: 0.82em;
   font-weight: 700;
   letter-spacing: 0.18em;
 }
 .shogi-game__pregame-heading h2 {
-  margin: 0.35rem 0 0;
-  font-size: clamp(1.35rem, 3vw, 2rem);
+  margin: 0.3em 0 0;
+  font-size: 1.6em;
 }
 .shogi-game__pregame-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: 0.8em;
 }
 .shogi-game__pregame-field {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.4em;
+  align-content: start;
   min-width: 0;
-  padding: 0.75rem;
-  border: 1px solid rgba(240, 196, 95, 0.58);
-  border-radius: 0.55rem;
-  background: rgba(16, 8, 12, 0.38);
+  padding: 0.75em;
+  border: 1px solid rgba(215, 209, 253, 0.24);
+  border-radius: 0.2em;
+  background: rgba(23, 38, 50, 0.58);
 }
 .shogi-game__pregame-field span {
-  color: #f7d88f;
+  color: var(--amber);
   font-weight: 700;
 }
 .shogi-game__pregame-field select {
-  box-sizing: border-box;
   width: 100%;
-  min-height: 2.8rem;
-  padding: 0.45rem 0.6rem;
-  border: 1px solid #d9a84f;
-  border-radius: 0.4rem;
-  color: #2b1618;
-  background: #fff9ea;
-  font: inherit;
+  min-height: 2.8em;
+  padding: 0.4em 0.6em;
+  border: 1px solid rgba(241, 165, 76, 0.68);
+  border-radius: 0.15em;
+  color: var(--night-deep);
+  background: var(--ivory);
+  font-size: 1em;
 }
 .shogi-game__pregame-control {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.4em;
   min-width: 0;
 }
 .shogi-game__pregame-control--sub {
-  padding-top: 0.65rem;
-  border-top: 1px solid rgba(240, 196, 95, 0.3);
+  padding-top: 0.65em;
+  border-top: 1px solid rgba(241, 165, 76, 0.3);
 }
 .shogi-game__strategy-setting {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.6em;
   min-width: 0;
 }
-.shogi-game__strategy-setting select {
-  width: 100% !important;
-}
-.shogi-game__strategy-toggle {
+.shogi-game .shogi-game__strategy-toggle {
   justify-self: end;
-  min-width: 4.7rem;
-  margin-top: 0.15rem;
-  padding: 0.28rem 0.55rem !important;
+  min-height: 2.2em;
+  padding: 0.25em 0.7em;
+  font-size: 0.82em;
   white-space: nowrap;
-  font-size: 0.78rem !important;
-  opacity: 0.9;
 }
-.shogi-game__strategy-details {
+.shogi-game__strategy-details,
+.shogi-game__opening-tendency {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(9em, 1fr));
+  gap: 0.55em;
 }
-.shogi-game__strategy-details label {
+.shogi-game__strategy-details label,
+.shogi-game__opening-tendency label {
   display: grid;
-  gap: 0.28rem;
+  gap: 0.28em;
   min-width: 0;
 }
-.shogi-game__strategy-details label > span {
-  font-size: 0.78rem;
-  font-weight: 600;
-  opacity: 0.86;
+.shogi-game__strategy-details label > span,
+.shogi-game__opening-tendency label > span {
+  font-size: 0.82em;
+  opacity: 0.9;
 }
 .shogi-game__pregame-field--opening-tendency {
   grid-column: 1 / -1;
 }
+.shogi-game__pregame-field--opening-tendency > summary {
+  display: flex;
+  gap: 0.6em;
+  align-items: baseline;
+  justify-content: space-between;
+  list-style: none;
+  cursor: pointer;
+}
+.shogi-game__pregame-field--opening-tendency > summary::-webkit-details-marker {
+  display: none;
+}
+.shogi-game__pregame-field--opening-tendency > summary::after {
+  color: var(--amber);
+  content: "▾";
+}
+.shogi-game__pregame-field--opening-tendency[open] > summary::after {
+  content: "▴";
+}
+.shogi-game__pregame-field--opening-tendency > summary small {
+  flex: 1 1 auto;
+  color: var(--muted);
+  font-size: 0.85em;
+  text-align: right;
+}
+.shogi-game__pregame-hint {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.shogi-game__pregame-footer {
+  display: grid;
+  justify-items: center;
+  gap: 0.7em;
+  margin-top: 1em;
+}
+.shogi-game__pregame-note {
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+}
+.shogi-game .shogi-game__pregame-start {
+  width: min(18em, 100%);
+  min-height: 3.1em;
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--amber);
+  box-shadow: 0 3px 0 var(--amber-shadow);
+  font-size: 1.1em;
+  font-weight: 800;
+}
+.shogi-game--narrow .shogi-game__pregame-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5em;
+}
+.shogi-game--narrow .shogi-game__pregame-field {
+  padding: 0.55em 0.65em;
+}
+.shogi-game--narrow .shogi-game__pregame-heading {
+  margin-bottom: 0.7em;
+}
+.shogi-game--narrow .shogi-game__pregame-heading h2 {
+  font-size: 1.35em;
+}
+/* 対局準備の下端に開始ボタンを固定し、長い設定でも押しやすくする。 */
+.shogi-game--narrow .shogi-game__pregame-footer,
+.shogi-game--short .shogi-game__pregame-footer {
+  position: sticky;
+  bottom: calc(-1 * clamp(0.9em, 3vw, 2em));
+  margin-inline: calc(-1 * clamp(0.9em, 3vw, 2em));
+  padding: 0.6em clamp(0.9em, 3vw, 2em) clamp(0.9em, 3vw, 2em);
+  background: linear-gradient(180deg, rgba(43, 70, 91, 0) 0, var(--slate) 0.8em);
+}
+
+/* ===== 終局 ===== */
+.shogi-game__result {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  padding: 1em;
+  background: rgba(23, 38, 50, 0.86);
+  backdrop-filter: blur(0.35rem);
+  animation: result-backdrop-in 360ms ease-out both;
+}
+.shogi-game__result-panel {
+  position: relative;
+  width: min(32em, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: clamp(1.2em, 4vw, 2.8em);
+  border: 1px solid var(--result-accent);
+  border-top-width: 4px;
+  border-radius: 0.3em;
+  color: var(--ivory);
+  background: var(--night-deep);
+  box-shadow: 0 1.2em 3.2em rgba(7, 18, 26, 0.62);
+  text-align: center;
+  animation: result-panel-in 620ms cubic-bezier(0.2, 1.3, 0.3, 1) both;
+}
+.shogi-game__result--victory {
+  --result-accent: var(--amber);
+  --result-glow: rgba(241, 165, 76, 0.18);
+}
+.shogi-game__result--defeat {
+  --result-accent: var(--lavender);
+  --result-glow: rgba(215, 209, 253, 0.16);
+}
+.shogi-game__result--draw {
+  --result-accent: rgba(255, 252, 244, 0.7);
+  --result-glow: rgba(255, 252, 244, 0.12);
+}
+.shogi-game__result h2 {
+  margin: 0;
+  color: var(--ivory);
+  font-size: clamp(2.6em, 12vmin, 4.6em);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+  text-shadow: 0 0.15rem 0 var(--slate);
+}
+.shogi-game__result--defeat h2 {
+  animation: result-defeat-pulse 2.2s ease-in-out infinite;
+}
+.shogi-game__result-details {
+  display: grid;
+  gap: 0.45em;
+  margin: 1.2em 0 1.3em;
+  text-align: left;
+}
+.shogi-game__result-details > div {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+  gap: 0.75em;
+  padding: 0.5em 0.65em;
+  border-bottom: 1px solid rgba(241, 165, 76, 0.3);
+  background: rgba(43, 70, 91, 0.35);
+}
+.shogi-game__result-details dt {
+  color: var(--result-accent);
+  font-weight: 700;
+}
+.shogi-game__result-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.shogi-game .shogi-game__rematch {
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--amber);
+  box-shadow: 0 2px 0 var(--amber-shadow);
+}
+.shogi-game__result-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8em, 1fr));
+  gap: 0.65em;
+}
+.shogi-game__result-actions button {
+  min-width: 0;
+  min-height: 3em;
+}
+.shogi-game--short .shogi-game__result-details {
+  margin: 0.8em 0;
+}
+.shogi-game--short .shogi-game__result-details > div {
+  padding-block: 0.3em;
+}
+.shogi-game__confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.shogi-game__confetti i {
+  position: absolute;
+  top: -8%;
+  left: 50%;
+  width: 0.65rem;
+  height: 1.15rem;
+  background: var(--amber);
+  animation: result-confetti-fall 2.8s ease-in infinite;
+}
+.shogi-game__confetti i:nth-child(3n) { background: var(--lavender); }
+.shogi-game__confetti i:nth-child(3n + 1) { background: var(--ivory); }
+.shogi-game__confetti i:nth-child(1) { left: 8%; animation-delay: -0.4s; }
+.shogi-game__confetti i:nth-child(2) { left: 16%; animation-delay: -1.9s; }
+.shogi-game__confetti i:nth-child(3) { left: 25%; animation-delay: -0.8s; }
+.shogi-game__confetti i:nth-child(4) { left: 34%; animation-delay: -2.3s; }
+.shogi-game__confetti i:nth-child(5) { left: 42%; animation-delay: -1.2s; }
+.shogi-game__confetti i:nth-child(6) { left: 49%; animation-delay: -2.6s; }
+.shogi-game__confetti i:nth-child(7) { left: 57%; animation-delay: -0.2s; }
+.shogi-game__confetti i:nth-child(8) { left: 65%; animation-delay: -1.6s; }
+.shogi-game__confetti i:nth-child(9) { left: 73%; animation-delay: -2.1s; }
+.shogi-game__confetti i:nth-child(10) { left: 81%; animation-delay: -0.7s; }
+.shogi-game__confetti i:nth-child(11) { left: 89%; animation-delay: -1.4s; }
+.shogi-game__confetti i:nth-child(12) { left: 95%; animation-delay: -2.5s; }
+@keyframes result-backdrop-in {
+  from { opacity: 0; }
+}
+@keyframes result-panel-in {
+  from { transform: scale(0.65) translateY(2rem); opacity: 0; }
+}
+@keyframes result-defeat-pulse {
+  50% { opacity: 0.72; text-shadow: 0 0 0.7rem var(--result-accent); }
+}
+@keyframes result-confetti-fall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translateY(115vh) rotate(720deg); opacity: 0.25; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__result,
+  .shogi-game__result-panel,
+  .shogi-game__result h2,
+  .shogi-game__confetti i,
+  .shogi-game__menu,
+  .shogi-game__analysis-menu {
+    animation: none;
+  }
+}
+
+/* ===== ホーム画面(原型) ===== */
+/* 縦画面メディアクエリの portrait 補助表示(display: grid)より優先させる。 */
+/* ホーム画面では対局UIを隠す。定跡図鑑はホームから開くため例外。 */
+.shogi-game--home > :not(.shogi-home):not(.shogi-dex) { display: none !important; }
+.shogi-home {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  padding: 24px;
+  overflow: hidden;
+  background: #1d303f;
+  color: var(--ink, #fffcf4);
+  font-family: "Courier New", "Hiragino Kaku Gothic ProN", "Yu Gothic", monospace;
+}
+.shogi-home__star { position: absolute; pointer-events: none; }
+.shogi-home__star::before,
+.shogi-home__star::after {
+  content: "";
+  position: absolute;
+  background: currentColor;
+}
+.shogi-home__star::before {
+  left: 33%;
+  top: 0;
+  width: 34%;
+  height: 100%;
+}
+.shogi-home__star::after {
+  left: 0;
+  top: 33%;
+  width: 100%;
+  height: 34%;
+}
+.shogi-home__moon {
+  position: absolute;
+  right: 12%;
+  top: 10%;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fffcf4;
+  box-shadow: inset -12px -6px 0 0 #1d303f;
+}
+.shogi-home__chara {
+  position: absolute;
+  left: 50%;
+  bottom: 3vh;
+  height: clamp(130px, 26vh, 220px);
+  width: auto;
+  pointer-events: none;
+  image-rendering: pixelated;
+  animation: shogi-home-chara-float 4.5s ease-in-out infinite;
+}
+/* 中央寄せはアニメーションのtransformと競合するため、keyframes側で行う。 */
+@keyframes shogi-home-chara-float {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-8px);
+  }
+}
+.shogi-home__title { text-align: center; }
+.shogi-home__title h1 {
+  margin: 0;
+  font-size: clamp(36px, 7vw, 64px);
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: #fffcf4;
+  text-shadow: 3px 3px 0 #172632;
+}
+.shogi-home__menu {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(16px, 3vw, 40px);
+}
+.shogi-home__group {
+  display: grid;
+  gap: 10px;
+}
+.shogi-home__group-title {
+  margin: 0;
+  padding-left: 4px;
+  color: #e8a04c;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+}
+.shogi-home__cards {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(118px, 160px);
+  gap: clamp(10px, 2vw, 20px);
+}
+.shogi-home__desc {
+  color: #cfd8de;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+}
+.shogi-home__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 10px 18px;
+  border: 2px solid rgba(255, 252, 244, 0.4);
+  border-radius: 8px;
+  background: rgba(43, 70, 91, 0.9);
+  box-shadow: 4px 4px 0 rgba(23, 38, 50, 0.8);
+  color: #fffcf4;
+  font: inherit;
+  cursor: pointer;
+}
+.shogi-home__card:not(:disabled):hover {
+  border-color: #f1a54c;
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 rgba(23, 38, 50, 0.8);
+}
+.shogi-home__card:disabled { cursor: default; opacity: 0.72; }
+.shogi-home__icon { width: 56px; height: 56px; }
+.shogi-home__label { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; }
+.shogi-home__soon {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f1a54c;
+  color: #1d303f;
+  font-size: 10px;
+  font-weight: 700;
+}
+.shogi-home__koma-char {
+  font-size: 9px;
+  font-weight: 700;
+  fill: #1d303f;
+  text-anchor: middle;
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+}
+@media (max-width: 640px) {
+  /* 下部のキャラクターと重ならないよう、メニューを上側へ寄せる。 */
+  .shogi-home { gap: 24px; padding-bottom: clamp(140px, 26vh, 220px); }
+  .shogi-home__label { font-size: 13px; letter-spacing: 0.02em; white-space: nowrap; }
+  .shogi-home__menu { flex-direction: column; align-items: stretch; width: 100%; max-width: 380px; gap: 18px; }
+  .shogi-home__cards { grid-auto-columns: minmax(0, 1fr); }
+  .shogi-home__card { padding: 16px 6px 12px; gap: 8px; }
+  .shogi-home__icon { width: 44px; height: 44px; }
+}
+@media (max-width: 640px) and (max-height: 760px) {
+  .shogi-home { gap: 18px; padding-bottom: 112px; }
+  .shogi-home__chara { height: 100px; bottom: 8px; }
+  .shogi-home__icon { width: 36px; height: 36px; }
+}
+/* ===== 学習対局 ===== */
 .shogi-game__match-kind {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4658,1543 +6342,5 @@ queueMicrotask(() => {
 .shogi-game .shogi-game__command--attack[aria-pressed="true"],
 .shogi-game .shogi-game__command--flip[aria-pressed="true"] {
   box-shadow: inset 0 0 0 2px var(--amber, #f5a645);
-}
-.shogi-game__opening-tendency {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
-}
-.shogi-game__opening-tendency label {
-  display: grid;
-  gap: 0.28rem;
-  min-width: 0;
-}
-.shogi-game__opening-tendency label > span {
-  font-size: 0.78rem;
-  font-weight: 600;
-  opacity: 0.86;
-}
-.shogi-game__pregame-field--opening-tendency > small {
-  color: #d5c3bd;
-  font-size: 0.75rem;
-}
-.shogi-game__pregame-note {
-  min-height: 1.5rem;
-  margin: 1rem 0 0;
-  color: #dccbc5;
-  text-align: center;
-}
-.shogi-game__pregame-start {
-  display: block;
-  width: min(18rem, 100%);
-  min-height: 3.25rem;
-  margin: 1rem auto 0;
-  border-color: #ffe39b !important;
-  color: #fff9e9 !important;
-  background: linear-gradient(#ae3f58, #681d31) !important;
-  box-shadow: 0 0 1.1rem rgba(255, 166, 184, 0.28);
-  font-size: 1.1rem !important;
-  font-weight: 800;
-}
-.shogi-game__settings {
-  position: absolute;
-  z-index: 20;
-  top: 4.5rem;
-  right: 1rem;
-  width: min(20rem, calc(100% - 2rem));
-  margin: 0.55rem 0;
-  padding: 0.8rem;
-  border: 2px solid var(--gold);
-  border-radius: 0.45rem;
-  background: rgba(24, 13, 18, 0.96);
-}
-.shogi-game__settings-title {
-  margin-bottom: 0.6rem;
-  color: #f4d890;
-  font-weight: 700;
-}
-.shogi-game__settings-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.65rem;
-}
-.shogi-game__settings-actions {
-  display: flex;
-  gap: 0.6rem;
-  justify-content: flex-end;
-  margin-top: 0.8rem;
-}
-.shogi-game__settings-actions button {
-  min-width: 6.5rem;
-  padding: 0.55rem 1rem;
-}
-.shogi-game__strength {
-  display: flex;
-  gap: 0.55rem;
-  align-items: center;
-  justify-content: space-between;
-}
-.shogi-game__strength select {
-  box-sizing: border-box;
-  width: min(13rem, 65%);
-  min-height: 2.5rem;
-  padding: 0.4rem 0.55rem;
-  border: 1px solid var(--gold);
-  border-radius: 0.4rem;
-  background: #fff9ea;
-  color: #2b1618;
-  font: inherit;
-}
-.shogi-game__strength .shogi-game__strategy-setting {
-  width: min(20rem, 72%);
-}
-.shogi-game__strength--strategy {
-  align-items: start;
-}
-.shogi-game__board-shell {
-  grid-column: 1;
-  grid-row: 1 / 4;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  padding: 0.45rem;
-  overflow: hidden;
-  border: 3px solid var(--gold);
-  background: rgba(27, 9, 14, 0.88);
-  box-shadow: 0 0.6rem 1.4rem rgba(25, 0, 8, 0.55);
-}
-.shogi-game__board-shell .shogi-match-theme-controls {
-  display: none;
-}
-.shogi-game__dialogue {
-  display: flex;
-  gap: 0.65rem;
-  align-items: center;
-  min-height: 3.5rem;
-  max-height: 5rem;
-  overflow: auto;
-  padding: 0.85rem 1rem;
-}
-.shogi-game__dialogue-icon {
-  display: inline-flex;
-  width: 1.45rem;
-  height: 1.8rem;
-  flex: 0 0 auto;
-  filter: drop-shadow(0 0 0.3rem rgba(62, 176, 255, 0.9));
-}
-.shogi-game__dialogue-icon svg {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.shogi-game__flame-outer {
-  fill: #237be8;
-}
-.shogi-game__flame-inner {
-  fill: #9deaff;
-}
-.shogi-game__dialogue-text {
-  min-width: 0;
-}
-.shogi-game__assist-actions {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
-  align-items: center;
-}
-.shogi-game__assist-actions button {
-  min-width: 0;
-  padding-inline: 0.35rem;
-  font-size: 0.86rem;
-}
-.shogi-game__assist-actions > .shogi-game__analysis-button {
-  grid-column: 1 / -1;
-}
-.shogi-game__analysis-button {
-  border-color: #78d4ff !important;
-  background: linear-gradient(#285f82, #173247) !important;
-  box-shadow: 0 0 .8rem rgba(66, 181, 255, .3) !important;
-}
-.shogi-game__analysis {
-  z-index: 2;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 2px solid #e8842c;
-  border-radius: 0;
-  color: #111;
-  background: #fff8e7;
-  box-shadow: none;
-  font-family: Arial, "Yu Gothic", sans-serif;
-}
-.shogi-game.shogi-game--analysis {
-  grid-template-rows: auto minmax(0, 1fr) minmax(15rem, 30vh);
-  row-gap: 0;
-  padding-block: 0;
-}
-.shogi-game--analysis .shogi-game__board-shell {
-  grid-row: 1 / 3;
-  padding-block: 0;
-}
-.shogi-game--analysis .shogi-game__analysis {
-  grid-column: 1;
-  grid-row: 3;
-}
-.shogi-game__analysis .evaluation-graph {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  min-height: 0;
-  overflow: hidden;
-}
-.shogi-game__analysis .evaluation-graph__svg {
-  height: 100%;
-  min-height: 0;
-  aspect-ratio: auto;
-}
-.shogi-game__analysis .evaluation-graph__selection {
-  display: none;
-}
-.shogi-game__analysis-info {
-  display: flex;
-  min-width: 0;
-  min-height: 1.6rem;
-  gap: .35rem;
-  align-items: center;
-  padding: 0 .15rem;
-  color: #111;
-  font-size: .82rem;
-  white-space: nowrap;
-}
-.shogi-game__analysis-info strong {
-  font-size: .82rem;
-}
-.shogi-game__analysis-info select {
-  min-width: 8rem;
-  max-width: 15rem;
-  height: 1.45rem;
-  border: 1px solid #666;
-  border-radius: 0;
-  color: #111;
-  background: #fff;
-  font: .78rem Arial, sans-serif;
-}
-.shogi-game__analysis-slider {
-  min-width: 4rem;
-  flex: 1;
-}
-.shogi-game__analysis-slider input[type="range"] {
-  width: 100%;
-  height: 1.2rem;
-  margin: 0;
-  accent-color: #1d43e8;
-  cursor: ew-resize;
-  vertical-align: middle;
-  touch-action: pan-x;
-}
-.shogi-game__analysis-progress {
-  color: #a74316;
-  font-weight: 700;
-}
-.shogi-game__analysis-actions {
-  display: flex;
-  gap: .25rem;
-  justify-content: flex-start;
-  margin-top: 0;
-  flex-wrap: wrap;
-}
-.shogi-game__analysis-actions button {
-  min-width: 2.2rem;
-  min-height: 1.8rem;
-  padding: .15rem .55rem;
-  border: 1px solid #888;
-  border-radius: .1rem;
-  color: #111;
-  background: linear-gradient(#fff, #e9e9e9);
-  box-shadow: none;
-  font: 700 .8rem/1 Arial, "Yu Gothic", sans-serif;
-  text-shadow: none;
-}
-.shogi-game .shogi-game__analysis-actions button:disabled {
-  border-color: #bbb;
-  color: #aaa;
-  background: #eee;
-  opacity: 1;
-}
-.shogi-game__player-zone--player .shogi-game__player-card {
-  margin-left: 6.5rem;
-}
-.shogi-game__awakening {
-  border-color: #fff0a6 !important;
-  background: linear-gradient(135deg, #6f3d08 0%, #d99b22 45%, #fff0a0 58%, #a65d08 100%) !important;
-  box-shadow:
-    inset 0 0 0 2px rgba(83, 42, 0, 0.7),
-    0 0 0.75rem rgba(255, 193, 59, 0.7) !important;
-  color: #fffbea !important;
-  text-shadow: 0 1px 2px #4a2600, 0 0 0.45rem #fff3ad;
-}
-.shogi-game__error {
-  margin: 0.7rem 0 0;
-  padding: 0.75rem;
-  border: 1px solid #ff8d8d;
-  color: #fff;
-  background: rgba(110, 10, 20, 0.94);
-}
-.shogi-game__result {
-  position: absolute;
-  z-index: 100;
-  inset: 0;
-  display: grid;
-  overflow: hidden;
-  place-items: center;
-  padding: 1.5rem;
-  background: rgba(9, 3, 7, 0.78);
-  backdrop-filter: blur(0.35rem);
-  animation: result-backdrop-in 360ms ease-out both;
-}
-.shogi-game__result-panel {
-  position: relative;
-  width: min(32rem, 92vw);
-  padding: clamp(1.8rem, 5vw, 3.5rem);
-  border: 3px solid var(--result-accent);
-  border-radius: 1rem;
-  color: #fff8ec;
-  background:
-    radial-gradient(circle at 50% 5%, var(--result-glow), transparent 55%),
-    linear-gradient(155deg, rgba(63, 24, 34, 0.98), rgba(24, 10, 16, 0.98));
-  box-shadow:
-    inset 0 0 2.5rem var(--result-glow),
-    0 0 0 1px rgba(255, 255, 255, 0.22),
-    0 1.2rem 4rem rgba(0, 0, 0, 0.65),
-    0 0 2.5rem var(--result-glow);
-  text-align: center;
-  animation: result-panel-in 620ms cubic-bezier(0.2, 1.3, 0.3, 1) both;
-}
-.shogi-game__result--victory {
-  --result-accent: #ffe17a;
-  --result-glow: rgba(255, 198, 43, 0.38);
-}
-.shogi-game__result--defeat {
-  --result-accent: #c97782;
-  --result-glow: rgba(142, 30, 48, 0.34);
-}
-.shogi-game__result--draw {
-  --result-accent: #c8b9d9;
-  --result-glow: rgba(147, 123, 178, 0.28);
-}
-.shogi-game__result h2 {
-  margin: 0;
-  color: #fff;
-  font-size: clamp(3.3rem, 10vw, 6.5rem);
-  line-height: 1;
-  letter-spacing: 0.12em;
-  text-indent: 0.12em;
-  text-shadow: 0 0 1.4rem var(--result-accent), 0 0.18rem 0 #541d25;
-}
-.shogi-game__result--defeat h2 {
-  animation: result-defeat-pulse 2.2s ease-in-out infinite;
-}
-.shogi-game__result-details {
-  display: grid;
-  gap: 0.5rem;
-  margin: 1.35rem 0 1.5rem;
-  text-align: left;
-}
-.shogi-game__result-details > div {
-  display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
-  gap: 0.75rem;
-  padding: 0.55rem 0.65rem;
-  border-bottom: 1px solid rgba(255, 225, 122, 0.32);
-  background: rgba(16, 7, 11, 0.28);
-}
-.shogi-game__result-details dt {
-  color: var(--result-accent);
-  font-weight: 700;
-}
-.shogi-game__result-details dd {
-  min-width: 0;
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: #fff8ec;
-}
-.shogi-game__rematch {
-  border-color: var(--result-accent) !important;
-  background: linear-gradient(#7a3540, #42151e) !important;
-  box-shadow: 0 0 1.2rem var(--result-glow) !important;
-}
-.shogi-game__result-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  gap: 0.65rem;
-}
-.shogi-game__result-actions button {
-  min-width: 0;
-  padding: 0.7rem 0.55rem;
-}
-.shogi-game__confetti {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.shogi-game__confetti i {
-  position: absolute;
-  top: -8%;
-  left: 50%;
-  width: 0.65rem;
-  height: 1.15rem;
-  background: #ffe17a;
-  animation: result-confetti-fall 2.8s ease-in infinite;
-}
-.shogi-game__confetti i:nth-child(3n) { background: #ff7f9b; }
-.shogi-game__confetti i:nth-child(3n + 1) { background: #fff4c2; }
-.shogi-game__confetti i:nth-child(1) { left: 8%; animation-delay: -0.4s; }
-.shogi-game__confetti i:nth-child(2) { left: 16%; animation-delay: -1.9s; }
-.shogi-game__confetti i:nth-child(3) { left: 25%; animation-delay: -0.8s; }
-.shogi-game__confetti i:nth-child(4) { left: 34%; animation-delay: -2.3s; }
-.shogi-game__confetti i:nth-child(5) { left: 42%; animation-delay: -1.2s; }
-.shogi-game__confetti i:nth-child(6) { left: 49%; animation-delay: -2.6s; }
-.shogi-game__confetti i:nth-child(7) { left: 57%; animation-delay: -0.2s; }
-.shogi-game__confetti i:nth-child(8) { left: 65%; animation-delay: -1.6s; }
-.shogi-game__confetti i:nth-child(9) { left: 73%; animation-delay: -2.1s; }
-.shogi-game__confetti i:nth-child(10) { left: 81%; animation-delay: -0.7s; }
-.shogi-game__confetti i:nth-child(11) { left: 89%; animation-delay: -1.4s; }
-.shogi-game__confetti i:nth-child(12) { left: 95%; animation-delay: -2.5s; }
-@keyframes result-backdrop-in {
-  from { opacity: 0; }
-}
-@keyframes result-panel-in {
-  from { transform: scale(0.65) translateY(2rem); opacity: 0; }
-}
-@keyframes result-defeat-pulse {
-  50% { opacity: 0.72; text-shadow: 0 0 0.7rem var(--result-accent); }
-}
-@keyframes result-confetti-fall {
-  0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
-  12% { opacity: 1; }
-  100% { transform: translateY(115vh) rotate(720deg); opacity: 0.25; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .shogi-game__result,
-  .shogi-game__result-panel,
-  .shogi-game__result h2,
-  .shogi-game__confetti i {
-    animation: none;
-  }
-}
-@media (max-width: 780px) {
-  .shogi-game__pregame {
-    padding: 0.65rem;
-  }
-  .shogi-game__pregame-panel {
-    max-height: 100%;
-    padding: 0.9rem;
-    overflow: auto;
-  }
-  .shogi-game__pregame-heading {
-    margin-bottom: 0.7rem;
-  }
-  .shogi-game__pregame-grid {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-  }
-  .shogi-game__pregame-field {
-    grid-template-columns: 8rem minmax(0, 1fr);
-    align-items: center;
-    padding: 0.45rem 0.55rem;
-  }
-  .shogi-game__pregame-field--turn {
-    grid-template-columns: 1fr;
-  }
-  .shogi-game__pregame-field--opening-tendency {
-    grid-template-columns: 1fr;
-  }
-  .shogi-game__opening-tendency {
-    grid-template-columns: 1fr;
-  }
-  .shogi-game__pregame-control {
-    grid-template-columns: 8rem minmax(0, 1fr);
-    align-items: center;
-  }
-  .shogi-game__pregame-note {
-    margin-top: 0.65rem;
-  }
-  .shogi-game__pregame-start {
-    min-height: 2.8rem;
-    margin-top: 0.65rem;
-  }
-  .shogi-game__settings-grid {
-    grid-template-columns: 1fr;
-  }
-}
-@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
-  .shogi-game {
-    --panel: #2b171d;
-  }
-  .shogi-game__portrait--advisor {
-    width: 8rem;
-    height: 9rem;
-  }
-  .shogi-game__assist-actions,
-  .shogi-game__player-zone--player .shogi-game__player-card {
-    margin-left: 8.5rem;
-  }
-  .shogi-game__assist-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .shogi-game button:disabled {
-    border-color: #8f6d68;
-    color: #c7b4b1;
-    background: #5a3b43;
-    filter: grayscale(0.35);
-    opacity: 1;
-  }
-}
-@media (min-width: 1100px) and (min-aspect-ratio: 5/4) {
-  .shogi-game {
-    grid-template-columns:
-      minmax(13rem, 1fr)
-      minmax(40rem, 68rem)
-      minmax(15rem, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.65rem;
-    padding: 0.75rem;
-  }
-  .shogi-game__toolbar {
-    grid-column: 3;
-    grid-row: 1;
-    gap: 0.45rem;
-    padding: 0 0 0.1rem;
-  }
-  .shogi-game__toolbar button,
-  .shogi-game__turn {
-    min-width: 0;
-    padding-inline: 0.55rem;
-  }
-  .shogi-game__board-shell {
-    grid-column: 2;
-    grid-row: 1 / -1;
-    padding: 0.25rem;
-  }
-  .shogi-game__player-zone--opponent,
-  .shogi-game__player-zone--player {
-    min-height: 0;
-    gap: 0.55rem;
-    padding: 0;
-    overflow: hidden;
-    align-content: stretch;
-    align-items: stretch;
-  }
-  .shogi-game__player-zone--opponent {
-    grid-column: 1;
-    grid-row: 1 / -1;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    align-content: start;
-  }
-  .shogi-game__player-zone--player {
-    grid-column: 3;
-    grid-row: 2;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto auto auto;
-    isolation: isolate;
-  }
-  .shogi-game__portrait--advisor {
-    position: absolute;
-    z-index: 0;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    background:
-      linear-gradient(180deg, rgba(43, 23, 29, 0.02) 0 42%, rgba(43, 23, 29, 0.32) 68%, rgba(43, 23, 29, 0.72) 100%);
-  }
-  .shogi-game__portrait--advisor .shogi-game__character {
-    object-fit: cover;
-    object-position: center top;
-  }
-  .shogi-game__dialogue,
-  .shogi-game__assist-actions,
-  .shogi-game__player-zone--player .shogi-game__player-card {
-    position: relative;
-    z-index: 2;
-  }
-  .shogi-game__player-zone--opponent .shogi-game__match-summary {
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .shogi-game__opening-guide {
-    display: flex;
-    grid-column: 1;
-    grid-row: 2;
-    align-self: end;
-    max-height: 100%;
-    flex-direction: column;
-    gap: 0.4rem;
-    padding: 0.6rem;
-    overflow: auto;
-    border: 2px solid var(--gold);
-    background: linear-gradient(155deg, rgba(69, 29, 40, 0.98), rgba(34, 18, 23, 0.98));
-    box-shadow: inset 0 0 1.5rem rgba(110, 34, 53, 0.42);
-  }
-  .shogi-game__opening-guide h2 {
-    margin: 0;
-    color: #f4d890;
-    font-size: 0.9rem;
-    text-align: center;
-  }
-  .shogi-game__opening-selects {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.4rem;
-  }
-  .shogi-game__opening-selects label {
-    display: grid;
-    min-width: 0;
-    gap: 0.2rem;
-    color: #f4d890;
-    font-size: 0.75rem;
-  }
-  .shogi-game__opening-selects select {
-    width: 100%;
-    min-width: 0;
-    padding: 0.35rem 0.2rem;
-    border: 1px solid var(--gold);
-    color: #fff8ee;
-    background: #25151a;
-    font: inherit;
-  }
-  .shogi-game__opening-guide p {
-    margin: 0;
-    padding: 0.4rem 0.5rem;
-    border-left: 3px solid #55bfe9;
-    color: #f7eee8;
-    background: rgba(7, 80, 116, 0.23);
-    font-size: 0.74rem;
-    line-height: 1.35;
-  }
-  .shogi-game__dialogue {
-    grid-column: 1;
-    grid-row: 2;
-    max-height: none;
-  }
-  .shogi-game__assist-actions {
-    grid-column: 1;
-    grid-row: 3;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-left: 0;
-  }
-  .shogi-game__player-zone--player .shogi-game__player-card {
-    grid-column: 1;
-    grid-row: 4;
-    margin-left: 0;
-  }
-  .shogi-game--analysis {
-    grid-template-rows: auto minmax(0, 1fr) minmax(15rem, 31vh);
-  }
-  .shogi-game--analysis .shogi-game__board-shell {
-    grid-column: 2;
-    grid-row: 1 / 3;
-  }
-  .shogi-game--analysis .shogi-game__player-zone--opponent {
-    grid-row: 1 / -1;
-  }
-  .shogi-game--analysis .shogi-game__player-zone--player {
-    grid-row: 2 / -1;
-  }
-  .shogi-game--analysis .shogi-game__analysis {
-    grid-column: 2;
-    grid-row: 3;
-  }
-}
-@media (max-width: 899px), (max-aspect-ratio: 5/4) {
-  .shogi-game {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 8.75rem;
-    height: 100dvh;
-    padding: 0.5rem;
-  }
-  .shogi-game__toolbar {
-    grid-column: 1;
-    grid-row: 1;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .shogi-game__toolbar.shogi-game__toolbar--learning {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-  .shogi-game__toolbar--learning .shogi-game__turn {
-    grid-column: auto;
-  }
-  .shogi-game__player-zone--opponent {
-    grid-column: 1;
-    grid-row: 2;
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 0.75fr) minmax(12rem, 1.25fr);
-    min-height: 0;
-    padding-right: 0;
-  }
-  .shogi-game__match-summary {
-    grid-column: 1 / 3;
-    grid-row: 1;
-    align-self: stretch;
-  }
-  .shogi-game__opening-guide {
-    grid-column: 3;
-    grid-row: 1;
-    align-self: stretch;
-    gap: 0.25rem;
-    padding: 0.35rem;
-  }
-  .shogi-game__opening-guide h2 {
-    font-size: 0.72rem;
-  }
-  .shogi-game__opening-selects {
-    gap: 0.25rem;
-  }
-  .shogi-game__opening-selects label,
-  .shogi-game__opening-guide p {
-    font-size: 0.68rem;
-  }
-  .shogi-game__opening-selects select {
-    padding: 0.18rem;
-  }
-  .shogi-game__opening-guide p {
-    padding: 0.22rem 0.35rem;
-  }
-  .shogi-game__board-shell {
-    grid-column: 1;
-    grid-row: 3;
-  }
-  .shogi-game__player-zone--player {
-    grid-column: 1;
-    grid-row: 4;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: minmax(0, 1fr) auto;
-    min-height: 0;
-    padding-left: 6.5rem;
-  }
-  .shogi-game__portrait--advisor {
-    width: 6.5rem;
-    height: 8.75rem;
-  }
-  .shogi-game__dialogue {
-    grid-column: 1;
-    grid-row: 1;
-    min-height: 0;
-    max-height: none;
-    padding: 0.55rem 0.75rem;
-  }
-  .shogi-game__player-zone--player .shogi-game__player-card {
-    grid-column: 1;
-    grid-row: 2;
-    margin-left: 0;
-    padding: 0.45rem 0.65rem;
-  }
-  .shogi-game__assist-actions {
-    display: flex;
-    margin-left: 0;
-    grid-column: 2;
-    grid-row: 1 / 3;
-    flex-direction: column;
-    flex-wrap: nowrap;
-    align-items: stretch;
-  }
-  .shogi-game__assist-actions button {
-    min-height: 2.35rem;
-    padding: 0.4rem 0.75rem;
-  }
-  .shogi-game--analysis {
-    grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) minmax(15rem, 28vh) 8.75rem;
-  }
-  .shogi-game--analysis .shogi-game__analysis {
-    grid-column: 1;
-    grid-row: 4;
-  }
-  .shogi-game--analysis .shogi-game__board-shell {
-    grid-column: 1;
-    grid-row: 3;
-  }
-  .shogi-game--analysis .shogi-game__player-zone--player {
-    grid-row: 5;
-  }
-}
-@media (min-width: 541px) and (max-aspect-ratio: 5/4) {
-  .shogi-game {
-    grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 10rem;
-  }
-  .shogi-game__player-zone--player {
-    padding-left: 9rem;
-  }
-  .shogi-game__portrait--advisor {
-    width: 9rem;
-    height: 10rem;
-  }
-  .shogi-game__assist-actions {
-    width: 5rem;
-    gap: 0.25rem;
-    justify-self: end;
-  }
-  .shogi-game__assist-actions button {
-    min-height: 1.8rem;
-    padding: 0.25rem 0.3rem;
-    font-size: 0.75rem;
-    line-height: 1.1;
-  }
-  .shogi-game__assist-actions button small {
-    font-size: 0.68rem;
-  }
-}
-@media (max-width: 540px) {
-  .shogi-game__learning-plans,
-  .shogi-game__learning-start .shogi-game__opening-tendency {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .shogi-game__analysis-info {
-    flex-wrap: wrap;
-    gap: .15rem .3rem;
-  }
-  .shogi-game__analysis-slider {
-    order: 3;
-    min-width: 100%;
-  }
-  .shogi-game {
-    grid-template-rows: 3.25rem 9.5rem minmax(0, 1fr) 6.5rem;
-    padding: 0.4rem;
-    border-radius: 0;
-  }
-  .shogi-game.shogi-game--analysis {
-    grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) minmax(15rem, 32vh) 3.4rem;
-  }
-  .shogi-game__toolbar {
-    gap: 0.4rem;
-    padding-inline: 0;
-  }
-  .shogi-game__toolbar .shogi-game__command {
-    min-width: 0;
-    padding-inline: 0.3rem;
-    font-size: 0.72rem;
-    white-space: nowrap;
-  }
-  .shogi-game__turn {
-    padding-inline: 0.5rem;
-    font-size: 0.85rem;
-  }
-  .shogi-game__player-zone {
-    min-height: 0;
-  }
-  .shogi-game__player-zone--opponent {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
-    grid-template-rows: 4.5rem minmax(0, 1fr);
-    min-height: 0;
-    padding-right: 0;
-  }
-  .shogi-game__match-summary {
-    grid-column: 1 / -1;
-    padding: 0.35rem 0.5rem;
-    gap: 0.25rem;
-  }
-  .shogi-game__match-summary-status strong {
-    font-size: 0.85rem;
-  }
-  .shogi-game__formation-summary {
-    gap: 0.4rem;
-    padding-top: 0.25rem;
-  }
-  .shogi-game__player-zone--player {
-    grid-template-columns: minmax(0, 1fr) 4.8rem;
-    grid-template-rows: 1fr;
-    min-height: 0;
-    padding-left: 4.5rem;
-  }
-  .shogi-game__portrait {
-    width: 4.25rem;
-    height: 4.5rem;
-  }
-  .shogi-game__portrait--advisor {
-    width: 4.5rem;
-    height: 6.5rem;
-  }
-  .shogi-game__character {
-    object-position: center;
-  }
-  .shogi-game__player-card {
-    grid-template-columns: auto 1fr;
-    min-width: 0;
-    padding: 0.55rem;
-    font-size: 0.85rem;
-  }
-  .shogi-game__player-card > small {
-    display: none;
-  }
-  .shogi-game__status {
-    min-height: 3.25rem;
-    padding: 0.5rem;
-  }
-  .shogi-game__assist-actions {
-    grid-column: 2;
-    grid-row: 1;
-    flex-direction: column;
-    flex-wrap: nowrap;
-    gap: 0.2rem;
-  }
-  .shogi-game__assist-actions button {
-    flex: 1;
-    min-height: 0;
-    padding: 0.2rem 0.3rem;
-    font-size: 0.72rem;
-  }
-  .shogi-game__dialogue {
-    display: flex;
-    grid-column: 1;
-    grid-row: 1;
-    gap: 0.35rem;
-    min-height: 0;
-    max-height: none;
-    padding: 0.4rem 0.5rem;
-    overflow: auto;
-    font-size: 0.78rem;
-    line-height: 1.25;
-  }
-  .shogi-game__dialogue-icon {
-    width: 1rem;
-    height: 1.3rem;
-  }
-  .shogi-game__opening-guide {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.2rem 0.35rem;
-    padding: 0.3rem;
-  }
-  .shogi-game__opening-guide h2 {
-    display: none;
-  }
-  .shogi-game__opening-selects {
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .shogi-game__opening-guide p {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    min-height: 0;
-    overflow: auto;
-  }
-  .shogi-game__player-zone--player .shogi-game__player-card {
-    display: none;
-  }
-  .shogi-game__strength {
-    min-width: 0;
-    font-size: 0.85rem;
-  }
-  .shogi-game__strength select {
-    min-width: 0;
-    width: 62%;
-  }
-}
-@media (max-width: 360px) {
-  .shogi-game {
-    grid-template-rows: 6rem 9.5rem minmax(0, 1fr) 6.5rem;
-  }
-  .shogi-game__toolbar {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .shogi-game__command {
-    width: 100%;
-    min-width: 0;
-  }
-  .shogi-game__turn {
-    grid-column: 2;
-    grid-row: 2;
-    margin-left: 0;
-    text-align: center;
-  }
-  .shogi-game__player-zone--opponent,
-  .shogi-game__player-zone--player {
-    padding-right: 0;
-    padding-left: 0;
-  }
-  .shogi-game__player-zone--player {
-    padding-left: 4.5rem;
-    padding-right: 0;
-  }
-  .shogi-game__portrait {
-    width: 5rem;
-  }
-}
-@media (min-width: 541px) and (max-width: 899px) and (max-height: 500px) {
-  .shogi-game {
-    grid-template-rows: 3.25rem 4.25rem minmax(0, 1fr) 5.5rem;
-  }
-  .shogi-game__player-zone--opponent {
-    grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.65fr) minmax(15rem, 1.5fr);
-    grid-template-rows: minmax(0, 1fr);
-    overflow: hidden;
-  }
-  .shogi-game__opening-guide {
-    height: auto;
-    min-height: 0;
-    max-height: 100%;
-    gap: 0.12rem;
-    padding: 0.18rem 0.3rem;
-  }
-  .shogi-game__opening-guide h2 {
-    display: none;
-  }
-  .shogi-game__opening-selects label,
-  .shogi-game__opening-guide p {
-    font-size: 0.62rem;
-  }
-  .shogi-game__opening-guide p {
-    padding: 0.12rem 0.25rem;
-    line-height: 1.15;
-  }
-  .shogi-game__player-zone--player {
-    padding-left: 5rem;
-  }
-  .shogi-game__portrait--advisor {
-    width: 5rem;
-    height: 5.5rem;
-  }
-  .shogi-game__dialogue {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.75rem;
-  }
-  .shogi-game__assist-actions {
-    gap: 0.2rem;
-  }
-  .shogi-game__assist-actions button {
-    min-height: 1.6rem;
-    padding: 0.15rem 0.25rem;
-    font-size: 0.7rem;
-  }
-}
-.shogi-game__opening-guide.shogi-game__opening-guide--portrait {
-  display: none;
-}
-@media (max-aspect-ratio: 5/4) {
-  .shogi-game:not(.shogi-game--analysis) {
-    grid-template-rows: 3.5rem 5.5rem minmax(0, 1fr) 10rem 5rem;
-  }
-  .shogi-game:not(.shogi-game--analysis).shogi-game--rook-choice {
-    grid-template-rows: 3.5rem 5rem minmax(0, 1fr) 9rem 9rem;
-  }
-  .shogi-game:not(.shogi-game--analysis) .shogi-game__player-zone--opponent {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .shogi-game:not(.shogi-game--analysis) .shogi-game__opening-guide--primary {
-    display: none;
-  }
-  .shogi-game:not(.shogi-game--analysis) .shogi-game__opening-guide.shogi-game__opening-guide--portrait {
-    display: grid;
-    grid-column: 1;
-    grid-row: 5;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
-    gap: 0.2rem;
-    align-self: stretch;
-    min-height: 0;
-    padding: 0.3rem;
-    overflow-y: auto;
-  }
-  .shogi-game__opening-guide--portrait h2 {
-    display: none;
-  }
-  .shogi-game__opening-guide--portrait .shogi-game__opening-selects {
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .shogi-game__opening-guide--portrait .shogi-game__opening-selects label {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-  }
-  .shogi-game__opening-guide--portrait .shogi-game__rook-choice {
-    grid-column: 1;
-    grid-row: 2;
-  }
-  .shogi-game__opening-guide--portrait .shogi-game__rook-choice button {
-    min-height: 1.8rem;
-  }
-  .shogi-game__opening-guide--portrait p {
-    grid-column: 1;
-    grid-row: 3;
-    min-height: 0;
-    overflow: visible;
-    padding: 0.2rem 0.35rem;
-    font-size: 0.68rem;
-    line-height: 1.2;
-  }
-}
-@media (max-width: 540px) and (max-aspect-ratio: 5/4) {
-  .shogi-game:not(.shogi-game--analysis) {
-    grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) 6.5rem 4.5rem;
-  }
-  .shogi-game:not(.shogi-game--analysis) .shogi-game__player-zone--opponent {
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .shogi-game:not(.shogi-game--analysis).shogi-game--rook-choice {
-    grid-template-rows: 3.25rem 4.5rem minmax(0, 1fr) 6rem 9rem;
-  }
-}
-@media (max-width: 360px) and (max-aspect-ratio: 5/4) {
-  .shogi-game:not(.shogi-game--analysis) {
-    grid-template-rows: 6rem 4.5rem minmax(0, 1fr) 6.5rem 4.5rem;
-  }
-  .shogi-game:not(.shogi-game--analysis).shogi-game--rook-choice {
-    grid-template-rows: 6rem 4.5rem minmax(0, 1fr) 6rem 9rem;
-  }
-  .shogi-game.shogi-game--analysis {
-    grid-template-rows: 6rem 4.5rem minmax(0, 1fr) minmax(15rem, 32vh) 3.4rem;
-  }
-}
-
-/* Night-magic theme — based on the supplied navy, amber, ivory and lavender palette. */
-.shogi-game {
-  --night: #1d3343;
-  --night-deep: #142736;
-  --slate: #2e4a60;
-  --slate-light: #3b5a70;
-  --amber: #f5a645;
-  --ivory: #fffdf4;
-  --lavender: #d7ceff;
-  --gold: var(--amber);
-  --ink: var(--ivory);
-  --panel: rgba(20, 39, 54, 0.94);
-  border: 0;
-  color: var(--ink);
-  background:
-    radial-gradient(circle at 8% 18%, rgba(245, 166, 69, 0.16) 0 2px, transparent 3px),
-    radial-gradient(circle at 91% 13%, rgba(215, 206, 255, 0.18) 0 2px, transparent 3px),
-    radial-gradient(circle at 83% 78%, rgba(255, 253, 244, 0.13) 0 1px, transparent 2px),
-    var(--night);
-  box-shadow: none;
-  font-family: "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
-}
-.shogi-game::before {
-  background: linear-gradient(135deg, transparent 0 68%, rgba(46, 74, 96, 0.18) 68% 100%);
-  opacity: 1;
-}
-.shogi-game button {
-  border: 1px solid rgba(245, 166, 69, 0.68);
-  border-radius: 0.2rem;
-  color: var(--ivory);
-  background: var(--slate);
-  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72);
-  font-family: inherit;
-  text-shadow: none;
-  transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
-}
-@media (hover: hover) {
-  .shogi-game button:not(:disabled):hover {
-    border-color: var(--amber);
-    background: var(--slate-light);
-    transform: translateY(-1px);
-  }
-}
-.shogi-game button.shogi-game__command--flip[aria-pressed="true"] {
-  border-color: var(--lavender);
-  color: var(--night-deep);
-  background: var(--lavender);
-  box-shadow: 0 2px 0 #736c98, inset 0 0 0 2px var(--night-deep);
-}
-.shogi-game button:focus-visible,
-.shogi-game select:focus-visible,
-.shogi-game input:focus-visible {
-  outline: 2px solid var(--lavender);
-  outline-offset: 2px;
-}
-.shogi-game button:disabled {
-  border-color: rgba(174, 184, 189, 0.28);
-  color: rgba(255, 253, 244, 0.45);
-  background: #263e50;
-  box-shadow: none;
-  filter: none;
-}
-.shogi-game__command {
-  clip-path: none;
-}
-.shogi-game__command--danger {
-  border-color: rgba(245, 166, 69, 0.82);
-  background: #735036;
-}
-.shogi-game__command--complete {
-  border-color: var(--amber);
-  color: var(--night-deep);
-  background: var(--amber);
-  box-shadow: 0 2px 0 #a96924;
-}
-.shogi-game__command--settings,
-.shogi-game__analysis-button {
-  border-color: rgba(215, 206, 255, 0.62) !important;
-  background: var(--slate) !important;
-  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72) !important;
-}
-.shogi-game__turn {
-  border: 1px solid rgba(245, 166, 69, 0.72);
-  border-radius: 0.2rem;
-  color: var(--amber);
-  background: var(--night-deep);
-}
-.shogi-game__match-summary,
-.shogi-game__player-card,
-.shogi-game__status,
-.shogi-game__dialogue,
-.shogi-game__opening-guide {
-  border: 1px solid rgba(245, 166, 69, 0.5);
-  border-left: 3px solid var(--amber);
-  color: var(--ivory);
-  background: var(--panel);
-  box-shadow: none;
-}
-.shogi-game__opening-guide {
-  background: rgba(20, 39, 54, 0.96);
-}
-.shogi-game__opening-guide h2,
-.shogi-game__opening-selects label,
-.shogi-game__formation-summary b,
-.shogi-game__player-card b,
-.shogi-game__settings-title,
-.shogi-game__pregame-heading > span,
-.shogi-game__pregame-field span {
-  color: var(--amber);
-}
-.shogi-game__player-card > span,
-.shogi-game__player-card > small,
-.shogi-game__match-summary-status span,
-.shogi-game__status span,
-.shogi-game__pregame-note {
-  color: #becbd2;
-}
-.shogi-game__player-card > div,
-.shogi-game__formation-summary {
-  border-top-color: rgba(245, 166, 69, 0.35);
-}
-.shogi-game__opening-selects select,
-.shogi-game__strength select {
-  border: 1px solid rgba(245, 166, 69, 0.6);
-  border-radius: 0.15rem;
-  color: var(--ivory);
-  background: var(--night-deep);
-}
-.shogi-game__opening-guide p {
-  border-left-color: var(--lavender);
-  color: var(--ivory);
-  background: rgba(46, 74, 96, 0.58);
-}
-.shogi-game__board-shell {
-  padding: 0.3rem;
-  border: 1px solid rgba(245, 166, 69, 0.64);
-  background: var(--night-deep);
-  box-shadow: 0 0.45rem 1.2rem rgba(8, 20, 29, 0.38);
-}
-.shogi-game__pregame {
-  background: rgba(20, 39, 54, 0.96);
-  backdrop-filter: blur(0.4rem);
-}
-.shogi-game__pregame-panel {
-  border: 1px solid rgba(245, 166, 69, 0.72);
-  border-top: 4px solid var(--amber);
-  border-radius: 0.3rem;
-  color: var(--ivory);
-  background: var(--slate);
-  box-shadow: 0 1.2rem 3rem rgba(7, 18, 26, 0.52);
-}
-.shogi-game__pregame-field {
-  border: 1px solid rgba(215, 206, 255, 0.24);
-  border-radius: 0.2rem;
-  background: rgba(20, 39, 54, 0.58);
-}
-.shogi-game__pregame-field select {
-  border: 1px solid rgba(245, 166, 69, 0.68);
-  border-radius: 0.15rem;
-  color: var(--night-deep);
-  background: var(--ivory);
-}
-.shogi-game__pregame-start {
-  border-color: var(--amber) !important;
-  color: var(--night-deep) !important;
-  background: var(--amber) !important;
-  box-shadow: 0 3px 0 #a96924 !important;
-}
-.shogi-game__settings {
-  border: 1px solid rgba(245, 166, 69, 0.72);
-  border-top: 3px solid var(--amber);
-  border-radius: 0.2rem;
-  background: rgba(20, 39, 54, 0.98);
-  box-shadow: 0 0.8rem 2rem rgba(7, 18, 26, 0.5);
-}
-.shogi-game__rematch {
-  border-color: var(--amber) !important;
-  background: #735036 !important;
-  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72) !important;
-}
-.shogi-game__awakening {
-  border-color: var(--amber) !important;
-  color: var(--night-deep) !important;
-  background: var(--amber) !important;
-  box-shadow: 0 2px 0 #a96924 !important;
-  text-shadow: none;
-}
-.shogi-game__flame-outer { fill: var(--amber); }
-.shogi-game__flame-inner { fill: var(--ivory); }
-.shogi-game__dialogue-icon {
-  filter: drop-shadow(0 0 0.25rem rgba(245, 166, 69, 0.45));
-}
-.shogi-game__analysis {
-  border-color: var(--amber);
-  color: var(--night-deep);
-  background: var(--ivory);
-}
-.shogi-game__analysis-info,
-.shogi-game__analysis-info select {
-  color: var(--night-deep);
-}
-.shogi-game__analysis-slider input[type="range"] {
-  accent-color: var(--amber);
-}
-.shogi-game__analysis-actions button {
-  border-color: var(--slate);
-  color: var(--night-deep);
-  background: var(--ivory);
-  box-shadow: none;
-}
-.shogi-game__result {
-  background: rgba(14, 29, 40, 0.86);
-}
-.shogi-game__result-panel {
-  border-width: 1px;
-  border-top-width: 4px;
-  border-radius: 0.3rem;
-  color: var(--ivory);
-  background: var(--night-deep);
-  box-shadow: 0 1.2rem 3.2rem rgba(7, 18, 26, 0.62);
-}
-.shogi-game__result--victory {
-  --result-accent: var(--amber);
-  --result-glow: rgba(245, 166, 69, 0.18);
-}
-.shogi-game__result--defeat {
-  --result-accent: #d7ceff;
-  --result-glow: rgba(215, 206, 255, 0.16);
-}
-.shogi-game__result--draw {
-  --result-accent: #aeb8bd;
-  --result-glow: rgba(174, 184, 189, 0.14);
-}
-.shogi-game__result h2 {
-  color: var(--ivory);
-  text-shadow: 0 0.15rem 0 var(--slate);
-}
-.shogi-game__result-details > div {
-  border-bottom-color: rgba(245, 166, 69, 0.3);
-  background: rgba(46, 74, 96, 0.35);
-}
-.shogi-game__confetti i { background: var(--amber); }
-.shogi-game__confetti i:nth-child(3n) { background: var(--lavender); }
-.shogi-game__confetti i:nth-child(3n + 1) { background: var(--ivory); }
-.shogi-game__error {
-  border-color: #f5a645;
-  background: #604634;
-}
-@media (min-width: 900px) and (min-aspect-ratio: 5/4) {
-  .shogi-game { --panel: rgba(20, 39, 54, 0.94); }
-  .shogi-game button:disabled {
-    border-color: rgba(174, 184, 189, 0.28);
-    color: rgba(255, 253, 244, 0.45);
-    background: #263e50;
-  }
-}
-@media (min-width: 1100px) and (min-aspect-ratio: 5/4) {
-  .shogi-game__portrait--advisor {
-    background: linear-gradient(180deg, rgba(29, 51, 67, 0.02) 0 42%, rgba(29, 51, 67, 0.36) 68%, rgba(20, 39, 54, 0.82) 100%);
-  }
-  .shogi-game__opening-guide {
-    border: 1px solid rgba(245, 166, 69, 0.5);
-    border-left: 3px solid var(--amber);
-    background: rgba(20, 39, 54, 0.96);
-    box-shadow: none;
-  }
-  .shogi-game__opening-guide h2,
-  .shogi-game__opening-selects label { color: var(--amber); }
-  .shogi-game__opening-selects select {
-    border-color: rgba(245, 166, 69, 0.6);
-    color: var(--ivory);
-    background: var(--night-deep);
-  }
-  .shogi-game__opening-guide p {
-    border-left-color: var(--lavender);
-    color: var(--ivory);
-    background: rgba(46, 74, 96, 0.58);
-  }
-}
-
-/* ===== ホーム画面(原型) ===== */
-/* 縦画面メディアクエリの portrait 補助表示(display: grid)より優先させる。 */
-/* ホーム画面では対局UIを隠す。定跡図鑑はホームから開くため例外。 */
-.shogi-game--home > :not(.shogi-home):not(.shogi-dex) { display: none !important; }
-.shogi-home {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 40px;
-  padding: 24px;
-  overflow: hidden;
-  background: #1d2b3a;
-  color: var(--ink, #fff8ec);
-  font-family: "Courier New", "Hiragino Kaku Gothic ProN", "Yu Gothic", monospace;
-}
-.shogi-home__star { position: absolute; pointer-events: none; }
-.shogi-home__star::before,
-.shogi-home__star::after {
-  content: "";
-  position: absolute;
-  background: currentColor;
-}
-.shogi-home__star::before {
-  left: 33%;
-  top: 0;
-  width: 34%;
-  height: 100%;
-}
-.shogi-home__star::after {
-  left: 0;
-  top: 33%;
-  width: 100%;
-  height: 34%;
-}
-.shogi-home__moon {
-  position: absolute;
-  right: 12%;
-  top: 10%;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #f2e3c2;
-  box-shadow: inset -12px -6px 0 0 #1d2b3a;
-}
-.shogi-home__chara {
-  position: absolute;
-  left: 50%;
-  bottom: 3vh;
-  height: clamp(130px, 26vh, 220px);
-  width: auto;
-  pointer-events: none;
-  image-rendering: pixelated;
-  animation: shogi-home-chara-float 4.5s ease-in-out infinite;
-}
-/* 中央寄せはアニメーションのtransformと競合するため、keyframes側で行う。 */
-@keyframes shogi-home-chara-float {
-  0%,
-  100% {
-    transform: translateX(-50%) translateY(0);
-  }
-  50% {
-    transform: translateX(-50%) translateY(-8px);
-  }
-}
-.shogi-home__title { text-align: center; }
-.shogi-home__title h1 {
-  margin: 0;
-  font-size: clamp(36px, 7vw, 64px);
-  letter-spacing: 0.06em;
-  font-weight: 700;
-  color: #f6f2e8;
-  text-shadow: 3px 3px 0 #14212e;
-}
-.shogi-home__menu {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-start;
-  gap: clamp(16px, 3vw, 40px);
-}
-.shogi-home__group {
-  display: grid;
-  gap: 10px;
-}
-.shogi-home__group-title {
-  margin: 0;
-  padding-left: 4px;
-  color: #e8a04c;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.24em;
-}
-.shogi-home__cards {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(118px, 160px);
-  gap: clamp(10px, 2vw, 20px);
-}
-.shogi-home__desc {
-  color: #cfd8de;
-  font-size: 11px;
-  line-height: 1.4;
-  text-align: center;
-}
-.shogi-home__card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 22px 10px 18px;
-  border: 2px solid rgba(242, 227, 194, 0.4);
-  border-radius: 8px;
-  background: rgba(37, 58, 77, 0.9);
-  box-shadow: 4px 4px 0 rgba(16, 26, 36, 0.8);
-  color: #f6f2e8;
-  font: inherit;
-  cursor: pointer;
-}
-.shogi-home__card:not(:disabled):hover {
-  border-color: #e8a04c;
-  transform: translate(-1px, -1px);
-  box-shadow: 5px 5px 0 rgba(16, 26, 36, 0.8);
-}
-.shogi-home__card:disabled { cursor: default; opacity: 0.72; }
-.shogi-home__icon { width: 56px; height: 56px; }
-.shogi-home__label { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; }
-.shogi-home__soon {
-  position: absolute;
-  right: 6px;
-  top: 6px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: #e8a04c;
-  color: #1d2b3a;
-  font-size: 10px;
-  font-weight: 700;
-}
-.shogi-home__koma-char {
-  font-size: 9px;
-  font-weight: 700;
-  fill: #1d2b3a;
-  text-anchor: middle;
-  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
-}
-@media (max-width: 640px) {
-  /* 下部のキャラクターと重ならないよう、メニューを上側へ寄せる。 */
-  .shogi-home { gap: 24px; padding-bottom: clamp(140px, 26vh, 220px); }
-  .shogi-home__label { font-size: 13px; letter-spacing: 0.02em; white-space: nowrap; }
-  .shogi-home__menu { flex-direction: column; align-items: stretch; width: 100%; max-width: 380px; gap: 18px; }
-  .shogi-home__cards { grid-auto-columns: minmax(0, 1fr); }
-  .shogi-home__card { padding: 16px 6px 12px; gap: 8px; }
-  .shogi-home__icon { width: 44px; height: 44px; }
-}
-@media (max-width: 640px) and (max-height: 760px) {
-  .shogi-home { gap: 18px; padding-bottom: 112px; }
-  .shogi-home__chara { height: 100px; bottom: 8px; }
-  .shogi-home__icon { width: 36px; height: 36px; }
 }
 </style>

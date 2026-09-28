@@ -8,6 +8,7 @@ import {
   inferOpeningRookStyle,
   isOpeningGuideExpired,
   isOpeningPlanComplete,
+  isStandaloneOpening,
   matchesMovePositionPrerequisites,
   mirrorUsiMove,
   nextOpeningPlanMove,
@@ -22,8 +23,10 @@ import {
   openingPlanBranchMessage,
   openingPlanCandidates,
   openingPlanInterruption,
+  openingPlanParallelCandidates,
   openingPlanSteps,
   rangingRookStrategyChoices,
+  selectBestOpeningPlan,
   openingStrategyCompletionChoices,
   shouldAbandonOpeningGuide,
   shouldShowOpeningFollowup,
@@ -615,7 +618,96 @@ describe("opening guide", () => {
     expect(openingPlanSteps("kakugawari-45-knight", "").map(({ usi }) => usi)).toContain("7i8h");
   });
 
-  it("offers Yababozu only to White after Black opens the bishop diagonal", () => {
+  it("offers Yababozu to Black after White opens the bishop diagonal", () => {
+    const yababozu = OPENING_STRATEGIES.find(({ id }) => id === "yababozu");
+    expect(availableOpeningDefinitions({
+      definitions: [yababozu],
+      kind: "strategy",
+      color: "black",
+      playedMoves: ["7g7f"],
+      moveHistory: ["7g7f", "3c3d"],
+      legalMoves: ["8h2b+"],
+    }).map(({ id }) => id)).toEqual(["yababozu"]);
+    expect(availableOpeningDefinitions({
+      definitions: [yababozu],
+      kind: "strategy",
+      color: "black",
+      playedMoves: ["7g7f"],
+      moveHistory: ["7g7f", "8c8d"],
+      legalMoves: ["2g2f"],
+    })).toEqual([]);
+  });
+
+  it("requires White to recapture with the silver before Black continues Yababozu", () => {
+    const yababozu = OPENING_STRATEGIES.find(({ id }) => id === "yababozu");
+    const common = {
+      definitions: [yababozu],
+      kind: "strategy",
+      color: "black",
+      playedMoves: ["7g7f", "8h2b+"],
+      legalMoves: ["6i7h"],
+    };
+    expect(availableOpeningDefinitions({
+      ...common,
+      moveHistory: ["7g7f", "3c3d", "8h2b+", "8b2b"],
+    })).toEqual([]);
+    expect(availableOpeningDefinitions({
+      ...common,
+      moveHistory: ["7g7f", "3c3d", "8h2b+", "3a2b"],
+    }).map(({ id }) => id)).toEqual(["yababozu"]);
+  });
+
+  it("guides Black through the complete Yababozu shape in a legal game", () => {
+    const record = createGameRecord();
+    const blackMoves = [
+      "7g7f", "8h2b+", "6i7h", "7i6h", "6g6f", "6h6g",
+      "2h6h", "5i4h", "4h3h", "8i7g", "6h6i",
+    ];
+    const whiteMoves = [
+      "3c3d", "3a2b", "9c9d", "1c1d", "7a7b", "5a4b", "4b3b", "6a5b", "9d9e", "1d1e",
+    ];
+    const moveHistory = [];
+    blackMoves.forEach((expected, index) => {
+      const candidates = openingPlanCandidates({
+        strategyId: "yababozu",
+        color: "black",
+        playedMoves: moveHistory.filter((_, ply) => ply % 2 === 0),
+        opponentMoves: moveHistory.filter((_, ply) => ply % 2 === 1),
+        moveHistory,
+        legalMoves: enumerateLegalMoves(record.position).map(({ usi }) => usi),
+        currentSfen: record.position.sfen,
+      }).map(({ usi }) => usi);
+      expect(candidates, `black ${index + 1}`).toContain(expected);
+      expect(appendUsiMove(record, expected), expected).toBe(true);
+      moveHistory.push(expected);
+      const reply = whiteMoves[index];
+      if (!reply) return;
+      expect(appendUsiMove(record, reply), reply).toBe(true);
+      moveHistory.push(reply);
+    });
+    expect(isOpeningPlanComplete({
+      strategyId: "yababozu",
+      color: "black",
+      playedMoves: blackMoves,
+      currentSfen: record.position.sfen,
+    })).toBe(true);
+  });
+
+  it("guides a promoting bishop exchange from a real position", () => {
+    const record = createGameRecord();
+    for (const usi of ["7g7f", "3c3d", "2g2f"]) expect(appendUsiMove(record, usi), usi).toBe(true);
+    expect(openingPlanCandidates({
+      strategyId: "yababozu",
+      color: "white",
+      playedMoves: ["3c3d"],
+      opponentMoves: ["7g7f", "2g2f"],
+      moveHistory: ["7g7f", "3c3d", "2g2f"],
+      legalMoves: enumerateLegalMoves(record.position).map(({ usi }) => usi),
+      currentSfen: record.position.sfen,
+    }).map(({ usi }) => usi)).toContain("2b8h+");
+  });
+
+  it("keeps Yababozu available to White after Black opens the bishop diagonal", () => {
     const yababozu = OPENING_STRATEGIES.find(({ id }) => id === "yababozu");
     expect(availableOpeningDefinitions({
       definitions: [yababozu],
@@ -1273,7 +1365,9 @@ describe("opening guide", () => {
     });
   });
 
-  it("immediately stops a fixed plan when its next piece has left the route", () => {
+  // 駒組みの区間は、駒が元の位置になくても完成形までの距離で続行可否を決める仕様へ変更した。
+  // 飛車が1八へ動いても3八へ戻せるため中断しない。
+  it("keeps a shape-building plan when its piece left the route but can still reach the target", () => {
     const currentSfen = sfenAfterMoves(["3g3f", "2h1h"]);
     expect(openingPlanInterruption({
       strategyId: "sodebisha",
@@ -1281,10 +1375,33 @@ describe("opening guide", () => {
       playedMoves: ["3g3f", "2h1h"],
       moveHistory: ["3g3f", "2h1h"],
       currentSfen,
+    })).toBeNull();
+    const legalMoves = enumerateLegalMoves(
+      createGameRecord(withTurn(currentSfen, "black")).position,
+    ).map(({ usi }) => usi);
+    expect(nextOpeningPlanMove({
+      strategyId: "sodebisha",
+      color: "black",
+      playedMoves: ["3g3f", "2h1h"],
+      legalMoves,
+      currentSfen,
+    })?.usi).toBe("1h3h");
+  });
+
+  it("stops a shape-building plan when the target can no longer be reached", () => {
+    // 3筋の歩を3五まで突くと、袖飛車の3六歩へは戻れない。
+    const playedMoves = ["3g3f", "3f3e", "2h1h"];
+    const currentSfen = sfenAfterMoves(playedMoves);
+    expect(openingPlanInterruption({
+      strategyId: "sodebisha",
+      color: "black",
+      playedMoves,
+      moveHistory: playedMoves,
+      currentSfen,
     })).toMatchObject({
       requiresReselection: true,
       clearStrategy: true,
-      message: expect.stringContaining("寄り道はせずここで中断"),
+      reason: "unreachable",
     });
   });
 
@@ -1334,9 +1451,10 @@ describe("opening guide", () => {
       strategyId: "sodebisha", color, playedMoves,
       legalMoves, currentSfen,
     })?.usi).toBe(alternative);
+    // 駒組みは距離で判定する仕様へ変更したため、合法手一覧がなくても3八へ届く限り中断しない。
     expect(openingPlanInterruption({
       strategyId: "sodebisha", color, playedMoves, legalMoves: [], currentSfen,
-    })).toMatchObject({ requiresReselection: true });
+    })).toBeNull();
     const completed = sfenAfterMoves([...playedMoves, alternative], color);
     expect(isOpeningPlanComplete({
       strategyId: "sodebisha", color,
@@ -1634,6 +1752,105 @@ describe("opening guide", () => {
     expect(chooseSafeOpeningMove("7g7f", [
       { rank: 1, move: "7g7f" },
     ])).toEqual({ usi: "7g7f", source: "plan", scoreLoss: 0 });
+  });
+
+  it("offers the next castle move alongside the next strategy move", () => {
+    expect(openingPlanParallelCandidates({
+      strategyId: "ibisha",
+      castleId: "funagakoi",
+      legalMoves: ["2g2f", "5i6h", "7g7f"],
+    })).toEqual([
+      { usi: "2g2f", phase: "strategy" },
+      { usi: "5i6h", phase: "castle" },
+    ]);
+    expect(openingPlanParallelCandidates({
+      strategyId: "ibisha",
+      castleId: "funagakoi",
+      color: "white",
+      legalMoves: ["8c8d", "5a4b", "3c3d"],
+    })).toEqual([
+      { usi: "8c8d", phase: "strategy" },
+      { usi: "5a4b", phase: "castle" },
+    ]);
+  });
+
+  it("offers parallel castle moves from a real position in both colors", () => {
+    for (const color of ["black", "white"]) {
+      const record = createGameRecord(withTurn(createGameRecord().position.sfen, color));
+      const candidates = openingPlanParallelCandidates({
+        strategyId: "ibisha",
+        castleId: "funagakoi",
+        color,
+        legalMoves: enumerateLegalMoves(record.position).map(({ usi }) => usi),
+        currentSfen: record.position.sfen,
+      });
+      expect(candidates.map(({ phase }) => phase), color).toEqual(
+        expect.arrayContaining(["strategy", "castle"]),
+      );
+      for (const { usi } of candidates) {
+        const trial = createGameRecord(record.position.sfen);
+        expect(appendUsiMove(trial, usi), `${color}: ${usi}`).toBe(true);
+      }
+    }
+  });
+
+  it("does not interleave castle moves that block a pending rook swing", () => {
+    const candidates = openingPlanParallelCandidates({
+      strategyId: "shiken",
+      castleId: "mino",
+      playedMoves: ["7g7f", "6g6f"],
+      legalMoves: ["2h6h", "5i4h", "3i3h", "6i5h"],
+    });
+    expect(candidates).toEqual([{ usi: "2h6h", phase: "strategy" }]);
+    expect(openingPlanParallelCandidates({
+      strategyId: "shiken",
+      castleId: "mino",
+      color: "white",
+      playedMoves: ["3c3d", "4c4d"],
+      legalMoves: ["8b4b", "5a6b", "7a7b", "4a5b"],
+    })).toEqual([{ usi: "8b4b", phase: "strategy" }]);
+  });
+
+  it("keeps the strategy alone while the Kakugawari routine is in progress", () => {
+    expect(openingPlanParallelCandidates({
+      strategyId: "kakugawari",
+      castleId: "yagura",
+      legalMoves: ["7g7f", "6g6f", "5i6h"],
+    }).map(({ phase }) => phase)).toEqual(["strategy"]);
+  });
+
+  it("chooses the better-evaluated move between strategy and castle", () => {
+    const planned = [
+      { usi: "2g2f", phase: "strategy" },
+      { usi: "5i6h", phase: "castle" },
+    ];
+    expect(selectBestOpeningPlan(planned, [
+      { rank: 1, move: "5i6h", score: { type: "cp", value: 80 } },
+      { rank: 2, move: "2g2f", score: { type: "cp", value: 40 } },
+    ])).toBe("5i6h");
+    expect(selectBestOpeningPlan(planned, [
+      { rank: 1, move: "5i6h", score: { type: "cp", value: 60 } },
+      { rank: 2, move: "2g2f", score: { type: "cp", value: 60 } },
+    ])).toBe("2g2f");
+    const limits = [];
+    expect(chooseAdaptiveOpeningMove(planned, [
+      { rank: 1, move: "7g7f", score: { type: "cp", value: 500 } },
+      { rank: 2, move: "5i6h", score: { type: "cp", value: 80 } },
+      { rank: 3, move: "2g2f", score: { type: "cp", value: 40 } },
+    ], (usi) => {
+      limits.push(usi);
+      return usi === "5i6h" ? 500 : 250;
+    })).toEqual({ usi: "5i6h", source: "plan", scoreLoss: 420 });
+    expect(limits).toEqual(["5i6h"]);
+  });
+
+  it("marks combined strategy/castle definitions as standalone", () => {
+    expect(isStandaloneOpening("ahiru", "strategy")).toBe(true);
+    expect(isStandaloneOpening("right-king", "castle")).toBe(true);
+    expect(isStandaloneOpening("migigyoku-habu", "castle")).toBe(true);
+    expect(isStandaloneOpening("mino", "castle")).toBe(false);
+    expect(isStandaloneOpening("ibisha", "strategy")).toBe(false);
+    expect(isStandaloneOpening("", "strategy")).toBe(false);
   });
 
   it("reorders ready plan moves by evaluation without leaving the plan", () => {

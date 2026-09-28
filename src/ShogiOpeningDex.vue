@@ -330,8 +330,8 @@ watch(stepIndex, async () => {
   z-index: 6;
   display: flex;
   flex-direction: column;
-  background: #1d2b3a;
-  color: var(--ink, #fff8ec);
+  background: #1d303f;
+  color: var(--ink, #fffcf4);
   font-family: "Courier New", "Hiragino Kaku Gothic ProN", "Yu Gothic", monospace;
 }
 .shogi-game .shogi-dex__header {
@@ -340,7 +340,7 @@ watch(stepIndex, async () => {
   align-items: center;
   gap: 0.75rem 1rem;
   padding: 0.6rem 1rem;
-  border-bottom: 1px solid rgba(242, 227, 194, 0.35);
+  border-bottom: 1px solid rgba(255, 252, 244, 0.35);
 }
 .shogi-game .shogi-dex__header h1 {
   margin: 0;
@@ -350,9 +350,9 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex .shogi-dex__back {
   min-height: 2rem;
   padding: 0.3rem 0.8rem;
-  border: 1px solid rgba(242, 227, 194, 0.5);
+  border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 999px;
-  color: #f2e3c2;
+  color: #fffcf4;
   background: transparent;
   font: 700 0.8rem/1.2 inherit;
   font-family: inherit;
@@ -372,20 +372,20 @@ watch(stepIndex, async () => {
   max-width: 14rem;
   min-height: 2.9rem;
   padding: 0.4rem 0.9rem;
-  border: 1px solid rgba(242, 227, 194, 0.5);
+  border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 0.6rem;
-  color: #f2e3c2;
-  background: rgba(242, 227, 194, 0.06);
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.06);
   font-family: inherit;
   cursor: pointer;
 }
 .shogi-game .shogi-dex .shogi-dex__modes button:hover {
-  background: rgba(242, 227, 194, 0.14);
+  background: rgba(255, 252, 244, 0.14);
 }
 .shogi-game .shogi-dex .shogi-dex__modes button.shogi-dex__mode--active {
-  color: #25151a;
-  background: #e8a04c;
-  border-color: #e8a04c;
+  color: #172632;
+  background: #f1a54c;
+  border-color: #f1a54c;
 }
 .shogi-dex__mode-icon {
   display: flex;
@@ -417,7 +417,7 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex__list {
   overflow-y: auto;
   padding: 0.5rem 0.4rem 1rem;
-  border-right: 1px solid rgba(242, 227, 194, 0.25);
+  border-right: 1px solid rgba(255, 252, 244, 0.25);
 }
 .shogi-game .shogi-dex .shogi-dex__list-toggle {
   display: flex;
@@ -426,10 +426,10 @@ watch(stepIndex, async () => {
   margin: 0.55rem 0.6rem 0;
   min-height: 2.7rem;
   padding: 0.3rem 0.8rem;
-  border: 1px solid rgba(242, 227, 194, 0.5);
+  border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 0.5rem;
-  color: #f2e3c2;
-  background: rgba(242, 227, 194, 0.08);
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.08);
   font: 700 0.9rem/1.2 inherit;
   font-family: inherit;
   cursor: pointer;
@@ -437,7 +437,7 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex__list-toggle small {
   margin-left: auto;
   overflow: hidden;
-  color: #e8a04c;
+  color: #f1a54c;
   font-size: 0.72rem;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -447,9 +447,9 @@ watch(stepIndex, async () => {
   min-height: 2.2rem;
   margin: 0.5rem 0.4rem 0.2rem;
   padding: 0.25rem 0.8rem;
-  border: 1px solid rgba(242, 227, 194, 0.5);
+  border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 999px;
-  color: #f2e3c2;
+  color: #fffcf4;
   background: transparent;
   font: 700 0.8rem/1.2 inherit;
   font-family: inherit;
@@ -458,7 +458,7 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex__group h2 {
   margin: 0.6rem 0.3rem 0.25rem;
   font-size: 0.72rem;
-  color: #e8a04c;
+  color: #f1a54c;
   letter-spacing: 0.08em;
 }
 .shogi-dex__group ul {
@@ -486,19 +486,19 @@ watch(stepIndex, async () => {
   cursor: pointer;
 }
 .shogi-game .shogi-dex .shogi-dex__group button:hover {
-  background: rgba(242, 227, 194, 0.12);
+  background: rgba(255, 252, 244, 0.12);
 }
 .shogi-game .shogi-dex .shogi-dex__item--active,
 .shogi-game .shogi-dex .shogi-dex__item--active:hover {
-  color: #25151a;
-  background: #f2e3c2;
+  color: #172632;
+  background: #fffcf4;
 }
 .shogi-game .shogi-dex__side-tag {
   flex: none;
   padding: 0 0.3rem;
-  border: 1px solid #e8a04c;
+  border: 1px solid #f1a54c;
   border-radius: 0.3rem;
-  color: #e8a04c;
+  color: #f1a54c;
   font-size: 0.62rem;
   line-height: 1.3;
 }
@@ -539,7 +539,7 @@ watch(stepIndex, async () => {
   font-size: 1.15rem;
 }
 .shogi-game .shogi-dex__side-note {
-  color: #e8a04c;
+  color: #f1a54c;
   font-size: 0.72rem;
 }
 .shogi-game .shogi-dex__stage {
@@ -558,10 +558,10 @@ watch(stepIndex, async () => {
   flex: none;
   width: 3rem;
   height: 4.5rem;
-  border: 1px solid rgba(242, 227, 194, 0.5);
+  border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 0.5rem;
-  color: #f2e3c2;
-  background: rgba(242, 227, 194, 0.08);
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.08);
   font: 700 1.1rem/1 inherit;
   font-family: inherit;
   cursor: pointer;
@@ -597,10 +597,10 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex .shogi-dex__controls button {
   min-height: 2rem;
   padding: 0.3rem 0.8rem;
-  border: 1px solid rgba(242, 227, 194, 0.5);
+  border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 0.4rem;
-  color: #f2e3c2;
-  background: rgba(242, 227, 194, 0.08);
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.08);
   font: 700 0.8rem/1.2 inherit;
   font-family: inherit;
   cursor: pointer;
@@ -622,7 +622,7 @@ watch(stepIndex, async () => {
   margin: 0;
   padding: 0.4rem;
   list-style: none;
-  border: 1px solid rgba(242, 227, 194, 0.25);
+  border: 1px solid rgba(255, 252, 244, 0.25);
   border-radius: 0.5rem;
   max-height: 7.5rem;
   overflow-y: auto;
@@ -633,7 +633,7 @@ watch(stepIndex, async () => {
   gap: 0.3rem;
   min-height: 1.8rem;
   padding: 0.2rem 0.55rem;
-  border: 1px solid rgba(242, 227, 194, 0.35);
+  border: 1px solid rgba(255, 252, 244, 0.35);
   border-radius: 0.35rem;
   color: inherit;
   background: transparent;
@@ -643,21 +643,21 @@ watch(stepIndex, async () => {
 }
 .shogi-game .shogi-dex .shogi-dex__move--current,
 .shogi-game .shogi-dex .shogi-dex__move--current:hover {
-  color: #25151a;
-  background: #e8a04c;
-  border-color: #e8a04c;
+  color: #172632;
+  background: #f1a54c;
+  border-color: #f1a54c;
 }
 .shogi-game .shogi-dex__move-routine {
-  color: #e8a04c;
+  color: #f1a54c;
 }
 .shogi-game .shogi-dex .shogi-dex__move--current .shogi-dex__move-routine {
-  color: #25151a;
+  color: #172632;
 }
 .shogi-game .shogi-dex__explanation {
   padding: 0.7rem 0.9rem;
-  border: 1px solid rgba(242, 227, 194, 0.35);
+  border: 1px solid rgba(255, 252, 244, 0.35);
   border-radius: 0.6rem;
-  background: rgba(29, 43, 58, 0.6);
+  background: rgba(29, 48, 63, 0.6);
 }
 .shogi-game .shogi-dex__speech {
   display: flex;
@@ -692,7 +692,7 @@ watch(stepIndex, async () => {
   align-items: flex-end;
   gap: 0.6rem;
   margin: 0;
-  color: rgba(242, 227, 194, 0.8);
+  color: rgba(255, 252, 244, 0.8);
   font-size: 0.85rem;
 }
 .shogi-game .shogi-dex__explanation dl {
@@ -706,7 +706,7 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex__explanation dt {
   flex: none;
   min-width: 8em;
-  color: #e8a04c;
+  color: #f1a54c;
   font-size: 0.78rem;
 }
 .shogi-game .shogi-dex__explanation dd {
@@ -741,7 +741,7 @@ watch(stepIndex, async () => {
     position: fixed;
     inset: 0;
     z-index: 1000001;
-    background: #1d2b3a;
+    background: #1d303f;
     padding-bottom: 1rem;
   }
   .shogi-game .shogi-dex__detail {

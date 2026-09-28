@@ -1,8 +1,9 @@
 <template>
   <div class="evaluation-graph">
     <svg
+      ref="svgElement"
       class="evaluation-graph__svg"
-      viewBox="0 0 800 160"
+      :viewBox="`0 0 ${size.width} ${size.height}`"
       role="img"
       :aria-label="`棋譜の評価値グラフ。現在は${currentPly}手目`"
       @pointerdown="selectNearestPly"
@@ -14,7 +15,13 @@
       </g>
       <g class="evaluation-graph__labels">
         <text v-for="tick in yTicks" :key="`y-${tick.value}`" :x="plot.left - 8" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
-        <text v-for="tick in xTicks" :key="`x-${tick.value}`" :x="tick.x" :y="plot.top + plot.height + 22" text-anchor="middle">{{ tick.value }}手</text>
+        <text
+          v-for="(tick, index) in xTicks"
+          :key="`x-${tick.value}`"
+          :x="tick.x"
+          :y="plot.top + plot.height + 16"
+          :text-anchor="index === 0 ? 'start' : index === xTicks.length - 1 ? 'end' : 'middle'"
+        >{{ tick.value }}手</text>
       </g>
       <line class="evaluation-graph__zero" :x1="plot.left" :x2="plot.left + plot.width" :y1="scoreY(0)" :y2="scoreY(0)" />
       <rect
@@ -56,8 +63,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { nearestPlyFromPlotPoint } from "./core/evaluation-graph-selection.mjs";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  graphAxisLimit,
+  graphScoreRatio,
+  graphTickValues,
+  nearestPlyFromPlotPoint,
+} from "./core/evaluation-graph-selection.mjs";
 
 type AnalysisPoint = {
   ply: number;
@@ -78,20 +90,56 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ select: [ply: number] }>();
 const hitArea = ref<SVGRectElement | null>(null);
+const svgElement = ref<SVGSVGElement | null>(null);
 
-const plot = { left: 58, top: 5, width: 724, height: 125 };
-const graphLimit = 6000;
+// 縦軸の上限は棋譜の評価値に合わせて広げる。詰みは端に置く。
+const axisLimit = computed(() => graphAxisLimit(props.points.map(({ graphValue }) => graphValue)));
+// 描画座標を表示中の実寸(CSS px)に合わせ、欄の高さを余白にせず使い切る。文字や記号も伸び縮みしない。
+const size = ref({ width: 800, height: 220 });
+const PLOT_MARGIN = { right: 10, top: 8, bottom: 22 };
+// 左の余白は、最も長い目盛り(上限。例: "-10000")が欠けない幅にする。12pxの数字1文字を約7pxとみなす。
+const plotLeft = computed(() => Math.max(38, 12 + 7 * `-${axisLimit.value}`.length));
+const plot = computed(() => ({
+  left: plotLeft.value,
+  top: PLOT_MARGIN.top,
+  width: Math.max(1, size.value.width - plotLeft.value - PLOT_MARGIN.right),
+  height: Math.max(1, size.value.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom),
+}));
+let resizeObserver: ResizeObserver | undefined;
+function measure() {
+  const element = svgElement.value;
+  if (!element) return;
+  const width = Math.round(element.clientWidth);
+  const height = Math.round(element.clientHeight);
+  if (width > 0 && height > 0) size.value = { width, height };
+}
+onMounted(() => {
+  measure();
+  if (typeof ResizeObserver === "undefined" || !svgElement.value) return;
+  resizeObserver = new ResizeObserver(measure);
+  resizeObserver.observe(svgElement.value);
+});
+onBeforeUnmount(() => resizeObserver?.disconnect());
+
 const maxPly = computed(() => Math.max(1, props.totalPly));
-const plyX = (ply: number) => plot.left + (Math.max(0, Math.min(maxPly.value, ply)) / maxPly.value) * plot.width;
-const scoreY = (score: number) => plot.top + ((graphLimit - Math.max(-graphLimit, Math.min(graphLimit, score))) / (graphLimit * 2)) * plot.height;
+const plyX = (ply: number) => plot.value.left + (Math.max(0, Math.min(maxPly.value, ply)) / maxPly.value) * plot.value.width;
+const scoreY = (score: number) => (
+  plot.value.top + ((1 - graphScoreRatio(score, axisLimit.value)) / 2) * plot.value.height
+);
 const linePoints = computed(() => props.points.map((point) => `${plyX(point.ply)},${scoreY(point.graphValue)}`).join(" "));
 const selectedPoint = computed(() => props.points.find((point) => point.ply === props.currentPly));
 const annotatedPoints = computed(() => props.points.filter((point) => point.annotation));
-const yTicks = computed(() => [6000, 4000, 2000, 0, -2000, -4000, -6000].map((value) => ({
-  value,
-  y: scoreY(value),
-  label: value === 0 ? "0" : `${value > 0 ? "+" : ""}${value}`,
-})));
+// 目盛りは0と上限を優先し、文字が重なる低い欄では内側の目盛りから省く。
+const Y_TICK_MIN_GAP = 16;
+const yTicks = computed(() => {
+  const ticks: { value: number; y: number; label: string }[] = [];
+  for (const value of graphTickValues(axisLimit.value)) {
+    const y = scoreY(value);
+    if (ticks.some((tick) => Math.abs(tick.y - y) < Y_TICK_MIN_GAP)) continue;
+    ticks.push({ value, y, label: value === 0 ? "0" : `${value > 0 ? "+" : ""}${value}` });
+  }
+  return ticks.sort((left, right) => left.y - right.y);
+});
 const xTicks = computed(() => [...new Set([0, .25, .5, .75, 1].map((ratio) => Math.round(maxPly.value * ratio)))]
   .map((value) => ({ value, x: plyX(value) })));
 const trianglePoints = (ply: number, score: number, mover: "black" | "white") => {
@@ -110,14 +158,14 @@ function selectNearestPly(event: PointerEvent) {
 </script>
 
 <style scoped>
-.evaluation-graph { min-width: 0; color: #1d3343; font-family: Arial, "Yu Gothic", sans-serif; }
-.evaluation-graph__svg { display: block; width: 100%; min-height: 5rem; border: 1px solid #2e4a60; background: #fffdf4; cursor: crosshair; touch-action: none; }
-.evaluation-graph__background { fill: #fffdf4; }
+.evaluation-graph { min-width: 0; color: #1d303f; font-family: Arial, "Yu Gothic", sans-serif; }
+.evaluation-graph__svg { display: block; width: 100%; min-height: 5rem; border: 1px solid #2b465b; background: #fffcf4; cursor: crosshair; touch-action: none; }
+.evaluation-graph__background { fill: #fffcf4; }
 .evaluation-graph__grid line { stroke: #aeb8bd; stroke-width: 1; }
-.evaluation-graph__labels { fill: #1d3343; font: 12px Arial, sans-serif; }
-.evaluation-graph__zero { stroke: #2e4a60; stroke-width: 1.25; }
-.evaluation-graph__line { fill: none; stroke: #2e4a60; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
-.evaluation-graph__current { stroke: #f5a645; stroke-width: 2; }
+.evaluation-graph__labels { fill: #1d303f; font: 12px Arial, sans-serif; }
+.evaluation-graph__zero { stroke: #2b465b; stroke-width: 1.25; }
+.evaluation-graph__line { fill: none; stroke: #2b465b; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.evaluation-graph__current { stroke: #f1a54c; stroke-width: 2; }
 .evaluation-graph__point { stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .evaluation-graph__point--blunder {
   fill: #ff4b00;
@@ -134,19 +182,19 @@ function selectNearestPly(event: PointerEvent) {
   fill: #990099;
   stroke: #4d004d;
   stroke-width: 2;
-  filter: drop-shadow(0 0 2px #fffdf4);
+  filter: drop-shadow(0 0 2px #fffcf4);
 }
 .evaluation-graph__point--current {
   filter: drop-shadow(0 0 1.5px #111827);
 }
 .evaluation-graph__hit-area { fill: transparent; }
-.evaluation-graph__legend { display: flex; gap: .55rem; align-items: center; min-height: 1.2rem; padding: .1rem .2rem 0; color: #2e4a60; font: 11px Arial, "Yu Gothic", sans-serif; white-space: nowrap; }
+.evaluation-graph__legend { display: flex; gap: .55rem; align-items: center; min-height: 1.2rem; padding: .1rem .2rem 0; color: #2b465b; font: 11px Arial, "Yu Gothic", sans-serif; white-space: nowrap; }
 .evaluation-graph__legend-brilliant { color: #790079; }
 .evaluation-graph__legend-good { color: #007a55; }
 .evaluation-graph__legend-dubious { color: #665f00; }
 .evaluation-graph__legend-mistake { color: #8a5b00; }
 .evaluation-graph__legend-blunder { color: #b53500; }
 .evaluation-graph__legend small { margin-left: auto; color: #526878; }
-.evaluation-graph__selection { display: flex; gap: .8rem; justify-content: flex-end; min-height: 1.2rem; margin-top: .15rem; color: #1d3343; font-size: .78rem; }
+.evaluation-graph__selection { display: flex; gap: .8rem; justify-content: flex-end; min-height: 1.2rem; margin-top: .15rem; color: #1d303f; font-size: .78rem; }
 .evaluation-graph__selection span { color: #526878; }
 </style>
