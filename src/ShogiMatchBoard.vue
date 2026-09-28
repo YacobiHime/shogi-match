@@ -44,6 +44,7 @@
       :white-player-name="whitePlayerName"
       :black-player-detail="blackPlayerDetail"
       :white-player-detail="whitePlayerDetail"
+      :hide-clock="true"
       :arrow-image-url="`${normalizedAssetBase}/arrow/arrow.svg`"
       @move="onMove"
       @resize="onResize"
