@@ -182,21 +182,6 @@
             :disabled="!active"
             @click="reviewMode ? completeReview() : requestResign()"
           >{{ reviewMode ? "完了" : "投了" }}</button>
-          <button
-            type="button"
-            class="shogi-game__command shogi-game__command--flip"
-            aria-label="盤面を上下反転（ひふみんアイ）"
-            :aria-pressed="boardFlipOverride"
-            @click="boardFlipOverride = !boardFlipOverride"
-          >ひふみんアイ</button>
-          <button
-            v-if="matchKind === 'learning'"
-            type="button"
-            class="shogi-game__command shogi-game__command--attack"
-            aria-label="駒の利きを表示"
-            :aria-pressed="attackGuideEnabled"
-            @click="attackGuideEnabled = !attackGuideEnabled"
-          >駒の利き</button>
         </template>
         <button
           type="button"
@@ -225,27 +210,6 @@
             :disabled="!active"
             @click="closeSettings(); reviewMode ? completeReview() : requestResign()"
           >{{ reviewMode ? "検討を完了する" : "投了する" }}</button>
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            class="shogi-game__menu-item"
-            :aria-checked="boardFlipOverride"
-            @click="boardFlipOverride = !boardFlipOverride"
-          >
-            <span>ひふみんアイ（盤を反転）</span>
-            <b>{{ boardFlipOverride ? "ON" : "OFF" }}</b>
-          </button>
-          <button
-            v-if="matchKind === 'learning'"
-            type="button"
-            role="menuitemcheckbox"
-            class="shogi-game__menu-item"
-            :aria-checked="attackGuideEnabled"
-            @click="attackGuideEnabled = !attackGuideEnabled"
-          >
-            <span>駒の利きを表示</span>
-            <b>{{ attackGuideEnabled ? "ON" : "OFF" }}</b>
-          </button>
         </template>
         <label class="shogi-game__menu-field">
           <span>やこび姫の助言</span>
@@ -735,6 +699,21 @@
         待った <small>×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}</small>
       </button>
       <button
+        type="button"
+        class="shogi-game__assist-toggle shogi-game__command--flip"
+        aria-label="盤面を上下反転（ひふみんアイ）"
+        :aria-pressed="boardFlipOverride"
+        @click="boardFlipOverride = !boardFlipOverride"
+      >ひふみん<wbr>アイ</button>
+      <button
+        v-if="matchKind === 'learning'"
+        type="button"
+        class="shogi-game__assist-toggle shogi-game__command--attack"
+        aria-label="駒の利きを表示"
+        :aria-pressed="attackGuideEnabled"
+        @click="attackGuideEnabled = !attackGuideEnabled"
+      >駒の<wbr>利き</button>
+      <button
         v-if="reviewMode && !analysisOpen"
         type="button"
         class="shogi-game__analysis-button"
@@ -849,6 +828,12 @@
           >その他 <span aria-hidden="true">{{ analysisMenuOpen ? "▴" : "▾" }}</span></button>
         </div>
         <div v-if="analysisMenuOpen" class="shogi-game__analysis-menu" role="menu">
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            :aria-checked="boardFlipOverride"
+            @click="boardFlipOverride = !boardFlipOverride"
+          >ひふみんアイ（盤を反転）：{{ boardFlipOverride ? "ON" : "OFF" }}</button>
           <button v-if="reviewNavigation.branch" type="button" role="menuitem" @click="analysisMenuOpen = false; returnToMainLine()">本筋に戻る</button>
           <button v-if="analysisRunning" type="button" role="menuitem" @click="analysisMenuOpen = false; cancelKifuAnalysis()">解析を中止</button>
           <button v-else type="button" role="menuitem" :disabled="reviewCpuEnabled" @click="analysisMenuOpen = false; runKifuAnalysis()">再解析</button>
@@ -5323,13 +5308,26 @@ queueMicrotask(() => {
   gap: 0.5em;
   min-width: 0;
 }
+/* ボタンは同じ幅に並べ、狭いときは「閃き／×3」「ひふみん／アイ」のように区切りで2行にする。 */
 .shogi-game__assist-actions > button {
-  flex: 1 1 6em;
+  flex: 1 1 0;
   min-width: 0;
   min-height: 3em;
-  padding: 0.4em 0.5em;
+  padding: 0.4em 0.3em;
   font-size: 1.02em;
-  white-space: nowrap;
+  line-height: 1.15;
+  white-space: normal;
+  word-break: keep-all;
+}
+/* ひふみんアイ・駒の利きは、閃き・待ったと同じ並びの切り替えボタンにする。 */
+.shogi-game .shogi-game__assist-actions > .shogi-game__assist-toggle {
+  font-size: 0.9em;
+}
+.shogi-game .shogi-game__assist-actions > .shogi-game__assist-toggle[aria-pressed="true"] {
+  border-color: var(--lavender);
+  color: var(--night-deep);
+  background: var(--lavender);
+  box-shadow: 0 2px 0 rgba(23, 38, 50, 0.6), inset 0 0 0 2px var(--night-deep);
 }
 .shogi-game__assist-actions small {
   margin-left: 0.15em;

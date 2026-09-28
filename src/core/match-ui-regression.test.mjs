@@ -15,9 +15,12 @@ describe("match screen regressions", () => {
   });
 
   it("keeps the flip control readable and reachable on every layout", () => {
-    expect(source).toMatch(/class="shogi-game__command shogi-game__command--flip"[\s\S]*?aria-label="盤面を上下反転（ひふみんアイ）"/);
-    expect(source).toMatch(/\.shogi-game__command\s*\{[^}]*white-space:\s*nowrap/s);
-    // PC以外では見出しにボタンを並べず、メニューの中に反転を置く。
+    // ひふみんアイは、閃き・待ったと同じ並びに置く。
+    expect(source).toMatch(/class="shogi-game__assist-actions"[\s\S]*?class="shogi-game__assist-toggle shogi-game__command--flip"[\s\S]*?aria-label="盤面を上下反転（ひふみんアイ）"/);
+    // 狭い画面でもはみ出さないよう、区切り（<wbr>や空白）でだけ2行に折り返す。
+    expect(source).toMatch(/\.shogi-game__assist-actions > button\s*\{[^}]*word-break:\s*keep-all/s);
+    expect(source).toContain("ひふみん<wbr>アイ");
+    // PC以外では見出しにボタンを並べない。棋譜解析中は解析パネルの「その他」から反転できる。
     expect(responsiveSource).toMatch(/const menuCollapsed = computed\(\(\) => uiLayout\.value !== "wide"\)/);
     expect(source).toMatch(/role="menuitemcheckbox"[\s\S]*?ひふみんアイ（盤を反転）/);
   });
