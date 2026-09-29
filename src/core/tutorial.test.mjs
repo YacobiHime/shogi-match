@@ -15,6 +15,8 @@ import {
   replaySfen,
   replaySpeech,
   seekReplay,
+  tutorialGraphPly,
+  tutorialGraphPoints,
   tutorialHint,
   tutorialMatchOutcome,
   tutorialMatchSettings,
@@ -72,7 +74,7 @@ function reachable(sfen, from, target, maxMoves) {
 describe("やこび姫の将棋教室のカリキュラム", () => {
   it("5巻の構成で、すべてのレッスンが一意のIDを持つ", () => {
     expect(TUTORIAL_VOLUMES.map(({ title }) => title)).toEqual([
-      "将棋ってなあに？", "一局の流れをつかもう", "攻めと守りのひみつ", "戦法マスターへの道", "考えるって楽しい！",
+      "盤と駒をおぼえよう", "一局の流れをつかもう", "攻めと守りのひみつ", "戦法マスターへの道", "形勢を読んで、格言を生かそう",
     ]);
     expect(TUTORIAL_VOLUMES.flatMap(({ chapters }) => chapters)).toHaveLength(12);
     const ids = TUTORIAL_LESSONS.map(({ id }) => id);
@@ -145,6 +147,21 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
             if (mark) expect(replayMoveLabel(step, ply), `${label}: ${ply}手目`).toBe(mark);
           }
         }
+        if (step.graph) {
+          expect(step.graph.evaluations, `${label}: 0手目から全局面の評価値`).toHaveLength(step.graph.moves.length + 1);
+          const moves = step.moves ?? [];
+          expect(step.graph.moves.slice(0, moves.length), `${label}: 盤の手順がグラフの対局と同じ`).toEqual(moves);
+          const points = tutorialGraphPoints(step);
+          expect(points.every(({ graphValue }) => Number.isFinite(graphValue)), label).toBe(true);
+          // 台詞で読み上げる評価値が、その手数のグラフの値と一致している。
+          const texts = step.type === "replay"
+            ? [[step.from, step.speech], ...Object.entries(step.notes ?? {}).map(([ply, note]) => [Number(ply), note])]
+            : [[tutorialGraphPly(step, createStepState(step)), step.speech]];
+          for (const [ply, text] of texts) {
+            const spoken = text.match(/評価値[はが]([+-]\d+)/)?.[1];
+            if (spoken) expect(Number(spoken), `${label}: ${ply}手目の評価値`).toBe(step.graph.evaluations[ply]);
+          }
+        }
         if (step.type === "choose") {
           expect(step.options.length, label).toBeGreaterThanOrEqual(2);
           expect(step.answer, label).toBeGreaterThanOrEqual(0);
@@ -171,6 +188,34 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
       }
     }
     expect(tutorialLesson("v1-king").steps[2].speech).toBe("玉を5七（緑のマス）まで動かしてみよう！ 2手以内で届くよ。");
+  });
+
+  it("評価値のレッスンは、盤面と評価値グラフを合わせて見せる", () => {
+    const lesson = tutorialLesson("v5-evaluation");
+    const boardSteps = lesson.steps.filter(({ type }) => type !== "choose");
+    for (const step of boardSteps) {
+      expect(tutorialStepSfen(step), step.speech).not.toBe("");
+      expect(tutorialGraphPoints(step).length, step.speech).toBeGreaterThan(0);
+    }
+    const replay = lesson.steps.find(({ type }) => type === "replay");
+    const points = tutorialGraphPoints(replay);
+    expect(points).toHaveLength(68);
+    expect(points[30]).toMatchObject({ label: "30手目 △5二金", scoreLabel: "評価値 +2055" });
+    expect(points[32]).toMatchObject({ label: "32手目 △7一飛", scoreLabel: "評価値 +4191" });
+    // 詰んだ最後の局面も、グラフを0へ落とさない。
+    expect(points[67].scoreLabel).toBe("詰み");
+    expect(points[67].graphValue).toBe(points[66].graphValue);
+    expect(tutorialGraphPly(replay, seekReplay(replay, createStepState(replay), 31))).toBe(31);
+  });
+
+  it("「端玉には端歩」は、端歩の突き捨てで香が玉まで通る", () => {
+    const step = tutorialLesson("v5-pawn-proverbs").steps.find(({ type }) => type === "find-move");
+    expect(step.answers).toEqual(["1e1d"]);
+    const sfen = ["1e1d", "1c1d", "1i1d"].reduce((current, usi) => {
+      expect(legalMoves(current), usi).toContain(usi);
+      return afterMove(current, usi);
+    }, step.sfen);
+    expect(Position.newBySFEN(sfen).checked).toBe(true);
   });
 
   it("定跡の練習は、図鑑の手順を順番に指させる", () => {

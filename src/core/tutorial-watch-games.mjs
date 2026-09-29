@@ -30,3 +30,15 @@ export const WATCH_GAME_KURIDASHI = moves(`
   1a5e 5a4b 3b1b 9c9d 5e6e 4b4a N*8e 9b9c 2c3b 7a5a 3b4a P*2f 4a5a 5b6b R*9b 7b7a
   L*7b 6b7b 9b7b+
 `);
+
+/**
+ * WATCH_GAME_KURIDASHIの各局面（0手目〜67手目）の評価値。先手から見た値で、数値はcp、詰みは{ type: "mate" }。
+ * scripts/lib/node-engine.mjs のやねうら王で、各局面を15万nodes探索した最善手の値を記録した。
+ */
+export const WATCH_GAME_KURIDASHI_EVALUATIONS = Object.freeze([
+  70, 54, 90, 72, 124, 65, 110, 102, 132, 141, 76, 64, 168, 164, 231, 215,
+  234, 244, 238, 227, 427, 473, 411, 385, 434, 308, 457, 411, 772, 801, 2055, 2156,
+  4191, 4037, 4108, 4053, 5004, 5130, 5117, 4976, 5328, 5261, 5937, 5930, 6222, 6373, 6341, 6370,
+  6736, 6471, 7004, 6978, 7144, 7184, 7280, 7394, 7584, 7433,
+  ...[25, 12, 9, 8, 7, 6, 3, 2, 1, 0].map((value) => Object.freeze({ type: "mate", value })),
+]);

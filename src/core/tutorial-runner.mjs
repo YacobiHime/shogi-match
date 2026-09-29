@@ -1,5 +1,6 @@
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
 import { formatHintMove } from "./match-assists.mjs";
+import { formatAnalysisScore, scoreToGraphValue } from "./kifu-analysis.mjs";
 import { pieceReachSquares } from "./reference-dex.mjs";
 
 /**
@@ -98,6 +99,39 @@ export function replaySpeech(step, ply) {
   if (note) return note;
   if (ply === (step.from ?? 0)) return step.speech;
   return `${replayMoveLabel(step, ply)}と指したよ。`;
+}
+
+/**
+ * 評価値グラフを出すステップ（観戦・解説）の点。step.graphは平手からの { moves, evaluations } で、ステップの手順が途中まででも
+ * グラフは対局全体を描く。evaluationsは0手目からの各局面の値で、先手から見たcpの数値か、詰みの{ type: "mate", value }。
+ */
+export function tutorialGraphPoints(step) {
+  const graph = step?.graph;
+  if (!graph) return [];
+  const record = createGameRecord(STANDARD_SFEN);
+  const points = [];
+  graph.evaluations.slice(0, graph.moves.length + 1).forEach((evaluation, ply) => {
+    let label = "開始局面";
+    if (ply > 0) {
+      const usi = graph.moves[ply - 1];
+      const before = record.position.sfen;
+      if (!appendUsiMove(record, usi)) throw new Error(`${usi}を指せません`);
+      label = `${ply}手目 ${before.split(" ")[1] === "b" ? "▲" : "△"}${formatHintMove(usi, before)}`;
+    }
+    const score = typeof evaluation === "number" ? { type: "cp", value: evaluation } : evaluation;
+    // 詰んだ局面（mate 0）は0へ落とさず、直前の詰みの値のまま描く。
+    const graphValue = score.type === "mate" && score.value === 0
+      ? points.at(-1)?.graphValue ?? 0
+      : scoreToGraphValue(score);
+    points.push({ ply, graphValue, label, scoreLabel: formatAnalysisScore(score), annotation: null });
+  });
+  return points;
+}
+
+/** 評価値グラフで強調する手数。観戦は今見ている手、解説は手順の最後の局面。 */
+export function tutorialGraphPly(step, state) {
+  if (step?.type === "replay") return state.ply;
+  return step?.sfen ? 0 : step?.moves?.length ?? 0;
 }
 
 function legalMoves(sfen) {

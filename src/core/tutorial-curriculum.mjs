@@ -4,7 +4,7 @@ import { buildOpeningDexSteps } from "./opening-dex-replay.mjs";
 import { formatHintMove } from "./match-assists.mjs";
 import { referenceDexEntries } from "./reference-dex.mjs";
 import { STANDARD_SFEN } from "./tutorial-runner.mjs";
-import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI } from "./tutorial-watch-games.mjs";
+import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI, WATCH_GAME_KURIDASHI_EVALUATIONS } from "./tutorial-watch-games.mjs";
 
 /**
  * やこび姫の将棋教室のカリキュラム。巻 → 章 → レッスン → ステップの4階層。
@@ -19,6 +19,8 @@ import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI } from "./tutorial-watch-gam
  * - open-dex   図鑑の項目を開く（kind: piece / tesuji / world / opening）
  * - play       学習対局の設定を用意して対局へ進む
  * - replay     棋譜（moves）をfrom手目から1手ずつ再生する。notesは手数ごとの解説。最後の手まで見たら次へ進める
+ *
+ * explain / replay に graph（平手からの { moves, evaluations }）を付けると、盤の横に評価値グラフを出す。
  */
 
 const PIECES = Object.fromEntries(referenceDexEntries("piece").map((entry) => [entry.id, entry]));
@@ -52,8 +54,8 @@ function pieceLesson(id, { entryId, sfen, from, target, maxMoves, targetLabel, q
 
 const VOLUME_1 = {
   id: "v1",
-  title: "将棋ってなあに？",
-  description: "盤と駒のことを、やこび姫といっしょに知ろう！",
+  title: "盤と駒をおぼえよう",
+  description: "盤と駒の名前、駒の動きを、やこび姫といっしょにおぼえよう！",
   chapters: [
     {
       id: "v1-c1",
@@ -190,8 +192,8 @@ function tesujiFindStep(entryId, speech) {
 }
 
 /** 観戦の棋譜を、from手目の局面からto手目まで1手ずつ再生する。 */
-function watchReplay(game, from, to, speech, notes) {
-  return { type: "replay", moves: game.slice(0, to), from, speech, notes };
+function watchReplay(game, from, to, speech, notes, graph) {
+  return { type: "replay", moves: game.slice(0, to), from, speech, notes, ...(graph ? { graph } : {}) };
 }
 
 /** 観戦の棋譜のply手目まで進めた局面で、実力者が指した次の一手を当てる。 */
@@ -206,6 +208,7 @@ function watchFinish(game, speech) {
 
 const G1 = WATCH_GAME_FUNAGAKOI;
 const G2 = WATCH_GAME_KURIDASHI;
+const G2_GRAPH = Object.freeze({ moves: G2, evaluations: WATCH_GAME_KURIDASHI_EVALUATIONS });
 
 const VOLUME_2 = {
   id: "v2",
@@ -671,7 +674,7 @@ function proverbLesson(id, title, entryIds) {
 
 const VOLUME_5 = {
   id: "v5",
-  title: "考えるって楽しい！",
+  title: "形勢を読んで、格言を生かそう",
   description: "形勢の読み方と、格言の使いどころを身につけよう！",
   chapters: [
     {
@@ -694,9 +697,19 @@ const VOLUME_5 = {
           title: "評価値ってなに？",
           summary: "AIの形勢判断を読む",
           steps: [
-            { type: "explain", speech: "将棋AIは、形勢を「評価値」という数字で表すよ。プラスなら先手が有利、マイナスなら後手が有利なんだ。" },
-            { type: "explain", speech: "対局のあと「棋譜解析」を開くと、評価値のグラフが見られるよ。グラフが大きく動いたところが勝負の分かれ目なんだ。" },
+            { type: "explain", sfen: STANDARD_SFEN, graph: G2_GRAPH, speech: "将棋AIは、形勢を「評価値」という数字で表すよ。プラスなら先手が有利、マイナスなら後手が有利なんだ。" },
+            { type: "explain", sfen: STANDARD_SFEN, graph: G2_GRAPH, speech: "下のグラフは、第3巻で観戦した対局の評価値だよ。横が手数、縦が評価値。はじめの局面は+70で、ほとんど互角なんだ。" },
+            watchReplay(G2, 28, 33, "28手目まで進んだところ。評価値は+772で、先手が少し有利だよ。「次の手」で進めて、グラフの動きを見てみよう。", {
+              29: "▲3五銀。評価値は+801で、ほとんど変わらないね。どちらも悪い手を指していないあいだは、グラフはあまり動かないんだ。",
+              30: "△5二金。評価値が+2055にはね上がった！ 3筋の攻めに備えなかったこの手が、後手の失敗だったんだ。",
+              31: "▲3四歩打。角の頭をたたく手筋だよ。評価値は+2156で、先手はリードを保っているね。",
+              32: "△7一飛。評価値は+4191！ 角を逃がさなかったから、また大きく先手に傾いたよ。",
+              33: "▲3三歩成。角を取って、と金もできた。このあともグラフは先手のほうへ伸びていくよ。",
+            }, G2_GRAPH),
+            { type: "explain", moves: G2, graph: G2_GRAPH, speech: "最後まで進めると、グラフはこうなるよ。30手目と32手目で大きくはね上がっているね。グラフが大きく動いたところが勝負の分かれ目なんだ。" },
+            { type: "explain", moves: G2, graph: G2_GRAPH, speech: "自分の対局でも、終わったあと「棋譜解析」を開くと、このグラフが見られるよ。グラフが大きく動いた手を見直すと、強くなれるんだ。" },
             { type: "choose", question: "評価値がプラスのときは？", options: ["先手が有利", "後手が有利", "引き分け"], answer: 0, explanation: "プラスは先手、マイナスは後手が有利だよ。" },
+            { type: "choose", question: "評価値のグラフが大きく動いたところは？", options: ["勝負の分かれ目", "何も起きていない", "対局が終わった"], answer: 0, explanation: "大きく動いた手は、どちらかが失敗した手だよ。そこを見直そう！" },
           ],
         },
       ],

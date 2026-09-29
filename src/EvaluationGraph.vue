@@ -47,7 +47,7 @@
         </polygon>
       </g>
     </svg>
-    <div class="evaluation-graph__legend" aria-label="評価記号の凡例">
+    <div v-if="!hideLegend" class="evaluation-graph__legend" aria-label="評価記号の凡例">
       <span class="evaluation-graph__legend-brilliant">◆ 神の一手</span>
       <span class="evaluation-graph__legend-good">◆ 好手</span>
       <span class="evaluation-graph__legend-dubious">◆ 疑問手</span>
@@ -87,6 +87,8 @@ const props = defineProps<{
   points: AnalysisPoint[];
   currentPly: number;
   totalPly: number;
+  /** 評価記号を付けないグラフ（将棋教室など）では凡例を出さない。 */
+  hideLegend?: boolean;
 }>();
 const emit = defineEmits<{ select: [ply: number] }>();
 const hitArea = ref<SVGRectElement | null>(null);

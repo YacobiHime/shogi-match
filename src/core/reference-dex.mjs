@@ -210,11 +210,11 @@ const PIECE_ENTRIES = [
 const TESUJI_ENTRY_LIST = [
   {
     id: "edge-king-edge-pawn", group: "攻めの格言", label: "端玉には端歩",
-    sfen: "8k/9/7pp/9/8P/9/9/9/4K4 b - 1",
-    arrows: ["1e1d"], marks: [["1a", "target"], ["1d", "key"]],
+    sfen: "8k/9/7pp/9/8P/9/9/9/4K3L b - 1",
+    arrows: ["1e1d"], marks: [["1a", "target"], ["1d", "key"], ["1i", "key"]],
     overview: "端に逃げた玉には、端の歩を突いて攻めよう！",
     rows: [
-      ["意味", "玉が1筋や9筋にいるときは、端歩を突いて相手の歩とぶつけるのが効果的だよ。"],
+      ["意味", "端歩を突いて相手の歩とぶつけると、1九の香の前があいて、香が1筋をまっすぐ玉までにらめるよ。同歩と取られても同香と取り返して、玉のすぐそばまで迫れるんだ。"],
       ["使いどころ", "端歩を突き捨てて筋を開け、香や桂、持ち駒の歩で端から攻めると、少ない駒でも崩せるよ。"],
     ],
   },
@@ -743,7 +743,7 @@ export function pieceReachSquares(sfen, squareUsi) {
     .map((square) => square.usi);
 }
 
-/** 盤面に重ねる色付け。駒の動きは青、ねらう駒は赤、大事なマスは黄色。 */
+/** 盤面に重ねる色付け。駒の動きは青、ねらう駒は赤、大事なマスは緑。 */
 export function referenceEntryMarks(entry) {
   if (entry?.table) return [];
   const sfen = referenceEntrySfen(entry);

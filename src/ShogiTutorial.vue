@@ -121,6 +121,16 @@
                 >次の手 <span aria-hidden="true">▶</span></button>
               </div>
             </div>
+            <!-- 評価値の説明：盤の局面に合わせて、対局全体の評価値グラフに今の手数を示す。 -->
+            <div v-if="graphPoints.length" class="shogi-tutorial__graph">
+              <EvaluationGraph
+                :points="graphPoints"
+                :current-ply="graphPly"
+                :total-ply="currentStep.graph.moves.length"
+                hide-legend
+                @select="onGraphSelect"
+              />
+            </div>
             <p v-if="currentStep.type === 'choose' && currentStep.speech" class="shogi-tutorial__sub">{{ currentStep.speech }}</p>
             <!-- 対局の条件はレッスンで固定する。変更はさせず、内容だけ見せる。 -->
             <dl v-if="currentStep.type === 'play'" class="shogi-tutorial__conditions">
@@ -228,6 +238,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
+import EvaluationGraph from "./EvaluationGraph.vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { formatHintMove } from "./core/match-assists.mjs";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
@@ -247,6 +258,8 @@ import {
   replayMoveLabel,
   replaySpeech,
   seekReplay,
+  tutorialGraphPly,
+  tutorialGraphPoints,
   tutorialHint,
   tutorialMatchSettings,
   tutorialStepMarks,
@@ -471,13 +484,22 @@ const stepSpeech = computed(() => {
 const replayLabel = computed(() => (
   currentStep.value?.type === "replay" ? replayMoveLabel(currentStep.value, stepState.value.ply) : ""
 ));
+const graphPoints = computed(() => tutorialGraphPoints(currentStep.value));
+const graphPly = computed(() => tutorialGraphPly(currentStep.value, stepState.value));
+// 観戦中はグラフを押した手数へ盤を動かす（再生できる範囲の中だけ）。
+function onGraphSelect(ply: number) {
+  if (currentStep.value?.type === "replay") seekReplayTo(ply);
+}
 function seekReplayBy(delta: number) {
+  seekReplayTo(stepState.value.ply + delta);
+}
+function seekReplayTo(ply: number) {
   const step = currentStep.value;
   if (step?.type !== "replay") return;
   const before = stepState.value;
-  stepState.value = seekReplay(step, before, before.ply + delta);
-  // 進めたときだけ駒音を鳴らす。
-  if (stepState.value.ply > before.ply) playMoveSoundFor(before.sfen, step.moves[before.ply]);
+  stepState.value = seekReplay(step, before, ply);
+  // 1手進めたときだけ駒音を鳴らす。
+  if (stepState.value.ply === before.ply + 1) playMoveSoundFor(before.sfen, step.moves[before.ply]);
   stepSolved.value = stepState.value.solved;
   lastMove.value = step.moves[stepState.value.ply - 1] ?? "";
 }
@@ -707,11 +729,6 @@ const resultMessage = computed(() => {
 </script>
 
 <style>
-/* 教室の「大事なマス」は、対局中に駒が動いた升と同じ緑にする（図鑑の黄色はそのまま）。 */
-.shogi-game .shogi-tutorial .square-mark--key {
-  background: rgba(68, 204, 68, 0.45);
-  box-shadow: inset 0 0 0 2px rgba(34, 153, 34, 0.9);
-}
 .shogi-game .shogi-tutorial__shelf,
 .shogi-game .shogi-tutorial__volume-view,
 .shogi-game .shogi-tutorial__result {
@@ -958,6 +975,17 @@ const resultMessage = computed(() => {
   border-color: #6ee7b7;
   opacity: 1;
   background: rgba(16, 185, 129, 0.35);
+}
+.shogi-game .shogi-tutorial__graph .evaluation-graph__svg {
+  height: 8.5rem;
+}
+/* グラフの下の手数と評価値は、暗いパネルの上で読める色にする。 */
+.shogi-game .shogi-tutorial__graph .evaluation-graph__selection {
+  color: #f8fafc;
+  font-size: 0.85rem;
+}
+.shogi-game .shogi-tutorial__graph .evaluation-graph__selection span {
+  color: #fde68a;
 }
 .shogi-game .shogi-tutorial__replay {
   display: grid;
