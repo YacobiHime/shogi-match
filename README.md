@@ -51,6 +51,7 @@ game.html?mode=cpu&player_color=black&match_id=chapter1-boss
 - `handicap`: 手合割名
 
 `engine_nodes`は指定値に最も近い難易度プリセットへ丸められます。旧版の値（2000〜480000）は、旧版と同じ段級位の表示名を持つレベルへ引き継がれます。Custom Elementでは`cpu-delay-ms`、`engine-base-url`、`handicap-name`、`mobile`、`enable-drag-and-drop`、`show-home`属性も指定できます。
+`show-home`を付けた単体表示では、ブラウザーの戻る操作で図鑑・教室・対局準備などを1段ずつ閉じてホームへ戻り、ホームでもう一度戻ると元のページへ移ります。対局中と振り返り中は、開いているメニューや解析を閉じるだけで対局画面からは離れません。
 
 やねうら王を取得・起動できない場合だけ、合法手から選ぶ軽量CPUへ自動的に切り替わります。
 棋力を必要とする場合は、別配布のUSIエンジンアダプターを使用してください。

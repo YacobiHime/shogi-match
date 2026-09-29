@@ -2,7 +2,7 @@
   <div class="shogi-dex" role="dialog" aria-modal="true" aria-labelledby="shogi-dex-title">
     <header class="shogi-dex__header">
       <button type="button" class="shogi-dex__back" @click="emit('close')">
-        <span aria-hidden="true">←</span> タイトルへ戻る
+        <span aria-hidden="true">←</span> {{ backLabel }}
       </button>
       <h1 id="shogi-dex-title">定跡図鑑</h1>
     </header>
@@ -190,6 +190,8 @@ const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   // 教室から開くときに最初に表示する戦法・囲い。囲いのIDなら囲いのタブで開く。
   initialId: { type: String, default: "" },
+  // 教室から重ねて開いたときは教室へ戻るため、「戻る」とだけ表示する。
+  backLabel: { type: String, default: "タイトルへ戻る" },
 });
 const emit = defineEmits(["close"]);
 

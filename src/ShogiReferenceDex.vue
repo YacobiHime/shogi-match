@@ -2,7 +2,7 @@
   <div class="shogi-dex" role="dialog" aria-modal="true" aria-labelledby="shogi-reference-dex-title">
     <header class="shogi-dex__header">
       <button type="button" class="shogi-dex__back" @click="emit('close')">
-        <span aria-hidden="true">←</span> タイトルへ戻る
+        <span aria-hidden="true">←</span> {{ backLabel }}
       </button>
       <h1 id="shogi-reference-dex-title">{{ dex.title }}</h1>
     </header>
@@ -182,6 +182,8 @@ const props = defineProps({
   // 教室などから開いたとき、最初に表示する項目。
   initialId: { type: String, default: "" },
   assetBaseUrl: { type: String, default: "." },
+  // 教室から重ねて開いたときは教室へ戻るため、「戻る」とだけ表示する。
+  backLabel: { type: String, default: "タイトルへ戻る" },
 });
 const emit = defineEmits(["close"]);
 

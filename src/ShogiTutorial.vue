@@ -375,6 +375,8 @@ function goBack() {
   else if (view.value === "volume") view.value = "shelf";
   else if (currentLesson.value) openVolume(currentLesson.value.volumeId);
 }
+// ブラウザの戻るからも、ヘッダーの戻るボタンと同じ段だけ戻す。
+defineExpose({ goBack });
 
 // ===== 本棚と一覧 =====
 const upcomingLesson = computed(() => nextLesson(lessons, progress.value) as Lesson | null);

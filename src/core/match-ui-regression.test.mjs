@@ -95,7 +95,9 @@ describe("match screen regressions", () => {
   it("locks the counterpart select for combined strategy/castle definitions", () => {
     expect(source).toMatch(/v-model="selectedStrategy"[\s\S]*?:disabled="strategySelectLocked"/);
     expect(source).toMatch(/v-model="selectedCastle"[\s\S]*?:disabled="castleSelectLocked"/);
-    expect(source).toMatch(/v-model="cpuDetailedStrategy"[\s\S]*?:disabled="cpuStrategySelectLocked"/);
-    expect(source).toMatch(/v-model="cpuDetailedCastle"[\s\S]*?:disabled="cpuCastleSelectLocked"/);
+    // 対局準備のCPU欄は「項目: 値 [変更]」の行で、一体型なら変更ボタンを無効にする。
+    expect(source).toMatch(/id: "cpuDetailedStrategy"[\s\S]*?disabled: cpuStrategySelectLocked\.value/);
+    expect(source).toMatch(/id: "cpuDetailedCastle"[\s\S]*?disabled: cpuCastleSelectLocked\.value/);
+    expect(source).toMatch(/class="shogi-game__pregame-change"\s+:disabled="row\.disabled"/);
   });
 });
