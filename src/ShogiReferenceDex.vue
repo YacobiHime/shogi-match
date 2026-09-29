@@ -289,8 +289,8 @@ function selectItem(id: string) {
 }
 .shogi-game .shogi-reference-dex__swatch--target { background: rgba(220, 38, 38, 0.6); }
 .shogi-game .shogi-reference-dex__swatch--key {
-  background: rgba(234, 179, 8, 0.65);
-  box-shadow: inset 0 0 0 2px rgba(202, 138, 4, 0.9);
+  background: rgba(68, 204, 68, 0.65);
+  box-shadow: inset 0 0 0 2px rgba(34, 153, 34, 0.9);
 }
 .shogi-game .shogi-reference-dex__tiers {
   width: 100%;

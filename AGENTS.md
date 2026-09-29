@@ -38,6 +38,20 @@
 - 対局中と終局後の状態は`localStorage`へ保存します。「対局準備」へ戻る操作は保存を削除する境界です。
 - 縦画面では、飛車選択などの操作を固定高で隠さないでください。スマホ幅とタブレット縦の両方を確認します。
 
+## 盤面の色の使い分け
+
+盤の木目が黄色系なので、升の強調に黄色を使わないでください。図鑑・将棋教室・対局で次の意味をそろえます。
+
+| 色 | 意味 | 定義場所 |
+| --- | --- | --- |
+| 緑 | 駒が動いた跡、図鑑・教室の「大事なマス」（`square-mark--key`） | `src/renderer/view/primitive/board/params.ts`の`lastMoveTo`、`BoardView.vue`の`.square-mark--key` |
+| 青い点 | 駒の動けるマス（`square-mark--reach`） | `BoardView.vue`の`.square-mark--reach` |
+| 赤 | ねらう駒・目標のマス（`square-mark--target`） | `BoardView.vue`の`.square-mark--target` |
+
+- 図鑑の凡例（`ShogiReferenceDex.vue`の`__swatch--*`）は盤上の色と同じ色相にします。
+- 升の色を変えるときは、台詞や凡例の色の名前（「緑のマス」など）も同じ変更で直します。
+- 対局中の矢印（危険な定跡手の黄色、AI候補の赤など）は升の強調とは別の表示で、この表の対象外です。
+
 ## 検証
 
 変更範囲に応じて、最低限次を実行します。

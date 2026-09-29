@@ -1251,7 +1251,8 @@ const whitePlayerTimeSeverity = computed(() => {
 </script>
 
 <style scoped>
-/* 図鑑の升の色付け。青は駒の動き、赤はねらう駒、黄色は大事なマス。 */
+/* 図鑑・教室の升の色付け。青は駒の動き、赤はねらう駒、緑は大事なマス。
+   大事なマスは、木目と見分けにくい黄色を避け、駒が動いた跡（params.tsのlastMoveTo）と同じ緑にする。 */
 .square-mark {
   pointer-events: none;
 }
@@ -1265,8 +1266,8 @@ const whitePlayerTimeSeverity = computed(() => {
   background: rgba(220, 38, 38, 0.3);
 }
 .square-mark--key {
-  background: rgba(234, 179, 8, 0.42);
-  box-shadow: inset 0 0 0 2px rgba(202, 138, 4, 0.9);
+  background: rgba(68, 204, 68, 0.45);
+  box-shadow: inset 0 0 0 2px rgba(34, 153, 34, 0.9);
 }
 /* 学習対局の「駒の利き」表示。青は先手、赤は後手、紫は両者が利かせている升。 */
 .attack-tint {
