@@ -946,8 +946,9 @@ const OPENING_CASTLE_DEFINITIONS = [
     label: "左美濃",
     detectionNames: ["左美濃", "居角左美濃", "天守閣美濃"],
     strictOrder: true,
-    completionSquares: [["8h", "K"], ["7h", "S"], ["6h", "G"], ["6f", "B"]],
-    blackMoves: ["7g7f", "8h6f", "7i7h", "5i6h", "6h7i", "7i8h", "6i6h"],
+    // 角は7七に上がり、4九の金を5八へ寄せて完成。6九の金は動かさない。
+    completionSquares: [["8h", "K"], ["7h", "S"], ["6i", "G"], ["5h", "G"], ["7g", "B"]],
+    blackMoves: ["7g7f", "8h7g", "7i7h", "5i6h", "6h7i", "7i8h", "4i5h"],
   },
   {
     id: "tenshukaku-mino",
@@ -1158,7 +1159,7 @@ const CASTLE_NEAR_COMPLETIONS = {
   }],
   kinmusou: [{ id: "kata-kinmusou", label: "片金無双", squares: [["3h", "K"], ["2h", "S"], ["4h", "G"]] }],
   "left-mino": [{
-    id: "kinyose-mae-left-mino", label: "金寄り前の左美濃", squares: [["8h", "K"], ["7h", "S"], ["6f", "B"]],
+    id: "kinagari-mae-left-mino", label: "金上がり前の左美濃", squares: [["8h", "K"], ["7h", "S"], ["6i", "G"], ["7g", "B"]],
   }],
   elmo: [{
     id: "kinyose-mae-elmo", label: "金寄り前のエルモ", squares: [["7h", "K"], ["6h", "S"], ["7i", "G"]],

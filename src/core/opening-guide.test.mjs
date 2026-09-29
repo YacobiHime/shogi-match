@@ -1154,6 +1154,29 @@ describe("opening guide", () => {
     ]);
   });
 
+  it.each(["black", "white"])("builds Left Mino with a 7g bishop and the 4i gold on 5h as %s", (color) => {
+    const own = openingPlanSteps("", "left-mino", color).map(({ usi }) => usi);
+    const convert = color === "white" ? mirrorUsiMove : (move) => move;
+    expect(own).toEqual(["7g7f", "8h7g", "7i7h", "5i6h", "6h7i", "7i8h", "4i5h"].map(convert));
+    // 相手は囲いに干渉しない端歩と飛車の上下だけを指す。
+    const fillers = ["1g1f", "9g9f", "2h1h", "1h2h", "2h1h", "1h2h", "2h1h"].map(color === "white" ? (move) => move : mirrorUsiMove);
+    const record = createGameRecord();
+    const played = [];
+    const opponent = [];
+    for (let index = 0; index < own.length; index += 1) {
+      const pair = color === "black" ? [own[index], fillers[index]] : [fillers[index], own[index]];
+      for (const usi of pair) expect(appendUsiMove(record, usi), usi).toBe(true);
+      played.push(own[index]);
+      opponent.push(fillers[index]);
+      const complete = isOpeningPlanComplete({
+        castleId: "left-mino", color, playedMoves: played, opponentMoves: opponent, currentSfen: record.position.sfen,
+        // 戦型検出の「左美濃」（8八玉・7八銀・6九金）だけでは、5八金の前に完成扱いしない。
+        detectedFormations: ["左美濃"],
+      });
+      expect(complete, own[index]).toBe(index === own.length - 1);
+    }
+  });
+
   it("switches Ahiru to the third-file rook attack against 3d pawn and 3c bishop", () => {
     expect(openingPlanSteps("ahiru", "", "black", {
       playedMoves: ["2g2f", "2f2e", "3i4h"],
