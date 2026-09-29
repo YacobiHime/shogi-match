@@ -149,7 +149,16 @@ describe('対局中の応援・助言', () => {
       level: 'detailed', opponentFormations: ['連盟美濃'], advisedTopics: [],
     });
     expect(advice?.topic).toBe('castle-renmei-mino');
-    expect(advice?.text).toContain('横からの攻め');
+    expect(advice?.text).toContain('ネタ');
+    expect(advice?.text).toContain('飛車を横から');
+  });
+
+  test('無敵囲いはネタの囲いとして助言する', () => {
+    const advice = getCoachAdvice({
+      level: 'detailed', opponentFormations: ['無敵囲い'], advisedTopics: [],
+    });
+    expect(advice?.topic).toBe('castle-muteki');
+    expect(advice?.text).toContain('ネタ');
   });
 
   test('相手の戦法には適した囲いを一度だけ提案する', () => {

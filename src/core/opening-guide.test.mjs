@@ -52,6 +52,7 @@ it("matches AND groups containing OR position alternatives", () => {
   pieces.delete("8e");
   expect(matchesMovePositionPrerequisites(conditions, { pieceAt: (square) => pieces.get(square) })).toBe(false);
 });
+import { OPENING_GUIDE_OVERRIDES } from "../data/opening-guide-overrides.mjs";
 import { OPENING_EXPLANATIONS, openingExplanation } from "./opening-explanations.mjs";
 
 function withTurn(sfen, color) {
@@ -442,8 +443,15 @@ describe("opening guide", () => {
   });
 
   it("has an explanation for every castle", () => {
-    expect(Object.keys(OPENING_EXPLANATIONS).sort())
-      .toEqual([...OPENING_STRATEGIES, ...OPENING_CASTLES].map(({ id }) => id).sort());
+    // テストでは定跡エディターの追加分（無敵囲いなど）を読み込まないので、その解説は追加分のIDとして確かめる。
+    const builtInIds = [...OPENING_STRATEGIES, ...OPENING_CASTLES].map(({ id }) => id);
+    const editorOnlyIds = Object.values(OPENING_GUIDE_OVERRIDES).map(({ id }) => id)
+      .filter((id) => !builtInIds.includes(id));
+    const explained = Object.keys(OPENING_EXPLANATIONS);
+    expect(explained.filter((id) => builtInIds.includes(id)).sort()).toEqual([...builtInIds].sort());
+    expect(explained.filter((id) => !builtInIds.includes(id)).every((id) => editorOnlyIds.includes(id))).toBe(true);
+    expect(openingExplanation("muteki")).toMatchObject({ overview: expect.stringContaining("ネタ") });
+    expect(openingExplanation("renmei-mino")).toMatchObject({ overview: expect.stringContaining("ネタ") });
     for (const { id } of OPENING_CASTLES) {
       expect(openingExplanation(id)).toMatchObject({
         overview: expect.any(String),

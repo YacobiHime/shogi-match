@@ -46,7 +46,9 @@ export const OPENING_EXPLANATIONS = Object.freeze({
   mino: { overview: "横からの攻めに強い、振り飛車の定番！", weakness: "上からの攻めに弱いよ。玉頭に注意しよう。", development: "高美濃・ダイヤモンド美濃・銀冠", compatibleStrategies: "ノーマル四間飛車・ノーマル三間飛車・ゴキゲン中飛車" },
   "high-mino": { overview: "上からの攻めにも強くなった美濃！", weakness: "本美濃より横が薄いよ。飛車の打ち込みに注意しよう。", development: "銀冠", compatibleStrategies: "ノーマル四間飛車・ノーマル三間飛車・ゴキゲン中飛車" },
   "diamond-mino": { overview: "金銀4枚で固めた、堅い美濃！", weakness: "組むのに手数がかかるよ。端攻めに注意しよう。", development: "銀冠", compatibleStrategies: "ノーマル四間飛車・ノーマル三間飛車" },
-  "renmei-mino": { overview: "金銀が並んで、横からの攻めに強い！", weakness: "攻めに使える駒が減るよ。", development: "高美濃", compatibleStrategies: "ゴキゲン中飛車・ノーマル三間飛車" },
+  // 連盟美濃と無敵囲いはネタとして知られる囲い。実戦向きの囲いと誤解させない解説にする。
+  "renmei-mino": { overview: "本美濃と金銀の位置がずれた、ネタとして知られる囲いだよ！", weakness: "銀が3九、金が5九と下段に下がっていて、本美濃より守りの連携が悪いよ。実戦では本美濃を組もう。", development: "本美濃に組み直そう", compatibleStrategies: "なし（遊びで指すとき向け）" },
+  muteki: { overview: "玉の真上に飛車を置いた、ネタとして知られる囲いだよ！", weakness: "玉が5九の居玉のままで、真上を飛車がふさいでいるから逃げ道がないよ。飛車も攻めに使えない。実戦では美濃囲いや舟囲いを組もう。", development: "なし（ほかの囲いに組み直そう）", compatibleStrategies: "なし（遊びで指すとき向け）" },
   "silver-crown": { overview: "上にも端にも強い、振り飛車の本格派！", weakness: "組むのに手数がかかるよ。途中の仕掛けに注意しよう。", development: "振り飛車穴熊", compatibleStrategies: "ノーマル四間飛車・ノーマル三間飛車" },
   "furibisha-anaguma": { overview: "とにかく堅い！王手がかかりにくい！", weakness: "組むのに時間がかかるよ。端攻めに注意しよう。", development: "なし（これが完成形）", compatibleStrategies: "ノーマル四間飛車・ノーマル三間飛車・ノーマル向かい飛車" },
   "furibisha-elmo": { overview: "少ない手数で組めて、急戦に強い！", weakness: "持久戦に弱いよ。早めに決着をつけよう。", development: "美濃囲い・銀冠", compatibleStrategies: "やばボーズ流" },
