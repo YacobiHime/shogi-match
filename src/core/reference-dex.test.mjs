@@ -9,11 +9,26 @@ import {
   referenceDexGroups,
   referenceEntryMarks,
   referenceEntrySfen,
+  referencePieceImageEntryId,
 } from "./reference-dex.mjs";
 
 const KINDS = Object.keys(REFERENCE_DEX_KINDS);
 
 describe("reference dex", () => {
+  it("links every piece image in the value tables to its piece entry", () => {
+    const entries = referenceDexEntries("piece");
+    const ids = new Set(entries.map(({ id }) => id));
+    const images = entries.flatMap(({ table, aiTable }) => [
+      ...(table ?? []).flatMap(({ pieces }) => pieces),
+      ...(aiTable?.pieces ?? []),
+    ]).flatMap(({ images: names }) => names);
+    expect(images.length).toBeGreaterThan(0);
+    for (const image of images) expect(ids.has(referencePieceImageEntryId(image)), image).toBe(true);
+    expect(referencePieceImageEntryId("black_prom_pawn")).toBe("tokin");
+    expect(referencePieceImageEntryId("black_prom_lance")).toBe("promoted-minor");
+    expect(referencePieceImageEntryId("unknown")).toBe("");
+  });
+
   it("offers piece, tesuji and shogi-world dexes with grouped entries", () => {
     expect(KINDS).toEqual(["piece", "tesuji", "world"]);
     for (const kind of KINDS) {

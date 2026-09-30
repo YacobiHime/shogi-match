@@ -21,7 +21,7 @@
       <small v-if="selectedEntry">現在：{{ selectedEntry.label }}</small>
     </button>
 
-    <div class="shogi-dex__body">
+    <div ref="bodyEl" class="shogi-dex__body">
       <nav
         id="shogi-reference-dex-list"
         class="shogi-dex__list"
@@ -50,14 +50,22 @@
         </section>
       </nav>
 
-      <section v-if="selectedEntry" class="shogi-dex__detail">
+      <section v-if="selectedEntry" ref="detailEl" class="shogi-dex__detail">
         <div class="shogi-dex__main">
+          <button
+            v-if="returnEntry"
+            type="button"
+            class="shogi-reference-dex__return"
+            @click="returnToTable"
+          >
+            <span aria-hidden="true">←</span> {{ returnEntry.label }}へ戻る
+          </button>
           <div class="shogi-dex__detail-head">
             <h2>{{ selectedEntry.label }}</h2>
             <span v-if="kind === 'tesuji' && sideToMove === 'white'" class="shogi-dex__side-note">後手番の局面</span>
           </div>
           <table v-if="selectedEntry.table" class="shogi-reference-dex__tiers">
-            <caption>点数は駒得の目安（局面によって変わるよ）</caption>
+            <caption>点数は駒得の目安（局面によって変わるよ）。駒を押すと説明が見られるよ</caption>
             <tbody>
               <tr v-for="row in selectedEntry.table" :key="row.tier">
                 <th scope="row" :class="`shogi-reference-dex__tier shogi-reference-dex__tier--${tierClass(row.tier)}`">
@@ -72,13 +80,16 @@
                       :title="piece.label"
                     >
                       <span class="shogi-reference-dex__piece-images">
-                        <img
+                        <button
                           v-for="image in piece.images"
                           :key="image"
-                          :src="pieceImageUrl(image)"
-                          :alt="piece.label"
-                          draggable="false"
+                          type="button"
+                          class="shogi-reference-dex__piece-link"
+                          :aria-label="`${pieceEntryLabel(image)}の説明を見る`"
+                          @click="openPieceEntry(image)"
                         >
+                          <img :src="pieceImageUrl(image)" alt="" draggable="false">
+                        </button>
                       </span>
                       <span class="shogi-reference-dex__points">{{ piece.points }}<small v-if="piece.points !== '∞'">点</small></span>
                     </li>
@@ -94,13 +105,16 @@
               <li v-for="piece in aiPieces" :key="piece.label" :title="piece.label">
                 <span class="shogi-reference-dex__ai-bar" :style="{ width: `${piece.ratio * 100}%` }" aria-hidden="true"></span>
                 <span class="shogi-reference-dex__piece-images">
-                  <img
+                  <button
                     v-for="image in piece.images"
                     :key="image"
-                    :src="pieceImageUrl(image)"
-                    :alt="piece.label"
-                    draggable="false"
+                    type="button"
+                    class="shogi-reference-dex__piece-link"
+                    :aria-label="`${pieceEntryLabel(image)}の説明を見る`"
+                    @click="openPieceEntry(image)"
                   >
+                    <img :src="pieceImageUrl(image)" alt="" draggable="false">
+                  </button>
                 </span>
                 <strong>{{ piece.value }}</strong>
                 <small>歩×{{ piece.relative }}</small>
@@ -154,7 +168,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import {
   REFERENCE_DEX_KINDS,
@@ -162,6 +176,7 @@ import {
   referenceDexGroups,
   referenceEntryMarks,
   referenceEntrySfen,
+  referencePieceImageEntryId,
 } from "./core/reference-dex.mjs";
 
 type ReferenceDexKind = "piece" | "tesuji" | "world";
@@ -260,9 +275,52 @@ function tierClass(tier: string) {
 
 function selectItem(id: string) {
   selectedId.value = id;
+  returnPoint.value = null;
   // 一覧から選んだらメニューを閉じる。
   listOpen.value = false;
 }
+
+// 表の駒から説明へ飛んだとき、元の表とスクロール位置を覚えておき、ワンタップで戻れるようにする。
+// スクロールするのは、広い画面では詳細、狭い画面では本文全体。
+const bodyEl = ref<HTMLElement | null>(null);
+const detailEl = ref<HTMLElement | null>(null);
+const returnPoint = ref<{ id: string; scroll: [number, number] } | null>(null);
+const returnEntry = computed(() => entries.value.find(({ id }) => id === returnPoint.value?.id) ?? null);
+watch(() => [props.kind, props.initialId], () => { returnPoint.value = null; });
+
+function setScroll([body, detail]: [number, number]) {
+  nextTick(() => {
+    if (bodyEl.value) bodyEl.value.scrollTop = body;
+    if (detailEl.value) detailEl.value.scrollTop = detail;
+  });
+}
+function pieceEntryLabel(image: string) {
+  const id = referencePieceImageEntryId(image);
+  return entries.value.find((entry) => entry.id === id)?.label ?? "";
+}
+function openPieceEntry(image: string) {
+  const id = referencePieceImageEntryId(image);
+  if (!id) return;
+  returnPoint.value = {
+    id: selectedId.value,
+    scroll: [bodyEl.value?.scrollTop ?? 0, detailEl.value?.scrollTop ?? 0],
+  };
+  selectedId.value = id;
+  setScroll([0, 0]);
+}
+function returnToTable() {
+  const point = returnPoint.value;
+  if (!point) return false;
+  returnPoint.value = null;
+  selectedId.value = point.id;
+  setScroll(point.scroll);
+  return true;
+}
+// ブラウザの戻るでは、駒の説明から表へ戻り、それ以外は図鑑を閉じる。
+function goBack() {
+  if (!returnToTable()) emit("close");
+}
+defineExpose({ goBack });
 </script>
 
 <style>
@@ -349,10 +407,36 @@ function selectItem(id: string) {
   gap: 0.1rem;
 }
 .shogi-game .shogi-reference-dex__piece-images img {
+  display: block;
   width: 2.3rem;
   height: 2.5rem;
   object-fit: contain;
   user-select: none;
+}
+/* 駒画像そのものを押せるようにし、共通のボタン装飾は外す。 */
+.shogi-game button.shogi-reference-dex__piece-link {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  box-shadow: none;
+}
+@media (hover: hover) {
+  .shogi-game button.shogi-reference-dex__piece-link:not(:disabled):hover {
+    background: rgba(241, 165, 76, 0.28);
+    transform: translateY(-1px);
+  }
+}
+.shogi-game button.shogi-reference-dex__piece-link:active {
+  background: rgba(241, 165, 76, 0.4);
+}
+.shogi-game .shogi-dex button.shogi-reference-dex__return {
+  align-self: flex-start;
+  min-height: 2.4rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
 }
 .shogi-game .shogi-reference-dex__ai {
   margin-top: 0.9rem;

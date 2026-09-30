@@ -196,6 +196,7 @@
     />
     <ShogiReferenceDex
       v-if="referenceDexKind"
+      ref="referenceDexView"
       :kind="referenceDexKind"
       :initial-id="referenceDexInitialId"
       :asset-base-url="assetBaseUrl"
@@ -1105,6 +1106,7 @@ const referenceDexInitialId = ref("");
 // やこび姫の将棋教室を開いているか。
 const tutorialOpen = ref(false);
 const tutorialView = ref<InstanceType<typeof ShogiTutorial> | null>(null);
+const referenceDexView = ref<InstanceType<typeof ShogiReferenceDex> | null>(null);
 // 教室のレッスンから始めた対局。終局後は教室へ戻り、reportで★を付ける。
 type TutorialMatchReport = { lessonId: string; outcome: "win" | "lose" | "draw"; reason: string; assistsUsed: number };
 const tutorialMatch = ref<{ lessonId: string; playerColor: "black" | "white"; report: TutorialMatchReport | null } | null>(null);
@@ -2644,7 +2646,9 @@ function openHome() {
  */
 function navigateBack() {
   if (referenceDexKind.value) {
-    referenceDexKind.value = "";
+    // 駒の説明へ飛んできたときは、先に元の表へ戻す。
+    if (referenceDexView.value) referenceDexView.value.goBack();
+    else referenceDexKind.value = "";
   } else if (dexOpen.value) {
     dexOpen.value = false;
     openingDexInitialId.value = "";

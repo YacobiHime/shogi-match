@@ -708,6 +708,30 @@ export function referenceDexEntries(kind) {
   return ENTRIES[kind] ?? [];
 }
 
+// 駒の価値の表に並べた駒画像と、その駒を説明する項目。
+const PIECE_IMAGE_ENTRY_IDS = Object.freeze({
+  black_king: "king",
+  black_king2: "king",
+  black_rook: "rook",
+  black_bishop: "bishop",
+  black_gold: "gold",
+  black_silver: "silver",
+  black_knight: "knight",
+  black_lance: "lance",
+  black_pawn: "pawn",
+  black_dragon: "dragon",
+  black_horse: "horse",
+  black_prom_pawn: "tokin",
+  black_prom_silver: "promoted-minor",
+  black_prom_knight: "promoted-minor",
+  black_prom_lance: "promoted-minor",
+});
+
+/** 駒の価値の表で押した駒画像から、説明の項目IDを引く。対応がなければ空文字。 */
+export function referencePieceImageEntryId(image) {
+  return PIECE_IMAGE_ENTRY_IDS[image] ?? "";
+}
+
 /** 図鑑の項目を、グループごとにまとめた一覧にする。 */
 export function referenceDexGroups(kind) {
   const groups = [];
