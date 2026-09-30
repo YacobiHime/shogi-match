@@ -299,6 +299,25 @@
             <small>{{ MATCH_KIND_OPTIONS.find(({ value }) => value === matchKind)?.description }}</small>
           </div>
 
+          <!-- 開始局面で下に出る項目が変わるため、学習対局では最初に選ばせる。 -->
+          <div v-if="matchKind === 'learning'" class="shogi-game__pregame-section shogi-game__pregame-start-type">
+            <span id="pregame-start-type" class="shogi-game__pregame-row-label">開始局面</span>
+            <div class="shogi-game__checks" role="radiogroup" aria-labelledby="pregame-start-type">
+              <button
+                v-for="option in LEARNING_START_OPTIONS"
+                :key="option.value"
+                type="button"
+                role="radio"
+                class="shogi-game__check"
+                :aria-checked="learningStartType === option.value"
+                @click="learningStartType = option.value as LearningStartType"
+              >
+                <span class="shogi-game__check-box" aria-hidden="true"></span>
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+
           <section
             v-for="side in pregameSides"
             :key="side.color"
@@ -332,7 +351,13 @@
             </div>
             <div v-if="side.rows.length" class="shogi-game__pregame-rows">
               <template v-for="row in side.rows" :key="row.id">
-                <div v-if="row.kind === 'switch'" class="shogi-game__pregame-row">
+                <div
+                  v-if="row.kind === 'switch'"
+                  class="shogi-game__pregame-row"
+                  :class="{ 'shogi-game__pregame-row--fresh': pregameFreshRows.has(row.id) }"
+                  :data-pregame-row="row.id"
+                >
+                  <span v-if="pregameFreshRows.has(row.id)" class="shogi-game__pregame-fresh" aria-hidden="true"></span>
                   <span class="shogi-game__pregame-row-label">{{ row.label }}</span>
                   <button
                     type="button"
@@ -343,7 +368,13 @@
                     @click="toggleCpuStrategyDetails"
                   ><span aria-hidden="true"></span></button>
                 </div>
-                <div v-else class="shogi-game__pregame-row">
+                <div
+                  v-else
+                  class="shogi-game__pregame-row"
+                  :class="{ 'shogi-game__pregame-row--fresh': pregameFreshRows.has(row.id) }"
+                  :data-pregame-row="row.id"
+                >
+                  <span v-if="pregameFreshRows.has(row.id)" class="shogi-game__pregame-fresh" aria-hidden="true"></span>
                   <span class="shogi-game__pregame-row-label">{{ row.label }}:</span>
                   <span class="shogi-game__pregame-value" :class="{ 'shogi-game__pregame-value--muted': row.disabled }">{{ row.value }}</span>
                   <button
@@ -360,7 +391,14 @@
 
           <section class="shogi-game__pregame-section" aria-label="対局の条件">
             <div class="shogi-game__pregame-rows">
-              <div v-for="row in pregameCommonRows" :key="row.id" class="shogi-game__pregame-row">
+              <div
+                v-for="row in pregameCommonRows"
+                :key="row.id"
+                class="shogi-game__pregame-row"
+                :class="{ 'shogi-game__pregame-row--fresh': pregameFreshRows.has(row.id) }"
+                :data-pregame-row="row.id"
+              >
+                <span v-if="pregameFreshRows.has(row.id)" class="shogi-game__pregame-fresh" aria-hidden="true"></span>
                 <span class="shogi-game__pregame-row-label">{{ row.label }}:</span>
                 <span class="shogi-game__pregame-value">{{ row.value }}</span>
                 <button
@@ -2323,7 +2361,6 @@ const pregameSides = computed(() => (["black", "white"] as const).map((color) =>
 const pregameCommonRows = computed(() => {
   const rows: { id: string; label: string; value: string }[] = [];
   if (matchKind.value === "learning") {
-    rows.push({ id: "startType", label: "開始局面", value: optionLabel(LEARNING_START_OPTIONS, learningStartType.value) });
     if (pregameUsesHandicap.value) {
       rows.push({ id: "handicap", label: "手合割", value: optionLabel(handicapOptions, learningHandicapId.value) });
     }
@@ -2335,6 +2372,31 @@ const pregameCommonRows = computed(() => {
   rows.push({ id: "coach", label: "やこび姫の助言", value: optionLabel(COACH_LEVEL_OPTIONS, coachLevel.value) });
   return rows;
 });
+
+/*
+ * 設定を変えて新しく現れた行を、しばらく矢印と点滅で強調する。
+ * 開始局面を選ぶと離れた先手・後手の欄に行が増えるため、見える位置までスクロールもする。
+ */
+const PREGAME_FRESH_MS = 3000;
+const pregameFreshRows = ref(new Set<string>());
+let pregameFreshTimer: ReturnType<typeof setTimeout> | undefined;
+const pregameRowIds = computed(() => [
+  ...pregameSides.value.flatMap(({ rows }) => rows.map(({ id }) => id)),
+  ...pregameCommonRows.value.map(({ id }) => id),
+]);
+watch(pregameRowIds, (ids, previous) => {
+  if (!pregameOpen.value || !previous) return;
+  const added = ids.filter((id) => !previous.includes(id));
+  if (!added.length) return;
+  pregameFreshRows.value = new Set(added);
+  if (pregameFreshTimer) clearTimeout(pregameFreshTimer);
+  pregameFreshTimer = setTimeout(() => { pregameFreshRows.value = new Set(); }, PREGAME_FRESH_MS);
+  void nextTick(() => {
+    gameRoot.value?.querySelector(`[data-pregame-row="${added[0]}"]`)
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
+});
+onBeforeUnmount(() => { if (pregameFreshTimer) clearTimeout(pregameFreshTimer); });
 
 const LEARNING_PLAN_PICKER = /^plan:(player|opponent):(strategy|castle)$/;
 
@@ -2364,7 +2426,6 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
       ],
     };
   }
-  if (id === "startType") return single("開始局面", learningStartType.value, [{ options: LEARNING_START_OPTIONS }]);
   if (id === "handicap") return single("手合割", learningHandicapId.value, [{ options: handicapOptions }]);
   if (id === "hintLimit") return single("閃きの回数", learningHintLimit.value, [{ options: assistLimitOptions }]);
   if (id === "undoLimit") return single("待ったの回数", learningUndoLimit.value, [{ options: assistLimitOptions }]);
@@ -2396,7 +2457,6 @@ function onPregamePick(key: string, value: PickerValue) {
   else if (key === "bishop") cpuBishopPreference.value = text;
   else if (key === "rook") cpuRookPreference.value = text;
   else if (key === "tempo") cpuTempoPreference.value = text;
-  else if (key === "startType") learningStartType.value = text as LearningStartType;
   else if (key === "handicap") learningHandicapId.value = text;
   else if (key === "hintLimit") learningHintLimit.value = Number(value);
   else if (key === "undoLimit") learningUndoLimit.value = Number(value);
@@ -6263,7 +6323,7 @@ queueMicrotask(() => {
   font-size: 0.72em;
   font-weight: 600;
 }
-/* 先手は玉、後手は王の駒で表す。 */
+/* 先手は玉、後手は王の駒で表す。どちらも正位置で読めるよう回転させない。 */
 .shogi-game__pregame-avatar {
   display: grid;
   place-items: center;
@@ -6276,9 +6336,6 @@ queueMicrotask(() => {
   font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
   font-size: 1.3em;
   font-weight: 800;
-}
-.shogi-game__pregame-avatar--white {
-  transform: rotate(180deg);
 }
 .shogi-game__pregame-name {
   display: grid;
@@ -6413,6 +6470,95 @@ queueMicrotask(() => {
   .shogi-game .shogi-game__pregame-back:not(:disabled):hover {
     border-color: var(--pregame-paper);
     background-color: rgba(255, 252, 244, 0.15);
+  }
+}
+/* 学習対局の開始局面。1つだけ選ぶ設定だが、見た目はチェックボックスにする。 */
+.shogi-game__pregame-start-type {
+  gap: 0.45em;
+}
+.shogi-game__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em 1.1em;
+}
+.shogi-game .shogi-game__check {
+  display: inline-flex;
+  gap: 0.5em;
+  align-items: center;
+  min-height: 2.3em;
+  padding: 0.2em 0.1em;
+  border: 0;
+  color: var(--pregame-ink);
+  background: transparent;
+  box-shadow: none;
+  font-weight: 600;
+}
+.shogi-game__check-box {
+  position: relative;
+  flex: none;
+  width: 1.35em;
+  height: 1.35em;
+  border: 2px solid #8a7a63;
+  border-radius: 0.25em;
+  background: #fff;
+}
+.shogi-game__check[aria-checked="true"] .shogi-game__check-box {
+  border-color: #4a9f50;
+  background: #5dbb63;
+}
+.shogi-game__check[aria-checked="true"] .shogi-game__check-box::after {
+  position: absolute;
+  top: 0.08em;
+  left: 0.36em;
+  width: 0.35em;
+  height: 0.7em;
+  border: solid #fff;
+  border-width: 0 0.18em 0.18em 0;
+  content: "";
+  transform: rotate(45deg);
+}
+.shogi-game .shogi-game__check[aria-checked="true"] {
+  color: var(--pregame-value);
+  font-weight: 800;
+}
+@media (hover: hover) {
+  .shogi-game .shogi-game__check:not(:disabled):hover {
+    background-color: transparent;
+  }
+  .shogi-game .shogi-game__check:not(:disabled):hover .shogi-game__check-box {
+    border-color: var(--pregame-frame);
+  }
+}
+/* 新しく現れた行。背景を点滅させ、左で矢印を動かして気づかせる。 */
+.shogi-game__pregame-row--fresh {
+  margin-inline: -0.4em;
+  padding-inline: 0.4em;
+  border-radius: 0.4em;
+  animation: shogi-pregame-fresh 1s ease-in-out 3;
+}
+.shogi-game__pregame-fresh {
+  width: 0;
+  height: 0;
+  border-top: 0.45em solid transparent;
+  border-bottom: 0.45em solid transparent;
+  border-left: 0.7em solid #e3742b;
+  animation: shogi-pregame-arrow 0.6s ease-in-out infinite alternate;
+}
+@keyframes shogi-pregame-fresh {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: #fbdcc0; }
+}
+@keyframes shogi-pregame-arrow {
+  from { transform: translateX(-0.3em); }
+  to { transform: translateX(0.15em); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__pregame-row--fresh {
+    background-color: #fbe6d2;
+    animation: none;
+  }
+  .shogi-game__pregame-fresh {
+    animation: none;
   }
 }
 /* 開始ボタンは用紙の下端に固定し、長い設定でも押しやすくする。 */
