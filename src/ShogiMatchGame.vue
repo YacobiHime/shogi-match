@@ -327,11 +327,12 @@
           >
             <div class="shogi-game__pregame-side-head">
               <span class="shogi-game__pregame-side-label">{{ side.label }}<small v-if="side.role">{{ side.role }}</small></span>
-              <span
+              <img
                 class="shogi-game__pregame-avatar"
-                :class="`shogi-game__pregame-avatar--${side.color}`"
-                aria-hidden="true"
-              >{{ side.color === "black" ? "玉" : "王" }}</span>
+                :src="pregameKingImageUrl(side.color)"
+                alt=""
+                draggable="false"
+              />
               <span class="shogi-game__pregame-name">
                 <strong>{{ side.name }}</strong>
                 <small v-if="side.detail">{{ side.detail }}</small>
@@ -2334,6 +2335,21 @@ function cpuPlanRows(): PregameRow[] {
     rows.push({ kind: "pick", id: "cpuFirstMove", label: "初手", value: optionLabel(CPU_FIRST_MOVE_OPTIONS, cpuFirstMove.value) });
   }
   return rows;
+}
+
+// 盤で選んだ駒の書体で、先手は玉、後手は王の駒を正位置の画像で表す。
+function pregamePieceTheme() {
+  try {
+    return localStorage.getItem("shogi-match-piece-theme") || "hitomoji_wood";
+  } catch {
+    return "hitomoji_wood";
+  }
+}
+const pregamePieceThemeId = ref(pregamePieceTheme());
+watch(pregameOpen, (open) => { if (open) pregamePieceThemeId.value = pregamePieceTheme(); });
+function pregameKingImageUrl(color: "black" | "white") {
+  const name = color === "black" ? "black_king2" : "black_king";
+  return `${props.assetBaseUrl.replace(/\/$/, "")}/piece/${pregamePieceThemeId.value}/${name}.webp`;
 }
 
 const pregameSides = computed(() => (["black", "white"] as const).map((color) => {
@@ -6327,19 +6343,14 @@ queueMicrotask(() => {
   font-size: 0.72em;
   font-weight: 600;
 }
-/* 先手は玉、後手は王の駒で表す。どちらも正位置で読めるよう回転させない。 */
+/* 先手は玉、後手は王の駒画像で表す。どちらも正位置で読めるよう先手向きの画像を使う。 */
 .shogi-game__pregame-avatar {
-  display: grid;
-  place-items: center;
-  width: 1.85em;
-  height: 2.08em;
-  padding-top: 0.18em;
-  color: #2a1d10;
-  background: linear-gradient(160deg, #f4d596, #d9a95b);
-  clip-path: polygon(50% 0, 84% 14%, 100% 100%, 0 100%, 16% 14%);
-  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
-  font-size: 1.3em;
-  font-weight: 800;
+  display: block;
+  flex: none;
+  width: 2.4em;
+  height: 2.7em;
+  object-fit: contain;
+  user-select: none;
 }
 .shogi-game__pregame-name {
   display: grid;
