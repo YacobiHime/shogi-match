@@ -78,7 +78,13 @@
         <div class="shogi-dex__main">
           <div class="shogi-dex__detail-head">
             <h2>{{ selectedDefinition.label }}</h2>
-            <span v-if="isWhiteSide" class="shogi-dex__side-note">後手から見た盤面</span>
+            <span v-if="flipped" class="shogi-dex__side-note">後手から見た盤面</span>
+            <button
+              type="button"
+              class="shogi-dex__flip"
+              :aria-pressed="flipped"
+              @click="flipped = !flipped"
+            ><span aria-hidden="true">⇅</span> 盤を反転</button>
           </div>
           <div class="shogi-dex__stage">
             <!-- 小さい画面では盤の横の矢印だけで前後できる。 -->
@@ -96,7 +102,7 @@
                 :last-move="currentStep.lastMove"
                 :allow-move="false"
                 :enable-drag-and-drop="false"
-                :flip="isWhiteSide"
+                :flip="flipped"
                 :mobile="isNarrow"
                 :layout="isNarrow ? 'portrait' : 'standard'"
                 :asset-base-url="assetBaseUrl"
@@ -272,6 +278,9 @@ const isWhiteSide = computed(() => {
   const colors = (selectedDefinition.value as any)?.availability?.colors;
   return Array.isArray(colors) && colors.length === 1 && colors[0] === "white";
 });
+// 後手専用の戦法は後手から見た盤面で開き、どの定跡も利用者が反転できる。
+const flipped = ref(false);
+watch(selectedDefinition, () => { flipped.value = isWhiteSide.value; }, { immediate: true });
 const currentStep = computed(() => (
   steps.value[Math.min(stepIndex.value, steps.value.length - 1)] ?? { sfen: STANDARD_SFEN, label: "", lastMove: "", routine: null }
 ));
@@ -538,6 +547,7 @@ watch(stepIndex, async () => {
 }
 .shogi-dex__detail-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 0.6rem;
   flex: none;
@@ -549,6 +559,25 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex__side-note {
   color: #f1a54c;
   font-size: 0.72rem;
+}
+.shogi-game .shogi-dex .shogi-dex__flip {
+  align-self: center;
+  margin-left: auto;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 999px;
+  color: #fffcf4;
+  background: transparent;
+  font: 700 0.8rem/1.2 inherit;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.shogi-game .shogi-dex .shogi-dex__flip[aria-pressed="true"] {
+  color: #172632;
+  background: #f1a54c;
+  border-color: #f1a54c;
 }
 .shogi-game .shogi-dex__stage {
   display: flex;
