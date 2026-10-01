@@ -1,9 +1,12 @@
-import { Position, Square } from "tsshogi";
+import { Position, RecordMetadataKey, Square, importKIF } from "tsshogi";
 import { appendUsiMove, createGameRecord } from "../game-state";
+import { AMANO_SOHO_KIFU, KOYAMA_REO_ENTRANCE_KIFU } from "../data/reference-kifu.mjs";
 
 /**
  * 駒図鑑・手筋図鑑・将棋界図鑑の収録内容。
  * 各項目は盤面（SFENまたは平手からの手順）と、升の色付け・矢印・解説を持つ。
+ * 代表局の棋譜（KIF形式）を持つ項目は、定跡図鑑と同じように1手ずつ並べられる。
+ * flipを付けた項目は、後手を下にした盤面で開く。
  * 升はUSI表記（例: 5e）。先手側から見た盤面で書く。
  */
 
@@ -631,6 +634,19 @@ const WORLD_ENTRIES = [
     ],
   },
   {
+    id: "amano-soho", group: "名棋士", label: "天野宗歩",
+    kifu: AMANO_SOHO_KIFU,
+    kifuTitle: "弘化2年（1845年）",
+    // 宗歩は後手なので、宗歩の側を下にして並べる。
+    flip: true,
+    overview: "江戸時代の終わりごろに活躍した、伝説の強さをもつ棋士だよ！",
+    rows: [
+      ["人物", "江戸時代後期（1816〜1859年）の棋士。名人は家元から出るきまりだったので名人にはならなかったけれど、のちに「棋聖」とたたえられたんだ。"],
+      ["実力十三段", "段位は七段だったけれど、その強さは「実力十三段」と言われたよ。"],
+      ["棋譜", "盤面は、大橋宗珉との一局。角交換から腰掛銀に組んで戦い、宗歩が勝ったよ。宗歩は後手なので、宗歩の側を下にして並べているよ。"],
+    ],
+  },
+  {
     id: "masuda", group: "名棋士", label: "升田幸三",
     moves: ["7g7f", "3c3d", "7f7e", "8c8d", "2h7h", "8d8e", "7h7f", "4a3b"],
     overview: "「新手一生」を掲げて、新しい指し方を次々に生み出した棋士だよ！",
@@ -691,6 +707,17 @@ const WORLD_ENTRIES = [
     ],
   },
   {
+    id: "koyama", group: "名棋士", label: "小山怜央",
+    kifu: KOYAMA_REO_ENTRANCE_KIFU,
+    kifuTitle: "棋士編入試験（2023年2月13日）",
+    overview: "奨励会を経ずに、アマチュアからプロ棋士になった棋士だよ！",
+    rows: [
+      ["プロ編入", "奨励会に入らず、アマチュアの大会で実績を積んで棋士編入試験を受けたよ。2023年に合格して、奨励会を経験しないでプロ棋士になった初めての人になったんだ。"],
+      ["棋風", "穴熊が大得意！相手がどんな指し手をしてきても、穴熊を組むことができるんだ。"],
+      ["棋譜", "盤面は、プロ入りを決めた横山友紀四段との一局だよ。四間飛車に居飛車穴熊で組んで、最後は相手の玉を寄せ切ったんだ。"],
+    ],
+  },
+  {
     id: "computer-shogi", group: "トピック", label: "コンピュータ将棋",
     sfen: STANDARD,
     overview: "今ではAIもとっても強くなって、プロの研究にも使われているよ！",
@@ -746,10 +773,59 @@ export function referenceDexGroups(kind) {
   return groups;
 }
 
+const kifuCache = new Map();
+
+/**
+ * 代表局の棋譜を、初期局面から1手ずつの局面に展開する。
+ * 各局面は、SFEN・指し手の表記・直前の手（USI）・その手への解説・見せ場の名前を持つ。棋譜のない項目はnull。
+ */
+export function referenceEntryKifu(entry) {
+  if (!entry?.kifu) return null;
+  if (kifuCache.has(entry.kifu)) return kifuCache.get(entry.kifu);
+  const record = importKIF(entry.kifu);
+  if (record instanceof Error) throw new Error(`${entry.id}: ${record.message}`);
+  const steps = [];
+  const metadata = (key) => record.metadata.getStandardMetadata(key) ?? "";
+  // 投了などの終局は、最後の指し手の局面に「投了」と書き添える。
+  let ending = "";
+  record.goto(0);
+  for (const node of record.moves) {
+    if (node.ply > 0) record.goForward();
+    if (node.ply > 0 && !node.move?.usi) {
+      ending = node.displayText;
+      break;
+    }
+    steps.push({
+      sfen: record.position.sfen,
+      label: node.ply === 0 ? "" : node.displayText.replace("☗", "▲").replace("☖", "△"),
+      lastMove: node.move?.usi ?? "",
+      comment: node.comment.trim(),
+      // KIFのしおり（「&」の行）は、その対局の見せ場の名前として扱う。
+      highlight: node.bookmark.trim(),
+    });
+  }
+  // 投了・詰みで終わった棋譜は、最後の手を指した側の勝ち。
+  const lastPly = steps.length - 1;
+  const winner = ["投了", "詰み"].includes(ending) && lastPly > 0
+    ? (lastPly % 2 === 1 ? "black" : "white")
+    : "";
+  const kifu = Object.freeze({
+    black: metadata(RecordMetadataKey.BLACK_NAME),
+    white: metadata(RecordMetadataKey.WHITE_NAME),
+    ending,
+    winner,
+    steps,
+  });
+  kifuCache.set(entry.kifu, kifu);
+  return kifu;
+}
+
 /** 項目の盤面SFEN。手順で指定した項目は平手から指し進める。表だけの項目は盤面を持たない。 */
 export function referenceEntrySfen(entry) {
   if (entry?.table) return "";
   if (entry?.sfen) return entry.sfen;
+  const kifu = referenceEntryKifu(entry);
+  if (kifu) return kifu.steps.at(-1).sfen;
   const record = createGameRecord(STANDARD);
   for (const usi of entry?.moves ?? []) {
     if (!appendUsiMove(record, usi)) throw new Error(`${entry.id}: ${usi}を指せません`);

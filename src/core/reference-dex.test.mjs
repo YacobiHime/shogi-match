@@ -1,12 +1,13 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { Position } from "tsshogi";
+import { Position, Square } from "tsshogi";
 import { createGameRecord, enumerateLegalMoves } from "../game-state";
 import {
   REFERENCE_DEX_KINDS,
   pieceReachSquares,
   referenceDexEntries,
   referenceDexGroups,
+  referenceEntryKifu,
   referenceEntryMarks,
   referenceEntrySfen,
   referencePieceImageEntryId,
@@ -60,6 +61,60 @@ describe("reference dex", () => {
       expect(entry.overview, entry.id).toEqual(expect.any(String));
       expect(entry.rows.length, entry.id).toBeGreaterThanOrEqual(2);
     }
+  });
+
+  it("replays every kifu in the shogi-world dex move by move to the end", () => {
+    const entries = referenceDexEntries("world").filter(({ kifu }) => kifu);
+    expect(entries.map(({ id }) => id)).toContain("koyama");
+    for (const entry of entries) {
+      const { steps } = referenceEntryKifu(entry);
+      expect(steps[0].lastMove, entry.id).toBe("");
+      for (let index = 1; index < steps.length; index += 1) {
+        // 前の局面から、記録した手を合法に指すと次の局面になる。
+        const record = createGameRecord(steps[index - 1].sfen);
+        const move = record.position.createMoveByUSI(steps[index].lastMove);
+        expect(move && record.append(move), `${entry.id}: ${index}手目`).toBe(true);
+        expect(record.position.sfen.split(" ").slice(0, 3)).toEqual(steps[index].sfen.split(" ").slice(0, 3));
+        expect(steps[index].label, `${entry.id}: ${index}手目`).toMatch(/^[▲△]/);
+      }
+      expect(referenceEntrySfen(entry)).toBe(steps.at(-1).sfen);
+    }
+  });
+
+  it("shows Koyama Reo's entrance-exam win built on an anaguma", () => {
+    const entry = referenceDexEntries("world").find(({ id }) => id === "koyama");
+    const kifu = referenceEntryKifu(entry);
+    expect(kifu.black).toBe("小山怜央 アマ");
+    expect(kifu.white).toBe("横山友紀 四段");
+    expect(kifu.ending).toBe("投了");
+    expect(kifu.steps).toHaveLength(134);
+    expect(kifu.steps.at(-1).label).toBe("▲７三角成");
+    // 39手目の8八銀で、玉が9九・香が9八・銀が8八・金が7八の居飛車穴熊に組んでいる。
+    const anaguma = Position.newBySFEN(kifu.steps[39].sfen);
+    const at = (file, rank) => anaguma.board.at(new Square(file, rank));
+    expect([at(9, 9), at(9, 8), at(8, 8), at(7, 8)].map((piece) => piece?.color === "black" && piece.type))
+      .toEqual(["king", "lance", "silver", "gold"]);
+    expect(kifu.steps[39].comment).toContain("穴熊");
+    // 穴熊の完成は、棋譜のしおりで見せ場にしている。
+    expect(kifu.steps.filter(({ highlight }) => highlight).map(({ highlight }) => highlight)).toEqual(["穴熊の完成"]);
+    expect(kifu.steps[39].highlight).toBe("穴熊の完成");
+    expect(kifu.winner).toBe("black");
+    expect(entry.rows.map(([, text]) => text).join("")).toContain("相手がどんな指し手をしてきても、穴熊を組むことができる");
+  });
+
+  it("shows Amano Soho's game from his side as the second player", () => {
+    const entries = referenceDexEntries("world");
+    const entry = entries.find(({ id }) => id === "amano-soho");
+    const kifu = referenceEntryKifu(entry);
+    expect(kifu.black).toBe("八代大橋宗珉");
+    expect(kifu.white).toBe("天野宗歩");
+    expect(entry.flip).toBe(true);
+    expect(kifu.steps).toHaveLength(97);
+    expect(kifu.steps.at(-1).label).toBe("△８六銀");
+    expect(kifu.ending).toBe("投了");
+    expect(kifu.winner).toBe("white");
+    // 名棋士は時代の順に並べ、江戸時代の宗歩を最初にする。
+    expect(entries.filter(({ group }) => group === "名棋士")[0].id).toBe("amano-soho");
   });
 
   it.each([

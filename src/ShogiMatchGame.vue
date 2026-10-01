@@ -198,6 +198,7 @@
       v-if="referenceDexKind"
       ref="referenceDexView"
       :kind="referenceDexKind"
+      :analysis-engine="dexAnalysisEngine"
       :initial-id="referenceDexInitialId"
       :asset-base-url="assetBaseUrl"
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
@@ -4690,8 +4691,9 @@ async function scheduleCpuMove() {
   }, Math.max(0, props.cpuDelayMs));
 }
 
-async function initializeEngine() {
-  if ((normalizedMode.value !== "cpu" && !reviewMode.value) || engineReady.value) return;
+// 図鑑の棋譜解析（force）では、対局の形式によらずエンジンを起動する。
+async function initializeEngine({ force = false } = {}) {
+  if ((!force && normalizedMode.value !== "cpu" && !reviewMode.value) || engineReady.value) return;
   if (enginePromise) return enginePromise;
   enginePromise = (async () => {
    try {
@@ -4719,6 +4721,43 @@ async function initializeEngine() {
   })();
   try { await enginePromise; } finally { enginePromise = null; }
 }
+
+/*
+ * 図鑑で代表局を解析するための探索。図鑑はホームの上に開くので対局の探索とは重ならないが、
+ * 同じエンジンは一度に1つしか探索できないため、助言探索が終わるのを待ってから1局面ずつ流す。
+ */
+let dexSearchQueue: Promise<unknown> = Promise.resolve();
+let dexSearchRunning = false;
+const dexAnalysisEngine = {
+  search(sfen: string) {
+    const run = dexSearchQueue.catch(() => undefined).then(async () => {
+      await initializeEngine({ force: true });
+      if (!engine || !engineReady.value) throw new Error("将棋AIを起動できませんでした。");
+      await Promise.all([
+        dedicatedCoachQueue.catch(() => undefined),
+        reviewCoachQueue.catch(() => undefined),
+      ]);
+      const compact = props.mobile || boardLayout.value === "portrait";
+      dexSearchRunning = true;
+      try {
+        engine.applyStrengthOptions({ multiPv: 2 });
+        engine.setPosition(sfen);
+        return await engine.go({
+          nodes: compact ? 6000 : 12000,
+          maxTimeMs: compact ? 800 : 1200,
+        });
+      } finally {
+        dexSearchRunning = false;
+      }
+    });
+    dexSearchQueue = run;
+    return run;
+  },
+  // 図鑑の探索だけを止め、対局の探索には触れない。
+  stop() {
+    if (dexSearchRunning) engine?.stop();
+  },
+};
 
 function resign() {
   if (active.value && !reviewMode.value) finish(resignationResult(record.value));
