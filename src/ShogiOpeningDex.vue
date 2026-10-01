@@ -647,9 +647,11 @@ watch(stepIndex, async () => {
   opacity: 0.4;
 }
 .shogi-game .shogi-dex__step-count {
-  min-width: 6em;
+  /* 手数の桁が変わっても、前後のボタンが横へずれないよう幅を固定する。 */
+  min-width: 6.5em;
   text-align: center;
   font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
 }
 .shogi-game .shogi-dex__moves {
   display: flex;
