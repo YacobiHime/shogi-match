@@ -102,6 +102,17 @@ describe("reference dex", () => {
     expect(entry.rows.map(([, text]) => text).join("")).toContain("相手がどんな指し手をしてきても、穴熊を組むことができる");
   });
 
+  it("shows the oldest surviving kifu in the Edo meijin entry", () => {
+    const entry = referenceDexEntries("world").find(({ id }) => id === "edo-meijin");
+    const kifu = referenceEntryKifu(entry);
+    expect(kifu.black).toBe("初代大橋宗桂");
+    expect(kifu.white).toBe("本因坊算砂");
+    expect(kifu.steps).toHaveLength(134);
+    expect(kifu.steps[10].label).toBe("△４二飛");
+    expect(kifu.steps.at(-1).label).toBe("▲６三香成");
+    expect(kifu.winner).toBe("black");
+  });
+
   it("shows Amano Soho's game from his side as the second player", () => {
     const entries = referenceDexEntries("world");
     const entry = entries.find(({ id }) => id === "amano-soho");
