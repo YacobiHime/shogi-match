@@ -878,6 +878,8 @@ import {
   STANDARD_SFEN,
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
+import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
+import { kifuAnalysisBudget } from "./core/reference-kifu-analysis.mjs";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
 import {
   createFormationState,
@@ -1248,6 +1250,7 @@ let playerMoveFlair: {
   wasEnemyCampDrop: boolean;
   fromHint: boolean;
   trivial: boolean;
+  sacrifice: boolean;
   materialGain: number;
 } | undefined;
 type PraiseCandidate = { rank: number; move: string; score?: EngineEvaluation };
@@ -3755,6 +3758,7 @@ async function playerMovePraise(options: {
         move: flair.usi,
         deepCandidates: baseline.deep,
         shallowCandidates: baseline.shallow,
+        sacrifice: flair.sacrifice,
       })
     : null;
   const cpuMatePly = parseMateScore(cpuCandidates.find(({ rank }) => rank === 1));
@@ -4089,6 +4093,10 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   const legalMoveCountBefore = actor === "player" && !reviewMode.value
     ? enumerateLegalMoves(record.value.position.clone()).length
     : 0;
+  // 神の一手の判定で、捨て駒を見つけにくさとして加点する。
+  const sacrificeBefore = actor === "player" && !reviewMode.value && coachLevel.value === "detailed"
+    ? moveContext(currentSfen.value, usi).sacrifice
+    : false;
   const move = active.value ? record.value.position.createMoveByUSI(usi) : null;
   if (!move || !record.value.append(move)) return false;
   syncPosition(usi);
@@ -4130,6 +4138,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
       fromHint: Boolean(reusedHint),
       // 取り返しや合法手がほぼ無い局面の最善手は、褒めるほどの選択ではない。
       trivial: recapture || (legalMoveCountBefore > 0 && legalMoveCountBefore <= 2),
+      sacrifice: sacrificeBefore,
       materialGain: move.capturedPieceType
         ? materialGain({
             capturedPieceType: move.capturedPieceType,
@@ -4729,7 +4738,15 @@ async function initializeEngine({ force = false } = {}) {
 let dexSearchQueue: Promise<unknown> = Promise.resolve();
 let dexSearchRunning = false;
 const dexAnalysisEngine = {
-  search(sfen: string) {
+  /*
+   * 浅い読み（shallow）は神の一手の判定用で、対局中の褒め言葉と同じ予算で読む。
+   * 深い読み（deep）は、図鑑で選んだ解析の深さ（level）の探索量で読み、読みの途中経過をonUpdateへ渡す。
+   */
+  search(
+    sfen: string,
+    depth: "shallow" | "deep" = "deep",
+    options: { level?: number; onUpdate?: (update: { depth?: number; nodes?: number }) => void } = {},
+  ) {
     const run = dexSearchQueue.catch(() => undefined).then(async () => {
       await initializeEngine({ force: true });
       if (!engine || !engineReady.value) throw new Error("将棋AIを起動できませんでした。");
@@ -4740,11 +4757,15 @@ const dexAnalysisEngine = {
       const compact = props.mobile || boardLayout.value === "portrait";
       dexSearchRunning = true;
       try {
-        engine.applyStrengthOptions({ multiPv: 2 });
+        const settings = depth === "shallow"
+          ? getPraiseBaselineSearchSettings(compact).shallow
+          : { ...kifuAnalysisBudget(options.level ?? 0, compact), multiPv: 2 };
+        engine.applyStrengthOptions({ multiPv: settings.multiPv });
         engine.setPosition(sfen);
         return await engine.go({
-          nodes: compact ? 6000 : 12000,
-          maxTimeMs: compact ? 800 : 1200,
+          nodes: settings.nodes,
+          maxTimeMs: settings.maxTimeMs,
+          ...(options.onUpdate ? { onUpdate: options.onUpdate } : {}),
         });
       } finally {
         dexSearchRunning = false;
@@ -4829,7 +4850,7 @@ async function runKifuAnalysis() {
       ? "startpos"
       : matchInitialSfen.value;
     const replay = createGameRecord(matchInitialSfen.value);
-    const positions = [{ sideToMove: replay.position.color, label: "開始局面" }];
+    const positions = [{ sideToMove: replay.position.color, label: "開始局面", sfen: replay.position.sfen }];
     for (let index = 0; index < moves.length; index += 1) {
       const label = (() => {
         try {
@@ -4842,20 +4863,33 @@ async function runKifuAnalysis() {
       positions.push({
         sideToMove: replay.position.color,
         label,
+        sfen: replay.position.sfen,
       });
     }
     analysisTotal.value = positions.length;
     const compact = props.mobile || boardLayout.value === "portrait";
-    engine.applyStrengthOptions({ multiPv: 2 });
+    // 神の一手は、浅い読みで見えない最善手かを対局中の褒め言葉と同じ基準で比べる。
+    const shallowSettings = getPraiseBaselineSearchSettings(compact).shallow;
+    const searched: { deep: PraiseCandidate[]; shallow: PraiseCandidate[] }[] = [];
+    const pick = (candidates: Array<{ rank: number; move: string; score?: unknown }>) => candidates
+      .map(({ rank, move, score }) => ({ rank, move, score: score as EngineEvaluation | undefined }));
     for (let ply = 0; ply < positions.length; ply += 1) {
       if (generation !== analysisGeneration || !reviewMode.value) break;
       const prefixMoves = moves.slice(0, ply);
       engine.setPosition(`${base}${prefixMoves.length ? ` moves ${prefixMoves.join(" ")}` : ""}`);
+      engine.applyStrengthOptions({ multiPv: shallowSettings.multiPv });
+      const shallowSearch = await engine.go({
+        nodes: shallowSettings.nodes,
+        maxTimeMs: shallowSettings.maxTimeMs,
+      });
+      if (generation !== analysisGeneration || !reviewMode.value) break;
+      engine.applyStrengthOptions({ multiPv: 2 });
       const search = await engine.go({
         nodes: compact ? 6000 : 12000,
         maxTimeMs: compact ? 800 : 1200,
       });
       if (generation !== analysisGeneration || !reviewMode.value) break;
+      searched[ply] = { deep: pick(search.candidates), shallow: pick(shallowSearch.candidates) };
       const bestCandidate = search.candidates.find((candidate) => candidate.rank === 1);
       const secondCandidate = search.candidates.find((candidate) => candidate.rank === 2);
       const rawScore = bestCandidate?.score;
@@ -4864,6 +4898,17 @@ async function runKifuAnalysis() {
       const graphValue = scoreToGraphValue(score);
       if (score && graphValue !== undefined) {
         const previous = analysisPoints.value.at(-1);
+        const before = ply > 0 ? searched[ply - 1] : undefined;
+        const context = before ? moveContext(positions[ply - 1].sfen, moves[ply - 1], moves[ply - 2] ?? "") : null;
+        const godMove = before && context
+          ? judgeGodMove({
+              move: moves[ply - 1],
+              deepCandidates: before.deep,
+              shallowCandidates: before.shallow,
+              trivial: context.trivial,
+              sacrifice: context.sacrifice,
+            })
+          : null;
         const annotation = ply > 0 && previous
           ? classifyAnalyzedMove({
               ply,
@@ -4872,6 +4917,7 @@ async function runKifuAnalysis() {
               beforeBestScore: previous.score,
               beforeSecondScore: previous.secondScore,
               afterScore: score,
+              godMove,
             })
           : null;
         analysisPoints.value.push({
@@ -4885,6 +4931,8 @@ async function runKifuAnalysis() {
           secondScore,
           annotation,
         });
+        // 神の一手は1局で上位3手まで。外れた手は好手として残す。
+        analysisPoints.value = capGodMoves(analysisPoints.value);
       }
       analysisProgress.value = ply + 1;
       await nextTick();

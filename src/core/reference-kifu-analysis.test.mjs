@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { referenceDexEntries, referenceEntryKifu } from "./reference-dex.mjs";
 import {
+  KIFU_ANALYSIS_LEVELS,
   analysisComment,
   analysisHighlights,
   analyzeKifuSteps,
   findTurningPoint,
   formatAnalysisMove,
+  formatNodeCount,
   formatPrincipalVariation,
+  kifuAnalysisBudget,
+  mergeAnalysisPoints,
 } from "./reference-kifu-analysis.mjs";
 import { STANDARD_SFEN } from "../game-state";
 
@@ -20,7 +24,9 @@ describe("reference kifu analysis", () => {
     const scores = [50, -40, 1000, -900];
     const points = await analyzeKifuSteps({
       steps,
-      search: async (sfen) => {
+      search: async (sfen, depth) => {
+        // 浅い読みは神の一手の判定だけに使うので、ここでは候補を返さない。
+        if (depth === "shallow") return { candidates: [] };
         const ply = searched.push(sfen) - 1;
         return {
           candidates: [
@@ -40,11 +46,33 @@ describe("reference kifu analysis", () => {
     expect(points[2].annotation).toMatchObject({ kind: "mistake", mover: "white" });
   });
 
+  it("marks a best move that the shallow search misses as a god move", async () => {
+    const steps = koyama.steps.slice(0, 3);
+    const points = await analyzeKifuSteps({
+      steps,
+      search: async (sfen, depth) => {
+        const ply = steps.findIndex((step) => step.sfen === sfen);
+        const played = steps[ply + 1]?.lastMove ?? "7g7f";
+        // 深い読みでは指した手が最善で、次善手より勝率で約12ポイント良い。浅い読みでは別の手が最善に見える。
+        // 評価値は手番側視点なので、形勢が動かないよう局面ごとに±300を返す。
+        const best = sfen.split(" ")[1] === "w" ? -300 : 300;
+        return depth === "deep"
+          ? { candidates: [
+            { rank: 1, move: played, pv: [played], score: { type: "cp", value: best } },
+            { rank: 2, move: "9g9f", pv: ["9g9f"], score: { type: "cp", value: best - 300 } },
+          ] }
+          : { candidates: [{ rank: 1, move: "9g9f", score: { type: "cp", value: 100 } }] };
+      },
+    });
+    expect(points[1].annotation).toMatchObject({ kind: "brilliant", label: "神の一手" });
+  });
+
   it("skips positions without a score and stops when cancelled", async () => {
     let calls = 0;
     const points = await analyzeKifuSteps({
       steps: koyama.steps,
-      search: async () => {
+      search: async (sfen, depth) => {
+        if (depth === "shallow") return { candidates: [] };
         calls += 1;
         return { candidates: calls === 1 ? [] : [{ rank: 1, move: "7g7f", score: { type: "mate", value: 3 } }] };
       },
@@ -99,5 +127,33 @@ describe("reference kifu analysis", () => {
       .toContain("この▲４五桂から小山怜央 アマがはっきり優勢");
     expect(analysisComment({ ply: 3, annotation: null }, { moveLabel: "▲２五歩", names })).toBe("");
     expect(analysisComment({ ply: 0, annotation: null }, {})).toBe("");
+  });
+
+  it("deepens the analysis in three levels up to the Fujii Sota level search", () => {
+    expect(KIFU_ANALYSIS_LEVELS.map(({ label }) => label)).toEqual(["標準", "深い", "藤井聡太並み"]);
+    const nodes = KIFU_ANALYSIS_LEVELS.map((_, level) => kifuAnalysisBudget(level).nodes);
+    expect(nodes).toEqual([...nodes].sort((left, right) => left - right));
+    // いちばん深い段は、CPUの「藤井聡太並み」と同じ探索量。
+    expect(nodes.at(-1)).toBe(480000);
+    // スマホでは標準だけ軽くし、時間の上限は長めに取る。
+    expect(kifuAnalysisBudget(0, true).nodes).toBeLessThan(kifuAnalysisBudget(0).nodes);
+    expect(kifuAnalysisBudget(2, true).maxTimeMs).toBeGreaterThan(kifuAnalysisBudget(2).maxTimeMs);
+    expect(kifuAnalysisBudget(9)).toEqual(kifuAnalysisBudget(2));
+    expect(formatNodeCount(12000)).toBe("1.2万");
+    expect(formatNodeCount(480000)).toBe("48万");
+    expect(formatNodeCount(600)).toBe("600");
+  });
+
+  it("shows the previous result for positions the deeper analysis has not reached yet", () => {
+    const point = (ply, graphValue, annotation = null) => ({ ply, graphValue, annotation });
+    const god = (strength) => ({ kind: "brilliant", label: "神の一手", mover: "black", strength });
+    const older = [point(0, 0), point(1, 100, god(20)), point(2, 200, god(30)), point(3, 300, god(25)), point(4, 400)];
+    // 深く読み直した0〜1手目で、もっと強い神の一手が見つかった。
+    const merged = mergeAnalysisPoints([point(0, 10), point(1, 150, god(40))], older);
+    expect(merged.map(({ graphValue }) => graphValue)).toEqual([10, 150, 200, 300, 400]);
+    expect(merged.filter(({ annotation }) => annotation?.kind === "brilliant").map(({ ply }) => ply)).toEqual([1, 2, 3]);
+    // 前の結果が強い神の一手を消した場合も、3手に絞り直す。
+    const extra = mergeAnalysisPoints([point(4, 400, god(50))], merged);
+    expect(extra.filter(({ annotation }) => annotation?.kind === "brilliant").map(({ ply }) => ply)).toEqual([1, 2, 4]);
   });
 });

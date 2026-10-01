@@ -1,31 +1,17 @@
 // プレイヤーの好手・形勢の転換点を、やこび姫が褒めるための判定。
 // 追加のエンジン探索は行わず、手番開始時の浅い／深い解析とCPU探索の評価を使う。
+// 神の一手の基準は棋譜解析と共通で、god-move.mjsにある。対局中は上限なく褒める。
+import { GOD_MOVE_SHALLOW_DEFICIT, PIECE_VALUES, judgeGodMove } from './god-move.mjs';
+
+export { GOD_MOVE_SHALLOW_DEFICIT };
 
 /** 棋譜解析と同じ基準：最善手かつ次善手との差が350以上で好手。 */
 export const GOOD_MOVE_GAP = 350;
-/** 浅い読みで最善手より何点低く見えていれば「先まで読まないと気付けない」とするか。 */
-export const GOD_MOVE_SHALLOW_DEFICIT = 150;
 /** 褒める手の評価低下の許容量。探索深さの違いによる揺れだけを吸収する。 */
 export const PRAISE_MAX_LOSS = 200;
 /** 駒得として褒める正味の駒の価値（歩=1）。 */
 export const MATERIAL_GAIN_MIN = 3;
 
-const PIECE_VALUES = {
-  pawn: 1,
-  lance: 3,
-  knight: 4,
-  silver: 5,
-  gold: 6,
-  bishop: 8,
-  rook: 10,
-  king: 100,
-  promPawn: 5,
-  promLance: 5,
-  promKnight: 5,
-  promSilver: 5,
-  horse: 10,
-  dragon: 12,
-};
 
 /** @typedef {{ type: string, value: number }} PraiseScore */
 /** @typedef {{ rank: number, move: string, score?: PraiseScore }} PraiseCandidate */
@@ -51,25 +37,19 @@ function rankedCandidates(candidates = []) {
 
 /**
  * 手番開始時の解析から、指した手が好手か神の一手かを判定する。
- * deep・shallowの評価はどちらも手番側（プレイヤー）視点。
- * @param {{ move?: string, deepCandidates?: PraiseCandidate[], shallowCandidates?: PraiseCandidate[] }} [options]
+ * deep・shallowの評価はどちらも手番側（プレイヤー）視点。sacrificeはその手が捨て駒か。
+ * @param {{ move?: string, deepCandidates?: PraiseCandidate[], shallowCandidates?: PraiseCandidate[], sacrifice?: boolean }} [options]
  */
-export function classifyMoveQuality({ move, deepCandidates = [], shallowCandidates = [] } = {}) {
+export function classifyMoveQuality({ move, deepCandidates = [], shallowCandidates = [], sacrifice = false } = {}) {
+  const god = judgeGodMove({ move, deepCandidates, shallowCandidates, sacrifice });
+  if (god) return { kind: 'god', score: god.score, gap: god.gap };
   const deep = rankedCandidates(deepCandidates);
   const best = deep[0];
   const second = deep[1];
   if (!move || best?.rank !== 1 || best.move !== move || !second) return null;
   const gap = comparableScore(best.score) - comparableScore(second.score);
   if (gap < GOOD_MOVE_GAP) return null;
-
-  const shallow = rankedCandidates(shallowCandidates);
-  const shallowBest = shallow[0];
-  const shallowMove = shallow.find((candidate) => candidate.move === move);
-  const hiddenFromShallow = shallowBest?.rank === 1 && shallowBest.move !== move && (
-    !shallowMove
-    || comparableScore(shallowBest.score) - comparableScore(shallowMove.score) >= GOD_MOVE_SHALLOW_DEFICIT
-  );
-  return { kind: hiddenFromShallow ? 'god' : 'good', score: best.score, gap };
+  return { kind: 'good', score: best.score, gap };
 }
 
 /**

@@ -45,7 +45,18 @@ function comparableScore(score) {
 
 /**
  * 着手前の最善評価と実着手後の評価を着手者目線で比較する。
- * 好手系は「最善手だった」だけでは付けず、次善手との差が大きい局面に限定する。
+ * 好手は「最善手だった」だけでは付けず、次善手との差が大きい局面に限定する。
+ * 神の一手は、god-move.mjsのjudgeGodMoveで候補と判定された手（godMove）にだけ付ける。
+ * 1局で表示する上限（上位3手）は、解析を終えた点の列にcapGodMovesを掛けて絞る。
+ * @param {{
+ *   ply?: number,
+ *   playedMove?: string,
+ *   bestMove?: string,
+ *   beforeBestScore?: { type: string, value: number },
+ *   beforeSecondScore?: { type: string, value: number },
+ *   afterScore?: { type: string, value: number },
+ *   godMove?: { strength: number } | null,
+ * }} [options]
  */
 export function classifyAnalyzedMove({
   ply,
@@ -54,6 +65,7 @@ export function classifyAnalyzedMove({
   beforeBestScore,
   beforeSecondScore,
   afterScore,
+  godMove = null,
 } = {}) {
   if (!Number.isInteger(ply) || ply < 1 || typeof playedMove !== 'string') return null;
   const before = comparableScore(beforeBestScore);
@@ -67,12 +79,12 @@ export function classifyAnalyzedMove({
   if (loss >= 300) return { kind: 'dubious', label: '疑問手', mover, loss };
 
   if (playedMove !== bestMove) return null;
+  if (godMove) {
+    return { kind: 'brilliant', label: '神の一手', mover, loss, strength: godMove.strength };
+  }
   const second = comparableScore(beforeSecondScore);
   if (second === undefined) return null;
   const bestGap = Math.max(0, mover === 'black' ? before - second : second - before);
-  if (bestGap >= 1200) {
-    return { kind: 'brilliant', label: '神の一手', mover, loss, bestGap };
-  }
   if (bestGap >= 350) {
     return { kind: 'good', label: '好手', mover, loss, bestGap };
   }

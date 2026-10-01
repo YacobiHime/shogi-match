@@ -130,9 +130,8 @@
             </ol>
           </section>
           <template v-else>
-            <p v-if="kifu" class="shogi-reference-dex__kifu-head">
-              <strong v-if="selectedEntry.kifuTitle">{{ selectedEntry.kifuTitle }}</strong>
-              <span>▲{{ kifu.black }}　△{{ kifu.white }}</span>
+            <p v-if="kifu && selectedEntry.kifuTitle" class="shogi-reference-dex__kifu-head">
+              <strong>{{ selectedEntry.kifuTitle }}</strong>
             </p>
             <div class="shogi-dex__stage">
               <!-- 棋譜は、小さい画面では盤の横の矢印だけで前後できる。 -->
@@ -144,19 +143,34 @@
                 :disabled="stepIndex === 0"
                 @click="stepIndex -= 1"
               >◀</button>
-              <div class="shogi-dex__board">
-                <ShogiMatchBoard
-                  :sfen="boardSfen"
-                  :flip="flipped"
-                  :last-move="currentStep?.lastMove ?? ''"
-                  :allow-move="false"
-                  :enable-drag-and-drop="false"
-                  :mobile="isNarrow"
-                  :layout="isNarrow ? 'portrait' : 'standard'"
-                  :asset-base-url="assetBaseUrl"
-                  :candidates="boardArrows"
-                  :mark-squares="kifu ? [] : marks"
-                />
+              <!--
+                棋譜では、盤の上下にその側の対局者の名前と評価値、盤の下に今の手を出す。
+                上下の欄は高さを固定し、盤の大きさが変わらないようにする。棋譜でない項目では枠を使わない。
+              -->
+              <div :class="kifu ? 'shogi-reference-dex__board-frame' : 'shogi-reference-dex__board-passthrough'">
+                <div v-if="kifu" class="shogi-reference-dex__player-bar shogi-reference-dex__player-bar--top">
+                  <span class="shogi-reference-dex__player-name">{{ playerBars.top.side }} {{ playerBars.top.name }}</span>
+                  <span class="shogi-reference-dex__player-eval">{{ playerBars.top.evaluation }}</span>
+                </div>
+                <div class="shogi-dex__board">
+                  <ShogiMatchBoard
+                    :sfen="boardSfen"
+                    :flip="flipped"
+                    :last-move="currentStep?.lastMove ?? ''"
+                    :allow-move="false"
+                    :enable-drag-and-drop="false"
+                    :mobile="isNarrow"
+                    :layout="isNarrow ? 'portrait' : 'standard'"
+                    :asset-base-url="assetBaseUrl"
+                    :candidates="boardArrows"
+                    :mark-squares="kifu ? [] : marks"
+                  />
+                </div>
+                <div v-if="kifu" class="shogi-reference-dex__player-bar shogi-reference-dex__player-bar--bottom">
+                  <span class="shogi-reference-dex__player-eval">{{ playerBars.bottom.evaluation }}</span>
+                  <span class="shogi-reference-dex__player-name">{{ playerBars.bottom.side }} {{ playerBars.bottom.name }}</span>
+                </div>
+                <p v-if="kifu" class="shogi-reference-dex__move-caption" aria-live="polite">{{ moveCaption }}</p>
               </div>
               <button
                 v-if="kifu && isNarrow"
@@ -169,10 +183,7 @@
             </div>
           </template>
           <template v-if="kifu">
-            <div v-if="isNarrow" class="shogi-dex__stage-count" aria-live="polite">
-              {{ stepIndex }}/{{ lastStep }}手目<template v-if="stepIndex === lastStep && kifu.ending">（{{ kifu.ending }}）</template>
-            </div>
-            <div v-else class="shogi-dex__controls">
+            <div v-if="!isNarrow" class="shogi-dex__controls">
               <button type="button" :disabled="stepIndex === 0" @click="stepIndex = 0">最初へ</button>
               <button type="button" :disabled="stepIndex === 0" @click="stepIndex -= 1">◀ 戻る</button>
               <span class="shogi-dex__step-count">{{ stepIndex }}/{{ lastStep }}手目</span>
@@ -226,10 +237,23 @@
                 @click="showBestArrow = !showBestArrow"
               >最善手の矢印</button>
               <button v-if="analysisRunning" type="button" class="shogi-reference-dex__analysis-start" @click="cancelAnalysis">中止</button>
-              <button v-else type="button" class="shogi-reference-dex__analysis-start" @click="startAnalysis">{{ analysisPoints.length ? "解析し直す" : "将棋AIで解析" }}</button>
+              <button
+                v-else
+                type="button"
+                class="shogi-reference-dex__analysis-start"
+                :disabled="nextAnalysisLevel === null"
+                @click="nextAnalysisLevel !== null && startAnalysis(nextAnalysisLevel)"
+              >{{ analysisButtonLabel }}</button>
             </div>
+            <!-- 解析の進み具合。読んでいる局面と、その局面の読みの深さ・探索量をその場で出す。 -->
             <p v-if="analysisRunning" class="shogi-reference-dex__analysis-note" aria-live="polite">
-              解析中 {{ analysisProgress }}/{{ lastStep + 1 }}局面
+              {{ levelLabel(runningLevel) }}で解析中 {{ analysisProgress }}/{{ lastStep + 1 }}局面
+              <template v-if="liveSearch">
+                <br>{{ liveSearch.ply }}手目を読んでいるよ<template v-if="liveSearch.depth">（{{ liveSearch.depth }}手先・{{ formatNodeCount(liveSearch.nodes ?? 0) }}局面）</template>
+              </template>
+            </p>
+            <p v-else-if="analysisLevel >= 0" class="shogi-reference-dex__analysis-note">
+              解析の深さ：{{ levelLabel(analysisLevel) }}（1局面あたり{{ formatNodeCount(levelNodes(analysisLevel)) }}局面を読む）
             </p>
             <p v-if="analysisError" class="shogi-reference-dex__analysis-note" role="alert">{{ analysisError }}</p>
             <template v-if="analysisPoints.length">
@@ -294,13 +318,18 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
+import { formatAnalysisScore } from "./core/kifu-analysis.mjs";
 import {
+  KIFU_ANALYSIS_LEVELS,
   analysisComment,
   analysisHighlights,
   analyzeKifuSteps,
   findTurningPoint,
   formatAnalysisMove,
+  formatNodeCount,
   formatPrincipalVariation,
+  kifuAnalysisBudget,
+  mergeAnalysisPoints,
 } from "./core/reference-kifu-analysis.mjs";
 import {
   REFERENCE_DEX_KINDS,
@@ -329,7 +358,15 @@ type ReferenceEntry = {
 };
 type KifuStep = { sfen: string; label: string; lastMove: string; comment: string; highlight: string };
 type Kifu = { black: string; white: string; ending: string; winner: "" | "black" | "white"; steps: KifuStep[] };
-type AnalysisEngine = { search(sfen: string): Promise<any>; stop(): void };
+type LiveUpdate = { depth?: number; nodes?: number };
+type AnalysisEngine = {
+  search(
+    sfen: string,
+    depth: "shallow" | "deep",
+    options?: { level?: number; onUpdate?: (update: LiveUpdate) => void },
+  ): Promise<any>;
+  stop(): void;
+};
 type AnalysisPoint = {
   ply: number;
   graphValue: number;
@@ -337,11 +374,13 @@ type AnalysisPoint = {
   scoreLabel: string;
   bestMove?: string;
   pv: string[];
+  score?: { type: "cp" | "mate"; value: number };
   annotation: {
     kind: "blunder" | "mistake" | "dubious" | "good" | "brilliant";
     label: string;
     mover: "black" | "white";
     bestGap?: number;
+    strength?: number;
   } | null;
 };
 
@@ -406,6 +445,7 @@ watch(selectedId, () => {
   analysisPoints.value = [];
   analysisError.value = "";
   analysisDone.value = false;
+  analysisLevel.value = -1;
 });
 
 // 代表局を開始局面から1局面ずつ将棋AIで解析し、評価値グラフと最善手・読み筋を出す。
@@ -417,6 +457,28 @@ const analysisError = ref("");
 const analysisDone = ref(false);
 const showBestArrow = ref(true);
 let analysisGeneration = 0;
+// 最後まで解析し終えた深さ（KIFU_ANALYSIS_LEVELSの番号）。まだなら-1。
+const analysisLevel = ref(-1);
+const runningLevel = ref(0);
+const liveSearch = ref<{ ply: number; depth?: number; nodes?: number } | null>(null);
+// 浅い読みは深さによらず同じなので、深く読み直すときは前の結果を使う。
+const shallowCache = new Map<string, unknown>();
+const mobileLayout = () => isNarrow.value;
+const levelLabel = (level: number) => KIFU_ANALYSIS_LEVELS[level]?.label ?? "";
+const levelNodes = (level: number) => kifuAnalysisBudget(level, mobileLayout()).nodes;
+// 次に押したときの深さ。最後まで解析していなければ、途中で止めた深さから読み直す。いちばん深く読み終えたらnull。
+const nextAnalysisLevel = computed(() => {
+  const next = analysisLevel.value + 1;
+  if (analysisRunning.value) return null;
+  if (analysisLevel.value < 0) return 0;
+  return next < KIFU_ANALYSIS_LEVELS.length ? next : null;
+});
+const analysisButtonLabel = computed(() => {
+  const next = nextAnalysisLevel.value;
+  if (next === null) return "いちばん深く解析済み";
+  if (next === 0) return "将棋AIで解析";
+  return `深く解析（${levelLabel(next)}）`;
+});
 const currentPoint = computed(() => analysisPoints.value.find(({ ply }) => ply === stepIndex.value) ?? null);
 const bestMoveLabel = computed(() => {
   const point = currentPoint.value;
@@ -463,46 +525,98 @@ const highlights = computed(() => {
     : [];
   return [...fromKifu, ...fromAi].sort((left, right) => left.ply - right.ply);
 });
+// 盤の上下に出す対局者の欄。盤を反転したら上下を入れ替える。評価値はその側から見た値。
+function sideEvaluation(sign: 1 | -1) {
+  const score = currentPoint.value?.score;
+  if (!score) return "評価値 -";
+  const value = score.value * sign;
+  if (score.type === "mate") return value > 0 ? `${value}手で詰ませる` : `${-value}手で詰まされる`;
+  return formatAnalysisScore({ type: "cp", value });
+}
+const playerBars = computed(() => {
+  const black = { side: "先手", name: kifu.value?.black ?? "", evaluation: sideEvaluation(1) };
+  const white = { side: "後手", name: kifu.value?.white ?? "", evaluation: sideEvaluation(-1) };
+  return flipped.value ? { top: black, bottom: white } : { top: white, bottom: black };
+});
+// 盤の下に出す今の手。「5手目 ▲４八銀(39)」のように、動かした駒の元の升を添える。
+const moveCaption = computed(() => {
+  const step = currentStep.value;
+  if (!step || stepIndex.value === 0) return "開始局面";
+  const from = /^([1-9])([a-i])/.exec(step.lastMove);
+  const origin = from ? `(${from[1]}${from[2].charCodeAt(0) - 96})` : "";
+  const ending = stepIndex.value === lastStep.value && kifu.value?.ending ? `　まで、${kifu.value.ending}` : "";
+  return `${stepIndex.value}手目 ${step.label}${origin}${ending}`;
+});
 const boardArrows = computed(() => {
   if (!kifu.value) return arrows.value;
   const best = currentPoint.value?.bestMove;
   return showBestArrow.value && best ? [{ usi: best, guideKind: "ai" as const }] : [];
 });
 
-async function startAnalysis() {
+/*
+ * levelの深さで解析する。2回目以降（深く解析）は、前の結果を表示したまま、読み直した局面から新しい結果へ置き換える。
+ * 前の結果が全局面そろっているので、形勢の分かれ目や見せ場は読み直しの途中でも出したままにする。
+ */
+async function startAnalysis(level = 0) {
   const engine = props.analysisEngine;
   const steps = kifu.value?.steps;
   if (!engine || !steps || analysisRunning.value) return;
   const generation = ++analysisGeneration;
+  const deeper = level > 0 && analysisLevel.value >= 0;
+  const previous = deeper ? analysisPoints.value : [];
   analysisRunning.value = true;
+  runningLevel.value = level;
   analysisProgress.value = 0;
-  analysisPoints.value = [];
   analysisError.value = "";
-  analysisDone.value = false;
+  liveSearch.value = null;
+  if (!deeper) {
+    analysisPoints.value = [];
+    analysisDone.value = false;
+  }
   try {
     await analyzeKifuSteps({
       steps,
-      search: async (sfen: string) => {
-        const result = await engine.search(sfen);
-        if (generation === analysisGeneration) analysisProgress.value += 1;
+      search: async (sfen: string, depth: "shallow" | "deep") => {
+        if (depth === "shallow" && shallowCache.has(sfen)) return shallowCache.get(sfen);
+        const result = await engine.search(sfen, depth, {
+          level,
+          onUpdate: (update: LiveUpdate) => {
+            if (depth !== "deep" || generation !== analysisGeneration || !liveSearch.value) return;
+            liveSearch.value = { ...liveSearch.value, depth: update.depth, nodes: update.nodes };
+          },
+        });
+        if (depth === "shallow") shallowCache.set(sfen, result);
+        if (depth === "deep" && generation === analysisGeneration) analysisProgress.value += 1;
         return result;
       },
       isCancelled: () => generation !== analysisGeneration,
-      onPoint: (point: AnalysisPoint) => { analysisPoints.value = [...analysisPoints.value, point]; },
+      onPly: (ply: number) => {
+        if (generation === analysisGeneration) liveSearch.value = { ply };
+      },
+      onPoints: (points: AnalysisPoint[]) => {
+        analysisPoints.value = deeper ? mergeAnalysisPoints(points, previous) : points;
+      },
     });
-    if (generation === analysisGeneration) analysisDone.value = true;
+    if (generation === analysisGeneration) {
+      analysisDone.value = true;
+      analysisLevel.value = level;
+    }
   } catch (error) {
     if (generation === analysisGeneration) {
       analysisError.value = error instanceof Error ? error.message : String(error);
     }
   } finally {
-    if (generation === analysisGeneration) analysisRunning.value = false;
+    if (generation === analysisGeneration) {
+      analysisRunning.value = false;
+      liveSearch.value = null;
+    }
   }
 }
 function cancelAnalysis() {
   if (!analysisRunning.value) return;
   analysisGeneration += 1;
   analysisRunning.value = false;
+  liveSearch.value = null;
   props.analysisEngine?.stop();
 }
 onBeforeUnmount(cancelAnalysis);
@@ -606,6 +720,73 @@ defineExpose({ goBack });
 .shogi-game .shogi-reference-dex__kifu-head strong {
   color: #f1a54c;
 }
+/* 盤の上下の対局者欄と今の手。高さを固定し、盤はその残りの高さに合わせる。 */
+.shogi-game .shogi-reference-dex__board-passthrough {
+  display: contents;
+}
+.shogi-game .shogi-reference-dex__board-frame {
+  --player-bar: 1.7rem;
+  --move-caption: 1.6rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.shogi-game .shogi-reference-dex__board-frame > .shogi-dex__board {
+  height: calc(100% - var(--player-bar) * 2 - var(--move-caption));
+}
+.shogi-game .shogi-reference-dex__player-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  height: var(--player-bar);
+  padding: 0 0.5rem;
+  overflow: hidden;
+  color: #172632;
+  background: #fde9b8;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.shogi-game .shogi-reference-dex__player-bar--top {
+  border-radius: 0.3rem 0.3rem 0 0;
+}
+.shogi-game .shogi-reference-dex__player-bar--bottom {
+  border-radius: 0 0 0.3rem 0.3rem;
+}
+.shogi-game .shogi-reference-dex__player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shogi-game .shogi-reference-dex__player-eval {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.shogi-game .shogi-reference-dex__move-caption {
+  flex: none;
+  height: var(--move-caption);
+  margin: 0;
+  overflow: hidden;
+  line-height: var(--move-caption);
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+@media (max-width: 56rem) {
+  .shogi-game .shogi-reference-dex__board-frame {
+    flex: 1;
+    height: auto;
+  }
+  .shogi-game .shogi-reference-dex__board-frame > .shogi-dex__board {
+    width: 100%;
+    height: auto;
+  }
+}
 /* 解説の欄は3行分（狭い画面では4行分）の高さで固定する。 */
 .shogi-game .shogi-reference-dex__kifu-comment {
   --comment-lines: 3;
@@ -708,6 +889,10 @@ defineExpose({ goBack });
   font-family: inherit;
   cursor: pointer;
 }
+.shogi-game .shogi-dex .shogi-reference-dex__analysis button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
 .shogi-game .shogi-dex .shogi-reference-dex__analysis button.shogi-reference-dex__arrow-toggle {
   color: #fffcf4;
   background: transparent;
@@ -733,9 +918,10 @@ defineExpose({ goBack });
 .shogi-game .shogi-reference-dex__graph .evaluation-graph__selection span {
   color: #f1a54c;
 }
+/* 凡例の記号は色付きの文字なので、グラフと同じ明るい地の上に置く。 */
 .shogi-game .shogi-reference-dex__graph .evaluation-graph__legend {
   overflow-x: auto;
-  color: #fffcf4;
+  background: #fffcf4;
 }
 .shogi-game .shogi-reference-dex__analysis-detail {
   display: grid;

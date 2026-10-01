@@ -48,19 +48,27 @@ describe('棋譜解析の評価値', () => {
     })?.label).toBe('大悪手');
   });
 
-  test('次善手との差が大きい最善手だけを好手・神の一手にする', () => {
+  test('次善手との差が大きい最善手を好手にし、神の一手は判定済みの候補にだけ付ける', () => {
     expect(classifyAnalyzedMove({
       ply: 1, playedMove: '7g7f', bestMove: '7g7f',
       beforeBestScore: { type: 'cp', value: 700 },
       beforeSecondScore: { type: 'cp', value: 250 },
       afterScore: { type: 'cp', value: 680 },
     })?.label).toBe('好手');
+    // 次善手との差が大きいだけでは神の一手にしない。
     expect(classifyAnalyzedMove({
       ply: 2, playedMove: '8c8d', bestMove: '8c8d',
       beforeBestScore: { type: 'cp', value: -900 },
       beforeSecondScore: { type: 'cp', value: 500 },
       afterScore: { type: 'cp', value: -850 },
-    })?.label).toBe('神の一手');
+    })?.label).toBe('好手');
+    expect(classifyAnalyzedMove({
+      ply: 2, playedMove: '8c8d', bestMove: '8c8d',
+      beforeBestScore: { type: 'cp', value: -900 },
+      beforeSecondScore: { type: 'cp', value: 500 },
+      afterScore: { type: 'cp', value: -850 },
+      godMove: { strength: 42 },
+    })).toMatchObject({ kind: 'brilliant', label: '神の一手', strength: 42 });
     expect(classifyAnalyzedMove({
       ply: 1, playedMove: '7g7f', bestMove: '7g7f',
       beforeBestScore: { type: 'cp', value: 100 },
