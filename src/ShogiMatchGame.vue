@@ -4451,11 +4451,10 @@ function scheduleReviewCpuMove() {
       if (!usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
         const enginePosition = currentEnginePosition();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
-        await engine.setSearchThreads(strength.searchThreads);
         engine.setPosition(enginePosition);
         search = await engine.go({
           nodes: strength.nodes,
-          maxTimeMs: strength.maxTimeMs ?? 8000,
+          maxTimeMs: 8000,
         });
         if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
         verify = cpuOversightVerifier(
@@ -4560,16 +4559,14 @@ async function scheduleCpuMove() {
         usi = await naturalCpuMove();
       } else if (engine && engineReady.value) {
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
-        cpuSearchRunning = true;
-        cpuSearchGeneration = generation;
-        // 最強レベルだけ複数スレッドで読む。ほかのレベルは校正どおり1スレッドに戻す。
-        await engine.setSearchThreads(strength.searchThreads);
         // setPositionが「position sfen」を付けるため、SFENだけを渡す。
         const enginePosition = currentEnginePosition();
         engine.setPosition(enginePosition);
+        cpuSearchRunning = true;
+        cpuSearchGeneration = generation;
         const search = await engine.go({
           nodes: strength.nodes,
-          maxTimeMs: strength.maxTimeMs ?? 60000,
+          maxTimeMs: 60000,
           searchMoves: [...allowedCpuMoveIds],
         });
         if (cpuSearchGeneration === generation) cpuSearchRunning = false;

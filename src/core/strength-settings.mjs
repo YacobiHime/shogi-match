@@ -101,9 +101,6 @@ export const CPU_STRENGTH_PRESETS = [
   { level: 38, value: 464000, skill: 0.943, label: 'アマ七段程度' },
   { level: 39, value: 472000, skill: 0.972, label: 'プロ級' },
   { level: 40, value: 480000, skill: 1, label: '藤井聡太並み' },
-  // 最強は技量1のまま、探索量をLv40の約3倍に増やす。複数スレッドで読み、待ち時間を抑える。
-  // 遅い端末で待たせすぎないよう、思考時間に上限を付ける(上限で止めた時点の最善手を指す)。
-  { level: 41, value: 1500000, skill: 1, label: '最強', nodes: 1500000, searchThreads: 4, maxTimeMs: 12000 },
 ];
 
 /** 旧版にだけあった識別値(十九〜十六級)は、最も弱い段級位のレベルへ対応付ける。 */
@@ -153,8 +150,6 @@ export function searchSettingsForSkill(skill) {
     oversightMaxLoss: settings.oversightMaxLoss ?? 0,
     // 作戦の定跡手を評価値より優先する幅の倍率。低レベルほど、多少悪くても決めた形を作り続ける。
     openingPlanScoreScale: Math.round((1 + 2 * (1 - clamp01(skill))) * 100) / 100,
-    // 探索スレッド数の上限。端末のコア数に合わせてさらに減らす。
-    searchThreads: 1,
     // 旧設定との互換キー。一様ランダムの着手は廃止したため常に無効。
     randomLegalRate: 0,
     randomFallback: false,
@@ -165,10 +160,5 @@ export function searchSettingsForSkill(skill) {
 
 /** UIの強さ識別値から探索量と候補選択設定を返す。 */
 export function getStrengthSearchSettings(preset) {
-  const { skill, nodes, searchThreads, maxTimeMs } = strengthPresetFor(preset);
-  const settings = searchSettingsForSkill(skill);
-  if (nodes) settings.nodes = nodes;
-  if (searchThreads) settings.searchThreads = searchThreads;
-  if (maxTimeMs) settings.maxTimeMs = maxTimeMs;
-  return settings;
+  return searchSettingsForSkill(strengthPresetFor(preset).skill);
 }

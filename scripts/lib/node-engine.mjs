@@ -77,9 +77,8 @@ export async function createNodeEngine() {
   return engine;
 }
 
-export async function search(engine, sfen, { nodes, multiPv, searchMoves, searchThreads = 1 }) {
+export async function search(engine, sfen, { nodes, multiPv, searchMoves }) {
   engine.applyStrengthOptions({ multiPv });
-  await engine.setSearchThreads(searchThreads);
   engine.setPosition(sfen);
   return engine.go({ nodes, maxTimeMs: 20000, ...(searchMoves ? { searchMoves } : {}) });
 }
