@@ -15,6 +15,8 @@
 
 const USI_MOVE_PATTERN = /^(?:[1-9][a-i][1-9][a-i]\+?|[PLNSGBR]\*[1-9][a-i])$/;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
+/** 置換表の大きさ(MB)。配信サイズは増えず、端末のメモリだけを使う。 */
+const SEARCH_HASH_MB = 64;
 
 function writeVirtualFile(mod, virtualPath, bytes) {
   const lastSlash = virtualPath.lastIndexOf('/');
@@ -49,6 +51,7 @@ function writeVirtualFile(mod, virtualPath, bytes) {
  *   npmパッケージ同梱のyaneuraou.jsを読み込むとグローバルに生える。
  * @property {() => Promise<any>} [fallbackFactory]
  *   NNUE取得または主エンジン初期化に失敗した場合に使う内蔵評価版ファクトリ。
+ * @property {number} [hashMb] 置換表の大きさ(MB)。省略時は64
  * @property {string} [nnuePath]
  *   評価関数ファイル(nn.bin等)のURL。本番エンジン(水匠5/hao)では必須。
  *   軽量版(arashigaoka)のように評価関数がwasm.data内に同梱されている場合は不要。
@@ -85,6 +88,10 @@ export class ShogiEngine {
     this.activeBookPath = null;
     this.instance = null;
     this._usiOptions = new Set();
+    /** エンジンへ設定済みの探索スレッド数。やねうら王の既定値は1。 */
+    this.searchThreads = 1;
+    /** 置換表の大きさ(MB)。棋譜解析で追加するエンジンは、メモリを抑えるため小さくする。 */
+    this.hashMb = options.hashMb ?? SEARCH_HASH_MB;
     /** @type {((line: string) => void)[]} */
     this._listeners = [];
   }
@@ -211,6 +218,8 @@ export class ShogiEngine {
       },
       'usi応答',
     );
+    // 既定の16MBでは最強レベルの探索で置換表があふれるため、isreadyの前に広げる。
+    this.setOption('USI_Hash', this.hashMb);
   }
 
   /**
@@ -394,6 +403,20 @@ export class ShogiEngine {
       }
       this.send('setoption name MultiPV value ' + params.multiPv);
     }
+  }
+
+  /**
+   * 探索スレッド数を変える。端末のコア数から1本を画面用に残す。
+   * 変更した場合は、スレッドの用意ができるまで待つ。探索中には呼ばないこと。
+   * @param {number} requested
+   */
+  async setSearchThreads(requested = 1) {
+    const cores = Number(globalThis.navigator?.hardwareConcurrency) || 1;
+    const threads = Math.max(1, Math.min(Math.floor(requested) || 1, cores - 1));
+    if (threads === this.searchThreads || !this.setOption('Threads', threads)) return false;
+    this.searchThreads = threads;
+    await this.ready();
+    return true;
   }
 
   supportsOption(name) {

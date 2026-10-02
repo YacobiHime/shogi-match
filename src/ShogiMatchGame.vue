@@ -716,7 +716,7 @@
           </option>
         </select>
         <span v-if="analysisRunning" class="shogi-game__analysis-progress">
-          解析中 {{ analysisProgress }}/{{ analysisTotal }}
+          {{ ANALYSIS_STAGE_LABELS[analysisStage as keyof typeof ANALYSIS_STAGE_LABELS] ?? "解析中" }} {{ analysisProgress }}/{{ analysisTotal }}
         </span>
         <button
           type="button"
@@ -879,7 +879,13 @@ import {
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
-import { kifuAnalysisBudget } from "./core/reference-kifu-analysis.mjs";
+import {
+  ANALYSIS_STAGE_LABELS,
+  STAGED_ANALYSIS_PLANS,
+  analysisPointsFromResults,
+  analyzeKifuStaged,
+} from "./core/kifu-analysis-pipeline.mjs";
+import { kifuAnalysisPlan } from "./core/reference-kifu-analysis.mjs";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
 import {
   createFormationState,
@@ -1141,6 +1147,8 @@ const analysisOpen = ref(false);
 const analysisRunning = ref(false);
 const analysisProgress = ref(0);
 const analysisTotal = ref(0);
+// 棋譜解析の段階。全局面を軽く読む(scan)、怪しい手を読み直す(review)、大事な局面を深く読む(focus)。
+const analysisStage = ref("");
 const analysisPoints = ref<AnalysisPoint[]>([]);
 const analysisVisible = computed(() => reviewMode.value && analysisOpen.value);
 const boardFlipOverride = ref(false);
@@ -1272,6 +1280,8 @@ let enginePromise: Promise<void> | null = null;
 let idleCoachTimer: ReturnType<typeof setTimeout> | undefined;
 let idleCoachGeneration = 0;
 let engine: ShogiEngine | null = null;
+// 棋譜解析で追加のエンジンを作るためのファクトリ。
+let engineFactory: ((options?: any) => Promise<any>) | null = null;
 let moveHistory: string[] = [];
 let coachAdviceHistory: RecordedCoachAdvice[] = [];
 let displayingStructuredCoachAdvice = false;
@@ -4441,10 +4451,11 @@ function scheduleReviewCpuMove() {
       if (!usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
         const enginePosition = currentEnginePosition();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        await engine.setSearchThreads(strength.searchThreads);
         engine.setPosition(enginePosition);
         search = await engine.go({
           nodes: strength.nodes,
-          maxTimeMs: 8000,
+          maxTimeMs: strength.maxTimeMs ?? 8000,
         });
         if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
         verify = cpuOversightVerifier(
@@ -4549,14 +4560,16 @@ async function scheduleCpuMove() {
         usi = await naturalCpuMove();
       } else if (engine && engineReady.value) {
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        cpuSearchRunning = true;
+        cpuSearchGeneration = generation;
+        // 最強レベルだけ複数スレッドで読む。ほかのレベルは校正どおり1スレッドに戻す。
+        await engine.setSearchThreads(strength.searchThreads);
         // setPositionが「position sfen」を付けるため、SFENだけを渡す。
         const enginePosition = currentEnginePosition();
         engine.setPosition(enginePosition);
-        cpuSearchRunning = true;
-        cpuSearchGeneration = generation;
         const search = await engine.go({
           nodes: strength.nodes,
-          maxTimeMs: 60000,
+          maxTimeMs: strength.maxTimeMs ?? 60000,
           searchMoves: [...allowedCpuMoveIds],
         });
         if (cpuSearchGeneration === generation) cpuSearchRunning = false;
@@ -4707,6 +4720,7 @@ async function initializeEngine({ force = false } = {}) {
   enginePromise = (async () => {
    try {
     const factories = await loadEngineFactories(null, { engineBaseUrl: props.engineBaseUrl });
+    engineFactory = factories.factory;
     engine = new ShogiEngine({ factory: factories.factory });
     await engine.init();
     await engine.ready();
@@ -4732,21 +4746,38 @@ async function initializeEngine({ force = false } = {}) {
 }
 
 /*
- * 図鑑で代表局を解析するための探索。図鑑はホームの上に開くので対局の探索とは重ならないが、
- * 同じエンジンは一度に1つしか探索できないため、助言探索が終わるのを待ってから1局面ずつ流す。
+ * 図鑑で代表局を解析する。図鑑はホームの上に開くので対局の探索とは重ならないが、
+ * 同じエンジンは一度に1つしか探索できないため、助言探索が終わるのを待ってから段階解析を始める。
+ * 対局後の解析と同じく、解析の間だけエンジンを追加して局面を並行して読む。
  */
 let dexSearchQueue: Promise<unknown> = Promise.resolve();
 let dexSearchRunning = false;
+let dexAnalysisEngines: ShogiEngine[] = [];
+function releaseDexAnalysisEngines() {
+  for (const extra of dexAnalysisEngines) {
+    try {
+      extra.stop();
+      extra.quit();
+    } catch { /* 終了済みのエンジンは無視する */ }
+  }
+  dexAnalysisEngines = [];
+}
 const dexAnalysisEngine = {
-  /*
-   * 浅い読み（shallow）は神の一手の判定用で、対局中の褒め言葉と同じ予算で読む。
-   * 深い読み（deep）は、図鑑で選んだ解析の深さ（level）の探索量で読み、読みの途中経過をonUpdateへ渡す。
-   */
-  search(
-    sfen: string,
-    depth: "shallow" | "deep" = "deep",
-    options: { level?: number; onUpdate?: (update: { depth?: number; nodes?: number }) => void } = {},
-  ) {
+  analyze({
+    steps,
+    level,
+    results,
+    isCancelled,
+    onProgress,
+    onPoints,
+  }: {
+    steps: { sfen: string; lastMove: string; label?: string }[];
+    level: number;
+    results: unknown[];
+    isCancelled: () => boolean;
+    onProgress: (progress: { stage: string; done: number; total: number }) => void;
+    onPoints: (points: AnalysisPoint[]) => void;
+  }) {
     const run = dexSearchQueue.catch(() => undefined).then(async () => {
       await initializeEngine({ force: true });
       if (!engine || !engineReady.value) throw new Error("将棋AIを起動できませんでした。");
@@ -4754,20 +4785,37 @@ const dexAnalysisEngine = {
         dedicatedCoachQueue.catch(() => undefined),
         reviewCoachQueue.catch(() => undefined),
       ]);
+      if (isCancelled()) return;
       const compact = props.mobile || boardLayout.value === "portrait";
       dexSearchRunning = true;
       try {
-        const settings = depth === "shallow"
-          ? getPraiseBaselineSearchSettings(compact).shallow
-          : { ...kifuAnalysisBudget(options.level ?? 0, compact), multiPv: 2 };
-        engine.applyStrengthOptions({ multiPv: settings.multiPv });
-        engine.setPosition(sfen);
-        return await engine.go({
-          nodes: settings.nodes,
-          maxTimeMs: settings.maxTimeMs,
-          ...(options.onUpdate ? { onUpdate: options.onUpdate } : {}),
+        dexAnalysisEngines = await createAnalysisEngines(analysisEngineCount(compact) - 1);
+        if (isCancelled()) return;
+        const lanes = [engine, ...dexAnalysisEngines].map((laneEngine) => async (
+          sfen: string,
+          options: { nodes: number; multiPv: number; maxTimeMs: number; fresh?: boolean },
+        ) => {
+          if (options.fresh) {
+            laneEngine.newGame();
+            await laneEngine.ready();
+          }
+          laneEngine.applyStrengthOptions({ multiPv: options.multiPv });
+          laneEngine.setPosition(sfen);
+          return laneEngine.go({ nodes: options.nodes, maxTimeMs: options.maxTimeMs });
+        });
+        await analyzeKifuStaged({
+          steps,
+          lanes,
+          plan: kifuAnalysisPlan(level, compact),
+          results,
+          isCancelled,
+          onProgress,
+          onResults: (latest, contexts) => {
+            if (!isCancelled()) onPoints(analysisPointsFromResults(steps, latest, contexts));
+          },
         });
       } finally {
+        releaseDexAnalysisEngines();
         dexSearchRunning = false;
       }
     });
@@ -4776,7 +4824,9 @@ const dexAnalysisEngine = {
   },
   // 図鑑の探索だけを止め、対局の探索には触れない。
   stop() {
-    if (dexSearchRunning) engine?.stop();
+    if (!dexSearchRunning) return;
+    engine?.stop();
+    for (const extra of dexAnalysisEngines) extra.stop();
   },
 };
 
@@ -4827,11 +4877,52 @@ function openKifuAnalysis() {
   if (analysisPoints.value.length === 0 && !analysisRunning.value) void runKifuAnalysis();
 }
 
+/*
+ * 棋譜解析の間だけ、局面を並行して読むエンジンを追加する。対局用のエンジンと合わせた数を返す。
+ * 1つあたり数十MBのメモリを使うため、スマホではメモリとコアに余裕のある端末だけ2つにする。
+ */
+function analysisEngineCount(compact: boolean) {
+  const cores = Number(globalThis.navigator?.hardwareConcurrency) || 2;
+  const memory = Number((globalThis.navigator as { deviceMemory?: number } | undefined)?.deviceMemory) || 4;
+  if (compact) return cores >= 6 && memory >= 4 ? 2 : 1;
+  return Math.max(1, Math.min(4, cores - 1));
+}
+
+let analysisEngines: ShogiEngine[] = [];
+async function createAnalysisEngines(count: number) {
+  if (!engineFactory || count < 1) return [];
+  const created = await Promise.all(Array.from({ length: count }, async () => {
+    const extra = new ShogiEngine({ factory: engineFactory!, hashMb: 16 });
+    try {
+      await extra.init();
+      await extra.ready();
+      extra.newGame();
+      return extra;
+    } catch {
+      // 追加のエンジンを起動できなくても、対局用のエンジンだけで解析を続ける。
+      extra.quit();
+      return null;
+    }
+  }));
+  return created.filter((extra): extra is ShogiEngine => Boolean(extra));
+}
+
+function releaseAnalysisEngines() {
+  for (const extra of analysisEngines) {
+    try {
+      extra.stop();
+      extra.quit();
+    } catch { /* 終了済みのエンジンは無視する */ }
+  }
+  analysisEngines = [];
+}
+
 async function runKifuAnalysis() {
   if (!engine || !engineReady.value || analysisRunning.value || reviewCpuEnabled.value) return;
   const generation = ++analysisGeneration;
   analysisRunning.value = true;
   analysisProgress.value = 0;
+  analysisStage.value = "";
   analysisTotal.value = reviewNavigation.value.mainLine.length + 1;
   analysisOpen.value = true;
   analysisPoints.value = [];
@@ -4850,94 +4941,58 @@ async function runKifuAnalysis() {
       ? "startpos"
       : matchInitialSfen.value;
     const replay = createGameRecord(matchInitialSfen.value);
-    const positions = [{ sideToMove: replay.position.color, label: "開始局面", sfen: replay.position.sfen }];
-    for (let index = 0; index < moves.length; index += 1) {
+    const steps = [{ sfen: replay.position.sfen, lastMove: "", label: "" }];
+    for (const move of moves) {
       const label = (() => {
         try {
-          return `${index + 1}手目 ${formatHintMove(moves[index], replay.position.sfen)}`;
+          return formatHintMove(move, replay.position.sfen);
         } catch {
-          return `${index + 1}手目`;
+          return "";
         }
       })();
-      appendUsiMove(replay, moves[index]);
-      positions.push({
-        sideToMove: replay.position.color,
-        label,
-        sfen: replay.position.sfen,
-      });
+      appendUsiMove(replay, move);
+      steps.push({ sfen: replay.position.sfen, lastMove: move, label });
     }
-    analysisTotal.value = positions.length;
+    analysisTotal.value = steps.length;
     const compact = props.mobile || boardLayout.value === "portrait";
-    // 神の一手は、浅い読みで見えない最善手かを対局中の褒め言葉と同じ基準で比べる。
-    const shallowSettings = getPraiseBaselineSearchSettings(compact).shallow;
-    const searched: { deep: PraiseCandidate[]; shallow: PraiseCandidate[] }[] = [];
-    const pick = (candidates: Array<{ rank: number; move: string; score?: unknown }>) => candidates
-      .map(({ rank, move, score }) => ({ rank, move, score: score as EngineEvaluation | undefined }));
-    for (let ply = 0; ply < positions.length; ply += 1) {
-      if (generation !== analysisGeneration || !reviewMode.value) break;
-      const prefixMoves = moves.slice(0, ply);
-      engine.setPosition(`${base}${prefixMoves.length ? ` moves ${prefixMoves.join(" ")}` : ""}`);
-      engine.applyStrengthOptions({ multiPv: shallowSettings.multiPv });
-      const shallowSearch = await engine.go({
-        nodes: shallowSettings.nodes,
-        maxTimeMs: shallowSettings.maxTimeMs,
-      });
-      if (generation !== analysisGeneration || !reviewMode.value) break;
-      engine.applyStrengthOptions({ multiPv: 2 });
-      const search = await engine.go({
-        nodes: compact ? 6000 : 12000,
-        maxTimeMs: compact ? 800 : 1200,
-      });
-      if (generation !== analysisGeneration || !reviewMode.value) break;
-      searched[ply] = { deep: pick(search.candidates), shallow: pick(shallowSearch.candidates) };
-      const bestCandidate = search.candidates.find((candidate) => candidate.rank === 1);
-      const secondCandidate = search.candidates.find((candidate) => candidate.rank === 2);
-      const rawScore = bestCandidate?.score;
-      const score = scoreForBlack(rawScore, positions[ply].sideToMove);
-      const secondScore = scoreForBlack(secondCandidate?.score, positions[ply].sideToMove);
-      const graphValue = scoreToGraphValue(score);
-      if (score && graphValue !== undefined) {
-        const previous = analysisPoints.value.at(-1);
-        const before = ply > 0 ? searched[ply - 1] : undefined;
-        const context = before ? moveContext(positions[ply - 1].sfen, moves[ply - 1], moves[ply - 2] ?? "") : null;
-        const godMove = before && context
-          ? judgeGodMove({
-              move: moves[ply - 1],
-              deepCandidates: before.deep,
-              shallowCandidates: before.shallow,
-              trivial: context.trivial,
-              sacrifice: context.sacrifice,
-            })
-          : null;
-        const annotation = ply > 0 && previous
-          ? classifyAnalyzedMove({
-              ply,
-              playedMove: moves[ply - 1],
-              bestMove: previous.bestMove,
-              beforeBestScore: previous.score,
-              beforeSecondScore: previous.secondScore,
-              afterScore: score,
-              godMove,
-            })
-          : null;
-        analysisPoints.value.push({
-          ply,
-          graphValue,
-          label: positions[ply].label,
-          scoreLabel: formatAnalysisScore(score),
-          bestMove: bestCandidate?.move,
-          pv: bestCandidate?.pv,
-          score,
-          secondScore,
-          annotation,
-        });
-        // 神の一手は1局で上位3手まで。外れた手は好手として残す。
-        analysisPoints.value = capGodMoves(analysisPoints.value);
+    const cancelled = () => generation !== analysisGeneration || !reviewMode.value;
+    // 千日手を正しく判定できるよう、初期局面からの手順で読ませる。
+    const laneFor = (laneEngine: ShogiEngine) => async (
+      _sfen: string,
+      options: { nodes: number; multiPv: number; maxTimeMs: number; fresh?: boolean },
+      ply: number,
+    ) => {
+      // 神の一手の浅い読みは、深い読みの結果が残らないよう置換表を消してから読む。
+      if (options.fresh) {
+        laneEngine.newGame();
+        await laneEngine.ready();
       }
-      analysisProgress.value = ply + 1;
-      await nextTick();
-    }
-    if (generation === analysisGeneration && analysisProgress.value === analysisTotal.value) {
+      laneEngine.applyStrengthOptions({ multiPv: options.multiPv });
+      laneEngine.setPosition(`${base}${ply ? ` moves ${moves.slice(0, ply).join(" ")}` : ""}`);
+      return laneEngine.go({ nodes: options.nodes, maxTimeMs: options.maxTimeMs });
+    };
+    analysisEngines = await createAnalysisEngines(analysisEngineCount(compact) - 1);
+    if (cancelled()) return;
+    let completed = false;
+    await analyzeKifuStaged({
+      steps,
+      lanes: [engine, ...analysisEngines].map(laneFor),
+      plan: STAGED_ANALYSIS_PLANS[compact ? "mobile" : "desktop"],
+      isCancelled: cancelled,
+      onProgress: ({ stage, done, total }) => {
+        if (cancelled()) return;
+        analysisStage.value = stage;
+        analysisProgress.value = done;
+        analysisTotal.value = total;
+        completed = stage === "focus" && done === total;
+      },
+      onResults: (results, contexts) => {
+        if (cancelled()) return;
+        // 神の一手は1局で上位3手まで。外れた手は好手として残す。
+        analysisPoints.value = analysisPointsFromResults(steps, results, contexts);
+      },
+    });
+    if (generation === analysisGeneration && completed) {
       if (!showRecordedCoachAdvice()) {
         guideText.value = coachLevel.value === "off"
           ? ""
@@ -4950,6 +5005,7 @@ async function runKifuAnalysis() {
       errorMessage.value = `棋譜解析に失敗しました: ${message}`;
     }
   } finally {
+    if (generation === analysisGeneration) releaseAnalysisEngines();
     analysisRunning.value = false;
     thinking.value = false;
   }
@@ -4960,6 +5016,7 @@ function cancelKifuAnalysis() {
   coachAdviceScheduler.reset();
   analysisGeneration += 1;
   engine?.stop();
+  releaseAnalysisEngines();
   guideText.value = coachLevel.value === "off" ? "" : "棋譜解析を中止したよ。";
 }
 

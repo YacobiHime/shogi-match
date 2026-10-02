@@ -77,8 +77,36 @@ export async function createNodeEngine() {
   return engine;
 }
 
-export async function search(engine, sfen, { nodes, multiPv, searchMoves }) {
+export async function search(engine, sfen, { nodes, multiPv, searchMoves, searchThreads = 1 }) {
   engine.applyStrengthOptions({ multiPv });
+  await engine.setSearchThreads(searchThreads);
   engine.setPosition(sfen);
   return engine.go({ nodes, maxTimeMs: 20000, ...(searchMoves ? { searchMoves } : {}) });
+}
+
+/**
+ * PCのネイティブUSIエンジン(水匠5など)を、ブラウザ版と同じShogiEngineで操作する。
+ * 棋譜解析の基準データ作りに使う。評価関数はエンジンと同じフォルダのeval/から読む。
+ */
+export async function createNativeEngine(enginePath, { threads = 4, hashMb = 256 } = {}) {
+  const { spawn } = await import("node:child_process");
+  const { createInterface } = await import("node:readline");
+  const engine = new ShogiEngine({
+    factory: async () => {
+      const child = spawn(enginePath, [], { cwd: path.dirname(enginePath), stdio: ["pipe", "pipe", "ignore"] });
+      process.on("exit", () => child.kill());
+      const listeners = [];
+      createInterface({ input: child.stdout }).on("line", (line) => listeners.forEach((listener) => listener(line)));
+      return {
+        postMessage: (command) => child.stdin.write(`${command}\n`),
+        addMessageListener: (listener) => listeners.push(listener),
+      };
+    },
+  });
+  await engine.init();
+  engine.setOption("Threads", threads);
+  engine.setOption("USI_Hash", hashMb);
+  await engine.ready();
+  engine.newGame();
+  return engine;
 }

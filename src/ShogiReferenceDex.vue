@@ -245,11 +245,11 @@
                 @click="nextAnalysisLevel !== null && startAnalysis(nextAnalysisLevel)"
               >{{ analysisButtonLabel }}</button>
             </div>
-            <!-- 解析の進み具合。読んでいる局面と、その局面の読みの深さ・探索量をその場で出す。 -->
+            <!-- 解析の進み具合。全体を確認→怪しい手を読み直し→大事な局面を深読みの段階ごとに出す。 -->
             <p v-if="analysisRunning" class="shogi-reference-dex__analysis-note" aria-live="polite">
-              {{ levelLabel(runningLevel) }}で解析中 {{ analysisProgress }}/{{ lastStep + 1 }}局面
-              <template v-if="liveSearch">
-                <br>{{ liveSearch.ply }}手目を読んでいるよ<template v-if="liveSearch.depth">（{{ liveSearch.depth }}手先・{{ formatNodeCount(liveSearch.nodes ?? 0) }}局面）</template>
+              {{ levelLabel(runningLevel) }}で解析中
+              <template v-if="analysisStage">
+                <br>{{ ANALYSIS_STAGE_LABELS[analysisStage as keyof typeof ANALYSIS_STAGE_LABELS] }} {{ analysisProgress }}/{{ analysisTotal }}局面
               </template>
             </p>
             <p v-else-if="analysisLevel >= 0" class="shogi-reference-dex__analysis-note">
@@ -323,14 +323,13 @@ import {
   KIFU_ANALYSIS_LEVELS,
   analysisComment,
   analysisHighlights,
-  analyzeKifuSteps,
   findTurningPoint,
   formatAnalysisMove,
   formatNodeCount,
   formatPrincipalVariation,
   kifuAnalysisBudget,
-  mergeAnalysisPoints,
 } from "./core/reference-kifu-analysis.mjs";
+import { ANALYSIS_STAGE_LABELS } from "./core/kifu-analysis-pipeline.mjs";
 import {
   REFERENCE_DEX_KINDS,
   referenceDexEntries,
@@ -358,13 +357,16 @@ type ReferenceEntry = {
 };
 type KifuStep = { sfen: string; label: string; lastMove: string; comment: string; highlight: string };
 type Kifu = { black: string; white: string; ending: string; winner: "" | "black" | "white"; steps: KifuStep[] };
-type LiveUpdate = { depth?: number; nodes?: number };
+/** 図鑑の棋譜を段階解析する。resultsは深く読み直すときに前の結果を引き継ぐための配列で、解析が書き足す。 */
 type AnalysisEngine = {
-  search(
-    sfen: string,
-    depth: "shallow" | "deep",
-    options?: { level?: number; onUpdate?: (update: LiveUpdate) => void },
-  ): Promise<any>;
+  analyze(options: {
+    steps: KifuStep[];
+    level: number;
+    results: unknown[];
+    isCancelled: () => boolean;
+    onProgress: (progress: { stage: string; done: number; total: number }) => void;
+    onPoints: (points: AnalysisPoint[]) => void;
+  }): Promise<unknown>;
   stop(): void;
 };
 type AnalysisPoint = {
@@ -443,6 +445,7 @@ watch(selectedId, () => {
   stepIndex.value = 0;
   cancelAnalysis();
   analysisPoints.value = [];
+  analysisResults = [];
   analysisError.value = "";
   analysisDone.value = false;
   analysisLevel.value = -1;
@@ -460,9 +463,10 @@ let analysisGeneration = 0;
 // 最後まで解析し終えた深さ（KIFU_ANALYSIS_LEVELSの番号）。まだなら-1。
 const analysisLevel = ref(-1);
 const runningLevel = ref(0);
-const liveSearch = ref<{ ply: number; depth?: number; nodes?: number } | null>(null);
-// 浅い読みは深さによらず同じなので、深く読み直すときは前の結果を使う。
-const shallowCache = new Map<string, unknown>();
+const analysisStage = ref("");
+const analysisTotal = ref(0);
+// 局面ごとの読みの結果。深く読み直すときは、前の深さの読みを残したまま書き足す。
+let analysisResults: unknown[] = [];
 const mobileLayout = () => isNarrow.value;
 const levelLabel = (level: number) => KIFU_ANALYSIS_LEVELS[level]?.label ?? "";
 const levelNodes = (level: number) => kifuAnalysisBudget(level, mobileLayout()).nodes;
@@ -554,8 +558,9 @@ const boardArrows = computed(() => {
 });
 
 /*
- * levelの深さで解析する。2回目以降（深く解析）は、前の結果を表示したまま、読み直した局面から新しい結果へ置き換える。
- * 前の結果が全局面そろっているので、形勢の分かれ目や見せ場は読み直しの途中でも出したままにする。
+ * levelの深さで解析する。2回目以降（深く解析）は、前の深さの読みを残したまま深い読みを書き足し、
+ * 読み直した局面から順に新しい結果へ置き換える。前の結果が全局面そろっているので、
+ * 形勢の分かれ目や見せ場は読み直しの途中でも出したままにする。
  */
 async function startAnalysis(level = 0) {
   const engine = props.analysisEngine;
@@ -563,38 +568,31 @@ async function startAnalysis(level = 0) {
   if (!engine || !steps || analysisRunning.value) return;
   const generation = ++analysisGeneration;
   const deeper = level > 0 && analysisLevel.value >= 0;
-  const previous = deeper ? analysisPoints.value : [];
   analysisRunning.value = true;
   runningLevel.value = level;
+  analysisStage.value = "";
   analysisProgress.value = 0;
+  analysisTotal.value = 0;
   analysisError.value = "";
-  liveSearch.value = null;
   if (!deeper) {
+    analysisResults = [];
     analysisPoints.value = [];
     analysisDone.value = false;
   }
   try {
-    await analyzeKifuSteps({
+    await engine.analyze({
       steps,
-      search: async (sfen: string, depth: "shallow" | "deep") => {
-        if (depth === "shallow" && shallowCache.has(sfen)) return shallowCache.get(sfen);
-        const result = await engine.search(sfen, depth, {
-          level,
-          onUpdate: (update: LiveUpdate) => {
-            if (depth !== "deep" || generation !== analysisGeneration || !liveSearch.value) return;
-            liveSearch.value = { ...liveSearch.value, depth: update.depth, nodes: update.nodes };
-          },
-        });
-        if (depth === "shallow") shallowCache.set(sfen, result);
-        if (depth === "deep" && generation === analysisGeneration) analysisProgress.value += 1;
-        return result;
-      },
+      level,
+      results: analysisResults,
       isCancelled: () => generation !== analysisGeneration,
-      onPly: (ply: number) => {
-        if (generation === analysisGeneration) liveSearch.value = { ply };
+      onProgress: ({ stage, done, total }) => {
+        if (generation !== analysisGeneration) return;
+        analysisStage.value = stage;
+        analysisProgress.value = done;
+        analysisTotal.value = total;
       },
       onPoints: (points: AnalysisPoint[]) => {
-        analysisPoints.value = deeper ? mergeAnalysisPoints(points, previous) : points;
+        if (generation === analysisGeneration) analysisPoints.value = points;
       },
     });
     if (generation === analysisGeneration) {
@@ -606,17 +604,13 @@ async function startAnalysis(level = 0) {
       analysisError.value = error instanceof Error ? error.message : String(error);
     }
   } finally {
-    if (generation === analysisGeneration) {
-      analysisRunning.value = false;
-      liveSearch.value = null;
-    }
+    if (generation === analysisGeneration) analysisRunning.value = false;
   }
 }
 function cancelAnalysis() {
   if (!analysisRunning.value) return;
   analysisGeneration += 1;
   analysisRunning.value = false;
-  liveSearch.value = null;
   props.analysisEngine?.stop();
 }
 onBeforeUnmount(cancelAnalysis);

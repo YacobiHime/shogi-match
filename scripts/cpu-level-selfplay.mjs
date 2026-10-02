@@ -2,6 +2,10 @@
 // 使い方:
 //   node scripts/cpu-level-selfplay.mjs --players L1,L5,L10 [--games 40] [--gap 2] [--workers 8] [--out result.json]
 //   選手はL<レベル>、s<技量>(例: s0.3)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
+//   末尾にn<nodes>を付けると探索量だけを差し替える(例: L40n2000000)。
+//   --deadline-sec 280 で、指定秒数を過ぎたら対局中の局を打ち切り、終わった局だけで集計する。
+//   --opening-plies 12 で、序盤の指定手数まで両者とも評価差の小さい候補からばらして選ぶ。
+//   最上位レベル同士は着手にばらつきがなく、同じ棋譜を繰り返すのを避けるために使う。
 //   並べた順に、隣からgap個先までの組み合わせで先後を入れ替えながら対局する。
 //   --anchors old6000 --anchor-games 20 で、基準選手を全選手と対局させる。
 //   --include prev.json で、以前の結果の対局もレーティング推定に含める。
@@ -12,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { Position } from "tsshogi";
 import { chooseCpuMove } from "../src/core/cpu-move-choice.mjs";
 import { comparableScore } from "../src/core/move-selection.mjs";
-import { CPU_STRENGTH_PRESETS, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
 
 const MAX_PLY = 256;
@@ -38,10 +42,12 @@ function option(name, fallback) {
 
 /** 選手指定から、着手選択に渡す強さ設定を作る。 */
 export function strengthForPlayer(spec) {
+  const nodesOverride = spec.match(/^(.+?)n(\d+)$/);
+  if (nodesOverride) return { ...strengthForPlayer(nodesOverride[1]), nodes: Number(nodesOverride[2]) };
   if (/^L\d+$/.test(spec)) {
     const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === Number(spec.slice(1)));
     if (!preset) throw new Error(`存在しないレベルです: ${spec}`);
-    return searchSettingsForSkill(preset.skill);
+    return getStrengthSearchSettings(preset.value);
   }
   if (/^s[\d.]+$/.test(spec)) return searchSettingsForSkill(Number(spec.slice(1)));
   if (/^old\d+$/.test(spec)) {
@@ -69,8 +75,21 @@ async function adjudicate(engine, sfen, nodes, threshold, color) {
   return (value > 0) === (color === "black") ? "black" : "white";
 }
 
+/** 序盤をばらすための着手設定。最善手から評価差80以内の候補を、差が小さいほど選びやすくする。 */
+const OPENING_VARIETY = {
+  ...searchSettingsForSkill(0.9),
+  nodes: 20000,
+  multiPv: 4,
+  moveRank: { min: 1, max: 4 },
+  maxScoreLoss: 80,
+  scoreTemperature: 40,
+  bestMoveRate: 0,
+  naturalnessAlpha: 0,
+  openingPlanScoreScale: 1,
+};
+
 /** 1局を指し、勝者("black" | "white" | "draw")を返す。選手ごとに別のエンジンを使い、置換表を共有しない。 */
-async function playGame(engines, players, seed) {
+async function playGame(engines, players, seed, openingPlies = 0) {
   const random = seededRandom(seed);
   const position = Position.newBySFEN(STANDARD_SFEN);
   const history = [];
@@ -78,13 +97,13 @@ async function playGame(engines, players, seed) {
   for (let ply = 0; ply < MAX_PLY; ply += 1) {
     const color = position.color === "black" ? "black" : "white";
     const moves = legalMoves(position);
-    if (!moves.length) return { winner: color === "black" ? "white" : "black", plies: ply, reason: "mate" };
+    if (!moves.length) return { winner: color === "black" ? "white" : "black", plies: ply, moves: history, reason: "mate" };
     if (ply >= ADJUDICATE_FROM_PLY && ply % ADJUDICATE_EVERY === 0) {
       const winner = await adjudicate(engines.judge, position.sfen, ADJUDICATE_NODES, ADJUDICATE_SCORE, color);
-      if (winner) return { winner, plies: ply, reason: "adjudicated" };
+      if (winner) return { winner, plies: ply, moves: history, reason: "adjudicated" };
     }
     const engine = engines[color];
-    const strength = players[color];
+    const strength = ply < openingPlies ? OPENING_VARIETY : players[color];
     const sfen = position.sfen;
     const result = strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
     const choice = await chooseCpuMove({
@@ -103,11 +122,11 @@ async function playGame(engines, players, seed) {
     history.push(choice.move);
     const key = positionKey(position.sfen);
     seen.set(key, (seen.get(key) ?? 0) + 1);
-    if (seen.get(key) >= 4) return { winner: "draw", plies: ply + 1, reason: "repetition" };
+    if (seen.get(key) >= 4) return { winner: "draw", plies: ply + 1, moves: history, reason: "repetition" };
   }
   const color = position.color === "black" ? "black" : "white";
   const winner = await adjudicate(engines.judge, position.sfen, FINAL_ADJUDICATE_NODES, FINAL_ADJUDICATE_SCORE, color);
-  return { winner: winner ?? "draw", plies: MAX_PLY, reason: winner ? "max-ply-adjudicated" : "max-ply" };
+  return { winner: winner ?? "draw", plies: MAX_PLY, moves: history, reason: winner ? "max-ply-adjudicated" : "max-ply" };
 }
 
 async function runWorker() {
@@ -125,7 +144,7 @@ async function runWorker() {
     const players = { black: strengthForPlayer(job.black), white: strengthForPlayer(job.white) };
     const started = Date.now();
     try {
-      const result = await playGame(engines, players, job.seed);
+      const result = await playGame(engines, players, job.seed, job.openingPlies);
       process.send({ ...job, ...result, ms: Date.now() - started });
     } catch (error) {
       process.send({ ...job, error: String(error?.stack ?? error) });
@@ -219,6 +238,8 @@ async function runMain() {
   const anchors = option("anchors", "").split(",").filter(Boolean);
   anchors.forEach(strengthForPlayer);
   const anchorGames = Number(option("anchor-games", "20"));
+  const openingPlies = Number(option("opening-plies", "0"));
+  const deadlineSec = Number(option("deadline-sec", "0"));
   const included = option("include", "").split(",").filter(Boolean)
     .flatMap((file) => JSON.parse(fs.readFileSync(path.resolve(projectRoot, file), "utf8")).games);
 
@@ -227,7 +248,7 @@ async function runMain() {
     for (let j = i + 1; j <= Math.min(players.length - 1, i + gap); j += 1) {
       for (let game = 0; game < gamesPerPair; game += 1) {
         const [black, white] = game % 2 === 0 ? [players[i], players[j]] : [players[j], players[i]];
-        jobs.push({ black, white, seed: seed + jobs.length * 7919 });
+        jobs.push({ black, white, seed: seed + jobs.length * 7919, openingPlies });
       }
     }
   }
@@ -235,7 +256,7 @@ async function runMain() {
     for (const player of players) {
       for (let game = 0; game < anchorGames; game += 1) {
         const [black, white] = game % 2 === 0 ? [anchor, player] : [player, anchor];
-        jobs.push({ black, white, seed: seed + jobs.length * 7919 });
+        jobs.push({ black, white, seed: seed + jobs.length * 7919, openingPlies });
       }
     }
   }
@@ -247,8 +268,17 @@ async function runMain() {
   await new Promise((resolve, reject) => {
     let running = 0;
     const scriptPath = fileURLToPath(import.meta.url);
+    const children = [];
+    if (deadlineSec > 0) {
+      setTimeout(() => {
+        console.error(`${deadlineSec}秒を過ぎたため、${results.length}/${total}局で打ち切ります。`);
+        for (const child of children) child.kill();
+        resolve();
+      }, deadlineSec * 1000).unref();
+    }
     for (let w = 0; w < Math.min(workers, jobs.length); w += 1) {
       const child = fork(scriptPath, ["--worker"], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
+      children.push(child);
       running += 1;
       const next = () => {
         const job = jobs.shift();

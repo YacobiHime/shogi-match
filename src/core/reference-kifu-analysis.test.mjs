@@ -4,87 +4,19 @@ import {
   KIFU_ANALYSIS_LEVELS,
   analysisComment,
   analysisHighlights,
-  analyzeKifuSteps,
   findTurningPoint,
   formatAnalysisMove,
   formatNodeCount,
   formatPrincipalVariation,
   kifuAnalysisBudget,
-  mergeAnalysisPoints,
+  kifuAnalysisPlan,
 } from "./reference-kifu-analysis.mjs";
+import { STAGED_ANALYSIS_PLANS } from "./kifu-analysis-pipeline.mjs";
 import { STANDARD_SFEN } from "../game-state";
 
 const koyama = referenceEntryKifu(referenceDexEntries("world").find(({ id }) => id === "koyama"));
 
 describe("reference kifu analysis", () => {
-  it("turns engine scores into black-side graph points and judges each played move", async () => {
-    const steps = koyama.steps.slice(0, 4);
-    const searched = [];
-    // 手番側から見た評価値を返す。2手目の後だけ後手が大きく損をした形にする。
-    const scores = [50, -40, 1000, -900];
-    const points = await analyzeKifuSteps({
-      steps,
-      search: async (sfen, depth) => {
-        // 浅い読みは神の一手の判定だけに使うので、ここでは候補を返さない。
-        if (depth === "shallow") return { candidates: [] };
-        const ply = searched.push(sfen) - 1;
-        return {
-          candidates: [
-            { rank: 1, move: "7g7f", pv: ["7g7f", "3c3d"], score: { type: "cp", value: scores[ply] } },
-            { rank: 2, move: "2g2f", pv: ["2g2f"], score: { type: "cp", value: scores[ply] - 10 } },
-          ],
-        };
-      },
-    });
-    expect(searched).toEqual(steps.map(({ sfen }) => sfen));
-    // 後手番の局面は符号を反転し、先手から見た値にそろえる。
-    expect(points.map(({ graphValue }) => graphValue)).toEqual([50, 40, 1000, 900]);
-    expect(points[0].label).toBe("開始局面");
-    expect(points[1].label).toBe("1手目 ▲２六歩");
-    expect(points[0].annotation).toBeNull();
-    // 先手有利+40から+1000へ変わった2手目（後手の手）は、後手の大きな損として判定する。
-    expect(points[2].annotation).toMatchObject({ kind: "mistake", mover: "white" });
-  });
-
-  it("marks a best move that the shallow search misses as a god move", async () => {
-    const steps = koyama.steps.slice(0, 3);
-    const points = await analyzeKifuSteps({
-      steps,
-      search: async (sfen, depth) => {
-        const ply = steps.findIndex((step) => step.sfen === sfen);
-        const played = steps[ply + 1]?.lastMove ?? "7g7f";
-        // 深い読みでは指した手が最善で、次善手より勝率で約12ポイント良い。浅い読みでは別の手が最善に見える。
-        // 評価値は手番側視点なので、形勢が動かないよう局面ごとに±300を返す。
-        const best = sfen.split(" ")[1] === "w" ? -300 : 300;
-        return depth === "deep"
-          ? { candidates: [
-            { rank: 1, move: played, pv: [played], score: { type: "cp", value: best } },
-            { rank: 2, move: "9g9f", pv: ["9g9f"], score: { type: "cp", value: best - 300 } },
-          ] }
-          : { candidates: [{ rank: 1, move: "9g9f", score: { type: "cp", value: 100 } }] };
-      },
-    });
-    expect(points[1].annotation).toMatchObject({ kind: "brilliant", label: "神の一手" });
-  });
-
-  it("skips positions without a score and stops when cancelled", async () => {
-    let calls = 0;
-    const points = await analyzeKifuSteps({
-      steps: koyama.steps,
-      search: async (sfen, depth) => {
-        if (depth === "shallow") return { candidates: [] };
-        calls += 1;
-        return { candidates: calls === 1 ? [] : [{ rank: 1, move: "7g7f", score: { type: "mate", value: 3 } }] };
-      },
-      isCancelled: () => calls >= 3,
-    });
-    expect(calls).toBe(3);
-    expect(points.map(({ ply }) => ply)).toEqual([1]);
-    expect(points[0].scoreLabel).toBe("後手に3手詰め");
-    // 前の局面に点がないので、指した手の判定はしない。
-    expect(points[0].annotation).toBeNull();
-  });
-
   it("formats the best move and principal variation with turn marks", () => {
     expect(formatAnalysisMove("7g7f", STANDARD_SFEN)).toBe("▲7六歩");
     expect(formatPrincipalVariation(["7g7f", "3c3d", "8h2b+"], STANDARD_SFEN)).toBe("▲7六歩 → △3四歩 → ▲2二角成");
@@ -139,21 +71,18 @@ describe("reference kifu analysis", () => {
     expect(kifuAnalysisBudget(0, true).nodes).toBeLessThan(kifuAnalysisBudget(0).nodes);
     expect(kifuAnalysisBudget(2, true).maxTimeMs).toBeGreaterThan(kifuAnalysisBudget(2).maxTimeMs);
     expect(kifuAnalysisBudget(9)).toEqual(kifuAnalysisBudget(2));
+    // 標準は対局後の解析と同じ段階解析で、深い段ほど読み直し・深読みの探索量も増やす。
+    expect(kifuAnalysisPlan(0)).toBe(STAGED_ANALYSIS_PLANS.desktop);
+    expect(kifuAnalysisPlan(0, true)).toBe(STAGED_ANALYSIS_PLANS.mobile);
+    const plans = KIFU_ANALYSIS_LEVELS.map((_, level) => kifuAnalysisPlan(level));
+    for (const stage of ["scan", "review", "focus"]) {
+      const stageNodes = plans.map((plan) => plan[stage].nodes);
+      expect(stageNodes, stage).toEqual([...stageNodes].sort((left, right) => left - right));
+    }
+    expect(kifuAnalysisPlan(2).scan).toMatchObject({ nodes: 480000, multiPv: 2 });
+    expect(kifuAnalysisPlan(2).review.lossThreshold).toBe(STAGED_ANALYSIS_PLANS.desktop.review.lossThreshold);
     expect(formatNodeCount(12000)).toBe("1.2万");
     expect(formatNodeCount(480000)).toBe("48万");
     expect(formatNodeCount(600)).toBe("600");
-  });
-
-  it("shows the previous result for positions the deeper analysis has not reached yet", () => {
-    const point = (ply, graphValue, annotation = null) => ({ ply, graphValue, annotation });
-    const god = (strength) => ({ kind: "brilliant", label: "神の一手", mover: "black", strength });
-    const older = [point(0, 0), point(1, 100, god(20)), point(2, 200, god(30)), point(3, 300, god(25)), point(4, 400)];
-    // 深く読み直した0〜1手目で、もっと強い神の一手が見つかった。
-    const merged = mergeAnalysisPoints([point(0, 10), point(1, 150, god(40))], older);
-    expect(merged.map(({ graphValue }) => graphValue)).toEqual([10, 150, 200, 300, 400]);
-    expect(merged.filter(({ annotation }) => annotation?.kind === "brilliant").map(({ ply }) => ply)).toEqual([1, 2, 3]);
-    // 前の結果が強い神の一手を消した場合も、3手に絞り直す。
-    const extra = mergeAnalysisPoints([point(4, 400, god(50))], merged);
-    expect(extra.filter(({ annotation }) => annotation?.kind === "brilliant").map(({ ply }) => ply)).toEqual([1, 2, 4]);
   });
 });

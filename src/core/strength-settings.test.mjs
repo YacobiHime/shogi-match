@@ -21,15 +21,16 @@ const LEGACY_PRESETS = [
 ];
 
 describe('CPU strength settings', () => {
-  it('offers Lv0 plus forty Piyo-like levels', () => {
-    expect(CPU_STRENGTH_PRESETS).toHaveLength(41);
+  it('offers Lv0, forty Piyo-like levels, and the strongest level', () => {
+    expect(CPU_STRENGTH_PRESETS).toHaveLength(42);
     expect(CPU_STRENGTH_PRESETS.map(({ level }) => level))
-      .toEqual(Array.from({ length: 41 }, (_, level) => level));
+      .toEqual(Array.from({ length: 42 }, (_, level) => level));
     expect(CPU_STRENGTH_PRESETS[0].label).toBe('駒の動きを覚えたて');
     expect(CPU_STRENGTH_PRESETS[1].label).toBe('十五級程度');
     // ぴよ将棋のLv15(3級前後)と同じ目安にする。
     expect(CPU_STRENGTH_PRESETS[15].label).toBe('三級程度');
-    expect(CPU_STRENGTH_PRESETS.at(-1)).toMatchObject({ level: 40, value: 480000, label: '藤井聡太並み' });
+    expect(CPU_STRENGTH_PRESETS[40]).toMatchObject({ level: 40, value: 480000, label: '藤井聡太並み' });
+    expect(CPU_STRENGTH_PRESETS.at(-1)).toMatchObject({ level: 41, value: 1500000, label: '最強' });
   });
 
   it('orders identifiers and calibrated skill from weakest to strongest', () => {
@@ -37,8 +38,12 @@ describe('CPU strength settings', () => {
       index === 0 || preset[key] > list[index - 1][key]
     ));
     expect(increasing('value')).toBe(true);
-    expect(increasing('skill')).toBe(true);
+    // 最強はLv40と同じ技量1のまま、探索量だけを増やす。
+    expect(CPU_STRENGTH_PRESETS.slice(0, -1).every((preset, index, list) => (
+      index === 0 || preset.skill > list[index - 1].skill
+    ))).toBe(true);
     expect(CPU_STRENGTH_PRESETS[0].skill).toBe(0);
+    expect(CPU_STRENGTH_PRESETS[40].skill).toBe(1);
     expect(CPU_STRENGTH_PRESETS.at(-1).skill).toBe(1);
   });
 
@@ -136,8 +141,20 @@ describe('CPU strength settings', () => {
       oversightNodes: 0,
       oversightMaxLoss: 0,
       openingPlanScoreScale: 1,
+      searchThreads: 1,
       randomLegalRate: 0,
       randomFallback: false,
     });
+  });
+
+  it('reads about three times deeper at the strongest level with several threads', () => {
+    expect(getStrengthSearchSettings(1500000)).toEqual({
+      ...getStrengthSearchSettings(480000),
+      nodes: 1500000,
+      searchThreads: 4,
+      maxTimeMs: 12000,
+    });
+    // 旧版の上限より大きい値は最強へ丸める。
+    expect(strengthPresetFor(2000000).level).toBe(41);
   });
 });
