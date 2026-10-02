@@ -25,6 +25,8 @@ export function appendReviewMove(state, move) {
   if (!state.branch && state.cursor < state.mainLine.length && state.mainLine[state.cursor] === move) {
     return { ...state, line: [...state.mainLine], cursor: state.cursor + 1 };
   }
+  // 分岐の途中へ戻ってから同じ手を指したときは、その先の手順を残したまま進める。
+  if (state.line[state.cursor] === move) return { ...state, cursor: state.cursor + 1 };
   return {
     ...state,
     line: [...state.line.slice(0, state.cursor), move],
@@ -59,4 +61,33 @@ export function returnReviewToMainLine(state) {
 
 export function visibleReviewMoves(state) {
   return state.line.slice(0, state.cursor);
+}
+
+/**
+ * 今の局面から、読み筋などの手順を並べる。手順は今の局面より先を置き換え、1手目まで進める。
+ * 並べた手順が本筋と同じなら、本筋のまま進める。
+ */
+export function previewReviewLine(state, moves) {
+  if (!state || !Array.isArray(moves) || moves.some((move) => typeof move !== 'string' || move === '')) {
+    throw new Error('棋譜解析の読み筋が不正です');
+  }
+  if (!moves.length) return state;
+  const line = [...state.line.slice(0, state.cursor), ...moves];
+  const onMainLine = line.length <= state.mainLine.length && line.every((move, index) => move === state.mainLine[index]);
+  return onMainLine
+    ? { ...state, line: [...state.mainLine], cursor: state.cursor + 1, branch: false }
+    : { ...state, line, cursor: state.cursor + 1, branch: true };
+}
+
+/** 分岐が本筋から外れる手数(本筋と違う最初の手の位置)。分岐していなければnull。 */
+export function reviewBranchStart(state) {
+  if (!state?.branch) return null;
+  const index = state.line.findIndex((move, ply) => move !== state.mainLine[ply]);
+  return index < 0 ? state.line.length : index;
+}
+
+/** 今の局面が本筋の上か。分岐していても、本筋から外れる手より前なら本筋の局面。 */
+export function isOnReviewMainLine(state) {
+  const start = reviewBranchStart(state);
+  return start === null || state.cursor <= start;
 }

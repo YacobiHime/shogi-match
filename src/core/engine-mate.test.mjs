@@ -69,6 +69,24 @@ describe('USI通常探索', () => {
     }
   });
 
+  test('打ち切りで短くなった読み筋は、直前の長い読み筋を残して評価値だけ更新する', async () => {
+    const engine = new ShogiEngine({ factory: async () => ({}) });
+    engine.instance = {
+      postMessage(command) {
+        if (!command.startsWith('go ')) return;
+        queueMicrotask(() => {
+          engine._emit('info depth 15 score cp -78 nodes 228700 pv 3c3d 7g7f 4a3b 2f2e');
+          engine._emit('info depth 16 score cp -55 nodes 400249 pv 3c3d 7g7f');
+          engine._emit('bestmove 3c3d ponder 7g7f');
+        });
+      },
+    };
+    const result = await engine.go({ nodes: 400000, maxTimeMs: 200 });
+    expect(result.candidates[0]).toMatchObject({
+      move: '3c3d', depth: 16, score: { type: 'cp', value: -55 }, pv: ['3c3d', '7g7f', '4a3b', '2f2e'],
+    });
+  });
+
   test('読んだ局面数を含むinfo行ごとに、思考ゲージ用の途中経過を渡す', async () => {
     const engine = new ShogiEngine({ factory: async () => ({}) });
     engine.instance = {

@@ -336,8 +336,13 @@ export class ShogiEngine {
           if (pvMatch) {
             // MultiPV=1 のとき `multipv 1` を省略するUSIエンジンもある。
             const rank = rankMatch ? Number(rankMatch[1]) : 1;
-            const pv = pvMatch[1].trim().split(/\s+/).filter((move) => USI_MOVE_PATTERN.test(move));
-            if (pv.length === 0) return;
+            const reported = pvMatch[1].trim().split(/\s+/).filter((move) => USI_MOVE_PATTERN.test(move));
+            if (reported.length === 0) return;
+            // 探索量の上限で打ち切ると、最後の読み筋が短く出ることがある。直前の読み筋の先頭と同じなら、長いほうを残す。
+            const previousPv = candidateDetails.get(rankMatch ? Number(rankMatch[1]) : 1)?.pv ?? [];
+            const pv = reported.length < previousPv.length && reported.every((move, index) => previousPv[index] === move)
+              ? previousPv
+              : reported;
             const detail = {
               rank,
               move: pv[0],

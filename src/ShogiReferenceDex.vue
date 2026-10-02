@@ -141,7 +141,7 @@
                 class="shogi-dex__stage-nav"
                 aria-label="前の局面へ戻る"
                 :disabled="stepIndex === 0"
-                @click="stepIndex -= 1"
+                @click="stepBy(-1)"
               >◀</button>
               <!--
                 棋譜では、盤の上下にその側の対局者の名前と評価値、盤の下に今の手を出す。
@@ -156,14 +156,15 @@
                   <ShogiMatchBoard
                     :sfen="boardSfen"
                     :flip="flipped"
-                    :last-move="currentStep?.lastMove ?? ''"
-                    :allow-move="false"
+                    :last-move="boardLastMove"
+                    :allow-move="Boolean(kifu)"
                     :enable-drag-and-drop="false"
                     :mobile="isNarrow"
                     :layout="isNarrow ? 'portrait' : 'standard'"
                     :asset-base-url="assetBaseUrl"
                     :candidates="boardArrows"
                     :mark-squares="kifu ? [] : marks"
+                    @usi-move="onBoardMove"
                   />
                 </div>
                 <div v-if="kifu" class="shogi-reference-dex__player-bar shogi-reference-dex__player-bar--bottom">
@@ -177,18 +178,23 @@
                 type="button"
                 class="shogi-dex__stage-nav"
                 aria-label="次の局面へ進む"
-                :disabled="stepIndex >= lastStep"
-                @click="stepIndex += 1"
+                :disabled="stepIndex >= lineEnd"
+                @click="stepBy(1)"
               >▶</button>
             </div>
           </template>
           <template v-if="kifu">
             <div v-if="!isNarrow" class="shogi-dex__controls">
-              <button type="button" :disabled="stepIndex === 0" @click="stepIndex = 0">最初へ</button>
-              <button type="button" :disabled="stepIndex === 0" @click="stepIndex -= 1">◀ 戻る</button>
-              <span class="shogi-dex__step-count">{{ stepIndex }}/{{ lastStep }}手目</span>
-              <button type="button" :disabled="stepIndex >= lastStep" @click="stepIndex += 1">進む ▶</button>
-              <button type="button" :disabled="stepIndex >= lastStep" @click="stepIndex = lastStep">最後へ</button>
+              <button type="button" :disabled="stepIndex === 0 && onMainLine" @click="goToPly(0)">最初へ</button>
+              <button type="button" :disabled="stepIndex === 0" @click="stepBy(-1)">◀ 戻る</button>
+              <span class="shogi-dex__step-count">{{ onMainLine ? `${stepIndex}/${lastStep}手目` : `分岐 ${stepIndex}手目` }}</span>
+              <button type="button" :disabled="stepIndex >= lineEnd" @click="stepBy(1)">進む ▶</button>
+              <button type="button" :disabled="stepIndex >= lineEnd" @click="goToLineEnd">最後へ</button>
+            </div>
+            <!-- 盤で本筋と違う手を指すと分岐になる。分岐中は、本筋へ戻るボタンを出す。 -->
+            <div v-if="nav.branch" class="shogi-reference-dex__branch-bar">
+              <span>{{ (branchStart ?? 0) + 1 }}手目から分岐中</span>
+              <button type="button" @click="returnToMainLine">本筋に戻る</button>
             </div>
             <!--
               棋譜の解説と、AIの解析から選んだ一言は、やこび姫が話す。
@@ -220,8 +226,8 @@
               :key="`${item.ply}-${item.label}`"
               type="button"
               :class="{ 'shogi-reference-dex__highlight--ai': item.ai }"
-              :aria-current="stepIndex === item.ply ? 'step' : undefined"
-              @click="stepIndex = item.ply"
+              :aria-current="onMainLine && stepIndex === item.ply ? 'step' : undefined"
+              @click="goToPly(item.ply)"
             >
               <small v-if="item.ai">AI</small>{{ item.ply }}手目 {{ item.label }}
             </button>
@@ -256,13 +262,47 @@
               解析の深さ：{{ levelLabel(analysisLevel) }}（1局面あたり{{ formatNodeCount(levelNodes(analysisLevel)) }}局面を読む）
             </p>
             <p v-if="analysisError" class="shogi-reference-dex__analysis-note" role="alert">{{ analysisError }}</p>
+            <!-- 分岐の局面の候補手。読み筋は盤に並べて、1手ずつ進められる。 -->
+            <div v-if="branchPosition" class="shogi-reference-dex__branch" aria-live="polite">
+              <h4>分岐の局面のAIの候補手</h4>
+              <p v-if="!branchCandidateRows.length" class="shogi-reference-dex__analysis-note">
+                {{ positionAnalysis?.error || (analysisRunning ? "全体の解析が終わったら読むよ。" : "AIが読んでいるよ…") }}
+              </p>
+              <ol v-else>
+                <li v-for="row in branchCandidateRows" :key="row.rank">
+                  <strong>{{ row.move }}</strong>
+                  <span class="shogi-reference-dex__branch-score">{{ row.score }}</span>
+                  <small>{{ row.line }}</small>
+                  <button type="button" class="shogi-reference-dex__line-button" @click="previewLine(row.pv)">盤に並べる</button>
+                </li>
+              </ol>
+            </div>
+            <!-- 投了の理由。投了図を深く読み、詰み筋や形勢の差を説明する。 -->
+            <div v-if="atResignation && analysisEngine.searchPosition" class="shogi-reference-dex__resign" aria-live="polite">
+              <h4>投了の理由</h4>
+              <template v-if="resignation?.explanation">
+                <p>{{ resignation.explanation.text }}</p>
+                <p v-if="resignation.explanation.pvLabel" class="shogi-reference-dex__resign-line">
+                  読み筋：{{ resignation.explanation.pvLabel }}
+                  <button type="button" class="shogi-reference-dex__line-button" @click="previewLine(resignation.explanation.pv)">手順を盤に並べる</button>
+                </p>
+              </template>
+              <p v-else-if="resignation?.error" class="shogi-reference-dex__analysis-note" role="alert">{{ resignation.error }}</p>
+              <button
+                v-else
+                type="button"
+                class="shogi-reference-dex__analysis-start"
+                :disabled="resignation?.loading || analysisRunning"
+                @click="explainCurrentResignation"
+              >{{ resignation?.loading ? "AIが投了図を読んでいるよ…" : "投了の理由をAIに聞く" }}</button>
+            </div>
             <template v-if="analysisPoints.length">
               <div class="shogi-reference-dex__graph">
                 <EvaluationGraph
                   :points="analysisPoints"
-                  :current-ply="stepIndex"
+                  :current-ply="onMainLine ? stepIndex : branchStart ?? stepIndex"
                   :total-ply="lastStep"
-                  @select="stepIndex = $event"
+                  @select="goToPly($event)"
                 />
               </div>
               <dl v-if="currentPoint" class="shogi-reference-dex__analysis-detail">
@@ -282,13 +322,16 @@
                 </div>
                 <div v-if="pvLabel">
                   <dt>読み筋</dt>
-                  <dd>{{ pvLabel }}</dd>
+                  <dd>
+                    {{ pvLabel }}
+                    <button type="button" class="shogi-reference-dex__line-button" @click="previewLine(currentPoint.pv)">盤に並べる</button>
+                  </dd>
                 </div>
               </dl>
-              <p v-else class="shogi-reference-dex__analysis-note">この局面はまだ解析していないよ。</p>
+              <p v-else-if="onMainLine" class="shogi-reference-dex__analysis-note">この局面はまだ解析していないよ。</p>
             </template>
             <p v-else-if="!analysisRunning" class="shogi-reference-dex__analysis-note">
-              評価値のグラフと、局面ごとの最善手・読み筋が見られるよ。
+              評価値のグラフと、局面ごとの最善手・読み筋が見られるよ。盤の駒を動かすと「こう指したら？」も試せるよ。
             </p>
           </section>
           <div class="shogi-dex__explanation">
@@ -318,7 +361,19 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
-import { formatAnalysisScore } from "./core/kifu-analysis.mjs";
+import { formatAnalysisScore, scoreForBlack } from "./core/kifu-analysis.mjs";
+import { appendUsiMove, createGameRecord } from "./game-state";
+import {
+  appendReviewMove,
+  createReviewNavigation,
+  isOnReviewMainLine,
+  moveReviewCursor,
+  previewReviewLine,
+  returnReviewToMainLine,
+  reviewBranchStart,
+  visibleReviewMoves,
+} from "./core/review-navigation.mjs";
+import { explainResignation, resignationSearchSettings } from "./core/resignation-explanation.mjs";
 import {
   KIFU_ANALYSIS_LEVELS,
   analysisComment,
@@ -328,6 +383,7 @@ import {
   formatNodeCount,
   formatPrincipalVariation,
   kifuAnalysisBudget,
+  positionAnalysisBudget,
 } from "./core/reference-kifu-analysis.mjs";
 import { ANALYSIS_STAGE_LABELS } from "./core/kifu-analysis-pipeline.mjs";
 import {
@@ -367,8 +423,11 @@ type AnalysisEngine = {
     onProgress: (progress: { stage: string; done: number; total: number }) => void;
     onPoints: (points: AnalysisPoint[]) => void;
   }): Promise<unknown>;
+  /** 1局面だけ読む。分岐させた局面や投了図の解析に使う。 */
+  searchPosition?(options: { sfen: string; nodes: number; maxTimeMs: number; multiPv: number }): Promise<{ candidates?: Candidate[] }>;
   stop(): void;
 };
+type Candidate = { rank: number; move: string; pv?: string[]; score?: { type: "cp" | "mate"; value: number } };
 type AnalysisPoint = {
   ply: number;
   graphValue: number;
@@ -437,12 +496,69 @@ const arrows = computed(() => (selectedEntry.value?.arrows ?? []).map((usi) => (
 
 // 代表局の棋譜は初期局面から1手ずつ並べる。項目を選び直したら初期局面へ戻す。
 const kifu = computed(() => (selectedEntry.value ? referenceEntryKifu(selectedEntry.value) as Kifu | null : null));
-const stepIndex = ref(0);
+/*
+ * 棋譜の並べ方は対局後の振り返りと同じ。盤で本筋と違う手を指すと分岐になり、「こう指したらどうなったか」を試せる。
+ * 本筋の局面では棋譜の解説と全局面の解析を、分岐の局面ではその場で読んだ候補手を出す。
+ */
+const mainMoves = computed(() => (kifu.value?.steps ?? []).slice(1).map(({ lastMove }) => lastMove));
+const startNavigation = () => ({ ...createReviewNavigation(mainMoves.value), cursor: 0 });
+const nav = ref(startNavigation());
+const stepIndex = computed(() => nav.value.cursor);
+const lineEnd = computed(() => nav.value.line.length);
 const lastStep = computed(() => Math.max(0, (kifu.value?.steps.length ?? 1) - 1));
-const currentStep = computed(() => kifu.value?.steps[Math.min(stepIndex.value, lastStep.value)] ?? null);
-const boardSfen = computed(() => currentStep.value?.sfen ?? sfen.value);
+const onMainLine = computed(() => isOnReviewMainLine(nav.value));
+const branchStart = computed(() => reviewBranchStart(nav.value));
+const currentStep = computed(() => (
+  onMainLine.value ? kifu.value?.steps[Math.min(stepIndex.value, lastStep.value)] ?? null : null
+));
+/** 分岐の局面。本筋の上ではnull。 */
+const branchPosition = computed(() => {
+  const steps = kifu.value?.steps;
+  if (onMainLine.value || !steps) return null;
+  const record = createGameRecord(steps[0].sfen);
+  const moves = visibleReviewMoves(nav.value);
+  let before = record.position.sfen;
+  for (const move of moves) {
+    before = record.position.sfen;
+    if (!appendUsiMove(record, move)) break;
+  }
+  const lastMove = moves.at(-1) ?? "";
+  let label = lastMove;
+  try {
+    label = formatAnalysisMove(lastMove, before);
+  } catch { /* 表記できない手はUSIのまま出す */ }
+  return { sfen: record.position.sfen, lastMove, label };
+});
+const boardSfen = computed(() => branchPosition.value?.sfen ?? currentStep.value?.sfen ?? sfen.value);
+const boardLastMove = computed(() => branchPosition.value?.lastMove ?? currentStep.value?.lastMove ?? "");
+/** 本筋のply手目へ移る。分岐していたら本筋に戻す。 */
+function goToPly(ply: number) {
+  const main = returnReviewToMainLine(nav.value);
+  nav.value = { ...main, cursor: Math.max(0, Math.min(main.line.length, Math.trunc(ply))) };
+}
+/** 今の並び(本筋か分岐)の上で、前後へ動く。 */
+function stepBy(delta: number) {
+  nav.value = moveReviewCursor(nav.value, delta);
+}
+function goToLineEnd() {
+  nav.value = { ...nav.value, cursor: nav.value.line.length };
+}
+/** 盤で指した手。本筋と同じなら進み、違えば分岐する。 */
+function onBoardMove(usi: string) {
+  nav.value = appendReviewMove(nav.value, usi);
+}
+/** 分岐を消して、分岐が始まった本筋の局面へ戻る。 */
+function returnToMainLine() {
+  goToPly(branchStart.value ?? stepIndex.value);
+}
+/** 読み筋を分岐として盤に並べ、1手目まで進める。▶で1手ずつ進められる。 */
+function previewLine(moves: string[] | undefined) {
+  if (!moves?.length) return;
+  nav.value = previewReviewLine(nav.value, moves);
+}
 watch(selectedId, () => {
-  stepIndex.value = 0;
+  nav.value = startNavigation();
+  resignation.value = null;
   cancelAnalysis();
   analysisPoints.value = [];
   analysisResults = [];
@@ -483,7 +599,9 @@ const analysisButtonLabel = computed(() => {
   if (next === 0) return "将棋AIで解析";
   return `深く解析（${levelLabel(next)}）`;
 });
-const currentPoint = computed(() => analysisPoints.value.find(({ ply }) => ply === stepIndex.value) ?? null);
+const currentPoint = computed(() => (
+  onMainLine.value ? analysisPoints.value.find(({ ply }) => ply === stepIndex.value) ?? null : null
+));
 const bestMoveLabel = computed(() => {
   const point = currentPoint.value;
   if (!point?.bestMove || !currentStep.value) return "";
@@ -508,6 +626,8 @@ const turningPly = computed(() => (
   analysisDone.value ? findTurningPoint(analysisPoints.value, kifu.value?.winner ?? "") : null
 ));
 const stepComment = computed(() => {
+  if (branchPosition.value) return branchComment.value;
+  if (atResignation.value && resignation.value?.explanation) return resignation.value.explanation.text;
   const step = currentStep.value;
   if (!step || !kifu.value) return "";
   if (step.comment) return step.comment;
@@ -531,7 +651,7 @@ const highlights = computed(() => {
 });
 // 盤の上下に出す対局者の欄。盤を反転したら上下を入れ替える。評価値はその側から見た値。
 function sideEvaluation(sign: 1 | -1) {
-  const score = currentPoint.value?.score;
+  const score = branchPosition.value ? branchScore.value : currentPoint.value?.score;
   if (!score) return "評価値 -";
   const value = score.value * sign;
   if (score.type === "mate") return value > 0 ? `${value}手で詰ませる` : `${-value}手で詰まされる`;
@@ -544,6 +664,7 @@ const playerBars = computed(() => {
 });
 // 盤の下に出す今の手。「5手目 ▲４八銀(39)」のように、動かした駒の元の升を添える。
 const moveCaption = computed(() => {
+  if (branchPosition.value) return `分岐 ${stepIndex.value}手目 ${branchPosition.value.label}`;
   const step = currentStep.value;
   if (!step || stepIndex.value === 0) return "開始局面";
   const from = /^([1-9])([a-i])/.exec(step.lastMove);
@@ -553,9 +674,114 @@ const moveCaption = computed(() => {
 });
 const boardArrows = computed(() => {
   if (!kifu.value) return arrows.value;
-  const best = currentPoint.value?.bestMove;
+  const best = branchPosition.value ? branchBest.value?.move : currentPoint.value?.bestMove;
   return showBestArrow.value && best ? [{ usi: best, guideKind: "ai" as const }] : [];
 });
+
+/*
+ * 分岐の局面は、動かすたびにその場でAIに読ませる。続けて指したときは前の読みを止め、最後の局面だけを読む。
+ * 全局面の解析中は、解析が終わるまで待たせないよう読まない。
+ */
+const positionAnalysis = ref<{ sfen: string; loading: boolean; candidates: Candidate[]; error: string } | null>(null);
+let positionGeneration = 0;
+let positionTimer: ReturnType<typeof setTimeout> | null = null;
+async function analyzeBranchPosition(target: string) {
+  const engine = props.analysisEngine;
+  if (!engine?.searchPosition || analysisRunning.value) return;
+  const generation = ++positionGeneration;
+  positionAnalysis.value = { sfen: target, loading: true, candidates: [], error: "" };
+  try {
+    const result = await engine.searchPosition({ sfen: target, ...positionAnalysisBudget(mobileLayout()) });
+    if (generation !== positionGeneration) return;
+    positionAnalysis.value = { sfen: target, loading: false, candidates: result.candidates ?? [], error: "" };
+  } catch (error) {
+    if (generation !== positionGeneration) return;
+    positionAnalysis.value = { sfen: target, loading: false, candidates: [], error: error instanceof Error ? error.message : String(error) };
+  }
+}
+watch(() => branchPosition.value?.sfen ?? "", (target) => {
+  if (positionTimer) clearTimeout(positionTimer);
+  positionGeneration += 1;
+  if (positionAnalysis.value?.loading) props.analysisEngine?.stop();
+  positionAnalysis.value = null;
+  if (!target) return;
+  positionTimer = setTimeout(() => analyzeBranchPosition(target), 350);
+});
+onBeforeUnmount(() => { if (positionTimer) clearTimeout(positionTimer); });
+const branchCandidates = computed(() => (
+  positionAnalysis.value?.sfen === branchPosition.value?.sfen ? positionAnalysis.value?.candidates ?? [] : []
+));
+const branchBest = computed(() => branchCandidates.value.find(({ rank }) => rank === 1) ?? null);
+const branchSide = computed(() => (branchPosition.value?.sfen.split(" ")[1] === "w" ? "white" : "black"));
+const branchScore = computed(() => scoreForBlack(branchBest.value?.score, branchSide.value));
+/** 分岐の候補手を、手・評価値(先手から見た値)・読み筋の表記にする。 */
+const branchCandidateRows = computed(() => {
+  const position = branchPosition.value;
+  if (!position) return [];
+  return [...branchCandidates.value].sort((left, right) => left.rank - right.rank).map((candidate) => {
+    let move = candidate.move;
+    let line = "";
+    try {
+      move = formatAnalysisMove(candidate.move, position.sfen);
+      line = formatPrincipalVariation(candidate.pv ?? [candidate.move], position.sfen);
+    } catch { /* 表記できない手はUSIのまま出す */ }
+    return {
+      rank: candidate.rank,
+      move,
+      line,
+      pv: candidate.pv?.length ? candidate.pv : [candidate.move],
+      score: formatAnalysisScore(scoreForBlack(candidate.score, branchSide.value)),
+    };
+  });
+});
+const branchComment = computed(() => {
+  if (!branchPosition.value) return "";
+  const analysis = positionAnalysis.value;
+  const start = branchStart.value ?? 0;
+  const lead = `${start + 1}手目から分岐した局面だよ。`;
+  if (!props.analysisEngine?.searchPosition) return `${lead}盤の駒を動かして、いろいろ試してみてね。`;
+  if (analysisRunning.value) return `${lead}全体の解析が終わったら、この局面もAIが読むよ。`;
+  if (!analysis || analysis.loading) return `${lead}AIがこの局面を読んでいるよ…`;
+  if (analysis.error) return `${lead}AIの読みに失敗したよ：${analysis.error}`;
+  const best = branchCandidateRows.value[0];
+  if (!best) return `${lead}この局面では指せる手がないみたい。`;
+  const side = branchSide.value === "black" ? "先手" : "後手";
+  return `${lead}AIの読みでは、ここで${side}は${best.move}が一番（${best.score}）。読み筋は ${best.line} だよ。`;
+});
+
+/*
+ * 投了の理由。最後の局面が投了なら、その局面を深く読み、詰みがあるか・形勢の差がどれだけあるかを話す。
+ * 読み筋は「手順を盤に並べる」で分岐として並べられる。
+ */
+const atResignation = computed(() => (
+  onMainLine.value && Boolean(kifu.value) && kifu.value?.ending === "投了" && stepIndex.value === lastStep.value
+));
+const resignation = ref<{ loading: boolean; error: string; explanation: ReturnType<typeof explainResignation> } | null>(null);
+async function explainCurrentResignation() {
+  const engine = props.analysisEngine;
+  const final = kifu.value?.steps.at(-1);
+  const winner = kifu.value?.winner;
+  if (!engine?.searchPosition || !final || !winner || resignation.value?.loading) return;
+  const entryId = selectedId.value;
+  resignation.value = { loading: true, error: "", explanation: null };
+  try {
+    const result = await engine.searchPosition({ sfen: final.sfen, ...resignationSearchSettings(mobileLayout()) });
+    if (selectedId.value !== entryId) return;
+    resignation.value = {
+      loading: false,
+      error: "",
+      explanation: explainResignation({
+        sfen: final.sfen,
+        candidates: result.candidates ?? [],
+        loser: winner === "black" ? "white" : "black",
+        names: { black: kifu.value?.black, white: kifu.value?.white },
+      }),
+    };
+  } catch (error) {
+    if (selectedId.value !== entryId) return;
+    resignation.value = { loading: false, error: error instanceof Error ? error.message : String(error), explanation: null };
+  }
+}
 
 /*
  * levelの深さで解析する。2回目以降（深く解析）は、前の深さの読みを残したまま深い読みを書き足し、
@@ -935,6 +1161,77 @@ defineExpose({ goBack });
 .shogi-game .shogi-reference-dex__analysis-detail dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+/* 分岐中の表示。盤の下の操作の続きに置き、本筋へ戻るボタンを添える。 */
+.shogi-game .shogi-reference-dex__branch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.7rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: #f1a54c;
+  font-weight: 700;
+}
+.shogi-game .shogi-reference-dex__branch-bar button {
+  min-height: 2rem;
+  padding: 0.2rem 0.8rem;
+  border: 1px solid #f1a54c;
+  border-radius: 999px;
+  color: #172632;
+  background: #f1a54c;
+  font: 700 0.85rem/1.2 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+/* 分岐の候補手と投了の理由。読み筋は折り返し、並べるボタンは小さく添える。 */
+.shogi-game .shogi-reference-dex__branch,
+.shogi-game .shogi-reference-dex__resign {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  border-left: 3px solid #f1a54c;
+  border-radius: 0.3rem;
+  background: rgba(241, 165, 76, 0.08);
+}
+.shogi-game .shogi-reference-dex__branch h4,
+.shogi-game .shogi-reference-dex__resign h4 {
+  margin: 0;
+  color: #f1a54c;
+  font-size: 0.9rem;
+}
+.shogi-game .shogi-reference-dex__branch ol {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.88rem;
+}
+.shogi-game .shogi-reference-dex__branch li small {
+  display: block;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+.shogi-game .shogi-reference-dex__branch-score {
+  margin-left: 0.4rem;
+  color: #f1a54c;
+  font-variant-numeric: tabular-nums;
+}
+.shogi-game .shogi-reference-dex__resign p {
+  margin: 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.shogi-game .shogi-dex .shogi-reference-dex__analysis button.shogi-reference-dex__line-button {
+  min-height: 1.7rem;
+  margin-left: 0.3rem;
+  padding: 0.1rem 0.6rem;
+  color: #fffcf4;
+  background: transparent;
+  border-color: rgba(255, 252, 244, 0.5);
+  font-size: 0.78rem;
+  vertical-align: middle;
 }
 .shogi-game .shogi-reference-dex__annotation {
   display: inline-block;

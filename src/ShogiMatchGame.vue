@@ -737,6 +737,14 @@
             {{ analysisPositionOption(ply - 1) }}
           </option>
         </select>
+        <button
+          v-if="reviewBranchFrom !== null && !reviewCpuEnabled"
+          type="button"
+          class="shogi-game__analysis-branch"
+          :title="`${reviewBranchFrom + 1}手目から分岐中。押すと本筋に戻る`"
+          :aria-label="`${reviewBranchFrom + 1}手目から分岐中。本筋に戻る`"
+          @click="returnToMainLine"
+        >分岐中・本筋へ</button>
         <span v-if="analysisRunning" class="shogi-game__analysis-progress">
           {{ ANALYSIS_STAGE_LABELS[analysisStage as keyof typeof ANALYSIS_STAGE_LABELS] ?? "解析中" }} {{ analysisProgress }}/{{ analysisTotal }}
         </span>
@@ -775,8 +783,8 @@
         </div>
         <div class="shogi-game__analysis-tools">
           <button type="button" class="shogi-game__analysis-awakening" :disabled="!canUseHint" @click="showHint">閃き</button>
-          <button type="button" :disabled="!analysisCurrentPoint?.bestMove" @click="showAnalysisRecommendation">推奨</button>
-          <button type="button" :disabled="!analysisCurrentPoint?.pv?.length" @click="showAnalysisLine">読み</button>
+          <button type="button" :disabled="!analysisCurrentPoint?.bestMove && !canAnalyzeReviewPosition" @click="showAnalysisRecommendation">推奨</button>
+          <button type="button" :disabled="!analysisCurrentPoint?.pv?.length && !canAnalyzeReviewPosition" @click="showAnalysisLine">読み</button>
           <button
             type="button"
             class="shogi-game__analysis-more"
@@ -793,6 +801,14 @@
             @click="boardFlipOverride = !boardFlipOverride"
           >ひふみんアイ（盤を反転）：{{ boardFlipOverride ? "ON" : "OFF" }}</button>
           <button v-if="reviewNavigation.branch" type="button" role="menuitem" @click="analysisMenuOpen = false; returnToMainLine()">本筋に戻る</button>
+          <button type="button" role="menuitem" :disabled="!canPlaceReviewLine" @click="analysisMenuOpen = false; placeReviewLine()">読み筋を盤に並べる</button>
+          <button
+            v-if="result?.reason === 'resignation'"
+            type="button"
+            role="menuitem"
+            :disabled="reviewCpuEnabled || !engineReady || analysisRunning"
+            @click="analysisMenuOpen = false; goToAnalysisPly(reviewNavigation.mainLine.length); explainReviewResignation()"
+          >投了の理由</button>
           <button v-if="analysisRunning" type="button" role="menuitem" @click="analysisMenuOpen = false; cancelKifuAnalysis()">解析を中止</button>
           <button v-else type="button" role="menuitem" :disabled="reviewCpuEnabled" @click="analysisMenuOpen = false; runKifuAnalysis()">再解析</button>
           <button
@@ -907,7 +923,12 @@ import {
   analysisPointsFromResults,
   analyzeKifuStaged,
 } from "./core/kifu-analysis-pipeline.mjs";
-import { formatNodeCount, kifuAnalysisPlan } from "./core/reference-kifu-analysis.mjs";
+import {
+  formatNodeCount,
+  formatPrincipalVariation,
+  kifuAnalysisPlan,
+  positionAnalysisBudget,
+} from "./core/reference-kifu-analysis.mjs";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
 import {
   createFormationState,
@@ -987,11 +1008,15 @@ import {
 import {
   appendReviewMove,
   createReviewNavigation,
+  isOnReviewMainLine,
   moveReviewCursor,
+  previewReviewLine,
+  reviewBranchStart,
   rewindReviewMoves,
   returnReviewToMainLine,
   visibleReviewMoves,
 } from "./core/review-navigation.mjs";
+import { explainResignation, resignationSearchSettings } from "./core/resignation-explanation.mjs";
 import {
   availableOpeningDefinitions,
   chooseAdaptiveOpeningMove,
@@ -1407,9 +1432,17 @@ const moveCount = computed(() => record.value.current.ply);
 const flipBoard = computed(() => (
   normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
 ) !== boardFlipOverride.value);
-const analysisCurrentPoint = computed(() =>
-  analysisPoints.value.find(({ ply }) => ply === reviewNavigation.value.cursor)
-);
+// 分岐の局面には本筋の解析結果を使わない(推奨・読みは、その場で読み直す)。
+const analysisCurrentPoint = computed(() => (
+  isOnReviewMainLine(reviewNavigation.value)
+    ? analysisPoints.value.find(({ ply }) => ply === reviewNavigation.value.cursor)
+    : undefined
+));
+const reviewBranchFrom = computed(() => reviewBranchStart(reviewNavigation.value));
+/** 推奨・読みで、解析済みでない局面(分岐など)をその場で読めるか。 */
+const canAnalyzeReviewPosition = computed(() => (
+  reviewMode.value && engineReady.value && !thinking.value && !analysisRunning.value && !reviewCpuEnabled.value
+));
 // CPU対局ではCPU側の名前にレベルを添え、棋力の説明を2行目に出す。
 const cpuColor = computed(() => (normalizedMode.value === "cpu" ? reverseColor(humanColor.value) : null));
 const cpuStrengthPreset = computed(() => strengthPresetFor(searchNodes.value));
@@ -4408,32 +4441,145 @@ function onAnalysisPositionSelect(event: Event) {
 }
 
 function analysisPositionOption(ply: number): string {
+  // 分岐の局面には、本筋の解析の表記を使わない。
+  const from = reviewBranchFrom.value;
+  if (from !== null && ply > from) return `${ply}手目（分岐）`;
   const point = analysisPoints.value.find((candidate) => candidate.ply === ply);
   return point?.label ?? (ply === 0 ? "開始局面" : `${ply}手目`);
 }
 
-function showAnalysisRecommendation() {
-  const point = analysisCurrentPoint.value;
-  if (!point?.bestMove) return;
-  hintCandidates.value = [{ usi: point.bestMove }];
-  hintText.value = `推奨手は ${formatHintMove(point.bestMove, currentSfen.value)} だよ！`;
+/*
+ * 振り返りの今の局面の最善手と読み筋。本筋で解析済みなら棋譜解析の結果を使い、
+ * 分岐などの解析していない局面は、その場で読む。読み筋は「読み筋を盤に並べる」で使えるよう覚えておく。
+ */
+const reviewLine = ref<{ sfen: string; pv: string[] } | null>(null);
+/** 振り返りの探索は、助言の探索と同じ順番待ちに並べ、同じエンジンで探索を重ねない。 */
+function enqueueReviewSearch<T>(task: () => Promise<T>): Promise<T> {
+  const run = Promise.all([
+    reviewCoachQueue.catch(() => undefined),
+    dedicatedCoachQueue.catch(() => undefined),
+  ]).then(task);
+  reviewCoachQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
-
-function showAnalysisLine() {
+async function reviewPositionLine(): Promise<{ bestMove: string; pv: string[] } | null> {
   const point = analysisCurrentPoint.value;
-  if (!point?.pv?.length) return;
+  if (point?.bestMove) return { bestMove: point.bestMove, pv: point.pv?.length ? point.pv : [point.bestMove] };
+  if (!canAnalyzeReviewPosition.value || !engine) return null;
+  const sfen = currentSfen.value;
+  thinking.value = true;
+  hintText.value = "やこび姫がこの局面を読んでいるよ…";
   try {
-    const variation = createGameRecord(currentSfen.value);
-    const labels: string[] = [];
-    for (const move of point.pv.slice(0, 6)) {
-      labels.push(formatHintMove(move, variation.position.sfen));
-      if (!appendUsiMove(variation, move)) break;
+    const budget = positionAnalysisBudget(props.mobile || boardLayout.value === "portrait");
+    const candidates = await enqueueReviewSearch(() => (
+      currentSfen.value === sfen ? analyzeCoachPosition(budget.nodes, budget.maxTimeMs, 1) : Promise.resolve([])
+    ));
+    if (currentSfen.value !== sfen) return null;
+    const best = candidates.find(({ rank }) => rank === 1);
+    if (!best?.move) {
+      hintText.value = "この局面はうまく読めなかったよ。";
+      return null;
     }
-    hintText.value = `読み筋: ${labels.join(" → ")}`;
-  } catch {
-    hintText.value = `読み筋: ${point.pv.slice(0, 6).join(" → ")}`;
+    return { bestMove: best.move, pv: best.pv?.length ? best.pv : [best.move] };
+  } catch (error) {
+    hintText.value = `この局面を読めませんでした: ${error instanceof Error ? error.message : String(error)}`;
+    return null;
+  } finally {
+    engine?.applyStrengthOptions({ multiPv: 1 });
+    thinking.value = false;
   }
 }
+
+async function showAnalysisRecommendation() {
+  const line = await reviewPositionLine();
+  if (!line) return;
+  reviewLine.value = { sfen: currentSfen.value, pv: line.pv };
+  hintCandidates.value = [{ usi: line.bestMove }];
+  hintText.value = `推奨手は ${formatHintMove(line.bestMove, currentSfen.value)} だよ！`;
+}
+
+async function showAnalysisLine() {
+  const line = await reviewPositionLine();
+  if (!line) return;
+  reviewLine.value = { sfen: currentSfen.value, pv: line.pv };
+  let labels = line.pv.slice(0, 6).join(" → ");
+  try {
+    labels = formatPrincipalVariation(line.pv, currentSfen.value, 6);
+  } catch { /* 表記できない手はUSIのまま出す */ }
+  hintText.value = `読み筋: ${labels}（「その他」から盤に並べられるよ）`;
+}
+
+/** 直前に出した読み筋(推奨・読み・投了の理由)を、今の局面から分岐として並べる。▶で1手ずつ進められる。 */
+function placeReviewLine() {
+  const line = reviewLine.value;
+  if (reviewCpuEnabled.value || !line || line.sfen !== currentSfen.value || !line.pv.length) return;
+  coachAdviceScheduler.reset();
+  reviewNavigation.value = previewReviewLine(reviewNavigation.value, line.pv);
+  rebuildRecord(visibleReviewMoves(reviewNavigation.value));
+  hintCandidates.value = [];
+  hintText.value = "読み筋を盤に並べたよ。▶で1手ずつ進めてみてね。";
+  refreshReviewCoachAdvice();
+}
+const canPlaceReviewLine = computed(() => (
+  !reviewCpuEnabled.value && Boolean(reviewLine.value?.pv.length) && reviewLine.value?.sfen === currentSfen.value
+));
+
+/*
+ * 投了の理由。投了で終わった対局の最終局面を開いたら、投了図を深く読んで、詰み筋や形勢の差を話す。
+ * 1局につき1回だけ読み、読み筋は「読み筋を盤に並べる」で並べられる。
+ */
+const resignationExplanation = ref<ReturnType<typeof explainResignation> | null>(null);
+let resignationRequested = false;
+watch(result, () => {
+  resignationExplanation.value = null;
+  resignationRequested = false;
+});
+const atResignedPosition = computed(() => (
+  reviewMode.value && result.value?.reason === "resignation" && !reviewCpuEnabled.value
+  && isOnReviewMainLine(reviewNavigation.value)
+  && reviewNavigation.value.cursor === reviewNavigation.value.mainLine.length
+));
+function showResignationExplanation() {
+  const explanation = resignationExplanation.value;
+  if (!explanation || !atResignedPosition.value) return;
+  reviewLine.value = { sfen: currentSfen.value, pv: explanation.pv };
+  hintText.value = explanation.pvLabel
+    ? `${explanation.text} 読み筋: ${explanation.pvLabel}`
+    : explanation.text;
+}
+function explainReviewResignation() {
+  const finished = result.value;
+  if (!atResignedPosition.value || !finished?.winner || !engine || !engineReady.value) return;
+  // 棋譜解析は始めるときに探索を止めるので、途中で止められた浅い読みで説明しないよう、解析の後に読む。
+  if (analysisRunning.value) return;
+  if (resignationExplanation.value) {
+    showResignationExplanation();
+    return;
+  }
+  if (resignationRequested) return;
+  resignationRequested = true;
+  const sfen = currentSfen.value;
+  const loser = finished.winner === Color.BLACK ? "white" : "black";
+  enqueueReviewSearch(async () => {
+    if (!atResignedPosition.value || currentSfen.value !== sfen || analysisRunning.value) {
+      resignationRequested = false;
+      return;
+    }
+    const settings = resignationSearchSettings(props.mobile || boardLayout.value === "portrait");
+    const candidates = await analyzeCoachPosition(settings.nodes, settings.maxTimeMs, settings.multiPv);
+    if (!candidates.length) {
+      resignationRequested = false;
+      return;
+    }
+    resignationExplanation.value = explainResignation({ sfen, candidates, loser });
+    showResignationExplanation();
+  })
+  .catch(() => { resignationRequested = false; })
+  .finally(() => engine?.applyStrengthOptions({ multiPv: 1 }));
+}
+watch([atResignedPosition, analysisRunning], ([atResigned, running]) => {
+  if (atResigned && !running) explainReviewResignation();
+});
 
 function navigateAnalysis(delta: number) {
   if (reviewCpuEnabled.value) return;
@@ -4895,6 +5041,27 @@ const dexAnalysisEngine = {
         });
       } finally {
         releaseDexAnalysisEngines();
+        dexSearchRunning = false;
+      }
+    });
+    dexSearchQueue = run;
+    return run;
+  },
+  /** 図鑑で分岐させた局面や投了図を、1局面だけ読む。解析と同じ順番待ちに並べる。 */
+  searchPosition({ sfen, nodes, maxTimeMs, multiPv }: { sfen: string; nodes: number; maxTimeMs: number; multiPv: number }) {
+    const run = dexSearchQueue.catch(() => undefined).then(async () => {
+      await initializeEngine({ force: true });
+      if (!engine || !engineReady.value) throw new Error("将棋AIを起動できませんでした。");
+      await Promise.all([
+        dedicatedCoachQueue.catch(() => undefined),
+        reviewCoachQueue.catch(() => undefined),
+      ]);
+      dexSearchRunning = true;
+      try {
+        engine.applyStrengthOptions({ multiPv });
+        engine.setPosition(sfen);
+        return await engine.go({ nodes, maxTimeMs });
+      } finally {
         dexSearchRunning = false;
       }
     });
@@ -6078,6 +6245,23 @@ queueMicrotask(() => {
   color: var(--slate);
   font-weight: 700;
   white-space: nowrap;
+}
+/* 分岐中の目印。押すと本筋の局面へ戻る。 */
+.shogi-game .shogi-game__analysis-branch {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 2.3em;
+  padding: 0.2em 0.7em;
+  overflow: hidden;
+  border: 1px solid var(--amber-shadow);
+  border-radius: 999px;
+  color: var(--night);
+  background: var(--amber);
+  font-weight: 700;
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
 }
 .shogi-game .shogi-game__analysis-close {
   flex: none;

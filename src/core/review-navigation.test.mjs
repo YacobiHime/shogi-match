@@ -3,7 +3,10 @@ import { describe, expect, test } from 'vitest';
 import {
   appendReviewMove,
   createReviewNavigation,
+  isOnReviewMainLine,
   moveReviewCursor,
+  previewReviewLine,
+  reviewBranchStart,
   rewindReviewMoves,
   returnReviewToMainLine,
   visibleReviewMoves,
@@ -44,5 +47,29 @@ describe('棋譜解析の棋譜ナビゲーション', () => {
     expect(state.cursor).toBe(startedAt);
     expect(visibleReviewMoves(state)).toEqual(main.slice(0, startedAt));
     expect(rewindReviewMoves(state, 2, startedAt).cursor).toBe(startedAt);
+  });
+
+  test('分岐の途中へ戻って同じ手を指すと、その先の手順を残す', () => {
+    let state = moveReviewCursor(createReviewNavigation(main), -2);
+    state = appendReviewMove(state, '5g5f');
+    state = appendReviewMove(state, '5c5d');
+    state = moveReviewCursor(state, -2);
+    state = appendReviewMove(state, '5g5f');
+    expect(state.line).toEqual([...main.slice(0, 2), '5g5f', '5c5d']);
+    expect(state.cursor).toBe(3);
+  });
+
+  test('読み筋を並べると分岐にして1手目まで進め、本筋と同じなら本筋のまま進める', () => {
+    const start = moveReviewCursor(createReviewNavigation(main), -3);
+    const preview = previewReviewLine(start, ['5g5f', '5c5d', '4i5h']);
+    expect(preview).toMatchObject({ cursor: 2, branch: true });
+    expect(preview.line).toEqual([main[0], '5g5f', '5c5d', '4i5h']);
+    expect(reviewBranchStart(preview)).toBe(1);
+    expect(isOnReviewMainLine(preview)).toBe(false);
+    expect(isOnReviewMainLine(moveReviewCursor(preview, -1))).toBe(true);
+
+    const same = previewReviewLine(start, main.slice(1, 3));
+    expect(same).toMatchObject({ line: main, cursor: 2, branch: false });
+    expect(reviewBranchStart(same)).toBeNull();
   });
 });

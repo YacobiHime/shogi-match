@@ -132,6 +132,16 @@ export function kifuAnalysisPlan(level, mobile = false) {
   };
 }
 
+/**
+ * 棋譜から分岐させた局面を、その場で読むときの探索量。候補手を3つまで出す。
+ * 指すたびに読み直すので、全局面の解析の深読みより軽くする。
+ */
+export function positionAnalysisBudget(mobile = false) {
+  return mobile
+    ? { nodes: 100000, maxTimeMs: 3000, multiPv: 3 }
+    : { nodes: 300000, maxTimeMs: 3000, multiPv: 3 };
+}
+
 /** 「1.2万」「48万」のような、探索量の短い表記。 */
 export function formatNodeCount(nodes) {
   if (nodes >= 10000) return `${Number((nodes / 10000).toFixed(1))}万`;
