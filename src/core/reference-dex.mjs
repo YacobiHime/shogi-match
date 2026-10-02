@@ -1,6 +1,6 @@
 import { Position, RecordMetadataKey, Square, importKIF } from "tsshogi";
 import { appendUsiMove, createGameRecord } from "../game-state";
-import { AMANO_SOHO_KIFU, KOYAMA_REO_ENTRANCE_KIFU, OHASHI_SOKEI_SANSA_KIFU } from "../data/reference-kifu.mjs";
+import { AMANO_SOHO_KIFU, HABU_YOSHIHARU_52GIN_KIFU, KOYAMA_REO_ENTRANCE_KIFU, OHASHI_SOKEI_SANSA_KIFU } from "../data/reference-kifu.mjs";
 
 /**
  * 駒図鑑・手筋図鑑・将棋界図鑑の収録内容。
@@ -690,12 +690,14 @@ const WORLD_ENTRIES = [
   },
   {
     id: "habu", group: "名棋士", label: "羽生善治",
-    sfen: STANDARD,
+    kifu: HABU_YOSHIHARU_52GIN_KIFU,
+    kifuTitle: "NHK杯 加藤一二三九段戦（1989年1月9日）",
     overview: "七つのタイトルを独占したこともある、平成を代表する棋士だよ！",
     rows: [
       ["七冠", "1996年、当時の七大タイトルをすべて独占する「七冠」を達成したよ。"],
       ["永世七冠", "2017年には、7つのタイトルで永世称号の資格を得る「永世七冠」を達成したんだ。"],
       ["国民栄誉賞", "2018年に国民栄誉賞を受賞したよ。"],
+      ["棋譜", "盤面は「伝説の5二銀」で知られる、NHK杯の加藤一二三九段との一局。角換わり棒銀の戦いで、61手目の▲5二銀が決め手になったよ。"],
     ],
   },
   {

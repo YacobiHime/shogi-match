@@ -102,6 +102,22 @@ describe("reference dex", () => {
     expect(entry.rows.map(([, text]) => text).join("")).toContain("相手がどんな指し手をしてきても、穴熊を組むことができる");
   });
 
+  it("shows Habu Yoshiharu's legendary 5二銀 game", () => {
+    const entry = referenceDexEntries("world").find(({ id }) => id === "habu");
+    const kifu = referenceEntryKifu(entry);
+    expect(kifu.black).toBe("羽生善治");
+    expect(kifu.white).toBe("加藤一二三");
+    expect(kifu.steps).toHaveLength(68);
+    expect(kifu.steps[61].label).toBe("▲５二銀");
+    expect(kifu.steps[61].highlight).toBe("伝説の5二銀");
+    // 5二の銀は、後手の金と飛車のどちらでも取れる。
+    const position = Position.newBySFEN(kifu.steps[61].sfen);
+    expect(position.listAttackers(Square.newByUSI("5b")).map(({ usi }) => usi).sort()).toEqual(["6a", "8b"]);
+    expect(kifu.steps.at(-1).label).toBe("▲３二金");
+    expect(kifu.ending).toBe("投了");
+    expect(kifu.winner).toBe("black");
+  });
+
   it("shows the oldest surviving kifu in the Edo meijin entry", () => {
     const entry = referenceDexEntries("world").find(({ id }) => id === "edo-meijin");
     const kifu = referenceEntryKifu(entry);
