@@ -88,6 +88,8 @@ export class ShogiEngine {
     this.activeBookPath = null;
     this.instance = null;
     this._usiOptions = new Set();
+    /** エンジンへ設定済みの探索スレッド数。やねうら王の既定値は1。 */
+    this.searchThreads = 1;
     /** 置換表の大きさ(MB)。棋譜解析で追加するエンジンは、メモリを抑えるため小さくする。 */
     this.hashMb = options.hashMb ?? SEARCH_HASH_MB;
     /** @type {((line: string) => void)[]} */
@@ -406,6 +408,20 @@ export class ShogiEngine {
       }
       this.send('setoption name MultiPV value ' + params.multiPv);
     }
+  }
+
+  /**
+   * 探索スレッド数を変える。端末のコア数から1本を画面用に残す。
+   * 変更した場合は、スレッドの用意ができるまで待つ。探索中には呼ばないこと。
+   * @param {number} requested
+   */
+  async setSearchThreads(requested = 1) {
+    const cores = Number(globalThis.navigator?.hardwareConcurrency) || 1;
+    const threads = Math.max(1, Math.min(Math.floor(requested) || 1, cores - 1));
+    if (threads === this.searchThreads || !this.setOption('Threads', threads)) return false;
+    this.searchThreads = threads;
+    await this.ready();
+    return true;
   }
 
   supportsOption(name) {

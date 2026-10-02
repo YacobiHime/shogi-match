@@ -1347,7 +1347,7 @@ const matchStorageKey = typeof window === "undefined"
     });
 
 // 助言は対局AIより軽く保つ。局面評価は数万ノードで十分であり、
-// 人間最高峰プリセット（48万ノード）相当の探索を毎手行わない。
+// 人間最高峰プリセット（72万ノード）相当の探索を毎手行わない。
 const COACH_SEARCH_BUDGET = {
   standard: { nodes: 60000, maxTimeMs: 1500 },
   compact: { nodes: 30000, maxTimeMs: 900 },
@@ -4524,6 +4524,7 @@ function scheduleReviewCpuMove() {
       if (!usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
         const enginePosition = currentEnginePosition();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        await engine.setSearchThreads(strength.searchThreads);
         engine.setPosition(enginePosition);
         startCpuGauge(strength.nodes);
         search = await engine.go({
@@ -4635,11 +4636,13 @@ async function scheduleCpuMove() {
         usi = await naturalCpuMove();
       } else if (engine && engineReady.value) {
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        cpuSearchRunning = true;
+        cpuSearchGeneration = generation;
+        // Lv40だけ2スレッドで読む。ほかのレベルは校正どおり1スレッドに戻す。
+        await engine.setSearchThreads(strength.searchThreads);
         // setPositionが「position sfen」を付けるため、SFENだけを渡す。
         const enginePosition = currentEnginePosition();
         engine.setPosition(enginePosition);
-        cpuSearchRunning = true;
-        cpuSearchGeneration = generation;
         startCpuGauge(strength.nodes);
         const search = await engine.go({
           nodes: strength.nodes,

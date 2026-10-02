@@ -1,7 +1,9 @@
 // 人間の棋譜とCPUの指し手を、強いエンジン(水匠5など)の深い読みで採点して比べる開発用スクリプト。
 // 「藤井聡太並み」(Lv40)が本当に藤井聡太の指し手の質に近いかを確かめるために使う。
 // 使い方:
-//   node scripts/human-strength-compare.mjs --engine <USIエンジンのexe> [--nodes 6000000] [--level 40] a.kif b.kif ...
+//   node scripts/human-strength-compare.mjs --engine <USIエンジンのexe> [--nodes 6000000] [--level 40]
+//     [--cpu-nodes 720000] [--cache eval-cache.json] a.kif b.kif ...
+// --cpu-nodesで、CPUの探索量だけを差し替えて試せる。--cacheを付けると基準エンジンの採点を保存し、次回は読み直さない。
 // 棋譜の各局面で、指された手と、CPU(指定レベルの探索量・最善手)の手のそれぞれを、基準エンジンで採点する。
 // 指し手の損は「指す前の局面の評価値」と「指した後の局面の評価値(相手番なので符号を反転)」の差。
 // 評価値が±2000を超えた局面(勝負が決まった後)は集計から除く。
@@ -18,6 +20,10 @@ const enginePath = option("engine", "");
 if (!enginePath) throw new Error("--engineで基準のUSIエンジンを指定してください");
 const nodes = Number(option("nodes", "6000000"));
 const level = Number(option("level", "40"));
+const cpuNodes = Number(option("cpu-nodes", "0"));
+const cachePath = option("cache", "");
+const cache = cachePath && fs.existsSync(cachePath) ? JSON.parse(fs.readFileSync(cachePath, "utf8")) : {};
+const cacheKey = (sfen, moves = []) => `${nodes} ${sfen} ${moves.join(" ")}`;
 const files = process.argv.slice(2).filter((arg, index, args) => arg.endsWith(".kif") && !args[index - 1]?.startsWith("--"));
 const DECIDED = 2000;
 
@@ -45,13 +51,14 @@ const games = files.map((file) => {
 
 // 1. CPUの手。対局と同じ探索量で、最善手(第1候補)を選ぶ。
 const preset = CPU_STRENGTH_PRESETS.find((entry) => entry.level === level);
-const strength = getStrengthSearchSettings(preset.value);
+const strength = { ...getStrengthSearchSettings(preset.value), ...(cpuNodes ? { nodes: cpuNodes } : {}) };
 const cpuJobs = games.flatMap((game) => game.steps.filter(({ move }) => move));
 const cpuEngines = await Promise.all(Array.from({ length: 8 }, () => createNodeEngine()));
 let started = Date.now();
 await Promise.all(cpuEngines.map(async (engine) => {
   for (let step = cpuJobs.shift(); step; step = cpuJobs.shift()) {
     engine.applyStrengthOptions({ multiPv: 1 });
+    await engine.setSearchThreads(strength.searchThreads);
     engine.setPosition(step.sfen);
     step.cpuMove = (await engine.go({ nodes: strength.nodes, maxTimeMs: 60000 })).move;
   }
@@ -61,15 +68,20 @@ console.error(`Lv${level}(${strength.nodes.toLocaleString()}nodes)の手を${((D
 
 // 2. 基準エンジンで、各局面と、CPUの手を指した後の局面を読む。
 const evalJobs = [];
+const queue = (job) => {
+  const saved = cache[cacheKey(job.sfen, job.moves)];
+  if (saved) job.set(saved);
+  else evalJobs.push(job);
+};
 for (const game of games) {
   game.steps.forEach((step) => {
-    evalJobs.push({ sfen: step.sfen, set: (result) => { step.eval = result; } });
+    queue({ sfen: step.sfen, set: (result) => { step.eval = result; } });
     if (step.move && step.cpuMove && step.cpuMove !== step.move) {
-      evalJobs.push({ sfen: step.sfen, moves: [step.cpuMove], set: (result) => { step.cpuAfter = result; } });
+      queue({ sfen: step.sfen, moves: [step.cpuMove], set: (result) => { step.cpuAfter = result; } });
     }
   });
 }
-const refEngines = await Promise.all(Array.from({ length: 5 }, () => createNativeEngine(enginePath, { threads: 4 })));
+const refEngines = await Promise.all(Array.from({ length: Math.min(5, evalJobs.length) }, () => createNativeEngine(enginePath, { threads: 4 })));
 started = Date.now();
 await Promise.all(refEngines.map(async (engine) => {
   for (let job = evalJobs.shift(); job; job = evalJobs.shift()) {
@@ -77,10 +89,13 @@ await Promise.all(refEngines.map(async (engine) => {
     engine.setPosition(job.moves ? `${job.sfen} moves ${job.moves.join(" ")}` : job.sfen);
     const result = await engine.go({ nodes, maxTimeMs: 60000 });
     const best = result.candidates.find(({ rank }) => rank === 1);
-    job.set({ move: result.move, score: comparable(best?.score) });
+    const value = { move: result.move, score: comparable(best?.score) };
+    cache[cacheKey(job.sfen, job.moves)] = value;
+    job.set(value);
   }
 }));
 refEngines.forEach((engine) => engine.quit());
+if (cachePath) fs.writeFileSync(cachePath, JSON.stringify(cache));
 console.error(`基準エンジンで${((Date.now() - started) / 1000).toFixed(0)}秒かけて採点しました。`);
 
 // 3. 指し手の損を集計する。
@@ -115,6 +130,7 @@ const median = (values) => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
 };
+console.log(`CPU: Lv${level}、${strength.nodes.toLocaleString()}nodes`);
 console.log(`基準: ${enginePath.split(/[\\/]/).at(-2)} ${nodes.toLocaleString()}nodes、${games.length}局。評価値±${DECIDED}以上の局面は除く。`);
 console.log("| 指し手 | 手数 | 平均損失 | 中央値 | 平均勝率損失 | 疑問手以上(300) | 悪手以上(800) | 最善手一致 |");
 console.log("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");

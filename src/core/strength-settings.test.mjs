@@ -114,6 +114,12 @@ describe('CPU strength settings', () => {
     }
   });
 
+  it('reads with one thread below the strongest level', () => {
+    for (const { level, value } of CPU_STRENGTH_PRESETS.slice(1, -1)) {
+      expect(getStrengthSearchSettings(value).searchThreads, `Lv${level}`).toBe(1);
+    }
+  });
+
   it('limits the oversight re-search to a light second search', () => {
     for (const { level, value } of CPU_STRENGTH_PRESETS.slice(1)) {
       const settings = getStrengthSearchSettings(value);
@@ -125,8 +131,10 @@ describe('CPU strength settings', () => {
   });
 
   it('keeps the strongest level as a pure best-move search', () => {
+    // Lv40だけ、曲線の上端(48万)より1.5倍多く、2スレッドで読む。
     expect(getStrengthSearchSettings(480000)).toEqual({
-      nodes: 480000,
+      nodes: 720000,
+      searchThreads: 2,
       multiPv: 1,
       moveRank: { min: 1, max: 1 },
       maxScoreLoss: 0,

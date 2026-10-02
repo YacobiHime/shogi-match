@@ -45,6 +45,30 @@ describe('USI通常探索', () => {
     });
   });
 
+  test('探索スレッド数はコア数から1本残し、変わったときだけ設定して準備を待つ', async () => {
+    vi.stubGlobal('navigator', { hardwareConcurrency: 3 });
+    try {
+      const engine = new ShogiEngine({ factory: async () => ({}) });
+      const commands = [];
+      engine._usiOptions.add('Threads');
+      engine.instance = {
+        postMessage(command) {
+          commands.push(command);
+          if (command === 'isready') queueMicrotask(() => engine._emit('readyok'));
+        },
+      };
+      await expect(engine.setSearchThreads(4)).resolves.toBe(true);
+      await expect(engine.setSearchThreads(4)).resolves.toBe(false);
+      await expect(engine.setSearchThreads(1)).resolves.toBe(true);
+      expect(commands).toEqual([
+        'setoption name Threads value 2', 'isready',
+        'setoption name Threads value 1', 'isready',
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test('読んだ局面数を含むinfo行ごとに、思考ゲージ用の途中経過を渡す', async () => {
     const engine = new ShogiEngine({ factory: async () => ({}) });
     engine.instance = {

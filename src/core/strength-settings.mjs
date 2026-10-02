@@ -4,6 +4,12 @@
 
 const MIN_NODES = 50;
 const TOP_NODES = 480000;
+/**
+ * 最高技量(Lv40「藤井聡太並み」)だけの探索量とスレッド数。Lv1〜39の曲線(TOP_NODES)とは別に持つ。
+ * 2026-10-02に48万から72万nodesへ1.5倍にし、2スレッドで読んで待ち時間を以前より短くした。
+ */
+const TOP_LEVEL_NODES = 720000;
+const TOP_LEVEL_THREADS = 2;
 /** これ未満の技量では、読まずに見た目の自然さだけで指す手を混ぜる。 */
 const NATURAL_MOVE_SKILL_END = 0.4;
 /** これ未満の技量では、浅い読みで良く見える悪手を選ぶ「見落とし」を混ぜる。 */
@@ -29,7 +35,12 @@ export function strengthParametersForSkill(skill) {
   const s = clamp01(skill);
   if (s === 0) return { nodes: 0, multiPv: 1, maxScoreLoss: 0, bestMoveRate: 0, alpha: 1, naturalMoveRate: 1 };
   const nodes = roundSignificant(MIN_NODES * (TOP_NODES / MIN_NODES) ** s);
-  if (s === 1) return { nodes, multiPv: 1, maxScoreLoss: 0, bestMoveRate: 1, alpha: 0, naturalMoveRate: 0 };
+  if (s === 1) {
+    return {
+      nodes: TOP_LEVEL_NODES, searchThreads: TOP_LEVEL_THREADS,
+      multiPv: 1, maxScoreLoss: 0, bestMoveRate: 1, alpha: 0, naturalMoveRate: 0,
+    };
+  }
   // 少ないノード数で大きなMultiPVにすると候補順位も評価値もノイズになるため、探索量に合わせて抑える。
   const widest = s < 0.5 ? 4 + Math.round(s * 8) : Math.round(8 - (s - 0.5) * 14);
   const multiPv = Math.max(2, Math.min(widest, Math.max(4, Math.ceil(Math.log2(nodes)))));
@@ -150,6 +161,8 @@ export function searchSettingsForSkill(skill) {
     oversightMaxLoss: settings.oversightMaxLoss ?? 0,
     // 作戦の定跡手を評価値より優先する幅の倍率。低レベルほど、多少悪くても決めた形を作り続ける。
     openingPlanScoreScale: Math.round((1 + 2 * (1 - clamp01(skill))) * 100) / 100,
+    // 探索スレッド数の上限。端末のコア数に合わせてさらに減らす。
+    searchThreads: settings.searchThreads ?? 1,
     // 旧設定との互換キー。一様ランダムの着手は廃止したため常に無効。
     randomLegalRate: 0,
     randomFallback: false,

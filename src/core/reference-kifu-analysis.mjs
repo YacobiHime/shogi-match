@@ -104,7 +104,7 @@ export const KIFU_ANALYSIS_LEVELS = Object.freeze([
     mobileMaxTimeMs: STAGED_ANALYSIS_PLANS.mobile.scan.maxTimeMs,
   },
   { label: "深い", nodes: 120000, mobileNodes: 120000, maxTimeMs: 4000, mobileMaxTimeMs: 8000, reviewNodes: 480000, focusNodes: 1500000 },
-  { label: "藤井聡太並み", nodes: 480000, mobileNodes: 480000, maxTimeMs: 10000, mobileMaxTimeMs: 20000, reviewNodes: 1500000, focusNodes: 3000000 },
+  { label: "藤井聡太並み", nodes: 720000, mobileNodes: 720000, maxTimeMs: 10000, mobileMaxTimeMs: 20000, reviewNodes: 1500000, focusNodes: 3000000 },
 ]);
 
 const clampLevel = (level) => Math.max(0, Math.min(KIFU_ANALYSIS_LEVELS.length - 1, level));

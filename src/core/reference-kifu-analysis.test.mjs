@@ -12,6 +12,7 @@ import {
   kifuAnalysisPlan,
 } from "./reference-kifu-analysis.mjs";
 import { STAGED_ANALYSIS_PLANS } from "./kifu-analysis-pipeline.mjs";
+import { getStrengthSearchSettings } from "./strength-settings.mjs";
 import { STANDARD_SFEN } from "../game-state";
 
 const koyama = referenceEntryKifu(referenceDexEntries("world").find(({ id }) => id === "koyama"));
@@ -66,7 +67,7 @@ describe("reference kifu analysis", () => {
     const nodes = KIFU_ANALYSIS_LEVELS.map((_, level) => kifuAnalysisBudget(level).nodes);
     expect(nodes).toEqual([...nodes].sort((left, right) => left - right));
     // いちばん深い段は、CPUの「藤井聡太並み」と同じ探索量。
-    expect(nodes.at(-1)).toBe(480000);
+    expect(nodes.at(-1)).toBe(getStrengthSearchSettings(480000).nodes);
     // スマホでは標準だけ軽くし、時間の上限は長めに取る。
     expect(kifuAnalysisBudget(0, true).nodes).toBeLessThan(kifuAnalysisBudget(0).nodes);
     expect(kifuAnalysisBudget(2, true).maxTimeMs).toBeGreaterThan(kifuAnalysisBudget(2).maxTimeMs);
@@ -79,7 +80,7 @@ describe("reference kifu analysis", () => {
       const stageNodes = plans.map((plan) => plan[stage].nodes);
       expect(stageNodes, stage).toEqual([...stageNodes].sort((left, right) => left - right));
     }
-    expect(kifuAnalysisPlan(2).scan).toMatchObject({ nodes: 480000, multiPv: 2 });
+    expect(kifuAnalysisPlan(2).scan).toMatchObject({ nodes: 720000, multiPv: 2 });
     expect(kifuAnalysisPlan(2).review.lossThreshold).toBe(STAGED_ANALYSIS_PLANS.desktop.review.lossThreshold);
     expect(formatNodeCount(12000)).toBe("1.2万");
     expect(formatNodeCount(480000)).toBe("48万");
