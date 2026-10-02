@@ -810,7 +810,21 @@
             @click="analysisMenuOpen = false; goToAnalysisPly(reviewNavigation.mainLine.length); explainReviewResignation()"
           >投了の理由</button>
           <button v-if="analysisRunning" type="button" role="menuitem" @click="analysisMenuOpen = false; cancelKifuAnalysis()">解析を中止</button>
-          <button v-else type="button" role="menuitem" :disabled="reviewCpuEnabled" @click="analysisMenuOpen = false; runKifuAnalysis()">再解析</button>
+          <label class="shogi-game__analysis-level shogi-game__analysis-level--menu">
+            <span>解析レベル</span>
+            <select v-model.number="analysisLevelChoice" :disabled="analysisRunning">
+              <option v-for="(level, index) in KIFU_ANALYSIS_LEVELS" :key="level.label" :value="index">
+                {{ index + 1 }}. {{ level.label }}{{ index <= analyzedLevel ? "（解析済み）" : "" }}
+              </option>
+            </select>
+          </label>
+          <button
+            v-if="!analysisRunning"
+            type="button"
+            role="menuitem"
+            :disabled="reviewCpuEnabled || analysisLevelChoice <= analyzedLevel"
+            @click="analysisMenuOpen = false; runKifuAnalysis()"
+          >{{ analyzedLevel < 0 ? "このレベルで解析" : analysisLevelChoice <= analyzedLevel ? "このレベルは解析済み" : "このレベルで読み直す" }}</button>
           <button
             v-if="!reviewCpuEnabled"
             type="button"
@@ -887,6 +901,14 @@
           <button v-else type="button" class="shogi-game__rematch" @click="openPregame">対局準備</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
         </div>
+        <label class="shogi-game__analysis-level">
+          <span>解析レベル</span>
+          <select v-model.number="analysisLevelChoice">
+            <option v-for="(level, index) in KIFU_ANALYSIS_LEVELS" :key="level.label" :value="index">
+              {{ index + 1 }}. {{ level.label }}
+            </option>
+          </select>
+        </label>
       </div>
     </div>
   </section>
@@ -919,15 +941,17 @@ import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
-  STAGED_ANALYSIS_PLANS,
   analysisPointsFromResults,
   analyzeKifuStaged,
 } from "./core/kifu-analysis-pipeline.mjs";
 import {
+  KIFU_ANALYSIS_LEVELS,
   formatNodeCount,
   formatPrincipalVariation,
   kifuAnalysisPlan,
+  loadAnalysisLevel,
   positionAnalysisBudget,
+  saveAnalysisLevel,
 } from "./core/reference-kifu-analysis.mjs";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
 import {
@@ -1196,6 +1220,12 @@ const analysisProgress = ref(0);
 const analysisTotal = ref(0);
 // 棋譜解析の段階。全局面を軽く読む(scan)、怪しい手を読み直す(review)、大事な局面を深く読む(focus)。
 const analysisStage = ref("");
+// 解析を始める前に選ぶ解析レベル(5段階)。前回選んだレベルを覚えておく(図鑑と共通)。
+const analysisLevelChoice = ref(loadAnalysisLevel());
+watch(analysisLevelChoice, (level) => saveAnalysisLevel(level));
+// 最後まで解析し終えたレベル。まだなら-1。同じ棋譜を深いレベルで読み直すときは、前の読みを残して書き足す。
+const analyzedLevel = ref(-1);
+let gameAnalysisResults: { key: string; results: unknown[] } | null = null;
 const analysisPoints = ref<AnalysisPoint[]>([]);
 const analysisVisible = computed(() => reviewMode.value && analysisOpen.value);
 const boardFlipOverride = ref(false);
@@ -5171,7 +5201,15 @@ async function runKifuAnalysis() {
   analysisStage.value = "";
   analysisTotal.value = reviewNavigation.value.mainLine.length + 1;
   analysisOpen.value = true;
-  analysisPoints.value = [];
+  const level = analysisLevelChoice.value;
+  const resultsKey = `${matchInitialSfen.value} ${reviewNavigation.value.mainLine.join(" ")}`;
+  // 同じ棋譜をもう一度解析するときは、前の読みを引き継ぎ、グラフも出したまま読み直す。
+  if (gameAnalysisResults?.key !== resultsKey) {
+    gameAnalysisResults = { key: resultsKey, results: [] };
+    analysisPoints.value = [];
+    analyzedLevel.value = -1;
+  }
+  const previousResults = gameAnalysisResults.results;
   reviewCoachGeneration += 1;
   engine.stop();
   try {
@@ -5223,7 +5261,8 @@ async function runKifuAnalysis() {
     await analyzeKifuStaged({
       steps,
       lanes: [engine, ...analysisEngines].map(laneFor),
-      plan: STAGED_ANALYSIS_PLANS[compact ? "mobile" : "desktop"],
+      plan: kifuAnalysisPlan(level, compact),
+      results: previousResults,
       isCancelled: cancelled,
       onProgress: ({ stage, done, total }) => {
         if (cancelled()) return;
@@ -5239,6 +5278,7 @@ async function runKifuAnalysis() {
       },
     });
     if (generation === analysisGeneration && completed) {
+      analyzedLevel.value = Math.max(analyzedLevel.value, level);
       if (!showRecordedCoachAdvice()) {
         guideText.value = coachLevel.value === "off"
           ? ""
@@ -5310,6 +5350,8 @@ function restart() {
   analysisProgress.value = 0;
   analysisTotal.value = 0;
   analysisPoints.value = [];
+  analyzedLevel.value = -1;
+  gameAnalysisResults = null;
   boardFlipOverride.value = false;
   reviewCoachGeneration += 1;
   reviewNavigation.value = createReviewNavigation();
@@ -7173,6 +7215,27 @@ queueMicrotask(() => {
 .shogi-game__result-actions button {
   min-width: 0;
   min-height: 3em;
+}
+/* 解析レベルの選択。結果画面では棋譜解析ボタンの下、解析メニューでは項目の1つとして置く。 */
+.shogi-game__analysis-level {
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 0.5em;
+  font-size: 0.9em;
+  font-weight: 700;
+}
+.shogi-game__analysis-level select {
+  min-height: 2.2em;
+  padding: 0.15em 0.4em;
+  font: inherit;
+  font-weight: 400;
+}
+.shogi-game__analysis-level--menu {
+  justify-content: space-between;
+  margin: 0;
+  color: var(--night);
 }
 .shogi-game--short .shogi-game__result-details {
   margin: 0.8em 0;

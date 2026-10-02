@@ -10,6 +10,9 @@ import {
   formatPrincipalVariation,
   kifuAnalysisBudget,
   kifuAnalysisPlan,
+  FUJII_ANALYSIS_LEVEL,
+  loadAnalysisLevel,
+  saveAnalysisLevel,
 } from "./reference-kifu-analysis.mjs";
 import { STAGED_ANALYSIS_PLANS } from "./kifu-analysis-pipeline.mjs";
 import { getStrengthSearchSettings } from "./strength-settings.mjs";
@@ -62,17 +65,20 @@ describe("reference kifu analysis", () => {
     expect(analysisComment({ ply: 0, annotation: null }, {})).toBe("");
   });
 
-  it("deepens the analysis in three levels up to the Fujii Sota level search", () => {
-    expect(KIFU_ANALYSIS_LEVELS.map(({ label }) => label)).toEqual(["標準", "深い", "藤井聡太並み"]);
+  it("offers five analysis levels with the Fujii Sota level in the middle", () => {
+    expect(KIFU_ANALYSIS_LEVELS.map(({ label }) => label)).toEqual(["速い", "詳しい", "藤井聡太並み", "深い", "最強"]);
+    expect(FUJII_ANALYSIS_LEVEL).toBe(2);
     const nodes = KIFU_ANALYSIS_LEVELS.map((_, level) => kifuAnalysisBudget(level).nodes);
     expect(nodes).toEqual([...nodes].sort((left, right) => left - right));
-    // いちばん深い段は、CPUの「藤井聡太並み」と同じ探索量。
-    expect(nodes.at(-1)).toBe(getStrengthSearchSettings(480000).nodes);
-    // スマホでは標準だけ軽くし、時間の上限は長めに取る。
+    // 真ん中の段は、CPUの「藤井聡太並み」と同じ探索量。最強はその4倍(倍以上)を読む。
+    const fujii = getStrengthSearchSettings(480000).nodes;
+    expect(nodes[FUJII_ANALYSIS_LEVEL]).toBe(fujii);
+    expect(nodes.at(-1)).toBe(fujii * 4);
+    // スマホでは速いだけ軽くし、時間の上限は長めに取る。
     expect(kifuAnalysisBudget(0, true).nodes).toBeLessThan(kifuAnalysisBudget(0).nodes);
-    expect(kifuAnalysisBudget(2, true).maxTimeMs).toBeGreaterThan(kifuAnalysisBudget(2).maxTimeMs);
-    expect(kifuAnalysisBudget(9)).toEqual(kifuAnalysisBudget(2));
-    // 標準は対局後の解析と同じ段階解析で、深い段ほど読み直し・深読みの探索量も増やす。
+    expect(kifuAnalysisBudget(4, true).maxTimeMs).toBeGreaterThan(kifuAnalysisBudget(4).maxTimeMs);
+    expect(kifuAnalysisBudget(9)).toEqual(kifuAnalysisBudget(4));
+    // 速いは対局後の解析の既定と同じ段階解析で、深い段ほど読み直し・深読みの探索量も増やす。
     expect(kifuAnalysisPlan(0)).toBe(STAGED_ANALYSIS_PLANS.desktop);
     expect(kifuAnalysisPlan(0, true)).toBe(STAGED_ANALYSIS_PLANS.mobile);
     const plans = KIFU_ANALYSIS_LEVELS.map((_, level) => kifuAnalysisPlan(level));
@@ -81,7 +87,21 @@ describe("reference kifu analysis", () => {
       expect(stageNodes, stage).toEqual([...stageNodes].sort((left, right) => left - right));
     }
     expect(kifuAnalysisPlan(2).scan).toMatchObject({ nodes: 720000, multiPv: 2 });
-    expect(kifuAnalysisPlan(2).review.lossThreshold).toBe(STAGED_ANALYSIS_PLANS.desktop.review.lossThreshold);
+    expect(kifuAnalysisPlan(4).review.lossThreshold).toBe(STAGED_ANALYSIS_PLANS.desktop.review.lossThreshold);
+  });
+
+  it("remembers the chosen analysis level and falls back to the fastest", () => {
+    const store = new Map();
+    const storage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+    expect(loadAnalysisLevel(storage)).toBe(0);
+    saveAnalysisLevel(3, storage);
+    expect(loadAnalysisLevel(storage)).toBe(3);
+    store.set("shogi-match-analysis-level", "9");
+    expect(loadAnalysisLevel(storage)).toBe(0);
+    expect(loadAnalysisLevel({ getItem: () => { throw new Error("blocked"); } })).toBe(0);
+  });
+
+  it("formats node counts", () => {
     expect(formatNodeCount(12000)).toBe("1.2万");
     expect(formatNodeCount(480000)).toBe("48万");
     expect(formatNodeCount(600)).toBe("600");

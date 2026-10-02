@@ -1,6 +1,7 @@
 import { appendUsiMove, createGameRecord } from "../game-state";
 import { formatHintMove } from "./match-assists.mjs";
 import { STAGED_ANALYSIS_PLANS } from "./kifu-analysis-pipeline.mjs";
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from "./strength-settings.mjs";
 
 /** 局面で指す手を、手番の印付きの「▲7六歩」のような表記にする。 */
 export function formatAnalysisMove(usi, sfen) {
@@ -88,24 +89,55 @@ export function analysisComment(point, { moveLabel = "", names = {}, winner = ""
 }
 
 /**
- * 図鑑の棋譜解析の深さは3段階。「将棋AIで解析」は標準で読み、「深く解析」を押すたびに1段ずつ深く読み直す。
+ * 棋譜解析のレベルは5段階。解析を始める前に選ぶ(対局後の振り返り・図鑑で共通)。
  * どの段も、全局面を読む(scan)→怪しい手を読み直す(review)→大事な局面を深く読む(focus)の段階解析
  * (kifu-analysis-pipeline.mjs)で読む。nodesは全局面を読むときの1局面あたりの探索量で、
- * reviewNodes・focusNodesは読み直し・深読みの探索量。標準は対局後の解析と同じ設定にする。
+ * reviewNodes・focusNodesは読み直し・深読みの探索量。「速い」は段階解析の既定の設定をそのまま使う。
+ * 中くらいの「藤井聡太並み」は、全局面をCPUの最高難易度(Lv40)と同じ探索量で読む
+ * (docs/fujii-sota-strength-calibration.md)。「深い」はその2倍、「最強」は4倍を読む。
  * maxTimeMsは遅い端末で止まらないための上限で、スマホではmobileの値を使う。
- * 「藤井聡太並み」は、全局面をCPUの最高難易度と同じ探索量で読む（docs/fujii-sota-strength-calibration.md）。
  */
+const FUJII_NODES = getStrengthSearchSettings(CPU_STRENGTH_PRESETS.at(-1).value).nodes;
 export const KIFU_ANALYSIS_LEVELS = Object.freeze([
   {
-    label: "標準",
+    label: "速い",
     nodes: STAGED_ANALYSIS_PLANS.desktop.scan.nodes,
     mobileNodes: STAGED_ANALYSIS_PLANS.mobile.scan.nodes,
     maxTimeMs: STAGED_ANALYSIS_PLANS.desktop.scan.maxTimeMs,
     mobileMaxTimeMs: STAGED_ANALYSIS_PLANS.mobile.scan.maxTimeMs,
   },
-  { label: "深い", nodes: 120000, mobileNodes: 120000, maxTimeMs: 4000, mobileMaxTimeMs: 8000, reviewNodes: 480000, focusNodes: 1500000 },
-  { label: "藤井聡太並み", nodes: 720000, mobileNodes: 720000, maxTimeMs: 10000, mobileMaxTimeMs: 20000, reviewNodes: 1500000, focusNodes: 3000000 },
+  { label: "詳しい", nodes: 120000, mobileNodes: 120000, maxTimeMs: 4000, mobileMaxTimeMs: 8000, reviewNodes: 480000, focusNodes: 1500000 },
+  {
+    label: "藤井聡太並み", nodes: FUJII_NODES, mobileNodes: FUJII_NODES,
+    maxTimeMs: 10000, mobileMaxTimeMs: 20000, reviewNodes: 1500000, focusNodes: 3000000,
+  },
+  {
+    label: "深い", nodes: FUJII_NODES * 2, mobileNodes: FUJII_NODES * 2,
+    maxTimeMs: 15000, mobileMaxTimeMs: 30000, reviewNodes: 3000000, focusNodes: 6000000,
+  },
+  {
+    label: "最強", nodes: FUJII_NODES * 4, mobileNodes: FUJII_NODES * 4,
+    maxTimeMs: 25000, mobileMaxTimeMs: 50000, reviewNodes: 6000000, focusNodes: 12000000,
+  },
 ]);
+/** 藤井聡太並みの段の番号。5段階の真ん中。 */
+export const FUJII_ANALYSIS_LEVEL = KIFU_ANALYSIS_LEVELS.findIndex(({ label }) => label === "藤井聡太並み");
+
+const ANALYSIS_LEVEL_STORAGE_KEY = "shogi-match-analysis-level";
+/** 前回選んだ解析レベル。保存がなければ「速い」。 */
+export function loadAnalysisLevel(storage = globalThis.localStorage) {
+  try {
+    const level = Number(storage?.getItem(ANALYSIS_LEVEL_STORAGE_KEY));
+    return Number.isInteger(level) && level >= 0 && level < KIFU_ANALYSIS_LEVELS.length ? level : 0;
+  } catch {
+    return 0;
+  }
+}
+export function saveAnalysisLevel(level, storage = globalThis.localStorage) {
+  try {
+    storage?.setItem(ANALYSIS_LEVEL_STORAGE_KEY, String(level));
+  } catch { /* 保存できない環境では覚えない */ }
+}
 
 const clampLevel = (level) => Math.max(0, Math.min(KIFU_ANALYSIS_LEVELS.length - 1, level));
 

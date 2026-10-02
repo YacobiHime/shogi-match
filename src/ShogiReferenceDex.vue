@@ -243,13 +243,20 @@
                 @click="showBestArrow = !showBestArrow"
               >最善手の矢印</button>
               <button v-if="analysisRunning" type="button" class="shogi-reference-dex__analysis-start" @click="cancelAnalysis">中止</button>
-              <button
-                v-else
-                type="button"
-                class="shogi-reference-dex__analysis-start"
-                :disabled="nextAnalysisLevel === null"
-                @click="nextAnalysisLevel !== null && startAnalysis(nextAnalysisLevel)"
-              >{{ analysisButtonLabel }}</button>
+              <template v-else>
+                <!-- 解析レベルは解析を始める前に選ぶ。深いレベルで読み直すときは、前の読みを残して書き足す。 -->
+                <select v-model.number="chosenLevel" class="shogi-reference-dex__level-select" aria-label="解析レベル">
+                  <option v-for="(level, index) in KIFU_ANALYSIS_LEVELS" :key="level.label" :value="index">
+                    {{ index + 1 }}. {{ level.label }}
+                  </option>
+                </select>
+                <button
+                  type="button"
+                  class="shogi-reference-dex__analysis-start"
+                  :disabled="chosenLevel <= analysisLevel"
+                  @click="startAnalysis(chosenLevel)"
+                >{{ analysisButtonLabel }}</button>
+              </template>
             </div>
             <!-- 解析の進み具合。全体を確認→怪しい手を読み直し→大事な局面を深読みの段階ごとに出す。 -->
             <p v-if="analysisRunning" class="shogi-reference-dex__analysis-note" aria-live="polite">
@@ -259,7 +266,7 @@
               </template>
             </p>
             <p v-else-if="analysisLevel >= 0" class="shogi-reference-dex__analysis-note">
-              解析の深さ：{{ levelLabel(analysisLevel) }}（1局面あたり{{ formatNodeCount(levelNodes(analysisLevel)) }}局面を読む）
+              解析レベル：{{ levelLabel(analysisLevel) }}（1局面あたり{{ formatNodeCount(levelNodes(analysisLevel)) }}局面を読む）
             </p>
             <p v-if="analysisError" class="shogi-reference-dex__analysis-note" role="alert">{{ analysisError }}</p>
             <!-- 分岐の局面の候補手。読み筋は盤に並べて、1手ずつ進められる。 -->
@@ -383,7 +390,9 @@ import {
   formatNodeCount,
   formatPrincipalVariation,
   kifuAnalysisBudget,
+  loadAnalysisLevel,
   positionAnalysisBudget,
+  saveAnalysisLevel,
 } from "./core/reference-kifu-analysis.mjs";
 import { ANALYSIS_STAGE_LABELS } from "./core/kifu-analysis-pipeline.mjs";
 import {
@@ -586,18 +595,13 @@ let analysisResults: unknown[] = [];
 const mobileLayout = () => isNarrow.value;
 const levelLabel = (level: number) => KIFU_ANALYSIS_LEVELS[level]?.label ?? "";
 const levelNodes = (level: number) => kifuAnalysisBudget(level, mobileLayout()).nodes;
-// 次に押したときの深さ。最後まで解析していなければ、途中で止めた深さから読み直す。いちばん深く読み終えたらnull。
-const nextAnalysisLevel = computed(() => {
-  const next = analysisLevel.value + 1;
-  if (analysisRunning.value) return null;
-  if (analysisLevel.value < 0) return 0;
-  return next < KIFU_ANALYSIS_LEVELS.length ? next : null;
-});
+// 解析を始める前に選ぶレベル。前回選んだレベルを覚えておく(対局後の振り返りと共通)。
+const chosenLevel = ref(loadAnalysisLevel());
+watch(chosenLevel, (level) => saveAnalysisLevel(level));
 const analysisButtonLabel = computed(() => {
-  const next = nextAnalysisLevel.value;
-  if (next === null) return "いちばん深く解析済み";
-  if (next === 0) return "将棋AIで解析";
-  return `深く解析（${levelLabel(next)}）`;
+  if (analysisLevel.value < 0) return "将棋AIで解析";
+  if (chosenLevel.value <= analysisLevel.value) return "解析済み";
+  return "このレベルで読み直す";
 });
 const currentPoint = computed(() => (
   onMainLine.value ? analysisPoints.value.find(({ ply }) => ply === stepIndex.value) ?? null : null
@@ -793,7 +797,7 @@ async function startAnalysis(level = 0) {
   const steps = kifu.value?.steps;
   if (!engine || !steps || analysisRunning.value) return;
   const generation = ++analysisGeneration;
-  const deeper = level > 0 && analysisLevel.value >= 0;
+  const deeper = analysisLevel.value >= 0 && level > analysisLevel.value;
   analysisRunning.value = true;
   runningLevel.value = level;
   analysisStage.value = "";
@@ -1122,6 +1126,16 @@ defineExpose({ goBack });
   color: #172632;
   background: #f1a54c;
   border-color: #f1a54c;
+}
+.shogi-game .shogi-reference-dex__level-select {
+  min-height: 2.2rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 0.4rem;
+  color: #fffcf4;
+  background: #172632;
+  font: inherit;
+  font-size: 0.85rem;
 }
 .shogi-game .shogi-reference-dex__analysis-note {
   margin: 0;
