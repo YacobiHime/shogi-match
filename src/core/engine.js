@@ -266,8 +266,10 @@ export class ShogiEngine {
    *       depth?: number,
    *       score?: { type: 'cp' | 'mate', value: number }
    *     }[]
-   *   }) => void
+   *   }) => void,
+   *   onNodes?: (progress: { nodes: number, nps?: number }) => void
    * }} goOptions
+   * onNodesは、読んだ局面数を含むinfo行を受け取るたびに呼ぶ。思考中のゲージに使う。
    * @returns {Promise<{
    *   move: string,
    *   ponder?: string,
@@ -326,6 +328,9 @@ export class ShogiEngine {
             nodes: nodesMatch ? Number(nodesMatch[1]) : latestStats.nodes,
             nps: npsMatch ? Number(npsMatch[1]) : latestStats.nps,
           };
+          if (nodesMatch && typeof goOptions.onNodes === 'function') {
+            goOptions.onNodes({ nodes: latestStats.nodes, nps: latestStats.nps });
+          }
           if (pvMatch) {
             // MultiPV=1 のとき `multipv 1` を省略するUSIエンジンもある。
             const rank = rankMatch ? Number(rankMatch[1]) : 1;

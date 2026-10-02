@@ -208,6 +208,28 @@
     <header class="shogi-game__header">
       <div class="shogi-game__status" aria-live="polite">
         <strong>{{ statusText }}</strong>
+        <div
+          v-if="cpuThinkingShown"
+          class="shogi-game__think"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="cpuSearchGauge ? cpuGaugePercent : undefined"
+          :aria-label="cpuSearchGauge
+            ? `読んだ局面 ${formatNodeCount(Math.floor(cpuSearchGauge.nodes))}／${formatNodeCount(cpuSearchGauge.target)}`
+            : '考え中'"
+        >
+          <div class="shogi-game__think-track">
+            <div
+              class="shogi-game__think-fill"
+              :class="{ 'shogi-game__think-fill--busy': !cpuSearchGauge }"
+              :style="cpuSearchGauge ? { width: `${cpuGaugePercent}%` } : undefined"
+            />
+          </div>
+          <small v-if="cpuSearchGauge" class="shogi-game__think-count">
+            {{ formatNodeCount(Math.floor(cpuSearchGauge.nodes)) }}／{{ formatNodeCount(cpuSearchGauge.target) }}
+          </small>
+        </div>
         <span>{{ moveCount }}手目</span>
       </div>
       <div
@@ -885,7 +907,7 @@ import {
   analysisPointsFromResults,
   analyzeKifuStaged,
 } from "./core/kifu-analysis-pipeline.mjs";
-import { kifuAnalysisPlan } from "./core/reference-kifu-analysis.mjs";
+import { formatNodeCount, kifuAnalysisPlan } from "./core/reference-kifu-analysis.mjs";
 import { loadEngineFactories } from "./core/engine-loader.mjs";
 import {
   createFormationState,
@@ -1424,6 +1446,57 @@ const canUndo = computed(() =>
     : normalizedMode.value === "local" ? moveHistory.length > 0 : moveHistory.length >= 2)
   && (reviewMode.value || normalizedMode.value === "local" || record.value.position.color === humanColor.value)
 );
+/*
+ * CPUの思考の進み具合。探索中だけ、読んだ局面数(nodes)と予定の局面数(target)を持つ。
+ * エンジンの途中経過は読みが1段深くなるたびにしか届かないため、合間は最後の探索速度から進み具合を見積もり、
+ * ゲージを滑らかに進める。見積もりは予定の99%で止め、探索が終わったら100%にする。
+ */
+const cpuSearchGauge = ref<{ target: number; nodes: number } | null>(null);
+let cpuGaugeSample = { nodes: 0, nps: 0, at: 0 };
+let cpuGaugeTimer: ReturnType<typeof setInterval> | null = null;
+function stopCpuGauge() {
+  if (cpuGaugeTimer) clearInterval(cpuGaugeTimer);
+  cpuGaugeTimer = null;
+  cpuSearchGauge.value = null;
+}
+function startCpuGauge(target: number) {
+  stopCpuGauge();
+  cpuGaugeSample = { nodes: 0, nps: 0, at: performance.now() };
+  cpuSearchGauge.value = { target, nodes: 0 };
+  cpuGaugeTimer = setInterval(() => {
+    const gauge = cpuSearchGauge.value;
+    if (!gauge) return;
+    const { nodes, nps, at } = cpuGaugeSample;
+    const estimate = Math.min(gauge.target * 0.99, nodes + (nps * (performance.now() - at)) / 1000);
+    if (estimate > gauge.nodes) cpuSearchGauge.value = { ...gauge, nodes: estimate };
+  }, 100);
+}
+function updateCpuGauge({ nodes, nps }: { nodes: number; nps?: number }) {
+  cpuGaugeSample = { nodes, nps: nps ?? cpuGaugeSample.nps, at: performance.now() };
+  const gauge = cpuSearchGauge.value;
+  if (gauge && nodes > gauge.nodes) cpuSearchGauge.value = { ...gauge, nodes: Math.min(gauge.target, nodes) };
+}
+function finishCpuGauge() {
+  if (cpuGaugeTimer) clearInterval(cpuGaugeTimer);
+  cpuGaugeTimer = null;
+  const gauge = cpuSearchGauge.value;
+  if (gauge) cpuSearchGauge.value = { ...gauge, nodes: gauge.target };
+}
+watch(thinking, (value) => {
+  if (!value) stopCpuGauge();
+});
+onBeforeUnmount(stopCpuGauge);
+const cpuGaugePercent = computed(() => {
+  const gauge = cpuSearchGauge.value;
+  return gauge ? Math.round((gauge.nodes / Math.max(1, gauge.target)) * 100) : 0;
+});
+/** 「CPUが考えています」を出す場面か。探索しないレベルでも、流れるゲージで考え中を表す。 */
+const cpuThinkingShown = computed(() => {
+  if (!matchStarted.value || !thinking.value) return false;
+  if (reviewMode.value) return reviewCpuEnabled.value;
+  if (result.value) return false;
+  return !(normalizedMode.value === "cpu" && !engineReady.value);
+});
 const statusText = computed(() => {
   if (!matchStarted.value) return "対局条件を選んでください";
   if (reviewMode.value && reviewCpuEnabled.value) {
@@ -4452,10 +4525,13 @@ function scheduleReviewCpuMove() {
         const enginePosition = currentEnginePosition();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
         engine.setPosition(enginePosition);
+        startCpuGauge(strength.nodes);
         search = await engine.go({
           nodes: strength.nodes,
           maxTimeMs: 8000,
+          onNodes: updateCpuGauge,
         });
+        finishCpuGauge();
         if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
         verify = cpuOversightVerifier(
           enginePosition,
@@ -4564,11 +4640,14 @@ async function scheduleCpuMove() {
         engine.setPosition(enginePosition);
         cpuSearchRunning = true;
         cpuSearchGeneration = generation;
+        startCpuGauge(strength.nodes);
         const search = await engine.go({
           nodes: strength.nodes,
           maxTimeMs: 60000,
           searchMoves: [...allowedCpuMoveIds],
+          onNodes: updateCpuGauge,
         });
+        finishCpuGauge();
         if (cpuSearchGeneration === generation) cpuSearchRunning = false;
         if (generation !== matchGeneration) return;
         const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
@@ -5457,6 +5536,58 @@ queueMicrotask(() => {
   display: flex;
   flex: none;
   gap: 0.45em;
+}
+/* CPUの思考ゲージ。読んだ局面数の割合を、盤の木目と重ならない琥珀色で表す。 */
+/* 上にバー、下に局面数の2段にして、スマホ縦の狭い幅にも収める。見出しの高さは変えない。 */
+.shogi-game__think {
+  display: flex;
+  flex: 1 1 6em;
+  flex-direction: column;
+  gap: 0.2em;
+  justify-content: center;
+  min-width: 0;
+  max-width: 12em;
+  overflow: hidden;
+}
+/* ゲージがある間は「考えています」の文字を縮めず、ゲージが残りの幅に収まる。 */
+.shogi-game__status strong:has(+ .shogi-game__think) {
+  flex: none;
+}
+.shogi-game__think-track {
+  position: relative;
+  flex: none;
+  height: 0.5em;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 252, 244, 0.16);
+}
+.shogi-game__think-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--amber);
+  transition: width 0.1s linear;
+}
+/* 探索しないとき(Lv0など)は、量が分からないので帯を流して考え中を表す。 */
+.shogi-game__think-fill--busy {
+  width: 40%;
+  animation: shogi-game-think-busy 1.1s ease-in-out infinite;
+}
+@keyframes shogi-game-think-busy {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__think-fill { transition: none; }
+  .shogi-game__think-fill--busy { animation: none; opacity: 0.6; width: 100%; }
+}
+.shogi-game__think-count {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.72em;
+  line-height: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .shogi-game__command {
   min-width: 0;

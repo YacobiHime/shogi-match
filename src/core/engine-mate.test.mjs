@@ -44,4 +44,21 @@ describe('USI通常探索', () => {
       candidates: [{ rank: 1, move: '7g7f', score: { type: 'cp', value: 235 } }],
     });
   });
+
+  test('読んだ局面数を含むinfo行ごとに、思考ゲージ用の途中経過を渡す', async () => {
+    const engine = new ShogiEngine({ factory: async () => ({}) });
+    engine.instance = {
+      postMessage(command) {
+        if (!command.startsWith('go ')) return;
+        queueMicrotask(() => {
+          engine._emit('info depth 3 score cp 20 nodes 120 nps 4000 pv 7g7f');
+          engine._emit('info nodes 900 nps 5000 hashfull 1');
+          engine._emit('bestmove 7g7f');
+        });
+      },
+    };
+    const progress = [];
+    await engine.go({ nodes: 1000, maxTimeMs: 200, onNodes: (update) => progress.push(update) });
+    expect(progress).toEqual([{ nodes: 120, nps: 4000 }, { nodes: 900, nps: 5000 }]);
+  });
 });
