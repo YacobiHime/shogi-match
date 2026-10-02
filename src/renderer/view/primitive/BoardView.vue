@@ -289,7 +289,7 @@ import { BoardLayoutType } from "@/common/settings/layout";
 import { CompactLayoutBuilder } from "./board/compact";
 import BoardGrid from "./BoardGrid.vue";
 import { t } from "@/common/i18n";
-import { legalDestinationSquares } from "@/position";
+import { legalDestinationSquares, movementArrowMoves } from "@/position";
 import { parallelArrowLaneOffsets } from "./arrow-layout";
 import {
   boardParams,
@@ -303,7 +303,7 @@ type CandidateMove = {
   move: Move;
   score?: number; // 手番側視点の数値スコア（showArrowScore が有効な場合のみ設定）
   promotion?: "成" | "不成";
-  guideKind?: "plan" | "unsafe-plan" | "urgent" | "ai";
+  guideKind?: "plan" | "unsafe-plan" | "urgent" | "ai" | "move";
 };
 
 type State = {
@@ -389,6 +389,12 @@ const props = defineProps({
     type: Array as PropType<CandidateMove[]>,
     required: false,
     default: () => [],
+  },
+  // 選んだ駒の動き方を矢印で見せる(学習対局の「動きの矢印」)。
+  movementArrows: {
+    type: Boolean,
+    required: false,
+    default: false,
   },
   attackMarks: {
     type: Array as PropType<{ file: number; rank: number; black: number; white: number }[]>,
@@ -1081,14 +1087,31 @@ const whiteHand = computed(() => {
   );
 });
 
+/** 動きの矢印。駒を選んでいる間は、ほかの案内の矢印の代わりに、その駒が動ける方向へ青い矢印を出す。 */
+const movementCandidates = computed<CandidateMove[]>(() => {
+  if (!props.movementArrows || !props.allowMove || !(state.pointer instanceof Square)) return [];
+  return movementArrowMoves(props.position, state.pointer).map((move) => ({ move, guideKind: "move" as const }));
+});
+const shownCandidates = computed(() => (
+  movementCandidates.value.length ? movementCandidates.value : props.candidates
+));
+
+/** 矢印の色。危険な定跡手は橙、動きの矢印は動けるマスの点と同じ青、それ以外(AI候補・定跡)は赤。 */
+function arrowColor(guideKind: CandidateMove["guideKind"]) {
+  if (guideKind === "unsafe-plan") return "#ff9d00";
+  if (guideKind === "move") return "#1d6fe0";
+  return "#fe0000";
+}
+
 const arrows = computed(() => {
   const arrowWidth = 30 * main.value.ratio;
-  const n = props.candidates.length;
-  const bestScore = props.candidates.reduce<number | undefined>(
+  const candidates = shownCandidates.value;
+  const n = candidates.length;
+  const bestScore = candidates.reduce<number | undefined>(
     (best, c) => (c.score !== undefined && (best === undefined || c.score > best) ? c.score : best),
     undefined,
   );
-  const geometries = props.candidates.map((candidate) => {
+  const geometries = candidates.map((candidate) => {
     const move = candidate.move;
     const boardBase = layoutBuilder.value.boardBasePoint;
     const blackHandBase = layoutBuilder.value.blackHandBasePoint;
@@ -1165,7 +1188,7 @@ const arrows = computed(() => {
       const diff = candidate.score - bestScore;
       scoreRank =
         1 +
-        props.candidates.filter((c) => c.score !== undefined && c.score > candidate.score!).length;
+        candidates.filter((c) => c.score !== undefined && c.score > candidate.score!).length;
       evaluationLabel = diff === 0 ? "最善" : `${diff}`;
     } else {
       scoreRank = index + 1;
@@ -1178,7 +1201,7 @@ const arrows = computed(() => {
     const labelOffsetY = dy > 0 ? -horizontalFactor * 12 : horizontalFactor * 12;
     return {
       id: move.usi,
-      color: candidate.guideKind === "unsafe-plan" ? "#ff9d00" : "#fe0000",
+      color: arrowColor(candidate.guideKind),
       labelText,
       start: shiftedStart,
       shaftEnd,
@@ -1204,7 +1227,7 @@ const arrows = computed(() => {
       labelStyle: {
         left: middle.x + "px",
         top: middle.y + labelOffsetY + "px",
-        color: candidate.guideKind === "unsafe-plan" ? "#d96b00" : "#fe0000",
+        color: candidate.guideKind === "unsafe-plan" ? "#d96b00" : arrowColor(candidate.guideKind),
         zIndex: 100 + 2 * n - scoreRank,
       },
     };

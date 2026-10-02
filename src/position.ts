@@ -8,7 +8,7 @@ import {
   unpromotedPieceType,
 } from "tsshogi";
 
-export type CandidateGuideKind = "plan" | "unsafe-plan" | "urgent" | "ai";
+export type CandidateGuideKind = "plan" | "unsafe-plan" | "urgent" | "ai" | "move";
 export type CandidateInput = { usi: string; score?: number; guideKind?: CandidateGuideKind };
 export type CandidateMove = {
   move: Move;
@@ -52,6 +52,27 @@ export function legalDestinationSquares(
     return move !== null &&
       (position.isValidMove(move) || position.isValidMove(move.withPromote()));
   });
+}
+
+/**
+ * 駒の動き方を矢印で見せるための手。盤上の駒が動けるマスを方向ごとにまとめ、
+ * 飛車・角・香のように遠くまで動ける駒は、その方向でいちばん遠いマスまでの1本にする。桂の2方向は別々の矢印にする。
+ */
+export function movementArrowMoves(position: ImmutablePosition, from: Square): Move[] {
+  const farthest = new Map<string, { square: Square; distance: number }>();
+  for (const square of legalDestinationSquares(position, from)) {
+    const fileStep = square.file - from.file;
+    const rankStep = square.rank - from.rank;
+    const distance = Math.max(Math.abs(fileStep), Math.abs(rankStep));
+    // 縦・横・斜めは方向だけで、桂のような飛ぶ動きは動いた量そのもので分ける。
+    const straight = fileStep === 0 || rankStep === 0 || Math.abs(fileStep) === Math.abs(rankStep);
+    const key = straight ? `${Math.sign(fileStep)},${Math.sign(rankStep)}` : `${fileStep},${rankStep}`;
+    const known = farthest.get(key);
+    if (!known || distance > known.distance) farthest.set(key, { square, distance });
+  }
+  return [...farthest.values()]
+    .map(({ square }) => position.createMove(from, square))
+    .filter((move): move is Move => move !== null);
 }
 
 export function lastMoveFromUsi(

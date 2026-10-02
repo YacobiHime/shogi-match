@@ -445,6 +445,7 @@
             </p>
             <p v-if="matchKind === 'learning'" class="shogi-game__pregame-message">
               対局中は「駒の利き」ボタンで、各マスに利いている駒の数を表示できます。
+              「動きの矢印」にチェックを入れると、選んだ駒が動ける方向を矢印で表示します。
             </p>
           </section>
         </div>
@@ -607,6 +608,7 @@
         :white-player-detail="cpuColor === Color.WHITE ? cpuStrengthLabel : ''"
         :candidates="boardCandidates"
         :attack-marks="boardAttackMarks"
+        :movement-arrows="matchKind === 'learning' && movementArrowsEnabled && matchStarted && !pregameOpen"
         @usi-move="onPlayerMove"
       />
     </div>
@@ -671,6 +673,10 @@
         :aria-pressed="attackGuideEnabled"
         @click="attackGuideEnabled = !attackGuideEnabled"
       >駒の<wbr>利き</button>
+      <label v-if="matchKind === 'learning'" class="shogi-game__assist-check">
+        <input v-model="movementArrowsEnabled" type="checkbox">
+        <span>選んだ駒の動きを矢印で表示</span>
+      </label>
       <button
         v-if="reviewMode && !analysisOpen"
         type="button"
@@ -1152,6 +1158,8 @@ const learningHintLimit = ref(3);
 const learningUndoLimit = ref(3);
 const learningStartLabel = ref("");
 const attackGuideEnabled = ref(false);
+// 学習対局で、選んだ駒の動ける方向を矢印で見せるか。駒を選んだときだけ出るので、学習対局では最初からオンにする。
+const movementArrowsEnabled = ref(true);
 
 /** 棋譜の手番号が先手の手か。駒落ちでは上手（後手）から指し始める。 */
 function isBlackMoveIndex(index: number) {
@@ -3076,6 +3084,7 @@ function persistMatchState() {
       undoLimit: learningUndoLimit.value,
       startLabel: learningStartLabel.value,
       attackGuide: attackGuideEnabled.value,
+      movementArrows: movementArrowsEnabled.value,
     },
     tutorial: tutorialMatch.value,
     settingsBeforeTutorial: tutorialMatch.value ? settingsBeforeTutorial : null,
@@ -3136,6 +3145,8 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
   learningUndoLimit.value = normalizeAssistLimit(learning.undoLimit);
   learningStartLabel.value = text(learning.startLabel);
   attackGuideEnabled.value = matchKind.value === "learning" && learning.attackGuide === true;
+  // 保存のない以前の対局でも、学習対局の既定どおりオンにする。
+  movementArrowsEnabled.value = learning.movementArrows !== false;
   tutorialMatch.value = matchKind.value === "learning" ? restoredTutorialMatch(snapshot.tutorial) : null;
   settingsBeforeTutorial = tutorialMatch.value && snapshot.settingsBeforeTutorial && typeof snapshot.settingsBeforeTutorial === "object"
     ? snapshot.settingsBeforeTutorial
@@ -5465,6 +5476,7 @@ watch([
   strategyCompletionLocked,
   castleCompletionLocked,
   attackGuideEnabled,
+  movementArrowsEnabled,
   castleNearCompletionHandled,
   strategyNearCompletionHandled,
 ], persistMatchState);
@@ -6223,6 +6235,42 @@ queueMicrotask(() => {
   color: var(--night-deep);
   background: var(--lavender);
   box-shadow: 0 2px 0 rgba(23, 38, 50, 0.6), inset 0 0 0 2px var(--night-deep);
+}
+/* 動きの矢印のチェックボックス。ボタンの列を窮屈にしないよう、その下に1行で置き、押せる範囲を枠全体にする。 */
+.shogi-game__assist-check {
+  display: flex;
+  flex: 1 1 100%;
+  gap: 0.3em;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 2.4em;
+  padding: 0.3em 0.6em;
+  border: 1px solid rgba(241, 165, 76, 0.68);
+  border-radius: 0.3em;
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72);
+  font-size: 0.9em;
+  font-weight: 700;
+  line-height: 1.15;
+  word-break: keep-all;
+  cursor: pointer;
+}
+.shogi-game__assist-check input {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0;
+  accent-color: #1d6fe0;
+  cursor: pointer;
+}
+.shogi-game__assist-check:has(input:checked) {
+  border-color: #1d6fe0;
+  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72), inset 0 0 0 2px #1d6fe0;
+}
+.shogi-game--side.shogi-game--short .shogi-game__assist-check {
+  min-height: 2.2em;
 }
 .shogi-game__assist-actions small {
   margin-left: 0.15em;

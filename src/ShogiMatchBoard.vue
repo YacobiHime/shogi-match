@@ -34,6 +34,7 @@
       :position="position"
       :last-move="lastMoveObject"
       :candidates="candidateMoves"
+      :movement-arrows="movementArrows"
       :attack-marks="attackMarks"
       :mark-squares="markSquares"
       :flip="flip"
@@ -79,6 +80,8 @@ type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key"
 const props = defineProps({
   sfen: { type: String, required: true },
   candidates: { type: Array as () => CandidateInput[], default: () => [] },
+  // 選んだ駒の動ける方向を矢印で見せる(学習対局の「動きの矢印」)。
+  movementArrows: { type: Boolean, default: false },
   // 学習対局の「駒の利き」表示。各升に利いている先手・後手の駒数。
   attackMarks: { type: Array as () => AttackMark[], default: () => [] },
   // 図鑑で、駒の動きや大事なマスを色付けする。
