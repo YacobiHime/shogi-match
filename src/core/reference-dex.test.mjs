@@ -316,6 +316,13 @@ describe("reference dex", () => {
       for (const { usi } of enumerateLegalMoves(after)) expect(hasMateInOne(play(after, usi)), `${id}: ${usi}`).toBe(true);
     });
 
+    it("drops the legendary silver where both the gold and the rook can take it in habu-magic", () => {
+      const start = createGameRecord(referenceEntrySfen(glossary("habu-magic"))).position;
+      const after = play(start, "S*5b");
+      const replies = enumerateLegalMoves(after).map(({ usi }) => usi);
+      expect(replies).toEqual(expect.arrayContaining(["6a5b", "8b5b"]));
+    });
+
     it("threatens mate without check in the tsumero example, but it can be defended", () => {
       const start = createGameRecord(referenceEntrySfen(glossary("tsumero"))).position;
       const after = play(start, "P*2c");
