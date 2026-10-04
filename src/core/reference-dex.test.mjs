@@ -9,6 +9,7 @@ import {
   referenceDexGroups,
   referenceEntryKifu,
   referenceEntryMarks,
+  referenceEntryMatches,
   referenceEntrySfen,
   referencePieceImageEntryId,
 } from "./reference-dex.mjs";
@@ -30,8 +31,8 @@ describe("reference dex", () => {
     expect(referencePieceImageEntryId("unknown")).toBe("");
   });
 
-  it("offers piece, tesuji and shogi-world dexes with grouped entries", () => {
-    expect(KINDS).toEqual(["piece", "tesuji", "world"]);
+  it("offers piece, tesuji, shogi-world and glossary dexes with grouped entries", () => {
+    expect(KINDS).toEqual(["piece", "tesuji", "world", "glossary"]);
     for (const kind of KINDS) {
       const entries = referenceDexEntries(kind);
       expect(entries.length, kind).toBeGreaterThanOrEqual(8);
@@ -245,5 +246,85 @@ describe("reference dex", () => {
     const afterFork = createGameRecord(referenceEntrySfen(fork));
     afterFork.append(afterFork.position.createMoveByUSI("4e5c"));
     expect(pieceReachSquares(afterFork.position.sfen, "5c").sort()).toEqual(["4a", "6a"]);
+  });
+
+  it("collects every requested term in the glossary with valid related links", () => {
+    const entries = referenceDexEntries("glossary");
+    const terms = entries.map(({ label }) => label.replace(/（.*$/, ""));
+    for (const term of [
+      "寄せ", "詰めろ", "対抗形", "必至", "駒組み", "手筋", "さばき", "受け", "無理攻め", "駒得", "攻め駒", "守り駒",
+      "遊び駒", "浮き駒", "離れ駒", "詰み筋", "王手飛車", "両取り", "定跡", "指し手", "振り飛車", "居飛車", "戦法", "囲い",
+      "角交換", "形勢", "大局観", "入玉", "急戦", "最善手", "格言", "悪形", "形良く", "悪手", "好手", "神の一手", "二枚換え",
+      "急所", "壁銀", "壁金", "受けなし", "一段金", "手番", "投了", "詰めろ逃れの詰めろ", "玉頭戦", "厚み", "合い駒",
+      "開き王手", "合わせ", "居玉", "思い出王手", "棋風", "利き", "妙手", "奇襲戦法", "奇手", "大駒", "小駒", "渋い",
+      "捨て駒", "詰将棋", "敗着", "早逃げ", "無理筋", "寄り形", "見落とし", "読み抜け", "力戦", "割り打ち",
+    ]) expect(terms, term).toContain(term);
+    const ids = new Set(entries.map(({ id }) => id));
+    for (const { id, label, related = [] } of entries) {
+      // 見出しには読みがなを添える。
+      expect(label, id).toMatch(/（[ぁ-んー]+）$|^さばき$/);
+      for (const target of related) {
+        expect(ids.has(target), `${id} → ${target}`).toBe(true);
+        expect(target, id).not.toBe(id);
+      }
+    }
+  });
+
+  it("searches the glossary by reading and explanation regardless of kana", () => {
+    const entries = referenceDexEntries("glossary");
+    const found = (query) => entries.filter((entry) => referenceEntryMatches(entry, query)).map(({ id }) => id);
+    expect(found("つめろ")).toContain("tsumero");
+    expect(found("ツメロ")).toContain("tsumero");
+    expect(found("十字飛車")).toEqual(["ryodori"]);
+    expect(found("")).toHaveLength(entries.length);
+    const groups = referenceDexGroups("glossary", "かべ");
+    expect(groups.flatMap(({ items }) => items.map(({ id }) => id))).toEqual(expect.arrayContaining(["kabe-gin", "kabe-kin"]));
+    expect(referenceDexGroups("glossary", "存在しない言葉")).toEqual([]);
+  });
+
+  describe("glossary endgame claims", () => {
+    const glossary = (id) => referenceDexEntries("glossary").find((entry) => entry.id === id);
+    const play = (position, usi) => {
+      const record = createGameRecord(position.sfen);
+      expect(record.append(record.position.createMoveByUSI(usi)), usi).toBe(true);
+      return record.position;
+    };
+    const isMate = (position) => position.checked && enumerateLegalMoves(position).length === 0;
+    const hasMateInOne = (position) => enumerateLegalMoves(position).some(({ usi }) => isMate(play(position, usi)));
+
+    it.each(["saizenshu", "kishu", "haichaku", "kabe-kin", "tsume-shogi"])("mates at once with the arrow in %s", (id) => {
+      const start = createGameRecord(referenceEntrySfen(glossary(id))).position;
+      expect(isMate(play(start, glossary(id).arrows[0]))).toBe(true);
+    });
+
+    it.each([
+      ["myoushu", ["R*1a", "1b1a", "G*2b"]],
+      ["kami-no-itte", ["B*2b", "2a2b", "S*1b"]],
+      ["sute-goma", ["S*2a", "1b2a", "G*2b"]],
+      ["tsumisuji", ["N*2c", "2b2c", "G*1b"]],
+    ])("mates after the sacrifice in %s", (id, line) => {
+      let position = createGameRecord(referenceEntrySfen(glossary(id))).position;
+      expect(hasMateInOne(position), `${id}: いきなり詰む`).toBe(false);
+      for (const usi of line) position = play(position, usi);
+      expect(isMate(position)).toBe(true);
+    });
+
+    it.each(["yose", "hisshi", "ukenashi"])("leaves no defence after the quiet move in %s", (id) => {
+      const start = createGameRecord(referenceEntrySfen(glossary(id))).position;
+      const after = play(start, glossary(id).arrows[0]);
+      expect(after.checked).toBe(false);
+      for (const { usi } of enumerateLegalMoves(after)) expect(hasMateInOne(play(after, usi)), `${id}: ${usi}`).toBe(true);
+    });
+
+    it("threatens mate without check in the tsumero example, but it can be defended", () => {
+      const start = createGameRecord(referenceEntrySfen(glossary("tsumero"))).position;
+      const after = play(start, "P*2c");
+      expect(after.checked).toBe(false);
+      // 後手が何もしなければ（手番を渡せば）、2二銀で詰む。
+      const fields = after.sfen.split(" ");
+      fields[1] = "b";
+      expect(isMate(play(createGameRecord(fields.join(" ")).position, "S*2b"))).toBe(true);
+      expect(enumerateLegalMoves(after).some(({ usi }) => !hasMateInOne(play(after, usi)))).toBe(true);
+    });
   });
 });

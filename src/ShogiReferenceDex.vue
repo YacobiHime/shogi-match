@@ -34,6 +34,17 @@
           class="shogi-dex__list-close"
           @click="listOpen = false"
         >✕ 閉じる</button>
+        <!-- 用語辞典は項目が多いため、見出しと解説から検索できるようにする。 -->
+        <div v-if="searchable" class="shogi-reference-dex__search">
+          <input
+            v-model="searchQuery"
+            type="search"
+            placeholder="用語を探す（例: つめろ）"
+            aria-label="用語を探す"
+            enterkeyhint="search"
+          >
+          <p v-if="!groups.length" class="shogi-reference-dex__search-empty">見つからなかったよ。</p>
+        </div>
         <section v-for="group in groups" :key="group.id" class="shogi-dex__group">
           <h2>{{ group.label }}</h2>
           <ul>
@@ -62,7 +73,7 @@
           </button>
           <div class="shogi-dex__detail-head">
             <h2>{{ selectedEntry.label }}</h2>
-            <span v-if="kind === 'tesuji' && sideToMove === 'white'" class="shogi-dex__side-note">後手番の局面</span>
+            <span v-if="(kind === 'tesuji' || kind === 'glossary') && sideToMove === 'white'" class="shogi-dex__side-note">後手番の局面</span>
             <span v-if="flipped && !selectedEntry.table" class="shogi-dex__side-note">後手から見た盤面</span>
             <button
               v-if="!selectedEntry.table"
@@ -357,6 +368,15 @@
                 <dd>{{ text }}</dd>
               </div>
             </dl>
+            <nav v-if="relatedEntries.length" class="shogi-reference-dex__related" aria-label="関連する用語">
+              <span class="shogi-reference-dex__related-label">関連する用語</span>
+              <button
+                v-for="item in relatedEntries"
+                :key="item.id"
+                type="button"
+                @click="jumpToEntry(item.id)"
+              >{{ item.label }}</button>
+            </nav>
           </div>
         </div>
       </section>
@@ -405,7 +425,7 @@ import {
   referencePieceImageEntryId,
 } from "./core/reference-dex.mjs";
 
-type ReferenceDexKind = "piece" | "tesuji" | "world";
+type ReferenceDexKind = "piece" | "tesuji" | "world" | "glossary";
 type TierRow = { tier: string; pieces: { label: string; images: string[]; points: number | string }[] };
 type AiTable = { title: string; note: string; pieces: { label: string; images: string[]; value: number }[] };
 type ReferenceEntry = {
@@ -419,6 +439,7 @@ type ReferenceEntry = {
   kifu?: string;
   kifuTitle?: string;
   flip?: boolean;
+  related?: string[];
 };
 type KifuStep = { sfen: string; label: string; lastMove: string; comment: string; highlight: string };
 type Kifu = { black: string; white: string; ending: string; winner: "" | "black" | "white"; steps: KifuStep[] };
@@ -474,7 +495,11 @@ const LEGEND_LABELS = {
 
 const dex = computed(() => REFERENCE_DEX_KINDS[props.kind]);
 const entries = computed(() => referenceDexEntries(props.kind) as ReferenceEntry[]);
-const groups = computed(() => referenceDexGroups(props.kind));
+// 用語辞典だけ、一覧を検索で絞り込める。
+const searchable = computed(() => props.kind === "glossary");
+const searchQuery = ref("");
+watch(() => props.kind, () => { searchQuery.value = ""; });
+const groups = computed(() => referenceDexGroups(props.kind, searchable.value ? searchQuery.value : ""));
 const initialEntryId = () => (
   entries.value.some(({ id }) => id === props.initialId) ? props.initialId : entries.value[0]?.id ?? ""
 );
@@ -890,7 +915,7 @@ function selectItem(id: string) {
   listOpen.value = false;
 }
 
-// 表の駒から説明へ飛んだとき、元の表とスクロール位置を覚えておき、ワンタップで戻れるようにする。
+// 表の駒や関連する用語から別の項目へ飛んだとき、元の項目とスクロール位置を覚えておき、ワンタップで戻れるようにする。
 // スクロールするのは、広い画面では詳細、狭い画面では本文全体。
 const bodyEl = ref<HTMLElement | null>(null);
 const detailEl = ref<HTMLElement | null>(null);
@@ -908,9 +933,8 @@ function pieceEntryLabel(image: string) {
   const id = referencePieceImageEntryId(image);
   return entries.value.find((entry) => entry.id === id)?.label ?? "";
 }
-function openPieceEntry(image: string) {
-  const id = referencePieceImageEntryId(image);
-  if (!id) return;
+/** 今の項目とスクロール位置を覚えてから、別の項目を開く。 */
+function jumpToEntry(id: string) {
   returnPoint.value = {
     id: selectedId.value,
     scroll: [bodyEl.value?.scrollTop ?? 0, detailEl.value?.scrollTop ?? 0],
@@ -918,6 +942,14 @@ function openPieceEntry(image: string) {
   selectedId.value = id;
   setScroll([0, 0]);
 }
+function openPieceEntry(image: string) {
+  const id = referencePieceImageEntryId(image);
+  if (id) jumpToEntry(id);
+}
+// 用語辞典の関連する用語へ移るときも、元の項目へワンタップで戻れるようにする。
+const relatedEntries = computed(() => (selectedEntry.value?.related ?? [])
+  .map((id) => entries.value.find((entry) => entry.id === id))
+  .filter((entry): entry is ReferenceEntry => Boolean(entry)));
 function returnToTable() {
   const point = returnPoint.value;
   if (!point) return false;
@@ -926,7 +958,7 @@ function returnToTable() {
   setScroll(point.scroll);
   return true;
 }
-// ブラウザの戻るでは、駒の説明から表へ戻り、それ以外は図鑑を閉じる。
+// ブラウザの戻るでは、飛ぶ前の項目へ戻り、それ以外は図鑑を閉じる。
 function goBack() {
   if (!returnToTable()) emit("close");
 }
@@ -1261,6 +1293,59 @@ defineExpose({ goBack });
 .shogi-game .shogi-reference-dex__annotation--dubious { background: #fff38a; }
 .shogi-game .shogi-reference-dex__annotation--mistake { background: #f6c560; }
 .shogi-game .shogi-reference-dex__annotation--blunder { background: #ff8a5c; }
+.shogi-game .shogi-reference-dex__search {
+  margin: 0.3rem 0.3rem 0.2rem;
+}
+.shogi-game .shogi-dex .shogi-reference-dex__search input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.3rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 0.45rem;
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.08);
+  /* iOSで入力欄にフォーカスしたとき拡大されないよう、16px以上にする。 */
+  font: 500 1rem/1.3 inherit;
+  font-family: inherit;
+}
+.shogi-game .shogi-reference-dex__search input::placeholder {
+  color: rgba(255, 252, 244, 0.55);
+}
+.shogi-game .shogi-reference-dex__search-empty {
+  margin: 0.5rem 0.2rem 0;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+.shogi-game .shogi-reference-dex__related {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.8rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255, 252, 244, 0.2);
+}
+.shogi-game .shogi-reference-dex__related-label {
+  width: 100%;
+  color: #f1a54c;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.shogi-game .shogi-dex .shogi-reference-dex__related button {
+  min-height: 2rem;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 999px;
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.08);
+  font: 600 0.8rem/1.2 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+.shogi-game .shogi-dex .shogi-reference-dex__related button:hover {
+  background: rgba(255, 252, 244, 0.18);
+}
 .shogi-game .shogi-reference-dex__legend {
   display: flex;
   flex-wrap: wrap;

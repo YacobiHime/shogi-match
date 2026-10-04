@@ -1,9 +1,10 @@
 import { Position, RecordMetadataKey, Square, importKIF } from "tsshogi";
 import { appendUsiMove, createGameRecord } from "../game-state";
 import { AMANO_SOHO_KIFU, HABU_YOSHIHARU_52GIN_KIFU, KOYAMA_REO_ENTRANCE_KIFU, OHASHI_SOKEI_SANSA_KIFU } from "../data/reference-kifu.mjs";
+import { GLOSSARY_ENTRIES } from "../data/shogi-glossary.mjs";
 
 /**
- * 駒図鑑・手筋図鑑・将棋界図鑑の収録内容。
+ * 駒図鑑・手筋図鑑・将棋界図鑑・将棋用語辞典の収録内容。
  * 各項目は盤面（SFENまたは平手からの手順）と、升の色付け・矢印・解説を持つ。
  * 代表局の棋譜（KIF形式）を持つ項目は、定跡図鑑と同じように1手ずつ並べられる。
  * flipを付けた項目は、後手を下にした盤面で開く。
@@ -33,6 +34,11 @@ export const REFERENCE_DEX_KINDS = Object.freeze({
     title: "将棋界図鑑",
     listLabel: "項目一覧",
     description: "将棋の歴史や、名棋士の逸話を紹介するよ。",
+  },
+  glossary: {
+    title: "将棋用語辞典",
+    listLabel: "用語一覧",
+    description: "「詰めろ」「さばき」のような将棋の言葉を、盤面で確かめよう。",
   },
 });
 
@@ -737,7 +743,12 @@ const WORLD_ENTRIES = [
   },
 ];
 
-const ENTRIES = Object.freeze({ piece: PIECE_ENTRIES, tesuji: TESUJI_ENTRIES, world: WORLD_ENTRIES });
+const ENTRIES = Object.freeze({
+  piece: PIECE_ENTRIES,
+  tesuji: TESUJI_ENTRIES,
+  world: WORLD_ENTRIES,
+  glossary: GLOSSARY_ENTRIES,
+});
 
 export function referenceDexEntries(kind) {
   return ENTRIES[kind] ?? [];
@@ -767,10 +778,31 @@ export function referencePieceImageEntryId(image) {
   return PIECE_IMAGE_ENTRY_IDS[image] ?? "";
 }
 
-/** 図鑑の項目を、グループごとにまとめた一覧にする。 */
-export function referenceDexGroups(kind) {
+/** 検索用に、カタカナをひらがなへ、英字を小文字へそろえ、空白を除く。 */
+function normalizeSearchText(text) {
+  return String(text)
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+    .replace(/\s+/g, "");
+}
+
+/**
+ * 検索語に合う項目か。見出し（読みがなを含む）と解説の本文から探す。
+ * 空の検索語はすべての項目に合う。
+ */
+export function referenceEntryMatches(entry, query) {
+  const needle = normalizeSearchText(query ?? "");
+  if (!needle) return true;
+  const haystack = [entry.label, entry.overview, ...(entry.rows ?? []).flat()].join("\n");
+  return normalizeSearchText(haystack).includes(needle);
+}
+
+/** 図鑑の項目を、グループごとにまとめた一覧にする。検索語を渡すと、合う項目だけに絞る。 */
+export function referenceDexGroups(kind, query = "") {
   const groups = [];
   for (const entry of referenceDexEntries(kind)) {
+    if (!referenceEntryMatches(entry, query)) continue;
     let group = groups.find(({ label }) => label === entry.group);
     if (!group) {
       group = { id: `${kind}-${groups.length}`, label: entry.group, items: [] };

@@ -172,6 +172,27 @@
               <span class="shogi-home__label">将棋界図鑑</span>
               <small class="shogi-home__desc">歴史と名棋士</small>
             </button>
+            <button type="button" class="shogi-home__card" @click="referenceDexKind = 'glossary'">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f1a54c">
+                  <rect x="3" y="1" width="10" height="14" />
+                </g>
+                <g fill="#fffcf4">
+                  <rect x="4" y="2" width="8" height="12" />
+                  <rect x="13" y="3" width="2" height="2" />
+                  <rect x="13" y="7" width="2" height="2" />
+                  <rect x="13" y="11" width="2" height="2" />
+                </g>
+                <g fill="#1d303f">
+                  <rect x="5" y="4" width="4" height="1" />
+                  <rect x="5" y="6" width="6" height="1" />
+                  <rect x="5" y="8" width="6" height="1" />
+                  <rect x="5" y="10" width="5" height="1" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">将棋用語辞典</span>
+              <small class="shogi-home__desc">言葉の意味と使い方</small>
+            </button>
           </div>
         </section>
       </nav>
@@ -1190,7 +1211,7 @@ const homeOpen = ref(props.showHome);
 const dexOpen = ref(false);
 const openingDexInitialId = ref("");
 // 駒図鑑・手筋図鑑・将棋界図鑑のうち、開いているもの。
-const referenceDexKind = ref<"" | "piece" | "tesuji" | "world">("");
+const referenceDexKind = ref<"" | "piece" | "tesuji" | "world" | "glossary">("");
 const referenceDexInitialId = ref("");
 // やこび姫の将棋教室を開いているか。
 const tutorialOpen = ref(false);
@@ -2709,7 +2730,7 @@ function openDexFromTutorial({ kind, id }: { kind: string; id?: string }) {
     dexOpen.value = true;
     return;
   }
-  if (kind === "piece" || kind === "tesuji" || kind === "world") {
+  if (kind === "piece" || kind === "tesuji" || kind === "world" || kind === "glossary") {
     referenceDexInitialId.value = id ?? "";
     referenceDexKind.value = kind;
   }
@@ -7505,7 +7526,7 @@ queueMicrotask(() => {
   .shogi-home__label { font-size: 13px; letter-spacing: 0.02em; white-space: nowrap; }
   .shogi-home__menu { flex-direction: column; align-items: stretch; width: 100%; max-width: 380px; gap: 18px; }
   .shogi-home__cards { grid-auto-columns: minmax(0, 1fr); }
-  /* 図鑑の4枚は、狭い画面では2列2段に並べる。 */
+  /* 図鑑の5枚は、狭い画面では2列に並べる。 */
   .shogi-home__cards--dex { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* メニューが縦に長くなるため、月をタイトルと重ならない右上へ寄せる。 */
   .shogi-home__moon { top: 3%; right: 6%; width: 32px; height: 32px; box-shadow: inset -9px -4px 0 0 #1d303f; }

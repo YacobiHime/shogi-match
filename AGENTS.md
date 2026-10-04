@@ -22,7 +22,7 @@
 | 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue` |
 | リロード復元 | `src/core/match-persistence.mjs` |
 | 将棋教室 | `src/ShogiTutorial.vue`、`src/core/tutorial-curriculum.mjs`、設計は`docs/nyumon-mode-design.md` |
-| 図鑑 | `src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界）、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`ShogiMatchGame.vue`の`dexAnalysisEngine`を借りる） |
+| 図鑑 | `src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`ShogiMatchGame.vue`の`dexAnalysisEngine`を借りる） |
 | iframe・ノベル連携 | `src/novel-bridge.ts`、RPGは`integrations/shogi-rpg.js` |
 | 手動検証履歴 | `docs/yakobihime-opening-guide-verification.md` |
 
