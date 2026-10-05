@@ -23,14 +23,18 @@
         aria-hidden="true"
       ></span>
       <span class="shogi-home__moon" aria-hidden="true"></span>
-      <img
-        class="shogi-home__chara"
-        :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
-        alt=""
-        aria-hidden="true"
-      >
-      <div class="shogi-home__title">
-        <h1>shogi-match</h1>
+      <!-- 広い画面では、タイトルとキャラクターを左の列にまとめる。狭い画面ではキャラクターを下部へ置く。 -->
+      <div class="shogi-home__hero">
+        <div class="shogi-home__title">
+          <h1>shogi-match</h1>
+        </div>
+        <p class="shogi-home__bubble" aria-hidden="true">今日はなにをする？</p>
+        <img
+          class="shogi-home__chara"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+          alt=""
+          aria-hidden="true"
+        >
       </div>
       <nav class="shogi-home__menu" aria-label="メニュー">
         <section class="shogi-home__group" aria-labelledby="shogi-home-school">
@@ -60,7 +64,7 @@
         <section class="shogi-home__group" aria-labelledby="shogi-home-match">
           <h2 id="shogi-home-match" class="shogi-home__group-title">対局</h2>
           <div class="shogi-home__cards">
-            <button type="button" class="shogi-home__card" @click="openMatchSetup('normal')">
+            <button type="button" class="shogi-home__card shogi-home__card--main" @click="openMatchSetup('normal')">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
                   <rect x="2" y="2" width="12" height="1" />
@@ -7549,6 +7553,119 @@ queueMicrotask(() => {
   .shogi-home { gap: 14px; padding-bottom: 104px; }
   .shogi-home__chara { height: 92px; bottom: 8px; }
   .shogi-home__icon { width: 32px; height: 32px; }
+}
+.shogi-home__bubble { display: none; }
+/* 広い画面では、左にタイトルとキャラクター、右にメニューを並べる。 */
+@media (min-width: 1000px) and (min-height: 600px) {
+  .shogi-home {
+    display: grid;
+    grid-template-columns: minmax(260px, 380px) minmax(0, 760px);
+    justify-content: center;
+    align-content: center;
+    column-gap: clamp(32px, 5vw, 88px);
+    padding: 40px clamp(32px, 5vw, 80px);
+  }
+  .shogi-home__hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .shogi-home__title h1 { font-size: clamp(36px, 3.6vw, 56px); white-space: nowrap; }
+  .shogi-home__bubble {
+    position: relative;
+    display: block;
+    margin: 28px 0 14px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    background: #fffcf4;
+    box-shadow: 4px 4px 0 #172632;
+    color: #1d303f;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .shogi-home__bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    width: 12px;
+    height: 12px;
+    background: #fffcf4;
+    transform: translateX(-50%) rotate(45deg);
+  }
+  .shogi-home__chara {
+    position: static;
+    height: clamp(220px, 44vh, 380px);
+    animation-name: shogi-home-chara-float-wide;
+  }
+  .shogi-home__menu {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 32px 16px;
+  }
+  /* 入門と対局のカードは、同じ幅・同じ高さにそろえる。 */
+  .shogi-home__group { grid-template-rows: auto 1fr; }
+  .shogi-home__cards { grid-auto-columns: minmax(0, 1fr); gap: 16px; }
+  /* 図鑑は1段下へ、メニューの幅いっぱいに並べる。 */
+  .shogi-home__group:last-child { grid-column: 1 / -1; grid-template-rows: none; }
+  /* 全体のボタンの書式（.shogi-game button）より優先させるため、.shogi-homeを付けて書く。 */
+  .shogi-home .shogi-home__card {
+    justify-content: center;
+    gap: 14px;
+    padding: 28px 14px 24px;
+    border: 2px solid rgba(255, 252, 244, 0.28);
+    border-radius: 8px;
+    background: rgba(43, 70, 91, 0.92);
+    box-shadow: 4px 4px 0 rgba(23, 38, 50, 0.8);
+    transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s, background-color 0.12s;
+  }
+  .shogi-home .shogi-home__card:not(:disabled):hover {
+    border-color: #f1a54c;
+    background-color: rgba(54, 87, 112, 0.95);
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 rgba(23, 38, 50, 0.8);
+  }
+  .shogi-home .shogi-home__card:focus-visible { outline: 3px solid #f1a54c; outline-offset: 3px; }
+  .shogi-home__icon { width: 64px; height: 64px; }
+  .shogi-home__label { font-size: clamp(15px, 1.35vw, 18px); white-space: nowrap; }
+  .shogi-home__desc { font-size: 12px; }
+  /* 通常対局は、いちばんよく使う入口なので目立たせる。 */
+  .shogi-home .shogi-home__card--main { border-color: #f1a54c; background: #3a4f5c; }
+  .shogi-home .shogi-home__card--main:not(:disabled):hover { background-color: #46606f; }
+  /* 図鑑は対局より小さめのカードにして、優先度の差を見せる。 */
+  .shogi-home .shogi-home__cards--dex .shogi-home__card { gap: 8px; padding: 16px 6px 14px; }
+  .shogi-home__cards--dex { gap: 12px; }
+  .shogi-home__cards--dex .shogi-home__icon { width: 44px; height: 44px; }
+  .shogi-home__cards--dex .shogi-home__label { font-size: clamp(12px, 1.1vw, 14px); letter-spacing: 0.02em; }
+  .shogi-home__cards--dex .shogi-home__desc { font-size: 11px; }
+  .shogi-home__moon { right: 6%; top: 7%; }
+}
+/* 大きな画面では、メニューとキャラクターをひと回り大きくする。 */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .shogi-home { grid-template-columns: minmax(300px, 460px) minmax(0, 980px); }
+  .shogi-home__title h1 { font-size: 64px; }
+  .shogi-home__bubble { font-size: 18px; padding: 12px 22px; }
+  .shogi-home__chara { height: clamp(380px, 46vh, 520px); }
+  .shogi-home__group-title { font-size: 16px; }
+  .shogi-home__group-note { font-size: 14px; }
+  .shogi-home .shogi-home__card { padding: 40px 16px 34px; gap: 18px; }
+  .shogi-home__icon { width: 84px; height: 84px; }
+  .shogi-home__label { font-size: 22px; }
+  .shogi-home__desc { font-size: 14px; }
+  .shogi-home .shogi-home__cards--dex .shogi-home__card { padding: 22px 8px 18px; gap: 10px; }
+  .shogi-home__cards--dex .shogi-home__icon { width: 56px; height: 56px; }
+  .shogi-home__cards--dex .shogi-home__label { font-size: 17px; }
+  .shogi-home__cards--dex .shogi-home__desc { font-size: 12px; }
+}
+@keyframes shogi-home-chara-float-wide {
+  0%,
+  100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@media (min-width: 1000px) and (min-height: 600px) and (prefers-reduced-motion: reduce) {
+  .shogi-home__chara { animation: none; }
 }
 /* ===== 学習対局 ===== */
 .shogi-game__toolbar--learning .shogi-game__turn {
