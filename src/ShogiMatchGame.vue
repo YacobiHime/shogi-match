@@ -59,6 +59,22 @@
               <span class="shogi-home__label">やこび姫の将棋教室</span>
               <small class="shogi-home__desc">ルールから戦法まで楽しく学ぼう</small>
             </button>
+            <button type="button" class="shogi-home__card" @click="problemSetOpen = true">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#fffcf4">
+                  <rect x="5" y="2" width="6" height="1" />
+                  <rect x="4" y="3" width="2" height="2" />
+                  <rect x="10" y="3" width="2" height="3" />
+                  <rect x="8" y="6" width="3" height="1" />
+                  <rect x="7" y="7" width="2" height="3" />
+                </g>
+                <g fill="#f1a54c">
+                  <rect x="7" y="12" width="2" height="2" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">やこび姫の将棋問題集</span>
+              <small class="shogi-home__desc">詰ませ方・逃げ方の問題に挑戦</small>
+            </button>
           </div>
         </section>
         <section class="shogi-home__group" aria-labelledby="shogi-home-match">
@@ -210,6 +226,12 @@
       @close="tutorialOpen = false; tutorialReport = null"
       @open-dex="openDexFromTutorial"
       @start-match="startMatchFromTutorial"
+    />
+    <ShogiProblemSet
+      v-if="problemSetOpen"
+      ref="problemSetView"
+      :asset-base-url="assetBaseUrl"
+      @close="problemSetOpen = false"
     />
     <!-- 図鑑は教室の上に重ねて開き、閉じると教室へ戻る。 -->
     <ShogiOpeningDex
@@ -951,6 +973,7 @@ import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
 import ShogiReferenceDex from "./ShogiReferenceDex.vue";
 import ShogiTutorial from "./ShogiTutorial.vue";
+import ShogiProblemSet from "./ShogiProblemSet.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { tutorialLesson } from "./core/tutorial-curriculum.mjs";
 import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
@@ -1220,6 +1243,9 @@ const referenceDexInitialId = ref("");
 const tutorialOpen = ref(false);
 const tutorialView = ref<InstanceType<typeof ShogiTutorial> | null>(null);
 const referenceDexView = ref<InstanceType<typeof ShogiReferenceDex> | null>(null);
+// やこび姫の将棋問題集を開いているか。
+const problemSetOpen = ref(false);
+const problemSetView = ref<InstanceType<typeof ShogiProblemSet> | null>(null);
 // 教室のレッスンから始めた対局。終局後は教室へ戻り、reportで★を付ける。
 type TutorialMatchReport = { lessonId: string; outcome: "win" | "lose" | "draw"; reason: string; assistsUsed: number };
 const tutorialMatch = ref<{ lessonId: string; playerColor: "black" | "white"; report: TutorialMatchReport | null } | null>(null);
@@ -2855,6 +2881,9 @@ function navigateBack() {
     openingDexInitialId.value = "";
   } else if (tutorialOpen.value) {
     tutorialView.value?.goBack();
+  } else if (problemSetOpen.value) {
+    if (problemSetView.value) problemSetView.value.goBack();
+    else problemSetOpen.value = false;
   } else if (homeOpen.value) {
     // ホームが最下段。
   } else if (resignConfirmOpen.value) {
@@ -2877,7 +2906,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || tutorialOpen.value || dexOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
