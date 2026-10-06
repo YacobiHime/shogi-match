@@ -262,6 +262,7 @@ export function analysisPointsFromResults(steps, results, contexts = []) {
           deepCandidates: secondRead?.candidates ?? [],
           shallowCandidates: before.shallow ?? [],
           trivial: context.trivial,
+          obvious: context.obvious,
           sacrifice: context.sacrifice,
         }),
       });

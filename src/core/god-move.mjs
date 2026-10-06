@@ -1,27 +1,43 @@
 import { Position } from "tsshogi";
 import { enumerateLegalMoves } from "../game-state";
 
+import { createNaturalnessEvaluator } from "./move-naturalness.mjs";
+
 /**
  * 神の一手の判定。対局中のやこび姫の褒め言葉と、棋譜解析（対局後・図鑑）の両方で使う。
  *
- * 神の一手は「先を読まないと良さに気付けない最善手で、ほかの手より明らかに良い手」とする。
- * 逆転の一手である必要はない。すべてを満たす手を神の一手の候補にする。
+ * 神の一手は、羽生善治の▲5二銀のような「気付くのが難しく、勝敗を分ける手」とする。
+ * すべてを満たす手を神の一手の候補にする。
  * 1. 取り返しや、合法手が2手以下の局面の手ではない（誰でも指す手を除く）。
- * 2. 深い読みの最善手で、次善手より勝率で10ポイント以上良い（捨て駒なら7ポイント以上）。
- * 3. 浅い読みでは最善に見えない（候補に入らないか、浅い読みの最善より150以上低い）。
+ * 2. 駒を取る・取られそうな駒を逃げる・王手の駒を取る・紐の付いた駒で相手の駒に当てる、といった
+ *    当たり前の手ではない（obvious。捨て駒は除く）。
+ * 3. 深い読みの最善手で、次善手より勝率で20ポイント以上良い（捨て駒なら15ポイント以上）。
+ * 4. 勝敗を分ける。最善手と次善手で、形勢の段階（負け・不明・勝ち）が変わる。
+ *    互角の序盤で、少し良くなるだけの手は対象にしない。
+ *    ただし、詰ませる手（次善手では詰まない）は、勝っている局面の決め手でも勝敗を決める手とし、3と4を問わない。
+ * 5. 浅い読みでは見えない（候補に入らないか、浅い読みの最善より300以上低い）。
  *    または、浅い読みでまだ詰みが見えていない局面での捨て駒。
  * 棋譜解析では、候補のうち強さ（勝率差と、見つけにくさ・捨て駒の加点の合計）の上位3手だけを神の一手と表示する。
  */
 
 /** 次善手との勝率差（ポイント）の下限。 */
-export const GOD_MOVE_MIN_WINRATE_GAP = 10;
+export const GOD_MOVE_MIN_WINRATE_GAP = 20;
 /** 捨て駒のときの勝率差の下限。捨て駒は見つけにくいので緩める。 */
-export const GOD_MOVE_SACRIFICE_MIN_WINRATE_GAP = 7;
+export const GOD_MOVE_SACRIFICE_MIN_WINRATE_GAP = 15;
+/** 勝率がこれ以上なら「勝ち」、LOSE以下なら「負け」の段階とする。最善手と次善手で段階が変わる手だけを選ぶ。 */
+export const GOD_MOVE_WINNING_RATE = 65;
+export const GOD_MOVE_LOSING_RATE = 35;
 /** 浅い読みで最善手より何点低く見えていれば「先まで読まないと気付けない」とするか。 */
-export const GOD_MOVE_SHALLOW_DEFICIT = 150;
+export const GOD_MOVE_SHALLOW_DEFICIT = 300;
+/** 自然さの評価で、誰でも気付く当たり前の手とみなすタグ。 */
+const OBVIOUS_TAGS = new Set([
+  "free-capture", "winning-capture", "even-trade", "recapture", "escape", "capture-checker", "threaten",
+]);
 /** 浅い読みで見えない手と、捨て駒の強さへの加点（勝率ポイント）。 */
 export const GOD_MOVE_HIDDEN_BONUS = 10;
 export const GOD_MOVE_SACRIFICE_BONUS = 10;
+/** 詰ませる決め手の強さへの加点。勝率差は小さくても、勝負を決めた手として順位を上げる。 */
+export const GOD_MOVE_MATE_BONUS = 20;
 /** 棋譜解析で神の一手と表示する1局あたりの上限。 */
 export const GOD_MOVE_LIMIT = 3;
 
@@ -70,15 +86,29 @@ function rankedCandidates(candidates = []) {
     .sort((left, right) => left.rank - right.rank);
 }
 
+/** 取る・逃げる・王手の駒を取る・紐の付いた駒で当てる、といった誰でも気付く手か。 */
+function isObviousMove(beforeSfen, usi, previousUsi) {
+  try {
+    const evaluate = createNaturalnessEvaluator(beforeSfen, {
+      moveHistory: previousUsi ? [previousUsi] : [],
+      simplicity: 1,
+    });
+    return evaluate(usi).tags.some((tag) => OBVIOUS_TAGS.has(tag));
+  } catch {
+    return false;
+  }
+}
+
 /**
- * 指す前の局面と指し手から、その手が誰でも指す手（trivial）か、捨て駒（sacrifice）かを調べる。
+ * 指す前の局面と指し手から、その手が誰でも指す手（trivial）か、当たり前の手（obvious）か、
+ * 捨て駒（sacrifice）かを調べる。
  * 捨て駒は、相手がその駒を合法に取れて、取り合いを最後まで単純に数えると駒損になる手。
  * @param {string} beforeSfen
  * @param {string} usi
  * @param {string} [previousUsi] 直前の相手の手。取り返しの判定に使う。
  */
 export function moveContext(beforeSfen, usi, previousUsi = "") {
-  const none = { trivial: false, sacrifice: false };
+  const none = { trivial: false, obvious: false, sacrifice: false };
   const position = Position.newBySFEN(beforeSfen);
   const move = position?.createMoveByUSI(usi);
   if (!position || !move) return none;
@@ -88,17 +118,26 @@ export function moveContext(beforeSfen, usi, previousUsi = "") {
   const recapture = Boolean(captured) && previousUsi.slice(2, 4) === usi.slice(2, 4);
   const trivial = recapture || (legalCount > 0 && legalCount <= 2);
   const mover = position.color;
-  if (!position.doMove(move)) return { trivial, sacrifice: false };
+  const obvious = isObviousMove(beforeSfen, usi, previousUsi);
+  if (!position.doMove(move)) return { trivial, obvious, sacrifice: false };
   const moved = position.board.at(move.to);
   const takers = enumerateLegalMoves(position.clone()).filter(({ to }) => to.equals(move.to));
-  if (!moved || !takers.length) return { trivial, sacrifice: false };
+  if (!moved || !takers.length) return { trivial, obvious, sacrifice: false };
   const cheapestTaker = Math.min(...takers.map(({ pieceType }) => PIECE_VALUES[pieceType] ?? 0));
   const defended = position.listAttackers(move.to)
     .some((square) => position.board.at(square)?.color === mover);
   const net = (captured ? PIECE_VALUES[captured.type] ?? 0 : 0)
     - (PIECE_VALUES[moved.type] ?? 0)
     + (defended ? cheapestTaker : 0);
-  return { trivial, sacrifice: net < 0 };
+  // 捨て駒は駒をただで渡す手なので、駒を取る手でも当たり前の手とはみなさない。
+  return net < 0 ? { trivial, obvious: false, sacrifice: true } : { trivial, obvious, sacrifice: false };
+}
+
+/** 勝率の段階。-1が負け、0が不明、1が勝ち。 */
+function outcomeBand(rate) {
+  if (rate >= GOD_MOVE_WINNING_RATE) return 1;
+  if (rate <= GOD_MOVE_LOSING_RATE) return -1;
+  return 0;
 }
 
 /**
@@ -109,6 +148,7 @@ export function moveContext(beforeSfen, usi, previousUsi = "") {
  *   deepCandidates?: { rank: number, move: string, score?: { type: string, value: number } }[],
  *   shallowCandidates?: { rank: number, move: string, score?: { type: string, value: number } }[],
  *   trivial?: boolean,
+ *   obvious?: boolean,
  *   sacrifice?: boolean,
  * }} [options]
  */
@@ -117,13 +157,23 @@ export function judgeGodMove({
   deepCandidates = [],
   shallowCandidates = [],
   trivial = false,
+  obvious = false,
   sacrifice = false,
 } = {}) {
   const deep = rankedCandidates(deepCandidates);
   const [best, second] = deep;
-  if (trivial || !move || !best || best.move !== move || !second) return null;
-  const gap = winRate(best.score) - winRate(second.score);
-  if (!(gap >= (sacrifice ? GOD_MOVE_SACRIFICE_MIN_WINRATE_GAP : GOD_MOVE_MIN_WINRATE_GAP))) return null;
+  if (trivial || (obvious && !sacrifice) || !move || !best || best.move !== move || !second) return null;
+  const bestRate = winRate(best.score);
+  const secondRate = winRate(second.score);
+  const gap = bestRate - secondRate;
+  // 詰ませる手(次善手では詰まない)は、勝っている局面の決め手でも勝敗を決める手とする。
+  const mates = (score) => score?.type === "mate" && score.value > 0;
+  const decidingMate = mates(best.score) && !mates(second.score);
+  if (!decidingMate) {
+    if (!(gap >= (sacrifice ? GOD_MOVE_SACRIFICE_MIN_WINRATE_GAP : GOD_MOVE_MIN_WINRATE_GAP))) return null;
+    // 勝敗を分ける手だけ。ほかの手では勝てない、またはほかの手では負ける局面の最善手。
+    if (!(outcomeBand(bestRate) > outcomeBand(secondRate))) return null;
+  }
 
   const shallow = rankedCandidates(shallowCandidates);
   const shallowBest = shallow[0];
@@ -136,7 +186,8 @@ export function judgeGodMove({
   const obviousMate = shallowBest?.score?.type === "mate" && shallowBest.score.value > 0;
   if (!hidden && !(sacrifice && !obviousMate)) return null;
   return {
-    strength: gap + (hidden ? GOD_MOVE_HIDDEN_BONUS : 0) + (sacrifice ? GOD_MOVE_SACRIFICE_BONUS : 0),
+    strength: gap + (decidingMate ? GOD_MOVE_MATE_BONUS : 0)
+      + (hidden ? GOD_MOVE_HIDDEN_BONUS : 0) + (sacrifice ? GOD_MOVE_SACRIFICE_BONUS : 0),
     gap,
     hidden,
     sacrifice,

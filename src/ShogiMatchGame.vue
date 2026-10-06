@@ -1368,6 +1368,7 @@ let playerMoveFlair: {
   fromHint: boolean;
   trivial: boolean;
   sacrifice: boolean;
+  obvious: boolean;
   materialGain: number;
 } | undefined;
 type PraiseCandidate = { rank: number; move: string; score?: EngineEvaluation };
@@ -3946,6 +3947,7 @@ async function playerMovePraise(options: {
         deepCandidates: baseline.deep,
         shallowCandidates: baseline.shallow,
         sacrifice: flair.sacrifice,
+        obvious: flair.obvious,
       })
     : null;
   const cpuMatePly = parseMateScore(cpuCandidates.find(({ rank }) => rank === 1));
@@ -4280,10 +4282,10 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   const legalMoveCountBefore = actor === "player" && !reviewMode.value
     ? enumerateLegalMoves(record.value.position.clone()).length
     : 0;
-  // 神の一手の判定で、捨て駒を見つけにくさとして加点する。
-  const sacrificeBefore = actor === "player" && !reviewMode.value && coachLevel.value === "detailed"
-    ? moveContext(currentSfen.value, usi).sacrifice
-    : false;
+  // 神の一手の判定で、捨て駒を見つけにくさとして加点し、駒を取る・逃げるといった当たり前の手を除く。
+  const contextBefore = actor === "player" && !reviewMode.value && coachLevel.value === "detailed"
+    ? moveContext(currentSfen.value, usi, moveHistory.at(-1) ?? "")
+    : null;
   const move = active.value ? record.value.position.createMoveByUSI(usi) : null;
   if (!move || !record.value.append(move)) return false;
   syncPosition(usi);
@@ -4325,7 +4327,8 @@ function applyMove(usi: string, actor: "player" | "cpu") {
       fromHint: Boolean(reusedHint),
       // 取り返しや合法手がほぼ無い局面の最善手は、褒めるほどの選択ではない。
       trivial: recapture || (legalMoveCountBefore > 0 && legalMoveCountBefore <= 2),
-      sacrifice: sacrificeBefore,
+      sacrifice: contextBefore?.sacrifice ?? false,
+      obvious: contextBefore?.obvious ?? false,
       materialGain: move.capturedPieceType
         ? materialGain({
             capturedPieceType: move.capturedPieceType,

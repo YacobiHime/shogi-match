@@ -99,11 +99,12 @@ describe("staged kifu analysis", () => {
     const calls = [];
     const lane = fakeLane(steps, (ply, { multiPv, nodes }) => {
       const played = steps[ply + 1]?.lastMove ?? "1a1b";
-      const best = steps[ply].sfen.split(" ")[1] === "w" ? -300 : 300;
+      const best = steps[ply].sfen.split(" ")[1] === "w" ? -600 : 600;
       // 浅い読みでは別の手が最善に見える。
       if (nodes === STAGED_ANALYSIS_PLANS.desktop.shallow.nodes) return [{ rank: 1, move: "9g9f", score: cp(100) }];
       const first = { rank: 1, move: played, pv: [played], score: cp(best) };
-      return multiPv >= 2 ? [first, { rank: 2, move: "9g9f", score: cp(best - 300) }] : [first];
+      // 先手は、指した手(+600)だけが勝ちにつながり、次善手(0)では互角に戻る。
+      return multiPv >= 2 ? [first, { rank: 2, move: "9g9f", score: cp(best - 600) }] : [first];
     }, calls);
     const results = await analyzeKifuStaged({ steps, lanes: [lane] });
     const points = analysisPointsFromResults(steps, results);

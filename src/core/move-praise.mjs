@@ -37,11 +37,17 @@ function rankedCandidates(candidates = []) {
 
 /**
  * 手番開始時の解析から、指した手が好手か神の一手かを判定する。
- * deep・shallowの評価はどちらも手番側（プレイヤー）視点。sacrificeはその手が捨て駒か。
- * @param {{ move?: string, deepCandidates?: PraiseCandidate[], shallowCandidates?: PraiseCandidate[], sacrifice?: boolean }} [options]
+ * deep・shallowの評価はどちらも手番側（プレイヤー）視点。sacrificeはその手が捨て駒か、
+ * obviousは駒を取る・逃げるといった当たり前の手か(god-move.mjsのmoveContext)。
+ * @param {{
+ *   move?: string, deepCandidates?: PraiseCandidate[], shallowCandidates?: PraiseCandidate[],
+ *   sacrifice?: boolean, obvious?: boolean,
+ * }} [options]
  */
-export function classifyMoveQuality({ move, deepCandidates = [], shallowCandidates = [], sacrifice = false } = {}) {
-  const god = judgeGodMove({ move, deepCandidates, shallowCandidates, sacrifice });
+export function classifyMoveQuality({
+  move, deepCandidates = [], shallowCandidates = [], sacrifice = false, obvious = false,
+} = {}) {
+  const god = judgeGodMove({ move, deepCandidates, shallowCandidates, sacrifice, obvious });
   if (god) return { kind: 'god', score: god.score, gap: god.gap };
   const deep = rankedCandidates(deepCandidates);
   const best = deep[0];

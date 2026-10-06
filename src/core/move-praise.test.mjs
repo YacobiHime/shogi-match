@@ -15,9 +15,10 @@ import { formatSpokenMove } from './match-assists.mjs';
 const cp = (value) => ({ type: 'cp', value });
 
 describe('classifyMoveQuality', () => {
+  // 指した手だけが勝ちにつながる(+900)。次善手では互角(0)。
   const deep = [
     { rank: 1, move: '5c5d', score: cp(900) },
-    { rank: 2, move: '7g7f', score: cp(400) },
+    { rank: 2, move: '7g7f', score: cp(0) },
   ];
 
   it('浅い読みでも最善なら好手', () => {
@@ -26,7 +27,7 @@ describe('classifyMoveQuality', () => {
       deepCandidates: deep,
       shallowCandidates: [{ rank: 1, move: '5c5d', score: cp(700) }],
     });
-    expect(quality).toMatchObject({ kind: 'good', gap: 500 });
+    expect(quality).toMatchObject({ kind: 'good', gap: 900 });
   });
 
   it('浅い読みで見落とす最善手は神の一手', () => {
@@ -43,9 +44,29 @@ describe('classifyMoveQuality', () => {
       deepCandidates: deep,
       shallowCandidates: [
         { rank: 1, move: '7g7f', score: cp(300) },
-        { rank: 2, move: '5c5d', score: cp(100) },
+        { rank: 2, move: '5c5d', score: cp(-50) },
       ],
     })?.kind).toBe('god');
+  });
+
+  it('駒を取る・逃げるといった当たり前の手は、浅い読みで見落としても神の一手にしない', () => {
+    expect(classifyMoveQuality({
+      move: '5c5d',
+      deepCandidates: deep,
+      shallowCandidates: [{ rank: 1, move: '7g7f', score: cp(300) }],
+      obvious: true,
+    })?.kind).toBe('good');
+  });
+
+  it('勝敗に関わらない序盤の差では、神の一手にしない', () => {
+    expect(classifyMoveQuality({
+      move: '5c5d',
+      deepCandidates: [
+        { rank: 1, move: '5c5d', score: cp(300) },
+        { rank: 2, move: '7g7f', score: cp(-100) },
+      ],
+      shallowCandidates: [{ rank: 1, move: '7g7f', score: cp(300) }],
+    })?.kind).toBe('good');
   });
 
   it('浅い読みとの差が小さければ好手に留める', () => {

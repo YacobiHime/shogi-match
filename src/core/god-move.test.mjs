@@ -23,28 +23,54 @@ describe("god move", () => {
     expect(winRate(undefined)).toBeUndefined();
   });
 
-  it("calls a hidden best move clearly ahead of the second move a god move", () => {
-    // +300と0は勝率で約12ポイントの差。
-    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(300), cp(0)), shallowCandidates: shallowMiss }))
+  it("calls a hidden, game-deciding best move a god move", () => {
+    // +600(勝率73)と0(勝率50)。この手だけが勝ちにつながる。
+    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(600), cp(0)), shallowCandidates: shallowMiss }))
       .toMatchObject({ hidden: true, sacrifice: false });
     // 浅い読みでも見えている手は、見つけにくい手ではない。
-    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(300), cp(0)), shallowCandidates: shallowFound })).toBeNull();
+    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(600), cp(0)), shallowCandidates: shallowFound })).toBeNull();
+    // 浅い読みで少し(300未満)低く見えるだけの手も、見つけにくい手ではない。
+    expect(judgeGodMove({
+      move: "5c5d",
+      deepCandidates: deep(cp(600), cp(0)),
+      shallowCandidates: [{ rank: 1, move: "7g7f", score: cp(100) }, { rank: 2, move: "5c5d", score: cp(-100) }],
+    })).toBeNull();
     // 最善手でなければ神の一手ではない。
-    expect(judgeGodMove({ move: "7g7f", deepCandidates: deep(cp(300), cp(0)), shallowCandidates: shallowMiss })).toBeNull();
+    expect(judgeGodMove({ move: "7g7f", deepCandidates: deep(cp(600), cp(0)), shallowCandidates: shallowMiss })).toBeNull();
+    // ほかの手では負ける局面で、負けを消す手も勝敗を分ける。
+    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(0), cp(-600)), shallowCandidates: shallowMiss })).not.toBeNull();
   });
 
-  it("needs the move to be clearly better than the second move in win rate", () => {
-    // +300と+150は勝率で約6ポイントの差しかない。
-    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(300), cp(150)), shallowCandidates: shallowMiss })).toBeNull();
-    // 勝負が決まった局面の差は、評価値が大きくても勝率ではほとんど差がない。
-    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(3000), cp(2000)), shallowCandidates: shallowMiss })).toBeNull();
-    // 逆転の一手でなくてもよい。不利な側の見つけにくい最善手も対象にする。
-    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(-300), cp(-700)), shallowCandidates: shallowMiss })).not.toBeNull();
+  it("needs the move to decide the game, not just to be a little better", () => {
+    // +300と0は勝率で約12ポイントの差しかない。
+    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(300), cp(0)), shallowCandidates: shallowMiss })).toBeNull();
+    // 互角の序盤で、+250と-250(勝率差約21ポイント)でも、どちらも形勢は「不明」のままなので選ばない。
+    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(250), cp(-250)), shallowCandidates: shallowMiss })).toBeNull();
+    // もう勝っている局面で、さらに良くするだけの手も選ばない(+2000と+500はどちらも勝ち)。
+    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(2000), cp(500)), shallowCandidates: shallowMiss })).toBeNull();
+    // 詰ませる手と、詰まない手。
+    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(mate(9), cp(0)), shallowCandidates: shallowMiss })).not.toBeNull();
+  });
+
+  it("counts a hidden mating move as decisive even when the side is already winning", () => {
+    // ▲5二銀のような決め手。次善手でも+2000で勝っているが、詰ませられるのはこの手だけ。
+    const finisher = judgeGodMove({
+      move: "5c5d", deepCandidates: deep(mate(11), cp(2000)), shallowCandidates: shallowMiss, sacrifice: true,
+    });
+    expect(finisher).not.toBeNull();
+    // 詰みの手順がほかにもあるなら、決め手とは言えない。
+    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(mate(11), mate(13)), shallowCandidates: shallowMiss })).toBeNull();
+    // 浅い読みで詰みが見えている当たり前の詰ませ方は除く。
+    expect(judgeGodMove({
+      move: "5c5d",
+      deepCandidates: deep(mate(3), cp(2000)),
+      shallowCandidates: [{ rank: 1, move: "5c5d", score: mate(3) }],
+    })).toBeNull();
   });
 
   it("counts a sacrifice as hard to find and gives it a bonus", () => {
-    // +300と+110は勝率で約7.6ポイントの差。捨て駒なら神の一手、そうでなければ届かない。
-    const candidates = deep(cp(300), cp(110));
+    // +450(勝率68)と0は勝率で約18ポイントの差。捨て駒なら神の一手、そうでなければ届かない。
+    const candidates = deep(cp(450), cp(0));
     expect(judgeGodMove({ move: "5c5d", deepCandidates: candidates, shallowCandidates: shallowFound })).toBeNull();
     const sacrifice = judgeGodMove({ move: "5c5d", deepCandidates: candidates, shallowCandidates: shallowFound, sacrifice: true });
     expect(sacrifice).toMatchObject({ hidden: false, sacrifice: true });
@@ -54,20 +80,28 @@ describe("god move", () => {
     // 浅い読みでもう詰みが見えている局面の捨て駒は、読まなくても分かる。
     expect(judgeGodMove({
       move: "5c5d",
-      deepCandidates: deep(mate(5), cp(300)),
+      deepCandidates: deep(mate(5), cp(0)),
       shallowCandidates: [{ rank: 1, move: "5c5d", score: mate(5) }],
       sacrifice: true,
     })).toBeNull();
   });
 
-  it("skips trivial moves such as recaptures", () => {
-    expect(judgeGodMove({ move: "5c5d", deepCandidates: deep(cp(300), cp(0)), shallowCandidates: shallowMiss, trivial: true }))
-      .toBeNull();
+  it("skips trivial and obvious moves such as recaptures, escapes and plain attacks", () => {
+    const options = { move: "5c5d", deepCandidates: deep(cp(600), cp(0)), shallowCandidates: shallowMiss };
+    expect(judgeGodMove({ ...options, trivial: true })).toBeNull();
+    expect(judgeGodMove({ ...options, obvious: true })).toBeNull();
   });
 
-  it("finds recaptures and sacrifices from the position", () => {
+  it("finds recaptures, obvious moves and sacrifices from the position", () => {
     // 7六の歩を取り返す手は、誰でも指す手。
-    expect(moveContext("4k4/9/9/9/9/2p6/2P6/9/4K4 b - 1", "7g7f", "7e7f")).toEqual({ trivial: true, sacrifice: false });
+    expect(moveContext("4k4/9/9/9/9/2p6/2P6/9/4K4 b - 1", "7g7f", "7e7f"))
+      .toEqual({ trivial: true, obvious: true, sacrifice: false });
+    // 歩で当たっている飛車を逃げる手は、当たり前の手。
+    expect(moveContext("4k4/9/9/9/9/7p1/7R1/9/4K4 b - 1", "2g3g").obvious).toBe(true);
+    // 紐の付いた銀を出て飛車に当てる手も、当たり前の手。
+    expect(moveContext("4k4/5r3/9/4SP3/9/9/9/9/4K4 b - 1", "5d4c")).toMatchObject({ obvious: true, sacrifice: false });
+    // 序盤の静かな手は、当たり前の手ではない(神の一手かどうかは読みで決める)。
+    expect(moveContext("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1", "7g7f").obvious).toBe(false);
     // 玉の隣へ銀を打つと、ひもが付いていなければ玉にただで取られる。
     expect(moveContext("4k4/9/9/9/9/9/9/9/4K4 b S 1", "S*5b").sacrifice).toBe(true);
     // 金のひもが付いていれば、玉は銀を取れない。
