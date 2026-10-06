@@ -814,7 +814,6 @@
         </div>
         <div class="shogi-game__analysis-tools">
           <button type="button" class="shogi-game__analysis-awakening" :disabled="!canUseHint" @click="showHint">閃き</button>
-          <button type="button" :disabled="!analysisCurrentPoint?.bestMove && !canAnalyzeReviewPosition" @click="showAnalysisRecommendation">推奨</button>
           <button type="button" :disabled="!analysisCurrentPoint?.pv?.length && !canAnalyzeReviewPosition" @click="showAnalysisLine">読み</button>
           <button
             type="button"
@@ -1495,14 +1494,14 @@ const moveCount = computed(() => record.value.current.ply);
 const flipBoard = computed(() => (
   normalizedMode.value === "cpu" && humanColor.value === Color.WHITE
 ) !== boardFlipOverride.value);
-// 分岐の局面には本筋の解析結果を使わない(推奨・読みは、その場で読み直す)。
+// 分岐の局面には本筋の解析結果を使わない(読みは、その場で読み直す)。
 const analysisCurrentPoint = computed(() => (
   isOnReviewMainLine(reviewNavigation.value)
     ? analysisPoints.value.find(({ ply }) => ply === reviewNavigation.value.cursor)
     : undefined
 ));
 const reviewBranchFrom = computed(() => reviewBranchStart(reviewNavigation.value));
-/** 推奨・読みで、解析済みでない局面(分岐など)をその場で読めるか。 */
+/** 読みで、解析済みでない局面(分岐など)をその場で読めるか。 */
 const canAnalyzeReviewPosition = computed(() => (
   reviewMode.value && engineReady.value && !thinking.value && !analysisRunning.value && !reviewCpuEnabled.value
 ));
@@ -4556,14 +4555,6 @@ async function reviewPositionLine(): Promise<{ bestMove: string; pv: string[] } 
   }
 }
 
-async function showAnalysisRecommendation() {
-  const line = await reviewPositionLine();
-  if (!line) return;
-  reviewLine.value = { sfen: currentSfen.value, pv: line.pv };
-  hintCandidates.value = [{ usi: line.bestMove }];
-  hintText.value = `推奨手は ${formatHintMove(line.bestMove, currentSfen.value)} だよ！`;
-}
-
 async function showAnalysisLine() {
   const line = await reviewPositionLine();
   if (!line) return;
@@ -4575,7 +4566,7 @@ async function showAnalysisLine() {
   hintText.value = `読み筋: ${labels}（「その他」から盤に並べられるよ）`;
 }
 
-/** 直前に出した読み筋(推奨・読み・投了の理由)を、今の局面から分岐として並べる。▶で1手ずつ進められる。 */
+/** 直前に出した読み筋(読み・投了の理由)を、今の局面から分岐として並べる。▶で1手ずつ進められる。 */
 function placeReviewLine() {
   const line = reviewLine.value;
   if (reviewCpuEnabled.value || !line || line.sfen !== currentSfen.value || !line.pv.length) return;
