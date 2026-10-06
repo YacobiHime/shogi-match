@@ -1043,7 +1043,7 @@ import {
   mateCheckResultFromCandidate,
   parseMateScore,
 } from "./core/engine-mate-check.mjs";
-import { chooseCpuMove, chooseNaturalMove } from "./core/cpu-move-choice.mjs";
+import { canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice } from "./core/cpu-move-choice.mjs";
 import { createAssistSearchControl } from "./core/assist-search-control.mjs";
 import { findMateInOne } from "./core/mate-threat";
 import {
@@ -1413,6 +1413,8 @@ type CpuOpeningPlan = {
   switchedFrom?: string;
 };
 let cpuOpeningPlan: CpuOpeningPlan | null = null;
+/** CPUが大きな悪手を指した手数。1局の回数と間隔の制限に使い、待ったで戻した分は数えない。 */
+let cpuBlunderPlies: number[] = [];
 const positionAnalysisCache = createPositionAnalysisCache();
 const assistSearchControl = createAssistSearchControl();
 let restoringSavedMatch = false;
@@ -3129,6 +3131,7 @@ function persistMatchState() {
     cpuStrategyDetailsOpen: cpuStrategyDetailsOpen.value,
     // おまかせで組んだ作戦をリロード後も引き継ぐ。
     cpuOpeningPlan,
+    cpuBlunderPlies: cpuBlunderPlies.filter((ply) => ply < moveHistory.length),
     coachLevel: coachLevel.value,
     selectedStrategy: selectedStrategy.value,
     selectedCastle: selectedCastle.value,
@@ -3272,6 +3275,9 @@ function restorePersistedMatch(): boolean {
       : "";
     cpuStrategyDetailsOpen.value = snapshot.cpuStrategyDetailsOpen === true;
     cpuOpeningPlan = restoredCpuOpeningPlan(snapshot.cpuOpeningPlan);
+    cpuBlunderPlies = Array.isArray(snapshot.cpuBlunderPlies)
+      ? snapshot.cpuBlunderPlies.filter((ply: unknown) => Number.isInteger(ply) && (ply as number) >= 0 && (ply as number) < moves.length)
+      : [];
     coachLevel.value = ["off", "encourage", "detailed"].includes(snapshot.coachLevel)
       ? snapshot.coachLevel
       : "detailed";
@@ -4938,6 +4944,7 @@ async function scheduleCpuMove() {
             legalMoves: allowedCpuMoveList,
             moveHistory,
             search,
+            blunderAllowed: canBlunder(strength, cpuBlunderPlies, moveHistory.length),
             verify: async (searchMoves: string[], nodes: number) => {
               cpuSearchRunning = true;
               cpuSearchGeneration = generation;
@@ -4953,6 +4960,9 @@ async function scheduleCpuMove() {
           });
         if (generation !== matchGeneration) return;
         usi = selection?.move ?? "";
+        if (isBlunderChoice(selection)) {
+          cpuBlunderPlies = [...cpuBlunderPlies.filter((ply) => ply < moveHistory.length), moveHistory.length];
+        }
         selectedCpuScore = searchedCandidates.find(
           (candidate) => candidate.move === usi,
         )?.score;
@@ -5392,6 +5402,7 @@ function restart() {
   lastCpuCapture = undefined;
   turningPointState = createTurningPointState();
   cpuOpeningPlan = null;
+  cpuBlunderPlies = [];
   positionAnalysisCache.clear();
   moveHistory = [];
   coachAdviceHistory = [];

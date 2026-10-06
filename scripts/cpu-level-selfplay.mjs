@@ -14,7 +14,7 @@ import path from "node:path";
 import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Position } from "tsshogi";
-import { chooseCpuMove } from "../src/core/cpu-move-choice.mjs";
+import { canBlunder, chooseCpuMove, isBlunderChoice } from "../src/core/cpu-move-choice.mjs";
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
@@ -94,6 +94,8 @@ async function playGame(engines, players, seed, openingPlies = 0) {
   const position = Position.newBySFEN(STANDARD_SFEN);
   const history = [];
   const seen = new Map();
+  // 対局画面と同じく、大きな悪手の回数と間隔を選手ごとに数える。
+  const blunderPlies = { black: [], white: [] };
   for (let ply = 0; ply < MAX_PLY; ply += 1) {
     const color = position.color === "black" ? "black" : "white";
     const moves = legalMoves(position);
@@ -116,7 +118,9 @@ async function playGame(engines, players, seed, openingPlies = 0) {
         ? (searchMoves, nodes) => search(engine, sfen, { nodes, multiPv: searchMoves.length, searchMoves })
         : undefined,
       random,
+      blunderAllowed: canBlunder(strength, blunderPlies[color], ply),
     });
+    if (isBlunderChoice(choice)) blunderPlies[color].push(ply);
     const move = choice && position.createMoveByUSI(choice.move);
     if (!move || !position.doMove(move)) throw new Error(`不正な着手です: ${choice?.move}`);
     history.push(choice.move);

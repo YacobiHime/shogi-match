@@ -84,13 +84,16 @@ describe('CPU strength settings', () => {
     ))).toBe(true);
   });
 
-  it('mixes unread natural moves only into the weak levels', () => {
-    const rate = (level) => getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value).naturalMoveRate;
-    expect(rate(1)).toBeGreaterThan(0.5);
-    expect(rate(1)).toBeLessThan(1);
-    expect(rate(15)).toBeGreaterThan(0);
-    expect(rate(21)).toBe(0);
-    expect(rate(40)).toBe(0);
+  it('plays unread natural moves only at level zero and narrows vision below', () => {
+    const settings = (level) => getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value);
+    expect(settings(0).naturalMoveRate).toBe(1);
+    // Lv1だけは、Lv0とのつなぎとして読まない手を少し混ぜる。
+    expect(settings(1).naturalMoveRate).toBeGreaterThan(0);
+    expect(settings(1).naturalMoveRate).toBeLessThan(0.5);
+    for (const level of [2, 15, 21, 40]) expect(settings(level).naturalMoveRate, `Lv${level}`).toBe(0);
+    // 読まない手の代わりに、目に付く少数の手だけを読む。
+    expect(settings(1).visionWidth).toBe(3);
+    expect(settings(40).visionWidth).toBeUndefined();
   });
 
   it('keeps weaker levels on their chosen opening plan longer', () => {
@@ -126,8 +129,29 @@ describe('CPU strength settings', () => {
       if (settings.oversightRate === 0) continue;
       expect(settings.oversightNodes, `Lv${level}`).toBeGreaterThan(settings.nodes);
       expect(settings.oversightNodes, `Lv${level}`).toBeLessThanOrEqual(70000);
-      expect(settings.oversightMaxLoss, `Lv${level}`).toBeGreaterThan(settings.maxScoreLoss);
+      // 見落としも1手の損失上限を超えない。上限は見落としの下限(300)より大きく保つ。
+      expect(settings.oversightMaxLoss, `Lv${level}`).toBeLessThanOrEqual(settings.moveLossCap);
+      expect(settings.oversightMaxLoss, `Lv${level}`).toBeGreaterThan(300);
     }
+  });
+
+  it('caps the loss of a single move and limits big blunders per game', () => {
+    const settings = Array.from({ length: 99 }, (_, index) => searchSettingsForSkill((index + 1) / 100));
+    const monotonic = (key, direction) => settings.every((entry, index) => (
+      index === 0 || direction * (entry[key] - settings[index - 1][key]) >= 0
+    ));
+    expect(monotonic('moveLossCap', -1)).toBe(true);
+    expect(monotonic('blunderLimit', -1)).toBe(true);
+    expect(monotonic('blunderCooldown', 1)).toBe(true);
+    expect(monotonic('simplicity', -1)).toBe(true);
+    const lv15 = getStrengthSearchSettings(CPU_STRENGTH_PRESETS[15].value);
+    // 以前のLv15は、見落としで2300、抽選で970まで損をする手を選べた。
+    expect(lv15.moveLossCap).toBeLessThanOrEqual(600);
+    expect(lv15.blunderLimit).toBeLessThanOrEqual(2);
+    // 低レベルでも、大駒をただで渡すほどの損は上限で防ぐ。
+    expect(getStrengthSearchSettings(CPU_STRENGTH_PRESETS[2].value).moveLossCap).toBeLessThanOrEqual(1300);
+    expect(lv15.simplicity).toBeGreaterThan(0.5);
+    expect(getStrengthSearchSettings(1000).simplicity).toBe(1);
   });
 
   it('keeps the strongest level as a pure best-move search', () => {

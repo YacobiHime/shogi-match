@@ -24,6 +24,25 @@ export const LOW_NATURALNESS_THRESHOLD = 0.3;
 const OPENING_KING_PLY = 30;
 const CASTLE_BUILD_PLY = 40;
 const BIG_PIECES = new Set(["B", "R", "+B", "+R"]);
+/** 優勢側が駒の交換を好み始める評価値。 */
+const SIMPLIFY_ADVANTAGE = 300;
+/** 狙いの分かる手のタグ。これらを持たない手を「目的のない手」とみなす。 */
+const PURPOSEFUL_TAGS = new Set([
+  "free-capture", "winning-capture", "even-trade", "losing-capture", "recapture",
+  "capture-checker", "king-escape", "drop-block", "move-block", "escape", "promote", "activate",
+  "castle-build", "pawn-tension", "rook-pawn-push", "threaten", "open-line", "develop",
+]);
+
+/** toの歩の後ろ(自陣側)に、間に駒を挟まず自分の飛車・竜がいるか。 */
+function rookBehind(board, to, color) {
+  const step = color === "black" ? 1 : -1;
+  for (let rank = to.charCodeAt(1) - 96 + step; rank >= 1 && rank <= 9; rank += step) {
+    const piece = board.get(`${to[0]}${String.fromCharCode(96 + rank)}`);
+    if (!piece) continue;
+    return piece.color === color && (piece.kind === "R" || piece.kind === "+R");
+  }
+  return false;
+}
 
 function chebyshev(a, b) {
   return Math.max(Math.abs(Number(a[0]) - Number(b[0])), Math.abs(a.charCodeAt(1) - b.charCodeAt(1)));
@@ -47,7 +66,11 @@ function castleDirection(board, color) {
  * 局面ごとの共通情報を一度だけ計算し、各手の自然さを返す関数を作る。
  * 重みは[NATURALNESS_MIN, NATURALNESS_MAX]に収め、弱い手も完全には除外しない。
  */
-export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply } = {}) {
+/**
+ * simplicity(0〜1)は、弱いCPUほど分かりやすい手を好む度合い。0なら従来どおりの自然さだけを返す。
+ * advantageは手番側から見た評価値で、優勢なら駒の交換を好む(局面を単純にする)のに使う。
+ */
+export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simplicity = 0, advantage } = {}) {
   const { board, turn: me } = parseSfenState(sfen);
   const opp = opponentOf(me);
   const kingSquare = findKing(board, me);
@@ -61,6 +84,8 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply } = {})
   const direction = castleDirection(board, me);
   const kingCastled = kingSquare && kingSquare !== initialKingSquare(me);
   let hangingBefore;
+  let ownBigPieces;
+  let bigPieceReach;
 
   return (usi) => {
     const parsed = parseUsiMove(usi);
@@ -177,6 +202,39 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply } = {})
       if (BIG_PIECES.has(moverKind)) apply(0.05, "sacrifice");
       else if (moverKind === "P") apply(0.4, "sacrifice");
       else apply(0.1, "sacrifice");
+    }
+
+    if (simplicity > 0) {
+      const simple = (strength, tag) => apply(1 + strength * simplicity, tag);
+      // 歩と歩がぶつかったら、まず取る。
+      if (moverKind === "P" && !drop && applied.captured?.kind === "P") simple(3, "pawn-tension");
+      if (tags.includes("recapture")) simple(1, "simple-recapture");
+      if (Number.isFinite(advantage) && advantage >= SIMPLIFY_ADVANTAGE
+        && (tags.includes("even-trade") || tags.includes("recapture"))) {
+        simple(1.5, "simplify");
+      }
+      // 飛車の前の歩を伸ばす、相手の駒に当てるといった、狙いの見える攻めの手。
+      if (!drop && moverKind === "P" && !applied.captured && rookBehind(after, to, me)) simple(0.8, "rook-pawn-push");
+      if (!applied.captured && !hangingAfter && attackedSquares(after, to).some((square) => {
+        const target = after.get(square);
+        return target?.color === opp && target.kind !== "K" && pieceValue(target.kind) >= 3
+          && !attackedSquares(board, from ?? to).includes(square);
+      })) simple(1, "threaten");
+      // 角道を開けるなど、自分の飛車・角の利きを広げる手。
+      if (!drop && !BIG_PIECES.has(originalKind)) {
+        ownBigPieces ??= [...board].filter(([, piece]) => piece.color === me && BIG_PIECES.has(piece.kind));
+        const reach = (position) => ownBigPieces
+          .reduce((sum, [square]) => sum + attackedSquares(position, square).length, 0);
+        bigPieceReach ??= reach(board);
+        if (reach(after) - bigPieceReach >= 2) simple(0.5, "open-line");
+      }
+      // 端歩以外の前進は、駒組みや攻めの準備として目的のある手に数える。
+      const edgePawn = moverKind === "P" && [1, 9].includes(relativeFile(to, me));
+      if (tags.includes("advance") && !edgePawn) tags.push("develop");
+      // 取る・逃げる・成る・王手・囲い・攻めのどれでもない、目的の見えない手は避ける。
+      if (!givesCheck && !tags.some((tag) => PURPOSEFUL_TAGS.has(tag))) {
+        apply(1 - 0.6 * simplicity, "aimless");
+      }
     }
 
     // 歩以外の駒を、取り返しの見込みなく相手に渡す手。王手や成りの加点で打ち消さない。

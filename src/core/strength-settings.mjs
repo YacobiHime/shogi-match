@@ -10,10 +10,17 @@ const TOP_NODES = 480000;
  */
 const TOP_LEVEL_NODES = 720000;
 const TOP_LEVEL_THREADS = 2;
-/** これ未満の技量では、読まずに見た目の自然さだけで指す手を混ぜる。 */
-const NATURAL_MOVE_SKILL_END = 0.4;
+/** これ未満の技量では、目に付く手だけを読む「視野の狭さ」で弱くする。 */
+const VISION_SKILL_END = 0.6;
+/**
+ * この技量で、読まない手がなくなり、1手の損失上限と悪手の回数制限を常に守るようになる。
+ * それ未満は、読まないLv0から段差なくつなぐための区間。
+ */
+const CAREFUL_SKILL_END = 0.05;
 /** これ未満の技量では、浅い読みで良く見える悪手を選ぶ「見落とし」を混ぜる。 */
 const OVERSIGHT_SKILL_END = 0.75;
+/** 1手の損失上限の下限。見落とし(深い読みで300以上の損)を選べる幅を残す。 */
+const MIN_MOVE_LOSS_CAP = 400;
 
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
 /** 設定表を読みやすくするため、上2桁に丸める。 */
@@ -27,13 +34,17 @@ const round2 = (value) => Math.round(value * 100) / 100;
 /**
  * 技量(0〜1)から探索量と候補選択の設定を作る。0は探索しない自然さだけの着手、1は最善手だけの着手。
  * どの設定も技量が上がるほど強くなる方向にだけ動く。
- * - naturalMoveRate: 読まずに、合法手を自然さ^alphaで選ぶ割合。駒をただで取られる手も含む。
+ * - naturalMoveRate: 読まずに、合法手を自然さ^alphaで選ぶ割合。Lv0(技量0)だけが1で、ほかは0。
+ * - visionWidth・engineVision: 目に付く手の数。自然さの上位visionWidth手と探索上位engineVision手だけを読んで選ぶ。
  * - alpha: 自然さの効き具合。oversight*: 浅い読みでは良く見える手を深い読みで検証して選ぶ「見落とし」。
+ * - moveLossCap: 1手で失ってよい評価値の上限。blunderLimit・blunderCooldown: 大きな悪手の1局の回数と間隔(CPUの手数)。
+ *   carefulRate: 上限と回数制限を守る手の割合。
+ * - simplicity: 分かりやすい手(歩の取り合い・取り返し・交換・攻め)を好み、目的のない手を避ける度合い(0〜1)。
  */
 export function strengthParametersForSkill(skill) {
   if (!Number.isFinite(skill)) throw new Error('技量は有限の数値にしてください');
   const s = clamp01(skill);
-  if (s === 0) return { nodes: 0, multiPv: 1, maxScoreLoss: 0, bestMoveRate: 0, alpha: 1, naturalMoveRate: 1 };
+  if (s === 0) return { nodes: 0, multiPv: 1, maxScoreLoss: 0, bestMoveRate: 0, alpha: 1, naturalMoveRate: 1, simplicity: 1 };
   const nodes = roundSignificant(MIN_NODES * (TOP_NODES / MIN_NODES) ** s);
   if (s === 1) {
     return {
@@ -51,18 +62,37 @@ export function strengthParametersForSkill(skill) {
     scoreTemperature: roundSignificant(1800 * (40 / 1800) ** s),
     bestMoveRate: round2(s ** 2),
     alpha: Math.round((1 - s) * 10) / 10,
-    // Lv0(常に読まない)から段差なく減らす。
-    naturalMoveRate: s < NATURAL_MOVE_SKILL_END ? round2((1 - s / NATURAL_MOVE_SKILL_END) ** 1.8) : 0,
+    // 読まない手は、人間には「手ですらない」手に見えやすい。Lv0とのつなぎの区間にだけ残す。
+    naturalMoveRate: s < CAREFUL_SKILL_END ? round2((1 - s / CAREFUL_SKILL_END) ** 1.5) : 0,
   };
+  if (s < VISION_SKILL_END) {
+    const progress = s / VISION_SKILL_END;
+    Object.assign(settings, {
+      visionWidth: Math.round(3 + 9 * progress),
+      engineVision: Math.round(multiPv * progress ** 2),
+    });
+  }
+  // 1手で失ってよい評価値の上限。見落とし・目に付いた手・候補の抽選のどれにも掛け、対局を台無しにする手を防ぐ。
+  // 低レベルでも大駒をただで渡すほどの損(1,000超)はまれにし、上のレベルほど締める。
+  const moveLossCap = roundSignificant(Math.max(MIN_MOVE_LOSS_CAP, 1300 * (1 - s) ** 3));
   if (s < OVERSIGHT_SKILL_END) {
     const progress = s / OVERSIGHT_SKILL_END;
     Object.assign(settings, {
       oversightRate: round2(0.5 * (1 - progress)),
       oversightShallowLoss: roundSignificant(600 - 400 * progress),
       oversightNodes: roundSignificant(Math.min(70000, Math.max(3000, nodes * 5))),
-      oversightMaxLoss: roundSignificant(3000 - 2100 * progress),
+      oversightMaxLoss: Math.min(moveLossCap, roundSignificant(3000 - 2100 * progress)),
     });
   }
+  Object.assign(settings, {
+    moveLossCap,
+    carefulRate: round2(Math.min(1, s / CAREFUL_SKILL_END)),
+    // 大きな悪手は1局で数回まで、続けて出さない。人間の級位者も悪手は指すが、毎回は崩れない。
+    blunderLimit: Math.max(1, Math.round(5 * (1 - s) ** 4)),
+    blunderCooldown: Math.round(3 + 14 * s),
+    // 歩の取り合い・取り返し・駒の交換など、分かりやすい手と局面を好む度合い。
+    simplicity: round2((1 - s) ** 1.5),
+  });
   return settings;
 }
 
@@ -168,6 +198,12 @@ export function searchSettingsForSkill(skill) {
     randomFallback: false,
   };
   if (Number.isFinite(settings.scoreTemperature)) result.scoreTemperature = settings.scoreTemperature;
+  // 最高技量は最善手だけを指すため、悪手の上限や素人らしさを持たない。
+  for (const key of [
+    'visionWidth', 'engineVision', 'moveLossCap', 'carefulRate', 'blunderLimit', 'blunderCooldown', 'simplicity',
+  ]) {
+    if (Number.isFinite(settings[key])) result[key] = settings[key];
+  }
   return result;
 }
 

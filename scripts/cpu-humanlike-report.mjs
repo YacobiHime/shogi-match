@@ -101,7 +101,7 @@ async function main() {
       const times = [];
       let low = 0;
       let oversight = 0;
-      let unread = 0;
+      let vision = 0;
       for (const sample of samples) {
         const position = Position.newBySFEN(sample.sfen);
         const moves = legalMoves(position);
@@ -113,7 +113,7 @@ async function main() {
           const evaluation = naturalness(choice.move);
           if (evaluation.weight < LOW_NATURALNESS_THRESHOLD) low += 1;
           if (choice.kind === "oversight") oversight += 1;
-          if (choice.kind === "natural") unread += 1;
+          if (choice.kind === "vision") vision += 1;
           losses.push(await reference(sample, choice.move));
           if ([1, 5].includes(level) && trial === 0 && samples.indexOf(sample) % 6 === 2) {
             report.examples.push({
@@ -137,7 +137,7 @@ async function main() {
         blunder1000: Number((losses.filter((value) => value >= 1000).length / losses.length).toFixed(3)),
         lowNaturalness: Number((low / losses.length).toFixed(3)),
         oversight: Number((oversight / losses.length).toFixed(3)),
-        unread: Number((unread / losses.length).toFixed(3)),
+        vision: Number((vision / losses.length).toFixed(3)),
         meanMs: Math.round(times.reduce((sum, value) => sum + value, 0) / times.length),
         p95Ms: Math.round(percentile(sortedTimes, 0.95)),
         maxMs: Math.round(sortedTimes.at(-1)),
@@ -151,13 +151,13 @@ async function main() {
   const lines = [
     `サンプル${samples.length}局面 × ${trials}回、基準探索${REFERENCE_NODES}nodes、seed=${seed}`,
     "",
-    "| Lv | 平均損失(±標準誤差) | 中央値 | 90%点 | 300以上 | 1000以上 | 不自然 | 読まない手 | 見落とし | 平均ms | 95%ms | 最大ms |",
+    "| Lv | 平均損失(±標準誤差) | 中央値 | 90%点 | 300以上 | 1000以上 | 不自然 | 視野内の手 | 見落とし | 平均ms | 95%ms | 最大ms |",
     "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
   ];
   const pct = (value) => `${(value * 100).toFixed(1)}%`;
   for (const row of report.levels) {
     const m = row;
-    lines.push(`| ${row.level} | ${m.meanLoss} ±${m.meanLossSe} | ${m.medianLoss} | ${m.p90Loss} | ${pct(m.blunder300)} | ${pct(m.blunder1000)} | ${pct(m.lowNaturalness)} | ${pct(m.unread)} | ${pct(m.oversight)} | ${m.meanMs} | ${m.p95Ms} | ${m.maxMs} |`);
+    lines.push(`| ${row.level} | ${m.meanLoss} ±${m.meanLossSe} | ${m.medianLoss} | ${m.p90Loss} | ${pct(m.blunder300)} | ${pct(m.blunder1000)} | ${pct(m.lowNaturalness)} | ${pct(m.vision)} | ${pct(m.oversight)} | ${m.meanMs} | ${m.p95Ms} | ${m.maxMs} |`);
   }
   lines.push("", "代表例:");
   for (const example of report.examples) {
