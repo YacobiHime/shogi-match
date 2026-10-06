@@ -56,7 +56,7 @@
                   <rect x="6" y="9" width="4" height="1" />
                 </g>
               </svg>
-              <span class="shogi-home__label">やこび姫の将棋教室</span>
+              <span class="shogi-home__label"><span class="shogi-home__label-prefix">やこび姫の</span>将棋教室</span>
               <small class="shogi-home__desc">ルールから戦法まで楽しく学ぼう</small>
             </button>
             <button type="button" class="shogi-home__card" @click="problemSetOpen = true">
@@ -72,7 +72,7 @@
                   <rect x="7" y="12" width="2" height="2" />
                 </g>
               </svg>
-              <span class="shogi-home__label">やこび姫の将棋問題集</span>
+              <span class="shogi-home__label"><span class="shogi-home__label-prefix">やこび姫の</span>将棋問題集</span>
               <small class="shogi-home__desc">詰ませ方・逃げ方の問題に挑戦</small>
             </button>
           </div>
@@ -7490,17 +7490,20 @@ queueMicrotask(() => {
   color: #fffcf4;
   text-shadow: 3px 3px 0 #172632;
 }
+/* 同じ行に並ぶ入門と対局は、カードの高さをそろえる（名前が2行の入門のカードに合わせる）。 */
 .shogi-home__menu {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  align-items: flex-start;
+  align-items: stretch;
   gap: clamp(16px, 3vw, 40px);
 }
 .shogi-home__group {
   display: grid;
+  grid-template-rows: auto 1fr;
   gap: 10px;
 }
+.shogi-home__group:last-child { grid-template-rows: none; }
 .shogi-home__group-title {
   margin: 0;
   padding-left: 4px;
@@ -7550,6 +7553,14 @@ queueMicrotask(() => {
 .shogi-home__card:disabled { cursor: default; opacity: 0.72; }
 .shogi-home__icon { width: 56px; height: 56px; }
 .shogi-home__label { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; }
+/* 「やこび姫の将棋教室」などの長い名前は、「やこび姫の」を小さく上の行に出して、カードの幅に収める。 */
+.shogi-home__label-prefix {
+  display: block;
+  margin-bottom: 2px;
+  color: #f1c68a;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+}
 .shogi-home__soon {
   position: absolute;
   right: 6px;
@@ -7644,9 +7655,11 @@ queueMicrotask(() => {
     height: clamp(220px, 44vh, 380px);
     animation-name: shogi-home-chara-float-wide;
   }
+  /* 入門（教室・問題集）と対局（通常・学習）は2枚ずつなので、同じ幅で並べる。 */
   .shogi-home__menu {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
     gap: 32px 16px;
   }
   /* 入門と対局のカードは、同じ幅・同じ高さにそろえる。 */
