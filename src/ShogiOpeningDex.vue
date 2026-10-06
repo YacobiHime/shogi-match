@@ -365,13 +365,13 @@ watch(stepIndex, async () => {
   letter-spacing: 0.2em;
 }
 .shogi-game .shogi-dex .shogi-dex__back {
-  min-height: 2rem;
-  padding: 0.3rem 0.8rem;
-  border: 1px solid rgba(255, 252, 244, 0.5);
+  min-height: 2.6rem;
+  padding: 0.4rem 1.1rem;
+  border: 1px solid rgba(255, 252, 244, 0.7);
   border-radius: 999px;
   color: #fffcf4;
   background: transparent;
-  font: 700 0.8rem/1.2 inherit;
+  font: 700 1rem/1.2 inherit;
   font-family: inherit;
   cursor: pointer;
 }

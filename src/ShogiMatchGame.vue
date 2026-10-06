@@ -928,7 +928,7 @@
         <div class="shogi-game__result-actions">
           <!-- 教室の対局は、やこび姫の一言と★を見に教室へ戻る。 -->
           <button v-if="tutorialMatch" type="button" class="shogi-game__rematch" @click="returnToTutorial">教室へ戻る</button>
-          <button v-else type="button" class="shogi-game__rematch" @click="openPregame">対局準備</button>
+          <button v-else type="button" class="shogi-game__rematch" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
         </div>
         <label class="shogi-game__analysis-level">
@@ -5157,7 +5157,13 @@ function completeReview() {
     returnToTutorial();
     return;
   }
+  leaveFinishedMatch();
+}
+
+/** 終わった対局から離れる。ホーム画面がある表示ならホームへ、なければ対局準備へ戻る。保存はどちらも消す。 */
+function leaveFinishedMatch() {
   openPregame();
+  if (props.showHome) openHome();
 }
 
 function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう！") {
@@ -6834,7 +6840,7 @@ queueMicrotask(() => {
 }
 .shogi-game__pregame-titlebar {
   position: relative;
-  padding: 0.5em 5.5em;
+  padding: 0.6em 7em;
   background: var(--pregame-frame);
   text-align: center;
 }
@@ -6844,22 +6850,29 @@ queueMicrotask(() => {
   font-size: 1.25em;
   letter-spacing: 0.12em;
 }
+/*
+ * 上下中央はtransformを使わずに揃える。ボタン共通のホバーがtransformを上書きすると、
+ * ボタンが沈んでカーソルから外れ、押せなくなるため。
+ */
 .shogi-game .shogi-game__pregame-back {
   position: absolute;
-  top: 50%;
+  top: 0;
+  bottom: 0;
   left: 0.5em;
   display: inline-flex;
-  gap: 0.3em;
+  gap: 0.35em;
   align-items: center;
-  min-height: 2em;
-  padding: 0.2em 0.7em;
+  height: fit-content;
+  min-height: 2.5em;
+  margin-block: auto;
+  padding: 0.3em 1em;
   border: 1px solid rgba(255, 252, 244, 0.7);
   border-radius: 999px;
   color: var(--pregame-paper);
   background: transparent;
   box-shadow: none;
-  font-size: 0.85em;
-  transform: translateY(-50%);
+  font-size: 1em;
+  font-weight: 700;
 }
 .shogi-game__pregame-body {
   padding: 0 1.1em;
@@ -7197,9 +7210,6 @@ queueMicrotask(() => {
   padding-inline: 3.4em;
 }
 /* 狭い画面では戻るボタンを矢印だけにして、見出しと重ねない。 */
-.shogi-game--narrow .shogi-game__pregame-back-label {
-  display: none;
-}
 .shogi-game--narrow .shogi-game__pregame-side .shogi-game__pregame-rows {
   padding-left: 0.2em;
 }
