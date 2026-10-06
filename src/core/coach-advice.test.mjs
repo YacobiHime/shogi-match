@@ -9,6 +9,7 @@ import {
   scoreFromOpponentPerspective,
   scoreForPlayer,
 } from './coach-advice.mjs';
+import { coachAdvicePriority } from './coach-advice-scheduler.mjs';
 
 describe('候補手ごとの危険度助言', () => {
   test('最善手でも被詰みなら詰み手数を表示する', () => {
@@ -97,6 +98,23 @@ describe('対局中の応援・助言', () => {
     expect(getCoachAdvice({
       level: 'detailed', opponentFormations: ['エルモ囲い'], advisedTopics: ['castle-elmo'],
     })).toBeNull();
+  });
+
+  test('大差で勝っている局面の王手は、思い出王手として扱う', () => {
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 2500 } },
+    ], { inCheck: true, bestMoveIsKingMove: true })).toEqual({
+      key: 'king-in-check-memorial', text: '思い出王手きた～！',
+    });
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'mate', value: 9 } },
+    ], { inCheck: true })?.text).toBe('思い出王手きた～！');
+    // 勝っていても大差でなければ、普通の王手として受け方を考える。
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 1500 } },
+    ], { inCheck: true })?.text).toBe('王手きたーっ！！');
+    // 思い出王手も、王手の助言と同じ最優先で表示する。
+    expect(coachAdvicePriority({ key: 'king-in-check-memorial' })).toBe(100);
   });
 
   test('王手で最善手が玉の移動なら逃げる助言を優先する', () => {

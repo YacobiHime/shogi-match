@@ -193,6 +193,9 @@ function comparableScore(score) {
   return undefined;
 }
 
+/** 王手を掛けられても、プレイヤーがこれ以上の評価(詰みを含む)なら「思い出王手」とみなす。 */
+export const MEMORIAL_CHECK_SCORE = 2000;
+
 /** 上位候補の評価差から、一手の選択が勝敗へ直結する局面を知らせる。 */
 export function getCandidateRiskAdvice(candidates = [], {
   inCheck = false,
@@ -218,6 +221,11 @@ export function getCandidateRiskAdvice(candidates = [], {
     };
   }
   if (inCheck) {
+    // 大差で負けている相手が、投了の前に記念に掛ける王手。
+    const bestValue = comparableScore(best?.score);
+    if (bestValue !== undefined && bestValue >= MEMORIAL_CHECK_SCORE) {
+      return { key: 'king-in-check-memorial', text: '思い出王手きた～！' };
+    }
     return bestMoveIsKingMove
       ? { key: 'king-in-check-escape', text: 'う～ん、王手だね…ここは逃げるべきかも。' }
       : { key: 'king-in-check', text: '王手きたーっ！！' };
