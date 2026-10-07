@@ -88,7 +88,7 @@ const TEMPO_STYLE_POOLS = {
 
 /**
  * 「おまかせ」で選ぶ戦法の出現比率（%の目安）。
- * [初級（Lv0〜10）, 級位者（Lv11〜20）, 有段者（Lv21〜34）, 高段・プロ級（Lv35〜40）]の順。
+ * [初級（Lv0〜21）, 級位者（Lv22〜31）, 有段者（Lv32〜36）, 高段・プロ級（Lv37〜40）]の順。
  * 将棋ウォーズの級位帯では振り飛車・棒銀・中飛車などの急戦や奇襲が多く、
  * 段位が上がるほど、プロ公式戦のように角換わり・相掛かり・矢倉が中心になる傾向を反映した概数。
  */
@@ -118,13 +118,13 @@ const OPENING_DISTRIBUTION = Object.freeze({
 
 /**
  * 強さのLv（0〜40）から、戦法分布・囲い選びに使う棋力帯（0〜3）を返す。
- * Lv0〜10は六級程度まで、Lv11〜20は五級〜一級、Lv21〜34はアマ初段〜五段、Lv35以上はアマ六段〜プロ級。
+ * Lv0〜21は六級程度まで、Lv22〜31は五級〜一級、Lv32〜36はアマ初段〜五段、Lv37以上はアマ六段〜プロ級。
  */
 export function cpuOpeningTier(level) {
   if (!Number.isFinite(level)) return 1;
-  if (level <= 10) return 0;
-  if (level <= 20) return 1;
-  if (level <= 34) return 2;
+  if (level <= 21) return 0;
+  if (level <= 31) return 1;
+  if (level <= 36) return 2;
   return 3;
 }
 

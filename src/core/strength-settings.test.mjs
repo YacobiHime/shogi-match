@@ -11,14 +11,20 @@ import {
 
 // 2026-09-26版の識別値と表示名。旧URL・保存データは同じ段級位のレベルへ引き継ぐ。
 const LEGACY_PRESETS = [
-  [1000, '駒の動きを覚えたて'], [2000, '十五級程度'], [3000, '十五級程度'], [4000, '十五級程度'],
-  [4500, '十五級程度'], [5000, '十五級程度'], [6000, '十四級程度'], [7000, '十三級程度'],
+  [1000, '駒の動きを覚えたて'], [2000, '十九級程度'], [3000, '十八級程度'], [4000, '十七級程度'],
+  [4500, '十六級程度'], [5000, '十五級程度'], [6000, '十四級程度'], [7000, '十三級程度'],
   [8000, '十二級程度'], [10000, '十一級程度'], [12000, '十級程度'], [15000, '九級程度'],
   [20000, '八級程度'], [25000, '七級程度'], [30000, '六級程度'], [60000, '五級程度'],
   [70000, '四級程度'], [80000, '三級程度'], [100000, '二級程度'], [150000, '一級程度'],
   [200000, 'アマ初段程度'], [250000, 'アマ二段程度'], [300000, 'アマ三段程度'],
   [400000, 'アマ四段程度'], [480000, '藤井聡太並み'],
+  // 2026-10-07に、重なっていたアマ段位を1段位1レベルにしたときに削った値。
+  [280000, 'アマ二段程度'], [340000, 'アマ三段程度'], [360000, 'アマ四段程度'], [408000, 'アマ四段程度'],
+  [416000, 'アマ五段程度'], [432000, 'アマ五段程度'], [448000, 'アマ六段程度'], [464000, 'アマ七段程度'],
 ];
+
+/** 表示名が同じレベルのうち、最も弱いもの。 */
+const presetByLabel = (label) => CPU_STRENGTH_PRESETS.find((preset) => preset.label === label);
 
 describe('CPU strength settings', () => {
   it('offers Lv0 plus forty Piyo-like levels', () => {
@@ -26,10 +32,16 @@ describe('CPU strength settings', () => {
     expect(CPU_STRENGTH_PRESETS.map(({ level }) => level))
       .toEqual(Array.from({ length: 41 }, (_, level) => level));
     expect(CPU_STRENGTH_PRESETS[0].label).toBe('駒の動きを覚えたて');
-    expect(CPU_STRENGTH_PRESETS[1].label).toBe('十五級程度');
-    // ぴよ将棋のLv15(3級前後)と同じ目安にする。
-    expect(CPU_STRENGTH_PRESETS[15].label).toBe('三級程度');
+    expect(CPU_STRENGTH_PRESETS[1].label).toBe('二十六級程度');
+    expect(CPU_STRENGTH_PRESETS[11].label).toBe('十六級程度');
+    expect(CPU_STRENGTH_PRESETS[12].label).toBe('十五級程度');
     expect(CPU_STRENGTH_PRESETS.at(-1)).toMatchObject({ level: 40, value: 480000, label: '藤井聡太並み' });
+  });
+
+  it('has one level for each amateur dan rank', () => {
+    for (const rank of ['初', '二', '三', '四', '五', '六', '七']) {
+      expect(CPU_STRENGTH_PRESETS.filter(({ label }) => label === `アマ${rank}段程度`), rank).toHaveLength(1);
+    }
   });
 
   it('orders identifiers and calibrated skill from weakest to strongest', () => {
@@ -54,7 +66,7 @@ describe('CPU strength settings', () => {
     // 藤井聡太並み(Lv40)が上限。それより大きい値(以前の版のLv41など)はLv40にする。
     expect(strengthPresetFor(1500000).level).toBe(40);
     expect(normalizeStrengthValue(Number.NaN)).toBe(DEFAULT_STRENGTH_VALUE);
-    expect(strengthPresetFor(DEFAULT_STRENGTH_VALUE).level).toBe(10);
+    expect(strengthPresetFor(DEFAULT_STRENGTH_VALUE).label).toBe('六級程度');
   });
 
   it('uses the engine-free natural-move CPU only for level zero', () => {
@@ -87,10 +99,12 @@ describe('CPU strength settings', () => {
   it('plays unread natural moves only at level zero and narrows vision below', () => {
     const settings = (level) => getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value);
     expect(settings(0).naturalMoveRate).toBe(1);
-    // Lv1だけは、Lv0とのつなぎとして読まない手を少し混ぜる。
-    expect(settings(1).naturalMoveRate).toBeGreaterThan(0);
-    expect(settings(1).naturalMoveRate).toBeLessThan(0.5);
-    for (const level of [2, 15, 21, 40]) expect(settings(level).naturalMoveRate, `Lv${level}`).toBe(0);
+    // 二十六級〜十五級は、Lv0とのつなぎとして、弱いほど読まない手を多く混ぜる。
+    const fifteenth = presetByLabel('十五級程度').level;
+    const rates = CPU_STRENGTH_PRESETS.slice(1, fifteenth + 1).map(({ level }) => settings(level).naturalMoveRate);
+    expect(rates.every((rate, index) => rate > 0 && rate < 1 && (index === 0 || rate < rates[index - 1]))).toBe(true);
+    expect(settings(fifteenth).naturalMoveRate).toBeLessThan(0.5);
+    for (const level of [fifteenth + 1, 26, 32, 40]) expect(settings(level).naturalMoveRate, `Lv${level}`).toBe(0);
     // 読まない手の代わりに、目に付く少数の手だけを読む。
     expect(settings(1).visionWidth).toBe(3);
     expect(settings(40).visionWidth).toBeUndefined();
@@ -144,8 +158,8 @@ describe('CPU strength settings', () => {
     expect(monotonic('blunderLimit', -1)).toBe(true);
     expect(monotonic('blunderCooldown', 1)).toBe(true);
     expect(monotonic('simplicity', -1)).toBe(true);
-    const lv15 = getStrengthSearchSettings(CPU_STRENGTH_PRESETS[15].value);
-    // 以前のLv15は、見落としで2300、抽選で970まで損をする手を選べた。
+    const lv15 = getStrengthSearchSettings(presetByLabel('三級程度').value);
+    // 以前の三級程度(Lv15)は、見落としで2300、抽選で970まで損をする手を選べた。
     expect(lv15.moveLossCap).toBeLessThanOrEqual(600);
     expect(lv15.blunderLimit).toBeLessThanOrEqual(2);
     // 低レベルでも、大駒をただで渡すほどの損は上限で防ぐ。

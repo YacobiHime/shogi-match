@@ -236,7 +236,8 @@ export function lessonStars({ mistakes = 0, hints = 0 } = {}) {
 export const TUTORIAL_MATCH_DEFAULTS = Object.freeze({
   startType: "standard",
   playerColor: "black",
-  cpuLevel: 1,
+  // 十五級程度。
+  cpuLevel: 12,
   hintLimit: 3,
   undoLimit: 3,
   attackGuide: false,
