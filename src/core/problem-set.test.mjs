@@ -174,9 +174,13 @@ describe("将棋問題集の区分", () => {
       .toEqual([["1手詰め", 30], ["3手詰め", 30], ["5手詰め", 30], ["7手詰め", 30]]);
     expect(ZUKOU_SET).toHaveLength(100);
     expect(new Set(ZUKOU_SET.map(({ number }) => number)).size).toBe(100);
-    // 図巧は手数の短い順。最短は第50番の9手。
-    expect(ZUKOU_SET[0]).toMatchObject({ id: "zukou-050", plies: 9, title: "第50番（9手）" });
-    expect(ZUKOU_SET.every((problem, index, list) => index === 0 || list[index - 1].plies <= problem.plies)).toBe(true);
+    // 図巧は原典の番号順。
+    expect(ZUKOU_SET.map(({ number }) => number)).toEqual(Array.from({ length: 100 }, (_, index) => index + 1));
+    expect(ZUKOU_SET[0]).toMatchObject({ id: "zukou-001", plies: 69, title: "第1番（69手）" });
+    // 通称のある作品だけ、名前を添える。
+    expect(ZUKOU_SET.filter(({ title }) => title.includes("『")).map(({ title }) => title)).toEqual([
+      "第6番『朝霧』（81手）", "第94番『襷詰』（23手）", "第98番『裸玉』（31手）", "第99番『煙詰』（117手）", "第100番『寿』（611手）",
+    ]);
     const ids = [...PROBLEMS, ...TSUME_SET, ...ZUKOU_SET].map(({ id }) => id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -242,7 +246,8 @@ describe("手順で判定する問題（詰め将棋・図巧）", () => {
   });
 
   it("図巧は、作意手順どおりに解ききれ、途中で何手目かを伝える", () => {
-    const problem = ZUKOU_SET[0];
+    // 最も短い第50番（9手）で確かめる。
+    const problem = ZUKOU_SET.find(({ id }) => id === "zukou-050");
     const results = playLine(problem);
     expect(results.at(-1)).toMatchObject({ correct: true, solved: true, next: null });
     expect(results[0].speech).toContain("（2/9手）");
@@ -257,7 +262,7 @@ describe("手順で判定する問題（詰め将棋・図巧）", () => {
       return appendUsiMove(next, usi) && next.position.checked && enumerateLegalMoves(next.position).length > 0;
     });
     const tsumeWithOtherCheck = TSUME_SET.find((problem) => problem.plies === 3 && otherCheck(problem));
-    for (const problem of [tsumeWithOtherCheck, ZUKOU_SET[0]]) {
+    for (const problem of [tsumeWithOtherCheck, ZUKOU_SET.find(({ id }) => id === "zukou-050")]) {
       const other = otherCheck(problem);
       expect(other, problem.id).toBeTruthy();
       const result = judgeProblemMove(problem, other);

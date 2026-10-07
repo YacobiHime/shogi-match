@@ -165,15 +165,28 @@ export const TSUME_SET = Object.freeze(TSUME_PROBLEMS.map((entry, index, list) =
   return lineProblem({ ...entry, source: "tsume", title: `${plies}手詰め 第${number}問`, number });
 }));
 
-/** 詰将棋図巧。手数の短い順に並べ、原典の番号を残す。 */
+/**
+ * 図巧のうち、名前で呼ばれている作品。図巧の各番には題名がなく、通称があるのは一部だけ。
+ * 第94・98・99・100番はWikipedia「将棋図巧」、第6番は「ネコ印 二百科事典 有名な詰将棋作品」による（2026-10-07確認）。
+ * 第97番の「実戦初形」は駒の配置の説明なので、名前には入れない。
+ */
+export const ZUKOU_NICKNAMES = Object.freeze({
+  6: "朝霧",
+  94: "襷詰",
+  98: "裸玉",
+  99: "煙詰",
+  100: "寿",
+});
+
+/** 詰将棋図巧。原典の番号順（第1番〜第100番）に並べ、通称のある作品は『』で添える。 */
 export const ZUKOU_SET = Object.freeze(ZUKOU_PROBLEMS
   .map((entry) => lineProblem({
     ...entry,
     id: `zukou-${String(entry.number).padStart(3, "0")}`,
     source: "zukou",
-    title: `第${entry.number}番（${entry.line.split(" ").length}手）`,
+    title: `第${entry.number}番${ZUKOU_NICKNAMES[entry.number] ? `『${ZUKOU_NICKNAMES[entry.number]}』` : ""}（${entry.line.split(" ").length}手）`,
   }))
-  .sort((a, b) => a.plies - b.plies || a.number - b.number));
+  .sort((a, b) => a.number - b.number));
 
 /** 問題集の区分。groupsは一覧の見出しごとのまとまり。 */
 export const PROBLEM_SECTIONS = Object.freeze([
