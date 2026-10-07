@@ -7688,9 +7688,8 @@ queueMicrotask(() => {
   .shogi-home__icon { width: 64px; height: 64px; }
   .shogi-home__label { font-size: clamp(15px, 1.35vw, 18px); white-space: nowrap; }
   .shogi-home__desc { font-size: 12px; }
-  /* 通常対局は、いちばんよく使う入口なので目立たせる。 */
-  .shogi-home .shogi-home__card--main { border-color: #f1a54c; background: #3a4f5c; }
-  .shogi-home .shogi-home__card--main:not(:disabled):hover { background-color: #46606f; }
+  /* 通常対局は、いちばんよく使う入口なので、背景はほかのカードとそろえたまま枠の色で目立たせる。 */
+  .shogi-home .shogi-home__card--main { border-color: #f1a54c; }
   /* 図鑑は対局より小さめのカードにして、優先度の差を見せる。 */
   .shogi-home .shogi-home__cards--dex .shogi-home__card { gap: 8px; padding: 16px 6px 14px; }
   .shogi-home__cards--dex { gap: 12px; }
