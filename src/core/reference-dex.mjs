@@ -1,6 +1,16 @@
 import { Position, RecordMetadataKey, Square, importKIF } from "tsshogi";
 import { appendUsiMove, createGameRecord } from "../game-state";
-import { AMANO_SOHO_KIFU, HABU_YOSHIHARU_52GIN_KIFU, KOYAMA_REO_ENTRANCE_KIFU, OHASHI_SOKEI_SANSA_KIFU } from "../data/reference-kifu.mjs";
+import {
+  AMANO_SOHO_KIFU,
+  FUJII_SOTA_29_WINS_KIFU,
+  HABU_YOSHIHARU_52GIN_KIFU,
+  KOYAMA_REO_ENTRANCE_KIFU,
+  MASUDA_KOZO_KYO_OCHI_KIFU,
+  NAKAHARA_MAKOTO_MEIJIN_KIFU,
+  OHASHI_SOKEI_SANSA_KIFU,
+  OYAMA_YASUHARU_FIRST_MEIJIN_KIFU,
+  TANIGAWA_KOJI_YOUNGEST_MEIJIN_KIFU,
+} from "../data/reference-kifu.mjs";
 import { GLOSSARY_ENTRIES } from "../data/shogi-glossary.mjs";
 import { ZUKOU_SET } from "./problem-set.mjs";
 
@@ -675,41 +685,50 @@ const WORLD_ENTRIES = [
   },
   {
     id: "masuda", group: "名棋士", label: "升田幸三",
-    moves: ["7g7f", "3c3d", "7f7e", "8c8d", "2h7h", "8d8e", "7h7f", "4a3b"],
+    kifu: MASUDA_KOZO_KYO_OCHI_KIFU,
+    kifuTitle: "第5期王将戦 第4局 香落ち（1956年1月19日）",
+    // 升田は上手（後手の側）なので、升田の側を下にして並べる。
+    flip: true,
     overview: "「新手一生」を掲げて、新しい指し方を次々に生み出した棋士だよ！",
     rows: [
       ["人物", "実力制の時代を代表する棋士で、名人をはじめ多くのタイトルを獲得したよ。"],
       ["新手一生", "「新手一生」という言葉を残し、常に新しい手を追い求めたんだ。"],
-      ["盤面", "盤面は升田が得意とした「升田式石田流」につながる石田流の形だよ。"],
+      ["棋譜", "盤面は、大山康晴名人に香車を1枚落として勝った王将戦の一局。少年のころからの夢「名人に香車を引いて勝つ」をかなえたんだ。升田は上手なので、升田の側を下にして並べているよ。"],
     ],
   },
   {
     id: "oyama", group: "名棋士", label: "大山康晴",
-    moves: ["7g7f", "3c3d", "6g6f", "8c8d", "2h6h", "8d8e", "8h7g", "4a3b", "5i4h", "5a4b", "4h3h", "6a5b", "3h2h", "7a7b", "3i3h"],
+    kifu: OYAMA_YASUHARU_FIRST_MEIJIN_KIFU,
+    kifuTitle: "第11期名人戦 第5局 木村義雄名人戦（1952年7月14日）",
     overview: "振り飛車の名手で、長い間トップに立ち続けた大棋士だよ！",
     rows: [
       ["人物", "十五世名人。タイトルを通算80期獲得し、長く将棋界の頂点に立ったよ。"],
       ["棋風", "粘り強い受けと、四間飛車などの振り飛車を得意としたんだ。"],
-      ["盤面", "盤面は大山も得意とした、四間飛車と美濃囲いの形だよ。"],
+      ["棋譜", "盤面は、木村義雄名人に勝って初めて名人になった名人戦の一局。矢倉の戦いを制して、29歳で名人になったよ。"],
     ],
   },
   {
     id: "nakahara", group: "名棋士", label: "中原誠",
-    moves: ["7g7f", "8c8d", "6g6f", "3c3d", "7i6h", "7a6b", "6h7g", "6c6d"],
+    kifu: NAKAHARA_MAKOTO_MEIJIN_KIFU,
+    kifuTitle: "第31期名人戦 第7局 大山康晴名人戦（1972年6月7日）",
+    // 中原は後手なので、中原の側を下にして並べる。
+    flip: true,
     overview: "「自然流」と呼ばれた、のびのびとした指し回しの名人だよ！",
     rows: [
       ["人物", "十六世名人。1972年に大山康晴から名人を奪い、その後の将棋界の第一人者として活躍したよ。"],
       ["棋風", "無理のない自然な指し回しから「自然流」と呼ばれたんだ。"],
-      ["盤面", "盤面は、相居飛車の代表的な戦型のひとつ「矢倉」の出だしだよ。"],
+      ["棋譜", "盤面は、大山康晴名人から名人を奪った名人戦の第7局。3勝3敗で迎えた最終局に勝ち、24歳で名人になったよ。中原は後手なので、中原の側を下にして並べているよ。"],
     ],
   },
   {
     id: "tanigawa", group: "名棋士", label: "谷川浩司",
-    sfen: STANDARD,
+    kifu: TANIGAWA_KOJI_YOUNGEST_MEIJIN_KIFU,
+    kifuTitle: "第41期名人戦 第6局 加藤一二三名人戦（1983年6月14日）",
     overview: "鋭い寄せで「光速の寄せ」と呼ばれた棋士だよ！",
     rows: [
       ["人物", "1983年に21歳で名人になり、当時の史上最年少名人となったよ。十七世名人の資格を持っているんだ。"],
       ["棋風", "一気に相手玉を追い詰める終盤の速さから「光速の寄せ」と呼ばれたよ。"],
+      ["棋譜", "盤面は、加藤一二三名人に勝って史上最年少の名人になった名人戦の一局。ひねり飛車の戦いを制したよ。"],
     ],
   },
   {
@@ -726,13 +745,14 @@ const WORLD_ENTRIES = [
   },
   {
     id: "fujii", group: "名棋士", label: "藤井聡太",
-    moves: ["7g7f", "8c8d", "2g2f", "3c3d", "8h2b+", "3a2b", "7i8h", "2b3c"],
+    kifu: FUJII_SOTA_29_WINS_KIFU,
+    kifuTitle: "竜王戦決勝トーナメント 増田康宏四段戦（2017年6月26日）",
     overview: "次々に最年少記録を塗り替えている、令和の大スターだよ！",
     rows: [
       ["デビュー", "2016年、14歳2か月で史上最年少のプロ棋士（四段）になったよ。"],
       ["29連勝", "2017年には、デビューから公式戦29連勝という新記録を打ち立てたんだ。"],
       ["八冠", "2023年に、竜王・名人を含む8つのタイトルをすべて独占する「八冠」を達成したよ。"],
-      ["盤面", "盤面は、トップ棋士の対局でよく指される「角換わり」の出だしだよ。"],
+      ["棋譜", "盤面は、29連勝を決めた竜王戦の増田康宏四段との一局。雁木に構えた増田四段に勝って、30年ぶりに連勝記録を塗り替えたよ。"],
     ],
   },
   {
@@ -862,14 +882,16 @@ export function referenceEntryKifu(entry) {
       highlight: node.bookmark.trim(),
     });
   }
-  // 投了・詰みで終わった棋譜は、最後の手を指した側の勝ち。
+  // 投了・詰みで終わった棋譜は、最後の手を指した側の勝ち。駒落ちでは上手が先に指すので、最後の局面の手番で決める。
   const lastPly = steps.length - 1;
   const winner = ["投了", "詰み"].includes(ending) && lastPly > 0
-    ? (lastPly % 2 === 1 ? "black" : "white")
+    ? (steps[lastPly].sfen.split(" ")[1] === "w" ? "black" : "white")
     : "";
   const kifu = Object.freeze({
-    black: metadata(RecordMetadataKey.BLACK_NAME),
-    white: metadata(RecordMetadataKey.WHITE_NAME),
+    // 駒落ちの棋譜は、下手が先手の側、上手が後手の側。
+    black: metadata(RecordMetadataKey.BLACK_NAME) || metadata(RecordMetadataKey.SHITATE_NAME),
+    white: metadata(RecordMetadataKey.WHITE_NAME) || metadata(RecordMetadataKey.UWATE_NAME),
+    handicap: !record.initialPosition.sfen.startsWith(STANDARD.split(" ")[0]),
     ending,
     winner,
     steps,

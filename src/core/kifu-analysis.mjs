@@ -48,8 +48,10 @@ function comparableScore(score) {
  * 好手は「最善手だった」だけでは付けず、次善手との差が大きい局面に限定する。
  * 神の一手は、god-move.mjsのjudgeGodMoveで候補と判定された手（godMove）にだけ付ける。
  * 1局で表示する上限（上位3手）は、解析を終えた点の列にcapGodMovesを掛けて絞る。
+ * moverは指した側。省くと平手として手数の偶奇で決める（駒落ちは上手が先に指すので渡す）。
  * @param {{
  *   ply?: number,
+ *   mover?: 'black' | 'white',
  *   playedMove?: string,
  *   bestMove?: string,
  *   beforeBestScore?: { type: string, value: number },
@@ -60,6 +62,7 @@ function comparableScore(score) {
  */
 export function classifyAnalyzedMove({
   ply,
+  mover = ply % 2 === 1 ? 'black' : 'white',
   playedMove,
   bestMove,
   beforeBestScore,
@@ -71,7 +74,6 @@ export function classifyAnalyzedMove({
   const before = comparableScore(beforeBestScore);
   const after = comparableScore(afterScore);
   if (before === undefined || after === undefined) return null;
-  const mover = ply % 2 === 1 ? 'black' : 'white';
   const loss = Math.max(0, mover === 'black' ? before - after : after - before);
 
   if (loss >= 1800) return { kind: 'blunder', label: '大悪手', mover, loss };

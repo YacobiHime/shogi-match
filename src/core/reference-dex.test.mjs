@@ -83,6 +83,31 @@ describe("reference dex", () => {
     }
   });
 
+  it.each([
+    // [id, 先手（下手）, 後手（上手）, 駒落ち, 最後の手, 勝った側, しおり]
+    ["masuda", "大山康晴 名人", "升田幸三 王将", true, "△９五銀", "white", "名人に香を引いて勝つ"],
+    ["oyama", "大山康晴", "木村義雄", false, "▲７九玉", "black", "名人獲得"],
+    ["nakahara", "大山康晴", "中原誠", false, "△６七香成", "white", "名人奪取"],
+    ["tanigawa", "谷川浩司", "加藤一二三", false, "▲４四金", "black", "史上最年少名人"],
+    ["fujii", "藤井聡太 四段", "増田康宏 四段", false, "▲３八飛", "black", "29連勝"],
+  ])("shows the signature game of %s", (id, black, white, handicap, last, winner, highlight) => {
+    const entry = referenceDexEntries("world").find((candidate) => candidate.id === id);
+    const kifu = referenceEntryKifu(entry);
+    expect(kifu).toMatchObject({ black, white, handicap, ending: "投了", winner });
+    expect(kifu.steps.at(-1).label).toBe(last);
+    expect(kifu.steps.at(-1).highlight).toBe(highlight);
+    // 盤は、その棋士の側を下にして並べる。
+    expect(Boolean(entry.flip)).toBe(winner === "white");
+  });
+
+  it("starts the handicap game from the uwate's move", () => {
+    const entry = referenceDexEntries("world").find(({ id }) => id === "masuda");
+    const [start, first] = referenceEntryKifu(entry).steps;
+    // 香落ちでは、上手（後手の側）の1一の香がなく、上手が先に指す。
+    expect(start.sfen).toBe("lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1");
+    expect(first.label).toBe("△３四歩");
+  });
+
   it("shows Koyama Reo's entrance-exam win built on an anaguma", () => {
     const entry = referenceDexEntries("world").find(({ id }) => id === "koyama");
     const kifu = referenceEntryKifu(entry);

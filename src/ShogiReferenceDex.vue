@@ -481,7 +481,7 @@ type ReferenceEntry = {
   related?: string[];
 };
 type KifuStep = { sfen: string; label: string; lastMove: string; comment: string; highlight: string };
-type Kifu = { black: string; white: string; ending: string; winner: "" | "black" | "white"; steps: KifuStep[] };
+type Kifu = { black: string; white: string; handicap: boolean; ending: string; winner: "" | "black" | "white"; steps: KifuStep[] };
 /** 図鑑の棋譜を段階解析する。resultsは深く読み直すときに前の結果を引き継ぐための配列で、解析が書き足す。 */
 type AnalysisEngine = {
   analyze(options: {
@@ -808,8 +808,10 @@ function sideEvaluation(sign: 1 | -1) {
   return formatAnalysisScore({ type: "cp", value });
 }
 const playerBars = computed(() => {
-  const black = { side: "先手", name: kifu.value?.black ?? "", evaluation: sideEvaluation(1) };
-  const white = { side: "後手", name: kifu.value?.white ?? "", evaluation: sideEvaluation(-1) };
+  // 駒落ちでは、駒を落とした側を「上手」、落とされない側を「下手」と呼ぶ。
+  const handicap = Boolean(kifu.value?.handicap);
+  const black = { side: handicap ? "下手" : "先手", name: kifu.value?.black ?? "", evaluation: sideEvaluation(1) };
+  const white = { side: handicap ? "上手" : "後手", name: kifu.value?.white ?? "", evaluation: sideEvaluation(-1) };
   return flipped.value ? { top: black, bottom: white } : { top: white, bottom: black };
 });
 // 盤の下に出す今の手。「5手目 ▲４八銀(39)」のように、動かした駒の元の升を添える。

@@ -252,6 +252,7 @@ export function analysisPointsFromResults(steps, results, contexts = []) {
       const secondRead = deepestRead(before, true);
       annotation = classifyAnalyzedMove({
         ply,
+        mover: beforeSide,
         playedMove: steps[ply].lastMove,
         bestMove: rankOf(pair.before?.candidates, 1)?.move,
         beforeBestScore: scoreForBlack(rankOf(pair.before?.candidates, 1)?.score, beforeSide),
