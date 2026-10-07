@@ -1,6 +1,8 @@
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
+import { TSUME_PROBLEMS } from "../data/tsume-problems.mjs";
+import { ZUKOU_PROBLEMS } from "../data/zukou-problems.mjs";
 import { formatHintMove } from "./match-assists.mjs";
-import { analyzeProblem } from "./problem-solver";
+import { analyzeProblem, findEscapeReply } from "./problem-solver";
 
 /**
  * やこび姫の将棋問題集。詰ませる問題と、王手から逃げる問題を出す。
@@ -16,6 +18,12 @@ import { analyzeProblem } from "./problem-solver";
  *
  * 逃げる問題は、正解のあとも、なぜ詰まないのかが分かるところまで指す（続きの1手）。
  * 相手は、まちがえた逃げ方なら詰んでいた王手を指し、プレイヤーはもう一度逃げる。
+ *
+ * 問題集は「練習問題」「詰め将棋」「詰将棋図巧」の3区分。練習問題（PROBLEMS）だけが上の探索で正解を決める。
+ * 詰め将棋（src/data/tsume-problems.mjs）と図巧（src/data/zukou-problems.mjs）は外部データの手順（kind: "line"）で判定する。
+ * - 長い図巧はブラウザの探索では読み切れないため、データ作成側が検証した手順を正とする。
+ * - 詰め将棋は7手詰め以下で余詰めがない（攻め方の正解が各手で1つ）問題だけを選んでいる。
+ * - どちらも、最後の1手は詰ませる手ならどれでも正解にする。
  */
 
 /** 続きの1手で、相手の王手の候補として調べる数の上限（探索で画面を止めすぎないため）。 */
@@ -144,8 +152,59 @@ export const PROBLEMS = Object.freeze([
   },
 ]);
 
+/** 手順で判定する問題を作る。lineは作意手順（USI）、pliesは手数。 */
+function lineProblem({ id, source, title, sfen, line, number }) {
+  const moves = line.split(" ");
+  return Object.freeze({ id, kind: "line", source, title, sfen, line: Object.freeze(moves), plies: moves.length, number });
+}
+
+/** 詰め将棋。手数ごとに、データの並び（やさしい順）で番号を振る。 */
+export const TSUME_SET = Object.freeze(TSUME_PROBLEMS.map((entry, index, list) => {
+  const plies = entry.line.split(" ").length;
+  const number = list.slice(0, index + 1).filter((other) => other.line.split(" ").length === plies).length;
+  return lineProblem({ ...entry, source: "tsume", title: `${plies}手詰め 第${number}問`, number });
+}));
+
+/** 詰将棋図巧。手数の短い順に並べ、原典の番号を残す。 */
+export const ZUKOU_SET = Object.freeze(ZUKOU_PROBLEMS
+  .map((entry) => lineProblem({
+    ...entry,
+    id: `zukou-${String(entry.number).padStart(3, "0")}`,
+    source: "zukou",
+    title: `第${entry.number}番（${entry.line.split(" ").length}手）`,
+  }))
+  .sort((a, b) => a.plies - b.plies || a.number - b.number));
+
+/** 問題集の区分。groupsは一覧の見出しごとのまとまり。 */
+export const PROBLEM_SECTIONS = Object.freeze([
+  { id: "practice", label: "練習問題", groups: [{ label: "", problems: PROBLEMS }] },
+  {
+    id: "tsume",
+    label: "詰め将棋",
+    groups: [1, 3, 5, 7].map((plies) => ({
+      label: `${plies}手詰め`,
+      problems: TSUME_SET.filter((problem) => problem.plies === plies),
+    })),
+  },
+  { id: "zukou", label: "詰将棋図巧", groups: [{ label: "", problems: ZUKOU_SET }] },
+]);
+
+/** 区分の問題を、一覧の順に並べる。 */
+export function sectionProblems(sectionId) {
+  return PROBLEM_SECTIONS.find(({ id }) => id === sectionId)?.groups.flatMap(({ problems }) => problems) ?? [];
+}
+
+/** 問題が属する区分。 */
+export function problemSectionId(problem) {
+  if (problem?.kind !== "line") return "practice";
+  return problem.source;
+}
+
 export function problemById(id) {
-  return PROBLEMS.find((problem) => problem.id === id) ?? null;
+  return PROBLEMS.find((problem) => problem.id === id)
+    ?? TSUME_SET.find((problem) => problem.id === id)
+    ?? ZUKOU_SET.find((problem) => problem.id === id)
+    ?? null;
 }
 
 /** step回正解したあとの、探索の深さ。 */
@@ -258,6 +317,7 @@ function moveLabels(sfen, line) {
  * @returns {{ correct: boolean, solved: boolean, speech: string, line: string[], next: { sfen: string, step: number } | null }}
  */
 export function judgeProblemMove(problem, usi, sfen = problem.sfen, step = 0) {
+  if (problem.kind === "line") return judgeLineMove(problem, usi, sfen, step);
   const verdict = problemAnalysis(problem, sfen, step).verdicts.find((entry) => entry.usi === usi);
   if (!verdict) return { correct: false, solved: false, speech: "その手は指せないよ。駒の動きをもう一度確かめてみよう！", line: [], next: null };
   const reply = verdict.correct ? opponentReply(problem, sfen, step, verdict) : null;
@@ -317,8 +377,99 @@ function finalVerdict(problem, sfen, verdict) {
   }
 }
 
+/** 詰ませた局面か。 */
+function isCheckmate(position) {
+  return Boolean(position?.checked) && enumerateLegalMoves(position).length === 0;
+}
+
+/**
+ * 手順で判定する問題（詰め将棋・図巧）の判定。stepは攻め方が正解した回数で、line[2 * step]が次の正解。
+ * その場で詰ませる手は、手順と違っても正解にする。
+ * 作意手順の最後の手は、無駄合い（間に打っても取られて詰む合駒）が残っていても正解にする（図巧の第26・73・93番）。
+ */
+function judgeLineMove(problem, usi, sfen, step) {
+  const position = positionAfter(sfen, [usi]);
+  if (!position) return { correct: false, solved: false, speech: "その手は指せないよ。駒の動きをもう一度確かめてみよう！", line: [], next: null };
+  const index = 2 * step;
+  const expected = problem.line[index];
+  const [played] = moveLabels(sfen, [usi]);
+  const mated = isCheckmate(position);
+  if (mated || (usi === expected && index === problem.line.length - 1)) {
+    const mate = mated ? `${played}で詰みだよ。` : `${played}で詰みだよ。間に駒を打っても、取れば詰むよ。`;
+    return {
+      correct: true,
+      solved: true,
+      speech: problem.source === "zukou"
+        ? `お見事！ ${mate}伊藤看寿の${problem.title}を解ききったね！`
+        : `正解！ ${mate}${problem.plies}手詰め、クリア！`,
+      line: [usi],
+      next: null,
+    };
+  }
+  if (usi === expected && index + 1 < problem.line.length) {
+    const line = [usi, problem.line[index + 1]];
+    const [, replied] = moveLabels(sfen, line);
+    const progress = problem.source === "zukou" ? `（${index + 2}/${problem.plies}手）` : "";
+    return {
+      correct: true,
+      solved: false,
+      speech: `いいね！ ${played}に、相手は${replied}${progress}。続けて詰ませてみよう！`,
+      line,
+      next: { sfen: positionAfter(sfen, line).sfen, step: step + 1 },
+    };
+  }
+  if (!position.checked) {
+    return { correct: false, solved: false, speech: `${played}は王手になっていないよ。詰将棋は、王手を続けて詰ませるよ！`, line: [usi], next: null };
+  }
+  if (problem.source === "zukou") {
+    return {
+      correct: false,
+      solved: false,
+      speech: `${played}は、作者の手順とは違う手だよ。もう一度考えてみよう！ 「答えを見る」で作者の手順も確かめられるよ。`,
+      line: [usi],
+      next: null,
+    };
+  }
+  // 詰め将棋は手順の外の王手でも詰まないので、詰まない逃げ方を探して見せる。
+  const reply = findEscapeReply(position.sfen, problem.plies - index - 2);
+  const [, escaped] = reply ? moveLabels(sfen, [usi, reply]) : [];
+  return {
+    correct: false,
+    solved: false,
+    speech: escaped
+      ? `${played}だと、${escaped}と逃げられちゃう…。もう一度考えてみよう！`
+      : `${played}では詰まないよ。もう一度考えてみよう！`,
+    line: reply ? [usi, reply] : [usi],
+    next: null,
+  };
+}
+
+const PIECE_NAMES = Object.freeze({
+  pawn: "歩", lance: "香", knight: "桂", silver: "銀", gold: "金", bishop: "角", rook: "飛車", king: "玉",
+  promPawn: "と", promLance: "成香", promKnight: "成桂", promSilver: "成銀", horse: "馬", dragon: "竜",
+});
+
+/**
+ * ヒント。練習問題は1手目だけ、問題に書いた台詞とマス。手順で判定する問題は、次に動かす駒を伝え、
+ * 盤上の駒を動かすならそのマスを示す。
+ * @returns {{ text: string, square?: string } | null}
+ */
+export function problemHint(problem, sfen = problem.sfen, step = 0) {
+  if (problem.kind !== "line") return step === 0 ? { text: problem.hint, square: problem.hintSquare } : null;
+  const usi = problem.line[2 * step];
+  const move = usi ? createGameRecord(sfen).position.createMoveByUSI(usi) : null;
+  if (!move) return null;
+  const name = PIECE_NAMES[move.pieceType] ?? "駒";
+  if (usi.includes("*")) return { text: `持ち駒の${name}を打つ手だよ。どこに打てば王手が続くかな？` };
+  return { text: `${name}を動かす手だよ。緑のマスの駒に注目してみよう！`, square: usi.slice(0, 2) };
+}
+
 /** 出題の台詞。 */
 export function problemQuestion(problem) {
+  if (problem.source === "zukou") {
+    return `詰将棋図巧 ${problem.title}。伊藤看寿の名作だよ。王手を続けて、後手玉を詰ませてみよう！`;
+  }
+  if (problem.source === "tsume") return `${problem.title}。後手玉を${problem.plies}手で詰ませてみよう！`;
   return `第${PROBLEMS.indexOf(problem) + 1}問 ${problem.question}`;
 }
 

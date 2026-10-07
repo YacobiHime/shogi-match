@@ -1,4 +1,4 @@
-import { Position } from "tsshogi";
+import { Position, reverseColor } from "tsshogi";
 import { enumerateLegalMoves } from "../game-state";
 
 /**
@@ -82,6 +82,21 @@ function escapeReply(position: Position, attacker: Position["color"], remaining:
     if (next && mateSearch(next, attacker, remaining, budget) === null) return usi;
   }
   return undefined;
+}
+
+/**
+ * 受け方の手番の局面で、remaining手以内の連続王手で詰まされない応手を1つ返す。
+ * 見つからない、または探索の上限に達したらundefined（詰め将棋で、手順と違う王手の逃げ方を見せるのに使う）。
+ */
+export function findEscapeReply(
+  sfen: string,
+  remaining: number,
+  { nodeLimit = 60000, maxTimeMs = 600 } = {},
+): string | undefined {
+  const position = Position.newBySFEN(sfen);
+  if (!position) return undefined;
+  const budget: Budget = { nodes: 0, limit: nodeLimit, deadline: now() + maxTimeMs };
+  return escapeReply(position, reverseColor(position.color), Math.max(0, remaining), budget);
 }
 
 /**

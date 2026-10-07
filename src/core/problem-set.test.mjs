@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
 import {
   PROBLEMS,
+  PROBLEM_SECTIONS,
+  TSUME_SET,
+  ZUKOU_SET,
   judgeProblemMove,
+  problemHint,
+  sectionProblems,
   loadProblemProgress,
   problemAnalysis,
   problemAnswers,
@@ -125,6 +131,172 @@ describe("将棋問題集の正誤判定（詰み探索）", () => {
   it("詰みの手数を深くしても、1手で詰む手は正解のまま", () => {
     const result = analyzeProblem({ sfen: "4k4/9/4P4/9/9/9/9/9/9 b GS 1", kind: "mate", depth: 3 });
     expect(result.verdicts.filter(({ correct }) => correct).map(({ usi }) => usi)).toContain("G*5b");
+  });
+});
+
+/** 指したあとの局面が詰みか。 */
+function matesAfter(sfen, usi) {
+  const record = createGameRecord(sfen);
+  return appendUsiMove(record, usi) && record.position.checked && enumerateLegalMoves(record.position).length === 0;
+}
+
+/**
+ * 手順を指し進め、攻め方の手がすべて王手で、最後に詰むかを確かめる。
+ * 最後に合駒が残る場合は、どの合駒も取り返して詰む無駄合いであることを確かめ、その問題のidを返す。
+ */
+function checkMateLine(problem) {
+  const record = createGameRecord(problem.sfen);
+  expect(record.position.color, problem.id).toBe("black");
+  problem.line.forEach((usi, index) => {
+    expect(appendUsiMove(record, usi), `${problem.id} ${index + 1}手目 ${usi}`).toBe(true);
+    if (index % 2 === 0) expect(record.position.checked, `${problem.id} ${index + 1}手目は王手`).toBe(true);
+  });
+  expect(record.position.checked, problem.id).toBe(true);
+  const replies = enumerateLegalMoves(record.position);
+  if (!replies.length) return null;
+  const finalSfen = record.position.sfen;
+  for (const reply of replies) {
+    expect(reply.usi, `${problem.id} 合駒だけが残る`).toMatch(/^[A-Z]\*/);
+    const after = createGameRecord(finalSfen);
+    appendUsiMove(after, reply.usi);
+    const recaptures = enumerateLegalMoves(after.position).map(({ usi }) => usi);
+    expect(recaptures.some((usi) => matesAfter(after.position.sfen, usi)), `${problem.id} ${reply.usi}は取って詰む`).toBe(true);
+  }
+  return problem.id;
+}
+
+describe("将棋問題集の区分", () => {
+  it("練習問題・詰め将棋・詰将棋図巧の3区分で、詰め将棋は1・3・5・7手詰めが30問ずつ、図巧は全100問", () => {
+    expect(PROBLEM_SECTIONS.map(({ label }) => label)).toEqual(["練習問題", "詰め将棋", "詰将棋図巧"]);
+    expect(sectionProblems("practice")).toEqual([...PROBLEMS]);
+    const tsume = PROBLEM_SECTIONS.find(({ id }) => id === "tsume");
+    expect(tsume.groups.map(({ label, problems }) => [label, problems.length]))
+      .toEqual([["1手詰め", 30], ["3手詰め", 30], ["5手詰め", 30], ["7手詰め", 30]]);
+    expect(ZUKOU_SET).toHaveLength(100);
+    expect(new Set(ZUKOU_SET.map(({ number }) => number)).size).toBe(100);
+    // 図巧は手数の短い順。最短は第50番の9手。
+    expect(ZUKOU_SET[0]).toMatchObject({ id: "zukou-050", plies: 9, title: "第50番（9手）" });
+    expect(ZUKOU_SET.every((problem, index, list) => index === 0 || list[index - 1].plies <= problem.plies)).toBe(true);
+    const ids = [...PROBLEMS, ...TSUME_SET, ...ZUKOU_SET].map(({ id }) => id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("詰め将棋と図巧の手順は、どれも王手の連続で最後に詰む（図巧の3問は無駄合いが残る）", () => {
+    const futile = [];
+    for (const problem of [...TSUME_SET, ...ZUKOU_SET]) {
+      expect(problem.plies % 2, problem.id).toBe(1);
+      const id = checkMateLine(problem);
+      if (id) futile.push(id);
+    }
+    expect(futile.sort()).toEqual(["zukou-026", "zukou-073", "zukou-093"]);
+  });
+
+  it("無駄合いが残る作意の最後の手も、正解にする", () => {
+    const problem = ZUKOU_SET.find(({ id }) => id === "zukou-026");
+    let sfen = problem.sfen;
+    let step = 0;
+    let result;
+    for (let index = 0; index < problem.line.length; index += 2) {
+      result = judgeProblemMove(problem, problem.line[index], sfen, step);
+      expect(result.correct, `${index + 1}手目`).toBe(true);
+      if (result.next) ({ sfen, step } = result.next);
+    }
+    expect(result).toMatchObject({ solved: true, next: null });
+    expect(result.speech).toContain("間に駒を打っても、取れば詰むよ。");
+  });
+
+  // 3手詰め以上も探索で一致を確かめたが（2026-10-07）、重くほかのテストを遅らせるため、ここでは1手詰めだけを確かめる。
+  it("1手詰めは、探索でもデータの初手だけが正解になる", () => {
+    for (const problem of TSUME_SET.filter(({ plies }) => plies === 1)) {
+      const result = analyzeProblem(
+        { sfen: problem.sfen, kind: "mate", depth: problem.plies },
+        { nodeLimit: 3000000, maxTimeMs: 20000 },
+      );
+      expect(result.exhausted, problem.id).toBe(false);
+      expect(result.verdicts.filter(({ correct }) => correct).map(({ usi }) => usi), problem.id).toEqual([problem.line[0]]);
+    }
+  }, 30000);
+});
+
+describe("手順で判定する問題（詰め将棋・図巧）", () => {
+  /** 作意手順のとおりに指し、毎回の判定を返す。 */
+  function playLine(problem) {
+    let sfen = problem.sfen;
+    let step = 0;
+    const results = [];
+    for (let index = 0; index < problem.line.length; index += 2) {
+      const result = judgeProblemMove(problem, problem.line[index], sfen, step);
+      results.push(result);
+      expect(result.correct, `${problem.id} ${index + 1}手目`).toBe(true);
+      if (result.next) ({ sfen, step } = result.next);
+    }
+    return results;
+  }
+
+  it("詰め将棋は、作意手順どおりに指すと相手が応じ、最後の手で正解になる", () => {
+    const problem = TSUME_SET.find(({ plies }) => plies === 3);
+    const results = playLine(problem);
+    expect(results.map(({ solved }) => solved)).toEqual([false, true]);
+    expect(results[0].line).toEqual(problem.line.slice(0, 2));
+    expect(results[1].speech).toMatch(/^正解！ .+で詰みだよ。3手詰め、クリア！$/);
+  });
+
+  it("図巧は、作意手順どおりに解ききれ、途中で何手目かを伝える", () => {
+    const problem = ZUKOU_SET[0];
+    const results = playLine(problem);
+    expect(results.at(-1)).toMatchObject({ correct: true, solved: true, next: null });
+    expect(results[0].speech).toContain("（2/9手）");
+    expect(results.at(-1).speech).toMatch(/第50番（9手）を解ききったね！$/);
+  });
+
+  it("手順と違う王手は、詰め将棋では逃げ方を見せ、図巧では作者の手順と違うと伝える", () => {
+    /** 作意の初手とは違い、詰まない王手。 */
+    const otherCheck = (problem) => enumerateLegalMoves(createGameRecord(problem.sfen).position).map(({ usi }) => usi).find((usi) => {
+      if (usi === problem.line[0]) return false;
+      const next = createGameRecord(problem.sfen);
+      return appendUsiMove(next, usi) && next.position.checked && enumerateLegalMoves(next.position).length > 0;
+    });
+    const tsumeWithOtherCheck = TSUME_SET.find((problem) => problem.plies === 3 && otherCheck(problem));
+    for (const problem of [tsumeWithOtherCheck, ZUKOU_SET[0]]) {
+      const other = otherCheck(problem);
+      expect(other, problem.id).toBeTruthy();
+      const result = judgeProblemMove(problem, other);
+      expect(result).toMatchObject({ correct: false, solved: false, next: null });
+      if (problem.source === "zukou") {
+        expect(result.speech).toContain("作者の手順とは違う手");
+      } else {
+        expect(result.line).toHaveLength(2);
+        expect(result.speech).toMatch(/と逃げられちゃう/);
+      }
+    }
+    // 王手でない手は、そう伝える。
+    const tsume = TSUME_SET[0];
+    const quiet = enumerateLegalMoves(createGameRecord(tsume.sfen).position).map(({ usi }) => usi).find((usi) => {
+      const next = createGameRecord(tsume.sfen);
+      return appendUsiMove(next, usi) && !next.position.checked;
+    });
+    expect(judgeProblemMove(tsume, quiet).speech).toContain("王手になっていない");
+  });
+
+  it("その場で詰ませる手は、作意手順と違っても正解にする", () => {
+    // 作意は銀打からの3手詰めとしても、金を5二に打てばすぐ詰む。
+    const problem = {
+      id: "test", kind: "line", source: "tsume", title: "テスト", plies: 3,
+      sfen: "4k4/9/4P4/9/9/9/9/9/9 b GS 1", line: ["S*5b", "5a4b", "G*4c"],
+    };
+    expect(judgeProblemMove(problem, "G*5b")).toMatchObject({ correct: true, solved: true, line: ["G*5b"] });
+  });
+
+  it("ヒントは、次に動かす駒を伝え、盤上の駒を動かすならそのマスを示す", () => {
+    const drop = TSUME_SET.find(({ line }) => line[0].includes("*"));
+    expect(problemHint(drop).text).toMatch(/^持ち駒の.+を打つ手だよ。/);
+    expect(problemHint(drop).square).toBeUndefined();
+    const move = TSUME_SET.find(({ line }) => !line[0].includes("*"));
+    expect(problemHint(move)).toMatchObject({ square: move.line[0].slice(0, 2) });
+    expect(problemHint(move).text).toContain("緑のマスの駒");
+    // 練習問題のヒントは1手目だけ。
+    expect(problemHint(headGold)).toEqual({ text: headGold.hint, square: headGold.hintSquare });
+    expect(problemHint(headGold, headGold.sfen, 1)).toBeNull();
   });
 });
 
