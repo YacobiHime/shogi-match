@@ -80,7 +80,7 @@
         <section class="shogi-home__group" aria-labelledby="shogi-home-match">
           <h2 id="shogi-home-match" class="shogi-home__group-title">対局</h2>
           <div class="shogi-home__cards">
-            <button type="button" class="shogi-home__card shogi-home__card--main" @click="openMatchSetup('normal')">
+            <button type="button" class="shogi-home__card" @click="openMatchSetup('normal')">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
                   <rect x="2" y="2" width="12" height="1" />
@@ -7692,8 +7692,6 @@ queueMicrotask(() => {
   .shogi-home__icon { width: 64px; height: 64px; }
   .shogi-home__label { font-size: clamp(15px, 1.35vw, 18px); white-space: nowrap; }
   .shogi-home__desc { font-size: 12px; }
-  /* 通常対局は、いちばんよく使う入口なので、背景はほかのカードとそろえたまま枠の色で目立たせる。 */
-  .shogi-home .shogi-home__card--main { border-color: #f1a54c; }
   /* 図鑑は対局より小さめのカードにして、優先度の差を見せる。 */
   .shogi-home .shogi-home__cards--dex .shogi-home__card { gap: 8px; padding: 16px 6px 14px; }
   .shogi-home__cards--dex { gap: 12px; }
