@@ -2,6 +2,7 @@ import { Position, RecordMetadataKey, Square, importKIF } from "tsshogi";
 import { appendUsiMove, createGameRecord } from "../game-state";
 import { AMANO_SOHO_KIFU, HABU_YOSHIHARU_52GIN_KIFU, KOYAMA_REO_ENTRANCE_KIFU, OHASHI_SOKEI_SANSA_KIFU } from "../data/reference-kifu.mjs";
 import { GLOSSARY_ENTRIES } from "../data/shogi-glossary.mjs";
+import { ZUKOU_SET } from "./problem-set.mjs";
 
 /**
  * 駒図鑑・手筋図鑑・将棋界図鑑・将棋用語辞典の収録内容。
@@ -598,6 +599,23 @@ const TESUJI_ENTRIES = TESUJI_GROUPS.flatMap(([group, ids]) => ids.map((id) => {
   return { ...entry, group };
 }));
 
+/**
+ * 「詰将棋の名作」で解く『将棋図巧』の作品。問題と判定は将棋問題集（problem-set.mjs）と共通で、
+ * 図鑑では短めの作品と有名な「裸玉」だけを、やさしい順に並べる。noteは出題のときの一言。
+ */
+const DEX_ZUKOU_PICKS = [
+  { number: 50, note: "『将棋図巧』の100番の中で、いちばん短い作品だよ。" },
+  { number: 7 },
+  { number: 29 },
+  { number: 13 },
+  { number: 98, note: "盤の上には玉しかない「裸玉」。持ち駒の4枚だけで詰ませるんだ。" },
+];
+const DEX_TSUME_PROBLEMS = DEX_ZUKOU_PICKS.map(({ number, note }) => {
+  const problem = ZUKOU_SET.find((entry) => entry.number === number);
+  if (!problem) throw new Error(`図巧の第${number}番がありません`);
+  return { problem, note: note ?? "" };
+});
+
 const WORLD_ENTRIES = [
   {
     id: "origin", group: "将棋の歴史", label: "将棋のはじまり",
@@ -623,13 +641,13 @@ const WORLD_ENTRIES = [
   },
   {
     id: "tsume-classic", group: "将棋の歴史", label: "詰将棋の名作",
-    sfen: "4k4/9/4P4/9/9/9/9/9/4K4 b G 1",
-    arrows: ["G*5b"],
+    sfen: DEX_TSUME_PROBLEMS[0].problem.sfen,
+    tsume: DEX_TSUME_PROBLEMS,
     overview: "王手の連続で玉を詰ませるパズル、詰将棋にも長い歴史があるよ！",
     rows: [
-      ["将棋図巧", "江戸時代の伊藤看寿による詰将棋集『将棋図巧』は、今でも最高傑作のひとつとされているよ。"],
+      ["将棋図巧", "江戸時代の伊藤看寿による詰将棋集『将棋図巧』は、今でも最高傑作のひとつとされているよ。1755年に幕府へ献上された100番の作品集なんだ。"],
       ["寿", "『将棋図巧』に収められた「寿」は611手もの長さで知られる、とても有名な作品なんだ。"],
-      ["盤面", "盤面は1手で詰む一番やさしい形「頭金」。詰将棋はまずここから始めよう！"],
+      ["解いてみよう", "盤では『将棋図巧』の短めの作品を実際に解けるよ。王手の連続で、後手の玉を詰ませよう！ 後手の手は自動で指されるよ。"],
     ],
   },
   {

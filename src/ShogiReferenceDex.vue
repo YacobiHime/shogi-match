@@ -168,13 +168,13 @@
                     :sfen="boardSfen"
                     :flip="flipped"
                     :last-move="boardLastMove"
-                    :allow-move="Boolean(kifu)"
+                    :allow-move="Boolean(kifu) || tsumePlayable"
                     :enable-drag-and-drop="false"
                     :mobile="isNarrow"
                     :layout="isNarrow ? 'portrait' : 'standard'"
                     :asset-base-url="assetBaseUrl"
                     :candidates="boardArrows"
-                    :mark-squares="kifu ? [] : marks"
+                    :mark-squares="kifu ? [] : tsumeProblem ? tsumeMarks : marks"
                     @usi-move="onBoardMove"
                   />
                 </div>
@@ -194,6 +194,38 @@
               >▶</button>
             </div>
           </template>
+          <!-- 詰将棋の名作は、盤で実際に解ける。玉方の手は正解手順から自動で指す。 -->
+          <section v-if="tsumeProblem && tsumeState" class="shogi-reference-dex__tsume" aria-labelledby="shogi-reference-dex-tsume-title">
+            <h3 id="shogi-reference-dex-tsume-title">『将棋図巧』を解いてみよう</h3>
+            <div class="shogi-reference-dex__tsume-picker" role="group" aria-label="問題を選ぶ">
+              <button
+                v-for="problem in tsumeProblems"
+                :key="problem.id"
+                type="button"
+                :aria-pressed="problem.id === tsumeProblem.id"
+                @click="selectTsume(problem.id)"
+              >{{ problem.title }}</button>
+            </div>
+            <div class="shogi-reference-dex__kifu-comment" aria-live="polite">
+              <img
+                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+                alt=""
+                aria-hidden="true"
+              >
+              <p :class="`shogi-reference-dex__tsume-message--${tsumeTone}`">{{ tsumeMessage }}</p>
+            </div>
+            <div class="shogi-dex__controls">
+              <button type="button" :disabled="tsumeState.step === 0 && !tsumeState.solved" @click="resetTsume">最初から</button>
+              <span class="shogi-dex__step-count">{{ tsumeState.solved ? tsumeProblem.plies : tsumeState.step * 2 }}/{{ tsumeProblem.plies }}手</span>
+              <button type="button" :disabled="tsumeState.solved || tsumeHintShown" @click="showTsumeHint">ヒント</button>
+              <button type="button" :aria-expanded="tsumeAnswerOpen" @click="tsumeAnswerOpen = !tsumeAnswerOpen">
+                {{ tsumeAnswerOpen ? "答えを隠す" : "答えを見る" }}
+              </button>
+            </div>
+            <ol v-if="tsumeAnswerOpen" class="shogi-reference-dex__tsume-answer">
+              <li v-for="(label, index) in tsumeAnswer" :key="index"><small>{{ index + 1 }}</small>{{ label }}</li>
+            </ol>
+          </section>
           <template v-if="kifu">
             <div v-if="!isNarrow" class="shogi-dex__controls">
               <button type="button" :disabled="stepIndex === 0 && onMainLine" @click="goToPly(0)">最初へ</button>
@@ -424,12 +456,19 @@ import {
   referenceEntrySfen,
   referencePieceImageEntryId,
 } from "./core/reference-dex.mjs";
+import { judgeProblemMove, lineSfens, problemHint, problemQuestion } from "./core/problem-set.mjs";
+import { formatHintMove } from "./core/match-assists.mjs";
 
 type ReferenceDexKind = "piece" | "tesuji" | "world" | "glossary";
 type TierRow = { tier: string; pieces: { label: string; images: string[]; points: number | string }[] };
 type AiTable = { title: string; note: string; pieces: { label: string; images: string[]; value: number }[] };
+type TsumeProblem = { id: string; number: number; title: string; sfen: string; line: readonly string[]; plies: number };
+/** stepは攻め方が正解した回数。sfenはその局面。 */
+type TsumeState = { sfen: string; step: number; solved: boolean; lastMove: string };
+type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" };
 type ReferenceEntry = {
   id: string;
+  tsume?: { problem: TsumeProblem; note: string }[];
   label: string;
   table?: TierRow[];
   aiTable?: AiTable;
@@ -563,8 +602,12 @@ const branchPosition = computed(() => {
   } catch { /* 表記できない手はUSIのまま出す */ }
   return { sfen: record.position.sfen, lastMove, label };
 });
-const boardSfen = computed(() => branchPosition.value?.sfen ?? currentStep.value?.sfen ?? sfen.value);
-const boardLastMove = computed(() => branchPosition.value?.lastMove ?? currentStep.value?.lastMove ?? "");
+const boardSfen = computed(() => (
+  branchPosition.value?.sfen ?? currentStep.value?.sfen ?? tsumeState.value?.sfen ?? sfen.value
+));
+const boardLastMove = computed(() => (
+  branchPosition.value?.lastMove ?? currentStep.value?.lastMove ?? tsumeState.value?.lastMove ?? ""
+));
 /** 本筋のply手目へ移る。分岐していたら本筋に戻す。 */
 function goToPly(ply: number) {
   const main = returnReviewToMainLine(nav.value);
@@ -577,9 +620,87 @@ function stepBy(delta: number) {
 function goToLineEnd() {
   nav.value = { ...nav.value, cursor: nav.value.line.length };
 }
-/** 盤で指した手。本筋と同じなら進み、違えば分岐する。 */
+/** 盤で指した手。詰将棋なら解答として判定する。棋譜では、本筋と同じなら進み、違えば分岐する。 */
 function onBoardMove(usi: string) {
+  if (tsumeProblem.value) {
+    playTsumeMove(usi);
+    return;
+  }
   nav.value = appendReviewMove(nav.value, usi);
+}
+
+/*
+ * 詰将棋。攻め方の手が正解手順と同じなら、玉方の応手を自動で指す。違う手は指させず、局面をそのまま保つ。
+ * ヒントは1回目で動かす先のマス、2回目で正解の矢印を出す。
+ */
+const tsumeEntries = computed(() => selectedEntry.value?.tsume ?? []);
+const tsumeProblems = computed(() => tsumeEntries.value.map(({ problem }) => problem));
+const tsumeId = ref("");
+const tsumeProblem = computed(() => (
+  tsumeProblems.value.find(({ id }) => id === tsumeId.value) ?? tsumeProblems.value[0] ?? null
+));
+const tsumeState = ref<TsumeState | null>(null);
+const tsumeHintShown = ref(false);
+const tsumeAnswerOpen = ref(false);
+const tsumeMessage = ref("");
+const tsumeTone = ref<"info" | "good" | "bad">("info");
+const tsumePlayable = computed(() => Boolean(tsumeProblem.value && tsumeState.value && !tsumeState.value.solved));
+/** 作者の手順を「▲4五角打」「△4五桂」のように、先手・後手の印を付けて並べる。 */
+const tsumeAnswer = computed(() => {
+  const problem = tsumeProblem.value;
+  if (!problem) return [];
+  const sfens = lineSfens(problem.sfen, [...problem.line]);
+  return problem.line.map((usi, index) => `${index % 2 === 0 ? "▲" : "△"}${formatHintMove(usi, sfens[index])}`);
+});
+const tsumeHintView = computed(() => (
+  tsumeProblem.value && tsumeState.value && tsumePlayable.value && tsumeHintShown.value
+    ? problemHint(tsumeProblem.value, tsumeState.value.sfen, tsumeState.value.step)
+    : null
+));
+const tsumeMarks = computed((): SquareMark[] => {
+  const square = tsumeHintView.value?.square;
+  return square ? [{ file: Number(square[0]), rank: square.charCodeAt(1) - 96, tone: "key" }] : [];
+});
+function resetTsume() {
+  const problem = tsumeProblem.value;
+  tsumeState.value = problem ? { sfen: problem.sfen, step: 0, solved: false, lastMove: "" } : null;
+  tsumeHintShown.value = false;
+  tsumeAnswerOpen.value = false;
+  const note = tsumeEntries.value.find((entry) => entry.problem === problem)?.note ?? "";
+  tsumeMessage.value = problem ? `${problemQuestion(problem)}${note ? ` ${note}` : ""} 後手の手は自動で指されるよ。` : "";
+  tsumeTone.value = "info";
+}
+function selectTsume(id: string) {
+  tsumeId.value = id;
+  resetTsume();
+}
+watch(selectedId, () => {
+  tsumeId.value = "";
+  resetTsume();
+}, { immediate: true });
+function showTsumeHint() {
+  tsumeHintShown.value = true;
+  const hint = tsumeHintView.value;
+  if (!hint) return;
+  tsumeMessage.value = hint.text;
+  tsumeTone.value = "info";
+}
+/** 判定は将棋問題集と同じ。作者の手順どおりなら玉方の応手を自動で指し、違う手は指させずに局面を保つ。 */
+function playTsumeMove(usi: string) {
+  const problem = tsumeProblem.value;
+  const state = tsumeState.value;
+  if (!problem || !state || state.solved) return;
+  const result = judgeProblemMove(problem, usi, state.sfen, state.step);
+  tsumeMessage.value = result.speech;
+  if (!result.correct) {
+    tsumeTone.value = "bad";
+    return;
+  }
+  tsumeHintShown.value = false;
+  tsumeTone.value = result.solved ? "good" : "info";
+  tsumeState.value = result.next
+    ? { sfen: result.next.sfen, step: result.next.step, solved: false, lastMove: result.line.at(-1) ?? usi }
+    : { sfen: lineSfens(state.sfen, result.line).at(-1) ?? state.sfen, step: state.step, solved: true, lastMove: usi };
 }
 /** 分岐を消して、分岐が始まった本筋の局面へ戻る。 */
 function returnToMainLine() {
@@ -702,6 +823,7 @@ const moveCaption = computed(() => {
   return `${stepIndex.value}手目 ${step.label}${origin}${ending}`;
 });
 const boardArrows = computed(() => {
+  if (tsumeProblem.value) return [];
   if (!kifu.value) return arrows.value;
   const best = branchPosition.value ? branchBest.value?.move : currentPoint.value?.bestMove;
   return showBestArrow.value && best ? [{ usi: best, guideKind: "ai" as const }] : [];
@@ -1079,6 +1201,59 @@ defineExpose({ goBack });
   .shogi-game .shogi-reference-dex__kifu-comment {
     --comment-lines: 4;
   }
+}
+.shogi-game .shogi-reference-dex__tsume {
+  display: grid;
+  gap: 0.5rem;
+}
+.shogi-game .shogi-reference-dex__tsume h3 {
+  margin: 0;
+  color: #f1a54c;
+  font-size: 0.9rem;
+}
+.shogi-game .shogi-reference-dex__tsume-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.shogi-game .shogi-dex .shogi-reference-dex__tsume-picker button {
+  min-height: 2rem;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid #f1a54c;
+  border-radius: 999px;
+  color: #fffcf4;
+  background: rgba(241, 165, 76, 0.18);
+  font: 700 0.8rem/1.2 inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+.shogi-game .shogi-dex .shogi-reference-dex__tsume-picker button[aria-pressed="true"] {
+  color: #172632;
+  background: #f1a54c;
+}
+.shogi-game .shogi-reference-dex__kifu-comment p.shogi-reference-dex__tsume-message--good {
+  border-color: #6fcf8a;
+  background: rgba(111, 207, 138, 0.16);
+}
+.shogi-game .shogi-reference-dex__kifu-comment p.shogi-reference-dex__tsume-message--bad {
+  border-color: #e07a6a;
+  background: rgba(224, 122, 106, 0.14);
+}
+.shogi-game .shogi-reference-dex__tsume-answer {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.2rem 0.8rem;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  list-style: none;
+  border: 1px solid rgba(255, 252, 244, 0.2);
+  border-radius: 0.4rem;
+  font-size: var(--dex-text);
+}
+.shogi-game .shogi-reference-dex__tsume-answer small {
+  display: inline-block;
+  min-width: 1.6rem;
+  opacity: 0.6;
 }
 .shogi-game .shogi-reference-dex__highlights {
   display: flex;

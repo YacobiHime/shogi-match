@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Position, Square } from "tsshogi";
 import { createGameRecord, enumerateLegalMoves } from "../game-state";
+import { ZUKOU_SET, judgeProblemMove } from "./problem-set.mjs";
 import {
   REFERENCE_DEX_KINDS,
   pieceReachSquares,
@@ -333,5 +334,25 @@ describe("reference dex", () => {
       expect(isMate(play(createGameRecord(fields.join(" ")).position, "S*2b"))).toBe(true);
       expect(enumerateLegalMoves(after).some(({ usi }) => !hasMateInOne(play(after, usi)))).toBe(true);
     });
+  });
+});
+
+describe("詰将棋の名作", () => {
+  it("offers short Zukou problems from the problem set, judged the same way", () => {
+    const entry = referenceDexEntries("world").find(({ id }) => id === "tsume-classic");
+    const problems = entry.tsume.map(({ problem }) => problem);
+    expect(problems.map(({ number }) => number)).toEqual([50, 7, 29, 13, 98]);
+    for (const problem of problems) expect(ZUKOU_SET).toContain(problem);
+    expect(problems.at(-1).title).toBe("第98番『裸玉』（31手）");
+    expect(entry.sfen).toBe(problems[0].sfen);
+    // 作者の手順どおりに指せば、玉方が応じて最後に詰む。
+    const [problem] = problems;
+    let state = { sfen: problem.sfen, step: 0 };
+    for (let index = 0; index < problem.line.length; index += 2) {
+      const result = judgeProblemMove(problem, problem.line[index], state.sfen, state.step);
+      expect(result.correct, `${index + 1}手目`).toBe(true);
+      if (result.next) state = result.next;
+      else expect(result.solved).toBe(true);
+    }
   });
 });
