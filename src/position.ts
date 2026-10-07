@@ -1,6 +1,7 @@
 import {
   ImmutablePosition,
   Move,
+  PieceType,
   Position,
   Square,
   parseUSIMove,

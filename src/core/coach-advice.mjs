@@ -283,6 +283,12 @@ function formatEvaluation(value) {
 }
 
 /** 着手前後のプレイヤー視点評価から、大きな評価低下だけを指摘する。 */
+/**
+ * @param {{
+ *   level?: string, beforeScore?: { type: string, value: number } | null, afterScore?: { type: string, value: number } | null,
+ *   wasPromotion?: boolean, wasEnemyCampDrop?: boolean,
+ * }} [options]
+ */
 export function getMoveFeedback({
   level = 'encourage',
   beforeScore,
@@ -328,6 +334,12 @@ export function isSideToMoveInCheck(sfen) {
 /**
  * 表示すべき助言を優先度順に1件だけ返す。
  * level: off / encourage / detailed
+ */
+/**
+ * @param {{
+ *   level?: string, score?: { type: string, value: number } | null, moveCount?: number, inCheck?: boolean,
+ *   opponentFormations?: string[], playerFormations?: string[], advisedTopics?: Iterable<string>,
+ * }} [options]
  */
 export function getCoachAdvice({
   level = 'encourage',

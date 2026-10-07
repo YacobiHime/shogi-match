@@ -834,7 +834,8 @@ const clickFrame = () => {
 };
 
 const updatePointer = (newPointer: Square | Piece, empty: boolean, color: Color | undefined) => {
-  const prevPointer = state.pointer;
+  // reactiveで包むとSquare・Pieceのクラスの型が外れ、instanceofで絞り込めなくなるため、元の型に戻す。
+  const prevPointer = state.pointer as State["pointer"];
   resetState();
   if (
     newPointer instanceof Square &&

@@ -1,6 +1,12 @@
 export const IDLE_COACH_DELAY_MS = 10000;
 
 /** 探索した最善手の性質から、考慮中に出す軽い助言を組み立てる。 */
+/**
+ * @param {{
+ *   usi?: string, formattedMove?: string, pieceType?: string, capturedPieceType?: string, toRank?: number,
+ *   color?: string, lastMove?: string, givesCheck?: boolean,
+ * }} [options]
+ */
 export function getIdleCoachAdvice({
   usi = '',
   formattedMove = '',

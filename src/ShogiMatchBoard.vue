@@ -73,6 +73,7 @@ import {
   PromotionSelectorStyle,
 } from "./common/settings/app";
 import { BoardLayoutType } from "./common/settings/layout";
+import type { Move } from "tsshogi";
 
 type AttackMark = { file: number; rank: number; black: number; white: number };
 type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" };

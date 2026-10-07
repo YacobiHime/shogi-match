@@ -356,7 +356,7 @@ const castleContextOptions = [
   { id: "anti-static-ranging", label: "対抗型・振り飛車側" },
   { id: "double-ranging", label: "相振り飛車" },
 ];
-const castleFamilyOptions = [...new Set(castles.map((castle: any) => castle.family).filter(Boolean))];
+const castleFamilyOptions: string[] = [...new Set<string>(castles.map((castle: any) => castle.family).filter(Boolean))];
 const strategyFamilyLabels = new Map(strategyFamilyOptions.map((option) => [option.id, option.label]));
 const castleGroupLabels = new Map(castleGroups.map((group: any) => [group.id, group.label]));
 const storedLibrary = safeParseLibrary(localStorage.getItem(OPENING_BOOK_LIBRARY_STORAGE_KEY));
@@ -364,7 +364,9 @@ const stored = localStorage.getItem(OPENING_BOOK_STORAGE_KEY);
 const legacyInitial = stored ? safeParse(stored) : null;
 const initial = storedLibrary.activeKey ? storedLibrary.books[storedLibrary.activeKey] ?? legacyInitial : legacyInitial;
 type NearCompletion = { id: string; label: string; squares: [string, string][] };
-const book = reactive<any>(normalize(initial ?? createOpeningBookDraft({ initialSfen: STANDARD_SFEN })));
+// 編集中に項目を足すことがあるため、下書きの型にない項目も許す。
+type OpeningBookDraft = ReturnType<typeof createOpeningBookDraft> & Record<string, any>;
+const book = reactive<OpeningBookDraft>(normalize(initial ?? createOpeningBookDraft({ initialSfen: STANDARD_SFEN })));
 const selectedDefinitionKey = ref(initial && (storedLibrary.books[openingBookDraftKey(initial)] || [...strategies, ...castles].some((item: any) => item.id === initial.id)) ? openingBookDraftKey(initial) : "new");
 const draftLibrary = ref<any>(storedLibrary);
 const activeBranchIndex = ref(0);

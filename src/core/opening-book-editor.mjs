@@ -58,6 +58,7 @@ export function serializeOpeningBookLibrary(library) {
   return `${JSON.stringify({ ...createOpeningBookLibrary(), ...library }, null, 2)}\n`;
 }
 
+/** @returns {{ alternatives: Record<string, any>[] }[]} */
 export function normalizeMovePositionPrerequisiteGroups(conditions) {
   if (!Array.isArray(conditions)) return [];
   return conditions.map((group) => ({
@@ -66,6 +67,7 @@ export function normalizeMovePositionPrerequisiteGroups(conditions) {
   }));
 }
 
+/** @returns {Record<string, { alternatives: Record<string, any>[] }[]>} */
 export function normalizeMovePositionPrerequisites(prerequisites) {
   if (!prerequisites || Array.isArray(prerequisites) || typeof prerequisites !== "object") return {};
   return Object.fromEntries(Object.entries(prerequisites).map(
@@ -73,7 +75,10 @@ export function normalizeMovePositionPrerequisites(prerequisites) {
   ));
 }
 
-/** 囲いの「ほぼ完成形」を {id, label, squares} の配列へ整える。 */
+/**
+ * 囲いの「ほぼ完成形」を {id, label, squares} の配列へ整える。
+ * @returns {{ id: string, label: string, squares: [string, string][] }[]}
+ */
 export function normalizeNearCompletions(nearCompletions) {
   if (!Array.isArray(nearCompletions)) return [];
   return nearCompletions
@@ -87,6 +92,7 @@ export function normalizeNearCompletions(nearCompletions) {
     }));
 }
 
+/** @returns {Record<string, string[]>} */
 export function normalizeMoveConditionBranches(branches) {
   if (!branches || Array.isArray(branches) || typeof branches !== "object") return {};
   return Object.fromEntries(Object.entries(branches).map(([move, branchMoves]) => [
@@ -97,6 +103,7 @@ export function normalizeMoveConditionBranches(branches) {
   ]));
 }
 
+/** @param {{ definition?: any, kind?: string, side?: string, initialSfen: string }} options */
 export function createOpeningBookDraft({ definition, kind = "strategy", side = "black", initialSfen }) {
   const now = new Date().toISOString().slice(0, 10);
   return {
@@ -114,10 +121,10 @@ export function createOpeningBookDraft({ definition, kind = "strategy", side = "
     },
     initialSfen,
     guideMoves: [...(definition?.blackMoves ?? [])],
-    completionVariants: (definition?.completionVariants?.length
+    completionVariants: /** @type {[string, string][][]} */ ((definition?.completionVariants?.length
       ? definition.completionVariants
       : definition?.completionSquares?.length ? [definition.completionSquares] : []
-    ).map((variant) => variant.map(([square, kind]) => [square, kind])),
+    ).map((variant) => variant.map(([square, kind]) => [square, kind]))),
     nearCompletions: normalizeNearCompletions(definition?.nearCompletions),
     movePositionPrerequisites: normalizeMovePositionPrerequisites(definition?.movePositionPrerequisites),
     moveConditionBranches: normalizeMoveConditionBranches(definition?.moveConditionBranches),

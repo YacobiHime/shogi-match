@@ -7,7 +7,10 @@ export function parseMateScore(candidate) {
   return Number.isInteger(value) && value > 0 ? value : null;
 }
 
-/** 通常探索の最善候補を、連続王手詰み判定へ変換する。 */
+/**
+ * 通常探索の最善候補を、連続王手詰み判定へ変換する。
+ * @returns {{ status: "mate", plies: number } | { status: "no-mate" }}
+ */
 export function mateCheckResultFromCandidate(sfen, candidate, maxPly = 7) {
   const plies = parseMateScore(candidate);
   return plies && plies <= maxPly && isContinuousCheckMate(sfen, candidate?.pv, plies)

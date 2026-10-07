@@ -106,6 +106,13 @@ export async function loadEngineFactory(
 /**
  * NNUE指定時はHalfKP noeval版を主系統、内蔵評価版をフォールバック先にする。
  */
+/**
+ * @param {string | null} nnuePath
+ * @param {{
+ *   onFallback?: ((error: unknown) => void) | null, documentObject?: any, globalObject?: any,
+ *   engineBaseUrl?: string, loaderTimeoutMs?: number,
+ * }} [options]
+ */
 export async function loadEngineFactories(
   nnuePath,
   { onFallback = null, ...loaderOptions } = {}

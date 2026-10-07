@@ -1,6 +1,7 @@
 import {
   Color,
   handPieceTypes,
+  ImmutablePosition,
   Move,
   Position,
   Record,
@@ -32,7 +33,7 @@ export function createGameRecord(initialSfen = STANDARD_SFEN): Record {
   return new Record(position);
 }
 
-export function enumerateLegalMoves(position: Position): Move[] {
+export function enumerateLegalMoves(position: ImmutablePosition): Move[] {
   const moves: Move[] = [];
   const seen = new Set<string>();
   const append = (move: Move | null) => {

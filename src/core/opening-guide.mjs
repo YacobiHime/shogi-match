@@ -782,6 +782,12 @@ const STRATEGY_NEAR_COMPLETIONS = {
   }],
 };
 
+/**
+ * 戦法・囲いの定義。項目が多く定義ごとに異なるため、よく使う項目だけ型を書く。
+ * @typedef {{ id: string, label: string, family?: string, menuGroup?: string, [key: string]: any }} OpeningDefinition
+ */
+
+/** @type {OpeningDefinition[]} */
 export const OPENING_STRATEGIES = definitionsWithEditorOverrides(
   OPENING_STRATEGY_DEFINITIONS.map((strategy) => (STRATEGY_NEAR_COMPLETIONS[strategy.id]
     ? { ...strategy, nearCompletions: STRATEGY_NEAR_COMPLETIONS[strategy.id] }
@@ -1172,6 +1178,7 @@ const CASTLE_NEAR_COMPLETIONS = {
   }],
 };
 
+/** @type {OpeningDefinition[]} */
 export const OPENING_CASTLES = definitionsWithEditorOverrides(OPENING_CASTLE_DEFINITIONS.map((castle) => ({
   ...castle,
   ...CASTLE_CLASSIFICATION[castle.id],
@@ -2077,6 +2084,11 @@ export function availableOpeningDefinitions({
 /**
  * 相手の応手によって奇襲の成立条件が失われたかを判定する。
  * 一時的に予定手が指せないだけの局面とは分け、確実に不成立になった場合だけ返す。
+ * @param {{
+ *   strategyId?: string, castleId?: string, color?: string, playedMoves?: string[], opponentMoves?: string[],
+ *   moveHistory?: string[], detectedFormations?: string[], opponentFormations?: string[], currentSfen?: string,
+ *   legalMoves?: string[], completedPhases?: { strategy?: boolean, castle?: boolean },
+ * }} [options]
  */
 export function openingPlanInterruption({
   strategyId,
@@ -2317,7 +2329,10 @@ export function openingPlanInterruption({
   return null;
 }
 
-/** 相手の対策に応じて選ばれたゴキゲン中飛車の分岐を、やこび姫の台詞にする。 */
+/**
+ * 相手の対策に応じて選ばれたゴキゲン中飛車の分岐を、やこび姫の台詞にする。
+ * @param {{ strategyId?: string, color?: string, playedMoves?: string[], opponentMoves?: string[] }} [options]
+ */
 export function openingPlanBranchMessage({
   strategyId,
   color = "black",
@@ -2975,7 +2990,10 @@ export function shouldAbandonOpeningGuide(
   return count >= limit;
 }
 
-/** 固定手順がAI上位候補から外れる、または大きく評価を落とす場合は安全な手へ差し替える。 */
+/**
+ * 固定手順がAI上位候補から外れる、または大きく評価を落とす場合は安全な手へ差し替える。
+ * @returns {{ usi: string, source: "plan" | "ai", scoreLoss?: number } | null}
+ */
 export function chooseSafeOpeningMove(plannedMove, candidates = [], maxScoreLoss = 250) {
   const ranked = [...candidates]
     .filter(({ rank, move }) => Number.isInteger(rank) && rank >= 1 && typeof move === "string")
@@ -3026,6 +3044,7 @@ export function selectBestOpeningPlan(plannedMoves = [], candidates = []) {
  * @param {Array<string | { usi: string }>} [plannedMoves]
  * @param {Array<{ rank: number, move: string, score?: { type: string, value: number } }>} [candidates]
  * @param {number | ((plannedMove: string | null) => number)} [maxScoreLoss]
+ * @returns {{ usi: string, source: "plan" | "ai", scoreLoss?: number } | null}
  */
 export function chooseAdaptiveOpeningMove(plannedMoves = [], candidates = [], maxScoreLoss = 250) {
   const selectedPlan = selectBestOpeningPlan(plannedMoves, candidates);
@@ -3033,7 +3052,10 @@ export function chooseAdaptiveOpeningMove(plannedMoves = [], candidates = [], ma
   return chooseSafeOpeningMove(selectedPlan, candidates, limit);
 }
 
-/** 危険な定跡手1手と、代わりに選べるAI上位3候補を矢印用にまとめる。 */
+/**
+ * 危険な定跡手1手と、代わりに選べるAI上位3候補を矢印用にまとめる。
+ * @returns {{ usi: string, source: "unsafe-plan" | "ai", score?: { type: string, value: number } }[]}
+ */
 export function openingDetourArrowCandidates(plannedMove, candidates = [], limit = 3) {
   if (typeof plannedMove !== "string" || !plannedMove) return [];
   const count = Math.max(1, Math.trunc(Number(limit) || 1));

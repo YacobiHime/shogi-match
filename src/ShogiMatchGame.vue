@@ -968,7 +968,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch, type Ref } from "vue";
-import { Color, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
+import { Color, Move, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
 import ShogiReferenceDex from "./ShogiReferenceDex.vue";
@@ -1227,7 +1227,8 @@ function matchUndoAllowance() {
 }
 
 const errorMessage = ref("");
-const record = ref<Record>(createRecord());
+// 深い反応性はそのままに、型だけtsshogiのRecordとして扱う（ref<Record>だとクラスの型が外れ、Recordを受け取る関数へ渡せない）。
+const record = ref(createRecord()) as Ref<Record>;
 const currentSfen = ref(record.value.position.sfen);
 const lastMove = ref("");
 const active = ref(false);
@@ -1846,7 +1847,8 @@ const groupedOpeningStrategies = computed(() => {
   // 戦法に届かなくなったとき、近い戦法を残り手数つきで先頭に並べる。
   const suggested = strategySuggestions.value.flatMap(({ id, label, distance }) => {
     const strategy = OPENING_STRATEGIES.find((entry) => entry.id === id);
-    return strategy ? [{ ...strategy, label: `${label}（あと${distance}手）`, disabled: false }] : [];
+    const suggestionLabel = `${label}（あと${distance}手）`;
+    return strategy ? [{ ...strategy, label: suggestionLabel, optionLabel: suggestionLabel, disabled: false }] : [];
   });
   const groups = groupOpeningStrategies(
     OPENING_STRATEGIES
@@ -1897,7 +1899,8 @@ const groupedOpeningCastles = computed(() => {
   // 囲いに届かなくなったとき、近い囲いを残り手数つきで先頭に並べる。
   const suggested = castleSuggestions.value.flatMap(({ id, label, distance }) => {
     const castle = OPENING_CASTLES.find((entry) => entry.id === id);
-    return castle ? [{ ...castle, label: `${label}（あと${distance}手）`, disabled: false }] : [];
+    const suggestionLabel = `${label}（あと${distance}手）`;
+    return castle ? [{ ...castle, label: suggestionLabel, optionLabel: suggestionLabel, disabled: false }] : [];
   });
   return suggested.length
     ? [{ id: "suggested", label: "今の局面から近い囲い", options: suggested }, ...groups]
@@ -2986,7 +2989,8 @@ function strategyMove(): { usi: string; phase: "strategy" | "castle" } | undefin
     ply: moveHistory.length,
     cpuMoveCount: cpuMoves.length,
     inCheck: isSideToMoveInCheck(currentSfen.value),
-    lastMoveWasCapture: Boolean(record.value.current.move?.capturedPieceType),
+    // 開始局面や投了などの特殊な手は、駒を取った手ではない。
+    lastMoveWasCapture: record.value.current.move instanceof Move && Boolean(record.value.current.move.capturedPieceType),
   })) return undefined;
   if (!cpuOpeningPlan) cpuOpeningPlan = randomCpuOpeningCombination(cpuMoves, configuredCpuColor, legalMoves);
   if (!cpuOpeningPlan) {
@@ -3633,7 +3637,7 @@ function scheduleOpeningGuideSafety() {
         plannedOptions.find((option) => option.usi === usi)?.phase ?? planned?.phase
       );
       const bestPlanUsi = selectBestOpeningPlan(plannedOptions, compatibleCandidates);
-      const choice = plannedOptions.length
+      const choice: { usi: string; source: "plan" | "ai"; scoreLoss?: number } | null | undefined = plannedOptions.length
         ? chooseAdaptiveOpeningMove(
             plannedOptions,
             compatibleCandidates,

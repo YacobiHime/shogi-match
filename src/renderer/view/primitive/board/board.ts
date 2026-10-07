@@ -18,14 +18,6 @@ const boardBackgroundColorMap = {
   [BoardImageType.LIGHT3]: "rgba(0, 0, 0, 0)",
   [BoardImageType.WARM]: "rgba(0, 0, 0, 0)",
   [BoardImageType.WARM2]: "rgba(0, 0, 0, 0)",
-  [BoardImageType.RESIN]: "#d69b00",
-  [BoardImageType.RESIN2]: "#efbf63",
-  [BoardImageType.RESIN3]: "#ad7624",
-  [BoardImageType.GREEN]: "#598459",
-  [BoardImageType.CHERRY_BLOSSOM]: "#ecb6b6",
-  [BoardImageType.AUTUMN]: "#d09f51",
-  [BoardImageType.SNOW]: "#c3c0d3",
-  [BoardImageType.DARK_GREEN]: "#465e5e",
   [BoardImageType.DARK]: "#333333",
   [BoardImageType.CUSTOM_IMAGE]: "rgba(0, 0, 0, 0)",
 };
@@ -211,7 +203,7 @@ export class BoardLayoutBuilder {
       const isLegalDestination = legalDestinations.some((destination) =>
         destination.equals(square),
       );
-      let selectionStyle = { ...style, display: "none" };
+      let selectionStyle: { [key: string]: string } = { ...style, display: "none" };
       let selectionClass = "";
       if (pointer) {
         selectionStyle = {

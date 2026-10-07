@@ -11,7 +11,13 @@ export function coachAdvicePriority(advice) {
   return 20;
 }
 
-/** 連続して届く助言を待機させ、先の台詞を読める時間だけ保持する。 */
+/**
+ * 連続して届く助言を待機させ、先の台詞を読める時間だけ保持する。
+ * @param {{
+ *   display?: (advice: any) => void, minimumDisplayMs?: number, now?: () => number,
+ *   setTimer?: (callback: () => void, delay: number) => any, clearTimer?: (timer: any) => void,
+ * }} [options]
+ */
 export function createCoachAdviceScheduler({
   display,
   minimumDisplayMs = COACH_ADVICE_MIN_DISPLAY_MS,
