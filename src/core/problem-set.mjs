@@ -1,4 +1,4 @@
-import { appendUsiMove, createGameRecord } from "../game-state";
+import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
 import { formatHintMove } from "./match-assists.mjs";
 import { analyzeProblem } from "./problem-solver";
 
@@ -7,7 +7,19 @@ import { analyzeProblem } from "./problem-solver";
  * 正解は問題に書かず、problem-solver.tsの詰み探索で合法手をすべて調べて決める。
  * 問題に書くのは、局面・種類・探索の深さと、やこび姫の出題・解説・ヒントの台詞だけ。
  * 局面には、詰将棋と同じく攻め方の玉を置かなくてよい。
+ *
+ * 自分の手が2回以上ある問題では、正解のたびに相手が応じ、プレイヤーは次の手も盤で指す。
+ * - 詰ませる問題: 相手は最も長く逃れる応手を指す。残りの深さは、正解のたびに2手ずつ減る。
+ * - 逃げる問題: 正解のあと、相手はrepliesに書いた王手を指す。repliesを指し終えたら正解。
+ * repliesには、正解のたびに相手が指す手を順に書く（正解ではなく、相手の手の好み）。
+ * 詰ませる問題では、探索で最も長く逃れる応手の1つと確かめられたときだけ使う。
+ *
+ * 逃げる問題は、正解のあとも、なぜ詰まないのかが分かるところまで指す（続きの1手）。
+ * 相手は、まちがえた逃げ方なら詰んでいた王手を指し、プレイヤーはもう一度逃げる。
  */
+
+/** 続きの1手で、相手の王手の候補として調べる数の上限（探索で画面を止めすぎないため）。 */
+const FOLLOW_UP_CHECK_LIMIT = 12;
 
 export const PROBLEM_SET_TITLE = "やこび姫の将棋問題集";
 
@@ -36,24 +48,190 @@ export const PROBLEMS = Object.freeze([
     hintSquare: "7h",
     explanation: "6九なら、5八に金を打たれても7九へ逃げられるし、6八に打たれたら7八の金で取れるんだ。困ったときは、味方の駒がいる方へ逃げるのが基本だよ！",
   },
+  {
+    id: "escape-twice",
+    kind: "escape",
+    // 逃げたあと、相手に3手以内の詰みがないか調べる。正解のあと、相手は4七に金を打って王手する。
+    depth: 3,
+    replies: ["G*4g"],
+    title: "金2枚から逃げきれ！",
+    sfen: "9/9/9/9/4s4/4g4/4K4/1S5G1/9 b 2g 1",
+    question: "5六の金で王手！ 相手は持ち駒に金を2枚持っているよ。どのように逃げる？",
+    hint: "5六の金は銀に守られているから取れないね。逃げた先で金を打たれても、味方の駒が助けてくれるのはどっちの方向かな？",
+    hintSquare: "2h",
+    explanation: "4八から3九へ逃げておけば、4八に金を打たれても2九へ逃げられるし、3八に打たれたら2八の金で取れるんだ。何回王手されても、味方の金の近くへ逃げるのが正解だったね！",
+  },
+  {
+    id: "block-with-pawn",
+    kind: "escape",
+    depth: 3,
+    title: "投了するしかない？",
+    sfen: "9/9/9/1rb6/P8/K1P6/L8/9/9 b P 1",
+    question: "7四の角で王手！ 逃げ道は無いよ、どうする？ 投了するしかないのかな？",
+    hint: "玉が動けないときは、王手している駒と玉の間に駒を打って、王手をさえぎる方法があるよ。持ち駒をよく見てね。",
+    hintSquare: "8e",
+    explanation: "角と玉の間に歩を打って、王手をさえぎったよ。このように間に駒を打つことを「合駒」というんだ。歩を角に取られても、今度はその角が8四の飛車の利きを止めるから、玉は8六や8七へ逃げられるよ。逃げ道が無くても、すぐにあきらめないでね！",
+  },
+  {
+    id: "take-knight-and-drop",
+    kind: "mate",
+    // 3手詰め。
+    depth: 3,
+    replies: ["3b3c"],
+    title: "取った桂をすぐ使おう",
+    sfen: "3gkg3/6s2/2s1+Ppn2/9/4B4/9/9/9/9 b 2rb2g2s3n4l16p 1",
+    question: "後手玉は3手で詰むよ！ 最初の一手を考えてみよう。",
+    hint: "5五の角で、3三の桂を取って王手できるね。取った桂は、あとでどこに打てるかな？",
+    hintSquare: "3c",
+    explanation: "角で3三の桂を取って王手し、取り返されたら、手に入れた桂を6三に打って詰みだよ。5三のとが、玉の逃げ道の4二・5二・6二をふさいでいたんだ。取った駒をすぐに使うのが、詰ませるコツだよ！",
+  },
+  {
+    id: "where-to-drop-bishop",
+    kind: "mate",
+    depth: 3,
+    replies: ["1a1b"],
+    title: "角をどこに打つ？",
+    sfen: "8k/9/7P1/9/6s2/9/9/9/9 b Br4g3s4n4l17p 1",
+    question: "角をどこに打てば詰むかな？ 3手で詰ませてみよう！",
+    hint: "遠くから角を打つと、3五の銀に間に入られたり、取られたりするよ。銀が届かない場所はどこかな？",
+    hintSquare: "3c",
+    explanation: "3三に角を打てば、3五の銀は届かないね。玉が逃げたら、2二で角を成って馬にすれば詰みだよ。2三の歩が馬を守っているんだ！",
+  },
+  {
+    id: "two-rooks",
+    kind: "mate",
+    depth: 3,
+    replies: ["3b4a"],
+    title: "二枚飛車で討ち取れ！",
+    sfen: "1R3gknl/1R4s2/5p1pp/6p2/9/9/9/9/9 b 2b3g3s3n3l14p 1",
+    question: "飛車が二枚で攻めているね。これを二枚飛車というよ。一気に3手詰めで討ち取ろう！",
+    hint: "まずは8一の飛車で、4一の金を取ってみよう。取った金は、玉のすぐ近くに打てるよ。",
+    hintSquare: "4a",
+    explanation: "4一の金を飛車で取って成り、取り返されたら、その金を2二に打って詰みだよ。8二の飛車が横から2二の金を守っているんだ。二枚飛車は横の利きがとっても強いね！",
+  },
+  {
+    id: "rook-and-bishop",
+    kind: "mate",
+    depth: 3,
+    title: "飛車と角の連携",
+    sfen: "8k/9/7p1/9/8B/9/9/8R/9 b rb4g4s4n4l17p 1",
+    question: "飛車と角で、3手で詰まそう！",
+    hint: "1五の角が動くと、1八の飛車の利きが玉まで通るね。角と飛車の両方で王手できる場所はどこかな？",
+    hintSquare: "3c",
+    explanation: "角が3三で成ると、馬と飛車の両方で王手する「両王手」になるよ。両王手は間に駒を打っても防げないから、玉は逃げるしかないんだ。最後は飛車を1一で成って詰みだよ！",
+  },
+  {
+    id: "kings-face-to-face",
+    kind: "mate",
+    depth: 3,
+    title: "玉と玉が近いとき",
+    sfen: "6r2/7k1/6+B2/9/6K2/9/9/9/9 b Gr2b3g4s4n4l18p 1",
+    question: "互いの玉が近くにいるね。詰ましてみよう！",
+    hint: "金を打つなら、3三の馬が守ってくれる場所がいいね。玉が逃げたら、その金をもう一度動かしてみよう。",
+    hintSquare: "2c",
+    explanation: "2三に金を打って王手し、玉が2一へ逃げたら、金を2二へ寄って詰みだよ。2三でも2二でも、金は3三の馬に守られているから、玉は取れないんだ！",
+  },
+  {
+    id: "mate-over-rook",
+    kind: "mate",
+    depth: 1,
+    title: "飛車を取る？",
+    sfen: "6gnk/1r5sl/9/6ppp/4B4/9/9/9/9 b N 1",
+    question: "飛車は取れるけど、それでいいのかな？ もっと良い手は無い？",
+    hint: "持ち駒の桂を打って王手できる場所があるよ。2二の銀は、本当に動けるかな？",
+    hintSquare: "2c",
+    explanation: "2三に桂を打てば詰みだよ！ 2二の銀で桂を取ると、5五の角の利きが玉まで通ってしまうから、銀は動けないんだ。駒を取るより、詰ませるほうがずっと大事だね！",
+  },
 ]);
 
 export function problemById(id) {
   return PROBLEMS.find((problem) => problem.id === id) ?? null;
 }
 
-/** 問題の合法手をすべて判定する。結果は問題ごとに覚えておく（局面は変わらないため）。 */
+/** step回正解したあとの、探索の深さ。 */
+function stepDepth(problem, step) {
+  return problem.kind === "mate" ? problem.depth - 2 * step : problem.depth;
+}
+
+/**
+ * 問題の局面（step回正解したあとの局面sfen）の合法手をすべて判定する。
+ * 結果は局面ごとに覚えておく（問題の局面は変わらないため）。
+ */
 const analysisCache = new Map();
-export function problemAnalysis(problem) {
-  if (!analysisCache.has(problem.id)) {
-    analysisCache.set(problem.id, analyzeProblem({ sfen: problem.sfen, kind: problem.kind, depth: problem.depth }));
+export function problemAnalysis(problem, sfen = problem.sfen, step = 0) {
+  const key = `${problem.id}|${step}|${sfen}`;
+  if (!analysisCache.has(key)) {
+    analysisCache.set(key, analyzeProblem({ sfen, kind: problem.kind, depth: stepDepth(problem, step) }));
   }
-  return analysisCache.get(problem.id);
+  return analysisCache.get(key);
 }
 
 /** 正解の手。 */
-export function problemAnswers(problem) {
-  return problemAnalysis(problem).verdicts.filter(({ correct }) => correct).map(({ usi }) => usi);
+export function problemAnswers(problem, sfen = problem.sfen, step = 0) {
+  return problemAnalysis(problem, sfen, step).verdicts.filter(({ correct }) => correct).map(({ usi }) => usi);
+}
+
+/** 手順を指し進めた局面。指せない手があればnull。 */
+function positionAfter(sfen, line) {
+  const record = createGameRecord(sfen);
+  for (const usi of line) {
+    if (!appendUsiMove(record, usi)) return null;
+  }
+  return record.position;
+}
+
+/**
+ * 正解のあとに相手が指す手。なければnull（そこで問題は終わり）。
+ * - 詰ませる問題: repliesの手が最も長く逃れる応手の1つならそれを、違えば探索で見つけた応手を指す。
+ * - 逃げる問題: repliesの手が王手になるときだけ指す。
+ */
+function opponentReply(problem, sfen, step, verdict) {
+  const preferred = problem.replies?.[step];
+  if (problem.kind === "mate") {
+    if (verdict.line.length < 2) return null;
+    const after = preferred ? positionAfter(sfen, [verdict.usi, preferred]) : null;
+    if (after) {
+      const lengths = problemAnalysis(problem, after.sfen, step + 1).verdicts
+        .filter(({ correct }) => correct)
+        .map(({ line }) => line.length);
+      if (lengths.length && Math.min(...lengths) === verdict.line.length - 2) return preferred;
+    }
+    return verdict.line[1];
+  }
+  if (preferred) return positionAfter(sfen, [verdict.usi, preferred])?.checked ? preferred : null;
+  return isAnswerStep(problem, step) ? followUpCheck(problem, sfen, step, verdict) : null;
+}
+
+/** 逃げる問題で、repliesを指し終えて答えが決まる手番か。このあとに続きの1手がある。 */
+function isAnswerStep(problem, step) {
+  return problem.kind === "escape" && step === (problem.replies?.length ?? 0);
+}
+
+/**
+ * 逃げる問題の答えのあと、なぜ詰まないのかを見せるために相手が指す王手。
+ * まちがえた逃げ方を詰ませていた王手を優先し、なければ逃げ方が最も少ない王手を選ぶ。
+ * どちらも、プレイヤーに詰まない逃げ方が残る王手に限る。
+ */
+function followUpCheck(problem, sfen, step, verdict) {
+  const position = positionAfter(sfen, [verdict.usi]);
+  if (!position) return null;
+  const threats = problemAnalysis(problem, sfen, step).verdicts
+    .filter(({ reason }) => reason === "mated")
+    .map(({ line }) => line[1]);
+  const checks = enumerateLegalMoves(position)
+    .map(({ usi }) => usi)
+    .filter((usi) => positionAfter(position.sfen, [usi])?.checked)
+    .sort((a, b) => Number(threats.includes(b)) - Number(threats.includes(a)))
+    .slice(0, FOLLOW_UP_CHECK_LIMIT);
+  let best = null;
+  for (const usi of checks) {
+    const { verdicts, exhausted } = problemAnalysis(problem, positionAfter(position.sfen, [usi]).sfen, step + 1);
+    const safe = verdicts.filter(({ correct }) => correct).length;
+    if (exhausted || safe === 0) continue;
+    const candidate = { usi, threat: threats.includes(usi), safe };
+    if (!best || Number(candidate.threat) > Number(best.threat) || (candidate.threat === best.threat && safe < best.safe)) best = candidate;
+  }
+  return best?.usi ?? null;
 }
 
 /** 手順を指し進めた局面の列。sfens[i]はline[i]を指す前の局面。 */
@@ -73,44 +251,69 @@ function moveLabels(sfen, line) {
 }
 
 /**
- * 指した手の判定と、やこび姫の台詞。lineは盤に並べる手順（指した手と、相手の応手や詰み手順）。
- * @returns {{ correct: boolean, speech: string, line: string[] }}
+ * 指した手の判定と、やこび姫の台詞。sfenはstep回正解したあとの局面。
+ * lineは盤に並べる手順（指した手と、相手の応手や詰み手順）。
+ * 正解でも問題が続くときは、lineの最後が相手の応手で、nextの局面から次の手を指す。
+ * solvedは、この手で問題に正解したか（逃げる問題では、このあとに続きの1手があってもtrue）。
+ * @returns {{ correct: boolean, solved: boolean, speech: string, line: string[], next: { sfen: string, step: number } | null }}
  */
-export function judgeProblemMove(problem, usi) {
-  const verdict = problemAnalysis(problem).verdicts.find((entry) => entry.usi === usi);
-  if (!verdict) return { correct: false, speech: "その手は指せないよ。駒の動きをもう一度確かめてみよう！", line: [] };
-  const [played, ...rest] = moveLabels(problem.sfen, verdict.line);
+export function judgeProblemMove(problem, usi, sfen = problem.sfen, step = 0) {
+  const verdict = problemAnalysis(problem, sfen, step).verdicts.find((entry) => entry.usi === usi);
+  if (!verdict) return { correct: false, solved: false, speech: "その手は指せないよ。駒の動きをもう一度確かめてみよう！", line: [], next: null };
+  const reply = verdict.correct ? opponentReply(problem, sfen, step, verdict) : null;
+  if (reply) {
+    const line = [usi, reply];
+    const [played, replied] = moveLabels(sfen, line);
+    const answered = isAnswerStep(problem, step);
+    let speech = `いいね！ ${played}なら大丈夫。でも、相手は${replied}と王手してきたよ。次はどう逃げる？`;
+    if (problem.kind === "mate") speech = `いいね！ ${played}に、相手は${replied}。続けて詰ませてみよう！`;
+    if (answered) speech = `正解！ ${played}なら、もう詰まないよ。どうして大丈夫なのか、続きを指して確かめよう。相手が${replied}と王手してきたら、どう逃げる？`;
+    return {
+      correct: true,
+      solved: answered,
+      speech,
+      line,
+      next: { sfen: positionAfter(sfen, line).sfen, step: step + 1 },
+    };
+  }
+  const result = finalVerdict(problem, sfen, verdict);
+  // 続きの1手を指し終えたときは、正解はもう伝えてあるので、逃げられたことと解説を伝える。
+  if (result.correct && problem.kind === "escape" && step > (problem.replies?.length ?? 0)) {
+    result.speech = `そのとおり！ ${moveLabels(sfen, [usi])[0]}で逃げられるね。${problem.explanation}`;
+  }
+  return { ...result, solved: result.correct, line: verdict.line, next: null };
+}
+
+/** 問題が終わる手（最後の正解か、まちがい）の判定と台詞。 */
+function finalVerdict(problem, sfen, verdict) {
+  const [played, ...rest] = moveLabels(sfen, verdict.line);
   switch (verdict.reason) {
     case "mate":
       return {
         correct: true,
         speech: `正解！ ${played}で詰みだよ。${problem.explanation}`,
-        line: verdict.line,
       };
     case "safe":
       return {
         correct: true,
         speech: `正解！ ${played}なら、もう詰まないよ。${problem.explanation}`,
-        line: verdict.line,
       };
     case "not-check":
-      return { correct: false, speech: `${played}は王手になっていないよ。相手の玉に王手をかけてみよう！`, line: verdict.line };
+      return { correct: false, speech: `${played}は王手になっていないよ。相手の玉に王手をかけてみよう！` };
     case "escapes":
       return {
         correct: false,
         speech: rest.length
           ? `${played}だと、${rest[0]}と逃げられちゃう…。もう一度考えてみよう！`
           : `${played}では詰まないよ。もう一度考えてみよう！`,
-        line: verdict.line,
       };
     case "mated":
       return {
         correct: false,
         speech: `${played}だと、${rest.join("、")}で詰んじゃう…。もう一度考えてみよう！`,
-        line: verdict.line,
       };
     default:
-      return { correct: false, speech: "ごめんね、この手は読み切れなかったよ。ほかの手を考えてみよう！", line: verdict.line };
+      return { correct: false, speech: "ごめんね、この手は読み切れなかったよ。ほかの手を考えてみよう！" };
   }
 }
 

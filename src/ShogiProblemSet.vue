@@ -53,13 +53,14 @@
               <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
               <p aria-live="polite">{{ speech }}</p>
             </div>
-            <p v-if="phase !== 'question'" class="shogi-tutorial__feedback" :class="`shogi-tutorial__feedback--${phase === 'solved' ? 'good' : 'bad'}`" role="status">
-              {{ phase === "solved" ? "正解！" : "ざんねん…" }}
+            <!-- 正解のあとに続きを指しているあいだも、正解の表示は残す。 -->
+            <p v-if="phase === 'wrong' || answered" class="shogi-tutorial__feedback" :class="`shogi-tutorial__feedback--${phase === 'wrong' ? 'bad' : 'good'}`" role="status">
+              {{ phase === "wrong" ? (answered ? "おしい！" : "ざんねん…") : "正解！" }}
             </p>
             <div class="shogi-tutorial__actions">
-              <button v-if="phase === 'question' && !hintShown" type="button" @click="showHint">ヒント</button>
-              <button v-if="phase === 'wrong'" type="button" class="shogi-tutorial__primary" @click="retry">もう一度</button>
-              <button v-if="phase === 'solved' && nextProblem" type="button" class="shogi-tutorial__primary" @click="openProblem(nextProblem.id)">次の問題</button>
+              <button v-if="phase === 'question' && step === 0 && !hintShown" type="button" @click="showHint">ヒント</button>
+              <button v-if="phase === 'wrong'" type="button" class="shogi-tutorial__primary" @click="retryStep">もう一度</button>
+              <button v-if="answered && phase !== 'wrong' && nextProblem" type="button" class="shogi-tutorial__primary" @click="openProblem(nextProblem.id)">次の問題</button>
               <button v-if="phase === 'solved'" type="button" @click="retry">もう一度解く</button>
               <button v-if="phase === 'solved' && !nextProblem" type="button" class="shogi-tutorial__primary" @click="view = 'list'">問題一覧へ</button>
             </div>
@@ -146,10 +147,16 @@ const listMessage = computed(() => {
 // ===== 問題 =====
 const boardSfen = ref("");
 const lastMove = ref("");
-const phase = ref<"question" | "wrong" | "solved">("question");
+// 自分の手が2回以上ある問題で、何回正解したかと、次の手を指す局面。
+const step = ref(0);
+const stepSfen = ref("");
+const stepLastMove = ref("");
+const phase = ref<"question" | "waiting" | "wrong" | "solved">("question");
 const speech = ref("");
 const mistakes = ref(0);
 const hintShown = ref(false);
+// 問題に正解したか。逃げる問題では、正解のあとも続きの1手を指す。
+const answered = ref(false);
 
 let timers: ReturnType<typeof setTimeout>[] = [];
 function clearTimers() {
@@ -163,7 +170,11 @@ function resetBoard() {
   const problem = currentProblem.value;
   if (!problem) return;
   boardSfen.value = problem.sfen;
+  stepSfen.value = problem.sfen;
+  step.value = 0;
+  stepLastMove.value = "";
   lastMove.value = "";
+  answered.value = false;
   phase.value = "question";
   speech.value = problemQuestion(problem);
 }
@@ -177,6 +188,22 @@ function openProblem(id: string) {
 function retry() {
   resetBoard();
 }
+/** まちがえたあとは、まちがえた手を指す前の局面からやり直す。 */
+function retryStep() {
+  const problem = currentProblem.value;
+  if (!problem) return;
+  if (step.value === 0) {
+    resetBoard();
+    return;
+  }
+  clearTimers();
+  boardSfen.value = stepSfen.value;
+  lastMove.value = stepLastMove.value;
+  phase.value = "question";
+  speech.value = answered.value
+    ? "相手の王手のあとから、もう一度逃げ方を考えてみよう！"
+    : "相手の応手のあとから、もう一度考えてみよう！";
+}
 function showHint() {
   const problem = currentProblem.value;
   if (!problem) return;
@@ -185,15 +212,14 @@ function showHint() {
 }
 
 const boardMarks = computed(() => {
-  const square = hintShown.value && phase.value === "question" ? currentProblem.value?.hintSquare : "";
+  // ヒントのマスは1手目のためのものなので、2手目からは出さない。
+  const square = hintShown.value && phase.value === "question" && step.value === 0 ? currentProblem.value?.hintSquare : "";
   return square ? [{ file: Number(square[0]), rank: square.charCodeAt(1) - 96, tone: "key" as const }] : [];
 });
 
 /** 指した手と、相手の応手（逃げ方や詰み手順）を、少しずつ盤に並べる。 */
 function showLine(line: string[]) {
-  const problem = currentProblem.value;
-  if (!problem) return;
-  const sfens = lineSfens(problem.sfen, line);
+  const sfens = lineSfens(stepSfen.value, line);
   line.forEach((usi, index) => {
     const show = () => {
       boardSfen.value = sfens[index + 1] ?? boardSfen.value;
@@ -208,17 +234,27 @@ function showLine(line: string[]) {
 function onBoardMove(usi: string) {
   const problem = currentProblem.value;
   if (!problem || phase.value !== "question") return;
-  const result = judgeProblemMove(problem, usi);
+  const result = judgeProblemMove(problem, usi, stepSfen.value, step.value);
   if (!result.line.length) {
     speech.value = result.speech;
     return;
   }
   showLine(result.line);
   speech.value = result.speech;
-  if (result.correct) {
-    phase.value = "solved";
+  if (result.solved && !answered.value) {
+    answered.value = true;
     progress.value = recordProblemSolved(progress.value, problem.id, { firstTry: mistakes.value === 0 && !hintShown.value });
     saveProblemProgress(storage, progress.value);
+  }
+  if (result.next) {
+    // 正解でまだ続くときは、相手の応手を並べ終えてから次の手を指せるようにする。
+    phase.value = "waiting";
+    step.value = result.next.step;
+    stepSfen.value = result.next.sfen;
+    stepLastMove.value = result.line[result.line.length - 1];
+    timers.push(setTimeout(() => { phase.value = "question"; }, 700 * (result.line.length - 1)));
+  } else if (result.correct) {
+    phase.value = "solved";
   } else {
     mistakes.value += 1;
     phase.value = "wrong";
