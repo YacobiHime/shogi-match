@@ -58,7 +58,7 @@
             <ShogiMatchBoard
               :sfen="boardSfen"
               :last-move="lastMove"
-              :allow-move="phase === 'question'"
+              :allow-move="phase === 'question' || phase === 'solved'"
               :enable-drag-and-drop="true"
               :mobile="isNarrow"
               :layout="isNarrow ? 'portrait' : 'standard'"
@@ -80,6 +80,7 @@
             <p v-if="phase !== 'answer' && (phase === 'wrong' || answered)" class="shogi-tutorial__feedback" :class="`shogi-tutorial__feedback--${phase === 'wrong' ? 'bad' : 'good'}`" role="status">
               {{ phase === "wrong" ? (answered ? "おしい！" : "ざんねん…") : "正解！" }}
             </p>
+            <p v-if="phase === 'solved'" class="shogi-problems__free-note">盤の駒は、先手も後手も自由に動かせるよ。満足するまで確かめてみてね。</p>
             <!-- 答えを見る: 手順を1手ずつ盤に並べる（詰め将棋・図巧）。 -->
             <div v-if="phase === 'answer'" class="shogi-tutorial__actions shogi-problems__answer-controls">
               <div class="shogi-problems__answer-steps">
@@ -94,7 +95,9 @@
               <button v-if="phase === 'question' && currentHint && hintStep !== step" type="button" @click="showHint">ヒント</button>
               <button v-if="currentProblem.kind === 'line' && phase !== 'waiting'" type="button" @click="openAnswer">答えを見る</button>
               <button v-if="phase === 'wrong'" type="button" class="shogi-tutorial__primary" @click="retryStep">もう一度</button>
-              <button v-if="answered && phase !== 'wrong' && nextProblem" type="button" class="shogi-tutorial__primary" @click="openProblem(nextProblem.id)">次の問題</button>
+              <button v-if="phase === 'solved' && freeMoves.length" type="button" @click="undoFreeMove">1手戻す</button>
+              <button v-if="phase === 'solved' && freeMoves.length" type="button" @click="restoreSolvedPosition">全部戻す</button>
+              <button v-if="phase === 'solved' && nextProblem" type="button" class="shogi-tutorial__primary" @click="openProblem(nextProblem.id)">次の問題</button>
               <button v-if="phase === 'solved'" type="button" @click="retry">もう一度解く</button>
               <button v-if="phase === 'solved' && !nextProblem" type="button" class="shogi-tutorial__primary" @click="view = 'list'">問題一覧へ</button>
             </div>
@@ -125,6 +128,7 @@ import {
   sectionProblems,
 } from "./core/problem-set.mjs";
 import { formatHintMove } from "./core/match-assists.mjs";
+import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "./game-state";
 import { TSUME_PROBLEM_SOURCE } from "./data/tsume-problems.mjs";
 import { ZUKOU_SOURCE } from "./data/zukou-problems.mjs";
 
@@ -247,6 +251,7 @@ function resetBoard() {
   lastMove.value = "";
   answered.value = false;
   hintStep.value = null;
+  freeMoves.value = [];
   phase.value = "question";
   speech.value = problemQuestion(problem);
 }
@@ -335,7 +340,58 @@ function showLine(line: string[]) {
   });
 }
 
+// ===== 解き終えたあとの自由な検討 =====
+// 解き終えた局面（solvedSfen）から、先手も後手も合法手なら交互に動かせる。freeMovesは動かした手順。
+const solvedSfen = ref("");
+const solvedLastMove = ref("");
+const freeMoves = ref<string[]>([]);
+function freeSfens() {
+  return lineSfens(solvedSfen.value, freeMoves.value);
+}
+function showFreePosition() {
+  const sfens = freeSfens();
+  boardSfen.value = sfens[sfens.length - 1];
+  lastMove.value = freeMoves.value[freeMoves.value.length - 1] ?? solvedLastMove.value;
+}
+function onFreeMove(usi: string) {
+  // 解き終えた手順を並べている途中でも、並べ終えた局面から動かす。
+  clearTimers();
+  const sfens = freeSfens();
+  const before = sfens[sfens.length - 1];
+  const record = createGameRecord(before);
+  if (!appendUsiMove(record, usi)) {
+    showFreePosition();
+    speech.value = "その手は指せないよ。";
+    return;
+  }
+  freeMoves.value = [...freeMoves.value, usi];
+  showFreePosition();
+  playMoveSound(before, usi);
+  const played = formatHintMove(usi, before);
+  if (record.position.checked && enumerateLegalMoves(record.position).length === 0) {
+    speech.value = `${played}。これで詰みだね！`;
+  } else if (record.position.checked) {
+    speech.value = `${played}。王手だよ。`;
+  } else {
+    speech.value = `${played}。`;
+  }
+}
+function undoFreeMove() {
+  freeMoves.value = freeMoves.value.slice(0, -1);
+  showFreePosition();
+  speech.value = freeMoves.value.length ? "1手戻したよ。" : "解き終えた局面に戻ったよ。";
+}
+function restoreSolvedPosition() {
+  freeMoves.value = [];
+  showFreePosition();
+  speech.value = "解き終えた局面に戻ったよ。";
+}
+
 function onBoardMove(usi: string) {
+  if (phase.value === "solved") {
+    onFreeMove(usi);
+    return;
+  }
   const problem = currentProblem.value;
   if (!problem || phase.value !== "question") return;
   const result = judgeProblemMove(problem, usi, stepSfen.value, step.value);
@@ -359,6 +415,10 @@ function onBoardMove(usi: string) {
     timers.push(setTimeout(() => { phase.value = "question"; }, 700 * (result.line.length - 1)));
   } else if (result.correct) {
     phase.value = "solved";
+    // 自由な検討は、解き終えた手順を並べ終えた局面から始める。
+    solvedSfen.value = lineSfens(stepSfen.value, result.line).at(-1) ?? stepSfen.value;
+    solvedLastMove.value = result.line[result.line.length - 1];
+    freeMoves.value = [];
   } else {
     mistakes.value += 1;
     phase.value = "wrong";
@@ -417,6 +477,12 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.shogi-game .shogi-problems__free-note {
+  margin: 0;
+  color: #cfd8de;
+  font-size: 0.8rem;
+  line-height: 1.5;
 }
 .shogi-game .shogi-problems__group-title {
   margin: 0.4rem 0 0;
