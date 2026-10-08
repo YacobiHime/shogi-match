@@ -30,12 +30,13 @@ describe('棋譜解析の棋譜ナビゲーション', () => {
     expect(visibleReviewMoves(state)).toEqual(['7g7f', '3c3d', '5g5f']);
   });
 
-  test('本筋へ戻ると同じ手数の本筋局面を復元する', () => {
+  test('本筋へ戻ると分岐した局面に戻る', () => {
     let state = moveReviewCursor(createReviewNavigation(main), -2);
     state = appendReviewMove(state, '5g5f');
+    state = appendReviewMove(state, '5c5d');
     state = returnReviewToMainLine(state);
     expect(state.branch).toBe(false);
-    expect(visibleReviewMoves(state)).toEqual(main.slice(0, 3));
+    expect(visibleReviewMoves(state)).toEqual(main.slice(0, 2));
   });
 
   test('対CPU検討の待ったは一往復戻し、開始局面より前へ戻らない', () => {

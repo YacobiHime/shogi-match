@@ -51,10 +51,13 @@ export function returnReviewToMainLine(state) {
   if (!state || !Array.isArray(state.mainLine) || !Number.isInteger(state.cursor)) {
     throw new Error('棋譜解析の本筋が不正です');
   }
+  // 分岐した局面へ戻す。分岐の先で進めた手数ぶん本筋を進めない。
+  const branchStart = reviewBranchStart(state);
+  const cursor = branchStart === null ? state.cursor : Math.min(state.cursor, branchStart);
   return {
     ...state,
     line: [...state.mainLine],
-    cursor: Math.min(state.cursor, state.mainLine.length),
+    cursor: Math.min(cursor, state.mainLine.length),
     branch: false,
   };
 }

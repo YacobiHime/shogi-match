@@ -820,6 +820,7 @@
         <div class="shogi-game__analysis-tools">
           <button type="button" class="shogi-game__analysis-awakening" :disabled="!canUseHint" @click="showHint">閃き</button>
           <button type="button" :disabled="!analysisCurrentPoint?.pv?.length && !canAnalyzeReviewPosition" @click="showAnalysisLine">読み</button>
+          <button type="button" :disabled="!canPlaceReviewLine" @click="placeReviewLine">読み筋を並べる</button>
           <button
             type="button"
             class="shogi-game__analysis-more"
@@ -836,7 +837,6 @@
             @click="boardFlipOverride = !boardFlipOverride"
           >ひふみんアイ（盤を反転）：{{ boardFlipOverride ? "ON" : "OFF" }}</button>
           <button v-if="reviewNavigation.branch" type="button" role="menuitem" @click="analysisMenuOpen = false; returnToMainLine()">本筋に戻る</button>
-          <button type="button" role="menuitem" :disabled="!canPlaceReviewLine" @click="analysisMenuOpen = false; placeReviewLine()">読み筋を盤に並べる</button>
           <button
             v-if="result?.reason === 'resignation'"
             type="button"
@@ -4540,7 +4540,7 @@ function analysisPositionOption(ply: number): string {
 
 /*
  * 振り返りの今の局面の最善手と読み筋。本筋で解析済みなら棋譜解析の結果を使い、
- * 分岐などの解析していない局面は、その場で読む。読み筋は「読み筋を盤に並べる」で使えるよう覚えておく。
+ * 分岐などの解析していない局面は、その場で読む。読み筋は「読み筋を並べる」で使えるよう覚えておく。
  */
 const reviewLine = ref<{ sfen: string; pv: string[] } | null>(null);
 /** 振り返りの探索は、助言の探索と同じ順番待ちに並べ、同じエンジンで探索を重ねない。 */
@@ -4608,7 +4608,7 @@ const canPlaceReviewLine = computed(() => (
 
 /*
  * 投了の理由。投了で終わった対局の最終局面を開いたら、投了図を深く読んで、詰み筋や形勢の差を話す。
- * 1局につき1回だけ読み、読み筋は「読み筋を盤に並べる」で並べられる。
+ * 1局につき1回だけ読み、読み筋は「読み筋を並べる」で並べられる。
  */
 const resignationExplanation = ref<ReturnType<typeof explainResignation> | null>(null);
 let resignationRequested = false;
