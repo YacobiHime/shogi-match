@@ -1,4 +1,5 @@
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
+import { JISSEN_TSUME_PROBLEMS } from "../data/jissen-tsume-problems.mjs";
 import { TSUME_PROBLEMS } from "../data/tsume-problems.mjs";
 import { ZUKOU_PROBLEMS } from "../data/zukou-problems.mjs";
 import { formatHintMove } from "./match-assists.mjs";
@@ -19,10 +20,12 @@ import { analyzeProblem, findEscapeReply } from "./problem-solver";
  * 逃げる問題は、正解のあとも、なぜ詰まないのかが分かるところまで指す（続きの1手）。
  * 相手は、まちがえた逃げ方なら詰んでいた王手を指し、プレイヤーはもう一度逃げる。
  *
- * 問題集は「練習問題」「詰め将棋」「詰将棋図巧」の3区分。練習問題（PROBLEMS）だけが上の探索で正解を決める。
- * 詰め将棋（src/data/tsume-problems.mjs）と図巧（src/data/zukou-problems.mjs）は外部データの手順（kind: "line"）で判定する。
+ * 問題集は「練習問題」「詰将棋」「詰将棋図巧」の3区分。練習問題（PROBLEMS）だけが上の探索で正解を決める。
+ * 詰将棋は、駒の少ない「詰将棋」（src/data/tsume-problems.mjs）と、対局に出た局面の「実戦詰将棋」
+ * （src/data/jissen-tsume-problems.mjs）の2種類で、どちらも1・3・5・7手詰めに分ける。
+ * 詰将棋と図巧（src/data/zukou-problems.mjs）は外部データの手順（kind: "line"）で判定する。
  * - 長い図巧はブラウザの探索では読み切れないため、データ作成側が検証した手順を正とする。
- * - 詰め将棋は7手詰め以下で余詰めがない（攻め方の正解が各手で1つ）問題だけを選んでいる。
+ * - 詰将棋は7手詰め以下で余詰めがない（攻め方の正解が各手で1つ）問題だけを選んでいる。
  * - どちらも、最後の1手は詰ませる手ならどれでも正解にする。
  */
 
@@ -158,12 +161,55 @@ function lineProblem({ id, source, title, sfen, line, number }) {
   return Object.freeze({ id, kind: "line", source, title, sfen, line: Object.freeze(moves), plies: moves.length, number });
 }
 
-/** 詰め将棋。手数ごとに、データの並び（やさしい順）で番号を振る。 */
-export const TSUME_SET = Object.freeze(TSUME_PROBLEMS.map((entry, index, list) => {
-  const plies = entry.line.split(" ").length;
-  const number = list.slice(0, index + 1).filter((other) => other.line.split(" ").length === plies).length;
-  return lineProblem({ ...entry, source: "tsume", title: `${plies}手詰め 第${number}問`, number });
-}));
+/** 詰将棋の手数。一覧では、この手数ごとのボタンで分ける。 */
+export const TSUME_PLIES = Object.freeze([1, 3, 5, 7]);
+
+/** 詰将棋の問題を作る。手数ごとに、データの並び（やさしい順）で番号を振る。 */
+function tsumeSet(entries, source, prefix) {
+  return Object.freeze(entries.map((entry, index, list) => {
+    const plies = entry.line.split(" ").length;
+    const number = list.slice(0, index + 1).filter((other) => other.line.split(" ").length === plies).length;
+    return lineProblem({ ...entry, source, title: `${prefix}${plies}手詰め 第${number}問`, number });
+  }));
+}
+
+/** 詰将棋（駒の少ない問題）。 */
+export const TSUME_SET = tsumeSet(TSUME_PROBLEMS, "tsume", "");
+
+/** 実戦詰将棋（対局に出た、盤に駒がたくさんある局面）。 */
+export const JISSEN_SET = tsumeSet(JISSEN_TSUME_PROBLEMS, "jissen", "実戦");
+
+/** 詰将棋の種類。idは問題のsourceと同じ。 */
+export const TSUME_KINDS = Object.freeze([
+  { id: "tsume", label: "詰将棋", problems: TSUME_SET },
+  { id: "jissen", label: "実戦詰将棋", problems: JISSEN_SET },
+]);
+
+/**
+ * 詰将棋の種類の問題。pliesを渡すと、その手数の問題だけにする。
+ * @param {string} kindId
+ * @param {number | null} [plies]
+ */
+export function tsumeKindProblems(kindId, plies = null) {
+  const problems = TSUME_KINDS.find(({ id }) => id === kindId)?.problems ?? [];
+  return plies === null ? problems : problems.filter((problem) => problem.plies === plies);
+}
+
+/**
+ * ランダム出題で次に出す問題。手数も問わず、まだ解いていない問題から選び、全部解いたら全体から選ぶ。
+ * 直前の問題（excludeId）は、ほかに候補がある限り出さない。
+ * @template {{ id: string }} T
+ * @param {readonly T[]} problems
+ * @param {{ solvedIds?: readonly string[], excludeId?: string, random?: () => number }} [options]
+ * @returns {T | null}
+ */
+export function pickRandomProblem(problems, { solvedIds = [], excludeId = "", random = Math.random } = {}) {
+  const solved = new Set(solvedIds);
+  const others = problems.filter(({ id }) => id !== excludeId);
+  const pool = others.filter(({ id }) => !solved.has(id));
+  const candidates = pool.length ? pool : others.length ? others : problems;
+  return candidates[Math.floor(random() * candidates.length)] ?? null;
+}
 
 /**
  * 図巧のうち、名前で呼ばれている作品。図巧の各番には題名がなく、通称があるのは一部だけ。
@@ -188,34 +234,28 @@ export const ZUKOU_SET = Object.freeze(ZUKOU_PROBLEMS
   }))
   .sort((a, b) => a.number - b.number));
 
-/** 問題集の区分。groupsは一覧の見出しごとのまとまり。 */
+/** 問題集の区分。詰将棋の区分は、種類（TSUME_KINDS）と手数でさらに分ける。 */
 export const PROBLEM_SECTIONS = Object.freeze([
-  { id: "practice", label: "練習問題", groups: [{ label: "", problems: PROBLEMS }] },
-  {
-    id: "tsume",
-    label: "詰め将棋",
-    groups: [1, 3, 5, 7].map((plies) => ({
-      label: `${plies}手詰め`,
-      problems: TSUME_SET.filter((problem) => problem.plies === plies),
-    })),
-  },
-  { id: "zukou", label: "詰将棋図巧", groups: [{ label: "", problems: ZUKOU_SET }] },
+  { id: "practice", label: "練習問題", problems: PROBLEMS },
+  { id: "tsume", label: "詰将棋", problems: Object.freeze(TSUME_KINDS.flatMap(({ problems }) => problems)) },
+  { id: "zukou", label: "詰将棋図巧", problems: ZUKOU_SET },
 ]);
 
 /** 区分の問題を、一覧の順に並べる。 */
 export function sectionProblems(sectionId) {
-  return PROBLEM_SECTIONS.find(({ id }) => id === sectionId)?.groups.flatMap(({ problems }) => problems) ?? [];
+  return PROBLEM_SECTIONS.find(({ id }) => id === sectionId)?.problems ?? [];
 }
 
 /** 問題が属する区分。 */
 export function problemSectionId(problem) {
   if (problem?.kind !== "line") return "practice";
-  return problem.source;
+  return problem.source === "zukou" ? "zukou" : "tsume";
 }
 
 export function problemById(id) {
   return PROBLEMS.find((problem) => problem.id === id)
     ?? TSUME_SET.find((problem) => problem.id === id)
+    ?? JISSEN_SET.find((problem) => problem.id === id)
     ?? ZUKOU_SET.find((problem) => problem.id === id)
     ?? null;
 }
@@ -396,7 +436,7 @@ function isCheckmate(position) {
 }
 
 /**
- * 手順で判定する問題（詰め将棋・図巧）の判定。stepは攻め方が正解した回数で、line[2 * step]が次の正解。
+ * 手順で判定する問題（詰将棋・図巧）の判定。stepは攻め方が正解した回数で、line[2 * step]が次の正解。
  * その場で詰ませる手は、手順と違っても正解にする。
  * 作意手順の最後の手は、無駄合い（間に打っても取られて詰む合駒）が残っていても正解にする（図巧の第26・73・93番）。
  */
@@ -443,7 +483,7 @@ function judgeLineMove(problem, usi, sfen, step) {
       next: null,
     };
   }
-  // 詰め将棋は手順の外の王手でも詰まないので、詰まない逃げ方を探して見せる。
+  // 詰将棋は手順の外の王手でも詰まないので、詰まない逃げ方を探して見せる。
   const reply = findEscapeReply(position.sfen, problem.plies - index - 2);
   const [, escaped] = reply ? moveLabels(sfen, [usi, reply]) : [];
   return {
@@ -483,6 +523,9 @@ export function problemQuestion(problem) {
     return `詰将棋図巧 ${problem.title}。伊藤看寿の名作だよ。王手を続けて、後手玉を詰ませてみよう！`;
   }
   if (problem.source === "tsume") return `${problem.title}。後手玉を${problem.plies}手で詰ませてみよう！`;
+  if (problem.source === "jissen") {
+    return `${problem.title}。対局に出てきた局面だよ。後手玉を${problem.plies}手で詰ませてみよう！`;
+  }
   return `第${PROBLEMS.indexOf(problem) + 1}問 ${problem.question}`;
 }
 

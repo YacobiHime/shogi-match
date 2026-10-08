@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
 import {
   PROBLEMS,
+  JISSEN_SET,
   PROBLEM_SECTIONS,
+  TSUME_KINDS,
   TSUME_SET,
   ZUKOU_SET,
   judgeProblemMove,
+  pickRandomProblem,
+  problemSectionId,
+  tsumeKindProblems,
   problemHint,
   sectionProblems,
   loadProblemProgress,
@@ -166,12 +171,18 @@ function checkMateLine(problem) {
 }
 
 describe("将棋問題集の区分", () => {
-  it("練習問題・詰め将棋・詰将棋図巧の3区分で、詰め将棋は1・3・5・7手詰めが30問ずつ、図巧は全100問", () => {
-    expect(PROBLEM_SECTIONS.map(({ label }) => label)).toEqual(["練習問題", "詰め将棋", "詰将棋図巧"]);
+  it("練習問題・詰将棋・詰将棋図巧の3区分で、詰将棋は2種類とも1・3・5・7手詰めが30問ずつ、図巧は全100問", () => {
+    expect(PROBLEM_SECTIONS.map(({ label }) => label)).toEqual(["練習問題", "詰将棋", "詰将棋図巧"]);
     expect(sectionProblems("practice")).toEqual([...PROBLEMS]);
-    const tsume = PROBLEM_SECTIONS.find(({ id }) => id === "tsume");
-    expect(tsume.groups.map(({ label, problems }) => [label, problems.length]))
-      .toEqual([["1手詰め", 30], ["3手詰め", 30], ["5手詰め", 30], ["7手詰め", 30]]);
+    expect(TSUME_KINDS.map(({ label }) => label)).toEqual(["詰将棋", "実戦詰将棋"]);
+    for (const { id } of TSUME_KINDS) {
+      expect([1, 3, 5, 7].map((plies) => tsumeKindProblems(id, plies).length), id).toEqual([30, 30, 30, 30]);
+    }
+    expect(sectionProblems("tsume")).toEqual([...TSUME_SET, ...JISSEN_SET]);
+    expect(JISSEN_SET[0].title).toBe("実戦1手詰め 第1問");
+    expect(problemSectionId(JISSEN_SET[0])).toBe("tsume");
+    expect(problemSectionId(ZUKOU_SET[0])).toBe("zukou");
+    expect(problemQuestion(JISSEN_SET[0])).toBe("実戦1手詰め 第1問。対局に出てきた局面だよ。後手玉を1手で詰ませてみよう！");
     expect(ZUKOU_SET).toHaveLength(100);
     expect(new Set(ZUKOU_SET.map(({ number }) => number)).size).toBe(100);
     // 図巧は原典の番号順。
@@ -181,13 +192,13 @@ describe("将棋問題集の区分", () => {
     expect(ZUKOU_SET.filter(({ title }) => title.includes("『")).map(({ title }) => title)).toEqual([
       "第6番『朝霧』（81手）", "第94番『襷詰』（23手）", "第98番『裸玉』（31手）", "第99番『煙詰』（117手）", "第100番『寿』（611手）",
     ]);
-    const ids = [...PROBLEMS, ...TSUME_SET, ...ZUKOU_SET].map(({ id }) => id);
+    const ids = [...PROBLEMS, ...TSUME_SET, ...JISSEN_SET, ...ZUKOU_SET].map(({ id }) => id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("詰め将棋と図巧の手順は、どれも王手の連続で最後に詰む（図巧の3問は無駄合いが残る）", () => {
+  it("詰将棋と図巧の手順は、どれも王手の連続で最後に詰む（図巧の3問は無駄合いが残る）", () => {
     const futile = [];
-    for (const problem of [...TSUME_SET, ...ZUKOU_SET]) {
+    for (const problem of [...TSUME_SET, ...JISSEN_SET, ...ZUKOU_SET]) {
       expect(problem.plies % 2, problem.id).toBe(1);
       const id = checkMateLine(problem);
       if (id) futile.push(id);
@@ -209,6 +220,17 @@ describe("将棋問題集の区分", () => {
     expect(result.speech).toContain("間に駒を打っても、取れば詰むよ。");
   });
 
+  it("実戦詰将棋は、両方の玉と多くの駒が盤にある対局の局面", () => {
+    for (const problem of JISSEN_SET) {
+      const board = problem.sfen.split(" ")[0];
+      expect(board, problem.id).toContain("K");
+      expect(board, problem.id).toContain("k");
+      expect([...board].filter((char) => /[a-z]/i.test(char)).length, problem.id).toBeGreaterThanOrEqual(20);
+      // 攻め方が王手をかけられている局面は選ばない。
+      expect(createGameRecord(problem.sfen).position.checked, problem.id).toBe(false);
+    }
+  });
+
   // 3手詰め以上も探索で一致を確かめたが（2026-10-07）、重くほかのテストを遅らせるため、ここでは1手詰めだけを確かめる。
   it("1手詰めは、探索でもデータの初手だけが正解になる", () => {
     for (const problem of TSUME_SET.filter(({ plies }) => plies === 1)) {
@@ -222,7 +244,7 @@ describe("将棋問題集の区分", () => {
   }, 30000);
 });
 
-describe("手順で判定する問題（詰め将棋・図巧）", () => {
+describe("手順で判定する問題（詰将棋・図巧）", () => {
   /** 作意手順のとおりに指し、毎回の判定を返す。 */
   function playLine(problem) {
     let sfen = problem.sfen;
@@ -237,7 +259,7 @@ describe("手順で判定する問題（詰め将棋・図巧）", () => {
     return results;
   }
 
-  it("詰め将棋は、作意手順どおりに指すと相手が応じ、最後の手で正解になる", () => {
+  it("詰将棋は、作意手順どおりに指すと相手が応じ、最後の手で正解になる", () => {
     const problem = TSUME_SET.find(({ plies }) => plies === 3);
     const results = playLine(problem);
     expect(results.map(({ solved }) => solved)).toEqual([false, true]);
@@ -254,7 +276,7 @@ describe("手順で判定する問題（詰め将棋・図巧）", () => {
     expect(results.at(-1).speech).toMatch(/第50番（9手）を解ききったね！$/);
   });
 
-  it("手順と違う王手は、詰め将棋では逃げ方を見せ、図巧では作者の手順と違うと伝える", () => {
+  it("手順と違う王手は、詰将棋では逃げ方を見せ、図巧では作者の手順と違うと伝える", () => {
     /** 作意の初手とは違い、詰まない王手。 */
     const otherCheck = (problem) => enumerateLegalMoves(createGameRecord(problem.sfen).position).map(({ usi }) => usi).find((usi) => {
       if (usi === problem.line[0]) return false;
@@ -302,6 +324,30 @@ describe("手順で判定する問題（詰め将棋・図巧）", () => {
     // 練習問題のヒントは1手目だけ。
     expect(problemHint(headGold)).toEqual({ text: headGold.hint, square: headGold.hintSquare });
     expect(problemHint(headGold, headGold.sfen, 1)).toBeNull();
+  });
+});
+
+describe("詰将棋のランダム出題", () => {
+  const problems = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+  it("まだ解いていない問題から選び、直前の問題は出さない", () => {
+    expect(pickRandomProblem(problems, { solvedIds: ["a"], excludeId: "b", random: () => 0.99 })).toEqual({ id: "c" });
+    expect(pickRandomProblem(problems, { solvedIds: ["b", "c"], random: () => 0.5 })).toEqual({ id: "a" });
+  });
+
+  it("全部解いたら全体から選び、候補が1問だけなら直前の問題も出す", () => {
+    expect(pickRandomProblem(problems, { solvedIds: ["a", "b", "c"], excludeId: "a", random: () => 0 })).toEqual({ id: "b" });
+    expect(pickRandomProblem([{ id: "a" }], { excludeId: "a" })).toEqual({ id: "a" });
+    expect(pickRandomProblem([])).toBeNull();
+  });
+
+  it("手数を問わず、種類の中の全手数から選ぶ", () => {
+    const picked = new Set();
+    const list = tsumeKindProblems("jissen");
+    for (let index = 0; index < list.length; index += 1) {
+      picked.add(pickRandomProblem(list, { random: () => index / list.length }).plies);
+    }
+    expect([...picked].sort()).toEqual([1, 3, 5, 7]);
   });
 });
 

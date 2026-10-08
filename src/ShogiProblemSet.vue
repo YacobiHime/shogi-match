@@ -3,7 +3,7 @@
   <div class="shogi-dex shogi-tutorial shogi-problems" role="dialog" aria-modal="true" aria-labelledby="shogi-problems-title">
     <header class="shogi-dex__header">
       <button type="button" class="shogi-dex__back" @click="goBack">
-        <span aria-hidden="true">←</span> {{ view === "list" ? "タイトルへ戻る" : "問題一覧へ" }}
+        <span aria-hidden="true">←</span> {{ backLabel }}
       </button>
       <h1 id="shogi-problems-title">{{ view === "problem" && currentProblem ? problemHeading(currentProblem) : PROBLEM_SET_TITLE }}</h1>
     </header>
@@ -19,7 +19,7 @@
           role="tab"
           :aria-selected="section === item.id"
           :class="{ 'shogi-dex__mode--active': section === item.id }"
-          @click="section = item.id"
+          @click="selectSection(item.id)"
         >
           <span class="shogi-dex__mode-label">{{ item.label }}</span>
         </button>
@@ -28,22 +28,56 @@
         <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
         <p>{{ listMessage }}</p>
       </div>
-      <template v-for="group in currentSection.groups" :key="group.label">
-        <h2 v-if="group.label" class="shogi-problems__group-title">{{ group.label }}</h2>
-        <ol class="shogi-problems__list">
-          <li v-for="problem in group.problems" :key="problem.id">
-            <button type="button" class="shogi-tutorial__lesson" :class="{ 'shogi-tutorial__lesson--cleared': solvedRecord(problem) }" @click="openProblem(problem.id)">
-              <span class="shogi-tutorial__lesson-badge" aria-hidden="true">{{ problemBadge(problem) }}</span>
-              <span class="shogi-tutorial__lesson-text">
-                <strong>{{ problemHeading(problem) }}</strong>
-                <small>{{ problemStatus(problem) }}</small>
-              </span>
-            </button>
-          </li>
-        </ol>
+      <!-- 詰将棋: まず種類（詰将棋・実戦詰将棋）を選ぶ。 -->
+      <ol v-if="section === 'tsume' && !tsumeKind" class="shogi-problems__list">
+        <li v-for="kind in TSUME_KINDS" :key="kind.id">
+          <button type="button" class="shogi-tutorial__lesson" @click="selectTsumeKind(kind.id)">
+            <span class="shogi-tutorial__lesson-badge" aria-hidden="true">{{ kind.id === "jissen" ? "実" : "詰" }}</span>
+            <span class="shogi-tutorial__lesson-text">
+              <strong>{{ kind.label }}</strong>
+              <small>{{ TSUME_KIND_NOTES[kind.id] }}（{{ solvedCount(kind.problems) }}/{{ kind.problems.length }}問クリア）</small>
+            </span>
+          </button>
+        </li>
+      </ol>
+      <!-- 詰将棋の種類を選んだあと: 手数ごとのボタンと、手数も問わないランダム出題。 -->
+      <template v-else-if="section === 'tsume' && tsumeKind">
+        <h2 class="shogi-problems__group-title">{{ tsumeKindLabel }}</h2>
+        <div class="shogi-problems__plies" role="tablist" aria-label="手数">
+          <button
+            v-for="plies in TSUME_PLIES"
+            :key="plies"
+            type="button"
+            role="tab"
+            :aria-selected="tsumePlies === plies"
+            :class="{ 'shogi-problems__ply--active': tsumePlies === plies }"
+            @click="tsumePlies = plies"
+          >
+            <strong>{{ plies }}手詰め</strong>
+            <small>{{ solvedCount(tsumeKindProblems(tsumeKind, plies)) }}/{{ tsumeKindProblems(tsumeKind, plies).length }}</small>
+          </button>
+          <button type="button" class="shogi-problems__random" @click="openRandomProblem">
+            <strong>ランダム出題</strong>
+            <small>手数もおまかせ</small>
+          </button>
+        </div>
       </template>
-      <p v-if="section === 'tsume'" class="shogi-problems__credit">
-        出典: {{ TSUME_PROBLEM_SOURCE.author }}「<a :href="TSUME_PROBLEM_SOURCE.url" target="_blank" rel="noopener">{{ TSUME_PROBLEM_SOURCE.title }}</a>」（{{ TSUME_PROBLEM_SOURCE.license }}）。機械で作られ、詰みを確かめた問題から選んでいます。
+      <ol v-if="section !== 'tsume' || tsumeKind" class="shogi-problems__list">
+        <li v-for="problem in listedProblems" :key="problem.id">
+          <button type="button" class="shogi-tutorial__lesson" :class="{ 'shogi-tutorial__lesson--cleared': solvedRecord(problem) }" @click="openProblem(problem.id)">
+            <span class="shogi-tutorial__lesson-badge" aria-hidden="true">{{ problemBadge(problem) }}</span>
+            <span class="shogi-tutorial__lesson-text">
+              <strong>{{ problemHeading(problem) }}</strong>
+              <small>{{ problemStatus(problem) }}</small>
+            </span>
+          </button>
+        </li>
+      </ol>
+      <p v-if="section === 'tsume' && tsumeKind !== 'jissen'" class="shogi-problems__credit">
+        詰将棋の出典: {{ TSUME_PROBLEM_SOURCE.author }}「<a :href="TSUME_PROBLEM_SOURCE.url" target="_blank" rel="noopener">{{ TSUME_PROBLEM_SOURCE.title }}</a>」（{{ TSUME_PROBLEM_SOURCE.license }}）。機械で作られ、詰みを確かめた問題から選んでいます。
+      </p>
+      <p v-if="section === 'tsume' && tsumeKind !== 'tsume'" class="shogi-problems__credit">
+        実戦詰将棋の出典: {{ JISSEN_TSUME_SOURCE.author }}「<a :href="JISSEN_TSUME_SOURCE.url" target="_blank" rel="noopener">{{ JISSEN_TSUME_SOURCE.title }}</a>」（{{ JISSEN_TSUME_SOURCE.license }}）。やねうら王どうしの対局に出た局面を解き、攻め方の正解が1つだけの問題を選んでいます。
       </p>
       <p v-if="section === 'zukou'" class="shogi-problems__credit">
         出典: {{ ZUKOU_SOURCE.author }}『{{ ZUKOU_SOURCE.title }}』（1755年）。データは<a :href="ZUKOU_SOURCE.dataUrl" target="_blank" rel="noopener">Open Tsume</a>（{{ ZUKOU_SOURCE.license }}）。作者の手順で判定するため、別の手でも詰む場合があります。
@@ -81,7 +115,7 @@
               {{ phase === "wrong" ? (answered ? "おしい！" : "ざんねん…") : "正解！" }}
             </p>
             <p v-if="phase === 'solved'" class="shogi-problems__free-note">盤の駒は、先手も後手も自由に動かせるよ。満足するまで確かめてみてね。</p>
-            <!-- 答えを見る: 手順を1手ずつ盤に並べる（詰め将棋・図巧）。 -->
+            <!-- 答えを見る: 手順を1手ずつ盤に並べる（詰将棋・図巧）。 -->
             <div v-if="phase === 'answer'" class="shogi-tutorial__actions shogi-problems__answer-controls">
               <div class="shogi-problems__answer-steps">
                 <button type="button" :disabled="answerIndex === 0" aria-label="最初へ" @click="showAnswerAt(0)">⏮</button>
@@ -97,9 +131,10 @@
               <button v-if="phase === 'wrong'" type="button" class="shogi-tutorial__primary" @click="retryStep">もう一度</button>
               <button v-if="phase === 'solved' && freeMoves.length" type="button" @click="undoFreeMove">1手戻す</button>
               <button v-if="phase === 'solved' && freeMoves.length" type="button" @click="restoreSolvedPosition">全部戻す</button>
-              <button v-if="phase === 'solved' && nextProblem" type="button" class="shogi-tutorial__primary" @click="openProblem(nextProblem.id)">次の問題</button>
+              <button v-if="phase === 'solved' && randomMode" type="button" class="shogi-tutorial__primary" @click="openRandomProblem">次の問題（ランダム）</button>
+              <button v-else-if="phase === 'solved' && nextProblem" type="button" class="shogi-tutorial__primary" @click="openProblem(nextProblem.id)">次の問題</button>
               <button v-if="phase === 'solved'" type="button" @click="retry">もう一度解く</button>
-              <button v-if="phase === 'solved' && !nextProblem" type="button" class="shogi-tutorial__primary" @click="view = 'list'">問題一覧へ</button>
+              <button v-if="phase === 'solved' && !nextProblem && !randomMode" type="button" class="shogi-tutorial__primary" @click="view = 'list'">問題一覧へ</button>
             </div>
           </div>
         </div>
@@ -116,9 +151,12 @@ import {
   PROBLEMS,
   PROBLEM_SECTIONS,
   PROBLEM_SET_TITLE,
+  TSUME_KINDS,
+  TSUME_PLIES,
   judgeProblemMove,
   lineSfens,
   loadProblemProgress,
+  pickRandomProblem,
   problemById,
   problemHint,
   problemQuestion,
@@ -126,13 +164,15 @@ import {
   recordProblemSolved,
   saveProblemProgress,
   sectionProblems,
+  tsumeKindProblems,
 } from "./core/problem-set.mjs";
 import { formatHintMove } from "./core/match-assists.mjs";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "./game-state";
+import { JISSEN_TSUME_SOURCE } from "./data/jissen-tsume-problems.mjs";
 import { TSUME_PROBLEM_SOURCE } from "./data/tsume-problems.mjs";
 import { ZUKOU_SOURCE } from "./data/zukou-problems.mjs";
 
-/** 練習問題（探索で判定）と、詰め将棋・図巧（手順で判定、kind: "line"）の共通の形。 */
+/** 練習問題（探索で判定）と、詰将棋・図巧（手順で判定、kind: "line"）の共通の形。 */
 type Problem = {
   id: string;
   kind: string;
@@ -144,6 +184,7 @@ type Problem = {
   line?: readonly string[];
 };
 type SectionId = (typeof PROBLEM_SECTIONS)[number]["id"];
+type TsumeKindId = (typeof TSUME_KINDS)[number]["id"];
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
@@ -163,24 +204,52 @@ function playMoveSound(sfen: string, usi: string) {
 
 const view = ref<"list" | "problem">("list");
 const section = ref<SectionId>("practice");
-const currentSection = computed(() => PROBLEM_SECTIONS.find(({ id }) => id === section.value) ?? PROBLEM_SECTIONS[0]);
+// 詰将棋の区分では、種類（未選択ならnull）と手数で一覧を絞る。
+const tsumeKind = ref<TsumeKindId | null>(null);
+const tsumePlies = ref<number>(TSUME_PLIES[0]);
+// ランダム出題中か。「次の問題」も、同じ種類からランダムに選ぶ。
+const randomMode = ref(false);
 const problemId = ref("");
 const currentProblem = computed(() => (problemId.value ? problemById(problemId.value) as Problem | null : null));
-// 「次の問題」は、同じ区分の一覧で次に並ぶ問題。
+const tsumeKindLabel = computed(() => TSUME_KINDS.find(({ id }) => id === tsumeKind.value)?.label ?? "");
+/** 一覧に並べる問題。詰将棋は、選んだ種類と手数の問題だけ。 */
+const listedProblems = computed(() => {
+  if (section.value === "tsume") return tsumeKind.value ? tsumeKindProblems(tsumeKind.value, tsumePlies.value) as Problem[] : [];
+  return sectionProblems(section.value) as Problem[];
+});
+// 「次の問題」は、問題を開いた一覧（詰将棋は同じ種類・同じ手数）で次に並ぶ問題。
 const nextProblem = computed(() => {
   const problem = currentProblem.value;
   if (!problem) return null;
-  const list = sectionProblems(problemSectionId(problem)) as Problem[];
+  const list = (problem.kind === "line" && problem.source !== "zukou"
+    ? tsumeKindProblems(problem.source ?? "", problem.plies ?? null)
+    : sectionProblems(problemSectionId(problem))) as Problem[];
   return list[list.findIndex(({ id }) => id === problem.id) + 1] ?? null;
 });
 
+const backLabel = computed(() => {
+  if (view.value === "problem") return "問題一覧へ";
+  return section.value === "tsume" && tsumeKind.value ? "詰将棋の種類へ" : "タイトルへ戻る";
+});
 function goBack() {
   if (view.value === "problem") {
     clearTimers();
     view.value = "list";
+  } else if (section.value === "tsume" && tsumeKind.value) {
+    tsumeKind.value = null;
   } else {
     emit("close");
   }
+}
+function selectSection(id: SectionId) {
+  // 詰将棋のタブを押し直したら、種類の選び直しに戻る。
+  if (id === "tsume") tsumeKind.value = null;
+  section.value = id;
+}
+function selectTsumeKind(id: TsumeKindId) {
+  tsumeKind.value = id;
+  // 最初は、まだ解き終えていない最も短い手数を選んでおく。
+  tsumePlies.value = TSUME_PLIES.find((plies) => solvedCount(tsumeKindProblems(id, plies) as Problem[]) < tsumeKindProblems(id, plies).length) ?? TSUME_PLIES[0];
 }
 // ブラウザの戻るからも、ヘッダーの戻るボタンと同じ段だけ戻す。
 defineExpose({ goBack });
@@ -189,12 +258,15 @@ defineExpose({ goBack });
 function solvedRecord(problem: Problem) {
   return (progress.value.solved as Record<string, { firstTry: boolean }>)[problem.id] ?? null;
 }
+function solvedCount(problems: readonly Problem[]) {
+  return problems.filter((problem) => solvedRecord(problem)).length;
+}
 function problemBadge(problem: Problem) {
   const record = solvedRecord(problem);
   if (!record) return "▶";
   return record.firstTry ? "★" : "✓";
 }
-/** 一覧と見出しの問題名。練習問題だけ通し番号を付ける（詰め将棋・図巧は名前に番号を含む）。 */
+/** 一覧と見出しの問題名。練習問題だけ通し番号を付ける（詰将棋・図巧は名前に番号を含む）。 */
 function problemHeading(problem: Problem) {
   return problem.kind === "line" ? problem.title : `第${PROBLEMS.indexOf(problem as never) + 1}問 ${problem.title}`;
 }
@@ -206,15 +278,27 @@ function problemStatus(problem: Problem) {
 }
 const SECTION_INTROS: Record<SectionId, string> = {
   practice: "やこび姫の将棋問題集へようこそ！ 詰ませ方や逃げ方の問題を出すから、盤で指して答えてね。",
-  tsume: "実戦でよく出る形の詰め将棋だよ。1手詰めから7手詰めまで、手数ごとに30問あるよ。",
+  tsume: "詰将棋は2種類あるよ。駒が少なくて形を覚えやすい「詰将棋」と、本当の対局に出てきた局面の「実戦詰将棋」。どっちに挑戦する？",
   zukou: "江戸時代の名作、伊藤看寿の『将棋図巧』全100問だよ。とっても難しいから、「答えを見る」で手順を眺めるだけでも楽しいよ。",
 };
+/** 詰将棋の種類の説明（種類を選ぶボタンに添える）。 */
+const TSUME_KIND_NOTES: Record<TsumeKindId, string> = {
+  tsume: "駒が少なく、詰ませる形を覚えやすい",
+  jissen: "対局に出た局面。盤に駒がいっぱい",
+};
+const TSUME_KIND_INTROS: Record<TsumeKindId, string> = {
+  tsume: "実戦でよく出る形の詰将棋だよ。手数のボタンを選んでね。「ランダム出題」なら、手数もおまかせで出すよ。",
+  jissen: "対局に本当に出てきた局面だよ。駒がたくさんあって、どれで王手するか見つけるのが大変！ 手数のボタンを選ぶか、「ランダム出題」で挑戦してね。",
+};
 const listMessage = computed(() => {
-  const list = sectionProblems(section.value) as Problem[];
-  const solved = list.filter((problem) => solvedRecord(problem)).length;
+  if (section.value === "tsume" && !tsumeKind.value) return SECTION_INTROS.tsume;
+  const list = section.value === "tsume" && tsumeKind.value
+    ? tsumeKindProblems(tsumeKind.value) as Problem[]
+    : sectionProblems(section.value) as Problem[];
+  const solved = solvedCount(list);
   if (solved === list.length) return "全問正解！ すごいね！ 何度でも挑戦してみてね。";
   if (solved > 0) return `${list.length}問中${solved}問クリアだよ。この調子でいこう！`;
-  return SECTION_INTROS[section.value];
+  return section.value === "tsume" && tsumeKind.value ? TSUME_KIND_INTROS[tsumeKind.value] : SECTION_INTROS[section.value];
 });
 
 // ===== 問題 =====
@@ -255,14 +339,32 @@ function resetBoard() {
   phase.value = "question";
   speech.value = problemQuestion(problem);
 }
-function openProblem(id: string) {
+function openProblem(id: string, { random = false } = {}) {
   problemId.value = id;
+  randomMode.value = random;
   const problem = problemById(id) as Problem | null;
-  if (problem) section.value = problemSectionId(problem) as SectionId;
+  if (problem) {
+    section.value = problemSectionId(problem) as SectionId;
+    // 一覧へ戻ったとき、解いた問題の種類と手数が並ぶようにする。
+    if (section.value === "tsume") {
+      tsumeKind.value = problem.source as TsumeKindId;
+      tsumePlies.value = problem.plies ?? TSUME_PLIES[0];
+    }
+  }
   mistakes.value = 0;
   hintShown.value = false;
   view.value = "problem";
   resetBoard();
+}
+/** 選んでいる詰将棋の種類から、手数も問わずランダムに出題する。まだ解いていない問題を優先する。 */
+function openRandomProblem() {
+  const kind = tsumeKind.value;
+  if (!kind) return;
+  const problem = pickRandomProblem(tsumeKindProblems(kind) as Problem[], {
+    solvedIds: Object.keys(progress.value.solved),
+    excludeId: problemId.value,
+  });
+  if (problem) openProblem(problem.id, { random: true });
 }
 function retry() {
   resetBoard();
@@ -283,7 +385,7 @@ function retryStep() {
     ? "相手の王手のあとから、もう一度逃げ方を考えてみよう！"
     : "相手の応手のあとから、もう一度考えてみよう！";
 }
-// 練習問題のヒントは1手目だけ。詰め将棋・図巧は、どの手番でも次に動かす駒を教える。
+// 練習問題のヒントは1手目だけ。詰将棋・図巧は、どの手番でも次に動かす駒を教える。
 const currentHint = computed(() => (currentProblem.value ? problemHint(currentProblem.value, stepSfen.value, step.value) : null));
 function showHint() {
   const hint = currentHint.value;
@@ -298,7 +400,7 @@ const boardMarks = computed(() => {
   return square ? [{ file: Number(square[0]), rank: square.charCodeAt(1) - 96, tone: "key" as const }] : [];
 });
 
-// ===== 答えを見る（詰め将棋・図巧） =====
+// ===== 答えを見る（詰将棋・図巧） =====
 const answerIndex = ref(0);
 const answerSfens = computed(() => {
   const problem = currentProblem.value;
@@ -512,6 +614,49 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.5rem;
+}
+/* 詰将棋の手数ボタン。4つの手数を1行に並べ、ランダム出題はその下に横いっぱいに置く。 */
+.shogi-game .shogi-problems__plies {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.shogi-game .shogi-problems .shogi-problems__plies button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  min-height: 3.2rem;
+  padding: 0.35rem 0.3rem;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 0.6rem;
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.06);
+  cursor: pointer;
+}
+.shogi-game .shogi-problems .shogi-problems__plies button:hover {
+  background: rgba(255, 252, 244, 0.14);
+}
+.shogi-game .shogi-problems__plies strong {
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.shogi-game .shogi-problems__plies small {
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+.shogi-game .shogi-problems .shogi-problems__plies button.shogi-problems__ply--active {
+  color: #172632;
+  background: #f1a54c;
+  border-color: #f1a54c;
+}
+.shogi-game .shogi-problems .shogi-problems__plies button.shogi-problems__random {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  gap: 0.6rem;
+  border-color: #f1c68a;
+  color: #f1c68a;
 }
 /* 「詰将棋図巧」のタブがスマホ幅で折り返さないようにする。 */
 .shogi-game .shogi-problems .shogi-dex__modes button {
