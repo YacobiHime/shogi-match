@@ -37,46 +37,6 @@
         >
       </div>
       <nav class="shogi-home__menu" aria-label="メニュー">
-        <section class="shogi-home__group" aria-labelledby="shogi-home-school">
-          <h2 id="shogi-home-school" class="shogi-home__group-title">入門</h2>
-          <div class="shogi-home__cards">
-            <button type="button" class="shogi-home__card shogi-home__card--school" @click="tutorialOpen = true">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f1a54c">
-                  <rect x="1" y="5" width="14" height="1" />
-                  <rect x="3" y="4" width="10" height="1" />
-                  <rect x="6" y="3" width="4" height="1" />
-                  <rect x="12" y="6" width="1" height="4" />
-                </g>
-                <g fill="#fffcf4">
-                  <rect x="4" y="7" width="8" height="5" />
-                  <rect x="3" y="12" width="10" height="1" />
-                </g>
-                <g fill="#f1a54c">
-                  <rect x="6" y="9" width="4" height="1" />
-                </g>
-              </svg>
-              <span class="shogi-home__label"><span class="shogi-home__label-prefix">やこび姫の</span>将棋教室</span>
-              <small class="shogi-home__desc">ルールから戦法まで楽しく学ぼう</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="problemSetOpen = true">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#fffcf4">
-                  <rect x="5" y="2" width="6" height="1" />
-                  <rect x="4" y="3" width="2" height="2" />
-                  <rect x="10" y="3" width="2" height="3" />
-                  <rect x="8" y="6" width="3" height="1" />
-                  <rect x="7" y="7" width="2" height="3" />
-                </g>
-                <g fill="#f1a54c">
-                  <rect x="7" y="12" width="2" height="2" />
-                </g>
-              </svg>
-              <span class="shogi-home__label"><span class="shogi-home__label-prefix">やこび姫の</span>将棋問題集</span>
-              <small class="shogi-home__desc">詰ませ方・逃げ方の問題に挑戦</small>
-            </button>
-          </div>
-        </section>
         <section class="shogi-home__group" aria-labelledby="shogi-home-match">
           <h2 id="shogi-home-match" class="shogi-home__group-title">対局</h2>
           <div class="shogi-home__cards">
@@ -118,6 +78,46 @@
               </svg>
               <span class="shogi-home__label">学習対局</span>
               <small class="shogi-home__desc">駒落ちや完成形から練習</small>
+            </button>
+          </div>
+        </section>
+        <section class="shogi-home__group" aria-labelledby="shogi-home-school">
+          <h2 id="shogi-home-school" class="shogi-home__group-title">入門</h2>
+          <div class="shogi-home__cards">
+            <button type="button" class="shogi-home__card shogi-home__card--school" @click="tutorialOpen = true">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f1a54c">
+                  <rect x="1" y="5" width="14" height="1" />
+                  <rect x="3" y="4" width="10" height="1" />
+                  <rect x="6" y="3" width="4" height="1" />
+                  <rect x="12" y="6" width="1" height="4" />
+                </g>
+                <g fill="#fffcf4">
+                  <rect x="4" y="7" width="8" height="5" />
+                  <rect x="3" y="12" width="10" height="1" />
+                </g>
+                <g fill="#f1a54c">
+                  <rect x="6" y="9" width="4" height="1" />
+                </g>
+              </svg>
+              <span class="shogi-home__label"><span class="shogi-home__label-prefix">やこび姫の</span>将棋教室</span>
+              <small class="shogi-home__desc">ルールから戦法まで楽しく学ぼう</small>
+            </button>
+            <button type="button" class="shogi-home__card" @click="problemSetOpen = true">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#fffcf4">
+                  <rect x="5" y="2" width="6" height="1" />
+                  <rect x="4" y="3" width="2" height="2" />
+                  <rect x="10" y="3" width="2" height="3" />
+                  <rect x="8" y="6" width="3" height="1" />
+                  <rect x="7" y="7" width="2" height="3" />
+                </g>
+                <g fill="#f1a54c">
+                  <rect x="7" y="12" width="2" height="2" />
+                </g>
+              </svg>
+              <span class="shogi-home__label"><span class="shogi-home__label-prefix">やこび姫の</span>将棋問題集</span>
+              <small class="shogi-home__desc">詰ませ方・逃げ方の問題に挑戦</small>
             </button>
           </div>
         </section>
@@ -7494,7 +7494,7 @@ queueMicrotask(() => {
   color: #fffcf4;
   text-shadow: 3px 3px 0 #172632;
 }
-/* 同じ行に並ぶ入門と対局は、カードの高さをそろえる（名前が2行の入門のカードに合わせる）。 */
+/* 同じ行に並ぶ対局と入門は、カードの高さをそろえる（名前が2行の入門のカードに合わせる）。 */
 .shogi-home__menu {
   display: flex;
   flex-wrap: wrap;
