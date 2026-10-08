@@ -59,25 +59,8 @@
                   <rect x="12" y="9" width="2" height="2" />
                 </g>
               </svg>
-              <span class="shogi-home__label">通常対局</span>
-              <small class="shogi-home__desc">平手でCPUと真剣勝負</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="openMatchSetup('learning')">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#fffcf4">
-                  <rect x="2" y="3" width="12" height="9" />
-                  <rect x="7" y="12" width="2" height="2" />
-                  <rect x="4" y="14" width="8" height="1" />
-                </g>
-                <g fill="#f1a54c">
-                  <rect x="4" y="5" width="2" height="2" />
-                  <rect x="7" y="5" width="2" height="2" />
-                  <rect x="10" y="5" width="2" height="2" />
-                  <rect x="4" y="8" width="8" height="2" />
-                </g>
-              </svg>
-              <span class="shogi-home__label">学習対局</span>
-              <small class="shogi-home__desc">駒落ちや完成形から練習</small>
+              <span class="shogi-home__label">対局</span>
+              <small class="shogi-home__desc">CPUと対局。学習対局にも切り替えられる</small>
             </button>
           </div>
         </section>
