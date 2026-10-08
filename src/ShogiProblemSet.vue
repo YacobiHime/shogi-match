@@ -385,6 +385,17 @@ function retryStep() {
     ? "相手の王手のあとから、もう一度逃げ方を考えてみよう！"
     : "相手の応手のあとから、もう一度考えてみよう！";
 }
+/**
+ * まちがえたあと、逃げられ方や詰まされ方を見せ終えたら、ボタンを押さなくても元の局面に戻して続きを指せるようにする。
+ * 台詞はまちがいの説明を残す。「もう一度」ボタンは、待たずに戻したいときのために残す。
+ */
+const AUTO_RETRY_WAIT_MS = 1800;
+function autoRetryStep() {
+  if (phase.value !== "wrong") return;
+  boardSfen.value = stepSfen.value;
+  lastMove.value = stepLastMove.value;
+  phase.value = "question";
+}
 // 練習問題のヒントは1手目だけ。詰将棋・図巧は、どの手番でも次に動かす駒を教える。
 const currentHint = computed(() => (currentProblem.value ? problemHint(currentProblem.value, stepSfen.value, step.value) : null));
 function showHint() {
@@ -524,6 +535,7 @@ function onBoardMove(usi: string) {
   } else {
     mistakes.value += 1;
     phase.value = "wrong";
+    timers.push(setTimeout(autoRetryStep, 700 * (result.line.length - 1) + AUTO_RETRY_WAIT_MS));
   }
 }
 
