@@ -40,6 +40,23 @@
         <section class="shogi-home__group" aria-labelledby="shogi-home-match">
           <h2 id="shogi-home-match" class="shogi-home__group-title">対局</h2>
           <div class="shogi-home__cards">
+            <button
+              v-if="suspendedMatch"
+              type="button"
+              class="shogi-home__card shogi-home__card--resume"
+              @click="resumeSuspendedMatch"
+            >
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f1a54c">
+                  <rect x="4" y="2" width="2" height="12" />
+                  <rect x="7" y="3" width="2" height="10" />
+                  <rect x="9" y="4" width="2" height="8" />
+                  <rect x="11" y="5" width="2" height="6" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">対局を再開</span>
+              <small class="shogi-home__desc">中断した対局（{{ suspendedMatch.moves }}手目まで）</small>
+            </button>
             <button type="button" class="shogi-home__card" @click="openMatchSetup('normal')">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
@@ -300,6 +317,13 @@
             :disabled="!active"
             @click="reviewMode ? completeReview() : requestResign()"
           >{{ reviewMode ? "完了" : "投了" }}</button>
+          <button
+            v-if="showHome && !reviewMode"
+            type="button"
+            class="shogi-game__command"
+            :disabled="!active"
+            @click="suspendConfirmOpen = true"
+          >中断</button>
         </template>
         <button
           type="button"
@@ -328,6 +352,14 @@
             :disabled="!active"
             @click="closeSettings(); reviewMode ? completeReview() : requestResign()"
           >{{ reviewMode ? "検討を完了する" : "投了する" }}</button>
+          <button
+            v-if="showHome && !reviewMode"
+            type="button"
+            role="menuitem"
+            class="shogi-game__menu-item"
+            :disabled="!active"
+            @click="closeSettings(); suspendConfirmOpen = true"
+          >対局を中断する</button>
         </template>
         <label class="shogi-game__menu-field">
           <span>やこび姫の助言</span>
@@ -930,6 +962,42 @@
     </div>
 
     <div
+      v-if="suspendConfirmOpen"
+      class="shogi-game__confirm"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="suspend-confirm-title"
+      @click.self="suspendConfirmOpen = false"
+    >
+      <div class="shogi-game__confirm-panel">
+        <h2 id="suspend-confirm-title">対局を中断しますか？</h2>
+        <p>ここまでの対局を保存して、ホームへ戻ります。ホームの「対局を再開」から続けられます。</p>
+        <div>
+          <button type="button" @click="suspendMatch">中断する</button>
+          <button type="button" @click="suspendConfirmOpen = false">対局を続ける</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="discardSuspendedPending"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="discard-suspended-title"
+      @click.self="discardSuspendedPending = null"
+    >
+      <div class="shogi-game__confirm-panel">
+        <h2 id="discard-suspended-title">中断した対局があります</h2>
+        <p>新しく始めると、中断した対局は消えます。</p>
+        <div>
+          <button type="button" class="shogi-game__confirm-danger" @click="acceptDiscardSuspended">新しく始める</button>
+          <button type="button" @click="discardSuspendedPending = null">やめる</button>
+        </div>
+      </div>
+    </div>
+
+    <div
       v-if="resignConfirmOpen"
       class="shogi-game__confirm"
       role="alertdialog"
@@ -1496,6 +1564,11 @@ const {
   uiShort,
 } = useResponsiveLayout({ analysisVisible });
 const resignConfirmOpen = ref(false);
+// 中断した対局(保存済み)。ホームの「対局を再開」から続ける。リロードしても残る。
+const suspendedMatch = ref<{ moves: number } | null>(null);
+const suspendConfirmOpen = ref(false);
+/** 中断した対局を消して新しく始める前の確認。承諾したら、保留した開始処理を行う。 */
+const discardSuspendedPending = ref<(() => void) | null>(null);
 const analysisMenuOpen = ref(false);
 // 対局準備で開いている選択シート。空なら閉じている。
 const pregamePicker = ref("");
@@ -2910,6 +2983,9 @@ let settingsBeforeMeasure: { [key: string]: unknown } | null = null;
  * 平手・先手・作戦おまかせ・助言なしで、CPUの強さはレーティングに近いレベルにする。
  */
 function startMeasureMatch() {
+  confirmDiscardSuspended(startMeasureMatchNow);
+}
+function startMeasureMatchNow() {
   yakobiNoteOpen.value = false;
   openPregame();
   settingsBeforeMeasure = captureMatchSettings();
@@ -2932,8 +3008,10 @@ function startMeasureMatch() {
 }
 
 function openMatchSetup(kind: MatchKind) {
-  matchKind.value = kind;
-  closeHome();
+  confirmDiscardSuspended(() => {
+    matchKind.value = kind;
+    closeHome();
+  });
 }
 
 /** 教室のレッスンから、関連する図鑑の項目を開く。 */
@@ -2974,7 +3052,11 @@ function restoreMatchSettings(saved: { [key: string]: unknown }) {
 }
 
 /** 教室の「対局をはじめる」から、レッスンで決めた条件のまま対局準備を通さずに始める。 */
-function startMatchFromTutorial({ lessonId, preset }: {
+function startMatchFromTutorial(request: Parameters<typeof startMatchFromTutorialNow>[0]) {
+  confirmDiscardSuspended(() => startMatchFromTutorialNow(request));
+}
+
+function startMatchFromTutorialNow({ lessonId, preset }: {
   lessonId: string;
   preset: {
     startType: LearningStartType;
@@ -3044,6 +3126,60 @@ function tutorialMatchReport(matchResult: MatchResult, lessonId: string, playerC
   };
 }
 
+/** 対局を保存してホームへ戻る。盤の状態は消し、再開は保存した対局から復元する。 */
+function suspendMatch() {
+  suspendConfirmOpen.value = false;
+  if (!props.showHome || !active.value || reviewMode.value || !matchStarted.value) return;
+  matchGeneration += 1;
+  if (cpuTimer) clearTimeout(cpuTimer);
+  cpuTimer = undefined;
+  if (cpuSearchRunning) engine?.stop();
+  cancelPlayerIdleAdvice();
+  coachAdviceScheduler.reset();
+  suspendedMatch.value = { moves: moveHistory.length };
+  persistMatchState();
+  active.value = false;
+  thinking.value = false;
+  matchStarted.value = false;
+  settingsOpen.value = false;
+  resignConfirmOpen.value = false;
+  openHome();
+}
+
+/** 中断した対局を、保存した状態から続ける。 */
+function resumeSuspendedMatch() {
+  if (!suspendedMatch.value) return;
+  suspendedMatch.value = null;
+  if (!restorePersistedMatch({ resume: true })) {
+    errorMessage.value = "中断した対局を読み込めませんでした。";
+    return;
+  }
+  // 保存した状態から、中断の印を外す。
+  persistMatchState();
+  void initializeEngine();
+  // エンジンが準備済みなら、初期化を待たずにCPUの手番などを再開する。
+  if (engineReady.value) {
+    scheduleCpuMove();
+    scheduleOpeningGuideSafety();
+    schedulePlayerIdleAdvice();
+  }
+}
+
+/** 中断した対局があるときは、新しく始める前に確認する。 */
+function confirmDiscardSuspended(proceed: () => void) {
+  if (!suspendedMatch.value) {
+    proceed();
+    return;
+  }
+  discardSuspendedPending.value = proceed;
+}
+function acceptDiscardSuspended() {
+  const proceed = discardSuspendedPending.value;
+  discardSuspendedPending.value = null;
+  suspendedMatch.value = null;
+  proceed?.();
+}
+
 function openHome() {
   measureMode.value = false;
   homeOpen.value = true;
@@ -3054,7 +3190,9 @@ function openHome() {
  * 対局中と振り返り中は、保存を消さないよう対局画面から離れない。ホームでは元のページへ戻る。
  */
 function navigateBack() {
-  if (yakobiNoteOpen.value) {
+  if (discardSuspendedPending.value) {
+    discardSuspendedPending.value = null;
+  } else if (yakobiNoteOpen.value) {
     yakobiNoteOpen.value = false;
   } else if (referenceDexKind.value) {
     // 駒の説明へ飛んできたときは、先に元の表へ戻す。
@@ -3070,6 +3208,8 @@ function navigateBack() {
     else problemSetOpen.value = false;
   } else if (homeOpen.value) {
     // ホームが最下段。
+  } else if (suspendConfirmOpen.value) {
+    suspendConfirmOpen.value = false;
   } else if (resignConfirmOpen.value) {
     resignConfirmOpen.value = false;
   } else if (strategyExplanationOpen.value) {
@@ -3090,7 +3230,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || Boolean(discardSuspendedPending.value) || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
@@ -3116,6 +3256,8 @@ function openPregame() {
   reviewMode.value = false;
   analysisOpen.value = false;
   discardPersistedMatch();
+  suspendedMatch.value = null;
+  suspendConfirmOpen.value = false;
   measureMode.value = false;
   measureSession.value = false;
   if (settingsBeforeMeasure) restoreMatchSettings(settingsBeforeMeasure);
@@ -3331,6 +3473,7 @@ function persistMatchState() {
       attackGuide: attackGuideEnabled.value,
       movementArrows: movementArrowsEnabled.value,
     },
+    suspended: suspendedMatch.value !== null,
     tutorial: tutorialMatch.value,
     settingsBeforeTutorial: tutorialMatch.value ? settingsBeforeTutorial : null,
     moves: [...moveHistory],
@@ -3439,12 +3582,19 @@ function discardPersistedMatch() {
   clearMatchSnapshot(matchStorage, matchStorageKey);
 }
 
-function restorePersistedMatch(): boolean {
+/**
+ * 保存した対局を復元する。中断した対局は、ホームの「対局を再開」が押されるまで復元せず、再開の案内だけを出す。
+ */
+function restorePersistedMatch({ resume = false } = {}): boolean {
   const snapshot = loadMatchSnapshot(matchStorage, matchStorageKey, {
     initialSfen: props.initialSfen,
     mode: normalizedMode.value,
   });
   if (!snapshot) return false;
+  if (snapshot.suspended === true && props.showHome && !resume) {
+    suspendedMatch.value = { moves: Array.isArray(snapshot.moves) ? snapshot.moves.length : 0 };
+    return false;
+  }
   restoringSavedMatch = true;
   try {
     if (
@@ -7717,7 +7867,8 @@ queueMicrotask(() => {
 /* ===== ホーム画面(原型) ===== */
 /* 縦画面メディアクエリの portrait 補助表示(display: grid)より優先させる。 */
 /* ホーム画面では対局UIを隠す。定跡図鑑はホームから開くため例外。 */
-.shogi-game--home > :not(.shogi-home):not(.shogi-dex) { display: none !important; }
+/* ホームの上に出す確認(中断した対局を消す確認)だけは、ホームを開いたままでも見せる。 */
+.shogi-game--home > :not(.shogi-home):not(.shogi-dex):not(.shogi-game__confirm--over-home) { display: none !important; }
 .shogi-home {
   position: absolute;
   inset: 0;

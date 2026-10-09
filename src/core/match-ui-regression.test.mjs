@@ -25,6 +25,22 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/role="menuitemcheckbox"[\s\S]*?ひふみんアイ（盤を反転）/);
   });
 
+  it("suspends a match to the home screen and resumes it from the saved state", () => {
+    // 中断は、ホームのある表示だけで出す。保存に印を付け、盤の状態を消してホームへ戻る。
+    expect(source).toMatch(/v-if="showHome && !reviewMode"[\s\S]*?suspendConfirmOpen = true[\s\S]*?>中断<\/button>/);
+    expect(source).toContain("suspended: suspendedMatch.value !== null,");
+    expect(source).toMatch(/function suspendMatch\(\)[\s\S]*?persistMatchState\(\);[\s\S]*?matchStarted\.value = false;[\s\S]*?openHome\(\);/);
+    // 中断した対局は、リロードしても自動では復元せず、ホームの「対局を再開」から復元する。
+    expect(source).toMatch(/snapshot\.suspended === true && props\.showHome && !resume/);
+    expect(source).toMatch(/function resumeSuspendedMatch\(\)[\s\S]*?restorePersistedMatch\(\{ resume: true \}\)[\s\S]*?scheduleCpuMove\(\);/);
+    // 新しい対局を始めると中断した対局が消えるため、開始の3経路で確認する。
+    expect(source).toMatch(/function openMatchSetup[\s\S]*?confirmDiscardSuspended/);
+    expect(source).toContain("confirmDiscardSuspended(startMeasureMatchNow)");
+    expect(source).toContain("confirmDiscardSuspended(() => startMatchFromTutorialNow(request))");
+    // ブラウザの戻る操作で、確認ダイアログも閉じられる。
+    expect(source).toMatch(/function navigateBack\(\)[\s\S]*?discardSuspendedPending[\s\S]*?suspendConfirmOpen/);
+  });
+
   it("asks before resigning from the toolbar and the menu", () => {
     expect(source.match(/reviewMode \? completeReview\(\) : requestResign\(\)/g)).toHaveLength(2);
     expect(source).not.toMatch(/reviewMode \? completeReview\(\) : resign\(\)/);

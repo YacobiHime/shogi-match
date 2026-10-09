@@ -118,6 +118,15 @@ describe("reference dex", () => {
     expect(Boolean(entry.flip)).toBe(false);
   });
 
+  it("shows a top-rated floodgate game on the computer shogi entry", () => {
+    const entry = referenceDexEntries("world").find(({ id }) => id === "computer-shogi");
+    const kifu = referenceEntryKifu(entry);
+    expect(kifu).toMatchObject({ black: "Lladro", white: "minicon", handicap: false, ending: "投了", winner: "black" });
+    expect(kifu.steps).toHaveLength(230);
+    expect(kifu.steps.at(-1).label).toBe("▲１四香");
+    expect(kifu.steps.at(-1).highlight).toBe("Lladroの勝ち");
+  });
+
   it("starts a handicap game from the uwate's move", () => {
     // 駒落ちの棋譜(升田幸三の香落ち)。図鑑では使わなくなったが、読み込みは保つ。
     const [start, first] = referenceEntryKifu({ kifu: MASUDA_KOZO_KYO_OCHI_KIFU }).steps;

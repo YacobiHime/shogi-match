@@ -2,6 +2,7 @@ import { Position, RecordMetadataKey, Square, importKIF } from "tsshogi";
 import { appendUsiMove, createGameRecord } from "../game-state";
 import {
   AMANO_SOHO_KIFU,
+  COMPUTER_SHOGI_TOP_KIFU,
   FUJII_SOTA_RYUOH_36_4_KIFU,
   HABU_YOSHIHARU_52GIN_KIFU,
   KIMURA_YOSHIO_FIRST_MEIJIN_KIFU,
@@ -775,11 +776,13 @@ const WORLD_ENTRIES = [
   },
   {
     id: "computer-shogi", group: "トピック", label: "コンピュータ将棋",
-    sfen: STANDARD,
+    kifu: COMPUTER_SHOGI_TOP_KIFU,
+    kifuTitle: "floodgate Lladro対minicon（2026年9月26日）",
     overview: "今ではAIもとっても強くなって、プロの研究にも使われているよ！",
     rows: [
       ["電王戦", "プロ棋士とコンピュータが対戦する「電王戦」が行われ、2017年には名人がソフトに敗れて話題になったよ。"],
       ["研究への活用", "今ではプロ棋士もAIで研究するのが当たり前になり、中継ではAIの評価値が表示されるようになったんだ。"],
+      ["最高レベルの棋譜", "盤面は、将棋ソフトが対戦するサイト「floodgate」で、2026年9月にレーティングがとくに高かったソフト同士の一局。先手のLladro（R4336）が、後手のminicon（R4353）に229手で勝ったよ。"],
       ["このアプリ", "このアプリのCPUや棋譜解析も、将棋AI（やねうら王）の力を借りているよ。"],
     ],
   },
