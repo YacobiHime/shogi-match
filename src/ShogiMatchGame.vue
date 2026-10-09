@@ -470,6 +470,16 @@
               :class="{ 'shogi-game__pregame-message--error': learningStartBlocked }"
               role="status"
             >{{ learningFormationMessage }}</p>
+            <p v-if="ratingRecommendation" class="shogi-game__pregame-message" data-rating-recommendation>
+              あなたのレーティング: R{{ ratingState.rating }}（{{ ratingState.games }}局）。
+              おすすめの強さ: Lv.{{ recommendedStrengthPreset.level }} {{ recommendedStrengthPreset.label }}
+              <button
+                type="button"
+                class="shogi-game__pregame-change"
+                :disabled="searchNodes === recommendedStrengthPreset.value"
+                @click="searchNodes = recommendedStrengthPreset.value"
+              >おすすめにする</button>
+            </p>
             <p v-if="pregameUsesHandicap" class="shogi-game__pregame-message">
               駒を落とす側（上手）は後手です。後手の欄の入れ替えボタンで、上手と下手を入れ替えられます。
             </p>
@@ -929,6 +939,13 @@
             <dt>結果</dt>
             <dd>{{ resultPresentation.detail }}</dd>
           </div>
+          <div v-if="ratingChange" data-rating-change>
+            <dt>レーティング</dt>
+            <dd>
+              R{{ ratingChange.before }} → R{{ ratingChange.after }}
+              （{{ ratingChange.delta >= 0 ? "+" : "−" }}{{ Math.abs(ratingChange.delta) }}）
+            </dd>
+          </div>
         </dl>
         <div class="shogi-game__result-actions">
           <!-- 教室の対局は、やこび姫の一言と★を見に教室へ戻る。 -->
@@ -1145,6 +1162,12 @@ import {
   savedMatchNumber,
   saveMatchSnapshot,
 } from "./core/match-persistence.mjs";
+import {
+  applyRatedGame,
+  loadRatingState,
+  recommendedLevel,
+  saveRatingState,
+} from "./core/player-rating.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 const INITIAL_GUIDE_TEXT = "一緒に頑張ろう！";
@@ -1239,6 +1262,14 @@ const engineReady = ref(false);
 const engineUnavailable = ref(false);
 const result = ref<MatchResult | null>(null);
 const resultDialogOpen = ref(false);
+// 通常対局(平手・対CPU)の結果で更新するプレイヤーのレーティング。
+const ratingState = ref(loadRatingState(browserStorage()));
+/** 直近の対局で変動したレーティング。リロードで復元した終局画面では出さない。 */
+const ratingChange = ref<{ before: number; after: number; delta: number } | null>(null);
+const recommendedStrengthPreset = computed(() => {
+  const level = recommendedLevel(ratingState.value.rating);
+  return CPU_STRENGTH_PRESETS.find((preset) => preset.level === level)!;
+});
 const reviewMode = ref(false);
 const reviewNavigation = ref(createReviewNavigation());
 type AnalysisPoint = {
@@ -2572,6 +2603,11 @@ const pregameSides = computed(() => (["black", "white"] as const).map((color) =>
     rows,
   };
 }));
+
+/** レーティングの対象になる設定(平手の通常対局で、対CPU)のときだけ、おすすめの強さを案内する。 */
+const ratingRecommendation = computed(() => (
+  matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value
+));
 
 const pregameCommonRows = computed(() => {
   const rows: { id: string; label: string; value: string }[] = [];
@@ -4242,6 +4278,23 @@ function refreshReviewCoachAdvice({ analyze = true } = {}): boolean {
   return false;
 }
 
+/** 平手の通常対局(対CPU)だけをレーティングに数える。学習対局・駒落ち・教室の対局は数えない。 */
+function recordRatedGame(matchResult: MatchResult) {
+  ratingChange.value = null;
+  const level = cpuStrengthLevel();
+  const rated = matchKind.value === "normal"
+    && normalizedMode.value === "cpu"
+    && !tutorialMatch.value
+    && matchInitialSfen.value === STANDARD_SFEN
+    && level !== undefined;
+  if (!rated) return;
+  const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";
+  const applied = applyRatedGame(ratingState.value, { opponentLevel: level, outcome });
+  ratingState.value = applied.state;
+  ratingChange.value = { before: applied.before, after: applied.after, delta: applied.delta };
+  saveRatingState(browserStorage(), applied.state);
+}
+
 function finish(matchResult: MatchResult) {
   matchGeneration += 1;
   if (cpuTimer) clearTimeout(cpuTimer);
@@ -4252,6 +4305,7 @@ function finish(matchResult: MatchResult) {
   thinking.value = false;
   result.value = matchResult;
   resultDialogOpen.value = true;
+  recordRatedGame(matchResult);
   if (tutorialMatch.value) {
     const { lessonId, playerColor } = tutorialMatch.value;
     tutorialMatch.value = { lessonId, playerColor, report: tutorialMatchReport(matchResult, lessonId, playerColor) };
