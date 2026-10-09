@@ -79,6 +79,21 @@
               <span class="shogi-home__label">対局</span>
               <small class="shogi-home__desc">CPUと対局。学習対局にも切り替えられる</small>
             </button>
+            <button type="button" class="shogi-home__card" @click="openTournamentScreen">
+              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f1a54c">
+                  <rect x="4" y="2" width="8" height="1" />
+                  <rect x="4" y="3" width="8" height="4" />
+                  <rect x="2" y="3" width="2" height="1" />
+                  <rect x="12" y="3" width="2" height="1" />
+                  <rect x="5" y="7" width="6" height="1" />
+                  <rect x="7" y="8" width="2" height="3" />
+                  <rect x="5" y="11" width="6" height="2" />
+                </g>
+              </svg>
+              <span class="shogi-home__label">大会</span>
+              <small class="shogi-home__desc">試験や大会に挑戦して、称号を目指す</small>
+            </button>
           </div>
         </section>
         <section class="shogi-home__group" aria-labelledby="shogi-home-school">
@@ -257,6 +272,14 @@
       :asset-base-url="assetBaseUrl"
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
       @close="dexOpen = false; openingDexInitialId = ''"
+    />
+    <ShogiTournament
+      v-if="tournamentOpen"
+      :asset-base-url="assetBaseUrl"
+      :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
+      :profile="profileState"
+      @close="tournamentOpen = false"
+      @start="startTournamentFromScreen"
     />
     <YakobiNote
       v-if="yakobiNoteOpen"
@@ -455,7 +478,7 @@
           </div>
 
           <section
-            v-for="side in pregameVisibleSides"
+            v-for="side in pregameSides"
             :key="side.color"
             class="shogi-game__pregame-section shogi-game__pregame-side"
             :aria-label="side.label"
@@ -552,9 +575,6 @@
               :class="{ 'shogi-game__pregame-message--error': learningStartBlocked }"
               role="status"
             >{{ learningFormationMessage }}</p>
-            <p v-if="matchKind === 'tournament'" class="shogi-game__pregame-message" data-tournament-summary>
-              {{ tournamentSummary }}
-            </p>
             <p v-if="ratingRecommendation" class="shogi-game__pregame-message" data-rating-recommendation>
               あなたのレーティング: R{{ ratingState.rating }}（{{ nearestRatingLabel }}・{{ ratingState.games }}局）。
               おすすめの強さ: Lv.{{ recommendedStrengthPreset.level }} {{ recommendedStrengthPreset.label }}
@@ -1142,12 +1162,13 @@
         <div class="shogi-game__result-actions">
           <template v-if="tournamentVerdict">
             <button type="button" class="shogi-game__rematch" @click="openProfileAfterTournament">プロフィールを見る</button>
+            <button v-if="showHome" type="button" class="shogi-game__analysis-button" @click="leaveToTournamentScreen">大会へ</button>
             <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
             <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
           </template>
           <template v-else>
             <button type="button" class="shogi-game__rematch" @click="startTournamentRound">次の対局へ</button>
-            <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch">大会をやめる</button>
+            <button type="button" class="shogi-game__analysis-button" @click="showHome ? leaveToTournamentScreen() : leaveFinishedMatch()">大会をやめる</button>
           </template>
         </div>
       </div>
@@ -1228,6 +1249,7 @@ import ShogiReferenceDex from "./ShogiReferenceDex.vue";
 import ShogiTutorial from "./ShogiTutorial.vue";
 import ShogiProblemSet from "./ShogiProblemSet.vue";
 import YakobiNote from "./YakobiNote.vue";
+import ShogiTournament from "./ShogiTournament.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { tutorialLesson } from "./core/tutorial-curriculum.mjs";
 import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
@@ -1248,9 +1270,7 @@ import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
 import {
-  TOURNAMENTS,
   createTournamentRun,
-  examPassLine,
   examVerdict,
   nextRound,
   recordTournamentGame,
@@ -1520,6 +1540,7 @@ const pregameOpen = ref(true);
 const homeOpen = ref(props.showHome);
 const dexOpen = ref(false);
 const yakobiNoteOpen = ref(false);
+const tournamentOpen = ref(false);
 const openingDexInitialId = ref("");
 // 駒図鑑・手筋図鑑・将棋界図鑑のうち、開いているもの。
 const referenceDexKind = ref<"" | "piece" | "tesuji" | "world" | "glossary">("");
@@ -1545,9 +1566,6 @@ const ratingState = ref(loadRatingState(browserStorage()));
 // プレイヤーのプロフィール(大会で得た称号と成績)。
 const profileState = ref(loadProfile(browserStorage()));
 // 大会の設定と、進行中の大会。
-const tournamentId = ref(TOURNAMENTS[0].id);
-const tournamentGames = ref(TOURNAMENTS[0].defaultGames);
-const tournamentBaseLevel = ref(TOURNAMENTS[0].defaultLevel);
 const tournamentRun = ref<ReturnType<typeof createTournamentRun> | null>(null);
 const tournamentVerdict = computed(() => (tournamentRun.value ? examVerdict(tournamentRun.value) : null));
 /** 直近の対局で変動したレーティング。リロードで復元した終局画面では出さない。 */
@@ -2696,7 +2714,6 @@ const learningOpponentPlanOptions = computed(() => learningPlanOptions(
 const MATCH_KIND_OPTIONS = [
   { value: "normal" as const, label: "通常対局", description: "平手でいつもどおり対局" },
   { value: "learning" as const, label: "学習対局", description: "開始局面や補助を自由に設定" },
-  { value: "tournament" as const, label: "大会", description: "試験や大会に挑戦して、称号を目指す" },
 ];
 const LEARNING_PLAN_SIDES = [
   { id: "player" as const, label: "自分" },
@@ -2919,39 +2936,9 @@ const ratingRecommendation = computed(() => (
   matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value
 ));
 
-// 大会では、先手・後手の欄(CPUの強さや作戦)は出さず、大会の設定の行で決める。
-const pregameVisibleSides = computed(() => (matchKind.value === "tournament" ? [] : pregameSides.value));
-
-const TOURNAMENT_OPTIONS: PregameOption[] = TOURNAMENTS.map(({ id, label }) => ({ value: id, label }));
-const tournamentGameOptions = computed<PregameOption[]>(() => (
-  (tournamentById(tournamentId.value)?.gameOptions ?? []).map((games) => ({
-    value: games, label: games === 1 ? "1局（短縮）" : `${games}局`,
-  }))
-));
-const tournamentLevelOptions: PregameOption[] = CPU_STRENGTH_PRESETS.map((preset) => ({
-  value: preset.level, label: `Lv.${preset.level} ${preset.label}`,
-}));
-/** 大会の説明。選んだ設定での各局の相手と、合格の条件を示す。 */
-const tournamentSummary = computed(() => {
-  const definition = tournamentById(tournamentId.value);
-  if (!definition) return "";
-  const run = createTournamentRun({ id: definition.id, total: tournamentGames.value, baseLevel: tournamentBaseLevel.value });
-  const opponents = run.levels.map((level) => `Lv.${level}`).join("→");
-  const sweep = run.total >= 3 ? "全勝するとF1クラスで入会できます。" : "";
-  return `${definition.description} 先手と後手を入れ替えて${run.total}局指します（相手は${opponents}）。`
-    + `${examPassLine(run.total)}勝以上で合格し、研修会F2クラスで入会します。${sweep}`
-    + "これはこのゲームの簡易版で、実際の試験の規定ではありません。";
-});
-
 const pregameCommonRows = computed(() => {
   const rows: { id: string; label: string; value: string }[] = [];
-  if (matchKind.value === "tournament") {
-    rows.push(
-      { id: "tournament", label: "大会", value: optionLabel(TOURNAMENT_OPTIONS, tournamentId.value) },
-      { id: "tournamentGames", label: "対局数", value: optionLabel(tournamentGameOptions.value, tournamentGames.value) },
-      { id: "tournamentLevel", label: "相手の強さ", value: optionLabel(tournamentLevelOptions, tournamentBaseLevel.value) },
-    );
-  }
+
   if (matchKind.value === "learning") {
     if (pregameUsesHandicap.value) {
       rows.push({ id: "handicap", label: "手合割", value: optionLabel(handicapOptions, learningHandicapId.value) });
@@ -3018,13 +3005,6 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
       ],
     };
   }
-  if (id === "tournament") return single("大会", tournamentId.value, [{ options: TOURNAMENT_OPTIONS }]);
-  if (id === "tournamentGames") {
-    return single("対局数", tournamentGames.value, [{ options: tournamentGameOptions.value }], "少ない対局数で短縮できます。1局だけのときは、F1クラスは出ません。");
-  }
-  if (id === "tournamentLevel") {
-    return single("相手の強さ", tournamentBaseLevel.value, [{ options: tournamentLevelOptions }], "基準のレベルです。局が進むほど、基準より少しずつ強い相手になります。");
-  }
   if (id === "handicap") return single("手合割", learningHandicapId.value, [{ options: handicapOptions }]);
   if (id === "hintLimit") return single("閃きの回数", learningHintLimit.value, [{ options: assistLimitOptions }]);
   if (id === "undoLimit") return single("待ったの回数", learningUndoLimit.value, [{ options: assistLimitOptions }]);
@@ -3056,9 +3036,6 @@ function onPregamePick(key: string, value: PickerValue) {
   else if (key === "bishop") cpuBishopPreference.value = text;
   else if (key === "rook") cpuRookPreference.value = text;
   else if (key === "tempo") cpuTempoPreference.value = text;
-  else if (key === "tournament") tournamentId.value = text;
-  else if (key === "tournamentGames") tournamentGames.value = Number(value);
-  else if (key === "tournamentLevel") tournamentBaseLevel.value = Number(value);
   else if (key === "handicap") learningHandicapId.value = text;
   else if (key === "hintLimit") learningHintLimit.value = Number(value);
   else if (key === "undoLimit") learningUndoLimit.value = Number(value);
@@ -3072,11 +3049,27 @@ function onPregamePick(key: string, value: PickerValue) {
 }
 
 /** 大会を始める。1局目から、設定した相手と指す。 */
-function beginTournament() {
-  tournamentRun.value = createTournamentRun({
-    id: tournamentId.value, total: tournamentGames.value, baseLevel: tournamentBaseLevel.value,
-  });
+function beginTournament(settings: { id: string; total: number; baseLevel: number }) {
+  tournamentRun.value = createTournamentRun(settings);
   startTournamentRound();
+}
+
+/** 大会の画面で「大会に挑戦する」を押したとき。対局設定を通さずに、1局目を始める。 */
+function startTournamentFromScreen(settings: { id: string; total: number; baseLevel: number }) {
+  confirmDiscardSuspended(() => {
+    tournamentOpen.value = false;
+    openPregame();
+    matchKind.value = "tournament";
+    homeOpen.value = false;
+    void initializeEngine();
+    beginTournament(settings);
+  });
+}
+
+/** 大会の対局から離れて、大会の画面へ戻る。 */
+function leaveToTournamentScreen() {
+  leaveFinishedMatch();
+  if (props.showHome) tournamentOpen.value = true;
 }
 
 /** 大会の次の1局を始める。手番と相手のレベルは、局ごとに決まっている。 */
@@ -3129,10 +3122,6 @@ function openProfileAfterTournament() {
 }
 
 function beginMatch() {
-  if (matchKind.value === "tournament") {
-    beginTournament();
-    return;
-  }
   if (matchKind.value === "learning") {
     const start = learningStartPosition({
       startType: learningStartType.value,
@@ -3227,6 +3216,11 @@ function openMatchSetup(kind: MatchKind) {
     matchKind.value = kind;
     closeHome();
   });
+}
+
+/** タイトル画面の「大会」。大会の画面を開く。 */
+function openTournamentScreen() {
+  tournamentOpen.value = true;
 }
 
 /** 教室のレッスンから、関連する図鑑の項目を開く。 */
@@ -3407,6 +3401,8 @@ function openHome() {
 function navigateBack() {
   if (discardSuspendedPending.value) {
     discardSuspendedPending.value = null;
+  } else if (tournamentOpen.value) {
+    tournamentOpen.value = false;
   } else if (yakobiNoteOpen.value) {
     yakobiNoteOpen.value = false;
   } else if (referenceDexKind.value) {
@@ -3445,7 +3441,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || Boolean(discardSuspendedPending.value) || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || Boolean(discardSuspendedPending.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
@@ -3472,6 +3468,8 @@ function openPregame() {
   analysisOpen.value = false;
   discardPersistedMatch();
   tournamentRun.value = null;
+  // 大会の対局準備はないので、対局準備を開くときは通常対局へ戻す。
+  if (matchKind.value === "tournament") matchKind.value = "normal";
   suspendedMatch.value = null;
   suspendConfirmOpen.value = false;
   measureMode.value = false;

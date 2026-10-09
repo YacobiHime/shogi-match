@@ -41,19 +41,28 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function navigateBack\(\)[\s\S]*?discardSuspendedPending[\s\S]*?suspendConfirmOpen/);
   });
 
-  it("runs a tournament as a third match kind with its own result dialog and saved progress", () => {
-    // 大会は対局の種類で、通常の結果ダイアログとは別に、大会専用の結果を出す。
+  it("runs a tournament as its own mode from the title screen, with its own result dialog and saved progress", () => {
+    // 大会は、対局設定ではなく、タイトル画面のボタンから入る専用の画面で始める。
+    expect(source).toMatch(/@click="openTournamentScreen"[\s\S]*?<span class="shogi-home__label">大会<\/span>/);
+    const kindStart = source.indexOf("const MATCH_KIND_OPTIONS");
+    const kindOptions = source.slice(kindStart, source.indexOf("\n];", kindStart));
+    expect(kindOptions).toContain("learning");
+    expect(kindOptions).not.toContain("tournament");
+    expect(source).toMatch(/<ShogiTournament[\s\S]*?@start="startTournamentFromScreen"/);
+    // 大会の対局は内部の種類「tournament」で動かし、通常の結果ダイアログとは別に、大会専用の結果を出す。
     expect(source).toContain('type MatchKind = "normal" | "learning" | "tournament";');
     expect(source).toMatch(/v-if="resultDialogOpen && result && resultPresentation && !tournamentRun"/);
     expect(source).toMatch(/v-if="resultDialogOpen && result && resultPresentation && tournamentRun"[\s\S]*?data-tournament-result/);
-    // 大会の設定は、対局設定の「項目: 値 [変更]」の行と選択シートで決める。
-    expect(source).toMatch(/id: "tournamentGames", label: "対局数"/);
-    expect(source).toMatch(/if \(id === "tournamentLevel"\)/);
-    expect(source).toMatch(/key === "tournamentGames"\) tournamentGames\.value = Number\(value\)/);
+    // 対局準備を開くときは、通常対局へ戻す(大会の対局準備はない)。
+    expect(source).toMatch(/if \(matchKind\.value === "tournament"\) matchKind\.value = "normal";/);
     // 終局を記録してから保存し、保存と復元に大会の進行を含める。
     expect(source).toMatch(/recordTournamentOutcome\(matchResult\);[\s\S]*?persistMatchState\(\);/);
     expect(source).toContain("tournament: tournamentRun.value,");
     expect(source).toMatch(/sanitizeTournamentRun\(snapshot\.tournament\)/);
+    // 重ねて開く画面なので、ブラウザの戻る操作で閉じられる。中断した対局を消す確認も挟む。
+    expect(source).toMatch(/function navigateBack\(\)[\s\S]*?tournamentOpen\.value = false/);
+    expect(source).toMatch(/canGoBack: \(\) =>[^\n]*tournamentOpen\.value/);
+    expect(source).toMatch(/function startTournamentFromScreen[\s\S]*?confirmDiscardSuspended/);
     // 大会の対局は、通常対局のレーティングには数えない。
     expect(source).toMatch(/const rated = matchKind\.value === "normal"/);
   });
