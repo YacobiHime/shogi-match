@@ -79,3 +79,46 @@ export function estimateSkill(points, color) {
 export function estimatedLevelRating(estimate) {
   return levelRating(presetForLevel(estimate.level).level);
 }
+
+/** 序盤・中盤・終盤を分ける手数。 */
+const PHASES = [
+  { key: 'opening', label: '序盤', until: 30 },
+  { key: 'middle', label: '中盤', until: 80 },
+  { key: 'ending', label: '終盤', until: Infinity },
+];
+
+/**
+ * 棋力測定の結果に添える統計。診断と同じ手(形勢に大差が付いた局面を除く)から、局面ごとの平均損失と、
+ * 悪手・好手の数、最も損をした手を数える。悪手・好手の数は、解析が付けた評価(classifyAnalyzedMove)を数える。
+ * @param {any[]} points 棋譜解析の点
+ * @param {'black' | 'white'} color 測定する側
+ */
+export function measureStatistics(points, color) {
+  const own = (points ?? []).filter((point) => point.moveMeasure?.mover === color);
+  const measured = own.filter((point) => Math.abs(point.moveMeasure.standing) < DECIDED_STANDING);
+  const phases = PHASES.map(({ key, label, until }, index) => {
+    const from = index === 0 ? 0 : PHASES[index - 1].until;
+    const losses = measured
+      .filter((point) => point.ply > from && point.ply <= until)
+      .map((point) => Math.min(LOSS_CAP, point.moveMeasure.loss));
+    return {
+      key, label, count: losses.length,
+      averageLoss: losses.length ? Math.round(losses.reduce((sum, loss) => sum + loss, 0) / losses.length) : null,
+    };
+  });
+  const kinds = { blunder: 0, mistake: 0, dubious: 0, good: 0, brilliant: 0 };
+  for (const point of own) {
+    const kind = point.annotation?.kind;
+    if (kind && kind in kinds) kinds[kind] += 1;
+  }
+  const worst = measured.reduce((max, point) => (!max || point.moveMeasure.loss > max.moveMeasure.loss ? point : max), null);
+  return {
+    moves: own.length,
+    measuredMoves: measured.length,
+    phases,
+    kinds,
+    worst: worst && worst.moveMeasure.loss >= 300
+      ? { ply: worst.ply, label: worst.label ?? `${worst.ply}手目`, loss: Math.round(worst.moveMeasure.loss) }
+      : null,
+  };
+}

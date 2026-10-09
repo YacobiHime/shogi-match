@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateSkill, levelForAverageLoss } from './skill-estimate.mjs';
+import { estimateSkill, levelForAverageLoss, measureStatistics } from './skill-estimate.mjs';
 
 const movesWithLoss = (loss, count, mover = 'black', standing = 0) => (
   Array.from({ length: count }, () => ({ moveMeasure: { mover, loss, standing } }))
@@ -40,5 +40,24 @@ describe('skill estimate', () => {
     const estimate = estimateSkill(points, 'black');
     expect(estimate.averageLoss).toBe(Math.round((50 * 11 + 1000) / 12));
     expect(estimate.reliability).toBe('reference');
+  });
+
+  it('summarizes phases, move grades and the worst move for the notebook result', () => {
+    const point = (ply, loss, extra = {}) => ({
+      ply, label: `${ply}手目 ▲テスト`, moveMeasure: { mover: 'black', loss, standing: 0 }, ...extra,
+    });
+    const points = [
+      point(1, 20), point(3, 40), point(31, 900, { annotation: { kind: 'mistake', mover: 'black', loss: 900 } }),
+      point(33, 100, { annotation: { kind: 'good', mover: 'black' } }), point(81, 60),
+      point(83, 3000, { moveMeasure: { mover: 'black', loss: 3000, standing: 2500 } }),
+      { ply: 2, moveMeasure: { mover: 'white', loss: 500, standing: 0 } },
+    ];
+    const stats = measureStatistics(points, 'black');
+    expect(stats.moves).toBe(6);
+    expect(stats.measuredMoves).toBe(5);
+    expect(stats.phases.map(({ count, averageLoss }) => [count, averageLoss])).toEqual([[2, 30], [2, 500], [1, 60]]);
+    expect(stats.kinds).toMatchObject({ mistake: 1, good: 1, blunder: 0 });
+    expect(stats.worst).toEqual({ ply: 31, label: '31手目 ▲テスト', loss: 900 });
+    expect(measureStatistics([], 'black').worst).toBeNull();
   });
 });

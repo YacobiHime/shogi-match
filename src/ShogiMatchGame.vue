@@ -495,10 +495,6 @@
               :class="{ 'shogi-game__pregame-message--error': learningStartBlocked }"
               role="status"
             >{{ learningFormationMessage }}</p>
-            <p v-if="measureMode && matchKind === 'normal'" class="shogi-game__pregame-message" data-measure-note>
-              棋力測定: 対局が終わると自動で棋譜解析を始め、あなたの指し手から棋力を診断します。
-              CPUの強さは、レーティングに近いレベルがおすすめです。長めに指すほど正確に測れます。
-            </p>
             <p v-if="ratingRecommendation" class="shogi-game__pregame-message" data-rating-recommendation>
               あなたのレーティング: R{{ ratingState.rating }}（{{ nearestRatingLabel }}・{{ ratingState.games }}局）。
               おすすめの強さ: Lv.{{ recommendedStrengthPreset.level }} {{ recommendedStrengthPreset.label }}
@@ -1008,6 +1004,69 @@
         </label>
       </div>
     </div>
+    <div
+      v-if="measureReportOpen && skillDiagnosis"
+      class="shogi-game__result shogi-game__result--measure"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="measure-result-title"
+      data-measure-report
+    >
+      <div class="shogi-game__result-panel">
+        <h2 id="measure-result-title">棋力測定の結果</h2>
+        <template v-if="skillDiagnosis.insufficient">
+          <p>測れる手が足りませんでした（{{ skillDiagnosis.count }}手）。もう少し長く指した対局で、もう一度測ってみてください。</p>
+        </template>
+        <template v-else>
+          <p class="shogi-game__measure-rating">
+            <strong>R{{ skillDiagnosis.rating }}</strong>
+            <span>（{{ skillDiagnosis.label }}）</span>
+          </p>
+          <p class="shogi-game__measure-range">
+            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安{{ skillDiagnosis.reliability === "reference" ? "（手数が少ない参考値）" : "" }}
+          </p>
+          <dl v-if="measureStats" class="shogi-game__result-details">
+            <div>
+              <dt>対局</dt>
+              <dd>{{ resultPresentation?.title }}・{{ result?.moveCount }}手（{{ resultPresentation?.opponent }}）</dd>
+            </div>
+            <div>
+              <dt>測った手</dt>
+              <dd>{{ skillDiagnosis.count }}手・平均損失{{ skillDiagnosis.averageLoss }}</dd>
+            </div>
+            <div v-for="phase in measureStats.phases" :key="phase.key">
+              <dt>{{ phase.label }}</dt>
+              <dd>{{ phase.averageLoss === null ? "測れる手なし" : `平均損失${phase.averageLoss}（${phase.count}手）` }}</dd>
+            </div>
+            <div>
+              <dt>悪手</dt>
+              <dd>
+                大悪手{{ measureStats.kinds.blunder }}・悪手{{ measureStats.kinds.mistake }}・疑問手{{ measureStats.kinds.dubious }}
+              </dd>
+            </div>
+            <div>
+              <dt>好手</dt>
+              <dd>好手{{ measureStats.kinds.good }}・神の一手{{ measureStats.kinds.brilliant }}</dd>
+            </div>
+            <div v-if="measureStats.worst">
+              <dt>一番の悪手</dt>
+              <dd>{{ measureStats.worst.label }}（損失{{ measureStats.worst.loss }}）</dd>
+            </div>
+          </dl>
+          <button
+            type="button"
+            class="shogi-game__rematch"
+            :disabled="ratingState.rating === skillDiagnosis.rating"
+            @click="applySkillDiagnosis"
+          >{{ ratingState.rating === skillDiagnosis.rating ? "レーティングに設定済み" : "この棋力をレーティングに設定" }}</button>
+        </template>
+        <div class="shogi-game__result-actions">
+          <button type="button" class="shogi-game__analysis-button" @click="measureReportDismissed = true">棋譜を見る</button>
+          <button type="button" class="shogi-game__rematch" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
+        </div>
+        <p class="shogi-game__measure-note">評価値の損から求めた目安です。解析の探索量や対局の内容で動きます。</p>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -1038,7 +1097,7 @@ import {
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
-import { estimateSkill } from "./core/skill-estimate.mjs";
+import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -1319,6 +1378,9 @@ const ratingState = ref(loadRatingState(browserStorage()));
 const ratingChange = ref<{ before: number; after: number; delta: number } | null>(null);
 /** 棋力測定の対局か。終局後に自動で棋譜解析を始め、棋力を診断する。 */
 const measureMode = ref(false);
+/** 棋力測定の結果の表示中(測定対局の終局から、対局準備・ホームへ戻るまで)。 */
+const measureSession = ref(false);
+const measureReportDismissed = ref(false);
 /** レーティングに近いLvの段級位の表示名。 */
 const nearestRatingLabel = computed(() => recommendedStrengthPreset.value.label);
 const recommendedStrengthPreset = computed(() => {
@@ -2832,12 +2894,33 @@ function closeHome() {
   void initializeEngine();
 }
 
-/** やこびノートから、棋力測定の対局を始める。通常対局(平手)の準備へ進み、おすすめの強さを選んでおく。 */
+/** 棋力測定の前の対局設定。測定の対局を離れたら戻す。 */
+let settingsBeforeMeasure: { [key: string]: unknown } | null = null;
+
+/**
+ * やこびノートから、棋力測定の対局を対局準備を通さずに始める。
+ * 平手・先手・作戦おまかせ・助言なしで、CPUの強さはレーティングに近いレベルにする。
+ */
 function startMeasureMatch() {
   yakobiNoteOpen.value = false;
-  openMatchSetup("normal");
-  measureMode.value = true;
+  openPregame();
+  settingsBeforeMeasure = captureMatchSettings();
+  matchKind.value = "normal";
   searchNodes.value = recommendedStrengthPreset.value.value;
+  selectedPlayerColor.value = "black";
+  selectedStrategy.value = "";
+  selectedCastle.value = "";
+  cpuStrategy.value = "random";
+  cpuStrategyDetailsOpen.value = false;
+  cpuFirstMove.value = "random";
+  cpuBishopPreference.value = "";
+  cpuRookPreference.value = "";
+  cpuTempoPreference.value = "";
+  coachLevel.value = "off";
+  measureMode.value = true;
+  homeOpen.value = false;
+  void initializeEngine();
+  beginMatch();
 }
 
 function openMatchSetup(kind: MatchKind) {
@@ -3025,6 +3108,10 @@ function openPregame() {
   reviewMode.value = false;
   analysisOpen.value = false;
   discardPersistedMatch();
+  measureMode.value = false;
+  measureSession.value = false;
+  if (settingsBeforeMeasure) restoreMatchSettings(settingsBeforeMeasure);
+  settingsBeforeMeasure = null;
   // 教室の対局から離れたら、教室の固定条件を元の設定へ戻す。
   if (tutorialMatch.value) {
     if (settingsBeforeTutorial) restoreMatchSettings(settingsBeforeTutorial);
@@ -4333,6 +4420,14 @@ const skillDiagnosis = computed(() => {
   if (normalizedMode.value !== "cpu" || !analysisPoints.value.length) return null;
   return estimateSkill(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black");
 });
+const measureStats = computed(() => (
+  measureSession.value && skillDiagnosis.value && !skillDiagnosis.value.insufficient
+    ? measureStatistics(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black")
+    : null
+));
+const measureReportOpen = computed(() => (
+  measureSession.value && !measureReportDismissed.value && Boolean(skillDiagnosis.value)
+));
 function applySkillDiagnosis() {
   const diagnosis = skillDiagnosis.value;
   if (!diagnosis || diagnosis.insufficient || diagnosis.rating === undefined) return;
@@ -4431,6 +4526,8 @@ function finish(matchResult: MatchResult) {
   recordRatedGame(matchResult);
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
   measureMode.value = false;
+  measureSession.value = measuring;
+  measureReportDismissed.value = false;
   if (tutorialMatch.value) {
     const { lessonId, playerColor } = tutorialMatch.value;
     tutorialMatch.value = { lessonId, playerColor, report: tutorialMatchReport(matchResult, lessonId, playerColor) };
@@ -7424,6 +7521,11 @@ queueMicrotask(() => {
   backdrop-filter: blur(0.35rem);
   animation: result-backdrop-in 360ms ease-out both;
 }
+.shogi-game__result--measure { --result-accent: #f1a54c; }
+.shogi-game__measure-rating { margin: 0.4em 0 0; }
+.shogi-game__measure-rating strong { font-size: 2.6em; }
+.shogi-game__measure-range,
+.shogi-game__measure-note { margin: 0.3em 0 0.8em; font-size: 0.85em; opacity: 0.8; }
 .shogi-game__result-panel {
   position: relative;
   width: min(32em, 100%);
