@@ -44,6 +44,23 @@ function comparableScore(score) {
 }
 
 /**
+ * 着手前の最善評価と実着手後の評価から、指した側の評価値の損と、着手前の形勢(指した側から見た評価値)を返す。
+ * 評価値が読めなければnull。棋力診断が、指し手の損の平均を取るために使う。
+ * @param {{
+ *   mover: 'black' | 'white',
+ *   beforeBestScore?: { type: string, value: number },
+ *   afterScore?: { type: string, value: number },
+ * }} options
+ */
+export function analyzedMoveLoss({ mover, beforeBestScore, afterScore }) {
+  const before = comparableScore(beforeBestScore);
+  const after = comparableScore(afterScore);
+  if (before === undefined || after === undefined) return null;
+  const sign = mover === 'black' ? 1 : -1;
+  return { loss: Math.max(0, sign * (before - after)), standing: sign * before };
+}
+
+/**
  * 着手前の最善評価と実着手後の評価を着手者目線で比較する。
  * 好手は「最善手だった」だけでは付けず、次善手との差が大きい局面に限定する。
  * 神の一手は、god-move.mjsのjudgeGodMoveで候補と判定された手（godMove）にだけ付ける。

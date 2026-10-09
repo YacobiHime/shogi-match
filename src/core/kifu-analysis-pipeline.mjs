@@ -1,4 +1,5 @@
 import {
+  analyzedMoveLoss,
   classifyAnalyzedMove,
   formatAnalysisScore,
   scoreForBlack,
@@ -245,11 +246,16 @@ export function analysisPointsFromResults(steps, results, contexts = []) {
     const before = results[ply - 1];
     const judged = ply > 0 && previous?.ply === ply - 1 && before;
     let annotation = null;
+    let moveMeasure = null;
     if (judged) {
       const context = contexts[ply] ?? moveContext(steps[ply - 1].sfen, steps[ply].lastMove, steps[ply - 1].lastMove);
       const beforeSide = sideToMove(steps[ply - 1].sfen);
       const pair = pairedReads(before, results[ply]);
       const secondRead = deepestRead(before, true);
+      const beforeBestScore = scoreForBlack(rankOf(pair.before?.candidates, 1)?.score, beforeSide);
+      const afterScore = scoreForBlack(rankOf(pair.after?.candidates, 1)?.score, side);
+      const measured = analyzedMoveLoss({ mover: beforeSide, beforeBestScore, afterScore });
+      if (measured) moveMeasure = { mover: beforeSide, ...measured };
       annotation = classifyAnalyzedMove({
         ply,
         mover: beforeSide,
@@ -278,6 +284,8 @@ export function analysisPointsFromResults(steps, results, contexts = []) {
       score,
       secondScore: scoreForBlack(rankOf(deepestRead(results[ply], true)?.candidates, 2)?.score, side),
       annotation,
+      // その手の評価値の損と着手前の形勢。棋力診断(skill-estimate.mjs)が使う。
+      moveMeasure,
     });
   }
   return capGodMoves(points);
