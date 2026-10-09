@@ -100,7 +100,9 @@ describe("match screen regressions", () => {
     // 大会の選択のカードは、段によらず、同じ大きさで、同じ列に並べる。
     expect(tournament).toMatch(/shogi-tournament-home \.shogi-home__cards \{[\s\S]*?repeat\(3, clamp\(96px, 26vw, 130px\)\)/);
     // 説明・エントリーの一言・次の対局・結果の解説は、やこび姫のセリフにする。
-    expect(tournament.match(/<YakobiSays/g)?.length).toBeGreaterThanOrEqual(8);
+    // 顔を何度も並べず、各画面に、大きなやこび姫の解説役(xl)を1人置いて話させる。
+    expect(tournament.match(/<YakobiSays[^>]*size="xl"/g)?.length).toBe(3);
+    expect(tournament).toMatch(/talkTopic = 'difficulty'/);
     for (const helper of ["ryuoGuideLines", "entryDifficultyLine", "opponentLines", "resultLines", "seasonPhaseLines"]) {
       expect(tournament).toContain(helper);
     }
