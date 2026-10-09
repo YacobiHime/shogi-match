@@ -92,7 +92,7 @@
                 </g>
               </svg>
               <span class="shogi-home__label">大会</span>
-              <small class="shogi-home__desc">試験や大会に挑戦して、称号を目指す</small>
+              <small class="shogi-home__desc">竜王戦に参加して、称号を目指す</small>
             </button>
           </div>
         </section>
@@ -275,11 +275,18 @@
     />
     <ShogiTournament
       v-if="tournamentOpen"
+      ref="tournamentView"
       :asset-base-url="assetBaseUrl"
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
-      :profile="profileState"
+      :career="ryuoCareer"
+      :view="ryuoView"
+      :default-difficulty="ryuoDefaultDifficulty"
+      :rating-text="`R${ratingState.rating}`"
+      :start-at="tournamentStartAt"
       @close="tournamentOpen = false"
-      @start="startTournamentFromScreen"
+      @enter="enterRyuoSeason"
+      @play="startRyuoGame"
+      @open-note="tournamentOpen = false; yakobiNoteOpen = true"
     />
     <YakobiNote
       v-if="yakobiNoteOpen"
@@ -287,6 +294,7 @@
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
       :state="ratingState"
       :profile="profileState"
+      :career="ryuoCareer"
       @close="yakobiNoteOpen = false"
       @start-measure="startMeasureMatch"
       @declare="declareGrade"
@@ -1072,7 +1080,7 @@
     </div>
 
     <div
-      v-if="resultDialogOpen && result && resultPresentation && !tournamentRun"
+      v-if="resultDialogOpen && result && resultPresentation && !ryuoGame"
       class="shogi-game__result"
       :class="`shogi-game__result--${resultPresentation.tone}`"
       role="dialog"
@@ -1130,46 +1138,33 @@
       </div>
     </div>
     <div
-      v-if="resultDialogOpen && result && resultPresentation && tournamentRun"
+      v-if="resultDialogOpen && result && resultPresentation && ryuoGame"
       class="shogi-game__result"
-      :class="`shogi-game__result--${tournamentVerdict ? (tournamentVerdict.passed ? 'victory' : 'defeat') : resultPresentation.tone}`"
+      :class="`shogi-game__result--${resultPresentation.tone}`"
       role="dialog"
       aria-modal="true"
       aria-labelledby="tournament-result-title"
       data-tournament-result
     >
-      <div v-if="tournamentVerdict?.passed" class="shogi-game__confetti" aria-hidden="true">
+      <div v-if="resultPresentation.tone === 'victory'" class="shogi-game__confetti" aria-hidden="true">
         <i v-for="index in 12" :key="index" />
       </div>
       <div class="shogi-game__result-panel">
-        <h2 id="tournament-result-title">
-          {{ tournamentVerdict ? (tournamentVerdict.passed ? "合格！" : "不合格") : `第${tournamentRun.results.length}局 ${resultPresentation.title}` }}
-        </h2>
-        <p class="shogi-game__tournament-name">{{ tournamentById(tournamentRun.id)?.label }}</p>
-        <ol class="shogi-game__tournament-games">
-          <li v-for="(level, index) in tournamentRun.levels" :key="index">
-            <span>第{{ index + 1 }}局</span>
-            <span>{{ roundColor(index) === "black" ? "先手" : "後手" }}・相手Lv.{{ level }}</span>
-            <strong>{{ { win: "○", loss: "●", draw: "△" }[tournamentRun.results[index]?.outcome ?? ""] ?? "—" }}</strong>
-          </li>
-        </ol>
-        <template v-if="tournamentVerdict">
-          <p v-if="tournamentVerdict.passed" class="shogi-game__tournament-title" data-tournament-title>
-            {{ tournamentVerdict.title?.label }}を獲得！（{{ tournamentVerdict.record }}）
-          </p>
-          <p v-else class="shogi-game__tournament-title">{{ tournamentVerdict.record }}で、合格に届きませんでした。もう一度挑戦してみよう！</p>
-        </template>
+        <h2 id="tournament-result-title">{{ resultPresentation.title }}</h2>
+        <p class="shogi-game__tournament-name">{{ ryuoGame.label }}</p>
+        <p class="shogi-game__tournament-name">{{ ryuoOpponent ? `対 ${ryuoOpponent.name} ${ryuoOpponent.dan}` : "" }}</p>
+        <p v-if="ryuoGame.replay" class="shogi-game__tournament-title">千日手になりました。先後を入れ替えて、指し直します。</p>
+        <p v-else-if="ryuoView?.result" class="shogi-game__tournament-title">
+          {{ ryuoView.result.outcome === "champion" ? "竜王になりました！" : "この期の対局は、すべて終わりました。" }}
+        </p>
+        <p v-else-if="ryuoView?.pending" class="shogi-game__tournament-title">次の対局: {{ ryuoView.pending.label }}</p>
         <div class="shogi-game__result-actions">
-          <template v-if="tournamentVerdict">
-            <button type="button" class="shogi-game__rematch" @click="openProfileAfterTournament">プロフィールを見る</button>
-            <button v-if="showHome" type="button" class="shogi-game__analysis-button" @click="leaveToTournamentScreen">大会へ</button>
-            <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
-            <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
-          </template>
-          <template v-else>
-            <button type="button" class="shogi-game__rematch" @click="startTournamentRound">次の対局へ</button>
-            <button type="button" class="shogi-game__analysis-button" @click="showHome ? leaveToTournamentScreen() : leaveFinishedMatch()">大会をやめる</button>
-          </template>
+          <button v-if="ryuoGame.replay" type="button" class="shogi-game__rematch" @click="replayRyuoGame">指し直す</button>
+          <button v-else type="button" class="shogi-game__rematch" @click="leaveToTournamentScreen">
+            {{ ryuoView?.result ? "結果を見る" : "トーナメント表へ" }}
+          </button>
+          <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
+          <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
       </div>
     </div>
@@ -1269,21 +1264,16 @@ import {
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
+import { createSeason, describeSeason, recommendedDifficulty, recordUserGame } from "./core/ryuo.mjs";
 import {
-  createTournamentRun,
-  examVerdict,
-  nextRound,
-  recordTournamentGame,
-  roundColor,
-  sanitizeTournamentRun,
-  tournamentById,
-} from "./core/tournament.mjs";
-import {
-  grantTitle,
-  loadProfile,
-  recordTournamentResult,
-  saveProfile,
-} from "./core/player-profile.mjs";
+  applySeason,
+  loadCareer,
+  loadSeason,
+  nextEntry,
+  saveCareer,
+  saveSeason,
+} from "./core/ryuo-career.mjs";
+import { grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -1518,12 +1508,14 @@ function isBlackMoveIndex(index: number) {
 }
 
 function matchHintAllowance() {
+  if (matchKind.value === "tournament") return assistAllowance(Number(ryuoSeason.value?.settings?.hintLimit ?? 3));
   return matchKind.value === "learning"
     ? assistAllowance(learningHintLimit.value)
     : Math.max(0, Math.trunc(props.hintCount));
 }
 
 function matchUndoAllowance() {
+  if (matchKind.value === "tournament") return assistAllowance(Number(ryuoSeason.value?.settings?.undoLimit ?? 3));
   return matchKind.value === "learning"
     ? assistAllowance(learningUndoLimit.value)
     : Math.max(0, Math.trunc(props.undoCount));
@@ -1566,8 +1558,19 @@ const ratingState = ref(loadRatingState(browserStorage()));
 // プレイヤーのプロフィール(大会で得た称号と成績)。
 const profileState = ref(loadProfile(browserStorage()));
 // 大会の設定と、進行中の大会。
-const tournamentRun = ref<ReturnType<typeof createTournamentRun> | null>(null);
-const tournamentVerdict = computed(() => (tournamentRun.value ? examVerdict(tournamentRun.value) : null));
+// 竜王戦(大会)。キャリア(いま何組か、竜王の期数)と、進行中の期は、1局ごとに端末へ保存する。
+type RyuoGame = { opponentId: string; label: string; outcome?: "win" | "loss"; replay?: boolean };
+const ryuoCareer = ref(loadCareer(browserStorage()));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ryuoSeason = ref<any>(loadSeason(browserStorage()));
+/** いま指している大会の対局。保存した対局と一緒に、リロードしても復元する。 */
+const ryuoGame = ref<RyuoGame | null>(null);
+const ryuoView = computed(() => (ryuoSeason.value ? describeSeason(ryuoSeason.value) : null));
+const ryuoOpponent = computed(() => (ryuoGame.value ? ryuoSeason.value?.players?.[ryuoGame.value.opponentId] ?? null : null));
+const tournamentStartAt = ref<"select" | "season">("select");
+/** 大会の難易度のおすすめ。6組の相手の平均が、レーティングに近いLvになる難易度。 */
+const ryuoDefaultDifficulty = computed(() => recommendedDifficulty(recommendedStrengthPreset.value.level));
+const tournamentView = ref<{ goBack: () => void } | null>(null);
 /** 直近の対局で変動したレーティング。リロードで復元した終局画面では出さない。 */
 const ratingChange = ref<{ before: number; after: number; delta: number } | null>(null);
 /** 棋力測定の対局か。終局後に自動で棋譜解析を始め、棋力を診断する。 */
@@ -1874,10 +1877,16 @@ const canAnalyzeReviewPosition = computed(() => (
 const cpuColor = computed(() => (normalizedMode.value === "cpu" ? reverseColor(humanColor.value) : null));
 const cpuStrengthPreset = computed(() => strengthPresetFor(searchNodes.value));
 const cpuDisplayName = computed(() => {
+  // 大会では、対戦相手の棋士の名前と段位を出す。
+  if (matchKind.value === "tournament" && ryuoOpponent.value) {
+    return `${ryuoOpponent.value.name} ${ryuoOpponent.value.dan} Lv.${ryuoOpponent.value.level}`;
+  }
   const name = props.cpuPlayerName.trim() || "CPU";
   return cpuStrengthPreset.value ? `${name} Lv.${cpuStrengthPreset.value.level}` : name;
 });
-const cpuStrengthLabel = computed(() => cpuStrengthPreset.value?.label ?? "");
+const cpuStrengthLabel = computed(() => (
+  matchKind.value === "tournament" && ryuoOpponent.value ? "" : cpuStrengthPreset.value?.label ?? ""
+));
 const effectiveBlackPlayerName = computed(() =>
   cpuColor.value === Color.BLACK ? cpuDisplayName.value : props.blackPlayerName,
 );
@@ -3048,77 +3057,127 @@ function onPregamePick(key: string, value: PickerValue) {
   if ((pregamePickerConfig.value?.sections.length ?? 0) <= 1) pregamePicker.value = "";
 }
 
-/** 大会を始める。1局目から、設定した相手と指す。 */
-function beginTournament(settings: { id: string; total: number; baseLevel: number }) {
-  tournamentRun.value = createTournamentRun(settings);
-  startTournamentRound();
-}
-
-/** 大会の画面で「大会に挑戦する」を押したとき。対局設定を通さずに、1局目を始める。 */
-function startTournamentFromScreen(settings: { id: string; total: number; baseLevel: number }) {
-  confirmDiscardSuspended(() => {
-    tournamentOpen.value = false;
-    openPregame();
-    matchKind.value = "tournament";
-    homeOpen.value = false;
-    void initializeEngine();
-    beginTournament(settings);
+/** 大会の画面で「大会に参加する」を押したとき。新しい期を始める(進行中の期は破棄する)。 */
+function enterRyuoSeason(settings: {
+  difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number;
+}) {
+  const career = ryuoCareer.value;
+  const entry = nextEntry(career);
+  const season = createSeason({
+    ...entry,
+    settings,
+    userLevel: recommendedStrengthPreset.value.level,
+    career,
   });
+  ryuoSeason.value = season;
+  saveSeason(browserStorage(), season);
+  const { difficulty: _difficulty, ...saved } = settings;
+  void _difficulty;
+  ryuoCareer.value = { ...career, settings: saved };
+  saveCareer(browserStorage(), ryuoCareer.value);
+  finalizeRyuoSeason();
 }
 
-/** 大会の対局から離れて、大会の画面へ戻る。 */
-function leaveToTournamentScreen() {
-  leaveFinishedMatch();
-  if (props.showHome) tournamentOpen.value = true;
+/** 終わった期を、キャリア(組・竜王の期数)と、プロフィール(称号)に反映する。1期につき1回だけ。 */
+function finalizeRyuoSeason() {
+  const season = ryuoSeason.value;
+  if (!season || season.phase !== "done" || season.applied) return;
+  const { career, titles } = applySeason(ryuoCareer.value, season);
+  ryuoCareer.value = career;
+  saveCareer(browserStorage(), career);
+  let profile = profileState.value;
+  for (const title of titles) profile = grantTitle(profile, title);
+  profileState.value = profile;
+  saveProfile(browserStorage(), profile);
+  ryuoSeason.value = { ...season, applied: true, result: { ...season.result, titles } };
+  saveSeason(browserStorage(), ryuoSeason.value);
 }
 
-/** 大会の次の1局を始める。手番と相手のレベルは、局ごとに決まっている。 */
-function startTournamentRound() {
-  const run = tournamentRun.value;
-  const round = run ? nextRound(run) : -1;
-  if (!run || round < 0) return;
-  const color = roundColor(round);
+const rawRyuoSeason = () => JSON.parse(JSON.stringify(ryuoSeason.value));
+
+/** 大会の画面で「対局開始」を押したとき。対局設定を通さずに、次の1局を始める。 */
+function startRyuoGame() {
+  confirmDiscardSuspended(startRyuoGameNow);
+}
+function startRyuoGameNow() {
+  const season = ryuoSeason.value;
+  const pending = season?.pending;
+  if (!season || !pending) return;
+  const label = ryuoView.value?.pending?.label ?? "";
+  tournamentOpen.value = false;
+  openPregame();
+  matchKind.value = "tournament";
+  homeOpen.value = false;
+  void initializeEngine();
+  coachLevel.value = ["off", "encourage", "detailed"].includes(season.settings.coachLevel) ? season.settings.coachLevel : "detailed";
+  ryuoGame.value = { opponentId: pending.opponentId, label };
+  startRyuoMatch();
+}
+
+/** 保留中の大会の対局を始める。相手の棋力・得意戦法・囲いと、手番(振り駒)は、シーズンが決めている。 */
+function startRyuoMatch() {
+  const season = ryuoSeason.value;
+  const pending = season?.pending;
+  const opponent = pending ? season.players[pending.opponentId] : null;
+  if (!pending || !opponent) return;
   matchInitialSfen.value = props.initialSfen;
-  selectedPlayerColor.value = color;
-  activePlayerColor.value = color;
+  selectedPlayerColor.value = pending.color;
+  activePlayerColor.value = pending.color;
   learningStartLabel.value = "";
   attackGuideEnabled.value = false;
   selectedStrategy.value = "";
   selectedCastle.value = "";
-  searchNodes.value = CPU_STRENGTH_PRESETS.find(({ level }) => level === run.levels[round])?.value ?? DEFAULT_STRENGTH_VALUE;
+  searchNodes.value = CPU_STRENGTH_PRESETS.find(({ level }) => level === opponent.level)?.value ?? DEFAULT_STRENGTH_VALUE;
   cpuStrategy.value = "random";
-  cpuStrategyDetailsOpen.value = false;
   cpuFirstMove.value = "random";
   cpuBishopPreference.value = "";
   cpuRookPreference.value = "";
   cpuTempoPreference.value = "";
+  // 得意戦法と囲いは、詳細の指定として渡す(囲いと一体の戦法は、囲いが空)。
+  cpuStrategyDetailsOpen.value = Boolean(opponent.style);
+  if (opponent.style) {
+    cpuDetailedStrategy.value = opponent.style.strategy;
+    cpuDetailedCastle.value = opponent.style.castle;
+  }
+  ryuoGame.value = { ...(ryuoGame.value ?? { opponentId: opponent.id, label: "" }), outcome: undefined, replay: false };
   matchStarted.value = true;
   pregameOpen.value = false;
   scheduleDeferredCoachPortraitPreload();
   restart();
 }
 
-/** 終局を大会の記録に加える。全局が終わったら判定し、称号とプロフィールの履歴を残す。 */
-function recordTournamentOutcome(matchResult: MatchResult) {
-  const run = tournamentRun.value;
-  if (!run || nextRound(run) < 0) return;
-  const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";
-  const next = recordTournamentGame(run, { outcome });
-  tournamentRun.value = next;
-  const verdict = examVerdict(next);
-  if (!verdict) return;
-  let profile = recordTournamentResult(profileState.value, {
-    id: next.id, label: tournamentById(next.id)?.label ?? "", passed: verdict.passed, record: verdict.record, grade: verdict.grade,
-  });
-  if (verdict.title) profile = grantTitle(profile, verdict.title);
-  profileState.value = profile;
-  saveProfile(browserStorage(), profile);
+/** 終局を大会に記録する。勝敗は、トーナメント表を進める。千日手(引き分け)は、先後を入れ替えて指し直す。 */
+function recordRyuoOutcome(matchResult: MatchResult) {
+  const game = ryuoGame.value;
+  const season = ryuoSeason.value;
+  if (!game || !season?.pending) return;
+  if (!matchResult.winner) {
+    const next = rawRyuoSeason();
+    next.pending.color = next.pending.color === "black" ? "white" : "black";
+    ryuoSeason.value = next;
+    saveSeason(browserStorage(), next);
+    ryuoGame.value = { ...game, replay: true };
+    return;
+  }
+  const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
+  ryuoSeason.value = recordUserGame(rawRyuoSeason(), outcome);
+  saveSeason(browserStorage(), ryuoSeason.value);
+  ryuoGame.value = { ...game, outcome, replay: false };
+  finalizeRyuoSeason();
 }
 
-/** 大会を終えて、プロフィールを見る。 */
-function openProfileAfterTournament() {
+/** 大会の対局から離れて、トーナメント表(大会の画面)へ戻る。 */
+function leaveToTournamentScreen() {
   leaveFinishedMatch();
-  if (props.showHome) yakobiNoteOpen.value = true;
+  if (props.showHome) {
+    tournamentStartAt.value = "season";
+    tournamentOpen.value = true;
+  }
+}
+
+/** 千日手の指し直し。先後を入れ替えて、同じ相手と指す。 */
+function replayRyuoGame() {
+  startRyuoMatch();
 }
 
 function beginMatch() {
@@ -3220,6 +3279,7 @@ function openMatchSetup(kind: MatchKind) {
 
 /** タイトル画面の「大会」。大会の画面を開く。 */
 function openTournamentScreen() {
+  tournamentStartAt.value = "select";
   tournamentOpen.value = true;
 }
 
@@ -3402,7 +3462,9 @@ function navigateBack() {
   if (discardSuspendedPending.value) {
     discardSuspendedPending.value = null;
   } else if (tournamentOpen.value) {
-    tournamentOpen.value = false;
+    // 大会の画面は、中の画面(説明・トーナメント表)から、大会の選択へ、そして閉じる、の順に戻る。
+    if (tournamentView.value) tournamentView.value.goBack();
+    else tournamentOpen.value = false;
   } else if (yakobiNoteOpen.value) {
     yakobiNoteOpen.value = false;
   } else if (referenceDexKind.value) {
@@ -3467,7 +3529,7 @@ function openPregame() {
   reviewMode.value = false;
   analysisOpen.value = false;
   discardPersistedMatch();
-  tournamentRun.value = null;
+  ryuoGame.value = null;
   // 大会の対局準備はないので、対局準備を開くときは通常対局へ戻す。
   if (matchKind.value === "tournament") matchKind.value = "normal";
   suspendedMatch.value = null;
@@ -3689,7 +3751,7 @@ function persistMatchState() {
       movementArrows: movementArrowsEnabled.value,
     },
     suspended: suspendedMatch.value !== null,
-    tournament: tournamentRun.value,
+    ryuoGame: ryuoGame.value,
     tutorial: tutorialMatch.value,
     settingsBeforeTutorial: tutorialMatch.value ? settingsBeforeTutorial : null,
     moves: [...moveHistory],
@@ -3728,9 +3790,18 @@ function persistMatchState() {
 }
 
 function restoreLearningSettings(snapshot: { [key: string]: any }) {
-  const restoredTournament = snapshot.matchKind === "tournament" ? sanitizeTournamentRun(snapshot.tournament) : null;
-  matchKind.value = snapshot.matchKind === "learning" ? "learning" : restoredTournament ? "tournament" : "normal";
-  tournamentRun.value = restoredTournament;
+  const savedRyuo = snapshot.ryuoGame;
+  const restoredRyuo: RyuoGame | null = snapshot.matchKind === "tournament" && savedRyuo
+    && typeof savedRyuo.opponentId === "string" && ryuoSeason.value?.players?.[savedRyuo.opponentId]
+    ? {
+      opponentId: savedRyuo.opponentId,
+      label: typeof savedRyuo.label === "string" ? savedRyuo.label : "",
+      outcome: savedRyuo.outcome === "win" || savedRyuo.outcome === "loss" ? savedRyuo.outcome : undefined,
+      replay: savedRyuo.replay === true,
+    }
+    : null;
+  matchKind.value = snapshot.matchKind === "learning" ? "learning" : restoredRyuo ? "tournament" : "normal";
+  ryuoGame.value = restoredRyuo;
   // 保存時の開始局面で棋譜を再生する。不正なSFENは復元全体を取り消す。
   const startSfen = typeof snapshot.startSfen === "string" ? snapshot.startSfen : props.initialSfen;
   createGameRecord(startSfen);
@@ -4900,7 +4971,7 @@ function finish(matchResult: MatchResult) {
   result.value = matchResult;
   resultDialogOpen.value = true;
   recordRatedGame(matchResult);
-  recordTournamentOutcome(matchResult);
+  recordRyuoOutcome(matchResult);
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
   measureMode.value = false;
   measureSession.value = measuring;
@@ -7898,24 +7969,6 @@ queueMicrotask(() => {
 }
 .shogi-game__result--measure { --result-accent: #f1a54c; }
 .shogi-game__tournament-name { margin: 0.2em 0 0.6em; opacity: 0.8; }
-.shogi-game__tournament-games {
-  display: grid;
-  gap: 0.35em;
-  margin: 0 0 0.8em;
-  padding: 0;
-  list-style: none;
-}
-.shogi-game__tournament-games li {
-  display: grid;
-  grid-template-columns: 4.5em 1fr 2em;
-  gap: 0.6em;
-  align-items: center;
-  padding: 0.3em 0.6em;
-  border: 1px solid rgba(255, 252, 244, 0.25);
-  border-radius: 0.3em;
-  text-align: left;
-}
-.shogi-game__tournament-games strong { text-align: center; color: var(--amber); }
 .shogi-game__tournament-title { margin: 0 0 0.8em; font-weight: 700; }
 .shogi-game__measure-rating { margin: 0.4em 0 0; }
 .shogi-game__measure-rating strong { font-size: 2.6em; }

@@ -29,15 +29,29 @@
             <span class="shogi-note__stat">{{ title.detail }}{{ title.at ? `（${new Date(title.at).toLocaleDateString("ja-JP")}）` : "" }}</span>
           </li>
         </ul>
-        <template v-if="profile.history.length">
-          <h3 class="shogi-note__subhead">大会の成績</h3>
-          <ul class="shogi-note__rows">
-            <li v-for="entry in history" :key="entry.at">
-              <span class="shogi-note__name">{{ entry.label }}</span>
-              <span class="shogi-note__stat">{{ entry.passed ? `合格（${entry.grade ?? ""}）` : "不合格" }}・{{ entry.record }}</span>
+      </section>
+
+      <section class="shogi-note__card" aria-labelledby="shogi-note-ryuo" data-note-ryuo>
+        <h2 id="shogi-note-ryuo">竜王戦</h2>
+        <p class="shogi-note__affiliation">
+          <span>現在</span>
+          <strong>{{ career.champion ? "竜王" : `竜王戦${career.group}組` }}</strong>
+        </p>
+        <ul class="shogi-note__rows">
+          <li><span class="shogi-note__name">参加</span><span class="shogi-note__stat">{{ career.seasons }}期（挑戦者 {{ career.challenges }}回）</span></li>
+          <li><span class="shogi-note__name">竜王</span><span class="shogi-note__stat">通算{{ career.titles }}期（連続{{ career.streak }}期・最長{{ career.bestStreak }}期）</span></li>
+          <li v-if="career.eternal"><span class="shogi-note__name">称号</span><span class="shogi-note__stat">永世竜王</span></li>
+        </ul>
+        <template v-if="career.history.length">
+          <h3 class="shogi-note__subhead">これまでの成績</h3>
+          <ul class="shogi-note__rows" data-note-ryuo-history>
+            <li v-for="entry in recentHistory" :key="entry.no">
+              <span class="shogi-note__name">第{{ entry.no }}期（{{ entry.mode === "defense" ? "防衛戦" : `${entry.startGroup}組` }}）</span>
+              <span class="shogi-note__stat">{{ outcomeText(entry.outcome) }}{{ entry.promoted ? `・${entry.newGroup}組へ昇級` : "" }}{{ entry.relegated ? `・${entry.newGroup}組へ降級` : "" }}（{{ entry.wins }}勝{{ entry.losses }}敗）</span>
             </li>
           </ul>
         </template>
+        <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
       </section>
 
       <section class="shogi-note__card" aria-labelledby="shogi-note-rating">
@@ -148,6 +162,7 @@ import {
 } from "./core/player-rating.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
 import { currentAffiliation } from "./core/player-profile.mjs";
+import { outcomeText } from "./core/ryuo-career.mjs";
 
 type Tally = { wins: number; losses: number; draws: number };
 type RatingState = {
@@ -167,14 +182,22 @@ type RatingState = {
 
 type ProfileState = {
   titles: { id: string; label: string; detail: string; rank: number; at: number }[];
-  history: { id: string; label: string; passed: boolean; record: string; grade: string | null; at: number }[];
+};
+type RyuoCareer = {
+  group: number; seasons: number; champion: boolean; titles: number; streak: number; bestStreak: number;
+  challenges: number; eternal: boolean;
+  history: { no: number; mode: string; startGroup: number; newGroup: number; outcome: string; wins: number; losses: number; promoted: boolean; relegated: boolean }[];
 };
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   backLabel: { type: String, default: "タイトルへ戻る" },
   state: { type: Object as PropType<RatingState>, required: true },
-  profile: { type: Object as PropType<ProfileState>, default: () => ({ titles: [], history: [] }) },
+  profile: { type: Object as PropType<ProfileState>, default: () => ({ titles: [] }) },
+  career: {
+    type: Object as PropType<RyuoCareer>,
+    default: () => ({ group: 6, seasons: 0, champion: false, titles: 0, streak: 0, bestStreak: 0, challenges: 0, eternal: false, history: [] }),
+  },
 });
 const emit = defineEmits(["close", "start-measure", "declare"]);
 
@@ -186,7 +209,7 @@ const measuredDate = computed(() => {
 const affiliation = computed(() => currentAffiliation(props.profile));
 /** 称号は高いものから、大会の成績は新しいものから並べる。 */
 const titles = computed(() => [...props.profile.titles].sort((a, b) => b.rank - a.rank || a.at - b.at));
-const history = computed(() => [...props.profile.history].reverse().slice(0, 8));
+const recentHistory = computed(() => [...props.career.history].reverse().slice(0, 8));
 const grades = declarableGrades();
 const declareLabel = ref("");
 function declare() {

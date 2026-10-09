@@ -41,28 +41,35 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function navigateBack\(\)[\s\S]*?discardSuspendedPending[\s\S]*?suspendConfirmOpen/);
   });
 
-  it("runs a tournament as its own mode from the title screen, with its own result dialog and saved progress", () => {
-    // 大会は、対局設定ではなく、タイトル画面のボタンから入る専用の画面で始める。
+  it("runs the Ryuo tournament as its own mode from the title screen, with saved seasons and its own result dialog", () => {
+    // 大会は、対局設定ではなく、タイトル画面のボタンから入る専用の画面で参加する。
     expect(source).toMatch(/@click="openTournamentScreen"[\s\S]*?<span class="shogi-home__label">大会<\/span>/);
     const kindStart = source.indexOf("const MATCH_KIND_OPTIONS");
     const kindOptions = source.slice(kindStart, source.indexOf("\n];", kindStart));
     expect(kindOptions).toContain("learning");
     expect(kindOptions).not.toContain("tournament");
-    expect(source).toMatch(/<ShogiTournament[\s\S]*?@start="startTournamentFromScreen"/);
+    expect(source).toMatch(/<ShogiTournament[\s\S]*?@enter="enterRyuoSeason"[\s\S]*?@play="startRyuoGame"/);
     // 大会の対局は内部の種類「tournament」で動かし、通常の結果ダイアログとは別に、大会専用の結果を出す。
     expect(source).toContain('type MatchKind = "normal" | "learning" | "tournament";');
-    expect(source).toMatch(/v-if="resultDialogOpen && result && resultPresentation && !tournamentRun"/);
-    expect(source).toMatch(/v-if="resultDialogOpen && result && resultPresentation && tournamentRun"[\s\S]*?data-tournament-result/);
+    expect(source).toMatch(/v-if="resultDialogOpen && result && resultPresentation && !ryuoGame"/);
+    expect(source).toMatch(/v-if="resultDialogOpen && result && resultPresentation && ryuoGame"[\s\S]*?data-tournament-result/);
     // 対局準備を開くときは、通常対局へ戻す(大会の対局準備はない)。
     expect(source).toMatch(/if \(matchKind\.value === "tournament"\) matchKind\.value = "normal";/);
-    // 終局を記録してから保存し、保存と復元に大会の進行を含める。
-    expect(source).toMatch(/recordTournamentOutcome\(matchResult\);[\s\S]*?persistMatchState\(\);/);
-    expect(source).toContain("tournament: tournamentRun.value,");
-    expect(source).toMatch(/sanitizeTournamentRun\(snapshot\.tournament\)/);
-    // 重ねて開く画面なので、ブラウザの戻る操作で閉じられる。中断した対局を消す確認も挟む。
-    expect(source).toMatch(/function navigateBack\(\)[\s\S]*?tournamentOpen\.value = false/);
+    // 終局を記録してから保存し、保存と復元に、いま指している大会の対局を含める。
+    expect(source).toMatch(/recordRyuoOutcome\(matchResult\);[\s\S]*?persistMatchState\(\);/);
+    expect(source).toContain("ryuoGame: ryuoGame.value,");
+    expect(source).toMatch(/const savedRyuo = snapshot\.ryuoGame;/);
+    // 期とキャリアは、1局ごとに別のキーへ保存する。終わった期は、1回だけキャリアと称号に反映する。
+    expect(source).toMatch(/ryuoSeason\.value = recordUserGame\(rawRyuoSeason\(\), outcome\);\s*saveSeason\(/);
+    expect(source).toMatch(/season\.phase !== "done" \|\| season\.applied/);
+    // 千日手は、結果に数えず、先後を入れ替えて指し直す。
+    expect(source).toMatch(/if \(!matchResult\.winner\) \{[\s\S]*?next\.pending\.color = next\.pending\.color === "black" \? "white" : "black";/);
+    // 重ねて開く画面なので、ブラウザの戻る操作で閉じられる(大会の画面の中の戻りを先に行う)。中断した対局を消す確認も挟む。
+    expect(source).toMatch(/function navigateBack\(\)[\s\S]*?tournamentView\.value\.goBack\(\)/);
     expect(source).toMatch(/canGoBack: \(\) =>[^\n]*tournamentOpen\.value/);
-    expect(source).toMatch(/function startTournamentFromScreen[\s\S]*?confirmDiscardSuspended/);
+    expect(source).toMatch(/function startRyuoGame\(\) \{\s*confirmDiscardSuspended\(startRyuoGameNow\);/);
+    // 大会の閃き・待ったの回数は、エントリー設定で決める。
+    expect(source).toMatch(/matchKind\.value === "tournament"\) return assistAllowance\(Number\(ryuoSeason\.value\?\.settings\?\.hintLimit/);
     // 大会の対局は、通常対局のレーティングには数えない。
     expect(source).toMatch(/const rated = matchKind\.value === "normal"/);
   });
