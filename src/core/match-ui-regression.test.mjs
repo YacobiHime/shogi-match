@@ -41,6 +41,23 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function navigateBack\(\)[\s\S]*?discardSuspendedPending[\s\S]*?suspendConfirmOpen/);
   });
 
+  it("runs a tournament as a third match kind with its own result dialog and saved progress", () => {
+    // 大会は対局の種類で、通常の結果ダイアログとは別に、大会専用の結果を出す。
+    expect(source).toContain('type MatchKind = "normal" | "learning" | "tournament";');
+    expect(source).toMatch(/v-if="resultDialogOpen && result && resultPresentation && !tournamentRun"/);
+    expect(source).toMatch(/v-if="resultDialogOpen && result && resultPresentation && tournamentRun"[\s\S]*?data-tournament-result/);
+    // 大会の設定は、対局設定の「項目: 値 [変更]」の行と選択シートで決める。
+    expect(source).toMatch(/id: "tournamentGames", label: "対局数"/);
+    expect(source).toMatch(/if \(id === "tournamentLevel"\)/);
+    expect(source).toMatch(/key === "tournamentGames"\) tournamentGames\.value = Number\(value\)/);
+    // 終局を記録してから保存し、保存と復元に大会の進行を含める。
+    expect(source).toMatch(/recordTournamentOutcome\(matchResult\);[\s\S]*?persistMatchState\(\);/);
+    expect(source).toContain("tournament: tournamentRun.value,");
+    expect(source).toMatch(/sanitizeTournamentRun\(snapshot\.tournament\)/);
+    // 大会の対局は、通常対局のレーティングには数えない。
+    expect(source).toMatch(/const rated = matchKind\.value === "normal"/);
+  });
+
   it("asks before resigning from the toolbar and the menu", () => {
     expect(source.match(/reviewMode \? completeReview\(\) : requestResign\(\)/g)).toHaveLength(2);
     expect(source).not.toMatch(/reviewMode \? completeReview\(\) : resign\(\)/);

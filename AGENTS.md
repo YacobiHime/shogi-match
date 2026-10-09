@@ -21,6 +21,7 @@
 | CPUの戦法の選び方 | `src/core/cpu-opening-repertoire.mjs` |
 | 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue` |
 | リロード復元 | `src/core/match-persistence.mjs` |
+| 大会（研修会入会試験など）・称号・プロフィール | `src/core/tournament.mjs`（進行と判定）、`src/core/player-profile.mjs`（称号と成績の保存）、`src/ShogiMatchGame.vue`の`tournamentRun`、設計は`docs/tournament-design.md` |
 | 将棋教室 | `src/ShogiTutorial.vue`、`src/core/tutorial-curriculum.mjs`、設計は`docs/nyumon-mode-design.md` |
 | 将棋問題集 | `src/ShogiProblemSet.vue`、問題とやこび姫の台詞は`src/core/problem-set.mjs`、練習問題の正誤判定の詰み探索は`src/core/problem-solver.ts`（正解は書かず探索で決める）、詰将棋（駒の少ない詰将棋と実戦詰将棋）と詰将棋図巧のデータは`src/data/tsume-problems.mjs`・`src/data/jissen-tsume-problems.mjs`・`src/data/zukou-problems.mjs`（外部データの手順で判定する。手で書き換えない） |
 | 図鑑 | `src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、「詰将棋の名作」で解ける『将棋図巧』は将棋問題集の`ZUKOU_SET`と判定を使う、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`ShogiMatchGame.vue`の`dexAnalysisEngine`を借りる） |

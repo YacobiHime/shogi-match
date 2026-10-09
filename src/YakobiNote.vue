@@ -13,6 +13,33 @@
         <p>{{ message }}</p>
       </div>
 
+      <section class="shogi-note__card" aria-labelledby="shogi-note-profile" data-note-profile>
+        <h2 id="shogi-note-profile">プロフィール</h2>
+        <p class="shogi-note__affiliation">
+          <span>所属</span>
+          <strong>{{ affiliation ? affiliation.label : "まだ所属なし" }}</strong>
+        </p>
+        <h3 class="shogi-note__subhead">称号</h3>
+        <p v-if="!profile.titles.length" class="shogi-note__hint">
+          まだ称号がありません。対局設定の「大会」に挑戦して、称号を手に入れよう！
+        </p>
+        <ul v-else class="shogi-note__rows">
+          <li v-for="title in titles" :key="title.id" data-note-title>
+            <span class="shogi-note__name">{{ title.label }}</span>
+            <span class="shogi-note__stat">{{ title.detail }}{{ title.at ? `（${new Date(title.at).toLocaleDateString("ja-JP")}）` : "" }}</span>
+          </li>
+        </ul>
+        <template v-if="profile.history.length">
+          <h3 class="shogi-note__subhead">大会の成績</h3>
+          <ul class="shogi-note__rows">
+            <li v-for="entry in history" :key="entry.at">
+              <span class="shogi-note__name">{{ entry.label }}</span>
+              <span class="shogi-note__stat">{{ entry.passed ? `合格（${entry.grade ?? ""}）` : "不合格" }}・{{ entry.record }}</span>
+            </li>
+          </ul>
+        </template>
+      </section>
+
       <section class="shogi-note__card" aria-labelledby="shogi-note-rating">
         <h2 id="shogi-note-rating">レーティング</h2>
         <p class="shogi-note__rating">
@@ -120,6 +147,7 @@ import {
   usageRows,
 } from "./core/player-rating.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
+import { currentAffiliation } from "./core/player-profile.mjs";
 
 type Tally = { wins: number; losses: number; draws: number };
 type RatingState = {
@@ -137,10 +165,16 @@ type RatingState = {
   history: { rating: number }[];
 };
 
+type ProfileState = {
+  titles: { id: string; label: string; detail: string; rank: number; at: number }[];
+  history: { id: string; label: string; passed: boolean; record: string; grade: string | null; at: number }[];
+};
+
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   backLabel: { type: String, default: "タイトルへ戻る" },
   state: { type: Object as PropType<RatingState>, required: true },
+  profile: { type: Object as PropType<ProfileState>, default: () => ({ titles: [], history: [] }) },
 });
 const emit = defineEmits(["close", "start-measure", "declare"]);
 
@@ -149,6 +183,10 @@ const measuredDate = computed(() => {
   const at = props.state.measured?.at;
   return at ? new Date(at).toLocaleDateString("ja-JP") : "";
 });
+const affiliation = computed(() => currentAffiliation(props.profile));
+/** 称号は高いものから、大会の成績は新しいものから並べる。 */
+const titles = computed(() => [...props.profile.titles].sort((a, b) => b.rank - a.rank || a.at - b.at));
+const history = computed(() => [...props.profile.history].reverse().slice(0, 8));
 const grades = declarableGrades();
 const declareLabel = ref("");
 function declare() {
@@ -270,6 +308,19 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   color: #f1a54c;
   font-size: 1em;
   letter-spacing: 0.1em;
+}
+.shogi-game .shogi-note__affiliation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.8rem;
+  margin: 0;
+}
+.shogi-game .shogi-note__affiliation strong { font-size: 1.4em; }
+.shogi-game .shogi-note__subhead {
+  margin: 0.8rem 0 0.4rem;
+  color: rgba(255, 252, 244, 0.8);
+  font-size: 0.9em;
 }
 .shogi-game .shogi-note__rating {
   display: flex;

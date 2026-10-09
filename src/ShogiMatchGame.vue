@@ -263,6 +263,7 @@
       :asset-base-url="assetBaseUrl"
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
       :state="ratingState"
+      :profile="profileState"
       @close="yakobiNoteOpen = false"
       @start-measure="startMeasureMatch"
       @declare="declareGrade"
@@ -303,6 +304,27 @@
             {{ formatNodeCount(Math.floor(cpuSearchGauge.nodes)) }}／{{ formatNodeCount(cpuSearchGauge.target) }}
           </small>
         </div>
+        <div
+          v-if="measureAnalyzing"
+          class="shogi-game__think"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="measureProgressPercent"
+          aria-label="棋力の測定の進み具合"
+          data-measuring
+        >
+          <div class="shogi-game__think-track">
+            <div
+              class="shogi-game__think-fill"
+              :class="{ 'shogi-game__think-fill--busy': !analysisRunning }"
+              :style="analysisRunning ? { width: `${measureProgressPercent}%` } : undefined"
+            />
+          </div>
+          <small class="shogi-game__think-count">
+            {{ analysisRunning ? `${ANALYSIS_STAGE_LABELS[analysisStage as keyof typeof ANALYSIS_STAGE_LABELS] ?? "解析"} ${analysisProgress}/${analysisTotal}` : "準備中" }}
+          </small>
+        </div>
         <span>{{ moveCount }}手目</span>
       </div>
       <div
@@ -311,6 +333,7 @@
       >
         <template v-if="!menuCollapsed">
           <button
+            v-if="!(reviewMode && measureAnalyzing)"
             type="button"
             class="shogi-game__command"
             :class="reviewMode ? 'shogi-game__command--complete' : 'shogi-game__command--danger'"
@@ -345,6 +368,7 @@
       <div v-if="settingsOpen" class="shogi-game__menu" role="menu" @keydown.esc="closeSettings">
         <template v-if="menuCollapsed">
           <button
+            v-if="!(reviewMode && measureAnalyzing)"
             type="button"
             role="menuitem"
             class="shogi-game__menu-item"
@@ -431,7 +455,7 @@
           </div>
 
           <section
-            v-for="side in pregameSides"
+            v-for="side in pregameVisibleSides"
             :key="side.color"
             class="shogi-game__pregame-section shogi-game__pregame-side"
             :aria-label="side.label"
@@ -528,6 +552,9 @@
               :class="{ 'shogi-game__pregame-message--error': learningStartBlocked }"
               role="status"
             >{{ learningFormationMessage }}</p>
+            <p v-if="matchKind === 'tournament'" class="shogi-game__pregame-message" data-tournament-summary>
+              {{ tournamentSummary }}
+            </p>
             <p v-if="ratingRecommendation" class="shogi-game__pregame-message" data-rating-recommendation>
               あなたのレーティング: R{{ ratingState.rating }}（{{ nearestRatingLabel }}・{{ ratingState.games }}局）。
               おすすめの強さ: Lv.{{ recommendedStrengthPreset.level }} {{ recommendedStrengthPreset.label }}
@@ -742,10 +769,9 @@
       </div>
     </section>
 
-    <!-- 棋譜解析中は、閃きを解析パネルの操作列へ移す。 -->
-    <div v-if="!(reviewMode && analysisOpen && !reviewCpuEnabled)" class="shogi-game__assist-actions">
+    <!-- 棋譜解析中も、閃きと読みは、やこび姫のコメントの下の操作列に置く(通常時の閃き・待ったと同じ場所)。 -->
+    <div class="shogi-game__assist-actions">
       <button
-        v-if="!(reviewMode && analysisOpen)"
         type="button"
         class="shogi-game__awakening"
         :disabled="!canUseHint"
@@ -753,10 +779,23 @@
       >
         閃き <small>×{{ reviewMode ? "∞" : formatAssistCount(hintsRemaining) }}</small>
       </button>
+      <button
+        v-if="reviewMode && analysisOpen"
+        type="button"
+        :disabled="!analysisCurrentPoint?.pv?.length && !canAnalyzeReviewPosition"
+        @click="showAnalysisLine"
+      >読み</button>
+      <button
+        v-if="reviewMode && analysisOpen"
+        type="button"
+        :disabled="!canPlaceReviewLine"
+        @click="placeReviewLine"
+      >読み筋を<wbr>並べる</button>
       <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
         待った <small>×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}</small>
       </button>
       <button
+        v-if="!(reviewMode && analysisOpen && !reviewCpuEnabled)"
         type="button"
         class="shogi-game__assist-toggle shogi-game__command--flip"
         aria-label="盤面を上下反転（ひふみんアイ）"
@@ -902,9 +941,6 @@
           <button type="button" aria-label="最終局面へ" :disabled="reviewCpuEnabled || reviewNavigation.cursor >= reviewNavigation.line.length" @click="goToAnalysisPly(reviewNavigation.line.length)">⏭</button>
         </div>
         <div class="shogi-game__analysis-tools">
-          <button type="button" class="shogi-game__analysis-awakening" :disabled="!canUseHint" @click="showHint">閃き</button>
-          <button type="button" :disabled="!analysisCurrentPoint?.pv?.length && !canAnalyzeReviewPosition" @click="showAnalysisLine">読み</button>
-          <button type="button" :disabled="!canPlaceReviewLine" @click="placeReviewLine">読み筋を並べる</button>
           <button
             type="button"
             class="shogi-game__analysis-more"
@@ -1016,7 +1052,7 @@
     </div>
 
     <div
-      v-if="resultDialogOpen && result && resultPresentation"
+      v-if="resultDialogOpen && result && resultPresentation && !tournamentRun"
       class="shogi-game__result"
       :class="`shogi-game__result--${resultPresentation.tone}`"
       role="dialog"
@@ -1073,6 +1109,50 @@
         </label>
       </div>
     </div>
+    <div
+      v-if="resultDialogOpen && result && resultPresentation && tournamentRun"
+      class="shogi-game__result"
+      :class="`shogi-game__result--${tournamentVerdict ? (tournamentVerdict.passed ? 'victory' : 'defeat') : resultPresentation.tone}`"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tournament-result-title"
+      data-tournament-result
+    >
+      <div v-if="tournamentVerdict?.passed" class="shogi-game__confetti" aria-hidden="true">
+        <i v-for="index in 12" :key="index" />
+      </div>
+      <div class="shogi-game__result-panel">
+        <h2 id="tournament-result-title">
+          {{ tournamentVerdict ? (tournamentVerdict.passed ? "合格！" : "不合格") : `第${tournamentRun.results.length}局 ${resultPresentation.title}` }}
+        </h2>
+        <p class="shogi-game__tournament-name">{{ tournamentById(tournamentRun.id)?.label }}</p>
+        <ol class="shogi-game__tournament-games">
+          <li v-for="(level, index) in tournamentRun.levels" :key="index">
+            <span>第{{ index + 1 }}局</span>
+            <span>{{ roundColor(index) === "black" ? "先手" : "後手" }}・相手Lv.{{ level }}</span>
+            <strong>{{ { win: "○", loss: "●", draw: "△" }[tournamentRun.results[index]?.outcome ?? ""] ?? "—" }}</strong>
+          </li>
+        </ol>
+        <template v-if="tournamentVerdict">
+          <p v-if="tournamentVerdict.passed" class="shogi-game__tournament-title" data-tournament-title>
+            {{ tournamentVerdict.title?.label }}を獲得！（{{ tournamentVerdict.record }}）
+          </p>
+          <p v-else class="shogi-game__tournament-title">{{ tournamentVerdict.record }}で、合格に届きませんでした。もう一度挑戦してみよう！</p>
+        </template>
+        <div class="shogi-game__result-actions">
+          <template v-if="tournamentVerdict">
+            <button type="button" class="shogi-game__rematch" @click="openProfileAfterTournament">プロフィールを見る</button>
+            <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
+            <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
+          </template>
+          <template v-else>
+            <button type="button" class="shogi-game__rematch" @click="startTournamentRound">次の対局へ</button>
+            <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch">大会をやめる</button>
+          </template>
+        </div>
+      </div>
+    </div>
+
     <div
       v-if="measureReportOpen && skillDiagnosis"
       class="shogi-game__result shogi-game__result--measure"
@@ -1167,6 +1247,23 @@ import {
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
+import {
+  TOURNAMENTS,
+  createTournamentRun,
+  examPassLine,
+  examVerdict,
+  nextRound,
+  recordTournamentGame,
+  roundColor,
+  sanitizeTournamentRun,
+  tournamentById,
+} from "./core/tournament.mjs";
+import {
+  grantTitle,
+  loadProfile,
+  recordTournamentResult,
+  saveProfile,
+} from "./core/player-profile.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -1254,6 +1351,7 @@ import {
 import {
   CPU_STRENGTH_PRESETS,
   getStrengthSearchSettings,
+  DEFAULT_STRENGTH_VALUE,
   normalizeStrengthValue,
   strengthPresetFor,
   usesNaturalMoveOnly,
@@ -1375,7 +1473,7 @@ const props = defineProps({
 const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error"]);
 
 // 学習対局では駒落ちや戦型完成局面から始めるため、実際の開始局面を別に持つ。
-type MatchKind = "normal" | "learning";
+type MatchKind = "normal" | "learning" | "tournament";
 type LearningStartType = "standard" | "handicap" | "formation";
 const matchKind = ref<MatchKind>("normal");
 const matchInitialSfen = ref(props.initialSfen);
@@ -1444,12 +1542,25 @@ const result = ref<MatchResult | null>(null);
 const resultDialogOpen = ref(false);
 // 通常対局(平手・対CPU)の結果で更新するプレイヤーのレーティング。
 const ratingState = ref(loadRatingState(browserStorage()));
+// プレイヤーのプロフィール(大会で得た称号と成績)。
+const profileState = ref(loadProfile(browserStorage()));
+// 大会の設定と、進行中の大会。
+const tournamentId = ref(TOURNAMENTS[0].id);
+const tournamentGames = ref(TOURNAMENTS[0].defaultGames);
+const tournamentBaseLevel = ref(TOURNAMENTS[0].defaultLevel);
+const tournamentRun = ref<ReturnType<typeof createTournamentRun> | null>(null);
+const tournamentVerdict = computed(() => (tournamentRun.value ? examVerdict(tournamentRun.value) : null));
 /** 直近の対局で変動したレーティング。リロードで復元した終局画面では出さない。 */
 const ratingChange = ref<{ before: number; after: number; delta: number } | null>(null);
 /** 棋力測定の対局か。終局後に自動で棋譜解析を始め、棋力を診断する。 */
 const measureMode = ref(false);
 /** 棋力測定の結果の表示中(測定対局の終局から、対局準備・ホームへ戻るまで)。 */
 const measureSession = ref(false);
+/** 棋力測定の解析中。完了ボタンを隠し、「測定中」を表示する。 */
+const measureAnalyzing = ref(false);
+const measureProgressPercent = computed(() => (
+  analysisTotal.value ? Math.round((analysisProgress.value / analysisTotal.value) * 100) : 0
+));
 const measureReportDismissed = ref(false);
 /** レーティングに近いLvの段級位の表示名。 */
 const nearestRatingLabel = computed(() => recommendedStrengthPreset.value.label);
@@ -1833,6 +1944,7 @@ const statusText = computed(() => {
   if (reviewMode.value && reviewCpuEnabled.value) {
     return thinking.value ? `${props.cpuPlayerName}が考えています…` : "対CPU検討中です";
   }
+  if (reviewMode.value && measureAnalyzing.value) return "棋力を測定中です…";
   if (reviewMode.value) return "棋譜解析中です";
   if (result.value) {
     if (!result.value.winner) return "引き分け";
@@ -2584,6 +2696,7 @@ const learningOpponentPlanOptions = computed(() => learningPlanOptions(
 const MATCH_KIND_OPTIONS = [
   { value: "normal" as const, label: "通常対局", description: "平手でいつもどおり対局" },
   { value: "learning" as const, label: "学習対局", description: "開始局面や補助を自由に設定" },
+  { value: "tournament" as const, label: "大会", description: "試験や大会に挑戦して、称号を目指す" },
 ];
 const LEARNING_PLAN_SIDES = [
   { id: "player" as const, label: "自分" },
@@ -2806,8 +2919,39 @@ const ratingRecommendation = computed(() => (
   matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value
 ));
 
+// 大会では、先手・後手の欄(CPUの強さや作戦)は出さず、大会の設定の行で決める。
+const pregameVisibleSides = computed(() => (matchKind.value === "tournament" ? [] : pregameSides.value));
+
+const TOURNAMENT_OPTIONS: PregameOption[] = TOURNAMENTS.map(({ id, label }) => ({ value: id, label }));
+const tournamentGameOptions = computed<PregameOption[]>(() => (
+  (tournamentById(tournamentId.value)?.gameOptions ?? []).map((games) => ({
+    value: games, label: games === 1 ? "1局（短縮）" : `${games}局`,
+  }))
+));
+const tournamentLevelOptions: PregameOption[] = CPU_STRENGTH_PRESETS.map((preset) => ({
+  value: preset.level, label: `Lv.${preset.level} ${preset.label}`,
+}));
+/** 大会の説明。選んだ設定での各局の相手と、合格の条件を示す。 */
+const tournamentSummary = computed(() => {
+  const definition = tournamentById(tournamentId.value);
+  if (!definition) return "";
+  const run = createTournamentRun({ id: definition.id, total: tournamentGames.value, baseLevel: tournamentBaseLevel.value });
+  const opponents = run.levels.map((level) => `Lv.${level}`).join("→");
+  const sweep = run.total >= 3 ? "全勝するとF1クラスで入会できます。" : "";
+  return `${definition.description} 先手と後手を入れ替えて${run.total}局指します（相手は${opponents}）。`
+    + `${examPassLine(run.total)}勝以上で合格し、研修会F2クラスで入会します。${sweep}`
+    + "これはこのゲームの簡易版で、実際の試験の規定ではありません。";
+});
+
 const pregameCommonRows = computed(() => {
   const rows: { id: string; label: string; value: string }[] = [];
+  if (matchKind.value === "tournament") {
+    rows.push(
+      { id: "tournament", label: "大会", value: optionLabel(TOURNAMENT_OPTIONS, tournamentId.value) },
+      { id: "tournamentGames", label: "対局数", value: optionLabel(tournamentGameOptions.value, tournamentGames.value) },
+      { id: "tournamentLevel", label: "相手の強さ", value: optionLabel(tournamentLevelOptions, tournamentBaseLevel.value) },
+    );
+  }
   if (matchKind.value === "learning") {
     if (pregameUsesHandicap.value) {
       rows.push({ id: "handicap", label: "手合割", value: optionLabel(handicapOptions, learningHandicapId.value) });
@@ -2874,6 +3018,13 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
       ],
     };
   }
+  if (id === "tournament") return single("大会", tournamentId.value, [{ options: TOURNAMENT_OPTIONS }]);
+  if (id === "tournamentGames") {
+    return single("対局数", tournamentGames.value, [{ options: tournamentGameOptions.value }], "少ない対局数で短縮できます。1局だけのときは、F1クラスは出ません。");
+  }
+  if (id === "tournamentLevel") {
+    return single("相手の強さ", tournamentBaseLevel.value, [{ options: tournamentLevelOptions }], "基準のレベルです。局が進むほど、基準より少しずつ強い相手になります。");
+  }
   if (id === "handicap") return single("手合割", learningHandicapId.value, [{ options: handicapOptions }]);
   if (id === "hintLimit") return single("閃きの回数", learningHintLimit.value, [{ options: assistLimitOptions }]);
   if (id === "undoLimit") return single("待ったの回数", learningUndoLimit.value, [{ options: assistLimitOptions }]);
@@ -2905,6 +3056,9 @@ function onPregamePick(key: string, value: PickerValue) {
   else if (key === "bishop") cpuBishopPreference.value = text;
   else if (key === "rook") cpuRookPreference.value = text;
   else if (key === "tempo") cpuTempoPreference.value = text;
+  else if (key === "tournament") tournamentId.value = text;
+  else if (key === "tournamentGames") tournamentGames.value = Number(value);
+  else if (key === "tournamentLevel") tournamentBaseLevel.value = Number(value);
   else if (key === "handicap") learningHandicapId.value = text;
   else if (key === "hintLimit") learningHintLimit.value = Number(value);
   else if (key === "undoLimit") learningUndoLimit.value = Number(value);
@@ -2917,7 +3071,68 @@ function onPregamePick(key: string, value: PickerValue) {
   if ((pregamePickerConfig.value?.sections.length ?? 0) <= 1) pregamePicker.value = "";
 }
 
+/** 大会を始める。1局目から、設定した相手と指す。 */
+function beginTournament() {
+  tournamentRun.value = createTournamentRun({
+    id: tournamentId.value, total: tournamentGames.value, baseLevel: tournamentBaseLevel.value,
+  });
+  startTournamentRound();
+}
+
+/** 大会の次の1局を始める。手番と相手のレベルは、局ごとに決まっている。 */
+function startTournamentRound() {
+  const run = tournamentRun.value;
+  const round = run ? nextRound(run) : -1;
+  if (!run || round < 0) return;
+  const color = roundColor(round);
+  matchInitialSfen.value = props.initialSfen;
+  selectedPlayerColor.value = color;
+  activePlayerColor.value = color;
+  learningStartLabel.value = "";
+  attackGuideEnabled.value = false;
+  selectedStrategy.value = "";
+  selectedCastle.value = "";
+  searchNodes.value = CPU_STRENGTH_PRESETS.find(({ level }) => level === run.levels[round])?.value ?? DEFAULT_STRENGTH_VALUE;
+  cpuStrategy.value = "random";
+  cpuStrategyDetailsOpen.value = false;
+  cpuFirstMove.value = "random";
+  cpuBishopPreference.value = "";
+  cpuRookPreference.value = "";
+  cpuTempoPreference.value = "";
+  matchStarted.value = true;
+  pregameOpen.value = false;
+  scheduleDeferredCoachPortraitPreload();
+  restart();
+}
+
+/** 終局を大会の記録に加える。全局が終わったら判定し、称号とプロフィールの履歴を残す。 */
+function recordTournamentOutcome(matchResult: MatchResult) {
+  const run = tournamentRun.value;
+  if (!run || nextRound(run) < 0) return;
+  const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";
+  const next = recordTournamentGame(run, { outcome });
+  tournamentRun.value = next;
+  const verdict = examVerdict(next);
+  if (!verdict) return;
+  let profile = recordTournamentResult(profileState.value, {
+    id: next.id, label: tournamentById(next.id)?.label ?? "", passed: verdict.passed, record: verdict.record, grade: verdict.grade,
+  });
+  if (verdict.title) profile = grantTitle(profile, verdict.title);
+  profileState.value = profile;
+  saveProfile(browserStorage(), profile);
+}
+
+/** 大会を終えて、プロフィールを見る。 */
+function openProfileAfterTournament() {
+  leaveFinishedMatch();
+  if (props.showHome) yakobiNoteOpen.value = true;
+}
+
 function beginMatch() {
+  if (matchKind.value === "tournament") {
+    beginTournament();
+    return;
+  }
   if (matchKind.value === "learning") {
     const start = learningStartPosition({
       startType: learningStartType.value,
@@ -3256,10 +3471,12 @@ function openPregame() {
   reviewMode.value = false;
   analysisOpen.value = false;
   discardPersistedMatch();
+  tournamentRun.value = null;
   suspendedMatch.value = null;
   suspendConfirmOpen.value = false;
   measureMode.value = false;
   measureSession.value = false;
+  measureAnalyzing.value = false;
   if (settingsBeforeMeasure) restoreMatchSettings(settingsBeforeMeasure);
   settingsBeforeMeasure = null;
   // 教室の対局から離れたら、教室の固定条件を元の設定へ戻す。
@@ -3474,6 +3691,7 @@ function persistMatchState() {
       movementArrows: movementArrowsEnabled.value,
     },
     suspended: suspendedMatch.value !== null,
+    tournament: tournamentRun.value,
     tutorial: tutorialMatch.value,
     settingsBeforeTutorial: tutorialMatch.value ? settingsBeforeTutorial : null,
     moves: [...moveHistory],
@@ -3512,7 +3730,9 @@ function persistMatchState() {
 }
 
 function restoreLearningSettings(snapshot: { [key: string]: any }) {
-  matchKind.value = snapshot.matchKind === "learning" ? "learning" : "normal";
+  const restoredTournament = snapshot.matchKind === "tournament" ? sanitizeTournamentRun(snapshot.tournament) : null;
+  matchKind.value = snapshot.matchKind === "learning" ? "learning" : restoredTournament ? "tournament" : "normal";
+  tournamentRun.value = restoredTournament;
   // 保存時の開始局面で棋譜を再生する。不正なSFENは復元全体を取り消す。
   const startSfen = typeof snapshot.startSfen === "string" ? snapshot.startSfen : props.initialSfen;
   createGameRecord(startSfen);
@@ -4682,6 +4902,7 @@ function finish(matchResult: MatchResult) {
   result.value = matchResult;
   resultDialogOpen.value = true;
   recordRatedGame(matchResult);
+  recordTournamentOutcome(matchResult);
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
   measureMode.value = false;
   measureSession.value = measuring;
@@ -4701,7 +4922,10 @@ function finish(matchResult: MatchResult) {
     }, window.location.origin);
   }
   // 棋力測定の対局は、続けて棋譜解析を始め、解析のあとに棋力を診断する。
-  if (measuring) void startKifuAnalysis();
+  if (measuring) {
+    measureAnalyzing.value = true;
+    void startKifuAnalysis().finally(() => { measureAnalyzing.value = false; });
+  }
 }
 
 function applyMove(usi: string, actor: "player" | "cpu") {
@@ -5024,7 +5248,7 @@ async function showAnalysisLine() {
   try {
     labels = formatPrincipalVariation(line.pv, currentSfen.value, 6);
   } catch { /* 表記できない手はUSIのまま出す */ }
-  hintText.value = `読み筋: ${labels}（「その他」から盤に並べられるよ）`;
+  hintText.value = `読み筋: ${labels}（「読み筋を並べる」で盤に並べられるよ）`;
 }
 
 /** 直前に出した読み筋(読み・投了の理由)を、今の局面から分岐として並べる。▶で1手ずつ進められる。 */
@@ -6914,11 +7138,6 @@ queueMicrotask(() => {
   background: #fff;
   box-shadow: none;
 }
-.shogi-game .shogi-game__analysis-actions .shogi-game__analysis-awakening:not(:disabled) {
-  border-color: var(--amber);
-  background: #fff3df;
-  font-weight: 700;
-}
 .shogi-game .shogi-game__analysis-actions button:disabled {
   border-color: #bbb;
   color: #aaa;
@@ -7680,6 +7899,26 @@ queueMicrotask(() => {
   animation: result-backdrop-in 360ms ease-out both;
 }
 .shogi-game__result--measure { --result-accent: #f1a54c; }
+.shogi-game__tournament-name { margin: 0.2em 0 0.6em; opacity: 0.8; }
+.shogi-game__tournament-games {
+  display: grid;
+  gap: 0.35em;
+  margin: 0 0 0.8em;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game__tournament-games li {
+  display: grid;
+  grid-template-columns: 4.5em 1fr 2em;
+  gap: 0.6em;
+  align-items: center;
+  padding: 0.3em 0.6em;
+  border: 1px solid rgba(255, 252, 244, 0.25);
+  border-radius: 0.3em;
+  text-align: left;
+}
+.shogi-game__tournament-games strong { text-align: center; color: var(--amber); }
+.shogi-game__tournament-title { margin: 0 0 0.8em; font-weight: 700; }
 .shogi-game__measure-rating { margin: 0.4em 0 0; }
 .shogi-game__measure-rating strong { font-size: 2.6em; }
 .shogi-game__measure-range,
