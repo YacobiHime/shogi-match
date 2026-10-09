@@ -3,6 +3,7 @@
 // 制度の要点(6組のランキング戦→敗者復活→決勝トーナメント→挑戦者決定三番勝負→七番勝負)を、
 // 規模を縮小して再現する簡易版で、実際の規定そのものではない。出典は docs/ryuo-sen-research.md。
 
+import { aggregateSeasonStats } from './ryuo-stats.mjs';
 import {
   GIVEN_NAMES,
   GROUP_DAN_WEIGHTS,
@@ -139,7 +140,7 @@ export function generateGroupField({ group, size, difficulty, rng, used, prefix 
       kind,
       group,
       level: clampLevel(mean + offset + gauss(rng) * spread),
-      style: { id: style.id, label: style.label, strategy: style.strategy, castle: style.castle },
+      style: { id: style.id, label: style.label, strategy: style.strategy, castle: style.castle, rook: style.rook },
     });
   }
   return players;
@@ -413,6 +414,7 @@ export function createSeason({ no, mode, group, settings, userLevel, career, see
   const used = new Set([userName]);
   const season = {
     version: 1,
+    id: seed,
     no,
     mode,
     startGroup: group,
@@ -428,8 +430,12 @@ export function createSeason({ no, mode, group, settings, userLevel, career, see
     playoff: null,
     finals: null,
     champion: null,
+    defender: null,
+    mainEntrants: [],
     pending: null,
     userGames: [],
+    analysis: {},
+    analysisQueue: [],
     result: null,
     rngState: 0,
   };
@@ -439,8 +445,10 @@ export function createSeason({ no, mode, group, settings, userLevel, career, see
   const championLevel = clampLevel(groupMeanLevel(1, settings.difficulty) + 2);
   if (mode === 'defense') {
     season.champion = USER_ID;
+    season.defender = USER_ID;
   } else {
     season.champion = CHAMPION_ID;
+    season.defender = CHAMPION_ID;
     season.players[CHAMPION_ID] = {
       id: CHAMPION_ID, name: newName(rng, used), dan: '竜王', kind: 'pro', group: 1, level: championLevel,
       style: pickStyle(rng),
@@ -462,7 +470,7 @@ export function createSeason({ no, mode, group, settings, userLevel, career, see
 
 function pickStyle(rng) {
   const style = pick(rng, OPPONENT_STYLES);
-  return { id: style.id, label: style.label, strategy: style.strategy, castle: style.castle };
+  return { id: style.id, label: style.label, strategy: style.strategy, castle: style.castle, rook: style.rook };
 }
 
 /**
@@ -499,6 +507,7 @@ function buildMainFor(season, userGroupQualified, rng) {
     qualified.forEach((pid, rank) => entrants.push({ pid, weight: MAIN_WEIGHTS[group][rank] ?? MAIN_WEIGHTS[group].at(-1), group, rank }));
   }
   season.qualified = entrants.map(({ pid }) => pid);
+  season.mainEntrants = entrants.map(({ pid, group, rank }) => ({ pid, group, rank }));
   return buildMainBracket(entrants);
 }
 
@@ -511,11 +520,13 @@ function seriesPendingFor(season, series, kind) {
 
 /** 次のプレイヤーの対局の設定(手番は振り駒)。 */
 function setPending(season, pending, rng) {
+  // 対局の名前(例: 6組ランキング戦 2回戦)。結果の画面で、どこで敗退したかを示すのに使う。
+  const label = pendingLabelFor(season, pending);
   const previous = season.userGames.at(-1);
   const sameSeries = pending.kind !== 'game' && previous && previous.phase === pending.phase && previous.seriesGame;
   // 番勝負は、1局目だけ振り駒で、あとは先後を入れ替える。
   const color = sameSeries ? (previous.color === 'black' ? 'white' : 'black') : (rng.next() < 0.5 ? 'black' : 'white');
-  season.pending = { ...pending, color };
+  season.pending = { ...pending, color, label };
 }
 
 function finishSeason(season) {
@@ -539,7 +550,43 @@ function finishSeason(season) {
   else if (promote) newGroup = Math.max(1, startGroup - 1);
   else if (relegate) newGroup = Math.min(6, startGroup + 1);
   const wins = season.userGames.filter((game) => game.win).length;
+  // どの段階まで進んで、どこで敗退したか。
+  const path = [];
+  const exitText = (bracket, pid, { series = false } = {}) => {
+    const record = bracketRecords(bracket)[pid];
+    if (bracketChampion(bracket) === pid) return '優勝';
+    if (bracketRunnerUp(bracket) === pid) return '準優勝（決勝で敗退）';
+    return record.lostRound !== null ? `${resultRoundLabel(bracket, record.lostRound, { series })}で敗退` : '';
+  };
+  if (season.ranking?.ids.includes(user)) path.push({ stage: 'ranking', label: season.ranking.label, text: exitText(season.ranking, user) });
+  for (const block of season.revival) {
+    if (block.ids.includes(user)) path.push({ stage: 'revival', label: block.label, text: exitText(block, user) });
+  }
+  if (season.main?.ids.includes(user)) {
+    const record = bracketRecords(season.main)[user];
+    path.push({
+      stage: 'main',
+      label: '決勝トーナメント',
+      text: record.lostRound !== null ? `${resultRoundLabel(season.main, record.lostRound, { series: true })}で敗退` : '勝ち上がり（挑戦者決定三番勝負へ）',
+    });
+  }
+  if (season.playoff && (season.playoff.a === user || season.playoff.b === user)) {
+    path.push({
+      stage: 'playoff', label: season.playoff.label,
+      text: season.playoff.winner === user ? `${season.playoff.wins[user]}勝で挑戦者に` : `${season.playoff.wins[user]}勝${season.playoff.games.length - season.playoff.wins[user]}敗で敗退`,
+    });
+  }
+  if (reachedFinals) {
+    const losses = season.finals.games.length - season.finals.wins[user];
+    path.push({
+      stage: 'finals', label: season.finals.label,
+      text: wonFinals ? `${season.finals.wins[user]}勝${losses}敗で、竜王に` : `${season.finals.wins[user]}勝${losses}敗で敗退`,
+    });
+  }
+  const lastLoss = [...season.userGames].reverse().find((game) => !game.win);
   season.result = {
+    path,
+    exitLabel: outcome === 'champion' ? '' : (lastLoss?.label ?? ''),
     outcome,
     startGroup,
     newGroup,
@@ -662,6 +709,7 @@ export function recordUserGame(season, outcome) {
   const opponent = pending.opponentId;
   next.userGames.push({
     phase: pending.phase, opponentId: opponent, win, color: pending.color, seriesGame: pending.kind !== 'game',
+    label: pending.label ?? '',
   });
   next.pending = null;
   if (pending.kind === 'game') {
@@ -685,8 +733,31 @@ export function playerView(season, pid) {
   return playerBrief(season, pid);
 }
 
-function bracketView(season, bracket, { series = false } = {}) {
-  if (!bracket?.root) return { title: bracket?.label ?? '', rounds: [] };
+/**
+ * 画面に木の形で描くための、トーナメント表の構造。
+ * 葉(棋士)の順に左から並べ、各試合は、勝ち上がった2つの枝を結ぶ。labelsは、葉に添える短い文字(例: 1組優勝)。
+ */
+function treeView(season, bracket, labels = {}, pendingNodeId = null) {
+  if (!bracket?.root) return null;
+  const leafIds = [];
+  const collect = (side) => {
+    if (side.pid) leafIds.push(side.pid);
+    else {
+      const node = bracket.nodes[side.from];
+      collect(node.a);
+      collect(node.b);
+    }
+  };
+  collect(bracket.root);
+  const leaves = Object.fromEntries(leafIds.map((pid) => [pid, { ...playerBrief(season, pid), label: labels[pid] ?? '' }]));
+  const nodes = Object.fromEntries(Object.values(bracket.nodes).map((node) => [
+    node.id, { id: node.id, a: node.a, b: node.b, winner: node.winner, round: node.round },
+  ]));
+  return { root: bracket.root, rounds: bracket.rounds, leaves, nodes, pendingNodeId };
+}
+
+function bracketView(season, bracket, { series = false, labels = {}, pendingNodeId = null } = {}) {
+  if (!bracket?.root) return { title: bracket?.label ?? '', rounds: [], tree: null };
   const rounds = [];
   for (const node of sortedNodes(bracket)) {
     const a = sidePid(bracket, node.a);
@@ -699,7 +770,7 @@ function bracketView(season, bracket, { series = false } = {}) {
       user: a === USER_ID || b === USER_ID, final: isRoot,
     });
   }
-  return { title: bracket.label, rounds };
+  return { title: bracket.label, rounds, tree: treeView(season, bracket, labels, pendingNodeId) };
 }
 
 const PHASE_TEXT = Object.freeze({
@@ -712,9 +783,18 @@ const PHASE_TEXT = Object.freeze({
  */
 export function describeSeason(season) {
   const tables = [];
-  if (season.ranking) tables.push({ key: 'ranking', ...bracketView(season, season.ranking) });
-  season.revival.forEach((block, index) => tables.push({ key: `revival-${index}`, ...bracketView(season, block) }));
-  if (season.main) tables.push({ key: 'main', ...bracketView(season, season.main, { series: true }) });
+  const pending = season.pending;
+  const pendingNode = (phase, blockIndex) => (
+    pending?.kind === 'game' && pending.phase === phase && (blockIndex === undefined || pending.blockIndex === blockIndex) ? pending.nodeId : null
+  );
+  if (season.ranking) tables.push({ key: 'ranking', ...bracketView(season, season.ranking, { pendingNodeId: pendingNode('ranking') }) });
+  season.revival.forEach((block, index) => tables.push({
+    key: `revival-${index}`, ...bracketView(season, block, { pendingNodeId: pendingNode('revival', index) }),
+  }));
+  if (season.main) {
+    const labels = Object.fromEntries((season.mainEntrants ?? []).map(({ pid, group, rank }) => [pid, `${group}組${rank === 0 ? '優勝' : `${rank + 1}位`}`]));
+    tables.push({ key: 'main', ...bracketView(season, season.main, { series: true, labels, pendingNodeId: pendingNode('main') }) });
+  }
   const seriesViews = [];
   for (const [key, series] of [['playoff', season.playoff], ['finals', season.finals]]) {
     if (!series) continue;
@@ -724,7 +804,7 @@ export function describeSeason(season) {
       wins: { a: series.wins[series.a], b: series.wins[series.b] }, winner: series.winner,
     });
   }
-  const pending = season.pending
+  const pendingView = season.pending
     ? { ...season.pending, opponent: playerBrief(season, season.pending.opponentId), label: pendingLabel(season) }
     : null;
   return {
@@ -737,14 +817,20 @@ export function describeSeason(season) {
       : PHASE_TEXT[season.phase],
     tables,
     series: seriesViews,
-    pending,
+    pending: pendingView,
     result: season.result,
+    resultSeen: season.resultSeen === true,
     champion: season.champion ? playerBrief(season, season.champion) : null,
+    defender: season.defender ? playerBrief(season, season.defender) : null,
+    stats: aggregateSeasonStats({
+      records: season.analysis ?? {},
+      games: season.userGames.map(({ win, color, label }) => ({ win, color, label })),
+      pending: season.analysisQueue?.length ?? 0,
+    }),
   };
 }
 
-function pendingLabel(season) {
-  const pending = season.pending;
+function pendingLabelFor(season, pending) {
   if (pending.kind === 'playoff') return `挑戦者決定三番勝負 第${pending.gameNo}局`;
   if (pending.kind === 'finals') return `竜王戦七番勝負 第${pending.gameNo}局`;
   const bracket = pending.phase === 'ranking' ? season.ranking : pending.phase === 'revival' ? season.revival[pending.blockIndex] : season.main;
@@ -754,3 +840,5 @@ function pendingLabel(season) {
   if (pending.phase === 'revival') return `${bracket.label} ${round}`;
   return `決勝トーナメント ${round}`;
 }
+
+const pendingLabel = (season) => season.pending.label ?? pendingLabelFor(season, season.pending);

@@ -23,27 +23,27 @@ export const WOMEN_GIVEN_NAMES = Object.freeze([
 
 /**
  * 戦法と囲いの組。CPUが対応している戦法・囲いだけを使い、飛車の振り方(居飛車・振り飛車)が合う組にする。
- * strategyとcastleは、opening-guideの戦法・囲いのid。囲いと一体の戦法(腰掛け銀・藤井システム)は、castleを空にする。
+ * strategyとcastleは、opening-guideの戦法・囲いのid。rookは、飛車の振り方(static: 居飛車、ranging: 振り飛車)。囲いと一体の戦法(腰掛け銀・藤井システム)は、castleを空にする。
  */
 export const OPPONENT_STYLES = Object.freeze([
-  { id: 'yagura', label: '矢倉', strategy: 'yagura-strategy', castle: 'yagura' },
-  { id: 'kakugawari', label: '角換わり', strategy: 'kakugawari', castle: 'early-castle' },
-  { id: 'kakugawari-kg', label: '角換わり腰掛け銀', strategy: 'kakugawari-koshikake-gin', castle: '' },
-  { id: 'aigakari', label: '相掛かり', strategy: 'aigakari', castle: 'funagakoi' },
-  { id: 'ibisha-anaguma', label: '居飛車穴熊', strategy: 'ibisha', castle: 'ibisha-anaguma' },
-  { id: 'gangi', label: '雁木', strategy: 'ibisha', castle: 'gangi' },
-  { id: 'left-mino', label: '居飛車左美濃', strategy: 'ibisha', castle: 'left-mino' },
-  { id: 'right-shiken', label: '右四間飛車', strategy: 'right-shiken', castle: 'elmo' },
-  { id: 'hayaguri', label: '早繰り銀', strategy: 'hayaguri-gin', castle: 'funagakoi' },
-  { id: 'bougin', label: '棒銀', strategy: 'bougin', castle: 'funagakoi' },
-  { id: 'shiken-mino', label: '四間飛車（美濃）', strategy: 'shiken', castle: 'mino' },
-  { id: 'shiken-anaguma', label: '四間飛車（穴熊）', strategy: 'shiken', castle: 'furibisha-anaguma' },
-  { id: 'shiken-silver-crown', label: '四間飛車（銀冠）', strategy: 'shiken', castle: 'silver-crown' },
-  { id: 'sangen', label: '三間飛車', strategy: 'sangen', castle: 'mino' },
-  { id: 'gokigen', label: 'ゴキゲン中飛車', strategy: 'gokigen', castle: 'high-mino' },
-  { id: 'mukai', label: '向かい飛車', strategy: 'mukai', castle: 'mino' },
-  { id: 'ishida', label: '早石田', strategy: 'ishida', castle: 'half-mino' },
-  { id: 'fujii-system', label: '藤井システム', strategy: 'fujii-system', castle: '' },
+  { id: 'yagura', label: '矢倉', strategy: 'yagura-strategy', castle: 'yagura', rook: 'static' },
+  { id: 'kakugawari', label: '角換わり', strategy: 'kakugawari', castle: 'early-castle', rook: 'static' },
+  { id: 'kakugawari-kg', label: '角換わり腰掛け銀', strategy: 'kakugawari-koshikake-gin', castle: '', rook: 'static' },
+  { id: 'aigakari', label: '相掛かり', strategy: 'aigakari', castle: 'funagakoi', rook: 'static' },
+  { id: 'ibisha-anaguma', label: '居飛車穴熊', strategy: 'ibisha', castle: 'ibisha-anaguma', rook: 'static' },
+  { id: 'gangi', label: '雁木', strategy: 'ibisha', castle: 'gangi', rook: 'static' },
+  { id: 'left-mino', label: '居飛車左美濃', strategy: 'ibisha', castle: 'left-mino', rook: 'static' },
+  { id: 'right-shiken', label: '右四間飛車', strategy: 'right-shiken', castle: 'elmo', rook: 'static' },
+  { id: 'hayaguri', label: '早繰り銀', strategy: 'hayaguri-gin', castle: 'funagakoi', rook: 'static' },
+  { id: 'bougin', label: '棒銀', strategy: 'bougin', castle: 'funagakoi', rook: 'static' },
+  { id: 'shiken-mino', label: '四間飛車（美濃）', strategy: 'shiken', castle: 'mino', rook: 'ranging' },
+  { id: 'shiken-anaguma', label: '四間飛車（穴熊）', strategy: 'shiken', castle: 'furibisha-anaguma', rook: 'ranging' },
+  { id: 'shiken-silver-crown', label: '四間飛車（銀冠）', strategy: 'shiken', castle: 'silver-crown', rook: 'ranging' },
+  { id: 'sangen', label: '三間飛車', strategy: 'sangen', castle: 'mino', rook: 'ranging' },
+  { id: 'gokigen', label: 'ゴキゲン中飛車', strategy: 'gokigen', castle: 'high-mino', rook: 'ranging' },
+  { id: 'mukai', label: '向かい飛車', strategy: 'mukai', castle: 'mino', rook: 'ranging' },
+  { id: 'ishida', label: '早石田', strategy: 'ishida', castle: 'half-mino', rook: 'ranging' },
+  { id: 'fujii-system', label: '藤井システム', strategy: 'fujii-system', castle: '', rook: 'ranging' },
 ]);
 
 /**

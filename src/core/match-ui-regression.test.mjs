@@ -60,7 +60,14 @@ describe("match screen regressions", () => {
     expect(source).toContain("ryuoGame: ryuoGame.value,");
     expect(source).toMatch(/const savedRyuo = snapshot\.ryuoGame;/);
     // 期とキャリアは、1局ごとに別のキーへ保存する。終わった期は、1回だけキャリアと称号に反映する。
-    expect(source).toMatch(/ryuoSeason\.value = recordUserGame\(rawRyuoSeason\(\), outcome\);\s*saveSeason\(/);
+    expect(source).toMatch(/const next = recordUserGame\(rawRyuoSeason\(\), outcome\);[\s\S]*?saveSeason\(browserStorage\(\), next\);/);
+    // 終えた対局は、統計のために、別のエンジンで裏で解析する(保存して、リロードしても続ける)。
+    expect(source).toMatch(/next\.analysisQueue = \[/);
+    expect(source).toMatch(/async function processRyuoAnalysisQueue\(\)/);
+    expect(source).toMatch(/stages: \["scan"\]/);
+    expect(source).toMatch(/season\.id !== job\.seasonId/);
+    // 結果の画面を見終えたら記録し、次に竜王戦を選ぶと次の期のエントリーになる。
+    expect(source).toMatch(/@result-seen="markRyuoResultSeen"/);
     expect(source).toMatch(/season\.phase !== "done" \|\| season\.applied/);
     // 千日手は、結果に数えず、先後を入れ替えて指し直す。
     expect(source).toMatch(/if \(!matchResult\.winner\) \{[\s\S]*?next\.pending\.color = next\.pending\.color === "black" \? "white" : "black";/);

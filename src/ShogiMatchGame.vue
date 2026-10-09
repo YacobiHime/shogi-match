@@ -287,6 +287,7 @@
       @enter="enterRyuoSeason"
       @play="startRyuoGame"
       @open-note="tournamentOpen = false; yakobiNoteOpen = true"
+      @result-seen="markRyuoResultSeen"
     />
     <YakobiNote
       v-if="yakobiNoteOpen"
@@ -1277,9 +1278,11 @@ import { grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs"
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
+  STAGED_ANALYSIS_PLANS,
   analysisPointsFromResults,
   analyzeKifuStaged,
 } from "./core/kifu-analysis-pipeline.mjs";
+import { summarizeGame } from "./core/ryuo-stats.mjs";
 import {
   KIFU_ANALYSIS_LEVELS,
   formatNodeCount,
@@ -3160,10 +3163,121 @@ function recordRyuoOutcome(matchResult: MatchResult) {
     return;
   }
   const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
-  ryuoSeason.value = recordUserGame(rawRyuoSeason(), outcome);
-  saveSeason(browserStorage(), ryuoSeason.value);
+  const next = recordUserGame(rawRyuoSeason(), outcome);
+  // この対局を、統計のために、あとで別のエンジンで解析する(保存しておき、リロードしても続ける)。
+  next.analysisQueue = [...(next.analysisQueue ?? []), {
+    seasonId: next.id,
+    index: next.userGames.length - 1,
+    moves: [...moveHistory],
+    color: humanColor.value === Color.WHITE ? "white" : "black",
+    win: outcome === "win",
+    opponentId: game.opponentId,
+  }];
+  ryuoSeason.value = next;
+  saveSeason(browserStorage(), next);
   ryuoGame.value = { ...game, outcome, replay: false };
   finalizeRyuoSeason();
+  void processRyuoAnalysisQueue();
+}
+
+// ---- 大会の統計のための、対局の裏での解析。対局用のエンジンとは別の、軽いエンジンで読む。
+let ryuoStatsEngine: ShogiEngine | null = null;
+let ryuoStatsRunning = false;
+
+async function ensureRyuoStatsEngine(): Promise<ShogiEngine | null> {
+  if (ryuoStatsEngine) return ryuoStatsEngine;
+  try {
+    if (!engineFactory) engineFactory = (await loadEngineFactories(null, { engineBaseUrl: props.engineBaseUrl })).factory;
+    const created = new ShogiEngine({ factory: engineFactory!, hashMb: 16 });
+    await created.init();
+    await created.ready();
+    created.newGame();
+    ryuoStatsEngine = created;
+    return created;
+  } catch {
+    return null;
+  }
+}
+
+type RyuoAnalysisJob = { seasonId: number; index: number; moves: string[]; color: "black" | "white"; win: boolean; opponentId: string };
+
+async function analyzeRyuoGameRecord(job: RyuoAnalysisJob) {
+  const opponentRook = ryuoSeason.value?.players?.[job.opponentId]?.style?.rook ?? null;
+  const failed = { failed: true, win: job.win, opponentRook, plies: job.moves.length };
+  const worker = await ensureRyuoStatsEngine();
+  if (!worker) return failed;
+  const replay = createGameRecord(STANDARD_SFEN);
+  const steps = [{ sfen: replay.position.sfen, lastMove: "", label: "" }];
+  for (const move of job.moves) {
+    let label = "";
+    try {
+      label = formatHintMove(move, replay.position.sfen);
+    } catch { /* ラベルは無くてもよい */ }
+    appendUsiMove(replay, move);
+    steps.push({ sfen: replay.position.sfen, lastMove: move, label });
+  }
+  const compact = props.mobile || boardLayout.value === "portrait";
+  const base = STAGED_ANALYSIS_PLANS[compact ? "mobile" : "desktop"];
+  const plan = { ...base, scan: compact ? { nodes: 4000, maxTimeMs: 500, multiPv: 2 } : { nodes: 8000, maxTimeMs: 700, multiPv: 2 } };
+  const lane = async (_sfen: string, options: { nodes: number; multiPv: number; maxTimeMs: number; fresh?: boolean }, ply: number) => {
+    if (options.fresh) {
+      worker.newGame();
+      await worker.ready();
+    }
+    worker.applyStrengthOptions({ multiPv: options.multiPv });
+    worker.setPosition(`startpos${ply ? ` moves ${job.moves.slice(0, ply).join(" ")}` : ""}`);
+    return worker.go({ nodes: options.nodes, maxTimeMs: options.maxTimeMs });
+  };
+  let results: unknown[] = [];
+  let contexts: unknown[] = [];
+  await analyzeKifuStaged({
+    steps, lanes: [lane], plan, stages: ["scan"],
+    onResults: (latest: unknown[], latestContexts: unknown[]) => { results = latest; contexts = latestContexts; },
+  });
+  const points = analysisPointsFromResults(steps, results, contexts);
+  return summarizeGame({
+    points, sfens: steps.map((step) => step.sfen), color: job.color, win: job.win, opponentRook, plies: job.moves.length,
+  });
+}
+
+/** 保存してある解析の依頼を、1局ずつ順に解析して、統計の記録として残す。 */
+async function processRyuoAnalysisQueue() {
+  if (ryuoStatsRunning) return;
+  ryuoStatsRunning = true;
+  try {
+    for (;;) {
+      const job = ryuoSeason.value?.analysisQueue?.[0] as RyuoAnalysisJob | undefined;
+      if (!job) break;
+      let record: object;
+      try {
+        record = await analyzeRyuoGameRecord(job);
+      } catch {
+        record = { failed: true, win: job.win, opponentRook: null, plies: job.moves.length };
+      }
+      const season = ryuoSeason.value;
+      // 解析のあいだに、別の期に変わっていたら、記録は捨てる。
+      if (!season || season.id !== job.seasonId) break;
+      const updated = {
+        ...season,
+        analysis: { ...season.analysis, [job.index]: record },
+        analysisQueue: (season.analysisQueue ?? []).filter((queued: RyuoAnalysisJob) => queued.index !== job.index),
+      };
+      ryuoSeason.value = updated;
+      saveSeason(browserStorage(), updated);
+    }
+  } finally {
+    ryuoStatsRunning = false;
+    ryuoStatsEngine?.quit();
+    ryuoStatsEngine = null;
+  }
+}
+
+/** 結果の画面を見終えた。次に竜王戦を選ぶと、次の期のエントリーになる。 */
+function markRyuoResultSeen() {
+  const season = ryuoSeason.value;
+  if (!season || season.resultSeen) return;
+  ryuoSeason.value = { ...season, resultSeen: true };
+  saveSeason(browserStorage(), ryuoSeason.value);
 }
 
 /** 大会の対局から離れて、トーナメント表(大会の画面)へ戻る。 */
@@ -3281,6 +3395,8 @@ function openMatchSetup(kind: MatchKind) {
 function openTournamentScreen() {
   tournamentStartAt.value = "select";
   tournamentOpen.value = true;
+  // 前に終えた対局の解析が残っていれば、続きを解析する。
+  if (ryuoSeason.value?.analysisQueue?.length) void processRyuoAnalysisQueue();
 }
 
 /** 教室のレッスンから、関連する図鑑の項目を開く。 */
@@ -6361,6 +6477,7 @@ onBeforeUnmount(() => {
   cancelDeferredCoachPortraitPreload?.();
   cancelDeferredCoachPortraitPreload = undefined;
   engine?.quit();
+  ryuoStatsEngine?.quit();
   if (typeof window !== "undefined") {
     window.removeEventListener("pagehide", handlePageHide);
     window.removeEventListener("keydown", handleGlobalKeydown);
