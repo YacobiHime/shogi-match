@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Position, Square } from "tsshogi";
 import { createGameRecord, enumerateLegalMoves } from "../game-state";
 import { ZUKOU_SET, judgeProblemMove } from "./problem-set.mjs";
+import { MASUDA_KOZO_KYO_OCHI_KIFU } from "../data/reference-kifu.mjs";
 import {
   REFERENCE_DEX_KINDS,
   pieceReachSquares,
@@ -85,11 +86,11 @@ describe("reference dex", () => {
 
   it.each([
     // [id, 先手（下手）, 後手（上手）, 駒落ち, 最後の手, 勝った側, しおり]
-    ["masuda", "大山康晴 名人", "升田幸三 王将", true, "△９五銀", "white", "名人に香を引いて勝つ"],
+    ["masuda", "大山康晴 名人", "升田幸三 九段", false, "△８五桂", "white", "升田の勝ち"],
     ["oyama", "大山康晴", "木村義雄", false, "▲７九玉", "black", "名人獲得"],
     ["nakahara", "大山康晴", "中原誠", false, "△６七香成", "white", "名人奪取"],
     ["tanigawa", "谷川浩司", "加藤一二三", false, "▲４四金", "black", "史上最年少名人"],
-    ["fujii", "藤井聡太 四段", "増田康宏 四段", false, "▲３八飛", "black", "29連勝"],
+    ["fujii", "藤井聡太 竜王", "伊藤匠 七段", false, "▲６一飛", "black", "藤井の勝ち"],
   ])("shows the signature game of %s", (id, black, white, handicap, last, winner, highlight) => {
     const entry = referenceDexEntries("world").find((candidate) => candidate.id === id);
     const kifu = referenceEntryKifu(entry);
@@ -100,9 +101,26 @@ describe("reference dex", () => {
     expect(Boolean(entry.flip)).toBe(winner === "white");
   });
 
-  it("starts the handicap game from the uwate's move", () => {
+  it("shows Masuda's △3五銀 as a highlight of the 1971 meijin match", () => {
     const entry = referenceDexEntries("world").find(({ id }) => id === "masuda");
-    const [start, first] = referenceEntryKifu(entry).steps;
+    const { steps } = referenceEntryKifu(entry);
+    expect(steps).toHaveLength(211);
+    expect(steps[94].label).toBe("△３五銀");
+    expect(steps[94].highlight).toBe("△3五銀");
+  });
+
+  it("shows the decisive game of the first jitsuryoku-sei meijin title", () => {
+    const entry = referenceDexEntries("world").find(({ id }) => id === "modern-titles");
+    const kifu = referenceEntryKifu(entry);
+    expect(kifu).toMatchObject({ black: "木村義雄 八段", white: "花田長太郎 八段", handicap: false, ending: "投了", winner: "black" });
+    expect(kifu.steps).toHaveLength(106);
+    expect(kifu.steps.at(-1).highlight).toBe("初代の実力制名人");
+    expect(Boolean(entry.flip)).toBe(false);
+  });
+
+  it("starts a handicap game from the uwate's move", () => {
+    // 駒落ちの棋譜(升田幸三の香落ち)。図鑑では使わなくなったが、読み込みは保つ。
+    const [start, first] = referenceEntryKifu({ kifu: MASUDA_KOZO_KYO_OCHI_KIFU }).steps;
     // 香落ちでは、上手（後手の側）の1一の香がなく、上手が先に指す。
     expect(start.sfen).toBe("lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1");
     expect(first.label).toBe("△３四歩");
