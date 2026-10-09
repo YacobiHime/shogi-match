@@ -131,6 +131,8 @@ async function main() {
       Object.assign(row, {
         meanLoss: Math.round(mean),
         meanLossSe: Math.round(Math.sqrt(variance / losses.length)),
+        // 棋力診断(src/core/skill-estimate.mjs)と同じ、1手1000で打ち切った平均損失。
+        meanLossCap1000: Math.round(losses.reduce((sum, value) => sum + Math.min(1000, value), 0) / losses.length),
         medianLoss: percentile(sorted, 0.5),
         p90Loss: percentile(sorted, 0.9),
         blunder300: Number((losses.filter((value) => value >= 300).length / losses.length).toFixed(3)),

@@ -6,14 +6,16 @@ const movesWithLoss = (loss, count, mover = 'black', standing = 0) => (
 );
 
 describe('skill estimate', () => {
-  it('maps average loss to levels monotonically, hitting the measured anchors', () => {
-    expect(levelForAverageLoss(405)).toBeCloseTo(1);
-    expect(levelForAverageLoss(168)).toBeCloseTo(10);
-    expect(levelForAverageLoss(102)).toBeCloseTo(20);
+  it('maps average loss to levels monotonically within the measured range', () => {
     expect(levelForAverageLoss(5000)).toBe(0);
-    expect(levelForAverageLoss(1)).toBe(40);
+    expect(levelForAverageLoss(1)).toBe(36);
+    // 現在のレベル表での測定値(Lv16=約228、Lv26=約119、Lv30=約92)の近くに来る。
+    expect(levelForAverageLoss(228)).toBeGreaterThan(14);
+    expect(levelForAverageLoss(228)).toBeLessThan(19);
+    expect(levelForAverageLoss(119)).toBeGreaterThan(24);
+    expect(levelForAverageLoss(119)).toBeLessThan(28);
     let previous = Infinity;
-    for (const loss of [20, 50, 80, 100, 150, 200, 300, 500, 900]) {
+    for (const loss of [80, 100, 150, 200, 300, 500, 900]) {
       const level = levelForAverageLoss(loss);
       expect(level).toBeLessThan(previous);
       previous = level;
@@ -24,7 +26,7 @@ describe('skill estimate', () => {
     const points = [...movesWithLoss(134, 30), ...movesWithLoss(900, 30, 'white')];
     const estimate = estimateSkill(points, 'black');
     expect(estimate.insufficient).toBe(false);
-    expect(estimate).toMatchObject({ count: 30, averageLoss: 134, rating: 1200, label: '十二級程度', reliability: 'estimate' });
+    expect(estimate).toMatchObject({ count: 30, averageLoss: 134, rating: 1921, label: '四級程度', reliability: 'estimate' });
     expect(estimate.ratingLow).toBeLessThanOrEqual(estimate.rating);
     expect(estimate.ratingHigh).toBeGreaterThanOrEqual(estimate.rating);
   });

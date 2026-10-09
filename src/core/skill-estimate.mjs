@@ -1,6 +1,5 @@
 // 棋譜解析の結果から、対局で指した手の評価値の損(平均損失)を見て、棋力(レーティングと級・段)を推定する。
-// 平均損失とCPUのレベルの対応は、docs/difficulty-calibration.mdの1手当たりの評価損の測定値
-// (Lv1〜25)を基準点にし、その先は目安として延ばした仮の対応である。
+// 平均損失とCPUのレベルの対応は、現在のレベル表でCPUの着手を測った値から作る(下のlevelForAverageLoss)。
 // 解析の探索量や対局の内容で値が動くため、結果は目安として扱う。
 
 import { levelRating } from './player-rating.mjs';
@@ -13,26 +12,20 @@ const DECIDED_STANDING = 1500;
 /** 診断に必要な、測れる手の数の下限。 */
 export const MIN_MEASURED_MOVES = 10;
 
-/** [平均損失, Lv]。平均損失が小さいほど強い。Lv1〜25は測定値、Lv32以上は仮の延長。 */
-const LOSS_ANCHORS = [
-  [1140, 0], [405, 1], [212, 5], [168, 10], [134, 15], [102, 20], [86, 25], [60, 32], [40, 36], [25, 40],
-];
+/**
+ * 平均損失(1手1000で打ち切り)からLv(小数)への対応。CPUの着手を同じ基準(30,000nodes)で採点した
+ * 平均損失を、Lv12〜35で測り、Lvが損失の対数にほぼ直線で並ぶことから回帰した(2026-10-09、
+ * scripts/cpu-humanlike-report.mjs、36局面×3回、Lvごとに108手。残差はおおむね±3Lv)。
+ * Lv0〜11は損失の差が小さく、Lv36〜40は損失が35前後で頭打ちになるため、診断はLv0〜36の範囲にする。
+ */
+const LEVEL_AT_LOSS_1 = 94.59;
+const LEVEL_PER_LN_LOSS = -14.41;
+const MAX_DIAGNOSED_LEVEL = 36;
 
-/** 平均損失を、Lv(小数)へ変換する。損失の対数で折れ線補間し、範囲外は端のLvにそろえる。 */
+/** 平均損失を、Lv(小数)へ変換する。範囲外は両端のLvにそろえる。 */
 export function levelForAverageLoss(loss) {
-  const first = LOSS_ANCHORS[0];
-  const last = LOSS_ANCHORS.at(-1);
-  if (loss >= first[0]) return first[1];
-  if (loss <= last[0]) return last[1];
-  for (let index = 1; index < LOSS_ANCHORS.length; index += 1) {
-    const [lowLoss, highLevel] = LOSS_ANCHORS[index];
-    const [highLoss, lowLevel] = LOSS_ANCHORS[index - 1];
-    if (loss >= lowLoss) {
-      const t = (Math.log(highLoss) - Math.log(loss)) / (Math.log(highLoss) - Math.log(lowLoss));
-      return lowLevel + (highLevel - lowLevel) * t;
-    }
-  }
-  return last[1];
+  const level = LEVEL_AT_LOSS_1 + LEVEL_PER_LN_LOSS * Math.log(Math.max(1, loss));
+  return Math.min(MAX_DIAGNOSED_LEVEL, Math.max(0, level));
 }
 
 const presetForLevel = (level) => {

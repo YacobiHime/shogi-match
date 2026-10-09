@@ -45,6 +45,31 @@
         </p>
       </section>
 
+      <section class="shogi-note__card" aria-labelledby="shogi-note-declare">
+        <h2 id="shogi-note-declare">自己申告の棋力</h2>
+        <p class="shogi-note__hint">
+          日本将棋連盟の段級位で申告すると、レーティングをその棋力に設定します。
+          以降の対局は、申告ごとにCPUのレベル別の成績を記録し、表示名と実際の棋力のずれを調べるのに使います。
+        </p>
+        <div class="shogi-note__declare">
+          <select v-model="declareLabel" aria-label="申告する段級位">
+            <option value="">段級位を選ぶ</option>
+            <option v-for="grade in grades" :key="grade.label" :value="grade.label">{{ grade.label }}</option>
+          </select>
+          <button type="button" class="shogi-note__measure" :disabled="!declareLabel" @click="declare">申告して設定</button>
+        </div>
+        <p v-if="state.declared" class="shogi-note__hint" data-note-declared>
+          申告中: {{ state.declared.label }}（{{ declaredDate }}に設定）
+        </p>
+        <ul v-if="declaredRows.length" class="shogi-note__rows">
+          <li v-for="row in declaredRows" :key="row.level">
+            <span class="shogi-note__name">Lv.{{ row.level }} {{ row.label }}</span>
+            <span class="shogi-note__stat">{{ row.wins }}勝{{ row.losses }}敗{{ row.draws }}分</span>
+          </li>
+        </ul>
+        <button v-if="state.games" type="button" class="shogi-note__copy" @click="copyRecord">{{ copied ? "コピーしました" : "戦績データをコピー" }}</button>
+      </section>
+
       <section v-if="state.games" class="shogi-note__card" aria-labelledby="shogi-note-colors">
         <h2 id="shogi-note-colors">手番ごとの成績</h2>
         <ul class="shogi-note__rows">
@@ -86,9 +111,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, type PropType } from "vue";
+import { computed, ref, type PropType } from "vue";
 import {
   USAGE_CATEGORIES,
+  declarableGrades,
   levelRating,
   recommendedLevel,
   usageRows,
@@ -106,6 +132,8 @@ type RatingState = {
   colors: { [color: string]: Tally };
   usage: { [category: string]: { [name: string]: Tally } };
   measured: { rating: number; label: string; at: number } | null;
+  declared: { label: string; level: number; at: number } | null;
+  declaredLevels: { [label: string]: { [level: string]: Tally } };
   history: { rating: number }[];
 };
 
@@ -114,13 +142,45 @@ const props = defineProps({
   backLabel: { type: String, default: "タイトルへ戻る" },
   state: { type: Object as PropType<RatingState>, required: true },
 });
-const emit = defineEmits(["close", "start-measure"]);
+const emit = defineEmits(["close", "start-measure", "declare"]);
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=2`);
 const measuredDate = computed(() => {
   const at = props.state.measured?.at;
   return at ? new Date(at).toLocaleDateString("ja-JP") : "";
 });
+const grades = declarableGrades();
+const declareLabel = ref("");
+function declare() {
+  const grade = grades.find(({ label }) => label === declareLabel.value);
+  if (grade) emit("declare", grade);
+}
+const declaredDate = computed(() => {
+  const at = props.state.declared?.at;
+  return at ? new Date(at).toLocaleDateString("ja-JP") : "";
+});
+/** 申告中の段級位に対する、CPUのレベル別の成績(対局したレベルだけ)。 */
+const declaredRows = computed(() => {
+  const label = props.state.declared?.label;
+  const tally = label ? props.state.declaredLevels?.[label] : undefined;
+  if (!tally) return [];
+  return CPU_STRENGTH_PRESETS
+    .filter((preset) => tally[preset.level] && tally[preset.level].wins + tally[preset.level].losses + tally[preset.level].draws > 0)
+    .map((preset) => ({ ...preset, ...tally[preset.level] }));
+});
+const copied = ref(false);
+/** 戦績を、表示名の調整に使えるよう、JSONでクリップボードへコピーする。 */
+async function copyRecord() {
+  const { declared, declaredLevels, levels, colors, games, wins, losses, draws, rating } = props.state;
+  const text = JSON.stringify({ rating, games, wins, losses, draws, declared, declaredLevels, levels, colors });
+  try {
+    await navigator.clipboard.writeText(text);
+    copied.value = true;
+    setTimeout(() => { copied.value = false; }, 2500);
+  } catch {
+    window.prompt("戦績データをコピーしてください", text);
+  }
+}
 const percent = (ratio: number) => `${Math.round(ratio * 100)}%`;
 
 const nearestPreset = computed(() => {
@@ -237,6 +297,33 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   background: #f1a54c;
   font: inherit;
   font-weight: 800;
+  cursor: pointer;
+}
+.shogi-game .shogi-note__declare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.shogi-game .shogi-note__declare select {
+  min-height: 2.4rem;
+  padding: 0 0.6rem;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 0.4rem;
+  color: #fffcf4;
+  background: #1d303f;
+  font: inherit;
+}
+.shogi-game .shogi-note__declare .shogi-note__measure { margin-top: 0; }
+.shogi-game .shogi-note__measure:disabled { opacity: 0.5; cursor: default; }
+.shogi-game .shogi-note__copy {
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid rgba(255, 252, 244, 0.6);
+  border-radius: 0.4rem;
+  color: #fffcf4;
+  background: transparent;
+  font: inherit;
   cursor: pointer;
 }
 .shogi-game .shogi-note__trend-note,

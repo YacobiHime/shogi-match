@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   INITIAL_RATING,
   RATING_STORAGE_KEY,
+  applyDeclaredGrade,
   applyMeasuredRating,
+  declarableGrades,
   applyRatedGame,
   createRatingState,
   levelRating,
@@ -108,5 +110,20 @@ describe('player rating', () => {
     expect(next.measured).toEqual(measured.measured);
     expect(next.games).toBe(2);
     expect(loadRatingState({ getItem: () => JSON.stringify(next) }).measured).toEqual(measured.measured);
+  });
+
+  it('offers kyu/dan grades for self declaration and records results against the declaration', () => {
+    const grades = declarableGrades();
+    expect(grades[0]).toEqual({ label: '二十六級', level: 1 });
+    expect(grades.find(({ label }) => label === 'アマ初段')).toEqual({ label: 'アマ初段', level: 32 });
+    expect(grades.at(-1).label).toBe('アマ七段');
+    expect(grades.some(({ label }) => label.includes('プロ') || label.includes('藤井'))).toBe(false);
+    const declared = applyDeclaredGrade(createRatingState(), { label: '三級', level: 26, at: 5 });
+    expect(declared).toMatchObject({ rating: 2080, games: 0, declared: { label: '三級', level: 26 } });
+    let state = declared;
+    for (const outcome of ['win', 'win', 'loss']) state = applyRatedGame(state, { opponentLevel: 26, outcome }).state;
+    expect(state.declaredLevels['三級'][26]).toEqual({ wins: 2, losses: 1, draws: 0 });
+    expect(loadRatingState({ getItem: () => JSON.stringify(state) }).declaredLevels).toEqual(state.declaredLevels);
+    expect(applyRatedGame(createRatingState(), { opponentLevel: 5, outcome: 'win' }).state.declaredLevels).toEqual({});
   });
 });

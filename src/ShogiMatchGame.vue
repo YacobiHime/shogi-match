@@ -248,6 +248,7 @@
       :state="ratingState"
       @close="yakobiNoteOpen = false"
       @start-measure="startMeasureMatch"
+      @declare="declareGrade"
     />
     <ShogiReferenceDex
       v-if="referenceDexKind"
@@ -1270,6 +1271,7 @@ import {
   saveMatchSnapshot,
 } from "./core/match-persistence.mjs";
 import {
+  applyDeclaredGrade,
   applyMeasuredRating,
   applyRatedGame,
   levelRatingText,
@@ -2892,6 +2894,12 @@ function closeHome() {
   openPregame();
   homeOpen.value = false;
   void initializeEngine();
+}
+
+/** やこびノートで自己申告した段級位を、レーティングに設定する。 */
+function declareGrade(grade: { label: string; level: number }) {
+  ratingState.value = applyDeclaredGrade(ratingState.value, grade);
+  saveRatingState(browserStorage(), ratingState.value);
 }
 
 /** 棋力測定の前の対局設定。測定の対局を離れたら戻す。 */

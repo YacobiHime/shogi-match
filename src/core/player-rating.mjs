@@ -27,7 +27,7 @@ export function recommendedLevel(rating) {
 }
 
 export function createRatingState() {
-  return { rating: INITIAL_RATING, games: 0, wins: 0, losses: 0, draws: 0, levels: {}, colors: {}, usage: {}, measured: null, history: [] };
+  return { rating: INITIAL_RATING, games: 0, wins: 0, losses: 0, draws: 0, levels: {}, colors: {}, usage: {}, measured: null, declared: null, declaredLevels: {}, history: [] };
 }
 
 const OUTCOME_KEY = { win: 'wins', loss: 'losses', draw: 'draws' };
@@ -97,11 +97,43 @@ export function applyRatedGame(state, { opponentLevel, outcome, color, profile, 
     losses: state.losses + (outcome === 'loss' ? 1 : 0),
     draws: state.draws + (outcome === 'draw' ? 1 : 0),
     levels: addToTally(state.levels, opponentLevel, outcome),
+    declaredLevels: state.declared
+      ? { ...state.declaredLevels, [state.declared.label]: addToTally(state.declaredLevels?.[state.declared.label], opponentLevel, outcome) }
+      : (state.declaredLevels ?? {}),
     colors: color ? addToTally(state.colors, color, outcome) : (state.colors ?? {}),
     usage: addUsage(state.usage, profile, outcome),
     history: [...state.history, { at, rating: after, opponentLevel, outcome }].slice(-MAX_HISTORY),
   };
   return { state: next, before: Math.round(state.rating), after, delta: after - Math.round(state.rating) };
+}
+
+/**
+ * 自己申告できる段級位の選択肢(二十六級〜アマ七段)。同じ表示名のレベルが複数あるときは、真ん中のレベルを代表にする。
+ * @returns {{ label: string, level: number }[]}
+ */
+export function declarableGrades() {
+  const groups = new Map();
+  for (const preset of CPU_STRENGTH_PRESETS) {
+    if (preset.level === 0 || !/^(.+級|アマ.+段)程度$/.test(preset.label)) continue;
+    groups.set(preset.label, [...(groups.get(preset.label) ?? []), preset.level]);
+  }
+  return [...groups].map(([label, levels]) => ({ label: label.replace(/程度$/, ''), level: levels[Math.floor((levels.length - 1) / 2)] }));
+}
+
+/**
+ * 自己申告した段級位をレーティングに設定する。以降の対局は、申告ごとのCPUのレベル別成績にも記録する
+ * (表示名と実際の棋力のずれを見るため)。対局数は変えない。
+ * @param {ReturnType<typeof createRatingState>} state
+ * @param {{ label: string, level: number, at?: number }} grade
+ */
+export function applyDeclaredGrade(state, { label, level, at = Date.now() }) {
+  const rating = levelRating(level);
+  return {
+    ...state,
+    rating,
+    declared: { label, level, at },
+    history: [...state.history, { at, rating, opponentLevel: null, outcome: 'declare' }].slice(-MAX_HISTORY),
+  };
 }
 
 /**
@@ -138,6 +170,10 @@ export function loadRatingState(storage) {
       measured: parsed.measured && Number.isFinite(parsed.measured.rating)
         ? { rating: Math.round(parsed.measured.rating), label: String(parsed.measured.label ?? ''), at: Number(parsed.measured.at) || 0 }
         : null,
+      declared: parsed.declared && typeof parsed.declared.label === 'string' && Number.isFinite(parsed.declared.level)
+        ? { label: parsed.declared.label, level: parsed.declared.level, at: Number(parsed.declared.at) || 0 }
+        : null,
+      declaredLevels: Object.fromEntries(Object.entries(parsed.declaredLevels ?? {}).map(([label, tally]) => [label, loadTally(tally)])),
       levels: loadTally(parsed.levels),
       colors: loadTally(parsed.colors),
       usage: Object.fromEntries(
