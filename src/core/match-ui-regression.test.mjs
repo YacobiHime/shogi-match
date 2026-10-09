@@ -81,6 +81,31 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/const rated = matchKind\.value === "normal"/);
   });
 
+  it("offers to set the rating only in the measurement started from the notebook", () => {
+    // 診断の表示は、ほかの棋譜解析でも出すが、「レーティングに設定」のボタンは、棋力測定の対局だけ。
+    expect(source.match(/@click="applySkillDiagnosis"/g)).toHaveLength(2);
+    expect(source).toMatch(/<button v-if="measureSession" type="button"[^>]*@click="applySkillDiagnosis"/);
+    // 測定の結果のダイアログは、測定の対局(measureSession)のときだけ開く。
+    expect(source).toMatch(/measureSession\.value && !measureReportDismissed\.value && Boolean\(skillDiagnosis\.value\)/);
+  });
+
+  it("keeps the Ryuo screen buttons the same size and lets Yakobihime do the explaining", () => {
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    // 選択肢の高さ・大きな操作ボタンの高さを、共通の値にそろえ、選択肢は等分のグリッドで並べる。
+    expect(tournament).toContain("--tr-control: 2.75rem;");
+    expect(tournament).toContain("--tr-action: 3.25rem;");
+    expect(tournament).toMatch(/\.shogi-tournament__choices--ten \{ grid-template-columns: repeat\(10, minmax\(0, 1fr\)\); \}/);
+    expect(tournament).toMatch(/\.shogi-tournament__choices button,[\s\S]*?height: var\(--tr-control\);/);
+    expect(tournament).toMatch(/\.shogi-tournament__start,\s*\.shogi-game \.shogi-tournament__sub \{[\s\S]*?height: var\(--tr-action\);/);
+    // 大会の選択のカードは、段によらず、同じ大きさで、同じ列に並べる。
+    expect(tournament).toMatch(/shogi-tournament-home \.shogi-home__cards \{[\s\S]*?repeat\(3, clamp\(96px, 26vw, 130px\)\)/);
+    // 説明・エントリーの一言・次の対局・結果の解説は、やこび姫のセリフにする。
+    expect(tournament.match(/<YakobiSays/g)?.length).toBeGreaterThanOrEqual(8);
+    for (const helper of ["ryuoGuideLines", "entryDifficultyLine", "opponentLines", "resultLines", "seasonPhaseLines"]) {
+      expect(tournament).toContain(helper);
+    }
+  });
+
   it("asks before resigning from the toolbar and the menu", () => {
     expect(source.match(/reviewMode \? completeReview\(\) : requestResign\(\)/g)).toHaveLength(2);
     expect(source).not.toMatch(/reviewMode \? completeReview\(\) : resign\(\)/);

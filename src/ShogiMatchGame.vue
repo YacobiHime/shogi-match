@@ -281,6 +281,7 @@
       :career="ryuoCareer"
       :view="ryuoView"
       :default-difficulty="ryuoDefaultDifficulty"
+      :user-level="recommendedStrengthPreset.level"
       :rating-text="`R${ratingState.rating}`"
       :start-at="tournamentStartAt"
       @close="tournamentOpen = false"
@@ -957,7 +958,8 @@
             あなたの{{ skillDiagnosis.count }}手の平均損失は{{ skillDiagnosis.averageLoss }}。
             R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安です{{ skillDiagnosis.reliability === "reference" ? "（手数が少ない参考値）" : "" }}。
           </span>
-          <button type="button" :disabled="ratingState.rating === skillDiagnosis.rating" @click="applySkillDiagnosis">
+          <!-- レーティングへの設定は、やこびノートの棋力測定の対局だけ。ほかの解析では、診断を表示するだけにする。 -->
+          <button v-if="measureSession" type="button" :disabled="ratingState.rating === skillDiagnosis.rating" @click="applySkillDiagnosis">
             {{ ratingState.rating === skillDiagnosis.rating ? "設定済み" : "この棋力をレーティングに設定" }}
           </button>
         </template>
