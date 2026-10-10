@@ -11,7 +11,7 @@ import {
 } from './ryuo-speech.mjs';
 import { USER_ID, createSeason, describeSeason, recordUserGame } from './ryuo.mjs';
 
-const settings = { difficulty: 5, scale: 2, revival: true };
+const settings = { difficulty: 7, scale: 2, revival: true };
 
 describe('Yakobihime speech for the Ryuo screens', () => {
   it('explains the tournament in order, from the title match to the eternal title', () => {

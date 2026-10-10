@@ -32,16 +32,18 @@ export const SCALES = Object.freeze([
   { id: 5, label: '実物', sizes: REAL_SIZES, slots: { 1: 5, 2: 2, 3: 1, 4: 1, 5: 1, 6: 1 }, promote: 4 },
 ]);
 
-export const DIFFICULTY_LEVELS = 10;
+export const DIFFICULTY_LEVELS = 12;
+/** 基準の難易度。2026-10-10に下へ2段階足したので、以前の5がこの7にあたる。 */
+export const BASE_DIFFICULTY = 7;
 const LEVELS_PER_DIFFICULTY = 4;
 const SIM_ELO_PER_LEVEL = 50;
 const MAX_CPU_LEVEL = 40;
 
 export const scaleById = (id) => SCALES.find((scale) => scale.id === id) ?? SCALES[2];
 
-/** 難易度(1〜10)での、全体のLvのずれ。5が基準で、1段階ごとに4レベル動く。 */
+/** 難易度(1〜12)での、全体のLvのずれ。7が基準で、1段階ごとに4レベル動く。 */
 export function levelShift(difficulty) {
-  return (Math.min(DIFFICULTY_LEVELS, Math.max(1, Math.round(difficulty))) - 5) * LEVELS_PER_DIFFICULTY;
+  return (Math.min(DIFFICULTY_LEVELS, Math.max(1, Math.round(difficulty))) - BASE_DIFFICULTY) * LEVELS_PER_DIFFICULTY;
 }
 
 /** 難易度での、その組の相手のLvの平均。 */
@@ -51,7 +53,7 @@ export function groupMeanLevel(group, difficulty) {
 
 /** おすすめの難易度。6組の相手のLvの平均が、プレイヤーの棋力(Lv)に近くなる難易度。 */
 export function recommendedDifficulty(playerLevel) {
-  const difficulty = Math.round((playerLevel - GROUP_MEAN_LEVEL[6]) / LEVELS_PER_DIFFICULTY + 5);
+  const difficulty = Math.round((playerLevel - GROUP_MEAN_LEVEL[6]) / LEVELS_PER_DIFFICULTY + BASE_DIFFICULTY);
   return Math.min(DIFFICULTY_LEVELS, Math.max(1, difficulty));
 }
 
@@ -413,7 +415,7 @@ export function createSeason({ no, mode, group, settings, userLevel, career, see
   const rng = createRng(seed);
   const used = new Set([userName]);
   const season = {
-    version: 1,
+    version: 2,
     id: seed,
     no,
     mode,

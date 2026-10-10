@@ -94,7 +94,7 @@ describe("match screen regressions", () => {
     // 選択肢の高さ・大きな操作ボタンの高さを、共通の値にそろえ、選択肢は等分のグリッドで並べる。
     expect(tournament).toContain("--tr-control: 2.75rem;");
     expect(tournament).toContain("--tr-action: 3.25rem;");
-    expect(tournament).toMatch(/\.shogi-tournament__choices--ten \{ grid-template-columns: repeat\(10, minmax\(0, 1fr\)\); \}/);
+    expect(tournament).toMatch(/\.shogi-tournament__choices--ten \{ grid-template-columns: repeat\(12, minmax\(0, 1fr\)\); \}/);
     expect(tournament).toMatch(/\.shogi-tournament__choices button,[\s\S]*?height: var\(--tr-control\);/);
     expect(tournament).toMatch(/\.shogi-tournament__start,\s*\.shogi-game \.shogi-tournament__sub \{[\s\S]*?height: var\(--tr-action\);/);
     // 大会の選択のカードは、段によらず、同じ大きさで、同じ列に並べる。

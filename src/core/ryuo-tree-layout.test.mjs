@@ -73,7 +73,7 @@ describe('tournament tree layout', () => {
   it('lays out the real season brackets of every scale', () => {
     for (const scale of [1, 2, 3, 4, 5]) {
       const season = createSeason({
-        no: 1, mode: 'challenge', group: 6, settings: { difficulty: 5, scale, revival: true }, userLevel: 28, seed: 30 + scale,
+        no: 1, mode: 'challenge', group: 6, settings: { difficulty: 7, scale, revival: true }, userLevel: 28, seed: 30 + scale,
       });
       const view = describeSeason(season);
       const { tree } = view.tables[0];

@@ -148,7 +148,16 @@ export function saveCareer(storage, career) {
 export function loadSeason(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(SEASON_STORAGE_KEY) ?? 'null');
-    if (!parsed || parsed.version !== 1 || typeof parsed.phase !== 'string' || !parsed.players) return null;
+    if (!parsed || ![1, 2].includes(parsed.version) || typeof parsed.phase !== 'string' || !parsed.players) return null;
+    // 版1の期は難易度が1〜10だった。下へ2段階足したので、同じ強さになるよう2つずらす。
+    if (parsed.version === 1) {
+      const difficulty = Number(parsed.settings?.difficulty);
+      return {
+        ...parsed,
+        version: 2,
+        settings: { ...parsed.settings, ...(Number.isFinite(difficulty) ? { difficulty: difficulty + 2 } : {}) },
+      };
+    }
     return parsed;
   } catch {
     return null;

@@ -441,7 +441,7 @@ const props = defineProps({
   backLabel: { type: String, default: "タイトルへ戻る" },
   career: { type: Object as PropType<Career>, required: true },
   view: { type: Object as PropType<View | null>, default: null },
-  defaultDifficulty: { type: Number, default: 5 },
+  defaultDifficulty: { type: Number, default: 7 },
   /** プレイヤーの棋力の目安(CPUのLv)。やこび姫が、相手の強さを話すのに使う。 */
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
@@ -988,7 +988,7 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__row-meta { grid-column: 2; margin: 0; color: rgba(255, 252, 244, 0.72); font-size: 0.82em; }
 .shogi-game .shogi-tournament__row-meta strong { color: var(--tr-gold); }
 .shogi-game .shogi-tournament__choices { display: grid; gap: var(--tr-gap); }
-.shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(12, minmax(0, 1fr)); }
 .shogi-game .shogi-tournament__choices--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .shogi-game .shogi-tournament__choices--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .shogi-game .shogi-tournament__choices--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1211,7 +1211,7 @@ const statTiles = computed(() => {
   .shogi-game .shogi-tournament__step { font-size: 0.7em; }
   .shogi-game .shogi-tournament__row { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-tournament__row-meta { grid-column: 1; }
-  .shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .shogi-game .shogi-tournament__choices--five button { padding: 0; }
   .shogi-game .shogi-tournament__actions--two { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-tournament__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }

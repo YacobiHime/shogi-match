@@ -32,7 +32,7 @@ import { OPPONENT_STYLES } from './ryuo-data.mjs';
 import { CPU_OPENING_STRATEGY_IDS } from './cpu-opening-repertoire.mjs';
 import { OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from './opening-guide.mjs';
 
-const settings = (overrides = {}) => ({ difficulty: 5, scale: 3, revival: true, ...overrides });
+const settings = (overrides = {}) => ({ difficulty: 7, scale: 3, revival: true, ...overrides });
 
 /** 方針に従ってプレイヤーが対局を指し続け、シーズンの最後まで進める。 */
 function playOut(season, policy, limit = 400) {
@@ -76,14 +76,15 @@ describe('scales and difficulty', () => {
   });
 
   it('shifts the opponents by difficulty and recommends one near the player level', () => {
-    expect(levelShift(5)).toBe(0);
-    expect(levelShift(1)).toBe(-16);
-    expect(levelShift(10)).toBe(20);
-    expect(groupMeanLevel(6, 5)).toBe(30);
-    expect(groupMeanLevel(1, 10)).toBe(40);
-    expect(recommendedDifficulty(30)).toBe(5);
-    expect(recommendedDifficulty(10)).toBe(1);
-    expect(recommendedDifficulty(40)).toBe(8);
+    expect(levelShift(7)).toBe(0);
+    expect(levelShift(1)).toBe(-24);
+    expect(levelShift(12)).toBe(20);
+    expect(groupMeanLevel(6, 7)).toBe(30);
+    expect(groupMeanLevel(6, 1)).toBe(6);
+    expect(groupMeanLevel(1, 12)).toBe(40);
+    expect(recommendedDifficulty(30)).toBe(7);
+    expect(recommendedDifficulty(6)).toBe(1);
+    expect(recommendedDifficulty(40)).toBe(10);
     expect(groupMeanLevel(6, recommendedDifficulty(34))).toBeCloseTo(34, 0);
   });
 
@@ -98,7 +99,7 @@ describe('opponent field', () => {
   it('builds distinct players with spread levels, mixed dan and varied styles', () => {
     const rng = createRng(7);
     const used = new Set();
-    const field = generateGroupField({ group: 6, size: 64, difficulty: 5, rng, used });
+    const field = generateGroupField({ group: 6, size: 64, difficulty: 7, rng, used });
     expect(field).toHaveLength(64);
     expect(new Set(field.map(({ name }) => name)).size).toBe(64);
     expect(field.every(({ level }) => level >= 3 && level <= 40)).toBe(true);
@@ -114,12 +115,12 @@ describe('opponent field', () => {
 
   it('puts higher groups on stronger levels and higher dan', () => {
     const mean = (group) => {
-      const field = generateGroupField({ group, size: 32, difficulty: 5, rng: createRng(group), used: new Set() });
+      const field = generateGroupField({ group, size: 32, difficulty: 7, rng: createRng(group), used: new Set() });
       return field.reduce((sum, { level }) => sum + level, 0) / field.length;
     };
     const means = [1, 2, 3, 4, 5, 6].map(mean);
     for (let index = 1; index < means.length; index += 1) expect(means[index - 1]).toBeGreaterThan(means[index]);
-    const dans = generateGroupField({ group: 1, size: 16, difficulty: 5, rng: createRng(3), used: new Set() }).map(({ dan }) => dan);
+    const dans = generateGroupField({ group: 1, size: 16, difficulty: 7, rng: createRng(3), used: new Set() }).map(({ dan }) => dan);
     expect(dans.every((dan) => ['八段', '九段'].includes(dan))).toBe(true);
   });
 
@@ -150,7 +151,7 @@ describe('opponent field', () => {
 
   it('maps every opponent level to a CPU preset', () => {
     const levels = new Set(CPU_STRENGTH_PRESETS.map(({ level }) => level));
-    const field = generateGroupField({ group: 6, size: 64, difficulty: 10, rng: createRng(9), used: new Set() });
+    const field = generateGroupField({ group: 6, size: 64, difficulty: 12, rng: createRng(9), used: new Set() });
     expect(field.every(({ level }) => levels.has(level))).toBe(true);
   });
 });
@@ -235,7 +236,7 @@ describe('a Ryuo season', () => {
   it('does not always pit a weak player against the strongest opponent in the first round', () => {
     const levels = new Set();
     for (let seed = 1; seed <= 12; seed += 1) {
-      const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ difficulty: 5 }), userLevel: 5, seed });
+      const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ difficulty: 7 }), userLevel: 5, seed });
       levels.add(season.players[season.pending.opponentId].level);
       const strongest = Math.max(...Object.values(season.players).filter(({ group, id }) => group === 6 && id !== USER_ID).map(({ level }) => level));
       expect(season.players[season.pending.opponentId].level).toBeLessThanOrEqual(strongest);
@@ -369,7 +370,7 @@ describe('a Ryuo season', () => {
       const group = (seed % 6) + 1;
       const rng = createRng(seed * 101);
       const season = createSeason({
-        no: 1, mode: 'challenge', group, settings: settings({ scale, revival: seed % 2 === 0, difficulty: (seed % 10) + 1 }), userLevel: 20 + (seed % 15), seed,
+        no: 1, mode: 'challenge', group, settings: settings({ scale, revival: seed % 2 === 0, difficulty: (seed % 12) + 1 }), userLevel: 20 + (seed % 15), seed,
       });
       const { season: done, games } = playOut(season, () => (rng.next() < 0.6 ? 'win' : 'loss'));
       expect(games).toBeLessThan(120);
@@ -518,6 +519,9 @@ describe('career', () => {
     const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ scale: 1 }), userLevel: 20, seed: 2 });
     expect(saveSeason(storage, season)).toBe(true);
     expect(loadSeason(storage)).toEqual(JSON.parse(JSON.stringify(season)));
+    // 難易度が1〜10だった版1の期は、同じ強さの難易度へずらして読み込む。
+    storage.setItem('yacobihime:shogi-match:ryuo-season', JSON.stringify({ ...season, version: 1, settings: { ...season.settings, difficulty: 5 } }));
+    expect(loadSeason(storage)).toMatchObject({ version: 2, settings: { difficulty: 7 } });
     saveSeason(storage, null);
     expect(loadSeason(storage)).toBeNull();
     storage.setItem('yacobihime:shogi-match:ryuo-career', '{broken');
