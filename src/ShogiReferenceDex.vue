@@ -1094,10 +1094,21 @@ defineExpose({ goBack });
   display: flex;
   flex-wrap: wrap;
   gap: 0.2rem 0.8rem;
-  margin: 0 0 0.4rem;
+  align-items: center;
+  margin: 0 0 0.5rem;
   font-size: 0.85rem;
 }
+/* 棋譜の題は、ドット絵の看板のように角を立て、星のきらめきを添える。 */
 .shogi-game .shogi-reference-dex__kifu-head strong {
+  padding: 0.25rem 0.7rem;
+  border: 2px solid #f1a54c;
+  color: #fffcf4;
+  background: #2c4359;
+  box-shadow: 3px 3px 0 #f1a54c;
+  letter-spacing: 0.04em;
+}
+.shogi-game .shogi-reference-dex__kifu-head strong::before {
+  content: "✦ ";
   color: #f1a54c;
 }
 /* 盤の上下の対局者欄と今の手。高さを固定し、盤はその残りの高さに合わせる。 */
@@ -1125,17 +1136,19 @@ defineExpose({ goBack });
   height: var(--player-bar);
   padding: 0 0.5rem;
   overflow: hidden;
-  color: #172632;
-  background: #fde9b8;
+  color: #fffcf4;
+  background: #2c4359;
+  border: 2px solid #1e2d3d;
+  box-sizing: border-box;
   font-size: 0.85rem;
   font-weight: 700;
   white-space: nowrap;
 }
 .shogi-game .shogi-reference-dex__player-bar--top {
-  border-radius: 0.3rem 0.3rem 0 0;
+  border-bottom-color: #f1a54c;
 }
 .shogi-game .shogi-reference-dex__player-bar--bottom {
-  border-radius: 0 0 0.3rem 0.3rem;
+  border-top-color: #f1a54c;
 }
 .shogi-game .shogi-reference-dex__player-name {
   overflow: hidden;
@@ -1143,6 +1156,7 @@ defineExpose({ goBack });
 }
 .shogi-game .shogi-reference-dex__player-eval {
   flex: none;
+  color: #f1a54c;
   font-variant-numeric: tabular-nums;
 }
 .shogi-game .shogi-reference-dex__move-caption {
@@ -1154,6 +1168,7 @@ defineExpose({ goBack });
   text-align: center;
   white-space: nowrap;
   text-overflow: ellipsis;
+  color: #fffcf4;
   font-size: 0.9rem;
   font-weight: 700;
 }
@@ -1190,9 +1205,12 @@ defineExpose({ goBack });
   flex: 1;
   margin: 0;
   padding: 0.5rem 0.75rem;
-  border: 1px solid rgba(241, 165, 76, 0.7);
-  border-radius: 0.6rem 0.6rem 0.6rem 0;
-  background: rgba(255, 252, 244, 0.1);
+  border: 2px solid #fffcf4;
+  border-left: 4px solid #d8d0ff;
+  border-radius: 0;
+  color: #fffcf4;
+  background: #2c4359;
+  box-shadow: 3px 3px 0 #f1a54c;
   font-size: var(--dex-text);
   line-height: 1.6;
   max-height: 100%;
