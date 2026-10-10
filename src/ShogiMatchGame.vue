@@ -809,18 +809,15 @@
       >
         閃き <small>×{{ reviewMode ? "∞" : formatAssistCount(hintsRemaining) }}</small>
       </button>
+      <!-- 感想戦。押すと、盤で指した手に対局相手のCPUが同じ強さで応える。もう一度押すとやめる。 -->
       <button
-        v-if="reviewMode && analysisOpen"
+        v-if="reviewMode && !guidedReview"
         type="button"
-        :disabled="!analysisCurrentPoint?.pv?.length && !canAnalyzeReviewPosition"
-        @click="showAnalysisLine"
-      >読み</button>
-      <button
-        v-if="reviewMode && analysisOpen"
-        type="button"
-        :disabled="!canPlaceReviewLine"
-        @click="placeReviewLine"
-      >読み筋を<wbr>並べる</button>
+        class="shogi-game__kansousen"
+        :aria-pressed="reviewCpuEnabled"
+        :disabled="!reviewCpuEnabled && !canStartKansousen"
+        @click="toggleKansousen"
+      >{{ reviewCpuEnabled ? "感想戦終了" : "感想戦" }}</button>
       <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
         待った <small>×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}</small>
       </button>
@@ -857,12 +854,6 @@
         class="shogi-game__guided-start shogi-game__guided-start--inline"
         @click="startGuidedReview"
       >▶ 対局を振り返る</button>
-      <button
-        v-if="reviewMode && reviewCpuEnabled"
-        type="button"
-        class="shogi-game__review-cpu-stop"
-        @click="stopReviewCpu"
-      >対CPU検討を終了</button>
     </div>
 
     <div
@@ -961,7 +952,7 @@
           </option>
         </select>
         <button
-          v-if="reviewBranchFrom !== null && !reviewCpuEnabled"
+          v-if="reviewBranchFrom !== null"
           type="button"
           class="shogi-game__analysis-branch"
           :title="`${reviewBranchFrom + 1}手目から分岐中。押すと本筋に戻る`"
@@ -1062,13 +1053,17 @@
             @click="analysisMenuOpen = false; runKifuAnalysis()"
           >{{ analyzedLevel < 0 ? "このレベルで解析" : analysisLevelChoice <= analyzedLevel ? "このレベルは解析済み" : "このレベルで読み直す" }}</button>
           <button
-            v-if="!reviewCpuEnabled"
             type="button"
             role="menuitem"
-            :disabled="analysisRunning || thinking || !engineReady"
-            @click="analysisMenuOpen = false; startReviewCpu()"
-          >ここから対CPU</button>
-          <button v-else type="button" role="menuitem" @click="analysisMenuOpen = false; stopReviewCpu()">対CPU終了</button>
+            :disabled="reviewCpuEnabled || (!analysisCurrentPoint?.pv?.length && !canAnalyzeReviewPosition)"
+            @click="analysisMenuOpen = false; showAnalysisLine()"
+          >最善の読み筋</button>
+          <button
+            type="button"
+            role="menuitem"
+            :disabled="!canPlaceReviewLine"
+            @click="analysisMenuOpen = false; placeReviewLine()"
+          >読み筋を盤に並べる</button>
         </div>
       </div>
     </section>
@@ -2033,7 +2028,7 @@ const cpuThinkingShown = computed(() => {
 const statusText = computed(() => {
   if (!matchStarted.value) return "対局条件を選んでください";
   if (reviewMode.value && reviewCpuEnabled.value) {
-    return thinking.value ? `${props.cpuPlayerName}が考えています…` : "対CPU検討中です";
+    return thinking.value ? `${props.cpuPlayerName}が考えています…` : "感想戦中です";
   }
   if (reviewMode.value && measureAnalyzing.value) return "棋力を測定中です…";
   if (reviewMode.value) return "棋譜解析中です";
@@ -5496,7 +5491,7 @@ async function showAnalysisLine() {
   try {
     labels = formatPrincipalVariation(line.pv, currentSfen.value, 6);
   } catch { /* 表記できない手はUSIのまま出す */ }
-  hintText.value = `読み筋: ${labels}（「読み筋を並べる」で盤に並べられるよ）`;
+  hintText.value = `読み筋: ${labels}（その他の「読み筋を盤に並べる」で並べられるよ）`;
 }
 
 /** 直前に出した読み筋(読み・投了の理由)を、今の局面から分岐として並べる。▶で1手ずつ進められる。 */
@@ -5581,7 +5576,8 @@ function navigateAnalysis(delta: number) {
 }
 
 function returnToMainLine() {
-  if (reviewCpuEnabled.value) return;
+  // 感想戦中に本筋へ戻るときは、感想戦をやめてから戻る。
+  if (reviewCpuEnabled.value) stopReviewCpu();
   coachAdviceScheduler.reset();
   reviewNavigation.value = returnReviewToMainLine(reviewNavigation.value);
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
@@ -5615,19 +5611,39 @@ function onPlayerMove(usi: string) {
   }
 }
 
-function startReviewCpu() {
-  if (!reviewMode.value || !engineReady.value || analysisRunning.value || thinking.value) return;
+/*
+ * 感想戦。検討中に盤で指した手に、対局相手のCPUが対局と同じ強さで応える。
+ * 押した時点で相手の手番なら、すぐに相手が指す。待ったは感想戦を始めた局面まで何度でも使える。
+ */
+const canStartKansousen = computed(() => (
+  reviewMode.value && engineReady.value && !analysisRunning.value && !guidedReview.value
+));
+function toggleKansousen() {
+  if (reviewCpuEnabled.value) stopReviewCpu();
+  else void startReviewCpu();
+}
+
+async function startReviewCpu() {
+  if (!canStartKansousen.value || reviewCpuEnabled.value) return;
   coachAdviceScheduler.reset();
+  // 助言の探索を止め、エンジンが空いてから相手に指させる。
   reviewCoachGeneration += 1;
+  engine?.stop();
+  await reviewCoachQueue.catch(() => undefined);
+  if (!canStartKansousen.value || reviewCpuEnabled.value) return;
+  thinking.value = false;
   reviewCpuGeneration += 1;
   reviewCpuStartedAtPly.value = moveHistory.length;
   reviewCpuEnabled.value = true;
-  analysisOpen.value = false;
+  analysisMenuOpen.value = false;
   hintCandidates.value = [];
   hintText.value = "";
+  const cpuTurn = record.value.position.color !== humanColor.value;
   guideText.value = coachLevel.value === "off"
     ? ""
-    : "ここから相手をするね。閃きと待ったは何度でも使えるよ！";
+    : cpuTurn
+      ? `感想戦を始めるよ。${props.cpuPlayerName}ならどう指すかな？`
+      : `感想戦を始めるよ。指してみてね、${props.cpuPlayerName}ならどう応えるか見せるよ！`;
   scheduleReviewCpuMove();
 }
 
@@ -5643,7 +5659,7 @@ function stopReviewCpu() {
   }
   if (thinking.value) engine?.stop();
   thinking.value = false;
-  guideText.value = coachLevel.value === "off" ? "" : "対CPU検討を終了したよ。";
+  guideText.value = coachLevel.value === "off" ? "" : "感想戦を終えたよ。";
 }
 
 function scheduleReviewCpuMove() {
@@ -5698,12 +5714,12 @@ function scheduleReviewCpuMove() {
       }
       if (applyMove(usi, "cpu")) {
         reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
-        guideText.value = coachLevel.value === "off" ? "" : "相手が指したよ。じっくり考えてみよう！";
+        guideText.value = coachLevel.value === "off" ? "" : `${props.cpuPlayerName}ならこう指すよ。次はあなたの番！`;
       }
     } catch (error) {
       if (generation !== reviewCpuGeneration) return;
       const message = error instanceof Error ? error.message : String(error);
-      errorMessage.value = `対CPU検討の思考に失敗しました: ${message}`;
+      errorMessage.value = `感想戦の思考に失敗しました: ${message}`;
     } finally {
       if (generation === reviewCpuGeneration) thinking.value = false;
     }
@@ -7472,6 +7488,15 @@ queueMicrotask(() => {
   color: rgba(255, 252, 244, 0.45);
   background: rgba(43, 70, 91, 0.5);
   box-shadow: none;
+}
+.shogi-game .shogi-game__kansousen {
+  border-color: #d7d1fd;
+  color: var(--ivory);
+  background: #4a4a8a;
+}
+.shogi-game .shogi-game__kansousen[aria-pressed="true"] {
+  color: var(--night-deep);
+  background: #d7d1fd;
 }
 .shogi-game .shogi-game__analysis-button {
   border-color: rgba(215, 209, 253, 0.62);
