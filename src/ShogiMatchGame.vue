@@ -852,6 +852,12 @@
         @click="openKifuAnalysis"
       >{{ analysisRunning ? "解析中…" : analysisPoints.length ? "解析グラフ" : "棋譜解析" }}</button>
       <button
+        v-if="reviewMode && !analysisOpen && !reviewCpuEnabled"
+        type="button"
+        class="shogi-game__guided-start shogi-game__guided-start--inline"
+        @click="startGuidedReview"
+      >▶ 対局を振り返る</button>
+      <button
         v-if="reviewMode && reviewCpuEnabled"
         type="button"
         class="shogi-game__review-cpu-stop"
@@ -898,6 +904,50 @@
       class="shogi-game__analysis"
       aria-label="棋譜解析"
     >
+      <!-- 対局の振り返り。止まる局面では、盤で手を指して答え合わせする。 -->
+      <div v-if="guidedReview" class="shogi-game__guided" aria-live="polite">
+        <img
+          class="shogi-game__guided-chara"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+          alt=""
+          aria-hidden="true"
+        >
+        <div class="shogi-game__guided-body">
+          <p class="shogi-game__guided-move">
+            <span v-if="guidedReview.phase === 'waiting'">解析中 {{ analysisProgress }}/{{ analysisTotal }}</span>
+            <span v-else-if="guidedReview.phase === 'quiz'" class="shogi-game__guided-badge">考えてみよう</span>
+            <span v-else-if="guidedReview.phase === 'done'" class="shogi-game__guided-badge">おしまい</span>
+            <template v-else>{{ guidedReview.moveLabel || "開始局面" }}</template>
+          </p>
+          <p class="shogi-game__guided-text">{{ guidedReview.text }}</p>
+          <div class="shogi-game__guided-actions">
+            <template v-if="guidedReview.phase === 'quiz'">
+              <button type="button" @click="revealGuidedReviewAnswer()">答えを見る</button>
+              <button type="button" @click="nextGuidedReviewStep">とばす</button>
+            </template>
+            <button
+              v-else-if="guidedReview.phase === 'answer' || (guidedReview.phase === 'paused' && guidedReview.text)"
+              type="button"
+              class="shogi-game__guided-primary"
+              @click="nextGuidedReviewStep"
+            >続ける ▶</button>
+            <button
+              v-else-if="guidedReview.phase === 'playing' || guidedReview.phase === 'paused'"
+              type="button"
+              @click="toggleGuidedReviewPause"
+            >{{ guidedReview.phase === "playing" ? "一時停止" : "再開 ▶" }}</button>
+            <button v-if="guidedReview.phase === 'done'" type="button" class="shogi-game__guided-primary" @click="startGuidedReview">もう一度</button>
+            <button type="button" @click="stopGuidedReview">{{ guidedReview.phase === "done" ? "閉じる" : "やめる" }}</button>
+          </div>
+        </div>
+      </div>
+      <button
+        v-else
+        type="button"
+        class="shogi-game__guided-start"
+        :disabled="reviewCpuEnabled"
+        @click="startGuidedReview"
+      ><span aria-hidden="true">▶</span> 対局を振り返る</button>
       <div class="shogi-game__analysis-info">
         <strong>{{ record.position.color === Color.BLACK ? "先手番" : "後手番" }}</strong>
         <select
@@ -1124,6 +1174,9 @@
             </dd>
           </div>
         </dl>
+        <button type="button" class="shogi-game__guided-start shogi-game__guided-start--result" @click="startGuidedReview">
+          <span aria-hidden="true">▶</span> 対局を振り返る
+        </button>
         <div class="shogi-game__result-actions">
           <!-- 教室の対局は、やこび姫の一言と★を見に教室へ戻る。 -->
           <button v-if="tutorialMatch" type="button" class="shogi-game__rematch" @click="returnToTutorial">教室へ戻る</button>
@@ -1285,6 +1338,12 @@ import {
   analyzeKifuStaged,
 } from "./core/kifu-analysis-pipeline.mjs";
 import { summarizeGame } from "./core/ryuo-stats.mjs";
+import {
+  buildGuidedReview,
+  guidedReviewSummary,
+  GUIDED_REVIEW_COMMENT_MS,
+  GUIDED_REVIEW_STEP_MS,
+} from "./core/guided-review.mjs";
 import {
   KIFU_ANALYSIS_LEVELS,
   formatNodeCount,
@@ -2174,12 +2233,12 @@ const strategyCompletionPrompt = computed(() => (
 ));
 const OPENING_STRATEGY_GROUPS = [
   { id: "ibisha", label: "居飛車/基本戦法" },
-  { id: "aigakari", label: "相居飛車／相掛かり" },
-  { id: "yokofudori", label: "相居飛車／横歩取り" },
-  { id: "yagura", label: "相居飛車／矢倉" },
-  { id: "kakugawari", label: "相居飛車／角換わり" },
-  { id: "gangi", label: "相居飛車／雁木" },
-  { id: "anti-ranging", label: "対抗型／居飛車側" },
+  { id: "aigakari", label: "対居飛車／相掛かり" },
+  { id: "yokofudori", label: "対居飛車／横歩取り" },
+  { id: "yagura", label: "対居飛車／矢倉" },
+  { id: "kakugawari", label: "対居飛車／角換わり" },
+  { id: "gangi", label: "対居飛車／雁木" },
+  { id: "anti-ranging", label: "対振り飛車／居飛車側" },
   { id: "shiken", label: "四間飛車" },
   { id: "sangen", label: "三間飛車" },
   { id: "nakabisha", label: "中飛車" },
@@ -3613,6 +3672,8 @@ function navigateBack() {
     pregamePicker.value = "";
   } else if (pregameOpen.value) {
     openHome();
+  } else if (guidedReview.value) {
+    stopGuidedReview();
   } else if (reviewMode.value && analysisOpen.value) {
     analysisOpen.value = false;
   }
@@ -5538,6 +5599,12 @@ function onPlayerMove(usi: string) {
   if (assistSearchInterrupted) engine?.stop();
   if (reviewMode.value) {
     reviewNavigation.value = appendReviewMove(reviewNavigation.value, usi);
+    if (guidedReview.value) {
+      // 振り返り中は、問題の答え合わせだけをする。問題以外で指したら一時停止する。
+      if (guidedReview.value.phase === "quiz") checkGuidedReviewMove(usi);
+      else if (guidedReview.value.phase === "playing") toggleGuidedReviewPause();
+      return;
+    }
     if (reviewCpuEnabled.value) {
       scheduleReviewCpuMove();
     } else {
@@ -6025,6 +6092,7 @@ function completeReview() {
 
 /** 終わった対局から離れる。ホーム画面がある表示ならホームへ、なければ対局準備へ戻る。保存はどちらも消す。 */
 function leaveFinishedMatch() {
+  stopGuidedReview();
   openPregame();
   if (props.showHome) openHome();
 }
@@ -6231,8 +6299,223 @@ function goToAnalysisPly(ply: number) {
   refreshReviewCoachAdvice();
 }
 
+/*
+ * 対局の振り返り。棋譜解析の結果から台本を作り、開始局面から1手ずつ自動で並べる。
+ * 敗着や見逃した詰みの前では止まり、盤で手を指して考えさせる。決め手などの手では、説明してから止まる。
+ * 解析がまだなら、解析を走らせて終わるのを待ってから始める。
+ */
+type GuidedReviewQuiz = {
+  type: string;
+  ply: number;
+  question: string;
+  bestMove?: string;
+  bestLine: string[];
+  playedMove?: string;
+  mateLength: number;
+};
+type GuidedReviewScript = {
+  steps: Map<number, { comment?: string; pause?: boolean; quiz?: GuidedReviewQuiz }>;
+  lastPly: number;
+  quizCount: number;
+};
+type GuidedReviewState = {
+  phase: "waiting" | "playing" | "paused" | "quiz" | "answer" | "done";
+  cursor: number;
+  text: string;
+  moveLabel: string;
+  quiz: GuidedReviewQuiz | null;
+  solved: number;
+};
+const guidedReview = ref<GuidedReviewState | null>(null);
+let guidedReviewScript: GuidedReviewScript | null = null;
+let guidedReviewTimer: ReturnType<typeof setTimeout> | undefined;
+const guidedAnsweredQuizzes = new Set<number>();
+
+function clearGuidedReviewTimer() {
+  if (guidedReviewTimer) clearTimeout(guidedReviewTimer);
+  guidedReviewTimer = undefined;
+}
+
+/** 振り返りで本筋の局面へ移る。助言の探索は走らせない。 */
+function guidedGoTo(ply: number) {
+  reviewCoachGeneration += 1;
+  const mainLine = reviewNavigation.value.mainLine;
+  const cursor = Math.max(0, Math.min(mainLine.length, Math.trunc(ply)));
+  reviewNavigation.value = { ...reviewNavigation.value, line: [...mainLine], cursor, branch: false };
+  rebuildRecord(mainLine.slice(0, cursor));
+  hintCandidates.value = [];
+  hintText.value = "";
+  // 振り返りの一言は振り返り欄で話すので、対局中の助言は残さない。
+  guideText.value = "";
+}
+
+function guidedMoveLabel(ply: number) {
+  if (ply < 1) return "";
+  return analysisPoints.value.find((point) => point.ply === ply)?.label ?? `${ply}手目`;
+}
+
+function guidedFirstMover(): "black" | "white" {
+  const fields = matchInitialSfen.value.replace(/^sfen\s+/, "").trim().split(/\s+/);
+  return fields[1] === "w" ? "white" : "black";
+}
+
+async function startGuidedReview() {
+  clearGuidedReviewTimer();
+  guidedAnsweredQuizzes.clear();
+  guidedReviewScript = null;
+  analysisMenuOpen.value = false;
+  if (!reviewMode.value) enterAnalysisMode("対局を一緒に振り返ろう！");
+  analysisOpen.value = true;
+  guidedReview.value = {
+    phase: "waiting",
+    cursor: 0,
+    text: "棋譜を解析しているよ。終わったら振り返りを始めるね！",
+    moveLabel: "",
+    quiz: null,
+    solved: 0,
+  };
+  await initializeEngine();
+  if (!guidedReview.value) return;
+  if (analyzedLevel.value >= 0 && !analysisRunning.value) beginGuidedReview();
+  else if (!analysisRunning.value) await runKifuAnalysis();
+}
+
+// 解析が終わるのを待っていた振り返りを始める。
+watch(analysisRunning, (running) => {
+  const state = guidedReview.value;
+  if (running || state?.phase !== "waiting") return;
+  if (analyzedLevel.value >= 0) beginGuidedReview();
+  else guidedReview.value = { ...state, phase: "done", text: "解析が終わらなかったから、振り返りを始められなかったよ。" };
+});
+
+function beginGuidedReview() {
+  const state = guidedReview.value;
+  if (!state) return;
+  const winner = result.value?.winner;
+  const firstMover = guidedFirstMover();
+  guidedReviewScript = buildGuidedReview(analysisPoints.value, {
+    playerColor: humanColor.value === Color.WHITE ? "white" : "black",
+    winner: winner === Color.BLACK ? "black" : winner === Color.WHITE ? "white" : null,
+    moves: [...reviewNavigation.value.mainLine],
+    moverForPly: (ply: number) => ((ply % 2 === 1) === (firstMover === "black") ? "black" : "white"),
+  }) as GuidedReviewScript;
+  guidedGoTo(0);
+  guidedReview.value = {
+    ...state,
+    phase: "playing",
+    cursor: 0,
+    moveLabel: "",
+    quiz: null,
+    text: "対局を最初から振り返るよ！大事な場面では止まるから、一緒に考えよう。",
+  };
+  scheduleGuidedStep(GUIDED_REVIEW_COMMENT_MS);
+}
+
+function scheduleGuidedStep(delay = GUIDED_REVIEW_STEP_MS) {
+  clearGuidedReviewTimer();
+  guidedReviewTimer = setTimeout(advanceGuidedReview, delay);
+}
+
+/** 今の局面に問題があれば出す。なければ1手進める。 */
+function advanceGuidedReview() {
+  clearGuidedReviewTimer();
+  const state = guidedReview.value;
+  const script = guidedReviewScript;
+  if (!state || !script || !["playing", "answer"].includes(state.phase)) return;
+  const quiz = script.steps.get(state.cursor)?.quiz;
+  if (quiz && !guidedAnsweredQuizzes.has(quiz.ply)) {
+    guidedReview.value = { ...state, phase: "quiz", quiz, text: `${quiz.question}盤で指してみてね。` };
+    return;
+  }
+  const next = state.cursor + 1;
+  if (next > reviewNavigation.value.mainLine.length) {
+    guidedReview.value = {
+      ...state,
+      phase: "done",
+      quiz: null,
+      text: guidedReviewSummary({ quizCount: script.quizCount, solved: state.solved }),
+    };
+    return;
+  }
+  guidedGoTo(next);
+  const step = script.steps.get(next);
+  guidedReview.value = {
+    ...state,
+    phase: step?.pause ? "paused" : "playing",
+    cursor: next,
+    moveLabel: guidedMoveLabel(next),
+    quiz: null,
+    text: step?.comment ?? "",
+  };
+  if (!step?.pause) scheduleGuidedStep(step?.comment ? GUIDED_REVIEW_COMMENT_MS : GUIDED_REVIEW_STEP_MS);
+}
+
+function toggleGuidedReviewPause() {
+  const state = guidedReview.value;
+  if (!state) return;
+  if (state.phase === "playing") {
+    clearGuidedReviewTimer();
+    guidedReview.value = { ...state, phase: "paused" };
+  } else if (state.phase === "paused") {
+    // 一時停止中に盤を動かしていたら、本筋の局面へ戻してから続ける。
+    guidedGoTo(state.cursor);
+    guidedReview.value = { ...state, phase: "playing" };
+    advanceGuidedReview();
+  }
+}
+
+/** 次へ。止まっている局面や問題を飛ばして進める。 */
+function nextGuidedReviewStep() {
+  const state = guidedReview.value;
+  if (!state) return;
+  if (state.quiz) guidedAnsweredQuizzes.add(state.quiz.ply);
+  guidedGoTo(state.cursor);
+  guidedReview.value = { ...state, phase: "playing", quiz: null };
+  advanceGuidedReview();
+}
+
+function revealGuidedReviewAnswer(prefix = "") {
+  const state = guidedReview.value;
+  const quiz = state?.quiz;
+  if (!state || !quiz) return;
+  guidedAnsweredQuizzes.add(quiz.ply);
+  guidedGoTo(state.cursor);
+  const best = quiz.bestMove;
+  const bestLabel = best ? formatHintMove(best, currentSfen.value) : "";
+  const playedLabel = quiz.playedMove ? formatHintMove(quiz.playedMove, currentSfen.value) : "";
+  if (best) hintCandidates.value = [{ usi: best }];
+  const answer = !bestLabel
+    ? "この局面の最善手は分からなかったよ。"
+    : quiz.type === "mate"
+      ? `${bestLabel}から詰ませられたよ。`
+      : `一番いい手は${bestLabel}だよ。`;
+  const played = playedLabel && quiz.playedMove !== best ? `実戦は${playedLabel}だったね。` : "";
+  guidedReview.value = { ...state, phase: "answer", text: `${prefix}${answer}${played}` };
+}
+
+/** 問題の局面で盤に指した手を答え合わせする。 */
+function checkGuidedReviewMove(usi: string) {
+  const state = guidedReview.value;
+  const quiz = state?.quiz;
+  if (!state || !quiz || state.phase !== "quiz") return;
+  if (usi === quiz.bestMove) {
+    guidedReview.value = { ...state, solved: state.solved + 1 };
+    revealGuidedReviewAnswer("正解！");
+  } else {
+    revealGuidedReviewAnswer("おしい！");
+  }
+}
+
+function stopGuidedReview() {
+  clearGuidedReviewTimer();
+  guidedReview.value = null;
+  guidedReviewScript = null;
+  hintCandidates.value = [];
+}
+
 function restart() {
   matchGeneration += 1;
+  stopGuidedReview();
   if (cpuTimer) clearTimeout(cpuTimer);
   cpuTimer = undefined;
   if (cpuSearchRunning) engine?.stop();
@@ -6469,6 +6752,7 @@ watch([currentKifuPly, () => kifuEntries.value.length], () => nextTick(() => {
 }));
 onBeforeUnmount(() => {
   matchGeneration += 1;
+  clearGuidedReviewTimer();
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
   analysisGeneration += 1;
@@ -7200,7 +7484,7 @@ queueMicrotask(() => {
   z-index: 5;
   display: grid;
   grid-area: analysis;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 0.3em;
   min-width: 0;
   min-height: 0;
@@ -7210,6 +7494,98 @@ queueMicrotask(() => {
   color: var(--night-deep);
   background: var(--ivory);
   font-size: 0.92em;
+}
+/* 対局の振り返り。結果画面と解析欄の目立つ位置に開始ボタンを置く。 */
+.shogi-game .shogi-game__guided-start {
+  display: flex;
+  gap: 0.4em;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4em;
+  padding: 0.3em 1em;
+  border: 2px solid #b8742a;
+  border-radius: 0.4em;
+  color: var(--night-deep);
+  background: var(--amber);
+  box-shadow: 0 3px 0 #b8742a;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.shogi-game .shogi-game__guided-start:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.shogi-game .shogi-game__guided-start--result {
+  width: 100%;
+  min-height: 3em;
+  margin: 0.2em 0 0.6em;
+  font-size: 1.15em;
+}
+.shogi-game .shogi-game__guided-start--inline {
+  min-height: 0;
+}
+.shogi-game__guided {
+  display: flex;
+  gap: 0.5em;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0.4em 0.5em;
+  border: 2px solid var(--amber);
+  border-radius: 0.4em;
+  color: var(--ivory);
+  background: var(--night-deep);
+}
+.shogi-game__guided-chara {
+  flex: none;
+  width: auto;
+  height: 3.4em;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.shogi-game__guided-body {
+  display: grid;
+  flex: 1;
+  gap: 0.25em;
+  min-width: 0;
+}
+.shogi-game__guided-move {
+  margin: 0;
+  color: var(--amber);
+  font-weight: 800;
+  font-size: 0.9em;
+}
+.shogi-game__guided-badge {
+  display: inline-block;
+  padding: 0 0.5em;
+  border-radius: 999px;
+  color: var(--night-deep);
+  background: var(--amber);
+}
+.shogi-game__guided-text {
+  margin: 0;
+  min-height: 1.5em;
+  line-height: 1.5;
+}
+.shogi-game__guided-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+.shogi-game .shogi-game__guided-actions button {
+  min-height: 2.2em;
+  padding: 0.2em 0.8em;
+  border: 1px solid var(--amber);
+  border-radius: 0.3em;
+  color: var(--ivory);
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.shogi-game .shogi-game__guided-actions .shogi-game__guided-primary {
+  color: var(--night-deep);
+  background: var(--amber);
 }
 .shogi-game__analysis-info {
   display: flex;
@@ -7361,7 +7737,7 @@ queueMicrotask(() => {
   padding-bottom: max(0.45em, env(safe-area-inset-bottom));
 }
 .shogi-game--stack.shogi-game--analysis {
-  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 13em) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 17em) auto auto;
   grid-template-areas: "header" "summary" "board" "analysis" "coach" "actions";
 }
 .shogi-game--stack .shogi-game__opening-guide h2 {
