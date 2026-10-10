@@ -276,3 +276,43 @@ describe('対局中の応援・助言', () => {
     })?.key).toBe('move-mistake--900');
   });
 });
+
+describe('相手の戦法への対策助言', () => {
+  const advise = (opponentFormations, playerFormations = []) => getCoachAdvice({
+    level: 'detailed', opponentFormations, playerFormations, advisedTopics: [],
+  });
+
+  test('早繰り銀には相性の良い腰掛け銀を教える', () => {
+    const advice = advise(['早繰り銀']);
+    expect(advice?.topic).toBe('strategy-hayakuri-gin');
+    expect(advice?.text).toContain('腰掛け銀');
+  });
+
+  test('角換わりの銀の三すくみを教える', () => {
+    expect(advise(['棒銀'])?.text).toContain('早繰り銀が相性');
+    expect(advise(['腰掛け銀'])?.text).toContain('棒銀が相性');
+    expect(advise(['角換わり'])?.text).toContain('棒銀は腰掛け銀に');
+  });
+
+  test('奇襲戦法には受け方を教える', () => {
+    expect(advise(['鬼殺し'])?.text).toContain('角の頭を守');
+    expect(advise(['パックマン'])?.text).toContain('飛びつかず');
+    expect(advise(['筋違い角'])?.text).toContain('歩を1枚');
+  });
+
+  test('プレイヤーの戦型で受け方を変える', () => {
+    expect(advise(['棒銀'])?.text).toContain('飛車先を守');
+    expect(advise(['棒銀'], ['四間飛車'])?.text).toContain('飛車を浮いて');
+    expect(advise(['右四間飛車'], ['ノーマル四間飛車'])?.text).toContain('四間飛車のまま');
+  });
+
+  test('居飛車穴熊には振り飛車側の攻略法を教える', () => {
+    expect(advise(['居飛車穴熊'], ['四間飛車'])?.text).toContain('完成する前');
+    expect(advise(['居飛車穴熊'])?.text).toContain('外側の金銀');
+  });
+
+  test('派生の戦法を一般名より優先する', () => {
+    expect(advise(['四間飛車', '藤井システム'])?.topic).toBe('strategy-fujii-system');
+    expect(advise(['中飛車', 'ゴキゲン中飛車'])?.topic).toBe('strategy-gokigen');
+  });
+});

@@ -1094,13 +1094,13 @@ const OPENING_CASTLE_DEFINITIONS = [
 ];
 
 export const OPENING_CASTLE_GROUPS = [
-  { id: "static-quick", label: "対抗型・居飛車側／急戦囲い" },
-  { id: "static-left-mino", label: "対抗型・居飛車側／左美濃系" },
-  { id: "static-anaguma", label: "対抗型・居飛車側／穴熊系" },
-  { id: "aibisha-yagura", label: "相居飛車／矢倉系" },
-  { id: "aibisha-gangi", label: "相居飛車／雁木系" },
-  { id: "aibisha-nakazumai", label: "相居飛車／中住まい系" },
-  { id: "aibisha-balance", label: "相居飛車／バランス型・その他" },
+  { id: "static-quick", label: "対振り飛車（居飛車側）／急戦囲い" },
+  { id: "static-left-mino", label: "対振り飛車（居飛車側）／左美濃系" },
+  { id: "static-anaguma", label: "対振り飛車（居飛車側）／穴熊系" },
+  { id: "aibisha-yagura", label: "対居飛車／矢倉系" },
+  { id: "aibisha-gangi", label: "対居飛車／雁木系" },
+  { id: "aibisha-nakazumai", label: "対居飛車／中住まい系" },
+  { id: "aibisha-balance", label: "対居飛車／バランス型・その他" },
   { id: "ranging-mino", label: "振り飛車側／美濃囲い系" },
   { id: "ranging-anaguma", label: "振り飛車側／穴熊系" },
   { id: "ranging-elmo", label: "振り飛車側／エルモ系" },

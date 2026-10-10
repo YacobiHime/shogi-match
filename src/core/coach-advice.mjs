@@ -1,3 +1,4 @@
+import { COUNTER_STRATEGY_TIPS, counterStrategyText } from './counter-strategy.mjs';
 import shogiLib from './vendor/shogi.esm.js';
 
 const { Shogi } = shogiLib;
@@ -24,8 +25,14 @@ const CASTLE_TIPS = [
     text: '相手は美濃囲い系だね。横からは堅いけど、端攻めや玉頭からの攻めが急所だよ！',
   },
   {
+    key: 'ibisha-anaguma',
+    names: ['居飛車穴熊', '松尾流穴熊', 'ビッグ4', '銀冠穴熊'],
+    text: '相手は居飛車穴熊だね。玉は遠いから、端を絡めて外側の金銀を一枚ずつはがしていこう！',
+    furibisha: '相手は居飛車穴熊だね。穴熊が完成する前に、藤井システムのように玉頭や端から先に仕掛けるのが相性いいよ。組まれたら、外側の金銀から一枚ずつはがそう！',
+  },
+  {
     key: 'anaguma',
-    names: ['振り飛車穴熊', '居飛車穴熊', '四枚穴熊', '松尾流穴熊', '銀冠穴熊', 'ビッグ4'],
+    names: ['振り飛車穴熊', '四枚穴熊'],
     text: '相手は穴熊系だね。玉は遠いから、端を絡めて外側の金銀を一枚ずつはがしていこう！',
   },
   {
@@ -42,6 +49,7 @@ const CASTLE_TIPS = [
     key: 'king-head',
     names: ['左美濃', '天守閣美濃', '端玉銀冠', '銀冠金無双', '金無双', '片金無双', '離れ金無双', '居飛車金無双'],
     text: '相手の囲いは横からの攻めに強い形だね。端と玉頭に歩や桂を集めて攻めるのが急所だよ！',
+    furibisha: '相手の囲いは横からの攻めに強い形だね。振り飛車なら、端歩を突き越して端攻めや、玉頭へ銀と桂を集める攻めが相性いいよ！',
   },
   {
     key: 'right-king',
@@ -62,66 +70,10 @@ const CASTLE_TIPS = [
 
 const FURIBISHA_NAMES = [
   '四間飛車', '藤井システム', '三間飛車', '向かい飛車', '中飛車', 'ゴキゲン中飛車',
-  'ノーマル四間飛車', 'ノーマル三間飛車', '角交換四間飛車', '角交換三間飛車',
-  '立石流四間飛車', '石田流', '早石田', '端角中飛車', 'ダイレクト向かい飛車',
+  'ノーマル四間飛車', 'ノーマル三間飛車', 'ノーマル向かい飛車', '角交換四間飛車', '角交換三間飛車',
+  '立石流四間飛車', '石田流', '早石田', '端角中飛車', '原始中飛車', 'ダイレクト向かい飛車',
   'メリケン向かい飛車', '阪田流向かい飛車', '菜々河流向かい飛車', '天彦流向かい飛車',
-  '7八飛戦法', '2手目3二飛戦法', '鬼殺し',
-];
-
-const STRATEGY_TIPS = [
-  {
-    key: 'aifuribisha',
-    names: ['相振り飛車', '相中飛車'],
-    text: '相振り飛車だね。金無双か美濃囲いにして、相手の攻める筋を見て組み替えるのがおすすめだよ！',
-  },
-  {
-    key: 'fujii-system',
-    names: ['藤井システム'],
-    text: '相手は藤井システムだね。居飛車穴熊を急ぐと端や玉頭を攻められやすいよ。舟囲いの急戦や、端歩を受けて備えるのがおすすめだよ！',
-    furibishaText: '相手は藤井システムだね。相振り飛車に切り替えて、短手数の金無双から先に動くのがおすすめだよ！',
-  },
-  {
-    key: 'osumi',
-    names: ['大隅囲い'],
-    text: '相手は大隅囲いだね。完成は速いけど金一枚の薄い形だから、玉頭と横から早めに圧力をかけよう！',
-  },
-  {
-    key: 'fast-swinging-rook',
-    names: ['鬼殺し', '早石田', '7八飛戦法', '2手目3二飛戦法'],
-    text: '相手は速攻型の振り飛車だね。まず舟囲いなど短手数の囲いで、戦いに備えるのがおすすめだよ！',
-    furibishaText: '相手は速攻型だね。金無双や片美濃のような、短手数の囲いで戦いに備えよう！',
-  },
-  {
-    key: 'swinging-rook',
-    names: FURIBISHA_NAMES,
-    text: '相手は振り飛車だね。こちらが居飛車なら、急戦は舟囲い、持久戦は左美濃や居飛車穴熊が候補だよ！',
-    furibishaText: '相振り飛車になりそうだね。短手数で組める金無双か美濃囲いが使いやすいよ！',
-  },
-  {
-    key: 'yagura-opening',
-    names: ['矢倉'],
-    text: '相手は矢倉戦法だね。こちらも矢倉で厚くするか、雁木で手早く囲うのが候補だよ！',
-  },
-  {
-    key: 'bishop-exchange',
-    names: ['角換わり', '一手損角換わり', '角換わり29手目基本図', '角換わり37手目基本図', '4五桂速攻'],
-    text: '角換わりだね。角の打ち込みに備えて、金銀を低く保つ早囲いや右玉が候補だよ！',
-  },
-  {
-    key: 'side-pawn',
-    names: ['横歩取り', '横歩取り青野流', '横歩取り勇気流', '横歩取り2三歩戦法', '横歩取り3三角戦法', '横歩取り3三桂戦法', '相横歩取り', '横歩取り4五角戦法', '横歩取り8五飛戦法'],
-    text: '横歩取りの戦いだね。深く囲うより、中住まいで玉を広くして大駒の打ち込みに備えよう！',
-  },
-  {
-    key: 'double-wing',
-    names: ['相掛かり', 'AlphaZero流相掛かり', '6二金・8一飛車型', '相掛かり横歩取らせ'],
-    text: '相掛かりだね。中住まいや中原囲いのような、広くて手数のかからない囲いが向いているよ！',
-  },
-  {
-    key: 'rapid-attack',
-    names: ['原始棒銀', '棒銀', '右四間飛車', '袖飛車', '雀刺し'],
-    text: '相手は速い攻めを狙っているね。舟囲いや早囲いのような、短手数で金銀が連結する囲いを優先しよう！',
-  },
+  '7八飛戦法', '2手目3二飛戦法', '鬼殺し', '新鬼殺し', 'やばボーズ流', '相振り飛車', '相中飛車',
 ];
 
 function includesAny(names, candidates) {
@@ -130,12 +82,10 @@ function includesAny(names, candidates) {
 
 function formationAdvice(opponentFormations, playerFormations, advisedTopics) {
   const seen = new Set(advisedTopics);
-  for (const tip of STRATEGY_TIPS) {
+  const playerUsesFuribisha = includesAny(playerFormations, FURIBISHA_NAMES);
+  for (const tip of COUNTER_STRATEGY_TIPS) {
     if (seen.has(`strategy-${tip.key}`) || !includesAny(opponentFormations, tip.names)) continue;
-    const playerUsesFuribisha = includesAny(playerFormations, FURIBISHA_NAMES);
-    const text = playerUsesFuribisha
-      ? tip.furibishaText ?? 'こちらが振り飛車なら、美濃囲いか振り飛車穴熊が組みやすいよ！'
-      : tip.text;
+    const text = counterStrategyText(tip, playerUsesFuribisha);
     return {
       key: `strategy-${tip.key}`,
       topic: `strategy-${tip.key}`,
@@ -144,7 +94,8 @@ function formationAdvice(opponentFormations, playerFormations, advisedTopics) {
   }
   for (const tip of CASTLE_TIPS) {
     if (!seen.has(`castle-${tip.key}`) && includesAny(opponentFormations, tip.names)) {
-      return { key: `castle-${tip.key}`, topic: `castle-${tip.key}`, text: tip.text };
+      const text = playerUsesFuribisha ? tip.furibisha ?? tip.text : tip.text;
+      return { key: `castle-${tip.key}`, topic: `castle-${tip.key}`, text };
     }
   }
   return null;
