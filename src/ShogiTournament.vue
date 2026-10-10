@@ -714,7 +714,9 @@ const statTiles = computed(() => {
 <style>
 /*
  * 竜王戦の画面。
- *   色: 紺の地に、竜王戦の朱(--tr-red)と金(--tr-gold)。操作ボタンは、アプリ共通の橙。
+ *   色: ドット絵のやこび姫と同じ、紺の地・スレートの面・クリームの文字・橙の強調・ラベンダーの差し色。
+ *       グラデーションと光る影は使わず、平らな面と角の立った枠、ずらした影にする。
+ *       竜王戦の朱(--tr-red)は、竜王の印(帯の「竜」と七番勝負の札)だけに使う。
  *   ボタンと入力の寸法をそろえる。
  *     --tr-control: 選択肢のボタン・セレクト・タブの高さ
  *     --tr-action:  大きな操作ボタン(参加・対局開始など)の高さ
@@ -724,14 +726,15 @@ const statTiles = computed(() => {
   --tr-control: 2.75rem;
   --tr-action: 3.25rem;
   --tr-gap: 0.5rem;
-  --tr-red: #c8483c;
-  --tr-gold: #e2b25a;
+  --tr-red: #c4604c;
+  --tr-gold: #f1a54c;
+  --tr-lavender: #d8d0ff;
+  --tr-panel: #2c4359;
+  --tr-deep: #172632;
+  --tr-shadow: #121e29;
   --tr-line: rgba(255, 252, 244, 0.16);
   --tr-mincho: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
-  background:
-    radial-gradient(90% 50% at 100% 0%, rgba(200, 72, 60, 0.16), transparent 70%),
-    radial-gradient(70% 40% at 0% 100%, rgba(226, 178, 90, 0.08), transparent 70%),
-    #1b2d3b;
+  background: #1e2d3d;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
 }
 .shogi-game .shogi-tournament__body {
@@ -768,10 +771,10 @@ const statTiles = computed(() => {
   align-items: center;
   gap: 0.9rem 1rem;
   padding: 1rem 1.2rem 1.1rem;
-  border: 1px solid rgba(226, 178, 90, 0.5);
-  border-radius: 0.9rem;
-  background: linear-gradient(115deg, #7a2620 0%, #4a2730 38%, #24394b 100%);
-  box-shadow: 0 0.4rem 1.2rem rgba(7, 18, 26, 0.35);
+  border: 2px solid var(--tr-gold);
+  border-radius: 0.2rem;
+  background: var(--tr-panel);
+  box-shadow: 4px 4px 0 var(--tr-shadow);
 }
 @media (min-width: 900px) {
   .shogi-game .shogi-tournament__banner {
@@ -785,10 +788,11 @@ const statTiles = computed(() => {
   place-items: center;
   width: 3.6rem;
   height: 3.6rem;
-  border-radius: 50%;
+  border: 2px solid #fffcf4;
+  border-radius: 0.2rem;
   color: #fffcf4;
   background: var(--tr-red);
-  box-shadow: 0 0 0 3px #7a2620, 0 0 0 5px var(--tr-gold), 0 0.3rem 0.8rem rgba(0, 0, 0, 0.4);
+  box-shadow: 3px 3px 0 var(--tr-shadow);
   font-family: var(--tr-mincho);
   font-size: 2rem;
   font-weight: 800;
@@ -848,21 +852,19 @@ const statTiles = computed(() => {
   width: 1rem;
   height: 1rem;
   border: 2px solid rgba(255, 252, 244, 0.55);
-  border-radius: 50%;
-  background: #2c3f50;
+  background: var(--tr-deep);
 }
 .shogi-game .shogi-tournament__step--done .shogi-tournament__step-dot { border-color: var(--tr-gold); background: var(--tr-gold); }
 .shogi-game .shogi-tournament__step--done { color: rgba(255, 252, 244, 0.85); }
 .shogi-game .shogi-tournament__step--current { color: #fffcf4; }
 .shogi-game .shogi-tournament__step--current .shogi-tournament__step-dot {
   border-color: #fffcf4;
-  background: var(--tr-red);
-  box-shadow: 0 0 0 4px rgba(255, 252, 244, 0.25);
+  background: var(--tr-lavender);
 }
-.shogi-game .shogi-tournament__step--won { color: #f3d48a; }
-.shogi-game .shogi-tournament__step--won .shogi-tournament__step-dot { border-color: #fffcf4; background: #f3d48a; box-shadow: 0 0 0.8rem #f3d48a; }
-.shogi-game .shogi-tournament__step--lost { color: #ffb0a6; }
-.shogi-game .shogi-tournament__step--lost .shogi-tournament__step-dot { border-color: #ffb0a6; background: var(--tr-red); }
+.shogi-game .shogi-tournament__step--won { color: var(--tr-gold); }
+.shogi-game .shogi-tournament__step--won .shogi-tournament__step-dot { border-color: #fffcf4; background: var(--tr-gold); }
+.shogi-game .shogi-tournament__step--lost { color: rgba(255, 252, 244, 0.6); }
+.shogi-game .shogi-tournament__step--lost .shogi-tournament__step-dot { border-color: rgba(255, 252, 244, 0.6); background: #5d6f80; }
 
 /* ---- カード */
 .shogi-game .shogi-tournament__card {
@@ -871,9 +873,9 @@ const statTiles = computed(() => {
   align-content: start;
   min-width: 0;
   padding: 1rem 1.1rem;
-  border: 1px solid var(--tr-line);
-  border-radius: 0.9rem;
-  background: linear-gradient(180deg, rgba(255, 252, 244, 0.07), rgba(255, 252, 244, 0.025));
+  border: 2px solid #3b5570;
+  border-radius: 0.2rem;
+  background: var(--tr-panel);
 }
 .shogi-game .shogi-tournament__card h2 {
   display: flex;
@@ -887,10 +889,9 @@ const statTiles = computed(() => {
 }
 .shogi-game .shogi-tournament__card h2::before {
   content: "";
-  width: 0.3rem;
-  height: 1.1em;
-  border-radius: 2px;
-  background: var(--tr-red);
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--tr-gold);
 }
 .shogi-game .shogi-tournament__text { margin: 0; line-height: 1.7; }
 .shogi-game .shogi-tournament__lead { margin: 0; font-size: 1.2em; font-weight: 800; }
@@ -903,9 +904,10 @@ const statTiles = computed(() => {
   gap: 0.9rem;
   min-width: 0;
   padding: 1.1rem;
-  border: 1px solid rgba(226, 178, 90, 0.4);
-  border-radius: 0.9rem;
-  background: linear-gradient(160deg, rgba(200, 72, 60, 0.2), rgba(255, 252, 244, 0.04) 60%);
+  border: 2px solid var(--tr-lavender);
+  border-radius: 0.2rem;
+  background: var(--tr-panel);
+  box-shadow: 4px 4px 0 var(--tr-shadow);
 }
 .shogi-game .shogi-tournament__coach .yakobi-says { padding-bottom: 0.5rem; }
 .shogi-game .shogi-tournament__pager {
@@ -936,16 +938,16 @@ const statTiles = computed(() => {
   padding: 0 0.8rem;
   border: 0;
   border-left: 3px solid rgba(255, 252, 244, 0.25);
-  border-radius: 0.4rem;
+  border-radius: 0.15rem;
   color: rgba(255, 252, 244, 0.85);
-  background: rgba(255, 252, 244, 0.05);
+  background: var(--tr-deep);
   font: inherit;
   font-size: 0.9em;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
 }
-.shogi-game .shogi-tournament__chapters button[aria-current="step"] { border-left-color: var(--tr-red); color: #fffcf4; background: rgba(200, 72, 60, 0.3); }
+.shogi-game .shogi-tournament__chapters button[aria-current="step"] { border-left-color: var(--tr-gold); color: #fffcf4; background: #3b5570; }
 .shogi-game .shogi-tournament__inline-says { display: none; }
 @media (max-width: 899px) {
   .shogi-game .shogi-tournament__inline-says { display: block; }
@@ -966,8 +968,8 @@ const statTiles = computed(() => {
   gap: 0.15rem;
   min-width: 0;
   padding: 0.55rem 0.7rem;
-  border-radius: 0.6rem;
-  background: rgba(255, 252, 244, 0.06);
+  border-radius: 0.15rem;
+  background: var(--tr-deep);
 }
 .shogi-game .shogi-tournament__tiles dt { color: rgba(255, 252, 244, 0.65); font-size: 0.78em; font-weight: 700; }
 .shogi-game .shogi-tournament__tiles dd { margin: 0; font-size: 1.35em; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; }
@@ -999,10 +1001,10 @@ const statTiles = computed(() => {
   min-width: 0;
   height: var(--tr-control);
   padding: 0 0.3rem;
-  border: 1px solid rgba(255, 252, 244, 0.45);
-  border-radius: 0.5rem;
+  border: 2px solid rgba(255, 252, 244, 0.4);
+  border-radius: 0.2rem;
   color: #fffcf4;
-  background: rgba(255, 252, 244, 0.04);
+  background: var(--tr-deep);
   font: inherit;
   font-weight: 700;
   white-space: nowrap;
@@ -1029,10 +1031,10 @@ const statTiles = computed(() => {
   width: 100%;
   height: var(--tr-control);
   padding: 0 0.6rem;
-  border: 1px solid rgba(255, 252, 244, 0.45);
-  border-radius: 0.5rem;
+  border: 2px solid rgba(255, 252, 244, 0.4);
+  border-radius: 0.2rem;
   color: #fffcf4;
-  background: #22384a;
+  background: var(--tr-deep);
   font: inherit;
 }
 
@@ -1046,7 +1048,7 @@ const statTiles = computed(() => {
   width: 100%;
   height: var(--tr-action);
   padding: 0 1rem;
-  border-radius: 0.7rem;
+  border-radius: 0.2rem;
   font: inherit;
   font-size: 1.05em;
   white-space: nowrap;
@@ -1057,7 +1059,7 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__start {
   border: 2px solid #f1a54c;
   color: #172632;
-  background: linear-gradient(180deg, #f6b766, #ea9a3b);
+  background: #f1a54c;
   font-weight: 800;
   box-shadow: 0 0.25rem 0 #b06a1c;
 }
@@ -1071,10 +1073,8 @@ const statTiles = computed(() => {
   align-items: center;
   gap: 0.6rem;
   padding: 1rem 0.6rem;
-  border-radius: 0.8rem;
-  background:
-    linear-gradient(90deg, rgba(241, 165, 76, 0.18), transparent 40%, transparent 60%, rgba(200, 72, 60, 0.25)),
-    rgba(7, 18, 26, 0.3);
+  border-radius: 0.2rem;
+  background: var(--tr-deep);
 }
 .shogi-game .shogi-tournament__player { display: grid; justify-items: center; gap: 0.2rem; min-width: 0; text-align: center; }
 .shogi-game .shogi-tournament__player strong {
@@ -1087,7 +1087,7 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__player small { color: rgba(255, 252, 244, 0.8); font-weight: 700; }
 .shogi-game .shogi-tournament__color {
   padding: 0.05rem 0.6rem;
-  border-radius: 999px;
+  border-radius: 0.15rem;
   color: #172632;
   background: #fffcf4;
   font-size: 0.75em;
@@ -1112,8 +1112,8 @@ const statTiles = computed(() => {
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.6rem;
-  border-radius: 0.5rem;
-  background: rgba(255, 252, 244, 0.05);
+  border-radius: 0.15rem;
+  background: var(--tr-deep);
 }
 .shogi-game .shogi-tournament__series-label { color: rgba(255, 252, 244, 0.7); font-size: 0.85em; }
 .shogi-game .shogi-tournament__series-name { font-weight: 700; text-align: center; overflow-wrap: anywhere; }
@@ -1125,15 +1125,16 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__verdict {
   grid-template-columns: minmax(0, 1fr);
   gap: 1rem 1.5rem;
-  border-color: rgba(226, 178, 90, 0.45);
+  border-color: var(--tr-gold);
 }
 @media (min-width: 760px) {
   .shogi-game .shogi-tournament__verdict { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
   .shogi-game .shogi-tournament__path { grid-column: 1 / -1; }
 }
-.shogi-game .shogi-tournament__verdict--crown { background: linear-gradient(120deg, rgba(243, 212, 138, 0.25), rgba(255, 252, 244, 0.03) 60%); }
-.shogi-game .shogi-tournament__verdict--up { background: linear-gradient(120deg, rgba(95, 186, 125, 0.2), rgba(255, 252, 244, 0.03) 60%); }
-.shogi-game .shogi-tournament__verdict--down { background: linear-gradient(120deg, rgba(200, 72, 60, 0.25), rgba(255, 252, 244, 0.03) 60%); }
+/* 結果の種類は、枠の色で分ける(竜王・昇級は橙、降級はラベンダー)。 */
+.shogi-game .shogi-tournament__verdict--crown,
+.shogi-game .shogi-tournament__verdict--up { border-color: var(--tr-gold); }
+.shogi-game .shogi-tournament__verdict--down { border-color: var(--tr-lavender); }
 .shogi-game .shogi-tournament__verdict-main { display: grid; gap: 0.4rem; min-width: 0; }
 .shogi-game .shogi-tournament__eyebrow { margin: 0; color: var(--tr-gold); font-weight: 800; letter-spacing: 0.12em; }
 .shogi-game .shogi-tournament__headline {
@@ -1150,8 +1151,8 @@ const statTiles = computed(() => {
   justify-content: center;
   gap: 0.3rem 0.8rem;
   padding: 0.8rem 1.2rem;
-  border-radius: 0.8rem;
-  background: rgba(7, 18, 26, 0.35);
+  border-radius: 0.2rem;
+  background: var(--tr-deep);
   text-align: center;
 }
 .shogi-game .shogi-tournament__move-from,
@@ -1162,14 +1163,14 @@ const statTiles = computed(() => {
   grid-column: 1 / -1;
   justify-self: center;
   padding: 0.1rem 1rem;
-  border-radius: 999px;
+  border-radius: 0.15rem;
   color: #172632;
   background: #fffcf4;
   letter-spacing: 0.2em;
 }
-.shogi-game .shogi-tournament__verdict--crown .shogi-tournament__move-label { background: #f3d48a; }
-.shogi-game .shogi-tournament__verdict--up .shogi-tournament__move-label { background: #8fd9a8; }
-.shogi-game .shogi-tournament__verdict--down .shogi-tournament__move-label { color: #fffcf4; background: var(--tr-red); }
+.shogi-game .shogi-tournament__verdict--crown .shogi-tournament__move-label,
+.shogi-game .shogi-tournament__verdict--up .shogi-tournament__move-label { background: var(--tr-gold); }
+.shogi-game .shogi-tournament__verdict--down .shogi-tournament__move-label { background: var(--tr-lavender); }
 .shogi-game .shogi-tournament__path {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
@@ -1183,8 +1184,8 @@ const statTiles = computed(() => {
   gap: 0.15rem;
   padding: 0.5rem 0.7rem;
   border-left: 3px solid var(--tr-gold);
-  border-radius: 0.4rem;
-  background: rgba(255, 252, 244, 0.05);
+  border-radius: 0.15rem;
+  background: var(--tr-deep);
 }
 .shogi-game .shogi-tournament__path li span { color: rgba(255, 252, 244, 0.7); font-size: 0.82em; }
 .shogi-game .shogi-tournament__titles { display: flex; flex-wrap: wrap; gap: var(--tr-gap); margin: 0.2rem 0 0; padding: 0; list-style: none; }
@@ -1192,9 +1193,10 @@ const statTiles = computed(() => {
   display: grid;
   gap: 0.05rem;
   padding: 0.4rem 0.9rem;
-  border-radius: 0.6rem;
-  color: #2a1608;
-  background: linear-gradient(180deg, #f3d48a, #c99a3e);
+  border-radius: 0.15rem;
+  color: #172632;
+  background: var(--tr-gold);
+  box-shadow: 3px 3px 0 var(--tr-shadow);
 }
 .shogi-game .shogi-tournament__titles small { font-size: 0.75em; }
 .shogi-game .shogi-tournament__radar { justify-items: center; }

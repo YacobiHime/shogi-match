@@ -104,10 +104,10 @@ const lost = computed(() => {
 .shogi-game .shogi-tree__canvas { position: relative; margin: 0 auto; }
 .shogi-game .shogi-tree__lines { position: absolute; inset: 0; }
 .shogi-game .shogi-tree__edge { stroke: rgba(255, 252, 244, 0.35); stroke-width: 1.5; }
-.shogi-game .shogi-tree__edge--won { stroke: #e0483a; stroke-width: 3; }
+.shogi-game .shogi-tree__edge--won { stroke: #f1a54c; stroke-width: 3; }
 .shogi-game .shogi-tree__node { fill: rgba(255, 252, 244, 0.35); }
-.shogi-game .shogi-tree__node--decided { fill: #e0483a; }
-.shogi-game .shogi-tree__node--pending { fill: #f1a54c; stroke: #fffcf4; stroke-width: 2; animation: shogi-tree-pulse 1.4s ease-in-out infinite; }
+.shogi-game .shogi-tree__node--decided { fill: #f1a54c; }
+.shogi-game .shogi-tree__node--pending { fill: #d8d0ff; stroke: #fffcf4; stroke-width: 2; animation: shogi-tree-pulse 1.4s ease-in-out infinite; }
 @keyframes shogi-tree-pulse { 50% { opacity: 0.45; } }
 .shogi-game .shogi-tree__badge {
   position: absolute;
@@ -119,8 +119,8 @@ const lost = computed(() => {
   white-space: nowrap;
   transform: translate(-50%, -50%);
 }
-.shogi-game .shogi-tree__badge--gold { background: #b8860b; }
-.shogi-game .shogi-tree__badge--red { background: #c0392b; }
+.shogi-game .shogi-tree__badge--gold { color: #172632; background: #f1a54c; }
+.shogi-game .shogi-tree__badge--red { background: #c4604c; }
 .shogi-game .shogi-tree__leaf {
   position: absolute;
   display: flex;
@@ -129,14 +129,14 @@ const lost = computed(() => {
   gap: 0.2rem;
   padding: 0.2rem 0;
   border: 1px solid rgba(255, 252, 244, 0.4);
-  border-radius: 0.35rem;
-  background: rgba(255, 252, 244, 0.08);
+  border-radius: 0.15rem;
+  background: #172632;
   box-sizing: border-box;
   transform: translateX(-50%);
   overflow: hidden;
 }
 .shogi-game .shogi-tree__leaf--user { border: 2px solid #f1a54c; background: rgba(241, 165, 76, 0.2); }
-.shogi-game .shogi-tree__leaf--champion { border-color: #c0392b; background: rgba(192, 57, 43, 0.18); }
+.shogi-game .shogi-tree__leaf--champion { border: 2px solid #d8d0ff; background: rgba(216, 208, 255, 0.14); }
 .shogi-game .shogi-tree__leaf--out { opacity: 0.55; }
 .shogi-game .shogi-tree__tag {
   min-height: 1.1em;

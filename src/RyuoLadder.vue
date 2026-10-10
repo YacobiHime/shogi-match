@@ -44,13 +44,12 @@ const steps = computed(() => [
   display: grid;
   place-items: center;
   min-width: 0;
-  border-radius: 0.35rem 0.35rem 0 0;
   color: rgba(255, 252, 244, 0.7);
-  background: rgba(255, 252, 244, 0.08);
+  background: #172632;
   font-weight: 700;
   font-size: 0.85em;
 }
-.shogi-game .ryuo-ladder__step--ryuo { height: 4.2rem; color: #2a1608; background: linear-gradient(180deg, #f3d48a, #c99a3e); }
+.shogi-game .ryuo-ladder__step--ryuo { height: 4.2rem; color: #172632; background: #f1a54c; }
 .shogi-game .ryuo-ladder__step--g1 { height: 3.7rem; }
 .shogi-game .ryuo-ladder__step--g2 { height: 3.3rem; }
 .shogi-game .ryuo-ladder__step--g3 { height: 2.9rem; }
@@ -58,11 +57,11 @@ const steps = computed(() => [
 .shogi-game .ryuo-ladder__step--g5 { height: 2.2rem; }
 .shogi-game .ryuo-ladder__step--g6 { height: 1.9rem; }
 .shogi-game .ryuo-ladder__step--current:not(.ryuo-ladder__step--ryuo) {
-  color: #fffcf4;
-  background: #c8483c;
+  color: #172632;
+  background: #d8d0ff;
   box-shadow: 0 0 0 2px #fffcf4 inset;
 }
-.shogi-game .ryuo-ladder__step--ryuo.ryuo-ladder__step--current { box-shadow: 0 0 0 2px #fffcf4 inset, 0 0 1rem rgba(243, 212, 138, 0.6); }
+.shogi-game .ryuo-ladder__step--ryuo.ryuo-ladder__step--current { box-shadow: 0 0 0 2px #fffcf4 inset; }
 .shogi-game .ryuo-ladder__label { white-space: nowrap; }
 .shogi-game .ryuo-ladder__you {
   position: absolute;
@@ -70,7 +69,6 @@ const steps = computed(() => [
   left: 50%;
   transform: translateX(-50%);
   padding: 0.05rem 0.4rem;
-  border-radius: 999px;
   color: #172632;
   background: #fffcf4;
   font-size: 0.75em;

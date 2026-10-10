@@ -372,17 +372,18 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 </script>
 
 <style>
-/* やこびノート。竜王戦の画面と同じ、紺の地・金の見出し・角の丸いカードでそろえる。 */
+/* やこびノート。竜王戦の画面と同じく、ドット絵のやこび姫の配色(紺・スレート・クリーム・橙・ラベンダー)で、
+ * グラデーションを使わない平らな面と、角の立った枠にそろえる。 */
 .shogi-game .shogi-dex.shogi-note {
-  --note-gold: #e2b25a;
-  --note-red: #c8483c;
+  --note-gold: #f1a54c;
+  --note-lavender: #d8d0ff;
+  --note-panel: #2c4359;
+  --note-deep: #172632;
+  --note-shadow: #121e29;
   --note-line: rgba(255, 252, 244, 0.16);
   --note-control: 2.75rem;
   --note-mincho: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
-  background:
-    radial-gradient(80% 45% at 0% 0%, rgba(241, 165, 76, 0.14), transparent 70%),
-    radial-gradient(70% 40% at 100% 100%, rgba(200, 72, 60, 0.1), transparent 70%),
-    #1b2d3b;
+  background: #1e2d3d;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
 }
 .shogi-game .shogi-note__body {
@@ -403,9 +404,10 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 }
 .shogi-game .shogi-note__coach {
   padding: 1.1rem 1.1rem 1.5rem;
-  border: 1px solid rgba(226, 178, 90, 0.4);
-  border-radius: 0.9rem;
-  background: linear-gradient(160deg, rgba(241, 165, 76, 0.2), rgba(255, 252, 244, 0.04) 60%);
+  border: 2px solid var(--note-lavender);
+  border-radius: 0.2rem;
+  background: var(--note-panel);
+  box-shadow: 4px 4px 0 var(--note-shadow);
 }
 .shogi-game .shogi-note__card {
   display: grid;
@@ -413,9 +415,9 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   gap: 0.75rem;
   min-width: 0;
   padding: 1rem 1.1rem;
-  border: 1px solid var(--note-line);
-  border-radius: 0.9rem;
-  background: linear-gradient(180deg, rgba(255, 252, 244, 0.07), rgba(255, 252, 244, 0.025));
+  border: 2px solid #3b5570;
+  border-radius: 0.2rem;
+  background: var(--note-panel);
 }
 .shogi-game .shogi-note__card h2 {
   display: flex;
@@ -428,10 +430,9 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 }
 .shogi-game .shogi-note__card h2::before {
   content: "";
-  width: 0.3rem;
-  height: 1.1em;
-  border-radius: 2px;
-  background: #f1a54c;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--note-gold);
 }
 .shogi-game .shogi-note__affiliation {
   display: flex;
@@ -448,10 +449,10 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   gap: 0.1rem;
   min-width: 0;
   padding: 0.45rem 0.9rem;
-  border-radius: 0.6rem;
-  color: #2a1608;
-  background: linear-gradient(180deg, #f3d48a, #c99a3e);
-  box-shadow: 0 0.15rem 0.5rem rgba(0, 0, 0, 0.25);
+  border-radius: 0.15rem;
+  color: #172632;
+  background: var(--note-gold);
+  box-shadow: 3px 3px 0 var(--note-shadow);
 }
 .shogi-game .shogi-note__titles strong { font-family: var(--note-mincho); font-size: 1.15em; }
 .shogi-game .shogi-note__titles small { font-size: 0.75em; }
@@ -467,9 +468,9 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__rating strong { font-size: clamp(2.4rem, 1.8rem + 2vw, 3.4rem); font-weight: 800; line-height: 1; letter-spacing: 0.02em; }
 .shogi-game .shogi-note__chip {
   padding: 0.2rem 0.8rem;
-  border: 1px solid rgba(241, 165, 76, 0.7);
-  border-radius: 999px;
-  color: #f1a54c;
+  border: 2px solid var(--note-gold);
+  border-radius: 0.15rem;
+  color: var(--note-gold);
   font-weight: 700;
 }
 .shogi-game .shogi-note__tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; margin: 0; }
@@ -479,8 +480,8 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   gap: 0.1rem;
   min-width: 0;
   padding: 0.5rem 0.6rem;
-  border-radius: 0.6rem;
-  background: rgba(255, 252, 244, 0.06);
+  border-radius: 0.15rem;
+  background: var(--note-deep);
 }
 .shogi-game .shogi-note__tiles dt { color: rgba(255, 252, 244, 0.65); font-size: 0.75em; font-weight: 700; white-space: nowrap; }
 .shogi-game .shogi-note__tiles dd { margin: 0; font-size: 1.3em; font-weight: 800; line-height: 1.2; }
@@ -492,8 +493,8 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   gap: 0.3rem 0.5rem;
   margin: 0;
   padding: 0.7rem 0.8rem;
-  border-radius: 0.7rem;
-  background: rgba(7, 18, 26, 0.3);
+  border-radius: 0.15rem;
+  background: var(--note-deep);
 }
 .shogi-game .shogi-note__trend-axis {
   display: flex;
@@ -524,7 +525,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__declare select {
   box-sizing: border-box;
   height: var(--note-control);
-  border-radius: 0.6rem;
+  border-radius: 0.2rem;
   font: inherit;
 }
 .shogi-game .shogi-note__button {
@@ -540,7 +541,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__button--primary {
   border-color: #f1a54c;
   color: #172632;
-  background: linear-gradient(180deg, #f6b766, #ea9a3b);
+  background: var(--note-gold);
   box-shadow: 0 0.2rem 0 #b06a1c;
 }
 .shogi-game .shogi-note__button--ghost { justify-self: start; width: auto; border-width: 1px; font-weight: 700; }
@@ -549,9 +550,9 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__declare select {
   width: 100%;
   padding: 0 0.6rem;
-  border: 1px solid rgba(255, 252, 244, 0.45);
+  border: 2px solid rgba(255, 252, 244, 0.4);
   color: #fffcf4;
-  background: #22384a;
+  background: var(--note-deep);
 }
 .shogi-game .shogi-note__hint { margin: 0; color: rgba(255, 252, 244, 0.7); font-size: 0.8em; line-height: 1.6; }
 
@@ -571,13 +572,13 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   gap: 0.6rem;
   padding: 0.4rem 0.6rem;
   border-left: 3px solid rgba(255, 252, 244, 0.35);
-  border-radius: 0.4rem;
-  background: rgba(255, 252, 244, 0.05);
+  border-radius: 0.15rem;
+  background: var(--note-deep);
   font-size: 0.9em;
 }
-.shogi-game .shogi-note__history li.shogi-note__history--crown { border-left-color: #f3d48a; background: rgba(243, 212, 138, 0.12); }
-.shogi-game .shogi-note__history li.shogi-note__history--up { border-left-color: #8fd9a8; }
-.shogi-game .shogi-note__history li.shogi-note__history--down { border-left-color: var(--note-red); }
+.shogi-game .shogi-note__history li.shogi-note__history--crown { border-left-color: var(--note-gold); background: rgba(241, 165, 76, 0.14); }
+.shogi-game .shogi-note__history li.shogi-note__history--up { border-left-color: var(--note-gold); }
+.shogi-game .shogi-note__history li.shogi-note__history--down { border-left-color: var(--note-lavender); }
 .shogi-game .shogi-note__history-no { font-weight: 800; }
 .shogi-game .shogi-note__history-group { color: var(--note-gold); font-weight: 700; }
 .shogi-game .shogi-note__history-text { overflow-wrap: anywhere; }
@@ -594,8 +595,8 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__rows li:not(:has(.shogi-note__bar)) { grid-template-columns: 1fr auto; }
 .shogi-game .shogi-note__name { font-weight: 700; overflow-wrap: anywhere; }
 .shogi-game .shogi-note__stat { font-size: 0.85em; text-align: right; white-space: nowrap; }
-.shogi-game .shogi-note__bar { height: 0.55rem; border-radius: 999px; background: rgba(255, 252, 244, 0.12); overflow: hidden; }
-.shogi-game .shogi-note__bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ea9a3b, #f3d48a); }
+.shogi-game .shogi-note__bar { height: 0.55rem; background: var(--note-deep); overflow: hidden; }
+.shogi-game .shogi-note__bar span { display: block; height: 100%; background: var(--note-gold); }
 @media (max-width: 520px) {
   .shogi-game .shogi-note__rows li,
   .shogi-game .shogi-note__rows li:not(:has(.shogi-note__bar)) { grid-template-columns: 1fr auto; }
