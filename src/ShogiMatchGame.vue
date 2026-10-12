@@ -988,7 +988,8 @@
         :total-ply="reviewNavigation.mainLine.length"
         @select="goToAnalysisPly"
       />
-      <div v-if="skillDiagnosis" class="shogi-game__skill" data-skill-diagnosis>
+      <!-- 棋力診断は、棋力測定の対局では常に出す。ほかの解析では、グラフの高さを奪わないよう「その他」から開いた人だけに出す。 -->
+      <div v-if="skillDiagnosis && (measureSession || skillDiagnosisVisible)" class="shogi-game__skill" data-skill-diagnosis>
         <template v-if="skillDiagnosis.insufficient">
           <strong>棋力診断</strong>
           <span>測れる手が足りません（{{ skillDiagnosis.count }}手）。もう少し長く指した対局で診断できます。</span>
@@ -1028,6 +1029,13 @@
             :aria-checked="boardFlipOverride"
             @click="boardFlipOverride = !boardFlipOverride"
           >ひふみんアイ（盤を反転）：{{ boardFlipOverride ? "ON" : "OFF" }}</button>
+          <button
+            v-if="skillDiagnosis && !measureSession"
+            type="button"
+            role="menuitemcheckbox"
+            :aria-checked="skillDiagnosisVisible"
+            @click="skillDiagnosisVisible = !skillDiagnosisVisible"
+          >棋力診断：{{ skillDiagnosisVisible ? "表示中" : "非表示" }}</button>
           <button v-if="reviewNavigation.branch" type="button" role="menuitem" @click="analysisMenuOpen = false; returnToMainLine()">本筋に戻る</button>
           <button
             v-if="result?.reason === 'resignation'"
@@ -1642,6 +1650,8 @@ const measureProgressPercent = computed(() => (
   analysisTotal.value ? Math.round((analysisProgress.value / analysisTotal.value) * 100) : 0
 ));
 const measureReportDismissed = ref(false);
+/** 棋力測定以外の解析で、棋力診断を表示するか。「その他」メニューから切り替える。 */
+const skillDiagnosisVisible = ref(false);
 /** レーティングに近いLvの段級位の表示名。 */
 const nearestRatingLabel = computed(() => recommendedStrengthPreset.value.label);
 const recommendedStrengthPreset = computed(() => {
@@ -6554,6 +6564,7 @@ function restart() {
   resultDialogOpen.value = false;
   reviewMode.value = false;
   analysisOpen.value = false;
+  skillDiagnosisVisible.value = false;
   analysisRunning.value = false;
   analysisProgress.value = 0;
   analysisTotal.value = 0;
@@ -7509,7 +7520,8 @@ queueMicrotask(() => {
   z-index: 5;
   display: grid;
   grid-area: analysis;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  /* グラフの行は最低限の高さを保ち、細い線にしない。 */
+  grid-template-rows: auto auto auto minmax(5em, 1fr) auto;
   gap: 0.3em;
   min-width: 0;
   min-height: 0;
@@ -7764,6 +7776,10 @@ queueMicrotask(() => {
 .shogi-game--stack.shogi-game--analysis {
   grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 17em) auto auto;
   grid-template-areas: "header" "summary" "board" "analysis" "coach" "actions";
+}
+/* 棋力診断を出したら解析欄を広げ、グラフを潰さずに盤の方を縮める。 */
+.shogi-game--stack.shogi-game--analysis:has(.shogi-game__skill) {
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 23em) auto auto;
 }
 .shogi-game--stack .shogi-game__opening-guide h2 {
   display: none;

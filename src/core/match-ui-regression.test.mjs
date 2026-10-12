@@ -82,7 +82,10 @@ describe("match screen regressions", () => {
   });
 
   it("offers to set the rating only in the measurement started from the notebook", () => {
-    // 診断の表示は、ほかの棋譜解析でも出すが、「レーティングに設定」のボタンは、棋力測定の対局だけ。
+    // 診断は、棋力測定の対局では常に出し、ほかの棋譜解析では「その他」から開いた人だけに出す。
+    // 「レーティングに設定」のボタンは、棋力測定の対局だけ。
+    expect(source).toMatch(/v-if="skillDiagnosis && \(measureSession \|\| skillDiagnosisVisible\)"/);
+    expect(source).toMatch(/v-if="skillDiagnosis && !measureSession"[^>]*@click="skillDiagnosisVisible = !skillDiagnosisVisible"/);
     expect(source.match(/@click="applySkillDiagnosis"/g)).toHaveLength(2);
     expect(source).toMatch(/<button v-if="measureSession" type="button"[^>]*@click="applySkillDiagnosis"/);
     // 測定の結果のダイアログは、測定の対局(measureSession)のときだけ開く。
