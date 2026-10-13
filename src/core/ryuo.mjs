@@ -5,14 +5,30 @@
 
 import { aggregateSeasonStats } from './ryuo-stats.mjs';
 import {
+  CHAMPION_RATING,
   GIVEN_NAMES,
   GROUP_DAN_WEIGHTS,
-  GROUP_LEVEL_SPREAD,
-  GROUP_MEAN_LEVEL,
   OPPONENT_STYLES,
+  SPECIAL_RATING_OFFSET,
   SURNAMES,
   WOMEN_GIVEN_NAMES,
 } from './ryuo-data.mjs';
+import {
+  BASE_DIFFICULTY,
+  DIFFICULTY_LEVELS,
+  GROUP_MEAN_RATING,
+  GROUP_RATING_SPREAD,
+  groupMeanLevel,
+  levelToRating,
+  ratingToLevel,
+  recommendedDifficulty,
+  winProbability,
+} from './ryuo-strength.mjs';
+
+export { BASE_DIFFICULTY, DIFFICULTY_LEVELS, groupMeanLevel, recommendedDifficulty, winProbability };
+
+/** 期の保存形式。3から、棋士はレーティング(rating)を持ち、Lvは難易度から換算した値になった。 */
+export const SEASON_VERSION = 3;
 
 export const USER_ID = 'user';
 export const CHAMPION_ID = 'champion';
@@ -32,30 +48,7 @@ export const SCALES = Object.freeze([
   { id: 5, label: '実物', sizes: REAL_SIZES, slots: { 1: 5, 2: 2, 3: 1, 4: 1, 5: 1, 6: 1 }, promote: 4 },
 ]);
 
-export const DIFFICULTY_LEVELS = 12;
-/** 基準の難易度。2026-10-10に下へ2段階足したので、以前の5がこの7にあたる。 */
-export const BASE_DIFFICULTY = 7;
-const LEVELS_PER_DIFFICULTY = 4;
-const SIM_ELO_PER_LEVEL = 50;
-const MAX_CPU_LEVEL = 40;
-
 export const scaleById = (id) => SCALES.find((scale) => scale.id === id) ?? SCALES[2];
-
-/** 難易度(1〜12)での、全体のLvのずれ。7が基準で、1段階ごとに4レベル動く。 */
-export function levelShift(difficulty) {
-  return (Math.min(DIFFICULTY_LEVELS, Math.max(1, Math.round(difficulty))) - BASE_DIFFICULTY) * LEVELS_PER_DIFFICULTY;
-}
-
-/** 難易度での、その組の相手のLvの平均。 */
-export function groupMeanLevel(group, difficulty) {
-  return Math.min(MAX_CPU_LEVEL, Math.max(0, GROUP_MEAN_LEVEL[group] + levelShift(difficulty)));
-}
-
-/** おすすめの難易度。6組の相手のLvの平均が、プレイヤーの棋力(Lv)に近くなる難易度。 */
-export function recommendedDifficulty(playerLevel) {
-  const difficulty = Math.round((playerLevel - GROUP_MEAN_LEVEL[6]) / LEVELS_PER_DIFFICULTY + BASE_DIFFICULTY);
-  return Math.min(DIFFICULTY_LEVELS, Math.max(1, difficulty));
-}
 
 // ---- 乱数(状態を保存して、続きから再現できる)
 
@@ -95,11 +88,10 @@ function weightedPick(rng, entries) {
 
 // ---- 棋士の生成
 
-const clampLevel = (level) => Math.min(MAX_CPU_LEVEL, Math.max(3, Math.round(level)));
-
-/** 自動対局の勝率。棋力(Lv)の差を、1Lvあたり50点のレーティング差として扱う。 */
-export function winProbability(levelA, levelB) {
-  return 1 / (1 + 10 ** (((levelB - levelA) * SIM_ELO_PER_LEVEL) / 400));
+/** 棋士を作る。強さはレーティングで持ち、Lvは、その期の難易度で換算した、実際に指すときの値。 */
+function makePlayer(fields, rating, difficulty) {
+  const rounded = Math.round(rating);
+  return { ...fields, rating: rounded, level: ratingToLevel(rounded, difficulty) };
 }
 
 function newName(rng, used, women = false) {
@@ -120,8 +112,8 @@ function newName(rng, used, women = false) {
  * @param {{ group: number, size: number, difficulty: number, rng: ReturnType<typeof createRng>, used: Set<string>, prefix?: string }} options
  */
 export function generateGroupField({ group, size, difficulty, rng, used, prefix = `g${group}` }) {
-  const mean = groupMeanLevel(group, difficulty);
-  const spread = GROUP_LEVEL_SPREAD[group];
+  const mean = GROUP_MEAN_RATING[group];
+  const spread = GROUP_RATING_SPREAD[group];
   // 6組の枠の内訳(実物は女流4・奨励会1・アマ5)。規模に合わせて、人数に比例して減らす。
   const specials = group === 6
     ? [
@@ -133,17 +125,15 @@ export function generateGroupField({ group, size, difficulty, rng, used, prefix 
   const players = [];
   for (let index = 0; index < size; index += 1) {
     const kind = specials[index] ?? 'pro';
-    const offset = { pro: 0, amateur: -2, woman: 0.5, shoreikai: 2 }[kind];
     const style = pick(rng, OPPONENT_STYLES);
-    players.push({
+    players.push(makePlayer({
       id: `${prefix}-${index + 1}`,
       name: newName(rng, used, kind === 'woman'),
       dan: kind === 'amateur' ? 'アマ' : kind === 'woman' ? '女流二段' : kind === 'shoreikai' ? '奨励会三段' : weightedPick(rng, GROUP_DAN_WEIGHTS[group]),
       kind,
       group,
-      level: clampLevel(mean + offset + gauss(rng) * spread),
       style: { id: style.id, label: style.label, strategy: style.strategy, castle: style.castle, rook: style.rook },
-    });
+    }, mean + SPECIAL_RATING_OFFSET[kind] + gauss(rng) * spread, difficulty));
   }
   return players;
 }
@@ -253,7 +243,7 @@ export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAt
       const a = sidePid(bracket, node.a);
       const b = sidePid(bracket, node.b);
       if (a === userId || b === userId) return { state: 'user', nodeId: node.id };
-      node.winner = rng.next() < winProbability(players[a].level, players[b].level) ? a : b;
+      node.winner = rng.next() < winProbability(players[a].rating, players[b].rating) ? a : b;
     }
   }
   const rootId = rootNodeId(bracket);
@@ -310,7 +300,7 @@ export function recordSeriesGame(series, winner) {
 
 function simulateSeries(series, players, rng) {
   while (series.winner === null) {
-    const pa = winProbability(players[series.a].level, players[series.b].level);
+    const pa = winProbability(players[series.a].rating, players[series.b].rating);
     recordSeriesGame(series, rng.next() < pa ? series.a : series.b);
   }
 }
@@ -320,7 +310,7 @@ function simulateSeries(series, players, rng) {
 /**
  * 組の最終順位(上から)。優勝、準優勝、敗者復活の勝者、それ以外(敗者復活と本戦の勝ち数、シード順)の順。
  */
-export function computeStandings(ranking, revivalBlocks, levels) {
+export function computeStandings(ranking, revivalBlocks, strengths) {
   const records = bracketRecords(ranking);
   const champion = bracketChampion(ranking);
   const runnerUp = bracketRunnerUp(ranking);
@@ -338,7 +328,7 @@ export function computeStandings(ranking, revivalBlocks, levels) {
     .sort((x, y) => (
       (revivalWins[y] ?? 0) - (revivalWins[x] ?? 0)
       || records[y].wins - records[x].wins
-      || (levels[y] ?? 0) - (levels[x] ?? 0)
+      || (strengths[y] ?? 0) - (strengths[x] ?? 0)
       || seedIndex(x) - seedIndex(y)
     ));
   return [...head, ...rest];
@@ -358,7 +348,7 @@ export function revivalSlots(group, scale) {
  * 敗者復活戦の表を作る。ランキング戦で決勝の前に負けた棋士が出る。
  * 1組は負けた回戦ごと(準決勝敗者、準々決勝敗者…)、2組以下は成績順に交互に分けた表で、それぞれ1名が勝ち上がる。
  */
-export function buildRevivalBlocks(group, ranking, slotCount, levels, prefix) {
+export function buildRevivalBlocks(group, ranking, slotCount, strengths, prefix) {
   if (slotCount <= 0) return [];
   const records = bracketRecords(ranking);
   const pool = ranking.ids.filter((pid) => records[pid].lostRound !== null && records[pid].lostRound < ranking.rounds);
@@ -367,7 +357,7 @@ export function buildRevivalBlocks(group, ranking, slotCount, levels, prefix) {
     const rounds = [...new Set(pool.map((pid) => records[pid].lostRound))].sort((x, y) => y - x);
     groups = rounds.slice(0, slotCount).map((round) => pool.filter((pid) => records[pid].lostRound === round));
   } else {
-    const ordered = [...pool].sort((x, y) => records[y].wins - records[x].wins || (levels[y] ?? 0) - (levels[x] ?? 0));
+    const ordered = [...pool].sort((x, y) => records[y].wins - records[x].wins || (strengths[y] ?? 0) - (strengths[x] ?? 0));
     groups = Array.from({ length: Math.min(slotCount, ordered.length) }, () => []);
     ordered.forEach((pid, index) => {
       const lane = index % groups.length;
@@ -377,7 +367,7 @@ export function buildRevivalBlocks(group, ranking, slotCount, levels, prefix) {
     });
   }
   return groups.filter((ids) => ids.length > 0).map((ids, index) => {
-    const sorted = [...ids].sort((x, y) => (levels[y] ?? 0) - (levels[x] ?? 0));
+    const sorted = [...ids].sort((x, y) => (strengths[y] ?? 0) - (strengths[x] ?? 0));
     return buildSeededBracket(group === 1 ? `出場者決定戦 ${index + 3}位決定` : `昇級者決定戦 ${'ABCD'[index] ?? index + 1}`, sorted, `${prefix}-r${index + 1}`);
   });
 }
@@ -415,7 +405,7 @@ export function createSeason({ no, mode, group, settings, userLevel, career, see
   const rng = createRng(seed);
   const used = new Set([userName]);
   const season = {
-    version: 2,
+    version: SEASON_VERSION,
     id: seed,
     no,
     mode,
@@ -441,27 +431,27 @@ export function createSeason({ no, mode, group, settings, userLevel, career, see
     result: null,
     rngState: 0,
   };
+  // プレイヤーのレーティングは、棋力(Lv)をこの難易度で棋士の尺度に直した値。自動対局には使わない(表示と目安)。
   season.players[USER_ID] = {
-    id: USER_ID, name: userName, dan: userDanFor(career), kind: 'user', group, level: Math.round(userLevel), style: null,
+    id: USER_ID, name: userName, dan: userDanFor(career), kind: 'user', group,
+    level: Math.round(userLevel), rating: levelToRating(userLevel, settings.difficulty), style: null,
   };
-  const championLevel = clampLevel(groupMeanLevel(1, settings.difficulty) + 2);
   if (mode === 'defense') {
     season.champion = USER_ID;
     season.defender = USER_ID;
   } else {
     season.champion = CHAMPION_ID;
     season.defender = CHAMPION_ID;
-    season.players[CHAMPION_ID] = {
-      id: CHAMPION_ID, name: newName(rng, used), dan: '竜王', kind: 'pro', group: 1, level: championLevel,
-      style: pickStyle(rng),
-    };
+    season.players[CHAMPION_ID] = makePlayer({
+      id: CHAMPION_ID, name: newName(rng, used), dan: '竜王', kind: 'pro', group: 1, style: pickStyle(rng),
+    }, CHAMPION_RATING, settings.difficulty);
   }
   if (mode === 'challenge') {
     const field = generateGroupField({ group, size: scale.sizes[group] - 1, difficulty: settings.difficulty, rng, used });
     for (const player of field) season.players[player.id] = player;
     const ids = Object.keys(season.players).filter((pid) => season.players[pid].group === group && pid !== CHAMPION_ID);
-    const seedLevels = levelsOf(season);
-    ids.sort((x, y) => seedLevels[y] - seedLevels[x]);
+    const seedStrengths = strengthsOf(season);
+    ids.sort((x, y) => seedStrengths[y] - seedStrengths[x]);
     season.ranking = buildSeededBracket(`${group}組ランキング戦`, ids, 'rk');
   } else {
     season.phase = 'prepare-defense';
@@ -479,9 +469,9 @@ function pickStyle(rng) {
  * 組み合わせと順位の同点処理に使う、各棋士の棋力。プレイヤーは、実際の棋力ではなく、組の平均として扱う
  * (棋力が低くても、毎回、組でいちばん強い相手に当たらないように)。
  */
-const levelsOf = (season) => Object.fromEntries(Object.entries(season.players).map(([pid, player]) => [
+const strengthsOf = (season) => Object.fromEntries(Object.entries(season.players).map(([pid, player]) => [
   pid,
-  pid === USER_ID ? groupMeanLevel(season.startGroup, season.settings.difficulty) : player.level,
+  pid === USER_ID ? GROUP_MEAN_RATING[season.startGroup] : player.rating,
 ]));
 
 /** プレイヤーの組以外の組の、決勝トーナメント進出者を、自動で決める。 */
@@ -491,13 +481,13 @@ function simulateGroupQualifiers(season, group, rng) {
   const field = generateGroupField({ group, size: scale.sizes[group], difficulty: season.settings.difficulty, rng, used, prefix: `o${group}` });
   season.used = [...used];
   for (const player of field) season.players[player.id] = player;
-  const ids = field.map(({ id }) => id).sort((x, y) => season.players[y].level - season.players[x].level);
+  const ids = field.map(({ id }) => id).sort((x, y) => season.players[y].rating - season.players[x].rating);
   const ranking = buildSeededBracket(`${group}組`, ids, `o${group}rk`);
   advanceBracket(ranking, season.players, rng);
-  const levels = levelsOf(season);
-  const blocks = season.settings.revival ? buildRevivalBlocks(group, ranking, group === 1 ? scale.slots[1] - 2 : 0, levels, `o${group}`) : [];
+  const strengths = strengthsOf(season);
+  const blocks = season.settings.revival ? buildRevivalBlocks(group, ranking, group === 1 ? scale.slots[1] - 2 : 0, strengths, `o${group}`) : [];
   for (const block of blocks) advanceBracket(block, season.players, rng);
-  return computeStandings(ranking, blocks, levels).slice(0, scale.slots[group]);
+  return computeStandings(ranking, blocks, strengths).slice(0, scale.slots[group]);
 }
 
 function buildMainFor(season, userGroupQualified, rng) {
@@ -617,9 +607,9 @@ function drive(season, rng) {
         break;
       }
       const scale = scaleById(season.settings.scale);
-      const levels = levelsOf(season);
+      const strengths = strengthsOf(season);
       const slotCount = revivalSlots(season.startGroup, scale);
-      season.revival = season.settings.revival ? buildRevivalBlocks(season.startGroup, season.ranking, slotCount, levels, 'rv') : [];
+      season.revival = season.settings.revival ? buildRevivalBlocks(season.startGroup, season.ranking, slotCount, strengths, 'rv') : [];
       season.phase = 'revival';
       continue;
     }
@@ -637,7 +627,7 @@ function drive(season, rng) {
       }
       if (pendingUser) break;
       // 勝敗が同じ人の中では、プレイヤーを下位に置く(初戦と敗者復活戦の初戦で負ければ、降級になる)。
-      season.standings = computeStandings(season.ranking, season.revival, { ...levelsOf(season), [USER_ID]: -1 });
+      season.standings = computeStandings(season.ranking, season.revival, { ...strengthsOf(season), [USER_ID]: -Infinity });
       const scale = scaleById(season.settings.scale);
       season.qualifiedFromGroup = season.standings.slice(0, scale.slots[season.startGroup]);
       season.phase = 'main-setup';
@@ -728,7 +718,7 @@ export function recordUserGame(season, outcome) {
 
 const playerBrief = (season, pid) => {
   const player = season.players[pid];
-  return player ? { id: pid, name: player.name, dan: player.dan, level: player.level, kind: player.kind, style: player.style } : null;
+  return player ? { id: pid, name: player.name, dan: player.dan, level: player.level, rating: player.rating, kind: player.kind, style: player.style } : null;
 };
 
 export function playerView(season, pid) {

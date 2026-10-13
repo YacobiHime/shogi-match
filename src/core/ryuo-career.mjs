@@ -1,5 +1,7 @@
 // 竜王戦のキャリア(何期目か、いま何組か、竜王を何期獲ったか)の記録。結果は1期ごとに保存する。
 
+import { SEASON_VERSION } from './ryuo.mjs';
+
 export const CAREER_STORAGE_KEY = 'yacobihime:shogi-match:ryuo-career';
 export const SEASON_STORAGE_KEY = 'yacobihime:shogi-match:ryuo-season';
 const MAX_HISTORY = 40;
@@ -148,16 +150,8 @@ export function saveCareer(storage, career) {
 export function loadSeason(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(SEASON_STORAGE_KEY) ?? 'null');
-    if (!parsed || ![1, 2].includes(parsed.version) || typeof parsed.phase !== 'string' || !parsed.players) return null;
-    // 版1の期は難易度が1〜10だった。下へ2段階足したので、同じ強さになるよう2つずらす。
-    if (parsed.version === 1) {
-      const difficulty = Number(parsed.settings?.difficulty);
-      return {
-        ...parsed,
-        version: 2,
-        settings: { ...parsed.settings, ...(Number.isFinite(difficulty) ? { difficulty: difficulty + 2 } : {}) },
-      };
-    }
+    // 版2以前の期は、棋士がレーティングを持たない(強さがLvだけ)。続きは指せないので、捨てて作り直してもらう。
+    if (!parsed || parsed.version !== SEASON_VERSION || typeof parsed.phase !== 'string' || !parsed.players) return null;
     return parsed;
   } catch {
     return null;

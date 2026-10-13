@@ -47,13 +47,13 @@ export const OPPONENT_STYLES = Object.freeze([
 ]);
 
 /**
- * 組ごとの棋力(CPUのLv)の平均。難易度の初期値(5)でのLv。
- * 上の組ほど強い。1組はプロの上位で、Lv40(藤井聡太並み)に近い。
+ * 6組の特別枠の、6組の平均の棋士とのレーティングの差。
+ * アマ・女流棋士は、棋士との対局で勝ち越すことは少ないので下げる。奨励会三段は、四段目前なので少し上げる。
  */
-export const GROUP_MEAN_LEVEL = Object.freeze({ 1: 37, 2: 36, 3: 34.5, 4: 33, 5: 31.5, 6: 30 });
+export const SPECIAL_RATING_OFFSET = Object.freeze({ pro: 0, amateur: -170, woman: -120, shoreikai: 40 });
 
-/** 組ごとの棋力のばらつき(標準偏差)。6組は、アマ・女流・奨励会員が混じるので広い。 */
-export const GROUP_LEVEL_SPREAD = Object.freeze({ 1: 1.6, 2: 1.8, 3: 2, 4: 2.2, 5: 2.5, 6: 3.4 });
+/** 竜王のレーティング。1組の平均より、ばらつき2つ分ほど上に置く。 */
+export const CHAMPION_RATING = 1950;
 
 /** 組ごとの段位の分布。[段位, 重み]。 */
 export const GROUP_DAN_WEIGHTS = Object.freeze({
