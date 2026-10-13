@@ -626,7 +626,7 @@ export function recordUserGame(season, outcome) {
 
 const playerBrief = (season, pid) => {
   const player = season.players[pid];
-  return player ? { id: pid, name: player.name, dan: player.dan, level: player.level, rating: player.rating, kind: player.kind, style: player.style } : null;
+  return player ? { id: pid, name: player.name, dan: player.dan, level: player.level, rating: player.rating, kind: player.kind, style: player.style, character: player.character ?? null } : null;
 };
 
 export function playerView(season, pid) {

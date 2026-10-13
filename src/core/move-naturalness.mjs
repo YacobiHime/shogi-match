@@ -249,6 +249,8 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
     return {
       weight: Math.min(NATURALNESS_MAX, Math.max(NATURALNESS_MIN, weight)),
       tags,
+      // 王手かどうか。棋風(攻めの手か)の判定に使う。
+      check: givesCheck,
     };
   };
 }

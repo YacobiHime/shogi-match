@@ -3,7 +3,7 @@
 // (scripts/cpu-level-selfplay.mjs、docs/difficulty-calibration.md)。
 
 const MIN_NODES = 50;
-const TOP_NODES = 480000;
+export const TOP_NODES = 480000;
 /**
  * 最高技量(Lv40「藤井聡太並み」)だけの探索量とスレッド数。Lv1〜39の曲線(TOP_NODES)とは別に持つ。
  * 2026-10-02に48万から72万nodesへ1.5倍にし、2スレッドで読んで待ち時間を以前より短くした。

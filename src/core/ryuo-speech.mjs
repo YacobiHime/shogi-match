@@ -1,5 +1,7 @@
 // 竜王戦の画面で、やこび姫が話すセリフ。説明・エントリーの一言・次の対局・結果の言葉を作る。画面に依存しない。
 
+import { describeCharacter } from './player-character.mjs';
+
 /** 竜王戦の説明。やこび姫が、順に話す。 */
 export function ryuoGuideLines() {
   return [
@@ -82,6 +84,11 @@ export function opponentLines(opponent, userLevel, pending) {
   else if (gap >= 3) lines.push('手ごわい相手だよ。慎重にね。');
   else if (gap <= -4) lines.push('落ち着いて指せば大丈夫。でも、油断は禁物だよ！');
   else lines.push('いい勝負になりそう！ がんばってね。');
+  const profile = describeCharacter(opponent.character ?? null);
+  if (opponent.character) {
+    const notes = [...profile.strengths.slice(0, 1).map((text) => `${text}みたい`), ...profile.weaknesses.slice(0, 1).map((text) => `${text}らしいよ`)];
+    lines.push(`${profile.style}の人だよ。${notes.length ? `${notes.join('。でも、')}。` : ''}`);
+  }
   if (opponent.style?.rook === 'ranging') lines.push('振り飛車の相手だから、対振り飛車の形を思い出しておこうね。');
   else if (opponent.style?.rook === 'static') lines.push('居飛車の相手だよ。序盤の組み方に気をつけてね。');
   if (pending?.kind && pending.kind !== 'game') lines.push(`これは第${pending.gameNo}局。ここまで、あなた${pending.wins.user}勝、相手${pending.wins.opponent}勝だよ。`);

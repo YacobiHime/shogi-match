@@ -1333,6 +1333,8 @@ import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
 import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById } from "./core/ryuo.mjs";
 import { applySeasonToRoster, createRoster, loadRoster, saveRoster } from "./core/ryuo-roster.mjs";
+import { applyCharacter, characterSituation } from "./core/player-character.mjs";
+import { comparableScore } from "./core/move-selection.mjs";
 import {
   applySeason,
   loadCareer,
@@ -5817,7 +5819,16 @@ async function scheduleCpuMove() {
         cpuMoveCount: cpuOpeningTurn.cpuMoves.length,
         cpuMoves: cpuOpeningTurn.cpuMoves,
       });
-      const strength = getStrengthSearchSettings(searchNodes.value);
+      // 竜王戦の相手は、棋風と、この場面で働く特徴を強さ設定に反映する(探索の前は探索量、探索のあとは手の選び方)。
+      const baseStrength = getStrengthSearchSettings(searchNodes.value);
+      const cpuCharacter = ryuoGame.value ? ryuoOpponent.value?.character ?? null : null;
+      const cpuSituation = cpuCharacter
+        ? characterSituation({ sfen: record.value.position.sfen, ply: moveHistory.length })
+        : null;
+      const characterStrength = (advantage?: number) => (cpuCharacter && cpuSituation
+        ? applyCharacter(baseStrength, cpuCharacter, { ...cpuSituation, advantage }, { skill: cpuStrengthPreset.value.skill })
+        : baseStrength);
+      const strength = characterStrength();
       const allowedCpuMoveList = allowedCpuMoves.map(({ usi: moveUsi }) => moveUsi);
       const naturalCpuMove = async () => (await chooseCpuMove({
         strength,
@@ -5850,6 +5861,8 @@ async function scheduleCpuMove() {
         if (cpuSearchGeneration === generation) cpuSearchRunning = false;
         if (generation !== matchGeneration) return;
         const bestCpuScore = search.candidates.find((candidate) => candidate.rank === 1)?.score;
+        // 形勢で働く特徴(劣勢でも崩れない・優勢で緩む)は、探索の評価値(CPUの手番から見た値)で決める。
+        const selectionStrength = characterStrength(comparableScore(bestCpuScore));
         // 閃き候補を指した場合は、深さの違う再探索と混ぜず同じ探索内で比較する。
         const playerAfterScore = reusedHintAssessment?.afterScore ?? scoreForPlayer(
           bestCpuScore,
@@ -5926,12 +5939,12 @@ async function scheduleCpuMove() {
             rank: searchedCandidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
             }
           : await chooseCpuMove({
-            strength,
+            strength: selectionStrength,
             sfen: record.value.position.sfen,
             legalMoves: allowedCpuMoveList,
             moveHistory,
             search,
-            blunderAllowed: canBlunder(strength, cpuBlunderPlies, moveHistory.length),
+            blunderAllowed: canBlunder(selectionStrength, cpuBlunderPlies, moveHistory.length),
             verify: async (searchMoves: string[], nodes: number) => {
               cpuSearchRunning = true;
               cpuSearchGeneration = generation;

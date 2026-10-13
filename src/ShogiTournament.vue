@@ -267,6 +267,11 @@
                 <div><dt>得意戦法</dt><dd class="shogi-tournament__tile-text">{{ view.pending.opponent.style?.label ?? "—" }}</dd></div>
                 <div><dt>手番</dt><dd class="shogi-tournament__tile-text">{{ view.pending.color === "black" ? "先手" : "後手" }}</dd><span class="shogi-tournament__tile-note">振り駒</span></div>
               </dl>
+              <dl class="shogi-tournament__profile" data-tournament-opponent-profile>
+                <div><dt>棋風</dt><dd>{{ opponentProfile.style }}</dd></div>
+                <div v-if="opponentProfile.strengths.length"><dt>得意</dt><dd>{{ opponentProfile.strengths.join("・") }}</dd></div>
+                <div v-if="opponentProfile.weaknesses.length"><dt>苦手</dt><dd>{{ opponentProfile.weaknesses.join("・") }}</dd></div>
+              </dl>
               <button type="button" class="shogi-tournament__start" data-tournament-play @click="emit('play')">対局開始</button>
             </section>
 
@@ -398,12 +403,16 @@ import {
   seasonPhaseLines,
 } from "./core/ryuo-speech.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
+import { describeCharacter } from "./core/player-character.mjs";
 
 type Career = {
   group: number; seasons: number; champion: boolean; titles: number; streak: number; eternal: boolean;
   settings: { scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number };
 };
-type Brief = { id: string; name: string; dan: string; level: number; style?: { label: string; rook?: string } | null };
+type Brief = {
+  id: string; name: string; dan: string; level: number; style?: { label: string; rook?: string } | null;
+  character?: { attack: number; traits: { id: string; degree: number }[] } | null;
+};
 type Tree = {
   root: { pid?: string; from?: string }; rounds: number;
   nodes: Record<string, { id: string; a: { pid?: string; from?: string }; b: { pid?: string; from?: string }; winner: string | null; round: number }>;
@@ -609,6 +618,8 @@ const talkLines = computed(() => {
   }
 });
 const phaseLines = computed(() => seasonPhaseLines(props.view));
+/** 次の相手の棋風と特徴(得意・苦手)。 */
+const opponentProfile = computed(() => describeCharacter(props.view?.pending?.opponent?.character ?? null));
 const opponentSays = computed(() => (
   props.view?.pending ? opponentLines(props.view.pending.opponent, props.userLevel, props.view.pending) : []
 ));
@@ -976,6 +987,24 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__tiles dd small { margin-left: 0.1rem; font-size: 0.6em; }
 .shogi-game .shogi-tournament__tiles dd.shogi-tournament__tile-text { font-size: 1em; }
 .shogi-game .shogi-tournament__tile-note { color: var(--tr-gold); font-size: 0.75em; font-weight: 700; }
+
+/* ---- 次の相手の棋風と特徴 */
+.shogi-game .shogi-tournament__profile {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.15rem;
+  background: var(--tr-deep);
+}
+.shogi-game .shogi-tournament__profile > div {
+  display: grid;
+  grid-template-columns: 3em minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: baseline;
+}
+.shogi-game .shogi-tournament__profile dt { color: rgba(255, 252, 244, 0.65); font-size: 0.78em; font-weight: 700; }
+.shogi-game .shogi-tournament__profile dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 
 /* ---- エントリー: 項目名と選択肢を、同じ幅の2列にそろえる */
 .shogi-game .shogi-tournament__row {

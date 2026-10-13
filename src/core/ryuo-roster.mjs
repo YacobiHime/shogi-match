@@ -14,6 +14,7 @@ import {
 } from './ryuo-data.mjs';
 import { GROUP_MEAN_RATING, GROUP_RATING_SPREAD } from './ryuo-strength.mjs';
 import { createRng, gauss, pick, weightedPick } from './ryuo-random.mjs';
+import { ageCharacter, createCharacter } from './player-character.mjs';
 
 export const ROSTER_STORAGE_KEY = 'yacobihime:shogi-match:ryuo-roster';
 export const ROSTER_VERSION = 1;
@@ -111,6 +112,8 @@ function createMember(roster, rng, used, { group, kind = 'pro', rating, age, dan
     ryuo: 0,
     style: pickStyle(rng),
   };
+  // 棋風と特徴。強さ・年齢・得意戦法に合わせて決める。
+  member.character = createCharacter(rng, member);
   roster.players[id] = member;
   return member;
 }
@@ -204,6 +207,7 @@ export function seasonEntry(roster, id) {
     rating: member.rating,
     style: { ...member.style },
     ryuo: member.ryuo,
+    character: structuredClone(member.character ?? { attack: 0, traits: [] }),
   };
 }
 
@@ -286,6 +290,7 @@ export function applySeasonToRoster(roster, season, { userGroup, promote }) {
   for (const member of members(next)) {
     member.age += 1;
     if (member.kind === 'pro' || member.kind === 'woman') member.rating = Math.round(member.rating + ageDrift(member.age) + gauss(rng) * 30);
+    if (member.character) member.character = ageCharacter(rng, member.character, member);
     if (member.kind !== 'pro' || isHolder(next, member.id)) continue;
     const index = DAN_ORDER.indexOf(member.dan);
     const chance = (DAN_UP_CHANCE[member.dan] ?? 0) * clamp(1 + (member.rating - 1450) / 400, 0.4, 2);
@@ -349,6 +354,13 @@ export function loadRoster(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(ROSTER_STORAGE_KEY) ?? 'null');
     if (!parsed || parsed.version !== ROSTER_VERSION || !parsed.players || typeof parsed.players !== 'object') return null;
+    // 個性を持つ前に作った名簿には、棋士ごとに決まった種から個性を足す。
+    for (const member of Object.values(parsed.players)) {
+      if (member && !member.character) {
+        const seed = [...String(member.id)].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
+        member.character = createCharacter(createRng(seed), member);
+      }
+    }
     return parsed;
   } catch {
     return null;

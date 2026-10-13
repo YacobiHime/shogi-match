@@ -40,6 +40,22 @@ describe('initial roster', () => {
       expect(groupOf(roster, 6).filter((member) => member.kind === kind)).toHaveLength(slots);
     }
     expect(new Set(members(roster).map(({ name }) => name)).size).toBe(members(roster).length);
+    // 全員が棋風と特徴を持ち、特徴のない棋士もいる。
+    expect(members(roster).every(({ character }) => Number.isFinite(character.attack) && Array.isArray(character.traits))).toBe(true);
+    expect(members(roster).some(({ character }) => character.traits.length === 0)).toBe(true);
+    expect(members(roster).some(({ character }) => character.traits.length > 0)).toBe(true);
+  });
+
+  it('gives characters to an older roster saved without them, the same way every time', () => {
+    const data = new Map();
+    const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: (k) => data.delete(k) };
+    const roster = createRoster({ seed: 9 });
+    for (const member of members(roster)) delete member.character;
+    saveRoster(storage, roster);
+    const first = loadRoster(storage);
+    const second = loadRoster(storage);
+    expect(members(first).every(({ character }) => character)).toBe(true);
+    expect(first).toEqual(second);
   });
 
   it('follows the Ryuo promotion rules for dan and has young and veteran players in group 6', () => {
@@ -67,6 +83,7 @@ describe('roster across seasons', () => {
     const shared = Object.keys(second.players).filter((id) => id !== USER_ID && before.has(id));
     expect(shared.length).toBeGreaterThan(100);
     expect(second.champion).toBe(first.roster.holder);
+    for (const id of shared) expect(second.players[id].character).toEqual(first.roster.players[id].character);
   });
 
   it('applies a season only once', () => {

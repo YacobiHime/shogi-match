@@ -75,7 +75,59 @@ function naturalnessMemo(sfen, moveHistory, options = {}, evaluation = evaluatio
     const { tags } = evaluation(usi);
     return tags.includes(PIECE_SACRIFICE_TAG) || tags.includes("sacrifice");
   };
+  weight.leaning = (usi) => moveLeaning(evaluation(usi));
   return weight;
+}
+
+/** 攻めの手のタグ。王手も攻めの手に数える。 */
+export const ATTACK_TAGS = new Set(["threaten", "open-line", "rook-pawn-push", "pawn-tension", "promote", "winning-capture", "free-capture"]);
+/** 受けの手のタグ。 */
+export const DEFENSE_TAGS = new Set(["king-escape", "drop-block", "move-block", "escape", "castle-build", "capture-checker", "recapture", "simple-recapture"]);
+
+/** 手が攻め(1)か受け(-1)か、どちらでもない(0)か。両方の性格を持つ手は、攻めに数える。 */
+export function moveLeaning({ tags = [], check = false } = {}) {
+  if (check || tags.some((tag) => ATTACK_TAGS.has(tag))) return 1;
+  if (tags.some((tag) => DEFENSE_TAGS.has(tag))) return -1;
+  return 0;
+}
+
+/**
+ * 棋風で手を選ぶ。最善手との差がmargin以内の候補のうち、棋風に合う手(攻めなら攻めの手)を、
+ * |attack|×rateの割合で選ぶ。最善手が棋風に合うなら、最善手のまま。合う手がなければnull。
+ */
+export function chooseStyledMove({ search, candidates, style, naturalness, random = Math.random, lossCap = Infinity }) {
+  if (!style || !Number.isFinite(style.attack) || style.attack === 0) return null;
+  if (drawRandom(random) >= Math.abs(style.attack) * (style.rate ?? 1)) return null;
+  const want = Math.sign(style.attack);
+  const bestScore = comparableScore(candidates.find(({ move }) => move === search.move)?.score);
+  if (bestScore === undefined) return null;
+  if (naturalness.leaning(search.move) === want) return null;
+  const limit = Math.min(style.margin ?? 0, lossCap);
+  const fitting = candidates
+    .map((candidate) => ({ ...candidate, value: comparableScore(candidate.score) }))
+    .filter(({ move, value }) => move !== search.move && value !== undefined && bestScore - value <= limit
+      && !naturalness.isSacrifice(move) && naturalness.leaning(move) === want);
+  if (!fitting.length) return null;
+  // 最善手に近いほど選びやすい。
+  const picked = pickWeighted(fitting.map((entry) => ({ ...entry, weight: 1 + limit - (bestScore - entry.value) })), random);
+  return {
+    move: picked.move, rank: picked.rank, kind: "style",
+    naturalness: naturalness(picked.move), loss: Math.max(0, bestScore - picked.value),
+  };
+}
+
+/**
+ * 詰みが見える手数(strength.mateHorizon、plyで相手の応手を含む)以内の詰みが探索で見えていれば、詰ます手を返す。
+ * それより長い詰みは、ふだんの手の選び方に任せる(見逃すことがある)。
+ */
+export function chooseMatingMove({ search, candidates, strength }) {
+  const horizon = strength.mateHorizon;
+  if (!(horizon > 0)) return null;
+  const mates = candidates
+    .filter(({ score }) => score?.type === "mate" && Number.isInteger(score.value) && score.value > 0 && score.value <= horizon)
+    .sort((a, b) => a.score.value - b.score.value || a.rank - b.rank);
+  const best = mates[0];
+  return best ? { move: best.move, rank: best.rank, kind: "mate", loss: 0, mate: best.score.value } : null;
 }
 
 /** エンジンを使わず、合法手を自然さ^alphaで重み付けして選ぶ。 */
@@ -268,6 +320,10 @@ export async function chooseCpuMove({
     return bestScore !== undefined && value !== undefined && bestScore - value <= SACRIFICE_CANDIDATE_MAX_LOSS;
   });
 
+  // 詰みが見える手数以内の詰みは、必ず詰ます。
+  const mating = chooseMatingMove({ search, candidates, strength });
+  if (mating) return { ...mating, naturalness: naturalness(mating.move) };
+
   // Lv0とのつなぎの区間では、読まずに見た目だけで指す手を混ぜる。自分から駒をただで渡す手は選ばない。
   if (strength.naturalMoveRate > 0 && drawRandom(random) < strength.naturalMoveRate) {
     const unread = legalMoves.filter((move) => !naturalness.isSacrifice(move));
@@ -283,6 +339,10 @@ export async function chooseCpuMove({
     });
     if (oversight) return oversight;
   }
+
+  // 棋風。最善手に近い候補の中で、攻めの手か受けの手を選びやすくする。
+  const styled = chooseStyledMove({ search, candidates, style: strength.style, naturalness, random, lossCap });
+  if (styled) return styled;
 
   // 視野の狭さで弱くする。目に付く手だけを読み、その中から選ぶ。
   if (strength.visionWidth > 0 && verify) {
