@@ -42,7 +42,7 @@ describe('rating to level', () => {
   });
 
   it('keeps the rating order and clamps to Lv0..40', () => {
-    for (let difficulty = 1; difficulty <= 12; difficulty += 1) {
+    for (let difficulty = 1; difficulty <= 14; difficulty += 1) {
       let previous = -Infinity;
       for (let rating = 800; rating <= 2400; rating += 25) {
         const level = ratingToLevel(rating, difficulty);
@@ -61,7 +61,7 @@ describe('rating to level', () => {
   });
 
   it('round-trips a level through the rating', () => {
-    for (const difficulty of [3, 7, 10]) {
+    for (const difficulty of [5, 9, 12]) {
       for (const level of [12, 25, 30, 36]) {
         expect(ratingToLevel(levelToRating(level, difficulty), difficulty)).toBe(level);
       }
@@ -71,9 +71,9 @@ describe('rating to level', () => {
   it('orders the groups by strength and recommends a difficulty near the player', () => {
     for (let group = 2; group <= 6; group += 1) {
       expect(GROUP_MEAN_RATING[group - 1]).toBeGreaterThan(GROUP_MEAN_RATING[group]);
-      expect(groupMeanLevel(group - 1, 7)).toBeGreaterThan(groupMeanLevel(group, 7));
+      expect(groupMeanLevel(group - 1, 9)).toBeGreaterThan(groupMeanLevel(group, 9));
     }
-    expect(recommendedDifficulty(30)).toBe(7);
+    expect(recommendedDifficulty(30)).toBe(9);
     expect(Math.abs(groupMeanLevel(6, recommendedDifficulty(22)) - 22)).toBeLessThanOrEqual(LEVELS_PER_DIFFICULTY / 2);
   });
 

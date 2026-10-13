@@ -20,9 +20,12 @@ export const SELFPLAY_LEVEL_RATINGS = Object.freeze([
   [40, 4820],
 ]);
 
-export const DIFFICULTY_LEVELS = 12;
-/** 基準の難易度。2026-10-10に下へ2段階足したので、以前の5がこの7にあたる。 */
-export const BASE_DIFFICULTY = 7;
+export const DIFFICULTY_LEVELS = 14;
+/**
+ * 基準の難易度。2026-10-10と2026-10-13に、それぞれ下へ2段階足した。最初の5が、いまの9にあたる。
+ * いちばん下の1は、6組の相手の平均がLv.-2(Lv0に丸める)。
+ */
+export const BASE_DIFFICULTY = 9;
 /** 難易度1段階で、換算の基準点が動くLv。 */
 export const LEVELS_PER_DIFFICULTY = 4;
 

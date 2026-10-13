@@ -30,7 +30,7 @@ import { OPPONENT_STYLES } from './ryuo-data.mjs';
 import { CPU_OPENING_STRATEGY_IDS } from './cpu-opening-repertoire.mjs';
 import { OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from './opening-guide.mjs';
 
-const settings = (overrides = {}) => ({ difficulty: 7, scale: 3, revival: true, ...overrides });
+const settings = (overrides = {}) => ({ difficulty: 9, scale: 3, revival: true, ...overrides });
 
 /** 方針に従ってプレイヤーが対局を指し続け、シーズンの最後まで進める。 */
 function playOut(season, policy, limit = 400) {
@@ -74,15 +74,19 @@ describe('scales and difficulty', () => {
   });
 
   it('shifts the opponents by difficulty and recommends one near the player level', () => {
-    expect(groupMeanLevel(6, 7)).toBeCloseTo(30);
-    expect(groupMeanLevel(6, 1)).toBeCloseTo(6);
-    expect(groupMeanLevel(1, 12)).toBe(40);
-    for (let difficulty = 2; difficulty <= 12; difficulty += 1) {
+    expect(groupMeanLevel(6, 9)).toBeCloseTo(30);
+    expect(groupMeanLevel(6, 3)).toBeCloseTo(6);
+    // 2026-10-13に足したいちばん下は、6組の平均がLv0(Lv.-2を丸める)。
+    expect(groupMeanLevel(6, 2)).toBeCloseTo(2);
+    expect(groupMeanLevel(6, 1)).toBe(0);
+    expect(groupMeanLevel(1, 14)).toBe(40);
+    for (let difficulty = 2; difficulty <= 14; difficulty += 1) {
       expect(groupMeanLevel(1, difficulty)).toBeGreaterThanOrEqual(groupMeanLevel(1, difficulty - 1));
     }
-    expect(recommendedDifficulty(30)).toBe(7);
-    expect(recommendedDifficulty(6)).toBe(1);
-    expect(recommendedDifficulty(40)).toBe(10);
+    expect(recommendedDifficulty(30)).toBe(9);
+    expect(recommendedDifficulty(6)).toBe(3);
+    expect(recommendedDifficulty(0)).toBe(1);
+    expect(recommendedDifficulty(40)).toBe(12);
     expect(groupMeanLevel(6, recommendedDifficulty(34))).toBeCloseTo(34, 0);
   });
 
@@ -131,8 +135,8 @@ describe('opponent field', () => {
   });
 
   it('keeps the ratings when the difficulty changes, and only converts the level', () => {
-    const easy = realSeason({ difficulty: 3 });
-    const hard = realSeason({ difficulty: 10 });
+    const easy = realSeason({ difficulty: 5 });
+    const hard = realSeason({ difficulty: 12 });
     const ids = easy.fields[3];
     expect(hard.fields[3]).toEqual(ids);
     expect(ids.map((id) => hard.players[id].rating)).toEqual(ids.map((id) => easy.players[id].rating));
@@ -176,7 +180,7 @@ describe('opponent field', () => {
 
   it('maps every opponent level to a CPU preset', () => {
     const levels = new Set(CPU_STRENGTH_PRESETS.map(({ level }) => level));
-    const season = realSeason({ difficulty: 12 });
+    const season = realSeason({ difficulty: 14 });
     expect(Object.values(season.players).filter(({ id }) => id !== USER_ID).every(({ level }) => levels.has(level))).toBe(true);
   });
 });
@@ -262,7 +266,7 @@ describe('a Ryuo season', () => {
   it('does not always pit a weak player against the strongest opponent in the first round', () => {
     const levels = new Set();
     for (let seed = 1; seed <= 12; seed += 1) {
-      const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ difficulty: 7 }), userLevel: 5, seed });
+      const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ difficulty: 9 }), userLevel: 5, seed });
       levels.add(season.players[season.pending.opponentId].rating);
       const strongest = Math.max(...Object.values(season.players).filter(({ group, id }) => group === 6 && id !== USER_ID).map(({ rating }) => rating));
       expect(season.players[season.pending.opponentId].rating).toBeLessThan(strongest);
@@ -397,7 +401,7 @@ describe('a Ryuo season', () => {
       const group = (seed % 6) + 1;
       const rng = createRng(seed * 101);
       const season = createSeason({
-        no: 1, mode: 'challenge', group, settings: settings({ scale, revival: seed % 2 === 0, difficulty: (seed % 12) + 1 }), userLevel: 20 + (seed % 15), seed,
+        no: 1, mode: 'challenge', group, settings: settings({ scale, revival: seed % 2 === 0, difficulty: (seed % 14) + 1 }), userLevel: 20 + (seed % 15), seed,
       });
       const { season: done, games } = playOut(season, () => (rng.next() < 0.6 ? 'win' : 'loss'));
       expect(games).toBeLessThan(120);
@@ -546,8 +550,11 @@ describe('career', () => {
     const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ scale: 1 }), userLevel: 20, seed: 2 });
     expect(saveSeason(storage, season)).toBe(true);
     expect(loadSeason(storage)).toEqual(JSON.parse(JSON.stringify(season)));
-    // 棋士がレーティングを持たない版2以前の期は、続きを指せないので読み込まない(新しく作り直す)。
-    for (const version of [1, 2]) {
+    // 難易度が1〜12だった版4の期は、同じ強さになるよう難易度を2つずらして読み込む。
+    storage.setItem('yacobihime:shogi-match:ryuo-season', JSON.stringify({ ...season, version: 4, settings: { ...season.settings, difficulty: 3 } }));
+    expect(loadSeason(storage)).toMatchObject({ version: 5, settings: { difficulty: 5 } });
+    // 棋士が名簿の棋士でない版3以前の期は、続きを指せないので読み込まない(新しく作り直す)。
+    for (const version of [1, 2, 3]) {
       storage.setItem('yacobihime:shogi-match:ryuo-season', JSON.stringify({ ...season, version }));
       expect(loadSeason(storage)).toBeNull();
     }

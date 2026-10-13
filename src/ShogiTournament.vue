@@ -1046,7 +1046,7 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__row-meta { grid-column: 2; margin: 0; color: rgba(255, 252, 244, 0.72); font-size: 0.82em; }
 .shogi-game .shogi-tournament__row-meta strong { color: var(--tr-gold); }
 .shogi-game .shogi-tournament__choices { display: grid; gap: var(--tr-gap); }
-.shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(14, minmax(0, 1fr)); }
 .shogi-game .shogi-tournament__choices--five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .shogi-game .shogi-tournament__choices--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .shogi-game .shogi-tournament__choices--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1269,7 +1269,7 @@ const statTiles = computed(() => {
   .shogi-game .shogi-tournament__step { font-size: 0.7em; }
   .shogi-game .shogi-tournament__row { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-tournament__row-meta { grid-column: 1; }
-  .shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .shogi-game .shogi-tournament__choices--five button { padding: 0; }
   .shogi-game .shogi-tournament__actions--two { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-tournament__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }

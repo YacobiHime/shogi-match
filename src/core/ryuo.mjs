@@ -24,8 +24,9 @@ export { BASE_DIFFICULTY, DIFFICULTY_LEVELS, createRng, groupMeanLevel, recommen
 /**
  * 期の保存形式。3から、棋士はレーティング(rating)を持ち、Lvは難易度から換算した値になった。
  * 4から、棋士は名簿(ryuo-roster.mjs)の棋士で、idは名簿のid。各組の出場者(fields)を、期の始めに決めて持つ。
+ * 5で、難易度を下へ2段階足した(14段階)。版4の期は、同じ強さになるよう難易度を2つずらして読み込む。
  */
-export const SEASON_VERSION = 4;
+export const SEASON_VERSION = 5;
 
 /** プレイヤーのid。名簿の竜王がプレイヤーのときの値(USER_HOLDER)と同じ。 */
 export const USER_ID = USER_HOLDER;

@@ -150,8 +150,18 @@ export function saveCareer(storage, career) {
 export function loadSeason(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(SEASON_STORAGE_KEY) ?? 'null');
-    // 版2以前の期は、棋士がレーティングを持たない(強さがLvだけ)。続きは指せないので、捨てて作り直してもらう。
-    if (!parsed || parsed.version !== SEASON_VERSION || typeof parsed.phase !== 'string' || !parsed.players) return null;
+    if (!parsed || typeof parsed.phase !== 'string' || !parsed.players) return null;
+    // 版4の期は、難易度が1〜12だった。下へ2段階足したので、同じ強さになるよう2つずらす。
+    if (parsed.version === 4) {
+      const difficulty = Number(parsed.settings?.difficulty);
+      return {
+        ...parsed,
+        version: SEASON_VERSION,
+        settings: { ...parsed.settings, ...(Number.isFinite(difficulty) ? { difficulty: difficulty + 2 } : {}) },
+      };
+    }
+    // 版3以前の期は、棋士が名簿の棋士でない。続きは指せないので、捨てて作り直してもらう。
+    if (parsed.version !== SEASON_VERSION) return null;
     return parsed;
   } catch {
     return null;

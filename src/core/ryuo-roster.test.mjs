@@ -13,7 +13,7 @@ import {
   saveRoster,
 } from './ryuo-roster.mjs';
 
-const settings = (overrides = {}) => ({ difficulty: 7, scale: 5, revival: true, ...overrides });
+const settings = (overrides = {}) => ({ difficulty: 9, scale: 5, revival: true, ...overrides });
 const members = (roster) => Object.values(roster.players);
 const groupOf = (roster, group) => members(roster).filter((member) => member.group === group && member.id !== roster.holder);
 const pros = (roster) => members(roster).filter(({ kind }) => kind === 'pro');

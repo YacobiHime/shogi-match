@@ -26,7 +26,7 @@ const pros = (roster) => Object.values(roster.players).filter(({ kind }) => kind
 const index = (dan) => DAN_ORDER.indexOf(dan);
 
 function runSeason(career, roster, seed, policy = () => 'loss') {
-  let season = createSeason({ ...nextEntry(career), settings: { difficulty: 7, scale: 5, revival: true }, userLevel: 30, career, roster, seed });
+  let season = createSeason({ ...nextEntry(career), settings: { difficulty: 9, scale: 5, revival: true }, userLevel: 30, career, roster, seed });
   for (let guard = 0; season.phase !== 'done' && guard < 400; guard += 1) season = recordUserGame(season, policy(season));
   const applied = applySeason(career, season);
   return { career: applied.career, roster: applySeasonToRoster(roster, season, { userGroup: applied.career.group, promote: scaleById(5).promote }), season };
@@ -85,7 +85,7 @@ describe('a league year', () => {
 
   it('counts the Ryuo games of roster players, from every bracket and series', () => {
     const roster = createRoster({ seed: 23 });
-    let season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: { difficulty: 7, scale: 3, revival: true }, userLevel: 30, roster, seed: 7 });
+    let season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: { difficulty: 9, scale: 3, revival: true }, userLevel: 30, roster, seed: 7 });
     while (season.phase !== 'done') season = recordUserGame(season, 'loss');
     const games = ryuoSeasonGames(season, (id) => Boolean(roster.players[id]));
     expect(games.length).toBeGreaterThan(60);
