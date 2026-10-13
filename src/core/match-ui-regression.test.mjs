@@ -92,6 +92,13 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/measureSession\.value && !measureReportDismissed\.value && Boolean\(skillDiagnosis\.value\)/);
   });
 
+  it("returns to the Ryuo screen, not the home screen, after a Ryuo game or its review", () => {
+    // 対局や検討を終えたら、竜王戦の対局なら竜王戦の画面(トーナメント表)へ戻る。明示的な「ホームへ」だけはホームへ。
+    expect(source).toMatch(/const backToTournament = !toHome && props\.showHome && Boolean\(ryuoGame\.value\)/);
+    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = "season";\s*tournamentOpen\.value = true;/);
+    expect(source).toMatch(/@click="leaveFinishedMatch\(\{ toHome: true \}\)"/);
+  });
+
   it("keeps the Ryuo screen buttons the same size and lets Yakobihime do the explaining", () => {
     const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
     // 選択肢の高さ・大きな操作ボタンの高さを、共通の値にそろえ、選択肢は等分のグリッドで並べる。

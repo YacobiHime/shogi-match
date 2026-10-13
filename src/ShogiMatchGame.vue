@@ -1191,7 +1191,7 @@
         <div class="shogi-game__result-actions">
           <!-- 教室の対局は、やこび姫の一言と★を見に教室へ戻る。 -->
           <button v-if="tutorialMatch" type="button" class="shogi-game__rematch" @click="returnToTutorial">教室へ戻る</button>
-          <button v-else type="button" class="shogi-game__rematch" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
+          <button v-else type="button" class="shogi-game__rematch" @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
         </div>
         <label class="shogi-game__analysis-level">
@@ -1231,7 +1231,7 @@
             {{ ryuoView?.result ? "結果を見る" : "トーナメント表へ" }}
           </button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
-          <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
+          <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch({ toHome: true })">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
       </div>
     </div>
@@ -1294,7 +1294,7 @@
         </template>
         <div class="shogi-game__result-actions">
           <button type="button" class="shogi-game__analysis-button" @click="measureReportDismissed = true">棋譜を見る</button>
-          <button type="button" class="shogi-game__rematch" @click="leaveFinishedMatch">{{ showHome ? "ホームへ" : "対局準備" }}</button>
+          <button type="button" class="shogi-game__rematch" @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
         <p class="shogi-game__measure-note">評価値の損から求めた目安です。解析の探索量や対局の内容で動きます。</p>
       </div>
@@ -3389,10 +3389,6 @@ function markRyuoResultSeen() {
 /** 大会の対局から離れて、トーナメント表(大会の画面)へ戻る。 */
 function leaveToTournamentScreen() {
   leaveFinishedMatch();
-  if (props.showHome) {
-    tournamentStartAt.value = "season";
-    tournamentOpen.value = true;
-  }
 }
 
 /** 千日手の指し直し。先後を入れ替えて、同じ相手と指す。 */
@@ -6174,10 +6170,16 @@ function completeReview() {
 }
 
 /** 終わった対局から離れる。ホーム画面がある表示ならホームへ、なければ対局準備へ戻る。保存はどちらも消す。 */
-function leaveFinishedMatch() {
+function leaveFinishedMatch({ toHome = false }: { toHome?: boolean } = {}) {
+  // 竜王戦の対局は、対局や検討を終えたら、ホームではなく竜王戦の画面(トーナメント表)へ戻る。
+  const backToTournament = !toHome && props.showHome && Boolean(ryuoGame.value);
   stopGuidedReview();
   openPregame();
   if (props.showHome) openHome();
+  if (backToTournament) {
+    tournamentStartAt.value = "season";
+    tournamentOpen.value = true;
+  }
 }
 
 function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう！") {
