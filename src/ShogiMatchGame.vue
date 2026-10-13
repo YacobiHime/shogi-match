@@ -1431,6 +1431,7 @@ import {
   parseMateScore,
 } from "./core/engine-mate-check.mjs";
 import { canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice } from "./core/cpu-move-choice.mjs";
+import { chooseLogicMove, usesLogicAi } from "./core/logic-ai.mjs";
 import { createAssistSearchControl } from "./core/assist-search-control.mjs";
 import { findMateInOne } from "./core/mate-threat";
 import {
@@ -5723,9 +5724,11 @@ function scheduleReviewCpuMove() {
       ) return;
       const strength = getStrengthSearchSettings(searchNodes.value);
       const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi: moveUsi }) => moveUsi);
+      // Lv1〜10は、感想戦でもロジックAIで応じる(エンジンは使わない)。
+      const logicLevel = usesLogicAi(cpuStrengthPreset.value.level);
       let search;
       let verify;
-      if (!usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
+      if (!logicLevel && !usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
         const enginePosition = currentEnginePosition();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
         await engine.setSearchThreads(strength.searchThreads);
@@ -5743,14 +5746,16 @@ function scheduleReviewCpuMove() {
           () => generation === reviewCpuGeneration && reviewCpuEnabled.value,
         );
       }
-      const choice = await chooseCpuMove({
-        strength,
-        sfen: record.value.position.sfen,
-        legalMoves,
-        moveHistory,
-        search,
-        verify,
-      });
+      const choice = logicLevel
+        ? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, level: cpuStrengthPreset.value.level, moveHistory })
+        : await chooseCpuMove({
+          strength,
+          sfen: record.value.position.sfen,
+          legalMoves,
+          moveHistory,
+          search,
+          verify,
+        });
       if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
       const usi = choice?.move ?? "";
       if (!usi) {
@@ -5904,8 +5909,11 @@ async function scheduleCpuMove() {
         // MultiPVの候補数は合法手より少ないため、作戦の定跡手が候補に入っていない
         // 局面でも専用探索で評価してから、AI最善手との比較を行う。
         let searchedCandidates = search.candidates;
+        // Lv1〜10はロジックAIで指す。上の探索は、直前のプレイヤーの手への助言にだけ使う。
+        const logicLevel = usesLogicAi(cpuStrengthPreset.value.level);
         if (
-          allowedOpeningMove && !forceConfiguredOpening
+          !logicLevel
+          && allowedOpeningMove && !forceConfiguredOpening
           && !searchedCandidates.some(({ move }) => move === allowedOpeningMove)
         ) {
           engine.setPosition(enginePosition);
@@ -5934,11 +5942,19 @@ async function scheduleCpuMove() {
             * strength.openingPlanScoreScale,
           strength.maxScoreLoss,
         );
-        const safeOpening = allowedOpeningMove && !forceConfiguredOpening
+        const safeOpening = allowedOpeningMove && !forceConfiguredOpening && !logicLevel
           ? chooseSafeOpeningMove(allowedOpeningMove, searchedCandidates, planScoreLimit)
           : null;
         const selection = forceConfiguredOpening && allowedOpeningMove
           ? { move: allowedOpeningMove }
+          : logicLevel
+          ? chooseLogicMove({
+            sfen: record.value.position.sfen,
+            legalMoves: allowedCpuMoveList,
+            level: cpuStrengthPreset.value.level,
+            moveHistory,
+            planMove: allowedOpeningMove ?? null,
+          })
           : safeOpening
           ? {
             move: safeOpening.usi,
@@ -5980,7 +5996,16 @@ async function scheduleCpuMove() {
         )?.score;
       } else {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
-        usi = allowedOpeningMove ?? await naturalCpuMove();
+        // Lv1〜10は、エンジンがなくてもロジックAIで指せる。
+        usi = usesLogicAi(cpuStrengthPreset.value.level)
+          ? chooseLogicMove({
+            sfen: record.value.position.sfen,
+            legalMoves: allowedCpuMoveList,
+            level: cpuStrengthPreset.value.level,
+            moveHistory,
+            planMove: allowedOpeningMove ?? null,
+          })?.move ?? ""
+          : allowedOpeningMove ?? await naturalCpuMove();
       }
       if (generation !== matchGeneration) return;
       if (!usi) {

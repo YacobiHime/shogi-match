@@ -173,3 +173,20 @@ export function judgeMateStep(
   if (!result || !result.line.length) return { status: "escapes" };
   return { status: "continue", reply: result.line[0], plies: result.plies };
 }
+
+/**
+ * 手番側が、plies手以内の連続王手で詰ませる手順を返す。詰みがなければnull、探索の上限に達したらundefined。
+ * 対局のCPU(ロジックAI)が、詰みに気づくか・相手の詰みを防ぐかを調べるのに使う。
+ */
+export function findMateLine(
+  sfen: string,
+  plies: number,
+  { nodeLimit = 20000, maxTimeMs = 150 } = {},
+): string[] | null | undefined {
+  const position = Position.newBySFEN(sfen);
+  if (!position) return null;
+  const budget: Budget = { nodes: 0, limit: nodeLimit, deadline: now() + maxTimeMs };
+  const result = mateSearch(position, position.color, Math.max(1, plies), budget);
+  if (result === undefined) return undefined;
+  return result && result.line.length ? result.line : null;
+}

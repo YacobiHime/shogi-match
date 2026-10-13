@@ -17,7 +17,7 @@
 | 戦法・囲いの解説文 | `src/core/opening-explanations.mjs` |
 | 戦型検出 | `src/core/formation-tracker.mjs`、`src/data/hiragana_suisho_formations.json` |
 | やこび姫の助言・称賛 | `src/core/coach-advice.mjs`、`src/core/move-praise.mjs`、神の一手の基準（対局中と棋譜解析で共通）は`src/core/god-move.mjs` |
-| CPU難易度 | `src/core/strength-settings.mjs` |
+| CPU難易度 | `src/core/strength-settings.mjs`、Lv1〜10のロジックAIは`src/core/logic-ai.mjs`（設計は`docs/logic-ai-design.md`） |
 | CPUの戦法の選び方 | `src/core/cpu-opening-repertoire.mjs` |
 | 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue` |
 | リロード復元 | `src/core/match-persistence.mjs` |
