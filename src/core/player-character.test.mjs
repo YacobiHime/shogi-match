@@ -8,7 +8,9 @@ import {
   ageCharacter,
   applyCharacter,
   attackStyleLabel,
-  baseMateHorizon,
+  baseMateFinding,
+  mateFindProbability,
+  shiftProbability,
   characterSituation,
   createCharacter,
   describeCharacter,
@@ -26,33 +28,64 @@ const mate = (value) => ({ type: 'mate', value });
 const quiet = { phase: 'middle', kingDanger: false, attackChance: false, opponentRook: 'static' };
 const withTrait = (id, degree = 1, attack = 0) => ({ attack, traits: [{ id, degree }] });
 
-describe('mate horizon', () => {
-  it('grows with the skill and is unlimited only at the top', () => {
-    let previous = 0;
+describe('finding mates', () => {
+  it('finds short mates more often than long ones, and stronger levels find longer mates', () => {
+    let previousCenter = 0;
     for (const { skill } of CPU_STRENGTH_PRESETS) {
-      const horizon = baseMateHorizon(skill);
-      expect(horizon).toBeGreaterThanOrEqual(previous);
-      previous = horizon;
+      const finding = baseMateFinding(skill);
+      expect(finding.center).toBeGreaterThanOrEqual(previousCenter);
+      previousCenter = finding.center;
+      for (let plies = 3; plies <= 15; plies += 2) {
+        expect(mateFindProbability(finding, plies)).toBeLessThanOrEqual(mateFindProbability(finding, plies - 2));
+      }
     }
-    expect(baseMateHorizon(0)).toBe(1);
-    expect(baseMateHorizon(0.95)).toBe(15);
-    expect(baseMateHorizon(1)).toBe(Infinity);
+    const weak = baseMateFinding(skillAt(21));
+    const strong = baseMateFinding(skillAt(35));
+    expect(mateFindProbability(strong, 7)).toBeGreaterThan(mateFindProbability(weak, 7));
+    expect(mateFindProbability(baseMateFinding(1), 31)).toBe(1);
   });
 
-  it('mates within the horizon and leaves longer mates to the usual choice', () => {
+  it('raises the chance with the tsume trait, most for mates around the level, and by degree', () => {
+    const at = (level, degree, plies) => {
+      const settings = applyCharacter(strengthAt(level), degree ? withTrait('tsume', degree) : null, quiet, { skill: skillAt(level) });
+      return mateFindProbability(settings.mateFinding, plies);
+    };
+    for (const level of [21, 30, 35]) {
+      for (const plies of [3, 5, 7, 9]) {
+        expect(at(level, 1, plies)).toBeGreaterThanOrEqual(at(level, 0, plies));
+        expect(at(level, 2, plies)).toBeGreaterThanOrEqual(at(level, 1, plies));
+      }
+    }
+    // 上がり幅はレベルで変わる。六級程度では3手詰め、アマ四段程度では11手詰めの上がり幅が大きい。
+    expect(at(21, 2, 3) - at(21, 0, 3)).toBeGreaterThan(at(35, 2, 3) - at(35, 0, 3));
+    expect(at(35, 2, 11) - at(35, 0, 11)).toBeGreaterThan(at(21, 2, 11) - at(21, 0, 11));
+  });
+
+  it('shifts probabilities by log-odds, staying inside 0..1', () => {
+    expect(shiftProbability(0.5, 0)).toBeCloseTo(0.5);
+    expect(shiftProbability(0.5, 1)).toBeGreaterThan(0.7);
+    expect(shiftProbability(0.99, 2)).toBeLessThan(1);
+    expect(shiftProbability(0.9, 1) - 0.9).toBeLessThan(shiftProbability(0.5, 1) - 0.5);
+  });
+
+  it('mates with the given chance, choosing the shortest mate', () => {
     const candidates = [
       { rank: 1, move: '2b3c', score: mate(9) },
       { rank: 2, move: '7g7f', score: mate(5) },
       { rank: 3, move: '2g2f', score: cp(300) },
     ];
-    const search = { move: '2b3c', candidates };
-    expect(chooseMatingMove({ search, candidates, strength: { mateHorizon: 7 } })).toMatchObject({ move: '7g7f', mate: 5 });
-    expect(chooseMatingMove({ search, candidates, strength: { mateHorizon: 3 } })).toBeNull();
-    expect(chooseMatingMove({ search, candidates, strength: {} })).toBeNull();
+    const sure = { mateFinding: { center: 100, slope: 1 } };
+    expect(chooseMatingMove({ candidates, strength: sure, random: () => 0.5 })).toMatchObject({ move: '7g7f', mate: 5 });
+    expect(chooseMatingMove({ candidates, strength: { mateFinding: { center: -100, slope: 1 } }, random: () => 0.5 })).toBeNull();
+    expect(chooseMatingMove({ candidates, strength: {} })).toBeNull();
+    const finding = { center: 5, slope: 0.7 };
+    let found = 0;
+    for (let seed = 1; seed <= 2000; seed += 1) if (chooseMatingMove({ candidates, strength: { mateFinding: finding }, random: createRng(seed).next })) found += 1;
+    expect(found / 2000).toBeCloseTo(mateFindProbability(finding, 5), 1);
   });
 
-  it('makes chooseCpuMove play the mate even when it would usually pick other moves', async () => {
-    const strength = { ...strengthAt(12), mateHorizon: 5, bestMoveRate: 0 };
+  it('makes chooseCpuMove play the mate when it finds it', async () => {
+    const strength = { ...strengthAt(12), mateFinding: { center: 100, slope: 1 }, bestMoveRate: 0 };
     const search = { move: '2g2f', candidates: [{ rank: 1, move: '2g2f', score: mate(3) }, { rank: 2, move: '7g7f', score: cp(0) }] };
     for (let seed = 1; seed <= 20; seed += 1) {
       const choice = await chooseCpuMove({
@@ -131,7 +164,7 @@ describe('traits on the strength settings', () => {
 
   it('adds the base mate horizon and changes nothing else without a character', () => {
     const plain = apply(null, quiet);
-    expect(plain).toEqual({ ...base, mateHorizon: baseMateHorizon(skillAt(30)) });
+    expect(plain).toEqual({ ...base, mateFinding: baseMateFinding(skillAt(30)) });
   });
 
   it('reads deeper and is sharper only where the trait applies', () => {
@@ -145,33 +178,37 @@ describe('traits on the strength settings', () => {
     expect(apply(withTrait('deep-reading', 2), quiet, 39).nodes).toBeLessThanOrEqual(TOP_NODES);
   });
 
-  it('defends accurately in a dangerous endgame, and collapses there with the weakness', () => {
+  it('defends accurately in a dangerous endgame, and collapses there with the weakness, scaled to the level', () => {
     const danger = { ...quiet, phase: 'ending', kingDanger: true };
-    const steady = apply(withTrait('endgame-defense', 2), danger);
-    expect(steady.moveLossCap).toBeLessThanOrEqual(150);
-    expect(steady.blunderLimit).toBe(0);
-    expect(apply(withTrait('endgame-defense', 2), quiet).moveLossCap).toBe(base.moveLossCap);
-    const collapse = apply(withTrait('endgame-collapse', 2), danger);
-    expect(collapse.oversightRate).toBeGreaterThan(0.3);
-    expect(collapse.moveLossCap).toBeGreaterThanOrEqual(2500);
-  });
-
-  it('extends the mate horizon for a tsume solver', () => {
-    expect(apply(withTrait('tsume', 2), quiet).mateHorizon).toBe(baseMateHorizon(skillAt(30)) + 4);
+    for (const level of [21, 30, 36]) {
+      const own = strengthAt(level);
+      const steady = apply(withTrait('endgame-defense', 2), danger, level);
+      expect(steady.moveLossCap).toBe(Math.max(80, Math.round(own.moveLossCap * 0.4)));
+      expect(steady.blunderLimit).toBe(Math.max(0, own.blunderLimit - 2));
+      expect(apply(withTrait('endgame-defense', 2), quiet, level).moveLossCap).toBe(own.moveLossCap);
+      const slight = apply(withTrait('endgame-collapse', 1), danger, level);
+      const heavy = apply(withTrait('endgame-collapse', 2), danger, level);
+      expect(slight.oversightRate).toBeGreaterThan(own.oversightRate ?? 0);
+      expect(heavy.oversightRate).toBeGreaterThan(slight.oversightRate);
+      expect(heavy.moveLossCap).toBeGreaterThanOrEqual(2500);
+    }
+    // 頓死は、もとから見落としの多い弱いレベルほど多い。
+    expect(apply(withTrait('endgame-collapse', 2), danger, 21).oversightRate).toBeGreaterThan(apply(withTrait('endgame-collapse', 2), danger, 36).oversightRate);
   });
 
   it('reacts to the score after the search', () => {
     expect(activeTraits(withTrait('tenacious'), { ...quiet, advantage: BEHIND_SCORE - 1 })).toHaveLength(1);
     expect(activeTraits(withTrait('tenacious'), { ...quiet })).toHaveLength(0);
     const loose = apply(withTrait('loose-when-ahead', 2), { ...quiet, advantage: FAR_AHEAD_SCORE });
-    expect(loose.moveLossCap).toBeGreaterThanOrEqual(800);
+    expect(loose.moveLossCap).toBe(Math.round(base.moveLossCap * 2));
+    expect(loose.blunderLimit).toBe(base.blunderLimit + 2);
     expect(loose.bestMoveRate).toBeLessThan(base.bestMoveRate);
   });
 
   it('carries the attacking style into the settings, but never changes the top level', () => {
     expect(apply({ attack: 0.7, traits: [] }, quiet).style).toMatchObject({ attack: 0.7 });
     const top = apply({ attack: 0.9, traits: [{ id: 'deep-reading', degree: 2 }, { id: 'middle-strong', degree: 2 }] }, quiet, 40);
-    expect(top).toEqual({ ...strengthAt(40), mateHorizon: Infinity, activeTraits: ['deep-reading', 'middle-strong'] });
+    expect(top).toEqual({ ...strengthAt(40), mateFinding: baseMateFinding(1), activeTraits: ['deep-reading', 'middle-strong'] });
   });
 });
 

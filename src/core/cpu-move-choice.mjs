@@ -1,5 +1,6 @@
 import { comparableScore, selectMoveByRank } from "./move-selection.mjs";
 import { createNaturalnessEvaluator, PIECE_SACRIFICE_TAG } from "./move-naturalness.mjs";
+import { mateFindProbability } from "./player-character.mjs";
 
 /** 深い読みで判明する損失がこれ以上なら「見落とし」とみなす。 */
 export const OVERSIGHT_MIN_DEEP_LOSS = 300;
@@ -117,17 +118,20 @@ export function chooseStyledMove({ search, candidates, style, naturalness, rando
 }
 
 /**
- * 詰みが見える手数(strength.mateHorizon、plyで相手の応手を含む)以内の詰みが探索で見えていれば、詰ます手を返す。
- * それより長い詰みは、ふだんの手の選び方に任せる(見逃すことがある)。
+ * 探索で詰みが見えていれば、strength.mateFindingの確率で詰ます手を返す(最も短い詰みの手数で判定する)。
+ * 見つけられなかったときは、ふだんの手の選び方に任せる(たまたま詰ますこともある)。
+ * mateFindingが無い設定(竜王戦以外の対局)では、何もしない。
  */
-export function chooseMatingMove({ search, candidates, strength }) {
-  const horizon = strength.mateHorizon;
-  if (!(horizon > 0)) return null;
+export function chooseMatingMove({ candidates, strength, random = Math.random }) {
+  if (!strength.mateFinding) return null;
   const mates = candidates
-    .filter(({ score }) => score?.type === "mate" && Number.isInteger(score.value) && score.value > 0 && score.value <= horizon)
+    .filter(({ score }) => score?.type === "mate" && Number.isInteger(score.value) && score.value > 0)
     .sort((a, b) => a.score.value - b.score.value || a.rank - b.rank);
   const best = mates[0];
-  return best ? { move: best.move, rank: best.rank, kind: "mate", loss: 0, mate: best.score.value } : null;
+  if (!best) return null;
+  const probability = mateFindProbability(strength.mateFinding, best.score.value);
+  if (drawRandom(random) >= probability) return null;
+  return { move: best.move, rank: best.rank, kind: "mate", loss: 0, mate: best.score.value };
 }
 
 /** エンジンを使わず、合法手を自然さ^alphaで重み付けして選ぶ。 */
@@ -320,8 +324,8 @@ export async function chooseCpuMove({
     return bestScore !== undefined && value !== undefined && bestScore - value <= SACRIFICE_CANDIDATE_MAX_LOSS;
   });
 
-  // 詰みが見える手数以内の詰みは、必ず詰ます。
-  const mating = chooseMatingMove({ search, candidates, strength });
+  // 探索で詰みが見えたら、強さと特徴に応じた確率で詰ます。
+  const mating = chooseMatingMove({ candidates, strength, random });
   if (mating) return { ...mating, naturalness: naturalness(mating.move) };
 
   // Lv0とのつなぎの区間では、読まずに見た目だけで指す手を混ぜる。自分から駒をただで渡す手は選ばない。

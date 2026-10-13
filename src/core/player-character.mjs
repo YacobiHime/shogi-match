@@ -4,7 +4,8 @@
 // - 手の選び方の鋭さ(scoreTemperature・bestMoveRate・maxScoreLoss): 良い手を選ぶ割合
 // - 悪手の抑え(moveLossCap・blunderLimit・oversightRate): 大きな悪手や見落としの出にくさ
 // - 棋風の重み(style): 最善手に近い候補の中で、攻めの手と受けの手のどちらを選びやすいか
-// - 詰みが見える手数(mateHorizon): 何手詰めまで確実に詰ますか
+// - 詰みを見つける確率(mateFinding): n手詰めを、どれだけの確率で詰ますか
+// 効果は、そのレベルの元の値に対する割合や確率のずらしで掛け、レベルに応じて上がり幅が変わるようにする。
 // 設計は docs/tournament-design.md の「棋風と特徴」。
 
 import { TOP_NODES } from './strength-settings.mjs';
@@ -25,18 +26,42 @@ export const KING_DANGER_SQUARES = 3;
  * attack(-1〜1)の絶対値にSTYLE_RATEを掛けた割合で、範囲内の好みの手を選ぶ。
  */
 export const STYLE_MARGIN = 80;
+/** 悪手を抑える特徴で、1手の損の上限をこれより下げない。 */
+const MIN_STEADY_LOSS_CAP = 80;
+/** 頓死の特徴で、見落としの割合をずらす元の値の下限。 */
+const OVERLOOK_FLOOR = 0.02;
+/** 詰将棋の特徴で、詰みを見つける確率をずらす幅(ロジット、度合い1あたり)。 */
+const MATE_TRAIT_LOGIT = 1;
 export const STYLE_RATE = 0.6;
 
-/** 強さに応じた、詰みが見える手数(手数はplyで、相手の応手を含む)。技量(0〜1)から決める。 */
-export function baseMateHorizon(skill) {
-  if (!Number.isFinite(skill)) return 1;
-  if (skill >= 1) return Infinity;
-  if (skill >= 0.9) return 15;
-  if (skill >= 0.75) return 11;
-  if (skill >= 0.6) return 7;
-  if (skill >= 0.45) return 5;
-  if (skill >= 0.25) return 3;
-  return 1;
+/**
+ * 詰みを見つける確率の形。n手詰め(plyで、相手の応手を含む)を見つける確率は、
+ * 1 / (1 + exp(-slope × (center - n)))。centerは確率が半分になる手数で、強いほど長い。
+ * 技量0で約1.5手、技量0.5で約7手、技量0.9で約13手。Lv40(技量1)は、最善手だけを指すので使わない。
+ */
+export const MATE_SLOPE = 0.7;
+export function mateCenter(skill) {
+  const s = clamp(Number.isFinite(skill) ? skill : 0, 0, 1);
+  return 1.5 + 13 * s ** 1.1;
+}
+
+/** 強さに応じた、詰みを見つける確率の設定。 */
+export function baseMateFinding(skill) {
+  if (skill >= 1) return { center: Infinity, slope: MATE_SLOPE };
+  return { center: Math.round(mateCenter(skill) * 100) / 100, slope: MATE_SLOPE };
+}
+
+/** n手詰めを見つける確率。 */
+export function mateFindProbability(finding, plies) {
+  if (!finding || !(plies > 0)) return 0;
+  if (finding.center === Infinity) return 1;
+  return 1 / (1 + Math.exp(-finding.slope * (finding.center - plies)));
+}
+
+/** 確率を、ロジット(対数オッズ)でずらす。0や1に近いほど、ずれ幅は小さくなる。 */
+export function shiftProbability(probability, delta) {
+  const p = clamp(probability, 1e-4, 1 - 1e-4);
+  return 1 / (1 + Math.exp(-(Math.log(p / (1 - p)) + delta)));
 }
 
 /**
@@ -57,7 +82,7 @@ export const TRAITS = Object.freeze([
   {
     id: 'tsume', kind: 'strength', label: (d) => `詰将棋が${DEGREE_WORDS[d]}得意`,
     when: {},
-    effect: (d) => ({ mateHorizon: 2 * d }),
+    effect: (d) => ({ mate: d }),
   },
   {
     id: 'deep-reading', kind: 'strength', label: (d) => `読みが${DEGREE_WORDS[d]}深い`,
@@ -301,7 +326,7 @@ const round2 = (value) => Math.round(value * 100) / 100;
  * @param {{ skill: number }} options
  */
 export function applyCharacter(strength, character, situation, { skill }) {
-  const next = { ...strength, mateHorizon: baseMateHorizon(skill) };
+  const next = { ...strength, mateFinding: baseMateFinding(skill) };
   if (!character) return next;
   let nodes = 1;
   let sharpen = 0;
@@ -318,7 +343,7 @@ export function applyCharacter(strength, character, situation, { skill }) {
     steady = Math.max(steady, effect.steady ?? 0);
     overlook = Math.max(overlook, effect.overlook ?? 0);
     loose = Math.max(loose, effect.loose ?? 0);
-    mate += effect.mateHorizon ?? 0;
+    mate += effect.mate ?? 0;
     style += effect.style ?? 0;
   }
   next.activeTraits = active.map(({ id }) => id);
@@ -334,27 +359,34 @@ export function applyCharacter(strength, character, situation, { skill }) {
       next.bestMoveRate = round2(clamp(k >= 0 ? next.bestMoveRate + (1 - next.bestMoveRate) * k : next.bestMoveRate * (1 + k), 0, 1));
     }
   }
-  if (steady > 0) {
-    // 悪手と数える損(300)より小さい損まで。見落としも減らす。
-    next.moveLossCap = Math.min(next.moveLossCap ?? Infinity, steady === 2 ? 150 : 250);
-    next.blunderLimit = 0;
-    if (next.oversightRate) next.oversightRate = round2(next.oversightRate * (steady === 2 ? 0.2 : 0.5));
+  if (steady > 0 && !bestOnly) {
+    // 悪手を抑える。1手で失ってよい損の上限を、そのレベルの元の値の7割(やや)・4割(とても)にし、
+    // 大きな悪手の回数と見落としの割合も減らす。もとから悪手の少ない強いレベルほど、変化は小さい。
+    if (Number.isFinite(next.moveLossCap)) next.moveLossCap = Math.max(MIN_STEADY_LOSS_CAP, Math.round(next.moveLossCap * (steady === 2 ? 0.4 : 0.7)));
+    if (Number.isFinite(next.blunderLimit)) next.blunderLimit = Math.max(0, next.blunderLimit - steady);
+    if (next.oversightRate) next.oversightRate = round2(next.oversightRate * (1 - 0.35 * steady));
   }
-  if (overlook > 0) {
-    // 自玉の危険を見落とす。浅く読むと良く見えて、深く読むと悪い手を、ときどき選ぶ。
-    next.oversightRate = round2(Math.max(next.oversightRate ?? 0, overlook === 2 ? 0.35 : 0.18));
+  if (overlook > 0 && !bestOnly) {
+    // 自玉の危険を見落とす(浅く読むと良く見えて、深く読むと悪い手を選ぶ)。見落としの確率を、ロジットで+0.9(やや)・+1.8(とても)ずらす。
+    // もとの割合が0のレベルは、2%からずらす(強いレベルほど、頓死もまれ)。
+    next.oversightRate = round2(shiftProbability(Math.max(next.oversightRate ?? 0, OVERLOOK_FLOOR), 0.9 * overlook));
     next.oversightShallowLoss = Math.max(next.oversightShallowLoss ?? 0, 300);
     next.oversightNodes = Math.max(next.oversightNodes ?? 0, Math.min(70000, Math.max(3000, (next.nodes ?? 0) * 3)));
     next.oversightMaxLoss = Math.max(next.oversightMaxLoss ?? 0, 2500);
     next.moveLossCap = Math.max(next.moveLossCap ?? 0, 2500);
-    next.blunderLimit = Math.max(next.blunderLimit ?? 0, 2 + overlook);
+    next.blunderLimit = (next.blunderLimit ?? 0) + overlook;
     next.blunderCooldown = Math.min(next.blunderCooldown ?? 0, 4);
   }
-  if (loose > 0) {
-    next.moveLossCap = Math.max(next.moveLossCap ?? 0, loose === 2 ? 800 : 500);
-    next.blunderLimit = Math.max(next.blunderLimit ?? 0, 1 + loose);
+  if (loose > 0 && !bestOnly) {
+    // 優勢で緩む。1手で失ってよい損の上限を、元の値の1.5倍(やや)・2倍(とても)に広げ、大きな悪手を1〜2回増やす。
+    if (Number.isFinite(next.moveLossCap)) next.moveLossCap = Math.round(next.moveLossCap * (1 + 0.5 * loose));
+    next.blunderLimit = (next.blunderLimit ?? 0) + loose;
   }
-  next.mateHorizon += mate;
+  // 詰将棋が得意: n手詰めを見つける確率を、ロジットで+1.0(やや)・+2.0(とても)ずらす(中心の手数が約1.4・2.9手延びるのと同じ)。
+  // 確率が半分前後の長さの詰みで最も上がり、そのレベルで確実に解ける短い詰みや、とても長い詰みでは、あまり変わらない。
+  if (mate > 0 && next.mateFinding.center !== Infinity) {
+    next.mateFinding = { ...next.mateFinding, center: Math.round((next.mateFinding.center + (MATE_TRAIT_LOGIT * mate) / next.mateFinding.slope) * 100) / 100 };
+  }
   const attack = clamp(style, -1, 1);
   if (Math.abs(attack) >= 0.05 && !bestOnly) {
     next.style = { attack: round2(attack), margin: STYLE_MARGIN, rate: STYLE_RATE };
