@@ -928,6 +928,13 @@
               @click="toggleGuidedReviewPause"
             >{{ guidedReview.phase === "playing" ? "一時停止" : "再開 ▶" }}</button>
             <button v-if="guidedReview.phase === 'done'" type="button" class="shogi-game__guided-primary" @click="startGuidedReview">もう一度</button>
+            <button
+              v-if="guidedReview.phase !== 'done'"
+              type="button"
+              class="shogi-game__guided-speed"
+              :aria-label="`振り返りの速さ: ${guidedReviewSpeedLabel}。押すと切り替える`"
+              @click="cycleGuidedReviewSpeed"
+            >速さ: {{ guidedReviewSpeedLabel }}</button>
             <button type="button" @click="stopGuidedReview">{{ guidedReview.phase === "done" ? "閉じる" : "やめる" }}</button>
           </div>
         </div>
@@ -1308,6 +1315,7 @@ import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePi
 import { tutorialLesson } from "./core/tutorial-curriculum.mjs";
 import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
+import { judgeMateStep } from "./core/problem-solver";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import { useBackNavigation } from "./composables/useBackNavigation";
 import {
@@ -1344,8 +1352,10 @@ import { summarizeGame } from "./core/ryuo-stats.mjs";
 import {
   buildGuidedReview,
   guidedReviewSummary,
-  GUIDED_REVIEW_COMMENT_MS,
-  GUIDED_REVIEW_STEP_MS,
+  GUIDED_REVIEW_SPEEDS,
+  guidedReviewDelay,
+  nextGuidedReviewSpeed,
+  normalizeGuidedReviewSpeed,
 } from "./core/guided-review.mjs";
 import {
   KIFU_ANALYSIS_LEVELS,
@@ -1962,9 +1972,12 @@ const effectiveBlackPlayerName = computed(() =>
 const effectiveWhitePlayerName = computed(() =>
   cpuColor.value === Color.WHITE ? cpuDisplayName.value : props.whitePlayerName,
 );
+/** 振り返りの詰みの問題で、相手の応手を指すまでの間。盤を触らせない。 */
+const guidedMateReplyPending = ref(false);
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
+  !guidedMateReplyPending.value &&
   (reviewMode.value
     ? (!reviewCpuEnabled.value || record.value.position.color === humanColor.value)
     : normalizedMode.value === "local" || record.value.position.color === humanColor.value)
@@ -6344,22 +6357,60 @@ type GuidedReviewScript = {
   lastPly: number;
   quizCount: number;
 };
+/**
+ * 詰みの問題の途中経過。詰むまで盤で指させ、相手の応手はやこび姫が指す。
+ * sfenは次にプレイヤーが指す局面、remainingはそこからの詰みまでの手数、onLineは解析の詰み手順どおりに進んでいるか。
+ */
+type GuidedMateProgress = {
+  sfen: string;
+  remaining: number;
+  played: string[];
+  onLine: boolean;
+};
 type GuidedReviewState = {
   phase: "waiting" | "playing" | "paused" | "quiz" | "answer" | "done";
   cursor: number;
   text: string;
   moveLabel: string;
   quiz: GuidedReviewQuiz | null;
+  mate?: GuidedMateProgress | null;
   solved: number;
 };
 const guidedReview = ref<GuidedReviewState | null>(null);
 let guidedReviewScript: GuidedReviewScript | null = null;
 let guidedReviewTimer: ReturnType<typeof setTimeout> | undefined;
+/** 振り返りの速さ。端末ごとの好みとして保存する。 */
+const GUIDED_REVIEW_SPEED_KEY = "shogi-match-guided-review-speed";
+function loadGuidedReviewSpeed() {
+  try {
+    return normalizeGuidedReviewSpeed(browserStorage()?.getItem(GUIDED_REVIEW_SPEED_KEY));
+  } catch {
+    return normalizeGuidedReviewSpeed(null);
+  }
+}
+const guidedReviewSpeed = ref(loadGuidedReviewSpeed());
+const guidedReviewSpeedLabel = computed(() => (
+  GUIDED_REVIEW_SPEEDS.find((speed) => speed.id === guidedReviewSpeed.value)?.label ?? ""
+));
+/** 速さを次の段階に切り替える。進んでいる途中なら、新しい速さで次の手を待ち直す。 */
+function cycleGuidedReviewSpeed() {
+  guidedReviewSpeed.value = nextGuidedReviewSpeed(guidedReviewSpeed.value);
+  try {
+    browserStorage()?.setItem(GUIDED_REVIEW_SPEED_KEY, guidedReviewSpeed.value);
+  } catch {
+    // 保存できない環境では、この画面の間だけ使う。
+  }
+  const state = guidedReview.value;
+  if (state?.phase === "playing" && guidedReviewTimer) {
+    scheduleGuidedStep(guidedReviewDelay(Boolean(state.text), guidedReviewSpeed.value));
+  }
+}
 const guidedAnsweredQuizzes = new Set<number>();
 
 function clearGuidedReviewTimer() {
   if (guidedReviewTimer) clearTimeout(guidedReviewTimer);
   guidedReviewTimer = undefined;
+  guidedMateReplyPending.value = false;
 }
 
 /** 振り返りで本筋の局面へ移る。助言の探索は走らせない。 */
@@ -6434,10 +6485,10 @@ function beginGuidedReview() {
     quiz: null,
     text: "対局を最初から振り返るよ！大事な場面では止まるから、一緒に考えよう。",
   };
-  scheduleGuidedStep(GUIDED_REVIEW_COMMENT_MS);
+  scheduleGuidedStep(guidedReviewDelay(true, guidedReviewSpeed.value));
 }
 
-function scheduleGuidedStep(delay = GUIDED_REVIEW_STEP_MS) {
+function scheduleGuidedStep(delay = guidedReviewDelay(false, guidedReviewSpeed.value)) {
   clearGuidedReviewTimer();
   guidedReviewTimer = setTimeout(advanceGuidedReview, delay);
 }
@@ -6450,7 +6501,11 @@ function advanceGuidedReview() {
   if (!state || !script || !["playing", "answer"].includes(state.phase)) return;
   const quiz = script.steps.get(state.cursor)?.quiz;
   if (quiz && !guidedAnsweredQuizzes.has(quiz.ply)) {
-    guidedReview.value = { ...state, phase: "quiz", quiz, text: `${quiz.question}盤で指してみてね。` };
+    const mate = quiz.type === "mate" && quiz.mateLength > 0
+      ? { sfen: currentSfen.value, remaining: quiz.mateLength, played: [], onLine: true }
+      : null;
+    const prompt = mate ? "盤で指してね。相手の手はわたしが指すよ。" : "盤で指してみてね。";
+    guidedReview.value = { ...state, phase: "quiz", quiz, mate, text: `${quiz.question}${prompt}` };
     return;
   }
   const next = state.cursor + 1;
@@ -6473,7 +6528,7 @@ function advanceGuidedReview() {
     quiz: null,
     text: step?.comment ?? "",
   };
-  if (!step?.pause) scheduleGuidedStep(step?.comment ? GUIDED_REVIEW_COMMENT_MS : GUIDED_REVIEW_STEP_MS);
+  if (!step?.pause) scheduleGuidedStep(guidedReviewDelay(Boolean(step?.comment), guidedReviewSpeed.value));
 }
 
 function toggleGuidedReviewPause() {
@@ -6504,8 +6559,13 @@ function revealGuidedReviewAnswer(prefix = "") {
   const state = guidedReview.value;
   const quiz = state?.quiz;
   if (!state || !quiz) return;
+  clearGuidedReviewTimer();
   guidedAnsweredQuizzes.add(quiz.ply);
   guidedGoTo(state.cursor);
+  if (quiz.type === "mate" && quiz.bestLine.length > 1) {
+    showGuidedMateLine(state, quiz, prefix);
+    return;
+  }
   const best = quiz.bestMove;
   const bestLabel = best ? formatHintMove(best, currentSfen.value) : "";
   const playedLabel = quiz.playedMove ? formatHintMove(quiz.playedMove, currentSfen.value) : "";
@@ -6519,11 +6579,109 @@ function revealGuidedReviewAnswer(prefix = "") {
   guidedReview.value = { ...state, phase: "answer", text: `${prefix}${answer}${played}` };
 }
 
+/** 詰みの答え。解析の詰み手順を問題の局面から盤に並べ、1手ずつ自動で進める。 */
+function showGuidedMateLine(state: GuidedReviewState, quiz: GuidedReviewQuiz, prefix: string) {
+  const sfen = currentSfen.value;
+  let labels = "";
+  try {
+    labels = formatPrincipalVariation(quiz.bestLine, sfen, quiz.bestLine.length);
+  } catch { /* 表記できない手順は並べるだけにする */ }
+  const played = quiz.playedMove ? formatHintMove(quiz.playedMove, sfen) : "";
+  const playedText = played && quiz.playedMove !== quiz.bestMove ? `実戦は${played}だったね。` : "";
+  guidedReview.value = {
+    ...state,
+    phase: "answer",
+    mate: null,
+    text: `${prefix}詰み手順は${labels || "盤のとおり"}だよ。盤に並べるね。${playedText}`,
+  };
+  const start = reviewNavigation.value.cursor;
+  const placed = previewReviewLine(reviewNavigation.value, quiz.bestLine);
+  reviewNavigation.value = { ...placed, cursor: start };
+  const end = start + quiz.bestLine.length;
+  const stepLine = () => {
+    guidedReviewTimer = undefined;
+    const current = guidedReview.value;
+    if (current?.phase !== "answer" || current.quiz !== quiz || reviewNavigation.value.cursor >= end) return;
+    reviewNavigation.value = moveReviewCursor(reviewNavigation.value, 1);
+    rebuildRecord(visibleReviewMoves(reviewNavigation.value));
+    if (reviewNavigation.value.cursor < end) {
+      guidedReviewTimer = setTimeout(stepLine, guidedReviewDelay(false, guidedReviewSpeed.value));
+    }
+  };
+  guidedReviewTimer = setTimeout(stepLine, guidedReviewDelay(false, guidedReviewSpeed.value));
+}
+
+/**
+ * 詰みの問題で指した手を判定する。詰みが続くなら相手の応手を指して続けさせ、詰んだら正解にする。
+ * 解析の詰み手順どおりの手は、JavaScriptの探索で読み切れなくても（王手でない手を含む詰みなど）正解として進める。
+ */
+function checkGuidedMateMove(state: GuidedReviewState, quiz: GuidedReviewQuiz, mate: GuidedMateProgress, usi: string) {
+  const index = mate.played.length;
+  const onLine = mate.onLine && quiz.bestLine[index] === usi;
+  const verdict = judgeMateStep(mate.sfen, usi, mate.remaining);
+  if (verdict.status === "mated") {
+    guidedAnsweredQuizzes.add(quiz.ply);
+    guidedReview.value = {
+      ...state,
+      phase: "answer",
+      mate: null,
+      solved: state.solved + 1,
+      text: index === 0 ? "正解！詰んだね！" : "正解！最後まで詰ませたね！",
+    };
+    return;
+  }
+  const lineReply = onLine ? quiz.bestLine[index + 1] : undefined;
+  const reply = lineReply ?? (verdict.status === "continue" ? verdict.reply : undefined);
+  if (!reply) {
+    const reason = verdict.status === "unknown"
+      ? "その手で詰むかは、読み切れなかったよ。"
+      : verdict.status === "not-check"
+        ? "王手をかけないと、逃げる時間を与えちゃうね。"
+        : "その手だと逃げられちゃうね。";
+    revealGuidedReviewAnswer(`おしい！${reason}`);
+    return;
+  }
+  const remaining = verdict.status === "continue" && !lineReply
+    ? verdict.plies - 1
+    : Math.max(1, mate.remaining - 2);
+  guidedReview.value = { ...state, text: "いいね！相手はどう逃げるかな…" };
+  guidedMateReplyPending.value = true;
+  guidedReviewTimer = setTimeout(() => {
+    guidedReviewTimer = undefined;
+    guidedMateReplyPending.value = false;
+    const current = guidedReview.value;
+    if (current?.phase !== "quiz" || current.quiz !== quiz) return;
+    const replySfen = currentSfen.value;
+    if (!applyMove(reply, "cpu")) {
+      revealGuidedReviewAnswer();
+      return;
+    }
+    reviewNavigation.value = appendReviewMove(reviewNavigation.value, reply);
+    guidedReview.value = {
+      ...current,
+      mate: { sfen: currentSfen.value, remaining, played: [...mate.played, usi, reply], onLine: Boolean(lineReply) },
+      text: `相手は${formatHintMove(reply, replySfen)}。続けて詰ませよう！`,
+    };
+  }, guidedReviewDelay(false, guidedReviewSpeed.value));
+}
+
 /** 問題の局面で盤に指した手を答え合わせする。 */
 function checkGuidedReviewMove(usi: string) {
   const state = guidedReview.value;
   const quiz = state?.quiz;
-  if (!state || !quiz || state.phase !== "quiz") return;
+  if (!state || !quiz || state.phase !== "quiz" || guidedMateReplyPending.value) return;
+  if (state.mate) {
+    // 詰み探索は少し時間がかかるので、指した手を盤に描いてから判定する。
+    const mate = state.mate;
+    guidedMateReplyPending.value = true;
+    guidedReviewTimer = setTimeout(() => {
+      guidedReviewTimer = undefined;
+      guidedMateReplyPending.value = false;
+      if (guidedReview.value !== state) return;
+      checkGuidedMateMove(state, quiz, mate, usi);
+    }, 30);
+    return;
+  }
   if (usi === quiz.bestMove) {
     guidedReview.value = { ...state, solved: state.solved + 1 };
     revealGuidedReviewAnswer("正解！");

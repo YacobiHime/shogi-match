@@ -1,6 +1,16 @@
 import { describe, expect, test } from 'vitest';
 
-import { buildGuidedReview, guidedReviewSummary, winRateFor } from './guided-review.mjs';
+import {
+  GUIDED_REVIEW_COMMENT_MS,
+  GUIDED_REVIEW_SPEEDS,
+  GUIDED_REVIEW_STEP_MS,
+  buildGuidedReview,
+  guidedReviewDelay,
+  guidedReviewSummary,
+  nextGuidedReviewSpeed,
+  normalizeGuidedReviewSpeed,
+  winRateFor,
+} from './guided-review.mjs';
 
 const cp = (value) => ({ type: 'cp', value });
 const mate = (value) => ({ type: 'mate', value });
@@ -36,7 +46,7 @@ describe('振り返りの台本', () => {
     const review = buildGuidedReview(points, { playerColor: 'black', winner: 'black', moves: movesOf(4) });
     const quiz = review.steps.get(2)?.quiz;
     expect(quiz?.type).toBe('mate');
-    expect(quiz?.question).toBe('ここで5手詰めがあったよ！詰ませ方を探してみよう。');
+    expect(quiz?.question).toBe('ここに5手詰めがあったね。詰ませてみよう！');
   });
 
   test('最善手で詰ませたなら詰みの見逃しにしない', () => {
@@ -93,5 +103,29 @@ describe('振り返りの台本', () => {
   test('最後の一言', () => {
     expect(guidedReviewSummary({ quizCount: 0 })).toContain('いい将棋');
     expect(guidedReviewSummary({ quizCount: 3, solved: 1 })).toContain('3問のうち、1問');
+  });
+});
+
+describe('guided review speed', () => {
+  test('keeps the current interval at the normal speed and shortens it when faster', () => {
+    expect(guidedReviewDelay(false, 'normal')).toBe(GUIDED_REVIEW_STEP_MS);
+    expect(guidedReviewDelay(true, 'normal')).toBe(GUIDED_REVIEW_COMMENT_MS);
+    const delays = GUIDED_REVIEW_SPEEDS.map(({ id }) => guidedReviewDelay(false, id));
+    expect(delays).toEqual([...delays].sort((a, b) => b - a));
+    expect(guidedReviewDelay(true, 'fastest')).toBeLessThan(guidedReviewDelay(true, 'normal'));
+  });
+
+  test('falls back to normal for unknown ids and cycles through every speed', () => {
+    expect(normalizeGuidedReviewSpeed(null)).toBe('normal');
+    expect(normalizeGuidedReviewSpeed('warp')).toBe('normal');
+    expect(guidedReviewDelay(false, 'warp')).toBe(GUIDED_REVIEW_STEP_MS);
+    const seen = [];
+    let id = 'slow';
+    for (let i = 0; i < GUIDED_REVIEW_SPEEDS.length; i += 1) {
+      seen.push(id);
+      id = nextGuidedReviewSpeed(id);
+    }
+    expect(id).toBe('slow');
+    expect(seen).toEqual(GUIDED_REVIEW_SPEEDS.map((speed) => speed.id));
   });
 });

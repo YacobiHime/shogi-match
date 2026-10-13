@@ -136,3 +136,40 @@ export function analyzeProblem(
   });
   return { verdicts, exhausted };
 }
+
+export type MateStepVerdict =
+  /** 指した手で詰んだ。 */
+  | { status: "mated" }
+  /** まだ詰みが続く。replyは受け方の最も長く逃れる応手、pliesは応手から詰みまでの手数。 */
+  | { status: "continue"; reply: string; plies: number }
+  /** 王手でない・逃げられる・指せない。 */
+  | { status: "not-check" | "escapes" | "illegal" }
+  /** 探索の上限で判定できない。 */
+  | { status: "unknown" };
+
+/**
+ * 実戦の詰み（対局の振り返りなど）で、攻め方が指した1手を判定する。
+ * remainingは、指す前の局面での詰みまでの手数。少し遠回りの詰みも認めるため、slack手だけ長く読む。
+ * @param {string} sfen 攻め方の手番の局面
+ * @param {string} usi 攻め方が指した手
+ * @param {number} remaining 指す前の局面での詰みまでの手数
+ */
+export function judgeMateStep(
+  sfen: string,
+  usi: string,
+  remaining: number,
+  { slack = 2, nodeLimit = 200000, maxTimeMs = 1500 } = {},
+): MateStepVerdict {
+  const position = Position.newBySFEN(sfen);
+  if (!position) return { status: "illegal" };
+  const attacker = position.color;
+  const next = play(position, usi);
+  if (!next) return { status: "illegal" };
+  if (!next.checked) return { status: "not-check" };
+  if (enumerateLegalMoves(next).length === 0) return { status: "mated" };
+  const budget: Budget = { nodes: 0, limit: nodeLimit, deadline: now() + maxTimeMs };
+  const result = mateSearch(next, attacker, Math.max(0, remaining - 1) + slack, budget);
+  if (result === undefined) return { status: "unknown" };
+  if (!result || !result.line.length) return { status: "escapes" };
+  return { status: "continue", reply: result.line[0], plies: result.plies };
+}

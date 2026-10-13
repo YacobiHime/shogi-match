@@ -15,6 +15,37 @@
 export const GUIDED_REVIEW_STEP_MS = 1300;
 /** 一言を話した手で、次へ進むまで待つ間隔（ミリ秒）。 */
 export const GUIDED_REVIEW_COMMENT_MS = 2600;
+/** 振り返りの速さ。factorは、上の間隔に掛ける倍率。 */
+export const GUIDED_REVIEW_SPEEDS = [
+  { id: 'slow', label: 'ゆっくり', factor: 1.5 },
+  { id: 'normal', label: 'ふつう', factor: 1 },
+  { id: 'fast', label: '速い', factor: 0.5 },
+  { id: 'fastest', label: 'とても速い', factor: 0.25 },
+];
+export const GUIDED_REVIEW_DEFAULT_SPEED = 'normal';
+
+/** 速さのIDを、知っているIDに直す。知らないIDは「ふつう」にする。 */
+export function normalizeGuidedReviewSpeed(id) {
+  return GUIDED_REVIEW_SPEEDS.some((speed) => speed.id === id) ? id : GUIDED_REVIEW_DEFAULT_SPEED;
+}
+
+/** 速さの選択肢で、次の速さのID。最後の次は最初に戻る。 */
+export function nextGuidedReviewSpeed(id) {
+  const index = GUIDED_REVIEW_SPEEDS.findIndex((speed) => speed.id === normalizeGuidedReviewSpeed(id));
+  return GUIDED_REVIEW_SPEEDS[(index + 1) % GUIDED_REVIEW_SPEEDS.length].id;
+}
+
+/**
+ * 次へ進むまでの間隔（ミリ秒）。
+ * @param {boolean} comment 一言を話した手か
+ * @param {string} speedId 速さのID
+ */
+export function guidedReviewDelay(comment, speedId) {
+  const speed = GUIDED_REVIEW_SPEEDS.find((entry) => entry.id === normalizeGuidedReviewSpeed(speedId));
+  const base = comment ? GUIDED_REVIEW_COMMENT_MS : GUIDED_REVIEW_STEP_MS;
+  return Math.round(base * (speed?.factor ?? 1));
+}
+
 /** 1局で考えさせる局面の上限。 */
 export const GUIDED_REVIEW_QUIZ_LIMIT = 5;
 
@@ -152,7 +183,7 @@ export function buildGuidedReview(points, {
   for (const { info, type } of quizzes) {
     quizPlies.add(info.ply);
     const question = type === 'mate'
-      ? `ここで${info.missedMate}手詰めがあったよ！詰ませ方を探してみよう。`
+      ? `ここに${info.missedMate}手詰めがあったね。詰ませてみよう！`
       : type === 'losing'
         ? '次の手が敗着だったみたい…。他の手は無かったかな？'
         : type === 'blunder'
