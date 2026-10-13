@@ -1331,7 +1331,8 @@ import {
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
-import { createSeason, describeSeason, recommendedDifficulty, recordUserGame } from "./core/ryuo.mjs";
+import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById } from "./core/ryuo.mjs";
+import { applySeasonToRoster, createRoster, loadRoster, saveRoster } from "./core/ryuo-roster.mjs";
 import {
   applySeason,
   loadCareer,
@@ -1638,6 +1639,9 @@ const profileState = ref(loadProfile(browserStorage()));
 // 竜王戦(大会)。キャリア(いま何組か、竜王の期数)と、進行中の期は、1局ごとに端末へ保存する。
 type RyuoGame = { opponentId: string; label: string; outcome?: "win" | "loss"; replay?: boolean };
 const ryuoCareer = ref(loadCareer(browserStorage()));
+/** 竜王戦に出る架空の棋士の名簿。期をまたいで残り、期が終わるたびに更新する。最初の期に作る。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let ryuoRoster: any = loadRoster(browserStorage());
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ryuoSeason = ref<any>(loadSeason(browserStorage()));
 /** いま指している大会の対局。保存した対局と一緒に、リロードしても復元する。 */
@@ -3145,11 +3149,18 @@ function enterRyuoSeason(settings: {
 }) {
   const career = ryuoCareer.value;
   const entry = nextEntry(career);
+  const seed = Date.now();
+  if (!ryuoRoster) {
+    ryuoRoster = createRoster({ seed, userGroup: entry.group, userIsChampion: entry.mode === "defense" });
+    saveRoster(browserStorage(), ryuoRoster);
+  }
   const season = createSeason({
     ...entry,
     settings,
     userLevel: recommendedStrengthPreset.value.level,
     career,
+    roster: ryuoRoster,
+    seed,
   });
   ryuoSeason.value = season;
   saveSeason(browserStorage(), season);
@@ -3167,6 +3178,10 @@ function finalizeRyuoSeason() {
   const { career, titles } = applySeason(ryuoCareer.value, season);
   ryuoCareer.value = career;
   saveCareer(browserStorage(), career);
+  if (ryuoRoster) {
+    ryuoRoster = applySeasonToRoster(ryuoRoster, season, { userGroup: career.group, promote: scaleById(season.settings.scale).promote });
+    saveRoster(browserStorage(), ryuoRoster);
+  }
   let profile = profileState.value;
   for (const title of titles) profile = grantTitle(profile, title);
   profileState.value = profile;

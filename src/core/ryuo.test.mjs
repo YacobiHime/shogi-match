@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CHAMPION_ID,
   SCALES,
   USER_ID,
   advanceBracket,
@@ -9,7 +8,6 @@ import {
   createRng,
   createSeason,
   describeSeason,
-  generateGroupField,
   groupMeanLevel,
   recommendedDifficulty,
   recordUserGame,
@@ -27,6 +25,7 @@ import {
   saveSeason,
 } from './ryuo-career.mjs';
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
+import { createRoster } from './ryuo-roster.mjs';
 import { OPPONENT_STYLES } from './ryuo-data.mjs';
 import { CPU_OPENING_STRATEGY_IDS } from './cpu-opening-repertoire.mjs';
 import { OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from './opening-guide.mjs';
@@ -95,35 +94,59 @@ describe('scales and difficulty', () => {
 });
 
 describe('opponent field', () => {
-  it('builds distinct players with spread levels, mixed dan and varied styles', () => {
-    const rng = createRng(7);
-    const used = new Set();
-    const field = generateGroupField({ group: 6, size: 64, difficulty: 7, rng, used });
-    expect(field).toHaveLength(64);
-    expect(new Set(field.map(({ name }) => name)).size).toBe(64);
-    expect(field.every(({ level }) => level >= 0 && level <= 40)).toBe(true);
-    expect(field.every(({ rating }) => Number.isInteger(rating))).toBe(true);
-    const ratings = field.map(({ rating }) => rating);
+  /** 名簿から作った期の、組の出場者(プレイヤーを除く)。 */
+  const field = (season, group) => season.fields[group].filter((id) => id !== USER_ID).map((id) => season.players[id]);
+  const realSeason = (overrides = {}) => createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ scale: 5, ...overrides }), userLevel: 28, seed: 7 });
+
+  it('builds distinct players with spread ratings, mixed dan and varied styles', () => {
+    const season = realSeason();
+    const sixth = field(season, 6);
+    expect(sixth).toHaveLength(63);
+    const all = Object.values(season.players).filter(({ id }) => id !== USER_ID);
+    expect(new Set(all.map(({ name }) => name)).size).toBe(all.length);
+    expect(sixth.every(({ level }) => level >= 0 && level <= 40)).toBe(true);
+    expect(sixth.every(({ rating }) => Number.isInteger(rating))).toBe(true);
+    const ratings = sixth.map(({ rating }) => rating);
     expect(Math.max(...ratings) - Math.min(...ratings)).toBeGreaterThanOrEqual(300);
-    const levels = field.map(({ level }) => level);
+    const levels = sixth.map(({ level }) => level);
     expect(Math.max(...levels)).toBeGreaterThan(Math.min(...levels));
-    expect(new Set(field.map(({ style }) => style.id)).size).toBeGreaterThanOrEqual(8);
-    expect(new Set(field.map(({ dan }) => dan)).size).toBeGreaterThanOrEqual(3);
+    expect(new Set(sixth.map(({ style }) => style.id)).size).toBeGreaterThanOrEqual(8);
+    expect(new Set(sixth.map(({ dan }) => dan)).size).toBeGreaterThanOrEqual(3);
     // 6組には、アマチュア・女流・奨励会員が混じる。
-    expect(field.some(({ kind }) => kind === 'amateur')).toBe(true);
-    expect(field.some(({ kind }) => kind === 'woman')).toBe(true);
-    expect(field.some(({ kind }) => kind === 'shoreikai')).toBe(true);
+    expect(sixth.some(({ kind }) => kind === 'amateur')).toBe(true);
+    expect(sixth.some(({ kind }) => kind === 'woman')).toBe(true);
+    expect(sixth.some(({ kind }) => kind === 'shoreikai')).toBe(true);
   });
 
   it('puts higher groups on stronger ratings and higher dan', () => {
-    const mean = (group) => {
-      const field = generateGroupField({ group, size: 32, difficulty: 7, rng: createRng(group), used: new Set() });
-      return field.reduce((sum, { rating }) => sum + rating, 0) / field.length;
-    };
+    const season = realSeason();
+    const mean = (group) => field(season, group).reduce((sum, { rating }) => sum + rating, 0) / field(season, group).length;
     const means = [1, 2, 3, 4, 5, 6].map(mean);
     for (let index = 1; index < means.length; index += 1) expect(means[index - 1]).toBeGreaterThan(means[index]);
-    const dans = generateGroupField({ group: 1, size: 16, difficulty: 7, rng: createRng(3), used: new Set() }).map(({ dan }) => dan);
-    expect(dans.every((dan) => ['八段', '九段'].includes(dan))).toBe(true);
+    const dans = field(season, 1).map(({ dan }) => dan);
+    expect(dans.every((dan) => ['七段', '八段', '九段'].includes(dan))).toBe(true);
+    // 竜王は出場者に入らない。
+    expect(Object.values(season.fields).flat()).not.toContain(season.champion);
+    expect(season.players[season.champion].dan).toBe('竜王');
+  });
+
+  it('keeps the ratings when the difficulty changes, and only converts the level', () => {
+    const easy = realSeason({ difficulty: 3 });
+    const hard = realSeason({ difficulty: 10 });
+    const ids = easy.fields[3];
+    expect(hard.fields[3]).toEqual(ids);
+    expect(ids.map((id) => hard.players[id].rating)).toEqual(ids.map((id) => easy.players[id].rating));
+    ids.forEach((id) => expect(hard.players[id].level).toBeGreaterThanOrEqual(easy.players[id].level));
+  });
+
+  it('takes the players from a given roster', () => {
+    const roster = createRoster({ seed: 3 });
+    const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings(), userLevel: 28, seed: 9, roster });
+    expect(season.champion).toBe(roster.holder);
+    for (const id of Object.values(season.fields).flat().filter((pid) => pid !== USER_ID)) {
+      expect(season.players[id].name).toBe(roster.players[id].name);
+      expect(season.players[id].group).toBe(roster.players[id].group);
+    }
   });
 
   it('uses only styles the CPU can play, with a rook style that matches the castle', () => {
@@ -151,18 +174,10 @@ describe('opponent field', () => {
     expect(rookStyles).toEqual(new Set(['static', 'ranging']));
   });
 
-  it('keeps the ratings when the difficulty changes, and only converts the level', () => {
-    const easy = generateGroupField({ group: 3, size: 16, difficulty: 3, rng: createRng(4), used: new Set() });
-    const hard = generateGroupField({ group: 3, size: 16, difficulty: 10, rng: createRng(4), used: new Set() });
-    expect(hard.map(({ rating }) => rating)).toEqual(easy.map(({ rating }) => rating));
-    hard.forEach((player, index) => expect(player.level).toBeGreaterThanOrEqual(easy[index].level));
-    expect(hard.reduce((sum, { level }) => sum + level, 0)).toBeGreaterThan(easy.reduce((sum, { level }) => sum + level, 0));
-  });
-
   it('maps every opponent level to a CPU preset', () => {
     const levels = new Set(CPU_STRENGTH_PRESETS.map(({ level }) => level));
-    const field = generateGroupField({ group: 6, size: 64, difficulty: 12, rng: createRng(9), used: new Set() });
-    expect(field.every(({ level }) => levels.has(level))).toBe(true);
+    const season = realSeason({ difficulty: 12 });
+    expect(Object.values(season.players).filter(({ id }) => id !== USER_ID).every(({ level }) => levels.has(level))).toBe(true);
   });
 });
 
@@ -240,7 +255,8 @@ describe('a Ryuo season', () => {
     expect(view.pending.opponent.name).toBeTruthy();
     expect(view.pending.opponent.style.strategy).toBeTruthy();
     expect(view.tables[0].rounds.map(({ label }) => label)).toEqual(['1回戦', '2回戦', '準々決勝', '準決勝', '決勝']);
-    expect(Object.values(season.players).filter(({ id }) => id !== CHAMPION_ID && season.players[id].group === 6)).toHaveLength(32);
+    expect(season.fields[6]).toHaveLength(32);
+    expect(season.fields[6]).toContain(USER_ID);
   });
 
   it('does not always pit a weak player against the strongest opponent in the first round', () => {
@@ -344,7 +360,8 @@ describe('a Ryuo season', () => {
     const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ scale: 2 }), userLevel: 28, seed: 31 });
     const { season: done } = playOut(season, (current) => (current.phase === 'finals' ? 'loss' : 'win'));
     expect(done.result).toMatchObject({ outcome: 'finals-lost', challenger: true, newGroup: 1, wonTitle: false });
-    expect(done.champion).toBe(CHAMPION_ID);
+    expect(done.champion).toBe(season.champion);
+    expect(done.champion).not.toBe(USER_ID);
   });
 
   it('plays a defense match as the champion against a simulated challenger', () => {
@@ -428,7 +445,7 @@ describe('season details for the screen', () => {
     expect(labels).toContain('2組2位');
     expect(labels).toContain('6組優勝');
     expect(main.tree.leaves[USER_ID].label).toBe('6組優勝');
-    expect(view.defender.id).toBe(CHAMPION_ID);
+    expect(view.defender.id).toBe(season.champion);
   });
 
   it('keeps analysis records and queued games through the season and shows them in the statistics', () => {
