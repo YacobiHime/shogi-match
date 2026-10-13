@@ -6,6 +6,8 @@
 import { aggregateSeasonStats } from './ryuo-stats.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { USER_HOLDER, createRoster, seasonEntry, selectParticipants } from './ryuo-roster.mjs';
+import { memberWinProbability } from './ryuo-league.mjs';
+import { pickGameStyle } from './ryuo-repertoire.mjs';
 import {
   BASE_DIFFICULTY,
   DIFFICULTY_LEVELS,
@@ -158,7 +160,7 @@ export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAt
       const a = sidePid(bracket, node.a);
       const b = sidePid(bracket, node.b);
       if (a === userId || b === userId) return { state: 'user', nodeId: node.id };
-      node.winner = rng.next() < winProbability(players[a].rating, players[b].rating) ? a : b;
+      node.winner = rng.next() < memberWinProbability(players[a], players[b]) ? a : b;
     }
   }
   const rootId = rootNodeId(bracket);
@@ -215,7 +217,7 @@ export function recordSeriesGame(series, winner) {
 
 function simulateSeries(series, players, rng) {
   while (series.winner === null) {
-    const pa = winProbability(players[series.a].rating, players[series.b].rating);
+    const pa = memberWinProbability(players[series.a], players[series.b]);
     recordSeriesGame(series, rng.next() < pa ? series.a : series.b);
   }
 }
@@ -392,6 +394,9 @@ function simulateGroupQualifiers(season, group, rng) {
   const strengths = strengthsOf(season);
   const blocks = season.settings.revival ? buildRevivalBlocks(group, ranking, group === 1 ? scale.slots[1] - 2 : 0, strengths, `o${group}`) : [];
   for (const block of blocks) advanceBracket(block, season.players, rng);
+  // 名簿の年間成績に数えるので、表を残す。
+  season.groupBrackets = { ...(season.groupBrackets ?? {}), [`${group}`]: ranking };
+  blocks.forEach((block, index) => { season.groupBrackets[`${group}-r${index + 1}`] = block; });
   const standings = computeStandings(ranking, blocks, strengths);
   // 名簿の昇級・降級に使うので、全員の順位を残す。
   season.groupStandings[group] = standings;
@@ -426,7 +431,10 @@ function setPending(season, pending, rng) {
   const sameSeries = pending.kind !== 'game' && previous && previous.phase === pending.phase && previous.seriesGame;
   // 番勝負は、1局目だけ振り駒で、あとは先後を入れ替える。
   const color = sameSeries ? (previous.color === 'black' ? 'white' : 'black') : (rng.next() < 0.5 ? 'black' : 'white');
-  season.pending = { ...pending, color, label };
+  // 相手は、得意戦法の中から、この1局の戦法を選ぶ(いちばんの得意戦法を多めに)。
+  const opponent = season.players[pending.opponentId];
+  const style = opponent?.repertoire ? pickGameStyle(rng, opponent.repertoire) : opponent?.style ?? null;
+  season.pending = { ...pending, color, label, style };
 }
 
 function finishSeason(season) {
@@ -624,9 +632,19 @@ export function recordUserGame(season, outcome) {
 
 // ---- 表示用
 
+function lastGameView(season) {
+  const game = season.userGames?.at(-1);
+  if (!game) return null;
+  return { win: game.win, label: game.label ?? '', opponent: playerBrief(season, game.opponentId), traitMoments: game.traitMoments ?? [] };
+}
+
 const playerBrief = (season, pid) => {
   const player = season.players[pid];
-  return player ? { id: pid, name: player.name, dan: player.dan, level: player.level, rating: player.rating, kind: player.kind, style: player.style, character: player.character ?? null } : null;
+  return player ? {
+    id: pid, name: player.name, dan: player.dan, level: player.level, rating: player.rating, kind: player.kind, style: player.style,
+    character: player.character ?? null, repertoire: player.repertoire ?? null, age: player.age ?? null,
+    profile: player.profile ?? null, vsUser: player.vsUser ?? null,
+  } : null;
 };
 
 export function playerView(season, pid) {
@@ -718,6 +736,8 @@ export function describeSeason(season) {
     tables,
     series: seriesViews,
     pending: pendingView,
+    // 直前のプレイヤーの対局(相手と、相手の特徴が出た場面)。
+    lastGame: lastGameView(season),
     result: season.result,
     resultSeen: season.resultSeen === true,
     champion: season.champion ? playerBrief(season, season.champion) : null,

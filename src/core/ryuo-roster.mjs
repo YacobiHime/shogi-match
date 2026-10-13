@@ -1,23 +1,33 @@
 // 竜王戦に出る架空の棋士の名簿。期をまたいで残り、毎期の結果で更新する。
-// - 組の昇級・降級、竜王の交代、昇段(竜王戦の昇段規定と、勝数規定の近似)
+// - 組の昇級・降級、竜王の交代
+// - 棋界の1年(ryuo-league.mjs): 年間の成績、順位戦、竜王以外のタイトル戦、昇段、将棋大賞
+// - プレイヤーとの対戦成績
 // - 年齢と強さの変化、引退、新四段の加入、6組の特別枠(アマ・女流・奨励会員)の入れ替え
 // 登場する棋士はすべて架空で、実在の棋士とは関係がない。設計は docs/tournament-design.md の「名簿」。
 
-import {
-  CHAMPION_RATING,
-  GIVEN_NAMES,
-  GROUP_DAN_WEIGHTS,
-  OPPONENT_STYLES,
-  SPECIAL_RATING_OFFSET,
-  SURNAMES,
-  WOMEN_GIVEN_NAMES,
-} from './ryuo-data.mjs';
+import { CHAMPION_RATING, GROUP_DAN_WEIGHTS, SPECIAL_RATING_OFFSET } from './ryuo-data.mjs';
 import { GROUP_MEAN_RATING, GROUP_RATING_SPREAD } from './ryuo-strength.mjs';
-import { createRng, gauss, pick, weightedPick } from './ryuo-random.mjs';
+import { createRng, gauss, weightedPick } from './ryuo-random.mjs';
 import { ageCharacter, createCharacter } from './player-character.mjs';
+import { newName } from './ryuo-names.mjs';
+import { createRepertoire, styleEntry } from './ryuo-repertoire.mjs';
+import {
+  DAN_ORDER,
+  assignJunni,
+  careerSummary,
+  createRecord,
+  heldTitles,
+  playLeagueYear,
+  raiseDan,
+  seedLeagueHistory,
+  settleLeague,
+} from './ryuo-league.mjs';
+
+export { DAN_ORDER };
 
 export const ROSTER_STORAGE_KEY = 'yacobihime:shogi-match:ryuo-roster';
-export const ROSTER_VERSION = 1;
+/** 名簿の保存形式。2から、得意戦法・成績・順位戦・タイトル・将棋大賞・プレイヤーとの対戦成績を持つ。1は作り直す。 */
+export const ROSTER_VERSION = 2;
 /** 竜王がプレイヤーのときの、名簿の竜王(holder)の値。 */
 export const USER_HOLDER = 'user';
 const GROUPS = [1, 2, 3, 4, 5, 6];
@@ -35,33 +45,9 @@ const SHOREIKAI_PROMOTION = 0.3;
 export const MIN_NEW_PROS = 2;
 export const MAX_NEW_PROS = 8;
 
-export const DAN_ORDER = Object.freeze(['四段', '五段', '六段', '七段', '八段', '九段']);
-/**
- * 勝数規定などによる、1期あたりの昇段の確率(強さが平均の棋士)。強い棋士ほど上がりやすい。
- * 四段から五段まで数年、七段から八段は十年ほどかかる、という目安に合わせた仮の値。八段から九段は、強い棋士(R1700以上)だけ。
- */
-const DAN_UP_CHANCE = Object.freeze({ 四段: 0.25, 五段: 0.18, 六段: 0.12, 七段: 0.04, 八段: 0.05 });
 const WOMEN_DAN_WEIGHTS = [['女流初段', 15], ['女流二段', 30], ['女流三段', 30], ['女流四段', 15], ['女流五段', 10]];
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
-
-function newName(rng, used, women = false) {
-  for (let attempt = 0; attempt < 400; attempt += 1) {
-    const name = `${pick(rng, SURNAMES)}${pick(rng, women ? WOMEN_GIVEN_NAMES : GIVEN_NAMES)}`;
-    if (!used.has(name)) {
-      used.add(name);
-      return name;
-    }
-  }
-  const name = `${pick(rng, SURNAMES)}${pick(rng, GIVEN_NAMES)}${used.size}`;
-  used.add(name);
-  return name;
-}
-
-function pickStyle(rng) {
-  const style = pick(rng, OPPONENT_STYLES);
-  return { id: style.id, label: style.label, strategy: style.strategy, castle: style.castle, rook: style.rook };
-}
 
 /** 最初の名簿の年齢。上の組は働き盛り、6組は若手とベテランに分かれる。 */
 function initialAge(rng, group, kind) {
@@ -102,7 +88,7 @@ function createMember(roster, rng, used, { group, kind = 'pro', rating, age, dan
   roster.nextId += 1;
   const member = {
     id,
-    name: newName(rng, used, kind === 'woman'),
+    name: newName(rng, used, { women: kind === 'woman', age: memberAge }),
     kind,
     group,
     dan: dan ?? (kind === 'pro' ? initialDan(rng, group, memberAge) : specialDan(rng, kind)),
@@ -110,8 +96,14 @@ function createMember(roster, rng, used, { group, kind = 'pro', rating, age, dan
     age: memberAge,
     since: roster.season,
     ryuo: 0,
-    style: pickStyle(rng),
+    titleCounts: {},
+    awards: [],
+    record: createRecord(),
+    junni: null,
   };
+  // 得意戦法(居飛車党・振り飛車党・両方)。styleは、いちばんの得意戦法。
+  member.repertoire = createRepertoire(rng, group);
+  member.style = styleEntry(member.repertoire.styles[0]);
   // 棋風と特徴。強さ・年齢・得意戦法に合わせて決める。
   member.character = createCharacter(rng, member);
   roster.players[id] = member;
@@ -147,7 +139,10 @@ export function rosterTarget(group, userGroup, holderInRoster) {
  */
 export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
   const rng = createRng((seed ^ 0x9e3779b9) >>> 0);
-  const roster = { version: ROSTER_VERSION, season: 0, nextId: 1, players: {}, holder: USER_HOLDER, history: [], retired: 0, ratingMean: 0, ratingSd: 0 };
+  const roster = {
+    version: ROSTER_VERSION, season: 0, nextId: 1, players: {}, holder: USER_HOLDER, history: [], retired: 0, ratingMean: 0, ratingSd: 0,
+    titles: {}, titleHistory: [], awards: [], vsUser: {}, lastYear: null,
+  };
   const used = new Set();
   if (!userIsChampion) {
     const holder = createMember(roster, rng, used, { group: 1, rating: CHAMPION_RATING, age: Math.round(clamp(30 + gauss(rng) * 4, 21, 45)), dan: '九段' });
@@ -159,6 +154,9 @@ export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
     for (let index = 0; index < count; index += 1) createMember(roster, rng, used, { group });
   }
   addSpecials(roster, rng, used);
+  // 順位戦のクラスと、過去のタイトル戦・通算勝数の履歴を作り、実績に合わせて段位を上げる。
+  assignJunni(roster, rng);
+  seedLeagueHistory(roster, rng, { ageDrift });
   roster.ratingMean = Math.round(proMean(roster));
   roster.ratingSd = Math.round(proSd(roster));
   return roster;
@@ -206,15 +204,30 @@ export function seasonEntry(roster, id) {
     group: member.group,
     rating: member.rating,
     style: { ...member.style },
+    repertoire: structuredClone(member.repertoire ?? { party: 'static', styles: [member.style.id] }),
     ryuo: member.ryuo,
+    age: member.age,
     character: structuredClone(member.character ?? { attack: 0, traits: [] }),
+    // 紹介用の実績(タイトル・順位戦・成績・将棋大賞)と、プレイヤーとの対戦成績。
+    profile: careerSummary(roster, member),
+    vsUser: roster.vsUser?.[id] ? { ...roster.vsUser[id] } : null,
   };
 }
 
-const raiseDan = (member, dan) => {
-  if (member.kind !== 'pro') return;
-  if (DAN_ORDER.indexOf(dan) > DAN_ORDER.indexOf(member.dan)) member.dan = dan;
-};
+/** プレイヤーとの対戦成績を足す。streakはプレイヤーから見た連勝(+)・連敗(-)。 */
+function recordVsUser(roster, season) {
+  roster.vsUser ??= {};
+  for (const game of season.userGames ?? []) {
+    if (!roster.players[game.opponentId]) continue;
+    const entry = roster.vsUser[game.opponentId] ?? { wins: 0, losses: 0, streak: 0, lastNo: null, lastWin: null };
+    if (game.win) entry.wins += 1;
+    else entry.losses += 1;
+    entry.streak = game.win ? Math.max(0, entry.streak) + 1 : Math.min(0, entry.streak) - 1;
+    entry.lastNo = season.no;
+    entry.lastWin = game.win;
+    roster.vsUser[game.opponentId] = entry;
+  }
+}
 
 /** 年齢による、1期あたりの強さの変化。20代前半まで伸び、30代後半から下がる。 */
 export function ageDrift(age) {
@@ -285,23 +298,26 @@ export function applySeasonToRoster(roster, season, { userGroup, promote }) {
   }
   if (previous !== next.holder && previous !== USER_HOLDER && inRoster(previous)) next.players[previous].group = 1;
   next.history.push({ no: season.no, holder: next.holder, name: next.holder === USER_HOLDER ? null : next.players[next.holder]?.name ?? null });
+  next.titleHistory = [...(next.titleHistory ?? []), {
+    no: season.no, title: 'ryuo', holder: next.holder, name: next.holder === USER_HOLDER ? null : next.players[next.holder]?.name ?? null, changed: previous !== next.holder,
+  }];
+  recordVsUser(next, season);
 
-  // 年齢と強さの変化、勝数規定による昇段(強い棋士ほど、早く上がる)。
+  // 棋界の1年: 年間の成績、順位戦、竜王以外のタイトル戦、昇段(勝数規定・順位戦・タイトル)、将棋大賞。
+  next.lastYear = { no: season.no, ...playLeagueYear(next, season, rng) };
+
+  // 年齢と強さの変化。個性も少しずつ変わる。
   for (const member of members(next)) {
     member.age += 1;
     if (member.kind === 'pro' || member.kind === 'woman') member.rating = Math.round(member.rating + ageDrift(member.age) + gauss(rng) * 30);
     if (member.character) member.character = ageCharacter(rng, member.character, member);
-    if (member.kind !== 'pro' || isHolder(next, member.id)) continue;
-    const index = DAN_ORDER.indexOf(member.dan);
-    const chance = (DAN_UP_CHANCE[member.dan] ?? 0) * clamp(1 + (member.rating - 1450) / 400, 0.4, 2);
-    if (index === 4 && member.rating < 1700) continue;
-    if (index >= 0 && index < 5 && rng.next() < chance) member.dan = DAN_ORDER[index + 1];
   }
 
   // 引退と、特別枠の入れ替え。アマチュアは1期限り。奨励会員は、四段になれば棋士として残る。
   // 女流棋士は、昇級して5組以上にいれば残る(6組に残ったら、次の期は別の女流棋士が出る)。
   for (const member of members(next)) {
-    if (isHolder(next, member.id)) continue;
+    // タイトルを持っている棋士は引退しない。
+    if (isHolder(next, member.id) || heldTitles(next, member.id).length) continue;
     if (member.kind === 'shoreikai' && rng.next() < SHOREIKAI_PROMOTION) {
       Object.assign(member, { kind: 'pro', dan: '四段', since: season.no });
       continue;
@@ -341,6 +357,8 @@ export function applySeasonToRoster(roster, season, { userGroup, promote }) {
     });
   }
   addSpecials(next, rng, used);
+  // 順位戦の定員をそろえ(新四段はC級2組)、実績に合わせて段位を上げる。
+  settleLeague(next);
 
   // 尺度を保つ。棋士の平均とばらつきが、最初の名簿からずれないように、全員を同じ式で直す(順位は変わらない)。
   // 毎期のゆらぎが積み重なって、強い棋士がどこまでも強くなるのを防ぐ。
@@ -354,13 +372,6 @@ export function loadRoster(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(ROSTER_STORAGE_KEY) ?? 'null');
     if (!parsed || parsed.version !== ROSTER_VERSION || !parsed.players || typeof parsed.players !== 'object') return null;
-    // 個性を持つ前に作った名簿には、棋士ごとに決まった種から個性を足す。
-    for (const member of Object.values(parsed.players)) {
-      if (member && !member.character) {
-        const seed = [...String(member.id)].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7);
-        member.character = createCharacter(createRng(seed), member);
-      }
-    }
     return parsed;
   } catch {
     return null;

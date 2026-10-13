@@ -258,6 +258,59 @@ export function ageCharacter(rng, character, { age, rating, style }) {
   return next;
 }
 
+// ---- 特徴が出た場面
+
+/**
+ * 対局中のCPUの手の記録から、特徴が手の選び方に表れた場面を取り出す。特徴ごとに最初の1回だけ。
+ * - 終盤での頓死が多い: 見落とし(oversight)の手
+ * - 詰将棋が得意: 詰ます手(mate)
+ * - 寄せが速い・終盤の受けが正確・劣勢でも崩れない: 棋風で選んだ手(style)
+ * @param {{ ply: number, kind: string, traits: string[] }[]} moves plyは、その手を指す前の手数。
+ * @returns {{ id: string, ply: number }[]}
+ */
+export function summarizeTraitMoments(moves) {
+  const RULES = [
+    ['endgame-collapse', 'oversight'], ['tsume', 'mate'],
+    ['fast-attack', 'style'], ['endgame-defense', 'style'], ['tenacious', 'style'],
+  ];
+  const moments = [];
+  for (const [id, kind] of RULES) {
+    const move = (moves ?? []).find((entry) => entry.kind === kind && entry.traits?.includes(id));
+    if (move) moments.push({ id, ply: move.ply });
+  }
+  return moments.sort((a, b) => a.ply - b.ply);
+}
+
+const MOMENT_TEXT = Object.freeze({
+  'endgame-collapse': '終盤での頓死の癖が出ていたよ。',
+  tsume: '詰将棋の得意な人らしく、詰みをしっかり読み切っていたね。',
+  'fast-attack': '寄せの速さが出ていたよ。',
+  'endgame-defense': '終盤の正確な受けが出ていたよ。',
+  tenacious: '劣勢でも崩れない粘りが出ていたよ。',
+});
+
+/** 特徴が出た場面の、やこび姫の一言(手数は1から数える)。 */
+export function traitMomentText({ id, ply }) {
+  return MOMENT_TEXT[id] ? `${ply + 1}手目、${MOMENT_TEXT[id]}` : '';
+}
+
+// ---- 自動対局での相性
+
+/** 対振り飛車・対居飛車が得意な棋士が、その相手と当たったときの、自動対局のレーティングの上乗せ(度合い1あたり)。 */
+export const MATCHUP_ELO = 25;
+
+/**
+ * 自動対局で、相手の飛車の振り方に対する得意を、レーティングの上乗せにする。
+ * @param {{ traits?: { id: string, degree: number }[] } | null | undefined} character
+ * @param {'static' | 'ranging' | null | undefined} opponentRook 相手の(いちばんの得意戦法の)飛車の振り方
+ */
+export function matchupBonus(character, opponentRook) {
+  if (!character || !opponentRook) return 0;
+  const id = opponentRook === 'ranging' ? 'vs-ranging' : 'vs-static';
+  const trait = character.traits?.find((entry) => entry.id === id);
+  return trait ? MATCHUP_ELO * (trait.degree === 2 ? 2 : 1) : 0;
+}
+
 // ---- 局面の判定
 
 function zoneDanger(board, kingSquare, attacker) {

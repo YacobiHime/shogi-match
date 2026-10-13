@@ -268,9 +268,14 @@
                 <div><dt>手番</dt><dd class="shogi-tournament__tile-text">{{ view.pending.color === "black" ? "先手" : "後手" }}</dd><span class="shogi-tournament__tile-note">振り駒</span></div>
               </dl>
               <dl class="shogi-tournament__profile" data-tournament-opponent-profile>
+                <div v-if="opponentProfile.repertoire"><dt>戦型</dt><dd>{{ opponentProfile.repertoire }}</dd></div>
                 <div><dt>棋風</dt><dd>{{ opponentProfile.style }}</dd></div>
                 <div v-if="opponentProfile.strengths.length"><dt>得意</dt><dd>{{ opponentProfile.strengths.join("・") }}</dd></div>
                 <div v-if="opponentProfile.weaknesses.length"><dt>苦手</dt><dd>{{ opponentProfile.weaknesses.join("・") }}</dd></div>
+                <div v-if="opponentProfile.titles"><dt>タイトル</dt><dd>{{ opponentProfile.titles }}</dd></div>
+                <div v-if="opponentProfile.junni"><dt>順位戦</dt><dd>{{ opponentProfile.junni }}</dd></div>
+                <div v-if="opponentProfile.lastSeason"><dt>昨年度</dt><dd>{{ opponentProfile.lastSeason }}</dd></div>
+                <div><dt>対戦</dt><dd>{{ opponentProfile.vsUser }}</dd></div>
               </dl>
               <button type="button" class="shogi-tournament__start" data-tournament-play @click="emit('play')">対局開始</button>
             </section>
@@ -397,6 +402,7 @@ import {
   entryDifficultyLine,
   entryRevivalLine,
   entryScaleLine,
+  lastGameLines,
   opponentLines,
   resultLines,
   ryuoGuideLines,
@@ -404,6 +410,8 @@ import {
 } from "./core/ryuo-speech.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { describeCharacter } from "./core/player-character.mjs";
+import { repertoireText } from "./core/ryuo-repertoire.mjs";
+import { vsUserText } from "./core/ryuo-book.mjs";
 
 type Career = {
   group: number; seasons: number; champion: boolean; titles: number; streak: number; eternal: boolean;
@@ -412,6 +420,9 @@ type Career = {
 type Brief = {
   id: string; name: string; dan: string; level: number; style?: { label: string; rook?: string } | null;
   character?: { attack: number; traits: { id: string; degree: number }[] } | null;
+  repertoire?: { party: string; styles: string[] } | null;
+  profile?: { held: string[]; former: string[]; totalTitles: number; junni: string | null; season: { wins: number; losses: number } | null } | null;
+  vsUser?: { wins: number; losses: number; streak: number; lastWin: boolean | null } | null;
 };
 type Tree = {
   root: { pid?: string; from?: string }; rounds: number;
@@ -439,6 +450,7 @@ type View = {
     titles?: { id: string; label: string; detail: string }[];
   };
   defender: Brief | null;
+  lastGame?: null | { win: boolean; label: string; opponent: Brief | null; traitMoments: { id: string; ply: number }[] };
   stats: {
     radar: { key: string; label: string; value: number | null }[]; summary: Summary; pending: number;
     commentary: { title: string; text: string }[];
@@ -619,14 +631,29 @@ const talkLines = computed(() => {
 });
 const phaseLines = computed(() => seasonPhaseLines(props.view));
 /** 次の相手の棋風と特徴(得意・苦手)。 */
-const opponentProfile = computed(() => describeCharacter(props.view?.pending?.opponent?.character ?? null));
+const opponentProfile = computed(() => {
+  const opponent = props.view?.pending?.opponent;
+  const career = opponent?.profile;
+  const titles = career?.held?.length
+    ? `${career.held.join("・")}（通算${career.totalTitles}期）`
+    : career?.totalTitles ? `${career.former.join("・")}（通算${career.totalTitles}期）` : "";
+  return {
+    ...describeCharacter(opponent?.character ?? null),
+    repertoire: repertoireText(opponent?.repertoire ?? null),
+    titles,
+    junni: career?.junni ?? "",
+    lastSeason: career?.season && (career.season.wins || career.season.losses) ? `${career.season.wins}勝${career.season.losses}敗` : "",
+    vsUser: opponent ? vsUserText(opponent.vsUser ?? null) : "",
+  };
+});
 const opponentSays = computed(() => (
   props.view?.pending ? opponentLines(props.view.pending.opponent, props.userLevel, props.view.pending) : []
 ));
 const resultSays = computed(() => resultLines(props.view?.result ? { ...props.view.result } : null));
 /** 表の画面のやこび姫: いまの段階と、次の相手について。期が終わっていれば、結果について。 */
+const lastGameSays = computed(() => lastGameLines(props.view?.lastGame ?? null));
 const seasonSays = computed(() => {
-  const lines = [...phaseLines.value, ...opponentSays.value];
+  const lines = [...lastGameSays.value, ...phaseLines.value, ...opponentSays.value];
   return lines.length ? lines : resultSays.value;
 });
 /** 解説の表情を決めるための、セリフの文字列。 */
@@ -999,7 +1026,7 @@ const statTiles = computed(() => {
 }
 .shogi-game .shogi-tournament__profile > div {
   display: grid;
-  grid-template-columns: 3em minmax(0, 1fr);
+  grid-template-columns: 4.5em minmax(0, 1fr);
   gap: 0.6rem;
   align-items: baseline;
 }

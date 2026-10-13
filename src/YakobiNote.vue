@@ -142,6 +142,8 @@
             <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
           </section>
 
+          <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" />
+
           <section v-if="state.games" class="shogi-note__card" aria-labelledby="shogi-note-colors">
             <h2 id="shogi-note-colors">手番ごとの成績</h2>
             <ul class="shogi-note__rows">
@@ -201,6 +203,7 @@
 <script setup lang="ts">
 import { computed, ref, type PropType } from "vue";
 import RyuoLadder from "./RyuoLadder.vue";
+import RyuoRosterBook from "./RyuoRosterBook.vue";
 import YakobiSays from "./YakobiSays.vue";
 import {
   USAGE_CATEGORIES,
@@ -246,6 +249,8 @@ const props = defineProps({
   backLabel: { type: String, default: "タイトルへ戻る" },
   state: { type: Object as PropType<RatingState>, required: true },
   profile: { type: Object as PropType<ProfileState>, default: () => ({ titles: [] }) },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  roster: { type: Object as PropType<any>, default: null },
   career: {
     type: Object as PropType<RyuoCareer>,
     default: () => ({ group: 6, seasons: 0, champion: false, titles: 0, streak: 0, bestStreak: 0, challenges: 0, eternal: false, history: [] }),

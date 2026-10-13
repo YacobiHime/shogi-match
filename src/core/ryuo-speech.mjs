@@ -1,6 +1,7 @@
 // 竜王戦の画面で、やこび姫が話すセリフ。説明・エントリーの一言・次の対局・結果の言葉を作る。画面に依存しない。
 
-import { describeCharacter } from './player-character.mjs';
+import { describeCharacter, traitMomentText } from './player-character.mjs';
+import { styleEntry } from './ryuo-repertoire.mjs';
 
 /** 竜王戦の説明。やこび姫が、順に話す。 */
 export function ryuoGuideLines() {
@@ -77,13 +78,32 @@ export function seasonPhaseLines(view) {
 /** 次の対戦相手についての一言。userLevelは、プレイヤーの棋力の目安(Lv)。 */
 export function opponentLines(opponent, userLevel, pending) {
   if (!opponent) return [];
-  const style = opponent.style?.label;
-  const lines = [`${opponent.name}${opponent.dan}との一局だね。${style ? `得意は「${style}」だよ。` : ''}`];
+  // 得意戦法が複数あれば、2つまで挙げる。
+  const styles = opponent.repertoire?.styles?.length
+    ? opponent.repertoire.styles.slice(0, 2).map((id) => styleEntry(id).label)
+    : [opponent.style?.label].filter(Boolean);
+  const styleText = styles.map((label) => `「${label}」`).join('や');
+  const lines = [`${opponent.name}${opponent.dan}との一局だね。${styleText ? `得意は${styleText}だよ。` : ''}`];
   const gap = opponent.level - userLevel;
   if (gap >= 6) lines.push('今までで一番の強敵かも…！ 全力でいこう！');
   else if (gap >= 3) lines.push('手ごわい相手だよ。慎重にね。');
   else if (gap <= -4) lines.push('落ち着いて指せば大丈夫。でも、油断は禁物だよ！');
   else lines.push('いい勝負になりそう！ がんばってね。');
+  // 実績(タイトル)と、プレイヤーとの対戦成績。
+  const career = opponent.profile;
+  if (career?.held?.length) {
+    const crowns = career.held.length >= 2 ? `${career.held.join('・')}の${['', '', '二', '三', '四', '五', '六', '七', '八'][career.held.length]}冠` : career.held[0];
+    lines.push(`相手は${crowns}だよ！ タイトル通算${career.totalTitles}期${career.held.length >= 2 ? 'の第一人者' : ''}だね。`);
+  } else if (career?.former?.length) {
+    lines.push(`${career.former[0]}で、タイトル通算${career.totalTitles}期の実力者だよ。`);
+  }
+  const vs = opponent.vsUser;
+  if (vs) {
+    if (vs.streak <= -2) lines.push(`この人には${-vs.streak}連敗中…。今度こそ勝とう！`);
+    else if (vs.streak >= 2) lines.push(`この人には${vs.streak}連勝中！ 相性がいいのかも。`);
+    else if (vs.lastWin === false) lines.push('前に負けた相手だよ。リベンジしよう！');
+    else lines.push(`前に勝ったことのある相手だね。通算であなたの${vs.wins}勝${vs.losses}敗だよ。`);
+  }
   const profile = describeCharacter(opponent.character ?? null);
   if (opponent.character) {
     const notes = [...profile.strengths.slice(0, 1).map((text) => `${text}みたい`), ...profile.weaknesses.slice(0, 1).map((text) => `${text}らしいよ`)];
@@ -93,6 +113,13 @@ export function opponentLines(opponent, userLevel, pending) {
   else if (opponent.style?.rook === 'static') lines.push('居飛車の相手だよ。序盤の組み方に気をつけてね。');
   if (pending?.kind && pending.kind !== 'game') lines.push(`これは第${pending.gameNo}局。ここまで、あなた${pending.wins.user}勝、相手${pending.wins.opponent}勝だよ。`);
   return lines;
+}
+
+/** 直前の対局で、相手の特徴が出た場面についての一言。 */
+export function lastGameLines(lastGame) {
+  if (!lastGame?.traitMoments?.length) return [];
+  const name = lastGame.opponent?.name ?? '相手';
+  return [`さっきの${name}さんとの対局、`, ...lastGame.traitMoments.slice(0, 2).map(traitMomentText).filter(Boolean)];
 }
 
 /** 期の結果についての、やこび姫の言葉。 */

@@ -297,6 +297,7 @@
       :state="ratingState"
       :profile="profileState"
       :career="ryuoCareer"
+      :roster="ryuoRoster"
       @close="yakobiNoteOpen = false"
       @start-measure="startMeasureMatch"
       @declare="declareGrade"
@@ -1302,7 +1303,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch, type Ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRaw, watch, type Ref } from "vue";
 import { Color, Move, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import ShogiOpeningDex from "./ShogiOpeningDex.vue";
@@ -1333,7 +1334,7 @@ import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
 import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById } from "./core/ryuo.mjs";
 import { applySeasonToRoster, createRoster, loadRoster, saveRoster } from "./core/ryuo-roster.mjs";
-import { applyCharacter, characterSituation } from "./core/player-character.mjs";
+import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { comparableScore } from "./core/move-selection.mjs";
 import {
   applySeason,
@@ -1643,11 +1644,13 @@ type RyuoGame = { opponentId: string; label: string; outcome?: "win" | "loss"; r
 const ryuoCareer = ref(loadCareer(browserStorage()));
 /** 竜王戦に出る架空の棋士の名簿。期をまたいで残り、期が終わるたびに更新する。最初の期に作る。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let ryuoRoster: any = loadRoster(browserStorage());
+const ryuoRoster = shallowRef<any>(loadRoster(browserStorage()));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ryuoSeason = ref<any>(loadSeason(browserStorage()));
 /** いま指している大会の対局。保存した対局と一緒に、リロードしても復元する。 */
 const ryuoGame = ref<RyuoGame | null>(null);
+/** 大会の対局での、CPUの手ごとの選び方と、働いていた特徴(対局後に、特徴が出た場面を示すため)。 */
+let ryuoCpuMoves: { ply: number; kind: string; traits: string[] }[] = [];
 const ryuoView = computed(() => (ryuoSeason.value ? describeSeason(ryuoSeason.value) : null));
 const ryuoOpponent = computed(() => (ryuoGame.value ? ryuoSeason.value?.players?.[ryuoGame.value.opponentId] ?? null : null));
 const tournamentStartAt = ref<"select" | "season">("select");
@@ -3152,16 +3155,16 @@ function enterRyuoSeason(settings: {
   const career = ryuoCareer.value;
   const entry = nextEntry(career);
   const seed = Date.now();
-  if (!ryuoRoster) {
-    ryuoRoster = createRoster({ seed, userGroup: entry.group, userIsChampion: entry.mode === "defense" });
-    saveRoster(browserStorage(), ryuoRoster);
+  if (!ryuoRoster.value) {
+    ryuoRoster.value = createRoster({ seed, userGroup: entry.group, userIsChampion: entry.mode === "defense" });
+    saveRoster(browserStorage(), ryuoRoster.value);
   }
   const season = createSeason({
     ...entry,
     settings,
     userLevel: recommendedStrengthPreset.value.level,
     career,
-    roster: ryuoRoster,
+    roster: ryuoRoster.value,
     seed,
   });
   ryuoSeason.value = season;
@@ -3180,9 +3183,9 @@ function finalizeRyuoSeason() {
   const { career, titles } = applySeason(ryuoCareer.value, season);
   ryuoCareer.value = career;
   saveCareer(browserStorage(), career);
-  if (ryuoRoster) {
-    ryuoRoster = applySeasonToRoster(ryuoRoster, season, { userGroup: career.group, promote: scaleById(season.settings.scale).promote });
-    saveRoster(browserStorage(), ryuoRoster);
+  if (ryuoRoster.value) {
+    ryuoRoster.value = applySeasonToRoster(ryuoRoster.value, season, { userGroup: career.group, promote: scaleById(season.settings.scale).promote });
+    saveRoster(browserStorage(), ryuoRoster.value);
   }
   let profile = profileState.value;
   for (const title of titles) profile = grantTitle(profile, title);
@@ -3233,12 +3236,15 @@ function startRyuoMatch() {
   cpuRookPreference.value = "";
   cpuTempoPreference.value = "";
   // 得意戦法と囲いは、詳細の指定として渡す(囲いと一体の戦法は、囲いが空)。
-  cpuStrategyDetailsOpen.value = Boolean(opponent.style);
-  if (opponent.style) {
-    cpuDetailedStrategy.value = opponent.style.strategy;
-    cpuDetailedCastle.value = opponent.style.castle;
+  // この1局の戦法は、シーズンが得意戦法の中から選んでいる(古い期は、いちばんの得意戦法)。
+  const gameStyle = pending.style ?? opponent.style;
+  cpuStrategyDetailsOpen.value = Boolean(gameStyle);
+  if (gameStyle) {
+    cpuDetailedStrategy.value = gameStyle.strategy;
+    cpuDetailedCastle.value = gameStyle.castle;
   }
   ryuoGame.value = { ...(ryuoGame.value ?? { opponentId: opponent.id, label: "" }), outcome: undefined, replay: false };
+  ryuoCpuMoves = [];
   matchStarted.value = true;
   pregameOpen.value = false;
   scheduleDeferredCoachPortraitPreload();
@@ -3260,6 +3266,10 @@ function recordRyuoOutcome(matchResult: MatchResult) {
   }
   const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
   const next = recordUserGame(rawRyuoSeason(), outcome);
+  // 相手の特徴が手の選び方に表れた場面を、この対局の記録に残す(大会の画面で、やこび姫が話す)。
+  const last = next.userGames[next.userGames.length - 1];
+  if (last) last.traitMoments = summarizeTraitMoments(ryuoCpuMoves);
+  ryuoCpuMoves = [];
   // この対局を、統計のために、あとで別のエンジンで解析する(保存しておき、リロードしても続ける)。
   next.analysisQueue = [...(next.analysisQueue ?? []), {
     seasonId: next.id,
@@ -5960,6 +5970,12 @@ async function scheduleCpuMove() {
           });
         if (generation !== matchGeneration) return;
         usi = selection?.move ?? "";
+        if (cpuCharacter && usi) {
+          const kind = (selection as { kind?: string } | null)?.kind ?? "opening";
+          ryuoCpuMoves = [...ryuoCpuMoves.filter(({ ply }) => ply < moveHistory.length), {
+            ply: moveHistory.length, kind, traits: selectionStrength.activeTraits ?? [],
+          }];
+        }
         if (isBlunderChoice(selection)) {
           cpuBlunderPlies = [...cpuBlunderPlies.filter((ply) => ply < moveHistory.length), moveHistory.length];
         }

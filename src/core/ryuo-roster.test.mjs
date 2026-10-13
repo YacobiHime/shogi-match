@@ -46,16 +46,11 @@ describe('initial roster', () => {
     expect(members(roster).some(({ character }) => character.traits.length > 0)).toBe(true);
   });
 
-  it('gives characters to an older roster saved without them, the same way every time', () => {
+  it('rebuilds a roster saved in an older format', () => {
     const data = new Map();
     const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: (k) => data.delete(k) };
-    const roster = createRoster({ seed: 9 });
-    for (const member of members(roster)) delete member.character;
-    saveRoster(storage, roster);
-    const first = loadRoster(storage);
-    const second = loadRoster(storage);
-    expect(members(first).every(({ character }) => character)).toBe(true);
-    expect(first).toEqual(second);
+    saveRoster(storage, { ...createRoster({ seed: 9 }), version: 1 });
+    expect(loadRoster(storage)).toBeNull();
   });
 
   it('follows the Ryuo promotion rules for dan and has young and veteran players in group 6', () => {
