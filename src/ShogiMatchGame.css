@@ -2127,6 +2127,8 @@
   box-shadow: 4px 4px 0 var(--amber-shadow);
 }
 .shogi-home .shogi-home__card--primary .shogi-home__label { color: #ffe2b8; }
+/* 脇役のカードは枠を控えめにし、主役のカードとの差をはっきりさせる。 */
+.shogi-home .shogi-home__card:not(.shogi-home__card--primary) { border-color: rgba(255, 252, 244, 0.3); }
 
 .shogi-home__icon { width: 56px; height: 56px; }
 .shogi-home__label { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; }
