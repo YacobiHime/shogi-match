@@ -135,6 +135,11 @@
   min-height: 2.6em;
   padding: 0.3em 0.7em;
 }
+.shogi-game__status--check {
+  border-color: #d4573b;
+  border-left-color: #d4573b;
+  background: rgba(120, 38, 24, 0.9);
+}
 .shogi-game__status strong {
   flex: 1 1 auto;
   min-width: 0;
@@ -539,6 +544,65 @@
 }
 .shogi-game__board-shell .shogi-match-theme-controls {
   display: none;
+}
+/* 王手の知らせ。盤の中央に短く出し、盤の操作は妨げない。守る側（自分が王手された）は赤みを強くする。 */
+.shogi-game__check-callout {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  gap: 0.2em;
+  justify-items: center;
+  padding: 0.5em 1.4em 0.6em;
+  border: 3px solid var(--ivory);
+  border-radius: 1em;
+  color: var(--night);
+  background: var(--amber);
+  box-shadow: 0 6px 0 var(--amber-shadow), 0 10px 24px rgba(0, 0, 0, 0.45);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.shogi-game__check-callout--defend {
+  color: var(--ivory);
+  background: #d4573b;
+  box-shadow: 0 6px 0 #8f3423, 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+.shogi-game__check-callout strong {
+  font-size: 2.4em;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+}
+.shogi-game__check-callout small {
+  font-size: 0.95em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.shogi-game__callout-enter-active {
+  animation: shogi-callout-pop 260ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.shogi-game__callout-leave-active {
+  transition: opacity 180ms ease;
+}
+.shogi-game__callout-leave-to {
+  opacity: 0;
+}
+@keyframes shogi-callout-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__callout-enter-active {
+    animation: none;
+  }
 }
 
 /* ===== やこび姫 ===== */
@@ -2056,6 +2120,14 @@
   box-shadow: 5px 5px 0 rgba(23, 38, 50, 0.8);
 }
 .shogi-home__card:disabled { cursor: default; opacity: 0.72; }
+/* 主役のカード（対局・教室・再開）は、琥珀色の枠と温かい地色でほかより目立たせる。 */
+.shogi-home .shogi-home__card--primary {
+  border-color: var(--amber);
+  background: linear-gradient(180deg, rgba(241, 165, 76, 0.26), rgba(43, 70, 91, 0.94) 70%);
+  box-shadow: 4px 4px 0 var(--amber-shadow);
+}
+.shogi-home .shogi-home__card--primary .shogi-home__label { color: #ffe2b8; }
+
 .shogi-home__icon { width: 56px; height: 56px; }
 .shogi-home__label { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; }
 /* 「やこび姫の将棋教室」などの長い名前は、「やこび姫の」を小さく上の行に出して、カードの幅に収める。 */
@@ -2189,6 +2261,12 @@
     transform: translate(-2px, -2px);
     box-shadow: 6px 6px 0 rgba(23, 38, 50, 0.8);
   }
+  .shogi-home .shogi-home__card--primary {
+    border-color: var(--amber);
+    background: linear-gradient(180deg, rgba(241, 165, 76, 0.26), rgba(43, 70, 91, 0.94) 70%);
+    box-shadow: 4px 4px 0 var(--amber-shadow);
+  }
+  .shogi-home .shogi-home__card--primary:not(:disabled):hover { box-shadow: 6px 6px 0 var(--amber-shadow); }
   .shogi-home .shogi-home__card:focus-visible { outline: 3px solid #f1a54c; outline-offset: 3px; }
   .shogi-home__icon { width: 64px; height: 64px; }
   .shogi-home__label { font-size: clamp(15px, 1.35vw, 18px); white-space: nowrap; }
@@ -2233,4 +2311,20 @@
 .shogi-game .shogi-game__command--attack[aria-pressed="true"],
 .shogi-game .shogi-game__command--flip[aria-pressed="true"] {
   box-shadow: inset 0 0 0 2px var(--amber, #f5a645);
+}
+
+/* ===== 押した感触 =====
+ * 押している間はボタンが影の分だけ沈む。:hoverの書式より後に置き、押している間はこちらを優先する。 */
+.shogi-game button:not(:disabled):active {
+  box-shadow: none;
+  transform: translateY(2px);
+  transition-duration: 40ms;
+}
+.shogi-home .shogi-home__card:not(:disabled):active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 rgba(23, 38, 50, 0.8);
+  transition-duration: 40ms;
+}
+.shogi-home .shogi-home__card--primary:not(:disabled):active {
+  box-shadow: 1px 1px 0 var(--amber-shadow);
 }

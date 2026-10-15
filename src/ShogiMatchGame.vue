@@ -43,7 +43,7 @@
             <button
               v-if="suspendedMatch"
               type="button"
-              class="shogi-home__card shogi-home__card--resume"
+              class="shogi-home__card shogi-home__card--resume shogi-home__card--primary"
               @click="resumeSuspendedMatch"
             >
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
@@ -57,7 +57,7 @@
               <span class="shogi-home__label">対局を再開</span>
               <small class="shogi-home__desc">中断した対局（{{ suspendedMatch.moves }}手目まで）</small>
             </button>
-            <button type="button" class="shogi-home__card" @click="openMatchSetup('normal')">
+            <button type="button" class="shogi-home__card shogi-home__card--primary" @click="openMatchSetup('normal')">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
                   <rect x="2" y="2" width="12" height="1" />
@@ -99,7 +99,7 @@
         <section class="shogi-home__group" aria-labelledby="shogi-home-school">
           <h2 id="shogi-home-school" class="shogi-home__group-title">入門</h2>
           <div class="shogi-home__cards">
-            <button type="button" class="shogi-home__card shogi-home__card--school" @click="tutorialOpen = true">
+            <button type="button" class="shogi-home__card shogi-home__card--school shogi-home__card--primary" @click="tutorialOpen = true">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#f1a54c">
                   <rect x="1" y="5" width="14" height="1" />
@@ -314,7 +314,11 @@
     />
 
     <header class="shogi-game__header">
-      <div class="shogi-game__status" aria-live="polite">
+      <div
+        class="shogi-game__status"
+        :class="{ 'shogi-game__status--check': sideToMoveInCheck && !reviewMode }"
+        aria-live="polite"
+      >
         <strong>{{ statusText }}</strong>
         <div
           v-if="cpuThinkingShown"
@@ -767,6 +771,18 @@
         :movement-arrows="matchKind === 'learning' && movementArrowsEnabled && matchStarted && !pregameOpen"
         @usi-move="onPlayerMove"
       />
+      <Transition name="shogi-game__callout">
+        <div
+          v-if="checkCallout"
+          :key="checkCallout.id"
+          class="shogi-game__check-callout"
+          :class="{ 'shogi-game__check-callout--defend': checkCallout.checkedIsHuman }"
+          role="status"
+        >
+          <strong>王手！</strong>
+          <small v-if="checkCallout.explain">{{ checkCallout.explain }}</small>
+        </div>
+      </Transition>
     </div>
 
     <section class="shogi-game__coach" aria-label="やこび姫">
@@ -1098,8 +1114,8 @@
       @click.self="suspendConfirmOpen = false"
     >
       <div class="shogi-game__confirm-panel">
-        <h2 id="suspend-confirm-title">対局を中断しますか？</h2>
-        <p>ここまでの対局を保存して、ホームへ戻ります。ホームの「対局を再開」から続けられます。</p>
+        <h2 id="suspend-confirm-title">対局を中断します。</h2>
+        <p>ここまでを保存してホームへ戻ります。ホームの「対局を再開」から続けられます。</p>
         <div>
           <button type="button" @click="suspendMatch">中断する</button>
           <button type="button" @click="suspendConfirmOpen = false">対局を続ける</button>
@@ -1164,8 +1180,8 @@
       @click.self="resignConfirmOpen = false"
     >
       <div class="shogi-game__confirm-panel">
-        <h2 id="resign-confirm-title">投了しますか？</h2>
-        <p>投了すると対局が終わります。</p>
+        <h2 id="resign-confirm-title">投了します。</h2>
+        <p>この対局は負けになります。</p>
         <div>
           <button type="button" class="shogi-game__confirm-danger" @click="confirmResign">投了する</button>
           <button type="button" @click="resignConfirmOpen = false">対局を続ける</button>
@@ -2096,8 +2112,44 @@ const statusText = computed(() => {
   }
   if (normalizedMode.value === "cpu" && !engineReady.value) return "やねうら王を起動中…";
   if (thinking.value) return `${props.cpuPlayerName}が考えています…`;
-  return record.value.position.color === Color.BLACK ? "先手番です" : "後手番です";
+  // CPU対局では先手・後手ではなく「あなた」「相手」で手番を示す。
+  if (cpuColor.value !== null) {
+    if (record.value.position.color !== humanColor.value) return `${cpuDisplayName.value}の番です`;
+    return sideToMoveInCheck.value ? "王手！ 玉を守ろう" : "あなたの番です";
+  }
+  const side = record.value.position.color === Color.BLACK ? "先手番です" : "後手番です";
+  return sideToMoveInCheck.value ? `王手！ ${side}` : side;
 });
+/** 手番の側の玉に王手がかかっているか。 */
+const sideToMoveInCheck = computed(() => matchStarted.value && !result.value && isSideToMoveInCheck(currentSfen.value));
+/**
+ * 王手がかかった瞬間に盤の上へ短く出す知らせ。駒音（強い音）と同時に、見た目でも伝える。
+ * 意味の説明は最初の数回だけ添え、慣れたら「王手！」だけにする。
+ */
+const CHECK_EXPLAIN_LIMIT = 3;
+const CHECK_EXPLAIN_KEY = "shogi-match-check-explained";
+const checkCallout = ref<{ id: number; checkedIsHuman: boolean; explain: string } | null>(null);
+let checkCalloutTimer: ReturnType<typeof setTimeout> | undefined;
+watch(sideToMoveInCheck, (inCheck) => {
+  if (!inCheck || !active.value || reviewMode.value) return;
+  const checkedIsHuman = cpuColor.value === null || record.value.position.color === humanColor.value;
+  let explained = 0;
+  try {
+    explained = Number(matchStorage?.getItem(CHECK_EXPLAIN_KEY)) || 0;
+    if (explained < CHECK_EXPLAIN_LIMIT) matchStorage?.setItem(CHECK_EXPLAIN_KEY, String(explained + 1));
+  } catch {
+    explained = CHECK_EXPLAIN_LIMIT;
+  }
+  const explain = explained >= CHECK_EXPLAIN_LIMIT
+    ? ""
+    : checkedIsHuman
+      ? "玉がねらわれているよ。逃げるか、守ろう"
+      : "相手の玉をねらったよ";
+  checkCallout.value = { id: Date.now(), checkedIsHuman, explain };
+  clearTimeout(checkCalloutTimer);
+  checkCalloutTimer = setTimeout(() => { checkCallout.value = null; }, explain ? 2000 : 1300);
+});
+onBeforeUnmount(() => clearTimeout(checkCalloutTimer));
 const resultPresentation = computed(() => {
   if (!result.value) return null;
   const loser = result.value.winner === Color.BLACK ? "後手" : "先手";
