@@ -1551,11 +1551,32 @@
   padding-left: 3.9em;
 }
 .shogi-game__pregame-row {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 0.25em 0.55em;
   align-items: center;
   min-height: 2.4em;
+  border-radius: 0.4em;
+}
+/*
+ * 「変更」ボタンの押せる範囲を行全体へ広げ、項目名や値を押しても選択シートが開くようにする。
+ * ボタンは1つのままなので、キーボードと読み上げでの操作は変わらない。
+ */
+.shogi-game .shogi-game__pregame-row .shogi-game__pregame-change:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  inset: -0.2em -0.4em;
+  border-radius: 0.4em;
+}
+/* 押したときに沈ませると広げた範囲もずれ、行の端を押したときにクリックが外れるため、この行のボタンは沈ませない。 */
+.shogi-game .shogi-game__pregame-row .shogi-game__pregame-change:active {
+  transform: none;
+}
+@media (hover: hover) {
+  .shogi-game__pregame-row:has(.shogi-game__pregame-change:not(:disabled)):hover {
+    background: rgba(201, 138, 62, 0.1);
+  }
 }
 .shogi-game__pregame-row-label {
   font-weight: 600;

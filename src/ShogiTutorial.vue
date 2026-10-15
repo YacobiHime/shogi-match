@@ -1053,8 +1053,28 @@ const resultMessage = computed(() => {
   border-radius: 0.4rem;
   font-weight: 700;
 }
-.shogi-game .shogi-tutorial__feedback--good { background: rgba(16, 185, 129, 0.28); }
-.shogi-game .shogi-tutorial__feedback--bad { background: rgba(239, 68, 68, 0.28); }
+/* 正解は明るい緑の札で、出た瞬間に小さく弾ませる。 */
+.shogi-game .shogi-tutorial__feedback--good {
+  color: #10281b;
+  background: #8fdcaa;
+  box-shadow: 0 3px 0 #4e9d6c;
+  animation: shogi-tutorial-feedback-pop 260ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__feedback--good::before {
+  content: "◎ ";
+}
+/* 間違いは責める感じにならないよう、赤ではなく落ち着いた薄紫にする。 */
+.shogi-game .shogi-tutorial__feedback--bad {
+  border-left: 4px solid #d7d1fd;
+  background: rgba(215, 209, 253, 0.16);
+}
+@keyframes shogi-tutorial-feedback-pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tutorial__feedback--good { animation: none; }
+}
 .shogi-game .shogi-tutorial__feedback--info { background: rgba(96, 165, 250, 0.22); }
 .shogi-game .shogi-tutorial__skip {
   justify-self: end;
