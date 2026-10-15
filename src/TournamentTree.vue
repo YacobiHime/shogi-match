@@ -1,6 +1,14 @@
 <template>
-  <div class="shogi-tree" data-tree>
-    <div class="shogi-tree__canvas" :style="{ width: `${layout.width}px`, height: `${layout.height}px` }">
+  <!--
+    表は、置かれた枠の大きさに合わせて拡大・縮小する(MIN_SCALE〜MAX_SCALE)。
+    それより小さくしないと収まらないときは、読める大きさのまま、枠の中でスクロールする。
+  -->
+  <div ref="frame" class="shogi-tree" data-tree>
+    <div class="shogi-tree__stage" :style="{ width: `${layout.width * scale}px`, height: `${layout.height * scale}px` }">
+    <div
+      class="shogi-tree__canvas"
+      :style="{ width: `${layout.width}px`, height: `${layout.height}px`, transform: `scale(${scale})` }"
+    >
       <svg class="shogi-tree__lines" :width="layout.width" :height="layout.height" aria-hidden="true">
         <polyline
           v-for="edge in layout.edges"
@@ -48,11 +56,12 @@
         <small class="shogi-tree__dan">{{ shortDan(finals.defender.dan) }}</small>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, type PropType } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
 import { layoutTree } from "./core/ryuo-tree-layout.mjs";
 
 type Brief = { id: string; name: string; dan: string; level: number; label?: string };
@@ -81,6 +90,41 @@ const layout = computed(() => layoutTree(props.tree, {
   top: props.finals ? rowHeight + 40 : 44,
   finals: props.finals ? { defender: props.finals.defender.id, winner: props.finals.winner } : null,
 }));
+/** 拡大・縮小の範囲。小さすぎると名前が読めないので、MIN_SCALEより小さくはせず、枠の中でスクロールさせる。 */
+const MIN_SCALE = 0.9;
+const MAX_SCALE = 2.2;
+const frame = ref<HTMLElement | null>(null);
+const frameSize = ref({ width: 0, height: 0 });
+let frameObserver: ResizeObserver | undefined;
+onMounted(() => {
+  // 枠の高さが決まっているとき(親が --tree-fit: both を指定したとき)だけ、高さにも合わせる。
+  // 高さが中身で決まる枠で高さに合わせると、縮めるたびに枠も縮み、表がどこまでも小さくなるため。
+  const measure = () => {
+    const el = frame.value;
+    if (!el) return;
+    const fitHeight = getComputedStyle(el).getPropertyValue("--tree-fit").trim() === "both";
+    frameSize.value = { width: el.clientWidth, height: fitHeight ? el.clientHeight : 0 };
+  };
+  measure();
+  frameObserver = new ResizeObserver(measure);
+  if (frame.value) frameObserver.observe(frame.value);
+  // 表が枠より広いときは、自分の名前が見える位置まで横に送っておく。
+  void nextTick(() => {
+    const el = frame.value;
+    const you = layout.value.leaves.find((leaf) => leaf.pid === props.userId);
+    if (el && you && el.scrollWidth > el.clientWidth) {
+      el.scrollLeft = Math.max(0, you.x * scale.value - el.clientWidth / 2);
+    }
+  });
+});
+onBeforeUnmount(() => frameObserver?.disconnect());
+/** 枠の幅と高さの両方に収まる倍率。枠の高さが決まっていない(0)ときは、幅だけで決める。 */
+const scale = computed(() => {
+  const { width, height } = frameSize.value;
+  if (!width) return 1;
+  const fit = Math.min(width / layout.value.width, height ? height / layout.value.height : Infinity);
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, fit));
+});
 const player = (pid: string) => props.tree.leaves[pid];
 /** 葉の幅に収まるよう、長い段位(女流二段・奨励会三段)を縮める。 */
 const shortDan = (dan = "") => dan.replace("奨励会", "奨").replace("女流", "女");
@@ -100,8 +144,9 @@ const lost = computed(() => {
 </script>
 
 <style>
-.shogi-game .shogi-tree { overflow-x: auto; padding-bottom: 0.5rem; }
-.shogi-game .shogi-tree__canvas { position: relative; margin: 0 auto; }
+.shogi-game .shogi-tree { overflow: auto; overscroll-behavior: contain; }
+.shogi-game .shogi-tree__stage { position: relative; margin: 0 auto; }
+.shogi-game .shogi-tree__canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
 .shogi-game .shogi-tree__lines { position: absolute; inset: 0; }
 .shogi-game .shogi-tree__edge { stroke: rgba(255, 252, 244, 0.35); stroke-width: 1.5; }
 .shogi-game .shogi-tree__edge--won { stroke: #f1a54c; stroke-width: 3; }

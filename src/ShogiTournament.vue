@@ -846,7 +846,19 @@ const statTiles = computed(() => {
     align-items: stretch;
   }
   .shogi-game .shogi-tournament__layout--entry { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
-  .shogi-game .shogi-tournament__layout--season { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+  /* トーナメント表を大きく見せるため、右の列を広くする。 */
+  .shogi-game .shogi-tournament__layout--season { grid-template-columns: minmax(19em, 4fr) minmax(0, 8fr); }
+  /* トーナメント表のカードは右の列いっぱいに広げ、表は残りの高さいっぱいに拡大する。 */
+  .shogi-game .shogi-tournament__layout--season > .shogi-tournament__tables {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .shogi-game .shogi-tournament__layout--season > .shogi-tournament__tables .shogi-tree {
+    --tree-fit: both;
+    flex: 1 1 0;
+    min-height: 0;
+  }
   .shogi-game .shogi-tournament__layout--entry > *,
   .shogi-game .shogi-tournament__layout--season > * {
     min-height: 0;
@@ -1225,9 +1237,13 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__choices button[aria-checked="true"]:hover,
 .shogi-game .shogi-tournament__tabs button[aria-selected="true"]:hover,
 .shogi-game .shogi-tournament__chapters button[aria-current="step"]:hover { border-color: #f1a54c; color: #172632; background: #f1a54c; }
-/* 狭い画面では、あなたの竜王戦(組・期数)は操作の帯に出すので、カードを省いてエントリー設定を上に出す。 */
+/* 狭い画面では、あなたの竜王戦(組・期数)は操作の帯に出すので、カードを省いてエントリー設定を上に出す。
+ * トーナメント表は、やこび姫の話より先(次の対局のすぐ下)に出す。 */
 @media (max-width: 899px) {
   .shogi-game .shogi-tournament__layout--entry .shogi-tournament__status { display: none; }
+  .shogi-game .shogi-tournament__layout--season > .shogi-tournament__col { display: contents; }
+  .shogi-game .shogi-tournament__layout--season > .shogi-tournament__tables { order: 1; }
+  .shogi-game .shogi-tournament__layout--season .shogi-tournament__coach { order: 2; }
 }
 
 /* ---- 次の対局: あなた VS 相手 */
