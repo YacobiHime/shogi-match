@@ -19,6 +19,14 @@ const VISION_SKILL_END = 0.6;
 const CAREFUL_SKILL_END = 0.05;
 /** これ未満の技量では、浅い読みで良く見える悪手を選ぶ「見落とし」を混ぜる。 */
 const OVERSIGHT_SKILL_END = 0.75;
+/**
+ * このレベル以下では、危険への態度(riskAttitude)を持つ。優勢・互角では道の細い最善手を避けて無難な手を、
+ * 劣勢では相手が間違えやすい勝負手を選ぶ(cpu-move-choice.mjsのchooseRiskAwareMove)。
+ */
+export const RISK_MAX_LEVEL = 30;
+/** 危険を見積もる追加探索の探索量の下限。 */
+const RISK_PROBE_MIN_NODES = 1000;
+
 /** 1手の損失上限の下限。見落とし(深い読みで300以上の損)を選べる幅を残す。 */
 const MIN_MOVE_LOSS_CAP = 400;
 
@@ -75,6 +83,14 @@ export function strengthParametersForSkill(skill) {
   // 1手で失ってよい評価値の上限。見落とし・目に付いた手・候補の抽選のどれにも掛け、対局を台無しにする手を防ぐ。
   // 低レベルでも大駒をただで渡すほどの損(1,000超)はまれにし、上のレベルほど締める。
   const moveLossCap = roundSignificant(Math.max(MIN_MOVE_LOSS_CAP, 1300 * (1 - s) ** 3));
+  // 危険への態度。弱いほど強く(1)、RISK_MAX_LEVELで半分になり、それより上のレベルでは持たない。
+  const riskSkillEnd = CPU_STRENGTH_PRESETS.find(({ level }) => level === RISK_MAX_LEVEL)?.skill ?? 0;
+  if (s <= riskSkillEnd) {
+    Object.assign(settings, {
+      riskAttitude: round2(1 - 0.5 * s / riskSkillEnd),
+      riskProbeNodes: Math.max(RISK_PROBE_MIN_NODES, nodes),
+    });
+  }
   if (s < OVERSIGHT_SKILL_END) {
     const progress = s / OVERSIGHT_SKILL_END;
     Object.assign(settings, {
@@ -213,7 +229,7 @@ export function searchSettingsForSkill(skill) {
   if (Number.isFinite(settings.scoreTemperature)) result.scoreTemperature = settings.scoreTemperature;
   // 最高技量は最善手だけを指すため、悪手の上限や素人らしさを持たない。
   for (const key of [
-    'visionWidth', 'engineVision', 'moveLossCap', 'carefulRate', 'blunderLimit', 'blunderCooldown', 'simplicity',
+    'visionWidth', 'engineVision', 'riskAttitude', 'riskProbeNodes', 'moveLossCap', 'carefulRate', 'blunderLimit', 'blunderCooldown', 'simplicity',
   ]) {
     if (Number.isFinite(settings[key])) result[key] = settings[key];
   }

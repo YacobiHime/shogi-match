@@ -1,4 +1,5 @@
-import { comparableScore, selectMoveByRank } from "./move-selection.mjs";
+import { Position } from "tsshogi";
+import { comparableScore, selectMoveByRank, winRate } from "./move-selection.mjs";
 import { createNaturalnessEvaluator, PIECE_SACRIFICE_TAG } from "./move-naturalness.mjs";
 import { mateFindProbability } from "./player-character.mjs";
 
@@ -20,6 +21,23 @@ export const SACRIFICE_CANDIDATE_MAX_LOSS = 150;
 export const BLUNDER_LOSS = OVERSIGHT_MIN_DEEP_LOSS;
 /** 目に付いた手を読む探索量の下限。駒のただ取られを確実に見つけられる量にする。 */
 export const VISION_MIN_NODES = 1000;
+/** 危険度で選び直す候補の、最善手との勝率差(ポイント)の上限と、読み直す候補の数。 */
+export const RISK_MARGIN = 6;
+/** 劣勢で勝負手を選ぶときの、最善手との勝率差の上限。勝負手の損は、相手が間違えなければそのまま負けに近づくので狭くする。 */
+export const RISK_SWINDLE_MARGIN = 3;
+export const RISK_MAX_CANDIDATES = 3;
+/** 選び直す候補の、最善手との評価値の差の上限。大差の局面では勝率の差が小さく見えるため、評価値でも抑える。 */
+export const RISK_MAX_SCORE_LOSS = 150;
+/** 候補手の先の局面を読むときのMultiPV。この数の手で「正解の道の広さ」を見る。 */
+export const RISK_PROBE_MULTIPV = 4;
+/**
+ * 形勢(最善手の勝率)による危険への態度。SAFE_FROM以上では危険な手を避け、FULLで最も強く避ける。
+ * SWINDLE_BELOW未満では、相手が間違えやすい手を好み、SWINDLE_FULLで最も強く好む。
+ */
+export const RISK_SAFE_FROM = 40;
+export const RISK_SAFE_FULL = 50;
+export const RISK_SWINDLE_BELOW = 40;
+export const RISK_SWINDLE_FULL = 20;
 
 /**
  * 大きな悪手をまだ指してよいか。blunderPliesは、これまでに大きな悪手を指した手数(0始まり)。
@@ -222,6 +240,147 @@ async function tryOversight({ search, candidates, legalMoves, strength, naturaln
   } : null;
 }
 
+/**
+ * 手番の側が、この局面からその棋力で指したときに失う勝率の見込み(ポイント)。
+ * MultiPVの候補を、評価差に応じた重み(温度temperature)と目に付きやすさ(weightOf)で選ぶとして、
+ * 最善の勝率との差を返す。正解が1手しかなく、目に付きにくい局面ほど大きい。
+ * 正解が取る・取り返すといった目に付く手なら、道が細くても小さい。
+ * @param {{ move?: string, score?: any }[]} [candidates]
+ * @param {number} [temperature]
+ * @param {(usi: string) => number} [weightOf]
+ */
+export function expectedWinRateLoss(candidates = [], temperature = 1000, weightOf = () => 1) {
+  const rows = candidates
+    .map(({ move, score }) => ({ move, value: comparableScore(score), rate: winRate(score) }))
+    .filter(({ value, rate }) => value !== undefined && rate !== undefined);
+  if (rows.length < 2) return 0;
+  const bestValue = Math.max(...rows.map(({ value }) => value));
+  const bestRate = Math.max(...rows.map(({ rate }) => rate));
+  let total = 0;
+  let expected = 0;
+  for (const { move, value, rate } of rows) {
+    const weight = Math.exp(-(bestValue - value) / temperature) * (move ? weightOf(move) : 1);
+    total += weight;
+    expected += weight * rate;
+  }
+  return total > 0 ? Math.max(0, bestRate - expected / total) : 0;
+}
+
+/**
+ * sfenからmovesを指した局面での、手の目に付きやすさ(自然さ^alpha)。局面を作れなければ、どの手も1とする。
+ * @returns {(usi: string) => number}
+ */
+export function naturalnessAfter(sfen, moves, alpha = 1) {
+  try {
+    const position = sfen ? Position.newBySFEN(sfen) : null;
+    if (!position) return () => 1;
+    for (const usi of moves) {
+      const move = position.createMoveByUSI(usi);
+      if (!move || !position.doMove(move)) return () => 1;
+    }
+    const evaluate = createNaturalnessEvaluator(position.sfen, { moveHistory: moves });
+    return (usi) => {
+      try {
+        return evaluate(usi).weight ** alpha;
+      } catch {
+        return 1;
+      }
+    };
+  } catch {
+    return () => 1;
+  }
+}
+
+/**
+ * 形勢に応じた危険への態度。safeは自分の道が細い手を避ける強さ、swindleは相手が間違えやすい手を好む強さ。
+ * 優勢ほど手堅く、劣勢ほど勝負手を選ぶ。
+ */
+export function riskStance(bestRate, riskAttitude) {
+  if (!(riskAttitude > 0) || !Number.isFinite(bestRate)) return { safe: 0, swindle: 0 };
+  if (bestRate >= RISK_SAFE_FROM) {
+    const ramp = Math.min(1, (bestRate - RISK_SAFE_FROM) / (RISK_SAFE_FULL - RISK_SAFE_FROM));
+    // 勝勢に近いほど、逆転される手をさらに嫌う(勝率100%で2倍)。
+    const winning = 1 + Math.max(0, bestRate - RISK_SAFE_FULL) / (100 - RISK_SAFE_FULL);
+    return { safe: riskAttitude * ramp * winning, swindle: 0 };
+  }
+  const ramp = Math.min(1, (RISK_SWINDLE_BELOW - bestRate) / (RISK_SWINDLE_BELOW - RISK_SWINDLE_FULL));
+  return { safe: 0, swindle: riskAttitude * ramp };
+}
+
+/**
+ * 人間らしい危険の見積もりで、最善手に近い候補から選び直す。
+ * 互角〜優勢では、最善手を指した後に正解の道が細い手(間違えると崩れる手)を避け、無難な手を選ぶ。
+ * 劣勢では、指した後に相手の正解の道が細い手(相手が間違えやすい勝負手)を選ぶ。
+ * 危険を見積もるには、候補手の先の局面を読む。probe(moves, { nodes, multiPv })は、
+ * 現在の局面からmovesを指した局面を読む追加探索で、呼び出し側が直列に実行する。
+ * 候補の重みには、CPUがふだん手を選ぶときと同じく、評価差と目に付きやすさ(自然さ)を使う。
+ * 選び直した手が最善手のままなら、nullを返してふだんの選び方に任せる。
+ * @param {{
+ *   sfen?: string,
+ *   search: { move: string },
+ *   candidates: { rank: number, move: string, score?: any, pv?: string[] }[],
+ *   strength: {
+ *     riskAttitude?: number, riskProbeNodes?: number, nodes: number, scoreTemperature?: number, naturalnessAlpha?: number,
+ *   },
+ *   naturalness: ((usi: string) => number) & { isSacrifice: (usi: string) => boolean },
+ *   probe?: (moves: string[], options: { nodes: number, multiPv: number }) => Promise<any>,
+ *   lossCap?: number,
+ * }} options
+ */
+export async function chooseRiskAwareMove({ sfen, search, candidates, strength, naturalness, probe, lossCap = Infinity }) {
+  if (!probe || !(strength.riskAttitude > 0)) return null;
+  const root = candidates
+    .map((candidate) => ({ ...candidate, value: comparableScore(candidate.score), rate: winRate(candidate.score) }))
+    .filter(({ value, rate, score }) => value !== undefined && rate !== undefined && score?.type === "cp");
+  const best = root.find(({ move }) => move === search.move);
+  if (!best) return null;
+  const stance = riskStance(best.rate, strength.riskAttitude);
+  if (!stance.safe && !stance.swindle) return null;
+  const pool = [best, ...root
+    .filter(({ move, rate, value }) => move !== search.move && best.rate - rate <= (stance.safe ? RISK_MARGIN : RISK_SWINDLE_MARGIN)
+      && best.value - value <= Math.min(lossCap, RISK_MAX_SCORE_LOSS) && !naturalness.isSacrifice(move))
+    .sort((left, right) => right.value - left.value)]
+    .slice(0, RISK_MAX_CANDIDATES);
+  if (pool.length < 2) return null;
+
+  const nodes = Math.max(strength.riskProbeNodes ?? strength.nodes, 1);
+  const temperature = strength.scoreTemperature ?? 1000;
+  const alpha = strength.naturalnessAlpha ?? 1;
+  const risk = (moves, result) => expectedWinRateLoss(result.candidates, temperature, naturalnessAfter(sfen, moves, alpha));
+  const scored = [];
+  for (const candidate of pool) {
+    let adjusted;
+    if (stance.safe) {
+      // 相手の最善の応手の後、自分がこの棋力で指したときに失う勝率。
+      const reply = candidate.pv?.[1];
+      if (!reply) {
+        if (candidate === best) return null;
+        continue;
+      }
+      const moves = [candidate.move, reply];
+      const result = await probe(moves, { nodes, multiPv: RISK_PROBE_MULTIPV });
+      if (!result) return null;
+      adjusted = candidate.rate - stance.safe * risk(moves, result);
+    } else {
+      // 指した後、相手が同じくらいの棋力で指したときに失う勝率(こちらの逆転の見込み)。
+      const moves = [candidate.move];
+      const result = await probe(moves, { nodes, multiPv: RISK_PROBE_MULTIPV });
+      if (!result) return null;
+      adjusted = candidate.rate + stance.swindle * risk(moves, result);
+    }
+    scored.push({ ...candidate, adjusted });
+  }
+  const picked = scored.reduce((top, entry) => (entry.adjusted > top.adjusted ? entry : top), scored[0]);
+  if (!picked || picked.move === search.move) return null;
+  return {
+    move: picked.move,
+    rank: picked.rank,
+    kind: stance.safe ? "safe" : "swindle",
+    naturalness: naturalness(picked.move),
+    loss: Math.max(0, best.value - picked.value),
+  };
+}
+
 /** 目に付く手。自然さの上位visionWidth手(駒をただで渡す手を除く)と、探索上位engineVision手。 */
 export function visibleMoves({ search, candidates, legalMoves, strength, naturalness }) {
   const natural = legalMoves
@@ -273,16 +432,19 @@ async function chooseWithinVision({ search, candidates, legalMoves, strength, na
 /**
  * CPUの着手を選ぶ共通処理。
  * search未指定(Lv0・エンジンなし)なら自然さだけで選ぶ。
- * 探索済みなら、見落とし → 視野の狭さ(visionWidthがある場合) → 探索候補からの抽選の順に試す。
+ * 探索済みなら、見落とし → 危険への態度(riskAttitudeがある場合) → 棋風 → 視野の狭さ(visionWidthがある場合)
+ * → 探索候補からの抽選の順に試す。
  * verify(searchMoves, nodes)は、見落とし判定(浅い読み直しと深い検証の2回)と、目に付いた手の読み直しに使う
- * 追加探索で、呼び出し側が直列に実行する。
+ * 追加探索で、呼び出し側が直列に実行する。probe(moves, { nodes, multiPv })は、候補手の先の局面を読む追加探索
+ * (chooseRiskAwareMove)で、これも呼び出し側が直列に実行する。
  * @param {{
  *   strength: ReturnType<typeof import('./strength-settings.mjs').getStrengthSearchSettings>,
  *   sfen: string,
  *   legalMoves: string[],
  *   moveHistory?: string[],
- *   search?: { move: string, candidates?: { rank: number, move: string, score?: any }[] },
+ *   search?: { move: string, candidates?: { rank: number, move: string, score?: any, pv?: string[] }[] },
  *   verify?: (searchMoves: string[], nodes: number) => Promise<any>,
+ *   probe?: (moves: string[], options: { nodes: number, multiPv: number }) => Promise<any>,
  *   random?: () => number,
  *   blunderAllowed?: boolean,
  * }} options
@@ -296,6 +458,7 @@ export async function chooseCpuMove({
   moveHistory = [],
   search,
   verify,
+  probe,
   random = Math.random,
   blunderAllowed = true,
 }) {
@@ -343,6 +506,10 @@ export async function chooseCpuMove({
     });
     if (oversight) return oversight;
   }
+
+  // 危険への態度。優勢・互角では道の細い最善手を避けて無難な手を、劣勢では相手が間違えやすい勝負手を選ぶ。
+  const risky = await chooseRiskAwareMove({ sfen, search, candidates, strength, naturalness, probe, lossCap });
+  if (risky) return risky;
 
   // 棋風。最善手に近い候補の中で、攻めの手か受けの手を選びやすくする。
   const styled = chooseStyledMove({ search, candidates, style: strength.style, naturalness, random, lossCap });

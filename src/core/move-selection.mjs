@@ -29,6 +29,15 @@ export function comparableScore(score) {
   return undefined;
 }
 
+/** 評価値（手番側視点）を勝率（0〜100）にする。詰みは100か0。 */
+export function winRate(score) {
+  if (score?.type === 'mate' && Number.isFinite(score.value) && score.value !== 0) {
+    return score.value > 0 ? 100 : 0;
+  }
+  if (score?.type !== 'cp' || !Number.isFinite(score.value)) return undefined;
+  return 100 / (1 + Math.exp(-score.value / 600));
+}
+
 /**
  * MultiPV候補から指定ランク範囲の手をランダムに選ぶ。
  * 候補不足時は、存在する最大ランクまで選択範囲を縮める。

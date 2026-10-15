@@ -4160,6 +4160,16 @@ function cpuOversightVerifier(enginePosition: string, isCurrent: () => boolean) 
   };
 }
 
+/** CPUの危険の見積もり用に、候補手の先の局面を読む追加探索。通常探索の直後へ直列で行う。 */
+function cpuRiskProbe(enginePosition: string, isCurrent: () => boolean) {
+  return async (moves: string[], { nodes, multiPv }: { nodes: number, multiPv: number }) => {
+    if (!engine || !isCurrent()) return undefined;
+    engine.applyStrengthOptions({ multiPv });
+    engine.setPosition(`${enginePosition}${enginePosition.includes(" moves ") ? "" : " moves"} ${moves.join(" ")}`);
+    return engine.go({ nodes, maxTimeMs: 1500 });
+  };
+}
+
 async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 1) {
   if (!engine) return [];
   const positionKey = currentEnginePosition();
@@ -5607,6 +5617,7 @@ function scheduleReviewCpuMove() {
       const logicLevel = usesLogicAi(cpuStrengthPreset.value.level);
       let search;
       let verify;
+      let probe;
       if (!logicLevel && !usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
         const enginePosition = currentEnginePosition();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
@@ -5624,6 +5635,10 @@ function scheduleReviewCpuMove() {
           enginePosition,
           () => generation === reviewCpuGeneration && reviewCpuEnabled.value,
         );
+        probe = cpuRiskProbe(
+          enginePosition,
+          () => generation === reviewCpuGeneration && reviewCpuEnabled.value,
+        );
       }
       const choice = logicLevel
         ? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, level: cpuStrengthPreset.value.level, moveHistory })
@@ -5634,6 +5649,7 @@ function scheduleReviewCpuMove() {
           moveHistory,
           search,
           verify,
+          probe,
         });
       if (generation !== reviewCpuGeneration || !reviewCpuEnabled.value) return;
       const usi = choice?.move ?? "";
@@ -5854,6 +5870,15 @@ async function scheduleCpuMove() {
                   enginePosition,
                   () => generation === matchGeneration,
                 )(searchMoves, nodes);
+              } finally {
+                if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+              }
+            },
+            probe: async (moves: string[], options: { nodes: number, multiPv: number }) => {
+              cpuSearchRunning = true;
+              cpuSearchGeneration = generation;
+              try {
+                return await cpuRiskProbe(enginePosition, () => generation === matchGeneration)(moves, options);
               } finally {
                 if (cpuSearchGeneration === generation) cpuSearchRunning = false;
               }

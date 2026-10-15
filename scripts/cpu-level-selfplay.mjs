@@ -3,6 +3,7 @@
 //   node scripts/cpu-level-selfplay.mjs --players L1,L5,L10 [--games 40] [--gap 2] [--workers 8] [--out result.json]
 //   選手はL<レベル>、s<技量>(例: s0.3)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
 //   末尾にn<nodes>を付けると探索量だけを差し替える(例: L40n2000000)。
+//   末尾にnoriskを付けると、危険への態度(無難な手・勝負手の選び直し)を外す(例: L25norisk)。
 //   --deadline-sec 280 で、指定秒数を過ぎたら対局中の局を打ち切り、終わった局だけで集計する。
 //   --opening-plies 12 で、序盤の指定手数まで両者とも評価差の小さい候補からばらして選ぶ。
 //   最上位レベル同士は着手にばらつきがなく、同じ棋譜を繰り返すのを避けるために使う。
@@ -42,6 +43,8 @@ function option(name, fallback) {
 
 /** 選手指定から、着手選択に渡す強さ設定を作る。 */
 export function strengthForPlayer(spec) {
+  const noRisk = spec.match(/^(.+)norisk$/);
+  if (noRisk) return { ...strengthForPlayer(noRisk[1]), riskAttitude: 0 };
   const nodesOverride = spec.match(/^(.+?)n(\d+)$/);
   if (nodesOverride) return { ...strengthForPlayer(nodesOverride[1]), nodes: Number(nodesOverride[2]) };
   if (/^L\d+$/.test(spec)) {
@@ -116,6 +119,9 @@ async function playGame(engines, players, seed, openingPlies = 0) {
       search: result,
       verify: result
         ? (searchMoves, nodes) => search(engine, sfen, { nodes, multiPv: searchMoves.length, searchMoves })
+        : undefined,
+      probe: result
+        ? (moves, { nodes, multiPv }) => search(engine, `${sfen} moves ${moves.join(" ")}`, { nodes, multiPv })
         : undefined,
       random,
       blunderAllowed: canBlunder(strength, blunderPlies[color], ply),

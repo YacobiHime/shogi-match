@@ -18,6 +18,12 @@ export const NATURALNESS_MIN = 0.02;
 export const NATURALNESS_MAX = 8;
 /** 歩以外の駒を、取り返しの見込みなく相手に渡す手に付けるタグ。 */
 export const PIECE_SACRIFICE_TAG = "piece-sacrifice";
+/**
+ * 誰でも気付く当たり前の手とみなすタグ。神の一手の判定と、CPUの危険の見積もり(正解が当たり前の手なら間違えない)で使う。
+ */
+export const OBVIOUS_MOVE_TAGS = new Set([
+  "free-capture", "winning-capture", "even-trade", "recapture", "escape", "capture-checker", "threaten",
+]);
 /** これ未満の重みを「人間が指しにくい手」として集計する。 */
 export const LOW_NATURALNESS_THRESHOLD = 0.3;
 

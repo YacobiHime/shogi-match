@@ -59,6 +59,9 @@ async function currentChoose(engine, preset, sample, moves, random) {
     verify: result
       ? (searchMoves, nodes) => search(engine, sample.sfen, { nodes, multiPv: searchMoves.length, searchMoves })
       : undefined,
+    probe: result
+      ? (moves, { nodes, multiPv }) => search(engine, `${sample.sfen} moves ${moves.join(" ")}`, { nodes, multiPv })
+      : undefined,
     random,
   });
 }

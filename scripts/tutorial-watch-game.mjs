@@ -50,6 +50,9 @@ for (let ply = 0; ply < MAX_PLY; ply += 1) {
       verify: result
         ? (searchMoves, nodes) => search(weakEngine, sfen, { nodes, multiPv: searchMoves.length, searchMoves })
         : undefined,
+      probe: result
+        ? (moves, { nodes, multiPv }) => search(weakEngine, `${sfen} moves ${moves.join(" ")}`, { nodes, multiPv })
+        : undefined,
       random,
     });
     move = choice.move;

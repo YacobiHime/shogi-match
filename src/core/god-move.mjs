@@ -1,7 +1,10 @@
 import { Position } from "tsshogi";
 import { enumerateLegalMoves } from "../game-state";
 
-import { createNaturalnessEvaluator } from "./move-naturalness.mjs";
+import { OBVIOUS_MOVE_TAGS as OBVIOUS_TAGS, createNaturalnessEvaluator } from "./move-naturalness.mjs";
+import { winRate } from "./move-selection.mjs";
+
+export { winRate };
 
 /**
  * 神の一手の判定。対局中のやこび姫の褒め言葉と、棋譜解析（対局後・図鑑）の両方で使う。
@@ -29,10 +32,6 @@ export const GOD_MOVE_WINNING_RATE = 65;
 export const GOD_MOVE_LOSING_RATE = 35;
 /** 浅い読みで最善手より何点低く見えていれば「先まで読まないと気付けない」とするか。 */
 export const GOD_MOVE_SHALLOW_DEFICIT = 300;
-/** 自然さの評価で、誰でも気付く当たり前の手とみなすタグ。 */
-const OBVIOUS_TAGS = new Set([
-  "free-capture", "winning-capture", "even-trade", "recapture", "escape", "capture-checker", "threaten",
-]);
 /** 浅い読みで見えない手と、捨て駒の強さへの加点（勝率ポイント）。 */
 export const GOD_MOVE_HIDDEN_BONUS = 10;
 export const GOD_MOVE_SACRIFICE_BONUS = 10;
@@ -68,14 +67,6 @@ function comparableScore(score) {
   return undefined;
 }
 
-/** 評価値（手番側視点）を勝率（0〜100）にする。詰みは100か0。 */
-export function winRate(score) {
-  if (score?.type === "mate" && Number.isFinite(score.value) && score.value !== 0) {
-    return score.value > 0 ? 100 : 0;
-  }
-  if (score?.type !== "cp" || !Number.isFinite(score.value)) return undefined;
-  return 100 / (1 + Math.exp(-score.value / 600));
-}
 
 function rankedCandidates(candidates = []) {
   return [...candidates]
