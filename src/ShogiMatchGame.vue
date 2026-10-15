@@ -1561,6 +1561,7 @@ import {
   getHintSearchSettings,
   getIdleCoachSearchSettings,
   getMateCheckSearchSettings,
+  getMoveJudgeSearchSettings,
   getOpeningFollowupSearchSettings,
   getOpeningGuideSafetySearchSettings,
   getPraiseBaselineSearchSettings,
@@ -4378,6 +4379,68 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
   return analysis.candidates;
 }
 
+/**
+ * 悪手判定の読み。着手の前後の局面を、同じ深さ(getMoveJudgeSearchSettings)で読む。
+ * 着手前の局面は、プレイヤーの手番の間に読んでおく(moveJudgeBefore)。間に合わなかったときは、
+ * 着手後の局面と一緒に、相手の思考時間として読む。
+ */
+let moveJudgeBefore: { positionKey: string; score?: EngineEvaluation } | undefined;
+function enginePositionAt(ply: number) {
+  const base = matchInitialSfen.value === STANDARD_SFEN ? "startpos" : matchInitialSfen.value;
+  const moves = moveHistory.slice(0, ply);
+  return `${base}${moves.length ? ` moves ${moves.join(" ")}` : ""}`;
+}
+async function judgeSearchScore(positionKey: string): Promise<EngineEvaluation | undefined> {
+  if (!engine) return undefined;
+  const settings = getMoveJudgeSearchSettings(props.mobile || boardLayout.value === "portrait");
+  engine.setPosition(positionKey);
+  engine.applyStrengthOptions({ multiPv: 1 });
+  const search = await engine.go({ nodes: settings.nodes, maxTimeMs: settings.maxTimeMs });
+  return search.candidates.find((candidate) => candidate.rank === 1)?.score as EngineEvaluation | undefined;
+}
+/** プレイヤーの手番の間に、着手前の局面を悪手判定の深さで読んでおく。詳しい助言のときだけ。 */
+function scheduleMoveJudgeBaseline() {
+  if (
+    !engine || !engineReady.value || !active.value || reviewMode.value
+    || normalizedMode.value !== "cpu" || coachLevel.value !== "detailed"
+    || record.value.position.color !== humanColor.value
+  ) return;
+  const historyLength = moveHistory.length;
+  const positionKey = currentEnginePosition();
+  if (moveJudgeBefore?.positionKey === positionKey) return;
+  const stale = () => (
+    !active.value || reviewMode.value || moveHistory.length !== historyLength
+    || record.value.position.color !== humanColor.value
+  );
+  dedicatedCoachQueue = dedicatedCoachQueue
+    .catch(() => undefined)
+    .then(async () => {
+      if (stale()) return;
+      const { value: score, interrupted } = await assistSearchControl.run(() => judgeSearchScore(positionKey));
+      if (interrupted || stale()) return;
+      moveJudgeBefore = { positionKey, score: scoreForPlayer(score, humanColor.value, humanColor.value) };
+    })
+    .catch(() => undefined);
+}
+/**
+ * 直前のプレイヤーの着手を、悪手判定の深さで読んで評価する(CPUの手番の、CPUの探索の直前に呼ぶ)。
+ * 返す評価値は、どちらもプレイヤー視点。読めなかったときはnull。
+ */
+async function judgePlayerMove(isCurrent: () => boolean) {
+  if (!engine || !engineReady.value || coachLevel.value !== "detailed" || moveHistory.length < 1) return null;
+  const beforeKey = enginePositionAt(moveHistory.length - 1);
+  const afterKey = currentEnginePosition();
+  const sideAfter = record.value.position.color;
+  let before = moveJudgeBefore?.positionKey === beforeKey ? moveJudgeBefore.score : undefined;
+  if (!before) {
+    before = scoreForPlayer(await judgeSearchScore(beforeKey), reverseColor(sideAfter), humanColor.value);
+    if (!isCurrent()) return null;
+  }
+  const after = scoreForPlayer(await judgeSearchScore(afterKey), sideAfter, humanColor.value);
+  if (!isCurrent() || !before || !after) return null;
+  return { before, after };
+}
+
 async function analyzeOpeningFollowupPosition() {
   const settings = getOpeningFollowupSearchSettings(
     props.mobile || boardLayout.value === "portrait",
@@ -5010,6 +5073,7 @@ function schedulePostCpuAssists(hadScore = false) {
       if (coachLevel.value === "detailed" || (coachLevel.value !== "off" && !hadScore)) {
         scheduleDedicatedCoachAdvice(null, { riskOnly: hadScore });
       }
+      scheduleMoveJudgeBaseline();
       schedulePlayerMoveBaseline();
       schedulePlayerIdleAdvice();
     }, 0);
@@ -5926,6 +5990,36 @@ async function scheduleCpuMove() {
         ?? (playerTurnScoreHistoryLength === playerMoveHistoryLength - 1
           ? playerTurnScore
           : undefined);
+      // 悪手判定は、着手の前後を同じ深さで読んで比べる。この読みは、相手の思考時間として、CPUの探索の前に行う。
+      // 悪手・かち込みは、相手が考えている間に伝える。
+      // プレイヤーが指した直後だけ読む(CPUが先手の初手や、リロードで再開したCPUの手番では読まない)。
+      let judged: { before: EngineEvaluation; after: EngineEvaluation } | null = null;
+      let shownFeedbackKey = "";
+      if (moveFlair) {
+        cpuSearchRunning = true;
+        cpuSearchGeneration = generation;
+        try {
+          judged = await judgePlayerMove(() => generation === matchGeneration);
+        } catch {
+          judged = null;
+        } finally {
+          if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+        }
+        if (generation !== matchGeneration) return;
+        if (judged) {
+          moveFeedback = getMoveFeedback({
+            level: coachLevel.value,
+            beforeScore: judged.before,
+            afterScore: judged.after,
+            wasPromotion: moveFlair.wasPromotion,
+            wasEnemyCampDrop: moveFlair.wasEnemyCampDrop,
+          });
+          if (moveFeedback) {
+            showCoachAdvice(moveFeedback);
+            shownFeedbackKey = moveFeedback.key;
+          }
+        }
+      }
       const openingPlanMove = strategyMove();
       const openingMove = openingPlanMove?.usi;
       const openingMovePhase = openingPlanMove?.phase ?? "strategy";
@@ -5993,20 +6087,23 @@ async function scheduleCpuMove() {
           record.value.position.color,
           humanColor.value,
         );
-        moveFeedback = getMoveFeedback({
-          level: coachLevel.value,
-          beforeScore: comparableBeforeScore,
-          afterScore: playerAfterScore,
-          wasPromotion: moveFlair?.wasPromotion,
-          wasEnemyCampDrop: moveFlair?.wasEnemyCampDrop,
-        });
+        // 悪手判定の読みができなかったときだけ、CPU本体の探索の評価値で比べる。
+        if (!judged) {
+          moveFeedback = getMoveFeedback({
+            level: coachLevel.value,
+            beforeScore: comparableBeforeScore,
+            afterScore: playerAfterScore,
+            wasPromotion: moveFlair?.wasPromotion,
+            wasEnemyCampDrop: moveFlair?.wasEnemyCampDrop,
+          });
+        }
         // 悪手の指摘を最優先し、それ以外では好手や形勢の転換点を褒める。
         const mistake = moveFeedback && /move-(blunder|mistake)/.test(moveFeedback.key);
         const praise = await playerMovePraise({
           historyLength: playerMoveHistoryLength,
           flair: moveFlair,
-          beforeScore: comparableBeforeScore,
-          afterScore: playerAfterScore,
+          beforeScore: judged?.before ?? comparableBeforeScore,
+          afterScore: judged?.after ?? playerAfterScore,
           fallback: moveFeedback,
           cpuCandidates: search.candidates,
           generation,
@@ -6014,7 +6111,7 @@ async function scheduleCpuMove() {
         if (!mistake) moveFeedback = praise;
       // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
       // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
-        if (moveFeedback) {
+        if (moveFeedback && moveFeedback.key !== shownFeedbackKey) {
           showCoachAdvice(moveFeedback);
           await nextTick();
           if (generation !== matchGeneration) return;

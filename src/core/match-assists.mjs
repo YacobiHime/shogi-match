@@ -187,6 +187,17 @@ export function getIdleCoachSearchSettings(mobile = false) {
   return getHintSearchSettings(mobile);
 }
 
+/**
+ * 悪手判定の読み。プレイヤーの着手の前後の局面を、同じ深さで読んで評価値を比べる。
+ * 悪手(500点以上の損)と大悪手(1000点以上の損)を見分けられるよう、CPU本体の探索(低いレベルでは数十局面)
+ * よりずっと深く読む。着手後の局面は、相手の思考時間としてCPUの探索の直前に読む。
+ */
+export function getMoveJudgeSearchSettings(mobile = false) {
+  return mobile
+    ? { nodes: 100000, maxTimeMs: 2000 }
+    : { nodes: 200000, maxTimeMs: 2000 };
+}
+
 /** 戦法完成後の自動3候補。メインスレッドを止めない短時間探索に限定する。 */
 export function getOpeningFollowupSearchSettings(mobile = false) {
   return mobile

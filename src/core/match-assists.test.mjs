@@ -109,3 +109,16 @@ describe('hint arrow evaluations', () => {
     expect(getMateCheckSearchSettings(true)).toEqual({ nodes: 15000, maxTimeMs: 250 });
   });
 });
+
+describe('悪手判定の読み', () => {
+  it('CPU本体の探索よりずっと深く、時間の上限つきで読む', async () => {
+    const { getMoveJudgeSearchSettings } = await import('./match-assists.mjs');
+    const { getStrengthSearchSettings, CPU_STRENGTH_PRESETS } = await import('./strength-settings.mjs');
+    const lv21 = getStrengthSearchSettings(CPU_STRENGTH_PRESETS.find(({ level }) => level === 21).value);
+    for (const mobile of [false, true]) {
+      const judge = getMoveJudgeSearchSettings(mobile);
+      expect(judge.nodes).toBeGreaterThanOrEqual(100 * lv21.nodes);
+      expect(judge.maxTimeMs).toBeLessThanOrEqual(2000);
+    }
+  });
+});
