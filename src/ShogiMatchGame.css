@@ -2366,6 +2366,360 @@
 @media (min-width: 1000px) and (min-height: 600px) and (prefers-reduced-motion: reduce) {
   .shogi-home__chara { animation: none; }
 }
+/* ===== タイトル画面 =====
+ * 「つぎはこれ」を1枚だけ大きく出し、記録の帯、あそぶ・まなぶ・しらべるの入口の順に、上から重要な順で並べる。
+ * 大会の選択画面は .shogi-home__* の部品をそのまま使うので、タイトル画面は .shogi-title__* で別に組む。
+ */
+.shogi-home.shogi-home--title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* 収まるときは上下の中央に置き、収まらないときは上から並べてスクロールする。 */
+  justify-content: safe center;
+  gap: 14px;
+  padding: max(14px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
+}
+.shogi-title__hero {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas: "chara logo" "chara bubble";
+  align-items: center;
+  justify-content: center;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+.shogi-title__logo {
+  grid-area: logo;
+  margin: 0;
+  color: #fffcf4;
+  font-family: "Courier New", monospace;
+  font-size: clamp(30px, 9vw, 44px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-shadow: 3px 3px 0 #172632;
+}
+.shogi-title__bubble {
+  grid-area: bubble;
+  justify-self: start;
+  position: relative;
+  margin: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  color: #172632;
+  background: #fffcf4;
+  box-shadow: 3px 3px 0 rgba(23, 38, 50, 0.6);
+  font-size: 13px;
+  font-weight: 700;
+}
+.shogi-title__chara {
+  grid-area: chara;
+  height: 84px;
+  width: auto;
+  image-rendering: pixelated;
+  animation: shogi-title-chara-float 4.5s ease-in-out infinite;
+}
+@keyframes shogi-title-chara-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.shogi-title__menu {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 560px);
+}
+
+/* つぎはこれ */
+.shogi-game .shogi-title__next {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon eyebrow"
+    "icon label"
+    "icon desc"
+    "go go";
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 2px;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  border: 3px solid var(--amber);
+  border-radius: 16px;
+  color: #fffcf4;
+  background: #34546b;
+  box-shadow: 0 6px 0 var(--amber-shadow);
+  text-align: left;
+  white-space: normal;
+}
+@media (hover: hover) {
+  .shogi-game .shogi-title__next:not(:disabled):hover {
+    border-color: var(--amber);
+    background-color: #3c5f78;
+    transform: translateY(-2px);
+  }
+}
+.shogi-game .shogi-title__next:not(:disabled):active {
+  box-shadow: 0 2px 0 var(--amber-shadow);
+  transform: translateY(4px);
+}
+.shogi-title__next-eyebrow {
+  grid-area: eyebrow;
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+.shogi-title__next-icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: #1d303f;
+}
+.shogi-title__next-icon .shogi-title__icon { width: 44px; height: 44px; }
+.shogi-title__next-label {
+  grid-area: label;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.shogi-title__next-desc {
+  grid-area: desc;
+  color: #cfd8de;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.shogi-title__next-go {
+  grid-area: go;
+  justify-self: stretch;
+  margin-top: 12px;
+  padding: 10px 0;
+  border-radius: 999px;
+  color: #172632;
+  background: var(--amber);
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+/* 記録の帯 */
+.shogi-game .shogi-title__record {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 14px;
+  border: 2px solid rgba(255, 252, 244, 0.3);
+  border-radius: 999px;
+  color: #fffcf4;
+  background: rgba(23, 38, 50, 0.85);
+  box-shadow: 0 3px 0 rgba(10, 25, 35, 0.75);
+  font-weight: 700;
+}
+.shogi-title__record .shogi-title__icon { flex: none; width: 26px; height: 26px; }
+.shogi-title__record-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+.shogi-title__record-main strong { color: var(--amber); font-size: 20px; font-weight: 900; }
+.shogi-title__record-badge {
+  padding: 1px 8px;
+  border: 1px solid var(--amber);
+  border-radius: 999px;
+  color: var(--amber);
+  font-size: 12px;
+}
+.shogi-title__record-link {
+  flex: none;
+  color: #cfd8de;
+  font-size: 13px;
+}
+
+/* あそぶ・まなぶ・しらべる */
+.shogi-title__groups {
+  display: grid;
+  gap: 12px;
+}
+.shogi-title__group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.shogi-title__group-title {
+  margin: 0;
+  padding-left: 4px;
+  color: #e8a04c;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+}
+.shogi-title__tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.shogi-title__tiles--dex {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.shogi-game .shogi-title__tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "icon label" "icon desc";
+  align-items: center;
+  justify-items: start;
+  column-gap: 10px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 2px solid rgba(255, 252, 244, 0.3);
+  border-radius: 12px;
+  color: #fffcf4;
+  background: rgba(43, 70, 91, 0.92);
+  box-shadow: 0 4px 0 rgba(23, 38, 50, 0.85);
+  text-align: left;
+  white-space: normal;
+}
+.shogi-title__tile .shogi-title__icon { grid-area: icon; width: 36px; height: 36px; }
+.shogi-title__label {
+  grid-area: label;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.shogi-title__desc {
+  grid-area: desc;
+  color: #cfd8de;
+  font-size: 11px;
+  line-height: 1.3;
+}
+/* 図鑑の5つは、アイコンと短い名前だけの小さなタイルにする。 */
+.shogi-game .shogi-title__tile--small {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "icon" "label";
+  justify-items: center;
+  row-gap: 4px;
+  min-height: 0;
+  padding: 8px 2px 6px;
+  border-radius: 10px;
+  box-shadow: 0 3px 0 rgba(23, 38, 50, 0.85);
+  text-align: center;
+}
+.shogi-title__tile--small .shogi-title__icon { width: 30px; height: 30px; }
+.shogi-title__tile--small .shogi-title__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .shogi-game .shogi-title__tile:not(:disabled):hover,
+  .shogi-game .shogi-title__record:not(:disabled):hover {
+    border-color: var(--amber);
+    background-color: rgba(54, 87, 112, 0.95);
+    transform: translateY(-2px);
+  }
+}
+
+/* スマホでは、月をタイトルと重ならない右下へ移す。 */
+@media (max-width: 599px) {
+  .shogi-home--title .shogi-home__moon { top: auto; bottom: 5%; right: 8%; width: 32px; height: 32px; box-shadow: inset -9px -4px 0 0 #1d303f; }
+}
+/* タブレット縦: 1列のまま、文字とタイルを大きくする。 */
+@media (min-width: 600px) and (max-width: 899px) and (min-height: 700px) {
+  .shogi-home.shogi-home--title { gap: 20px; }
+  .shogi-title__chara { height: 120px; }
+  .shogi-title__logo { font-size: 52px; }
+  .shogi-title__bubble { font-size: 15px; padding: 7px 16px; }
+  .shogi-title__menu { gap: 16px; width: min(100%, 620px); }
+  .shogi-title__next-icon { width: 76px; height: 76px; }
+  .shogi-title__next-icon .shogi-title__icon { width: 52px; height: 52px; }
+  .shogi-title__next-label { font-size: 28px; }
+  .shogi-title__next-desc { font-size: 14px; }
+  .shogi-title__groups { gap: 16px; }
+  .shogi-game .shogi-title__tile { min-height: 76px; padding: 12px 14px; }
+  .shogi-title__tile .shogi-title__icon { width: 44px; height: 44px; }
+  .shogi-title__label { font-size: 18px; }
+  .shogi-title__desc { font-size: 12px; }
+  .shogi-title__tile--small .shogi-title__icon { width: 38px; height: 38px; }
+  .shogi-title__tile--small .shogi-title__label { font-size: 13px; }
+}
+
+/* 広い画面: 左にタイトルと大きなやこび姫、右にメニュー。 */
+@media (min-width: 900px) and (min-height: 600px) {
+  .shogi-home.shogi-home--title {
+    display: grid;
+    grid-template-columns: minmax(280px, 420px) minmax(0, 640px);
+    align-content: center;
+    justify-content: center;
+    column-gap: clamp(32px, 5vw, 80px);
+    padding: 32px 40px;
+  }
+  .shogi-title__hero {
+    grid-template-columns: auto;
+    grid-template-areas: "logo" "bubble" "chara";
+    justify-items: center;
+    row-gap: 16px;
+  }
+  .shogi-title__logo { font-size: clamp(40px, 3.8vw, 60px); }
+  .shogi-title__bubble { justify-self: center; padding: 10px 20px; border-radius: 12px; font-size: 16px; }
+  .shogi-title__bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -8px;
+    border: 8px solid transparent;
+    border-top-color: #fffcf4;
+    border-bottom: 0;
+    transform: translateX(-50%);
+  }
+  .shogi-title__chara { height: clamp(260px, 42vh, 440px); }
+  .shogi-title__menu { gap: 16px; width: 100%; }
+  .shogi-game .shogi-title__next {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon eyebrow go"
+      "icon label go"
+      "icon desc go";
+    padding: 20px 22px;
+  }
+  .shogi-title__next-icon { width: 84px; height: 84px; }
+  .shogi-title__next-icon .shogi-title__icon { width: 58px; height: 58px; }
+  .shogi-title__next-label { font-size: 30px; }
+  .shogi-title__next-desc { font-size: 14px; }
+  .shogi-title__next-go { margin: 0; padding: 12px 22px; }
+  .shogi-title__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .shogi-title__group--dex { grid-column: 1 / -1; }
+  .shogi-game .shogi-title__tile {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "icon" "label" "desc";
+    justify-items: center;
+    row-gap: 6px;
+    min-height: 120px;
+    padding: 14px 8px 12px;
+    text-align: center;
+  }
+  .shogi-title__tile .shogi-title__icon { width: 48px; height: 48px; }
+  .shogi-title__label { font-size: 18px; }
+  .shogi-title__desc { font-size: 12px; }
+  .shogi-game .shogi-title__tile--small { min-height: 0; padding: 12px 4px 10px; }
+  .shogi-title__tile--small .shogi-title__icon { width: 40px; height: 40px; }
+  .shogi-title__tile--small .shogi-title__label { font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-title__chara { animation: none; }
+}
+
 /* ===== 学習対局 ===== */
 .shogi-game__toolbar--learning .shogi-game__turn {
   grid-column: 1 / -1;

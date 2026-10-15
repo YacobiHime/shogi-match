@@ -14,7 +14,7 @@
     :style="uiLayoutStyle"
     aria-label="将棋対局"
   >
-    <div v-if="homeOpen" class="shogi-home" aria-label="ホーム">
+    <div v-if="homeOpen" class="shogi-home shogi-home--title" aria-label="ホーム">
       <span
         v-for="star in HOME_STARS"
         :key="star.id"
@@ -23,30 +23,31 @@
         aria-hidden="true"
       ></span>
       <span class="shogi-home__moon" aria-hidden="true"></span>
-      <!-- 広い画面では、タイトルとキャラクターを左の列にまとめる。狭い画面ではキャラクターを下部へ置く。 -->
-      <div class="shogi-home__hero">
-        <div class="shogi-home__title">
-          <h1>shogi-match</h1>
-        </div>
-        <p class="shogi-home__bubble" aria-hidden="true">今日はなにをする？</p>
+      <!--
+        タイトル画面。いまの状態に合った「つぎはこれ」を1枚だけ大きく出し、その下に記録の帯と、
+        あそぶ・まなぶ・しらべるの3つの入口を並べる。広い画面ではタイトルとやこび姫を左の列に置く。
+      -->
+      <div class="shogi-title__hero">
+        <h1 class="shogi-title__logo">shogi-match</h1>
+        <p class="shogi-title__bubble" aria-hidden="true">{{ homeGreeting }}</p>
         <img
-          class="shogi-home__chara"
+          class="shogi-title__chara"
           :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
           alt=""
           aria-hidden="true"
         >
       </div>
-      <nav class="shogi-home__menu" aria-label="メニュー">
-        <section class="shogi-home__group" aria-labelledby="shogi-home-match">
-          <h2 id="shogi-home-match" class="shogi-home__group-title">対局</h2>
-          <div class="shogi-home__cards">
-            <button
-              v-if="suspendedMatch"
-              type="button"
-              class="shogi-home__card shogi-home__card--resume shogi-home__card--primary"
-              @click="resumeSuspendedMatch"
-            >
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+      <nav class="shogi-title__menu" aria-label="メニュー">
+        <button
+          type="button"
+          class="shogi-title__next"
+          :data-next="homeNext.id"
+          @click="startHomeNext"
+        >
+          <span class="shogi-title__next-eyebrow">つぎはこれ</span>
+          <span class="shogi-title__next-icon" aria-hidden="true">
+            <template v-if="homeNext.id === 'resume'">
+              <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#f1a54c">
                   <rect x="4" y="2" width="2" height="12" />
                   <rect x="7" y="3" width="2" height="10" />
@@ -54,17 +55,26 @@
                   <rect x="11" y="5" width="2" height="6" />
                 </g>
               </svg>
-              <span class="shogi-home__label">対局を再開</span>
-              <small class="shogi-home__desc">中断した対局（{{ suspendedMatch.moves }}手目まで）</small>
-            </button>
-            <!-- 主役のカードは1枚だけにする。中断した対局があれば「対局を再開」、なければ「対局」。 -->
-            <button
-              type="button"
-              class="shogi-home__card"
-              :class="{ 'shogi-home__card--primary': !suspendedMatch }"
-              @click="openMatchSetup('normal')"
-            >
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            </template>
+            <template v-else-if="homeNext.id === 'tutorial'">
+              <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f1a54c">
+                  <rect x="1" y="5" width="14" height="1" />
+                  <rect x="3" y="4" width="10" height="1" />
+                  <rect x="6" y="3" width="4" height="1" />
+                  <rect x="12" y="6" width="1" height="4" />
+                </g>
+                <g fill="#fffcf4">
+                  <rect x="4" y="7" width="8" height="5" />
+                  <rect x="3" y="12" width="10" height="1" />
+                </g>
+                <g fill="#f1a54c">
+                  <rect x="6" y="9" width="4" height="1" />
+                </g>
+              </svg>
+            </template>
+            <template v-else>
+              <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
                   <rect x="2" y="2" width="12" height="1" />
                   <rect x="2" y="13" width="12" height="1" />
@@ -82,177 +92,208 @@
                   <rect x="12" y="9" width="2" height="2" />
                 </g>
               </svg>
-              <span class="shogi-home__label">対局</span>
-              <small class="shogi-home__desc">CPUと対局。学習対局にも切り替えられる</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="openTournamentScreen">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f1a54c">
-                  <rect x="4" y="2" width="8" height="1" />
-                  <rect x="4" y="3" width="8" height="4" />
-                  <rect x="2" y="3" width="2" height="1" />
-                  <rect x="12" y="3" width="2" height="1" />
-                  <rect x="5" y="7" width="6" height="1" />
-                  <rect x="7" y="8" width="2" height="3" />
-                  <rect x="5" y="11" width="6" height="2" />
-                </g>
-              </svg>
-              <span class="shogi-home__label">大会</span>
-              <small class="shogi-home__desc">竜王戦に参加して、称号を目指す</small>
-            </button>
-          </div>
-        </section>
-        <section class="shogi-home__group" aria-labelledby="shogi-home-school">
-          <h2 id="shogi-home-school" class="shogi-home__group-title">入門</h2>
-          <div class="shogi-home__cards">
-            <button type="button" class="shogi-home__card shogi-home__card--school" @click="tutorialOpen = true">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f1a54c">
-                  <rect x="1" y="5" width="14" height="1" />
-                  <rect x="3" y="4" width="10" height="1" />
-                  <rect x="6" y="3" width="4" height="1" />
-                  <rect x="12" y="6" width="1" height="4" />
-                </g>
-                <g fill="#fffcf4">
-                  <rect x="4" y="7" width="8" height="5" />
-                  <rect x="3" y="12" width="10" height="1" />
-                </g>
-                <g fill="#f1a54c">
-                  <rect x="6" y="9" width="4" height="1" />
-                </g>
-              </svg>
-              <span class="shogi-home__label"><span class="shogi-home__label-prefix">やこび姫の</span>将棋教室</span>
-              <small class="shogi-home__desc">ルールから戦法まで楽しく学ぼう</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="problemSetOpen = true">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#fffcf4">
-                  <rect x="5" y="2" width="6" height="1" />
-                  <rect x="4" y="3" width="2" height="2" />
-                  <rect x="10" y="3" width="2" height="3" />
-                  <rect x="8" y="6" width="3" height="1" />
-                  <rect x="7" y="7" width="2" height="3" />
-                </g>
-                <g fill="#f1a54c">
-                  <rect x="7" y="12" width="2" height="2" />
-                </g>
-              </svg>
-              <span class="shogi-home__label"><span class="shogi-home__label-prefix">やこび姫の</span>将棋問題集</span>
-              <small class="shogi-home__desc">詰ませ方・逃げ方の問題に挑戦</small>
-            </button>
-          </div>
-        </section>
-        <section class="shogi-home__group" aria-labelledby="shogi-home-dex">
-          <h2 id="shogi-home-dex" class="shogi-home__group-title">図鑑</h2>
-          <p class="shogi-home__group-note">盤面付きでいろんな解説を収録</p>
-          <div class="shogi-home__cards shogi-home__cards--dex">
-            <button type="button" class="shogi-home__card" @click="referenceDexKind = 'piece'">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f1a54c">
-                  <rect x="5" y="1" width="6" height="1" />
-                  <rect x="4" y="2" width="8" height="2" />
-                  <rect x="3" y="4" width="10" height="8" />
-                  <rect x="4" y="12" width="8" height="2" />
-                  <rect x="5" y="14" width="6" height="1" />
-                </g>
-                <text x="8" y="11" class="shogi-home__koma-char" aria-hidden="true">飛</text>
-              </svg>
-              <span class="shogi-home__label">駒図鑑</span>
-              <small class="shogi-home__desc">動き・役割・弱点</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="referenceDexKind = 'tesuji'">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#fffcf4">
-                  <rect x="3" y="2" width="10" height="12" />
-                  <rect x="2" y="1" width="2" height="14" />
-                </g>
-                <g fill="#f1a54c">
-                  <rect x="6" y="4" width="6" height="1" />
-                  <rect x="6" y="6" width="6" height="1" />
-                  <rect x="6" y="8" width="6" height="1" />
-                  <rect x="6" y="10" width="4" height="1" />
-                </g>
-              </svg>
-              <span class="shogi-home__label">手筋図鑑</span>
-              <small class="shogi-home__desc">格言と使いどころ</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="dexOpen = true">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#fffcf4">
-                  <rect x="2" y="3" width="5" height="10" />
-                  <rect x="9" y="3" width="5" height="10" />
-                  <rect x="7" y="2" width="2" height="12" />
-                </g>
-                <g fill="#f1a54c">
-                  <rect x="3" y="4" width="3" height="1" />
-                  <rect x="3" y="6" width="3" height="1" />
-                  <rect x="3" y="8" width="3" height="1" />
-                  <rect x="10" y="4" width="3" height="1" />
-                  <rect x="10" y="6" width="3" height="1" />
-                  <rect x="10" y="8" width="3" height="1" />
-                </g>
-              </svg>
-              <span class="shogi-home__label">定跡図鑑</span>
-              <small class="shogi-home__desc">戦法と囲いの手順</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="referenceDexKind = 'world'">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f1a54c">
-                  <rect x="3" y="2" width="10" height="5" />
-                  <rect x="1" y="3" width="2" height="3" />
-                  <rect x="13" y="3" width="2" height="3" />
-                  <rect x="5" y="7" width="6" height="2" />
-                  <rect x="7" y="9" width="2" height="2" />
-                  <rect x="4" y="11" width="8" height="2" />
-                </g>
-                <g fill="#fffcf4">
-                  <rect x="7" y="3" width="2" height="3" />
-                  <rect x="3" y="13" width="10" height="1" />
-                </g>
-              </svg>
-              <span class="shogi-home__label">将棋界図鑑</span>
-              <small class="shogi-home__desc">歴史と名棋士</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="referenceDexKind = 'glossary'">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f1a54c">
-                  <rect x="3" y="1" width="10" height="14" />
-                </g>
-                <g fill="#fffcf4">
-                  <rect x="4" y="2" width="8" height="12" />
-                  <rect x="13" y="3" width="2" height="2" />
-                  <rect x="13" y="7" width="2" height="2" />
-                  <rect x="13" y="11" width="2" height="2" />
-                </g>
-                <g fill="#1d303f">
-                  <rect x="5" y="4" width="4" height="1" />
-                  <rect x="5" y="6" width="6" height="1" />
-                  <rect x="5" y="8" width="6" height="1" />
-                  <rect x="5" y="10" width="5" height="1" />
-                </g>
-              </svg>
-              <span class="shogi-home__label">将棋用語辞典</span>
-              <small class="shogi-home__desc">言葉の意味と使い方</small>
-            </button>
-            <button type="button" class="shogi-home__card" @click="yakobiNoteOpen = true">
-              <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                <g fill="#f1a54c">
-                  <rect x="3" y="1" width="10" height="14" />
-                </g>
-                <g fill="#fffcf4">
-                  <rect x="4" y="2" width="8" height="12" />
-                </g>
-                <g fill="#1d303f">
-                  <rect x="5" y="10" width="2" height="2" />
-                  <rect x="8" y="7" width="2" height="5" />
-                  <rect x="11" y="4" width="1" height="8" />
-                </g>
-              </svg>
-              <span class="shogi-home__label">やこびノート</span>
-              <small class="shogi-home__desc">レーティングと戦績</small>
-            </button>
-          </div>
-        </section>
+            </template>
+          </span>
+          <span class="shogi-title__next-label">{{ homeNext.label }}</span>
+          <small class="shogi-title__next-desc">{{ homeNext.description }}</small>
+          <span class="shogi-title__next-go" aria-hidden="true">▶ はじめる</span>
+        </button>
+
+        <!-- 記録の帯。いまの棋力と所属を見せ、押すとやこびノートを開く。 -->
+        <button type="button" class="shogi-title__record" @click="yakobiNoteOpen = true">
+          <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <g fill="#f1a54c">
+              <rect x="3" y="1" width="10" height="14" />
+            </g>
+            <g fill="#fffcf4">
+              <rect x="4" y="2" width="8" height="12" />
+            </g>
+            <g fill="#1d303f">
+              <rect x="5" y="10" width="2" height="2" />
+              <rect x="8" y="7" width="2" height="5" />
+              <rect x="11" y="4" width="1" height="8" />
+            </g>
+          </svg>
+          <span class="shogi-title__record-main">
+            <strong>R{{ ratingState.rating }}</strong>
+            <span>{{ recommendedStrengthPreset.label.replace(/程度$/, "") }}</span>
+            <span v-if="homeAffiliation" class="shogi-title__record-badge">{{ homeAffiliation }}</span>
+          </span>
+          <span class="shogi-title__record-link">やこびノート <span aria-hidden="true">›</span></span>
+        </button>
+
+        <div class="shogi-title__groups">
+          <section class="shogi-title__group" aria-labelledby="shogi-home-play">
+            <h2 id="shogi-home-play" class="shogi-title__group-title">あそぶ</h2>
+            <div class="shogi-title__tiles">
+              <button type="button" class="shogi-title__tile" @click="openMatchSetup('normal')">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#fffcf4">
+                    <rect x="2" y="2" width="12" height="1" />
+                    <rect x="2" y="13" width="12" height="1" />
+                    <rect x="2" y="2" width="1" height="12" />
+                    <rect x="13" y="2" width="1" height="12" />
+                    <rect x="5" y="2" width="1" height="12" />
+                    <rect x="8" y="2" width="1" height="12" />
+                    <rect x="11" y="2" width="1" height="12" />
+                    <rect x="2" y="5" width="12" height="1" />
+                    <rect x="2" y="8" width="12" height="1" />
+                    <rect x="2" y="11" width="12" height="1" />
+                  </g>
+                  <g fill="#f1a54c">
+                    <rect x="3" y="3" width="2" height="2" />
+                    <rect x="12" y="9" width="2" height="2" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">対局</span>
+                <small class="shogi-title__desc">CPUと1局</small>
+              </button>
+              <button type="button" class="shogi-title__tile" @click="openTournamentScreen">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="4" y="2" width="8" height="1" />
+                    <rect x="4" y="3" width="8" height="4" />
+                    <rect x="2" y="3" width="2" height="1" />
+                    <rect x="12" y="3" width="2" height="1" />
+                    <rect x="5" y="7" width="6" height="1" />
+                    <rect x="7" y="8" width="2" height="3" />
+                    <rect x="5" y="11" width="6" height="2" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">大会</span>
+                <small class="shogi-title__desc">竜王戦で称号を</small>
+              </button>
+            </div>
+          </section>
+          <section class="shogi-title__group" aria-labelledby="shogi-home-school">
+            <h2 id="shogi-home-school" class="shogi-title__group-title">まなぶ</h2>
+            <div class="shogi-title__tiles">
+              <button type="button" class="shogi-title__tile" @click="tutorialOpen = true">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="1" y="5" width="14" height="1" />
+                    <rect x="3" y="4" width="10" height="1" />
+                    <rect x="6" y="3" width="4" height="1" />
+                    <rect x="12" y="6" width="1" height="4" />
+                  </g>
+                  <g fill="#fffcf4">
+                    <rect x="4" y="7" width="8" height="5" />
+                    <rect x="3" y="12" width="10" height="1" />
+                  </g>
+                  <g fill="#f1a54c">
+                    <rect x="6" y="9" width="4" height="1" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">将棋教室</span>
+                <small class="shogi-title__desc">ルールから戦法まで</small>
+              </button>
+              <button type="button" class="shogi-title__tile" @click="problemSetOpen = true">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#fffcf4">
+                    <rect x="5" y="2" width="6" height="1" />
+                    <rect x="4" y="3" width="2" height="2" />
+                    <rect x="10" y="3" width="2" height="3" />
+                    <rect x="8" y="6" width="3" height="1" />
+                    <rect x="7" y="7" width="2" height="3" />
+                  </g>
+                  <g fill="#f1a54c">
+                    <rect x="7" y="12" width="2" height="2" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">問題集</span>
+                <small class="shogi-title__desc">詰ませ方・逃げ方</small>
+              </button>
+            </div>
+          </section>
+          <section class="shogi-title__group shogi-title__group--dex" aria-labelledby="shogi-home-dex">
+            <h2 id="shogi-home-dex" class="shogi-title__group-title">しらべる</h2>
+            <div class="shogi-title__tiles shogi-title__tiles--dex">
+              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'piece'">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="5" y="1" width="6" height="1" />
+                    <rect x="4" y="2" width="8" height="2" />
+                    <rect x="3" y="4" width="10" height="8" />
+                    <rect x="4" y="12" width="8" height="2" />
+                    <rect x="5" y="14" width="6" height="1" />
+                  </g>
+                  <text x="8" y="11" class="shogi-home__koma-char" aria-hidden="true">飛</text>
+                </svg>
+                <span class="shogi-title__label">駒図鑑</span>
+              </button>
+              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'tesuji'">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#fffcf4">
+                    <rect x="3" y="2" width="10" height="12" />
+                    <rect x="2" y="1" width="2" height="14" />
+                  </g>
+                  <g fill="#f1a54c">
+                    <rect x="6" y="4" width="6" height="1" />
+                    <rect x="6" y="6" width="6" height="1" />
+                    <rect x="6" y="8" width="6" height="1" />
+                    <rect x="6" y="10" width="4" height="1" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">手筋図鑑</span>
+              </button>
+              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="dexOpen = true">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#fffcf4">
+                    <rect x="2" y="3" width="5" height="10" />
+                    <rect x="9" y="3" width="5" height="10" />
+                    <rect x="7" y="2" width="2" height="12" />
+                  </g>
+                  <g fill="#f1a54c">
+                    <rect x="3" y="4" width="3" height="1" />
+                    <rect x="3" y="6" width="3" height="1" />
+                    <rect x="3" y="8" width="3" height="1" />
+                    <rect x="10" y="4" width="3" height="1" />
+                    <rect x="10" y="6" width="3" height="1" />
+                    <rect x="10" y="8" width="3" height="1" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">定跡図鑑</span>
+              </button>
+              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'world'">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="3" y="2" width="10" height="5" />
+                    <rect x="1" y="3" width="2" height="3" />
+                    <rect x="13" y="3" width="2" height="3" />
+                    <rect x="5" y="7" width="6" height="2" />
+                    <rect x="7" y="9" width="2" height="2" />
+                    <rect x="4" y="11" width="8" height="2" />
+                  </g>
+                  <g fill="#fffcf4">
+                    <rect x="7" y="3" width="2" height="3" />
+                    <rect x="3" y="13" width="10" height="1" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">将棋界図鑑</span>
+              </button>
+              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'glossary'">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="3" y="1" width="10" height="14" />
+                  </g>
+                  <g fill="#fffcf4">
+                    <rect x="4" y="2" width="8" height="12" />
+                    <rect x="13" y="3" width="2" height="2" />
+                    <rect x="13" y="7" width="2" height="2" />
+                    <rect x="13" y="11" width="2" height="2" />
+                  </g>
+                  <g fill="#1d303f">
+                    <rect x="5" y="4" width="4" height="1" />
+                    <rect x="5" y="6" width="6" height="1" />
+                    <rect x="5" y="8" width="6" height="1" />
+                    <rect x="5" y="10" width="5" height="1" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">用語辞典</span>
+              </button>
+            </div>
+          </section>
+        </div>
       </nav>
     </div>
 
@@ -1454,7 +1495,8 @@ import {
   saveCareer,
   saveSeason,
 } from "./core/ryuo-career.mjs";
-import { grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
+import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
+import { loadTutorialProgress } from "./core/tutorial-progress.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -3656,6 +3698,46 @@ function openHome() {
   measureMode.value = false;
   homeOpen.value = true;
 }
+
+/** 教室で終えた(クリアかスキップした)レッスンの数。タイトル画面を開くたび、教室を閉じるたびに読み直す。 */
+const homeLessonsDone = ref(0);
+function refreshHomeProgress() {
+  homeLessonsDone.value = Object.keys(loadTutorialProgress(browserStorage()).lessons).length;
+}
+watch([homeOpen, tutorialOpen], ([home, tutorial]) => {
+  if (home && !tutorial) refreshHomeProgress();
+}, { immediate: true });
+
+/** 対局を始める前の人(教室を始めた人、通常対局が3局未満の人)には、教室を先に案内する。 */
+const HOME_TUTORIAL_GAMES = 3;
+type HomeNext = { id: "resume" | "tutorial" | "match"; label: string; description: string };
+/** タイトル画面の「つぎはこれ」。中断した対局、教室のつづき、対局の順に、いまの状態に合うものを1つ選ぶ。 */
+const homeNext = computed<HomeNext>(() => {
+  if (suspendedMatch.value) {
+    return { id: "resume", label: "対局を再開", description: `中断した対局（${suspendedMatch.value.moves}手目まで）` };
+  }
+  const games = ratingState.value.games;
+  if (games === 0 && homeLessonsDone.value === 0) {
+    return { id: "tutorial", label: "将棋教室ではじめる", description: "駒の動かし方から、やこび姫といっしょに覚えよう" };
+  }
+  if (homeLessonsDone.value > 0 && games < HOME_TUTORIAL_GAMES) {
+    return { id: "tutorial", label: "将棋教室のつづき", description: `${homeLessonsDone.value}レッスン終わったよ。次のレッスンへ進もう` };
+  }
+  const preset = recommendedStrengthPreset.value;
+  return { id: "match", label: "対局する", description: `おすすめの相手: Lv.${preset.level} ${preset.label}` };
+});
+function startHomeNext() {
+  if (homeNext.value.id === "resume") resumeSuspendedMatch();
+  else if (homeNext.value.id === "tutorial") tutorialOpen.value = true;
+  else openMatchSetup("normal");
+}
+/** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
+const homeGreeting = computed(() => ({
+  resume: "さっきの対局、続きをしよう！",
+  tutorial: homeLessonsDone.value ? "今日も教室で練習しよう！" : "はじめまして！ いっしょに覚えよう",
+  match: "今日はなにをする？",
+})[homeNext.value.id]);
+const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.label ?? "");
 
 /*
  * ブラウザの戻るで、手前に重なった画面から1段ずつ閉じる。対局準備はホームへ戻る。

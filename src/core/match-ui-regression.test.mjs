@@ -45,7 +45,7 @@ describe("match screen regressions", () => {
 
   it("runs the Ryuo tournament as its own mode from the title screen, with saved seasons and its own result dialog", () => {
     // 大会は、対局設定ではなく、タイトル画面のボタンから入る専用の画面で参加する。
-    expect(source).toMatch(/@click="openTournamentScreen"[\s\S]*?<span class="shogi-home__label">大会<\/span>/);
+    expect(source).toMatch(/@click="openTournamentScreen"[\s\S]*?<span class="shogi-title__label">大会<\/span>/);
     const kindStart = source.indexOf("const MATCH_KIND_OPTIONS");
     const kindOptions = source.slice(kindStart, source.indexOf("\n];", kindStart));
     expect(kindOptions).toContain("learning");
