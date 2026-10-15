@@ -1287,6 +1287,19 @@ const statTiles = computed(() => {
   grid-auto-rows: 1fr;
 }
 .shogi-game .shogi-tournament-home .shogi-home__card { min-height: 7.5rem; align-content: center; }
+/* スマホでは3列のカードが狭く、横並び（アイコンと文字）だと文字が1字ずつ折れるため、アイコンの下に名前を置く。 */
+@media (max-width: 640px) {
+  .shogi-game .shogi-tournament-home .shogi-home__card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 4px;
+    text-align: center;
+  }
+  .shogi-game .shogi-tournament-home .shogi-home__desc { text-align: center; }
+}
 .shogi-game .shogi-tournament__home-back {
   position: absolute;
   top: 0.8rem;
