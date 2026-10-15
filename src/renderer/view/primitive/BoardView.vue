@@ -50,7 +50,12 @@
           :class="mark.tintClass"
           :style="mark.style"
         ></div>
-        <div v-for="piece in board.pieces" :key="piece.id" :style="piece.style">
+        <div
+          v-for="piece in board.pieces"
+          :key="piece.id"
+          :class="{ 'piece--landed': piece.landed }"
+          :style="piece.style"
+        >
           <img class="piece-image" :src="piece.imagePath" />
         </div>
         <div
@@ -1378,13 +1383,49 @@ const whitePlayerTimeSeverity = computed(() => {
 .hand-background.drop-shadows {
   box-shadow: 3px 3px 6px var(--shadow-color);
 }
+/* 直前の手で動いた駒は、置いた瞬間に少し沈んで戻る。何が動いたかを目で追えるよう、短く小さく動かす。 */
+.piece--landed {
+  animation: piece-land 220ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  transform-origin: 50% 85%;
+}
+@keyframes piece-land {
+  0% {
+    transform: translateY(-14%) scale(1.08);
+  }
+  60% {
+    transform: translateY(0) scale(0.97, 1.02);
+  }
+  100% {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .piece--landed {
+    animation: none;
+  }
+}
+/* 対局者名は名札にし、手番の側を枠と光で示す。色だけに頼らないよう、手番の側には▶も付ける。 */
 .player-name {
   background-color: var(--text-bg-color);
   display: flex;
   justify-content: left;
   align-items: center;
-  border: 1px solid black;
+  border: 2px solid var(--plate-border-color);
+  border-radius: 0.4em;
   box-sizing: border-box;
+  font-weight: 700;
+  transition: box-shadow 160ms ease, border-color 160ms ease;
+}
+.player-name.active {
+  border-color: var(--plate-active-color);
+  background-color: var(--plate-active-bg-color);
+  box-shadow: 0 0 0 2px var(--plate-active-color), 0 0 12px 2px var(--plate-active-glow);
+}
+.player-name.active .player-name-text::before {
+  content: "▶";
+  margin-right: 0.15em;
+  color: var(--plate-active-mark-color);
+  font-size: 0.8em;
 }
 .player-name-text {
   margin-left: 5px;
@@ -1429,16 +1470,50 @@ const whitePlayerTimeSeverity = computed(() => {
 .clock-text {
   vertical-align: middle;
 }
+/* 成・不成は駒の絵だけでなく「成る」「成らない」の文字も添える。成るほうを明るく目立たせる。 */
+.promote,
+.not-promote {
+  container-type: size;
+  border-radius: 6%;
+  cursor: pointer;
+}
 .promote {
   background-color: var(--promote-bg-color);
+  box-shadow: inset 0 0 0 3px var(--plate-active-color), 0 0 14px 3px var(--plate-active-glow);
 }
 .not-promote {
   background-color: var(--not-promote-bg-color);
 }
+.promote::after,
+.not-promote::after {
+  position: absolute;
+  bottom: -12cqh;
+  left: 50%;
+  padding: 0.1em 0.5em;
+  border-radius: 999px;
+  font-size: 17cqh;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.promote::after {
+  content: "成る";
+  color: var(--turn-label-color);
+  background: var(--turn-label-bg-color);
+}
+.not-promote::after {
+  content: "成らない";
+  color: #fffcf4;
+  background: #445c6d;
+}
 .turn {
   color: var(--turn-label-color);
   background-color: var(--turn-label-bg-color);
-  border-color: var(--turn-label-border-color);
+  border: 2px solid var(--turn-label-border-color);
+  box-sizing: border-box;
+  font-weight: 800;
   overflow: hidden;
   display: flex;
   justify-content: center;

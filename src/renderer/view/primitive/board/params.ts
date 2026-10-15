@@ -29,6 +29,11 @@ export const boardParams = {
       "box-shadow":
         "inset 0 0 9px 1px rgba(255, 232, 158, 0.42), inset 0 0 0 2px rgba(224, 178, 70, 0.96), inset 0 0 0 3px rgba(104, 63, 8, 0.88)",
     },
+    captureDestination: {
+      background: "rgba(220, 38, 38, 0.18)",
+      "box-shadow":
+        "inset 0 0 10px 2px rgba(220, 38, 38, 0.45), inset 0 0 0 3px rgba(200, 30, 30, 0.95)",
+    },
     lastMoveTo: { "background-color": "#44cc44", opacity: "0.8" },
     lastMoveFrom: { "background-color": "#44cc44", opacity: "0.4" },
   },

@@ -1,1 +1,1 @@
-export const t = { nextTurn: "次の手番" };
+export const t = { nextTurn: "手番" };

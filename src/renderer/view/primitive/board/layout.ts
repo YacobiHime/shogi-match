@@ -56,6 +56,8 @@ export type BoardLabel = {
 export type BoardPiece = {
   id: string;
   imagePath: string;
+  /** 直前の手で動いた駒。着地の動きを付ける。 */
+  landed?: boolean;
   style: { [key: string]: string };
 };
 

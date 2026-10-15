@@ -181,16 +181,22 @@ watch(selectedPieceTheme, (theme) => storage?.setItem("shogi-match-piece-theme",
 :host { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .shogi-match-root {
   --shadow-color: rgba(0, 0, 0, 0.5);
-  --text-color: black;
-  --text-bg-color: white;
+  /* 名札・手番・成り選択の色は、対局画面（ShogiMatchGame.css）の配色に合わせる。 */
+  --text-color: #1d303f;
+  --text-bg-color: #fffcf4;
   --text-bg-color-warning: #ffff88;
   --text-bg-color-danger: red;
   --text-color-danger: white;
-  --promote-bg-color: white;
-  --not-promote-bg-color: gray;
-  --turn-label-color: lightyellow;
-  --turn-label-bg-color: #2424e6;
-  --turn-label-border-color: midnightblue;
+  --plate-border-color: rgba(29, 48, 63, 0.35);
+  --plate-active-color: #f1a54c;
+  --plate-active-bg-color: #fff3dc;
+  --plate-active-glow: rgba(241, 165, 76, 0.55);
+  --plate-active-mark-color: #d9822b;
+  --promote-bg-color: #fff3dc;
+  --not-promote-bg-color: #cfcabd;
+  --turn-label-color: #1d303f;
+  --turn-label-bg-color: #f1a54c;
+  --turn-label-border-color: #b57c39;
   display: flex;
   width: 100%;
   height: 100%;

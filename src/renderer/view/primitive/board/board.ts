@@ -125,7 +125,11 @@ export class BoardLayoutBuilder {
     return labels;
   }
 
-  private getPieces(board: ImmutableBoard, dragSourceSquare?: Square): BoardPiece[] {
+  private getPieces(
+    board: ImmutableBoard,
+    dragSourceSquare?: Square,
+    lastMove?: Move | null,
+  ): BoardPiece[] {
     const pieces: BoardPiece[] = [];
     board.listNonEmptySquares().forEach((square) => {
       if (dragSourceSquare && square.equals(dragSourceSquare)) {
@@ -150,6 +154,7 @@ export class BoardLayoutBuilder {
       pieces.push({
         id,
         imagePath,
+        landed: !!lastMove && square.equals(lastMove.to),
         style: {
           left: x + "px",
           top: y + "px",
@@ -162,6 +167,7 @@ export class BoardLayoutBuilder {
   }
 
   private getSquares(
+    board: ImmutableBoard,
     lastMove?: Move | null,
     pointer?: Square | Piece | null,
     legalDestinations: Square[] = [],
@@ -211,11 +217,15 @@ export class BoardLayoutBuilder {
           ...boardParams.highlight.selectionDimmer,
         };
         if (isLegalDestination) {
+          // 相手の駒を取れる升は、ねらう駒と同じ赤で、ただの移動先と見分けられるようにする。
+          const capture = !!board.at(square);
           selectionStyle = {
             ...style,
-            ...boardParams.highlight.legalDestination,
+            ...(capture
+              ? boardParams.highlight.captureDestination
+              : boardParams.highlight.legalDestination),
           };
-          selectionClass = "legal-destination";
+          selectionClass = capture ? "legal-destination legal-destination--capture" : "legal-destination";
         } else if (pointer instanceof Square && pointer.equals(square)) {
           selectionStyle = {
             ...style,
@@ -300,8 +310,8 @@ export class BoardLayoutBuilder {
     return {
       background: this.background,
       labels: this.labels,
-      pieces: this.getPieces(board, dragSourceSquare),
-      squares: this.getSquares(lastMove, pointer, legalDestinations),
+      pieces: this.getPieces(board, dragSourceSquare, lastMove),
+      squares: this.getSquares(board, lastMove, pointer, legalDestinations),
       promote,
       doNotPromote,
     };

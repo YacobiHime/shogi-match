@@ -98,7 +98,7 @@
 | --- | --- | --- |
 | 緑 | 駒が動いた跡、図鑑・教室の「大事なマス」（`square-mark--key`） | `src/renderer/view/primitive/board/params.ts`の`lastMoveTo`、`BoardView.vue`の`.square-mark--key` |
 | 青い点 | 駒の動けるマス（`square-mark--reach`） | `BoardView.vue`の`.square-mark--reach` |
-| 赤 | ねらう駒・目標のマス（`square-mark--target`） | `BoardView.vue`の`.square-mark--target` |
+| 赤 | ねらう駒・目標のマス（`square-mark--target`）、駒を選んだときの相手の駒を取れる移動先 | `BoardView.vue`の`.square-mark--target`、`params.ts`の`captureDestination` |
 
 - 図鑑の凡例（`ShogiReferenceDex.vue`の`__swatch--*`）は、盤上の色と同じ色相にします。
 - 升の色を変えるときは、台詞や凡例にある色の名前（「緑のマス」など）も同じ変更で直します。
