@@ -62,6 +62,15 @@
           </button>
         </div>
       </template>
+      <!-- 教室と同じく、まだ解いていない最初の問題へすぐ進めるようにする。 -->
+      <button
+        v-if="(section !== 'tsume' || tsumeKind) && nextUnsolvedProblem"
+        type="button"
+        class="shogi-tutorial__continue"
+        @click="openProblem(nextUnsolvedProblem.id)"
+      >
+        つづきから：{{ problemHeading(nextUnsolvedProblem) }}
+      </button>
       <ol v-if="section !== 'tsume' || tsumeKind" class="shogi-problems__list">
         <li v-for="problem in listedProblems" :key="problem.id">
           <button type="button" class="shogi-tutorial__lesson" :class="{ 'shogi-tutorial__lesson--cleared': solvedRecord(problem) }" @click="openProblem(problem.id)">
@@ -217,6 +226,8 @@ const listedProblems = computed(() => {
   if (section.value === "tsume") return tsumeKind.value ? tsumeKindProblems(tsumeKind.value, tsumePlies.value) as Problem[] : [];
   return sectionProblems(section.value) as Problem[];
 });
+/** 一覧で、まだ解いていない最初の問題。 */
+const nextUnsolvedProblem = computed(() => listedProblems.value.find((problem) => !solvedRecord(problem)) ?? null);
 // 「次の問題」は、問題を開いた一覧（詰将棋は同じ種類・同じ手数）で次に並ぶ問題。
 const nextProblem = computed(() => {
   const problem = currentProblem.value;

@@ -743,18 +743,31 @@ const resultMessage = computed(() => {
   max-width: 48rem;
   margin: 0 auto 0.8rem;
 }
+/* 次に進む先を示す、画面でいちばん目立つボタン。押すと影の分だけ沈む。 */
 .shogi-game .shogi-tutorial__continue {
   display: block;
   width: min(100%, 40rem);
-  margin: 0 auto 1rem;
+  min-height: 3.2rem;
+  margin: 0 auto 1.1rem;
   padding: 0.75rem 1rem;
   border: 2px solid #f1a54c;
-  border-radius: 0.6rem;
+  border-radius: 0.8rem;
   color: #172632;
   background: #f1a54c;
+  box-shadow: 0 4px 0 #b57c39;
   font: inherit;
+  font-size: 1.05em;
   font-weight: 800;
   cursor: pointer;
+}
+.shogi-game .shogi-tutorial__continue::before {
+  content: "▶";
+  margin-right: 0.5em;
+  font-size: 0.85em;
+}
+.shogi-game .shogi-tutorial__continue:active {
+  box-shadow: 0 1px 0 #b57c39;
+  transform: translateY(3px);
 }
 .shogi-game .shogi-tutorial__volumes {
   display: grid;

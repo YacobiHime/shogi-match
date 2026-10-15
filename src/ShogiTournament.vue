@@ -19,7 +19,7 @@
           <h2 id="shogi-tournament-titles" class="shogi-home__group-title">タイトル戦</h2>
           <p class="shogi-home__group-note">予選から勝ち上がって、タイトルを目指そう</p>
           <div class="shogi-home__cards">
-            <button type="button" class="shogi-home__card" data-tournament="ryuo" @click="chooseRyuo">
+            <button type="button" class="shogi-home__card shogi-home__card--primary" data-tournament="ryuo" @click="chooseRyuo">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#f1a54c">
                   <rect x="4" y="2" width="8" height="1" />

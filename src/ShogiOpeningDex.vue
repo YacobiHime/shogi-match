@@ -351,26 +351,55 @@ watch(stepIndex, async () => {
   color: var(--ink, #fffcf4);
   font-family: "Courier New", "Hiragino Kaku Gothic ProN", "Yu Gothic", monospace;
 }
+/*
+ * 教室・問題集・図鑑・大会・やこびノートの共通の枠。
+ * 開いたときは約0.2秒で下から浮かび上がらせ、何が開いたかを目で追えるようにする（動きを減らす設定では止める）。
+ */
+.shogi-game .shogi-dex,
+.shogi-game .shogi-home {
+  animation: shogi-screen-enter 180ms ease-out both;
+}
+@keyframes shogi-screen-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-dex,
+  .shogi-game .shogi-home {
+    animation: none;
+  }
+}
+/* 見出しの帯は本文より一段暗くし、どの画面でも同じ高さ・同じ位置に戻るボタンと題名を置く。 */
 .shogi-game .shogi-dex__header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem 1rem;
   padding: 0.6rem 1rem;
-  border-bottom: 1px solid rgba(255, 252, 244, 0.35);
+  border-bottom: 2px solid rgba(241, 165, 76, 0.45);
+  background: #172632;
 }
 .shogi-game .shogi-dex__header h1 {
   margin: 0;
   font-size: 1.3rem;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.12em;
 }
-.shogi-game .shogi-dex .shogi-dex__back {
-  min-height: 2.6rem;
-  padding: 0.4rem 1.1rem;
-  border: 1px solid rgba(255, 252, 244, 0.7);
+/* 戻るボタンは、大会の選択画面（shogi-homeの見た目）でも同じ形にする。 */
+.shogi-game .shogi-dex .shogi-dex__back,
+.shogi-game .shogi-home .shogi-dex__back {
+  min-height: 2.75rem;
+  padding: 0.4rem 1.1rem 0.4rem 0.9rem;
+  border: 2px solid rgba(255, 252, 244, 0.55);
   border-radius: 999px;
   color: #fffcf4;
-  background: transparent;
+  background: rgba(255, 252, 244, 0.08);
+  box-shadow: 0 3px 0 rgba(10, 25, 35, 0.75);
   font: 700 1rem/1.2 inherit;
   font-family: inherit;
   cursor: pointer;
