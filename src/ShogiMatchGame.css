@@ -1210,6 +1210,49 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.6em;
 }
+.shogi-welcome {
+  width: min(26em, 100%);
+  max-height: calc(100% - 1em);
+  overflow-y: auto;
+}
+.shogi-welcome__chara {
+  display: block;
+  width: 4.5em;
+  height: auto;
+  margin: 0 auto 0.3em;
+  image-rendering: pixelated;
+}
+.shogi-welcome__choices {
+  display: grid;
+  gap: 0.55em;
+  margin: 0 0 0.7em;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-welcome__choices button {
+  display: grid;
+  gap: 0.25em;
+  width: 100%;
+  padding: 0.7em 0.95em;
+  text-align: left;
+}
+.shogi-welcome__choices strong {
+  color: var(--amber);
+  font-size: 1.08em;
+}
+.shogi-welcome__choices small {
+  color: var(--muted);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.shogi-game .shogi-welcome__skip {
+  min-height: 2.2em;
+  border-color: transparent;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+  text-decoration: underline;
+}
 .shogi-game .shogi-game__confirm-danger {
   border-color: var(--rust);
   color: var(--night-deep);

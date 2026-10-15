@@ -1107,6 +1107,36 @@
       </div>
     </div>
 
+    <!-- はじめて遊ぶ人への案内。将棋をどのくらい知っているかで、教室・対局・棋力測定へ案内する。 -->
+    <div
+      v-if="welcomeOpen && homeOpen"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="welcome-title"
+      @click.self="dismissWelcome"
+    >
+      <div class="shogi-game__confirm-panel shogi-welcome">
+        <img
+          class="shogi-welcome__chara"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+          alt=""
+          aria-hidden="true"
+        >
+        <h2 id="welcome-title">ようこそ！</h2>
+        <p>わたしはやこび姫。将棋はどのくらい知ってる？ 合わせて、はじめの一歩を案内するね。</p>
+        <ul class="shogi-welcome__choices">
+          <li v-for="choice in WELCOME_CHOICES" :key="choice.id">
+            <button type="button" @click="chooseWelcome(choice.id)">
+              <strong>{{ choice.label }}</strong>
+              <small>{{ choice.description }}</small>
+            </button>
+          </li>
+        </ul>
+        <button type="button" class="shogi-welcome__skip" @click="dismissWelcome">自分で選ぶ</button>
+      </div>
+    </div>
+
     <div
       v-if="discardSuspendedPending"
       class="shogi-game__confirm shogi-game__confirm--over-home"
@@ -1314,6 +1344,7 @@ import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import { useBackNavigation } from "./composables/useBackNavigation";
+import { WELCOME_CHOICES, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
 import {
   type AnalysisPoint,
   type EngineFactory,
@@ -1653,6 +1684,7 @@ const matchStarted = ref(false);
 const pregameOpen = ref(true);
 const homeOpen = ref(props.showHome);
 // はじめて遊ぶ人への案内。ホームのある表示で、遊んだ記録が何もない端末だけで出す。
+const welcomeOpen = ref(props.showHome && shouldShowWelcome(typeof localStorage === "undefined" ? null : localStorage));
 const dexOpen = ref(false);
 const yakobiNoteOpen = ref(false);
 const tournamentOpen = ref(false);
@@ -3315,6 +3347,21 @@ function startMeasureMatchNow() {
   beginMatch();
 }
 
+/** はじめての案内で選んだ道へ進む。 */
+function chooseWelcome(choice: string) {
+  markWelcomeSeen(browserStorage(), choice);
+  welcomeOpen.value = false;
+  if (choice === "beginner") tutorialOpen.value = true;
+  else if (choice === "rules") openMatchSetup("normal");
+  else if (choice === "player") startMeasureMatch();
+}
+
+/** 案内を閉じて、ホームから自分で選ぶ。 */
+function dismissWelcome() {
+  markWelcomeSeen(browserStorage(), "skip");
+  welcomeOpen.value = false;
+}
+
 function openMatchSetup(kind: MatchKind) {
   confirmDiscardSuspended(() => {
     matchKind.value = kind;
@@ -3506,7 +3553,9 @@ function openHome() {
  * 対局中と振り返り中は、保存を消さないよう対局画面から離れない。ホームでは元のページへ戻る。
  */
 function navigateBack() {
-  if (discardSuspendedPending.value) {
+  if (welcomeOpen.value && homeOpen.value) {
+    dismissWelcome();
+  } else if (discardSuspendedPending.value) {
     discardSuspendedPending.value = null;
   } else if (tournamentOpen.value) {
     // 大会の画面は、中の画面(説明・トーナメント表)から、大会の選択へ、そして閉じる、の順に戻る。
@@ -3553,7 +3602,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || Boolean(discardSuspendedPending.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || Boolean(discardSuspendedPending.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
