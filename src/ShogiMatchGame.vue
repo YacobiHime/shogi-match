@@ -305,6 +305,7 @@
       :career="ryuoCareer"
       :roster="ryuoRoster"
       @close="yakobiNoteOpen = false"
+      @start-match="startMatchFromNote"
       @start-measure="startMeasureMatch"
       @declare="declareGrade"
     />
@@ -3422,6 +3423,14 @@ let settingsBeforeMeasure: { [key: string]: unknown } | null = null;
  * やこびノートから、棋力測定の対局を対局準備を通さずに始める。
  * 平手・先手・作戦おまかせ・助言なしで、CPUの強さはレーティングに近いレベルにする。
  */
+/** やこびノートの「対局する」。ノートを閉じて、通常対局の対局準備を開く。 */
+function startMatchFromNote() {
+  confirmDiscardSuspended(() => {
+    yakobiNoteOpen.value = false;
+    matchKind.value = "normal";
+    closeHome();
+  });
+}
 function startMeasureMatch() {
   confirmDiscardSuspended(startMeasureMatchNow);
 }

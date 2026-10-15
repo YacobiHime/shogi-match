@@ -8,50 +8,128 @@
     </header>
 
     <div class="shogi-note__body">
-      <!-- 上段: やこび姫のひとことと、プロフィール -->
-      <div class="shogi-note__hero">
+      <!--
+        表紙。いちばん知りたい「いまの棋力」と「次の目標」を大きく出し、次にすること（対局する）を1つだけ主役にする。
+        細かい記録は下のタブ（成績・戦法・竜王戦）に分け、棋力の調整に使う項目は最後に折りたたむ。
+      -->
+      <section class="shogi-note__cover" aria-labelledby="shogi-note-rank" data-note-profile>
         <div class="shogi-note__coach">
           <YakobiSays :lines="messages" size="xl" merged name-tag :asset-base-url="assetBaseUrl" />
         </div>
 
-        <section class="shogi-note__card shogi-note__profile" aria-labelledby="shogi-note-profile" data-note-profile>
-          <h2 id="shogi-note-profile">プロフィール</h2>
-          <p class="shogi-note__affiliation">
-            <span>所属</span>
-            <strong>{{ affiliation ? affiliation.label : "まだ所属なし" }}</strong>
+        <div class="shogi-note__rank">
+          <p id="shogi-note-rank" class="shogi-note__eyebrow">あなたの棋力</p>
+          <p class="shogi-note__rating">
+            <strong>R{{ state.rating }}</strong>
+            <span
+              v-if="ratingDelta"
+              class="shogi-note__delta"
+              :class="ratingDelta > 0 ? 'shogi-note__delta--up' : 'shogi-note__delta--down'"
+              :title="'前の対局からの増減'"
+            >{{ ratingDelta > 0 ? `▲ +${ratingDelta}` : `▼ −${Math.abs(ratingDelta)}` }}</span>
           </p>
-          <p v-if="!profile.titles.length" class="shogi-note__hint">
-            まだ称号がありません。タイトル画面の「大会」に挑戦して、称号を手に入れよう！
+          <p class="shogi-note__grade">
+            {{ gradeName(nearestPreset.label) }}<small>（CPU Lv.{{ nearestPreset.level }}くらい）</small>
           </p>
-          <ul v-else class="shogi-note__titles">
-            <li v-for="title in titles" :key="title.id" data-note-title>
-              <strong>{{ title.label }}</strong>
-              <small>{{ title.detail }}{{ title.at ? `（${new Date(title.at).toLocaleDateString("ja-JP")}）` : "" }}</small>
+
+          <div v-if="nextGoal" class="shogi-note__goal">
+            <p class="shogi-note__goal-text">
+              <span>次の目標 <b>{{ gradeName(nextGoal.label) }}</b></span>
+              <span>あと <b>R{{ nextGoal.remaining }}</b></span>
+            </p>
+            <div
+              class="shogi-note__goal-bar"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              :aria-valuenow="nextGoal.percent"
+              :aria-label="`${gradeName(nextGoal.label)}まで${nextGoal.percent}%`"
+            ><span :style="{ width: `${nextGoal.percent}%` }"></span></div>
+          </div>
+          <p v-else class="shogi-note__goal-text">いちばん上の目安に届いたよ！</p>
+
+          <ul class="shogi-note__badges" aria-label="所属と称号">
+            <li class="shogi-note__badge" :class="{ 'shogi-note__badge--group': affiliation }">
+              <small>所属</small>{{ affiliation ? affiliation.label : "まだ所属なし" }}
+            </li>
+            <li v-for="title in otherTitles" :key="title.id" class="shogi-note__badge" :title="title.detail" data-note-title>
+              {{ title.label }}
             </li>
           </ul>
-        </section>
+
+          <div v-if="recentForm.length" class="shogi-note__form">
+            <span class="shogi-note__form-label">最近の対局</span>
+            <ol :aria-label="`最近${recentForm.length}局の結果`">
+              <li
+                v-for="(outcome, index) in recentForm"
+                :key="index"
+                :class="`shogi-note__form-mark--${outcome}`"
+                :title="FORM_TEXT[outcome]"
+              >{{ FORM_MARK[outcome] }}</li>
+            </ol>
+          </div>
+
+          <div class="shogi-note__actions">
+            <button type="button" class="shogi-note__button shogi-note__button--primary" @click="emit('start-match')">
+              {{ state.games ? "対局する" : "1局指してノートを始める" }}
+            </button>
+            <button type="button" class="shogi-note__button" @click="emit('start-measure')">棋力を測る</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 詳しい記録は、3つのタブに分ける。 -->
+      <div class="shogi-dex__modes shogi-note__tabs" role="tablist" aria-label="記録の種類">
+        <button
+          v-for="item in TABS"
+          :key="item.id"
+          type="button"
+          role="tab"
+          :aria-selected="tab === item.id"
+          :class="{ 'shogi-dex__mode--active': tab === item.id }"
+          @click="selectTab(item.id)"
+        >
+          <span class="shogi-dex__mode-label">{{ item.label }}</span>
+        </button>
       </div>
 
-      <!-- レーティング: 数字・成績・推移と、棋力の測定 -->
-      <section class="shogi-note__card shogi-note__rating-card" aria-labelledby="shogi-note-rating">
-        <h2 id="shogi-note-rating">レーティング</h2>
-        <div class="shogi-note__rating-grid">
-          <div class="shogi-note__rating-main">
-            <p class="shogi-note__rating">
-              <strong>R{{ state.rating }}</strong>
-              <span class="shogi-note__chip">目安 Lv.{{ nearestPreset.level }} {{ nearestPreset.label }}</span>
-            </p>
-            <dl class="shogi-note__tiles" data-note-record>
-              <div><dt>対局</dt><dd>{{ state.games }}</dd></div>
-              <div><dt>勝ち</dt><dd>{{ state.wins }}</dd></div>
-              <div><dt>負け</dt><dd>{{ state.losses }}</dd></div>
-              <div><dt>引き分け</dt><dd>{{ state.draws }}</dd></div>
-              <div><dt>勝率</dt><dd>{{ state.games ? percent(state.wins / state.games) : "—" }}</dd></div>
-            </dl>
+      <!-- 成績 -->
+      <section v-if="tab === 'record'" class="shogi-note__panel" role="tabpanel" aria-label="成績">
+        <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
+          <p>まだ記録がないよ。平手でCPUと対局すると、勝ち負けとレーティングの推移がここに書き込まれるよ。</p>
+        </div>
+        <template v-else>
+          <section class="shogi-note__card shogi-note__score" aria-labelledby="shogi-note-score" data-note-record>
+            <h2 id="shogi-note-score">勝ち負け</h2>
+            <div class="shogi-note__score-body">
+              <div
+                class="shogi-note__ring"
+                :style="{ '--win': `${winShare}%`, '--draw': `${winShare + drawShare}%` }"
+                role="img"
+                :aria-label="`勝率${percent(state.wins / state.games)}`"
+              >
+                <span><small>勝率</small>{{ percent(state.wins / state.games) }}</span>
+              </div>
+              <dl class="shogi-note__tiles">
+                <div><dt>対局</dt><dd>{{ state.games }}</dd></div>
+                <div class="shogi-note__tile--win"><dt>勝ち</dt><dd>{{ state.wins }}</dd></div>
+                <div class="shogi-note__tile--loss"><dt>負け</dt><dd>{{ state.losses }}</dd></div>
+                <div><dt>引き分け</dt><dd>{{ state.draws }}</dd></div>
+              </dl>
+            </div>
+            <ul class="shogi-note__rows" aria-label="手番ごとの成績">
+              <li v-for="row in colorRows" :key="row.key">
+                <span class="shogi-note__name">{{ row.label }}</span>
+                <span class="shogi-note__bar" aria-hidden="true"><span :style="{ width: row.winPercent }"></span></span>
+                <span class="shogi-note__stat">{{ row.text }}</span>
+              </li>
+            </ul>
             <p class="shogi-note__hint">平手の通常対局（対CPU）の結果だけを数えています。</p>
-          </div>
-          <figure class="shogi-note__trend-box">
-            <template v-if="trend">
+          </section>
+
+          <figure class="shogi-note__card shogi-note__trend-card">
+            <h2>レーティングの推移</h2>
+            <div v-if="trend" class="shogi-note__trend-box">
               <div class="shogi-note__trend-axis" aria-hidden="true"><span>R{{ trend.max }}</span><span>R{{ trend.min }}</span></div>
               <svg
                 class="shogi-note__trend"
@@ -70,92 +148,127 @@
                 <polygon :points="`0,100 ${trend.points} 300,100`" fill="url(#shogi-note-trend-fill)" />
                 <polyline :points="trend.points" fill="none" stroke="#f1a54c" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
               </svg>
-              <figcaption class="shogi-note__trend-note">直近{{ trend.count }}局の推移（R{{ trend.min }}〜R{{ trend.max }}）</figcaption>
-            </template>
-            <p v-else class="shogi-note__trend-empty">2局以上指すと、ここにレーティングの推移が出ます。</p>
+              <figcaption class="shogi-note__trend-note">直近{{ trend.count }}局（R{{ trend.min }}〜R{{ trend.max }}）</figcaption>
+            </div>
+            <p v-else class="shogi-note__hint">2局以上指すと、ここに推移の線が出るよ。</p>
           </figure>
-        </div>
+        </template>
+      </section>
 
-        <div class="shogi-note__measure-box">
-          <div class="shogi-note__measure-head">
-            <h3>棋力を測る</h3>
+      <!-- 戦法: 自分の戦法・囲い・戦型を勝率で比べ、得意とにがてに札を付ける。相手の戦法・囲いはその下に小さく。 -->
+      <section v-if="tab === 'style'" class="shogi-note__panel" role="tabpanel" aria-label="戦法">
+        <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
+          <p>対局すると、使った戦法と囲いの勝率がここに並ぶよ。得意な戦法を見つけよう！</p>
+        </div>
+        <template v-else>
+          <section
+            v-for="group in ownUsageGroups"
+            :key="group.category"
+            class="shogi-note__card"
+            :aria-label="group.title"
+          >
+            <h2>{{ group.title }}</h2>
+            <p v-if="!group.rows.length" class="shogi-note__hint">まだ記録がありません。</p>
+            <ul v-else class="shogi-note__rows shogi-note__rows--style">
+              <li v-for="row in group.rows" :key="row.name">
+                <span class="shogi-note__name">
+                  {{ row.name }}
+                  <em v-if="row.tag === 'best'" class="shogi-note__tag shogi-note__tag--best">★得意</em>
+                  <em v-else-if="row.tag === 'weak'" class="shogi-note__tag shogi-note__tag--weak">にがて</em>
+                </span>
+                <span class="shogi-note__bar" :title="`勝率 ${percent(row.winRate)}`" aria-hidden="true">
+                  <span :style="{ width: percent(row.winRate) }"></span>
+                </span>
+                <span class="shogi-note__stat">勝率{{ percent(row.winRate) }}・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws ? `${row.draws}分` : "" }}</span>
+              </li>
+            </ul>
+          </section>
+          <div class="shogi-note__pair">
+            <section
+              v-for="group in opponentUsageGroups"
+              :key="group.category"
+              class="shogi-note__card shogi-note__card--minor"
+              :aria-label="group.title"
+            >
+              <h2>{{ group.title }}</h2>
+              <p v-if="!group.rows.length" class="shogi-note__hint">まだ記録がありません。</p>
+              <ul v-else class="shogi-note__rows">
+                <li v-for="row in group.rows" :key="row.name">
+                  <span class="shogi-note__name">{{ row.name }}</span>
+                  <span class="shogi-note__stat">{{ row.games }}局・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws ? `${row.draws}分` : "" }}</span>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </template>
+      </section>
+
+      <!-- 竜王戦 -->
+      <section v-if="tab === 'ryuo'" class="shogi-note__panel" role="tabpanel" aria-label="竜王戦">
+        <section class="shogi-note__card" aria-labelledby="shogi-note-ryuo" data-note-ryuo>
+          <h2 id="shogi-note-ryuo">竜王戦</h2>
+          <RyuoLadder :group="career.group" :champion="career.champion" />
+          <dl class="shogi-note__tiles shogi-note__tiles--four">
+            <div><dt>現在</dt><dd>{{ career.champion ? "竜王" : `${career.group}組` }}</dd></div>
+            <div><dt>参加</dt><dd>{{ career.seasons }}<small>期</small></dd></div>
+            <div><dt>挑戦者</dt><dd>{{ career.challenges }}<small>回</small></dd></div>
+            <div><dt>竜王</dt><dd>{{ career.titles }}<small>期</small></dd></div>
+          </dl>
+          <p v-if="career.titles" class="shogi-note__hint">
+            連続{{ career.streak }}期・最長{{ career.bestStreak }}期{{ career.eternal ? "・永世竜王" : "" }}
+          </p>
+          <template v-if="career.history.length">
+            <h3 class="shogi-note__subhead">これまでの成績</h3>
+            <ol class="shogi-note__history" data-note-ryuo-history>
+              <li v-for="entry in recentHistory" :key="entry.no" :class="`shogi-note__history--${historyKind(entry)}`">
+                <span class="shogi-note__history-no">第{{ entry.no }}期</span>
+                <span class="shogi-note__history-group">{{ entry.mode === "defense" ? "防衛戦" : `${entry.startGroup}組` }}</span>
+                <span class="shogi-note__history-text">
+                  {{ outcomeText(entry.outcome) }}{{ entry.promoted ? `・${entry.newGroup}組へ昇級` : "" }}{{ entry.relegated ? `・${entry.newGroup}組へ降級` : "" }}
+                </span>
+                <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+              </li>
+            </ol>
+          </template>
+          <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
+        </section>
+        <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" />
+      </section>
+
+      <!-- 棋力の調整に使う項目。ふだんは閉じておく。 -->
+      <details class="shogi-note__more">
+        <summary>くわしい記録と棋力の設定</summary>
+        <div class="shogi-note__more-body">
+          <section class="shogi-note__card shogi-note__card--minor">
+            <h2>棋力を測る</h2>
             <p class="shogi-note__hint">
-              CPUと1局指すと、終局後に棋譜解析で指し手の評価値の損を調べ、レーティングと級・段の目安を診断します。
+              CPUと1局指すと、終局後に指し手を解析して、レーティングと級・段の目安を診断します。
               結果は解析画面から、あなたのレーティングに設定できます。
             </p>
             <p v-if="state.measured" class="shogi-note__hint" data-note-measured>
               棋力測定で R{{ state.measured.rating }}（{{ state.measured.label }}）を設定しました（{{ measuredDate }}）。
             </p>
-          </div>
-          <button type="button" class="shogi-note__button shogi-note__button--primary" @click="emit('start-measure')">棋力を測る</button>
-        </div>
+          </section>
 
-        <div class="shogi-note__measure-box">
-          <div class="shogi-note__measure-head">
-            <h3>段級位を申告する</h3>
+          <section class="shogi-note__card shogi-note__card--minor">
+            <h2>段級位を申告する</h2>
             <p class="shogi-note__hint">
               日本将棋連盟の段級位で申告すると、レーティングをその棋力に設定します。
-              以降の対局は、申告ごとにCPUのレベル別の成績を記録し、表示名と実際の棋力のずれを調べるのに使います。
+              以降の対局は申告ごとにCPUのレベル別の成績を記録し、表示名と実際の棋力のずれを調べるのに使います。
             </p>
             <p v-if="state.declared" class="shogi-note__hint" data-note-declared>
               申告中: {{ state.declared.label }}（{{ declaredDate }}に設定）
             </p>
-          </div>
-          <div class="shogi-note__declare">
-            <select v-model="declareLabel" aria-label="申告する段級位">
-              <option value="">段級位を選ぶ</option>
-              <option v-for="grade in grades" :key="grade.label" :value="grade.label">{{ grade.label }}</option>
-            </select>
-            <button type="button" class="shogi-note__button" :disabled="!declareLabel" @click="declare">申告して設定</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- 記録のカード。左に竜王戦と成績、右に戦法・囲いの使用率。狭い画面では1列。 -->
-      <div class="shogi-note__grid">
-        <div class="shogi-note__stack">
-          <section class="shogi-note__card" aria-labelledby="shogi-note-ryuo" data-note-ryuo>
-            <h2 id="shogi-note-ryuo">竜王戦</h2>
-            <RyuoLadder :group="career.group" :champion="career.champion" />
-            <dl class="shogi-note__tiles shogi-note__tiles--four">
-              <div><dt>現在</dt><dd>{{ career.champion ? "竜王" : `${career.group}組` }}</dd></div>
-              <div><dt>参加</dt><dd>{{ career.seasons }}<small>期</small></dd></div>
-              <div><dt>挑戦者</dt><dd>{{ career.challenges }}<small>回</small></dd></div>
-              <div><dt>竜王</dt><dd>{{ career.titles }}<small>期</small></dd></div>
-            </dl>
-            <p v-if="career.titles" class="shogi-note__hint">
-              連続{{ career.streak }}期・最長{{ career.bestStreak }}期{{ career.eternal ? "・永世竜王" : "" }}
-            </p>
-            <template v-if="career.history.length">
-              <h3 class="shogi-note__subhead">これまでの成績</h3>
-              <ol class="shogi-note__history" data-note-ryuo-history>
-                <li v-for="entry in recentHistory" :key="entry.no" :class="`shogi-note__history--${historyKind(entry)}`">
-                  <span class="shogi-note__history-no">第{{ entry.no }}期</span>
-                  <span class="shogi-note__history-group">{{ entry.mode === "defense" ? "防衛戦" : `${entry.startGroup}組` }}</span>
-                  <span class="shogi-note__history-text">
-                    {{ outcomeText(entry.outcome) }}{{ entry.promoted ? `・${entry.newGroup}組へ昇級` : "" }}{{ entry.relegated ? `・${entry.newGroup}組へ降級` : "" }}
-                  </span>
-                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
-                </li>
-              </ol>
-            </template>
-            <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
+            <div class="shogi-note__declare">
+              <select v-model="declareLabel" aria-label="申告する段級位">
+                <option value="">段級位を選ぶ</option>
+                <option v-for="grade in grades" :key="grade.label" :value="grade.label">{{ grade.label }}</option>
+              </select>
+              <button type="button" class="shogi-note__button" :disabled="!declareLabel" @click="declare">申告して設定</button>
+            </div>
           </section>
 
-          <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" />
-
-          <section v-if="state.games" class="shogi-note__card" aria-labelledby="shogi-note-colors">
-            <h2 id="shogi-note-colors">手番ごとの成績</h2>
-            <ul class="shogi-note__rows">
-              <li v-for="row in colorRows" :key="row.key">
-                <span class="shogi-note__name">{{ row.label }}</span>
-                <span class="shogi-note__bar" aria-hidden="true"><span :style="{ width: row.winPercent }"></span></span>
-                <span class="shogi-note__stat">{{ row.text }}</span>
-              </li>
-            </ul>
-          </section>
-
-          <section v-if="levelRows.length" class="shogi-note__card" aria-labelledby="shogi-note-levels">
+          <section v-if="levelRows.length" class="shogi-note__card shogi-note__card--minor" aria-labelledby="shogi-note-levels">
             <h2 id="shogi-note-levels">CPUのレベルごとの成績</h2>
             <ul class="shogi-note__rows">
               <li v-for="row in levelRows" :key="row.level">
@@ -165,7 +278,7 @@
             </ul>
           </section>
 
-          <section v-if="declaredRows.length || state.games" class="shogi-note__card" aria-labelledby="shogi-note-declared">
+          <section v-if="declaredRows.length || state.games" class="shogi-note__card shogi-note__card--minor" aria-labelledby="shogi-note-declared">
             <h2 id="shogi-note-declared">申告した棋力での成績</h2>
             <ul v-if="declaredRows.length" class="shogi-note__rows">
               <li v-for="row in declaredRows" :key="row.level">
@@ -177,25 +290,7 @@
             <button v-if="state.games" type="button" class="shogi-note__button shogi-note__button--ghost" @click="copyRecord">{{ copied ? "コピーしました" : "戦績データをコピー" }}</button>
           </section>
         </div>
-        <div class="shogi-note__stack">
-          <section v-for="group in usageGroups" :key="group.category" class="shogi-note__card" :aria-label="group.title">
-            <h2>{{ group.title }}</h2>
-            <p v-if="!group.rows.length" class="shogi-note__hint">まだ記録がありません。</p>
-            <ul v-else class="shogi-note__rows">
-              <li v-for="row in group.rows" :key="row.name">
-                <span class="shogi-note__name">{{ row.name }}</span>
-                <span class="shogi-note__bar" :title="`使用率 ${percent(row.rate)}`" aria-hidden="true">
-                  <span :style="{ width: percent(row.rate) }"></span>
-                </span>
-                <span class="shogi-note__stat">
-                  {{ percent(row.rate) }}・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws }}分
-                </span>
-              </li>
-            </ul>
-          </section>
-
-        </div>
-      </div>
+      </details>
     </div>
   </div>
 </template>
@@ -206,7 +301,6 @@ import RyuoLadder from "./RyuoLadder.vue";
 import RyuoRosterBook from "./RyuoRosterBook.vue";
 import YakobiSays from "./YakobiSays.vue";
 import {
-  USAGE_CATEGORIES,
   declarableGrades,
   levelRating,
   recommendedLevel,
@@ -217,6 +311,7 @@ import { currentAffiliation } from "./core/player-profile.mjs";
 import { outcomeText } from "./core/ryuo-career.mjs";
 
 type Tally = { wins: number; losses: number; draws: number };
+type GameOutcome = "win" | "loss" | "draw";
 type RatingState = {
   rating: number;
   games: number;
@@ -229,7 +324,7 @@ type RatingState = {
   measured: { rating: number; label: string; at: number } | null;
   declared: { label: string; level: number; at: number } | null;
   declaredLevels: { [label: string]: { [level: string]: Tally } };
-  history: { rating: number }[];
+  history: { rating: number; outcome?: string }[];
 };
 
 type ProfileState = {
@@ -243,6 +338,7 @@ type RyuoCareer = {
   challenges: number; eternal: boolean;
   history: HistoryEntry[];
 };
+type UsageRow = { name: string; wins: number; losses: number; draws: number; games: number; rate: number };
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
@@ -256,15 +352,43 @@ const props = defineProps({
     default: () => ({ group: 6, seasons: 0, champion: false, titles: 0, streak: 0, bestStreak: 0, challenges: 0, eternal: false, history: [] }),
   },
 });
-const emit = defineEmits(["close", "start-measure", "declare"]);
+const emit = defineEmits(["close", "start-match", "start-measure", "declare"]);
+
+/** 記録のタブ。最後に開いたタブを、この端末で覚えておく。 */
+const TABS = [
+  { id: "record", label: "成績" },
+  { id: "style", label: "戦法" },
+  { id: "ryuo", label: "竜王戦" },
+] as const;
+type TabId = typeof TABS[number]["id"];
+const TAB_STORAGE_KEY = "yacobihime:shogi-match:note-tab";
+function loadTab(): TabId {
+  try {
+    const saved = localStorage.getItem(TAB_STORAGE_KEY);
+    return TABS.some(({ id }) => id === saved) ? saved as TabId : "record";
+  } catch {
+    return "record";
+  }
+}
+const tab = ref<TabId>(loadTab());
+function selectTab(id: TabId) {
+  tab.value = id;
+  try {
+    localStorage.setItem(TAB_STORAGE_KEY, id);
+  } catch {
+    // 保存できなくても、タブは切り替わる。
+  }
+}
 
 const measuredDate = computed(() => {
   const at = props.state.measured?.at;
   return at ? new Date(at).toLocaleDateString("ja-JP") : "";
 });
 const affiliation = computed(() => currentAffiliation(props.profile));
-/** 称号は高いものから、大会の成績は新しいものから並べる。 */
-const titles = computed(() => [...props.profile.titles].sort((a, b) => b.rank - a.rank || a.at - b.at));
+/** 所属に使った称号のほかの称号を、高いものから並べる。 */
+const otherTitles = computed(() => [...props.profile.titles]
+  .filter((title) => title.id !== affiliation.value?.id)
+  .sort((a, b) => b.rank - a.rank || a.at - b.at));
 const recentHistory = computed(() => [...props.career.history].reverse().slice(0, 8));
 /** 成績の行の色分け: 竜王・昇級・降級・そのほか。 */
 function historyKind(entry: HistoryEntry) {
@@ -306,23 +430,68 @@ async function copyRecord() {
   }
 }
 const percent = (ratio: number) => `${Math.round(ratio * 100)}%`;
+/** 「十四級程度」を、表紙では「十四級」と短く出す。 */
+const gradeName = (label: string) => label.replace(/程度$/, "");
 
 const nearestPreset = computed(() => {
   const level = recommendedLevel(props.state.rating);
   return CPU_STRENGTH_PRESETS.find((preset) => preset.level === level)!;
 });
 
-/** やこび姫のひとこと。全体の様子と、得意な戦法(3局以上で、いちばん勝率の高いもの)。 */
+/**
+ * 次の目標。いまの目安と違う表示名の、すぐ上のレベル。
+ * recommendedLevelはR÷80を四捨五入するので、レベルLの目安になるのはR(80L−40)から。
+ */
+const nextGoal = computed(() => {
+  const current = nearestPreset.value;
+  const next = CPU_STRENGTH_PRESETS.find((preset) => preset.level > current.level && preset.label !== current.label);
+  if (!next) return null;
+  const firstOfCurrent = CPU_STRENGTH_PRESETS.find((preset) => preset.label === current.label)!;
+  const threshold = (level: number) => Math.max(0, levelRating(level) - levelRating(1) / 2);
+  const start = threshold(firstOfCurrent.level);
+  const target = threshold(next.level);
+  const rating = props.state.rating;
+  const ratio = target > start ? (rating - start) / (target - start) : 0;
+  return {
+    label: next.label,
+    remaining: Math.max(1, Math.ceil(target - rating)),
+    percent: Math.round(Math.min(1, Math.max(0, ratio)) * 100),
+  };
+});
+
+/** 対局の結果だけを、古い順に並べたもの(申告・測定の記録は除く)。 */
+const gameHistory = computed(() => props.state.history.filter(
+  (entry): entry is { rating: number; outcome: GameOutcome } =>
+    entry.outcome === "win" || entry.outcome === "loss" || entry.outcome === "draw",
+));
+/** 前の対局からのレーティングの増減。直前の記録が対局の結果のときだけ出す。 */
+const ratingDelta = computed(() => {
+  const history = props.state.history;
+  const last = history[history.length - 1];
+  const before = history[history.length - 2];
+  if (!last || !before || !gameHistory.value.includes(last as { rating: number; outcome: GameOutcome })) return 0;
+  return Math.round(last.rating - before.rating);
+});
+const FORM_MARK: Record<GameOutcome, string> = { win: "勝", loss: "負", draw: "分" };
+const FORM_TEXT: Record<GameOutcome, string> = { win: "勝ち", loss: "負け", draw: "引き分け" };
+/** 最近10局の勝ち負け(古い順)。 */
+const recentForm = computed(() => gameHistory.value.slice(-10).map((entry) => entry.outcome));
+
+/** 勝率の輪の、勝ち・引き分けの割合(%)。 */
+const winShare = computed(() => (props.state.games ? (props.state.wins / props.state.games) * 100 : 0));
+const drawShare = computed(() => (props.state.games ? (props.state.draws / props.state.games) * 100 : 0));
+
+/** やこび姫のひとこと。全体の様子と、得意な戦法(3局以上で、いちばん勝率の高いもの)と、次の目標。 */
 const messages = computed(() => {
   const { games, wins, rating } = props.state;
-  if (!games) return ["ここは、あなたの対局の記録をまとめるノートだよ。", "対局すると、レーティングや得意な戦法が書き込まれていくよ！"];
+  if (!games) return ["ここは、あなたの対局の記録をまとめるノートだよ。", "1局指すと、レーティングや得意な戦法が書き込まれていくよ！"];
   if (games < 5) return [`まだ${games}局だけど、もう書き込みが始まったよ。`, "たくさん指して、ノートを育てよう！"];
   const lines = [`${games}局で${wins}勝！ 今のレーティングはR${rating}だよ。`];
   const best = usageRows(props.state, "rook")
-    .filter((row: { games: number }) => row.games >= 3)
-    .sort((a: { wins: number; games: number }, b: { wins: number; games: number }) => b.wins / b.games - a.wins / a.games)[0];
+    .filter((row: UsageRow) => row.games >= 3)
+    .sort((a: UsageRow, b: UsageRow) => b.wins / b.games - a.wins / a.games)[0];
   if (best) lines.push(`いちばん勝てているのは「${best.name}」。勝率${percent(best.wins / best.games)}だよ！`);
-  lines.push("ノートを見て、得意な戦法と苦手な戦法を確かめよう！");
+  if (nextGoal.value) lines.push(`${gradeName(nextGoal.value.label)}まで、あとR${nextGoal.value.remaining}。いっしょにがんばろう！`);
   return lines;
 });
 
@@ -354,19 +523,27 @@ const colorRows = computed(() => (["black", "white"] as const).map((key) => {
   };
 }));
 
-const USAGE_TITLES: { [category: string]: string } = {
-  rook: "あなたの戦法",
-  castle: "あなたの囲い",
-  battle: "戦型",
-  opponentRook: "相手の戦法",
-  opponentCastle: "相手の囲い",
-};
 const USAGE_LIMIT = 8;
-const usageGroups = computed(() => USAGE_CATEGORIES.map((category: string) => ({
-  category,
-  title: USAGE_TITLES[category],
-  rows: usageRows(props.state, category).slice(0, USAGE_LIMIT),
-})));
+/** 「得意」「にがて」の札を付けるのに要る対局数。 */
+const TAG_MIN_GAMES = 3;
+function usageGroup(category: string, title: string) {
+  const rows = (usageRows(props.state, category) as UsageRow[]).slice(0, USAGE_LIMIT)
+    .map((row) => ({ ...row, winRate: row.games ? row.wins / row.games : 0, tag: "" as "" | "best" | "weak" }));
+  const tagged = rows.filter((row) => row.games >= TAG_MIN_GAMES);
+  const best = tagged.reduce<typeof rows[number] | null>((top, row) => (!top || row.winRate > top.winRate ? row : top), null);
+  if (best && best.winRate >= 0.5) best.tag = "best";
+  for (const row of tagged) if (row !== best && row.winRate < 0.5) row.tag = "weak";
+  return { category, title, rows };
+}
+const ownUsageGroups = computed(() => [
+  usageGroup("rook", "あなたの戦法"),
+  usageGroup("castle", "あなたの囲い"),
+  usageGroup("battle", "戦型"),
+]);
+const opponentUsageGroups = computed(() => [
+  usageGroup("opponentRook", "相手の戦法"),
+  usageGroup("opponentCastle", "相手の囲い"),
+]);
 
 const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .filter((preset) => {
@@ -377,17 +554,18 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 </script>
 
 <style>
-/* やこびノート。竜王戦の画面と同じく、ドット絵のやこび姫の配色(紺・スレート・クリーム・橙・ラベンダー)で、
- * グラデーションを使わない平らな面と、角の立った枠にそろえる。 */
+/* やこびノート。夜空の紺に、やこび姫のドット絵の色(クリーム・橙・ラベンダー)を合わせる。
+ * 表紙をいちばん大きく、タブの中のカードは控えめにして、見る順番をはっきりさせる。 */
 .shogi-game .shogi-dex.shogi-note {
   --note-gold: #f1a54c;
+  --note-gold-shadow: #b57c39;
   --note-lavender: #d8d0ff;
   --note-panel: #2c4359;
   --note-deep: #172632;
   --note-shadow: #121e29;
   --note-line: rgba(255, 252, 244, 0.16);
-  --note-control: 2.75rem;
-  --note-mincho: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+  --note-muted: rgba(255, 252, 244, 0.7);
+  --note-control: 2.9rem;
   background: #1e2d3d;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
 }
@@ -396,34 +574,200 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   display: grid;
   align-content: start;
   gap: 1rem;
-  width: min(100%, 76rem);
+  width: min(100%, 64rem);
   margin: 0 auto;
   box-sizing: border-box;
   overflow-y: auto;
-  padding: 1rem clamp(0.8rem, 3vw, 2rem) 2rem;
+  padding: 1rem clamp(0.8rem, 3vw, 2rem) 2.5rem;
   font-size: var(--dex-text);
 }
-.shogi-game .shogi-note__hero { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
-@media (min-width: 860px) {
-  .shogi-game .shogi-note__hero { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+
+/* ===== 表紙 ===== */
+.shogi-game .shogi-note__cover {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  padding: clamp(0.9rem, 2.5vw, 1.4rem);
+  border: 2px solid var(--note-gold);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 92% 12%, rgba(241, 165, 76, 0.16) 0 3px, transparent 4px),
+    radial-gradient(circle at 70% 85%, rgba(215, 209, 253, 0.16) 0 2px, transparent 3px),
+    #263d52;
+  box-shadow: 0 5px 0 var(--note-gold-shadow);
 }
-.shogi-game .shogi-note__coach {
-  padding: 1.1rem 1.1rem 1.5rem;
-  border: 2px solid var(--note-lavender);
-  border-radius: 0.2rem;
-  background: var(--note-panel);
-  box-shadow: 4px 4px 0 var(--note-shadow);
+@media (min-width: 820px) {
+  .shogi-game .shogi-note__cover { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; }
+}
+.shogi-game .shogi-note__coach { min-width: 0; }
+.shogi-game .shogi-note__rank { display: grid; gap: 0.6rem; min-width: 0; }
+.shogi-game .shogi-note__eyebrow {
+  margin: 0;
+  color: var(--note-gold);
+  font-size: 0.85em;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.shogi-game .shogi-note__rating {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.8rem;
+  margin: 0;
+}
+.shogi-game .shogi-note__rating strong {
+  font-size: clamp(2.8rem, 2rem + 3vw, 4.2rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-shadow: 0 3px 0 var(--note-shadow);
+}
+.shogi-game .shogi-note__delta {
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.95em;
+  font-weight: 800;
+}
+.shogi-game .shogi-note__delta--up { color: var(--note-deep); background: var(--note-gold); }
+.shogi-game .shogi-note__delta--down { color: var(--note-deep); background: var(--note-lavender); }
+.shogi-game .shogi-note__grade {
+  margin: 0;
+  font-size: 1.5em;
+  font-weight: 800;
+}
+.shogi-game .shogi-note__grade small {
+  margin-left: 0.4rem;
+  color: var(--note-muted);
+  font-size: 0.55em;
+  font-weight: 600;
+}
+.shogi-game .shogi-note__goal { display: grid; gap: 0.35rem; }
+.shogi-game .shogi-note__goal-text {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.2rem 1rem;
+  margin: 0;
+  color: var(--note-muted);
+  font-size: 0.9em;
+}
+.shogi-game .shogi-note__goal-text b { color: #fffcf4; font-size: 1.1em; }
+.shogi-game .shogi-note__goal-bar {
+  height: 0.9rem;
+  overflow: hidden;
+  border: 2px solid var(--note-deep);
+  border-radius: 999px;
+  background: var(--note-deep);
+}
+.shogi-game .shogi-note__goal-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: repeating-linear-gradient(135deg, var(--note-gold) 0 10px, #f6bb6e 10px 20px);
+  animation: shogi-note-goal-fill 700ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  transform-origin: left center;
+}
+@keyframes shogi-note-goal-fill {
+  from { transform: scaleX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-note__goal-bar span { animation: none; }
+}
+.shogi-game .shogi-note__badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__badge {
+  padding: 0.25rem 0.75rem;
+  border: 2px solid var(--note-gold);
+  border-radius: 999px;
+  color: var(--note-gold);
+  font-size: 0.85em;
+  font-weight: 800;
+}
+.shogi-game .shogi-note__badge small { margin-right: 0.4rem; color: var(--note-muted); font-weight: 700; }
+.shogi-game .shogi-note__badge--group { color: var(--note-deep); background: var(--note-gold); }
+.shogi-game .shogi-note__badge--group small { color: rgba(23, 38, 50, 0.75); }
+.shogi-game .shogi-note__form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; }
+.shogi-game .shogi-note__form-label { color: var(--note-muted); font-size: 0.85em; font-weight: 700; }
+.shogi-game .shogi-note__form ol { display: flex; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__form li {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  font-size: 0.8em;
+  font-weight: 900;
+  line-height: 1;
+}
+.shogi-game .shogi-note__form-mark--win { color: var(--note-deep); background: var(--note-gold); }
+.shogi-game .shogi-note__form-mark--loss { color: var(--note-deep); background: var(--note-lavender); }
+.shogi-game .shogi-note__form-mark--draw { color: #fffcf4; background: #445c6d; }
+.shogi-game .shogi-note__actions { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 0.6rem; margin-top: 0.2rem; }
+
+/* ===== ボタン ===== */
+.shogi-game .shogi-note__button,
+.shogi-game .shogi-note__declare select {
+  box-sizing: border-box;
+  height: var(--note-control);
+  border-radius: 0.6rem;
+  font: inherit;
+}
+.shogi-game .shogi-note__button {
+  width: 100%;
+  padding: 0 1rem;
+  border: 2px solid rgba(255, 252, 244, 0.55);
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.06);
+  box-shadow: 0 3px 0 var(--note-shadow);
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.shogi-game .shogi-note__button--primary {
+  border-color: var(--note-gold);
+  color: var(--note-deep);
+  background: var(--note-gold);
+  box-shadow: 0 4px 0 var(--note-gold-shadow);
+  font-size: 1.05em;
+}
+.shogi-game .shogi-note__button:not(:disabled):active { box-shadow: none; transform: translateY(3px); }
+.shogi-game .shogi-note__button--ghost { justify-self: start; width: auto; border-width: 1px; font-weight: 700; }
+.shogi-game .shogi-note__button:disabled { opacity: 0.45; cursor: default; }
+
+/* ===== タブ ===== */
+.shogi-game .shogi-dex .shogi-note__tabs { padding: 0; }
+.shogi-game .shogi-dex .shogi-note__tabs button { max-width: none; }
+
+/* ===== カード ===== */
+.shogi-game .shogi-note__panel {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  animation: shogi-note-panel-in 160ms ease-out both;
+}
+@media (min-width: 820px) {
+  .shogi-game .shogi-note__panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .shogi-game .shogi-note__panel > .shogi-note__empty,
+  .shogi-game .shogi-note__panel > .shogi-note__pair { grid-column: 1 / -1; }
+}
+@keyframes shogi-note-panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-note__panel { animation: none; }
 }
 .shogi-game .shogi-note__card {
   display: grid;
   align-content: start;
   gap: 0.75rem;
   min-width: 0;
+  margin: 0;
   padding: 1rem 1.1rem;
   border: 2px solid #3b5570;
-  border-radius: 0.2rem;
+  border-radius: 0.8rem;
   background: var(--note-panel);
 }
+.shogi-game .shogi-note__card--minor { border-color: rgba(59, 85, 112, 0.7); background: rgba(44, 67, 89, 0.6); }
 .shogi-game .shogi-note__card h2 {
   display: flex;
   align-items: center;
@@ -431,7 +775,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   margin: 0;
   color: var(--note-gold);
   font-size: 0.95em;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
 }
 .shogi-game .shogi-note__card h2::before {
   content: "";
@@ -439,66 +783,58 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   height: 0.5rem;
   background: var(--note-gold);
 }
-.shogi-game .shogi-note__affiliation {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.2rem 0.8rem;
-  margin: 0;
-}
-.shogi-game .shogi-note__affiliation span { color: rgba(255, 252, 244, 0.7); font-weight: 700; }
-.shogi-game .shogi-note__affiliation strong { font-family: var(--note-mincho); font-size: 2em; line-height: 1.2; }
-.shogi-game .shogi-note__titles { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
-.shogi-game .shogi-note__titles li {
-  display: grid;
-  gap: 0.1rem;
-  min-width: 0;
-  padding: 0.45rem 0.9rem;
-  border-radius: 0.15rem;
-  color: #172632;
-  background: var(--note-gold);
-  box-shadow: 3px 3px 0 var(--note-shadow);
-}
-.shogi-game .shogi-note__titles strong { font-family: var(--note-mincho); font-size: 1.15em; }
-.shogi-game .shogi-note__titles small { font-size: 0.75em; }
+.shogi-game .shogi-note__empty p { margin: 0; line-height: 1.7; }
+.shogi-game .shogi-note__pair { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
 .shogi-game .shogi-note__subhead { margin: 0.3rem 0 0; color: rgba(255, 252, 244, 0.8); font-size: 0.9em; }
+.shogi-game .shogi-note__hint { margin: 0; color: var(--note-muted); font-size: 0.8em; line-height: 1.6; }
 
-/* レーティング */
-.shogi-game .shogi-note__rating-grid { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 860px) {
-  .shogi-game .shogi-note__rating-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; }
+/* 勝ち負け: 勝率の輪と、数のタイル */
+.shogi-game .shogi-note__score-body { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.shogi-game .shogi-note__ring {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 7.5rem;
+  height: 7.5rem;
+  border-radius: 50%;
+  background: conic-gradient(var(--note-gold) 0 var(--win), #8a93a0 var(--win) var(--draw), var(--note-lavender) var(--draw) 100%);
 }
-.shogi-game .shogi-note__rating-main { display: grid; align-content: start; gap: 0.7rem; }
-.shogi-game .shogi-note__rating { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 1rem; margin: 0; }
-.shogi-game .shogi-note__rating strong { font-size: clamp(2.4rem, 1.8rem + 2vw, 3.4rem); font-weight: 800; line-height: 1; letter-spacing: 0.02em; }
-.shogi-game .shogi-note__chip {
-  padding: 0.2rem 0.8rem;
-  border: 2px solid var(--note-gold);
-  border-radius: 0.15rem;
-  color: var(--note-gold);
-  font-weight: 700;
+.shogi-game .shogi-note__ring span {
+  display: grid;
+  place-items: center;
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  background: var(--note-panel);
+  font-size: 1.5em;
+  font-weight: 900;
+  line-height: 1.1;
 }
-.shogi-game .shogi-note__tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.5rem; margin: 0; }
+.shogi-game .shogi-note__ring small { color: var(--note-muted); font-size: 0.45em; font-weight: 700; }
+.shogi-game .shogi-note__tiles { display: grid; flex: 1 1 12rem; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin: 0; }
 .shogi-game .shogi-note__tiles--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .shogi-game .shogi-note__tiles > div {
   display: grid;
   gap: 0.1rem;
   min-width: 0;
-  padding: 0.5rem 0.6rem;
-  border-radius: 0.15rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.5rem;
   background: var(--note-deep);
 }
-.shogi-game .shogi-note__tiles dt { color: rgba(255, 252, 244, 0.65); font-size: 0.75em; font-weight: 700; white-space: nowrap; }
-.shogi-game .shogi-note__tiles dd { margin: 0; font-size: 1.3em; font-weight: 800; line-height: 1.2; }
+.shogi-game .shogi-note__tiles dt { color: var(--note-muted); font-size: 0.75em; font-weight: 700; white-space: nowrap; }
+.shogi-game .shogi-note__tiles dd { margin: 0; font-size: 1.35em; font-weight: 900; line-height: 1.2; }
 .shogi-game .shogi-note__tiles dd small { margin-left: 0.1rem; font-size: 0.6em; }
+.shogi-game .shogi-note__tile--win { box-shadow: inset 4px 0 0 var(--note-gold); }
+.shogi-game .shogi-note__tile--loss { box-shadow: inset 4px 0 0 var(--note-lavender); }
+
+/* レーティングの推移 */
 .shogi-game .shogi-note__trend-box {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: minmax(7rem, 1fr) auto;
+  grid-template-rows: minmax(8rem, 1fr) auto;
   gap: 0.3rem 0.5rem;
-  margin: 0;
   padding: 0.7rem 0.8rem;
-  border-radius: 0.15rem;
+  border-radius: 0.5rem;
   background: var(--note-deep);
 }
 .shogi-game .shogi-note__trend-axis {
@@ -509,64 +845,8 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   font-size: 0.72em;
   text-align: right;
 }
-.shogi-game .shogi-note__trend { display: block; width: 100%; height: 100%; min-height: 7rem; }
-.shogi-game .shogi-note__trend-note { grid-column: 2; color: rgba(255, 252, 244, 0.7); font-size: 0.78em; }
-.shogi-game .shogi-note__trend-empty { grid-column: 1 / -1; align-self: center; margin: 0; color: rgba(255, 252, 244, 0.6); text-align: center; }
-.shogi-game .shogi-note__measure-box {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  gap: 0.6rem 1.2rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--note-line);
-}
-@media (min-width: 760px) {
-  .shogi-game .shogi-note__measure-box { grid-template-columns: minmax(0, 1fr) 22rem; }
-}
-.shogi-game .shogi-note__measure-head { display: grid; gap: 0.25rem; min-width: 0; }
-.shogi-game .shogi-note__measure-head h3 { margin: 0; font-size: 1em; }
-/* 操作ボタンとセレクトは、同じ高さにそろえる */
-.shogi-game .shogi-note__button,
-.shogi-game .shogi-note__declare select {
-  box-sizing: border-box;
-  height: var(--note-control);
-  border-radius: 0.2rem;
-  font: inherit;
-}
-.shogi-game .shogi-note__button {
-  width: 100%;
-  padding: 0 1rem;
-  border: 2px solid rgba(255, 252, 244, 0.6);
-  color: #fffcf4;
-  background: transparent;
-  font-weight: 800;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.shogi-game .shogi-note__button--primary {
-  border-color: #f1a54c;
-  color: #172632;
-  background: var(--note-gold);
-  box-shadow: 0 0.2rem 0 #b06a1c;
-}
-.shogi-game .shogi-note__button--ghost { justify-self: start; width: auto; border-width: 1px; font-weight: 700; }
-.shogi-game .shogi-note__button:disabled { opacity: 0.45; cursor: default; }
-.shogi-game .shogi-note__declare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }
-.shogi-game .shogi-note__declare select {
-  width: 100%;
-  padding: 0 0.6rem;
-  border: 2px solid rgba(255, 252, 244, 0.4);
-  color: #fffcf4;
-  background: var(--note-deep);
-}
-.shogi-game .shogi-note__hint { margin: 0; color: rgba(255, 252, 244, 0.7); font-size: 0.8em; line-height: 1.6; }
-
-/* 記録のカードは、段組みで詰めて並べる */
-.shogi-game .shogi-note__grid { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@media (min-width: 860px) {
-  .shogi-game .shogi-note__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-}
-.shogi-game .shogi-note__stack { display: grid; gap: 1rem; min-width: 0; }
+.shogi-game .shogi-note__trend { display: block; width: 100%; height: 100%; min-height: 8rem; }
+.shogi-game .shogi-note__trend-note { grid-column: 2; color: var(--note-muted); font-size: 0.78em; }
 
 /* 竜王戦の成績 */
 .shogi-game .shogi-note__history { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
@@ -575,9 +855,9 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.4rem 0.6rem;
-  border-left: 3px solid rgba(255, 252, 244, 0.35);
-  border-radius: 0.15rem;
+  padding: 0.45rem 0.7rem;
+  border-left: 4px solid rgba(255, 252, 244, 0.35);
+  border-radius: 0.4rem;
   background: var(--note-deep);
   font-size: 0.9em;
 }
@@ -590,26 +870,67 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__history-record { white-space: nowrap; }
 
 /* 使用率・成績の行 */
-.shogi-game .shogi-note__rows { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__rows { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .shogi-note__rows li {
   display: grid;
   grid-template-columns: minmax(6rem, 1fr) minmax(3rem, 1fr) auto;
   align-items: center;
-  gap: 0.2rem 0.7rem;
+  gap: 0.25rem 0.7rem;
 }
 .shogi-game .shogi-note__rows li:not(:has(.shogi-note__bar)) { grid-template-columns: 1fr auto; }
+.shogi-game .shogi-note__rows--style li { grid-template-columns: minmax(0, 1fr) auto; }
+.shogi-game .shogi-note__rows--style .shogi-note__bar { grid-column: 1 / -1; grid-row: 2; }
 .shogi-game .shogi-note__name { font-weight: 700; overflow-wrap: anywhere; }
 .shogi-game .shogi-note__stat { font-size: 0.85em; text-align: right; white-space: nowrap; }
-.shogi-game .shogi-note__bar { height: 0.55rem; background: var(--note-deep); overflow: hidden; }
-.shogi-game .shogi-note__bar span { display: block; height: 100%; background: var(--note-gold); }
+.shogi-game .shogi-note__bar { height: 0.6rem; overflow: hidden; border-radius: 999px; background: var(--note-deep); }
+.shogi-game .shogi-note__bar span { display: block; height: 100%; border-radius: inherit; background: var(--note-gold); }
+.shogi-game .shogi-note__tag {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72em;
+  font-style: normal;
+  font-weight: 800;
+  vertical-align: 0.1em;
+}
+.shogi-game .shogi-note__tag--best { color: var(--note-deep); background: var(--note-gold); }
+.shogi-game .shogi-note__tag--weak { color: var(--note-deep); background: var(--note-lavender); }
+
+/* くわしい記録と棋力の設定 */
+.shogi-game .shogi-note__more {
+  border: 1px solid var(--note-line);
+  border-radius: 0.8rem;
+}
+.shogi-game .shogi-note__more summary {
+  padding: 0.8rem 1rem;
+  color: var(--note-muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+.shogi-game .shogi-note__more-body {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  align-items: start;
+  padding: 0 0.8rem 0.8rem;
+}
+.shogi-game .shogi-note__declare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }
+.shogi-game .shogi-note__declare select {
+  width: 100%;
+  padding: 0 0.6rem;
+  border: 2px solid rgba(255, 252, 244, 0.4);
+  color: #fffcf4;
+  background: var(--note-deep);
+}
 @media (max-width: 520px) {
   .shogi-game .shogi-note__rows li,
   .shogi-game .shogi-note__rows li:not(:has(.shogi-note__bar)) { grid-template-columns: 1fr auto; }
   .shogi-game .shogi-note__bar { grid-column: 1 / -1; grid-row: 2; }
-  .shogi-game .shogi-note__tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .shogi-game .shogi-note__tiles--four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shogi-game .shogi-note__declare { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-note__history li { grid-template-columns: auto auto minmax(0, 1fr); }
   .shogi-game .shogi-note__history-record { grid-column: 3; justify-self: end; }
+  .shogi-game .shogi-note__actions { grid-template-columns: minmax(0, 1fr); }
+  .shogi-game .shogi-note__ring { width: 6.2rem; height: 6.2rem; }
 }
 </style>
