@@ -8,9 +8,10 @@ type ResponsiveLayoutOptions = {
 };
 
 // 盤描画の外枠寸法（src/renderer/view/primitive/board/params.ts）。どれも9x9の盤は878x960。
+// compactは、自分の名札と手番を盤の下の行に置くため、盤の上下に1行ずつある。
 const BOARD_FRAMES = {
   standard: { width: 1471, height: 959 },
-  compact: { width: 1088, height: 1015 },
+  compact: { width: 1088, height: 1071 },
   portrait: { width: 878, height: 1168 },
 } as const;
 type BoardFrameName = keyof typeof BOARD_FRAMES;

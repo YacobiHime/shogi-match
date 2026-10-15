@@ -176,10 +176,14 @@ export const compactHandParams = {
   topPiecePadding: 5.7,
 };
 
+/*
+ * 駒台を盤の左右に置く配置。相手（上側）の名札と手番は盤の上の行に、
+ * 自分（下側）の名札と手番は盤の下の行に置き、それぞれの駒台の近くにまとめる。
+ */
 export const compactViewParams = {
   frame: {
     width: 1088,
-    height: 1015,
+    height: 1071,
   },
   board: {
     x: 105,
@@ -197,8 +201,8 @@ export const compactViewParams = {
   },
   turn: {
     black: {
-      x: 575,
-      y: 3,
+      x: 568,
+      y: 1020,
     },
     white: {
       x: 304,
@@ -211,7 +215,7 @@ export const compactViewParams = {
   playerName: {
     black: {
       x: 788,
-      y: 0,
+      y: 1019,
     },
     white: {
       x: 0,
@@ -224,7 +228,7 @@ export const compactViewParams = {
   clock: {
     black: {
       x: 575,
-      y: 0,
+      y: 1019,
     },
     white: {
       x: 300,
