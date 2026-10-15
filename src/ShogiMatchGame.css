@@ -2120,10 +2120,10 @@
   box-shadow: 5px 5px 0 rgba(23, 38, 50, 0.8);
 }
 .shogi-home__card:disabled { cursor: default; opacity: 0.72; }
-/* 主役のカード（対局・教室・再開）は、琥珀色の枠と温かい地色でほかより目立たせる。 */
+/* 主役のカード（対局、または中断した対局の再開）は1枚だけにし、琥珀色の枠と少し明るい地色で目立たせる。 */
 .shogi-home .shogi-home__card--primary {
   border-color: var(--amber);
-  background: linear-gradient(180deg, rgba(241, 165, 76, 0.26), rgba(43, 70, 91, 0.94) 70%);
+  background: #34546b;
   box-shadow: 4px 4px 0 var(--amber-shadow);
 }
 .shogi-home .shogi-home__card--primary .shogi-home__label { color: #ffe2b8; }
@@ -2166,6 +2166,9 @@
   .shogi-home__cards { grid-auto-columns: minmax(0, 1fr); }
   /* 図鑑の5枚は、狭い画面では2列に並べる。 */
   .shogi-home__cards--dex { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 中断した対局があると対局の段が3枚になり、横に並べると文字が折れるため、「対局を再開」を1段目に広げる。 */
+  .shogi-home__cards:has(.shogi-home__card--resume) { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shogi-home__card--resume { grid-column: 1 / -1; }
   /* メニューが縦に長くなるため、月をタイトルと重ならない右上へ寄せる。 */
   .shogi-home__moon { top: 3%; right: 6%; width: 32px; height: 32px; box-shadow: inset -9px -4px 0 0 #1d303f; }
   /* 入門・対局・図鑑の3段が収まるよう、カードは「アイコン＋名前・説明」の横並びにする。 */
@@ -2265,7 +2268,7 @@
   }
   .shogi-home .shogi-home__card--primary {
     border-color: var(--amber);
-    background: linear-gradient(180deg, rgba(241, 165, 76, 0.26), rgba(43, 70, 91, 0.94) 70%);
+    background: #34546b;
     box-shadow: 4px 4px 0 var(--amber-shadow);
   }
   .shogi-home .shogi-home__card--primary:not(:disabled):hover { box-shadow: 6px 6px 0 var(--amber-shadow); }

@@ -57,7 +57,13 @@
               <span class="shogi-home__label">対局を再開</span>
               <small class="shogi-home__desc">中断した対局（{{ suspendedMatch.moves }}手目まで）</small>
             </button>
-            <button type="button" class="shogi-home__card shogi-home__card--primary" @click="openMatchSetup('normal')">
+            <!-- 主役のカードは1枚だけにする。中断した対局があれば「対局を再開」、なければ「対局」。 -->
+            <button
+              type="button"
+              class="shogi-home__card"
+              :class="{ 'shogi-home__card--primary': !suspendedMatch }"
+              @click="openMatchSetup('normal')"
+            >
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
                   <rect x="2" y="2" width="12" height="1" />
@@ -99,7 +105,7 @@
         <section class="shogi-home__group" aria-labelledby="shogi-home-school">
           <h2 id="shogi-home-school" class="shogi-home__group-title">入門</h2>
           <div class="shogi-home__cards">
-            <button type="button" class="shogi-home__card shogi-home__card--school shogi-home__card--primary" @click="tutorialOpen = true">
+            <button type="button" class="shogi-home__card shogi-home__card--school" @click="tutorialOpen = true">
               <svg class="shogi-home__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#f1a54c">
                   <rect x="1" y="5" width="14" height="1" />
