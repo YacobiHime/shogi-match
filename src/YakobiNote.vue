@@ -5,240 +5,277 @@
         <span aria-hidden="true">←</span> {{ backLabel }}
       </button>
       <h1 id="shogi-note-title">やこびノート</h1>
+      <p class="shogi-note__header-rating" aria-label="いまのレーティング">
+        <strong>R{{ state.rating }}</strong><span>{{ gradeName(nearestPreset.label) }}</span>
+      </p>
     </header>
 
-    <div class="shogi-note__body">
-      <!--
-        表紙。いちばん知りたい「いまの棋力」と「次の目標」を大きく出し、次にすること（対局する）を1つだけ主役にする。
-        細かい記録は下のタブ（成績・戦法・竜王戦）に分け、棋力の調整に使う項目は最後に折りたたむ。
-      -->
-      <section class="shogi-note__cover" aria-labelledby="shogi-note-rank" data-note-profile>
-        <div class="shogi-note__coach">
-          <YakobiSays :lines="messages" size="xl" merged name-tag :asset-base-url="assetBaseUrl" />
-        </div>
-
-        <div class="shogi-note__rank">
-          <p id="shogi-note-rank" class="shogi-note__eyebrow">あなたの棋力</p>
-          <p class="shogi-note__rating">
-            <strong>R{{ state.rating }}</strong>
-            <span
-              v-if="ratingDelta"
-              class="shogi-note__delta"
-              :class="ratingDelta > 0 ? 'shogi-note__delta--up' : 'shogi-note__delta--down'"
-              :title="'前の対局からの増減'"
-            >{{ ratingDelta > 0 ? `▲ +${ratingDelta}` : `▼ −${Math.abs(ratingDelta)}` }}</span>
-          </p>
-          <p class="shogi-note__grade">
-            {{ gradeName(nearestPreset.label) }}<small>（CPU Lv.{{ nearestPreset.level }}くらい）</small>
-          </p>
-
-          <div v-if="nextGoal" class="shogi-note__goal">
-            <p class="shogi-note__goal-text">
-              <span>次の目標 <b>{{ gradeName(nextGoal.label) }}</b></span>
-              <span>あと <b>R{{ nextGoal.remaining }}</b></span>
-            </p>
-            <div
-              class="shogi-note__goal-bar"
-              role="progressbar"
-              aria-valuemin="0"
-              aria-valuemax="100"
-              :aria-valuenow="nextGoal.percent"
-              :aria-label="`${gradeName(nextGoal.label)}まで${nextGoal.percent}%`"
-            ><span :style="{ width: `${nextGoal.percent}%` }"></span></div>
-          </div>
-          <p v-else class="shogi-note__goal-text">いちばん上の目安に届いたよ！</p>
-
-          <ul class="shogi-note__badges" aria-label="所属と称号">
-            <li class="shogi-note__badge" :class="{ 'shogi-note__badge--group': affiliation }">
-              <small>所属</small>{{ affiliation ? affiliation.label : "まだ所属なし" }}
-            </li>
-            <li v-for="title in otherTitles" :key="title.id" class="shogi-note__badge" :title="title.detail" data-note-title>
-              {{ title.label }}
-            </li>
-          </ul>
-
-          <div v-if="recentForm.length" class="shogi-note__form">
-            <span class="shogi-note__form-label">最近の対局</span>
-            <ol :aria-label="`最近${recentForm.length}局の結果`">
-              <li
-                v-for="(outcome, index) in recentForm"
-                :key="index"
-                :class="`shogi-note__form-mark--${outcome}`"
-                :title="FORM_TEXT[outcome]"
-              >{{ FORM_MARK[outcome] }}</li>
-            </ol>
-          </div>
-
-          <div class="shogi-note__actions">
-            <button type="button" class="shogi-note__button shogi-note__button--primary" @click="emit('start-match')">
-              {{ state.games ? "対局する" : "1局指してノートを始める" }}
-            </button>
-            <button type="button" class="shogi-note__button" @click="emit('start-measure')">棋力を測る</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- 詳しい記録は、3つのタブに分ける。 -->
-      <div class="shogi-dex__modes shogi-note__tabs" role="tablist" aria-label="記録の種類">
+    <!--
+      ページ全体はスクロールさせず、左（スマホでは上）のメニューで中身を切り替える。
+      中身の欄だけが、収まらないときに中でスクロールする。
+    -->
+    <div class="shogi-note__layout">
+      <nav class="shogi-note__nav" role="tablist" aria-label="ノートの項目" aria-orientation="vertical">
         <button
           v-for="item in TABS"
           :key="item.id"
           type="button"
           role="tab"
+          class="shogi-note__nav-item"
           :aria-selected="tab === item.id"
-          :class="{ 'shogi-dex__mode--active': tab === item.id }"
+          :aria-controls="`shogi-note-pane-${item.id}`"
           @click="selectTab(item.id)"
         >
-          <span class="shogi-dex__mode-label">{{ item.label }}</span>
+          <span class="shogi-note__nav-label">{{ item.label }}</span>
+          <small class="shogi-note__nav-desc">{{ item.description }}</small>
         </button>
-      </div>
+      </nav>
 
-      <!-- 成績 -->
-      <section v-if="tab === 'record'" class="shogi-note__panel" role="tabpanel" aria-label="成績">
-        <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
-          <p>まだ記録がないよ。平手でCPUと対局すると、勝ち負けとレーティングの推移がここに書き込まれるよ。</p>
-        </div>
-        <template v-else>
-          <section class="shogi-note__card shogi-note__score" aria-labelledby="shogi-note-score" data-note-record>
-            <h2 id="shogi-note-score">勝ち負け</h2>
-            <div class="shogi-note__score-body">
+      <main class="shogi-note__pane">
+        <!--
+          まとめ。いちばん知りたい「いまの棋力」と「次の目標」を大きく出し、次にすること（対局する）を1つだけ主役にする。
+        -->
+        <section
+          v-if="tab === 'summary'"
+          id="shogi-note-pane-summary"
+          class="shogi-note__cover"
+          role="tabpanel"
+          aria-labelledby="shogi-note-rank"
+          data-note-profile
+        >
+          <div class="shogi-note__coach">
+            <YakobiSays :lines="messages" size="xl" merged name-tag :asset-base-url="assetBaseUrl" />
+          </div>
+
+          <div class="shogi-note__rank">
+            <p id="shogi-note-rank" class="shogi-note__eyebrow">あなたの棋力</p>
+            <p class="shogi-note__rating">
+              <strong>R{{ state.rating }}</strong>
+              <span
+                v-if="ratingDelta"
+                class="shogi-note__delta"
+                :class="ratingDelta > 0 ? 'shogi-note__delta--up' : 'shogi-note__delta--down'"
+                :title="'前の対局からの増減'"
+              >{{ ratingDelta > 0 ? `▲ +${ratingDelta}` : `▼ −${Math.abs(ratingDelta)}` }}</span>
+            </p>
+            <p class="shogi-note__grade">
+              {{ gradeName(nearestPreset.label) }}<small>（CPU Lv.{{ nearestPreset.level }}くらい）</small>
+            </p>
+
+            <div v-if="nextGoal" class="shogi-note__goal">
+              <p class="shogi-note__goal-text">
+                <span>次の目標 <b>{{ gradeName(nextGoal.label) }}</b></span>
+                <span>あと <b>R{{ nextGoal.remaining }}</b></span>
+              </p>
               <div
-                class="shogi-note__ring"
-                :style="{ '--win': `${winShare}%`, '--draw': `${winShare + drawShare}%` }"
-                role="img"
-                :aria-label="`勝率${percent(state.wins / state.games)}`"
-              >
-                <span><small>勝率</small>{{ percent(state.wins / state.games) }}</span>
+                class="shogi-note__goal-bar"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-valuenow="nextGoal.percent"
+                :aria-label="`${gradeName(nextGoal.label)}まで${nextGoal.percent}%`"
+              ><span :style="{ width: `${nextGoal.percent}%` }"></span></div>
+            </div>
+            <p v-else class="shogi-note__goal-text">いちばん上の目安に届いたよ！</p>
+
+            <ul class="shogi-note__badges" aria-label="所属と称号">
+              <li class="shogi-note__badge" :class="{ 'shogi-note__badge--group': affiliation }">
+                <small>所属</small>{{ affiliation ? affiliation.label : "まだ所属なし" }}
+              </li>
+              <li v-for="title in otherTitles" :key="title.id" class="shogi-note__badge" :title="title.detail" data-note-title>
+                {{ title.label }}
+              </li>
+            </ul>
+
+            <div v-if="recentForm.length" class="shogi-note__form">
+              <span class="shogi-note__form-label">最近の対局</span>
+              <ol :aria-label="`最近${recentForm.length}局の結果`">
+                <li
+                  v-for="(outcome, index) in recentForm"
+                  :key="index"
+                  :class="`shogi-note__form-mark--${outcome}`"
+                  :title="FORM_TEXT[outcome]"
+                >{{ FORM_MARK[outcome] }}</li>
+              </ol>
+            </div>
+
+            <div class="shogi-note__actions">
+              <button type="button" class="shogi-note__button shogi-note__button--primary" @click="emit('start-match')">
+                {{ state.games ? "対局する" : "1局指してノートを始める" }}
+              </button>
+              <button type="button" class="shogi-note__button" @click="emit('start-measure')">棋力を測る</button>
+            </div>
+          </div>
+
+          <ul class="shogi-note__highlights" aria-label="記録のハイライト">
+            <li>
+              <button type="button" class="shogi-note__highlight" @click="selectTab('record')">
+                <small>勝率</small>
+                <strong>{{ state.games ? percent(state.wins / state.games) : "—" }}</strong>
+                <span>{{ state.games ? `${state.games}局 ${state.wins}勝${state.losses}敗` : "まだ対局がありません" }}</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="shogi-note__highlight" @click="selectTab('style')">
+                <small>得意な戦法</small>
+                <strong>{{ favoriteStrategy ? favoriteStrategy.name : "—" }}</strong>
+                <span>{{ favoriteStrategy ? `勝率${percent(favoriteStrategy.winRate)}・${favoriteStrategy.games}局` : "3局以上で見つかるよ" }}</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="shogi-note__highlight" @click="selectTab('ryuo')">
+                <small>竜王戦</small>
+                <strong>{{ career.champion ? "竜王" : `${career.group}組` }}</strong>
+                <span>{{ career.seasons ? `${career.seasons}期参加` : "まだ参加していません" }}</span>
+              </button>
+            </li>
+          </ul>
+        </section>
+
+        <!-- 成績 -->
+        <section v-if="tab === 'record'" id="shogi-note-pane-record" class="shogi-note__panel shogi-note__panel--fill" role="tabpanel" aria-label="成績">
+          <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
+            <p>まだ記録がないよ。平手でCPUと対局すると、勝ち負けとレーティングの推移がここに書き込まれるよ。</p>
+          </div>
+          <template v-else>
+            <section class="shogi-note__card shogi-note__score" aria-labelledby="shogi-note-score" data-note-record>
+              <h2 id="shogi-note-score">勝ち負け</h2>
+              <div class="shogi-note__score-body">
+                <div
+                  class="shogi-note__ring"
+                  :style="{ '--win': `${winShare}%`, '--draw': `${winShare + drawShare}%` }"
+                  role="img"
+                  :aria-label="`勝率${percent(state.wins / state.games)}`"
+                >
+                  <span><small>勝率</small>{{ percent(state.wins / state.games) }}</span>
+                </div>
+                <dl class="shogi-note__tiles">
+                  <div><dt>対局</dt><dd>{{ state.games }}</dd></div>
+                  <div class="shogi-note__tile--win"><dt>勝ち</dt><dd>{{ state.wins }}</dd></div>
+                  <div class="shogi-note__tile--loss"><dt>負け</dt><dd>{{ state.losses }}</dd></div>
+                  <div><dt>引き分け</dt><dd>{{ state.draws }}</dd></div>
+                </dl>
               </div>
-              <dl class="shogi-note__tiles">
-                <div><dt>対局</dt><dd>{{ state.games }}</dd></div>
-                <div class="shogi-note__tile--win"><dt>勝ち</dt><dd>{{ state.wins }}</dd></div>
-                <div class="shogi-note__tile--loss"><dt>負け</dt><dd>{{ state.losses }}</dd></div>
-                <div><dt>引き分け</dt><dd>{{ state.draws }}</dd></div>
-              </dl>
-            </div>
-            <ul class="shogi-note__rows" aria-label="手番ごとの成績">
-              <li v-for="row in colorRows" :key="row.key">
-                <span class="shogi-note__name">{{ row.label }}</span>
-                <span class="shogi-note__bar" aria-hidden="true"><span :style="{ width: row.winPercent }"></span></span>
-                <span class="shogi-note__stat">{{ row.text }}</span>
-              </li>
-            </ul>
-            <p class="shogi-note__hint">平手の通常対局（対CPU）の結果だけを数えています。</p>
-          </section>
+              <ul class="shogi-note__rows" aria-label="手番ごとの成績">
+                <li v-for="row in colorRows" :key="row.key">
+                  <span class="shogi-note__name">{{ row.label }}</span>
+                  <span class="shogi-note__bar" aria-hidden="true"><span :style="{ width: row.winPercent }"></span></span>
+                  <span class="shogi-note__stat">{{ row.text }}</span>
+                </li>
+              </ul>
+              <p class="shogi-note__hint">平手の通常対局（対CPU）の結果だけを数えています。</p>
+            </section>
 
-          <figure class="shogi-note__card shogi-note__trend-card">
-            <h2>レーティングの推移</h2>
-            <div v-if="trend" class="shogi-note__trend-box">
-              <div class="shogi-note__trend-axis" aria-hidden="true"><span>R{{ trend.max }}</span><span>R{{ trend.min }}</span></div>
-              <svg
-                class="shogi-note__trend"
-                viewBox="0 0 300 100"
-                preserveAspectRatio="none"
-                role="img"
-                :aria-label="`直近${trend.count}局のレーティングの推移`"
-              >
-                <defs>
-                  <linearGradient id="shogi-note-trend-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="#f1a54c" stop-opacity="0.45" />
-                    <stop offset="100%" stop-color="#f1a54c" stop-opacity="0" />
-                  </linearGradient>
-                </defs>
-                <line v-for="y in [8, 50, 92]" :key="y" x1="0" x2="300" :y1="y" :y2="y" stroke="rgba(255,252,244,0.12)" stroke-width="1" vector-effect="non-scaling-stroke" />
-                <polygon :points="`0,100 ${trend.points} 300,100`" fill="url(#shogi-note-trend-fill)" />
-                <polyline :points="trend.points" fill="none" stroke="#f1a54c" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
-              </svg>
-              <figcaption class="shogi-note__trend-note">直近{{ trend.count }}局（R{{ trend.min }}〜R{{ trend.max }}）</figcaption>
-            </div>
-            <p v-else class="shogi-note__hint">2局以上指すと、ここに推移の線が出るよ。</p>
-          </figure>
-        </template>
-      </section>
+            <figure class="shogi-note__card shogi-note__trend-card">
+              <h2>レーティングの推移</h2>
+              <div v-if="trend" class="shogi-note__trend-box">
+                <div class="shogi-note__trend-axis" aria-hidden="true"><span>R{{ trend.max }}</span><span>R{{ trend.min }}</span></div>
+                <svg
+                  class="shogi-note__trend"
+                  viewBox="0 0 300 100"
+                  preserveAspectRatio="none"
+                  role="img"
+                  :aria-label="`直近${trend.count}局のレーティングの推移`"
+                >
+                  <defs>
+                    <linearGradient id="shogi-note-trend-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#f1a54c" stop-opacity="0.45" />
+                      <stop offset="100%" stop-color="#f1a54c" stop-opacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <line v-for="y in [8, 50, 92]" :key="y" x1="0" x2="300" :y1="y" :y2="y" stroke="rgba(255,252,244,0.12)" stroke-width="1" vector-effect="non-scaling-stroke" />
+                  <polygon :points="`0,100 ${trend.points} 300,100`" fill="url(#shogi-note-trend-fill)" />
+                  <polyline :points="trend.points" fill="none" stroke="#f1a54c" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+                </svg>
+                <figcaption class="shogi-note__trend-note">直近{{ trend.count }}局（R{{ trend.min }}〜R{{ trend.max }}）</figcaption>
+              </div>
+              <p v-else class="shogi-note__hint">2局以上指すと、ここに推移の線が出るよ。</p>
+            </figure>
+          </template>
+        </section>
 
-      <!-- 戦法: 自分の戦法・囲い・戦型を勝率で比べ、得意とにがてに札を付ける。相手の戦法・囲いはその下に小さく。 -->
-      <section v-if="tab === 'style'" class="shogi-note__panel" role="tabpanel" aria-label="戦法">
-        <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
-          <p>対局すると、使った戦法と囲いの勝率がここに並ぶよ。得意な戦法を見つけよう！</p>
-        </div>
-        <template v-else>
-          <section
-            v-for="group in ownUsageGroups"
-            :key="group.category"
-            class="shogi-note__card"
-            :aria-label="group.title"
-          >
-            <h2>{{ group.title }}</h2>
-            <p v-if="!group.rows.length" class="shogi-note__hint">まだ記録がありません。</p>
-            <ul v-else class="shogi-note__rows shogi-note__rows--style">
-              <li v-for="row in group.rows" :key="row.name">
-                <span class="shogi-note__name">
-                  {{ row.name }}
-                  <em v-if="row.tag === 'best'" class="shogi-note__tag shogi-note__tag--best">★得意</em>
-                  <em v-else-if="row.tag === 'weak'" class="shogi-note__tag shogi-note__tag--weak">にがて</em>
-                </span>
-                <span class="shogi-note__bar" :title="`勝率 ${percent(row.winRate)}`" aria-hidden="true">
-                  <span :style="{ width: percent(row.winRate) }"></span>
-                </span>
-                <span class="shogi-note__stat">勝率{{ percent(row.winRate) }}・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws ? `${row.draws}分` : "" }}</span>
-              </li>
-            </ul>
-          </section>
-          <div class="shogi-note__pair">
+        <!-- 戦法: 自分の戦法・囲い・戦型を勝率で比べ、得意とにがてに札を付ける。相手の戦法・囲いはその下に小さく。 -->
+        <section v-if="tab === 'style'" id="shogi-note-pane-style" class="shogi-note__panel shogi-note__panel--style" role="tabpanel" aria-label="戦法">
+          <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
+            <p>対局すると、使った戦法と囲いの勝率がここに並ぶよ。得意な戦法を見つけよう！</p>
+          </div>
+          <template v-else>
             <section
-              v-for="group in opponentUsageGroups"
+              v-for="group in ownUsageGroups"
               :key="group.category"
-              class="shogi-note__card shogi-note__card--minor"
+              class="shogi-note__card"
               :aria-label="group.title"
             >
               <h2>{{ group.title }}</h2>
               <p v-if="!group.rows.length" class="shogi-note__hint">まだ記録がありません。</p>
-              <ul v-else class="shogi-note__rows">
+              <ul v-else class="shogi-note__rows shogi-note__rows--style">
                 <li v-for="row in group.rows" :key="row.name">
-                  <span class="shogi-note__name">{{ row.name }}</span>
-                  <span class="shogi-note__stat">{{ row.games }}局・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws ? `${row.draws}分` : "" }}</span>
+                  <span class="shogi-note__name">
+                    {{ row.name }}
+                    <em v-if="row.tag === 'best'" class="shogi-note__tag shogi-note__tag--best">★得意</em>
+                    <em v-else-if="row.tag === 'weak'" class="shogi-note__tag shogi-note__tag--weak">にがて</em>
+                  </span>
+                  <span class="shogi-note__bar" :title="`勝率 ${percent(row.winRate)}`" aria-hidden="true">
+                    <span :style="{ width: percent(row.winRate) }"></span>
+                  </span>
+                  <span class="shogi-note__stat">勝率{{ percent(row.winRate) }}・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws ? `${row.draws}分` : "" }}</span>
                 </li>
               </ul>
             </section>
-          </div>
-        </template>
-      </section>
-
-      <!-- 竜王戦 -->
-      <section v-if="tab === 'ryuo'" class="shogi-note__panel" role="tabpanel" aria-label="竜王戦">
-        <section class="shogi-note__card" aria-labelledby="shogi-note-ryuo" data-note-ryuo>
-          <h2 id="shogi-note-ryuo">竜王戦</h2>
-          <RyuoLadder :group="career.group" :champion="career.champion" />
-          <dl class="shogi-note__tiles shogi-note__tiles--four">
-            <div><dt>現在</dt><dd>{{ career.champion ? "竜王" : `${career.group}組` }}</dd></div>
-            <div><dt>参加</dt><dd>{{ career.seasons }}<small>期</small></dd></div>
-            <div><dt>挑戦者</dt><dd>{{ career.challenges }}<small>回</small></dd></div>
-            <div><dt>竜王</dt><dd>{{ career.titles }}<small>期</small></dd></div>
-          </dl>
-          <p v-if="career.titles" class="shogi-note__hint">
-            連続{{ career.streak }}期・最長{{ career.bestStreak }}期{{ career.eternal ? "・永世竜王" : "" }}
-          </p>
-          <template v-if="career.history.length">
-            <h3 class="shogi-note__subhead">これまでの成績</h3>
-            <ol class="shogi-note__history" data-note-ryuo-history>
-              <li v-for="entry in recentHistory" :key="entry.no" :class="`shogi-note__history--${historyKind(entry)}`">
-                <span class="shogi-note__history-no">第{{ entry.no }}期</span>
-                <span class="shogi-note__history-group">{{ entry.mode === "defense" ? "防衛戦" : `${entry.startGroup}組` }}</span>
-                <span class="shogi-note__history-text">
-                  {{ outcomeText(entry.outcome) }}{{ entry.promoted ? `・${entry.newGroup}組へ昇級` : "" }}{{ entry.relegated ? `・${entry.newGroup}組へ降級` : "" }}
-                </span>
-                <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
-              </li>
-            </ol>
+            <div class="shogi-note__pair">
+              <section
+                v-for="group in opponentUsageGroups"
+                :key="group.category"
+                class="shogi-note__card shogi-note__card--minor"
+                :aria-label="group.title"
+              >
+                <h2>{{ group.title }}</h2>
+                <p v-if="!group.rows.length" class="shogi-note__hint">まだ記録がありません。</p>
+                <ul v-else class="shogi-note__rows">
+                  <li v-for="row in group.rows" :key="row.name">
+                    <span class="shogi-note__name">{{ row.name }}</span>
+                    <span class="shogi-note__stat">{{ row.games }}局・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws ? `${row.draws}分` : "" }}</span>
+                  </li>
+                </ul>
+              </section>
+            </div>
           </template>
-          <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
         </section>
-        <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" />
-      </section>
 
-      <!-- 棋力の調整に使う項目。ふだんは閉じておく。 -->
-      <details class="shogi-note__more">
-        <summary>くわしい記録と棋力の設定</summary>
-        <div class="shogi-note__more-body">
+        <!-- 竜王戦 -->
+        <section v-if="tab === 'ryuo'" id="shogi-note-pane-ryuo" class="shogi-note__panel" role="tabpanel" aria-label="竜王戦">
+          <section class="shogi-note__card" aria-labelledby="shogi-note-ryuo" data-note-ryuo>
+            <h2 id="shogi-note-ryuo">竜王戦</h2>
+            <RyuoLadder :group="career.group" :champion="career.champion" />
+            <dl class="shogi-note__tiles shogi-note__tiles--four">
+              <div><dt>現在</dt><dd>{{ career.champion ? "竜王" : `${career.group}組` }}</dd></div>
+              <div><dt>参加</dt><dd>{{ career.seasons }}<small>期</small></dd></div>
+              <div><dt>挑戦者</dt><dd>{{ career.challenges }}<small>回</small></dd></div>
+              <div><dt>竜王</dt><dd>{{ career.titles }}<small>期</small></dd></div>
+            </dl>
+            <p v-if="career.titles" class="shogi-note__hint">
+              連続{{ career.streak }}期・最長{{ career.bestStreak }}期{{ career.eternal ? "・永世竜王" : "" }}
+            </p>
+            <template v-if="career.history.length">
+              <h3 class="shogi-note__subhead">これまでの成績</h3>
+              <ol class="shogi-note__history" data-note-ryuo-history>
+                <li v-for="entry in recentHistory" :key="entry.no" :class="`shogi-note__history--${historyKind(entry)}`">
+                  <span class="shogi-note__history-no">第{{ entry.no }}期</span>
+                  <span class="shogi-note__history-group">{{ entry.mode === "defense" ? "防衛戦" : `${entry.startGroup}組` }}</span>
+                  <span class="shogi-note__history-text">
+                    {{ outcomeText(entry.outcome) }}{{ entry.promoted ? `・${entry.newGroup}組へ昇級` : "" }}{{ entry.relegated ? `・${entry.newGroup}組へ降級` : "" }}
+                  </span>
+                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                </li>
+              </ol>
+            </template>
+            <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
+          </section>
+          <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" />
+        </section>
+
+        <!-- 棋力の調整に使う項目。 -->
+        <section v-if="tab === 'settings'" id="shogi-note-pane-settings" class="shogi-note__panel" role="tabpanel" aria-label="設定">
           <section class="shogi-note__card shogi-note__card--minor">
             <h2>棋力を測る</h2>
             <p class="shogi-note__hint">
@@ -248,6 +285,7 @@
             <p v-if="state.measured" class="shogi-note__hint" data-note-measured>
               棋力測定で R{{ state.measured.rating }}（{{ state.measured.label }}）を設定しました（{{ measuredDate }}）。
             </p>
+            <button type="button" class="shogi-note__button shogi-note__button--ghost" @click="emit('start-measure')">棋力を測る</button>
           </section>
 
           <section class="shogi-note__card shogi-note__card--minor">
@@ -289,8 +327,8 @@
             <p v-else class="shogi-note__hint">段級位を申告すると、ここにCPUのレベル別の成績が出ます。</p>
             <button v-if="state.games" type="button" class="shogi-note__button shogi-note__button--ghost" @click="copyRecord">{{ copied ? "コピーしました" : "戦績データをコピー" }}</button>
           </section>
-        </div>
-      </details>
+        </section>
+      </main>
     </div>
   </div>
 </template>
@@ -354,20 +392,22 @@ const props = defineProps({
 });
 const emit = defineEmits(["close", "start-match", "start-measure", "declare"]);
 
-/** 記録のタブ。最後に開いたタブを、この端末で覚えておく。 */
+/** ノートの項目。最後に開いた項目を、この端末で覚えておく。 */
 const TABS = [
-  { id: "record", label: "成績" },
-  { id: "style", label: "戦法" },
-  { id: "ryuo", label: "竜王戦" },
+  { id: "summary", label: "まとめ", description: "いまの棋力と次の目標" },
+  { id: "record", label: "成績", description: "勝ち負けと推移" },
+  { id: "style", label: "戦法", description: "得意な戦法と囲い" },
+  { id: "ryuo", label: "竜王戦", description: "組と棋士名鑑" },
+  { id: "settings", label: "設定", description: "棋力の測定と申告" },
 ] as const;
 type TabId = typeof TABS[number]["id"];
 const TAB_STORAGE_KEY = "yacobihime:shogi-match:note-tab";
 function loadTab(): TabId {
   try {
     const saved = localStorage.getItem(TAB_STORAGE_KEY);
-    return TABS.some(({ id }) => id === saved) ? saved as TabId : "record";
+    return TABS.some(({ id }) => id === saved) ? saved as TabId : "summary";
   } catch {
-    return "record";
+    return "summary";
   }
 }
 const tab = ref<TabId>(loadTab());
@@ -535,6 +575,8 @@ function usageGroup(category: string, title: string) {
   for (const row of tagged) if (row !== best && row.winRate < 0.5) row.tag = "weak";
   return { category, title, rows };
 }
+/** まとめに出す得意な戦法。戦法の中で「★得意」の札が付いたもの。 */
+const favoriteStrategy = computed(() => usageGroup("rook", "").rows.find((row) => row.tag === "best") ?? null);
 const ownUsageGroups = computed(() => [
   usageGroup("rook", "あなたの戦法"),
   usageGroup("castle", "あなたの囲い"),
@@ -569,17 +611,103 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   background: #1e2d3d;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
 }
-.shogi-game .shogi-note__body {
+.shogi-game .shogi-note__header-rating {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0 0 0 auto;
+  font-weight: 800;
+}
+.shogi-game .shogi-note__header-rating strong { color: var(--note-gold); font-size: 1.35rem; }
+.shogi-game .shogi-note__header-rating span { color: var(--note-muted); }
+
+/* ===== 画面の骨組み =====
+ * ページ全体はスクロールさせない。スマホは上にメニュー、広い画面は左にメニューを置き、
+ * 中身の欄（.shogi-note__pane）だけが、収まらないときに中でスクロールする。 */
+.shogi-game .shogi-note__layout {
   flex: 1;
   display: grid;
-  align-content: start;
-  gap: 1rem;
-  width: min(100%, 64rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  width: min(100%, 82rem);
+  min-height: 0;
   margin: 0 auto;
+  margin-bottom: 0.5rem;
   box-sizing: border-box;
-  overflow-y: auto;
-  padding: 1rem clamp(0.8rem, 3vw, 2rem) 2.5rem;
+  padding: 0.7rem clamp(0.6rem, 2vw, 1.5rem) 0.8rem;
   font-size: var(--dex-text);
+}
+.shogi-game .shogi-note__nav {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+.shogi-game .shogi-note__nav-item {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-width: 0;
+  min-height: 2.9rem;
+  padding: 0.3rem 0.2rem;
+  border: 2px solid rgba(255, 252, 244, 0.35);
+  border-radius: 0.7rem;
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.06);
+  box-shadow: 0 3px 0 var(--note-shadow);
+  font: inherit;
+  cursor: pointer;
+}
+.shogi-game .shogi-note__nav .shogi-note__nav-item[aria-selected="true"] {
+  border-color: var(--note-gold);
+  color: var(--note-deep);
+  background: var(--note-gold);
+  box-shadow: 0 3px 0 var(--note-gold-shadow);
+}
+.shogi-game .shogi-note__nav-item:active { box-shadow: none; transform: translateY(3px); }
+.shogi-game .shogi-note__nav-label { font-weight: 800; white-space: nowrap; }
+.shogi-game .shogi-note__nav-desc { display: none; }
+.shogi-game .shogi-note__pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.shogi-game .shogi-note__pane > * { flex: none; }
+.shogi-game .shogi-note__pane > .shogi-note__cover,
+.shogi-game .shogi-note__pane > .shogi-note__panel--fill {
+  flex: 1 0 auto;
+  box-sizing: border-box;
+}
+.shogi-game .shogi-note__pane > .shogi-note__cover { align-content: space-evenly; }
+.shogi-game .shogi-note__panel.shogi-note__panel--fill { align-items: stretch; }
+.shogi-game .shogi-note__panel--fill > .shogi-note__card { align-content: start; }
+.shogi-game .shogi-note__panel--fill .shogi-note__trend-card { grid-template-rows: auto minmax(0, 1fr); }
+.shogi-game .shogi-note__panel--fill .shogi-note__trend-box { height: 100%; box-sizing: border-box; }
+/* スマホでは見出しの帯が2行にならないよう、レーティングは「まとめ」にだけ出す。 */
+@media (max-width: 599px) {
+  .shogi-game .shogi-note__header-rating { display: none; }
+}
+@media (min-width: 900px) {
+  .shogi-game .shogi-note__layout {
+    font-size: clamp(15px, min(1.25vw, 2.2vh), 26px);
+    width: min(100%, 74em);
+    grid-template-columns: 13.5em minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 1.2rem;
+    padding-top: 1rem;
+  }
+  .shogi-game .shogi-note__nav { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 0.5rem; }
+  .shogi-game .shogi-note__nav-item {
+    justify-items: start;
+    gap: 0.15rem;
+    min-height: 3.8rem;
+    padding: 0.6rem 1rem;
+    text-align: left;
+  }
+  .shogi-game .shogi-note__nav-label { font-size: 1.1em; }
+  .shogi-game .shogi-note__nav-desc { display: block; color: var(--note-muted); font-size: 0.75em; }
+  .shogi-game .shogi-note__nav .shogi-note__nav-item[aria-selected="true"] .shogi-note__nav-desc { color: rgba(23, 38, 50, 0.75); }
 }
 
 /* ===== 表紙 ===== */
@@ -596,8 +724,55 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
     #263d52;
   box-shadow: 0 5px 0 var(--note-gold-shadow);
 }
-@media (min-width: 820px) {
+@media (min-width: 1000px) {
   .shogi-game .shogi-note__cover { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; }
+  .shogi-game .shogi-note__highlights { grid-column: 1 / -1; }
+}
+.shogi-game .shogi-note__highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-note__highlight {
+  display: grid;
+  gap: 0.15em;
+  justify-items: start;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0.7em 0.9em;
+  border: 2px solid rgba(255, 252, 244, 0.25);
+  border-radius: 0.7rem;
+  color: #fffcf4;
+  background: var(--note-deep);
+  box-shadow: 0 3px 0 var(--note-shadow);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shogi-game .shogi-note__highlight:active { box-shadow: none; transform: translateY(3px); }
+@media (hover: hover) {
+  .shogi-game .shogi-note__highlight:hover { border-color: var(--note-gold); }
+}
+.shogi-game .shogi-note__highlight small { color: var(--note-gold); font-size: 0.78em; font-weight: 800; }
+.shogi-game .shogi-note__highlight strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 1.35em;
+  font-weight: 900;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game .shogi-note__highlight span { color: var(--note-muted); font-size: 0.75em; }
+@media (max-width: 599px) {
+  .shogi-game .shogi-note__highlights { gap: 0.4rem; }
+  .shogi-game .shogi-note__highlight { padding: 0.55em 0.6em; }
+  .shogi-game .shogi-note__highlight strong { font-size: 1.05em; }
+  .shogi-game .shogi-note__highlight span { font-size: 0.68em; }
 }
 .shogi-game .shogi-note__coach { min-width: 0; }
 .shogi-game .shogi-note__rank { display: grid; gap: 0.6rem; min-width: 0; }
@@ -734,8 +909,6 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__button:disabled { opacity: 0.45; cursor: default; }
 
 /* ===== タブ ===== */
-.shogi-game .shogi-dex .shogi-note__tabs { padding: 0; }
-.shogi-game .shogi-dex .shogi-note__tabs button { max-width: none; }
 
 /* ===== カード ===== */
 .shogi-game .shogi-note__panel {
@@ -745,7 +918,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   align-items: start;
   animation: shogi-note-panel-in 160ms ease-out both;
 }
-@media (min-width: 820px) {
+@media (min-width: 760px) {
   .shogi-game .shogi-note__panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .shogi-game .shogi-note__panel > .shogi-note__empty,
   .shogi-game .shogi-note__panel > .shogi-note__pair { grid-column: 1 / -1; }
@@ -896,24 +1069,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__tag--best { color: var(--note-deep); background: var(--note-gold); }
 .shogi-game .shogi-note__tag--weak { color: var(--note-deep); background: var(--note-lavender); }
 
-/* くわしい記録と棋力の設定 */
-.shogi-game .shogi-note__more {
-  border: 1px solid var(--note-line);
-  border-radius: 0.8rem;
-}
-.shogi-game .shogi-note__more summary {
-  padding: 0.8rem 1rem;
-  color: var(--note-muted);
-  font-weight: 700;
-  cursor: pointer;
-}
-.shogi-game .shogi-note__more-body {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
-  align-items: start;
-  padding: 0 0.8rem 0.8rem;
-}
+/* 設定 */
 .shogi-game .shogi-note__declare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem; }
 .shogi-game .shogi-note__declare select {
   width: 100%;
