@@ -21,28 +21,8 @@ await cp(
   new URL("index.html", output),
 );
 
-// ローダーと付随するwasm/data/workerを同じ版として配信する。
-const profiles = ["yaneuraou", "yaneuraou.halfkp.noeval"];
-const bundledJsUrl = new URL("dist/shogi-match.js", output);
-let bundledJs = await readFile(bundledJsUrl, "utf8");
-for (const profile of profiles) {
-  const hash = createHash("sha256");
-  let assetCount = 0;
-  for (const suffix of ["js", "wasm", "data", "worker.js"]) {
-    const name = `${profile}.${suffix}`;
-    try {
-      hash.update(await readFile(new URL(`vendor/${name}`, output)));
-      assetCount += 1;
-    }
-    catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
-  }
-  if (assetCount === 0) continue;
-  const version = hash.digest("hex").slice(0, 12);
-  bundledJs = bundledJs.replaceAll(`${profile}.js?v=20260727-2`, `${profile}.js?v=${version}`);
-}
-await writeFile(bundledJsUrl, bundledJs);
+// エンジンの版(?v=)は、vite.config.jsのengineVersionPluginがビルドの時点で埋め込む。
+// 遅延チャンク(dist/chunks/)は名前に内容のハッシュを持つので、ここでは書き換えない。
 
 const assetVersions = new Map();
 for (const asset of ["shogi-match.css", "shogi-match.js"]) {

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { matchScreenSource } from "./match-screen-source.mjs";
 
-const source = readFileSync(new URL("../ShogiMatchGame.vue", import.meta.url), "utf8");
+const source = matchScreenSource();
 const responsiveSource = readFileSync(
   new URL("../composables/useResponsiveLayout.ts", import.meta.url),
   "utf8",
@@ -63,9 +64,10 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/const next = recordUserGame\(rawRyuoSeason\(\), outcome\);[\s\S]*?saveSeason\(browserStorage\(\), next\);/);
     // 終えた対局は、統計のために、別のエンジンで裏で解析する(保存して、リロードしても続ける)。
     expect(source).toMatch(/next\.analysisQueue = \[/);
-    expect(source).toMatch(/async function processRyuoAnalysisQueue\(\)/);
+    expect(source).toMatch(/async function processQueue\(\)/);
+    expect(source).toMatch(/void ryuoStats\.processQueue\(\)/);
     expect(source).toMatch(/stages: \["scan"\]/);
-    expect(source).toMatch(/season\.id !== job\.seasonId/);
+    expect(source).toMatch(/current\.id !== job\.seasonId/);
     // 結果の画面を見終えたら記録し、次に竜王戦を選ぶと次の期のエントリーになる。
     expect(source).toMatch(/@result-seen="markRyuoResultSeen"/);
     expect(source).toMatch(/season\.phase !== "done" \|\| season\.applied/);

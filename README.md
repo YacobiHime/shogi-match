@@ -76,6 +76,7 @@ npm run opening-editor
 ### 自分のサーバーへ置く
 
 `game.html`、`dist/`、`vendor/`を同じ階層に置き、HTTPサーバーから`game.html`を開きます。
+`dist/chunks/`には、教室・問題集・図鑑・やこびノート・大会の画面と、対局の共通部分が入っています。`dist/shogi-match.js`がそこから読み込むので、`dist/`はフォルダーごと置いてください。
 WASMエンジンは`SharedArrayBuffer`を使います。そのため、サーバーは次の2つのヘッダーを返す必要があります。
 
 ```text
@@ -321,7 +322,8 @@ npm run deploy
 ```
 
 - 公開用ファイルは`firebase-public/`に生成されます。このフォルダーと`.firebase/`は生成物なので、Gitには含めません。
-- HTMLは毎回再検証します。JSとCSSは内容のハッシュ付きURLにして、長期キャッシュします。
+- HTMLは毎回再検証します。JSとCSSは内容のハッシュ付きURLにして、長期キャッシュします。入口の`dist/shogi-match.js`とCSSは`?v=`で、`dist/chunks/`のファイルは名前で版を区別します。
+- エンジンの版（`vendor/yaneuraou.js?v=…`）は、`vite.config.js`がビルドの時点で`vendor/`の内容のハッシュを埋め込みます。
 - 画像・音声・WASM・評価データのキャッシュは`firebase.json`で設定しています。
 
 ### 関連文書

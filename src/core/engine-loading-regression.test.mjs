@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { matchScreenSource } from "./match-screen-source.mjs";
 
-const source = readFileSync(new URL("../ShogiMatchGame.vue", import.meta.url), "utf8");
+const source = matchScreenSource();
 
 describe("engine loading timing", () => {
   it("does not initialize the engine while only the home screen is open", () => {

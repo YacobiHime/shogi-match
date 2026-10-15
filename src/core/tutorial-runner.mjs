@@ -1,7 +1,7 @@
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
 import { formatHintMove } from "./match-assists.mjs";
 import { formatAnalysisScore, scoreToGraphValue } from "./kifu-analysis.mjs";
-import { pieceReachSquares } from "./reference-dex.mjs";
+import { pieceReachSquares } from "./piece-reach.mjs";
 
 /**
  * やこび姫の将棋教室のステップを進める純粋な処理。

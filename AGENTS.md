@@ -8,8 +8,8 @@
 
 | 作業 | 主な参照先 |
 | --- | --- |
-| 対局画面・状態遷移・やこび姫の表示 | `src/ShogiMatchGame.vue` |
-| 対局準備の画面 | `src/ShogiMatchGame.vue`の対局準備（`pregameSides`・`pregameCommonRows`・`pregamePickerConfig`）、選択シートは`src/PregamePicker.vue` |
+| 対局画面・状態遷移・やこび姫の表示 | `src/ShogiMatchGame.vue`、スタイルは`src/ShogiMatchGame.css`、対局画面から切り出した部品は`src/composables/match/` |
+| 対局準備の画面 | `src/ShogiMatchGame.vue`の対局準備（`pregameSides`・`pregameCommonRows`・`pregamePickerConfig`）、選択肢の定数は`src/composables/match/pregameOptions.ts`、選択シートは`src/PregamePicker.vue` |
 | ブラウザの戻る操作 | `src/composables/useBackNavigation.ts`、`src/ShogiMatchGame.vue`の`navigateBack` |
 | 画面の大きさによる配置の切り替え | `src/composables/useResponsiveLayout.ts` |
 | 戦法・囲いの手順、完成条件、分類 | `src/core/opening-guide.mjs` |
@@ -19,12 +19,12 @@
 | やこび姫の助言・称賛 | `src/core/coach-advice.mjs`、`src/core/move-praise.mjs`、神の一手の基準（対局中と棋譜解析で共通）は`src/core/god-move.mjs` |
 | CPU難易度 | `src/core/strength-settings.mjs`、Lv1〜10のロジックAIは`src/core/logic-ai.mjs`（設計は`docs/logic-ai-design.md`） |
 | CPUの戦法の選び方 | `src/core/cpu-opening-repertoire.mjs` |
-| 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue` |
+| 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue`、解析用エンジンの追加と解放は`src/composables/match/analysisEngines.ts`、対局の振り返りは`src/composables/match/useGuidedReview.ts`（台本は`src/core/guided-review.mjs`） |
 | リロード復元 | `src/core/match-persistence.mjs` |
-| 大会（竜王戦）・称号・プロフィール | `src/core/ryuo.mjs`（トーナメント表・棋士の生成・自動対局・昇級降級・シーズンの進行）、`src/core/ryuo-data.mjs`（棋士の名前・戦法）、`src/core/player-character.mjs`（棋士の棋風と特徴、強さ設定への反映、詰みが見える手数）、`src/core/ryuo-roster.mjs`（期をまたいで残る架空の棋士の名簿と、期の結果での更新）、`src/core/ryuo-league.mjs`（棋界の1年: 年間成績・順位戦・竜王以外のタイトル戦・昇段・将棋大賞）、`src/core/ryuo-names.mjs`（名前）、`src/core/ryuo-repertoire.mjs`（得意戦法）、`src/core/ryuo-book.mjs`と`src/RyuoRosterBook.vue`（棋士名鑑）、`src/core/ryuo-strength.mjs`（棋士のレーティング・難易度によるLvへの換算・自動対局の勝率）、`src/core/ryuo-career.mjs`（キャリアと保存）、`src/core/ryuo-stats.mjs`（統計・レーダーチャート・解説）、`src/core/ryuo-tree-layout.mjs`（トーナメント表の木の配置）、`src/core/player-profile.mjs`（称号）、`src/ShogiTournament.vue`（タイトル画面から入る大会の画面）、`src/TournamentTree.vue`（木の図）、`src/RadarChart.vue`、`src/RyuoLadder.vue`（組の階段）、`src/ShogiMatchGame.vue`の`ryuoSeason`・`ryuoGame`、設計は`docs/tournament-design.md`、制度の調査は`docs/ryuo-sen-research.md` |
+| 大会（竜王戦）・称号・プロフィール | `src/core/ryuo.mjs`（トーナメント表・棋士の生成・自動対局・昇級降級・シーズンの進行）、`src/core/ryuo-data.mjs`（棋士の名前・戦法）、`src/core/player-character.mjs`（棋士の棋風と特徴、強さ設定への反映、詰みが見える手数）、`src/core/ryuo-roster.mjs`（期をまたいで残る架空の棋士の名簿と、期の結果での更新）、`src/core/ryuo-league.mjs`（棋界の1年: 年間成績・順位戦・竜王以外のタイトル戦・昇段・将棋大賞）、`src/core/ryuo-names.mjs`（名前）、`src/core/ryuo-repertoire.mjs`（得意戦法）、`src/core/ryuo-book.mjs`と`src/RyuoRosterBook.vue`（棋士名鑑）、`src/core/ryuo-strength.mjs`（棋士のレーティング・難易度によるLvへの換算・自動対局の勝率）、`src/core/ryuo-career.mjs`（キャリアと保存）、`src/core/ryuo-stats.mjs`（統計・レーダーチャート・解説）、`src/core/ryuo-tree-layout.mjs`（トーナメント表の木の配置）、`src/core/player-profile.mjs`（称号）、`src/ShogiTournament.vue`（タイトル画面から入る大会の画面）、`src/TournamentTree.vue`（木の図）、`src/RadarChart.vue`、`src/RyuoLadder.vue`（組の階段）、`src/ShogiMatchGame.vue`の`ryuoSeason`・`ryuoGame`、統計のための裏の解析は`src/composables/match/useRyuoStatsAnalysis.ts`、設計は`docs/tournament-design.md`、制度の調査は`docs/ryuo-sen-research.md` |
 | 将棋教室 | `src/ShogiTutorial.vue`、`src/core/tutorial-curriculum.mjs`、設計は`docs/nyumon-mode-design.md` |
 | 将棋問題集 | `src/ShogiProblemSet.vue`、問題とやこび姫の台詞は`src/core/problem-set.mjs`、練習問題の正誤判定の詰み探索は`src/core/problem-solver.ts`（正解は書かず探索で決める）、詰将棋（駒の少ない詰将棋と実戦詰将棋）と詰将棋図巧のデータは`src/data/tsume-problems.mjs`・`src/data/jissen-tsume-problems.mjs`・`src/data/zukou-problems.mjs`（外部データの手順で判定する。手で書き換えない） |
-| 図鑑 | `src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、「詰将棋の名作」で解ける『将棋図巧』は将棋問題集の`ZUKOU_SET`と判定を使う、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`ShogiMatchGame.vue`の`dexAnalysisEngine`を借りる） |
+| 図鑑 | `src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、「詰将棋の名作」で解ける『将棋図巧』は将棋問題集の`ZUKOU_SET`と判定を使う、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`src/composables/match/useDexAnalysisEngine.ts`で対局用のものを借りる） |
 | iframe・ノベル連携 | `src/novel-bridge.ts`、RPGは`integrations/shogi-rpg.js` |
 | 手動検証履歴 | `docs/yakobihime-opening-guide-verification.md` |
 
@@ -123,6 +123,7 @@ git diff --check
   - 完成条件
   - 分類
 - `src/core/match-ui-regression.test.mjs`は、`ShogiMatchGame.vue`のソースを正規表現で調べるテストです。
+  - 調べるソースは、`ShogiMatchGame.vue`・`ShogiMatchGame.css`・`src/composables/match/*.ts`をつないだもの（`src/core/match-screen-source.mjs`）です。対局画面の処理を`src/composables/match/`へ移しても、同じテストで確かめられます。
   - 画面の書き方を変えると失敗することがあります。
   - 失敗したら、守りたい性質が新しい書き方でも保たれているかを確かめてから、パターンを直してください。
 - 画面の操作を変更したら、可能なら実際のブラウザで、デスクトップ、スマホ縦、タブレット縦の3つを確認します。
@@ -137,6 +138,10 @@ git diff --check
 - `src/data/opening-guide-overrides.mjs`は、定跡エディターのJSONから`npm run import:opening-library`で生成します。
 - Firebase Hostingへは`npm run deploy`で公開します。pushとデプロイは、ユーザーが明示的に頼んだときだけ行います。
 - HostingではHTMLを毎回再検証し、`scripts/build-hosting.mjs`がJSとCSSに内容のハッシュを付けます。大きな静的資産はキャッシュします。キャッシュの方針を変えるときは、ビルドスクリプトと`firebase.json`を一緒に確認します。
+- 教室・問題集・図鑑・やこびノート・大会の画面は、`ShogiMatchGame.vue`から`defineAsyncComponent`で開いたときに読み込みます。
+  - 入口から静的にたどれるモジュールは、`vite.config.js`の`codeSplitting`で`dist/chunks/runtime-<hash>.js`にまとめます。遅延チャンクが入口の`shogi-match.js`（`?v=`なし）をimportして、同じモジュールが2回読まれるのを防ぐためです。
+  - 対局画面から、これらの画面だけが使う重いモジュール（`reference-dex.mjs`・`problem-set.mjs`・`tutorial-curriculum.mjs`など）を静的にimportしないでください。最初に読むJSに入ってしまいます。
+  - ビルドの後でJSの中身を書き換えないでください。チャンクの名前のハッシュが変わらず、長期キャッシュに古い中身が残ります。エンジンの版は`vite.config.js`の`engineVersionPlugin`が埋め込みます。
 
 ## 文書の保守
 

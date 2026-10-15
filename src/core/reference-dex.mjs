@@ -15,6 +15,9 @@ import {
 } from "../data/reference-kifu.mjs";
 import { GLOSSARY_ENTRIES } from "../data/shogi-glossary.mjs";
 import { ZUKOU_SET } from "./problem-set.mjs";
+import { pieceReachSquares } from "./piece-reach.mjs";
+
+export { pieceReachSquares };
 
 /**
  * 駒図鑑・手筋図鑑・将棋界図鑑・将棋用語辞典の収録内容。
@@ -918,16 +921,6 @@ export function referenceEntrySfen(entry) {
     if (!appendUsiMove(record, usi)) throw new Error(`${entry.id}: ${usi}を指せません`);
   }
   return record.position.sfen;
-}
-
-/** 指定した升の駒が動けるマス。駒図鑑で動きを色付けする。 */
-export function pieceReachSquares(sfen, squareUsi) {
-  const position = Position.newBySFEN(sfen);
-  const from = Square.newByUSI(squareUsi);
-  if (!position || !from) return [];
-  return Square.all
-    .filter((square) => position.listAttackers(square).some((attacker) => attacker.equals(from)))
-    .map((square) => square.usi);
 }
 
 /** 盤面に重ねる色付け。駒の動きは青、ねらう駒は赤、大事なマスは緑。 */
