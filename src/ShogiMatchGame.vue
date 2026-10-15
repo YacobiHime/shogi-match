@@ -429,6 +429,23 @@
             @click="closeSettings(); suspendConfirmOpen = true"
           >対局を中断する</button>
         </template>
+        <!-- 盤の反転（ひふみんアイ）は、どの画面の形でもこのメニューから切り替える。 -->
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          class="shogi-game__menu-item"
+          aria-label="盤面を上下反転（ひふみんアイ）"
+          :aria-checked="boardFlipOverride"
+          @click="boardFlipOverride = !boardFlipOverride"
+        >盤を反転（ひふみんアイ）<b>{{ boardFlipOverride ? "ON" : "OFF" }}</b></button>
+        <button
+          v-if="matchKind === 'learning'"
+          type="button"
+          role="menuitemcheckbox"
+          class="shogi-game__menu-item"
+          :aria-checked="movementArrowsEnabled"
+          @click="movementArrowsEnabled = !movementArrowsEnabled"
+        >選んだ駒の動きを矢印で表示<b>{{ movementArrowsEnabled ? "ON" : "OFF" }}</b></button>
         <label class="shogi-game__menu-field">
           <span>やこび姫の助言</span>
           <select v-model="coachLevel" aria-label="対局中の助言">
@@ -611,7 +628,7 @@
             </p>
             <p v-if="matchKind === 'learning'" class="shogi-game__pregame-message">
               対局中は「駒の利き」ボタンで、各マスに利いている駒の数を表示できます。
-              「動きの矢印」にチェックを入れると、選んだ駒が動ける方向を矢印で表示します。
+              選んだ駒が動ける方向の矢印は、メニューの「選んだ駒の動きを矢印で表示」で切り替えられます。
             </p>
           </section>
         </div>
@@ -639,19 +656,40 @@
       />
     </div>
 
-    <section class="shogi-game__summary" aria-label="対戦相手と戦型">
+    <section
+      v-if="cpuColor !== null || blackFormationText !== UNDETERMINED_FORMATION || whiteFormationText !== UNDETERMINED_FORMATION"
+      class="shogi-game__summary"
+      aria-label="対戦相手と戦型"
+    >
       <div v-if="cpuColor !== null" class="shogi-game__summary-opponent">
         <b>対戦相手</b>
         <span>{{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}<small v-if="cpuStrengthLabel">{{ cpuStrengthLabel }}</small></span>
       </div>
-      <div><b>先手</b><span>{{ blackFormationText }}</span></div>
-      <div><b>後手</b><span>{{ whiteFormationText }}</span></div>
+      <!-- 戦型は決まってから出す。「未判定」を並べて画面の上を埋めない。 -->
+      <div v-if="blackFormationText !== UNDETERMINED_FORMATION"><b>先手</b><span>{{ blackFormationText }}</span></div>
+      <div v-if="whiteFormationText !== UNDETERMINED_FORMATION"><b>後手</b><span>{{ whiteFormationText }}</span></div>
     </section>
 
-    <section class="shogi-game__opening-guide" aria-label="やこび姫補助">
+    <section
+      v-if="openingGuideAvailable || matchKind === 'learning'"
+      class="shogi-game__opening-guide"
+      :class="{ 'shogi-game__opening-guide--collapsed': openingGuideCollapsed }"
+      aria-label="やこび姫補助"
+    >
       <h2>やこび姫補助</h2>
       <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
-      <div v-if="openingGuideAvailable" class="shogi-game__opening-selects">
+      <!-- 通常対局で作戦を選んでいないあいだは、1行のボタンにたたむ。選ぶと開き、飛車の振り先などの選択も隠さない。 -->
+      <button
+        v-if="openingGuideCollapsed"
+        type="button"
+        class="shogi-game__opening-expand"
+        :aria-expanded="false"
+        @click="openingGuideExpanded = true"
+      >
+        <span>作戦を選ぶ</span>
+        <small>戦法・囲いを選ぶと、やこび姫が手順を案内するよ</small>
+      </button>
+      <div v-else-if="openingGuideAvailable" class="shogi-game__opening-selects">
         <div class="shogi-game__opening-strategy-field">
           <label>
             <span>戦法</span>
@@ -822,7 +860,10 @@
       </div>
     </section>
 
-    <!-- 棋譜解析中も、閃きと読みは、やこび姫のコメントの下の操作列に置く(通常時の閃き・待ったと同じ場所)。 -->
+    <!--
+      対局中の操作列は、閃き・待った（学習対局は駒の利きも）だけにする。盤の反転や動きの矢印は見出しのメニューにしまう。
+      棋譜解析中も、閃きと読みは、やこび姫のコメントの下の操作列に置く(通常時の閃き・待ったと同じ場所)。
+    -->
     <div class="shogi-game__assist-actions">
       <button
         type="button"
@@ -845,14 +886,6 @@
         待った <small>×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}</small>
       </button>
       <button
-        v-if="!(reviewMode && analysisOpen && !reviewCpuEnabled)"
-        type="button"
-        class="shogi-game__assist-toggle shogi-game__command--flip"
-        aria-label="盤面を上下反転（ひふみんアイ）"
-        :aria-pressed="boardFlipOverride"
-        @click="boardFlipOverride = !boardFlipOverride"
-      >ひふみん<wbr>アイ</button>
-      <button
         v-if="matchKind === 'learning'"
         type="button"
         class="shogi-game__assist-toggle shogi-game__command--attack"
@@ -860,10 +893,6 @@
         :aria-pressed="attackGuideEnabled"
         @click="attackGuideEnabled = !attackGuideEnabled"
       >駒の<wbr>利き</button>
-      <label v-if="matchKind === 'learning'" class="shogi-game__assist-check">
-        <input v-model="movementArrowsEnabled" type="checkbox">
-        <span>選んだ駒の動きを矢印で表示</span>
-      </label>
       <button
         v-if="reviewMode && !analysisOpen"
         type="button"
@@ -2798,10 +2827,11 @@ function formationNamesForColor(sfen: string, color: Color): string[] {
   );
 }
 
+const UNDETERMINED_FORMATION = "まだ未判定";
 function formationTextForColor(color: Color): string {
   const key = color === Color.BLACK ? "black" : "white";
   const names = formationNamesFromState(formationState.value, key, 3);
-  return names.length ? names.join("・") : "まだ未判定";
+  return names.length ? names.join("・") : UNDETERMINED_FORMATION;
 }
 
 function observeFormations(sfen: string) {
@@ -2865,6 +2895,15 @@ const learningStartBlocked = computed(() => (
 ));
 // 平手以外の開始局面では、平手用の定跡（やこび姫補助・CPUの定跡）を当てはめない。
 const openingGuideAvailable = computed(() => matchInitialSfen.value === STANDARD_SFEN);
+/** 通常対局の作戦欄を開いたか。学習対局ではいつも開く。 */
+const openingGuideExpanded = ref(false);
+const openingGuideCollapsed = computed(() =>
+  openingGuideAvailable.value &&
+  matchKind.value !== "learning" &&
+  !openingGuideExpanded.value &&
+  !selectedStrategy.value &&
+  !selectedCastle.value
+);
 const pregameUsesCustomStart = computed(() => (
   matchKind.value === "learning" && learningStartType.value !== "standard"
 ));

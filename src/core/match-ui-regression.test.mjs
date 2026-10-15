@@ -15,13 +15,14 @@ describe("match screen regressions", () => {
     expect(source).toContain('const base = matchInitialSfen.value === STANDARD_SFEN ? "startpos" : matchInitialSfen.value;');
   });
 
-  it("keeps the flip control readable and reachable on every layout", () => {
-    // ひふみんアイは、閃き・待ったと同じ並びに置く。
-    expect(source).toMatch(/class="shogi-game__assist-actions"[\s\S]*?class="shogi-game__assist-toggle shogi-game__command--flip"[\s\S]*?aria-label="盤面を上下反転（ひふみんアイ）"/);
-    // 狭い画面でもはみ出さないよう、区切り（<wbr>や空白）でだけ2行に折り返す。
+  it("keeps the flip control reachable on every layout from the header menu", () => {
+    // 対局中の操作列は閃き・待ったに絞り、ひふみんアイは見出しのメニューに置く。メニューはどの画面の形にもある。
+    const menu = source.split('class="shogi-game__menu" role="menu"')[1]?.split("</header>")[0] ?? "";
+    expect(menu).toMatch(/role="menuitemcheckbox"[\s\S]*?aria-label="盤面を上下反転（ひふみんアイ）"[\s\S]*?@click="boardFlipOverride = !boardFlipOverride"/);
+    expect(menu).not.toMatch(/v-if="menuCollapsed"[^>]*>\s*<button[^>]*aria-label="盤面を上下反転/);
+    // 狭い画面でもはみ出さないよう、操作列のボタンは区切り（<wbr>や空白）でだけ2行に折り返す。
     expect(source).toMatch(/\.shogi-game__assist-actions > button\s*\{[^}]*word-break:\s*keep-all/s);
-    expect(source).toContain("ひふみん<wbr>アイ");
-    // PC以外では見出しにボタンを並べない。棋譜解析中は解析パネルの「その他」から反転できる。
+    // PC以外では見出しにボタンを並べない。棋譜解析中は解析パネルの「その他」からも反転できる。
     expect(responsiveSource).toMatch(/const menuCollapsed = computed\(\(\) => uiLayout\.value !== "wide"\)/);
     expect(source).toMatch(/role="menuitemcheckbox"[\s\S]*?ひふみんアイ（盤を反転）/);
   });
