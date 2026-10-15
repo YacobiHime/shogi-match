@@ -1528,7 +1528,7 @@ import {
   scoreForPlayer,
 } from "./core/coach-advice.mjs";
 import {
-  coachAdvicePriority,
+  shouldDisplayCoachAdvice,
   createCoachAdviceScheduler,
 } from "./core/coach-advice-scheduler.mjs";
 import {
@@ -4273,11 +4273,13 @@ function displayCoachAdvice(advice: {
   sfen?: string;
   ply?: number;
 }): boolean {
-  const lastShownAt = coachAdviceLastShownAt.get(advice.key);
-  if (
-    lastShownAt !== undefined && moveCount.value - lastShownAt < 8
-    && coachAdvicePriority(advice) < 100
-  ) return false;
+  if (!shouldDisplayCoachAdvice({
+    advice,
+    review: reviewMode.value,
+    currentSfen: currentSfen.value,
+    moveCount: moveCount.value,
+    lastShownAt: coachAdviceLastShownAt.get(advice.key),
+  })) return false;
   coachAdviceLastShownAt.set(advice.key, moveCount.value);
   if (advice.topic) advisedCoachTopics.add(advice.topic);
   displayingStructuredCoachAdvice = true;
@@ -4746,10 +4748,18 @@ async function engineMateCheck(
   }
 }
 
+/**
+ * プレイヤーの手番に、局面を読み直して助言する。詳しい助言では、詰み筋・評価の崖・飛車の危機などの注意を出す。
+ * riskOnly: CPU着手の直後に、すでに形勢の助言を出したとき。注意すべきことがあるときだけ出す。
+ * ここで読んだ評価値は、悪手判定の基準(playerTurnScore)にはしない。悪手判定は、着手の前後をCPU本体の
+ * 同じ深さの探索で比べるため、深さの違う評価値を混ぜると、悪手でない手を悪手と言ってしまう。
+ */
 async function updateDedicatedCoachAdvice(
   moveFeedback?: { key: string; text: string } | null,
+  { riskOnly = false }: { riskOnly?: boolean } = {},
 ) {
   if (!engine || !active.value || reviewMode.value || coachLevel.value === "off") return;
+  if (record.value.position.color !== humanColor.value) return;
   const analyzedHistoryLength = moveHistory.length;
   const analyzedSideToMove = record.value.position.color;
   const budget = coachSearchBudget();
@@ -4798,16 +4808,25 @@ async function updateDedicatedCoachAdvice(
         ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
       })
     : null;
+  if (riskOnly) {
+    if (moveFeedback ?? riskAdvice) showCoachAdvice(moveFeedback ?? riskAdvice);
+    return;
+  }
   updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice, false);
 }
 
 function scheduleDedicatedCoachAdvice(
   moveFeedback?: { key: string; text: string } | null,
+  options: { riskOnly?: boolean } = {},
 ) {
   dedicatedCoachQueue = dedicatedCoachQueue
     .catch(() => undefined)
     .then(async () => {
-      await updateDedicatedCoachAdvice(moveFeedback);
+      try {
+        await updateDedicatedCoachAdvice(moveFeedback, options);
+      } finally {
+        engine?.applyStrengthOptions({ multiPv: 1 });
+      }
     })
     .catch(() => undefined);
 }
@@ -4965,7 +4984,12 @@ function candidateGivesCheck(usi: string): boolean {
   }
 }
 
-function schedulePostCpuAssists() {
+/**
+ * CPUの着手を描画したあと、プレイヤーの手番に行う補助を、エンジンの待ち行列へ積む。
+ * hadScore: CPUの選んだ手の評価値があり、形勢の助言をすでに出したか。
+ *   Lv0〜10(ロジックAI)や、わざと候補外の手を選んだときは評価値がないため、読み直して形勢の助言を出す。
+ */
+function schedulePostCpuAssists(hadScore = false) {
   const historyLength = moveHistory.length;
   // WASMエンジンはメインスレッドで動く。CPUの駒を描画した次のフレームまで待ってから、
   // 必要な序盤補助だけを短時間で解析する。
@@ -4983,6 +5007,9 @@ function schedulePostCpuAssists() {
       }
       scheduleOpeningGuideSafety();
       scheduleOpeningFollowupCandidates();
+      if (coachLevel.value === "detailed" || (coachLevel.value !== "off" && !hadScore)) {
+        scheduleDedicatedCoachAdvice(null, { riskOnly: hadScore });
+      }
       schedulePlayerMoveBaseline();
       schedulePlayerIdleAdvice();
     }, 0);
@@ -6112,7 +6139,7 @@ async function scheduleCpuMove() {
       if (applyMove(usi, "cpu") && active.value) {
         updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
-        schedulePostCpuAssists();
+        schedulePostCpuAssists(selectedCpuScore !== undefined);
       }
       thinking.value = false;
     } catch (error) {

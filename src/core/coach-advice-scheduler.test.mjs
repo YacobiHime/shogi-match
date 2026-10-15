@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import {
   COACH_ADVICE_MIN_DISPLAY_MS,
   createCoachAdviceScheduler,
+  shouldDisplayCoachAdvice,
 } from './coach-advice-scheduler.mjs';
 
 describe('助言の表示時間', () => {
@@ -56,5 +57,46 @@ describe('助言の表示時間', () => {
     vi.advanceTimersByTime(COACH_ADVICE_MIN_DISPLAY_MS);
     expect(shown).toEqual(['castle-yagura']);
     vi.useRealTimers();
+  });
+});
+
+describe('助言を出してよいか', () => {
+  const sfen = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL w - 2';
+  const later = 'lnsgkgsnl/1r5b1/ppppppp1p/7p1/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL b - 3';
+
+  test('同じ助言は、直近8手のうちは繰り返さない', () => {
+    const advice = { key: 'prefer-defense', sfen };
+    expect(shouldDisplayCoachAdvice({ advice, currentSfen: sfen, moveCount: 30, lastShownAt: 26 })).toBe(false);
+    expect(shouldDisplayCoachAdvice({ advice, currentSfen: sfen, moveCount: 34, lastShownAt: 26 })).toBe(true);
+  });
+
+  test('「待った」で手数が戻ったあとは、戻った先より後に出した記録を数えない', () => {
+    // 40手目で出したあと、待ったで36手目に戻った。戻った先でも、同じ助言を出す。
+    const advice = { key: 'candidate-evaluation-cliff', sfen };
+    expect(shouldDisplayCoachAdvice({ advice, currentSfen: sfen, moveCount: 36, lastShownAt: 40 })).toBe(true);
+  });
+
+  test('局面についての助言は、表示を待つ間に局面が進んだら出さない', () => {
+    expect(shouldDisplayCoachAdvice({
+      advice: { key: 'mate-risk-top3', sfen }, currentSfen: later, moveCount: 3,
+    })).toBe(false);
+  });
+
+  test('直前の着手への助言は、局面が進んでも出す', () => {
+    for (const key of ['move-mistake--620', 'move-blunder--1500', 'praise-good-move', 'enter-enemy-camp']) {
+      expect(shouldDisplayCoachAdvice({ advice: { key, sfen }, currentSfen: later, moveCount: 3 }), key).toBe(true);
+    }
+  });
+
+  test('王手・詰みの助言は、続けて出す', () => {
+    expect(shouldDisplayCoachAdvice({
+      advice: { key: 'king-in-check', sfen }, currentSfen: sfen, moveCount: 30, lastShownAt: 28,
+    })).toBe(true);
+  });
+
+  test('棋譜検討では、局面を行き来しても同じ助言を出す', () => {
+    expect(shouldDisplayCoachAdvice({
+      advice: { key: 'middle-even' }, review: true, currentSfen: sfen, moveCount: 40, lastShownAt: 42,
+    })).toBe(true);
   });
 });

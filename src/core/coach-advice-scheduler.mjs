@@ -11,6 +11,38 @@ export function coachAdvicePriority(advice) {
   return 20;
 }
 
+/** 同じ助言を、この手数のうちは繰り返さない(詰み・王手などの優先度100は除く)。 */
+export const COACH_ADVICE_REPEAT_PLIES = 8;
+/** 直前の着手についての助言(悪手・好手・かち込み)。表示を待つ間に局面が進んでも、出す意味がある。 */
+const MOVE_ADVICE_KEY = /^(move-|praise-|enter-enemy-camp$)/;
+
+/**
+ * 助言を、いま出してよいか。
+ * - 棋譜検討では局面ごとに見るので、同じ助言でも出す。
+ * - 局面についての助言は、表示を待つ間に局面が進んだら出さない(古い局面の「王手だね」などを後から出さない)。
+ * - 同じ助言は、直近の手数のうちは繰り返さない。ただし「待った」で手数が戻ったあとは、戻った先より後に出した記録を数えない。
+ * @param {{
+ *   advice: { key: string, sfen?: string },
+ *   review?: boolean,
+ *   currentSfen?: string,
+ *   moveCount: number,
+ *   lastShownAt?: number,
+ * }} options
+ */
+export function shouldDisplayCoachAdvice({ advice, review = false, currentSfen, moveCount, lastShownAt }) {
+  if (review) return true;
+  if (
+    typeof advice.sfen === 'string' && typeof currentSfen === 'string'
+    && advice.sfen !== currentSfen && !MOVE_ADVICE_KEY.test(advice.key)
+  ) return false;
+  if (
+    lastShownAt !== undefined && lastShownAt <= moveCount
+    && moveCount - lastShownAt < COACH_ADVICE_REPEAT_PLIES
+    && coachAdvicePriority(advice) < 100
+  ) return false;
+  return true;
+}
+
 /**
  * 連続して届く助言を待機させ、先の台詞を読める時間だけ保持する。
  * @param {{

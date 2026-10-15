@@ -156,8 +156,10 @@ describe("match screen regressions", () => {
   it("praises good moves only after mistakes are ruled out", () => {
     expect(source).toMatch(/const mistake = moveFeedback && \/move-\(blunder\|mistake\)\/\.test\(moveFeedback\.key\);/);
     expect(source).toMatch(/if \(!mistake\) moveFeedback = praise;/);
-    // 好手判定の解析はCPU着手を描画した後、定跡補助の後ろへ積む。
-    expect(source).toMatch(/scheduleOpeningFollowupCandidates\(\);\s*schedulePlayerMoveBaseline\(\);\s*schedulePlayerIdleAdvice\(\);/);
+    // 好手判定の解析はCPU着手を描画した後、定跡補助の後ろへ積む。その前に、局面の注意(詰み筋・評価の崖など)の解析を積む。
+    expect(source).toMatch(/scheduleOpeningFollowupCandidates\(\);\s*if \([^)]*\)\) \{\s*scheduleDedicatedCoachAdvice\(null, \{ riskOnly: hadScore \}\);\s*\}\s*schedulePlayerMoveBaseline\(\);\s*schedulePlayerIdleAdvice\(\);/);
+    // CPUの選んだ手の評価値がないとき(Lv0〜10など)も、プレイヤーの手番に読み直して形勢の助言を出す。
+    expect(source).toContain("schedulePostCpuAssists(selectedCpuScore !== undefined);");
     expect(source).toMatch(/<ruby v-if="segment\.ruby">/);
   });
 
