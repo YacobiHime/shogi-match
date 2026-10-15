@@ -1208,35 +1208,38 @@
       </div>
       <div class="shogi-game__result-panel">
         <h2 id="match-result-title">{{ resultPresentation.title }}</h2>
-        <dl class="shogi-game__result-details">
-          <div>
-            <dt>手合割</dt>
-            <dd>{{ resultPresentation.handicap }}</dd>
-          </div>
-          <div v-if="normalizedMode === 'cpu'">
-            <dt>対戦相手</dt>
-            <dd>{{ resultPresentation.opponent }}</dd>
-          </div>
-          <div>
-            <dt>先手戦型</dt>
-            <dd>{{ resultPresentation.blackFormations }}</dd>
-          </div>
-          <div>
-            <dt>後手戦型</dt>
-            <dd>{{ resultPresentation.whiteFormations }}</dd>
-          </div>
-          <div>
-            <dt>結果</dt>
-            <dd>{{ resultPresentation.detail }}</dd>
-          </div>
-          <div v-if="ratingChange" data-rating-change>
-            <dt>レーティング</dt>
-            <dd>
-              R{{ ratingChange.before }} → R{{ ratingChange.after }}
-              （{{ ratingChange.delta >= 0 ? "+" : "−" }}{{ Math.abs(ratingChange.delta) }}）
-            </dd>
-          </div>
-        </dl>
+        <!-- 勝ち負けの次に知りたい、決まり手とレーティングの増減だけを大きく出す。対局の記録は折りたたむ。 -->
+        <p class="shogi-game__result-lead">{{ resultPresentation.detail }}</p>
+        <p
+          v-if="ratingChange"
+          class="shogi-game__result-rating"
+          :class="{ 'shogi-game__result-rating--up': ratingChange.delta > 0 }"
+          data-rating-change
+        >
+          R{{ ratingChange.before }} → <strong>R{{ ratingChange.after }}</strong>
+          <span>{{ ratingChange.delta >= 0 ? "+" : "−" }}{{ Math.abs(ratingChange.delta) }}</span>
+        </p>
+        <details class="shogi-game__result-record">
+          <summary>対局の記録</summary>
+          <dl class="shogi-game__result-details">
+            <div>
+              <dt>手合割</dt>
+              <dd>{{ resultPresentation.handicap }}</dd>
+            </div>
+            <div v-if="normalizedMode === 'cpu'">
+              <dt>対戦相手</dt>
+              <dd>{{ resultPresentation.opponent }}</dd>
+            </div>
+            <div>
+              <dt>先手戦型</dt>
+              <dd>{{ resultPresentation.blackFormations }}</dd>
+            </div>
+            <div>
+              <dt>後手戦型</dt>
+              <dd>{{ resultPresentation.whiteFormations }}</dd>
+            </div>
+          </dl>
+        </details>
         <button type="button" class="shogi-game__guided-start shogi-game__guided-start--result" @click="startGuidedReview">
           <span aria-hidden="true">▶</span> 対局を振り返る
         </button>

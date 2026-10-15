@@ -1837,10 +1837,47 @@
 .shogi-game__result--defeat h2 {
   animation: result-defeat-pulse 2.2s ease-in-out infinite;
 }
+/* 決まり手。勝ち負けのすぐ下に置き、何で終わったかを一行で伝える。 */
+.shogi-game__result-lead {
+  margin: 0.8em 0 0;
+  font-size: 1.05em;
+  font-weight: 700;
+}
+/* レーティングの増減は、上がったときだけ琥珀色の札にして嬉しさを伝える。 */
+.shogi-game__result-rating {
+  display: inline-flex;
+  gap: 0.5em;
+  align-items: baseline;
+  margin: 0.7em 0 0;
+  padding: 0.3em 0.9em;
+  border: 1px solid rgba(255, 252, 244, 0.35);
+  border-radius: 999px;
+  background: rgba(43, 70, 91, 0.6);
+}
+.shogi-game__result-rating strong { font-size: 1.25em; }
+.shogi-game__result-rating span { font-weight: 800; }
+.shogi-game__result-rating--up {
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--amber);
+}
+/* 手合割・戦型などの記録は、見たい人だけが開く。 */
+.shogi-game__result-record {
+  margin: 1em 0 1.1em;
+  text-align: left;
+}
+.shogi-game__result-record summary {
+  width: fit-content;
+  margin-inline: auto;
+  padding: 0.3em 0.8em;
+  color: var(--muted);
+  font-size: 0.9em;
+  cursor: pointer;
+}
 .shogi-game__result-details {
   display: grid;
   gap: 0.45em;
-  margin: 1.2em 0 1.3em;
+  margin: 0.6em 0 0;
   text-align: left;
 }
 .shogi-game__result-details > div {
@@ -1865,6 +1902,13 @@
   color: var(--night-deep);
   background: var(--amber);
   box-shadow: 0 2px 0 var(--amber-shadow);
+}
+/* 通常の対局の結果では「対局を振り返る」を主役にし、ホームへ戻るボタンは脇役の色にする。 */
+.shogi-game .shogi-game__guided-start--result ~ .shogi-game__result-actions .shogi-game__rematch {
+  border-color: rgba(241, 165, 76, 0.68);
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72);
 }
 .shogi-game__result-actions {
   display: grid;
