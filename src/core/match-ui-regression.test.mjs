@@ -110,8 +110,9 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/\.shogi-tournament__choices--ten \{ grid-template-columns: repeat\(14, minmax\(0, 1fr\)\); \}/);
     expect(tournament).toMatch(/\.shogi-tournament__choices button,[\s\S]*?height: var\(--tr-control\);/);
     expect(tournament).toMatch(/\.shogi-tournament__start,\s*\.shogi-game \.shogi-tournament__sub \{[\s\S]*?height: var\(--tr-action\);/);
-    // 大会の選択のカードは、段によらず、同じ大きさで、同じ列に並べる。
-    expect(tournament).toMatch(/shogi-tournament-home \.shogi-home__cards \{[\s\S]*?repeat\(3, clamp\(96px, 26vw, 130px\)\)/);
+    // 大会の選択は、参加できる竜王戦を1枚だけ大きく出し、準備中のタイルは、段によらず同じ大きさで同じ列に並べる。
+    expect(tournament).toMatch(/class="shogi-title__next" data-tournament="ryuo"/);
+    expect(tournament).toMatch(/shogi-tournament-home \.shogi-tournament__soon-tiles \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
     // 説明・エントリーの一言・次の対局・結果の解説は、やこび姫のセリフにする。
     // 顔を何度も並べず、各画面に、大きなやこび姫の解説役(xl)を1人置いて話させる。
     expect(tournament.match(/<YakobiSays[^>]*size="xl"/g)?.length).toBe(3);
