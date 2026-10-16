@@ -2772,6 +2772,12 @@
   color: var(--amber);
   font-size: 0.8em;
 }
+/* 続けて遊んだ日。所属の札と見分けられるよう、薄紫にする。 */
+.shogi-title__record-badge--streak {
+  border-color: var(--lavender);
+  color: var(--lavender);
+  white-space: nowrap;
+}
 .shogi-title__record-link {
   flex: none;
   color: #cfd8de;

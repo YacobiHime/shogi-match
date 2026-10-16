@@ -61,6 +61,9 @@
             <p class="shogi-note__grade">
               {{ gradeName(nearestPreset.label) }}<small>（CPU Lv.{{ nearestPreset.level }}くらい）</small>
             </p>
+            <p v-if="playStreak.best" class="shogi-note__streak" data-note-streak>
+              続けて遊んだ日 <b>{{ playStreak.current }}日</b><small>（いちばん長い記録 {{ playStreak.best }}日）</small>
+            </p>
 
             <div v-if="nextGoal" class="shogi-note__goal">
               <p class="shogi-note__goal-text">
@@ -423,6 +426,7 @@ import {
 } from "./core/player-rating.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
 import { currentAffiliation } from "./core/player-profile.mjs";
+import { currentStreak, loadPlayStreak, streakLine } from "./core/play-streak.mjs";
 import {
   COLLECTION_LEVELS,
   collectionCatalog,
@@ -561,6 +565,16 @@ function chooseTheme(kind: "board" | "piece", id: string) {
   saveTheme(kind, id);
 }
 
+/**
+ * 続けて遊んだ日(core/play-streak.mjs)。1局指す・1問解く・レッスンを終えると数える。
+ * 週に1日はおやすみしても続く。途切れても、いちばん長い記録は残る。
+ */
+const playStreak = (() => {
+  const saved = loadPlayStreak(safeStorage());
+  return { current: currentStreak(saved).current, best: saved.best };
+})();
+const playStreakLine = streakLine(currentStreak(loadPlayStreak(safeStorage())));
+
 const measuredDate = computed(() => {
   const at = props.state.measured?.at;
   return at ? new Date(at).toLocaleDateString("ja-JP") : "";
@@ -655,6 +669,7 @@ const messages = computed(() => {
     .sort((a: UsageRow, b: UsageRow) => b.wins / b.games - a.wins / a.games)[0];
   if (best) lines.push(`いちばん勝てているのは「${best.name}」。勝率${percent(best.wins / best.games)}だよ！`);
   if (nextGoal.value) lines.push(`${gradeName(nextGoal.value.label)}まで、あとR${nextGoal.value.remaining}。いっしょにがんばろう！`);
+  if (playStreakLine) lines.push(playStreakLine);
   return lines;
 });
 
@@ -1084,6 +1099,11 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__pair { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
 .shogi-game .shogi-note__subhead { margin: 0.3rem 0 0; color: rgba(255, 252, 244, 0.8); font-size: 0.9em; }
 .shogi-game .shogi-note__hint { margin: 0; color: var(--note-muted); font-size: 0.8em; line-height: 1.6; }
+
+/* 続けて遊んだ日。棋力の下に小さく出す(数字で急かさない)。 */
+.shogi-game .shogi-note__streak { margin: 0.2rem 0 0; color: var(--note-muted); font-size: 0.85em; }
+.shogi-game .shogi-note__streak b { color: var(--note-gold); }
+.shogi-game .shogi-note__streak small { margin-left: 0.3rem; }
 
 /* コレクション */
 .shogi-game .shogi-note__count { margin-left: auto; color: var(--note-muted); font-size: 0.85em; letter-spacing: 0; }

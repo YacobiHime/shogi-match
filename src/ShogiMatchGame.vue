@@ -118,6 +118,7 @@
             <strong>R{{ ratingState.rating }}</strong>
             <span>{{ recommendedStrengthPreset.label.replace(/程度$/, "") }}</span>
             <span v-if="homeAffiliation" class="shogi-title__record-badge">{{ homeAffiliation }}</span>
+            <span v-if="homeStreak.current >= 2" class="shogi-title__record-badge shogi-title__record-badge--streak" data-home-streak>続けて{{ homeStreak.current }}日</span>
           </span>
           <span class="shogi-title__record-link">やこびノート <span aria-hidden="true">›</span></span>
         </button>
@@ -1806,6 +1807,7 @@ import {
 } from "./core/collection.mjs";
 import { themeName } from "./core/themes.mjs";
 import { loadOshi } from "./core/ryuo-oshi.mjs";
+import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 // 対局のほかの画面は、開いたときに読み込む。最初に読むJSを小さくして、起動を速くするため。
@@ -4037,8 +4039,11 @@ function openHome() {
 
 /** 教室で終えた(クリアかスキップした)レッスンの数。タイトル画面を開くたび、教室を閉じるたびに読み直す。 */
 const homeLessonsDone = ref(0);
+/** 続けて遊んだ日(core/play-streak.mjs)。タイトル画面の記録の帯とやこび姫の一言に使う。 */
+const homeStreak = ref(currentStreak(loadPlayStreak(browserStorage())));
 function refreshHomeProgress() {
   homeLessonsDone.value = Object.keys(loadTutorialProgress(browserStorage()).lessons).length;
+  homeStreak.value = currentStreak(loadPlayStreak(browserStorage()));
 }
 watch([homeOpen, tutorialOpen], ([home, tutorial]) => {
   if (home && !tutorial) refreshHomeProgress();
@@ -4071,7 +4076,7 @@ function startHomeNext() {
 const homeGreeting = computed(() => ({
   resume: "さっきの対局、続きをしよう！",
   tutorial: homeLessonsDone.value ? "今日も教室で練習しよう！" : "はじめまして！ いっしょに覚えよう",
-  match: "今日はなにをする？",
+  match: streakGreeting(homeStreak.value) || "今日はなにをする？",
 })[homeNext.value.id]);
 const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.label ?? "");
 
@@ -5767,6 +5772,8 @@ function finish(matchResult: MatchResult) {
   active.value = false;
   thinking.value = false;
   result.value = matchResult;
+  // 1局指し終えたら、続けて遊んだ日に数える(すぐ投了した対局は数えない)。
+  if (matchResult.moveCount >= 2) savePlayStreak(browserStorage(), recordPlay(loadPlayStreak(browserStorage())));
   // 詰みで決まったときは、止めてから結果画面を出す。勝ちは長く、負けは短く(core/move-impact.mjs)。
   const outcome = !matchResult.winner
     ? "draw"

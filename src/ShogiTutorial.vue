@@ -245,6 +245,7 @@ import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
 import { TUTORIAL_LESSONS, TUTORIAL_TITLE, TUTORIAL_VOLUMES, tutorialLesson } from "./core/tutorial-curriculum.mjs";
+import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.mjs";
 import {
   INTERACTIVE_STEP_TYPES,
   TUTORIAL_AUTO_ADVANCE_MS,
@@ -691,6 +692,8 @@ function showResult(stars: number, report: TutorialMatchReport | null) {
   resultStars.value = stars;
   matchResult.value = report;
   updateProgress(recordLessonCleared(progress.value, lesson.id, stars));
+  // レッスンを終えたら、続けて遊んだ日に数える。
+  savePlayStreak(storage, recordPlay(loadPlayStreak(storage)));
   view.value = "result";
   revealedStars.value = 0;
   revealStage.value = 0;

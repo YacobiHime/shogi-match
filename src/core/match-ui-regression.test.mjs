@@ -299,4 +299,16 @@ describe("match screen regressions", () => {
     expect(book).toMatch(/data-oshi-toggle[\s\S]*?@click="toggleOshi\(member\.id\)"/);
     expect(book).toMatch(/member\.catchphrase/);
   });
+
+  it("counts play days only for shogi actions and never pressures the player", () => {
+    // 1局指し終えたら数える(すぐ投了した対局は数えない)。開いただけでは数えない。
+    expect(source).toMatch(/if \(matchResult\.moveCount >= 2\) savePlayStreak\(browserStorage\(\), recordPlay\(loadPlayStreak\(browserStorage\(\)\)\)\)/);
+    expect(source).not.toMatch(/onMounted\([^)]*recordPlay/);
+    const problemSet = readFileSync(new URL("../ShogiProblemSet.vue", import.meta.url), "utf8");
+    expect(problemSet).toMatch(/recordReview\(problem, firstTry\);[\s\S]{0,80}recordPlay\(loadPlayStreak\(storage\)\)/);
+    const tutorial = readFileSync(new URL("../ShogiTutorial.vue", import.meta.url), "utf8");
+    expect(tutorial).toMatch(/recordLessonCleared\([\s\S]{0,120}recordPlay\(loadPlayStreak\(storage\)\)/);
+    // 「今日やらないと」と急かす言葉は使わない。
+    expect(source + problemSet + tutorial).not.toMatch(/今日やらないと|記録が消え|途切れちゃう/);
+  });
 });

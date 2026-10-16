@@ -189,6 +189,7 @@ import {
 } from "./core/problem-set.mjs";
 import { formatHintMove } from "./core/match-assists.mjs";
 import { dueReviewId, loadReviewQueue, recordReviewResult, saveReviewQueue } from "./core/review-queue.mjs";
+import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.mjs";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "./game-state";
 import { JISSEN_TSUME_SOURCE } from "./data/jissen-tsume-problems.mjs";
 import { TSUME_PROBLEM_SOURCE } from "./data/tsume-problems.mjs";
@@ -559,6 +560,8 @@ function onBoardMove(usi: string) {
     progress.value = recordProblemSolved(progress.value, problem.id, { firstTry });
     saveProblemProgress(storage, progress.value);
     recordReview(problem, firstTry);
+    // 問題を1問解いたら、続けて遊んだ日に数える。
+    savePlayStreak(storage, recordPlay(loadPlayStreak(storage)));
   }
   if (result.next) {
     // 正解でまだ続くときは、相手の応手を並べ終えてから次の手を指せるようにする。

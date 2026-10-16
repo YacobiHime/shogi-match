@@ -42,6 +42,7 @@
 | 振り駒 | `src/core/furigoma.mjs`、`ShogiMatchGame.vue`の`furigomaCallout` | 知らせは1.8秒（`FURIGOMA_SHOW_MS`）、盤の操作は妨げない |
 | もう一局・局面からの指し直し | `ShogiMatchGame.vue`の`rematch`・`retryFromPly`・`startPositionMatch` | 指し直しの対局は開始局面の名前`RETRY_START_LABEL`で見分ける |
 | 称号・所属 | `src/core/player-profile.mjs` | |
+| 続けて遊んだ日 | `src/core/play-streak.mjs`、`ShogiMatchGame.vue`の`finish`・`ShogiProblemSet.vue`・`ShogiTutorial.vue` | 将棋の行為だけを数える。週に1日のおやすみ（`REST_WINDOW_DAYS`）。急かす言葉は使わない |
 | 記録の画面 | `src/YakobiNote.vue` | 「コレクション」の項目で、印と着せ替えを見せる |
 | コレクション | `src/core/collection.mjs`、`ShogiMatchGame.vue`の`recordCollection` | 定跡図鑑の戦法・囲いとLvの壁を印にする。着せ替えの解放（`THEME_UNLOCKS`）もここ。保存は`yacobihime:shogi-match:collection:v1` |
 | 着せ替えの一覧 | `src/core/themes.mjs` | 盤の部品・終局画面・やこびノートで共通。選んだら`saveTheme`で開いている盤へ知らせる |
