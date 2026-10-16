@@ -3,6 +3,7 @@
 このリポジトリは、Vue Custom Elementとして配布する将棋対局ランタイムです。
 ふだん変更するのは`src/`です。公開の入口は`game.html`、Firebase Hostingの設定は`firebase.json`にあります。
 利用者向けの説明は`README.md`、ローカルでの起動と定跡編集の手順は`docs/local-development.md`にあります。
+遊びとUIの設計の指針（桜井政博・任天堂のゲーム論とUI論）は`docs/nintendo-design/`にあります。
 
 ## 最初に確認する場所
 
@@ -27,6 +28,8 @@
 | 図鑑 | `src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、「詰将棋の名作」で解ける『将棋図巧』は将棋問題集の`ZUKOU_SET`と判定を使う、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`src/composables/match/useDexAnalysisEngine.ts`で対局用のものを借りる） |
 | iframe・ノベル連携 | `src/novel-bridge.ts`、RPGは`integrations/shogi-rpg.js` |
 | 手動検証履歴 | `docs/yakobihime-opening-guide-verification.md` |
+| 遊び・演出・ご褒美・難易度・教え方の設計 | 設計するときは`docs/nintendo-design/Game_Nintendo_Design.md`、実装するときは`docs/nintendo-design/Game_Nintendo_Implementation.md` |
+| 画面・操作・文言の設計 | 設計するときは`docs/nintendo-design/UI_Nintendo_Design.md`、実装するときは`docs/nintendo-design/UI_Nintendo_Implementation.md`、根拠は`docs/nintendo-design/UI_Nintendo.md` |
 
 文書と実装が食い違う場合は、テスト済みのコードを現在の仕様として扱います。同じ変更で文書も直してください。
 ただし、ユーザーが手動で検証した結果を、自動テストだけで「動作確認済み」へ書き換えてはいけません。
@@ -39,6 +42,15 @@
 - 補足が要るときは、本文を1行空けて箇条書きで書きます。
 
 ## 実装上の重要事項
+
+### 遊びとUIの設計指針
+
+- 新しい遊びや画面を設計するときは`*_Design.md`、コードを書くときは`*_Implementation.md`を読みます。`docs/nintendo-design/`の文書は次の5つです。
+  - `Game_Nintendo_Design.md`と`Game_Nintendo_Implementation.md`：遊び・演出・ご褒美・難易度・教え方
+  - `UI_Nintendo_Design.md`と`UI_Nintendo_Implementation.md`：画面・操作・文言
+  - `UI_Nintendo.md`：UI論の根拠と出典
+- これらの文書にある時間や段階の数値は初期値です。触って調整したら、文書の表も直します。
+- これらの文書とこの`AGENTS.md`が食い違ったら、`AGENTS.md`に従い、文書のほうを直します。
 
 ### 戦法・囲いの案内
 
