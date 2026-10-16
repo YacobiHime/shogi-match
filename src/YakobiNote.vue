@@ -1340,4 +1340,45 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__actions { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-note__ring { width: 6.2rem; height: 6.2rem; }
 }
+/* ===== 背の低い画面(2026-10 レスポンシブの見直し) =====
+ * まとめは1画面に収める。縦長の小さなスマホは、メニューとすき間を詰め、文字を少し小さくする。
+ * 横長の背の低い画面(スマホの横向き)は、広い画面と同じく左にメニューを置き、表紙を左右2列にする。 */
+@media (orientation: portrait) and (max-height: 700px) {
+  .shogi-game .shogi-note__layout { gap: 0.5rem; padding-top: 0.5rem; }
+  .shogi-game .shogi-note__nav-item { min-height: 2.4rem; }
+  .shogi-game .shogi-note__cover { gap: 0.6rem; padding: 0.7rem; }
+  .shogi-game .shogi-note__rating strong { font-size: 2.4rem; }
+  .shogi-game .shogi-note__grade { font-size: 1.2em; }
+  .shogi-game .shogi-note__coach img { max-height: 4.5rem; }
+  /* 成績: 勝率の輪を小さくし、数のタイルと横に並べる。 */
+  .shogi-game .shogi-note__ring { width: 5.2rem; height: 5.2rem; }
+  .shogi-game .shogi-note__score-body { flex-wrap: nowrap; gap: 0.7rem; }
+  .shogi-game .shogi-note__tiles dd { font-size: 1.1em; }
+  /* 下の3つの近道は、上のメニューと同じ行き先なので、背の低い画面では省く。 */
+  .shogi-game .shogi-note__highlights { display: none; }
+}
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 899px) {
+  .shogi-game .shogi-note__highlights { display: none; }
+  .shogi-game .shogi-note__ring { width: 5.2rem; height: 5.2rem; }
+  .shogi-game .shogi-note__score-body { flex-wrap: nowrap; gap: 0.7rem; }
+  .shogi-game .shogi-note__card { padding: 0.7rem 0.8rem; gap: 0.5rem; }
+  .shogi-game .shogi-note__layout {
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0.7rem;
+    padding: 0.5rem 0.8rem;
+  }
+  .shogi-game .shogi-note__nav { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 0.3rem; }
+  .shogi-game .shogi-note__nav-item { min-height: 2.3rem; padding: 0.2rem 0.6rem; justify-items: start; }
+  .shogi-game .shogi-note__cover {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    align-items: center;
+    gap: 0.6rem 1rem;
+    padding: 0.7rem 0.9rem;
+  }
+  .shogi-game .shogi-note__highlights { grid-column: 1 / -1; }
+  .shogi-game .shogi-note__rating strong { font-size: 2.3rem; }
+  .shogi-game .shogi-note__grade { font-size: 1.15em; }
+  .shogi-game .shogi-note__coach img { max-height: 4.5rem; }
+}
 </style>

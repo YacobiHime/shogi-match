@@ -419,6 +419,30 @@ watch(stepIndex, async () => {
   font-family: inherit;
   cursor: pointer;
 }
+/*
+ * 背の低い画面(スマホの横向き)では、見出しを細くして中身の高さを空ける。
+ * 図鑑・教室・問題集・やこびノート・大会の見出しはこの形を共通で使う。
+ */
+@media (max-height: 500px) {
+  .shogi-game .shogi-dex__header {
+    flex-wrap: nowrap;
+    gap: 0.6rem;
+    padding: 0.3rem 0.8rem;
+  }
+  .shogi-game .shogi-dex__header h1 {
+    overflow: hidden;
+    font-size: 1.05rem;
+    letter-spacing: 0.06em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .shogi-game .shogi-dex .shogi-dex__back,
+  .shogi-game .shogi-home .shogi-dex__back {
+    min-height: 2.1rem;
+    padding: 0.2rem 0.8rem;
+    font-size: 0.9rem;
+  }
+}
 .shogi-game .shogi-dex__modes {
   display: flex;
   gap: 0.6rem;

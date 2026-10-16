@@ -593,7 +593,8 @@ function onBoardMove(usi: string) {
 
 // 狭い画面では縦長レイアウトの盤に切り替える（将棋教室と同じ基準）。
 const narrowMediaQuery = typeof window !== "undefined" && window.matchMedia
-  ? window.matchMedia("(max-width: 56rem)")
+  // 縦長の狭い画面だけ縦長の盤にする。スマホの横向きは、横長の盤の横に台詞を置く。
+  ? window.matchMedia("(max-width: 56rem) and (orientation: portrait), (max-width: 30rem)")
   : null;
 const isNarrow = ref(Boolean(narrowMediaQuery?.matches));
 function onNarrowChange(event: MediaQueryListEvent) { isNarrow.value = event.matches; }
@@ -617,11 +618,16 @@ function layoutBoardBox() {
   const style = getComputedStyle(stage);
   const innerWidth = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   const innerHeight = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  // 横に並べる画面(スマホの横向き)では、台詞の欄の幅を引いた残りに、縦に並べる画面では高さを引いた残りに収める。
+  const row = style.flexDirection === "row";
   const panelHeight = panelEl.value?.offsetHeight ?? 0;
-  const gap = parseFloat(style.rowGap) || 0;
+  const panelWidth = panelEl.value?.offsetWidth ?? 0;
+  const gap = parseFloat(row ? style.columnGap : style.rowGap) || 0;
+  // 台詞が長くても盤が小さくなりすぎないようにする。
   const minHeight = Math.min(320, window.innerHeight * 0.42);
-  const availableHeight = Math.max(minHeight, innerHeight - panelHeight - gap);
-  const width = Math.max(1, Math.floor(Math.min(innerWidth, availableHeight * boardAspect.value)));
+  const availableHeight = row ? innerHeight : Math.max(minHeight, innerHeight - panelHeight - gap);
+  const availableWidth = row ? Math.max(1, innerWidth - panelWidth - gap) : innerWidth;
+  const width = Math.max(1, Math.floor(Math.min(availableWidth, availableHeight * boardAspect.value)));
   const height = Math.max(1, Math.floor(width / boardAspect.value));
   boardBoxStyle.value = { width: `${width}px`, height: `${height}px` };
 }

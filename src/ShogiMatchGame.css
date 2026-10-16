@@ -2047,6 +2047,8 @@
   box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72);
   font-size: 1em;
 }
+/* 次にすること(もう一局・振り返る・ホームへ)のまとまり。ふだんは並びに影響させない。 */
+.shogi-game__result-next { display: contents; }
 /* 負けたあとの一言と、級・段が上がったときの一言。 */
 .shogi-game__result-cheer {
   margin: 0.4em 0 0;
@@ -2895,7 +2897,7 @@
 /* 広い画面: 左にタイトルと大きなやこび姫、右にメニュー。基準の文字は画面の幅と高さの小さいほうに合わせる。 */
 @media (min-width: 1100px) and (min-height: 600px) {
   .shogi-home.shogi-home--title {
-    --title-base: clamp(15px, min(1.3vw, 2.3vh), 32px);
+    --title-base: clamp(15px, min(1.3vw, 2.2vh), 32px);
     display: grid;
     grid-template-columns: auto minmax(0, 38em);
     align-content: center;
@@ -2955,6 +2957,55 @@
   .shogi-title__tile--small .shogi-title__icon { width: 2.5em; height: 2.5em; }
   .shogi-title__tile--small .shogi-title__label { font-size: 0.82em; }
 }
+/* 背の低いスマホの縦向き: 基準の文字を少し小さくし、すき間を詰めて、スクロールせずに1画面へ収める。 */
+@media (orientation: portrait) and (max-height: 700px) {
+  .shogi-home.shogi-home--title {
+    --title-base: clamp(12px, min(4vw, 2.05vh), 19px);
+    gap: 0.7em;
+  }
+  .shogi-title__chara { height: 6.2em; }
+  .shogi-title__menu { gap: 0.65em; }
+  .shogi-title__groups { gap: 0.6em; }
+  .shogi-title__next-go { margin-top: 0.55em; padding: 0.55em 0; }
+}
+/*
+ * 背の低い横長の画面(スマホの横向き): 縦に積むと入らないので、広い画面と同じく、
+ * 左にタイトルとやこび姫、右にメニューを置く。基準の文字は高さに合わせて小さくする。
+ */
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 1099px) {
+  .shogi-home.shogi-home--title {
+    --title-base: clamp(10px, 2.5vh, 16px);
+    display: grid;
+    grid-template-columns: auto minmax(0, 40em);
+    align-content: center;
+    justify-content: center;
+    column-gap: 2em;
+    padding: 0.8em 1.6em;
+    overflow-y: hidden;
+  }
+  .shogi-title__hero {
+    grid-template-columns: auto;
+    grid-template-areas: "logo" "bubble" "chara";
+    justify-items: center;
+    row-gap: 0.5em;
+  }
+  .shogi-title__chara { height: min(13em, 48vh); }
+  .shogi-title__menu { gap: 0.6em; width: 100%; }
+  .shogi-game .shogi-title__next {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon eyebrow go"
+      "icon label go"
+      "icon desc go";
+    padding: 0.7em 1em;
+  }
+  .shogi-title__next-icon { width: 3.6em; height: 3.6em; }
+  .shogi-title__next-go { margin: 0; padding: 0.6em 1.2em; }
+  .shogi-title__groups { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6em; }
+  .shogi-title__group--dex { grid-column: 1 / -1; }
+  .shogi-game .shogi-title__tile { min-height: 3.6em; padding: 0.45em 0.6em; }
+  .shogi-title__tile .shogi-title__icon { width: 2.2em; height: 2.2em; }
+}
 @media (prefers-reduced-motion: reduce) {
   .shogi-title__chara { animation: none; }
 }
@@ -2981,4 +3032,78 @@
 }
 .shogi-home .shogi-home__card--primary:not(:disabled):active {
   box-shadow: 1px 1px 0 var(--amber-shadow);
+}
+
+/*
+ * 背の低い横長の画面(スマホの横向き)。結果と対局準備は縦に積むと入らないので、左右の2列に分ける。
+ * 結果: 左に勝ち負け・レーティング・次の目標、右に次にすること(もう一局・振り返る)。
+ * 対局準備: 先手と後手を左右に並べ、対局の種類と条件は横いっぱいに置く。
+ */
+@media (orientation: landscape) and (max-height: 500px) {
+  .shogi-game__result { padding: 0.5em; }
+  /* 左の列に勝ち負け・レーティング・次の目標、右の列に「次にすること」をまとめ、列ごとに上から詰める。 */
+  .shogi-game__result-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-content: start;
+    align-items: start;
+    column-gap: 1.4em;
+    width: min(50em, 100%);
+    padding: 0.8em 1.3em;
+  }
+  .shogi-game__result-panel > * { grid-column: 1; }
+  .shogi-game__result-panel > .shogi-game__result-next {
+    display: grid;
+    grid-column: 2;
+    grid-row: 1 / span 20;
+    align-content: start;
+  }
+  .shogi-game__result-panel > p { margin-top: 0.35em; margin-bottom: 0; }
+  .shogi-game__result h2 { font-size: 2em; }
+  .shogi-game__result-panel > .shogi-game__rematch--primary,
+  .shogi-game__result-panel > .shogi-game__result-retry { margin-top: 0; }
+  .shogi-game__result-record { margin: 0.5em 0 0; }
+
+  .shogi-game__pregame { padding: 0.35em; }
+  .shogi-game__pregame-panel { width: min(58em, 100%); }
+  .shogi-game__pregame-titlebar { padding-block: 0.35em; }
+  .shogi-game__pregame-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-content: start;
+    column-gap: 1.2em;
+  }
+  .shogi-game__pregame-body > * { grid-column: 1 / -1; }
+  /* CPUの欄がいちばん長いので右の列にひとりで置き、あなたの欄と対局の条件を左の列に並べる。 */
+  .shogi-game__pregame-body { grid-auto-flow: row dense; }
+  .shogi-game__pregame-body > .shogi-game__pregame-side,
+  .shogi-game__pregame-body > .shogi-game__pregame-section { grid-column: 1; align-self: start; }
+  .shogi-game__pregame-body > .shogi-game__pregame-side--cpu { grid-column: 2; grid-row: span 3; }
+  .shogi-game__pregame-kind { padding: 0.4em 0; gap: 0.2em; }
+  .shogi-game__pregame-kind > small { display: none; }
+  .shogi-game__pregame-titlebar h2 { font-size: 1.05em; }
+  /* はじめての案内: やこび姫を左に、あいさつと3つの道を右に置き、道は横に並べる。 */
+  .shogi-game__confirm-panel.shogi-welcome {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 1em;
+    align-items: center;
+    width: min(48em, 100%);
+    text-align: left;
+  }
+  .shogi-welcome > * { grid-column: 2; }
+  .shogi-welcome .shogi-welcome__chara { grid-column: 1; grid-row: 1 / span 4; max-height: 9em; width: auto; }
+  .shogi-welcome .shogi-welcome__choices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shogi-game__pregame-rows { gap: 0.25em; }
+  .shogi-game__pregame-side-head { padding-block: 0.3em; }
+  /* 下の帯は、準備のようすと「対局開始」を横に並べて細くする。 */
+  .shogi-game__pregame-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1em;
+    padding-block: 0.4em;
+  }
+  .shogi-game__pregame-footer .shogi-game__pregame-note { margin: 0; }
+  .shogi-game__pregame-footer .shogi-game__pregame-start { width: auto; min-width: 12em; }
 }

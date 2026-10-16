@@ -116,7 +116,8 @@ describe("match screen regressions", () => {
     // 説明・エントリーの一言・次の対局・結果の解説は、やこび姫のセリフにする。
     // 顔を何度も並べず、各画面に、大きなやこび姫の解説役(xl)を1人置いて話させる。
     expect(tournament.match(/<YakobiSays[^>]*size="xl"/g)?.length).toBe(3);
-    expect(tournament).toMatch(/talkTopic = 'difficulty'/);
+    // エントリーの設定を選ぶと、やこび姫がその設定について話す(選択シートで選んだとき)。
+    expect(tournament).toMatch(/difficulty\.value = Number\(value\); talkTopic\.value = "difficulty";/);
     for (const helper of ["ryuoGuideLines", "entryDifficultyLine", "opponentLines", "resultLines", "seasonPhaseLines"]) {
       expect(tournament).toContain(helper);
     }

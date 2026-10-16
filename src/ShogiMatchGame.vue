@@ -588,6 +588,7 @@
             v-for="side in pregameSides"
             :key="side.color"
             class="shogi-game__pregame-section shogi-game__pregame-side"
+            :class="{ 'shogi-game__pregame-side--cpu': side.isCpu }"
             :aria-label="side.label"
           >
             <div class="shogi-game__pregame-side-head">
@@ -1403,46 +1404,49 @@
           <p v-for="theme in collectionResult.themes" :key="theme" class="shogi-game__result-collection-theme">着せ替え{{ theme }}が使えるようになったよ！（やこびノートで選べるよ）</p>
           <p v-if="collectionResult.next" class="shogi-game__result-collection-next">次の着せ替えまで、印あと{{ collectionResult.next.remaining }}個</p>
         </div>
-        <!--
-          次の挑戦をいちばん手前に置く。同じLvに続けて負けたときは、挑戦を続ける道を先頭に、
-          強さを1つ下げる・香落ちを同じ大きさで並べる(自動では変えない)。教室と棋力測定の対局には出さない。
-        -->
-        <div v-if="!tutorialMatch && !measureSession && resultRetrySuggestion" class="shogi-game__result-retry" data-retry-suggestion>
-          <p>Lv.{{ resultRetrySuggestion.level }}、手強いね。どうする？</p>
-          <div class="shogi-game__result-retry-choices">
-            <button type="button" class="shogi-game__rematch" data-rematch @click="rematch()">もう一度挑む</button>
-            <button
-              v-if="resultRetrySuggestion.lowerLevel !== null"
-              type="button"
-              @click="rematch({ level: resultRetrySuggestion.lowerLevel })"
-            >Lv.{{ resultRetrySuggestion.lowerLevel }}で腕ならし</button>
-            <button type="button" @click="rematch({ handicapId: 'lance' })">香落ちで挑む</button>
+        <!-- 次にすること。ふだんは並びに影響しない(display: contents)。スマホの横向きでは右の列にまとめる。 -->
+        <div class="shogi-game__result-next">
+          <!--
+            次の挑戦をいちばん手前に置く。同じLvに続けて負けたときは、挑戦を続ける道を先頭に、
+            強さを1つ下げる・香落ちを同じ大きさで並べる(自動では変えない)。教室と棋力測定の対局には出さない。
+          -->
+          <div v-if="!tutorialMatch && !measureSession && resultRetrySuggestion" class="shogi-game__result-retry" data-retry-suggestion>
+            <p>Lv.{{ resultRetrySuggestion.level }}、手強いね。どうする？</p>
+            <div class="shogi-game__result-retry-choices">
+              <button type="button" class="shogi-game__rematch" data-rematch @click="rematch()">もう一度挑む</button>
+              <button
+                v-if="resultRetrySuggestion.lowerLevel !== null"
+                type="button"
+                @click="rematch({ level: resultRetrySuggestion.lowerLevel })"
+              >Lv.{{ resultRetrySuggestion.lowerLevel }}で腕ならし</button>
+              <button type="button" @click="rematch({ handicapId: 'lance' })">香落ちで挑む</button>
+            </div>
           </div>
+          <button
+            v-else-if="!tutorialMatch && !measureSession"
+            type="button"
+            class="shogi-game__rematch shogi-game__rematch--primary"
+            data-rematch
+            @click="rematch()"
+          >もう一局</button>
+          <button type="button" class="shogi-game__guided-start shogi-game__guided-start--result" @click="startGuidedReview">
+            <span aria-hidden="true">▶</span> 対局を振り返る
+          </button>
+          <div class="shogi-game__result-actions">
+            <!-- 教室の対局は、やこび姫の一言と★を見に教室へ戻る。 -->
+            <button v-if="tutorialMatch" type="button" class="shogi-game__rematch" @click="returnToTutorial">教室へ戻る</button>
+            <button v-else type="button" class="shogi-game__rematch" @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
+            <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
+          </div>
+          <label class="shogi-game__analysis-level">
+            <span>解析レベル</span>
+            <select v-model.number="analysisLevelChoice">
+              <option v-for="(level, index) in KIFU_ANALYSIS_LEVELS" :key="level.label" :value="index">
+                {{ index + 1 }}. {{ level.label }}
+              </option>
+            </select>
+          </label>
         </div>
-        <button
-          v-else-if="!tutorialMatch && !measureSession"
-          type="button"
-          class="shogi-game__rematch shogi-game__rematch--primary"
-          data-rematch
-          @click="rematch()"
-        >もう一局</button>
-        <button type="button" class="shogi-game__guided-start shogi-game__guided-start--result" @click="startGuidedReview">
-          <span aria-hidden="true">▶</span> 対局を振り返る
-        </button>
-        <div class="shogi-game__result-actions">
-          <!-- 教室の対局は、やこび姫の一言と★を見に教室へ戻る。 -->
-          <button v-if="tutorialMatch" type="button" class="shogi-game__rematch" @click="returnToTutorial">教室へ戻る</button>
-          <button v-else type="button" class="shogi-game__rematch" @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
-          <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
-        </div>
-        <label class="shogi-game__analysis-level">
-          <span>解析レベル</span>
-          <select v-model.number="analysisLevelChoice">
-            <option v-for="(level, index) in KIFU_ANALYSIS_LEVELS" :key="level.label" :value="index">
-              {{ index + 1 }}. {{ level.label }}
-            </option>
-          </select>
-        </label>
       </div>
     </div>
     <div

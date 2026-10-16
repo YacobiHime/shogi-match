@@ -261,13 +261,24 @@
           <p class="shogi-tutorial__speech">{{ chapterClearMessage }}</p>
         </div>
       </div>
+      <!-- レッスンは札にして並べ、札のどこを押してももう一度遊べる(小さなボタンを探させない)。 -->
       <ul class="shogi-tutorial__learned-list" aria-label="できるようになったこと">
         <li v-for="entry in clearedChapter.lessons" :key="entry.id">
-          <span class="shogi-tutorial__learned-stars" aria-hidden="true">
-            <i v-for="index in 3" :key="index" :class="{ on: index <= entry.stars }">★</i>
-          </span>
-          <span><b>{{ entry.title }}</b><small>{{ entry.summary }}</small></span>
-          <button type="button" class="shogi-tutorial__learned-retry" @click="startLesson(entry.id)">もう一度</button>
+          <button
+            type="button"
+            class="shogi-tutorial__learned-tile"
+            :aria-label="`${entry.title}（星${entry.stars}つ）をもう一度`"
+            @click="startLesson(entry.id)"
+          >
+            <span class="shogi-tutorial__learned-head">
+              <span class="shogi-tutorial__learned-stars" aria-hidden="true">
+                <i v-for="index in 3" :key="index" :class="{ on: index <= entry.stars }">★</i>
+              </span>
+              <span class="shogi-tutorial__learned-again" aria-hidden="true">もう一度</span>
+            </span>
+            <b>{{ entry.title }}</b>
+            <small v-if="entry.summary">{{ entry.summary }}</small>
+          </button>
         </li>
       </ul>
       <div class="shogi-tutorial__result-actions">
@@ -417,7 +428,8 @@ const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-min
 
 // 狭い画面では縦長レイアウトの盤に切り替える。
 const narrowMediaQuery = typeof window !== "undefined" && window.matchMedia
-  ? window.matchMedia("(max-width: 56rem)")
+  // 縦長の狭い画面だけ縦長の盤にする。スマホの横向きは、横長の盤の横に台詞を置く。
+  ? window.matchMedia("(max-width: 56rem) and (orientation: portrait), (max-width: 30rem)")
   : null;
 const isNarrow = ref(Boolean(narrowMediaQuery?.matches));
 function onNarrowChange(event: MediaQueryListEvent) { isNarrow.value = event.matches; }
@@ -442,12 +454,16 @@ function layoutBoardBox() {
   const style = getComputedStyle(stage);
   const innerWidth = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   const innerHeight = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+  // 横に並べる画面(スマホの横向き)では、台詞の欄の幅を引いた残りに、縦に並べる画面では高さを引いた残りに収める。
+  const row = style.flexDirection === "row";
   const panelHeight = panelEl.value?.offsetHeight ?? 0;
-  const gap = parseFloat(style.rowGap) || 0;
-  // 台詞が長くても盤が小さくなりすぎないようにする。収まらない分は画面ごとスクロールする。
+  const panelWidth = panelEl.value?.offsetWidth ?? 0;
+  const gap = parseFloat(row ? style.columnGap : style.rowGap) || 0;
+  // 台詞が長くても盤が小さくなりすぎないようにする。
   const minHeight = Math.min(320, window.innerHeight * 0.42);
-  const availableHeight = Math.max(minHeight, innerHeight - panelHeight - gap);
-  const width = Math.max(1, Math.floor(Math.min(innerWidth, availableHeight * boardAspect.value)));
+  const availableHeight = row ? innerHeight : Math.max(minHeight, innerHeight - panelHeight - gap);
+  const availableWidth = row ? Math.max(1, innerWidth - panelWidth - gap) : innerWidth;
+  const width = Math.max(1, Math.floor(Math.min(availableWidth, availableHeight * boardAspect.value)));
   const height = Math.max(1, Math.floor(width / boardAspect.value));
   boardBoxStyle.value = { width: `${width}px`, height: `${height}px` };
 }
@@ -1881,32 +1897,49 @@ const resultMessage = computed(() => {
   padding: 0;
   list-style: none;
 }
-.shogi-game .shogi-tutorial__learned-list li {
+.shogi-game .shogi-tutorial__learned-tile {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.5rem 0.8rem;
+  align-content: start;
+  gap: 0.15rem;
+  width: 100%;
+  height: 100%;
+  padding: 0.45rem 0.65rem 0.5rem;
+  border: 1px solid rgba(255, 252, 244, 0.18);
   border-radius: 0.7rem;
+  color: #fffcf4;
   background: rgba(43, 70, 91, 0.6);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.shogi-game .shogi-tutorial__learned-list b {
-  display: block;
+.shogi-game .shogi-tutorial__learned-tile:hover,
+.shogi-game .shogi-tutorial__learned-tile:focus-visible {
+  border-color: rgba(241, 165, 76, 0.8);
+  background: rgba(55, 88, 113, 0.75);
 }
-.shogi-game .shogi-tutorial__learned-list small {
+.shogi-game .shogi-tutorial__learned-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem;
+}
+.shogi-game .shogi-tutorial__learned-again {
+  color: rgba(255, 252, 244, 0.6);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.shogi-game .shogi-tutorial__learned-tile b {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.shogi-game .shogi-tutorial__learned-tile small {
   display: block;
   color: rgba(255, 252, 244, 0.75);
-}
-.shogi-game .shogi-tutorial__learned-retry {
-  min-height: 2rem;
-  padding: 0.1rem 0.7rem;
-  border: 1px solid rgba(255, 252, 244, 0.45);
-  border-radius: 999px;
-  color: #fffcf4;
-  background: transparent;
-  font: inherit;
   font-size: 0.8rem;
-  cursor: pointer;
 }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .shogi-tutorial__node--next,
@@ -1916,5 +1949,87 @@ const resultMessage = computed(() => {
   .shogi-game .shogi-tutorial__chapter-clear h2 {
     animation: none;
   }
+}
+/*
+ * 背の低い横長の画面(スマホの横向き)。盤の下に台詞を置くと盤が小さくなりすぎるので、
+ * 横長の盤を左に、台詞と操作を右に並べる(将棋教室と問題集で共通)。
+ */
+@media (orientation: landscape) and (max-height: 560px) {
+  .shogi-game .shogi-tutorial .shogi-tutorial__stage {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    overflow: hidden;
+    padding-block: 0.3rem;
+  }
+  .shogi-game .shogi-tutorial .shogi-tutorial__panel {
+    width: min(44%, 26rem);
+    max-height: 100%;
+    align-self: center;
+    overflow-y: auto;
+  }
+  .shogi-game .shogi-tutorial__chara { height: clamp(56px, 18vh, 80px); }
+  .shogi-game .shogi-tutorial__speech { font-size: 0.98rem; }
+  .shogi-game .shogi-tutorial__track { margin-top: 0.25rem; }
+}
+/*
+ * 章クリアのレッスンの一覧。11レッスンある章でもスクロールせずに見られるよう、
+ * レッスンが5つ以上の章は解説を省いた小さな札にして、列を増やす。
+ */
+.shogi-game .shogi-tutorial__learned-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+}
+.shogi-game .shogi-tutorial__chapter-clear:has(.shogi-tutorial__learned-list li:nth-child(5)) > * {
+  width: min(100%, 52rem);
+}
+.shogi-game .shogi-tutorial__learned-list:has(li:nth-child(5)) {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr));
+}
+.shogi-game .shogi-tutorial__learned-list:has(li:nth-child(5)) small { display: none; }
+@media (max-width: 600px), (max-height: 600px) {
+  .shogi-game .shogi-tutorial__learned-list,
+  .shogi-game .shogi-tutorial__learned-list:has(li:nth-child(5)) {
+    grid-template-columns: repeat(auto-fill, minmax(6.4rem, 1fr));
+    gap: 0.3rem;
+  }
+  .shogi-game .shogi-tutorial__learned-list small { display: none; }
+  .shogi-game .shogi-tutorial__learned-tile { padding: 0.3rem 0.45rem 0.35rem; gap: 0.05rem; }
+  .shogi-game .shogi-tutorial__learned-tile b { font-size: 0.82rem; }
+  .shogi-game .shogi-tutorial__learned-stars { font-size: 0.8rem; }
+  .shogi-game .shogi-tutorial__learned-again { font-size: 0.62rem; }
+  .shogi-game .shogi-tutorial__chapter-clear { gap: 0.45rem; padding-top: 0.5rem; padding-bottom: 0.6rem; }
+  .shogi-game .shogi-tutorial__chapter-clear-eyebrow { margin-top: 0; font-size: 0.8rem; }
+  .shogi-game .shogi-tutorial__chapter-clear-stars { font-size: 1.15rem; }
+  .shogi-game .shogi-tutorial__chapter-clear .shogi-tutorial__bubble { padding: 0.45rem 0.7rem; }
+  .shogi-game .shogi-tutorial__chapter-clear .shogi-tutorial__chara { height: 3.6rem; }
+  .shogi-game .shogi-tutorial__chapter-clear .shogi-tutorial__speech { font-size: 0.9rem; }
+  .shogi-game .shogi-tutorial__chapter-clear .shogi-tutorial__result-actions { gap: 0.35rem; }
+}
+/*
+ * 背の低い横長の画面(スマホの横向き)では、見出し・やこび姫・次へのボタンを左に、
+ * レッスンの札を右に並べる。
+ */
+@media (orientation: landscape) and (max-height: 500px) {
+  .shogi-game .shogi-tutorial__chapter-clear {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-auto-flow: row dense;
+    align-content: center;
+    column-gap: 1rem;
+    row-gap: 0.35rem;
+  }
+  .shogi-game .shogi-tutorial__chapter-clear > *,
+  .shogi-game .shogi-tutorial__chapter-clear:has(.shogi-tutorial__learned-list li:nth-child(5)) > * {
+    grid-column: 1;
+    width: 100%;
+  }
+  .shogi-game .shogi-tutorial__chapter-clear h2 { font-size: 1.35rem; }
+  .shogi-game .shogi-tutorial__chapter-clear:has(.shogi-tutorial__learned-list li:nth-child(1)) > .shogi-tutorial__learned-list {
+    grid-column: 2;
+    grid-row: 1 / span 6;
+    align-self: center;
+  }
+  .shogi-game .shogi-tutorial__chapter-clear .shogi-tutorial__speech { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  .shogi-game .shogi-tutorial__chapter-clear .shogi-tutorial__result-actions button { min-height: 2.4rem; padding-block: 0.3rem; }
 }
 </style>
