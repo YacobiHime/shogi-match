@@ -42,6 +42,8 @@ function pieceLesson(id, { entryId, sfen, from, target, maxMoves, targetLabel, q
     id,
     title: entry.label.replace(/（.*）/, ""),
     summary: entry.overview,
+    // 地図のマスに描く文字。駒のレッスンは、その駒の1文字にする。
+    icon: entry.label[0],
     steps: [
       { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: `これが「${name}」。${entry.overview} 青い点が、${name}の動けるマスだよ。` },
       { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: entry.rows[0][1] },

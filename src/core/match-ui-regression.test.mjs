@@ -350,4 +350,20 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/homeNext\.value\.id === "tutorial"\) openTutorialLesson\(\)/);
     expect(source).toMatch(/:auto-start="tutorialAutoStart"/);
   });
+
+  it("lays the classroom out as one map and chains short lessons within a chapter", () => {
+    const tutorial = readFileSync(new URL("../ShogiTutorial.vue", import.meta.url), "utf8");
+    // 本棚と巻の一覧のかわりに、1本の道の地図。マスを押せばすぐ始まる。
+    expect(tutorial).toMatch(/v-if="view === 'map'"[\s\S]*?data-tutorial-map/);
+    expect(tutorial).not.toMatch(/view === 'shelf'|view === 'volume'/);
+    expect(tutorial).toMatch(/@click="onNodeClick\(row\)"/);
+    // 同じ章のあいだは、結果の画面を挟まずにクリアの知らせを出して続ける。章の最後だけ章クリアの画面。
+    const finish = tutorial.split("function finishLesson()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(finish).toMatch(/continueAfter\(lesson, stars\)/);
+    expect(finish).not.toMatch(/showResult\(/);
+    const after = tutorial.split("function continueAfter(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(after).toMatch(/nextLessonInChapter\([\s\S]*?showChapterClear\(lesson\.chapterId\)[\s\S]*?setTimeout\(continueChain, STAGE_CLEAR_MS\)/);
+    expect(tutorial).toMatch(/data-stage-clear @click="continueChain"/);
+    expect(tutorial).toMatch(/view === 'chapter' && clearedChapter/);
+  });
 });

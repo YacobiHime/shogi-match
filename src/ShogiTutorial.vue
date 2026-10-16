@@ -21,69 +21,76 @@
       >スキップ</button>
     </header>
 
-    <!-- 本棚：巻を選ぶ -->
-    <section v-if="view === 'shelf'" class="shogi-tutorial__shelf" aria-label="巻の一覧">
-      <div class="shogi-dex__speech shogi-tutorial__intro">
-        <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
-        <p>{{ shelfMessage }}</p>
-      </div>
-      <button
-        v-if="upcomingLesson"
-        type="button"
-        class="shogi-tutorial__continue"
-        @click="startLesson(upcomingLesson.id)"
-      >
-        つづきから：第{{ upcomingLesson.volumeNumber }}巻「{{ upcomingLesson.title }}」
-      </button>
-      <ol class="shogi-tutorial__volumes">
-        <li v-for="(volume, index) in volumes" :key="volume.id">
-          <button type="button" class="shogi-tutorial__volume" @click="openVolume(volume.id)">
-            <span class="shogi-tutorial__volume-number">第{{ index + 1 }}巻</span>
-            <strong>{{ volume.title }}</strong>
-            <small>{{ volume.description }}</small>
-            <span class="shogi-tutorial__meter" aria-hidden="true">
-              <span :style="{ width: `${volumeSummary(volume).percent}%` }"></span>
-            </span>
-            <span class="shogi-tutorial__volume-stats">
-              {{ volumeSummary(volume).done }}/{{ volumeSummary(volume).total }} レッスン
-              ・ ★{{ volumeSummary(volume).stars }}/{{ volumeSummary(volume).maxStars }}
-            </span>
-          </button>
-        </li>
-      </ol>
-    </section>
-
-    <!-- 巻の中：章とレッスンの道 -->
-    <section v-else-if="view === 'volume' && currentVolume" class="shogi-tutorial__volume-view" aria-label="レッスンの一覧">
-      <p class="shogi-tutorial__volume-lead">{{ currentVolume.description }}</p>
-      <section v-for="chapter in currentVolume.chapters" :key="chapter.id" class="shogi-tutorial__chapter">
-        <div class="shogi-tutorial__chapter-head">
-          <h2>{{ chapter.title }}</h2>
-          <button
-            v-if="chapterSkippable(chapter)"
-            type="button"
-            class="shogi-tutorial__skip-chapter"
-            @click="skipChapter(chapter)"
-          >この章をスキップ</button>
+    <!--
+      地図(すごろくの道)。巻・章・レッスンを学ぶ順に1本の道に並べ、いま進めるマスを1つだけ大きく見せる。
+      マスを押せばすぐレッスンが始まる。開くと、いまのマスまで自動でスクロールする。
+    -->
+    <section v-if="view === 'map'" ref="mapEl" class="shogi-tutorial__map" aria-label="レッスンの地図" data-tutorial-map>
+      <div class="shogi-tutorial__map-hero">
+        <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
+        <div class="shogi-tutorial__map-hero-body">
+          <p class="shogi-tutorial__speech">{{ mapMessage || shelfMessage }}</p>
+          <p class="shogi-tutorial__map-total" aria-label="集めた星">
+            ★ {{ map.total.stars }} / {{ map.total.maxStars }}<small>・{{ map.total.done }} / {{ map.total.total }} レッスン</small>
+          </p>
         </div>
-        <ol class="shogi-tutorial__path">
-          <li v-for="lesson in chapterLessons(chapter)" :key="lesson.id">
+        <button
+          v-if="upcomingLesson"
+          type="button"
+          class="shogi-tutorial__continue"
+          data-tutorial-continue
+          @click="startLesson(upcomingLesson.id)"
+        >
+          <small>つづきから</small><span>▶ {{ upcomingLesson.title }}</span>
+        </button>
+      </div>
+      <ol class="shogi-tutorial__road">
+        <li
+          v-for="row in map.rows"
+          :key="`${row.type}-${row.id}`"
+          :class="`shogi-tutorial__road-${row.type}`"
+        >
+          <!-- 巻の看板 -->
+          <div v-if="row.type === 'volume'" class="shogi-tutorial__world">
+            <span class="shogi-tutorial__world-number">第{{ row.number }}巻</span>
+            <strong>{{ row.title }}</strong>
+            <span class="shogi-tutorial__meter" aria-hidden="true">
+              <span :style="{ width: `${row.summary.total ? Math.round((row.summary.done / row.summary.total) * 100) : 0}%` }"></span>
+            </span>
+            <small>★{{ row.summary.stars }}/{{ row.summary.maxStars }}</small>
+          </div>
+          <!-- 章の看板 -->
+          <div v-else-if="row.type === 'chapter'" class="shogi-tutorial__signpost">
+            <span>第{{ row.number }}章 {{ row.title }}</span>
+            <button
+              v-if="row.skippable"
+              type="button"
+              class="shogi-tutorial__skip-chapter"
+              @click="skipChapterById(row.id)"
+            >この章をとばす</button>
+          </div>
+          <!-- レッスンのマス -->
+          <div v-else class="shogi-tutorial__stop" :style="{ '--lane': row.lane }">
             <button
               type="button"
-              class="shogi-tutorial__lesson"
-              :class="lessonClass(lesson)"
-              :disabled="!lessonUnlocked(lesson) || lesson.comingSoon"
-              @click="startLesson(lesson.id)"
+              class="shogi-tutorial__node"
+              :class="`shogi-tutorial__node--${row.state}`"
+              :aria-label="`${row.title}（${nodeStateText(row)}）`"
+              :data-map-current="row.state === 'next' ? '' : undefined"
+              :data-lesson-node="row.id"
+              :disabled="row.state === 'soon'"
+              @click="onNodeClick(row)"
             >
-              <span class="shogi-tutorial__lesson-badge" aria-hidden="true">{{ lessonBadge(lesson) }}</span>
-              <span class="shogi-tutorial__lesson-text">
-                <strong>{{ lesson.title }}</strong>
-                <small>{{ lessonStatusText(lesson) }}</small>
-              </span>
+              <span class="shogi-tutorial__node-icon" aria-hidden="true">{{ row.state === "locked" ? "🔒" : row.icon }}</span>
+              <span v-if="row.state === 'next'" class="shogi-tutorial__node-start" aria-hidden="true">ここから！</span>
             </button>
-          </li>
-        </ol>
-      </section>
+            <span class="shogi-tutorial__node-title">{{ row.title }}</span>
+            <span v-if="row.state === 'cleared'" class="shogi-tutorial__node-stars" aria-hidden="true">
+              <i v-for="index in 3" :key="index" :class="{ on: index <= row.stars }">★</i>
+            </span>
+          </div>
+        </li>
+      </ol>
     </section>
 
     <!--
@@ -91,18 +98,18 @@
       盤の課題と選択問題は、正解すると自動で次へ進む。困ったら、しばらくするとヒントがそっと出る。
     -->
     <section v-else-if="view === 'lesson' && currentLesson && currentStep" class="shogi-tutorial__lesson-view" aria-label="レッスン">
-      <!-- 進み具合。ステップを点で並べ、あといくつで終わるかを見せる。 -->
-      <ol class="shogi-tutorial__steps" :aria-label="`${stepIndex + 1}/${currentLesson.steps.length}`" data-tutorial-steps>
-        <li
-          v-for="(step, index) in currentLesson.steps"
-          :key="index"
-          :class="{
-            'shogi-tutorial__step--done': Number(index) < stepIndex,
-            'shogi-tutorial__step--now': Number(index) === stepIndex,
-            'shogi-tutorial__step--task': step.type !== 'explain',
-          }"
-        ></li>
-      </ol>
+      <!--
+        進み具合。章のレッスンを区切りで並べ、いまのレッスンは区切りの中をステップの進み具合で塗る。
+        短いレッスンが続けて流れていくことを、1本の帯で見せる。
+      -->
+      <div class="shogi-tutorial__track" data-tutorial-steps :aria-label="`第${chapterNumber}章 ${chapterTrack.index + 1}/${chapterTrack.count}つ目のレッスン、${stepIndex + 1}/${currentLesson.steps.length}`">
+        <span class="shogi-tutorial__track-label">{{ chapterTitle }}</span>
+        <ol>
+          <li v-for="(id, index) in chapterTrack.ids" :key="id">
+            <span :style="{ width: `${trackFill(index)}%` }"></span>
+          </li>
+        </ol>
+      </div>
       <div ref="stageEl" class="shogi-dex__detail shogi-tutorial__stage" data-tutorial-stage @click="onStageTap">
         <div v-if="boardSfen" class="shogi-dex__main">
           <div class="shogi-dex__board" :style="boardBoxStyle">
@@ -220,6 +227,51 @@
           </div>
         </div>
       </div>
+      <!--
+        レッスンクリアの知らせ。結果の画面へ移らず、盤の上に短く出して、同じ章の次のレッスンへ自動で続ける。
+        押せば待たずに進む。地図へ戻る道も残す。
+      -->
+      <Transition name="shogi-tutorial__clear">
+        <div v-if="stageClear" class="shogi-tutorial__clear" role="status" data-stage-clear @click="continueChain">
+          <p class="shogi-tutorial__clear-title">クリア！</p>
+          <p class="shogi-tutorial__clear-stars" :aria-label="`星${stageClear.stars}つ`">
+            <i v-for="index in 3" :key="index" :class="{ on: index <= stageClear.stars }">★</i>
+          </p>
+          <p class="shogi-tutorial__clear-next">つぎは「{{ stageClear.nextTitle }}」 <span aria-hidden="true">▶</span></p>
+          <button type="button" class="shogi-tutorial__clear-map" @click.stop="openMap">地図へ</button>
+        </div>
+      </Transition>
+    </section>
+
+    <!--
+      章クリア。短いレッスンのたびに結果を挟まず、章の終わりでまとめてほめる。
+      できるようになったことを並べ、次の章へすぐ進めるようにする。
+    -->
+    <section v-else-if="view === 'chapter' && clearedChapter" class="shogi-tutorial__chapter-clear" aria-label="章クリア" data-chapter-clear>
+      <p class="shogi-tutorial__chapter-clear-eyebrow">第{{ clearedChapter.volumeNumber }}巻 第{{ clearedChapter.number }}章</p>
+      <h2>「{{ clearedChapter.title }}」クリア！</h2>
+      <p class="shogi-tutorial__chapter-clear-stars">★ {{ clearedChapter.stars }} / {{ clearedChapter.maxStars }}</p>
+      <div class="shogi-tutorial__bubble">
+        <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
+        <div class="shogi-tutorial__bubble-body">
+          <p class="shogi-tutorial__speech">{{ chapterClearMessage }}</p>
+        </div>
+      </div>
+      <ul class="shogi-tutorial__learned-list" aria-label="できるようになったこと">
+        <li v-for="entry in clearedChapter.lessons" :key="entry.id">
+          <span class="shogi-tutorial__learned-stars" aria-hidden="true">
+            <i v-for="index in 3" :key="index" :class="{ on: index <= entry.stars }">★</i>
+          </span>
+          <span><b>{{ entry.title }}</b><small>{{ entry.summary }}</small></span>
+          <button type="button" class="shogi-tutorial__learned-retry" @click="startLesson(entry.id)">もう一度</button>
+        </li>
+      </ul>
+      <div class="shogi-tutorial__result-actions">
+        <button v-if="nextChapterLesson" ref="nextChapterButton" type="button" class="shogi-tutorial__primary" data-next-chapter @click="startLesson(nextChapterLesson.id)">
+          次の章へ：{{ nextChapterLesson.title }}
+        </button>
+        <button type="button" @click="openMap">地図へ</button>
+      </div>
     </section>
 
     <!-- 結果 -->
@@ -260,12 +312,12 @@
         </div>
         <p v-else class="shogi-tutorial__star-note">{{ resultMessage }}</p>
         <div class="shogi-tutorial__result-actions">
-          <button v-if="followingLesson" ref="nextLessonButton" type="button" class="shogi-tutorial__primary" @click="startLesson(followingLesson.id)">
-            次のレッスン：{{ followingLesson.title }}
+          <button v-if="followingLesson" ref="nextLessonButton" type="button" class="shogi-tutorial__primary" @click="continueAfterResult">
+            次へ進む
           </button>
           <button v-if="matchComment" type="button" @click="startMatch">もう一度対局する</button>
           <button v-else type="button" @click="startLesson(currentLesson.id)">もう一度</button>
-          <button type="button" @click="openVolume(currentLesson.volumeId)">レッスン一覧へ</button>
+          <button type="button" @click="openMap">地図へ</button>
         </div>
       </template>
     </section>
@@ -305,15 +357,19 @@ import {
   tutorialStepMarks,
 } from "./core/tutorial-runner.mjs";
 import {
-  isLessonUnlocked,
-  lessonRecord,
-  lessonsProgress,
   loadTutorialProgress,
   nextLesson,
   recordLessonCleared,
   recordLessonSkipped,
   saveTutorialProgress,
 } from "./core/tutorial-progress.mjs";
+import {
+  chapterPosition,
+  chapterSummary,
+  firstLessonOfNextChapter,
+  nextLessonInChapter,
+  tutorialMap,
+} from "./core/tutorial-map.mjs";
 
 type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string };
 type Volume = (typeof TUTORIAL_VOLUMES)[number];
@@ -351,8 +407,7 @@ function playMoveSoundFor(sfen: string, usi: string) {
 
 const volumes = TUTORIAL_VOLUMES as unknown as Volume[];
 const lessons = TUTORIAL_LESSONS as unknown as Lesson[];
-const view = ref<"shelf" | "volume" | "lesson" | "result">("shelf");
-const volumeId = ref("");
+const view = ref<"map" | "lesson" | "chapter" | "result">("map");
 const lessonId = ref("");
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=2`);
 
@@ -402,81 +457,130 @@ watch([stageEl, panelEl], ([stage, panel]) => {
 watch(boardAspect, layoutBoardBox);
 onBeforeUnmount(() => boardBoxObserver?.disconnect());
 
-const currentVolume = computed(() => volumes.find(({ id }) => id === volumeId.value) ?? null);
 const currentLesson = computed(() => (lessonId.value ? tutorialLesson(lessonId.value) as Lesson | null : null));
 const headerTitle = computed(() => {
-  if (view.value === "volume" && currentVolume.value) return `第${volumes.indexOf(currentVolume.value) + 1}巻 ${currentVolume.value.title}`;
   if ((view.value === "lesson" || view.value === "result") && currentLesson.value) return currentLesson.value.title;
+  if (view.value === "chapter") return "章クリア！";
   return TUTORIAL_TITLE;
 });
-const backLabel = computed(() => (
-  view.value === "shelf" ? "タイトルへ戻る" : view.value === "volume" ? "本棚へ戻る" : "レッスン一覧へ"
-));
+const backLabel = computed(() => (view.value === "map" ? "タイトルへ戻る" : "地図へ"));
 function goBack() {
-  if (view.value === "shelf") emit("close");
-  else if (view.value === "volume") view.value = "shelf";
-  else if (currentLesson.value) openVolume(currentLesson.value.volumeId);
+  if (view.value === "map") emit("close");
+  else openMap();
 }
 // ブラウザの戻るからも、ヘッダーの戻るボタンと同じ段だけ戻す。
 defineExpose({ goBack });
 
-// ===== 本棚と一覧 =====
+// ===== 地図(すごろくの道) =====
 const upcomingLesson = computed(() => nextLesson(lessons, progress.value) as Lesson | null);
-const shelfMessage = computed(() => (
-  Object.keys(progress.value.lessons).length
-    ? "おかえり！ 今日もいっしょに将棋を学ぼうね。"
-    : "ようこそ、やこび姫の将棋教室へ！ 駒の動かし方から、いっしょに少しずつ覚えていこうね。"
-));
-function volumeLessons(volume: Volume) {
-  return lessons.filter((lesson) => lesson.volumeId === volume.id);
+const map = computed(() => tutorialMap(volumes, lessons, progress.value));
+const shelfMessage = computed(() => {
+  if (!Object.keys(progress.value.lessons).length) return "ようこそ、やこび姫の将棋教室へ！ 光っているマスから始めよう。";
+  return upcomingLesson.value ? "おかえり！ 光っているマスから続けよう。" : "全部のレッスンを終えたね！ 好きなマスで、もう一度遊べるよ。";
+});
+/** 閉じたマスを押したときなど、やこび姫が一言だけかける。 */
+const mapMessage = ref("");
+const mapEl = ref<HTMLElement | null>(null);
+function nodeStateText(row: { state: string; stars: number }) {
+  return ({
+    cleared: `クリア・★${row.stars}`, skipped: "とばした", next: "ここから", open: "遊べる", locked: "まだ閉じている", soon: "準備中",
+  } as Record<string, string>)[row.state] ?? "";
 }
-function volumeSummary(volume: Volume) {
-  const summary = lessonsProgress(volumeLessons(volume), progress.value);
-  return { ...summary, percent: summary.total ? Math.round((summary.done / summary.total) * 100) : 0 };
+function onNodeClick(row: { id: string; state: string }) {
+  if (row.state === "locked") {
+    mapMessage.value = "そのマスは、光っているマスを終えると遊べるよ。";
+    return;
+  }
+  startLesson(row.id);
 }
-function openVolume(id: string) {
+function openMap() {
   clearStepTimers();
-  volumeId.value = id;
-  view.value = "volume";
+  clearChain();
+  mapMessage.value = "";
+  view.value = "map";
+  // いま進めるマスが見える位置まで、地図をスクロールする。
+  void nextTick(() => {
+    mapEl.value?.querySelector("[data-map-current]")?.scrollIntoView({ block: "center" });
+  });
 }
-function lessonUnlocked(lesson: Lesson) {
-  return isLessonUnlocked(lessons, progress.value, lesson.id);
-}
-function lessonBadge(lesson: Lesson) {
-  if (lesson.comingSoon) return "…";
-  const record = lessonRecord(progress.value, lesson.id);
-  if (record.status === "cleared") return "★".repeat(record.stars);
-  if (record.status === "skipped") return "»";
-  return lessonUnlocked(lesson) ? "▶" : "🔒";
-}
-function lessonStatusText(lesson: Lesson) {
-  if (lesson.comingSoon) return "準備中";
-  const record = lessonRecord(progress.value, lesson.id);
-  if (record.status === "cleared") return `クリア（★${record.stars}）`;
-  if (record.status === "skipped") return "スキップ済み";
-  return lessonUnlocked(lesson) ? (lesson.summary ?? "") : "前のレッスンを終えると解放";
-}
-function lessonClass(lesson: Lesson) {
-  const record = lessonRecord(progress.value, lesson.id);
-  return {
-    "shogi-tutorial__lesson--cleared": record.status === "cleared",
-    "shogi-tutorial__lesson--skipped": record.status === "skipped",
-    "shogi-tutorial__lesson--next": upcomingLesson.value?.id === lesson.id,
-  };
-}
-function chapterLessons(chapter: Volume["chapters"][number]) {
-  return chapter.lessons as unknown as Lesson[];
-}
-function chapterSkippable(chapter: Volume["chapters"][number]) {
-  const pending = chapter.lessons.filter((lesson: any) => !lesson.comingSoon && lessonRecord(progress.value, lesson.id).status === "new");
-  return pending.length > 0 && lessonUnlocked(pending[0] as Lesson);
-}
-function skipChapter(chapter: Volume["chapters"][number]) {
+function skipChapterById(chapterId: string) {
   let next = progress.value;
-  for (const lesson of chapter.lessons as Lesson[]) {
+  for (const lesson of lessons.filter((entry) => entry.chapterId === chapterId)) {
     if (!lesson.comingSoon) next = recordLessonSkipped(next, lesson.id);
   }
   updateProgress(next);
+}
+
+// ===== 続けて進める(同じ章のレッスンは結果の画面を挟まない) =====
+/** レッスンクリアの知らせ。出ている間に押すか、少し待つと次のレッスンが始まる。 */
+const STAGE_CLEAR_MS = 1700;
+const stageClear = ref<{ stars: number; nextId: string; nextTitle: string } | null>(null);
+let chainTimer: ReturnType<typeof setTimeout> | undefined;
+function clearChain() {
+  clearTimeout(chainTimer);
+  chainTimer = undefined;
+  stageClear.value = null;
+}
+onBeforeUnmount(clearChain);
+function continueChain() {
+  const next = stageClear.value;
+  clearChain();
+  if (next) startLesson(next.nextId);
+}
+/** 章クリアの画面に出す章。 */
+const clearedChapterId = ref("");
+const clearedChapter = computed(() => (clearedChapterId.value ? chapterSummary(volumes, lessons, progress.value, clearedChapterId.value) : null));
+const nextChapterLesson = computed(() => {
+  const last = clearedChapter.value?.lessons.at(-1);
+  return last ? firstLessonOfNextChapter(lessons, last.id) as Lesson | null : null;
+});
+const chapterClearMessage = computed(() => {
+  const chapter = clearedChapter.value;
+  if (!chapter) return "";
+  if (chapter.stars >= chapter.maxStars) return "全部★3つ！ 完ぺきだね。この章でできるようになったことを、見てみよう。";
+  return "章クリア、おめでとう！ できるようになったことを並べたよ。★が足りないところは、「もう一度」で取り直せるよ。";
+});
+const nextChapterButton = ref<HTMLButtonElement | null>(null);
+function showChapterClear(chapterId: string) {
+  clearStepTimers();
+  clearChain();
+  clearedChapterId.value = chapterId;
+  view.value = "chapter";
+  void nextTick(() => nextChapterButton.value?.focus());
+}
+/**
+ * レッスンを終えたあと。同じ章に次のレッスンがあれば、知らせを出して続けて始める。章の最後なら、章クリアの画面へ。
+ * stars が null のとき(スキップ・対局の結果のあと)は、知らせを出さずにすぐ進む。
+ */
+function continueAfter(lesson: Lesson, stars: number | null) {
+  const next = nextLessonInChapter(lessons, lesson.id) as Lesson | null;
+  if (!next) {
+    showChapterClear(lesson.chapterId);
+    return;
+  }
+  if (stars === null) {
+    startLesson(next.id);
+    return;
+  }
+  stageClear.value = { stars, nextId: next.id, nextTitle: next.title };
+  chainTimer = setTimeout(continueChain, STAGE_CLEAR_MS);
+}
+
+/** 見出しの進み具合: 章のレッスンの区切りと、いまのレッスンの中のステップ。 */
+const chapterTrack = computed(() => chapterPosition(lessons, lessonId.value));
+const chapterInfo = computed(() => {
+  const lesson = currentLesson.value;
+  if (!lesson) return null;
+  return chapterSummary(volumes, lessons, progress.value, lesson.chapterId);
+});
+const chapterNumber = computed(() => chapterInfo.value?.number ?? 0);
+const chapterTitle = computed(() => (chapterInfo.value ? `第${chapterInfo.value.number}章 ${chapterInfo.value.title}` : ""));
+function trackFill(index: number) {
+  if (index < chapterTrack.value.index) return 100;
+  if (index > chapterTrack.value.index) return 0;
+  if (stageClear.value) return 100;
+  const steps = currentLesson.value?.steps?.length ?? 1;
+  return Math.round((stepIndex.value / steps) * 100);
 }
 
 // ===== レッスン =====
@@ -494,7 +598,7 @@ const resultStars = ref(0);
 const currentStep = computed(() => currentLesson.value?.steps?.[stepIndex.value] ?? null);
 const stepInteractive = computed(() => INTERACTIVE_STEP_TYPES.includes(currentStep.value?.type));
 const boardSfen = computed(() => stepState.value.sfen);
-const boardInteractive = computed(() => stepInteractive.value && !stepSolved.value);
+const boardInteractive = computed(() => stepInteractive.value && !stepSolved.value && !stageClear.value);
 const hintView = computed(() => (
   hintLevel.value && currentStep.value
     ? tutorialHint(currentStep.value, stepState.value, hintLevel.value)
@@ -551,6 +655,10 @@ function onStageTap(event: MouseEvent) {
   advanceByTap();
 }
 function advanceByTap() {
+  if (stageClear.value) {
+    continueChain();
+    return;
+  }
   const step = currentStep.value;
   if (!step || !tapToAdvance.value) return;
   const now = Date.now();
@@ -632,6 +740,7 @@ function loadStep(index: number) {
   lastMove.value = played.at(-1) ?? "";
 }
 function startLesson(id: string) {
+  clearChain();
   lessonId.value = id;
   mistakes.value = 0;
   hints.value = 0;
@@ -720,7 +829,11 @@ function choose(index: number) {
 function finishLesson() {
   const lesson = currentLesson.value;
   if (!lesson) return;
-  showResult(lessonStars({ mistakes: mistakes.value, hints: hints.value }), null);
+  const stars = lessonStars({ mistakes: mistakes.value, hints: hints.value });
+  updateProgress(recordLessonCleared(progress.value, lesson.id, stars));
+  // レッスンを終えたら、続けて遊んだ日に数える。
+  savePlayStreak(storage, recordPlay(loadPlayStreak(storage)));
+  continueAfter(lesson, stars);
 }
 function advance() {
   clearStepTimers();
@@ -733,9 +846,7 @@ function skipCurrentLesson() {
   const lesson = currentLesson.value;
   if (!lesson) return;
   updateProgress(recordLessonSkipped(progress.value, lesson.id));
-  const following = nextLesson(lessons, progress.value) as Lesson | null;
-  if (following) startLesson(following.id);
-  else openVolume(lesson.volumeId);
+  continueAfter(lesson, null);
 }
 // 対局ステップ。条件はレッスンで固定し、クリアと★は終局後に決める。
 const playStep = computed(() => currentLesson.value?.steps?.find(({ type }: { type: string }) => type === "play") ?? null);
@@ -822,16 +933,23 @@ watch(revealStage, (stage) => {
 });
 onMounted(() => {
   const report = props.matchReport;
-  // タイトル画面の「将棋教室のつづき」からは、本棚を通さずに次のレッスンを始める。
+  // タイトル画面の「将棋教室のつづき」からは、地図を通さずに次のレッスンを始める。
   if (!report && props.autoStart && upcomingLesson.value) {
     startLesson(upcomingLesson.value.id);
     return;
   }
-  if (!report || !tutorialLesson(report.lessonId)) return;
+  if (!report || !tutorialLesson(report.lessonId)) {
+    // 地図を開いたら、いま進めるマスが見える位置までスクロールする。
+    void nextTick(() => mapEl.value?.querySelector("[data-map-current]")?.scrollIntoView({ block: "center" }));
+    return;
+  }
   lessonId.value = report.lessonId;
-  volumeId.value = currentLesson.value?.volumeId ?? "";
   showResult(matchLessonStars(report), report);
 });
+/** 対局のレッスンの結果から、次へ進む(同じ章の次のレッスンか、章クリア)。 */
+function continueAfterResult() {
+  if (currentLesson.value) continueAfter(currentLesson.value, null);
+}
 const followingLesson = computed(() => {
   const index = lessons.findIndex(({ id }) => id === lessonId.value);
   return lessons.slice(index + 1).find((lesson) => !lesson.comingSoon) ?? null;
@@ -854,7 +972,8 @@ const resultMessage = computed(() => {
 
 <style>
 .shogi-game .shogi-tutorial__shelf,
-.shogi-game .shogi-tutorial__volume-view,
+.shogi-game .shogi-tutorial__map,
+.shogi-game .shogi-tutorial__chapter-clear,
 .shogi-game .shogi-tutorial__result {
   flex: 1;
   overflow-y: auto;
@@ -891,87 +1010,19 @@ const resultMessage = computed(() => {
   box-shadow: 0 1px 0 #b57c39;
   transform: translateY(3px);
 }
-.shogi-game .shogi-tutorial__volumes {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
-  gap: 0.8rem;
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: 0;
-  list-style: none;
-}
-.shogi-game .shogi-tutorial__volume {
-  display: grid;
-  gap: 0.35rem;
-  width: 100%;
-  height: 100%;
-  padding: 0.9rem 1rem;
-  border: 1px solid rgba(255, 252, 244, 0.35);
-  border-left: 6px solid #f1a54c;
-  border-radius: 0.5rem;
-  color: #fffcf4;
-  background: rgba(29, 48, 63, 0.8);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.shogi-game .shogi-tutorial__volume:hover {
-  border-color: #f1a54c;
-}
-.shogi-game .shogi-tutorial__volume-number {
-  color: #f1a54c;
-  font-size: 0.85em;
-  font-weight: 700;
-}
-.shogi-game .shogi-tutorial__volume strong {
-  font-size: 1.15em;
-}
-.shogi-game .shogi-tutorial__volume small,
-.shogi-game .shogi-tutorial__volume-stats {
-  font-size: 0.82em;
-  opacity: 0.85;
-}
-.shogi-game .shogi-tutorial__meter,
-.shogi-game .shogi-tutorial__progress {
+.shogi-game .shogi-tutorial__meter {
   display: block;
   height: 0.45rem;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 252, 244, 0.18);
 }
-.shogi-game .shogi-tutorial__meter > span,
-.shogi-game .shogi-tutorial__progress > span {
+.shogi-game .shogi-tutorial__meter > span {
   display: block;
   height: 100%;
   border-radius: inherit;
   background: #f1a54c;
   transition: width 200ms ease;
-}
-.shogi-game .shogi-tutorial__progress {
-  flex: none;
-  margin: 0.5rem 1rem 0;
-}
-.shogi-game .shogi-tutorial__volume-lead {
-  max-width: 48rem;
-  margin: 0 auto 0.6rem;
-  opacity: 0.85;
-}
-.shogi-game .shogi-tutorial__chapter {
-  max-width: 48rem;
-  margin: 0 auto 1.2rem;
-}
-.shogi-game .shogi-tutorial__chapter-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-.shogi-game .shogi-tutorial__chapter-head h2 {
-  margin: 0;
-  color: #f1a54c;
-  font-size: 1.05em;
 }
 .shogi-game .shogi-tutorial__skip-chapter,
 .shogi-game .shogi-tutorial__skip {
@@ -983,14 +1034,6 @@ const resultMessage = computed(() => {
   font: inherit;
   font-size: 0.8em;
   cursor: pointer;
-}
-.shogi-game .shogi-tutorial__path {
-  display: grid;
-  gap: 0.45rem;
-  margin: 0;
-  padding: 0 0 0 1.2rem;
-  border-left: 3px dashed rgba(241, 165, 76, 0.5);
-  list-style: none;
 }
 .shogi-game .shogi-tutorial__lesson {
   display: flex;
@@ -1280,12 +1323,12 @@ const resultMessage = computed(() => {
  * 見出し: レッスン中は1行にまとめる。狭い画面では戻るボタンを矢印だけにし、題名は1行で切る。
  * スキップは見出しの右端の小さなボタンにする(押し間違えにくく、操作の邪魔をしない)。
  */
-.shogi-game .shogi-tutorial--lesson .shogi-dex__header {
+.shogi-game .shogi-tutorial .shogi-dex__header {
   flex-wrap: nowrap;
   gap: 0.6rem;
   padding: 0.4rem 0.7rem;
 }
-.shogi-game .shogi-tutorial--lesson .shogi-dex__header h1 {
+.shogi-game .shogi-tutorial .shogi-dex__header h1 {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1294,7 +1337,7 @@ const resultMessage = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.shogi-game .shogi-tutorial--lesson .shogi-dex__back {
+.shogi-game .shogi-tutorial .shogi-dex__back {
   min-height: 2.4rem;
   padding: 0.3rem 0.8rem;
 }
@@ -1311,36 +1354,9 @@ const resultMessage = computed(() => {
   cursor: pointer;
 }
 @media (max-width: 40rem) {
-  .shogi-game .shogi-tutorial--lesson .shogi-tutorial__back-label {
+  .shogi-game .shogi-tutorial .shogi-tutorial__back-label {
     display: none;
   }
-}
-/* 進み具合の点。済んだところは琥珀色、いまのところは大きく、課題の点は四角にする。 */
-.shogi-game .shogi-tutorial__steps {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.35rem;
-  margin: 0.45rem 0 0.1rem;
-  padding: 0 0.7rem;
-  list-style: none;
-}
-.shogi-game .shogi-tutorial__steps li {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  background: rgba(255, 252, 244, 0.22);
-  transition: transform 160ms ease, background-color 160ms ease;
-}
-.shogi-game .shogi-tutorial__steps .shogi-tutorial__step--task {
-  border-radius: 0.12rem;
-}
-.shogi-game .shogi-tutorial__steps .shogi-tutorial__step--done {
-  background: #f1a54c;
-}
-.shogi-game .shogi-tutorial__steps .shogi-tutorial__step--now {
-  background: #fffcf4;
-  transform: scale(1.35);
 }
 /* 画面のどこを押しても進む説明では、押せることを指の形で示す。 */
 .shogi-game .shogi-tutorial__stage {
@@ -1462,6 +1478,438 @@ const resultMessage = computed(() => {
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .shogi-tutorial__bubble--bad,
   .shogi-game .shogi-tutorial__tap span {
+    animation: none;
+  }
+}
+/* ===== 地図(すごろくの道) ===== */
+.shogi-game .shogi-tutorial__map {
+  scroll-behavior: smooth;
+}
+/* 上: やこび姫と、集めた星と、「つづきから」。 */
+.shogi-game .shogi-tutorial__map-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 0.4rem 0.8rem;
+  width: min(100%, 36rem);
+  margin: 0 auto 1rem;
+}
+.shogi-game .shogi-tutorial__map-hero-body {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.6rem 0.8rem;
+  border: 2px solid rgba(255, 252, 244, 0.3);
+  border-radius: 1rem;
+  background: rgba(23, 38, 50, 0.92);
+}
+.shogi-game .shogi-tutorial__map-total {
+  margin: 0;
+  color: #f1a54c;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__map-total small {
+  color: rgba(255, 252, 244, 0.7);
+  font-weight: 600;
+}
+.shogi-game .shogi-tutorial__map-hero .shogi-tutorial__continue {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.1rem;
+  width: 100%;
+  margin: 0;
+  text-align: center;
+}
+.shogi-game .shogi-tutorial__map-hero .shogi-tutorial__continue::before {
+  content: none;
+}
+.shogi-game .shogi-tutorial__map-hero .shogi-tutorial__continue small {
+  font-size: 0.75em;
+  letter-spacing: 0.08em;
+}
+/* 道。巻の看板、章の看板、レッスンのマスを縦に並べ、マスは左右にくねらせる。 */
+.shogi-game .shogi-tutorial__road {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  width: min(100%, 36rem);
+  margin: 0 auto;
+  padding: 0 0 3rem;
+  list-style: none;
+}
+.shogi-game .shogi-tutorial__road > li {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+}
+.shogi-game .shogi-tutorial__road-volume {
+  margin-top: 1.4rem;
+}
+.shogi-game .shogi-tutorial__road-volume:first-child {
+  margin-top: 0;
+}
+.shogi-game .shogi-tutorial__world {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.7rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  color: #172632;
+  background: linear-gradient(135deg, #f6bd70, #f1a54c);
+  box-shadow: 0 4px 0 #b57c39;
+}
+.shogi-game .shogi-tutorial__world-number {
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  color: #fffcf4;
+  background: #172632;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__world strong {
+  font-size: 1.1rem;
+}
+.shogi-game .shogi-tutorial__world small {
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__world .shogi-tutorial__meter {
+  grid-column: 1 / -1;
+  height: 0.45rem;
+  margin: 0;
+  background: rgba(23, 38, 50, 0.25);
+}
+.shogi-game .shogi-tutorial__world .shogi-tutorial__meter > span {
+  background: #172632;
+}
+.shogi-game .shogi-tutorial__road-chapter {
+  margin: 0.9rem 0 0.2rem;
+}
+.shogi-game .shogi-tutorial__signpost {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem 0.7rem;
+  padding: 0.3rem 0.9rem;
+  border: 2px solid rgba(241, 165, 76, 0.55);
+  border-radius: 999px;
+  color: #f1a54c;
+  background: rgba(23, 38, 50, 0.85);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__signpost .shogi-tutorial__skip-chapter {
+  min-height: 1.8rem;
+  padding: 0 0.6rem;
+  font-size: 0.75rem;
+}
+/* レッスンのマス。--laneで左右にずらし、道をくねらせる。 */
+.shogi-game .shogi-tutorial__stop {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  width: 7rem;
+  padding: 0.35rem 0;
+  transform: translateX(calc((var(--lane, 2) - 2) * min(11vw, 4.2rem)));
+}
+.shogi-game .shogi-tutorial__node {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 3.9rem;
+  height: 3.6rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #fffcf4;
+  background: #2b465b;
+  box-shadow: 0 5px 0 #172632;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+.shogi-game .shogi-tutorial__node:active:not(:disabled) {
+  box-shadow: 0 1px 0 #172632;
+  transform: translateY(4px);
+}
+.shogi-game .shogi-tutorial__node-icon {
+  font-size: 1.45rem;
+  font-weight: 900;
+  line-height: 1;
+}
+.shogi-game .shogi-tutorial__node--cleared {
+  color: #172632;
+  background: #f1a54c;
+  box-shadow: 0 5px 0 #b57c39;
+}
+.shogi-game .shogi-tutorial__node--next {
+  width: 4.6rem;
+  height: 4.3rem;
+  color: #172632;
+  background: #fffcf4;
+  box-shadow: 0 5px 0 #b57c39, 0 0 0 6px rgba(241, 165, 76, 0.35);
+  animation: shogi-tutorial-node-pulse 1.6s ease-in-out infinite;
+}
+.shogi-game .shogi-tutorial__node--open {
+  border: 3px solid #f1a54c;
+}
+.shogi-game .shogi-tutorial__node--skipped {
+  border: 2px dashed rgba(255, 252, 244, 0.45);
+  color: rgba(255, 252, 244, 0.75);
+}
+.shogi-game .shogi-tutorial__node--locked {
+  color: rgba(255, 252, 244, 0.6);
+  background: #1f3343;
+  box-shadow: 0 5px 0 #121e29;
+}
+.shogi-game .shogi-tutorial__node--locked .shogi-tutorial__node-icon {
+  font-size: 1.05rem;
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+.shogi-game .shogi-tutorial__node--soon {
+  opacity: 0.45;
+  cursor: default;
+}
+@keyframes shogi-tutorial-node-pulse {
+  0%, 100% { box-shadow: 0 5px 0 #b57c39, 0 0 0 4px rgba(241, 165, 76, 0.35); }
+  50% { box-shadow: 0 5px 0 #b57c39, 0 0 0 10px rgba(241, 165, 76, 0.15); }
+}
+/* 「ここから！」の吹き出し。 */
+.shogi-game .shogi-tutorial__node-start {
+  position: absolute;
+  bottom: calc(100% + 0.45rem);
+  left: 50%;
+  padding: 0.15rem 0.6rem;
+  border-radius: 0.5rem;
+  color: #172632;
+  background: #f1a54c;
+  font-size: 0.78rem;
+  font-weight: 900;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: shogi-tutorial-tap 1s ease-in-out infinite;
+}
+.shogi-game .shogi-tutorial__node-start::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  border: 0.35rem solid transparent;
+  border-top-color: #f1a54c;
+  transform: translateX(-50%);
+}
+.shogi-game .shogi-tutorial__road-lesson:has(.shogi-tutorial__node--next) {
+  margin-top: 1.6rem;
+}
+.shogi-game .shogi-tutorial__node-title {
+  max-width: 7rem;
+  color: rgba(255, 252, 244, 0.9);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+.shogi-game .shogi-tutorial__node--locked + .shogi-tutorial__node-title {
+  color: rgba(255, 252, 244, 0.45);
+}
+.shogi-game .shogi-tutorial__node-stars,
+.shogi-game .shogi-tutorial__clear-stars,
+.shogi-game .shogi-tutorial__learned-stars {
+  display: flex;
+  gap: 0.05rem;
+  margin: 0;
+  font-style: normal;
+}
+.shogi-game .shogi-tutorial__node-stars i,
+.shogi-game .shogi-tutorial__clear-stars i,
+.shogi-game .shogi-tutorial__learned-stars i {
+  color: rgba(255, 252, 244, 0.2);
+  font-style: normal;
+}
+.shogi-game .shogi-tutorial__node-stars i.on,
+.shogi-game .shogi-tutorial__clear-stars i.on,
+.shogi-game .shogi-tutorial__learned-stars i.on {
+  color: #f6d365;
+}
+.shogi-game .shogi-tutorial__node-stars {
+  font-size: 0.75rem;
+}
+
+/* ===== レッスンの見出しの進み具合(章の帯) ===== */
+.shogi-game .shogi-tutorial__track {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: min(100% - 1.4rem, 44rem);
+  margin: 0.4rem auto 0.1rem;
+}
+.shogi-game .shogi-tutorial__track-label {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  color: rgba(255, 252, 244, 0.75);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game .shogi-tutorial__track ol {
+  display: flex;
+  flex: 1;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-tutorial__track li {
+  flex: 1;
+  height: 0.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 252, 244, 0.18);
+}
+.shogi-game .shogi-tutorial__track li span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #f1a54c;
+  transition: width 240ms ease;
+}
+
+/* ===== レッスンクリアの知らせ ===== */
+.shogi-game .shogi-tutorial__lesson-view {
+  position: relative;
+}
+.shogi-game .shogi-tutorial__clear {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.4rem;
+  background: rgba(10, 20, 28, 0.62);
+  cursor: pointer;
+}
+.shogi-game .shogi-tutorial__clear-title {
+  margin: 0;
+  color: #f1a54c;
+  font-size: clamp(2.4rem, 9vw, 3.6rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-shadow: 0 4px 0 #172632;
+  animation: shogi-tutorial-clear-pop 360ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__clear-stars {
+  font-size: 2rem;
+}
+.shogi-game .shogi-tutorial__clear-stars i.on {
+  animation: shogi-tutorial-clear-pop 320ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__clear-stars i.on:nth-child(2) { animation-delay: 120ms; }
+.shogi-game .shogi-tutorial__clear-stars i.on:nth-child(3) { animation-delay: 240ms; }
+.shogi-game .shogi-tutorial__clear-next {
+  margin: 0.3rem 0 0;
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+  color: #172632;
+  background: #fffcf4;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__clear-map {
+  min-height: 2.2rem;
+  margin-top: 0.4rem;
+  padding: 0.2rem 0.9rem;
+  border: 1px solid rgba(255, 252, 244, 0.5);
+  border-radius: 999px;
+  color: #fffcf4;
+  background: transparent;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+@keyframes shogi-tutorial-clear-pop {
+  0% { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.shogi-game .shogi-tutorial__clear-enter-active { transition: opacity 160ms ease; }
+.shogi-game .shogi-tutorial__clear-leave-active { transition: opacity 120ms ease; }
+.shogi-game .shogi-tutorial__clear-enter-from,
+.shogi-game .shogi-tutorial__clear-leave-to { opacity: 0; }
+
+/* ===== 章クリア ===== */
+.shogi-game .shogi-tutorial__chapter-clear {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 0.7rem;
+}
+.shogi-game .shogi-tutorial__chapter-clear > * {
+  width: min(100%, 36rem);
+}
+.shogi-game .shogi-tutorial__chapter-clear-eyebrow {
+  margin: 0.6rem 0 0;
+  color: rgba(255, 252, 244, 0.7);
+  font-weight: 700;
+  text-align: center;
+}
+.shogi-game .shogi-tutorial__chapter-clear h2 {
+  margin: 0;
+  color: #f1a54c;
+  font-size: clamp(1.4rem, 5vw, 2rem);
+  text-align: center;
+  animation: shogi-tutorial-clear-pop 360ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__chapter-clear-stars {
+  margin: 0;
+  color: #f6d365;
+  font-size: 1.4rem;
+  font-weight: 900;
+  text-align: center;
+}
+.shogi-game .shogi-tutorial__learned-list {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-tutorial__learned-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 0.7rem;
+  background: rgba(43, 70, 91, 0.6);
+}
+.shogi-game .shogi-tutorial__learned-list b {
+  display: block;
+}
+.shogi-game .shogi-tutorial__learned-list small {
+  display: block;
+  color: rgba(255, 252, 244, 0.75);
+}
+.shogi-game .shogi-tutorial__learned-retry {
+  min-height: 2rem;
+  padding: 0.1rem 0.7rem;
+  border: 1px solid rgba(255, 252, 244, 0.45);
+  border-radius: 999px;
+  color: #fffcf4;
+  background: transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tutorial__node--next,
+  .shogi-game .shogi-tutorial__node-start,
+  .shogi-game .shogi-tutorial__clear-title,
+  .shogi-game .shogi-tutorial__clear-stars i.on,
+  .shogi-game .shogi-tutorial__chapter-clear h2 {
     animation: none;
   }
 }
