@@ -347,6 +347,7 @@
       :user-level="recommendedStrengthPreset.level"
       :rating-text="`R${ratingState.rating}`"
       :start-at="tournamentStartAt"
+      :oshi="ryuoOshi"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
       @play="startRyuoGame"
@@ -1804,6 +1805,7 @@ import {
   saveCollection,
 } from "./core/collection.mjs";
 import { themeName } from "./core/themes.mjs";
+import { loadOshi } from "./core/ryuo-oshi.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 // 対局のほかの画面は、開いたときに読み込む。最初に読むJSを小さくして、起動を速くするため。
@@ -1941,6 +1943,14 @@ const ryuoCareer = ref(loadCareer(browserStorage()));
 /** 竜王戦に出る架空の棋士の名簿。期をまたいで残り、期が終わるたびに更新する。最初の期に作る。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ryuoRoster = shallowRef<any>(loadRoster(browserStorage()));
+/** 推しの棋士(やこびノートの棋士名鑑で選ぶ)。大会の画面を開くたびに読み直す。 */
+const ryuoOshi = ref<{ id: string; name: string } | null>(null);
+watch(tournamentOpen, (open) => {
+  if (!open) return;
+  const id = loadOshi(browserStorage());
+  const name = id ? (ryuoSeason.value?.players?.[id]?.name ?? ryuoRoster.value?.players?.[id]?.name ?? "") : "";
+  ryuoOshi.value = id && name ? { id, name } : null;
+}, { immediate: true });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ryuoSeason = ref<any>(loadSeason(browserStorage()));
 /** いま指している大会の対局。保存した対局と一緒に、リロードしても復元する。 */

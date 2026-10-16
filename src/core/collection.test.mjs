@@ -8,6 +8,7 @@ import {
   grantTheme,
   loadCollection,
   newlyUnlockedThemes,
+  recordPredictionHit,
   nextThemeUnlock,
   recordMatchCollection,
   saveCollection,
@@ -82,9 +83,16 @@ describe('コレクション', () => {
       formations: { 本美濃: { count: 1, firstAt: 1 } },
       levels: { 3: 1 },
       godMoves: 0,
+      predictionsHit: 0,
       grantedThemes: ['board:sunfish_dark'],
     });
     expect(loadCollection({ getItem: (key) => (key === COLLECTION_STORAGE_KEY ? '{broken' : null) })).toEqual(createCollection());
     expect(loadCollection(null)).toEqual(createCollection());
+  });
+
+  it('竜王戦の予想の的中は、印に数えず回数だけ残す', () => {
+    const state = recordPredictionHit(recordPredictionHit(createCollection()));
+    expect(state.predictionsHit).toBe(2);
+    expect(collectionCount(state)).toBe(0);
   });
 });

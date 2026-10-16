@@ -3,6 +3,7 @@
 import { describeCharacter } from './player-character.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
 import { OTHER_TITLES, awardLabel, careerSummary, titleLabel, winRate } from './ryuo-league.mjs';
+import { characterCatchphrase } from './ryuo-oshi.mjs';
 
 const KIND_LABELS = Object.freeze({ pro: '棋士', woman: '女流棋士', amateur: 'アマチュア', shoreikai: '奨励会員' });
 
@@ -39,6 +40,8 @@ export function memberProfile(roster, member) {
     totalTitles: career.totalTitles,
     repertoire: repertoireText(member.repertoire),
     style: character.style,
+    // 一覧の行にも出す、個性の一言(棋風と、いちばん目立つ特徴)。
+    catchphrase: characterCatchphrase(character),
     strengths: character.strengths,
     weaknesses: character.weaknesses,
     lastSeason: season && season.games ? `${season.wins}勝${season.losses}敗 ${rateText(season)}` : '',

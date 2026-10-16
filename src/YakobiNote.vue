@@ -287,6 +287,7 @@
               <div><dt>勝ったLv</dt><dd>{{ collectedLevelCount }}<small>/ {{ COLLECTION_LEVELS.length }}</small></dd></div>
               <div><dt>神の一手</dt><dd>{{ collection.godMoves }}<small>回</small></dd></div>
             </dl>
+            <p v-if="collection.predictionsHit" class="shogi-note__hint" data-note-predictions>竜王戦の組優勝の予想を、{{ collection.predictionsHit }}回当てたよ！</p>
             <p class="shogi-note__hint">
               対局で定跡図鑑の戦法・囲いを組むと、印が1つ増えるよ。CPUの各Lvに初めて勝っても1つ（レーティングの対象の対局だけ）。
               <template v-if="nextUnlock">次の着せ替えまで、印あと{{ nextUnlock.remaining }}個！</template>

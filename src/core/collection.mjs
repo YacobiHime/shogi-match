@@ -5,6 +5,7 @@
  * - 定跡図鑑の戦法・囲いを、対局で組んだ(プレイヤーの側だけ。対CPUの対局すべてが対象)
  * - CPUのLvに初めて勝った(レーティングの対象の対局だけ)
  * - 神の一手を指した(数だけ数える。印の数には入れない)
+ * - 竜王戦の組優勝の予想が当たった(数だけ数える。印の数には入れない。core/ryuo-oshi.mjs)
  *
  * まだ持っていないものも名前は見せる(存在だけ見せる)。保存は端末に置き、読めなくても遊びは止めない。
  */
@@ -30,7 +31,7 @@ export function collectionCatalog({ strategies, castles }) {
 export const COLLECTION_LEVELS = Object.freeze(Array.from({ length: 40 }, (_, index) => index + 1));
 
 export function createCollection() {
-  return { formations: {}, levels: {}, godMoves: 0, grantedThemes: [] };
+  return { formations: {}, levels: {}, godMoves: 0, predictionsHit: 0, grantedThemes: [] };
 }
 
 /**
@@ -64,6 +65,11 @@ export function recordMatchCollection(state, { formations = [], wonLevel = null,
     gained.push({ kind: 'level', label: `Lv.${wonLevel}` });
   }
   return { state: next, gained, repeated };
+}
+
+/** 竜王戦の組優勝の予想が当たった。 */
+export function recordPredictionHit(state) {
+  return { ...state, predictionsHit: (state.predictionsHit ?? 0) + 1 };
 }
 
 /** 印の数(組んだ戦法・囲いの種類と、勝ったLvの数)。 */
@@ -144,6 +150,7 @@ export function loadCollection(storage) {
       formations,
       levels,
       godMoves: count(parsed.godMoves),
+      predictionsHit: count(parsed.predictionsHit),
       grantedThemes: Array.isArray(parsed.grantedThemes) ? parsed.grantedThemes.filter((key) => typeof key === 'string') : [],
     };
   } catch {

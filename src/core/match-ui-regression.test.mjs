@@ -285,4 +285,18 @@ describe("match screen regressions", () => {
     expect(problemSet).toMatch(/recordProblemSolved\([\s\S]*?recordReview\(problem, firstTry\)/);
     expect(problemSet).toMatch(/function openAnswer\(\)[\s\S]*?recordReview\(currentProblem\.value, false\)/);
   });
+
+  it("lets the player cheer for a ryuo player and predict the group winner", () => {
+    // 推しの棋士は名鑑で選び、大会の画面を開くたびに読み直して渡す。
+    expect(source).toMatch(/watch\(tournamentOpen, \(open\) => \{[\s\S]*?loadOshi\(browserStorage\(\)\)/);
+    expect(source).toMatch(/:oshi="ryuoOshi"/);
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    expect(tournament).toMatch(/v-if="predictionOptions"[\s\S]*?data-prediction/);
+    // 予想の的中は、計算(computed)の中ではなくwatchで一度だけ記録する。
+    expect(tournament).toMatch(/watch\(predictionResult, countPredictionHit, \{ immediate: true \}\)/);
+    expect(tournament).toMatch(/:mark-id="oshi\?\.id \?\? ''"/);
+    const book = readFileSync(new URL("../RyuoRosterBook.vue", import.meta.url), "utf8");
+    expect(book).toMatch(/data-oshi-toggle[\s\S]*?@click="toggleOshi\(member\.id\)"/);
+    expect(book).toMatch(/member\.catchphrase/);
+  });
 });

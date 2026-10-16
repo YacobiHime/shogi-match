@@ -38,12 +38,12 @@
       <div
         v-for="leaf in layout.leaves"
         :key="leaf.pid"
-        :class="['shogi-tree__leaf', { 'shogi-tree__leaf--user': leaf.pid === userId, 'shogi-tree__leaf--out': lost.has(leaf.pid) }]"
+        :class="['shogi-tree__leaf', { 'shogi-tree__leaf--user': leaf.pid === userId, 'shogi-tree__leaf--out': lost.has(leaf.pid), 'shogi-tree__leaf--mark': markId && leaf.pid === markId }]"
         :style="{ left: `${leaf.x}px`, top: `${leaf.y}px`, width: `${leafWidth - 6}px`, height: `${leafHeight}px` }"
         :title="`${player(leaf.pid)?.name} ${player(leaf.pid)?.dan} Lv.${player(leaf.pid)?.level ?? ''}`"
       >
         <small class="shogi-tree__tag">{{ player(leaf.pid)?.label }}</small>
-        <span class="shogi-tree__name">{{ player(leaf.pid)?.name }}</span>
+        <span class="shogi-tree__name"><b v-if="markId && leaf.pid === markId" class="shogi-tree__mark" aria-label="推し">★</b>{{ player(leaf.pid)?.name }}</span>
         <small class="shogi-tree__dan">{{ shortDan(player(leaf.pid)?.dan) }}</small>
       </div>
       <div
@@ -77,6 +77,8 @@ const props = defineProps({
   finals: { type: Object as PropType<{ defender: Brief; winner: string | null; defenderLabel?: string } | null>, default: null },
   rootBadge: { type: String, default: "" },
   userId: { type: String, default: "user" },
+  /** 印を付ける棋士(推しの棋士)。 */
+  markId: { type: String, default: "" },
 });
 
 const rowHeight = 44;
@@ -181,6 +183,9 @@ const lost = computed(() => {
   overflow: hidden;
 }
 .shogi-game .shogi-tree__leaf--user { border: 2px solid #f1a54c; background: rgba(241, 165, 76, 0.2); }
+/* 推しの棋士。プレイヤー(琥珀色)と見分けられるよう、薄紫の枠にする。 */
+.shogi-game .shogi-tree__leaf--mark { border: 2px solid #d7d1fd; }
+.shogi-game .shogi-tree__mark { display: block; color: #d7d1fd; font-size: 0.9em; line-height: 1; }
 .shogi-game .shogi-tree__leaf--champion { border: 2px solid #d8d0ff; background: rgba(216, 208, 255, 0.14); }
 .shogi-game .shogi-tree__leaf--out { opacity: 0.55; }
 .shogi-game .shogi-tree__tag {

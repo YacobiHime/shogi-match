@@ -294,6 +294,22 @@
               <p class="shogi-tournament__lead">{{ outcomeHeadline }}（{{ view.result.wins }}勝{{ view.result.losses }}敗）</p>
             </section>
 
+            <!--
+              組優勝の予想。ランキング戦の1局目が決まる前だけ選べる。当たっても見返りは小さく(記録に残るだけ)、
+              肩入れする理由にする。自分自身に賭けてもよい。
+            -->
+            <section v-if="predictionOptions" class="shogi-tournament__card" aria-labelledby="shogi-ryuo-predict" data-prediction>
+              <h2 id="shogi-ryuo-predict">組優勝を予想しよう</h2>
+              <p class="shogi-tournament__hint">{{ view.startGroup }}組ランキング戦を勝ち抜くのは誰かな？ 当たると、やこびノートのコレクションに記録されるよ。</p>
+              <div class="shogi-tournament__predict">
+                <select v-model="predictionPick" aria-label="組優勝の予想">
+                  <option value="" disabled>棋士を選んでね</option>
+                  <option v-for="option in predictionOptions" :key="option.id" :value="option.id">{{ option.name }}</option>
+                </select>
+                <button type="button" :disabled="!predictionPick" @click="choosePrediction">予想する</button>
+              </div>
+            </section>
+
             <section v-if="view.series.length" class="shogi-tournament__card" aria-label="番勝負">
               <h2>番勝負</h2>
               <ul class="shogi-tournament__series">
@@ -328,6 +344,7 @@
               :tree="activeTable.tree"
               :finals="activeTable.key === 'main' && view.defender ? { defender: view.defender, winner: finalsWinner } : null"
               :root-badge="activeTable.key === 'main' ? '' : rootBadge(activeTable)"
+              :mark-id="oshi?.id ?? ''"
             />
           </section>
         </div>
@@ -422,7 +439,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type PropType } from "vue";
+import { computed, ref, watch, type PropType } from "vue";
 import TournamentTree from "./TournamentTree.vue";
 import RadarChart from "./RadarChart.vue";
 import RyuoLadder from "./RyuoLadder.vue";
@@ -444,6 +461,16 @@ import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { describeCharacter } from "./core/player-character.mjs";
 import { repertoireText } from "./core/ryuo-repertoire.mjs";
 import { vsUserText } from "./core/ryuo-book.mjs";
+import {
+  loadPrediction,
+  oshiSeasonLine,
+  oshiSeasonStatus,
+  predictionChoices,
+  predictionLine,
+  predictionOutcome,
+  savePrediction,
+} from "./core/ryuo-oshi.mjs";
+import { loadCollection, recordPredictionHit, saveCollection } from "./core/collection.mjs";
 
 type Career = {
   group: number; seasons: number; champion: boolean; titles: number; streak: number; eternal: boolean;
@@ -499,6 +526,8 @@ const props = defineProps({
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
   startAt: { type: String as PropType<"select" | "season">, default: "select" },
+  /** 推しの棋士(core/ryuo-oshi.mjs)。やこび姫が、期の中での様子を知らせる。 */
+  oshi: { type: Object as PropType<{ id: string; name: string } | null>, default: null },
 });
 const emit = defineEmits<{
   close: [];
@@ -686,7 +715,46 @@ const resultSays = computed(() => resultLines(props.view?.result ? { ...props.vi
 const lastGameSays = computed(() => lastGameLines(props.view?.lastGame ?? null));
 const seasonSays = computed(() => {
   const lines = [...lastGameSays.value, ...phaseLines.value, ...opponentSays.value];
-  return lines.length ? lines : resultSays.value;
+  return [...(lines.length ? lines : resultSays.value), ...cheerSays.value];
+});
+
+// ---- 応援(推しの棋士と、組優勝の予想)。core/ryuo-oshi.mjs
+const storage = (() => {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
+  }
+})();
+const prediction = ref(loadPrediction(storage));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const seasonView = computed(() => props.view as any);
+/** 予想できる棋士。この期の予想がまだで、ランキング戦の1局目が決まる前だけ。 */
+const predictionOptions = computed(() => (
+  prediction.value?.season === props.view?.title ? null : predictionChoices(seasonView.value)
+));
+const predictionPick = ref("");
+function choosePrediction() {
+  const option = predictionOptions.value?.find(({ id }) => id === predictionPick.value);
+  if (!option || !props.view) return;
+  prediction.value = { season: props.view.title, pid: option.id, name: option.name, counted: false };
+  savePrediction(storage, prediction.value);
+}
+const predictionResult = computed(() => predictionOutcome(seasonView.value, prediction.value));
+/** 当たったら一度だけ、コレクションに記録する(印には数えない)。 */
+function countPredictionHit() {
+  const current = prediction.value;
+  if (predictionResult.value !== "hit" || !current || current.counted) return;
+  saveCollection(storage, recordPredictionHit(loadCollection(storage)));
+  prediction.value = { ...current, counted: true };
+  savePrediction(storage, prediction.value);
+}
+watch(predictionResult, countPredictionHit, { immediate: true });
+const cheerSays = computed(() => {
+  const lines: string[] = [];
+  if (props.oshi) lines.push(oshiSeasonLine(oshiSeasonStatus(seasonView.value, props.oshi.id), props.oshi.name));
+  if (prediction.value?.season === props.view?.title) lines.push(predictionLine(prediction.value!, predictionResult.value));
+  return lines;
 });
 /** 解説の表情を決めるための、セリフの文字列。 */
 const commentarySays = computed(() => (props.view?.stats.commentary ?? []).map((line) => `${line.title} ${line.text}`));
@@ -1286,6 +1354,17 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__score { font-size: 2em; font-weight: 800; line-height: 1; white-space: nowrap; }
 .shogi-game .shogi-tournament__score i { margin: 0 0.3rem; color: rgba(255, 252, 244, 0.5); font-style: normal; }
 .shogi-game .shogi-tournament__vs-mid small { color: var(--tr-gold); font-size: 0.75em; font-weight: 700; white-space: nowrap; }
+.shogi-game .shogi-tournament__predict { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.shogi-game .shogi-tournament__predict select {
+  flex: 1 1 10rem;
+  min-height: 2.6rem;
+  padding: 0 0.6rem;
+  border: 2px solid #3b5570;
+  border-radius: 0.4rem;
+  color: #fffcf4;
+  background: #172632;
+  font: inherit;
+}
 .shogi-game .shogi-tournament__series { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .shogi-tournament__series li {
   display: grid;
