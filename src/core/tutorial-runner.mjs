@@ -16,10 +16,27 @@ export const INTERACTIVE_STEP_TYPES = Object.freeze(["move-piece", "find-move", 
 /** 正解したあと、この時間（ミリ秒）だけ「正解！」を見せてから次のステップへ進める。 */
 export const TUTORIAL_AUTO_ADVANCE_MS = 1100;
 
-/** 正解したら自動で次へ進めるステップか。盤で指すステップだけで、選択肢は解説を読めるよう自動では進めない。 */
+/** 正解したら自動で次へ進めるステップか(盤で指すステップ)。選択肢は、解説を読む時間をとってから進める(choiceAdvanceDelay)。 */
 export function autoAdvancesOnSolve(step) {
   return INTERACTIVE_STEP_TYPES.includes(step?.type);
 }
+
+/**
+ * 選択問題に正解したあと、解説を読む時間をとってから自動で次へ進めるまでの時間(ミリ秒)。
+ * 解説が長いほど長くし、上限を設ける。画面を押せば待たずに進める(「次へ」を押させない)。
+ */
+export function choiceAdvanceDelay(explanation = "") {
+  return Math.min(4200, 1400 + 45 * [...String(explanation)].length);
+}
+
+/**
+ * 盤の課題で、この時間(ミリ秒)操作がなければ、そっとヒント(大事なマス)を出す。
+ * 頼まれて出すヒントではないので、★の数には数えない(UI_Nintendo_Design.mdの6-2「しばらく操作がない」)。
+ */
+export const TUTORIAL_IDLE_HINT_MS = 10000;
+
+/** 説明のステップを、画面を押して進めるときに、続けて押した誤操作を無視する時間(ミリ秒)。 */
+export const TUTORIAL_TAP_GUARD_MS = 250;
 
 /** 手番を先手に戻したSFEN。教室では先手の駒だけを動かす。 */
 export function withBlackToMove(sfen) {

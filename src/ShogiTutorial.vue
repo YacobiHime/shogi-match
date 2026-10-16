@@ -1,10 +1,24 @@
 <template>
-  <div class="shogi-dex shogi-tutorial" role="dialog" aria-modal="true" aria-labelledby="shogi-tutorial-title">
+  <div
+    class="shogi-dex shogi-tutorial"
+    :class="{ 'shogi-tutorial--lesson': view === 'lesson' }"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="shogi-tutorial-title"
+  >
+    <!-- レッスン中は見出しを1行にまとめ、盤を広くとる。スキップは見出しの右端へ置き、操作の邪魔をしない。 -->
     <header class="shogi-dex__header">
-      <button type="button" class="shogi-dex__back" @click="goBack">
-        <span aria-hidden="true">←</span> {{ backLabel }}
+      <button type="button" class="shogi-dex__back" :aria-label="backLabel" @click="goBack">
+        <span aria-hidden="true">←</span> <span class="shogi-tutorial__back-label">{{ backLabel }}</span>
       </button>
       <h1 id="shogi-tutorial-title">{{ headerTitle }}</h1>
+      <button
+        v-if="view === 'lesson'"
+        type="button"
+        class="shogi-tutorial__header-skip"
+        data-tutorial-skip
+        @click="skipCurrentLesson"
+      >スキップ</button>
     </header>
 
     <!-- 本棚：巻を選ぶ -->
@@ -72,12 +86,24 @@
       </section>
     </section>
 
-    <!-- レッスン -->
+    <!--
+      レッスン。説明は画面のどこを押しても進む(「次へ」のボタンを探して押させない)。
+      盤の課題と選択問題は、正解すると自動で次へ進む。困ったら、しばらくするとヒントがそっと出る。
+    -->
     <section v-else-if="view === 'lesson' && currentLesson && currentStep" class="shogi-tutorial__lesson-view" aria-label="レッスン">
-      <div class="shogi-tutorial__progress" aria-hidden="true">
-        <span :style="{ width: `${(stepIndex / currentLesson.steps.length) * 100}%` }"></span>
-      </div>
-      <div ref="stageEl" class="shogi-dex__detail shogi-tutorial__stage">
+      <!-- 進み具合。ステップを点で並べ、あといくつで終わるかを見せる。 -->
+      <ol class="shogi-tutorial__steps" :aria-label="`${stepIndex + 1}/${currentLesson.steps.length}`" data-tutorial-steps>
+        <li
+          v-for="(step, index) in currentLesson.steps"
+          :key="index"
+          :class="{
+            'shogi-tutorial__step--done': Number(index) < stepIndex,
+            'shogi-tutorial__step--now': Number(index) === stepIndex,
+            'shogi-tutorial__step--task': step.type !== 'explain',
+          }"
+        ></li>
+      </ol>
+      <div ref="stageEl" class="shogi-dex__detail shogi-tutorial__stage" data-tutorial-stage @click="onStageTap">
         <div v-if="boardSfen" class="shogi-dex__main">
           <div class="shogi-dex__board" :style="boardBoxStyle">
             <ShogiMatchBoard
@@ -95,96 +121,102 @@
             />
           </div>
         </div>
-        <div ref="panelEl" class="shogi-dex__explanation-col shogi-tutorial__panel">
-          <div class="shogi-dex__explanation">
-            <div class="shogi-dex__speech">
-              <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
-              <p>{{ stepSpeech }}</p>
+        <div ref="panelEl" class="shogi-tutorial__panel">
+          <!--
+            やこび姫の吹き出し。課題のときは「やってみよう」の目標として枠を琥珀色にし、
+            正解・不正解の一言は同じ吹き出しの中に出す(見る場所を1つにする)。
+          -->
+          <div
+            class="shogi-tutorial__bubble"
+            :class="{
+              'shogi-tutorial__bubble--task': isTaskStep && !stepSolved,
+              'shogi-tutorial__bubble--good': feedback && feedbackTone === 'good',
+              'shogi-tutorial__bubble--bad': feedback && feedbackTone === 'bad',
+            }"
+            aria-live="polite"
+            data-tutorial-bubble
+          >
+            <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
+            <div class="shogi-tutorial__bubble-body">
+              <p v-if="taskLabel" class="shogi-tutorial__task-label">{{ taskLabel }}</p>
+              <p class="shogi-tutorial__speech">{{ stepSpeech }}</p>
+              <p
+                v-if="feedback"
+                class="shogi-tutorial__feedback"
+                :class="`shogi-tutorial__feedback--${feedbackTone}`"
+                role="status"
+              >{{ feedback }}</p>
+              <p v-if="tapToAdvance" class="shogi-tutorial__tap" aria-hidden="true">{{ tapLabel }} <span>▼</span></p>
             </div>
-            <!-- 観戦：棋譜を1手ずつ進める。最後の手まで見ると「次へ」が出る。 -->
-            <div v-if="currentStep.type === 'replay'" class="shogi-tutorial__replay">
-              <p class="shogi-tutorial__replay-move">
-                {{ stepState.ply > 0 ? `${stepState.ply}手目 ${replayLabel}` : "開始局面" }}
-                <small>（{{ stepState.ply }}/{{ currentStep.moves.length }}）</small>
-              </p>
-              <div class="shogi-tutorial__replay-controls">
-                <button
-                  type="button"
-                  :disabled="stepState.ply <= (currentStep.from ?? 0)"
-                  @click="seekReplayBy(-1)"
-                ><span aria-hidden="true">◀</span> 戻る</button>
-                <button
-                  type="button"
-                  class="shogi-tutorial__primary"
-                  :disabled="stepState.ply >= currentStep.moves.length"
-                  @click="seekReplayBy(1)"
-                >次の手 <span aria-hidden="true">▶</span></button>
-              </div>
-            </div>
-            <!-- 評価値の説明：盤の局面に合わせて、対局全体の評価値グラフに今の手数を示す。 -->
-            <div v-if="graphPoints.length" class="shogi-tutorial__graph">
-              <EvaluationGraph
-                :points="graphPoints"
-                :current-ply="graphPly"
-                :total-ply="currentStep.graph.moves.length"
-                hide-legend
-                @select="onGraphSelect"
-              />
-            </div>
-            <p v-if="currentStep.type === 'choose' && currentStep.speech" class="shogi-tutorial__sub">{{ currentStep.speech }}</p>
-            <!-- 対局の条件はレッスンで固定する。変更はさせず、内容だけ見せる。 -->
-            <dl v-if="currentStep.type === 'play'" class="shogi-tutorial__conditions">
-              <div v-for="condition in playConditions" :key="condition.label">
-                <dt>{{ condition.label }}</dt>
-                <dd>{{ condition.value }}</dd>
-              </div>
-            </dl>
-            <div v-if="currentStep.type === 'choose'" class="shogi-tutorial__options">
+          </div>
+          <!-- 観戦: 盤を押しても1手進む。最後の手まで見ると、押すと次のステップへ進む。 -->
+          <div v-if="currentStep.type === 'replay'" class="shogi-tutorial__replay">
+            <p class="shogi-tutorial__replay-move">
+              {{ stepState.ply > 0 ? `${stepState.ply}手目 ${replayLabel}` : "開始局面" }}
+              <small>（{{ stepState.ply }}/{{ currentStep.moves.length }}）</small>
+            </p>
+            <div class="shogi-tutorial__replay-controls">
               <button
-                v-for="(option, index) in currentStep.options"
-                :key="option"
                 type="button"
-                :class="{ 'shogi-tutorial__option--correct': stepSolved && index === currentStep.answer }"
-                :disabled="stepSolved"
-                @click="choose(Number(index))"
-              >{{ option }}</button>
-            </div>
-            <p
-              v-if="feedback"
-              class="shogi-tutorial__feedback"
-              :class="`shogi-tutorial__feedback--${feedbackTone}`"
-              role="status"
-            >{{ feedback }}</p>
-            <div class="shogi-tutorial__actions">
+                :disabled="stepState.ply <= (currentStep.from ?? 0)"
+                @click="seekReplayBy(-1)"
+              ><span aria-hidden="true">◀</span> 戻る</button>
               <button
-                v-if="currentStep.type === 'open-dex'"
-                type="button"
-                @click="emit('open-dex', { kind: currentStep.kind, id: currentStep.id })"
-              >図鑑をひらく</button>
-              <button
-                v-if="currentStep.type === 'play'"
                 type="button"
                 class="shogi-tutorial__primary"
-                @click="startMatch"
-              >対局をはじめる</button>
-              <button
-                v-if="stepInteractive && !stepSolved"
-                type="button"
-                @click="showHint"
-              >ヒント</button>
-              <button
-                v-if="stepInteractive && !stepSolved && stepState.movesUsed + stepState.ply > 0"
-                type="button"
-                @click="resetStep"
-              >やり直し</button>
-              <button
-                v-if="canAdvance"
-                type="button"
-                class="shogi-tutorial__primary"
-                @click="advance"
-              >{{ stepIndex >= currentLesson.steps.length - 1 ? "レッスン完了！" : "次へ" }}</button>
+                :disabled="stepState.ply >= currentStep.moves.length"
+                @click="seekReplayBy(1)"
+              >次の手 <span aria-hidden="true">▶</span></button>
             </div>
-            <button type="button" class="shogi-tutorial__skip" @click="skipCurrentLesson">このレッスンをスキップ</button>
+          </div>
+          <!-- 評価値の説明: 盤の局面に合わせて、対局全体の評価値グラフに今の手数を示す。 -->
+          <div v-if="graphPoints.length" class="shogi-tutorial__graph">
+            <EvaluationGraph
+              :points="graphPoints"
+              :current-ply="graphPly"
+              :total-ply="currentStep.graph.moves.length"
+              hide-legend
+              @select="onGraphSelect"
+            />
+          </div>
+          <p v-if="currentStep.type === 'choose' && currentStep.speech" class="shogi-tutorial__sub">{{ currentStep.speech }}</p>
+          <!-- 対局の条件はレッスンで固定する。変更はさせず、内容だけ見せる。 -->
+          <dl v-if="currentStep.type === 'play'" class="shogi-tutorial__conditions">
+            <div v-for="condition in playConditions" :key="condition.label">
+              <dt>{{ condition.label }}</dt>
+              <dd>{{ condition.value }}</dd>
+            </div>
+          </dl>
+          <div v-if="currentStep.type === 'choose'" class="shogi-tutorial__options">
+            <button
+              v-for="(option, index) in currentStep.options"
+              :key="option"
+              type="button"
+              :class="{
+                'shogi-tutorial__option--correct': stepSolved && index === currentStep.answer,
+                'shogi-tutorial__option--wrong': wrongChoices.includes(Number(index)),
+              }"
+              :disabled="stepSolved || wrongChoices.includes(Number(index))"
+              @click="choose(Number(index))"
+            >{{ option }}</button>
+          </div>
+          <div v-if="hasActions" class="shogi-tutorial__actions">
+            <button
+              v-if="currentStep.type === 'open-dex'"
+              type="button"
+              @click="emit('open-dex', { kind: currentStep.kind, id: currentStep.id })"
+            >図鑑をひらく</button>
+            <button
+              v-if="currentStep.type === 'play'"
+              type="button"
+              class="shogi-tutorial__primary"
+              @click="startMatch"
+            >対局をはじめる</button>
+            <button
+              v-if="stepInteractive && !stepSolved && stepState.movesUsed + stepState.ply > 0"
+              type="button"
+              @click="resetStep"
+            >やり直す</button>
           </div>
         </div>
       </div>
@@ -205,6 +237,10 @@
         <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
         <p>{{ matchComment }}</p>
       </div>
+      <!-- 星の数より先に、このレッスンでできるようになったことを見せる。 -->
+      <p v-if="currentLesson.summary && !matchComment" class="shogi-tutorial__learned" data-tutorial-learned>
+        <small>できるようになったこと</small>{{ currentLesson.summary }}
+      </p>
       <div
         class="shogi-tutorial__stars"
         :class="{ 'shogi-tutorial__stars--hidden': revealStage < 1 }"
@@ -224,7 +260,7 @@
         </div>
         <p v-else class="shogi-tutorial__star-note">{{ resultMessage }}</p>
         <div class="shogi-tutorial__result-actions">
-          <button v-if="followingLesson" type="button" class="shogi-tutorial__primary" @click="startLesson(followingLesson.id)">
+          <button v-if="followingLesson" ref="nextLessonButton" type="button" class="shogi-tutorial__primary" @click="startLesson(followingLesson.id)">
             次のレッスン：{{ followingLesson.title }}
           </button>
           <button v-if="matchComment" type="button" @click="startMatch">もう一度対局する</button>
@@ -237,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { formatHintMove } from "./core/match-assists.mjs";
@@ -249,7 +285,10 @@ import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.m
 import {
   INTERACTIVE_STEP_TYPES,
   TUTORIAL_AUTO_ADVANCE_MS,
+  TUTORIAL_IDLE_HINT_MS,
+  TUTORIAL_TAP_GUARD_MS,
   attemptTutorialChoice,
+  choiceAdvanceDelay,
   attemptTutorialMove,
   autoAdvancesOnSolve,
   createStepState,
@@ -290,6 +329,8 @@ const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   // 教室の対局を終えて戻ってきたときの結果。あれば結果画面から始める。
   matchReport: { type: Object as PropType<TutorialMatchReport | null>, default: null },
+  /** タイトル画面の「将棋教室のつづき」から開いたとき、本棚を通さずに次のレッスンを始める。 */
+  autoStart: { type: Boolean, default: false },
 });
 const emit = defineEmits(["close", "open-dex", "start-match"]);
 
@@ -472,13 +513,74 @@ const boardArrows = computed(() => (
   [...(currentStep.value?.type === "explain" ? currentStep.value.arrows ?? [] : []), ...hintView.value.arrows]
     .map((usi: string) => ({ usi, guideKind: "plan" as const }))
 ));
-const canAdvance = computed(() => {
-  const type = currentStep.value?.type;
-  if (type === "explain" || type === "open-dex") return true;
-  // 盤で指すステップは正解すると自動で次へ進むので、「次へ」は出さない。
-  if (type === "play" || autoAdvancesOnSolve(currentStep.value)) return false;
-  return stepSolved.value;
+/** 課題のステップ(盤で指す・選択問題)。吹き出しを目標の見た目にする。 */
+const isTaskStep = computed(() => stepInteractive.value || currentStep.value?.type === "choose");
+/** 吹き出しの上に出す、課題の種類。 */
+const taskLabel = computed(() => {
+  if (!isTaskStep.value || stepSolved.value) return "";
+  if (currentStep.value?.type === "mate") return "詰ませてみよう";
+  return currentStep.value?.type === "choose" ? "クイズ" : "やってみよう";
 });
+/**
+ * 画面を押すと進められるか。説明・図鑑の案内はいつでも、観戦は1手ずつ、課題は正解したあと(自動で進むのを待たずに進める)。
+ * 対局のステップは「対局をはじめる」だけで進む。
+ */
+const tapToAdvance = computed(() => {
+  const type = currentStep.value?.type;
+  if (type === "explain" || type === "open-dex" || type === "replay") return true;
+  return isTaskStep.value && stepSolved.value;
+});
+const tapLabel = computed(() => {
+  const step = currentStep.value;
+  if (step?.type === "replay" && stepState.value.ply < step.moves.length) return "タップで次の手";
+  return stepIndex.value >= (currentLesson.value?.steps?.length ?? 0) - 1 ? "タップでレッスン完了" : "タップで次へ";
+});
+const hasActions = computed(() => {
+  const type = currentStep.value?.type;
+  return type === "open-dex" || type === "play"
+    || (stepInteractive.value && !stepSolved.value && stepState.value.movesUsed + stepState.value.ply > 0);
+});
+/** 選択問題でまちがえた選択肢。押せなくして、残りから選べるようにする。 */
+const wrongChoices = ref<number[]>([]);
+// 正解した押下や、続けて押した誤操作で、次のステップまで飛ばないようにする。
+let lastTapAt = 0;
+let solvedAt = 0;
+/** 画面を押したとき。ボタンは各自の動きにまかせ、それ以外の場所を押したら進める。 */
+function onStageTap(event: MouseEvent) {
+  if ((event.target as HTMLElement | null)?.closest("button, select, a, input, summary")) return;
+  advanceByTap();
+}
+function advanceByTap() {
+  const step = currentStep.value;
+  if (!step || !tapToAdvance.value) return;
+  const now = Date.now();
+  if (now - lastTapAt < TUTORIAL_TAP_GUARD_MS || now - solvedAt < 400) return;
+  lastTapAt = now;
+  if (step.type === "replay" && stepState.value.ply < step.moves.length) seekReplayBy(1);
+  else advance();
+}
+/** キーボードでも進められる(Enter・スペース・→)。ボタンにフォーカスがあるときは、ボタンを押す動きにまかせる。 */
+function onTutorialKeydown(event: KeyboardEvent) {
+  if (view.value !== "lesson" || !["Enter", " ", "ArrowRight"].includes(event.key)) return;
+  if ((event.target as HTMLElement | null)?.closest("button, select, input, textarea")) return;
+  event.preventDefault();
+  advanceByTap();
+}
+onMounted(() => window.addEventListener("keydown", onTutorialKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onTutorialKeydown));
+/** 盤の課題で、しばらく操作がなければ、そっとヒントを出す(★には数えない)。 */
+let idleHintTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleIdleHint() {
+  clearTimeout(idleHintTimer);
+  if (!stepInteractive.value || stepSolved.value) return;
+  const index = stepIndex.value;
+  idleHintTimer = setTimeout(() => {
+    if (view.value !== "lesson" || stepIndex.value !== index || stepSolved.value || hintLevel.value > 0) return;
+    hintLevel.value = 1;
+    setFeedback("光っているマスに注目してみてね。", "info");
+  }, TUTORIAL_IDLE_HINT_MS);
+}
+onBeforeUnmount(() => clearTimeout(idleHintTimer));
 const stepSpeech = computed(() => {
   const step = currentStep.value;
   if (step?.type === "replay") return replaySpeech(step, stepState.value.ply);
@@ -523,6 +625,8 @@ function loadStep(index: number) {
   stepSolved.value = false;
   hintLevel.value = 0;
   feedback.value = "";
+  wrongChoices.value = [];
+  scheduleIdleHint();
   // 棋譜の途中から始めるステップは、直前の手を強調する。
   const played = step?.type === "replay" ? step.moves.slice(0, step.from ?? 0) : (step?.sfen ? [] : step?.moves ?? []);
   lastMove.value = played.at(-1) ?? "";
@@ -544,6 +648,7 @@ function setFeedback(text: string, tone: "good" | "bad" | "info") {
 function onBoardMove(usi: string) {
   const step = currentStep.value;
   if (!step || stepSolved.value) return;
+  scheduleIdleHint();
   const before = stepState.value.sfen;
   const result = attemptTutorialMove(step, stepState.value, usi);
   if (result.outcome === "wrong") {
@@ -577,6 +682,8 @@ function onBoardMove(usi: string) {
     return;
   }
   stepSolved.value = true;
+  solvedAt = Date.now();
+  clearTimeout(idleHintTimer);
   hintLevel.value = 0;
   setFeedback(step.type === "mate" ? "詰み！ おみごと！" : "正解！ すごいね！", "good");
   // 盤で指すステップは、正解を少し見せてから自動で次へ進める。
@@ -597,16 +704,18 @@ function choose(index: number) {
   if (!step || stepSolved.value) return;
   if (attemptTutorialChoice(step, index) === "correct") {
     stepSolved.value = true;
+    solvedAt = Date.now();
     setFeedback(`正解！ ${step.explanation ?? ""}`, "good");
+    // 解説を読む時間をとってから、自動で次へ進む。画面を押せば待たずに進める。
+    const stepAt = stepIndex.value;
+    stepTimers.push(setTimeout(() => {
+      if (view.value === "lesson" && stepIndex.value === stepAt) advance();
+    }, choiceAdvanceDelay(step.explanation ?? "")));
   } else {
     mistakes.value += 1;
-    setFeedback("ちがうみたい。もう一度考えてみよう！", "bad");
+    wrongChoices.value = [...wrongChoices.value, index];
+    setFeedback("ちがうみたい。ほかのを選んでみよう！", "bad");
   }
-}
-function showHint() {
-  hints.value += 1;
-  hintLevel.value = Math.min(2, hintLevel.value + 1);
-  setFeedback(hintLevel.value >= 2 ? "矢印のとおりに指してみよう！" : "緑のマスに注目してみてね。", "info");
 }
 function finishLesson() {
   const lesson = currentLesson.value;
@@ -697,17 +806,27 @@ function showResult(stars: number, report: TutorialMatchReport | null) {
   view.value = "result";
   revealedStars.value = 0;
   revealStage.value = 0;
-  // 対局のあとは、やこび姫の一言を読む時間を取ってから星を付ける。
-  const start = report ? 1400 : 300;
+  // 対局のあとは、やこび姫の一言を読む時間を取ってから星を付ける。待たせないよう、星は短い間隔で付ける。
+  const start = report ? 1200 : 200;
   revealTimers.push(setTimeout(() => { revealStage.value = 1; }, start));
   for (let index = 1; index <= stars; index += 1) {
-    revealTimers.push(setTimeout(() => { revealedStars.value = index; }, start + index * 450));
+    revealTimers.push(setTimeout(() => { revealedStars.value = index; }, start + index * 280));
   }
-  revealTimers.push(setTimeout(() => { revealStage.value = 2; }, start + stars * 450 + 500));
+  revealTimers.push(setTimeout(() => { revealStage.value = 2; }, start + stars * 280 + 250));
 }
 onBeforeUnmount(clearRevealTimers);
+/** 結果のボタンが出たら「次のレッスン」にフォーカスし、Enterだけでも進めるようにする。 */
+const nextLessonButton = ref<HTMLButtonElement | null>(null);
+watch(revealStage, (stage) => {
+  if (stage >= 2) void nextTick(() => nextLessonButton.value?.focus());
+});
 onMounted(() => {
   const report = props.matchReport;
+  // タイトル画面の「将棋教室のつづき」からは、本棚を通さずに次のレッスンを始める。
+  if (!report && props.autoStart && upcomingLesson.value) {
+    startLesson(upcomingLesson.value.id);
+    return;
+  }
   if (!report || !tutorialLesson(report.lessonId)) return;
   lessonId.value = report.lessonId;
   volumeId.value = currentLesson.value?.volumeId ?? "";
@@ -969,8 +1088,10 @@ const resultMessage = computed(() => {
   margin: 0;
   opacity: 0.85;
 }
+/* 選択肢は、収まるだけ横に並べる(縦に積むと盤が小さくなるため)。長い選択肢は自然に折り返す。 */
 .shogi-game .shogi-tutorial__options {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: 0.45rem;
 }
 .shogi-game .shogi-tutorial__options button,
@@ -1153,5 +1274,195 @@ const resultMessage = computed(() => {
   display: grid;
   gap: 0.5rem;
   width: min(100%, 26rem);
+}
+/* ===== レッスン画面(2026-10 作り直し) ===== */
+/*
+ * 見出し: レッスン中は1行にまとめる。狭い画面では戻るボタンを矢印だけにし、題名は1行で切る。
+ * スキップは見出しの右端の小さなボタンにする(押し間違えにくく、操作の邪魔をしない)。
+ */
+.shogi-game .shogi-tutorial--lesson .shogi-dex__header {
+  flex-wrap: nowrap;
+  gap: 0.6rem;
+  padding: 0.4rem 0.7rem;
+}
+.shogi-game .shogi-tutorial--lesson .shogi-dex__header h1 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game .shogi-tutorial--lesson .shogi-dex__back {
+  min-height: 2.4rem;
+  padding: 0.3rem 0.8rem;
+}
+.shogi-game .shogi-tutorial__header-skip {
+  flex: none;
+  min-height: 2.2rem;
+  padding: 0.2rem 0.8rem;
+  border: 1px solid rgba(255, 252, 244, 0.35);
+  border-radius: 999px;
+  color: rgba(255, 252, 244, 0.75);
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+@media (max-width: 40rem) {
+  .shogi-game .shogi-tutorial--lesson .shogi-tutorial__back-label {
+    display: none;
+  }
+}
+/* 進み具合の点。済んだところは琥珀色、いまのところは大きく、課題の点は四角にする。 */
+.shogi-game .shogi-tutorial__steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0.1rem;
+  padding: 0 0.7rem;
+  list-style: none;
+}
+.shogi-game .shogi-tutorial__steps li {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: rgba(255, 252, 244, 0.22);
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+.shogi-game .shogi-tutorial__steps .shogi-tutorial__step--task {
+  border-radius: 0.12rem;
+}
+.shogi-game .shogi-tutorial__steps .shogi-tutorial__step--done {
+  background: #f1a54c;
+}
+.shogi-game .shogi-tutorial__steps .shogi-tutorial__step--now {
+  background: #fffcf4;
+  transform: scale(1.35);
+}
+/* 画面のどこを押しても進む説明では、押せることを指の形で示す。 */
+.shogi-game .shogi-tutorial__stage {
+  cursor: default;
+}
+.shogi-game .shogi-tutorial--lesson .shogi-tutorial__stage:has(.shogi-tutorial__tap) {
+  cursor: pointer;
+}
+/* やこび姫の吹き出し。立ち絵を大きくし、文字も大きく読みやすくする。 */
+.shogi-game .shogi-tutorial__bubble {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.7rem;
+  padding: 0.65rem 0.9rem;
+  border: 2px solid rgba(255, 252, 244, 0.3);
+  border-radius: 1rem;
+  background: rgba(23, 38, 50, 0.92);
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.shogi-game .shogi-tutorial__bubble--task {
+  border-color: #f1a54c;
+  box-shadow: 0 0 0 3px rgba(241, 165, 76, 0.18);
+}
+.shogi-game .shogi-tutorial__bubble--good {
+  border-color: #6ee7b7;
+  background: rgba(16, 64, 52, 0.92);
+}
+.shogi-game .shogi-tutorial__bubble--bad {
+  border-color: rgba(215, 209, 253, 0.8);
+  animation: shogi-tutorial-nudge 260ms ease;
+}
+@keyframes shogi-tutorial-nudge {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+}
+.shogi-game .shogi-tutorial__chara {
+  flex: none;
+  height: clamp(72px, 11vh, 108px);
+  width: auto;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+.shogi-game .shogi-tutorial__bubble-body {
+  display: grid;
+  flex: 1;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.shogi-game .shogi-tutorial__task-label {
+  justify-self: start;
+  margin: 0;
+  padding: 0.05rem 0.6rem;
+  border-radius: 999px;
+  color: #172632;
+  background: #f1a54c;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.shogi-game .shogi-tutorial__speech {
+  margin: 0;
+  font-size: clamp(1rem, 2.4vw, 1.15rem);
+  font-weight: 700;
+  line-height: 1.6;
+}
+.shogi-game .shogi-tutorial__bubble .shogi-tutorial__feedback {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__bubble .shogi-tutorial__feedback--good { color: #6ee7b7; }
+.shogi-game .shogi-tutorial__bubble .shogi-tutorial__feedback--bad { color: #d7d1fd; }
+.shogi-game .shogi-tutorial__bubble .shogi-tutorial__feedback--info { color: #93c5fd; }
+.shogi-game .shogi-tutorial__bubble .shogi-tutorial__feedback--good::before { content: none; }
+.shogi-game .shogi-tutorial__tap {
+  justify-self: end;
+  margin: 0;
+  color: rgba(255, 252, 244, 0.7);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.shogi-game .shogi-tutorial__tap span {
+  display: inline-block;
+  color: #f1a54c;
+  animation: shogi-tutorial-tap 1s ease-in-out infinite;
+}
+@keyframes shogi-tutorial-tap {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+.shogi-game .shogi-tutorial .shogi-tutorial__options button.shogi-tutorial__option--wrong:disabled {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+.shogi-game .shogi-tutorial__panel {
+  display: grid;
+  gap: 0.5rem;
+}
+/* 結果: できるようになったこと。 */
+.shogi-game .shogi-tutorial__learned {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0.6rem 1rem;
+  border: 2px solid #f1a54c;
+  border-radius: 0.8rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-align: center;
+}
+.shogi-game .shogi-tutorial__learned small {
+  color: #f1a54c;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tutorial__bubble--bad,
+  .shogi-game .shogi-tutorial__tap span {
+    animation: none;
+  }
 }
 </style>

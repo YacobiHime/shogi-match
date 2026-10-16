@@ -316,10 +316,11 @@
 
     <ShogiTutorial
       v-if="tutorialOpen"
+      :auto-start="tutorialAutoStart"
       ref="tutorialView"
       :asset-base-url="assetBaseUrl"
       :match-report="tutorialReport"
-      @close="tutorialOpen = false; tutorialReport = null"
+      @close="tutorialOpen = false; tutorialReport = null; tutorialAutoStart = false"
       @open-dex="openDexFromTutorial"
       @start-match="startMatchFromTutorial"
     />
@@ -3769,7 +3770,7 @@ function startMeasureMatchNow() {
 function chooseWelcome(choice: string) {
   markWelcomeSeen(browserStorage(), choice);
   welcomeOpen.value = false;
-  if (choice === "beginner") tutorialOpen.value = true;
+  if (choice === "beginner") openTutorialLesson();
   else if (choice === "rules") startQuickMatch();
   else if (choice === "player") startMeasureMatch();
 }
@@ -4107,9 +4108,18 @@ const homeNext = computed<HomeNext>(() => {
   const preset = recommendedStrengthPreset.value;
   return { id: "match", label: "対局する", description: `Lv.${preset.level} ${preset.label}の相手と、振り駒ですぐ始める` };
 });
+/**
+ * 「つぎはこれ」の将棋教室と、はじめての案内の「はじめて」。本棚を通さずに、次のレッスンをすぐ始める。
+ * タイトル画面の「将棋教室」のタイルからは、今までどおり本棚を開く。
+ */
+const tutorialAutoStart = ref(false);
+function openTutorialLesson() {
+  tutorialAutoStart.value = true;
+  tutorialOpen.value = true;
+}
 function startHomeNext() {
   if (homeNext.value.id === "resume") resumeSuspendedMatch();
-  else if (homeNext.value.id === "tutorial") tutorialOpen.value = true;
+  else if (homeNext.value.id === "tutorial") openTutorialLesson();
   else startQuickMatch();
 }
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */

@@ -331,4 +331,23 @@ describe("match screen regressions", () => {
     const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
     expect(tournament).toMatch(/props\.view\?\.result\?\.oshiLine/);
   });
+
+  it("keeps the classroom lessons moving without hunting for buttons", () => {
+    const tutorial = readFileSync(new URL("../ShogiTutorial.vue", import.meta.url), "utf8");
+    // 説明は画面のどこを押しても進む。「次へ」のボタンは置かない。
+    expect(tutorial).toMatch(/data-tutorial-stage @click="onStageTap"/);
+    expect(tutorial).not.toMatch(/>\{\{ stepIndex >= currentLesson\.steps\.length - 1 \? "レッスン完了！" : "次へ" \}\}</);
+    // 正解した押下で次まで飛ばないよう、正解の直後と続けての押下は無視する。
+    expect(tutorial).toMatch(/now - lastTapAt < TUTORIAL_TAP_GUARD_MS \|\| now - solvedAt < 400/);
+    // 選択問題も、正解すると解説を読む時間をとって自動で進む。まちがえた選択肢は押せなくする。
+    expect(tutorial).toMatch(/choiceAdvanceDelay\(step\.explanation \?\? ""\)/);
+    expect(tutorial).toMatch(/:disabled="stepSolved \|\| wrongChoices\.includes\(Number\(index\)\)"/);
+    // 困ったら、ヒントはボタンを押さなくても、しばらくするとそっと出る。
+    expect(tutorial).toMatch(/TUTORIAL_IDLE_HINT_MS/);
+    expect(tutorial).not.toMatch(/@click="showHint"/);
+    // スキップは見出しへ。タイトル画面の「つぎはこれ」からは、本棚を通さずにレッスンを始める。
+    expect(tutorial).toMatch(/class="shogi-tutorial__header-skip"/);
+    expect(source).toMatch(/homeNext\.value\.id === "tutorial"\) openTutorialLesson\(\)/);
+    expect(source).toMatch(/:auto-start="tutorialAutoStart"/);
+  });
 });

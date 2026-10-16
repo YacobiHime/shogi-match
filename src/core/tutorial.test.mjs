@@ -6,6 +6,7 @@ import {
   attemptTutorialChoice,
   attemptTutorialMove,
   autoAdvancesOnSolve,
+  choiceAdvanceDelay,
   createStepState,
   isCheckmate,
   lessonStars,
@@ -303,6 +304,10 @@ describe("やこび姫の将棋教室の正誤判定", () => {
     expect(tutorialHint(find, createStepState(find), 1).arrows).toEqual([]);
     expect(tutorialHint(find, createStepState(find), 2).arrows).toEqual(["7g7f"]);
     expect([lessonStars({}), lessonStars({ mistakes: 1, hints: 1 }), lessonStars({ mistakes: 3 })]).toEqual([3, 2, 1]);
+    // 選択問題は、解説を読む時間をとってから自動で進める。長い解説ほど長く、上限がある。
+    expect(choiceAdvanceDelay("")).toBe(1400);
+    expect(choiceAdvanceDelay("あいうえお")).toBe(1625);
+    expect(choiceAdvanceDelay("あ".repeat(200))).toBe(4200);
   });
 });
 
