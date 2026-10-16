@@ -26,6 +26,10 @@ export type GuidedReviewQuiz = {
   bestLine: string[];
   playedMove?: string;
   mateLength: number;
+  /** タダの駒を取る問題で、取る駒の升。この升の駒をタダで取る手は、最善手でなくても正解にする。 */
+  targetSquare?: string;
+  /** targetSquareの駒をタダで取れる駒の位置。ここから取る手だけを正解にする。 */
+  targetFrom?: string[];
 };
 export type GuidedReviewScript = {
   steps: Map<number, { comment?: string; pause?: boolean; quiz?: GuidedReviewQuiz }>;
@@ -207,6 +211,7 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
       winner: winnerColor(),
       moves: [...reviewNavigation.value.mainLine],
       moverForPly: (ply: number) => ((ply % 2 === 1) === (firstMover === "black") ? "black" : "white"),
+      initialSfen: matchInitialSfen.value,
     }) as GuidedReviewScript;
     guidedGoTo(0);
     guidedReview.value = {
@@ -414,7 +419,9 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
       }, 30);
       return;
     }
-    if (usi === quiz.bestMove) {
+    const tookTarget = Boolean(quiz.targetSquare) && usi[1] !== "*" && usi.slice(2, 4) === quiz.targetSquare
+      && Boolean(quiz.targetFrom?.includes(usi.slice(0, 2)));
+    if (usi === quiz.bestMove || tookTarget) {
       guidedReview.value = { ...state, solved: state.solved + 1 };
       revealGuidedReviewAnswer("正解！");
     } else {

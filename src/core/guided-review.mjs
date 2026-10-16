@@ -9,7 +9,15 @@
  * - 考えさせる局面が多すぎると流れが切れるので、損の大きい順に上限までに絞る。敗着と見逃した詰みは必ず残す。
  *
  * 点のscoreは先手から見た評価値。点のbestMoveは、その局面（ply手指した後）での最善手。
+ *
+ * 開始局面（initialSfen）を渡すと、盤を並べて駒のタダ取りも見る（core/review-tactics.mjs）。
+ * - タダで取れる駒を見逃した手: エンジンの最善手がタダの駒を取る手だったのに、取らなかった。考えさせる。
+ * - 駒をタダで取られる形にした手: 指した後、相手の最善手がタダで駒を取る手だった。悪手の問題の文を具体的にする。
+ * - タダの駒を取った手、相手がタダの駒を見逃した手などには、一言を添える。
+ * どれも、エンジンの最善手がその取る手のときだけ言う（取れそうに見えても取ると損な形は言わない）。
  */
+
+import { capturedValue, freeCapture, freeCaptureOrigins, usiTo, boardsAlongLine } from './review-tactics.mjs';
 
 /** 振り返りで手を進める間隔（ミリ秒）。 */
 export const GUIDED_REVIEW_STEP_MS = 1300;
@@ -48,6 +56,8 @@ export function guidedReviewDelay(comment, speedId) {
 
 /** 1局で考えさせる局面の上限。 */
 export const GUIDED_REVIEW_QUIZ_LIMIT = 5;
+/** タダの駒の見逃し・タダで取られる形を言う、勝率の下がり方の下限。 */
+const MISSED_FREE_DROP = 0.03;
 
 const WIN_RATE_SCALE = 600;
 
@@ -87,6 +97,7 @@ function mateLengthFor(score, color) {
  *   moves?: string[],
  *   moverForPly?: (ply: number) => 'black' | 'white',
  *   quizLimit?: number,
+ *   initialSfen?: string,
  * }} [options]
  */
 export function buildGuidedReview(points, {
@@ -95,7 +106,9 @@ export function buildGuidedReview(points, {
   moves = [],
   moverForPly = (ply) => (ply % 2 === 1 ? 'black' : 'white'),
   quizLimit = GUIDED_REVIEW_QUIZ_LIMIT,
+  initialSfen = '',
 } = {}) {
+  const boards = initialSfen ? boardsAlongLine(initialSfen, moves, moverForPly) : null;
   const byPly = new Map(points.map((point) => [point.ply, point]));
   const lastPly = Math.max(moves.length, ...points.map((point) => point.ply), 0);
   const moveInfos = [];
@@ -109,6 +122,7 @@ export function buildGuidedReview(points, {
     if (beforeRate === undefined || afterRate === undefined) continue;
     const played = moves[ply - 1];
     const missedMate = mateLengthFor(before.score, mover);
+    const drop = Math.max(0, beforeRate - afterRate);
     moveInfos.push({
       ply,
       mover,
@@ -116,9 +130,36 @@ export function buildGuidedReview(points, {
       after,
       beforeRate,
       afterRate,
-      drop: Math.max(0, beforeRate - afterRate),
+      drop,
       missedMate: missedMate && played !== before.bestMove && !mateLengthFor(after.score, mover) ? missedMate : 0,
+      // この手で、相手に詰みが生まれた(指す前は詰まされる形ではなかった)。
+      allowedMate: !mateLengthFor(before.score, opposite(mover)) && mateLengthFor(after.score, opposite(mover)) > 0,
+      ...tacticsOf(ply, played, before, after, drop),
     });
+  }
+
+  /*
+   * 駒のタダ取り。boards[ply - 1]は手を指す前、boards[ply]は指した後の盤。
+   * - tookFree: この手で、タダの駒を取った。
+   * - missedFree: 最善手がタダの駒を取る手だったのに、取らなかった(勝率を少しでも落としたときだけ)。
+   * - leftFree: 指した後、相手の最善手がこちらの駒をタダで取る手になった(勝率を落としたときだけ)。
+   *   駒を取って取り返される交換で、取った駒の方が高いときは言わない。
+   */
+  function tacticsOf(ply, played, before, after, drop) {
+    if (!boards || !played) return { tookFree: null, missedFree: null, leftFree: null };
+    const boardBefore = boards[ply - 1];
+    const boardAfter = boards[ply];
+    const tookFree = freeCapture(boardBefore, played);
+    const bestFree = before.bestMove && before.bestMove !== played ? freeCapture(boardBefore, before.bestMove) : null;
+    const missedFree = bestFree && drop >= MISSED_FREE_DROP
+      && !(tookFree && tookFree.value >= bestFree.value) && usiTo(played) !== bestFree.square
+      ? bestFree
+      : null;
+    const replyFree = after.bestMove ? freeCapture(boardAfter, after.bestMove) : null;
+    const leftFree = replyFree && drop >= MISSED_FREE_DROP && replyFree.value > capturedValue(boardBefore, played)
+      ? replyFree
+      : null;
+    return { tookFree, missedFree, leftFree };
   }
 
   // 敗着: 負けた側の手のうち、まだ負けていない局面から勝率を最も落とした手。
@@ -171,6 +212,8 @@ export function buildGuidedReview(points, {
       quizCandidates.push({ info, priority: 2, type: 'losing' });
     } else if (kind === 'blunder' || kind === 'mistake') {
       quizCandidates.push({ info, priority: 1, type: kind });
+    } else if (info.missedFree) {
+      quizCandidates.push({ info, priority: 1, type: 'free-capture' });
     }
   }
   const required = quizCandidates.filter((candidate) => candidate.priority >= 2);
@@ -182,21 +225,19 @@ export function buildGuidedReview(points, {
   const quizPlies = new Set();
   for (const { info, type } of quizzes) {
     quizPlies.add(info.ply);
-    const question = type === 'mate'
-      ? `ここに${info.missedMate}手詰めがあったね。詰ませてみよう！`
-      : type === 'losing'
-        ? '次の手が敗着だったみたい…。他の手は無かったかな？'
-        : type === 'blunder'
-          ? '次の手は大きな悪手だったみたい。もっと良い手を探してみよう！'
-          : '次の手は悪手だったみたい。もっと良い手があるよ、探してみよう！';
     stepAt(info.ply - 1).quiz = {
       type,
       ply: info.ply,
-      question,
+      question: quizQuestion(type, info),
       bestMove: info.before.bestMove,
       bestLine: info.before.pv ?? [],
       playedMove: moves[info.ply - 1],
       mateLength: info.missedMate,
+      // タダの駒を取る問題は、同じ駒を別の駒でタダで取っても正解にする。
+      targetSquare: info.missedFree ? info.missedFree.square : undefined,
+      targetFrom: info.missedFree && boards
+        ? freeCaptureOrigins(boards[info.ply - 1], info.missedFree.square, info.mover)
+        : undefined,
     };
   }
 
@@ -204,6 +245,8 @@ export function buildGuidedReview(points, {
     const step = stepAt(info.ply);
     const kind = info.after.annotation?.kind;
     const isPlayer = info.mover === playerColor;
+    const previous = moveInfos.find((entry) => entry.ply === info.ply - 1);
+    const tacticComment = tacticCommentFor(info, isPlayer, previous);
     if (info === decisiveMove) {
       step.comment = isPlayer ? 'この手が勝負の決め手になったね！' : '相手のこの手が決め手になっちゃった…';
       step.pause = true;
@@ -215,6 +258,8 @@ export function buildGuidedReview(points, {
       step.pause = true;
     } else if (info.missedMate) {
       step.comment = isPlayer ? '詰みを逃しちゃったね。' : `相手は${info.missedMate}手詰めを見逃してくれたよ！`;
+    } else if (tacticComment) {
+      step.comment = tacticComment;
     } else if (kind === 'good') {
       step.comment = isPlayer ? '好手だね！' : '相手の好手だね。';
     } else if (kind === 'blunder') {
@@ -235,6 +280,47 @@ export function buildGuidedReview(points, {
     decisivePly: decisiveMove?.ply ?? null,
     quizCount: quizzes.length,
   };
+}
+
+/** 考えさせる問題の文。駒をタダで取られる形や、詰みが生まれた手は、何が起きたかを具体的に言う。 */
+function quizQuestion(type, info) {
+  if (type === 'mate') return `ここに${info.missedMate}手詰めがあったね。詰ませてみよう！`;
+  if (type === 'free-capture') {
+    return `ここでは、相手の${info.missedFree.name}がタダで取れたよ。どの手で取れるかな？`;
+  }
+  const lead = type === 'losing' ? '次の手が敗着だったみたい…。' : '';
+  if (info.allowedMate) return `${lead}次の手で、相手に詰みが生まれちゃったよ。詰まされない手を探そう！`;
+  if (info.leftFree) {
+    return `${lead}次の手で、${info.leftFree.name}をタダで取られる形になっちゃったよ。取られない手を考えてみよう！`;
+  }
+  if (info.missedFree) return `${lead}ここでは、相手の${info.missedFree.name}がタダで取れたよ。どの手で取れるかな？`;
+  if (type === 'losing') return '次の手が敗着だったみたい…。他の手は無かったかな？';
+  return type === 'blunder'
+    ? '次の手は大きな悪手だったみたい。もっと良い手を探してみよう！'
+    : '次の手は悪手だったみたい。もっと良い手があるよ、探してみよう！';
+}
+
+/**
+ * 駒のタダ取りについての一言。直前の手で言ったことは繰り返さない。
+ * @param {any} info この手
+ * @param {boolean} isPlayer プレイヤーの手か
+ * @param {any} previous 直前の手(相手の手)
+ */
+function tacticCommentFor(info, isPlayer, previous) {
+  if (isPlayer) {
+    if (info.tookFree && previous?.leftFree?.square === info.tookFree.square) return `タダの${info.tookFree.name}をしっかり取ったね！`;
+    if (info.leftFree) return `この手で、${info.leftFree.name}がタダで取られる形になっちゃった…。`;
+    if (info.missedFree) return `相手の${info.missedFree.name}がタダで取れたのに、見逃しちゃったね。`;
+    if (info.tookFree && info.tookFree.value >= 3) return `タダの${info.tookFree.name}をゲット！`;
+    return '';
+  }
+  if (info.leftFree) return `相手の${info.leftFree.name}がタダで取れる形になったよ！`;
+  if (info.tookFree && previous?.leftFree?.square === info.tookFree.square) return '';
+  if (info.tookFree) return `${info.tookFree.name}をタダで取られちゃった…。`;
+  if (previous?.leftFree && !info.tookFree) {
+    return `相手は、タダの${previous.leftFree.name}を見逃してくれたね。`;
+  }
+  return '';
 }
 
 /** 振り返りの最後に話す一言。 */
