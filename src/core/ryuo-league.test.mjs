@@ -18,7 +18,7 @@ import {
   totalTitles,
 } from './ryuo-league.mjs';
 import { MATCHUP_ELO, matchupBonus, summarizeTraitMoments, traitMomentText } from './player-character.mjs';
-import { memberProfile, rosterBook, vsUserText } from './ryuo-book.mjs';
+import { formationFans, memberFormations, memberProfile, rosterBook, vsUserText } from './ryuo-book.mjs';
 import { lastGameLines, opponentLines } from './ryuo-speech.mjs';
 import { winProbability } from './ryuo-strength.mjs';
 
@@ -160,6 +160,17 @@ describe('roster book and lines', () => {
     expect(profile.repertoire).toMatch(/党|オールラウンダー/);
     expect(profile.total).toMatch(/勝.*敗/);
     expect(rosterBook(null)).toBeNull();
+    // 得意戦法から、定跡図鑑の戦法・囲いへつなぐ(基本の居飛車は使わない)。
+    expect(memberFormations({ repertoire: { styles: ['shiken-mino', 'gangi'] } })).toEqual([
+      { kind: 'strategy', id: 'shiken' }, { kind: 'castle', id: 'mino' }, { kind: 'castle', id: 'gangi' },
+    ]);
+    const someone = Object.values(roster.players).find((member) => memberFormations(member).length);
+    const formation = memberFormations(someone)[0];
+    const fans = formationFans(roster, formation, 50);
+    expect(fans.some(({ id }) => id === someone.id)).toBe(true);
+    expect(fans.map(({ group }) => group)).toEqual([...fans.map(({ group }) => group)].sort((a, b) => a - b));
+    expect(formationFans(roster, formation)).toHaveLength(Math.min(3, fans.length));
+    expect(formationFans(null, formation)).toEqual([]);
   });
 
   it('describes the head-to-head record', () => {

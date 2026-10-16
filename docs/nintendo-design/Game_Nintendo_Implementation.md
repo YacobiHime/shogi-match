@@ -44,17 +44,17 @@
 | 称号・所属 | `src/core/player-profile.mjs` | |
 | 続けて遊んだ日 | `src/core/play-streak.mjs`、`ShogiMatchGame.vue`の`finish`・`ShogiProblemSet.vue`・`ShogiTutorial.vue` | 将棋の行為だけを数える。週に1日のおやすみ（`REST_WINDOW_DAYS`）。急かす言葉は使わない |
 | 記録の画面 | `src/YakobiNote.vue` | 「コレクション」の項目で、印と着せ替えを見せる |
-| コレクション | `src/core/collection.mjs`、`ShogiMatchGame.vue`の`recordCollection` | 定跡図鑑の戦法・囲いとLvの壁を印にする。着せ替えの解放（`THEME_UNLOCKS`）もここ。保存は`yacobihime:shogi-match:collection:v1` |
+| コレクション | `src/core/collection.mjs`、`ShogiMatchGame.vue`の`recordCollection` | 定跡図鑑の戦法・囲い、手筋（`src/core/move-tesuji.mjs`で見分ける）、Lvの壁を印にする。組んだ形と棋士名鑑のつながりは`src/core/ryuo-book.mjs`の`formationFans`。着せ替えの解放（`THEME_UNLOCKS`）もここ。保存は`yacobihime:shogi-match:collection:v1` |
 | 着せ替えの一覧 | `src/core/themes.mjs` | 盤の部品・終局画面・やこびノートで共通。選んだら`saveTheme`で開いている盤へ知らせる |
 | CPUの強さ | `src/core/strength-settings.mjs`、`src/core/logic-ai.mjs` | 上限はLv40。値を変えたら`docs/difficulty-calibration.md`も直す |
 | CPUの手の自然さ | `src/core/move-naturalness.mjs` | |
 | 棋士の棋風・得意と苦手 | `src/core/player-character.mjs` | |
 | 棋士の台詞 | `src/core/ryuo-speech.mjs` | |
-| 推しの棋士・組優勝の予想・個性の一言 | `src/core/ryuo-oshi.mjs`、`RyuoRosterBook.vue`、`ShogiTournament.vue`の`cheerSays` | 予想は自分の1局目が決まる前だけ、負けていない棋士から。的中はコレクションに回数だけ残す |
+| 推しの棋士・組優勝の予想・個性の一言 | `src/core/ryuo-oshi.mjs`、`RyuoRosterBook.vue`、`ShogiTournament.vue`の`cheerSays`、期の終わりの結果は`ShogiMatchGame.vue`の`finalizeRyuoSeason`（`oshiLine`） | 予想は自分の1局目が決まる前だけ、負けていない棋士から。的中はコレクションに回数だけ残す |
 | 対局の振り返り | `src/core/guided-review.mjs`、`src/composables/match/useGuidedReview.ts` | |
 | 教室・問題集 | `src/core/tutorial-curriculum.mjs`、`src/core/problem-set.mjs` | 対局画面から静的にimportしない（`AGENTS.md`） |
-| 間をあけた出し直し | `src/core/review-queue.mjs`、`ShogiProblemSet.vue`の`reviewDueProblem` | 一発で解けなかった問題を1日後・3日後・7日後に出す（`REVIEW_INTERVAL_DAYS`） |
-| 終盤戦 | `src/core/endgame-start.mjs`、`ShogiMatchGame.vue`の`startEndgameNow` | 代表局の終局24〜40手前、駒の損得6以内。対局画面からは押したときに読み込む |
+| 間をあけた出し直し | `src/core/review-queue.mjs`、`ShogiProblemSet.vue`の`reviewDueProblem` | 一発で解けなかった問題を1日後・3日後・7日後に出す（`REVIEW_INTERVAL_DAYS`）。振り返りで見逃した3手以内の詰みは`src/core/review-problems.mjs`で問題にする |
+| 終盤戦 | `src/core/endgame-start.mjs`、`ShogiMatchGame.vue`の`startEndgameNow` | 代表局と最近の自分の対局（`src/core/recent-games.mjs`）の終局24〜40手前、駒の損得6以内。対局画面からは押したときに読み込む |
 | 盤・駒の見た目 | `src/ShogiMatchBoard.vue` | `shogi-match-board-theme`、`shogi-match-piece-theme`に保存 |
 
 ---

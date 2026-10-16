@@ -87,7 +87,7 @@ export function oshiSeasonStatus(view, oshiId) {
  * @param {string} name
  */
 export function oshiSeasonLine(status, name) {
-  if (!status) return `推しの${name}さんは、ほかの組で戦っているよ。期が終わったら、やこびノートの棋士名鑑で成績を見てみよう！`;
+  if (!status) return `推しの${name}さんは、ほかの組で戦っているよ。期が終わったら、結果を知らせるね！`;
   if (status.champion) return `推しの${name}さんが、竜王になったよ！ ずっと応援してきたかいがあったね！`;
   const last = status.games.at(-1);
   if (!last) return `推しの${name}さんは、まだ対局前だよ。いっしょに応援しよう！`;
@@ -165,4 +165,18 @@ export function predictionLine(prediction, outcome) {
   if (outcome === 'hit') return `組優勝の予想、${who}で大当たり！ 見る目があるね！`;
   if (outcome === 'miss') return `組優勝の予想（${who}）は、はずれちゃった。来期こそ当てよう！`;
   return `組優勝は${who}と予想したね。どうなるかな？`;
+}
+
+/**
+ * 期が終わったときの、推しの棋士の結果。ほかの組にいても、組の順位と昇級・降級は分かる。
+ * @param {{ name: string, beforeGroup: number, afterGroup: number | null, rank: number | null, champion?: boolean }} result
+ *   rankは組のランキング戦の順位(0が優勝)。afterGroupがnullなら、名簿から外れた(引退など)。
+ */
+export function oshiSeasonResultLine({ name, beforeGroup, afterGroup, rank, champion = false }) {
+  if (champion) return `推しの${name}さんが、竜王になったよ！ ずっと応援してきたかいがあったね！`;
+  if (afterGroup === null) return `推しの${name}さんは、今期で名鑑から外れちゃった。おつかれさまでした！ 新しい推しを探してみよう。`;
+  const place = rank === 0 ? `${beforeGroup}組で優勝` : Number.isInteger(rank) ? `${beforeGroup}組で${rank + 1}位` : `${beforeGroup}組で戦い`;
+  if (afterGroup < beforeGroup) return `推しの${name}さんは、${place}。${afterGroup}組へ昇級したよ！ おめでとう！`;
+  if (afterGroup > beforeGroup) return `推しの${name}さんは、${place}。${afterGroup}組へ降級しちゃった…。来期の巻き返しを応援しよう！`;
+  return `推しの${name}さんは、${place}。来期も${afterGroup}組で戦うよ。`;
 }

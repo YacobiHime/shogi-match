@@ -81,6 +81,7 @@ describe('コレクション', () => {
     expect(saveCollection(storage, grantTheme(state, 'board', 'sunfish_dark'))).toBe(true);
     expect(loadCollection(storage)).toEqual({
       formations: { 本美濃: { count: 1, firstAt: 1 } },
+      tesuji: {},
       levels: { 3: 1 },
       godMoves: 0,
       predictionsHit: 0,
@@ -88,6 +89,19 @@ describe('コレクション', () => {
     });
     expect(loadCollection({ getItem: (key) => (key === COLLECTION_STORAGE_KEY ? '{broken' : null) })).toEqual(createCollection());
     expect(loadCollection(null)).toEqual(createCollection());
+  });
+
+  it('指した手筋も印にし、知らない手筋は数えない', () => {
+    const names = { 'head-gold': '頭金', 'knight-fork': 'ふんどしの桂' };
+    const first = recordMatchCollection(createCollection(), { tesuji: ['head-gold', 'unknown', 'head-gold'], catalog, tesujiNames: names, at: 3 });
+    expect(first.gained).toEqual([{ kind: 'tesuji', label: '頭金' }]);
+    expect(collectionCount(first.state)).toBe(1);
+    const second = recordMatchCollection(first.state, { tesuji: ['head-gold', 'knight-fork'], catalog, tesujiNames: names, at: 4 });
+    expect(second.gained).toEqual([{ kind: 'tesuji', label: 'ふんどしの桂' }]);
+    expect(second.repeated).toEqual(['頭金']);
+    expect(second.state.tesuji['head-gold']).toEqual({ count: 2, firstAt: 3 });
+    // 手筋を持たない古い保存も読める。
+    expect(loadCollection({ getItem: () => JSON.stringify({ formations: {}, levels: {} }) }).tesuji).toEqual({});
   });
 
   it('竜王戦の予想の的中は、印に数えず回数だけ残す', () => {

@@ -4,6 +4,37 @@ import { describeCharacter } from './player-character.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
 import { OTHER_TITLES, awardLabel, careerSummary, titleLabel, winRate } from './ryuo-league.mjs';
 import { characterCatchphrase } from './ryuo-oshi.mjs';
+import { styleEntry } from './ryuo-repertoire.mjs';
+
+/** 基本の居飛車は、どの居飛車の戦法にも付くので、結びつきには使わない。 */
+const GENERIC_STRATEGIES = new Set(['ibisha']);
+
+/**
+ * 棋士の得意戦法が使う、定跡図鑑の戦法・囲いのID。コレクション(組んだ形)との結びつきに使う。
+ * @returns {{ kind: 'strategy' | 'castle', id: string }[]}
+ */
+export function memberFormations(member) {
+  const result = [];
+  for (const styleId of member?.repertoire?.styles ?? []) {
+    const style = styleEntry(styleId);
+    if (style.strategy && !GENERIC_STRATEGIES.has(style.strategy)) result.push({ kind: 'strategy', id: style.strategy });
+    if (style.castle) result.push({ kind: 'castle', id: style.castle });
+  }
+  return result.filter((entry, index) => result.findIndex(({ kind, id }) => kind === entry.kind && id === entry.id) === index);
+}
+
+/**
+ * その戦法・囲いを得意にしている棋士(上の組から)。プレイヤーが組んだ形から、名鑑の棋士へつなぐのに使う。
+ * @returns {{ id: string, name: string, group: number }[]}
+ */
+export function formationFans(roster, { kind, id }, limit = 3) {
+  if (!roster) return [];
+  return Object.values(roster.players)
+    .filter((member) => memberFormations(member).some((entry) => entry.kind === kind && entry.id === id))
+    .sort((a, b) => a.group - b.group || a.name.localeCompare(b.name, 'ja'))
+    .slice(0, limit)
+    .map(({ id: memberId, name, group }) => ({ id: memberId, name, group }));
+}
 
 const KIND_LABELS = Object.freeze({ pro: '棋士', woman: '女流棋士', amateur: 'アマチュア', shoreikai: '奨励会員' });
 
@@ -42,6 +73,7 @@ export function memberProfile(roster, member) {
     style: character.style,
     // 一覧の行にも出す、個性の一言(棋風と、いちばん目立つ特徴)。
     catchphrase: characterCatchphrase(character),
+    formations: memberFormations(member),
     strengths: character.strengths,
     weaknesses: character.weaknesses,
     lastSeason: season && season.games ? `${season.wins}勝${season.losses}敗 ${rateText(season)}` : '',

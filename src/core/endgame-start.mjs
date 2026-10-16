@@ -8,7 +8,8 @@
  *
  * このモジュールは代表局の棋譜を含むので、対局画面からは使うときに読み込む(dynamic import)。
  */
-import { importKIF } from 'tsshogi';
+import { Position, importKIF } from 'tsshogi';
+import { recentGameTitle } from './recent-games.mjs';
 import {
   AMANO_SOHO_KIFU,
   COMPUTER_SHOGI_TOP_KIFU,
@@ -102,6 +103,25 @@ export function parseEndgameSource(kifu) {
   };
 }
 
+const STANDARD_SFEN = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1';
+
+/**
+ * 最近の自分の対局(core/recent-games.mjs)を、名局と同じ形にする。指せない手があったり短すぎたりすればnull。
+ * @param {{ at: number, moves: string[], winner: 'black' | 'white', opponent: string }} game
+ */
+export function sourceFromRecentGame(game) {
+  const position = Position.newBySFEN(STANDARD_SFEN);
+  if (!position) return null;
+  const sfens = [position.sfen];
+  for (const usi of game.moves) {
+    const move = position.createMoveByUSI(usi);
+    if (!move || !position.doMove(move)) return null;
+    sfens.push(position.sfen);
+  }
+  if (sfens.length < ENDGAME_PLIES_BEFORE_END.max + 20) return null;
+  return { title: recentGameTitle(game), sfens, winner: game.winner };
+}
+
 let parsedSources = null;
 /** 代表局を一度だけ読み込む。 */
 export function endgameSources() {
@@ -139,6 +159,10 @@ export function pickEndgameStart(sources, { random = Math.random, excludeSfen = 
 /** 終盤戦を始めるときの、やこび姫の一言。実戦でどちらが勝ったかを添える(負けている側を持つこともある)。 */
 export function endgameIntro({ title, playerColor, winner }) {
   const side = playerColor === 'black' ? '先手' : '後手';
+  if (title.startsWith('あなたの対局')) {
+    const result = winner === playerColor ? 'この局面を持った側が勝ったよ。今度も勝ち切ろう！' : 'この局面を持った側が負けちゃったんだ。今度はひっくり返せるかな？';
+    return `${title}の終盤から、あなたは${side}を持つよ。前の対局では、${result}`;
+  }
   const result = winner === playerColor ? 'この局面を持った側が勝ったよ。勝ち切れるかな？' : '相手の側が勝ったよ。ひっくり返せるかな？';
   return `「${title}」の終盤から、あなたは${side}を持つよ。実戦では、${result}`;
 }

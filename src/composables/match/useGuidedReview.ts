@@ -17,6 +17,9 @@ import {
   visibleReviewMoves,
 } from "../../core/review-navigation.mjs";
 import type { AnalysisPoint } from "./analysisEngines";
+import { addReviewProblems, buildReviewProblem, loadReviewProblems, saveReviewProblems } from "../../core/review-problems.mjs";
+import { loadReviewQueue, recordReviewResult, saveReviewQueue } from "../../core/review-queue.mjs";
+import { appendUsiMove, createGameRecord } from "../../game-state";
 
 export type GuidedReviewQuiz = {
   type: string;
@@ -221,6 +224,7 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
       moverForPly: (ply: number) => ((ply % 2 === 1) === (firstMover === "black") ? "black" : "white"),
       initialSfen: matchInitialSfen.value,
     }) as GuidedReviewScript;
+    saveMissedMatesAsProblems(guidedReviewScript);
     const winner = winnerColor();
     const losingPly = guidedReviewScript.losingPly;
     guidedRetryPly.value = winner && winner !== playerColor() && losingPly ? losingPly - 1 : null;
@@ -234,6 +238,33 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
       text: "対局を最初から振り返るよ！大事な場面では止まるから、一緒に考えよう。",
     };
     scheduleGuidedStep(guidedReviewDelay(true, guidedReviewSpeed.value));
+  }
+
+  /**
+   * 見逃した短い詰みの局面を、問題集の「あなたの対局から」の問題にして、復習の箱へ入れる(core/review-problems.mjs)。
+   * 日をあけて「やこび姫からの1問」に出る。保存できない環境では何もしない。
+   */
+  function saveMissedMatesAsProblems(script: GuidedReviewScript) {
+    const moves = [...reviewNavigation.value.mainLine];
+    const problems = [];
+    for (const step of script.steps.values()) {
+      const quiz = step.quiz;
+      if (quiz?.type !== "mate") continue;
+      try {
+        const record = createGameRecord(matchInitialSfen.value);
+        for (const usi of moves.slice(0, quiz.ply - 1)) appendUsiMove(record, usi);
+        const problem = buildReviewProblem({ sfen: record.position.sfen, mateLength: quiz.mateLength });
+        if (problem) problems.push(problem);
+      } catch {
+        // 局面を作れない手順は飛ばす。
+      }
+    }
+    if (!problems.length) return;
+    const store = storage();
+    saveReviewProblems(store, addReviewProblems(loadReviewProblems(store), problems));
+    let queue = loadReviewQueue(store);
+    for (const problem of problems) queue = recordReviewResult(queue, problem.id, { firstTry: false });
+    saveReviewQueue(store, queue);
   }
 
   function scheduleGuidedStep(delay = guidedReviewDelay(false, guidedReviewSpeed.value)) {

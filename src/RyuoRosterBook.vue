@@ -48,6 +48,7 @@
               <div v-if="member.total"><dt>通算</dt><dd>{{ member.total }}</dd></div>
               <div v-if="member.awards.length"><dt>将棋大賞</dt><dd>{{ member.awards.join("・") }}</dd></div>
               <div><dt>対戦成績</dt><dd>{{ member.vsUser }}</dd></div>
+              <div v-if="sharedFormations(member).length" data-book-shared><dt>あなたも組んだ形</dt><dd>{{ sharedFormations(member).join("・") }}</dd></div>
             </dl>
             <button
               type="button"
@@ -67,10 +68,13 @@
 import { computed, ref, type PropType } from "vue";
 import { rosterBook } from "./core/ryuo-book.mjs";
 import { loadOshi, saveOshi } from "./core/ryuo-oshi.mjs";
+import { loadCollection } from "./core/collection.mjs";
+import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 
 type Profile = {
   id: string; name: string; dan: string; kind: string; age: number; group: number; ryuoHolder: boolean; junni: string | null;
   held: string[]; former: string[]; titleCounts: string[]; totalTitles: number; repertoire: string; style: string; catchphrase: string;
+  formations: { kind: "strategy" | "castle"; id: string }[];
   strengths: string[]; weaknesses: string[]; lastSeason: string; total: string; awards: string[]; vsUser: string; played: boolean;
 };
 type Book = {
@@ -101,6 +105,13 @@ const storage = (() => {
 })();
 const oshiId = ref(loadOshi(storage));
 const oshiName = computed(() => (oshiId.value ? props.roster?.players?.[oshiId.value]?.name ?? "" : ""));
+/** 棋士の得意な形のうち、プレイヤーも対局で組んだことのあるもの(コレクションとのつながり)。 */
+const collectedLabels = new Set(Object.keys(loadCollection(storage).formations));
+function sharedFormations(member: Profile) {
+  return member.formations
+    .map(({ kind, id }) => (kind === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES).find((entry: { id: string }) => entry.id === id)?.label ?? "")
+    .filter((label: string) => label && collectedLabels.has(label));
+}
 function toggleOshi(id: string) {
   oshiId.value = oshiId.value === id ? "" : id;
   saveOshi(storage, oshiId.value);

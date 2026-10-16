@@ -193,8 +193,12 @@ describe("match screen regressions", () => {
 
   it("plays the move sound for moves made during review, including CPU play from a review position", () => {
     const applyMove = source.split("function applyMove(")[1]?.split("async function showHint")[0] ?? "";
-    // 駒音は検討中かどうかの判定より前に鳴らす。間には、プレイヤーの手の止め(検討中は止めない)だけを挟む。
-    expect(applyMove).toMatch(/moveSounds\.play\(selectMoveSound\([\s\S]*?\)\);\s*(?:\/\/[^\n]*\n\s*)?(?:if \(actor === "player" && !reviewMode\.value\) holdForImpact\(impact\.stage\);\s*)?if \(!reviewMode\.value\) \{/);
+    // 駒音は、検討中かどうかで分ける前に鳴らす(検討中の手にも鳴らす)。
+    const soundAt = applyMove.indexOf("moveSounds.play(selectMoveSound(");
+    const reviewGate = applyMove.indexOf("if (!reviewMode.value) {");
+    expect(soundAt).toBeGreaterThan(-1);
+    expect(soundAt).toBeLessThan(reviewGate);
+    expect(applyMove.slice(0, soundAt)).not.toMatch(/if \(!?reviewMode\.value\) \{\s*$/);
   });
 
   it("locks the counterpart select for combined strategy/castle definitions", () => {
@@ -310,5 +314,21 @@ describe("match screen regressions", () => {
     expect(tutorial).toMatch(/recordLessonCleared\([\s\S]{0,120}recordPlay\(loadPlayStreak\(storage\)\)/);
     // 「今日やらないと」と急かす言葉は使わない。
     expect(source + problemSet + tutorial).not.toMatch(/今日やらないと|記録が消え|途切れちゃう/);
+  });
+
+  it("connects tesuji, review positions, own games and the oshi's season result to the existing features", () => {
+    // 手筋は、プレイヤーの手(検討中は除く)から見分け、終局でコレクションに渡す。
+    expect(source).toMatch(/actor === "player" && !reviewMode\.value && normalizedMode\.value === "cpu"\) \{\s*for \(const id of detectTesuji\(/);
+    expect(source).toMatch(/tesuji: \[\.\.\.matchTesuji\],\s*tesujiNames: TESUJI_NAMES,/);
+    // 振り返りで見逃した短い詰みを、問題と復習の箱に入れる。
+    expect(source).toMatch(/saveMissedMatesAsProblems\(guidedReviewScript\);/);
+    // 終局まで指した平手の対局を残し、終盤戦の候補に加える。
+    expect(source).toMatch(/saveRecentGames\(browserStorage\(\), addRecentGame\(/);
+    expect(source).toMatch(/pickEndgameStart\(\[\.\.\.endgameSources\(\), \.\.\.ownSources\]/);
+    // 推しの棋士の組の順位は、名簿を進める前に控える。
+    const finalize = source.split("function finalizeRyuoSeason(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(finalize.indexOf("oshiStandings")).toBeLessThan(finalize.indexOf("applySeasonToRoster"));
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    expect(tournament).toMatch(/props\.view\?\.result\?\.oshiLine/);
   });
 });

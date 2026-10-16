@@ -3,6 +3,7 @@
  *
  * 集めるもの(条件はすべて将棋の行為。Game_Nintendo_Implementation.mdの6-1):
  * - 定跡図鑑の戦法・囲いを、対局で組んだ(プレイヤーの側だけ。対CPUの対局すべてが対象)
+ * - 手筋図鑑の手筋・詰みの形を、対局で指した(core/move-tesuji.mjsが見分けたもの)
  * - CPUのLvに初めて勝った(レーティングの対象の対局だけ)
  * - 神の一手を指した(数だけ数える。印の数には入れない)
  * - 竜王戦の組優勝の予想が当たった(数だけ数える。印の数には入れない。core/ryuo-oshi.mjs)
@@ -31,22 +32,24 @@ export function collectionCatalog({ strategies, castles }) {
 export const COLLECTION_LEVELS = Object.freeze(Array.from({ length: 40 }, (_, index) => index + 1));
 
 export function createCollection() {
-  return { formations: {}, levels: {}, godMoves: 0, predictionsHit: 0, grantedThemes: [] };
+  return { formations: {}, tesuji: {}, levels: {}, godMoves: 0, predictionsHit: 0, grantedThemes: [] };
 }
 
 /**
  * 1局の結果をコレクションに加える。
  * @param {ReturnType<typeof createCollection>} state
- * @param {{ formations?: string[], wonLevel?: number | null, godMoves?: number, catalog: { kind: string, id: string, label: string }[], at?: number }} game
+ * @param {{ formations?: string[], tesuji?: string[], wonLevel?: number | null, godMoves?: number, catalog: { kind: string, id: string, label: string }[], tesujiNames?: Record<string, string>, at?: number }} game
  *   formationsはこの対局でプレイヤーが組んだ戦型の名前。一覧にない名前は数えない。
- * @returns {{ state: ReturnType<typeof createCollection>, gained: { kind: 'strategy' | 'castle' | 'level', label: string }[], repeated: string[] }}
- *   gainedは初めて手に入った印、repeatedは前にも組んだ戦法・囲い。
+ *   tesujiは指した手筋のID。tesujiNamesにないIDは数えない。
+ * @returns {{ state: ReturnType<typeof createCollection>, gained: { kind: 'strategy' | 'castle' | 'tesuji' | 'level', label: string }[], repeated: string[] }}
+ *   gainedは初めて手に入った印、repeatedは前にも組んだ戦法・囲いと、前にも指した手筋。
  */
-export function recordMatchCollection(state, { formations = [], wonLevel = null, godMoves = 0, catalog, at = Date.now() }) {
+export function recordMatchCollection(state, { formations = [], tesuji = [], wonLevel = null, godMoves = 0, catalog, tesujiNames = {}, at = Date.now() }) {
   const byLabel = new Map(catalog.map((entry) => [entry.label, entry]));
   const next = {
     ...state,
     formations: { ...state.formations },
+    tesuji: { ...(state.tesuji ?? {}) },
     levels: { ...state.levels },
     godMoves: state.godMoves + Math.max(0, Math.trunc(godMoves) || 0),
   };
@@ -60,6 +63,14 @@ export function recordMatchCollection(state, { formations = [], wonLevel = null,
     if (current) repeated.push(label);
     else gained.push({ kind: /** @type {'strategy' | 'castle'} */ (entry.kind), label });
   }
+  for (const id of new Set(tesuji)) {
+    const label = tesujiNames[id];
+    if (!label) continue;
+    const current = next.tesuji[id];
+    next.tesuji[id] = { count: (current?.count ?? 0) + 1, firstAt: current?.firstAt ?? at };
+    if (current) repeated.push(label);
+    else gained.push({ kind: 'tesuji', label });
+  }
   if (Number.isInteger(wonLevel) && COLLECTION_LEVELS.includes(wonLevel) && !next.levels[wonLevel]) {
     next.levels[wonLevel] = at;
     gained.push({ kind: 'level', label: `Lv.${wonLevel}` });
@@ -72,9 +83,9 @@ export function recordPredictionHit(state) {
   return { ...state, predictionsHit: (state.predictionsHit ?? 0) + 1 };
 }
 
-/** 印の数(組んだ戦法・囲いの種類と、勝ったLvの数)。 */
+/** 印の数(組んだ戦法・囲いの種類、指した手筋の種類、勝ったLvの数)。 */
 export function collectionCount(state) {
-  return Object.keys(state.formations).length + Object.keys(state.levels).length;
+  return Object.keys(state.formations).length + Object.keys(state.tesuji ?? {}).length + Object.keys(state.levels).length;
 }
 
 /**
@@ -142,12 +153,17 @@ export function loadCollection(storage) {
     for (const [label, entry] of Object.entries(parsed.formations ?? {})) {
       if (entry && count(entry.count)) formations[label] = { count: count(entry.count), firstAt: Number(entry.firstAt) || 0 };
     }
+    const tesuji = {};
+    for (const [id, entry] of Object.entries(parsed.tesuji ?? {})) {
+      if (entry && count(entry.count)) tesuji[id] = { count: count(entry.count), firstAt: Number(entry.firstAt) || 0 };
+    }
     const levels = {};
     for (const [level, at] of Object.entries(parsed.levels ?? {})) {
       if (COLLECTION_LEVELS.includes(Number(level))) levels[level] = Number(at) || 0;
     }
     return {
       formations,
+      tesuji,
       levels,
       godMoves: count(parsed.godMoves),
       predictionsHit: count(parsed.predictionsHit),

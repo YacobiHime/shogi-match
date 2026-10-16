@@ -1394,9 +1394,11 @@
         <div v-if="collectionResult && (collectionResult.gained.length || collectionResult.repeated.length)" class="shogi-game__result-collection" data-collection-result>
           <p class="shogi-game__result-collection-title">コレクション</p>
           <ul v-if="collectionResult.gained.length">
-            <li v-for="gain in collectionResult.gained" :key="gain.label" class="shogi-game__result-collection-new">{{ collectionGainText(gain) }}</li>
+            <li v-for="gain in collectionResult.gained" :key="gain.label" class="shogi-game__result-collection-new">
+              {{ collectionGainText(gain) }}<small v-if="gain.detail">{{ gain.detail }}</small>
+            </li>
           </ul>
-          <p v-if="collectionResult.repeated.length" class="shogi-game__result-collection-repeat">組んだ形: {{ collectionResult.repeated.join("・") }}</p>
+          <p v-if="collectionResult.repeated.length" class="shogi-game__result-collection-repeat">前にも出した形: {{ collectionResult.repeated.join("・") }}</p>
           <p v-for="theme in collectionResult.themes" :key="theme" class="shogi-game__result-collection-theme">着せ替え{{ theme }}が使えるようになったよ！（やこびノートで選べるよ）</p>
           <p v-if="collectionResult.next" class="shogi-game__result-collection-next">次の着せ替えまで、印あと{{ collectionResult.next.remaining }}個</p>
         </div>
@@ -1806,7 +1808,9 @@ import {
   saveCollection,
 } from "./core/collection.mjs";
 import { themeName } from "./core/themes.mjs";
-import { loadOshi } from "./core/ryuo-oshi.mjs";
+import { loadOshi, oshiSeasonResultLine } from "./core/ryuo-oshi.mjs";
+import { TESUJI_HINTS, TESUJI_NAMES, detectTesuji } from "./core/move-tesuji.mjs";
+import { addRecentGame, loadRecentGames, saveRecentGames } from "./core/recent-games.mjs";
 import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
@@ -3069,9 +3073,10 @@ function observeFormations(sfen: string) {
  */
 const COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
 const matchFormationNames = new Set<string>();
+const matchTesuji = new Set<string>();
 let matchGodMoves = 0;
 const collectionResult = ref<{
-  gained: { kind: "strategy" | "castle" | "level"; label: string }[];
+  gained: { kind: "strategy" | "castle" | "tesuji" | "level"; label: string; detail: string }[];
   repeated: string[];
   themes: string[];
   next: { need: number; remaining: number } | null;
@@ -3084,21 +3089,37 @@ function recordCollection(won: boolean) {
   const before = loadCollection(browserStorage());
   const recorded = recordMatchCollection(before, {
     formations: [...matchFormationNames],
+    tesuji: [...matchTesuji],
+    tesujiNames: TESUJI_NAMES,
     wonLevel: won && ratingChange.value && level !== undefined ? level : null,
     godMoves: matchGodMoves,
     catalog: COLLECTION_CATALOG,
   });
   saveCollection(browserStorage(), recorded.state);
   collectionResult.value = {
-    gained: recorded.gained,
+    // 初めて手に入った形には、どんな形かを一言添える(何が良かったかを伝える称賛にする)。
+    gained: recorded.gained.map((gain) => ({ ...gain, detail: collectionGainDetail(gain) })),
     repeated: recorded.repeated,
     themes: newlyUnlockedThemes(before, recorded.state).map(({ kind, id }) => `${kind === "board" ? "盤" : "駒"}「${themeName(kind, id)}」`),
     next: recorded.gained.length ? nextThemeUnlock(recorded.state) : null,
   };
 }
+/** 初めて手に入った形の一言。戦法・囲いは定跡図鑑の解説、手筋は手筋の一言から。 */
+function collectionGainDetail(gain: { kind: string; label: string }) {
+  if (gain.kind === "tesuji") {
+    const id = Object.entries(TESUJI_NAMES).find(([, name]) => name === gain.label)?.[0];
+    return id ? TESUJI_HINTS[id as keyof typeof TESUJI_HINTS] : "";
+  }
+  if (gain.kind === "strategy" || gain.kind === "castle") {
+    const entry = COLLECTION_CATALOG.find(({ label }) => label === gain.label);
+    return entry ? openingExplanation(entry.id)?.overview ?? "" : "";
+  }
+  return "";
+}
 /** 終局画面の「この対局で手に入った印」。初めてのものだけ一言にし、前にも組んだものは名前を並べる。 */
 function collectionGainText(gain: { kind: string; label: string }) {
-  return gain.kind === "level" ? `${gain.label}にはじめて勝った！` : `${gain.label}をはじめて組んだ！`;
+  if (gain.kind === "level") return `${gain.label}にはじめて勝った！`;
+  return gain.kind === "tesuji" ? `${gain.label}をはじめて指した！` : `${gain.label}をはじめて組んだ！`;
 }
 
 function formatFinalMove(matchResult: MatchResult): string {
@@ -3500,6 +3521,13 @@ function finalizeRyuoSeason() {
   const { career, titles } = applySeason(ryuoCareer.value, season);
   ryuoCareer.value = career;
   saveCareer(browserStorage(), career);
+  // 推しの棋士の、この期の組の順位(ほかの組でも、期の終わりには順位が決まっている)。名簿を進める前に控える。
+  const oshiId = loadOshi(browserStorage());
+  const oshiBefore = oshiId ? ryuoRoster.value?.players?.[oshiId] ?? null : null;
+  const oshiStandings: string[] | undefined = oshiBefore
+    ? (oshiBefore.group === season.startGroup && season.mode === "challenge" ? season.standings : season.groupStandings?.[oshiBefore.group])
+    : undefined;
+  const oshiRank = oshiStandings ? oshiStandings.indexOf(oshiId) : -1;
   if (ryuoRoster.value) {
     ryuoRoster.value = applySeasonToRoster(ryuoRoster.value, season, { userGroup: career.group, promote: scaleById(season.settings.scale).promote });
     saveRoster(browserStorage(), ryuoRoster.value);
@@ -3508,7 +3536,17 @@ function finalizeRyuoSeason() {
   for (const title of titles) profile = grantTitle(profile, title);
   profileState.value = profile;
   saveProfile(browserStorage(), profile);
-  ryuoSeason.value = { ...season, applied: true, result: { ...season.result, titles } };
+  const oshiAfter = oshiBefore ? ryuoRoster.value?.players?.[oshiId] ?? null : null;
+  const oshiLine = oshiBefore
+    ? oshiSeasonResultLine({
+      name: oshiBefore.name,
+      beforeGroup: oshiBefore.group,
+      afterGroup: oshiAfter ? oshiAfter.group : null,
+      rank: oshiRank >= 0 ? oshiRank : null,
+      champion: season.champion === oshiId,
+    })
+    : "";
+  ryuoSeason.value = { ...season, applied: true, result: { ...season.result, titles, oshiLine } };
   saveSeason(browserStorage(), ryuoSeason.value);
 }
 
@@ -3774,8 +3812,10 @@ function startEndgameMatch() {
   confirmDiscardSuspended(() => { void startEndgameNow(); });
 }
 async function startEndgameNow({ excludeSfen = "" } = {}) {
-  const { endgameIntro, endgameSources, pickEndgameStart } = await import("./core/endgame-start.mjs");
-  const start = pickEndgameStart(endgameSources(), { excludeSfen });
+  const { endgameIntro, endgameSources, pickEndgameStart, sourceFromRecentGame } = await import("./core/endgame-start.mjs");
+  // 名局に、最近の自分の対局(終局まで指したもの)も加えて選ぶ。
+  const ownSources = loadRecentGames(browserStorage()).map(sourceFromRecentGame).filter((source) => source !== null);
+  const start = pickEndgameStart([...endgameSources(), ...ownSources], { excludeSfen });
   if (!start) return;
   yakobiNoteOpen.value = false;
   stopGuidedReview();
@@ -5772,6 +5812,14 @@ function finish(matchResult: MatchResult) {
   active.value = false;
   thinking.value = false;
   result.value = matchResult;
+  // 平手・対CPUで終局まで指した対局は、終盤戦の開始局面に使えるよう残す(短い対局は残さない)。
+  if (normalizedMode.value === "cpu" && matchInitialSfen.value === STANDARD_SFEN && matchResult.winner) {
+    saveRecentGames(browserStorage(), addRecentGame(loadRecentGames(browserStorage()), {
+      moves: [...moveHistory],
+      winner: matchResult.winner === Color.BLACK ? "black" : "white",
+      opponent: matchKind.value === "tournament" ? cpuDisplayName.value : `Lv.${cpuStrengthLevel() ?? ""}`,
+    }));
+  }
   // 1局指し終えたら、続けて遊んだ日に数える(すぐ投了した対局は数えない)。
   if (matchResult.moveCount >= 2) savePlayStreak(browserStorage(), recordPlay(loadPlayStreak(browserStorage())));
   // 詰みで決まったときは、止めてから結果画面を出す。勝ちは長く、負けは短く(core/move-impact.mjs)。
@@ -5849,6 +5897,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   const contextBefore = actor === "player" && !reviewMode.value && coachLevel.value === "detailed"
     ? moveContext(currentSfen.value, usi, moveHistory.at(-1) ?? "")
     : null;
+  const sfenBeforeMove = currentSfen.value;
   const move = active.value ? record.value.position.createMoveByUSI(usi) : null;
   if (!move || !record.value.append(move)) return false;
   syncPosition(usi);
@@ -5946,6 +5995,12 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   ));
   // プレイヤーの王手・大駒を取る手は、CPUの応手を出す前に一瞬止める。
   if (actor === "player" && !reviewMode.value) holdForImpact(impact.stage);
+  // コレクションのために、プレイヤーが指した手筋(手筋図鑑の項目)を控える。
+  if (actor === "player" && !reviewMode.value && normalizedMode.value === "cpu") {
+    for (const id of detectTesuji({ sfenBefore: sfenBeforeMove, usi, checkmate: terminalResult?.reason === "checkmate" })) {
+      matchTesuji.add(id);
+    }
+  }
   if (!reviewMode.value) {
     emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
     if (terminalResult) finish(terminalResult);
@@ -7017,6 +7072,7 @@ function restart() {
   reviewCoachGeneration += 1;
   reviewNavigation.value = createReviewNavigation();
   matchFormationNames.clear();
+  matchTesuji.clear();
   matchGodMoves = 0;
   collectionResult.value = null;
   playerTurnScore = undefined;

@@ -55,6 +55,12 @@
                 @click="selectItem(item.id)"
               >
                 <span>{{ item.label }}</span>
+                <small
+                  v-if="kind === 'tesuji' && collectedTesuji[item.id]"
+                  class="shogi-dex__got"
+                  :aria-label="`対局で${collectedTesuji[item.id]}回指した`"
+                  :title="`対局で${collectedTesuji[item.id]}回指した`"
+                >★{{ collectedTesuji[item.id] > 1 ? collectedTesuji[item.id] : "" }}</small>
               </button>
             </li>
           </ul>
@@ -419,6 +425,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
+import { loadCollection } from "./core/collection.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { formatAnalysisScore, scoreForBlack } from "./core/kifu-analysis.mjs";
 import { appendUsiMove, createGameRecord } from "./game-state";
@@ -533,6 +540,15 @@ const LEGEND_LABELS = {
 } as const;
 
 const dex = computed(() => REFERENCE_DEX_KINDS[props.kind]);
+/** 対局で指したことのある手筋の回数(core/collection.mjs)。手筋図鑑の一覧に★を付ける。 */
+const collectedTesuji: Record<string, number> = (() => {
+  try {
+    const tesuji = loadCollection(typeof localStorage === "undefined" ? null : localStorage).tesuji ?? {};
+    return Object.fromEntries(Object.entries(tesuji).map(([id, entry]) => [id, (entry as { count: number }).count]));
+  } catch {
+    return {};
+  }
+})();
 const entries = computed(() => referenceDexEntries(props.kind) as ReferenceEntry[]);
 // 用語辞典だけ、一覧を検索で絞り込める。
 const searchable = computed(() => props.kind === "glossary");
@@ -1090,6 +1106,15 @@ defineExpose({ goBack });
 </script>
 
 <style>
+/* 対局で指したことのある手筋の★(定跡図鑑の★と同じ見た目)。 */
+.shogi-game .shogi-dex__got {
+  flex: none;
+  margin-left: auto;
+  color: #f1a54c;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(23, 38, 50, 0.6);
+}
 .shogi-game .shogi-reference-dex__kifu-head {
   display: flex;
   flex-wrap: wrap;

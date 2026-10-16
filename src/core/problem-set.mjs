@@ -526,7 +526,9 @@ export function problemQuestion(problem) {
   if (problem.source === "jissen") {
     return `${problem.title}。対局に出てきた局面だよ。後手玉を${problem.plies}手で詰ませてみよう！`;
   }
-  return `第${PROBLEMS.indexOf(problem) + 1}問 ${problem.question}`;
+  // 問題集の一覧にない問題(振り返りの局面から作った問題など)は、番号を付けない。
+  const index = PROBLEMS.indexOf(problem);
+  return index < 0 ? problem.question : `第${index + 1}問 ${problem.question}`;
 }
 
 // ===== 進み具合（端末に保存） =====

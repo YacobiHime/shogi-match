@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Position } from 'tsshogi';
+import { Position, importKIF } from 'tsshogi';
+import { KOYAMA_REO_ENTRANCE_KIFU } from '../data/reference-kifu.mjs';
 import {
   ENDGAME_MAX_MATERIAL_GAP,
   ENDGAME_PLIES_BEFORE_END,
@@ -7,6 +8,7 @@ import {
   endgameSources,
   materialBalance,
   pickEndgameStart,
+  sourceFromRecentGame,
 } from './endgame-start.mjs';
 
 const STANDARD = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1';
@@ -51,5 +53,23 @@ describe('終盤戦の開始局面', () => {
     expect(endgameIntro({ title: 'A 対 B', playerColor: 'black', winner: 'black' }))
       .toBe('「A 対 B」の終盤から、あなたは先手を持つよ。実戦では、この局面を持った側が勝ったよ。勝ち切れるかな？');
     expect(endgameIntro({ title: 'A 対 B', playerColor: 'white', winner: 'black' })).toContain('ひっくり返せるかな？');
+  });
+});
+
+describe('自分の対局から選ぶ終盤戦', () => {
+  it('最近の対局を、名局と同じ形にして候補に加える', () => {
+    // 代表局の手順を、自分の対局として使う。
+    const record = importKIF(KOYAMA_REO_ENTRANCE_KIFU);
+    const moves = record.moves.map((node) => node.move?.usi).filter(Boolean);
+    expect(moves.length).toBeGreaterThan(60);
+    const source = sourceFromRecentGame({ at: new Date(2026, 9, 16).getTime(), moves, winner: 'black', opponent: 'Lv.10' });
+    expect(source.title).toBe('あなたの対局（10/16 対 Lv.10）');
+    expect(source.sfens).toHaveLength(moves.length + 1);
+    const start = pickEndgameStart([source], { random: () => 0 });
+    expect(start.title).toContain('あなたの対局');
+    expect(endgameIntro(start)).toContain('前の対局では');
+    // 短い対局と、指せない手のある対局は使わない。
+    expect(sourceFromRecentGame({ at: 0, moves: ['7g7f'], winner: 'black', opponent: '' })).toBeNull();
+    expect(sourceFromRecentGame({ at: 0, moves: ['7g7e', ...moves], winner: 'black', opponent: '' })).toBeNull();
   });
 });

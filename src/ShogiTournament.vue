@@ -507,6 +507,7 @@ type View = {
     outcome: string; startGroup: number; newGroup: number; promoted: boolean; relegated: boolean; challenger: boolean;
     wins: number; losses: number; standing: number | null; exitLabel: string; path: { stage: string; label: string; text: string }[];
     titles?: { id: string; label: string; detail: string }[];
+    oshiLine?: string;
   };
   defender: Brief | null;
   lastGame?: null | { win: boolean; label: string; opponent: Brief | null; traitMoments: { id: string; ply: number }[] };
@@ -710,7 +711,11 @@ const opponentProfile = computed(() => {
 const opponentSays = computed(() => (
   props.view?.pending ? opponentLines(props.view.pending.opponent, props.userLevel, props.view.pending) : []
 ));
-const resultSays = computed(() => resultLines(props.view?.result ? { ...props.view.result } : null));
+const resultSays = computed(() => [
+  ...resultLines(props.view?.result ? { ...props.view.result } : null),
+  // 推しの棋士の、この期の結果(ほかの組でも、期の終わりに分かる)。
+  ...(props.view?.result?.oshiLine ? [props.view.result.oshiLine] : []),
+]);
 /** 表の画面のやこび姫: いまの段階と、次の相手について。期が終わっていれば、結果について。 */
 const lastGameSays = computed(() => lastGameLines(props.view?.lastGame ?? null));
 const seasonSays = computed(() => {

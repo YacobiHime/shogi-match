@@ -286,13 +286,13 @@
             <h2 id="shogi-note-collection-count">集めた印</h2>
             <dl class="shogi-note__tiles shogi-note__tiles--four">
               <div><dt>印</dt><dd>{{ collectionTotal }}<small>/ {{ collectionMax }}</small></dd></div>
-              <div><dt>戦法・囲い</dt><dd>{{ collectedFormationCount }}<small>/ {{ COLLECTION_CATALOG.length }}</small></dd></div>
+              <div><dt>戦法・囲い・手筋</dt><dd>{{ collectedFormationCount + collectedTesujiCount }}<small>/ {{ COLLECTION_CATALOG.length + TESUJI_IDS.length }}</small></dd></div>
               <div><dt>勝ったLv</dt><dd>{{ collectedLevelCount }}<small>/ {{ COLLECTION_LEVELS.length }}</small></dd></div>
               <div><dt>神の一手</dt><dd>{{ collection.godMoves }}<small>回</small></dd></div>
             </dl>
             <p v-if="collection.predictionsHit" class="shogi-note__hint" data-note-predictions>竜王戦の組優勝の予想を、{{ collection.predictionsHit }}回当てたよ！</p>
             <p class="shogi-note__hint">
-              対局で定跡図鑑の戦法・囲いを組むと、印が1つ増えるよ。CPUの各Lvに初めて勝っても1つ（レーティングの対象の対局だけ）。
+              対局で定跡図鑑の戦法・囲いを組んだり、手筋図鑑の手筋を指したりすると、印が1つ増えるよ。CPUの各Lvに初めて勝っても1つ（レーティングの対象の対局だけ）。
               <template v-if="nextUnlock">次の着せ替えまで、印あと{{ nextUnlock.remaining }}個！</template>
               <template v-else>着せ替えは全部使えるようになったよ！</template>
             </p>
@@ -337,6 +337,18 @@
                 <small v-if="item.count">×{{ item.count }}</small>
               </li>
             </ul>
+          </section>
+
+          <!-- 組んだ形を得意にしている棋士。コレクションから竜王戦の棋士名鑑へつなぐ。 -->
+          <section v-if="formationFanRows.length" class="shogi-note__card" aria-labelledby="shogi-note-fans" data-note-fans>
+            <h2 id="shogi-note-fans">同じ形を得意にしている棋士</h2>
+            <ul class="shogi-note__fans">
+              <li v-for="row in formationFanRows" :key="row.label">
+                <b>{{ row.label }}</b>
+                <span>{{ row.fans.map((fan) => `${fan.name}（${fan.group}組）`).join("・") }}</span>
+              </li>
+            </ul>
+            <p class="shogi-note__hint">竜王戦で当たったら、得意な形どうしの勝負になるかも。棋士名鑑で、くわしく見てみよう！</p>
           </section>
 
           <section class="shogi-note__card" aria-labelledby="shogi-note-levels">
@@ -436,6 +448,8 @@ import {
   themeUnlock,
 } from "./core/collection.mjs";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
+import { TESUJI_NAMES } from "./core/move-tesuji.mjs";
+import { formationFans } from "./core/ryuo-book.mjs";
 import {
   BOARD_THEMES,
   BOARD_THEME_KEY,
@@ -529,14 +543,28 @@ const collection = ref(loadCollection(safeStorage()));
 const collectedFormationCount = computed(() => COLLECTION_CATALOG.filter(({ label }) => collection.value.formations[label]).length);
 const collectedLevelCount = computed(() => COLLECTION_LEVELS.filter((level) => collection.value.levels[level]).length);
 const collectionTotal = computed(() => collectionCount(collection.value));
-const collectionMax = COLLECTION_CATALOG.length + COLLECTION_LEVELS.length;
+const TESUJI_IDS = Object.keys(TESUJI_NAMES);
+const collectedTesujiCount = computed(() => TESUJI_IDS.filter((id) => collection.value.tesuji?.[id]).length);
+const collectionMax = COLLECTION_CATALOG.length + TESUJI_IDS.length + COLLECTION_LEVELS.length;
 const nextUnlock = computed(() => nextThemeUnlock(collection.value));
-const formationGroups = computed(() => (["strategy", "castle"] as const).map((kind) => {
-  const items = COLLECTION_CATALOG
-    .filter((entry) => entry.kind === kind)
-    .map(({ label }) => ({ label, count: collection.value.formations[label]?.count ?? 0 }));
-  return { kind, label: kind === "strategy" ? "戦法" : "囲い", items, collected: items.filter(({ count }) => count).length };
-}));
+/** 組んだ戦法・囲いごとに、それを得意にしている棋士(上の組から3人まで)。名鑑がないときは出さない。 */
+const formationFanRows = computed(() => COLLECTION_CATALOG
+  .filter(({ label }) => collection.value.formations[label])
+  .map((entry) => ({ label: entry.label, fans: formationFans(props.roster, { kind: entry.kind, id: entry.id }) }))
+  .filter(({ fans }) => fans.length)
+  .slice(0, 8));
+const formationGroups = computed(() => [
+  ...(["strategy", "castle"] as const).map((kind) => {
+    const items = COLLECTION_CATALOG
+      .filter((entry) => entry.kind === kind)
+      .map(({ label }) => ({ label, count: collection.value.formations[label]?.count ?? 0 }));
+    return { kind, label: kind === "strategy" ? "戦法" : "囲い", items, collected: items.filter(({ count }) => count).length };
+  }),
+  (() => {
+    const items = TESUJI_IDS.map((id) => ({ label: TESUJI_NAMES[id as keyof typeof TESUJI_NAMES], count: collection.value.tesuji?.[id]?.count ?? 0 }));
+    return { kind: "tesuji" as const, label: "手筋", items, collected: items.filter(({ count }) => count).length };
+  })(),
+]);
 function safeStorage(): Storage | null {
   try {
     return typeof localStorage === "undefined" ? null : localStorage;
@@ -1099,6 +1127,10 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__pair { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
 .shogi-game .shogi-note__subhead { margin: 0.3rem 0 0; color: rgba(255, 252, 244, 0.8); font-size: 0.9em; }
 .shogi-game .shogi-note__hint { margin: 0; color: var(--note-muted); font-size: 0.8em; line-height: 1.6; }
+
+.shogi-game .shogi-note__fans { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; font-size: 0.88em; }
+.shogi-game .shogi-note__fans li { display: grid; grid-template-columns: minmax(6rem, auto) minmax(0, 1fr); gap: 0.6rem; }
+.shogi-game .shogi-note__fans b { color: var(--note-gold); }
 
 /* 続けて遊んだ日。棋力の下に小さく出す(数字で急かさない)。 */
 .shogi-game .shogi-note__streak { margin: 0.2rem 0 0; color: var(--note-muted); font-size: 0.85em; }

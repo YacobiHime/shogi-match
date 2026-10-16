@@ -87,3 +87,14 @@ describe('竜王戦の応援', () => {
     expect(loadPrediction({ getItem: () => '{broken' })).toBeNull();
   });
 });
+
+describe('期の終わりの、推しの棋士の結果', () => {
+  it('組の順位と昇級・降級を伝える', async () => {
+    const { oshiSeasonResultLine } = await import('./ryuo-oshi.mjs');
+    expect(oshiSeasonResultLine({ name: '佐藤', beforeGroup: 3, afterGroup: 2, rank: 0 })).toBe('推しの佐藤さんは、3組で優勝。2組へ昇級したよ！ おめでとう！');
+    expect(oshiSeasonResultLine({ name: '佐藤', beforeGroup: 3, afterGroup: 4, rank: 15 })).toContain('3組で16位。4組へ降級');
+    expect(oshiSeasonResultLine({ name: '佐藤', beforeGroup: 3, afterGroup: 3, rank: null })).toBe('推しの佐藤さんは、3組で戦い。来期も3組で戦うよ。');
+    expect(oshiSeasonResultLine({ name: '佐藤', beforeGroup: 3, afterGroup: null, rank: 5 })).toContain('名鑑から外れちゃった');
+    expect(oshiSeasonResultLine({ name: '佐藤', beforeGroup: 1, afterGroup: 1, rank: 0, champion: true })).toContain('竜王になった');
+  });
+});

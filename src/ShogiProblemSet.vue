@@ -38,7 +38,7 @@
       >
         <span class="shogi-problems__review-eyebrow">やこび姫からの1問</span>
         <strong>{{ problemHeading(reviewDueProblem) }}</strong>
-        <small>前に苦労した問題だよ。今度は一発で解けるかな？</small>
+        <small>{{ isReviewProblemId(reviewDueProblem.id) ? "あなたの対局で見逃した詰みだよ。今度は見つけられるかな？" : "前に苦労した問題だよ。今度は一発で解けるかな？" }}</small>
       </button>
       <!-- 詰将棋: まず種類（詰将棋・実戦詰将棋）を選ぶ。 -->
       <ol v-if="section === 'tsume' && !tsumeKind" class="shogi-problems__list">
@@ -189,6 +189,7 @@ import {
 } from "./core/problem-set.mjs";
 import { formatHintMove } from "./core/match-assists.mjs";
 import { dueReviewId, loadReviewQueue, recordReviewResult, saveReviewQueue } from "./core/review-queue.mjs";
+import { isReviewProblemId, loadReviewProblems, reviewProblemById } from "./core/review-problems.mjs";
 import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.mjs";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "./game-state";
 import { JISSEN_TSUME_SOURCE } from "./data/jissen-tsume-problems.mjs";
@@ -219,10 +220,15 @@ const storage = typeof localStorage === "undefined" ? null : localStorage;
 const progress = ref(loadProblemProgress(storage));
 /** 復習の箱(core/review-queue.mjs)。一発で解けなかった問題を、日をあけて「やこび姫からの1問」に出す。 */
 const reviewQueue = ref(loadReviewQueue(storage));
+/** 振り返りで見つけた「あなたの対局から」の問題(core/review-problems.mjs)。問題集の問題と同じように開ける。 */
+const reviewProblems = loadReviewProblems(storage);
+function findProblem(id: string): Problem | null {
+  return (problemById(id) ?? reviewProblemById(reviewProblems, id)) as Problem | null;
+}
 const reviewDueProblem = computed(() => {
-  const known = new Set(Object.keys(reviewQueue.value.items).filter((id) => problemById(id)));
+  const known = new Set(Object.keys(reviewQueue.value.items).filter((id) => findProblem(id)));
   const id = dueReviewId(reviewQueue.value, { knownIds: known });
-  return id ? problemById(id) as Problem | null : null;
+  return id ? findProblem(id) : null;
 });
 /** 「やこび姫からの1問」から開いた問題か。問いかけの前に一言添える。 */
 const reviewing = ref(false);
@@ -246,7 +252,7 @@ const tsumePlies = ref<number>(TSUME_PLIES[0]);
 // ランダム出題中か。「次の問題」も、同じ種類からランダムに選ぶ。
 const randomMode = ref(false);
 const problemId = ref("");
-const currentProblem = computed(() => (problemId.value ? problemById(problemId.value) as Problem | null : null));
+const currentProblem = computed(() => (problemId.value ? findProblem(problemId.value) : null));
 const tsumeKindLabel = computed(() => TSUME_KINDS.find(({ id }) => id === tsumeKind.value)?.label ?? "");
 /** 一覧に並べる問題。詰将棋は、選んだ種類と手数の問題だけ。 */
 const listedProblems = computed(() => {
@@ -306,7 +312,8 @@ function problemBadge(problem: Problem) {
 }
 /** 一覧と見出しの問題名。練習問題だけ通し番号を付ける（詰将棋・図巧は名前に番号を含む）。 */
 function problemHeading(problem: Problem) {
-  return problem.kind === "line" ? problem.title : `第${PROBLEMS.indexOf(problem as never) + 1}問 ${problem.title}`;
+  if (problem.kind === "line" || isReviewProblemId(problem.id)) return problem.title;
+  return `第${PROBLEMS.indexOf(problem as never) + 1}問 ${problem.title}`;
 }
 function problemStatus(problem: Problem) {
   const record = solvedRecord(problem);
@@ -375,13 +382,14 @@ function resetBoard() {
   hintStep.value = null;
   freeMoves.value = [];
   phase.value = "question";
-  speech.value = reviewing.value ? `前に苦労した問題だよ。${problemQuestion(problem)}` : problemQuestion(problem);
+  // 「あなたの対局から」の問題は、問いかけ自体が対局の局面だと伝えるので、前置きを付けない。
+  speech.value = reviewing.value && !isReviewProblemId(problem.id) ? `前に苦労した問題だよ。${problemQuestion(problem)}` : problemQuestion(problem);
 }
 function openProblem(id: string, { random = false, review = false } = {}) {
   problemId.value = id;
   randomMode.value = random;
   reviewing.value = review;
-  const problem = problemById(id) as Problem | null;
+  const problem = findProblem(id);
   if (problem) {
     section.value = problemSectionId(problem) as SectionId;
     // 一覧へ戻ったとき、解いた問題の種類と手数が並ぶようにする。
