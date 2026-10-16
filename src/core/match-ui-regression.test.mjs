@@ -335,7 +335,8 @@ describe("match screen regressions", () => {
   it("keeps the classroom lessons moving without hunting for buttons", () => {
     const tutorial = readFileSync(new URL("../ShogiTutorial.vue", import.meta.url), "utf8");
     // 説明は画面のどこを押しても進む。「次へ」のボタンは置かない。
-    expect(tutorial).toMatch(/data-tutorial-stage @click="onStageTap"/);
+    // 盤のマスはクリックを止めるので、キャプチャ段階で受け取り、盤を押しても進む。
+    expect(tutorial).toMatch(/data-tutorial-stage @click\.capture="onStageTap"/);
     expect(tutorial).not.toMatch(/>\{\{ stepIndex >= currentLesson\.steps\.length - 1 \? "レッスン完了！" : "次へ" \}\}</);
     // 正解した押下で次まで飛ばないよう、正解の直後と続けての押下は無視する。
     expect(tutorial).toMatch(/now - lastTapAt < TUTORIAL_TAP_GUARD_MS \|\| now - solvedAt < 400/);

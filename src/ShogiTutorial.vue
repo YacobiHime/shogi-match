@@ -110,7 +110,11 @@
           </li>
         </ol>
       </div>
-      <div ref="stageEl" class="shogi-dex__detail shogi-tutorial__stage" data-tutorial-stage @click="onStageTap">
+      <!--
+        盤のマスはクリックを止める(@click.stop)ので、画面全体はキャプチャ段階で受け取り、盤を押しても進めるようにする。
+        課題の途中は進めない判定(tapToAdvance)なので、盤で指す操作は邪魔しない。
+      -->
+      <div ref="stageEl" class="shogi-dex__detail shogi-tutorial__stage" data-tutorial-stage @click.capture="onStageTap">
         <div v-if="boardSfen" class="shogi-dex__main">
           <div class="shogi-dex__board" :style="boardBoxStyle">
             <ShogiMatchBoard
