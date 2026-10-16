@@ -15,7 +15,12 @@
           :key="pointer.id"
           :style="pointer.backgroundStyle"
         ></div>
-        <div v-for="piece in whiteHand.pieces" :key="piece.id" :style="piece.style">
+        <div
+          v-for="piece in whiteHand.pieces"
+          :key="handPieceKey(Color.WHITE, piece.id)"
+          :class="{ 'hand-piece--arrived': isArrivedHandPiece(Color.WHITE, piece.id) }"
+          :style="piece.style"
+        >
           <img class="piece-image" :src="piece.imagePath" />
         </div>
         <div v-for="number in whiteHand.numbers" :key="number.id" :style="number.style">
@@ -53,7 +58,7 @@
         <div
           v-for="piece in board.pieces"
           :key="piece.id"
-          :class="{ 'piece--landed': piece.landed }"
+          :class="piece.landed ? ['piece--landed', `piece--land-${piece.landKind ?? 'move'}`] : []"
           :style="piece.style"
         >
           <img class="piece-image" :src="piece.imagePath" />
@@ -93,7 +98,12 @@
           :key="pointer.id"
           :style="pointer.backgroundStyle"
         ></div>
-        <div v-for="piece in blackHand.pieces" :key="piece.id" :style="piece.style">
+        <div
+          v-for="piece in blackHand.pieces"
+          :key="handPieceKey(Color.BLACK, piece.id)"
+          :class="{ 'hand-piece--arrived': isArrivedHandPiece(Color.BLACK, piece.id) }"
+          :style="piece.style"
+        >
           <img class="piece-image" :src="piece.imagePath" />
         </div>
         <div v-for="number in blackHand.numbers" :key="number.id" :style="number.style">
@@ -270,6 +280,7 @@ import {
   PositionChange,
   secondsToHHMMSS,
   reverseColor,
+  unpromotedPieceType,
 } from "tsshogi";
 import { computed, reactive, ref, watch, onMounted, onUnmounted, PropType } from "vue";
 import {
@@ -1080,6 +1091,27 @@ const blackHand = computed(() => {
   );
 });
 
+/*
+ * 直前の手で取った駒が入った駒台の駒。取った駒の行き先が分かるよう、入った駒を跳ねさせる。
+ * 駒台の駒のidは、駒を並べる配置では「種類＋番号」、数字で数を出す配置では「種類」。
+ * 数字で数を出す配置では同じ駒が残るので、keyを変えて動きをもう一度付ける。
+ */
+const arrivedHandPiece = computed(() => {
+  const move = props.lastMove;
+  if (!move?.capturedPieceType) return null;
+  const type = unpromotedPieceType(move.capturedPieceType);
+  const count = props.position.hand(move.color).count(type);
+  if (count < 1) return null;
+  return { color: move.color, ids: new Set<string>([`${type}${count - 1}`, type]), key: props.position.sfen };
+});
+function isArrivedHandPiece(color: Color, id: string) {
+  const arrived = arrivedHandPiece.value;
+  return !!arrived && arrived.color === color && arrived.ids.has(id);
+}
+function handPieceKey(color: Color, id: string) {
+  return isArrivedHandPiece(color, id) ? `${id}:${arrivedHandPiece.value?.key}` : id;
+}
+
 const whiteHand = computed(() => {
   const dragSourceType =
     drag.active && drag.source instanceof Piece && drag.source.color === Color.WHITE
@@ -1399,8 +1431,72 @@ const whitePlayerTimeSeverity = computed(() => {
     transform: none;
   }
 }
+/* 取った駒は強めに、打った駒は上から置き、成った駒は裏返す。 */
+.piece--land-capture {
+  animation: piece-land-capture 260ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.piece--land-drop {
+  animation: piece-land-drop 240ms cubic-bezier(0.3, 1.3, 0.5, 1) both;
+}
+.piece--land-promote {
+  animation: piece-land-promote 320ms ease-out both;
+  transform-origin: 50% 50%;
+}
+@keyframes piece-land-capture {
+  0% {
+    transform: translateY(-22%) scale(1.14);
+  }
+  55% {
+    transform: translateY(0) scale(0.94, 1.04);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes piece-land-drop {
+  0% {
+    opacity: 0.4;
+    transform: translateY(-34%) scale(1.06);
+  }
+  65% {
+    opacity: 1;
+    transform: translateY(0) scale(0.97, 1.02);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes piece-land-promote {
+  0% {
+    transform: scaleX(1) scale(1.08);
+  }
+  40% {
+    transform: scaleX(0.05) scale(1.12);
+  }
+  100% {
+    transform: none;
+  }
+}
+/* 取った駒が駒台に入ったら、小さく跳ねさせて行き先を見せる。 */
+.hand-piece--arrived {
+  animation: hand-piece-arrive 300ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes hand-piece-arrive {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    transform: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .piece--landed {
+  .piece--landed,
+  .hand-piece--arrived {
     animation: none;
   }
 }

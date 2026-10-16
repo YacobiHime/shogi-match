@@ -76,6 +76,24 @@ export function movementArrowMoves(position: ImmutablePosition, from: Square): M
     .filter((move): move is Move => move !== null);
 }
 
+/**
+ * 直前の局面からusiの手を指して、今の局面になるなら、その手(取った駒を含む)を返す。
+ * 直前の局面がない・つながらないときは、今の局面から復元する(取った駒は分からない)。
+ * 盤の着地の動き(取った駒は強く着地させ、駒台に入った駒を跳ねさせる)に使う。
+ */
+export function lastMoveBetween(
+  previousSfen: string,
+  position: ImmutablePosition,
+  usi: string,
+): Move | null {
+  if (previousSfen) {
+    const previous = Position.newBySFEN(previousSfen);
+    const move = previous?.createMoveByUSI(usi);
+    if (previous && move && previous.doMove(move) && previous.sfen === position.sfen) return move;
+  }
+  return lastMoveFromUsi(position, usi);
+}
+
 export function lastMoveFromUsi(
   position: ImmutablePosition,
   usi: string,

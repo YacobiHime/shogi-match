@@ -61,7 +61,7 @@ import { RectSize } from "./common/assets/geometry";
 import {
   CandidateInput,
   candidateMovesFromUsi,
-  lastMoveFromUsi,
+  lastMoveBetween,
   positionFromSfen,
 } from "./position";
 import {
@@ -143,8 +143,11 @@ const position = computed(() => {
     return null;
   }
 });
+// 直前の局面を覚えておき、取った駒まで分かる形で直前の手を復元する(盤の着地の動きに使う)。
+const previousSfen = ref("");
+watch(() => props.sfen, (_, old) => { previousSfen.value = old ?? ""; });
 const lastMoveObject = computed(() =>
-  position.value && props.lastMove ? lastMoveFromUsi(position.value, props.lastMove) : null
+  position.value && props.lastMove ? lastMoveBetween(previousSfen.value, position.value, props.lastMove) : null
 );
 const candidateMoves = computed(() =>
   position.value ? candidateMovesFromUsi(position.value, props.candidates) : []

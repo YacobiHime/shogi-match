@@ -58,6 +58,8 @@ export type BoardPiece = {
   imagePath: string;
   /** 直前の手で動いた駒。着地の動きを付ける。 */
   landed?: boolean;
+  /** 直前の手の種類。成った駒は裏返し、取った駒は強く着地させ、打った駒は上から置く。 */
+  landKind?: "move" | "capture" | "promote" | "drop";
   style: { [key: string]: string };
 };
 

@@ -193,7 +193,8 @@ describe("match screen regressions", () => {
 
   it("plays the move sound for moves made during review, including CPU play from a review position", () => {
     const applyMove = source.split("function applyMove(")[1]?.split("async function showHint")[0] ?? "";
-    expect(applyMove).toMatch(/moveSounds\.play\(selectMoveSound\([\s\S]*?\)\);\s*if \(!reviewMode\.value\) \{/);
+    // 駒音は検討中かどうかの判定より前に鳴らす。間には、プレイヤーの手の止め(検討中は止めない)だけを挟む。
+    expect(applyMove).toMatch(/moveSounds\.play\(selectMoveSound\([\s\S]*?\)\);\s*(?:\/\/[^\n]*\n\s*)?(?:if \(actor === "player" && !reviewMode\.value\) holdForImpact\(impact\.stage\);\s*)?if \(!reviewMode\.value\) \{/);
   });
 
   it("locks the counterpart select for combined strategy/castle definitions", () => {
@@ -236,5 +237,18 @@ describe("match screen regressions", () => {
     expect(retry).toContain("startPositionMatch(sfen, playerColor, RETRY_START_LABEL)");
     // 局面からの対局は平手の初期局面ではないので、レーティングの対象にならない。
     expect(source).toMatch(/&& matchInitialSfen\.value === STANDARD_SFEN\s*&& level !== undefined/);
+  });
+
+  it("stops only what happens next for heavy moments, and the board can always cut the stop short", () => {
+    // 止めるのはCPUの応手と結果画面の開始だけ。盤を触ると止めを打ち切る。
+    expect(source).toMatch(/await waitForImpactHold\(\);\s*if \(generation !== matchGeneration\) return;\s*if \(applyMove\(usi, "cpu"\)/);
+    expect(source).toMatch(/class="shogi-game__board-shell"[\s\S]*?@pointerdown\.capture="releaseImpactHold"/);
+    const finish = source.split("function finish(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(finish).toMatch(/finishImpact\([\s\S]*?setTimeout\(revealResult, finishing\.stopMs\)/);
+    // 光りは升の色を変えず、揺れるのは光の枠だけにする。
+    expect(source).toMatch(/\.shogi-game__board-impact \{[^}]*pointer-events: none/s);
+    expect(source).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.shogi-game__board-shell--impact-5 \.shogi-game__board-impact \{\s*animation: shogi-board-impact-fade/);
+    // 効果音は見出しのメニューで切り替えられる。
+    expect(source).toMatch(/data-sound-toggle\s+@click="toggleSound"/);
   });
 });

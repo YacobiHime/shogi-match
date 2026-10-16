@@ -1,57 +1,143 @@
-import { PieceType, Position } from "tsshogi";
+import { Position } from "tsshogi";
+import { moveImpact } from "./move-impact.mjs";
 
-export type MoveSoundKind = "normal" | "strong";
+/** 着手の駒音。強い音は王手・大駒を取る手・詰み。 */
+export type MoveSoundKind = "normal" | "strong" | "capture" | "drop" | "promote";
+/** 着手以外も含めた効果音。 */
+export type SoundKind = MoveSoundKind | "god" | "win" | "lose" | "furigoma";
 
-const MAJOR_PIECE_TYPES = new Set<PieceType>([
-  PieceType.ROOK,
-  PieceType.BISHOP,
-  PieceType.DRAGON,
-  PieceType.HORSE,
-]);
+/** 効果音のファイル名(public/audio/)。 */
+export const SOUND_FILES: Readonly<Record<SoundKind, string>> = Object.freeze({
+  normal: "komaoto_normal.mp3",
+  strong: "komaoto_strong.mp3",
+  capture: "komaoto_capture.mp3",
+  drop: "komaoto_drop.mp3",
+  promote: "promote.mp3",
+  god: "god_move.mp3",
+  win: "win.mp3",
+  lose: "lose.mp3",
+  furigoma: "furigoma.mp3",
+});
 
-export function selectMoveSound(
-  capturedPieceType: PieceType | null,
-  givesCheck: boolean,
-): MoveSoundKind {
-  return givesCheck || (capturedPieceType !== null && MAJOR_PIECE_TYPES.has(capturedPieceType))
-    ? "strong"
-    : "normal";
+/**
+ * public/audio/に置いてある音。素材が届いたら、ここに足すと鳴るようになる。
+ * ない音は、SOUND_FALLBACKの代わりの音を鳴らすか、鳴らさない(存在しないファイルを読みに行かない)。
+ */
+export const AVAILABLE_SOUNDS: ReadonlySet<SoundKind> = new Set<SoundKind>(["normal", "strong"]);
+
+/** 素材がないときの代わりの音。ここにない音は、素材がなければ鳴らさない。 */
+const SOUND_FALLBACK: Partial<Record<SoundKind, SoundKind>> = {
+  capture: "normal",
+  drop: "normal",
+  promote: "normal",
+  god: "strong",
+};
+
+/** 音量。重要度の高い出来事ほど大きくする(Game_Nintendo_Implementation.mdの3-3)。 */
+export const SOUND_VOLUME: Readonly<Record<SoundKind, number>> = Object.freeze({
+  normal: 0.8,
+  drop: 0.75,
+  capture: 0.85,
+  promote: 0.85,
+  strong: 1,
+  god: 1,
+  win: 0.9,
+  lose: 0.7,
+  furigoma: 0.8,
+});
+
+/** 実際に鳴らす音。素材がなければ代わりの音、代わりもなければnull。 */
+export function resolveSound(kind: SoundKind, available: ReadonlySet<SoundKind> = AVAILABLE_SOUNDS): SoundKind | null {
+  if (available.has(kind)) return kind;
+  const fallback = SOUND_FALLBACK[kind];
+  return fallback && available.has(fallback) ? fallback : null;
 }
 
-/** 局面でusiの手を指したときの駒音。大駒を取る手と王手は強い音にする。指せない手はnull。 */
+/**
+ * 着手の駒音。強い音(王手・大駒を取る手) → 成る → 取る → 打つ → 普通、の順に選ぶ(core/move-impact.mjs)。
+ */
+export function selectMoveSound(
+  capturedPieceType: string | null,
+  givesCheck: boolean,
+  { promote = false, drop = false }: { promote?: boolean; drop?: boolean } = {},
+): MoveSoundKind {
+  return moveImpact({ capturedPieceType, check: givesCheck, promote, drop }).sound;
+}
+
+/** 局面でusiの手を指したときの駒音。指せない手はnull。 */
 export function moveSoundForUsi(sfen: string, usi: string): MoveSoundKind | null {
   const position = Position.newBySFEN(sfen);
   const move = position?.createMoveByUSI(usi);
   if (!position || !move || !position.doMove(move)) return null;
-  return selectMoveSound(move.capturedPieceType ?? null, position.checked);
+  return selectMoveSound(move.capturedPieceType ?? null, position.checked, {
+    promote: move.promote,
+    drop: usi.includes("*"),
+  });
+}
+
+/** 効果音のオン/オフの保存先。 */
+export const SOUND_ENABLED_KEY = "yacobihime:shogi-match:sound";
+
+/** 効果音がオンか。保存がない・読めないときはオン。 */
+export function loadSoundEnabled(storage: Pick<Storage, "getItem"> | null | undefined): boolean {
+  try {
+    return storage?.getItem(SOUND_ENABLED_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function saveSoundEnabled(storage: Pick<Storage, "setItem"> | null | undefined, enabled: boolean) {
+  try {
+    storage?.setItem(SOUND_ENABLED_KEY, enabled ? "on" : "off");
+  } catch {
+    // 保存できない環境では、この画面の間だけ使う。
+  }
+}
+
+function defaultSoundEnabled() {
+  try {
+    return loadSoundEnabled(typeof localStorage === "undefined" ? null : localStorage);
+  } catch {
+    return true;
+  }
 }
 
 export type MoveSoundPlayer = {
   /** 音声を先に読み込んでおく。 */
   preload: () => void;
-  play: (kind: MoveSoundKind) => void;
+  play: (kind: SoundKind) => void;
 };
 
-/** 駒音の再生。連続して指しても重ねて鳴らせるよう、読み込んだ音声を複製して再生する。 */
-export function createMoveSoundPlayer(assetBaseUrl: () => string): MoveSoundPlayer {
-  let templates: Record<MoveSoundKind, HTMLAudioElement> | null = null;
+/**
+ * 効果音の再生。連続して指しても重ねて鳴らせるよう、読み込んだ音声を複製して再生する。
+ * enabledが偽を返す間は鳴らさない。既定では、対局画面のメニューで選んだオン/オフ(SOUND_ENABLED_KEY)に従う。
+ */
+export function createMoveSoundPlayer(
+  assetBaseUrl: () => string,
+  { enabled = defaultSoundEnabled }: { enabled?: () => boolean } = {},
+): MoveSoundPlayer {
+  let templates: Partial<Record<SoundKind, HTMLAudioElement>> | null = null;
   const url = (fileName: string) => `${assetBaseUrl().replace(/\/$/, "")}/audio/${fileName}`;
   const preload = () => {
     if (templates || typeof Audio === "undefined") return;
-    templates = {
-      normal: new Audio(url("komaoto_normal.mp3")),
-      strong: new Audio(url("komaoto_strong.mp3")),
-    };
-    for (const audio of Object.values(templates)) {
+    templates = {};
+    for (const kind of AVAILABLE_SOUNDS) {
+      const audio = new Audio(url(SOUND_FILES[kind]));
       audio.preload = "auto";
       audio.load();
+      templates[kind] = audio;
     }
   };
-  const play = (kind: MoveSoundKind) => {
+  const play = (kind: SoundKind) => {
+    if (!enabled()) return;
+    const resolved = resolveSound(kind);
+    if (!resolved) return;
     preload();
-    const template = templates?.[kind];
+    const template = templates?.[resolved];
     if (!template) return;
     const audio = template.cloneNode(true) as HTMLAudioElement;
+    audio.volume = SOUND_VOLUME[kind];
     void audio.play().catch(() => undefined);
   };
   return { preload, play };

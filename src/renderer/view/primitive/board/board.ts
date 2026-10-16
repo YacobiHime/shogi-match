@@ -155,6 +155,7 @@ export class BoardLayoutBuilder {
         id,
         imagePath,
         landed: !!lastMove && square.equals(lastMove.to),
+        landKind: lastMove && square.equals(lastMove.to) ? landKindOf(lastMove) : undefined,
         style: {
           left: x + "px",
           top: y + "px",
@@ -316,4 +317,12 @@ export class BoardLayoutBuilder {
       doNotPromote,
     };
   }
+}
+
+/** 直前の手の種類。成る → 取る → 打つ → 普通、の順に見る。 */
+function landKindOf(move: Move): "move" | "capture" | "promote" | "drop" {
+  if (move.promote) return "promote";
+  if (move.capturedPieceType) return "capture";
+  if (!(move.from instanceof Square)) return "drop";
+  return "move";
 }

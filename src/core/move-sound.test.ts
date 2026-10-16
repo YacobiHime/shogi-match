@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { PieceType } from "tsshogi";
-import { moveSoundForUsi, selectMoveSound } from "./move-sound";
+import { AVAILABLE_SOUNDS, SOUND_ENABLED_KEY, loadSoundEnabled, moveSoundForUsi, resolveSound, selectMoveSound } from "./move-sound";
 
 describe("selectMoveSound", () => {
   it("uses the normal sound for an ordinary move", () => {
     expect(selectMoveSound(null, false)).toBe("normal");
-    expect(selectMoveSound(PieceType.PAWN, false)).toBe("normal");
+  });
+
+  it("distinguishes capturing, promoting and dropping", () => {
+    expect(selectMoveSound(PieceType.PAWN, false)).toBe("capture");
+    expect(selectMoveSound(null, false, { promote: true })).toBe("promote");
+    expect(selectMoveSound(null, false, { drop: true })).toBe("drop");
   });
 
   it.each([
@@ -36,5 +41,25 @@ describe("moveSoundForUsi", () => {
 
   it("returns null for a move that cannot be played", () => {
     expect(moveSoundForUsi(standard, "7g7e")).toBeNull();
+  });
+});
+
+describe("sound files", () => {
+  it("falls back to an available sound or stays silent when a file is missing", () => {
+    const onlyKomaoto = new Set(["normal", "strong"] as const);
+    expect(resolveSound("normal", onlyKomaoto)).toBe("normal");
+    expect(resolveSound("capture", onlyKomaoto)).toBe("normal");
+    expect(resolveSound("god", onlyKomaoto)).toBe("strong");
+    expect(resolveSound("win", onlyKomaoto)).toBeNull();
+    expect(resolveSound("win", new Set(["win"] as const))).toBe("win");
+    // 届いている素材は、いまは駒音の2つだけ。
+    expect([...AVAILABLE_SOUNDS].sort()).toEqual(["normal", "strong"]);
+  });
+
+  it("keeps sound on unless it was turned off", () => {
+    expect(loadSoundEnabled(null)).toBe(true);
+    expect(loadSoundEnabled({ getItem: () => null })).toBe(true);
+    expect(loadSoundEnabled({ getItem: (key: string) => (key === SOUND_ENABLED_KEY ? "off" : null) })).toBe(false);
+    expect(loadSoundEnabled({ getItem: () => { throw new Error("blocked"); } })).toBe(true);
   });
 });

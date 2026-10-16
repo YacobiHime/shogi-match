@@ -27,8 +27,10 @@
 
 | 扱うもの | 主な場所 | メモ |
 |---|---|---|
-| 駒音の種類と選び方 | `src/core/move-sound.ts` | いまは`normal`と`strong`の2種類。王手と大駒を取る手が`strong` |
-| 駒の着地・盤上の動き | `src/renderer/view/primitive/BoardView.vue` | `piece-land`（220ms）。`prefers-reduced-motion`対応あり |
+| 出来事の段階・止め | `src/core/move-impact.mjs` | 3-1の段階と止めの長さ（`IMPACT_STOP_MS`）、終局の止めと音（`finishImpact`） |
+| 駒音・効果音 | `src/core/move-sound.ts` | 着手は`normal`・`capture`・`drop`・`promote`・`strong`（王手・大駒を取る・詰み）。ほかに`god`・`win`・`lose`・`furigoma`。届いている素材は`AVAILABLE_SOUNDS`に書き、ない音は代わりの音を鳴らすか鳴らさない。オン/オフは`yacobihime:shogi-match:sound` |
+| 駒の着地・盤上の動き | `src/renderer/view/primitive/BoardView.vue` | `piece-land`（220ms）、取る（260ms）・打つ（240ms）・成る（320ms、裏返す）の着地、駒台に入った駒の跳ね（300ms）。`prefers-reduced-motion`対応あり |
+| 止めと盤の縁の光り | `src/ShogiMatchGame.vue`の`holdForImpact`・`waitForImpactHold`・`showBoardImpact`、`ShogiMatchGame.css`の`.shogi-game__board-impact` | 止めるのはCPUの応手と結果画面の開始だけ。盤を触ると打ち切る。光りは900ms |
 | 王手の知らせ | `src/ShogiMatchGame.vue`の`checkCallout` | 説明は最初の3回だけ（`CHECK_EXPLAIN_LIMIT`、`shogi-match-check-explained`） |
 | 終局画面の演出 | `src/ShogiMatchGame.css`の`result-*`、`.shogi-game__confetti` | 勝ちは紙吹雪、負けは`result-defeat-pulse` |
 | 神の一手の判定 | `src/core/god-move.mjs` | 対局中と棋譜解析で共通。1局3手まで（`GOD_MOVE_LIMIT`） |

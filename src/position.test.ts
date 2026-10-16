@@ -3,6 +3,7 @@ import {
   candidateMovesFromUsi,
   legalDestinationSquares,
   lastMoveFromUsi,
+  lastMoveBetween,
   movementArrowMoves,
   positionFromSfen,
 } from "./position";
@@ -61,6 +62,16 @@ describe("ShogiHome board adapter contract", () => {
     const lastMove = lastMoveFromUsi(position, "7g7f");
     expect((lastMove?.from as Square).usi).toBe("7g");
     expect(lastMove?.to.usi).toBe("7f");
+  });
+
+  it("keeps the captured piece when the previous position is known", () => {
+    const before = "4k4/9/9/9/4p4/4R4/9/9/4K4 b - 1";
+    const position = positionFromSfen(before) as Position;
+    expect(position.doMove(position.createMoveByUSI("5f5e")!)).toBe(true);
+    expect(lastMoveBetween(before, position, "5f5e")?.capturedPieceType).toBe(PieceType.PAWN);
+    // 直前の局面がない・つながらないときは、今の局面から復元する(取った駒は分からない)。
+    expect(lastMoveBetween("", position, "5f5e")?.capturedPieceType).toBeNull();
+    expect(lastMoveBetween(START_SFEN, position, "5f5e")?.to.usi).toBe("5e");
   });
 
   it("lists legal destinations for board pieces and drops", () => {

@@ -488,6 +488,14 @@
           :aria-checked="movementArrowsEnabled"
           @click="movementArrowsEnabled = !movementArrowsEnabled"
         >選んだ駒の動きを矢印で表示<b>{{ movementArrowsEnabled ? "ON" : "OFF" }}</b></button>
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          class="shogi-game__menu-item"
+          :aria-checked="soundEnabled"
+          data-sound-toggle
+          @click="toggleSound"
+        >効果音<b>{{ soundEnabled ? "ON" : "OFF" }}</b></button>
         <label class="shogi-game__menu-field">
           <span>やこび姫の助言</span>
           <select v-model="coachLevel" aria-label="対局中の助言">
@@ -838,7 +846,14 @@
       </ol>
     </section>
 
-    <div ref="boardShell" class="shogi-game__board-shell">
+    <div
+      ref="boardShell"
+      class="shogi-game__board-shell"
+      :class="boardImpact ? `shogi-game__board-shell--impact-${boardImpact.stage}` : ''"
+      :data-impact="boardImpact?.stage"
+      @pointerdown.capture="releaseImpactHold"
+    >
+      <span v-if="boardImpact" :key="boardImpact.id" class="shogi-game__board-impact" aria-hidden="true"></span>
       <ShogiMatchBoard
         :sfen="currentSfen"
         :last-move="lastMove"
@@ -1730,7 +1745,8 @@ import {
   learningStartPosition,
   normalizeAssistLimit,
 } from "./core/learning-setup.mjs";
-import { createMoveSoundPlayer, selectMoveSound } from "./core/move-sound";
+import { createMoveSoundPlayer, loadSoundEnabled, saveSoundEnabled, selectMoveSound } from "./core/move-sound";
+import { IMPACT_STAGE, finishImpact, impactStopMs, moveImpact, praiseImpactStage } from "./core/move-impact.mjs";
 import {
   clearMatchSnapshot,
   loadMatchSnapshot,
@@ -3991,6 +4007,7 @@ useBackNavigation({
 
 function openPregame() {
   matchGeneration += 1;
+  cancelResultReveal();
   if (cpuTimer) clearTimeout(cpuTimer);
   cpuTimer = undefined;
   if (cpuSearchRunning) engine?.stop();
@@ -5327,7 +5344,77 @@ function bestMoveTacticalContext(usi: string) {
   };
 }
 
-const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
+/** 効果音のオン/オフ。教室・問題集も同じ保存(SOUND_ENABLED_KEY)に従う。 */
+const soundEnabled = ref(loadSoundEnabled(browserStorage()));
+function toggleSound() {
+  soundEnabled.value = !soundEnabled.value;
+  saveSoundEnabled(browserStorage(), soundEnabled.value);
+}
+const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl, { enabled: () => soundEnabled.value });
+
+/*
+ * 止め(ヒットストップ)と盤の光り(core/move-impact.mjsの段階)。
+ * 止めるのは「次に起きること」(CPUの応手を盤に出す、結果画面を出す)の開始だけで、プレイヤーの入力は止めない。
+ * 止めの間に盤を触ったら、止めを打ち切る。
+ */
+let impactHoldUntil = 0;
+let impactHoldRelease: (() => void) | null = null;
+function holdForImpact(stage: number) {
+  const ms = impactStopMs(stage);
+  if (ms > 0) impactHoldUntil = Math.max(impactHoldUntil, performance.now() + ms);
+}
+function waitForImpactHold(): Promise<void> {
+  const wait = impactHoldUntil - performance.now();
+  if (wait <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, wait);
+    function done() {
+      clearTimeout(timer);
+      impactHoldRelease = null;
+      impactHoldUntil = 0;
+      resolve();
+    }
+    impactHoldRelease = done;
+  });
+}
+/** 神の一手と詰みで、盤の縁を光らせる(升の色は変えない)。 */
+const BOARD_IMPACT_MS = 900;
+const boardImpact = ref<{ id: number; stage: number } | null>(null);
+let boardImpactTimer: ReturnType<typeof setTimeout> | undefined;
+function showBoardImpact(stage: number) {
+  if (stage < IMPACT_STAGE.GOD) return;
+  boardImpact.value = { id: Date.now(), stage };
+  clearTimeout(boardImpactTimer);
+  boardImpactTimer = setTimeout(() => { boardImpact.value = null; }, BOARD_IMPACT_MS);
+}
+/** 詰みのあと、止めてから結果画面を出す。 */
+let resultRevealTimer: ReturnType<typeof setTimeout> | undefined;
+let resultRevealSound: "win" | "lose" | null = null;
+function revealResult() {
+  clearTimeout(resultRevealTimer);
+  resultRevealTimer = undefined;
+  if (resultRevealSound) moveSounds.play(resultRevealSound);
+  resultRevealSound = null;
+  resultDialogOpen.value = true;
+}
+/** 止めと、結果画面を出す予約を取り消す。新しい対局を始めるとき・対局準備へ戻るときに呼ぶ。 */
+function cancelResultReveal() {
+  clearTimeout(resultRevealTimer);
+  resultRevealTimer = undefined;
+  resultRevealSound = null;
+  impactHoldUntil = 0;
+  impactHoldRelease?.();
+}
+/** 止めの間に盤を触ったら、止めを打ち切る。 */
+function releaseImpactHold() {
+  impactHoldUntil = 0;
+  impactHoldRelease?.();
+  if (resultRevealTimer) revealResult();
+}
+onBeforeUnmount(() => {
+  clearTimeout(boardImpactTimer);
+  clearTimeout(resultRevealTimer);
+});
 
 function schedulePlayerIdleAdvice() {
   cancelPlayerIdleAdvice();
@@ -5552,7 +5639,19 @@ function finish(matchResult: MatchResult) {
   active.value = false;
   thinking.value = false;
   result.value = matchResult;
-  resultDialogOpen.value = true;
+  // 詰みで決まったときは、止めてから結果画面を出す。勝ちは長く、負けは短く(core/move-impact.mjs)。
+  const outcome = !matchResult.winner
+    ? "draw"
+    : normalizedMode.value === "local" ? "none" : matchResult.winner === humanColor.value ? "win" : "loss";
+  const finishing = finishImpact({ reason: matchResult.reason, outcome });
+  cancelResultReveal();
+  resultRevealSound = finishing.sound;
+  if (finishing.stopMs > 0) {
+    if (outcome !== "loss") showBoardImpact(IMPACT_STAGE.FINISH);
+    resultRevealTimer = setTimeout(revealResult, finishing.stopMs);
+  } else {
+    revealResult();
+  }
   recordRatedGame(matchResult);
   recordRyuoOutcome(matchResult);
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
@@ -5696,10 +5795,21 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   hintText.value = "";
   const terminalResult = resultAfterMove(record.value);
   // 棋譜検討中の分岐や「ここから対CPU」でも、実際に指した手には駒音を鳴らす。
+  const givesCheck = isSideToMoveInCheck(currentSfen.value);
+  const impact = moveImpact({
+    capturedPieceType: move.capturedPieceType ?? null,
+    promote: move.promote,
+    drop: usi.includes("*"),
+    check: givesCheck,
+    checkmate: terminalResult?.reason === "checkmate",
+  });
   moveSounds.play(selectMoveSound(
     move.capturedPieceType,
-    terminalResult?.reason === "checkmate" || isSideToMoveInCheck(currentSfen.value),
+    terminalResult?.reason === "checkmate" || givesCheck,
+    { promote: move.promote, drop: usi.includes("*") },
   ));
+  // プレイヤーの王手・大駒を取る手は、CPUの応手を出す前に一瞬止める。
+  if (actor === "player" && !reviewMode.value) holdForImpact(impact.stage);
   if (!reviewMode.value) {
     emit("match-move", { usi, actor, moveCount: moveCount.value, sfen: currentSfen.value });
     if (terminalResult) finish(terminalResult);
@@ -6304,6 +6414,11 @@ async function scheduleCpuMove() {
       // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
         if (moveFeedback && moveFeedback.key !== shownFeedbackKey) {
           showCoachAdvice(moveFeedback);
+          // ほめ言葉は、何が良かったかを読めるよう、CPUの応手を出す前に止める。神の一手は盤も光らせる。
+          const praiseStage = praiseImpactStage(moveFeedback.key);
+          holdForImpact(praiseStage);
+          showBoardImpact(praiseStage);
+          if (praiseStage === IMPACT_STAGE.GOD) moveSounds.play("god");
           await nextTick();
           if (generation !== matchGeneration) return;
         }
@@ -6424,6 +6539,8 @@ async function scheduleCpuMove() {
         if (terminalResult) finish(terminalResult);
         return;
       }
+      await waitForImpactHold();
+      if (generation !== matchGeneration) return;
       if (applyMove(usi, "cpu") && active.value) {
         updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
@@ -6726,6 +6843,7 @@ const {
 
 function restart() {
   matchGeneration += 1;
+  cancelResultReveal();
   stopGuidedReview();
   if (cpuTimer) clearTimeout(cpuTimer);
   cpuTimer = undefined;

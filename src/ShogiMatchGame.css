@@ -616,6 +616,53 @@
   font-weight: 700;
   white-space: nowrap;
 }
+/*
+ * 神の一手(段階5)と詰み(段階6)で、盤の縁を光らせる。升の色は変えず、縁の内側の光だけにする。
+ * 揺れるのはこの光の枠だけで、盤・駒・クリックの位置は動かさない。光は暗い縁と重ねて、木目の上でも消えないようにする。
+ */
+.shogi-game__board-impact {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  border-radius: 0.4em;
+  pointer-events: none;
+  animation: shogi-board-impact-fade 900ms ease-out both;
+}
+.shogi-game__board-shell--impact-5 .shogi-game__board-impact {
+  box-shadow:
+    inset 0 0 0 4px rgba(255, 252, 244, 0.95),
+    inset 0 0 0 8px rgba(23, 38, 50, 0.75),
+    inset 0 0 48px 12px rgba(215, 209, 253, 0.75);
+  animation:
+    shogi-board-impact-fade 900ms ease-out both,
+    shogi-board-impact-shake 260ms linear both;
+}
+.shogi-game__board-shell--impact-6 .shogi-game__board-impact {
+  box-shadow:
+    inset 0 0 0 5px rgba(241, 165, 76, 0.95),
+    inset 0 0 0 9px rgba(23, 38, 50, 0.75),
+    inset 0 0 56px 14px rgba(241, 165, 76, 0.55);
+}
+@keyframes shogi-board-impact-fade {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+/* 大きく始めて、だんだん小さく収める。 */
+@keyframes shogi-board-impact-shake {
+  0% { transform: translate(0, 0); }
+  15% { transform: translate(-6px, 2px); }
+  35% { transform: translate(5px, -2px); }
+  55% { transform: translate(-3px, 1px); }
+  75% { transform: translate(2px, 0); }
+  100% { transform: translate(0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__board-shell--impact-5 .shogi-game__board-impact {
+    animation: shogi-board-impact-fade 900ms ease-out both;
+  }
+}
 /* 振り駒の知らせ。王手の知らせと同じ置き方で、歩5枚が順に落ちてから先後を伝える。盤の操作は妨げない。 */
 .shogi-game__furigoma {
   position: absolute;
