@@ -28,6 +28,18 @@
         <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
         <p>{{ listMessage }}</p>
       </div>
+      <!-- 間をあけた出し直し。前に苦労した問題を、日をあけて1問だけ出す。解かなくても先へ進める。 -->
+      <button
+        v-if="reviewDueProblem"
+        type="button"
+        class="shogi-problems__review"
+        data-review-due
+        @click="openProblem(reviewDueProblem.id, { review: true })"
+      >
+        <span class="shogi-problems__review-eyebrow">やこび姫からの1問</span>
+        <strong>{{ problemHeading(reviewDueProblem) }}</strong>
+        <small>前に苦労した問題だよ。今度は一発で解けるかな？</small>
+      </button>
       <!-- 詰将棋: まず種類（詰将棋・実戦詰将棋）を選ぶ。 -->
       <ol v-if="section === 'tsume' && !tsumeKind" class="shogi-problems__list">
         <li v-for="kind in TSUME_KINDS" :key="kind.id">
@@ -176,6 +188,7 @@ import {
   tsumeKindProblems,
 } from "./core/problem-set.mjs";
 import { formatHintMove } from "./core/match-assists.mjs";
+import { dueReviewId, loadReviewQueue, recordReviewResult, saveReviewQueue } from "./core/review-queue.mjs";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "./game-state";
 import { JISSEN_TSUME_SOURCE } from "./data/jissen-tsume-problems.mjs";
 import { TSUME_PROBLEM_SOURCE } from "./data/tsume-problems.mjs";
@@ -203,6 +216,19 @@ const emit = defineEmits(["close"]);
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=2`);
 const storage = typeof localStorage === "undefined" ? null : localStorage;
 const progress = ref(loadProblemProgress(storage));
+/** 復習の箱(core/review-queue.mjs)。一発で解けなかった問題を、日をあけて「やこび姫からの1問」に出す。 */
+const reviewQueue = ref(loadReviewQueue(storage));
+const reviewDueProblem = computed(() => {
+  const known = new Set(Object.keys(reviewQueue.value.items).filter((id) => problemById(id)));
+  const id = dueReviewId(reviewQueue.value, { knownIds: known });
+  return id ? problemById(id) as Problem | null : null;
+});
+/** 「やこび姫からの1問」から開いた問題か。問いかけの前に一言添える。 */
+const reviewing = ref(false);
+function recordReview(problem: Problem, firstTry: boolean) {
+  reviewQueue.value = recordReviewResult(reviewQueue.value, problem.id, { firstTry });
+  saveReviewQueue(storage, reviewQueue.value);
+}
 
 const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
 onMounted(() => moveSounds.preload());
@@ -348,11 +374,12 @@ function resetBoard() {
   hintStep.value = null;
   freeMoves.value = [];
   phase.value = "question";
-  speech.value = problemQuestion(problem);
+  speech.value = reviewing.value ? `前に苦労した問題だよ。${problemQuestion(problem)}` : problemQuestion(problem);
 }
-function openProblem(id: string, { random = false } = {}) {
+function openProblem(id: string, { random = false, review = false } = {}) {
   problemId.value = id;
   randomMode.value = random;
+  reviewing.value = review;
   const problem = problemById(id) as Problem | null;
   if (problem) {
     section.value = problemSectionId(problem) as SectionId;
@@ -444,8 +471,9 @@ function showAnswerAt(index: number) {
 }
 function openAnswer() {
   clearTimers();
-  // 答えを見たら、一発正解の記録にはしない。
+  // 答えを見たら、一発正解の記録にはしない。日をあけてもう一度出す。
   hintShown.value = true;
+  if (currentProblem.value && !answered.value) recordReview(currentProblem.value, false);
   phase.value = "answer";
   showAnswerAt(0);
 }
@@ -527,8 +555,10 @@ function onBoardMove(usi: string) {
   speech.value = result.speech;
   if (result.solved && !answered.value) {
     answered.value = true;
-    progress.value = recordProblemSolved(progress.value, problem.id, { firstTry: mistakes.value === 0 && !hintShown.value });
+    const firstTry = mistakes.value === 0 && !hintShown.value;
+    progress.value = recordProblemSolved(progress.value, problem.id, { firstTry });
     saveProblemProgress(storage, progress.value);
+    recordReview(problem, firstTry);
   }
   if (result.next) {
     // 正解でまだ続くときは、相手の応手を並べ終えてから次の手を指せるようにする。
@@ -614,6 +644,33 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   color: #f1a54c;
   font-size: 0.95rem;
   letter-spacing: 0.08em;
+}
+.shogi-game .shogi-problems__review {
+  display: grid;
+  gap: 0.15rem;
+  width: min(100%, 40rem);
+  margin: 0 auto 1rem;
+  padding: 0.7rem 1rem;
+  border: 2px solid #d7d1fd;
+  border-radius: 0.8rem;
+  color: #fffcf4;
+  background: #2b465b;
+  box-shadow: 0 4px 0 #172632;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shogi-game .shogi-problems__review-eyebrow {
+  color: #d7d1fd;
+  font-size: 0.8em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.shogi-game .shogi-problems__review strong {
+  font-size: 1.05em;
+}
+.shogi-game .shogi-problems__review small {
+  color: rgba(255, 252, 244, 0.75);
 }
 .shogi-game .shogi-problems__credit {
   margin: 0.4rem 0 0;

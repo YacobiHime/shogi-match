@@ -163,6 +163,22 @@
                 <span class="shogi-title__label">大会</span>
                 <small class="shogi-title__desc">竜王戦で称号を</small>
               </button>
+              <button type="button" class="shogi-title__tile" data-endgame-tile @click="startEndgameMatch">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="7" y="1" width="2" height="2" />
+                    <rect x="6" y="3" width="4" height="2" />
+                    <rect x="5" y="5" width="6" height="6" />
+                    <rect x="4" y="11" width="8" height="2" />
+                  </g>
+                  <g fill="#fffcf4">
+                    <rect x="2" y="13" width="12" height="2" />
+                    <rect x="7" y="7" width="2" height="2" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">終盤戦</span>
+                <small class="shogi-title__desc">名局の終盤から</small>
+              </button>
             </div>
           </section>
           <section class="shogi-title__group" aria-labelledby="shogi-home-school">
@@ -3735,6 +3751,31 @@ function startQuickMatch() {
 
 /** 「敗着の前から指し直す」で始めた対局の開始局面の名前。終局画面の「もう一局」で同じ局面から始め直す目印にもする。 */
 const RETRY_START_LABEL = "敗着の前から";
+/** 終盤戦の開始局面の名前。終局画面の「もう一局」で、別の名局の終盤を選ぶ目印にもする。 */
+const ENDGAME_START_LABEL = "終盤戦";
+
+/**
+ * タイトル画面の「終盤戦」。名局の終盤の局面から、おすすめの強さのCPUとすぐ1局指す(core/endgame-start.mjs)。
+ * 代表局の棋譜は重いので、押したときに読み込む。平手の初期局面ではないので、レーティングの対象にはならない。
+ */
+function startEndgameMatch() {
+  confirmDiscardSuspended(() => { void startEndgameNow(); });
+}
+async function startEndgameNow({ excludeSfen = "" } = {}) {
+  const { endgameIntro, endgameSources, pickEndgameStart } = await import("./core/endgame-start.mjs");
+  const start = pickEndgameStart(endgameSources(), { excludeSfen });
+  if (!start) return;
+  yakobiNoteOpen.value = false;
+  stopGuidedReview();
+  openPregame();
+  matchKind.value = "normal";
+  searchNodes.value = recommendedStrengthPreset.value.value;
+  homeOpen.value = false;
+  void initializeEngine();
+  startPositionMatch(start.sfen, start.playerColor, ENDGAME_START_LABEL);
+  // 持つ側と実戦の勝ち負けは、助言の設定によらず伝える(どちらを持ったか分からないと遊べないため)。
+  guideText.value = endgameIntro(start);
+}
 
 /**
  * 局面から始める対局。対局の種類と設定は変えず、開始局面だけを差し替える。
@@ -3760,6 +3801,10 @@ function startPositionMatch(sfen: string, playerColor: "black" | "white", label:
  * - 「敗着の前から」の対局は、同じ局面から始め直す。
  */
 function rematch(options: { level?: number; handicapId?: string } = {}) {
+  if (learningStartLabel.value === ENDGAME_START_LABEL && !options.handicapId) {
+    void startEndgameNow({ excludeSfen: matchInitialSfen.value });
+    return;
+  }
   const retrySfen = learningStartLabel.value === RETRY_START_LABEL ? matchInitialSfen.value : "";
   const previousColor = activePlayerColor.value;
   const alternate = matchKind.value === "normal" && !retrySfen && !options.handicapId;

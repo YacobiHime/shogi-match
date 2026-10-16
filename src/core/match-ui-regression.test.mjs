@@ -266,4 +266,23 @@ describe("match screen regressions", () => {
     // 強い相手を選ぶ見返りを、強さの選択肢に出す(レーティングの計算は変えない)。
     expect(source).toMatch(/初めて勝つと★/);
   });
+
+  it("starts an endgame from a famous game without loading the game records up front", () => {
+    // 代表局の棋譜は重いので、押したときに読み込む(最初に読むJSに入れない)。
+    expect(source).not.toMatch(/^import [^;]*endgame-start\.mjs/m);
+    expect(source).toMatch(/await import\("\.\/core\/endgame-start\.mjs"\)/);
+    expect(source).toMatch(/data-endgame-tile\s+@click="startEndgameMatch"/);
+    const start = source.split("async function startEndgameNow(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(start).toMatch(/startPositionMatch\(start\.sfen, start\.playerColor, ENDGAME_START_LABEL\)/);
+    // 「もう一局」は、別の名局の終盤を選ぶ。
+    expect(source).toMatch(/learningStartLabel\.value === ENDGAME_START_LABEL[\s\S]{0,80}startEndgameNow\(\{ excludeSfen: matchInitialSfen\.value \}\)/);
+  });
+
+  it("brings back a struggled problem days later in the problem set", () => {
+    const problemSet = readFileSync(new URL("../ShogiProblemSet.vue", import.meta.url), "utf8");
+    expect(problemSet).toMatch(/data-review-due[\s\S]*?openProblem\(reviewDueProblem\.id, \{ review: true \}\)/);
+    // 解き終えたとき・答えを見たときに、復習の箱へ反映する。
+    expect(problemSet).toMatch(/recordProblemSolved\([\s\S]*?recordReview\(problem, firstTry\)/);
+    expect(problemSet).toMatch(/function openAnswer\(\)[\s\S]*?recordReview\(currentProblem\.value, false\)/);
+  });
 });

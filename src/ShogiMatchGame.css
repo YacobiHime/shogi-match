@@ -2783,8 +2783,10 @@
   display: grid;
   gap: 0.8em;
 }
+/* 並んだ区分のタイルの数が違っても、タイルを縦に伸ばさず上へ詰める。 */
 .shogi-title__group {
   display: grid;
+  align-content: start;
   gap: 0.4em;
   min-width: 0;
 }

@@ -51,6 +51,8 @@
 | 棋士の台詞 | `src/core/ryuo-speech.mjs` | |
 | 対局の振り返り | `src/core/guided-review.mjs`、`src/composables/match/useGuidedReview.ts` | |
 | 教室・問題集 | `src/core/tutorial-curriculum.mjs`、`src/core/problem-set.mjs` | 対局画面から静的にimportしない（`AGENTS.md`） |
+| 間をあけた出し直し | `src/core/review-queue.mjs`、`ShogiProblemSet.vue`の`reviewDueProblem` | 一発で解けなかった問題を1日後・3日後・7日後に出す（`REVIEW_INTERVAL_DAYS`） |
+| 終盤戦 | `src/core/endgame-start.mjs`、`ShogiMatchGame.vue`の`startEndgameNow` | 代表局の終局24〜40手前、駒の損得6以内。対局画面からは押したときに読み込む |
 | 盤・駒の見た目 | `src/ShogiMatchBoard.vue` | `shogi-match-board-theme`、`shogi-match-piece-theme`に保存 |
 
 ---
