@@ -35,6 +35,8 @@ export type GuidedReviewScript = {
   steps: Map<number, { comment?: string; pause?: boolean; quiz?: GuidedReviewQuiz }>;
   lastPly: number;
   quizCount: number;
+  /** 負けた側の敗着の手数。勝ち負けがない、または敗着がないときはnull。 */
+  losingPly: number | null;
 };
 /**
  * 詰みの問題の途中経過。詰むまで盤で指させ、相手の応手はやこび姫が指す。
@@ -143,6 +145,11 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
     }
   }
   const guidedAnsweredQuizzes = new Set<number>();
+  /**
+   * プレイヤーが負けた対局で、敗着を指す前の局面の手数。振り返りから「敗着の前から指し直す」に使う。
+   * 敗着が見つからない対局ではnull。
+   */
+  const guidedRetryPly = ref<number | null>(null);
 
   function clearGuidedReviewTimer() {
     if (guidedReviewTimer) clearTimeout(guidedReviewTimer);
@@ -177,6 +184,7 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
     clearGuidedReviewTimer();
     guidedAnsweredQuizzes.clear();
     guidedReviewScript = null;
+    guidedRetryPly.value = null;
     analysisMenuOpen.value = false;
     if (!reviewMode.value) enterAnalysisMode("対局を一緒に振り返ろう！");
     analysisOpen.value = true;
@@ -213,6 +221,9 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
       moverForPly: (ply: number) => ((ply % 2 === 1) === (firstMover === "black") ? "black" : "white"),
       initialSfen: matchInitialSfen.value,
     }) as GuidedReviewScript;
+    const winner = winnerColor();
+    const losingPly = guidedReviewScript.losingPly;
+    guidedRetryPly.value = winner && winner !== playerColor() && losingPly ? losingPly - 1 : null;
     guidedGoTo(0);
     guidedReview.value = {
       ...state,
@@ -433,11 +444,13 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
     clearGuidedReviewTimer();
     guidedReview.value = null;
     guidedReviewScript = null;
+    guidedRetryPly.value = null;
     hintCandidates.value = [];
   }
 
   return {
     guidedReview,
+    guidedRetryPly,
     guidedReviewSpeedLabel,
     cycleGuidedReviewSpeed,
     clearGuidedReviewTimer,

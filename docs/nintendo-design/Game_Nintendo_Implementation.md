@@ -36,7 +36,9 @@
 | やこび姫の助言の優先度と間隔 | `src/core/coach-advice-scheduler.mjs` | 詰み・王手が最優先。最低表示6秒、同じ助言は8手のあいだ繰り返さない |
 | やこび姫の表情 | `src/core/coach-expression.mjs` | 褒め言葉では心配顔にしない |
 | 閃き・待ったなどの補助 | `src/core/match-assists.mjs` | |
-| レーティングと級段 | `src/core/player-rating.mjs` | 平手の通常対局（対CPU）だけ数える |
+| レーティングと級段 | `src/core/player-rating.mjs` | 平手の通常対局（対CPU）だけ数える。次の目標（`nextRatingGoal`）と連敗の提案（`retrySuggestion`、3連敗）もここ |
+| 振り駒 | `src/core/furigoma.mjs`、`ShogiMatchGame.vue`の`furigomaCallout` | 知らせは1.8秒（`FURIGOMA_SHOW_MS`）、盤の操作は妨げない |
+| もう一局・局面からの指し直し | `ShogiMatchGame.vue`の`rematch`・`retryFromPly`・`startPositionMatch` | 指し直しの対局は開始局面の名前`RETRY_START_LABEL`で見分ける |
 | 称号・所属 | `src/core/player-profile.mjs` | |
 | 記録の画面 | `src/YakobiNote.vue` | |
 | CPUの強さ | `src/core/strength-settings.mjs`、`src/core/logic-ai.mjs` | 上限はLv40。値を変えたら`docs/difficulty-calibration.md`も直す |

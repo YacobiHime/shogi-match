@@ -146,7 +146,7 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">対局</span>
-                <small class="shogi-title__desc">CPUと1局</small>
+                <small class="shogi-title__desc">設定を選んで1局</small>
               </button>
               <button type="button" class="shogi-title__tile" @click="openTournamentScreen">
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
@@ -869,6 +869,27 @@
           <small v-if="checkCallout.explain">{{ checkCallout.explain }}</small>
         </div>
       </Transition>
+      <Transition name="shogi-game__callout">
+        <div
+          v-if="furigomaCallout && !checkCallout"
+          :key="furigomaCallout.id"
+          class="shogi-game__furigoma"
+          role="status"
+          data-furigoma
+        >
+          <span class="shogi-game__furigoma-pieces" aria-hidden="true">
+            <img
+              v-for="(face, index) in furigomaCallout.faces"
+              :key="index"
+              :src="furigomaPieceUrl(face)"
+              :style="{ animationDelay: `${index * 70}ms` }"
+              alt=""
+            >
+          </span>
+          <strong>振り駒</strong>
+          <small>{{ furigomaCallout.text }}</small>
+        </div>
+      </Transition>
     </div>
 
     <section class="shogi-game__coach" aria-label="やこび姫">
@@ -1021,7 +1042,15 @@
               type="button"
               @click="toggleGuidedReviewPause"
             >{{ guidedReview.phase === "playing" ? "一時停止" : "再開 ▶" }}</button>
-            <button v-if="guidedReview.phase === 'done'" type="button" class="shogi-game__guided-primary" @click="startGuidedReview">もう一度</button>
+            <!-- やり直しの単位を小さくする。負けた対局では、敗着の答え合わせのあとと振り返りの最後に、その局面から指し直せる。 -->
+            <button
+              v-if="guidedRetryPly !== null && (guidedReview.phase === 'done' || (guidedReview.phase === 'answer' && guidedReview.quiz?.type === 'losing'))"
+              type="button"
+              :class="{ 'shogi-game__guided-primary': guidedReview.phase === 'done' }"
+              data-retry-from-losing
+              @click="retryFromPly(guidedRetryPly)"
+            >敗着の前から指し直す</button>
+            <button v-if="guidedReview.phase === 'done'" type="button" :class="{ 'shogi-game__guided-primary': guidedRetryPly === null }" @click="startGuidedReview">もう一度</button>
             <button
               v-if="guidedReview.phase !== 'done'"
               type="button"
@@ -1281,6 +1310,7 @@
         <h2 id="match-result-title">{{ resultPresentation.title }}</h2>
         <!-- 勝ち負けの次に知りたい、決まり手とレーティングの増減だけを大きく出す。対局の記録は折りたたむ。 -->
         <p class="shogi-game__result-lead">{{ resultPresentation.detail }}</p>
+        <p v-if="resultPresentation.cheer" class="shogi-game__result-cheer">{{ resultPresentation.cheer }}</p>
         <p
           v-if="ratingChange"
           class="shogi-game__result-rating"
@@ -1290,6 +1320,22 @@
           R{{ ratingChange.before }} → <strong>R{{ ratingChange.after }}</strong>
           <span>{{ ratingChange.delta >= 0 ? "+" : "−" }}{{ Math.abs(ratingChange.delta) }}</span>
         </p>
+        <!-- 次の級・段までの残り。下がったときも帯だけ出し、強調しない。 -->
+        <p v-if="resultGradeUp" class="shogi-game__result-grade-up" data-grade-up>{{ resultGradeUp }}に上がったよ！</p>
+        <div v-if="resultNextGoal" class="shogi-game__result-goal" data-next-goal>
+          <p>
+            <span>次の目標 <b>{{ gradeName(resultNextGoal.label) }}</b></span>
+            <span>あと <b>R{{ resultNextGoal.remaining }}</b></span>
+          </p>
+          <div
+            class="shogi-game__result-goal-bar"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="resultNextGoal.percent"
+            :aria-label="`${gradeName(resultNextGoal.label)}まで${resultNextGoal.percent}%`"
+          ><span :style="{ width: `${resultNextGoal.percent}%` }"></span></div>
+        </div>
         <details class="shogi-game__result-record">
           <summary>対局の記録</summary>
           <dl class="shogi-game__result-details">
@@ -1311,6 +1357,29 @@
             </div>
           </dl>
         </details>
+        <!--
+          次の挑戦をいちばん手前に置く。同じLvに続けて負けたときは、挑戦を続ける道を先頭に、
+          強さを1つ下げる・香落ちを同じ大きさで並べる(自動では変えない)。教室と棋力測定の対局には出さない。
+        -->
+        <div v-if="!tutorialMatch && !measureSession && resultRetrySuggestion" class="shogi-game__result-retry" data-retry-suggestion>
+          <p>Lv.{{ resultRetrySuggestion.level }}、手強いね。どうする？</p>
+          <div class="shogi-game__result-retry-choices">
+            <button type="button" class="shogi-game__rematch" data-rematch @click="rematch()">もう一度挑む</button>
+            <button
+              v-if="resultRetrySuggestion.lowerLevel !== null"
+              type="button"
+              @click="rematch({ level: resultRetrySuggestion.lowerLevel })"
+            >Lv.{{ resultRetrySuggestion.lowerLevel }}で腕ならし</button>
+            <button type="button" @click="rematch({ handicapId: 'lance' })">香落ちで挑む</button>
+          </div>
+        </div>
+        <button
+          v-else-if="!tutorialMatch && !measureSession"
+          type="button"
+          class="shogi-game__rematch shogi-game__rematch--primary"
+          data-rematch
+          @click="rematch()"
+        >もう一局</button>
         <button type="button" class="shogi-game__guided-start shogi-game__guided-start--result" @click="startGuidedReview">
           <span aria-hidden="true">▶</span> 対局を振り返る
         </button>
@@ -1675,11 +1744,15 @@ import {
   applyDeclaredGrade,
   applyMeasuredRating,
   applyRatedGame,
+  gradeName,
   levelRatingText,
   loadRatingState,
+  nextRatingGoal,
   recommendedLevel,
+  retrySuggestion,
   saveRatingState,
 } from "./core/player-rating.mjs";
+import { furigomaMessage, throwFurigoma } from "./core/furigoma.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 // 対局のほかの画面は、開いたときに読み込む。最初に読むJSを小さくして、起動を速くするため。
@@ -2232,6 +2305,23 @@ watch(sideToMoveInCheck, (inCheck) => {
   checkCalloutTimer = setTimeout(() => { checkCallout.value = null; }, explain ? 2000 : 1300);
 });
 onBeforeUnmount(() => clearTimeout(checkCalloutTimer));
+/**
+ * 振り駒の知らせ。ホームからすぐ始める対局で、盤の上に歩5枚と先後を短く出す。
+ * 盤の操作は妨げない(先手ならすぐ指せる)。
+ */
+const FURIGOMA_SHOW_MS = 1800;
+const furigomaCallout = ref<{ id: number; faces: ("fu" | "to")[]; text: string } | null>(null);
+let furigomaTimer: ReturnType<typeof setTimeout> | undefined;
+function showFurigoma(toss: ReturnType<typeof throwFurigoma>) {
+  furigomaCallout.value = { id: Date.now(), faces: toss.faces, text: furigomaMessage(toss) };
+  clearTimeout(furigomaTimer);
+  furigomaTimer = setTimeout(() => { furigomaCallout.value = null; }, FURIGOMA_SHOW_MS);
+}
+function furigomaPieceUrl(face: "fu" | "to") {
+  const name = face === "fu" ? "black_pawn" : "black_prom_pawn";
+  return `${props.assetBaseUrl.replace(/\/$/, "")}/piece/${pregamePieceThemeId.value}/${name}.webp`;
+}
+onBeforeUnmount(() => clearTimeout(furigomaTimer));
 const resultPresentation = computed(() => {
   if (!result.value) return null;
   const loser = result.value.winner === Color.BLACK ? "後手" : "先手";
@@ -2259,6 +2349,7 @@ const resultPresentation = computed(() => {
     return {
       tone: "draw",
       title: "引き分け",
+      cheer: "",
       ...common,
     };
   }
@@ -2266,13 +2357,33 @@ const resultPresentation = computed(() => {
     return {
       tone: "victory",
       title: result.value.winner === Color.BLACK ? "先手勝利" : "後手勝利",
+      cheer: "",
       ...common,
     };
   }
   const playerWon = result.value.winner === humanColor.value;
+  // 負けたときは責めずに次にすることを、指し直して勝ったときは何を越えたかを一言添える。
+  const retried = learningStartLabel.value === RETRY_START_LABEL;
   return playerWon
-    ? { tone: "victory", title: "勝利", ...common }
-    : { tone: "defeat", title: "敗北", ...common };
+    ? { tone: "victory", title: "勝利", cheer: retried ? "さっきの分かれ道、今度は越えたね！" : "", ...common }
+    : { tone: "defeat", title: "敗北", cheer: "どこで分かれたか、いっしょに見てみよう。", ...common };
+});
+
+/** 終局画面の「次の目標」。レーティングが動いた対局(平手の通常対局)だけ出す。 */
+const resultNextGoal = computed(() => (ratingChange.value ? nextRatingGoal(ratingState.value.rating) : null));
+/** この対局で級・段の目安が上がったら、その名前。 */
+const resultGradeUp = computed(() => {
+  const change = ratingChange.value;
+  if (!change || change.after <= change.before) return "";
+  const labelOf = (rating: number) => CPU_STRENGTH_PRESETS.find(({ level }) => level === recommendedLevel(rating))?.label ?? "";
+  const after = labelOf(change.after);
+  return after !== labelOf(change.before) ? gradeName(after) : "";
+});
+/** 同じLvに続けて負けたときの、選べる提案(強さを1つ下げる・香落ち)。自動では変えない。 */
+const resultRetrySuggestion = computed(() => {
+  if (!ratingChange.value || !result.value?.winner || result.value.winner === humanColor.value) return null;
+  const level = cpuStrengthLevel();
+  return level === undefined ? null : retrySuggestion(ratingState.value, level);
 });
 const blackFormationText = computed(() => formationTextForColor(Color.BLACK));
 const whiteFormationText = computed(() => formationTextForColor(Color.WHITE));
@@ -3504,7 +3615,7 @@ function chooseWelcome(choice: string) {
   markWelcomeSeen(browserStorage(), choice);
   welcomeOpen.value = false;
   if (choice === "beginner") tutorialOpen.value = true;
-  else if (choice === "rules") openMatchSetup("normal");
+  else if (choice === "rules") startQuickMatch();
   else if (choice === "player") startMeasureMatch();
 }
 
@@ -3512,6 +3623,86 @@ function chooseWelcome(choice: string) {
 function dismissWelcome() {
   markWelcomeSeen(browserStorage(), "skip");
   welcomeOpen.value = false;
+}
+
+/**
+ * ホームの「つぎはこれ：対局する」。対局準備を開かず、おすすめの強さ・平手で、先後は振り駒で決めてすぐ始める。
+ * ほかの設定(助言・作戦など)は、前に対局準備で選んだものを使う。設定を選びたいときは「対局」のタイルから。
+ */
+function startQuickMatch() {
+  confirmDiscardSuspended(() => {
+    yakobiNoteOpen.value = false;
+    openPregame();
+    matchKind.value = "normal";
+    searchNodes.value = recommendedStrengthPreset.value.value;
+    const toss = throwFurigoma();
+    selectedPlayerColor.value = toss.playerColor;
+    homeOpen.value = false;
+    void initializeEngine();
+    beginMatch();
+    showFurigoma(toss);
+  });
+}
+
+/** 「敗着の前から指し直す」で始めた対局の開始局面の名前。終局画面の「もう一局」で同じ局面から始め直す目印にもする。 */
+const RETRY_START_LABEL = "敗着の前から";
+
+/**
+ * 局面から始める対局。対局の種類と設定は変えず、開始局面だけを差し替える。
+ * 平手の初期局面ではないので、レーティングの対象にはならない(recordRatedGame)。
+ */
+function startPositionMatch(sfen: string, playerColor: "black" | "white", label: string) {
+  matchInitialSfen.value = sfen;
+  activePlayerColor.value = playerColor;
+  learningStartLabel.value = label;
+  selectedStrategy.value = "";
+  selectedCastle.value = "";
+  attackGuideEnabled.value = false;
+  matchStarted.value = true;
+  pregameOpen.value = false;
+  scheduleDeferredCoachPortraitPreload();
+  restart();
+}
+
+/**
+ * 終局画面の「もう一局」。対局準備を通さず、直前と同じ設定ですぐ次の対局を始める。
+ * - 平手の通常対局では先後を入れ替える。
+ * - levelを渡すとCPUの強さを、handicapIdを渡すと学習対局の駒落ち(CPUが上手)に変えて始める。
+ * - 「敗着の前から」の対局は、同じ局面から始め直す。
+ */
+function rematch(options: { level?: number; handicapId?: string } = {}) {
+  const retrySfen = learningStartLabel.value === RETRY_START_LABEL ? matchInitialSfen.value : "";
+  const previousColor = activePlayerColor.value;
+  const alternate = matchKind.value === "normal" && !retrySfen && !options.handicapId;
+  stopGuidedReview();
+  openPregame();
+  if (options.level !== undefined) {
+    const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === options.level);
+    if (preset) searchNodes.value = preset.value;
+  }
+  if (options.handicapId) {
+    matchKind.value = "learning";
+    learningStartType.value = "handicap";
+    learningHandicapId.value = options.handicapId;
+    learningHandicapGiver.value = "cpu";
+  } else if (alternate) {
+    selectedPlayerColor.value = previousColor === "black" ? "white" : "black";
+  }
+  void initializeEngine();
+  if (retrySfen) startPositionMatch(retrySfen, previousColor, RETRY_START_LABEL);
+  else beginMatch();
+}
+
+/** 振り返りの「敗着の前から指し直す」。本筋のply手目までの局面から、同じ相手・同じ手番で指し直す。 */
+function retryFromPly(ply: number) {
+  const moves = reviewNavigation.value.mainLine.slice(0, Math.max(0, ply));
+  const { nextRecord } = recordAndFormationsFromMoves(matchInitialSfen.value, moves, hiraganaFormationMaster);
+  const sfen = nextRecord.position.sfen;
+  const playerColor = activePlayerColor.value;
+  stopGuidedReview();
+  openPregame();
+  void initializeEngine();
+  startPositionMatch(sfen, playerColor, RETRY_START_LABEL);
 }
 
 function openMatchSetup(kind: MatchKind) {
@@ -3725,12 +3916,12 @@ const homeNext = computed<HomeNext>(() => {
     return { id: "tutorial", label: "将棋教室のつづき", description: `${homeLessonsDone.value}レッスン終わったよ。次のレッスンへ進もう` };
   }
   const preset = recommendedStrengthPreset.value;
-  return { id: "match", label: "対局する", description: `おすすめの相手: Lv.${preset.level} ${preset.label}` };
+  return { id: "match", label: "対局する", description: `Lv.${preset.level} ${preset.label}の相手と、振り駒ですぐ始める` };
 });
 function startHomeNext() {
   if (homeNext.value.id === "resume") resumeSuspendedMatch();
   else if (homeNext.value.id === "tutorial") tutorialOpen.value = true;
-  else openMatchSetup("normal");
+  else startQuickMatch();
 }
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
 const homeGreeting = computed(() => ({
@@ -6495,6 +6686,7 @@ function goToAnalysisPly(ply: number) {
  */
 const {
   guidedReview,
+  guidedRetryPly,
   guidedReviewSpeedLabel,
   cycleGuidedReviewSpeed,
   clearGuidedReviewTimer,

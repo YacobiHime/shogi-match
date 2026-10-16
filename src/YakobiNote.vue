@@ -340,7 +340,9 @@ import RyuoRosterBook from "./RyuoRosterBook.vue";
 import YakobiSays from "./YakobiSays.vue";
 import {
   declarableGrades,
+  gradeName as gradeNameOf,
   levelRating,
+  nextRatingGoal,
   recommendedLevel,
   usageRows,
 } from "./core/player-rating.mjs";
@@ -471,33 +473,15 @@ async function copyRecord() {
 }
 const percent = (ratio: number) => `${Math.round(ratio * 100)}%`;
 /** 「十四級程度」を、表紙では「十四級」と短く出す。 */
-const gradeName = (label: string) => label.replace(/程度$/, "");
+const gradeName = (label: string) => gradeNameOf(label);
 
 const nearestPreset = computed(() => {
   const level = recommendedLevel(props.state.rating);
   return CPU_STRENGTH_PRESETS.find((preset) => preset.level === level)!;
 });
 
-/**
- * 次の目標。いまの目安と違う表示名の、すぐ上のレベル。
- * recommendedLevelはR÷80を四捨五入するので、レベルLの目安になるのはR(80L−40)から。
- */
-const nextGoal = computed(() => {
-  const current = nearestPreset.value;
-  const next = CPU_STRENGTH_PRESETS.find((preset) => preset.level > current.level && preset.label !== current.label);
-  if (!next) return null;
-  const firstOfCurrent = CPU_STRENGTH_PRESETS.find((preset) => preset.label === current.label)!;
-  const threshold = (level: number) => Math.max(0, levelRating(level) - levelRating(1) / 2);
-  const start = threshold(firstOfCurrent.level);
-  const target = threshold(next.level);
-  const rating = props.state.rating;
-  const ratio = target > start ? (rating - start) / (target - start) : 0;
-  return {
-    label: next.label,
-    remaining: Math.max(1, Math.ceil(target - rating)),
-    percent: Math.round(Math.min(1, Math.max(0, ratio)) * 100),
-  };
-});
+/** 次の目標と、そこまでの残り。計算は結果画面と共通(core/player-rating.mjs)。 */
+const nextGoal = computed(() => nextRatingGoal(props.state.rating));
 
 /** 対局の結果だけを、古い順に並べたもの(申告・測定の記録は除く)。 */
 const gameHistory = computed(() => props.state.history.filter(

@@ -204,4 +204,37 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/id: "cpuDetailedCastle"[\s\S]*?disabled: cpuCastleSelectLocked\.value/);
     expect(source).toMatch(/class="shogi-game__pregame-change"\s+:disabled="row\.disabled"/);
   });
+
+  it("puts the next challenge first on the result screen and keeps the retry suggestion optional", () => {
+    // リトライは迅速に: 通常の対局の結果では「もう一局」が「対局を振り返る」より手前にある。
+    const dialog = source.split('aria-labelledby="match-result-title"')[1]?.split('aria-labelledby="tournament-result-title"')[0] ?? "";
+    expect(dialog.indexOf("data-rematch")).toBeGreaterThan(-1);
+    expect(dialog.indexOf("data-rematch")).toBeLessThan(dialog.indexOf("対局を振り返る"));
+    // 連敗の提案は、挑戦を続ける道を先頭に並べ、強さは自動では変えない。
+    expect(dialog).toMatch(/data-retry-suggestion[\s\S]*?もう一度挑む[\s\S]*?で腕ならし[\s\S]*?香落ちで挑む/);
+    expect(source).not.toMatch(/resultRetrySuggestion[^\n]*searchNodes\.value\s*=/);
+    // 次の級・段までの残りを、対局直後に見せる。
+    expect(dialog).toContain("data-next-goal");
+    // 「もう一局」は対局準備を開かずに始める。
+    const rematch = source.split("function rematch(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(rematch).toMatch(/openPregame\(\);[\s\S]*?beginMatch\(\)/);
+    expect(rematch).not.toMatch(/pregameOpen\.value = true/);
+  });
+
+  it("starts the home recommendation without the setup screen and decides colors by furigoma", () => {
+    const homeNext = source.split("function startHomeNext()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(homeNext).toContain("startQuickMatch()");
+    const quick = source.split("function startQuickMatch()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(quick).toMatch(/throwFurigoma\(\)[\s\S]*?beginMatch\(\);[\s\S]*?showFurigoma/);
+    // 振り駒の知らせは盤の操作を妨げない。
+    expect(source).toMatch(/\.shogi-game__furigoma \{[^}]*pointer-events: none/s);
+  });
+
+  it("lets a lost game be replayed from the position before the losing move", () => {
+    expect(source).toMatch(/data-retry-from-losing[\s\S]*?@click="retryFromPly\(guidedRetryPly\)"/);
+    const retry = source.split("function retryFromPly(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(retry).toContain("startPositionMatch(sfen, playerColor, RETRY_START_LABEL)");
+    // 局面からの対局は平手の初期局面ではないので、レーティングの対象にならない。
+    expect(source).toMatch(/&& matchInitialSfen\.value === STANDARD_SFEN\s*&& level !== undefined/);
+  });
 });

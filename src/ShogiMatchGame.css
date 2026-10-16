@@ -81,6 +81,16 @@
     background-color: var(--slate-light);
     transform: translateY(-1px);
   }
+  /* 琥珀色の主役のボタンは、触れても琥珀色のまま少し明るくする(暗い文字が灰色の上で読みにくくならないように)。 */
+  .shogi-game .shogi-game__rematch--primary:not(:disabled):hover,
+  .shogi-game .shogi-game__result-retry .shogi-game__rematch:not(:disabled):hover,
+  .shogi-game .shogi-game__guided-start--result:not(:disabled):hover {
+    background-color: #f6b968;
+  }
+  .shogi-game .shogi-game__rematch--primary ~ .shogi-game__guided-start--result:not(:disabled):hover,
+  .shogi-game .shogi-game__result-retry ~ .shogi-game__guided-start--result:not(:disabled):hover {
+    background-color: var(--slate-light);
+  }
 }
 .shogi-game button:disabled {
   border-color: rgba(255, 252, 244, 0.2);
@@ -605,6 +615,58 @@
   font-size: 0.95em;
   font-weight: 700;
   white-space: nowrap;
+}
+/* 振り駒の知らせ。王手の知らせと同じ置き方で、歩5枚が順に落ちてから先後を伝える。盤の操作は妨げない。 */
+.shogi-game__furigoma {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  gap: 0.25em;
+  justify-items: center;
+  padding: 0.6em 1.2em 0.7em;
+  border: 3px solid var(--ivory);
+  border-radius: 1em;
+  color: var(--ivory);
+  background: var(--night);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 10px 24px rgba(0, 0, 0, 0.45);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.shogi-game__furigoma-pieces {
+  display: flex;
+  gap: 0.3em;
+}
+.shogi-game__furigoma-pieces img {
+  width: 2.2em;
+  height: auto;
+  animation: shogi-furigoma-drop 320ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.shogi-game__furigoma strong {
+  font-size: 1.1em;
+  letter-spacing: 0.1em;
+}
+.shogi-game__furigoma small {
+  font-size: 1em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+@keyframes shogi-furigoma-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-1.2em) rotate(-25deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__furigoma-pieces img {
+    animation: none;
+  }
 }
 .shogi-game__callout-enter-active {
   animation: shogi-callout-pop 260ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
@@ -1922,6 +1984,76 @@
   color: var(--ivory);
   background: var(--slate);
   box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72);
+}
+/* 「もう一局」を主役にする(リトライは迅速に)。そのときは「対局を振り返る」を二番手の色にする。 */
+.shogi-game .shogi-game__rematch--primary {
+  width: 100%;
+  min-height: 3.2em;
+  margin: 1em 0 0.5em;
+  font-size: 1.2em;
+}
+.shogi-game .shogi-game__rematch--primary ~ .shogi-game__guided-start--result,
+.shogi-game .shogi-game__result-retry ~ .shogi-game__guided-start--result {
+  border-color: rgba(241, 165, 76, 0.68);
+  color: var(--ivory);
+  background: var(--slate);
+  box-shadow: 0 2px 0 rgba(10, 25, 35, 0.72);
+  font-size: 1em;
+}
+/* 負けたあとの一言と、級・段が上がったときの一言。 */
+.shogi-game__result-cheer {
+  margin: 0.4em 0 0;
+  color: var(--result-accent);
+  font-weight: 700;
+}
+.shogi-game__result-grade-up {
+  margin: 0.6em 0 0;
+  color: var(--amber);
+  font-size: 1.2em;
+  font-weight: 900;
+}
+/* 次の級・段までの帯。やこびノートの帯と同じ形にする。 */
+.shogi-game__result-goal {
+  margin: 0.7em auto 0;
+  max-width: 22em;
+}
+.shogi-game__result-goal p {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 0.3em;
+  font-size: 0.92em;
+}
+.shogi-game__result-goal b {
+  color: var(--amber);
+}
+.shogi-game__result-goal-bar {
+  height: 0.6em;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 252, 244, 0.18);
+}
+.shogi-game__result-goal-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--amber);
+}
+/* 同じLvに続けて負けたときの選択肢。挑戦を続ける道を先頭にし、3つを同じ大きさで並べる。 */
+.shogi-game__result-retry {
+  margin: 1em 0 0.5em;
+}
+.shogi-game__result-retry p {
+  margin: 0 0 0.5em;
+  font-weight: 700;
+}
+.shogi-game__result-retry-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8em, 1fr));
+  gap: 0.5em;
+}
+.shogi-game__result-retry-choices button {
+  min-width: 0;
+  min-height: 3em;
 }
 .shogi-game__result-actions {
   display: grid;

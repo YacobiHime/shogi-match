@@ -13,6 +13,10 @@ import {
   loadRatingState,
   recommendedLevel,
   saveRatingState,
+  gradeName,
+  losingStreakAt,
+  nextRatingGoal,
+  retrySuggestion,
 } from './player-rating.mjs';
 
 const memoryStorage = () => {
@@ -125,5 +129,32 @@ describe('player rating', () => {
     expect(state.declaredLevels['三級'][26]).toEqual({ wins: 2, losses: 1, draws: 0 });
     expect(loadRatingState({ getItem: () => JSON.stringify(state) }).declaredLevels).toEqual(state.declaredLevels);
     expect(applyRatedGame(createRatingState(), { opponentLevel: 5, outcome: 'win' }).state.declaredLevels).toEqual({});
+  });
+
+  it('shows the next grade goal and how far the rating has come', () => {
+    // R800はLv10(十七級)。次の表示名はLv11の十六級で、目安はR840から。
+    expect(nextRatingGoal(800)).toEqual({ label: '十六級程度', level: 11, remaining: 40, percent: 50 });
+    // 同じ表示名が2レベルある五級(Lv22・23)では、Lv24の四級が次の目標になる。
+    expect(nextRatingGoal(1800)).toMatchObject({ label: '四級程度', level: 24 });
+    expect(nextRatingGoal(3200)).toBeNull();
+    expect(gradeName('十六級程度')).toBe('十六級');
+  });
+
+  it('counts consecutive losses against the same level and suggests easier options after three', () => {
+    let state = createRatingState();
+    for (const outcome of ['loss', 'win', 'loss', 'loss']) {
+      state = applyRatedGame(state, { opponentLevel: 12, outcome }).state;
+    }
+    expect(losingStreakAt(state, 12)).toBe(2);
+    expect(retrySuggestion(state, 12)).toBeNull();
+    // 申告・測定の記録は、連敗を途切れさせない。
+    state = applyMeasuredRating(state, { rating: 900 });
+    state = applyRatedGame(state, { opponentLevel: 12, outcome: 'loss' }).state;
+    expect(retrySuggestion(state, 12)).toEqual({ level: 12, losses: 3, lowerLevel: 11 });
+    // 別のLvとの対局を挟むと数え直す。
+    expect(losingStreakAt(applyRatedGame(state, { opponentLevel: 11, outcome: 'loss' }).state, 12)).toBe(0);
+    let bottom = createRatingState();
+    for (let i = 0; i < 3; i += 1) bottom = applyRatedGame(bottom, { opponentLevel: 0, outcome: 'loss' }).state;
+    expect(retrySuggestion(bottom, 0)).toEqual({ level: 0, losses: 3, lowerLevel: null });
   });
 });

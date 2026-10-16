@@ -26,6 +26,70 @@ export function recommendedLevel(rating) {
   return Math.min(MAX_LEVEL, Math.max(0, level));
 }
 
+/** 段級位の表示名から「程度」を除いたもの。 */
+export function gradeName(label) {
+  return String(label ?? '').replace(/程度$/, '');
+}
+
+/**
+ * 次の目標。いまの目安と違う表示名の、すぐ上のレベル。
+ * recommendedLevelはR÷80を四捨五入するので、レベルLの目安になるのはR(80L−40)から。
+ * percentは、いまの表示名に入ったところから次の表示名までの進み具合(0〜100)。いちばん上ではnull。
+ * @param {number} rating
+ * @returns {{ label: string, level: number, remaining: number, percent: number } | null}
+ */
+export function nextRatingGoal(rating) {
+  const current = CPU_STRENGTH_PRESETS.find((preset) => preset.level === recommendedLevel(rating));
+  const next = CPU_STRENGTH_PRESETS.find((preset) => preset.level > current.level && preset.label !== current.label);
+  if (!next) return null;
+  const firstOfCurrent = CPU_STRENGTH_PRESETS.find((preset) => preset.label === current.label);
+  const threshold = (level) => Math.max(0, levelRating(level) - levelRating(1) / 2);
+  const start = threshold(firstOfCurrent.level);
+  const target = threshold(next.level);
+  const value = Number.isFinite(rating) ? rating : INITIAL_RATING;
+  const ratio = target > start ? (value - start) / (target - start) : 0;
+  return {
+    label: next.label,
+    level: next.level,
+    remaining: Math.max(1, Math.ceil(target - value)),
+    percent: Math.round(Math.min(1, Math.max(0, ratio)) * 100),
+  };
+}
+
+/** 難易度を変える提案を出す連敗の数。 */
+export const RETRY_SUGGESTION_LOSSES = 3;
+
+/**
+ * 同じLvの相手に、直近で続けて負けた数。間に別のLvとの対局・勝ち・引き分けがあれば、そこで数え直す。
+ * 申告・測定の記録(opponentLevelのない記録)は飛ばす。
+ * @param {ReturnType<typeof createRatingState>} state
+ * @param {number} level
+ */
+export function losingStreakAt(state, level) {
+  let losses = 0;
+  for (let index = (state?.history?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const entry = state.history[index];
+    if (!Number.isFinite(entry?.opponentLevel)) continue;
+    if (entry.opponentLevel !== level || entry.outcome !== 'loss') break;
+    losses += 1;
+  }
+  return losses;
+}
+
+/**
+ * 同じLvに続けて負けたときの、選べる提案。自動では下げず、挑戦を続ける道と並べて見せる。
+ * lowerLevelはLv0の相手ではnull。
+ * @param {ReturnType<typeof createRatingState>} state
+ * @param {number} level
+ * @returns {{ level: number, losses: number, lowerLevel: number | null } | null}
+ */
+export function retrySuggestion(state, level) {
+  if (!Number.isFinite(level)) return null;
+  const losses = losingStreakAt(state, level);
+  if (losses < RETRY_SUGGESTION_LOSSES) return null;
+  return { level, losses, lowerLevel: level > 0 ? level - 1 : null };
+}
+
 export function createRatingState() {
   return { rating: INITIAL_RATING, games: 0, wins: 0, losses: 0, draws: 0, levels: {}, colors: {}, usage: {}, measured: null, declared: null, declaredLevels: {}, history: [] };
 }
