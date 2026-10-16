@@ -2085,6 +2085,50 @@
   border-radius: inherit;
   background: var(--amber);
 }
+/* この対局で手に入った印。初めてのものを琥珀色で大きく、前にも組んだ形と次の着せ替えまでの残りは小さく出す。 */
+.shogi-game__result-collection {
+  margin: 0.8em auto 0;
+  max-width: 24em;
+  padding: 0.55em 0.8em;
+  border: 1px solid rgba(241, 165, 76, 0.55);
+  border-radius: 0.5em;
+  background: rgba(43, 70, 91, 0.45);
+  text-align: left;
+}
+.shogi-game__result-collection p,
+.shogi-game__result-collection ul {
+  margin: 0.25em 0 0;
+}
+.shogi-game__result-collection > :first-child {
+  margin-top: 0;
+}
+.shogi-game__result-collection ul {
+  display: grid;
+  gap: 0.2em;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game__result-collection-title {
+  color: var(--muted);
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.shogi-game__result-collection-new {
+  color: var(--amber);
+  font-weight: 800;
+}
+.shogi-game__result-collection-new::before {
+  content: "★ ";
+}
+.shogi-game__result-collection-repeat,
+.shogi-game__result-collection-next {
+  font-size: 0.88em;
+}
+.shogi-game__result-collection-theme {
+  color: var(--lavender);
+  font-weight: 700;
+}
 /* 同じLvに続けて負けたときの選択肢。挑戦を続ける道を先頭にし、3つを同じ大きさで並べる。 */
 .shogi-game__result-retry {
   margin: 1em 0 0.5em;

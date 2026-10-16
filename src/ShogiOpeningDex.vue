@@ -68,6 +68,12 @@
               >
                 <span>{{ item.label }}</span>
                 <small v-if="item.sideTag" class="shogi-dex__side-tag">{{ item.sideTag }}</small>
+                <small
+                  v-if="item.collected"
+                  class="shogi-dex__got"
+                  :aria-label="`対局で${item.collected}回組んだ`"
+                  :title="`対局で${item.collected}回組んだ`"
+                >★{{ item.collected > 1 ? item.collected : "" }}</small>
               </button>
             </li>
           </ul>
@@ -191,6 +197,7 @@ import {
 import { openingExplanation } from "./core/opening-explanations.mjs";
 import { formatHintMove } from "./core/match-assists.mjs";
 import { buildOpeningDexSteps } from "./core/opening-dex-replay.mjs";
+import { loadCollection } from "./core/collection.mjs";
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
@@ -269,8 +276,16 @@ function toListItem(item: any) {
   const sideTag = Array.isArray(colors) && colors.length === 1
     ? (colors[0] === "white" ? "後手" : "先手")
     : "";
-  return { id: item.id, label: item.label, sideTag };
+  return { id: item.id, label: item.label, sideTag, collected: collection.formations[item.label]?.count ?? 0 };
 }
+// 対局で組んだことのある戦法・囲いには★を付ける(core/collection.mjsのコレクション)。
+const collection = loadCollection((() => {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
+  }
+})());
 const selectedDefinition = computed(() => (
   definitions.value.find((item) => item.id === selectedId.value) ?? null
 ));
@@ -547,6 +562,15 @@ watch(stepIndex, async () => {
   color: #f1a54c;
   font-size: 0.62rem;
   line-height: 1.3;
+}
+/* 対局で組んだことのある戦法・囲いの★。2回目からは回数を添える。 */
+.shogi-game .shogi-dex__got {
+  flex: none;
+  margin-left: auto;
+  color: #f1a54c;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(23, 38, 50, 0.6);
 }
 .shogi-game .shogi-dex__detail {
   display: flex;

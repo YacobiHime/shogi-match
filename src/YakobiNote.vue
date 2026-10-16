@@ -274,6 +274,80 @@
           <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" />
         </section>
 
+        <!--
+          コレクション。対局で組んだ戦法・囲いと、初めて勝ったLvを印として並べる。まだのものも名前は見せる。
+          印の数で使えるようになる着せ替えは、ここで選ぶ。
+        -->
+        <section v-if="tab === 'collection'" id="shogi-note-pane-collection" class="shogi-note__panel" role="tabpanel" aria-label="コレクション">
+          <section class="shogi-note__card" aria-labelledby="shogi-note-collection-count" data-note-collection>
+            <h2 id="shogi-note-collection-count">集めた印</h2>
+            <dl class="shogi-note__tiles shogi-note__tiles--four">
+              <div><dt>印</dt><dd>{{ collectionTotal }}<small>/ {{ collectionMax }}</small></dd></div>
+              <div><dt>戦法・囲い</dt><dd>{{ collectedFormationCount }}<small>/ {{ COLLECTION_CATALOG.length }}</small></dd></div>
+              <div><dt>勝ったLv</dt><dd>{{ collectedLevelCount }}<small>/ {{ COLLECTION_LEVELS.length }}</small></dd></div>
+              <div><dt>神の一手</dt><dd>{{ collection.godMoves }}<small>回</small></dd></div>
+            </dl>
+            <p class="shogi-note__hint">
+              対局で定跡図鑑の戦法・囲いを組むと、印が1つ増えるよ。CPUの各Lvに初めて勝っても1つ（レーティングの対象の対局だけ）。
+              <template v-if="nextUnlock">次の着せ替えまで、印あと{{ nextUnlock.remaining }}個！</template>
+              <template v-else>着せ替えは全部使えるようになったよ！</template>
+            </p>
+          </section>
+
+          <section class="shogi-note__card" aria-labelledby="shogi-note-themes">
+            <h2 id="shogi-note-themes">着せ替え</h2>
+            <div v-for="group in themeGroups" :key="group.kind" class="shogi-note__themes" role="radiogroup" :aria-label="group.label">
+              <p class="shogi-note__subhead">{{ group.label }}</p>
+              <ul>
+                <li v-for="theme in group.themes" :key="theme.id">
+                  <button
+                    type="button"
+                    role="radio"
+                    class="shogi-note__theme"
+                    :class="{ 'shogi-note__theme--locked': !theme.unlocked }"
+                    :aria-checked="theme.selected"
+                    :disabled="!theme.unlocked"
+                    :data-theme="`${group.kind}:${theme.id}`"
+                    @click="chooseTheme(group.kind, theme.id)"
+                  >
+                    <img :src="theme.preview" alt="" aria-hidden="true">
+                    <span>{{ theme.name }}</span>
+                    <small v-if="!theme.unlocked">印あと{{ theme.remaining }}個</small>
+                    <small v-else-if="theme.selected">使用中</small>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section v-for="group in formationGroups" :key="group.kind" class="shogi-note__card" :aria-label="group.label">
+            <h2>{{ group.label }}<small class="shogi-note__count">{{ group.collected }} / {{ group.items.length }}</small></h2>
+            <ul class="shogi-note__stamps">
+              <li
+                v-for="item in group.items"
+                :key="item.label"
+                class="shogi-note__stamp"
+                :class="{ 'shogi-note__stamp--got': item.count }"
+              >
+                <span>{{ item.label }}</span>
+                <small v-if="item.count">×{{ item.count }}</small>
+              </li>
+            </ul>
+          </section>
+
+          <section class="shogi-note__card" aria-labelledby="shogi-note-levels">
+            <h2 id="shogi-note-levels">Lvの壁<small class="shogi-note__count">{{ collectedLevelCount }} / {{ COLLECTION_LEVELS.length }}</small></h2>
+            <ol class="shogi-note__levels" aria-label="初めて勝ったLv">
+              <li
+                v-for="level in COLLECTION_LEVELS"
+                :key="level"
+                :class="{ 'shogi-note__level--got': collection.levels[level] }"
+                :title="collection.levels[level] ? `Lv.${level}に勝った` : `Lv.${level}にはまだ勝っていない`"
+              >{{ level }}</li>
+            </ol>
+          </section>
+        </section>
+
         <!-- 棋力の調整に使う項目。 -->
         <section v-if="tab === 'settings'" id="shogi-note-pane-settings" class="shogi-note__panel" role="tabpanel" aria-label="設定">
           <section class="shogi-note__card shogi-note__card--minor">
@@ -348,6 +422,24 @@ import {
 } from "./core/player-rating.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
 import { currentAffiliation } from "./core/player-profile.mjs";
+import {
+  COLLECTION_LEVELS,
+  collectionCatalog,
+  collectionCount,
+  loadCollection,
+  nextThemeUnlock,
+  themeUnlock,
+} from "./core/collection.mjs";
+import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
+import {
+  BOARD_THEMES,
+  BOARD_THEME_KEY,
+  DEFAULT_BOARD_THEME,
+  DEFAULT_PIECE_THEME,
+  PIECE_THEMES,
+  PIECE_THEME_KEY,
+  saveTheme,
+} from "./core/themes.mjs";
 import { outcomeText } from "./core/ryuo-career.mjs";
 
 type Tally = { wins: number; losses: number; draws: number };
@@ -400,6 +492,7 @@ const TABS = [
   { id: "record", label: "成績", description: "勝ち負けと推移" },
   { id: "style", label: "戦法", description: "得意な戦法と囲い" },
   { id: "ryuo", label: "竜王戦", description: "組と棋士名鑑" },
+  { id: "collection", label: "コレクション", description: "集めた印と着せ替え" },
   { id: "settings", label: "設定", description: "棋力の測定と申告" },
 ] as const;
 type TabId = typeof TABS[number]["id"];
@@ -420,6 +513,51 @@ function selectTab(id: TabId) {
   } catch {
     // 保存できなくても、タブは切り替わる。
   }
+}
+
+/*
+ * コレクション(core/collection.mjs)。開いたときに端末の保存から読む。
+ * 着せ替えは、ここで選ぶと保存し、開いている盤にも知らせる(core/themes.mjsのsaveTheme)。
+ */
+const COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+const collection = ref(loadCollection(safeStorage()));
+const collectedFormationCount = computed(() => COLLECTION_CATALOG.filter(({ label }) => collection.value.formations[label]).length);
+const collectedLevelCount = computed(() => COLLECTION_LEVELS.filter((level) => collection.value.levels[level]).length);
+const collectionTotal = computed(() => collectionCount(collection.value));
+const collectionMax = COLLECTION_CATALOG.length + COLLECTION_LEVELS.length;
+const nextUnlock = computed(() => nextThemeUnlock(collection.value));
+const formationGroups = computed(() => (["strategy", "castle"] as const).map((kind) => {
+  const items = COLLECTION_CATALOG
+    .filter((entry) => entry.kind === kind)
+    .map(({ label }) => ({ label, count: collection.value.formations[label]?.count ?? 0 }));
+  return { kind, label: kind === "strategy" ? "戦法" : "囲い", items, collected: items.filter(({ count }) => count).length };
+}));
+function safeStorage(): Storage | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
+  }
+}
+const selectedThemes = ref({
+  board: safeStorage()?.getItem(BOARD_THEME_KEY) || DEFAULT_BOARD_THEME,
+  piece: safeStorage()?.getItem(PIECE_THEME_KEY) || DEFAULT_PIECE_THEME,
+});
+const assetBase = computed(() => props.assetBaseUrl.replace(/\/$/, ""));
+const themeGroups = computed(() => ([
+  { kind: "board" as const, label: "盤", themes: BOARD_THEMES.map((theme) => ({ ...theme, preview: `${assetBase.value}/board/${theme.file}` })) },
+  { kind: "piece" as const, label: "駒", themes: PIECE_THEMES.map((theme) => ({ ...theme, preview: `${assetBase.value}/piece/${theme.id}/black_king2.webp` })) },
+]).map((group) => ({
+  ...group,
+  themes: group.themes.map((theme) => {
+    const unlock = themeUnlock(collection.value, group.kind, theme.id);
+    return { ...theme, unlocked: unlock.unlocked, remaining: unlock.remaining, selected: selectedThemes.value[group.kind] === theme.id };
+  }),
+})));
+function chooseTheme(kind: "board" | "piece", id: string) {
+  if (!themeUnlock(collection.value, kind, id).unlocked) return;
+  selectedThemes.value = { ...selectedThemes.value, [kind]: id };
+  saveTheme(kind, id);
 }
 
 const measuredDate = computed(() => {
@@ -621,9 +759,10 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   padding: 0.7rem clamp(0.6rem, 2vw, 1.5rem) 0.8rem;
   font-size: var(--dex-text);
 }
+/* 項目が横に並ぶ画面では、収まらない分を次の行へ折り返す(「コレクション」が切れないように)。 */
 .shogi-game .shogi-note__nav {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(5.6rem, 1fr));
   gap: 0.35rem;
 }
 .shogi-game .shogi-note__nav-item {
@@ -944,6 +1083,81 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__pair { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
 .shogi-game .shogi-note__subhead { margin: 0.3rem 0 0; color: rgba(255, 252, 244, 0.8); font-size: 0.9em; }
 .shogi-game .shogi-note__hint { margin: 0; color: var(--note-muted); font-size: 0.8em; line-height: 1.6; }
+
+/* コレクション */
+.shogi-game .shogi-note__count { margin-left: auto; color: var(--note-muted); font-size: 0.85em; letter-spacing: 0; }
+.shogi-game .shogi-note__stamps { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__stamp {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px dashed var(--note-line);
+  border-radius: 999px;
+  color: var(--note-muted);
+  font-size: 0.82em;
+}
+.shogi-game .shogi-note__stamp--got {
+  border: 1px solid var(--note-gold);
+  color: var(--note-deep);
+  background: var(--note-gold);
+  font-weight: 800;
+}
+.shogi-game .shogi-note__stamp small { font-size: 0.85em; }
+.shogi-game .shogi-note__levels {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-note__levels li {
+  display: grid;
+  place-items: center;
+  min-height: 1.9rem;
+  border: 1px dashed var(--note-line);
+  border-radius: 0.35rem;
+  color: var(--note-muted);
+  font-size: 0.78em;
+  font-weight: 700;
+}
+.shogi-game .shogi-note__levels .shogi-note__level--got {
+  border: 1px solid var(--note-gold);
+  color: var(--note-deep);
+  background: var(--note-gold);
+}
+.shogi-game .shogi-note__themes ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  gap: 0.45rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-note__theme {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  width: 100%;
+  min-height: 0;
+  padding: 0.45rem 0.3rem;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  color: inherit;
+  background: var(--note-deep);
+  font-size: 0.8em;
+}
+.shogi-game .shogi-note__theme img {
+  width: 3rem;
+  height: 3rem;
+  object-fit: cover;
+  border-radius: 0.25rem;
+}
+.shogi-game .shogi-note__theme[aria-checked="true"] { border-color: var(--note-gold); }
+.shogi-game .shogi-note__theme small { color: var(--note-muted); font-size: 0.85em; }
+.shogi-game .shogi-note__theme--locked img { filter: grayscale(1) brightness(0.55); }
+.shogi-game .shogi-note__theme:disabled { opacity: 1; cursor: default; }
 
 /* 勝ち負け: 勝率の輪と、数のタイル */
 .shogi-game .shogi-note__score-body { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }

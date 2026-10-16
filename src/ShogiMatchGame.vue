@@ -1372,6 +1372,16 @@
             </div>
           </dl>
         </details>
+        <!-- この対局で手に入った印と、使えるようになった着せ替え。次の着せ替えまでの残りも見せる。 -->
+        <div v-if="collectionResult && (collectionResult.gained.length || collectionResult.repeated.length)" class="shogi-game__result-collection" data-collection-result>
+          <p class="shogi-game__result-collection-title">コレクション</p>
+          <ul v-if="collectionResult.gained.length">
+            <li v-for="gain in collectionResult.gained" :key="gain.label" class="shogi-game__result-collection-new">{{ collectionGainText(gain) }}</li>
+          </ul>
+          <p v-if="collectionResult.repeated.length" class="shogi-game__result-collection-repeat">組んだ形: {{ collectionResult.repeated.join("・") }}</p>
+          <p v-for="theme in collectionResult.themes" :key="theme" class="shogi-game__result-collection-theme">着せ替え{{ theme }}が使えるようになったよ！（やこびノートで選べるよ）</p>
+          <p v-if="collectionResult.next" class="shogi-game__result-collection-next">次の着せ替えまで、印あと{{ collectionResult.next.remaining }}個</p>
+        </div>
         <!--
           次の挑戦をいちばん手前に置く。同じLvに続けて負けたときは、挑戦を続ける道を先頭に、
           強さを1つ下げる・香落ちを同じ大きさで並べる(自動では変えない)。教室と棋力測定の対局には出さない。
@@ -1769,6 +1779,15 @@ import {
   saveRatingState,
 } from "./core/player-rating.mjs";
 import { furigomaMessage, throwFurigoma } from "./core/furigoma.mjs";
+import {
+  collectionCatalog,
+  loadCollection,
+  newlyUnlockedThemes,
+  nextThemeUnlock,
+  recordMatchCollection,
+  saveCollection,
+} from "./core/collection.mjs";
+import { themeName } from "./core/themes.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 // 対局のほかの画面は、開いたときに読み込む。最初に読むJSを小さくして、起動を速くするため。
@@ -3010,6 +3029,48 @@ function observeFormations(sfen: string) {
     formationState.value,
     formationSnapshotForSfen(sfen),
   );
+  // 囲いは局面ごとに上書きされるので、対局中に一度でも組んだものをコレクション用に控える。
+  if (active.value && !reviewMode.value && normalizedMode.value === "cpu") {
+    for (const name of formationNamesFromState(formationState.value, playerColorKey.value)) matchFormationNames.add(name);
+  }
+}
+
+/*
+ * コレクション(core/collection.mjs)。対局で組んだ戦法・囲い、初めて勝ったLv、神の一手を印として残す。
+ * 対CPUの対局すべてが対象で、Lvの壁だけはレーティングの対象の対局で数える。
+ */
+const COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+const matchFormationNames = new Set<string>();
+let matchGodMoves = 0;
+const collectionResult = ref<{
+  gained: { kind: "strategy" | "castle" | "level"; label: string }[];
+  repeated: string[];
+  themes: string[];
+  next: { need: number; remaining: number } | null;
+} | null>(null);
+function recordCollection(won: boolean) {
+  collectionResult.value = null;
+  if (normalizedMode.value !== "cpu") return;
+  for (const name of formationNamesFromState(formationState.value, playerColorKey.value)) matchFormationNames.add(name);
+  const level = cpuStrengthLevel();
+  const before = loadCollection(browserStorage());
+  const recorded = recordMatchCollection(before, {
+    formations: [...matchFormationNames],
+    wonLevel: won && ratingChange.value && level !== undefined ? level : null,
+    godMoves: matchGodMoves,
+    catalog: COLLECTION_CATALOG,
+  });
+  saveCollection(browserStorage(), recorded.state);
+  collectionResult.value = {
+    gained: recorded.gained,
+    repeated: recorded.repeated,
+    themes: newlyUnlockedThemes(before, recorded.state).map(({ kind, id }) => `${kind === "board" ? "盤" : "駒"}「${themeName(kind, id)}」`),
+    next: recorded.gained.length ? nextThemeUnlock(recorded.state) : null,
+  };
+}
+/** 終局画面の「この対局で手に入った印」。初めてのものだけ一言にし、前にも組んだものは名前を並べる。 */
+function collectionGainText(gain: { kind: string; label: string }) {
+  return gain.kind === "level" ? `${gain.label}にはじめて勝った！` : `${gain.label}をはじめて組んだ！`;
 }
 
 function formatFinalMove(matchResult: MatchResult): string {
@@ -3139,10 +3200,22 @@ function setLearningPlan(side: "player" | "opponent", kind: "strategy" | "castle
 
 // ===== 対局準備の表示 =====
 /** 強さの選択シート用。各Lvにレーティングと、これまでの対戦成績を添える。 */
-const strengthPickerOptions = computed(() => CPU_STRENGTH_PRESETS.map((preset, index) => ({
-  ...strengthOptions[index],
-  description: levelRatingText(ratingState.value, preset.level),
-})));
+/*
+ * 強さの選択肢。おすすめより強い相手のうち、まだ勝っていないLvには「初めて勝つと★」を添える(悪魔の釜)。
+ * ★はコレクションのLvの壁で、レーティングの計算は変えない。
+ */
+const beatenLevels = computed(() => {
+  void pregameOpen.value;
+  return new Set(Object.keys(loadCollection(browserStorage()).levels).map(Number));
+});
+const strengthPickerOptions = computed(() => CPU_STRENGTH_PRESETS.map((preset, index) => {
+  const record = levelRatingText(ratingState.value, preset.level);
+  const challenge = preset.level > recommendedStrengthPreset.value.level && !beatenLevels.value.has(preset.level);
+  return {
+    ...strengthOptions[index],
+    description: challenge ? `${record}・初めて勝つと★` : record,
+  };
+}));
 
 const pregameUsesHandicap = computed(() => matchKind.value === "learning" && learningStartType.value === "handicap");
 // 駒落ちでは、駒を落とす側（上手）が後手になる。
@@ -5653,6 +5726,7 @@ function finish(matchResult: MatchResult) {
     revealResult();
   }
   recordRatedGame(matchResult);
+  recordCollection(outcome === "win");
   recordRyuoOutcome(matchResult);
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
   measureMode.value = false;
@@ -6418,7 +6492,10 @@ async function scheduleCpuMove() {
           const praiseStage = praiseImpactStage(moveFeedback.key);
           holdForImpact(praiseStage);
           showBoardImpact(praiseStage);
-          if (praiseStage === IMPACT_STAGE.GOD) moveSounds.play("god");
+          if (praiseStage === IMPACT_STAGE.GOD) {
+            moveSounds.play("god");
+            matchGodMoves += 1;
+          }
           await nextTick();
           if (generation !== matchGeneration) return;
         }
@@ -6877,6 +6954,9 @@ function restart() {
   boardFlipOverride.value = false;
   reviewCoachGeneration += 1;
   reviewNavigation.value = createReviewNavigation();
+  matchFormationNames.clear();
+  matchGodMoves = 0;
+  collectionResult.value = null;
   playerTurnScore = undefined;
   playerTurnScoreHistoryLength = -1;
   latestHintAnalysis = undefined;

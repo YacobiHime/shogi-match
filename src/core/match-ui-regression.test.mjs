@@ -251,4 +251,19 @@ describe("match screen regressions", () => {
     // 効果音は見出しのメニューで切り替えられる。
     expect(source).toMatch(/data-sound-toggle\s+@click="toggleSound"/);
   });
+
+  it("records the collection at the end of a CPU game and shows what was gained", () => {
+    // 対局中に一度でも組んだ形を控え、終局で記録する。保存はいつも読み直してから書く(盤の部品の解放済みを消さない)。
+    expect(source).toMatch(/function observeFormations[\s\S]*?matchFormationNames\.add\(name\)/);
+    const record = source.split("function recordCollection(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(record).toMatch(/if \(normalizedMode\.value !== "cpu"\) return;/);
+    expect(record).toMatch(/const before = loadCollection\(browserStorage\(\)\);[\s\S]*?saveCollection\(browserStorage\(\), recorded\.state\)/);
+    // Lvの壁は、レーティングが動いた対局で勝ったときだけ。
+    expect(record).toMatch(/wonLevel: won && ratingChange\.value && level !== undefined \? level : null/);
+    expect(source).toMatch(/recordRatedGame\(matchResult\);\s*recordCollection\(outcome === "win"\);/);
+    const dialog = source.split('aria-labelledby="match-result-title"')[1]?.split('aria-labelledby="tournament-result-title"')[0] ?? "";
+    expect(dialog).toContain("data-collection-result");
+    // 強い相手を選ぶ見返りを、強さの選択肢に出す(レーティングの計算は変えない)。
+    expect(source).toMatch(/初めて勝つと★/);
+  });
 });

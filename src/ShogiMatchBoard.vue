@@ -4,16 +4,16 @@
       <label>
         盤
         <select v-model="selectedBoardTheme">
-          <option v-for="theme in boardThemes" :key="theme.id" :value="theme.id">
-            {{ theme.name }}
+          <option v-for="theme in boardThemeOptions" :key="theme.id" :value="theme.id" :disabled="!theme.unlocked">
+            {{ theme.label }}
           </option>
         </select>
       </label>
       <label>
         駒
         <select v-model="selectedPieceTheme">
-          <option v-for="theme in pieceThemes" :key="theme.id" :value="theme.id">
-            {{ theme.name }}
+          <option v-for="theme in pieceThemeOptions" :key="theme.id" :value="theme.id" :disabled="!theme.unlocked">
+            {{ theme.label }}
           </option>
         </select>
       </label>
@@ -73,6 +73,16 @@ import {
   PromotionSelectorStyle,
 } from "./common/settings/app";
 import { BoardLayoutType } from "./common/settings/layout";
+import {
+  BOARD_THEMES,
+  BOARD_THEME_KEY,
+  DEFAULT_BOARD_THEME,
+  DEFAULT_PIECE_THEME,
+  PIECE_THEMES,
+  PIECE_THEME_KEY,
+  THEME_CHANGE_EVENT,
+} from "./core/themes.mjs";
+import { grantTheme, loadCollection, saveCollection, themeUnlock } from "./core/collection.mjs";
 import type { Move } from "tsshogi";
 
 type AttackMark = { file: number; rank: number; black: number; white: number };
@@ -104,24 +114,45 @@ const root = ref<HTMLElement | null>(null);
 const maxSize = ref(new RectSize(900, 620));
 let resizeObserver: ResizeObserver | undefined;
 
-const boardThemes = [
-  { id: "wood_light2", name: "木目・明るめ", file: "wood_light2.webp" },
-  { id: "sunfish_light", name: "白木", file: "sunfish_light.webp" },
-  { id: "sunfish_warm", name: "暖色木目", file: "sunfish_warm.webp" },
-  { id: "sunfish_dark", name: "濃色", file: "sunfish_dark.webp" },
-  { id: "sunfish_resin", name: "樹脂", file: "sunfish_resin.webp" },
-];
-const pieceThemes = [
-  { id: "hitomoji_wood", name: "一文字・木目" },
-  { id: "hitomoji", name: "一文字" },
-  { id: "hitomoji_dark", name: "一文字・濃色" },
-  { id: "hitomoji_gothic", name: "一文字・ゴシック" },
-  { id: "hitomoji_gothic_dark", name: "一文字・ゴシック濃色" },
-  { id: "futamoji", name: "二文字" },
-];
+const boardThemes = BOARD_THEMES;
 const storage = typeof localStorage === "undefined" ? null : localStorage;
-const selectedBoardTheme = ref(storage?.getItem("shogi-match-board-theme") || "wood_light2");
-const selectedPieceTheme = ref(storage?.getItem("shogi-match-piece-theme") || "hitomoji_wood");
+const selectedBoardTheme = ref(storage?.getItem(BOARD_THEME_KEY) || DEFAULT_BOARD_THEME);
+const selectedPieceTheme = ref(storage?.getItem(PIECE_THEME_KEY) || DEFAULT_PIECE_THEME);
+
+/*
+ * 着せ替えの一部は、コレクションの印の数で使えるようになる(core/collection.mjs)。
+ * 前から選んでいた着せ替えは、解放済みとして残す。まだのものは、選択肢に「印あと◯個」と出して選べなくする。
+ */
+const collection = ref(loadCollection(storage));
+function keepChosenThemes() {
+  let next = collection.value;
+  if (!themeUnlock(next, "board", selectedBoardTheme.value).unlocked) next = grantTheme(next, "board", selectedBoardTheme.value);
+  if (!themeUnlock(next, "piece", selectedPieceTheme.value).unlocked) next = grantTheme(next, "piece", selectedPieceTheme.value);
+  if (next !== collection.value) {
+    collection.value = next;
+    saveCollection(storage, next);
+  }
+}
+keepChosenThemes();
+function themeOptions(kind: "board" | "piece", themes: readonly { id: string; name: string }[]) {
+  return themes.map((theme) => {
+    const unlock = themeUnlock(collection.value, kind, theme.id);
+    return { ...theme, unlocked: unlock.unlocked, label: unlock.unlocked ? theme.name : `${theme.name}（印あと${unlock.remaining}個）` };
+  });
+}
+const boardThemeOptions = computed(() => themeOptions("board", BOARD_THEMES));
+const pieceThemeOptions = computed(() => themeOptions("piece", PIECE_THEMES));
+// ほかの画面(やこびノート)で着せ替えを変えたら、開いている盤にも反映する。
+function onThemeChange(event: Event) {
+  const detail = (event as CustomEvent<{ kind: string; id: string }>).detail;
+  collection.value = loadCollection(storage);
+  if (detail?.kind === "board") selectedBoardTheme.value = detail.id;
+  if (detail?.kind === "piece") selectedPieceTheme.value = detail.id;
+}
+if (typeof window !== "undefined") window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
+onBeforeUnmount(() => {
+  if (typeof window !== "undefined") window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
+});
 const normalizedAssetBase = computed(() => props.assetBaseUrl.replace(/\/$/, ""));
 const boardImageUrl = computed(() => {
   const theme = boardThemes.find(({ id }) => id === selectedBoardTheme.value) || boardThemes[0];
@@ -176,8 +207,8 @@ onMounted(() => {
 });
 onBeforeUnmount(() => resizeObserver?.disconnect());
 watch(() => [props.sfen, props.layout], () => measure());
-watch(selectedBoardTheme, (theme) => storage?.setItem("shogi-match-board-theme", theme));
-watch(selectedPieceTheme, (theme) => storage?.setItem("shogi-match-piece-theme", theme));
+watch(selectedBoardTheme, (theme) => storage?.setItem(BOARD_THEME_KEY, theme));
+watch(selectedPieceTheme, (theme) => storage?.setItem(PIECE_THEME_KEY, theme));
 </script>
 
 <style>
