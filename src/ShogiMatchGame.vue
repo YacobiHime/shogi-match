@@ -145,7 +145,7 @@
                     <rect x="12" y="9" width="2" height="2" />
                   </g>
                 </svg>
-                <span class="shogi-title__label">対局</span>
+                <span class="shogi-title__label">自由対局</span>
                 <small class="shogi-title__desc">設定を選んで1局</small>
               </button>
               <button type="button" class="shogi-title__tile" @click="openTournamentScreen">
@@ -3627,7 +3627,7 @@ function dismissWelcome() {
 
 /**
  * ホームの「つぎはこれ：対局する」。対局準備を開かず、おすすめの強さ・平手で、先後は振り駒で決めてすぐ始める。
- * ほかの設定(助言・作戦など)は、前に対局準備で選んだものを使う。設定を選びたいときは「対局」のタイルから。
+ * ほかの設定(助言・作戦など)は、前に対局準備で選んだものを使う。設定を選びたいときは「自由対局」のタイルから。
  */
 function startQuickMatch() {
   confirmDiscardSuspended(() => {
