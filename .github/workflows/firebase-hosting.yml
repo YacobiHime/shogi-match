@@ -1,0 +1,33 @@
+# Firebase Hostingへの公開。自動では動かさず、Actionsの画面の「Run workflow」で起動したときだけ公開する。
+# 公開の鍵(サービスアカウントのJSON)は、リポジトリのSecretsのFIREBASE_SERVICE_ACCOUNT_SHOGI_64125に置く。
+name: Firebase Hostingへ公開
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-hosting
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # 壊れたものを公開しないよう、テストと型チェックを通ってから公開する。
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build:hosting
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SHOGI_64125 }}
+          projectId: shogi-64125
+          channelId: live

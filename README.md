@@ -335,6 +335,8 @@ Firebase CLIでログインしていれば、次のコマンドで`.firebaserc`�
 npm run deploy
 ```
 
+GitHubからも公開できます。リポジトリのActionsの「Firebase Hostingへ公開」で「Run workflow」を押すと、mainなど選んだブランチを、テストと型チェックのあとに公開します（`.github/workflows/firebase-hosting.yml`）。自動では動きません。公開の鍵は、リポジトリのSecretsの`FIREBASE_SERVICE_ACCOUNT_SHOGI_64125`に、サービスアカウント（ロール「Firebase Hosting 管理者」と「API キー閲覧者」）のJSONを置きます。
+
 - 公開用ファイルは`firebase-public/`に生成されます。このフォルダーと`.firebase/`は生成物なので、Gitには含めません。
 - HTMLは毎回再検証します。JSとCSSは内容のハッシュ付きURLにして、長期キャッシュします。入口の`dist/shogi-match.js`とCSSは`?v=`で、`dist/chunks/`のファイルは名前で版を区別します。
 - エンジンの版（`vendor/yaneuraou.js?v=…`）は、`vite.config.js`がビルドの時点で`vendor/`の内容のハッシュを埋め込みます。
