@@ -26,6 +26,8 @@
       <!--
         タイトル画面。いまの状態に合った「つぎはこれ」を1枚だけ大きく出し、その下に記録の帯と、
         あそぶ・まなぶ・しらべるの3つの入口を並べる。広い画面ではタイトルとやこび姫を左の列に置く。
+        3つの入口は混ぜない(Switchのホーム画面の「種類を分けて配置する」)。区分ごとに色の違う帯にして上から積み、
+        帯の中のタイルは、どの画面でも横1列に並べる(区分を横に並べたり、タイルを折り返したりしない)。
       -->
       <div class="shogi-title__hero">
         <h1 class="shogi-title__logo">shogi-match</h1>
@@ -124,9 +126,9 @@
         </button>
 
         <div class="shogi-title__groups">
-          <section class="shogi-title__group" aria-labelledby="shogi-home-play">
+          <section class="shogi-title__group shogi-title__group--play" aria-labelledby="shogi-home-play" data-home-group="play">
             <h2 id="shogi-home-play" class="shogi-title__group-title">あそぶ</h2>
-            <div class="shogi-title__tiles">
+            <div class="shogi-title__tiles shogi-title__tiles--play">
               <button type="button" class="shogi-title__tile" @click="openMatchSetup('normal')">
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#fffcf4">
@@ -182,7 +184,7 @@
               </button>
             </div>
           </section>
-          <section class="shogi-title__group" aria-labelledby="shogi-home-school">
+          <section class="shogi-title__group shogi-title__group--learn" aria-labelledby="shogi-home-school" data-home-group="learn">
             <h2 id="shogi-home-school" class="shogi-title__group-title">まなぶ</h2>
             <div class="shogi-title__tiles">
               <button type="button" class="shogi-title__tile" @click="tutorialOpen = true">
@@ -222,7 +224,7 @@
               </button>
             </div>
           </section>
-          <section class="shogi-title__group shogi-title__group--dex" aria-labelledby="shogi-home-dex">
+          <section class="shogi-title__group shogi-title__group--dex" aria-labelledby="shogi-home-dex" data-home-group="dex">
             <h2 id="shogi-home-dex" class="shogi-title__group-title">しらべる</h2>
             <div class="shogi-title__tiles shogi-title__tiles--dex">
               <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'piece'">

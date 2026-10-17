@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutTree } from './ryuo-tree-layout.mjs';
+import { layoutTree, roundLabel } from './ryuo-tree-layout.mjs';
 import { USER_ID, buildSeededBracket, createSeason, describeSeason } from './ryuo.mjs';
 
 const bracketTree = (count, decide = () => null) => {
@@ -16,7 +16,8 @@ describe('tournament tree layout', () => {
     expect(layout.leaves).toHaveLength(8);
     expect(layout.leaves.map(({ x }) => x)).toEqual([25, 75, 125, 175, 225, 275, 325, 375]);
     expect(layout.nodes).toHaveLength(7);
-    expect(layout.edges).toHaveLength(14);
+    // 1つの枝を、縦の線と横の線に分ける。
+    expect(layout.edges).toHaveLength(28);
     expect(layout.width).toBe(400);
     expect(layout.leafY).toBe(40 + 3 * 40);
     expect(layout.height).toBe(layout.leafY + 100);
@@ -42,16 +43,38 @@ describe('tournament tree layout', () => {
     });
     const layout = layoutTree(tree);
     const won = layout.edges.filter((edge) => edge.won);
-    // 1回戦の2試合の勝者の枝だけが強調され、決勝(未定)の枝は強調されない。
-    expect(won).toHaveLength(2);
-    expect(layout.edges.filter((edge) => !edge.decided)).toHaveLength(2);
+    // 1回戦の勝者2人は、名前から勝った試合の横の線を通り、決勝の横の線の高さまで線が伸びる(ここで2人がぶつかる)。
+    // 決勝(未定)の横の線は、まだ強調しない。
+    expect(won.filter(({ kind }) => kind === 'bar')).toHaveLength(2);
+    expect(won.filter(({ kind }) => kind === 'rise')).toHaveLength(4);
+    const rootY = layout.rootY;
+    const intoFinal = won.filter(({ kind, points }) => kind === 'rise' && points[1][1] === rootY);
+    expect(intoFinal).toHaveLength(2);
+    expect(layout.edges.filter((edge) => edge.kind === 'bar' && edge.points[0][1] === rootY && edge.won)).toHaveLength(0);
+    expect(layout.edges.filter((edge) => !edge.decided)).toHaveLength(4);
     expect(layout.nodes.filter((node) => node.decided)).toHaveLength(2);
+  });
+
+  it('marks the lines into the pending match, and names each round from the top', () => {
+    const tree = { ...bracketTree(8), pendingNodeId: null };
+    const first = Object.values(tree.nodes).find((node) => node.round === 1);
+    tree.pendingNodeId = first.id;
+    const layout = layoutTree(tree, { gutter: 30, leafWidth: 50 });
+    expect(layout.edges.filter((edge) => edge.next)).toHaveLength(4);
+    expect(layout.nodes.find((node) => node.pending).id).toBe(first.id);
+    expect(layout.rows.map(({ label }) => label)).toEqual(['準々決勝', '準決勝', '決勝']);
+    expect(layout.rows[2].y).toBe(layout.rootY);
+    expect(layout.leaves[0].x).toBe(30 + 25);
+    expect(layout.width).toBe(30 + 8 * 50);
+    expect(roundLabel(6, 1)).toBe('1回戦');
+    expect(roundLabel(6, 3)).toBe('3回戦');
+    expect(roundLabel(6, 4)).toBe('準々決勝');
   });
 
   it('shortens the branch of a player who skips a round, so byes show as long vertical lines', () => {
     const tree = bracketTree(6);
     const layout = layoutTree(tree, { top: 40, rowHeight: 40 });
-    const lengths = layout.edges.map(({ points }) => points[0][1] - points[1][1]);
+    const lengths = layout.edges.filter(({ kind }) => kind === 'rise').map(({ points }) => points[0][1] - points[1][1]);
     expect(Math.max(...lengths)).toBeGreaterThan(Math.min(...lengths));
     expect(layout.leaves).toHaveLength(6);
     expect(layout.nodes).toHaveLength(5);
@@ -65,9 +88,9 @@ describe('tournament tree layout', () => {
     expect(layout.finals).toMatchObject({ y: 40, decided: true, winner: 'champ' });
     expect(layout.finals.x).toBeGreaterThan(layout.rootX);
     const finalsEdges = layout.edges.filter(({ id }) => id.startsWith('finals'));
-    expect(finalsEdges).toHaveLength(2);
-    expect(finalsEdges.find(({ id }) => id === 'finals:defender').won).toBe(true);
-    expect(finalsEdges.find(({ id }) => id === 'finals:challenger').won).toBe(false);
+    expect(finalsEdges).toHaveLength(4);
+    expect(finalsEdges.find(({ id }) => id === 'finals:defender:bar').won).toBe(true);
+    expect(finalsEdges.find(({ id }) => id === 'finals:challenger:bar').won).toBe(false);
   });
 
   it('lays out the real season brackets of every scale', () => {
