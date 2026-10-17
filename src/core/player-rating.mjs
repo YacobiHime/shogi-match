@@ -91,8 +91,18 @@ export function retrySuggestion(state, level) {
 }
 
 export function createRatingState() {
-  return { rating: INITIAL_RATING, games: 0, wins: 0, losses: 0, draws: 0, levels: {}, colors: {}, usage: {}, measured: null, declared: null, declaredLevels: {}, history: [] };
+  return { rating: INITIAL_RATING, games: 0, wins: 0, losses: 0, draws: 0, levels: {}, colors: {}, events: {}, usage: {}, measured: null, declared: null, declaredLevels: {}, history: [] };
 }
+
+/**
+ * 記録する棋戦。free: 自由対局(平手・対CPU)、ryuo: 竜王戦。
+ * 棋戦を増やすときは、ここに足すと、やこびノートの「棋戦ごとの成績」に出る。
+ */
+export const RATED_EVENTS = Object.freeze([
+  Object.freeze({ id: 'free', label: '自由対局' }),
+  Object.freeze({ id: 'ryuo', label: '竜王戦' }),
+]);
+const RATED_EVENT_IDS = new Set(RATED_EVENTS.map(({ id }) => id));
 
 const OUTCOME_KEY = { win: 'wins', loss: 'losses', draw: 'draws' };
 
@@ -143,11 +153,16 @@ export function levelRatingText(state, level) {
  *   outcome: 'win' | 'loss' | 'draw',
  *   color?: 'black' | 'white',
  *   profile?: { [category: string]: string | undefined },
+ *   event?: string,
+ *   opponent?: string,
+ *   stage?: string,
  *   at?: number,
  * }} game
  * colorはプレイヤーの手番、profileは分類(USAGE_CATEGORIES)ごとの戦型・戦法・囲いの名前。
+ * eventは棋戦(RATED_EVENTSのid。省略すると自由対局)、opponentは相手の名前、stageは棋戦の中の段階(「決勝トーナメント 準決勝」など)。
  */
-export function applyRatedGame(state, { opponentLevel, outcome, color, profile, at = Date.now() }) {
+export function applyRatedGame(state, { opponentLevel, outcome, color, profile, event = 'free', opponent: opponentName, stage, at = Date.now() }) {
+  const eventId = RATED_EVENT_IDS.has(event) ? event : 'free';
   const score = outcome === 'win' ? 1 : outcome === 'draw' ? 0.5 : 0;
   const opponent = levelRating(opponentLevel);
   const expected = 1 / (1 + 10 ** ((opponent - state.rating) / 400));
@@ -165,8 +180,17 @@ export function applyRatedGame(state, { opponentLevel, outcome, color, profile, 
       ? { ...state.declaredLevels, [state.declared.label]: addToTally(state.declaredLevels?.[state.declared.label], opponentLevel, outcome) }
       : (state.declaredLevels ?? {}),
     colors: color ? addToTally(state.colors, color, outcome) : (state.colors ?? {}),
+    events: addToTally(state.events, eventId, outcome),
     usage: addUsage(state.usage, profile, outcome),
-    history: [...state.history, { at, rating: after, opponentLevel, outcome }].slice(-MAX_HISTORY),
+    history: [...state.history, {
+      at,
+      rating: after,
+      opponentLevel,
+      outcome,
+      event: eventId,
+      ...(opponentName ? { opponent: String(opponentName) } : {}),
+      ...(stage ? { stage: String(stage) } : {}),
+    }].slice(-MAX_HISTORY),
   };
   return { state: next, before: Math.round(state.rating), after, delta: after - Math.round(state.rating) };
 }
@@ -221,6 +245,17 @@ const loadTally = (tally) => Object.fromEntries(Object.entries(tally ?? {}).map(
   key, { wins: count(record?.wins), losses: count(record?.losses), draws: count(record?.draws) },
 ]));
 
+/**
+ * 棋戦ごとの成績。棋戦を記録する前に保存した対局は、すべて自由対局だった(竜王戦は数えていなかった)ので、自由対局として読む。
+ */
+function loadEvents(parsed) {
+  if (parsed.events && typeof parsed.events === 'object') {
+    return loadTally(Object.fromEntries(Object.entries(parsed.events).filter(([id]) => RATED_EVENT_IDS.has(id))));
+  }
+  const tally = { wins: count(parsed.wins), losses: count(parsed.losses), draws: count(parsed.draws) };
+  return tally.wins + tally.losses + tally.draws ? { free: tally } : {};
+}
+
 export function loadRatingState(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(RATING_STORAGE_KEY) ?? 'null');
@@ -240,6 +275,7 @@ export function loadRatingState(storage) {
       declaredLevels: Object.fromEntries(Object.entries(parsed.declaredLevels ?? {}).map(([label, tally]) => [label, loadTally(tally)])),
       levels: loadTally(parsed.levels),
       colors: loadTally(parsed.colors),
+      events: loadEvents(parsed),
       usage: Object.fromEntries(
         USAGE_CATEGORIES.filter((category) => parsed.usage?.[category]).map((category) => [category, loadTally(parsed.usage[category])]),
       ),

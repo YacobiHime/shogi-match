@@ -80,8 +80,10 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function startRyuoGame\(\) \{\s*confirmDiscardSuspended\(startRyuoGameNow\);/);
     // 大会の閃き・待ったの回数は、エントリー設定で決める。
     expect(source).toMatch(/matchKind\.value === "tournament"\) return assistAllowance\(Number\(ryuoSeason\.value\?\.settings\?\.hintLimit/);
-    // 大会の対局は、通常対局のレーティングには数えない。
-    expect(source).toMatch(/const rated = matchKind\.value === "normal"/);
+    // 竜王戦の対局も、自由対局と同じくレーティングとやこびノートに数え、棋戦・相手・段階を残す。千日手は指し直した対局だけを数える。
+    expect(source).toMatch(/const rated = \(matchKind\.value === "normal" \|\| tournament\)/);
+    expect(source).toMatch(/event: tournament \? "ryuo" : "free"/);
+    expect(source).toMatch(/if \(!rated \|\| \(tournament && !matchResult\.winner\)\) return;/);
   });
 
   it("offers to set the rating only in the measurement started from the notebook", () => {

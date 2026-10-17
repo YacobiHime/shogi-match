@@ -1465,6 +1465,15 @@
         <h2 id="tournament-result-title">{{ resultPresentation.title }}</h2>
         <p class="shogi-game__tournament-name">{{ ryuoGame.label }}</p>
         <p class="shogi-game__tournament-name">{{ ryuoOpponent ? `対 ${ryuoOpponent.name} ${ryuoOpponent.dan}` : "" }}</p>
+        <p
+          v-if="ratingChange"
+          class="shogi-game__result-rating"
+          :class="{ 'shogi-game__result-rating--up': ratingChange.delta > 0 }"
+          data-rating-change
+        >
+          R{{ ratingChange.before }} → <strong>R{{ ratingChange.after }}</strong>
+          <span>{{ ratingChange.delta >= 0 ? "+" : "−" }}{{ Math.abs(ratingChange.delta) }}</span>
+        </p>
         <p v-if="ryuoGame.replay" class="shogi-game__tournament-title">千日手になりました。先後を入れ替えて、指し直します。</p>
         <p v-else-if="ryuoView?.result" class="shogi-game__tournament-title">
           {{ ryuoView.result.outcome === "champion" ? "竜王になりました！" : "この期の対局は、すべて終わりました。" }}
@@ -2441,7 +2450,7 @@ const resultPresentation = computed(() => {
     : { tone: "defeat", title: "敗北", cheer: "どこで分かれたか、いっしょに見てみよう。", ...common };
 });
 
-/** 終局画面の「次の目標」。レーティングが動いた対局(平手の通常対局)だけ出す。 */
+/** 終局画面の「次の目標」。レーティングが動いた対局(平手の自由対局と竜王戦)だけ出す。 */
 const resultNextGoal = computed(() => (ratingChange.value ? nextRatingGoal(ratingState.value.rating) : null));
 /** この対局で級・段の目安が上がったら、その名前。 */
 const resultGradeUp = computed(() => {
@@ -5785,16 +5794,21 @@ function refreshReviewCoachAdvice({ analyze = true } = {}): boolean {
   return false;
 }
 
-/** 平手の通常対局(対CPU)だけをレーティングに数える。学習対局・駒落ち・教室の対局は数えない。 */
+/**
+ * 平手の対CPUの棋戦(自由対局と竜王戦)をレーティングとやこびノートに数える。学習対局・駒落ち・教室の対局は数えない。
+ * 竜王戦の相手の強さは、棋士のLvで決まる(startRyuoMatch)。
+ */
 function recordRatedGame(matchResult: MatchResult) {
   ratingChange.value = null;
   const level = cpuStrengthLevel();
-  const rated = matchKind.value === "normal"
+  const tournament = matchKind.value === "tournament" && Boolean(ryuoGame.value);
+  const rated = (matchKind.value === "normal" || tournament)
     && normalizedMode.value === "cpu"
     && !tutorialMatch.value
     && matchInitialSfen.value === STANDARD_SFEN
     && level !== undefined;
-  if (!rated) return;
+  // 竜王戦の千日手は、先後を入れ替えて指し直す(recordRyuoOutcome)ので、指し直した対局の結果だけを数える。
+  if (!rated || (tournament && !matchResult.winner)) return;
   const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";
   // やこびノートの統計用に、プレイヤーの手番と、終局時点の戦型・戦法・囲いを控える。
   const color = humanColor.value === Color.WHITE ? "white" : "black";
@@ -5811,6 +5825,9 @@ function recordRatedGame(matchResult: MatchResult) {
       opponentRook: other.rook,
       opponentCastle: other.castle,
     },
+    event: tournament ? "ryuo" : "free",
+    opponent: tournament ? ryuoOpponent.value?.name : undefined,
+    stage: tournament ? ryuoGame.value?.label : undefined,
   });
   ratingState.value = applied.state;
   ratingChange.value = { before: applied.before, after: applied.after, delta: applied.delta };

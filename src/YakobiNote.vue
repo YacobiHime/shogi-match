@@ -138,7 +138,7 @@
         <!-- 成績 -->
         <section v-if="tab === 'record'" id="shogi-note-pane-record" class="shogi-note__panel shogi-note__panel--fill" role="tabpanel" aria-label="成績">
           <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
-            <p>まだ記録がないよ。平手でCPUと対局すると、勝ち負けとレーティングの推移がここに書き込まれるよ。</p>
+            <p>まだ記録がないよ。平手でCPUと対局したり、竜王戦で指したりすると、勝ち負けとレーティングの推移がここに書き込まれるよ。</p>
           </div>
           <template v-else>
             <section class="shogi-note__card shogi-note__score" aria-labelledby="shogi-note-score" data-note-record>
@@ -166,7 +166,14 @@
                   <span class="shogi-note__stat">{{ row.text }}</span>
                 </li>
               </ul>
-              <p class="shogi-note__hint">平手の通常対局（対CPU）の結果だけを数えています。</p>
+              <ul v-if="eventRows.length" class="shogi-note__rows" aria-label="棋戦ごとの成績" data-note-events>
+                <li v-for="row in eventRows" :key="row.key">
+                  <span class="shogi-note__name">{{ row.label }}</span>
+                  <span class="shogi-note__bar" aria-hidden="true"><span :style="{ width: row.winPercent }"></span></span>
+                  <span class="shogi-note__stat">{{ row.text }}</span>
+                </li>
+              </ul>
+              <p class="shogi-note__hint">平手でCPUと指した自由対局と竜王戦の結果を数えています。</p>
             </section>
 
             <figure class="shogi-note__card shogi-note__trend-card">
@@ -194,6 +201,20 @@
               </div>
               <p v-else class="shogi-note__hint">2局以上指すと、ここに推移の線が出るよ。</p>
             </figure>
+
+            <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-recent" data-note-recent-games>
+              <h2 id="shogi-note-recent">最近の対局</h2>
+              <ol class="shogi-note__games">
+                <li v-for="game in recentGames" :key="game.key" :class="`shogi-note__game--${game.outcome}`">
+                  <span class="shogi-note__game-mark" aria-hidden="true">{{ game.mark }}</span>
+                  <span class="shogi-note__game-body">
+                    <span class="shogi-note__game-event">{{ game.event }}<small v-if="game.stage">{{ game.stage }}</small></span>
+                    <span class="shogi-note__game-meta">{{ [game.date, game.opponent ? `対 ${game.opponent}` : "", FORM_TEXT[game.outcome]].filter(Boolean).join("・") }}</span>
+                  </span>
+                  <span class="shogi-note__game-rating">R{{ game.rating }}<small v-if="game.delta !== null">{{ game.delta >= 0 ? "+" : "−" }}{{ Math.abs(game.delta) }}</small></span>
+                </li>
+              </ol>
+            </section>
           </template>
         </section>
 
@@ -433,6 +454,7 @@ import {
   gradeName as gradeNameOf,
   levelRating,
   nextRatingGoal,
+  RATED_EVENTS,
   recommendedLevel,
   usageRows,
 } from "./core/player-rating.mjs";
@@ -471,11 +493,16 @@ type RatingState = {
   draws: number;
   levels: { [level: string]: Tally };
   colors: { [color: string]: Tally };
+  events: { [event: string]: Tally };
   usage: { [category: string]: { [name: string]: Tally } };
   measured: { rating: number; label: string; at: number } | null;
   declared: { label: string; level: number; at: number } | null;
   declaredLevels: { [label: string]: { [level: string]: Tally } };
-  history: { rating: number; outcome?: string }[];
+  history: HistoryRecord[];
+};
+/** レーティングの記録。対局の結果には、棋戦・相手・段階も付く(棋戦を記録する前の対局は、自由対局)。 */
+type HistoryRecord = {
+  rating: number; outcome?: string; at?: number; opponentLevel?: number; event?: string; opponent?: string; stage?: string;
 };
 
 type ProfileState = {
@@ -728,6 +755,42 @@ const colorRows = computed(() => (["black", "white"] as const).map((key) => {
     text: `${games ? `勝率${percent(tally.wins / games)}・` : ""}${tallyText(tally)}`,
   };
 }));
+
+/** 棋戦ごとの成績。指したことのある棋戦だけ出す。 */
+const eventRows = computed(() => RATED_EVENTS.map(({ id, label }) => {
+  const tally = props.state.events?.[id] ?? { wins: 0, losses: 0, draws: 0 };
+  const games = tally.wins + tally.losses + tally.draws;
+  return {
+    key: id,
+    label,
+    games,
+    winPercent: percent(games ? tally.wins / games : 0),
+    text: `${games ? `勝率${percent(tally.wins / games)}・` : ""}${tallyText(tally)}`,
+  };
+}).filter(({ games }) => games > 0));
+
+const EVENT_LABEL: Record<string, string> = Object.fromEntries(RATED_EVENTS.map(({ id, label }) => [id, label]));
+const RECENT_GAME_LIMIT = 8;
+/** 最近の対局(新しい順)。棋戦・段階・相手・結果と、終局後のレーティング。 */
+const recentGames = computed(() => {
+  const history = props.state.history;
+  return history
+    .map((entry, index) => ({ entry, before: history[index - 1] }))
+    .filter(({ entry }) => entry.outcome === "win" || entry.outcome === "loss" || entry.outcome === "draw")
+    .slice(-RECENT_GAME_LIMIT)
+    .reverse()
+    .map(({ entry, before }, index) => ({
+      key: `${entry.at ?? 0}-${index}`,
+      event: EVENT_LABEL[entry.event ?? "free"] ?? EVENT_LABEL.free,
+      stage: entry.stage ?? "",
+      opponent: [entry.opponent, Number.isFinite(entry.opponentLevel) ? `Lv.${entry.opponentLevel}` : ""].filter(Boolean).join(" "),
+      outcome: entry.outcome as GameOutcome,
+      mark: FORM_MARK[entry.outcome as GameOutcome],
+      rating: Math.round(entry.rating),
+      delta: before ? Math.round(entry.rating - before.rating) : null,
+      date: entry.at ? new Date(entry.at).toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" }) : "",
+    }));
+});
 
 const USAGE_LIMIT = 8;
 /** 「得意」「にがて」の札を付けるのに要る対局数。 */
@@ -1088,7 +1151,8 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 @media (min-width: 760px) {
   .shogi-game .shogi-note__panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .shogi-game .shogi-note__panel > .shogi-note__empty,
-  .shogi-game .shogi-note__panel > .shogi-note__pair { grid-column: 1 / -1; }
+  .shogi-game .shogi-note__panel > .shogi-note__pair,
+  .shogi-game .shogi-note__panel > .shogi-note__card--wide { grid-column: 1 / -1; }
 }
 @keyframes shogi-note-panel-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -1292,6 +1356,34 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__history-group { color: var(--note-gold); font-weight: 700; }
 .shogi-game .shogi-note__history-text { overflow-wrap: anywhere; }
 .shogi-game .shogi-note__history-record { white-space: nowrap; }
+
+/* 最近の対局(棋戦・段階・相手・結果) */
+.shogi-game .shogi-note__games { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__games li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+}
+.shogi-game .shogi-note__game-mark {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  font-size: 0.8em;
+  font-weight: 900;
+  line-height: 1;
+}
+.shogi-game .shogi-note__game--win .shogi-note__game-mark { color: var(--note-deep); background: var(--note-gold); }
+.shogi-game .shogi-note__game--loss .shogi-note__game-mark { color: var(--note-deep); background: var(--note-lavender); }
+.shogi-game .shogi-note__game--draw .shogi-note__game-mark { color: #fffcf4; background: #445c6d; }
+.shogi-game .shogi-note__game-body { display: grid; min-width: 0; }
+.shogi-game .shogi-note__game-event { font-weight: 700; overflow-wrap: anywhere; }
+.shogi-game .shogi-note__game-event small { margin-left: 0.5em; color: var(--note-muted); font-weight: 400; }
+.shogi-game .shogi-note__game-meta { color: var(--note-muted); font-size: 0.85em; overflow-wrap: anywhere; }
+.shogi-game .shogi-note__game-rating { font-weight: 700; text-align: right; white-space: nowrap; }
+.shogi-game .shogi-note__game-rating small { display: block; color: var(--note-muted); font-size: 0.8em; font-weight: 400; }
 
 /* 使用率・成績の行 */
 .shogi-game .shogi-note__rows { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }

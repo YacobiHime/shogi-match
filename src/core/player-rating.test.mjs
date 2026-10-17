@@ -17,6 +17,7 @@ import {
   losingStreakAt,
   nextRatingGoal,
   retrySuggestion,
+  RATED_EVENTS,
 } from './player-rating.mjs';
 
 const memoryStorage = () => {
@@ -156,5 +157,39 @@ describe('player rating', () => {
     let bottom = createRatingState();
     for (let i = 0; i < 3; i += 1) bottom = applyRatedGame(bottom, { opponentLevel: 0, outcome: 'loss' }).state;
     expect(retrySuggestion(bottom, 0)).toEqual({ level: 0, losses: 3, lowerLevel: null });
+  });
+
+  it('竜王戦の対局も、棋戦・相手・段階を付けて同じ記録に数える', () => {
+    let state = applyRatedGame(createRatingState(), { opponentLevel: 10, outcome: 'win', at: 1 }).state;
+    state = applyRatedGame(state, {
+      opponentLevel: 12, outcome: 'loss', event: 'ryuo', opponent: '桜井 一郎', stage: '6組 1回戦', at: 2,
+    }).state;
+    expect(state.games).toBe(2);
+    expect(state.events).toEqual({
+      free: { wins: 1, losses: 0, draws: 0 },
+      ryuo: { wins: 0, losses: 1, draws: 0 },
+    });
+    expect(state.history[0]).toMatchObject({ event: 'free', outcome: 'win' });
+    expect(state.history[1]).toMatchObject({ event: 'ryuo', opponent: '桜井 一郎', stage: '6組 1回戦', opponentLevel: 12 });
+    expect(RATED_EVENTS.map(({ id }) => id)).toEqual(['free', 'ryuo']);
+
+    const storage = memoryStorage();
+    saveRatingState(storage, state);
+    const loaded = loadRatingState(storage);
+    expect(loaded.events).toEqual(state.events);
+    expect(loaded.history[1]).toMatchObject({ event: 'ryuo', opponent: '桜井 一郎', stage: '6組 1回戦' });
+  });
+
+  it('知らない棋戦は自由対局として数える', () => {
+    const { state } = applyRatedGame(createRatingState(), { opponentLevel: 5, outcome: 'draw', event: 'unknown' });
+    expect(state.events).toEqual({ free: { wins: 0, losses: 0, draws: 1 } });
+  });
+
+  it('棋戦を記録する前の保存は、すべて自由対局として読む', () => {
+    const storage = memoryStorage();
+    storage.setItem(RATING_STORAGE_KEY, JSON.stringify({ rating: 900, games: 5, wins: 3, losses: 1, draws: 1 }));
+    expect(loadRatingState(storage).events).toEqual({ free: { wins: 3, losses: 1, draws: 1 } });
+    storage.setItem(RATING_STORAGE_KEY, JSON.stringify({ rating: 900, games: 0, wins: 0, losses: 0, draws: 0 }));
+    expect(loadRatingState(storage).events).toEqual({});
   });
 });
