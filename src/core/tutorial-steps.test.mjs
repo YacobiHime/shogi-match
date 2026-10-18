@@ -267,3 +267,63 @@ describe("にがてをもう1回と駒を並べよう", async () => {
     expect(lesson.steps.at(-2).kiki).toBe("black");
   });
 });
+
+describe("序盤・中盤・終盤の作戦（駒得まで指す・角打ちの隙・詰めろ・受け）", async () => {
+  const { tutorialLesson } = await import("./tutorial-curriculum.mjs");
+  const stepOf = (lessonId, predicate) => tutorialLesson(lessonId).steps.find(predicate);
+
+  it("両取りのあと、相手が高いほうを逃がし、残った駒を取ると駒得で正解", () => {
+    const step = stepOf("v2-fork", ({ untilGain }) => untilGain === 6);
+    let result = attemptTutorialMove(step, createStepState(step), "4e5c");
+    expect(result.outcome).toBe("continue");
+    expect(result.next).toBe("gain");
+    // 相手は飛車を逃がす(金より高い駒)。
+    expect(result.reply.slice(0, 2)).toBe("6a");
+    // 取らない手はまちがい(局面は戻さない)。
+    const idle = attemptTutorialMove(step, result.state, "1i2h");
+    expect(idle).toMatchObject({ outcome: "wrong", reason: "no-gain" });
+    expect(tutorialHint(step, result.state, 2).arrows).toEqual(["5c4a+"]);
+    result = attemptTutorialMove(step, result.state, "5c4a+");
+    expect(result.outcome).toBe("correct");
+    expect(result.swing).toBe(6);
+  });
+
+  it("相手が受けて取り返す形なら、取り返しまで見せて損得を数える", () => {
+    const step = stepOf("v2-fork", ({ untilGain }) => untilGain === 1);
+    let result = attemptTutorialMove(step, createStepState(step), "6e5d");
+    result = attemptTutorialMove(step, result.state, "5d4c");
+    expect(result.outcome).toBe("correct");
+    expect(result.reply).toBeTruthy();
+    expect(result.swing).toBe(1);
+  });
+
+  it("さそいの歩のあと、決めた両取りを指してから駒を取る", () => {
+    const step = stepOf("v5-middle-plan", ({ plan }) => plan);
+    let result = attemptTutorialMove(step, createStepState(step), "P*5c");
+    expect(result).toMatchObject({ outcome: "continue", next: "plan", reply: "5b5c" });
+    expect(attemptTutorialMove(step, result.state, "N*6e").outcome).toBe("wrong");
+    result = attemptTutorialMove(step, result.state, "N*4e");
+    expect(result.next).toBe("gain");
+    result = attemptTutorialMove(step, result.state, "4e5c");
+    expect(result.outcome).toBe("correct");
+    expect(result.swing).toBe(5);
+  });
+
+  it("角換わりの角打ちの隙が残る手は、相手の角打ちを見せてまちがいにする", () => {
+    const step = stepOf("v5-opening-plan", ({ guardDrop }) => guardDrop);
+    const wrong = attemptTutorialMove(step, createStepState(step), "9g9f");
+    expect(wrong).toMatchObject({ outcome: "wrong", reason: "refuted", refutation: { reply: "B*3i", kind: "drop" } });
+    expect(attemptTutorialMove(step, createStepState(step), "2h2i").outcome).toBe("correct");
+  });
+
+  it("詰めろは王手でない手で、受けは詰まされない手で正解", () => {
+    const threat = stepOf("v5-endgame-plan", ({ threat: kind }) => kind === "mate");
+    expect(attemptTutorialMove(threat, createStepState(threat), "2d2c+").outcome).toBe("correct");
+    expect(attemptTutorialMove(threat, createStepState(threat), "9i9h")).toMatchObject({ outcome: "wrong", reason: "no-threat" });
+    expect(attemptTutorialMove(threat, createStepState(threat), "G*3b")).toMatchObject({ outcome: "wrong", reason: "check-not-threat" });
+    const defend = stepOf("v5-endgame-plan", ({ defend: kind }) => kind === "mate");
+    expect(attemptTutorialMove(defend, createStepState(defend), "6i7h").outcome).toBe("correct");
+    const wrong = attemptTutorialMove(defend, createStepState(defend), "6i5i");
+    expect(wrong).toMatchObject({ outcome: "wrong", reason: "refuted", refutation: { reply: "G*8h", kind: "mate" } });
+  });
+});

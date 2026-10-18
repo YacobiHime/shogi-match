@@ -1300,6 +1300,10 @@ function onBoardMove(usi: string) {
       "other-piece": step.type === "capture" ? "動かせるのは、最初に置いてあった駒だけだよ。" : "動かす駒がちがうよ。光っている駒を動かしてね。",
       "too-many-moves": "手数を使い切っちゃった。最初からもう一度やってみよう！",
       stuck: "残りの駒にもう届かないね。最初からもう一度やってみよう！",
+      "smaller-gain": "それも駒得だけど、もっと高い駒が取れるよ。ねらわれている駒をよく見てみよう！",
+      "no-gain": "いまは駒を取るチャンス！ 取って得をする駒を探そう。",
+      "no-threat": "その手だと、相手は何もしなくても詰まないよ。次に詰ませる形を作ろう！",
+      "check-not-threat": "王手は受けられちゃう。王手をしないで、次に詰ませる形（詰めろ）を作ろう！",
     } as Record<string, string>)[result.reason ?? ""] ?? "おしい！ もう一度考えてみよう。";
     setFeedback(reason, "bad");
     stepState.value = result.state;
@@ -1317,10 +1321,15 @@ function onBoardMove(usi: string) {
     stepTimers.push(setTimeout(() => playMoveSoundFor(afterMine, reply), 350));
     popCapture(afterMine, reply, 350);
     if (result.outcome === "continue") {
+      const replyText = formatHintMove(reply, afterMine);
       setFeedback(
         step.type === "mate"
-          ? `相手は${formatHintMove(reply, afterMine)}と応じたよ。続けて詰ませよう！`
-          : `相手は${formatHintMove(reply, afterMine)}と取り返したよ。続けて指そう！`,
+          ? `相手は${replyText}と応じたよ。続けて詰ませよう！`
+          : step.untilGain
+            ? (result.next === "gain"
+              ? `相手は${replyText}。ねらっている駒を取って、駒得しよう！`
+              : `相手は${replyText}。手筋の続きを指そう！`)
+            : `相手は${replyText}と取り返したよ。続けて指そう！`,
         "info",
       );
     }
@@ -1367,7 +1376,9 @@ function onBoardMove(usi: string) {
     return;
   }
   if (step.type === "mate") mateShown.value = true;
-  const text = `${praiseFor(step)}${sacrificeNote()}`;
+  // 駒得するまで指す課題は、最後に合計の損得を言う(何が良かったかを数字で伝える)。
+  const gainNote = step.untilGain ? `合計${materialLabel(result.swing ?? 0).text.replace(/^駒得 /, "")}の駒得！ ` : "";
+  const text = `${gainNote}${praiseFor(step)}${sacrificeNote()}`;
   solveStep(text, { stampText: step.type === "mate" ? "詰み！" : "正解", big: step.type === "mate", delay: choiceAdvanceDelay(text) });
 }
 /** 台詞で呼ぶ駒の名前と、マスの名前(「6九」)。 */
@@ -1386,7 +1397,7 @@ function sacrificeNote() {
  */
 const REFUTE_REPLY_MS = 450;
 const REFUTE_RESET_MS = 1300;
-function playRefutation(before: string, usi: string, refutation: { reply: string; square: string }) {
+function playRefutation(before: string, usi: string, refutation: { reply: string; square: string; kind?: "drop" | "mate" }) {
   const original = stepState.value;
   const totalBefore = materialTotal.value;
   const seenBefore = materialSeen.value;
@@ -1398,7 +1409,15 @@ function playRefutation(before: string, usi: string, refutation: { reply: string
   popCapture(before, usi);
   stepState.value = { ...original, sfen: afterMine };
   lastMove.value = usi;
-  setFeedback(`あっ、${formatHintMove(refutation.reply, afterMine)}と取られちゃう！ 相手の利きがあるマスだったね。`, "bad");
+  const replyText = formatHintMove(refutation.reply, afterMine);
+  setFeedback(
+    refutation.kind === "drop"
+      ? `あっ、${replyText}と打たれて、両取りになっちゃう！ 打ち込まれる隙が残っていたね。`
+      : refutation.kind === "mate"
+        ? `あっ、${replyText}で詰まされちゃう！ 相手の次の手を考えて受けよう。`
+        : `あっ、${replyText}と取られちゃう！ 相手の利きがあるマスだったね。`,
+    "bad",
+  );
   const restore = () => {
     if (!refuting.value || stepIndex.value !== index) return;
     refuting.value = false;

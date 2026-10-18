@@ -33,6 +33,11 @@ import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI, WATCH_GAME_KURIDASHI_EVALUA
  * - refute     取られる場所へ動かしてまちがえたら、相手の取り返しを見せてから戻す
  * - escapeMap  玉の逃げ道を出す（"black"／"white"。どちらの玉か）
  * - line       find-move で、相手の応手を決めた手順（自分・相手・自分…）。駒の取り合いを、駒得の数字で見せる
+ * - untilGain  find-move で、手筋のあと駒得するまで指す（両取りをかけ、相手が1枚逃がしたら、もう1枚を取る）。
+ *              合計の損得がこの点数以上で正解。planは手筋の続きの決まった手（さそいの歩のあとの両取りなど）。相手の応手は損得がいちばん小さくなる受け
+ * - guardDrop  find-move で、その持ち駒（"B"）を打ち込まれても両取りにならない手を指す（角換わりの角打ちの隙）。answersはヒントのお手本
+ * - threat     find-move で "mate"。王手でなく、次に1手で詰ませられる手（詰めろ）を指す
+ * - defend     find-move で "mate"。相手に1手で詰まされない手を指す（受け）
  * - material / control  形勢の3つのものさしで、駒の点数の合計・利いているマスの数を札にして出す
  *
  * 課題のステップには、正解したときのほめ言葉（praise）を書ける。何が良かったかを1文で言う（Game_Nintendo_Implementation.mdの5章）。
@@ -109,6 +114,15 @@ const SETUP_TARGETS = Object.freeze([
 
 /** 盤の上に玉だけを置いた局面。マスの名前を覚える課題で、玉を動かす。 */
 const KING_CENTER = "9/9/9/9/4K4/9/9/9/9 b - 1";
+
+/*
+ * 駒得するまで指す課題(untilGain)の局面。自分の玉は1九に置き、香と金で囲っておく
+ * (相手の飛車が王手や、玉へのピン(駒を動けなくする手)で両取りから逃げないようにするため)。
+ */
+/** ふんどしの桂。5一の銀が横の利きをふさぐので、飛車は逃げても金を守れない。 */
+const FORK_KNIGHT_SFEN = "k2rsg3/9/9/9/5N3/9/9/8L/7GK b - 1";
+/** 銀の両取り。相手は飛車を9三へ逃がして金を守る。金を取って銀を取り返されても、金と銀の交換で得。 */
+const FORK_SILVER_SFEN = "k8/9/3r1g3/9/3SP4/9/9/8L/7GK b - 1";
 
 const VOLUME_1 = {
   id: "v1",
@@ -464,11 +478,15 @@ const VOLUME_2 = {
           summary: "2枚の駒を同時にねらう",
           steps: [
             { type: "explain", sfen: TESUJI["knight-fork"].sfen, marks: TESUJI["knight-fork"].marks, speech: "1つの駒で2枚の駒を同時にねらう手を「両取り」というよ。相手はどちらか1枚しか守れないんだ。" },
-            tesujiFindStep("knight-fork", "桂馬を跳ねて、飛車と金の両取りをかけてみよう！", "飛車と金の両取り！ 相手はどちらか1枚しか逃がせないね。"),
             {
-              type: "find-move", sfen: "k8/9/3r1g3/9/3SP4/9/9/9/8K b - 1", answers: ["6e5d"],
-              speech: "こんどは銀で両取り！ 銀は斜め前に2つ利くよ。飛車と金を同時にねらえるマスはどこかな？",
-              praise: "5四の銀が、飛車と金を同時にねらっているよ。5五の歩が銀を守っているから、取られても取り返せるんだ！",
+              type: "find-move", sfen: FORK_KNIGHT_SFEN, answers: ["4e5c"], untilGain: 6, refute: true,
+              speech: "桂馬を成らずに跳ねて、飛車と金の両取りをかけよう！ 相手が1枚逃がしたら、残ったほうを取って駒得まで指そう。",
+              praise: "相手は飛車を逃がしたけど、金はもう守れない。両取りは、かけたあと取りきるまでが手筋だよ！",
+            },
+            {
+              type: "find-move", sfen: FORK_SILVER_SFEN, answers: ["6e5d"], untilGain: 1, refute: true,
+              speech: "こんどは銀で両取り！ 銀は斜め前に2つ利くよ。飛車と金を同時にねらって、駒得まで指そう。",
+              praise: "相手は飛車で金を守ったけど、金を取って、銀を取り返されても金と銀の交換で1点の得。両取りは、相手がうまく受けても得になるんだ！",
             },
             { type: "open-dex", kind: "tesuji", id: "knight-fork", speech: "手筋図鑑の「ふんどしの桂」も見てみよう！" },
           ],
@@ -504,9 +522,9 @@ const VOLUME_2 = {
               praise: "7九の銀は守られていない。4四の角は4三の歩に守られているから、取ると飛車を取り返されちゃうね！",
             },
             {
-              type: "find-move", sfen: "k8/9/3g1r3/9/4PS3/9/9/9/8K b - 1", answers: ["4e5d"],
-              speech: "銀で両取りをかけよう！",
-              praise: "金と飛車の両取り！ 5五の歩が銀を守っているよ。",
+              type: "find-move", sfen: "k8/9/3g1r3/9/4PS3/9/9/8L/7GK b - 1", answers: ["4e5d"], untilGain: 1, refute: true,
+              speech: "銀で両取りをかけて、駒得まで指そう！",
+              praise: "金と飛車の両取り！ 相手は金で銀を取ったけど、5五の歩で取り返して、金と銀の交換で得をしたね。",
             },
             { type: "choose", question: "金（6点）を取って、銀（5点）を取られたら？", options: ["駒得", "駒損", "同じ"], answer: 0, explanation: "6点もらって5点渡したから、1点の駒得だね。" },
             { type: "choose", question: "三手の読みの2手目は、だれの手？", options: ["自分", "相手"], answer: 1, explanation: "自分 → 相手 → 自分。相手の応手を考えるのが2手目だよ。" },
@@ -1187,6 +1205,25 @@ function proverbFindStep(entryId) {
   };
 }
 
+// ===== 第5巻 序盤・中盤・終盤の作戦 =====
+/**
+ * 角換わりの角打ちの隙。▲2八飛と▲4八金が、△3九角の両取りにかかる形(3七の桂が跳ねて、3九が空いている)。
+ * 飛車を2九へ引く「4八金・2九飛型」などで隙を消す。
+ */
+const KAKUGAWARI_GAP_SFEN = "ln1gk2nl/1r1s1gs2/p1pppp1pp/1p4p2/9/2P3PP1/PPSPPPN1P/2K2GSR1/LN1G4L b Bb 1";
+/** 手筋に相手をさそう。5三に歩を打って金を呼び、桂の両取りのマスへ。4三の銀が飛車の横の利きをふさぐ。 */
+const LURE_FORK_SFEN = "k8/4g4/5sr2/9/9/9/9/8L/7GK b PN 1";
+/** 飛車は十字に使え。打った飛車で金と銀の両取り。 */
+const ROOK_CROSS_SFEN = "k8/4g4/9/9/7s1/9/9/8L/7GK b R 1";
+/** 四間飛車＋美濃囲いと、居飛車＋舟囲い。おたがいに囲いが組めて、すぐにすることがない局面。 */
+const IDLE_SFEN = "lns3snl/1r2ggkb1/p1ppppppp/9/1p7/2PP5/PP2PPPPP/1B1RG1SK1/LNS2G1NL b - 1";
+/** 詰めろ。2四の歩を2三へ成れば、次に2二金(頭金)で詰む。 */
+const THREAT_SFEN = "7kl/9/6p1p/7P1/9/9/9/9/K8 b G 1";
+/** 受け。相手は金を持っていて、次に8八金(頭金)で詰む。 */
+const DEFEND_SFEN = "4k4/9/9/9/9/9/1p7/9/LK1G5 b g 1";
+/** 自玉は詰めろ(次に9八金で詰む)。でも、王手を続ける3手詰めで先に勝てる。 */
+const RACE_SFEN = "7gk/9/7BP/9/9/9/p8/9/K8 b Gg 1";
+
 const VOLUME_5 = {
   id: "v5",
   title: "形勢を読んで、格言を生かそう",
@@ -1247,6 +1284,128 @@ const VOLUME_5 = {
             { type: "choose", question: "評価値が -1500 のときは？", options: ["先手が有利", "後手が有利", "互角"], answer: 1, explanation: "マイナスは後手が有利。1500は大きな差だよ。" },
             { type: "choose", question: "飛車（10点）と金（6点）を交換したら？", options: ["飛車を渡したほうが駒損", "飛車を渡したほうが駒得", "同じ"], answer: 0, explanation: "10点を渡して6点もらうから、4点の駒損だね。" },
             problemStep("where-to-drop-bishop", { speech: "【前の巻から】角をどこに打てば詰むかな？ 3手で詰ませよう！" }),
+          ],
+        }),
+      ],
+    },
+    {
+      id: "v5-plan",
+      title: "序盤・中盤・終盤の作戦",
+      lessons: [
+        {
+          id: "v5-opening-plan",
+          title: "序盤は形を作ろう",
+          summary: "定跡で、相手に合う形を組む",
+          steps: [
+            { type: "explain", sfen: STANDARD_SFEN, speech: "一局は、序盤・中盤・終盤に分けて作戦を立てるよ。序盤は、囲いや戦法の定跡どおりに駒を組んで、相手に対して相性のいい形を作る時間なんだ。" },
+            {
+              type: "find-move", sfen: STANDARD_SFEN, answers: ["7g7f", "2g2f"],
+              speech: "定跡の第一歩を指そう！ 角道を開ける歩か、飛車先の歩を突いてみて。",
+              praise: "定跡どおりの第一歩！ 序盤は、決まった形を順に作っていくんだ。",
+            },
+            { type: "choose", question: "相手が飛車を横に動かした（振り飛車）。居飛車の君は、玉をどっちに囲う？", options: ["左（7筋・8筋のほう）", "右（2筋・3筋のほう）"], answer: 0, explanation: "玉は飛車から離して囲うのが基本。居飛車は飛車が右にいるから、玉は左に囲うよ。" },
+            { type: "choose", question: "相手の振り飛車に、居飛車で組む囲いは？", options: ["舟囲い・居飛車穴熊", "美濃囲い・振り飛車穴熊", "どれでも同じ"], answer: 0, explanation: "舟囲いや居飛車穴熊は、振り飛車と戦う居飛車の囲い。美濃囲いは振り飛車の囲いだよ。作戦カードの◎・○も、相性のいい組み合わせなんだ。" },
+            {
+              type: "explain", sfen: KAKUGAWARI_GAP_SFEN, marks: [["2h", "target"], ["4h", "target"], ["3i", "key"]],
+              speech: "角換わりは、おたがいに角を持っている戦法。持ち駒の角は、どこにでも打てるよ。この形だと、3九（緑のマス）に角を打たれると、飛車と金（赤いマス）の両取りになっちゃう！",
+            },
+            {
+              type: "find-move", sfen: KAKUGAWARI_GAP_SFEN, answers: ["2h2i"], guardDrop: "B",
+              speech: "角を打たれても両取りにならない形にしよう！ 飛車か金を、角にねらわれない場所へ動かしてみて。",
+              praise: "角打ちの隙が消えたね！ 角換わりでよく指す「4八金・2九飛型」も、この隙をなくす形なんだ。角換わりでは、毎手、角を打たれる隙がないかを確かめよう。",
+            },
+            { type: "choose", question: "角換わりで、毎手気をつけることは？", options: ["自陣に角を打ち込まれる隙がないか", "端歩を突いたか", "駒をたくさん動かしたか"], answer: 0, explanation: "角を持ち合っていると、隙に角を打たれて両取りをかけられる。打ち込まれる場所がないかを、いつも見ておこう。" },
+          ],
+        },
+        {
+          id: "v5-middle-plan",
+          title: "中盤は駒得をねらおう",
+          summary: "手筋で駒得し、駒を成る",
+          steps: [
+            { type: "explain", speech: "中盤は、駒得や、駒を成ることをねらって指そう。駒得するには「手筋」が大事なんだ。両取りなどの手筋で、相手の駒を取りにいこう！" },
+            {
+              type: "find-move", sfen: ROOK_CROSS_SFEN, answers: ["R*5e"], untilGain: 5, refute: true,
+              speech: "持ち駒の飛車を打って、金と銀の両取りをかけよう！ 相手が1枚逃がしたら、もう1枚を取って駒得まで指そう。",
+              praise: "飛車の十字の利きで両取り、そして銀を取った！ 手筋で駒得する流れだね。",
+            },
+            {
+              type: "explain", sfen: LURE_FORK_SFEN, marks: [["5b", "target"], ["3c", "target"], ["5c", "key"]],
+              speech: "手筋が使える形に、相手をさそいこむのも作戦だよ。いまは金と飛車が離れていて、両取りがかからない。歩を5三（緑のマス）に捨てて、金を呼びよせよう。",
+            },
+            {
+              type: "find-move", sfen: LURE_FORK_SFEN, answers: ["P*5c"], plan: [["N*4e"]], untilGain: 5, refute: true,
+              speech: "5三に歩を打って、金をさそい出そう！ 金が歩を取ったら、桂馬で両取りがかかるマスがあるよ。",
+              praise: "歩1枚を捨てて、金を両取りのマスへさそい出した！ 歩を渡しても、金を取って合計で駒得だね。",
+            },
+            {
+              type: "find-move", sfen: "4k4/3g5/9/9/9/9/9/7R1/K8 b - 1", answers: ["2h2c+", "2h2b+", "2h2a+"], refute: true,
+              speech: "駒を成るのも中盤のねらい。飛車を敵陣（上の3段）に入れて、竜に成ろう！",
+              praise: "竜になった！ 竜は飛車の動きに、斜めの1マスが加わる強い駒。駒得と同じくらいうれしいことなんだ。",
+            },
+            {
+              type: "find-move", sfen: IDLE_SFEN, answers: ["1g1f", "9g9f"],
+              speech: "おたがいに囲いができて、攻めも受けも、すぐにはすることがない局面。形を悪くしない端歩を突いて、相手の出方を待とう！",
+              praise: "「手のない時は端歩を突け」。端歩や玉の位置の調整は、形をくずさない「待つ手」なんだ。相手が動いてから、手筋をねらえばいいよ。",
+            },
+            { type: "choose", question: "中盤で、攻めも受けもすることがないときは？", options: ["端歩を突いたり玉を寄せたりして、形を悪くしないで待つ", "囲いの金を前に出して攻める", "飛車を相手の歩の前に出す"], answer: 0, explanation: "無理に動くと形がくずれて、手筋をかけられる隙ができる。形を悪くしない手で待つのも作戦だよ。" },
+          ],
+        },
+        {
+          id: "v5-endgame-plan",
+          title: "終盤は玉を追いつめよう",
+          summary: "囲いを崩し、詰めろと受けで勝ちきる",
+          steps: [
+            { type: "explain", speech: "終盤は、相手の玉の逃げ道をふさぎながら、敵陣を制圧していこう。まずは、玉を守っている囲いの金銀をはがすのが大事なんだ。" },
+            tesujiFindStep("tapping-pawn", "歩を金の頭に打って、囲いの金をつり上げよう！", "叩きの歩！ 金が歩を取れば玉から離れ、取らなければ歩が金を取る。囲いを崩す手筋だよ。"),
+            {
+              type: "explain", sfen: THREAT_SFEN, escapeMap: "white",
+              speech: "「詰めろ」は、次に詰ませる手のこと。王手じゃなくても、相手は受けないと負けちゃう。逃げ道をふさいで詰めろをかけ、相手を追いつめよう！",
+            },
+            {
+              type: "find-move", sfen: THREAT_SFEN, answers: ["2d2c+"], threat: "mate",
+              speech: "相手の玉に詰めろをかけよう！ 王手はしないで、次に持ち駒の金を打てば詰む形を作ってみて。",
+              praise: "詰めろ！ 次は2二に金を打てば、と金に守られた頭金で詰み。相手は受けるしかないね。",
+            },
+            {
+              type: "find-move", sfen: DEFEND_SFEN, answers: ["6i7h"], defend: "mate", escapeMap: "black",
+              speech: "こんどは自分の玉がピンチ！ 相手は金を持っていて、次に8八へ打てば詰み。自分の玉が詰まないように受けよう！",
+              praise: "受けた！ 攻めるだけじゃなく、自分の玉が詰まないように受けるのも、終盤の大事な仕事だよ。",
+            },
+            { type: "explain", speech: "王手をかけると、相手は必ず受けないといけない。だから詰将棋では、必ず王手をかけるのがルールなんだ。王手を続けているあいだ、相手は反撃できないよ。" },
+            {
+              type: "explain", sfen: RACE_SFEN, escapeMap: "black",
+              speech: "この局面、自分の玉は、次に9八へ金を打たれると詰む（詰めろ）。でも、自分の番。王手を続けて先に詰ませれば、こっちの勝ち！",
+            },
+            {
+              type: "mate", sfen: RACE_SFEN, solution: ["G*1b", "2a1b", "1c1b+"],
+              speech: "王手を続けて、3手で詰ませよう！ 相手に受けの手番を渡さなければ、自分の玉が詰む前に勝てるよ。",
+              praise: "連続王手で詰み！ 自分の玉が詰めろでも、王手を続けて先に詰ませれば勝ちなんだ。",
+            },
+            { type: "choose", question: "次に自分の玉が詰む形でも、勝てるのはどんなとき？", options: ["王手を続けて、先に相手を詰ませたとき", "駒得しているとき", "端歩を突いたとき"], answer: 0, explanation: "王手を続ければ、相手は受けるしかなく、反撃できない。詰みまで王手を続けられれば、先に勝てるんだ。" },
+          ],
+        },
+        bossLesson("v5-plan-boss", {
+          title: "序盤・中盤・終盤",
+          summary: "序盤・中盤・終盤で、やることを選べる",
+          chapterLabel: "序盤・中盤・終盤の作戦",
+          steps: [
+            { type: "choose", question: "序盤でいちばん大事なのは？", options: ["定跡どおりに、相手に合う形を組む", "すぐに王手をかける", "駒をたくさん取る"], answer: 0, explanation: "序盤は形作り。相手に合う囲いと戦法を組もう。" },
+            {
+              type: "find-move", sfen: "k8/9/3g1r3/9/4PS3/9/9/8L/7GK b - 1", answers: ["4e5d"], untilGain: 1, refute: true,
+              speech: "【中盤】銀で両取りをかけて、駒得まで指そう！",
+              praise: "金と銀の交換で駒得！ 手筋で得をするのが中盤の作戦だね。",
+            },
+            {
+              type: "find-move", sfen: "lk7/9/p1p6/1P7/9/9/9/9/8K b G 1", answers: ["8d8c+"], threat: "mate",
+              speech: "【終盤】王手をしないで、相手の玉に詰めろをかけよう！",
+              praise: "詰めろ！ 次は8二金で頭金の詰みだね。",
+            },
+            {
+              type: "find-move", sfen: "4k4/9/9/9/9/9/7p1/9/5G1KL b g 1", answers: ["4i3h"], defend: "mate",
+              speech: "【終盤】相手は金を持っていて、次に2八へ打てば詰み。自分の玉を受けよう！",
+              praise: "しっかり受けた！ 自玉の安全を確かめてから攻めよう。",
+            },
+            problemStep("take-knight-and-drop", { speech: "【前の巻から】王手を続けて、3手で詰ませよう！" }),
           ],
         }),
       ],

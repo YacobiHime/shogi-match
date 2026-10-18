@@ -48,6 +48,7 @@ import { ATTACK_TEST_HOLD_PLIES } from "./tutorial-problem.mjs";
 import { findMateLine } from "./problem-solver";
 import { buildLowerBound, buildMissingTargets } from "./tutorial-runner.mjs";
 import { kingEscapeMap } from "./board-insight.mjs";
+import { bestGainMove, dropThreat } from "./material-tactics.mjs";
 
 const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play", "replay", "capture", "problem", "build", "attack-test"];
 const legalMoves = (sfen) => enumerateLegalMoves(createGameRecord(sfen).position).map(({ usi }) => usi);
@@ -86,7 +87,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     expect(TUTORIAL_VOLUMES.map(({ title }) => title)).toEqual([
       "盤と駒をおぼえよう", "一局の流れをつかもう", "攻めと守りのひみつ", "戦法マスターへの道", "形勢を読んで、格言を生かそう",
     ]);
-    expect(TUTORIAL_VOLUMES.flatMap(({ chapters }) => chapters)).toHaveLength(12);
+    expect(TUTORIAL_VOLUMES.flatMap(({ chapters }) => chapters)).toHaveLength(13);
     const ids = TUTORIAL_LESSONS.map(({ id }) => id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(TUTORIAL_LESSONS.filter(({ comingSoon }) => comingSoon)).toEqual([]);
@@ -95,6 +96,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     }
   });
 
+  // 詰みの探索と駒の損得の読みで、全部のステップを確かめるため時間がかかる(並列で動かすと5秒を超える)。
   it("すべてのステップの盤面・正解・参照先が正しい", () => {
     const dexIds = {
       piece: new Set(referenceDexEntries("piece").map(({ id }) => id)),
@@ -148,6 +150,35 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
           } else {
             expect(step.answers?.length, label).toBeGreaterThan(0);
             for (const usi of step.answers) expect(legal, `${label}: ${usi}`).toContain(usi);
+          }
+          if (step.untilGain) {
+            // 駒得するまで指す課題は、お手本(1手目・手筋の続き・いちばん得な取り方)で、相手のいちばん良い受けに対して目標の損得に届く。
+            let state = createStepState(step);
+            let result = attemptTutorialMove(step, state, step.answers[0]);
+            for (let round = 1; result.outcome === "continue" && round < 6; round += 1) {
+              state = result.state;
+              const next = round <= (step.plan ?? []).length ? step.plan[round - 1][0] : bestGainMove(state.sfen).usi;
+              result = attemptTutorialMove(step, state, next);
+            }
+            expect(result.outcome, `${label}: 駒得まで指せる`).toBe("correct");
+            expect(result.swing, label).toBeGreaterThanOrEqual(step.untilGain);
+            // 手筋をかけずに、ほかの手で取りにいっても目標に届かない(手筋を教える課題になっている)。
+            expect(bestGainMove(sfen).gain, `${label}: 手筋なしでは駒得できない`).toBeLessThan(step.untilGain);
+          }
+          if (step.guardDrop) {
+            // 指す前は、相手に打ち込まれる隙があり、お手本の手で消える。
+            expect(dropThreat(sfen.replace(" b ", " w "), step.guardDrop), `${label}: 隙がある`).not.toBeNull();
+            for (const usi of step.answers) expect(attemptTutorialMove(step, createStepState(step), usi).outcome, `${label}: ${usi}`).toBe("correct");
+          }
+          if (step.threat === "mate") {
+            // 詰めろの課題: 王手で詰む手はなく、お手本は王手でない詰めろ。
+            expect(mateInOneMoves(sfen), `${label}: 1手詰めがない`).toEqual([]);
+            for (const usi of step.answers) expect(attemptTutorialMove(step, createStepState(step), usi).outcome, `${label}: ${usi}`).toBe("correct");
+          }
+          if (step.defend === "mate") {
+            // 受けの課題: 相手の番なら1手で詰まされる形で、お手本の手で受かる。
+            expect(mateInOneMoves(sfen.replace(" b ", " w ")).length, `${label}: 詰めろがかかっている`).toBeGreaterThan(0);
+            for (const usi of step.answers) expect(attemptTutorialMove(step, createStepState(step), usi).outcome, `${label}: ${usi}`).toBe("correct");
           }
         }
         if (step.type === "move-piece") {
@@ -246,7 +277,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
         }
       });
     }
-  });
+  }, 60_000);
 
   it("台詞に図鑑の見出し向けの「〜こと！」をつながない", () => {
     for (const lesson of TUTORIAL_LESSONS) {
@@ -271,7 +302,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     // 観戦だけの章には置かない(平地)。それ以外の章には置く。
     const chapters = TUTORIAL_VOLUMES.flatMap(({ chapters: list }) => list);
     expect(chapters.filter((chapter) => chapter.lessons.some(({ boss }) => boss)).map(({ id }) => id)).toEqual([
-      "v1-c1", "v1-c2", "v2-c1", "v2-c3", "v3-c1", "v3-c3", "v4-c1", "v4-c2", "v5-c1", "v5-c2",
+      "v1-c1", "v1-c2", "v2-c1", "v2-c3", "v3-c1", "v3-c3", "v4-c1", "v4-c2", "v5-c1", "v5-plan", "v5-c2",
     ]);
   });
 

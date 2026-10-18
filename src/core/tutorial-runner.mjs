@@ -2,7 +2,10 @@ import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-st
 import { formatHintMove } from "./match-assists.mjs";
 import { formatAnalysisScore, scoreToGraphValue } from "./kifu-analysis.mjs";
 import { pieceReachSquares } from "./piece-reach.mjs";
-import { refutationOf } from "./board-insight.mjs";
+import { cheapestRecapture, isPieceLoose, refutationOf } from "./board-insight.mjs";
+import { bestGainMove, defendingReply, dropThreat, moveGain } from "./material-tactics.mjs";
+import { capturePoints } from "./piece-points.mjs";
+import { applyUsiToBoard, parseSfenState } from "./piece-movement.mjs";
 
 /**
  * やこび姫の将棋教室のステップを進める純粋な処理。
@@ -96,6 +99,8 @@ export function createStepState(step) {
     sfen,
     square: step?.type === "move-piece" || step?.type === "capture" ? step.from : "",
     movesUsed: 0,
+    // 駒得するまで指す課題(untilGain)の、ここまでの駒の損得(取った駒の値段−取られた駒の値段)。
+    swing: 0,
     ply: step?.type === "replay" ? (step.from ?? 0) : 0,
     solved: false,
   };
@@ -257,6 +262,10 @@ function moveMatches(step, usi) {
  */
 export function attemptTutorialMove(step, state, usi) {
   if (!legalMoves(state.sfen).includes(usi)) return { outcome: "wrong", state, reason: "illegal" };
+  if (step.type === "find-move" && step.untilGain) return attemptGainMove(step, state, usi);
+  if (step.type === "find-move" && step.guardDrop) return attemptGuardDropMove(step, state, usi);
+  if (step.type === "find-move" && step.threat === "mate") return attemptThreatMove(step, state, usi);
+  if (step.type === "find-move" && step.defend === "mate") return attemptDefendMove(step, state, usi);
   if (step.type === "find-move" && step.line) {
     // 相手の応手を決めた手順。プレイヤーの手は手順どおりに指す。最後の手のあとで正解。
     if (usi !== step.line[state.ply]) return wrongMove(step, state, usi);
@@ -352,6 +361,113 @@ function wrongMove(step, state, usi) {
   return refutation ? { outcome: "wrong", state, reason: "refuted", refutation } : { outcome: "wrong", state, reason: "different" };
 }
 
+// ===== 駒得するまで指す(untilGain) =====
+/** 取った駒の値段。取らない手は0。 */
+function capturedPoints(sfen, usi) {
+  const { board, turn } = parseSfenState(sfen);
+  return capturePoints(applyUsiToBoard(board, usi, turn)?.captured?.kind ?? "");
+}
+
+/**
+ * 両取りなどの手筋をかけたあと、駒得するまで指す課題。
+ * - 1手目は answers、2手目からは plan[0]・plan[1]…(手筋の続きの決まった手。相手をさそう歩のあとの両取りなど)。
+ * - plan を指し終えたら、取る手の番。いま取れるいちばん得な駒を取れば正解(取られて損をする取り方は、損得を引いて比べる)。
+ * - 相手の応手は、駒の損得がいちばん小さくなる受け(defendingReply。両取りなら高いほうの駒を逃がす)。
+ * - ここまでの損得(swing)が untilGain 以上になったら正解。最後に取った駒が取り返される形なら、相手の取り返しも見せる。
+ */
+function attemptGainMove(step, state, usi) {
+  const round = Math.floor((state.ply ?? 0) / 2);
+  const plan = step.plan ?? [];
+  const capturing = round > plan.length;
+  if (round === 0 && !moveMatches(step, usi)) return wrongMove(step, state, usi);
+  if (round > 0 && !capturing && !plan[round - 1].includes(usi)) return wrongMove(step, state, usi);
+  if (capturing) {
+    const best = bestGainMove(state.sfen);
+    const gain = moveGain(state.sfen, usi);
+    if (gain < best.gain || gain <= 0) {
+      const refuted = wrongMove(step, state, usi);
+      if (refuted.reason === "refuted") return refuted;
+      return { outcome: "wrong", state, reason: gain > 0 ? "smaller-gain" : "no-gain" };
+    }
+  }
+  const after = applyMove(state.sfen, usi);
+  let swing = (state.swing ?? 0) + capturedPoints(state.sfen, usi);
+  const to = usi.replace("+", "").slice(-2);
+  if (capturing) {
+    // 取った駒が取り返されて損をする形なら、相手の取り返しまで指して損得を数える。
+    const { board } = parseSfenState(after);
+    const recapture = isPieceLoose(board, to) ? cheapestRecapture(after, to) : "";
+    const afterReply = recapture ? applyMove(after, recapture) : after;
+    if (recapture) swing -= capturedPoints(after, recapture);
+    const next = { ...state, sfen: afterReply, ply: state.ply + 2, swing };
+    if (swing >= step.untilGain) {
+      return { outcome: "correct", ...(recapture ? { reply: recapture } : {}), state: { ...next, solved: true }, swing };
+    }
+    if (recapture) return { outcome: "continue", reply: recapture, state: next, swing, next: "gain" };
+  }
+  const reply = defendingReply(after).usi;
+  if (!reply) return { outcome: "correct", state: { ...state, sfen: after, ply: state.ply + 1, swing, solved: true }, swing };
+  swing -= capturedPoints(after, reply);
+  const nextRound = round + 1;
+  return {
+    outcome: "continue",
+    reply,
+    state: { ...state, sfen: applyMove(after, reply), ply: state.ply + 2, swing },
+    swing,
+    next: nextRound > plan.length ? "gain" : "plan",
+  };
+}
+
+/** 駒得するまで指す課題の、いまの番のお手本の手(ヒントの矢印)。 */
+function gainHintMove(step, state) {
+  const round = Math.floor((state.ply ?? 0) / 2);
+  if (round === 0) return step.answers?.[0] ?? "";
+  const plan = step.plan ?? [];
+  if (round <= plan.length) return plan[round - 1][0] ?? "";
+  return bestGainMove(state.sfen).usi;
+}
+
+// ===== 角打ちの隙(guardDrop)・詰めろ(threat)・受け(defend) =====
+/**
+ * 持ち駒を打ち込まれる隙を消す課題(角換わりの角打ち)。指したあと、相手がguardDropの駒を打って両取りをかけても
+ * 駒得されず、ほかに取られる駒もなければ正解。まちがえたら、相手の打ち込みを見せる。answersはヒントのお手本。
+ */
+function attemptGuardDropMove(step, state, usi) {
+  const after = applyMove(state.sfen, usi);
+  const threat = dropThreat(after, step.guardDrop);
+  if (threat) return { outcome: "wrong", state, reason: "refuted", refutation: { reply: threat.usi, square: threat.usi.slice(-2), kind: "drop" } };
+  if (bestGainMove(after).gain > 0) return wrongMove({ ...step, refute: true }, state, usi);
+  return { outcome: "correct", state: { ...state, sfen: after, solved: true } };
+}
+
+/** 手番の側に、1手で詰ませる手があれば、その手。 */
+export function mateInOneMove(sfen) {
+  for (const usi of legalMoves(sfen)) {
+    const after = applyMove(sfen, usi);
+    if (after && isCheckmate(after)) return usi;
+  }
+  return "";
+}
+
+/**
+ * 詰めろをかける課題。王手ではなく、相手が何もしなければ次に1手で詰ませられる手なら正解。詰ませる手も正解にする。
+ */
+function attemptThreatMove(step, state, usi) {
+  const after = applyMove(state.sfen, usi);
+  if (isCheckmate(after)) return { outcome: "correct", state: { ...state, sfen: after, solved: true } };
+  if (createGameRecord(after).position.checked) return { outcome: "wrong", state, reason: "check-not-threat" };
+  if (!mateInOneMove(withBlackToMove(after))) return { outcome: "wrong", state, reason: "no-threat" };
+  return { outcome: "correct", state: { ...state, sfen: after, solved: true } };
+}
+
+/** 自玉の詰みを受ける課題。指したあと、相手に1手で詰まされる手がなければ正解。まちがえたら、詰まされる手を見せる。 */
+function attemptDefendMove(step, state, usi) {
+  const after = applyMove(state.sfen, usi);
+  const mate = mateInOneMove(after);
+  if (mate) return { outcome: "wrong", state, reason: "refuted", refutation: { reply: mate, square: mate.replace("+", "").slice(-2), kind: "mate" } };
+  return { outcome: "correct", state: { ...state, sfen: after, solved: true } };
+}
+
 /** 駒取りゲームで、最短で取りきる道の次の1手。見つからなければ""。 */
 export function captureBestMove(sfen, square) {
   const goal = captureMinMoves(sfen, square);
@@ -430,7 +546,7 @@ export function tutorialHint(step, state, level) {
   const answer = step.type === "mate"
     ? step.solution[state.ply]
     : step.type === "find-move"
-      ? (step.line ? step.line[state.ply] : step.answers?.[0])
+      ? (step.line ? step.line[state.ply] : step.untilGain ? gainHintMove(step, state) : step.answers?.[0])
       : "";
   // 囲いを組もうは、まだそろっていないマスを緑で示す。2回目は手順(par の道)の次の1手を矢印で示す。
   if (step.type === "build") {
