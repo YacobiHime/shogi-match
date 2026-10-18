@@ -299,7 +299,7 @@ URLの組み立てと結果の検証だけを使う場合は、`buildGameUrl()`�
 | `npm run build:hosting` | `firebase-public/`へ公開用ファイルを生成する |
 | `npm run deploy` | 公開用ファイルを生成し、Firebase Hostingへデプロイする |
 | `npm run import:opening-library` | 定跡エディターで書き出したJSONを、内蔵定跡の上書きデータへ取り込む |
-| `npm run optimize:images` | 画像を最適化する |
+| `npm run optimize:images` | 画像を最適化する。立ち絵の小さい版（`-320.webp`。スマホ・タブレットの縦向きで使う）も作る |
 
 ### フォルダー構成
 

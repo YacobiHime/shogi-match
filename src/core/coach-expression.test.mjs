@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'vitest';
 
+import { existsSync } from 'node:fs';
+
 import {
+  COACH_EXPRESSION_FILES,
   coachExpressionFilename,
   coachExpressionForText,
+  coachPortraitSizes,
+  coachPortraitSmallFilename,
+  coachPortraitSrcset,
 } from './coach-expression.mjs';
 
 describe('助言に応じた表情', () => {
@@ -34,5 +40,26 @@ describe('助言に応じた表情', () => {
     expect(coachExpressionForText('相手は振り飛車だね。')).toBe('neutral');
     expect(coachExpressionFilename('良い出だしだね！'))
       .toBe('sakurano-momoka.webp');
+  });
+});
+
+describe('立ち絵の大きさの版', () => {
+  test('小さい版と大きい版を、幅の記述付きでsrcsetに並べる', () => {
+    expect(coachPortraitSmallFilename('sakurano-momoka-wry.webp')).toBe('sakurano-momoka-wry-320.webp');
+    expect(coachPortraitSrcset('./dist', 'sakurano-momoka.webp')).toBe(
+      './dist/characters/sakurano-momoka-320.webp?v=3 320w, ./dist/characters/sakurano-momoka.webp?v=3 800w',
+    );
+  });
+
+  test('表示幅を測れたらその幅を、測る前は画面の幅からの見当をsizesにする', () => {
+    expect(coachPortraitSizes(283.4)).toBe('284px');
+    expect(coachPortraitSizes(0)).toBe('(max-width: 999px) 80px, 400px');
+    expect(coachPortraitSizes(undefined)).toBe('(max-width: 999px) 80px, 400px');
+  });
+
+  test('どの表情にも小さい版の画像がある', () => {
+    for (const filename of Object.values(COACH_EXPRESSION_FILES)) {
+      expect(existsSync(new URL(`../../public/characters/${coachPortraitSmallFilename(filename)}`, import.meta.url))).toBe(true);
+    }
   });
 });

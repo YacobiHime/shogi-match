@@ -70,6 +70,11 @@ export default defineConfig({
         // 入口から静的にたどれるモジュールは、内容のハッシュ付きの共通チャンクへまとめ、
         // 入口と遅延チャンクの両方がそこからimportするようにする。
         chunkFileNames: "chunks/[name]-[hash].js",
+        // ライブラリ形式(ES)では、Viteは名前の短縮だけを行い、空白とコメントを残す(後で組み込む側が削るため)。
+        // 配布物はgame.htmlとFirebase Hostingがそのまま読むので、空白とコメントも消して転送量を減らす。
+        // ライセンスの表記(legal)だけは残す。
+        minify: true,
+        comments: { legal: true, annotation: false, jsdoc: false },
         codeSplitting: {
           groups: [
             {

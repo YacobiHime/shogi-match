@@ -932,8 +932,11 @@
     <section class="shogi-game__coach" aria-label="やこび姫">
       <div class="shogi-game__portrait">
         <img
+          ref="portraitImage"
           class="shogi-game__character"
           :src="coachPortraitUrl"
+          :srcset="coachPortraitSrcsetValue"
+          :sizes="coachPortraitSizesValue"
           :data-expression="coachExpression"
           alt="助言役のやこび姫"
         >
@@ -1672,6 +1675,8 @@ import {
   COACH_EXPRESSION_FILES,
   coachExpressionFilename,
   coachExpressionForText,
+  coachPortraitSizes,
+  coachPortraitSrcset,
   coachTextSegments,
 } from "./core/coach-expression.mjs";
 import {
@@ -2068,6 +2073,15 @@ const dialogueSegments = computed(() => coachTextSegments(activeCoachText.value)
 const coachPortraitUrl = computed(() => (
   `${props.assetBaseUrl}/characters/${coachExpressionFilename(activeCoachText.value)}?v=${COACH_EXPRESSION_ASSET_VERSION}`
 ));
+/*
+ * 立ち絵は、表示幅に合う大きさの版を読む(スマホ・タブレットの縦向きでは小さい版。core/coach-expression.mjs)。
+ * 表示幅を測ってsizesに渡し、画面の倍率と合わせてブラウザに選ばせる。先読みも同じsizesで行う。
+ */
+const portraitImage = ref<HTMLImageElement | null>(null);
+const portraitWidth = ref(0);
+const coachPortraitSrcsetValue = computed(() => coachPortraitSrcset(props.assetBaseUrl, coachExpressionFilename(activeCoachText.value)));
+const coachPortraitSizesValue = computed(() => coachPortraitSizes(portraitWidth.value));
+let portraitObserver: ResizeObserver | undefined;
 const selectedStrategy = ref("");
 const selectedCastle = ref("");
 const strategyExplanationOpen = ref(false);
@@ -7277,6 +7291,9 @@ function handleGlobalKeydown(event: KeyboardEvent) {
 function preloadCoachPortraits(fileNames: string[]) {
   for (const filename of fileNames) {
     const portrait = new Image();
+    // 表示と同じ版を選ばせるため、srcsetとsizesを先に与えてからsrcを入れる。
+    portrait.sizes = coachPortraitSizesValue.value;
+    portrait.srcset = coachPortraitSrcset(props.assetBaseUrl, filename);
     portrait.src = `${props.assetBaseUrl}/characters/${filename}?v=${COACH_EXPRESSION_ASSET_VERSION}`;
   }
 }
@@ -7323,6 +7340,7 @@ onBeforeUnmount(() => {
   cpuTimer = undefined;
   cancelDeferredCoachPortraitPreload?.();
   cancelDeferredCoachPortraitPreload = undefined;
+  portraitObserver?.disconnect();
   engine?.quit();
   ryuoStats.dispose();
   if (typeof window !== "undefined") {
@@ -7331,6 +7349,14 @@ onBeforeUnmount(() => {
   }
 });
 onMounted(() => {
+  if (typeof ResizeObserver !== "undefined" && portraitImage.value) {
+    portraitObserver = new ResizeObserver(([entry]) => {
+      const width = entry?.contentRect.width ?? 0;
+      // 隠れている間(幅0)は、前の値か見当のままにする。
+      if (width > 0) portraitWidth.value = width;
+    });
+    portraitObserver.observe(portraitImage.value);
+  }
   preloadCoachPortraits([COACH_EXPRESSION_FILES.neutral]);
   if (matchStarted.value) scheduleDeferredCoachPortraitPreload();
   moveSounds.preload();

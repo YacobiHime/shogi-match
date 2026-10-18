@@ -46,3 +46,15 @@ for (const fileName of coachPortraits) {
   await rm(source);
   await rename(temporary, source);
 }
+
+// スマホ・タブレットの縦向きでは、立ち絵を横60〜80px程度で出すので、高精細の画面でも横320pxあれば足りる。
+// 小さい版(-320.webp)を作り、srcsetで画面に合うほうを読ませる(core/coach-expression.mjsのcoachPortraitSrcset)。
+// 元の立ち絵を差し替えたら、このスクリプトをもう一度実行して小さい版も作り直す。
+for (const fileName of coachPortraits) {
+  const source = path.join(root, "characters", fileName);
+  const destination = source.replace(/\.webp$/, "-320.webp");
+  await sharp(source)
+    .resize({ width: 320, withoutEnlargement: true })
+    .webp({ quality: 82, alphaQuality: 90, effort: 6 })
+    .toFile(destination);
+}
