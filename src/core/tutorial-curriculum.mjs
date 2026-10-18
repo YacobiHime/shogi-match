@@ -147,7 +147,7 @@ function weaknessSpeech(name, text) {
   return [...speech].length <= 60 ? speech : `${name}の弱点。${text}`;
 }
 
-function pieceLesson(id, { entryId, sfen, from, target, maxMoves, targetLabel, capture, quiz, praise }) {
+function pieceLesson(id, { entryId, sfen, from, target, maxMoves, targetLabel, capture, quiz, praise, moveProverb }) {
   const entry = PIECES[entryId];
   const name = PIECE_NAMES[entryId];
   return {
@@ -159,7 +159,7 @@ function pieceLesson(id, { entryId, sfen, from, target, maxMoves, targetLabel, c
     icon: entry.label[0],
     steps: [
       { type: "explain", sfen: entry.sfen, pieceSquare: entry.pieceSquare, speech: `これが「${name}」。${entry.overview} 青い点が、${name}の動けるマスだよ。` },
-      { type: "move-piece", sfen, from, target, maxMoves, praise, speech: `${name}を${targetLabel}（緑のマス）まで動かしてみよう！${maxMoves > 1 ? ` ${maxMoves}手以内で届くよ。` : ""}` },
+      { type: "move-piece", sfen, from, target, maxMoves, praise, ...(moveProverb ? { proverb: moveProverb } : {}), speech: `${name}を${targetLabel}（緑のマス）まで動かしてみよう！${maxMoves > 1 ? ` ${maxMoves}手以内で届くよ。` : ""}` },
       {
         type: "capture",
         ...capture,
@@ -286,7 +286,7 @@ const VOLUME_1 = {
         pieceLesson("v1-lance", {
           entryId: "lance", sfen: "k8/9/9/9/9/9/9/9/4L3K b - 1", from: "5i", target: "5c", maxMoves: 1, targetLabel: "5三",
           praise: "香車は前ならどこまでも。1手で5三まで飛んでいけたね！",
-          capture: { sfen: "9/9/8s/9/9/8p/9/9/8L b - 1", from: "1i", par: 2, praise: "香車は、前にいる駒まで一気に進んで取れるよ！" },
+          capture: { sfen: "9/9/8s/9/9/8p/9/9/8L b - 1", from: "1i", par: 2, praise: "香車は、前にいる駒まで一気に進んで取れるよ！", proverb: "bottom-lance" },
           quiz: { question: "香車が動けないのはどれ？", options: ["前に2マス", "後ろに1マス", "前に5マス"], answer: 1, explanation: "香車は前にだけ進めて、後ろには戻れないよ。" },
         }),
         pieceLesson("v1-knight", {
@@ -298,7 +298,7 @@ const VOLUME_1 = {
         pieceLesson("v1-silver", {
           entryId: "silver", sfen: "k8/9/9/9/9/9/9/4S4/8K b - 1", from: "5h", target: "3f", maxMoves: 2, targetLabel: "3六",
           praise: "銀は斜めに強い駒。斜めに2回で3六に着いたね！",
-          capture: { sfen: "9/9/9/9/3p5/4p4/5p3/9/4S4 b - 1", from: "5i", par: 4, praise: "銀は斜め前に進めるから、斜めに並んだ駒を順に取れるんだ！" },
+          capture: { sfen: "9/9/9/9/3p5/4p4/5p3/9/4S4 b - 1", from: "5i", par: 4, praise: "銀は斜め前に進めるから、斜めに並んだ駒を順に取れるんだ！", proverb: "silver-zigzag" },
           quiz: { question: "銀が動けないのはどこ？", options: ["真横", "斜め後ろ", "真正面"], answer: 0, explanation: "銀は真横と真後ろには動けないよ。" },
         }),
         pieceLesson("v1-gold", {
@@ -322,6 +322,7 @@ const VOLUME_1 = {
         pieceLesson("v1-king", {
           entryId: "king", sfen: "k8/9/9/9/9/9/9/9/4K4 b - 1", from: "5i", target: "5g", maxMoves: 2, targetLabel: "5七",
           praise: "玉は周りに1マスずつ。2手で5七に着いたね！",
+          moveProverb: "avoid-idle-king",
           capture: { sfen: "9/9/9/9/9/9/6p2/5p3/4K4 b - 1", from: "5i", par: 2, praise: "玉も駒を取れるよ。でも、取られない場所だけに動けるんだ！" },
           quiz: { question: "玉が取られたらどうなる？", options: ["引き分け", "そのまま続ける", "負け"], answer: 2, explanation: "玉を取られたら（詰まされたら）負けだよ。" },
         }),
@@ -337,6 +338,7 @@ const VOLUME_1 = {
               type: "capture", sfen: "9/5pp2/4p4/4P4/9/9/9/9/9 b - 1", from: "5d", par: 3,
               speech: "駒取りゲーム！ 歩だけで相手の駒を全部取ろう。5三で歩を取ったら成って「と金」にしよう。と金は金と同じ動きだよ！",
               praise: "と金は金と同じ動き。成ると、歩でも斜めや横の駒を取れるんだ！",
+              proverb: "tokin-on-53",
             },
             { type: "choose", question: "成れない駒はどれかな？", options: ["銀", "金", "歩"], answer: 1, explanation: "金と玉は成れないよ。" },
           ],
@@ -349,6 +351,12 @@ const VOLUME_1 = {
             { type: "explain", sfen: "k8/9/9/4g4/4S4/9/9/9/8K b - 1", marks: [["5d", "target"]], speech: "相手の駒を取ると、その駒は自分の「持ち駒」になるよ。" },
             { type: "find-move", sfen: "k8/9/9/4g4/4S4/9/9/9/8K b - 1", answers: ["5e5d"], speech: "銀で5四の金を取ってみよう！", praise: "金を取ったよ！ 駒台に乗った金は、もう自分の駒なんだ。" },
             { type: "find-move", sfen: "k8/9/9/4S4/9/9/9/9/8K b G 1", anyDropOf: "G", speech: "持ち駒の金を、好きな空きマスに打ってみよう！ 駒台の金を選んでから、打つマスを選ぶよ。", praise: "持ち駒は、空いているマスならどこにでも打てるよ！" },
+            {
+              type: "find-move", sfen: TESUJI["drop-major-far"].sfen, answers: ["R*5e", "R*5f", "R*5g", "R*5h"], marks: [["5a", "target"]],
+              speech: "持ち駒の飛車を、5筋の玉から離れたマスに打って、玉をねらおう！",
+              praise: "離して打てば、玉が近づいても飛車は取られないね！",
+              proverb: "drop-major-far",
+            },
             { type: "choose", question: "持ち駒を打てないマスはどれ？", options: ["駒があるマス", "空いているマス"], answer: 0, explanation: "持ち駒は、空いているマスにだけ打てるよ。" },
           ],
         },
@@ -544,7 +552,7 @@ const VOLUME_2 = {
           steps: [
             { type: "explain", sfen: TESUJI["knight-fork"].sfen, marks: TESUJI["knight-fork"].marks, speech: "1つの駒で2枚の駒を同時にねらう手を「両取り」というよ。相手はどちらか1枚しか守れないんだ。" },
             {
-              type: "find-move", sfen: FORK_KNIGHT_SFEN, answers: ["4e5c"], untilGain: 6, refute: true,
+              type: "find-move", sfen: FORK_KNIGHT_SFEN, answers: ["4e5c"], untilGain: 6, refute: true, proverb: "knight-fork",
               speech: "桂馬を成らずに跳ねて、飛車と金の両取りをかけよう！ 相手が1枚逃がしたら、残ったほうを取って駒得まで指そう。",
               praise: "相手は飛車を逃がしたけど、金はもう守れない。両取りは、かけたあと取りきるまでが手筋だよ！",
             },
@@ -553,7 +561,6 @@ const VOLUME_2 = {
               speech: "こんどは銀で両取り！ 銀は斜め前に2つ利くよ。飛車と金を同時にねらって、駒得まで指そう。",
               praise: "相手は飛車で金を守ったけど、金を取って、銀を取り返されても金と銀の交換で1点の得。両取りは、相手がうまく受けても得になるんだ！",
             },
-            dexStep("tesuji", "knight-fork"),
           ],
         },
         {
@@ -709,7 +716,7 @@ const VOLUME_2 = {
           summary: "玉の頭に金を打つ",
           steps: [
             { type: "explain", sfen: TESUJI["head-gold"].sfen, marks: TESUJI["head-gold"].marks, speech: "玉の頭（真上）に金を打つ「頭金」は、詰みの基本の形だよ。" },
-            { type: "mate", sfen: TESUJI["head-gold"].sfen, solution: ["G*5b"], speech: "1手で詰ませてみよう！", praise: "頭金！ 4三の銀が金を守っているから、玉は金を取れないんだ。" },
+            { type: "mate", sfen: TESUJI["head-gold"].sfen, solution: ["G*5b"], speech: "1手で詰ませてみよう！", praise: "頭金！ 4三の銀が金を守っているから、玉は金を取れないんだ。", proverb: "head-gold" },
           ],
         },
         {
@@ -718,7 +725,7 @@ const VOLUME_2 = {
           summary: "合駒できない王手",
           steps: [
             { type: "explain", sfen: "7nk/7bp/9/9/9/9/9/9/1K7 b N 1", marks: [["1a", "target"]], speech: "桂馬の王手は、間に駒を置いて防げないよ。玉のまわりが自分の駒でふさがっていたら大チャンス！" },
-            { type: "mate", sfen: "7nk/7bp/9/9/9/9/9/9/1K7 b N 1", solution: ["N*2c"], speech: "持ち駒の桂馬で、1手で詰ませてみよう！", praise: "玉のまわりは自分の駒でいっぱい。桂の王手は間に駒を置けないから、詰みだよ！" },
+            { type: "mate", sfen: "7nk/7bp/9/9/9/9/9/9/1K7 b N 1", solution: ["N*2c"], speech: "持ち駒の桂馬で、1手で詰ませてみよう！", praise: "玉のまわりは自分の駒でいっぱい。桂の王手は間に駒を置けないから、詰みだよ！", proverb: "knight-check" },
           ],
         },
         {
@@ -778,7 +785,7 @@ const VOLUME_2 = {
             { type: "explain", speech: "詰みには、よく出てくる「形」があるよ。形を覚えておくと、実戦ですぐに気づけるんだ。" },
             dexStep("tesuji", "head-gold"),
             { type: "explain", sfen: TESUJI["belly-silver"].sfen, marks: TESUJI["belly-silver"].marks, speech: "次は「腹銀」。玉の真横（お腹）に銀を打つ形だよ。" },
-            tesujiFindStep("belly-silver", "持ち駒の銀を、玉のお腹に打ってみよう！", "腹銀！ 玉は横にも後ろにも逃げられないね。"),
+            { ...tesujiFindStep("belly-silver", "持ち駒の銀を、玉のお腹に打ってみよう！", "腹銀！ 玉は横にも後ろにも逃げられないね。"), proverb: "belly-silver" },
           ],
         },
         bossLesson("v2-c3-boss", {
@@ -850,6 +857,7 @@ const VOLUME_3 = {
             },
             {
               type: "attack-test", sfen: IGYOKU_SFEN, expect: "mate", plies: 3, label: "居玉",
+              proverb: "avoid-idle-king", proverbLine: "居玉はすぐ詰んじゃう。だから、この格言！",
               speech: "相手は居玉。5五の竜と持ち駒の金で、王手をして詰ませてみよう！",
               praise: "3手で詰んだ！ 居玉は、まん中にいるから攻めがすぐ届くんだ。",
             },
@@ -887,6 +895,7 @@ const VOLUME_3 = {
               skip: 1, name: "美濃囲い",
               speech: "薄く見えている駒が、美濃囲いの完成形。玉と金銀を動かして組み立てよう！ 5手で組めたら最短だよ。",
               praise: "美濃囲い、完成！",
+              proverb: "three-guards",
             }),
             {
               type: "explain", sfen: MINO_BLACK_SFEN, kiki: "black",
@@ -1039,6 +1048,7 @@ const VOLUME_3 = {
               type: "find-move", sfen: "k8/9/6g2/6p2/5S3/9/9/9/6R1K b - 1", line: ["4e3d", "3c3d", "3i3d"], kiki: "both", refute: true,
               speech: "銀と飛車の2枚で、金に守られた3四の歩を攻めよう。飛車から行くと…？ 安い銀から突っ込むのがコツだよ！",
               praise: "銀で歩を取って＋1、金に取られて−5、飛車で金を取って＋6。銀と飛車の2枚で攻めたから、合計＋2！",
+              proverb: "attack-pieces",
             },
             { type: "choose", question: "攻めに使う駒として、ふつう残しておくのは？", options: ["飛車", "金", "桂"], answer: 1, explanation: "金は玉を守る大事な駒だよ。" },
           ],
@@ -1060,7 +1070,7 @@ const VOLUME_3 = {
               praise: "王手している駒を取れば、王手は消える。いちばん気持ちいい受けだね！",
             },
             { type: "explain", sfen: TESUJI["one-pawn"].sfen, marks: TESUJI["one-pawn"].marks, escapeMap: "black", speech: "③合駒。竜に王手をかけられたよ！ 逃げ道も、竜を取る駒もないときは、間に駒を置いて防ごう。" },
-            tesujiFindStep("one-pawn", "持ち駒の歩を、玉と竜の間に打ってみよう！", "歩1枚で竜の王手を止めたね。安い駒の合駒が「一歩千金」だよ！"),
+            { ...tesujiFindStep("one-pawn", "持ち駒の歩を、玉と竜の間に打ってみよう！", "歩1枚で竜の王手を止めたね。安い駒の合駒が「一歩千金」だよ！"), proverb: "one-pawn" },
           ],
         },
         {
@@ -1069,7 +1079,7 @@ const VOLUME_3 = {
           summary: "危なくなる前に逃げる",
           steps: [
             { type: "explain", sfen: TESUJI["early-escape"].sfen, marks: TESUJI["early-escape"].marks, kiki: "white", speech: "「玉の早逃げ八手の得」。竜の利き（赤い数字）が玉のそばまで来たね。王手される前に、玉を安全な場所へ逃がそう。" },
-            { ...tesujiFindStep("early-escape", "玉を2九へ逃がしてみよう！", "王手をかけられる前に、竜から離れられたね。早逃げは何手分もの得になるよ！"), kiki: "white" },
+            { ...tesujiFindStep("early-escape", "玉を2九へ逃がしてみよう！", "王手をかけられる前に、竜から離れられたね。早逃げは何手分もの得になるよ！"), kiki: "white", proverb: "early-escape" },
           ],
         },
         {
@@ -1078,7 +1088,7 @@ const VOLUME_3 = {
           summary: "一段目の歩は堅い",
           steps: [
             { type: "explain", sfen: TESUJI["gold-bottom-pawn"].sfen, marks: TESUJI["gold-bottom-pawn"].marks, kiki: "white", speech: "竜が一段目から、玉の下をねらっているよ。一段目に赤い数字が並んでいるね。こういうときは「金底の歩」が効くんだ。" },
-            { ...tesujiFindStep("gold-bottom-pawn", "金の真下の3九に歩を打って、竜の横利き（赤い数字）を止めよう！", "金底の歩で、3九から先の赤い数字が消えた！ 竜の横利きが止まったね。「岩よりも堅し」だよ！"), kiki: "white" },
+            { ...tesujiFindStep("gold-bottom-pawn", "金の真下の3九に歩を打って、竜の横利き（赤い数字）を止めよう！", "金底の歩で、3九から先の赤い数字が消えた！ 竜の横利きが止まったね。「岩よりも堅し」だよ！"), kiki: "white", proverb: "gold-bottom-pawn" },
           ],
         },
         bossLesson("v3-c3-boss", {
@@ -1172,7 +1182,12 @@ function drillIdentifyStep(strategyId, options) {
 }
 
 /** 定跡図鑑の手順をなぞる練習。相手の応手は定跡図鑑と同じく省いた盤面で進める。 */
-function openingDrillLesson(id, strategyId) {
+/**
+ * @param {string} id
+ * @param {string} strategyId
+ * @param {{ proverb?: string }} [options] proverbは、手順の最後の手に付ける格言札(手筋図鑑のID)
+ */
+function openingDrillLesson(id, strategyId, { proverb = "" } = {}) {
   const definition = OPENING_STRATEGIES.find((strategy) => strategy.id === strategyId);
   const explanation = openingExplanation(strategyId);
   const replay = drillReplay(strategyId);
@@ -1190,6 +1205,10 @@ function openingDrillLesson(id, strategyId) {
         praise: `${step.label}、定跡どおり！`,
       });
     }
+  }
+  if (proverb) {
+    const last = steps.findLastIndex(({ type }) => type === "find-move");
+    steps[last] = { ...steps[last], proverb };
   }
   // 形ができたら、先手の利きの地図で、駒がどこまで働くようになったかを見せる。
   steps.push({ type: "explain", sfen: replay.at(-1).sfen, kiki: "black", speech: `${definition.label}の形ができたね！ 青い数字は、君の駒が見張るマス。${DRILL_TEXTS[strategyId].next}` });
@@ -1233,7 +1252,7 @@ const VOLUME_4 = {
       id: "v4-c2",
       title: "居飛車にチャレンジ",
       lessons: [
-        openingDrillLesson("v4-bougin", "bougin"),
+        openingDrillLesson("v4-bougin", "bougin", { proverb: "silver-attacks-gold-defends" }),
         openingDrillLesson("v4-hayaguri", "hayaguri-gin"),
         openingDrillLesson("v4-koshikake", "koshikake-gin"),
         openingDrillLesson("v4-yagura", "yagura-strategy"),

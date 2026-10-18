@@ -65,7 +65,7 @@ function quotedTerm(speech) {
  * @param {{
  *   sfen?: string,
  *   marks?: { file: number, rank: number, tone: string }[],
- *   phase?: "task" | "solved" | "refute",
+ *   phase?: "task" | "solved" | "refute" | "proverb",
  *   moved?: string,
  *   lead?: string,
  *   refuteSquare?: string,
@@ -87,6 +87,8 @@ export function stepCallout(step, context = {}) {
     const text = context.refuteKind === "drop" ? "打ち込まれる！" : context.refuteKind === "mate" ? "詰まされる！" : "取られる！";
     return { at: context.refuteSquare, text };
   }
+  // 格言札を出すときは、いま指した駒を「この手！」と指す(格言の名前は札に大きく出す)。
+  if (phase === "proverb") return context.moved ? { at: context.moved, text: "この手！" } : null;
   if (phase === "solved") {
     return context.moved && context.lead ? { at: context.moved, text: context.lead } : null;
   }

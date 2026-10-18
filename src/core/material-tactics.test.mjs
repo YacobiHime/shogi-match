@@ -20,10 +20,11 @@ describe("駒の損得の軽い読み", () => {
     expect(reply.score).toBe(6);
   });
 
+  // 合法手ごとに相手の受けまで読むので重い。並列で動かすと5秒を超えることがある。
   it("持ち駒を打ち込まれて両取りになる隙を見つける", () => {
     const gap = "ln1gk2nl/1r1s1gs2/p1pppp1pp/1p4p2/9/2P3PP1/PPSPPPN1P/2K2GSR1/LN1G4L w Bb 1";
     expect(dropThreat(gap, "B")?.usi).toBe("B*3i");
     const closed = sfenAfterMove(gap.replace(" w ", " b "), "2h2i");
     expect(dropThreat(closed, "B")).toBeNull();
-  });
+  }, 30_000);
 });

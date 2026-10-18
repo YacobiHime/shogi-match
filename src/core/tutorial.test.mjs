@@ -28,7 +28,10 @@ import {
 } from "./tutorial-runner.mjs";
 import {
   TUTORIAL_PROGRESS_KEY,
+  TUTORIAL_PROVERBS_KEY,
   emptyTutorialProgress,
+  loadCollectedProverbs,
+  recordProverb,
   isLessonUnlocked,
   lessonsProgress,
   loadTutorialProgress,
@@ -301,15 +304,45 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     expect(steps.filter(({ type }) => type === "open-dex")).toEqual([]);
     const dex = steps.filter(({ dex: entry }) => entry);
     expect(dex.map(({ dex: entry }) => `${entry.kind}:${entry.id}`)).toEqual(expect.arrayContaining([
-      "tesuji:knight-fork", "piece:piece-values", "tesuji:head-gold", "opening:yagura", "opening:shiken",
+      "piece:piece-values", "tesuji:head-gold", "opening:yagura", "opening:shiken",
     ]));
     // 図鑑の項目の局面と印は、図鑑のデータと同じ(二重に持たない)。
-    const fork = dex.find(({ dex: entry }) => entry.id === "knight-fork");
-    const entry = referenceDexEntries("tesuji").find(({ id }) => id === "knight-fork");
-    expect(fork).toMatchObject({ sfen: entry.sfen, marks: entry.marks, arrows: entry.arrows, speech: entry.overview, headline: entry.label });
-    expect(fork.pages.length).toBe(entry.rows.length);
+    const headGold = dex.find(({ dex: entry }) => entry.id === "head-gold");
+    const entry = referenceDexEntries("tesuji").find(({ id }) => id === "head-gold");
+    expect(headGold).toMatchObject({ sfen: entry.sfen, marks: entry.marks, arrows: entry.arrows, speech: entry.overview, headline: entry.label });
+    expect(headGold.pages.length).toBe(entry.rows.length);
     expect(dex.find(({ dex: item }) => item.id === "piece-values").values.map(({ label, points }) => `${label}${points}`).slice(0, 7))
       .toEqual(["歩1", "香3", "桂4", "銀5", "金6", "角8", "飛10"]);
+  });
+
+  it("格言札は手筋図鑑の格言を、課題に1レッスン1枚まで付け、第1巻から第4巻のどの巻にもある(設計16-5)", () => {
+    const tesuji = new Set(referenceDexEntries("tesuji").map(({ id }) => id));
+    const volumes = new Set();
+    for (const lesson of TUTORIAL_LESSONS) {
+      const cards = lesson.steps.filter(({ proverb }) => proverb);
+      expect(cards.length, lesson.id).toBeLessThanOrEqual(1);
+      for (const step of cards) {
+        expect(tesuji.has(step.proverb), `${lesson.id} ${step.proverb}`).toBe(true);
+        expect(["move-piece", "find-move", "mate", "capture", "build", "attack-test"], lesson.id).toContain(step.type);
+        volumes.add(lesson.volumeId);
+      }
+    }
+    expect([...volumes].sort()).toEqual(expect.arrayContaining(["v1", "v2", "v3", "v4"]));
+    // 第1巻の最初の駒のレッスンから出会う。
+    expect(tutorialLesson("v1-silver").steps.some(({ proverb }) => proverb === "silver-zigzag")).toBe(true);
+  });
+
+  it("格言帳は出会った格言を重ねずに残し、壊れた記録でも空の帳面で遊べる", () => {
+    const store = new Map();
+    const storage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+    expect(loadCollectedProverbs(storage)).toEqual([]);
+    expect(recordProverb(storage, "silver-zigzag")).toEqual({ ids: ["silver-zigzag"], isNew: true });
+    expect(recordProverb(storage, "silver-zigzag")).toEqual({ ids: ["silver-zigzag"], isNew: false });
+    expect(JSON.parse(store.get(TUTORIAL_PROVERBS_KEY))).toEqual(["silver-zigzag"]);
+    store.set(TUTORIAL_PROVERBS_KEY, "{broken");
+    expect(loadCollectedProverbs(storage)).toEqual([]);
+    const blocked = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
+    expect(recordProverb(blocked, "head-gold")).toEqual({ ids: ["head-gold"], isNew: true });
   });
 
   it("吹き出しの文は1ステップ60字まで(大事なことは盤の上のひとことで見せる。設計16-3)", () => {

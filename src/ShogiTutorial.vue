@@ -178,6 +178,27 @@
                 data-tutorial-stamp
               ><span>{{ stamp.text }}</span></div>
             </Transition>
+            <!-- 格言札。いま指した手に、格言の名前を付ける。押すと次へ進む。 -->
+            <div
+              v-if="proverbCard"
+              :key="proverbCard.id"
+              class="shogi-tutorial__proverb"
+              :class="`shogi-tutorial__proverb--${proverbCard.place}`"
+              role="status"
+              data-proverb-card
+            >
+              <p class="shogi-tutorial__proverb-line">{{ proverbCard.line }}</p>
+              <p class="shogi-tutorial__proverb-name">{{ proverbCard.label }}</p>
+              <p class="shogi-tutorial__proverb-overview">{{ proverbCard.overview }}</p>
+              <p class="shogi-tutorial__proverb-foot">
+                <span v-if="proverbCard.isNew" data-proverb-new><span class="shogi-tutorial__proverb-badge" aria-hidden="true">札</span>格言帳に入ったよ</span>
+                <button
+                  type="button"
+                  class="shogi-tutorial__dex-link"
+                  @click="emit('open-dex', { kind: 'tesuji', id: proverbCard.id })"
+                >図鑑でくわしく</button>
+              </p>
+            </div>
             <ShogiMatchBoard
               :sfen="boardSfen"
               :last-move="lastMove"
@@ -547,7 +568,9 @@ import {
   recordLessonSkipped,
   saveKikiGlassesOn,
   saveTutorialProgress,
+  recordProverb,
 } from "./core/tutorial-progress.mjs";
+import { referenceDexEntries } from "./core/reference-dex.mjs";
 import {
   chapterPosition,
   chapterSummary,
@@ -962,6 +985,29 @@ const mateShown = ref(false);
  * 正解・取り返しの瞬間に盤の上へ出す一言(「両取り！」「取られる！」)。ステップが変わるか、局面を戻すと消す。
  */
 const momentCallout = ref<{ at: string; text: string; tone: "good" | "bad" } | null>(null);
+/**
+ * 格言札(16-5)。課題を解き終えたら、いま指した手の格言を盤の上に出す。初めての格言は格言帳(手筋図鑑の★)に入れる。
+ * placeは札を出す位置。いま動かした駒を隠さないよう、駒が盤の上半分なら下に出す。
+ */
+const proverbCard = ref<{ id: string; label: string; overview: string; line: string; isNew: boolean; place: "top" | "bottom" } | null>(null);
+const TESUJI_ENTRIES = new Map(referenceDexEntries("tesuji").map((entry: any) => [entry.id, entry]));
+function showProverbCard(step: any, at: string) {
+  const entry: any = TESUJI_ENTRIES.get(step.proverb);
+  if (!entry) return null;
+  const { isNew } = recordProverb(storage, entry.id);
+  const rank = at ? at.charCodeAt(1) - 96 : 9;
+  proverbCard.value = {
+    id: entry.id,
+    label: entry.label,
+    overview: entry.overview,
+    line: step.proverbLine ?? "いま君が指した手が、これ！",
+    isNew,
+    place: rank <= 4 ? "bottom" : "top",
+  };
+  const callout = at ? stepCallout(step, { phase: "proverb", moved: at }) : null;
+  if (callout) momentCallout.value = { ...callout, tone: "good" };
+  return proverbCard.value;
+}
 /** 取り返しの再生中。盤を触れなくし、押すと待たずに戻す。 */
 const refuting = ref(false);
 let refuteRestore: (() => void) | null = null;
@@ -1352,6 +1398,7 @@ function loadStep(index: number) {
   refuting.value = false;
   refuteRestore = null;
   momentCallout.value = null;
+  proverbCard.value = null;
   dexPage.value = 0;
   startFormationReplay(step);
   // 道具を手に入れる場面。判を押して、見出しにボタンを出す(ごほうびはすぐ使えるように)。
@@ -1413,7 +1460,7 @@ function praiseFor(step: any) {
  */
 function solveStep(
   text: string,
-  { delay = TUTORIAL_AUTO_ADVANCE_MS as number | null, stampText = "正解", big = false, at = "" } = {},
+  { delay = TUTORIAL_AUTO_ADVANCE_MS as number | null, stampText = "正解", big = false, at = "", lead: splitLead = true } = {},
 ) {
   stepSolved.value = true;
   solvedAt = Date.now();
@@ -1425,12 +1472,15 @@ function solveStep(
   if (stepMisses.value > 0) runMissed.add(stepIndex.value);
   else if (origin) reviewSolved.push(origin);
   // 動かした駒のそばに、ほめ言葉の最初の一句を出し、吹き出しには続きだけを出す(読み上げは全部読む)。
-  const { lead, rest } = at ? splitLeadPhrase(text) : { lead: "", rest: text };
+  const { lead, rest } = at && splitLead ? splitLeadPhrase(text) : { lead: "", rest: text };
   const solvedCallout = lead ? stepCallout(currentStep.value, { phase: "solved", moved: at, lead }) : null;
   momentCallout.value = solvedCallout ? { ...solvedCallout, tone: "good" } : null;
-  setFeedback(lead ? rest : text, "good", text);
+  // 格言札(16-5)。まちがえても、解き終えたら出す。押すまで次へ進めない(札を読む時間をとる)。
+  const card = currentStep.value?.proverb ? showProverbCard(currentStep.value, at) : null;
+  // 札を出すときは、盤の上の一言が「この手！」になるので、吹き出しにはほめ言葉を全部出す。
+  setFeedback(lead && !card ? rest : text, "good", card ? `${text} ${card.line}「${card.label}」。${card.overview}` : text);
   showStamp(stampText, big);
-  if (delay === null) return;
+  if (delay === null || card) return;
   const index = stepIndex.value;
   stepTimers.push(setTimeout(() => {
     if (view.value === "lesson" && stepIndex.value === index) advance();
@@ -1531,7 +1581,7 @@ function onBoardMove(usi: string) {
     const text = best
       ? `最短の${result.movesUsed}手！ ${score}${praiseFor(step)}`
       : `全部取れたね！ ${score}${result.movesUsed}手かかったけど、最短は${result.par}手。もう一度やると、近道が見つかるかも。`;
-    solveStep(text, { stampText: best ? "最短！" : "正解", big: best, delay: best ? 1600 : 2600 });
+    solveStep(text, { stampText: best ? "最短！" : "正解", big: best, delay: best ? 1600 : 2600, at: usiDestination(usi), lead: false });
     return;
   }
   if (step.type === "build") {
@@ -1544,7 +1594,7 @@ function onBoardMove(usi: string) {
     const text = best
       ? `最短の${result.movesUsed}手！ ${praiseFor(step)}`
       : `${result.movesUsed}手で組めたね。最短は${result.par}手だよ。${praiseFor(step)}`;
-    solveStep(text, { stampText: "完成！", big: true, delay: Math.max(1800, choiceAdvanceDelay(text)) });
+    solveStep(text, { stampText: "完成！", big: true, delay: Math.max(1800, choiceAdvanceDelay(text)), at: usiDestination(usi), lead: false });
     return;
   }
   if (step.type === "mate") mateShown.value = true;
@@ -1650,7 +1700,7 @@ function onAttackMove(step: any, usi: string) {
   if (result.mated) {
     attackOutcome.value = attackResultLabel({ mated: true, checks: result.state.checks });
     mateShown.value = true;
-    solveStep(praiseFor(step), { stampText: "詰み！", big: true, delay: null });
+    solveStep(praiseFor(step), { stampText: "詰み！", big: true, delay: null, at: usiDestination(usi), lead: false });
     return;
   }
   attackOutcome.value = attackResultLabel({ mated: false, checks: result.state.checks });
@@ -3031,6 +3081,77 @@ const resultMessage = computed(() => {
 /* 正解のはなまる。盤の上のまん中に、ぽんと押して、すぐ消える。操作は止めない。 */
 .shogi-game .shogi-tutorial__board {
   position: relative;
+}
+/*
+ * 格言札。盤の上に、いま指した駒を隠さない側(上か下)へ出す。名前を大きく、図鑑の一言を添える。
+ * はなまる(z-index 40)より下、盤の部品より上。
+ */
+.shogi-game .shogi-tutorial__proverb {
+  position: absolute;
+  left: 50%;
+  z-index: 38;
+  display: grid;
+  gap: 0.25rem;
+  width: min(92%, 24rem);
+  box-sizing: border-box;
+  padding: 0.7rem 0.9rem 0.5rem;
+  border: 3px solid #7c2d12;
+  border-radius: 0.8rem;
+  background: #fffaf0;
+  color: #2a211d;
+  box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.35);
+  transform: translateX(-50%);
+  animation: shogi-tutorial-proverb-in 240ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__proverb--top { top: 4%; }
+.shogi-game .shogi-tutorial__proverb--bottom { bottom: 4%; }
+.shogi-game .shogi-tutorial__proverb p {
+  margin: 0;
+}
+.shogi-game .shogi-tutorial__proverb-line {
+  color: #9a3412;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__proverb-name {
+  font-size: 1.45rem;
+  font-weight: 900;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+}
+.shogi-game .shogi-tutorial__proverb-overview {
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.shogi-game .shogi-tutorial__proverb-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.8rem;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #166534;
+}
+/* 手筋図鑑の一覧に付く「札」の印と同じ形。 */
+.shogi-game .shogi-tutorial__proverb-badge {
+  margin-right: 0.3em;
+  padding: 0 0.25em;
+  border: 1px solid #d97706;
+  border-radius: 0.2em;
+  color: #b45309;
+  font-size: 0.85em;
+}
+.shogi-game .shogi-tutorial__proverb .shogi-tutorial__dex-link {
+  margin-left: auto;
+  color: #1d4ed8;
+}
+@keyframes shogi-tutorial-proverb-in {
+  from { opacity: 0; transform: translateX(-50%) rotate(-3deg) scale(0.8); }
+  to { opacity: 1; transform: translateX(-50%) rotate(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tutorial__proverb { animation: none; }
 }
 .shogi-game .shogi-tutorial__stamp {
   position: absolute;

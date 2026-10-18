@@ -114,6 +114,41 @@ export function saveKikiGlassesOn(storage, on) {
   }
 }
 
+// ===== 格言帳 =====
+/**
+ * 教室の格言札で出会った格言(手筋図鑑のID)。手筋図鑑の項目に★を付ける(docs/nyumon-mode-design.mdの16-5)。
+ * 読めなくても、壊れていても、空の帳面として遊べるようにする。
+ */
+export const TUTORIAL_PROVERBS_KEY = "yacobihime:shogi-match:tutorial-proverbs:v1";
+
+/** @param {any} storage @returns {string[]} */
+export function loadCollectedProverbs(storage) {
+  try {
+    const parsed = JSON.parse(storage?.getItem(TUTORIAL_PROVERBS_KEY) ?? "[]");
+    return Array.isArray(parsed) ? [...new Set(parsed.filter((id) => typeof id === "string" && id))] : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 格言を格言帳に入れる。isNewは初めて出会った格言か(「格言帳に入ったよ」と添える)。
+ * @param {any} storage
+ * @param {string} id
+ * @returns {{ ids: string[], isNew: boolean }}
+ */
+export function recordProverb(storage, id) {
+  const ids = loadCollectedProverbs(storage);
+  if (!id || ids.includes(id)) return { ids, isNew: false };
+  const next = [...ids, id];
+  try {
+    storage?.setItem(TUTORIAL_PROVERBS_KEY, JSON.stringify(next));
+  } catch {
+    // 保存できなくても、札は出す。
+  }
+  return { ids: next, isNew: true };
+}
+
 // ===== にがてをもう1回 =====
 /**
  * レッスンでまちがえた課題(まちがい・ヒントがあった課題)の記録。{ [レッスンID]: ステップの番号の配列 }。

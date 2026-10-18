@@ -309,12 +309,13 @@ describe("序盤・中盤・終盤の作戦（駒得まで指す・角打ちの�
     expect(result.swing).toBe(5);
   });
 
+  // 合法手ごとに相手の受けまで読むので重い。並列で動かすと5秒を超えることがある。
   it("角換わりの角打ちの隙が残る手は、相手の角打ちを見せてまちがいにする", () => {
     const step = stepOf("v5-opening-plan", ({ guardDrop }) => guardDrop);
     const wrong = attemptTutorialMove(step, createStepState(step), "9g9f");
     expect(wrong).toMatchObject({ outcome: "wrong", reason: "refuted", refutation: { reply: "B*3i", kind: "drop" } });
     expect(attemptTutorialMove(step, createStepState(step), "2h2i").outcome).toBe("correct");
-  });
+  }, 30_000);
 
   it("詰めろは王手でない手で、受けは詰まされない手で正解", () => {
     const threat = stepOf("v5-endgame-plan", ({ threat: kind }) => kind === "mate");

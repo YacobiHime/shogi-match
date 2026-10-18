@@ -55,6 +55,13 @@
                 @click="selectItem(item.id)"
               >
                 <span>{{ item.label }}</span>
+                <!-- 格言帳: 将棋教室の格言札で出会った格言。対局で指した★とは別の札の印にする。 -->
+                <small
+                  v-if="kind === 'tesuji' && proverbBook.has(item.id)"
+                  class="shogi-dex__card-mark"
+                  aria-label="教室の格言札で出会った"
+                  title="教室の格言札で出会った"
+                >札</small>
                 <small
                   v-if="kind === 'tesuji' && collectedTesuji[item.id]"
                   class="shogi-dex__got"
@@ -426,6 +433,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { loadCollection } from "./core/collection.mjs";
+import { loadCollectedProverbs } from "./core/tutorial-progress.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { formatAnalysisScore, scoreForBlack } from "./core/kifu-analysis.mjs";
 import { appendUsiMove, createGameRecord } from "./game-state";
@@ -549,6 +557,8 @@ const collectedTesuji: Record<string, number> = (() => {
     return {};
   }
 })();
+/** 将棋教室の格言札で出会った格言(core/tutorial-progress.mjsの格言帳)。 */
+const proverbBook = new Set<string>(loadCollectedProverbs(typeof localStorage === "undefined" ? null : localStorage));
 const entries = computed(() => referenceDexEntries(props.kind) as ReferenceEntry[]);
 // 用語辞典だけ、一覧を検索で絞り込める。
 const searchable = computed(() => props.kind === "glossary");
@@ -1114,6 +1124,21 @@ defineExpose({ goBack });
   font-size: 0.72rem;
   font-weight: 800;
   text-shadow: 0 1px 0 rgba(23, 38, 50, 0.6);
+}
+/* 格言帳の札の印。★の前に小さな札を置く(★がなければ右端へ寄せる)。 */
+.shogi-game .shogi-dex__card-mark {
+  flex: none;
+  margin-left: auto;
+  padding: 0 0.25rem;
+  border: 1px solid #f1a54c;
+  border-radius: 0.2rem;
+  color: #f1a54c;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.shogi-game .shogi-dex__card-mark + .shogi-dex__got {
+  margin-left: 0.3rem;
 }
 .shogi-game .shogi-reference-dex__kifu-head {
   display: flex;

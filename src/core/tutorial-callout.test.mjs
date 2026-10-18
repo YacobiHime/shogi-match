@@ -51,6 +51,9 @@ describe("盤の上のひとこと", () => {
     expect(stepCallout(step, { phase: "solved", moved: "5e", lead: "両取り！" })).toEqual({ at: "5e", text: "両取り！" });
     expect(stepCallout(step, { phase: "refute", refuteSquare: "5e" })).toEqual({ at: "5e", text: "取られる！" });
     expect(stepCallout(step, { phase: "refute", refuteSquare: "3i", refuteKind: "drop" })).toEqual({ at: "3i", text: "打ち込まれる！" });
+    expect(stepCallout(step, { phase: "proverb", moved: "5b" })).toEqual({ at: "5b", text: "この手！" });
+    // その場の図鑑は、見出しを図鑑の矢印の行き先に付ける。
+    expect(stepCallout({ type: "explain", sfen: "4k4/9/5S3/9/9/9/9/9/4K4 b G 1", headline: "頭金", arrows: ["G*5b"] })).toEqual({ at: "5b", text: "頭金" });
     expect(shortHeadline("飛車先の歩交換三つの得あり")).toBe("飛車先の歩交換三つの得あり");
     expect(shortHeadline("へぼ将棋、玉より飛車を可愛がり")).toBe("へぼ将棋");
   });
