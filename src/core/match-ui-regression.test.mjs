@@ -224,6 +224,10 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/data-plan-interruption[\s\S]*?chooseSuggestedPlan\(suggestion\.kind, suggestion\.id\)/);
     // 完成形の駒を盤に薄く出す。
     expect(source).toMatch(/:ghost-pieces="planGhosts"/);
+    // 戦法占いで出た作戦は解放に加え、定跡図鑑の占いの結果から対局準備へ進める。
+    expect(source).toMatch(/@fortune-result="onFortuneResult"/);
+    expect(source).toMatch(/extraIds: fortunePlanIds\.value/);
+    expect(source).toMatch(/@play-plan="playPlanFromDex"/);
     // 戻る操作で作戦カードのシートを閉じる。
     expect(source).toMatch(/else if \(planSheet\.value\) \{\s*closePlanSheet\(\);/);
     // 対局準備のCPU欄は「項目: 値 [変更]」の行で、一体型なら変更ボタンを無効にする。

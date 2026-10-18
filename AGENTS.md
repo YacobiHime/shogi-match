@@ -15,7 +15,7 @@
 | ブラウザの戻る操作 | `src/composables/useBackNavigation.ts`、`src/ShogiMatchGame.vue`の`navigateBack` |
 | 画面の大きさによる配置の切り替え | `src/composables/useResponsiveLayout.ts` |
 | 戦法・囲いの手順、完成条件、分類 | `src/core/opening-guide.mjs` |
-| やこび姫補助の作戦カード（選び方・解放・完成形の小さな盤と薄い駒） | 目録は`src/core/opening-catalog.mjs`、解放とおまかせは`src/core/opening-unlocks.mjs`、完成形は`src/core/opening-formation.mjs`、画面は`src/OpeningPlanSheet.vue`と`src/FormationThumb.vue`、対局画面の`planSheet`・`planGhosts`・`planInterruption`、設計は`docs/opening-guide-ux-design.md` |
+| やこび姫補助の作戦カード（選び方・解放・完成形の小さな盤と薄い駒） | 目録は`src/core/opening-catalog.mjs`、解放とおまかせは`src/core/opening-unlocks.mjs`、完成形は`src/core/opening-formation.mjs`、戦法占いは`src/core/opening-fortune.mjs`と`src/OpeningFortune.vue`（作戦カードのシートと定跡図鑑から開く）、画面は`src/OpeningPlanSheet.vue`と`src/FormationThumb.vue`、対局画面の`planSheet`・`planGhosts`・`planInterruption`、設計は`docs/opening-guide-ux-design.md` |
 | 定跡エディターの上書きデータ | `src/data/opening-guide-overrides.mjs`（`npm run import:opening-library`で生成） |
 | 戦法・囲いの解説文 | `src/core/opening-explanations.mjs` |
 | 戦型検出 | `src/core/formation-tracker.mjs`、`src/data/hiragana_suisho_formations.json` |

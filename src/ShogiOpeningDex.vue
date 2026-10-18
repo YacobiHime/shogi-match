@@ -30,6 +30,12 @@
       </button>
     </div>
 
+    <!-- 迷ったら、戦法占い。結果から、その作戦で指す・完成形から指す・図鑑で見るを選べる。 -->
+    <button type="button" class="shogi-dex__fortune-open" data-fortune-open @click="fortuneOpen = true">
+      <span>迷ったら、やこび姫に占ってもらう</span>
+      <small>3つの質問で、君に合う戦法が分かるよ</small>
+    </button>
+
     <!-- 小さい画面では定跡一覧をハンバーガーメニューにまとめる。 -->
     <button
       v-if="isNarrow"
@@ -181,12 +187,37 @@
         </div>
       </section>
     </div>
+
+    <div
+      v-if="fortuneOpen"
+      class="shogi-dex__fortune"
+      role="dialog"
+      aria-modal="true"
+      aria-label="戦法占い"
+      @click.self="fortuneOpen = false"
+    >
+      <div class="shogi-dex__fortune-panel">
+        <header>
+          <h2>戦法占い</h2>
+          <button type="button" class="shogi-dex__fortune-close" aria-label="閉じる" @click="fortuneOpen = false">×</button>
+        </header>
+        <div class="shogi-dex__fortune-body">
+          <OpeningFortune
+            :asset-base-url="assetBaseUrl"
+            :actions="['play', 'practice', 'dex']"
+            @action="onFortuneAction"
+          />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
+import OpeningFortune, { type FortuneAction } from "./OpeningFortune.vue";
+import { openingPlanById } from "./core/opening-catalog.mjs";
 import { STANDARD_SFEN } from "./game-state";
 import {
   OPENING_CASTLES,
@@ -206,7 +237,11 @@ const props = defineProps({
   // 教室から重ねて開いたときは教室へ戻るため、「戻る」とだけ表示する。
   backLabel: { type: String, default: "タイトルへ戻る" },
 });
-const emit = defineEmits(["close"]);
+const emit = defineEmits<{
+  close: [];
+  // 戦法占いの結果から、その作戦で対局する(practiceは完成形から指す学習対局)。
+  "play-plan": [planId: string, practice: boolean];
+}>();
 
 type DexDefinition = { id: string; label: string; blackMoves?: string[]; availability?: { colors?: string[] } };
 type DexStep = { sfen: string; label: string; lastMove: string; routine: string | null };
@@ -330,6 +365,33 @@ function selectItem(id: string) {
   // 一覧から選んだらメニューを閉じる。
   listOpen.value = false;
 }
+
+// ===== 戦法占い =====
+const fortuneOpen = ref(false);
+function onFortuneAction(kind: FortuneAction, planId: string) {
+  fortuneOpen.value = false;
+  if (kind !== "dex") {
+    emit("play-plan", planId, kind === "practice");
+    return;
+  }
+  // 図鑑で見る: 矢倉のカードは矢倉戦法の項目、ほかは戦法の項目を開く。
+  const plan = openingPlanById(planId);
+  const id = [plan?.explanation, plan?.strategyId].find((candidate) => (
+    candidate && OPENING_STRATEGIES.some((item: any) => item.id === candidate)
+  ));
+  if (!id) return;
+  tab.value = "strategy";
+  selectItem(id);
+  stepIndex.value = 0;
+}
+function onFortuneKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape" && fortuneOpen.value) {
+    event.stopPropagation();
+    fortuneOpen.value = false;
+  }
+}
+onMounted(() => window.addEventListener("keydown", onFortuneKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onFortuneKeydown));
 
 // 定跡の手順を平手の初期局面から再生する。後手専用の戦法は左右を反転し、
 // 「@角換わり」のような定型手順は、相手の応手を含む代表進行を1手ずつ展開する。
@@ -897,6 +959,85 @@ watch(stepIndex, async () => {
   .shogi-game .shogi-dex__stage-nav {
     width: 2.6rem;
     height: 4rem;
+  }
+}
+/* 戦法占い。図鑑の上に、明るい用紙の札で重ねる。 */
+.shogi-game .shogi-dex__fortune-open {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1em 0.7em;
+  align-items: baseline;
+  margin: 0.4em 0.6em 0.2em;
+  min-height: 2.75em;
+  padding: 0.4em 0.9em;
+  border: 2px dashed #c98a3d;
+  border-radius: 0.5em;
+  color: #fffcf4;
+  background: rgba(201, 138, 61, 0.22);
+  box-shadow: none;
+  text-align: left;
+}
+.shogi-dex__fortune-open span {
+  font-weight: 800;
+}
+.shogi-dex__fortune-open small {
+  font-size: 0.8em;
+  opacity: 0.85;
+}
+.shogi-dex__fortune {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.4em, 3vw, 2em);
+  background: rgba(23, 38, 50, 0.6);
+}
+.shogi-dex__fortune-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(34em, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  border: 3px solid #c98a3d;
+  border-radius: 0.6em;
+  color: #1d303f;
+  background: #fffcf4;
+  box-shadow: 0 1em 2.6em rgba(7, 18, 26, 0.5);
+}
+.shogi-dex__fortune-panel header {
+  position: relative;
+  padding: 0.55em 2.8em;
+  background: #c98a3d;
+  text-align: center;
+}
+.shogi-dex__fortune-panel h2 {
+  margin: 0;
+  color: #fffcf4;
+  font-size: 1.1em;
+}
+.shogi-game .shogi-dex__fortune-close {
+  position: absolute;
+  top: 50%;
+  right: 0.3em;
+  width: 2.2em;
+  min-height: 2.2em;
+  padding: 0;
+  border: 0;
+  color: #fffcf4;
+  background: transparent;
+  box-shadow: none;
+  font-size: 1.2em;
+  transform: translateY(-50%);
+}
+.shogi-dex__fortune-body {
+  padding: 0.8em;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+@media (hover: hover) {
+  .shogi-game .shogi-dex__fortune-close:not(:disabled):hover {
+    background-color: transparent;
   }
 }
 </style>

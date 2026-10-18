@@ -388,6 +388,7 @@
       :asset-base-url="assetBaseUrl"
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
       @close="dexOpen = false; openingDexInitialId = ''"
+      @play-plan="playPlanFromDex"
     />
     <ShogiTournament
       v-if="tournamentOpen"
@@ -821,7 +822,9 @@
       @choose="choosePlan"
       @clear="clearPlan"
       @auto="autoPickOpeningPlan(planSheet || 'game')"
+      :asset-base-url="assetBaseUrl"
       @toggle-all="togglePlanSwitch"
+      @fortune-result="onFortuneResult"
       @close="closePlanSheet"
     />
 
@@ -1666,6 +1669,7 @@ import {
   saveShowAllPlans,
 } from "./core/opening-unlocks.mjs";
 import { openingFormationGhosts, openingFormationProgress } from "./core/opening-formation.mjs";
+import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
@@ -3342,6 +3346,11 @@ const showAllPlans = ref(loadShowAllPlans(browserStorage()));
 const seenPlanIds = ref<Set<string> | null>(loadSeenPlans(browserStorage()));
 /** 対局で形を完成させたら読み直す(コレクションの印から解放を計算するため)。 */
 const planCollectionVersion = ref(0);
+/** 戦法占いで出た作戦。まだ使えない段でも使える(占いのごほうび)。 */
+const fortunePlanIds = ref<string[]>(loadFortunePlans(browserStorage()));
+function onFortuneResult() {
+  fortunePlanIds.value = loadFortunePlans(browserStorage());
+}
 /** 初段相当以上の人は、最初から全部の作戦を使える(安全網)。 */
 const PLAN_ALL_LEVEL = CPU_STRENGTH_PRESETS.find(({ label }) => label.includes("初段"))?.level ?? 32;
 const planFormations = computed(() => {
@@ -3359,6 +3368,7 @@ function planUnlocksFor(formations: { [label: string]: { count: number } }) {
     welcomeChoice: homeWelcomeChoice.value,
     strong: ratingState.value.games > 0 && recommendedLevel(ratingState.value.rating) >= PLAN_ALL_LEVEL,
     showAll: showAllPlans.value,
+    extraIds: fortunePlanIds.value,
   });
 }
 const planUnlocks = computed(() => planUnlocksFor(planFormations.value));
@@ -3436,6 +3446,8 @@ function markPlansSeen() {
 function openPlanSheet(context: "pregame" | "game") {
   // 初めて開いたときは、いま使える作戦を全部見たことにする(最初からNEWだらけにしない)。
   if (seenPlanIds.value === null) markPlansSeen();
+  // 図鑑の戦法占いで出た作戦も、使えるようにしておく。
+  onFortuneResult();
   planSheet.value = context;
 }
 function closePlanSheet() {
@@ -3560,6 +3572,30 @@ const planInterruption = computed(() => {
       : "この囲いは組めなくなったよ。";
   return { reason, suggestions };
 });
+/**
+ * 定跡図鑑の戦法占いの結果から対局へ。「この作戦で指す」は通常対局の「あなたの作戦」に入れ、
+ * 「完成形から指してみる」は学習対局の完成形から始める。どちらも対局準備で強さなどを決めてから始める。
+ */
+function playPlanFromDex(planId: string, practice: boolean) {
+  const plan = openingPlanById(planId);
+  if (!plan) return;
+  onFortuneResult();
+  // 中断した対局を消す確認はホームの上に出すので、先に図鑑と教室を閉じる。
+  dexOpen.value = false;
+  openingDexInitialId.value = "";
+  tutorialOpen.value = false;
+  confirmDiscardSuspended(() => {
+    matchKind.value = practice ? "learning" : "normal";
+    closeHome();
+    if (practice) {
+      learningStartType.value = "formation";
+      learningPlayerStrategy.value = plan.strategyId;
+      learningPlayerCastle.value = plan.castles[0] ?? "";
+    } else {
+      applyPlan(plan.id, plan.castles[0] ?? "", "pregame");
+    }
+  });
+}
 function chooseSuggestedPlan(kind: "strategy" | "castle", id: string) {
   if (kind === "strategy") selectedStrategy.value = id;
   else selectedCastle.value = id;

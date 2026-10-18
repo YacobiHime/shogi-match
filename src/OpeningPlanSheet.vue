@@ -2,13 +2,24 @@
   <div class="plan-sheet" role="dialog" aria-modal="true" :aria-label="title" @click.self="emit('close')">
     <div ref="panel" class="plan-sheet__panel" tabindex="-1">
       <header class="plan-sheet__header">
-        <button v-if="detail" type="button" class="plan-sheet__back" aria-label="一覧へ戻る" @click="detailId = ''">‹</button>
-        <h3>{{ detail ? detailName : title }}</h3>
+        <button v-if="detail || fortuneOpen" type="button" class="plan-sheet__back" aria-label="一覧へ戻る" @click="backToList">‹</button>
+        <h3>{{ fortuneOpen ? "戦法占い" : detail ? detailName : title }}</h3>
         <button type="button" class="plan-sheet__close" aria-label="閉じる" @click="emit('close')">×</button>
       </header>
 
+      <!-- 戦法占い。結果の「この作戦で指す」で、その作戦を選ぶ。 -->
+      <div v-if="fortuneOpen" class="plan-sheet__body">
+        <OpeningFortune
+          :asset-base-url="assetBaseUrl"
+          :actions="['play']"
+          :locked-ids="lockedIds"
+          @result="emit('fortune-result', $event)"
+          @action="(_, planId) => chooseFortune(planId)"
+        />
+      </div>
+
       <!-- くわしく: 完成形を大きく見せ、得意・苦手・コツを1行ずつ。囲いは合う順に並べて替えられる。 -->
-      <div v-if="detail" class="plan-sheet__body plan-sheet__detail">
+      <div v-else-if="detail" class="plan-sheet__body plan-sheet__detail">
         <div class="plan-sheet__detail-head">
           <FormationThumb class="plan-sheet__detail-thumb" :strategy-id="detail.plan.strategyId" :castle-id="detailCastle" />
           <div class="plan-sheet__tags">
@@ -54,6 +65,10 @@
           <button type="button" class="plan-sheet__auto" @click="emit('auto')">
             <span>おまかせ</span>
             <small>やこび姫が1つ選ぶよ</small>
+          </button>
+          <button type="button" class="plan-sheet__fortune" data-fortune-open @click="fortuneOpen = true">
+            <span>迷ったら占う</span>
+            <small>3つの質問で、やこび姫が占うよ</small>
           </button>
           <button v-if="allowClear" type="button" class="plan-sheet__clear" @click="emit('clear')">作戦なしにする</button>
         </div>
@@ -111,7 +126,7 @@
         </div>
       </div>
 
-      <footer v-if="detail" class="plan-sheet__footer">
+      <footer v-if="detail && !fortuneOpen" class="plan-sheet__footer">
         <button type="button" class="plan-sheet__choose" @click="choose">この作戦にする</button>
       </footer>
     </div>
@@ -121,6 +136,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
 import FormationThumb from "./FormationThumb.vue";
+import OpeningFortune from "./OpeningFortune.vue";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { openingExplanation } from "./core/opening-explanations.mjs";
 import { OPENING_PLAN_GROUPS, OPENING_PLAN_TIERS, OPENING_STYLE_LABELS } from "./core/opening-catalog.mjs";
@@ -148,6 +164,7 @@ const props = defineProps({
   showSwitch: { type: Boolean, default: true },
   showAll: { type: Boolean, default: false },
   note: { type: String, default: "" },
+  assetBaseUrl: { type: String, default: "." },
 });
 const emit = defineEmits<{
   choose: [planId: string, castleId: string];
@@ -155,6 +172,7 @@ const emit = defineEmits<{
   auto: [];
   "toggle-all": [on: boolean];
   close: [];
+  "fortune-result": [planId: string];
 }>();
 
 const GROUP_DESCRIPTIONS: { [id: string]: string } = {
@@ -230,6 +248,17 @@ function openDetail(entry: OpeningPlanEntry) {
   const current = entry.plan.id === props.selectedId && entry.castles.includes(props.selectedCastle) ? props.selectedCastle : "";
   detailCastle.value = current || entry.castles[0] || "";
 }
+const fortuneOpen = ref(false);
+const lockedIds = computed(() => props.entries.filter(({ locked }) => locked).map(({ plan }) => plan.id));
+function backToList() {
+  fortuneOpen.value = false;
+  detailId.value = "";
+}
+/** 占いの結果の作戦にする。囲いは、今の局面から組める合う囲いのいちばん目。 */
+function chooseFortune(planId: string) {
+  const entry = props.entries.find(({ plan }) => plan.id === planId);
+  emit("choose", planId, entry?.castles[0] ?? "");
+}
 function choose() {
   if (!detail.value) return;
   emit("choose", detail.value.plan.id, detailCastle.value);
@@ -239,7 +268,7 @@ const panel = ref<HTMLElement | null>(null);
 function onKeydown(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
   event.stopPropagation();
-  if (detailId.value) detailId.value = "";
+  if (detailId.value || fortuneOpen.value) backToList();
   else emit("close");
 }
 onMounted(() => {
@@ -337,6 +366,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 }
 .plan-sheet__auto span { font-size: 1.05em; font-weight: 800; }
 .plan-sheet__auto small { opacity: 0.9; }
+.shogi-game .plan-sheet__fortune {
+  display: grid;
+  flex: 1 1 12em;
+  justify-items: start;
+  min-height: 2.9em;
+  padding: 0.4em 0.9em;
+  border: 2px solid var(--plan-sheet-accent);
+  border-radius: 0.5em;
+  color: var(--plan-sheet-ink);
+  background: #fff;
+  text-align: left;
+}
+.plan-sheet__fortune span { font-size: 1.05em; font-weight: 800; }
+.plan-sheet__fortune small { color: var(--plan-sheet-muted); }
 .shogi-game .plan-sheet__clear {
   min-height: 2.9em;
   padding: 0.4em 0.9em;
@@ -578,6 +621,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 /* 対局画面のボタンの暗い色の「触れたとき」を、明るい用紙の上の色に置き換える。 */
 @media (hover: hover) {
   .shogi-game .plan-sheet__card:not(:disabled):hover,
+  .shogi-game .plan-sheet__fortune:not(:disabled):hover,
   .shogi-game .plan-sheet__castle:not(:disabled):hover,
   .shogi-game .plan-sheet__clear:not(:disabled):hover {
     border-color: var(--plan-sheet-accent);
