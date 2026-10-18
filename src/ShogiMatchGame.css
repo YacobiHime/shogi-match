@@ -416,51 +416,103 @@
   font-size: 0.95em;
   text-align: center;
 }
-.shogi-game__opening-selects {
+/* 選んだ作戦のカード。完成形の小さな盤と名前、完成までの残り。押すと作戦カードのシートを開く。 */
+.shogi-game__opening-plan {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45em;
+  gap: 0.4em;
 }
-.shogi-game__opening-selects label {
-  display: grid;
-  gap: 0.2em;
-  min-width: 0;
-  color: var(--amber);
-  font-size: 0.82em;
-  font-weight: 700;
-}
-.shogi-game__opening-selects select {
+.shogi-game .shogi-game__opening-plan-card {
+  display: flex;
+  gap: 0.6em;
+  align-items: center;
   width: 100%;
-  min-width: 0;
-  min-height: 2.5em;
-  padding: 0.3em 0.4em;
+  min-height: 2.9em;
+  padding: 0.35em 0.6em;
   border: 1px solid rgba(241, 165, 76, 0.6);
-  border-radius: 0.2em;
+  border-radius: 0.4em;
   color: var(--ivory);
-  background: var(--night-deep);
-  font-size: 1.15em;
-  font-weight: 400;
+  background: rgba(23, 38, 50, 0.7);
+  box-shadow: none;
+  text-align: left;
 }
-.shogi-game__opening-strategy-field {
-  position: relative;
+.shogi-game__opening-plan-thumb {
+  flex: 0 0 5.4em;
+  width: 5.4em;
+}
+.shogi-game__opening-plan-text {
+  display: grid;
+  gap: 0.1em;
   min-width: 0;
 }
-.shogi-game__opening-strategy-field > label {
-  height: 100%;
+.shogi-game__opening-plan-text b {
+  color: var(--amber);
+  font-size: 1em;
 }
-.shogi-game .shogi-game__opening-explanation-trigger {
-  position: absolute;
-  z-index: 1;
-  top: -0.2em;
-  right: 0;
-  min-height: 1.7em;
-  padding: 0.1em 0.6em;
+.shogi-game__opening-plan-text small {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.shogi-game__opening-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+.shogi-game .shogi-game__opening-plan-actions button {
+  flex: 1 1 6em;
+  min-height: 2.5em;
+  padding: 0.3em 0.6em;
   border-color: rgba(215, 209, 253, 0.6);
-  border-radius: 0.2em;
   color: var(--ivory);
-  background: rgba(43, 70, 91, 0.9);
-  box-shadow: none;
-  font-size: 0.75em;
+  background: var(--slate);
+  font-size: 0.85em;
+}
+.shogi-game .shogi-game__opening-plan-ghosts span {
+  margin-left: 0.4em;
+  padding: 0 0.35em;
+  border-radius: 0.25em;
+  color: var(--night-deep);
+  background: var(--muted);
+  font-size: 0.85em;
+  font-weight: 800;
+}
+.shogi-game .shogi-game__opening-plan-ghosts[aria-checked="true"] span {
+  background: var(--amber);
+}
+/* 中断したときの「作戦を変えよう」の札。近い作戦を、残り手数つきで並べる。 */
+.shogi-game__plan-interrupt {
+  display: grid;
+  gap: 0.4em;
+  padding: 0.5em;
+  border: 1px solid var(--amber);
+  border-radius: 0.4em;
+  background: rgba(241, 165, 76, 0.12);
+}
+.shogi-game__opening-guide .shogi-game__plan-interrupt p {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.shogi-game__plan-interrupt b {
+  margin-right: 0.5em;
+  color: var(--amber);
+}
+.shogi-game__plan-interrupt > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7em, 1fr));
+  gap: 0.4em;
+}
+.shogi-game .shogi-game__plan-interrupt button {
+  display: grid;
+  min-height: 2.6em;
+  padding: 0.3em 0.4em;
+  border-color: rgba(215, 209, 253, 0.6);
+  color: var(--ivory);
+  background: var(--slate);
+  font-size: 0.85em;
+}
+.shogi-game__plan-interrupt button small {
+  color: var(--amber);
+  font-size: 0.85em;
 }
 .shogi-game__rook-choice {
   display: grid;
@@ -1179,21 +1231,6 @@
 .shogi-game--stack.shogi-game--analysis .shogi-game__portrait {
   display: none;
 }
-/* 縦の余裕が少ない端末では、補助の選択欄を横並びの見出し付き1行にする。 */
-.shogi-game--stack.shogi-game--short .shogi-game__opening-selects label {
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.35em;
-  align-items: center;
-}
-.shogi-game--stack.shogi-game--short .shogi-game__opening-explanation-trigger {
-  top: auto;
-  right: auto;
-  bottom: calc(100% + 0.2em);
-  left: 0;
-}
-.shogi-game--stack.shogi-game--short .shogi-game__opening-strategy-field:has(.shogi-game__opening-explanation-trigger) {
-  margin-top: 1.2em;
-}
 .shogi-game--stack.shogi-game--short .shogi-game__dialogue {
   min-height: 3.6em;
   max-height: 4.6em;
@@ -1369,8 +1406,7 @@
   min-height: 2.2em;
   padding: 0;
 }
-.shogi-game__confirm,
-.shogi-game__opening-explanation {
+.shogi-game__confirm {
   position: absolute;
   z-index: 95;
   inset: 0;
@@ -1450,53 +1486,6 @@
   border-color: var(--rust);
   color: var(--night-deep);
   background: var(--rust);
-}
-.shogi-game__opening-explanation-panel {
-  width: min(31em, 100%);
-  max-height: calc(100% - 1em);
-  overflow-y: auto;
-  padding: 1.1em;
-  border: 1px solid rgba(241, 165, 76, 0.78);
-  border-top: 4px solid var(--amber);
-  color: var(--ivory);
-  background: var(--slate);
-  box-shadow: 0 1em 2.5em rgba(7, 18, 26, 0.58);
-}
-.shogi-game__opening-explanation-panel small {
-  color: var(--amber);
-  font-weight: 700;
-}
-.shogi-game__opening-explanation-panel h2 {
-  margin: 0.15em 0 0.7em;
-  color: var(--ivory);
-}
-.shogi-game__opening-explanation-panel p {
-  margin: 0 0 0.8em;
-  line-height: 1.7;
-}
-.shogi-game__opening-explanation-panel dl {
-  display: grid;
-  gap: 0.55em;
-  margin: 0;
-}
-.shogi-game__opening-explanation-panel dl > div {
-  padding: 0.65em;
-  border-left: 3px solid var(--lavender);
-  background: rgba(23, 38, 50, 0.72);
-}
-.shogi-game__opening-explanation-panel dt {
-  margin-bottom: 0.2em;
-  color: var(--amber);
-  font-weight: 800;
-}
-.shogi-game__opening-explanation-panel dd {
-  margin: 0;
-  line-height: 1.6;
-}
-.shogi-game__opening-explanation-panel > button {
-  display: block;
-  min-width: 7em;
-  margin: 0.9em 0 0 auto;
 }
 
 /* ===== 対局準備 ===== */
@@ -1706,6 +1695,19 @@
   .shogi-game__pregame-row:has(.shogi-game__pregame-change:not(:disabled)):hover {
     background: rgba(201, 138, 62, 0.1);
   }
+}
+/* あなたの作戦の行は「おまかせ」と「変更」の2つのボタンを持つ。行全体を押せる範囲は「変更」に任せ、「おまかせ」はその上に出す。 */
+.shogi-game__pregame-plan-buttons {
+  display: inline-flex;
+  gap: 0.4em;
+}
+.shogi-game .shogi-game__pregame-row .shogi-game__pregame-auto {
+  position: relative;
+  z-index: 1;
+  background: var(--pregame-value);
+}
+.shogi-game .shogi-game__pregame-row .shogi-game__pregame-auto::after {
+  content: none;
 }
 .shogi-game__pregame-row-label {
   font-weight: 600;
@@ -2160,6 +2162,19 @@
 .shogi-game__result-collection-repeat,
 .shogi-game__result-collection-next {
   font-size: 0.88em;
+}
+.shogi-game__result-collection-plans {
+  color: var(--ivory);
+  font-weight: 700;
+}
+.shogi-game__result-collection-plans em {
+  margin-right: 0.4em;
+  padding: 0.05em 0.4em;
+  border-radius: 0.3em;
+  color: #fff;
+  background: #c0392b;
+  font-size: 0.75em;
+  font-style: normal;
 }
 .shogi-game__result-collection-theme {
   color: var(--lavender);

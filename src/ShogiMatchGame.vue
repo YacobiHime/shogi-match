@@ -696,6 +696,29 @@
                   ><span aria-hidden="true"></span></button>
                 </div>
                 <div
+                  v-else-if="row.kind === 'plan'"
+                  class="shogi-game__pregame-row shogi-game__pregame-row--plan"
+                  :data-pregame-row="row.id"
+                >
+                  <span class="shogi-game__pregame-row-label">{{ row.label }}:</span>
+                  <span class="shogi-game__pregame-value">{{ row.value }}</span>
+                  <span class="shogi-game__pregame-plan-buttons">
+                    <button
+                      type="button"
+                      class="shogi-game__pregame-change shogi-game__pregame-auto"
+                      aria-label="あなたの作戦を、やこび姫におまかせする"
+                      data-plan-auto
+                      @click="autoPickOpeningPlan('pregame')"
+                    >おまかせ</button>
+                    <button
+                      type="button"
+                      class="shogi-game__pregame-change"
+                      aria-label="あなたの作戦を変更"
+                      @click="openPlanSheet('pregame')"
+                    >変更</button>
+                  </span>
+                </div>
+                <div
                   v-else
                   class="shogi-game__pregame-row"
                   :class="{ 'shogi-game__pregame-row--fresh': pregameFreshRows.has(row.id) }"
@@ -784,6 +807,23 @@
         @close="pregamePicker = ''"
       />
     </div>
+    <!-- 作戦カードのシート。対局準備の「あなたの作戦」と、対局中のやこび姫補助の欄から開く。 -->
+    <OpeningPlanSheet
+      v-if="planSheet"
+      :title="planSheet === 'pregame' ? 'あなたの作戦をえらぶ' : '作戦をえらぶ'"
+      :entries="planSheetEntries"
+      :selected-id="selectedPlanId"
+      :selected-castle="selectedCastle"
+      :allow-clear="Boolean(selectedStrategy || selectedCastle)"
+      :show-switch="!planUnlocks.all || showAllPlans"
+      :show-all="showAllPlans"
+      :note="planSheet === 'game' ? '今の局面から組める作戦だけを並べているよ。' : ''"
+      @choose="choosePlan"
+      @clear="clearPlan"
+      @auto="autoPickOpeningPlan(planSheet || 'game')"
+      @toggle-all="togglePlanSwitch"
+      @close="closePlanSheet"
+    />
 
     <section
       v-if="cpuColor !== null || blackFormationText !== UNDETERMINED_FORMATION || whiteFormationText !== UNDETERMINED_FORMATION"
@@ -807,69 +847,67 @@
     >
       <h2>やこび姫補助</h2>
       <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
-      <!-- 通常対局で作戦を選んでいないあいだは、1行のボタンにたたむ。選ぶと開き、飛車の振り先などの選択も隠さない。 -->
+      <!--
+        作戦は、完成形の小さな盤が描かれた作戦カードで選ぶ(docs/opening-guide-ux-design.md)。
+        通常対局で作戦を選んでいないあいだは、1行のボタンにたたむ。押すと作戦カードのシートを開く。
+      -->
       <button
         v-if="openingGuideCollapsed"
         type="button"
         class="shogi-game__opening-expand"
-        :aria-expanded="false"
-        @click="openingGuideExpanded = true"
+        data-plan-open
+        @click="openPlanSheet('game')"
       >
         <span>作戦を選ぶ</span>
-        <small>戦法・囲いを選ぶと、やこび姫が手順を案内するよ</small>
+        <small>完成形を見て作戦を選ぶと、やこび姫が手順を案内するよ</small>
       </button>
-      <div v-else-if="openingGuideAvailable" class="shogi-game__opening-selects">
-        <div class="shogi-game__opening-strategy-field">
-          <label>
-            <span>戦法</span>
-            <select
-              v-model="selectedStrategy"
-              aria-label="戦法"
-              :disabled="strategySelectLocked"
-              @change="announceOpeningGuide"
-            >
-              <option value="">{{ strategySelectLocked ? "囲いと一体のため選べません" : "選択しない" }}</option>
-              <optgroup v-for="group in groupedOpeningStrategies" :key="group.id" :label="group.label">
-                <option
-                  v-for="strategy in group.options"
-                  :key="strategy.id"
-                  :value="strategy.id"
-                  :disabled="strategy.disabled"
-                >
-                  {{ strategy.optionLabel }}
-                </option>
-              </optgroup>
-            </select>
-          </label>
+      <div v-else-if="openingGuideAvailable" class="shogi-game__opening-plan">
+        <button
+          type="button"
+          class="shogi-game__opening-plan-card"
+          data-plan-open
+          :aria-label="`作戦: ${selectedPlanLabel || 'なし'}。押すと作戦を変えられるよ`"
+          @click="openPlanSheet('game')"
+        >
+          <FormationThumb
+            v-if="selectedStrategy || selectedCastle"
+            class="shogi-game__opening-plan-thumb"
+            :strategy-id="selectedStrategy"
+            :castle-id="selectedCastle"
+            :filled-squares="planFilledSquares"
+          />
+          <span class="shogi-game__opening-plan-text">
+            <b>{{ selectedPlanLabel || "作戦なし" }}</b>
+            <small v-if="planProgress && planProgress.total">完成まで、あと{{ planProgress.total - planProgress.filled }}マス</small>
+            <small v-else-if="openingPlanComplete">完成！</small>
+            <small v-else-if="!selectedStrategy && !selectedCastle">押すと作戦カードから選べるよ</small>
+          </span>
+        </button>
+        <div class="shogi-game__opening-plan-actions">
+          <button type="button" data-plan-auto @click="autoPickOpeningPlan('game')">おまかせ</button>
           <button
-            v-if="selectedStrategyExplanation"
+            v-if="selectedStrategy || selectedCastle"
             type="button"
-            class="shogi-game__opening-explanation-trigger"
-            :aria-label="`${selectedStrategyDefinition?.label}の解説`"
-            @click="strategyExplanationOpen = true"
-          >解説</button>
+            role="switch"
+            class="shogi-game__opening-plan-ghosts"
+            :aria-checked="planGhostsOn"
+            data-plan-ghosts
+            @click="togglePlanGhosts"
+          >完成形を盤に出す<span aria-hidden="true">{{ planGhostsOn ? "ON" : "OFF" }}</span></button>
         </div>
-        <label>
-          <span>囲い</span>
-          <select
-            v-model="selectedCastle"
-            aria-label="囲い"
-            :disabled="castleSelectLocked"
-            @change="announceOpeningGuide"
-          >
-            <option value="">{{ castleSelectLocked ? castleSelectionLockedLabel : "選択しない" }}</option>
-            <optgroup v-for="group in groupedOpeningCastles" :key="group.id" :label="group.label">
-              <option
-                v-for="castle in group.options"
-                :key="castle.id"
-                :value="castle.id"
-                :disabled="castle.disabled"
-              >
-                {{ castle.optionLabel }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
+      </div>
+      <!-- 中断したら、理由を一言で伝え、今の局面から近い作戦を並べる。押せばすぐ続けられる。 -->
+      <div v-if="planInterruption" class="shogi-game__plan-interrupt" data-plan-interruption role="status">
+        <p><b>作戦を変えよう</b>{{ planInterruption.reason }}</p>
+        <div>
+          <button
+            v-for="suggestion in planInterruption.suggestions"
+            :key="`${suggestion.kind}:${suggestion.id}`"
+            type="button"
+            @click="chooseSuggestedPlan(suggestion.kind, suggestion.id)"
+          >{{ suggestion.label }}<small>あと{{ suggestion.distance }}手</small></button>
+          <button type="button" @click="openPlanSheet('game')">ほかの作戦を見る</button>
+        </div>
       </div>
       <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
         <span>この囲いでは、先に飛車を振る場所を選んでね</span>
@@ -951,6 +989,7 @@
         :float-labels="captureFloatLabels"
         :mark-squares="boardEscapeMarks"
         :risk-destinations="boardRiskDestinations"
+        :ghost-pieces="planGhosts"
         :movement-arrows="matchKind === 'learning' && movementArrowsEnabled && matchStarted && !pregameOpen"
         @usi-move="onPlayerMove"
       />
@@ -1083,40 +1122,6 @@
         class="shogi-game__guided-start shogi-game__guided-start--inline"
         @click="startGuidedReview"
       >▶ 対局を振り返る</button>
-    </div>
-
-    <div
-      v-if="strategyExplanationOpen && selectedStrategyDefinition && selectedStrategyExplanation"
-      class="shogi-game__opening-explanation"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="opening-explanation-title"
-      @click.self="strategyExplanationOpen = false"
-    >
-      <article class="shogi-game__opening-explanation-panel">
-        <small>戦法解説</small>
-        <h2 id="opening-explanation-title">{{ selectedStrategyDefinition.label }}</h2>
-        <p>{{ selectedStrategyExplanation.overview }}</p>
-        <dl>
-          <div>
-            <dt>目的</dt>
-            <dd>{{ selectedStrategyExplanation.aim }}</dd>
-          </div>
-          <div>
-            <dt>相性の良い囲い</dt>
-            <dd>{{ selectedStrategyExplanation.castles }}</dd>
-          </div>
-          <div>
-            <dt>コツ</dt>
-            <dd>{{ selectedStrategyExplanation.tip }}</dd>
-          </div>
-          <div>
-            <dt>注意点</dt>
-            <dd>{{ selectedStrategyExplanation.caution }}</dd>
-          </div>
-        </dl>
-        <button type="button" @click="strategyExplanationOpen = false">閉じる</button>
-      </article>
     </div>
 
     <section
@@ -1472,7 +1477,7 @@
           </dl>
         </details>
         <!-- この対局で手に入った印と、使えるようになった着せ替え。次の着せ替えまでの残りも見せる。 -->
-        <div v-if="collectionResult && (collectionResult.gained.length || collectionResult.repeated.length)" class="shogi-game__result-collection" data-collection-result>
+        <div v-if="collectionResult && (collectionResult.gained.length || collectionResult.repeated.length || collectionResult.plans.length)" class="shogi-game__result-collection" data-collection-result>
           <p class="shogi-game__result-collection-title">コレクション</p>
           <ul v-if="collectionResult.gained.length">
             <li v-for="gain in collectionResult.gained" :key="gain.label" class="shogi-game__result-collection-new">
@@ -1482,6 +1487,10 @@
           <p v-if="collectionResult.repeated.length" class="shogi-game__result-collection-repeat">前にも出した形: {{ collectionResult.repeated.join("・") }}</p>
           <p v-for="theme in collectionResult.themes" :key="theme" class="shogi-game__result-collection-theme">着せ替え{{ theme }}が使えるようになったよ！（やこびノートで選べるよ）</p>
           <p v-if="collectionResult.next" class="shogi-game__result-collection-next">次の着せ替えまで、印あと{{ collectionResult.next.remaining }}個</p>
+          <!-- 形を完成させて増えた作戦カード。すぐ次の対局の「あなたの作戦」で使える(ごほうびの使い道)。 -->
+          <p v-if="collectionResult.plans.length" class="shogi-game__result-collection-plans" data-new-plans>
+            <em>NEW</em>{{ newPlansText(collectionResult.plans) }}を覚えたね！次の対局の「あなたの作戦」で使ってみよう
+          </p>
         </div>
         <!-- 次にすること。ふだんは並びに影響しない(display: contents)。スマホの横向きでは右の列にまとめる。 -->
         <div class="shogi-game__result-next">
@@ -1643,6 +1652,20 @@ import type ShogiReferenceDexComponent from "./ShogiReferenceDex.vue";
 import type ShogiTutorialComponent from "./ShogiTutorial.vue";
 import type ShogiProblemSetComponent from "./ShogiProblemSet.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
+import OpeningPlanSheet, { type OpeningPlanEntry } from "./OpeningPlanSheet.vue";
+import FormationThumb from "./FormationThumb.vue";
+import { ALL_OPENING_PLANS, openingPlanById, openingPlanFor } from "./core/opening-catalog.mjs";
+import {
+  autoPickPlan,
+  loadSeenPlans,
+  loadShowAllPlans,
+  newlyUnlockedPlans,
+  openingUnlocks,
+  planCompletedCount,
+  saveSeenPlans,
+  saveShowAllPlans,
+} from "./core/opening-unlocks.mjs";
+import { openingFormationGhosts, openingFormationProgress } from "./core/opening-formation.mjs";
 import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
@@ -1829,6 +1852,7 @@ import {
   openingCastleDistance,
   openingNearCompletion,
   openingCastleReselection,
+  openingAvailabilityForColor,
   openingDefinitionRookStyle,
   openingDetourArrowCandidates,
   openingFollowupCount,
@@ -2162,7 +2186,6 @@ const coachPortraitSizesValue = computed(() => coachPortraitSizes(portraitWidth.
 let portraitObserver: ResizeObserver | undefined;
 const selectedStrategy = ref("");
 const selectedCastle = ref("");
-const strategyExplanationOpen = ref(false);
 const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
@@ -2635,7 +2658,6 @@ function availableOpeningOptions(kind: "strategy" | "castle") {
   });
 }
 const availableOpeningStrategies = computed(() => availableOpeningOptions("strategy"));
-const availableOpeningCastles = computed(() => availableOpeningOptions("castle"));
 const rangingRookChoiceRequired = computed(() => (
   openingDefinitionRookStyle(selectedCastle.value, "castle") === "ranging"
   && openingDefinitionRookStyle(selectedStrategy.value, "strategy") !== "ranging"
@@ -2724,31 +2746,6 @@ function groupOpeningStrategies<T extends (typeof OPENING_STRATEGIES)[number]>(o
     options: options.filter(({ family }) => family === group.id),
   })).filter(({ options: groupOptions }) => groupOptions.length);
 }
-const groupedOpeningStrategies = computed(() => {
-  const availableIds = new Set(availableOpeningStrategies.value.map(({ id }) => id));
-  // 戦法に届かなくなったとき、近い戦法を残り手数つきで先頭に並べる。
-  const suggested = strategySuggestions.value.flatMap(({ id, label, distance }) => {
-    const strategy = OPENING_STRATEGIES.find((entry) => entry.id === id);
-    const suggestionLabel = `${label}（あと${distance}手）`;
-    return strategy ? [{ ...strategy, label: suggestionLabel, optionLabel: suggestionLabel, disabled: false }] : [];
-  });
-  const groups = groupOpeningStrategies(
-    OPENING_STRATEGIES
-      // 完成後ボタンから選んだ内部派生も、選択中はプルダウンへ表示する。
-      .filter(({ id, guideSelectable }) => guideSelectable !== false || id === selectedStrategy.value)
-      .map((strategy) => ({
-        ...strategy,
-        optionLabel: strategy.integrated ? `${strategy.label}（囲い込み）` : strategy.label,
-        // 進行中の補助は、相手の応手を待つ一時的な局面でも解除しない。
-        // 中断後も、現在局面から到達できる別案だけを選択可能にする。
-        disabled: strategy.id !== selectedStrategy.value
-          && !availableIds.has(strategy.id),
-      })),
-  );
-  return suggested.length
-    ? [{ id: "suggested", label: "今の局面から近い戦法", options: suggested }, ...groups]
-    : groups;
-});
 const cpuDetailedStrategyGroups = computed(() => {
   const cpuColor = selectedPlayerColor.value === "black" ? "white" : "black";
   const supported = new Set(CPU_OPENING_STRATEGY_IDS);
@@ -2769,24 +2766,6 @@ const cpuDetailedCastleGroups = computed(() => {
     const castleStyle = openingDefinitionRookStyle(id, "castle") ?? "both";
     return !strategyStyle || castleStyle === strategyStyle || castleStyle === "both";
   }));
-});
-const groupedOpeningCastles = computed(() => {
-  const availableIds = new Set(availableOpeningCastles.value.map(({ id }) => id));
-  const groups = groupOpeningCastles(OPENING_CASTLES.map((castle) => ({
-      ...castle,
-      optionLabel: castle.integrated ? `${castle.label}（戦法込み）` : castle.label,
-      disabled: castle.id !== selectedCastle.value
-        && !availableIds.has(castle.id),
-    })));
-  // 囲いに届かなくなったとき、近い囲いを残り手数つきで先頭に並べる。
-  const suggested = castleSuggestions.value.flatMap(({ id, label, distance }) => {
-    const castle = OPENING_CASTLES.find((entry) => entry.id === id);
-    const suggestionLabel = `${label}（あと${distance}手）`;
-    return castle ? [{ ...castle, label: suggestionLabel, optionLabel: suggestionLabel, disabled: false }] : [];
-  });
-  return suggested.length
-    ? [{ id: "suggested", label: "今の局面から近い囲い", options: suggested }, ...groups]
-    : groups;
 });
 // アヒル囲い・右玉のように戦法と囲いが一体の定義を選んだら、相方は選べなくする。
 const strategySelectLocked = computed(() => isStandaloneOpening(selectedCastle.value, "castle"));
@@ -2814,12 +2793,6 @@ exclusiveOpeningWatch(cpuDetailedCastle, cpuDetailedStrategy, "castle");
 const selectedStrategyDefinition = computed(() => (
   OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value) ?? null
 ));
-// 一体型の戦法では、囲い欄に内蔵の囲いを表示する。
-const castleSelectionLockedLabel = computed(() => {
-  const label = selectedStrategyDefinition.value?.integratedCastleLabel;
-  return label ? `戦法に含む（${label}）` : "戦法に含む";
-});
-const selectedStrategyExplanation = computed(() => openingExplanation(selectedStrategy.value));
 const OPENING_GUIDE_MAX_PLIES = 40;
 const openingPlanExpired = computed(() => {
   // currentSfenを購読し、非refのmoveHistoryが進むたび再評価する。
@@ -3037,6 +3010,14 @@ const openingGuideStatus = computed(() => {
   return `${phase}の次の一手：${formatHintMove(openingGuideDecision.value.usi, currentSfen.value)}`;
 });
 
+/** 作戦カードの名前。カードに名前がなければ戦法の名前(囲いだけのカードは囲いの名前)。 */
+function openingPlanTitle(plan: { name?: string; strategyId: string; castles: readonly string[] }) {
+  return plan.name
+    ?? OPENING_STRATEGIES.find(({ id }) => id === plan.strategyId)?.label
+    ?? OPENING_CASTLES.find(({ id }) => id === plan.castles[0])?.label
+    ?? "";
+}
+
 function selectedOpeningLabel() {
   const strategy = OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value)?.label;
   const castle = OPENING_CASTLES.find(({ id }) => id === selectedCastle.value)?.label;
@@ -3044,7 +3025,6 @@ function selectedOpeningLabel() {
 }
 
 function announceOpeningGuide() {
-  strategyExplanationOpen.value = false;
   openingPlanCompletionLocked.value = false;
   strategyCompletionLocked.value = false;
   castleCompletionLocked.value = false;
@@ -3189,6 +3169,8 @@ const collectionResult = ref<{
   repeated: string[];
   themes: string[];
   next: { need: number; remaining: number } | null;
+  // この対局で新しく使えるようになった作戦カード(やこび姫補助)の名前。
+  plans: string[];
 } | null>(null);
 function recordCollection(won: boolean) {
   collectionResult.value = null;
@@ -3205,13 +3187,26 @@ function recordCollection(won: boolean) {
     catalog: COLLECTION_CATALOG,
   });
   saveCollection(browserStorage(), recorded.state);
+  type PlanFormations = { [label: string]: { count: number } };
+  const newPlans = newlyUnlockedPlans(
+    planUnlocksFor(before.formations as PlanFormations),
+    planUnlocksFor(recorded.state.formations as PlanFormations),
+  )
+    .filter(({ group }) => group !== "castle");
+  planCollectionVersion.value += 1;
   collectionResult.value = {
+    plans: newPlans.map(openingPlanTitle),
     // 初めて手に入った形には、どんな形かを一言添える(何が良かったかを伝える称賛にする)。
     gained: recorded.gained.map((gain) => ({ ...gain, detail: collectionGainDetail(gain) })),
     repeated: recorded.repeated,
     themes: newlyUnlockedThemes(before, recorded.state).map(({ kind, id }) => `${kind === "board" ? "盤" : "駒"}「${themeName(kind, id)}」`),
     next: recorded.gained.length ? nextThemeUnlock(recorded.state) : null,
   };
+}
+/** 増えた作戦の名前。多いときは3つまで並べて、残りは数で言う。 */
+function newPlansText(names: string[]) {
+  const shown = names.slice(0, 3).join("・");
+  return names.length > 3 ? `${shown}ほか${names.length - 3}つの作戦` : shown;
 }
 /** 初めて手に入った形の一言。戦法・囲いは定跡図鑑の解説、手筋は手筋の一言から。 */
 function collectionGainDetail(gain: { kind: string; label: string }) {
@@ -3328,18 +3323,248 @@ const learningStartBlocked = computed(() => (
 ));
 // 平手以外の開始局面では、平手用の定跡（やこび姫補助・CPUの定跡）を当てはめない。
 const openingGuideAvailable = computed(() => matchInitialSfen.value === STANDARD_SFEN);
-/** 通常対局の作戦欄を開いたか。学習対局ではいつも開く。 */
-const openingGuideExpanded = ref(false);
+/** 通常対局で作戦を選んでいないあいだは、補助の欄を1行のボタンにたたむ。学習対局ではいつも開く。 */
 const openingGuideCollapsed = computed(() =>
   openingGuideAvailable.value &&
   matchKind.value !== "learning" &&
-  !openingGuideExpanded.value &&
   !selectedStrategy.value &&
   !selectedCastle.value
 );
 const pregameUsesCustomStart = computed(() => (
   matchKind.value === "learning" && learningStartType.value !== "standard"
 ));
+
+// ===== 作戦カード(docs/opening-guide-ux-design.md) =====
+/** 開いている作戦カードのシート。対局準備から開くか、対局中の補助の欄から開くか。 */
+const planSheet = ref<"" | "pregame" | "game">("");
+const showAllPlans = ref(loadShowAllPlans(browserStorage()));
+/** もう見た作戦(NEWを外す)。まだ一度もシートを開いていなければnull。 */
+const seenPlanIds = ref<Set<string> | null>(loadSeenPlans(browserStorage()));
+/** 対局で形を完成させたら読み直す(コレクションの印から解放を計算するため)。 */
+const planCollectionVersion = ref(0);
+/** 初段相当以上の人は、最初から全部の作戦を使える(安全網)。 */
+const PLAN_ALL_LEVEL = CPU_STRENGTH_PRESETS.find(({ label }) => label.includes("初段"))?.level ?? 32;
+const planFormations = computed(() => {
+  void planCollectionVersion.value;
+  void pregameOpen.value;
+  return loadCollection(browserStorage()).formations as { [label: string]: { count: number } };
+});
+function planUnlocksFor(formations: { [label: string]: { count: number } }) {
+  const ryuoTally = (ratingState.value.events as { [event: string]: { wins: number; losses: number; draws: number } } | undefined)?.ryuo;
+  const ryuoGames = ryuoTally ? ryuoTally.wins + ryuoTally.losses + ryuoTally.draws : 0;
+  return openingUnlocks({
+    formations,
+    tutorialProgress: homeTutorialProgress.value,
+    ryuoPlayed: ryuoGames > 0 || ryuoCareer.value.seasons > 0,
+    welcomeChoice: homeWelcomeChoice.value,
+    strong: ratingState.value.games > 0 && recommendedLevel(ratingState.value.rating) >= PLAN_ALL_LEVEL,
+    showAll: showAllPlans.value,
+  });
+}
+const planUnlocks = computed(() => planUnlocksFor(planFormations.value));
+
+/**
+ * 今の局面から組める戦法・囲い。対局準備では、手番の色で使えない戦法(先手だけの戦法など)だけを外す。
+ * 対局中は今の補助の欄と同じ判定を、選んでいる相方の作戦に縛られずに行う(カードは戦法と囲いを組で替えるため)。
+ */
+function planAvailability(context: "pregame" | "game") {
+  if (context === "pregame") {
+    const color = pregamePlayerColor.value;
+    const usable = (definition: (typeof OPENING_STRATEGIES)[number] | (typeof OPENING_CASTLES)[number]) => {
+      const colors = openingAvailabilityForColor(definition, color)?.colors;
+      return !colors || colors.includes(color);
+    };
+    return {
+      strategies: new Set(OPENING_STRATEGIES.filter(usable).map(({ id }) => id)),
+      castles: new Set(OPENING_CASTLES.filter(usable).map(({ id }) => id)),
+    };
+  }
+  const { committedRookStyle, currentFormations, legalMoves, playerIsBlack, playerMoves, sfen } = openingAvailabilityContext.value;
+  const available = (kind: "strategy" | "castle") => new Set(availableOpeningDefinitions({
+    definitions: kind === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES,
+    kind,
+    color: playerIsBlack ? "black" : "white",
+    playedMoves: playerMoves,
+    moveHistory,
+    legalMoves,
+    detectedFormations: currentFormations,
+    currentSfen: sfen,
+    rookStyle: committedRookStyle,
+  }).map(({ id }) => id));
+  const strategies = available("strategy");
+  const castles = available("castle");
+  // 選んでいる作戦は、相手を待つ一時的な局面でもカードから消さない。
+  if (selectedStrategy.value) strategies.add(selectedStrategy.value);
+  if (selectedCastle.value) castles.add(selectedCastle.value);
+  return { strategies, castles };
+}
+function planEntries(context: "pregame" | "game"): OpeningPlanEntry[] {
+  const unlocks = planUnlocks.value;
+  const formations = planFormations.value;
+  const { strategies, castles: castleIds } = planAvailability(context);
+  const seen = seenPlanIds.value;
+  return ALL_OPENING_PLANS.flatMap((plan) => {
+    if (plan.strategyId && !strategies.has(plan.strategyId)) return [];
+    const castles = plan.castles.filter((id) => castleIds.has(id));
+    // 囲いだけのカードと矢倉のカードは、囲いが組めなければ外す。
+    if ((!plan.strategyId || plan.name) && !castles.length) return [];
+    const locked = !unlocks.unlocked.has(plan.id);
+    return [{
+      plan,
+      castles,
+      locked,
+      condition: unlocks.condition(plan.id),
+      isNew: !locked && seen !== null && !seen.has(plan.id),
+      count: planCompletedCount(plan, formations),
+    }];
+  });
+}
+const planSheetEntries = computed(() => (planSheet.value ? planEntries(planSheet.value) : []));
+const selectedPlanId = computed(() => openingPlanFor(selectedStrategy.value, selectedCastle.value)?.id ?? "");
+/** 補助の欄・対局準備の行に出す作戦の名前。カードの名前があればそれを、なければ戦法＋囲い。 */
+const selectedPlanLabel = computed(() => {
+  const plan = openingPlanById(selectedPlanId.value);
+  if (plan?.name && selectedCastle.value === plan.castles[0]) return plan.name;
+  return selectedOpeningLabel();
+});
+
+function markPlansSeen() {
+  const ids = new Set([...(seenPlanIds.value ?? []), ...planUnlocks.value.unlocked]);
+  seenPlanIds.value = ids;
+  saveSeenPlans(browserStorage(), ids);
+}
+function openPlanSheet(context: "pregame" | "game") {
+  // 初めて開いたときは、いま使える作戦を全部見たことにする(最初からNEWだらけにしない)。
+  if (seenPlanIds.value === null) markPlansSeen();
+  planSheet.value = context;
+}
+function closePlanSheet() {
+  if (!planSheet.value) return;
+  planSheet.value = "";
+  markPlansSeen();
+}
+function togglePlanSwitch(on: boolean) {
+  showAllPlans.value = on;
+  saveShowAllPlans(browserStorage(), on);
+}
+function applyPlan(planId: string, castleId: string, context: "pregame" | "game") {
+  const plan = openingPlanById(planId);
+  if (!plan) return;
+  selectedStrategy.value = plan.strategyId;
+  selectedCastle.value = plan.strategyId && !plan.name ? castleId : plan.castles[0] ?? "";
+  if (context === "game") announceOpeningGuide();
+}
+function choosePlan(planId: string, castleId: string) {
+  const context = planSheet.value || "game";
+  closePlanSheet();
+  applyPlan(planId, castleId, context);
+}
+function clearPlan() {
+  const context = planSheet.value || "game";
+  closePlanSheet();
+  selectedStrategy.value = "";
+  selectedCastle.value = "";
+  if (context === "game") {
+    announceOpeningGuide();
+    if (coachLevel.value !== "off") guideText.value = "作戦なしで指そう。困ったら、いつでも作戦を選べるよ！";
+  }
+}
+/** 相手が振り飛車と分かっているか。対局中は相手の指し手から、対局準備ではCPUの作戦の指定から。 */
+function opponentRangingFor(context: "pregame" | "game") {
+  if (context === "pregame") {
+    return cpuStrategyDetailsOpen.value
+      ? openingDefinitionRookStyle(cpuDetailedStrategy.value, "strategy") === "ranging"
+      : cpuStrategy.value === "ranging";
+  }
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  return inferOpeningRookStyle({
+    color: playerIsBlack ? "white" : "black",
+    playedMoves: moveHistory.filter((_, index) => isBlackMoveIndex(index) !== playerIsBlack),
+    currentSfen: currentSfen.value,
+  }) === "ranging";
+}
+/** おまかせ。使える作戦から、やこび姫が1枚を選んで入れる(まだ完成させたことのない作戦を優先)。 */
+function autoPickOpeningPlan(context: "pregame" | "game") {
+  const entries = planEntries(context).filter(({ locked }) => !locked);
+  const picked = autoPickPlan({
+    plans: entries.map(({ plan }) => plan),
+    formations: planFormations.value,
+    opponentRanging: opponentRangingFor(context),
+  });
+  if (planSheet.value) closePlanSheet();
+  if (!picked) return;
+  const castles = entries.find(({ plan }) => plan.id === picked.id)?.castles ?? [];
+  applyPlan(picked.id, castles[0] ?? "", context);
+  if (context === "game" && coachLevel.value !== "off") {
+    guideText.value = `やこび姫のおまかせは「${selectedPlanLabel.value}」！盤の矢印と薄い駒を目指して指そう。`;
+  }
+}
+
+/** 完成形の駒を盤に薄く出すか。保存した選択がなければ、強くなる道の5段目より前の人と学習対局で出す。 */
+const PLAN_GHOSTS_KEY = "yacobihime:shogi-match:plan-ghosts:v1";
+function loadPlanGhostsPreference() {
+  try {
+    const value = browserStorage()?.getItem(PLAN_GHOSTS_KEY);
+    return value === "on" || value === "off" ? value : "";
+  } catch {
+    return "";
+  }
+}
+const planGhostsPreference = ref(loadPlanGhostsPreference());
+const planGhostsOn = computed(() => (
+  planGhostsPreference.value
+    ? planGhostsPreference.value === "on"
+    : matchKind.value === "learning" || homeRoadmapState.value.current < 5
+));
+function togglePlanGhosts() {
+  planGhostsPreference.value = planGhostsOn.value ? "off" : "on";
+  try {
+    browserStorage()?.setItem(PLAN_GHOSTS_KEY, planGhostsPreference.value);
+  } catch {
+    // 保存できない環境では、この画面のあいだだけ切り替える。
+  }
+}
+/** 作戦の進み具合(完成形のうち、もう駒が着いたマス)。完成したら0にする。 */
+const planProgress = computed(() => {
+  if (!selectedStrategy.value && !selectedCastle.value) return null;
+  if (!openingGuideAvailable.value || openingPlanComplete.value) return null;
+  return openingFormationProgress({
+    strategyId: selectedStrategy.value,
+    castleId: selectedCastle.value,
+    color: playerColorKey.value,
+    sfen: currentSfen.value,
+  });
+});
+const planFilledSquares = computed(() => planProgress.value?.filledSquares ?? null);
+const planGhosts = computed(() => {
+  if (!planGhostsOn.value || !planProgress.value || reviewMode.value || !active.value) return [];
+  return openingFormationGhosts({
+    strategyId: selectedStrategy.value,
+    castleId: selectedCastle.value,
+    color: playerColorKey.value,
+    sfen: currentSfen.value,
+  });
+});
+/** 中断したときの「作戦を変えよう」の札。今の局面から近い作戦を、残り手数つきで並べる。 */
+const planInterruption = computed(() => {
+  if (!openingGuideAvailable.value || reviewMode.value) return null;
+  const suggestions = [
+    ...strategySuggestions.value.map((entry) => ({ ...entry, kind: "strategy" as const })),
+    ...castleSuggestions.value.map((entry) => ({ ...entry, kind: "castle" as const })),
+  ].slice(0, 3);
+  if (!suggestions.length && !openingGuideAbandoned.value) return null;
+  const reason = openingGuideAbandoned.value
+    ? "この形へ戻るのは難しそう。"
+    : strategySuggestions.value.length
+      ? "この戦法は続けられなくなったよ。"
+      : "この囲いは組めなくなったよ。";
+  return { reason, suggestions };
+});
+function chooseSuggestedPlan(kind: "strategy" | "castle", id: string) {
+  if (kind === "strategy") selectedStrategy.value = id;
+  else selectedCastle.value = id;
+  announceOpeningGuide();
+}
 
 type LearningPlanGroup = { id: string; label: string; options: { id: string; optionLabel: string }[] };
 
@@ -3450,6 +3675,12 @@ function learningPlanRows(side: "player" | "opponent"): PregameRow[] {
   ];
 }
 
+/** あなたの作戦。平手から始める対局で、作戦カードのシートで選ぶ(既定は「なし」)。 */
+function playerPlanRows(): PregameRow[] {
+  if (pregameUsesCustomStart.value) return [];
+  return [{ kind: "plan", id: "playerPlan", label: "あなたの作戦", value: selectedPlanLabel.value || "なし" }];
+}
+
 function cpuPlanRows(): PregameRow[] {
   if (pregameUsesCustomStart.value) return [];
   const rows: PregameRow[] = [
@@ -3506,7 +3737,7 @@ const pregameSides = computed(() => (["black", "white"] as const).map((color) =>
       ...cpuPlanRows(),
       ...learningPlanRows("opponent"),
     ]
-    : local ? [] : learningPlanRows("player");
+    : local ? [] : [...playerPlanRows(), ...learningPlanRows("player")];
   return {
     color,
     label: color === "black" ? "先手" : "後手",
@@ -3756,6 +3987,8 @@ function startRyuoMatch() {
   pregameOpen.value = false;
   scheduleDeferredCoachPortraitPreload();
   restart();
+  // 対局準備で選んだ作戦は、始めた瞬間にやこび姫が目指す形を伝える。
+  if (openingGuideAvailable.value && (selectedStrategy.value || selectedCastle.value)) announceOpeningGuide();
 }
 
 /** 終局を大会に記録する。勝敗は、トーナメント表を進める。千日手(引き分け)は、先後を入れ替えて指し直す。 */
@@ -4378,8 +4611,8 @@ function navigateBack() {
     suspendConfirmOpen.value = false;
   } else if (resignConfirmOpen.value) {
     resignConfirmOpen.value = false;
-  } else if (strategyExplanationOpen.value) {
-    strategyExplanationOpen.value = false;
+  } else if (planSheet.value) {
+    closePlanSheet();
   } else if (analysisMenuOpen.value) {
     analysisMenuOpen.value = false;
   } else if (settingsOpen.value) {
@@ -7358,7 +7591,6 @@ function restart() {
   positionAnalysisCache.clear();
   moveHistory = [];
   coachAdviceHistory = [];
-  strategyExplanationOpen.value = false;
   openingGuideStartedAtPly.value = 0;
   openingGuideDetourCount.value = 0;
   openingGuideUnsafeTurns.value = 0;

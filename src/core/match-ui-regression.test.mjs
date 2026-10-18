@@ -213,9 +213,19 @@ describe("match screen regressions", () => {
     expect(applyMove.slice(0, soundAt)).not.toMatch(/if \(!?reviewMode\.value\) \{\s*$/);
   });
 
-  it("locks the counterpart select for combined strategy/castle definitions", () => {
-    expect(source).toMatch(/v-model="selectedStrategy"[\s\S]*?:disabled="strategySelectLocked"/);
-    expect(source).toMatch(/v-model="selectedCastle"[\s\S]*?:disabled="castleSelectLocked"/);
+  it("picks the player's plan from opening plan cards and locks the CPU counterpart for combined definitions", () => {
+    // やこび姫補助の作戦は、<select>ではなく、完成形の小さな盤が描かれた作戦カードのシートで選ぶ。
+    expect(source).not.toMatch(/v-model="selected(Strategy|Castle)"/);
+    expect(source).toMatch(/<OpeningPlanSheet[\s\S]*?@choose="choosePlan"[\s\S]*?@auto="autoPickOpeningPlan/);
+    // 対局準備の「あなたの作戦」は、おまかせと変更の2つのボタンを持つ行。
+    expect(source).toMatch(/kind: "plan", id: "playerPlan", label: "あなたの作戦"/);
+    expect(source).toMatch(/row\.kind === 'plan'[\s\S]*?data-plan-auto[\s\S]*?openPlanSheet\('pregame'\)/);
+    // 中断したら「作戦を変えよう」の札で、近い作戦を残り手数つきで並べる。
+    expect(source).toMatch(/data-plan-interruption[\s\S]*?chooseSuggestedPlan\(suggestion\.kind, suggestion\.id\)/);
+    // 完成形の駒を盤に薄く出す。
+    expect(source).toMatch(/:ghost-pieces="planGhosts"/);
+    // 戻る操作で作戦カードのシートを閉じる。
+    expect(source).toMatch(/else if \(planSheet\.value\) \{\s*closePlanSheet\(\);/);
     // 対局準備のCPU欄は「項目: 値 [変更]」の行で、一体型なら変更ボタンを無効にする。
     expect(source).toMatch(/id: "cpuDetailedStrategy"[\s\S]*?disabled: cpuStrategySelectLocked\.value/);
     expect(source).toMatch(/id: "cpuDetailedCastle"[\s\S]*?disabled: cpuCastleSelectLocked\.value/);

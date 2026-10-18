@@ -91,7 +91,7 @@ import { Color, PieceType, type Move } from "tsshogi";
 type AttackMark = { file: number; rank: number; black: number; white: number };
 type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" | "covered" | "danger" };
 type FloatLabel = { id: string | number; file: number; rank: number; text: string; tone: "good" | "bad"; big?: boolean };
-type GhostPiece = { file: number; rank: number; kind: string };
+type GhostPiece = { file: number; rank: number; kind: string; color?: "black" | "white" };
 const GHOST_PIECE_TYPES: Record<string, PieceType> = {
   K: PieceType.KING, R: PieceType.ROOK, B: PieceType.BISHOP, G: PieceType.GOLD,
   S: PieceType.SILVER, N: PieceType.KNIGHT, L: PieceType.LANCE, P: PieceType.PAWN,
@@ -108,7 +108,7 @@ const props = defineProps({
   markSquares: { type: Array as () => SquareMark[], default: () => [] },
   // 駒得の数字(＋6／−5)。取ったマスの上に浮かべる。
   floatLabels: { type: Array as PropType<FloatLabel[]>, default: () => [] },
-  // 教室の「囲いを組もう」で薄く見せる完成形の駒(先手)。kindはSFENの駒の文字("K"・"G"など)。
+  // 教室の「囲いを組もう」と、対局中の作戦の完成形で薄く見せる駒。kindはSFENの駒の文字("K"・"G"など)。colorを省くと先手。
   ghostPieces: { type: Array as () => GhostPiece[], default: () => [] },
   // 利きメガネ: 選んだ駒を動かすと取られて損をする行き先を返す。
   riskDestinations: { type: Function as PropType<((source: string) => string[]) | null>, default: null },
@@ -199,8 +199,8 @@ const candidateMoves = computed(() =>
   position.value ? candidateMovesFromUsi(position.value, props.candidates) : []
 );
 
-const ghostPieceInputs = computed(() => props.ghostPieces.flatMap(({ file, rank, kind }) => (
-  GHOST_PIECE_TYPES[kind] ? [{ file, rank, type: GHOST_PIECE_TYPES[kind], color: Color.BLACK }] : []
+const ghostPieceInputs = computed(() => props.ghostPieces.flatMap(({ file, rank, kind, color }) => (
+  GHOST_PIECE_TYPES[kind] ? [{ file, rank, type: GHOST_PIECE_TYPES[kind], color: color === "white" ? Color.WHITE : Color.BLACK }] : []
 )));
 
 function onMove(move: Move) {
