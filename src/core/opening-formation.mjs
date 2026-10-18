@@ -22,46 +22,96 @@ const USI_DROP = /^([PLNSGBR])\*([1-9][a-i])$/;
 const cache = new Map();
 
 /**
- * 先手から見た完成形。piecesは自分の駒すべて、movedは手順で動いた駒のマス(カードで濃く描き、対局で薄く出す)。
+ * @typedef {{ id: string, square: string, kind: string, promoted: boolean, moved: boolean }} FormationPiece
+ *   idは初めにいたマス(打った駒は「drop:マス」)。再生で同じ駒をすべらせて動かすのに使う。
+ * @typedef {{ usi: string, phase: "strategy" | "castle", kind: string, from: string, to: string, promote: boolean, drop: boolean, exchange: boolean }} FormationStep
+ */
+
+/**
+ * 手順を先手の駒だけで指し進め、1手ごとの形を残す(くわしい画面の1手ずつの再生と、完成形の小さな盤)。
+ * stepsは実際に駒が動いた手だけ(動かす駒がいない手は入れない)。framesはstepsより1つ多く、frames[0]が初めの形。
  * @param {string} strategyId
  * @param {string} castleId
- * @returns {{ pieces: { square: string, kind: string, promoted: boolean, moved: boolean }[], moved: string[] }}
+ * @returns {{ steps: readonly FormationStep[], frames: readonly (readonly FormationPiece[])[] }}
  */
-export function openingFormation(strategyId = "", castleId = "") {
+export function openingFormationSteps(strategyId = "", castleId = "") {
   const key = `${strategyId}|${castleId}`;
   const cached = cache.get(key);
   if (cached) return cached;
-  const board = new Map(INITIAL_BLACK.map(([square, kind]) => [square, { kind, promoted: false, moved: false }]));
+  const board = new Map(INITIAL_BLACK.map(([square, kind]) => [square, { id: square, kind, promoted: false, moved: false }]));
   const { strategy, castle } = resolveOpeningPlanDefinitions(strategyId, castleId);
-  const moves = [...(strategy?.blackMoves ?? []), ...(castle?.blackMoves ?? [])];
-  const play = (from, to, promote = false) => {
+  /** @type {[string, "strategy" | "castle"][]} */
+  const moves = [
+    ...(strategy?.blackMoves ?? []).map((move) => [move, "strategy"]),
+    ...(castle?.blackMoves ?? []).map((move) => [move, "castle"]),
+  ];
+  /** @type {FormationStep[]} */
+  const steps = [];
+  const snapshot = () => Object.freeze([...board].map(([square, piece]) => Object.freeze({ square, ...piece })));
+  const frames = [snapshot()];
+  const record = (step) => {
+    steps.push(Object.freeze(step));
+    frames.push(snapshot());
+  };
+  const play = (from, to, promote, usi, phase) => {
     const piece = board.get(from);
     if (!piece) return;
     board.delete(from);
     board.set(to, { ...piece, promoted: piece.promoted || promote, moved: true });
+    record({ usi, phase, kind: piece.kind, from, to, promote: promote && !piece.promoted, drop: false, exchange: false });
   };
-  for (const move of moves) {
+  for (const [move, phase] of moves) {
     if (typeof move !== "string") continue;
     if (move === "@kakugawari") {
-      play("7g", "7f");
-      board.delete("8h");
+      play("7g", "7f", false, "7g7f", phase);
+      if (board.get("8h")?.kind === "B") {
+        board.delete("8h");
+        record({ usi: "@kakugawari", phase, kind: "B", from: "8h", to: "", promote: false, drop: false, exchange: true });
+      }
       continue;
     }
     const drop = USI_DROP.exec(move);
     if (drop) {
-      if (!board.has(drop[2])) board.set(drop[2], { kind: drop[1], promoted: false, moved: true });
+      if (board.has(drop[2])) continue;
+      board.set(drop[2], { id: `drop:${drop[2]}`, kind: drop[1], promoted: false, moved: true });
+      record({ usi: move, phase, kind: drop[1], from: "", to: drop[2], promote: false, drop: true, exchange: false });
       continue;
     }
     const step = USI_MOVE.exec(move);
-    if (step) play(step[1], step[2], step[3] === "+");
+    if (step) play(step[1], step[2], step[3] === "+", move, phase);
   }
-  const pieces = [...board].map(([square, piece]) => ({ square, ...piece }));
-  const result = Object.freeze({
-    pieces: Object.freeze(pieces),
-    moved: Object.freeze(pieces.filter(({ moved }) => moved).map(({ square }) => square)),
-  });
+  const result = Object.freeze({ steps: Object.freeze(steps), frames: Object.freeze(frames) });
   cache.set(key, result);
   return result;
+}
+
+/**
+ * 先手から見た完成形。piecesは自分の駒すべて、movedは手順で動いた駒のマス(カードで濃く描き、対局で薄く出す)。
+ * @param {string} strategyId
+ * @param {string} castleId
+ * @returns {{ pieces: readonly FormationPiece[], moved: string[] }}
+ */
+export function openingFormation(strategyId = "", castleId = "") {
+  const { frames } = openingFormationSteps(strategyId, castleId);
+  const pieces = frames[frames.length - 1];
+  return { pieces, moved: pieces.filter(({ moved }) => moved).map(({ square }) => square) };
+}
+
+const FILE_DIGITS = ["", "１", "２", "３", "４", "５", "６", "７", "８", "９"];
+const RANK_KANJI = { a: "一", b: "二", c: "三", d: "四", e: "五", f: "六", g: "七", h: "八", i: "九" };
+const PIECE_NAMES = { K: "玉", R: "飛", B: "角", G: "金", S: "銀", N: "桂", L: "香", P: "歩" };
+
+/**
+ * 再生の1手の名前(「▲7六歩」)。後手で指すときは盤を反転したマスで「△3四歩」と書く。
+ * @param {FormationStep} step
+ * @param {"black" | "white"} color
+ */
+export function openingStepLabel(step, color = "black") {
+  if (step.exchange) return "角を交換する";
+  const to = color === "white" ? mirrorUsiMove(`${step.to}${step.to}`).slice(0, 2) : step.to;
+  const mark = color === "white" ? "△" : "▲";
+  const suffix = step.drop ? "打" : step.promote ? "成" : "";
+  return `${mark}${FILE_DIGITS[Number(to[0])]}${RANK_KANJI[/** @type {keyof typeof RANK_KANJI} */ (to[1])]}${PIECE_NAMES[/** @type {keyof typeof PIECE_NAMES} */ (step.kind)] ?? ""}${suffix}`;
 }
 
 function sfenPieceAt(sfen) {

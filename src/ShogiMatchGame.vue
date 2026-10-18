@@ -680,24 +680,7 @@
             <div v-if="side.rows.length" class="shogi-game__pregame-rows">
               <template v-for="row in side.rows" :key="row.id">
                 <div
-                  v-if="row.kind === 'switch'"
-                  class="shogi-game__pregame-row"
-                  :class="{ 'shogi-game__pregame-row--fresh': pregameFreshRows.has(row.id) }"
-                  :data-pregame-row="row.id"
-                >
-                  <span v-if="pregameFreshRows.has(row.id)" class="shogi-game__pregame-fresh" aria-hidden="true"></span>
-                  <span class="shogi-game__pregame-row-label">{{ row.label }}</span>
-                  <button
-                    type="button"
-                    role="switch"
-                    class="shogi-game__switch"
-                    :aria-checked="row.checked"
-                    :aria-label="row.label"
-                    @click="toggleCpuStrategyDetails"
-                  ><span aria-hidden="true"></span></button>
-                </div>
-                <div
-                  v-else-if="row.kind === 'plan'"
+                  v-if="row.kind === 'plan'"
                   class="shogi-game__pregame-row shogi-game__pregame-row--plan"
                   :data-pregame-row="row.id"
                 >
@@ -733,7 +716,7 @@
                     class="shogi-game__pregame-change"
                     :disabled="row.disabled"
                     :aria-label="`${side.label}の${row.label}を変更`"
-                    @click="pregamePicker = row.id"
+                    @click="openPregameRow(row.id)"
                   >変更</button>
                 </div>
               </template>
@@ -811,20 +794,25 @@
     <!-- 作戦カードのシート。対局準備の「あなたの作戦」と、対局中のやこび姫補助の欄から開く。 -->
     <OpeningPlanSheet
       v-if="planSheet"
-      :title="planSheet === 'pregame' ? 'あなたの作戦をえらぶ' : '作戦をえらぶ'"
+      :title="planSheet === 'cpu' ? 'CPUの作戦をえらぶ' : planSheet === 'pregame' ? 'あなたの作戦をえらぶ' : '作戦をえらぶ'"
+      :mode="planSheet === 'cpu' ? 'cpu' : 'player'"
       :entries="planSheetEntries"
-      :selected-id="selectedPlanId"
-      :selected-castle="selectedCastle"
+      :selected-id="planSheet === 'cpu' ? cpuPlanId : selectedPlanId"
+      :selected-castle="planSheet === 'cpu' ? cpuDetailedCastle : selectedCastle"
+      :broad-options="CPU_STRATEGY_OPTIONS"
+      :broad-value="cpuStrategyDetailsOpen ? '' : cpuStrategy"
       :allow-clear="Boolean(selectedStrategy || selectedCastle)"
       :show-switch="!planUnlocks.all || showAllPlans"
       :show-all="showAllPlans"
       :note="planSheet === 'game' ? '今の局面から組める作戦だけを並べているよ。' : ''"
       @choose="choosePlan"
       @clear="clearPlan"
-      @auto="autoPickOpeningPlan(planSheet || 'game')"
+      @auto="autoPickOpeningPlan(planSheet === 'pregame' ? 'pregame' : 'game')"
       :asset-base-url="assetBaseUrl"
+      :player-color="planSheet === 'cpu' ? (selectedPlayerColor === 'black' ? 'white' : 'black') : planSheet === 'pregame' ? pregamePlayerColor : playerColorKey"
       @toggle-all="togglePlanSwitch"
       @fortune-result="onFortuneResult"
+      @broad="chooseCpuBroadPlan"
       @close="closePlanSheet"
     />
 
@@ -2774,8 +2762,6 @@ const cpuDetailedCastleGroups = computed(() => {
 // アヒル囲い・右玉のように戦法と囲いが一体の定義を選んだら、相方は選べなくする。
 const strategySelectLocked = computed(() => isStandaloneOpening(selectedCastle.value, "castle"));
 const castleSelectLocked = computed(() => isStandaloneOpening(selectedStrategy.value, "strategy"));
-const cpuStrategySelectLocked = computed(() => isStandaloneOpening(cpuDetailedCastle.value, "castle"));
-const cpuCastleSelectLocked = computed(() => isStandaloneOpening(cpuDetailedStrategy.value, "strategy"));
 // 復元や自動切り替えで組み合わせられない対が揃った場合も、後から設定した側を優先する。
 function exclusiveOpeningWatch(
   own: typeof selectedStrategy,
@@ -3260,11 +3246,6 @@ function closeSettings() {
   settingsOpen.value = false;
 }
 
-function toggleCpuStrategyDetails() {
-  cpuStrategyDetailsOpen.value = !cpuStrategyDetailsOpen.value;
-  cpuOpeningPlan = null;
-}
-
 const learningFormationResult = computed(() => {
   if (matchKind.value !== "learning" || learningStartType.value !== "formation") return null;
   const playerColor = selectedPlayerColor.value === "white" ? "white" : "black";
@@ -3340,7 +3321,7 @@ const pregameUsesCustomStart = computed(() => (
 
 // ===== 作戦カード(docs/opening-guide-ux-design.md) =====
 /** 開いている作戦カードのシート。対局準備から開くか、対局中の補助の欄から開くか。 */
-const planSheet = ref<"" | "pregame" | "game">("");
+const planSheet = ref<"" | "pregame" | "game" | "cpu">("");
 const showAllPlans = ref(loadShowAllPlans(browserStorage()));
 /** もう見た作戦(NEWを外す)。まだ一度もシートを開いていなければnull。 */
 const seenPlanIds = ref<Set<string> | null>(loadSeenPlans(browserStorage()));
@@ -3429,21 +3410,51 @@ function planEntries(context: "pregame" | "game"): OpeningPlanEntry[] {
     }];
   });
 }
-const planSheetEntries = computed(() => (planSheet.value ? planEntries(planSheet.value) : []));
-const selectedPlanId = computed(() => openingPlanFor(selectedStrategy.value, selectedCastle.value)?.id ?? "");
-/** 補助の欄・対局準備の行に出す作戦の名前。カードの名前があればそれを、なければ戦法＋囲い。 */
-const selectedPlanLabel = computed(() => {
-  const plan = openingPlanById(selectedPlanId.value);
-  if (plan?.name && selectedCastle.value === plan.castles[0]) return plan.name;
-  return selectedOpeningLabel();
+/**
+ * CPUの作戦カード。CPUが指せる戦法(cpu-opening-repertoire.mjs)と、CPUの手番の色で使える作戦だけを並べる。
+ * 相手の作戦なので、解放の段とは関係なく全部選べる。
+ */
+const cpuPlanEntries = computed<OpeningPlanEntry[]>(() => {
+  const cpuColor = selectedPlayerColor.value === "black" ? "white" : "black";
+  const supported = new Set<string>(CPU_OPENING_STRATEGY_IDS);
+  const usable = (definition: (typeof OPENING_STRATEGIES)[number] | (typeof OPENING_CASTLES)[number]) => {
+    const colors = openingAvailabilityForColor(definition, cpuColor)?.colors;
+    return !colors || colors.includes(cpuColor);
+  };
+  const strategies = new Set(OPENING_STRATEGIES.filter((definition) => supported.has(definition.id) && usable(definition)).map(({ id }) => id));
+  const castleIds = new Set(OPENING_CASTLES.filter(usable).map(({ id }) => id));
+  return ALL_OPENING_PLANS.flatMap((plan) => {
+    if (plan.strategyId && !strategies.has(plan.strategyId)) return [];
+    const castles = plan.castles.filter((id) => castleIds.has(id));
+    if ((!plan.strategyId || plan.name) && !castles.length) return [];
+    return [{ plan, castles, locked: false, condition: "", isNew: false, count: 0 }];
+  });
 });
+const planSheetEntries = computed(() => {
+  if (planSheet.value === "cpu") return cpuPlanEntries.value;
+  return planSheet.value ? planEntries(planSheet.value) : [];
+});
+const selectedPlanId = computed(() => openingPlanFor(selectedStrategy.value, selectedCastle.value)?.id ?? "");
+const cpuPlanId = computed(() => (
+  cpuStrategyDetailsOpen.value ? openingPlanFor(cpuDetailedStrategy.value, cpuDetailedCastle.value)?.id ?? "" : ""
+));
+/** 作戦の名前。カードの名前があればそれを(「矢倉」)、なければ戦法＋囲い。 */
+function openingPairLabel(strategyId: string, castleId: string) {
+  const plan = openingPlanFor(strategyId, castleId);
+  if (plan?.name && castleId === plan.castles[0]) return plan.name;
+  const strategy = OPENING_STRATEGIES.find(({ id }) => id === strategyId)?.label;
+  const castle = OPENING_CASTLES.find(({ id }) => id === castleId)?.label;
+  return [strategy, castle].filter(Boolean).join("＋");
+}
+/** 補助の欄・対局準備の行に出す、あなたの作戦の名前。 */
+const selectedPlanLabel = computed(() => openingPairLabel(selectedStrategy.value, selectedCastle.value));
 
 function markPlansSeen() {
   const ids = new Set([...(seenPlanIds.value ?? []), ...planUnlocks.value.unlocked]);
   seenPlanIds.value = ids;
   saveSeenPlans(browserStorage(), ids);
 }
-function openPlanSheet(context: "pregame" | "game") {
+function openPlanSheet(context: "pregame" | "game" | "cpu") {
   // 初めて開いたときは、いま使える作戦を全部見たことにする(最初からNEWだらけにしない)。
   if (seenPlanIds.value === null) markPlansSeen();
   // 図鑑の戦法占いで出た作戦も、使えるようにしておく。
@@ -3452,16 +3463,25 @@ function openPlanSheet(context: "pregame" | "game") {
 }
 function closePlanSheet() {
   if (!planSheet.value) return;
+  const context = planSheet.value;
   planSheet.value = "";
-  markPlansSeen();
+  // CPUの作戦カードは解放と関係なく全部並べるので、見たことにはしない。
+  if (context !== "cpu") markPlansSeen();
 }
 function togglePlanSwitch(on: boolean) {
   showAllPlans.value = on;
   saveShowAllPlans(browserStorage(), on);
 }
-function applyPlan(planId: string, castleId: string, context: "pregame" | "game") {
+function applyPlan(planId: string, castleId: string, context: "pregame" | "game" | "cpu") {
   const plan = openingPlanById(planId);
   if (!plan) return;
+  if (context === "cpu") {
+    cpuStrategyDetailsOpen.value = true;
+    cpuDetailedStrategy.value = plan.strategyId;
+    cpuDetailedCastle.value = plan.strategyId && !plan.name ? castleId : plan.castles[0] ?? "";
+    cpuOpeningPlan = null;
+    return;
+  }
   selectedStrategy.value = plan.strategyId;
   selectedCastle.value = plan.strategyId && !plan.name ? castleId : plan.castles[0] ?? "";
   if (context === "game") announceOpeningGuide();
@@ -3480,6 +3500,13 @@ function clearPlan() {
     announceOpeningGuide();
     if (coachLevel.value !== "off") guideText.value = "作戦なしで指そう。困ったら、いつでも作戦を選べるよ！";
   }
+}
+/** CPUの作戦を、大まかな方針(おまかせ・居飛車・振り飛車・奇襲戦法)にする。細かい戦法はCPUが局面を見て選ぶ。 */
+function chooseCpuBroadPlan(value: string) {
+  closePlanSheet();
+  cpuStrategyDetailsOpen.value = false;
+  cpuStrategy.value = value;
+  cpuOpeningPlan = null;
 }
 /** 相手が振り飛車と分かっているか。対局中は相手の指し手から、対局準備ではCPUの作戦の指定から。 */
 function opponentRangingFor(context: "pregame" | "game") {
@@ -3719,29 +3746,15 @@ function playerPlanRows(): PregameRow[] {
 
 function cpuPlanRows(): PregameRow[] {
   if (pregameUsesCustomStart.value) return [];
-  const rows: PregameRow[] = [
-    { kind: "switch", id: "cpuDetails", label: "戦法・囲いを指定", checked: cpuStrategyDetailsOpen.value },
-  ];
-  if (cpuStrategyDetailsOpen.value) {
-    rows.push(
-      {
-        kind: "pick", id: "cpuDetailedStrategy", label: "戦法",
-        value: cpuStrategySelectLocked.value
-          ? "囲いと一体"
-          : openingLabel(cpuDetailedStrategyGroups.value, cpuDetailedStrategy.value, "指定なし"),
-        disabled: cpuStrategySelectLocked.value,
-      },
-      {
-        kind: "pick", id: "cpuDetailedCastle", label: "囲い",
-        value: cpuCastleSelectLocked.value
-          ? "戦法と一体"
-          : openingLabel(cpuDetailedCastleGroups.value, cpuDetailedCastle.value, "指定なし"),
-        disabled: cpuCastleSelectLocked.value,
-      },
-    );
-  } else {
-    rows.push({ kind: "pick", id: "cpuStrategy", label: "作戦", value: optionLabel(CPU_STRATEGY_OPTIONS, cpuStrategy.value) });
-  }
+  // CPUの作戦は、大まかな方針(おまかせ・居飛車・振り飛車・奇襲戦法)か、作戦カードの1枚を、作戦カードのシートで選ぶ。
+  const rows: PregameRow[] = [{
+    kind: "pick",
+    id: "cpuPlan",
+    label: "作戦",
+    value: cpuStrategyDetailsOpen.value
+      ? openingPairLabel(cpuDetailedStrategy.value, cpuDetailedCastle.value) || optionLabel(CPU_STRATEGY_OPTIONS, cpuStrategy.value)
+      : optionLabel(CPU_STRATEGY_OPTIONS, cpuStrategy.value),
+  }];
   rows.push({ kind: "pick", id: "tendency", label: "序盤傾向", value: pregameTendencySummary.value });
   if (selectedPlayerColor.value === "white") {
     rows.push({ kind: "pick", id: "cpuFirstMove", label: "初手", value: optionLabel(CPU_FIRST_MOVE_OPTIONS, cpuFirstMove.value) });
@@ -3843,14 +3856,7 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
     title, note, sections: [{ key: id, value, groups }],
   });
   if (id === "strength") return single("CPUの強さ", searchNodes.value, [{ options: strengthPickerOptions.value }]);
-  if (id === "cpuStrategy") return single("CPUの作戦", cpuStrategy.value, [{ options: CPU_STRATEGY_OPTIONS }]);
   if (id === "cpuFirstMove") return single("CPUの初手", cpuFirstMove.value, [{ options: CPU_FIRST_MOVE_OPTIONS }]);
-  if (id === "cpuDetailedStrategy") {
-    return single("CPUの戦法", cpuDetailedStrategy.value, openingPickerGroups(cpuDetailedStrategyGroups.value, "指定なし"));
-  }
-  if (id === "cpuDetailedCastle") {
-    return single("CPUの囲い", cpuDetailedCastle.value, openingPickerGroups(cpuDetailedCastleGroups.value, "指定なし"));
-  }
   if (id === "tendency") {
     return {
       title: "CPUの序盤傾向",
@@ -3883,13 +3889,16 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
   return null;
 });
 
+/** 対局準備の行の［変更］。作戦の行は作戦カードのシート、ほかは選択シートを開く。 */
+function openPregameRow(id: string) {
+  if (id === "cpuPlan") openPlanSheet("cpu");
+  else pregamePicker.value = id;
+}
+
 function onPregamePick(key: string, value: PickerValue) {
   const text = String(value);
   if (key === "strength") searchNodes.value = Number(value);
-  else if (key === "cpuStrategy") cpuStrategy.value = text;
   else if (key === "cpuFirstMove") cpuFirstMove.value = text;
-  else if (key === "cpuDetailedStrategy") cpuDetailedStrategy.value = text;
-  else if (key === "cpuDetailedCastle") cpuDetailedCastle.value = text;
   else if (key === "bishop") cpuBishopPreference.value = text;
   else if (key === "rook") cpuRookPreference.value = text;
   else if (key === "tempo") cpuTempoPreference.value = text;

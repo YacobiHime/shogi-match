@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { openingFormation, openingFormationGhosts, openingFormationProgress } from "./opening-formation.mjs";
+import {
+  openingFormation,
+  openingFormationGhosts,
+  openingFormationProgress,
+  openingFormationSteps,
+  openingStepLabel,
+} from "./opening-formation.mjs";
 import { ALL_OPENING_PLANS } from "./opening-catalog.mjs";
 
 const START = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
@@ -50,5 +56,37 @@ describe("作戦カードの完成形", () => {
     expect(progress).toMatchObject({ filled: 2, total: 6 });
     expect([...progress.filledSquares].sort()).toEqual(["6h", "7f"]);
     expect(openingFormationProgress({ sfen: START })).toEqual({ filled: 0, total: 0, filledSquares: [] });
+  });
+
+  it("1手ずつの形を残し、最後の形が完成形になる", () => {
+    const { steps, frames } = openingFormationSteps("shiken", "mino");
+    expect(frames).toHaveLength(steps.length + 1);
+    expect(frames[0].every(({ moved }) => !moved)).toBe(true);
+    expect(frames.at(-1)).toEqual(openingFormation("shiken", "mino").pieces);
+    expect(steps.map(({ phase }) => phase)).toEqual([...Array(3).fill("strategy"), ...Array(5).fill("castle")]);
+    // 1手目のあとは、7六の歩だけが動いている。
+    expect(frames[1].filter(({ moved }) => moved).map(({ square }) => square)).toEqual(["7f"]);
+  });
+
+  it("手の名前は、先手は▲、後手は盤を反転したマスで△と書く", () => {
+    const { steps } = openingFormationSteps("shiken", "mino");
+    expect(steps.map((step) => openingStepLabel(step)).slice(0, 3)).toEqual(["▲７六歩", "▲６六歩", "▲６八飛"]);
+    expect(steps.map((step) => openingStepLabel(step, "white")).slice(0, 3)).toEqual(["△３四歩", "△４四歩", "△４二飛"]);
+    const kakugawari = openingFormationSteps("kakugawari", "nakazumai").steps.map((step) => openingStepLabel(step));
+    expect(kakugawari.slice(0, 2)).toEqual(["▲７六歩", "角を交換する"]);
+    const promoted = { usi: "8h2b+", phase: "strategy", kind: "B", from: "8h", to: "2b", promote: true, drop: false, exchange: false };
+    expect(openingStepLabel(promoted)).toBe("▲２二角成");
+    const drop = { usi: "B*5e", phase: "strategy", kind: "B", from: "", to: "5e", promote: false, drop: true, exchange: false };
+    expect(openingStepLabel(drop)).toBe("▲５五角打");
+  });
+
+  it("すべてのカードで、手順の再生に動かない手がない", () => {
+    for (const plan of ALL_OPENING_PLANS) {
+      const { steps, frames } = openingFormationSteps(plan.strategyId, plan.castles[0] ?? "");
+      expect(steps.length, plan.id).toBeGreaterThan(0);
+      for (let index = 1; index < frames.length; index += 1) {
+        expect(frames[index], `${plan.id} ${index}`).not.toEqual(frames[index - 1]);
+      }
+    }
   });
 });

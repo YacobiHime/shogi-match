@@ -21,7 +21,24 @@
       <!-- くわしく: 完成形を大きく見せ、得意・苦手・コツを1行ずつ。囲いは合う順に並べて替えられる。 -->
       <div v-else-if="detail" class="plan-sheet__body plan-sheet__detail">
         <div class="plan-sheet__detail-head">
-          <FormationThumb class="plan-sheet__detail-thumb" :strategy-id="detail.plan.strategyId" :castle-id="detailCastle" />
+          <FormationThumb class="plan-sheet__detail-thumb" :strategy-id="detail.plan.strategyId" :castle-id="detailCastle" :ply="replayPly" />
+          <!-- 手順を1手ずつ。自分が指す手だけを、同じ小さな盤ですべらせて見せる(相手の手は局面しだいで変わるため描かない)。 -->
+          <div class="plan-sheet__replay" data-plan-replay>
+            <button type="button" aria-label="1手もどる" :disabled="replayIndex === 0" @click="stepReplay(-1)">◀</button>
+            <p aria-live="polite">
+              <template v-if="replayPly === null">完成形<small>（全{{ replaySteps.length }}手）</small></template>
+              <template v-else-if="replayIndex === 0">はじめの形</template>
+              <template v-else>
+                <small>{{ replayIndex }} / {{ replaySteps.length }}手</small>
+                <b>{{ replayStepLabel }}</b>
+                <span class="plan-sheet__replay-phase">{{ replayPhaseLabel }}</span>
+              </template>
+            </p>
+            <button type="button" aria-label="1手すすむ" :disabled="replayIndex === replaySteps.length" @click="stepReplay(1)">▶</button>
+            <button type="button" class="plan-sheet__replay-play" data-plan-replay-play @click="toggleReplay">
+              {{ replayTimer ? "止める" : "手順を見る" }}
+            </button>
+          </div>
           <div class="plan-sheet__tags">
             <span class="plan-sheet__tag" :class="`plan-sheet__tag--${detail.plan.style}`">{{ OPENING_STYLE_LABELS[detail.plan.style] }}</span>
             <span class="plan-sheet__stars" :aria-label="`難しさ${detail.plan.difficulty}`">{{ stars(detail.plan.difficulty) }}</span>
@@ -29,7 +46,7 @@
           </div>
           <p class="plan-sheet__legend"><span class="plan-sheet__legend-swatch" aria-hidden="true"></span>緑のわくの駒を動かして、この形を作るよ</p>
         </div>
-        <div v-if="detail.castles.length && detail.plan.strategyId && !detail.plan.name" class="plan-sheet__castles"role="radiogroup" aria-label="いっしょに組む囲い">
+        <div v-if="detail.castles.length && detail.plan.strategyId && !detail.plan.name" class="plan-sheet__castles" role="radiogroup" aria-label="いっしょに組む囲い">
           <p>いっしょに組む囲い</p>
           <div>
             <button
@@ -49,7 +66,7 @@
               :class="{ 'plan-sheet__castle--selected': !detailCastle }"
               :aria-checked="!detailCastle"
               @click="detailCastle = ''"
-            >囲いは組まない</button>
+            >{{ mode === "cpu" ? "囲いはCPUにまかせる" : "囲いは組まない" }}</button>
           </div>
         </div>
         <dl class="plan-sheet__facts">
@@ -61,7 +78,24 @@
       </div>
 
       <div v-else class="plan-sheet__body">
-        <div class="plan-sheet__actions">
+        <!-- CPUの作戦: 大まかな方針を選ぶか、下のカードで作戦を決める。 -->
+        <section v-if="mode === 'cpu'" class="plan-sheet__group" aria-label="大まかに決める">
+          <h4>大まかに決める<small>細かい戦法は、CPUが局面を見て選ぶよ</small></h4>
+          <div class="plan-sheet__broad" role="radiogroup" aria-label="CPUの大まかな作戦">
+            <button
+              v-for="option in broadOptions"
+              :key="option.value"
+              type="button"
+              role="radio"
+              class="plan-sheet__castle"
+              :class="{ 'plan-sheet__castle--selected': option.value === broadValue }"
+              :aria-checked="option.value === broadValue"
+              :data-broad="option.value"
+              @click="emit('broad', String(option.value))"
+            >{{ option.label }}</button>
+          </div>
+        </section>
+        <div v-else class="plan-sheet__actions">
           <button type="button" class="plan-sheet__auto" @click="emit('auto')">
             <span>おまかせ</span>
             <small>やこび姫が1つ選ぶよ</small>
@@ -73,6 +107,7 @@
           <button v-if="allowClear" type="button" class="plan-sheet__clear" @click="emit('clear')">作戦なしにする</button>
         </div>
         <p v-if="note" class="plan-sheet__note">{{ note }}</p>
+        <h4 v-if="mode === 'cpu'" class="plan-sheet__cpu-heading">作戦を決める<small>カードを押すと、くわしく見て決められるよ</small></h4>
         <section v-for="group in groups" :key="group.id" class="plan-sheet__group" :aria-label="group.label">
           <h4>{{ group.label }}<small>{{ group.description }}</small></h4>
           <div class="plan-sheet__cards">
@@ -110,7 +145,7 @@
             </div>
           </div>
         </section>
-        <div v-if="showSwitch" class="plan-sheet__switch-row">
+        <div v-if="showSwitch && mode !== 'cpu'" class="plan-sheet__switch-row">
           <span>
             ぜんぶの作戦を使う
             <small>将棋に慣れていたら、まだ使えない作戦もすぐ選べるよ</small>
@@ -134,12 +169,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import FormationThumb from "./FormationThumb.vue";
 import OpeningFortune from "./OpeningFortune.vue";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { openingExplanation } from "./core/opening-explanations.mjs";
 import { OPENING_PLAN_GROUPS, OPENING_PLAN_TIERS, OPENING_STYLE_LABELS } from "./core/opening-catalog.mjs";
+import { openingFormationSteps, openingStepLabel } from "./core/opening-formation.mjs";
 
 export type OpeningPlanView = {
   id: string; strategyId: string; castles: readonly string[]; group: string; tier: string;
@@ -165,6 +201,13 @@ const props = defineProps({
   showAll: { type: Boolean, default: false },
   note: { type: String, default: "" },
   assetBaseUrl: { type: String, default: "." },
+  // player: あなたの作戦(解放・おまかせ・占い)。cpu: CPUの作戦(大まかな方針と、全部のカード)。
+  mode: { type: String as PropType<"player" | "cpu">, default: "player" },
+  broadOptions: { type: Array as PropType<{ value: string | number; label: string }[]>, default: () => [] },
+  // 大まかな方針を選んでいるときの値。作戦カードを選んでいるときは空。
+  broadValue: { type: String, default: "" },
+  // 手順の名前を、先手なら▲、後手なら盤を反転して△で書く。
+  playerColor: { type: String as PropType<"black" | "white">, default: "black" },
 });
 const emit = defineEmits<{
   choose: [planId: string, castleId: string];
@@ -173,6 +216,7 @@ const emit = defineEmits<{
   "toggle-all": [on: boolean];
   close: [];
   "fortune-result": [planId: string];
+  broad: [value: string];
 }>();
 
 const GROUP_DESCRIPTIONS: { [id: string]: string } = {
@@ -242,6 +286,46 @@ const detailFacts = computed(() => {
   ];
   return facts.filter(({ label, text }) => label && text);
 });
+
+// ===== 手順の再生 =====
+/** 再生している手数。nullは完成形(くわしい画面を開いたときは、まず完成形を見せる)。 */
+const replayPly = ref<number | null>(null);
+const replayTimer = ref<ReturnType<typeof setInterval> | null>(null);
+const REPLAY_INTERVAL_MS = 800;
+const replaySteps = computed(() => (detail.value ? openingFormationSteps(detail.value.plan.strategyId, detailCastle.value).steps : []));
+const replayIndex = computed(() => replayPly.value ?? replaySteps.value.length);
+const replayStepLabel = computed(() => {
+  const step = replaySteps.value[replayIndex.value - 1];
+  return step ? openingStepLabel(step, props.playerColor) : "";
+});
+const replayPhaseLabel = computed(() => (replaySteps.value[replayIndex.value - 1]?.phase === "castle" ? "囲い" : "戦法"));
+function stopReplay() {
+  if (replayTimer.value) clearInterval(replayTimer.value);
+  replayTimer.value = null;
+}
+function stepReplay(delta: number) {
+  stopReplay();
+  replayPly.value = Math.max(0, Math.min(replaySteps.value.length, replayIndex.value + delta));
+}
+/** 「手順を見る」: はじめの形から1手ずつ進め、完成形で止まる。 */
+function toggleReplay() {
+  if (replayTimer.value) {
+    stopReplay();
+    return;
+  }
+  if (replayIndex.value >= replaySteps.value.length) replayPly.value = 0;
+  replayTimer.value = setInterval(() => {
+    const next = replayIndex.value + 1;
+    replayPly.value = next;
+    if (next >= replaySteps.value.length) stopReplay();
+  }, REPLAY_INTERVAL_MS);
+}
+// 作戦や囲いを替えたら、完成形から見直す。
+watch([detailId, detailCastle], () => {
+  stopReplay();
+  replayPly.value = null;
+});
+onBeforeUnmount(stopReplay);
 
 function openDetail(entry: OpeningPlanEntry) {
   detailId.value = entry.plan.id;
@@ -387,6 +471,26 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   border-radius: 0.5em;
   color: var(--plan-sheet-ink);
   background: #fff;
+}
+.plan-sheet__broad {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+.plan-sheet__cpu-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em 0.6em;
+  align-items: baseline;
+  margin: 0.3em 0 0;
+  padding-top: 0.7em;
+  border-top: 2px solid var(--plan-sheet-line);
+  font-size: 1em;
+}
+.plan-sheet__cpu-heading small {
+  color: var(--plan-sheet-muted);
+  font-size: 0.78em;
+  font-weight: 600;
 }
 .plan-sheet__note {
   margin: 0;
@@ -542,6 +646,54 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .plan-sheet__detail-thumb {
   width: min(20em, 100%);
 }
+.plan-sheet__replay {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  align-items: center;
+  justify-content: center;
+  width: min(20em, 100%);
+}
+.plan-sheet__replay p {
+  display: flex;
+  flex: 1 1 8em;
+  flex-wrap: wrap;
+  gap: 0 0.4em;
+  align-items: baseline;
+  justify-content: center;
+  margin: 0;
+  font-size: 0.95em;
+}
+.plan-sheet__replay small {
+  color: var(--plan-sheet-muted);
+  font-size: 0.8em;
+}
+.plan-sheet__replay-phase {
+  padding: 0 0.35em;
+  border-radius: 0.25em;
+  color: var(--plan-sheet-muted);
+  background: #efe6d2;
+  font-size: 0.75em;
+  font-weight: 700;
+}
+.shogi-game .plan-sheet__replay button {
+  min-width: 2.75em;
+  min-height: 2.75em;
+  padding: 0.2em 0.6em;
+  border: 2px solid var(--plan-sheet-line);
+  border-radius: 0.5em;
+  color: var(--plan-sheet-ink);
+  background: #fff;
+  box-shadow: none;
+}
+.shogi-game .plan-sheet__replay button:disabled {
+  opacity: 0.4;
+}
+.shogi-game .plan-sheet__replay .plan-sheet__replay-play {
+  flex: 1 0 100%;
+  border-color: var(--plan-sheet-accent);
+  font-weight: 800;
+}
 .plan-sheet__legend {
   display: flex;
   gap: 0.4em;
@@ -621,6 +773,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 /* 対局画面のボタンの暗い色の「触れたとき」を、明るい用紙の上の色に置き換える。 */
 @media (hover: hover) {
   .shogi-game .plan-sheet__card:not(:disabled):hover,
+  .shogi-game .plan-sheet__replay button:not(:disabled):hover,
   .shogi-game .plan-sheet__fortune:not(:disabled):hover,
   .shogi-game .plan-sheet__castle:not(:disabled):hover,
   .shogi-game .plan-sheet__clear:not(:disabled):hover {

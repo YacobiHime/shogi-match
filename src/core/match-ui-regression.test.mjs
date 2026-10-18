@@ -230,9 +230,10 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/@play-plan="playPlanFromDex"/);
     // 戻る操作で作戦カードのシートを閉じる。
     expect(source).toMatch(/else if \(planSheet\.value\) \{\s*closePlanSheet\(\);/);
-    // 対局準備のCPU欄は「項目: 値 [変更]」の行で、一体型なら変更ボタンを無効にする。
-    expect(source).toMatch(/id: "cpuDetailedStrategy"[\s\S]*?disabled: cpuStrategySelectLocked\.value/);
-    expect(source).toMatch(/id: "cpuDetailedCastle"[\s\S]*?disabled: cpuCastleSelectLocked\.value/);
+    // 対局準備のCPUの作戦も「項目: 値 [変更]」の1行で、作戦カードのシート(大まかな方針と全部のカード)で選ぶ。
+    expect(source).toMatch(/id: "cpuPlan",\s*label: "作戦"/);
+    expect(source).toMatch(/if \(id === "cpuPlan"\) openPlanSheet\("cpu"\)/);
+    expect(source).toMatch(/:mode="planSheet === 'cpu' \? 'cpu' : 'player'"[\s\S]*?@broad="chooseCpuBroadPlan"/);
     expect(source).toMatch(/class="shogi-game__pregame-change"\s+:disabled="row\.disabled"/);
   });
 

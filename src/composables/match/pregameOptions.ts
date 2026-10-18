@@ -83,7 +83,6 @@ export function openingLabel(groups: OpeningOptionGroup[], id: string, emptyLabe
 }
 
 export type PregameRow =
-  | { kind: "switch"; id: string; label: string; checked: boolean }
   | { kind: "pick"; id: string; label: string; value: string; disabled?: boolean }
   // あなたの作戦。[おまかせ][変更]の2つのボタンを持つ(作戦カードのシートで選ぶ)。
   | { kind: "plan"; id: string; label: string; value: string };

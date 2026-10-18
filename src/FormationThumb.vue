@@ -20,11 +20,17 @@
       class="formation-thumb__line"
       x1="0" :y1="index * CELL" :x2="FILES * CELL" :y2="index * CELL"
     />
-    <g v-for="piece in cells" :key="piece.square" :transform="`translate(${piece.x} ${piece.y})`">
+    <!-- 再生では同じ駒をすべらせて動かすため、駒の初めのマスをkeyにし、位置はCSSのtransformで変える。 -->
+    <g
+      v-for="piece in cells"
+      :key="piece.id"
+      class="formation-thumb__cell"
+      :style="{ transform: `translate(${piece.x}px, ${piece.y}px)` }"
+    >
       <rect
         v-if="piece.moved"
         class="formation-thumb__mark"
-        :class="{ 'formation-thumb__mark--pending': piece.pending }"
+        :class="{ 'formation-thumb__mark--pending': piece.pending, 'formation-thumb__mark--last': piece.last }"
         x="0.6" y="0.6" :width="CELL - 1.2" :height="CELL - 1.2" rx="1.6"
       />
       <path
@@ -47,7 +53,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { openingFormation } from "./core/opening-formation.mjs";
+import { openingFormationSteps } from "./core/opening-formation.mjs";
 
 const props = defineProps({
   strategyId: { type: String, default: "" },
@@ -56,6 +62,8 @@ const props = defineProps({
   silhouette: { type: Boolean, default: false },
   // 対局中の進み具合。完成形のうち、もう駒が着いたマス(先手から見た座標)。nullなら全部を完成として描く。
   filledSquares: { type: Array as () => string[] | null, default: null },
+  // くわしい画面の手順の再生。何手目までの形を描くか(0は初めの形)。nullなら完成形。
+  ply: { type: Number as () => number | null, default: null },
 });
 
 const FILES = 9;
@@ -67,14 +75,19 @@ const LABELS: { [kind: string]: string } = { K: "玉", R: "飛", B: "角", G: "�
 const PROMOTED_LABELS: { [kind: string]: string } = { R: "龍", B: "馬", S: "全", N: "圭", L: "杏", P: "と" };
 
 const cells = computed(() => {
-  const formation = openingFormation(props.strategyId, props.castleId);
+  const { steps, frames } = openingFormationSteps(props.strategyId, props.castleId);
+  const index = props.ply === null ? frames.length - 1 : Math.max(0, Math.min(frames.length - 1, props.ply));
+  // 再生中は、いま動いた駒のマスを濃く塗る(緑は「駒が動いた跡」)。
+  const lastSquare = props.ply === null || index === 0 ? "" : steps[index - 1]?.to ?? "";
   const filled = props.filledSquares ? new Set(props.filledSquares) : null;
-  return formation.pieces.flatMap((piece) => {
+  return frames[index].flatMap((piece) => {
     const rankIndex = RANKS.indexOf(piece.square[1]);
     if (rankIndex < 0) return [];
     const file = Number(piece.square[0]);
     return [{
+      id: piece.id,
       square: piece.square,
+      last: piece.square === lastSquare,
       x: (FILES - file) * CELL,
       y: rankIndex * CELL,
       moved: piece.moved,
@@ -105,6 +118,8 @@ const cells = computed(() => {
 .formation-thumb__board { fill: var(--formation-thumb-board); }
 .formation-thumb__line { stroke: var(--formation-thumb-line); stroke-width: 0.35; }
 .formation-thumb__mark { fill: var(--formation-thumb-moved-fill); }
+.formation-thumb__cell { transition: transform 160ms ease-out; }
+.formation-thumb__mark--last { fill: rgba(64, 160, 84, 0.7); }
 .formation-thumb__mark--pending { fill: none; stroke: var(--formation-thumb-moved); stroke-width: 0.5; stroke-dasharray: 1.2 1; }
 .formation-thumb__piece { fill: var(--formation-thumb-piece); stroke: var(--formation-thumb-piece-edge); stroke-width: 0.4; }
 .formation-thumb__piece--moved { fill: #fffaf0; stroke: var(--formation-thumb-moved); stroke-width: 0.7; }
@@ -121,4 +136,7 @@ const cells = computed(() => {
 .formation-thumb--silhouette .formation-thumb__mark { fill: none; }
 .formation-thumb--silhouette .formation-thumb__piece { opacity: 0.35; }
 .formation-thumb--silhouette .formation-thumb__piece--moved { fill: var(--formation-thumb-shadow); stroke: var(--formation-thumb-shadow); opacity: 0.8; }
+@media (prefers-reduced-motion: reduce) {
+  .formation-thumb__cell { transition: none; }
+}
 </style>
