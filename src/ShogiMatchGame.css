@@ -2793,8 +2793,9 @@
 }
 
 /*
- * あそぶ・まなぶ・しらべる。区分を混ぜないよう、区分ごとに色の違う帯にして、上から1列に積む(横に並べない)。
- * 帯の左端に、区分の色の見出しを縦書きで置き、帯の中のタイルは横1列に並べる(折り返さない)。
+ * あそぶ・まなぶ・しらべる。区分を混ぜないよう、区分ごとに1行にして上から積む(横に並べない)。
+ * 区分を枠や背景で囲むとごちゃつくので、囲まずに、行の上の小さな見出しと余白で分ける。
+ * 区分の色は見出しの文字にだけ使い、タイルは区分によらず同じ見た目にする。
  */
 .shogi-home--title {
   --title-play: var(--amber);
@@ -2803,38 +2804,34 @@
 }
 .shogi-title__groups {
   display: grid;
-  gap: 0.6em;
+  gap: 0.85em;
 }
 .shogi-title__group {
   --group-color: var(--title-play);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: stretch;
-  gap: 0.5em;
+  gap: 0.35em;
   min-width: 0;
-  padding: 0.45em;
-  /* color-mixが使えないブラウザでは、色の付かない枠と背景にする(見出しの色で区分は分かる)。 */
-  border: 0.12em solid rgba(255, 252, 244, 0.25);
-  border-color: color-mix(in srgb, var(--group-color) 45%, transparent);
-  border-radius: 1em;
-  background: rgba(23, 38, 50, 0.82);
-  background: color-mix(in srgb, var(--group-color) 9%, rgba(23, 38, 50, 0.82));
 }
 .shogi-title__group--learn { --group-color: var(--title-learn); }
 .shogi-title__group--dex { --group-color: var(--title-dex); }
 .shogi-title__group-title {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
   margin: 0;
-  padding: 0.5em 0.3em;
-  border-radius: 0.65em;
-  color: #172632;
-  background: var(--group-color);
+  padding-left: 0.15em;
+  color: var(--group-color);
   font-size: 0.82em;
   font-weight: 900;
-  letter-spacing: 0.18em;
-  writing-mode: vertical-rl;
-  text-orientation: upright;
+  letter-spacing: 0.2em;
+}
+/* 見出しの前の小さな印。区分の色を、文字より目に入りやすくする。 */
+.shogi-title__group-title::before {
+  content: "";
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 0.15em;
+  background: var(--group-color);
 }
 .shogi-title__tiles {
   display: grid;
@@ -2857,7 +2854,6 @@
   min-height: 4.4em;
   padding: 0.6em 0.7em;
   border: 0.12em solid rgba(255, 252, 244, 0.3);
-  border-color: color-mix(in srgb, var(--group-color, #fffcf4) 35%, transparent);
   border-radius: 0.8em;
   color: #fffcf4;
   background: rgba(43, 70, 91, 0.92);
@@ -2979,8 +2975,7 @@
   .shogi-title__next-label { font-size: 1.9em; }
   .shogi-title__next-desc { font-size: 0.9em; }
   .shogi-title__next-go { margin: 0; padding: 0.7em 1.4em; }
-  .shogi-title__groups { gap: 0.8em; }
-  .shogi-title__group { padding: 0.55em; }
+  .shogi-title__groups { gap: 1em; }
   .shogi-game .shogi-title__tile { min-height: 5em; padding: 0.7em 0.8em; }
   .shogi-title__tile .shogi-title__icon { width: 2.8em; height: 2.8em; }
   .shogi-title__label { font-size: 1.15em; }
@@ -3033,8 +3028,8 @@
   }
   .shogi-title__next-icon { width: 3.6em; height: 3.6em; }
   .shogi-title__next-go { margin: 0; padding: 0.6em 1.2em; }
-  .shogi-title__groups { gap: 0.45em; }
-  .shogi-title__group { padding: 0.35em; }
+  .shogi-title__groups { gap: 0.5em; }
+  .shogi-title__group { gap: 0.2em; }
   .shogi-game .shogi-title__tile { min-height: 3.2em; padding: 0.35em 0.6em; }
   .shogi-title__tile .shogi-title__icon { width: 2.2em; height: 2.2em; }
 }

@@ -29,7 +29,8 @@ describe("match screen regressions", () => {
 
   it("suspends a match to the home screen and resumes it from the saved state", () => {
     // 中断は、ホームのある表示だけで出す。保存に印を付け、盤の状態を消してホームへ戻る。
-    expect(source).toMatch(/v-if="showHome && !reviewMode"[\s\S]*?suspendConfirmOpen = true[\s\S]*?>中断<\/button>/);
+    expect(source).toMatch(/v-if="!menuCollapsed && !reviewMode"[\s\S]*?v-if="showHome"[\s\S]*?suspendConfirmOpen = true[\s\S]*?>中断<\/button>/);
+    expect(source).toMatch(/v-if="menuCollapsed && !reviewMode"[\s\S]*?v-if="showHome"[\s\S]*?suspendConfirmOpen = true[\s\S]*?>対局を中断する<\/button>/);
     expect(source).toContain("suspended: suspendedMatch.value !== null,");
     expect(source).toMatch(/function suspendMatch\(\)[\s\S]*?persistMatchState\(\);[\s\S]*?matchStarted\.value = false;[\s\S]*?openHome\(\);/);
     // 中断した対局は、リロードしても自動では復元せず、ホームの「対局を再開」から復元する。
@@ -126,9 +127,17 @@ describe("match screen regressions", () => {
   });
 
   it("asks before resigning from the toolbar and the menu", () => {
-    expect(source.match(/reviewMode \? completeReview\(\) : requestResign\(\)/g)).toHaveLength(2);
-    expect(source).not.toMatch(/reviewMode \? completeReview\(\) : resign\(\)/);
+    expect(source.match(/@click="(?:closeSettings\(\); )?requestResign\(\)"/g)).toHaveLength(2);
+    expect(source).not.toMatch(/@click="(?:closeSettings\(\); )?resign\(\)"/);
     expect(source).toMatch(/function confirmResign\(\) \{\s*resignConfirmOpen\.value = false;\s*resign\(\);/);
+  });
+
+  it("shows the button that finishes the review outside the menu, naming where it goes", () => {
+    // 検討を終えるボタンは、狭い画面でもメニュー(ハンバーガー)にしまわない。
+    const toolbar = source.split('class="shogi-game__toolbar"')[1]?.split('class="shogi-game__menu-toggle')[0] ?? "";
+    expect(toolbar).toMatch(/v-if="reviewMode && !measureAnalyzing"[\s\S]*?@click="completeReview\(\)"/);
+    expect(toolbar).not.toMatch(/v-if="!menuCollapsed"[^>]*>[\s\S]*?completeReview/);
+    expect(source).toMatch(/"完了して教室へ"[\s\S]*"完了して竜王戦へ"[\s\S]*"完了してホームへ" : "完了して対局準備へ"/);
   });
 
   it("does not hide opening-guide choices behind a fixed height in portrait", () => {

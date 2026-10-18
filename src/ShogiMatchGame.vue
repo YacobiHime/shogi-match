@@ -26,8 +26,9 @@
       <!--
         タイトル画面。いまの状態に合った「つぎはこれ」を1枚だけ大きく出し、その下に記録の帯と、
         あそぶ・まなぶ・しらべるの3つの入口を並べる。広い画面ではタイトルとやこび姫を左の列に置く。
-        3つの入口は混ぜない(Switchのホーム画面の「種類を分けて配置する」)。区分ごとに色の違う帯にして上から積み、
-        帯の中のタイルは、どの画面でも横1列に並べる(区分を横に並べたり、タイルを折り返したりしない)。
+        3つの入口は混ぜない(Switchのホーム画面の「種類を分けて配置する」)。区分ごとに1行にして上から積み、
+        行の中のタイルは、どの画面でも横1列に並べる(区分を横に並べたり、タイルを折り返したりしない)。
+        区分は枠で囲まず(囲むとごちゃつく)、行の上の小さな見出しと余白で分ける。
       -->
       <div class="shogi-title__hero">
         <h1 class="shogi-title__logo">shogi-match</h1>
@@ -439,17 +440,27 @@
         class="shogi-game__toolbar"
         :class="{ 'shogi-game__toolbar--learning': matchKind === 'learning' }"
       >
-        <template v-if="!menuCollapsed">
+        <!--
+          検討(棋譜解析・振り返り)を終えるボタンは、次へ進む唯一の道なので、画面の幅によらずメニューにしまわずに出す。
+          押すとどこへ行くかを文字で示す(ホーム・竜王戦・教室・対局準備)。
+        -->
+        <button
+          v-if="reviewMode && !measureAnalyzing"
+          type="button"
+          class="shogi-game__command shogi-game__command--complete"
+          :disabled="!active"
+          data-review-complete
+          @click="completeReview()"
+        >{{ reviewCompleteLabel }}</button>
+        <template v-if="!menuCollapsed && !reviewMode">
           <button
-            v-if="!(reviewMode && measureAnalyzing)"
             type="button"
-            class="shogi-game__command"
-            :class="reviewMode ? 'shogi-game__command--complete' : 'shogi-game__command--danger'"
+            class="shogi-game__command shogi-game__command--danger"
             :disabled="!active"
-            @click="reviewMode ? completeReview() : requestResign()"
-          >{{ reviewMode ? "完了" : "投了" }}</button>
+            @click="requestResign()"
+          >投了</button>
           <button
-            v-if="showHome && !reviewMode"
+            v-if="showHome"
             type="button"
             class="shogi-game__command"
             :disabled="!active"
@@ -474,18 +485,16 @@
       </div>
       <div v-if="settingsOpen" class="shogi-game__menu-backdrop" aria-hidden="true" @click="closeSettings"></div>
       <div v-if="settingsOpen" class="shogi-game__menu" role="menu" @keydown.esc="closeSettings">
-        <template v-if="menuCollapsed">
+        <template v-if="menuCollapsed && !reviewMode">
           <button
-            v-if="!(reviewMode && measureAnalyzing)"
             type="button"
             role="menuitem"
-            class="shogi-game__menu-item"
-            :class="reviewMode ? 'shogi-game__menu-item--complete' : 'shogi-game__menu-item--danger'"
+            class="shogi-game__menu-item shogi-game__menu-item--danger"
             :disabled="!active"
-            @click="closeSettings(); reviewMode ? completeReview() : requestResign()"
-          >{{ reviewMode ? "検討を完了する" : "投了する" }}</button>
+            @click="closeSettings(); requestResign()"
+          >投了する</button>
           <button
-            v-if="showHome && !reviewMode"
+            v-if="showHome"
             type="button"
             role="menuitem"
             class="shogi-game__menu-item"
@@ -6864,6 +6873,13 @@ const dexAnalysisEngine = useDexAnalysisEngine({
 function resign() {
   if (active.value && !reviewMode.value) finish(resignationResult(record.value));
 }
+
+/** 検討を終えるボタンの文字。押すと行く先を書く(completeReview・leaveFinishedMatchと同じ分かれ方)。 */
+const reviewCompleteLabel = computed(() => {
+  if (tutorialMatch.value?.report) return "完了して教室へ";
+  if (props.showHome && ryuoGame.value) return "完了して竜王戦へ";
+  return props.showHome ? "完了してホームへ" : "完了して対局準備へ";
+});
 
 function completeReview() {
   if (!reviewMode.value) return;
