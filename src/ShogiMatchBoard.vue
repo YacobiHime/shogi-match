@@ -38,6 +38,7 @@
       :attack-marks="attackMarks"
       :ghost-pieces="ghostPieceInputs"
       :float-labels="floatLabels"
+      :callout="callout"
       :risk-destinations="riskDestinations"
       :mark-squares="markSquares"
       :flip="flip"
@@ -91,6 +92,10 @@ import { Color, PieceType, type Move } from "tsshogi";
 type AttackMark = { file: number; rank: number; black: number; white: number };
 type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" | "covered" | "danger" };
 type FloatLabel = { id: string | number; file: number; rank: number; text: string; tone: "good" | "bad"; big?: boolean };
+type BoardCallout = {
+  at: string; text: string; side: "above" | "below" | "left" | "right";
+  x: number; y: number; width: number; height: number; tail: number; tone?: string;
+};
 type GhostPiece = { file: number; rank: number; kind: string; color?: "black" | "white" };
 const GHOST_PIECE_TYPES: Record<string, PieceType> = {
   K: PieceType.KING, R: PieceType.ROOK, B: PieceType.BISHOP, G: PieceType.GOLD,
@@ -108,6 +113,8 @@ const props = defineProps({
   markSquares: { type: Array as () => SquareMark[], default: () => [] },
   // 駒得の数字(＋6／−5)。取ったマスの上に浮かべる。
   floatLabels: { type: Array as PropType<FloatLabel[]>, default: () => [] },
+  // 教室の盤の上のひとこと(tutorial-callout.mjsのplaceCalloutの結果に文とtoneを足したもの)。
+  callout: { type: Object as PropType<BoardCallout | null>, default: null },
   // 教室の「囲いを組もう」と、対局中の作戦の完成形で薄く見せる駒。kindはSFENの駒の文字("K"・"G"など)。colorを省くと先手。
   ghostPieces: { type: Array as () => GhostPiece[], default: () => [] },
   // 利きメガネ: 選んだ駒を動かすと取られて損をする行き先を返す。

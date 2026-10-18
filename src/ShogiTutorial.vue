@@ -26,6 +26,24 @@
         <svg viewBox="0 0 32 16" aria-hidden="true"><circle cx="8" cy="9" r="5.5" /><circle cx="24" cy="9" r="5.5" /><path d="M13.5 8.5 Q16 6.5 18.5 8.5 M2.5 8 L1 4 M29.5 8 L31 4" /></svg>
         <span>利き</span>
       </button>
+      <!-- 読み上げ。押すたびにオン/オフ。既定はオフ。日本語の声がない端末では出さない。 -->
+      <button
+        v-if="view === 'lesson' && japaneseVoice"
+        type="button"
+        class="shogi-tutorial__glasses shogi-tutorial__voice"
+        :class="{ 'shogi-tutorial__glasses--on': voiceOn }"
+        :aria-pressed="voiceOn"
+        aria-label="読み上げ"
+        data-tutorial-voice
+        @click="toggleVoice"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
+          <path v-if="voiceOn" d="M15.5 9a4 4 0 0 1 0 6 M18 6.5a7.5 7.5 0 0 1 0 11" />
+          <path v-else d="M16 9.5l5 5 M21 9.5l-5 5" />
+        </svg>
+        <span>声</span>
+      </button>
       <button
         v-if="view === 'lesson'"
         type="button"
@@ -174,6 +192,7 @@
               :ghost-pieces="boardGhosts"
               :risk-destinations="riskDestinations"
               :float-labels="floatLabels"
+              :callout="boardCallout"
               @usi-move="onBoardMove"
               @resize="onBoardResize"
             />
@@ -230,13 +249,22 @@
                   {{ streak }}れんぞく！
                 </span>
               </p>
-              <p class="shogi-tutorial__speech">{{ stepSpeech }}</p>
+              <!-- 「緑のマス」「赤い数字」などの前に、盤と同じ色の札を付ける(言葉と盤の色を同じ形で結ぶ)。 -->
+              <p class="shogi-tutorial__speech">
+                <template v-for="(segment, index) in speechSegments(stepSpeech ?? '')" :key="index">
+                  <i v-if="segment.tone" class="shogi-tutorial__swatch" :class="`shogi-tutorial__swatch--${segment.tone}`" aria-hidden="true"></i>{{ segment.text }}
+                </template>
+              </p>
               <p
                 v-if="feedback"
                 class="shogi-tutorial__feedback"
                 :class="`shogi-tutorial__feedback--${feedbackTone}`"
                 role="status"
-              >{{ feedback }}</p>
+              >
+                <template v-for="(segment, index) in speechSegments(feedback)" :key="index">
+                  <i v-if="segment.tone" class="shogi-tutorial__swatch" :class="`shogi-tutorial__swatch--${segment.tone}`" aria-hidden="true"></i>{{ segment.text }}
+                </template>
+              </p>
               <p v-if="tapToAdvance" class="shogi-tutorial__tap" aria-hidden="true">{{ tapLabel }} <span>▼</span></p>
             </div>
           </div>
@@ -440,7 +468,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, type PropType } from "vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { formatHintMove } from "./core/match-assists.mjs";
@@ -513,6 +541,8 @@ import {
   tutorialProblem,
   tutorialProblemSpeech,
 } from "./core/tutorial-problem.mjs";
+import { placeCallout, speechSegments, splitLeadPhrase, stepCallout } from "./core/tutorial-callout.mjs";
+import { loadTutorialVoiceOn, pickJapaneseVoice, saveTutorialVoiceOn, voiceText } from "./core/tutorial-voice.mjs";
 
 type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string; boss?: boolean; review?: boolean };
 type VolumeTitle = { id: string; label: string; detail: string; rank: number };
@@ -582,6 +612,39 @@ onMounted(() => moveSounds.preload());
 function playMoveSoundFor(sfen: string, usi: string) {
   const kind = moveSoundForUsi(sfen, usi);
   if (kind) moveSounds.play(kind);
+}
+
+// ===== 読み上げ(16-10) =====
+/** 端末の日本語の声。なければ読み上げのボタンを出さない。 */
+const synth = typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null;
+const japaneseVoice = shallowRef<SpeechSynthesisVoice | null>(null);
+const voiceOn = ref(loadTutorialVoiceOn(storage));
+function refreshVoices() {
+  japaneseVoice.value = synth ? pickJapaneseVoice(synth.getVoices()) : null;
+}
+onMounted(() => {
+  refreshVoices();
+  synth?.addEventListener?.("voiceschanged", refreshVoices);
+});
+onBeforeUnmount(() => {
+  synth?.removeEventListener?.("voiceschanged", refreshVoices);
+  synth?.cancel();
+});
+/** 吹き出しの文を読み上げる。前の読み上げは止める(重ねない)。 */
+function speak(text: string) {
+  if (!synth || !voiceOn.value || !japaneseVoice.value || !text) return;
+  synth.cancel();
+  const utterance = new SpeechSynthesisUtterance(voiceText(text));
+  utterance.voice = japaneseVoice.value;
+  utterance.lang = japaneseVoice.value.lang;
+  utterance.rate = 1.05;
+  synth.speak(utterance);
+}
+function toggleVoice() {
+  voiceOn.value = !voiceOn.value;
+  saveTutorialVoiceOn(storage, voiceOn.value);
+  if (voiceOn.value) speak([stepSpeech.value, feedbackVoice.value].filter(Boolean).join(" "));
+  else synth?.cancel();
 }
 
 const view = ref<"map" | "lesson" | "chapter" | "result">("map");
@@ -818,6 +881,8 @@ const hints = ref(0);
 const hintLevel = ref(0);
 const feedback = ref("");
 const feedbackTone = ref<"good" | "bad" | "info">("info");
+/** 読み上げる一言。盤の上に最初の一句を出したときも、読み上げは文の全部を読む。 */
+const feedbackVoice = ref("");
 const lastMove = ref("");
 const resultStars = ref(0);
 /** このステップでまちがえた・ヒントを見た回数(問題集の記録の「一発で解けたか」と、れんぞく正解に使う)。 */
@@ -864,6 +929,10 @@ function applyUsi(sfen: string, usi: string) {
 const attackOutcome = ref("");
 /** 詰ませたあと、詰みの理由として玉の逃げ道を見せる。 */
 const mateShown = ref(false);
+/**
+ * 正解・取り返しの瞬間に盤の上へ出す一言(「両取り！」「取られる！」)。ステップが変わるか、局面を戻すと消す。
+ */
+const momentCallout = ref<{ at: string; text: string; tone: "good" | "bad" } | null>(null);
 /** 取り返しの再生中。盤を触れなくし、押すと待たずに戻す。 */
 const refuting = ref(false);
 let refuteRestore: (() => void) | null = null;
@@ -1012,6 +1081,32 @@ const attackChips = computed(() => {
   else chips.push({ key: "checks", text: `王手 ${stepState.value.checks ?? 0}/${step.maxChecks ?? ATTACK_CHECKS}`, tone: "" });
   return chips;
 });
+/**
+ * 盤の上のひとこと(16-3)。見るマスのそばに1つだけ出す。正解・取り返しの一言があればそれを、
+ * なければ課題・説明の見るところ(ねらう駒・大事なマス・玉の逃げ道の数)を、ステップのデータから自動で作る。
+ */
+const boardCallout = computed(() => {
+  const step = currentStep.value;
+  if (!step || !boardSfen.value || stageClear.value) return null;
+  const callout = momentCallout.value
+    ?? (stepSolved.value || refuting.value
+      ? null
+      : stepCallout(step, {
+        sfen: boardSfen.value,
+        marks: boardMarks.value,
+        mateTask: isMateTask.value,
+        movesUsed: stepState.value.movesUsed,
+        speech: stepSpeech.value,
+      }));
+  if (!callout) return null;
+  const anchors = "anchors" in callout && callout.anchors ? callout.anchors : callout.at;
+  const placement = placeCallout(anchors, callout.text, { marks: boardMarks.value, sfen: boardSfen.value, avoid: boardAttackMarks.value });
+  return placement ? { ...placement, text: callout.text, tone: "tone" in callout ? callout.tone : "" } : null;
+});
+/** 指した手の行き先のマス("7f+"・"P*5e"の"7f"・"5e")。 */
+function usiDestination(usi: string) {
+  return usi.replace("+", "").slice(-2);
+}
 const boardArrows = computed(() => (
   [...(currentStep.value?.type === "explain" ? currentStep.value.arrows ?? [] : []), ...hintView.value.arrows]
     .map((usi: string) => ({ usi, guideKind: "plan" as const }))
@@ -1126,6 +1221,14 @@ const stepSpeech = computed(() => {
   if (step?.type === "problem") return tutorialProblemSpeech(step);
   return step?.question ?? step?.speech;
 });
+// ステップが変わったら(観戦は1手ごとにも)吹き出しの文を読み上げ、レッスンを離れたら止める。
+watch(
+  () => (view.value === "lesson" ? `${lessonId.value}:${stepIndex.value}:${stepSpeech.value ?? ""}` : ""),
+  (key) => {
+    if (key) speak(stepSpeech.value ?? "");
+    else synth?.cancel();
+  },
+);
 const replayLabel = computed(() => (
   currentStep.value?.type === "replay" ? replayMoveLabel(currentStep.value, stepState.value.ply) : ""
 ));
@@ -1192,6 +1295,7 @@ function loadStep(index: number) {
   mateShown.value = false;
   refuting.value = false;
   refuteRestore = null;
+  momentCallout.value = null;
   // 道具を手に入れる場面。判を押して、見出しにボタンを出す(ごほうびはすぐ使えるように)。
   if (step?.tool === "kiki-glasses" && !ownsGlasses.value) {
     toolGranted.value = true;
@@ -1201,6 +1305,7 @@ function loadStep(index: number) {
   stepMisses.value = 0;
   hintLevel.value = 0;
   feedback.value = "";
+  feedbackVoice.value = "";
   wrongChoices.value = [];
   scheduleIdleHint();
   // 棋譜の途中から始めるステップは、直前の手を強調する。
@@ -1223,9 +1328,11 @@ function startLesson(id: string) {
 function resetStep() {
   loadStep(stepIndex.value);
 }
-function setFeedback(text: string, tone: "good" | "bad" | "info") {
+function setFeedback(text: string, tone: "good" | "bad" | "info", voice = text) {
   feedback.value = text;
   feedbackTone.value = tone;
+  feedbackVoice.value = voice;
+  speak(voice);
 }
 /** まちがえたとき。★の計算と、ステップのまちがいに数え、れんぞくを途切れさせる。ヒントを1段ずつ強くする。 */
 function countMiss() {
@@ -1246,7 +1353,10 @@ function praiseFor(step: any) {
  * 課題に正解したとき。ほめ言葉・はなまる・れんぞくを出し、読む時間をとってから自動で次へ進む。
  * delayを省くと、盤の課題の標準の時間で進む。nullなら自動では進まず、画面を押して進む(長い解説を読ませるとき)。
  */
-function solveStep(text: string, { delay = TUTORIAL_AUTO_ADVANCE_MS as number | null, stampText = "正解", big = false } = {}) {
+function solveStep(
+  text: string,
+  { delay = TUTORIAL_AUTO_ADVANCE_MS as number | null, stampText = "正解", big = false, at = "" } = {},
+) {
   stepSolved.value = true;
   solvedAt = Date.now();
   clearTimeout(idleHintTimer);
@@ -1256,7 +1366,11 @@ function solveStep(text: string, { delay = TUTORIAL_AUTO_ADVANCE_MS as number | 
   const origin = currentStep.value?.origin;
   if (stepMisses.value > 0) runMissed.add(stepIndex.value);
   else if (origin) reviewSolved.push(origin);
-  setFeedback(text, "good");
+  // 動かした駒のそばに、ほめ言葉の最初の一句を出し、吹き出しには続きだけを出す(読み上げは全部読む)。
+  const { lead, rest } = at ? splitLeadPhrase(text) : { lead: "", rest: text };
+  const solvedCallout = lead ? stepCallout(currentStep.value, { phase: "solved", moved: at, lead }) : null;
+  momentCallout.value = solvedCallout ? { ...solvedCallout, tone: "good" } : null;
+  setFeedback(lead ? rest : text, "good", text);
   showStamp(stampText, big);
   if (delay === null) return;
   const index = stepIndex.value;
@@ -1379,7 +1493,12 @@ function onBoardMove(usi: string) {
   // 駒得するまで指す課題は、最後に合計の損得を言う(何が良かったかを数字で伝える)。
   const gainNote = step.untilGain ? `合計${materialLabel(result.swing ?? 0).text.replace(/^駒得 /, "")}の駒得！ ` : "";
   const text = `${gainNote}${praiseFor(step)}${sacrificeNote()}`;
-  solveStep(text, { stampText: step.type === "mate" ? "詰み！" : "正解", big: step.type === "mate", delay: choiceAdvanceDelay(text) });
+  solveStep(text, {
+    stampText: step.type === "mate" ? "詰み！" : "正解",
+    big: step.type === "mate",
+    delay: choiceAdvanceDelay(text),
+    at: usiDestination(usi),
+  });
 }
 /** 台詞で呼ぶ駒の名前と、マスの名前(「6九」)。 */
 const PIECE_LABELS: Record<string, string> = { P: "歩", L: "香車", N: "桂馬", S: "銀", G: "金", B: "角", R: "飛車", K: "玉" };
@@ -1405,6 +1524,8 @@ function playRefutation(before: string, usi: string, refutation: { reply: string
   const afterMine = applyUsi(before, usi);
   const afterReply = applyUsi(afterMine, refutation.reply);
   refuting.value = true;
+  const refuteCallout = stepCallout(currentStep.value, { phase: "refute", refuteSquare: refutation.square, refuteKind: refutation.kind ?? "" });
+  momentCallout.value = refuteCallout ? { ...refuteCallout, tone: "bad" } : null;
   playMoveSoundFor(before, usi);
   popCapture(before, usi);
   stepState.value = { ...original, sfen: afterMine };
@@ -1422,6 +1543,7 @@ function playRefutation(before: string, usi: string, refutation: { reply: string
     if (!refuting.value || stepIndex.value !== index) return;
     refuting.value = false;
     refuteRestore = null;
+    momentCallout.value = null;
     stepState.value = original;
     lastMove.value = "";
     materialTotal.value = totalBefore;
@@ -2985,6 +3107,55 @@ const resultMessage = computed(() => {
   border-color: #1d4ed8;
   background: #1d4ed8;
 }
+/* 読み上げのボタン。メガネと同じ形にし、並んだときは間を詰める。せまい画面では印だけにして、見出しの文字を残す。 */
+@media (max-width: 480px) {
+  .shogi-game .shogi-tutorial__voice span {
+    display: none;
+  }
+}
+.shogi-game .shogi-tutorial__glasses + .shogi-tutorial__voice {
+  margin-left: 0.4rem;
+}
+.shogi-game .shogi-tutorial__voice svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+/*
+ * 吹き出しの色の札。「緑のマス」などの言葉の前に、盤の印と同じ色相の小さな札を付ける
+ * (AGENTS.mdの盤面の色の表。図鑑の凡例と同じ色)。
+ */
+.shogi-game .shogi-tutorial__swatch {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin: 0 0.15em 0 0.1em;
+  border-radius: 0.18em;
+  vertical-align: -0.08em;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.shogi-game .shogi-tutorial__swatch--key {
+  background: rgba(68, 204, 68, 0.75);
+  box-shadow: inset 0 0 0 2px rgba(34, 153, 34, 0.95);
+}
+.shogi-game .shogi-tutorial__swatch--reach {
+  background: radial-gradient(circle, rgba(29, 78, 216, 0.95) 0 30%, transparent 34%), rgba(96, 165, 250, 0.45);
+}
+.shogi-game .shogi-tutorial__swatch--target { background: rgba(220, 38, 38, 0.7); }
+.shogi-game .shogi-tutorial__swatch--black { background: rgba(37, 99, 235, 0.75); }
+.shogi-game .shogi-tutorial__swatch--white { background: rgba(220, 38, 38, 0.75); }
+.shogi-game .shogi-tutorial__swatch--risk {
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 2.5px rgba(220, 38, 38, 0.95);
+}
+.shogi-game .shogi-tutorial__swatch--danger,
+.shogi-game .shogi-tutorial__swatch--covered {
+  background:
+    linear-gradient(45deg, transparent 40%, currentColor 41% 59%, transparent 60%),
+    linear-gradient(-45deg, transparent 40%, currentColor 41% 59%, transparent 60%);
+}
+.shogi-game .shogi-tutorial__swatch--danger { color: rgba(220, 38, 38, 0.95); }
+.shogi-game .shogi-tutorial__swatch--covered { color: rgba(37, 99, 235, 0.95); }
 /* 手に入れたばかりのメガネは、押すまでそっと光らせる。 */
 .shogi-game .shogi-tutorial__glasses--new {
   animation: shogi-tutorial-glasses-glow 1.6s ease-in-out infinite;

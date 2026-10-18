@@ -101,6 +101,15 @@
           :style="label.style"
           aria-hidden="true"
         ><span>{{ label.text }}</span></div>
+        <!-- 教室の盤の上のひとこと。見るマスのそばに、しっぽ付きの札を1つだけ出す(tutorial-callout.mjs)。 -->
+        <div
+          v-if="calloutView"
+          :key="calloutView.key"
+          class="board-callout"
+          :class="[`board-callout--${calloutView.side}`, calloutView.tone ? `board-callout--${calloutView.tone}` : '']"
+          :style="calloutView.style"
+          aria-hidden="true"
+        >{{ calloutView.text }}</div>
         <!-- 利きメガネ: 駒を選んだとき、動かすと取られて損をする行き先を赤い輪で示す。 -->
         <div
           v-for="risk in riskSquareViews"
@@ -444,6 +453,15 @@ const props = defineProps({
     type: Array as PropType<{ id: string | number; file: number; rank: number; text: string; tone: string; big?: boolean }[]>,
     required: false,
     default: () => [],
+  },
+  // 教室の盤の上のひとこと。位置はtutorial-callout.mjsのplaceCalloutで決めた、先手から見た盤の座標(マスを1とする)。
+  callout: {
+    type: Object as PropType<{
+      at: string; text: string; side: "above" | "below" | "left" | "right";
+      x: number; y: number; width: number; height: number; tail: number; tone?: string;
+    } | null>,
+    required: false,
+    default: null,
   },
   // 教室の「囲いを組もう」の完成形。目的のマスに薄く駒を描く。
   ghostPieces: {
@@ -1082,6 +1100,42 @@ const floatLabelViews = computed(() => {
   });
 });
 
+const FLIPPED_SIDES = { above: "below", below: "above", left: "right", right: "left" } as const;
+const calloutView = computed(() => {
+  const callout = props.callout;
+  if (!callout) return null;
+  const file = Number(callout.at[0]);
+  const rank = callout.at.charCodeAt(1) - 96;
+  const square = board.value.squares.find((item) => item.file === file && item.rank === rank);
+  if (!square) return null;
+  const w = Number.parseFloat(String(square.style.width)) || 0;
+  const h = Number.parseFloat(String(square.style.height)) || 0;
+  const left = Number.parseFloat(String(square.style.left)) || 0;
+  const top = Number.parseFloat(String(square.style.top)) || 0;
+  // 札の座標は先手から見た盤なので、盤を反転しているときは札も反転する。
+  const flip = config.value.flip;
+  const col = flip ? file - 1 : 9 - file;
+  const row = flip ? 9 - rank : rank - 1;
+  const x = flip ? 9 - callout.x - callout.width : callout.x;
+  const y = flip ? 9 - callout.y - callout.height : callout.y;
+  const vertical = callout.side === "above" || callout.side === "below";
+  const tail = flip ? (vertical ? callout.width : callout.height) - callout.tail : callout.tail;
+  return {
+    key: `${callout.at}:${callout.text}`,
+    text: callout.text,
+    tone: callout.tone ?? "",
+    side: flip ? FLIPPED_SIDES[callout.side] : callout.side,
+    style: {
+      left: `${left + (x - col) * w}px`,
+      top: `${top + (y - row) * h}px`,
+      width: `${callout.width * w}px`,
+      height: `${callout.height * h}px`,
+      fontSize: `${Math.max(11, w * 0.3)}px`,
+      "--callout-tail": `${tail * (vertical ? w : h)}px`,
+    },
+  };
+});
+
 const ghostPieceViews = computed(() => {
   if (!props.ghostPieces.length) return [];
   const ghosts = new Map(props.ghostPieces.map((ghost) => [`${ghost.file}${ghost.rank}`, ghost]));
@@ -1484,6 +1538,74 @@ const whitePlayerTimeSeverity = computed(() => {
   @keyframes float-label-fade {
     0%, 70% { opacity: 1; }
     100% { opacity: 0; }
+  }
+}
+/*
+ * 教室の盤の上のひとこと。木目の上で読めるよう、白地に濃い文字と濃い縁にする(黄色は使わない)。
+ * しっぽは見るマスの側に付け、--callout-tailがしっぽの位置。
+ */
+.board-callout {
+  position: absolute;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  z-index: 36;
+  pointer-events: none;
+  padding: 0 0.3em;
+  border: 2px solid #3b2f2a;
+  border-radius: 0.6em;
+  background: #fffdf7;
+  color: #2a211d;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.3);
+  animation: board-callout-in 160ms ease-out both;
+}
+.board-callout--good {
+  border-color: #1f8a4c;
+}
+.board-callout--bad {
+  border-color: #c0392b;
+  color: #8f1d12;
+}
+.board-callout::after {
+  content: "";
+  position: absolute;
+  width: 0.55em;
+  height: 0.55em;
+  background: inherit;
+  border: inherit;
+  border-width: 0 2px 2px 0;
+  border-radius: 0 0 0.12em 0;
+}
+.board-callout--above::after {
+  left: calc(var(--callout-tail) - 0.3em);
+  bottom: -0.33em;
+  transform: rotate(45deg);
+}
+.board-callout--below::after {
+  left: calc(var(--callout-tail) - 0.3em);
+  top: -0.33em;
+  transform: rotate(-135deg);
+}
+.board-callout--left::after {
+  top: calc(var(--callout-tail) - 0.3em);
+  right: -0.33em;
+  transform: rotate(-45deg);
+}
+.board-callout--right::after {
+  top: calc(var(--callout-tail) - 0.3em);
+  left: -0.33em;
+  transform: rotate(135deg);
+}
+@keyframes board-callout-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-callout {
+    animation: none;
   }
 }
 /* 囲いを組もうの完成形。薄く見せ、置いた駒と見分けられるようにする。 */

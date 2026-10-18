@@ -288,6 +288,16 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     expect(tutorialLesson("v1-king").steps[1].speech).toBe("玉を5七（緑のマス）まで動かしてみよう！ 2手以内で届くよ。");
   });
 
+  it("吹き出しの文は1ステップ60字まで(大事なことは盤の上のひとことで見せる。設計16-3)", () => {
+    for (const lesson of TUTORIAL_LESSONS) {
+      lesson.steps.forEach(({ speech, question }, index) => {
+        for (const text of [speech, question]) {
+          if (text) expect([...text].length, `${lesson.id}#${index} ${text}`).toBeLessThanOrEqual(60);
+        }
+      });
+    }
+  });
+
   it("章の腕だめしは章の最後に置き、課題を4問以上持つ", () => {
     const tasks = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem", "build", "attack-test"]);
     for (const volume of TUTORIAL_VOLUMES) {
