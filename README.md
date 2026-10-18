@@ -364,6 +364,7 @@ GitHubからも公開できます。リポジトリのActionsの「Firebase Host
 - [CPU難易度の調整方針](docs/difficulty-calibration.md)、[「藤井聡太並み」難易度の設定根拠](docs/fujii-sota-strength-calibration.md)
 - [やこび姫の将棋教室（入門モード）の設計](docs/nyumon-mode-design.md)
 - [ホームの「強くなる道」の設計](docs/home-roadmap-design.md)
+- [やこび姫補助（定跡補助）の作り直しの設計](docs/opening-guide-ux-design.md)
 - [Workerエンジン疎通確認](docs/worker-engine-probe-verification.md)
 - 開発に参加するときの約束事: [AGENTS.md](AGENTS.md)
 
