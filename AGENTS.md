@@ -3,7 +3,7 @@
 このリポジトリは、Vue Custom Elementとして配布する将棋対局ランタイムです。
 ふだん変更するのは`src/`です。公開の入口は`game.html`、Firebase Hostingの設定は`firebase.json`にあります。
 利用者向けの説明は`README.md`、ローカルでの起動と定跡編集の手順は`docs/local-development.md`にあります。
-遊びとUIの設計の指針（桜井政博・任天堂のゲーム論とUI論）は`docs/nintendo-design/`にあります。
+遊びとUIの設計の指針（桜井政博・任天堂のゲーム論とUI論）は`docs/nintendo-design/`にあります。ゲームデザインやUIデザインに関わる作業では、必ずこれを読んでから始めます（下の「遊びとUIの設計指針」）。
 
 ## 最初に確認する場所
 
@@ -45,10 +45,15 @@
 
 ### 遊びとUIの設計指針
 
-- 新しい遊びや画面を設計するときは`*_Design.md`、コードを書くときは`*_Implementation.md`を読みます。`docs/nintendo-design/`の文書は次の5つです。
-  - `Game_Nintendo_Design.md`と`Game_Nintendo_Implementation.md`：遊び・演出・ご褒美・難易度・教え方
-  - `UI_Nintendo_Design.md`と`UI_Nintendo_Implementation.md`：画面・操作・文言
-  - `UI_Nintendo.md`：UI論の根拠と出典
+- ゲームデザインやUIデザインに関わる作業では、**必ず**`docs/nintendo-design/`の文書を読んでから始めます。小さな修正でも省きません。
+  - 対象は、遊び・演出・ご褒美・難易度・教え方・やこび姫の台詞と、画面の配置・操作・ボタン・文言・色・アニメーションを、新しく作る・変える・直す作業すべてです。
+  - 設計する（何を作るか決める）ときは`*_Design.md`、コードを書くときは`*_Implementation.md`を読みます。両方に当たる作業では両方を読みます。
+  - 文書は次の5つです。
+    - `Game_Nintendo_Design.md`と`Game_Nintendo_Implementation.md`：遊び・演出・ご褒美・難易度・教え方
+    - `UI_Nintendo_Design.md`と`UI_Nintendo_Implementation.md`：画面・操作・文言
+    - `UI_Nintendo.md`：UI論の根拠と出典
+- 設計を決めたら、どの原則に基づいたかを、設計文書（`docs/`）か、コミットの本文に書きます。新しい遊びや画面は、`Game_Nintendo_Design.md`の「機能設計メモのテンプレート」の形で設計文書に残します。
+- 実装したら、`*_Implementation.md`の「実装後のチェックリスト」で確かめます。
 - これらの文書にある時間や段階の数値は初期値です。触って調整したら、文書の表も直します。
 - これらの文書とこの`AGENTS.md`が食い違ったら、`AGENTS.md`に従い、文書のほうを直します。
 
