@@ -48,9 +48,10 @@ import { ATTACK_TEST_HOLD_PLIES } from "./tutorial-problem.mjs";
 import { findMateLine } from "./problem-solver";
 import { buildLowerBound, buildMissingTargets } from "./tutorial-runner.mjs";
 import { kingEscapeMap } from "./board-insight.mjs";
+import { openingFormationSteps } from "./opening-formation.mjs";
 import { bestGainMove, dropThreat } from "./material-tactics.mjs";
 
-const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play", "replay", "capture", "problem", "build", "attack-test"];
+const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "play", "replay", "capture", "problem", "build", "attack-test"];
 const legalMoves = (sfen) => enumerateLegalMoves(createGameRecord(sfen).position).map(({ usi }) => usi);
 
 function afterMove(sfen, usi) {
@@ -265,8 +266,15 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
           expect(step.answer, label).toBeGreaterThanOrEqual(0);
           expect(step.answer, label).toBeLessThan(step.options.length);
         }
-        if (step.type === "open-dex") {
-          expect(dexIds[step.kind]?.has(step.id), label).toBe(true);
+        // その場の図鑑は、図鑑にある項目を参照し、定跡の小さな盤は手順のある作戦を描く。
+        if (step.dex) {
+          expect(step.type, label).toBe("explain");
+          expect(dexIds[step.dex.kind]?.has(step.dex.id), label).toBe(true);
+          for (const page of step.pages ?? []) expect(page.title && page.text, label).toBeTruthy();
+          for (const formation of step.formations ?? []) {
+            expect(formation.label, label).toBeTruthy();
+            expect(openingFormationSteps(formation.strategyId, formation.castleId).steps.length, label).toBeGreaterThan(0);
+          }
         }
         if (step.type === "play" && step.preset.startType === "formation") {
           const result = buildFormationStart({
@@ -286,6 +294,22 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
       }
     }
     expect(tutorialLesson("v1-king").steps[1].speech).toBe("玉を5七（緑のマス）まで動かしてみよう！ 2手以内で届くよ。");
+  });
+
+  it("図鑑の画面へ移るステップを使わず、その場の図鑑で見せる(設計16-4)", () => {
+    const steps = TUTORIAL_LESSONS.flatMap(({ steps: list }) => list);
+    expect(steps.filter(({ type }) => type === "open-dex")).toEqual([]);
+    const dex = steps.filter(({ dex: entry }) => entry);
+    expect(dex.map(({ dex: entry }) => `${entry.kind}:${entry.id}`)).toEqual(expect.arrayContaining([
+      "tesuji:knight-fork", "piece:piece-values", "tesuji:head-gold", "opening:yagura", "opening:shiken",
+    ]));
+    // 図鑑の項目の局面と印は、図鑑のデータと同じ(二重に持たない)。
+    const fork = dex.find(({ dex: entry }) => entry.id === "knight-fork");
+    const entry = referenceDexEntries("tesuji").find(({ id }) => id === "knight-fork");
+    expect(fork).toMatchObject({ sfen: entry.sfen, marks: entry.marks, arrows: entry.arrows, speech: entry.overview, headline: entry.label });
+    expect(fork.pages.length).toBe(entry.rows.length);
+    expect(dex.find(({ dex: item }) => item.id === "piece-values").values.map(({ label, points }) => `${label}${points}`).slice(0, 7))
+      .toEqual(["歩1", "香3", "桂4", "銀5", "金6", "角8", "飛10"]);
   });
 
   it("吹き出しの文は1ステップ60字まで(大事なことは盤の上のひとことで見せる。設計16-3)", () => {
@@ -318,7 +342,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
 
   it("課題を増やし、説明を読むだけのステップを全体の半分未満にする", () => {
     const steps = TUTORIAL_LESSONS.flatMap(({ steps: list }) => list);
-    const reading = steps.filter(({ type }) => type === "explain" || type === "open-dex").length;
+    const reading = steps.filter(({ type }) => type === "explain").length;
     expect(reading / steps.length).toBeLessThan(0.5);
     // 第1巻は、レッスンごとに盤で指す課題がある(話を聞くだけのレッスンを作らない)。
     const board = new Set(["move-piece", "find-move", "mate", "capture", "problem", "build", "attack-test"]);
@@ -427,8 +451,8 @@ describe("やこび姫の将棋教室の正誤判定", () => {
 
   it("盤で指すステップだけ、正解したら自動で次へ進める", () => {
     expect(["move-piece", "find-move", "mate"].map((type) => autoAdvancesOnSolve({ type }))).toEqual([true, true, true]);
-    expect(["choose", "explain", "replay", "play", "open-dex"].map((type) => autoAdvancesOnSolve({ type })))
-      .toEqual([false, false, false, false, false]);
+    expect(["choose", "explain", "replay", "play"].map((type) => autoAdvancesOnSolve({ type })))
+      .toEqual([false, false, false, false]);
   });
 
   it("選択肢・ヒント・★を判定する", () => {

@@ -95,6 +95,16 @@ export function stepCallout(step, context = {}) {
     const text = shortHeadline(context.headline.text);
     if (text) return { at: context.headline.at, text };
   }
+  // その場の図鑑は、見出しを図鑑の矢印の行き先(なければ緑の印・ねらう駒・駒)に付ける。
+  if (step.headline) {
+    const text = shortHeadline(step.headline);
+    const own = step.marks ?? [];
+    const at = step.arrows?.[0]?.replace("+", "").slice(-2)
+      ?? own.find(([, tone]) => tone === "key")?.[0]
+      ?? own.find(([, tone]) => tone === "target")?.[0]
+      ?? step.pieceSquare;
+    if (text && at) return { at, text };
+  }
   const speech = context.speech ?? step.speech ?? "";
   if (step.type === "explain") {
     const term = quotedTerm(speech);

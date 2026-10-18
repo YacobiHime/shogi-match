@@ -216,8 +216,12 @@
             <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
             <div class="shogi-tutorial__bubble-body">
               <!-- 課題の種類・腕だめしの何問目か・駒取りの手数・れんぞく正解を、1行の札で並べる。 -->
-              <p v-if="taskLabel || bossProgress || captureCount || buildCount || attackChips.length || insightChips.length || materialChip || streak >= 2" class="shogi-tutorial__chips">
+              <p v-if="currentStep.dex || taskLabel || bossProgress || captureCount || buildCount || attackChips.length || insightChips.length || materialChip || streak >= 2" class="shogi-tutorial__chips">
                 <span v-if="taskLabel" class="shogi-tutorial__task-label">{{ taskLabel }}</span>
+                <!-- その場の図鑑: どの図鑑の項目かと、行をめくった位置。 -->
+                <span v-if="currentStep.dex" class="shogi-tutorial__chip shogi-tutorial__chip--dex" data-dex-chip>
+                  {{ DEX_TITLES[currentStep.dex.kind] ?? "図鑑" }}<template v-if="dexPages.length">・{{ dexPage + 1 }}/{{ dexPages.length + 1 }}</template>
+                </span>
                 <span v-if="bossProgress" class="shogi-tutorial__chip shogi-tutorial__chip--boss" data-boss-progress>
                   第{{ bossProgress.number }}問 / {{ bossProgress.total }}
                 </span>
@@ -265,7 +269,35 @@
                   <i v-if="segment.tone" class="shogi-tutorial__swatch" :class="`shogi-tutorial__swatch--${segment.tone}`" aria-hidden="true"></i>{{ segment.text }}
                 </template>
               </p>
-              <p v-if="tapToAdvance" class="shogi-tutorial__tap" aria-hidden="true">{{ tapLabel }} <span>▼</span></p>
+              <!-- 駒の価値の札。値段を1行に並べる(成った駒は色を変える)。 -->
+              <p v-if="currentStep.values" class="shogi-tutorial__values" data-dex-values>
+                <span
+                  v-for="value in currentStep.values"
+                  :key="value.label"
+                  :class="{ 'shogi-tutorial__value--promoted': value.promoted }"
+                ><b>{{ value.label }}</b>{{ value.points }}</span>
+              </p>
+              <!-- 定跡: 作戦カードと同じ小さな盤。おさらいでは手順を1手ずつ動かす。 -->
+              <div v-if="currentStep.formations" class="shogi-tutorial__formations" data-dex-formations>
+                <figure v-for="formation in currentStep.formations" :key="formation.strategyId + formation.castleId">
+                  <FormationThumb
+                    :strategy-id="formation.strategyId"
+                    :castle-id="formation.castleId"
+                    :ply="currentStep.replay ? formationPly : null"
+                  />
+                  <figcaption>{{ formation.label }}</figcaption>
+                </figure>
+              </div>
+              <p v-if="tapToAdvance || currentStep.dex" class="shogi-tutorial__tap-row">
+                <button
+                  v-if="currentStep.dex"
+                  type="button"
+                  class="shogi-tutorial__dex-link"
+                  data-dex-link
+                  @click="emit('open-dex', { kind: currentStep.dex.kind, id: currentStep.dex.id })"
+                >図鑑でくわしく</button>
+                <span v-if="tapToAdvance" class="shogi-tutorial__tap" aria-hidden="true">{{ tapLabel }} <span>▼</span></span>
+              </p>
             </div>
           </div>
           <!-- 観戦: 盤を押しても1手進む。最後の手まで見ると、押すと次のステップへ進む。 -->
@@ -320,11 +352,6 @@
             >{{ option }}</button>
           </div>
           <div v-if="hasActions" class="shogi-tutorial__actions">
-            <button
-              v-if="currentStep.type === 'open-dex'"
-              type="button"
-              @click="emit('open-dex', { kind: currentStep.kind, id: currentStep.id })"
-            >図鑑をひらく</button>
             <button
               v-if="currentStep.type === 'play'"
               type="button"
@@ -541,6 +568,8 @@ import {
   tutorialProblem,
   tutorialProblemSpeech,
 } from "./core/tutorial-problem.mjs";
+import FormationThumb from "./FormationThumb.vue";
+import { openingFormationSteps } from "./core/opening-formation.mjs";
 import { placeCallout, speechSegments, splitLeadPhrase, stepCallout } from "./core/tutorial-callout.mjs";
 import { loadTutorialVoiceOn, pickJapaneseVoice, saveTutorialVoiceOn, voiceText } from "./core/tutorial-voice.mjs";
 
@@ -1145,17 +1174,18 @@ const captureCount = computed(() => (
  */
 const tapToAdvance = computed(() => {
   const type = currentStep.value?.type;
-  if (type === "explain" || type === "open-dex" || type === "replay") return true;
+  if (type === "explain" || type === "replay") return true;
   return isTaskStep.value && stepSolved.value;
 });
 const tapLabel = computed(() => {
   const step = currentStep.value;
   if (step?.type === "replay" && stepState.value.ply < step.moves.length) return "タップで次の手";
+  if (dexPage.value < dexPages.value.length) return "タップで次の行";
   return stepIndex.value >= (currentLesson.value?.steps?.length ?? 0) - 1 ? "タップでレッスン完了" : "タップで次へ";
 });
 const hasActions = computed(() => {
   const type = currentStep.value?.type;
-  return type === "open-dex" || type === "play"
+  return type === "play"
     || (stepInteractive.value && !stepSolved.value && stepState.value.movesUsed + stepState.value.ply > 0);
 });
 /** 選択問題でまちがえた選択肢。押せなくして、残りから選べるようにする。 */
@@ -1184,6 +1214,7 @@ function advanceByTap() {
   if (now - lastTapAt < TUTORIAL_TAP_GUARD_MS || now - solvedAt < 400) return;
   lastTapAt = now;
   if (step.type === "replay" && stepState.value.ply < step.moves.length) seekReplayBy(1);
+  else if (dexPage.value < dexPages.value.length) dexPage.value += 1;
   else advance();
 }
 /** キーボードでも進められる(Enter・スペース・→)。ボタンにフォーカスがあるときは、ボタンを押す動きにまかせる。 */
@@ -1215,8 +1246,33 @@ function idleHintText(step: any) {
   if (step?.type === "build") return "緑のマスに、薄く見えている駒を動かそう。";
   return "光っているマスに注目してみてね。";
 }
+// ===== その場の図鑑(16-4) =====
+const DEX_TITLES: Record<string, string> = { piece: "駒図鑑", tesuji: "手筋図鑑", opening: "定跡図鑑", glossary: "用語辞典", world: "将棋界図鑑" };
+/** 図鑑の行。押すたびに1行ずつめくる(0は図鑑の一言)。 */
+const dexPage = ref(0);
+const dexPages = computed<{ title: string; text: string }[]>(() => currentStep.value?.pages ?? []);
+/** 定跡のおさらいで、小さな盤に描く手数。ステップを開くと0から完成形まで1手ずつ進める。 */
+const formationPly = ref<number | null>(null);
+const FORMATION_REPLAY_MS = 800;
+let formationTimer: ReturnType<typeof setInterval> | undefined;
+function startFormationReplay(step: any) {
+  clearInterval(formationTimer);
+  formationPly.value = null;
+  if (!step?.replay || !step.formations?.length) return;
+  const { strategyId, castleId } = step.formations[0];
+  const total = openingFormationSteps(strategyId, castleId).steps.length;
+  formationPly.value = 0;
+  formationTimer = setInterval(() => {
+    const next = (formationPly.value ?? 0) + 1;
+    formationPly.value = next;
+    if (next >= total) clearInterval(formationTimer);
+  }, FORMATION_REPLAY_MS);
+}
+onBeforeUnmount(() => clearInterval(formationTimer));
 const stepSpeech = computed(() => {
   const step = currentStep.value;
+  const page = dexPage.value > 0 ? dexPages.value[dexPage.value - 1] : null;
+  if (page) return `${page.title}：${page.text}`;
   if (step?.type === "replay") return replaySpeech(step, stepState.value.ply);
   if (step?.type === "problem") return tutorialProblemSpeech(step);
   return step?.question ?? step?.speech;
@@ -1296,6 +1352,8 @@ function loadStep(index: number) {
   refuting.value = false;
   refuteRestore = null;
   momentCallout.value = null;
+  dexPage.value = 0;
+  startFormationReplay(step);
   // 道具を手に入れる場面。判を押して、見出しにボタンを出す(ごほうびはすぐ使えるように)。
   if (step?.tool === "kiki-glasses" && !ownsGlasses.value) {
     toolGranted.value = true;
@@ -2283,8 +2341,81 @@ const resultMessage = computed(() => {
 .shogi-game .shogi-tutorial__bubble .shogi-tutorial__feedback--bad { color: #d7d1fd; }
 .shogi-game .shogi-tutorial__bubble .shogi-tutorial__feedback--info { color: #93c5fd; }
 .shogi-game .shogi-tutorial__bubble .shogi-tutorial__feedback--good::before { content: none; }
+/* 「図鑑でくわしく」と「タップで次へ」を1行に並べる。リンクは左、進め方の案内は右。 */
+.shogi-game .shogi-tutorial__tap-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: stretch;
+  margin: 0;
+}
+.shogi-game .shogi-tutorial__dex-link {
+  margin-right: auto;
+  min-height: 2.2rem;
+  padding: 0.2rem 0.2rem;
+  border: 0;
+  background: none;
+  color: #93c5fd;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.shogi-game .shogi-tutorial__dex-link:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+.shogi-game .shogi-tutorial__chip--dex {
+  border-color: rgba(147, 197, 253, 0.6);
+  color: #bfdbfe;
+}
+/* 駒の価値の札。駒の名前と値段を1行に並べ、せまい画面では折り返す。 */
+.shogi-game .shogi-tutorial__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+}
+.shogi-game .shogi-tutorial__values span {
+  display: inline-flex;
+  gap: 0.2rem;
+  align-items: baseline;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.4rem;
+  background: #fffcf4;
+  color: #2a211d;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__values b {
+  font-size: 1.05em;
+}
+.shogi-game .shogi-tutorial__values .shogi-tutorial__value--promoted {
+  background: #fde2e1;
+  color: #8f1d12;
+}
+/* 定跡の小さな盤。作戦カードと同じ部品を、名前を添えて並べる。 */
+.shogi-game .shogi-tutorial__formations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.shogi-game .shogi-tutorial__formations figure {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  width: 7.5rem;
+  margin: 0;
+}
+.shogi-game .shogi-tutorial__formations figcaption {
+  color: #fffcf4;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
 .shogi-game .shogi-tutorial__tap {
-  justify-self: end;
   margin: 0;
   color: rgba(255, 252, 244, 0.7);
   font-size: 0.8rem;

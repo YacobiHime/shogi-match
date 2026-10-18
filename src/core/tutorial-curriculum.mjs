@@ -1,7 +1,7 @@
 import { appendUsiMove, createGameRecord } from "../game-state";
 import { OPENING_CASTLES, OPENING_GUIDE_ROUTINES, OPENING_STRATEGIES } from "./opening-guide.mjs";
 import { controlCount } from "./board-insight.mjs";
-import { materialTotals } from "./piece-points.mjs";
+import { PIECE_POINTS, PROMOTED_PIECE_POINTS, materialTotals } from "./piece-points.mjs";
 import { openingExplanation } from "./opening-explanations.mjs";
 import { buildOpeningDexSteps } from "./opening-dex-replay.mjs";
 import { formatHintMove } from "./match-assists.mjs";
@@ -19,7 +19,6 @@ import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI, WATCH_GAME_KURIDASHI_EVALUA
  * - find-move  正解の一手（answers）を指す。anyDropOfを指定すると、その駒を打てば正解
  * - mate       詰将棋。solutionは自分と相手の手を交互に並べ、最後の自分の手で詰む
  * - choose     選択肢から答える（answerは正解の番号）
- * - open-dex   図鑑の項目を開く（kind: piece / tesuji / world / opening）
  * - play       学習対局の設定を用意して対局へ進む
  * - replay     棋譜（moves）をfrom手目から1手ずつ再生する。notesは手数ごとの解説。最後の手まで見たら次へ進める
  * - capture    駒取りゲーム。fromの駒だけを動かして、相手の駒を全部取る。parは最短の手数（テストで確かめる）
@@ -43,11 +42,71 @@ import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI, WATCH_GAME_KURIDASHI_EVALUA
  * 課題のステップには、正解したときのほめ言葉（praise）を書ける。何が良かったかを1文で言う（Game_Nintendo_Implementation.mdの5章）。
  * 章の最後のレッスンは、腕だめし（boss: true）にできる。その章の課題に、前の章の課題を混ぜて復習させる。
  *
+ * 盤の上のひとことと、その場の図鑑（docs/nyumon-mode-design.mdの16章）:
+ * - 盤の上のひとことは、ステップのデータから自動で作る（tutorial-callout.mjs）。言い回しを変えたいときだけ note: { at, text } で上書きする
+ * - dex        図鑑の項目（{ kind, id }）を、図鑑の画面へ移らずに見せる説明。dexStep・openingDexStepで図鑑のデータから作る。
+ *              pages（押すたびにめくる図鑑の行）、headline（盤の上のひとこと）、values（駒の価値の札）、formations（定跡の小さな盤）
+ * - 吹き出しの文（speech・question）は60字まで（目安は40字）。大事なことは盤の上で見せる
+ *
  * explain / replay に graph（平手からの { moves, evaluations }）を付けると、盤の横に評価値グラフを出す。
  */
 
 const PIECES = Object.fromEntries(referenceDexEntries("piece").map((entry) => [entry.id, entry]));
 const TESUJI = Object.fromEntries(referenceDexEntries("tesuji").map((entry) => [entry.id, entry]));
+
+/**
+ * その場の図鑑(docs/nyumon-mode-design.mdの16-4)。図鑑の項目を、教室の画面を離れずに盤と吹き出しで見せる説明のステップ。
+ * 局面・印・矢印・一言・行は図鑑のデータをIDで引いて使う(同じ説明を二重に持たない)。
+ * 吹き出しは図鑑の一言(overview)から始め、押すたびに図鑑の行(pages)を1行ずつめくる。見出し(headline)は盤の上のひとことに出す。
+ * 盤のない表の項目(駒の価値)は、駒の値段を札(values)で並べる。rowsで、めくる行を初めのいくつかに絞れる(残りは「図鑑でくわしく」で読む)。
+ */
+function dexStep(kind, id, { sfen, rows = Infinity } = {}) {
+  const entry = referenceDexEntries(kind).find((item) => item.id === id);
+  if (!entry) throw new Error(`${kind}:${id}が図鑑にありません`);
+  const board = entry.table
+    ? { ...(sfen ? { sfen } : {}), values: PIECE_VALUE_CHIPS }
+    : {
+      ...(entry.sfen ? { sfen: entry.sfen } : { moves: entry.moves }),
+      ...(entry.marks ? { marks: entry.marks } : {}),
+      ...(entry.arrows ? { arrows: entry.arrows } : {}),
+      ...(entry.pieceSquare ? { pieceSquare: entry.pieceSquare } : {}),
+    };
+  return {
+    type: "explain",
+    dex: { kind, id },
+    headline: entry.label,
+    ...board,
+    speech: entry.overview,
+    pages: (entry.rows ?? []).slice(0, rows).map(([title, text]) => ({ title, text })),
+  };
+}
+
+/** 駒の価値の札。成る前の駒と、成った駒(教室・学習対局の駒得の数字と同じ値。piece-points.mjs)。 */
+const PIECE_VALUE_CHIPS = Object.freeze([
+  ...[["歩", "P"], ["香", "L"], ["桂", "N"], ["銀", "S"], ["金", "G"], ["角", "B"], ["飛", "R"]]
+    .map(([label, kind]) => ({ label, points: PIECE_POINTS[kind] })),
+  ...[["と", "+P"], ["馬", "+B"], ["竜", "+R"]].map(([label, kind]) => ({ label, points: PROMOTED_PIECE_POINTS[kind], promoted: true })),
+]);
+
+/**
+ * その場の図鑑の定跡(16-4)。作戦カードと同じ小さな盤(FormationThumb)で完成形を見せる。
+ * replayなら、小さな盤で手順を1手ずつ動かして見せる(定跡の練習のおさらい)。
+ * @param {string} id 図鑑を開くときの項目(戦法か囲いのID)
+ * @param {{ sfen: string, speech: string, formations: { strategyId?: string, castleId?: string }[], replay?: boolean }} options
+ */
+function openingDexStep(id, { sfen, speech, formations, replay = false }) {
+  const label = ({ strategyId, castleId }) => (
+    (strategyId ? OPENING_STRATEGIES.find((item) => item.id === strategyId) : OPENING_CASTLES.find((item) => item.id === castleId))?.label ?? ""
+  );
+  return {
+    type: "explain",
+    dex: { kind: "opening", id },
+    sfen,
+    speech,
+    formations: formations.map((formation) => ({ strategyId: "", castleId: "", ...formation, label: label(formation) })),
+    ...(replay ? { replay: true } : {}),
+  };
+}
 
 const FILE_1 = ["1a", "1b", "1c", "1d", "1e", "1f", "1g", "1h", "1i"];
 const RANK_1 = ["9a", "8a", "7a", "6a", "5a", "4a", "3a", "2a", "1a"];
@@ -494,7 +553,7 @@ const VOLUME_2 = {
               speech: "こんどは銀で両取り！ 銀は斜め前に2つ利くよ。飛車と金を同時にねらって、駒得まで指そう。",
               praise: "相手は飛車で金を守ったけど、金を取って、銀を取り返されても金と銀の交換で1点の得。両取りは、相手がうまく受けても得になるんだ！",
             },
-            { type: "open-dex", kind: "tesuji", id: "knight-fork", speech: "手筋図鑑の「ふんどしの桂」も見てみよう！" },
+            dexStep("tesuji", "knight-fork"),
           ],
         },
         {
@@ -514,7 +573,7 @@ const VOLUME_2 = {
               praise: "5三の飛車は金に守られているから、取っても取り返されて±0。守られていない金なら、まるごと＋6だね！",
             },
             { type: "choose", question: "一番価値が高いのはどれ？", options: ["銀", "飛車", "桂馬"], answer: 1, explanation: "飛車は10点。銀は5点、桂馬は4点だよ。" },
-            { type: "open-dex", kind: "piece", id: "piece-values", speech: "駒図鑑の「駒の価値 tier表」で、成った駒の点数も見てみよう！" },
+            dexStep("piece", "piece-values", { rows: 2 }),
           ],
         },
         bossLesson("v2-c1-boss", {
@@ -717,7 +776,7 @@ const VOLUME_2 = {
           summary: "頭金と腹銀",
           steps: [
             { type: "explain", speech: "詰みには、よく出てくる「形」があるよ。形を覚えておくと、実戦ですぐに気づけるんだ。" },
-            { type: "open-dex", kind: "tesuji", id: "head-gold", speech: "手筋図鑑の「頭金」を見てみよう！" },
+            dexStep("tesuji", "head-gold"),
             { type: "explain", sfen: TESUJI["belly-silver"].sfen, marks: TESUJI["belly-silver"].marks, speech: "次は「腹銀」。玉の真横（お腹）に銀を打つ形だよ。" },
             tesujiFindStep("belly-silver", "持ち駒の銀を、玉のお腹に打ってみよう！", "腹銀！ 玉は横にも後ろにも逃げられないね。"),
           ],
@@ -856,7 +915,11 @@ const VOLUME_3 = {
               type: "choose", question: "上からの攻めに強いのは？", options: ["矢倉囲い", "舟囲い"], answer: 0,
               explanation: "矢倉は金銀を玉の上に積み上げた形で、上からの攻めに強いよ。美濃囲いは横からの攻めに強いんだ。",
             },
-            { type: "open-dex", kind: "opening", id: "yagura", speech: "定跡図鑑の「囲い」で、ほかの囲いも見てみよう！" },
+            openingDexStep("yagura", {
+              sfen: STANDARD_SFEN,
+              speech: "囲いには、ほかにもいろいろな形があるよ。玉のまわりの金銀の並べ方を見くらべてみよう！",
+              formations: [{ castleId: "mino" }, { castleId: "funagakoi" }, { castleId: "yagura" }, { castleId: "ibisha-anaguma" }],
+            }),
           ],
         },
         {
@@ -1130,7 +1193,12 @@ function openingDrillLesson(id, strategyId) {
   }
   // 形ができたら、先手の利きの地図で、駒がどこまで働くようになったかを見せる。
   steps.push({ type: "explain", sfen: replay.at(-1).sfen, kiki: "black", speech: `${definition.label}の形ができたね！ 青い数字は、君の駒が見張るマス。${DRILL_TEXTS[strategyId].next}` });
-  steps.push({ type: "open-dex", kind: "opening", id: strategyId, speech: "定跡図鑑で、手順をもう一度確かめてみよう！" });
+  steps.push(openingDexStep(strategyId, {
+    sfen: replay.at(-1).sfen,
+    speech: "小さな盤で、手順をもう一度おさらいしよう！",
+    formations: [{ strategyId }],
+    replay: true,
+  }));
   return { id, title: definition.label, summary: DRILL_TEXTS[strategyId].summary, steps };
 }
 
