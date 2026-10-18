@@ -2734,10 +2734,67 @@
 }
 .shogi-title__next-eyebrow {
   grid-area: eyebrow;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3em 0.7em;
   color: var(--amber);
   font-size: 0.78em;
   font-weight: 800;
   letter-spacing: 0.16em;
+}
+/* 強くなる道。5つの段を線でつないだ丸で見せる。終えた段は✓、いまの段は大きく光らせる。 */
+.shogi-title__road {
+  display: inline-flex;
+  align-items: center;
+  letter-spacing: 0;
+}
+.shogi-title__road i {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 1.45em;
+  height: 1.45em;
+  margin-left: 0.55em;
+  border: 0.12em solid rgba(255, 252, 244, 0.45);
+  border-radius: 50%;
+  color: rgba(255, 252, 244, 0.7);
+  font-size: 0.95em;
+  font-style: normal;
+  line-height: 1;
+}
+.shogi-title__road i:first-child { margin-left: 0; }
+/* 段と段をつなぐ線。 */
+.shogi-title__road i + i::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 0.55em;
+  height: 0.12em;
+  background: rgba(255, 252, 244, 0.45);
+}
+.shogi-title__road i.is-done {
+  border-color: var(--amber);
+  color: #172632;
+  background: var(--amber);
+}
+.shogi-title__road i.is-done + i::before { background: var(--amber); }
+.shogi-title__road i.is-current {
+  width: 1.8em;
+  height: 1.8em;
+  border-color: #fffcf4;
+  color: #172632;
+  background: #fffcf4;
+  box-shadow: 0 0 0 0.25em rgba(241, 165, 76, 0.45);
+  animation: shogi-road-glow 1.8s ease-in-out infinite;
+}
+@keyframes shogi-road-glow {
+  0%, 100% { box-shadow: 0 0 0 0.2em rgba(241, 165, 76, 0.35); }
+  50% { box-shadow: 0 0 0 0.35em rgba(241, 165, 76, 0.6); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-title__road i.is-current { animation: none; }
 }
 .shogi-title__next-icon {
   grid-area: icon;
@@ -2891,6 +2948,28 @@
   white-space: normal;
 }
 .shogi-title__tile .shogi-title__icon { grid-area: icon; width: 2.6em; height: 2.6em; }
+/* 強くなる道で、いまの段のおすすめの入口。琥珀の縁と小さな札で示す。 */
+.shogi-game .shogi-title__tile--recommended {
+  position: relative;
+  border-color: var(--amber);
+}
+.shogi-title__tile-badge {
+  position: absolute;
+  top: -0.65em;
+  right: 0.6em;
+  padding: 0.05em 0.55em;
+  border-radius: 999px;
+  color: #172632;
+  background: var(--amber);
+  font-size: 0.68em;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+/* まだ早い入口。鍵はかけず、薄くして「〇〇のあとに」と添える(押せばそのまま遊べる)。 */
+.shogi-game .shogi-title__tile--later {
+  opacity: 0.5;
+}
 .shogi-title__label {
   grid-area: label;
   font-size: 1.1em;

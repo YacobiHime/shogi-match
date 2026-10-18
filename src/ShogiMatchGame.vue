@@ -47,7 +47,22 @@
           :data-next="homeNext.id"
           @click="startHomeNext"
         >
-          <span class="shogi-title__next-eyebrow">つぎはこれ</span>
+          <!-- 強くなる道(docs/home-roadmap-design.md)。5つの段のどこにいるかを、つぎはこれの見出しの横に見せる。 -->
+          <span class="shogi-title__next-eyebrow">
+            <span>つぎはこれ</span>
+            <span
+              class="shogi-title__road"
+              role="img"
+              :aria-label="`強くなる道 ${homeRoadmapState.current}/${homeRoadmapState.steps.length}：${homeRoadmapStep.label}`"
+              data-home-road
+            >
+              <i
+                v-for="step in homeRoadmapState.steps"
+                :key="step.id"
+                :class="{ 'is-done': step.done, 'is-current': step.current }"
+              >{{ step.done ? "✓" : step.number }}</i>
+            </span>
+          </span>
           <span class="shogi-title__next-icon" aria-hidden="true">
             <template v-if="homeNext.id === 'resume'">
               <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
@@ -56,6 +71,33 @@
                   <rect x="7" y="3" width="2" height="10" />
                   <rect x="9" y="4" width="2" height="8" />
                   <rect x="11" y="5" width="2" height="6" />
+                </g>
+              </svg>
+            </template>
+            <template v-else-if="homeNext.id === 'tournament'">
+              <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#f1a54c">
+                  <rect x="4" y="2" width="8" height="1" />
+                  <rect x="4" y="3" width="8" height="4" />
+                  <rect x="2" y="3" width="2" height="1" />
+                  <rect x="12" y="3" width="2" height="1" />
+                  <rect x="5" y="7" width="6" height="1" />
+                  <rect x="7" y="8" width="2" height="3" />
+                  <rect x="5" y="11" width="6" height="2" />
+                </g>
+              </svg>
+            </template>
+            <template v-else-if="homeNext.id === 'problems'">
+              <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                <g fill="#fffcf4">
+                  <rect x="5" y="2" width="6" height="1" />
+                  <rect x="4" y="3" width="2" height="2" />
+                  <rect x="10" y="3" width="2" height="3" />
+                  <rect x="8" y="6" width="3" height="1" />
+                  <rect x="7" y="7" width="2" height="3" />
+                </g>
+                <g fill="#f1a54c">
+                  <rect x="7" y="12" width="2" height="2" />
                 </g>
               </svg>
             </template>
@@ -130,7 +172,8 @@
           <section class="shogi-title__group shogi-title__group--play" aria-labelledby="shogi-home-play" data-home-group="play">
             <h2 id="shogi-home-play" class="shogi-title__group-title">あそぶ</h2>
             <div class="shogi-title__tiles shogi-title__tiles--play">
-              <button type="button" class="shogi-title__tile" @click="openMatchSetup('normal')">
+              <button type="button" class="shogi-title__tile" :class="homeTileClass('match')" @click="openMatchSetup('normal')">
+                <span v-if="homeTile('match').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#fffcf4">
                     <rect x="2" y="2" width="12" height="1" />
@@ -150,9 +193,10 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">自由対局</span>
-                <small class="shogi-title__desc">設定を選んで1局</small>
+                <small class="shogi-title__desc">{{ homeTile("match").after || "設定を選んで1局" }}</small>
               </button>
-              <button type="button" class="shogi-title__tile" @click="openTournamentScreen">
+              <button type="button" class="shogi-title__tile" :class="homeTileClass('tournament')" @click="openTournamentScreen">
+                <span v-if="homeTile('tournament').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#f1a54c">
                     <rect x="4" y="2" width="8" height="1" />
@@ -165,9 +209,10 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">大会</span>
-                <small class="shogi-title__desc">竜王戦で称号を</small>
+                <small class="shogi-title__desc">{{ homeTile("tournament").after || "竜王戦で称号を" }}</small>
               </button>
-              <button type="button" class="shogi-title__tile" data-endgame-tile @click="startEndgameMatch">
+              <button type="button" class="shogi-title__tile" :class="homeTileClass('endgame')" data-endgame-tile @click="startEndgameMatch">
+                <span v-if="homeTile('endgame').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#f1a54c">
                     <rect x="7" y="1" width="2" height="2" />
@@ -181,14 +226,15 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">終盤戦</span>
-                <small class="shogi-title__desc">名局の終盤から</small>
+                <small class="shogi-title__desc">{{ homeTile("endgame").after || "名局の終盤から" }}</small>
               </button>
             </div>
           </section>
           <section class="shogi-title__group shogi-title__group--learn" aria-labelledby="shogi-home-school" data-home-group="learn">
             <h2 id="shogi-home-school" class="shogi-title__group-title">まなぶ</h2>
             <div class="shogi-title__tiles">
-              <button type="button" class="shogi-title__tile" @click="tutorialOpen = true">
+              <button type="button" class="shogi-title__tile" :class="homeTileClass('tutorial')" @click="tutorialOpen = true">
+                <span v-if="homeTile('tutorial').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#f1a54c">
                     <rect x="1" y="5" width="14" height="1" />
@@ -207,7 +253,8 @@
                 <span class="shogi-title__label">将棋教室</span>
                 <small class="shogi-title__desc">ルールから戦法まで</small>
               </button>
-              <button type="button" class="shogi-title__tile" @click="problemSetOpen = true">
+              <button type="button" class="shogi-title__tile" :class="homeTileClass('problems')" @click="problemSetOpen = true">
+                <span v-if="homeTile('problems').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#fffcf4">
                     <rect x="5" y="2" width="6" height="1" />
@@ -221,7 +268,7 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">問題集</span>
-                <small class="shogi-title__desc">詰ませ方・逃げ方</small>
+                <small class="shogi-title__desc">{{ homeTile("problems").after || "詰ませ方・逃げ方" }}</small>
               </button>
             </div>
           </section>
@@ -1600,7 +1647,9 @@ import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import { useBackNavigation } from "./composables/useBackNavigation";
-import { WELCOME_CHOICES, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
+import { WELCOME_CHOICES, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
+import { VOLUME_2_LAST_LESSON, homeRoadmap, roadmapTile, welcomeChoiceFrom } from "./core/home-roadmap.mjs";
+import { loadProblemProgress } from "./core/problem-progress.mjs";
 import {
   type AnalysisPoint,
   type EngineFactory,
@@ -4189,33 +4238,82 @@ function openHome() {
 
 /** 教室で終えた(クリアかスキップした)レッスンの数。タイトル画面を開くたび、教室を閉じるたびに読み直す。 */
 const homeLessonsDone = ref(0);
+/** 強くなる道(core/home-roadmap.mjs)を決める記録。タイトル画面を開くたびに読み直す。 */
+const homeTutorialProgress = ref(loadTutorialProgress(browserStorage()));
+const homeProblemsSolved = ref(0);
+const homeWelcomeChoice = ref("");
 /** 続けて遊んだ日(core/play-streak.mjs)。タイトル画面の記録の帯とやこび姫の一言に使う。 */
 const homeStreak = ref(currentStreak(loadPlayStreak(browserStorage())));
 function refreshHomeProgress() {
-  homeLessonsDone.value = Object.keys(loadTutorialProgress(browserStorage()).lessons).length;
+  homeTutorialProgress.value = loadTutorialProgress(browserStorage());
+  homeLessonsDone.value = Object.keys(homeTutorialProgress.value.lessons).length;
+  homeProblemsSolved.value = Object.keys(loadProblemProgress(browserStorage()).solved).length;
+  homeWelcomeChoice.value = welcomeChoiceFrom(browserStorage(), WELCOME_SEEN_KEY);
   homeStreak.value = currentStreak(loadPlayStreak(browserStorage()));
 }
-watch([homeOpen, tutorialOpen], ([home, tutorial]) => {
-  if (home && !tutorial) refreshHomeProgress();
+watch([homeOpen, tutorialOpen, problemSetOpen, welcomeOpen], ([home, tutorial, problems]) => {
+  if (home && !tutorial && !problems) refreshHomeProgress();
 }, { immediate: true });
 
-/** 対局を始める前の人(教室を始めた人、通常対局が3局未満の人)には、教室を先に案内する。 */
-const HOME_TUTORIAL_GAMES = 3;
-type HomeNext = { id: "resume" | "tutorial" | "match"; label: string; description: string };
-/** タイトル画面の「つぎはこれ」。中断した対局、教室のつづき、対局の順に、いまの状態に合うものを1つ選ぶ。 */
+/**
+ * 強くなる道。5つの段のどこにいるかを、保存してある記録だけで決める(docs/home-roadmap-design.md)。
+ * つぎはこれ・入口のおすすめ・薄くする入口・やこび姫の一言は、いまの段から決める。
+ */
+const homeRoadmapState = computed(() => {
+  const ryuoTally = (ratingState.value.events as { [event: string]: { wins: number; losses: number; draws: number } } | undefined)?.ryuo;
+  const ryuoGames = ryuoTally ? ryuoTally.wins + ryuoTally.losses + ryuoTally.draws : 0;
+  return homeRoadmap({
+    tutorialProgress: homeTutorialProgress.value,
+    ratedGames: ratingState.value.games,
+    problemsSolved: homeProblemsSolved.value,
+    ryuoPlayed: ryuoGames > 0 || ryuoCareer.value.seasons > 0,
+    welcomeChoice: homeWelcomeChoice.value,
+  });
+});
+const homeRoadmapStep = computed(() => homeRoadmapState.value.steps[homeRoadmapState.value.current - 1]);
+function homeTile(id: string) {
+  return roadmapTile(id, homeRoadmapState.value.current);
+}
+function homeTileClass(id: string) {
+  const tile = homeTile(id);
+  return { "shogi-title__tile--later": tile.dim, "shogi-title__tile--recommended": tile.recommended };
+}
+
+type HomeNext = { id: "resume" | "tutorial" | "match" | "tournament" | "problems"; label: string; description: string };
+/**
+ * タイトル画面の「つぎはこれ」。中断した対局があれば再開を最優先にし、それ以外は強くなる道のいまの段の行き先にする。
+ */
 const homeNext = computed<HomeNext>(() => {
   if (suspendedMatch.value) {
     return { id: "resume", label: "対局を再開", description: `中断した対局（${suspendedMatch.value.moves}手目まで）` };
   }
-  const games = ratingState.value.games;
-  if (games === 0 && homeLessonsDone.value === 0) {
-    return { id: "tutorial", label: "将棋教室ではじめる", description: "駒の動かし方から、やこび姫といっしょに覚えよう" };
-  }
-  if (homeLessonsDone.value > 0 && games < HOME_TUTORIAL_GAMES) {
-    return { id: "tutorial", label: "将棋教室のつづき", description: `${homeLessonsDone.value}レッスン終わったよ。次のレッスンへ進もう` };
-  }
   const preset = recommendedStrengthPreset.value;
-  return { id: "match", label: "対局する", description: `Lv.${preset.level} ${preset.label}の相手と、振り駒ですぐ始める` };
+  switch (homeRoadmapState.value.current) {
+    case 1:
+      return homeLessonsDone.value
+        ? { id: "tutorial", label: "将棋教室のつづき", description: `${homeLessonsDone.value}レッスン終わったよ。駒の動きを覚えて、第1巻を終えよう` }
+        : { id: "tutorial", label: "将棋教室ではじめる", description: "駒の動かし方から、やこび姫といっしょに覚えよう" };
+    case 2:
+      return { id: "match", label: "はじめての対局", description: `Lv.${preset.level} ${preset.label}の相手と、振り駒ですぐ始める。困ったら、やこび姫が助言するよ` };
+    case 3: {
+      const volume2Done = ["cleared", "skipped"].includes(homeTutorialProgress.value.lessons?.[VOLUME_2_LAST_LESSON]?.status ?? "");
+      return volume2Done
+        ? { id: "problems", label: "問題集で詰ませよう", description: `詰将棋を解いて、玉のつかまえ方を身につけよう（${homeProblemsSolved.value}問解いたよ）` }
+        : { id: "tutorial", label: "教室で詰みを覚えよう", description: "将棋教室の第2巻で、三手の読みと玉のつかまえ方を覚えよう" };
+    }
+    case 4:
+      return { id: "tournament", label: "竜王戦に出よう", description: "6組から、トーナメントを勝ち上がって竜王をめざそう" };
+    default: {
+      const goal = nextRatingGoal(ratingState.value.rating);
+      return {
+        id: "match",
+        label: "対局する",
+        description: goal
+          ? `${goal.label.replace(/程度$/, "")}まであとR${goal.remaining}。Lv.${preset.level}の相手と、振り駒ですぐ始める`
+          : `Lv.${preset.level} ${preset.label}の相手と、振り駒ですぐ始める`,
+      };
+    }
+  }
 });
 /**
  * 「つぎはこれ」の将棋教室と、はじめての案内の「はじめて」。本棚を通さずに、次のレッスンをすぐ始める。
@@ -4229,14 +4327,21 @@ function openTutorialLesson() {
 function startHomeNext() {
   if (homeNext.value.id === "resume") resumeSuspendedMatch();
   else if (homeNext.value.id === "tutorial") openTutorialLesson();
+  else if (homeNext.value.id === "tournament") openTournamentScreen();
+  else if (homeNext.value.id === "problems") problemSetOpen.value = true;
   else startQuickMatch();
 }
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
-const homeGreeting = computed(() => ({
-  resume: "さっきの対局、続きをしよう！",
-  tutorial: homeLessonsDone.value ? "今日も教室で練習しよう！" : "はじめまして！ いっしょに覚えよう",
-  match: streakGreeting(homeStreak.value) || "今日はなにをする？",
-})[homeNext.value.id]);
+const homeGreeting = computed(() => {
+  if (homeNext.value.id === "resume") return "さっきの対局、続きをしよう！";
+  switch (homeRoadmapState.value.current) {
+    case 1: return homeLessonsDone.value ? "今日も教室で練習しよう！" : "はじめまして！ いっしょに覚えよう";
+    case 2: return "駒の動き、覚えたね！ CPUと指してみよう";
+    case 3: return "次は、玉のつかまえ方を覚えよう！";
+    case 4: return "腕だめしに、竜王戦に出てみよう！";
+    default: return streakGreeting(homeStreak.value) || "今日はなにをする？";
+  }
+});
 const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.label ?? "");
 
 /*
