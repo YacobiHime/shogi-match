@@ -1,9 +1,12 @@
-import { OPENING_GUIDE_ROUTINES, OPENING_STRATEGIES } from "./opening-guide.mjs";
+import { appendUsiMove, createGameRecord } from "../game-state";
+import { OPENING_CASTLES, OPENING_GUIDE_ROUTINES, OPENING_STRATEGIES } from "./opening-guide.mjs";
+import { controlCount } from "./board-insight.mjs";
+import { materialTotals } from "./piece-points.mjs";
 import { openingExplanation } from "./opening-explanations.mjs";
 import { buildOpeningDexSteps } from "./opening-dex-replay.mjs";
 import { formatHintMove } from "./match-assists.mjs";
 import { referenceDexEntries } from "./reference-dex.mjs";
-import { STANDARD_SFEN } from "./tutorial-runner.mjs";
+import { STANDARD_SFEN, withBlackToMove } from "./tutorial-runner.mjs";
 import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI, WATCH_GAME_KURIDASHI_EVALUATIONS } from "./tutorial-watch-games.mjs";
 
 /**
@@ -21,6 +24,16 @@ import { WATCH_GAME_FUNAGAKOI, WATCH_GAME_KURIDASHI, WATCH_GAME_KURIDASHI_EVALUA
  * - replay     棋譜（moves）をfrom手目から1手ずつ再生する。notesは手数ごとの解説。最後の手まで見たら次へ進める
  * - capture    駒取りゲーム。fromの駒だけを動かして、相手の駒を全部取る。parは最短の手数（テストで確かめる）
  * - problem    問題集の問題（problemId）を、問題集と同じ判定で解く（判定は tutorial-problem.mjs）
+ * - build      囲いを組もう。完成形（targets）を薄く見せ、玉・金銀を動かして組み立てる。手順は定跡図鑑の囲いの定義から作る
+ * - attack-test 攻めくらべ。王手だけで相手の玉を攻める。expect: "mate"（plies手以内に詰む）か "hold"（詰まない）
+ *
+ * 盤の見える化（どの課題にも書ける）:
+ * - kiki       利きの地図を出す（"both"／"black"／"white"）。利きメガネを持っていなくても、このステップでは出す
+ * - danger     駒を選んだとき、取られるマスに赤い輪を出す
+ * - refute     取られる場所へ動かしてまちがえたら、相手の取り返しを見せてから戻す
+ * - escapeMap  玉の逃げ道を出す（"black"／"white"。どちらの玉か）
+ * - line       find-move で、相手の応手を決めた手順（自分・相手・自分…）。駒の取り合いを、駒得の数字で見せる
+ * - material / control  形勢の3つのものさしで、駒の点数の合計・利いているマスの数を札にして出す
  *
  * 課題のステップには、正解したときのほめ言葉（praise）を書ける。何が良かったかを1文で言う（Game_Nintendo_Implementation.mdの5章）。
  * 章の最後のレッスンは、腕だめし（boss: true）にできる。その章の課題に、前の章の課題を混ぜて復習させる。
@@ -38,7 +51,7 @@ const ENEMY_CAMP = ["a", "b", "c"].flatMap((rank) => [9, 8, 7, 6, 5, 4, 3, 2, 1]
 // ===== 腕だめし =====
 
 /** 課題のステップの種類（腕だめしの問題数を数える）。 */
-const TASK_TYPES = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem"]);
+const TASK_TYPES = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem", "build", "attack-test"]);
 
 /**
  * 章の腕だめし。最初に、問題の数と、まちがえずに解けば金メダルになることを伝える。
@@ -295,6 +308,40 @@ function tesujiFindStep(entryId, speech, praise) {
   return { type: "find-move", sfen: entry.sfen, moves: entry.moves, answers: entry.arrows, marks: entry.marks, speech, ...(praise ? { praise } : {}) };
 }
 
+/**
+ * 局面から手順を指し進めたSFEN。教材の局面を、手順から作るのに使う。
+ * blackOnlyなら、先手だけが続けて指す(囲いを組む手順。教室では相手はお休み)。
+ */
+function sfenAfter(sfen, moves, { blackOnly = false } = {}) {
+  let current = sfen;
+  for (const usi of moves) {
+    const record = createGameRecord(blackOnly ? withBlackToMove(current) : current);
+    if (!appendUsiMove(record, usi)) throw new Error(`${usi}を指せません`);
+    current = record.position.sfen;
+  }
+  return blackOnly ? withBlackToMove(current) : current;
+}
+
+/**
+ * 囲いを組もうのステップ。完成形と手順は、定跡図鑑と同じ囲いの定義(opening-guide.mjs)から作る。
+ * skipは、手順のうち先に指しておく手の数(美濃囲いの飛車を振る手など)。parは手順の長さ(テストで最短と確かめる)。
+ */
+function castleBuildStep(castleId, { sfen = STANDARD_SFEN, skip = 0, name, pieces = [], ...extra }) {
+  const castle = OPENING_CASTLES.find(({ id }) => id === castleId);
+  const moves = castle.blackMoves.slice(skip);
+  return {
+    type: "build",
+    castle: castleId,
+    name: name ?? castle.label,
+    sfen: sfenAfter(sfen, castle.blackMoves.slice(0, skip), { blackOnly: true }),
+    targets: castle.completionSquares,
+    moves,
+    par: moves.length,
+    pieces,
+    ...extra,
+  };
+}
+
 /** 問題集の問題を解くステップ。台詞を省くと、問題集の出題の台詞を使う。 */
 function problemStep(problemId, extra = {}) {
   return { type: "problem", problemId, ...extra };
@@ -315,9 +362,16 @@ function watchFinish(game, speech) {
   return { type: "mate", moves: game.slice(0, -1), solution: [game.at(-1)], speech };
 }
 
+/** 利きを見ようの局面。5五の銀の前の3マスに、相手の歩が利いている。 */
+const KIKI_SFEN = "4k4/9/3ppp3/9/4S4/9/9/9/4K4 b - 1";
+
 const G1 = WATCH_GAME_FUNAGAKOI;
 const G2 = WATCH_GAME_KURIDASHI;
 const G2_GRAPH = Object.freeze({ moves: G2, evaluations: WATCH_GAME_KURIDASHI_EVALUATIONS });
+/** 形勢の3つのものさしで見る局面(観戦した対局の63手目、飛車を打って玉を上からねらったところ)。数字は局面から計算して台詞に入れる。 */
+const JUDGE_MOVES = G2.slice(0, 63);
+const JUDGE_MATERIAL = materialTotals(sfenAfter(STANDARD_SFEN, JUDGE_MOVES));
+const JUDGE_CONTROL = controlCount(sfenAfter(STANDARD_SFEN, JUDGE_MOVES));
 
 const VOLUME_2 = {
   id: "v2",
@@ -329,18 +383,48 @@ const VOLUME_2 = {
       title: "三手先まで考えよう",
       lessons: [
         {
+          id: "v2-kiki",
+          title: "利きを見よう",
+          summary: "相手の駒が見張っているマスがわかる",
+          icon: "利",
+          steps: [
+            {
+              type: "explain", sfen: KIKI_SFEN, kiki: "both",
+              speech: "駒が動けるマスを「利き」というよ。青い数字は君の駒、赤い数字は相手の駒が、そのマスを何枚で見張っているかなんだ。",
+            },
+            {
+              type: "find-move", sfen: KIKI_SFEN, answers: ["5e4f", "5e6f"], kiki: "both", danger: true, refute: true,
+              speech: "銀を、相手の利き（赤い数字）がないマスへ動かそう！ 赤い輪のマスは、動かすと取られちゃうよ。",
+              praise: "赤い数字のないマスなら、取られないね。動かす前に、相手の利きを見るのが大事だよ！",
+            },
+            {
+              type: "find-move", sfen: "k8/9/7p1/7g1/9/9/9/3s3R1/8K b - 1", answers: ["2h6h"], kiki: "both", refute: true,
+              speech: "取れる駒が2つあるよ。赤い数字がない、ただの駒のほうを取ろう！",
+              praise: "6八の銀には、相手の利きがない。だから取り返されずに＋5！",
+            },
+            {
+              type: "explain", sfen: KIKI_SFEN, kiki: "both", tool: "kiki-glasses",
+              speech: "利きメガネを手に入れた！ 見出しのメガネのボタンを押すと、どのレッスンでも利きが見えるよ。困ったら、かけてみてね。",
+            },
+          ],
+        },
+        {
           id: "v2-free-piece",
           title: "ただで取れる駒",
           summary: "取られない駒を取ろう",
           steps: [
-            { type: "explain", sfen: "k8/9/9/7s1/9/9/9/7R1/8K b - 1", marks: [["2d", "target"]], speech: "2四の銀は、どの駒にも守られていないよ。こういう駒は「ただ」で取れるんだ。" },
-            { type: "find-move", sfen: "k8/9/9/7s1/9/9/9/7R1/8K b - 1", answers: ["2h2d"], speech: "飛車で2四の銀を取ってみよう！", praise: "守られていない銀を、ただで取れたね！" },
-            { type: "explain", sfen: "k8/9/7p1/7s1/9/9/9/7R1/8K b - 1", marks: [["2c", "target"], ["2d", "target"]], speech: "でも、こんどは2三に歩がいるよ。銀を取ると、歩で飛車を取り返されちゃうんだ。" },
-            { type: "choose", sfen: "k8/9/7p1/7s1/9/9/9/7R1/8K b - 1", question: "2四の銀を飛車で取ると、どうなる？", options: ["何も起きない", "歩で飛車を取り返される"], answer: 1, explanation: "銀（5点）を取っても、飛車（10点）を取られたら大損だね。" },
+            { type: "explain", sfen: "k8/9/9/7s1/9/9/9/7R1/8K b - 1", marks: [["2d", "target"]], kiki: "both", speech: "2四の銀には、相手の利き（赤い数字）がないね。どの駒にも守られていない駒は「ただ」で取れるんだ。" },
+            { type: "find-move", sfen: "k8/9/9/7s1/9/9/9/7R1/8K b - 1", answers: ["2h2d"], speech: "飛車で2四の銀を取ってみよう！", praise: "守られていない銀を、ただで取れたね。＋5！" },
+            { type: "explain", sfen: "k8/9/7p1/7s1/9/9/9/7R1/8K b - 1", marks: [["2c", "target"], ["2d", "target"]], kiki: "both", speech: "でも、こんどは2三に歩がいるよ。2四に赤い数字が出たね。銀を取ると、歩で飛車を取り返されちゃうんだ。" },
             {
-              type: "find-move", sfen: "k8/9/7p1/7s1/9/9/9/3g3R1/8K b - 1", answers: ["2h6h"],
+              type: "find-move", sfen: "k8/9/7p1/7s1/9/9/9/7R1/8K b - 1", line: ["2h2d", "2c2d"],
+              speech: "ためしに、2四の銀を飛車で取ってみよう。そのあと何が起きるかな？",
+              praise: "銀を取って＋5、でも歩に飛車を取られて−10。合計は駒損−5だね。取る前に、取り返されないかを見よう！",
+            },
+            {
+              type: "find-move", sfen: "k8/9/7p1/7s1/9/9/9/3g3R1/8K b - 1", answers: ["2h6h"], refute: true,
               speech: "取れる駒が2つあるよ。取り返されない、ただの駒のほうを取ろう！",
-              praise: "6八の金は誰にも守られていないから、ただで取れる。取る前に「取り返されないか」を見るのが大事だよ！",
+              praise: "6八の金は誰にも守られていないから、ただで取れる。＋6！ 取る前に「取り返されないか」を見るのが大事だよ！",
             },
           ],
         },
@@ -353,7 +437,12 @@ const VOLUME_2 = {
             { type: "explain", sfen: "k8/9/7p1/7s1/9/9/9/7R1/8K b - 1", marks: [["2d", "target"]], speech: "たとえば、2四の銀を取る（自分）→ 歩で取り返される（相手）→ 飛車を損した（自分の番）。3手まで考えると、取ってはいけないと分かるね。" },
             { type: "choose", question: "三手の読みで考える順番は？", options: ["自分 → 自分 → 自分", "自分 → 相手 → 自分", "相手 → 相手 → 自分"], answer: 1, explanation: "相手の応手まで考えるのがポイントだよ！" },
             {
-              type: "find-move", sfen: "8k/5s3/4g4/9/9/9/9/1b2R4/8K b - 1", answers: ["5h8h"],
+              type: "find-move", sfen: "k8/9/7p1/7g1/7S1/9/9/7R1/8K b - 1", line: ["2e2d", "2c2d", "2h2d"], kiki: "both", refute: true,
+              speech: "2四の金は歩に守られている（赤い数字1）。でも君は銀と飛車の2枚で攻めている（青い数字2）。安い銀から取ってみよう！",
+              praise: "銀で金を取って＋6、歩に取られて−5、飛車で歩を取って＋1。合計＋2の駒得！ 利きの数が多いほうが、取り合いに勝つんだ。",
+            },
+            {
+              type: "find-move", sfen: "8k/5s3/4g4/9/9/9/9/1b2R4/8K b - 1", answers: ["5h8h"], kiki: "both", refute: true,
               speech: "三手の読みで考えよう。5三の金を取ると、4二の銀に取り返されるね。取り返されないのはどっち？",
               praise: "8八の角は守られていないから、ただ。三手の読みで、損をしない手を選べたね！",
             },
@@ -377,11 +466,21 @@ const VOLUME_2 = {
         {
           id: "v2-values",
           title: "駒の価値を知ろう",
-          summary: "駒得と駒損",
+          summary: "得な取り方がわかる",
           steps: [
-            { type: "explain", speech: "駒にはだいたいの価値があるよ。価値の高い駒を取って、低い駒を渡すのが「駒得」なんだ。" },
-            { type: "open-dex", kind: "piece", id: "piece-values", speech: "駒図鑑の「駒の価値 tier表」で、点数を見てみよう！" },
+            { type: "explain", speech: "駒を取ったときに出ていた「＋6」みたいな数字。あれが駒の値段だよ！ 歩1・香3・桂4・銀5・金6・角8・飛車10。高い駒を取って、安い駒を渡すのが「駒得」なんだ。" },
+            {
+              type: "find-move", sfen: "k8/9/9/3s1b3/4G4/9/9/9/8K b - 1", answers: ["5e4d"],
+              speech: "金で取れる駒が2つ。どっちを取るほうが得かな？",
+              praise: "角は8点、銀は5点。高いほうを取れたね！",
+            },
+            {
+              type: "find-move", sfen: "k8/4g4/4r4/9/9/9/9/g3R4/8K b - 1", answers: ["5h9h"], refute: true,
+              speech: "こんどは飛車と金。高い飛車を取りたくなるけど…取り返されないかな？",
+              praise: "5三の飛車は金に守られているから、取っても取り返されて±0。守られていない金なら、まるごと＋6だね！",
+            },
             { type: "choose", question: "一番価値が高いのはどれ？", options: ["銀", "飛車", "桂馬"], answer: 1, explanation: "飛車は10点。銀は5点、桂馬は4点だよ。" },
+            { type: "open-dex", kind: "piece", id: "piece-values", speech: "駒図鑑の「駒の価値 tier表」で、成った駒の点数も見てみよう！" },
           ],
         },
         bossLesson("v2-c1-boss", {
@@ -613,6 +712,19 @@ const VOLUME_2 = {
 
 // ===== 第3巻 =====
 
+/**
+ * 攻めくらべの局面。攻める側(先手)は、どれも5五の竜と持ち駒の金だけ。後手の玉の形だけを変える。
+ * テストで、居玉は3手で詰み、美濃囲いと舟囲いは詰まない(ATTACK_TEST_HOLD_PLIES手以内)ことを確かめる。
+ */
+const ATTACKER = "/4+R4/9/9/9/4K4 b G 1";
+const IGYOKU_SFEN = `ln1gkg1nl/2s3s2/ppppp1ppp/6p2${ATTACKER}`;
+const MINO_SFEN = `ln1g3nl/1ks1g4/ppppp1ppp/6p2${ATTACKER}`;
+const FUNA_SFEN = `lns2gsnl/4g1kb1/ppppp1ppp/6p2${ATTACKER}`;
+/** 居玉を詰ませた局面(▲5三竜△5二金▲6二金)。玉の逃げ道を見せる。 */
+const IGYOKU_MATED_SFEN = sfenAfter(IGYOKU_SFEN, ["5e5c", "6a5b", "G*6b"]);
+/** 先手の美濃囲い(四間飛車)の完成形。 */
+const MINO_BLACK_SFEN = sfenAfter(STANDARD_SFEN, OPENING_CASTLES.find(({ id }) => id === "mino").blackMoves, { blackOnly: true });
+
 const VOLUME_3 = {
   id: "v3",
   title: "攻めと守りのひみつ",
@@ -634,14 +746,83 @@ const VOLUME_3 = {
           ],
         },
         {
+          id: "v3-igyoku",
+          title: "居玉はあぶない",
+          summary: "囲わない玉は詰みやすい",
+          icon: "居",
+          steps: [
+            {
+              type: "explain", sfen: STANDARD_SFEN, marks: [["5i", "target"], ["5a", "target"]],
+              speech: "最初の並べ方のまま、玉がまん中にいることを「居玉（いぎょく）」というよ。居玉のまま戦うと、どうなるかな？",
+            },
+            {
+              type: "attack-test", sfen: IGYOKU_SFEN, expect: "mate", plies: 3, label: "居玉",
+              speech: "相手は居玉。5五の竜と持ち駒の金で、王手をして詰ませてみよう！",
+              praise: "3手で詰んだ！ 居玉は、まん中にいるから攻めがすぐ届くんだ。",
+            },
+            {
+              type: "explain", sfen: IGYOKU_MATED_SFEN, escapeMap: "white",
+              speech: "詰んだ形を見てみよう。×のマスは君の駒が見張っていて、印のないマスは相手の金がふさいでいる。居玉は、味方の駒が逃げ道をふさいでしまうんだ。",
+            },
+            {
+              type: "choose", question: "居玉が詰みやすいのはなぜ？",
+              options: ["まん中にいて、味方の駒が逃げ道をふさぐから", "玉が強すぎるから", "駒の数が少ないから"], answer: 0,
+              explanation: "まん中は戦いが始まる場所。そこに玉がいると、攻めがすぐ届くし、逃げ道も少ないんだ。",
+            },
+          ],
+        },
+        {
           id: "v3-castles",
           title: "囲いで玉を守ろう",
-          summary: "金銀で玉を囲う",
+          summary: "美濃囲いを組める",
           steps: [
-            { type: "explain", sfen: TESUJI["three-guards"].sfen, marks: TESUJI["three-guards"].marks, speech: "戦う前に、金と銀で玉を守る形を作るよ。これを「囲い」というんだ。この形が「美濃囲い」だよ。" },
-            { type: "explain", speech: "囲いの基本は「金銀3枚」。攻めに使う駒と、守りに使う駒を分けて考えよう。" },
-            { type: "open-dex", kind: "opening", id: "mino", speech: "定跡図鑑の「囲い」で、いろいろな囲いを見てみよう！" },
+            {
+              type: "attack-test", sfen: MINO_SFEN, expect: "hold", label: "美濃囲い",
+              compareTo: { label: "居玉", result: "3手で詰み" },
+              speech: "さっきと同じ竜と金で、こんどは「美濃囲い」の玉を攻めてみよう！ 王手を5回してみてね。",
+            },
+            {
+              type: "explain", sfen: MINO_SFEN, kiki: "white",
+              speech: "同じ攻めなのに、美濃囲いは詰まなかったね。玉が戦いの場所から離れていて、金と銀が玉のまわりを何重にも見張っている（赤い数字）からだよ。",
+            },
+            {
+              type: "move-piece", sfen: STANDARD_SFEN, from: "2h", target: "6h", maxMoves: 1,
+              speech: "こんどは君の玉を囲おう！ 美濃囲いは振り飛車の囲い。まず飛車を6八（緑のマス）へ振ろう！",
+              praise: "6筋に振った「四間飛車」だね。飛車が離れたから、玉の場所があいたよ。",
+            },
+            castleBuildStep("mino", {
+              skip: 1, name: "美濃囲い",
+              speech: "薄く見えている駒が、美濃囲いの完成形。玉と金銀を動かして組み立てよう！ 5手で組めたら最短だよ。",
+              praise: "美濃囲い、完成！",
+            }),
+            {
+              type: "explain", sfen: MINO_BLACK_SFEN, kiki: "black",
+              speech: "完成した美濃囲い。金と銀が手をつないで、玉のまわりのマスを何重にも見張っているね（青い数字）。これが囲いの堅さなんだ。",
+            },
             { type: "choose", question: "囲いの基本はどれ？", options: ["金銀3枚で玉を守る", "玉をひとりにする", "飛車で玉を守る"], answer: 0, explanation: "玉の守りは金銀3枚が基本だよ！" },
+          ],
+        },
+        {
+          id: "v3-castle-variety",
+          title: "いろいろな囲い",
+          summary: "舟囲いと矢倉を組める",
+          icon: "囲",
+          steps: [
+            castleBuildStep("funagakoi", {
+              name: "舟囲い",
+              speech: "居飛車の囲いも組んでみよう！ まずは3手で組める「舟囲い」。薄く見えている形へ、玉と金を動かそう。",
+              praise: "舟囲い、完成！ すばやく組めるから、すぐに戦いたいときの囲いだよ。",
+            }),
+            castleBuildStep("yagura", {
+              name: "金矢倉", pieces: ["P", "B"],
+              speech: "次は「矢倉囲い」。歩と角も動かして、道をあけながら組み立てよう！ 少し長いけど、11手で組めたら最短だよ。",
+              praise: "金矢倉、完成！ 金銀を玉の上に積み上げた、堅い囲いだね。",
+            }),
+            {
+              type: "choose", question: "上からの攻めに強いのは？", options: ["矢倉囲い", "舟囲い"], answer: 0,
+              explanation: "矢倉は金銀を玉の上に積み上げた形で、上からの攻めに強いよ。美濃囲いは横からの攻めに強いんだ。",
+            },
+            { type: "open-dex", kind: "opening", id: "yagura", speech: "定跡図鑑の「囲い」で、ほかの囲いも見てみよう！" },
           ],
         },
         {
@@ -679,7 +860,16 @@ const VOLUME_3 = {
           chapterLabel: "戦法と囲い",
           steps: [
             { type: "choose", moves: ["7g7f", "3c3d", "2g2f", "8c8d", "2f2e"], marks: [["2h", "key"]], question: "この先手は、居飛車と振り飛車のどっち？", options: ["居飛車", "振り飛車"], answer: 0, explanation: "飛車が最初の2筋のまま。2筋の歩を伸ばして攻める居飛車だね。" },
-            { type: "choose", sfen: TESUJI["three-guards"].sfen, marks: TESUJI["three-guards"].marks, question: "この囲いの名前は？", options: ["美濃囲い", "矢倉囲い", "穴熊"], answer: 0, explanation: "玉を2八に置いて、金銀で横から包む形が「美濃囲い」。振り飛車の代表的な囲いだよ。" },
+            castleBuildStep("mino", {
+              skip: 1, name: "美濃囲い", hideTarget: true,
+              speech: "美濃囲いを組もう！ こんどは完成形が見えないよ。玉は2八、銀は3八、金は4九と5八だったね。",
+              praise: "完成形を見ずに、美濃囲いを組めたね！",
+            }),
+            {
+              type: "attack-test", sfen: FUNA_SFEN, expect: "hold", label: "舟囲い",
+              compareTo: { label: "居玉", result: "3手で詰み" },
+              speech: "相手は舟囲い。竜と金で、王手を5回してみよう！ 居玉とくらべて、どうかな？",
+            },
             { type: "choose", question: "玉の守りの基本は？", options: ["金銀3枚", "飛車と角", "歩をたくさん"], answer: 0, explanation: "「玉の守りは金銀3枚」。この格言を覚えておこう！" },
             problemStep("gts-22d2d6dacae5", { speech: "【前の巻から】1手で詰ませよう！ 歩を成るのもありだよ。" }),
           ],
@@ -745,18 +935,34 @@ const VOLUME_3 = {
         {
           id: "v3-attack-pieces",
           title: "攻めは飛角銀桂",
-          summary: "攻めに使う駒",
+          summary: "攻めの駒を2枚以上で使う",
           steps: [
             { type: "explain", sfen: TESUJI["attack-pieces"].sfen, marks: TESUJI["attack-pieces"].marks, speech: "攻めの主役は、飛車・角・銀・桂の4枚だよ。金は玉の守りに残しておくのが基本なんだ。" },
+            {
+              type: "find-move", sfen: "k8/9/6g2/6p2/5S3/9/9/9/6R1K b - 1", line: ["4e3d", "3c3d", "3i3d"], kiki: "both", refute: true,
+              speech: "銀と飛車の2枚で、金に守られた3四の歩を攻めよう。飛車から行くと…？ 安い銀から突っ込むのがコツだよ！",
+              praise: "銀で歩を取って＋1、金に取られて−5、飛車で金を取って＋6。銀と飛車の2枚で攻めたから、合計＋2！",
+            },
             { type: "choose", question: "攻めに使う駒として、ふつう残しておくのは？", options: ["飛車", "金", "桂"], answer: 1, explanation: "金は玉を守る大事な駒だよ。" },
           ],
         },
         {
           id: "v3-defense",
           title: "王手を受けよう",
-          summary: "合駒で防ぐ",
+          summary: "逃げる・取る・合駒で防ぐ",
           steps: [
-            { type: "explain", sfen: TESUJI["one-pawn"].sfen, marks: TESUJI["one-pawn"].marks, speech: "竜に王手をかけられたよ！ 玉が逃げられないときは、間に駒を置く「合駒」で防ごう。" },
+            { type: "explain", speech: "王手の防ぎ方は3つ。①玉が逃げる ②王手している駒を取る ③間に駒を置く（合駒）。1つずつやってみよう！" },
+            {
+              type: "find-move", sfen: "k3r4/9/9/9/9/9/9/9/4K4 b - 1", answers: ["5i4h", "5i6h", "5i4i", "5i6i"], escapeMap: "black",
+              speech: "①逃げる。5一の飛車が王手！ 赤い×のマスには相手の駒が利いているよ。×のないマスへ玉を逃がそう。",
+              praise: "飛車の通り道から外れたね。×のないマスなら安全だよ！",
+            },
+            {
+              type: "find-move", sfen: "4k4/9/9/9/9/9/4p4/4g4/3SK4 b - 1", answers: ["6i5h"], escapeMap: "black",
+              speech: "②取る。5八の金が王手！ 玉の逃げ道は全部×。王手している金を、銀で取っちゃおう！",
+              praise: "王手している駒を取れば、王手は消える。いちばん気持ちいい受けだね！",
+            },
+            { type: "explain", sfen: TESUJI["one-pawn"].sfen, marks: TESUJI["one-pawn"].marks, escapeMap: "black", speech: "③合駒。竜に王手をかけられたよ！ 逃げ道も、竜を取る駒もないときは、間に駒を置いて防ごう。" },
             tesujiFindStep("one-pawn", "持ち駒の歩を、玉と竜の間に打ってみよう！", "歩1枚で竜の王手を止めたね。安い駒の合駒が「一歩千金」だよ！"),
           ],
         },
@@ -765,8 +971,8 @@ const VOLUME_3 = {
           title: "玉の早逃げ",
           summary: "危なくなる前に逃げる",
           steps: [
-            { type: "explain", sfen: TESUJI["early-escape"].sfen, marks: TESUJI["early-escape"].marks, speech: "「玉の早逃げ八手の得」。王手をかけられる前に、玉を安全な場所へ動かしておこう。" },
-            tesujiFindStep("early-escape", "玉を2九へ逃がしてみよう！", "王手をかけられる前に、竜から離れられたね。早逃げは何手分もの得になるよ！"),
+            { type: "explain", sfen: TESUJI["early-escape"].sfen, marks: TESUJI["early-escape"].marks, kiki: "white", speech: "「玉の早逃げ八手の得」。竜の利き（赤い数字）が、玉のすぐそばまで来ているね。王手をかけられる前に、玉を安全な場所へ動かしておこう。" },
+            { ...tesujiFindStep("early-escape", "玉を2九へ逃がしてみよう！", "王手をかけられる前に、竜から離れられたね。早逃げは何手分もの得になるよ！"), kiki: "white" },
           ],
         },
         {
@@ -774,8 +980,8 @@ const VOLUME_3 = {
           title: "金底の歩",
           summary: "一段目の歩は堅い",
           steps: [
-            { type: "explain", sfen: TESUJI["gold-bottom-pawn"].sfen, marks: TESUJI["gold-bottom-pawn"].marks, speech: "竜が一段目から、玉の下をねらっているよ。こういうときは「金底の歩」が効くんだ。" },
-            tesujiFindStep("gold-bottom-pawn", "金の真下の3九に歩を打って、竜の横利きを止めよう！", "金底の歩で竜の横利きが止まった。「岩よりも堅し」だね！"),
+            { type: "explain", sfen: TESUJI["gold-bottom-pawn"].sfen, marks: TESUJI["gold-bottom-pawn"].marks, kiki: "white", speech: "竜が一段目から、玉の下をねらっているよ。一段目に赤い数字が並んでいるね。こういうときは「金底の歩」が効くんだ。" },
+            { ...tesujiFindStep("gold-bottom-pawn", "金の真下の3九に歩を打って、竜の横利き（赤い数字）を止めよう！", "金底の歩で、3九から先の赤い数字が消えた！ 竜の横利きが止まったね。「岩よりも堅し」だよ！"), kiki: "white" },
           ],
         },
         bossLesson("v3-c3-boss", {
@@ -984,9 +1190,20 @@ const VOLUME_5 = {
           title: "形勢の3つのものさし",
           summary: "駒の損得・玉の堅さ・駒の働き",
           steps: [
-            { type: "explain", speech: "どちらが有利かを「形勢」というよ。形勢は、①駒の損得 ②玉の堅さ ③駒の働き の3つで考えるんだ。" },
-            { type: "explain", sfen: TESUJI["three-guards"].sfen, marks: TESUJI["three-guards"].marks, speech: "玉の堅さ：金銀で囲われた玉は、なかなか詰まされないよ。" },
-            { type: "explain", sfen: TESUJI["dragon-enemy-horse-home"].sfen, marks: TESUJI["dragon-enemy-horse-home"].marks, speech: "駒の働き：同じ駒でも、よく利いている場所にあると強いんだ。敵陣の竜や、自陣の馬がその例だよ。" },
+            { type: "explain", moves: JUDGE_MOVES, speech: "どちらが有利かを「形勢」というよ。形勢は、①駒の損得 ②玉の堅さ ③駒の働き の3つで考えるんだ。第3巻で観戦した対局の、この局面で考えてみよう。" },
+            {
+              type: "explain", moves: JUDGE_MOVES, material: true,
+              speech: `①駒の損得。盤の上と持ち駒の点数を足すと、先手${JUDGE_MATERIAL.black}点、後手${JUDGE_MATERIAL.white}点。先手が${JUDGE_MATERIAL.black - JUDGE_MATERIAL.white}点の駒得だね。`,
+            },
+            {
+              type: "explain", moves: JUDGE_MOVES, escapeMap: "both",
+              speech: "②玉の堅さ。後手の玉の逃げ道（緑のマス）は1つだけで、×（先手の駒が見張っているマス）もある。先手の玉には、相手の駒がまったく利いていないね。逃げ道が少ない玉は、詰みに近いんだ。",
+            },
+            {
+              type: "explain", moves: JUDGE_MOVES, kiki: "both", control: true,
+              speech: `③駒の働き。先手の竜と馬と飛車が敵陣に利いていて、利いているマスの数も先手${JUDGE_CONTROL.black}、後手${JUDGE_CONTROL.white}。よく利く駒は、強く働いているんだ。`,
+            },
+            { type: "choose", moves: JUDGE_MOVES, question: "3つのものさしで見ると、この局面で有利なのは？", options: ["先手", "後手", "互角"], answer: 0, explanation: "先手は駒得で、後手の玉は逃げ道が少なく、先手の駒はよく働いている。3つとも先手が上だから、先手が有利だよ！" },
             { type: "choose", question: "形勢を考える3つのものさしに入らないのは？", options: ["駒の損得", "玉の堅さ", "指した手の数"], answer: 2, explanation: "手の数ではなく、駒の損得・玉の堅さ・駒の働きで考えるよ。" },
           ],
         },

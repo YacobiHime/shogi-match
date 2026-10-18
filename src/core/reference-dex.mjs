@@ -1,5 +1,6 @@
 import { Position, RecordMetadataKey, Square, importKIF } from "tsshogi";
 import { appendUsiMove, createGameRecord } from "../game-state";
+import { PIECE_POINTS, PROMOTED_PIECE_POINTS } from "./piece-points.mjs";
 import {
   AMANO_SOHO_KIFU,
   COMPUTER_SHOGI_TOP_KIFU,
@@ -62,27 +63,28 @@ const PIECE_ENTRIES = [
   {
     id: "piece-values", group: "駒の価値", label: "駒の価値 tier表",
     // 盤面の代わりに表を出す項目。点数はよく使われる目安で、局面によって変わる。
+    // 値は将棋教室・学習対局の駒得の数字と共通(piece-points.mjs)。
     table: [
       { tier: "別格", pieces: [{ label: "玉将・王将", images: ["black_king2", "black_king"], points: "∞" }] },
       { tier: "S", pieces: [
-        { label: "竜王", images: ["black_dragon"], points: 12 },
-        { label: "竜馬", images: ["black_horse"], points: 10 },
-        { label: "飛車", images: ["black_rook"], points: 10 },
+        { label: "竜王", images: ["black_dragon"], points: PROMOTED_PIECE_POINTS["+R"] },
+        { label: "竜馬", images: ["black_horse"], points: PROMOTED_PIECE_POINTS["+B"] },
+        { label: "飛車", images: ["black_rook"], points: PIECE_POINTS.R },
       ] },
       { tier: "A", pieces: [
-        { label: "角行", images: ["black_bishop"], points: 8 },
-        { label: "と金", images: ["black_prom_pawn"], points: 7 },
+        { label: "角行", images: ["black_bishop"], points: PIECE_POINTS.B },
+        { label: "と金", images: ["black_prom_pawn"], points: PROMOTED_PIECE_POINTS["+P"] },
       ] },
       { tier: "B", pieces: [
-        { label: "金将", images: ["black_gold"], points: 6 },
-        { label: "成銀・成桂・成香", images: ["black_prom_silver", "black_prom_knight", "black_prom_lance"], points: 6 },
-        { label: "銀将", images: ["black_silver"], points: 5 },
+        { label: "金将", images: ["black_gold"], points: PIECE_POINTS.G },
+        { label: "成銀・成桂・成香", images: ["black_prom_silver", "black_prom_knight", "black_prom_lance"], points: PROMOTED_PIECE_POINTS["+S"] },
+        { label: "銀将", images: ["black_silver"], points: PIECE_POINTS.S },
       ] },
       { tier: "C", pieces: [
-        { label: "桂馬", images: ["black_knight"], points: 4 },
-        { label: "香車", images: ["black_lance"], points: 3 },
+        { label: "桂馬", images: ["black_knight"], points: PIECE_POINTS.N },
+        { label: "香車", images: ["black_lance"], points: PIECE_POINTS.L },
       ] },
-      { tier: "D", pieces: [{ label: "歩兵", images: ["black_pawn"], points: 1 }] },
+      { tier: "D", pieces: [{ label: "歩兵", images: ["black_pawn"], points: PIECE_POINTS.P }] },
     ],
     // やねうら王の探索で、駒得の見積もり（静的交換評価など）に使う駒の値。歩＝90を基準とする。
     aiTable: {
@@ -104,7 +106,7 @@ const PIECE_ENTRIES = [
     overview: "駒にはだいたいの「価値」があるよ。交換するときの損得の目安にしよう！",
     rows: [
       ["強さの順番", "成る前の駒は、歩＜香車＜桂馬＜銀＜金＜角＜飛車の順に価値が高いよ。大駒の飛車と角は別格で、金銀は玉の守りに欠かせないんだ。桂は動ける場所こそ少ないけれど、駒を飛び越えて両取りをかけられる分、香より価値が高いとされるよ。"],
-      ["使い方", "駒を交換するときは、取った駒と取られた駒の点数を比べよう。たとえば銀（5点）で金（6点）を取れれば1点の得だよ。"],
+      ["使い方", "駒を交換するときは、取った駒と取られた駒の点数を比べよう。たとえば銀（5点）で金（6点）を取れれば1点の得だよ。成った駒を取っても、持ち駒になるのは元の駒だから、将棋教室や学習対局の「＋」の数字は元の駒の点数で数えるよ（と金を取ったら＋1）。"],
       ["将棋AIの見方", "やねうら王も駒の価値を点数で持っていて、歩の約3.5倍が香、約6倍が金、11倍が飛車だよ。ただし実際の形勢判断は、駒の位置や玉の堅さまで含めて評価関数（NNUE）で行うんだ。"],
       ["注意点", "点数はあくまで目安だよ。玉の近くの駒や、攻めに欠かせない駒は、局面によって点数以上の価値になるんだ。"],
       ["格言", "「終盤は駒の損得より速度」。終盤では、駒得よりも早く相手玉に迫ることが大事になるよ。"],

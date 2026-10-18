@@ -55,6 +55,16 @@
           :class="mark.tintClass"
           :style="mark.style"
         ></div>
+        <!-- 教室の「囲いを組もう」で、駒を置く目的のマスに薄く見せる完成形の駒。 -->
+        <div
+          v-for="ghost in ghostPieceViews"
+          :key="'ghost-' + ghost.id"
+          class="ghost-piece"
+          :style="ghost.style"
+          aria-hidden="true"
+        >
+          <img class="piece-image" :src="ghost.imagePath" />
+        </div>
         <div
           v-for="piece in board.pieces"
           :key="piece.id"
@@ -81,6 +91,23 @@
           :key="'selection-' + square.id"
           :class="square.selectionClass"
           :style="square.selectionStyle"
+        ></div>
+        <!-- 駒得の数字。取った駒の値段を、取ったマスの上に浮かべて消す(教室・学習対局)。 -->
+        <div
+          v-for="label in floatLabelViews"
+          :key="'float-' + label.id"
+          class="float-label"
+          :class="[`float-label--${label.tone}`, { 'float-label--big': label.big }]"
+          :style="label.style"
+          aria-hidden="true"
+        ><span>{{ label.text }}</span></div>
+        <!-- 利きメガネ: 駒を選んだとき、動かすと取られて損をする行き先を赤い輪で示す。 -->
+        <div
+          v-for="risk in riskSquareViews"
+          :key="'risk-' + risk.id"
+          class="risk-ring"
+          :style="risk.style"
+          aria-hidden="true"
         ></div>
       </div>
 
@@ -411,6 +438,24 @@ const props = defineProps({
     type: Boolean,
     required: false,
     default: false,
+  },
+  // 駒得の数字(＋6／−5)。取ったマスの上に浮かべる。idが変わるたびに動きをやり直す。
+  floatLabels: {
+    type: Array as PropType<{ id: string | number; file: number; rank: number; text: string; tone: string; big?: boolean }[]>,
+    required: false,
+    default: () => [],
+  },
+  // 教室の「囲いを組もう」の完成形。目的のマスに薄く駒を描く。
+  ghostPieces: {
+    type: Array as PropType<{ file: number; rank: number; type: PieceType; color: Color }[]>,
+    required: false,
+    default: () => [],
+  },
+  // 利きメガネ: 選んだ駒(盤の駒は"5e"、持ち駒は"P*")を動かすと取られて損をする行き先(USIのマス)を返す。
+  riskDestinations: {
+    type: Function as PropType<((source: string) => string[]) | null>,
+    required: false,
+    default: null,
   },
   attackMarks: {
     type: Array as PropType<{ file: number; rank: number; black: number; white: number }[]>,
@@ -1023,6 +1068,56 @@ const squareMarkViews = computed(() => {
   });
 });
 
+const floatLabelViews = computed(() => {
+  if (!props.floatLabels.length) return [];
+  const squares = new Map(board.value.squares.map((square) => [`${square.file}${square.rank}`, square]));
+  return props.floatLabels.flatMap((label) => {
+    const square = squares.get(`${label.file}${label.rank}`);
+    if (!square) return [];
+    const height = Number.parseFloat(String(square.style.height)) || 0;
+    return [{
+      ...label,
+      style: { ...square.style, fontSize: `${Math.max(14, height * (label.big ? 0.52 : 0.42))}px` },
+    }];
+  });
+});
+
+const ghostPieceViews = computed(() => {
+  if (!props.ghostPieces.length) return [];
+  const ghosts = new Map(props.ghostPieces.map((ghost) => [`${ghost.file}${ghost.rank}`, ghost]));
+  return board.value.squares.flatMap((square) => {
+    const ghost = ghosts.get(`${square.file}${square.rank}`);
+    if (!ghost) return [];
+    return [{ id: square.id, style: square.style, imagePath: getPieceImagePath(new Piece(ghost.color, ghost.type)) }];
+  });
+});
+
+const USI_HAND_LETTERS: Partial<Record<PieceType, string>> = {
+  [PieceType.PAWN]: "P",
+  [PieceType.LANCE]: "L",
+  [PieceType.KNIGHT]: "N",
+  [PieceType.SILVER]: "S",
+  [PieceType.GOLD]: "G",
+  [PieceType.BISHOP]: "B",
+  [PieceType.ROOK]: "R",
+};
+
+const riskSquareViews = computed(() => {
+  if (!props.riskDestinations || !props.allowMove) return [];
+  const pointer = state.pointer;
+  const source = pointer instanceof Square
+    ? pointer.usi
+    : pointer instanceof Piece && USI_HAND_LETTERS[pointer.type]
+      ? `${USI_HAND_LETTERS[pointer.type]}*`
+      : "";
+  if (!source) return [];
+  const risky = new Set(props.riskDestinations(source));
+  if (!risky.size) return [];
+  return board.value.squares.flatMap((square) => (
+    risky.has(`${square.file}${String.fromCharCode(96 + square.rank)}`) ? [{ id: square.id, style: square.style }] : []
+  ));
+});
+
 const attackMarkViews = computed(() => {
   if (!props.attackMarks.length) return [];
   const marks = new Map(props.attackMarks.map((mark) => [`${mark.file}${mark.rank}`, mark]));
@@ -1329,6 +1424,79 @@ const whitePlayerTimeSeverity = computed(() => {
 .square-mark--key {
   background: rgba(68, 204, 68, 0.45);
   box-shadow: inset 0 0 0 2px rgba(34, 153, 34, 0.9);
+}
+/* 玉の逃げ道: 相手の駒が利いていて逃げられないマス。先手の利きと同じ青に、×を重ねる。 */
+.square-mark--covered {
+  background:
+    linear-gradient(45deg, transparent 44%, rgba(29, 78, 216, 0.85) 45% 55%, transparent 56%),
+    linear-gradient(-45deg, transparent 44%, rgba(29, 78, 216, 0.85) 45% 55%, transparent 56%),
+    rgba(37, 99, 235, 0.22);
+  background-size: 60% 60%, 60% 60%, auto;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+/* 玉の逃げ道: 自分の玉のまわりで、相手の駒が利いているマス。後手の利きと同じ赤に、×を重ねる。 */
+.square-mark--danger {
+  background:
+    linear-gradient(45deg, transparent 44%, rgba(185, 28, 28, 0.85) 45% 55%, transparent 56%),
+    linear-gradient(-45deg, transparent 44%, rgba(185, 28, 28, 0.85) 45% 55%, transparent 56%),
+    rgba(220, 38, 38, 0.2);
+  background-size: 60% 60%, 60% 60%, auto;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+/* 駒得の数字。緑は駒得、赤は駒損。符号と白い縁取りで、色が見分けにくくても木目の上でも読めるようにする。 */
+.float-label {
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 35;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  animation: float-label-rise 900ms ease-out both;
+}
+.float-label span {
+  padding: 0.08em 0.28em;
+  border-radius: 0.35em;
+  color: #fff;
+  box-shadow: 0 0 0 0.12em #fffcf4, 0 0.12em 0.25em rgba(0, 0, 0, 0.35);
+}
+.float-label--good span {
+  background: #1f8a4c;
+}
+.float-label--bad span {
+  background: #c0392b;
+}
+.float-label--big span {
+  box-shadow: 0 0 0 0.14em #fffcf4, 0 0.16em 0.35em rgba(0, 0, 0, 0.45);
+}
+@keyframes float-label-rise {
+  0% { opacity: 0; transform: translateY(0) scale(0.7); }
+  18% { opacity: 1; transform: translateY(-15%) scale(1.08); }
+  70% { opacity: 1; transform: translateY(-55%) scale(1); }
+  100% { opacity: 0; transform: translateY(-80%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .float-label {
+    animation: float-label-fade 900ms linear both;
+  }
+  @keyframes float-label-fade {
+    0%, 70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+/* 囲いを組もうの完成形。薄く見せ、置いた駒と見分けられるようにする。 */
+.ghost-piece {
+  pointer-events: none;
+  opacity: 0.38;
+  filter: grayscale(0.35);
+}
+/* 利きメガネ: 動かすと取られるマス。相手の利き(赤)と同じ色相の輪を、動けるマスの印の外側に付ける。 */
+.risk-ring {
+  pointer-events: none;
+  box-shadow: inset 0 0 0 3px rgba(220, 38, 38, 0.85);
+  border-radius: 50%;
 }
 /* 学習対局の「駒の利き」表示。青は先手、赤は後手、紫は両者が利かせている升。 */
 .attack-tint {

@@ -901,6 +901,7 @@
         :white-player-detail="cpuColor === Color.WHITE ? cpuStrengthLabel : ''"
         :candidates="boardCandidates"
         :attack-marks="boardAttackMarks"
+        :float-labels="captureFloatLabels"
         :movement-arrows="matchKind === 'learning' && movementArrowsEnabled && matchStarted && !pregameOpen"
         @usi-move="onPlayerMove"
       />
@@ -1806,6 +1807,7 @@ import {
   learningStartPosition,
   normalizeAssistLimit,
 } from "./core/learning-setup.mjs";
+import { CAPTURE_POP_MS, capturePop } from "./core/piece-points.mjs";
 import { createMoveSoundPlayer, loadSoundEnabled, saveSoundEnabled, selectMoveSound } from "./core/move-sound";
 import { IMPACT_STAGE, finishImpact, impactStopMs, moveImpact, praiseImpactStage } from "./core/move-impact.mjs";
 import {
@@ -4448,9 +4450,33 @@ function createRecord(): Record {
 }
 
 function syncPosition(usi = "") {
+  const previous = currentSfen.value;
   currentSfen.value = record.value.position.sfen;
   lastMove.value = usi;
   observeFormations(currentSfen.value);
+  if (usi) showCapturePop(previous, usi);
+}
+
+/*
+ * 学習対局(教室から始めた対局を含む)の駒得の数字。駒を取ったら、取ったマスに緑の「＋6」、取られたら赤の「−5」を浮かべる。
+ * 成った駒は、持ち駒になる元の駒の値段で数える(piece-points.mjs)。直前の局面から指した手のときだけ出す(復元・待ったでは出さない)。
+ */
+const captureFloatLabels = ref<{ id: number; file: number; rank: number; text: string; tone: "good" | "bad"; big: boolean }[]>([]);
+let captureFloatSeq = 0;
+function showCapturePop(previous: string, usi: string) {
+  if (matchKind.value !== "learning" || !matchStarted.value || reviewMode.value || !previous) return;
+  // 直前の局面からこの手を指した結果が、いまの局面と同じときだけ出す。
+  const check = createGameRecord(previous);
+  if (!appendUsiMove(check, usi) || check.position.sfen.split(" ")[0] !== record.value.position.sfen.split(" ")[0]) return;
+  const side = humanColor.value === Color.WHITE ? "white" : "black";
+  captureFloatSeq += 1;
+  const pop = capturePop(previous, usi, side, captureFloatSeq);
+  if (!pop) return;
+  const label = { id: captureFloatSeq, file: pop.file, rank: pop.rank, text: pop.text, tone: pop.tone, big: pop.big };
+  captureFloatLabels.value = [...captureFloatLabels.value, label];
+  setTimeout(() => {
+    captureFloatLabels.value = captureFloatLabels.value.filter(({ id }) => id !== label.id);
+  }, CAPTURE_POP_MS);
 }
 
 function persistMatchState() {

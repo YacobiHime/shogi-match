@@ -43,8 +43,13 @@ import { CPU_STRENGTH_PRESETS } from "./strength-settings.mjs";
 import { problemById } from "./problem-set.mjs";
 import { createProblemState } from "./tutorial-problem.mjs";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./opening-guide.mjs";
+import { OPENING_GUIDE_OVERRIDES } from "../data/opening-guide-overrides.mjs";
+import { ATTACK_TEST_HOLD_PLIES } from "./tutorial-problem.mjs";
+import { findMateLine } from "./problem-solver";
+import { buildLowerBound, buildMissingTargets } from "./tutorial-runner.mjs";
+import { kingEscapeMap } from "./board-insight.mjs";
 
-const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play", "replay", "capture", "problem"];
+const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play", "replay", "capture", "problem", "build", "attack-test"];
 const legalMoves = (sfen) => enumerateLegalMoves(createGameRecord(sfen).position).map(({ usi }) => usi);
 
 function afterMove(sfen, usi) {
@@ -111,7 +116,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
           fields[1] = fields[1] === "b" ? "w" : "b";
           expect(Position.newBySFEN(fields.join(" "))?.checked, `${label}: 手番でない側が王手されている`).toBe(false);
         }
-        if (["move-piece", "find-move", "mate", "capture"].includes(step.type)) {
+        if (["move-piece", "find-move", "mate", "capture", "build", "attack-test"].includes(step.type)) {
           expect(sfen.split(" ")[1], `${label}: 先手番で始める`).toBe("b");
         }
         if (step.type === "capture") {
@@ -130,7 +135,17 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
         if (step.type === "find-move") {
           const legal = legalMoves(sfen);
           if (step.anyDropOf) expect(legal.some((usi) => usi.startsWith(`${step.anyDropOf}*`)), label).toBe(true);
-          else {
+          else if (step.line) {
+            // 相手の応手を決めた手順は、自分の手を順に指すと正解になる。
+            let state = createStepState(step);
+            let result;
+            for (let ply = 0; ply < step.line.length; ply += 2) {
+              result = attemptTutorialMove(step, state, step.line[ply]);
+              expect(result.outcome, `${label}: ${step.line[ply]}`).not.toBe("wrong");
+              state = result.state;
+            }
+            expect(result.outcome, label).toBe("correct");
+          } else {
             expect(step.answers?.length, label).toBeGreaterThan(0);
             for (const usi of step.answers) expect(legal, `${label}: ${usi}`).toContain(usi);
           }
@@ -138,6 +153,35 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
         if (step.type === "move-piece") {
           expect(reachable(sfen, step.from, step.target, step.maxMoves), label).toBe(true);
         }
+        if (step.type === "build") {
+          // 完成形と手順は定跡図鑑の囲いの定義と同じ。本番で上書きデータに置き換わらない囲いを使う。
+          const castle = OPENING_CASTLES.find(({ id }) => id === step.castle);
+          expect(step.targets, label).toEqual(castle.completionSquares);
+          expect(OPENING_GUIDE_OVERRIDES?.[`castle:${step.castle}`], `${label}: 上書きデータ`).toBeUndefined();
+          expect(buildMissingTargets(step, sfen).length, label).toBeGreaterThan(0);
+          // お手本の手順で完成し、目標の手数(par)は手順の長さ。下限と同じなら最短。
+          let state = createStepState(step);
+          let result;
+          for (const usi of step.moves) {
+            result = attemptTutorialMove(step, state, usi);
+            expect(result.outcome, `${label}: ${usi}`).not.toBe("wrong");
+            state = result.state;
+          }
+          expect(result.outcome, label).toBe("correct");
+          expect(step.par, label).toBe(step.moves.length);
+          expect(buildLowerBound(step), label).toBeLessThanOrEqual(step.par);
+        }
+        if (step.type === "attack-test") {
+          if (step.expect === "mate") {
+            expect(findMateLine(sfen, step.plies, { nodeLimit: 2_000_000, maxTimeMs: 20000 })?.length, `${label}: ${step.plies}手以内に詰む`).toBeLessThanOrEqual(step.plies);
+          } else {
+            expect(findMateLine(sfen, ATTACK_TEST_HOLD_PLIES, { nodeLimit: 2_000_000, maxTimeMs: 20000 }), `${label}: 詰まない`).toBeNull();
+          }
+        }
+        for (const color of step.escapeMap === "both" ? ["black", "white"] : step.escapeMap ? [step.escapeMap] : []) {
+          expect(kingEscapeMap(sfen, color), label).not.toBeNull();
+        }
+        if (step.kiki) expect(["both", "black", "white"], label).toContain(step.kiki);
         if (step.type === "mate") {
           let state = createStepState(step);
           for (let ply = 0; ply < step.solution.length; ply += 2) {
@@ -210,7 +254,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
   });
 
   it("章の腕だめしは章の最後に置き、課題を4問以上持つ", () => {
-    const tasks = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem"]);
+    const tasks = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem", "build", "attack-test"]);
     for (const volume of TUTORIAL_VOLUMES) {
       for (const chapter of volume.chapters) {
         const bosses = chapter.lessons.filter(({ boss }) => boss);
@@ -232,7 +276,7 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     const reading = steps.filter(({ type }) => type === "explain" || type === "open-dex").length;
     expect(reading / steps.length).toBeLessThan(0.5);
     // 第1巻は、レッスンごとに盤で指す課題がある(話を聞くだけのレッスンを作らない)。
-    const board = new Set(["move-piece", "find-move", "mate", "capture", "problem"]);
+    const board = new Set(["move-piece", "find-move", "mate", "capture", "problem", "build", "attack-test"]);
     const volume1 = TUTORIAL_LESSONS.filter(({ volumeId, id }) => volumeId === "v1" && id !== "v1-win" && id !== "v1-setup");
     for (const lesson of volume1) expect(lesson.steps.some(({ type }) => board.has(type)), lesson.id).toBe(true);
   });

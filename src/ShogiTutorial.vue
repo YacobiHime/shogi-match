@@ -12,6 +12,20 @@
         <span aria-hidden="true">←</span> <span class="shogi-tutorial__back-label">{{ backLabel }}</span>
       </button>
       <h1 id="shogi-tutorial-title">{{ headerTitle }}</h1>
+      <!-- 利きメガネ(道具)。第2巻の「利きを見よう」で手に入れる。付けると、どのレッスンでも利きと取られるマスが見える。 -->
+      <button
+        v-if="view === 'lesson' && ownsGlasses"
+        type="button"
+        class="shogi-tutorial__glasses"
+        :class="{ 'shogi-tutorial__glasses--on': glassesOn, 'shogi-tutorial__glasses--new': glassesNew }"
+        :aria-pressed="glassesOn"
+        aria-label="利きメガネ"
+        data-kiki-glasses
+        @click="toggleGlasses"
+      >
+        <svg viewBox="0 0 32 16" aria-hidden="true"><circle cx="8" cy="9" r="5.5" /><circle cx="24" cy="9" r="5.5" /><path d="M13.5 8.5 Q16 6.5 18.5 8.5 M2.5 8 L1 4 M29.5 8 L31 4" /></svg>
+        <span>利き</span>
+      </button>
       <button
         v-if="view === 'lesson'"
         type="button"
@@ -149,6 +163,10 @@
               :asset-base-url="assetBaseUrl"
               :candidates="boardArrows"
               :mark-squares="boardMarks"
+              :attack-marks="boardAttackMarks"
+              :ghost-pieces="boardGhosts"
+              :risk-destinations="riskDestinations"
+              :float-labels="floatLabels"
               @usi-move="onBoardMove"
               @resize="onBoardResize"
             />
@@ -172,7 +190,7 @@
             <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
             <div class="shogi-tutorial__bubble-body">
               <!-- 課題の種類・腕だめしの何問目か・駒取りの手数・れんぞく正解を、1行の札で並べる。 -->
-              <p v-if="taskLabel || bossProgress || captureCount || streak >= 2" class="shogi-tutorial__chips">
+              <p v-if="taskLabel || bossProgress || captureCount || buildCount || attackChips.length || insightChips.length || materialChip || streak >= 2" class="shogi-tutorial__chips">
                 <span v-if="taskLabel" class="shogi-tutorial__task-label">{{ taskLabel }}</span>
                 <span v-if="bossProgress" class="shogi-tutorial__chip shogi-tutorial__chip--boss" data-boss-progress>
                   第{{ bossProgress.number }}問 / {{ bossProgress.total }}
@@ -180,6 +198,27 @@
                 <span v-if="captureCount" class="shogi-tutorial__chip" data-capture-count>
                   目標{{ captureCount.par }}手・いま{{ captureCount.used }}手
                 </span>
+                <span v-if="buildCount" class="shogi-tutorial__chip" data-build-count>
+                  {{ buildCount.name }}：目標{{ buildCount.par }}手・いま{{ buildCount.used }}手
+                </span>
+                <!-- 攻めくらべ: 王手の回数と、くらべる相手(居玉)の結果・この局面の結果を並べる。 -->
+                <span
+                  v-for="chip in attackChips"
+                  :key="chip.key"
+                  class="shogi-tutorial__chip"
+                  :class="chip.tone ? `shogi-tutorial__chip--${chip.tone}` : ''"
+                  data-attack-chip
+                >{{ chip.text }}</span>
+                <!-- 形勢のものさし: 駒の点数の合計・利いているマスの数。 -->
+                <span v-for="chip in insightChips" :key="chip" class="shogi-tutorial__chip" data-insight-chip>{{ chip }}</span>
+                <!-- 駒得の合計。課題の中で駒の取り合いが起きたときだけ出す。 -->
+                <span
+                  v-if="materialChip"
+                  :key="materialChip.text"
+                  class="shogi-tutorial__chip shogi-tutorial__chip--material"
+                  :class="`shogi-tutorial__chip--${materialChip.tone}`"
+                  data-material
+                >{{ materialChip.text }}</span>
                 <span v-if="streak >= 2" :key="streak" class="shogi-tutorial__chip shogi-tutorial__chip--streak" data-streak>
                   {{ streak }}れんぞく！
                 </span>
@@ -391,6 +430,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropTy
 import EvaluationGraph from "./EvaluationGraph.vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { formatHintMove } from "./core/match-assists.mjs";
+import { appendUsiMove, createGameRecord } from "./game-state";
+import { attackMap } from "./core/learning-setup.mjs";
+import { controlCount, kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
+import { CAPTURE_POP_MS, capturePop, materialLabel, materialSwing, materialTotals } from "./core/piece-points.mjs";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
@@ -398,10 +441,12 @@ import { TUTORIAL_LESSONS, TUTORIAL_TITLE, TUTORIAL_VOLUMES, tutorialLesson } fr
 import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.mjs";
 import {
   INTERACTIVE_STEP_TYPES,
+  STANDARD_SFEN,
   TUTORIAL_AUTO_ADVANCE_MS,
   TUTORIAL_IDLE_HINT_MS,
   TUTORIAL_TAP_GUARD_MS,
   attemptTutorialChoice,
+  buildMissingTargets,
   choiceAdvanceDelay,
   attemptTutorialMove,
   autoAdvancesOnSolve,
@@ -419,10 +464,13 @@ import {
   tutorialStepMarks,
 } from "./core/tutorial-runner.mjs";
 import {
+  hasKikiGlasses,
+  loadKikiGlassesOn,
   loadTutorialProgress,
   nextLesson,
   recordLessonCleared,
   recordLessonSkipped,
+  saveKikiGlassesOn,
   saveTutorialProgress,
 } from "./core/tutorial-progress.mjs";
 import {
@@ -434,7 +482,11 @@ import {
   tutorialMap,
 } from "./core/tutorial-map.mjs";
 import {
+  attackResultLabel,
+  attackStepHint,
+  attemptAttackMove,
   attemptProblemMove,
+  createAttackState,
   createProblemState,
   problemStepHint,
   recordTutorialProblem,
@@ -466,6 +518,26 @@ const volumes = TUTORIAL_VOLUMES as unknown as Volume[];
 const lessons = TUTORIAL_LESSONS as unknown as Lesson[];
 const storage = typeof localStorage === "undefined" ? null : localStorage;
 const progress = ref(loadTutorialProgress(storage));
+// ===== 道具: 利きメガネ =====
+/** 「利きを見よう」の最後で手に入れた(レッスンを終える前でも、手に入れた場面から使える)。 */
+const toolGranted = ref(false);
+const ownsGlasses = computed(() => toolGranted.value || hasKikiGlasses(progress.value));
+const glassesOn = ref(loadKikiGlassesOn(storage));
+/** 手に入れたばかりで、まだ押していない。ボタンをそっと光らせる。 */
+const glassesNew = ref(false);
+const glassesActive = computed(() => ownsGlasses.value && glassesOn.value);
+let glassesExplained = false;
+function toggleGlasses() {
+  glassesOn.value = !glassesOn.value;
+  glassesNew.value = false;
+  saveKikiGlassesOn(storage, glassesOn.value);
+  // 色の意味は、この画面で初めてかけたときだけ一言で伝える(UI_Nintendo_Design.mdの6-2)。
+  if (glassesOn.value && !glassesExplained) {
+    glassesExplained = true;
+    setFeedback("利きメガネ：青い数字は君の駒、赤い数字は相手の駒が見張っている数。赤い輪のマスへ動かすと取られるよ。", "info");
+  }
+}
+
 /** この画面を開いてから新しく手に入れた巻の称号。章クリアの画面で知らせる。 */
 const newTitle = ref<VolumeTitle | null>(null);
 function updateProgress(next: typeof progress.value) {
@@ -694,17 +766,74 @@ const resultStars = ref(0);
 const stepMisses = ref(0);
 /** まちがえずに続けて解いた課題の数。2つ以上で「2れんぞく！」と知らせる(何が良かったかを数で見せる)。 */
 const streak = ref(0);
+/** 駒得の合計(このステップの中)。駒を取ったら＋、取られたら−。取り合いが起きたら札を出す。 */
+const materialTotal = ref(0);
+const materialSeen = ref(false);
+/** 盤に浮かべている駒得の数字。 */
+const floatLabels = ref<{ id: string | number; file: number; rank: number; text: string; tone: "good" | "bad"; big: boolean }[]>([]);
+let floatSeq = 0;
+let floatTimers: ReturnType<typeof setTimeout>[] = [];
+function clearFloats() {
+  for (const timer of floatTimers) clearTimeout(timer);
+  floatTimers = [];
+  floatLabels.value = [];
+}
+onBeforeUnmount(clearFloats);
+/**
+ * 駒を取った手なら、取ったマスに＋N(先手が取った)・−N(後手が取った)を浮かべ、合計に足す。
+ * delayは相手の応手のように、少し遅れて盤に出る手の数字を合わせるため(合計はすぐ足す)。
+ */
+function popCapture(sfen: string, usi: string, delay = 0) {
+  const pop = capturePop(sfen, usi, "black", (floatSeq += 1));
+  if (!pop) return;
+  materialTotal.value += pop.points;
+  materialSeen.value = true;
+  const show = () => {
+    floatLabels.value = [...floatLabels.value, pop];
+    floatTimers.push(setTimeout(() => {
+      floatLabels.value = floatLabels.value.filter(({ id }) => id !== pop.id);
+    }, CAPTURE_POP_MS));
+  };
+  if (delay) floatTimers.push(setTimeout(show, delay));
+  else show();
+}
+/** 指した手の後の局面。 */
+function applyUsi(sfen: string, usi: string) {
+  const record = createGameRecord(sfen);
+  return appendUsiMove(record, usi) ? record.position.sfen : sfen;
+}
+/** 攻めくらべの結果(「3手で詰み」「詰まない」)。 */
+const attackOutcome = ref("");
+/** 詰ませたあと、詰みの理由として玉の逃げ道を見せる。 */
+const mateShown = ref(false);
+/** 取り返しの再生中。盤を触れなくし、押すと待たずに戻す。 */
+const refuting = ref(false);
+let refuteRestore: (() => void) | null = null;
 
 const currentStep = computed(() => currentLesson.value?.steps?.[stepIndex.value] ?? null);
 const isProblemStep = computed(() => currentStep.value?.type === "problem");
 const stepInteractive = computed(() => INTERACTIVE_STEP_TYPES.includes(currentStep.value?.type));
 const boardSfen = computed(() => stepState.value.sfen);
-const boardInteractive = computed(() => stepInteractive.value && !stepSolved.value && !stageClear.value);
+const boardInteractive = computed(() => stepInteractive.value && !stepSolved.value && !stageClear.value && !refuting.value);
 const problemHint = computed(() => (
   isProblemStep.value && hintLevel.value ? problemStepHint(currentStep.value, stepState.value, hintLevel.value) : null
 ));
+/** 詰ませる課題(詰将棋・詰ませる問題・攻めくらべ)。ヒントの1段目と詰んだあとに、玉の逃げ道を見せる。 */
+const isMateTask = computed(() => {
+  const step = currentStep.value;
+  if (step?.type === "mate" || step?.type === "attack-test") return true;
+  return step?.type === "problem" && problemKind.value !== "escape";
+});
+/** 攻めくらべの2段目のヒントの矢印。詰み探索を使うので、ヒントを出すときだけ求める。 */
+const attackHintArrow = computed(() => (
+  currentStep.value?.type === "attack-test" && hintLevel.value >= 2 ? attackStepHint(currentStep.value, stepState.value) : ""
+));
 const hintView = computed(() => {
   if (!hintLevel.value || !currentStep.value) return { marks: [], arrows: [] };
+  const step = currentStep.value;
+  if (step.type === "attack-test") return { marks: [], arrows: attackHintArrow.value ? [attackHintArrow.value] : [] };
+  // 1段目は「見方」(利きの地図・玉の逃げ道)だけを見せ、答えのマスは2段目で見せる。
+  if ((step.type === "find-move" || step.type === "mate") && hintLevel.value === 1) return { marks: [], arrows: [] };
   if (problemHint.value) {
     const square = problemHint.value.square;
     return {
@@ -724,8 +853,106 @@ const boardMarks = computed(() => {
       boardSfen.value,
     );
   const merged = new Map(marks.map((mark: any) => [`${mark.file}${mark.rank}`, mark]));
+  for (const mark of escapeMarks.value) merged.set(`${mark.file}${mark.rank}`, mark);
   for (const mark of hintView.value.marks) merged.set(`${mark.file}${mark.rank}`, mark);
   return [...merged.values()];
+});
+/** 玉の逃げ道を見せる玉。ステップの指定か、詰ませたあと・詰ませる課題の1段目のヒント。 */
+const escapeColors = computed<("black" | "white")[]>(() => {
+  const step = currentStep.value;
+  if (!step) return [];
+  if (step.escapeMap) return step.escapeMap === "both" ? ["white", "black"] : [step.escapeMap];
+  if (isMateTask.value && (mateShown.value || hintLevel.value === 1)) return ["white"];
+  return [];
+});
+/**
+ * 玉の逃げ道。逃げられるマスは緑(大事なマス)、相手の駒が利いているマスは×(先手の利きは青、後手の利きは赤)。
+ * 玉の味方がふさいでいるマスは印を付けない。
+ */
+const escapeMarks = computed(() => {
+  if (!boardSfen.value) return [];
+  return escapeColors.value.flatMap((color) => (kingEscapeMap(boardSfen.value, color)?.squares ?? []).flatMap(({ square, state }) => {
+    const tone = state === "open" ? "key" : state === "covered" ? (color === "white" ? "covered" : "danger") : "";
+    return tone ? [{ file: Number(square[0]), rank: square.charCodeAt(1) - 96, tone }] : [];
+  }));
+});
+/**
+ * 利きの地図。レッスンが指定したとき(kiki)、利きメガネをかけているとき、盤で指す課題の1段目のヒント(見方)で出す。
+ * "black"／"white"は片方の駒の利きだけを見せる。
+ */
+const kikiMode = computed(() => {
+  const step = currentStep.value;
+  if (!step || !boardSfen.value) return "";
+  if (step.kiki) return step.kiki;
+  if (glassesActive.value) return "both";
+  if (step.type === "find-move" && hintLevel.value === 1 && !stepSolved.value) return "both";
+  return "";
+});
+const boardAttackMarks = computed(() => {
+  const mode = kikiMode.value;
+  if (!mode) return [];
+  return attackMap(boardSfen.value).flatMap((mark: { file: number; rank: number; black: number; white: number }) => {
+    const black = mode === "white" ? 0 : mark.black;
+    const white = mode === "black" ? 0 : mark.white;
+    return black || white ? [{ ...mark, black, white }] : [];
+  });
+});
+/** 利きメガネ・dangerのステップで、駒を選んだときに取られるマスを赤い輪で見せる。 */
+const riskDestinations = computed(() => {
+  const step = currentStep.value;
+  if (!boardInteractive.value || !(step?.danger || glassesActive.value)) return null;
+  const sfen = boardSfen.value;
+  return (source: string) => unsafeDestinations(sfen, source);
+});
+/** 囲いを組もうの完成形。まだそろっていないマスに薄く駒を描く(腕だめしでは描かない)。 */
+const boardGhosts = computed(() => {
+  const step = currentStep.value;
+  if (step?.type !== "build" || step.hideTarget || !boardSfen.value) return [];
+  return buildMissingTargets(step, boardSfen.value).map(([square, kind]: [string, string]) => ({
+    file: Number(square[0]), rank: square.charCodeAt(1) - 96, kind,
+  }));
+});
+/** 駒得の合計の札。観戦は先手から見た損得を、手数に合わせて計算し直す。 */
+const materialChip = computed(() => {
+  const step = currentStep.value;
+  if (step?.type === "replay") {
+    const swing = materialSwing(step.sfen ?? STANDARD_SFEN, step.moves.slice(0, stepState.value.ply));
+    if (!swing) return null;
+    const label = materialLabel(swing);
+    return { ...label, text: `▲先手 ${label.text}` };
+  }
+  return materialSeen.value ? materialLabel(materialTotal.value) : null;
+});
+/** 形勢のものさしの札(駒の点数の合計・利いているマスの数)。 */
+const insightChips = computed(() => {
+  const step = currentStep.value;
+  if (!step || !boardSfen.value) return [];
+  const chips: string[] = [];
+  if (step.material) {
+    const totals = materialTotals(boardSfen.value);
+    chips.push(`駒の点数 ▲${totals.black}・△${totals.white}`);
+  }
+  if (step.control) {
+    const counts = controlCount(boardSfen.value);
+    chips.push(`利いているマス ▲${counts.black}・△${counts.white}`);
+  }
+  return chips;
+});
+/** 囲いを組もうの手数。 */
+const buildCount = computed(() => (
+  currentStep.value?.type === "build" ? { name: currentStep.value.name, par: currentStep.value.par, used: stepState.value.movesUsed } : null
+));
+/** 攻めくらべの札。くらべる相手(居玉)の結果と、王手の回数か、この局面の結果。 */
+const ATTACK_CHECKS = 5;
+const attackChips = computed(() => {
+  const step = currentStep.value;
+  if (step?.type !== "attack-test") return [];
+  const chips: { key: string; text: string; tone: string }[] = [];
+  if (step.compareTo) chips.push({ key: "compare", text: `${step.compareTo.label}：${step.compareTo.result}`, tone: "" });
+  if (attackOutcome.value) chips.push({ key: "result", text: `${step.label}：${attackOutcome.value}`, tone: "result" });
+  else if (step.expect === "mate") chips.push({ key: "goal", text: `${step.label}を${step.plies}手で詰ませよう`, tone: "" });
+  else chips.push({ key: "checks", text: `王手 ${stepState.value.checks ?? 0}/${step.maxChecks ?? ATTACK_CHECKS}`, tone: "" });
+  return chips;
 });
 const boardArrows = computed(() => (
   [...(currentStep.value?.type === "explain" ? currentStep.value.arrows ?? [] : []), ...hintView.value.arrows]
@@ -738,13 +965,15 @@ const taskLabel = computed(() => {
   if (!isTaskStep.value || stepSolved.value) return "";
   const step = currentStep.value;
   if (step?.type === "capture") return "駒取りゲーム";
+  if (step?.type === "build") return "囲いを組もう";
+  if (step?.type === "attack-test") return "攻めくらべ";
   if (step?.type === "problem") return problemKind.value === "escape" ? "逃げてみよう" : "詰ませてみよう";
   if (step?.type === "mate") return "詰ませてみよう";
   return step?.type === "choose" ? "クイズ" : "やってみよう";
 });
 const problemKind = computed(() => (isProblemStep.value ? tutorialProblem(currentStep.value)?.kind ?? "" : ""));
 /** 答える課題の種類(腕だめしの問題数を数える)。 */
-const TASK_STEP_TYPES = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem"]);
+const TASK_STEP_TYPES = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem", "build", "attack-test"]);
 /** 腕だめしの何問目か。腕だめしでは、課題の数と、いま何問目かを見せる(山場の進み具合)。 */
 const bossProgress = computed(() => {
   const lesson = currentLesson.value;
@@ -791,6 +1020,11 @@ function advanceByTap() {
     continueChain();
     return;
   }
+  // 取り返しの再生中に押したら、待たずに局面を戻す。
+  if (refuting.value) {
+    refuteRestore?.();
+    return;
+  }
   const step = currentStep.value;
   if (!step || !tapToAdvance.value) return;
   const now = Date.now();
@@ -817,10 +1051,17 @@ function scheduleIdleHint() {
   idleHintTimer = setTimeout(() => {
     if (view.value !== "lesson" || stepIndex.value !== index || stepSolved.value || hintLevel.value > 0) return;
     hintLevel.value = 1;
-    setFeedback(problemHint.value?.text || "光っているマスに注目してみてね。", "info");
+    setFeedback(problemHint.value?.text || idleHintText(currentStep.value), "info");
   }, TUTORIAL_IDLE_HINT_MS);
 }
 onBeforeUnmount(() => clearTimeout(idleHintTimer));
+/** しばらく操作がないときのヒントの一言。答えではなく、見方を渡す。 */
+function idleHintText(step: any) {
+  if (isMateTask.value) return "玉の逃げ道（緑のマス）を、全部ふさぐ王手を考えてみよう。";
+  if (step?.type === "find-move") return "利きを見てみよう。青い数字が君の駒、赤い数字が相手の駒の利きだよ。";
+  if (step?.type === "build") return "緑のマスに、薄く見えている駒を動かそう。";
+  return "光っているマスに注目してみてね。";
+}
 const stepSpeech = computed(() => {
   const step = currentStep.value;
   if (step?.type === "replay") return replaySpeech(step, stepState.value.ply);
@@ -844,8 +1085,15 @@ function seekReplayTo(ply: number) {
   if (step?.type !== "replay") return;
   const before = stepState.value;
   stepState.value = seekReplay(step, before, ply);
-  // 1手進めたときだけ駒音を鳴らす。
-  if (stepState.value.ply === before.ply + 1) playMoveSoundFor(before.sfen, step.moves[before.ply]);
+  // 1手進めたときだけ駒音を鳴らし、駒を取った手なら先手から見た駒得の数字を浮かべる。
+  if (stepState.value.ply === before.ply + 1) {
+    playMoveSoundFor(before.sfen, step.moves[before.ply]);
+    const pop = capturePop(before.sfen, step.moves[before.ply], "black", (floatSeq += 1));
+    if (pop) {
+      floatLabels.value = [...floatLabels.value, pop];
+      floatTimers.push(setTimeout(() => { floatLabels.value = floatLabels.value.filter(({ id }) => id !== pop.id); }, CAPTURE_POP_MS));
+    }
+  }
   stepSolved.value = stepState.value.solved;
   lastMove.value = step.moves[stepState.value.ply - 1] ?? "";
 }
@@ -875,8 +1123,23 @@ function loadStep(index: number) {
   clearStepTimers();
   stepIndex.value = index;
   const step = currentLesson.value?.steps?.[index];
-  stepState.value = step?.type === "problem" ? createProblemState(step) : createStepState(step);
+  stepState.value = step?.type === "problem"
+    ? createProblemState(step)
+    : step?.type === "attack-test" ? createAttackState(step) : createStepState(step);
   stepSolved.value = false;
+  clearFloats();
+  materialTotal.value = 0;
+  materialSeen.value = false;
+  attackOutcome.value = "";
+  mateShown.value = false;
+  refuting.value = false;
+  refuteRestore = null;
+  // 道具を手に入れる場面。判を押して、見出しにボタンを出す(ごほうびはすぐ使えるように)。
+  if (step?.tool === "kiki-glasses" && !ownsGlasses.value) {
+    toolGranted.value = true;
+    glassesNew.value = true;
+    showStamp("メガネGET！", true);
+  }
   stepMisses.value = 0;
   hintLevel.value = 0;
   feedback.value = "";
@@ -914,6 +1177,7 @@ function countMiss() {
 function praiseFor(step: any) {
   if (step.praise) return step.praise;
   if (step.type === "mate") return "詰み！ 玉の逃げ道を全部ふさげたね。";
+  if (step.type === "build") return `${step.name}、完成！`;
   if (step.type === "move-piece") return "着いたね！ 駒の動き、ばっちり。";
   return "正解！ いい手を見つけたね。";
 }
@@ -943,10 +1207,23 @@ function onBoardMove(usi: string) {
     onProblemMove(step, usi);
     return;
   }
+  if (step.type === "attack-test") {
+    onAttackMove(step, usi);
+    return;
+  }
   const before = stepState.value.sfen;
   const result: any = attemptTutorialMove(step, stepState.value, usi);
   if (result.outcome === "wrong") {
+    // 囲いに使わない駒を動かそうとしたときは、まちがいに数えず、使う駒を伝える(不可の分類)。
+    if (result.reason === "not-castle-piece") {
+      setFeedback("囲いに使うのは、薄く見えている駒だよ。その駒を動かしてね。", "info");
+      return;
+    }
     countMiss();
+    if (result.reason === "refuted") {
+      playRefutation(before, usi, result.refutation);
+      return;
+    }
     const reason = ({
       illegal: "その手は指せないよ。駒の動きをもう一度確かめてみよう！",
       "other-piece": step.type === "capture" ? "動かせるのは、最初に置いてあった駒だけだよ。" : "動かす駒がちがうよ。光っている駒を動かしてね。",
@@ -960,16 +1237,30 @@ function onBoardMove(usi: string) {
   stepState.value = result.state;
   lastMove.value = usi;
   playMoveSoundFor(before, usi);
+  popCapture(before, usi);
+  if (result.reply) {
+    const reply = result.reply;
+    const afterMine = applyBefore(before, usi);
+    lastMove.value = reply;
+    // 相手の応手の駒音と駒得の数字は、自分の手と重ならないよう少し遅らせる。
+    stepTimers.push(setTimeout(() => playMoveSoundFor(afterMine, reply), 350));
+    popCapture(afterMine, reply, 350);
+    if (result.outcome === "continue") {
+      setFeedback(
+        step.type === "mate"
+          ? `相手は${formatHintMove(reply, afterMine)}と応じたよ。続けて詰ませよう！`
+          : `相手は${formatHintMove(reply, afterMine)}と取り返したよ。続けて指そう！`,
+        "info",
+      );
+    }
+  }
   if (result.outcome === "continue") {
     if (result.reply) {
-      const reply = result.reply;
-      const afterMine = applyBefore(before, usi);
-      lastMove.value = reply;
-      // 相手の応手の駒音は、自分の手の音と重ならないよう少し遅らせる。
-      stepTimers.push(setTimeout(() => playMoveSoundFor(afterMine, reply), 350));
-      setFeedback(`相手は${formatHintMove(reply, afterMine)}と応じたよ。続けて詰ませよう！`, "info");
+      // 台詞は上で出した。
     } else if (step.type === "capture") {
       setFeedback(result.captured ? `取った！ のこり${result.left}枚。` : `${stepState.value.movesUsed}手目。赤いマスの駒をねらおう！`, "info");
+    } else if (step.type === "build") {
+      setFeedback(result.placed ? `カチッ！ のこり${result.left}マス。` : `${stepState.value.movesUsed}手目。薄く見えている駒のマスへ動かそう！`, "info");
     } else {
       setFeedback("その調子！ 続けて動かそう。", "info");
     }
@@ -983,13 +1274,115 @@ function onBoardMove(usi: string) {
       mistakes.value += 1;
       stepMisses.value += 1;
     }
+    // 取った駒の値段の合計を、点数を集める遊びとして伝える(値段の説明は第2巻でする)。
+    const score = `全部で＋${materialTotal.value}！ `;
     const text = best
-      ? `最短の${result.movesUsed}手！ ${praiseFor(step)}`
-      : `全部取れたね！ ${result.movesUsed}手かかったけど、最短は${result.par}手。もう一度やると、近道が見つかるかも。`;
-    solveStep(text, { stampText: best ? "最短！" : "正解", big: best, delay: best ? TUTORIAL_AUTO_ADVANCE_MS : 2400 });
+      ? `最短の${result.movesUsed}手！ ${score}${praiseFor(step)}`
+      : `全部取れたね！ ${score}${result.movesUsed}手かかったけど、最短は${result.par}手。もう一度やると、近道が見つかるかも。`;
+    solveStep(text, { stampText: best ? "最短！" : "正解", big: best, delay: best ? 1600 : 2600 });
     return;
   }
-  solveStep(praiseFor(step), { stampText: step.type === "mate" ? "詰み！" : "正解", big: step.type === "mate", delay: choiceAdvanceDelay(praiseFor(step)) });
+  if (step.type === "build") {
+    // 目標の手数で組めたら「最短！」。手数が多いときはクリアにして、★の計算でまちがい1回に数える。
+    const best = result.movesUsed <= result.par;
+    if (!best) {
+      mistakes.value += 1;
+      stepMisses.value += 1;
+    }
+    const text = best
+      ? `最短の${result.movesUsed}手！ ${praiseFor(step)}`
+      : `${result.movesUsed}手で組めたね。最短は${result.par}手だよ。${praiseFor(step)}`;
+    solveStep(text, { stampText: "完成！", big: true, delay: Math.max(1800, choiceAdvanceDelay(text)) });
+    return;
+  }
+  if (step.type === "mate") mateShown.value = true;
+  const text = `${praiseFor(step)}${sacrificeNote()}`;
+  solveStep(text, { stampText: step.type === "mate" ? "詰み！" : "正解", big: step.type === "mate", delay: choiceAdvanceDelay(text) });
+}
+/** 駒を捨てて詰ませたとき(合計が駒損)に添える一言。格言「終盤は駒の損得より速度」につなぐ。 */
+function sacrificeNote() {
+  return materialSeen.value && materialTotal.value < 0 ? " 駒損でも、詰ませれば勝ち！ 終盤は駒の損得より速さだよ。" : "";
+}
+/**
+ * 取り返しの再生。取られる場所へ動かしたまちがいで、指した手と相手の取り返しを見せてから、局面を戻す。
+ * 押せば待たずに戻す(演出で待たせない)。
+ */
+const REFUTE_REPLY_MS = 450;
+const REFUTE_RESET_MS = 1300;
+function playRefutation(before: string, usi: string, refutation: { reply: string; square: string }) {
+  const original = stepState.value;
+  const totalBefore = materialTotal.value;
+  const seenBefore = materialSeen.value;
+  const index = stepIndex.value;
+  const afterMine = applyUsi(before, usi);
+  const afterReply = applyUsi(afterMine, refutation.reply);
+  refuting.value = true;
+  playMoveSoundFor(before, usi);
+  popCapture(before, usi);
+  stepState.value = { ...original, sfen: afterMine };
+  lastMove.value = usi;
+  setFeedback(`あっ、${formatHintMove(refutation.reply, afterMine)}と取られちゃう！ 相手の利きがあるマスだったね。`, "bad");
+  const restore = () => {
+    if (!refuting.value || stepIndex.value !== index) return;
+    refuting.value = false;
+    refuteRestore = null;
+    stepState.value = original;
+    lastMove.value = "";
+    materialTotal.value = totalBefore;
+    materialSeen.value = seenBefore;
+  };
+  refuteRestore = restore;
+  stepTimers.push(setTimeout(() => {
+    if (!refuting.value || stepIndex.value !== index) return;
+    playMoveSoundFor(afterMine, refutation.reply);
+    popCapture(afterMine, refutation.reply);
+    stepState.value = { ...original, sfen: afterReply };
+    lastMove.value = refutation.reply;
+  }, REFUTE_REPLY_MS));
+  stepTimers.push(setTimeout(restore, REFUTE_REPLY_MS + REFUTE_RESET_MS));
+}
+/** 攻めくらべ。王手だけを指せる。居玉は詰ませ、囲いは詰まないことを確かめる。 */
+function onAttackMove(step: any, usi: string) {
+  const before = stepState.value.sfen;
+  const result = attemptAttackMove(step, stepState.value, usi);
+  if (result.outcome === "wrong") {
+    // 王手でない手は、まちがいに数えず、王手で攻めるよう促す(不可の分類)。
+    if (result.reason === "not-check") {
+      setFeedback("王手で攻めてみよう！ 王手は、次に玉を取れる手のことだよ。", "info");
+      return;
+    }
+    countMiss();
+    setFeedback(result.reason === "escapes" ? "その王手だと、玉に逃げられちゃう。別の王手を探そう！" : "その手は指せないよ。", "bad");
+    return;
+  }
+  playMoveSoundFor(before, usi);
+  popCapture(before, usi);
+  stepState.value = result.state;
+  lastMove.value = usi;
+  const afterMine = applyUsi(before, usi);
+  if (result.reply) {
+    const reply = result.reply;
+    lastMove.value = reply;
+    stepTimers.push(setTimeout(() => playMoveSoundFor(afterMine, reply), 350));
+    popCapture(afterMine, reply, 350);
+  }
+  if (result.outcome === "continue") {
+    setFeedback(`王手！ 相手は${formatHintMove(result.reply ?? "", afterMine)}。続けて王手しよう！`, "info");
+    hintLevel.value = 0;
+    return;
+  }
+  if (result.mated) {
+    attackOutcome.value = attackResultLabel({ mated: true, checks: result.state.checks });
+    mateShown.value = true;
+    solveStep(praiseFor(step), { stampText: "詰み！", big: true, delay: null });
+    return;
+  }
+  attackOutcome.value = attackResultLabel({ mated: false, checks: result.state.checks });
+  const compare = step.compareTo ? `${step.compareTo.label}は${step.compareTo.result}だったのに、` : "";
+  solveStep(
+    `${step.label}は詰まなかった！ ${compare}同じ攻めでも、囲いがあるとびくともしないね。`,
+    { stampText: "詰まない！", big: true, delay: null },
+  );
 }
 /** 問題集の問題。判定と台詞は問題集と同じ。相手の応手は、自分の手の音のあとに鳴らす。 */
 function onProblemMove(step: any, usi: string) {
@@ -1001,6 +1394,7 @@ function onProblemMove(step: any, usi: string) {
     return;
   }
   playMoveSoundFor(before, usi);
+  popCapture(before, usi);
   stepState.value = result.state;
   lastMove.value = usi;
   if (result.reply) {
@@ -1008,6 +1402,7 @@ function onProblemMove(step: any, usi: string) {
     const afterMine = applyBefore(before, usi);
     lastMove.value = reply;
     stepTimers.push(setTimeout(() => playMoveSoundFor(afterMine, reply), 350));
+    popCapture(afterMine, reply, 350);
   }
   if (result.outcome === "continue") {
     // 逃げる問題で答えが決まったとき(続きの1手を指す前)も、正解のはなまるを押す。
@@ -1020,8 +1415,9 @@ function onProblemMove(step: any, usi: string) {
   // 解いた問題は、問題集の記録にも付ける(まちがえず、ヒントも見ずに解けたら「一発」)。
   recordTutorialProblem(storage, step, { firstTry: stepMisses.value === 0 && hintLevel.value === 0 });
   const mate = problemKind.value !== "escape";
+  if (mate) mateShown.value = true;
   // 問題集の解説は、なぜ詰むか・なぜ逃げられるかを伝える長い文なので、自動では進めない。
-  solveStep(result.speech, { stampText: mate ? "詰み！" : "正解", big: mate, delay: null });
+  solveStep(`${result.speech}${mate ? sacrificeNote() : ""}`, { stampText: mate ? "詰み！" : "正解", big: mate, delay: null });
 }
 // 相手の応手を表示するため、自分の手を指した直後の局面を作る。
 function applyBefore(sfen: string, usi: string) {
@@ -2243,6 +2639,9 @@ const resultMessage = computed(() => {
   /* はなまる。先生の赤ペンのような朱色。盤の升の強調ではないので、升の色の決まりとは別。 */
   --stamp-ink: #e2553b;
   --boss: #b8433f;
+  /* 駒得の札。盤に浮かべる数字(BoardView.vueのfloat-label)と同じ色にする。 */
+  --material-good: #1f8a4c;
+  --material-bad: #c0392b;
 }
 /* めあて。見出しの帯の左に、いつも1行で出す。 */
 .shogi-game .shogi-tutorial__track-label b {
@@ -2434,6 +2833,76 @@ const resultMessage = computed(() => {
   .shogi-game .shogi-tutorial__chip--streak,
   .shogi-game .shogi-tutorial__medal,
   .shogi-game .shogi-tutorial__new-title {
+    animation: none;
+  }
+}
+/* ===== 2026-10-18 見える化（利きメガネ・駒得の数字・攻めくらべ） ===== */
+/* 利きメガネ。スキップの左に置く。かけているときは青く塗る(先手の利きの色)。 */
+.shogi-game .shogi-tutorial__glasses {
+  display: inline-flex;
+  flex: none;
+  gap: 0.3rem;
+  align-items: center;
+  min-height: 2.2rem;
+  margin-left: auto;
+  padding: 0.2rem 0.75rem;
+  border: 1px solid rgba(255, 252, 244, 0.45);
+  border-radius: 999px;
+  color: #fffcf4;
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.shogi-game .shogi-tutorial__glasses + .shogi-tutorial__header-skip {
+  margin-left: 0.4rem;
+}
+.shogi-game .shogi-tutorial__glasses svg {
+  width: 1.5rem;
+  height: 0.8rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+.shogi-game .shogi-tutorial__glasses--on {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+}
+/* 手に入れたばかりのメガネは、押すまでそっと光らせる。 */
+.shogi-game .shogi-tutorial__glasses--new {
+  animation: shogi-tutorial-glasses-glow 1.6s ease-in-out infinite;
+}
+@keyframes shogi-tutorial-glasses-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0); }
+  50% { box-shadow: 0 0 0 5px rgba(96, 165, 250, 0.55); }
+}
+/* 駒得の札。符号と言葉を必ず添え、色だけに頼らない。 */
+.shogi-game .shogi-tutorial__chip--material {
+  animation: shogi-tutorial-feedback-pop 260ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__chip--good {
+  border-color: var(--material-good);
+  background: var(--material-good);
+}
+.shogi-game .shogi-tutorial__chip--bad {
+  border-color: var(--material-bad);
+  background: var(--material-bad);
+}
+.shogi-game .shogi-tutorial__chip--even {
+  border-color: rgba(255, 252, 244, 0.4);
+  background: rgba(255, 252, 244, 0.16);
+}
+/* 攻めくらべの結果。くらべる相手の結果と並べて、この局面の結果を強く出す。 */
+.shogi-game .shogi-tutorial__chip--result {
+  border-color: #fffcf4;
+  color: #172632;
+  background: #fffcf4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tutorial__glasses--new,
+  .shogi-game .shogi-tutorial__chip--material {
     animation: none;
   }
 }

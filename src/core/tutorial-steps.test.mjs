@@ -99,3 +99,118 @@ describe("問題集の問題を教室で解く", () => {
     expect(JSON.parse(values.get(PROBLEM_PROGRESS_KEY)).solved["two-rooks"]).toEqual({ firstTry: true });
   });
 });
+
+describe("囲いの教え方（攻めくらべ・囲いを組もう）", async () => {
+  const { tutorialLesson, TUTORIAL_LESSONS } = await import("./tutorial-curriculum.mjs");
+  const { attemptAttackMove, attackResultLabel, attackStepHint, createAttackState } = await import("./tutorial-problem.mjs");
+  const { buildLowerBound, buildNextMove } = await import("./tutorial-runner.mjs");
+  const { kingEscapeMap } = await import("./board-insight.mjs");
+  const { parseSfenState } = await import("./piece-movement.mjs");
+  const stepOf = (lessonId, type, nth = 0) => tutorialLesson(lessonId).steps.filter((step) => step.type === type)[nth];
+
+  it("攻めくらべは、どの局面も攻める側の駒が同じ（玉の形だけを変える）", () => {
+    const attackers = TUTORIAL_LESSONS.flatMap(({ steps }) => steps.filter(({ type }) => type === "attack-test")).map(({ sfen }) => {
+      const { board } = parseSfenState(sfen);
+      const black = [...board].filter(([, piece]) => piece.color === "black").map(([square, piece]) => `${square}${piece.kind}`).sort();
+      return `${black.join(",")}|${sfen.split(" ")[2]}`;
+    });
+    expect(attackers.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(attackers).size).toBe(1);
+  });
+
+  it("居玉は3手で詰み、王手でない手はまちがいに数えない", () => {
+    const step = stepOf("v3-igyoku", "attack-test");
+    let state = createAttackState(step);
+    expect(attemptAttackMove(step, state, "5e4d").reason).toBe("not-check");
+    let result = attemptAttackMove(step, state, "5e5c");
+    expect(result.outcome).toBe("continue");
+    expect(result.reply).toBeTruthy();
+    state = result.state;
+    const hint = attackStepHint(step, state);
+    result = attemptAttackMove(step, state, hint);
+    expect(result.outcome).toBe("correct");
+    expect(result.mated).toBe(true);
+    expect(attackResultLabel({ mated: true, checks: result.state.checks })).toBe("3手で詰み");
+  });
+
+  it("美濃囲いは、王手を続けても詰まずにクリアになる", () => {
+    const step = stepOf("v3-castles", "attack-test");
+    let state = createAttackState(step);
+    let result;
+    for (let turn = 0; turn < 8; turn += 1) {
+      const usi = attackStepHint(step, state);
+      if (!usi) break;
+      result = attemptAttackMove(step, state, usi);
+      expect(result.outcome).not.toBe("wrong");
+      expect(result.mated).toBeFalsy();
+      state = result.state;
+      if (result.outcome === "correct") break;
+    }
+    expect(result.outcome).toBe("correct");
+    expect(result.held).toBe(true);
+  });
+
+  it("居玉を詰ませた局面では、玉の逃げ道がない", () => {
+    const step = tutorialLesson("v3-igyoku").steps.find(({ escapeMap }) => escapeMap);
+    const map = kingEscapeMap(step.sfen, "white");
+    expect(map.squares.filter(({ state }) => state === "open")).toEqual([]);
+    expect(map.squares.some(({ state }) => state === "blocked")).toBe(true);
+  });
+
+  it("形勢のものさしの局面では、後手の玉の逃げ道が少なく、先手の玉は安全", () => {
+    const step = tutorialLesson("v5-judgement").steps.find(({ escapeMap }) => escapeMap);
+    const sfen = createStepState(step).sfen;
+    const white = kingEscapeMap(sfen, "white");
+    const black = kingEscapeMap(sfen, "black");
+    const count = (map, state) => map.squares.filter((entry) => entry.state === state).length;
+    // 台詞のとおり、後手の玉の逃げ道は1つで×もあり、先手の玉には相手の駒が利いていない。
+    expect(count(white, "open")).toBe(1);
+    expect(count(white, "covered")).toBeGreaterThan(0);
+    expect(count(black, "covered")).toBe(0);
+  });
+
+  it("美濃囲いと舟囲いは、お手本の手順が最短", () => {
+    expect(buildLowerBound(stepOf("v3-castles", "build"))).toBe(stepOf("v3-castles", "build").par);
+    expect(buildLowerBound(stepOf("v3-castle-variety", "build"))).toBe(stepOf("v3-castle-variety", "build").par);
+  });
+
+  it("囲いを組もうは、囲いの駒だけを動かせて、そろうとクリア", () => {
+    const step = stepOf("v3-castles", "build");
+    let state = createStepState(step);
+    expect(attemptTutorialMove(step, state, "6h6b+").reason ?? "").not.toBe("");
+    expect(attemptTutorialMove(step, state, "7g7f").reason).toBe("not-castle-piece");
+    // 手順と違う順で組んでも、次の手を教えられる。
+    let result = attemptTutorialMove(step, state, "6i5h");
+    expect(result.outcome).toBe("continue");
+    state = result.state;
+    for (let turn = 0; turn < 8 && result.outcome !== "correct"; turn += 1) {
+      const next = buildNextMove(step, state.sfen);
+      expect(next).toBeTruthy();
+      result = attemptTutorialMove(step, state, next);
+      state = result.state;
+    }
+    expect(result.outcome).toBe("correct");
+    expect(result.movesUsed).toBe(step.par);
+    expect(state.sfen.split(" ")[1]).toBe("b");
+  });
+
+  it("取られる場所へ動かしたら、相手の取り返しを添える", () => {
+    const step = tutorialLesson("v2-kiki").steps.find(({ type }) => type === "find-move");
+    const wrong = attemptTutorialMove(step, createStepState(step), "5e5d");
+    expect(wrong.outcome).toBe("wrong");
+    expect(wrong.refutation).toEqual({ reply: "5c5d", square: "5d" });
+    expect(attemptTutorialMove(step, createStepState(step), "5e4f").outcome).toBe("correct");
+  });
+
+  it("相手の応手を決めた手順は、応手を返しながら進む", () => {
+    const step = tutorialLesson("v2-three-moves").steps.find(({ line }) => line);
+    let result = attemptTutorialMove(step, createStepState(step), step.line[0]);
+    expect(result.outcome).toBe("continue");
+    expect(result.reply).toBe(step.line[1]);
+    // 飛車から取ると、取り返されてまちがい(取り返しを見せる)。
+    const wrong = attemptTutorialMove(step, createStepState(step), "2h2d");
+    expect(wrong.outcome).toBe("wrong");
+    result = attemptTutorialMove(step, result.state, step.line[2]);
+    expect(result.outcome).toBe("correct");
+  });
+});

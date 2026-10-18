@@ -36,6 +36,9 @@
       :candidates="candidateMoves"
       :movement-arrows="movementArrows"
       :attack-marks="attackMarks"
+      :ghost-pieces="ghostPieceInputs"
+      :float-labels="floatLabels"
+      :risk-destinations="riskDestinations"
       :mark-squares="markSquares"
       :flip="flip"
       :mobile="mobile"
@@ -55,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import BoardView from "./renderer/view/primitive/BoardView.vue";
 import { RectSize } from "./common/assets/geometry";
 import {
@@ -83,10 +86,16 @@ import {
   THEME_CHANGE_EVENT,
 } from "./core/themes.mjs";
 import { grantTheme, loadCollection, saveCollection, themeUnlock } from "./core/collection.mjs";
-import type { Move } from "tsshogi";
+import { Color, PieceType, type Move } from "tsshogi";
 
 type AttackMark = { file: number; rank: number; black: number; white: number };
-type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" };
+type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" | "covered" | "danger" };
+type FloatLabel = { id: string | number; file: number; rank: number; text: string; tone: "good" | "bad"; big?: boolean };
+type GhostPiece = { file: number; rank: number; kind: string };
+const GHOST_PIECE_TYPES: Record<string, PieceType> = {
+  K: PieceType.KING, R: PieceType.ROOK, B: PieceType.BISHOP, G: PieceType.GOLD,
+  S: PieceType.SILVER, N: PieceType.KNIGHT, L: PieceType.LANCE, P: PieceType.PAWN,
+};
 
 const props = defineProps({
   sfen: { type: String, required: true },
@@ -97,6 +106,12 @@ const props = defineProps({
   attackMarks: { type: Array as () => AttackMark[], default: () => [] },
   // 図鑑で、駒の動きや大事なマスを色付けする。
   markSquares: { type: Array as () => SquareMark[], default: () => [] },
+  // 駒得の数字(＋6／−5)。取ったマスの上に浮かべる。
+  floatLabels: { type: Array as PropType<FloatLabel[]>, default: () => [] },
+  // 教室の「囲いを組もう」で薄く見せる完成形の駒(先手)。kindはSFENの駒の文字("K"・"G"など)。
+  ghostPieces: { type: Array as () => GhostPiece[], default: () => [] },
+  // 利きメガネ: 選んだ駒を動かすと取られて損をする行き先を返す。
+  riskDestinations: { type: Function as PropType<((source: string) => string[]) | null>, default: null },
   lastMove: { type: String, default: "" },
   allowMove: { type: Boolean, default: true },
   enableDragAndDrop: { type: Boolean, default: true },
@@ -183,6 +198,10 @@ const lastMoveObject = computed(() =>
 const candidateMoves = computed(() =>
   position.value ? candidateMovesFromUsi(position.value, props.candidates) : []
 );
+
+const ghostPieceInputs = computed(() => props.ghostPieces.flatMap(({ file, rank, kind }) => (
+  GHOST_PIECE_TYPES[kind] ? [{ file, rank, type: GHOST_PIECE_TYPES[kind], color: Color.BLACK }] : []
+)));
 
 function onMove(move: Move) {
   emit("usi-move", move.usi);

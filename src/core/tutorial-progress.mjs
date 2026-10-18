@@ -85,3 +85,31 @@ export function lessonsProgress(lessons, progress) {
     maxStars: playable.length * 3,
   };
 }
+
+// ===== 道具: 利きメガネ =====
+/** 利きメガネをもらうレッスン。クリアかスキップで持っていることにする(スキップした上級者も使える)。 */
+export const KIKI_GLASSES_LESSON_ID = "v2-kiki";
+/** 利きメガネを付けているか(付け外しの状態)。レッスンの進捗とは別の鍵に置く。 */
+export const KIKI_GLASSES_KEY = "yacobihime:shogi-match:tutorial-kiki-glasses:v1";
+
+export function hasKikiGlasses(progress) {
+  const { status } = lessonRecord(progress, KIKI_GLASSES_LESSON_ID);
+  return status === "cleared" || status === "skipped";
+}
+
+export function loadKikiGlassesOn(storage) {
+  try {
+    return storage?.getItem(KIKI_GLASSES_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function saveKikiGlassesOn(storage, on) {
+  try {
+    storage?.setItem(KIKI_GLASSES_KEY, on ? "on" : "off");
+    return true;
+  } catch {
+    return false;
+  }
+}

@@ -2,6 +2,7 @@ import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-st
 import { formatHintMove } from "./match-assists.mjs";
 import { formatAnalysisScore, scoreToGraphValue } from "./kifu-analysis.mjs";
 import { pieceReachSquares } from "./piece-reach.mjs";
+import { refutationOf } from "./board-insight.mjs";
 
 /**
  * やこび姫の将棋教室のステップを進める純粋な処理。
@@ -10,8 +11,11 @@ import { pieceReachSquares } from "./piece-reach.mjs";
 
 export const STANDARD_SFEN = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
 
-/** 盤を操作するステップの種類。problemは問題集の問題(判定はtutorial-problem.mjs)。 */
-export const INTERACTIVE_STEP_TYPES = Object.freeze(["move-piece", "find-move", "mate", "capture", "problem"]);
+/**
+ * 盤を操作するステップの種類。problemは問題集の問題、attack-testは攻めくらべ(判定はどちらもtutorial-problem.mjs)。
+ * buildは囲いを組もう。
+ */
+export const INTERACTIVE_STEP_TYPES = Object.freeze(["move-piece", "find-move", "mate", "capture", "problem", "build", "attack-test"]);
 
 /** 正解したあと、この時間（ミリ秒）だけ「正解！」を見せてから次のステップへ進める。 */
 export const TUTORIAL_AUTO_ADVANCE_MS = 1100;
@@ -95,6 +99,21 @@ export function createStepState(step) {
     ply: step?.type === "replay" ? (step.from ?? 0) : 0,
     solved: false,
   };
+}
+
+// ===== 囲いを組もう(build) =====
+/**
+ * 囲いの完成形でまだ駒がそろっていないマス。targetsは[マス, 駒の文字]の並び(先手)。
+ * 同じ種類の駒が着いていればよい(どの金で組んでもよい)。
+ */
+export function buildMissingTargets(step, sfen) {
+  const squares = boardSquares(sfen);
+  return (step.targets ?? []).filter(([square, kind]) => squares.get(square) !== kind);
+}
+
+/** 囲いを組もうで動かせる駒(完成形に出てくる駒の種類と、pieces で足した種類)。 */
+function buildMovableKinds(step) {
+  return new Set([...(step.targets ?? []).map(([, kind]) => kind), ...(step.pieces ?? [])]);
 }
 
 /** 観戦ステップをply手目の局面へ動かす。最後の手まで見たらsolvedにし、戻っても保つ。 */
@@ -238,9 +257,30 @@ function moveMatches(step, usi) {
  */
 export function attemptTutorialMove(step, state, usi) {
   if (!legalMoves(state.sfen).includes(usi)) return { outcome: "wrong", state, reason: "illegal" };
+  if (step.type === "find-move" && step.line) {
+    // 相手の応手を決めた手順。プレイヤーの手は手順どおりに指す。最後の手のあとで正解。
+    if (usi !== step.line[state.ply]) return wrongMove(step, state, usi);
+    const after = applyMove(state.sfen, usi);
+    if (state.ply >= step.line.length - 1) return { outcome: "correct", state: { ...state, sfen: after, solved: true } };
+    const reply = step.line[state.ply + 1];
+    const next = { ...state, sfen: applyMove(after, reply), ply: state.ply + 2 };
+    // 相手の応手で手順が終わるとき(取り返されて終わる手順)は、応手のあとで正解にする。
+    if (state.ply + 2 >= step.line.length) return { outcome: "correct", reply, state: { ...next, solved: true } };
+    return { outcome: "continue", reply, state: next };
+  }
   if (step.type === "find-move") {
-    if (!moveMatches(step, usi)) return { outcome: "wrong", state, reason: "different" };
+    if (!moveMatches(step, usi)) return wrongMove(step, state, usi);
     return { outcome: "correct", state: { ...state, sfen: applyMove(state.sfen, usi), solved: true } };
+  }
+  if (step.type === "build") {
+    const kind = boardSquares(state.sfen).get(usi.slice(0, 2));
+    if (usi.includes("*") || !buildMovableKinds(step).has(kind)) return { outcome: "wrong", state, reason: "not-castle-piece" };
+    const sfen = withBlackToMove(applyMove(state.sfen, usi));
+    const before = buildMissingTargets(step, state.sfen).length;
+    const next = { ...state, sfen, movesUsed: state.movesUsed + 1 };
+    const missing = buildMissingTargets(step, sfen).length;
+    if (!missing) return { outcome: "correct", state: { ...next, solved: true }, movesUsed: next.movesUsed, par: step.par };
+    return { outcome: "continue", state: next, placed: missing < before, left: missing };
   }
   if (step.type === "move-piece") {
     if (usi.slice(0, 2) !== state.square) return { outcome: "wrong", state, reason: "other-piece" };
@@ -289,6 +329,15 @@ export function attemptTutorialMove(step, state, usi) {
   return { outcome: "wrong", state, reason: "not-interactive" };
 }
 
+/**
+ * まちがえた手。refute を指定した課題で、指した駒が取られて損をするなら、相手の取り返し(refutation)を添える。
+ * 画面は、指した手と取り返しを見せてから局面を戻す(取り返しの再生)。
+ */
+function wrongMove(step, state, usi) {
+  const refutation = step.refute ? refutationOf(state.sfen, usi) : null;
+  return refutation ? { outcome: "wrong", state, reason: "refuted", refutation } : { outcome: "wrong", state, reason: "different" };
+}
+
 /** 駒取りゲームで、最短で取りきる道の次の1手。見つからなければ""。 */
 export function captureBestMove(sfen, square) {
   const goal = captureMinMoves(sfen, square);
@@ -301,6 +350,56 @@ export function captureBestMove(sfen, square) {
   return "";
 }
 
+/**
+ * 囲いを組もうの次の1手。お手本の手順(moves)のうち、まだ指していない最初の手で、いま指せるもの。
+ * 手順と違う順で組んでいるときは、手順にこだわらず、完成形へ近づく合法手を探す。
+ */
+export function buildNextMove(step, sfen) {
+  const legal = legalMoves(withBlackToMove(sfen));
+  const missingBefore = buildMissingTargets(step, sfen).length;
+  for (const usi of step.moves ?? []) {
+    if (!legal.includes(usi)) continue;
+    const after = withBlackToMove(applyMove(sfen, usi));
+    if (buildMissingTargets(step, after).length <= missingBefore) return usi;
+  }
+  const movable = buildMovableKinds(step);
+  const squares = boardSquares(sfen);
+  return legal.find((usi) => {
+    if (usi.includes("*") || !movable.has(squares.get(usi.slice(0, 2)))) return false;
+    return buildMissingTargets(step, withBlackToMove(applyMove(sfen, usi))).length < missingBefore;
+  }) ?? "";
+}
+
+/**
+ * 囲いを組もうの手数の下限。完成形の各マスへ、同じ種類の駒が1マスずつ歩いて着くのに要る手数(縦横斜めの距離)の合計を、
+ * 駒の割り当てを全部試して最小にする。玉・金・銀は1手で1マスしか動けないので、実際の最短の手数はこれ以上になる。
+ * お手本の手順(moves)の長さがこの値と同じなら、お手本が最短だと分かる(教材の目標手数parの確かめに使う)。
+ */
+export function buildLowerBound(step) {
+  const squares = boardSquares(tutorialStepSfen(step));
+  const missing = buildMissingTargets(step, tutorialStepSfen(step));
+  const distance = (a, b) => Math.max(Math.abs(Number(a[0]) - Number(b[0])), Math.abs(a.charCodeAt(1) - b.charCodeAt(1)));
+  let best = Infinity;
+  const search = (index, used, total) => {
+    if (total >= best) return;
+    if (index >= missing.length) {
+      best = total;
+      return;
+    }
+    const [target, kind] = missing[index];
+    for (const [square, piece] of squares) {
+      if (piece !== kind || used.has(square)) continue;
+      // 完成形のマスにもう着いている同じ駒は動かさない。
+      if ((step.targets ?? []).some(([goal, goalKind]) => goal === square && goalKind === piece)) continue;
+      used.add(square);
+      search(index + 1, used, total + distance(square, target));
+      used.delete(square);
+    }
+  };
+  search(0, new Set(), 0);
+  return best;
+}
+
 /** 選択肢のステップを判定する。 */
 export function attemptTutorialChoice(step, index) {
   return index === step.answer ? "correct" : "wrong";
@@ -311,8 +410,16 @@ export function tutorialHint(step, state, level) {
   const answer = step.type === "mate"
     ? step.solution[state.ply]
     : step.type === "find-move"
-      ? step.answers?.[0]
+      ? (step.line ? step.line[state.ply] : step.answers?.[0])
       : "";
+  // 囲いを組もうは、まだそろっていないマスを緑で示す。2回目は手順(par の道)の次の1手を矢印で示す。
+  if (step.type === "build") {
+    const missing = buildMissingTargets(step, state.sfen);
+    const marks = missing.map(([square]) => toMark(square, "key"));
+    if (level < 2) return { marks, arrows: [] };
+    const next = buildNextMove(step, state.sfen);
+    return { marks, arrows: next ? [next] : [] };
+  }
   if (step.type === "move-piece") {
     return { marks: [toMark(step.target, "key"), toMark(state.square, "target")], arrows: [] };
   }

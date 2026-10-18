@@ -1,4 +1,6 @@
-import { appendUsiMove, createGameRecord } from "../game-state";
+import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
+import { hasCheckingMove } from "./board-insight.mjs";
+import { findEscapeReply, findMateLine, judgeMateStep } from "./problem-solver";
 import {
   judgeProblemMove,
   loadProblemProgress,
@@ -98,4 +100,70 @@ export function recordTutorialProblem(storage, step, { firstTry }) {
   if (!problem) return false;
   saveProblemProgress(storage, recordProblemSolved(loadProblemProgress(storage), problem.id, { firstTry }));
   return true;
+}
+
+// ===== 攻めくらべ(attack-test) =====
+/**
+ * 同じ攻め駒で、居玉と囲いを攻めくらべる課題。王手だけを指せる。
+ * - expect: "mate" は、plies手以内に詰ませる(居玉)。王手でも詰みから外れる手はまちがい。
+ * - expect: "hold" は、詰まないことを確かめる(囲い)。王手をmaxChecks回するか、王手が続かなくなったらクリア。
+ * 相手は、詰み探索でいちばん長く逃げる手を返す。
+ */
+export const ATTACK_TEST_MAX_CHECKS = 5;
+/** 囲いが詰まないかを読む手数。テストで、囲いの局面がこの手数以内に詰まないことを確かめる。 */
+export const ATTACK_TEST_HOLD_PLIES = 9;
+
+export function createAttackState(step) {
+  return { sfen: step?.sfen ?? "", square: "", movesUsed: 0, ply: 0, checks: 0, solved: false };
+}
+
+function playUsi(sfen, usi) {
+  const record = createGameRecord(sfen);
+  return appendUsiMove(record, usi) ? record.position : null;
+}
+
+/**
+ * 攻めくらべで指した手を判定する。
+ * @returns {{ outcome: "correct" | "continue" | "wrong", state: any, reason?: string, reply?: string, mated?: boolean, held?: boolean }}
+ */
+export function attemptAttackMove(step, state, usi) {
+  const position = playUsi(state.sfen, usi);
+  if (!position) return { outcome: "wrong", state, reason: "illegal" };
+  // 王手でない手は、まちがいに数えず、王手で攻めるよう促す。
+  if (!position.checked) return { outcome: "wrong", state, reason: "not-check" };
+  const checks = state.checks + 1;
+  const movesUsed = state.movesUsed + 1;
+  if (enumerateLegalMoves(position).length === 0) {
+    return { outcome: "correct", state: { ...state, sfen: position.sfen, checks, movesUsed, solved: true }, mated: true };
+  }
+  let reply;
+  if (step.expect === "mate") {
+    const verdict = judgeMateStep(state.sfen, usi, (step.plies ?? 3) - state.ply, { slack: 0 });
+    if (verdict.status !== "continue") return { outcome: "wrong", state, reason: "escapes" };
+    reply = verdict.reply;
+  } else {
+    reply = findEscapeReply(position.sfen, ATTACK_TEST_HOLD_PLIES) ?? enumerateLegalMoves(position)[0]?.usi;
+  }
+  const after = reply ? playUsi(position.sfen, reply) : null;
+  if (!after) return { outcome: "wrong", state, reason: "illegal" };
+  const next = { ...state, sfen: after.sfen, checks, movesUsed, ply: state.ply + 2 };
+  if (step.expect !== "mate" && (checks >= (step.maxChecks ?? ATTACK_TEST_MAX_CHECKS) || !hasCheckingMove(after.sfen))) {
+    return { outcome: "correct", state: { ...next, solved: true }, reply, held: true };
+  }
+  return { outcome: "continue", state: next, reply };
+}
+
+/** 攻めくらべの2回目のヒントの矢印。詰ませる局面では詰み手順の次の手、詰まない局面では王手の1つ。 */
+export function attackStepHint(step, state) {
+  if (step.expect === "mate") return findMateLine(state.sfen, (step.plies ?? 3) - state.ply, { nodeLimit: 200000, maxTimeMs: 1500 })?.[0] ?? "";
+  const position = createGameRecord(state.sfen).position;
+  for (const { usi } of enumerateLegalMoves(position)) {
+    if (playUsi(state.sfen, usi)?.checked) return usi;
+  }
+  return "";
+}
+
+/** 攻めくらべの結果を「3手で詰み」「詰まない」の言葉にする。 */
+export function attackResultLabel({ mated, checks }) {
+  return mated ? `${checks * 2 - 1}手で詰み` : "詰まない";
 }
