@@ -101,6 +101,12 @@ function pieceLesson(id, { entryId, sfen, from, target, maxMoves, targetLabel, c
   };
 }
 
+/** 駒を並べようの局面。玉と歩だけを並べ、ほかの10枚は持ち駒にして、打って並べる。 */
+const SETUP_SFEN = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/9/4K4 b RB2G2S2N2L 1";
+const SETUP_TARGETS = Object.freeze([
+  ["6i", "G"], ["4i", "G"], ["7i", "S"], ["3i", "S"], ["8i", "N"], ["2i", "N"], ["9i", "L"], ["1i", "L"], ["8h", "B"], ["2h", "R"],
+]);
+
 /** 盤の上に玉だけを置いた局面。マスの名前を覚える課題で、玉を動かす。 */
 const KING_CENTER = "9/9/9/9/4K4/9/9/9/9 b - 1";
 
@@ -140,8 +146,12 @@ const VOLUME_1 = {
           summary: "最初の並べ方がわかる",
           steps: [
             { type: "explain", sfen: STANDARD_SFEN, speech: "最初はこんなふうに並べるよ。自分も相手も20枚ずつ、駒は8種類あるんだ。" },
+            {
+              type: "build", drop: true, name: "最初の並べ方", sfen: SETUP_SFEN, targets: SETUP_TARGETS, par: SETUP_TARGETS.length,
+              speech: "玉と歩は並べておいたよ。持ち駒を、薄く見えているマスに打って、最初の並べ方を完成させよう！",
+              praise: "最初の並べ方、完成！ 玉のとなりから金・銀・桂・香の順に、左右対称に並ぶんだ。二段目には、遠くまで動ける飛車と角がいるよ。",
+            },
             { type: "choose", sfen: STANDARD_SFEN, question: "取られたら負けの、いちばん大事な「玉」。自分の玉はどこかな？", options: ["5九", "5一", "1九"], answer: 0, explanation: "一番下のまん中、5九が自分の玉だよ。5一にいるのは相手の玉だね。" },
-            { type: "explain", sfen: STANDARD_SFEN, marks: [["2h", "key"], ["8h", "key"]], speech: "二段目にいるのが「飛車」と「角」。どちらも遠くまで動ける強い駒だよ。" },
             { type: "choose", sfen: STANDARD_SFEN, question: "自分の飛車はどこにあるかな？", options: ["8八", "5九", "2八"], answer: 2, explanation: "飛車は右側の2八にいるよ。左側の8八にいるのが角だね。" },
           ],
         },
@@ -1094,7 +1104,8 @@ function openingDrillLesson(id, strategyId) {
       });
     }
   }
-  steps.push({ type: "explain", sfen: replay.at(-1).sfen, speech: `${definition.label}の形ができたね！ ${DRILL_TEXTS[strategyId].next}` });
+  // 形ができたら、先手の利きの地図で、駒がどこまで働くようになったかを見せる。
+  steps.push({ type: "explain", sfen: replay.at(-1).sfen, kiki: "black", speech: `${definition.label}の形ができたね！ 青い数字が、君の駒が見張っているマスだよ。${DRILL_TEXTS[strategyId].next}` });
   steps.push({ type: "open-dex", kind: "opening", id: strategyId, speech: "定跡図鑑で、手順をもう一度確かめてみよう！" });
   return { id, title: definition.label, summary: DRILL_TEXTS[strategyId].summary, steps };
 }

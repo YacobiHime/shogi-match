@@ -682,6 +682,34 @@
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
+/* 囲い完成の知らせ。振り駒と同じ形で、教室のはなまると同じ朱色の縁にする。 */
+.shogi-game__castle-callout {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  gap: 0.15em;
+  justify-items: center;
+  padding: 0.55em 1.3em 0.65em;
+  border: 3px solid #e2553b;
+  border-radius: 1em;
+  color: var(--night);
+  background: var(--ivory);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 10px 24px rgba(0, 0, 0, 0.45);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.shogi-game__castle-callout strong {
+  font-size: 1.5em;
+  font-weight: 900;
+  color: #c0392b;
+}
+.shogi-game__castle-callout small {
+  font-size: 0.8em;
+  font-weight: 700;
+}
 .shogi-game__furigoma-pieces {
   display: flex;
   gap: 0.3em;

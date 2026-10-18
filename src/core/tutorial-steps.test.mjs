@@ -214,3 +214,56 @@ describe("囲いの教え方（攻めくらべ・囲いを組もう）", async (
     expect(result.outcome).toBe("correct");
   });
 });
+
+describe("にがてをもう1回と駒を並べよう", async () => {
+  const { TUTORIAL_LESSONS, tutorialLesson } = await import("./tutorial-curriculum.mjs");
+  const progress = await import("./tutorial-progress.mjs");
+  const { buildNextMove } = await import("./tutorial-runner.mjs");
+
+  it("まちがえた課題を記録し、章の苦手だけを並べた復習を作る", () => {
+    const lesson = tutorialLesson("v2-kiki");
+    const taskIndexes = lesson.steps.map((step, index) => ({ step, index })).filter(({ step }) => step.type === "find-move").map(({ index }) => index);
+    let weak = progress.recordLessonWeakSteps({}, "v2-kiki", [taskIndexes[0], 0]);
+    // 説明のステップ(0)は、読み込むときに捨てる。
+    const store = new Map();
+    const storage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+    progress.saveWeakSteps(storage, weak);
+    weak = progress.loadWeakSteps(storage, TUTORIAL_LESSONS);
+    expect(weak).toEqual({ "v2-kiki": [taskIndexes[0]] });
+    const review = progress.weakReviewLesson(TUTORIAL_LESSONS, weak, "v2-c1");
+    expect(review.id).toBe("review:v2-c1");
+    expect(review.chapterId).toBe("v2-c1");
+    expect(review.steps).toHaveLength(1);
+    expect(review.steps[0].origin).toEqual({ lessonId: "v2-kiki", index: taskIndexes[0] });
+    expect(progress.weakReviewLesson(TUTORIAL_LESSONS, weak, "v1-c1")).toBeNull();
+    // まちがえずに解いたら苦手から消え、レッスンをまちがえずに遊び直しても消える。
+    expect(progress.clearWeakSteps(weak, [review.steps[0].origin])).toEqual({});
+    expect(progress.recordLessonWeakSteps(weak, "v2-kiki", [])).toEqual({});
+    expect(progress.loadWeakSteps({ getItem: () => "{broken" }, TUTORIAL_LESSONS)).toEqual({});
+  });
+
+  it("駒を並べようは、持ち駒を目的のマスへ打って並べる", () => {
+    const step = tutorialLesson("v1-setup").steps.find(({ type }) => type === "build");
+    let state = createStepState(step);
+    // 盤の駒は動かせない。違うマスに打つとまちがいで、置く場所を返す。
+    expect(attemptTutorialMove(step, state, "7g7f").reason).toBe("not-castle-piece");
+    const wrong = attemptTutorialMove(step, state, "G*7i");
+    expect(wrong.reason).toBe("wrong-square");
+    expect(["6i", "4i"]).toContain(wrong.expected);
+    let result;
+    for (let turn = 0; turn < 12; turn += 1) {
+      result = attemptTutorialMove(step, state, buildNextMove(step, state.sfen));
+      expect(result.outcome).not.toBe("wrong");
+      state = result.state;
+      if (result.outcome === "correct") break;
+    }
+    expect(result.outcome).toBe("correct");
+    expect(state.sfen.split(" ")[0]).toBe("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL");
+    expect(result.movesUsed).toBe(step.par);
+  });
+
+  it("定跡ドリルは、形ができたら先手の利きを見せる", () => {
+    const lesson = tutorialLesson("v4-shiken");
+    expect(lesson.steps.at(-2).kiki).toBe("black");
+  });
+});

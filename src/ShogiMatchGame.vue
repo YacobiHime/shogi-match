@@ -902,6 +902,8 @@
         :candidates="boardCandidates"
         :attack-marks="boardAttackMarks"
         :float-labels="captureFloatLabels"
+        :mark-squares="boardEscapeMarks"
+        :risk-destinations="boardRiskDestinations"
         :movement-arrows="matchKind === 'learning' && movementArrowsEnabled && matchStarted && !pregameOpen"
         @usi-move="onPlayerMove"
       />
@@ -936,6 +938,20 @@
           </span>
           <strong>振り駒</strong>
           <small>{{ furigomaCallout.text }}</small>
+        </div>
+      </Transition>
+      <!-- 囲い完成の知らせ。教室の「囲いを組もう」と同じく、組み上げた瞬間をほめる。 -->
+      <Transition name="shogi-game__callout">
+        <div
+          v-if="castleCallout && !checkCallout && !furigomaCallout"
+          :key="castleCallout.id"
+          class="shogi-game__castle-callout"
+          role="status"
+          data-castle-callout
+        >
+          <small v-if="castleCallout.first">はじめて！</small>
+          <strong>{{ castleCallout.label }} 完成！</strong>
+          <small>{{ castleCallout.first ? "終局後、コレクションに印がつくよ" : "玉が堅くなったね" }}</small>
         </div>
       </Transition>
     </div>
@@ -1640,7 +1656,8 @@ import {
   saveSeason,
 } from "./core/ryuo-career.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
-import { loadTutorialProgress } from "./core/tutorial-progress.mjs";
+import { hasKikiGlasses, loadTutorialProgress } from "./core/tutorial-progress.mjs";
+import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -3114,6 +3131,7 @@ function observeFormations(sfen: string) {
  * 対CPUの対局すべてが対象で、Lvの壁だけはレーティングの対象の対局で数える。
  */
 const COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+const CASTLE_LABELS = new Set(COLLECTION_CATALOG.filter(({ kind }) => kind === "castle").map(({ label }) => label));
 const matchFormationNames = new Set<string>();
 const matchTesuji = new Set<string>();
 let matchGodMoves = 0;
@@ -3208,6 +3226,49 @@ const learningFormationResult = computed(() => {
     [opponentColor]: { strategyId: learningOpponentStrategy.value, castleId: learningOpponentCastle.value },
   });
 });
+/*
+ * 教室の見える化を対局でも同じ見た目で出す(docs/nyumon-mode-design.mdの14章)。
+ * - 利きメガネ(教室で手に入れる道具)を持っていて、学習対局の「駒の利き」を付けているとき、駒を選ぶと取られるマスに赤い輪を出す。
+ * - 学習対局で「駒の利き」を付けているとき、自分の玉が王手されたら、玉の逃げ道(緑)と相手の利き(×)を出す。
+ * - 詰んだ局面を見ているとき(終局後・検討中)は、詰んだ玉のまわりに印を出す(詰みの理由)。
+ */
+const ownsKikiGlasses = ref(hasKikiGlasses(loadTutorialProgress(browserStorage())));
+const learningAssistVisible = computed(() => (
+  matchKind.value === "learning" && attackGuideEnabled.value && matchStarted.value && !pregameOpen.value
+));
+const boardRiskDestinations = computed(() => {
+  if (!learningAssistVisible.value || !ownsKikiGlasses.value || reviewMode.value) return null;
+  const sfen = currentSfen.value;
+  return (source: string) => unsafeDestinations(sfen, source);
+});
+const boardEscapeMarks = computed(() => {
+  if (!matchStarted.value || pregameOpen.value) return [];
+  const position = createGameRecord(currentSfen.value).position;
+  if (!position.checked) return [];
+  const turn = position.color === Color.BLACK ? "black" : "white";
+  const mated = enumerateLegalMoves(position).length === 0;
+  const ownKingInCheck = learningAssistVisible.value && !reviewMode.value && position.color === humanColor.value;
+  if (!mated && !ownKingInCheck) return [];
+  return (kingEscapeMap(currentSfen.value, turn)?.squares ?? []).flatMap(({ square, state }) => {
+    const tone = state === "open" ? "key" : state === "covered" ? (turn === "white" ? "covered" : "danger") : "";
+    return tone ? [{ file: Number(square[0]), rank: square.charCodeAt(1) - 96, tone: tone as "key" | "covered" | "danger" }] : [];
+  });
+});
+
+/*
+ * 囲い完成の知らせ。対CPUの対局で、プレイヤーが定跡図鑑の囲いを完成させた瞬間に出す。1局で同じ囲いは1回だけ。
+ * 初めての囲いなら、終局後にコレクションの印がつくことを添える。
+ */
+const CASTLE_CALLOUT_MS = 1600;
+const castleCallout = ref<{ id: number; label: string; first: boolean } | null>(null);
+let castleCalloutTimer: ReturnType<typeof setTimeout> | undefined;
+function showCastleCallout(label: string) {
+  const first = !loadCollection(browserStorage()).formations?.[label];
+  clearTimeout(castleCalloutTimer);
+  castleCallout.value = { id: Date.now(), label, first };
+  castleCalloutTimer = setTimeout(() => { castleCallout.value = null; }, CASTLE_CALLOUT_MS);
+}
+
 const boardAttackMarks = computed(() => (
   matchKind.value === "learning" && attackGuideEnabled.value && matchStarted.value && !pregameOpen.value
     ? attackMap(currentSfen.value)
@@ -3710,6 +3771,7 @@ function replayRyuoGame() {
 }
 
 function beginMatch() {
+  ownsKikiGlasses.value = hasKikiGlasses(loadTutorialProgress(browserStorage()));
   if (matchKind.value === "learning") {
     const start = learningStartPosition({
       startType: learningStartType.value,
@@ -4451,10 +4513,16 @@ function createRecord(): Record {
 
 function syncPosition(usi = "") {
   const previous = currentSfen.value;
+  const formationsBefore = new Set(matchFormationNames);
   currentSfen.value = record.value.position.sfen;
   lastMove.value = usi;
   observeFormations(currentSfen.value);
-  if (usi) showCapturePop(previous, usi);
+  if (usi) {
+    showCapturePop(previous, usi);
+    // この手で初めて組めた囲いを知らせる(開始局面ですでに組んである囲いや、復元では出さない)。
+    const castle = [...matchFormationNames].find((name) => !formationsBefore.has(name) && CASTLE_LABELS.has(name));
+    if (castle) showCastleCallout(castle);
+  }
 }
 
 /*

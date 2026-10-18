@@ -85,6 +85,13 @@
               :aria-label="row.medal.label"
             >●</span>
             <button
+              v-if="weakCount(row.id)"
+              type="button"
+              class="shogi-tutorial__weak shogi-tutorial__weak--small"
+              :aria-label="`にがてをもう1回（${weakCount(row.id)}問）`"
+              @click="startReview(row.id)"
+            >にがて{{ weakCount(row.id) }}</button>
+            <button
               v-if="row.skippable"
               type="button"
               class="shogi-tutorial__skip-chapter"
@@ -368,6 +375,13 @@
         </li>
       </ul>
       <div class="shogi-tutorial__result-actions">
+        <button
+          v-if="clearedChapter && weakCount(clearedChapter.id)"
+          type="button"
+          class="shogi-tutorial__weak"
+          data-weak-review
+          @click="startReview(clearedChapter.id)"
+        >にがてをもう1回（{{ weakCount(clearedChapter.id) }}問）</button>
         <button v-if="nextChapterLesson" ref="nextChapterButton" type="button" class="shogi-tutorial__primary" data-next-chapter @click="startLesson(nextChapterLesson.id)">
           次の章へ：{{ nextChapterLesson.title }}
         </button>
@@ -464,8 +478,14 @@ import {
   tutorialStepMarks,
 } from "./core/tutorial-runner.mjs";
 import {
+  chapterWeakSteps,
+  clearWeakSteps,
   hasKikiGlasses,
   loadKikiGlassesOn,
+  loadWeakSteps,
+  recordLessonWeakSteps,
+  saveWeakSteps,
+  weakReviewLesson,
   loadTutorialProgress,
   nextLesson,
   recordLessonCleared,
@@ -494,7 +514,7 @@ import {
   tutorialProblemSpeech,
 } from "./core/tutorial-problem.mjs";
 
-type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string; boss?: boolean };
+type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string; boss?: boolean; review?: boolean };
 type VolumeTitle = { id: string; label: string; detail: string; rank: number };
 type Volume = (typeof TUTORIAL_VOLUMES)[number];
 
@@ -619,7 +639,36 @@ watch([stageEl, panelEl], ([stage, panel]) => {
 watch(boardAspect, layoutBoardBox);
 onBeforeUnmount(() => boardBoxObserver?.disconnect());
 
-const currentLesson = computed(() => (lessonId.value ? tutorialLesson(lessonId.value) as Lesson | null : null));
+// ===== にがてをもう1回 =====
+/** レッスンでまちがえた課題の記録。章クリアの画面と地図の章の看板から、章の苦手だけを解き直せる。 */
+const weakSteps = ref<Record<string, number[]>>(loadWeakSteps(storage, lessons));
+function updateWeakSteps(next: Record<string, number[]>) {
+  weakSteps.value = next;
+  saveWeakSteps(storage, next);
+}
+function weakCount(chapterId: string) {
+  return chapterWeakSteps(lessons, weakSteps.value, chapterId).length;
+}
+/** 遊んでいる「にがてをもう1回」(章の苦手だけを並べたレッスン)。 */
+const reviewLesson = ref<Lesson | null>(null);
+/** このレッスンの回で、まちがえた課題の番号。最後まで遊んだら苦手の記録を置き換える。 */
+let runMissed = new Set<number>();
+/** にがてをもう1回で、まちがえずに解いた課題(苦手から消す)。 */
+let reviewSolved: { lessonId: string; index: number }[] = [];
+/** にがてをもう1回の結果。章クリアの画面で知らせる。 */
+const reviewResult = ref<{ cleared: number; left: number } | null>(null);
+function startReview(chapterId: string) {
+  const lesson = weakReviewLesson(lessons, weakSteps.value, chapterId) as Lesson | null;
+  if (!lesson) return;
+  reviewLesson.value = lesson;
+  startLesson(lesson.id);
+}
+
+const currentLesson = computed(() => {
+  if (!lessonId.value) return null;
+  if (lessonId.value.startsWith("review:")) return reviewLesson.value?.id === lessonId.value ? reviewLesson.value : null;
+  return tutorialLesson(lessonId.value) as Lesson | null;
+});
 const headerTitle = computed(() => {
   if ((view.value === "lesson" || view.value === "result") && currentLesson.value) return currentLesson.value.title;
   if (view.value === "chapter") return "章クリア！";
@@ -660,6 +709,7 @@ function onNodeClick(row: { id: string; state: string }) {
 function openMap() {
   clearStepTimers();
   clearChain();
+  reviewResult.value = null;
   newTitle.value = null;
   mapMessage.value = "";
   view.value = "map";
@@ -702,6 +752,14 @@ const nextChapterLesson = computed(() => {
 const chapterClearMessage = computed(() => {
   const chapter = clearedChapter.value;
   if (!chapter) return "";
+  const review = reviewResult.value;
+  if (review) {
+    if (!review.left) {
+      if (!review.cleared) return "この章の苦手はもうないよ。";
+      return `にがて克服！ ${review.cleared === 1 ? "まちがえずに解けたね" : `${review.cleared}問とも、まちがえずに解けたね`}。この章の苦手はもうないよ。`;
+    }
+    return `${review.cleared}問克服！ あと${review.left}問。まちがえた問題は、もう一度挑戦できるよ。`;
+  }
   if (chapter.stars >= chapter.maxStars) return "全部★3つ！ 完ぺきだね。この章でできるようになったことを、見てみよう。";
   const medal = chapter.medal;
   if (medal?.tier === "gold") return "腕だめしは、まちがいなしの金メダル！ この章でできるようになったことを並べたよ。";
@@ -965,7 +1023,7 @@ const taskLabel = computed(() => {
   if (!isTaskStep.value || stepSolved.value) return "";
   const step = currentStep.value;
   if (step?.type === "capture") return "駒取りゲーム";
-  if (step?.type === "build") return "囲いを組もう";
+  if (step?.type === "build") return step.drop ? "駒を並べよう" : "囲いを組もう";
   if (step?.type === "attack-test") return "攻めくらべ";
   if (step?.type === "problem") return problemKind.value === "escape" ? "逃げてみよう" : "詰ませてみよう";
   if (step?.type === "mate") return "詰ませてみよう";
@@ -1151,11 +1209,14 @@ function loadStep(index: number) {
 }
 function startLesson(id: string) {
   clearChain();
+  if (!id.startsWith("review:")) reviewResult.value = null;
   newTitle.value = null;
   lessonId.value = id;
   mistakes.value = 0;
   hints.value = 0;
   streak.value = 0;
+  runMissed = new Set();
+  reviewSolved = [];
   view.value = "lesson";
   loadStep(0);
 }
@@ -1191,6 +1252,10 @@ function solveStep(text: string, { delay = TUTORIAL_AUTO_ADVANCE_MS as number | 
   clearTimeout(idleHintTimer);
   hintLevel.value = 0;
   if (stepMisses.value === 0) streak.value += 1;
+  // まちがえた課題は苦手に残す。にがてをもう1回で、まちがえずに解けたら苦手から消す。
+  const origin = currentStep.value?.origin;
+  if (stepMisses.value > 0) runMissed.add(stepIndex.value);
+  else if (origin) reviewSolved.push(origin);
   setFeedback(text, "good");
   showStamp(stampText, big);
   if (delay === null) return;
@@ -1216,7 +1281,13 @@ function onBoardMove(usi: string) {
   if (result.outcome === "wrong") {
     // 囲いに使わない駒を動かそうとしたときは、まちがいに数えず、使う駒を伝える(不可の分類)。
     if (result.reason === "not-castle-piece") {
-      setFeedback("囲いに使うのは、薄く見えている駒だよ。その駒を動かしてね。", "info");
+      setFeedback(step.drop ? "持ち駒を選んで、薄く見えているマスに打とう。" : "囲いに使うのは、薄く見えている駒だよ。その駒を動かしてね。", "info");
+      return;
+    }
+    if (result.reason === "wrong-square") {
+      countMiss();
+      const name = PIECE_LABELS[usi[0]] ?? "その駒";
+      setFeedback(result.expected ? `${name}は${squareLabel(result.expected)}に置こう。薄く見えている${name}のマスだよ。` : `${name}はもう並べ終わったよ。`, "bad");
       return;
     }
     countMiss();
@@ -1298,6 +1369,12 @@ function onBoardMove(usi: string) {
   if (step.type === "mate") mateShown.value = true;
   const text = `${praiseFor(step)}${sacrificeNote()}`;
   solveStep(text, { stampText: step.type === "mate" ? "詰み！" : "正解", big: step.type === "mate", delay: choiceAdvanceDelay(text) });
+}
+/** 台詞で呼ぶ駒の名前と、マスの名前(「6九」)。 */
+const PIECE_LABELS: Record<string, string> = { P: "歩", L: "香車", N: "桂馬", S: "銀", G: "金", B: "角", R: "飛車", K: "玉" };
+const RANK_KANJI = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+function squareLabel(square: string) {
+  return `${square[0]}${RANK_KANJI[square.charCodeAt(1) - 96]}`;
 }
 /** 駒を捨てて詰ませたとき(合計が駒損)に添える一言。格言「終盤は駒の損得より速度」につなぐ。 */
 function sacrificeNote() {
@@ -1441,6 +1518,12 @@ function choose(index: number) {
 function finishLesson() {
   const lesson = currentLesson.value;
   if (!lesson) return;
+  if (lesson.review) {
+    finishReview(lesson);
+    return;
+  }
+  // 最後まで遊んだ回の結果で、このレッスンの苦手を置き換える。
+  updateWeakSteps(recordLessonWeakSteps(weakSteps.value, lesson.id, [...runMissed]));
   const stars = lessonStars({ mistakes: mistakes.value, hints: hints.value });
   updateProgress(recordLessonCleared(progress.value, lesson.id, stars));
   // レッスンを終えたら、続けて遊んだ日に数える。
@@ -1454,9 +1537,22 @@ function advance() {
   if (stepIndex.value >= lesson.steps.length - 1) finishLesson();
   else loadStep(stepIndex.value + 1);
 }
+/** にがてをもう1回を終えたとき。まちがえずに解いた課題を苦手から消し、章クリアの画面へ戻る。★は付けない。 */
+function finishReview(lesson: Lesson) {
+  const before = weakCount(lesson.chapterId);
+  updateWeakSteps(clearWeakSteps(weakSteps.value, reviewSolved));
+  const left = weakCount(lesson.chapterId);
+  savePlayStreak(storage, recordPlay(loadPlayStreak(storage)));
+  reviewResult.value = { cleared: before - left, left };
+  showChapterClear(lesson.chapterId);
+}
 function skipCurrentLesson() {
   const lesson = currentLesson.value;
   if (!lesson) return;
+  if (lesson.review) {
+    showChapterClear(lesson.chapterId);
+    return;
+  }
   updateProgress(recordLessonSkipped(progress.value, lesson.id));
   continueAfter(lesson, null);
 }
@@ -2905,5 +3001,22 @@ const resultMessage = computed(() => {
   .shogi-game .shogi-tutorial__chip--material {
     animation: none;
   }
+}
+/* にがてをもう1回。章クリアの画面では次の章のボタンの前に、地図では章の看板の中に小さく出す。 */
+.shogi-game .shogi-tutorial__weak {
+  min-height: 2.6rem;
+  padding: 0.35rem 1rem;
+  border: 2px solid #f3a3c8;
+  border-radius: 999px;
+  color: #172632;
+  background: #f3a3c8;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.shogi-game .shogi-tutorial__weak--small {
+  min-height: 1.8rem;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.78em;
 }
 </style>

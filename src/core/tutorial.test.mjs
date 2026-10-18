@@ -154,21 +154,25 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
           expect(reachable(sfen, step.from, step.target, step.maxMoves), label).toBe(true);
         }
         if (step.type === "build") {
-          // 完成形と手順は定跡図鑑の囲いの定義と同じ。本番で上書きデータに置き換わらない囲いを使う。
-          const castle = OPENING_CASTLES.find(({ id }) => id === step.castle);
-          expect(step.targets, label).toEqual(castle.completionSquares);
-          expect(OPENING_GUIDE_OVERRIDES?.[`castle:${step.castle}`], `${label}: 上書きデータ`).toBeUndefined();
           expect(buildMissingTargets(step, sfen).length, label).toBeGreaterThan(0);
+          if (step.castle) {
+            // 完成形と手順は定跡図鑑の囲いの定義と同じ。本番で上書きデータに置き換わらない囲いを使う。
+            const castle = OPENING_CASTLES.find(({ id }) => id === step.castle);
+            expect(step.targets, label).toEqual(castle.completionSquares);
+            expect(OPENING_GUIDE_OVERRIDES?.[`castle:${step.castle}`], `${label}: 上書きデータ`).toBeUndefined();
+          }
           // お手本の手順で完成し、目標の手数(par)は手順の長さ。下限と同じなら最短。
+          // 持ち駒を打って並べるときは、空いているマスへ1枚ずつ打つ手順をお手本にする。
+          const moves = step.drop ? buildMissingTargets(step, sfen).map(([square, kind]) => `${kind}*${square}`) : step.moves;
           let state = createStepState(step);
           let result;
-          for (const usi of step.moves) {
+          for (const usi of moves) {
             result = attemptTutorialMove(step, state, usi);
             expect(result.outcome, `${label}: ${usi}`).not.toBe("wrong");
             state = result.state;
           }
           expect(result.outcome, label).toBe("correct");
-          expect(step.par, label).toBe(step.moves.length);
+          expect(step.par, label).toBe(moves.length);
           expect(buildLowerBound(step), label).toBeLessThanOrEqual(step.par);
         }
         if (step.type === "attack-test") {

@@ -113,3 +113,89 @@ export function saveKikiGlassesOn(storage, on) {
     return false;
   }
 }
+
+// ===== にがてをもう1回 =====
+/**
+ * レッスンでまちがえた課題(まちがい・ヒントがあった課題)の記録。{ [レッスンID]: ステップの番号の配列 }。
+ * レッスンの進捗(★)とは別の鍵に置く。教材が変わって番号が課題でなくなったものは、読み込むときに捨てる。
+ */
+export const TUTORIAL_WEAK_KEY = "yacobihime:shogi-match:tutorial-weak:v1";
+/** 苦手として出し直す課題の種類。説明・観戦・対局・図鑑の案内は出さない。 */
+export const WEAK_STEP_TYPES = Object.freeze(["move-piece", "find-move", "mate", "choose", "capture", "problem", "build", "attack-test"]);
+
+function isWeakStep(lesson, index) {
+  return WEAK_STEP_TYPES.includes(lesson?.steps?.[index]?.type);
+}
+
+/** @param {any} storage @param {{ id: string, steps?: any[] }[]} lessons */
+export function loadWeakSteps(storage, lessons) {
+  try {
+    const parsed = JSON.parse(storage?.getItem(TUTORIAL_WEAK_KEY) ?? "{}");
+    const byId = new Map(lessons.map((lesson) => [lesson.id, lesson]));
+    /** @type {Record<string, number[]>} */
+    const weak = {};
+    for (const [lessonId, indexes] of Object.entries(parsed ?? {})) {
+      if (!Array.isArray(indexes)) continue;
+      const valid = [...new Set(indexes.filter((index) => Number.isInteger(index) && isWeakStep(byId.get(lessonId), index)))].sort((a, b) => a - b);
+      if (valid.length) weak[lessonId] = valid;
+    }
+    return weak;
+  } catch {
+    return {};
+  }
+}
+
+export function saveWeakSteps(storage, weak) {
+  try {
+    storage?.setItem(TUTORIAL_WEAK_KEY, JSON.stringify(weak));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** レッスンを最後まで遊んだ結果で、そのレッスンの苦手を置き換える(まちがえなかった課題は消える)。 */
+export function recordLessonWeakSteps(weak, lessonId, indexes) {
+  const next = { ...weak };
+  const list = [...new Set(indexes)].sort((a, b) => a - b);
+  if (list.length) next[lessonId] = list;
+  else delete next[lessonId];
+  return next;
+}
+
+/** にがてをもう1回で、まちがえずに解いた課題を苦手から消す。 */
+export function clearWeakSteps(weak, solved) {
+  const next = { ...weak };
+  for (const { lessonId, index } of solved) {
+    const list = (next[lessonId] ?? []).filter((entry) => entry !== index);
+    if (list.length) next[lessonId] = list;
+    else delete next[lessonId];
+  }
+  return next;
+}
+
+/** 章の苦手の課題(学ぶ順)。 */
+export function chapterWeakSteps(lessons, weak, chapterId) {
+  return lessons
+    .filter((lesson) => lesson.chapterId === chapterId)
+    .flatMap((lesson) => (weak[lesson.id] ?? []).filter((index) => isWeakStep(lesson, index)).map((index) => ({ lessonId: lesson.id, index, step: lesson.steps[index] })));
+}
+
+/**
+ * 章の苦手だけを並べた復習のレッスン。苦手がなければnull。
+ * 各ステップのoriginに、元のレッスンと番号を残す(まちがえずに解いたら苦手から消すため)。
+ */
+export function weakReviewLesson(lessons, weak, chapterId) {
+  const entries = chapterWeakSteps(lessons, weak, chapterId);
+  if (!entries.length) return null;
+  const first = lessons.find((lesson) => lesson.chapterId === chapterId);
+  return {
+    id: `review:${chapterId}`,
+    chapterId,
+    volumeId: first?.volumeId,
+    title: "にがてをもう1回",
+    summary: "まちがえた課題を解き直す",
+    review: true,
+    steps: entries.map(({ lessonId, index, step }) => ({ ...step, origin: { lessonId, index } })),
+  };
+}

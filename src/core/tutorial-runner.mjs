@@ -272,6 +272,20 @@ export function attemptTutorialMove(step, state, usi) {
     if (!moveMatches(step, usi)) return wrongMove(step, state, usi);
     return { outcome: "correct", state: { ...state, sfen: applyMove(state.sfen, usi), solved: true } };
   }
+  if (step.type === "build" && step.drop) {
+    // 持ち駒を打って並べる。完成形でまだ空いているマスへ、同じ種類の駒を打つ。
+    const missing = buildMissingTargets(step, state.sfen);
+    const target = missing.find(([square]) => square === usi.slice(2, 4));
+    if (!usi.includes("*")) return { outcome: "wrong", state, reason: "not-castle-piece" };
+    if (!target || target[1] !== usi[0]) {
+      return { outcome: "wrong", state, reason: "wrong-square", expected: missing.find(([, kind]) => kind === usi[0])?.[0] ?? "" };
+    }
+    const sfen = withBlackToMove(applyMove(state.sfen, usi));
+    const next = { ...state, sfen, movesUsed: state.movesUsed + 1 };
+    const left = buildMissingTargets(step, sfen).length;
+    if (!left) return { outcome: "correct", state: { ...next, solved: true }, movesUsed: next.movesUsed, par: step.par };
+    return { outcome: "continue", state: next, placed: true, left };
+  }
   if (step.type === "build") {
     const kind = boardSquares(state.sfen).get(usi.slice(0, 2));
     if (usi.includes("*") || !buildMovableKinds(step).has(kind)) return { outcome: "wrong", state, reason: "not-castle-piece" };
@@ -355,6 +369,10 @@ export function captureBestMove(sfen, square) {
  * 手順と違う順で組んでいるときは、手順にこだわらず、完成形へ近づく合法手を探す。
  */
 export function buildNextMove(step, sfen) {
+  if (step.drop) {
+    const [square, kind] = buildMissingTargets(step, sfen)[0] ?? [];
+    return square ? `${kind}*${square}` : "";
+  }
   const legal = legalMoves(withBlackToMove(sfen));
   const missingBefore = buildMissingTargets(step, sfen).length;
   for (const usi of step.moves ?? []) {
@@ -376,6 +394,8 @@ export function buildNextMove(step, sfen) {
  * お手本の手順(moves)の長さがこの値と同じなら、お手本が最短だと分かる(教材の目標手数parの確かめに使う)。
  */
 export function buildLowerBound(step) {
+  // 持ち駒を打って並べるときは、1枚に1手。
+  if (step.drop) return buildMissingTargets(step, tutorialStepSfen(step)).length;
   const squares = boardSquares(tutorialStepSfen(step));
   const missing = buildMissingTargets(step, tutorialStepSfen(step));
   const distance = (a, b) => Math.max(Math.abs(Number(a[0]) - Number(b[0])), Math.abs(a.charCodeAt(1) - b.charCodeAt(1)));
