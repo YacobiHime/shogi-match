@@ -325,6 +325,7 @@
       @close="tutorialOpen = false; tutorialReport = null; tutorialAutoStart = false"
       @open-dex="openDexFromTutorial"
       @start-match="startMatchFromTutorial"
+      @grant-title="grantTutorialTitle"
     />
     <ShogiProblemSet
       v-if="problemSetOpen"
@@ -3937,6 +3938,12 @@ function openTournamentScreen() {
 }
 
 /** 教室のレッスンから、関連する図鑑の項目を開く。 */
+/** 将棋教室の巻を終えたときの称号。称号の保存は対局画面が持つので、教室からは知らせだけ受け取る(同じ称号は上書き)。 */
+function grantTutorialTitle(title: { id: string; label: string; detail?: string; rank?: number }) {
+  profileState.value = grantTitle(profileState.value, title);
+  saveProfile(browserStorage(), profileState.value);
+}
+
 function openDexFromTutorial({ kind, id }: { kind: string; id?: string }) {
   if (kind === "opening") {
     openingDexInitialId.value = id ?? "";

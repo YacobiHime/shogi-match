@@ -70,3 +70,34 @@ describe('将棋教室の地図', () => {
     expect(lessonIcon(lessons.find(({ id }) => id === 'v1-rook'))).toBe('飛');
   });
 });
+
+describe('腕だめしのメダルと巻の称号', () => {
+  it('腕だめしの★で、章のメダルが金・銀・銅になる。スキップはメダルなし', async () => {
+    const { chapterMedal } = await import('./tutorial-map.mjs');
+    const boss = lessons.find(({ boss: isBoss }) => isBoss);
+    expect(chapterMedal(lessons, emptyTutorialProgress(), boss.chapterId)).toBeNull();
+    expect(chapterMedal(lessons, recordLessonCleared(emptyTutorialProgress(), boss.id, 3), boss.chapterId)).toMatchObject({ tier: 'gold', label: '金メダル' });
+    expect(chapterMedal(lessons, recordLessonCleared(emptyTutorialProgress(), boss.id, 2), boss.chapterId).tier).toBe('silver');
+    expect(chapterMedal(lessons, recordLessonCleared(emptyTutorialProgress(), boss.id, 1), boss.chapterId).tier).toBe('bronze');
+    expect(chapterMedal(lessons, recordLessonSkipped(emptyTutorialProgress(), boss.id), boss.chapterId)).toBeNull();
+    // 腕だめしは、地図の道のまん中に、腕だめしの印で置く。
+    const row = tutorialMap(volumes, lessons, emptyTutorialProgress()).rows.find(({ id }) => id === boss.id);
+    expect(row).toMatchObject({ boss: true, lane: 2, icon: '試' });
+  });
+
+  it('巻のレッスンを全部終え、腕だめしをクリアしたら、巻の称号を渡す', async () => {
+    const { volumeTitle, earnedVolumeTitles } = await import('./tutorial-map.mjs');
+    const volume1 = lessons.filter(({ volumeId }) => volumeId === 'v1');
+    let progress = emptyTutorialProgress();
+    for (const lesson of volume1) progress = lesson.boss ? recordLessonSkipped(progress, lesson.id) : recordLessonCleared(progress, lesson.id, 1);
+    // 腕だめしをスキップしただけでは渡さない。
+    expect(volumeTitle(volumes, lessons, progress, 'v1')).toBeNull();
+    for (const lesson of volume1.filter(({ boss }) => boss)) progress = recordLessonCleared(progress, lesson.id, 1);
+    expect(volumeTitle(volumes, lessons, progress, 'v1')).toMatchObject({ id: 'tutorial-v1', label: '将棋教室 第1巻 修了', rank: 1 });
+    expect(earnedVolumeTitles(volumes, lessons, progress).map(({ id }) => id)).toEqual(['tutorial-v1']);
+    // 最後の巻は「卒業」。
+    let all = emptyTutorialProgress();
+    for (const lesson of lessons) all = recordLessonCleared(all, lesson.id, 3);
+    expect(earnedVolumeTitles(volumes, lessons, all).at(-1)).toMatchObject({ id: 'tutorial-v5', label: '将棋教室 卒業', rank: 5 });
+  });
+});

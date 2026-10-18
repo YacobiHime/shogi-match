@@ -8,21 +8,65 @@
  */
 import { isLessonUnlocked, lessonRecord, lessonsProgress, nextLesson } from './tutorial-progress.mjs';
 
+/** 腕だめしの★からメダルを決める。★3は金、★2は銀、★1は銅。スキップやまだのときはなし。 */
+const MEDAL_TIERS = Object.freeze({ 3: 'gold', 2: 'silver', 1: 'bronze' });
+export const MEDAL_LABELS = Object.freeze({ gold: '金メダル', silver: '銀メダル', bronze: '銅メダル' });
+
+/**
+ * 章のメダル。章の腕だめし(boss)をクリアした★から決める。保存はせず、進捗から導く。
+ * @returns {{ tier: 'gold' | 'silver' | 'bronze', label: string, stars: number } | null}
+ */
+export function chapterMedal(lessons, progress, chapterId) {
+  const boss = lessons.find((lesson) => lesson.chapterId === chapterId && lesson.boss);
+  if (!boss) return null;
+  const record = lessonRecord(progress, boss.id);
+  const tier = record.status === 'cleared' ? MEDAL_TIERS[record.stars] : undefined;
+  return tier ? { tier, label: MEDAL_LABELS[tier], stars: record.stars } : null;
+}
+
+/**
+ * 巻を終えたときの称号。巻のレッスンを全部終え(クリアかスキップ)、腕だめしはすべてクリアしていれば渡す。
+ * 腕だめしをスキップしただけでは渡さない(称号は力を試した記録にする)。
+ * rankは巻の番号(1〜5)で、竜王戦の称号(10〜)より低くし、ホームの所属を竜王戦より先に変えない。
+ * @returns {{ id: string, label: string, detail: string, rank: number } | null}
+ */
+export function volumeTitle(volumes, lessons, progress, volumeId) {
+  const index = volumes.findIndex(({ id }) => id === volumeId);
+  if (index < 0) return null;
+  const volumeLessons = lessons.filter((lesson) => lesson.volumeId === volumeId && !lesson.comingSoon);
+  const finished = volumeLessons.every((lesson) => lessonRecord(progress, lesson.id).status !== 'new');
+  const bossesCleared = volumeLessons.filter(({ boss }) => boss).every((lesson) => lessonRecord(progress, lesson.id).status === 'cleared');
+  if (!volumeLessons.length || !finished || !bossesCleared) return null;
+  const last = index === volumes.length - 1;
+  return {
+    id: `tutorial-${volumeId}`,
+    label: last ? '将棋教室 卒業' : `将棋教室 第${index + 1}巻 修了`,
+    detail: `やこび姫の将棋教室 第${index + 1}巻「${volumes[index].title}」を終えた`,
+    rank: index + 1,
+  };
+}
+
+/** 終えた巻の称号の一覧(巻の順)。 */
+export function earnedVolumeTitles(volumes, lessons, progress) {
+  return volumes.map(({ id }) => volumeTitle(volumes, lessons, progress, id)).filter(Boolean);
+}
+
 /** 道を左右にくねらせる位置(0〜4)。章ごとに、まん中から始める。 */
 const LANES = Object.freeze([2, 3, 4, 3, 2, 1, 0, 1]);
 
 /**
  * レッスンのマスに描く1文字。いちばん大事な課題の種類で決める。
  * レッスンにiconがあればそれを使う(駒のレッスンは、その駒の1文字)。
- * なければ、対局 → 観戦 → 詰み → 指す → 駒を動かす → クイズ → 説明。
+ * なければ、対局 → 観戦 → 詰み・問題 → 指す → 駒取り → 駒を動かす → クイズ → 説明。
  */
 export function lessonIcon(lesson) {
   if (typeof lesson?.icon === 'string' && lesson.icon) return lesson.icon;
   const types = new Set((lesson?.steps ?? []).map(({ type }) => type));
   if (types.has('play')) return '局';
   if (types.has('replay')) return '観';
-  if (types.has('mate')) return '詰';
+  if (types.has('mate') || types.has('problem')) return '詰';
   if (types.has('find-move')) return '指';
+  if (types.has('capture')) return '取';
   if (types.has('move-piece')) return '駒';
   if (types.has('choose')) return '問';
   return '話';
@@ -50,22 +94,25 @@ export function tutorialMap(volumes, lessons, progress) {
   volumes.forEach((volume, volumeIndex) => {
     const volumeLessons = lessons.filter((lesson) => lesson.volumeId === volume.id);
     rows.push({
-      type: 'volume', id: volume.id, number: volumeIndex + 1, title: volume.title, description: volume.description,
+      type: 'volume', id: volume.id, number: volumeIndex + 1, volumeNumber: volumeIndex + 1, title: volume.title, description: volume.description,
       summary: lessonsProgress(volumeLessons, progress),
     });
     volume.chapters.forEach((chapter, chapterIndex) => {
       const chapterLessons = lessons.filter((lesson) => lesson.chapterId === chapter.id);
       const pending = chapterLessons.filter((lesson) => !lesson.comingSoon && lessonRecord(progress, lesson.id).status === 'new');
       rows.push({
-        type: 'chapter', id: chapter.id, number: chapterIndex + 1, title: chapter.title,
+        type: 'chapter', id: chapter.id, number: chapterIndex + 1, title: chapter.title, volumeNumber: volumeIndex + 1,
         summary: lessonsProgress(chapterLessons, progress),
+        medal: chapterMedal(lessons, progress, chapter.id),
         // まだ終えていないレッスンがあり、その最初が遊べるときだけ、章ごと飛ばせる。
         skippable: pending.length > 0 && isLessonUnlocked(lessons, progress, pending[0].id),
       });
       chapterLessons.forEach((lesson, lessonIndex) => {
         rows.push({
-          type: 'lesson', id: lesson.id, title: lesson.title, summary: lesson.summary ?? '',
-          icon: lessonIcon(lesson), lane: LANES[lessonIndex % LANES.length],
+          type: 'lesson', id: lesson.id, title: lesson.title, summary: lesson.summary ?? '', volumeNumber: volumeIndex + 1,
+          icon: lessonIcon(lesson), boss: Boolean(lesson.boss),
+          // 腕だめしは道のまん中に置く(山場を目立たせる)。
+          lane: lesson.boss ? 2 : LANES[lessonIndex % LANES.length],
           state: lessonState(lessons, progress, lesson, current),
           stars: lessonRecord(progress, lesson.id).stars,
         });
@@ -93,7 +140,7 @@ export function firstLessonOfNextChapter(lessons, lessonId) {
 
 /**
  * 章のまとめ。章クリアの画面に出す。
- * @returns {{ id: string, title: string, number: number, volumeNumber: number, lessons: { id: string, title: string, summary: string, stars: number, status: string }[], stars: number, maxStars: number }}
+ * @returns {{ id: string, title: string, number: number, volumeNumber: number, volumeId: string, medal: ReturnType<typeof chapterMedal>, lessons: { id: string, title: string, summary: string, stars: number, status: string }[], stars: number, maxStars: number }}
  */
 export function chapterSummary(volumes, lessons, progress, chapterId) {
   for (const [volumeIndex, volume] of volumes.entries()) {
@@ -108,6 +155,8 @@ export function chapterSummary(volumes, lessons, progress, chapterId) {
       title: volume.chapters[chapterIndex].title,
       number: chapterIndex + 1,
       volumeNumber: volumeIndex + 1,
+      volumeId: volume.id,
+      medal: chapterMedal(lessons, progress, chapterId),
       lessons: entries,
       stars: entries.reduce((sum, { stars }) => sum + stars, 0),
       maxStars: entries.length * 3,

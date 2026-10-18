@@ -6,6 +6,8 @@ import {
   attemptTutorialChoice,
   attemptTutorialMove,
   autoAdvancesOnSolve,
+  captureMinMoves,
+  captureTargets,
   choiceAdvanceDelay,
   createStepState,
   isCheckmate,
@@ -38,9 +40,11 @@ import {
 import { referenceDexEntries } from "./reference-dex.mjs";
 import { buildFormationStart } from "./learning-setup.mjs";
 import { CPU_STRENGTH_PRESETS } from "./strength-settings.mjs";
+import { problemById } from "./problem-set.mjs";
+import { createProblemState } from "./tutorial-problem.mjs";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./opening-guide.mjs";
 
-const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play", "replay"];
+const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "open-dex", "play", "replay", "capture", "problem"];
 const legalMoves = (sfen) => enumerateLegalMoves(createGameRecord(sfen).position).map(({ usi }) => usi);
 
 function afterMove(sfen, usi) {
@@ -98,7 +102,8 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
       lesson.steps.forEach((step, index) => {
         const label = `${lesson.id}#${index} ${step.type}`;
         expect(STEP_TYPES, label).toContain(step.type);
-        expect(step.speech ?? step.question, label).toEqual(expect.any(String));
+        // 問題集の問題は、台詞を省くと問題集の出題の台詞を使う。
+        if (step.type !== "problem") expect(step.speech ?? step.question, label).toEqual(expect.any(String));
         const sfen = tutorialStepSfen(step);
         if (sfen) {
           expect(() => createGameRecord(sfen), label).not.toThrow();
@@ -106,9 +111,22 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
           fields[1] = fields[1] === "b" ? "w" : "b";
           expect(Position.newBySFEN(fields.join(" "))?.checked, `${label}: 手番でない側が王手されている`).toBe(false);
         }
-        if (["move-piece", "find-move", "mate"].includes(step.type)) {
+        if (["move-piece", "find-move", "mate", "capture"].includes(step.type)) {
           expect(sfen.split(" ")[1], `${label}: 先手番で始める`).toBe("b");
         }
+        if (step.type === "capture") {
+          // 目標の手数(par)は、探索で求めた最短の手数と同じ。相手の駒が残っている。
+          expect(captureTargets(sfen).length, label).toBeGreaterThan(0);
+          // 相手の玉は置かない(玉のレッスンでは、自分の玉で取る)。
+          expect(sfen.split(" ")[0], label).not.toMatch(/k/);
+          expect(captureMinMoves(sfen, step.from), `${label}: 最短の手数`).toBe(step.par);
+        }
+        if (step.type === "problem") {
+          const problem = problemById(step.problemId);
+          expect(problem, `${label}: ${step.problemId}`).toBeTruthy();
+          expect(createProblemState(step).sfen.split(" ")[1], `${label}: 先手番で始める`).toBe("b");
+        }
+        if (step.praise) expect(step.praise, label).toEqual(expect.any(String));
         if (step.type === "find-move") {
           const legal = legalMoves(sfen);
           if (step.anyDropOf) expect(legal.some((usi) => usi.startsWith(`${step.anyDropOf}*`)), label).toBe(true);
@@ -188,7 +206,35 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
         if (text) expect(text, lesson.id).not.toMatch(/こと！/);
       }
     }
-    expect(tutorialLesson("v1-king").steps[2].speech).toBe("玉を5七（緑のマス）まで動かしてみよう！ 2手以内で届くよ。");
+    expect(tutorialLesson("v1-king").steps[1].speech).toBe("玉を5七（緑のマス）まで動かしてみよう！ 2手以内で届くよ。");
+  });
+
+  it("章の腕だめしは章の最後に置き、課題を4問以上持つ", () => {
+    const tasks = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem"]);
+    for (const volume of TUTORIAL_VOLUMES) {
+      for (const chapter of volume.chapters) {
+        const bosses = chapter.lessons.filter(({ boss }) => boss);
+        expect(bosses.length, chapter.id).toBeLessThanOrEqual(1);
+        if (!bosses.length) continue;
+        expect(chapter.lessons.at(-1).boss, chapter.id).toBe(true);
+        expect(bosses[0].steps.filter(({ type }) => tasks.has(type)).length, chapter.id).toBeGreaterThanOrEqual(4);
+      }
+    }
+    // 観戦だけの章には置かない(平地)。それ以外の章には置く。
+    const chapters = TUTORIAL_VOLUMES.flatMap(({ chapters: list }) => list);
+    expect(chapters.filter((chapter) => chapter.lessons.some(({ boss }) => boss)).map(({ id }) => id)).toEqual([
+      "v1-c1", "v1-c2", "v2-c1", "v2-c3", "v3-c1", "v3-c3", "v4-c1", "v4-c2", "v5-c1", "v5-c2",
+    ]);
+  });
+
+  it("課題を増やし、説明を読むだけのステップを全体の半分未満にする", () => {
+    const steps = TUTORIAL_LESSONS.flatMap(({ steps: list }) => list);
+    const reading = steps.filter(({ type }) => type === "explain" || type === "open-dex").length;
+    expect(reading / steps.length).toBeLessThan(0.5);
+    // 第1巻は、レッスンごとに盤で指す課題がある(話を聞くだけのレッスンを作らない)。
+    const board = new Set(["move-piece", "find-move", "mate", "capture", "problem"]);
+    const volume1 = TUTORIAL_LESSONS.filter(({ volumeId, id }) => volumeId === "v1" && id !== "v1-win" && id !== "v1-setup");
+    for (const lesson of volume1) expect(lesson.steps.some(({ type }) => board.has(type)), lesson.id).toBe(true);
   });
 
   it("評価値のレッスンは、盤面と評価値グラフを合わせて見せる", () => {

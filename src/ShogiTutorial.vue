@@ -31,7 +31,7 @@
         <div class="shogi-tutorial__map-hero-body">
           <p class="shogi-tutorial__speech">{{ mapMessage || shelfMessage }}</p>
           <p class="shogi-tutorial__map-total" aria-label="集めた星">
-            ★ {{ map.total.stars }} / {{ map.total.maxStars }}<small>・{{ map.total.done }} / {{ map.total.total }} レッスン</small>
+            ★ {{ map.total.stars }} / {{ map.total.maxStars }}<small>・{{ map.total.done }} / {{ map.total.total }} レッスン・メダル{{ medalCount }}</small>
           </p>
         </div>
         <button
@@ -42,6 +42,7 @@
           @click="startLesson(upcomingLesson.id)"
         >
           <small>つづきから</small><span>▶ {{ upcomingLesson.title }}</span>
+          <small v-if="upcomingLesson.summary" class="shogi-tutorial__continue-goal">めあて：{{ upcomingLesson.summary }}</small>
         </button>
       </div>
       <ol class="shogi-tutorial__road">
@@ -49,6 +50,7 @@
           v-for="row in map.rows"
           :key="`${row.type}-${row.id}`"
           :class="`shogi-tutorial__road-${row.type}`"
+          :data-volume="row.volumeNumber"
         >
           <!-- 巻の看板 -->
           <div v-if="row.type === 'volume'" class="shogi-tutorial__world">
@@ -62,6 +64,12 @@
           <!-- 章の看板 -->
           <div v-else-if="row.type === 'chapter'" class="shogi-tutorial__signpost">
             <span>第{{ row.number }}章 {{ row.title }}</span>
+            <span
+              v-if="row.medal"
+              class="shogi-tutorial__signpost-medal"
+              :class="`shogi-tutorial__signpost-medal--${row.medal.tier}`"
+              :aria-label="row.medal.label"
+            >●</span>
             <button
               v-if="row.skippable"
               type="button"
@@ -74,7 +82,7 @@
             <button
               type="button"
               class="shogi-tutorial__node"
-              :class="`shogi-tutorial__node--${row.state}`"
+              :class="[`shogi-tutorial__node--${row.state}`, { 'shogi-tutorial__node--boss': row.boss }]"
               :aria-label="`${row.title}（${nodeStateText(row)}）`"
               :data-map-current="row.state === 'next' ? '' : undefined"
               :data-lesson-node="row.id"
@@ -84,7 +92,7 @@
               <span class="shogi-tutorial__node-icon" aria-hidden="true">{{ row.state === "locked" ? "🔒" : row.icon }}</span>
               <span v-if="row.state === 'next'" class="shogi-tutorial__node-start" aria-hidden="true">ここから！</span>
             </button>
-            <span class="shogi-tutorial__node-title">{{ row.title }}</span>
+            <span class="shogi-tutorial__node-title">{{ row.boss ? "腕だめし" : row.title }}</span>
             <span v-if="row.state === 'cleared'" class="shogi-tutorial__node-stars" aria-hidden="true">
               <i v-for="index in 3" :key="index" :class="{ on: index <= row.stars }">★</i>
             </span>
@@ -103,7 +111,10 @@
         短いレッスンが続けて流れていくことを、1本の帯で見せる。
       -->
       <div class="shogi-tutorial__track" data-tutorial-steps :aria-label="`第${chapterNumber}章 ${chapterTrack.index + 1}/${chapterTrack.count}つ目のレッスン、${stepIndex + 1}/${currentLesson.steps.length}`">
-        <span class="shogi-tutorial__track-label">{{ chapterTitle }}</span>
+        <!-- めあて(このレッスンでできるようになること)を、いつも1行で見せる。 -->
+        <span class="shogi-tutorial__track-label" data-tutorial-goal :title="chapterTitle">
+          <b :class="{ 'shogi-tutorial__goal--boss': currentLesson.boss }">{{ currentLesson.boss ? "腕だめし" : "めあて" }}</b>{{ currentLesson.summary }}
+        </span>
         <ol>
           <li v-for="(id, index) in chapterTrack.ids" :key="id">
             <span :style="{ width: `${trackFill(index)}%` }"></span>
@@ -116,7 +127,18 @@
       -->
       <div ref="stageEl" class="shogi-dex__detail shogi-tutorial__stage" data-tutorial-stage @click.capture="onStageTap">
         <div v-if="boardSfen" class="shogi-dex__main">
-          <div class="shogi-dex__board" :style="boardBoxStyle">
+          <div class="shogi-dex__board shogi-tutorial__board" :style="boardBoxStyle">
+            <!-- 正解のはなまる。盤の上に短く出す(押した操作は止めない)。 -->
+            <Transition name="shogi-tutorial__stamp">
+              <div
+                v-if="stamp"
+                :key="stamp.key"
+                class="shogi-tutorial__stamp"
+                :class="{ 'shogi-tutorial__stamp--big': stamp.big }"
+                aria-hidden="true"
+                data-tutorial-stamp
+              ><span>{{ stamp.text }}</span></div>
+            </Transition>
             <ShogiMatchBoard
               :sfen="boardSfen"
               :last-move="lastMove"
@@ -149,7 +171,19 @@
           >
             <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
             <div class="shogi-tutorial__bubble-body">
-              <p v-if="taskLabel" class="shogi-tutorial__task-label">{{ taskLabel }}</p>
+              <!-- 課題の種類・腕だめしの何問目か・駒取りの手数・れんぞく正解を、1行の札で並べる。 -->
+              <p v-if="taskLabel || bossProgress || captureCount || streak >= 2" class="shogi-tutorial__chips">
+                <span v-if="taskLabel" class="shogi-tutorial__task-label">{{ taskLabel }}</span>
+                <span v-if="bossProgress" class="shogi-tutorial__chip shogi-tutorial__chip--boss" data-boss-progress>
+                  第{{ bossProgress.number }}問 / {{ bossProgress.total }}
+                </span>
+                <span v-if="captureCount" class="shogi-tutorial__chip" data-capture-count>
+                  目標{{ captureCount.par }}手・いま{{ captureCount.used }}手
+                </span>
+                <span v-if="streak >= 2" :key="streak" class="shogi-tutorial__chip shogi-tutorial__chip--streak" data-streak>
+                  {{ streak }}れんぞく！
+                </span>
+              </p>
               <p class="shogi-tutorial__speech">{{ stepSpeech }}</p>
               <p
                 v-if="feedback"
@@ -254,7 +288,20 @@
     <section v-else-if="view === 'chapter' && clearedChapter" class="shogi-tutorial__chapter-clear" aria-label="章クリア" data-chapter-clear>
       <p class="shogi-tutorial__chapter-clear-eyebrow">第{{ clearedChapter.volumeNumber }}巻 第{{ clearedChapter.number }}章</p>
       <h2>「{{ clearedChapter.title }}」クリア！</h2>
+      <!-- 腕だめしのメダル。判を押すように出す。 -->
+      <div
+        v-if="clearedChapter.medal"
+        class="shogi-tutorial__medal"
+        :class="`shogi-tutorial__medal--${clearedChapter.medal.tier}`"
+        data-chapter-medal
+      >
+        <span class="shogi-tutorial__medal-disc" aria-hidden="true">{{ clearedChapter.number }}</span>
+        <span>{{ clearedChapter.medal.label }}</span>
+      </div>
       <p class="shogi-tutorial__chapter-clear-stars">★ {{ clearedChapter.stars }} / {{ clearedChapter.maxStars }}</p>
+      <p v-if="newTitle" class="shogi-tutorial__new-title" data-new-title>
+        <small>称号をもらったよ！</small>{{ newTitle.label }}<small>やこびノートの称号に記録したよ</small>
+      </p>
       <div class="shogi-tutorial__bubble">
         <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
         <div class="shogi-tutorial__bubble-body">
@@ -381,12 +428,22 @@ import {
 import {
   chapterPosition,
   chapterSummary,
+  earnedVolumeTitles,
   firstLessonOfNextChapter,
   nextLessonInChapter,
   tutorialMap,
 } from "./core/tutorial-map.mjs";
+import {
+  attemptProblemMove,
+  createProblemState,
+  problemStepHint,
+  recordTutorialProblem,
+  tutorialProblem,
+  tutorialProblemSpeech,
+} from "./core/tutorial-problem.mjs";
 
-type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string };
+type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string; boss?: boolean };
+type VolumeTitle = { id: string; label: string; detail: string; rank: number };
 type Volume = (typeof TUTORIAL_VOLUMES)[number];
 
 export type TutorialMatchReport = {
@@ -403,14 +460,29 @@ const props = defineProps({
   /** タイトル画面の「将棋教室のつづき」から開いたとき、本棚を通さずに次のレッスンを始める。 */
   autoStart: { type: Boolean, default: false },
 });
-const emit = defineEmits(["close", "open-dex", "start-match"]);
+const emit = defineEmits(["close", "open-dex", "start-match", "grant-title"]);
 
+const volumes = TUTORIAL_VOLUMES as unknown as Volume[];
+const lessons = TUTORIAL_LESSONS as unknown as Lesson[];
 const storage = typeof localStorage === "undefined" ? null : localStorage;
 const progress = ref(loadTutorialProgress(storage));
+/** この画面を開いてから新しく手に入れた巻の称号。章クリアの画面で知らせる。 */
+const newTitle = ref<VolumeTitle | null>(null);
 function updateProgress(next: typeof progress.value) {
+  const before = new Set(earnedVolumeTitles(volumes, lessons, progress.value).map(({ id }: VolumeTitle) => id));
   progress.value = next;
   saveTutorialProgress(storage, next);
+  // 巻を終えたら称号を渡す(保存は対局画面の称号に任せる)。
+  for (const title of earnedVolumeTitles(volumes, lessons, next) as VolumeTitle[]) {
+    if (before.has(title.id)) continue;
+    newTitle.value = title;
+    emit("grant-title", title);
+  }
 }
+// 前の版で終えていた巻にも渡す(同じ称号は上書きになるだけ)。
+onMounted(() => {
+  for (const title of earnedVolumeTitles(volumes, lessons, progress.value)) emit("grant-title", title);
+});
 
 // 駒音。対局画面と同じ音を、指した手と観戦で進めた手に鳴らす。
 const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
@@ -420,8 +492,6 @@ function playMoveSoundFor(sfen: string, usi: string) {
   if (kind) moveSounds.play(kind);
 }
 
-const volumes = TUTORIAL_VOLUMES as unknown as Volume[];
-const lessons = TUTORIAL_LESSONS as unknown as Lesson[];
 const view = ref<"map" | "lesson" | "chapter" | "result">("map");
 const lessonId = ref("");
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=2`);
@@ -494,6 +564,8 @@ defineExpose({ goBack });
 // ===== 地図(すごろくの道) =====
 const upcomingLesson = computed(() => nextLesson(lessons, progress.value) as Lesson | null);
 const map = computed(() => tutorialMap(volumes, lessons, progress.value));
+/** 集めた腕だめしのメダルの数。 */
+const medalCount = computed(() => map.value.rows.filter((row: any) => row.type === "chapter" && row.medal).length);
 const shelfMessage = computed(() => {
   if (!Object.keys(progress.value.lessons).length) return "ようこそ、やこび姫の将棋教室へ！ 光っているマスから始めよう。";
   return upcomingLesson.value ? "おかえり！ 光っているマスから続けよう。" : "全部のレッスンを終えたね！ 好きなマスで、もう一度遊べるよ。";
@@ -516,6 +588,7 @@ function onNodeClick(row: { id: string; state: string }) {
 function openMap() {
   clearStepTimers();
   clearChain();
+  newTitle.value = null;
   mapMessage.value = "";
   view.value = "map";
   // いま進めるマスが見える位置まで、地図をスクロールする。
@@ -558,6 +631,9 @@ const chapterClearMessage = computed(() => {
   const chapter = clearedChapter.value;
   if (!chapter) return "";
   if (chapter.stars >= chapter.maxStars) return "全部★3つ！ 完ぺきだね。この章でできるようになったことを、見てみよう。";
+  const medal = chapter.medal;
+  if (medal?.tier === "gold") return "腕だめしは、まちがいなしの金メダル！ この章でできるようになったことを並べたよ。";
+  if (medal) return `腕だめしは${medal.label}！ まちがえずに解けたら金メダルだよ。札を押すと、もう一度挑戦できるよ。`;
   return "章クリア、おめでとう！ できるようになったことを並べたよ。★が足りないところは、「もう一度」で取り直せるよ。";
 });
 const nextChapterButton = ref<HTMLButtonElement | null>(null);
@@ -614,21 +690,39 @@ const feedback = ref("");
 const feedbackTone = ref<"good" | "bad" | "info">("info");
 const lastMove = ref("");
 const resultStars = ref(0);
+/** このステップでまちがえた・ヒントを見た回数(問題集の記録の「一発で解けたか」と、れんぞく正解に使う)。 */
+const stepMisses = ref(0);
+/** まちがえずに続けて解いた課題の数。2つ以上で「2れんぞく！」と知らせる(何が良かったかを数で見せる)。 */
+const streak = ref(0);
 
 const currentStep = computed(() => currentLesson.value?.steps?.[stepIndex.value] ?? null);
+const isProblemStep = computed(() => currentStep.value?.type === "problem");
 const stepInteractive = computed(() => INTERACTIVE_STEP_TYPES.includes(currentStep.value?.type));
 const boardSfen = computed(() => stepState.value.sfen);
 const boardInteractive = computed(() => stepInteractive.value && !stepSolved.value && !stageClear.value);
-const hintView = computed(() => (
-  hintLevel.value && currentStep.value
-    ? tutorialHint(currentStep.value, stepState.value, hintLevel.value)
-    : { marks: [], arrows: [] }
+const problemHint = computed(() => (
+  isProblemStep.value && hintLevel.value ? problemStepHint(currentStep.value, stepState.value, hintLevel.value) : null
 ));
+const hintView = computed(() => {
+  if (!hintLevel.value || !currentStep.value) return { marks: [], arrows: [] };
+  if (problemHint.value) {
+    const square = problemHint.value.square;
+    return {
+      marks: square ? [{ file: Number(square[0]), rank: square.charCodeAt(1) - 96, tone: "key" }] : [],
+      arrows: problemHint.value.arrow ? [problemHint.value.arrow] : [],
+    };
+  }
+  return tutorialHint(currentStep.value, stepState.value, hintLevel.value);
+});
 const boardMarks = computed(() => {
   if (!currentStep.value || !boardSfen.value) return [];
-  const marks = currentStep.value.type === "move-piece"
-    ? tutorialStepMarks({ ...currentStep.value, pieceSquare: stepState.value.square }, boardSfen.value)
-    : tutorialStepMarks(currentStep.value, boardSfen.value);
+  const step = currentStep.value;
+  const marks = step.type === "problem"
+    ? []
+    : tutorialStepMarks(
+      step.type === "move-piece" ? { ...step, pieceSquare: stepState.value.square } : step,
+      boardSfen.value,
+    );
   const merged = new Map(marks.map((mark: any) => [`${mark.file}${mark.rank}`, mark]));
   for (const mark of hintView.value.marks) merged.set(`${mark.file}${mark.rank}`, mark);
   return [...merged.values()];
@@ -642,9 +736,27 @@ const isTaskStep = computed(() => stepInteractive.value || currentStep.value?.ty
 /** 吹き出しの上に出す、課題の種類。 */
 const taskLabel = computed(() => {
   if (!isTaskStep.value || stepSolved.value) return "";
-  if (currentStep.value?.type === "mate") return "詰ませてみよう";
-  return currentStep.value?.type === "choose" ? "クイズ" : "やってみよう";
+  const step = currentStep.value;
+  if (step?.type === "capture") return "駒取りゲーム";
+  if (step?.type === "problem") return problemKind.value === "escape" ? "逃げてみよう" : "詰ませてみよう";
+  if (step?.type === "mate") return "詰ませてみよう";
+  return step?.type === "choose" ? "クイズ" : "やってみよう";
 });
+const problemKind = computed(() => (isProblemStep.value ? tutorialProblem(currentStep.value)?.kind ?? "" : ""));
+/** 答える課題の種類(腕だめしの問題数を数える)。 */
+const TASK_STEP_TYPES = new Set(["move-piece", "find-move", "mate", "choose", "capture", "problem"]);
+/** 腕だめしの何問目か。腕だめしでは、課題の数と、いま何問目かを見せる(山場の進み具合)。 */
+const bossProgress = computed(() => {
+  const lesson = currentLesson.value;
+  if (!lesson?.boss || !isTaskStep.value) return null;
+  const tasks = (lesson.steps ?? []).map((step: any, index: number) => ({ step, index }))
+    .filter(({ step }: { step: any }) => TASK_STEP_TYPES.has(step.type));
+  return { number: tasks.findIndex(({ index }: { index: number }) => index === stepIndex.value) + 1, total: tasks.length };
+});
+/** 駒取りゲームの手数。目標(最短)と、いま何手か。 */
+const captureCount = computed(() => (
+  currentStep.value?.type === "capture" ? { par: currentStep.value.par, used: stepState.value.movesUsed } : null
+));
 /**
  * 画面を押すと進められるか。説明・図鑑の案内はいつでも、観戦は1手ずつ、課題は正解したあと(自動で進むのを待たずに進める)。
  * 対局のステップは「対局をはじめる」だけで進む。
@@ -705,13 +817,14 @@ function scheduleIdleHint() {
   idleHintTimer = setTimeout(() => {
     if (view.value !== "lesson" || stepIndex.value !== index || stepSolved.value || hintLevel.value > 0) return;
     hintLevel.value = 1;
-    setFeedback("光っているマスに注目してみてね。", "info");
+    setFeedback(problemHint.value?.text || "光っているマスに注目してみてね。", "info");
   }, TUTORIAL_IDLE_HINT_MS);
 }
 onBeforeUnmount(() => clearTimeout(idleHintTimer));
 const stepSpeech = computed(() => {
   const step = currentStep.value;
   if (step?.type === "replay") return replaySpeech(step, stepState.value.ply);
+  if (step?.type === "problem") return tutorialProblemSpeech(step);
   return step?.question ?? step?.speech;
 });
 const replayLabel = computed(() => (
@@ -745,12 +858,26 @@ function clearStepTimers() {
 }
 onBeforeUnmount(clearStepTimers);
 
+/**
+ * 正解のはなまる。盤の上に短く出す(操作は止めない)。大事な瞬間は少し大きく見せる(Game_Nintendo_Implementation.mdの3-1)。
+ */
+const stamp = ref<{ text: string; key: number; big: boolean } | null>(null);
+let stampTimer: ReturnType<typeof setTimeout> | undefined;
+const STAMP_MS = 900;
+function showStamp(text: string, big = false) {
+  clearTimeout(stampTimer);
+  stamp.value = { text, key: Date.now(), big };
+  stampTimer = setTimeout(() => { stamp.value = null; }, STAMP_MS);
+}
+onBeforeUnmount(() => clearTimeout(stampTimer));
+
 function loadStep(index: number) {
   clearStepTimers();
   stepIndex.value = index;
   const step = currentLesson.value?.steps?.[index];
-  stepState.value = createStepState(step);
+  stepState.value = step?.type === "problem" ? createProblemState(step) : createStepState(step);
   stepSolved.value = false;
+  stepMisses.value = 0;
   hintLevel.value = 0;
   feedback.value = "";
   wrongChoices.value = [];
@@ -761,9 +888,11 @@ function loadStep(index: number) {
 }
 function startLesson(id: string) {
   clearChain();
+  newTitle.value = null;
   lessonId.value = id;
   mistakes.value = 0;
   hints.value = 0;
+  streak.value = 0;
   view.value = "lesson";
   loadStep(0);
 }
@@ -774,20 +903,55 @@ function setFeedback(text: string, tone: "good" | "bad" | "info") {
   feedback.value = text;
   feedbackTone.value = tone;
 }
+/** まちがえたとき。★の計算と、ステップのまちがいに数え、れんぞくを途切れさせる。ヒントを1段ずつ強くする。 */
+function countMiss() {
+  mistakes.value += 1;
+  stepMisses.value += 1;
+  streak.value = 0;
+  hintLevel.value = Math.min(2, hintLevel.value + 1);
+}
+/** 正解のほめ言葉(何が良かったか)。課題に書いたpraiseがなければ、種類ごとの一言にする。 */
+function praiseFor(step: any) {
+  if (step.praise) return step.praise;
+  if (step.type === "mate") return "詰み！ 玉の逃げ道を全部ふさげたね。";
+  if (step.type === "move-piece") return "着いたね！ 駒の動き、ばっちり。";
+  return "正解！ いい手を見つけたね。";
+}
+/**
+ * 課題に正解したとき。ほめ言葉・はなまる・れんぞくを出し、読む時間をとってから自動で次へ進む。
+ * delayを省くと、盤の課題の標準の時間で進む。nullなら自動では進まず、画面を押して進む(長い解説を読ませるとき)。
+ */
+function solveStep(text: string, { delay = TUTORIAL_AUTO_ADVANCE_MS as number | null, stampText = "正解", big = false } = {}) {
+  stepSolved.value = true;
+  solvedAt = Date.now();
+  clearTimeout(idleHintTimer);
+  hintLevel.value = 0;
+  if (stepMisses.value === 0) streak.value += 1;
+  setFeedback(text, "good");
+  showStamp(stampText, big);
+  if (delay === null) return;
+  const index = stepIndex.value;
+  stepTimers.push(setTimeout(() => {
+    if (view.value === "lesson" && stepIndex.value === index) advance();
+  }, delay));
+}
 function onBoardMove(usi: string) {
   const step = currentStep.value;
   if (!step || stepSolved.value) return;
   scheduleIdleHint();
+  if (step.type === "problem") {
+    onProblemMove(step, usi);
+    return;
+  }
   const before = stepState.value.sfen;
-  const result = attemptTutorialMove(step, stepState.value, usi);
+  const result: any = attemptTutorialMove(step, stepState.value, usi);
   if (result.outcome === "wrong") {
-    mistakes.value += 1;
-    // 間違えるたびにヒントを1段階ずつ出す。
-    hintLevel.value = Math.min(2, hintLevel.value + 1);
+    countMiss();
     const reason = ({
       illegal: "その手は指せないよ。駒の動きをもう一度確かめてみよう！",
-      "other-piece": "動かす駒がちがうよ。光っている駒を動かしてね。",
+      "other-piece": step.type === "capture" ? "動かせるのは、最初に置いてあった駒だけだよ。" : "動かす駒がちがうよ。光っている駒を動かしてね。",
       "too-many-moves": "手数を使い切っちゃった。最初からもう一度やってみよう！",
+      stuck: "残りの駒にもう届かないね。最初からもう一度やってみよう！",
     } as Record<string, string>)[result.reason ?? ""] ?? "おしい！ もう一度考えてみよう。";
     setFeedback(reason, "bad");
     stepState.value = result.state;
@@ -804,24 +968,60 @@ function onBoardMove(usi: string) {
       // 相手の応手の駒音は、自分の手の音と重ならないよう少し遅らせる。
       stepTimers.push(setTimeout(() => playMoveSoundFor(afterMine, reply), 350));
       setFeedback(`相手は${formatHintMove(reply, afterMine)}と応じたよ。続けて詰ませよう！`, "info");
+    } else if (step.type === "capture") {
+      setFeedback(result.captured ? `取った！ のこり${result.left}枚。` : `${stepState.value.movesUsed}手目。赤いマスの駒をねらおう！`, "info");
     } else {
       setFeedback("その調子！ 続けて動かそう。", "info");
     }
     hintLevel.value = 0;
     return;
   }
-  stepSolved.value = true;
-  solvedAt = Date.now();
-  clearTimeout(idleHintTimer);
-  hintLevel.value = 0;
-  setFeedback(step.type === "mate" ? "詰み！ おみごと！" : "正解！ すごいね！", "good");
-  // 盤で指すステップは、正解を少し見せてから自動で次へ進める。
-  if (autoAdvancesOnSolve(step)) {
-    const index = stepIndex.value;
-    stepTimers.push(setTimeout(() => {
-      if (view.value === "lesson" && stepIndex.value === index) advance();
-    }, TUTORIAL_AUTO_ADVANCE_MS));
+  if (step.type === "capture") {
+    // 最短の手数で取りきれたら「最短！」。手数が多いときはクリアにして、★の計算でまちがい1回に数える。
+    const best = result.movesUsed <= result.par;
+    if (!best) {
+      mistakes.value += 1;
+      stepMisses.value += 1;
+    }
+    const text = best
+      ? `最短の${result.movesUsed}手！ ${praiseFor(step)}`
+      : `全部取れたね！ ${result.movesUsed}手かかったけど、最短は${result.par}手。もう一度やると、近道が見つかるかも。`;
+    solveStep(text, { stampText: best ? "最短！" : "正解", big: best, delay: best ? TUTORIAL_AUTO_ADVANCE_MS : 2400 });
+    return;
   }
+  solveStep(praiseFor(step), { stampText: step.type === "mate" ? "詰み！" : "正解", big: step.type === "mate", delay: choiceAdvanceDelay(praiseFor(step)) });
+}
+/** 問題集の問題。判定と台詞は問題集と同じ。相手の応手は、自分の手の音のあとに鳴らす。 */
+function onProblemMove(step: any, usi: string) {
+  const before = stepState.value.sfen;
+  const result = attemptProblemMove(step, stepState.value, usi);
+  if (result.outcome === "wrong") {
+    countMiss();
+    setFeedback(result.speech || "おしい！ もう一度考えてみよう。", "bad");
+    return;
+  }
+  playMoveSoundFor(before, usi);
+  stepState.value = result.state;
+  lastMove.value = usi;
+  if (result.reply) {
+    const reply = result.reply;
+    const afterMine = applyBefore(before, usi);
+    lastMove.value = reply;
+    stepTimers.push(setTimeout(() => playMoveSoundFor(afterMine, reply), 350));
+  }
+  if (result.outcome === "continue") {
+    // 逃げる問題で答えが決まったとき(続きの1手を指す前)も、正解のはなまるを押す。
+    const answered = result.speech.startsWith("正解");
+    setFeedback(result.speech, answered ? "good" : "info");
+    if (answered) showStamp("正解");
+    hintLevel.value = 0;
+    return;
+  }
+  // 解いた問題は、問題集の記録にも付ける(まちがえず、ヒントも見ずに解けたら「一発」)。
+  recordTutorialProblem(storage, step, { firstTry: stepMisses.value === 0 && hintLevel.value === 0 });
+  const mate = problemKind.value !== "escape";
+  // 問題集の解説は、なぜ詰むか・なぜ逃げられるかを伝える長い文なので、自動では進めない。
+  solveStep(result.speech, { stampText: mate ? "詰み！" : "正解", big: mate, delay: null });
 }
 // 相手の応手を表示するため、自分の手を指した直後の局面を作る。
 function applyBefore(sfen: string, usi: string) {
@@ -832,16 +1032,12 @@ function choose(index: number) {
   const step = currentStep.value;
   if (!step || stepSolved.value) return;
   if (attemptTutorialChoice(step, index) === "correct") {
-    stepSolved.value = true;
-    solvedAt = Date.now();
-    setFeedback(`正解！ ${step.explanation ?? ""}`, "good");
     // 解説を読む時間をとってから、自動で次へ進む。画面を押せば待たずに進める。
-    const stepAt = stepIndex.value;
-    stepTimers.push(setTimeout(() => {
-      if (view.value === "lesson" && stepIndex.value === stepAt) advance();
-    }, choiceAdvanceDelay(step.explanation ?? "")));
+    solveStep(`正解！ ${step.explanation ?? ""}`, { delay: choiceAdvanceDelay(step.explanation ?? "") });
   } else {
     mistakes.value += 1;
+    stepMisses.value += 1;
+    streak.value = 0;
     wrongChoices.value = [...wrongChoices.value, index];
     setFeedback("ちがうみたい。ほかのを選んでみよう！", "bad");
   }
@@ -2031,5 +2227,214 @@ const resultMessage = computed(() => {
   }
   .shogi-game .shogi-tutorial__chapter-clear .shogi-tutorial__speech { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
   .shogi-game .shogi-tutorial__chapter-clear .shogi-tutorial__result-actions button { min-height: 2.4rem; padding-block: 0.3rem; }
+}
+
+/* ===== 2026-10-18 教室の大改良 ===== */
+.shogi-game .shogi-tutorial {
+  /* 巻ごとの色(地図の看板)。第1巻から順に、琥珀・緑・朱・青・桃。 */
+  --volume-1: #f1a54c;
+  --volume-2: #86d4a9;
+  --volume-3: #f08a6c;
+  --volume-4: #8fb5f7;
+  --volume-5: #f3a3c8;
+  --medal-gold: #f6d365;
+  --medal-silver: #d5dde6;
+  --medal-bronze: #d9925f;
+  /* はなまる。先生の赤ペンのような朱色。盤の升の強調ではないので、升の色の決まりとは別。 */
+  --stamp-ink: #e2553b;
+  --boss: #b8433f;
+}
+/* めあて。見出しの帯の左に、いつも1行で出す。 */
+.shogi-game .shogi-tutorial__track-label b {
+  margin-right: 0.4em;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  color: #172632;
+  background: #f1a54c;
+  font-size: 0.72rem;
+}
+.shogi-game .shogi-tutorial__track-label {
+  max-width: 62%;
+  color: rgba(255, 252, 244, 0.92);
+}
+.shogi-game .shogi-tutorial__track-label b.shogi-tutorial__goal--boss {
+  color: #fffcf4;
+  background: var(--boss);
+}
+/* 正解のはなまる。盤の上のまん中に、ぽんと押して、すぐ消える。操作は止めない。 */
+.shogi-game .shogi-tutorial__board {
+  position: relative;
+}
+.shogi-game .shogi-tutorial__stamp {
+  position: absolute;
+  inset: 0;
+  /* 盤の中の部品(駒・矢印・成る選択は最大30)より上に出す。 */
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.shogi-game .shogi-tutorial__stamp span {
+  display: grid;
+  place-items: center;
+  min-width: 5.5rem;
+  height: 5.5rem;
+  padding: 0 0.8rem;
+  border: 0.32rem solid var(--stamp-ink);
+  border-radius: 999px;
+  color: var(--stamp-ink);
+  background: rgba(255, 252, 244, 0.88);
+  box-shadow: 0 0.3rem 0 rgba(23, 38, 50, 0.35);
+  font-size: 1.7rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+  transform: rotate(-8deg);
+  animation: shogi-tutorial-stamp 420ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__stamp--big span {
+  min-width: 7rem;
+  height: 7rem;
+  font-size: 2.1rem;
+}
+@keyframes shogi-tutorial-stamp {
+  0% { opacity: 0; transform: rotate(-8deg) scale(1.8); }
+  60% { opacity: 1; transform: rotate(-8deg) scale(0.92); }
+  100% { opacity: 1; transform: rotate(-8deg) scale(1); }
+}
+.shogi-game .shogi-tutorial__stamp-leave-active { transition: opacity 180ms ease; }
+.shogi-game .shogi-tutorial__stamp-leave-to { opacity: 0; }
+/* 課題の札。課題の種類・腕だめしの何問目か・駒取りの手数・れんぞくを1行に並べる。 */
+.shogi-game .shogi-tutorial__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+}
+.shogi-game .shogi-tutorial__chips .shogi-tutorial__task-label {
+  justify-self: auto;
+}
+.shogi-game .shogi-tutorial__chip {
+  padding: 0.05rem 0.55rem;
+  border: 1px solid rgba(255, 252, 244, 0.4);
+  border-radius: 999px;
+  color: #fffcf4;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.shogi-game .shogi-tutorial__chip--boss {
+  border-color: var(--boss);
+  background: var(--boss);
+}
+.shogi-game .shogi-tutorial__chip--streak {
+  border-color: #6ee7b7;
+  color: #10281b;
+  background: #8fdcaa;
+  animation: shogi-tutorial-feedback-pop 260ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+/* 章クリアのメダル。 */
+.shogi-game .shogi-tutorial__medal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0;
+  color: var(--medal-color);
+  font-size: 1.2rem;
+  font-weight: 900;
+  animation: shogi-tutorial-clear-pop 420ms 200ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__medal--gold { --medal-color: var(--medal-gold); }
+.shogi-game .shogi-tutorial__medal--silver { --medal-color: var(--medal-silver); }
+.shogi-game .shogi-tutorial__medal--bronze { --medal-color: var(--medal-bronze); }
+.shogi-game .shogi-tutorial__medal-disc {
+  display: grid;
+  place-items: center;
+  width: 3.2rem;
+  height: 3.2rem;
+  border: 0.25rem solid rgba(23, 38, 50, 0.35);
+  border-radius: 50%;
+  color: #172632;
+  background: radial-gradient(circle at 35% 30%, #fffcf4 0 12%, var(--medal-color) 13%);
+  box-shadow: 0 0.25rem 0 rgba(10, 20, 28, 0.6);
+  font-size: 1.3rem;
+}
+.shogi-game .shogi-tutorial__new-title {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.55rem 1rem;
+  border: 2px solid var(--medal-gold);
+  border-radius: 0.8rem;
+  background: rgba(246, 211, 101, 0.12);
+  color: var(--medal-gold);
+  font-size: 1.15rem;
+  font-weight: 900;
+  text-align: center;
+  animation: shogi-tutorial-clear-pop 420ms 420ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+.shogi-game .shogi-tutorial__new-title small {
+  color: rgba(255, 252, 244, 0.8);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+/* 地図: 巻の色。 */
+.shogi-game .shogi-tutorial__road > li[data-volume="1"] { --volume: var(--volume-1); }
+.shogi-game .shogi-tutorial__road > li[data-volume="2"] { --volume: var(--volume-2); }
+.shogi-game .shogi-tutorial__road > li[data-volume="3"] { --volume: var(--volume-3); }
+.shogi-game .shogi-tutorial__road > li[data-volume="4"] { --volume: var(--volume-4); }
+.shogi-game .shogi-tutorial__road > li[data-volume="5"] { --volume: var(--volume-5); }
+.shogi-game .shogi-tutorial__road .shogi-tutorial__world {
+  background: var(--volume);
+  box-shadow: 0 4px 0 rgba(10, 20, 28, 0.55);
+}
+.shogi-game .shogi-tutorial__road .shogi-tutorial__signpost {
+  border-color: color-mix(in srgb, var(--volume) 70%, transparent);
+  color: var(--volume);
+}
+.shogi-game .shogi-tutorial__signpost-medal {
+  font-size: 1.1rem;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(10, 20, 28, 0.8);
+}
+.shogi-game .shogi-tutorial__signpost-medal--gold { color: var(--medal-gold); }
+.shogi-game .shogi-tutorial__signpost-medal--silver { color: var(--medal-silver); }
+.shogi-game .shogi-tutorial__signpost-medal--bronze { color: var(--medal-bronze); }
+/* 地図: 腕だめしのマス。道のまん中に、大きな角の丸い札で置く(山場)。 */
+.shogi-game .shogi-tutorial__node--boss {
+  width: 5rem;
+  height: 4.4rem;
+  border-radius: 1.1rem;
+}
+.shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--locked,
+.shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--open {
+  background: #4a2a33;
+  box-shadow: 0 5px 0 #24141a;
+}
+.shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--next {
+  color: #fffcf4;
+  background: var(--boss);
+  box-shadow: 0 5px 0 #6e2522, 0 0 0 6px rgba(184, 67, 63, 0.35);
+}
+.shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--cleared {
+  background: var(--medal-gold);
+}
+.shogi-game .shogi-tutorial__road-lesson:has(.shogi-tutorial__node--boss) .shogi-tutorial__node-title {
+  color: #f6a39f;
+  font-weight: 900;
+}
+.shogi-game .shogi-tutorial__continue-goal {
+  font-weight: 700;
+  opacity: 0.85;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tutorial__stamp span,
+  .shogi-game .shogi-tutorial__chip--streak,
+  .shogi-game .shogi-tutorial__medal,
+  .shogi-game .shogi-tutorial__new-title {
+    animation: none;
+  }
 }
 </style>

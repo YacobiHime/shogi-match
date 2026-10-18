@@ -10,8 +10,8 @@ import { pieceReachSquares } from "./piece-reach.mjs";
 
 export const STANDARD_SFEN = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
 
-/** 盤を操作するステップの種類。 */
-export const INTERACTIVE_STEP_TYPES = Object.freeze(["move-piece", "find-move", "mate"]);
+/** 盤を操作するステップの種類。problemは問題集の問題(判定はtutorial-problem.mjs)。 */
+export const INTERACTIVE_STEP_TYPES = Object.freeze(["move-piece", "find-move", "mate", "capture", "problem"]);
 
 /** 正解したあと、この時間（ミリ秒）だけ「正解！」を見せてから次のステップへ進める。 */
 export const TUTORIAL_AUTO_ADVANCE_MS = 1100;
@@ -77,7 +77,12 @@ export function tutorialStepMarks(step, sfen = tutorialStepSfen(step)) {
     for (const usi of pieceReachSquares(sfen, step.pieceSquare)) marks.set(usi, "reach");
   }
   for (const [usi, tone] of step?.marks ?? []) marks.set(usi, tone);
-  if (step?.type === "move-piece") marks.set(step.target, "key");
+  // マスの名前だけで動かす課題(hideTarget)では、目的のマスに色を付けない。
+  if (step?.type === "move-piece" && !step.hideTarget) marks.set(step.target, "key");
+  // 駒取りゲームは、残っている相手の駒(ねらう駒)を赤で示す。
+  if (step?.type === "capture" && sfen) {
+    for (const usi of captureTargets(sfen)) marks.set(usi, "target");
+  }
   return [...marks].map(([usi, tone]) => toMark(usi, tone));
 }
 
@@ -85,7 +90,7 @@ export function createStepState(step) {
   const sfen = tutorialStepSfen(step);
   return {
     sfen,
-    square: step?.type === "move-piece" ? step.from : "",
+    square: step?.type === "move-piece" || step?.type === "capture" ? step.from : "",
     movesUsed: 0,
     ply: step?.type === "replay" ? (step.from ?? 0) : 0,
     solved: false,
@@ -167,6 +172,61 @@ export function isCheckmate(sfen) {
   return position.checked && enumerateLegalMoves(position).length === 0;
 }
 
+// ===== 駒取りゲーム(capture) =====
+/** SFENの盤を、USIのマス("5e"など)から駒の文字への表にする。 */
+function boardSquares(sfen) {
+  const squares = new Map();
+  String(sfen).split(" ")[0].split("/").forEach((row, rankIndex) => {
+    let file = 9;
+    let promoted = false;
+    for (const char of row) {
+      if (char === "+") { promoted = true; continue; }
+      if (/\d/.test(char)) { file -= Number(char); continue; }
+      squares.set(`${file}${String.fromCharCode(97 + rankIndex)}`, `${promoted ? "+" : ""}${char}`);
+      promoted = false;
+      file -= 1;
+    }
+  });
+  return squares;
+}
+
+/** 駒取りゲームで、まだ盤に残っている相手(後手)の駒のマス。 */
+export function captureTargets(sfen) {
+  return [...boardSquares(sfen)].filter(([, piece]) => piece.replace("+", "") !== piece.replace("+", "").toUpperCase()).map(([usi]) => usi);
+}
+
+/**
+ * squareの駒だけを動かして、相手の駒を全部取るのに要る最短の手数。取りきれないときはnull。
+ * 調べる局面がlimitを超えたらundefined(分からない)。教材の目標手数(par)の確かめと、取りきれなくなったかの判定に使う。
+ */
+export function captureMinMoves(sfen, square, limit = 6000) {
+  const start = withBlackToMove(sfen);
+  if (!captureTargets(start).length) return 0;
+  let frontier = [{ sfen: start, square }];
+  const seen = new Set([`${start}|${square}`]);
+  for (let depth = 1; frontier.length; depth += 1) {
+    const next = [];
+    for (const node of frontier) {
+      for (const usi of legalMoves(node.sfen).filter((move) => move.slice(0, 2) === node.square)) {
+        const after = withBlackToMove(applyMove(node.sfen, usi));
+        if (!captureTargets(after).length) return depth;
+        const key = `${after}|${usi.slice(2, 4)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (seen.size > limit) return undefined;
+        next.push({ sfen: after, square: usi.slice(2, 4) });
+      }
+    }
+    frontier = next;
+  }
+  return null;
+}
+
+/** 後ろへ戻れない駒(歩・香・桂)。取りきれなくなることがあるので、指すたびに確かめる。 */
+function canGetStuck(sfen, square) {
+  return ["P", "L", "N"].includes(boardSquares(sfen).get(square));
+}
+
 function moveMatches(step, usi) {
   if (step.anyDropOf) return usi.startsWith(`${step.anyDropOf}*`);
   return (step.answers ?? []).includes(usi);
@@ -198,6 +258,19 @@ export function attemptTutorialMove(step, state, usi) {
     }
     return { outcome: "continue", state: next };
   }
+  if (step.type === "capture") {
+    if (usi.slice(0, 2) !== state.square) return { outcome: "wrong", state, reason: "other-piece" };
+    const before = captureTargets(state.sfen).length;
+    const sfen = withBlackToMove(applyMove(state.sfen, usi));
+    const next = { ...state, sfen, square: usi.slice(2, 4), movesUsed: state.movesUsed + 1 };
+    const left = captureTargets(sfen).length;
+    if (!left) return { outcome: "correct", state: { ...next, solved: true }, captured: true, movesUsed: next.movesUsed, par: step.par };
+    // 歩・香・桂が、残りの駒へもう届かなくなったら、最初の局面からやり直す。
+    if (canGetStuck(sfen, next.square) && captureMinMoves(sfen, next.square) === null) {
+      return { outcome: "wrong", state: createStepState(step), reason: "stuck" };
+    }
+    return { outcome: "continue", state: next, captured: left < before, left };
+  }
   if (step.type === "mate") {
     const expected = step.solution[state.ply];
     const lastPlayerMove = state.ply >= step.solution.length - 1;
@@ -216,6 +289,18 @@ export function attemptTutorialMove(step, state, usi) {
   return { outcome: "wrong", state, reason: "not-interactive" };
 }
 
+/** 駒取りゲームで、最短で取りきる道の次の1手。見つからなければ""。 */
+export function captureBestMove(sfen, square) {
+  const goal = captureMinMoves(sfen, square);
+  if (!goal) return "";
+  for (const usi of legalMoves(withBlackToMove(sfen)).filter((move) => move.slice(0, 2) === square)) {
+    const after = withBlackToMove(applyMove(sfen, usi));
+    const rest = captureMinMoves(after, usi.slice(2, 4));
+    if (rest === goal - 1) return usi;
+  }
+  return "";
+}
+
 /** 選択肢のステップを判定する。 */
 export function attemptTutorialChoice(step, index) {
   return index === step.answer ? "correct" : "wrong";
@@ -230,6 +315,13 @@ export function tutorialHint(step, state, level) {
       : "";
   if (step.type === "move-piece") {
     return { marks: [toMark(step.target, "key"), toMark(state.square, "target")], arrows: [] };
+  }
+  // 駒取りゲームは、動かす駒を緑で示す。2回目は、最短で取りきる道の次の1手を矢印で示す。
+  if (step.type === "capture") {
+    const marks = [toMark(state.square, "key")];
+    if (level < 2) return { marks, arrows: [] };
+    const best = captureBestMove(state.sfen, state.square);
+    return { marks, arrows: best ? [best] : [] };
   }
   if (!answer) return { marks: [], arrows: [] };
   const destination = answer.replace("+", "").slice(-2);
