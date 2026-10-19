@@ -79,7 +79,7 @@ describe('CPU着手の共通選択', () => {
     move: '2g2f',
     candidates: [
       { rank: 1, move: '2g2f', score: cp(60) },
-      { rank: 2, move: '6i7h', score: cp(40) },
+      { rank: 2, move: '7i6h', score: cp(40) },
       { rank: 3, move: '5i5h', score: cp(30) },
       { rank: 4, move: '8h2b+', score: cp(-1500) },
     ],
@@ -104,7 +104,7 @@ describe('CPU着手の共通選択', () => {
     }
     expect(counts['8h2b+'] ?? 0).toBe(0);
     // 評価値がほぼ同じでも、序盤の無意味な玉移動は自然さで大きく減る。
-    expect(counts['5i5h'] ?? 0).toBeLessThan((counts['6i7h'] ?? 0) / 4);
+    expect(counts['5i5h'] ?? 0).toBeLessThan((counts['7i6h'] ?? 0) / 4);
     expect(counts['2g2f']).toBeGreaterThan(counts['5i5h'] ?? 0);
   });
 
@@ -125,8 +125,8 @@ describe('CPU着手の共通選択', () => {
   test('見落としは浅い読みで良く見え深い読みで悪い手を、追加探索を直列2回で選ぶ', async () => {
     const strength = lowStrength;
     const verify = twoStageVerify(
-      { '2g2f': 60, '6i7h': 50, '7f7e': -600 },
-      { '2g2f': 80, '6i7h': -400 },
+      { '2g2f': 60, '7i6h': 50, '7f7e': -600 },
+      { '2g2f': 80, '7i6h': -400 },
     );
     const result = await chooseCpuMove({
       strength, sfen, legalMoves, moveHistory, search, verify,
@@ -137,14 +137,14 @@ describe('CPU着手の共通選択', () => {
     expect(verify.mock.calls[1][1]).toBe(strength.oversightNodes);
     // 浅い読みで悪く見えた手は深く読み直さない。
     expect(verify.mock.calls[1][0]).not.toContain('7f7e');
-    expect(result).toMatchObject({ move: '6i7h', kind: 'oversight', deepLoss: 480 });
+    expect(result).toMatchObject({ move: '7i6h', kind: 'oversight', deepLoss: 480 });
   });
 
   test('深い読みでも悪くない手しかなければ通常の抽選に戻る', async () => {
     const strength = lowStrength;
     const verify = twoStageVerify(
-      { '2g2f': 60, '6i7h': 50 },
-      { '2g2f': 80, '6i7h': 60 },
+      { '2g2f': 60, '7i6h': 50 },
+      { '2g2f': 80, '7i6h': 60 },
     );
     const result = await chooseCpuMove({
       strength, sfen, legalMoves, moveHistory, search, verify,

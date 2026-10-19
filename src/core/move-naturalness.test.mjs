@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { Position } from 'tsshogi';
 import { enumerateLegalMoves, STANDARD_SFEN } from '../game-state.ts';
+import { CPU_POSITION_SET, cpuPositionVariants, mirrorPositionSfen } from './cpu-position-set.mjs';
+import { mirrorUsiMove } from './opening-guide.mjs';
 import {
   createNaturalnessEvaluator,
   LOW_NATURALNESS_THRESHOLD,
@@ -26,6 +28,62 @@ function evaluatorAfter(moves, sfen) {
 }
 
 describe('指し手の自然さ', () => {
+  test('局面集を盤・手番・持ち駒ごと反転し、両方で同じ目的を判定する', () => {
+    for (const fixture of CPU_POSITION_SET) {
+      expect(Position.newBySFEN(fixture.sfen)).toBeTruthy();
+      expect(Position.newBySFEN(mirrorPositionSfen(fixture.sfen))).toBeTruthy();
+      expect(Position.newBySFEN(mirrorPositionSfen(mirrorPositionSfen(fixture.sfen))).sfen)
+        .toBe(Position.newBySFEN(fixture.sfen).sfen);
+    }
+    for (const fixture of cpuPositionVariants()) {
+      const move = (usi) => fixture.mirrored ? mirrorUsiMove(usi) : usi;
+      for (const simplicity of [0, 1]) {
+        const evaluate = createNaturalnessEvaluator(fixture.sfen, { moveHistory: fixture.moveHistory, simplicity });
+        if (fixture.id === 'rook-attacked') {
+          expect(evaluate(move('P*8d')).purposeful).toBe(false);
+          expect(evaluate(move('8b8d')).tags).toContain('escape');
+        }
+        if (fixture.id === 'anaguma') expect(evaluate(move('9i9h')).tags).toContain('develop');
+        if (fixture.id === 'bougin-silver') {
+          expect(evaluate(move('P*2c')).tags).toContain('guard');
+          for (const usi of ['9a9b', '1a1b', '6a6b']) expect(evaluate(move(usi)).purposeful).toBe(false);
+        }
+      }
+    }
+  });
+
+  test('初期位置の香上がりと桂跳ねは目的なし、作戦の手は目的あり', () => {
+    for (const simplicity of [0, 1]) {
+      const evaluate = createNaturalnessEvaluator(STANDARD_SFEN, { simplicity });
+      for (const usi of ['9i9h', '1i1h']) {
+        expect(evaluate(usi).purposeful).toBe(false);
+        expect(evaluate(usi).tags).not.toContain('advance');
+      }
+    }
+    const advancedPawn = positionAfter(['7g7f', '3c3d']);
+    expect(createNaturalnessEvaluator(advancedPawn.sfen)('8i7g').purposeful).toBe(false);
+    expect(createNaturalnessEvaluator(STANDARD_SFEN, { planMoves: ['9i9h'] })('9i9h').tags).toContain('plan');
+  });
+
+  test('取られる銀で歩を取る手は、取られる前に取る手として扱う', () => {
+    const sfen = '4k4/9/5g3/4p4/4S4/9/9/9/4K4 b - 1';
+    const evaluated = createNaturalnessEvaluator(sfen)('5e5d');
+    expect(evaluated.tags).toContain('desperado');
+    expect(evaluated.tags).not.toContain('losing-capture');
+    expect(evaluated.tags).not.toContain(PIECE_SACRIFICE_TAG);
+  });
+
+  test('損な取りの重みを素人らしさに応じて緩める', () => {
+    // 銀で香を取り、金で取り返される。銀は移動前には当たっていない。
+    const sfen = '4k4/9/9/9/4S1g2/5l3/9/9/4K4 b - 1';
+    const plain = createNaturalnessEvaluator(sfen)('5e4f');
+    const simple = createNaturalnessEvaluator(sfen, { simplicity: 1 })('5e4f');
+    expect(plain.tags).toContain('losing-capture');
+    expect(simple.tags).toContain('losing-capture');
+    // 香の侵入を止めるguard(1.5倍)と、取り自体の重みを分けて確認する。
+    expect(plain.weight / 1.5).toBeCloseTo(0.4);
+    expect(simple.weight / 1.5).toBeCloseTo(1.0);
+  });
   test('取り返しは無関係な手より重い', () => {
     const { evaluate } = evaluatorAfter(['7g7f', '3c3d', '8h2b+']);
     const recapture = evaluate('3a2b');
@@ -113,7 +171,8 @@ describe('指し手の自然さ', () => {
     const plain = createNaturalnessEvaluator(position.sfen, { moveHistory: moves });
     const simple = createNaturalnessEvaluator(position.sfen, { moveHistory: moves, simplicity: 1 });
     expect(simple('2c2d').tags).toContain('pawn-tension');
-    expect(simple('2c2d').weight).toBeGreaterThan(plain('2c2d').weight * 2);
+    // guardの加点と重み8の上限が両方に掛かっても、歩の取り合いをより好む。
+    expect(simple('2c2d').weight).toBeGreaterThan(plain('2c2d').weight);
     // 取らずに放っておく手との差が広がる。
     expect(simple('2c2d').weight / simple('9c9d').weight)
       .toBeGreaterThan(plain('2c2d').weight / plain('9c9d').weight * 3);

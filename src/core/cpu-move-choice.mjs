@@ -101,7 +101,7 @@ function naturalnessMemo(sfen, moveHistory, options = {}, evaluation = evaluatio
 /** 攻めの手のタグ。王手も攻めの手に数える。 */
 export const ATTACK_TAGS = new Set(["threaten", "open-line", "rook-pawn-push", "pawn-tension", "promote", "winning-capture", "free-capture"]);
 /** 受けの手のタグ。 */
-export const DEFENSE_TAGS = new Set(["king-escape", "drop-block", "move-block", "escape", "castle-build", "capture-checker", "recapture", "simple-recapture"]);
+export const DEFENSE_TAGS = new Set(["king-escape", "drop-block", "move-block", "escape", "castle-build", "capture-checker", "recapture", "simple-recapture", "guard"]);
 
 /** 手が攻め(1)か受け(-1)か、どちらでもない(0)か。両方の性格を持つ手は、攻めに数える。 */
 export function moveLeaning({ tags = [], check = false } = {}) {

@@ -156,11 +156,36 @@ export function isHanging(board, square) {
 }
 
 export function countHanging(board, color) {
+  const own = new Set();
+  const enemy = new Map();
+  for (const [from, piece] of board) {
+    for (const to of attackedSquares(board, from)) {
+      if (piece.color === color) own.add(to);
+      else enemy.set(to, Math.min(enemy.get(to) ?? Infinity, pieceValue(piece.kind)));
+    }
+  }
   let count = 0;
   for (const [square, piece] of board) {
-    if (piece.color === color && isHanging(board, square)) count += 1;
+    if (piece.color === color && piece.kind !== "K" && enemy.has(square)
+      && (!own.has(square) || enemy.get(square) < pieceValue(piece.kind))) count += 1;
   }
   return count;
+}
+
+/** 自陣へ次の一手で侵入でき、相手の利きが上回るマス。持ち駒の打ちは含めない。 */
+export function breakthroughSquares(board, color) {
+  const own = new Map();
+  const enemy = new Map();
+  const entries = new Set();
+  for (const [from, piece] of board) {
+    const counts = piece.color === color ? own : enemy;
+    for (const to of attackedSquares(board, from)) {
+      counts.set(to, (counts.get(to) ?? 0) + 1);
+      if (piece.color !== color && piece.kind !== "K" && relativeRank(to, color) >= 7
+        && board.get(to)?.color !== piece.color) entries.add(to);
+    }
+  }
+  return [...entries].filter((to) => (enemy.get(to) ?? 0) > (own.get(to) ?? 0));
 }
 
 const UNPROMOTE = { "+P": "P", "+L": "L", "+N": "N", "+S": "S", "+B": "B", "+R": "R" };
