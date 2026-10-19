@@ -109,7 +109,11 @@ export function recordTutorialProblem(storage, step, { firstTry }) {
  * - expect: "hold" は、詰まないことを確かめる(囲い)。王手をmaxChecks回するか、王手が続かなくなったらクリア。
  * 相手は、詰み探索でいちばん長く逃げる手を返す。
  */
-export const ATTACK_TEST_MAX_CHECKS = 5;
+/**
+ * 詰まないことを確かめる攻めくらべで、王手を続ける回数の上限。囲いによっては王手がこれより早く続かなくなる
+ * (美濃囲いは2回、舟囲いは3〜4回)ので、台詞では回数を約束しない。
+ */
+export const ATTACK_TEST_MAX_CHECKS = 3;
 /** 囲いが詰まないかを読む手数。テストで、囲いの局面がこの手数以内に詰まないことを確かめる。 */
 export const ATTACK_TEST_HOLD_PLIES = 9;
 

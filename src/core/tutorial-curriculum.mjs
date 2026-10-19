@@ -880,7 +880,7 @@ const VOLUME_3 = {
             {
               type: "attack-test", sfen: MINO_SFEN, expect: "hold", label: "美濃囲い",
               compareTo: { label: "居玉", result: "3手で詰み" },
-              speech: "さっきと同じ竜と金で、こんどは「美濃囲い」の玉を攻めてみよう！ 王手を5回してみてね。",
+              speech: "さっきと同じ竜と金で、こんどは「美濃囲い」の玉を攻めてみよう！ 王手が続くか、ためしてみてね。",
             },
             {
               type: "explain", sfen: MINO_SFEN, kiki: "white",
@@ -974,7 +974,7 @@ const VOLUME_3 = {
             {
               type: "attack-test", sfen: FUNA_SFEN, expect: "hold", label: "舟囲い",
               compareTo: { label: "居玉", result: "3手で詰み" },
-              speech: "相手は舟囲い。竜と金で、王手を5回してみよう！ 居玉とくらべて、どうかな？",
+              speech: "相手は舟囲い。竜と金で、王手を続けてみよう！ 居玉とくらべて、どうかな？",
             },
             { type: "choose", question: "玉の守りの基本は？", options: ["金銀3枚", "飛車と角", "歩をたくさん"], answer: 0, explanation: "「玉の守りは金銀3枚」。この格言を覚えておこう！" },
             problemStep("gts-22d2d6dacae5", { speech: "【前の巻から】1手で詰ませよう！ 歩を成るのもありだよ。" }),

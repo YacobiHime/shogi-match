@@ -1152,7 +1152,6 @@ const buildCount = computed(() => (
   currentStep.value?.type === "build" ? { name: currentStep.value.name, par: currentStep.value.par, used: stepState.value.movesUsed } : null
 ));
 /** 攻めくらべの札。くらべる相手(居玉)の結果と、王手の回数か、この局面の結果。 */
-const ATTACK_CHECKS = 5;
 const attackChips = computed(() => {
   const step = currentStep.value;
   if (step?.type !== "attack-test") return [];
@@ -1160,7 +1159,8 @@ const attackChips = computed(() => {
   if (step.compareTo) chips.push({ key: "compare", text: `${step.compareTo.label}：${step.compareTo.result}`, tone: "" });
   if (attackOutcome.value) chips.push({ key: "result", text: `${step.label}：${attackOutcome.value}`, tone: "result" });
   else if (step.expect === "mate") chips.push({ key: "goal", text: `${step.label}を${step.plies}手で詰ませよう`, tone: "" });
-  else chips.push({ key: "checks", text: `王手 ${stepState.value.checks ?? 0}/${step.maxChecks ?? ATTACK_CHECKS}`, tone: "" });
+  // 囲いによって王手が続く回数が違うので、上限の数は見せず、した回数だけを出す。
+  else chips.push({ key: "checks", text: `王手 ${stepState.value.checks ?? 0}回`, tone: "" });
   return chips;
 });
 /**

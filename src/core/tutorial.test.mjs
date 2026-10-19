@@ -387,6 +387,12 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     }
   });
 
+  it("詰まないことを確かめる攻めくらべは、王手の回数を約束しない(囲いによって王手が続く回数が違う)", () => {
+    const holds = TUTORIAL_LESSONS.flatMap(({ steps }) => steps).filter(({ type, expect: goal }) => type === "attack-test" && goal === "hold");
+    expect(holds.length).toBeGreaterThanOrEqual(2);
+    for (const step of holds) expect(step.speech, step.label).not.toMatch(/王手を[0-9０-９一二三四五六七八九]+回/);
+  });
+
   it("吹き出しの文は1ステップ60字まで(大事なことは盤の上のひとことで見せる。設計16-3)", () => {
     for (const lesson of TUTORIAL_LESSONS) {
       lesson.steps.forEach(({ speech, question }, index) => {
