@@ -35,7 +35,7 @@
         <p class="shogi-title__bubble" aria-hidden="true">{{ homeGreeting }}</p>
         <img
           class="shogi-title__chara"
-          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=3`"
           alt=""
           aria-hidden="true"
         >
@@ -1124,7 +1124,7 @@
       <div v-if="guidedReview" class="shogi-game__guided" aria-live="polite">
         <img
           class="shogi-game__guided-chara"
-          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=3`"
           alt=""
           aria-hidden="true"
         >
@@ -1351,7 +1351,7 @@
       <div class="shogi-game__confirm-panel shogi-welcome">
         <img
           class="shogi-welcome__chara"
-          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=3`"
           alt=""
           aria-hidden="true"
         >

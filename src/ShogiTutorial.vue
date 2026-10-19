@@ -708,7 +708,7 @@ function toggleVoice() {
 
 const view = ref<"map" | "lesson" | "chapter" | "result">("map");
 const lessonId = ref("");
-const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=2`);
+const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=3`);
 
 // 狭い画面では縦長レイアウトの盤に切り替える。
 const narrowMediaQuery = typeof window !== "undefined" && window.matchMedia

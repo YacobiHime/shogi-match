@@ -34,7 +34,7 @@ const props = defineProps({
 });
 
 // 竜王戦とやこびノートでは、ドット絵のやこび姫(全身)を使う。切り抜かずに全身を見せる。
-const faceUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=2`);
+const faceUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=3`);
 </script>
 
 <style>

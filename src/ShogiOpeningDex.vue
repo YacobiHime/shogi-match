@@ -162,7 +162,7 @@
             <div class="shogi-dex__speech">
               <img
                 class="shogi-dex__chara"
-                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=3`"
                 alt=""
                 aria-hidden="true"
               >
@@ -178,7 +178,7 @@
           <p v-else class="shogi-dex__no-explanation">
             <img
               class="shogi-dex__chara"
-              :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+              :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=3`"
               alt=""
               aria-hidden="true"
             >

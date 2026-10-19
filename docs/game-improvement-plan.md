@@ -370,7 +370,7 @@
 |---|---|---|---|
 | A | `public/characters/sakurano-momoka-happy.webp` | 好手・神の一手のほめ言葉、勝ったとき、指し直して勝ったとき（段階1・2） | いまの立ち絵と同じ構図・大きさ（横800px、縦2300px前後、透過のwebp）。目を細めて笑う、など、ふつうの顔と一目で区別できる喜び |
 | B | `public/characters/sakurano-momoka-surprised.webp` | 神の一手（段階2）。「えっ、すごい！」の驚き | 同上 |
-| B | `public/characters/yakobihime-mini-happy.webp` | ホーム・結果画面の小さなやこび姫（級・段が上がった、印が手に入った） | いまの`yakobihime-mini.webp`と同じ大きさ（304×690px、透過のwebp） |
+| B | `public/characters/yakobihime-mini-happy.webp` | ホーム・結果画面の小さなやこび姫（級・段が上がった、印が手に入った） | いまの`yakobihime-mini.webp`と同じ大きさ（312×690px、透過のwebp） |
 
 - 盤・駒の着せ替えは、いまあるもの（盤9種、駒6種）を解放制に回すので、新しい絵は要りません。増やしたくなったら、そのとき一覧を出します。
 - 振り駒の演出は、いまの駒の画像（歩・と）を使ってコードで動かします。

@@ -221,7 +221,7 @@
             </div>
             <div class="shogi-reference-dex__kifu-comment" aria-live="polite">
               <img
-                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=3`"
                 alt=""
                 aria-hidden="true"
               >
@@ -259,7 +259,7 @@
             <div class="shogi-reference-dex__kifu-comment" aria-live="polite">
               <img
                 :class="{ 'shogi-reference-dex__kifu-comment-chara--idle': !stepComment }"
-                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=3`"
                 alt=""
                 aria-hidden="true"
               >
@@ -401,7 +401,7 @@
             <div class="shogi-dex__speech">
               <img
                 class="shogi-dex__chara"
-                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=2`"
+                :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=3`"
                 alt=""
                 aria-hidden="true"
               >
