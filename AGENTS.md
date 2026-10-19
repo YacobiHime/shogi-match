@@ -25,7 +25,7 @@
 | 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue`、解析用エンジンの追加と解放は`src/composables/match/analysisEngines.ts`、対局の振り返りは`src/composables/match/useGuidedReview.ts`（台本は`src/core/guided-review.mjs`） |
 | リロード復元 | `src/core/match-persistence.mjs` |
 | 大会（竜王戦）・称号・プロフィール | `src/core/ryuo.mjs`（トーナメント表・棋士の生成・自動対局・昇級降級・シーズンの進行）、`src/core/ryuo-data.mjs`（棋士の名前・戦法）、`src/core/player-character.mjs`（棋士の棋風と特徴、強さ設定への反映、詰みが見える手数）、`src/core/ryuo-roster.mjs`（期をまたいで残る架空の棋士の名簿と、期の結果での更新）、`src/core/ryuo-league.mjs`（棋界の1年: 年間成績・順位戦・竜王以外のタイトル戦・昇段・将棋大賞）、`src/core/ryuo-names.mjs`（名前）、`src/core/ryuo-repertoire.mjs`（得意戦法）、`src/core/ryuo-book.mjs`と`src/RyuoRosterBook.vue`（棋士名鑑）、`src/core/ryuo-strength.mjs`（棋士のレーティング・難易度によるLvへの換算・自動対局の勝率）、`src/core/ryuo-career.mjs`（キャリアと保存）、`src/core/ryuo-stats.mjs`（統計・レーダーチャート・解説）、`src/core/ryuo-tree-layout.mjs`（トーナメント表の木の配置）、`src/core/player-profile.mjs`（称号）、`src/ShogiTournament.vue`（タイトル画面から入る大会の画面）、`src/TournamentTree.vue`（木の図）、`src/RadarChart.vue`、`src/RyuoLadder.vue`（組の階段）、`src/ShogiMatchGame.vue`の`ryuoSeason`・`ryuoGame`、統計のための裏の解析は`src/composables/match/useRyuoStatsAnalysis.ts`、設計は`docs/tournament-design.md`、制度の調査は`docs/ryuo-sen-research.md` |
-| 将棋教室 | `src/ShogiTutorial.vue`、`src/core/tutorial-curriculum.mjs`、判定は`src/core/tutorial-runner.mjs`（問題集の問題と攻めくらべは`src/core/tutorial-problem.mjs`。対局画面から読まない。駒得するまで指す課題・角打ちの隙の駒の損得の読みは`src/core/material-tactics.mjs`）、地図・メダル・称号は`src/core/tutorial-map.mjs`、利きメガネの所持とにがての記録は`src/core/tutorial-progress.mjs`、設計は`docs/nyumon-mode-design.md` |
+| 将棋教室 | `src/ShogiTutorial.vue`、`src/core/tutorial-curriculum.mjs`、盤の上のひとこと（文・マス・位置）と吹き出しの色の札は`src/core/tutorial-callout.mjs`、読み上げの読み方は`src/core/tutorial-voice.mjs`、判定は`src/core/tutorial-runner.mjs`（問題集の問題と攻めくらべは`src/core/tutorial-problem.mjs`。対局画面から読まない。駒得するまで指す課題・角打ちの隙の駒の損得の読みは`src/core/material-tactics.mjs`）、地図・メダル・称号は`src/core/tutorial-map.mjs`、利きメガネの所持・にがての記録・格言帳は`src/core/tutorial-progress.mjs`、設計は`docs/nyumon-mode-design.md` |
 | 盤の見える化 | 駒の値段と駒得の数字は`src/core/piece-points.mjs`（駒図鑑のtier表・教室・学習対局で共通）、取られるマス・玉の逃げ道・取り返し・利いているマスの数は`src/core/board-insight.mjs`、利きの地図は`src/core/learning-setup.mjs`の`attackMap` |
 | 将棋問題集 | `src/ShogiProblemSet.vue`、問題とやこび姫の台詞は`src/core/problem-set.mjs`、練習問題の正誤判定の詰み探索は`src/core/problem-solver.ts`（正解は書かず探索で決める）、詰将棋（駒の少ない詰将棋と実戦詰将棋）と詰将棋図巧のデータは`src/data/tsume-problems.mjs`・`src/data/jissen-tsume-problems.mjs`・`src/data/zukou-problems.mjs`（外部データの手順で判定する。手で書き換えない） |
 | 図鑑 | `src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、「詰将棋の名作」で解ける『将棋図巧』は将棋問題集の`ZUKOU_SET`と判定を使う、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`src/composables/match/useDexAnalysisEngine.ts`で対局用のものを借りる） |
@@ -123,10 +123,10 @@
 | 青・赤の× | 玉の逃げ道で、相手の駒が利いているマス。後手の玉のまわりは先手の利き（青、`square-mark--covered`）、先手の玉のまわりは後手の利き（赤、`square-mark--danger`）。逃げられるマスは緑（`square-mark--key`） | `BoardView.vue`の`.square-mark--covered`・`.square-mark--danger` |
 | 赤い輪 | 利きメガネで、駒を選んだとき、動かすと取られて損をする移動先 | `BoardView.vue`の`.risk-ring` |
 
-- 図鑑の凡例（`ShogiReferenceDex.vue`の`__swatch--*`）は、盤上の色と同じ色相にします。
+- 図鑑の凡例（`ShogiReferenceDex.vue`の`__swatch--*`）と、教室の吹き出しの色の札（`ShogiTutorial.vue`の`__swatch--*`。「緑のマス」などの言葉の前に付く）は、盤上の色と同じ色相にします。
 - 升の色を変えるときは、台詞や凡例にある色の名前（「緑のマス」など）も同じ変更で直します。
 - 対局中の矢印（危険な定跡手の黄色、AI候補の赤など）は升の強調とは別の表示で、この表の対象外です。
-- 駒得の数字（取ったマスに浮かべる緑の「＋6」・赤の「−5」、`BoardView.vue`の`.float-label`）と、囲いを組もうの薄い駒（`.ghost-piece`）も、升の強調とは別の表示です。駒得の数字の色は、教室の札（`ShogiTutorial.vue`の`--material-good`・`--material-bad`）とそろえます。
+- 駒得の数字（取ったマスに浮かべる緑の「＋6」・赤の「−5」、`BoardView.vue`の`.float-label`）と、囲いを組もうの薄い駒（`.ghost-piece`）、教室の盤の上のひとこと（`.board-callout`。白地に濃い縁で、黄色は使わない）も、升の強調とは別の表示です。駒得の数字の色は、教室の札（`ShogiTutorial.vue`の`--material-good`・`--material-bad`）とそろえます。
 
 ## 検証
 
