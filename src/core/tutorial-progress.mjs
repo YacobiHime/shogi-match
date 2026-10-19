@@ -22,7 +22,10 @@ export function loadTutorialProgress(storage) {
         lessons[id] = { status: "skipped", stars: 0 };
       }
     }
-    return { lessons };
+    const result = { lessons };
+    if (PLACEMENT_IDS.includes(parsed?.placement)) result.placement = parsed.placement;
+    if (parsed?.reviewOffered === true) result.reviewOffered = true;
+    return result;
   } catch {
     return emptyTutorialProgress();
   }
@@ -35,6 +38,72 @@ export function saveTutorialProgress(storage, progress) {
   } catch {
     return false;
   }
+}
+
+// ===== どこから始めるか(17章) =====
+/** 最初の問いの答え。札のID(tutorial-map.mjsのTUTORIAL_PLACEMENTS)と、地図から自分で選んだ「map」。 */
+export const PLACEMENT_IDS = Object.freeze(["beginner", "pieces", "rules", "mate", "map"]);
+
+/**
+ * 教室を開いたときに「どのくらい知ってる？」と聞くか。記録が1つもなく、まだ答えていないときだけ聞く。
+ * ホームのはじめての案内で「はじめて」を選んだ人には聞かない(もう答えている)。保存できない環境でも聞かない(毎回聞かないため)。
+ * @param {{ lessons: Record<string, unknown>, placement?: string }} progress
+ * @param {{ welcomeChoice?: string, storageAvailable?: boolean }} [options]
+ */
+export function shouldAskPlacement(progress, { welcomeChoice = "", storageAvailable = true } = {}) {
+  if (!storageAvailable || progress.placement || welcomeChoice === "beginner") return false;
+  return Object.keys(progress.lessons).length === 0;
+}
+
+/** ホームのはじめての案内の答えから、おすすめの札。決めつけず「おすすめ」の印に使うだけ。 */
+export function recommendedPlacement(welcomeChoice) {
+  return ({ rules: "rules", player: "mate" })[welcomeChoice] ?? "";
+}
+
+/**
+ * 答えを記録する。始めるレッスンより前のレッスンを、すべて「とばした」にする(章をとばすのと同じ記録)。
+ * クリアした記録は消さない。★・メダル・巻の称号は、今までどおり腕だめしのクリアが要る。
+ * @param {{ id: string, comingSoon?: boolean }[]} lessons
+ * @param {{ lessons: Record<string, any>, placement?: string }} progress
+ * @param {string} placement
+ * @param {string | null} [startLessonId] 始めるレッスン。なければ、とばさない。
+ */
+export function applyPlacement(lessons, progress, placement, startLessonId = null) {
+  let next = { ...progress, placement };
+  const index = startLessonId ? lessons.findIndex(({ id }) => id === startLessonId) : -1;
+  for (const lesson of lessons.slice(0, Math.max(0, index))) {
+    if (!lesson.comingSoon) next = recordLessonSkipped(next, lesson.id);
+  }
+  return next;
+}
+
+/** とばした最初のレッスン(地図の「はじめから学ぶ」で始める)。なければnull。 */
+export function firstSkippedLesson(lessons, progress) {
+  return lessons.find((lesson) => !lesson.comingSoon && lessonRecord(progress, lesson.id).status === "skipped") ?? null;
+}
+
+/**
+ * 先から始めた人が、始めた章で続けて2つのレッスンを★1で終えたら、一度だけ前の章の復習を勧める。
+ * 前の章へ戻るかは本人が選ぶ(黙って戻さない)。
+ * @param {{ id: string, chapterId: string, comingSoon?: boolean }[]} lessons
+ * @param {{ lessons: Record<string, any>, placement?: string, reviewOffered?: boolean }} progress
+ * @param {string | null} startLessonId 答えで始めたレッスン
+ */
+export function shouldOfferReview(lessons, progress, startLessonId) {
+  if (!startLessonId || progress.reviewOffered || ["beginner", "map", undefined].includes(progress.placement)) return false;
+  const start = lessons.find(({ id }) => id === startLessonId);
+  if (!start) return false;
+  const chapter = lessons.filter((lesson) => lesson.chapterId === start.chapterId && !lesson.comingSoon);
+  return chapter.some((lesson, index) => index > 0
+    && [lesson, chapter[index - 1]].every(({ id }) => {
+      const record = lessonRecord(progress, id);
+      return record.status === "cleared" && record.stars === 1;
+    }));
+}
+
+/** 復習を勧めたことを記録する(二度は聞かない)。 */
+export function markReviewOffered(progress) {
+  return { ...progress, reviewOffered: true };
 }
 
 /** クリアを記録する。やり直して★が減っても、最高記録を残す。 */

@@ -57,7 +57,39 @@
       地図(すごろくの道)。巻・章・レッスンを学ぶ順に1本の道に並べ、いま進めるマスを1つだけ大きく見せる。
       マスを押せばすぐレッスンが始まる。開くと、いまのマスまで自動でスクロールする。
     -->
-    <section v-if="view === 'map'" ref="mapEl" class="shogi-tutorial__map" aria-label="レッスンの地図" data-tutorial-map>
+    <!--
+      はじめて開いたときの問い(設計17章)。「どのくらい知ってる？」に札を1枚押すと、合ったレッスンがすぐ始まる。
+      札は「できること」で書き、易しい順に並べる。ホームの案内の答えに合う札には「おすすめ」を付ける。
+    -->
+    <section
+      v-if="view === 'map' && placementOpen"
+      class="shogi-tutorial__placement"
+      aria-labelledby="shogi-tutorial-placement-title"
+      data-tutorial-placement
+    >
+      <div class="shogi-tutorial__placement-hero">
+        <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
+        <p id="shogi-tutorial-placement-title" class="shogi-tutorial__speech">{{ PLACEMENT_QUESTION }}</p>
+      </div>
+      <ul class="shogi-tutorial__placement-list">
+        <li v-for="(choice, index) in placements" :key="choice.id">
+          <button
+            :ref="index === 0 ? (el) => { firstPlacementButton = el as HTMLButtonElement | null } : undefined"
+            type="button"
+            class="shogi-tutorial__placement-card"
+            :class="{ 'shogi-tutorial__placement-card--recommended': choice.id === recommendedPlacementId }"
+            :data-placement="choice.id"
+            @click="choosePlacement(choice.id)"
+          >
+            <strong>{{ choice.label }}</strong>
+            <small>{{ choice.description }}</small>
+            <span v-if="choice.id === recommendedPlacementId" class="shogi-tutorial__placement-badge">おすすめ</span>
+          </button>
+        </li>
+      </ul>
+      <button type="button" class="shogi-tutorial__placement-map" data-placement="map" @click="choosePlacementMap">地図から自分で選ぶ</button>
+    </section>
+    <section v-if="view === 'map' && !placementOpen" ref="mapEl" class="shogi-tutorial__map" aria-label="レッスンの地図" data-tutorial-map>
       <div class="shogi-tutorial__map-hero">
         <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
         <div class="shogi-tutorial__map-hero-body">
@@ -76,6 +108,14 @@
           <small>つづきから</small><span>▶ {{ upcomingLesson.title }}</span>
           <small v-if="upcomingLesson.summary" class="shogi-tutorial__continue-goal">めあて：{{ upcomingLesson.summary }}</small>
         </button>
+        <!-- 先から始めた人が、とばしたところを学ぶ入口。とばした記録はそのまま(終えればクリアに変わる)。 -->
+        <button
+          v-if="skippedStart"
+          type="button"
+          class="shogi-tutorial__skip-chapter shogi-tutorial__from-start"
+          data-tutorial-from-start
+          @click="startLesson(skippedStart.id)"
+        >はじめから学ぶ（{{ skippedStart.title }}）</button>
       </div>
       <ol class="shogi-tutorial__road">
         <li
@@ -408,6 +448,17 @@
           <button type="button" class="shogi-tutorial__clear-map" @click.stop="openMap">地図へ</button>
         </div>
       </Transition>
+      <!--
+        先から始めた章で続けてつまずいたとき、一度だけ前の章の復習を勧める(設計17-5)。
+        どちらが正しいとは言わないので、2つのボタンは同じ大きさにする。
+      -->
+      <div v-if="reviewOffer" class="shogi-tutorial__clear shogi-tutorial__review-offer" role="dialog" aria-labelledby="shogi-tutorial-review-offer" data-review-offer>
+        <p id="shogi-tutorial-review-offer" class="shogi-tutorial__review-offer-text">少しむずかしかったかな？<br>「{{ reviewOffer.title }}」から復習してみる？</p>
+        <div class="shogi-tutorial__review-offer-actions">
+          <button ref="reviewOfferButton" type="button" data-review-offer-back @click="acceptReviewOffer">復習する</button>
+          <button type="button" data-review-offer-continue @click="declineReviewOffer">このまま進む</button>
+        </div>
+      </div>
     </section>
 
     <!--
@@ -576,6 +627,12 @@ import {
   saveKikiGlassesOn,
   saveTutorialProgress,
   recordProverb,
+  applyPlacement,
+  firstSkippedLesson,
+  markReviewOffered,
+  recommendedPlacement,
+  shouldAskPlacement,
+  shouldOfferReview,
 } from "./core/tutorial-progress.mjs";
 import { referenceDexEntries } from "./core/reference-dex.mjs";
 import {
@@ -584,6 +641,9 @@ import {
   earnedVolumeTitles,
   firstLessonOfNextChapter,
   nextLessonInChapter,
+  placementStartLesson,
+  reviewLessonBefore,
+  TUTORIAL_PLACEMENTS,
   tutorialMap,
 } from "./core/tutorial-map.mjs";
 import {
@@ -620,6 +680,8 @@ const props = defineProps({
   matchReport: { type: Object as PropType<TutorialMatchReport | null>, default: null },
   /** タイトル画面の「将棋教室のつづき」から開いたとき、本棚を通さずに次のレッスンを始める。 */
   autoStart: { type: Boolean, default: false },
+  /** ホームのはじめての案内で選んだ道(beginner・rules・player)。最初の問いの「おすすめ」に使う。 */
+  welcomeChoice: { type: String, default: "" },
 });
 const emit = defineEmits(["close", "open-dex", "start-match", "grant-title"]);
 
@@ -645,6 +707,60 @@ function toggleGlasses() {
     glassesExplained = true;
     setFeedback("利きメガネ：青い数字は君の駒、赤い数字は相手の駒が見張っている数。赤い輪のマスへ動かすと取られるよ。", "info");
   }
+}
+
+// ===== 分かるところから始める(設計17章) =====
+const PLACEMENT_QUESTION = "将棋、どのくらい知ってる？";
+const placements = TUTORIAL_PLACEMENTS;
+const placementOpen = ref(shouldAskPlacement(progress.value, { welcomeChoice: props.welcomeChoice, storageAvailable: Boolean(storage) }));
+const recommendedPlacementId = recommendedPlacement(props.welcomeChoice);
+let firstPlacementButton: HTMLButtonElement | null = null;
+onMounted(() => {
+  if (placementOpen.value) void nextTick(() => firstPlacementButton?.focus());
+});
+/** 札を押した。始めるところより前を「とばした」にして、そのレッスンをすぐ始める。 */
+function choosePlacement(id: string) {
+  const start = placementStartLesson(id);
+  updateProgress(applyPlacement(lessons, progress.value, id, start));
+  placementOpen.value = false;
+  moveSounds.play("normal");
+  if (start) startLesson(start);
+}
+/** 「地図から自分で選ぶ」。答えたことだけ残し、今までどおり地図を開く。 */
+function choosePlacementMap() {
+  updateProgress(applyPlacement(lessons, progress.value, "map"));
+  placementOpen.value = false;
+  openMap();
+}
+/** 先から始めた人の「はじめから学ぶ」。とばした最初のレッスン。 */
+const skippedStart = computed(() => (
+  ["pieces", "rules", "mate"].includes((progress.value as { placement?: string }).placement ?? "")
+    ? firstSkippedLesson(lessons, progress.value) as Lesson | null : null
+));
+/** 一度だけの復習のすすめ。出ているあいだは、次のレッスンへ自動で進まない。 */
+const reviewOffer = ref<{ lessonId: string; title: string; from: Lesson; stars: number } | null>(null);
+const reviewOfferButton = ref<HTMLButtonElement | null>(null);
+function maybeOfferReview(lesson: Lesson, stars: number) {
+  const start = placementStartLesson((progress.value as { placement?: string }).placement ?? "");
+  const startLessonEntry = start ? lessons.find(({ id }) => id === start) : null;
+  if (stars !== 1 || !startLessonEntry || lesson.chapterId !== startLessonEntry.chapterId) return false;
+  if (!shouldOfferReview(lessons, progress.value, start)) return false;
+  const target = reviewLessonBefore(lessons, start) as Lesson | null;
+  if (!target) return false;
+  updateProgress(markReviewOffered(progress.value));
+  reviewOffer.value = { lessonId: target.id, title: target.title, from: lesson, stars };
+  void nextTick(() => reviewOfferButton.value?.focus());
+  return true;
+}
+function acceptReviewOffer() {
+  const offer = reviewOffer.value;
+  reviewOffer.value = null;
+  if (offer) startLesson(offer.lessonId);
+}
+function declineReviewOffer() {
+  const offer = reviewOffer.value;
+  reviewOffer.value = null;
+  if (offer) continueAfter(offer.from, offer.stars);
 }
 
 /** この画面を開いてから新しく手に入れた巻の称号。章クリアの画面で知らせる。 */
@@ -699,6 +815,13 @@ function speak(text: string) {
   utterance.rate = 1.05;
   synth.speak(utterance);
 }
+// はじめての問いは、読み上げを付けている人には1文だけ読む(端末の声が後から届いても読む)。
+let placementSpoken = false;
+watch([japaneseVoice, placementOpen], ([voice, open]) => {
+  if (!voice || !open || placementSpoken) return;
+  placementSpoken = true;
+  speak(PLACEMENT_QUESTION);
+}, { immediate: true });
 function toggleVoice() {
   voiceOn.value = !voiceOn.value;
   saveTutorialVoiceOn(storage, voiceOn.value);
@@ -831,6 +954,7 @@ function onNodeClick(row: { id: string; state: string }) {
 function openMap() {
   clearStepTimers();
   clearChain();
+  reviewOffer.value = null;
   reviewResult.value = null;
   newTitle.value = null;
   mapMessage.value = "";
@@ -1455,6 +1579,7 @@ function loadStep(index: number) {
 }
 function startLesson(id: string) {
   clearChain();
+  reviewOffer.value = null;
   if (!id.startsWith("review:")) reviewResult.value = null;
   newTitle.value = null;
   lessonId.value = id;
@@ -1822,6 +1947,7 @@ function finishLesson() {
   updateProgress(recordLessonCleared(progress.value, lesson.id, stars));
   // レッスンを終えたら、続けて遊んだ日に数える。
   savePlayStreak(storage, recordPlay(loadPlayStreak(storage)));
+  if (maybeOfferReview(lesson, stars)) return;
   continueAfter(lesson, stars);
 }
 function advance() {
@@ -1936,7 +2062,8 @@ watch(revealStage, (stage) => {
 onMounted(() => {
   const report = props.matchReport;
   // タイトル画面の「将棋教室のつづき」からは、地図を通さずに次のレッスンを始める。
-  if (!report && props.autoStart && upcomingLesson.value) {
+  // はじめての問いに答えるまでは、レッスンを自動で始めない。
+  if (!report && props.autoStart && upcomingLesson.value && !placementOpen.value) {
     startLesson(upcomingLesson.value.id);
     return;
   }
@@ -2600,6 +2727,151 @@ const resultMessage = computed(() => {
 .shogi-game .shogi-tutorial__map-hero .shogi-tutorial__continue small {
   font-size: 0.75em;
   letter-spacing: 0.08em;
+}
+/* 先から始めた人の「はじめから学ぶ」。つづきからの下に小さく置く。 */
+.shogi-game .shogi-tutorial__from-start {
+  grid-column: 1 / -1;
+  justify-self: center;
+  min-height: 2.75rem;
+}
+/* ===== はじめての問い(設計17章)。やこび姫の問いと、できることで書いた札を縦に並べる ===== */
+.shogi-game .shogi-tutorial__placement {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 0.8rem;
+  width: min(100% - 1.4rem, 32rem);
+  margin: 0 auto;
+  padding: 0.6rem 0 2rem;
+}
+/* 背の低い横長の画面(スマホの横向き)では、札を2列にして1画面に収める(UI_Nintendo_Implementation.md 7-5)。 */
+@media (max-height: 30rem) and (orientation: landscape) {
+  .shogi-game .shogi-tutorial__placement {
+    gap: 0.5rem;
+    width: min(100% - 1.4rem, 46rem);
+    padding: 0.3rem 0 0.6rem;
+  }
+  .shogi-game .shogi-tutorial__placement-hero .shogi-tutorial__chara {
+    max-height: 3.4rem;
+  }
+  .shogi-game .shogi-tutorial__placement-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+}
+.shogi-game .shogi-tutorial__placement-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 0.8rem;
+  width: 100%;
+}
+.shogi-game .shogi-tutorial__placement-hero .shogi-tutorial__speech {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border: 2px solid rgba(255, 252, 244, 0.3);
+  border-radius: 1rem;
+  background: rgba(23, 38, 50, 0.92);
+  font-size: 1.1em;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__placement-list {
+  display: grid;
+  gap: 0.6rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-tutorial__placement-card {
+  position: relative;
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  min-height: 3.6rem;
+  padding: 0.65rem 1rem;
+  border: 2px solid rgba(255, 252, 244, 0.35);
+  border-radius: 0.8rem;
+  color: #fffcf4;
+  background: rgba(23, 38, 50, 0.92);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shogi-game .shogi-tutorial__placement-card strong {
+  font-size: 1.1em;
+}
+.shogi-game .shogi-tutorial__placement-card small {
+  color: rgba(255, 252, 244, 0.78);
+  font-size: 0.85em;
+}
+.shogi-game .shogi-tutorial__placement-card--recommended {
+  border-color: #f1a54c;
+}
+.shogi-game .shogi-tutorial__placement-badge {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.7rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  color: #172632;
+  background: #f1a54c;
+  font-size: 0.75em;
+  font-weight: 800;
+}
+.shogi-game .shogi-tutorial__placement-card:active {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  transform: translateY(3px);
+}
+.shogi-game .shogi-tutorial__placement-card:focus-visible,
+.shogi-game .shogi-tutorial__placement-map:focus-visible,
+.shogi-game .shogi-tutorial__review-offer-actions button:focus-visible {
+  outline: 3px solid #f1a54c;
+  outline-offset: 2px;
+}
+.shogi-game .shogi-tutorial__placement-map {
+  min-height: 2.75rem;
+  padding: 0.2rem 0.8rem;
+  border: none;
+  color: rgba(255, 252, 244, 0.85);
+  background: transparent;
+  font: inherit;
+  font-size: 0.9em;
+  text-decoration: underline;
+  cursor: pointer;
+}
+/* 復習のすすめ。クリアの知らせと同じ幕の上に、同じ大きさの2つのボタンを並べる。 */
+.shogi-game .shogi-tutorial__review-offer {
+  cursor: default;
+  padding: 1rem;
+}
+.shogi-game .shogi-tutorial__review-offer-text {
+  margin: 0;
+  color: #fffcf4;
+  font-size: 1.15em;
+  font-weight: 800;
+  text-align: center;
+}
+.shogi-game .shogi-tutorial__review-offer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  width: min(100%, 26rem);
+}
+.shogi-game .shogi-tutorial__review-offer-actions button {
+  min-height: 3rem;
+  padding: 0.4rem 0.6rem;
+  border: 2px solid #fffcf4;
+  border-radius: 0.8rem;
+  color: #172632;
+  background: #fffcf4;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tutorial__placement-card:active { transform: none; }
 }
 /* 道。巻の看板、章の看板、レッスンのマスを縦に並べ、マスは左右にくねらせる。 */
 .shogi-game .shogi-tutorial__road {

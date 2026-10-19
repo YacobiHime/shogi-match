@@ -51,6 +51,34 @@ export function earnedVolumeTitles(volumes, lessons, progress) {
   return volumes.map(({ id }) => volumeTitle(volumes, lessons, progress, id)).filter(Boolean);
 }
 
+/**
+ * 教室を初めて開いたときの「将棋、どのくらい知ってる？」の札(設計17章)。
+ * 段階の名前ではなく「できること」で書き、易しい順に並べる。startは始めるレッスン。
+ */
+export const TUTORIAL_PLACEMENTS = Object.freeze([
+  Object.freeze({ id: "beginner", label: "はじめて", description: "駒の動かし方から覚えよう", start: "v1-board" }),
+  Object.freeze({ id: "pieces", label: "駒の動きは分かる", description: "成る・持ち駒・反則（二歩など）から", start: "v1-promotion" }),
+  Object.freeze({ id: "rules", label: "ルールは分かる", description: "タダの駒・両取り・詰みから", start: "v2-kiki" }),
+  Object.freeze({ id: "mate", label: "1手詰めなら解ける", description: "囲いと戦法から", start: "v3-rook-styles" }),
+]);
+
+/** 札のIDから、始めるレッスンのID。地図から選ぶ(map)など、札でないときはnull。 */
+export function placementStartLesson(placementId) {
+  return TUTORIAL_PLACEMENTS.find(({ id }) => id === placementId)?.start ?? null;
+}
+
+/**
+ * 復習を勧めるときの行き先: 始めたレッスンのすぐ前の章(とばした中で、いちばん近い章)の、
+ * 始めたレッスンより前で最初に遊べるレッスン。「駒の動きは分かる」なら歩、「1手詰めなら解ける」なら王手と詰み。なければnull。
+ */
+export function reviewLessonBefore(lessons, lessonId) {
+  const index = lessons.findIndex(({ id }) => id === lessonId);
+  if (index <= 0) return null;
+  const before = lessons.slice(0, index);
+  const chapterId = before.at(-1).chapterId;
+  return before.find((lesson) => lesson.chapterId === chapterId && !lesson.comingSoon) ?? null;
+}
+
 /** 道を左右にくねらせる位置(0〜4)。章ごとに、まん中から始める。 */
 const LANES = Object.freeze([2, 3, 4, 3, 2, 1, 0, 1]);
 

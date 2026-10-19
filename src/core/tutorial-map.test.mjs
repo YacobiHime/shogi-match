@@ -2,13 +2,31 @@ import { describe, expect, it } from 'vitest';
 import {
   chapterPosition,
   chapterSummary,
+  earnedVolumeTitles,
   firstLessonOfNextChapter,
   lessonIcon,
   nextLessonInChapter,
+  placementStartLesson,
+  reviewLessonBefore,
+  TUTORIAL_PLACEMENTS,
   tutorialMap,
 } from './tutorial-map.mjs';
 import { TUTORIAL_LESSONS, TUTORIAL_VOLUMES } from './tutorial-curriculum.mjs';
-import { emptyTutorialProgress, recordLessonCleared, recordLessonSkipped } from './tutorial-progress.mjs';
+import {
+  applyPlacement,
+  emptyTutorialProgress,
+  firstSkippedLesson,
+  loadTutorialProgress,
+  markReviewOffered,
+  nextLesson,
+  recommendedPlacement,
+  recordLessonCleared,
+  recordLessonSkipped,
+  saveTutorialProgress,
+  shouldAskPlacement,
+  shouldOfferReview,
+} from './tutorial-progress.mjs';
+import { homeRoadmap } from './home-roadmap.mjs';
 
 const lessons = TUTORIAL_LESSONS;
 const volumes = TUTORIAL_VOLUMES;
@@ -99,5 +117,101 @@ describe('腕だめしのメダルと巻の称号', () => {
     let all = emptyTutorialProgress();
     for (const lesson of lessons) all = recordLessonCleared(all, lesson.id, 3);
     expect(earnedVolumeTitles(volumes, lessons, all).at(-1)).toMatchObject({ id: 'tutorial-v5', label: '将棋教室 卒業', rank: 5 });
+  });
+});
+
+describe('分かるところから始める(設計17章)', () => {
+  const place = (id) => applyPlacement(lessons, emptyTutorialProgress(), id, placementStartLesson(id));
+
+  it('札は易しい順に4枚で、始めるレッスンは遊べるレッスンとして実在し、順に後ろへ進む', () => {
+    expect(TUTORIAL_PLACEMENTS.map(({ id }) => id)).toEqual(['beginner', 'pieces', 'rules', 'mate']);
+    const indexes = TUTORIAL_PLACEMENTS.map(({ start }) => lessons.findIndex(({ id }) => id === start));
+    for (const [index, placement] of TUTORIAL_PLACEMENTS.entries()) {
+      expect(indexes[index], placement.id).toBeGreaterThanOrEqual(0);
+      expect(lessons[indexes[index]].comingSoon).toBeFalsy();
+    }
+    expect(indexes[0]).toBe(0);
+    expect([...indexes].sort((a, b) => a - b)).toEqual(indexes);
+    // 「1手詰めなら解ける」は囲いと戦法から(第3巻の最初)。「ルールは分かる」は第2巻の最初。
+    expect(lessons[indexes[3]].volumeId).toBe(volumes[2].id);
+    expect(lessons[indexes[2]].volumeId).toBe(volumes[1].id);
+    expect(placementStartLesson('map')).toBeNull();
+  });
+
+  it('始めるところより前をとばし、次のレッスンが始めるレッスンになる', () => {
+    for (const { id, start } of TUTORIAL_PLACEMENTS) {
+      const progress = place(id);
+      expect(progress.placement).toBe(id);
+      expect(nextLesson(lessons, progress).id).toBe(start);
+      const index = lessons.findIndex((lesson) => lesson.id === start);
+      for (const lesson of lessons.slice(0, index)) expect(progress.lessons[lesson.id]?.status).toBe('skipped');
+      for (const lesson of lessons.slice(index)) expect(progress.lessons[lesson.id]).toBeUndefined();
+    }
+    expect(firstSkippedLesson(lessons, place('beginner'))).toBeNull();
+    expect(firstSkippedLesson(lessons, place('rules')).id).toBe(lessons[0].id);
+  });
+
+  it('クリアの記録は消さず、とばしただけでは巻の称号を渡さない', () => {
+    const cleared = recordLessonCleared(emptyTutorialProgress(), 'v1-board', 3);
+    const progress = applyPlacement(lessons, cleared, 'rules', placementStartLesson('rules'));
+    expect(progress.lessons['v1-board']).toEqual({ status: 'cleared', stars: 3 });
+    expect(earnedVolumeTitles(volumes, lessons, progress)).toEqual([]);
+  });
+
+  it('ルールは分かる以上を選ぶと、ホームの強くなる道の「駒を覚える」を終える', () => {
+    expect(homeRoadmap({ tutorialProgress: place('beginner') }).current).toBe(1);
+    expect(homeRoadmap({ tutorialProgress: place('rules') }).current).toBe(2);
+  });
+
+  it('記録が空で、まだ答えていないときだけ聞く', () => {
+    const empty = emptyTutorialProgress();
+    expect(shouldAskPlacement(empty)).toBe(true);
+    expect(shouldAskPlacement(empty, { welcomeChoice: 'rules' })).toBe(true);
+    expect(shouldAskPlacement(empty, { welcomeChoice: 'beginner' })).toBe(false);
+    expect(shouldAskPlacement(empty, { storageAvailable: false })).toBe(false);
+    expect(shouldAskPlacement(recordLessonCleared(empty, 'v1-board', 1))).toBe(false);
+    expect(shouldAskPlacement({ ...empty, placement: 'map' })).toBe(false);
+    expect(shouldAskPlacement(place('beginner'))).toBe(false);
+  });
+
+  it('ホームの案内の答えを、おすすめの札にする', () => {
+    expect(recommendedPlacement('rules')).toBe('rules');
+    expect(recommendedPlacement('player')).toBe('mate');
+    expect(recommendedPlacement('beginner')).toBe('');
+    expect(recommendedPlacement('')).toBe('');
+  });
+
+  it('答えと、復習を勧めたことを保存し、読めない値は捨てる', () => {
+    const store = new Map();
+    const fake = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+    const progress = markReviewOffered(place('mate'));
+    saveTutorialProgress(fake, progress);
+    expect(loadTutorialProgress(fake)).toMatchObject({ placement: 'mate', reviewOffered: true });
+    saveTutorialProgress(fake, { lessons: {}, placement: 'expert', reviewOffered: 'yes' });
+    expect(loadTutorialProgress(fake)).toEqual({ lessons: {} });
+  });
+
+  it('先から始めた章で、続けて2つ★1なら一度だけ復習を勧める', () => {
+    const start = placementStartLesson('mate');
+    const chapter = lessons.filter(({ chapterId }) => chapterId === lessons.find(({ id }) => id === start).chapterId);
+    let progress = place('mate');
+    progress = recordLessonCleared(progress, chapter[0].id, 1);
+    expect(shouldOfferReview(lessons, progress, start)).toBe(false);
+    progress = recordLessonCleared(progress, chapter[1].id, 1);
+    expect(shouldOfferReview(lessons, progress, start)).toBe(true);
+    expect(shouldOfferReview(lessons, markReviewOffered(progress), start)).toBe(false);
+    // ★2をはさめば続けてではない。
+    const mixed = recordLessonCleared(recordLessonCleared(place('mate'), chapter[0].id, 1), chapter[1].id, 2);
+    expect(shouldOfferReview(lessons, recordLessonCleared(mixed, chapter[2].id, 1), start)).toBe(false);
+    // はじめから始めた人・地図から選んだ人には勧めない。
+    const beginner = recordLessonCleared(recordLessonCleared(place('beginner'), lessons[0].id, 1), lessons[1].id, 1);
+    expect(shouldOfferReview(lessons, beginner, placementStartLesson('beginner'))).toBe(false);
+  });
+
+  it('復習の行き先は、とばした中でいちばん近い章の最初のレッスン', () => {
+    expect(reviewLessonBefore(lessons, placementStartLesson('pieces')).id).toBe('v1-pawn');
+    expect(reviewLessonBefore(lessons, placementStartLesson('rules')).id).toBe('v1-pawn');
+    expect(reviewLessonBefore(lessons, placementStartLesson('mate')).id).toBe('v2-check');
+    expect(reviewLessonBefore(lessons, placementStartLesson('beginner'))).toBeNull();
   });
 });

@@ -370,6 +370,7 @@
       ref="tutorialView"
       :asset-base-url="assetBaseUrl"
       :match-report="tutorialReport"
+      :welcome-choice="tutorialWelcomeChoice"
       @close="tutorialOpen = false; tutorialReport = null; tutorialAutoStart = false"
       @open-dex="openDexFromTutorial"
       @start-match="startMatchFromTutorial"
@@ -4599,6 +4600,11 @@ const homeNext = computed<HomeNext>(() => {
  * タイトル画面の「将棋教室」のタイルからは、今までどおり本棚を開く。
  */
 const tutorialAutoStart = ref(false);
+/** はじめての案内の答え。教室の最初の問いの「おすすめ」に使う。教室を開く直前に読み直す(案内で選んだ直後でも反映する)。 */
+const tutorialWelcomeChoice = ref("");
+watch(tutorialOpen, (open) => {
+  if (open) tutorialWelcomeChoice.value = welcomeChoiceFrom(browserStorage(), WELCOME_SEEN_KEY);
+}, { immediate: true });
 function openTutorialLesson() {
   tutorialAutoStart.value = true;
   tutorialOpen.value = true;
