@@ -156,4 +156,3 @@ export function kingZonePressure(board, kingColor) {
   }
   return covered.size;
 }
-
