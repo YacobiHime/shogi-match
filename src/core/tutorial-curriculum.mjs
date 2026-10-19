@@ -817,9 +817,9 @@ const VOLUME_2 = {
  * テストで、居玉は3手で詰み、美濃囲いと舟囲いは詰まない(ATTACK_TEST_HOLD_PLIES手以内)ことを確かめる。
  */
 const ATTACKER = "/4+R4/9/9/9/4K4 b G 1";
-const IGYOKU_SFEN = `ln1gkg1nl/2s3s2/ppppp1ppp/6p2${ATTACKER}`;
-const MINO_SFEN = `ln1g3nl/1ks1g4/ppppp1ppp/6p2${ATTACKER}`;
-const FUNA_SFEN = `lns2gsnl/4g1kb1/ppppp1ppp/6p2${ATTACKER}`;
+const IGYOKU_SFEN = `ln1gkg1nl/2s3s2/pppppp1pp/6p2${ATTACKER}`;
+const MINO_SFEN = `ln1g3nl/1ks1g4/pppppp1pp/6p2${ATTACKER}`;
+const FUNA_SFEN = `lns2gsnl/4g1kb1/pppppp1pp/6p2${ATTACKER}`;
 /** 居玉を詰ませた局面(▲5三竜△5二金▲6二金)。玉の逃げ道を見せる。 */
 const IGYOKU_MATED_SFEN = sfenAfter(IGYOKU_SFEN, ["5e5c", "6a5b", "G*6b"]);
 /** 先手の美濃囲い(四間飛車)の完成形。 */

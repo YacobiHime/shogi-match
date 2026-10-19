@@ -55,6 +55,32 @@ import { openingFormationSteps } from "./opening-formation.mjs";
 import { bestGainMove, dropThreat } from "./material-tactics.mjs";
 
 const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "play", "replay", "capture", "problem", "build", "attack-test"];
+/** 二歩の筋。同じ側の成っていない歩が2枚以上ある筋を「▲3筋」のように返す。 */
+function doublePawnFiles(sfen) {
+  const files = [];
+  const rows = String(sfen).split(" ")[0].split("/");
+  for (const color of ["P", "p"]) {
+    const counts = new Map();
+    for (const row of rows) {
+      let file = 9;
+      for (let index = 0; index < row.length; index += 1) {
+        const char = row[index];
+        if (/\d/.test(char)) {
+          file -= Number(char);
+          continue;
+        }
+        if (char === "+") {
+          index += 1;
+        } else if (char === color) {
+          counts.set(file, (counts.get(file) ?? 0) + 1);
+        }
+        file -= 1;
+      }
+    }
+    for (const [file, count] of counts) if (count > 1) files.push(`${color === "P" ? "▲" : "△"}${file}筋`);
+  }
+  return files;
+}
 const legalMoves = (sfen) => enumerateLegalMoves(createGameRecord(sfen).position).map(({ usi }) => usi);
 
 function afterMove(sfen, usi) {
@@ -343,6 +369,22 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     expect(loadCollectedProverbs(storage)).toEqual([]);
     const blocked = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
     expect(recordProverb(blocked, "head-gold")).toEqual({ ids: ["head-gold"], isNew: true });
+  });
+
+  it("教室と図鑑の局面に二歩がない(攻めくらべの局面で後手の3三歩と3四歩が並んでいたことがあった)", () => {
+    expect(doublePawnFiles("4k4/9/6p2/6p2/9/9/9/9/4K4 b - 1")).toEqual(["△3筋"]);
+    expect(doublePawnFiles("4k4/9/6+p2/6p2/9/9/9/9/4K4 b - 1")).toEqual([]);
+    for (const lesson of TUTORIAL_LESSONS) {
+      lesson.steps.forEach((step, index) => {
+        const sfen = step.type === "problem" ? createProblemState(step).sfen : tutorialStepSfen(step);
+        if (sfen) expect(doublePawnFiles(sfen), `${lesson.id}#${index}`).toEqual([]);
+      });
+    }
+    for (const kind of ["piece", "tesuji", "glossary"]) {
+      for (const entry of referenceDexEntries(kind)) {
+        if (entry.sfen) expect(doublePawnFiles(entry.sfen), `${kind}:${entry.id}`).toEqual([]);
+      }
+    }
   });
 
   it("吹き出しの文は1ステップ60字まで(大事なことは盤の上のひとことで見せる。設計16-3)", () => {
