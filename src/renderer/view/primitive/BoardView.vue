@@ -110,6 +110,14 @@
           :style="calloutView.style"
           aria-hidden="true"
         >{{ calloutView.text }}</div>
+        <div
+          v-if="calloutView?.lineStyle"
+          :key="calloutView.key + ':line'"
+          class="board-callout-line"
+          :class="calloutView.tone ? `board-callout-line--${calloutView.tone}` : ''"
+          :style="calloutView.lineStyle"
+          aria-hidden="true"
+        ></div>
         <!-- 利きメガネ: 駒を選んだとき、動かすと取られて損をする行き先を赤い輪で示す。 -->
         <div
           v-for="risk in riskSquareViews"
@@ -458,7 +466,7 @@ const props = defineProps({
   callout: {
     type: Object as PropType<{
       at: string; text: string; side: "above" | "below" | "left" | "right";
-      x: number; y: number; width: number; height: number; tail: number; tone?: string;
+      x: number; y: number; width: number; height: number; tail: number; reach?: number; tone?: string;
     } | null>,
     required: false,
     default: null,
@@ -1120,7 +1128,33 @@ const calloutView = computed(() => {
   const y = flip ? 9 - callout.y - callout.height : callout.y;
   const vertical = callout.side === "above" || callout.side === "below";
   const tail = flip ? (vertical ? callout.width : callout.height) - callout.tail : callout.tail;
+  // 札を見るマスから離して置いたときは、札のしっぽから見るマスの手前まで線を引く(先手から見た盤の座標で決めてから画面へ移す)。
+  const screen = (bx: number, by: number) => ({
+    x: left + ((flip ? 9 - bx : bx) - col) * w,
+    y: top + ((flip ? 9 - by : by) - row) * h,
+  });
+  const baseCol = 9 - file;
+  const baseRow = rank - 1;
+  const margin = 0.06;
+  const ends = !callout.reach
+    ? null
+    : callout.side === "above"
+      ? [screen(baseCol + 0.5, callout.y + callout.height), screen(baseCol + 0.5, baseRow - margin)]
+      : callout.side === "below"
+        ? [screen(baseCol + 0.5, baseRow + 1 + margin), screen(baseCol + 0.5, callout.y)]
+        : callout.side === "left"
+          ? [screen(callout.x + callout.width, baseRow + 0.5), screen(baseCol - margin, baseRow + 0.5)]
+          : [screen(baseCol + 1 + margin, baseRow + 0.5), screen(callout.x, baseRow + 0.5)];
+  const lineStyle = ends
+    ? {
+      left: `${Math.min(ends[0].x, ends[1].x) - (vertical ? 1 : 0)}px`,
+      top: `${Math.min(ends[0].y, ends[1].y) - (vertical ? 0 : 1)}px`,
+      width: vertical ? "2px" : `${Math.abs(ends[1].x - ends[0].x)}px`,
+      height: vertical ? `${Math.abs(ends[1].y - ends[0].y)}px` : "2px",
+    }
+    : null;
   return {
+    lineStyle,
     key: `${callout.at}:${callout.text}`,
     text: callout.text,
     tone: callout.tone ?? "",
@@ -1562,6 +1596,21 @@ const whitePlayerTimeSeverity = computed(() => {
   box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.3);
   animation: board-callout-in 160ms ease-out both;
 }
+/* 札を見るマスから離したときの線。札の縁と同じ色で、駒の上を細く通す。 */
+.board-callout-line {
+  position: absolute;
+  z-index: 36;
+  pointer-events: none;
+  background: #3b2f2a;
+  box-shadow: 0 0 0 1px rgba(255, 253, 247, 0.85);
+  animation: board-callout-in 160ms ease-out both;
+}
+.board-callout-line--good {
+  background: #1f8a4c;
+}
+.board-callout-line--bad {
+  background: #c0392b;
+}
 .board-callout--good {
   border-color: #1f8a4c;
 }
@@ -1604,7 +1653,8 @@ const whitePlayerTimeSeverity = computed(() => {
   to { opacity: 1; transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .board-callout {
+  .board-callout,
+  .board-callout-line {
     animation: none;
   }
 }

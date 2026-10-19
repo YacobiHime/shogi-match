@@ -87,11 +87,25 @@ describe("盤の上のひとこと", () => {
       const marked = new Set(marks.map(({ file, rank }) => `${file}${String.fromCharCode(96 + rank)}`));
       expect(covered.filter((square) => marked.has(square)), id).toEqual([]);
       expect(covered, id).not.toContain(placement.at);
+      // 駒も隠さない。第1巻「盤」の筋の説明だけは、一段目が駒で埋まり1筋が全部緑なので、どこに置いても重なる。
+      const { board } = parseSfenState(sfen);
+      if (id !== "v1-board#1") expect(covered.filter((square) => board.has(square)), `${id} 駒を隠す`).toEqual([]);
       // 動けるマスを指す札は、見るマスが駒の動けるマスのどれか。
       if (callout.anchors) expect(callout.anchors, id).toContain(placement.at);
     }
     // ねらう駒・動けるマス・ここまで・逃げ道などで、盤のステップの3割ほどに札が付く。
     expect(made).toBeGreaterThan(80);
+  });
+
+  it("すぐそばが駒で埋まっていたら、離して置いて線でつなぐ(駒を隠さない)", () => {
+    // 後手の玉のまわり(一段目・二段目・三段目)が駒で埋まった局面。
+    const sfen = "lnsgkgsnl/1r2p2b1/pppp1pppp/9/4R4/9/9/9/4K4 b G 1";
+    const placement = placeCallout("5a", "逃げ道 1", { sfen });
+    const { board } = parseSfenState(sfen);
+    expect(coveredSquares(placement.x, placement.y, placement.width, placement.height).filter((square) => board.has(square))).toEqual([]);
+    expect(placement.reach).toBeGreaterThan(0);
+    // すぐそばが空いていれば、離さない。
+    expect(placeCallout("5e", "ここまで", { sfen: "4k4/9/9/9/9/9/9/9/4K4 b - 1" }).reach).toBe(0);
   });
 
   it("札は駒をなるべく避ける(避けられる位置があれば駒に重ねない)", () => {

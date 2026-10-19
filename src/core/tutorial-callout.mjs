@@ -144,9 +144,11 @@ export function stepCallout(step, context = {}) {
 
 /**
  * 札の位置。マスの上(しっぽは下向き)を基本に、盤の上端なら下、印のマスや駒に重なるなら左右へずらす。
+ * すぐそばが駒で埋まっているときは、3マスまで離して置き、見るマスまで線でつなぐ(駒を隠さない)。
  * 座標は先手から見た盤(左上が9一)で、マスの幅・高さを1とする。
- * @typedef {{ side: "above" | "below" | "left" | "right", x: number, y: number, width: number, height: number, tail: number }} CalloutPlacement
+ * @typedef {{ side: "above" | "below" | "left" | "right", x: number, y: number, width: number, height: number, tail: number, reach: number }} CalloutPlacement
  *   x・yは札の左上、tailは札の中でのしっぽの位置(上下に出すときは横の位置、左右なら縦の位置)。
+ *   reachは、札を見るマスから離したマスの数(0ならすぐそば)。離したときは、しっぽの先から見るマスまで線を引く。
  * @param {string | string[]} anchor 見るマス("5c")。候補が複数なら、いちばん重ならない位置のマスを選ぶ
  * @param {string} text
  * @param {{ marks?: { file: number, rank: number }[], sfen?: string, avoid?: { file: number, rank: number }[] }} [options]
@@ -166,6 +168,13 @@ export function placeCallout(anchor, text, { marks = [], sfen = "", avoid = [] }
   return best;
 }
 
+/** 札を見るマスから離して置くときの、いちばん遠い距離(マス)。離したときは、見るマスまで細い線でつなぐ。 */
+export const CALLOUT_MAX_REACH = 3;
+/** 重なりの重さ。駒は札の下に隠れて見えなくなるので、印とほぼ同じくらい強く避ける(離して線でつなぐほうを選ぶ)。 */
+const COVER_COST = { mark: 5, piece: 4, avoid: 1 };
+/** 札を1マス離すごとの重さ。駒を1つ隠すより軽く、すきまがあれば近くを選ぶ。 */
+const REACH_COST = 0.7;
+
 /**
  * @param {string} at
  * @param {string} text
@@ -181,30 +190,32 @@ function placementCandidates(at, text, marked, pieces, avoided) {
   const height = CALLOUT_HEIGHT;
   /** @type {(CalloutPlacement & { at: string, cost: number })[]} */
   const candidates = [];
-  const consider = (side, x, y, preference) => {
+  const consider = (side, x, y, reach, preference) => {
     if (x < -1e-6 || y < -1e-6 || x + width > 9 + 1e-6 || y + height > 9 + 1e-6) return;
-    let cost = preference;
+    let cost = preference + reach * REACH_COST;
     for (const square of coveredSquares(x, y, width, height)) {
       if (square === at) return;
-      if (marked.has(square)) cost += 4;
-      else if (pieces.has(square)) cost += 1;
-      if (avoided.has(square)) cost += 1;
+      if (marked.has(square)) cost += COVER_COST.mark;
+      else if (pieces.has(square)) cost += COVER_COST.piece;
+      if (avoided.has(square)) cost += COVER_COST.avoid;
     }
     const tail = side === "above" || side === "below" ? col + 0.5 - x : row + 0.5 - y;
-    candidates.push({ at, side, x, y, width, height, tail, cost });
+    candidates.push({ at, side, x, y, width, height, tail, reach, cost });
   };
   const centered = col + 0.5 - width / 2;
   const clamp = (x) => Math.min(9 - width, Math.max(0, x));
-  for (const shift of [0, -1, 1, -2, 2]) {
-    const x = clamp(centered + shift);
-    // しっぽがマスの上から外れないように、札がマスの真上を含む位置だけを選ぶ。
-    if (x > col + 0.3 || x + width < col + 0.7) continue;
-    const penalty = Math.abs(x - clamp(centered)) * 0.1;
-    consider("above", x, row - CALLOUT_GAP - height, penalty);
-    consider("below", x, row + 1 + CALLOUT_GAP, 0.2 + penalty);
+  for (let reach = 0; reach <= CALLOUT_MAX_REACH; reach += 1) {
+    for (const shift of [0, -0.5, 0.5, -1, 1, -1.5, 1.5, -2, 2]) {
+      const x = clamp(centered + shift);
+      // しっぽがマスの真上(真下)を指せるように、札がマスの中心の列を含む位置だけを選ぶ。
+      if (x > col + 0.3 || x + width < col + 0.7) continue;
+      const penalty = Math.abs(x - clamp(centered)) * 0.1;
+      consider("above", x, row - CALLOUT_GAP - height - reach, reach, penalty);
+      consider("below", x, row + 1 + CALLOUT_GAP + reach, reach, 0.2 + penalty);
+    }
+    consider("left", col - CALLOUT_GAP - width - reach, row + 0.5 - height / 2, reach, 0.5);
+    consider("right", col + 1 + CALLOUT_GAP + reach, row + 0.5 - height / 2, reach, 0.5);
   }
-  consider("left", col - CALLOUT_GAP - width, row + 0.5 - height / 2, 0.5);
-  consider("right", col + 1 + CALLOUT_GAP, row + 0.5 - height / 2, 0.5);
   return candidates;
 }
 
