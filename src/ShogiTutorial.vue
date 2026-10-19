@@ -205,66 +205,17 @@
         課題の途中は進めない判定(tapToAdvance)なので、盤で指す操作は邪魔しない。
       -->
       <div ref="stageEl" class="shogi-dex__detail shogi-tutorial__stage" data-tutorial-stage @click.capture="onStageTap">
-        <div v-if="boardSfen" class="shogi-dex__main">
-          <div class="shogi-dex__board shogi-tutorial__board" :style="boardBoxStyle">
-            <!-- 正解のはなまる。盤の上に短く出す(押した操作は止めない)。 -->
-            <Transition name="shogi-tutorial__stamp">
-              <div
-                v-if="stamp"
-                :key="stamp.key"
-                class="shogi-tutorial__stamp"
-                :class="{ 'shogi-tutorial__stamp--big': stamp.big }"
-                aria-hidden="true"
-                data-tutorial-stamp
-              ><span>{{ stamp.text }}</span></div>
-            </Transition>
-            <!-- 格言札。いま指した手に、格言の名前を付ける。押すと次へ進む。 -->
-            <div
-              v-if="proverbCard"
-              :key="proverbCard.id"
-              class="shogi-tutorial__proverb"
-              :class="`shogi-tutorial__proverb--${proverbCard.place}`"
-              role="status"
-              data-proverb-card
-            >
-              <p class="shogi-tutorial__proverb-line">{{ proverbCard.line }}</p>
-              <p class="shogi-tutorial__proverb-name">{{ proverbCard.label }}</p>
-              <p class="shogi-tutorial__proverb-overview">{{ proverbCard.overview }}</p>
-              <p class="shogi-tutorial__proverb-foot">
-                <span v-if="proverbCard.isNew" data-proverb-new><span class="shogi-tutorial__proverb-badge" aria-hidden="true">札</span>格言帳に入ったよ</span>
-                <button
-                  type="button"
-                  class="shogi-tutorial__dex-link"
-                  @click="emit('open-dex', { kind: 'tesuji', id: proverbCard.id })"
-                >図鑑でくわしく</button>
-              </p>
-            </div>
-            <ShogiMatchBoard
-              :sfen="boardSfen"
-              :last-move="lastMove"
-              :allow-move="boardInteractive"
-              :enable-drag-and-drop="true"
-              :mobile="isNarrow"
-              :layout="isNarrow ? 'portrait' : 'standard'"
-              :asset-base-url="assetBaseUrl"
-              :candidates="boardArrows"
-              :mark-squares="boardMarks"
-              :attack-marks="boardAttackMarks"
-              :ghost-pieces="boardGhosts"
-              :risk-destinations="riskDestinations"
-              :float-labels="floatLabels"
-              :callout="boardCallout"
-              @usi-move="onBoardMove"
-              @resize="onBoardResize"
-            />
-          </div>
-        </div>
-        <div ref="panelEl" class="shogi-tutorial__panel">
+        <!--
+          やこび姫の台詞は盤の真上に置く(めあて→台詞→盤と、上から順に読める。2026-10-19に盤の下から移した)。
+          高さはレッスンのあいだ伸びた分を保ち、正解・不正解の一言が出ても盤が動かないようにする。
+        -->
+        <div ref="leadEl" class="shogi-tutorial__lead" :style="leadStyle">
           <!--
             やこび姫の吹き出し。課題のときは「やってみよう」の目標として枠を琥珀色にし、
             正解・不正解の一言は同じ吹き出しの中に出す(見る場所を1つにする)。
           -->
           <div
+            ref="bubbleEl"
             class="shogi-tutorial__bubble"
             :class="{
               'shogi-tutorial__bubble--task': isTaskStep && !stepSolved,
@@ -330,6 +281,8 @@
                   <i v-if="segment.tone" class="shogi-tutorial__swatch" :class="`shogi-tutorial__swatch--${segment.tone}`" aria-hidden="true"></i>{{ segment.text }}
                 </template>
               </p>
+              <!-- 課題の間は一言の行を空けておき、正解・不正解が出ても吹き出しの高さ(と盤の位置)を変えない。 -->
+              <p v-else-if="isTaskStep && !stepSolved" class="shogi-tutorial__feedback shogi-tutorial__feedback--reserve" aria-hidden="true">&nbsp;</p>
               <!-- 駒の価値の札。値段を1行に並べる(成った駒は色を変える)。 -->
               <p v-if="currentStep.values" class="shogi-tutorial__values" data-dex-values>
                 <span
@@ -361,6 +314,62 @@
               </p>
             </div>
           </div>
+        </div>
+        <div v-if="boardSfen" class="shogi-dex__main">
+          <div class="shogi-dex__board shogi-tutorial__board" :style="boardBoxStyle">
+            <!-- 正解のはなまる。盤の上に短く出す(押した操作は止めない)。 -->
+            <Transition name="shogi-tutorial__stamp">
+              <div
+                v-if="stamp"
+                :key="stamp.key"
+                class="shogi-tutorial__stamp"
+                :class="{ 'shogi-tutorial__stamp--big': stamp.big }"
+                aria-hidden="true"
+                data-tutorial-stamp
+              ><span>{{ stamp.text }}</span></div>
+            </Transition>
+            <!-- 格言札。いま指した手に、格言の名前を付ける。押すと次へ進む。 -->
+            <div
+              v-if="proverbCard"
+              :key="proverbCard.id"
+              class="shogi-tutorial__proverb"
+              :class="`shogi-tutorial__proverb--${proverbCard.place}`"
+              role="status"
+              data-proverb-card
+            >
+              <p class="shogi-tutorial__proverb-line">{{ proverbCard.line }}</p>
+              <p class="shogi-tutorial__proverb-name">{{ proverbCard.label }}</p>
+              <p class="shogi-tutorial__proverb-overview">{{ proverbCard.overview }}</p>
+              <p class="shogi-tutorial__proverb-foot">
+                <span v-if="proverbCard.isNew" data-proverb-new><span class="shogi-tutorial__proverb-badge" aria-hidden="true">札</span>格言帳に入ったよ</span>
+                <button
+                  type="button"
+                  class="shogi-tutorial__dex-link"
+                  @click="emit('open-dex', { kind: 'tesuji', id: proverbCard.id })"
+                >図鑑でくわしく</button>
+              </p>
+            </div>
+            <ShogiMatchBoard
+              :sfen="boardSfen"
+              :last-move="lastMove"
+              :allow-move="boardInteractive"
+              :enable-drag-and-drop="true"
+              :mobile="isNarrow"
+              :layout="isNarrow ? 'portrait' : 'standard'"
+              :asset-base-url="assetBaseUrl"
+              :candidates="boardArrows"
+              :mark-squares="boardMarks"
+              :attack-marks="boardAttackMarks"
+              :ghost-pieces="boardGhosts"
+              :risk-destinations="riskDestinations"
+              :float-labels="floatLabels"
+              :callout="boardCallout"
+              @usi-move="onBoardMove"
+              @resize="onBoardResize"
+            />
+          </div>
+        </div>
+        <div ref="panelEl" class="shogi-tutorial__panel">
           <!-- 観戦: 盤を押しても1手進む。最後の手まで見ると、押すと次のステップへ進む。 -->
           <div v-if="currentStep.type === 'replay'" class="shogi-tutorial__replay">
             <p class="shogi-tutorial__replay-move">
@@ -427,8 +436,12 @@
               @click="peekBuildTarget"
             >完成形を見る</button>
             <button
-              v-if="stepInteractive && !stepSolved && stepState.movesUsed + stepState.ply > 0"
+              v-if="canResetStep || reservesActions"
               type="button"
+              :class="{ 'shogi-tutorial__reserve': !canResetStep }"
+              :disabled="!canResetStep"
+              :aria-hidden="!canResetStep"
+              :tabindex="canResetStep ? undefined : -1"
               @click="resetStep"
             >やり直す</button>
           </div>
@@ -849,6 +862,26 @@ onBeforeUnmount(() => narrowMediaQuery?.removeEventListener("change", onNarrowCh
  */
 const stageEl = ref<HTMLElement | null>(null);
 const panelEl = ref<HTMLElement | null>(null);
+/**
+ * 盤の上の台詞。レッスンのあいだに伸びた高さを覚えて、その高さを保つ(縮めない)。
+ * 正解・不正解の一言や「タップで次へ」が出て吹き出しが伸びても、盤が下へずれないようにする。
+ * 新しいレッスンと、画面の幅が変わったときだけ測り直す。
+ */
+const leadEl = ref<HTMLElement | null>(null);
+const bubbleEl = ref<HTMLElement | null>(null);
+const leadReserve = ref(0);
+let leadReserveWidth = 0;
+const leadStyle = computed(() => (leadReserve.value ? { minHeight: `${leadReserve.value}px` } : {}));
+function measureLead() {
+  const bubble = bubbleEl.value;
+  if (!bubble) return;
+  const width = stageEl.value?.clientWidth ?? 0;
+  if (width !== leadReserveWidth) {
+    leadReserveWidth = width;
+    leadReserve.value = 0;
+  }
+  if (bubble.offsetHeight > leadReserve.value) leadReserve.value = bubble.offsetHeight;
+}
 const boardBoxStyle = ref<Record<string, string>>({});
 // 盤の縦横比は描画後に盤から受け取る。初期値は標準レイアウトの比。
 const boardAspect = ref(1471 / 959);
@@ -861,24 +894,25 @@ function layoutBoardBox() {
   const style = getComputedStyle(stage);
   const innerWidth = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   const innerHeight = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-  // 横に並べる画面(スマホの横向き)では、台詞の欄の幅を引いた残りに、縦に並べる画面では高さを引いた残りに収める。
-  const row = style.flexDirection === "row";
+  // 横に並べる画面(スマホの横向き)では、台詞の欄の幅を引いた残りに、縦に並べる画面では台詞(上)と操作(下)の高さを引いた残りに収める。
+  const row = style.getPropertyValue("--tutorial-side").trim() === "1";
+  const leadHeight = leadEl.value?.offsetHeight ?? 0;
   const panelHeight = panelEl.value?.offsetHeight ?? 0;
-  const panelWidth = panelEl.value?.offsetWidth ?? 0;
+  const panelWidth = Math.max(panelEl.value?.offsetWidth ?? 0, leadEl.value?.offsetWidth ?? 0);
   const gap = parseFloat(row ? style.columnGap : style.rowGap) || 0;
   // 台詞が長くても盤が小さくなりすぎないようにする。
   const minHeight = Math.min(320, window.innerHeight * 0.42);
-  const availableHeight = row ? innerHeight : Math.max(minHeight, innerHeight - panelHeight - gap);
+  const availableHeight = row ? innerHeight : Math.max(minHeight, innerHeight - leadHeight - panelHeight - gap * 2);
   const availableWidth = row ? Math.max(1, innerWidth - panelWidth - gap) : innerWidth;
   const width = Math.max(1, Math.floor(Math.min(availableWidth, availableHeight * boardAspect.value)));
   const height = Math.max(1, Math.floor(width / boardAspect.value));
   boardBoxStyle.value = { width: `${width}px`, height: `${height}px` };
 }
-const boardBoxObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => layoutBoardBox()) : null;
-watch([stageEl, panelEl], ([stage, panel]) => {
+const boardBoxObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => { measureLead(); layoutBoardBox(); }) : null;
+watch([stageEl, panelEl, leadEl, bubbleEl], ([stage, panel, lead, bubble]) => {
   boardBoxObserver?.disconnect();
-  if (stage) boardBoxObserver?.observe(stage);
-  if (panel) boardBoxObserver?.observe(panel);
+  for (const element of [stage, panel, lead, bubble]) if (element) boardBoxObserver?.observe(element);
+  measureLead();
   layoutBoardBox();
 });
 watch(boardAspect, layoutBoardBox);
@@ -1383,11 +1417,16 @@ function peekBuildTarget() {
   streak.value = 0;
   setFeedback(`これが${currentStep.value.name}の完成形。薄く見えている駒のマスへ動かそう！`, "info");
 }
+/** 「やり直す」を押せるか。指したあとの課題の途中だけ。 */
+const canResetStep = computed(() => stepInteractive.value && !stepSolved.value && stepState.value.movesUsed + stepState.value.ply > 0);
+/**
+ * 盤で指す課題では、操作の行をはじめから空けておく(「やり直す」が出ても盤の大きさを変えない)。
+ * 選択問題は盤で指さないので空けない。
+ */
+const reservesActions = computed(() => stepInteractive.value && Boolean(boardSfen.value) && currentStep.value?.type !== "choose");
 const hasActions = computed(() => {
   const type = currentStep.value?.type;
-  return type === "play"
-    || canPeekTarget.value
-    || (stepInteractive.value && !stepSolved.value && stepState.value.movesUsed + stepState.value.ply > 0);
+  return type === "play" || canPeekTarget.value || reservesActions.value || canResetStep.value;
 });
 /** 選択問題でまちがえた選択肢。押せなくして、残りから選べるようにする。 */
 const wrongChoices = ref<number[]>([]);
@@ -1580,6 +1619,7 @@ function loadStep(index: number) {
 function startLesson(id: string) {
   clearChain();
   reviewOffer.value = null;
+  leadReserve.value = 0;
   if (!id.startsWith("review:")) reviewResult.value = null;
   newTitle.value = null;
   lessonId.value = id;
@@ -2216,7 +2256,8 @@ const resultMessage = computed(() => {
 }
 /*
  * レッスン画面。台詞を盤の横に置くと視線が左右に離れて読みにくいので、画面の幅によらず
- * 台詞と操作を盤の真下に付けて置く。盤の枠の大きさはスクリプトで盤に合わせ、余った高さは台詞の下に残す。
+ * やこび姫の台詞を盤の真上に、選択肢・やり直すなどの操作を盤の真下に付けて置く(めあて→台詞→盤→操作の順に上から読む)。
+ * 盤の枠の大きさはスクリプトで盤に合わせ、余った高さは操作の下に残す。
  */
 .shogi-game .shogi-tutorial .shogi-tutorial__stage {
   flex: 1 1 auto;
@@ -2242,6 +2283,21 @@ const resultMessage = computed(() => {
   width: min(100%, 44rem);
   min-width: 0;
   align-self: center;
+}
+/* 盤の上の台詞。保った高さより吹き出しが低いときは、吹き出しを下(盤の側)に寄せる。 */
+.shogi-game .shogi-tutorial .shogi-tutorial__lead {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: min(100%, 44rem);
+  min-width: 0;
+  align-self: center;
+}
+/* 課題の間に空けておく一言の行と「やり直す」。見た目には出さない。 */
+.shogi-game .shogi-tutorial__feedback--reserve,
+.shogi-game .shogi-tutorial .shogi-tutorial__reserve {
+  visibility: hidden;
 }
 .shogi-game .shogi-tutorial__panel .shogi-dex__explanation {
   display: grid;
@@ -3282,18 +3338,33 @@ const resultMessage = computed(() => {
  * 横長の盤を左に、台詞と操作を右に並べる(将棋教室と問題集で共通)。
  */
 @media (orientation: landscape) and (max-height: 560px) {
+  /* 盤を左に、台詞(上)と操作(下)を右の列に積む。--tutorial-sideは盤の大きさを決めるスクリプトが読む。 */
   .shogi-game .shogi-tutorial .shogi-tutorial__stage {
-    flex-direction: row;
-    align-items: center;
+    --tutorial-side: 1;
+    display: grid;
+    grid-template-columns: auto minmax(0, min(44%, 26rem));
+    grid-template-rows: auto auto;
+    grid-template-areas: "board lead" "board panel";
+    align-content: center;
     justify-content: center;
-    gap: 0.8rem;
+    gap: 0.4rem 0.8rem;
     overflow: hidden;
     padding-block: 0.3rem;
   }
-  .shogi-game .shogi-tutorial .shogi-tutorial__panel {
-    width: min(44%, 26rem);
-    max-height: 100%;
+  .shogi-game .shogi-tutorial .shogi-tutorial__stage > .shogi-dex__main {
+    grid-area: board;
     align-self: center;
+  }
+  .shogi-game .shogi-tutorial .shogi-tutorial__lead {
+    grid-area: lead;
+    width: auto;
+    align-self: end;
+  }
+  .shogi-game .shogi-tutorial .shogi-tutorial__panel {
+    grid-area: panel;
+    width: auto;
+    max-height: 100%;
+    align-self: start;
     overflow-y: auto;
   }
   .shogi-game .shogi-tutorial__chara { height: clamp(56px, 18vh, 80px); }
