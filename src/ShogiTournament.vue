@@ -525,7 +525,7 @@ const HOME_STARS = [
 const COMING_SOON = [{ id: "junni", label: "順位戦" }, { id: "meijin", label: "名人戦" }];
 const ROAD = [{ id: "kenshukai", label: "研修会" }, { id: "shoreikai", label: "奨励会" }];
 
-const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=3`);
+const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const inProgress = computed(() => Boolean(props.view && !props.view.result));
 const screen = ref<"select" | "ryuo" | "season" | "result">(
   props.startAt === "season" && props.view ? (props.view.result ? "result" : "season") : "select",

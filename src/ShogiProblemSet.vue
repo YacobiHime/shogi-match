@@ -215,7 +215,7 @@ const props = defineProps({
 });
 const emit = defineEmits(["close"]);
 
-const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=3`);
+const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const storage = typeof localStorage === "undefined" ? null : localStorage;
 const progress = ref(loadProblemProgress(storage));
 /** 復習の箱(core/review-queue.mjs)。一発で解けなかった問題を、日をあけて「やこび姫からの1問」に出す。 */
