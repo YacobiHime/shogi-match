@@ -2,8 +2,10 @@
 import fs from "node:fs";
 import { Position } from "tsshogi";
 import { cpuPositionVariants } from "../src/core/cpu-position-set.mjs";
-import { chooseLogicMove } from "../src/core/logic-ai.mjs";
+import "./lib/ts-register.mjs";
+const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
+import { mirrorUsiMove } from "../src/core/opening-guide.mjs";
 import { legalMoves, seededRandom } from "./lib/node-engine.mjs";
 
 const option = (key, fallback) => {
@@ -29,7 +31,8 @@ for (const fixture of cpuPositionVariants()) {
       row.aimless += Number(!natural.purposeful);
       row.idlePawnDrop += Number(choice.move.startsWith("P*") && !natural.purposeful);
       row.escape += Number(natural.tags.includes("escape"));
-      row.response += Number(natural.tags.includes("escape") || natural.tags.includes("guard") || natural.tags.includes("threaten"));
+      const counter = ["3c3d", "6c6d"].map((move) => fixture.mirrored ? mirrorUsiMove(move) : move);
+      row.response += Number(natural.tags.includes("escape") || natural.tags.includes("guard") || natural.tags.includes("threaten") || (fixture.id === "rook-attacked" && counter.includes(choice.move)));
       if (choice.policy) { row.policies += 1; row[choice.policy] += 1; }
       row.moves[choice.move] = (row.moves[choice.move] ?? 0) + 1;
     }

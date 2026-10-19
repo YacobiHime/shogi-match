@@ -9,7 +9,7 @@ export const CPU_POSITION_SET = Object.freeze([
   { id: "rook-attacked", sfen: "lnsgkgsnl/1r5b1/p2pppppp/2p6/4B4/2P4R1/PP1PPPP1P/2S6/LN1GKGSNL w Pp 1", lastMove: "8h5e" },
   // 玉9八では香の移動先9八と重なるため、玉8八の穴熊への移行形。
   { id: "anaguma", sfen: "lnsgkgsnl/1r5b1/ppppppppp/9/9/2B6/PPPPPPPPP/1KSG3R1/LN3GSNL b - 1" },
-  { id: "hopeless", sfen: "4k4/9/9/9/9/9/2r3r2/2G3G2/4K4 b P 1" },
+  { id: "hopeless", sfen: "4k4/4g4/9/9/9/9/1br3r2/G1G3G2/4K4 b N 1" },
 ]);
 
 /** @param {string} sfen */

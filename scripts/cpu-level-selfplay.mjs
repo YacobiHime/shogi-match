@@ -16,6 +16,8 @@ import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Position } from "tsshogi";
 import { canBlunder, chooseCpuMove, isBlunderChoice } from "../src/core/cpu-move-choice.mjs";
+import "./lib/ts-register.mjs";
+const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
@@ -50,7 +52,7 @@ export function strengthForPlayer(spec) {
   if (/^L\d+$/.test(spec)) {
     const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === Number(spec.slice(1)));
     if (!preset) throw new Error(`存在しないレベルです: ${spec}`);
-    return getStrengthSearchSettings(preset.value);
+    return { ...getStrengthSearchSettings(preset.value), level: preset.level };
   }
   if (/^s[\d.]+$/.test(spec)) return searchSettingsForSkill(Number(spec.slice(1)));
   if (/^old\d+$/.test(spec)) {
@@ -110,8 +112,9 @@ async function playGame(engines, players, seed, openingPlies = 0) {
     const engine = engines[color];
     const strength = ply < openingPlies ? OPENING_VARIETY : players[color];
     const sfen = position.sfen;
-    const result = strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
-    const choice = await chooseCpuMove({
+    const logicLevel = usesLogicAi(strength.level) ? strength.level : null;
+    const result = !logicLevel && strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
+    const choice = logicLevel ? chooseLogicMove({ sfen, legalMoves: moves, moveHistory: history, level: logicLevel, random }) : await chooseCpuMove({
       strength,
       sfen,
       legalMoves: moves,
