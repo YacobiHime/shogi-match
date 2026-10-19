@@ -1,0 +1,5122 @@
+{
+  "date": "2026-10-19",
+  "status": "既定切替は未実施。目的条件を維持した試行では校正未達。",
+  "profiles": [
+    {
+      "id": 1,
+      "notes": "温度0.6倍、Lv35以上nodes0.45倍。追加候補だけを評価。",
+      "config": {
+        "temperatureScale": 0.6,
+        "upperNodeScale": 0.45,
+        "consistentCandidateScores": false,
+        "trustedEngineRate": 0
+      },
+      "humanlike": {
+        "samples": 12,
+        "trials": 6,
+        "seed": 20260926,
+        "levels": [
+          {
+            "level": 11,
+            "preset": 4500,
+            "meanLoss": 510,
+            "meanLossSe": 92,
+            "meanLossCap1000": 329,
+            "medianLoss": 176,
+            "p90Loss": 1895,
+            "blunder300": 0.403,
+            "blunder1000": 0.153,
+            "lowNaturalness": 0.028,
+            "oversight": 0.222,
+            "vision": 0,
+            "meanMs": 52,
+            "p95Ms": 96,
+            "maxMs": 111
+          },
+          {
+            "level": 15,
+            "preset": 8000,
+            "meanLoss": 265,
+            "meanLossSe": 32,
+            "meanLossCap1000": 259,
+            "medianLoss": 176,
+            "p90Loss": 494,
+            "blunder300": 0.431,
+            "blunder1000": 0.042,
+            "lowNaturalness": 0,
+            "oversight": 0.236,
+            "vision": 0,
+            "meanMs": 55,
+            "p95Ms": 92,
+            "maxMs": 95
+          },
+          {
+            "level": 20,
+            "preset": 25000,
+            "meanLoss": 161,
+            "meanLossSe": 20,
+            "meanLossCap1000": 161,
+            "medianLoss": 117,
+            "p90Loss": 421,
+            "blunder300": 0.25,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.167,
+            "vision": 0,
+            "meanMs": 53,
+            "p95Ms": 95,
+            "maxMs": 111
+          },
+          {
+            "level": 25,
+            "preset": 75000,
+            "meanLoss": 121,
+            "meanLossSe": 17,
+            "meanLossCap1000": 121,
+            "medianLoss": 88,
+            "p90Loss": 379,
+            "blunder300": 0.153,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.111,
+            "vision": 0,
+            "meanMs": 59,
+            "p95Ms": 95,
+            "maxMs": 112
+          },
+          {
+            "level": 30,
+            "preset": 150000,
+            "meanLoss": 95,
+            "meanLossSe": 12,
+            "meanLossCap1000": 95,
+            "medianLoss": 88,
+            "p90Loss": 216,
+            "blunder300": 0.028,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.014,
+            "vision": 0,
+            "meanMs": 59,
+            "p95Ms": 109,
+            "maxMs": 112
+          },
+          {
+            "level": 35,
+            "preset": 400000,
+            "meanLoss": 61,
+            "meanLossSe": 7,
+            "meanLossCap1000": 61,
+            "medianLoss": 53,
+            "p90Loss": 143,
+            "blunder300": 0,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 72,
+            "p95Ms": 80,
+            "maxMs": 94
+          },
+          {
+            "level": 39,
+            "preset": 472000,
+            "meanLoss": 32,
+            "meanLossSe": 6,
+            "meanLossCap1000": 32,
+            "medianLoss": 0,
+            "p90Loss": 139,
+            "blunder300": 0,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 601,
+            "p95Ms": 710,
+            "maxMs": 738
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "notes": "nodes下限1000、Lv35は0.25倍・Lv39は0.35倍、視認を増加。",
+      "config": {
+        "nodeFloor": 1000,
+        "nodeScale35": 0.25,
+        "nodeScale39": 0.35,
+        "temperatureScaleLow": 0.65,
+        "temperatureScaleHigh": 0.4,
+        "engineVisibility": [
+          0.35,
+          0.65,
+          0.9,
+          0.98,
+          0.995
+        ],
+        "consistentCandidateScores": false
+      },
+      "humanlike": {
+        "samples": 12,
+        "trials": 6,
+        "seed": 20260926,
+        "levels": [
+          {
+            "level": 11,
+            "preset": 4500,
+            "meanLoss": 274,
+            "meanLossSe": 48,
+            "meanLossCap1000": 244,
+            "medianLoss": 212,
+            "p90Loss": 584,
+            "blunder300": 0.375,
+            "blunder1000": 0.042,
+            "lowNaturalness": 0,
+            "oversight": 0.181,
+            "vision": 0,
+            "meanMs": 73,
+            "p95Ms": 111,
+            "maxMs": 162
+          },
+          {
+            "level": 15,
+            "preset": 8000,
+            "meanLoss": 196,
+            "meanLossSe": 22,
+            "meanLossCap1000": 196,
+            "medianLoss": 106,
+            "p90Loss": 522,
+            "blunder300": 0.347,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.25,
+            "vision": 0,
+            "meanMs": 74,
+            "p95Ms": 114,
+            "maxMs": 128
+          },
+          {
+            "level": 20,
+            "preset": 25000,
+            "meanLoss": 223,
+            "meanLossSe": 23,
+            "meanLossCap1000": 223,
+            "medianLoss": 204,
+            "p90Loss": 510,
+            "blunder300": 0.417,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.167,
+            "vision": 0,
+            "meanMs": 70,
+            "p95Ms": 109,
+            "maxMs": 112
+          },
+          {
+            "level": 25,
+            "preset": 75000,
+            "meanLoss": 156,
+            "meanLossSe": 19,
+            "meanLossCap1000": 156,
+            "medianLoss": 93,
+            "p90Loss": 417,
+            "blunder300": 0.292,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.111,
+            "vision": 0,
+            "meanMs": 66,
+            "p95Ms": 94,
+            "maxMs": 111
+          },
+          {
+            "level": 30,
+            "preset": 150000,
+            "meanLoss": 98,
+            "meanLossSe": 15,
+            "meanLossCap1000": 98,
+            "medianLoss": 50,
+            "p90Loss": 321,
+            "blunder300": 0.139,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.042,
+            "vision": 0,
+            "meanMs": 70,
+            "p95Ms": 124,
+            "maxMs": 127
+          },
+          {
+            "level": 35,
+            "preset": 400000,
+            "meanLoss": 56,
+            "meanLossSe": 11,
+            "meanLossCap1000": 56,
+            "medianLoss": 0,
+            "p90Loss": 212,
+            "blunder300": 0.083,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 69,
+            "p95Ms": 80,
+            "maxMs": 95
+          },
+          {
+            "level": 39,
+            "preset": 472000,
+            "meanLoss": 49,
+            "meanLossSe": 11,
+            "meanLossCap1000": 49,
+            "medianLoss": 4,
+            "p90Loss": 141,
+            "blunder300": 0.083,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 699,
+            "p95Ms": 792,
+            "maxMs": 843
+          }
+        ]
+      },
+      "selfplay": {
+        "games": 140,
+        "pairs": {
+          "L10:L11tuned": {
+            "games": 10,
+            "wins": {
+              "L11tuned": 10
+            }
+          },
+          "L11legacy:L11tuned": {
+            "games": 10,
+            "wins": {
+              "L11tuned": 10
+            }
+          },
+          "L11legacy:L15tuned": {
+            "games": 10,
+            "wins": {
+              "L15tuned": 10
+            }
+          },
+          "L15legacy:L15tuned": {
+            "games": 10,
+            "wins": {
+              "L15legacy": 4,
+              "L15tuned": 6
+            }
+          },
+          "L15legacy:L20tuned": {
+            "games": 10,
+            "wins": {
+              "L20tuned": 8,
+              "L15legacy": 2
+            }
+          },
+          "L20legacy:L20tuned": {
+            "games": 10,
+            "wins": {
+              "L20tuned": 5,
+              "L20legacy": 5
+            }
+          },
+          "L20legacy:L25tuned": {
+            "games": 10,
+            "wins": {
+              "L25tuned": 8,
+              "L20legacy": 2
+            }
+          },
+          "L25legacy:L25tuned": {
+            "games": 10,
+            "wins": {
+              "L25tuned": 4,
+              "L25legacy": 6
+            }
+          },
+          "L25legacy:L30tuned": {
+            "games": 10,
+            "wins": {
+              "L25legacy": 8,
+              "L30tuned": 2
+            }
+          },
+          "L30legacy:L30tuned": {
+            "games": 10,
+            "wins": {
+              "L30legacy": 7,
+              "L30tuned": 3
+            }
+          },
+          "L30legacy:L35tuned": {
+            "games": 10,
+            "wins": {
+              "L35tuned": 8,
+              "L30legacy": 2
+            }
+          },
+          "L35legacy:L35tuned": {
+            "games": 10,
+            "wins": {
+              "L35legacy": 10
+            }
+          },
+          "L35legacy:L39tuned": {
+            "games": 10,
+            "wins": {
+              "L39tuned": 6,
+              "L35legacy": 4
+            }
+          },
+          "L39legacy:L39tuned": {
+            "games": 10,
+            "wins": {
+              "L39legacy": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "notes": "案2に、基準手を同じMultiPVで再評価する比較を追加。",
+      "config": {
+        "nodeFloor": 1000,
+        "nodeScale35": 0.25,
+        "nodeScale39": 0.35,
+        "temperatureScaleLow": 0.65,
+        "temperatureScaleHigh": 0.4,
+        "consistentCandidateScores": true
+      },
+      "humanlike": {
+        "samples": 12,
+        "trials": 6,
+        "seed": 20260926,
+        "levels": [
+          {
+            "level": 11,
+            "preset": 4500,
+            "meanLoss": 259,
+            "meanLossSe": 51,
+            "meanLossCap1000": 225,
+            "medianLoss": 110,
+            "p90Loss": 549,
+            "blunder300": 0.292,
+            "blunder1000": 0.056,
+            "lowNaturalness": 0,
+            "oversight": 0.236,
+            "vision": 0,
+            "meanMs": 72,
+            "p95Ms": 110,
+            "maxMs": 124
+          },
+          {
+            "level": 15,
+            "preset": 8000,
+            "meanLoss": 163,
+            "meanLossSe": 24,
+            "meanLossCap1000": 163,
+            "medianLoss": 57,
+            "p90Loss": 421,
+            "blunder300": 0.208,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.208,
+            "vision": 0,
+            "meanMs": 70,
+            "p95Ms": 111,
+            "maxMs": 128
+          },
+          {
+            "level": 20,
+            "preset": 25000,
+            "meanLoss": 152,
+            "meanLossSe": 21,
+            "meanLossCap1000": 152,
+            "medianLoss": 49,
+            "p90Loss": 413,
+            "blunder300": 0.208,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.222,
+            "vision": 0,
+            "meanMs": 69,
+            "p95Ms": 111,
+            "maxMs": 112
+          },
+          {
+            "level": 25,
+            "preset": 75000,
+            "meanLoss": 115,
+            "meanLossSe": 18,
+            "meanLossCap1000": 115,
+            "medianLoss": 35,
+            "p90Loss": 393,
+            "blunder300": 0.153,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.167,
+            "vision": 0,
+            "meanMs": 71,
+            "p95Ms": 110,
+            "maxMs": 125
+          },
+          {
+            "level": 30,
+            "preset": 150000,
+            "meanLoss": 73,
+            "meanLossSe": 12,
+            "meanLossCap1000": 73,
+            "medianLoss": 11,
+            "p90Loss": 224,
+            "blunder300": 0.028,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.056,
+            "vision": 0,
+            "meanMs": 70,
+            "p95Ms": 122,
+            "maxMs": 141
+          },
+          {
+            "level": 35,
+            "preset": 400000,
+            "meanLoss": 25,
+            "meanLossSe": 7,
+            "meanLossCap1000": 25,
+            "medianLoss": 0,
+            "p90Loss": 168,
+            "blunder300": 0,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 80,
+            "p95Ms": 96,
+            "maxMs": 299
+          },
+          {
+            "level": 39,
+            "preset": 472000,
+            "meanLoss": 22,
+            "meanLossSe": 6,
+            "meanLossCap1000": 22,
+            "medianLoss": 0,
+            "p90Loss": 60,
+            "blunder300": 0,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 723,
+            "p95Ms": 806,
+            "maxMs": 872
+          }
+        ]
+      },
+      "selfplay": {
+        "games": 80,
+        "pairs": {
+          "L10:L11tuned": {
+            "games": 10,
+            "wins": {
+              "L11tuned": 10
+            }
+          },
+          "L11legacy:L11tuned": {
+            "games": 10,
+            "wins": {
+              "L11tuned": 10
+            }
+          },
+          "L15legacy:L15tuned": {
+            "games": 10,
+            "wins": {
+              "L15tuned": 5,
+              "L15legacy": 5
+            }
+          },
+          "L20legacy:L20tuned": {
+            "games": 10,
+            "wins": {
+              "L20tuned": 7,
+              "L20legacy": 3
+            }
+          },
+          "L25legacy:L25tuned": {
+            "games": 10,
+            "wins": {
+              "L25tuned": 8,
+              "L25legacy": 2
+            }
+          },
+          "L30legacy:L30tuned": {
+            "games": 10,
+            "wins": {
+              "L30tuned": 5,
+              "L30legacy": 5
+            }
+          },
+          "L35legacy:L35tuned": {
+            "games": 10,
+            "wins": {
+              "L35legacy": 10
+            }
+          },
+          "L39legacy:L39tuned": {
+            "games": 10,
+            "wins": {
+              "L39legacy": 9,
+              "L39tuned": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "notes": "上位で既知候補を99%の手番で再利用。探索をLv35で0.75倍・Lv39で0.9倍へ戻す。",
+      "config": {
+        "nodeFloor11": 100,
+        "nodeFloor15": 500,
+        "nodeFloor20": 1000,
+        "nodeScale35": 0.75,
+        "nodeScale39": 0.9,
+        "temperatureScaleLow": 0.65,
+        "temperatureScaleHigh": 0.6,
+        "engineVisibility": [
+          0.35,
+          0.65,
+          0.9,
+          0.98,
+          0.995
+        ],
+        "consistentCandidateScores": true,
+        "trustedEngineRate": 0.99
+      },
+      "humanlike": {
+        "samples": 12,
+        "trials": 6,
+        "seed": 20260926,
+        "levels": [
+          {
+            "level": 11,
+            "preset": 4500,
+            "meanLoss": 328,
+            "meanLossSe": 64,
+            "meanLossCap1000": 257,
+            "medianLoss": 137,
+            "p90Loss": 658,
+            "blunder300": 0.389,
+            "blunder1000": 0.069,
+            "lowNaturalness": 0,
+            "oversight": 0.167,
+            "vision": 0,
+            "meanMs": 66,
+            "p95Ms": 111,
+            "maxMs": 112
+          },
+          {
+            "level": 15,
+            "preset": 8000,
+            "meanLoss": 187,
+            "meanLossSe": 25,
+            "meanLossCap1000": 185,
+            "medianLoss": 137,
+            "p90Loss": 390,
+            "blunder300": 0.333,
+            "blunder1000": 0.014,
+            "lowNaturalness": 0,
+            "oversight": 0.222,
+            "vision": 0,
+            "meanMs": 67,
+            "p95Ms": 112,
+            "maxMs": 126
+          },
+          {
+            "level": 20,
+            "preset": 25000,
+            "meanLoss": 166,
+            "meanLossSe": 22,
+            "meanLossCap1000": 166,
+            "medianLoss": 94,
+            "p90Loss": 443,
+            "blunder300": 0.306,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.111,
+            "vision": 0,
+            "meanMs": 65,
+            "p95Ms": 110,
+            "maxMs": 128
+          },
+          {
+            "level": 25,
+            "preset": 75000,
+            "meanLoss": 127,
+            "meanLossSe": 17,
+            "meanLossCap1000": 127,
+            "medianLoss": 94,
+            "p90Loss": 372,
+            "blunder300": 0.222,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.139,
+            "vision": 0,
+            "meanMs": 65,
+            "p95Ms": 111,
+            "maxMs": 126
+          },
+          {
+            "level": 30,
+            "preset": 150000,
+            "meanLoss": 65,
+            "meanLossSe": 11,
+            "meanLossCap1000": 65,
+            "medianLoss": 0,
+            "p90Loss": 192,
+            "blunder300": 0.083,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.014,
+            "vision": 0,
+            "meanMs": 58,
+            "p95Ms": 110,
+            "maxMs": 111
+          },
+          {
+            "level": 35,
+            "preset": 400000,
+            "meanLoss": 42,
+            "meanLossSe": 7,
+            "meanLossCap1000": 42,
+            "medianLoss": 0,
+            "p90Loss": 137,
+            "blunder300": 0.014,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 76,
+            "p95Ms": 156,
+            "maxMs": 166
+          },
+          {
+            "level": 39,
+            "preset": 472000,
+            "meanLoss": 27,
+            "meanLossSe": 6,
+            "meanLossCap1000": 27,
+            "medianLoss": 0,
+            "p90Loss": 137,
+            "blunder300": 0,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 922,
+            "p95Ms": 1682,
+            "maxMs": 1726
+          }
+        ]
+      },
+      "selfplay": {
+        "games": 80,
+        "pairs": {
+          "L10:L11tuned": {
+            "games": 10,
+            "wins": {
+              "L11tuned": 10
+            }
+          },
+          "L11legacy:L11tuned": {
+            "games": 10,
+            "wins": {
+              "L11tuned": 9,
+              "L11legacy": 1
+            }
+          },
+          "L15legacy:L15tuned": {
+            "games": 10,
+            "wins": {
+              "L15tuned": 8,
+              "L15legacy": 2
+            }
+          },
+          "L20legacy:L20tuned": {
+            "games": 10,
+            "wins": {
+              "L20legacy": 4,
+              "L20tuned": 6
+            }
+          },
+          "L25legacy:L25tuned": {
+            "games": 10,
+            "wins": {
+              "L25tuned": 5,
+              "L25legacy": 5
+            }
+          },
+          "L30legacy:L30tuned": {
+            "games": 10,
+            "wins": {
+              "L30legacy": 5,
+              "L30tuned": 5
+            }
+          },
+          "L35legacy:L35tuned": {
+            "games": 10,
+            "wins": {
+              "L35legacy": 9,
+              "L35tuned": 1
+            }
+          },
+          "L39legacy:L39tuned": {
+            "games": 10,
+            "wins": {
+              "L39legacy": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "notes": "案4から上位の温度をほぼ1へ下げ、Lv11の視認・nodesを初期値へ近づける。序盤をばらす追加試験を実施。",
+      "config": {
+        "nodeFloor11": 62,
+        "nodeFloor15": 500,
+        "nodeFloor20": 1000,
+        "nodeScale35": 0.75,
+        "nodeScale39": 0.9,
+        "temperatureScale11": 1,
+        "temperatureScale15": 0.65,
+        "temperatureScale30": 0.65,
+        "temperatureScale35": 0.001,
+        "engineVisibility": [
+          0.25,
+          0.65,
+          0.9,
+          0.98,
+          0.995
+        ],
+        "consistentCandidateScores": true,
+        "trustedEngineRate": 0.99
+      },
+      "selfplay": {
+        "games": 80,
+        "pairs": {
+          "L10:L11tuned": {
+            "games": 10,
+            "wins": {
+              "L11tuned": 9,
+              "L10": 1
+            }
+          },
+          "L11legacy:L11tuned": {
+            "games": 10,
+            "wins": {
+              "L11tuned": 9,
+              "L11legacy": 1
+            }
+          },
+          "L15legacy:L15tuned": {
+            "games": 10,
+            "wins": {
+              "L15tuned": 6,
+              "L15legacy": 4
+            }
+          },
+          "L20legacy:L20tuned": {
+            "games": 10,
+            "wins": {
+              "L20tuned": 6,
+              "L20legacy": 4
+            }
+          },
+          "L25legacy:L25tuned": {
+            "games": 10,
+            "wins": {
+              "L25tuned": 5,
+              "L25legacy": 5
+            }
+          },
+          "L30legacy:L30tuned": {
+            "games": 10,
+            "wins": {
+              "L30legacy": 8,
+              "L30tuned": 2
+            }
+          },
+          "L35legacy:L35tuned": {
+            "games": 10,
+            "wins": {
+              "L35legacy": 9,
+              "L35tuned": 1
+            }
+          },
+          "L39legacy:L39tuned": {
+            "games": 10,
+            "wins": {
+              "L39legacy": 9,
+              "L39tuned": 1
+            }
+          }
+        }
+      }
+    }
+  ],
+  "varied": {
+    "profile": 5,
+    "openingPlies": 12,
+    "seed": 20261019,
+    "complete": true,
+    "games": 160,
+    "pairs": {
+      "L10:L11tuned": {
+        "games": 20,
+        "wins": {
+          "L11tuned": 19,
+          "L10": 1
+        }
+      },
+      "L11legacy:L11tuned": {
+        "games": 20,
+        "wins": {
+          "L11tuned": 16,
+          "L11legacy": 4
+        }
+      },
+      "L15legacy:L15tuned": {
+        "games": 20,
+        "wins": {
+          "L15legacy": 9,
+          "L15tuned": 11
+        }
+      },
+      "L20legacy:L20tuned": {
+        "games": 20,
+        "wins": {
+          "L20tuned": 13,
+          "L20legacy": 7
+        }
+      },
+      "L25legacy:L25tuned": {
+        "games": 20,
+        "wins": {
+          "L25tuned": 7,
+          "L25legacy": 13
+        }
+      },
+      "L30legacy:L30tuned": {
+        "games": 20,
+        "wins": {
+          "L30legacy": 11,
+          "L30tuned": 9
+        }
+      },
+      "L35legacy:L35tuned": {
+        "games": 20,
+        "wins": {
+          "L35tuned": 3,
+          "L35legacy": 17
+        }
+      },
+      "L39legacy:L39tuned": {
+        "games": 20,
+        "wins": {
+          "L39legacy": 20
+        }
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "winner": "black",
+      "black": "L35tuned",
+      "white": "L35legacy",
+      "total": 24,
+      "aimless": 1,
+      "same": 13,
+      "examples": [
+        {
+          "ply": 12,
+          "root": "2i3g",
+          "actual": "2f2e",
+          "tags": [],
+          "sfen": "l2gk1snl/1rs3gb1/p1npppppp/2p6/1p7/2P3PP1/PPBPPP2P/2S2S1R1/LN1GKG1NL b - 1"
+        }
+      ]
+    },
+    {
+      "winner": "black",
+      "black": "L35tuned",
+      "white": "L35legacy",
+      "total": 44,
+      "aimless": 3,
+      "same": 29,
+      "examples": [
+        {
+          "ply": 12,
+          "root": "6i7h",
+          "actual": "2e2d",
+          "tags": [],
+          "sfen": "ln1gk1snl/1r1s2gb1/p1pppp1pp/6p2/7P1/1PP3P2/P2PPP2P/1B3S1R1/LNSGKG1NL b P 1"
+        },
+        {
+          "ply": 46,
+          "root": "4i4h",
+          "actual": "3d3c+",
+          "tags": [],
+          "sfen": "ln2k1r1l/4gsg2/p1pp1pn1p/3b1sP+R1/6pp1/1P2+BP3/P1GPP1S1P/9/LNS1KG1NL b P3p 1"
+        },
+        {
+          "ply": 78,
+          "root": "P*3h",
+          "actual": "L*3d",
+          "tags": [
+            "idle-drop"
+          ],
+          "sfen": "ln2k1r1l/4g1g2/p1ppsp2p/4N4/6p+R1/1P2P4/P+BGP1KNSP/1S2+p4/LN6+b b SL6Pg 1"
+        }
+      ]
+    },
+    {
+      "winner": "black",
+      "black": "L35legacy",
+      "white": "L35tuned",
+      "total": 32,
+      "aimless": 6,
+      "same": 14,
+      "examples": [
+        {
+          "ply": 17,
+          "root": "P*2f",
+          "actual": "2b8h+",
+          "tags": [
+            "idle-drop",
+            "sacrifice"
+          ],
+          "sfen": "lnsgk1snl/1r4gb1/p1pppp2p/6p2/9/2P6/P2PPPP1P/1BG1G2R1/LNS1K1SNL w 2P2p 1"
+        },
+        {
+          "ply": 43,
+          "root": "S*8e",
+          "actual": "2c3d",
+          "tags": [
+            "idle-drop"
+          ],
+          "sfen": "ln1gk2nl/1rs4G1/p1p1pppsp/3p3p1/9/2P6/PPBPPPP1P/1G2G2R1/LN2K1SNL w bs2p 1"
+        },
+        {
+          "ply": 57,
+          "root": "3e2d",
+          "actual": "4c4d",
+          "tags": [],
+          "sfen": "ln1gk2nG/1rs3b2/p1p1ppppp/3p5/6s2/2P1L1s1P/PPBPPP3/1G2G2R1/LN2K1SNL w P2p 1"
+        },
+        {
+          "ply": 71,
+          "root": "6a7a",
+          "actual": "G*4h",
+          "tags": [],
+          "sfen": "ln1k5/2s6/p1p1G3p/3p1p3/1r4+R2/2b3s1P/PPBPPP3/1G2G4/LN2K1SNL w SN4Pgl3p 1"
+        },
+        {
+          "ply": 73,
+          "root": "L*6b",
+          "actual": "L*3b",
+          "tags": [
+            "idle-drop"
+          ],
+          "sfen": "ln1k5/2s6/p1p1G3p/3p1p3/1r4+R2/2b3s1P/PPBPPP3/1G2GS3/LN2K2NL w GSN4Pl3p 1"
+        },
+        {
+          "ply": 75,
+          "root": "1c1d",
+          "actual": "7f6g+",
+          "tags": [
+            "advance"
+          ],
+          "sfen": "ln1k5/2s3l2/p1p1G3p/3p1p3/1+R7/2b3s1P/PPBPPP3/1G2GS3/LN2K2NL w RGSN4P3p 1"
+        }
+      ]
+    },
+    {
+      "winner": "black",
+      "black": "L35legacy",
+      "white": "L35tuned",
+      "total": 54,
+      "aimless": 9,
+      "same": 25,
+      "examples": [
+        {
+          "ply": 15,
+          "root": "B*5d",
+          "actual": "2b3c",
+          "tags": [
+            "idle-drop"
+          ],
+          "sfen": "ln1g3nl/1rs2kgs1/p1pppp1pp/1p4p2/7P1/2P5P/PPNPPPP2/2G2S1R1/L1S1KG1NL w Bb 1"
+        },
+        {
+          "ply": 43,
+          "root": "8a7c",
+          "actual": "8b8c",
+          "tags": [],
+          "sfen": "ln1g2knl/1r4g2/p2sppspp/b5p2/2PP3PP/P3PP3/1PGS1SP2/4G2R1/L3K2NL w B3Pn 1"
+        },
+        {
+          "ply": 45,
+          "root": "8a7c",
+          "actual": "9d6g+",
+          "tags": [],
+          "sfen": "ln1g2knl/6g2/pr1sppspp/b5p2/2PP3PP/PP2PP3/2GS1SP2/4G2R1/L3K2NL w B3Pn 1"
+        },
+        {
+          "ply": 47,
+          "root": "8a7c",
+          "actual": "8c8b",
+          "tags": [],
+          "sfen": "ln1g2knl/6g2/pr1sppspp/6p2/2PP3PP/PP2PP3/2GG1SP2/7R1/L3K2NL w 2B3Psn 1"
+        },
+        {
+          "ply": 49,
+          "root": "8a7c",
+          "actual": "8b8d",
+          "tags": [],
+          "sfen": "ln1g2knl/1r4g2/p2sppspp/6p2/2PP3PP/PP2PP3/2GG1SP2/5K1R1/L6NL w 2B3Psn 1"
+        },
+        {
+          "ply": 83,
+          "root": "P*5e",
+          "actual": "G*3b",
+          "tags": [
+            "sacrifice"
+          ],
+          "sfen": "ln1g2knl/9/pp2+Ppsgp/1B1P2p2/2P4pP/PP2SP3/2G1K1P2/5R3/L3sSbNL w RN2Pg2p 1"
+        },
+        {
+          "ply": 109,
+          "root": "1c1d",
+          "actual": "S*3i",
+          "tags": [
+            "advance"
+          ],
+          "sfen": "ln2+RpGnl/4S2k1/p5ggp/1p1PB1ps1/2P4pP/PP2SP3/2G3P2/5b1K1/L6NL w RN3Ps2p 1"
+        },
+        {
+          "ply": 111,
+          "root": "1c1d",
+          "actual": "4h3g+",
+          "tags": [
+            "advance"
+          ],
+          "sfen": "ln2+RpGnl/4S2k1/p5ggp/1p1PB1ps1/2P4pP/PP2SP3/2G3P2/5bK2/L5sNL w RN3P2p 1"
+        },
+        {
+          "ply": 115,
+          "root": "1c1d",
+          "actual": "2b3a",
+          "tags": [
+            "advance"
+          ],
+          "sfen": "ln2+RpGnl/4S2k1/p5ggp/1p1PB1ps1/2P4pP/PP2SP3/2G6/5K3/L6NL w RBSN3P3p 1"
+        }
+      ]
+    }
+  ],
+  "purposeExpansion": {
+    "approved": "実際の狙いがある手を判定できるよう拡張して校正を続ける",
+    "trials": [
+      {
+        "source": ".cpu-purpose-expanded-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L35legacy",
+              "L35tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L35legacy": 15,
+              "L35tuned": 5
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L39legacy",
+              "L39tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L39legacy": 19,
+              "L39tuned": 1
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L10",
+              "L11tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L11tuned": 16,
+              "L10": 4
+            },
+            "draws": 0
+          }
+        ],
+        "decisions": 0,
+        "fallbacks": 0,
+        "rootRejected": 0,
+        "examples": []
+      },
+      {
+        "source": ".cpu-expanded-diagnostic-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L35legacy",
+              "L35tuned"
+            ],
+            "games": 10,
+            "wins": {
+              "L35legacy": 8,
+              "L35tuned": 2
+            },
+            "draws": 0
+          }
+        ],
+        "decisions": 433,
+        "fallbacks": 11,
+        "rootRejected": 30,
+        "examples": [
+          {
+            "sfen": "l5knl/1r3bg2/2ns1pss1/p1pp3pp/1p3Sp2/P1PP5/1PBGPP2P/2GK3R1/LN5NL b GP2p 1",
+            "root": "P*2e",
+            "actual": "2h2f",
+            "ply": 50,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "l1B3knl/4r1g2/p1npss1p1/1pp1p1P1p/3P1G3/P1PBPP3/1P1G1s2P/3K1G1r1/LN5NL b 2Psp 1",
+            "root": "P*2d",
+            "actual": "6h7g",
+            "ply": 76,
+            "tags": [
+              "idle-drop",
+              "sacrifice"
+            ]
+          },
+          {
+            "sfen": "l5kn+B/3r2g2/p2p1s1p1/1pp1p1P1p/3n1G3/PKP1PP3/1P1G4P/5s1r1/LN5NL b SL2Pbgs2p 1",
+            "root": "P*6d",
+            "actual": "8f9g",
+            "ply": 84,
+            "tags": [
+              "idle-drop",
+              "sacrifice"
+            ]
+          },
+          {
+            "sfen": "ln1g1ksnl/1r4gb1/ppp1pp1pp/3ps1p2/9/2PPP1P2/PP2SP1PP/1B1G3R1/LNSK1G1NL w - 1",
+            "root": "9c9d",
+            "actual": "8b6b",
+            "ply": 15,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "ln2gksnl/3r2gb1/pp2pp1pp/2pps1p2/9/2PPP1P2/PPNGSP1PP/1B1G3R1/L1SK3NL w - 1",
+            "root": "8a7c",
+            "actual": "3a4b",
+            "ply": 21,
+            "tags": []
+          },
+          {
+            "sfen": "ln2gk1nl/3r1sg2/pp2pp1pp/2ppsbp2/9/2PPP1PP1/PPNGSPN1P/1B1G3R1/L1SK4L w - 1",
+            "root": "1c1d",
+            "actual": "5a5b",
+            "ply": 25,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "ln3k1nl/3rgsg2/pp2pp1pp/2ppsbp2/9/2PPPSPP1/PPNG1PN1P/1B1G3R1/L1SK4L w - 1",
+            "root": "1c1d",
+            "actual": "6b7b",
+            "ply": 27,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "ln3k1nl/4gsgb1/pp3p1pp/4p1p2/2rNsS1P1/P2P2P2/1P1G1PN1P/1B1G3R1/L1SK4L w P3p 1",
+            "root": "P*7g",
+            "actual": "7e7d",
+            "ply": 41,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "lnsgk1snl/1r4gb1/p1pppp1pp/6p2/1p5R1/9/PPPPPPP1P/1BG6/LNS1KGSNL b P 1",
+            "root": "9g9f",
+            "actual": "3i4h",
+            "ply": 12,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "lnsgk1snl/6g2/p1ppppbpp/6p2/7R1/1rP6/P2PPPP1P/1BG2S3/LNS1KG1NL b 2Pp 1",
+            "root": "2e2h",
+            "actual": "8h3c+",
+            "ply": 18,
+            "tags": []
+          },
+          {
+            "sfen": "ln3g1nl/1r2gks2/p2sppbpp/1ppp2p2/9/2PPP1PPP/PPBS1P3/4GS1R1/LN1GK2NL w - 1",
+            "root": "8b6b",
+            "actual": "6c5d",
+            "ply": 21,
+            "tags": []
+          },
+          {
+            "sfen": "ln2k2nl/1rgs2gs1/p2ppp1pp/1+bp3p2/9/1PP3P2/P1GP1P2P/3S2SR1/LNK2G1NL b B2Pp 1",
+            "root": "9g9f",
+            "actual": "3h3g",
+            "ply": 36,
+            "tags": [
+              "advance"
+            ]
+          }
+        ]
+      },
+      {
+        "source": ".cpu-deadline-fixed-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L35legacy",
+              "L35tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L35tuned": 4,
+              "L35legacy": 16
+            },
+            "draws": 0
+          }
+        ],
+        "decisions": 1008,
+        "fallbacks": 0,
+        "rootRejected": 82,
+        "examples": [
+          {
+            "sfen": "ln6l/1r3kg2/p2p1gn2/1ppsp2pp/5pPs1/P1P3p1P/1PSPPPS2/2G4R1/LNKG3NL b Bbp 1",
+            "root": "7i8h",
+            "actual": "3g4h",
+            "ply": 44,
+            "tags": []
+          },
+          {
+            "sfen": "ln6l/1gr1k1g2/1B1p3P1/pppsp+BPpp/4s4/P1P6/1P2PPS1N/2G2S3/LN1K5 b RGLn4p 1",
+            "root": "R*6a",
+            "actual": "G*4c",
+            "ply": 86,
+            "tags": [
+              "sacrifice",
+              "piece-sacrifice"
+            ]
+          },
+          {
+            "sfen": "lnsgk1snl/1r4gb1/p1pppp2p/6pR1/9/P8/1PPPPPP1P/1BS2S3/LN1GKG1NL w P2p 1",
+            "root": "1c1d",
+            "actual": "7a6b",
+            "ply": 17,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "ln1g2snl/1r2k1gb1/p1sppp1pp/2p3p2/9/P3P1P2/1PPPSP2P/1BS1G2R1/LN1GK2NL w Pp 1",
+            "root": "1c1d",
+            "actual": "7c6d",
+            "ply": 27,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "l2g1k2l/1r3sgp1/p1np1pn1p/2pspbpR1/9/P1PSPBP2/1PNP1P2P/2S1G4/L2GK2NL w Pp 1",
+            "root": "P*8h",
+            "actual": "5d5e",
+            "ply": 45,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "l2g1k2l/1r3sg2/p1np1pnpp/3sPbp2/2p6/P1PS1BP2/1PNP1P2P/2S1G2R1/L2GK2NL w 2Pp 1",
+            "root": "8b5b",
+            "actual": "7e7f",
+            "ply": 51,
+            "tags": []
+          },
+          {
+            "sfen": "l2g1k2l/1+P3sg2/p2p1pnpp/3sPbp2/9/P2S1BP2/1P1PGP2P/7R1/L2K3NL w RN3Pgsnp 1",
+            "root": "N*7f",
+            "actual": "S*4e",
+            "ply": 61,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "lnsg2snl/1l3kg2/3pppb1p/p1p3pp1/1P7/P1P4R1/1+bNPPPP1P/3S1KS2/5G1NL b RPgp 1",
+            "root": "P*2e",
+            "actual": "4i5h",
+            "ply": 36,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "ln1g3nl/1ls2kgs1/3ppp2p/pPp+b1bpp1/5N3/PpPP2P2/2N1PP2P/3SGKSg1/7RL b RP 1",
+            "root": "5h5i",
+            "actual": "2i2h",
+            "ply": 50,
+            "tags": []
+          },
+          {
+            "sfen": "ln2kg1nl/4g1s2/p1p1pp3/1p4ppp/4b4/P1P3P2/1PS1PPS1P/2G1G2R1/LN2K2NL w Rbs3p 1",
+            "root": "5a4b",
+            "actual": "B*1e",
+            "ply": 37,
+            "tags": []
+          },
+          {
+            "sfen": "ln2kg1nl/4g1s2/p1p1pp3/1p4ppp/4b4/P1P2PP2/1PS1P1N1P/2G1G2R1/LN2K3L w RB2s3p 1",
+            "root": "P*6f",
+            "actual": "5a4b",
+            "ply": 41,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "ln3g1nl/1R2gks2/p1p1pp3/1p4ppp/4b4/P1P2PP2/1PS1P1N1P/2G1G2R1/LN2K3L w B2s3p 1",
+            "root": "P*6f",
+            "actual": "S*6f",
+            "ply": 43,
+            "tags": [
+              "idle-drop"
+            ]
+          }
+        ]
+      },
+      {
+        "source": ".cpu-expanded-current-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L35legacy",
+              "L35tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L35tuned": 8,
+              "L35legacy": 12
+            },
+            "draws": 0
+          }
+        ],
+        "decisions": 1060,
+        "fallbacks": 0,
+        "rootRejected": 59,
+        "examples": [
+          {
+            "sfen": "lnsgk1snl/6gb1/p1ppppppp/9/9/1pr6/PP1PPPP1P/1BG4R1/LNS1KGSNL b Pp 1",
+            "root": "P*2d",
+            "actual": "8h7g",
+            "ply": 18,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "lnsgk1snl/6gb1/p1pppp2p/6pp1/9/9/PGBPPPP1P/6S2/LNS1KG1NL b R2Pr2p 1",
+            "root": "8g8h",
+            "actual": "7g2b+",
+            "ply": 28,
+            "tags": []
+          },
+          {
+            "sfen": "l+R5nl/1pG6/1k1ppp1gp/p1pb2pp1/5r3/1PPS5/P1GPPPP1P/3K2S2/LNS2G1NL b BSNP 1",
+            "root": "N*9f",
+            "actual": "7b8b",
+            "ply": 60,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "ln5nl/1kg1r4/1s1p1gspp/ppp1ppp2/9/PPPP1PPP1/3+BPSN1P/1SGKG2R1/LN6L w b 1",
+            "root": "1c1d",
+            "actual": "6c6d",
+            "ply": 37,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "ln5nl/1kg1r4/1s3gspp/ppppppp2/9/PPPP1PPP1/1S1+BPSN1P/2GKG2R1/LN6L w b 1",
+            "root": "1c1d",
+            "actual": "5d5e",
+            "ply": 39,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "ln5nl/1kg1r4/1s3gspp/pppp1pp2/4p2P1/PPPP1PP2/1S1+BPSN1P/2GKG2R1/LN6L w b 1",
+            "root": "5b5a",
+            "actual": "8b9b",
+            "ply": 41,
+            "tags": []
+          },
+          {
+            "sfen": "ln5nl/k1g1r4/1s3gspp/pppp1pp2/4p2P1/PPPP1PP2/1S1+BPSN1P/2G1G2R1/LNK5L w b 1",
+            "root": "5b5a",
+            "actual": "9b8b",
+            "ply": 43,
+            "tags": []
+          },
+          {
+            "sfen": "ln5nl/1kg1r4/1s4spp/ppppgpp2/4p2P1/PPPP1PP1P/1S1+BPSN2/2GG3R1/LNK5L w b 1",
+            "root": "5b5a",
+            "actual": "5b5c",
+            "ply": 47,
+            "tags": []
+          },
+          {
+            "sfen": "l7l/1kg6/1s4+Ppp/ppp1g2s1/4pP2P/PPPG2p2/1S2P1N2/1K1G2SR1/L7L w RBN2Pb2n2p 1",
+            "root": "N*7c",
+            "actual": "B*4f",
+            "ply": 85,
+            "tags": [
+              "idle-drop"
+            ]
+          },
+          {
+            "sfen": "ln2k2nl/1r2g1gs1/3s3p1/1pppppB1p/p6R1/2PP1PP2/PPS1PSN1P/2G6/LN2KG2L b 2Pb 1",
+            "root": "4i3h",
+            "actual": "3d6g",
+            "ply": 34,
+            "tags": []
+          },
+          {
+            "sfen": "ln2k2nl/1r2g1gs1/3s3p1/2pppp2p/pp5R1/2PP1PP2/PPSBPSN1P/2G6/LN2KG2L b 2Pb 1",
+            "root": "2e2i",
+            "actual": "4i5h",
+            "ply": 36,
+            "tags": []
+          },
+          {
+            "sfen": "l6nl/1r2k1gs1/2ns1g1p1/2pppp2p/pp5R1/2PP1PP1P/PPSBPSN2/2GKG4/LN6L b 2Pb 1",
+            "root": "2e2h",
+            "actual": "2e2f",
+            "ply": 42,
+            "tags": []
+          }
+        ]
+      },
+      {
+        "source": ".cpu-expanded-pv-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L35legacy",
+              "L35tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L35legacy": 14,
+              "L35tuned": 6
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L39legacy",
+              "L39tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L39legacy": 16,
+              "L39tuned": 4
+            },
+            "draws": 0
+          }
+        ],
+        "decisions": 1991,
+        "fallbacks": 0,
+        "rootRejected": 93,
+        "examples": [
+          {
+            "sfen": "ln2k2nl/1r2gsgb1/1ppspp1pp/p2p2p2/9/P1PPP1PP1/1P3P2P/1BGS1S1R1/LN2KG1NL w - 1",
+            "root": "8b6b",
+            "actual": "5a4a",
+            "ply": 17,
+            "tags": []
+          },
+          {
+            "sfen": "ln2k2nl/1r1sgsg2/2p1pp1pp/p2p2p2/1p7/P1P2PPP1/1PSPP3P/2GK1S1R1/LN3G1NL w Bb 1",
+            "root": "1c1d",
+            "actual": "6b6c",
+            "ply": 21,
+            "tags": [
+              "advance"
+            ]
+          },
+          {
+            "sfen": "l5knl/5r3/2ngpgsp1/p1pp2p1p/4P2P1/PPP3P1P/3P1GN2/2GBK4/LN4S1L w B2SPr2p 1",
+            "root": "P*8g",
+            "actual": "R*2i",
+            "ply": 59,
+            "tags": [
+              "idle-drop",
+              "sacrifice"
+            ]
+          },
+          {
+            "sfen": "l5knl/5r3/2ngpgsp1/p1pp2p1p/4P2P1/PPP3P1P/3P1GN2/2GBK2B1/LN4SrL w 2SP2p 1",
+            "root": "P*4h",
+            "actual": "3a4a",
+            "ply": 61,
+            "tags": [
+              "idle-drop",
+              "sacrifice"
+            ]
+          },
+          {
+            "sfen": "+R5+Rnl/4Sgb1k/3gp1sp1/p1P2Lp1p/3pP2P1/PP1n1BP1P/3P1GN2/1pG3SS1/L4K2L w N3P 1",
+            "root": "6c5d",
+            "actual": "6f7h+",
+            "ply": 97,
+            "tags": [
+              "sacrifice",
+              "piece-sacrifice"
+            ]
+          },
+          {
+            "sfen": "ln1g3nl/1rs2kg2/2p1ppsp1/3p2p1p/pp5P1/2P2PP1P/PPSPPSN2/2G4R1/LN2KG2L b Bb 1",
+            "root": "5i5h",
+            "actual": "5i6h",
+            "ply": 26,
+            "tags": [
+              "early-king"
+            ]
+          },
+          {
+            "sfen": "ln1g3nl/1r3kg2/3sppsp1/2pp2p1p/pp5P1/2P1SPP1P/PPSPP1N2/2GK3R1/LN3G2L b Bb 1",
+            "root": "2h2i",
+            "actual": "2h2f",
+            "ply": 30,
+            "tags": []
+          },
+          {
+            "sfen": "ln1g3nl/1r3kg2/4ppsp1/2pps1p1p/pp5P1/2P1SPPRP/PPSPP1N2/2GK5/LN3G2L b Bb 1",
+            "root": "4i4h",
+            "actual": "5f4g",
+            "ply": 32,
+            "tags": []
+          },
+          {
+            "sfen": "ln1g3nl/1r3kg2/4ppsp1/2p1s1p1p/pp1p3P1/2P2PPRP/PPSPPSN2/2GK5/LN3G2L b Bb 1",
+            "root": "4i4h",
+            "actual": "4i5h",
+            "ply": 34,
+            "tags": []
+          },
+          {
+            "sfen": "l6nl/1r1g1kg2/2n1p1sp1/2p1spp1p/pp1p3P1/2P1SPPRP/PPSPPGN2/2GK5/LN6L b Bb 1",
+            "root": "4g4h",
+            "actual": "B*7a",
+            "ply": 40,
+            "tags": []
+          },
+          {
+            "sfen": "l6nl/5kg2/2G1p1sp1/r1p1spp1p/pp1p3P1/2P1SPPRP/PPSPPGN2/2GK5/LN6L b N2b 1",
+            "root": "7c8c",
+            "actual": "N*5h",
+            "ply": 48,
+            "tags": []
+          },
+          {
+            "sfen": "l5knl/6g2/2G1p1sp1/r1p1spp1p/pp1p3P1/2P1SPPRP/PPSPPGN2/2GKN4/LN6L b 2b 1",
+            "root": "7c8c",
+            "actual": "6g6f",
+            "ply": 50,
+            "tags": []
+          }
+        ]
+      },
+      {
+        "source": ".cpu-expanded-low-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L10",
+              "L11legacy"
+            ],
+            "games": 20,
+            "wins": {
+              "L10": 8,
+              "L11legacy": 12
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L10",
+              "L11tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L11tuned": 17,
+              "L10": 3
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11legacy",
+              "L11tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L11tuned": 12,
+              "L11legacy": 8
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11tuned",
+              "L12tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L12tuned": 14,
+              "L11tuned": 6
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11tuned",
+              "L13tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L13tuned": 18,
+              "L11tuned": 2
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L20legacy",
+              "L20tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L20legacy": 8,
+              "L20tuned": 12
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L30legacy",
+              "L30tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L30legacy": 10,
+              "L30tuned": 9
+            },
+            "draws": 1
+          }
+        ],
+        "decisions": 0,
+        "fallbacks": 0,
+        "rootRejected": 0,
+        "examples": []
+      },
+      {
+        "source": ".cpu-transition-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L10",
+              "L11tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L11tuned": 19,
+              "L10": 1
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11legacy",
+              "L11tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L11tuned": 18,
+              "L11legacy": 2
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11tuned",
+              "L12tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L12tuned": 17,
+              "L11tuned": 3
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11tuned",
+              "L13tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L13tuned": 20
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L15legacy",
+              "L15tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L15tuned": 16,
+              "L15legacy": 4
+            },
+            "draws": 0
+          }
+        ],
+        "decisions": 0,
+        "fallbacks": 0,
+        "rootRejected": 0,
+        "examples": []
+      },
+      {
+        "source": ".cpu-transition-narrow-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L10",
+              "L11tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L10": 7,
+              "L11tuned": 13
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11legacy",
+              "L11tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L11tuned": 8,
+              "L11legacy": 12
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11tuned",
+              "L12tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L11tuned": 4,
+              "L12tuned": 16
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11tuned",
+              "L13tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L13tuned": 19,
+              "L11tuned": 1
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L15legacy",
+              "L15tuned"
+            ],
+            "games": 20,
+            "wins": {
+              "L15legacy": 4,
+              "L15tuned": 16
+            },
+            "draws": 0
+          }
+        ],
+        "decisions": 0,
+        "fallbacks": 0,
+        "rootRejected": 0,
+        "examples": []
+      },
+      {
+        "source": ".cpu-stage4-low-selfplay.json",
+        "complete": true,
+        "pairs": [
+          {
+            "players": [
+              "L10",
+              "L11tuned"
+            ],
+            "games": 30,
+            "wins": {
+              "L10": 14,
+              "L11tuned": 16
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11legacy",
+              "L11tuned"
+            ],
+            "games": 30,
+            "wins": {
+              "L11tuned": 8,
+              "L11legacy": 22
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11tuned",
+              "L12tuned"
+            ],
+            "games": 30,
+            "wins": {
+              "L11tuned": 8,
+              "L12tuned": 22
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L11tuned",
+              "L13tuned"
+            ],
+            "games": 30,
+            "wins": {
+              "L13tuned": 26,
+              "L11tuned": 4
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L15legacy",
+              "L15tuned"
+            ],
+            "games": 30,
+            "wins": {
+              "L15legacy": 24,
+              "L15tuned": 6
+            },
+            "draws": 0
+          },
+          {
+            "players": [
+              "L25legacy",
+              "L25tuned"
+            ],
+            "games": 30,
+            "wins": {
+              "L25tuned": 19,
+              "L25legacy": 11
+            },
+            "draws": 0
+          }
+        ],
+        "decisions": 0,
+        "fallbacks": 0,
+        "rootRejected": 0,
+        "examples": []
+      }
+    ],
+    "previewHumanlike": {
+      "legacy": {
+        "seed": 20260926,
+        "trials": 6,
+        "referenceNodes": 30000,
+        "samples": 12,
+        "levels": [
+          {
+            "level": 11,
+            "preset": 4500,
+            "meanLoss": 396,
+            "meanLossSe": 68,
+            "meanLossCap1000": 319,
+            "medianLoss": 270,
+            "p90Loss": 775,
+            "blunder300": 0.444,
+            "blunder1000": 0.056,
+            "lowNaturalness": 0,
+            "oversight": 0.139,
+            "vision": 0.403,
+            "meanMs": 48,
+            "p95Ms": 78,
+            "maxMs": 96
+          },
+          {
+            "level": 15,
+            "preset": 8000,
+            "meanLoss": 253,
+            "meanLossSe": 25,
+            "meanLossCap1000": 253,
+            "medianLoss": 270,
+            "p90Loss": 493,
+            "blunder300": 0.389,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.264,
+            "vision": 0.597,
+            "meanMs": 51,
+            "p95Ms": 86,
+            "maxMs": 107
+          },
+          {
+            "level": 20,
+            "preset": 25000,
+            "meanLoss": 172,
+            "meanLossSe": 22,
+            "meanLossCap1000": 172,
+            "medianLoss": 99,
+            "p90Loss": 437,
+            "blunder300": 0.264,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.25,
+            "vision": 0.417,
+            "meanMs": 55,
+            "p95Ms": 100,
+            "maxMs": 112
+          },
+          {
+            "level": 25,
+            "preset": 75000,
+            "meanLoss": 111,
+            "meanLossSe": 16,
+            "meanLossCap1000": 111,
+            "medianLoss": 57,
+            "p90Loss": 413,
+            "blunder300": 0.125,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.097,
+            "vision": 0.472,
+            "meanMs": 67,
+            "p95Ms": 106,
+            "maxMs": 123
+          },
+          {
+            "level": 30,
+            "preset": 150000,
+            "meanLoss": 88,
+            "meanLossSe": 13,
+            "meanLossCap1000": 88,
+            "medianLoss": 45,
+            "p90Loss": 201,
+            "blunder300": 0.069,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.014,
+            "vision": 0.417,
+            "meanMs": 75,
+            "p95Ms": 128,
+            "maxMs": 153
+          },
+          {
+            "level": 35,
+            "preset": 400000,
+            "meanLoss": 36,
+            "meanLossSe": 6,
+            "meanLossCap1000": 36,
+            "medianLoss": 18,
+            "p90Loss": 83,
+            "blunder300": 0,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 84,
+            "p95Ms": 108,
+            "maxMs": 278
+          },
+          {
+            "level": 39,
+            "preset": 472000,
+            "meanLoss": 34,
+            "meanLossSe": 5,
+            "meanLossCap1000": 34,
+            "medianLoss": 25,
+            "p90Loss": 82,
+            "blunder300": 0,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 1085,
+            "p95Ms": 1659,
+            "maxMs": 2190
+          }
+        ],
+        "examples": []
+      },
+      "hybrid": {
+        "seed": 20260926,
+        "trials": 6,
+        "referenceNodes": 30000,
+        "samples": 12,
+        "levels": [
+          {
+            "level": 11,
+            "preset": 4500,
+            "meanLoss": 746,
+            "meanLossSe": 126,
+            "meanLossCap1000": 381,
+            "medianLoss": 280,
+            "p90Loss": 3000,
+            "blunder300": 0.458,
+            "blunder1000": 0.222,
+            "lowNaturalness": 0.153,
+            "oversight": 0.139,
+            "vision": 0,
+            "meanMs": 73,
+            "p95Ms": 127,
+            "maxMs": 143
+          },
+          {
+            "level": 15,
+            "preset": 8000,
+            "meanLoss": 399,
+            "meanLossSe": 78,
+            "meanLossCap1000": 288,
+            "medianLoss": 298,
+            "p90Loss": 562,
+            "blunder300": 0.486,
+            "blunder1000": 0.056,
+            "lowNaturalness": 0.056,
+            "oversight": 0.25,
+            "vision": 0,
+            "meanMs": 73,
+            "p95Ms": 121,
+            "maxMs": 138
+          },
+          {
+            "level": 20,
+            "preset": 25000,
+            "meanLoss": 213,
+            "meanLossSe": 22,
+            "meanLossCap1000": 213,
+            "medianLoss": 166,
+            "p90Loss": 494,
+            "blunder300": 0.347,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.181,
+            "vision": 0,
+            "meanMs": 73,
+            "p95Ms": 105,
+            "maxMs": 138
+          },
+          {
+            "level": 25,
+            "preset": 75000,
+            "meanLoss": 168,
+            "meanLossSe": 20,
+            "meanLossCap1000": 168,
+            "medianLoss": 130,
+            "p90Loss": 376,
+            "blunder300": 0.25,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.208,
+            "vision": 0,
+            "meanMs": 79,
+            "p95Ms": 121,
+            "maxMs": 154
+          },
+          {
+            "level": 30,
+            "preset": 150000,
+            "meanLoss": 92,
+            "meanLossSe": 16,
+            "meanLossCap1000": 92,
+            "medianLoss": 10,
+            "p90Loss": 364,
+            "blunder300": 0.111,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0.097,
+            "vision": 0,
+            "meanMs": 79,
+            "p95Ms": 120,
+            "maxMs": 146
+          },
+          {
+            "level": 35,
+            "preset": 400000,
+            "meanLoss": 42,
+            "meanLossSe": 12,
+            "meanLossCap1000": 42,
+            "medianLoss": 0,
+            "p90Loss": 108,
+            "blunder300": 0.083,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 99,
+            "p95Ms": 132,
+            "maxMs": 396
+          },
+          {
+            "level": 39,
+            "preset": 472000,
+            "meanLoss": 37,
+            "meanLossSe": 12,
+            "meanLossCap1000": 37,
+            "medianLoss": 0,
+            "p90Loss": 48,
+            "blunder300": 0.083,
+            "blunder1000": 0,
+            "lowNaturalness": 0,
+            "oversight": 0,
+            "vision": 0,
+            "meanMs": 1114,
+            "p95Ms": 1818,
+            "maxMs": 2170
+          }
+        ],
+        "examples": [
+          {
+            "level": 11,
+            "sample": "game1-ply58",
+            "sfen": "l5snl/1r4kb1/2ng1ppg1/p1spP3p/1P3NPp1/PpP1SP3/G1BPp3P/1SK1G2R1/LN6L b Pp 1",
+            "move": "4e3c+",
+            "kind": "aware-shallow",
+            "naturalness": 0.1,
+            "tags": [
+              "losing-capture",
+              "advance",
+              "develop",
+              "promote",
+              "piece-sacrifice"
+            ],
+            "loss": 1822
+          },
+          {
+            "level": 11,
+            "sample": "game1-ply58",
+            "sfen": "l5snl/1r4kb1/2ng1ppg1/p1spP3p/1P3NPp1/PpP1SP3/G1BPp3P/1SK1G2R1/LN6L b Pp 1",
+            "move": "4e3c+",
+            "kind": "aware-shallow",
+            "naturalness": 0.1,
+            "tags": [
+              "losing-capture",
+              "advance",
+              "develop",
+              "promote",
+              "piece-sacrifice"
+            ],
+            "loss": 1822
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply6",
+            "sfen": "lnsgk1snl/1r4gb1/p1pppp1pp/1p4p2/8P/2P6/PP1PPPPP1/1B5R1/LNSGKGSNL b - 1",
+            "move": "8h3c+",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "advance",
+              "develop",
+              "promote",
+              "activate",
+              "guard",
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply14",
+            "sfen": "ln1g2snl/1r1s1k1g1/p1p1pp1pp/1p1p2p2/8P/2P6/PPSPPPPP1/5S1R1/LN1GKG1NL b Bb 1",
+            "move": "B*2d",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "guard",
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply14",
+            "sfen": "ln1g2snl/1r1s1k1g1/p1p1pp1pp/1p1p2p2/8P/2P6/PPSPPPPP1/5S1R1/LN1GKG1NL b Bb 1",
+            "move": "B*2d",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "guard",
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply24",
+            "sfen": "ln5nl/1r2gksg1/p3pp1pp/1ppps1p2/8P/P1PP1P3/1PS1PSPP1/4G2R1/LN1GK2NL b Bb 1",
+            "move": "B*2d",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "guard",
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply24",
+            "sfen": "ln5nl/1r2gksg1/p3pp1pp/1ppps1p2/8P/P1PP1P3/1PS1PSPP1/4G2R1/LN1GK2NL b Bb 1",
+            "move": "B*3a",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply36",
+            "sfen": "ln4knl/3rg1g2/4p1spp/ppppspp2/8P/P1PP1PPP1/1PS1PSN2/2G1GK3/LN5RL b Bb 1",
+            "move": "B*4b",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply48",
+            "sfen": "ln4knl/3rg1g2/3sp1spp/1pp2pp2/3PP3P/p1P1GPPP1/+pPS2SN2/4GK3/LN5RL b BPb 1",
+            "move": "B*4c",
+            "kind": "aware",
+            "naturalness": 0.05,
+            "tags": [
+              "guard",
+              "sacrifice",
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply48",
+            "sfen": "ln4knl/3rg1g2/3sp1spp/1pp2pp2/3PP3P/p1P1GPPP1/+pPS2SN2/4GK3/LN5RL b BPb 1",
+            "move": "B*2b",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 11,
+            "sample": "game2-ply48",
+            "sfen": "ln4knl/3rg1g2/3sp1spp/1pp2pp2/3PP3P/p1P1GPPP1/+pPS2SN2/4GK3/LN5RL b BPb 1",
+            "move": "B*4b",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 15,
+            "sample": "game2-ply6",
+            "sfen": "lnsgk1snl/1r4gb1/p1pppp1pp/1p4p2/8P/2P6/PP1PPPPP1/1B5R1/LNSGKGSNL b - 1",
+            "move": "8h3c",
+            "kind": "logic",
+            "naturalness": 0.05,
+            "tags": [
+              "advance",
+              "develop",
+              "activate",
+              "guard",
+              "piece-sacrifice"
+            ],
+            "loss": 0
+          },
+          {
+            "level": 15,
+            "sample": "game2-ply6",
+            "sfen": "lnsgk1snl/1r4gb1/p1pppp1pp/1p4p2/8P/2P6/PP1PPPPP1/1B5R1/LNSGKGSNL b - 1",
+            "move": "8h3c+",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "advance",
+              "develop",
+              "promote",
+              "activate",
+              "guard",
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 15,
+            "sample": "game2-ply36",
+            "sfen": "ln4knl/3rg1g2/4p1spp/ppppspp2/8P/P1PP1PPP1/1PS1PSN2/2G1GK3/LN5RL b Bb 1",
+            "move": "B*4b",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          },
+          {
+            "level": 15,
+            "sample": "game2-ply48",
+            "sfen": "ln4knl/3rg1g2/3sp1spp/1pp2pp2/3PP3P/p1P1GPPP1/+pPS2SN2/4GK3/LN5RL b BPb 1",
+            "move": "B*4b",
+            "kind": "aware-shallow",
+            "naturalness": 0.05,
+            "tags": [
+              "piece-sacrifice"
+            ],
+            "loss": 3000
+          }
+        ]
+      }
+    }
+  },
+  "strengthPreservation": [
+    {
+      "run": ".cpu-stage4-preserve-strength.json",
+      "complete": false,
+      "conditions": {
+        "seed": 2026101907,
+        "openingPlies": 12,
+        "plannedGames": 64,
+        "includedGames": 0,
+        "settings": {
+          "L35tuned": {
+            "nodes": 27750,
+            "multiPv": 1,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 490,
+            "bestMoveRate": 0.52,
+            "naturalnessAlpha": 0.3,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.02,
+            "oversightShallowLoss": 220,
+            "oversightNodes": 70000,
+            "oversightMaxLoss": 400,
+            "openingPlanScoreScale": 1.56,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 13,
+            "simplicity": 0.15,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.98,
+            "engineTopVisibility": 0.49,
+            "logicBonusCap": 40,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 35,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0.99,
+            "shallowReadRate": 0
+          },
+          "L35legacy": {
+            "nodes": 37000,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 490,
+            "bestMoveRate": 0.52,
+            "naturalnessAlpha": 0.3,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.02,
+            "oversightShallowLoss": 220,
+            "oversightNodes": 70000,
+            "oversightMaxLoss": 400,
+            "openingPlanScoreScale": 1.56,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 120,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 13,
+            "simplicity": 0.15,
+            "logicHybrid": false,
+            "engineBestVisibility": 0.9,
+            "engineTopVisibility": 0.45,
+            "logicBonusCap": 40,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 35
+          },
+          "L39tuned": {
+            "nodes": 333000,
+            "multiPv": 2,
+            "moveRank": {
+              "min": 1,
+              "max": 2
+            },
+            "maxScoreLoss": 98,
+            "bestMoveRate": 0.94,
+            "naturalnessAlpha": 0,
+            "naturalMoveRate": 0,
+            "oversightRate": 0,
+            "oversightShallowLoss": 0,
+            "oversightNodes": 0,
+            "oversightMaxLoss": 0,
+            "openingPlanScoreScale": 1.06,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 17,
+            "simplicity": 0,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.995,
+            "engineTopVisibility": 0.4975,
+            "logicBonusCap": 20,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 39,
+            "candidateNodes": 33300,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0.99,
+            "shallowReadRate": 0
+          },
+          "L39legacy": {
+            "nodes": 370000,
+            "multiPv": 2,
+            "moveRank": {
+              "min": 1,
+              "max": 2
+            },
+            "maxScoreLoss": 98,
+            "bestMoveRate": 0.94,
+            "naturalnessAlpha": 0,
+            "naturalMoveRate": 0,
+            "oversightRate": 0,
+            "oversightShallowLoss": 0,
+            "oversightNodes": 0,
+            "oversightMaxLoss": 0,
+            "openingPlanScoreScale": 1.06,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 44,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 17,
+            "simplicity": 0,
+            "logicHybrid": false,
+            "engineBestVisibility": 0.98,
+            "engineTopVisibility": 0.49,
+            "logicBonusCap": 20,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 39
+          }
+        }
+      },
+      "pairs": {
+        "L35legacy:L35tuned": {
+          "games": 32,
+          "firstPlayerScore": 5
+        },
+        "L39legacy:L39tuned": {
+          "games": 10,
+          "firstPlayerScore": 1
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-preserve-lower.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101911,
+        "openingPlies": 12,
+        "plannedGames": 168,
+        "includedGames": 0,
+        "settings": {
+          "L10": {
+            "nodes": 61,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.42,
+            "oversightRate": 0.49,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.96,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1700,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.97,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.44,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.97,
+            "level": 10
+          },
+          "L11tuned": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "level": 11,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.5
+          },
+          "L11legacy": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": false,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "level": 11
+          },
+          "L15tuned": {
+            "nodes": 500,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 1100,
+            "bestMoveRate": 0.01,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.44,
+            "oversightShallowLoss": 560,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1000,
+            "openingPlanScoreScale": 2.83,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 845,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.87,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1000,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.88,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.4277777777777778,
+            "engineTopVisibility": 0.2138888888888889,
+            "logicBonusCap": 164.44444444444446,
+            "takePolicyRate": 0.4,
+            "perception": {
+              "freeCapture": 0.9722222222222222,
+              "hangingLastMoveMajor": 0.9888888888888889,
+              "hangingLastMoveMinor": 0.9555555555555556,
+              "hanging": 0.9166666666666666,
+              "exchange": 0.8611111111111112,
+              "threat": 0.75,
+              "mate1": 0.9444444444444444,
+              "mate3": 0.611111111111111,
+              "defendMate": 0.888888888888889,
+              "followPlan": 0.9722222222222222
+            },
+            "level": 15,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.2
+          },
+          "L15legacy": {
+            "nodes": 110,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 1100,
+            "bestMoveRate": 0.01,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.44,
+            "oversightShallowLoss": 560,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1000,
+            "openingPlanScoreScale": 2.83,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1300,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.87,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1000,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.88,
+            "logicHybrid": false,
+            "engineBestVisibility": 0.3388888888888889,
+            "engineTopVisibility": 0.16944444444444445,
+            "logicBonusCap": 164.44444444444446,
+            "takePolicyRate": 0.4,
+            "perception": {
+              "freeCapture": 0.9722222222222222,
+              "hangingLastMoveMajor": 0.9888888888888889,
+              "hangingLastMoveMinor": 0.9555555555555556,
+              "hanging": 0.9166666666666666,
+              "exchange": 0.8611111111111112,
+              "threat": 0.75,
+              "mate1": 0.9444444444444444,
+              "mate3": 0.611111111111111,
+              "defendMate": 0.888888888888889,
+              "followPlan": 0.9722222222222222
+            },
+            "level": 15
+          },
+          "L20tuned": {
+            "nodes": 1000,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 1100,
+            "bestMoveRate": 0.03,
+            "naturalnessAlpha": 0.8,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.39,
+            "oversightShallowLoss": 510,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 760,
+            "openingPlanScoreScale": 2.67,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 624,
+            "visionWidth": 5,
+            "engineVision": 0,
+            "riskAttitude": 0.75,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 760,
+            "carefulRate": 1,
+            "blunderLimit": 2,
+            "blunderCooldown": 5,
+            "simplicity": 0.76,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.65,
+            "engineTopVisibility": 0.325,
+            "logicBonusCap": 120,
+            "takePolicyRate": 0.3,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 20,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0
+          },
+          "L20legacy": {
+            "nodes": 230,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 1100,
+            "bestMoveRate": 0.03,
+            "naturalnessAlpha": 0.8,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.39,
+            "oversightShallowLoss": 510,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 760,
+            "openingPlanScoreScale": 2.67,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 960,
+            "visionWidth": 5,
+            "engineVision": 0,
+            "riskAttitude": 0.75,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 760,
+            "carefulRate": 1,
+            "blunderLimit": 2,
+            "blunderCooldown": 5,
+            "simplicity": 0.76,
+            "logicHybrid": false,
+            "engineBestVisibility": 0.45,
+            "engineTopVisibility": 0.225,
+            "logicBonusCap": 120,
+            "takePolicyRate": 0.3,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 20
+          },
+          "L25tuned": {
+            "nodes": 1000,
+            "multiPv": 6,
+            "moveRank": {
+              "min": 1,
+              "max": 6
+            },
+            "maxScoreLoss": 980,
+            "bestMoveRate": 0.06,
+            "naturalnessAlpha": 0.7,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.33,
+            "oversightShallowLoss": 470,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 540,
+            "openingPlanScoreScale": 2.49,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 449,
+            "visionWidth": 7,
+            "engineVision": 1,
+            "riskAttitude": 0.61,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 540,
+            "carefulRate": 1,
+            "blunderLimit": 2,
+            "blunderCooldown": 7,
+            "simplicity": 0.65,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.775,
+            "engineTopVisibility": 0.3875,
+            "logicBonusCap": 90,
+            "takePolicyRate": 0.2,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 25,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0
+          },
+          "L25legacy": {
+            "nodes": 510,
+            "multiPv": 6,
+            "moveRank": {
+              "min": 1,
+              "max": 6
+            },
+            "maxScoreLoss": 980,
+            "bestMoveRate": 0.06,
+            "naturalnessAlpha": 0.7,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.33,
+            "oversightShallowLoss": 470,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 540,
+            "openingPlanScoreScale": 2.49,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 690,
+            "visionWidth": 7,
+            "engineVision": 1,
+            "riskAttitude": 0.61,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 540,
+            "carefulRate": 1,
+            "blunderLimit": 2,
+            "blunderCooldown": 7,
+            "simplicity": 0.65,
+            "logicHybrid": false,
+            "engineBestVisibility": 0.575,
+            "engineTopVisibility": 0.2875,
+            "logicBonusCap": 90,
+            "takePolicyRate": 0.2,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 25
+          },
+          "L30tuned": {
+            "nodes": 1000,
+            "multiPv": 7,
+            "moveRank": {
+              "min": 1,
+              "max": 7
+            },
+            "maxScoreLoss": 910,
+            "bestMoveRate": 0.11,
+            "naturalnessAlpha": 0.7,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.28,
+            "oversightShallowLoss": 430,
+            "oversightNodes": 5000,
+            "oversightMaxLoss": 400,
+            "openingPlanScoreScale": 2.34,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 338,
+            "visionWidth": 8,
+            "engineVision": 2,
+            "riskAttitude": 0.5,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 8,
+            "simplicity": 0.55,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.9,
+            "engineTopVisibility": 0.45,
+            "logicBonusCap": 60,
+            "takePolicyRate": 0.1,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 30,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0
+          },
+          "L30legacy": {
+            "nodes": 1000,
+            "multiPv": 7,
+            "moveRank": {
+              "min": 1,
+              "max": 7
+            },
+            "maxScoreLoss": 910,
+            "bestMoveRate": 0.11,
+            "naturalnessAlpha": 0.7,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.28,
+            "oversightShallowLoss": 430,
+            "oversightNodes": 5000,
+            "oversightMaxLoss": 400,
+            "openingPlanScoreScale": 2.34,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 520,
+            "visionWidth": 8,
+            "engineVision": 2,
+            "riskAttitude": 0.5,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 8,
+            "simplicity": 0.55,
+            "logicHybrid": false,
+            "engineBestVisibility": 0.7,
+            "engineTopVisibility": 0.35,
+            "logicBonusCap": 60,
+            "takePolicyRate": 0.1,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 30
+          },
+          "L35tuned": {
+            "nodes": 27750,
+            "multiPv": 3,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 490,
+            "bestMoveRate": 0.52,
+            "naturalnessAlpha": 0.3,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.02,
+            "oversightShallowLoss": 220,
+            "oversightNodes": 70000,
+            "oversightMaxLoss": 400,
+            "openingPlanScoreScale": 1.56,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 13,
+            "simplicity": 0.15,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.98,
+            "engineTopVisibility": 0.49,
+            "logicBonusCap": 40,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 35,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0.99,
+            "shallowReadRate": 0
+          },
+          "L35legacy": {
+            "nodes": 37000,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 490,
+            "bestMoveRate": 0.52,
+            "naturalnessAlpha": 0.3,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.02,
+            "oversightShallowLoss": 220,
+            "oversightNodes": 70000,
+            "oversightMaxLoss": 400,
+            "openingPlanScoreScale": 1.56,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 120,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 13,
+            "simplicity": 0.15,
+            "logicHybrid": false,
+            "engineBestVisibility": 0.9,
+            "engineTopVisibility": 0.45,
+            "logicBonusCap": 40,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 35
+          }
+        }
+      },
+      "pairs": {
+        "L10:L11tuned": {
+          "games": 24,
+          "firstPlayerScore": 2
+        },
+        "L11legacy:L11tuned": {
+          "games": 24,
+          "firstPlayerScore": 7
+        },
+        "L15legacy:L15tuned": {
+          "games": 24,
+          "firstPlayerScore": 13
+        },
+        "L20legacy:L20tuned": {
+          "games": 24,
+          "firstPlayerScore": 9
+        },
+        "L25legacy:L25tuned": {
+          "games": 24,
+          "firstPlayerScore": 8
+        },
+        "L30legacy:L30tuned": {
+          "games": 24,
+          "firstPlayerScore": 12
+        },
+        "L35legacy:L35tuned": {
+          "games": 24,
+          "firstPlayerScore": 7
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-upper-rebalanced.json",
+      "complete": false,
+      "conditions": {
+        "seed": 2026101913,
+        "openingPlies": 12,
+        "plannedGames": 24,
+        "includedGames": 0,
+        "settings": {
+          "L39tuned": {
+            "nodes": 166500,
+            "multiPv": 2,
+            "moveRank": {
+              "min": 1,
+              "max": 2
+            },
+            "maxScoreLoss": 98,
+            "bestMoveRate": 0.94,
+            "naturalnessAlpha": 0,
+            "naturalMoveRate": 0,
+            "oversightRate": 0,
+            "oversightShallowLoss": 0,
+            "oversightNodes": 0,
+            "oversightMaxLoss": 0,
+            "openingPlanScoreScale": 1.06,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 17,
+            "simplicity": 0,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.995,
+            "engineTopVisibility": 0.4975,
+            "logicBonusCap": 20,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 39,
+            "candidateNodes": 16650,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0.99,
+            "shallowReadRate": 0
+          },
+          "L39legacy": {
+            "nodes": 370000,
+            "multiPv": 2,
+            "moveRank": {
+              "min": 1,
+              "max": 2
+            },
+            "maxScoreLoss": 98,
+            "bestMoveRate": 0.94,
+            "naturalnessAlpha": 0,
+            "naturalMoveRate": 0,
+            "oversightRate": 0,
+            "oversightShallowLoss": 0,
+            "oversightNodes": 0,
+            "oversightMaxLoss": 0,
+            "openingPlanScoreScale": 1.06,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 44,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 17,
+            "simplicity": 0,
+            "level": 39,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L39legacy:L39tuned": {
+          "games": 18,
+          "firstPlayerScore": 14
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-moderate-strength.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101917,
+        "openingPlies": 12,
+        "plannedGames": 144,
+        "includedGames": 0,
+        "settings": {
+          "L10": {
+            "nodes": 61,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.42,
+            "oversightRate": 0.49,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.96,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1700,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.97,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.44,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.97,
+            "level": 10
+          },
+          "L11tuned": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "level": 11,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.85
+          },
+          "L11legacy": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "level": 11,
+            "logicHybrid": false
+          },
+          "L20tuned": {
+            "nodes": 700,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 1100,
+            "bestMoveRate": 0.03,
+            "naturalnessAlpha": 0.8,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.39,
+            "oversightShallowLoss": 510,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 760,
+            "openingPlanScoreScale": 2.67,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 624,
+            "visionWidth": 5,
+            "engineVision": 0,
+            "riskAttitude": 0.75,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 760,
+            "carefulRate": 1,
+            "blunderLimit": 2,
+            "blunderCooldown": 5,
+            "simplicity": 0.76,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.65,
+            "engineTopVisibility": 0.325,
+            "logicBonusCap": 120,
+            "takePolicyRate": 0.3,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 20,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0
+          },
+          "L20legacy": {
+            "nodes": 230,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 1100,
+            "bestMoveRate": 0.03,
+            "naturalnessAlpha": 0.8,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.39,
+            "oversightShallowLoss": 510,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 760,
+            "openingPlanScoreScale": 2.67,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 960,
+            "visionWidth": 5,
+            "engineVision": 0,
+            "riskAttitude": 0.75,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 760,
+            "carefulRate": 1,
+            "blunderLimit": 2,
+            "blunderCooldown": 5,
+            "simplicity": 0.76,
+            "level": 20,
+            "logicHybrid": false
+          },
+          "L25tuned": {
+            "nodes": 700,
+            "multiPv": 6,
+            "moveRank": {
+              "min": 1,
+              "max": 6
+            },
+            "maxScoreLoss": 980,
+            "bestMoveRate": 0.06,
+            "naturalnessAlpha": 0.7,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.33,
+            "oversightShallowLoss": 470,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 540,
+            "openingPlanScoreScale": 2.49,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 449,
+            "visionWidth": 7,
+            "engineVision": 1,
+            "riskAttitude": 0.61,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 540,
+            "carefulRate": 1,
+            "blunderLimit": 2,
+            "blunderCooldown": 7,
+            "simplicity": 0.65,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.775,
+            "engineTopVisibility": 0.3875,
+            "logicBonusCap": 90,
+            "takePolicyRate": 0.2,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 25,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0
+          },
+          "L25legacy": {
+            "nodes": 510,
+            "multiPv": 6,
+            "moveRank": {
+              "min": 1,
+              "max": 6
+            },
+            "maxScoreLoss": 980,
+            "bestMoveRate": 0.06,
+            "naturalnessAlpha": 0.7,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.33,
+            "oversightShallowLoss": 470,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 540,
+            "openingPlanScoreScale": 2.49,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 690,
+            "visionWidth": 7,
+            "engineVision": 1,
+            "riskAttitude": 0.61,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 540,
+            "carefulRate": 1,
+            "blunderLimit": 2,
+            "blunderCooldown": 7,
+            "simplicity": 0.65,
+            "level": 25,
+            "logicHybrid": false
+          },
+          "L35tuned": {
+            "nodes": 18500,
+            "multiPv": 3,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 490,
+            "bestMoveRate": 0.52,
+            "naturalnessAlpha": 0.3,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.02,
+            "oversightShallowLoss": 220,
+            "oversightNodes": 70000,
+            "oversightMaxLoss": 400,
+            "openingPlanScoreScale": 1.56,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 13,
+            "simplicity": 0.15,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.98,
+            "engineTopVisibility": 0.49,
+            "logicBonusCap": 40,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 35,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0.99,
+            "shallowReadRate": 0
+          },
+          "L35legacy": {
+            "nodes": 37000,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 490,
+            "bestMoveRate": 0.52,
+            "naturalnessAlpha": 0.3,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.02,
+            "oversightShallowLoss": 220,
+            "oversightNodes": 70000,
+            "oversightMaxLoss": 400,
+            "openingPlanScoreScale": 1.56,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 120,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 13,
+            "simplicity": 0.15,
+            "level": 35,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L11legacy:L11tuned": {
+          "games": 24,
+          "firstPlayerScore": 2
+        },
+        "L10:L11tuned": {
+          "games": 24,
+          "firstPlayerScore": 3
+        },
+        "L10:L11legacy": {
+          "games": 24,
+          "firstPlayerScore": 7
+        },
+        "L20legacy:L20tuned": {
+          "games": 24,
+          "firstPlayerScore": 9
+        },
+        "L25legacy:L25tuned": {
+          "games": 24,
+          "firstPlayerScore": 13
+        },
+        "L35legacy:L35tuned": {
+          "games": 24,
+          "firstPlayerScore": 14
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-level11-temperature.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101921,
+        "openingPlies": 12,
+        "plannedGames": 32,
+        "includedGames": 0,
+        "settings": {
+          "L11tuned": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "level": 11,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.85,
+            "shallowTemperature": 280
+          },
+          "L11legacy": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "level": 11,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L11legacy:L11tuned": {
+          "games": 32,
+          "firstPlayerScore": 14
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-upper-final.json",
+      "complete": false,
+      "conditions": {
+        "seed": 2026101927,
+        "openingPlies": 12,
+        "plannedGames": 32,
+        "includedGames": 0,
+        "settings": {
+          "L39tuned": {
+            "nodes": 222000,
+            "multiPv": 2,
+            "moveRank": {
+              "min": 1,
+              "max": 2
+            },
+            "maxScoreLoss": 98,
+            "bestMoveRate": 0.94,
+            "naturalnessAlpha": 0,
+            "naturalMoveRate": 0,
+            "oversightRate": 0,
+            "oversightShallowLoss": 0,
+            "oversightNodes": 0,
+            "oversightMaxLoss": 0,
+            "openingPlanScoreScale": 1.06,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 17,
+            "simplicity": 0,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.995,
+            "engineTopVisibility": 0.4975,
+            "logicBonusCap": 20,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 39,
+            "candidateNodes": 22200,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0.99,
+            "shallowReadRate": 0,
+            "shallowTemperature": 70
+          },
+          "L39legacy": {
+            "nodes": 370000,
+            "multiPv": 2,
+            "moveRank": {
+              "min": 1,
+              "max": 2
+            },
+            "maxScoreLoss": 98,
+            "bestMoveRate": 0.94,
+            "naturalnessAlpha": 0,
+            "naturalMoveRate": 0,
+            "oversightRate": 0,
+            "oversightShallowLoss": 0,
+            "oversightNodes": 0,
+            "oversightMaxLoss": 0,
+            "openingPlanScoreScale": 1.06,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 44,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 17,
+            "simplicity": 0,
+            "level": 39,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L39legacy:L39tuned": {
+          "games": 14,
+          "firstPlayerScore": 13
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-upper-confidence.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101927,
+        "openingPlies": 12,
+        "plannedGames": 32,
+        "includedGames": 0,
+        "settings": {
+          "L39tuned": {
+            "nodes": 333000,
+            "multiPv": 2,
+            "moveRank": {
+              "min": 1,
+              "max": 2
+            },
+            "maxScoreLoss": 98,
+            "bestMoveRate": 0.94,
+            "naturalnessAlpha": 0,
+            "naturalMoveRate": 0,
+            "oversightRate": 0,
+            "oversightShallowLoss": 0,
+            "oversightNodes": 0,
+            "oversightMaxLoss": 0,
+            "openingPlanScoreScale": 1.06,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 44,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 17,
+            "simplicity": 0,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.995,
+            "engineTopVisibility": 0.4975,
+            "logicBonusCap": 20,
+            "takePolicyRate": 0,
+            "perception": {
+              "freeCapture": 1,
+              "hangingLastMoveMajor": 1,
+              "hangingLastMoveMinor": 1,
+              "hanging": 1,
+              "exchange": 1,
+              "threat": 1,
+              "mate1": 1,
+              "mate3": 1,
+              "defendMate": 1,
+              "followPlan": 1
+            },
+            "level": 39,
+            "candidateNodes": 33300,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0.94,
+            "shallowReadRate": 0,
+            "shallowTemperature": 70
+          },
+          "L39legacy": {
+            "nodes": 370000,
+            "multiPv": 2,
+            "moveRank": {
+              "min": 1,
+              "max": 2
+            },
+            "maxScoreLoss": 98,
+            "bestMoveRate": 0.94,
+            "naturalnessAlpha": 0,
+            "naturalMoveRate": 0,
+            "oversightRate": 0,
+            "oversightShallowLoss": 0,
+            "oversightNodes": 0,
+            "oversightMaxLoss": 0,
+            "openingPlanScoreScale": 1.06,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 44,
+            "moveLossCap": 400,
+            "carefulRate": 1,
+            "blunderLimit": 1,
+            "blunderCooldown": 17,
+            "simplicity": 0,
+            "level": 39,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L39legacy:L39tuned": {
+          "games": 32,
+          "firstPlayerScore": 21
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-level11-final.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101921,
+        "openingPlies": 12,
+        "plannedGames": 32,
+        "includedGames": 0,
+        "settings": {
+          "L11tuned": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "level": 11,
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.85,
+            "shallowTemperature": 280,
+            "shallowDepth": 2
+          },
+          "L11legacy": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "level": 11,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L11legacy:L11tuned": {
+          "games": 32,
+          "firstPlayerScore": 15
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-level11-verified.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101921,
+        "openingPlies": 12,
+        "plannedGames": 32,
+        "includedGames": 0,
+        "settings": {
+          "L11tuned": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.85,
+            "shallowTemperature": 280,
+            "shallowDepth": 2,
+            "level": 11
+          },
+          "L11legacy": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "level": 11,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L11legacy:L11tuned": {
+          "games": 32,
+          "firstPlayerScore": 10
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-level11-adopted-selfplay.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101921,
+        "openingPlies": 12,
+        "plannedGames": 32,
+        "includedGames": 0,
+        "settings": {
+          "L11tuned": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.85,
+            "shallowTemperature": 420,
+            "shallowDepth": 2,
+            "level": 11
+          },
+          "L11legacy": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "level": 11,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L11legacy:L11tuned": {
+          "games": 32,
+          "firstPlayerScore": 16
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-level11-depth1-selfplay.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101921,
+        "openingPlies": 12,
+        "plannedGames": 32,
+        "includedGames": 0,
+        "settings": {
+          "L11tuned": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.85,
+            "shallowTemperature": 420,
+            "shallowDepth": 1,
+            "level": 11
+          },
+          "L11legacy": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "level": 11,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L11legacy:L11tuned": {
+          "games": 32,
+          "firstPlayerScore": 20
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-lower-intermediate.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101931,
+        "openingPlies": 12,
+        "plannedGames": 72,
+        "includedGames": 0,
+        "settings": {
+          "L12tuned": {
+            "nodes": 63,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.33,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1460,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.52,
+            "blunderLimit": 4,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.29444444444444445,
+            "engineTopVisibility": 0.14722222222222223,
+            "logicBonusCap": 191.11111111111111,
+            "takePolicyRate": 0.45999999999999996,
+            "perception": {
+              "freeCapture": 0.9555555555555555,
+              "hangingLastMoveMajor": 0.9822222222222222,
+              "hangingLastMoveMinor": 0.9288888888888889,
+              "hanging": 0.8666666666666667,
+              "exchange": 0.7777777777777778,
+              "threat": 0.6000000000000001,
+              "mate1": 0.9111111111111111,
+              "mate3": 0.37777777777777777,
+              "defendMate": 0.8222222222222223,
+              "followPlan": 0.9555555555555555
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.83,
+            "shallowTemperature": 400,
+            "shallowDepth": 1,
+            "level": 12
+          },
+          "L12legacy": {
+            "nodes": 63,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.33,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.52,
+            "blunderLimit": 4,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "level": 12,
+            "logicHybrid": false
+          },
+          "L13tuned": {
+            "nodes": 281,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.47,
+            "oversightShallowLoss": 570,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1100,
+            "openingPlanScoreScale": 2.9,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1238,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.92,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1100,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.92,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.3388888888888889,
+            "engineTopVisibility": 0.16944444444444445,
+            "logicBonusCap": 182.22222222222223,
+            "takePolicyRate": 0.44,
+            "perception": {
+              "freeCapture": 0.961111111111111,
+              "hangingLastMoveMajor": 0.9844444444444445,
+              "hangingLastMoveMinor": 0.9377777777777778,
+              "hanging": 0.8833333333333333,
+              "exchange": 0.8055555555555556,
+              "threat": 0.65,
+              "mate1": 0.9222222222222223,
+              "mate3": 0.4555555555555555,
+              "defendMate": 0.8444444444444444,
+              "followPlan": 0.961111111111111
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.5,
+            "shallowTemperature": 245,
+            "shallowDepth": 2,
+            "level": 13
+          },
+          "L13legacy": {
+            "nodes": 80,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.47,
+            "oversightShallowLoss": 570,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1100,
+            "openingPlanScoreScale": 2.9,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1500,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.92,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1100,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.92,
+            "level": 13,
+            "logicHybrid": false
+          },
+          "L14tuned": {
+            "nodes": 391,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 1100,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.46,
+            "oversightShallowLoss": 560,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1100,
+            "openingPlanScoreScale": 2.87,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1033,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.9,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1100,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.9,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.3833333333333333,
+            "engineTopVisibility": 0.19166666666666665,
+            "logicBonusCap": 173.33333333333334,
+            "takePolicyRate": 0.42,
+            "perception": {
+              "freeCapture": 0.9666666666666667,
+              "hangingLastMoveMajor": 0.9866666666666667,
+              "hangingLastMoveMinor": 0.9466666666666667,
+              "hanging": 0.9,
+              "exchange": 0.8333333333333334,
+              "threat": 0.7,
+              "mate1": 0.9333333333333333,
+              "mate3": 0.5333333333333333,
+              "defendMate": 0.8666666666666667,
+              "followPlan": 0.9666666666666667
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.3,
+            "shallowTemperature": 157.5,
+            "shallowDepth": 2,
+            "level": 14
+          },
+          "L14legacy": {
+            "nodes": 92,
+            "multiPv": 5,
+            "moveRank": {
+              "min": 1,
+              "max": 5
+            },
+            "maxScoreLoss": 1100,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.46,
+            "oversightShallowLoss": 560,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1100,
+            "openingPlanScoreScale": 2.87,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1400,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.9,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1100,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.9,
+            "level": 14,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L12legacy:L12tuned": {
+          "games": 24,
+          "firstPlayerScore": 11
+        },
+        "L13legacy:L13tuned": {
+          "games": 24,
+          "firstPlayerScore": 18
+        },
+        "L14legacy:L14tuned": {
+          "games": 24,
+          "firstPlayerScore": 9
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-level13-adopted.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101937,
+        "openingPlies": 12,
+        "plannedGames": 32,
+        "includedGames": 0,
+        "settings": {
+          "L13tuned": {
+            "nodes": 350,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.47,
+            "oversightShallowLoss": 570,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1100,
+            "openingPlanScoreScale": 2.9,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1238,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.92,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1100,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.92,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.3388888888888889,
+            "engineTopVisibility": 0.16944444444444445,
+            "logicBonusCap": 182.22222222222223,
+            "takePolicyRate": 0.44,
+            "perception": {
+              "freeCapture": 0.961111111111111,
+              "hangingLastMoveMajor": 0.9844444444444445,
+              "hangingLastMoveMinor": 0.9377777777777778,
+              "hanging": 0.8833333333333333,
+              "exchange": 0.8055555555555556,
+              "threat": 0.65,
+              "mate1": 0.9222222222222223,
+              "mate3": 0.4555555555555555,
+              "defendMate": 0.8444444444444444,
+              "followPlan": 0.961111111111111
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.31999999999999995,
+            "shallowTemperature": 175,
+            "shallowDepth": 2,
+            "level": 13
+          },
+          "L13legacy": {
+            "nodes": 80,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.47,
+            "oversightShallowLoss": 570,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1100,
+            "openingPlanScoreScale": 2.9,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1500,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.92,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1100,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.92,
+            "level": 13,
+            "logicHybrid": false
+          }
+        }
+      },
+      "pairs": {
+        "L13legacy:L13tuned": {
+          "games": 32,
+          "firstPlayerScore": 21
+        }
+      }
+    },
+    {
+      "run": ".cpu-stage4-boundary-final.json",
+      "complete": true,
+      "conditions": {
+        "seed": 2026101941,
+        "openingPlies": 12,
+        "plannedGames": 72,
+        "includedGames": 0,
+        "settings": {
+          "L10": {
+            "nodes": 61,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.42,
+            "oversightRate": 0.49,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.96,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1700,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.97,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.44,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.97,
+            "level": 10
+          },
+          "L11tuned": {
+            "nodes": 62,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.37,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1600,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.48,
+            "blunderLimit": 5,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.25,
+            "engineTopVisibility": 0.125,
+            "logicBonusCap": 200,
+            "takePolicyRate": 0.48,
+            "perception": {
+              "freeCapture": 0.95,
+              "hangingLastMoveMajor": 0.98,
+              "hangingLastMoveMinor": 0.92,
+              "hanging": 0.85,
+              "exchange": 0.75,
+              "threat": 0.55,
+              "mate1": 0.9,
+              "mate3": 0.3,
+              "defendMate": 0.8,
+              "followPlan": 0.95
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.85,
+            "shallowTemperature": 420,
+            "shallowDepth": 1,
+            "level": 11
+          },
+          "L12tuned": {
+            "nodes": 63,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 1,
+            "naturalMoveRate": 0.33,
+            "oversightRate": 0.48,
+            "oversightShallowLoss": 590,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1200,
+            "openingPlanScoreScale": 2.95,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1460,
+            "visionWidth": 3,
+            "engineVision": 0,
+            "riskAttitude": 0.96,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1200,
+            "carefulRate": 0.52,
+            "blunderLimit": 4,
+            "blunderCooldown": 3,
+            "simplicity": 0.96,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.29444444444444445,
+            "engineTopVisibility": 0.14722222222222223,
+            "logicBonusCap": 191.11111111111111,
+            "takePolicyRate": 0.45999999999999996,
+            "perception": {
+              "freeCapture": 0.9555555555555555,
+              "hangingLastMoveMajor": 0.9822222222222222,
+              "hangingLastMoveMinor": 0.9288888888888889,
+              "hanging": 0.8666666666666667,
+              "exchange": 0.7777777777777778,
+              "threat": 0.6000000000000001,
+              "mate1": 0.9111111111111111,
+              "mate3": 0.37777777777777777,
+              "defendMate": 0.8222222222222223,
+              "followPlan": 0.9555555555555555
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.83,
+            "shallowTemperature": 400,
+            "shallowDepth": 1,
+            "level": 12
+          },
+          "L13tuned": {
+            "nodes": 350,
+            "multiPv": 4,
+            "moveRank": {
+              "min": 1,
+              "max": 4
+            },
+            "maxScoreLoss": 1200,
+            "bestMoveRate": 0,
+            "naturalnessAlpha": 0.9,
+            "naturalMoveRate": 0,
+            "oversightRate": 0.47,
+            "oversightShallowLoss": 570,
+            "oversightNodes": 3000,
+            "oversightMaxLoss": 1100,
+            "openingPlanScoreScale": 2.9,
+            "searchThreads": 1,
+            "randomLegalRate": 0,
+            "randomFallback": false,
+            "scoreTemperature": 1238,
+            "visionWidth": 4,
+            "engineVision": 0,
+            "riskAttitude": 0.92,
+            "riskProbeNodes": 1000,
+            "moveLossCap": 1100,
+            "carefulRate": 1,
+            "blunderLimit": 4,
+            "blunderCooldown": 4,
+            "simplicity": 0.92,
+            "logicHybrid": true,
+            "engineBestVisibility": 0.3388888888888889,
+            "engineTopVisibility": 0.16944444444444445,
+            "logicBonusCap": 182.22222222222223,
+            "takePolicyRate": 0.44,
+            "perception": {
+              "freeCapture": 0.961111111111111,
+              "hangingLastMoveMajor": 0.9844444444444445,
+              "hangingLastMoveMinor": 0.9377777777777778,
+              "hanging": 0.8833333333333333,
+              "exchange": 0.8055555555555556,
+              "threat": 0.65,
+              "mate1": 0.9222222222222223,
+              "mate3": 0.4555555555555555,
+              "defendMate": 0.8444444444444444,
+              "followPlan": 0.961111111111111
+            },
+            "consistentCandidateScores": true,
+            "trustedEngineRate": 0,
+            "shallowReadRate": 0.31999999999999995,
+            "shallowTemperature": 175,
+            "shallowDepth": 2,
+            "level": 13
+          }
+        }
+      },
+      "pairs": {
+        "L10:L11tuned": {
+          "games": 24,
+          "firstPlayerScore": 5
+        },
+        "L11tuned:L12tuned": {
+          "games": 24,
+          "firstPlayerScore": 9
+        },
+        "L12tuned:L13tuned": {
+          "games": 24,
+          "firstPlayerScore": 0
+        }
+      }
+    }
+  ]
+}

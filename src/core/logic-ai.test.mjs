@@ -35,9 +35,14 @@ describe('logic AI levels', () => {
 });
 
 describe('logic AI moves', () => {
+  it('keeps a purposeful fallback even when its time budget is exhausted', () => {
+    const choice = chooseLogicMove({ sfen: STANDARD_SFEN, legalMoves: ['9i9h', '2g2f'], level: 10, maxTimeMs: 0, random: () => 0 });
+    expect(choice.move).toBe('2g2f');
+  });
   it('takes a free rook more often at higher levels', () => {
     // 先手の銀(5f)の前に、後手の飛車(5e)がただで置いてある。
-    const sfen = '4k4/9/9/9/4r4/4S4/9/9/4K4 b - 1';
+    // 目的のない玉移動は候補から外すため、見逃したときに指せる歩も置く。
+    const sfen = '4k4/9/9/9/4r4/4S4/2P6/9/4K4 b - 1';
     const strong = rate(sfen, 10, ({ move }) => move === '5f5e' || move === '5f5e+');
     const weak = rate(sfen, 1, ({ move }) => move === '5f5e' || move === '5f5e+');
     expect(strong).toBeGreaterThan(0.8);
@@ -46,7 +51,7 @@ describe('logic AI moves', () => {
 
   it('saves an attacked bishop when it notices the danger', () => {
     // 先手の角(5e)に、後手の歩(5d)が当たっている。角に味方の利きはない。
-    const sfen = '4k4/9/9/4p4/4B4/9/9/9/4K4 b - 1';
+    const sfen = '4k4/9/9/4p4/4B4/9/PPPPPPPPP/9/4K4 b - 1';
     const strong = rate(sfen, 10, ({ move }) => move.startsWith('5e'));
     const weak = rate(sfen, 1, ({ move }) => move.startsWith('5e'));
     expect(strong).toBeGreaterThan(0.7);

@@ -178,6 +178,18 @@ describe('traits on the strength settings', () => {
     expect(apply(withTrait('deep-reading', 2), quiet, 39).nodes).toBeLessThanOrEqual(TOP_NODES);
   });
 
+  it('reflects traits in hybrid perception without changing the original probabilities or Lv40', () => {
+    const original = { ...strengthAt(20), logicHybrid: true, perception: { hanging: 0.8, defendMate: 0.8,
+      hangingLastMoveMajor: 0.9, hangingLastMoveMinor: 0.8, freeCapture: 0.8, exchange: 0.8, threat: 0.8, mate1: 0.8, mate3: 0.5 } };
+    const danger = { ...quiet, phase: 'ending', kingDanger: true };
+    const applyHybrid = (character) => applyCharacter(original, character, danger, { skill: skillAt(20) });
+    expect(applyHybrid(withTrait('endgame-defense', 2)).perception.defendMate).toBeGreaterThan(0.8);
+    expect(applyHybrid(withTrait('endgame-collapse', 2)).perception.defendMate).toBeLessThan(0.8);
+    expect(applyHybrid(withTrait('tsume', 2)).perception.mate3).toBeGreaterThan(0.5);
+    expect(original.perception.defendMate).toBe(0.8);
+    expect(apply(withTrait('endgame-collapse', 2), danger, 40).perception).toBeUndefined();
+  });
+
   it('defends accurately in a dangerous endgame, and collapses there with the weakness, scaled to the level', () => {
     const danger = { ...quiet, phase: 'ending', kingDanger: true };
     for (const level of [21, 30, 36]) {

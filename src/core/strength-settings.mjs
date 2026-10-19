@@ -1,5 +1,5 @@
 // CPUの強さは「技量」(0〜1)という1つの値から、探索量や候補選択の設定を連続的に決める。
-// 各レベルの技量は、CPU同士の自動対局で隣接レベルの勝率差がそろうように校正する
+// 各レベルは、CPU同士の自動対局で従来の強さを目安に校正する（多少の弱化は許容）。
 // (scripts/cpu-level-selfplay.mjs、docs/difficulty-calibration.md)。
 
 const MIN_NODES = 50;
@@ -112,7 +112,7 @@ export function strengthParametersForSkill(skill) {
   return settings;
 }
 
-// 表示名はぴよ将棋の段級位の目安(1レベルでR約80)に合わせる。
+// 表示名は既存の段級位の目安を保つ。現在の実測が全LvでR約80刻みという意味ではない。
 // valueは既存URL(engine_nodes)・保存データとの互換用識別値で、実探索量ではない。
 // 旧版と同じ表示名のレベルには旧版の値を割り当て、名前の意味を保ったまま強さだけ正す。
 // skillは校正結果。Lv0は探索せず自然さだけで選ぶ。
@@ -238,5 +238,62 @@ export function searchSettingsForSkill(skill) {
 
 /** UIの強さ識別値から探索量と候補選択設定を返す。 */
 export function getStrengthSearchSettings(preset) {
-  return searchSettingsForSkill(strengthPresetFor(preset).skill);
+  const selected = strengthPresetFor(preset);
+  const settings = searchSettingsForSkill(selected.skill);
+  if (selected.level < 11 || selected.level >= 40) return settings;
+  if (LOGIC_HYBRID_DEFAULT) return calibratedHybridSearchSettings(selected.level, settings);
+  return { ...settings, ...hybridSettingsForLevel(selected.level) };
+}
+
+/**
+ * 同じLvの旧CPUとの自動対局で調整した、目的のある候補の読み方。
+ * @param {number} level
+ * @param {ReturnType<typeof searchSettingsForSkill>} settings 技量の曲線から作った、校正前の設定。
+ */
+export function calibratedHybridSearchSettings(level, settings) {
+  if (!(level >= 11 && level <= 39)) return settings;
+  const nodeScale = level <= 30 ? 1 : level <= 35 ? 1 - 0.5 * (level - 30) / 5 : 0.5 + 0.4 * (level - 35) / 4;
+  const temperatureScale = level <= 15 ? 1 - 0.35 * (level - 11) / 4 : level <= 30 ? 0.65
+    : level <= 35 ? Math.max(0.001, 0.65 * (35 - level) / 5) : (level - 35) / 4;
+  const floor = level === 12 ? 63 : level === 13 ? 350 : level <= 15 ? 62 + (level - 11) * 109.5 : level <= 20 ? 500 + (level - 15) * 40 : 700;
+  const shallowAnchors = [[11, 0.85], [12, 0.83], [13, 0.32], [14, 0.3], [15, 0.2], [20, 0]];
+  const upper = Math.max(1, shallowAnchors.findIndex(([point]) => point >= Math.min(20, level)));
+  const [lo, a] = shallowAnchors[upper - 1];
+  const [hi, b] = shallowAnchors[upper];
+  const multiPv = level >= 35 ? Math.min(3, settings.multiPv) : settings.multiPv;
+  return {
+    ...settings, ...hybridSettingsForLevel(level), logicHybrid: true,
+    nodes: Math.round(Math.max(floor, settings.nodes * nodeScale)), multiPv,
+    moveRank: { min: 1, max: multiPv },
+    candidateNodes: level === 39 ? Math.max(1000, Math.round(settings.nodes * nodeScale * 0.1)) : undefined,
+    scoreTemperature: Math.max(1, Math.round(settings.scoreTemperature * temperatureScale)),
+    consistentCandidateScores: true, trustedEngineRate: level >= 35 ? 0.99 - 0.05 * (level - 35) / 4 : 0,
+    shallowReadRate: level >= 20 ? 0 : a + (b - a) * (level - lo) / (hi - lo),
+    shallowTemperature: level === 12 ? 400 : level === 13 ? 175 : level >= 15 ? 70 : 420 - (level - 11) * 87.5,
+    shallowDepth: level <= 12 ? 1 : level < 15 ? 2 : 4,
+  };
+}
+
+/** 全対局で目的と局面の気づきを使う。比較用の旧方式は開発スクリプト内だけに残す。 */
+export const LOGIC_HYBRID_DEFAULT = true;
+
+/** Lv11〜39の気づき・エンジン候補の視認・ロジックの重み。点の間は直線で補う。 */
+export function hybridSettingsForLevel(level) {
+  const anchors = [11, 20, 30, 35, 39];
+  const lv = Math.max(11, Math.min(39, Number(level) || 11));
+  const upper = Math.max(1, anchors.findIndex((point) => point >= lv));
+  const t = (lv - anchors[upper - 1]) / (anchors[upper] - anchors[upper - 1]);
+  const interpolate = (values) => values[upper - 1] + (values[upper] - values[upper - 1]) * t;
+  const engineBestVisibility = interpolate([0.25, 0.65, 0.9, 0.98, 0.995]);
+  const perception = {};
+  // Lv10の気づきからLv20の1.0へつなぐ。Lv11はLv10の値から始める。
+  for (const [key, value] of Object.entries({
+    freeCapture: 0.95, hangingLastMoveMajor: 0.98, hangingLastMoveMinor: 0.92,
+    hanging: 0.85, exchange: 0.75, threat: 0.55, mate1: 0.9, mate3: 0.3, defendMate: 0.8, followPlan: 0.95,
+  })) perception[key] = value + (1 - value) * Math.min(1, (lv - 11) / 9);
+  return {
+    logicHybrid: LOGIC_HYBRID_DEFAULT, engineBestVisibility, engineTopVisibility: engineBestVisibility / 2,
+    logicBonusCap: interpolate([200, 120, 60, 40, 20]),
+    takePolicyRate: interpolate([0.48, 0.3, 0.1, 0, 0]), perception,
+  };
 }

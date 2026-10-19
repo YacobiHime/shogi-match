@@ -14,9 +14,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { purposefulCalibration } from "./lib/purposeful-calibration.mjs";
 import { Position } from "tsshogi";
-import { canBlunder, chooseCpuMove, isBlunderChoice } from "../src/core/cpu-move-choice.mjs";
+import { canBlunder, isBlunderChoice } from "../src/core/cpu-move-choice.mjs";
+import { chooseLegacyCpuMove as chooseCpuMove } from "./lib/legacy-cpu-move-choice.mjs";
+import "./lib/ts-register.mjs";
+const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs");
+const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
+import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
 
@@ -43,6 +49,19 @@ function option(name, fallback) {
 
 /** 選手指定から、着手選択に渡す強さ設定を作る。 */
 export function strengthForPlayer(spec) {
+  const hybrid = spec.match(/^(.+?)(hybrid|legacy|tuned)$/);
+  if (hybrid) {
+    const base = strengthForPlayer(hybrid[1]);
+    if (!(base.level >= 11 && base.level <= 39)) throw new Error("hybrid/legacyの比較対象はLv11〜39です");
+    if (hybrid[2] === "tuned") return purposefulCalibration(base);
+    if (hybrid[2] === "legacy") {
+      const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === base.level);
+      const settings = searchSettingsForSkill(preset.skill);
+      const override = hybrid[1].match(/n(\d+)$/);
+      return { ...settings, ...(override ? { nodes: Number(override[1]) } : {}), level: base.level, logicHybrid: false };
+    }
+    return { ...base, logicHybrid: hybrid[2] === "hybrid" };
+  }
   const noRisk = spec.match(/^(.+)norisk$/);
   if (noRisk) return { ...strengthForPlayer(noRisk[1]), riskAttitude: 0 };
   const nodesOverride = spec.match(/^(.+?)n(\d+)$/);
@@ -50,7 +69,8 @@ export function strengthForPlayer(spec) {
   if (/^L\d+$/.test(spec)) {
     const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === Number(spec.slice(1)));
     if (!preset) throw new Error(`存在しないレベルです: ${spec}`);
-    return getStrengthSearchSettings(preset.value);
+    const settings = getStrengthSearchSettings(preset.value);
+    return { ...settings, level: preset.level, ...(preset.level >= 11 && preset.level < 40 && process.argv.includes("--hybrid") ? { logicHybrid: true } : {}) };
   }
   if (/^s[\d.]+$/.test(spec)) return searchSettingsForSkill(Number(spec.slice(1)));
   if (/^old\d+$/.test(spec)) {
@@ -97,21 +117,23 @@ async function playGame(engines, players, seed, openingPlies = 0) {
   const position = Position.newBySFEN(STANDARD_SFEN);
   const history = [];
   const seen = new Map();
+  const decisions = [];
   // 対局画面と同じく、大きな悪手の回数と間隔を選手ごとに数える。
   const blunderPlies = { black: [], white: [] };
   for (let ply = 0; ply < MAX_PLY; ply += 1) {
     const color = position.color === "black" ? "black" : "white";
     const moves = legalMoves(position);
-    if (!moves.length) return { winner: color === "black" ? "white" : "black", plies: ply, moves: history, reason: "mate" };
+    if (!moves.length) return { winner: color === "black" ? "white" : "black", plies: ply, moves: history, reason: "mate", ...(decisions.length ? { decisions } : {}) };
     if (ply >= ADJUDICATE_FROM_PLY && ply % ADJUDICATE_EVERY === 0) {
       const winner = await adjudicate(engines.judge, position.sfen, ADJUDICATE_NODES, ADJUDICATE_SCORE, color);
-      if (winner) return { winner, plies: ply, moves: history, reason: "adjudicated" };
+      if (winner) return { winner, plies: ply, moves: history, reason: "adjudicated", ...(decisions.length ? { decisions } : {}) };
     }
     const engine = engines[color];
     const strength = ply < openingPlies ? OPENING_VARIETY : players[color];
     const sfen = position.sfen;
-    const result = strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
-    const choice = await chooseCpuMove({
+    const logicLevel = usesLogicAi(strength.level) ? strength.level : null;
+    const result = !logicLevel && strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
+    let choice = logicLevel ? chooseLogicMove({ sfen, legalMoves: moves, moveHistory: history, level: logicLevel, random }) : await (strength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
       strength,
       sfen,
       legalMoves: moves,
@@ -126,17 +148,23 @@ async function playGame(engines, players, seed, openingPlies = 0) {
       random,
       blunderAllowed: canBlunder(strength, blunderPlies[color], ply),
     });
+    if (process.argv.includes("--diagnostics") && strength.logicHybrid) {
+      const root = createNaturalnessEvaluator(sfen, { moveHistory: history, continuations: result.candidates })(result.move);
+      decisions.push({ ply, color, sfen, root: result.move, actual: choice?.move ?? null, purposeful: root.purposeful, tags: root.tags,
+        fallback: !choice, considered: choice?.consideredMoves });
+    }
+    choice ??= strength.logicHybrid ? chooseLogicMove({ sfen, legalMoves: moves, moveHistory: history, level: 10, random }) : null;
     if (isBlunderChoice(choice)) blunderPlies[color].push(ply);
     const move = choice && position.createMoveByUSI(choice.move);
     if (!move || !position.doMove(move)) throw new Error(`不正な着手です: ${choice?.move}`);
     history.push(choice.move);
     const key = positionKey(position.sfen);
     seen.set(key, (seen.get(key) ?? 0) + 1);
-    if (seen.get(key) >= 4) return { winner: "draw", plies: ply + 1, moves: history, reason: "repetition" };
+    if (seen.get(key) >= 4) return { winner: "draw", plies: ply + 1, moves: history, reason: "repetition", ...(decisions.length ? { decisions } : {}) };
   }
   const color = position.color === "black" ? "black" : "white";
   const winner = await adjudicate(engines.judge, position.sfen, FINAL_ADJUDICATE_NODES, FINAL_ADJUDICATE_SCORE, color);
-  return { winner: winner ?? "draw", plies: MAX_PLY, moves: history, reason: winner ? "max-ply-adjudicated" : "max-ply" };
+  return { winner: winner ?? "draw", plies: MAX_PLY, moves: history, reason: winner ? "max-ply-adjudicated" : "max-ply", ...(decisions.length ? { decisions } : {}) };
 }
 
 async function runWorker() {
@@ -254,13 +282,14 @@ async function runMain() {
     .flatMap((file) => JSON.parse(fs.readFileSync(path.resolve(projectRoot, file), "utf8")).games);
 
   const jobs = [];
-  for (let i = 0; i < players.length; i += 1) {
-    for (let j = i + 1; j <= Math.min(players.length - 1, i + gap); j += 1) {
+  const explicitPairs = option("pairs", "").split(",").filter(Boolean).map((pair) => pair.split(":"));
+  for (const pair of explicitPairs) if (pair.length !== 2 || pair.some((player) => !players.includes(player))) throw new Error(`対戦カードが不正です: ${pair.join(":")}`);
+  const pairs = explicitPairs.length ? explicitPairs : players.flatMap((player, i) => players.slice(i + 1, i + gap + 1).map((other) => [player, other]));
+  for (const pair of pairs) {
       for (let game = 0; game < gamesPerPair; game += 1) {
-        const [black, white] = game % 2 === 0 ? [players[i], players[j]] : [players[j], players[i]];
+        const [black, white] = game % 2 === 0 ? pair : [...pair].reverse();
         jobs.push({ black, white, seed: seed + jobs.length * 7919, openingPlies });
       }
-    }
   }
   for (const anchor of anchors) {
     for (const player of players) {
@@ -272,6 +301,8 @@ async function runMain() {
   }
   const results = [];
   const total = jobs.length;
+  const conditions = { seed, openingPlies, plannedGames: total, includedGames: included.length,
+    settings: Object.fromEntries([...new Set([...players, ...anchors])].map((player) => [player, strengthForPlayer(player)])) };
   console.error(`${players.length}選手、${total}局を${workers}並列で対局します。`);
 
   const started = Date.now();
@@ -287,7 +318,7 @@ async function runMain() {
       }, deadlineSec * 1000).unref();
     }
     for (let w = 0; w < Math.min(workers, jobs.length); w += 1) {
-      const child = fork(scriptPath, ["--worker"], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
+      const child = fork(scriptPath, ["--worker", ...["--hybrid", "--diagnostics"].filter((flag) => process.argv.includes(flag))], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
       children.push(child);
       running += 1;
       const next = () => {
@@ -302,6 +333,7 @@ async function runMain() {
             return;
           }
           results.push(message);
+          if (outPath) fs.writeFileSync(path.resolve(projectRoot, outPath), JSON.stringify({ players, complete: false, conditions, games: [...included, ...results] }, null, 2));
           if (results.length % 20 === 0) {
             const elapsed = (Date.now() - started) / 1000;
             console.error(`${results.length}/${total}局 (${elapsed.toFixed(0)}秒)`);
@@ -334,7 +366,7 @@ async function runMain() {
   lines.push(`所要時間: ${((Date.now() - started) / 1000).toFixed(0)}秒`);
   console.log(lines.join("\n"));
   if (outPath) {
-    fs.writeFileSync(path.resolve(projectRoot, outPath), JSON.stringify({ players: allPlayers, ratings, games: allGames }, null, 2));
+    fs.writeFileSync(path.resolve(projectRoot, outPath), JSON.stringify({ players: allPlayers, complete: results.length === total, conditions, ratings, games: allGames }, null, 2));
   }
 }
 
