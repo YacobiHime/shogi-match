@@ -1801,6 +1801,7 @@ import {
   parseMateScore,
 } from "./core/engine-mate-check.mjs";
 import { canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice } from "./core/cpu-move-choice.mjs";
+import { chooseAwareMove } from "./core/aware-move-choice.mjs";
 import { chooseLogicMove, usesLogicAi } from "./core/logic-ai.mjs";
 import { createAssistSearchControl } from "./core/assist-search-control.mjs";
 import { findMateInOne } from "./core/mate-threat";
@@ -6956,6 +6957,9 @@ function scheduleReviewCpuMove() {
       }
       const choice = logicLevel
         ? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, level: cpuStrengthPreset.value.level, moveHistory })
+        : strength.logicHybrid
+        ? (await chooseAwareMove({ strength, sfen: record.value.position.sfen, legalMoves, moveHistory, search, verify, probe }))
+          ?? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, moveHistory, level: 10 })
         : await chooseCpuMove({
           strength,
           sfen: record.value.position.sfen,
@@ -6980,6 +6984,11 @@ function scheduleReviewCpuMove() {
       if (generation !== reviewCpuGeneration) return;
       const message = error instanceof Error ? error.message : String(error);
       errorMessage.value = `感想戦の思考に失敗しました: ${message}`;
+      if (getStrengthSearchSettings(searchNodes.value).logicHybrid) {
+        const fallback = chooseLogicMove({ sfen: record.value.position.sfen,
+          legalMoves: enumerateLegalMoves(record.value.position).map(({ usi }) => usi), moveHistory, level: 10 });
+        if (fallback && applyMove(fallback.move, "cpu")) reviewNavigation.value = appendReviewMove(reviewNavigation.value, fallback.move);
+      }
     } finally {
       if (generation === reviewCpuGeneration) thinking.value = false;
     }
@@ -7162,7 +7171,7 @@ async function scheduleCpuMove() {
         // Lv1〜10はロジックAIで指す。上の探索は、直前のプレイヤーの手への助言にだけ使う。
         const logicLevel = usesLogicAi(cpuStrengthPreset.value.level);
         if (
-          !logicLevel
+          !logicLevel && !selectionStrength.logicHybrid
           && allowedOpeningMove && !forceConfiguredOpening
           && !searchedCandidates.some(({ move }) => move === allowedOpeningMove)
         ) {
@@ -7184,6 +7193,7 @@ async function scheduleCpuMove() {
             ];
           }
         }
+        // 新しい選び方では、作戦手の専用評価も不足候補の評価と同じ1回にまとめる。
         // 作戦手の評価差許容は、やこび姫補助と同じ戦法・囲いの基準に合わせる。
         // ただし強いCPUほどAI最善を優先するため、探索設定の上限は超えない。
         // 低レベルほど倍率を大きくし、多少評価が下がっても決めた作戦の形を作り続ける。
@@ -7192,10 +7202,10 @@ async function scheduleCpuMove() {
             * strength.openingPlanScoreScale,
           strength.maxScoreLoss,
         );
-        const safeOpening = allowedOpeningMove && !forceConfiguredOpening && !logicLevel
+        const safeOpening = allowedOpeningMove && !forceConfiguredOpening && !logicLevel && !selectionStrength.logicHybrid
           ? chooseSafeOpeningMove(allowedOpeningMove, searchedCandidates, planScoreLimit)
           : null;
-        const selection = forceConfiguredOpening && allowedOpeningMove
+        let selection = forceConfiguredOpening && allowedOpeningMove
           ? { move: allowedOpeningMove }
           : logicLevel
           ? chooseLogicMove({
@@ -7210,12 +7220,13 @@ async function scheduleCpuMove() {
             move: safeOpening.usi,
             rank: searchedCandidates.find(({ move }) => move === safeOpening.usi)?.rank ?? 1,
             }
-          : await chooseCpuMove({
+          : await (selectionStrength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
             strength: selectionStrength,
             sfen: record.value.position.sfen,
             legalMoves: allowedCpuMoveList,
             moveHistory,
-            search,
+            search: { ...search, candidates: searchedCandidates },
+            ...(selectionStrength.logicHybrid ? { planMove: allowedOpeningMove ?? null, planScoreLossLimit: planScoreLimit } : {}),
             blunderAllowed: canBlunder(selectionStrength, cpuBlunderPlies, moveHistory.length),
             verify: async (searchMoves: string[], nodes: number) => {
               cpuSearchRunning = true;
@@ -7240,6 +7251,9 @@ async function scheduleCpuMove() {
             },
           });
         if (generation !== matchGeneration) return;
+        if (!selection && selectionStrength.logicHybrid) selection = chooseLogicMove({
+          sfen: record.value.position.sfen, legalMoves: allowedCpuMoveList, level: 10, moveHistory, planMove: allowedOpeningMove ?? null,
+        });
         usi = selection?.move ?? "";
         if (cpuCharacter && usi) {
           const kind = (selection as { kind?: string } | null)?.kind ?? "opening";
@@ -7256,11 +7270,12 @@ async function scheduleCpuMove() {
       } else {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
         // Lv1〜10は、エンジンがなくてもロジックAIで指せる。
-        usi = usesLogicAi(cpuStrengthPreset.value.level)
+        usi = forceConfiguredOpening && allowedOpeningMove ? allowedOpeningMove
+          : usesLogicAi(cpuStrengthPreset.value.level) || strength.logicHybrid
           ? chooseLogicMove({
             sfen: record.value.position.sfen,
             legalMoves: allowedCpuMoveList,
-            level: cpuStrengthPreset.value.level,
+            level: usesLogicAi(cpuStrengthPreset.value.level) ? cpuStrengthPreset.value.level : 10,
             moveHistory,
             planMove: allowedOpeningMove ?? null,
           })?.move ?? ""
@@ -7288,7 +7303,19 @@ async function scheduleCpuMove() {
       errorMessage.value = `やねうら王の思考に失敗しました: ${message}`;
       emit("match-error", { message });
       const fallbackOpeningMove = strategyMove();
-      const fallbackUsi = fallbackOpeningMove?.usi ?? chooseNaturalMove({
+      const hybridFallback = getStrengthSearchSettings(searchNodes.value).logicHybrid;
+      const fallbackAllowed = cpuMovesAllowedByBishopSetting().map(({ usi }) => usi);
+      const fallbackPlan = fallbackOpeningMove && fallbackAllowed.includes(fallbackOpeningMove.usi) ? fallbackOpeningMove.usi : null;
+      const fallbackTurn = currentCpuOpeningTurn();
+      const forceFallbackOpening = shouldForceConfiguredCpuOpening({
+        configuredFirstMove: cpuFirstMove.value, bishopPreference: cpuBishopPreference.value, openingMove: fallbackPlan,
+        cpuColor: fallbackTurn.cpuColor, cpuMoveCount: fallbackTurn.cpuMoves.length, cpuMoves: fallbackTurn.cpuMoves,
+      });
+      const fallbackUsi = hybridFallback
+        ? forceFallbackOpening && fallbackPlan ? fallbackPlan : chooseLogicMove({
+          sfen: record.value.position.sfen, legalMoves: fallbackAllowed, moveHistory, level: 10, planMove: fallbackPlan,
+        })?.move
+        : fallbackOpeningMove?.usi ?? chooseNaturalMove({
         sfen: record.value.position.sfen,
         legalMoves: enumerateLegalMoves(record.value.position).map(({ usi: moveUsi }) => moveUsi),
         moveHistory,

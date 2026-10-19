@@ -225,14 +225,14 @@ export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], pla
     ownPressureBefore: kingZonePressure(state.board, me),
   };
   let entries = [];
-  for (const usi of legalMoves) {
+  // 締切に達しても、先頭に並んだ無目的な手だけを評価して返さない。
+  const purposefulMoves = legalMoves.filter((usi) => evaluate(usi).purposeful || usi === plan);
+  for (const usi of purposefulMoves.length ? purposefulMoves : legalMoves) {
     if (entries.length && Date.now() >= deadline) break;
     const entry = scoreMove(context, usi, noticed);
     if (entry) entries.push(entry);
   }
   if (!entries.length) return result(legalMoves[0], "natural");
-  const purposeful = entries.filter((entry) => evaluate(entry.usi).purposeful || entry.check || entry.captureGain > 0 || entry.usi === plan);
-  if (purposeful.length) entries = purposeful;
 
   let policy = null;
   if (noticed.hanging && entries.every(({ parts }) => parts.reply <= -600)) {

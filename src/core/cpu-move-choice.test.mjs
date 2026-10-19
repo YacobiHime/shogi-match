@@ -106,7 +106,7 @@ describe('CPU着手の共通選択', () => {
     // 評価値がほぼ同じでも、序盤の無意味な玉移動は自然さで大きく減る。
     expect(counts['5i5h'] ?? 0).toBeLessThan((counts['7i6h'] ?? 0) / 4);
     expect(counts['2g2f']).toBeGreaterThan(counts['5i5h'] ?? 0);
-  });
+  }, 15000); // 固定4000回の分布を検証する。1手の時間制限とは別に、並列実行時の余裕を持たせる。
 
   // 浅い読み直し(レベル本来のnodes)と深い検証(oversightNodes)を順番に行う検証用エンジン。
   function twoStageVerify(shallowScores, deepScores) {

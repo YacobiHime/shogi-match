@@ -238,5 +238,32 @@ export function searchSettingsForSkill(skill) {
 
 /** UIの強さ識別値から探索量と候補選択設定を返す。 */
 export function getStrengthSearchSettings(preset) {
-  return searchSettingsForSkill(strengthPresetFor(preset).skill);
+  const selected = strengthPresetFor(preset);
+  const settings = searchSettingsForSkill(selected.skill);
+  if (selected.level < 11 || selected.level >= 40) return settings;
+  return { ...settings, ...hybridSettingsForLevel(selected.level) };
+}
+
+/** 開発用の比較が終わるまではfalse。利用者向けの切り替えは設けない。 */
+export const LOGIC_HYBRID_DEFAULT = false;
+
+/** Lv11〜39の気づき・エンジン候補の視認・ロジックの重み。点の間は直線で補う。 */
+export function hybridSettingsForLevel(level) {
+  const anchors = [11, 20, 30, 35, 39];
+  const lv = Math.max(11, Math.min(39, Number(level) || 11));
+  const upper = Math.max(1, anchors.findIndex((point) => point >= lv));
+  const t = (lv - anchors[upper - 1]) / (anchors[upper] - anchors[upper - 1]);
+  const interpolate = (values) => values[upper - 1] + (values[upper] - values[upper - 1]) * t;
+  const engineBestVisibility = interpolate([0.25, 0.45, 0.7, 0.9, 0.98]);
+  const perception = {};
+  // Lv10の気づきからLv20の1.0へつなぐ。Lv11はLv10の値から始める。
+  for (const [key, value] of Object.entries({
+    freeCapture: 0.95, hangingLastMoveMajor: 0.98, hangingLastMoveMinor: 0.92,
+    hanging: 0.85, exchange: 0.75, threat: 0.55, mate1: 0.9, mate3: 0.3, defendMate: 0.8, followPlan: 0.95,
+  })) perception[key] = value + (1 - value) * Math.min(1, (lv - 11) / 9);
+  return {
+    logicHybrid: LOGIC_HYBRID_DEFAULT, engineBestVisibility, engineTopVisibility: engineBestVisibility / 2,
+    logicBonusCap: interpolate([200, 120, 60, 40, 20]),
+    takePolicyRate: interpolate([0.48, 0.3, 0.1, 0, 0]), perception,
+  };
 }

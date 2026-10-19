@@ -9,6 +9,14 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("uses the aware selector in match and review, and falls back to Lv10 without bypassing opening restrictions", () => {
+    expect(source).toContain('import { chooseAwareMove } from "./core/aware-move-choice.mjs"');
+    expect(source).toContain('selectionStrength.logicHybrid ? chooseAwareMove : chooseCpuMove');
+    expect(source).toMatch(/strength\.logicHybrid[\s\S]*?await chooseAwareMove\([\s\S]*?chooseLogicMove\([\s\S]*?level: 10/);
+    expect(source).toMatch(/!logicLevel && !selectionStrength\.logicHybrid[\s\S]*?allowedOpeningMove/);
+    expect(source).toMatch(/chooseAwareMove : chooseCpuMove\)\(\{[\s\S]*?legalMoves: allowedCpuMoveList[\s\S]*?planMove: allowedOpeningMove/);
+    expect(source).toMatch(/const hybridFallback[\s\S]*?cpuMovesAllowedByBishopSetting\(\)[\s\S]*?chooseLogicMove\([\s\S]*?legalMoves: fallbackAllowed/);
+  });
   it("passes only the SFEN to the engine because setPosition adds \"position sfen\"", () => {
     // 「sfen sfen ...」になるとエンジンがbestmoveを返さず、平手以外の対局でCPUが止まる。
     expect(source).not.toMatch(/`sfen \$\{/);

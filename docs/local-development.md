@@ -4,6 +4,19 @@
 
 ## 必要なもの
 
+CPUの局面集・自己対局の計測は次のコマンドで行えます（いずれも開発用で、画面の設定は増えません）。
+
+```sh
+node scripts/cpu-position-set-report.mjs --logic --runs 200 --out logic-positions.json
+node scripts/cpu-position-set-batch.mjs --compare --runs 100 --workers 4 --out engine-positions.json
+node scripts/cpu-humanlike-report.mjs --hybrid --levels 11,15,20,25,30,35,39 --out humanlike.json
+node scripts/cpu-level-selfplay.mjs --players L10,L11hybrid,L11legacy --games 10 --gap 2 --workers 2 --out selfplay.json
+```
+
+`--hybrid`はLv11〜39の新しい選び方で比較します。自己対局では選手名の末尾の`hybrid`・`legacy`で同じレベルの新旧を指定できます。
+局面集のバッチは局面ごとに別エンジンを用意し、各エンジン内の読みは直列です。並列数を減らすと負荷を抑えられます。
+計測用のTypeScript解決・変換はスクリプトが登録するため、Nodeに型除去のフラグを付ける必要はありません。
+
 - Node.js 20以上
 - npm
 - Git

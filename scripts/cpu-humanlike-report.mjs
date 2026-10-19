@@ -2,8 +2,12 @@
 // 勝率による校正はscripts/cpu-level-selfplay.mjsで行う。
 // 使い方: node scripts/cpu-humanlike-report.mjs [--games 6] [--trials 6] [--levels 0,1,5,10,15] [--out report.json]
 import fs from "node:fs";
+import "./lib/ts-register.mjs";
+const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
+const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs");
 import path from "node:path";
 import { Position } from "tsshogi";
+import { purposefulCalibration } from "./lib/purposeful-calibration.mjs";
 import { chooseCpuMove } from "../src/core/cpu-move-choice.mjs";
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator, LOW_NATURALNESS_THRESHOLD } from "../src/core/move-naturalness.mjs";
@@ -48,9 +52,13 @@ async function samplePositions(engine, random) {
 }
 
 async function currentChoose(engine, preset, sample, moves, random) {
-  const strength = getStrengthSearchSettings(preset);
+  const level = CPU_STRENGTH_PRESETS.find(({ value }) => value === preset)?.level;
+  if (usesLogicAi(level)) return chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level, random });
+  let strength = { ...getStrengthSearchSettings(preset), level };
+  if (level >= 11 && level < 40) strength.logicHybrid = process.argv.includes("--hybrid");
+  if (strength.logicHybrid && process.argv.includes("--calibrated")) strength = purposefulCalibration(strength);
   const result = strength.nodes === 0 ? undefined : await search(engine, sample.sfen, strength);
-  return chooseCpuMove({
+  return (await (strength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
     strength,
     sfen: sample.sfen,
     legalMoves: moves,
@@ -63,7 +71,7 @@ async function currentChoose(engine, preset, sample, moves, random) {
       ? (moves, { nodes, multiPv }) => search(engine, `${sample.sfen} moves ${moves.join(" ")}`, { nodes, multiPv })
       : undefined,
     random,
-  });
+  })) ?? chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level: 10, random });
 }
 
 function percentile(sorted, ratio) {
@@ -118,7 +126,8 @@ async function main() {
           if (choice.kind === "oversight") oversight += 1;
           if (choice.kind === "vision") vision += 1;
           losses.push(await reference(sample, choice.move));
-          if ([1, 5].includes(level) && trial === 0 && samples.indexOf(sample) % 6 === 2) {
+          if (([1, 5].includes(level) && trial === 0 && samples.indexOf(sample) % 6 === 2)
+            || (evaluation.weight < LOW_NATURALNESS_THRESHOLD && report.examples.length < 80)) {
             report.examples.push({
               level, sample: sample.label, sfen: sample.sfen, move: choice.move,
               kind: choice.kind, naturalness: Number(evaluation.weight.toFixed(2)), tags: evaluation.tags,

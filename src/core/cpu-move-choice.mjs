@@ -175,7 +175,7 @@ function scoreMap(result) {
     .filter(([, value]) => value !== undefined));
 }
 
-async function tryOversight({ search, candidates, legalMoves, strength, naturalness, verify, random, lossCap }) {
+export async function tryOversight({ search, candidates, legalMoves, strength, naturalness, verify, random, lossCap }) {
   const alpha = strength.naturalnessAlpha ?? 1;
   const shallowLimit = Math.min(
     strength.maxScoreLoss,

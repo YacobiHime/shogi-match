@@ -35,6 +35,10 @@ describe('logic AI levels', () => {
 });
 
 describe('logic AI moves', () => {
+  it('keeps a purposeful fallback even when its time budget is exhausted', () => {
+    const choice = chooseLogicMove({ sfen: STANDARD_SFEN, legalMoves: ['9i9h', '2g2f'], level: 10, maxTimeMs: 0, random: () => 0 });
+    expect(choice.move).toBe('2g2f');
+  });
   it('takes a free rook more often at higher levels', () => {
     // 先手の銀(5f)の前に、後手の飛車(5e)がただで置いてある。
     // 目的のない玉移動は候補から外すため、見逃したときに指せる歩も置く。
