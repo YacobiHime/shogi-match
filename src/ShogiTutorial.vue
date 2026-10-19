@@ -379,6 +379,13 @@
               class="shogi-tutorial__primary"
               @click="startMatch"
             >対局をはじめる</button>
+            <!-- 完成形を伏せた「囲いを組もう」(腕だめし)で、形を思い出せないときに薄い駒を出す。ヒント1回に数える。 -->
+            <button
+              v-if="canPeekTarget"
+              type="button"
+              data-peek-target
+              @click="peekBuildTarget"
+            >完成形を見る</button>
             <button
               v-if="stepInteractive && !stepSolved && stepState.movesUsed + stepState.ply > 0"
               type="button"
@@ -1109,7 +1116,7 @@ const riskDestinations = computed(() => {
 /** 囲いを組もうの完成形。まだそろっていないマスに薄く駒を描く(腕だめしでは描かない)。 */
 const boardGhosts = computed(() => {
   const step = currentStep.value;
-  if (step?.type !== "build" || step.hideTarget || !boardSfen.value) return [];
+  if (step?.type !== "build" || targetHidden.value || !boardSfen.value) return [];
   return buildMissingTargets(step, boardSfen.value).map(([square, kind]: [string, string]) => ({
     file: Number(square[0]), rank: square.charCodeAt(1) - 96, kind,
   }));
@@ -1166,7 +1173,7 @@ const boardCallout = computed(() => {
   const callout = momentCallout.value
     ?? (stepSolved.value || refuting.value
       ? null
-      : stepCallout(step, {
+      : stepCallout(step.type === "build" && !targetHidden.value ? { ...step, hideTarget: false } : step, {
         sfen: boardSfen.value,
         marks: boardMarks.value,
         mateTask: isMateTask.value,
@@ -1175,7 +1182,12 @@ const boardCallout = computed(() => {
       }));
   if (!callout) return null;
   const anchors = "anchors" in callout && callout.anchors ? callout.anchors : callout.at;
-  const placement = placeCallout(anchors, callout.text, { marks: boardMarks.value, sfen: boardSfen.value, avoid: boardAttackMarks.value });
+  // 囲いを組もうの薄い駒も、印と同じく隠さない。
+  const placement = placeCallout(anchors, callout.text, {
+    marks: [...boardMarks.value, ...boardGhosts.value],
+    sfen: boardSfen.value,
+    avoid: boardAttackMarks.value,
+  });
   return placement ? { ...placement, text: callout.text, tone: "tone" in callout ? callout.tone : "" } : null;
 });
 /** 指した手の行き先のマス("7f+"・"P*5e"の"7f"・"5e")。 */
@@ -1229,9 +1241,28 @@ const tapLabel = computed(() => {
   if (dexPage.value < dexPages.value.length) return "タップで次の行";
   return stepIndex.value >= (currentLesson.value?.steps?.length ?? 0) - 1 ? "タップでレッスン完了" : "タップで次へ";
 });
+/**
+ * 完成形を伏せた「囲いを組もう」で、完成形を見たか。見ると、ふつうの「囲いを組もう」と同じく薄い駒を出す。
+ * 腕だめしの思い出す力試しは残しつつ、行き詰まったら自分で選んで助けを借りられるようにする(ヒント1回に数える)。
+ */
+const peekTarget = ref(false);
+const canPeekTarget = computed(() => (
+  currentStep.value?.type === "build" && currentStep.value.hideTarget && !peekTarget.value && !stepSolved.value
+));
+/** 完成形を伏せているか(見たら伏せない)。 */
+const targetHidden = computed(() => Boolean(currentStep.value?.hideTarget) && !peekTarget.value);
+function peekBuildTarget() {
+  if (!canPeekTarget.value) return;
+  peekTarget.value = true;
+  hints.value += 1;
+  stepMisses.value += 1;
+  streak.value = 0;
+  setFeedback(`これが${currentStep.value.name}の完成形。薄く見えている駒のマスへ動かそう！`, "info");
+}
 const hasActions = computed(() => {
   const type = currentStep.value?.type;
   return type === "play"
+    || canPeekTarget.value
     || (stepInteractive.value && !stepSolved.value && stepState.value.movesUsed + stepState.value.ply > 0);
 });
 /** 選択問題でまちがえた選択肢。押せなくして、残りから選べるようにする。 */
@@ -1289,7 +1320,11 @@ onBeforeUnmount(() => clearTimeout(idleHintTimer));
 function idleHintText(step: any) {
   if (isMateTask.value) return "玉の逃げ道（緑のマス）を、全部ふさぐ王手を考えてみよう。";
   if (step?.type === "find-move") return "利きを見てみよう。青い数字が君の駒、赤い数字が相手の駒の利きだよ。";
-  if (step?.type === "build") return "緑のマスに、薄く見えている駒を動かそう。";
+  if (step?.type === "build") {
+    return step.hideTarget && !peekTarget.value
+      ? "緑のマスが、囲いの駒の行き先だよ。形を忘れたら「完成形を見る」で確かめよう。"
+      : "緑のマスに、薄く見えている駒を動かそう。";
+  }
   return "光っているマスに注目してみてね。";
 }
 // ===== その場の図鑑(16-4) =====
@@ -1399,6 +1434,7 @@ function loadStep(index: number) {
   refuteRestore = null;
   momentCallout.value = null;
   proverbCard.value = null;
+  peekTarget.value = false;
   dexPage.value = 0;
   startFormationReplay(step);
   // 道具を手に入れる場面。判を押して、見出しにボタンを出す(ごほうびはすぐ使えるように)。
@@ -1431,7 +1467,10 @@ function startLesson(id: string) {
   loadStep(0);
 }
 function resetStep() {
+  // やり直しても、見た完成形は出したままにする(ヒントを2回に数えない)。
+  const peeked = peekTarget.value;
   loadStep(stepIndex.value);
+  peekTarget.value = peeked;
 }
 function setFeedback(text: string, tone: "good" | "bad" | "info", voice = text) {
   feedback.value = text;
@@ -1503,13 +1542,19 @@ function onBoardMove(usi: string) {
   if (result.outcome === "wrong") {
     // 囲いに使わない駒を動かそうとしたときは、まちがいに数えず、使う駒を伝える(不可の分類)。
     if (result.reason === "not-castle-piece") {
-      setFeedback(step.drop ? "持ち駒を選んで、薄く見えているマスに打とう。" : "囲いに使うのは、薄く見えている駒だよ。その駒を動かしてね。", "info");
+      setFeedback(
+        step.drop
+          ? "持ち駒を選んで、薄く見えているマスに打とう。"
+          : targetHidden.value ? "囲いに使うのは、玉と金銀だよ。その駒を動かしてね。" : "囲いに使うのは、薄く見えている駒だよ。その駒を動かしてね。",
+        "info",
+      );
       return;
     }
     if (result.reason === "wrong-square") {
       countMiss();
       const name = PIECE_LABELS[usi[0]] ?? "その駒";
-      setFeedback(result.expected ? `${name}は${squareLabel(result.expected)}に置こう。薄く見えている${name}のマスだよ。` : `${name}はもう並べ終わったよ。`, "bad");
+      const where = result.expected ? `${name}は${squareLabel(result.expected)}に置こう。` : "";
+      setFeedback(where ? (targetHidden.value ? where : `${where}薄く見えている${name}のマスだよ。`) : `${name}はもう並べ終わったよ。`, "bad");
       return;
     }
     countMiss();
