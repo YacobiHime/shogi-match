@@ -3,11 +3,12 @@
 // - 序盤: 決めた戦法・囲いの定跡手を指す。タダの駒や、取られそうな自分の駒に気づいたら、そちらを優先する。
 // - 中盤: 駒得を狙う。取り合いは、駒を取る手だけを数手先まで読む(取る手の読み)。
 // - 終盤: 王手と玉の周りへの利きを高く見る。詰み(1手・3手)に気づけば詰ます。相手の1手詰めに気づけば防ぐ。
-// 設計は docs/logic-ai-design.md。数値は仮の値で、自己対局で合わせる。
+// 設計は docs/logic-ai-design.md。強さの数値と自己対局の記録は docs/difficulty-calibration.md。
 
 import { Position } from "tsshogi";
-import { attackersOf, isKingAttacked, opponentOf } from "./piece-movement.mjs";
+import { attackersOf, guardsSquare, isKingAttacked, opponentOf } from "./piece-movement.mjs";
 import { createNaturalnessEvaluator } from "./move-naturalness.mjs";
+import { moveLeaning } from "./cpu-move-choice.mjs";
 import { findMateLine } from "./problem-solver";
 import { analyzePosition, perceptionForPosition } from "./position-awareness.mjs";
 
@@ -119,17 +120,17 @@ function scoreMove(context, usi, noticed) {
   const after = material(child, me);
   const captureGain = child.captured ? value(child.captured.kind) + value(child.captured.handKind) : 0;
   const promotionGain = after - before - captureGain;
-  const parts = { capture: 0, promotion: promotionGain, reply: 0, threat: 0, check: 0, pressure: 0, king: 0, natural: 0, plan: 0, response: 0 };
+  const parts = { capture: 0, promotion: promotionGain, reply: 0, threat: 0, check: 0, pressure: 0, king: 0, natural: 0, plan: 0, response: 0, style: 0 };
   if (captureGain && noticed.freeCapture) parts.capture = captureGain;
   // 指したあと、相手が駒を取ってくる損。取り返しまで読めれば、取り合いの損得で見る。
   if (noticed.hanging) {
-    const depth = noticed.exchange ? 4 : 1;
+    const depth = Math.min(noticed.exchange ? 4 : 1, context.readDepth ?? 4);
     parts.reply = -replyLoss(child, depth, context.deadline);
   }
   // 次に駒を取れる狙い(当たり・両取り)。相手の応手は考えない分、割り引く。
   if (noticed.threat) {
     const again = { ...child, turn: me };
-    parts.threat = Math.max(0, captureSearch(again, 2, -Infinity, Infinity, context.deadline) - material(again, me)) * THREAT_SHARE;
+    parts.threat = Math.max(0, captureSearch(again, Math.min(2, context.readDepth ?? 2), -Infinity, Infinity, context.deadline) - material(again, me)) * THREAT_SHARE;
   }
   const check = isKingAttacked(child.board, opponentOf(me));
   if (check) parts.check = CHECK_BONUS[phase];
@@ -138,6 +139,10 @@ function scoreMove(context, usi, noticed) {
   parts.natural = Math.log(Math.max(0.02, naturalness(usi))) * NATURALNESS_SCALE;
   if (noticed.hanging && context.responseMoves?.has(usi)) parts.response = 180;
   if (planMove === usi && noticed.followPlan) parts.plan = PLAN_BONUS;
+  if (context.style?.attack) {
+    const leaning = moveLeaning(context.evaluate(usi));
+    if (leaning && Math.sign(context.style.attack) === leaning) parts.style = (context.styleBonusCap ?? 0) * Math.abs(context.style.attack);
+  }
   const score = Object.values(parts).reduce((sum, part) => sum + part, 0);
   return { usi, score, parts, check, captureGain };
 }
@@ -171,15 +176,18 @@ const FULL = Object.freeze({ freeCapture: true, hanging: true, exchange: true, t
  * ロジックAIで1手を選ぶ。
  * @param {{
  *   sfen: string, legalMoves: string[], level: number, moveHistory?: string[], planMove?: string | null,
- *   random?: () => number, maxTimeMs?: number,
+ *   random?: () => number, maxTimeMs?: number, temperature?: number, readDepth?: number,
+ *   perceptionOverride?: Record<string, number>, style?: {attack: number}, styleBonusCap?: number,
  * }} options planMoveは、序盤の定跡の次の1手(なければnull)。
  * @returns {{ move: string, kind: 'logic', reason: string, missed: string[], phase: string, policy: 'take' | 'attack' | null, [key: string]: any } | null}
  */
-export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], planMove = null, random = Math.random, maxTimeMs = 600 }) {
+export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], planMove = null, random = Math.random, maxTimeMs = 600,
+  temperature, readDepth, perceptionOverride, style, styleBonusCap }) {
   if (!legalMoves?.length) return null;
   const deadline = Date.now() + maxTimeMs;
-  const perception = logicPerception(level);
-  const awareness = analyzePosition(sfen, { moveHistory, legalMoves, maxTimeMs: Math.min(120, Math.max(0, deadline - Date.now())) });
+  const perception = { ...logicPerception(level), ...perceptionOverride };
+  const awareness = analyzePosition(sfen, { moveHistory, legalMoves, captureThreatsOnly: true,
+    maxTimeMs: Math.min(120, Math.max(0, deadline - Date.now())) });
   const noticed = rollPerception(perceptionForPosition(perception, awareness), random);
   const state = stateFromSfen(sfen);
   const me = state.turn;
@@ -190,6 +198,7 @@ export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], pla
 
   // 詰みに気づけば詰ます。
   const mateLine = (plies) => {
+    if (plies > (readDepth ?? Infinity)) return null;
     if (Date.now() >= deadline) return null;
     const line = findMateLine(sfen, plies, { nodeLimit: plies > 1 ? 15000 : 4000, maxTimeMs: Math.min(plies > 1 ? 200 : 80, deadline - Date.now()) });
     return line && legalMoves.includes(line[0]) ? line : null;
@@ -216,12 +225,13 @@ export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], pla
     for (const usi of legalMoves) {
       const tags = evaluate(usi).tags;
       const child = playLight(state, usi);
-      if (tags.includes("escape") || tags.includes("guard") || salient.some((threat) => threat.attackers.some((square) =>
-        attackersOf(child.board, square, me).length > attackersOf(state.board, square, me).length))) responseMoves.add(usi);
+      if (salient.some((threat) => (usi.startsWith(threat.square) && tags.includes("escape"))
+        || guardsSquare(state.board, child.board, threat.square, me)
+        || threat.attackers.some((square) => attackersOf(child.board, square, me).length > attackersOf(state.board, square, me).length))) responseMoves.add(usi);
     }
   }
   const context = {
-    state, me, phase, planMove: plan, naturalness, deadline, responseMoves,
+    state, me, phase, planMove: plan, naturalness, deadline, responseMoves, readDepth, evaluate, style, styleBonusCap,
     ownPressureBefore: kingZonePressure(state.board, me),
   };
   let entries = [];
@@ -262,7 +272,7 @@ export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], pla
     : true;
   const picked = planEntry && !tempting && planEntry.score > -MATED_PENALTY / 2
     ? planEntry
-    : softmaxPick(entries, perception.temperature, random);
+    : softmaxPick(entries, temperature ?? perception.temperature, random);
   // 見落としの記録。気づいていれば避けられた損や、取れたのに見逃した駒。
   const missed = [];
   const truth = scoreMove(context, picked.usi, FULL);
@@ -273,7 +283,8 @@ export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], pla
   }
   const naturalReason = evaluate(picked.usi).tags.find((tag) => ["escape", "guard", "develop", "castle-build"].includes(tag));
   const reason = reasonOf(picked, plan);
-  return { ...result(picked.usi, reason === "natural" && naturalReason ? naturalReason : reason), missed, policy, score: Math.round(picked.score) };
+  return { ...result(picked.usi, reason === "natural" && naturalReason ? naturalReason : reason), missed, policy,
+    score: Math.round(picked.score), naturalnessEvaluation: evaluate(picked.usi) };
 }
 
 /** 受からない局面で取りに行く割合。Lv間は直線で補う。 */

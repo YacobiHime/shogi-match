@@ -19,8 +19,6 @@ export const OVERSIGHT_NATURAL_MOVES = 8;
 export const SACRIFICE_CANDIDATE_MAX_LOSS = 150;
 /** 最善手との差がこれ以上の着手を「大きな悪手」として、1局の回数と間隔を数える。見落としの下限と同じ。 */
 export const BLUNDER_LOSS = OVERSIGHT_MIN_DEEP_LOSS;
-/** 目に付いた手を読む探索量の下限。駒のただ取られを確実に見つけられる量にする。 */
-export const VISION_MIN_NODES = 1000;
 /** 危険度で選び直す候補の、最善手との勝率差(ポイント)の上限と、読み直す候補の数。 */
 export const RISK_MARGIN = 6;
 /** 劣勢で勝負手を選ぶときの、最善手との勝率差の上限。勝負手の損は、相手が間違えなければそのまま負けに近づくので狭くする。 */
@@ -99,9 +97,9 @@ function naturalnessMemo(sfen, moveHistory, options = {}, evaluation = evaluatio
 }
 
 /** 攻めの手のタグ。王手も攻めの手に数える。 */
-export const ATTACK_TAGS = new Set(["threaten", "open-line", "rook-pawn-push", "pawn-tension", "promote", "winning-capture", "free-capture"]);
+export const ATTACK_TAGS = new Set(["threaten", "open-line", "rook-pawn-push", "pawn-tension", "promote", "winning-capture", "free-capture", "attack-plan", "combination", "mate-plan"]);
 /** 受けの手のタグ。 */
-export const DEFENSE_TAGS = new Set(["king-escape", "drop-block", "move-block", "escape", "castle-build", "capture-checker", "recapture", "simple-recapture", "guard"]);
+export const DEFENSE_TAGS = new Set(["king-escape", "drop-block", "move-block", "escape", "castle-build", "capture-checker", "recapture", "simple-recapture", "guard", "guard-plan"]);
 
 /** 手が攻め(1)か受け(-1)か、どちらでもない(0)か。両方の性格を持つ手は、攻めに数える。 */
 export function moveLeaning({ tags = [], check = false } = {}) {
@@ -381,60 +379,12 @@ export async function chooseRiskAwareMove({ sfen, search, candidates, strength, 
   };
 }
 
-/** 目に付く手。自然さの上位visionWidth手(駒をただで渡す手を除く)と、探索上位engineVision手。 */
-export function visibleMoves({ search, candidates, legalMoves, strength, naturalness }) {
-  const natural = legalMoves
-    .filter((move) => !naturalness.isSacrifice(move))
-    .sort((left, right) => naturalness(right) - naturalness(left))
-    .slice(0, strength.visionWidth);
-  const engine = [search.move, ...candidates
-    .filter(({ rank }) => rank > 1)
-    .sort((left, right) => left.rank - right.rank)
-    .map(({ move }) => move)]
-    .slice(0, strength.engineVision ?? 0);
-  const visible = [...new Set([...natural, ...engine])];
-  return visible.length ? visible : legalMoves.slice(0, 1);
-}
-
-/**
- * 目に付いた手だけを、最善手と並べてそのレベルで読み直し、評価差と自然さの重みで選ぶ。
- * 人間の弱さは、良い手を読み違えることより、目に付かないことから出る。最善手は目に付いた場合だけ選ぶ。
- * 上限以内の手が無ければnullを返し、探索候補からの抽選に戻す。
- */
-async function chooseWithinVision({ search, candidates, legalMoves, strength, naturalness, verify, random, lossCap, alpha }) {
-  const visible = visibleMoves({ search, candidates, legalMoves, strength, naturalness });
-  const values = scoreMap(await verify(
-    [search.move, ...visible.filter((move) => move !== search.move)],
-    Math.max(strength.nodes, VISION_MIN_NODES),
-  ));
-  if (!values.size) return null;
-  const reference = Math.max(...values.values());
-  const pool = visible
-    .filter((move) => values.has(move))
-    .map((move) => ({ move, value: values.get(move), loss: reference - values.get(move) }))
-    .filter(({ loss }) => loss <= lossCap);
-  if (!pool.length) return null;
-  const poolBest = Math.max(...pool.map(({ value }) => value));
-  const temperature = strength.scoreTemperature ?? 1000;
-  const picked = pickWeighted(pool.map((entry) => ({
-    ...entry,
-    weight: Math.exp(-(poolBest - entry.value) / temperature) * naturalness(entry.move) ** alpha,
-  })), random);
-  return {
-    move: picked.move,
-    rank: candidates.find(({ move }) => move === picked.move)?.rank ?? 0,
-    kind: picked.move === search.move ? "best" : "vision",
-    naturalness: naturalness(picked.move),
-    loss: Math.max(0, picked.loss),
-  };
-}
-
 /**
  * CPUの着手を選ぶ共通処理。
  * search未指定(Lv0・エンジンなし)なら自然さだけで選ぶ。
- * 探索済みなら、見落とし → 危険への態度(riskAttitudeがある場合) → 棋風 → 視野の狭さ(visionWidthがある場合)
+ * 探索済みなら、見落とし → 危険への態度(riskAttitudeがある場合) → 棋風
  * → 探索候補からの抽選の順に試す。
- * verify(searchMoves, nodes)は、見落とし判定(浅い読み直しと深い検証の2回)と、目に付いた手の読み直しに使う
+ * verify(searchMoves, nodes)は、見落とし判定(浅い読み直しと深い検証の2回)に使う
  * 追加探索で、呼び出し側が直列に実行する。probe(moves, { nodes, multiPv })は、候補手の先の局面を読む追加探索
  * (chooseRiskAwareMove)で、これも呼び出し側が直列に実行する。
  * @param {{
@@ -514,17 +464,6 @@ export async function chooseCpuMove({
   // 棋風。最善手に近い候補の中で、攻めの手か受けの手を選びやすくする。
   const styled = chooseStyledMove({ search, candidates, style: strength.style, naturalness, random, lossCap });
   if (styled) return styled;
-
-  // 視野の狭さで弱くする。目に付く手だけを読み、その中から選ぶ。
-  if (strength.visionWidth > 0 && verify) {
-    if (drawRandom(random) < strength.bestMoveRate) {
-      return { move: search.move, rank: 1, kind: "best", naturalness: naturalness(search.move), loss: 0 };
-    }
-    const vision = await chooseWithinVision({
-      search, candidates, legalMoves, strength, naturalness, verify, random, lossCap, alpha,
-    });
-    if (vision) return vision;
-  }
 
   const selection = selectMoveByRank(
     { move: search.move, candidates },

@@ -34,7 +34,7 @@ try {
         });
       });
       rows.push(...JSON.parse(fs.readFileSync(file, "utf8")).rows);
-      fs.writeFileSync(out, JSON.stringify({ date: "2026-10-19", runs, workers: Number(option("workers", "4")), rows }, null, 2) + "\n");
+      fs.writeFileSync(out, JSON.stringify({ date: "2026-10-19", runs, alternatingModes: true, workers: Number(option("workers", "4")), rows }, null, 2) + "\n");
     }
   }));
 } finally {

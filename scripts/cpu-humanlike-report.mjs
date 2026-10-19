@@ -8,10 +8,10 @@ const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs"
 import path from "node:path";
 import { Position } from "tsshogi";
 import { purposefulCalibration } from "./lib/purposeful-calibration.mjs";
-import { chooseCpuMove } from "../src/core/cpu-move-choice.mjs";
+import { chooseLegacyCpuMove as chooseCpuMove } from "./lib/legacy-cpu-move-choice.mjs";
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator, LOW_NATURALNESS_THRESHOLD } from "../src/core/move-naturalness.mjs";
-import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from "../src/core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, LOGIC_HYBRID_DEFAULT, getStrengthSearchSettings, searchSettingsForSkill, strengthPresetFor } from "../src/core/strength-settings.mjs";
 import {
   STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom,
 } from "./lib/node-engine.mjs";
@@ -51,14 +51,21 @@ async function samplePositions(engine, random) {
   return samples;
 }
 
-async function currentChoose(engine, preset, sample, moves, random) {
+function reportStrength(preset) {
   const level = CPU_STRENGTH_PRESETS.find(({ value }) => value === preset)?.level;
-  if (usesLogicAi(level)) return chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level, random });
-  let strength = { ...getStrengthSearchSettings(preset), level };
+  let strength = { ...(process.argv.includes("--hybrid") ? getStrengthSearchSettings(preset)
+    : searchSettingsForSkill(strengthPresetFor(preset).skill)), level };
   if (level >= 11 && level < 40) strength.logicHybrid = process.argv.includes("--hybrid");
   if (strength.logicHybrid && process.argv.includes("--calibrated")) strength = purposefulCalibration(strength);
+  return strength;
+}
+
+async function currentChoose(engine, preset, sample, moves, random) {
+  const strength = reportStrength(preset);
+  const level = strength.level;
+  if (usesLogicAi(level)) return chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level, random });
   const result = strength.nodes === 0 ? undefined : await search(engine, sample.sfen, strength);
-  return (await (strength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
+  const choice = (await (strength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
     strength,
     sfen: sample.sfen,
     legalMoves: moves,
@@ -72,6 +79,7 @@ async function currentChoose(engine, preset, sample, moves, random) {
       : undefined,
     random,
   })) ?? chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level: 10, random });
+  return { ...choice, continuations: strength.logicHybrid ? result?.candidates : undefined };
 }
 
 function percentile(sorted, ratio) {
@@ -81,19 +89,20 @@ function percentile(sorted, ratio) {
 
 async function main() {
   const engine = await createNodeEngine();
+  const referenceEngine = await createNodeEngine();
   const random = seededRandom(seed);
   console.error("サンプル局面を生成中...");
-  const samples = await samplePositions(engine, random);
+  const samples = await samplePositions(referenceEngine, random);
   const referenceCache = new Map();
   const reference = async (sample, move) => {
     const key = `${sample.sfen}|${move}`;
     if (!referenceCache.has(key)) {
       const bestKey = `${sample.sfen}|*`;
       if (!referenceCache.has(bestKey)) {
-        const best = await search(engine, sample.sfen, { nodes: REFERENCE_NODES, multiPv: 1 });
+        const best = await search(referenceEngine, sample.sfen, { nodes: REFERENCE_NODES, multiPv: 1 });
         referenceCache.set(bestKey, comparableScore(best.candidates.find(({ rank }) => rank === 1)?.score));
       }
-      const result = await search(engine, sample.sfen, { nodes: REFERENCE_NODES, multiPv: 1, searchMoves: [move] });
+      const result = await search(referenceEngine, sample.sfen, { nodes: REFERENCE_NODES, multiPv: 1, searchMoves: [move] });
       referenceCache.set(key, comparableScore(result.candidates.find(({ rank }) => rank === 1)?.score));
     }
     const best = referenceCache.get(`${sample.sfen}|*`);
@@ -102,11 +111,14 @@ async function main() {
     return Math.min(LOSS_CAP, Math.max(0, best - value));
   };
 
-  const report = { seed, trials, referenceNodes: REFERENCE_NODES, samples: samples.length, levels: [], examples: [] };
+  const report = { seed, trials, referenceNodes: REFERENCE_NODES, isolatedReference: true,
+    hybrid: process.argv.includes("--hybrid"), calibrated: process.argv.includes("--calibrated")
+      || (process.argv.includes("--hybrid") && LOGIC_HYBRID_DEFAULT),
+    samples: samples.length, levels: [], examples: [] };
   for (const level of levels) {
     const preset = CPU_STRENGTH_PRESETS.find((entry) => entry.level === level)?.value;
     if (!preset) continue;
-    const row = { level, preset };
+    const row = { level, preset, settings: reportStrength(preset) };
     {
       const losses = [];
       const times = [];
@@ -118,10 +130,14 @@ async function main() {
         const moves = legalMoves(position);
         const naturalness = createNaturalnessEvaluator(sample.sfen, { moveHistory: sample.history });
         for (let trial = 0; trial < trials; trial += 1) {
+          engine.newGame();
+          await engine.ready();
           const started = performance.now();
           const choice = await currentChoose(engine, preset, sample, moves, random);
           times.push(performance.now() - started);
-          const evaluation = naturalness(choice.move);
+          const evaluation = choice.continuations
+            ? createNaturalnessEvaluator(sample.sfen, { moveHistory: sample.history, continuations: choice.continuations })(choice.move)
+            : naturalness(choice.move);
           if (evaluation.weight < LOW_NATURALNESS_THRESHOLD) low += 1;
           if (choice.kind === "oversight") oversight += 1;
           if (choice.kind === "vision") vision += 1;
@@ -161,6 +177,7 @@ async function main() {
     console.error(`Lv${level} 完了`);
   }
   engine.quit();
+  referenceEngine.quit();
 
   const lines = [
     `サンプル${samples.length}局面 × ${trials}回、基準探索${REFERENCE_NODES}nodes、seed=${seed}`,

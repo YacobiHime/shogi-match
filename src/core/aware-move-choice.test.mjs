@@ -6,18 +6,20 @@ import { CPU_POSITION_SET, cpuPositionVariants } from "./cpu-position-set.mjs";
 import { createNaturalnessEvaluator } from "./move-naturalness.mjs";
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, hybridSettingsForLevel } from "./strength-settings.mjs";
 import { createRng } from "./ryuo-random.mjs";
+import { chooseLogicMove } from "./logic-ai.mjs";
 
 const legal = (sfen) => enumerateLegalMoves(Position.newBySFEN(sfen)).map(({ usi }) => usi);
 const cp = (value) => ({ type: "cp", value });
-const strength = (level = 20) => ({ ...getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value), logicHybrid: true, oversightRate: 0, riskAttitude: 0 });
+const strength = (level = 20) => ({ ...getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value), logicHybrid: true,
+  shallowReadRate: 0, trustedEngineRate: 0, oversightRate: 0, riskAttitude: 0 });
 const fakeSearch = (moves, values = {}) => ({ move: moves[0], candidates: moves.map((move, i) => ({ move, rank: i + 1, score: cp(values[move] ?? -i * 10) })) });
 const fakeVerify = (values = {}) => vi.fn(async (moves) => fakeSearch(moves, values));
 
 describe("気づきと評価値から選ぶCPU", () => {
   test("Lv11〜39だけに連続した設定を足し、Lv0とLv40を変えない", () => {
     for (const level of [0, 1, 10, 40]) expect(getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value).logicHybrid).toBeUndefined();
-    expect(hybridSettingsForLevel(11)).toMatchObject({ logicHybrid: false, engineBestVisibility: 0.25, engineTopVisibility: 0.125, logicBonusCap: 200, takePolicyRate: 0.48 });
-    expect(hybridSettingsForLevel(39)).toMatchObject({ engineBestVisibility: 0.98, engineTopVisibility: 0.49, logicBonusCap: 20, takePolicyRate: 0 });
+    expect(hybridSettingsForLevel(11)).toMatchObject({ logicHybrid: true, engineBestVisibility: 0.25, engineTopVisibility: 0.125, logicBonusCap: 200, takePolicyRate: 0.48 });
+    expect(hybridSettingsForLevel(39)).toMatchObject({ engineBestVisibility: 0.995, engineTopVisibility: 0.4975, logicBonusCap: 20, takePolicyRate: 0 });
     expect(Object.values(hybridSettingsForLevel(20).perception).every((p) => p === 1)).toBe(true);
     for (let level = 12; level <= 39; level += 1) expect(hybridSettingsForLevel(level).engineBestVisibility).toBeGreaterThanOrEqual(hybridSettingsForLevel(level - 1).engineBestVisibility);
   });
@@ -122,6 +124,15 @@ describe("気づきと評価値から選ぶCPU", () => {
     expect(choice).toBeNull();
   });
 
+  test.each(["時間切れ", "追加評価の失敗"])("%sでも取得済みの目的のある評価を捨てない", async (kind) => {
+    const verify = vi.fn(async () => null);
+    const choice = await chooseAwareMove({ strength: { ...strength(), engineBestVisibility: 1, scoreTemperature: 1 },
+      sfen: STANDARD_SFEN, legalMoves: ["7g7f", "2g2f"], search: fakeSearch(["7g7f"]), verify,
+      maxTimeMs: kind === "時間切れ" ? 0 : 600, random: () => 0 });
+    expect(choice).toMatchObject({ move: "7g7f", kind: "aware", loss: 0 });
+    expect(verify).toHaveBeenCalledTimes(kind === "時間切れ" ? 0 : 1);
+  });
+
   test("基準手を同じMultiPVで評価する場合は深さの違う値を混ぜない", async () => {
     const verify = fakeVerify({ "7g7f": 1200, "2g2f": 500 });
     const choice = await chooseAwareMove({ strength: { ...strength(), consistentCandidateScores: true, engineBestVisibility: 1, scoreTemperature: 1 }, sfen: STANDARD_SFEN,
@@ -130,4 +141,103 @@ describe("気づきと評価値から選ぶCPU", () => {
     expect(new Set(verify.mock.calls[0][0])).toEqual(new Set(["7g7f", "2g2f"]));
     expect(choice).toMatchObject({ move: "7g7f", loss: 0 });
   });
+
+  test("最善手を信頼する手番では途中の深さの古い2位スコアで逆転させない", async () => {
+    const verify = fakeVerify();
+    const search = fakeSearch(["7g7f", "2g2f"], { "7g7f": 0, "2g2f": 1000 });
+    const choice = await chooseAwareMove({ strength: { ...strength(39), trustedEngineRate: 1, engineBestVisibility: 1,
+      engineTopVisibility: 1, scoreTemperature: 1 }, sfen: STANDARD_SFEN, legalMoves: ["7g7f", "2g2f"],
+      search, verify, random: () => 0 });
+    expect(choice).toMatchObject({ move: "7g7f", loss: 0, consideredMoves: ["7g7f"] });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  test("上位で最善手に目的がなければ取得済みの目的のある次善手を使う", async () => {
+    const verify = fakeVerify();
+    const choice = await chooseAwareMove({ strength: { ...strength(39), trustedEngineRate: 1, engineBestVisibility: 1, engineTopVisibility: 0 },
+      sfen: STANDARD_SFEN, legalMoves: ["9i9h", "7g7f"], search: fakeSearch(["9i9h", "7g7f"]), verify, random: () => 0.5 });
+    expect(choice).toMatchObject({ move: "7g7f", rank: 2, loss: 10 });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  test("上位の次善手を使う経路でも大きな悪手を使い切った後の上限を守る", async () => {
+    const verify = fakeVerify();
+    const choice = await chooseAwareMove({ strength: { ...strength(39), trustedEngineRate: 1, engineBestVisibility: 1 },
+      sfen: STANDARD_SFEN, legalMoves: ["9i9h", "7g7f", "2g2f"],
+      search: fakeSearch(["9i9h", "7g7f", "2g2f"], { "9i9h": 0, "7g7f": -350, "2g2f": -100 }),
+      verify, blunderAllowed: false, random: () => 0.5 });
+    expect(choice).toMatchObject({ move: "2g2f", loss: 100 });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  test("浅く読む手番も具体的な候補を直列に一度だけ評価し、理由を返す", async () => {
+    const verify = fakeVerify();
+    const choice = await chooseAwareMove({ strength: { ...strength(11), shallowReadRate: 1 },
+      sfen: STANDARD_SFEN, legalMoves: ["7g7f", "2g2f"], search: fakeSearch(["9i9h"]), verify, random: () => 0.5 });
+    expect(choice.kind).toBe("aware-shallow");
+    expect(["7g7f", "2g2f"]).toContain(choice.move);
+    expect(createNaturalnessEvaluator(STANDARD_SFEN)(choice.move).purposeful).toBe(true);
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(verify.mock.calls[0][0]).toEqual([choice.move]);
+  });
+
+  test("浅い手番にも棋士の気づきと受けの棋風を反映する", async () => {
+    const choice = await chooseAwareMove({ strength: { ...strength(11), shallowReadRate: 1, shallowDepth: 2, shallowTemperature: 1,
+      perception: { ...strength(11).perception, hanging: 0, freeCapture: 0 }, style: { attack: -1 }, logicBonusCap: 200 },
+      sfen: STANDARD_SFEN, legalMoves: ["7g7f", "6i7h"], search: fakeSearch(["7g7f", "6i7h"]), random: () => 0.5 });
+    expect(choice).toMatchObject({ move: "6i7h", kind: "aware-shallow", noticed: { hanging: false, freeCapture: false } });
+  });
+
+  test("浅い候補の評価が返らなくても既知の候補を残し、候補の追加評価を重ねない", async () => {
+    const verify = vi.fn(async () => null);
+    const choice = await chooseAwareMove({ strength: { ...strength(11), shallowReadRate: 1, engineBestVisibility: 1 },
+      sfen: STANDARD_SFEN, legalMoves: ["7g7f", "2g2f"], planMove: "2g2f", search: fakeSearch(["7g7f"]), verify, random: () => 0.5 });
+    expect(choice).toMatchObject({ move: "7g7f", kind: "aware" });
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(verify.mock.calls[0][0]).toEqual(["2g2f"]);
+  });
+
+  test("候補内で最高点でも、基準手より大きく悪い大駒のただ捨てを例外で残さない", async () => {
+    const position = Position.newBySFEN(STANDARD_SFEN);
+    for (const usi of ["7g7f", "3c3d"]) position.doMove(position.createMoveByUSI(usi));
+    const choice = await chooseAwareMove({ strength: { ...strength(11), engineBestVisibility: 0, engineTopVisibility: 1 },
+      sfen: position.sfen, legalMoves: ["9i9h", "8h3c+", "2g2f"],
+      search: fakeSearch(["9i9h", "8h3c+", "2g2f"], { "9i9h": 0, "8h3c+": -1000, "2g2f": -2000 }), random: () => 0.5 });
+    expect(choice.move).toBe("2g2f");
+  });
+
+  test("浅い手番より先に棋士が見つけたエンジンの詰みを採用する", async () => {
+    const search = fakeSearch(["7g7f", "2g2f"]);
+    search.candidates[0].score = { type: "mate", value: 3 };
+    const choice = await chooseAwareMove({ strength: { ...strength(11), shallowReadRate: 1, shallowDepth: 2,
+      mateFinding: { center: 100, slope: 1 } }, sfen: STANDARD_SFEN, legalMoves: ["7g7f", "2g2f"], search, random: () => 0.5 });
+    expect(choice).toMatchObject({ move: "7g7f", kind: "mate", reason: "mate" });
+  });
+
+  test("最善手を信頼する上位でも棋風の働く手番を飛ばさない", async () => {
+    const choice = await chooseAwareMove({ strength: { ...strength(39), trustedEngineRate: 1, engineBestVisibility: 1,
+      engineTopVisibility: 1, logicBonusCap: 20, scoreTemperature: 1, style: { attack: -1, rate: 1 } },
+      sfen: STANDARD_SFEN, legalMoves: ["7g7f", "6i7h"],
+      search: fakeSearch(["7g7f", "6i7h"], { "7g7f": 0, "6i7h": -10 }), random: () => 0.5 });
+    expect(choice.move).toBe("6i7h");
+    expect(choice.logicBonus).toBe(20);
+  });
+
+  test("浅い手番の校正を、角を歩と引き換えに渡す手で弱くしない", async () => {
+    const position = Position.newBySFEN(STANDARD_SFEN);
+    for (const usi of ["7g7f", "3c3d"]) position.doMove(position.createMoveByUSI(usi));
+    const moves = ["8h3c+", "2g2f", "6i7h"];
+    const search = fakeSearch(["2g2f", "6i7h", "8h3c+"], { "2g2f": 0, "6i7h": -20, "8h3c+": -3000 });
+    let shallowSacrifices = 0;
+    for (let seed = 1; seed <= 80; seed += 1) {
+      const random = createRng(seed).next;
+      random(); // 浅く読む手番のくじと揃える。
+      const shallow = chooseLogicMove({ sfen: position.sfen, legalMoves: moves, level: 10, random });
+      shallowSacrifices += Number(shallow.move === "8h3c+");
+      const choice = await chooseAwareMove({ strength: { ...strength(11), shallowReadRate: 1, engineBestVisibility: 1 },
+        sfen: position.sfen, legalMoves: moves, search, random: createRng(seed).next });
+      expect(choice.move).not.toBe("8h3c+");
+    }
+    expect(shallowSacrifices).toBeGreaterThan(0);
+  }, 20000);
 });

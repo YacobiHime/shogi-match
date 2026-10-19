@@ -435,6 +435,18 @@ export function applyCharacter(strength, character, situation, { skill }) {
     if (Number.isFinite(next.moveLossCap)) next.moveLossCap = Math.round(next.moveLossCap * (1 + 0.5 * loose));
     next.blunderLimit = (next.blunderLimit ?? 0) + loose;
   }
+  if (next.logicHybrid && next.perception && !bestOnly) {
+    const adjust = (probability, delta) => !Number.isFinite(probability) || delta === 0 || (probability >= 1 && delta > 0) ? probability
+      : round2(shiftProbability(delta < 0 ? Math.min(probability, 0.98) : probability, delta));
+    next.perception = { ...next.perception };
+    for (const key of ["freeCapture", "exchange", "threat"]) {
+      next.perception[key] = adjust(next.perception[key], 0.35 * sharpen);
+    }
+    for (const key of ["hanging", "hangingLastMoveMajor", "hangingLastMoveMinor", "defendMate"]) {
+      next.perception[key] = adjust(next.perception[key], 0.35 * sharpen + 0.4 * steady - 0.9 * overlook - 0.4 * loose);
+    }
+    for (const key of ["mate1", "mate3"]) next.perception[key] = adjust(next.perception[key], 0.5 * mate);
+  }
   // 詰将棋が得意: n手詰めを見つける確率を、ロジットで+1.0(やや)・+2.0(とても)ずらす(中心の手数が約1.4・2.9手延びるのと同じ)。
   // 確率が半分前後の長さの詰みで最も上がり、そのレベルで確実に解ける短い詰みや、とても長い詰みでは、あまり変わらない。
   if (mate > 0 && next.mateFinding.center !== Infinity) {

@@ -188,6 +188,74 @@ export function breakthroughSquares(board, color) {
   return [...entries].filter((to) => (enemy.get(to) ?? 0) > (own.get(to) ?? 0));
 }
 
+/** 特定の味方の駒への当たりを弱めるか、その駒に取り返しの支えを増やす受け。 */
+export function guardsSquare(board, after, square, color) {
+  if (after.get(square)?.color !== color || board.get(square)?.color !== color) return false;
+  const opp = opponentOf(color);
+  return attackersOf(after, square, opp).length < attackersOf(board, square, opp).length
+    || attackersOf(after, square, color).length > attackersOf(board, square, color).length;
+}
+
+/**
+ * 変更しない盤の写しを繰り返し調べる処理用。同じ盤の利きを一度だけ集計する。
+ * キャッシュは呼び出し元の処理内に閉じ、外部で変更されるMapへは適用しない。
+ */
+export function createBoardQueries() {
+  const cache = new WeakMap();
+  const attacksFor = (board) => {
+    if (cache.has(board)) return cache.get(board);
+    const colors = { black: new Map(), white: new Map() };
+    const targets = new Map();
+    for (const [from, piece] of board) {
+      const squares = attackedSquares(board, from);
+      targets.set(from, squares);
+      for (const to of squares) {
+        const list = colors[piece.color].get(to) ?? [];
+        list.push({ square: from, kind: piece.kind });
+        colors[piece.color].set(to, list);
+      }
+    }
+    const value = { colors, targets };
+    cache.set(board, value);
+    return value;
+  };
+  const attackers = (board, square, color) => cache.has(board)
+    ? cache.get(board).colors[color].get(square) ?? [] : attackersOf(board, square, color);
+  const hanging = (board, square) => {
+    const piece = board.get(square);
+    if (!piece || piece.kind === "K") return false;
+    const enemy = attackers(board, square, opponentOf(piece.color));
+    return enemy.length > 0 && (attackers(board, square, piece.color).length === 0
+      || enemy.some(({ kind }) => pieceValue(kind) < pieceValue(piece.kind)));
+  };
+  return {
+    prepare: (board) => { attacksFor(board); },
+    attackersOf: attackers,
+    isHanging: hanging,
+    isKingAttacked: (board, color) => {
+      const king = findKing(board, color);
+      return Boolean(king && attackers(board, king, opponentOf(color)).length);
+    },
+    countHanging: (board, color) => {
+      attacksFor(board);
+      return [...board].filter(([square, piece]) => piece.color === color && hanging(board, square)).length;
+    },
+    breakthroughSquares: (board, color) => {
+      const { colors, targets } = attacksFor(board);
+      const opp = opponentOf(color);
+      const entries = new Set();
+      for (const [from, piece] of board) {
+        if (piece.color !== opp || piece.kind === "K") continue;
+        for (const to of targets.get(from)) {
+          if (relativeRank(to, color) >= 7 && board.get(to)?.color !== opp
+            && (colors[opp].get(to)?.length ?? 0) > (colors[color].get(to)?.length ?? 0)) entries.add(to);
+        }
+      }
+      return [...entries];
+    },
+  };
+}
+
 const UNPROMOTE = { "+P": "P", "+L": "L", "+N": "N", "+S": "S", "+B": "B", "+R": "R" };
 
 export function parseUsiMove(usi) {

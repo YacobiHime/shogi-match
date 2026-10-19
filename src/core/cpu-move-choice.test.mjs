@@ -2,8 +2,9 @@ import { describe, expect, test, vi } from 'vitest';
 import { Position } from 'tsshogi';
 import { enumerateLegalMoves, STANDARD_SFEN } from '../game-state.ts';
 import {
-  BLUNDER_LOSS, canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice, pickWeighted, visibleMoves,
+  BLUNDER_LOSS, canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice, pickWeighted,
 } from './cpu-move-choice.mjs';
+import { chooseLegacyCpuMove, visibleMoves } from '../../scripts/lib/legacy-cpu-move-choice.mjs';
 import { createNaturalnessEvaluator, PIECE_SACRIFICE_TAG } from './move-naturalness.mjs';
 import { getStrengthSearchSettings } from './strength-settings.mjs';
 
@@ -172,7 +173,7 @@ describe('CPU着手の共通選択', () => {
     }));
   }
 
-  test('低レベルは目に付く手だけを読み、その中から選ぶ', async () => {
+  test('比較用の旧CPUは目に付く手だけを読み、その中から選ぶ', async () => {
     const strength = { ...lowStrength, oversightRate: 0, bestMoveRate: 0, moveLossCap: 3000 };
     const naturalness = createNaturalnessEvaluator(sfen, { moveHistory, simplicity: strength.simplicity });
     const weight = (move) => naturalness(move).weight;
@@ -183,7 +184,7 @@ describe('CPU着手の共通選択', () => {
     const verify = visionVerify({ '2g2f': 60 });
     const random = seededRandom(5);
     for (let i = 0; i < 200; i += 1) {
-      const result = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search, verify, random });
+      const result = await chooseLegacyCpuMove({ strength, sfen, legalMoves, moveHistory, search, verify, random });
       expect(visible).toContain(result.move);
     }
     // 最善手と目に付いた手を並べ、駒のただ取られが分かる量で読む。
@@ -248,6 +249,22 @@ describe('CPU着手の共通選択', () => {
     expect(result).toMatchObject({ move: '2g2f', kind: 'best' });
   });
 
+  test('Lv40の最善手にはLv11〜39の目的フィルターや再評価を掛けない', async () => {
+    const verify = vi.fn();
+    const strength = getStrengthSearchSettings(480000);
+    const search = { move: '9i9h', candidates: [
+      { rank: 1, move: '9i9h', score: cp(0) },
+      { rank: 2, move: '7g7f', score: cp(-10) },
+    ] };
+    expect(createNaturalnessEvaluator(STANDARD_SFEN)('9i9h').purposeful).toBe(false);
+    for (const value of [0, 0.5, 0.999999]) {
+      const result = await chooseCpuMove({ strength, sfen: STANDARD_SFEN,
+        legalMoves: ['9i9h', '7g7f'], search, verify, random: () => value });
+      expect(result).toMatchObject({ move: '9i9h', kind: 'best', loss: 0 });
+    }
+    expect(verify).not.toHaveBeenCalled();
+  });
+
   test('1手の損失上限を超える候補は、許容損失の内側でも選ばない', async () => {
     const strength = {
       ...lowStrength, oversightRate: 0, bestMoveRate: 0, naturalnessAlpha: 0,
@@ -281,14 +298,14 @@ describe('CPU着手の共通選択', () => {
     ],
   };
 
-  test('目に付いた手が全部上限を超える損なら、探索候補から選び直す', async () => {
+  test('比較用の旧CPUは目に付いた手が全部上限を超える損なら探索候補から選び直す', async () => {
     const strength = {
       ...lowStrength, oversightRate: 0, bestMoveRate: 0, moveLossCap: 400, engineVision: 0, visionWidth: 1,
     };
     const verify = visionVerify({ '5i5h': 60 });
     const random = seededRandom(19);
     for (let i = 0; i < 50; i += 1) {
-      const result = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search: hiddenBest, verify, random });
+      const result = await chooseLegacyCpuMove({ strength, sfen, legalMoves, moveHistory, search: hiddenBest, verify, random });
       expect(['5i5h', '6i7h']).toContain(result.move);
       expect(result.loss).toBeLessThanOrEqual(400);
     }
@@ -298,7 +315,7 @@ describe('CPU着手の共通選択', () => {
   test('目に付いた手は、上限以内の損なら損失を添えて指す', async () => {
     const strength = { ...lowStrength, oversightRate: 0, bestMoveRate: 0, moveLossCap: 400, engineVision: 0 };
     const verify = visionVerify(new Proxy({}, { get: (_, move) => (move === '2g2f' ? 60 : -290) }));
-    const result = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search, verify, random: seededRandom(23) });
+    const result = await chooseLegacyCpuMove({ strength, sfen, legalMoves, moveHistory, search, verify, random: seededRandom(23) });
     expect(['vision', 'best']).toContain(result.kind);
     expect(result.loss === 0 || result.loss === 350).toBe(true);
   });
@@ -316,7 +333,7 @@ describe('CPU着手の共通選択', () => {
     let overCap = 0;
     const random = seededRandom(31);
     for (let i = 0; i < 200; i += 1) {
-      const result = await chooseCpuMove({ strength, sfen, legalMoves, moveHistory, search: hiddenBest, verify, random });
+      const result = await chooseLegacyCpuMove({ strength, sfen, legalMoves, moveHistory, search: hiddenBest, verify, random });
       if (result.loss > 400) overCap += 1;
     }
     expect(overCap).toBeGreaterThan(40);

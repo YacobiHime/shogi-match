@@ -4,11 +4,14 @@
 //   prefixの手を指したあと、先手はエンジンの最善手、後手はweak-levelの強さ設定で指し継ぐ。
 //   各手の評価値（先手から見た値）と最善手を表示するので、解説を付ける場面選びに使う。
 import fs from "node:fs";
+import "./lib/ts-register.mjs";
+const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
+const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs");
 import { Position } from "tsshogi";
 import { chooseCpuMove } from "../src/core/cpu-move-choice.mjs";
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { formatHintMove } from "../src/core/match-assists.mjs";
-import { CPU_STRENGTH_PRESETS, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, search, seededRandom } from "./lib/node-engine.mjs";
 
 const MAX_PLY = 200;
@@ -22,7 +25,7 @@ function option(name, fallback) {
 const prefix = option("prefix", "").split(",").filter(Boolean);
 const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === Number(option("weak-level", "12")));
 if (!preset) throw new Error("存在しないレベルです");
-const weak = searchSettingsForSkill(preset.skill);
+const weak = getStrengthSearchSettings(preset.value);
 const out = option("out", "");
 const random = seededRandom(Number(option("seed", "1")));
 const strongEngine = await createNodeEngine();
@@ -40,12 +43,15 @@ for (let ply = 0; ply < MAX_PLY; ply += 1) {
   let move = prefix[ply];
   if (!move && black) move = best.move;
   if (!move) {
-    const result = weak.nodes > 0 ? await search(weakEngine, sfen, weak) : undefined;
-    const choice = await chooseCpuMove({
+    const moveHistory = record.map(({ usi }) => usi);
+    const logicLevel = usesLogicAi(preset.level) ? preset.level : null;
+    const result = !logicLevel && weak.nodes > 0 ? await search(weakEngine, sfen, weak) : undefined;
+    const choice = (logicLevel ? chooseLogicMove({ sfen, legalMoves: moves, moveHistory, level: logicLevel, random })
+      : await (weak.logicHybrid ? chooseAwareMove : chooseCpuMove)({
       strength: weak,
       sfen,
       legalMoves: moves,
-      moveHistory: record.map(({ usi }) => usi),
+      moveHistory,
       search: result,
       verify: result
         ? (searchMoves, nodes) => search(weakEngine, sfen, { nodes, multiPv: searchMoves.length, searchMoves })
@@ -54,7 +60,7 @@ for (let ply = 0; ply < MAX_PLY; ply += 1) {
         ? (moves, { nodes, multiPv }) => search(weakEngine, `${sfen} moves ${moves.join(" ")}`, { nodes, multiPv })
         : undefined,
       random,
-    });
+    })) ?? chooseLogicMove({ sfen, legalMoves: moves, moveHistory, level: 10, random });
     move = choice.move;
   }
   record.push({

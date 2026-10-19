@@ -1,12 +1,8 @@
 import {
   applyUsiToBoard,
   attackedSquares,
-  attackersOf,
-  breakthroughSquares,
-  countHanging,
+  createBoardQueries,
   findKing,
-  isHanging,
-  isKingAttacked,
   opponentOf,
   parseSfenState,
   parseUsiMove,
@@ -14,6 +10,7 @@ import {
   relativeFile,
   relativeRank,
 } from "./piece-movement.mjs";
+import { continuationPurpose } from "./continuation-purpose.mjs";
 
 export const NATURALNESS_MIN = 0.02;
 export const NATURALNESS_MAX = 8;
@@ -38,6 +35,7 @@ const PURPOSEFUL_TAGS = new Set([
   "free-capture", "winning-capture", "even-trade", "losing-capture", "recapture",
   "capture-checker", "king-escape", "drop-block", "move-block", "escape", "promote", "activate",
   "castle-build", "pawn-tension", "rook-pawn-push", "threaten", "open-line", "develop", "guard", "desperado", "plan",
+  "attack-plan", "guard-plan", "combination", "mate-plan",
 ]);
 
 /** toの歩の後ろ(自陣側)に、間に駒を挟まず自分の飛車・竜がいるか。 */
@@ -78,9 +76,11 @@ function castleDirection(board, color) {
  * advantageは手番側から見た評価値で、優勢なら駒の交換を好む(局面を単純にする)のに使う。
  */
 /** @param {string} sfen
- * @param {{moveHistory?: string[], ply?: number, simplicity?: number, advantage?: number, planMoves?: string[]}} [options] */
-export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simplicity = 0, advantage, planMoves = [] } = {}) {
+ * @param {{moveHistory?: string[], ply?: number, simplicity?: number, advantage?: number, planMoves?: string[], continuations?: {move: string, pv?: string[], score?: any}[]}} [options] */
+export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simplicity = 0, advantage, planMoves = [], continuations = [] } = {}) {
   const { board, turn: me } = parseSfenState(sfen);
+  const { prepare, attackersOf, breakthroughSquares, countHanging, isHanging, isKingAttacked } = createBoardQueries();
+  prepare(board);
   const opp = opponentOf(me);
   const kingSquare = findKing(board, me);
   const inCheck = isKingAttacked(board, me);
@@ -96,12 +96,15 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
   let ownBigPieces;
   let bigPieceReach;
   let breakthroughsBefore;
+  let threatenedBefore;
+  let potentialTargets;
 
   return (usi) => {
     const parsed = parseUsiMove(usi);
     const applied = parsed && applyUsiToBoard(board, usi, me);
     if (!applied) return { weight: 1, tags: [], purposeful: false, check: false };
     const after = applied.board;
+    prepare(after);
     const { to, from, drop } = parsed;
     const moverKind = applied.moved.kind;
     const originalKind = drop ?? board.get(from).kind;
@@ -156,8 +159,12 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
       else apply(1.5, "move-block");
     }
 
+    const attackersBefore = !drop && moverKind !== "K" ? attackersOf(board, from, opp).length : 0;
     if (!drop && moverKind !== "K" && wasHanging && !hangingAfter) {
       apply(2.0, "escape");
+    } else if (!drop && moverKind !== "K" && !hangingAfter && destAttackers.length < attackersBefore) {
+      // 損になる当たりではない駒の退避は静かな受け。従来の「当たり前の逃げ」と区別する。
+      apply(1.5, "guard");
     }
     if (!drop && moverKind !== "K" && relativeRank(to, me) < relativeRank(from, me)) {
       const targets = attackedSquares(after, to);
@@ -166,7 +173,15 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
         || (kingSquare && relativeRank(kingSquare, me) >= 8
           && [1, 9].includes(relativeFile(from, me))
           && chebyshev(kingSquare, `${from[0]}${me === "black" ? "i" : "a"}`) <= 2);
-      const knightPurpose = relativeRank(to, me) <= 5 || targets.some((square) => {
+      const supportedKnightRoute = relativeFile(to, me) >= 3 && relativeFile(to, me) <= 7 && !hangingAfter
+        && targets.some((square) => {
+          if (relativeRank(square, me) > 5 || after.get(square)?.color === me) return false;
+          if (destDefenders.length > 0) return true;
+          const next = applyUsiToBoard(after, `${to}${square}`, me);
+          return next && !isHanging(next.board, square) && (after.get(square)?.color === opp
+            || attackedSquares(next.board, square).some((target) => next.board.get(target)?.color === opp));
+        });
+      const knightPurpose = relativeRank(to, me) <= 5 || supportedKnightRoute || targets.some((square) => {
         const target = after.get(square);
         return target?.color === opp && target.kind !== "K" && pieceValue(target.kind) >= 3;
       });
@@ -180,12 +195,19 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
     if (!drop && BIG_PIECES.has(originalKind)) {
       const gain = attackedSquares(after, to).length - attackedSquares(board, from).length;
       if (gain >= 2) apply(1.2, "activate");
+      const enemyKing = findKing(after, opp);
+      if ((originalKind === "R" || originalKind === "+R") && enemyKing && to[0] === enemyKing[0]
+        && from[0] !== enemyKing[0] && !hangingAfter) apply(1.2, "activate");
     }
 
     if (!drop && (originalKind === "G" || originalKind === "S") && kingSquare && !applied.captured) {
       const before = chebyshev(from, kingSquare);
       const afterDistance = chebyshev(to, kingSquare);
       if (currentPly <= CASTLE_BUILD_PLY && afterDistance < before && afterDistance <= 2) {
+        apply(1.3, "castle-build");
+      } else if (currentPly <= CASTLE_BUILD_PLY && originalKind === "G" && relativeRank(to, me) === 8
+        && direction && Math.sign(relativeFile(to, me) - relativeFile(from, me)) === direction
+        && relativeRank(kingSquare, me) >= 8 && afterDistance <= 2) {
         apply(1.3, "castle-build");
       } else if (kingCastled && before <= 2 && afterDistance > before) {
         apply(0.5, "castle-break");
@@ -196,12 +218,22 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
       const fileStep = relativeFile(to, me) - relativeFile(from, me);
       const towardCastle = direction !== 0 && Math.sign(fileStep) === direction
         && relativeRank(to, me) >= 8;
-      if (towardCastle && currentPly <= CASTLE_BUILD_PLY) {
+      if (towardCastle && (currentPly <= CASTLE_BUILD_PLY || relativeRank(from, me) >= 8)) {
         apply(1.3, "castle-build");
       } else if (currentPly < OPENING_KING_PLY) {
         const forward = relativeRank(to, me) < relativeRank(from, me);
         const central = Math.abs(relativeFile(to, me) - 5) < Math.abs(relativeFile(from, me) - 5);
         apply(forward || central ? 0.1 : 0.2, "early-king");
+      }
+      if (currentPly >= OPENING_KING_PLY) {
+        const danger = (position, square) => attackedSquares(position, square)
+          .reduce((sum, target) => sum + attackersOf(position, target, opp).length, 0);
+        const enemyDistance = (square) => Math.min(...[...board].filter(([, piece]) => piece.color === opp && piece.kind !== "P")
+          .map(([target]) => chebyshev(square, target)));
+        if (danger(after, to) < danger(board, from)
+          || (relativeRank(to, me) >= 7 && destDefenders.length > attackersOf(board, from, me).length
+            && danger(after, to) <= danger(board, from))
+          || (enemyDistance(from) <= 3 && enemyDistance(to) > enemyDistance(from))) apply(1.5, "guard");
       }
     }
 
@@ -214,16 +246,81 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
       return target?.color === opp && target.kind !== "K" && relativeRank(square, me) >= 6
         && pieceValue(target.kind) >= 3 && isHanging(after, square) && !isHanging(board, square);
     });
+    // 現在の当たり、相手が次に作れる当たり、進出した歩への支え・利きの遮断も受け。
+    // 動かした駒・打った駒自身は比較に含めず、無関係な駒打ちをguardにしない。
+    if (!threatenedBefore) {
+      potentialTargets = new Set();
+      for (const [square, piece] of board) {
+        if (piece.color !== opp || piece.kind === "K") continue;
+        for (const nextSquare of attackedSquares(board, square)) {
+          if (board.get(nextSquare)?.color === opp) continue;
+          const next = applyUsiToBoard(board, `${square}${nextSquare}`, opp);
+          if (!next || isKingAttacked(next.board, opp)) continue;
+          for (const target of attackedSquares(next.board, nextSquare)) potentialTargets.add(target);
+        }
+      }
+    }
+    threatenedBefore ??= [...board].filter(([, piece]) => piece.color === me && piece.kind !== "K")
+      .map(([square, piece]) => ({ square, kind: piece.kind,
+        enemy: attackersOf(board, square, opp).length, own: attackersOf(board, square, me).length }))
+      .filter(({ square, kind, enemy }) => enemy > 0 || potentialTargets.has(square)
+        || (kind === "P" && relativeRank(square, me) <= 6));
+    const reinforces = threatenedBefore.some(({ square, kind, enemy, own }) => square !== from && square !== to
+      && after.get(square)?.color === me && after.get(square)?.kind === kind
+      && (attackersOf(after, square, me).length > own || attackersOf(after, square, opp).length < enemy));
+    // 当たっている駒の退路を空ける。例: 1三歩を進めて2二角が1三へ逃げられるようにする。
+    const opensRetreat = !drop && threatenedBefore.some(({ square, enemy }) => enemy > 0 && square !== from
+      && attackedSquares(board, square).includes(from) && !after.has(from) && (() => {
+        const escaped = applyUsiToBoard(after, `${square}${from}`, me);
+        return escaped && !isHanging(escaped.board, from) && !isKingAttacked(escaped.board, me);
+      })());
+    // 相手の次の成り込み地点の支えを厚くする。利きが元々同数でも、受けの狙いはある。
+    const coversPromotion = [...board].some(([square, piece]) => piece.color === opp && piece.kind === "P"
+      && attackedSquares(board, square).some((target) => relativeRank(target, me) >= 7
+        && board.get(target)?.color !== opp
+        && attackersOf(after, target, me).length > attackersOf(board, target, me).length));
+    const protectsKing = moverKind !== "K" && kingSquare
+      && attackersOf(after, kingSquare, me).length > attackersOf(board, kingSquare, me).length;
+    const opensKingRoute = !drop && moverKind !== "K" && kingSquare && chebyshev(from, kingSquare) <= 1 && (() => {
+      const exits = (position) => attackedSquares(position, kingSquare).filter((square) => position.get(square)?.color !== me
+        && attackersOf(position, square, opp).length === 0).length;
+      const before = exits(board);
+      return before <= 2 && exits(after) > before;
+    })();
     const defends = !tags.includes("escape") && (countHanging(after, me) < hangingBefore
-      || breakthroughSquares(after, me).length < breakthroughsBefore || countersIntruder);
-    if (defends) apply(1.5, "guard");
+      || breakthroughSquares(after, me).length < breakthroughsBefore || countersIntruder || reinforces || opensRetreat || coversPromotion
+      || protectsKing || opensKingRoute);
+    if (defends && !tags.includes("guard")) apply(1.5, "guard");
 
     if (drop && !inCheck) {
       const threatensPiece = attackedSquares(after, to).some((square) => {
         const target = after.get(square);
         return target?.color === opp && target.kind !== "K" && pieceValue(target.kind) >= 3;
       });
-      if (!givesCheck && !threatensPiece && !defends) {
+      // 支えのある拠点、または安全に歩を狙う大駒の配置から次の具体的な攻めへ進む。
+      if (drop !== "P" && relativeRank(to, me) <= 6 && !hangingAfter) {
+        const targetPawn = attackedSquares(after, to).some((square) => after.get(square)?.color === opp);
+        const nextPurpose = attackedSquares(after, to).some((square) => {
+          if (after.get(square)?.color === me) return false;
+          const promotes = ["N", "S", "B", "R", "L"].includes(drop)
+            && (relativeRank(to, me) <= 3 || relativeRank(square, me) <= 3);
+          const next = applyUsiToBoard(after, `${to}${square}${promotes ? "+" : ""}`, me);
+          if (!next || isKingAttacked(next.board, me)) return false;
+          if (promotes && (isKingAttacked(next.board, opp) || !isHanging(next.board, square))) return true;
+          if (!destDefenders.length || isHanging(next.board, square)) return false;
+          return attackedSquares(next.board, square).some((target) => next.board.get(target)?.color === opp);
+        });
+        if (targetPawn || nextPurpose) apply(1.2, "develop");
+      }
+      if (drop === "P" && threatensPiece) apply(1.2, "threaten");
+      if (drop === "P" && !hangingAfter && relativeRank(to, me) <= 4) {
+        const nextSquare = `${to[0]}${String.fromCharCode(to.charCodeAt(1) + (me === "black" ? -1 : 1))}`;
+        if (!after.has(nextSquare)) {
+          const next = applyUsiToBoard(after, `${to}${nextSquare}+`, me);
+          if (next && !isKingAttacked(next.board, me)) apply(1.2, "develop");
+        }
+      }
+      if (!givesCheck && !threatensPiece && !defends && !tags.includes("develop")) {
         if (relativeRank(to, me) >= 7) {
           const edge = [1, 9].includes(relativeFile(to, me));
           apply(edge ? 0.05 : 0.15, edge ? "corner-drop" : "idle-drop");
@@ -248,6 +345,13 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
       const simple = (strength, tag) => apply(1 + strength * simplicity, tag);
       // 歩と歩がぶつかったら、まず取る。
       if (moverKind === "P" && !drop && applied.captured?.kind === "P") simple(3, "pawn-tension");
+      if (moverKind === "P" && !drop && !applied.captured && [1, 9].includes(relativeFile(to, me))
+        && [...after].some(([square, piece]) => square[0] === to[0] && piece.color === opp && piece.kind === "P"
+          && relativeRank(square, me) < relativeRank(to, me) && (chebyshev(square, to) <= 2
+            || (chebyshev(square, to) === 3 && (() => {
+              const enemyKing = findKing(after, opp);
+              return enemyKing && Math.abs(Number(enemyKing[0]) - Number(to[0])) <= 2;
+            })())))) simple(0.5, "pawn-tension");
       if (tags.includes("recapture")) simple(1, "simple-recapture");
       if (Number.isFinite(advantage) && advantage >= SIMPLIFY_ADVANTAGE
         && (tags.includes("even-trade") || tags.includes("recapture"))) {
@@ -267,6 +371,18 @@ export function createNaturalnessEvaluator(sfen, { moveHistory = [], ply, simpli
           .reduce((sum, [square]) => sum + attackedSquares(position, square).length, 0);
         bigPieceReach ??= reach(board);
         if (reach(after) - bigPieceReach >= 2) simple(0.5, "open-line");
+      }
+      if (!givesCheck && !tags.some((tag) => PURPOSEFUL_TAGS.has(tag))) {
+        const candidate = continuations.find(({ move }) => move === usi);
+        const purpose = candidate && continuationPurpose(sfen, candidate);
+        if (purpose) {
+          // 読み筋で具体的な狙いが確認できた駒打ちを、待ち手としては数えない。
+          if (tags.includes("idle-drop") || tags.includes("corner-drop")) {
+            weight /= relativeRank(to, me) >= 7 ? ([1, 9].includes(relativeFile(to, me)) ? 0.05 : 0.15) : 0.3;
+            tags.splice(tags.findIndex((tag) => tag === "idle-drop" || tag === "corner-drop"), 1);
+          }
+          tags.push(purpose);
+        }
       }
       // 取る・逃げる・成る・王手・囲い・攻めのどれでもない、目的の見えない手は避ける。
       if (simplicity > 0 && !givesCheck && !tags.some((tag) => PURPOSEFUL_TAGS.has(tag))) {

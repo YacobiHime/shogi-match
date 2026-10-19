@@ -23,10 +23,10 @@ function beforeLastMove(board, lastMove, opponent) {
 /**
  * 局面の脅威と機会。確率は扱わず、両方のAIが同じ盤上の事実を見る。
  * @param {string} sfen
- * @param {{moveHistory?: string[], legalMoves?: string[], maxTimeMs?: number}} [options]
+ * @param {{moveHistory?: string[], legalMoves?: string[], maxTimeMs?: number, captureThreatsOnly?: boolean}} [options]
  * @returns {{me: "black" | "white", threats: Array<{kind: "capture" | "breakthrough" | "check" | "mate-threat", square: string, value: number, salience: "last-move-major" | "last-move-minor" | "other", attackers: string[]}>, chances: Array<{kind: "free-capture" | "winning-capture" | "fork" | "promote" | "check" | "mate", moves: string[], value: number}>}}
  */
-export function analyzePosition(sfen, { moveHistory = [], legalMoves, maxTimeMs = 120 } = {}) {
+export function analyzePosition(sfen, { moveHistory = [], legalMoves, maxTimeMs = 120, captureThreatsOnly = false } = {}) {
   const deadline = Date.now() + Math.max(0, maxTimeMs);
   const state = stateFromSfen(sfen);
   const { board, turn: me } = state;
@@ -51,6 +51,8 @@ export function analyzePosition(sfen, { moveHistory = [], legalMoves, maxTimeMs 
     if (existing) { existing.value = Math.max(existing.value, gain); continue; }
     threats.push({ kind: "capture", square, value: gain, salience, attackers: attackersOf(board, square, opp).map(({ square }) => square) });
   }
+  // ロジックAIは当たりの目立ち方だけを参照し、機会・成り込み・詰みは自分の候補の読みで調べる。
+  if (captureThreatsOnly) return { me, threats, chances };
   for (const square of breakthroughSquares(board, me)) {
     const attackers = attackersOf(board, square, opp).filter(({ kind }) => kind !== "K");
     const gain = Math.max(0, ...attackers.map(({ kind }) => value(`+${kind}`) - value(kind)));

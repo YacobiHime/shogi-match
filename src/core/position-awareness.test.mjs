@@ -7,6 +7,14 @@ import { createRng } from "./ryuo-random.mjs";
 import { replyLoss, playLight, stateFromSfen } from "./logic-position.mjs";
 
 describe("局面の気づき", () => {
+  test.each(cpuPositionVariants())("当たりだけの照会も同じ脅威と目立ち方を返す: $id $mirrored", (fixture) => {
+    const options = { moveHistory: fixture.moveHistory };
+    const full = analyzePosition(fixture.sfen, options);
+    const captures = analyzePosition(fixture.sfen, { ...options, captureThreatsOnly: true });
+    expect(captures.threats).toEqual(full.threats.filter(({ kind }) => kind === "capture"));
+    expect(captures.chances).toEqual([]);
+    expect(perceptionForPosition(logicPerception(10), captures)).toEqual(perceptionForPosition(logicPerception(10), full));
+  });
   test.each(cpuPositionVariants().filter(({ id }) => id === "rook-attacked"))("直前の角による飛車取りを目立つ脅威とする: $mirrored", (fixture) => {
     const awareness = analyzePosition(fixture.sfen, { moveHistory: fixture.moveHistory });
     const square = fixture.mirrored ? mirrorUsiMove("8b") : "8b";

@@ -6,6 +6,7 @@ import { chooseLogicMove } from "./logic-ai.mjs";
 import { createNaturalnessEvaluator } from "./move-naturalness.mjs";
 import { mirrorUsiMove } from "./opening-guide.mjs";
 import { createRng } from "./ryuo-random.mjs";
+import { applyUsiToBoard, attackersOf, guardsSquare, parseSfenState } from "./piece-movement.mjs";
 
 const results = new Map();
 describe("ロジックAIは目的のある手から選ぶ", () => {
@@ -35,7 +36,15 @@ describe("ロジックAIは目的のある手から選ぶ", () => {
         expect(count(10, ({ move }) => move === capture)).toBeGreaterThan(count(1, ({ move }) => move === capture));
       }
       if (fixture.id === "rook-attacked") {
-        const responding = ({ move: usi }) => values.get(usi).tags.some((tag) => ["escape", "guard"].includes(tag)) || [move("3c3d"), move("6c6d")].includes(usi);
+        const { board, turn } = parseSfenState(fixture.sfen);
+        const rook = move("8b");
+        const bishop = move("5e");
+        const responding = ({ move: usi }) => {
+          const after = applyUsiToBoard(board, usi, turn).board;
+          return (usi.startsWith(rook) && values.get(usi).tags.includes("escape"))
+            || guardsSquare(board, after, rook, turn)
+            || attackersOf(after, bishop, turn).length > attackersOf(board, bishop, turn).length;
+        };
         expect(count(5, responding)).toBeGreaterThan(count(1, responding));
         expect(count(10, responding)).toBeGreaterThan(count(5, responding));
       }

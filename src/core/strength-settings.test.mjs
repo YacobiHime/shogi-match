@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CPU_STRENGTH_PRESETS,
   DEFAULT_STRENGTH_VALUE,
+  calibratedHybridSearchSettings,
   getStrengthSearchSettings,
   normalizeStrengthValue,
   searchSettingsForSkill,
@@ -169,6 +170,8 @@ describe('CPU strength settings', () => {
   });
 
   it('keeps the strongest level as a pure best-move search', () => {
+    const strongest = getStrengthSearchSettings(480000);
+    expect(calibratedHybridSearchSettings(40, strongest)).toBe(strongest);
     // Lv40だけ、曲線の上端(48万)より1.5倍多く、2スレッドで読む。
     expect(getStrengthSearchSettings(480000)).toEqual({
       nodes: 720000,

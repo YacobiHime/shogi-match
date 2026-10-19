@@ -142,13 +142,18 @@ export function kingZonePressure(board, kingColor) {
   if (!king) return 0;
   const { x, y } = squareXY(king);
   const attacker = opponentOf(kingColor);
-  let count = 0;
+  const zone = new Set();
   for (let dx = -1; dx <= 1; dx += 1) {
     for (let dy = -1; dy <= 1; dy += 1) {
       const square = xySquare(x + dx, y + dy);
-      if (square && attackersOf(board, square, attacker).length) count += 1;
+      if (square) zone.add(square);
     }
   }
-  return count;
+  const covered = new Set();
+  for (const [from, piece] of board) {
+    if (piece.color !== attacker) continue;
+    for (const square of attackedSquares(board, from)) if (zone.has(square)) covered.add(square);
+  }
+  return covered.size;
 }
 
