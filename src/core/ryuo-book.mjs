@@ -5,6 +5,7 @@ import { repertoireText } from './ryuo-repertoire.mjs';
 import { OTHER_TITLES, awardLabel, careerSummary, titleLabel, winRate } from './ryuo-league.mjs';
 import { characterCatchphrase } from './ryuo-oshi.mjs';
 import { styleEntry } from './ryuo-repertoire.mjs';
+import { HANANE, STORY_PEOPLE, YOSHIHIKO } from './ryuo-story.mjs';
 
 /** 基本の居飛車は、どの居飛車の戦法にも付くので、結びつきには使わない。 */
 const GENERIC_STRATEGIES = new Set(['ibisha']);
@@ -71,8 +72,12 @@ export function memberProfile(roster, member) {
     totalTitles: career.totalTitles,
     repertoire: repertoireText(member.repertoire),
     style: character.style,
-    // 一覧の行にも出す、個性の一言(棋風と、いちばん目立つ特徴)。
-    catchphrase: characterCatchphrase(character),
+    // 一覧の行にも出す、個性の一言(棋風と、いちばん目立つ特徴)。物語の人物は、立場の一言。
+    catchphrase: member.story === HANANE ? 'ライバル' : member.story === YOSHIHIKO ? '羽音の父' : characterCatchphrase(character),
+    // 物語の人物(core/ryuo-story.mjs)。読みと紹介の文を、名鑑のくわしい情報に出す。
+    story: member.story ?? null,
+    reading: STORY_PEOPLE[member.story]?.reading ?? '',
+    intro: STORY_PEOPLE[member.story]?.intro ?? '',
     formations: memberFormations(member),
     strengths: character.strengths,
     weaknesses: character.weaknesses,
@@ -99,7 +104,9 @@ export function rosterBook(roster) {
   ];
   const lastNo = roster.lastYear?.no ?? null;
   const awards = (roster.awards ?? []).filter(({ no }) => no === lastNo).map(({ id, name }) => ({ label: awardLabel(id), name }));
+  // ライバルは、組のいちばん上に出す(竜王を除く)。
   const order = (a, b) => Number(b.ryuoHolder) - Number(a.ryuoHolder)
+    || Number(b.story === HANANE) - Number(a.story === HANANE)
     || b.held.length - a.held.length
     || b.totalTitles - a.totalTitles
     || DAN_RANK.indexOf(a.dan) - DAN_RANK.indexOf(b.dan)

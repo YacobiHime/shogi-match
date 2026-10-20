@@ -295,7 +295,7 @@
             </template>
             <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
           </section>
-          <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" />
+          <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" :asset-base-url="assetBaseUrl" />
         </section>
 
         <!--

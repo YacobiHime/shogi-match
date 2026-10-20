@@ -115,6 +115,17 @@ export const TRAITS = Object.freeze([
     effect: (d) => ({ steady: d, style: -0.3 * d }),
   },
   {
+    // 物語の人物(天鷺羽音)だけが持つ特徴。乱数の棋士には付けない(traitWeightsで0)。
+    // 序盤は並み、中盤から読みで上回り、終盤がいちばん正確。effectは場面(situation)で変わる。
+    id: 'late-bloom', kind: 'strength', label: (d) => `序盤より中盤、中盤より終盤と、指すほど${d === 2 ? 'ぐんぐん' : ''}強くなる`,
+    when: {},
+    effect: (d, situation) => {
+      if (situation?.phase === 'opening') return { sharpen: -0.3 };
+      if (situation?.phase === 'middle') return { sharpen: 0.3 * d, nodes: d === 2 ? 1.2 : 1.1 };
+      return { sharpen: 0.5 * d, steady: d, nodes: d === 2 ? 1.3 : 1.15 };
+    },
+  },
+  {
     id: 'endgame-collapse', kind: 'weakness', label: (d) => `終盤での頓死が${d === 2 ? 'とても' : 'やや'}多い`,
     when: { phase: 'ending', kingDanger: true },
     effect: (d) => ({ overlook: d }),
@@ -196,6 +207,7 @@ function traitWeights({ attack, age, rook }) {
     'endgame-collapse': 1 + (age >= 50 ? 1.5 : 0),
     'weak-defense': 1 + Math.max(0, attack) * 1.5,
     'loose-when-ahead': 1,
+    'late-bloom': 0,
   };
 }
 
@@ -390,7 +402,7 @@ export function applyCharacter(strength, character, situation, { skill }) {
   let style = character.attack ?? 0;
   const active = activeTraits(character, situation);
   for (const { id, degree } of active) {
-    const effect = traitById(id).effect(degree === 2 ? 2 : 1);
+    const effect = traitById(id).effect(degree === 2 ? 2 : 1, situation);
     nodes *= effect.nodes ?? 1;
     sharpen += effect.sharpen ?? 0;
     steady = Math.max(steady, effect.steady ?? 0);

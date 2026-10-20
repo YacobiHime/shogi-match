@@ -31,12 +31,19 @@
         <li v-for="member in members" :key="member.id">
           <details>
             <summary>
-              <span class="shogi-note__book-name"><b v-if="member.id === oshiId" class="shogi-note__book-oshi" aria-label="推し">★</b>{{ member.name }}</span>
+              <span class="shogi-note__book-name"><b v-if="member.id === oshiId" class="shogi-note__book-oshi" aria-label="推し">★</b><b v-if="member.story === 'hanane'" class="shogi-note__book-rival" aria-label="ライバル">◆</b>{{ member.name }}</span>
               <span class="shogi-note__book-dan">{{ member.ryuoHolder ? "竜王" : member.dan }}</span>
               <span v-if="member.held.length" class="shogi-note__book-crowns">{{ member.held.join("・") }}</span>
               <span v-if="member.played" class="shogi-note__book-played">対戦あり</span>
               <span class="shogi-note__book-catch">{{ member.catchphrase }}</span>
             </summary>
+            <!-- 物語の人物の紹介。羽音は、ドット絵(胸から上)を添える。 -->
+            <p v-if="member.intro" class="shogi-note__book-intro" data-book-intro>
+              <span v-if="member.story === 'hanane'" class="shogi-note__book-face" aria-hidden="true">
+                <img :src="hananeUrl" alt="" draggable="false">
+              </span>
+              <span><small>{{ member.reading }}</small>{{ member.intro }}</span>
+            </p>
             <dl class="shogi-note__book-profile">
               <div><dt>立場</dt><dd>{{ member.kind }}・{{ member.age }}歳{{ member.junni ? `・${member.junni}` : "" }}</dd></div>
               <div><dt>得意戦法</dt><dd>{{ member.repertoire }}</dd></div>
@@ -67,6 +74,7 @@
 <script setup lang="ts">
 import { computed, ref, type PropType } from "vue";
 import { rosterBook } from "./core/ryuo-book.mjs";
+import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { loadOshi, saveOshi } from "./core/ryuo-oshi.mjs";
 import { loadCollection } from "./core/collection.mjs";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
@@ -76,6 +84,7 @@ type Profile = {
   held: string[]; former: string[]; titleCounts: string[]; totalTitles: number; repertoire: string; style: string; catchphrase: string;
   formations: { kind: "strategy" | "castle"; id: string }[];
   strengths: string[]; weaknesses: string[]; lastSeason: string; total: string; awards: string[]; vsUser: string; played: boolean;
+  story: string | null; reading: string; intro: string;
 };
 type Book = {
   holders: { title: string; name: string }[];
@@ -89,7 +98,9 @@ const props = defineProps({
   roster: { type: Object as PropType<any>, default: null },
   /** 最初に開く組(プレイヤーのいる組)。 */
   initialGroup: { type: Number, default: 6 },
+  assetBaseUrl: { type: String, default: "." },
 });
+const hananeUrl = computed(() => `${props.assetBaseUrl}/characters/${HANANE_SPRITE.file}?v=${HANANE_SPRITE.version}`);
 
 const book = computed(() => (props.roster ? rosterBook(props.roster) as Book : null));
 const group = ref(props.initialGroup);
@@ -151,6 +162,12 @@ function toggleOshi(id: string) {
 }
 .shogi-game .shogi-note__book-tabs button[aria-selected="true"] { border-color: var(--note-gold); color: #172632; background: var(--note-gold); }
 .shogi-game .shogi-note__book-list { display: grid; gap: 0.35rem; max-height: 28rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.shogi-game .shogi-note__book-rival { margin-right: 0.15rem; color: #d4a93a; }
+.shogi-game .shogi-note__book-intro { display: flex; gap: 0.7rem; align-items: flex-start; margin: 0.4rem 0.6rem; line-height: 1.6; }
+.shogi-game .shogi-note__book-intro small { display: block; opacity: 0.75; }
+/* 胸から上(上の4割)。1ドットを2px前後にする。 */
+.shogi-game .shogi-note__book-face { flex: none; height: 4.8rem; overflow: hidden; }
+.shogi-game .shogi-note__book-face img { display: block; height: 12rem; width: auto; image-rendering: pixelated; }
 .shogi-game .shogi-note__book-list details { border-radius: 0.15rem; background: var(--note-deep); }
 .shogi-game .shogi-note__book-list summary {
   display: flex;

@@ -10,6 +10,7 @@ import { GROUP_MEAN_RATING, GROUP_RATING_SPREAD } from './ryuo-strength.mjs';
 import { createRng, gauss, weightedPick } from './ryuo-random.mjs';
 import { ageCharacter, createCharacter } from './player-character.mjs';
 import { newName } from './ryuo-names.mjs';
+import { HANANE, YOSHIHIKO, addStoryMembers, storyMemberId } from './ryuo-story.mjs';
 import { createRepertoire, styleEntry } from './ryuo-repertoire.mjs';
 import {
   DAN_ORDER,
@@ -149,14 +150,18 @@ export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
     holder.ryuo = 1 + Math.floor(rng.next() * 3);
     roster.holder = holder.id;
   }
+  // 物語の人物(羽音・善彦)の分を、その組の乱数の棋士から減らす。
+  const storyGroups = [1, userIsChampion ? 1 : userGroup];
   for (const group of GROUPS) {
-    const count = rosterTarget(group, userIsChampion ? 1 : userGroup, !userIsChampion);
+    const count = rosterTarget(group, userIsChampion ? 1 : userGroup, !userIsChampion) - storyGroups.filter((g) => g === group).length;
     for (let index = 0; index < count; index += 1) createMember(roster, rng, used, { group });
   }
   addSpecials(roster, rng, used);
   // 順位戦のクラスと、過去のタイトル戦・通算勝数の履歴を作り、実績に合わせて段位を上げる。
   assignJunni(roster, rng);
   seedLeagueHistory(roster, rng, { ageDrift });
+  // 物語の人物は、履歴を作ったあとに加える(通算の記録は人物の決まりのまま。善彦は名人)。
+  addStoryMembers(roster, { userGroup, userIsChampion, fresh: true });
   roster.ratingMean = Math.round(proMean(roster));
   roster.ratingSd = Math.round(proSd(roster));
   return roster;
@@ -168,9 +173,31 @@ function addSpecials(roster, rng, used) {
   }
 }
 
-/** 組から、この期に出る棋士を選ぶ。6組は、特別枠を人数に比例して混ぜる(実物は約70名中10名)。 */
+/**
+ * 物語の人物を加えた名簿を返す(保存してあった、人物のいない名簿のため)。いれば同じ名簿を返す。
+ * タイトルの記録は書き換えない(善彦は名人を持たずにA級に入る)。
+ * @param {any} roster
+ * @param {{ userGroup?: number, userIsChampion?: boolean }} options
+ */
+export function withStoryMembers(roster, options) {
+  if (!roster || (storyMemberId(roster, HANANE) && storyMemberId(roster, YOSHIHIKO))) return roster;
+  const next = structuredClone(roster);
+  addStoryMembers(next, options);
+  return next;
+}
+
+/**
+ * 組から、この期に出る棋士を選ぶ。6組は、特別枠を人数に比例して混ぜる(実物は約70名中10名)。
+ * 羽音は、組にいれば必ず出る(プレイヤーのライバルなので)。
+ */
 export function selectParticipants(roster, group, size, rng) {
-  const pool = groupMembers(roster, group).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const all = groupMembers(roster, group).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const rival = size > 1 ? all.find((member) => member.story === HANANE) : null;
+  if (rival) return [rival.id, ...selectFrom(all.filter((member) => member !== rival), group, size - 1, rng)];
+  return selectFrom(all, group, size, rng);
+}
+
+function selectFrom(pool, group, size, rng) {
   const take = (list, count) => {
     const copy = [...list];
     const chosen = [];
@@ -199,6 +226,7 @@ export function seasonEntry(roster, id) {
   return {
     id,
     name: member.name,
+    story: member.story ?? null,
     dan: isHolder(roster, id) ? '竜王' : member.dan,
     kind: member.kind,
     group: member.group,
@@ -310,14 +338,15 @@ export function applySeasonToRoster(roster, season, { userGroup, promote }) {
   for (const member of members(next)) {
     member.age += 1;
     if (member.kind === 'pro' || member.kind === 'woman') member.rating = Math.round(member.rating + ageDrift(member.age) + gauss(rng) * 30);
-    if (member.character) member.character = ageCharacter(rng, member.character, member);
+    // 物語の人物の個性は決まりのまま(変えない)。
+    if (member.character && !member.story) member.character = ageCharacter(rng, member.character, member);
   }
 
   // 引退と、特別枠の入れ替え。アマチュアは1期限り。奨励会員は、四段になれば棋士として残る。
   // 女流棋士は、昇級して5組以上にいれば残る(6組に残ったら、次の期は別の女流棋士が出る)。
   for (const member of members(next)) {
-    // タイトルを持っている棋士は引退しない。
-    if (isHolder(next, member.id) || heldTitles(next, member.id).length) continue;
+    // タイトルを持っている棋士と、物語の人物は引退しない。
+    if (member.story || isHolder(next, member.id) || heldTitles(next, member.id).length) continue;
     if (member.kind === 'shoreikai' && rng.next() < SHOREIKAI_PROMOTION) {
       Object.assign(member, { kind: 'pro', dan: '四段', since: season.no });
       continue;

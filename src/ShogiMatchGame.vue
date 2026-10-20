@@ -1709,7 +1709,7 @@ import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
 import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById } from "./core/ryuo.mjs";
-import { applySeasonToRoster, createRoster, loadRoster, saveRoster } from "./core/ryuo-roster.mjs";
+import { applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { comparableScore } from "./core/move-selection.mjs";
 import {
@@ -3926,6 +3926,13 @@ function enterRyuoSeason(settings: {
   if (!ryuoRoster.value) {
     ryuoRoster.value = createRoster({ seed, userGroup: entry.group, userIsChampion: entry.mode === "defense" });
     saveRoster(browserStorage(), ryuoRoster.value);
+  } else {
+    // 物語の人物(羽音・善彦)がいない、前の版の名簿には、次の期の始めに加える。
+    const withStory = withStoryMembers(ryuoRoster.value, { userGroup: entry.group, userIsChampion: entry.mode === "defense" });
+    if (withStory !== ryuoRoster.value) {
+      ryuoRoster.value = withStory;
+      saveRoster(browserStorage(), withStory);
+    }
   }
   const season = createSeason({
     ...entry,

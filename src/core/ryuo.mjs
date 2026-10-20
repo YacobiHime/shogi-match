@@ -6,6 +6,7 @@
 import { aggregateSeasonStats } from './ryuo-stats.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { USER_HOLDER, createRoster, seasonEntry, selectParticipants } from './ryuo-roster.mjs';
+import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO, hananeAfterLine, hananeBeforeLine, hananeCoachIntro, hananeGrudgeBonus, yoshihikoCoachIntro } from './ryuo-story.mjs';
 import { memberWinProbability } from './ryuo-league.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import {
@@ -50,10 +51,13 @@ export const scaleById = (id) => SCALES.find((scale) => scale.id === id) ?? SCAL
 
 // ---- 棋士
 
-/** 期で使う棋士。強さはレーティングで持ち、Lvは、その期の難易度で換算した、実際に指すときの値。 */
+/**
+ * 期で使う棋士。強さはレーティングで持ち、Lvは、その期の難易度で換算した、実際に指すときの値。
+ * 羽音は、一度プレイヤーに負けていれば、プレイヤーと指すときだけ強くなる(Lvにだけ足し、自動対局のレーティングは変えない)。
+ */
 function seasonPlayer(roster, id, difficulty) {
   const entry = seasonEntry(roster, id);
-  return { ...entry, level: ratingToLevel(entry.rating, difficulty) };
+  return { ...entry, level: ratingToLevel(entry.rating + hananeGrudgeBonus(entry, entry.vsUser), difficulty) };
 }
 
 // ---- トーナメント表(木構造)
@@ -78,6 +82,27 @@ function setRounds(bracket) {
   visit(bracket.root);
   bracket.rounds = bracket.root?.from ? bracket.nodes[bracket.root.from].round : 0;
   return bracket;
+}
+
+/** シード順(1から)の、トーナメント表の左右の半分(0か1)。 */
+export function seedHalf(seed, count) {
+  const size = 2 ** Math.ceil(Math.log2(Math.max(count, 2)));
+  return seedOrder(size).indexOf(seed) < size / 2 ? 0 : 1;
+}
+
+/**
+ * 羽音とプレイヤーが同じ組なら、2人がトーナメント表の反対の半分に入るよう、羽音を第1か第2シードに置く。
+ * 2人とも勝ち進めば、組の決勝で当たる(山場)。ほかの棋士の順番は変えない。
+ * @param {string[]} ids 強い順
+ * @param {string | null} rivalId
+ * @param {string} userId
+ */
+export function placeRival(ids, rivalId, userId) {
+  if (!rivalId || !ids.includes(rivalId) || !ids.includes(userId) || ids.length < 2) return ids;
+  const rest = ids.filter((id) => id !== rivalId);
+  const candidates = [[rivalId, ...rest], [rest[0], rivalId, ...rest.slice(1)]];
+  const apart = (list) => seedHalf(list.indexOf(rivalId) + 1, list.length) !== seedHalf(list.indexOf(userId) + 1, list.length);
+  return candidates.find(apart) ?? candidates[0];
 }
 
 /** シード順(強い順)の棋士から、標準のシードでトーナメント表を作る。人数が2の累乗でないときは、上位のシードが不戦勝になる。 */
@@ -154,6 +179,9 @@ function readyNodes(bracket, { stopAtRoot = false } = {}) {
  * @returns {{ state: 'user', nodeId: string } | { state: 'root', nodeId: string } | { state: 'finished' }}
  */
 export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAtRoot = false } = {}) {
+  // プレイヤーのいる表では、ライバル(羽音)が勝ち上がりやすい(ryuo-story.mjsのHANANE_RIVAL_RUN_RATING)。
+  const rivalRun = bracket.ids?.includes(userId);
+  const ratingOf = (member) => member.rating + (rivalRun && member.story === HANANE ? HANANE_RIVAL_RUN_RATING : 0);
   for (;;) {
     const ready = readyNodes(bracket, { stopAtRoot });
     if (!ready.length) break;
@@ -161,7 +189,7 @@ export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAt
       const a = sidePid(bracket, node.a);
       const b = sidePid(bracket, node.b);
       if (a === userId || b === userId) return { state: 'user', nodeId: node.id };
-      node.winner = rng.next() < memberWinProbability(players[a], players[b]) ? a : b;
+      node.winner = rng.next() < memberWinProbability(players[a], players[b], ratingOf) ? a : b;
     }
   }
   const rootId = rootNodeId(bracket);
@@ -369,8 +397,9 @@ export function createSeason({ no, mode, group, settings, userLevel, career, ros
   }
   if (mode === 'challenge') {
     const strengths = strengthsOf(season);
-    const ids = [...season.fields[group]].sort((x, y) => strengths[y] - strengths[x]);
-    season.ranking = buildSeededBracket(`${group}組ランキング戦`, ids, 'rk');
+    const sorted = [...season.fields[group]].sort((x, y) => strengths[y] - strengths[x]);
+    const rivalId = sorted.find((pid) => season.players[pid]?.story === HANANE) ?? null;
+    season.ranking = buildSeededBracket(`${group}組ランキング戦`, placeRival(sorted, rivalId, USER_ID), 'rk');
   } else {
     season.phase = 'prepare-defense';
   }
@@ -636,13 +665,44 @@ export function recordUserGame(season, outcome) {
 function lastGameView(season) {
   const game = season.userGames?.at(-1);
   if (!game) return null;
-  return { win: game.win, label: game.label ?? '', opponent: playerBrief(season, game.opponentId), traitMoments: game.traitMoments ?? [] };
+  const view = { win: game.win, label: game.label ?? '', opponent: playerBrief(season, game.opponentId), traitMoments: game.traitMoments ?? [] };
+  // ライバル(羽音)との対局なら、羽音の一言。この対局を数える前の対戦成績で選ぶ。
+  if (season.players[game.opponentId]?.story === HANANE) {
+    const before = vsUserSoFar(season, game.opponentId, season.userGames.length - 1);
+    view.rivalLine = hananeAfterLine({ userWon: game.win, vsUser: before });
+    // 初めて羽音に勝った(「絶対に許さないリスト」)は、注目の一言にする。
+    view.rivalNotice = game.win && before.wins === 0;
+  }
+  return view;
+}
+
+/** プレイヤーとその相手の、これまでの対戦成績(期の始めの記録に、この期のcount局目までを足す)。 */
+function vsUserSoFar(season, pid, count = season.userGames.length) {
+  const base = season.players[pid]?.vsUser ?? null;
+  const games = season.userGames.slice(0, count).filter((game) => game.opponentId === pid);
+  return {
+    wins: (base?.wins ?? 0) + games.filter(({ win }) => win).length,
+    losses: (base?.losses ?? 0) + games.filter(({ win }) => !win).length,
+  };
+}
+
+/** 次の対局の相手がライバル(羽音)なら、羽音の一言と、やこび姫の紹介。善彦なら、やこび姫の紹介だけ。 */
+function rivalPendingView(season) {
+  const pid = season.pending?.opponentId;
+  if (pid && season.players[pid]?.story === YOSHIHIKO) {
+    const hananeId = Object.keys(season.players).find((id) => season.players[id]?.story === HANANE);
+    const met = hananeId ? vsUserSoFar(season, hananeId).wins + vsUserSoFar(season, hananeId).losses > 0 : false;
+    return { story: YOSHIHIKO, line: '', coach: yoshihikoCoachIntro(met), grudge: false };
+  }
+  if (!pid || season.players[pid]?.story !== HANANE) return null;
+  const vsUser = vsUserSoFar(season, pid);
+  return { story: HANANE, line: hananeBeforeLine(vsUser), coach: hananeCoachIntro(vsUser), grudge: vsUser.wins > 0 };
 }
 
 const playerBrief = (season, pid) => {
   const player = season.players[pid];
   return player ? {
-    id: pid, name: player.name, dan: player.dan, level: player.level, rating: player.rating, kind: player.kind, style: player.style,
+    id: pid, name: player.name, dan: player.dan, level: player.level, rating: player.rating, kind: player.kind, style: player.style, story: player.story ?? null,
     character: player.character ?? null, repertoire: player.repertoire ?? null, age: player.age ?? null,
     profile: player.profile ?? null, vsUser: player.vsUser ?? null,
   } : null;
@@ -724,7 +784,7 @@ export function describeSeason(season) {
     });
   }
   const pendingView = season.pending
-    ? { ...season.pending, opponent: playerBrief(season, season.pending.opponentId), label: pendingLabel(season) }
+    ? { ...season.pending, opponent: playerBrief(season, season.pending.opponentId), label: pendingLabel(season), rival: rivalPendingView(season) }
     : null;
   return {
     title: `第${season.no}期竜王戦`,
@@ -739,6 +799,8 @@ export function describeSeason(season) {
     pending: pendingView,
     // 直前のプレイヤーの対局(相手と、相手の特徴が出た場面)。
     lastGame: lastGameView(season),
+    // ライバル(羽音)のid。この期に出ていなければnull。トーナメント表の印に使う。
+    rivalId: Object.keys(season.players).find((pid) => season.players[pid]?.story === HANANE) ?? null,
     result: season.result,
     resultSeen: season.resultSeen === true,
     champion: season.champion ? playerBrief(season, season.champion) : null,

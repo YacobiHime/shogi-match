@@ -221,6 +221,10 @@
             <button type="button" role="tab" :aria-selected="seasonTab === 'coach'" @click="seasonTab = 'coach'">やこび姫<span v-if="predictionOptions" class="shogi-tournament__pane-dot" aria-label="予想できます"></span></button>
           </div>
           <div class="shogi-tournament__col">
+            <!-- ライバル(天鷺羽音)と指した直後の、羽音の一言。次の対局を決める前に読めるよう、いちばん上に置く。 -->
+            <section v-if="view.lastGame?.rivalLine" class="shogi-tournament__card shogi-tournament__rival-after" aria-label="天鷺羽音の一言" data-rival-after data-pane="match">
+              <YakobiSays person="hanane" :lines="[view.lastGame.rivalLine]" size="md" bust name-tag :notice="view.lastGame.rivalNotice" :asset-base-url="assetBaseUrl" />
+            </section>
             <section v-if="view.pending" class="shogi-tournament__card shogi-tournament__match" aria-label="次の対局" data-pending data-pane="match">
               <h2>次の対局<span class="shogi-tournament__match-label">{{ view.pending.label }}</span></h2>
               <div class="shogi-tournament__vs">
@@ -238,10 +242,22 @@
                 </div>
                 <div class="shogi-tournament__player">
                   <span class="shogi-tournament__color">{{ view.pending.color === "black" ? "後手" : "先手" }}</span>
+                  <span v-if="view.pending.rival?.story === 'hanane'" class="shogi-tournament__rival-tag" data-rival-tag>ライバル</span>
                   <strong>{{ view.pending.opponent.name }}</strong>
                   <small>{{ view.pending.opponent.dan }}</small>
                 </div>
               </div>
+              <!-- ライバルの一言(1文だけ。操作は増やさない)。 -->
+              <YakobiSays
+                v-if="view.pending.rival?.line"
+                class="shogi-tournament__rival-says"
+                person="hanane"
+                :lines="[view.pending.rival.line]"
+                size="md"
+                bust
+                data-rival-before
+                :asset-base-url="assetBaseUrl"
+              />
               <dl class="shogi-tournament__tiles shogi-tournament__tiles--three">
                 <div><dt>相手の棋力</dt><dd>Lv.{{ view.pending.opponent.level }}</dd></div>
                 <div><dt>得意戦法</dt><dd class="shogi-tournament__tile-text">{{ view.pending.opponent.style?.label ?? "—" }}</dd></div>
@@ -318,6 +334,7 @@
               :finals="activeTable.key === 'main' && view.defender ? { defender: view.defender, winner: finalsWinner } : null"
               :root-badge="activeTable.key === 'main' ? '' : rootBadge(activeTable)"
               :mark-id="oshi?.id ?? ''"
+              :rival-id="view.rivalId ?? ''"
             />
           </section>
         </div>
@@ -344,6 +361,9 @@
             </ol>
           </section>
 
+          <section v-if="view.lastGame?.rivalLine" class="shogi-tournament__card shogi-tournament__rival-after" aria-label="天鷺羽音の一言" data-rival-after>
+            <YakobiSays person="hanane" :lines="[view.lastGame.rivalLine]" size="md" bust name-tag :notice="view.lastGame.rivalNotice" :asset-base-url="assetBaseUrl" />
+          </section>
           <aside class="shogi-tournament__coach" aria-label="やこび姫の解説" data-commentary>
             <YakobiSays size="xl" name-tag :asset-base-url="assetBaseUrl" :lines="[...resultSays, ...commentarySays]">
               <div class="yakobi-says__bubble shogi-tournament__result-talk">
@@ -476,7 +496,9 @@ type View = {
   series: { key: string; label: string; need: number; a: Brief | null; b: Brief | null; wins: { a: number; b: number }; winner: string | null }[];
   pending: null | {
     label: string; kind: string; color: string; need: number; gameNo: number; wins: { user: number; opponent: number }; opponent: Brief;
+    rival?: null | { story: string; line: string; coach: string; grudge: boolean };
   };
+  rivalId?: string | null;
   result: null | {
     outcome: string; startGroup: number; newGroup: number; promoted: boolean; relegated: boolean; challenger: boolean;
     wins: number; losses: number; standing: number | null; exitLabel: string; path: { stage: string; label: string; text: string }[];
@@ -484,7 +506,10 @@ type View = {
     oshiLine?: string;
   };
   defender: Brief | null;
-  lastGame?: null | { win: boolean; label: string; opponent: Brief | null; traitMoments: { id: string; ply: number }[] };
+  lastGame?: null | {
+    win: boolean; label: string; opponent: Brief | null; traitMoments: { id: string; ply: number }[];
+    rivalLine?: string; rivalNotice?: boolean;
+  };
   stats: {
     radar: { key: string; label: string; value: number | null }[]; summary: Summary; pending: number;
     commentary: { title: string; text: string }[];
@@ -683,7 +708,9 @@ const opponentProfile = computed(() => {
   };
 });
 const opponentSays = computed(() => (
-  props.view?.pending ? opponentLines(props.view.pending.opponent, props.userLevel, props.view.pending) : []
+  props.view?.pending
+    ? [...(props.view.pending.rival?.coach ? [props.view.pending.rival.coach] : []), ...opponentLines(props.view.pending.opponent, props.userLevel, props.view.pending)]
+    : []
 ));
 const resultSays = computed(() => [
   ...resultLines(props.view?.result ? { ...props.view.result } : null),
@@ -1360,6 +1387,17 @@ const statTiles = computed(() => {
   background: var(--tr-deep);
 }
 .shogi-game .shogi-tournament__player { display: grid; justify-items: center; gap: 0.2rem; min-width: 0; text-align: center; }
+/* ライバル(天鷺羽音)の札と一言。色は羽音の目の黄色(升の強調ではないので、盤の色の決まりの対象外)。 */
+.shogi-game .shogi-tournament__rival-tag {
+  padding: 0 0.5rem;
+  color: #1e2d3d;
+  background: #d4a93a;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.shogi-game .shogi-tournament__rival-says { margin-top: 0.6rem; }
+.shogi-game .shogi-tournament__rival-after { padding-bottom: 0.9rem; }
 .shogi-game .shogi-tournament__player strong {
   font-family: var(--tr-mincho);
   font-size: clamp(1.25rem, 0.9rem + 1.2vw, 1.9rem);

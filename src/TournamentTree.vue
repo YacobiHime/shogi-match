@@ -55,12 +55,13 @@
           'shogi-tree__leaf--opponent': leaf.pid === opponentId,
           'shogi-tree__leaf--out': lost.has(leaf.pid),
           'shogi-tree__leaf--mark': markId && leaf.pid === markId,
+          'shogi-tree__leaf--rival': rivalId && leaf.pid === rivalId,
         }]"
         :style="{ left: `${leaf.x}px`, top: `${leaf.y}px`, width: `${leafWidth - 6}px`, height: `${leafHeight}px` }"
         :title="`${player(leaf.pid)?.name} ${player(leaf.pid)?.dan} Lv.${player(leaf.pid)?.level ?? ''}`"
       >
         <small class="shogi-tree__tag">{{ player(leaf.pid)?.label }}</small>
-        <span class="shogi-tree__name"><b v-if="markId && leaf.pid === markId" class="shogi-tree__mark" aria-label="推し">★</b>{{ player(leaf.pid)?.name }}</span>
+        <span class="shogi-tree__name"><b v-if="markId && leaf.pid === markId" class="shogi-tree__mark" aria-label="推し">★</b><b v-if="rivalId && leaf.pid === rivalId" class="shogi-tree__rival" aria-label="ライバル">◆</b>{{ player(leaf.pid)?.name }}</span>
         <small class="shogi-tree__dan">{{ shortDan(player(leaf.pid)?.dan) }}</small>
       </div>
       <div
@@ -96,6 +97,8 @@ const props = defineProps({
   userId: { type: String, default: "user" },
   /** 印を付ける棋士(推しの棋士)。 */
   markId: { type: String, default: "" },
+  /** ライバル(天鷺羽音)の棋士。推しの★とは別の印(◆)を付ける。 */
+  rivalId: { type: String, default: "" },
 });
 
 const rowHeight = 44;
@@ -274,6 +277,8 @@ const lost = computed(() => {
 .shogi-game .shogi-tree__leaf--opponent { border: 2px solid var(--tree-next); background: rgba(239, 125, 98, 0.18); }
 /* 推しの棋士。プレイヤー(琥珀色)と見分けられるよう、薄紫の枠にする。 */
 .shogi-game .shogi-tree__leaf--mark { border: 2px solid #d7d1fd; }
+.shogi-game .shogi-tree__leaf--rival { border: 2px solid #d4a93a; }
+.shogi-game .shogi-tree__rival { margin-right: 0.15rem; color: #d4a93a; font-size: 0.85em; }
 .shogi-game .shogi-tree__mark { display: block; color: #d7d1fd; font-size: 0.9em; line-height: 1; }
 .shogi-game .shogi-tree__leaf--champion { border: 2px solid #d8d0ff; background: rgba(216, 208, 255, 0.14); }
 .shogi-game .shogi-tree__leaf--out { opacity: 0.55; }
