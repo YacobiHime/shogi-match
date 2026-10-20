@@ -153,6 +153,8 @@ git diff --check
 
 `dist/`と`firebase-public/`は生成物です。直接編集しないでください。
 
+展示用パッケージ（インターネットのないWindowsのPCで遊ぶフォルダーとzip）は`npm run build:exhibit`で`exhibit/`に作ります（生成物。gitに入れません）。中身と使い方は`docs/exhibit-design.md`と、パッケージの`README.txt`にあります。
+
 ## よくある問題
 
 ### ポート5173が使用中と表示される

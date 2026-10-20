@@ -3,4 +3,4 @@ dist/
 .firebase/
 firebase-public/
 firebase-debug.log
-
+/exhibit/

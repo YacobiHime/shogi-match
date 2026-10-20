@@ -2660,6 +2660,24 @@
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
   font-size: var(--title-base);
 }
+/* 展示モードの「最初から」。ホームの右上に小さく置き、遊びの入口と競わせない。 */
+.shogi-game .shogi-title__exhibit-reset {
+  position: absolute;
+  top: max(0.6em, env(safe-area-inset-top));
+  right: max(0.6em, env(safe-area-inset-right));
+  z-index: 2;
+  min-width: 3.4em;
+  min-height: 3em;
+  padding: 0.4em 1em;
+  border: 2px solid #fffcf4;
+  border-radius: 999px;
+  color: #fffcf4;
+  background: rgba(29, 48, 63, 0.85);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.shogi-game .shogi-title__exhibit-reset:focus-visible { outline: 3px solid #f1a54c; outline-offset: 2px; }
 .shogi-title__hero {
   display: grid;
   grid-template-columns: auto auto;

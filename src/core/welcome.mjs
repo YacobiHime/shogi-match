@@ -3,6 +3,8 @@
  * 教室・対局・棋力測定のどれから始めるかを案内する。
  */
 
+import { EXHIBIT_KEEP_KEYS } from "./exhibit-reset.mjs";
+
 export const WELCOME_SEEN_KEY = "yacobihime:shogi-match:welcome:v1";
 
 // このアプリが端末に残す鍵の先頭。どれか1つでもあれば、もう遊んだことのある人とみなす。
@@ -17,7 +19,8 @@ export const WELCOME_CHOICES = Object.freeze([
 function hasAppData(storage) {
   for (let index = 0; index < storage.length; index += 1) {
     const key = storage.key(index);
-    if (!key || key === WELCOME_SEEN_KEY) continue;
+    // 端末の設定(音・盤と駒の見た目)は、遊んだ記録に数えない(展示の「最初から」のあとにも案内を出す)。
+    if (!key || key === WELCOME_SEEN_KEY || EXHIBIT_KEEP_KEYS.includes(key)) continue;
     if (APP_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) return true;
   }
   return false;

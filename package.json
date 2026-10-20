@@ -21,6 +21,7 @@
   "scripts": {
     "build": "vite build",
     "prepack": "npm run build",
+    "build:exhibit": "npm run build:hosting && node scripts/build-exhibit.mjs",
     "build:hosting": "npm run build && node scripts/build-hosting.mjs",
     "import:opening-library": "node scripts/import-opening-library.mjs",
     "opening-editor": "vite --host 127.0.0.1 --open /opening-editor.html",

@@ -30,6 +30,14 @@
         行の中のタイルは、どの画面でも横1列に並べる(区分を横に並べたり、タイルを折り返したりしない)。
         区分は枠で囲まず(囲むとごちゃつく)、行の上の小さな見出しと余白で分ける。
       -->
+      <!-- 展示モード(exhibit属性)だけの「最初から」。次の来場者のために記録を消す(docs/exhibit-design.md)。 -->
+      <button
+        v-if="exhibit"
+        type="button"
+        class="shogi-title__exhibit-reset"
+        data-exhibit-reset
+        @click="openExhibitReset"
+      >最初から</button>
       <div class="shogi-title__hero">
         <h1 class="shogi-title__logo">shogi-match</h1>
         <p class="shogi-title__bubble" aria-hidden="true">{{ homeGreeting }}</p>
@@ -1371,6 +1379,25 @@
     </div>
 
     <div
+      v-if="exhibitResetOpen"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="exhibit-reset-title"
+      data-exhibit-reset-dialog
+      @click.self="exhibitResetOpen = false"
+    >
+      <div class="shogi-game__confirm-panel">
+        <h2 id="exhibit-reset-title">記録を消して、最初からにします。</h2>
+        <p>成績・教室の進み具合・竜王戦・中断した対局が消えます。音と盤・駒の見た目は残ります。</p>
+        <div>
+          <button type="button" class="shogi-game__confirm-danger" data-exhibit-reset-accept @click="acceptExhibitReset">最初からにする</button>
+          <button ref="exhibitResetCancel" type="button" @click="exhibitResetOpen = false">やめる</button>
+        </div>
+      </div>
+    </div>
+
+    <div
       v-if="discardSuspendedPending"
       class="shogi-game__confirm shogi-game__confirm--over-home"
       role="alertdialog"
@@ -1723,6 +1750,7 @@ import {
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { hasKikiGlasses, loadTutorialProgress } from "./core/tutorial-progress.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
+import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -1979,6 +2007,8 @@ const props = defineProps({
   mobile: { type: Boolean, default: false },
   enableDragAndDrop: { type: Boolean, default: true },
   showHome: { type: Boolean, default: false },
+  /** 展示モード。ホームに「最初から」(記録をすべて消して読み直す)を出す。game.htmlでは ?exhibit=1。 */
+  exhibit: { type: Boolean, default: false },
 });
 const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error"]);
 
@@ -4523,6 +4553,28 @@ function openHome() {
   homeOpen.value = true;
 }
 
+// ===== 展示モードの「最初から」 =====
+const exhibitResetOpen = ref(false);
+const exhibitResetCancel = ref<HTMLButtonElement | null>(null);
+function openExhibitReset() {
+  exhibitResetOpen.value = true;
+  // 取り消せない操作なので、最初のフォーカスは「やめる」(UI_Nintendo_Implementation.mdの3-1)。
+  void nextTick(() => exhibitResetCancel.value?.focus());
+}
+/**
+ * 記録を消して、ページを読み直す(画面の状態も、来場者が来る前に戻す)。
+ * 確認は閉じないまま読み直す。閉じると、戻る操作の見張りを外すhistory.back()が走り、読み直しが取り消される。
+ */
+function acceptExhibitReset() {
+  clearExhibitRecords(browserStorage());
+  try {
+    clearExhibitRecords(typeof sessionStorage === "undefined" ? null : sessionStorage);
+  } catch {
+    // セッションの保存が使えなくても、読み直す。
+  }
+  window.location.reload();
+}
+
 /** 教室で終えた(クリアかスキップした)レッスンの数。タイトル画面を開くたび、教室を閉じるたびに読み直す。 */
 const homeLessonsDone = ref(0);
 /** 強くなる道(core/home-roadmap.mjs)を決める記録。タイトル画面を開くたびに読み直す。 */
@@ -4643,6 +4695,8 @@ const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.l
 function navigateBack() {
   if (welcomeOpen.value && homeOpen.value) {
     dismissWelcome();
+  } else if (exhibitResetOpen.value) {
+    exhibitResetOpen.value = false;
   } else if (discardSuspendedPending.value) {
     discardSuspendedPending.value = null;
   } else if (tournamentOpen.value) {
@@ -4690,7 +4744,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || Boolean(discardSuspendedPending.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
@@ -7823,6 +7877,7 @@ function handlePageHide() {
 }
 function handleGlobalKeydown(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
+  exhibitResetOpen.value = false;
   settingsOpen.value = false;
   resignConfirmOpen.value = false;
   analysisMenuOpen.value = false;

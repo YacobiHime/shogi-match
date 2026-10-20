@@ -38,11 +38,15 @@ describe("はじめての案内", () => {
       SEASON_STORAGE_KEY,
       ROSTER_STORAGE_KEY,
       matchSnapshotKey({ pathname: "/game.html" }),
-      "shogi-match-piece-theme",
       "shogi-match-guided-review-speed",
     ]) {
       expect(shouldShowWelcome(memoryStorage({ [key]: "{}" })), key).toBe(false);
     }
+  });
+
+  it("端末の設定(音・盤と駒の見た目)だけなら、遊んだ記録に数えない(展示の「最初から」のあとにも案内を出す)", () => {
+    expect(shouldShowWelcome(memoryStorage({ "shogi-match-piece-theme": "x", "shogi-match-board-theme": "x", "yacobihime:shogi-match:sound": "off" }))).toBe(true);
+    expect(shouldShowWelcome(memoryStorage({ "shogi-match-piece-theme": "x", [RATING_STORAGE_KEY]: "{}" }))).toBe(false);
   });
 
   it("ほかのアプリの記録は気にしない", () => {

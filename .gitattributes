@@ -1,0 +1,2 @@
+# 展示用パッケージのWindows向けファイルは、改行(CRLF)と文字コード(BOM)をそのまま保つ。
+scripts/exhibit/* -text

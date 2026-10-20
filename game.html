@@ -35,6 +35,8 @@
     if (!params.has("mode") && !params.has("initial_sfen")) {
       game.setAttribute("show-home", "");
     }
+    // 展示用(docs/exhibit-design.md)。ホームに「最初から」を出す。
+    if (params.get("exhibit") === "1") game.setAttribute("exhibit", "");
   </script>
 </body>
 </html>

@@ -29,6 +29,7 @@
 | 盤の見える化 | 駒の値段と駒得の数字は`src/core/piece-points.mjs`（駒図鑑のtier表・教室・学習対局で共通）、取られるマス・玉の逃げ道・取り返し・利いているマスの数は`src/core/board-insight.mjs`（取られるかの判断はCPUと同じ`src/core/exchange-eval.mjs`の取り合いの計算）、利きの地図は`src/core/learning-setup.mjs`の`attackMap` |
 | 将棋問題集 | `src/ShogiProblemSet.vue`、問題とやこび姫の台詞は`src/core/problem-set.mjs`、練習問題の正誤判定の詰み探索は`src/core/problem-solver.ts`（正解は書かず探索で決める）、詰将棋（駒の少ない詰将棋と実戦詰将棋）と詰将棋図巧のデータは`src/data/tsume-problems.mjs`・`src/data/jissen-tsume-problems.mjs`・`src/data/zukou-problems.mjs`（外部データの手順で判定する。手で書き換えない） |
 | 図鑑 | `src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、「詰将棋の名作」で解ける『将棋図巧』は将棋問題集の`ZUKOU_SET`と判定を使う、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`src/composables/match/useDexAnalysisEngine.ts`で対局用のものを借りる） |
+| 展示（「最初から」と、インターネットなしのWindows用パッケージ） | 記録の消去は`src/core/exhibit-reset.mjs`、ボタンは`src/ShogiMatchGame.vue`の`exhibit`、パッケージは`scripts/build-exhibit.mjs`と`scripts/exhibit/`（PowerShellのサーバー・bat・説明書）、設計は`docs/exhibit-design.md` |
 | iframe・ノベル連携 | `src/novel-bridge.ts`、RPGは`integrations/shogi-rpg.js` |
 | 手動検証履歴 | `docs/yakobihime-opening-guide-verification.md` |
 | 遊び・演出・ご褒美・難易度・教え方の設計 | 設計するときは`docs/nintendo-design/Game_Nintendo_Design.md`、実装するときは`docs/nintendo-design/Game_Nintendo_Implementation.md` |
@@ -158,7 +159,7 @@ git diff --check
 
 ## 生成物と公開
 
-- `dist/`と`firebase-public/`は生成物です。直接編集せず、`npm run build`か`npm run build:hosting`で作り直します。
+- `dist/`と`firebase-public/`と`exhibit/`は生成物です。直接編集せず、`npm run build`か`npm run build:hosting`で作り直します。
 - `src/data/opening-guide-overrides.mjs`は、定跡エディターのJSONから`npm run import:opening-library`で生成します。
 - Firebase Hostingへは`npm run deploy`で公開します。pushとデプロイは、ユーザーが明示的に頼んだときだけ行います。
 - HostingではHTMLを毎回再検証し、`scripts/build-hosting.mjs`がJSとCSSに内容のハッシュを付けます。大きな静的資産はキャッシュします。キャッシュの方針を変えるときは、ビルドスクリプトと`firebase.json`を一緒に確認します。
