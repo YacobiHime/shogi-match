@@ -398,6 +398,10 @@ describe("match screen regressions", () => {
     // 同じ章のあいだは、結果の画面を挟まずにクリアの知らせを出して続ける。章の最後だけ章クリアの画面。
     const finish = tutorial.split("function finishLesson()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(finish).toMatch(/if \(maybeOfferReview\(lesson, stars\)\) return;\s*continueAfter\(lesson, stars\)/);
+    // 腕だめしの飛び級は、★を記録したあと、復習のすすめより先に決める(設計20章)。
+    expect(finish).toMatch(/recordLessonCleared\([\s\S]*?if \(lesson\.boss && finishSkipAhead\(lesson, stars\)\) return;\s*if \(maybeOfferReview/);
+    // 先の腕だめしは鍵をかけず、押せば始まる(onNodeClickが止めるのは鍵のマスだけ)。
+    expect(tutorial).toMatch(/if \(row\.state === "locked"\) \{/);
     expect(finish).not.toMatch(/showResult\(/);
     const after = tutorial.split("function continueAfter(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(after).toMatch(/nextLessonInChapter\([\s\S]*?showChapterClear\(lesson\.chapterId\)[\s\S]*?setTimeout\(continueChain, STAGE_CLEAR_MS\)/);

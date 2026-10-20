@@ -22,6 +22,11 @@ import {
   recommendedPlacement,
   recordLessonCleared,
   recordLessonSkipped,
+  recordSkipAhead,
+  isSkipAheadChallenge,
+  isLessonUnlocked,
+  skipAheadTargets,
+  SKIP_AHEAD_MIN_STARS,
   saveTutorialProgress,
   shouldAskPlacement,
   shouldOfferReview,
@@ -213,5 +218,85 @@ describe('分かるところから始める(設計17章)', () => {
     expect(reviewLessonBefore(lessons, placementStartLesson('rules')).id).toBe('v1-pawn');
     expect(reviewLessonBefore(lessons, placementStartLesson('mate')).id).toBe('v2-check');
     expect(reviewLessonBefore(lessons, placementStartLesson('beginner'))).toBeNull();
+  });
+});
+
+describe('腕だめしで飛び級(設計20章)', () => {
+  const bossOf = (chapterId) => lessons.find((lesson) => lesson.chapterId === chapterId && lesson.boss);
+  const chapterOf = (chapterId) => lessons.filter((lesson) => lesson.chapterId === chapterId && !lesson.comingSoon);
+
+  it('まだ届いていない腕だめしは、鍵をかけず「挑戦できる」にする。ふつうのレッスンは鍵のまま', () => {
+    const rows = tutorialMap(volumes, lessons, emptyTutorialProgress()).rows.filter(({ type }) => type === 'lesson');
+    const bosses = rows.filter(({ boss }) => boss);
+    expect(bosses.length).toBeGreaterThan(0);
+    for (const row of bosses) expect(row).toMatchObject({ state: 'challenge', skipAhead: true });
+    expect(rows.filter(({ boss, state }) => !boss && state === 'challenge')).toEqual([]);
+    expect(rows[1].state).toBe('locked');
+  });
+
+  it('合格すると、腕だめしの章の終えていないレッスンを修了に、前の章の遊んでいないレッスンをとばしたにする', () => {
+    const boss = bossOf('v2-c3');
+    let progress = recordLessonCleared(emptyTutorialProgress(), lessons[0].id, 3);
+    const inChapter = chapterOf('v2-c3');
+    progress = recordLessonCleared(progress, inChapter[0].id, 2);
+    expect(isSkipAheadChallenge(lessons, progress, boss.id)).toBe(true);
+    progress = recordLessonCleared(progress, boss.id, SKIP_AHEAD_MIN_STARS);
+    const result = recordSkipAhead(lessons, progress, boss.id);
+    // クリアの記録は残し、章の残りを修了に。
+    expect(result.progress.lessons[inChapter[0].id]).toEqual({ status: 'cleared', stars: 2 });
+    expect(result.tested).toEqual(inChapter.filter(({ id }) => id !== boss.id && id !== inChapter[0].id).map(({ id }) => id));
+    for (const id of result.tested) expect(result.progress.lessons[id]).toEqual({ status: 'skipped', stars: 0, tested: true });
+    expect(result.progress.lessons[lessons[0].id]).toEqual({ status: 'cleared', stars: 3 });
+    expect(result.progress.lessons[lessons[1].id]).toEqual({ status: 'skipped', stars: 0 });
+    // 次は、腕だめしの次の章から。
+    expect(nextLesson(lessons, result.progress).id).toBe(firstLessonOfNextChapter(lessons, boss.id).id);
+    const map = tutorialMap(volumes, lessons, result.progress);
+    expect(map.rows.find(({ id }) => id === result.tested[0]).state).toBe('tested');
+    expect(map.rows.find(({ id }) => id === boss.id)).toMatchObject({ state: 'cleared', skipAhead: false });
+    // 修了は「はじめから学ぶ」の行き先にしない(とばした最初のレッスンへ)。
+    expect(firstSkippedLesson(lessons, result.progress).id).toBe(lessons[1].id);
+  });
+
+  it('修了の記録は、章をとばしても消えず、クリアすれば★に変わる。保存して読み直しても残る', () => {
+    const boss = bossOf('v1-c1');
+    const { progress, tested } = recordSkipAhead(lessons, emptyTutorialProgress(), boss.id);
+    expect(recordLessonSkipped(progress, tested[0]).lessons[tested[0]].tested).toBe(true);
+    expect(recordLessonCleared(progress, tested[0], 1).lessons[tested[0]]).toEqual({ status: 'cleared', stars: 1 });
+    const store = new Map();
+    const storage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+    saveTutorialProgress(storage, progress);
+    expect(loadTutorialProgress(storage).lessons[tested[0]]).toEqual({ status: 'skipped', stars: 0, tested: true });
+  });
+
+  it('修了とメダル・称号: 腕だめしの★でメダル。前の章の腕だめしをとばしただけなら巻の称号は渡さない', () => {
+    const boss = bossOf('v1-c2');
+    let progress = recordLessonCleared(emptyTutorialProgress(), boss.id, 3);
+    progress = recordSkipAhead(lessons, progress, boss.id).progress;
+    expect(chapterSummary(volumes, lessons, progress, 'v1-c2').medal.tier).toBe('gold');
+    expect(earnedVolumeTitles(volumes, lessons, progress)).toEqual([]);
+    // 第1章の腕だめしにも合格すれば、第1巻の称号。
+    const first = bossOf('v1-c1');
+    progress = recordLessonCleared(progress, first.id, 2);
+    progress = recordSkipAhead(lessons, progress, first.id).progress;
+    expect(earnedVolumeTitles(volumes, lessons, progress).map(({ id }) => id)).toEqual(['tutorial-v1']);
+  });
+
+  it('順に届いた腕だめしは飛び級の挑戦ではない。とばしていた同じ章のレッスンだけを修了に変える', () => {
+    const boss = bossOf('v1-c2');
+    const progress = applyPlacement(lessons, emptyTutorialProgress(), 'pieces', placementStartLesson('pieces'));
+    let reached = progress;
+    for (const lesson of chapterOf('v1-c2')) {
+      if (lesson.id !== boss.id && reached.lessons[lesson.id]?.status !== 'skipped') reached = recordLessonCleared(reached, lesson.id, 3);
+    }
+    expect(isLessonUnlocked(lessons, reached, boss.id)).toBe(true);
+    expect(isSkipAheadChallenge(lessons, reached, boss.id)).toBe(false);
+    const targets = skipAheadTargets(lessons, reached, boss.id);
+    expect(targets.skipped).toEqual([]);
+    expect(targets.tested.every((id) => reached.lessons[id].status === 'skipped')).toBe(true);
+  });
+
+  it('腕だめしでないレッスンは、飛び級の対象にしない', () => {
+    expect(skipAheadTargets(lessons, emptyTutorialProgress(), lessons[3].id)).toEqual({ tested: [], skipped: [] });
+    expect(isSkipAheadChallenge(lessons, emptyTutorialProgress(), lessons[3].id)).toBe(false);
   });
 });

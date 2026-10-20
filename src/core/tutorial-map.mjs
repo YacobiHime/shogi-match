@@ -6,7 +6,7 @@
  * レッスンは短いので、同じ章のあいだは結果の画面を挟まずに続けて進め、章の終わりにまとめてほめる。
  * 画面に依存しない。
  */
-import { isLessonUnlocked, lessonRecord, lessonsProgress, nextLesson } from './tutorial-progress.mjs';
+import { isLessonUnlocked, isSkipAheadChallenge, lessonRecord, lessonsProgress, nextLesson } from './tutorial-progress.mjs';
 
 /** 腕だめしの★からメダルを決める。★3は金、★2は銀、★1は銅。スキップやまだのときはなし。 */
 const MEDAL_TIERS = Object.freeze({ 3: 'gold', 2: 'silver', 1: 'bronze' });
@@ -100,14 +100,18 @@ export function lessonIcon(lesson) {
   return '話';
 }
 
-/** レッスンのマスの状態。 */
+/**
+ * レッスンのマスの状態。腕だめしで修了にしたレッスンは'tested'。
+ * まだ届いていない腕だめしは鍵をかけず'challenge'にする(合格すれば飛び級できる。設計20章)。
+ */
 function lessonState(lessons, progress, lesson, current) {
   if (lesson.comingSoon) return 'soon';
   const record = lessonRecord(progress, lesson.id);
   if (record.status === 'cleared') return 'cleared';
-  if (record.status === 'skipped') return 'skipped';
+  if (record.status === 'skipped') return record.tested ? 'tested' : 'skipped';
   if (current?.id === lesson.id) return 'next';
-  return isLessonUnlocked(lessons, progress, lesson.id) ? 'open' : 'locked';
+  if (isLessonUnlocked(lessons, progress, lesson.id)) return 'open';
+  return lesson.boss ? 'challenge' : 'locked';
 }
 
 /**
@@ -143,6 +147,8 @@ export function tutorialMap(volumes, lessons, progress) {
           lane: lesson.boss ? 2 : LANES[lessonIndex % LANES.length],
           state: lessonState(lessons, progress, lesson, current),
           stars: lessonRecord(progress, lesson.id).stars,
+          // 合格すると飛び級になる腕だめし(前に、まだ遊んでいないレッスンがある)。
+          skipAhead: isSkipAheadChallenge(lessons, progress, lesson.id),
         });
       });
     });
@@ -168,7 +174,7 @@ export function firstLessonOfNextChapter(lessons, lessonId) {
 
 /**
  * 章のまとめ。章クリアの画面に出す。
- * @returns {{ id: string, title: string, number: number, volumeNumber: number, volumeId: string, medal: ReturnType<typeof chapterMedal>, lessons: { id: string, title: string, summary: string, stars: number, status: string }[], stars: number, maxStars: number }}
+ * @returns {{ id: string, title: string, number: number, volumeNumber: number, volumeId: string, medal: ReturnType<typeof chapterMedal>, lessons: { id: string, title: string, summary: string, stars: number, status: string, tested?: boolean }[], stars: number, maxStars: number }}
  */
 export function chapterSummary(volumes, lessons, progress, chapterId) {
   for (const [volumeIndex, volume] of volumes.entries()) {

@@ -175,6 +175,8 @@
             <span v-if="row.state === 'cleared'" class="shogi-tutorial__node-stars" aria-hidden="true">
               <i v-for="index in 3" :key="index" :class="{ on: index <= row.stars }">★</i>
             </span>
+            <span v-else-if="row.state === 'tested'" class="shogi-tutorial__node-tag" aria-hidden="true">修了</span>
+            <span v-if="row.skipAhead" class="shogi-tutorial__node-tag shogi-tutorial__node-tag--jump" aria-hidden="true">飛び級できる</span>
           </div>
         </li>
       </ol>
@@ -192,7 +194,7 @@
       <div class="shogi-tutorial__track" data-tutorial-steps :aria-label="`第${chapterNumber}章 ${chapterTrack.index + 1}/${chapterTrack.count}つ目のレッスン、${stepIndex + 1}/${currentLesson.steps.length}`">
         <!-- めあて(このレッスンでできるようになること)を、いつも1行で見せる。 -->
         <span class="shogi-tutorial__track-label" data-tutorial-goal :title="chapterTitle">
-          <b :class="{ 'shogi-tutorial__goal--boss': currentLesson.boss }">{{ currentLesson.boss ? "腕だめし" : "めあて" }}</b>{{ currentLesson.summary }}
+          <b :class="{ 'shogi-tutorial__goal--boss': currentLesson.boss }">{{ currentLesson.boss ? (skipAheadRun ? "飛び級" : "腕だめし") : "めあて" }}</b>{{ currentLesson.summary }}
         </span>
         <ol>
           <li v-for="(id, index) in chapterTrack.ids" :key="id">
@@ -507,11 +509,12 @@
           <button
             type="button"
             class="shogi-tutorial__learned-tile"
-            :aria-label="`${entry.title}（星${entry.stars}つ）をもう一度`"
+            :aria-label="`${entry.title}（${entry.tested ? '修了' : `星${entry.stars}つ`}）をもう一度`"
             @click="startLesson(entry.id)"
           >
             <span class="shogi-tutorial__learned-head">
-              <span class="shogi-tutorial__learned-stars" aria-hidden="true">
+              <span v-if="entry.tested" class="shogi-tutorial__node-tag" aria-hidden="true">修了</span>
+              <span v-else class="shogi-tutorial__learned-stars" aria-hidden="true">
                 <i v-for="index in 3" :key="index" :class="{ on: index <= entry.stars }">★</i>
               </span>
               <span class="shogi-tutorial__learned-again" aria-hidden="true">もう一度</span>
@@ -646,6 +649,9 @@ import {
   recommendedPlacement,
   shouldAskPlacement,
   shouldOfferReview,
+  SKIP_AHEAD_MIN_STARS,
+  isSkipAheadChallenge,
+  recordSkipAhead,
 } from "./core/tutorial-progress.mjs";
 import { referenceDexEntries } from "./core/reference-dex.mjs";
 import {
@@ -975,12 +981,13 @@ const mapMessage = ref("");
 const mapEl = ref<HTMLElement | null>(null);
 function nodeStateText(row: { state: string; stars: number }) {
   return ({
-    cleared: `クリア・★${row.stars}`, skipped: "とばした", next: "ここから", open: "遊べる", locked: "まだ閉じている", soon: "準備中",
+    cleared: `クリア・★${row.stars}`, skipped: "とばした", tested: "修了（腕だめしに合格）", next: "ここから", open: "遊べる",
+    locked: "まだ閉じている", challenge: "挑戦できる・合格すると飛び級", soon: "準備中",
   } as Record<string, string>)[row.state] ?? "";
 }
 function onNodeClick(row: { id: string; state: string }) {
   if (row.state === "locked") {
-    mapMessage.value = "そのマスは、光っているマスを終えると遊べるよ。";
+    mapMessage.value = "そのマスは、光っているマスを終えると遊べるよ。先の章の腕だめしに合格すると、飛び級もできるよ。";
     return;
   }
   startLesson(row.id);
@@ -990,6 +997,7 @@ function openMap() {
   clearChain();
   reviewOffer.value = null;
   reviewResult.value = null;
+  skipAheadResult.value = null;
   newTitle.value = null;
   mapMessage.value = "";
   view.value = "map";
@@ -1029,9 +1037,19 @@ const nextChapterLesson = computed(() => {
   const last = clearedChapter.value?.lessons.at(-1);
   return last ? firstLessonOfNextChapter(lessons, last.id) as Lesson | null : null;
 });
+/** 腕だめしで飛び級・修了にした結果。章クリアの画面で知らせる。jumpedは、順に進まずに挑んだ飛び級か。 */
+const skipAheadResult = ref<{ tested: number; jumped: boolean } | null>(null);
+/** いま遊んでいる腕だめしが、飛び級の挑戦か(始めたときに決める)。 */
+const skipAheadRun = ref(false);
 const chapterClearMessage = computed(() => {
   const chapter = clearedChapter.value;
   if (!chapter) return "";
+  const jump = skipAheadResult.value;
+  if (jump) {
+    const lessonsText = jump.tested ? `この章の${jump.tested}つのレッスンを「修了」にしたよ。` : "";
+    if (jump.jumped) return `飛び級、合格！ ${lessonsText}気になるレッスンは、札を押せばいつでも遊べるよ。`;
+    return `腕だめし、合格！ とばしていた${jump.tested}つのレッスンも「修了」にしたよ。`;
+  }
   const review = reviewResult.value;
   if (review) {
     if (!review.left) {
@@ -1621,6 +1639,7 @@ function startLesson(id: string) {
   reviewOffer.value = null;
   leadReserve.value = 0;
   if (!id.startsWith("review:")) reviewResult.value = null;
+  skipAheadResult.value = null;
   newTitle.value = null;
   lessonId.value = id;
   mistakes.value = 0;
@@ -1628,8 +1647,12 @@ function startLesson(id: string) {
   streak.value = 0;
   runMissed = new Set();
   reviewSolved = [];
+  skipAheadRun.value = isSkipAheadChallenge(lessons, progress.value, id);
   view.value = "lesson";
   loadStep(0);
+  if (skipAheadRun.value) {
+    setFeedback(`飛び級の挑戦！ まちがいとヒントが${SKIP_AHEAD_MIN_STARS}回までなら合格。合格すると、ここまでのレッスンを修了にするよ。`, "info");
+  }
 }
 function resetStep() {
   // やり直しても、見た完成形は出したままにする(ヒントを2回に数えない)。
@@ -1987,8 +2010,31 @@ function finishLesson() {
   updateProgress(recordLessonCleared(progress.value, lesson.id, stars));
   // レッスンを終えたら、続けて遊んだ日に数える。
   savePlayStreak(storage, recordPlay(loadPlayStreak(storage)));
+  if (lesson.boss && finishSkipAhead(lesson, stars)) return;
   if (maybeOfferReview(lesson, stars)) return;
   continueAfter(lesson, stars);
+}
+/**
+ * 腕だめしを終えたあとの飛び級(設計20章)。★2以上なら、腕だめしの章の終えていないレッスンを修了にし、
+ * それより前の遊んでいないレッスンを「とばした」にして、章クリアの画面へ。
+ * 飛び級の挑戦で★が足りなければ、記録(★)だけ残して地図へ戻し、次に学ぶレッスンを伝える。
+ * 何もしなかったときはfalse(ふつうの腕だめしとして続ける)。
+ */
+function finishSkipAhead(lesson: Lesson, stars: number) {
+  const jumped = skipAheadRun.value;
+  if (stars < SKIP_AHEAD_MIN_STARS) {
+    if (!jumped) return false;
+    const upcoming = nextLesson(lessons, progress.value) as Lesson | null;
+    openMap();
+    mapMessage.value = `腕だめしクリア！ 飛び級は、まちがいとヒントが${SKIP_AHEAD_MIN_STARS}回までで合格だよ。${upcoming ? `「${upcoming.title}」から学んで、` : ""}また挑戦してね。`;
+    return true;
+  }
+  const result = recordSkipAhead(lessons, progress.value, lesson.id);
+  if (!result.tested.length && !result.skipped.length) return false;
+  updateProgress(result.progress);
+  showChapterClear(lesson.chapterId);
+  skipAheadResult.value = { tested: result.tested.length, jumped };
+  return true;
 }
 function advance() {
   clearStepTimers();
@@ -3062,6 +3108,26 @@ const resultMessage = computed(() => {
   border: 2px dashed rgba(255, 252, 244, 0.45);
   color: rgba(255, 252, 244, 0.75);
 }
+/* 腕だめしで修了にしたマス。クリアと同じ色を薄くして、★の代わりに「修了」の札を付ける。 */
+.shogi-game .shogi-tutorial__node--tested {
+  color: #172632;
+  background: #c99a62;
+  box-shadow: 0 5px 0 #8a6232;
+}
+.shogi-game .shogi-tutorial__node-tag {
+  padding: 0 0.4rem;
+  border-radius: 0.4rem;
+  color: #172632;
+  background: rgba(241, 165, 76, 0.85);
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.shogi-game .shogi-tutorial__node-tag--jump {
+  color: #fffcf4;
+  background: var(--boss);
+}
 .shogi-game .shogi-tutorial__node--locked {
   color: rgba(255, 252, 244, 0.6);
   background: #1f3343;
@@ -3685,9 +3751,14 @@ const resultMessage = computed(() => {
   border-radius: 1.1rem;
 }
 .shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--locked,
-.shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--open {
+.shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--open,
+.shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--challenge {
   background: #4a2a33;
   box-shadow: 0 5px 0 #24141a;
+}
+/* 先の腕だめし。鍵をかけず、点線の縁で「挑戦できる」ことを見せる。 */
+.shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--challenge {
+  border: 2px dashed #f6a39f;
 }
 .shogi-game .shogi-tutorial__node--boss.shogi-tutorial__node--next {
   color: #fffcf4;

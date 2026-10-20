@@ -19,7 +19,7 @@ export function loadTutorialProgress(storage) {
       if (entry?.status === "cleared" && [1, 2, 3].includes(entry.stars)) {
         lessons[id] = { status: "cleared", stars: entry.stars };
       } else if (entry?.status === "skipped") {
-        lessons[id] = { status: "skipped", stars: 0 };
+        lessons[id] = entry.tested === true ? { status: "skipped", stars: 0, tested: true } : { status: "skipped", stars: 0 };
       }
     }
     const result = { lessons };
@@ -77,9 +77,12 @@ export function applyPlacement(lessons, progress, placement, startLessonId = nul
   return next;
 }
 
-/** とばした最初のレッスン(地図の「はじめから学ぶ」で始める)。なければnull。 */
+/** とばした最初のレッスン(地図の「はじめから学ぶ」で始める)。腕だめしで修了にしたレッスンは除く。なければnull。 */
 export function firstSkippedLesson(lessons, progress) {
-  return lessons.find((lesson) => !lesson.comingSoon && lessonRecord(progress, lesson.id).status === "skipped") ?? null;
+  return lessons.find((lesson) => {
+    const record = lessonRecord(progress, lesson.id);
+    return !lesson.comingSoon && record.status === "skipped" && !record.tested;
+  }) ?? null;
 }
 
 /**
@@ -113,10 +116,67 @@ export function recordLessonCleared(progress, lessonId, stars) {
   return { ...progress, lessons: { ...progress.lessons, [lessonId]: { status: "cleared", stars: best } } };
 }
 
-/** スキップを記録する。すでにクリアしたレッスンの記録は残す。 */
+/** スキップを記録する。すでにクリアしたレッスンと、腕だめしで修了にしたレッスンの記録は残す。 */
 export function recordLessonSkipped(progress, lessonId) {
-  if (progress.lessons[lessonId]?.status === "cleared") return progress;
+  const previous = progress.lessons[lessonId];
+  if (previous?.status === "cleared" || previous?.tested) return progress;
   return { ...progress, lessons: { ...progress.lessons, [lessonId]: { status: "skipped", stars: 0 } } };
+}
+
+// ===== 腕だめしで飛び級(設計20章) =====
+/** 腕だめしで飛び級できる★の下限。まちがいとヒントが合わせて2回まで(★2以上)で合格にする。 */
+export const SKIP_AHEAD_MIN_STARS = 2;
+
+/**
+ * 腕だめしで飛び級するときに記録を変えるレッスン。
+ * - tested: 腕だめしの章の、腕だめしより前で、まだクリアも修了もしていないレッスン(修了にする)。
+ * - skipped: それより前の章の、まだ遊んでいないレッスン(章をとばすのと同じ「とばした」にする)。
+ * 腕だめしでなければ、両方とも空。
+ * @param {{ id: string, chapterId: string, boss?: boolean, comingSoon?: boolean }[]} lessons
+ * @param {{ lessons: Record<string, any> }} progress
+ * @param {string} bossId
+ * @returns {{ tested: string[], skipped: string[] }}
+ */
+export function skipAheadTargets(lessons, progress, bossId) {
+  const index = lessons.findIndex(({ id }) => id === bossId);
+  const boss = lessons[index];
+  if (!boss?.boss) return { tested: [], skipped: [] };
+  const before = lessons.slice(0, index).filter(({ comingSoon }) => !comingSoon);
+  const tested = before
+    .filter((lesson) => lesson.chapterId === boss.chapterId)
+    .filter(({ id }) => {
+      const record = lessonRecord(progress, id);
+      return record.status !== "cleared" && !record.tested;
+    })
+    .map(({ id }) => id);
+  const skipped = before
+    .filter((lesson) => lesson.chapterId !== boss.chapterId && lessonRecord(progress, lesson.id).status === "new")
+    .map(({ id }) => id);
+  return { tested, skipped };
+}
+
+/**
+ * この腕だめしが飛び級の挑戦か: 前に、まだ遊んでいないレッスンがある(順に進んでいたら届かない)。
+ * 順に届いた腕だめしは、ふつうの腕だめし。合格すれば、とばしていた同じ章のレッスンを修了に変えるだけにする。
+ */
+export function isSkipAheadChallenge(lessons, progress, bossId) {
+  const lesson = lessons.find(({ id }) => id === bossId);
+  return Boolean(lesson?.boss) && !lesson.comingSoon && !isLessonUnlocked(lessons, progress, bossId);
+}
+
+/**
+ * 腕だめしの合格で飛び級を記録する。腕だめし自体のクリア(★)は、別にrecordLessonClearedで記録する。
+ * @returns {{ progress: { lessons: Record<string, any> }, tested: string[], skipped: string[] }}
+ */
+export function recordSkipAhead(lessons, progress, bossId) {
+  const { tested, skipped } = skipAheadTargets(lessons, progress, bossId);
+  let next = progress;
+  for (const id of skipped) next = recordLessonSkipped(next, id);
+  if (tested.length) {
+    const entries = Object.fromEntries(tested.map((id) => [id, { status: "skipped", stars: 0, tested: true }]));
+    next = { ...next, lessons: { ...next.lessons, ...entries } };
+  }
+  return { progress: next, tested, skipped };
 }
 
 export function lessonRecord(progress, lessonId) {
