@@ -21,7 +21,28 @@ export function usesLogicAi(level) {
 }
 
 export { LOGIC_PIECE_VALUES } from "./logic-position.mjs";
-import { HAND_KINDS, value, stateFromSfen, playLight, material, captureSearch, kingZonePressure, replyLoss } from "./logic-position.mjs";
+import { HAND_KINDS, value, stateFromSfen, playLight, material, kingZonePressure, handPressureLoss } from "./logic-position.mjs";
+import { moveExchange } from "./exchange-eval.mjs";
+
+/**
+ * レベルごとの取り合いの見え方(exchange-eval.mjs)。見え方(mode)と、確かめる自分の駒の範囲(scope)。
+ * - Lv1〜3: 相手の利きがあるかだけ見る。動かした駒と、気づいた当たりの駒だけ確かめる
+ * - Lv4〜6: 利きの数を比べる。動かした駒が守っていた駒も確かめる
+ * - Lv7〜10: 安い駒から順に取り合う。指したあと相手の利きがある自分の駒をすべて確かめる(裏の利き・ピンは見えない)
+ * 取り合いの読みに気づかなかった局面(noticed.exchange)では、見え方を1段下げる。
+ */
+const EXCHANGE_VIEWS = Object.freeze([
+  { upTo: 3, mode: "presence", scope: "moved" },
+  { upTo: 6, mode: "count", scope: "defended" },
+  { upTo: 10, mode: "see", scope: "all" },
+]);
+const SIMPLER_MODE = Object.freeze({ full: "see", see: "count", count: "presence", presence: "presence" });
+
+/** @returns {{ mode: string, scope: string }} */
+export function exchangeViewForLevel(level) {
+  const view = EXCHANGE_VIEWS.find(({ upTo }) => level <= upTo) ?? EXCHANGE_VIEWS.at(-1);
+  return { mode: view.mode, scope: view.scope };
+}
 
 /**
  * レベルごとの気づき。表の点(Lv1・3・5・8・10)の間は直線で補う。どれも「その局面で気づく確率」。
@@ -35,17 +56,17 @@ import { HAND_KINDS, value, stateFromSfen, playLight, material, captureSearch, k
  * - temperature: 手の選び方のばらつき(点数の差がこれくらいなら、選ばれやすさが約2.7倍違う)
  */
 const PERCEPTION_TABLE = Object.freeze({
-  freeCapture: [0.4, 0.6, 0.75, 0.9, 0.95],
-  hanging: [0.1, 0.3, 0.5, 0.75, 0.85],
+  freeCapture: [0.4, 0.6, 0.7, 0.71, 0.72],
+  hanging: [0.1, 0.3, 0.45, 0.47, 0.48],
   hangingLastMoveMajor: [0.7, 0.8, 0.9, 0.95, 0.98],
-  hangingLastMoveMinor: [0.4, 0.55, 0.7, 0.85, 0.92],
-  exchange: [0, 0, 0.3, 0.6, 0.75],
-  threat: [0, 0, 0.2, 0.4, 0.55],
+  hangingLastMoveMinor: [0.4, 0.55, 0.65, 0.72, 0.75],
+  exchange: [0, 0, 0.3, 0.45, 0.47],
+  threat: [0, 0, 0.2, 0.35, 0.4],
   mate1: [0, 0, 0.3, 0.7, 0.9],
   mate3: [0, 0, 0, 0, 0.3],
   defendMate: [0, 0, 0.2, 0.6, 0.8],
   followPlan: [0.6, 0.7, 0.8, 0.9, 0.95],
-  temperature: [280, 190, 130, 90, 70],
+  temperature: [280, 190, 150, 150, 150],
 });
 const PERCEPTION_LEVELS = [1, 3, 5, 8, 10];
 
@@ -122,15 +143,20 @@ function scoreMove(context, usi, noticed) {
   const promotionGain = after - before - captureGain;
   const parts = { capture: 0, promotion: promotionGain, reply: 0, threat: 0, check: 0, pressure: 0, king: 0, natural: 0, plan: 0, response: 0, style: 0 };
   if (captureGain && noticed.freeCapture) parts.capture = captureGain;
-  // 指したあと、相手が駒を取ってくる損。取り返しまで読めれば、取り合いの損得で見る。
-  if (noticed.hanging) {
-    const depth = Math.min(noticed.exchange ? 4 : 1, context.readDepth ?? 4);
-    parts.reply = -replyLoss(child, depth, context.deadline);
-  }
-  // 次に駒を取れる狙い(当たり・両取り)。相手の応手は考えない分、割り引く。
-  if (noticed.threat) {
-    const again = { ...child, turn: me };
-    parts.threat = Math.max(0, captureSearch(again, Math.min(2, context.readDepth ?? 2), -Infinity, Infinity, context.deadline) - material(again, me)) * THREAT_SHARE;
+  // 指したあと、相手が取り合いで得をする自分の駒の損(取られる損)と、次に自分が取り合いで得をする相手の駒(狙い)。
+  // マスごとの利きから取り合いを計算する(exchange-eval.mjs)。見え方はレベルで決まり、取り合いの読みに気づかなければ1段下がる。
+  // 狙いには玉を数えない(王手した局面で「もう一度指せば玉が取れる」を狙いと数えると、どんな王手も大きな得に見えてしまう)。
+  if (noticed.hanging || noticed.threat) {
+    const view = noticed === FULL ? { mode: "full", scope: "all" } : context.exchangeView;
+    // 直前の手で大駒に当たりがかかったときは、目立つので、取り合いの読みを省かない。
+    const mode = noticed.exchange || context.majorThreat ? view.mode : SIMPLER_MODE[view.mode];
+    const exchange = moveExchange(state, usi, { mode, scope: view.scope, watched: noticed.hanging ? context.watched : [] });
+    if (noticed.hanging && exchange) {
+      // 持ち歩を大駒の頭へ打たれる圧力は、取り合いを読める見え方だけが気づく。
+      const handPressure = mode === "see" || mode === "full" ? handPressureLoss(child, me) : 0;
+      parts.reply = -(exchange.risk + handPressure);
+    }
+    if (noticed.threat && exchange) parts.threat = exchange.threat * THREAT_SHARE;
   }
   const check = isKingAttacked(child.board, opponentOf(me));
   if (check) parts.check = CHECK_BONUS[phase];
@@ -178,11 +204,12 @@ const FULL = Object.freeze({ freeCapture: true, hanging: true, exchange: true, t
  *   sfen: string, legalMoves: string[], level: number, moveHistory?: string[], planMove?: string | null,
  *   random?: () => number, maxTimeMs?: number, temperature?: number, readDepth?: number,
  *   perceptionOverride?: Record<string, number>, style?: {attack: number}, styleBonusCap?: number,
+ *   exchangeView?: { mode: string, scope: string },
  * }} options planMoveは、序盤の定跡の次の1手(なければnull)。
  * @returns {{ move: string, kind: 'logic', reason: string, missed: string[], phase: string, policy: 'take' | 'attack' | null, [key: string]: any } | null}
  */
 export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], planMove = null, random = Math.random, maxTimeMs = 600,
-  temperature, readDepth, perceptionOverride, style, styleBonusCap }) {
+  temperature, readDepth, perceptionOverride, style, styleBonusCap, exchangeView }) {
   if (!legalMoves?.length) return null;
   const deadline = Date.now() + maxTimeMs;
   const perception = { ...logicPerception(level), ...perceptionOverride };
@@ -232,6 +259,10 @@ export function chooseLogicMove({ sfen, legalMoves, level, moveHistory = [], pla
   }
   const context = {
     state, me, phase, planMove: plan, naturalness, deadline, responseMoves, readDepth, evaluate, style, styleBonusCap,
+    exchangeView: exchangeView ?? exchangeViewForLevel(level),
+    // 当たりに気づいた局面では、すでに当たりになっている自分の駒も確かめる。
+    watched: awareness.threats.filter(({ kind }) => kind === "capture").map(({ square }) => square),
+    majorThreat: awareness.threats.some(({ salience }) => salience === "last-move-major"),
     ownPressureBefore: kingZonePressure(state.board, me),
   };
   let entries = [];

@@ -1,6 +1,7 @@
 import { createGameRecord, enumerateLegalMoves } from "../game-state";
 import { attackersOf, applyUsiToBoard, attackedSquares, findKing, opponentOf, parseSfenState, squareXY, xySquare } from "./piece-movement.mjs";
 import { capturePoints } from "./piece-points.mjs";
+import { exchangeGain } from "./exchange-eval.mjs";
 
 /**
  * 盤の「見える化」のための計算。将棋教室の利きメガネ(取られるマス・玉の逃げ道・取り返し)と、
@@ -17,16 +18,13 @@ function pieceWorth(kind) {
 }
 
 /**
- * squareの駒が、取られて損をするか。相手の利きがあって、自分の利きがないか、
- * 自分より安い駒で取られる(取り返しても損)なら真。玉は数えない。
+ * squareの駒が、取られて損をするか。相手が安い駒から順に取り合ったとき、相手が得をするなら真。玉は数えない。
+ * CPU(ロジックAI)の「取られる損」と同じ取り合いの計算(exchange-eval.mjs)で、裏の利き・ピン・成りまで見る。
  */
 export function isPieceLoose(board, square) {
   const piece = board.get(square);
   if (!piece || piece.kind === "K") return false;
-  const attackers = attackersOf(board, square, opponentOf(piece.color));
-  if (!attackers.length) return false;
-  if (!attackersOf(board, square, piece.color).length) return true;
-  return Math.min(...attackers.map(({ kind }) => pieceWorth(kind))) < capturePoints(piece.kind);
+  return exchangeGain(board, square, opponentOf(piece.color), { mode: "full" }).gain > 0;
 }
 
 /**

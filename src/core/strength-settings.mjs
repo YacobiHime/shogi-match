@@ -269,7 +269,7 @@ export function calibratedHybridSearchSettings(level, settings) {
     scoreTemperature: Math.max(1, Math.round(settings.scoreTemperature * temperatureScale)),
     consistentCandidateScores: true, trustedEngineRate: level >= 35 ? 0.99 - 0.05 * (level - 35) / 4 : 0,
     shallowReadRate: level >= 20 ? 0 : a + (b - a) * (level - lo) / (hi - lo),
-    shallowTemperature: level === 12 ? 400 : level === 13 ? 175 : level >= 15 ? 70 : 420 - (level - 11) * 87.5,
+    shallowTemperature: level === 11 ? 360 : level === 12 ? 320 : level === 13 ? 175 : level >= 15 ? 70 : 420 - (level - 11) * 87.5,
     shallowDepth: level <= 12 ? 1 : level < 15 ? 2 : 4,
   };
 }

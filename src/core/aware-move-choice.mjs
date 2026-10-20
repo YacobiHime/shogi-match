@@ -32,6 +32,8 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
     ? chooseLogicMove({ sfen, legalMoves, moveHistory, planMove: plan, level: 10, random,
       temperature: strength.shallowTemperature,
       readDepth: strength.shallowDepth,
+      // Lv11以上は、取り合いを安い駒から読み、読みの深い手番では裏の利き・ピンまで見る。
+      exchangeView: { mode: (strength.shallowDepth ?? 4) >= 4 ? "full" : "see", scope: "all" },
       perceptionOverride: strength.perception, style: strength.style, styleBonusCap: strength.logicBonusCap,
       maxTimeMs: Math.min(120, Math.max(0, deadline - Date.now())) }) : null;
   let evaluator;

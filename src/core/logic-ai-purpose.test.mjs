@@ -39,10 +39,15 @@ describe("ロジックAIは目的のある手から選ぶ", () => {
         const { board, turn } = parseSfenState(fixture.sfen);
         const rook = move("8b");
         const bishop = move("5e");
+        // この局面では、飛車の当たりのほかに、2三の歩も先手の飛車(2六)に成られながら取られる。
+        // 取り合いを読めるレベルは、飛車と角の交換(−400)より歩を成られる損(−500)を重く見て、歩を守ることもある。
+        // どちらかの当たりに応じる手を「応じた」と数える。
+        const pawn = move("2c");
         const responding = ({ move: usi }) => {
           const after = applyUsiToBoard(board, usi, turn).board;
           return (usi.startsWith(rook) && values.get(usi).tags.includes("escape"))
             || guardsSquare(board, after, rook, turn)
+            || guardsSquare(board, after, pawn, turn)
             || attackersOf(after, bishop, turn).length > attackersOf(board, bishop, turn).length;
         };
         expect(count(5, responding)).toBeGreaterThan(count(1, responding));
