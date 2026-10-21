@@ -261,6 +261,16 @@ describe("match screen regressions", () => {
     expect(rematch).not.toMatch(/pregameOpen\.value = true/);
   });
 
+  it("lets the player toggle the attack map in every match kind", () => {
+    // 駒の利きは、学習対局だけでなく、通常対局・竜王戦でも付け外しできる。始めるときに勝手に消さない。
+    expect(source).toMatch(/<button\s+type="button"\s+class="shogi-game__assist-toggle shogi-game__command--attack"/);
+    expect(source).toMatch(/const attackGuideVisible = computed\(\(\) => \(\s*attackGuideEnabled\.value && matchStarted\.value && !pregameOpen\.value/);
+    expect(source).toMatch(/const boardAttackMarks = computed\(\(\) => \(\s*attackGuideVisible\.value \? attackMap/);
+    expect(source).not.toMatch(/matchKind\.value === "learning" && attackGuideEnabled/);
+    expect(source).not.toMatch(/attackGuideEnabled\.value = false/);
+    expect(source).toMatch(/attackGuideEnabled\.value = learning\.attackGuide === true;/);
+  });
+
   it("analyzes finished free games in the background and offers practice from their content", () => {
     // 自由対局だけを、終局後に裏の解析の列へ足す(竜王戦は大会の統計で解析する)。対局中は解析を止める。
     const rated = source.split("function recordRatedGame(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";

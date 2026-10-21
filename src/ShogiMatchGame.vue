@@ -1091,7 +1091,8 @@
     </section>
 
     <!--
-      対局中の操作列は、閃き・待った（学習対局は駒の利きも）だけにする。盤の反転や動きの矢印は見出しのメニューにしまう。
+      対局中の操作列は、閃き・待った・駒の利きだけにする。盤の反転や動きの矢印は見出しのメニューにしまう。
+      駒の利きは、学習対局だけでなく、通常対局・竜王戦でも付け外しできる(押すまでは出さない。補助は本人が選ぶ)。
       棋譜解析中も、閃きと読みは、やこび姫のコメントの下の操作列に置く(通常時の閃き・待ったと同じ場所)。
     -->
     <div class="shogi-game__assist-actions">
@@ -1116,7 +1117,6 @@
         待った <small>×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}</small>
       </button>
       <button
-        v-if="matchKind === 'learning'"
         type="button"
         class="shogi-game__assist-toggle shogi-game__command--attack"
         aria-label="駒の利きを表示"
@@ -3385,17 +3385,17 @@ const learningFormationResult = computed(() => {
   });
 });
 /*
- * 教室の見える化を対局でも同じ見た目で出す(docs/nyumon-mode-design.mdの14章)。
- * - 利きメガネ(教室で手に入れる道具)を持っていて、学習対局の「駒の利き」を付けているとき、駒を選ぶと取られるマスに赤い輪を出す。
- * - 学習対局で「駒の利き」を付けているとき、自分の玉が王手されたら、玉の逃げ道(緑)と相手の利き(×)を出す。
+ * 教室の見える化を対局でも同じ見た目で出す(docs/nyumon-mode-design.mdの14章)。対局の種類(学習・通常・竜王戦)は問わない。
+ * - 利きメガネ(教室で手に入れる道具)を持っていて、「駒の利き」を付けているとき、駒を選ぶと取られるマスに赤い輪を出す。
+ * - 「駒の利き」を付けているとき、自分の玉が王手されたら、玉の逃げ道(緑)と相手の利き(×)を出す。
  * - 詰んだ局面を見ているとき(終局後・検討中)は、詰んだ玉のまわりに印を出す(詰みの理由)。
  */
 const ownsKikiGlasses = ref(hasKikiGlasses(loadTutorialProgress(browserStorage())));
-const learningAssistVisible = computed(() => (
-  matchKind.value === "learning" && attackGuideEnabled.value && matchStarted.value && !pregameOpen.value
+const attackGuideVisible = computed(() => (
+  attackGuideEnabled.value && matchStarted.value && !pregameOpen.value
 ));
 const boardRiskDestinations = computed(() => {
-  if (!learningAssistVisible.value || !ownsKikiGlasses.value || reviewMode.value) return null;
+  if (!attackGuideVisible.value || !ownsKikiGlasses.value || reviewMode.value) return null;
   const sfen = currentSfen.value;
   return (source: string) => unsafeDestinations(sfen, source);
 });
@@ -3405,7 +3405,7 @@ const boardEscapeMarks = computed(() => {
   if (!position.checked) return [];
   const turn = position.color === Color.BLACK ? "black" : "white";
   const mated = enumerateLegalMoves(position).length === 0;
-  const ownKingInCheck = learningAssistVisible.value && !reviewMode.value && position.color === humanColor.value;
+  const ownKingInCheck = attackGuideVisible.value && !reviewMode.value && position.color === humanColor.value;
   if (!mated && !ownKingInCheck) return [];
   return (kingEscapeMap(currentSfen.value, turn)?.squares ?? []).flatMap(({ square, state }) => {
     const tone = state === "open" ? "key" : state === "covered" ? (turn === "white" ? "covered" : "danger") : "";
@@ -3428,9 +3428,7 @@ function showCastleCallout(label: string) {
 }
 
 const boardAttackMarks = computed(() => (
-  matchKind.value === "learning" && attackGuideEnabled.value && matchStarted.value && !pregameOpen.value
-    ? attackMap(currentSfen.value)
-    : []
+  attackGuideVisible.value ? attackMap(currentSfen.value) : []
 ));
 const learningStartBlocked = computed(() => (
   learningFormationResult.value !== null && !learningFormationResult.value.ok
@@ -4145,7 +4143,6 @@ function startRyuoMatch() {
   selectedPlayerColor.value = pending.color;
   activePlayerColor.value = pending.color;
   learningStartLabel.value = "";
-  attackGuideEnabled.value = false;
   selectedStrategy.value = "";
   selectedCastle.value = "";
   searchNodes.value = CPU_STRENGTH_PRESETS.find(({ level }) => level === opponent.level)?.value ?? DEFAULT_STRENGTH_VALUE;
@@ -4264,7 +4261,6 @@ function beginMatch() {
     matchInitialSfen.value = props.initialSfen;
     activePlayerColor.value = selectedPlayerColor.value;
     learningStartLabel.value = "";
-    attackGuideEnabled.value = false;
   }
   matchStarted.value = true;
   pregameOpen.value = false;
@@ -4431,7 +4427,6 @@ function startPositionMatch(sfen: string, playerColor: "black" | "white", label:
   learningStartLabel.value = label;
   selectedStrategy.value = "";
   selectedCastle.value = "";
-  attackGuideEnabled.value = false;
   matchStarted.value = true;
   pregameOpen.value = false;
   scheduleDeferredCoachPortraitPreload();
@@ -5267,7 +5262,7 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
   learningHintLimit.value = normalizeAssistLimit(learning.hintLimit);
   learningUndoLimit.value = normalizeAssistLimit(learning.undoLimit);
   learningStartLabel.value = text(learning.startLabel);
-  attackGuideEnabled.value = matchKind.value === "learning" && learning.attackGuide === true;
+  attackGuideEnabled.value = learning.attackGuide === true;
   // 保存のない以前の対局でも、学習対局の既定どおりオンにする。
   movementArrowsEnabled.value = learning.movementArrows !== false;
   tutorialMatch.value = matchKind.value === "learning" ? restoredTutorialMatch(snapshot.tutorial) : null;

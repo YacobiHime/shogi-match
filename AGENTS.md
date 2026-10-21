@@ -120,7 +120,7 @@
 | 緑 | 駒が動いた跡、図鑑・教室の「大事なマス」（`square-mark--key`） | `src/renderer/view/primitive/board/params.ts`の`lastMoveTo`、`BoardView.vue`の`.square-mark--key` |
 | 青い点 | 駒の動けるマス（`square-mark--reach`） | `BoardView.vue`の`.square-mark--reach` |
 | 赤 | ねらう駒・目標のマス（`square-mark--target`）、駒を選んだときの相手の駒を取れる移動先 | `BoardView.vue`の`.square-mark--target`、`params.ts`の`captureDestination` |
-| 青・赤・紫の面と数字 | 駒の利き（学習対局の「駒の利き」、教室の利きメガネ）。青は先手、赤は後手、紫は両方の利き | `BoardView.vue`の`.attack-tint--*`・`.attack-count--*` |
+| 青・赤・紫の面と数字 | 駒の利き（対局の「駒の利き」。学習・通常・竜王戦のどれでも使える。教室の利きメガネ）。青は先手、赤は後手、紫は両方の利き | `BoardView.vue`の`.attack-tint--*`・`.attack-count--*` |
 | 青・赤の× | 玉の逃げ道で、相手の駒が利いているマス。後手の玉のまわりは先手の利き（青、`square-mark--covered`）、先手の玉のまわりは後手の利き（赤、`square-mark--danger`）。逃げられるマスは緑（`square-mark--key`） | `BoardView.vue`の`.square-mark--covered`・`.square-mark--danger` |
 | 赤い輪 | 利きメガネで、駒を選んだとき、動かすと取られて損をする移動先 | `BoardView.vue`の`.risk-ring` |
 

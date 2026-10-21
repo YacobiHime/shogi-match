@@ -1670,7 +1670,7 @@ const whitePlayerTimeSeverity = computed(() => {
   box-shadow: inset 0 0 0 3px rgba(220, 38, 38, 0.85);
   border-radius: 50%;
 }
-/* 学習対局の「駒の利き」表示。青は先手、赤は後手、紫は両者が利かせている升。 */
+/* 対局の「駒の利き」表示。青は先手、赤は後手、紫は両者が利かせている升。 */
 .attack-tint {
   pointer-events: none;
 }
