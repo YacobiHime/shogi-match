@@ -1,7 +1,7 @@
 // CPU同士を自動対局させ、強さ設定ごとのレーティング差を推定する開発用スクリプト。
 // 使い方:
 //   node scripts/cpu-level-selfplay.mjs --players L1,L5,L10 [--games 40] [--gap 2] [--workers 8] [--out result.json]
-//   選手はL<レベル>、s<技量>(例: s0.3)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
+//   選手はL<レベル>、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
 //   末尾にn<nodes>を付けると探索量だけを差し替える(例: L40n2000000)。
 //   末尾にnoriskを付けると、危険への態度(無難な手・勝負手の選び直し)を外す(例: L25norisk)。
 //   --deadline-sec 280 で、指定秒数を過ぎたら対局中の局を打ち切り、終わった局だけで集計する。
@@ -23,7 +23,7 @@ const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs"
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
-import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, searchSettingsForSkill, sourceLevelSettings } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
 
 const MAX_PLY = 256;
@@ -73,6 +73,8 @@ export function strengthForPlayer(spec) {
     return { ...settings, level: preset.level, ...(preset.level >= 11 && preset.level < 40 && process.argv.includes("--hybrid") ? { logicHybrid: true } : {}) };
   }
   if (/^s[\d.]+$/.test(spec)) return searchSettingsForSkill(Number(spec.slice(1)));
+  // e<もとの校正のLv(小数)>: 低級帯の付け替えを決めるための、もとの校正のLvの設定(例: e12.5)。
+  if (/^e[\d.]+$/.test(spec)) return { ...sourceLevelSettings(Number(spec.slice(1))), level: Math.round(Number(spec.slice(1))) };
   if (/^old\d+$/.test(spec)) {
     const old = OLD_SETTINGS.get(Number(spec.slice(3)));
     if (!old) throw new Error(`比較用の旧設定がありません: ${spec}`);

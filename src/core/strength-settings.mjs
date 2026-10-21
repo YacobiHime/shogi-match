@@ -241,8 +241,52 @@ export function getStrengthSearchSettings(preset) {
   const selected = strengthPresetFor(preset);
   const settings = searchSettingsForSkill(selected.skill);
   if (selected.level < 11 || selected.level >= 40) return settings;
-  if (LOGIC_HYBRID_DEFAULT) return calibratedHybridSearchSettings(selected.level, settings);
+  if (LOGIC_HYBRID_DEFAULT) {
+    const source = LOW_BAND_SOURCE_LEVELS[selected.level];
+    return source === undefined ? calibratedHybridSearchSettings(selected.level, settings) : sourceLevelSettings(source);
+  }
   return { ...settings, ...hybridSettingsForLevel(selected.level) };
+}
+
+/**
+ * 低級帯の付け替え(2026-10-21)。表示のLvに、もとの校正(段階4)のどのLv(小数)の強さを使うか。
+ * ユーザーの実測で、Lv15(十二級程度)が、ぴよ将棋の五級(R630)くらいの強さだった。もとの校正ではLv12からLv13への段差が大きく
+ * (自己対局で24勝0敗)、Lv13以上の低級帯が名前より強かった。表示の段級位はそのままにして、その名前に合う、もとの弱いLvの設定を当てる。
+ * 書いていないLv(26以上)は、もとの校正のまま。値の決め方は docs/difficulty-calibration.md の2026-10-21の節。
+ */
+export const LOW_BAND_SOURCE_LEVELS = Object.freeze({});
+
+/** もとの校正(段階4)の、整数のLvの設定。 */
+function calibratedSettingsAtLevel(level) {
+  const preset = CPU_STRENGTH_PRESETS.find((entry) => entry.level === level);
+  return calibratedHybridSearchSettings(level, searchSettingsForSkill(preset.skill));
+}
+
+/** 2つの設定を、数は直線で(どちらも整数なら整数に丸める)、入れ子はそれぞれ、それ以外は近いほうで混ぜる。 */
+function blendSettings(a, b, t) {
+  if (typeof a === 'number' && typeof b === 'number') {
+    const value = a + (b - a) * t;
+    return Number.isInteger(a) && Number.isInteger(b) ? Math.round(value) : Math.round(value * 1000) / 1000;
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a)) {
+    return Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map((key) => [key, blendSettings(a[key], b[key], t)]));
+  }
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return t < 0.5 ? a : b;
+}
+
+/**
+ * もとの校正のLv(小数、11〜39)の設定。整数のLvの間は、2つの設定を混ぜる(Lv12とLv13の段差をなだらかにつなぐ)。
+ * @param {number} source
+ */
+export function sourceLevelSettings(source) {
+  const level = Math.min(39, Math.max(11, source));
+  const lo = Math.floor(level);
+  const hi = Math.ceil(level);
+  const low = calibratedSettingsAtLevel(lo);
+  if (hi === lo) return low;
+  return blendSettings(low, calibratedSettingsAtLevel(hi), level - lo);
 }
 
 /**
