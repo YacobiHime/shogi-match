@@ -323,7 +323,9 @@ describe('CPU着手の共通選択', () => {
   test('最も弱いレベルでは、損失上限を守る手の割合を下げてLv0へつなぐ', async () => {
     expect(getStrengthSearchSettings(5000).carefulRate).toBeGreaterThan(0);
     expect(getStrengthSearchSettings(5000).carefulRate).toBeLessThan(1);
-    expect(getStrengthSearchSettings(6000).carefulRate).toBe(1);
+    // 低級帯の付け替え(2026-10-21)で、Lv13〜20は、もとのLv12とLv13を混ぜた設定なので、守る手の割合が少しずつ上がる。Lv21で1。
+    expect(getStrengthSearchSettings(6000).carefulRate).toBeGreaterThan(getStrengthSearchSettings(5000).carefulRate);
+    expect(getStrengthSearchSettings(30000).carefulRate).toBe(1);
     // 上限を守らない手番では、上限を超える手も選ぶ。
     const strength = {
       ...lowStrength, oversightRate: 0, bestMoveRate: 0, moveLossCap: 400, carefulRate: 0.5,

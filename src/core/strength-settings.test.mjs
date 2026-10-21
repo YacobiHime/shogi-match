@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   CPU_STRENGTH_PRESETS,
+  LOW_BAND_SOURCE_LEVELS,
+  sourceLevelSettings,
   DEFAULT_STRENGTH_VALUE,
   calibratedHybridSearchSettings,
   getStrengthSearchSettings,
@@ -97,6 +99,22 @@ describe('CPU strength settings', () => {
     ))).toBe(true);
   });
 
+  it('maps the low band to weaker calibrated settings, increasing with the level (2026-10-21)', () => {
+    const entries = Object.entries(LOW_BAND_SOURCE_LEVELS).map(([level, source]) => [Number(level), source]);
+    expect(entries.map(([level]) => level)).toEqual([11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
+    for (const [index, [level, source]] of entries.entries()) {
+      expect(source, `Lv${level}`).toBeGreaterThanOrEqual(11);
+      expect(source, `Lv${level}`).toBeLessThan(25);
+      if (index > 0) expect(source, `Lv${level}`).toBeGreaterThan(entries[index - 1][1]);
+    }
+    // 十二級程度(Lv15)は、もとのLv12とLv13のあいだ。三級程度(Lv26)から上は、もとの校正のまま。
+    expect(LOW_BAND_SOURCE_LEVELS[15]).toBeLessThan(13);
+    const lv = (level) => getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value);
+    expect(lv(15).nodes).toBeLessThan(sourceLevelSettings(15).nodes);
+    expect(lv(26)).toEqual(sourceLevelSettings(26));
+    expect(lv(25)).toEqual(sourceLevelSettings(25));
+  });
+
   it('plays unread natural moves only at level zero and narrows vision below', () => {
     const settings = (level) => getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value);
     expect(settings(0).naturalMoveRate).toBe(1);
@@ -105,7 +123,10 @@ describe('CPU strength settings', () => {
     const rates = CPU_STRENGTH_PRESETS.slice(1, fifteenth + 1).map(({ level }) => settings(level).naturalMoveRate);
     expect(rates.every((rate, index) => rate > 0 && rate < 1 && (index === 0 || rate < rates[index - 1]))).toBe(true);
     expect(settings(fifteenth).naturalMoveRate).toBeLessThan(0.5);
-    for (const level of [fifteenth + 1, 26, 32, 40]) expect(settings(level).naturalMoveRate, `Lv${level}`).toBe(0);
+    // 低級帯の付け替え(2026-10-21)で、Lv13〜20は、もとのLv12とLv13を混ぜた設定なので、読まない手が少しずつ減って残る。
+    const blended = CPU_STRENGTH_PRESETS.slice(fifteenth, 21).map(({ level }) => settings(level).naturalMoveRate);
+    expect(blended.every((rate, index) => index === 0 || rate <= blended[index - 1])).toBe(true);
+    for (const level of [21, 26, 32, 40]) expect(settings(level).naturalMoveRate, `Lv${level}`).toBe(0);
     // 読まない手の代わりに、目に付く少数の手だけを読む。
     expect(settings(1).visionWidth).toBe(3);
     expect(settings(40).visionWidth).toBeUndefined();

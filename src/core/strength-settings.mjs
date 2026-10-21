@@ -254,7 +254,10 @@ export function getStrengthSearchSettings(preset) {
  * (自己対局で24勝0敗)、Lv13以上の低級帯が名前より強かった。表示の段級位はそのままにして、その名前に合う、もとの弱いLvの設定を当てる。
  * 書いていないLv(26以上)は、もとの校正のまま。値の決め方は docs/difficulty-calibration.md の2026-10-21の節。
  */
-export const LOW_BAND_SOURCE_LEVELS = Object.freeze({});
+export const LOW_BAND_SOURCE_LEVELS = Object.freeze({
+  11: 11.57, 12: 11.93, 13: 12.06, 14: 12.17, 15: 12.29, 16: 12.47, 17: 12.58, 18: 12.67,
+  19: 12.79, 20: 12.89, 21: 14.25, 22: 14.88, 23: 18.09, 24: 21.3,
+});
 
 /** もとの校正(段階4)の、整数のLvの設定。 */
 function calibratedSettingsAtLevel(level) {
