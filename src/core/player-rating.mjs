@@ -87,7 +87,8 @@ export function retrySuggestion(state, level) {
   if (!Number.isFinite(level)) return null;
   const losses = losingStreakAt(state, level);
   if (losses < RETRY_SUGGESTION_LOSSES) return null;
-  return { level, losses, lowerLevel: level > 0 ? level - 1 : null };
+  // 腕ならしは2つ下(つぎはこれの立て直しと同じ。docs/home-next-adaptive-design.mdの3-3)。
+  return { level, losses, lowerLevel: level > 0 ? Math.max(0, level - 2) : null };
 }
 
 export function createRatingState() {

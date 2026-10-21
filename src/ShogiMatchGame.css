@@ -716,6 +716,24 @@
   }
 }
 /* 振り駒の知らせ。王手の知らせと同じ置き方で、歩5枚が順に落ちてから先後を伝える。盤の操作は妨げない。 */
+/* 勝ったときの次の一歩(次のLvへ)。理由の1行、主ボタン、同じ相手ともう一局(小)。 */
+.shogi-game__result-step {
+  display: grid;
+  gap: 0.35em;
+}
+.shogi-game__result-step p {
+  margin: 0;
+  font-weight: 800;
+  text-align: center;
+}
+.shogi-game .shogi-game__result-step-same {
+  justify-self: center;
+  border: 0;
+  background: transparent;
+  font-size: 0.9em;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
 .shogi-game__furigoma {
   position: absolute;
   top: 50%;
@@ -2745,6 +2763,22 @@
 }
 
 /* つぎはこれ */
+/* 立て直しのときの、小さな2つ目の入口(香落ちで挑む)。主役の札より小さく、文字だけにする。 */
+.shogi-game .shogi-title__next-sub {
+  justify-self: end;
+  min-height: 2.75em;
+  margin-top: -0.3em;
+  padding: 0.3em 0.8em;
+  border: 0;
+  color: var(--ivory, #fffcf4);
+  background: transparent;
+  font: inherit;
+  font-size: 0.85em;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
 .shogi-game .shogi-title__next {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

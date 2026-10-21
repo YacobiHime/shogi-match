@@ -151,6 +151,14 @@
           <small class="shogi-title__next-desc">{{ homeNext.description }}</small>
           <span class="shogi-title__next-go" aria-hidden="true">▶ はじめる</span>
         </button>
+        <!-- 立て直しのときだけ、小さな2つ目の入口(香落ちで、連敗したLvに挑む)。主役は上の1枚(docs/home-next-adaptive-design.mdの6章)。 -->
+        <button
+          v-if="homeNext.handicapLevel !== undefined && homeNext.handicapLevel !== null"
+          type="button"
+          class="shogi-title__next-sub"
+          data-next-handicap
+          @click="startQuickMatch({ level: homeNext.handicapLevel, handicapId: 'lance' })"
+        >香落ちでLv.{{ homeNext.handicapLevel }}に挑む</button>
 
         <!-- 記録の帯。いまの棋力と所属を見せ、押すとやこびノートを開く。 -->
         <button type="button" class="shogi-title__record" @click="yakobiNoteOpen = true">
@@ -760,12 +768,12 @@
             >{{ learningFormationMessage }}</p>
             <p v-if="ratingRecommendation" class="shogi-game__pregame-message" data-rating-recommendation>
               あなたのレーティング: R{{ ratingState.rating }}（{{ nearestRatingLabel }}・{{ ratingState.games }}局）。
-              おすすめの強さ: Lv.{{ recommendedStrengthPreset.level }} {{ recommendedStrengthPreset.label }}
+              おすすめの強さ: Lv.{{ playPreset.level }} {{ playPreset.label }}
               <button
                 type="button"
                 class="shogi-game__pregame-change"
-                :disabled="searchNodes === recommendedStrengthPreset.value"
-                @click="searchNodes = recommendedStrengthPreset.value"
+                :disabled="searchNodes === playPreset.value"
+                @click="searchNodes = playPreset.value"
               >おすすめにする</button>
             </p>
             <p v-if="pregameUsesHandicap" class="shogi-game__pregame-message">
@@ -1533,6 +1541,18 @@
               <button type="button" @click="rematch({ handicapId: 'lance' })">香落ちで挑む</button>
             </div>
           </div>
+          <!-- 勝ったら、次のLvへ(香落ちで勝ったら平手へ)。同じ相手ともう一局は、小さく残す(docs/home-next-adaptive-design.mdの4-2)。 -->
+          <div v-else-if="!tutorialMatch && !measureSession && resultNextStep" class="shogi-game__result-step" data-next-step>
+            <p>{{ resultNextStep.reason }}</p>
+            <button
+              type="button"
+              class="shogi-game__rematch shogi-game__rematch--primary"
+              data-rematch
+              data-next-step-go
+              @click="resultNextStep.kind === 'up' ? rematch({ level: resultNextStep.level }) : resultNextStep.kind === 'even' ? rematch({ level: resultNextStep.level, even: true }) : rematch()"
+            >{{ resultNextStep.title }}</button>
+            <button v-if="resultNextStep.sameTitle" type="button" class="shogi-game__result-step-same" data-next-step-same @click="rematch()">{{ resultNextStep.sameTitle }}</button>
+          </div>
           <button
             v-else-if="!tutorialMatch && !measureSession"
             type="button"
@@ -1947,6 +1967,7 @@ import {
   retrySuggestion,
   saveRatingState,
 } from "./core/player-rating.mjs";
+import { recommendPlay, resultNextStep as resultNextStepFor } from "./core/play-coach.mjs";
 import { furigomaMessage, throwFurigoma } from "./core/furigoma.mjs";
 import {
   collectionCatalog,
@@ -2136,10 +2157,17 @@ const measureReportDismissed = ref(false);
 const skillDiagnosisVisible = ref(false);
 /** レーティングに近いLvの段級位の表示名。 */
 const nearestRatingLabel = computed(() => recommendedStrengthPreset.value.label);
+/** レーティングに近いLv(段級位の目安・棋力測定・竜王戦の難易度の初期値に使う)。 */
 const recommendedStrengthPreset = computed(() => {
   const level = recommendedLevel(ratingState.value.rating);
   return CPU_STRENGTH_PRESETS.find((preset) => preset.level === level)!;
 });
+/**
+ * 次の対局の見立て(core/play-coach.mjs。docs/home-next-adaptive-design.md)。勝ち越せそうな相手のLvと、勧める理由。
+ * 「つぎはこれ」の対局・対局準備のおすすめ・終盤戦の相手に使う。
+ */
+const playPlan = computed(() => recommendPlay(ratingState.value));
+const playPreset = computed(() => CPU_STRENGTH_PRESETS.find((preset) => preset.level === playPlan.value.level)!);
 const reviewMode = ref(false);
 const reviewNavigation = ref(createReviewNavigation());
 const analysisOpen = ref(false);
@@ -2641,7 +2669,21 @@ const resultGradeUp = computed(() => {
   const after = labelOf(change.after);
   return after !== labelOf(change.before) ? gradeName(after) : "";
 });
-/** 同じLvに続けて負けたときの、選べる提案(強さを1つ下げる・香落ち)。自動では変えない。 */
+/**
+ * 勝ったときの次の一歩(core/play-coach.mjsのresultNextStep)。平手の通常対局で勝ったら1つ上、香落ちで勝ったら平手。
+ * 終盤戦・敗着の前から(学習対局の局面から)は今のまま「もう一局」。
+ */
+const resultNextStep = computed(() => {
+  if (!result.value?.winner || result.value.winner !== humanColor.value || ryuoGame.value) return null;
+  const level = cpuStrengthLevel();
+  const lanceHandicap = matchKind.value === "learning" && learningStartType.value === "handicap"
+    && learningHandicapId.value === "lance" && learningHandicapGiver.value === "cpu";
+  const rated = Boolean(ratingChange.value);
+  return resultNextStepFor({
+    won: true, rated, level, lanceHandicap, firstWin: rated && level !== undefined && (ratingState.value.levels?.[level]?.wins ?? 0) === 1,
+  });
+});
+/** 同じLvに続けて負けたときの、選べる提案(強さを2つ下げる・香落ち)。自動では変えない。 */
 const resultRetrySuggestion = computed(() => {
   if (!ratingChange.value || !result.value?.winner || result.value.winner === humanColor.value) return null;
   const level = cpuStrengthLevel();
@@ -3771,7 +3813,7 @@ const beatenLevels = computed(() => {
 });
 const strengthPickerOptions = computed(() => CPU_STRENGTH_PRESETS.map((preset, index) => {
   const record = levelRatingText(ratingState.value, preset.level);
-  const challenge = preset.level > recommendedStrengthPreset.value.level && !beatenLevels.value.has(preset.level);
+  const challenge = preset.level > playPreset.value.level && !beatenLevels.value.has(preset.level);
   return {
     ...strengthOptions[index],
     description: challenge ? `${record}・初めて勝つと★` : record,
@@ -4294,16 +4336,26 @@ function dismissWelcome() {
  * ホームの「つぎはこれ：対局する」。対局準備を開かず、おすすめの強さ・平手で、先後は振り駒で決めてすぐ始める。
  * ほかの設定(助言・作戦など)は、前に対局準備で選んだものを使う。設定を選びたいときは「自由対局」のタイルから。
  */
-function startQuickMatch() {
+function startQuickMatch(options: { level?: number; handicapId?: string } = {}) {
   confirmDiscardSuspended(() => {
     yakobiNoteOpen.value = false;
     openPregame();
-    matchKind.value = "normal";
-    searchNodes.value = recommendedStrengthPreset.value.value;
-    const toss = throwFurigoma();
-    selectedPlayerColor.value = toss.playerColor;
+    const level = options.level ?? playPlan.value.level;
+    searchNodes.value = (CPU_STRENGTH_PRESETS.find((preset) => preset.level === level) ?? playPreset.value).value;
     homeOpen.value = false;
     void initializeEngine();
+    if (options.handicapId) {
+      // 香落ち(CPUが上手)の学習対局。上手が先に指すので、振り駒はしない。
+      matchKind.value = "learning";
+      learningStartType.value = "handicap";
+      learningHandicapId.value = options.handicapId;
+      learningHandicapGiver.value = "cpu";
+      beginMatch();
+      return;
+    }
+    matchKind.value = "normal";
+    const toss = throwFurigoma();
+    selectedPlayerColor.value = toss.playerColor;
     beginMatch();
     showFurigoma(toss);
   });
@@ -4331,7 +4383,7 @@ async function startEndgameNow({ excludeSfen = "" } = {}) {
   stopGuidedReview();
   openPregame();
   matchKind.value = "normal";
-  searchNodes.value = recommendedStrengthPreset.value.value;
+  searchNodes.value = playPreset.value.value;
   homeOpen.value = false;
   void initializeEngine();
   startPositionMatch(start.sfen, start.playerColor, ENDGAME_START_LABEL);
@@ -4362,7 +4414,7 @@ function startPositionMatch(sfen: string, playerColor: "black" | "white", label:
  * - levelを渡すとCPUの強さを、handicapIdを渡すと学習対局の駒落ち(CPUが上手)に変えて始める。
  * - 「敗着の前から」の対局は、同じ局面から始め直す。
  */
-function rematch(options: { level?: number; handicapId?: string } = {}) {
+function rematch(options: { level?: number; handicapId?: string; even?: boolean } = {}) {
   if (learningStartLabel.value === ENDGAME_START_LABEL && !options.handicapId) {
     void startEndgameNow({ excludeSfen: matchInitialSfen.value });
     return;
@@ -4381,6 +4433,15 @@ function rematch(options: { level?: number; handicapId?: string } = {}) {
     learningStartType.value = "handicap";
     learningHandicapId.value = options.handicapId;
     learningHandicapGiver.value = "cpu";
+  } else if (options.even) {
+    // 香落ちで勝ったあとの「平手で挑む」。通常対局に戻し、先後は振り駒。
+    matchKind.value = "normal";
+    const toss = throwFurigoma();
+    selectedPlayerColor.value = toss.playerColor;
+    void initializeEngine();
+    beginMatch();
+    showFurigoma(toss);
+    return;
   } else if (alternate) {
     selectedPlayerColor.value = previousColor === "black" ? "white" : "black";
   }
@@ -4658,7 +4719,11 @@ function homeTileClass(id: string) {
   return { "shogi-title__tile--later": tile.dim, "shogi-title__tile--recommended": tile.recommended };
 }
 
-type HomeNext = { id: "resume" | "tutorial" | "match" | "tournament" | "problems"; label: string; description: string };
+type HomeNext = {
+  id: "resume" | "tutorial" | "match" | "tournament" | "problems"; label: string; description: string;
+  /** 立て直しのときの「香落ちで挑む」のLv。 */
+  handicapLevel?: number | null;
+};
 /**
  * タイトル画面の「つぎはこれ」。中断した対局があれば再開を最優先にし、それ以外は強くなる道のいまの段の行き先にする。
  */
@@ -4666,7 +4731,8 @@ const homeNext = computed<HomeNext>(() => {
   if (suspendedMatch.value) {
     return { id: "resume", label: "対局を再開", description: `中断した対局（${suspendedMatch.value.moves}手目まで）` };
   }
-  const preset = recommendedStrengthPreset.value;
+  const plan = playPlan.value;
+  const preset = playPreset.value;
   switch (homeRoadmapState.value.current) {
     case 1:
       return homeLessonsDone.value
@@ -4682,16 +4748,9 @@ const homeNext = computed<HomeNext>(() => {
     }
     case 4:
       return { id: "tournament", label: "竜王戦に出よう", description: "6組から、トーナメントを勝ち上がって竜王をめざそう" };
-    default: {
-      const goal = nextRatingGoal(ratingState.value.rating);
-      return {
-        id: "match",
-        label: "対局する",
-        description: goal
-          ? `${goal.label.replace(/程度$/, "")}まであとR${goal.remaining}。Lv.${preset.level}の相手と、振り駒ですぐ始める`
-          : `Lv.${preset.level} ${preset.label}の相手と、振り駒ですぐ始める`,
-      };
-    }
+    default:
+      // 5段目: 実力と実績の見立て(初勝利の次・立て直し・連勝の挑戦・昇級をかけた一局・ふだんの対局)。理由を1行で添える。
+      return { id: "match", label: plan.title, description: plan.reason, handicapLevel: plan.handicapLevel };
   }
 });
 /**

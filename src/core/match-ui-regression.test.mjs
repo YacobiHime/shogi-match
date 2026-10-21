@@ -264,7 +264,13 @@ describe("match screen regressions", () => {
   it("starts the home recommendation without the setup screen and decides colors by furigoma", () => {
     const homeNext = source.split("function startHomeNext()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(homeNext).toContain("startQuickMatch()");
-    const quick = source.split("function startQuickMatch()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    const quick = source.split("function startQuickMatch(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    // 強さは、実力と実績の見立て(play-coach)で決める。香落ちの立て直しは振り駒をしない。
+    expect(quick).toMatch(/options\.level \?\? playPlan\.value\.level/);
+    expect(quick).toMatch(/if \(options\.handicapId\) \{[\s\S]*?learningHandicapGiver\.value = "cpu";\s*beginMatch\(\);\s*return;/);
+    expect(source).toMatch(/default:[\s\S]{0,200}?return \{ id: "match", label: plan\.title, description: plan\.reason, handicapLevel: plan\.handicapLevel \}/);
+    // 勝ったら次のLvへ(同じ相手ともう一局は小さく残す)。
+    expect(source).toMatch(/v-else-if="!tutorialMatch && !measureSession && resultNextStep"[\s\S]*?data-next-step-go[\s\S]*?data-next-step-same/);
     expect(quick).toMatch(/throwFurigoma\(\)[\s\S]*?beginMatch\(\);[\s\S]*?showFurigoma/);
     // 振り駒の知らせは盤の操作を妨げない。
     expect(source).toMatch(/\.shogi-game__furigoma \{[^}]*pointer-events: none/s);

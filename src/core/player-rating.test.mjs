@@ -151,7 +151,7 @@ describe('player rating', () => {
     // 申告・測定の記録は、連敗を途切れさせない。
     state = applyMeasuredRating(state, { rating: 900 });
     state = applyRatedGame(state, { opponentLevel: 12, outcome: 'loss' }).state;
-    expect(retrySuggestion(state, 12)).toEqual({ level: 12, losses: 3, lowerLevel: 11 });
+    expect(retrySuggestion(state, 12)).toEqual({ level: 12, losses: 3, lowerLevel: 10 });
     // 別のLvとの対局を挟むと数え直す。
     expect(losingStreakAt(applyRatedGame(state, { opponentLevel: 11, outcome: 'loss' }).state, 12)).toBe(0);
     let bottom = createRatingState();
