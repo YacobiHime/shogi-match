@@ -125,13 +125,32 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/class="shogi-title__next" data-tournament="ryuo"/);
     expect(tournament).toMatch(/shogi-tournament-home \.shogi-tournament__soon-tiles \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
     // 説明・エントリーの一言・次の対局・結果の解説は、やこび姫のセリフにする。
-    // 顔を何度も並べず、各画面に、大きなやこび姫の解説役(xl)を1人置いて話させる。
-    expect(tournament.match(/<YakobiSays[^>]*size="xl"/g)?.length).toBe(3);
+    // 大きなやこび姫の解説役(xl)は、竜王戦の説明のシートと、結果の解説の2人だけ。次の一局では1行の手がかりにする。
+    expect(tournament.match(/<YakobiSays[^>]*size="xl"/g)?.length).toBe(2);
+    expect(tournament).toMatch(/data-tip>\s*<YakobiSays :lines="\[tipLine\]" size="sm"/);
     // エントリーの設定を選ぶと、やこび姫がその設定について話す(選択シートで選んだとき)。
     expect(tournament).toMatch(/difficulty\.value = Number\(value\); talkTopic\.value = "difficulty";/);
     for (const helper of ["ryuoGuideLines", "entryDifficultyLine", "opponentLines", "resultLines", "seasonPhaseLines"]) {
       expect(tournament).toContain(helper);
     }
+  });
+
+  it("opens the Ryuo season with one goal and shows what the next game is for", () => {
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    // 入口は1画面・1ボタン。目標の1行と、設定の要約。説明は「竜王戦ってなに？」で開く(docs/ryuo-ux-redesign.mdの4-1)。
+    expect(tournament).toMatch(/data-entry-goal>\{\{ entryGoal \}\}/);
+    expect(tournament).toMatch(/v-if="settingsOpen" class="shogi-tournament__settings"/);
+    expect(tournament).toMatch(/v-if="guideOpen"[^>]*role="dialog"/);
+    // 次の一局: 勝てば・負ければと、山場の札(4-2)。タブはやめ、狭い画面では表を重ねて開く。
+    expect(tournament).toMatch(/data-stakes-win>\{\{ view\.pending\.stakes\.win \}\}/);
+    expect(tournament).toMatch(/data-stakes-lose>\{\{ view\.pending\.stakes\.lose \}\}/);
+    expect(tournament).toMatch(/shogi-tournament__match--boss': view\.pending\.stakes\?\.boss/);
+    expect(tournament).not.toMatch(/data-pane=|pane-tabs/);
+    expect(tournament).toMatch(/\.shogi-tournament__layout--table-open > \.shogi-tournament__tables \{\s*position: fixed;/);
+    // ボタンは短い動詞(U:3-2)。結果の画面の主役は「次の期へ」。
+    expect(tournament).toMatch(/data-tournament-play @click="emit\('play'\)">対局する</);
+    expect(tournament).toMatch(/data-next-season @click="toNextSeason">次の期へ</);
+    expect(source).toContain('"結果を見る" : "竜王戦へ戻る"');
   });
 
   it("asks before resigning from the toolbar and the menu", () => {

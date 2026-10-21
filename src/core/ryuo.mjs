@@ -8,6 +8,7 @@ import { createRng } from './ryuo-random.mjs';
 import { USER_HOLDER, createRoster, seasonEntry, selectParticipants } from './ryuo-roster.mjs';
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO, hananeAfterLine, hananeBeforeLine, hananeCoachIntro, hananeGrudgeBonus, yoshihikoCoachIntro } from './ryuo-story.mjs';
 import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
+import { matchStakes, seasonGoalLine } from './ryuo-stakes.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import {
   BASE_DIFFICULTY,
@@ -824,7 +825,10 @@ export function describeSeason(season) {
     });
   }
   const pendingView = season.pending
-    ? { ...season.pending, opponent: playerBrief(season, season.pending.opponentId), label: pendingLabel(season), rival: rivalPendingView(season) }
+    ? {
+      ...season.pending, opponent: playerBrief(season, season.pending.opponentId), label: pendingLabel(season), rival: rivalPendingView(season),
+      stakes: pendingStakes(season),
+    }
     : null;
   return {
     title: `第${season.no}期竜王戦`,
@@ -851,6 +855,42 @@ export function describeSeason(season) {
       pending: season.analysisQueue?.length ?? 0,
     }),
   };
+}
+
+/**
+ * 次の一局に賭けているもの(勝てば・負ければ・目標まであと何勝)。ライバル(羽音)との一局も山場にする(core/ryuo-stakes.mjs)。
+ * @returns {ReturnType<typeof matchStakes> | null}
+ */
+export function pendingStakes(season) {
+  const pending = season.pending;
+  if (!pending) return null;
+  const scale = scaleById(season.settings.scale);
+  const group = season.startGroup;
+  const base = { mode: season.mode, group, promote: scale.promote, groupSlots: scale.slots[group] ?? 1, revivalEnabled: Boolean(season.settings.revival) };
+  let stakes;
+  if (pending.kind === 'game') {
+    const bracket = pending.phase === 'ranking' ? season.ranking : pending.phase === 'revival' ? season.revival[pending.blockIndex] : season.main;
+    const node = bracket?.nodes?.[pending.nodeId];
+    const round = node?.round ?? 1;
+    const rounds = bracket?.rounds ?? 1;
+    const slotCount = revivalSlots(group, scale);
+    stakes = matchStakes({
+      ...base, phase: pending.phase, round, rounds,
+      // 1組の敗者復活戦(出場者決定戦)は、遅い回戦で負けた人だけが出る。
+      revivalReachable: slotCount > 0 && round < rounds && (group !== 1 || round >= rounds - slotCount),
+      revivalPromotes: group === 1 || scale.promote - 2 > 0,
+    });
+  } else {
+    stakes = matchStakes({ ...base, phase: pending.kind, need: pending.need, winsUser: pending.wins?.user ?? 0, winsOpponent: pending.wins?.opponent ?? 0 });
+  }
+  const rival = season.players[pending.opponentId]?.story === HANANE;
+  return { ...stakes, boss: stakes.boss || rival };
+}
+
+/** 期の目標の1行(入口と、期の結果の「次の期」)。 */
+export function entryGoalLine({ mode, group, scale: scaleId }) {
+  const scale = scaleById(scaleId);
+  return seasonGoalLine({ mode, group, promote: scale.promote, groupSlots: scale.slots[group] ?? 1 });
 }
 
 function pendingLabelFor(season, pending) {

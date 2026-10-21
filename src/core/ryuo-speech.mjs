@@ -57,9 +57,14 @@ export function seasonPhaseLines(view) {
   const behind = pending && pending.kind !== 'game' ? pending.need - pending.wins.opponent : 0;
   switch (view.phase) {
     case 'ranking':
-      return [`${view.startGroup}組のランキング戦だよ。優勝か準優勝で昇級！ 1回戦から、一局ずつ大事にいこう。`];
-    case 'revival':
-      return ['敗者復活戦だよ！ ここで勝ち上がれば、まだ昇級のチャンスがあるよ。'];
+      // 昇級の枠(何位まで)は規模で変わるので、「上位」と言う。1組の上位は、昇級ではなく決勝トーナメント。
+      return [`${view.startGroup}組のランキング戦だよ。勝てば次の回戦、上位に入れば${view.startGroup === 1 ? '決勝トーナメントへ' : '昇級'}！ 一局ずつ大事にいこう。`];
+    case 'revival': {
+      // 小さな規模では、勝ち抜いても降級をまぬがれるだけ(ryuo-stakes.mjs)。
+      const goal = pending?.stakes?.goal ?? '';
+      const reward = view.startGroup === 1 ? '決勝トーナメントに出られる' : goal.startsWith('残留') ? '降級をまぬがれる' : 'まだ昇級できる';
+      return [`敗者復活戦だよ！ ここで勝ち上がれば、${reward}よ。`];
+    }
     case 'main':
     case 'main-setup':
       return ['決勝トーナメントに進めたんだね、すごい！ ここを勝ち上がれば、挑戦者決定戦だよ。'];

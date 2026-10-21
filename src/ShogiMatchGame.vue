@@ -1615,7 +1615,7 @@
         <div class="shogi-game__result-actions">
           <button v-if="ryuoGame.replay" type="button" class="shogi-game__rematch" @click="replayRyuoGame">指し直す</button>
           <button v-else type="button" class="shogi-game__rematch" @click="leaveToTournamentScreen">
-            {{ ryuoView?.result ? "結果を見る" : "トーナメント表へ" }}
+            {{ ryuoView?.result ? "結果を見る" : "竜王戦へ戻る" }}
           </button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
           <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch({ toHome: true })">{{ showHome ? "ホームへ" : "対局準備" }}</button>
