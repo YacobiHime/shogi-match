@@ -268,6 +268,14 @@ describe("match screen regressions", () => {
     expect(quick).toMatch(/throwFurigoma\(\)[\s\S]*?beginMatch\(\);[\s\S]*?showFurigoma/);
     // 振り駒の知らせは盤の操作を妨げない。
     expect(source).toMatch(/\.shogi-game__furigoma \{[^}]*pointer-events: none/s);
+    // 振る音のあいだ揺らし、撒く音の位置で結果を見せる。押すか指すと飛ばす。音を消していれば振らない。
+    const show = source.split("function showFurigoma(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(show).toMatch(/moveSounds\.play\("furigoma"\)[\s\S]*?setTimeout\(\(\) => landFurigoma\(\), FURIGOMA_LAND_AT\)/);
+    expect(show).toMatch(/phase: shaking \? "shake" : "land"/);
+    const land = source.split("function landFurigoma(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(land).toMatch(/if \(skipped\) \{\s*stopFurigomaShake\(\);\s*moveSounds\.play\("furigoma-land"\)/);
+    expect(source).toMatch(/@click="landFurigoma\(\{ skipped: true \}\)"/);
+    expect(source).toMatch(/watch\(moveCount, \(ply\) => \{\s*if \(ply > furigomaStartPly\) landFurigoma\(\{ skipped: true \}\)/);
   });
 
   it("lets a lost game be replayed from the position before the losing move", () => {

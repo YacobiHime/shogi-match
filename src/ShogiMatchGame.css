@@ -780,6 +780,18 @@
   font-weight: 700;
   white-space: nowrap;
 }
+/* 振っているあいだ。押すと飛ばせるので、押せるようにする。 */
+.shogi-game__furigoma--shake {
+  cursor: pointer;
+  pointer-events: auto;
+}
+.shogi-game__furigoma--shake .shogi-game__furigoma-pieces img {
+  animation: shogi-furigoma-shake 150ms ease-in-out infinite alternate;
+}
+@keyframes shogi-furigoma-shake {
+  0% { transform: translateY(-0.15em) rotate(-14deg); }
+  100% { transform: translateY(0.15em) rotate(14deg); }
+}
 @keyframes shogi-furigoma-drop {
   0% {
     opacity: 0;
@@ -791,7 +803,8 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .shogi-game__furigoma-pieces img {
+  .shogi-game__furigoma-pieces img,
+  .shogi-game__furigoma--shake .shogi-game__furigoma-pieces img {
     animation: none;
   }
 }

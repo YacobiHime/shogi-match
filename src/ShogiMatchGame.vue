@@ -1010,20 +1010,24 @@
           v-if="furigomaCallout && !checkCallout"
           :key="furigomaCallout.id"
           class="shogi-game__furigoma"
+          :class="{ 'shogi-game__furigoma--shake': furigomaCallout.phase === 'shake' }"
           role="status"
           data-furigoma
+          :data-furigoma-phase="furigomaCallout.phase"
+          @click="landFurigoma({ skipped: true })"
         >
-          <span class="shogi-game__furigoma-pieces" aria-hidden="true">
+          <!-- 振っているあいだは、歩の面を見せずに揺らす。撒く音で、表と裏を見せる。 -->
+          <span class="shogi-game__furigoma-pieces" aria-hidden="true" :key="furigomaCallout.phase">
             <img
               v-for="(face, index) in furigomaCallout.faces"
               :key="index"
-              :src="furigomaPieceUrl(face)"
-              :style="{ animationDelay: `${index * 70}ms` }"
+              :src="furigomaPieceUrl(furigomaCallout.phase === 'shake' ? 'fu' : face)"
+              :style="{ animationDelay: `${furigomaCallout.phase === 'shake' ? index * 37 : index * 70}ms` }"
               alt=""
             >
           </span>
           <strong>振り駒</strong>
-          <small>{{ furigomaCallout.text }}</small>
+          <small>{{ furigomaCallout.phase === "shake" ? "歩を5枚、振っているよ…" : furigomaCallout.text }}</small>
         </div>
       </Transition>
       <!-- 囲い完成の知らせ。教室の「囲いを組もう」と同じく、組み上げた瞬間をほめる。 -->
@@ -1920,7 +1924,7 @@ import {
   normalizeAssistLimit,
 } from "./core/learning-setup.mjs";
 import { CAPTURE_POP_MS, capturePop } from "./core/piece-points.mjs";
-import { createMoveSoundPlayer, loadSoundEnabled, saveSoundEnabled, selectMoveSound } from "./core/move-sound";
+import { FURIGOMA_LAND_AT, createMoveSoundPlayer, loadSoundEnabled, saveSoundEnabled, selectMoveSound } from "./core/move-sound";
 import { IMPACT_STAGE, finishImpact, impactStopMs, moveImpact, praiseImpactStage } from "./core/move-impact.mjs";
 import {
   clearMatchSnapshot,
@@ -2528,22 +2532,58 @@ watch(sideToMoveInCheck, (inCheck) => {
 });
 onBeforeUnmount(() => clearTimeout(checkCalloutTimer));
 /**
- * 振り駒の知らせ。ホームからすぐ始める対局で、盤の上に歩5枚と先後を短く出す。
- * 盤の操作は妨げない(先手ならすぐ指せる)。
+ * 振り駒の知らせ。ホームからすぐ始める対局で、盤の上に歩5枚と先後を短く出す(docs/game-improvement-plan.mdの1-2)。
+ * 音が鳴るときは、歩を振る音(約1.9秒)のあいだ駒を揺らし、駒台に撒く音(FURIGOMA_LAND_AT)で表と裏を見せる。
+ * 知らせを押すか、どちらかが指すと、振る音を止めて撒く音だけを鳴らし、すぐ結果を見せる(演出は飛ばせる)。
+ * 音を消しているときは、振らずにすぐ結果を見せる(待たせない)。盤の操作は妨げない(先手ならすぐ指せる)。
  */
 const FURIGOMA_SHOW_MS = 1800;
-const furigomaCallout = ref<{ id: number; faces: ("fu" | "to")[]; text: string } | null>(null);
+const furigomaCallout = ref<{ id: number; faces: ("fu" | "to")[]; text: string; phase: "shake" | "land" } | null>(null);
 let furigomaTimer: ReturnType<typeof setTimeout> | undefined;
+let furigomaShakeAudio: HTMLAudioElement | null = null;
+/** 振り始めたときの手数(対局を始めて盤が初期局面に戻る変化は、指した手に数えない)。 */
+let furigomaStartPly = 0;
+function stopFurigomaShake() {
+  furigomaShakeAudio?.pause();
+  furigomaShakeAudio = null;
+}
 function showFurigoma(toss: ReturnType<typeof throwFurigoma>) {
-  furigomaCallout.value = { id: Date.now(), faces: toss.faces, text: furigomaMessage(toss) };
   clearTimeout(furigomaTimer);
+  stopFurigomaShake();
+  furigomaStartPly = moveCount.value;
+  furigomaShakeAudio = moveSounds.play("furigoma");
+  const shaking = furigomaShakeAudio !== null;
+  furigomaCallout.value = { id: Date.now(), faces: toss.faces, text: furigomaMessage(toss), phase: shaking ? "shake" : "land" };
+  furigomaTimer = shaking
+    ? setTimeout(() => landFurigoma(), FURIGOMA_LAND_AT)
+    : setTimeout(() => { furigomaCallout.value = null; }, FURIGOMA_SHOW_MS);
+}
+/** 駒を撒いて、表と裏を見せる。skippedなら、振る音を止めて撒く音だけを鳴らす。 */
+function landFurigoma({ skipped = false } = {}) {
+  const callout = furigomaCallout.value;
+  if (!callout || callout.phase !== "shake") return;
+  clearTimeout(furigomaTimer);
+  if (skipped) {
+    stopFurigomaShake();
+    moveSounds.play("furigoma-land");
+  }
+  // 飛ばさなかったときは、振る音がそのまま撒く音まで鳴る。
+  furigomaShakeAudio = null;
+  furigomaCallout.value = { ...callout, phase: "land" };
   furigomaTimer = setTimeout(() => { furigomaCallout.value = null; }, FURIGOMA_SHOW_MS);
 }
+// 振っているあいだに指したら(先手のプレイヤー・後手のCPU)、すぐ結果を見せる。
+watch(moveCount, (ply) => {
+  if (ply > furigomaStartPly) landFurigoma({ skipped: true });
+});
 function furigomaPieceUrl(face: "fu" | "to") {
   const name = face === "fu" ? "black_pawn" : "black_prom_pawn";
   return `${props.assetBaseUrl.replace(/\/$/, "")}/piece/${pregamePieceThemeId.value}/${name}.webp`;
 }
-onBeforeUnmount(() => clearTimeout(furigomaTimer));
+onBeforeUnmount(() => {
+  clearTimeout(furigomaTimer);
+  stopFurigomaShake();
+});
 const resultPresentation = computed(() => {
   if (!result.value) return null;
   const loser = result.value.winner === Color.BLACK ? "後手" : "先手";

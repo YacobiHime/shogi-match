@@ -4,7 +4,14 @@ import { moveImpact } from "./move-impact.mjs";
 /** 着手の駒音。強い音は王手・大駒を取る手・詰み。 */
 export type MoveSoundKind = "normal" | "strong" | "capture" | "drop" | "promote";
 /** 着手以外も含めた効果音。 */
-export type SoundKind = MoveSoundKind | "god" | "win" | "lose" | "furigoma";
+/**
+ * furigomaは、歩を振る音から駒台に撒く音まで(2.5秒。撒く音はFURIGOMA_LAND_ATの位置)。
+ * furigoma-landは、撒く音だけ(0.6秒。演出を飛ばしたときに鳴らす)。
+ */
+export type SoundKind = MoveSoundKind | "god" | "win" | "lose" | "furigoma" | "furigoma-land";
+
+/** furigoma.mp3の中で、駒を撒く音が鳴る位置(ミリ秒)。振り駒の結果は、この瞬間に見せる。 */
+export const FURIGOMA_LAND_AT = 1930;
 
 /** 効果音のファイル名(public/audio/)。 */
 export const SOUND_FILES: Readonly<Record<SoundKind, string>> = Object.freeze({
@@ -17,13 +24,14 @@ export const SOUND_FILES: Readonly<Record<SoundKind, string>> = Object.freeze({
   win: "win.mp3",
   lose: "lose.mp3",
   furigoma: "furigoma.mp3",
+  "furigoma-land": "furigoma_land.mp3",
 });
 
 /**
  * public/audio/に置いてある音。素材が届いたら、ここに足すと鳴るようになる。
  * ない音は、SOUND_FALLBACKの代わりの音を鳴らすか、鳴らさない(存在しないファイルを読みに行かない)。
  */
-export const AVAILABLE_SOUNDS: ReadonlySet<SoundKind> = new Set<SoundKind>(["normal", "strong"]);
+export const AVAILABLE_SOUNDS: ReadonlySet<SoundKind> = new Set<SoundKind>(["normal", "strong", "furigoma", "furigoma-land"]);
 
 /** 素材がないときの代わりの音。ここにない音は、素材がなければ鳴らさない。 */
 const SOUND_FALLBACK: Partial<Record<SoundKind, SoundKind>> = {
@@ -44,6 +52,7 @@ export const SOUND_VOLUME: Readonly<Record<SoundKind, number>> = Object.freeze({
   win: 0.9,
   lose: 0.7,
   furigoma: 0.8,
+  "furigoma-land": 0.8,
 });
 
 /** 実際に鳴らす音。素材がなければ代わりの音、代わりもなければnull。 */
@@ -106,7 +115,8 @@ function defaultSoundEnabled() {
 export type MoveSoundPlayer = {
   /** 音声を先に読み込んでおく。 */
   preload: () => void;
-  play: (kind: SoundKind) => void;
+  /** 鳴らした音声を返す(途中で止めるため)。鳴らさなかったときはnull。 */
+  play: (kind: SoundKind) => HTMLAudioElement | null;
 };
 
 /**
@@ -130,15 +140,16 @@ export function createMoveSoundPlayer(
     }
   };
   const play = (kind: SoundKind) => {
-    if (!enabled()) return;
+    if (!enabled()) return null;
     const resolved = resolveSound(kind);
-    if (!resolved) return;
+    if (!resolved) return null;
     preload();
     const template = templates?.[resolved];
-    if (!template) return;
+    if (!template) return null;
     const audio = template.cloneNode(true) as HTMLAudioElement;
     audio.volume = SOUND_VOLUME[kind];
     void audio.play().catch(() => undefined);
+    return audio;
   };
   return { preload, play };
 }
