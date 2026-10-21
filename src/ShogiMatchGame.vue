@@ -396,6 +396,8 @@
       v-if="problemSetOpen"
       ref="problemSetView"
       :asset-base-url="assetBaseUrl"
+      :start-problem-id="problemSetStart?.id ?? ''"
+      :start-review="problemSetStart?.review ?? false"
       @close="problemSetOpen = false"
     />
     <!-- 図鑑は教室の上に重ねて開き、閉じると教室へ戻る。 -->
@@ -1746,6 +1748,7 @@ import {
   strengthOptions,
 } from "./composables/match/pregameOptions";
 import { useRyuoStatsAnalysis } from "./composables/match/useRyuoStatsAnalysis";
+import { usePlayInsightAnalysis } from "./composables/match/usePlayInsightAnalysis";
 import {
   appendUsiMove,
   createGameRecord,
@@ -1967,7 +1970,10 @@ import {
   retrySuggestion,
   saveRatingState,
 } from "./core/player-rating.mjs";
-import { recommendPlay, resultNextStep as resultNextStepFor } from "./core/play-coach.mjs";
+import { type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor } from "./core/play-coach.mjs";
+import { enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight } from "./core/play-insight.mjs";
+import { loadReviewProblems } from "./core/review-problems.mjs";
+import { dueReviewId, loadReviewQueue } from "./core/review-queue.mjs";
 import { furigomaMessage, throwFurigoma } from "./core/furigoma.mjs";
 import {
   collectionCatalog,
@@ -2112,6 +2118,11 @@ const result = ref<MatchResult | null>(null);
 const resultDialogOpen = ref(false);
 // 通常対局(平手・対CPU)の結果で更新するプレイヤーのレーティング。
 const ratingState = ref(loadRatingState(browserStorage()));
+/** 自由対局の中身の記録(core/play-insight.mjs)。見立ての内容の強さと、弱点の練習に使う。 */
+const playInsight = ref(loadPlayInsight(browserStorage()));
+/** 復習の期日が来た問題と、「あなたの対局から」の問題のID。「つぎはこれ」の練習に使う。タイトル画面を開くたびに読み直す。 */
+const homeReviewDueId = ref<string | null>(null);
+const homeReviewProblemIds = ref<Set<string>>(new Set());
 // プレイヤーのプロフィール(大会で得た称号と成績)。
 const profileState = ref(loadProfile(browserStorage()));
 // 大会の設定と、進行中の大会。
@@ -2166,7 +2177,11 @@ const recommendedStrengthPreset = computed(() => {
  * 次の対局の見立て(core/play-coach.mjs。docs/home-next-adaptive-design.md)。勝ち越せそうな相手のLvと、勧める理由。
  * 「つぎはこれ」の対局・対局準備のおすすめ・終盤戦の相手に使う。
  */
-const playPlan = computed(() => recommendPlay(ratingState.value));
+const playPlan = computed(() => recommendPlay(ratingState.value, {
+  insight: playInsight.value,
+  reviewDueId: homeReviewDueId.value,
+  problemIds: homeReviewProblemIds.value,
+}));
 const playPreset = computed(() => CPU_STRENGTH_PRESETS.find((preset) => preset.level === playPlan.value.level)!);
 const reviewMode = ref(false);
 const reviewNavigation = ref(createReviewNavigation());
@@ -4200,6 +4215,15 @@ const ryuoStats = useRyuoStatsAnalysis({
   compact: () => props.mobile || boardLayout.value === "portrait",
 });
 
+// ---- 自由対局の中身の記録のための、裏の解析(docs/home-next-adaptive-design.mdの5章)。対局中は止める。
+const playInsightAnalysis = usePlayInsightAnalysis({
+  storage: browserStorage,
+  engineFactory: ensureEngineFactory,
+  compact: () => props.mobile || boardLayout.value === "portrait",
+  paused: () => active.value,
+  onUpdated: (insight) => { playInsight.value = insight; },
+});
+
 /** 結果の画面を見終えた。次に竜王戦を選ぶと、次の期のエントリーになる。 */
 function markRyuoResultSeen() {
   const season = ryuoSeason.value;
@@ -4336,7 +4360,7 @@ function dismissWelcome() {
  * ホームの「つぎはこれ：対局する」。対局準備を開かず、おすすめの強さ・平手で、先後は振り駒で決めてすぐ始める。
  * ほかの設定(助言・作戦など)は、前に対局準備で選んだものを使う。設定を選びたいときは「自由対局」のタイルから。
  */
-function startQuickMatch(options: { level?: number; handicapId?: string } = {}) {
+function startQuickMatch(options: { level?: number; handicapId?: string; attackGuide?: boolean } = {}) {
   confirmDiscardSuspended(() => {
     yakobiNoteOpen.value = false;
     openPregame();
@@ -4353,7 +4377,12 @@ function startQuickMatch(options: { level?: number; handicapId?: string } = {}) 
       beginMatch();
       return;
     }
-    matchKind.value = "normal";
+    // 弱点の練習「駒の利きを見ながら対局」は、平手の学習対局で、駒の利きを付けて始める。
+    matchKind.value = options.attackGuide ? "learning" : "normal";
+    if (options.attackGuide) {
+      learningStartType.value = "standard";
+      attackGuideEnabled.value = true;
+    }
     const toss = throwFurigoma();
     selectedPlayerColor.value = toss.playerColor;
     beginMatch();
@@ -4373,11 +4402,12 @@ const ENDGAME_START_LABEL = "終盤戦";
 function startEndgameMatch() {
   confirmDiscardSuspended(() => { void startEndgameNow(); });
 }
-async function startEndgameNow({ excludeSfen = "" } = {}) {
+async function startEndgameNow({ excludeSfen = "", ownOnly = false } = {}) {
   const { endgameIntro, endgameSources, pickEndgameStart, sourceFromRecentGame } = await import("./core/endgame-start.mjs");
-  // 名局に、最近の自分の対局(終局まで指したもの)も加えて選ぶ。
+  // 名局に、最近の自分の対局(終局まで指したもの)も加えて選ぶ。弱点の練習(ownOnly)では、自分の対局から選ぶ(選べなければ名局も)。
   const ownSources = loadRecentGames(browserStorage()).map(sourceFromRecentGame).filter((source) => source !== null);
-  const start = pickEndgameStart([...endgameSources(), ...ownSources], { excludeSfen });
+  const start = (ownOnly ? pickEndgameStart(ownSources, { excludeSfen }) : null)
+    ?? pickEndgameStart([...endgameSources(), ...ownSources], { excludeSfen });
   if (!start) return;
   yakobiNoteOpen.value = false;
   stopGuidedReview();
@@ -4690,6 +4720,15 @@ function refreshHomeProgress() {
   homeProblemsSolved.value = Object.keys(loadProblemProgress(browserStorage()).solved).length;
   homeWelcomeChoice.value = welcomeChoiceFrom(browserStorage(), WELCOME_SEEN_KEY);
   homeStreak.value = currentStreak(loadPlayStreak(browserStorage()));
+  refreshPlayInsight();
+  // 終えた対局の中身の解析が残っていれば、ホームにいるあいだに続ける。
+  if (playInsight.value.queue.length) void playInsightAnalysis.processQueue();
+}
+function refreshPlayInsight() {
+  const store = browserStorage();
+  playInsight.value = loadPlayInsight(store);
+  homeReviewProblemIds.value = new Set(loadReviewProblems(store).map((problem: { id: string }) => problem.id));
+  homeReviewDueId.value = dueReviewId(loadReviewQueue(store));
 }
 watch([homeOpen, tutorialOpen, problemSetOpen, welcomeOpen], ([home, tutorial, problems]) => {
   if (home && !tutorial && !problems) refreshHomeProgress();
@@ -4720,7 +4759,7 @@ function homeTileClass(id: string) {
 }
 
 type HomeNext = {
-  id: "resume" | "tutorial" | "match" | "tournament" | "problems"; label: string; description: string;
+  id: "resume" | "tutorial" | "match" | "tournament" | "problems" | "practice"; label: string; description: string;
   /** 立て直しのときの「香落ちで挑む」のLv。 */
   handicapLevel?: number | null;
 };
@@ -4749,7 +4788,9 @@ const homeNext = computed<HomeNext>(() => {
     case 4:
       return { id: "tournament", label: "竜王戦に出よう", description: "6組から、トーナメントを勝ち上がって竜王をめざそう" };
     default:
-      // 5段目: 実力と実績の見立て(初勝利の次・立て直し・連勝の挑戦・昇級をかけた一局・ふだんの対局)。理由を1行で添える。
+      // 5段目: 実力と実績の見立て(初勝利の次・立て直し・連勝の挑戦・復習の1問・弱点の練習・昇級をかけた一局・ふだんの対局)。
+      // 理由を1行で添える。
+      if (plan.practice) return { id: "practice", label: plan.title, description: plan.reason };
       return { id: "match", label: plan.title, description: plan.reason, handicapLevel: plan.handicapLevel };
   }
 });
@@ -4772,7 +4813,40 @@ function startHomeNext() {
   else if (homeNext.value.id === "tutorial") openTutorialLesson();
   else if (homeNext.value.id === "tournament") openTournamentScreen();
   else if (homeNext.value.id === "problems") problemSetOpen.value = true;
+  else if (homeNext.value.id === "practice" && playPlan.value.practice) startPractice(playPlan.value.practice);
   else startQuickMatch();
+}
+/** 問題集を開いたときに、すぐ出す問題(「つぎはこれ」の復習の1問・詰みの解き直し)。 */
+const problemSetStart = ref<{ id: string; review: boolean } | null>(null);
+watch(problemSetOpen, (open) => {
+  if (!open) problemSetStart.value = null;
+});
+/**
+ * 「つぎはこれ」の練習(docs/home-next-adaptive-design.mdの4章(ウ)(エ))。始めたことを記録し、次の2局は対局を勧める。
+ * - review・mate: 問題集のその1問
+ * - ending: 自分の最近の対局の終盤から指す
+ * - free: 「駒の利き」を付けた学習対局(同じLv。レーティングの対象外)
+ * - opening: 学習対局の対局準備で、作戦カードを選ぶ
+ */
+function startPractice(practice: PracticeStep) {
+  const insight = recordPractice(loadPlayInsight(browserStorage()), { kind: practice.kind, games: ratingState.value.games });
+  savePlayInsight(browserStorage(), insight);
+  playInsight.value = insight;
+  if (practice.kind === "review" || practice.kind === "mate") {
+    problemSetStart.value = practice.problemId ? { id: practice.problemId, review: practice.kind === "review" } : null;
+    problemSetOpen.value = true;
+  } else if (practice.kind === "ending") {
+    confirmDiscardSuspended(() => { void startEndgameNow({ ownOnly: true }); });
+  } else if (practice.kind === "free") {
+    startQuickMatch({ attackGuide: true });
+  } else {
+    confirmDiscardSuspended(() => {
+      matchKind.value = "learning";
+      learningStartType.value = "standard";
+      closeHome();
+      openPlanSheet("pregame");
+    });
+  }
 }
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
 const homeGreeting = computed(() => {
@@ -6508,6 +6582,13 @@ function recordRatedGame(matchResult: MatchResult) {
   ratingState.value = applied.state;
   ratingChange.value = { before: applied.before, after: applied.after, delta: applied.delta };
   saveRatingState(browserStorage(), applied.state);
+  // 自由対局は、中身を裏で解析して、見立てと弱点の練習に使う(竜王戦は大会の統計で解析する)。
+  if (!tournament) {
+    const insight = enqueuePlayInsight(loadPlayInsight(browserStorage()), { moves: [...moveHistory], color, outcome, level });
+    savePlayInsight(browserStorage(), insight);
+    playInsight.value = insight;
+    void playInsightAnalysis.processQueue();
+  }
 }
 
 function finish(matchResult: MatchResult) {
@@ -8036,6 +8117,7 @@ onBeforeUnmount(() => {
   portraitObserver?.disconnect();
   engine?.quit();
   ryuoStats.dispose();
+  playInsightAnalysis.dispose();
   if (typeof window !== "undefined") {
     window.removeEventListener("pagehide", handlePageHide);
     window.removeEventListener("keydown", handleGlobalKeydown);

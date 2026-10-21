@@ -1,10 +1,13 @@
 /**
- * 「つぎはこれ」の対局の見立て(docs/home-next-adaptive-design.mdの3章・4章。段階1: 勝ち負けの記録だけで決める)。
- * レーティングと、最近の勝ち負け・Lvごとの勝ち負けから、勝ち越せそうな相手のLvと、勧める理由の1行を決める。
+ * 「つぎはこれ」の見立て(docs/home-next-adaptive-design.mdの3章・4章)。
+ * 段階1: レーティングと、最近の勝ち負け・Lvごとの勝ち負けから、勝ち越せそうな相手のLvと、勧める理由の1行を決める。
+ * 段階2: 自由対局の中身の記録(core/play-insight.mjs)から、内容の強さを見立てに混ぜ、復習の1問・弱点の練習を勧める。
  * 黙って難易度を変えない。勧めるだけで、選ぶのは本人(自由対局ではどのLvでも選べる)。画面に依存しない。
  */
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
 import { gradeName, levelRating, nextRatingGoal } from './player-rating.mjs';
+import { contentStrength, detectWeaknesses } from './play-insight.mjs';
+import { isReviewProblemId } from './review-problems.mjs';
 
 const MAX_LEVEL = CPU_STRENGTH_PRESETS.at(-1).level;
 const RATING_PER_LEVEL = levelRating(1);
@@ -53,6 +56,21 @@ export function resultStrength(state) {
   return performance !== null && performance < rating ? performance : rating;
 }
 
+/** 内容の強さの重み(結果6：内容4)と、結果の強さから動かす幅の上限(Lv2つ分)。 */
+export const CONTENT_WEIGHT = 0.4;
+export const CONTENT_SPREAD = 160;
+
+/**
+ * 見立ての強さ(3-2)。内容の強さ(R内容)がなければ結果の強さ。あれば0.6×R結果＋0.4×R内容を、R結果の±160に収める。
+ * @param {number} result 結果の強さ
+ * @param {number | null} content 内容の強さ
+ */
+export function blendedStrength(result, content) {
+  if (!Number.isFinite(content)) return result;
+  const blended = (1 - CONTENT_WEIGHT) * result + CONTENT_WEIGHT * content;
+  return Math.round(Math.min(result + CONTENT_SPREAD, Math.max(result - CONTENT_SPREAD, blended)));
+}
+
 function lastIndexOf(list, test) {
   for (let index = list.length - 1; index >= 0; index -= 1) if (test(list[index])) return index;
   return -1;
@@ -88,15 +106,69 @@ export function unbeatenCap(state) {
 }
 
 /**
- * 次の対局の見立て。
- * kind: 'first-win'(初めて勝ったLvの次)・'warmup'(3連敗の立て直し)・'challenge'(2連勝)・'promotion'(昇級をかけた一局)・'normal'。
- * handicapLevelは、立て直しで「香落ちで挑む」ときのLv(連敗したLv)。
- * @param {any} state player-ratingの記録
- * @returns {{ level: number, kind: string, title: string, reason: string, base: number, cap: number, handicapLevel: number | null }}
+ * @typedef {{ kind: 'review' | 'mate' | 'ending' | 'free' | 'opening', problemId?: string }} PracticeStep
+ * @typedef {{
+ *   level: number, kind: string, title: string, reason: string, base: number, cap: number, handicapLevel: number | null,
+ *   practice?: PracticeStep,
+ * }} PlayPlan
  */
-export function recommendPlay(state) {
+
+/**
+ * 次の見立て。
+ * kind: 'first-win'(初めて勝ったLvの次)・'warmup'(3連敗の立て直し)・'challenge'(2連勝)・'practice'(復習の1問・弱点の練習)・
+ * 'promotion'(昇級をかけた一局)・'normal'。
+ * handicapLevelは、立て直しで「香落ちで挑む」ときのLv(連敗したLv)。practiceは、練習のときの中身。
+ * 練習のときも、levelは対局で勧めるLv(弱点の練習の学習対局の強さに使う)。
+ * @param {any} state player-ratingの記録
+ * @param {{ insight?: any, reviewDueId?: string | null, problemIds?: Set<string> | null }} [context]
+ *   insightは対局の中身の記録(play-insight.mjs)、reviewDueIdは復習の期日が来た問題、problemIdsは「あなたの対局から」の問題のID
+ * @returns {PlayPlan}
+ */
+export function recommendPlay(state, context = {}) {
+  const plan = recommendMatch(state, contentStrength(context.insight?.games ?? []));
+  if (plan.kind !== 'normal' && plan.kind !== 'promotion') return plan;
+  const practice = recommendPractice(state, context);
+  return practice ? { ...plan, kind: 'practice', ...practice } : plan;
+}
+
+/** 練習は対局2局に1回まで。 */
+export const PRACTICE_EVERY = 2;
+
+const PRACTICE_TEXT = Object.freeze({
+  mate: { title: '詰みを解き直そう', reason: (count) => (count > 1 ? `詰みを逃した局面が${count}つ。解き直そう` : '詰みを逃した局面があったね。解き直そう') },
+  ending: { title: '自分の対局の終盤から', reason: () => '終盤で損が増えているね。自分の対局の終盤から指してみよう' },
+  free: { title: '駒の利きを見ながら対局', reason: () => '駒をタダで取られる手が多め。利きを見ながら指そう' },
+  opening: { title: '作戦カードで組み方を練習', reason: () => '序盤で押されたね。作戦カードで組み方を練習しよう' },
+});
+
+/**
+ * 復習の1問(ウ)・弱点の練習(エ)。練習のあと対局が2局たっていなければ出さない。弱点は、前の練習と同じ種類を続けない。
+ * @returns {{ title: string, reason: string, practice: PracticeStep } | null}
+ */
+function recommendPractice(state, { insight = null, reviewDueId = null, problemIds = null } = {}) {
+  const last = insight?.practice;
+  if (last && (state?.games ?? 0) - last.games < PRACTICE_EVERY) return null;
+  if (reviewDueId) {
+    const reason = isReviewProblemId(reviewDueId) ? '前に逃した詰み、今日は見つけられるかな' : '前に苦労した問題、今日は解けるかな';
+    return { title: 'やこび姫からの1問', reason, practice: { kind: 'review', problemId: reviewDueId } };
+  }
+  for (const weakness of detectWeaknesses(insight?.games ?? [])) {
+    if (weakness.kind === last?.kind) continue;
+    if (weakness.kind === 'mate' && !(weakness.problemId && problemIds?.has(weakness.problemId))) continue;
+    const text = PRACTICE_TEXT[weakness.kind];
+    return {
+      title: text.title,
+      reason: text.reason(weakness.count),
+      practice: weakness.problemId ? { kind: weakness.kind, problemId: weakness.problemId } : { kind: weakness.kind },
+    };
+  }
+  return null;
+}
+
+/** 次の対局のLvと理由(段階1の見立てに、内容の強さを混ぜる)。 */
+function recommendMatch(state, content) {
   const games = ratedHistory(state);
-  const strength = resultStrength(state);
+  const strength = blendedStrength(resultStrength(state), content);
   const base = clampLevel((strength - TARGET_MARGIN) / RATING_PER_LEVEL);
   const cap = unbeatenCap(state);
   const recentText = recentRecordText(games);

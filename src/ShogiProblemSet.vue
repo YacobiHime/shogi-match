@@ -212,6 +212,10 @@ type TsumeKindId = (typeof TSUME_KINDS)[number]["id"];
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
+  /** 開いたらすぐ出す問題(ホームの「つぎはこれ」の復習の1問・詰みの解き直し)。見つからなければ一覧を出す。 */
+  startProblemId: { type: String, default: "" },
+  /** startProblemIdを「やこび姫からの1問」として出すか。 */
+  startReview: { type: Boolean, default: false },
 });
 const emit = defineEmits(["close"]);
 
@@ -403,6 +407,10 @@ function openProblem(id: string, { random = false, review = false } = {}) {
   view.value = "problem";
   resetBoard();
 }
+// ホームの「つぎはこれ」から開いたときは、その問題をすぐ出す。
+onMounted(() => {
+  if (props.startProblemId && findProblem(props.startProblemId)) openProblem(props.startProblemId, { review: props.startReview });
+});
 /** 選んでいる詰将棋の種類から、手数も問わずランダムに出題する。まだ解いていない問題を優先する。 */
 function openRandomProblem() {
   const kind = tsumeKind.value;

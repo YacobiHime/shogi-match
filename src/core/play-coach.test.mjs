@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { applyRatedGame, createRatingState, recommendedLevel } from './player-rating.mjs';
-import { TARGET_MARGIN, recentPerformance, recommendPlay, resultNextStep, resultStrength, unbeatenCap } from './play-coach.mjs';
+import { CONTENT_SPREAD, TARGET_MARGIN, blendedStrength, recentPerformance, recommendPlay, resultNextStep, resultStrength, unbeatenCap } from './play-coach.mjs';
+import { completePlayInsight, createPlayInsight, recordPractice } from './play-insight.mjs';
+import { reviewProblemId } from './review-problems.mjs';
 
 /** レーティングRで、すでにgames局指した人から、結果を順に足す。 */
 function play(rating, games, results) {
@@ -106,5 +108,68 @@ describe('終局画面の主ボタン', () => {
     expect(resultNextStep({ won: true, rated: false, level: 15, lanceHandicap: true, firstWin: false })).toMatchObject({ kind: 'even', level: 15, title: '平手でLv.15に挑む', sameTitle: '香落ちでもう一局' });
     expect(resultNextStep({ won: false, rated: true, level: 15, lanceHandicap: false, firstWin: false })).toBeNull();
     expect(resultNextStep({ won: true, rated: false, level: 15, lanceHandicap: false, firstWin: false })).toBeNull();
+  });
+});
+
+/** 中身の記録。summariesは古い順。 */
+function insightOf(summaries, practice = null) {
+  let insight = createPlayInsight();
+  summaries.forEach((summary, at) => { insight = completePlayInsight(insight, { at, level: 14, outcome: 'loss', color: 'black' }, summary); });
+  return practice ? recordPractice(insight, practice) : insight;
+}
+function summary({ loss = 30, mates = [], freeLosses = 0 } = {}) {
+  const phase = { n: 10, sum: loss * 10, big: 0 };
+  return { moves: 30, sum: loss * 30, big: 0, phases: { opening: phase, middle: phase, ending: phase }, mates, freeLosses, standing30: 0 };
+}
+
+describe('段階2: 対局の中身', () => {
+  it('内容の強さは結果6：内容4で混ぜ、結果からR160より外へは動かさない', () => {
+    expect(blendedStrength(1200, null)).toBe(1200);
+    expect(blendedStrength(1200, 1000)).toBe(1120);
+    expect(blendedStrength(1200, 0)).toBe(1200 - CONTENT_SPREAD);
+    expect(blendedStrength(1200, 3000)).toBe(1200 + CONTENT_SPREAD);
+  });
+
+  it('内容が良ければ、結果より先に上を勧める(測れた手が40手以上のとき)', () => {
+    const state = { ...createRatingState(), rating: 1200, games: 3 };
+    const good = recommendPlay(state, { insight: insightOf([summary({ loss: 20 }), summary({ loss: 20 })]) });
+    expect(good.level).toBeGreaterThan(recommendPlay(state).level);
+    const few = recommendPlay(state, { insight: insightOf([summary({ loss: 20 })]) });
+    expect(few.level).toBe(recommendPlay(state).level);
+  });
+
+  it('復習の期日が来た問題があれば「やこび姫からの1問」', () => {
+    const state = { ...createRatingState(), rating: 1200, games: 20, history: [] };
+    const id = reviewProblemId('sfen x');
+    expect(recommendPlay(state, { reviewDueId: id })).toMatchObject({
+      kind: 'practice', title: 'やこび姫からの1問', reason: '前に逃した詰み、今日は見つけられるかな', practice: { kind: 'review', problemId: id },
+    });
+    expect(recommendPlay(state, { reviewDueId: 'tsume-1' }).reason).toBe('前に苦労した問題、今日は解けるかな');
+  });
+
+  it('弱点の練習。詰みを逃したら、その局面の問題(問題があるときだけ)', () => {
+    const state = { ...createRatingState(), rating: 1200, games: 20, history: [] };
+    const insight = insightOf([summary({ mates: [{ sfen: 'mate sfen', length: 1 }] })]);
+    const id = reviewProblemId('mate sfen');
+    expect(recommendPlay(state, { insight, problemIds: new Set([id]) })).toMatchObject({
+      kind: 'practice', title: '詰みを解き直そう', reason: '詰みを逃した局面があったね。解き直そう', practice: { kind: 'mate', problemId: id },
+    });
+    expect(recommendPlay(state, { insight, problemIds: new Set() }).kind).not.toBe('practice');
+    const free = insightOf([summary({ freeLosses: 2 })]);
+    expect(recommendPlay(state, { insight: free })).toMatchObject({ kind: 'practice', practice: { kind: 'free' }, title: '駒の利きを見ながら対局' });
+  });
+
+  it('練習は対局2局に1回まで。同じ弱点を続けて出さない', () => {
+    const free = [summary({ freeLosses: 2 })];
+    const just = { ...createRatingState(), rating: 1200, games: 21, history: [] };
+    expect(recommendPlay(just, { insight: insightOf(free, { kind: 'mate', games: 20 }) }).kind).not.toBe('practice');
+    const later = { ...just, games: 22 };
+    expect(recommendPlay(later, { insight: insightOf(free, { kind: 'mate', games: 20 }) }).practice?.kind).toBe('free');
+    expect(recommendPlay(later, { insight: insightOf(free, { kind: 'free', games: 20 }) }).kind).not.toBe('practice');
+  });
+
+  it('立て直し・初勝利の次・連勝の挑戦は、練習より先', () => {
+    const state = play(1200, 12, [[15, 'loss'], [15, 'loss'], [15, 'loss']]);
+    expect(recommendPlay(state, { reviewDueId: 'tsume-1' }).kind).toBe('warmup');
   });
 });

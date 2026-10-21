@@ -261,6 +261,24 @@ describe("match screen regressions", () => {
     expect(rematch).not.toMatch(/pregameOpen\.value = true/);
   });
 
+  it("analyzes finished free games in the background and offers practice from their content", () => {
+    // 自由対局だけを、終局後に裏の解析の列へ足す(竜王戦は大会の統計で解析する)。対局中は解析を止める。
+    const rated = source.split("function recordRatedGame(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(rated).toMatch(/if \(!tournament\) \{[\s\S]*?enqueuePlayInsight\([\s\S]*?playInsightAnalysis\.processQueue\(\)/);
+    expect(source).toMatch(/usePlayInsightAnalysis\(\{[\s\S]*?paused: \(\) => active\.value/);
+    expect(source).toMatch(/playInsightAnalysis\.dispose\(\)/);
+    // 見立ては中身の記録と復習の箱も見る。練習は「つぎはこれ」から始め、始めたことを記録する。
+    expect(source).toMatch(/recommendPlay\(ratingState\.value, \{\s*insight: playInsight\.value,/);
+    expect(source).toMatch(/if \(plan\.practice\) return \{ id: "practice"/);
+    const practice = source.split("function startPractice(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(practice).toMatch(/recordPractice\(/);
+    expect(practice).toMatch(/problemSetOpen\.value = true/);
+    expect(practice).toMatch(/startEndgameNow\(\{ ownOnly: true \}\)/);
+    expect(practice).toMatch(/startQuickMatch\(\{ attackGuide: true \}\)/);
+    expect(practice).toMatch(/openPlanSheet\("pregame"\)/);
+    expect(source).toMatch(/:start-problem-id="problemSetStart\?\.id \?\? ''"/);
+  });
+
   it("starts the home recommendation without the setup screen and decides colors by furigoma", () => {
     const homeNext = source.split("function startHomeNext()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(homeNext).toContain("startQuickMatch()");

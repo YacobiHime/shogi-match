@@ -279,6 +279,8 @@ export function buildGuidedReview(points, {
     losingPly: losingMove?.ply ?? null,
     decisivePly: decisiveMove?.ply ?? null,
     quizCount: quizzes.length,
+    // 1手ごとの詰み逃しとタダ取られ。「つぎはこれ」の弱点の見立て(core/play-insight.mjs)が使う。
+    moments: moveInfos.map(({ ply, mover, missedMate, leftFree }) => ({ ply, mover, missedMate, leftFree: Boolean(leftFree) })),
   };
 }
 

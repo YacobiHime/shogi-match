@@ -1,10 +1,8 @@
 import type { Ref } from "vue";
-import { ShogiEngine } from "../../core/engine.js";
-import { analysisPointsFromResults, analyzeKifuStaged, STAGED_ANALYSIS_PLANS } from "../../core/kifu-analysis-pipeline.mjs";
-import { formatHintMove } from "../../core/match-assists.mjs";
+import type { ShogiEngine } from "../../core/engine.js";
 import { summarizeGame } from "../../core/ryuo-stats.mjs";
-import { appendUsiMove, createGameRecord, STANDARD_SFEN } from "../../game-state";
-import { type EngineFactory, engineLane, movesPosition } from "./analysisEngines";
+import type { EngineFactory } from "./analysisEngines";
+import { createScanEngine, scanGameMoves } from "./scanAnalysis";
 
 type RyuoAnalysisJob = { seasonId: number; index: number; moves: string[]; color: "black" | "white"; win: boolean; opponentId: string };
 
@@ -24,17 +22,8 @@ export function useRyuoStatsAnalysis({ season, saveSeason, engineFactory, compac
   let running = false;
 
   async function ensureStatsEngine(): Promise<ShogiEngine | null> {
-    if (statsEngine) return statsEngine;
-    try {
-      const created = new ShogiEngine({ factory: await engineFactory(), hashMb: 16 });
-      await created.init();
-      await created.ready();
-      created.newGame();
-      statsEngine = created;
-      return created;
-    } catch {
-      return null;
-    }
+    if (!statsEngine) statsEngine = await createScanEngine(engineFactory);
+    return statsEngine;
   }
 
   async function analyzeGameRecord(job: RyuoAnalysisJob) {
@@ -42,31 +31,9 @@ export function useRyuoStatsAnalysis({ season, saveSeason, engineFactory, compac
     const failed = { failed: true, win: job.win, opponentRook, plies: job.moves.length };
     const worker = await ensureStatsEngine();
     if (!worker) return failed;
-    const replay = createGameRecord(STANDARD_SFEN);
-    const steps = [{ sfen: replay.position.sfen, lastMove: "", label: "" }];
-    for (const move of job.moves) {
-      let label = "";
-      try {
-        label = formatHintMove(move, replay.position.sfen);
-      } catch { /* ラベルは無くてもよい */ }
-      appendUsiMove(replay, move);
-      steps.push({ sfen: replay.position.sfen, lastMove: move, label });
-    }
-    const isCompact = compact();
-    const base = STAGED_ANALYSIS_PLANS[isCompact ? "mobile" : "desktop"];
-    const plan = { ...base, scan: isCompact ? { nodes: 4000, maxTimeMs: 500, multiPv: 2 } : { nodes: 8000, maxTimeMs: 700, multiPv: 2 } };
-    let results: unknown[] = [];
-    let contexts: unknown[] = [];
-    await analyzeKifuStaged({
-      steps,
-      lanes: [engineLane(worker, (_sfen, ply) => movesPosition("startpos", job.moves, ply))],
-      plan,
-      stages: ["scan"],
-      onResults: (latest: unknown[], latestContexts: unknown[]) => { results = latest; contexts = latestContexts; },
-    });
-    const points = analysisPointsFromResults(steps, results, contexts);
+    const { points, sfens } = await scanGameMoves({ worker, moves: job.moves, compact: compact() });
     return summarizeGame({
-      points, sfens: steps.map((step) => step.sfen), color: job.color, win: job.win, opponentRook, plies: job.moves.length,
+      points, sfens, color: job.color, win: job.win, opponentRook, plies: job.moves.length,
     });
   }
 
