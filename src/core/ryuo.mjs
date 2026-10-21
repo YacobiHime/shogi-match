@@ -9,6 +9,7 @@ import { USER_HOLDER, createRoster, seasonEntry, selectParticipants } from './ry
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO, hananeAfterLine, hananeBeforeLine, hananeCoachIntro, hananeGrudgeBonus, yoshihikoCoachIntro } from './ryuo-story.mjs';
 import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
 import { matchStakes, seasonGoalLine } from './ryuo-stakes.mjs';
+import { opponentArrivalLine, seasonRoad } from './ryuo-road.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import {
   BASE_DIFFICULTY,
@@ -679,9 +680,13 @@ export function recordUserGame(season, outcome) {
   const rng = createRng(next.rngState);
   const win = outcome === 'win';
   const opponent = pending.opponentId;
+  // 回戦(round)は、竜王への道の勝ち上がりの動きの出発点に使う(core/ryuo-road.mjs)。
+  const pendingBracket = pending.kind !== 'game' ? null
+    : pending.phase === 'ranking' ? next.ranking : pending.phase === 'revival' ? next.revival[pending.blockIndex] : next.main;
   next.userGames.push({
     phase: pending.phase, opponentId: opponent, win, color: pending.color, seriesGame: pending.kind !== 'game',
     label: pending.label ?? '',
+    round: pendingBracket?.nodes[pending.nodeId]?.round ?? 0,
   });
   next.pending = null;
   // 相手の成績の内訳(先後・戦法)のために、この対局の先手と、相手の戦法を残す。
@@ -828,6 +833,7 @@ export function describeSeason(season) {
     ? {
       ...season.pending, opponent: playerBrief(season, season.pending.opponentId), label: pendingLabel(season), rival: rivalPendingView(season),
       stakes: pendingStakes(season),
+      arrival: opponentArrivalLine(season),
     }
     : null;
   return {
@@ -839,6 +845,8 @@ export function describeSeason(season) {
       ? `${season.startGroup}組${PHASE_TEXT[season.phase]}`
       : PHASE_TEXT[season.phase],
     tables,
+    // 竜王への道(core/ryuo-road.mjs)。
+    road: seasonRoad(season, { promote: scaleById(season.settings.scale).promote }),
     series: seriesViews,
     pending: pendingView,
     // 直前のプレイヤーの対局(相手と、相手の特徴が出た場面)。

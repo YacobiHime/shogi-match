@@ -420,6 +420,7 @@
       :user-level="recommendedStrengthPreset.level"
       :rating-text="`R${ratingState.rating}`"
       :start-at="tournamentStartAt"
+      :from-game="tournamentFromGame"
       :oshi="ryuoOshi"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
@@ -2150,6 +2151,8 @@ let ryuoCpuMoves: { ply: number; kind: string; traits: string[] }[] = [];
 const ryuoView = computed(() => (ryuoSeason.value ? describeSeason(ryuoSeason.value) : null));
 const ryuoOpponent = computed(() => (ryuoGame.value ? ryuoSeason.value?.players?.[ryuoGame.value.opponentId] ?? null : null));
 const tournamentStartAt = ref<"select" | "season">("select");
+/** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを見せる。 */
+const tournamentFromGame = ref(false);
 /** 大会の難易度のおすすめ。6組の相手の平均が、レーティングに近いLvになる難易度。 */
 const ryuoDefaultDifficulty = computed(() => recommendedDifficulty(recommendedStrengthPreset.value.level));
 const tournamentView = ref<{ goBack: () => void } | null>(null);
@@ -4498,6 +4501,7 @@ function openMatchSetup(kind: MatchKind) {
 /** タイトル画面の「大会」。大会の画面を開く。 */
 function openTournamentScreen() {
   tournamentStartAt.value = "select";
+  tournamentFromGame.value = false;
   tournamentOpen.value = true;
   // 前に終えた対局の解析が残っていれば、続きを解析する。
   if (ryuoSeason.value?.analysisQueue?.length) void ryuoStats.processQueue();
@@ -7647,6 +7651,7 @@ function leaveFinishedMatch({ toHome = false }: { toHome?: boolean } = {}) {
   if (props.showHome) openHome();
   if (backToTournament) {
     tournamentStartAt.value = "season";
+    tournamentFromGame.value = true;
     tournamentOpen.value = true;
   }
 }

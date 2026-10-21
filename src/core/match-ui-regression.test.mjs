@@ -109,7 +109,9 @@ describe("match screen regressions", () => {
   it("returns to the Ryuo screen, not the home screen, after a Ryuo game or its review", () => {
     // 対局や検討を終えたら、竜王戦の対局なら竜王戦の画面(トーナメント表)へ戻る。明示的な「ホームへ」だけはホームへ。
     expect(source).toMatch(/const backToTournament = !toHome && props\.showHome && Boolean\(ryuoGame\.value\)/);
-    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = "season";\s*tournamentOpen\.value = true;/);
+    // 対局から戻ったときは、竜王への道で前の段から登る動きを見せる(fromGame)。
+    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
+    expect(source).toMatch(/:from-game="tournamentFromGame"/);
     expect(source).toMatch(/@click="leaveFinishedMatch\(\{ toHome: true \}\)"/);
   });
 

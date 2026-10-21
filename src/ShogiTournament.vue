@@ -94,17 +94,16 @@
             <h2>{{ bannerTitle }}</h2>
             <p data-phase>{{ bannerSub }}</p>
           </div>
-          <ol class="shogi-tournament__route" :style="{ '--route-steps': route.length }">
-            <li
-              v-for="step in route"
-              :key="step.key"
-              :class="['shogi-tournament__step', `shogi-tournament__step--${step.state}`]"
-              :aria-current="step.state === 'current' ? 'step' : undefined"
-            >
-              <span class="shogi-tournament__step-dot" aria-hidden="true"></span>
-              <span>{{ step.label }}</span>
-            </li>
-          </ol>
+          <!-- 竜王への道(RyuoRoad.vue)。入口では組の階段を見せるので、期が始まってから出す。 -->
+          <RyuoRoad
+            v-if="screen !== 'ryuo' && view?.road"
+            class="shogi-tournament__route"
+            :road="view.road"
+            :asset-base-url="assetBaseUrl"
+            :animate="climbPending"
+            :last-win="view.lastGame?.win ?? false"
+            @played="climbPending = false"
+          />
         </section>
 
         <div ref="mainEl" class="shogi-tournament__main">
@@ -241,6 +240,8 @@
                   <small v-if="opponentAbilitySummary" class="shogi-tournament__player-ability" data-opponent-ability-line>{{ opponentAbilitySummary }}</small>
                 </div>
               </div>
+              <!-- 相手が前の回戦をどう勝ってきたか(自動対局の勝ち方。D:8-3)。 -->
+              <p v-if="view.pending.arrival" class="shogi-tournament__arrival" data-arrival>{{ view.pending.arrival }}</p>
               <!-- この一局に賭けているもの(core/ryuo-stakes.mjs)。目標まであと何勝と、勝てば・負ければ。 -->
               <div v-if="view.pending.stakes" class="shogi-tournament__stakes" data-stakes>
                 <p class="shogi-tournament__stakes-goal" data-stakes-goal>{{ view.pending.stakes.goal }}</p>
@@ -462,6 +463,7 @@ import TournamentTree from "./TournamentTree.vue";
 import RadarChart from "./RadarChart.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RyuoLadder from "./RyuoLadder.vue";
+import RyuoRoad, { type RoadView } from "./RyuoRoad.vue";
 import YakobiSays from "./YakobiSays.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
@@ -526,7 +528,10 @@ type View = {
     rival?: null | { story: string; line: string; coach: string; grudge: boolean };
     /** この一局に賭けているもの(core/ryuo-stakes.mjs)。 */
     stakes?: null | { win: string; lose: string; goal: string; boss: boolean };
+    /** 相手が前の回戦をどう勝ってきたか(core/ryuo-road.mjs)。 */
+    arrival?: string;
   };
+  road?: RoadView;
   rivalId?: string | null;
   result: null | {
     outcome: string; startGroup: number; newGroup: number; promoted: boolean; relegated: boolean; challenger: boolean;
@@ -555,6 +560,8 @@ const props = defineProps({
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
   startAt: { type: String as PropType<"select" | "season">, default: "select" },
+  /** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを1回だけ見せる。 */
+  fromGame: { type: Boolean, default: false },
   /** 推しの棋士(core/ryuo-oshi.mjs)。やこび姫が、期の中での様子を知らせる。 */
   oshi: { type: Object as PropType<{ id: string; name: string } | null>, default: null },
 });
@@ -585,6 +592,8 @@ const screen = ref<"select" | "ryuo" | "season" | "result">(
   props.startAt === "season" && props.view ? (props.view.result ? "result" : "season") : "select",
 );
 const reEntry = ref(false);
+/** 竜王への道の、登る動きをまだ見せていない。 */
+const climbPending = ref(props.fromGame);
 const tableChoice = ref<string | null>(null);
 /** 中身の欄。画面を切り替えたら、上から見せる。 */
 const mainEl = ref<HTMLElement | null>(null);
@@ -639,32 +648,6 @@ const bannerSub = computed(() => {
   if (!view) return "";
   return view.mode === "defense" && view.phase !== "done" ? "防衛戦" : view.phaseText;
 });
-type RouteState = "done" | "current" | "todo" | "won" | "lost";
-const OUTCOME_STEP: Record<string, string> = {
-  "ranking-out": "ranking", "main-out": "main", "playoff-lost": "playoff", "finals-lost": "finals", "defense-lost": "finals", champion: "ryuo",
-};
-const PHASE_STEP: Record<string, string> = {
-  ranking: "ranking", revival: "ranking", "main-setup": "main", main: "main", playoff: "playoff", finals: "finals", "prepare-defense": "finals",
-};
-const route = computed(() => {
-  const view = screen.value === "ryuo" ? null : props.view;
-  const defense = view ? view.mode === "defense" : entry.value.mode === "defense";
-  const group = view ? view.startGroup : entry.value.group;
-  const keys = defense ? ["finals", "ryuo"] : ["ranking", "main", "playoff", "finals", "ryuo"];
-  const labels: Record<string, string> = {
-    ranking: `${group}組ランキング戦`, main: "決勝トーナメント", playoff: "挑戦者決定戦",
-    finals: defense ? "防衛戦 七番勝負" : "七番勝負", ryuo: defense ? "竜王防衛" : "竜王",
-  };
-  const outcome = view?.result?.outcome;
-  const at = view ? keys.indexOf(outcome ? OUTCOME_STEP[outcome] : PHASE_STEP[view.phase] ?? "ranking") : -1;
-  const reachedState: RouteState = !outcome ? "current" : outcome === "champion" ? "won" : "lost";
-  return keys.map((key, index) => ({
-    key,
-    label: labels[key],
-    state: (index < at ? "done" : index === at ? reachedState : "todo") as RouteState,
-  }));
-});
-
 // ---- エントリー設定
 const DIFFICULTY_STEPS = Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => index + 1);
 const COACH_OPTIONS = [
@@ -1180,7 +1163,7 @@ const statTiles = computed(() => {
 }
 @media (min-width: 900px) {
   .shogi-game .shogi-tournament__banner {
-    grid-template-columns: auto minmax(0, 0.8fr) minmax(0, 1.6fr);
+    grid-template-columns: auto minmax(0, 0.7fr) minmax(0, 2.6fr);
     grid-template-areas: "seal title route";
   }
 }
@@ -1211,62 +1194,9 @@ const statTiles = computed(() => {
   line-height: 1.2;
 }
 .shogi-game .shogi-tournament__banner-title p { margin: 0.25rem 0 0; color: var(--tr-gold); font-weight: 700; }
-.shogi-game .shogi-tournament__route {
-  grid-area: route;
-  display: grid;
-  grid-template-columns: repeat(var(--route-steps), minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.shogi-game .shogi-tournament__step {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  gap: 0.35rem;
-  padding: 0 0.15rem;
-  color: rgba(255, 252, 244, 0.6);
-  font-size: 0.78em;
-  font-weight: 700;
-  line-height: 1.35;
-  text-align: center;
-}
-/* 段階の間を結ぶ線。通り過ぎた段階までを金にする。 */
-.shogi-game .shogi-tournament__step::before {
-  content: "";
-  position: absolute;
-  top: 0.5rem;
-  right: 50%;
-  width: 100%;
-  height: 2px;
-  background: rgba(255, 252, 244, 0.28);
-}
-.shogi-game .shogi-tournament__step:first-child::before { display: none; }
-.shogi-game .shogi-tournament__step--done::before,
-.shogi-game .shogi-tournament__step--current::before,
-.shogi-game .shogi-tournament__step--won::before,
-.shogi-game .shogi-tournament__step--lost::before { background: var(--tr-gold); }
-.shogi-game .shogi-tournament__step-dot {
-  position: relative;
-  z-index: 1;
-  box-sizing: border-box;
-  width: 1rem;
-  height: 1rem;
-  border: 2px solid rgba(255, 252, 244, 0.55);
-  background: var(--tr-deep);
-}
-.shogi-game .shogi-tournament__step--done .shogi-tournament__step-dot { border-color: var(--tr-gold); background: var(--tr-gold); }
-.shogi-game .shogi-tournament__step--done { color: rgba(255, 252, 244, 0.85); }
-.shogi-game .shogi-tournament__step--current { color: #fffcf4; }
-.shogi-game .shogi-tournament__step--current .shogi-tournament__step-dot {
-  border-color: #fffcf4;
-  background: var(--tr-lavender);
-}
-.shogi-game .shogi-tournament__step--won { color: var(--tr-gold); }
-.shogi-game .shogi-tournament__step--won .shogi-tournament__step-dot { border-color: #fffcf4; background: var(--tr-gold); }
-.shogi-game .shogi-tournament__step--lost { color: rgba(255, 252, 244, 0.6); }
-.shogi-game .shogi-tournament__step--lost .shogi-tournament__step-dot { border-color: rgba(255, 252, 244, 0.6); background: #5d6f80; }
+/* 竜王への道(RyuoRoad.vue)。帯の下の段(広い画面では右)に置き、収まらないときは道だけを横に送る。 */
+/* contain: 道の幅で帯の列が広がらないようにする(道は自分の中で横に送る)。 */
+.shogi-game .shogi-tournament__route { grid-area: route; min-width: 0; contain: inline-size; }
 
 /* ---- カード */
 .shogi-game .shogi-tournament__card {
@@ -1678,7 +1608,6 @@ const statTiles = computed(() => {
 @media (max-width: 600px) {
   .shogi-game .shogi-tournament__banner { padding: 0.8rem 0.9rem 0.9rem; }
   .shogi-game .shogi-tournament__seal { width: 2.8rem; height: 2.8rem; font-size: 1.5rem; }
-  .shogi-game .shogi-tournament__step { font-size: 0.7em; }
   .shogi-game .shogi-tournament__row { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-tournament__row-meta { grid-column: 1; }
   .shogi-game .shogi-tournament__choices--ten { grid-template-columns: repeat(7, minmax(0, 1fr)); }
@@ -1710,7 +1639,7 @@ const statTiles = computed(() => {
   left: 0.8rem;
   z-index: 1;
 }
-/* 大会の帯は、狭い画面では1行に詰め、道のりの文字はいまの段階だけ出す。 */
+/* 大会の帯は、狭い画面では詰める。竜王への道は、横に送って見る。 */
 @media (max-width: 899px) {
   .shogi-game .shogi-tournament__banner {
     gap: 0.35rem 0.7rem;
@@ -1718,11 +1647,9 @@ const statTiles = computed(() => {
   }
   .shogi-game .shogi-tournament__banner .shogi-tournament__seal { width: 2.2rem; height: 2.2rem; font-size: 1.2rem; }
   .shogi-game .shogi-tournament__banner h2 { font-size: 1.05rem; }
-  .shogi-game .shogi-tournament__step:not([aria-current="step"]) > span:not(.shogi-tournament__step-dot) { visibility: hidden; }
 }
-/* 背の低いスマホの縦向き: 道のりの文字も省き、対局のカードを詰める。 */
+/* 背の低いスマホの縦向き: 対局のカードを詰める。 */
 @media (max-width: 899px) and (orientation: portrait) and (max-height: 700px) {
-  .shogi-game .shogi-tournament__step > span:not(.shogi-tournament__step-dot) { display: none; }
   .shogi-game .shogi-tournament__vs { padding: 0.5rem 0.4rem; }
   .shogi-game .shogi-tournament__card { padding-block: 0.6rem; }
 }
@@ -1895,6 +1822,7 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__seal-face--sprite { align-items: end; background: var(--tr-panel); }
 .shogi-game .shogi-tournament__seal-face--sprite img { width: auto; height: 160%; margin-bottom: -60%; image-rendering: pixelated; }
 .shogi-game .shogi-tournament__player-ability { font-size: 0.8em; }
+.shogi-game .shogi-tournament__arrival { margin: 0; color: rgba(255, 252, 244, 0.8); font-size: 0.85em; font-weight: 700; text-align: center; }
 
 /* この一局に賭けているもの。勝てば(金)・負ければ(灰)を並べ、目標まであと何勝を上に1行。 */
 .shogi-game .shogi-tournament__stakes { display: grid; gap: 0.45rem; }
