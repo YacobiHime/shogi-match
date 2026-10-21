@@ -7,7 +7,7 @@ import { aggregateSeasonStats } from './ryuo-stats.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { USER_HOLDER, createRoster, seasonEntry, selectParticipants } from './ryuo-roster.mjs';
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO, hananeAfterLine, hananeBeforeLine, hananeCoachIntro, hananeGrudgeBonus, yoshihikoCoachIntro } from './ryuo-story.mjs';
-import { memberWinProbability } from './ryuo-league.mjs';
+import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import {
   BASE_DIFFICULTY,
@@ -58,6 +58,22 @@ export const scaleById = (id) => SCALES.find((scale) => scale.id === id) ?? SCAL
 function seasonPlayer(roster, id, difficulty) {
   const entry = seasonEntry(roster, id);
   return { ...entry, level: ratingToLevel(entry.rating + hananeGrudgeBonus(entry, entry.vsUser), difficulty) };
+}
+
+/**
+ * 能力の配分と使用率を持たない、前の版で始めた期の棋士の写しに、名簿の能力と使用率を写す(名簿は版3へ移したもの)。
+ * 足すものがなければ、同じ期を返す。
+ */
+export function withRosterAbilities(season, roster) {
+  if (!season?.players || !roster?.players) return season;
+  const missing = Object.keys(season.players).filter((id) => id !== USER_ID && roster.players[id] && !season.players[id].character?.abilities);
+  if (!missing.length) return season;
+  const next = structuredClone(season);
+  for (const id of missing) {
+    next.players[id].character = structuredClone(roster.players[id].character);
+    next.players[id].repertoire = structuredClone(roster.players[id].repertoire);
+  }
+  return next;
 }
 
 // ---- トーナメント表(木構造)
@@ -182,6 +198,7 @@ export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAt
   // プレイヤーのいる表では、ライバル(羽音)が勝ち上がりやすい(ryuo-story.mjsのHANANE_RIVAL_RUN_RATING)。
   const rivalRun = bracket.ids?.includes(userId);
   const ratingOf = (member) => member.rating + (rivalRun && member.story === HANANE ? HANANE_RIVAL_RUN_RATING : 0);
+  const finalId = rootNodeId(bracket);
   for (;;) {
     const ready = readyNodes(bracket, { stopAtRoot });
     if (!ready.length) break;
@@ -189,7 +206,10 @@ export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAt
       const a = sidePid(bracket, node.a);
       const b = sidePid(bracket, node.b);
       if (a === userId || b === userId) return { state: 'user', nodeId: node.id };
-      node.winner = rng.next() < memberWinProbability(players[a], players[b], ratingOf) ? a : b;
+      // 能力の配分で、序盤・中盤・終盤と形勢を進めて決める(ryuo-simulation.mjs)。決勝は大事な対局。
+      const result = simulateMemberGame(rng, players[a], players[b], { ratingOf, big: node.id === finalId });
+      node.winner = result.aWins ? a : b;
+      node.game = gameRecordOf(result, a, b);
     }
   }
   const rootId = rootNodeId(bracket);
@@ -236,18 +256,29 @@ export function createSeries(label, a, b, need) {
   return { label, a, b, need, wins: { [a]: 0, [b]: 0 }, games: [], winner: null };
 }
 
-export function recordSeriesGame(series, winner) {
+/**
+ * 番勝負の1局を記録する。gameは、先手(black)・戦法(openings)・勝ち方(how)の内訳(あれば)。
+ * @param {any} series
+ * @param {string} winner
+ * @param {{ black?: string, openings?: Record<string, string | null>, how?: string | null } | null} [game]
+ */
+export function recordSeriesGame(series, winner, game = null) {
   if (series.winner !== null) return series;
   series.wins[winner] += 1;
-  series.games.push({ winner });
+  series.games.push({ winner, ...(game ?? {}) });
   if (series.wins[winner] >= series.need) series.winner = winner;
   return series;
 }
 
+/** 番勝負を自動で指す。先後は1局ごとに入れ替える(1局目のaの手番は振り駒)。大事な対局。 */
 function simulateSeries(series, players, rng) {
+  let aColor = series.games.length ? null : rng.next() < 0.5 ? 'black' : 'white';
   while (series.winner === null) {
-    const pa = memberWinProbability(players[series.a], players[series.b]);
-    recordSeriesGame(series, rng.next() < pa ? series.a : series.b);
+    const last = series.games.at(-1);
+    if (aColor === null) aColor = last?.black ? (last.black === series.a ? 'white' : 'black') : rng.next() < 0.5 ? 'black' : 'white';
+    const result = simulateMemberGame(rng, players[series.a], players[series.b], { big: true, aColor });
+    recordSeriesGame(series, result.aWins ? series.a : series.b, gameRecordOf(result, series.a, series.b));
+    aColor = aColor === 'black' ? 'white' : 'black';
   }
 }
 
@@ -461,9 +492,11 @@ function setPending(season, pending, rng) {
   const sameSeries = pending.kind !== 'game' && previous && previous.phase === pending.phase && previous.seriesGame;
   // 番勝負は、1局目だけ振り駒で、あとは先後を入れ替える。
   const color = sameSeries ? (previous.color === 'black' ? 'white' : 'black') : (rng.next() < 0.5 ? 'black' : 'white');
-  // 相手は、得意戦法の中から、この1局の戦法を選ぶ(いちばんの得意戦法を多めに)。
+  // 相手は、戦法と囲いの使用率から、この1局の戦法を選ぶ(相手の手番の使用率。opening-usage.mjs)。
   const opponent = season.players[pending.opponentId];
-  const style = opponent?.repertoire ? pickGameStyle(rng, opponent.repertoire) : opponent?.style ?? null;
+  const style = opponent?.repertoire
+    ? pickGameStyle(rng, opponent.repertoire, { color: color === 'black' ? 'white' : 'black' })
+    : opponent?.style ?? null;
   season.pending = { ...pending, color, label, style };
 }
 
@@ -650,12 +683,19 @@ export function recordUserGame(season, outcome) {
     label: pending.label ?? '',
   });
   next.pending = null;
+  // 相手の成績の内訳(先後・戦法)のために、この対局の先手と、相手の戦法を残す。
+  const game = {
+    black: pending.color === 'black' ? USER_ID : opponent,
+    how: null,
+    openings: { [opponent]: pending.style?.opening ?? null },
+  };
   if (pending.kind === 'game') {
     const bracket = pending.phase === 'ranking' ? next.ranking : pending.phase === 'revival' ? next.revival[pending.blockIndex] : next.main;
     bracket.nodes[pending.nodeId].winner = win ? USER_ID : opponent;
+    bracket.nodes[pending.nodeId].game = game;
   } else {
     const series = pending.kind === 'playoff' ? next.playoff : next.finals;
-    recordSeriesGame(series, win ? USER_ID : opponent);
+    recordSeriesGame(series, win ? USER_ID : opponent, game);
   }
   return drive(next, rng);
 }
@@ -692,7 +732,7 @@ function rivalPendingView(season) {
   if (pid && season.players[pid]?.story === YOSHIHIKO) {
     const hananeId = Object.keys(season.players).find((id) => season.players[id]?.story === HANANE);
     const met = hananeId ? vsUserSoFar(season, hananeId).wins + vsUserSoFar(season, hananeId).losses > 0 : false;
-    return { story: YOSHIHIKO, line: '', coach: yoshihikoCoachIntro(met), grudge: false };
+    return { story: YOSHIHIKO, line: '', coach: yoshihikoCoachIntro(met, season.players[pid]?.profile?.held ?? []), grudge: false };
   }
   if (!pid || season.players[pid]?.story !== HANANE) return null;
   const vsUser = vsUserSoFar(season, pid);

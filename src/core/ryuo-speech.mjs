@@ -2,6 +2,8 @@
 
 import { describeCharacter, traitMomentText } from './player-character.mjs';
 import { styleEntry } from './ryuo-repertoire.mjs';
+import { usageRows } from './opening-usage.mjs';
+import { abilityHighlights } from './player-abilities.mjs';
 
 /** 竜王戦の説明。やこび姫が、順に話す。 */
 export function ryuoGuideLines() {
@@ -78,10 +80,13 @@ export function seasonPhaseLines(view) {
 /** 次の対戦相手についての一言。userLevelは、プレイヤーの棋力の目安(Lv)。 */
 export function opponentLines(opponent, userLevel, pending) {
   if (!opponent) return [];
-  // 得意戦法が複数あれば、2つまで挙げる。
-  const styles = opponent.repertoire?.styles?.length
-    ? opponent.repertoire.styles.slice(0, 2).map((id) => styleEntry(id).label)
-    : [opponent.style?.label].filter(Boolean);
+  // 得意戦法が複数あれば、2つまで挙げる(使用率があれば、多い順に、割合を添えて)。
+  const rows = usageRows(opponent.repertoire?.usage).slice(0, 2);
+  const styles = rows.length
+    ? rows.map(({ label, share }) => `${label}（${share}%）`)
+    : opponent.repertoire?.styles?.length
+      ? opponent.repertoire.styles.slice(0, 2).map((id) => styleEntry(id).label)
+      : [opponent.style?.label].filter(Boolean);
   const styleText = styles.map((label) => `「${label}」`).join('や');
   const lines = [`${opponent.name}${opponent.dan}との一局だね。${styleText ? `得意は${styleText}だよ。` : ''}`];
   const gap = opponent.level - userLevel;
@@ -105,6 +110,12 @@ export function opponentLines(opponent, userLevel, pending) {
     else lines.push(`前に勝ったことのある相手だね。通算であなたの${vs.wins}勝${vs.losses}敗だよ。`);
   }
   const profile = describeCharacter(opponent.character ?? null);
+  // 能力のいちばんの武器と、いちばんの穴(作戦の手がかり)。
+  if (opponent.character?.abilities) {
+    const { best, worst } = abilityHighlights(opponent);
+    lines.push(`能力は${best.label}が${best.rank}で一番の武器。${worst.label}は${worst.rank}だから、${WEAK_SPOT_HINTS[worst.key]}`);
+  }
+  if (profile.gold?.length) lines.push(`金の特殊能力「${profile.gold.join('」「')}」を持っている、すごい人だよ！`);
   if (opponent.character) {
     const notes = [...profile.strengths.slice(0, 1).map((text) => `${text}みたい`), ...profile.weaknesses.slice(0, 1).map((text) => `${text}らしいよ`)];
     lines.push(`${profile.style}の人だよ。${notes.length ? `${notes.join('。でも、')}。` : ''}`);
@@ -114,6 +125,18 @@ export function opponentLines(opponent, userLevel, pending) {
   if (pending?.kind && pending.kind !== 'game') lines.push(`これは第${pending.gameNo}局。ここまで、あなた${pending.wins.user}勝、相手${pending.wins.opponent}勝だよ。`);
   return lines;
 }
+
+/** 相手のいちばん低い能力ごとの、作戦の手がかり。 */
+const WEAK_SPOT_HINTS = Object.freeze({
+  opening: '序盤でリードを取りたいね。',
+  middle: '中盤の駆け引きで差をつけよう。',
+  ending: '終盤の寄せ合いに持ち込めるといいね。',
+  attack: 'しっかり囲えば、攻めはしのげそう。',
+  defense: '攻め合いに持ち込めば、チャンスがありそう。',
+  reading: '複雑な局面にすると、読み負けしてくれるかも。',
+  mate: '玉を詰ませにくい形にしておくと、詰みを逃してくれるかも。',
+  stability: '粘っていれば、大きなミスが出るかも。',
+});
 
 /** 直前の対局で、相手の特徴が出た場面についての一言。 */
 export function lastGameLines(lastGame) {

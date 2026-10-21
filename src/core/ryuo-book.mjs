@@ -1,6 +1,9 @@
 // 棋士名鑑。名簿から、画面に出す一覧とプロフィールを作る。画面に依存しない。
 
-import { describeCharacter } from './player-character.mjs';
+import { describeCharacter, specialAbilityChips } from './player-character.mjs';
+import { ABILITIES, abilityRank, abilityTypeLabel, abilityValues } from './player-abilities.mjs';
+import { proOpening, staticShare, usageRows } from './opening-usage.mjs';
+import { HOW_LABELS } from './ryuo-simulation.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
 import { OTHER_TITLES, awardLabel, careerSummary, titleLabel, winRate } from './ryuo-league.mjs';
 import { characterCatchphrase } from './ryuo-oshi.mjs';
@@ -51,6 +54,52 @@ export function vsUserText(vsUser) {
   return `あなたの${vsUser.wins}勝${vsUser.losses}敗${streak}`;
 }
 
+/** 勝ち方の短い言葉(名鑑の統計)。 */
+const HOW_SHORT = Object.freeze({ opening: '序盤のリード', middle: '中盤の抜け出し', ending: '終盤の競り合い', comeback: '逆転', recover: '序盤の不利から挽回' });
+
+const percentText = ([wins, losses]) => (wins + losses ? `${wins}勝${losses}敗（${Math.round((wins / (wins + losses)) * 100)}%）` : '');
+
+/**
+ * 能力値・特殊能力・使用率(名鑑と、次の相手の札で共通)。棋士の写し(期の棋士)でも、名簿の棋士でもよい。
+ * @param {any} member
+ */
+export function memberAbilityView(member) {
+  if (!member?.character?.abilities) return null;
+  const values = abilityValues(member);
+  const totalOpenings = member.record?.total?.byOpening ?? {};
+  const usage = member.repertoire?.usage ?? null;
+  return {
+    abilities: ABILITIES.map(({ key, label, hint }) => ({ key, label, hint, value: values[key], rank: abilityRank(values[key]) })),
+    type: abilityTypeLabel(member),
+    specials: specialAbilityChips(member.character),
+    staticShare: usage ? staticShare(usage) : null,
+    openings: usageRows(usage).slice(0, 6).map((row) => ({
+      ...row,
+      record: totalOpenings[row.id] && totalOpenings[row.id][0] + totalOpenings[row.id][1] >= 3 ? percentText(totalOpenings[row.id]) : '',
+    })),
+  };
+}
+
+/** 成績の内訳(先手・後手、戦法ごと、勝ち方)。記録が始まる前(版3より前)の対局は数えない。 */
+export function memberStats(member) {
+  const total = member?.record?.total ?? {};
+  const season = member?.record?.season ?? {};
+  const color = (bucket, side) => (bucket.byColor ? percentText(bucket.byColor[side]) : '');
+  const hows = (bucket) => Object.entries(bucket.hows ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([how, count]) => `${HOW_SHORT[how] ?? HOW_LABELS[how] ?? how} ${count}`);
+  const best = Object.entries(total.byOpening ?? {})
+    .filter(([, [wins, losses]]) => wins + losses >= 5)
+    .map(([id, [wins, losses]]) => ({ label: proOpening(id)?.label ?? id, rate: wins / (wins + losses), wins, losses }))
+    .sort((a, b) => b.rate - a.rate)[0] ?? null;
+  return {
+    blackTotal: color(total, 'black'),
+    whiteTotal: color(total, 'white'),
+    blackSeason: color(season, 'black'),
+    whiteSeason: color(season, 'white'),
+    howsTotal: hows(total),
+    bestOpening: best ? `${best.label}（${best.wins}勝${best.losses}敗）` : '',
+  };
+}
+
 /** 1人分のプロフィール。 */
 export function memberProfile(roster, member) {
   const career = careerSummary(roster, member);
@@ -73,7 +122,7 @@ export function memberProfile(roster, member) {
     repertoire: repertoireText(member.repertoire),
     style: character.style,
     // 一覧の行にも出す、個性の一言(棋風と、いちばん目立つ特徴)。物語の人物は、立場の一言。
-    catchphrase: member.story === HANANE ? 'ライバル' : member.story === YOSHIHIKO ? '羽音の父' : characterCatchphrase(character),
+    catchphrase: member.story === HANANE ? 'ライバル' : member.story === YOSHIHIKO ? '羽音の父・史上最強' : characterCatchphrase(character),
     // 物語の人物(core/ryuo-story.mjs)。読みと紹介の文を、名鑑のくわしい情報に出す。
     story: member.story ?? null,
     reading: STORY_PEOPLE[member.story]?.reading ?? '',
@@ -86,6 +135,8 @@ export function memberProfile(roster, member) {
     awards: career.awards.map(({ no, label }) => `${no > 0 ? `第${no}期` : ''}${label}`),
     vsUser: vsUserText(vsUser),
     played: Boolean(vsUser),
+    ability: memberAbilityView(member),
+    stats: memberStats(member),
   };
 }
 

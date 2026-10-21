@@ -260,9 +260,14 @@
               />
               <dl class="shogi-tournament__tiles shogi-tournament__tiles--three">
                 <div><dt>相手の棋力</dt><dd>Lv.{{ view.pending.opponent.level }}</dd></div>
-                <div><dt>得意戦法</dt><dd class="shogi-tournament__tile-text">{{ view.pending.opponent.style?.label ?? "—" }}</dd></div>
+                <div><dt>得意戦法</dt><dd class="shogi-tournament__tile-text">{{ opponentFavorite }}</dd></div>
                 <div><dt>手番</dt><dd class="shogi-tournament__tile-text">{{ view.pending.color === "black" ? "先手" : "後手" }}</dd><span class="shogi-tournament__tile-note">振り駒</span></div>
               </dl>
+              <!-- 相手の能力(ランクとレーダーチャート)。作戦の手がかりになるので、くわしい情報より先に見せる。 -->
+              <details v-if="opponentAbility" class="shogi-tournament__profile-box" data-tournament-opponent-ability>
+                <summary>{{ view.pending.opponent.name }}の能力（{{ opponentAbilitySummary }}）</summary>
+                <PlayerAbilityPanel :view="opponentAbility" compact />
+              </details>
               <details class="shogi-tournament__profile-box">
                 <summary>{{ view.pending.opponent.name }}の、くわしい情報</summary>
               <dl class="shogi-tournament__profile" data-tournament-opponent-profile>
@@ -435,6 +440,7 @@
 import { computed, ref, watch, type PropType } from "vue";
 import TournamentTree from "./TournamentTree.vue";
 import RadarChart from "./RadarChart.vue";
+import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RyuoLadder from "./RyuoLadder.vue";
 import YakobiSays from "./YakobiSays.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
@@ -454,7 +460,7 @@ import {
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { describeCharacter } from "./core/player-character.mjs";
 import { repertoireText } from "./core/ryuo-repertoire.mjs";
-import { vsUserText } from "./core/ryuo-book.mjs";
+import { memberAbilityView, vsUserText } from "./core/ryuo-book.mjs";
 import {
   loadPrediction,
   oshiSeasonLine,
@@ -706,6 +712,20 @@ const opponentProfile = computed(() => {
     lastSeason: career?.season && (career.season.wins || career.season.losses) ? `${career.season.wins}勝${career.season.losses}敗` : "",
     vsUser: opponent ? vsUserText(opponent.vsUser ?? null) : "",
   };
+});
+/** 次の相手の能力値・特殊能力・使用率(core/ryuo-book.mjs)。能力のない古い期の棋士はnull。 */
+const opponentAbility = computed(() => memberAbilityView(props.view?.pending?.opponent ?? null));
+/** 能力の見出しに添える、いちばん高い能力といちばん低い能力。 */
+const opponentAbilitySummary = computed(() => {
+  const abilities = opponentAbility.value?.abilities ?? [];
+  if (!abilities.length) return "";
+  const sorted = [...abilities].sort((a, b) => b.value - a.value);
+  return `${sorted[0].label}${sorted[0].rank}・${sorted.at(-1)!.label}${sorted.at(-1)!.rank}`;
+});
+/** 得意戦法の札。使用率があれば、いちばん多い戦法と割合。 */
+const opponentFavorite = computed(() => {
+  const top = opponentAbility.value?.openings?.[0];
+  return top ? `${top.label} ${top.share}%` : props.view?.pending?.opponent?.style?.label ?? "—";
 });
 const opponentSays = computed(() => (
   props.view?.pending

@@ -9,6 +9,7 @@
 // 設計は docs/tournament-design.md の「棋風と特徴」。
 
 import { TOP_NODES } from './strength-settings.mjs';
+import { ABILITY_KEYS, ageAbilities, createAbilities, styleAttackOf } from './player-abilities.mjs';
 import { attackersOf, findKing, isKingAttacked, opponentOf, parseSfenState, relativeFile, squareXY, xySquare } from './piece-movement.mjs';
 
 /** 局面の区切り(手数)。竜王戦の統計(ryuo-stats.mjs)と同じ。 */
@@ -18,6 +19,8 @@ export const DEGREE_WORDS = Object.freeze({ 1: 'やや', 2: 'とても' });
 /** 形勢の区切り(手番側から見た評価値)。 */
 export const BEHIND_SCORE = -300;
 export const FAR_AHEAD_SCORE = 800;
+/** 互角とみなす形勢の幅(勝負強さの特殊能力が働く)。 */
+export const CLOSE_SCORE = 300;
 /** 玉の周り(玉と8近傍)のうち、相手の利きがあるマスがこれ以上なら「玉が危険」とみなす。 */
 export const KING_DANGER_SQUARES = 3;
 
@@ -126,6 +129,43 @@ export const TRAITS = Object.freeze([
     },
   },
   {
+    // 大舞台に強い: 互角の終盤で手の選び方が鋭い。自動対局では、決勝・番勝負で強くなる(ryuo-simulation.mjs)。
+    id: 'big-stage', kind: 'strength', label: (d) => `大舞台に${DEGREE_WORDS[d]}強い`,
+    when: { phase: 'ending', close: true },
+    effect: (d) => ({ sharpen: 0.4 * d }),
+  },
+  // ---- 金の特殊能力(超特殊能力)。1組の上位とタイトル保持者だけが持つ。度合いはなく、「とても」より少し強く効く。
+  {
+    id: 'grand-view', kind: 'strength', tier: 'gold', label: () => '大局観',
+    hint: '中盤の形勢判断が正確。中盤の手の選び方がとても鋭く、悪手が少ない',
+    when: { phase: 'middle' },
+    effect: () => ({ sharpen: 1, steady: 1, nodes: 1.2 }),
+  },
+  {
+    id: 'demon-reading', kind: 'strength', tier: 'gold', label: () => '鬼の読み',
+    hint: 'いつも深く正確に読む。読みの量が大きく増え、見落としがほとんどない',
+    when: {},
+    effect: () => ({ nodes: 1.7, steady: 1 }),
+  },
+  {
+    id: 'comeback', kind: 'strength', tier: 'gold', label: () => '逆転の名手',
+    hint: '劣勢になると、最善に近い手の中から、相手が間違えやすい勝負手を選ぶ',
+    when: { behind: true },
+    effect: () => ({ sharpen: 0.8, steady: 1, style: 0.5 }),
+  },
+  {
+    id: 'research-demon', kind: 'strength', tier: 'gold', label: () => '研究の鬼',
+    hint: '序盤の研究が深く、序盤の悪手がほとんどない',
+    when: { phase: 'opening' },
+    effect: () => ({ sharpen: 1, steady: 2 }),
+  },
+  {
+    id: 'defense-master', kind: 'strength', tier: 'gold', label: () => '受けの達人',
+    hint: '自玉が危ないとき、悪手がほとんどなく、手厚く受ける',
+    when: { kingDanger: true },
+    effect: () => ({ sharpen: 0.8, steady: 2, style: -0.4 }),
+  },
+  {
     id: 'endgame-collapse', kind: 'weakness', label: (d) => `終盤での頓死が${d === 2 ? 'とても' : 'やや'}多い`,
     when: { phase: 'ending', kingDanger: true },
     effect: (d) => ({ overlook: d }),
@@ -140,15 +180,32 @@ export const TRAITS = Object.freeze([
     when: { farAhead: true },
     effect: (d) => ({ sharpen: -0.5 * d, loose: d }),
   },
+  {
+    id: 'big-stage-weak', kind: 'weakness', label: (d) => `大舞台で${d === 2 ? 'とても' : 'やや'}硬くなる`,
+    when: { phase: 'ending', close: true },
+    effect: (d) => ({ sharpen: -0.4 * d }),
+  },
+  {
+    // 持ち時間の使い方が下手: 終盤に時間が足りなくなる(読みが浅くなる)。
+    id: 'time-trouble', kind: 'weakness', label: (d) => `終盤で時間に${d === 2 ? 'とても' : 'やや'}追われる`,
+    when: { phase: 'ending' },
+    effect: (d) => ({ nodes: d === 2 ? 0.6 : 0.8, sharpen: -0.25 * d }),
+  },
 ]);
 
 const TRAIT_BY_ID = new Map(TRAITS.map((trait) => [trait.id, trait]));
 export const traitById = (id) => TRAIT_BY_ID.get(id) ?? null;
+/** 金の特殊能力か。 */
+export const isGoldTrait = (id) => traitById(id)?.tier === 'gold';
+/** 金の特殊能力。 */
+export const GOLD_TRAIT_IDS = Object.freeze(TRAITS.filter(({ tier }) => tier === 'gold').map(({ id }) => id));
 
 /** 同時に持たない組。 */
 const EXCLUSIVE = [
   ['endgame-defense', 'endgame-collapse'], ['endgame-defense', 'weak-defense'],
   ['vs-ranging', 'vs-static'], ['tenacious', 'weak-defense'],
+  ['big-stage', 'big-stage-weak'], ['defense-master', 'weak-defense'], ['defense-master', 'endgame-collapse'],
+  ['demon-reading', 'time-trouble'],
 ];
 
 export function traitLabel({ id, degree }) {
@@ -166,16 +223,54 @@ export function attackStyleLabel(attack) {
   return 'バランス型';
 }
 
-/** 棋士の紹介に使う、個性の要約。 */
+/** 棋士の紹介に使う、個性の要約。金の特殊能力は、得意の先頭に並べる。 */
 export function describeCharacter(character) {
-  if (!character) return { style: 'バランス型', strengths: [], weaknesses: [] };
+  if (!character) return { style: 'バランス型', strengths: [], weaknesses: [], gold: [] };
   const traits = character.traits ?? [];
   return {
     style: attackStyleLabel(character.attack),
-    strengths: traits.filter(({ id }) => traitById(id)?.kind === 'strength').map(traitLabel),
+    gold: traits.filter(({ id }) => isGoldTrait(id)).map(traitLabel),
+    strengths: traits.filter(({ id }) => traitById(id)?.kind === 'strength' && !isGoldTrait(id)).map(traitLabel),
     weaknesses: traits.filter(({ id }) => traitById(id)?.kind === 'weakness').map(traitLabel),
   };
 }
+
+/**
+ * 特殊能力の札(名鑑)。tierは gold(金)・blue(得意)・red(苦手)。hintは、どの場面でどう効くかの1行。
+ * @param {{ traits?: { id: string, degree: number }[] } | null | undefined} character
+ */
+export function specialAbilityChips(character) {
+  const order = { gold: 0, blue: 1, red: 2 };
+  return (character?.traits ?? [])
+    .map(({ id, degree }) => {
+      const trait = traitById(id);
+      if (!trait) return null;
+      const tier = trait.tier === 'gold' ? 'gold' : trait.kind === 'strength' ? 'blue' : 'red';
+      return { id, tier, label: traitLabel({ id, degree }), hint: trait.hint ?? TRAIT_HINTS[id] ?? '' };
+    })
+    .filter((chip) => chip !== null)
+    .sort((a, b) => order[a.tier] - order[b.tier]);
+}
+
+/** 特殊能力の、場面と効き方の1行。 */
+const TRAIT_HINTS = Object.freeze({
+  'endgame-defense': '終盤で自玉が危ないとき、悪手が少なく、受けの手を選びやすい',
+  'fast-attack': '終盤で相手玉に迫れるとき、攻めの手を鋭く選ぶ',
+  tsume: '詰みが見えたとき、詰みを見つけやすい',
+  'deep-reading': 'いつも、ふだんより深く読む',
+  'middle-strong': '中盤で、深く読み、手の選び方が鋭い',
+  'opening-study': '序盤で、悪手が少なく、手の選び方が鋭い',
+  'vs-ranging': '相手が振り飛車のとき、手の選び方が鋭い。自動対局でも少し強い',
+  'vs-static': '相手が居飛車のとき、手の選び方が鋭い。自動対局でも少し強い',
+  tenacious: '劣勢のとき、悪手が少なく、粘り強く受ける',
+  'late-bloom': '序盤は並み、中盤から読みで上回り、終盤がいちばん正確',
+  'big-stage': '互角の終盤で、手の選び方が鋭い。決勝や番勝負に強い',
+  'endgame-collapse': '終盤で自玉が危ないとき、詰みや大きな損を見落としやすい',
+  'weak-defense': '自玉が危ないとき、手の選び方が鈍い',
+  'loose-when-ahead': '大きく優勢になると、大きな悪手が出やすい',
+  'big-stage-weak': '互角の終盤で、手の選び方が鈍い。決勝や番勝負に弱い',
+  'time-trouble': '終盤で、読みが浅くなり、手の選び方が鈍い',
+});
 
 // ---- 個性を作る
 
@@ -207,8 +302,34 @@ function traitWeights({ attack, age, rook }) {
     'endgame-collapse': 1 + (age >= 50 ? 1.5 : 0),
     'weak-defense': 1 + Math.max(0, attack) * 1.5,
     'loose-when-ahead': 1,
+    'big-stage': 0.8,
+    'big-stage-weak': 0.6,
+    'time-trouble': 0.5 + (veteran ? 0.5 : 0),
+    // 物語の人物だけの特徴と、金の特殊能力(addGoldTraitで別に付ける)は、ふつうには選ばない。
     'late-bloom': 0,
+    ...Object.fromEntries(GOLD_TRAIT_IDS.map((id) => [id, 0])),
   };
+}
+
+/** 金の特殊能力を持つ確率。1組の上位(R1800前後)から持ち始め、強いほど持ちやすい。 */
+export function goldTraitChance(rating) {
+  return clamp((rating - 1780) / 320, 0, 0.7);
+}
+
+/** いちばん高い能力に合う、金の特殊能力。 */
+const GOLD_FOR_ABILITY = Object.freeze({
+  opening: 'research-demon', middle: 'grand-view', ending: 'comeback', attack: 'comeback',
+  defense: 'defense-master', reading: 'demon-reading', mate: 'demon-reading', stability: 'grand-view',
+});
+
+/** 金の特殊能力を1つ足す(まだ持っていなければ)。いちばん高い能力に合うものを選ぶ。 */
+export function addGoldTrait(character) {
+  if (!character?.abilities || (character.traits ?? []).some(({ id }) => isGoldTrait(id))) return character;
+  const best = [...ABILITY_KEYS].sort((a, b) => (character.abilities[b] ?? 0) - (character.abilities[a] ?? 0))[0];
+  const id = GOLD_FOR_ABILITY[best];
+  const blocked = EXCLUSIVE.some(([a, b]) => (a === id && character.traits.some((trait) => trait.id === b)) || (b === id && character.traits.some((trait) => trait.id === a)));
+  if (blocked) return character;
+  return { ...character, traits: [...character.traits, { id, degree: 1 }] };
 }
 
 function poisson(rng, mean) {
@@ -255,18 +376,40 @@ export function createCharacter(rng, { rating, age, style }) {
     const chance = traitById(trait.id).kind === 'strength' ? strongChance : 0.3;
     trait.degree = rng.next() < chance ? 2 : 1;
   }
-  return { attack, traits };
+  // 能力の配分(player-abilities.mjs)。棋風は、配分の攻めと受けの差で決め直す。
+  const abilities = createAbilities(rng, { age, character: { attack, traits } });
+  let character = { attack: styleAttackOf(abilities), traits, abilities };
+  if (rng.next() < goldTraitChance(rating)) character = addGoldTrait(character);
+  return character;
+}
+
+/** 保存してあった、能力のない個性に、能力を足す(名簿の版2から3への移し替え)。 */
+export function withAbilities(rng, character, { age, rating }) {
+  if (character?.abilities) return character;
+  const base = character ?? { attack: 0, traits: [] };
+  const abilities = createAbilities(rng, { age, character: base });
+  let next = { attack: styleAttackOf(abilities), traits: base.traits.map((trait) => ({ ...trait })), abilities };
+  if (rng.next() < goldTraitChance(rating)) next = addGoldTrait(next);
+  return next;
 }
 
 /** 1期ごとの個性の変化。年を取ると、終盤の特徴が変わりやすい。 */
 export function ageCharacter(rng, character, { age, rating, style }) {
   const next = { attack: character.attack, traits: character.traits.map((trait) => ({ ...trait })) };
-  next.attack = Math.round(clamp(next.attack + gaussOf(rng) * 0.03 - (age >= 45 ? 0.01 : 0), -1, 1) * 100) / 100 + 0;
+  if (character.abilities) {
+    // 能力の配分が少し動き、棋風は配分の攻めと受けの差から決め直す。
+    next.abilities = ageAbilities(rng, character.abilities, { age });
+    next.attack = styleAttackOf(next.abilities);
+  } else {
+    next.attack = Math.round(clamp(next.attack + gaussOf(rng) * 0.03 - (age >= 45 ? 0.01 : 0), -1, 1) * 100) / 100 + 0;
+  }
   const weights = traitWeights({ attack: next.attack, age, rook: style?.rook });
   if (age >= 50) next.traits = next.traits.filter(({ id }) => !((id === 'fast-attack' || id === 'tsume') && rng.next() < 0.1));
   if (rng.next() < 0.04) pickTraits(rng, weights, 'strength', 1, next.traits);
   if (rng.next() < (age >= 50 ? 0.06 : 0.02)) pickTraits(rng, weights, 'weakness', 1, next.traits);
-  for (const trait of next.traits) if (trait.degree === 1 && rng.next() < 0.03 + Math.max(0, rating - 1600) / 5000) trait.degree = 2;
+  for (const trait of next.traits) if (trait.degree === 1 && !isGoldTrait(trait.id) && rng.next() < 0.03 + Math.max(0, rating - 1600) / 5000) trait.degree = 2;
+  // 強くなった棋士は、まれに金の特殊能力を得る。
+  if (next.abilities && rng.next() < goldTraitChance(rating) * 0.1) return addGoldTrait(next);
   return next;
 }
 
@@ -284,6 +427,7 @@ export function summarizeTraitMoments(moves) {
   const RULES = [
     ['endgame-collapse', 'oversight'], ['tsume', 'mate'],
     ['fast-attack', 'style'], ['endgame-defense', 'style'], ['tenacious', 'style'],
+    ['comeback', 'style'], ['defense-master', 'style'],
   ];
   const moments = [];
   for (const [id, kind] of RULES) {
@@ -299,6 +443,8 @@ const MOMENT_TEXT = Object.freeze({
   'fast-attack': '寄せの速さが出ていたよ。',
   'endgame-defense': '終盤の正確な受けが出ていたよ。',
   tenacious: '劣勢でも崩れない粘りが出ていたよ。',
+  comeback: '劣勢から勝負手を放ってきたね。「逆転の名手」らしい一手だったよ。',
+  'defense-master': '「受けの達人」らしい、手厚い受けだったよ。',
 });
 
 /** 特徴が出た場面の、やこび姫の一言(手数は1から数える)。 */
@@ -369,6 +515,7 @@ function matches(when, situation) {
   if (when.opponentRook && when.opponentRook !== situation.opponentRook) return false;
   if (when.behind && !(situation.advantage <= BEHIND_SCORE)) return false;
   if (when.farAhead && !(situation.advantage >= FAR_AHEAD_SCORE)) return false;
+  if (when.close && !(Math.abs(situation.advantage) <= CLOSE_SCORE)) return false;
   return true;
 }
 
@@ -381,6 +528,32 @@ export function activeTraits(character, situation) {
 }
 
 const round2 = (value) => Math.round(value * 100) / 100;
+
+/**
+ * 能力の配分(平均からの差、±30まで)の、この場面での効き方。どれも特徴の「やや」と同じくらいを上限にする。
+ * - 序盤・中盤・終盤: その局面で、差30で手の選び方が「やや」鋭い(sharpen 0.5)
+ * - 攻め・受け: 相手玉に迫れる・自玉が危ない場面で、差40でsharpen 0.5
+ * - 読み: 探索量を、差30で×1.41、−30で×0.71
+ * - 詰み: 詰みを見つける確率を、差15ごとにロジット1ずらす
+ * - 安定感: 差12以上で悪手を抑える(25以上で「とても」)、−15以下で悪手が増える
+ * @param {Record<string, number>} abilities
+ * @param {{ phase?: string, kingDanger?: boolean, attackChance?: boolean }} situation
+ */
+export function abilityEffect(abilities, situation) {
+  const dev = (key) => clamp(abilities?.[key] ?? 0, -30, 30);
+  let sharpen = 0;
+  if (situation?.phase) sharpen += dev(situation.phase) / 60;
+  if (situation?.attackChance) sharpen += dev('attack') / 80;
+  if (situation?.kingDanger) sharpen += dev('defense') / 80;
+  const stability = dev('stability');
+  return {
+    nodes: 2 ** (dev('reading') / 60),
+    sharpen,
+    steady: stability >= 25 ? 2 : stability >= 12 ? 1 : 0,
+    loose: stability <= -15 ? 1 : 0,
+    mate: dev('mate') / 15,
+  };
+}
 
 /**
  * 強さ設定に、棋風と、この場面で働く特徴を反映する。元の設定は変えない。
@@ -412,10 +585,19 @@ export function applyCharacter(strength, character, situation, { skill }) {
     style += effect.style ?? 0;
   }
   next.activeTraits = active.map(({ id }) => id);
+  // 能力の配分(平均からの差)を、同じつまみで効かせる。上下の合計が0に近いので、強さ全体はLvのまま、場面ごとに強弱が出る。
+  if (character.abilities) {
+    const effect = abilityEffect(character.abilities, situation);
+    nodes *= effect.nodes;
+    sharpen += effect.sharpen;
+    steady = Math.max(steady, effect.steady);
+    loose = Math.max(loose, effect.loose);
+    mate += effect.mate;
+  }
   // 最善手だけを指す設定(Lv40「藤井聡太並み」)は、上限なので、探索量も手の選び方も変えない。
   const bestOnly = next.bestMoveRate >= 1;
   // 読みが深くても、Lv40を超えないように、Lv40未満の探索量の上限(TOP_NODES)で止める。
-  if (nodes !== 1 && !bestOnly && Number.isFinite(next.nodes) && next.nodes > 0) next.nodes = Math.round(Math.min(TOP_NODES, next.nodes * nodes));
+  if (nodes !== 1 && !bestOnly && Number.isFinite(next.nodes) && next.nodes > 0) next.nodes = Math.max(1, Math.round(Math.min(TOP_NODES, next.nodes * nodes)));
   if (sharpen !== 0 && !bestOnly) {
     const k = clamp(sharpen, -1, 1) * 0.25;
     if (Number.isFinite(next.scoreTemperature)) next.scoreTemperature = Math.max(1, Math.round(next.scoreTemperature * (1 - k)));
@@ -461,8 +643,10 @@ export function applyCharacter(strength, character, situation, { skill }) {
   }
   // 詰将棋が得意: n手詰めを見つける確率を、ロジットで+1.0(やや)・+2.0(とても)ずらす(中心の手数が約1.4・2.9手延びるのと同じ)。
   // 確率が半分前後の長さの詰みで最も上がり、そのレベルで確実に解ける短い詰みや、とても長い詰みでは、あまり変わらない。
-  if (mate > 0 && next.mateFinding.center !== Infinity) {
-    next.mateFinding = { ...next.mateFinding, center: Math.round((next.mateFinding.center + (MATE_TRAIT_LOGIT * mate) / next.mateFinding.slope) * 100) / 100 };
+  // 詰みの能力が低い棋士は、逆に中心の手数が縮む(1手より短くはしない)。
+  if (mate !== 0 && next.mateFinding.center !== Infinity) {
+    const center = next.mateFinding.center + (MATE_TRAIT_LOGIT * mate) / next.mateFinding.slope;
+    next.mateFinding = { ...next.mateFinding, center: Math.round(Math.max(1, center) * 100) / 100 };
   }
   const attack = clamp(style, -1, 1);
   if (Math.abs(attack) >= 0.05 && !bestOnly) {

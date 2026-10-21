@@ -35,7 +35,8 @@ export function saveOshi(storage, id) {
  */
 export function characterCatchphrase(described) {
   const pick = (list) => list.find((text) => text.includes('とても') || text.includes('まったく')) ?? list[0];
-  const feature = pick(described.strengths) ?? pick(described.weaknesses);
+  // 金の特殊能力を持っていれば、それをいちばんに。
+  const feature = described.gold?.[0] ?? pick(described.strengths) ?? pick(described.weaknesses);
   return feature ? `${described.style}・${feature}` : described.style;
 }
 

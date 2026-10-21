@@ -11,6 +11,7 @@ import { gauss } from './ryuo-random.mjs';
 import { winProbability } from './ryuo-strength.mjs';
 import { matchupBonus } from './player-character.mjs';
 import { styleEntry } from './ryuo-repertoire.mjs';
+import { simulateMemberGame } from './ryuo-simulation.mjs';
 
 export const DAN_ORDER = Object.freeze(['四段', '五段', '六段', '七段', '八段', '九段']);
 
@@ -80,16 +81,58 @@ export function createRecord() {
   return { season: { games: 0, wins: 0, losses: 0, bestStreak: 0 }, total: { wins: 0, losses: 0 }, streak: 0, sincePromotion: 0 };
 }
 
+/**
+ * 1局の内訳を、成績の内訳(先手・後手、戦法ごと、勝ち方)に足す。byColorとbyOpeningは[勝ち, 負け]。howsは勝ち方ごとの勝ち数。
+ * @param {any} bucket record.seasonかrecord.total
+ * @param {boolean} win
+ * @param {{ color?: 'black' | 'white' | null, opening?: string | null, how?: string | null }} detail
+ */
+function addDetail(bucket, win, { color = null, opening = null, how = null }) {
+  const slot = win ? 0 : 1;
+  if (color) {
+    bucket.byColor ??= { black: [0, 0], white: [0, 0] };
+    bucket.byColor[color][slot] += 1;
+  }
+  if (opening) {
+    bucket.byOpening ??= {};
+    bucket.byOpening[opening] ??= [0, 0];
+    bucket.byOpening[opening][slot] += 1;
+  }
+  if (how && win) {
+    bucket.hows ??= {};
+    bucket.hows[how] = (bucket.hows[how] ?? 0) + 1;
+  }
+}
+
+/**
+ * 自動対局の1局を指し、両者の成績に足す。aColorはaの手番(省略すると乱数)。勝てばtrue。
+ * @param {{ next(): number }} rng
+ * @param {any} a
+ * @param {any} b
+ * @param {{ ratingOf?: (member: any) => number, big?: boolean, aColor?: 'black' | 'white' | null, record?: boolean }} [options]
+ */
+function playGame(rng, a, b, { ratingOf, big = false, aColor = null, record = true } = {}) {
+  const result = simulateMemberGame(rng, a, b, { ratingOf, big, aColor });
+  if (record) {
+    const bColor = result.aColor === 'black' ? 'white' : 'black';
+    addResult(a, result.aWins, { color: result.aColor, opening: result.openings.a, how: result.how });
+    addResult(b, !result.aWins, { color: bColor, opening: result.openings.b, how: result.how });
+  }
+  return result.aWins;
+}
+
 function ensureLeagueFields(member) {
   member.record ??= createRecord();
   member.titleCounts ??= {};
   member.awards ??= [];
 }
 
-function addResult(member, win) {
+function addResult(member, win, detail = {}) {
   ensureLeagueFields(member);
   const record = member.record;
   record.season.games += 1;
+  addDetail(record.season, win, detail);
+  addDetail(record.total, win, detail);
   if (win) {
     record.season.wins += 1;
     record.total.wins += 1;
@@ -112,7 +155,9 @@ export function rookOf(member) {
   return primary ? styleEntry(primary).rook : member?.style?.rook ?? null;
 }
 
-/** 自動対局の勝率。相手の飛車の振り方に対する得意を、レーティングに上乗せする。 */
+/**
+ * レーティングと相性だけで見た勝率(目安。実際の自動対局は、能力の配分も効くryuo-simulation.mjsのsimulateMemberGameで決める)。
+ */
 export function memberWinProbability(a, b, ratingOf = (member) => member.rating) {
   return winProbability(
     ratingOf(a) + matchupBonus(a.character, rookOf(b)),
@@ -231,15 +276,14 @@ function rebalanceJunni(roster) {
 
 // ---- タイトル戦
 
+/** 番勝負。1局目の先後は振り駒で、あとは交互。大事な対局なので、大舞台の特殊能力が効く。 */
 function playSeries(rng, holder, challenger, need, ratingOf, record = true) {
   const wins = { holder: 0, challenger: 0 };
+  let holderColor = rng.next() < 0.5 ? 'black' : 'white';
   while (wins.holder < need && wins.challenger < need) {
-    const holderWins = rng.next() < memberWinProbability(holder, challenger, ratingOf);
+    const holderWins = playGame(rng, holder, challenger, { ratingOf, big: true, aColor: holderColor, record });
     wins[holderWins ? 'holder' : 'challenger'] += 1;
-    if (record) {
-      addResult(holder, holderWins);
-      addResult(challenger, !holderWins);
-    }
+    holderColor = holderColor === 'black' ? 'white' : 'black';
   }
   return wins.holder >= need ? holder : challenger;
 }
@@ -257,11 +301,7 @@ function chooseChallenger(rng, pool, holderId, ratingOf, record) {
     const next = [];
     for (let index = 0; index + 1 < field.length; index += 2) {
       const [a, b] = [field[index], field[index + 1]];
-      const aWins = rng.next() < memberWinProbability(a, b, ratingOf);
-      if (record) {
-        addResult(a, aWins);
-        addResult(b, !aWins);
-      }
+      const aWins = playGame(rng, a, b, { ratingOf, record });
       next.push(aWins ? a : b);
     }
     if (field.length % 2) next.push(field.at(-1));
@@ -312,7 +352,7 @@ export function ryuoSeasonGames(season, isMember) {
       const a = side(node.a);
       const b = side(node.b);
       if (!a || !b) continue;
-      games.push({ winner: node.winner, loser: node.winner === a ? b : a });
+      games.push({ winner: node.winner, loser: node.winner === a ? b : a, game: node.game ?? null });
     }
   };
   fromBracket(season.ranking);
@@ -321,7 +361,7 @@ export function ryuoSeasonGames(season, isMember) {
   fromBracket(season.main);
   for (const series of [season.playoff, season.finals]) {
     if (!series) continue;
-    for (const game of series.games) games.push({ winner: game.winner, loser: game.winner === series.a ? series.b : series.a });
+    for (const game of series.games) games.push({ winner: game.winner, loser: game.winner === series.a ? series.b : series.a, game });
   }
   return games.filter(({ winner, loser }) => isMember(winner) || isMember(loser));
 }
@@ -396,12 +436,16 @@ export function playLeagueYear(roster, season, rng) {
   for (const entry of shuffle(rng, [...fixed, ...random])) {
     if (entry.pair) {
       const [a, b] = entry.pair;
-      const aWins = rng.next() < memberWinProbability(a, b);
-      addResult(a, aWins);
-      addResult(b, !aWins);
+      playGame(rng, a, b);
     } else {
-      if (isMember(entry.winner)) addResult(roster.players[entry.winner], true);
-      if (isMember(entry.loser)) addResult(roster.players[entry.loser], false);
+      // 竜王戦の対局は、表と番勝負に残した内訳(先手・戦法・勝ち方)で数える。
+      const detail = (id) => ({
+        color: entry.game?.black ? (entry.game.black === id ? 'black' : 'white') : null,
+        opening: entry.game?.openings?.[id] ?? null,
+        how: entry.game?.how ?? null,
+      });
+      if (isMember(entry.winner)) addResult(roster.players[entry.winner], true, detail(entry.winner));
+      if (isMember(entry.loser)) addResult(roster.players[entry.loser], false, detail(entry.loser));
     }
   }
   const meijinChallenger = playJunni(roster, rng);
@@ -482,7 +526,7 @@ export function seedLeagueHistory(roster, rng, { ageDrift }) {
       if (challenger) {
         const wins = { holder: 0, challenger: 0 };
         while (wins.holder < title.need && wins.challenger < title.need) {
-          wins[rng.next() < memberWinProbability(sitting, challenger, ratingOf) ? 'holder' : 'challenger'] += 1;
+          wins[playGame(rng, sitting, challenger, { ratingOf, big: true, record: false }) ? 'holder' : 'challenger'] += 1;
         }
         winner = wins.holder >= title.need ? sitting : challenger;
       }

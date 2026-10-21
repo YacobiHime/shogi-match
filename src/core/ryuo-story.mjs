@@ -1,11 +1,12 @@
 // 竜王戦の物語の人物。名簿の乱数の棋士とは別に、決まった名前・強さ・個性・台詞を持つ。
 // - 天鷺羽音(あまさぎ はのん): プレイヤーのライバル。三段リーグを突破した新四段の女子高生。
-// - 天鷺善彦(あまさぎ よしひこ): 羽音の父。史上最強と言われる名人。絵と台詞はない。
+// - 天鷺善彦(あまさぎ よしひこ): 羽音の父。史上最強と言われる、竜王を含む六冠のオールラウンダー。絵と台詞はない。
 // 登場する人物はすべて架空。設計は docs/hanane-rival-design.md。画面に依存しない。
 
-import { CHAMPION_RATING } from './ryuo-data.mjs';
 import { GROUP_MEAN_RATING, GROUP_RATING_SPREAD } from './ryuo-strength.mjs';
 import { styleEntry } from './ryuo-repertoire.mjs';
+import { defaultCastleShares } from './opening-usage.mjs';
+import { balanceDevs, styleAttackOf } from './player-abilities.mjs';
 import { JUNNI_CLASSES, JUNNI_SIZES, createRecord } from './ryuo-league.mjs';
 
 export const HANANE = 'hanane';
@@ -26,29 +27,71 @@ export const HANANE_SPRITE = Object.freeze({ file: 'hanane-mini.webp', version: 
 /** やこび姫の絵(yakobihime-mini.webp)の縦のドット数。並べるときに、1ドットの大きさをそろえる。 */
 export const YAKOBIHIME_SPRITE_DOTS = 53;
 
-/** 人物の定義。characterは名簿の棋士と同じ形(player-character.mjs)。 */
+/** 善彦のレーティング(名簿でいちばん強い。今の竜王の初期値R1950より上)。 */
+export const YOSHIHIKO_RATING = 2050;
+/** 最初の名簿で、善彦が持つタイトル(竜王を含む六冠)。王将と叡王は、ほかの棋士が持つ。 */
+export const YOSHIHIKO_TITLES = Object.freeze(['ryuo', 'meijin', 'oi', 'oza', 'kio', 'kisei']);
+
+/** 使用率の表(先手・後手が同じ)と、戦法ごとの囲いを目録のまま使った、使用率の形。 */
+function fixedUsage(black, white = black) {
+  const castles = {};
+  for (const id of new Set([...Object.keys(black), ...Object.keys(white)])) castles[id] = defaultCastleShares(id);
+  return { black, white, castles };
+}
+
+/**
+ * 人物の定義。characterは名簿の棋士と同じ形(player-character.mjs)。abilitiesは、能力の平均からの差(player-abilities.mjs)。
+ * 物語の人物も、能力の配分は重みつきの平均が0になるように直す(強さそのものはレーティングと、羽音の補正で決める)。
+ */
 export const STORY_PEOPLE = Object.freeze({
   [HANANE]: Object.freeze({
     name: '天鷺羽音',
     reading: 'あまさぎ はのん',
     age: 17,
-    repertoire: { party: 'static', styles: ['aigakari', 'kakugawari'] },
-    character: { attack: 0, traits: [{ id: 'deep-reading', degree: 2 }, { id: 'tsume', degree: 2 }, { id: 'late-bloom', degree: 2 }] },
-    intro: '三段リーグを突破した新四段の女子高生。天鷺善彦名人の娘。読みの深さ・速さ・正確さがずば抜けていて、力戦でも崩れない。',
+    // 序盤は並み、読み・詰み・終盤がずば抜ける(late-bloom)。若く、調子の波はまだある。
+    abilities: { opening: -12, middle: 0, ending: 9, attack: 1, defense: -2, reading: 12, mate: 10, stability: -6 },
+    repertoire: {
+      party: 'static',
+      styles: ['aigakari', 'kakugawari'],
+      usage: fixedUsage(
+        { aigakari: 40, 'kakugawari-kg': 22, kakugawari: 10, yagura: 10, ibisha: 12, 'kakugawari-45': 6 },
+        { aigakari: 36, 'kakugawari-kg': 16, kakugawari: 8, yagura: 12, gangi: 14, ibisha: 14 },
+      ),
+    },
+    character: { traits: [{ id: 'deep-reading', degree: 2 }, { id: 'tsume', degree: 2 }, { id: 'late-bloom', degree: 2 }] },
+    intro: '三段リーグを突破した新四段の女子高生。天鷺善彦の娘。読みの深さ・速さ・正確さがずば抜けていて、力戦でも崩れない。',
   }),
   [YOSHIHIKO]: Object.freeze({
     name: '天鷺善彦',
     reading: 'あまさぎ よしひこ',
-    age: 52,
-    repertoire: { party: 'both', styles: ['kakugawari', 'yagura', 'shiken-mino'] },
-    character: { attack: 0, traits: [{ id: 'deep-reading', degree: 2 }, { id: 'opening-study', degree: 2 }, { id: 'middle-strong', degree: 2 }] },
+    // 娘の羽音がまだ高校生なので、40代前半。
+    age: 43,
+    // 羽生善治を参考にしたオールラウンダー。武器は、中盤の形勢判断(大局観)と、深く正確な読み。ほかもA以上で、穴がない。
+    abilities: { opening: -6, middle: 6, ending: 2, attack: -5, defense: -4, reading: 6, mate: -2, stability: 4 },
+    repertoire: {
+      party: 'both',
+      styles: ['kakugawari-kg', 'yagura', 'shiken-mino'],
+      // いちばん多い戦法でも2割ほど。居飛車7割・振り飛車3割で、戦法を選ばない。
+      usage: fixedUsage(
+        { 'kakugawari-kg': 20, yagura: 16, aigakari: 14, kakugawari: 6, gangi: 6, ibisha: 8, shiken: 12, sangen: 8, gokigen: 6, mukai: 4 },
+        { 'kakugawari-kg': 14, yagura: 16, aigakari: 14, kakugawari: 4, gangi: 12, ibisha: 10, shiken: 12, sangen: 8, gokigen: 6, mukai: 4 },
+      ),
+    },
+    character: { traits: [{ id: 'grand-view', degree: 1 }, { id: 'demon-reading', degree: 1 }, { id: 'comeback', degree: 1 }] },
     // 史上最強と言われる通算の記録(竜王を除くタイトルの期数)。竜王はryuoで持つ。
-    titleCounts: { meijin: 12, oi: 13, eio: 3, oza: 19, kio: 13, osho: 12, kisei: 16 },
-    ryuo: 7,
-    totalRecord: { wins: 1480, losses: 430 },
-    intro: '史上最強と言われる名人。天鷺羽音の父。',
+    titleCounts: { meijin: 9, oi: 12, eio: 3, oza: 17, kio: 11, osho: 9, kisei: 13 },
+    ryuo: 6,
+    totalRecord: { wins: 1300, losses: 400 },
+    intro: '史上最強と言われる、竜王を含む六冠の棋士。居飛車も振り飛車も指すオールラウンダーで、形勢判断と深く正確な読みが武器。天鷺羽音の父。',
   }),
 });
+
+/** 人物の個性(能力の配分と、それから決めた棋風を含む)。 */
+export function storyCharacter(story) {
+  const person = STORY_PEOPLE[story];
+  const abilities = balanceDevs(person.abilities);
+  return { attack: styleAttackOf(abilities), traits: person.character.traits.map((trait) => ({ ...trait })), abilities };
+}
 
 /** 物語の人物の名簿のid。いなければnull。 */
 export function storyMemberId(roster, story) {
@@ -87,7 +130,7 @@ function storyMember(roster, story, { group, rating, dan }) {
     record: createRecord(),
     junni: null,
     repertoire: structuredClone(person.repertoire),
-    character: structuredClone(person.character),
+    character: storyCharacter(story),
   };
   member.style = styleEntry(member.repertoire.styles[0]);
   if (person.totalRecord) member.record.total = { ...person.totalRecord };
@@ -105,7 +148,7 @@ function storyMember(roster, story, { group, rating, dan }) {
 export function addStoryMembers(roster, { userGroup = 6, userIsChampion = false, fresh = false } = {}) {
   const added = [];
   if (!storyMemberId(roster, YOSHIHIKO)) {
-    added.push(storyMember(roster, YOSHIHIKO, { group: 1, rating: CHAMPION_RATING, dan: '九段' }));
+    added.push(storyMember(roster, YOSHIHIKO, { group: 1, rating: YOSHIHIKO_RATING, dan: '九段' }));
   }
   if (!storyMemberId(roster, HANANE)) {
     const group = userIsChampion ? 1 : userGroup;
@@ -114,13 +157,35 @@ export function addStoryMembers(roster, { userGroup = 6, userIsChampion = false,
   for (const member of added) placeJunni(roster, member, member.story === YOSHIHIKO ? 'A' : 'C2');
   if (fresh) {
     const father = roster.players[storyMemberId(roster, YOSHIHIKO)];
-    if (father && roster.titles) {
-      roster.titles.meijin = father.id;
-      const last = [...(roster.titleHistory ?? [])].reverse().find(({ title }) => title === 'meijin');
-      if (last) Object.assign(last, { holder: father.id, name: father.name, changed: false });
-    }
+    if (father && roster.titles) crownYoshihiko(roster, father, { withRyuo: !userIsChampion });
   }
   return added;
+}
+
+/** 善彦が続けて持っていたことにする、最近の期の数。 */
+const YOSHIHIKO_REIGN = 3;
+
+/**
+ * 最初の名簿で、善彦に六冠(竜王・名人・王位・王座・棋王・棋聖)を持たせる。プレイヤーが竜王のときは、竜王を除く五冠。
+ * 履歴の最近3期を善彦のものに書き換え、その期を持っていたことになっていた棋士の期数を減らす(通算の期数は人物の決まりのまま)。
+ */
+function crownYoshihiko(roster, father, { withRyuo }) {
+  for (const title of YOSHIHIKO_TITLES) {
+    if (title === 'ryuo' && !withRyuo) continue;
+    const entries = (roster.titleHistory ?? []).filter((entry) => entry.title === title);
+    const rewritten = entries.slice(-YOSHIHIKO_REIGN);
+    const before = entries.at(-YOSHIHIKO_REIGN - 1) ?? null;
+    rewritten.forEach((entry, index) => {
+      const previous = entry.holder !== father.id ? roster.players[entry.holder] : null;
+      if (previous) {
+        if (title === 'ryuo') previous.ryuo = Math.max(0, (previous.ryuo ?? 0) - 1);
+        else if (previous.titleCounts?.[title]) previous.titleCounts[title] -= 1;
+      }
+      Object.assign(entry, { holder: father.id, name: father.name, changed: index === 0 ? before?.holder !== father.id : false });
+    });
+    if (title === 'ryuo') roster.holder = father.id;
+    else roster.titles[title] = father.id;
+  }
 }
 
 /**
@@ -189,14 +254,19 @@ export function hananeAfterLine({ userWon, vsUser }) {
 /** やこび姫が、羽音と当たる対局の前に言う紹介(攻略の手がかりつき)。羽音は自分の弱点を言わない。 */
 export function hananeCoachIntro(vsUser) {
   if (!vsUser || !(vsUser.wins + vsUser.losses)) {
-    return '次の相手は天鷺羽音さん。天鷺名人の娘で、三段リーグを突破したばかりの新四段だよ。読みがすごく深くて、力戦でも崩れない。終盤ほど強くなるから、序盤のうちにリードを取ろう。';
+    return '次の相手は天鷺羽音さん。天鷺善彦さんの娘で、三段リーグを突破したばかりの新四段だよ。読みがすごく深くて、力戦でも崩れない。終盤ほど強くなるから、序盤のうちにリードを取ろう。';
   }
   if (vsUser.wins > 0) return '羽音さん、前に負けてから本気だよ。序盤でリードを取って、終盤は1手ずつ確かめよう。';
   return 'また羽音さんだね。終盤の正確さは折り紙つき。勝負は序盤だよ。';
 }
 
-/** やこび姫が、善彦と当たる対局の前に言う紹介。羽音と対局したことがあれば、羽音の言葉を添える。 */
-export function yoshihikoCoachIntro(metHanane) {
-  const lines = '天鷺善彦名人は、羽音さんのお父さん。史上最強って言われる人だよ。';
+/**
+ * やこび姫が、善彦と当たる対局の前に言う紹介(攻略の手がかりつき)。羽音と対局したことがあれば、羽音の言葉を添える。
+ * @param {boolean} metHanane
+ * @param {string[]} [held] 善彦がいま持っているタイトル
+ */
+export function yoshihikoCoachIntro(metHanane, held = []) {
+  const crown = held.length >= 2 ? `${held.length}冠の` : held.length === 1 ? `${held[0]}の` : '';
+  const lines = `${crown}天鷺善彦さんは、羽音さんのお父さん。史上最強って言われる人だよ。形勢判断と読みに穴がなくて、劣勢からでもひっくり返してくる。最後まで気をゆるめないで。`;
   return metHanane ? `${lines}羽音さんは「${HANANE_LINES.father[0]}」って言ってた。` : lines;
 }

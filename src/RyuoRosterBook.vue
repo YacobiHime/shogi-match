@@ -29,7 +29,7 @@
       </div>
       <ul class="shogi-note__book-list" role="tabpanel">
         <li v-for="member in members" :key="member.id">
-          <details>
+          <details :data-book-member="member.id" @toggle="onToggle(member.id, $event)">
             <summary>
               <span class="shogi-note__book-name"><b v-if="member.id === oshiId" class="shogi-note__book-oshi" aria-label="推し">★</b><b v-if="member.story === 'hanane'" class="shogi-note__book-rival" aria-label="ライバル">◆</b>{{ member.name }}</span>
               <span class="shogi-note__book-dan">{{ member.ryuoHolder ? "竜王" : member.dan }}</span>
@@ -44,6 +44,8 @@
               </span>
               <span><small>{{ member.reading }}</small>{{ member.intro }}</span>
             </p>
+            <!-- 能力値(レーダーチャートとランク)・特殊能力・戦法の使用率。開いたときだけ描く(1つの組に数十人いるため)。 -->
+            <PlayerAbilityPanel v-if="member.ability && openIds.has(member.id)" class="shogi-note__book-ability" :view="member.ability" />
             <dl class="shogi-note__book-profile">
               <div><dt>立場</dt><dd>{{ member.kind }}・{{ member.age }}歳{{ member.junni ? `・${member.junni}` : "" }}</dd></div>
               <div><dt>得意戦法</dt><dd>{{ member.repertoire }}</dd></div>
@@ -53,6 +55,11 @@
               <div v-if="member.titleCounts.length"><dt>タイトル</dt><dd>{{ member.titleCounts.join("・") }}（通算{{ member.totalTitles }}期）</dd></div>
               <div v-if="member.lastSeason"><dt>昨年度</dt><dd>{{ member.lastSeason }}</dd></div>
               <div v-if="member.total"><dt>通算</dt><dd>{{ member.total }}</dd></div>
+              <div v-if="member.stats.blackTotal || member.stats.whiteTotal" data-book-colors>
+                <dt>先手・後手</dt><dd>先手 {{ member.stats.blackTotal || "—" }}・後手 {{ member.stats.whiteTotal || "—" }}</dd>
+              </div>
+              <div v-if="member.stats.howsTotal.length" data-book-hows><dt>勝ち方</dt><dd>{{ member.stats.howsTotal.join("・") }}</dd></div>
+              <div v-if="member.stats.bestOpening"><dt>勝率の高い戦法</dt><dd>{{ member.stats.bestOpening }}</dd></div>
               <div v-if="member.awards.length"><dt>将棋大賞</dt><dd>{{ member.awards.join("・") }}</dd></div>
               <div><dt>対戦成績</dt><dd>{{ member.vsUser }}</dd></div>
               <div v-if="sharedFormations(member).length" data-book-shared><dt>あなたも組んだ形</dt><dd>{{ sharedFormations(member).join("・") }}</dd></div>
@@ -73,6 +80,7 @@
 
 <script setup lang="ts">
 import { computed, ref, type PropType } from "vue";
+import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import { rosterBook } from "./core/ryuo-book.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { loadOshi, saveOshi } from "./core/ryuo-oshi.mjs";
@@ -85,6 +93,9 @@ type Profile = {
   formations: { kind: "strategy" | "castle"; id: string }[];
   strengths: string[]; weaknesses: string[]; lastSeason: string; total: string; awards: string[]; vsUser: string; played: boolean;
   story: string | null; reading: string; intro: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ability: any;
+  stats: { blackTotal: string; whiteTotal: string; blackSeason: string; whiteSeason: string; howsTotal: string[]; bestOpening: string };
 };
 type Book = {
   holders: { title: string; name: string }[];
@@ -105,6 +116,14 @@ const hananeUrl = computed(() => `${props.assetBaseUrl}/characters/${HANANE_SPRI
 const book = computed(() => (props.roster ? rosterBook(props.roster) as Book : null));
 const group = ref(props.initialGroup);
 const members = computed(() => book.value?.groups.find((entry) => entry.group === group.value)?.members ?? []);
+/** 開いている棋士。能力のレーダーチャートは、開いたときだけ描く。 */
+const openIds = ref(new Set<string>());
+function onToggle(id: string, event: Event) {
+  const next = new Set(openIds.value);
+  if ((event.target as HTMLDetailsElement).open) next.add(id);
+  else next.delete(id);
+  openIds.value = next;
+}
 
 /** 推しの棋士(1人)。端末に保存し、竜王戦の画面でやこび姫が様子を知らせる(core/ryuo-oshi.mjs)。 */
 const storage = (() => {
@@ -200,8 +219,9 @@ function toggleOshi(id: string) {
   cursor: pointer;
 }
 .shogi-game .shogi-note__book-oshi-toggle[aria-pressed="true"] { color: #172632; background: var(--note-gold); }
+.shogi-game .shogi-note__book-ability { margin: 0.2rem 0.7rem 0.7rem; padding: 0.6rem; border-radius: 0.3rem; background: rgba(255, 252, 244, 0.05); }
 .shogi-game .shogi-note__book-profile { display: grid; gap: 0.3rem; margin: 0; padding: 0 0.7rem 0.7rem; }
-.shogi-game .shogi-note__book-profile > div { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 0.5rem; }
+.shogi-game .shogi-note__book-profile > div { display: grid; grid-template-columns: 6.5em minmax(0, 1fr); gap: 0.5rem; }
 .shogi-game .shogi-note__book-profile dt { color: rgba(255, 252, 244, 0.65); font-size: 0.82em; font-weight: 700; }
 .shogi-game .shogi-note__book-profile dd { margin: 0; font-size: 0.9em; overflow-wrap: anywhere; }
 </style>

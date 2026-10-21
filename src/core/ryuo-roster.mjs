@@ -5,13 +5,14 @@
 // - 年齢と強さの変化、引退、新四段の加入、6組の特別枠(アマ・女流・奨励会員)の入れ替え
 // 登場する棋士はすべて架空で、実在の棋士とは関係がない。設計は docs/tournament-design.md の「名簿」。
 
-import { CHAMPION_RATING, GROUP_DAN_WEIGHTS, SPECIAL_RATING_OFFSET } from './ryuo-data.mjs';
+import { GROUP_DAN_WEIGHTS, SPECIAL_RATING_OFFSET } from './ryuo-data.mjs';
 import { GROUP_MEAN_RATING, GROUP_RATING_SPREAD } from './ryuo-strength.mjs';
 import { createRng, gauss, weightedPick } from './ryuo-random.mjs';
-import { ageCharacter, createCharacter } from './player-character.mjs';
+import { ageCharacter, createCharacter, withAbilities } from './player-character.mjs';
 import { newName } from './ryuo-names.mjs';
-import { HANANE, YOSHIHIKO, addStoryMembers, storyMemberId } from './ryuo-story.mjs';
-import { createRepertoire, styleEntry } from './ryuo-repertoire.mjs';
+import { HANANE, STORY_PEOPLE, YOSHIHIKO, YOSHIHIKO_RATING, addStoryMembers, storyCharacter, storyMemberId } from './ryuo-story.mjs';
+import { createRepertoire, styleEntry, withUsage } from './ryuo-repertoire.mjs';
+import { driftUsage } from './opening-usage.mjs';
 import {
   DAN_ORDER,
   assignJunni,
@@ -27,8 +28,12 @@ import {
 export { DAN_ORDER };
 
 export const ROSTER_STORAGE_KEY = 'yacobihime:shogi-match:ryuo-roster';
-/** 名簿の保存形式。2から、得意戦法・成績・順位戦・タイトル・将棋大賞・プレイヤーとの対戦成績を持つ。1は作り直す。 */
-export const ROSTER_VERSION = 2;
+/**
+ * 名簿の保存形式。2から、得意戦法・成績・順位戦・タイトル・将棋大賞・プレイヤーとの対戦成績を持つ。
+ * 3から、棋士は能力の配分(character.abilities)・金の特殊能力・戦法と囲いの使用率(repertoire.usage)・先後と戦法ごとの成績を持つ。
+ * 版2は、レーティング・特徴・得意戦法から能力と使用率を作って移す(migrateRoster)。1は作り直す。
+ */
+export const ROSTER_VERSION = 3;
 /** 竜王がプレイヤーのときの、名簿の竜王(holder)の値。 */
 export const USER_HOLDER = 'user';
 const GROUPS = [1, 2, 3, 4, 5, 6];
@@ -145,13 +150,9 @@ export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
     titles: {}, titleHistory: [], awards: [], vsUser: {}, lastYear: null,
   };
   const used = new Set();
-  if (!userIsChampion) {
-    const holder = createMember(roster, rng, used, { group: 1, rating: CHAMPION_RATING, age: Math.round(clamp(30 + gauss(rng) * 4, 21, 45)), dan: '九段' });
-    holder.ryuo = 1 + Math.floor(rng.next() * 3);
-    roster.holder = holder.id;
-  }
-  // 物語の人物(羽音・善彦)の分を、その組の乱数の棋士から減らす。
-  const storyGroups = [1, userIsChampion ? 1 : userGroup];
+  // 名簿の竜王は、天鷺善彦(竜王を含む六冠。履歴を作ったあとに加える)。プレイヤーが竜王なら、善彦は1組の棋士。
+  // 物語の人物(羽音・善彦)の分を、その組の乱数の棋士から減らす。竜王の善彦は、組の枠を使わない。
+  const storyGroups = userIsChampion ? [1, 1] : [userGroup];
   for (const group of GROUPS) {
     const count = rosterTarget(group, userIsChampion ? 1 : userGroup, !userIsChampion) - storyGroups.filter((g) => g === group).length;
     for (let index = 0; index < count; index += 1) createMember(roster, rng, used, { group });
@@ -160,7 +161,8 @@ export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
   // 順位戦のクラスと、過去のタイトル戦・通算勝数の履歴を作り、実績に合わせて段位を上げる。
   assignJunni(roster, rng);
   seedLeagueHistory(roster, rng, { ageDrift });
-  // 物語の人物は、履歴を作ったあとに加える(通算の記録は人物の決まりのまま。善彦は名人)。
+  // 物語の人物は、履歴を作ったあとに加える(通算の記録は人物の決まりのまま。善彦は竜王を含む六冠)。
+  roster.holder = USER_HOLDER;
   addStoryMembers(roster, { userGroup, userIsChampion, fresh: true });
   roster.ratingMean = Math.round(proMean(roster));
   roster.ratingSd = Math.round(proSd(roster));
@@ -338,8 +340,9 @@ export function applySeasonToRoster(roster, season, { userGroup, promote }) {
   for (const member of members(next)) {
     member.age += 1;
     if (member.kind === 'pro' || member.kind === 'woman') member.rating = Math.round(member.rating + ageDrift(member.age) + gauss(rng) * 30);
-    // 物語の人物の個性は決まりのまま(変えない)。
+    // 物語の人物の個性と使用率は決まりのまま(変えない)。ほかの棋士は、使用率も流行で少し動く。
     if (member.character && !member.story) member.character = ageCharacter(rng, member.character, member);
+    if (member.repertoire?.usage && !member.story) member.repertoire = { ...member.repertoire, usage: driftUsage(rng, member.repertoire.usage) };
   }
 
   // 引退と、特別枠の入れ替え。アマチュアは1期限り。奨励会員は、四段になれば棋士として残る。
@@ -397,10 +400,53 @@ export function applySeasonToRoster(roster, season, { userGroup, promote }) {
   return next;
 }
 
+/**
+ * 版2の名簿を版3へ移す。棋士ごとに、レーティング・特徴・得意戦法から、能力の配分・金の特殊能力・使用率を作る
+ * (名簿のidから決まる乱数で作るので、何度移しても同じになる)。物語の人物は、人物の決まり(年齢・能力・使用率・特殊能力)にそろえる。
+ * タイトルと履歴は書き換えない(善彦の六冠は、新しく作る名簿だけ)。
+ */
+export function migrateRoster(roster) {
+  if (!roster || roster.version === ROSTER_VERSION) return roster;
+  const next = structuredClone(roster);
+  for (const member of members(next)) {
+    const rng = createRng((hashId(member.id) ^ 0x2545f491) >>> 0);
+    if (member.story) {
+      refreshStoryMember(member);
+      continue;
+    }
+    member.repertoire = withUsage(rng, member.repertoire ?? { party: 'static', styles: [member.style?.id ?? 'aigakari'] });
+    member.character = withAbilities(rng, member.character, member);
+  }
+  next.version = ROSTER_VERSION;
+  return next;
+}
+
+function hashId(id) {
+  let hash = 0;
+  for (const char of String(id)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return hash;
+}
+
+/** 物語の人物を、人物の決まりにそろえる(保存してあった名簿のため)。善彦の年齢は、加わってからの年数を保って43歳からにする。 */
+function refreshStoryMember(member) {
+  const person = STORY_PEOPLE[member.story];
+  if (!person) return;
+  const years = Math.max(0, (member.age ?? person.age) - (member.story === YOSHIHIKO ? 52 : person.age));
+  if (member.story === YOSHIHIKO) {
+    member.age = person.age + years;
+    member.rating = Math.max(member.rating, YOSHIHIKO_RATING);
+  }
+  member.repertoire = structuredClone(person.repertoire);
+  member.style = styleEntry(member.repertoire.styles[0]);
+  member.character = storyCharacter(member.story);
+}
+
 export function loadRoster(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(ROSTER_STORAGE_KEY) ?? 'null');
-    if (!parsed || parsed.version !== ROSTER_VERSION || !parsed.players || typeof parsed.players !== 'object') return null;
+    if (!parsed || !parsed.players || typeof parsed.players !== 'object') return null;
+    if (parsed.version === 2) return migrateRoster(parsed);
+    if (parsed.version !== ROSTER_VERSION) return null;
     return parsed;
   } catch {
     return null;

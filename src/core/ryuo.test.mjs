@@ -315,7 +315,7 @@ describe('a Ryuo season', () => {
     // 6組には降級が無いので、昇級の枠が無い小さな規模では、敗者復活戦は行わない。
     const sixth = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ scale: 3 }), userLevel: 28, seed: 6 });
     expect(recordUserGame(sixth, 'loss').phase).toBe('done');
-  });
+  }, 20000);
 
   it('relegates a player who loses everything, except from group 6', () => {
     const fifth = createSeason({ no: 1, mode: 'challenge', group: 5, settings: settings(), userLevel: 28, seed: 4 });

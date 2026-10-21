@@ -22,7 +22,7 @@
       <text class="shogi-radar__label" :x="labelPoint(index).x" :y="labelPoint(index).y" :text-anchor="anchor(index)" dominant-baseline="middle">
         {{ axis.label }}
       </text>
-      <text class="shogi-radar__value" :x="labelPoint(index).x" :y="labelPoint(index).y + 14" :text-anchor="anchor(index)" dominant-baseline="middle">
+      <text class="shogi-radar__value" :x="labelPoint(index).x" :y="labelPoint(index).y + valueOffset" :text-anchor="anchor(index)" dominant-baseline="middle">
         {{ axis.value === null ? "—" : axis.value }}
       </text>
     </g>
@@ -36,6 +36,8 @@ type Axis = { key: string; label: string; value: number | null };
 
 const props = defineProps({
   axes: { type: Array as PropType<Axis[]>, required: true },
+  /** 軸の名前から、値の文字までの縦の間(図の単位)。文字を大きくするときに広げる。 */
+  valueOffset: { type: Number, default: 14 },
 });
 
 const RINGS = [20, 40, 60, 80, 100];

@@ -1,8 +1,9 @@
 // 架空の棋士の得意戦法。居飛車党・振り飛車党・両方指す(オールラウンダー)を決めて、得意戦法を2〜3個持たせる。
-// 1局ごとに、その中から戦法を選ぶ(いちばんの得意戦法を多めに)。
+// 得意戦法を上位にした、戦法と囲いの使用率(usage。opening-usage.mjs)も持たせ、1局ごとに、その使用率で戦法と囲いを選ぶ。
 // 割合は、近年のプロ公式戦の傾向(居飛車が大半で、角換わり・相掛かりが多い。振り飛車党は少数派で、上位ほど少ない)に寄せた仮の値。
 
 import { OPPONENT_STYLES } from './ryuo-data.mjs';
+import { createUsage, pickOpening } from './opening-usage.mjs';
 
 /** 居飛車の戦法の選ばれやすさ。 */
 export const STATIC_STYLE_WEIGHTS = Object.freeze({
@@ -61,11 +62,24 @@ export function createRepertoire(rng, group) {
     const side = party === 'both' ? (index % 2 === 0 ? (rng.next() < 0.5 ? 'static' : 'ranging') : (STYLE_BY_ID.get(styles[0]).rook === 'static' ? 'ranging' : 'static')) : party;
     styles.push(weightedId(rng, side === 'ranging' ? RANGING_STYLE_WEIGHTS : STATIC_STYLE_WEIGHTS, styles));
   }
-  return { party, styles };
+  return withUsage(rng, { party, styles });
 }
 
-/** 1局の戦法を選ぶ。いちばんの得意戦法を多めに、ほかは等分。 */
-export function pickGameStyle(rng, repertoire) {
+/** 使用率を足す(保存してあった、使用率のない得意戦法のため)。党は、得意戦法の党のまま。 */
+export function withUsage(rng, repertoire) {
+  if (repertoire?.usage) return repertoire;
+  return { ...repertoire, usage: createUsage(rng, repertoire) };
+}
+
+/**
+ * 1局の戦法を選ぶ。使用率があれば、手番と相手の飛車の振り方で使用率から選ぶ(opening-usage.mjsのpickOpening)。
+ * 使用率のない古い期の棋士は、いちばんの得意戦法を多めに、ほかは等分。
+ * @param {{ next(): number }} rng
+ * @param {any} repertoire
+ * @param {{ color?: 'black' | 'white', opponentRook?: 'static' | 'ranging' | null }} [options] colorは、この棋士の手番
+ */
+export function pickGameStyle(rng, repertoire, options = {}) {
+  if (repertoire?.usage) return pickOpening(rng, repertoire.usage, options);
   const styles = repertoire?.styles ?? [];
   if (!styles.length) return null;
   if (styles.length === 1 || rng.next() < PRIMARY_STYLE_RATE) return styleEntry(styles[0]);

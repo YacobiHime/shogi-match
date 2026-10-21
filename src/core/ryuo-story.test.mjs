@@ -3,7 +3,7 @@ import { USER_ID, createSeason, describeSeason, recordUserGame, scaleById, seedH
 import { applySeason, createCareer, nextEntry } from './ryuo-career.mjs';
 import { applySeasonToRoster, createRoster, rosterTarget, selectParticipants, withStoryMembers } from './ryuo-roster.mjs';
 import { createRng } from './ryuo-random.mjs';
-import { JUNNI_SIZES } from './ryuo-league.mjs';
+import { JUNNI_SIZES, heldTitles } from './ryuo-league.mjs';
 import { applyCharacter } from './player-character.mjs';
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from './strength-settings.mjs';
 import {
@@ -12,10 +12,13 @@ import {
   HANANE_LINES,
   STORY_PEOPLE,
   YOSHIHIKO,
+  YOSHIHIKO_RATING,
+  YOSHIHIKO_TITLES,
   hananeAfterLine,
   hananeBeforeLine,
   hananeCoachIntro,
   hananeRating,
+  storyCharacter,
   storyMemberId,
 } from './ryuo-story.mjs';
 
@@ -25,15 +28,27 @@ const groupOf = (roster, group) => members(roster).filter((member) => member.gro
 const story = (roster, id) => roster.players[storyMemberId(roster, id)];
 
 describe('物語の人物を名簿に入れる', () => {
-  it('羽音はプレイヤーの組の新四段(C級2組)、善彦は1組・A級の名人', () => {
+  it('羽音はプレイヤーの組の新四段(C級2組)、善彦は1組・A級で、竜王を含む六冠', () => {
     const roster = createRoster({ seed: 3 });
     const hanane = story(roster, HANANE);
     expect(hanane).toMatchObject({ name: '天鷺羽音', kind: 'pro', group: 6, dan: '四段', junni: 'C2', age: 17, rating: hananeRating(6) });
-    expect(hanane.character).toEqual(STORY_PEOPLE[HANANE].character);
+    expect(hanane.character).toEqual(storyCharacter(HANANE));
     const father = story(roster, YOSHIHIKO);
-    expect(father).toMatchObject({ name: '天鷺善彦', group: 1, dan: '九段', junni: 'A' });
-    expect(roster.titles.meijin).toBe(father.id);
+    expect(father).toMatchObject({ name: '天鷺善彦', group: 1, dan: '九段', junni: 'A', age: 43, rating: YOSHIHIKO_RATING });
+    expect(roster.holder).toBe(father.id);
+    for (const title of YOSHIHIKO_TITLES) if (title !== 'ryuo') expect(roster.titles[title], title).toBe(father.id);
+    expect(heldTitles(roster, father.id)).toHaveLength(6);
+    expect(roster.titles.osho).not.toBe(father.id);
+    expect(roster.titles.eio).not.toBe(father.id);
     expect(father.titleCounts.meijin).toBe(STORY_PEOPLE[YOSHIHIKO].titleCounts.meijin);
+    // 履歴の最近3期は善彦。前にその期を持っていたことになっていた棋士の期数は減らしてある(合計が履歴と合う)。
+    const lastRyuo = roster.titleHistory.filter(({ title }) => title === 'ryuo').slice(-3);
+    expect(lastRyuo.every(({ holder }) => holder === father.id)).toBe(true);
+    for (const member of members(roster)) {
+      if (member.story) continue;
+      const won = roster.titleHistory.filter(({ title, holder }) => title === 'meijin' && holder === member.id).length;
+      expect(member.titleCounts.meijin ?? 0, member.name).toBe(won);
+    }
     // 組の人数と順位戦の定員は、今までどおり。
     for (const group of [1, 2, 3, 4, 5]) expect(groupOf(roster, group)).toHaveLength(rosterTarget(group, 6, true));
     for (const [cls, size] of Object.entries(JUNNI_SIZES)) {
@@ -91,14 +106,19 @@ describe('本気と、期をまたいだ変化', () => {
   }
 
   it('羽音に勝つと、次の期からプレイヤーと指すときだけ強くなる。個性は変わらず、引退しない', () => {
-    const roster = createRoster({ seed: 8, userGroup: 6 });
-    const hananeId = storyMemberId(roster, HANANE);
-    // 組の決勝で当たるので、勝ち進んで羽音にも勝つ。
-    const result = runSeason(createCareer(), roster, 8, () => 'win');
-    const met = result.season.userGames.some((game) => game.opponentId === hananeId);
-    expect(met).toBe(true);
+    // 組の決勝で当たる(およそ6割)ので、勝ち進んで羽音にも勝つ。当たった期を探す。
+    let roster;
+    let hananeId;
+    let result;
+    for (let seed = 8; seed < 40; seed += 1) {
+      roster = createRoster({ seed, userGroup: 6 });
+      hananeId = storyMemberId(roster, HANANE);
+      result = runSeason(createCareer(), roster, seed, () => 'win');
+      if (result.season.userGames.some((game) => game.opponentId === hananeId)) break;
+    }
+    expect(result.season.userGames.some((game) => game.opponentId === hananeId)).toBe(true);
     expect(result.roster.vsUser[hananeId].wins).toBe(1);
-    expect(result.roster.players[hananeId].character).toEqual(STORY_PEOPLE[HANANE].character);
+    expect(result.roster.players[hananeId].character).toEqual(storyCharacter(HANANE));
     const next = createSeason({ ...nextEntry(result.career), settings: settings(), userLevel: 20, career: result.career, roster: result.roster, seed: 9 });
     const player = next.players[hananeId];
     if (player) {

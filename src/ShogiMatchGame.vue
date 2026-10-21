@@ -1762,7 +1762,7 @@ import {
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
-import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById } from "./core/ryuo.mjs";
+import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
 import { applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { comparableScore } from "./core/move-selection.mjs";
@@ -2141,7 +2141,8 @@ watch(tournamentOpen, (open) => {
   ryuoOshi.value = id && name ? { id, name } : null;
 }, { immediate: true });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ryuoSeason = ref<any>(loadSeason(browserStorage()));
+// 前の版で始めた期の棋士には、名簿の能力の配分と使用率を写す(能力は、その期の対局から効く)。
+const ryuoSeason = ref<any>(withRosterAbilities(loadSeason(browserStorage()), ryuoRoster.value));
 /** いま指している大会の対局。保存した対局と一緒に、リロードしても復元する。 */
 const ryuoGame = ref<RyuoGame | null>(null);
 /** 大会の対局での、CPUの手ごとの選び方と、働いていた特徴(対局後に、特徴が出た場面を示すため)。 */
