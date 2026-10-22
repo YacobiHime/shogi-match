@@ -85,7 +85,12 @@ const emit = defineEmits<{
 }
 .pregame-picker__header {
   position: relative;
-  padding: 0.55em 2.8em;
+  padding: 0.55em 3em;
+  /* ×の押せる高さ(44px以上、UI_Nintendo_Implementation.mdの7-4)を保つ。 */
+  display: grid;
+  align-content: center;
+  min-height: 44px;
+  box-sizing: border-box;
   background: #c98a3d;
   text-align: center;
 }
@@ -95,12 +100,19 @@ const emit = defineEmits<{
   font-size: 1.1em;
   letter-spacing: 0.08em;
 }
+/*
+ * ×は見出しの帯の高さいっぱいに置く。真ん中寄せにtransformを使うと、ボタン共通の触れたとき・押したときの
+ * transformに上書きされて、指の下から逃げて押せなくなる。
+ */
 .shogi-game .pregame-picker__close {
   position: absolute;
-  top: 50%;
-  right: 0.4em;
-  width: 2em;
-  min-height: 2em;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: max(2.4em, 44px);
+  min-height: 0;
   padding: 0;
   border: 0;
   color: #fffcf4;
@@ -108,7 +120,6 @@ const emit = defineEmits<{
   box-shadow: none;
   font-size: 1.2em;
   line-height: 1;
-  transform: translateY(-50%);
 }
 .pregame-picker__body {
   display: grid;

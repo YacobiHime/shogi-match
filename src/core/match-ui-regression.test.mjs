@@ -9,6 +9,21 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("keeps sheet close buttons still under the finger (no transform centering, 44px target)", () => {
+    // ボタン共通の触れたとき・押したときのtransformが、真ん中寄せのtranslateY(-50%)を上書きして×が逃げていた。
+    const sheets = [
+      ["../PregamePicker.vue", "pregame-picker__close"],
+      ["../OpeningPlanSheet.vue", "plan-sheet__close"],
+      ["../ShogiOpeningDex.vue", "shogi-dex__fortune-close"],
+    ];
+    for (const [file, className] of sheets) {
+      const css = readFileSync(new URL(file, import.meta.url), "utf8");
+      const rule = css.match(new RegExp(`\\.${className}[^{]*\\{([^}]*)\\}`))?.[1] ?? "";
+      expect(rule, className).toContain("bottom: 0;");
+      expect(rule, className).toContain("44px");
+      expect(rule, className).not.toMatch(/transform/);
+    }
+  });
   it("uses the aware selector in match and review, and falls back to Lv10 without bypassing opening restrictions", () => {
     expect(source).toContain('import { chooseAwareMove } from "./core/aware-move-choice.mjs"');
     expect(source).toContain('selectionStrength.logicHybrid ? chooseAwareMove : chooseCpuMove');

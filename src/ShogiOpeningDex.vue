@@ -1007,7 +1007,12 @@ watch(stepIndex, async () => {
 }
 .shogi-dex__fortune-panel header {
   position: relative;
-  padding: 0.55em 2.8em;
+  padding: 0.55em 3em;
+  /* ×の押せる高さ(44px以上、UI_Nintendo_Implementation.mdの7-4)を保つ。 */
+  display: grid;
+  align-content: center;
+  min-height: 44px;
+  box-sizing: border-box;
   background: #c98a3d;
   text-align: center;
 }
@@ -1016,19 +1021,22 @@ watch(stepIndex, async () => {
   color: #fffcf4;
   font-size: 1.1em;
 }
+/* 見出しの帯の高さいっぱいに置く(transformで寄せると、ボタン共通の押したときの動きで指の下から逃げる)。 */
 .shogi-game .shogi-dex__fortune-close {
   position: absolute;
-  top: 50%;
-  right: 0.3em;
-  width: 2.2em;
-  min-height: 2.2em;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: max(2.4em, 44px);
+  min-height: 0;
   padding: 0;
   border: 0;
   color: #fffcf4;
   background: transparent;
   box-shadow: none;
   font-size: 1.2em;
-  transform: translateY(-50%);
 }
 .shogi-dex__fortune-body {
   padding: 0.8em;

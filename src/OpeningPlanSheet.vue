@@ -396,7 +396,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 }
 .plan-sheet__header {
   position: relative;
-  padding: 0.55em 2.8em;
+  padding: 0.55em 3em;
+  /* ×の押せる高さ(44px以上、UI_Nintendo_Implementation.mdの7-4)を保つ。 */
+  display: grid;
+  align-content: center;
+  min-height: 44px;
+  box-sizing: border-box;
   background: var(--plan-sheet-accent);
   text-align: center;
 }
@@ -406,12 +411,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   font-size: 1.1em;
   letter-spacing: 0.06em;
 }
+/* 見出しの帯の高さいっぱいに置く(transformで寄せると、ボタン共通の押したときの動きで指の下から逃げる)。 */
 .shogi-game .plan-sheet__close,
 .shogi-game .plan-sheet__back {
   position: absolute;
-  top: 50%;
-  width: 2.2em;
-  min-height: 2.2em;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: max(2.4em, 44px);
+  min-height: 0;
   padding: 0;
   border: 0;
   color: var(--plan-sheet-paper);
@@ -419,10 +428,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   box-shadow: none;
   font-size: 1.2em;
   line-height: 1;
-  transform: translateY(-50%);
 }
-.shogi-game .plan-sheet__close { right: 0.3em; }
-.shogi-game .plan-sheet__back { left: 0.3em; font-size: 1.6em; }
+.shogi-game .plan-sheet__close { right: 0; }
+.shogi-game .plan-sheet__back { left: 0; width: max(1.8em, 44px); font-size: 1.6em; }
 .plan-sheet__body {
   display: grid;
   gap: 0.8em;
