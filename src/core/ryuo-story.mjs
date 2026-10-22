@@ -27,8 +27,8 @@ export const HANANE_SPRITE = Object.freeze({ file: 'hanane-mini.webp', version: 
 /** やこび姫の絵(yakobihime-mini.webp)の縦のドット数。並べるときに、1ドットの大きさをそろえる。 */
 export const YAKOBIHIME_SPRITE_DOTS = 53;
 
-/** 善彦のレーティング(名簿でいちばん強い。今の竜王の初期値R1950より上)。 */
-export const YOSHIHIKO_RATING = 2050;
+/** 善彦のレーティング(名簿でいちばん強い。実物の棋士レーティングの1位(約2120〜2150)に合わせた)。 */
+export const YOSHIHIKO_RATING = 2130;
 /** 最初の名簿で、善彦が持つタイトル(竜王を含む六冠)。王将と叡王は、ほかの棋士が持つ。 */
 export const YOSHIHIKO_TITLES = Object.freeze(['ryuo', 'meijin', 'oi', 'oza', 'kio', 'kisei']);
 

@@ -3,8 +3,12 @@
 // - 実際に指すときのCPUのLv: 難易度に合わせて、レーティングからLvへ換算する。
 // 換算の根拠と測定の方法は docs/tournament-design.md の「棋士の強さ」にある。
 
-/** 棋士の尺度の基準。平均的な棋士を1500とする(棋士別成績一覧のレーティングと同じ置き方)。 */
-export const PRO_MEAN_RATING = 1500;
+/**
+ * 棋士の尺度。実物の非公式の棋士レーティング(Elo式、差400で勝率約91%)の、現役の棋士の分布に合わせる:
+ * 平均約1555・標準偏差約145(2018〜2019年の集計で平均1550〜1561、標準偏差143〜155)。docs/rating-realism-design.md。
+ */
+export const PRO_MEAN_RATING = 1555;
+export const PRO_RATING_SD = 145;
 
 export const MIN_CPU_LEVEL = 0;
 export const MAX_CPU_LEVEL = 40;
@@ -29,11 +33,14 @@ export const BASE_DIFFICULTY = 9;
 /** 難易度1段階で、換算の基準点が動くLv。 */
 export const LEVELS_PER_DIFFICULTY = 4;
 
-/** 組ごとのレーティングの平均。上の組ほど強い。根拠は docs/tournament-design.md。 */
-export const GROUP_MEAN_RATING = Object.freeze({ 1: 1760, 2: 1680, 3: 1620, 4: 1560, 5: 1500, 6: 1380 });
+/**
+ * 組ごとのレーティングの平均。上の組ほど強い。1〜5組は実物の竜王戦の組の平均(2019年4月の棋士レーティング)、
+ * 6組は棋士全体の平均が約1555になるように決めた値。根拠は docs/rating-realism-design.md。
+ */
+export const GROUP_MEAN_RATING = Object.freeze({ 1: 1786, 2: 1659, 3: 1635, 4: 1584, 5: 1524, 6: 1450 });
 
-/** 組ごとのレーティングのばらつき(標準偏差)。6組は、アマ・女流・奨励会員が混じるので広い。 */
-export const GROUP_RATING_SPREAD = Object.freeze({ 1: 90, 2: 90, 3: 90, 4: 100, 5: 110, 6: 140 });
+/** 組ごとのレーティングのばらつき(標準偏差)。棋士全体の標準偏差が約150になるように決めた値。 */
+export const GROUP_RATING_SPREAD = Object.freeze({ 1: 85, 2: 75, 3: 75, 4: 80, 5: 85, 6: 105 });
 
 /**
  * 換算の基準点。基準の難易度で、6組の平均の棋士をこのLvとして指させる。

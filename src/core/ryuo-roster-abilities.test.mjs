@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createSeason, recordUserGame, scaleById } from './ryuo.mjs';
 import { applySeason, createCareer, nextEntry } from './ryuo-career.mjs';
-import { ROSTER_STORAGE_KEY, ROSTER_VERSION, applySeasonToRoster, createRoster, loadRoster, migrateRoster } from './ryuo-roster.mjs';
-import { STORY_PEOPLE, YOSHIHIKO, storyCharacter, storyMemberId } from './ryuo-story.mjs';
+import { RATING_MODEL, ROSTER_STORAGE_KEY, ROSTER_VERSION, applySeasonToRoster, createRoster, loadRoster, migrateRoster, rescaleRosterRatings } from './ryuo-roster.mjs';
+import { STORY_PEOPLE, YOSHIHIKO, YOSHIHIKO_RATING, storyCharacter, storyMemberId } from './ryuo-story.mjs';
+import { PRO_MEAN_RATING, PRO_RATING_SD } from './ryuo-strength.mjs';
 import { ABILITY_KEYS } from './player-abilities.mjs';
 
 function memoryStorage(entries = {}) {
@@ -44,14 +45,40 @@ describe('名簿の能力値と使用率', () => {
       expect(member.character.abilities, member.name).toBeTruthy();
       expect(member.repertoire.usage, member.name).toBeTruthy();
     }
-    expect(migrateRoster(old)).toEqual(loaded);
+    // 読み込むときは、版を移したあと、レーティングを今の尺度(平均約1555・標準偏差約145)へ直す。
+    expect(rescaleRosterRatings(migrateRoster(old))).toEqual(loaded);
     const father = loaded.players[storyMemberId(loaded, YOSHIHIKO)];
     // 名簿に加わってから3年たっていた(52歳→55歳)ので、43歳から3年で46歳。
     expect(father.age).toBe(STORY_PEOPLE[YOSHIHIKO].age + 3);
-    expect(father.rating).toBe(2050);
+    expect(father.rating).toBeGreaterThanOrEqual(YOSHIHIKO_RATING);
     expect(father.character).toEqual(storyCharacter(YOSHIHIKO));
     // 版1以前は今までどおり作り直す。
     expect(loadRoster(memoryStorage({ [ROSTER_STORAGE_KEY]: JSON.stringify({ ...old, version: 1 }) }))).toBeNull();
+  });
+
+  it('レーティングは実物の棋士の分布(平均約1555・標準偏差約145)。前の尺度の名簿は、順位を変えずに直す', () => {
+    const stats = (roster) => {
+      const ratings = Object.values(roster.players).filter(({ kind }) => kind === 'pro').map(({ rating }) => rating);
+      const mean = ratings.reduce((sum, value) => sum + value, 0) / ratings.length;
+      return { mean, sd: Math.sqrt(ratings.reduce((sum, value) => sum + (value - mean) ** 2, 0) / ratings.length), max: Math.max(...ratings) };
+    };
+    const fresh = createRoster({ seed: 21 });
+    expect(fresh.ratingModel).toBe(RATING_MODEL);
+    expect(Math.abs(stats(fresh).mean - PRO_MEAN_RATING)).toBeLessThan(40);
+    expect(Math.abs(stats(fresh).sd - PRO_RATING_SD)).toBeLessThan(25);
+    expect(stats(fresh).max).toBe(YOSHIHIKO_RATING);
+    // 前の尺度(広い分布)の名簿。
+    const old = structuredClone(fresh);
+    delete old.ratingModel;
+    for (const member of Object.values(old.players)) member.rating = Math.round(1520 + (member.rating - 1555) * 1.25);
+    const fixed = loadRoster(memoryStorage({ [ROSTER_STORAGE_KEY]: JSON.stringify(old) }));
+    expect(fixed.ratingModel).toBe(RATING_MODEL);
+    expect(Math.round(stats(fixed).mean)).toBe(PRO_MEAN_RATING);
+    expect(Math.round(stats(fixed).sd)).toBeGreaterThanOrEqual(PRO_RATING_SD - 1);
+    // 強い順は変わらない(丸めで同じ値になることはある)。善彦だけは、いちばん強い値より下げない。
+    const byOld = Object.values(old.players).filter(({ story }) => story !== YOSHIHIKO).sort((a, b) => b.rating - a.rating).map(({ id }) => fixed.players[id].rating);
+    expect(byOld.every((value, index) => index === 0 || value <= byOld[index - 1])).toBe(true);
+    expect(rescaleRosterRatings(fixed)).toBe(fixed);
   });
 
   it('期を終えると、先後・戦法ごとの成績と勝ち方が残る', () => {

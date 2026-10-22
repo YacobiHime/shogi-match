@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOW_LABELS, classifyWin, simulateMemberGame } from './ryuo-simulation.mjs';
+import { FIRST_MOVE_EDGE, HOW_LABELS, classifyWin, simulateMemberGame } from './ryuo-simulation.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import { winProbability } from './ryuo-strength.mjs';
@@ -75,6 +75,23 @@ describe('3つの局面のまね(自動対局)', () => {
     const shakyStrong = flat(1700, { stability: -30 });
     const shakyWeak = flat(1500, { stability: -30 });
     expect(rate(steadyStrong, steadyWeak)).toBeGreaterThan(rate(shakyStrong, shakyWeak) + 0.03);
+  });
+
+  it('勝ち負けは、レーティングの差からElo式で決める(R1600がR2163に勝つのは約3.8%)', () => {
+    for (const [diff, expected] of [[0, 0.5], [100, 0.64], [200, 0.76], [563, 0.962]]) {
+      expect(rate(flat(1500 + diff), flat(1500), 20000)).toBeCloseTo(expected, 1);
+    }
+    expect(winProbability(1600, 2163)).toBeCloseTo(0.0377, 4);
+    const result = simulateMemberGame(createRng(3), flat(1600), flat(2163), { aColor: 'black' });
+    expect(result.probability).toBeCloseTo(winProbability(1600 + FIRST_MOVE_EDGE, 2163), 6);
+  });
+
+  it('負けた側から見ても、勝ち方の展開は勝ち負けに合っている', () => {
+    const rng = createRng(9);
+    for (let index = 0; index < 400; index += 1) {
+      const result = simulateMemberGame(rng, flat(1500), flat(2100));
+      expect(result.phases[2] > 0).toBe(result.aWins);
+    }
   });
 
   it('先後を指定でき、先手が少し有利。使用率から戦法を選ぶ', () => {

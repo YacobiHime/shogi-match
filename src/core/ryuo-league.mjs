@@ -8,7 +8,7 @@
 // 数値は、実物の制度を簡略にした仮の値。設計は docs/tournament-design.md の「棋界の1年」。
 
 import { gauss } from './ryuo-random.mjs';
-import { winProbability } from './ryuo-strength.mjs';
+import { PRO_MEAN_RATING, winProbability } from './ryuo-strength.mjs';
 import { matchupBonus } from './player-character.mjs';
 import { styleEntry } from './ryuo-repertoire.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
@@ -56,7 +56,7 @@ export const awardLabel = (id) => AWARDS.find((award) => award.id === id)?.label
 /** 勝率一位賞に必要な対局数。 */
 const BEST_RATE_MIN_GAMES = 30;
 
-/** タイトル戦での、その年の調子のばらつき(レーティング)。 */
+/** 最初の名簿の過去の履歴を作るときの、その年の調子のばらつき(レーティング。昔の強さは分からないため)。 */
 const FORM_SPREAD = 60;
 
 /** 過去の履歴を作る年数。 */
@@ -156,7 +156,7 @@ export function rookOf(member) {
 }
 
 /**
- * レーティングと相性だけで見た勝率(目安。実際の自動対局は、能力の配分も効くryuo-simulation.mjsのsimulateMemberGameで決める)。
+ * レーティングと相性だけで見た勝率(目安。実際の自動対局は、先手と能力の配分の上乗せも足すryuo-simulation.mjsのsimulateMemberGameで決める)。
  */
 export function memberWinProbability(a, b, ratingOf = (member) => member.rating) {
   return winProbability(
@@ -207,7 +207,7 @@ export function applyWinsRule(member) {
 
 // ---- 順位戦
 
-/** 最初の名簿で、順位戦のクラスを決める。強い順(ゆらぎ込み)に定員で分け、残りは、若手はC級2組、ベテランはフリークラス。 */
+/** 最初の名簿で、順位戦のクラスを決める。強い順(ゆらぎ込み)に定員で分け、残りはC級2組と、あふれたベテランはフリークラス。 */
 export function assignJunni(roster, rng) {
   const order = pros(roster)
     .map((member) => ({ member, score: member.rating + gauss(rng) * 100 }))
@@ -216,9 +216,12 @@ export function assignJunni(roster, rng) {
   for (const cls of ['A', 'B1', 'B2', 'C1']) {
     for (let count = 0; count < JUNNI_SIZES[cls] && index < order.length; count += 1, index += 1) order[index].member.junni = cls;
   }
-  const rest = order.slice(index).map(({ member }) => member);
-  // C級2組は若い順、あふれたベテランはフリークラス。
-  rest.sort((a, b) => a.age - b.age);
+  // 残りは、強い順(ゆらぎ込み)にC級2組の定員まで。45歳を過ぎたベテランは後ろに回し、あふれた棋士はフリークラス
+  // (実物のC級2組の平均はC級1組とほぼ同じ1544。docs/rating-realism-design.md)。
+  const rest = order.slice(index)
+    .map(({ member, score }) => ({ member, score: score - (member.age > 45 ? 120 : 0) }))
+    .sort((a, b) => b.score - a.score)
+    .map(({ member }) => member);
   rest.forEach((member, position) => { member.junni = position < JUNNI_SIZES.C2 ? 'C2' : 'F'; });
 }
 
@@ -449,9 +452,8 @@ export function playLeagueYear(roster, season, rng) {
     }
   }
   const meijinChallenger = playJunni(roster, rng);
-  // タイトル戦は、その年の調子(ゆらぎ)を足した強さで決める。同じ棋士がすべてを獲り続けないように。
-  const form = new Map(pros(roster).map((member) => [member.id, gauss(rng) * FORM_SPREAD]));
-  const ratingOf = (member) => member.rating + (form.get(member.id) ?? 0);
+  // タイトル戦も、ほかの対局と同じくレーティングの差どおりの勝率で決める(docs/rating-realism-design.md)。
+  const ratingOf = (member) => member.rating;
   const titleResults = playOtherTitles(roster, rng, { no: season.no, meijinChallenger, ratingOf });
   for (const member of pros(roster)) {
     applyDanRules(member);
@@ -508,7 +510,7 @@ export function seedLeagueHistory(roster, rng, { ageDrift }) {
     // 通算勝数。
     for (const member of active) {
       const games = gamesPerYear(ratingOf(member));
-      const wins = Math.round(games * winProbability(ratingOf(member), 1500));
+      const wins = Math.round(games * winProbability(ratingOf(member), PRO_MEAN_RATING));
       member.record.total.wins += wins;
       member.record.total.losses += games - wins;
     }

@@ -6,7 +6,7 @@
 // 登場する棋士はすべて架空で、実在の棋士とは関係がない。設計は docs/tournament-design.md の「名簿」。
 
 import { GROUP_DAN_WEIGHTS, SPECIAL_RATING_OFFSET } from './ryuo-data.mjs';
-import { GROUP_MEAN_RATING, GROUP_RATING_SPREAD } from './ryuo-strength.mjs';
+import { GROUP_MEAN_RATING, GROUP_RATING_SPREAD, PRO_MEAN_RATING, PRO_RATING_SD } from './ryuo-strength.mjs';
 import { createRng, gauss, weightedPick } from './ryuo-random.mjs';
 import { ageCharacter, createCharacter, withAbilities } from './player-character.mjs';
 import { newName } from './ryuo-names.mjs';
@@ -166,6 +166,7 @@ export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
   addStoryMembers(roster, { userGroup, userIsChampion, fresh: true });
   roster.ratingMean = Math.round(proMean(roster));
   roster.ratingSd = Math.round(proSd(roster));
+  roster.ratingModel = RATING_MODEL;
   return roster;
 }
 
@@ -385,7 +386,7 @@ export function applySeasonToRoster(roster, season, { userGroup, promote }) {
   const newcomers = clamp(rosterTarget(6, effectiveUserGroup, holderInRoster) - sixth, MIN_NEW_PROS, MAX_NEW_PROS);
   for (let index = 0; index < newcomers; index += 1) {
     createMember(next, rng, used, {
-      group: 6, rating: 1330 + gauss(rng) * 70, age: 18 + Math.floor(rng.next() * 6), dan: '四段',
+      group: 6, rating: 1430 + gauss(rng) * 70, age: 18 + Math.floor(rng.next() * 6), dan: '四段',
     });
   }
   addSpecials(next, rng, used);
@@ -441,13 +442,38 @@ function refreshStoryMember(member) {
   member.character = storyCharacter(member.story);
 }
 
+/**
+ * レーティングの尺度の版。2は、実物の棋士レーティングの分布(平均約1555・標準偏差約145)に合わせた尺度
+ * (2026-10-22。docs/rating-realism-design.md)。
+ */
+export const RATING_MODEL = 2;
+
+/**
+ * 前の尺度(平均約1520・標準偏差約180)で作った名簿を、今の尺度へ直す。全員を同じ1次式で直すので、順位は変わらない。
+ * 善彦は、いちばん強い棋士の値(YOSHIHIKO_RATING)より下げない。
+ */
+export function rescaleRosterRatings(roster) {
+  if (!roster || roster.ratingModel === RATING_MODEL) return roster;
+  const next = structuredClone(roster);
+  const mean = proMean(next);
+  const ratio = PRO_RATING_SD / Math.max(1, proSd(next));
+  for (const member of members(next)) {
+    member.rating = Math.round(PRO_MEAN_RATING + (member.rating - mean) * ratio);
+    if (member.story === YOSHIHIKO) member.rating = Math.max(member.rating, YOSHIHIKO_RATING);
+  }
+  next.ratingMean = PRO_MEAN_RATING;
+  next.ratingSd = PRO_RATING_SD;
+  next.ratingModel = RATING_MODEL;
+  return next;
+}
+
 export function loadRoster(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(ROSTER_STORAGE_KEY) ?? 'null');
     if (!parsed || !parsed.players || typeof parsed.players !== 'object') return null;
-    if (parsed.version === 2) return migrateRoster(parsed);
+    if (parsed.version === 2) return rescaleRosterRatings(migrateRoster(parsed));
     if (parsed.version !== ROSTER_VERSION) return null;
-    return parsed;
+    return rescaleRosterRatings(parsed);
   } catch {
     return null;
   }
