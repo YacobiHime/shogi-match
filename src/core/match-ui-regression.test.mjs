@@ -153,6 +153,11 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/data-tournament-play @click="emit\('play'\)">対局する</);
     expect(tournament).toMatch(/data-next-season @click="toNextSeason">次の期へ</);
     expect(source).toContain('"結果を見る" : "竜王戦へ戻る"');
+    // 節目の判子(段階3): 対局から戻ったときだけ出し、押すと閉じる。判子の音を鳴らすときは、登る音を鳴らさない。
+    expect(tournament).toMatch(/const milestoneOpen = ref\(props\.fromGame && Boolean\(props\.view\?\.milestone\)/);
+    expect(tournament).toMatch(/data-milestone\s*@click="milestoneOpen = false"/);
+    expect(tournament).toMatch(/:muted="Boolean\(celebration\)"/);
+    expect(tournament).toMatch(/soundPlayer\.play\("stamp"\)/);
   });
 
   it("asks before resigning from the toolbar and the menu", () => {

@@ -55,6 +55,8 @@ export function oshiSeasonStatus(view, oshiId) {
   const games = [];
   let appears = false;
   let waiting = false;
+  /** 次に指す段(回戦の名前か番勝負の名前)。 */
+  let next = null;
   for (const table of view.tables ?? []) {
     for (const round of table.rounds ?? []) {
       for (const match of round.matches ?? []) {
@@ -63,7 +65,10 @@ export function oshiSeasonStatus(view, oshiId) {
         appears = true;
         const opponent = callName(side === 'a' ? match.b : match.a);
         if (match.winner) games.push({ win: match.winner === oshiId, opponent, label: `${table.title} ${round.label}`.trim() });
-        else waiting = true;
+        else {
+          waiting = true;
+          next ??= round.label;
+        }
       }
     }
   }
@@ -73,13 +78,32 @@ export function oshiSeasonStatus(view, oshiId) {
     appears = true;
     const opponent = callName(side === 'a' ? series.b : series.a);
     if (series.winner) games.push({ win: series.winner === oshiId, opponent, label: series.label });
-    else waiting = true;
+    else {
+      waiting = true;
+      next ??= series.label;
+    }
   }
   if (!appears) return null;
   const wins = games.filter(({ win }) => win).length;
   const last = games.at(-1);
   const champion = view.champion?.id === oshiId;
-  return { games, wins, losses: games.length - wins, alive: champion || waiting || !last || last.win, champion };
+  return { games, wins, losses: games.length - wins, alive: champion || waiting || !last || last.win, champion, next };
+}
+
+/**
+ * 推しの棋士の、いまの段(竜王戦の画面の帯に小さく出す。docs/ryuo-ux-redesign.mdの4-7)。
+ * 例: 「推し 中村蓮さん: 準決勝」「推し 中村蓮さん: 2回戦で敗退」。ほかの組なら「ほかの組」。
+ * @param {ReturnType<typeof oshiSeasonStatus>} status
+ * @param {string} name
+ */
+export function oshiStepText(status, name) {
+  const head = `推し ${name}さん: `;
+  if (!status) return `${head}ほかの組`;
+  if (status.champion) return `${head}竜王`;
+  const last = status.games.at(-1);
+  if (!status.alive && last) return `${head}${last.label.split(' ').at(-1)}で敗退`;
+  if (status.next) return `${head}${status.next}`;
+  return last ? `${head}${last.label.split(' ').at(-1)}を突破` : `${head}対局前`;
 }
 
 /**

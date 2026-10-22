@@ -18,6 +18,7 @@
             'ryuo-road__step--boss': step.boss,
             'ryuo-road__step--glow': glowFrom <= index && index <= glowTo,
             'ryuo-road__step--here': index === road.currentIndex,
+            'ryuo-road__step--crown-glow': glowCrown && step.key === 'ryuo',
           },
         ]"
         :aria-current="index === road.currentIndex ? 'step' : undefined"
@@ -66,6 +67,10 @@ const props = defineProps({
   animate: { type: Boolean, default: false },
   /** 直前の対局に勝ったか(番勝負など、同じ段にとどまるときの跳ねと音に使う)。 */
   lastWin: { type: Boolean, default: false },
+  /** 登る音を鳴らさない(判子の音を鳴らす節目のとき。同時に鳴らすときは重い方だけ。Game_Nintendo_Implementation.mdの3-3)。 */
+  muted: { type: Boolean, default: false },
+  /** 道のてっぺん(竜王の段)を光らせる(挑戦権を得たとき・竜王になったとき)。 */
+  glowCrown: { type: Boolean, default: false },
 });
 const emit = defineEmits<{ played: [] }>();
 
@@ -125,7 +130,7 @@ function play() {
   const climbed = currentIndex > lastIndex && from?.state === "done";
   const stayed = currentIndex === lastIndex;
   if (!climbed && !stayed && currentIndex <= lastIndex) return;
-  if (climbed || (stayed && props.lastWin)) {
+  if (!props.muted && (climbed || (stayed && props.lastWin))) {
     createMoveSoundPlayer(() => props.assetBaseUrl).play("climb");
   }
   if (stayed) {
@@ -255,6 +260,12 @@ onBeforeUnmount(() => timers.splice(0).forEach(clearTimeout));
 .shogi-game .ryuo-road__face--balance { color: #172632; background: #d9b860; }
 .shogi-game .ryuo-road__crown { border-color: #f1a54c; background: #c4604c; }
 .shogi-game .ryuo-road__step--won .ryuo-road__crown { box-shadow: 0 0 0 3px #f1a54c; }
+/* 道のてっぺんが光る(挑戦権・竜王)。2回だけ脈打つ。 */
+.shogi-game .ryuo-road__step--crown-glow .ryuo-road__crown { opacity: 1; animation: ryuo-road-crown 700ms ease-in-out 2; }
+@keyframes ryuo-road-crown {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(241, 165, 76, 0); }
+  50% { box-shadow: 0 0 0 6px rgba(241, 165, 76, 0.85); }
+}
 .shogi-game .ryuo-road__sprite { height: 2.3rem; width: auto; margin-top: -0.4rem; image-rendering: pixelated; }
 /* まだ遠い段の顔は、少し沈める(いつか戦う相手が見えている)。 */
 .shogi-game .ryuo-road__step--todo .ryuo-road__face,
@@ -317,6 +328,7 @@ onBeforeUnmount(() => timers.splice(0).forEach(clearTimeout));
 .shogi-game .ryuo-road__note--out { color: #172632; background: #a9b6c4; }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .ryuo-road__node--pulse { animation: none; }
+  .shogi-game .ryuo-road__step--crown-glow .ryuo-road__crown { animation: none; box-shadow: 0 0 0 4px #f1a54c; }
   .shogi-game .ryuo-road__piece { transition: none !important; }
 }
 </style>

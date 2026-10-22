@@ -10,6 +10,7 @@ import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO, hananeAfterLine, hananeBefo
 import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
 import { matchStakes, seasonGoalLine } from './ryuo-stakes.mjs';
 import { opponentArrivalLine, seasonRoad } from './ryuo-road.mjs';
+import { lastGameMilestone, latestUpsetLine } from './ryuo-milestone.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import {
   BASE_DIFFICULTY,
@@ -847,6 +848,9 @@ export function describeSeason(season) {
     tables,
     // 竜王への道(core/ryuo-road.mjs)。
     road: seasonRoad(season, { promote: scaleById(season.settings.scale).promote }),
+    // 直前の対局の節目(突破・組優勝・挑戦権・竜王)と、同じ回戦の大番狂わせ(core/ryuo-milestone.mjs)。
+    milestone: lastGameMilestone(season, { promote: scaleById(season.settings.scale).promote }),
+    upset: latestUpsetLine(season),
     series: seriesViews,
     pending: pendingView,
     // 直前のプレイヤーの対局(相手と、相手の特徴が出た場面)。

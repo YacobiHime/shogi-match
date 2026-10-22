@@ -6,6 +6,7 @@ import {
   loadPrediction,
   oshiSeasonLine,
   oshiSeasonStatus,
+  oshiStepText,
   predictionChoices,
   predictionLine,
   predictionOutcome,
@@ -44,7 +45,7 @@ describe('竜王戦の応援', () => {
   });
 
   it('推しの棋士の勝ち負けを、表の進む順に数える', () => {
-    expect(oshiSeasonStatus(rankingView(), 'p2')).toEqual({ games: [], wins: 0, losses: 0, alive: true, champion: false });
+    expect(oshiSeasonStatus(rankingView(), 'p2')).toEqual({ games: [], wins: 0, losses: 0, alive: true, champion: false, next: '1回戦' });
     expect(oshiSeasonLine(oshiSeasonStatus(rankingView(), 'p2'), '佐藤')).toContain('まだ対局前');
     const won = oshiSeasonStatus(rankingView({ r1a: 'user', r1b: 'p2' }), 'p2');
     expect(won).toMatchObject({ wins: 1, losses: 0, alive: true });
@@ -55,6 +56,14 @@ describe('竜王戦の応援', () => {
     // 出ていない棋士はnullで、ほかの組で戦っていると伝える。
     expect(oshiSeasonStatus(rankingView(), 'p9')).toBeNull();
     expect(oshiSeasonLine(null, '田中')).toContain('ほかの組');
+  });
+
+  it('推しの棋士のいまの段を、帯に出す短い文字にする', () => {
+    expect(oshiStepText(oshiSeasonStatus(rankingView(), 'p2'), '佐藤')).toBe('推し 佐藤さん: 1回戦');
+    expect(oshiStepText(oshiSeasonStatus(rankingView({ r1a: 'user', r1b: 'p2' }), 'p2'), '佐藤')).toBe('推し 佐藤さん: 決勝');
+    expect(oshiStepText(oshiSeasonStatus(rankingView({ r1a: 'user', r1b: 'p2', final: 'user' }), 'p2'), '佐藤')).toBe('推し 佐藤さん: 決勝で敗退');
+    expect(oshiStepText(oshiSeasonStatus(rankingView({ r1a: 'user', r1b: 'p2', final: 'p2' }), 'p2'), '佐藤')).toBe('推し 佐藤さん: 決勝を突破');
+    expect(oshiStepText(null, '田中')).toBe('推し 田中さん: ほかの組');
   });
 
   it('組優勝の予想は、プレイヤーの1局目が決まる前だけ、負けていない棋士から選べる', () => {

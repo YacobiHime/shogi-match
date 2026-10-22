@@ -93,6 +93,8 @@
           <div class="shogi-tournament__banner-title">
             <h2>{{ bannerTitle }}</h2>
             <p data-phase>{{ bannerSub }}</p>
+            <!-- 推しの棋士のいまの段(4-7)。小さく、期の画面と結果だけ。 -->
+            <p v-if="oshiStep && screen !== 'ryuo'" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
           </div>
           <!-- 竜王への道(RyuoRoad.vue)。入口では組の階段を見せるので、期が始まってから出す。 -->
           <RyuoRoad
@@ -102,9 +104,31 @@
             :asset-base-url="assetBaseUrl"
             :animate="climbPending"
             :last-win="view.lastGame?.win ?? false"
+            :muted="Boolean(celebration)"
+            :glow-crown="celebration === 'challenger' || celebration === 'crown'"
             @played="climbPending = false"
           />
         </section>
+
+        <!--
+          節目の判子(4-5)。組優勝・挑戦権・突破など、重さに合わせて大きさを変える。押すと閉じ、操作は止めない(画面全体は覆わない)。
+          竜王になったときと、昇級・降級は、結果の画面の判子で見せる。
+        -->
+        <button
+          v-if="milestoneOpen && view?.milestone"
+          type="button"
+          :class="['shogi-tournament__milestone', `shogi-tournament__milestone--${view.milestone.weight}`]"
+          role="status"
+          aria-live="polite"
+          data-milestone
+          @click="milestoneOpen = false"
+        >
+          <span class="shogi-tournament__milestone-seal" aria-hidden="true">{{ view.milestone.seal }}</span>
+          <span class="shogi-tournament__milestone-text">
+            <strong>{{ view.milestone.title }}</strong>
+            <small>{{ view.milestone.sub }}</small>
+          </span>
+        </button>
 
         <div ref="mainEl" class="shogi-tournament__main">
         <!--
@@ -204,6 +228,8 @@
             <section v-if="view.lastGame?.rivalLine" class="shogi-tournament__card shogi-tournament__rival-after" aria-label="天鷺羽音の一言" data-rival-after>
               <YakobiSays person="hanane" :lines="[view.lastGame.rivalLine]" size="md" bust name-tag :notice="view.lastGame.rivalNotice" :asset-base-url="assetBaseUrl" />
             </section>
+            <!-- ほかの棋士の大番狂わせ(4-7)。直前に指した回戦のものだけ、1行で。 -->
+            <p v-if="view.upset" class="shogi-tournament__upset" data-upset>{{ view.upset }}</p>
             <section
               v-if="view.pending"
               :class="['shogi-tournament__card', 'shogi-tournament__match', { 'shogi-tournament__match--boss': view.pending.stakes?.boss }]"
@@ -379,8 +405,12 @@
               <span class="shogi-tournament__move-from">{{ groupMove.from }}</span>
               <span class="shogi-tournament__move-arrow" aria-hidden="true">→</span>
               <span class="shogi-tournament__move-to">{{ groupMove.to }}</span>
-              <strong class="shogi-tournament__move-label">{{ groupMove.label }}</strong>
+              <strong
+                :class="['shogi-tournament__move-label', { 'shogi-tournament__move-label--stamp': resultStamp }]"
+                data-move-label
+              >{{ groupMove.label }}</strong>
             </div>
+            <p v-if="bestAxis" class="shogi-tournament__best" data-best-axis>{{ bestAxis }}</p>
             <p class="shogi-tournament__next-goal" data-next-goal><small>次の期</small>{{ entryGoalLine({ mode: entry.mode, group: entry.group, scale: scale }) }}</p>
             <ol class="shogi-tournament__path">
               <li v-for="step in view.result.path" :key="step.stage + step.label"><span>{{ step.label }}</span><strong>{{ step.text }}</strong></li>
@@ -458,7 +488,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, type PropType } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import TournamentTree from "./TournamentTree.vue";
 import RadarChart from "./RadarChart.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
@@ -468,6 +498,8 @@ import YakobiSays from "./YakobiSays.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
+import { bestAxisLine } from "./core/ryuo-milestone.mjs";
+import { createMoveSoundPlayer } from "./core/move-sound";
 import { nextEntry, outcomeText } from "./core/ryuo-career.mjs";
 import {
   entryCoachLine,
@@ -488,6 +520,7 @@ import {
   loadPrediction,
   oshiSeasonLine,
   oshiSeasonStatus,
+  oshiStepText,
   predictionChoices,
   predictionLine,
   predictionOutcome,
@@ -532,6 +565,8 @@ type View = {
     arrival?: string;
   };
   road?: RoadView;
+  milestone?: null | { kind: string; weight: string; seal: string; title: string; sub: string; line: string };
+  upset?: string;
   rivalId?: string | null;
   result: null | {
     outcome: string; startGroup: number; newGroup: number; promoted: boolean; relegated: boolean; challenger: boolean;
@@ -808,7 +843,9 @@ const seasonSays = computed(() => {
 const tipLine = computed(() => {
   const ability = opponentSays.value.find((line) => line.startsWith("能力は"));
   const firstSeason = !props.career.seasons;
-  return props.view?.pending?.rival?.coach
+  // 対局から戻った直後の節目は、やこび姫がまず喜ぶ(4-5)。
+  return (props.fromGame ? props.view?.milestone?.line : "")
+    || props.view?.pending?.rival?.coach
     || (firstSeason ? phaseLines.value[0] : ability)
     || ability
     || phaseLines.value[0]
@@ -816,6 +853,42 @@ const tipLine = computed(() => {
     || "";
 });
 const coachOpen = ref(false);
+
+// ---- 節目(core/ryuo-milestone.mjs。docs/ryuo-ux-redesign.mdの4-5・4-6)
+/** 節目の札を出している長さ(ms)。動きは1.5秒以内に終わり、読むために少し残す。押せばすぐ閉じる。 */
+const MILESTONE_SHOW_MS = 3200;
+/** 判子が紙に着く時刻(ms)。CSSの判子の動き(遅れ450ms・長さ260msの7割)に合わせて、音を鳴らす。 */
+const STAMP_SOUND_AT = 630;
+/** 結果の画面の判子が着く時刻(ms)。CSSの遅れ300ms・長さ260msの7割。 */
+const RESULT_STAMP_SOUND_AT = 480;
+const soundPlayer = createMoveSoundPlayer(() => props.assetBaseUrl);
+/** 期の画面の節目の札。対局から戻ったときに1回だけ(期が終わったときは、結果の画面の判子で見せる)。 */
+const milestoneOpen = ref(props.fromGame && Boolean(props.view?.milestone) && !props.view?.result);
+/** 結果の画面の判子を押す(昇級・竜王のときだけ。降級や残留は静かに。D:7-1)。 */
+const resultStamp = ref(false);
+/** いま見せている節目の種類(道の竜王の段を光らせ、登る音を判子の音に譲るのに使う)。 */
+const celebration = computed(() => {
+  if (milestoneOpen.value) return props.view?.milestone?.kind ?? "";
+  return resultStamp.value ? props.view?.milestone?.kind ?? "result" : "";
+});
+const milestoneTimers: ReturnType<typeof setTimeout>[] = [];
+onMounted(() => {
+  if (milestoneOpen.value) {
+    milestoneTimers.push(
+      setTimeout(() => soundPlayer.play("stamp"), STAMP_SOUND_AT),
+      setTimeout(() => { milestoneOpen.value = false; }, MILESTONE_SHOW_MS),
+    );
+  } else if (props.fromGame && props.view?.result && (groupMove.value.kind === "up" || groupMove.value.kind === "crown")) {
+    resultStamp.value = true;
+    milestoneTimers.push(
+      setTimeout(() => soundPlayer.play("stamp"), RESULT_STAMP_SOUND_AT),
+      setTimeout(() => { resultStamp.value = false; }, MILESTONE_SHOW_MS),
+    );
+  }
+});
+onBeforeUnmount(() => milestoneTimers.splice(0).forEach(clearTimeout));
+/** 期のできたこと(1行)。 */
+const bestAxis = computed(() => bestAxisLine(props.view?.stats?.radar ?? []));
 
 // ---- 応援(推しの棋士と、組優勝の予想)。core/ryuo-oshi.mjs
 const storage = (() => {
@@ -899,6 +972,8 @@ function onEntryPick(key: string, value: PickerValue) {
   // 1項目だけのシートは、選んだら閉じる。
   if ((entryPickerConfig.value?.sections.length ?? 0) <= 1) entryPicker.value = "";
 }
+/** 推しの棋士のいまの段(帯に小さく出す)。 */
+const oshiStep = computed(() => (props.oshi && props.view ? oshiStepText(oshiSeasonStatus(seasonView.value, props.oshi.id), props.oshi.name) : ""));
 const cheerSays = computed(() => {
   const lines: string[] = [];
   if (props.oshi) lines.push(oshiSeasonLine(oshiSeasonStatus(seasonView.value, props.oshi.id), props.oshi.name));
@@ -1878,5 +1953,99 @@ const statTiles = computed(() => {
 }
 @media (max-width: 600px) {
   .shogi-game .shogi-tournament__seal-face { width: 2.8rem; height: 2.8rem; font-size: 1.4rem; }
+}
+
+/* ===== 竜王戦の節目(docs/ryuo-ux-redesign.mdの段階3) ===== */
+/* 節目の札。画面の上の方に浮かべ、下の操作の帯は覆わない。押すと閉じる。 */
+.shogi-game .shogi-tournament__milestone {
+  position: fixed;
+  top: 28%;
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: max-content;
+  max-width: calc(100vw - 2rem);
+  padding: 0.9rem 1.4rem 0.9rem 1rem;
+  border: 3px solid var(--tr-gold);
+  border-radius: 0.9rem;
+  color: #fffcf4;
+  background: var(--tr-deep);
+  box-shadow: 0 6px 0 var(--tr-shadow), 0 0 0 100vmax rgba(10, 18, 26, 0.35);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transform: translateX(-50%);
+  animation: tr-milestone-in 200ms ease-out 350ms both;
+}
+.shogi-game .shogi-tournament__milestone:hover { color: #fffcf4; background: var(--tr-deep); }
+.shogi-game .shogi-tournament__milestone-seal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 4.2rem;
+  height: 4.2rem;
+  border: 3px solid #fffcf4;
+  border-radius: 0.5rem;
+  color: #fffcf4;
+  background: var(--tr-red);
+  font-family: var(--tr-mincho);
+  font-size: 1.45rem;
+  font-weight: 900;
+  line-height: 1;
+  transform: rotate(-6deg);
+  animation: tr-stamp 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 450ms both;
+}
+.shogi-game .shogi-tournament__milestone-text { display: grid; gap: 0.2rem; }
+.shogi-game .shogi-tournament__milestone-text strong { font-family: var(--tr-mincho); font-size: 1.5em; font-weight: 800; line-height: 1.25; }
+.shogi-game .shogi-tournament__milestone-text small { color: var(--tr-gold); font-size: 0.95em; font-weight: 800; }
+/* 重さ: 中(突破・残留)は小さく、最大(竜王)は金の判子。 */
+.shogi-game .shogi-tournament__milestone--mid { border-color: rgba(255, 252, 244, 0.6); }
+.shogi-game .shogi-tournament__milestone--mid .shogi-tournament__milestone-seal { width: 3.4rem; height: 3.4rem; font-size: 1.15rem; }
+.shogi-game .shogi-tournament__milestone--mid .shogi-tournament__milestone-text strong { font-size: 1.25em; }
+.shogi-game .shogi-tournament__milestone--max .shogi-tournament__milestone-seal { width: 5rem; height: 5rem; color: #172632; background: var(--tr-gold); font-size: 1.8rem; }
+@keyframes tr-milestone-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(0.6rem); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
+@keyframes tr-stamp {
+  0% { opacity: 0; transform: scale(2.4) rotate(-14deg); }
+  70% { opacity: 1; transform: scale(0.92) rotate(-5deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-6deg); }
+}
+/* 結果の画面の、昇級・竜王の判子。 */
+.shogi-game .shogi-tournament__move-label--stamp { animation: tr-stamp-flat 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 300ms both; }
+@keyframes tr-stamp-flat {
+  0% { opacity: 0; transform: scale(2.4); }
+  70% { opacity: 1; transform: scale(0.92); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* 期のできたこと。 */
+.shogi-game .shogi-tournament__best { grid-column: 1 / -1; margin: 0; color: var(--tr-gold); font-weight: 800; }
+/* 大番狂わせの一言。 */
+.shogi-game .shogi-tournament__upset {
+  margin: 0;
+  padding: 0.5rem 0.8rem;
+  border-left: 4px solid var(--tr-lavender);
+  border-radius: 0.2rem;
+  background: var(--tr-panel);
+  font-size: 0.9em;
+  font-weight: 700;
+}
+/* 推しの棋士のいまの段。 */
+.shogi-game .shogi-tournament__banner-title .shogi-tournament__oshi {
+  overflow: hidden;
+  margin-top: 0.15rem;
+  color: var(--tr-lavender);
+  font-size: 0.8em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game .shogi-tournament__oshi span { margin-right: 0.25rem; color: var(--tr-lavender); }
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tournament__milestone,
+  .shogi-game .shogi-tournament__milestone-seal,
+  .shogi-game .shogi-tournament__move-label--stamp { animation: none; }
 }
 </style>
