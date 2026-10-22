@@ -254,6 +254,7 @@
 - 前の版で始めた期の棋士の写しには、名簿の能力と使用率を写して読み込む（`withRosterAbilities`）。
 - キャリアと、前回のエントリー設定は`yacobihime:shogi-match:ryuo-career`、称号は`yacobihime:shogi-match:player-profile`に保存する。
 - 指している対局は、対局の保存（スナップショット）に、相手と対局の名前（`ryuoGame`）を含める。中断・リロード・再開しても続く。
+- 竜王戦の対局を中断すると、中断の記録（`suspendedMatch`）に相手（`ryuoOpponentId`）を持つ。その相手が期の次の一局の相手と同じなら、期の画面の次の一局の枠の「対局する」を「対局を再開」（「中断した対局（N手目まで）」を添える）に替え、押すとVS画面を通さずに盤へ戻る（`ShogiMatchGame.vue`の`suspendedRyuoMoves`・`resumeRyuoGame`）。ホームの「つぎはこれ」の再開と同じ言葉にそろえる（UI_Nintendo_Implementation.mdの4章）。ほかの対局を中断しているときは今までどおり、「対局する」で確認のうえ新しく始める。
 - 終わった期は、1回だけ、キャリアと称号に反映する。
 
 ## キャリア

@@ -373,7 +373,11 @@
               <span class="shogi-tournament__tip-text">{{ tipLine }}</span>
               <span class="shogi-tournament__tip-more">もっと聞く</span>
             </button>
-            <button type="button" class="shogi-tournament__start" data-tournament-play @click="versusOpen = true">{{ playText }}</button>
+            <!-- 中断したこの対局があれば、「対局を再開」(VS画面は出さず、すぐ盤へ)。 -->
+            <button v-if="suspendedMoves !== null" type="button" class="shogi-tournament__start shogi-tournament__start--resume" data-tournament-resume @click="emit('resume')">
+              対局を再開<small>中断した対局（{{ suspendedMoves }}手目まで）</small>
+            </button>
+            <button v-else type="button" class="shogi-tournament__start" data-tournament-play @click="versusOpen = true">{{ playText }}</button>
           </section>
           <section v-else-if="view.result" class="shogi-tournament__hud" aria-label="この期の結果">
             <p class="shogi-tournament__hud-role">この期の対局は、すべて終わりました</p>
@@ -727,11 +731,14 @@ const props = defineProps({
   fromGame: { type: Boolean, default: false },
   /** 推しの棋士(core/ryuo-oshi.mjs)。やこび姫が、期の中での様子を知らせる。 */
   oshi: { type: Object as PropType<{ id: string; name: string } | null>, default: null },
+  /** 中断した、この期の次の一局の手数(なければnull)。あれば「対局する」を「対局を再開」にする。 */
+  suspendedMoves: { type: Number as PropType<number | null>, default: null },
 });
 const emit = defineEmits<{
   close: [];
   enter: [settings: { difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number }];
   play: [];
+  resume: [];
   "open-note": [];
   "result-seen": [];
 }>();
@@ -1617,6 +1624,9 @@ const statTiles = computed(() => {
   font-weight: 800;
   box-shadow: 0 0.25rem 0 #b06a1c;
 }
+/* 中断した対局の再開。何手目までかを、ボタンの中の2行目に小さく出す。 */
+.shogi-game .shogi-tournament__start--resume { display: grid; place-content: center; gap: 0.15rem; line-height: 1.2; }
+.shogi-game .shogi-tournament__start--resume small { font-size: 0.62em; font-weight: 700; }
 .shogi-game .shogi-tournament__sub { border: 2px solid rgba(255, 252, 244, 0.55); color: #fffcf4; background: transparent; font-weight: 700; }
 /* 指を置いたままでも(全体のボタンの:hoverより優先して)、主役・脇役・選んだ項目の色を保つ。 */
 .shogi-game .shogi-tournament__start:not(:disabled):hover { border-color: #f6bb6e; color: #172632; background: #f6bb6e; }

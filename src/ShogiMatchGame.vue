@@ -457,7 +457,9 @@
       :oshi="ryuoOshi"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
+      :suspended-moves="suspendedRyuoMoves"
       @play="startRyuoGame"
+      @resume="resumeRyuoGame"
       @open-note="tournamentOpen = false; yakobiNoteOpen = true"
       @result-seen="markRyuoResultSeen"
     />
@@ -2511,7 +2513,8 @@ const {
 } = useResponsiveLayout({ analysisVisible });
 const resignConfirmOpen = ref(false);
 // 中断した対局(保存済み)。ホームの「対局を再開」から続ける。リロードしても残る。
-const suspendedMatch = ref<{ moves: number } | null>(null);
+// 竜王戦の対局なら、相手(ryuoOpponentId)も持つ。竜王戦の画面の次の一局の枠からも再開できる。
+const suspendedMatch = ref<{ moves: number; ryuoOpponentId: string | null } | null>(null);
 const suspendConfirmOpen = ref(false);
 /** 中断した対局を消して新しく始める前の確認。承諾したら、保留した開始処理を行う。 */
 const discardSuspendedPending = ref<(() => void) | null>(null);
@@ -4369,6 +4372,21 @@ function finalizeRyuoSeason() {
 
 const rawRyuoSeason = () => JSON.parse(JSON.stringify(ryuoSeason.value));
 
+/**
+ * 中断した竜王戦の対局が、いまの期の次の一局と同じ相手なら、その手数。竜王戦の画面の次の一局の枠で「対局を再開」にする。
+ * ほかの対局を中断しているときはnull(「対局する」で、確認のうえ新しく始める)。
+ */
+const suspendedRyuoMoves = computed(() => {
+  const suspended = suspendedMatch.value;
+  const pending = ryuoSeason.value?.pending;
+  return suspended?.ryuoOpponentId && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
+});
+/** 竜王戦の画面で「対局を再開」を押したとき。大会の画面を閉じて、中断した対局を続ける(VS画面は出さない)。 */
+function resumeRyuoGame() {
+  tournamentOpen.value = false;
+  resumeSuspendedMatch();
+}
+
 /** 大会の画面で「対局開始」を押したとき。対局設定を通さずに、次の1局を始める。 */
 function startRyuoGame() {
   confirmDiscardSuspended(startRyuoGameNow);
@@ -4894,7 +4912,7 @@ function suspendMatch() {
   if (cpuSearchRunning) engine?.stop();
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
-  suspendedMatch.value = { moves: moveHistory.length };
+  suspendedMatch.value = { moves: moveHistory.length, ryuoOpponentId: ryuoGame.value?.opponentId ?? null };
   persistMatchState();
   active.value = false;
   thinking.value = false;
@@ -5027,7 +5045,8 @@ type HomeNext = {
  */
 const homeNext = computed<HomeNext>(() => {
   if (suspendedMatch.value) {
-    return { id: "resume", label: "対局を再開", description: `中断した対局（${suspendedMatch.value.moves}手目まで）` };
+    const what = suspendedMatch.value.ryuoOpponentId ? "竜王戦の対局" : "対局";
+    return { id: "resume", label: "対局を再開", description: `中断した${what}（${suspendedMatch.value.moves}手目まで）` };
   }
   const plan = playPlan.value;
   const preset = playPreset.value;
@@ -5590,7 +5609,11 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
   });
   if (!snapshot) return false;
   if (snapshot.suspended === true && props.showHome && !resume) {
-    suspendedMatch.value = { moves: Array.isArray(snapshot.moves) ? snapshot.moves.length : 0 };
+    const savedRyuo = snapshot.matchKind === "tournament" ? snapshot.ryuoGame : null;
+    suspendedMatch.value = {
+      moves: Array.isArray(snapshot.moves) ? snapshot.moves.length : 0,
+      ryuoOpponentId: typeof savedRyuo?.opponentId === "string" ? savedRyuo.opponentId : null,
+    };
     return false;
   }
   restoringSavedMatch = true;

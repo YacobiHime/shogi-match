@@ -96,6 +96,11 @@ describe("match screen regressions", () => {
     expect(source).toContain("confirmDiscardSuspended(() => startMatchFromTutorialNow(request))");
     // ブラウザの戻る操作で、確認ダイアログも閉じられる。
     expect(source).toMatch(/function navigateBack\(\)[\s\S]*?discardSuspendedPending[\s\S]*?suspendConfirmOpen/);
+    // 竜王戦の対局を中断したら、竜王戦の画面の次の一局の枠からも再開できる(同じ相手のときだけ)。
+    expect(source).toMatch(/ryuoOpponentId: ryuoGame\.value\?\.opponentId \?\? null/);
+    expect(source).toMatch(/suspended\.ryuoOpponentId === pending\.opponentId/);
+    expect(source).toMatch(/function resumeRyuoGame\(\)[\s\S]*?tournamentOpen\.value = false;[\s\S]*?resumeSuspendedMatch\(\);/);
+    expect(source).toMatch(/:suspended-moves="suspendedRyuoMoves"[\s\S]*?@resume="resumeRyuoGame"/);
   });
 
   it("runs the Ryuo tournament as its own mode from the title screen, with saved seasons and its own result dialog", () => {
@@ -210,6 +215,8 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/data-result-screen>[\s\S]*?<RyuoMountain v-if="view\.road"/);
     // ボタンは短い動詞(U:3-2)。結果の画面の主役は「次の期へ」。
     expect(tournament).toMatch(/data-tournament-play @click="versusOpen = true">\{\{ playText \}\}</);
+    // 中断したこの対局があれば、「対局する」の代わりに「対局を再開」(VS画面を通さない)。
+    expect(tournament).toMatch(/v-if="suspendedMoves !== null"[^>]*data-tournament-resume @click="emit\('resume'\)"/);
     // 番勝負では「第3局を指す」(docs/ryuo-stages-design.mdの4章)。
     expect(tournament).toMatch(/pending && pending\.kind !== "game" \? `第\$\{pending\.gameNo\}局を指す` : "対局する"/);
     // 期の画面は3つの段階(① 組・② 決勝トーナメント・③ 番勝負)。上の帯は1本で、段階の道のりを押すと、その段階の表を見る。
