@@ -38,19 +38,23 @@
         <div class="shogi-title__groups">
           <section class="shogi-title__group" aria-labelledby="shogi-tournament-titles">
             <h2 id="shogi-tournament-titles" class="shogi-title__group-title">タイトル戦</h2>
+            <!-- 名人戦(順位戦から名人へ。docs/meijin-design.md)。順位戦と名人戦は1つの大会にまとめた。 -->
             <div class="shogi-title__tiles shogi-tournament__soon-tiles">
-              <button v-for="item in COMING_SOON" :key="item.id" type="button" class="shogi-title__tile" disabled>
+              <button type="button" class="shogi-title__tile" data-tournament="meijin" @click="chooseMeijin">
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#fffcf4">
-                    <rect x="3" y="3" width="10" height="1" />
-                    <rect x="3" y="7" width="10" height="1" />
-                    <rect x="3" y="11" width="10" height="1" />
-                    <rect x="3" y="3" width="1" height="9" />
-                    <rect x="12" y="3" width="1" height="9" />
+                  <g fill="#f1a54c">
+                    <rect x="7" y="1" width="2" height="2" />
+                    <rect x="4" y="3" width="8" height="1" />
+                    <rect x="6" y="4" width="4" height="2" />
+                    <rect x="3" y="6" width="10" height="1" />
+                    <rect x="5" y="7" width="6" height="2" />
+                    <rect x="2" y="9" width="12" height="1" />
+                    <rect x="4" y="10" width="8" height="3" />
+                    <rect x="1" y="13" width="14" height="1" />
                   </g>
                 </svg>
-                <span class="shogi-title__label">{{ item.label }}</span>
-                <small class="shogi-title__desc">準備中</small>
+                <span class="shogi-title__label">名人戦</span>
+                <small class="shogi-title__desc">{{ meijinCardNote }}</small>
               </button>
             </div>
           </section>
@@ -76,7 +80,7 @@
 
     <template v-else>
       <!-- 期の画面は、上の帯を1本にする(戻るボタンは期の画面の帯に置く。docs/ryuo-stages-design.mdの5章)。 -->
-      <header v-if="screen !== 'season'" class="shogi-dex__header">
+      <header v-if="screen !== 'season' && screen !== 'meijin'" class="shogi-dex__header">
         <button type="button" class="shogi-dex__back" @click="goBack">
           <span aria-hidden="true">←</span> {{ backText }}
         </button>
@@ -109,6 +113,26 @@
         </button>
 
         <div ref="mainEl" class="shogi-tournament__main">
+        <ShogiMeijin
+          v-if="screen === 'meijin'"
+          ref="meijinEl"
+          :view="meijinView"
+          :career="meijinCareer"
+          :entry-class="meijinEntryClass"
+          :entry-no="meijinEntryNo"
+          :holder-name="meijinHolderName"
+          :default-difficulty="defaultDifficulty"
+          :last-settings="meijinSettings"
+          :asset-base-url="assetBaseUrl"
+          :player-name="playerName"
+          :rating-text="ratingText"
+          :suspended-moves="meijinSuspendedMoves"
+          @enter="emit('meijin-enter', $event)"
+          @play="emit('meijin-play')"
+          @resume="emit('meijin-resume')"
+          @result-seen="emit('meijin-result-seen')"
+          @back="backToSelect"
+        />
         <!--
           竜王戦の入口(docs/ryuo-ui-renewal-design.mdの5-1)。山の全景の上に題字と期。開くと、カメラが頂上の竜王から麓の自分まで降りる。
           下の枠に、この期の目標・やこび姫の一言・設定の要約・「出場する」。設定と説明は、押すと重ねて開く(必要な人だけ。U:6-1)。
@@ -615,6 +639,7 @@ import RadarChart from "./RadarChart.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RyuoMountain, { type RoadView } from "./RyuoMountain.vue";
 import RyuoVersus from "./RyuoVersus.vue";
+import ShogiMeijin, { type MeijinView } from "./ShogiMeijin.vue";
 import YakobiSays from "./YakobiSays.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
@@ -722,7 +747,7 @@ const props = defineProps({
   /** プレイヤーの棋力の目安(CPUのLv)。やこび姫が、相手の強さを話すのに使う。 */
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
-  startAt: { type: String as PropType<"select" | "season">, default: "select" },
+  startAt: { type: String as PropType<"select" | "season" | "meijin">, default: "select" },
   /** いまの竜王(プレイヤーが竜王ならnull)。入口の山で、七番勝負に顔を出す。 */
   ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
   /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。VS画面に出す。 */
@@ -733,6 +758,14 @@ const props = defineProps({
   oshi: { type: Object as PropType<{ id: string; name: string } | null>, default: null },
   /** 中断した、この期の次の一局の手数(なければnull)。あれば「対局する」を「対局を再開」にする。 */
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
+  // ---- 名人戦(docs/meijin-design.md)
+  meijinView: { type: Object as PropType<MeijinView | null>, default: null },
+  meijinCareer: { type: Object as PropType<{ no: number; best: string; titles: number; eternal: boolean }>, default: () => ({ no: 0, best: "C2", titles: 0, eternal: false }) },
+  meijinEntryClass: { type: String as PropType<"C2" | "C1" | "B2" | "B1" | "A" | "meijin">, default: "C2" },
+  meijinEntryNo: { type: Number, default: 1 },
+  meijinHolderName: { type: String, default: "" },
+  meijinSettings: { type: Object as PropType<Record<string, unknown> | null>, default: null },
+  meijinSuspendedMoves: { type: Number as PropType<number | null>, default: null },
 });
 const emit = defineEmits<{
   close: [];
@@ -741,6 +774,10 @@ const emit = defineEmits<{
   resume: [];
   "open-note": [];
   "result-seen": [];
+  "meijin-enter": [settings: { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number }];
+  "meijin-play": [];
+  "meijin-resume": [];
+  "meijin-result-seen": [];
 }>();
 
 const HOME_STARS = [
@@ -753,14 +790,24 @@ const HOME_STARS = [
   { id: "t7", style: "left:12%;top:70%;width:8px;height:8px;color:#f1a54c;" },
   { id: "t8", style: "left:88%;top:66%;width:8px;height:8px;color:#d7d1fd;" },
 ];
-const COMING_SOON = [{ id: "junni", label: "順位戦" }, { id: "meijin", label: "名人戦" }];
 const ROAD = [{ id: "kenshukai", label: "研修会" }, { id: "shoreikai", label: "奨励会" }];
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const inProgress = computed(() => Boolean(props.view && !props.view.result));
-const screen = ref<"select" | "ryuo" | "season" | "result">(
-  props.startAt === "season" && props.view ? (props.view.result ? "result" : "season") : "select",
+const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin">(
+  props.startAt === "meijin" ? "meijin" : props.startAt === "season" && props.view ? (props.view.result ? "result" : "season") : "select",
 );
+const meijinEl = ref<{ goBack: () => boolean } | null>(null);
+/** 名人戦の札の小さな説明(いまのクラス・期・名人の期数)。 */
+const meijinCardNote = computed(() => {
+  const cls = props.meijinEntryClass === "meijin" ? "名人" : ({ C2: "C級2組", C1: "C級1組", B2: "B級2組", B1: "B級1組", A: "A級" } as Record<string, string>)[props.meijinEntryClass] ?? "";
+  const progress = props.meijinView && !props.meijinView.result ? "・進行中" : "";
+  return props.meijinCareer.no || progress ? `${cls}${progress}` : "順位戦から名人へ";
+});
+/** 名人戦を選ぶ。 */
+function chooseMeijin() {
+  screen.value = "meijin";
+}
 const reEntry = ref(false);
 /** 竜王への道の、登る動きをまだ見せていない。 */
 const climbPending = ref(props.fromGame);
@@ -801,6 +848,7 @@ function goBack() {
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (tableOpen.value) tableOpen.value = false;
   else if (guideOpen.value) guideOpen.value = false;
+  else if (screen.value === "meijin" && meijinEl.value?.goBack()) return;
   else if (screen.value === "select") emit("close");
   else backToSelect();
 }

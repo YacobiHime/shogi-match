@@ -9,6 +9,7 @@ import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import { levelToRating, winProbability } from './ryuo-strength.mjs';
 import { HANANE } from './ryuo-story.mjs';
+import { seriesView } from './ryuo-stages.mjs';
 import { JUNNI_SIZES } from './ryuo-league.mjs';
 
 export const MEIJIN_SEASON_VERSION = 1;
@@ -538,6 +539,121 @@ function finishSeason(season) {
   };
 }
 
+// ---- 画面の形
+
+/** 棋士の札(名前・段位・Lv・戦法など。画面と、竜王戦と同じ次の一局の枠に使う)。 */
+function brief(season, id) {
+  const player = season.players[id];
+  if (!player) return null;
+  return {
+    id, name: player.name, dan: id === season.league.holder && id !== USER_ID ? '名人' : player.dan, level: player.level,
+    rating: player.rating, kind: player.kind, style: player.style ?? null, story: player.story ?? null,
+    character: player.character ?? null, repertoire: player.repertoire ?? null, age: player.age ?? null,
+    profile: player.profile ?? null, vsUser: player.vsUser ?? null,
+  };
+}
+
+/** 各棋士の回戦ごとの勝ち負け(win・loss・rest(余った回の自動の1局は勝ち負けで数える)・null(まだ))。 */
+function roundMarks(season) {
+  const marks = Object.fromEntries(season.order.map((id) => [id, Array(season.rounds).fill(null)]));
+  season.results.forEach((result, round) => {
+    if (!result) return;
+    const entry = season.schedule[round];
+    if (result.user && entry.opponent) {
+      marks[USER_ID][round] = result.user.win ? 'win' : 'loss';
+      marks[entry.opponent][round] = result.user.win ? 'loss' : 'win';
+    }
+    for (const game of result.games) {
+      marks[game.a][round] = game.winner === game.a ? 'win' : 'loss';
+      marks[game.b][round] = game.winner === game.b ? 'win' : 'loss';
+    }
+    if (result.extra) marks[result.extra.id][round] = result.extra.win ? 'win' : 'loss';
+  });
+  return marks;
+}
+
+/** 自力・他力の1行(5-1。札の「自力」「他力」は画面が付ける)。責めない言い方で、次の目標を言う。 */
+function outlookText(season, outlook) {
+  const target = season.cls === 'A' ? '名人挑戦' : '昇級';
+  const names = outlook.rivals.slice(0, 2).map((id) => `${season.players[id]?.name ?? ''}さん`).join('・');
+  switch (outlook.status) {
+    case 'clinched': return season.cls === 'A' ? '名人挑戦(かプレーオフ)が決まったよ' : '昇級が決まったよ！';
+    case 'self': return `残りを全部勝てば${target}`;
+    case 'others': return names ? `${names}が負ければ、${target}が近づく` : `ほかの結果しだいで${target}`;
+    case 'out': return season.cls === 'A' ? '残りを勝って、A級に残ろう' : '勝ち越して、来期の順位を上げよう';
+    default: return '';
+  }
+}
+
+/**
+ * 期の画面の形(docs/meijin-design.mdの7章)。順位表・自力/他力・次の一局・番勝負・結果。
+ * @param {any} season
+ */
+export function describeMeijinSeason(season) {
+  if (!season) return null;
+  const rule = CLASS_RULES[season.cls];
+  const table = standings(season);
+  const marks = roundMarks(season);
+  const pointCount = rule.pointShare ? Math.floor(table.length * rule.pointShare) : 0;
+  const relegate = rule.relegate ?? 0;
+  const promoteCount = season.cls === 'A' ? 1 : rule.promote;
+  const rows = table.map((row) => {
+    const player = brief(season, row.id);
+    const zone = row.place <= promoteCount ? 'promote'
+      : row.place > table.length - Math.max(pointCount, relegate) && (pointCount || relegate) ? (relegate ? 'demote' : 'point')
+        : '';
+    return {
+      ...row, name: player?.name ?? '', dan: player?.dan ?? '', story: player?.story ?? null, you: row.id === USER_ID,
+      points: season.league.points?.[row.id] ?? 0, marks: marks[row.id] ?? [], zone,
+      next: season.pending?.kind === 'league' && season.pending.opponentId === row.id,
+    };
+  });
+  const outlook = season.mode === 'challenge' ? promotionOutlook(season) : { status: 'none', slots: 0, rivals: [] };
+  const pending = season.pending ? {
+    ...season.pending,
+    opponent: brief(season, season.pending.opponentId),
+    stakes: { outlook: outlook.status, text: outlookText(season, outlook), boss: season.pending.kind !== 'league' || season.pending.round === season.rounds - 1 || brief(season, season.pending.opponentId)?.story === HANANE },
+  } : null;
+  const me = table.find(({ id }) => id === USER_ID) ?? null;
+  return {
+    no: season.no,
+    title: `第${season.no}期 名人戦`,
+    mode: season.mode,
+    cls: season.cls,
+    clsLabel: CLASS_LABELS[season.cls],
+    phase: season.phase,
+    round: season.round,
+    rounds: season.rounds,
+    promote: promoteCount,
+    lines: { promote: promoteCount, point: pointCount, relegate },
+    rows,
+    me,
+    outlook: { ...outlook, text: outlookText(season, outlook) },
+    pending,
+    holder: season.league.holder ? brief(season, season.league.holder) : null,
+    playoff: season.playoff ? { ...season.playoff, names: season.playoff.ladder.map((id) => brief(season, id)?.name ?? '') } : null,
+    series: season.finals ? seriesView(season.finals, { brief: (id) => brief(season, id), key: 'finals' }) : null,
+    userGames: season.userGames,
+    result: season.result,
+    resultSeen: season.resultSeen === true,
+    settings: season.settings,
+  };
+}
+
+/** 期の目標の1行(入口と期の画面)。 */
+export function meijinGoalLine(cls, rounds) {
+  if (!cls) return '名人として、A級の1位を迎え撃とう';
+  const rule = CLASS_RULES[cls];
+  if (cls === 'A') return `A級で${rounds}局。1位になれば、名人戦七番勝負へ`;
+  return `${CLASS_LABELS[cls]}で${rounds}局。上位${rule.promote}名に入れば、${CLASS_LABELS[upperClass(cls)]}へ昇級`;
+}
+
+/** 期の結果の見出し。 */
+export const MEIJIN_OUTCOME_TEXT = Object.freeze({
+  promote: '昇級', stay: '残留', point: '降級点', demote: '降級', reset: '降級点を消して再挑戦', clear: '降級点が消えた',
+  challenger: '名人挑戦', meijin: '名人獲得', defend: '名人防衛', 'lost-title': '名人失冠',
+});
+
 // ---- 次の期の順位戦の世界
 
 /**
@@ -678,6 +794,8 @@ export function loadMeijinCareer(storage) {
     league: validLeague(parsed.league)
       ? { ...parsed.league, points: parsed.league.points ?? {}, even: parsed.league.even ?? {} }
       : null,
+    // 前の期で選んだ設定(入口の初期値)。
+    ...(parsed.settings && typeof parsed.settings === 'object' ? { settings: parsed.settings } : {}),
   };
 }
 export const saveMeijinCareer = (storage, career) => writeJson(storage, MEIJIN_CAREER_KEY, career);

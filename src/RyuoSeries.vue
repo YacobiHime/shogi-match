@@ -98,6 +98,10 @@ const props = defineProps({
   nextColor: { type: String, default: "" },
   /** 防衛戦(自分が竜王で、七番勝負を受けて立つ)。 */
   defense: { type: Boolean, default: false },
+  /** タイトルの名前(名人戦では「名人」)。 */
+  titleName: { type: String, default: "竜王" },
+  /** この期の歩みの札を、呼ぶ側で決めるとき(名人戦: 順位戦と七番勝負)。番勝負の札は後ろに足す。 */
+  journeySteps: { type: Array as PropType<{ key: string; label: string; record: string; note: string; state: string }[] | null>, default: null },
 });
 
 /** いま大きく出す番勝負(七番勝負があれば七番勝負、なければ三番勝負)と、その前の済んだ三番勝負。 */
@@ -132,27 +136,27 @@ function sideNote(series: SeriesView, side: "me" | "them") {
   const brief = series[side];
   const titleHolder = (who: Brief) => {
     const count = who?.profile?.held?.length ?? 0;
-    return count > 1 ? `竜王・${count}冠` : "竜王";
+    return count > 1 ? `${props.titleName}・${count}冠` : props.titleName;
   };
   // 防衛戦の七番勝負は、自分が竜王で、相手が挑戦者。
-  if (series.key === "finals" && props.defense) return side === "me" ? "竜王(防衛)" : "挑戦者";
-  if (side === "me" && series.userIn) return series.key === "finals" ? "挑戦者" : "決勝トーナメント勝者";
+  if (series.key === "finals" && props.defense) return side === "me" ? `${props.titleName}(防衛)` : "挑戦者";
+  if (side === "me" && series.userIn) return series.key === "finals" ? "挑戦者" : props.titleName === "竜王" ? "決勝トーナメント勝者" : "";
   if (series.key === "finals" && side === "them") return titleHolder(brief);
   return brief?.dan ?? "";
 }
 function scoreNote(series: SeriesView) {
   const defending = series.key === "finals" && props.defense;
-  if (series.winner === "me") return series.userIn ? (defending ? "竜王防衛" : series.key === "finals" ? "竜王獲得" : "挑戦権獲得") : `${series.me?.name}の勝ち`;
+  if (series.winner === "me") return series.userIn ? (defending ? `${props.titleName}防衛` : series.key === "finals" ? `${props.titleName}獲得` : "挑戦権獲得") : `${series.me?.name}の勝ち`;
   if (series.winner === "them") return `${series.them?.name}の勝ち`;
   const rest = series.need - series.wins.me;
-  return defending ? `防衛まであと${rest}勝` : series.key === "finals" ? `竜王まであと${rest}勝` : `挑戦権まであと${rest}勝`;
+  return defending ? `防衛まであと${rest}勝` : series.key === "finals" ? `${props.titleName}まであと${rest}勝` : `挑戦権まであと${rest}勝`;
 }
 
 /** この期の歩み。①②と三番勝負・七番勝負の勝敗。 */
 const journey = computed(() => {
   const [group, final] = props.stages;
   const record = (wins: number, losses: number) => `${wins}勝${losses}敗`;
-  const steps = [
+  const steps = props.journeySteps ? [...props.journeySteps] : [
     { key: "group", label: `① ${group?.label ?? ""}`, record: group?.status === "watch" ? "—" : record(group?.wins ?? 0, group?.losses ?? 0), note: group?.status === "watch" ? "竜王は出ない" : "", state: group?.status ?? "" },
     { key: "final", label: "② 決勝トーナメント", record: final?.status === "watch" ? "—" : record(final?.wins ?? 0, final?.losses ?? 0), note: final?.status === "watch" ? "竜王は出ない" : "", state: final?.status ?? "" },
   ];
@@ -160,7 +164,7 @@ const journey = computed(() => {
     if (!series.userIn) continue;
     steps.push({
       key: series.key,
-      label: series.key === "finals" ? "③ 七番勝負" : "挑戦者決定三番勝負",
+      label: series.key === "finals" ? `${props.journeySteps ? "" : "③ "}七番勝負` : "挑戦者決定三番勝負",
       record: record(series.wins.me, series.wins.them),
       note: scoreNote(series),
       state: series.winner ? "done" : "current",

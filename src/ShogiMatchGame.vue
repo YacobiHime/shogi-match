@@ -470,6 +470,17 @@
       @resume="resumeRyuoGame"
       @open-note="tournamentOpen = false; yakobiNoteOpen = true"
       @result-seen="markRyuoResultSeen"
+      :meijin-view="meijinView"
+      :meijin-career="meijinCareer"
+      :meijin-entry-class="meijinEntryClass"
+      :meijin-entry-no="meijinEntryNo"
+      :meijin-holder-name="meijinHolderName"
+      :meijin-settings="meijinCareer.settings ?? null"
+      :meijin-suspended-moves="suspendedMeijinMoves"
+      @meijin-enter="enterMeijinSeason"
+      @meijin-play="startMeijinGame"
+      @meijin-resume="resumeMeijinGame"
+      @meijin-result-seen="markMeijinResultSeen"
     />
     <YakobiNote
       v-if="yakobiNoteOpen"
@@ -1706,14 +1717,12 @@
           <span>{{ ratingChange.delta >= 0 ? "+" : "−" }}{{ Math.abs(ratingChange.delta) }}</span>
         </p>
         <p v-if="ryuoGame.replay" class="shogi-game__tournament-title">千日手になりました。先後を入れ替えて、指し直します。</p>
-        <p v-else-if="ryuoView?.result" class="shogi-game__tournament-title">
-          {{ ryuoView.result.outcome === "champion" ? "竜王になりました！" : "この期の対局は、すべて終わりました。" }}
-        </p>
-        <p v-else-if="ryuoView?.pending" class="shogi-game__tournament-title">次の対局: {{ ryuoView.pending.label }}</p>
+        <p v-else-if="tournamentResult.done" class="shogi-game__tournament-title">{{ tournamentResult.doneText }}</p>
+        <p v-else-if="tournamentResult.next" class="shogi-game__tournament-title">次の対局: {{ tournamentResult.next }}</p>
         <div class="shogi-game__result-actions">
           <button v-if="ryuoGame.replay" type="button" class="shogi-game__rematch" @click="replayRyuoGame">指し直す</button>
           <button v-else type="button" class="shogi-game__rematch" @click="leaveToTournamentScreen">
-            {{ ryuoView?.result ? "結果を見る" : "竜王戦へ戻る" }}
+            {{ tournamentResult.done ? "結果を見る" : tournamentResult.back }}
           </button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
           <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch({ toHome: true })">{{ showHome ? "ホームへ" : "対局準備" }}</button>
@@ -2130,6 +2139,10 @@ import {
 } from "./core/player-rating.mjs";
 import { type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor } from "./core/play-coach.mjs";
 import { counterStyle, loadCounterKey, ryuoNextPlan, ryuoNextSeasonPlan, saveCounterKey } from "./core/ryuo-next.mjs";
+import {
+  applyMeijinSeason, createLeague, createMeijinSeason, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
+  recordMeijinGame, resumeMeijinSeason, saveMeijinCareer, saveMeijinSeason, userClass,
+} from "./core/meijin.mjs";
 import { enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight } from "./core/play-insight.mjs";
 import { loadReviewProblems } from "./core/review-problems.mjs";
 import { dueReviewId, loadReviewQueue } from "./core/review-queue.mjs";
@@ -2264,14 +2277,14 @@ function isBlackMoveIndex(index: number) {
 }
 
 function matchHintAllowance() {
-  if (matchKind.value === "tournament") return assistAllowance(Number(ryuoSeason.value?.settings?.hintLimit ?? 3));
+  if (matchKind.value === "tournament") return assistAllowance(Number(tournamentSeasonOf(ryuoGame.value)?.settings?.hintLimit ?? 3));
   return matchKind.value === "learning"
     ? assistAllowance(learningHintLimit.value)
     : Math.max(0, Math.trunc(props.hintCount));
 }
 
 function matchUndoAllowance() {
-  if (matchKind.value === "tournament") return assistAllowance(Number(ryuoSeason.value?.settings?.undoLimit ?? 3));
+  if (matchKind.value === "tournament") return assistAllowance(Number(tournamentSeasonOf(ryuoGame.value)?.settings?.undoLimit ?? 3));
   return matchKind.value === "learning"
     ? assistAllowance(learningUndoLimit.value)
     : Math.max(0, Math.trunc(props.undoCount));
@@ -2325,7 +2338,8 @@ const homeReviewProblemIds = ref<Set<string>>(new Set());
 const profileState = ref(loadProfile(browserStorage()));
 // 大会の設定と、進行中の大会。
 // 竜王戦(大会)。キャリア(いま何組か、竜王の期数)と、進行中の期は、1局ごとに端末へ保存する。
-type RyuoGame = { opponentId: string; label: string; outcome?: "win" | "loss"; replay?: boolean };
+/** 大会の対局。eventは大会(竜王戦か名人戦)。省くと竜王戦。 */
+type RyuoGame = { opponentId: string; label: string; outcome?: "win" | "loss"; replay?: boolean; event?: "ryuo" | "meijin" };
 const ryuoCareer = ref(loadCareer(browserStorage()));
 /** 竜王戦に出る架空の棋士の名簿。期をまたいで残り、期が終わるたびに更新する。最初の期に作る。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2346,7 +2360,36 @@ const ryuoGame = ref<RyuoGame | null>(null);
 /** 大会の対局での、CPUの手ごとの選び方と、働いていた特徴(対局後に、特徴が出た場面を示すため)。 */
 let ryuoCpuMoves: { ply: number; kind: string; traits: string[] }[] = [];
 const ryuoView = computed(() => (ryuoSeason.value ? describeSeason(ryuoSeason.value) : null));
-const ryuoOpponent = computed(() => (ryuoGame.value ? ryuoSeason.value?.players?.[ryuoGame.value.opponentId] ?? null : null));
+const ryuoOpponent = computed(() => (ryuoGame.value ? tournamentSeasonOf(ryuoGame.value)?.players?.[ryuoGame.value.opponentId] ?? null : null));
+
+// ---- 名人戦(順位戦から名人へ。docs/meijin-design.md)。竜王戦とは別々の暦で進む。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const meijinCareer = ref<any>(loadMeijinCareer(browserStorage()));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const meijinSeason = shallowRef<any>((() => {
+  const saved = loadMeijinSeason(browserStorage());
+  return saved ? resumeMeijinSeason(saved) : null;
+})());
+const meijinView = computed(() => describeMeijinSeason(meijinSeason.value));
+/** 次の期(か進行中の期)のプレイヤーのクラス。名人ならmeijin。 */
+const meijinEntryClass = computed(() => {
+  const season = meijinSeason.value;
+  if (season && season.phase !== "done") return season.mode === "defense" ? "meijin" : season.cls;
+  const league = meijinCareer.value.league;
+  if (!league) return "C2";
+  return league.holder === USER_ID ? "meijin" : userClass(league) ?? "C2";
+});
+const meijinEntryNo = computed(() => (meijinSeason.value && meijinSeason.value.phase !== "done" ? meijinSeason.value.no : meijinCareer.value.no + 1));
+/** いまの名人の名前(プレイヤーが名人なら空)。 */
+const meijinHolderName = computed(() => {
+  const holder = meijinSeason.value?.league?.holder ?? meijinCareer.value.league?.holder ?? ryuoRoster.value?.titles?.meijin ?? null;
+  if (!holder || holder === USER_ID) return "";
+  return meijinSeason.value?.players?.[holder]?.name ?? ryuoRoster.value?.players?.[holder]?.name ?? "";
+});
+/** 大会の対局の期(竜王戦か名人戦)。 */
+function tournamentSeasonOf(game: RyuoGame | null) {
+  return game?.event === "meijin" ? meijinSeason.value : ryuoSeason.value;
+}
 /**
  * 竜王戦の次の相手の対策(学習対局。docs/home-next-adaptive-design.mdの13-5)。レーティングにも竜王戦にも数えない。
  * 相手の棋風と特殊能力・得意戦法で指し、盤の名札に「（対策）」を添える。
@@ -2355,7 +2398,7 @@ const ryuoCounter = ref<{ opponentId: string; label: string; key: string } | nul
 const ryuoCounterOpponent = computed(() => (ryuoCounter.value ? ryuoSeason.value?.players?.[ryuoCounter.value.opponentId] ?? null : null));
 /** 対策をした次の一局の印(期と次の一局の組)。 */
 const ryuoCounterDoneKey = ref(loadCounterKey(browserStorage()));
-const tournamentStartAt = ref<"select" | "season">("select");
+const tournamentStartAt = ref<"select" | "season" | "meijin">("select");
 /** いまの竜王(名簿の竜王。プレイヤーが竜王ならnull)。竜王戦の入口の山で、七番勝負に顔を出す。 */
 const ryuoHolder = computed(() => {
   const roster = ryuoRoster.value;
@@ -2542,7 +2585,7 @@ const {
 const resignConfirmOpen = ref(false);
 // 中断した対局(保存済み)。ホームの「対局を再開」から続ける。リロードしても残る。
 // 竜王戦の対局なら、相手(ryuoOpponentId)も持つ。竜王戦の画面の次の一局の枠からも再開できる。
-const suspendedMatch = ref<{ moves: number; ryuoOpponentId: string | null } | null>(null);
+const suspendedMatch = ref<{ moves: number; ryuoOpponentId: string | null; event?: "ryuo" | "meijin" } | null>(null);
 const suspendConfirmOpen = ref(false);
 /** 中断した対局を消して新しく始める前の確認。承諾したら、保留した開始処理を行う。 */
 const discardSuspendedPending = ref<(() => void) | null>(null);
@@ -4410,8 +4453,13 @@ const rawRyuoSeason = () => JSON.parse(JSON.stringify(ryuoSeason.value));
 const suspendedRyuoMoves = computed(() => {
   const suspended = suspendedMatch.value;
   const pending = ryuoSeason.value?.pending;
-  return suspended?.ryuoOpponentId && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
+  return suspended?.ryuoOpponentId && suspended.event !== "meijin" && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
 });
+/** 名人戦の画面で「対局を再開」を押したとき。 */
+function resumeMeijinGame() {
+  tournamentOpen.value = false;
+  resumeSuspendedMatch();
+}
 /** 竜王戦の画面で「対局を再開」を押したとき。大会の画面を閉じて、中断した対局を続ける(VS画面は出さない)。 */
 function resumeRyuoGame() {
   tournamentOpen.value = false;
@@ -4439,7 +4487,7 @@ function startRyuoGameNow() {
 
 /** 保留中の大会の対局を始める。相手の棋力・得意戦法・囲いと、手番(振り駒)は、シーズンが決めている。 */
 function startRyuoMatch() {
-  const season = ryuoSeason.value;
+  const season = tournamentSeasonOf(ryuoGame.value);
   const pending = season?.pending;
   const opponent = pending ? season.players[pending.opponentId] : null;
   if (!pending || !opponent) return;
@@ -4533,6 +4581,10 @@ function goToRyuoFromCounter() {
 
 /** 終局を大会に記録する。勝敗は、トーナメント表を進める。千日手(引き分け)は、先後を入れ替えて指し直す。 */
 function recordRyuoOutcome(matchResult: MatchResult) {
+  if (ryuoGame.value?.event === "meijin") {
+    recordMeijinOutcome(matchResult);
+    return;
+  }
   const game = ryuoGame.value;
   const season = ryuoSeason.value;
   if (!game || !season?.pending) return;
@@ -4593,6 +4645,25 @@ function markRyuoResultSeen() {
   saveSeason(browserStorage(), ryuoSeason.value);
 }
 
+/** 大会の対局の終局画面の文(竜王戦か名人戦)。 */
+const tournamentResult = computed(() => {
+  if (ryuoGame.value?.event === "meijin") {
+    const view = meijinView.value;
+    return {
+      done: Boolean(view?.result),
+      doneText: view?.result?.outcome === "meijin" ? "名人になりました！" : "この期の対局は、すべて終わりました。",
+      next: view?.pending?.label ?? "",
+      back: "名人戦へ戻る",
+    };
+  }
+  return {
+    done: Boolean(ryuoView.value?.result),
+    doneText: ryuoView.value?.result?.outcome === "champion" ? "竜王になりました！" : "この期の対局は、すべて終わりました。",
+    next: ryuoView.value?.pending?.label ?? "",
+    back: "竜王戦へ戻る",
+  };
+});
+
 /** 大会の対局から離れて、トーナメント表(大会の画面)へ戻る。 */
 function leaveToTournamentScreen() {
   leaveFinishedMatch();
@@ -4602,6 +4673,77 @@ function leaveToTournamentScreen() {
 function replayRyuoGame() {
   startRyuoMatch();
 }
+
+// ---- 名人戦の期と対局
+/** 名人戦の期を始める(大会の画面の「出場する」)。名簿がなければ作る(竜王戦と同じ名簿を使う)。 */
+function enterMeijinSeason(settings: { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number }) {
+  const seed = Date.now();
+  if (!ryuoRoster.value) {
+    ryuoRoster.value = createRoster({ seed, userGroup: ryuoCareer.value.group });
+    saveRoster(browserStorage(), ryuoRoster.value);
+  }
+  const career = meijinCareer.value;
+  const league = career.league ?? createLeague(ryuoRoster.value);
+  meijinSeason.value = createMeijinSeason({
+    no: career.no + 1, league, roster: ryuoRoster.value, settings,
+    userLevel: recommendedStrengthPreset.value.level, userName: playerDisplayName(playerName.value), userDan: meijinDan(career), seed,
+  });
+  saveMeijinSeason(browserStorage(), meijinSeason.value);
+  meijinCareer.value = { ...career, settings };
+  saveMeijinCareer(browserStorage(), meijinCareer.value);
+}
+/** 名人戦の期の結果を見終えた。次に名人戦を選ぶと、次の期の入口になる。 */
+function markMeijinResultSeen() {
+  const season = meijinSeason.value;
+  if (!season || season.resultSeen) return;
+  meijinSeason.value = { ...season, resultSeen: true };
+  saveMeijinSeason(browserStorage(), meijinSeason.value);
+}
+function startMeijinGame() {
+  confirmDiscardSuspended(startMeijinGameNow);
+}
+function startMeijinGameNow() {
+  const season = meijinSeason.value;
+  const pending = season?.pending;
+  if (!season || !pending) return;
+  tournamentOpen.value = false;
+  openPregame();
+  matchKind.value = "tournament";
+  homeOpen.value = false;
+  void initializeEngine();
+  coachLevel.value = ["off", "encourage", "detailed"].includes(season.settings.coachLevel) ? season.settings.coachLevel : "detailed";
+  ryuoGame.value = { opponentId: pending.opponentId, label: pending.label ?? "", event: "meijin" };
+  startRyuoMatch();
+}
+/** 名人戦の終局を期に記録する。千日手は、先後を入れ替えて指し直す。期が終わったら、キャリアに足す。 */
+function recordMeijinOutcome(matchResult: MatchResult) {
+  const game = ryuoGame.value;
+  const season = meijinSeason.value;
+  if (!game || !season?.pending) return;
+  if (!matchResult.winner) {
+    const next = structuredClone(season);
+    next.pending.color = next.pending.color === "black" ? "white" : "black";
+    meijinSeason.value = next;
+    saveMeijinSeason(browserStorage(), next);
+    ryuoGame.value = { ...game, replay: true };
+    return;
+  }
+  const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
+  const next = recordMeijinGame(season, outcome);
+  meijinSeason.value = next;
+  saveMeijinSeason(browserStorage(), next);
+  ryuoGame.value = { ...game, outcome, replay: false };
+  if (next.phase === "done") {
+    meijinCareer.value = applyMeijinSeason(meijinCareer.value, next);
+    saveMeijinCareer(browserStorage(), meijinCareer.value);
+  }
+}
+/** 中断した名人戦の対局が、いまの期の次の一局と同じ相手なら、その手数。 */
+const suspendedMeijinMoves = computed(() => {
+  const suspended = suspendedMatch.value;
+  const pending = meijinSeason.value?.pending;
+  return suspended?.event === "meijin" && suspended.ryuoOpponentId && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
+});
 
 function beginMatch() {
   ownsKikiGlasses.value = hasKikiGlasses(loadTutorialProgress(browserStorage()));
@@ -5010,7 +5152,7 @@ function suspendMatch() {
   if (cpuSearchRunning) engine?.stop();
   cancelPlayerIdleAdvice();
   coachAdviceScheduler.reset();
-  suspendedMatch.value = { moves: moveHistory.length, ryuoOpponentId: ryuoGame.value?.opponentId ?? null };
+  suspendedMatch.value = { moves: moveHistory.length, ryuoOpponentId: ryuoGame.value?.opponentId ?? null, event: ryuoGame.value?.event ?? "ryuo" };
   persistMatchState();
   active.value = false;
   thinking.value = false;
@@ -5171,7 +5313,7 @@ const homeRyuoPlan = computed(() => {
  */
 const homeNext = computed<HomeNext>(() => {
   if (suspendedMatch.value) {
-    const what = suspendedMatch.value.ryuoOpponentId ? "竜王戦の対局" : "対局";
+    const what = suspendedMatch.value.ryuoOpponentId ? (suspendedMatch.value.event === "meijin" ? "名人戦の対局" : "竜王戦の対局") : "対局";
     return { id: "resume", label: "対局を再開", description: `中断した${what}（${suspendedMatch.value.moves}手目まで）` };
   }
   // 竜王戦の期の途中: 次の相手の対策か、続きを指すか。主役でない方を小さな入口にする。
@@ -5733,13 +5875,15 @@ function persistMatchState() {
 
 function restoreLearningSettings(snapshot: { [key: string]: any }) {
   const savedRyuo = snapshot.ryuoGame;
+  const savedEvent = savedRyuo?.event === "meijin" ? "meijin" : "ryuo";
   const restoredRyuo: RyuoGame | null = snapshot.matchKind === "tournament" && savedRyuo
-    && typeof savedRyuo.opponentId === "string" && ryuoSeason.value?.players?.[savedRyuo.opponentId]
+    && typeof savedRyuo.opponentId === "string" && tournamentSeasonOf({ opponentId: "", label: "", event: savedEvent })?.players?.[savedRyuo.opponentId]
     ? {
       opponentId: savedRyuo.opponentId,
       label: typeof savedRyuo.label === "string" ? savedRyuo.label : "",
       outcome: savedRyuo.outcome === "win" || savedRyuo.outcome === "loss" ? savedRyuo.outcome : undefined,
       replay: savedRyuo.replay === true,
+      event: savedEvent,
     }
     : null;
   matchKind.value = snapshot.matchKind === "learning" ? "learning" : restoredRyuo ? "tournament" : "normal";
@@ -5833,6 +5977,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
     suspendedMatch.value = {
       moves: Array.isArray(snapshot.moves) ? snapshot.moves.length : 0,
       ryuoOpponentId: typeof savedRyuo?.opponentId === "string" ? savedRyuo.opponentId : null,
+      event: savedRyuo?.event === "meijin" ? "meijin" : "ryuo",
     };
     return false;
   }
@@ -7107,7 +7252,7 @@ function recordRatedGame(matchResult: MatchResult) {
       opponentRook: other.rook,
       opponentCastle: other.castle,
     },
-    event: tournament ? "ryuo" : "free",
+    event: tournament ? (ryuoGame.value?.event === "meijin" ? "meijin" : "ryuo") : "free",
     opponent: tournament ? ryuoOpponent.value?.name : undefined,
     stage: tournament ? ryuoGame.value?.label : undefined,
   });
@@ -8162,7 +8307,7 @@ function resign() {
 /** 検討を終えるボタンの文字。押すと行く先を書く(completeReview・leaveFinishedMatchと同じ分かれ方)。 */
 const reviewCompleteLabel = computed(() => {
   if (tutorialMatch.value?.report) return "完了して教室へ";
-  if (props.showHome && ryuoGame.value) return "完了して竜王戦へ";
+  if (props.showHome && ryuoGame.value) return ryuoGame.value.event === "meijin" ? "完了して名人戦へ" : "完了して竜王戦へ";
   return props.showHome ? "完了してホームへ" : "完了して対局準備へ";
 });
 
@@ -8180,11 +8325,12 @@ function completeReview() {
 function leaveFinishedMatch({ toHome = false }: { toHome?: boolean } = {}) {
   // 竜王戦の対局は、対局や検討を終えたら、ホームではなく竜王戦の画面(トーナメント表)へ戻る。
   const backToTournament = !toHome && props.showHome && Boolean(ryuoGame.value);
+  const backEvent = ryuoGame.value?.event;
   stopGuidedReview();
   openPregame();
   if (props.showHome) openHome();
   if (backToTournament) {
-    tournamentStartAt.value = "season";
+    tournamentStartAt.value = backEvent === "meijin" ? "meijin" : "season";
     tournamentFromGame.value = true;
     tournamentOpen.value = true;
   }

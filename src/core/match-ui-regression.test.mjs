@@ -139,10 +139,10 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/canGoBack: \(\) =>[^\n]*tournamentOpen\.value/);
     expect(source).toMatch(/function startRyuoGame\(\) \{\s*confirmDiscardSuspended\(startRyuoGameNow\);/);
     // 大会の閃き・待ったの回数は、エントリー設定で決める。
-    expect(source).toMatch(/matchKind\.value === "tournament"\) return assistAllowance\(Number\(ryuoSeason\.value\?\.settings\?\.hintLimit/);
+    expect(source).toMatch(/matchKind\.value === "tournament"\) return assistAllowance\(Number\(tournamentSeasonOf\(ryuoGame\.value\)\?\.settings\?\.hintLimit/);
     // 竜王戦の対局も、自由対局と同じくレーティングとやこびノートに数え、棋戦・相手・段階を残す。千日手は指し直した対局だけを数える。
     expect(source).toMatch(/const rated = \(matchKind\.value === "normal" \|\| tournament\)/);
-    expect(source).toMatch(/event: tournament \? "ryuo" : "free"/);
+    expect(source).toMatch(/event: tournament \? \(ryuoGame\.value\?\.event === "meijin" \? "meijin" : "ryuo"\) : "free"/);
     expect(source).toMatch(/if \(!rated \|\| \(tournament && !matchResult\.winner\)\) return;/);
   });
 
@@ -161,7 +161,11 @@ describe("match screen regressions", () => {
     // 対局や検討を終えたら、竜王戦の対局なら竜王戦の画面(トーナメント表)へ戻る。明示的な「ホームへ」だけはホームへ。
     expect(source).toMatch(/const backToTournament = !toHome && props\.showHome && Boolean\(ryuoGame\.value\)/);
     // 対局から戻ったときは、竜王への道で前の段から登る動きを見せる(fromGame)。
-    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
+    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = backEvent === "meijin" \? "meijin" : "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
+    // 名人戦の対局も同じ道を通る(大会の対局のevent: "meijin")。終えたら名人戦の画面へ。
+    expect(source).toMatch(/const backEvent = ryuoGame\.value\?\.event;\s*stopGuidedReview\(\);\s*openPregame\(\);/);
+    expect(source).toMatch(/function recordRyuoOutcome\(matchResult: MatchResult\) \{\s*if \(ryuoGame\.value\?\.event === "meijin"\) \{\s*recordMeijinOutcome\(matchResult\);/);
+    expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "meijin" \};\s*startRyuoMatch\(\);/);
     expect(source).toMatch(/:from-game="tournamentFromGame"/);
     expect(source).toMatch(/@click="leaveFinishedMatch\(\{ toHome: true \}\)"/);
   });
@@ -220,14 +224,19 @@ describe("match screen regressions", () => {
     // 番勝負では「第3局を指す」(docs/ryuo-stages-design.mdの4章)。
     expect(tournament).toMatch(/pending && pending\.kind !== "game" \? `第\$\{pending\.gameNo\}局を指す` : "対局する"/);
     // 期の画面は3つの段階(① 組・② 決勝トーナメント・③ 番勝負)。上の帯は1本で、段階の道のりを押すと、その段階の表を見る。
-    expect(tournament).toMatch(/<header v-if="screen !== 'season'" class="shogi-dex__header">/);
+    expect(tournament).toMatch(/<header v-if="screen !== 'season' && screen !== 'meijin'" class="shogi-dex__header">/);
+    // 名人戦は大会の選択の札から入り、大会の画面の中に出す(docs/meijin-design.md)。
+    expect(tournament).toMatch(/data-tournament="meijin" @click="chooseMeijin"/);
+    expect(tournament).toMatch(/<ShogiMeijin\s+v-if="screen === 'meijin'"/);
     expect(tournament).toMatch(/data-stage-steps[\s\S]*?@click="showStage\(index\)"/);
     expect(tournament).toMatch(/<RyuoBracket\s+v-if="viewStageIndex === 0[\s\S]*?<RyuoBracket\s+v-if="viewStageIndex === 1[\s\S]*?<RyuoSeries\s+v-if="viewStageIndex === 2"/);
     // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。
     expect(tournament).toMatch(/<RyuoVersus[\s\S]*?@done="startPlay"/);
     expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*emit\("play"\);/);
     expect(tournament).toMatch(/data-next-season @click="toNextSeason">次の期へ</);
-    expect(source).toContain('"結果を見る" : "竜王戦へ戻る"');
+    expect(source).toContain('{{ tournamentResult.done ? "結果を見る" : tournamentResult.back }}');
+    expect(source).toMatch(/back: "竜王戦へ戻る"/);
+    expect(source).toMatch(/back: "名人戦へ戻る"/);
     // 節目の判子(段階3): 対局から戻ったときだけ出し、押すと閉じる。判子の音を鳴らすときは、登る音を鳴らさない。
     expect(tournament).toMatch(/const milestoneOpen = ref\(props\.fromGame && Boolean\(props\.view\?\.milestone\)/);
     expect(tournament).toMatch(/data-milestone\s*@click="milestoneOpen = false"/);
