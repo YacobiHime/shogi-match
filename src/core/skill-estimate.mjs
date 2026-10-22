@@ -34,19 +34,31 @@ const presetForLevel = (level) => {
 };
 
 /**
+ * 診断に使える手(形勢に大差が付く前の手)の、評価値の損と着手前の形勢。測れる手が足りなかった対局から、
+ * 次の対局へ持ち越すときに使う(下のcontinueMeasure)。
+ * @param {any[]} points 棋譜解析の点
+ * @param {'black' | 'white'} color 測定する側
+ * @returns {{ loss: number, standing: number }[]}
+ */
+export function measurableMoves(points, color) {
+  return (points ?? [])
+    .map((point) => point.moveMeasure)
+    .filter((measure) => measure && measure.mover === color && Math.abs(measure.standing) < DECIDED_STANDING)
+    .map(({ loss, standing }) => ({ loss, standing }));
+}
+
+/**
  * @param {any[]} points 棋譜解析の点。moveMeasure({ mover, loss, standing })を持つ点だけを使う
  * @param {'black' | 'white'} color 診断する側
+ * @param {{ loss: number, standing: number }[]} [carried] 前の測定対局から持ち越した手(measurableMoves)
  * @returns {{
  *   insufficient: boolean, count: number, averageLoss?: number, level?: number,
  *   rating?: number, ratingLow?: number, ratingHigh?: number, label?: string,
  *   reliability?: 'reference' | 'estimate' | 'stable',
  * }} insufficientが真のときは、countだけを持つ(測れる手が足りない)。
  */
-export function estimateSkill(points, color) {
-  const losses = (points ?? [])
-    .map((point) => point.moveMeasure)
-    .filter((measure) => measure && measure.mover === color && Math.abs(measure.standing) < DECIDED_STANDING)
-    .map(({ loss }) => Math.min(LOSS_CAP, loss));
+export function estimateSkill(points, color, carried = []) {
+  const losses = [...measurableMoves(points, color), ...carried].map(({ loss }) => Math.min(LOSS_CAP, loss));
   const count = losses.length;
   if (count < MIN_MEASURED_MOVES) return { insufficient: true, count };
   const mean = losses.reduce((sum, loss) => sum + loss, 0) / count;
@@ -66,6 +78,23 @@ export function estimateSkill(points, color) {
     label: presetForLevel(level).label,
     reliability: count < 20 ? 'reference' : count < 40 ? 'estimate' : 'stable',
   };
+}
+
+/**
+ * 測れる手が足りなかったときに、続けて指す測定対局の数の上限(最初の1局を含む)。
+ * 2局を合わせると、力の差が大きい組み合わせでもほぼ足りる(docs/skill-measure-design.mdの2章)。
+ */
+export const MAX_MEASURE_GAMES = 3;
+/** 続けて測るときに、相手のLvを動かす幅。勝ったら上げ、負けたら下げて、形勢が早く決まらない相手に近づける。 */
+export const MEASURE_LEVEL_STEP = 8;
+
+/**
+ * 測れる手が足りなかった対局の次に指す、測定対局の相手のLv。診断の範囲(Lv0〜36)に収める。
+ * @param {{ level: number, outcome: 'win' | 'loss' | 'draw' }} options level: いまの相手のLv、outcome: プレイヤーから見た結果
+ */
+export function nextMeasureLevel({ level, outcome }) {
+  const step = outcome === 'win' ? MEASURE_LEVEL_STEP : outcome === 'loss' ? -MEASURE_LEVEL_STEP : 0;
+  return Math.min(MAX_DIAGNOSED_LEVEL, Math.max(0, level + step));
 }
 
 /** 診断した棋力に近い、CPUのLvのレーティング(おすすめの強さの目安に使う)。 */

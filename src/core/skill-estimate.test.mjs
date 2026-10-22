@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateSkill, levelForAverageLoss, measureStatistics } from './skill-estimate.mjs';
+import { MAX_MEASURE_GAMES, estimateSkill, levelForAverageLoss, measurableMoves, measureStatistics, nextMeasureLevel } from './skill-estimate.mjs';
 
 const movesWithLoss = (loss, count, mover = 'black', standing = 0) => (
   Array.from({ length: count }, () => ({ moveMeasure: { mover, loss, standing } }))
@@ -61,5 +61,24 @@ describe('skill estimate', () => {
     expect(stats.kinds).toMatchObject({ mistake: 1, good: 1, blunder: 0 });
     expect(stats.worst).toEqual({ ply: 31, label: '31手目 ▲テスト', loss: 900 });
     expect(measureStatistics([], 'black').worst).toBeNull();
+  });
+
+  it('carries measurable moves over from a short measuring game and pools them', () => {
+    // 1局目は早く大差が付いて6手しか測れない。持ち越して、2局目の6手と合わせて診断する。
+    const first = [...movesWithLoss(100, 6), ...movesWithLoss(10, 20, 'black', 2500), ...movesWithLoss(500, 6, 'white')];
+    const carried = measurableMoves(first, 'black');
+    expect(carried).toEqual(Array.from({ length: 6 }, () => ({ loss: 100, standing: 0 })));
+    expect(estimateSkill(movesWithLoss(200, 6), 'black')).toEqual({ insufficient: true, count: 6 });
+    const pooled = estimateSkill(movesWithLoss(200, 6), 'black', carried);
+    expect(pooled).toMatchObject({ insufficient: false, count: 12, averageLoss: 150 });
+  });
+
+  it('moves the next measuring opponent toward the player within the diagnosed range', () => {
+    expect(nextMeasureLevel({ level: 10, outcome: 'win' })).toBe(18);
+    expect(nextMeasureLevel({ level: 10, outcome: 'loss' })).toBe(2);
+    expect(nextMeasureLevel({ level: 4, outcome: 'loss' })).toBe(0);
+    expect(nextMeasureLevel({ level: 33, outcome: 'win' })).toBe(36);
+    expect(nextMeasureLevel({ level: 15, outcome: 'draw' })).toBe(15);
+    expect(MAX_MEASURE_GAMES).toBeGreaterThanOrEqual(2);
   });
 });

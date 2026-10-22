@@ -1635,7 +1635,21 @@
     >
       <div class="shogi-game__result-panel">
         <h2 id="measure-result-title">棋力測定の結果</h2>
-        <template v-if="skillDiagnosis.insufficient">
+        <!--
+          測れる手が足りないときは、相手の強さを近づけて、もう1局(手は持ち越して合わせて診断する)。
+          最初の1局を含めて3局まで。docs/skill-measure-design.md
+        -->
+        <template v-if="skillDiagnosis.insufficient && measureNext">
+          <p class="shogi-game__measure-rating" data-measure-short>
+            <strong>まだ測りきれていません</strong>
+            <span>（測れた手 {{ skillDiagnosis.count }}手／{{ MIN_MEASURED_MOVES }}手）</span>
+          </p>
+          <p>
+            {{ (result?.moveCount ?? 0) < 40 ? "対局が短く、測れる手が少なめでした。" : "力の差が大きく、早めに形勢が決まりました。" }}相手の強さを{{ measureNext.level > measureNext.from ? "上げて" : measureNext.level < measureNext.from ? "下げて" : "そのままで" }}もう1局指すと、この対局の手と合わせて診断します。
+          </p>
+          <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-measure-continue @click="continueMeasure">もう1局指す（Lv.{{ measureNext.level }}）</button>
+        </template>
+        <template v-else-if="skillDiagnosis.insufficient">
           <p>測れる手が足りませんでした（{{ skillDiagnosis.count }}手）。もう少し長く指した対局で、もう一度測ってみてください。</p>
         </template>
         <template v-else>
@@ -1653,7 +1667,7 @@
             </div>
             <div>
               <dt>測った手</dt>
-              <dd>{{ skillDiagnosis.count }}手・平均損失{{ skillDiagnosis.averageLoss }}</dd>
+              <dd>{{ skillDiagnosis.count }}手{{ measureCarry ? `（${measureCarry.games + 1}局分）` : "" }}・平均損失{{ skillDiagnosis.averageLoss }}</dd>
             </div>
             <div v-for="phase in measureStats.phases" :key="phase.key">
               <dt>{{ phase.label }}</dt>
@@ -1763,7 +1777,7 @@ import {
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
-import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
+import { MAX_MEASURE_GAMES, MIN_MEASURED_MOVES, estimateSkill, measurableMoves, measureStatistics, nextMeasureLevel } from "./core/skill-estimate.mjs";
 import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
@@ -2175,6 +2189,11 @@ const measureProgressPercent = computed(() => (
   analysisTotal.value ? Math.round((analysisProgress.value / analysisTotal.value) * 100) : 0
 ));
 const measureReportDismissed = ref(false);
+/**
+ * 測れる手が足りなかった測定対局から持ち越した手と、その対局の数。次の測定対局の手と合わせて診断する。
+ * 測定の対局を続けている間だけ持ち、対局準備・ホームへ戻ると捨てる(docs/skill-measure-design.md)。
+ */
+const measureCarry = ref<{ moves: { loss: number; standing: number }[]; games: number } | null>(null);
 /** 棋力測定以外の解析で、棋力診断を表示するか。「その他」メニューから切り替える。 */
 const skillDiagnosisVisible = ref(false);
 /** レーティングに近いLvの段級位の表示名。 */
@@ -4311,10 +4330,6 @@ function declareGrade(grade: { label: string; level: number }) {
 /** 棋力測定の前の対局設定。測定の対局を離れたら戻す。 */
 let settingsBeforeMeasure: { [key: string]: unknown } | null = null;
 
-/**
- * やこびノートから、棋力測定の対局を対局準備を通さずに始める。
- * 平手・先手・作戦おまかせ・助言なしで、CPUの強さはレーティングに近いレベルにする。
- */
 /** やこびノートの「対局する」。ノートを閉じて、通常対局の対局準備を開く。 */
 function startMatchFromNote() {
   confirmDiscardSuspended(() => {
@@ -4323,15 +4338,27 @@ function startMatchFromNote() {
     closeHome();
   });
 }
+/**
+ * やこびノートから、棋力測定の対局を対局準備を通さずに始める。
+ * 平手・先手・作戦おまかせ・助言なしで、CPUの強さはレーティングに近いレベルにする。
+ */
 function startMeasureMatch() {
-  confirmDiscardSuspended(startMeasureMatchNow);
+  confirmDiscardSuspended(() => startMeasureMatchNow());
 }
-function startMeasureMatchNow() {
+/**
+ * 測定の対局を始める。続けて測るとき(continueMeasure)は、相手のLvと、前の対局から持ち越した手を渡す。
+ * @param options.level 相手のLv(省くとレーティングに近いLv)
+ * @param options.carry 持ち越した手と対局の数
+ */
+function startMeasureMatchNow(options: { level?: number; carry?: { moves: { loss: number; standing: number }[]; games: number } } = {}) {
   yakobiNoteOpen.value = false;
   openPregame();
+  measureCarry.value = options.carry ?? null;
   settingsBeforeMeasure = captureMatchSettings();
   matchKind.value = "normal";
-  searchNodes.value = recommendedStrengthPreset.value.value;
+  searchNodes.value = (options.level === undefined
+    ? recommendedStrengthPreset.value
+    : CPU_STRENGTH_PRESETS.find((preset) => preset.level === options.level) ?? recommendedStrengthPreset.value).value;
   selectedPlayerColor.value = "black";
   selectedStrategy.value = "";
   selectedCastle.value = "";
@@ -4959,6 +4986,7 @@ function openPregame() {
   measureMode.value = false;
   measureSession.value = false;
   measureAnalyzing.value = false;
+  measureCarry.value = null;
   if (settingsBeforeMeasure) restoreMatchSettings(settingsBeforeMeasure);
   settingsBeforeMeasure = null;
   // 教室の対局から離れたら、教室の固定条件を元の設定へ戻す。
@@ -6488,8 +6516,34 @@ function scheduleReviewCoachAdvice() {
 const skillDiagnosis = computed(() => {
   if (!reviewMode.value || reviewCpuEnabled.value || analysisRunning.value || analyzedLevel.value < 0) return null;
   if (normalizedMode.value !== "cpu" || !analysisPoints.value.length) return null;
-  return estimateSkill(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black");
+  // 棋力測定を続けているときは、前の測定対局から持ち越した手も合わせて診断する。
+  const carried = measureSession.value ? measureCarry.value?.moves ?? [] : [];
+  return estimateSkill(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black", carried);
 });
+/**
+ * 測れる手が足りなかったときに、続けて指す測定対局の相手(Lv)。勝ったら強く、負けたら弱くする。
+ * 最初の1局を含めて MAX_MEASURE_GAMES 局まで。
+ */
+const measureNext = computed(() => {
+  if (!measureSession.value || !skillDiagnosis.value?.insufficient) return null;
+  if ((measureCarry.value?.games ?? 0) + 1 >= MAX_MEASURE_GAMES) return null;
+  const from = cpuStrengthLevel();
+  if (from === undefined) return null;
+  const winner = result.value?.winner;
+  const outcome = !winner ? "draw" : winner === humanColor.value ? "win" : "loss";
+  return { from, level: nextMeasureLevel({ level: from, outcome }) };
+});
+/** 「もう1局指す」。この対局の測れた手を持ち越して、相手のLvを変えた測定対局を始める。 */
+function continueMeasure() {
+  const next = measureNext.value;
+  if (!next) return;
+  const color = humanColor.value === Color.WHITE ? "white" : "black";
+  const carry = {
+    moves: [...(measureCarry.value?.moves ?? []), ...measurableMoves(analysisPoints.value, color)],
+    games: (measureCarry.value?.games ?? 0) + 1,
+  };
+  startMeasureMatchNow({ level: next.level, carry });
+}
 const measureStats = computed(() => (
   measureSession.value && skillDiagnosis.value && !skillDiagnosis.value.insufficient
     ? measureStatistics(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black")

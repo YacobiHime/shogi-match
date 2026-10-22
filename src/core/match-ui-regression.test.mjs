@@ -9,6 +9,14 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("offers another measuring game with the carried moves when too few moves were measured", () => {
+    // 力の差で早く形勢が決まると測れる手が足りない。相手を近づけてもう1局、手は持ち越す(docs/skill-measure-design.md)。
+    expect(source).toMatch(/v-if="skillDiagnosis\.insufficient && measureNext"[\s\S]*?data-measure-continue @click="continueMeasure">もう1局指す（Lv\.\{\{ measureNext\.level \}\}）</);
+    expect(source).toMatch(/estimateSkill\(analysisPoints\.value, [^;]*carried\)/);
+    expect(source).toMatch(/function continueMeasure\(\) \{[\s\S]*?measurableMoves\(analysisPoints\.value, color\)[\s\S]*?startMeasureMatchNow\(\{ level: next\.level, carry \}\)/);
+    // 対局準備・ホームへ戻ると、持ち越した手は捨てる。
+    expect(source).toMatch(/measureAnalyzing\.value = false;\s*measureCarry\.value = null;/);
+  });
   it("keeps sheet close buttons still under the finger (no transform centering, 44px target)", () => {
     // ボタン共通の触れたとき・押したときのtransformが、真ん中寄せのtranslateY(-50%)を上書きして×が逃げていた。
     const sheets = [
@@ -61,7 +69,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function resumeSuspendedMatch\(\)[\s\S]*?restorePersistedMatch\(\{ resume: true \}\)[\s\S]*?scheduleCpuMove\(\);/);
     // 新しい対局を始めると中断した対局が消えるため、開始の3経路で確認する。
     expect(source).toMatch(/function openMatchSetup[\s\S]*?confirmDiscardSuspended/);
-    expect(source).toContain("confirmDiscardSuspended(startMeasureMatchNow)");
+    expect(source).toContain("confirmDiscardSuspended(() => startMeasureMatchNow())");
     expect(source).toContain("confirmDiscardSuspended(() => startMatchFromTutorialNow(request))");
     // ブラウザの戻る操作で、確認ダイアログも閉じられる。
     expect(source).toMatch(/function navigateBack\(\)[\s\S]*?discardSuspendedPending[\s\S]*?suspendConfirmOpen/);
