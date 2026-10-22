@@ -7,8 +7,8 @@
     -->
     <svg
       class="ryuo-mountain__svg"
-      :viewBox="`0 0 ${layout.width} ${layout.height}`"
-      :style="{ aspectRatio: `${layout.width} / ${layout.height}` }"
+      :viewBox="`0 ${-headroom} ${layout.width} ${layout.height + headroom}`"
+      :style="{ aspectRatio: `${layout.width} / ${layout.height + headroom}` }"
       role="img"
       :aria-label="ariaLabel"
       shape-rendering="crispEdges"
@@ -135,11 +135,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
 import { mountainLayers, mountainLayout } from "./core/ryuo-mountain-layout.mjs";
-import type { RoadView } from "./RyuoRoad.vue";
+
+type Step = {
+  key: string; label: string; short: string; /** done・current・lost・skip・todo・won */ state: string;
+  boss: boolean; mark: string; score: string;
+  face: null | { id: string; name: string; char: string; story: string | null; tone: string };
+};
+/** 竜王への道(core/ryuo-road.mjsのseasonRoad・previewRoad)。 */
+export type RoadView = { steps: Step[]; currentIndex: number; lastIndex: number };
 
 const props = defineProps({
   road: { type: Object as PropType<RoadView>, required: true },
@@ -154,9 +161,15 @@ const props = defineProps({
   glowCrown: { type: Boolean, default: false },
   /** 次の相手の顔(期の画面の`opponentFace`)。いまの段の横に置く。 */
   opponent: { type: Object as PropType<{ name: string; char: string; tone: string; story: string | null } | null>, default: null },
+  /** 入口: 開いたとき、カメラを頂上(いまの竜王)から、いまの段まで降ろす(docs/ryuo-ui-renewal-design.mdの5-1)。 */
+  intro: { type: Boolean, default: false },
+  /** 頂上の上にあける空(図の座標)。題字や結果の見出しを重ねる画面で、頂上が隠れないようにする。 */
+  headroom: { type: Number, default: 0 },
 });
 const emit = defineEmits<{ played: []; "open-opponent": [] }>();
 
+/** 入口のカメラが頂上から降りてくる長さ(ms)。押すと飛ばす。 */
+const INTRO_MS = 1200;
 /** 跳ぶ動きの長さ(ms)。Game_Nintendo_Implementation.mdの3-1「ふつうの回戦に勝つ」(小)。 */
 const CLIMB_MS = 600;
 /** 通った道が光っている長さ(ms)。動きと合わせて1.5秒以内。 */
@@ -185,7 +198,7 @@ const stars = computed(() => {
   const next = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
   const colors = ["#fffcf4", "#f1a54c", "#d8d0ff"];
   return Array.from({ length: 34 }, (_, id) => ({
-    id, x: Math.round(next() * 780) - 195, y: Math.round(next() * Math.min(420, layout.value.height * 0.5)),
+    id, x: Math.round(next() * 780) - 195, y: Math.round(next() * (Math.min(420, layout.value.height * 0.5) + props.headroom)) - props.headroom,
     size: next() < 0.3 ? 3 : 4, color: colors[id % 3], delay: Math.round(next() * 30) / 10,
   }));
 });
@@ -301,7 +314,33 @@ function finish() {
   pulsing.value = false;
 }
 function skip() {
+  if (cameraFrame) finishCamera();
   if (frame || timers.length) finish();
+}
+
+// ---- 入口のカメラ(頂上から、いまの段へ)
+let cameraFrame = 0;
+let cameraTarget = 0;
+function finishCamera() {
+  if (cameraFrame) cancelAnimationFrame(cameraFrame);
+  cameraFrame = 0;
+  if (scrollEl.value) scrollEl.value.scrollTop = cameraTarget;
+}
+function playCamera() {
+  const box = scrollEl.value;
+  if (!box) return;
+  cameraTarget = box.scrollTop;
+  if (reducedMotion() || cameraTarget <= 0) return;
+  box.scrollTop = 0;
+  const began = performance.now();
+  const step = (now: number) => {
+    const t = Math.min(1, (now - began) / INTRO_MS);
+    // はじめは頂上(いまの竜王)を少し見せ、そこから降りる。
+    const ease = t < 0.35 ? 0 : 1 - (1 - (t - 0.35) / 0.65) ** 3;
+    box.scrollTop = cameraTarget * ease;
+    cameraFrame = t < 1 ? requestAnimationFrame(step) : 0;
+  };
+  cameraFrame = requestAnimationFrame(step);
 }
 
 /** いまの段が見えるよう、地図を上下に送る(ページはスクロールさせない)。 */
@@ -309,8 +348,8 @@ function centerCurrent() {
   const box = scrollEl.value;
   const node = nodes.value[props.road.currentIndex];
   if (!box || !node) return;
-  const scale = box.scrollHeight / layout.value.height;
-  box.scrollTop = Math.max(0, node.y * scale - box.clientHeight * 0.55);
+  const scale = box.scrollHeight / (layout.value.height + props.headroom);
+  box.scrollTop = Math.max(0, (node.y + props.headroom) * scale - box.clientHeight * 0.55);
 }
 
 function play() {
@@ -358,12 +397,18 @@ function play() {
 onMounted(async () => {
   await nextTick();
   centerCurrent();
+  if (props.intro) playCamera();
   if (props.animate) {
     play();
     emit("played");
   }
 });
-onBeforeUnmount(finish);
+onBeforeUnmount(() => {
+  finish();
+  if (cameraFrame) cancelAnimationFrame(cameraFrame);
+});
+// 段の数が変わったら(入口で規模を変えたとき)、いまの段を見せ直す。
+watch(() => props.road.steps.length, () => nextTick(centerCurrent));
 </script>
 
 <style>

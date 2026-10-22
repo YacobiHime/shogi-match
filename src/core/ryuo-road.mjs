@@ -170,6 +170,37 @@ function lastGameIndex(season, steps) {
   return steps.findIndex((step) => step.key === key);
 }
 
+/**
+ * 期が始まる前の竜王への道(入口の山の全景。docs/ryuo-ui-renewal-design.mdの5-1)。どの段もまだで、いちばん下の段がいまの段。
+ * 七番勝負には、いまの竜王の顔(わかれば)。
+ * @param {{ mode: 'challenge' | 'defense', group: number, rounds: number, promote?: number,
+ *   holder?: { id: string, name: string, attack?: number, story?: string | null } | null }} entry
+ *   roundsはランキング戦の回戦の数、holderはいまの竜王(プレイヤーが竜王ならnull)。
+ */
+export function previewRoad({ mode, group, rounds, promote = 1, holder = null }) {
+  const steps = [];
+  const blank = { state: 'todo', face: null, mark: '', score: '', round: 0 };
+  if (mode !== 'defense') {
+    let markRound = rounds + 1;
+    for (let round = 1; round <= rounds; round += 1) {
+      if (2 ** (rounds - round + 1) <= promote) { markRound = round; break; }
+    }
+    for (let round = 1; round <= rounds; round += 1) {
+      steps.push({ ...blank, key: `ranking-${round}`, phase: 'ranking', round, ...rankingRoundName(rounds, round), boss: round === rounds, mark: group > 1 && round === markRound ? '昇級' : '' });
+    }
+    steps.push({ ...blank, key: 'main', phase: 'main', label: '決勝トーナメント', short: '決勝T', boss: false, mark: group > 1 && markRound > rounds ? '昇級' : '' });
+    steps.push({ ...blank, key: 'playoff', phase: 'playoff', label: '挑戦者決定三番勝負', short: '挑戦者決定戦', boss: true });
+  }
+  const attack = holder?.attack ?? 0;
+  const face = holder && mode !== 'defense'
+    ? { id: holder.id, name: holder.name, char: holder.name.slice(0, 1), story: holder.story ?? null, tone: attack >= 0.25 ? 'attack' : attack <= -0.25 ? 'defense' : 'balance' }
+    : null;
+  steps.push({ ...blank, key: 'finals', phase: 'finals', label: mode === 'defense' ? '防衛戦 七番勝負' : '竜王戦七番勝負', short: '七番勝負', boss: true, face });
+  steps.push({ ...blank, key: 'ryuo', phase: 'done', label: mode === 'defense' ? '竜王防衛' : '竜王', short: mode === 'defense' ? '防衛' : '竜王', boss: true });
+  steps[0] = { ...steps[0], state: 'current' };
+  return { steps, currentIndex: 0, lastIndex: -1 };
+}
+
 /** 勝ち方を、「〜で勝ち上がってきた」の形に。 */
 const HOW_ARRIVAL = Object.freeze({
   opening: '序盤のリードを守りきって',

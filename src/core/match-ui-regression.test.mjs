@@ -152,7 +152,10 @@ describe("match screen regressions", () => {
     expect(tournament).not.toMatch(/data-pane=|pane-tabs/);
     expect(tournament).toMatch(/\.shogi-tournament__stage > \.shogi-tournament__tables \{\s*position: fixed;/);
     // 重ねて開いたものは、ブラウザの戻る操作で先に閉じる。
-    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(sheet\.value\) sheet\.value = "";\s*else if \(tableOpen\.value\) tableOpen\.value = false;/);
+    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(sheet\.value\) sheet\.value = "";\s*else if \(resultDetailOpen\.value\)[\s\S]*?else if \(tableOpen\.value\) tableOpen\.value = false;/);
+    // 入口と結果も、ドット絵の山の地図の画面(段階C)。入口はカメラが頂上から降りる。
+    expect(tournament).toMatch(/<RyuoMountain :road="entryMapRoad" :asset-base-url="assetBaseUrl" intro/);
+    expect(tournament).toMatch(/data-result-screen>[\s\S]*?<RyuoMountain v-if="view\.road"/);
     // ボタンは短い動詞(U:3-2)。結果の画面の主役は「次の期へ」。
     expect(tournament).toMatch(/data-tournament-play @click="versusOpen = true">対局する</);
     // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。

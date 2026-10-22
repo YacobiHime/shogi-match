@@ -9,7 +9,7 @@ import { USER_HOLDER, createRoster, seasonEntry, selectParticipants } from './ry
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO, hananeAfterLine, hananeBeforeLine, hananeCoachIntro, hananeGrudgeBonus, yoshihikoCoachIntro } from './ryuo-story.mjs';
 import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
 import { matchStakes, seasonGoalLine } from './ryuo-stakes.mjs';
-import { opponentArrivalLine, seasonRoad } from './ryuo-road.mjs';
+import { opponentArrivalLine, previewRoad, seasonRoad } from './ryuo-road.mjs';
 import { lastGameMilestone, latestUpsetLine } from './ryuo-milestone.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import {
@@ -900,6 +900,17 @@ export function pendingStakes(season) {
 }
 
 /** 期の目標の1行(入口と、期の結果の「次の期」)。 */
+/**
+ * 次の期の入口に出す、竜王への道(山の全景)。ランキング戦の回戦の数は、組の人数(規模で決まる)から。
+ * @param {{ mode: 'challenge' | 'defense', group: number, scale: number,
+ *   holder?: { id: string, name: string, attack?: number, story?: string | null } | null }} entry
+ */
+export function entryRoad({ mode, group, scale: scaleId, holder = null }) {
+  const scale = scaleById(scaleId);
+  const rounds = Math.max(1, Math.ceil(Math.log2(scale.sizes[group] ?? 2)));
+  return previewRoad({ mode, group, rounds, promote: scale.promote, holder });
+}
+
 export function entryGoalLine({ mode, group, scale: scaleId }) {
   const scale = scaleById(scaleId);
   return seasonGoalLine({ mode, group, promote: scale.promote, groupSlots: scale.slots[group] ?? 1 });

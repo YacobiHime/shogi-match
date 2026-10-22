@@ -83,33 +83,10 @@
       </header>
 
       <!--
-        ページ全体はスクロールさせない。上に大会の帯、真ん中に中身の欄(収まらないときだけ中でスクロール)、
-        下に操作の帯を置き、いちばん大事なボタン(参加する・対局開始など)はいつも見えるようにする。
+        ページ全体はスクロールさせない。どの画面も、ドット絵の山の地図(真ん中。地図だけが中で動く)と、
+        下(横長の画面では右)の枠に分け、いちばん大事なボタン(出場する・対局する・次の期へ)はいつも見えるようにする。
       -->
-      <div :class="['shogi-tournament__body', { 'shogi-tournament__body--stage': screen === 'season' && view }]">
-        <!-- 入口と結果の画面は、上に大会の帯(印・期・いまの段階・勝ち上がりの道のり)を置く。期の画面は、地図の上の帯を使う。 -->
-        <section v-if="screen !== 'season' || !view" class="shogi-tournament__banner" aria-label="竜王戦の道のり">
-          <span class="shogi-tournament__seal" aria-hidden="true">竜</span>
-          <div class="shogi-tournament__banner-title">
-            <h2>{{ bannerTitle }}</h2>
-            <p data-phase>{{ bannerSub }}</p>
-            <!-- 推しの棋士のいまの段(4-7)。小さく、期の画面と結果だけ。 -->
-            <p v-if="oshiStep && screen !== 'ryuo'" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
-          </div>
-          <!-- 竜王への道(RyuoRoad.vue)。入口では組の階段を見せるので、期が始まってから出す。 -->
-          <RyuoRoad
-            v-if="screen !== 'ryuo' && view?.road"
-            class="shogi-tournament__route"
-            :road="view.road"
-            :asset-base-url="assetBaseUrl"
-            :animate="climbPending"
-            :last-win="view.lastGame?.win ?? false"
-            :muted="Boolean(celebration)"
-            :glow-crown="celebration === 'challenger' || celebration === 'crown'"
-            @played="climbPending = false"
-          />
-        </section>
-
+      <div class="shogi-tournament__body shogi-tournament__body--stage">
         <!--
           節目の判子(4-5)。組優勝・挑戦権・突破など、重さに合わせて大きさを変える。押すと閉じ、操作は止めない(画面全体は覆わない)。
           竜王になったときと、昇級・降級は、結果の画面の判子で見せる。
@@ -132,40 +109,56 @@
 
         <div ref="mainEl" class="shogi-tournament__main">
         <!--
-          竜王戦の入口(docs/ryuo-ux-redesign.mdの4-1)。1画面・1ボタン: この期の目標と組の階段、やこび姫の一言、
-          おすすめの設定(1行。「変える」で行を開く)。竜王戦の説明は「竜王戦ってなに？」で開く(必要な人だけ。U:6-1)。
+          竜王戦の入口(docs/ryuo-ui-renewal-design.mdの5-1)。山の全景の上に題字と期。開くと、カメラが頂上の竜王から麓の自分まで降りる。
+          下の枠に、この期の目標・やこび姫の一言・設定の要約・「出場する」。設定と説明は、押すと重ねて開く(必要な人だけ。U:6-1)。
         -->
-        <div
-          v-if="screen === 'ryuo'"
-          class="shogi-tournament__layout shogi-tournament__layout--entry"
-          data-screen="ryuo"
-        >
-          <div class="shogi-tournament__col">
-            <section v-if="inProgress && !reEntry" class="shogi-tournament__card" aria-labelledby="shogi-ryuo-progress">
-              <h2 id="shogi-ryuo-progress">進行中の大会</h2>
-              <YakobiSays :lines="[`${view?.title}（${view?.phaseText}）の途中だよ。続きから、いっしょに行こう！`]" size="md" :asset-base-url="assetBaseUrl" />
-              <p class="shogi-tournament__hint">下の「続きから参加する」で、竜王戦へ戻ります。</p>
-            </section>
+        <div v-if="screen === 'ryuo'" class="shogi-tournament__stage shogi-tournament__stage--entry" data-screen="ryuo">
+          <div class="shogi-tournament__mapwrap">
+            <RyuoMountain :road="entryMapRoad" :asset-base-url="assetBaseUrl" intro :headroom="120" />
+            <div class="shogi-tournament__logo" data-entry-logo>
+              <span class="shogi-tournament__seal" aria-hidden="true">竜</span>
+              <strong>竜王戦</strong>
+              <span class="shogi-tournament__logo-no">第{{ inProgress && !reEntry ? seasonNo : entry.no }}期</span>
+            </div>
+            <ol class="shogi-tournament__banzuke" aria-label="番付">
+              <li v-for="row in banzuke(career.champion ? 0 : career.group)" :key="row.key" :class="{ 'shogi-tournament__banzuke--you': row.you }">
+                {{ row.label }}<span v-if="row.you" class="shogi-tournament__banzuke-you">あなた</span>
+              </li>
+            </ol>
+          </div>
 
-            <section v-else class="shogi-tournament__card shogi-tournament__entry" aria-labelledby="shogi-ryuo-entry" data-entry-form>
-              <p class="shogi-tournament__eyebrow" id="shogi-ryuo-entry">この期の目標</p>
-              <p class="shogi-tournament__goal" data-entry-goal>{{ entryGoal }}</p>
-              <RyuoLadder :group="career.group" :champion="career.champion" />
-              <YakobiSays :lines="talkLines" size="md" :asset-base-url="assetBaseUrl" />
+          <section class="shogi-tournament__hud" aria-label="エントリー">
+            <template v-if="inProgress && !reEntry">
+              <p class="shogi-tournament__hud-role">進行中の大会</p>
+              <p class="shogi-tournament__hud-name">{{ view?.title }} <small>{{ view?.phaseText }}</small></p>
+              <div class="shogi-tournament__hud-row">
+                <button type="button" class="shogi-tournament__sub" @click="reEntry = true">破棄して、新しくエントリー</button>
+              </div>
+              <button type="button" class="shogi-tournament__start" data-tournament-continue @click="screen = 'season'">続きから参加する</button>
+            </template>
+            <template v-else>
+              <p class="shogi-tournament__goal-box" data-entry-form><small>この期の目標</small><span data-entry-goal>{{ entryGoal }}</span></p>
+              <button type="button" class="shogi-tournament__tip-line" data-entry-about @click="openGuide">
+                <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
+                <span class="shogi-tournament__tip-text">{{ talkLines[0] }}</span>
+                <span class="shogi-tournament__tip-more">竜王戦ってなに？</span>
+              </button>
               <div class="shogi-tournament__entry-settings">
                 <p>
                   <small>{{ settingsCustomized ? "設定" : "おすすめの設定" }}</small>
                   <span data-entry-summary>{{ settingsSummary }}</span>
                 </p>
-                <button
-                  type="button"
-                  class="shogi-tournament__sub"
-                  :aria-expanded="settingsOpen"
-                  data-entry-change
-                  @click="settingsOpen = !settingsOpen"
-                >{{ settingsOpen ? "閉じる" : "変える" }}</button>
+                <button type="button" class="shogi-tournament__sub" data-entry-change @click="settingsOpen = true">変える</button>
               </div>
-              <!-- 設定は対局準備と同じ「項目: 値 [変更]」の行。行のどこを押しても選択シートを開く(U:2-2 同じ操作)。 -->
+              <button type="button" class="shogi-tournament__start" data-tournament-enter @click="enter">出場する</button>
+            </template>
+          </section>
+
+          <!-- 設定(対局準備と同じ「項目: 値 [変更]」の行。行のどこを押しても選択シートを開く。U:2-2 同じ操作)。 -->
+          <div v-if="settingsOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="設定" data-entry-settings @click.self="settingsOpen = false">
+            <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
+              <h2>設定</h2>
+              <YakobiSays :lines="talkLines" size="sm" :asset-base-url="assetBaseUrl" />
               <ul v-if="settingsOpen" class="shogi-tournament__settings">
                 <li v-for="row in entryRows" :key="row.id">
                   <button
@@ -181,8 +174,8 @@
                   </button>
                 </li>
               </ul>
-              <button type="button" class="shogi-tournament__about" data-entry-about @click="openGuide">竜王戦ってなに？</button>
-            </section>
+              <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="settingsOpen = false">閉じる</button>
+            </div>
           </div>
 
           <!-- 竜王戦の説明(やこび姫が順に話す)。入口の上に重ねて開く。 -->
@@ -417,58 +410,79 @@
           </section>
         </div>
 
-        <!-- 竜王戦: 結果・統計・解説(やこび姫が話す) -->
-        <div v-else-if="screen === 'result' && view?.result" class="shogi-tournament__layout shogi-tournament__layout--result" data-screen="result" data-result-screen>
-          <section :class="['shogi-tournament__card', 'shogi-tournament__verdict', `shogi-tournament__verdict--${groupMove.kind}`]" aria-label="結果">
-            <div class="shogi-tournament__verdict-main">
+        <!--
+          期の結果(docs/ryuo-ui-renewal-design.mdの5-5)。山の全景で今期どこまで登ったか、左の番付で来期の組(昇級・竜王は判子)。
+          下の枠に、数字の札3枚・次の期の目標・やこび姫の一言・「次の期へ」。統計とレーダーチャートと解説は「くわしく」の奥。
+        -->
+        <div v-else-if="screen === 'result' && view?.result" class="shogi-tournament__stage shogi-tournament__stage--result" data-screen="result" data-result-screen>
+          <div class="shogi-tournament__mapwrap">
+            <RyuoMountain v-if="view.road" :road="view.road" :asset-base-url="assetBaseUrl" :glow-crown="groupMove.kind === 'crown'" :headroom="110" />
+            <div class="shogi-tournament__result-head">
               <p class="shogi-tournament__eyebrow">{{ view.title }}の結果</p>
               <p class="shogi-tournament__headline">{{ outcomeHeadline }}</p>
+              <p v-if="oshiStep" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
+            </div>
+            <ol class="shogi-tournament__banzuke" :aria-label="`番付。${groupMove.from}から${groupMove.to}（${groupMove.label}）`">
+              <li v-for="row in banzuke(groupMove.kind === 'crown' ? 0 : view.result.newGroup)" :key="row.key" :class="{ 'shogi-tournament__banzuke--you': row.you }">
+                {{ row.label }}<span v-if="row.you" class="shogi-tournament__banzuke-you">あなた</span>
+                <strong
+                  v-if="row.you && (groupMove.kind === 'up' || groupMove.kind === 'crown' || groupMove.kind === 'down')"
+                  :class="['shogi-tournament__move-label', `shogi-tournament__move-label--${groupMove.kind}`, { 'shogi-tournament__move-label--stamp': resultStamp }]"
+                  data-move-label
+                >{{ groupMove.kind === 'crown' ? groupMove.label : `${groupMove.to}へ${groupMove.label}` }}</strong>
+              </li>
+            </ol>
+          </div>
+
+          <section class="shogi-tournament__hud" aria-label="結果">
+            <dl class="shogi-tournament__result-cards" data-stats>
+              <div><dd>{{ view.result.wins }}勝{{ view.result.losses }}敗</dd><dt>戦績</dt></div>
+              <div><dd>{{ bestAxisLabel || "—" }}</dd><dt>いちばん光った</dt></div>
+              <div><dd>{{ stats.longestWinStreak }}連勝</dd><dt>最長</dt></div>
+            </dl>
+            <p class="shogi-tournament__next-goal" data-next-goal><small>次の期</small>{{ entryGoalLine({ mode: entry.mode, group: entry.group, scale: scale }) }}</p>
+            <button type="button" class="shogi-tournament__tip-line" data-result-more @click="resultDetailOpen = true">
+              <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
+              <span class="shogi-tournament__tip-text">{{ resultSays[0] }}</span>
+              <span class="shogi-tournament__tip-more">くわしく</span>
+            </button>
+            <div class="shogi-tournament__hud-row">
+              <button type="button" class="shogi-tournament__sub" data-result-table @click="screen = 'season'">表を見る</button>
+              <button type="button" class="shogi-tournament__sub" @click="emit('open-note')">ノートを見る</button>
+            </div>
+            <button type="button" class="shogi-tournament__start" data-next-season @click="toNextSeason">次の期へ</button>
+          </section>
+
+          <!-- くわしい結果(統計・レーダーチャート・やこび姫の解説)。 -->
+          <div v-if="resultDetailOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="くわしい結果" data-result-detail @click.self="resultDetailOpen = false">
+            <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
+              <h2>{{ outcomeHeadline }}</h2>
               <p class="shogi-tournament__text">{{ outcomeDetail }}</p>
+              <p v-if="bestAxis" class="shogi-tournament__best" data-best-axis>{{ bestAxis }}</p>
               <ul v-if="view.result.titles?.length" class="shogi-tournament__titles">
                 <li v-for="title in view.result.titles" :key="title.id"><strong>{{ title.label }}</strong><small>{{ title.detail }}</small></li>
               </ul>
-            </div>
-            <div class="shogi-tournament__move" :aria-label="`${groupMove.from}から${groupMove.to}（${groupMove.label}）`">
-              <span class="shogi-tournament__move-from">{{ groupMove.from }}</span>
-              <span class="shogi-tournament__move-arrow" aria-hidden="true">→</span>
-              <span class="shogi-tournament__move-to">{{ groupMove.to }}</span>
-              <strong
-                :class="['shogi-tournament__move-label', { 'shogi-tournament__move-label--stamp': resultStamp }]"
-                data-move-label
-              >{{ groupMove.label }}</strong>
-            </div>
-            <p v-if="bestAxis" class="shogi-tournament__best" data-best-axis>{{ bestAxis }}</p>
-            <p class="shogi-tournament__next-goal" data-next-goal><small>次の期</small>{{ entryGoalLine({ mode: entry.mode, group: entry.group, scale: scale }) }}</p>
-            <ol class="shogi-tournament__path">
-              <li v-for="step in view.result.path" :key="step.stage + step.label"><span>{{ step.label }}</span><strong>{{ step.text }}</strong></li>
-            </ol>
-          </section>
-
-          <section v-if="view.lastGame?.rivalLine" class="shogi-tournament__card shogi-tournament__rival-after" aria-label="天鷺羽音の一言" data-rival-after>
-            <YakobiSays person="hanane" :lines="[view.lastGame.rivalLine]" size="md" bust name-tag :notice="view.lastGame.rivalNotice" :asset-base-url="assetBaseUrl" />
-          </section>
-          <aside class="shogi-tournament__coach" aria-label="やこび姫の解説" data-commentary>
-            <YakobiSays size="xl" name-tag :asset-base-url="assetBaseUrl" :lines="[...resultSays, ...commentarySays]">
-              <div class="yakobi-says__bubble shogi-tournament__result-talk">
-                <p v-for="line in resultSays" :key="line">{{ line }}</p>
-              </div>
-              <p v-for="line in view.stats.commentary" :key="line.title" class="yakobi-says__bubble">
-                <strong>{{ line.title }}</strong>
-                <small>{{ line.text }}</small>
-              </p>
-            </YakobiSays>
-          </aside>
-
-          <div class="shogi-tournament__col">
-            <section class="shogi-tournament__card shogi-tournament__radar" aria-label="レーダーチャート">
-              <h2>この期のあなた</h2>
-              <RadarChart :axes="view.stats.radar" />
-              <p v-if="view.stats.pending" class="shogi-tournament__hint" data-analyzing>やこび姫が対局を解析しています（あと{{ view.stats.pending }}局）。終わると、点数が出ます。</p>
-              <p v-else class="shogi-tournament__hint">外側ほど得意。「—」は、データが足りない項目です。</p>
-            </section>
-
-            <section class="shogi-tournament__card" aria-label="統計" data-stats>
-              <h2>統計</h2>
+              <ol class="shogi-tournament__path">
+                <li v-for="step in view.result.path" :key="step.stage + step.label"><span>{{ step.label }}</span><strong>{{ step.text }}</strong></li>
+              </ol>
+              <YakobiSays v-if="view.lastGame?.rivalLine" person="hanane" :lines="[view.lastGame.rivalLine]" size="md" bust name-tag :notice="view.lastGame.rivalNotice" :asset-base-url="assetBaseUrl" data-rival-after />
+              <aside class="shogi-tournament__coach" aria-label="やこび姫の解説" data-commentary>
+                <YakobiSays size="xl" name-tag :asset-base-url="assetBaseUrl" :lines="[...resultSays, ...commentarySays]">
+                  <div class="yakobi-says__bubble shogi-tournament__result-talk">
+                    <p v-for="line in resultSays" :key="line">{{ line }}</p>
+                  </div>
+                  <p v-for="line in view.stats.commentary" :key="line.title" class="yakobi-says__bubble">
+                    <strong>{{ line.title }}</strong>
+                    <small>{{ line.text }}</small>
+                  </p>
+                </YakobiSays>
+              </aside>
+              <section class="shogi-tournament__radar" aria-label="レーダーチャート">
+                <h3>この期のあなた</h3>
+                <RadarChart :axes="view.stats.radar" />
+                <p v-if="view.stats.pending" class="shogi-tournament__hint" data-analyzing>やこび姫が対局を解析しています（あと{{ view.stats.pending }}局）。終わると、点数が出ます。</p>
+                <p v-else class="shogi-tournament__hint">外側ほど得意。「—」は、データが足りない項目です。</p>
+              </section>
               <dl class="shogi-tournament__tiles">
                 <div v-for="tile in statTiles" :key="tile.label">
                   <dt>{{ tile.label }}</dt>
@@ -476,31 +490,12 @@
                   <span v-if="tile.note" class="shogi-tournament__tile-note">{{ tile.note }}</span>
                 </div>
               </dl>
-            </section>
+              <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="resultDetailOpen = false">閉じる</button>
+            </div>
           </div>
-
         </div>
         </div>
 
-        <!-- 操作の帯。画面ごとに、いちばん大事なボタンを右に大きく置く。 -->
-        <footer v-if="screen !== 'season' || !view" class="shogi-tournament__actionbar">
-          <template v-if="screen === 'ryuo'">
-            <p class="shogi-tournament__actionbar-note">
-              <strong>{{ career.champion ? "竜王" : `${career.group}組` }}</strong>
-              <span>参加{{ career.seasons }}期・竜王{{ career.titles }}期</span>
-            </p>
-            <template v-if="inProgress && !reEntry">
-              <button type="button" class="shogi-tournament__sub" @click="reEntry = true">破棄して、新しくエントリー</button>
-              <button type="button" class="shogi-tournament__start" data-tournament-continue @click="screen = 'season'">続きから参加する</button>
-            </template>
-            <button v-else type="button" class="shogi-tournament__start" data-tournament-enter @click="enter">大会に参加する</button>
-          </template>
-          <template v-else-if="screen === 'result' && view?.result">
-            <button type="button" class="shogi-tournament__sub" data-result-table @click="screen = 'season'">表を見る</button>
-            <button type="button" class="shogi-tournament__sub" @click="emit('open-note')">ノートを見る</button>
-            <button type="button" class="shogi-tournament__start" data-next-season @click="toNextSeason">次の期へ</button>
-          </template>
-        </footer>
       </div>
     </template>
   </div>
@@ -511,13 +506,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from 
 import TournamentTree from "./TournamentTree.vue";
 import RadarChart from "./RadarChart.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
-import RyuoLadder from "./RyuoLadder.vue";
-import RyuoRoad, { type RoadView } from "./RyuoRoad.vue";
-import RyuoMountain from "./RyuoMountain.vue";
+import RyuoMountain, { type RoadView } from "./RyuoMountain.vue";
 import RyuoVersus from "./RyuoVersus.vue";
 import YakobiSays from "./YakobiSays.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
-import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
+import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { bestAxisLine } from "./core/ryuo-milestone.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
@@ -616,6 +609,8 @@ const props = defineProps({
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
   startAt: { type: String as PropType<"select" | "season">, default: "select" },
+  /** いまの竜王(プレイヤーが竜王ならnull)。入口の山で、七番勝負に顔を出す。 */
+  ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
   /** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを1回だけ見せる。 */
   fromGame: { type: Boolean, default: false },
   /** 推しの棋士(core/ryuo-oshi.mjs)。やこび姫が、期の中での様子を知らせる。 */
@@ -684,6 +679,8 @@ const backText = computed(() => (screen.value === "result" ? "大会選択へ" :
  */
 function goBack() {
   if (sheet.value) sheet.value = "";
+  else if (resultDetailOpen.value) resultDetailOpen.value = false;
+  else if (settingsOpen.value) settingsOpen.value = false;
   else if (tableOpen.value) tableOpen.value = false;
   else if (guideOpen.value) guideOpen.value = false;
   else if (screen.value === "select") emit("close");
@@ -698,18 +695,20 @@ function backToSelect() {
 }
 defineExpose({ goBack });
 
-// ---- 大会の帯: 期・段階と、勝ち上がりの道のり
-const bannerTitle = computed(() => {
-  if (screen.value === "ryuo") return `第${entry.value.no}期 竜王戦`;
-  return props.view?.title.replace(/竜王戦$/, " 竜王戦") ?? "竜王戦";
-});
-const bannerSub = computed(() => {
-  if (screen.value === "ryuo") return entry.value.mode === "defense" ? "竜王として、防衛戦に臨む" : `${entry.value.group}組からエントリー`;
-  if (screen.value === "result") return "結果";
-  const view = props.view;
-  if (!view) return "";
-  return view.mode === "defense" && view.phase !== "done" ? "防衛戦" : view.phaseText;
-});
+// ---- 入口の山(期が始まる前の竜王への道)と番付
+/** 入口の山。進行中の期があれば、その期の道。なければ、次の期の道(規模を変えると段の数も変わる)。 */
+const entryMapRoad = computed<RoadView>(() => (
+  inProgress.value && !reEntry.value && props.view?.road
+    ? props.view.road
+    : entryRoad({ mode: entry.value.mode, group: entry.value.group, scale: scale.value, holder: props.ryuoHolder })
+));
+/** 進行中の期の番号(第◯期竜王戦の◯)。 */
+const seasonNo = computed(() => Number(props.view?.title.match(/第(\d+)期/)?.[1] ?? entry.value.no));
+/** 番付(竜王・1組〜6組)。youは自分の組(0なら竜王)。 */
+function banzuke(you: number) {
+  return [0, 1, 2, 3, 4, 5, 6].map((group) => ({ key: group, label: group ? `${group}組` : "竜王", you: group === you }));
+}
+
 // ---- エントリー設定
 const DIFFICULTY_STEPS = Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => index + 1);
 const COACH_OPTIONS = [
@@ -963,6 +962,12 @@ onMounted(() => {
   }
 });
 onBeforeUnmount(() => milestoneTimers.splice(0).forEach(clearTimeout));
+/** 期の結果の、くわしい情報(統計・レーダーチャート・解説)。 */
+const resultDetailOpen = ref(false);
+/** 期のいちばん光った項目(レーダーチャートでいちばん高い項目)。 */
+const bestAxisLabel = computed(() => (
+  [...(props.view?.stats?.radar ?? [])].filter(({ value }) => typeof value === "number").sort((a, b) => (b.value ?? 0) - (a.value ?? 0))[0]?.label ?? ""
+));
 /** 期のできたこと(1行)。 */
 const bestAxis = computed(() => bestAxisLine(props.view?.stats?.radar ?? []));
 
@@ -1214,8 +1219,6 @@ const statTiles = computed(() => {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.shogi-game .shogi-tournament__layout { display: grid; gap: 1rem; align-items: start; grid-template-columns: minmax(0, 1fr); }
-.shogi-game .shogi-tournament__col { display: grid; align-content: start; gap: 1rem; min-width: 0; }
 @media (min-width: 900px) {
   .shogi-game .shogi-tournament__body {
     font-size: clamp(15px, min(1.15vw, 2vh), 24px);
@@ -1223,45 +1226,6 @@ const statTiles = computed(() => {
   }
   /* 広い画面では、表はいつも右の列にあるので、開く・閉じるボタンはいらない。 */
   .shogi-game .shogi-tournament__sub.shogi-tournament__table-close { display: none; }
-  .shogi-game .shogi-tournament__layout--result { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .shogi-game .shogi-tournament__verdict { grid-column: 1 / -1; }
-}
-
-/* ---- 操作の帯。いちばん大事なボタンを右端に大きく置き、左に今の状況を短く出す。 */
-.shogi-game .shogi-tournament__actionbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--tr-gap);
-  padding: 0.6rem 0.8rem;
-  border: 2px solid rgba(241, 165, 76, 0.55);
-  border-radius: 0.9rem;
-  background: var(--tr-deep);
-  box-shadow: 0 4px 0 var(--tr-shadow);
-}
-.shogi-game .shogi-tournament__actionbar:empty { display: none; }
-.shogi-game .shogi-tournament__actionbar-note {
-  display: grid;
-  gap: 0.05rem;
-  min-width: 0;
-  margin: 0 auto 0 0;
-  line-height: 1.3;
-}
-.shogi-game .shogi-tournament__actionbar-note strong { color: var(--tr-gold); font-size: 1.1em; }
-.shogi-game .shogi-tournament__actionbar-note span { color: rgba(255, 252, 244, 0.75); font-size: 0.85em; }
-.shogi-game .shogi-tournament__actionbar .shogi-tournament__start,
-.shogi-game .shogi-tournament__actionbar .shogi-tournament__sub {
-  width: auto;
-  flex: 0 1 auto;
-  min-width: 9em;
-}
-.shogi-game .shogi-tournament__actionbar .shogi-tournament__start { min-width: 14em; font-size: 1.15em; }
-@media (max-width: 600px) {
-  .shogi-game .shogi-tournament__actionbar { padding: 0.5rem; border-radius: 0.7rem; }
-  .shogi-game .shogi-tournament__actionbar-note { flex: 1 1 100%; grid-auto-flow: column; justify-content: start; gap: 0.6rem; align-items: baseline; }
-  .shogi-game .shogi-tournament__actionbar .shogi-tournament__start,
-  .shogi-game .shogi-tournament__actionbar .shogi-tournament__sub { flex: 1 1 0; min-width: 0; }
 }
 
 /* ---- 相手のくわしい情報(折りたたみ) */
@@ -1271,26 +1235,6 @@ const statTiles = computed(() => {
   font-size: 0.9em;
   font-weight: 700;
   cursor: pointer;
-}
-
-/* ---- 大会の帯 */
-.shogi-game .shogi-tournament__banner {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: "seal title" "route route";
-  align-items: center;
-  gap: 0.6rem 1rem;
-  padding: 0.6rem 1rem 0.7rem;
-  border: 2px solid var(--tr-gold);
-  border-radius: 0.9rem;
-  background: var(--tr-panel);
-  box-shadow: 0 4px 0 var(--tr-shadow);
-}
-@media (min-width: 900px) {
-  .shogi-game .shogi-tournament__banner {
-    grid-template-columns: auto minmax(0, 0.7fr) minmax(0, 2.6fr);
-    grid-template-areas: "seal title route";
-  }
 }
 .shogi-game .shogi-tournament__seal {
   grid-area: seal;
@@ -1308,20 +1252,6 @@ const statTiles = computed(() => {
   font-weight: 800;
   line-height: 1;
 }
-.shogi-game .shogi-tournament__banner-title { grid-area: title; min-width: 0; }
-.shogi-game .shogi-tournament__banner-title h2 {
-  margin: 0;
-  color: #fffcf4;
-  font-family: var(--tr-mincho);
-  font-size: 1.6em;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  line-height: 1.2;
-}
-.shogi-game .shogi-tournament__banner-title p { margin: 0.25rem 0 0; color: var(--tr-gold); font-weight: 700; }
-/* 竜王への道(RyuoRoad.vue)。帯の下の段(広い画面では右)に置き、収まらないときは道だけを横に送る。 */
-/* contain: 道の幅で帯の列が広がらないようにする(道は自分の中で横に送る)。 */
-.shogi-game .shogi-tournament__route { grid-area: route; min-width: 0; contain: inline-size; }
 
 /* ---- カード */
 .shogi-game .shogi-tournament__card {
@@ -1582,22 +1512,9 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__series-score { color: var(--tr-gold); font-size: 1.15em; white-space: nowrap; }
 .shogi-game .shogi-tournament__tabs { display: flex; flex-wrap: wrap; gap: var(--tr-gap); }
 .shogi-game .shogi-tournament__tabs button { min-width: 10rem; padding: 0 1rem; }
-
-/* ---- 結果 */
-.shogi-game .shogi-tournament__verdict {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem 1.5rem;
-  border-color: var(--tr-gold);
-}
 @media (min-width: 760px) {
-  .shogi-game .shogi-tournament__verdict { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
   .shogi-game .shogi-tournament__path { grid-column: 1 / -1; }
 }
-/* 結果の種類は、枠の色で分ける(竜王・昇級は橙、降級はラベンダー)。 */
-.shogi-game .shogi-tournament__verdict--crown,
-.shogi-game .shogi-tournament__verdict--up { border-color: var(--tr-gold); }
-.shogi-game .shogi-tournament__verdict--down { border-color: var(--tr-lavender); }
-.shogi-game .shogi-tournament__verdict-main { display: grid; gap: 0.4rem; min-width: 0; }
 .shogi-game .shogi-tournament__eyebrow { margin: 0; color: var(--tr-gold); font-weight: 800; letter-spacing: 0.12em; }
 .shogi-game .shogi-tournament__headline {
   margin: 0;
@@ -1606,33 +1523,6 @@ const statTiles = computed(() => {
   font-weight: 800;
   line-height: 1.2;
 }
-.shogi-game .shogi-tournament__move {
-  display: grid;
-  grid-template-columns: auto auto auto;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem 0.8rem;
-  padding: 0.8rem 1.2rem;
-  border-radius: 0.2rem;
-  background: var(--tr-deep);
-  text-align: center;
-}
-.shogi-game .shogi-tournament__move-from,
-.shogi-game .shogi-tournament__move-to { font-family: var(--tr-mincho); font-size: 1.8em; font-weight: 800; }
-.shogi-game .shogi-tournament__move-from { color: rgba(255, 252, 244, 0.6); }
-.shogi-game .shogi-tournament__move-arrow { color: rgba(255, 252, 244, 0.6); font-size: 1.4em; }
-.shogi-game .shogi-tournament__move-label {
-  grid-column: 1 / -1;
-  justify-self: center;
-  padding: 0.1rem 1rem;
-  border-radius: 0.15rem;
-  color: #172632;
-  background: #fffcf4;
-  letter-spacing: 0.2em;
-}
-.shogi-game .shogi-tournament__verdict--crown .shogi-tournament__move-label,
-.shogi-game .shogi-tournament__verdict--up .shogi-tournament__move-label { background: var(--tr-gold); }
-.shogi-game .shogi-tournament__verdict--down .shogi-tournament__move-label { background: var(--tr-lavender); }
 .shogi-game .shogi-tournament__path {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
@@ -1666,7 +1556,6 @@ const statTiles = computed(() => {
 
 /* 狭い画面: 項目名を選択肢の上に置き、10段階の難易度は5つずつ2段にする */
 @media (max-width: 600px) {
-  .shogi-game .shogi-tournament__banner { padding: 0.8rem 0.9rem 0.9rem; }
   .shogi-game .shogi-tournament__seal { width: 2.8rem; height: 2.8rem; font-size: 1.5rem; }
   .shogi-game .shogi-tournament__row { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-tournament__row-meta { grid-column: 1; }
@@ -1689,24 +1578,11 @@ const statTiles = computed(() => {
   font-family: var(--tr-mincho, "Yu Mincho", "Hiragino Mincho ProN", serif);
   letter-spacing: 0.12em;
 }
-/* 操作の帯(スマホ): 主役のボタンを1段目に広げ、脇役のボタンを2段目に並べる。 */
-@media (max-width: 600px) {
-  .shogi-game .shogi-tournament__actionbar .shogi-tournament__start { flex: 1 1 100%; order: -1; }
-}
 .shogi-game .shogi-tournament__home-back {
   position: absolute;
   top: 0.8rem;
   left: 0.8rem;
   z-index: 1;
-}
-/* 大会の帯は、狭い画面では詰める。竜王への道は、横に送って見る。 */
-@media (max-width: 899px) {
-  .shogi-game .shogi-tournament__banner {
-    gap: 0.35rem 0.7rem;
-    padding: 0.45rem 0.7rem 0.5rem;
-  }
-  .shogi-game .shogi-tournament__banner .shogi-tournament__seal { width: 2.2rem; height: 2.2rem; font-size: 1.2rem; }
-  .shogi-game .shogi-tournament__banner h2 { font-size: 1.05rem; }
 }
 /* 背の低いスマホの縦向き: 対局のカードを詰める。 */
 @media (max-width: 899px) and (orientation: portrait) and (max-height: 700px) {
@@ -1776,29 +1652,12 @@ const statTiles = computed(() => {
     padding-top: 0.45rem;
     padding-bottom: max(0.45rem, env(safe-area-inset-bottom));
   }
-  .shogi-game .shogi-tournament__banner { grid-area: banner; grid-template-areas: "seal title"; }
-  .shogi-game .shogi-tournament__banner .shogi-tournament__route { display: none; }
   .shogi-game .shogi-tournament__main { grid-area: main; }
-  .shogi-game .shogi-tournament__actionbar {
-    grid-area: action;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-end;
-    align-self: end;
-  }
-  .shogi-game .shogi-tournament__actionbar-note { flex: none; grid-auto-flow: row; margin: 0; }
-  .shogi-game .shogi-tournament__actionbar .shogi-tournament__start,
-  .shogi-game .shogi-tournament__actionbar .shogi-tournament__sub { flex: none; width: 100%; min-width: 0; }
-  .shogi-game .shogi-tournament__layout--entry { gap: 0.4rem; }
   .shogi-game .shogi-tournament__card { padding: 0.55rem 0.7rem; }
   .shogi-game .shogi-tournament__setting { min-height: 2.4rem; padding: 0.25rem 0.6rem; }
   .shogi-game .shogi-tournament__settings { gap: 0.3rem; }
   .shogi-game .shogi-tournament__coach img { max-height: 8rem; width: auto; }
 }
-
-/* ===== 竜王戦の入口・次の一局(docs/ryuo-ux-redesign.mdの段階1) ===== */
-/* 入口は、どの画面の大きさでも1列。目標・階段・ひとこと・設定の要約・参加ボタンだけ(U:1-1 1画面1目的)。 */
-.shogi-game .shogi-tournament__layout--entry { grid-template-columns: minmax(0, 40em); justify-content: center; }
 .shogi-game .shogi-tournament__goal {
   margin: 0;
   color: #fffcf4;
@@ -1962,8 +1821,6 @@ const statTiles = computed(() => {
   70% { opacity: 1; transform: scale(0.92) rotate(-5deg); }
   100% { opacity: 1; transform: scale(1) rotate(-6deg); }
 }
-/* 結果の画面の、昇級・竜王の判子。 */
-.shogi-game .shogi-tournament__move-label--stamp { animation: tr-stamp-flat 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 300ms both; }
 @keyframes tr-stamp-flat {
   0% { opacity: 0; transform: scale(2.4); }
   70% { opacity: 1; transform: scale(0.92); }
@@ -1981,20 +1838,10 @@ const statTiles = computed(() => {
   font-size: 0.9em;
   font-weight: 700;
 }
-/* 推しの棋士のいまの段。 */
-.shogi-game .shogi-tournament__banner-title .shogi-tournament__oshi {
-  overflow: hidden;
-  margin-top: 0.15rem;
-  color: var(--tr-lavender);
-  font-size: 0.8em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .shogi-game .shogi-tournament__oshi span { margin-right: 0.25rem; color: var(--tr-lavender); }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .shogi-tournament__milestone,
-  .shogi-game .shogi-tournament__milestone-seal,
-  .shogi-game .shogi-tournament__move-label--stamp { animation: none; }
+.shogi-game .shogi-tournament__milestone-seal { animation: none; }
 }
 
 /* ===== 期の画面: ドット絵の山の地図と、次の一局の枠(docs/ryuo-ui-renewal-design.mdの5-2) ===== */
@@ -2190,5 +2037,122 @@ const statTiles = computed(() => {
   }
   .shogi-game .shogi-tournament__hud--boss { border-left-color: var(--tr-red); }
   .shogi-game .shogi-tournament__hud-face { width: 5rem; height: 5rem; }
+}
+
+/* ===== 入口と結果: 山の全景と番付(docs/ryuo-ui-renewal-design.mdの5-1・5-5) ===== */
+.shogi-game .shogi-tournament__stage--entry,
+.shogi-game .shogi-tournament__stage--result { grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "map" "hud"; }
+/* 題字。山の上に重ねる。 */
+.shogi-game .shogi-tournament__logo {
+  position: absolute;
+  top: 0.8rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem 0.7rem;
+  pointer-events: none;
+}
+.shogi-game .shogi-tournament__logo .shogi-tournament__seal { width: 3rem; height: 3rem; font-size: 1.6rem; }
+.shogi-game .shogi-tournament__logo strong {
+  color: #fffcf4;
+  font-family: var(--tr-mincho);
+  font-size: clamp(2.6rem, 2rem + 3vw, 3.6rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1.1;
+  text-shadow: 0 4px 0 var(--tr-red), 0 8px 0 var(--tr-shadow);
+}
+.shogi-game .shogi-tournament__logo-no { flex-basis: 100%; text-align: center; color: var(--tr-gold); font-size: 1.05em; font-weight: 900; text-shadow: 0 2px 0 var(--tr-shadow); }
+/* 番付(竜王・1組〜6組)。山の左に、木の札のように縦に並べる。 */
+.shogi-game .shogi-tournament__banzuke {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.6rem;
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.35rem;
+  border: 2px solid #fffcf4;
+  background: #5a3a1e;
+  box-shadow: 3px 3px 0 var(--tr-shadow);
+  list-style: none;
+}
+.shogi-game .shogi-tournament__banzuke li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 3.4rem;
+  padding: 0.12rem 0.45rem;
+  color: #1a2433;
+  background: #efe3c6;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15);
+  font-size: 0.82em;
+  font-weight: 900;
+}
+.shogi-game .shogi-tournament__banzuke li.shogi-tournament__banzuke--you { background: var(--tr-gold); }
+.shogi-game .shogi-tournament__banzuke-you { font-size: 0.78em; }
+.shogi-game .shogi-tournament__banzuke .shogi-tournament__move-label {
+  position: absolute;
+  left: calc(100% + 0.5rem);
+  top: 50%;
+  padding: 0.15rem 0.7rem;
+  border: 3px solid #fffcf4;
+  color: #fffcf4;
+  background: var(--tr-red);
+  box-shadow: 3px 3px 0 var(--tr-shadow);
+  font-size: 1.15em;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  transform: translateY(-50%) rotate(-8deg);
+}
+.shogi-game .shogi-tournament__banzuke .shogi-tournament__move-label--crown { color: #172632; background: var(--tr-gold); }
+.shogi-game .shogi-tournament__banzuke .shogi-tournament__move-label--down { color: #172632; background: var(--tr-lavender); }
+.shogi-game .shogi-tournament__banzuke .shogi-tournament__move-label--stamp { animation: tr-banzuke-stamp 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 300ms both; }
+@keyframes tr-banzuke-stamp {
+  0% { opacity: 0; transform: translateY(-50%) rotate(-8deg) scale(2.2); }
+  70% { opacity: 1; transform: translateY(-50%) rotate(-8deg) scale(0.92); }
+  100% { opacity: 1; transform: translateY(-50%) rotate(-8deg) scale(1); }
+}
+/* 入口の枠。 */
+.shogi-game .shogi-tournament__goal-box {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  border: 2px solid var(--tr-gold);
+  border-radius: 0.6rem;
+  color: #fffcf4;
+  font-weight: 900;
+  line-height: 1.45;
+}
+.shogi-game .shogi-tournament__goal-box small { color: var(--tr-gold); font-size: 0.75em; }
+.shogi-game .shogi-tournament__hud .shogi-tournament__entry-settings { padding: 0.35rem 0.35rem 0.35rem 0.7rem; background: rgba(255, 252, 244, 0.06); font-size: 0.88em; }
+.shogi-game .shogi-tournament__hud-row { display: flex; gap: var(--tr-gap); }
+.shogi-game .shogi-tournament__hud-row .shogi-tournament__sub { flex: 1 1 0; width: auto; height: var(--tr-control); font-size: 0.9em; }
+/* 結果の見出し(山の上)と、数字の札。 */
+.shogi-game .shogi-tournament__result-head { position: absolute; top: 0.7rem; left: 0; right: 0; display: grid; justify-items: center; gap: 0.15rem; text-align: center; pointer-events: none; }
+.shogi-game .shogi-tournament__result-head .shogi-tournament__headline { color: #fffcf4; font-size: clamp(1.8rem, 1.3rem + 2.5vw, 2.6rem); text-shadow: 0 3px 0 var(--tr-red), 0 6px 0 var(--tr-shadow); }
+.shogi-game .shogi-tournament__result-head .shogi-tournament__oshi { margin: 0; color: var(--tr-lavender); font-size: 0.8em; font-weight: 800; }
+.shogi-game .shogi-tournament__result-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--tr-gap); margin: 0; }
+.shogi-game .shogi-tournament__result-cards > div { display: grid; justify-items: center; padding: 0.4rem 0.3rem; border: 2px solid #4b6585; border-radius: 0.6rem; background: rgba(255, 252, 244, 0.05); }
+.shogi-game .shogi-tournament__result-cards dd { margin: 0; color: var(--tr-gold); font-size: 1.15em; font-weight: 900; }
+.shogi-game .shogi-tournament__result-cards dt { color: rgba(255, 252, 244, 0.75); font-size: 0.72em; font-weight: 700; }
+.shogi-game .shogi-tournament__detail .shogi-tournament__radar { display: grid; justify-items: center; gap: 0.4rem; }
+.shogi-game .shogi-tournament__detail .shogi-tournament__radar h3 { justify-self: start; margin: 0; color: var(--tr-gold); font-size: 0.95em; }
+/* 狭い画面では、番付を小さくする。 */
+@media (max-width: 600px) {
+  .shogi-game .shogi-tournament__banzuke { gap: 0.15rem; padding: 0.25rem; font-size: 0.85em; }
+  .shogi-game .shogi-tournament__banzuke li { min-width: 2.9rem; padding: 0.05rem 0.35rem; }
+}
+@media (min-width: 900px), (orientation: landscape) and (max-height: 600px) {
+  .shogi-game .shogi-tournament__stage--entry,
+  .shogi-game .shogi-tournament__stage--result { grid-template-rows: minmax(0, 1fr); grid-template-areas: "map hud"; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tournament__banzuke .shogi-tournament__move-label--stamp { animation: none; }
 }
 </style>

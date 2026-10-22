@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { opponentArrivalLine, seasonRoad } from './ryuo-road.mjs';
-import { createSeason, describeSeason, recordUserGame } from './ryuo.mjs';
+import { opponentArrivalLine, previewRoad, seasonRoad } from './ryuo-road.mjs';
+import { createSeason, describeSeason, entryRoad, recordUserGame } from './ryuo.mjs';
 
 const settings = (overrides = {}) => ({ difficulty: 9, scale: 3, revival: true, ...overrides });
 const fresh = (overrides = {}) => createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings(), userLevel: 20, seed: 11, ...overrides });
@@ -82,5 +82,16 @@ describe('竜王への道', () => {
     }
     expect(line).toMatch(/^.+さんは、前の回戦を.+勝ち上がってきたよ。$/);
     expect(describeSeason(season).pending.arrival).toBe(line);
+  });
+
+  it('期が始まる前の道は、実際の期と同じ段の並びで、いちばん下がいまの段', () => {
+    const preview = entryRoad({ mode: 'challenge', group: 6, scale: 3, holder: { id: 'h', name: '天鷺善彦', attack: 0 } });
+    const season = seasonRoad(fresh(), { promote: 2 });
+    expect(keys(preview)).toEqual(keys(season));
+    expect(preview.steps.map(({ mark }) => mark)).toEqual(season.steps.map(({ mark }) => mark));
+    expect(preview.currentIndex).toBe(0);
+    expect(preview.steps.slice(1).every(({ state }) => state === 'todo')).toBe(true);
+    expect(preview.steps.find(({ key }) => key === 'finals').face).toMatchObject({ name: '天鷺善彦', char: '天', tone: 'balance' });
+    expect(keys(previewRoad({ mode: 'defense', group: 1, rounds: 3 }))).toEqual(['finals', 'ryuo']);
   });
 });

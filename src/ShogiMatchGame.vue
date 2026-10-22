@@ -421,6 +421,7 @@
       :rating-text="`R${ratingState.rating}`"
       :start-at="tournamentStartAt"
       :from-game="tournamentFromGame"
+      :ryuo-holder="ryuoHolder"
       :oshi="ryuoOshi"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
@@ -1764,7 +1765,7 @@ import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { estimateSkill, measureStatistics } from "./core/skill-estimate.mjs";
 import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
-import { applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
+import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { comparableScore } from "./core/move-selection.mjs";
 import {
@@ -2151,6 +2152,12 @@ let ryuoCpuMoves: { ply: number; kind: string; traits: string[] }[] = [];
 const ryuoView = computed(() => (ryuoSeason.value ? describeSeason(ryuoSeason.value) : null));
 const ryuoOpponent = computed(() => (ryuoGame.value ? ryuoSeason.value?.players?.[ryuoGame.value.opponentId] ?? null : null));
 const tournamentStartAt = ref<"select" | "season">("select");
+/** いまの竜王(名簿の竜王。プレイヤーが竜王ならnull)。竜王戦の入口の山で、七番勝負に顔を出す。 */
+const ryuoHolder = computed(() => {
+  const roster = ryuoRoster.value;
+  const player = roster && roster.holder !== USER_HOLDER ? roster.players?.[roster.holder] : null;
+  return player ? { id: roster.holder, name: player.name, attack: player.character?.attack ?? 0, story: player.story ?? null } : null;
+});
 /** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを見せる。 */
 const tournamentFromGame = ref(false);
 /** 大会の難易度のおすすめ。6組の相手の平均が、レーティングに近いLvになる難易度。 */
