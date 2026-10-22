@@ -9,6 +9,12 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("shows a measuring card with one forward-only bar while the measurement is analyzed", () => {
+    // 結果は少し遅れて出るので、測定中だと分かる札を盤の上に出す。閉じても状態表示の細い棒は残る。
+    expect(source).toMatch(/v-if="measureAnalyzing && !measureWaitHidden"[\s\S]*?data-measure-wait[\s\S]*?role="progressbar"[\s\S]*?data-measure-wait-hide @click="measureWaitHidden = true">盤を見ながら待つ</);
+    expect(source).toMatch(/MEASURE_STAGE_SPANS[^=]*= \{ scan: \[0, 60\], review: \[60, 85\], focus: \[85, 100\] \}/);
+    expect(source).toMatch(/if \(measuring\) \{\s*measureWaitHidden\.value = false;\s*measureAnalyzing\.value = true;/);
+  });
   it("offers another measuring game with the carried moves when too few moves were measured", () => {
     // 力の差で早く形勢が決まると測れる手が足りない。相手を近づけてもう1局、手は持ち越す(docs/skill-measure-design.md)。
     expect(source).toMatch(/v-if="skillDiagnosis\.insufficient && measureNext"[\s\S]*?data-measure-continue @click="continueMeasure">もう1局指す（Lv\.\{\{ measureNext\.level \}\}）</);

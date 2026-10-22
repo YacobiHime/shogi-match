@@ -1977,6 +1977,16 @@
 .shogi-game__result--measure { --result-accent: #f1a54c; }
 .shogi-game__tournament-name { margin: 0.2em 0 0.6em; opacity: 0.8; }
 .shogi-game__tournament-title { margin: 0 0 0.8em; font-weight: 700; }
+/* 棋力の測定中の札: 太い棒(CPUの「考えています」と同じ色と流れ方)、段階と割合、やこび姫の話。 */
+.shogi-game .shogi-game__measure-wait h2 { font-size: clamp(1.6em, 6vw, 2.2em); white-space: nowrap; }
+.shogi-game__measure-wait p { margin: 0.4em 0 0.8em; }
+.shogi-game__measure-bar { display: grid; gap: 0.35em; margin: 0.6em 0 1em; }
+.shogi-game__measure-bar .shogi-game__think-track { height: 0.9em; }
+.shogi-game__measure-steps { display: flex; justify-content: space-between; gap: 0.6em; font-size: 0.85em; font-variant-numeric: tabular-nums; }
+.shogi-game__measure-steps span { opacity: 0.85; }
+.shogi-game__measure-steps strong { color: var(--result-accent, var(--amber)); }
+.shogi-game .shogi-game__measure-tip { display: grid; grid-template-columns: 2.6em minmax(0, 1fr); align-items: center; gap: 0.6em; min-height: 3.6em; text-align: left; font-size: 0.9em; line-height: 1.5; }
+.shogi-game__measure-tip img { width: 100%; height: auto; image-rendering: pixelated; }
 .shogi-game__measure-rating { margin: 0.4em 0 0; }
 .shogi-game__measure-rating strong { font-size: 2.6em; }
 .shogi-game__measure-range,
@@ -3277,6 +3287,8 @@
   .shogi-game__result-panel > .shogi-game__rematch--primary,
   .shogi-game__result-panel > .shogi-game__result-retry { margin-top: 0; }
   .shogi-game__result-record { margin: 0.5em 0 0; }
+  /* 測定中の札は中身が少ないので、2列にせず1列で細くする。 */
+  .shogi-game__result-panel.shogi-game__measure-wait { display: block; width: min(30em, 100%); }
 
   .shogi-game__pregame { padding: 0.35em; }
   .shogi-game__pregame-panel { width: min(58em, 100%); }

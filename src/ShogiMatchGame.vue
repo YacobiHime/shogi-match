@@ -495,8 +495,8 @@
           <div class="shogi-game__think-track">
             <div
               class="shogi-game__think-fill"
-              :class="{ 'shogi-game__think-fill--busy': !analysisRunning }"
-              :style="analysisRunning ? { width: `${measureProgressPercent}%` } : undefined"
+              :class="{ 'shogi-game__think-fill--busy': !analysisStage }"
+              :style="analysisStage ? { width: `${measureProgressPercent}%` } : undefined"
             />
           </div>
           <small class="shogi-game__think-count">
@@ -1625,6 +1625,51 @@
       </div>
     </div>
 
+    <!--
+      棋力の測定中(終局から結果が出るまで)。結果は少し遅れて出るので、測定中だと分かる大きな札を盤の上に出す。
+      待ち時間には、何を測っているかをやこび姫が話す(UI_Nintendo.mdの3-6)。「盤を見ながら待つ」で札を閉じても、上の帯の細い棒は残る。
+    -->
+    <div
+      v-if="measureAnalyzing && !measureWaitHidden"
+      class="shogi-game__result shogi-game__result--measure"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="measure-wait-title"
+      data-measure-wait
+    >
+      <div class="shogi-game__result-panel shogi-game__measure-wait">
+        <h2 id="measure-wait-title">棋力を測定中</h2>
+        <p>あなたの指した手を、1手ずつ調べています。結果はこのあと、この画面に出ます。</p>
+        <div
+          class="shogi-game__measure-bar"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="analysisStage ? measureProgressPercent : undefined"
+          aria-label="棋力の測定の進み具合"
+        >
+          <div class="shogi-game__think-track">
+            <div
+              class="shogi-game__think-fill"
+              :class="{ 'shogi-game__think-fill--busy': !analysisStage }"
+              :style="analysisStage ? { width: `${measureProgressPercent}%` } : undefined"
+            />
+          </div>
+          <div class="shogi-game__measure-steps">
+            <span>{{ measureStepText }}</span>
+            <strong v-if="analysisStage">{{ measureProgressPercent }}%</strong>
+          </div>
+        </div>
+        <p class="shogi-game__measure-tip" aria-live="polite">
+          <img :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=4`" alt="" draggable="false">
+          <span>{{ MEASURE_WAIT_TIPS[measureTipIndex] }}</span>
+        </p>
+        <div class="shogi-game__result-actions">
+          <button type="button" class="shogi-game__analysis-button" data-measure-wait-hide @click="measureWaitHidden = true">盤を見ながら待つ</button>
+        </div>
+      </div>
+    </div>
+
     <div
       v-if="measureReportOpen && skillDiagnosis"
       class="shogi-game__result shogi-game__result--measure"
@@ -2185,9 +2230,45 @@ const measureMode = ref(false);
 const measureSession = ref(false);
 /** 棋力測定の解析中。完了ボタンを隠し、「測定中」を表示する。 */
 const measureAnalyzing = ref(false);
-const measureProgressPercent = computed(() => (
-  analysisTotal.value ? Math.round((analysisProgress.value / analysisTotal.value) * 100) : 0
-));
+/**
+ * 棋力の測定の進み具合(0〜100)。解析の3段階(全体を確認→怪しい手を読み直し→大事な局面を深読み)を、
+ * 時間のかかり方に合わせた幅で1本の棒にまとめる。段階が変わっても棒が戻らない。
+ */
+const MEASURE_STAGE_SPANS: { [stage: string]: [number, number] } = { scan: [0, 60], review: [60, 85], focus: [85, 100] };
+const measureProgressPercent = computed(() => {
+  const [from, to] = MEASURE_STAGE_SPANS[analysisStage.value] ?? [0, 0];
+  const ratio = analysisTotal.value ? Math.min(1, analysisProgress.value / analysisTotal.value) : 0;
+  return Math.round(from + (to - from) * ratio);
+});
+/** 測定中の札の、いまの段階(例: 全体を確認 1/3)。 */
+const measureStepText = computed(() => {
+  const keys = Object.keys(MEASURE_STAGE_SPANS);
+  const index = keys.indexOf(analysisStage.value);
+  if (index < 0) return "準備中…";
+  return `${ANALYSIS_STAGE_LABELS[analysisStage.value as keyof typeof ANALYSIS_STAGE_LABELS]}（${index + 1}/${keys.length}）`;
+});
+/** 測定中の札を閉じたか(「盤を見ながら待つ」)。測定対局が終わるたびに戻す。 */
+const measureWaitHidden = ref(false);
+/** 測定中に、やこび姫が話すこと(何を測っているか)。順番に替える。 */
+const MEASURE_WAIT_TIPS = Object.freeze([
+  "1手ごとに、いちばん良い手と比べて、評価値をどれだけ損したかを調べているよ。",
+  "損が小さい手が多いほど、強いっていう目安になるんだ。",
+  "形勢に大きな差がついたあとの手は、数えないよ。勝負が決まった後の手は、比べにくいからね。",
+  "結果は目安だよ。何局か測ると、だんだん本当の棋力に近づくよ。",
+]);
+const MEASURE_TIP_MS = 6000;
+const measureTipIndex = ref(0);
+let measureTipTimer: ReturnType<typeof setInterval> | undefined;
+watch(measureAnalyzing, (analyzing) => {
+  if (measureTipTimer) clearInterval(measureTipTimer);
+  measureTipTimer = undefined;
+  if (!analyzing) return;
+  measureTipIndex.value = 0;
+  measureTipTimer = setInterval(() => {
+    measureTipIndex.value = (measureTipIndex.value + 1) % MEASURE_WAIT_TIPS.length;
+  }, MEASURE_TIP_MS);
+});
+onBeforeUnmount(() => { if (measureTipTimer) clearInterval(measureTipTimer); });
 const measureReportDismissed = ref(false);
 /**
  * 測れる手が足りなかった測定対局から持ち越した手と、その対局の数。次の測定対局の手と合わせて診断する。
@@ -6707,6 +6788,7 @@ function finish(matchResult: MatchResult) {
   }
   // 棋力測定の対局は、続けて棋譜解析を始め、解析のあとに棋力を診断する。
   if (measuring) {
+    measureWaitHidden.value = false;
     measureAnalyzing.value = true;
     void startKifuAnalysis().finally(() => { measureAnalyzing.value = false; });
   }
