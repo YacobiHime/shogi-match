@@ -63,8 +63,9 @@
 }
 
 /* ===== 共通部品 ===== */
+/* ボタンの押せる高さは、文字が小さい画面でも44px以上にする(UI_Nintendo_Implementation.md 7-4)。 */
 .shogi-game button {
-  min-height: 2.6em;
+  min-height: max(2.6em, 44px);
   padding: 0.45em 0.9em;
   border: 1px solid rgba(241, 165, 76, 0.68);
   border-radius: 0.3em;
@@ -111,6 +112,7 @@
   outline-offset: 2px;
 }
 .shogi-game select {
+  min-height: 44px;
   font-family: inherit;
 }
 /* iOSは16px未満の入力欄にフォーカスすると画面を拡大するため、タッチ端末では下限を設ける。 */
@@ -243,7 +245,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.8em;
+  min-width: max(2.8em, 44px);
   padding-inline: 0.65em;
   border-color: rgba(215, 209, 253, 0.62) !important;
 }
@@ -311,7 +313,7 @@
 }
 .shogi-game__menu-field select {
   width: 100%;
-  min-height: 2.6em;
+  min-height: max(2.6em, 44px);
   padding: 0.3em 0.5em;
   border: 1px solid rgba(241, 165, 76, 0.6);
   border-radius: 0.2em;
@@ -551,7 +553,7 @@
   gap: 0.6em;
   align-items: center;
   width: 100%;
-  min-height: 2.9em;
+  min-height: max(2.9em, 44px);
   padding: 0.35em 0.6em;
   border: 1px solid rgba(241, 165, 76, 0.6);
   border-radius: 0.4em;
@@ -584,7 +586,7 @@
 }
 .shogi-game .shogi-game__opening-plan-actions button {
   flex: 1 1 6em;
-  min-height: 2.5em;
+  min-height: max(2.5em, 44px);
   padding: 0.3em 0.6em;
   border-color: rgba(215, 209, 253, 0.6);
   color: var(--ivory);
@@ -628,7 +630,7 @@
 }
 .shogi-game .shogi-game__plan-interrupt button {
   display: grid;
-  min-height: 2.6em;
+  min-height: max(2.6em, 44px);
   padding: 0.3em 0.4em;
   border-color: rgba(215, 209, 253, 0.6);
   color: var(--ivory);
@@ -659,7 +661,7 @@
 }
 .shogi-game .shogi-game__rook-choice button {
   min-width: 0;
-  min-height: 2.5em;
+  min-height: max(2.5em, 44px);
   padding: 0.35em 0.4em;
   border-color: rgba(215, 209, 253, 0.6);
   color: var(--ivory);
@@ -1145,7 +1147,7 @@
 .shogi-game__assist-actions > button {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 3em;
+  min-height: max(3em, 44px);
   padding: 0.4em 0.3em;
   font-size: 1.02em;
   line-height: 1.15;
@@ -1233,7 +1235,7 @@
   gap: 0.4em;
   align-items: center;
   justify-content: center;
-  min-height: 2.4em;
+  min-height: max(2.4em, 44px);
   padding: 0.3em 1em;
   border: 2px solid #b8742a;
   border-radius: 0.4em;
@@ -1250,7 +1252,7 @@
 }
 .shogi-game .shogi-game__guided-start--result {
   width: 100%;
-  min-height: 3em;
+  min-height: max(3em, 44px);
   margin: 0.2em 0 0.6em;
   font-size: 1.15em;
 }
@@ -1305,7 +1307,7 @@
   gap: 0.35em;
 }
 .shogi-game .shogi-game__guided-actions button {
-  min-height: 2.2em;
+  min-height: max(2.2em, 44px);
   padding: 0.2em 0.8em;
   border: 1px solid var(--amber);
   border-radius: 0.3em;
@@ -1332,7 +1334,7 @@
   flex: 1 1 auto;
   min-width: 0;
   max-width: 18em;
-  min-height: 2.2em;
+  min-height: max(2.2em, 44px);
   border: 1px solid var(--slate);
   border-radius: 0.2em;
   color: var(--night-deep);
@@ -1348,7 +1350,7 @@
 .shogi-game .shogi-game__analysis-branch {
   flex: 0 1 auto;
   min-width: 0;
-  min-height: 2.3em;
+  min-height: max(2.3em, 44px);
   padding: 0.2em 0.7em;
   overflow: hidden;
   border: 1px solid var(--amber-shadow);
@@ -1364,7 +1366,7 @@
 .shogi-game .shogi-game__analysis-close {
   flex: none;
   min-width: 2.3em;
-  min-height: 2.3em;
+  min-height: max(2.3em, 44px);
   margin-left: auto;
   padding: 0;
   border-color: var(--slate);
@@ -1426,7 +1428,7 @@
 .shogi-game .shogi-game__analysis-actions button {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 2.4em;
+  min-height: max(2.4em, 44px);
   padding: 0.2em 0.25em;
   white-space: nowrap;
   border-color: var(--slate);
@@ -1551,7 +1553,23 @@
   max-height: none;
 }
 .shogi-game--side.shogi-game--short .shogi-game__assist-actions > button {
-  min-height: 2.6em;
+  min-height: max(2.6em, 44px);
+}
+/*
+ * 背の低い画面で飛車の振り先などを選ぶあいだは、選ぶボタンを欄の中で隠さないよう(AGENTS.md)、
+ * ボタンを1行に並べ、下の補足の文を省く(UI_Nintendo_Implementation.md 7-5の1と3)。
+ */
+.shogi-game--side.shogi-game--short .shogi-game__rook-choice > div {
+  grid-template-columns: none;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+.shogi-game--short .shogi-game__rook-choice ~ p {
+  display: none;
+}
+/* スマホの横向きでは、選ぶあいだだけ「おまかせ・完成形を盤に出す」をしまう(作戦カードからは選び直せる)。 */
+.shogi-game--side.shogi-game--short .shogi-game__opening-guide:has(.shogi-game__rook-choice) .shogi-game__opening-plan-actions {
+  display: none;
 }
 
 /* 立ち絵を欄いっぱいに表示し、台詞を下に重ねる（PC・タブレット横）。 */
@@ -1674,7 +1692,7 @@
 .shogi-game .shogi-game__error button {
   flex: none;
   min-width: 2.2em;
-  min-height: 2.2em;
+  min-height: max(2.2em, 44px);
   padding: 0;
 }
 .shogi-game__confirm {
@@ -1746,7 +1764,7 @@
   line-height: 1.4;
 }
 .shogi-game .shogi-welcome__skip {
-  min-height: 2.2em;
+  min-height: max(2.2em, 44px);
   border-color: transparent;
   color: var(--muted);
   background: transparent;
@@ -1815,6 +1833,9 @@
 }
 .shogi-game__pregame-titlebar {
   position: relative;
+  display: grid;
+  align-content: center;
+  min-height: 48px;
   padding: 0.6em 7em;
   background: var(--pregame-frame);
   text-align: center;
@@ -1838,7 +1859,7 @@
   gap: 0.35em;
   align-items: center;
   height: fit-content;
-  min-height: 2.5em;
+  min-height: max(2.5em, 44px);
   margin-block: auto;
   padding: 0.3em 1em;
   border: 1px solid rgba(255, 252, 244, 0.7);
@@ -1874,7 +1895,7 @@
   background: #ebe4d6;
 }
 .shogi-game .shogi-game__segmented button {
-  min-height: 2.3em;
+  min-height: max(2.3em, 44px);
   padding: 0.3em 0.8em;
   border: 0;
   border-radius: 999px;
@@ -1937,8 +1958,8 @@
 .shogi-game .shogi-game__pregame-swap {
   display: grid;
   place-items: center;
-  width: 2.7em;
-  min-height: 2.7em;
+  width: max(2.7em, 44px);
+  min-height: max(2.7em, 44px);
   padding: 0;
   border: 0;
   border-radius: 0.35em;
@@ -1967,7 +1988,8 @@
   flex-wrap: wrap;
   gap: 0.25em 0.55em;
   align-items: center;
-  min-height: 2.4em;
+  /* 下の::afterで上下に広げる分と合わせ、行の押せる高さを44px以上にする(UI_Nintendo_Implementation.md 7-4)。 */
+  min-height: max(2.4em, 38px);
   border-radius: 0.4em;
 }
 /*
@@ -1977,7 +1999,7 @@
 .shogi-game .shogi-game__pregame-row .shogi-game__pregame-change:not(:disabled)::after {
   content: "";
   position: absolute;
-  inset: -0.2em -0.4em;
+  inset: -0.25em -0.4em;
   border-radius: 0.4em;
 }
 /* 押したときに沈ませると広げた範囲もずれ、行の端を押したときにクリックが外れるため、この行のボタンは沈ませない。 */
@@ -2088,6 +2110,31 @@
     background-color: rgba(255, 252, 244, 0.15);
   }
 }
+/*
+ * 背の低い画面では、区切りの余白を詰めて、押せる高さ(44px)を保ったまま1画面に収める
+ * (UI_Nintendo_Implementation.md 7-4・7-5)。
+ */
+@media (max-height: 800px) {
+  .shogi-game__pregame-kind { padding: 0.55em 0; }
+  .shogi-game__pregame-section { gap: 0.45em; padding: 0.45em 0; }
+  .shogi-game__pregame-rows { gap: 0.3em; }
+}
+/* 小さなスマホの縦向きでは、対局の種類の補足の文を省く(7-5の3。種類の名前は残す)。 */
+@media (orientation: portrait) and (max-height: 700px) {
+  .shogi-game__pregame-kind > small { display: none; }
+}
+/*
+ * 説明の文の中の「おすすめにする」は、文の高さのまま、押せる範囲だけ上下に広げて44px以上にする(7-4)。
+ * 欄の最後の行なので、下へ広げすぎると欄がスクロールする。上(文の1行目の側)へ多めに広げる。
+ */
+.shogi-game .shogi-game__pregame-message .shogi-game__pregame-change {
+  position: relative;
+}
+.shogi-game .shogi-game__pregame-message .shogi-game__pregame-change:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  inset: -18px -4px -5px;
+}
 /* 学習対局の開始局面。1つだけ選ぶ設定だが、見た目はチェックボックスにする。 */
 .shogi-game__pregame-start-type {
   gap: 0.45em;
@@ -2101,7 +2148,7 @@
   display: inline-flex;
   gap: 0.5em;
   align-items: center;
-  min-height: 2.3em;
+  min-height: max(2.3em, 44px);
   padding: 0.2em 0.1em;
   border: 0;
   color: var(--pregame-ink);
@@ -2193,7 +2240,7 @@
 }
 .shogi-game .shogi-game__pregame-start {
   width: min(18em, 100%);
-  min-height: 3em;
+  min-height: max(3em, 44px);
   border-color: var(--amber-shadow);
   color: var(--night-deep);
   background: var(--amber);
@@ -2318,13 +2365,14 @@
 }
 /* 手合割・戦型などの記録は、見たい人だけが開く。 */
 .shogi-game__result-record {
-  margin: 1em 0 1.1em;
+  margin: 0.6em 0 0.7em;
   text-align: left;
 }
+/* 開く見出しは小さな文字のまま、押せる高さを44px以上にする(7-4)。 */
 .shogi-game__result-record summary {
   width: fit-content;
   margin-inline: auto;
-  padding: 0.3em 0.8em;
+  padding: max(0.3em, calc((44px - 1.45em) / 2)) 0.8em;
   color: var(--muted);
   font-size: 0.9em;
   cursor: pointer;
@@ -2498,7 +2546,7 @@
 }
 .shogi-game__result-retry-choices button {
   min-width: 0;
-  min-height: 3em;
+  min-height: max(3em, 44px);
 }
 .shogi-game__result-actions {
   display: grid;
@@ -2507,7 +2555,7 @@
 }
 .shogi-game__result-actions button {
   min-width: 0;
-  min-height: 3em;
+  min-height: max(3em, 44px);
 }
 /* 解析レベルの選択。結果画面では棋譜解析ボタンの下、解析メニューでは項目の1つとして置く。 */
 .shogi-game__skill {
@@ -2543,7 +2591,7 @@
   font-weight: 700;
 }
 .shogi-game__analysis-level select {
-  min-height: 2.2em;
+  min-height: max(2.2em, 44px);
   padding: 0.15em 0.4em;
   font: inherit;
   font-weight: 400;
@@ -3038,7 +3086,7 @@
 /* 立て直しのときの、小さな2つ目の入口(香落ちで挑む)。主役の札より小さく、文字だけにする。 */
 .shogi-game .shogi-title__next-sub {
   justify-self: end;
-  min-height: 2.75em;
+  min-height: max(2.75em, 44px);
   margin-top: -0.3em;
   padding: 0.3em 0.8em;
   border: 0;
@@ -3481,10 +3529,12 @@
     --title-base: clamp(12px, min(4vw, 2.05vh), 19px);
     gap: 0.7em;
   }
-  .shogi-title__chara { height: 6.2em; }
+  .shogi-title__chara { height: 5.8em; }
   .shogi-title__menu { gap: 0.65em; }
   .shogi-title__groups { gap: 0.6em; }
   .shogi-title__next-go { margin-top: 0.55em; padding: 0.55em 0; }
+  /* 小さな2つ目の入口は押せる高さ(44px)を保ち、上下のすき間に重ねて1画面に収める(7-4・7-5)。 */
+  .shogi-game .shogi-title__next-sub { margin-block: -0.45em -0.45em; }
 }
 /*
  * 背の低い横長の画面(スマホの横向き): 縦に積むと入らないので、広い画面と同じく、
@@ -3521,7 +3571,9 @@
   .shogi-title__next-go { margin: 0; padding: 0.6em 1.2em; }
   .shogi-title__groups { gap: 0.5em; }
   .shogi-title__group { gap: 0.2em; }
-  .shogi-game .shogi-title__tile { min-height: 3.2em; padding: 0.35em 0.6em; }
+  /* 基準の文字が小さくなっても、タイルの押せる高さは44px以上にする(7-4)。 */
+  .shogi-game .shogi-title__tile { min-height: max(3.2em, 44px); padding: 0.35em 0.6em; }
+  .shogi-game .shogi-title__tile--small { min-height: 44px; }
   .shogi-title__tile .shogi-title__icon { width: 2.2em; height: 2.2em; }
 }
 @media (prefers-reduced-motion: reduce) {

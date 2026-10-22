@@ -1,5 +1,5 @@
 <template>
-  <div class="shogi-dex" role="dialog" aria-modal="true" aria-labelledby="shogi-dex-title">
+  <div class="shogi-dex shogi-dex--catalog" role="dialog" aria-modal="true" aria-labelledby="shogi-dex-title">
     <header class="shogi-dex__header">
       <button type="button" class="shogi-dex__back" @click="emit('close')">
         <span aria-hidden="true">←</span> {{ backLabel }}
@@ -500,7 +500,7 @@ watch(stepIndex, async () => {
   }
   .shogi-game .shogi-dex .shogi-dex__back,
   .shogi-game .shogi-home .shogi-dex__back {
-    min-height: 2.1rem;
+    min-height: 2.75rem;
     padding: 0.2rem 0.8rem;
     font-size: 0.9rem;
   }
@@ -571,7 +571,7 @@ watch(stepIndex, async () => {
   align-items: center;
   gap: 0.45rem;
   margin: 0.55rem 0.6rem 0;
-  min-height: 2.7rem;
+  min-height: 2.75rem;
   padding: 0.3rem 0.8rem;
   border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 0.5rem;
@@ -591,7 +591,7 @@ watch(stepIndex, async () => {
   white-space: nowrap;
 }
 .shogi-game .shogi-dex .shogi-dex__list-close {
-  min-height: 2.2rem;
+  min-height: 2.75rem;
   margin: 0.5rem 0.4rem 0.2rem;
   padding: 0.25rem 0.8rem;
   border: 1px solid rgba(255, 252, 244, 0.5);
@@ -618,10 +618,10 @@ watch(stepIndex, async () => {
 }
 .shogi-game .shogi-dex .shogi-dex__group button {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.35rem;
   width: 100%;
-  min-height: 1.9rem;
+  min-height: 2.75rem;
   padding: 0.25rem 0.55rem;
   border: 0;
   border-radius: 0.35rem;
@@ -702,7 +702,7 @@ watch(stepIndex, async () => {
 .shogi-game .shogi-dex .shogi-dex__flip {
   align-self: center;
   margin-left: auto;
-  min-height: 2rem;
+  min-height: 2.75rem;
   padding: 0.25rem 0.75rem;
   border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 999px;
@@ -771,7 +771,7 @@ watch(stepIndex, async () => {
   flex: none;
 }
 .shogi-game .shogi-dex .shogi-dex__controls button {
-  min-height: 2rem;
+  min-height: 2.75rem;
   padding: 0.3rem 0.8rem;
   border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 0.4rem;
@@ -901,7 +901,7 @@ watch(stepIndex, async () => {
     padding: 0.5rem 0.6rem 0;
   }
   .shogi-game .shogi-dex .shogi-dex__modes button {
-    min-height: 2.6rem;
+    min-height: 2.75rem;
     padding: 0.3rem 0.6rem;
   }
   .shogi-game .shogi-dex__body {
@@ -957,8 +957,93 @@ watch(stepIndex, async () => {
     aspect-ratio: 878 / 1168;
   }
   .shogi-game .shogi-dex__stage-nav {
-    width: 2.6rem;
+    width: 2.75rem;
     height: 4rem;
+  }
+}
+/*
+ * 背の低い横長の画面(スマホの横向き)の定跡図鑑・駒図鑑・手筋図鑑・将棋界図鑑・用語辞典。
+ * 縦に積むと見出しと切り替えで高さを使い切り、盤が画面の外へ切れるので、
+ * 左に盤の列、右に切り替え・一覧・解説の列を置く2列にする(UI_Nintendo_Implementation.md 7-5の1)。
+ * 盤は残りの高さいっぱいに置き、長い解説は右の列の枠の中だけで動かす。
+ */
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 56rem) {
+  .shogi-game .shogi-dex--catalog {
+    /* 盤の高さ = 画面の高さ - 見出し・盤の上の題名・手数・余白。 */
+    --dex-board-h: calc(100dvh - 9rem);
+    display: grid;
+    grid-template-columns: fit-content(60%) minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-auto-flow: column;
+  }
+  .shogi-game .shogi-dex--catalog > .shogi-dex__header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .shogi-game .shogi-dex--catalog > .shogi-dex__modes,
+  .shogi-game .shogi-dex--catalog > .shogi-dex__fortune-open,
+  .shogi-game .shogi-dex--catalog > .shogi-dex__list-toggle {
+    grid-column: 2;
+  }
+  .shogi-game .shogi-dex--catalog > .shogi-dex__modes { grid-row: 2; padding: 0.4rem 0.6rem 0; }
+  .shogi-game .shogi-dex--catalog > .shogi-dex__fortune-open { grid-row: 3; margin: 0.35rem 0.6rem 0; }
+  .shogi-game .shogi-dex--catalog > .shogi-dex__list-toggle { grid-row: 4; margin: 0.35rem 0.6rem 0; }
+  /* 占いの補足の文は省き、見出しの文だけ残す(7-5の3)。 */
+  .shogi-game .shogi-dex--catalog > .shogi-dex__fortune-open small { display: none; }
+  .shogi-game .shogi-dex--catalog .shogi-dex__body,
+  .shogi-game .shogi-dex--catalog .shogi-dex__detail {
+    display: contents;
+  }
+  /* 盤の列。盤の中の大きなz-indexが占いの札の上に出ないよう、この列で閉じ込める。 */
+  .shogi-game .shogi-dex--catalog .shogi-dex__main {
+    grid-column: 1;
+    grid-row: 2 / -1;
+    position: relative;
+    z-index: 0;
+    gap: 0.35rem;
+    min-height: 0;
+    padding: 0.4rem 0.2rem 0.4rem 0.6rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .shogi-game .shogi-dex--catalog .shogi-dex__explanation-col {
+    grid-column: 2;
+    grid-row: 5;
+    min-width: 0;
+    min-height: 0;
+    padding: 0.5rem 0.6rem 0.6rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .shogi-game .shogi-dex--catalog .shogi-dex__stage {
+    flex: none;
+    width: auto;
+    max-width: none;
+  }
+  .shogi-game .shogi-dex--catalog .shogi-dex__board,
+  .shogi-game .shogi-dex--catalog .shogi-reference-dex__board-frame > .shogi-dex__board {
+    flex: none;
+    width: auto;
+    height: var(--dex-board-h);
+    aspect-ratio: 878 / 1168;
+  }
+  .shogi-game .shogi-dex--catalog .shogi-reference-dex__board-frame {
+    flex: none;
+    height: auto;
+  }
+  /* 棋譜は盤の上下に対局者の欄と今の手があるので、その分だけ盤を小さくする。 */
+  .shogi-game .shogi-dex--catalog .shogi-reference-dex__board-frame > .shogi-dex__board {
+    height: calc(var(--dex-board-h) - var(--player-bar) * 2 - var(--move-caption));
+  }
+  .shogi-game .shogi-dex--catalog .shogi-dex__stage-nav {
+    width: 2.75rem;
+    height: 4rem;
+  }
+  .shogi-game .shogi-dex--catalog .shogi-dex__detail-head h2 {
+    font-size: 1.05rem;
+  }
+  .shogi-game .shogi-dex--catalog .shogi-dex__chara {
+    height: 64px;
   }
 }
 /* 戦法占い。図鑑の上に、明るい用紙の札で重ねる。 */
@@ -968,7 +1053,7 @@ watch(stepIndex, async () => {
   gap: 0.1em 0.7em;
   align-items: baseline;
   margin: 0.4em 0.6em 0.2em;
-  min-height: 2.75em;
+  min-height: max(2.75em, 44px);
   padding: 0.4em 0.9em;
   border: 2px dashed #c98a3d;
   border-radius: 0.5em;

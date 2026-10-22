@@ -1165,7 +1165,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 @media (max-width: 599px) {
   .shogi-game .shogi-note__header-rating { display: none; }
   .shogi-game .shogi-note__nav { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.3rem; }
-  .shogi-game .shogi-note__nav-item { min-height: 2.6rem; padding: 0.2rem 0.1rem; }
+  .shogi-game .shogi-note__nav-item { min-height: 2.75rem; padding: 0.2rem 0.1rem; }
   .shogi-game .shogi-note__nav-label { display: none; }
   .shogi-game .shogi-note__nav-short { display: block; font-size: 0.85em; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
 }
@@ -1585,7 +1585,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__album-grid--text { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .shogi-game .shogi-note__album-card { padding: 0.35rem 0.2rem 0.4rem; }
   .shogi-game .shogi-note__album-name { font-size: 0.74em; }
-  .shogi-game .shogi-note__album-pages button { min-height: 2.5rem; padding: 0 0.65rem; font-size: 0.88em; }
+  .shogi-game .shogi-note__album-pages button { min-height: 2.75rem; padding: 0 0.65rem; font-size: 0.88em; }
   .shogi-game .shogi-note__wall-row { grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0.3rem; }
   .shogi-game .shogi-note__wall { gap: 0.15rem; }
 }
@@ -1820,9 +1820,11 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
  * 横長の背の低い画面(スマホの横向き)は、広い画面と同じく左にメニューを置き、表紙を左右2列にする。 */
 @media (orientation: portrait) and (max-height: 700px) {
   .shogi-game .shogi-note__layout { gap: 0.5rem; padding-top: 0.5rem; }
-  .shogi-game .shogi-note__nav-item { min-height: 2.4rem; }
-  .shogi-game .shogi-note__cover { gap: 0.6rem; padding: 0.7rem; }
-  .shogi-game .shogi-note__rating strong { font-size: 2.4rem; }
+  .shogi-game .shogi-note__nav-item { min-height: 2.75rem; }
+  .shogi-game .shogi-note__cover { gap: 0.5rem; padding: 0.7rem; }
+  .shogi-game .shogi-note__rating strong { font-size: 2.2rem; }
+  /* 「対局する」と「棋力を測る」は縦に積まず横に並べ、2つとも1画面に入れる(UI_Nintendo_Implementation.md 7-5の1)。 */
+  .shogi-game .shogi-note__actions { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
   .shogi-game .shogi-note__grade { font-size: 1.2em; }
   .shogi-game .shogi-note__coach img { max-height: 4.5rem; }
   /* 成績: 勝率の輪を小さくし、数のタイルと横に並べる。 */
@@ -1843,8 +1845,9 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
     gap: 0.7rem;
     padding: 0.5rem 0.8rem;
   }
-  .shogi-game .shogi-note__nav { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 0.3rem; }
-  .shogi-game .shogi-note__nav-item { min-height: 2.3rem; padding: 0.2rem 0.6rem; justify-items: start; }
+  /* 7つの項目を縦に収めつつ、押せる高さは44px以上にする(UI_Nintendo_Implementation.md 7-4)。 */
+  .shogi-game .shogi-note__nav { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 0.15rem; }
+  .shogi-game .shogi-note__nav-item { min-height: 2.75rem; padding: 0.2rem 0.6rem; justify-items: start; }
   .shogi-game .shogi-note__cover {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
     align-items: center;

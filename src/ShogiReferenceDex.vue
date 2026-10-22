@@ -1,5 +1,5 @@
 <template>
-  <div class="shogi-dex" role="dialog" aria-modal="true" aria-labelledby="shogi-reference-dex-title">
+  <div class="shogi-dex shogi-dex--catalog" role="dialog" aria-modal="true" aria-labelledby="shogi-reference-dex-title">
     <header class="shogi-dex__header">
       <button type="button" class="shogi-dex__back" @click="emit('close')">
         <span aria-hidden="true">←</span> {{ backLabel }}
@@ -1544,7 +1544,7 @@ defineExpose({ goBack });
 .shogi-game .shogi-dex .shogi-reference-dex__search input {
   box-sizing: border-box;
   width: 100%;
-  min-height: 2.3rem;
+  min-height: 2.75rem;
   padding: 0.3rem 0.7rem;
   border: 1px solid rgba(255, 252, 244, 0.5);
   border-radius: 0.45rem;
@@ -1675,8 +1675,8 @@ defineExpose({ goBack });
 }
 .shogi-game .shogi-reference-dex__piece-images img {
   display: block;
-  width: 2.3rem;
-  height: 2.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
   object-fit: contain;
   user-select: none;
 }
@@ -1700,7 +1700,7 @@ defineExpose({ goBack });
 }
 .shogi-game .shogi-dex button.shogi-reference-dex__return {
   align-self: flex-start;
-  min-height: 2.4rem;
+  min-height: 2.75rem;
   padding: 0.3rem 0.9rem;
   border-radius: 999px;
   font-size: 0.85rem;
@@ -1737,8 +1737,8 @@ defineExpose({ goBack });
   color: #14212e;
 }
 .shogi-game .shogi-reference-dex__ai li .shogi-reference-dex__piece-images img {
-  width: 1.9rem;
-  height: 2.05rem;
+  width: 2.75rem;
+  height: 2.75rem;
 }
 .shogi-game .shogi-reference-dex__ai-bar {
   position: absolute;

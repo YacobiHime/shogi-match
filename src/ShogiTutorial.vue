@@ -2569,12 +2569,13 @@ const resultMessage = computed(() => {
   white-space: nowrap;
 }
 .shogi-game .shogi-tutorial .shogi-dex__back {
-  min-height: 2.4rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0.3rem 0.8rem;
 }
 .shogi-game .shogi-tutorial__header-skip {
   flex: none;
-  min-height: 2.2rem;
+  min-height: 2.75rem;
   padding: 0.2rem 0.8rem;
   border: 1px solid rgba(255, 252, 244, 0.35);
   border-radius: 999px;
@@ -3050,7 +3051,7 @@ const resultMessage = computed(() => {
   font-weight: 800;
 }
 .shogi-game .shogi-tutorial__signpost .shogi-tutorial__skip-chapter {
-  min-height: 1.8rem;
+  min-height: 2.75rem;
   padding: 0 0.6rem;
   font-size: 0.75rem;
 }
