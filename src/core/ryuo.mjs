@@ -8,6 +8,7 @@ import { createRng } from './ryuo-random.mjs';
 import { USER_HOLDER, createRoster, seasonEntry, selectParticipants } from './ryuo-roster.mjs';
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO, hananeAfterLine, hananeBeforeLine, hananeCoachIntro, hananeGrudgeBonus, yoshihikoCoachIntro } from './ryuo-story.mjs';
 import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
+import { matchBracket, seasonStages, seriesView, winsToPlayoff } from './ryuo-stages.mjs';
 import { matchStakes, seasonGoalLine } from './ryuo-stakes.mjs';
 import { opponentArrivalLine, previewRoad, seasonRoad } from './ryuo-road.mjs';
 import { lastGameMilestone, latestUpsetLine } from './ryuo-milestone.mjs';
@@ -759,31 +760,8 @@ export function playerView(season, pid) {
   return playerBrief(season, pid);
 }
 
-/**
- * 画面に木の形で描くための、トーナメント表の構造。
- * 葉(棋士)の順に左から並べ、各試合は、勝ち上がった2つの枝を結ぶ。labelsは、葉に添える短い文字(例: 1組優勝)。
- */
-function treeView(season, bracket, labels = {}, pendingNodeId = null) {
-  if (!bracket?.root) return null;
-  const leafIds = [];
-  const collect = (side) => {
-    if (side.pid) leafIds.push(side.pid);
-    else {
-      const node = bracket.nodes[side.from];
-      collect(node.a);
-      collect(node.b);
-    }
-  };
-  collect(bracket.root);
-  const leaves = Object.fromEntries(leafIds.map((pid) => [pid, { ...playerBrief(season, pid), label: labels[pid] ?? '' }]));
-  const nodes = Object.fromEntries(Object.values(bracket.nodes).map((node) => [
-    node.id, { id: node.id, a: node.a, b: node.b, winner: node.winner, round: node.round },
-  ]));
-  return { root: bracket.root, rounds: bracket.rounds, leaves, nodes, pendingNodeId };
-}
-
-function bracketView(season, bracket, { series = false, labels = {}, pendingNodeId = null } = {}) {
-  if (!bracket?.root) return { title: bracket?.label ?? '', rounds: [], tree: null };
+function bracketView(season, bracket, { series = false } = {}) {
+  if (!bracket?.root) return { title: bracket?.label ?? '', rounds: [] };
   const rounds = [];
   for (const node of sortedNodes(bracket)) {
     const a = sidePid(bracket, node.a);
@@ -796,7 +774,7 @@ function bracketView(season, bracket, { series = false, labels = {}, pendingNode
       user: a === USER_ID || b === USER_ID, final: isRoot,
     });
   }
-  return { title: bracket.label, rounds, tree: treeView(season, bracket, labels, pendingNodeId) };
+  return { title: bracket.label, rounds };
 }
 
 const PHASE_TEXT = Object.freeze({
@@ -808,19 +786,11 @@ const PHASE_TEXT = Object.freeze({
  * 画面に出す内容。トーナメント表(進行中の段階まで)、次の対局の相手、結果。
  */
 export function describeSeason(season) {
+  // 回戦ごとの試合の一覧(推しの棋士の段の判定などに使う。画面の表は、下のstages)。
   const tables = [];
-  const pending = season.pending;
-  const pendingNode = (phase, blockIndex) => (
-    pending?.kind === 'game' && pending.phase === phase && (blockIndex === undefined || pending.blockIndex === blockIndex) ? pending.nodeId : null
-  );
-  if (season.ranking) tables.push({ key: 'ranking', ...bracketView(season, season.ranking, { pendingNodeId: pendingNode('ranking') }) });
-  season.revival.forEach((block, index) => tables.push({
-    key: `revival-${index}`, ...bracketView(season, block, { pendingNodeId: pendingNode('revival', index) }),
-  }));
-  if (season.main) {
-    const labels = Object.fromEntries((season.mainEntrants ?? []).map(({ pid, group, rank }) => [pid, `${group}組${rank === 0 ? '優勝' : `${rank + 1}位`}`]));
-    tables.push({ key: 'main', ...bracketView(season, season.main, { series: true, labels, pendingNodeId: pendingNode('main') }) });
-  }
+  if (season.ranking) tables.push({ key: 'ranking', ...bracketView(season, season.ranking) });
+  season.revival.forEach((block, index) => tables.push({ key: `revival-${index}`, ...bracketView(season, block) }));
+  if (season.main) tables.push({ key: 'main', ...bracketView(season, season.main, { series: true }) });
   const seriesViews = [];
   for (const [key, series] of [['playoff', season.playoff], ['finals', season.finals]]) {
     if (!series) continue;
@@ -852,6 +822,8 @@ export function describeSeason(season) {
     milestone: lastGameMilestone(season, { promote: scaleById(season.settings.scale).promote }),
     upset: latestUpsetLine(season),
     series: seriesViews,
+    // 3つの段階(① 組のトーナメント・② 決勝トーナメント・③ 番勝負。core/ryuo-stages.mjs、docs/ryuo-stages-design.md)。
+    stages: stagesView(season),
     pending: pendingView,
     // 直前のプレイヤーの対局(相手と、相手の特徴が出た場面)。
     lastGame: lastGameView(season),
@@ -866,6 +838,78 @@ export function describeSeason(season) {
       games: season.userGames.map(({ win, color, label }) => ({ win, color, label })),
       pending: season.analysisQueue?.length ?? 0,
     }),
+  };
+}
+
+/** 決勝トーナメントの札に添える、組と順位(例: 1組優勝・2組2位)。 */
+const mainSlotLabel = (group, rank) => `${group}組${rank === 0 ? '優勝' : `${rank + 1}位`}`;
+
+/**
+ * 決勝トーナメントがまだ決まっていないときの下見。規模の設定の出場枠(各組の優勝者と上位)で、組み合わせの枠だけを作る。
+ * プレイヤーの組の優勝の枠には、そこから挑戦者決定戦までに要る勝ち数を添える。
+ */
+function previewMain(season, brief) {
+  const scale = scaleById(season.settings.scale);
+  const entrants = [];
+  for (const group of GROUPS) {
+    for (let rank = 0; rank < (scale.slots[group] ?? 1); rank += 1) {
+      entrants.push({ pid: `slot-${group}-${rank}`, weight: MAIN_WEIGHTS[group][rank] ?? MAIN_WEIGHTS[group].at(-1), group, rank });
+    }
+  }
+  const bracket = buildMainBracket(entrants, 'preview');
+  const labels = Object.fromEntries(entrants.map(({ pid, group, rank }) => [pid, mainSlotLabel(group, rank)]));
+  const hope = season.mode === 'challenge' ? `slot-${season.startGroup}-0` : null;
+  const view = matchBracket(bracket, {
+    brief: (pid) => (pid.startsWith('slot-') ? { name: '？', dan: '' } : brief(pid)),
+    roundLabel: (round) => resultRoundLabel(bracket, round, { series: true }),
+    labels,
+  });
+  for (const match of view.matches) {
+    for (const slot of [match.top, match.bottom]) slot.hope = slot.pid === hope;
+  }
+  return { ...view, preview: true, hopeWins: hope ? winsToPlayoff(bracket, hope) : null, hopeLabel: hope ? labels[hope] : '' };
+}
+
+/**
+ * 3つの段階の一覧と、段階ごとの表・番勝負(docs/ryuo-stages-design.md)。
+ * ①は、プレイヤーの組のランキング戦と昇級者決定戦(出場者決定戦)、決まっていればほかの組の表も。②は決勝トーナメント(まだなら下見)。
+ */
+function stagesView(season) {
+  const brief = (pid) => playerBrief(season, pid);
+  const pending = season.pending;
+  const pendingNode = (phase, blockIndex) => (
+    pending?.kind === 'game' && pending.phase === phase && (blockIndex === undefined || pending.blockIndex === blockIndex) ? pending.nodeId : null
+  );
+  const tableOf = (bracket, options = {}) => matchBracket(bracket, {
+    brief, roundLabel: (round) => resultRoundLabel(bracket, round, { series: options.series === true }), ...options,
+  });
+  const group = [];
+  if (season.ranking) group.push({ key: 'ranking', label: 'ランキング戦', group: season.startGroup, own: true, view: tableOf(season.ranking, { pendingNodeId: pendingNode('ranking') }) });
+  season.revival.forEach((block, index) => group.push({
+    key: `revival-${index}`, label: block.label, group: season.startGroup, own: true,
+    view: tableOf(block, { pendingNodeId: pendingNode('revival', index) }),
+  }));
+  // ほかの組の表(決勝トーナメントの組み合わせが決まると、各組の結果が分かる)。
+  for (const [key, bracket] of Object.entries(season.groupBrackets ?? {})) {
+    const [g, block] = key.split('-');
+    group.push({ key: `group-${key}`, label: block ? `${g}組 ${bracket.label}` : `${g}組`, group: Number(g), own: false, view: tableOf(bracket) });
+  }
+  const labels = Object.fromEntries((season.mainEntrants ?? []).map(({ pid, group: g, rank }) => [pid, mainSlotLabel(g, rank)]));
+  const final = season.main
+    ? { ...tableOf(season.main, { series: true, labels, pendingNodeId: pendingNode('main') }), preview: false, hopeWins: null, hopeLabel: '' }
+    : previewMain(season, brief);
+  const scale = scaleById(season.settings.scale);
+  return {
+    ...seasonStages(season),
+    // 段階の見出しの一言に使う、プレイヤーの組の決まり(人数・決勝トーナメントへの枠・昇級の人数)。
+    rule: { group: season.startGroup, size: scale.sizes[season.startGroup] ?? 0, slots: scale.slots[season.startGroup] ?? 1, promote: scale.promote, entrants: Object.values(scale.slots).reduce((sum, n) => sum + n, 0) },
+    group,
+    final,
+    series: [['playoff', season.playoff], ['finals', season.finals]]
+      .map(([key, series]) => seriesView(series, { brief, key }))
+      .filter(Boolean),
+    // 七番勝負の相手(竜王)。番勝負の前でも、頂上で待つ人として出す。
+    holder: season.defender ? brief(season.defender) : null,
   };
 }
 

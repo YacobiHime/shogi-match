@@ -415,40 +415,33 @@ describe('a Ryuo season', () => {
 });
 
 describe('season details for the screen', () => {
-  const leavesOf = (tree) => {
-    const leaves = [];
-    const walk = (side) => {
-      if (side.pid) leaves.push(side.pid);
-      else { walk(tree.nodes[side.from].a); walk(tree.nodes[side.from].b); }
-    };
-    walk(tree.root);
-    return leaves;
-  };
+  /** 試合の札の表(core/ryuo-stages.mjs)に出る棋士(名前のある行)。 */
+  const playersOf = (view) => view.matches.flatMap(({ top, bottom }) => [top, bottom]).filter(({ pid }) => pid);
 
-  it('describes each bracket as a tree: every player once, one match fewer than players, the next match marked', () => {
+  it('describes each bracket as match cards: one match fewer than players, every player once in their first match, the next match marked', () => {
     const season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ scale: 2 }), userLevel: 28, seed: 9 });
-    const view = describeSeason(season);
-    const { tree } = view.tables[0];
-    const leaves = leavesOf(tree);
-    expect(new Set(leaves).size).toBe(leaves.length);
-    expect(Object.keys(tree.nodes)).toHaveLength(leaves.length - 1);
-    expect(leaves).toContain(USER_ID);
-    expect(tree.leaves[USER_ID].name).toBe('あなた');
-    expect(tree.pendingNodeId).toBe(season.pending.nodeId);
-    expect(tree.rounds).toBe(Math.ceil(Math.log2(leaves.length)));
+    const { view } = describeSeason(season).stages.group.find(({ key }) => key === 'ranking');
+    expect(view.matches).toHaveLength(view.leafCount - 1);
+    // まだ誰も勝っていないので、名前のある行は、各棋士の最初の試合の1回ずつ。
+    const pids = playersOf(view).map(({ pid }) => pid);
+    expect(new Set(pids).size).toBe(view.leafCount);
+    const you = playersOf(view).find(({ pid }) => pid === USER_ID);
+    expect(you.name).toBe('あなた');
+    expect(you.you).toBe(true);
+    expect(view.matches.find(({ pending }) => pending).id).toBe(season.pending.nodeId);
+    expect(view.rounds).toHaveLength(Math.ceil(Math.log2(view.leafCount)));
   });
 
   it('labels the qualifiers of the main tournament by group and rank and shows the defending champion', () => {
     let season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings({ scale: 4 }), userLevel: 28, seed: 14 });
     while (season.phase === 'ranking' || season.phase === 'revival') season = recordUserGame(season, 'win');
     const view = describeSeason(season);
-    const main = view.tables.find(({ key }) => key === 'main');
-    const labels = Object.values(main.tree.leaves).map(({ label }) => label);
+    const labels = playersOf(view.stages.final).map(({ label }) => label);
     expect(labels).toContain('1組優勝');
     expect(labels).toContain('1組4位');
     expect(labels).toContain('2組2位');
     expect(labels).toContain('6組優勝');
-    expect(main.tree.leaves[USER_ID].label).toBe('6組優勝');
+    expect(playersOf(view.stages.final).find(({ pid }) => pid === USER_ID).label).toBe('6組優勝');
     expect(view.defender.id).toBe(season.champion);
   });
 

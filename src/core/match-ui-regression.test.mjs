@@ -208,7 +208,13 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/<RyuoMountain :road="entryMapRoad" :asset-base-url="assetBaseUrl" intro/);
     expect(tournament).toMatch(/data-result-screen>[\s\S]*?<RyuoMountain v-if="view\.road"/);
     // ボタンは短い動詞(U:3-2)。結果の画面の主役は「次の期へ」。
-    expect(tournament).toMatch(/data-tournament-play @click="versusOpen = true">対局する</);
+    expect(tournament).toMatch(/data-tournament-play @click="versusOpen = true">\{\{ playText \}\}</);
+    // 番勝負では「第3局を指す」(docs/ryuo-stages-design.mdの4章)。
+    expect(tournament).toMatch(/pending && pending\.kind !== "game" \? `第\$\{pending\.gameNo\}局を指す` : "対局する"/);
+    // 期の画面は3つの段階(① 組・② 決勝トーナメント・③ 番勝負)。上の帯は1本で、段階の道のりを押すと、その段階の表を見る。
+    expect(tournament).toMatch(/<header v-if="screen !== 'season'" class="shogi-dex__header">/);
+    expect(tournament).toMatch(/data-stage-steps[\s\S]*?@click="showStage\(index\)"/);
+    expect(tournament).toMatch(/<RyuoBracket\s+v-if="viewStageIndex === 0[\s\S]*?<RyuoBracket\s+v-if="viewStageIndex === 1[\s\S]*?<RyuoSeries\s+v-if="viewStageIndex === 2"/);
     // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。
     expect(tournament).toMatch(/<RyuoVersus[\s\S]*?@done="startPlay"/);
     expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*emit\("play"\);/);
@@ -462,7 +468,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/v-else-if="sheet === 'predict' && predictionOptions"[\s\S]*?data-prediction/);
     // 予想の的中は、計算(computed)の中ではなくwatchで一度だけ記録する。
     expect(tournament).toMatch(/watch\(predictionResult, countPredictionHit, \{ immediate: true \}\)/);
-    expect(tournament).toMatch(/:mark-id="oshi\?\.id \?\? ''"/);
+    expect(tournament).toMatch(/:oshi-id="oshi\?\.id \?\? ''"/);
     const book = readFileSync(new URL("../RyuoRosterBook.vue", import.meta.url), "utf8");
     expect(book).toMatch(/data-oshi-toggle[\s\S]*?@click="toggleOshi\(member\.id\)"/);
     expect(book).toMatch(/member\.catchphrase/);

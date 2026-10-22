@@ -21,6 +21,13 @@
         <rect v-for="star in stars" :key="star.id" :x="star.x" :y="star.y" :width="star.size" :height="star.size" :fill="star.color" class="ryuo-mountain__star" :style="{ animationDelay: `${star.delay}s` }" />
         <polygon v-for="layer in layers" :key="layer.fill" :points="layer.points" :fill="layer.fill" />
 
+        <!-- 3つの段階の帯(麓は組のトーナメント・中腹は決勝トーナメント・頂上は番勝負。docs/ryuo-stages-design.mdの5章)。 -->
+        <g v-for="band in stageBands" :key="`band-${band.stage}`" class="ryuo-mountain__band" :data-stage-band="band.stage">
+          <rect :x="-layout.width" :y="band.y" :width="layout.width * 3" :height="band.h" :fill="band.fill" />
+          <rect :x="band.labelX" :y="band.y + 6" :width="band.labelWidth" height="17" rx="3" :fill="band.current ? '#f1a54c' : 'rgba(15, 24, 40, 0.85)'" />
+          <text :x="band.labelX + 6" :y="band.y + 18.5" font-size="12" :class="['ryuo-mountain__band-label', { 'ryuo-mountain__band-label--current': band.current }]">{{ band.label }}</text>
+        </g>
+
         <!-- 麓の将棋会館(ランキング戦の舞台)。 -->
         <g v-if="kaikan" class="ryuo-mountain__kaikan">
           <rect :x="kaikan.x" :y="kaikan.y - 66" width="64" height="66" fill="#8a98a8" />
@@ -141,7 +148,7 @@ import { createMoveSoundPlayer } from "./core/move-sound";
 import { mountainLayers, mountainLayout } from "./core/ryuo-mountain-layout.mjs";
 
 type Step = {
-  key: string; label: string; short: string; /** done・current・lost・skip・todo・won */ state: string;
+  key: string; /** 段の進み(ranking・revival・main・playoff・finals・done)。段階の帯に使う。 */ phase: string; label: string; short: string; /** done・current・lost・skip・todo・won */ state: string;
   boss: boolean; mark: string; score: string;
   face: null | { id: string; name: string; char: string; story: string | null; tone: string };
 };
@@ -165,6 +172,9 @@ const props = defineProps({
   intro: { type: Boolean, default: false },
   /** 頂上の上にあける空(図の座標)。題字や結果の見出しを重ねる画面で、頂上が隠れないようにする。 */
   headroom: { type: Number, default: 0 },
+  /** 3つの段階の名前(① 組のトーナメントから)。渡すと、山を段階ごとの帯で塗り分ける。いまの段階はstageCurrent。 */
+  stageLabels: { type: Array as PropType<string[]>, default: () => [] },
+  stageCurrent: { type: Number, default: -1 },
 });
 const emit = defineEmits<{ played: []; "open-opponent": [] }>();
 
@@ -212,6 +222,42 @@ const nodes = computed(() => props.road.steps.map((step, index) => {
     labelY: step.key === "ryuo" ? y + 48 : y + 26,
   };
 }));
+
+/** 段階の帯。段の進み(phase)から段階を決め、隣の段階の段との真ん中で区切る。 */
+const BAND_FILL = ["rgba(63, 125, 90, 0.2)", "rgba(61, 111, 165, 0.22)", "rgba(241, 165, 76, 0.14)"];
+const stageOfPhase = (phase: string) => (phase === "ranking" || phase === "revival" ? 0 : phase === "main" ? 1 : 2);
+const stageBands = computed(() => {
+  if (!props.stageLabels.length) return [];
+  const ranges: { stage: number; top: number; bottom: number }[] = [];
+  for (const node of nodes.value) {
+    const stage = stageOfPhase(node.phase);
+    const range = ranges.find((entry) => entry.stage === stage);
+    if (range) {
+      range.top = Math.min(range.top, node.y);
+      range.bottom = Math.max(range.bottom, node.y);
+    } else ranges.push({ stage, top: node.y, bottom: node.y });
+  }
+  ranges.sort((a, b) => b.top - a.top);
+  return ranges.map((range, index) => {
+    const lower = ranges[index - 1];
+    const upper = ranges[index + 1];
+    const bottom = lower ? (range.bottom + lower.top) / 2 : layout.value.height;
+    const top = upper ? (range.top + upper.bottom) / 2 : -props.headroom;
+    const label = `${["①", "②", "③"][range.stage]} ${props.stageLabels[range.stage] ?? ""}`;
+    const labelWidth = 14 + label.length * 12.5;
+    // 帯の上の端にいちばん近い段と反対の側に置く(段の名前や扇子と重ねない)。
+    const nearest = nodes.value
+      .filter((node) => stageOfPhase(node.phase) === range.stage)
+      .reduce((best, node) => (!best || node.y < best.y ? node : best), null as null | { x: number; y: number });
+    const labelX = nearest && nearest.x < layout.value.width / 2 ? layout.value.width - labelWidth - 6 : 6;
+    return {
+      stage: range.stage, y: top, h: bottom - top, label, fill: BAND_FILL[range.stage],
+      current: range.stage === props.stageCurrent,
+      labelWidth,
+      labelX,
+    };
+  });
+});
 
 /** 麓の将棋会館(ランキング戦があるときだけ)。 */
 const kaikan = computed(() => {
@@ -414,6 +460,9 @@ watch(() => props.road.steps.length, () => nextTick(centerCurrent));
 <style>
 .shogi-game .ryuo-mountain {
   position: relative;
+  /* 図が枠より低いとき(防衛戦の2段など)は、図を下に置き、上を空にする(山が宙に浮かない)。 */
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -423,12 +472,15 @@ watch(() => props.road.steps.length, () => nextTick(centerCurrent));
 }
 .shogi-game .ryuo-mountain__svg {
   display: block;
+  flex: none;
   width: 100%;
   max-width: 34rem;
   height: auto;
-  margin: 0 auto;
+  margin: auto auto 0;
   overflow: visible;
 }
+.shogi-game .ryuo-mountain__band-label { fill: #c9d6e6; font-size: 12px; font-weight: 900; }
+.shogi-game .ryuo-mountain__band-label--current { fill: #172632; }
 .shogi-game .ryuo-mountain__star { animation: ryuo-mountain-twinkle 3.2s steps(2) infinite; }
 @keyframes ryuo-mountain-twinkle { 50% { opacity: 0.35; } }
 .shogi-game .ryuo-mountain__sign { font-size: 11px; font-weight: 900; fill: #1a2433; }

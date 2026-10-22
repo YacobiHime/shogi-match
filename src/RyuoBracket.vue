@@ -1,0 +1,267 @@
+<template>
+  <!--
+    竜王戦の試合の札の表(docs/ryuo-stages-design.mdの3章)。1試合を1枚の札にして上下に2人を置き、左から右へ回戦を並べる。
+    名前は横書き。自分は琥珀、次の相手と次の対局は朱、推しは薄紫の札、ライバルは「ライバル」の札。
+    広い枠では高さいっぱいに広げ(下を空けない)、狭い枠では回戦の列を横にすべらせる(列ごとに止まる)。
+  -->
+  <div ref="frame" class="ryuo-bracket" :class="{ 'ryuo-bracket--scroll': scrolls }" data-bracket>
+    <div class="ryuo-bracket__stage" :style="{ width: `${stageWidth}px`, height: `${stageHeight}px` }">
+      <ol class="ryuo-bracket__heads" :style="{ width: `${stageWidth}px` }" aria-hidden="true">
+        <li
+          v-for="(round, index) in view.rounds"
+          :key="round.round"
+          :class="{ 'ryuo-bracket__head--current': round.round === view.userNext }"
+          :style="{ left: `${index * colW}px`, width: `${cardW}px` }"
+        >{{ round.label }}</li>
+      </ol>
+      <span v-for="(round, index) in view.rounds" :key="`snap-${round.round}`" class="ryuo-bracket__snap" :style="{ left: `${index * colW}px` }" aria-hidden="true" />
+      <svg class="ryuo-bracket__lines" :width="stageWidth" :height="stageHeight" aria-hidden="true">
+        <path v-for="line in lines" :key="line.key" :d="line.d" :class="{ 'ryuo-bracket__line--hot': line.hot }" />
+      </svg>
+      <ul class="ryuo-bracket__cards" :aria-label="ariaLabel">
+        <li
+          v-for="match in view.matches"
+          :key="match.id"
+          :class="['ryuo-bracket__card', { 'ryuo-bracket__card--pending': match.pending, 'ryuo-bracket__card--final': match.final }]"
+          :style="{ left: `${(match.round - 1) * colW}px`, top: `${HEAD + match.y * leafGap - CARD_H / 2}px`, width: `${cardW}px` }"
+          :aria-label="matchAria(match)"
+          :data-match="match.id"
+        >
+          <div
+            v-for="side in (['top', 'bottom'] as const)"
+            :key="side"
+            :class="rowClass(match, side)"
+          >
+            <span class="ryuo-bracket__mark" aria-hidden="true">{{ match.winner === side ? "○" : match.winner ? "●" : "" }}</span>
+            <span class="ryuo-bracket__name">
+              <i v-if="oshiId && match[side].pid === oshiId" class="ryuo-bracket__tag ryuo-bracket__tag--oshi">推し</i>
+              <i v-if="match[side].pid && match[side].pid === rivalId" class="ryuo-bracket__tag ryuo-bracket__tag--rival">ライバル</i>
+              <template v-if="match[side].pid || !match[side].placeholder">{{ match[side].name }}</template>
+              <span v-else class="ryuo-bracket__wait">{{ match[side].placeholder }}</span>
+            </span>
+            <!-- 決勝トーナメントは、段位の代わりに組と順位(1組優勝など)を右に出す(名前の幅を残す)。 -->
+            <i v-if="match[side].label" class="ryuo-bracket__label">{{ match[side].label }}</i>
+            <span v-else class="ryuo-bracket__dan">{{ match[side].dan }}</span>
+          </div>
+          <span v-if="match.pending" class="ryuo-bracket__vs" aria-hidden="true">VS</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
+
+type Slot = { pid: string | null; name: string; dan: string; label: string; story: string | null; you: boolean; from: string | null; placeholder: string; hope?: boolean };
+type Match = {
+  id: string; round: number; y: number; top: Slot; bottom: Slot; winner: "top" | "bottom" | null;
+  how: string; pending: boolean; final: boolean; userIn: boolean; userWon: boolean;
+};
+export type BracketView = {
+  rounds: { round: number; label: string }[];
+  matches: Match[];
+  leafCount: number;
+  userNext: number | null;
+};
+
+const props = defineProps({
+  view: { type: Object as PropType<BracketView>, required: true },
+  oshiId: { type: String, default: "" },
+  rivalId: { type: String, default: "" },
+});
+
+/** 札の高さ(2行)と、列の見出しの高さ(px)。 */
+const CARD_H = 52;
+const HEAD = 40;
+/** 葉(棋士)1人あたりの縦の間の下限・上限。1回戦の札は葉2人ぶんの高さに入る。 */
+const LEAF_MIN = 31;
+const LEAF_MAX = 84;
+/** 列の幅の下限・上限(札の幅は列の幅から間を引く)。 */
+const COL_MIN = 168;
+const COL_MAX = 236;
+const COL_GAP = 22;
+
+const frame = ref<HTMLElement | null>(null);
+const frameSize = ref({ width: 0, height: 0 });
+const roundCount = computed(() => Math.max(1, props.view.rounds.length));
+/** 列の幅。枠に収まれば枠いっぱいに広げ、収まらなければ下限で横にすべらせる。 */
+const colW = computed(() => Math.min(COL_MAX, Math.max(COL_MIN, Math.floor((frameSize.value.width + COL_GAP) / roundCount.value))));
+const cardW = computed(() => colW.value - COL_GAP);
+const scrolls = computed(() => colW.value * roundCount.value - COL_GAP > frameSize.value.width + 1);
+/** 葉の縦の間。枠の高さいっぱいに広げる(下を空けない)。入らなければ下限で縦に動かす。 */
+const leafGap = computed(() => {
+  const leaves = Math.max(1, props.view.leafCount);
+  const fit = (frameSize.value.height - HEAD - 8) / leaves;
+  return Math.min(LEAF_MAX, Math.max(LEAF_MIN, fit));
+});
+const stageWidth = computed(() => colW.value * roundCount.value - COL_GAP);
+const stageHeight = computed(() => HEAD + props.view.leafCount * leafGap.value + 8);
+
+/** 前の試合の札から、次の試合の札の、その棋士の行へ引く線。自分が勝ち上がった線は琥珀。 */
+const lines = computed(() => {
+  const byId = new Map(props.view.matches.map((match) => [match.id, match]));
+  const out: { key: string; d: string; hot: boolean }[] = [];
+  for (const match of props.view.matches) {
+    (["top", "bottom"] as const).forEach((side, index) => {
+      const from = match[side].from;
+      const child = from ? byId.get(from) : null;
+      if (!child) return;
+      const x1 = (child.round - 1) * colW.value + cardW.value;
+      const y1 = HEAD + child.y * leafGap.value;
+      const x2 = (match.round - 1) * colW.value;
+      const y2 = HEAD + match.y * leafGap.value - CARD_H / 2 + (index === 0 ? CARD_H / 4 : (CARD_H * 3) / 4);
+      const xm = x2 - COL_GAP / 2;
+      out.push({ key: `${child.id}-${match.id}`, d: `M${x1} ${y1} H${xm} V${y2} H${x2}`, hot: child.userWon });
+    });
+  }
+  return out;
+});
+
+function rowClass(match: Match, side: "top" | "bottom") {
+  const slot = match[side];
+  return [
+    "ryuo-bracket__row",
+    {
+      "ryuo-bracket__row--win": match.winner === side,
+      "ryuo-bracket__row--lose": match.winner !== null && match.winner !== side,
+      "ryuo-bracket__row--you": slot.you || slot.hope,
+      "ryuo-bracket__row--opponent": match.pending && !slot.you && Boolean(slot.pid),
+      "ryuo-bracket__row--hope": slot.hope,
+    },
+  ];
+}
+const sideText = (slot: Slot) => (slot.pid ? `${slot.label ? `${slot.label} ` : ""}${slot.name}` : slot.placeholder || slot.name);
+function matchAria(match: Match) {
+  const result = match.winner ? `、${sideText(match[match.winner])}の勝ち` : match.pending ? "、あなたの次の対局" : "";
+  return `${props.view.rounds[match.round - 1]?.label ?? ""} ${sideText(match.top)} 対 ${sideText(match.bottom)}${result}`;
+}
+const ariaLabel = computed(() => `トーナメント表(${props.view.rounds.map(({ label }) => label).join("・")})`);
+
+let observer: ResizeObserver | undefined;
+function measure() {
+  const el = frame.value;
+  if (!el) return;
+  frameSize.value = { width: el.clientWidth, height: el.clientHeight };
+}
+/** 開いたとき、次の対局(なければ最後に指した試合)の回戦が左に来るよう、横に送る。縦は、その札が見えるように。 */
+function scrollToUser() {
+  const el = frame.value;
+  if (!el) return;
+  const round = props.view.userNext;
+  if (round && scrolls.value) el.scrollLeft = Math.max(0, (round - 2) * colW.value);
+  const match = props.view.matches.find((entry) => entry.pending) ?? [...props.view.matches].reverse().find((entry) => entry.userIn);
+  if (match && el.scrollHeight > el.clientHeight) {
+    el.scrollTop = Math.max(0, HEAD + match.y * leafGap.value - el.clientHeight / 2);
+  }
+}
+onMounted(() => {
+  measure();
+  observer = new ResizeObserver(measure);
+  if (frame.value) observer.observe(frame.value);
+  void nextTick(scrollToUser);
+});
+onBeforeUnmount(() => observer?.disconnect());
+watch(() => props.view, () => void nextTick(scrollToUser));
+</script>
+
+<style>
+.shogi-game .ryuo-bracket {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.shogi-game .ryuo-bracket--scroll { scroll-snap-type: x mandatory; }
+.shogi-game .ryuo-bracket__stage { position: relative; }
+.shogi-game .ryuo-bracket__snap { position: absolute; top: 0; width: 1px; height: 1px; scroll-snap-align: start; }
+.shogi-game .ryuo-bracket__heads {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .ryuo-bracket__heads li {
+  position: absolute;
+  top: 0;
+  display: grid;
+  place-items: center;
+  height: 28px;
+  border: 1px solid #2c4359;
+  border-radius: 999px;
+  color: #9fb3c8;
+  background: #0f1828;
+  font-size: 0.78rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.shogi-game .ryuo-bracket__heads li.ryuo-bracket__head--current { border-color: #f1a54c; color: #172632; background: #f1a54c; }
+.shogi-game .ryuo-bracket__lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.shogi-game .ryuo-bracket__lines path { fill: none; stroke: #4b6585; stroke-width: 2; }
+.shogi-game .ryuo-bracket__lines path.ryuo-bracket__line--hot { stroke: #f1a54c; stroke-width: 4; }
+.shogi-game .ryuo-bracket__cards { margin: 0; padding: 0; list-style: none; }
+.shogi-game .ryuo-bracket__card {
+  position: absolute;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  height: 52px;
+  box-sizing: border-box;
+  border: 2px solid #3a526e;
+  border-radius: 8px;
+  background: #22344c;
+  font-size: 0.82rem;
+}
+.shogi-game .ryuo-bracket__card--final { border-color: #d4a93a; }
+.shogi-game .ryuo-bracket__card--pending { border-color: #e0745e; box-shadow: 0 0 0 3px rgba(224, 116, 94, 0.35); }
+.shogi-game .ryuo-bracket__row {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0 0.45rem;
+  color: #fffcf4;
+}
+.shogi-game .ryuo-bracket__row:first-child { border-radius: 6px 6px 0 0; }
+.shogi-game .ryuo-bracket__row + .ryuo-bracket__row { border-top: 1px solid #3a526e; border-radius: 0 0 6px 6px; }
+.shogi-game .ryuo-bracket__mark { display: grid; place-items: center; width: 1rem; height: 1rem; border-radius: 4px; font-size: 0.7rem; font-weight: 900; }
+.shogi-game .ryuo-bracket__row--win .ryuo-bracket__mark { color: #172632; background: #f1a54c; }
+.shogi-game .ryuo-bracket__row--lose .ryuo-bracket__mark { color: #8ea0b4; background: #33465e; }
+.shogi-game .ryuo-bracket__name { display: flex; align-items: center; gap: 0.25rem; min-width: 0; overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .ryuo-bracket__row--win .ryuo-bracket__name { font-weight: 900; }
+.shogi-game .ryuo-bracket__row--lose { color: #7d8ea3; }
+.shogi-game .ryuo-bracket__row--you { background: rgba(241, 165, 76, 0.2); }
+.shogi-game .ryuo-bracket__row--you .ryuo-bracket__name { color: #ffd27a; }
+.shogi-game .ryuo-bracket__row--opponent { background: rgba(196, 96, 76, 0.28); }
+.shogi-game .ryuo-bracket__row--hope { outline: 2px dashed #f1a54c; outline-offset: -2px; }
+.shogi-game .ryuo-bracket__dan { color: #9fb3c8; font-size: 0.68rem; white-space: nowrap; }
+.shogi-game .ryuo-bracket__wait { color: #7d8ea3; font-weight: 700; }
+.shogi-game .ryuo-bracket__label,
+.shogi-game .ryuo-bracket__tag {
+  flex: none;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 900;
+}
+.shogi-game .ryuo-bracket__label { color: #172632; background: #c9d6e6; }
+.shogi-game .ryuo-bracket__tag--oshi { color: #172632; background: #d8d0ff; }
+.shogi-game .ryuo-bracket__tag--rival { color: #fffcf4; background: #8a5ad1; }
+.shogi-game .ryuo-bracket__vs {
+  position: absolute;
+  top: 50%;
+  right: -0.9rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 5px;
+  color: #fffcf4;
+  background: #c4604c;
+  font-size: 0.66rem;
+  font-weight: 900;
+  transform: translateY(-50%);
+}
+</style>

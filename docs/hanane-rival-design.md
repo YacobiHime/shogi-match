@@ -164,7 +164,7 @@
 | 新しい特徴`late-bloom` | `src/core/player-character.mjs` |
 | やこび姫の紹介の一言 | `src/core/ryuo-story.mjs`の`hananeCoachIntro`・`yoshihikoCoachIntro`（`ShogiTournament.vue`が`opponentLines`の前に足す） |
 | 吹き出しつきの絵の部品 | `src/YakobiSays.vue`を、人物（名前・絵・ドット数）を受け取れる形に広げる（新しい部品は作らない） |
-| 画面 | `src/ShogiTournament.vue`（対局前の札・結果）、`src/TournamentTree.vue`（印）、`src/RyuoRosterBook.vue`（名鑑） |
+| 画面 | `src/ShogiTournament.vue`（対局前の札・結果）、`src/RyuoBracket.vue`（札）、`src/RyuoRosterBook.vue`（名鑑） |
 | 絵 | `public/characters/hanane-mini.webp` |
 
 ## 9. 作る順番
@@ -192,7 +192,7 @@
 ## 11. 実装（2026-10-20）
 
 - 絵は`public/characters/hanane-mini.webp`（37×80ドットを8倍にした、劣化のない透過webp、1.3KB）。
-- 画面は`YakobiSays.vue`に`person`（話す人）・`notice`（注目の一言の縁）・`bust`（スマホで胸から上）を足して使う。羽音の高さは、やこび姫の80/53倍。名鑑（`RyuoRosterBook.vue`）では、羽音を組のいちばん上に置き（竜王を除く）、◆の印・読み・紹介の文・胸から上の絵を出す。善彦の一言は「羽音の父」。トーナメント表（`TournamentTree.vue`）では、羽音の札に◆の印と黄色の縁。
+- 画面は`YakobiSays.vue`に`person`（話す人）・`notice`（注目の一言の縁）・`bust`（スマホで胸から上）を足して使う。羽音の高さは、やこび姫の80/53倍。名鑑（`RyuoRosterBook.vue`）では、羽音を組のいちばん上に置き（竜王を除く）、◆の印・読み・紹介の文・胸から上の絵を出す。善彦の一言は「羽音の父」。トーナメント表（`RyuoBracket.vue`）では、羽音の行に「ライバル」の札。
 - 自動テスト（`ryuo-story.test.mjs`）: 最初の名簿での羽音と善彦（組・段位・順位戦・名人・人数と定員）、上の組から始めたとき、前の名簿への追加（タイトルを書き換えない・2度加えない）、毎期の出場、山の配置（反対の半分）、勝ったあとの本気と、7期たっても残り個性が変わらないこと、`late-bloom`の序盤・中盤・終盤、乱数の棋士に付かないこと、台詞の選び方と回し方、感嘆符を使わないこと、やこび姫の紹介、画面に渡す一言（対局前・勝ったあとの注目・負けたあと）、10期のうち5期以上で組の決勝で当たること。
 - ブラウザ（ヘッドレスChrome）で、スマホ縦（390×844）・タブレット縦（820×1180）・デスクトップ（1366×768）について、組の決勝の前の札（ライバルの札・羽音の一言・やこび姫の紹介）、羽音に勝ったあとの「絶対に許さないリスト」の札（黄色の縁）、トーナメント表の◆、名鑑の羽音と善彦を確かめた。横にはみ出さない。実機での手動確認と、実際に羽音と指す対局の確認は未実施。
 - 実装後のチェックリスト（`Game_Nintendo_Implementation.md`・`UI_Nintendo_Implementation.md`）: 判定・評価値は変えていない。確認ダイアログは増やしていない。操作は増やしていない（台詞は読み飛ばしても遊べる）。責める言葉を使っていない。升の色は変えていない（羽音の黄色は札・吹き出しの縁・名鑑とトーナメント表の印だけ）。絵の出る動きは`prefers-reduced-motion`で止める。強さの上限Lv40を越えない。作った人以外に触ってもらう確かめはまだ。
