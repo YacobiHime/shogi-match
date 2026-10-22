@@ -20,7 +20,9 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/<div class="shogi-title__record-row">[\s\S]*?data-player-name\s*@click="openNameDialog"[\s\S]*?class="shogi-title__record" @click="yakobiNoteOpen = true"/);
     expect(source).toMatch(/v-if="nameDialogOpen"[\s\S]*?@submit\.prevent="acceptPlayerName"[\s\S]*?data-player-name-save>この名前にする</);
     // CPUとの対局では、プレイヤーの側の名札に名前を出す。対局準備と竜王戦の新しい期にも使う。
-    expect(source).toMatch(/cpuColor\.value === Color\.WHITE && playerName\.value \? playerName\.value : props\.blackPlayerName/);
+    // タイトル戦の防衛戦では、名前に肩書を足す(docs/match-stage-design.md)。名前を入れていなければ先手・後手の表示名。
+    expect(source).toMatch(/const stageUserName = computed\(\(\) => \{[\s\S]*?: playerName\.value;/);
+    expect(source).toMatch(/cpuColor\.value === Color\.WHITE && stageUserName\.value \? stageUserName\.value : props\.blackPlayerName/);
     expect(source).toMatch(/userName: playerDisplayName\(playerName\.value\)/);
     // 重ねて開く札は、ブラウザの戻る操作で閉じる。
     expect(source).toMatch(/else if \(nameDialogOpen\.value\) \{\s*nameDialogOpen\.value = false;/);
@@ -473,7 +475,8 @@ describe("match screen regressions", () => {
   it("stops only what happens next for heavy moments, and the board can always cut the stop short", () => {
     // 止めるのはCPUの応手と結果画面の開始だけ。盤を触ると止めを打ち切る。
     expect(source).toMatch(/await waitForImpactHold\(\);\s*if \(generation !== matchGeneration\) return;\s*if \(applyMove\(usi, "cpu"\)/);
-    expect(source).toMatch(/class="shogi-game__board-shell"[\s\S]*?@pointerdown\.capture="releaseImpactHold"/);
+    expect(source).toMatch(/class="shogi-game__board-shell"[\s\S]*?@pointerdown\.capture="onBoardShellPointerDown"/);
+    expect(source).toMatch(/function onBoardShellPointerDown\(\) \{\s*releaseImpactHold\(\);/);
     const finish = source.split("function finish(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(finish).toMatch(/finishImpact\([\s\S]*?setTimeout\(revealResult, finishing\.stopMs\)/);
     // 光りは升の色を変えず、揺れるのは光の枠だけにする。

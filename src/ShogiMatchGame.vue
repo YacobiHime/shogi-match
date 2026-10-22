@@ -10,6 +10,7 @@
         'shogi-game--narrow': uiNarrow,
         'shogi-game--home': homeOpen,
       },
+      matchStage && !homeOpen ? `shogi-game--stage-${matchStage.weight}` : '',
     ]"
     :style="uiLayoutStyle"
     aria-label="将棋対局"
@@ -907,9 +908,47 @@
     <section
       v-if="cpuColor !== null || blackFormationText !== UNDETERMINED_FORMATION || whiteFormationText !== UNDETERMINED_FORMATION"
       class="shogi-game__summary"
+      :class="matchStage ? `shogi-game__summary--stage-${matchStage.weight}` : ''"
       aria-label="対戦相手と戦型"
     >
-      <div v-if="cpuColor !== null" class="shogi-game__summary-opponent">
+      <!--
+        大会の1局は、対局の札にする(docs/match-stage-design.md)。どの大会の、どの局で、何を賭けているかを、対局中ずっと見せる。
+        番勝負は星取り(○勝ち・●負け・◇この局)も出す。タイトル戦は対局場と、二日制の何日目かも出す。
+      -->
+      <div
+        v-if="matchStage"
+        class="shogi-game__stage-band"
+        :class="[`shogi-game__stage-band--${matchStage.weight}`, matchStage.tone ? `shogi-game__stage-band--${matchStage.tone}` : '']"
+        data-match-stage
+        :data-stage-weight="matchStage.weight"
+      >
+        <p class="shogi-game__stage-head">
+          <span class="shogi-game__stage-event">{{ matchStage.eventText }}</span>
+          <strong>{{ matchStage.shortLabel ?? matchStage.label }}</strong>
+          <span v-if="stageDayText" class="shogi-game__stage-day" data-stage-day>{{ stageDayText }}</span>
+        </p>
+        <p v-if="matchStage.venue" class="shogi-game__stage-venue">対局場 {{ matchStage.venue }}</p>
+        <p class="shogi-game__stage-line">
+          <span
+            v-if="matchStage.need"
+            class="shogi-game__stage-marks"
+            role="img"
+            :aria-label="matchStage.score ? `ここまで${matchStage.score}` : 'この局が最初'"
+          >
+            <i
+              v-for="(mark, index) in matchStage.marks"
+              :key="index"
+              :class="`shogi-game__stage-mark--${mark}`"
+            >{{ mark === "win" ? "○" : "●" }}</i>
+            <i class="shogi-game__stage-mark--now">◇</i>
+          </span>
+          <b v-if="matchStage.stakes" class="shogi-game__stage-stakes">{{ matchStage.stakes }}</b>
+        </p>
+        <p class="shogi-game__stage-opponent">
+          対 {{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}
+        </p>
+      </div>
+      <div v-else-if="cpuColor !== null" class="shogi-game__summary-opponent">
         <b>対戦相手</b>
         <span>{{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}<small v-if="cpuStrengthLabel">{{ cpuStrengthLabel }}</small></span>
       </div>
@@ -1047,7 +1086,7 @@
       class="shogi-game__board-shell"
       :class="boardImpact ? `shogi-game__board-shell--impact-${boardImpact.stage}` : ''"
       :data-impact="boardImpact?.stage"
-      @pointerdown.capture="releaseImpactHold"
+      @pointerdown.capture="onBoardShellPointerDown"
     >
       <span v-if="boardImpact" :key="boardImpact.id" class="shogi-game__board-impact" aria-hidden="true"></span>
       <ShogiMatchBoard
@@ -1109,10 +1148,42 @@
           <small>{{ furigomaCallout.phase === "shake" ? "歩を5枚、振っているよ…" : furigomaCallout.text }}</small>
         </div>
       </Transition>
+      <!--
+        大会の大一番とタイトル戦の、開幕の札と封じ手の札(docs/match-stage-design.md)。盤の操作は妨げず、盤を触るとすぐ消える。
+      -->
+      <Transition name="shogi-game__callout">
+        <div
+          v-if="stageCard && matchStage && !checkCallout"
+          :key="stageCard.id"
+          class="shogi-game__stage-card"
+          :class="[`shogi-game__stage-card--${stageCard.kind}`, `shogi-game__stage-card--${matchStage.weight}`]"
+          role="status"
+          data-stage-card
+          :data-stage-card-kind="stageCard.kind"
+        >
+          <template v-if="stageCard.kind === 'opening'">
+            <small>{{ matchStage.eventText }}</small>
+            <strong>{{ matchStage.shortLabel ?? matchStage.label }}</strong>
+            <span v-if="matchStage.venue" class="shogi-game__stage-card-venue">{{ matchStage.venue }}</span>
+            <span v-if="matchStage.weight === 'title'" class="shogi-game__stage-card-sides">
+              <span v-for="side in matchStage.sides" :key="side.role" :class="{ 'shogi-game__stage-card-you': side.you }">
+                <em>{{ side.role }}</em>{{ side.name }}
+              </span>
+            </span>
+            <b v-if="matchStage.stakes">{{ matchStage.stakes }}</b>
+          </template>
+          <template v-else>
+            <i class="shogi-game__stage-envelope" aria-hidden="true"></i>
+            <small>1日目はここまで</small>
+            <strong>封じ手</strong>
+            <span>この手を封筒にしまって、2日目に開けるよ</span>
+          </template>
+        </div>
+      </Transition>
       <!-- 囲い完成の知らせ。教室の「囲いを組もう」と同じく、組み上げた瞬間をほめる。 -->
       <Transition name="shogi-game__callout">
         <div
-          v-if="castleCallout && !checkCallout && !furigomaCallout"
+          v-if="castleCallout && !checkCallout && !furigomaCallout && !stageCard"
           :key="castleCallout.id"
           class="shogi-game__castle-callout"
           role="status"
@@ -1950,6 +2021,7 @@ import {
   saveSeason,
 } from "./core/ryuo-career.mjs";
 import { addAward, loadAwards, meijinAward, ryuoAward } from "./core/season-award.mjs";
+import { STAGE_CARD_MS, describeMatchStage, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { hasKikiGlasses, loadTutorialProgress } from "./core/tutorial-progress.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
@@ -2349,7 +2421,16 @@ const profileState = ref(loadProfile(browserStorage()));
 // 大会の設定と、進行中の大会。
 // 竜王戦(大会)。キャリア(いま何組か、竜王の期数)と、進行中の期は、1局ごとに端末へ保存する。
 /** 大会の対局。eventは大会(竜王戦か名人戦)。省くと竜王戦。 */
-type RyuoGame = { opponentId: string; label: string; outcome?: "win" | "loss"; replay?: boolean; event?: "ryuo" | "meijin" };
+type MatchStage = NonNullable<ReturnType<typeof describeMatchStage>>;
+type RyuoGame = {
+  opponentId: string;
+  label: string;
+  outcome?: "win" | "loss";
+  replay?: boolean;
+  event?: "ryuo" | "meijin";
+  /** 対局を始めたときの舞台(docs/match-stage-design.md)。終局後に期が次の局へ進んでも、この局の札のまま。 */
+  stage?: MatchStage | null;
+};
 const ryuoCareer = ref(loadCareer(browserStorage()));
 /** 竜王戦に出る架空の棋士の名簿。期をまたいで残り、期が終わるたびに更新する。最初の期に作る。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2371,6 +2452,8 @@ const ryuoGame = ref<RyuoGame | null>(null);
 let ryuoCpuMoves: { ply: number; kind: string; traits: string[] }[] = [];
 const ryuoView = computed(() => (ryuoSeason.value ? describeSeason(ryuoSeason.value) : null));
 const ryuoOpponent = computed(() => (ryuoGame.value ? tournamentSeasonOf(ryuoGame.value)?.players?.[ryuoGame.value.opponentId] ?? null : null));
+/** いま指している大会の1局の舞台(対局の札・開幕の札・名札の肩書。docs/match-stage-design.md)。 */
+const matchStage = computed(() => (matchKind.value === "tournament" && matchStarted.value ? ryuoGame.value?.stage ?? null : null));
 
 // ---- 名人戦(順位戦から名人へ。docs/meijin-design.md)。竜王戦とは別々の暦で進む。
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2833,7 +2916,10 @@ const cpuStrengthPreset = computed(() => strengthPresetFor(searchNodes.value));
 const cpuDisplayName = computed(() => {
   // 大会では、対戦相手の棋士の名前と段位を出す。
   if (matchKind.value === "tournament" && ryuoOpponent.value) {
-    return `${ryuoOpponent.value.name} ${ryuoOpponent.value.dan} Lv.${ryuoOpponent.value.level}`;
+    // タイトル戦では、タイトルを持っている相手に段位の代わりに肩書を付ける(「○○ 竜王」)。
+    const role = matchStage.value?.opponentRole;
+    const rank = role && role !== "挑戦者" ? role : ryuoOpponent.value.dan;
+    return `${ryuoOpponent.value.name} ${rank} Lv.${ryuoOpponent.value.level}`;
   }
   if (ryuoCounterOpponent.value) {
     return `${ryuoCounterOpponent.value.name} ${ryuoCounterOpponent.value.dan}（対策） Lv.${ryuoCounterOpponent.value.level}`;
@@ -2845,15 +2931,20 @@ const cpuStrengthLabel = computed(() => (
   (matchKind.value === "tournament" && ryuoOpponent.value) || ryuoCounterOpponent.value ? "" : cpuStrengthPreset.value?.label ?? ""
 ));
 // CPUとの対局では、プレイヤーの側の名札に、タイトル画面で入れたプレイヤー名を出す(入れていなければ先手・後手の表示名)。
+// タイトル戦の防衛戦では、プレイヤーの名札にも肩書を付ける(「やこび 竜王」)。
+const stageUserName = computed(() => {
+  const role = matchStage.value?.userRole;
+  return role && role !== "挑戦者" ? `${playerName.value || "あなた"} ${role}` : playerName.value;
+});
 const effectiveBlackPlayerName = computed(() =>
   cpuColor.value === Color.BLACK
     ? cpuDisplayName.value
-    : cpuColor.value === Color.WHITE && playerName.value ? playerName.value : props.blackPlayerName,
+    : cpuColor.value === Color.WHITE && stageUserName.value ? stageUserName.value : props.blackPlayerName,
 );
 const effectiveWhitePlayerName = computed(() =>
   cpuColor.value === Color.WHITE
     ? cpuDisplayName.value
-    : cpuColor.value === Color.BLACK && playerName.value ? playerName.value : props.whitePlayerName,
+    : cpuColor.value === Color.BLACK && stageUserName.value ? stageUserName.value : props.whitePlayerName,
 );
 /** 振り返りの詰みの問題で、相手の応手を指すまでの間。盤を触らせない。 */
 const guidedMateReplyPending = ref(false);
@@ -2989,6 +3080,29 @@ function landFurigoma({ skipped = false } = {}) {
 watch(moveCount, (ply) => {
   if (ply > furigomaStartPly) landFurigoma({ skipped: true });
 });
+/**
+ * 大会の舞台の札(docs/match-stage-design.md)。大一番とタイトル戦の開幕に、どの局で何を賭けているかを盤の上に出す。
+ * タイトル戦(二日制)は、1日目の終わりの手数を越えて最初にプレイヤーが指した手を封じ手にし、2日目へ進める。
+ * どちらも盤の操作は妨げない(盤を触ると消える)。
+ */
+const stageCard = ref<{ id: number; kind: "opening" | "seal" } | null>(null);
+let stageCardTimer: ReturnType<typeof setTimeout> | undefined;
+function showStageCard(kind: "opening" | "seal") {
+  clearTimeout(stageCardTimer);
+  stageCard.value = { id: Date.now(), kind };
+  stageCardTimer = setTimeout(hideStageCard, STAGE_CARD_MS);
+}
+function hideStageCard() {
+  clearTimeout(stageCardTimer);
+  stageCard.value = null;
+}
+const stageDayText = computed(() => stageDay(matchStage.value, moveCount.value, activePlayerColor.value));
+watch(moveCount, (ply, previous) => {
+  const stage = matchStage.value;
+  if (!stage?.twoDay || reviewMode.value || !active.value || previous !== ply - 1) return;
+  if (ply === stageSealPly(activePlayerColor.value)) showStageCard("seal");
+});
+onBeforeUnmount(() => clearTimeout(stageCardTimer));
 function furigomaPieceUrl(face: "fu" | "to") {
   const name = face === "fu" ? "black_pawn" : "black_prom_pawn";
   return `${props.assetBaseUrl.replace(/\/$/, "")}/piece/${pregamePieceThemeId.value}/${name}.webp`;
@@ -4573,12 +4687,24 @@ function startRyuoMatch() {
     cpuDetailedStrategy.value = gameStyle.strategy;
     cpuDetailedCastle.value = gameStyle.castle;
   }
-  ryuoGame.value = { ...(ryuoGame.value ?? { opponentId: opponent.id, label: "" }), outcome: undefined, replay: false };
+  const game: RyuoGame = ryuoGame.value ?? { opponentId: opponent.id, label: "" };
+  const event = game.event === "meijin" ? "meijin" : "ryuo";
+  const stage = describeMatchStage({
+    event,
+    season,
+    label: game.label,
+    userName: playerName.value,
+    stakes: (event === "meijin" ? meijinView.value : ryuoView.value)?.pending?.stakes ?? null,
+  });
+  ryuoGame.value = { ...game, outcome: undefined, replay: false, stage };
   ryuoCpuMoves = [];
   matchStarted.value = true;
   pregameOpen.value = false;
   scheduleDeferredCoachPortraitPreload();
   restart();
+  // 大一番とタイトル戦は、開幕の札とやこび姫の一言で始める。
+  if (stage?.coachLine && coachLevel.value !== "off") guideText.value = stage.coachLine;
+  if (stage && stage.weight !== "plain") showStageCard("opening");
   // 対局準備で選んだ作戦は、始めた瞬間にやこび姫が目指す形を伝える。
   if (openingGuideAvailable.value && (selectedStrategy.value || selectedCastle.value)) announceOpeningGuide();
 }
@@ -5957,6 +6083,9 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
       outcome: savedRyuo.outcome === "win" || savedRyuo.outcome === "loss" ? savedRyuo.outcome : undefined,
       replay: savedRyuo.replay === true,
       event: savedEvent,
+      stage: savedRyuo.stage && typeof savedRyuo.stage === "object" && ["plain", "big", "title"].includes(savedRyuo.stage.weight)
+        ? savedRyuo.stage
+        : null,
     }
     : null;
   matchKind.value = snapshot.matchKind === "learning" ? "learning" : restoredRyuo ? "tournament" : "normal";
@@ -7076,6 +7205,10 @@ function cancelResultReveal() {
   impactHoldRelease?.();
 }
 /** 止めの間に盤を触ったら、止めを打ち切る。 */
+function onBoardShellPointerDown() {
+  releaseImpactHold();
+  hideStageCard();
+}
 function releaseImpactHold() {
   impactHoldUntil = 0;
   impactHoldRelease?.();
@@ -8612,6 +8745,7 @@ const {
 
 function restart() {
   matchGeneration += 1;
+  hideStageCard();
   cancelResultReveal();
   stopGuidedReview();
   if (cpuTimer) clearTimeout(cpuTimer);

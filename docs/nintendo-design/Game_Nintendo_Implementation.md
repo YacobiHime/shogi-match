@@ -50,6 +50,7 @@
 | CPUの手の自然さ | `src/core/move-naturalness.mjs` | |
 | 棋士の棋風・得意と苦手 | `src/core/player-character.mjs` | |
 | 棋士の台詞 | `src/core/ryuo-speech.mjs` | |
+| 大会の対局の舞台 | `src/core/match-stage.mjs`、`ShogiMatchGame.vue`の`matchStage`・`stageCard` | 重さは3段階（ふつう・大一番・タイトル戦）。開幕の札と封じ手の札は1.8秒（`STAGE_CARD_MS`）、盤を触ると消える。封じ手は40手を越えたプレイヤーの最初の手（`STAGE_SEAL_PLY`） |
 | 推しの棋士・組優勝の予想・個性の一言 | `src/core/ryuo-oshi.mjs`、`RyuoRosterBook.vue`、`ShogiTournament.vue`の`cheerSays`、期の終わりの結果は`ShogiMatchGame.vue`の`finalizeRyuoSeason`（`oshiLine`） | 予想は自分の1局目が決まる前だけ、負けていない棋士から。的中はコレクションに回数だけ残す |
 | 対局の振り返り | `src/core/guided-review.mjs`、`src/composables/match/useGuidedReview.ts` | |
 | 教室・問題集 | `src/core/tutorial-curriculum.mjs`、`src/core/problem-set.mjs` | 対局画面から静的にimportしない（`AGENTS.md`） |

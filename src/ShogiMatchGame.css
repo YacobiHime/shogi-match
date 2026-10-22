@@ -29,6 +29,10 @@
   --ink: var(--ivory);
   --panel: rgba(23, 38, 50, 0.94);
   --line: rgba(241, 165, 76, 0.5);
+  /* 大会の舞台(緋毛氈の赤・金屏風の金・札の明朝)。 */
+  --stage-red: #a8352a;
+  --stage-gold: #e8c27a;
+  --stage-mincho: "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
   box-sizing: border-box;
   position: relative;
   display: grid;
@@ -362,6 +366,127 @@
   margin-left: 0.5em;
   color: var(--muted);
   font-size: 0.92em;
+}
+
+/* ===== 大会の舞台(docs/match-stage-design.md) ===== */
+/* 対局の札。ふつうの1局・大一番・タイトル戦の3段階で、少しずつ重くする。 */
+.shogi-game .shogi-game__stage-band {
+  display: grid;
+  flex: 1 1 100%;
+  gap: 0.1em;
+  min-width: 0;
+}
+.shogi-game .shogi-game__stage-band p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1em 0.6em;
+  align-items: baseline;
+  min-width: 0;
+  margin: 0;
+}
+.shogi-game .shogi-game__stage-event {
+  color: var(--muted);
+  font-size: 0.86em;
+}
+.shogi-game__stage-head strong {
+  min-width: 0;
+  color: var(--ivory);
+  font-size: 1.04em;
+}
+.shogi-game .shogi-game__stage-day {
+  flex: none;
+  padding: 0 0.45em;
+  border-radius: 0.3em;
+  color: var(--ivory);
+  background: var(--stage-red);
+  font-size: 0.8em;
+  font-weight: 700;
+}
+.shogi-game__stage-venue {
+  color: var(--muted);
+  font-size: 0.86em;
+}
+.shogi-game .shogi-game__stage-marks {
+  display: inline-flex;
+  flex: none;
+  gap: 0.08em;
+  letter-spacing: 0;
+}
+.shogi-game__stage-marks i {
+  font-size: 1.08em;
+  font-style: normal;
+  font-weight: 900;
+}
+.shogi-game__stage-mark--win {
+  color: var(--ivory);
+}
+.shogi-game__stage-mark--loss {
+  color: var(--muted);
+}
+.shogi-game__stage-mark--now {
+  color: var(--amber);
+  animation: shogi-stage-now 1.4s ease-in-out infinite alternate;
+}
+@keyframes shogi-stage-now {
+  from { opacity: 1; }
+  to { opacity: 0.35; }
+}
+.shogi-game .shogi-game__stage-stakes {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--amber);
+  font-size: 0.95em;
+  font-weight: 800;
+}
+.shogi-game .shogi-game__stage-band--kadoban .shogi-game__stage-stakes {
+  color: #ff9a85;
+}
+.shogi-game .shogi-game__stage-band--reach .shogi-game__stage-stakes,
+.shogi-game .shogi-game__stage-band--final .shogi-game__stage-stakes {
+  color: var(--stage-gold);
+}
+.shogi-game__stage-opponent {
+  color: var(--ivory);
+  font-size: 0.92em;
+}
+/* スマホ縦などの狭い画面では、対局場は開幕の札だけに出し、札を3行に収める。 */
+.shogi-game:not(.shogi-game--wide) .shogi-game__stage-venue {
+  display: none;
+}
+.shogi-game .shogi-game__summary--stage-big {
+  border-left-color: var(--stage-red);
+}
+.shogi-game .shogi-game__summary--stage-title {
+  border-color: rgba(232, 194, 122, 0.55);
+  border-left: 3px solid var(--stage-red);
+  background: linear-gradient(90deg, rgba(142, 43, 34, 0.42), rgba(23, 38, 50, 0.9) 70%);
+}
+.shogi-game--stage-title .shogi-game__stage-head strong {
+  font-family: var(--stage-mincho);
+  font-size: 1.1em;
+  letter-spacing: 0.04em;
+}
+/* タイトル戦の背景。金屏風の光と、屏風の継ぎ目、足もとの畳。盤と升の色には触れない(黄色の升の強調はしない)。 */
+.shogi-game.shogi-game--stage-title {
+  background:
+    radial-gradient(ellipse 75% 42% at 50% 0%, rgba(232, 194, 122, 0.26), transparent 72%),
+    repeating-linear-gradient(90deg, rgba(232, 194, 122, 0.07) 0 1px, transparent 1px 12.5%),
+    linear-gradient(180deg, transparent 0 78%, rgba(86, 104, 58, 0.32) 78% 100%),
+    linear-gradient(180deg, #33281d 0%, #251e18 62%, #232a1f 100%);
+}
+/* 大一番は、上からの朱の明かりだけを足す。 */
+.shogi-game.shogi-game--stage-big {
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(226, 85, 59, 0.18), transparent 72%),
+    radial-gradient(circle at 8% 18%, rgba(241, 165, 76, 0.16) 0 2px, transparent 3px),
+    radial-gradient(circle at 91% 13%, rgba(215, 209, 253, 0.18) 0 2px, transparent 3px),
+    linear-gradient(135deg, transparent 0 68%, rgba(43, 70, 91, 0.18) 68% 100%),
+    var(--night);
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__stage-mark--now {
+    animation: none;
+  }
 }
 
 /* ===== やこび姫補助 ===== */
@@ -751,6 +876,105 @@
   text-align: center;
   pointer-events: none;
   transform: translate(-50%, -50%);
+}
+/* 開幕の札と封じ手の札(docs/match-stage-design.md)。振り駒の知らせと同じ置き方で、盤の操作は妨げない。 */
+.shogi-game__stage-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  gap: 0.25em;
+  justify-items: center;
+  width: max-content;
+  min-width: min(17em, 88%);
+  max-width: 92%;
+  padding: 0.8em 1.5em 0.9em;
+  border: 3px solid var(--ivory);
+  border-radius: 0.8em;
+  color: var(--ivory);
+  background: var(--night);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 10px 24px rgba(0, 0, 0, 0.45);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.shogi-game__stage-card small {
+  color: rgba(255, 252, 244, 0.82);
+  font-size: 0.86em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.shogi-game__stage-card strong {
+  text-wrap: balance;
+  font-family: var(--stage-mincho);
+  font-size: 1.4em;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+}
+.shogi-game__stage-card b {
+  margin-top: 0.15em;
+  color: var(--amber);
+  font-size: 1.02em;
+  font-weight: 800;
+}
+.shogi-game__stage-card-venue {
+  font-size: 0.9em;
+}
+.shogi-game__stage-card-sides {
+  display: grid;
+  gap: 0.15em;
+  margin-top: 0.2em;
+  font-size: 1.05em;
+  font-weight: 700;
+}
+.shogi-game__stage-card-sides em {
+  margin-right: 0.5em;
+  color: var(--stage-gold);
+  font-size: 0.82em;
+  font-style: normal;
+}
+.shogi-game__stage-card-you {
+  text-decoration: underline;
+  text-decoration-color: rgba(232, 194, 122, 0.7);
+  text-underline-offset: 0.25em;
+}
+/* 大一番は朱の縁。タイトル戦は緋毛氈の赤に金の縁。 */
+.shogi-game__stage-card--big {
+  border-color: #e2553b;
+}
+.shogi-game__stage-card--title {
+  border-color: var(--stage-gold);
+  background: linear-gradient(180deg, #8e2b22, #6a1d17);
+}
+.shogi-game__stage-card--title b {
+  color: var(--stage-gold);
+}
+/* 封じ手は、和紙の札と封筒。 */
+.shogi-game .shogi-game__stage-card--seal {
+  border-color: var(--stage-red);
+  color: var(--night);
+  background: #f6eedd;
+}
+.shogi-game__stage-card--seal small {
+  color: #6b4b3a;
+}
+.shogi-game__stage-card--seal span {
+  font-size: 0.9em;
+  font-weight: 700;
+}
+.shogi-game__stage-envelope {
+  position: relative;
+  width: 2.6em;
+  height: 1.7em;
+  margin-bottom: 0.15em;
+  border: 2px solid var(--stage-red);
+  border-radius: 0.15em;
+  background:
+    linear-gradient(to bottom right, transparent calc(50% - 1px), var(--stage-red) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) left top / 50% 62% no-repeat,
+    linear-gradient(to bottom left, transparent calc(50% - 1px), var(--stage-red) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) right top / 50% 62% no-repeat,
+    #fffcf4;
 }
 /* 囲い完成の知らせ。振り駒と同じ形で、教室のはなまると同じ朱色の縁にする。 */
 .shogi-game__castle-callout {
