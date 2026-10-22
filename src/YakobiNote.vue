@@ -27,6 +27,7 @@
           @click="selectTab(item.id)"
         >
           <span class="shogi-note__nav-label">{{ item.label }}</span>
+          <span class="shogi-note__nav-short" aria-hidden="true">{{ item.short }}</span>
           <small class="shogi-note__nav-desc">{{ item.description }}</small>
         </button>
       </nav>
@@ -126,7 +127,7 @@
               </button>
             </li>
             <li>
-              <button type="button" class="shogi-note__highlight" @click="selectTab('ryuo')">
+              <button type="button" class="shogi-note__highlight" @click="selectTab('tournament')">
                 <small>竜王戦</small>
                 <strong>{{ career.champion ? "竜王" : `${career.group}組` }}</strong>
                 <span>{{ career.seasons ? `${career.seasons}期参加` : "まだ参加していません" }}</span>
@@ -266,8 +267,10 @@
           </template>
         </section>
 
-        <!-- 竜王戦 -->
-        <section v-if="tab === 'ryuo'" id="shogi-note-pane-ryuo" class="shogi-note__panel" role="tabpanel" aria-label="竜王戦">
+        <!--
+          大会(docs/player-world-note-design.mdの3-2)。竜王戦と名人戦の歩みと、賞状帳。
+        -->
+        <section v-if="tab === 'tournament'" id="shogi-note-pane-tournament" class="shogi-note__panel" role="tabpanel" aria-label="大会">
           <section class="shogi-note__card" aria-labelledby="shogi-note-ryuo" data-note-ryuo>
             <h2 id="shogi-note-ryuo">竜王戦</h2>
             <RyuoLadder :group="career.group" :champion="career.champion" />
@@ -295,7 +298,49 @@
             </template>
             <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
           </section>
-          <RyuoRosterBook :roster="roster" :initial-group="career.champion ? 1 : career.group" :asset-base-url="assetBaseUrl" />
+          <section class="shogi-note__card" aria-labelledby="shogi-note-meijin" data-note-meijin>
+            <h2 id="shogi-note-meijin">名人戦</h2>
+            <RyuoLadder kind="meijin" :meijin-class="meijinNow.cls" />
+            <dl class="shogi-note__tiles shogi-note__tiles--four">
+              <div><dt>現在</dt><dd data-note-meijin-now>{{ meijinNow.text }}</dd></div>
+              <div><dt>参加</dt><dd>{{ meijinHistory.length }}<small>期</small></dd></div>
+              <div><dt>最高</dt><dd>{{ meijinBest }}</dd></div>
+              <div><dt>名人</dt><dd>{{ meijinCareer.titles ?? 0 }}<small>期</small></dd></div>
+            </dl>
+            <p v-if="meijinCareer.eternal" class="shogi-note__hint">永世名人</p>
+            <template v-if="meijinHistory.length">
+              <h3 class="shogi-note__subhead">これまでの成績</h3>
+              <ol class="shogi-note__history" data-note-meijin-history>
+                <li v-for="entry in recentMeijinHistory" :key="entry.no" :class="`shogi-note__history--${meijinHistoryKind(entry)}`">
+                  <span class="shogi-note__history-no">第{{ entry.no }}期</span>
+                  <span class="shogi-note__history-group">{{ meijinClassLabel(entry.cls) }}</span>
+                  <span class="shogi-note__history-text">{{ meijinOutcome(entry.outcome) }}{{ entry.place ? `・${entry.place}位` : "" }}</span>
+                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                </li>
+              </ol>
+            </template>
+            <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、名人戦に参加できます。</p>
+          </section>
+          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-awards" data-note-awards>
+            <h2 id="shogi-note-awards">賞状帳<small class="shogi-note__count">{{ awards.length }}枚</small></h2>
+            <ul v-if="awards.length" class="shogi-note__awards">
+              <li v-for="item in shownAwards" :key="item.id">
+                <button type="button" class="shogi-note__award-row" :data-note-award="item.id" @click="awardShown = item">
+                  <span :class="['shogi-note__award-seal', `shogi-note__award-seal--${item.grade}`]" aria-hidden="true">{{ item.seal }}</span>
+                  <span class="shogi-note__award-text">{{ awardLine(item) }}<small>{{ item.wins }}勝{{ item.losses }}敗{{ item.grade === "fight" ? "・敢闘賞" : "" }}</small></span>
+                </button>
+              </li>
+            </ul>
+            <p v-else class="shogi-note__hint">竜王戦や名人戦の期を終えると、表彰式で賞状がもらえるよ。ここにたまっていくからね。</p>
+            <button v-if="awards.length > AWARD_PREVIEW" type="button" class="shogi-note__button shogi-note__button--ghost" data-note-awards-all @click="allAwards = !allAwards">
+              {{ allAwards ? "新しい3枚だけ見る" : `すべて見る（${awards.length}枚）` }}
+            </button>
+          </section>
+        </section>
+
+        <!-- 棋士名鑑(docs/player-world-note-design.mdの3-3)。 -->
+        <section v-if="tab === 'book'" id="shogi-note-pane-book" class="shogi-note__panel shogi-note__panel--book" role="tabpanel" aria-label="棋士名鑑">
+          <RyuoRosterBook ref="bookEl" :roster="roster" :initial-group="career.champion ? 1 : career.group" :asset-base-url="assetBaseUrl" />
         </section>
 
         <!--
@@ -440,6 +485,7 @@
           </section>
         </section>
       </main>
+      <SeasonAward v-if="awardShown" :award="awardShown" :asset-base-url="assetBaseUrl" @done="awardShown = null" />
     </div>
   </div>
 </template>
@@ -482,6 +528,10 @@ import {
   saveTheme,
 } from "./core/themes.mjs";
 import { outcomeText } from "./core/ryuo-career.mjs";
+import { CLASS_LABELS, MEIJIN_OUTCOME_TEXT } from "./core/meijin.mjs";
+import { junniClassOf, junniPlaceOf } from "./core/ryuo-league.mjs";
+import { awardLine } from "./core/season-award.mjs";
+import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 
 type Tally = { wins: number; losses: number; draws: number };
 type GameOutcome = "win" | "loss" | "draw";
@@ -516,6 +566,8 @@ type RyuoCareer = {
   challenges: number; eternal: boolean;
   history: HistoryEntry[];
 };
+type MeijinHistoryEntry = { no: number; cls: string; wins: number; losses: number; place: number | null; outcome: string; next: string | null };
+type MeijinCareer = { no: number; best: string; titles: number; eternal: boolean; history: MeijinHistoryEntry[] };
 type UsageRow = { name: string; wins: number; losses: number; draws: number; games: number; rate: number };
 
 const props = defineProps({
@@ -529,23 +581,29 @@ const props = defineProps({
     type: Object as PropType<RyuoCareer>,
     default: () => ({ group: 6, seasons: 0, champion: false, titles: 0, streak: 0, bestStreak: 0, challenges: 0, eternal: false, history: [] }),
   },
+  /** 名人戦のキャリア(プレイヤーの歩み。meijin.mjs)。 */
+  meijinCareer: { type: Object as PropType<MeijinCareer>, default: () => ({ no: 0, best: "C2", titles: 0, eternal: false, history: [] }) },
+  /** 賞状帳(core/season-award.mjs。古い順)。 */
+  awards: { type: Array as PropType<SeasonAwardData[]>, default: () => [] },
 });
 const emit = defineEmits(["close", "start-match", "start-measure", "declare"]);
 
 /** ノートの項目。最後に開いた項目を、この端末で覚えておく。 */
 const TABS = [
-  { id: "summary", label: "まとめ", description: "いまの棋力と次の目標" },
-  { id: "record", label: "成績", description: "勝ち負けと推移" },
-  { id: "style", label: "戦法", description: "得意な戦法と囲い" },
-  { id: "ryuo", label: "竜王戦", description: "組と棋士名鑑" },
-  { id: "collection", label: "コレクション", description: "集めた印と着せ替え" },
-  { id: "settings", label: "設定", description: "棋力の測定と申告" },
+  { id: "summary", label: "まとめ", short: "まとめ", description: "いまの棋力と次の目標" },
+  { id: "record", label: "成績", short: "成績", description: "勝ち負けと推移" },
+  { id: "style", label: "戦法", short: "戦法", description: "得意な戦法と囲い" },
+  { id: "tournament", label: "大会", short: "大会", description: "竜王戦・名人戦と賞状帳" },
+  { id: "book", label: "棋士名鑑", short: "名鑑", description: "棋士と、あなたとの対戦" },
+  { id: "collection", label: "コレクション", short: "コレクション", description: "集めた印と着せ替え" },
+  { id: "settings", label: "設定", short: "設定", description: "棋力の測定と申告" },
 ] as const;
 type TabId = typeof TABS[number]["id"];
 const TAB_STORAGE_KEY = "yacobihime:shogi-match:note-tab";
 function loadTab(): TabId {
   try {
-    const saved = localStorage.getItem(TAB_STORAGE_KEY);
+    // 前の版の「竜王戦」の項目は、「大会」として開く。
+    const saved = localStorage.getItem(TAB_STORAGE_KEY) === "ryuo" ? "tournament" : localStorage.getItem(TAB_STORAGE_KEY);
     return TABS.some(({ id }) => id === saved) ? saved as TabId : "summary";
   } catch {
     return "summary";
@@ -647,6 +705,44 @@ function historyKind(entry: HistoryEntry) {
   if (entry.relegated || entry.outcome === "defense-lost") return "down";
   return "stay";
 }
+// ---- 名人戦の歩み(大会の項目)。いまのクラスと順位は、名簿の順位戦の世界(roster.junni)から読む。
+const meijinHistory = computed(() => props.meijinCareer.history ?? []);
+const recentMeijinHistory = computed(() => [...meijinHistory.value].reverse().slice(0, 8));
+const meijinClassLabel = (cls: string) => (cls === "meijin" ? "名人" : CLASS_LABELS[cls as keyof typeof CLASS_LABELS] ?? cls);
+const meijinOutcome = (outcome: string) => MEIJIN_OUTCOME_TEXT[outcome as keyof typeof MEIJIN_OUTCOME_TEXT] ?? outcome;
+const meijinNow = computed(() => {
+  const world = props.roster?.junni;
+  const cls = world ? junniClassOf(world, "user") : null;
+  if (!cls || cls === "F") return { cls: "", text: "—" };
+  if (cls === "meijin") return { cls, text: "名人" };
+  return { cls, text: `${meijinClassLabel(cls)} ${junniPlaceOf(world, "user")}位` };
+});
+const meijinBest = computed(() => (meijinHistory.value.length ? meijinClassLabel(props.meijinCareer.best) : "—"));
+/** 成績の行の色分け: 名人・昇級・降級(降級点)・そのほか。 */
+function meijinHistoryKind(entry: MeijinHistoryEntry) {
+  if (["meijin", "defend"].includes(entry.outcome)) return "crown";
+  if (["promote", "challenger"].includes(entry.outcome)) return "up";
+  if (["demote", "point", "lost-title"].includes(entry.outcome)) return "down";
+  return "stay";
+}
+
+// ---- 賞状帳(大会の項目)。新しい順に3枚、「すべて見る」で全部。押すと賞状を開く(動かさない)。
+const AWARD_PREVIEW = 3;
+const allAwards = ref(false);
+const shownAwards = computed(() => [...props.awards].reverse().slice(0, allAwards.value ? undefined : AWARD_PREVIEW));
+const awardShown = ref<SeasonAwardData | null>(null);
+
+// ---- 戻る操作(ブラウザの戻る)。重ねて開いたもの(賞状・名鑑のくわしい情報)から閉じる。閉じたら真。
+const bookEl = ref<{ goBack: () => boolean } | null>(null);
+function goBack() {
+  if (awardShown.value) {
+    awardShown.value = null;
+    return true;
+  }
+  return Boolean(bookEl.value?.goBack());
+}
+defineExpose({ goBack });
+
 const grades = declarableGrades();
 const declareLabel = ref("");
 function declare() {
@@ -837,6 +933,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   --note-line: rgba(255, 252, 244, 0.16);
   --note-muted: rgba(255, 252, 244, 0.7);
   --note-control: 2.9rem;
+  --note-mincho: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
   background: #1e2d3d;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
 }
@@ -914,9 +1011,14 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__panel--fill > .shogi-note__card { align-content: start; }
 .shogi-game .shogi-note__panel--fill .shogi-note__trend-card { grid-template-rows: auto minmax(0, 1fr); }
 .shogi-game .shogi-note__panel--fill .shogi-note__trend-box { height: 100%; box-sizing: border-box; }
-/* スマホでは見出しの帯が2行にならないよう、レーティングは「まとめ」にだけ出す。 */
+.shogi-game .shogi-note__nav-short { display: none; }
+/* スマホでは見出しの帯が2行にならないよう、レーティングは「まとめ」にだけ出す。項目は4列2段で、短い名前にする。 */
 @media (max-width: 599px) {
   .shogi-game .shogi-note__header-rating { display: none; }
+  .shogi-game .shogi-note__nav { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.3rem; }
+  .shogi-game .shogi-note__nav-item { min-height: 2.6rem; padding: 0.2rem 0.1rem; }
+  .shogi-game .shogi-note__nav-label { display: none; }
+  .shogi-game .shogi-note__nav-short { display: block; font-size: 0.85em; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
 }
 @media (min-width: 900px) {
   .shogi-game .shogi-note__layout {
@@ -1146,10 +1248,13 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   gap: 1rem;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  animation: shogi-note-panel-in 160ms ease-out both;
+  /* 終わったあとに変形を残さない(backwards)。残すと、中で重ねて開くシートの位置の基準が、この欄になってしまう。 */
+  animation: shogi-note-panel-in 160ms ease-out backwards;
 }
 @media (min-width: 760px) {
   .shogi-game .shogi-note__panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  /* 棋士名鑑は1列(一覧と、くわしい情報を並べるのは名鑑の中)。 */
+  .shogi-game .shogi-note__panel.shogi-note__panel--book { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-note__panel > .shogi-note__empty,
   .shogi-game .shogi-note__panel > .shogi-note__pair,
   .shogi-game .shogi-note__panel > .shogi-note__card--wide { grid-column: 1 / -1; }
@@ -1349,6 +1454,41 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   background: var(--note-deep);
   font-size: 0.9em;
 }
+/* 賞状帳の行(大会の画面の賞状帳と同じ形)。左の小さな判子の色は賞状の格。 */
+.shogi-game .shogi-note__awards { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__award-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 52px;
+  padding: 0.4rem 0.7rem;
+  border: 0;
+  border-radius: 0.3rem;
+  color: inherit;
+  background: var(--note-deep);
+  box-shadow: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shogi-game .shogi-note__award-seal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 2px solid #fffcf4;
+  border-radius: 0.3rem;
+  background: #5d6f80;
+  font-family: var(--note-mincho);
+  font-weight: 900;
+}
+.shogi-game .shogi-note__award-seal--gold { background: #c9962e; }
+.shogi-game .shogi-note__award-seal--silver { background: #8c98a6; }
+.shogi-game .shogi-note__award-seal--red { background: #c4604c; }
+.shogi-game .shogi-note__award-text { display: grid; gap: 0.1rem; min-width: 0; font-weight: 800; }
+.shogi-game .shogi-note__award-text small { color: var(--note-muted); font-size: 0.8em; }
 .shogi-game .shogi-note__history li.shogi-note__history--crown { border-left-color: var(--note-gold); background: rgba(241, 165, 76, 0.14); }
 .shogi-game .shogi-note__history li.shogi-note__history--up { border-left-color: var(--note-gold); }
 .shogi-game .shogi-note__history li.shogi-note__history--down { border-left-color: var(--note-lavender); }

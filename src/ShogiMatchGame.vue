@@ -485,12 +485,15 @@
     />
     <YakobiNote
       v-if="yakobiNoteOpen"
+      ref="noteView"
       :asset-base-url="assetBaseUrl"
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
       :state="ratingState"
       :profile="profileState"
       :career="ryuoCareer"
       :roster="ryuoRoster"
+      :meijin-career="meijinCareer"
+      :awards="seasonAwards"
       @close="yakobiNoteOpen = false"
       @start-match="startMatchFromNote"
       @start-measure="startMeasureMatch"
@@ -2427,6 +2430,7 @@ const tournamentFromGame = ref(false);
 /** 大会の難易度のおすすめ。6組の相手の平均が、レーティングに近いLvになる難易度。 */
 const ryuoDefaultDifficulty = computed(() => recommendedDifficulty(recommendedStrengthPreset.value.level));
 const tournamentView = ref<{ goBack: () => void } | null>(null);
+const noteView = ref<{ goBack: () => boolean } | null>(null);
 /** 直近の対局で変動したレーティング。リロードで復元した終局画面では出さない。 */
 const ratingChange = ref<{ before: number; after: number; delta: number } | null>(null);
 /** 棋力測定の対局か。終局後に自動で棋譜解析を始め、棋力を診断する。 */
@@ -5554,7 +5558,8 @@ function navigateBack() {
     if (tournamentView.value) tournamentView.value.goBack();
     else tournamentOpen.value = false;
   } else if (yakobiNoteOpen.value) {
-    yakobiNoteOpen.value = false;
+    // やこびノートは、重ねて開いたもの(賞状・棋士名鑑のくわしい情報)から閉じる。
+    if (!noteView.value?.goBack()) yakobiNoteOpen.value = false;
   } else if (referenceDexKind.value) {
     // 駒の説明へ飛んできたときは、先に元の表へ戻す。
     if (referenceDexView.value) referenceDexView.value.goBack();

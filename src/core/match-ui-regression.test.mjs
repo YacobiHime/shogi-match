@@ -528,7 +528,9 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/:oshi-id="oshi\?\.id \?\? ''"/);
     const book = readFileSync(new URL("../RyuoRosterBook.vue", import.meta.url), "utf8");
     expect(book).toMatch(/data-oshi-toggle[\s\S]*?@click="toggleOshi\(member\.id\)"/);
-    expect(book).toMatch(/member\.catchphrase/);
+    // 名鑑は、顔の判子と肩書きの一覧から、くわしい情報を重ねて開く(個性の一言はくわしい情報に)。
+    expect(book).toMatch(/selected\.catchphrase/);
+    expect(book).toMatch(/data-book-member[\s\S]*?@click="openMember\(row\.id\)"/);
   });
 
   it("counts play days only for shogi actions and never pressures the player", () => {

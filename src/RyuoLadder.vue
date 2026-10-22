@@ -1,6 +1,6 @@
 <template>
-  <!-- 竜王戦の組の階段。上が竜王、下が6組。いまの位置に印を付ける。 -->
-  <ol class="ryuo-ladder" :aria-label="`竜王戦の組（いまは${champion ? '竜王' : `${group}組`}）`">
+  <!-- 竜王戦の組の階段(上が竜王、下が6組)か、名人戦の順位戦の階段(上が名人、下がC級2組)。いまの位置に印を付ける。 -->
+  <ol :class="['ryuo-ladder', { 'ryuo-ladder--meijin': kind === 'meijin' }]" :aria-label="ariaLabel">
     <li
       v-for="step in steps"
       :key="step.id"
@@ -17,14 +17,29 @@
 import { computed } from "vue";
 
 const props = defineProps({
+  /** ryuo: 竜王戦の組、meijin: 名人戦の順位戦のクラス。 */
+  kind: { type: String, default: "ryuo" },
   group: { type: Number, default: 6 },
   champion: { type: Boolean, default: false },
+  /** 名人戦のいまのクラス(A・B1・B2・C1・C2、名人ならmeijin、まだ出ていなければ空)。 */
+  meijinClass: { type: String, default: "" },
 });
 
-const steps = computed(() => [
-  { id: "ryuo", label: "竜王", current: props.champion },
-  ...[1, 2, 3, 4, 5, 6].map((group) => ({ id: `g${group}`, label: `${group}組`, current: !props.champion && props.group === group })),
-]);
+const MEIJIN_STEPS = [["A", "A級"], ["B1", "B級1組"], ["B2", "B級2組"], ["C1", "C級1組"], ["C2", "C級2組"]];
+const steps = computed(() => (props.kind === "meijin"
+  ? [
+    { id: "ryuo", label: "名人", current: props.meijinClass === "meijin" },
+    ...MEIJIN_STEPS.map(([cls, label], index) => ({ id: `g${index + 1}`, label, current: props.meijinClass === cls })),
+  ]
+  : [
+    { id: "ryuo", label: "竜王", current: props.champion },
+    ...[1, 2, 3, 4, 5, 6].map((group) => ({ id: `g${group}`, label: `${group}組`, current: !props.champion && props.group === group })),
+  ]));
+const ariaLabel = computed(() => {
+  if (props.kind !== "meijin") return `竜王戦の組（いまは${props.champion ? "竜王" : `${props.group}組`}）`;
+  const current = steps.value.find((step) => step.current);
+  return `名人戦の順位戦のクラス（${current ? `いまは${current.label}` : "まだ出ていない"}）`;
+});
 </script>
 
 <style>
@@ -39,6 +54,8 @@ const steps = computed(() => [
   border-bottom: 2px solid rgba(255, 252, 244, 0.35);
   list-style: none;
 }
+.shogi-game .ryuo-ladder--meijin { grid-template-columns: 1.25fr repeat(5, minmax(0, 1fr)); }
+.shogi-game .ryuo-ladder--meijin .ryuo-ladder__label { font-size: 0.85em; }
 .shogi-game .ryuo-ladder__step {
   position: relative;
   display: grid;
