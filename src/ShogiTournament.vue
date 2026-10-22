@@ -127,6 +127,7 @@
           :player-name="playerName"
           :rating-text="ratingText"
           :suspended-moves="meijinSuspendedMoves"
+          :open-season="meijinFromGame"
           @enter="emit('meijin-enter', $event)"
           @play="emit('meijin-play')"
           @resume="emit('meijin-resume')"
@@ -804,8 +805,11 @@ const meijinCardNote = computed(() => {
   const progress = props.meijinView && !props.meijinView.result ? "・進行中" : "";
   return props.meijinCareer.no || progress ? `${cls}${progress}` : "順位戦から名人へ";
 });
+/** 対局から名人戦へ戻ってきた(期の画面から開く)。大会の選択から選び直したら、入口の五重塔から。 */
+const meijinFromGame = ref(props.fromGame && props.startAt === "meijin");
 /** 名人戦を選ぶ。 */
 function chooseMeijin() {
+  meijinFromGame.value = false;
   screen.value = "meijin";
 }
 const reEntry = ref(false);

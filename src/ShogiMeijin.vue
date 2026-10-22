@@ -5,7 +5,17 @@
   -->
   <div class="meijin" data-meijin>
     <!-- 入口 -->
-    <div v-if="screen === 'entry'" class="shogi-tournament__stage shogi-tournament__stage--entry" data-meijin-screen="entry">
+    <div v-if="screen === 'entry'" class="shogi-tournament__stage shogi-tournament__stage--entry meijin__framed" data-meijin-screen="entry">
+      <header class="shogi-tournament__topbar meijin__topbar">
+        <button type="button" class="shogi-tournament__topbar-back" :aria-label="backLabel" data-meijin-back @click="topBack">
+          <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">{{ backLabel }}</span>
+        </button>
+        <span class="shogi-tournament__seal" aria-hidden="true">名</span>
+        <div class="shogi-tournament__topbar-title">
+          <h1 id="shogi-tournament-title">名人戦</h1>
+          <p class="shogi-tournament__topbar-sub">{{ career.no ? careerText : "順位戦から名人へ" }}</p>
+        </div>
+      </header>
       <div class="shogi-tournament__mapwrap">
         <MeijinPagoda :current="entryClass" :holder-name="holderName" :headroom="110" />
         <div class="shogi-tournament__logo" data-meijin-logo>
@@ -17,7 +27,7 @@
       <section class="shogi-tournament__hud" aria-label="エントリー">
         <template v-if="inProgress">
           <p class="shogi-tournament__hud-role">進行中の順位戦</p>
-          <p class="shogi-tournament__hud-name">{{ view?.title }} <small>{{ view?.clsLabel }} {{ view?.round }}/{{ view?.rounds }}局</small></p>
+          <p class="shogi-tournament__hud-name">{{ view?.title }} <small>{{ seasonSub }}</small></p>
           <button type="button" class="shogi-tournament__start" data-meijin-continue @click="screen = 'season'">続きから参加する</button>
         </template>
         <template v-else>
@@ -26,7 +36,6 @@
             <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
             <span class="shogi-tournament__tip-text">{{ entryTalk }}</span>
           </p>
-          <p v-if="career.no" class="meijin__career" data-meijin-career>{{ careerText }}</p>
           <div class="shogi-tournament__entry-settings">
             <p><small>設定</small><span data-meijin-summary>{{ settingsSummary }}</span></p>
             <button type="button" class="shogi-tournament__sub" data-meijin-change @click="settingsOpen = true">変える</button>
@@ -68,9 +77,9 @@
 
     <!-- 期の画面 -->
     <div v-else-if="screen === 'season' && view" class="shogi-tournament__stage shogi-tournament__stage--meijin" data-meijin-screen="season">
-      <header class="shogi-tournament__topbar">
-        <button type="button" class="shogi-tournament__topbar-back" aria-label="大会の選択へ" data-meijin-back @click="emit('back')">
-          <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">大会の選択へ</span>
+      <header class="shogi-tournament__topbar meijin__topbar">
+        <button type="button" class="shogi-tournament__topbar-back" :aria-label="backLabel" data-meijin-back @click="topBack">
+          <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">{{ backLabel }}</span>
         </button>
         <span class="shogi-tournament__seal" aria-hidden="true">名</span>
         <div class="shogi-tournament__topbar-title">
@@ -208,7 +217,17 @@
     </div>
 
     <!-- 結果 -->
-    <div v-else-if="screen === 'result' && view?.result" class="shogi-tournament__stage shogi-tournament__stage--entry" data-meijin-screen="result">
+    <div v-else-if="screen === 'result' && view?.result" class="shogi-tournament__stage shogi-tournament__stage--entry meijin__framed" data-meijin-screen="result">
+      <header class="shogi-tournament__topbar meijin__topbar">
+        <button type="button" class="shogi-tournament__topbar-back" :aria-label="backLabel" data-meijin-back @click="topBack">
+          <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">{{ backLabel }}</span>
+        </button>
+        <span class="shogi-tournament__seal" aria-hidden="true">名</span>
+        <div class="shogi-tournament__topbar-title">
+          <h1 id="shogi-tournament-title">名人戦</h1>
+          <p class="shogi-tournament__topbar-sub">{{ view.title }}の結果</p>
+        </div>
+      </header>
       <div class="shogi-tournament__mapwrap">
         <MeijinPagoda :current="entryClass" :holder-name="holderName" :headroom="110" />
         <div class="shogi-tournament__logo">
@@ -276,6 +295,8 @@ const props = defineProps({
   playerName: { type: String, default: "あなた" },
   ratingText: { type: String, default: "" },
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
+  /** 対局から戻ったとき。進行中の期の画面を直接開く(大会の選択から来たときは、入口の五重塔から)。 */
+  openSeason: { type: Boolean, default: false },
 });
 const emit = defineEmits<{
   enter: [settings: Settings];
@@ -287,9 +308,23 @@ const emit = defineEmits<{
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const inProgress = computed(() => Boolean(props.view && !props.view.result));
+/**
+ * 画面は3つで、入口(五重塔)が名人戦の中の起点。期の画面と結果は入口の1つ先で、左上の戻るは入口へ、
+ * 入口の戻るは大会の選択へ(どの画面も同じ場所に、行き先を書いた戻るを置く。docs/meijin-design.mdの15章)。
+ */
 const screen = ref<"entry" | "season" | "result">(
-  props.view && !props.view.result ? "season" : props.view?.result && !props.view.resultSeen ? "result" : "entry",
+  props.view?.result && !props.view.resultSeen ? "result" : props.openSeason && props.view && !props.view.result ? "season" : "entry",
 );
+const backLabel = computed(() => (screen.value === "entry" ? "大会の選択へ" : "五重塔へ"));
+/** 左上の戻る。入口なら大会の選択へ、ほかは入口へ。 */
+function topBack() {
+  if (screen.value === "entry") {
+    emit("back");
+    return;
+  }
+  if (screen.value === "result") emit("result-seen");
+  screen.value = "entry";
+}
 
 // ---- 入口と設定
 const settingsOpen = ref(false);
@@ -444,16 +479,14 @@ function toNext() {
   screen.value = "entry";
 }
 
-/** 戻る操作。重ねて開いたものを閉じたら真。閉じるものがなければ偽(大会の選択へ戻る)。 */
+/** 戻る操作。重ねて開いたものを閉じるか、入口へ戻したら真。入口なら偽(大会の選択へ戻る)。 */
 function goBack() {
   if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (detailOpen.value) detailOpen.value = false;
   else if (versusOpen.value) versusOpen.value = false;
-  else {
-    if (screen.value === "result") emit("result-seen");
-    return false;
-  }
+  else if (screen.value !== "entry") topBack();
+  else return false;
   return true;
 }
 defineExpose({ goBack });
@@ -462,7 +495,9 @@ defineExpose({ goBack });
 <style>
 .shogi-game .meijin { display: contents; }
 .shogi-game .meijin__tip { cursor: default; }
-.shogi-game .meijin__career { margin: 0; color: #9fb3c8; font-size: 0.8em; font-weight: 800; }
+/* 上の帯は3つの画面で同じ。戻るは、狭い画面でも行き先の文字を出す(竜王戦の帯より中身が少ない)。 */
+.shogi-game .meijin__topbar .shogi-tournament__topbar-back-text { display: inline; }
+.shogi-game .shogi-tournament__stage.meijin__framed { grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "top" "map" "hud"; }
 /* 期の画面: 上の帯、真ん中にリーグ表(番勝負)、下(横長は右)に次の一局の枠。 */
 .shogi-game .shogi-tournament__stage--meijin { grid-template-areas: "top" "map" "hud"; }
 .shogi-game .meijin__main {
@@ -511,6 +546,7 @@ defineExpose({ goBack });
 .shogi-game .meijin__record .is-loss { color: #8094a8; }
 @media (min-width: 900px), (orientation: landscape) and (max-height: 600px) {
   .shogi-game .shogi-tournament__stage--meijin { grid-template-areas: "top top" "map hud"; }
+  .shogi-game .shogi-tournament__stage.meijin__framed { grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "top top" "map hud"; }
 }
 @media (min-width: 1200px) and (min-aspect-ratio: 4/3) {
   .shogi-game .shogi-tournament__stage.shogi-tournament__stage--meijin:not(.shogi-tournament__stage--entry):not(.shogi-tournament__stage--result) {

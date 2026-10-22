@@ -228,6 +228,15 @@ describe("match screen regressions", () => {
     // 名人戦は大会の選択の札から入り、大会の画面の中に出す(docs/meijin-design.md)。
     expect(tournament).toMatch(/data-tournament="meijin" @click="chooseMeijin"/);
     expect(tournament).toMatch(/<ShogiMeijin\s+v-if="screen === 'meijin'"/);
+    // 名人戦の3つの画面は、どれも同じ上の帯の左上に、行き先を書いた戻るを置く。入口は大会の選択へ、期の画面と結果は入口(五重塔)へ。
+    // 大会の選択から選んだら入口から。対局から戻ったときだけ、期の画面を直接開く。
+    const meijin = readFileSync(new URL("../ShogiMeijin.vue", import.meta.url), "utf8");
+    expect(meijin.match(/<header class="shogi-tournament__topbar meijin__topbar">/g)).toHaveLength(3);
+    expect(meijin).toMatch(/const backLabel = computed\(\(\) => \(screen\.value === "entry" \? "大会の選択へ" : "五重塔へ"\)\);/);
+    expect(meijin).toMatch(/function topBack\(\) \{\s*if \(screen\.value === "entry"\) \{\s*emit\("back"\);[\s\S]*?screen\.value = "entry";/);
+    expect(meijin).toMatch(/props\.openSeason && props\.view && !props\.view\.result \? "season" : "entry"/);
+    expect(tournament).toMatch(/const meijinFromGame = ref\(props\.fromGame && props\.startAt === "meijin"\);/);
+    expect(tournament).toMatch(/function chooseMeijin\(\) \{\s*meijinFromGame\.value = false;/);
     expect(tournament).toMatch(/data-stage-steps[\s\S]*?@click="showStage\(index\)"/);
     expect(tournament).toMatch(/<RyuoBracket\s+v-if="viewStageIndex === 0[\s\S]*?<RyuoBracket\s+v-if="viewStageIndex === 1[\s\S]*?<RyuoSeries\s+v-if="viewStageIndex === 2"/);
     // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。
