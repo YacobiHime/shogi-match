@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MOUNTAIN_WIDTH, STEP_RISE, SUMMIT_RISE, mountainLayers, mountainLayout, steppedOutline } from './ryuo-mountain-layout.mjs';
+import { MOUNTAIN_WIDTH, STEP_RISE, SUMMIT_RISE, WIDE_HEIGHT, WIDE_STEP_GAP, mountainLayers, mountainLayersWide, mountainLayout, mountainLayoutWide, steppedOutline } from './ryuo-mountain-layout.mjs';
 
 describe('竜王への道の山の地図の配置', () => {
   it('下の段から頂上へ、一定の高さずつ登る。頂上(竜王)は真ん中', () => {
@@ -37,5 +37,31 @@ describe('竜王への道の山の地図の配置', () => {
       expect(outline[index][1] % 8).toBe(0);
     }
     expect(mountainLayers(700)).toHaveLength(4);
+  });
+
+  it('横長の図は、左の麓から右の頂上へ、段が右へ進むほど高くなる', () => {
+    const { width, height, points } = mountainLayoutWide(12);
+    expect(height).toBe(WIDE_HEIGHT);
+    expect(points).toHaveLength(12);
+    for (let index = 1; index < points.length; index += 1) expect(points[index].x).toBeGreaterThan(points[index - 1].x);
+    expect(points[1].x - points[0].x).toBe(WIDE_STEP_GAP);
+    // 頂上がいちばん高く、麓より上。図の中に収まる。
+    const summit = points.at(-1);
+    expect(Math.min(...points.map(({ y }) => y))).toBe(summit.y);
+    expect(points.at(-2).y).toBeLessThan(points[0].y);
+    for (const { x, y } of points) {
+      expect(x).toBeGreaterThan(0);
+      expect(x).toBeLessThan(width);
+      expect(y).toBeGreaterThan(0);
+      expect(y).toBeLessThan(height);
+    }
+    expect(mountainLayersWide(width, summit.x)).toHaveLength(4);
+  });
+
+  it('横長の図は、防衛戦の2段でも頂上が右にある', () => {
+    const { width, points } = mountainLayoutWide(2);
+    expect(points[1].x).toBeGreaterThan(points[0].x);
+    expect(points[1].y).toBeLessThan(points[0].y);
+    expect(width).toBeGreaterThan(points[1].x);
   });
 });

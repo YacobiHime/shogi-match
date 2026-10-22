@@ -1,14 +1,16 @@
 <template>
-  <div ref="scrollEl" class="ryuo-mountain" data-mountain @click="skip">
+  <div ref="scrollEl" :class="['ryuo-mountain', { 'ryuo-mountain--wide': wide }]" data-mountain @click="skip">
     <!--
       竜王への道の山の地図(docs/ryuo-ui-renewal-design.mdの5-2)。麓の将棋会館から、頂上の竜王の座(金屏風と将棋盤)まで、
       段を点線の道でつなぐ。いまの段に自分の駒とやこび姫、次の相手の顔、山場の段に扇子、頂上の横にいまの竜王。
       図は幅390の座標で描き、画面ではそのまま拡大・縮小する。山は図の外まで伸ばし、広い画面でも端が切れないようにする。
+      wideのときは横長の図(PCの期の画面で、真ん中の列の下に置く): 左の麓から右の頂上へ登り、枠の大きさに合わせて縮める。
     -->
     <svg
       class="ryuo-mountain__svg"
       :viewBox="`0 ${-headroom} ${layout.width} ${layout.height + headroom}`"
-      :style="{ aspectRatio: `${layout.width} / ${layout.height + headroom}` }"
+      :style="wide ? undefined : { aspectRatio: `${layout.width} / ${layout.height + headroom}` }"
+      :preserveAspectRatio="wide ? 'xMidYMax meet' : undefined"
       role="img"
       :aria-label="ariaLabel"
       shape-rendering="crispEdges"
@@ -23,9 +25,9 @@
 
         <!-- 3つの段階の帯(麓は組のトーナメント・中腹は決勝トーナメント・頂上は番勝負。docs/ryuo-stages-design.mdの5章)。 -->
         <g v-for="band in stageBands" :key="`band-${band.stage}`" class="ryuo-mountain__band" :data-stage-band="band.stage">
-          <rect :x="-layout.width" :y="band.y" :width="layout.width * 3" :height="band.h" :fill="band.fill" />
-          <rect :x="band.labelX" :y="band.y + 6" :width="band.labelWidth" height="17" rx="3" :fill="band.current ? '#f1a54c' : 'rgba(15, 24, 40, 0.85)'" />
-          <text :x="band.labelX + 6" :y="band.y + 18.5" font-size="12" :class="['ryuo-mountain__band-label', { 'ryuo-mountain__band-label--current': band.current }]">{{ band.label }}</text>
+          <rect :x="band.x" :y="band.y" :width="band.w" :height="band.h" :fill="band.fill" />
+          <rect :x="band.labelX" :y="band.labelY" :width="band.labelWidth" height="17" rx="3" :fill="band.current ? '#f1a54c' : 'rgba(15, 24, 40, 0.85)'" />
+          <text :x="band.labelX + 6" :y="band.labelY + 12.5" font-size="12" :class="['ryuo-mountain__band-label', { 'ryuo-mountain__band-label--current': band.current }]">{{ band.label }}</text>
         </g>
 
         <!-- 麓の将棋会館(ランキング戦の舞台)。 -->
@@ -121,14 +123,14 @@
         <rect x="-18" y="-18" width="36" height="36" :fill="face.sprite ? '#d8d0ff' : FACE_FILL[face.tone] ?? FACE_FILL.balance" stroke="#fffcf4" stroke-width="3" />
         <image v-if="face.sprite" :href="face.sprite" x="-15" y="-14" width="30" height="66" preserveAspectRatio="xMidYMin meet" clip-path="url(#ryuo-mountain-face-clip)" class="ryuo-mountain__sprite" />
         <text v-else x="0" y="7" text-anchor="middle" :class="['ryuo-mountain__face-char', { 'ryuo-mountain__face-char--dark': face.tone === 'balance' }]">{{ face.char }}</text>
-        <g v-if="face.bubble" :transform="`translate(${face.bubbleLeft ? -112 : 24}, -12)`">
+        <g v-if="face.bubble" :transform="wide ? 'translate(-44, -48)' : `translate(${face.bubbleLeft ? -112 : 24}, -12)`">
           <rect x="0" y="0" width="88" height="24" fill="#fffcf4" stroke="#0b1320" stroke-width="2" />
           <text x="44" y="17" text-anchor="middle" class="ryuo-mountain__bubble">{{ face.bubble }}</text>
         </g>
       </g>
 
       <!-- やこび姫と、自分の駒(将棋の駒の形)。 -->
-      <image v-if="piece" :href="yakobiUrl" :x="piece.x + (piece.x > layout.width / 2 ? 18 : -46)" :y="piece.y - 50" width="28" height="52" class="ryuo-mountain__sprite" preserveAspectRatio="xMidYMin meet" />
+      <image v-if="piece" :href="yakobiUrl" :x="piece.x + ((wide ? faceLeft : piece.x > layout.width / 2) ? 18 : -46)" :y="piece.y - 50" width="28" height="52" class="ryuo-mountain__sprite" preserveAspectRatio="xMidYMin meet" />
       <g v-if="piece" ref="pieceEl" class="ryuo-mountain__piece" :transform="`translate(${pieceAt.x}, ${pieceAt.y})`">
         <polygon points="0,-34 13,-29 16,0 -16,0 -13,-29" fill="#0b1320" transform="translate(3, 3)" />
         <polygon points="0,-34 13,-29 16,0 -16,0 -13,-29" :fill="piece.won ? '#f1a54c' : '#fffcf4'" />
@@ -145,7 +147,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
-import { mountainLayers, mountainLayout } from "./core/ryuo-mountain-layout.mjs";
+import { mountainLayers, mountainLayersWide, mountainLayout, mountainLayoutWide } from "./core/ryuo-mountain-layout.mjs";
 
 type Step = {
   key: string; /** 段の進み(ranking・revival・main・playoff・finals・done)。段階の帯に使う。 */ phase: string; label: string; short: string; /** done・current・lost・skip・todo・won */ state: string;
@@ -175,6 +177,10 @@ const props = defineProps({
   /** 3つの段階の名前(① 組のトーナメントから)。渡すと、山を段階ごとの帯で塗り分ける。いまの段階はstageCurrent。 */
   stageLabels: { type: Array as PropType<string[]>, default: () => [] },
   stageCurrent: { type: Number, default: -1 },
+  /** 段階の短い名前(横長の図で、帯が名前より狭いときに使う)。 */
+  stageShorts: { type: Array as PropType<string[]>, default: () => [] },
+  /** 横長の図にする(PCの期の画面。docs/ryuo-stages-design.mdの10章)。枠の大きさに合わせて縮め、送らない。 */
+  wide: { type: Boolean, default: false },
 });
 const emit = defineEmits<{ played: []; "open-opponent": [] }>();
 
@@ -198,8 +204,8 @@ const BAN_LINES = [1, 2, 3].flatMap((k) => [
 
 const hananeUrl = computed(() => `${props.assetBaseUrl}/characters/${HANANE_SPRITE.file}?v=${HANANE_SPRITE.version}`);
 const yakobiUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
-const layout = computed(() => mountainLayout(props.road.steps.length));
-const layers = computed(() => mountainLayers(layout.value.height));
+const layout = computed(() => (props.wide ? mountainLayoutWide : mountainLayout)(props.road.steps.length));
+const layers = computed(() => (props.wide ? mountainLayersWide(layout.value.width, layout.value.points.at(-1)!.x) : mountainLayers(layout.value.height)));
 const summit = computed(() => layout.value.points.at(-1)!);
 
 /** 星(位置は決まった並び。画面を開くたびに変わらない)。 */
@@ -208,7 +214,9 @@ const stars = computed(() => {
   const next = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
   const colors = ["#fffcf4", "#f1a54c", "#d8d0ff"];
   return Array.from({ length: 34 }, (_, id) => ({
-    id, x: Math.round(next() * 780) - 195, y: Math.round(next() * (Math.min(420, layout.value.height * 0.5) + props.headroom)) - props.headroom,
+    id,
+    x: Math.round(next() * layout.value.width * 2) - layout.value.width / 2,
+    y: props.wide ? Math.round(next() * 300) - 240 : Math.round(next() * (Math.min(420, layout.value.height * 0.5) + props.headroom)) - props.headroom,
     size: next() < 0.3 ? 3 : 4, color: colors[id % 3], delay: Math.round(next() * 30) / 10,
   }));
 });
@@ -225,37 +233,49 @@ const nodes = computed(() => props.road.steps.map((step, index) => {
 
 /** 段階の帯。段の進み(phase)から段階を決め、隣の段階の段との真ん中で区切る。 */
 const BAND_FILL = ["rgba(63, 125, 90, 0.2)", "rgba(61, 111, 165, 0.22)", "rgba(241, 165, 76, 0.14)"];
+/** 横長の図で、図の外まで伸ばす長さ(枠が図より横長でも、帯と山が切れない)。 */
+const FAR = 3000;
 const stageOfPhase = (phase: string) => (phase === "ranking" || phase === "revival" ? 0 : phase === "main" ? 1 : 2);
 const stageBands = computed(() => {
   if (!props.stageLabels.length) return [];
-  const ranges: { stage: number; top: number; bottom: number }[] = [];
+  // 縦長の図は高さ(y)で、横長の図は横の位置(x)で区切る。posは、麓から頂上へ増える位置。
+  const pos = (node: { x: number; y: number }) => (props.wide ? node.x : -node.y);
+  const ranges: { stage: number; low: number; high: number }[] = [];
   for (const node of nodes.value) {
     const stage = stageOfPhase(node.phase);
     const range = ranges.find((entry) => entry.stage === stage);
     if (range) {
-      range.top = Math.min(range.top, node.y);
-      range.bottom = Math.max(range.bottom, node.y);
-    } else ranges.push({ stage, top: node.y, bottom: node.y });
+      range.low = Math.min(range.low, pos(node));
+      range.high = Math.max(range.high, pos(node));
+    } else ranges.push({ stage, low: pos(node), high: pos(node) });
   }
-  ranges.sort((a, b) => b.top - a.top);
+  ranges.sort((a, b) => a.low - b.low);
+  const { width, height } = layout.value;
   return ranges.map((range, index) => {
     const lower = ranges[index - 1];
     const upper = ranges[index + 1];
-    const bottom = lower ? (range.bottom + lower.top) / 2 : layout.value.height;
-    const top = upper ? (range.top + upper.bottom) / 2 : -props.headroom;
-    const label = `${["①", "②", "③"][range.stage]} ${props.stageLabels[range.stage] ?? ""}`;
-    const labelWidth = 14 + label.length * 12.5;
+    const mark = ["①", "②", "③"][range.stage];
+    let label = `${mark} ${props.stageLabels[range.stage] ?? ""}`;
+    const widthOf = (text: string) => 14 + text.length * 12.5;
+    const common = { stage: range.stage, fill: BAND_FILL[range.stage], current: range.stage === props.stageCurrent };
+    if (props.wide) {
+      // 縦の帯。左右の端は図の外まで伸ばし、名前は帯の左上(図の中)に置く。帯が狭ければ短い名前にする。
+      const left = lower ? (range.low + lower.high) / 2 : -FAR;
+      const right = upper ? (range.high + upper.low) / 2 : width + FAR;
+      const labelX = Math.max(left, 0) + 6;
+      const room = (upper ? right : width) - labelX - 6;
+      if (widthOf(label) > room && props.stageShorts[range.stage]) label = `${mark} ${props.stageShorts[range.stage]}`;
+      return { ...common, label, labelWidth: widthOf(label), x: left, w: right - left, y: -FAR, h: height + FAR * 2, labelX, labelY: 6 };
+    }
+    const labelWidth = widthOf(label);
+    const bottom = lower ? -(range.low + lower.high) / 2 : height;
+    const top = upper ? -(range.high + upper.low) / 2 : -props.headroom;
     // 帯の上の端にいちばん近い段と反対の側に置く(段の名前や扇子と重ねない)。
     const nearest = nodes.value
       .filter((node) => stageOfPhase(node.phase) === range.stage)
       .reduce((best, node) => (!best || node.y < best.y ? node : best), null as null | { x: number; y: number });
-    const labelX = nearest && nearest.x < layout.value.width / 2 ? layout.value.width - labelWidth - 6 : 6;
-    return {
-      stage: range.stage, y: top, h: bottom - top, label, fill: BAND_FILL[range.stage],
-      current: range.stage === props.stageCurrent,
-      labelWidth,
-      labelX,
-    };
+    const labelX = nearest && nearest.x < width / 2 ? width - labelWidth - 6 : 6;
+    return { ...common, label, labelWidth, x: -width, w: width * 3, y: top, h: bottom - top, labelX, labelY: top + 6 };
   });
 });
 
@@ -302,10 +322,11 @@ const faces = computed(() => {
   const current = nodes.value[props.road.currentIndex];
   const spriteOf = (story: string | null | undefined) => (story === "hanane" ? hananeUrl.value : "");
   if (current && current.state === "current" && props.opponent) {
-    const right = current.x < layout.value.width / 2;
-    const x = current.x + (right ? 48 : -48);
+    const right = props.wide || current.x < layout.value.width / 2;
+    // 横長の図では、段の右上に置き、吹き出しは顔の上に出す(右の段と重ねない)。頂上のすぐ下の段では、金屏風と重ねないよう左上。
+    const x = current.x + (props.wide ? (faceLeft.value ? -46 : 44) : right ? 48 : -48);
     list.push({
-      key: "opponent", x, y: current.y - 4, name: props.opponent.name, char: props.opponent.char, tone: props.opponent.tone,
+      key: "opponent", x, y: props.wide ? current.y - 40 : current.y - 4, name: props.opponent.name, char: props.opponent.char, tone: props.opponent.tone,
       // 吹き出しは、段から遠い側(外側)に出す。上の段の名前と重ならないように。
       sprite: spriteOf(props.opponent.story), opponent: true, bubble: "次の相手！", bubbleLeft: !right,
     });
@@ -315,12 +336,15 @@ const faces = computed(() => {
     if (node.key === "finals") {
       list.push({ key: "ryuo", x: summit.value.x + 70, y: summit.value.y - 8, name: node.face.name, char: node.face.char, tone: node.face.tone, sprite: spriteOf(node.face.story), opponent: false, bubble: "", bubbleLeft: false });
     } else if (node.state === "todo") {
-      const left = node.x > layout.value.width / 2;
-      list.push({ key: node.key, x: node.x + (left ? 42 : -42), y: node.y - 14, name: node.face.name, char: node.face.char, tone: node.face.tone, sprite: spriteOf(node.face.story), opponent: false, bubble: "", bubbleLeft: false });
+      const left = !props.wide && node.x > layout.value.width / 2;
+      list.push({ key: node.key, x: node.x + (props.wide ? 40 : left ? 42 : -42), y: props.wide ? node.y - 40 : node.y - 14, name: node.face.name, char: node.face.char, tone: node.face.tone, sprite: spriteOf(node.face.story), opponent: false, bubble: "", bubbleLeft: false });
     }
   }
   return list;
 });
+
+/** 横長の図で、次の相手の顔を段の左に置くか(頂上のすぐ下の段。右は金屏風)。やこび姫は反対の右に置く。 */
+const faceLeft = computed(() => props.wide && props.road.currentIndex === props.road.steps.length - 2);
 
 /** 自分の駒の位置(いまの段。竜王になったら頂上)。 */
 const piece = computed(() => {
@@ -329,6 +353,10 @@ const piece = computed(() => {
   return { x: node.x, y: node.key === "ryuo" ? node.y - 30 : node.y - node.h / 2, won: node.state === "won" };
 });
 const pieceAt = ref({ x: piece.value?.x ?? 0, y: piece.value?.y ?? 0 });
+// 図の形が替わったとき(PCの横長の図と縦長の図)は、駒をいまの段に置き直す(跳ぶ動きの最中は動きに任せる)。
+watch(() => [piece.value?.x, piece.value?.y], () => {
+  if (!frame && piece.value) pieceAt.value = { x: piece.value.x, y: piece.value.y };
+});
 
 const ariaLabel = computed(() => {
   const node = nodes.value[props.road.currentIndex];
@@ -479,6 +507,9 @@ watch(() => props.road.steps.length, () => nextTick(centerCurrent));
   margin: auto auto 0;
   overflow: visible;
 }
+/* 横長の図: 枠いっぱいに広げ、図は下に寄せて縮める(送らない)。 */
+.shogi-game .ryuo-mountain--wide { overflow: hidden; }
+.shogi-game .ryuo-mountain--wide .ryuo-mountain__svg { flex: 1 1 0; width: 100%; max-width: none; height: 100%; min-height: 0; margin: 0; }
 .shogi-game .ryuo-mountain__band-label { fill: #c9d6e6; font-size: 12px; font-weight: 900; }
 .shogi-game .ryuo-mountain__band-label--current { fill: #172632; }
 .shogi-game .ryuo-mountain__star { animation: ryuo-mountain-twinkle 3.2s steps(2) infinite; }
