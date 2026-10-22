@@ -300,13 +300,26 @@
               <span class="shogi-tournament__tip-text">{{ tipLine }}</span>
               <span class="shogi-tournament__tip-more">もっと聞く</span>
             </button>
-            <button type="button" class="shogi-tournament__start" data-tournament-play @click="emit('play')">対局する</button>
+            <button type="button" class="shogi-tournament__start" data-tournament-play @click="versusOpen = true">対局する</button>
           </section>
           <section v-else-if="view.result" class="shogi-tournament__hud" aria-label="この期の結果">
             <p class="shogi-tournament__hud-role">この期の対局は、すべて終わりました</p>
             <p class="shogi-tournament__hud-name">{{ outcomeHeadline }} <small>{{ view.result.wins }}勝{{ view.result.losses }}敗</small></p>
             <button type="button" class="shogi-tournament__start" data-to-result @click="screen = 'result'">結果と統計を見る</button>
           </section>
+
+          <!-- 対局の直前のVS画面(5-3)。少しして、または押すと、盤へ。 -->
+          <RyuoVersus
+            v-if="versusOpen && view.pending"
+            :asset-base-url="assetBaseUrl"
+            :label="view.pending.label"
+            :you="view.pending.color === 'white' ? 'white' : 'black'"
+            :rating-text="ratingText"
+            :opponent="versusOpponent"
+            :win="view.pending.stakes?.win ?? ''"
+            :boss="Boolean(view.pending.stakes?.boss)"
+            @done="startPlay"
+          />
 
           <!-- くわしい情報のシート。下から重ねて開く。 -->
           <div v-if="sheet" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="SHEET_TITLE[sheet]" data-detail-sheet @click.self="sheet = ''">
@@ -501,6 +514,7 @@ import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RyuoLadder from "./RyuoLadder.vue";
 import RyuoRoad, { type RoadView } from "./RyuoRoad.vue";
 import RyuoMountain from "./RyuoMountain.vue";
+import RyuoVersus from "./RyuoVersus.vue";
 import YakobiSays from "./YakobiSays.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
@@ -895,6 +909,20 @@ const hudChips = computed(() => {
     chips.push({ text: `${abilities.at(-1)!.label} ${abilities.at(-1)!.rank}`, kind: "worst" });
   }
   return chips;
+});
+/** 対局の直前のVS画面。閉じたら(時間が来るか押すと)対局を始める。 */
+const versusOpen = ref(false);
+function startPlay() {
+  versusOpen.value = false;
+  emit("play");
+}
+/** VS画面の相手。 */
+const versusOpponent = computed(() => {
+  const opponent = props.view?.pending?.opponent;
+  return {
+    name: opponent?.name ?? "", char: opponent?.name.slice(0, 1) ?? "", tone: opponentStyleTone.value, sprite: opponentSprite.value,
+    dan: opponent?.dan ?? "", style: opponentProfile.value.style ?? "",
+  };
 });
 /** 山の地図に置く、次の相手の顔。 */
 const opponentFace = computed(() => {

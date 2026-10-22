@@ -154,7 +154,10 @@ describe("match screen regressions", () => {
     // 重ねて開いたものは、ブラウザの戻る操作で先に閉じる。
     expect(tournament).toMatch(/function goBack\(\) \{\s*if \(sheet\.value\) sheet\.value = "";\s*else if \(tableOpen\.value\) tableOpen\.value = false;/);
     // ボタンは短い動詞(U:3-2)。結果の画面の主役は「次の期へ」。
-    expect(tournament).toMatch(/data-tournament-play @click="emit\('play'\)">対局する</);
+    expect(tournament).toMatch(/data-tournament-play @click="versusOpen = true">対局する</);
+    // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。
+    expect(tournament).toMatch(/<RyuoVersus[\s\S]*?@done="startPlay"/);
+    expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*emit\("play"\);/);
     expect(tournament).toMatch(/data-next-season @click="toNextSeason">次の期へ</);
     expect(source).toContain('"結果を見る" : "竜王戦へ戻る"');
     // 節目の判子(段階3): 対局から戻ったときだけ出し、押すと閉じる。判子の音を鳴らすときは、登る音を鳴らさない。

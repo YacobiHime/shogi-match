@@ -11,8 +11,9 @@ export type MoveSoundKind = "normal" | "strong" | "capture" | "drop" | "promote"
 /**
  * climbは、竜王への道で1段登る音(ド・ミ・ソ・ドを上へ。0.4秒)。
  * stampは、竜王戦の節目(突破・組優勝・昇級・挑戦権・竜王)の判子の音(低い「トン」。0.3秒)。
+ * vsは、竜王戦の対局の直前のVS画面の音(和太鼓の「ドン」。0.4秒)。
  */
-export type SoundKind = MoveSoundKind | "god" | "win" | "lose" | "furigoma" | "furigoma-land" | "climb" | "stamp";
+export type SoundKind = MoveSoundKind | "god" | "win" | "lose" | "furigoma" | "furigoma-land" | "climb" | "stamp" | "vs";
 
 /** furigoma.mp3の中で、駒を撒く音が鳴る位置(ミリ秒)。振り駒の結果は、この瞬間に見せる。 */
 export const FURIGOMA_LAND_AT = 1930;
@@ -31,13 +32,14 @@ export const SOUND_FILES: Readonly<Record<SoundKind, string>> = Object.freeze({
   "furigoma-land": "furigoma_land.mp3",
   climb: "road_climb.mp3",
   stamp: "road_stamp.mp3",
+  vs: "road_vs.mp3",
 });
 
 /**
  * public/audio/に置いてある音。素材が届いたら、ここに足すと鳴るようになる。
  * ない音は、SOUND_FALLBACKの代わりの音を鳴らすか、鳴らさない(存在しないファイルを読みに行かない)。
  */
-export const AVAILABLE_SOUNDS: ReadonlySet<SoundKind> = new Set<SoundKind>(["normal", "strong", "furigoma", "furigoma-land", "climb", "stamp"]);
+export const AVAILABLE_SOUNDS: ReadonlySet<SoundKind> = new Set<SoundKind>(["normal", "strong", "furigoma", "furigoma-land", "climb", "stamp", "vs"]);
 
 /** 素材がないときの代わりの音。ここにない音は、素材がなければ鳴らさない。 */
 const SOUND_FALLBACK: Partial<Record<SoundKind, SoundKind>> = {
@@ -61,6 +63,7 @@ export const SOUND_VOLUME: Readonly<Record<SoundKind, number>> = Object.freeze({
   "furigoma-land": 0.8,
   climb: 0.6,
   stamp: 0.9,
+  vs: 0.9,
 });
 
 /** 実際に鳴らす音。素材がなければ代わりの音、代わりもなければnull。 */

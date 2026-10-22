@@ -89,6 +89,15 @@
         <text v-else-if="node.mark && node.state !== 'done'" :x="node.x" :y="node.labelY + 14" text-anchor="middle" class="ryuo-mountain__label ryuo-mountain__label--gold">{{ node.mark }}</text>
       </g>
 
+      <!-- 勝って登った直後: 倒した段に「突破」の判子(5-4)。 -->
+      <g v-if="stampAt" :transform="`translate(${stampAt.x}, ${stampAt.y}) rotate(-10)`" aria-hidden="true">
+        <g class="ryuo-mountain__stamp">
+          <rect x="-29" y="-15" width="58" height="30" fill="#0b1320" transform="translate(3, 3)" />
+          <rect x="-29" y="-15" width="58" height="30" fill="#c4604c" stroke="#fffcf4" stroke-width="3" />
+          <text x="0" y="6" text-anchor="middle" class="ryuo-mountain__stamp-text">突破</text>
+        </g>
+      </g>
+
       <!-- 顔(次の相手・ライバル・いまの竜王)。次の相手の顔を押すと、くわしい情報。 -->
       <g
         v-for="face in faces"
@@ -273,6 +282,8 @@ const pieceEl = ref<SVGGElement | null>(null);
 const glowFrom = ref(Infinity);
 const glowTo = ref(-Infinity);
 const pulsing = ref(false);
+/** 「突破」の判子を押す段の位置(勝って登ったときだけ)。 */
+const stampAt = ref<{ x: number; y: number } | null>(null);
 let frame = 0;
 const timers: ReturnType<typeof setTimeout>[] = [];
 
@@ -321,6 +332,7 @@ function play() {
   if (climbed) {
     glowFrom.value = lastIndex + 1;
     glowTo.value = currentIndex;
+    stampAt.value = { x: nodes.value[lastIndex].x + 8, y: nodes.value[lastIndex].y - 4 };
   }
   timers.push(setTimeout(finish, GLOW_MS));
   if (reducedMotion()) return;
@@ -395,6 +407,13 @@ onBeforeUnmount(finish);
 .shogi-game .ryuo-mountain__face--button:focus-visible { outline: 3px solid #d8d0ff; }
 .shogi-game .ryuo-mountain__bubble { font-size: 12px; font-weight: 800; fill: #1a2433; }
 .shogi-game .ryuo-mountain__sprite { image-rendering: pixelated; }
+.shogi-game .ryuo-mountain__stamp { transform-box: fill-box; transform-origin: center; animation: ryuo-mountain-stamp 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) 450ms both; }
+@keyframes ryuo-mountain-stamp {
+  0% { opacity: 0; transform: scale(2.2); }
+  70% { opacity: 1; transform: scale(0.92); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.shogi-game .ryuo-mountain__stamp-text { font-size: 16px; font-weight: 900; fill: #fffcf4; }
 .shogi-game .ryuo-mountain__piece-char { font-size: 15px; font-weight: 900; fill: #1a2433; }
 .shogi-game .ryuo-mountain__piece { animation: ryuo-mountain-bob 2.4s ease-in-out infinite; }
 @keyframes ryuo-mountain-bob { 50% { translate: 0 -3px; } }
@@ -418,6 +437,7 @@ onBeforeUnmount(finish);
   .shogi-game .ryuo-mountain__star,
   .shogi-game .ryuo-mountain__piece,
   .shogi-game .ryuo-mountain__pulse,
-  .shogi-game .ryuo-mountain__summit--glow { animation: none; }
+  .shogi-game .ryuo-mountain__summit--glow,
+  .shogi-game .ryuo-mountain__stamp { animation: none; }
 }
 </style>
