@@ -5,11 +5,18 @@
 利用者向けの説明は`README.md`、ローカルでの起動と定跡編集の手順は`docs/local-development.md`にあります。
 遊びとUIの設計の指針（桜井政博・任天堂のゲーム論とUI論）は`docs/nintendo-design/`にあります。ゲームデザインやUIデザインに関わる作業では、必ずこれを読んでから始めます（下の「遊びとUIの設計指針」）。
 
+## このゲームの柱
+
+- 主役は**大会**（竜王戦・名人戦）と**物語モード**（後で作る）です。
+- 将棋教室・問題集（詰将棋）・図鑑・終盤戦・自由対局は、主役を楽しむために強くなるための機能です。
+- 設計で迷ったら「大会（と物語）をもっと楽しむことにつながるか」を問います。「つぎはこれ」の練習も、最後は大会へ戻る道として勧めます（`docs/first-play-design.md`の0章）。
+
 ## 最初に確認する場所
 
 | 作業 | 主な参照先 |
 | --- | --- |
 | 対局画面・状態遷移・やこび姫の表示 | `src/ShogiMatchGame.vue`、スタイルは`src/ShogiMatchGame.css`、対局画面から切り出した部品は`src/composables/match/` |
+| はじめての分岐（どのくらい知ってるか）と、大会へ向かう「つぎはこれ」 | 設計は`docs/first-play-design.md`（はじめての案内は`src/core/welcome.mjs`、教室の始める場所は`src/core/tutorial-map.mjs`の`TUTORIAL_PLACEMENTS`）。CPUの段級位の作り直し（15級〜タイトル保持者）の設計は`docs/level-ladder-design.md` |
 | ホーム画面と強くなる道 | `src/ShogiMatchGame.vue`の`homeNext`・`homeRoadmapState`、段の判定は`src/core/home-roadmap.mjs`（問題集の解いた記録は`src/core/problem-progress.mjs`から読む）、設計は`docs/home-roadmap-design.md`。実力と実績で「つぎはこれ」とおすすめの強さを変える見立ては`src/core/play-coach.mjs`、対局の中身の記録（自由対局と竜王戦）と弱点の判定は`src/core/play-insight.mjs`、竜王戦の期の途中の「続きを指す」と「○○対策」・次の期へは`src/core/ryuo-next.mjs`、今日の1局・まだ見ていない遊び・あと少しのご褒美は`src/core/home-extras.mjs`、その裏の解析は`src/composables/match/usePlayInsightAnalysis.ts`（竜王戦の統計と共通の浅い読みは`scanAnalysis.ts`。設計は`docs/home-next-adaptive-design.md`） |
 | 対局準備の画面 | `src/ShogiMatchGame.vue`の対局準備（`pregameSides`・`pregameCommonRows`・`pregamePickerConfig`）、選択肢の定数は`src/composables/match/pregameOptions.ts`、選択シートは`src/PregamePicker.vue` |
 | ブラウザの戻る操作 | `src/composables/useBackNavigation.ts`、`src/ShogiMatchGame.vue`の`navigateBack` |
