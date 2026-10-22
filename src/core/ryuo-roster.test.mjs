@@ -113,7 +113,8 @@ describe('roster across seasons', () => {
     expect(groupOf(roster, 1).filter(({ kind }) => kind === 'pro').every(({ dan }) => index(dan) >= index('七段'))).toBe(true);
     const champion = roster.players[roster.holder];
     if (champion) expect(index(champion.dan)).toBeGreaterThanOrEqual(index('八段'));
-  });
+  // 多くの期を自動で進めるので、単独でも約5秒かかる。全部のテストを並べて走らせても時間切れにしない。
+  }, 30000);
 
   it('records the player as the champion and sends the former champion to group 1', () => {
     const roster = createRoster({ seed: 7 });
