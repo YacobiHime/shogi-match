@@ -171,10 +171,9 @@ function recommendMatch(state, content) {
   const strength = blendedStrength(resultStrength(state), content);
   const base = clampLevel((strength - TARGET_MARGIN) / RATING_PER_LEVEL);
   const cap = unbeatenCap(state);
-  const recentText = recentRecordText(games);
   const normal = (level) => ({
     level, kind: 'normal', title: '対局する', base, cap, handicapLevel: null,
-    reason: `Lv.${level} ${presetLabel(level)}の相手と。${recentText || '振り駒ですぐ始めるよ'}`,
+    reason: normalReason(state, games, level),
   });
   if ((state?.games ?? 0) < RULES_MIN_GAMES || !games.length) return withPromotion(state, normal(base));
 
@@ -215,6 +214,29 @@ function withPromotion(state, plan) {
     ...plan, kind: 'promotion', title: '昇級をかけた一局',
     reason: `${gradeName(goal.label)}まであとR${goal.remaining}。Lv.${plan.level}に勝てば昇級だよ`,
   };
+}
+
+/**
+ * 「対局する」の理由の1行(docs/home-next-adaptive-design.mdの13-4)。同じ状態なら同じ文にし、対局が1つ進むと変わるよう、
+ * 候補をレーティングの対局の数で選ぶ: 最近5局の成績・前の対局・そのLvとの通算・次の級まで。
+ */
+export function normalReason(state, games, level) {
+  const head = `Lv.${level} ${presetLabel(level)}の相手と。`;
+  const recentText = recentRecordText(games);
+  if (!games.length) return `${head}振り駒ですぐ始めるよ`;
+  const candidates = [`${head}${recentText}`];
+  const last = games.at(-1);
+  if (last.outcome === 'win') candidates.push(`前の対局はLv.${last.opponentLevel}に勝ち。次はLv.${level}で`);
+  else if (last.outcome === 'loss') candidates.push(`前の対局は惜しかったね。Lv.${level}でもう一度`);
+  const tally = state?.levels?.[level];
+  const played = (tally?.wins ?? 0) + (tally?.losses ?? 0) + (tally?.draws ?? 0);
+  if (!played) candidates.push(`Lv.${level}とは初めての対局。どんな相手かな`);
+  else if ((tally?.wins ?? 0) > (tally?.losses ?? 0)) candidates.push(`Lv.${level}とは通算${tally.wins}勝${tally.losses}敗。勝ち越しを伸ばそう`);
+  else if (!(tally?.wins)) candidates.push(`Lv.${level}とは${played}局指して、まだ勝ちなし。まずは1勝`);
+  else candidates.push(`Lv.${level}とは通算${tally.wins}勝${tally.losses}敗。ここで勝ち越そう`);
+  const goal = nextRatingGoal(state?.rating);
+  if (goal) candidates.push(`${gradeName(goal.label)}まであとR${goal.remaining}。Lv.${level}で一歩ずつ`);
+  return candidates[(state?.games ?? 0) % candidates.length];
 }
 
 /** 最近5局の成績の1行(「ここ5局は3勝2敗、いい調子」)。対局がなければ空。 */

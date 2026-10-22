@@ -82,7 +82,7 @@
                 </g>
               </svg>
             </template>
-            <template v-else-if="homeNext.id === 'tournament'">
+            <template v-else-if="homeNext.id === 'tournament' || homeNext.id === 'ryuo-season' || homeNext.id === 'ryuo-counter'">
               <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#f1a54c">
                   <rect x="4" y="2" width="8" height="1" />
@@ -159,6 +159,14 @@
           data-next-handicap
           @click="startQuickMatch({ level: homeNext.handicapLevel, handicapId: 'lance' })"
         >香落ちでLv.{{ homeNext.handicapLevel }}に挑む</button>
+        <!-- 竜王戦の期の途中: 主役でない方(対策か続き)を、小さな2つ目の入口にする(docs/home-next-adaptive-design.mdの13-3)。 -->
+        <button
+          v-if="homeNext.sub"
+          type="button"
+          class="shogi-title__next-sub"
+          :data-next-sub="homeNext.sub.id"
+          @click="startHomeNextSub"
+        >{{ homeNext.sub.label }}</button>
 
         <!--
           記録の帯の横に、プレイヤー名。押すと名前を入れる札を開く(docs/player-name-design.md)。
@@ -1615,7 +1623,13 @@
             次の挑戦をいちばん手前に置く。同じLvに続けて負けたときは、挑戦を続ける道を先頭に、
             強さを1つ下げる・香落ちを同じ大きさで並べる(自動では変えない)。教室と棋力測定の対局には出さない。
           -->
-          <div v-if="!tutorialMatch && !measureSession && resultRetrySuggestion" class="shogi-game__result-retry" data-retry-suggestion>
+          <!-- 竜王戦の次の相手の対策を終えたら、本番(竜王戦の期の画面)へ。もう一度対策も小さく残す(13-5)。 -->
+          <div v-if="ryuoCounter && !tutorialMatch && !measureSession" class="shogi-game__result-step" data-counter-next>
+            <p>{{ ryuoCounterOpponent?.name ?? "" }}さんの対策、おつかれさま。本番は{{ ryuoCounter.label }}</p>
+            <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-counter-go @click="goToRyuoFromCounter">本番へ</button>
+            <button type="button" class="shogi-game__result-step-same" data-counter-again @click="startRyuoCounter">もう一度対策</button>
+          </div>
+          <div v-else-if="!tutorialMatch && !measureSession && resultRetrySuggestion" class="shogi-game__result-retry" data-retry-suggestion>
             <p>Lv.{{ resultRetrySuggestion.level }}、手強いね。どうする？</p>
             <div class="shogi-game__result-retry-choices">
               <button type="button" class="shogi-game__rematch" data-rematch @click="rematch()">もう一度挑む</button>
@@ -2115,6 +2129,7 @@ import {
   saveRatingState,
 } from "./core/player-rating.mjs";
 import { type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor } from "./core/play-coach.mjs";
+import { counterStyle, loadCounterKey, ryuoNextPlan, ryuoNextSeasonPlan, saveCounterKey } from "./core/ryuo-next.mjs";
 import { enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight } from "./core/play-insight.mjs";
 import { loadReviewProblems } from "./core/review-problems.mjs";
 import { dueReviewId, loadReviewQueue } from "./core/review-queue.mjs";
@@ -2328,6 +2343,14 @@ const ryuoGame = ref<RyuoGame | null>(null);
 let ryuoCpuMoves: { ply: number; kind: string; traits: string[] }[] = [];
 const ryuoView = computed(() => (ryuoSeason.value ? describeSeason(ryuoSeason.value) : null));
 const ryuoOpponent = computed(() => (ryuoGame.value ? ryuoSeason.value?.players?.[ryuoGame.value.opponentId] ?? null : null));
+/**
+ * 竜王戦の次の相手の対策(学習対局。docs/home-next-adaptive-design.mdの13-5)。レーティングにも竜王戦にも数えない。
+ * 相手の棋風と特殊能力・得意戦法で指し、盤の名札に「（対策）」を添える。
+ */
+const ryuoCounter = ref<{ opponentId: string; label: string; key: string } | null>(null);
+const ryuoCounterOpponent = computed(() => (ryuoCounter.value ? ryuoSeason.value?.players?.[ryuoCounter.value.opponentId] ?? null : null));
+/** 対策をした次の一局の印(期と次の一局の組)。 */
+const ryuoCounterDoneKey = ref(loadCounterKey(browserStorage()));
 const tournamentStartAt = ref<"select" | "season">("select");
 /** いまの竜王(名簿の竜王。プレイヤーが竜王ならnull)。竜王戦の入口の山で、七番勝負に顔を出す。 */
 const ryuoHolder = computed(() => {
@@ -2725,11 +2748,14 @@ const cpuDisplayName = computed(() => {
   if (matchKind.value === "tournament" && ryuoOpponent.value) {
     return `${ryuoOpponent.value.name} ${ryuoOpponent.value.dan} Lv.${ryuoOpponent.value.level}`;
   }
+  if (ryuoCounterOpponent.value) {
+    return `${ryuoCounterOpponent.value.name} ${ryuoCounterOpponent.value.dan}（対策） Lv.${ryuoCounterOpponent.value.level}`;
+  }
   const name = props.cpuPlayerName.trim() || "CPU";
   return cpuStrengthPreset.value ? `${name} Lv.${cpuStrengthPreset.value.level}` : name;
 });
 const cpuStrengthLabel = computed(() => (
-  matchKind.value === "tournament" && ryuoOpponent.value ? "" : cpuStrengthPreset.value?.label ?? ""
+  (matchKind.value === "tournament" && ryuoOpponent.value) || ryuoCounterOpponent.value ? "" : cpuStrengthPreset.value?.label ?? ""
 ));
 // CPUとの対局では、プレイヤーの側の名札に、タイトル画面で入れたプレイヤー名を出す(入れていなければ先手・後手の表示名)。
 const effectiveBlackPlayerName = computed(() =>
@@ -4442,6 +4468,63 @@ function startRyuoMatch() {
   if (openingGuideAvailable.value && (selectedStrategy.value || selectedCastle.value)) announceOpeningGuide();
 }
 
+/**
+ * 竜王戦の次の相手の対策(docs/home-next-adaptive-design.mdの13-5)。相手のLv・棋風・特殊能力と、相手の手番でいちばん多い戦法で、
+ * 本番と同じ手番の学習対局を始める。レーティングにも竜王戦にも数えない。対策をしたことは、次の一局の印で覚える。
+ */
+function startRyuoCounter() {
+  const season = ryuoSeason.value;
+  const pending = ryuoView.value?.pending;
+  const opponent = pending ? season?.players?.[pending.opponentId] : null;
+  if (!season || !pending || !opponent) return;
+  confirmDiscardSuspended(() => {
+    yakobiNoteOpen.value = false;
+    tournamentOpen.value = false;
+    openPregame();
+    homeOpen.value = false;
+    void initializeEngine();
+    matchKind.value = "learning";
+    learningStartType.value = "standard";
+    coachLevel.value = ["off", "encourage", "detailed"].includes(season.settings.coachLevel) ? season.settings.coachLevel : "detailed";
+    const color = pending.color === "white" ? "white" : "black";
+    // 本番と同じく、自分の作戦の指定はしない(作戦カードは対局中に開ける)。
+    selectedStrategy.value = "";
+    selectedCastle.value = "";
+    const plan = homeRyuoPlan.value;
+    ryuoCounter.value = { opponentId: opponent.id, label: pending.label ?? "", key: plan?.key ?? "" };
+    if (plan?.key) {
+      ryuoCounterDoneKey.value = plan.key;
+      saveCounterKey(browserStorage(), plan.key);
+    }
+    selectedPlayerColor.value = color;
+    searchNodes.value = CPU_STRENGTH_PRESETS.find(({ level }) => level === opponent.level)?.value ?? DEFAULT_STRENGTH_VALUE;
+    cpuStrategy.value = "random";
+    cpuFirstMove.value = "random";
+    cpuBishopPreference.value = "";
+    cpuRookPreference.value = "";
+    cpuTempoPreference.value = "";
+    const style = counterStyle(ryuoView.value?.pending?.opponent ?? opponent, color)?.style ?? null;
+    cpuStrategyDetailsOpen.value = Boolean(style);
+    if (style) {
+      cpuDetailedStrategy.value = style.strategy;
+      cpuDetailedCastle.value = style.castle;
+    }
+    beginMatch();
+  });
+}
+/** 竜王戦の期の画面を開く(つぎはこれの「続きを指す」、対策の終局の「本番へ」)。 */
+function openRyuoSeasonScreen() {
+  tournamentStartAt.value = ryuoSeason.value?.pending ? "season" : "select";
+  tournamentFromGame.value = false;
+  tournamentOpen.value = true;
+  if (ryuoSeason.value?.analysisQueue?.length) void ryuoStats.processQueue();
+}
+/** 対策の対局を終えて、本番(竜王戦の期の画面)へ。 */
+function goToRyuoFromCounter() {
+  leaveFinishedMatch();
+  openRyuoSeasonScreen();
+}
+
 /** 終局を大会に記録する。勝敗は、トーナメント表を進める。千日手(引き分け)は、先後を入れ替えて指し直す。 */
 function recordRyuoOutcome(matchResult: MatchResult) {
   const game = ryuoGame.value;
@@ -5036,10 +5119,26 @@ function homeTileClass(id: string) {
 }
 
 type HomeNext = {
-  id: "resume" | "tutorial" | "match" | "tournament" | "problems" | "practice"; label: string; description: string;
+  id: "resume" | "tutorial" | "match" | "tournament" | "ryuo-season" | "ryuo-counter" | "problems" | "practice"; label: string; description: string;
   /** 立て直しのときの「香落ちで挑む」のLv。 */
   handicapLevel?: number | null;
+  /** 竜王戦の期の途中の、主役でない方の小さな入口(対策か続き)。 */
+  sub?: { id: "ryuo-season" | "ryuo-counter"; label: string } | null;
 };
+/** 竜王戦の期の途中の「つぎはこれ」(対策か続き。docs/home-next-adaptive-design.mdの13-3)。 */
+const homeRyuoPlan = computed(() => {
+  const season = ryuoSeason.value;
+  const pending = ryuoView.value?.pending;
+  if (!season || !pending || season.phase === "done") return null;
+  const last = season.userGames?.at(-1) ?? null;
+  return ryuoNextPlan({
+    pending,
+    seasonId: String(season.id ?? ""),
+    gamesPlayed: season.userGames?.length ?? 0,
+    lastGame: last ? { win: Boolean(last.win), opponentId: last.opponentId } : null,
+    counterDone: ryuoCounterDoneKey.value !== "" && ryuoCounterDoneKey.value === `${season.id}:${pending.opponentId}:${pending.label ?? ""}`,
+  });
+});
 /**
  * タイトル画面の「つぎはこれ」。中断した対局があれば再開を最優先にし、それ以外は強くなる道のいまの段の行き先にする。
  */
@@ -5047,6 +5146,13 @@ const homeNext = computed<HomeNext>(() => {
   if (suspendedMatch.value) {
     const what = suspendedMatch.value.ryuoOpponentId ? "竜王戦の対局" : "対局";
     return { id: "resume", label: "対局を再開", description: `中断した${what}（${suspendedMatch.value.moves}手目まで）` };
+  }
+  // 竜王戦の期の途中: 次の相手の対策か、続きを指すか。主役でない方を小さな入口にする。
+  const ryuo = homeRyuoPlan.value;
+  if (ryuo) {
+    return ryuo.main === "counter"
+      ? { id: "ryuo-counter", label: ryuo.counter.title, description: ryuo.counter.reason, sub: { id: "ryuo-season", label: ryuo.continue.sub } }
+      : { id: "ryuo-season", label: ryuo.continue.title, description: ryuo.continue.reason, sub: { id: "ryuo-counter", label: ryuo.counter.sub } };
   }
   const plan = playPlan.value;
   const preset = playPreset.value;
@@ -5068,6 +5174,8 @@ const homeNext = computed<HomeNext>(() => {
     default:
       // 5段目: 実力と実績の見立て(初勝利の次・立て直し・連勝の挑戦・復習の1問・弱点の練習・昇級をかけた一局・ふだんの対局)。
       // 理由を1行で添える。
+      // 竜王戦の期を終えたばかりなら、次の期へ。
+      if (homeNextSeason.value) return { id: "tournament", label: homeNextSeason.value.title, description: homeNextSeason.value.reason };
       if (plan.practice) return { id: "practice", label: plan.title, description: plan.reason };
       return { id: "match", label: plan.title, description: plan.reason, handicapLevel: plan.handicapLevel };
   }
@@ -5086,8 +5194,27 @@ function openTutorialLesson() {
   tutorialAutoStart.value = true;
   tutorialOpen.value = true;
 }
+/** 竜王戦の期を終えたあとの「次の期へ」(直前のレーティングの対局が竜王戦のとき)。 */
+const homeNextSeason = computed(() => {
+  const season = ryuoSeason.value;
+  const lastRated = ratingState.value.history?.filter((entry: { opponentLevel?: number }) => Number.isFinite(entry?.opponentLevel)).at(-1);
+  return ryuoNextSeasonPlan({
+    inSeason: Boolean(season?.pending) && season?.phase !== "done",
+    lastRatedEvent: lastRated?.event ?? "",
+    seasons: ryuoCareer.value.seasons ?? 0,
+    group: ryuoCareer.value.group ?? 6,
+    ryuo: ryuoCareer.value.champion === true,
+  });
+});
+function startHomeNextSub() {
+  const sub = homeNext.value.sub;
+  if (sub?.id === "ryuo-counter") startRyuoCounter();
+  else if (sub?.id === "ryuo-season") openRyuoSeasonScreen();
+}
 function startHomeNext() {
   if (homeNext.value.id === "resume") resumeSuspendedMatch();
+  else if (homeNext.value.id === "ryuo-counter") startRyuoCounter();
+  else if (homeNext.value.id === "ryuo-season") openRyuoSeasonScreen();
   else if (homeNext.value.id === "tutorial") openTutorialLesson();
   else if (homeNext.value.id === "tournament") openTournamentScreen();
   else if (homeNext.value.id === "problems") problemSetOpen.value = true;
@@ -5129,6 +5256,9 @@ function startPractice(practice: PracticeStep) {
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
 const homeGreeting = computed(() => {
   if (homeNext.value.id === "resume") return "さっきの対局、続きをしよう！";
+  const ryuoName = ryuoView.value?.pending?.opponent?.name ?? "";
+  if (homeNext.value.id === "ryuo-counter") return `${ryuoName}さんの対策、いっしょにしよう！`;
+  if (homeNext.value.id === "ryuo-season") return `次は${ryuoName}さんとの一局だね！`;
   switch (homeRoadmapState.value.current) {
     case 1: return homeLessonsDone.value ? "今日も教室で練習しよう！" : "はじめまして！ いっしょに覚えよう";
     case 2: return "駒の動き、覚えたね！ CPUと指してみよう";
@@ -5225,6 +5355,7 @@ function openPregame() {
   analysisOpen.value = false;
   discardPersistedMatch();
   ryuoGame.value = null;
+  ryuoCounter.value = null;
   // 大会の対局準備はないので、対局準備を開くときは通常対局へ戻す。
   if (matchKind.value === "tournament") matchKind.value = "normal";
   suspendedMatch.value = null;
@@ -5479,6 +5610,7 @@ function persistMatchState() {
     },
     suspended: suspendedMatch.value !== null,
     ryuoGame: ryuoGame.value,
+    ryuoCounter: ryuoCounter.value,
     tutorial: tutorialMatch.value,
     settingsBeforeTutorial: tutorialMatch.value ? settingsBeforeTutorial : null,
     moves: [...moveHistory],
@@ -5529,6 +5661,11 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
     : null;
   matchKind.value = snapshot.matchKind === "learning" ? "learning" : restoredRyuo ? "tournament" : "normal";
   ryuoGame.value = restoredRyuo;
+  const savedCounter = snapshot.ryuoCounter;
+  ryuoCounter.value = matchKind.value === "learning" && savedCounter && typeof savedCounter.opponentId === "string"
+    && ryuoSeason.value?.players?.[savedCounter.opponentId]
+    ? { opponentId: savedCounter.opponentId, label: String(savedCounter.label ?? ""), key: String(savedCounter.key ?? "") }
+    : null;
   // 保存時の開始局面で棋譜を再生する。不正なSFENは復元全体を取り消す。
   const startSfen = typeof snapshot.startSfen === "string" ? snapshot.startSfen : props.initialSfen;
   createGameRecord(startSfen);
@@ -7640,7 +7777,8 @@ async function scheduleCpuMove() {
       });
       // 竜王戦の相手は、棋風と、この場面で働く特徴を強さ設定に反映する(探索の前は探索量、探索のあとは手の選び方)。
       const baseStrength = getStrengthSearchSettings(searchNodes.value);
-      const cpuCharacter = ryuoGame.value ? ryuoOpponent.value?.character ?? null : null;
+      // 対策の練習対局でも、相手の棋風と特徴で指す。
+      const cpuCharacter = ryuoGame.value ? ryuoOpponent.value?.character ?? null : ryuoCounterOpponent.value?.character ?? null;
       const cpuSituation = cpuCharacter
         ? characterSituation({ sfen: record.value.position.sfen, ply: moveHistory.length })
         : null;

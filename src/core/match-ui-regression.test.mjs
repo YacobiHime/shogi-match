@@ -397,7 +397,16 @@ describe("match screen regressions", () => {
     // 強さは、実力と実績の見立て(play-coach)で決める。香落ちの立て直しは振り駒をしない。
     expect(quick).toMatch(/options\.level \?\? playPlan\.value\.level/);
     expect(quick).toMatch(/if \(options\.handicapId\) \{[\s\S]*?learningHandicapGiver\.value = "cpu";\s*beginMatch\(\);\s*return;/);
-    expect(source).toMatch(/default:[\s\S]{0,200}?return \{ id: "match", label: plan\.title, description: plan\.reason, handicapLevel: plan\.handicapLevel \}/);
+    expect(source).toMatch(/default:[\s\S]{0,600}?return \{ id: "match", label: plan\.title, description: plan\.reason, handicapLevel: plan\.handicapLevel \}/);
+    // 竜王戦の期の途中は、次の相手の対策か続き。主役でない方を小さな入口にする(docs/home-next-adaptive-design.mdの13章)。
+    expect(source).toMatch(/const ryuo = homeRyuoPlan\.value;[\s\S]*?id: "ryuo-counter"[\s\S]*?sub: \{ id: "ryuo-season"[\s\S]*?id: "ryuo-season"[\s\S]*?sub: \{ id: "ryuo-counter"/);
+    expect(source).toMatch(/v-if="homeNext\.sub"[\s\S]*?:data-next-sub="homeNext\.sub\.id"[\s\S]*?@click="startHomeNextSub"/);
+    expect(homeNext).toContain('homeNext.value.id === "ryuo-counter") startRyuoCounter()');
+    // 対策は学習対局(レーティングにも竜王戦にも数えない)で、相手の棋風と得意戦法、本番と同じ手番。終局後は「本番へ」。
+    const counter = source.split("function startRyuoCounter()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(counter).toMatch(/confirmDiscardSuspended[\s\S]*?matchKind\.value = "learning";[\s\S]*?selectedPlayerColor\.value = color;[\s\S]*?counterStyle\([\s\S]*?beginMatch\(\);/);
+    expect(source).toMatch(/ryuoGame\.value \? ryuoOpponent\.value\?\.character \?\? null : ryuoCounterOpponent\.value\?\.character \?\? null/);
+    expect(source).toMatch(/v-if="ryuoCounter && !tutorialMatch && !measureSession"[\s\S]*?data-counter-go @click="goToRyuoFromCounter"/);
     // 勝ったら次のLvへ(同じ相手ともう一局は小さく残す)。
     expect(source).toMatch(/v-else-if="!tutorialMatch && !measureSession && resultNextStep"[\s\S]*?data-next-step-go[\s\S]*?data-next-step-same/);
     expect(quick).toMatch(/throwFurigoma\(\)[\s\S]*?beginMatch\(\);[\s\S]*?showFurigoma/);
