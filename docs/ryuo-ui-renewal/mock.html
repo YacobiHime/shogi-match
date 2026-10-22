@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>竜王戦 新UI 見本(ドット絵・実際の棋戦)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&display=block">
+<style>
+  :root { --night: #121c2e; --deep: #172632; --cream: #fffcf4; --gold: #f1a54c; --gold2: #ffd27a; --red: #c4604c; --red2: #e0745e; --lav: #d8d0ff; --ai: #3d6fa5; --shadow: #0b1320; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #0a0f18; font-family: "IPAPGothic", sans-serif; color: var(--cream); }
+  .row { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .cap { margin: 0 0 10px; font: 18px "DotGothic16", sans-serif; color: #9fb3c8; }
+  .cap b { color: var(--gold); margin-right: 6px; }
+  .note { max-width: 390px; margin-top: 10px; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #b9c7d6; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; border-radius: 26px; background: linear-gradient(#0f1828, #1c2c45 70%, #243755); box-shadow: 0 0 0 3px #2a3a52; }
+  .dot { font-family: "DotGothic16", sans-serif; }
+  .px { image-rendering: pixelated; }
+  .stars span { position: absolute; width: 4px; height: 4px; background: var(--cream); opacity: .8; }
+  .stars span:nth-child(3n) { background: var(--gold); width: 3px; height: 3px; }
+  .stars span:nth-child(4n) { background: var(--lav); }
+  /* ドット絵のパネル: 角の欠けた四角・2段の縁 */
+  .win { position: absolute; background: #172632; border: 3px solid #fffcf4; box-shadow: 0 0 0 3px #0b1320, 5px 5px 0 3px #0b1320; clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px); }
+  .big { position: absolute; left: 20px; right: 20px; height: 64px; display: grid; place-items: center; background: var(--gold); color: #1a2433; font: 26px "DotGothic16", sans-serif; letter-spacing: .12em;
+    box-shadow: inset 0 -6px 0 #b0661b, inset 0 4px 0 #ffd27a, 0 0 0 3px #0b1320, 0 6px 0 3px #0b1320;
+    clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
+  .seal { display: grid; place-items: center; border: 3px solid var(--cream); background: var(--red); color: var(--cream); font-weight: 900; box-shadow: 3px 3px 0 var(--shadow); }
+  .bubble { position: absolute; padding: 8px 12px; background: var(--cream); color: #1a2433; font: 14px/1.5 "DotGothic16", sans-serif; box-shadow: 0 0 0 3px #0b1320, 4px 4px 0 3px #0b1320; }
+  .chip { display: inline-block; padding: 2px 8px; font: 12px "DotGothic16", sans-serif; }
+  .iconbtn { position: absolute; width: 46px; height: 46px; background: var(--deep); border: 3px solid #fffcf4; display: grid; place-items: center; font: 15px "DotGothic16", sans-serif; color: var(--cream); box-shadow: 0 0 0 3px #0b1320, 3px 3px 0 3px #0b1320; }
+  .label { position: absolute; font: 13px "DotGothic16", sans-serif; color: #fffcf4; text-shadow: 2px 0 #0b1320, -2px 0 #0b1320, 0 2px #0b1320, 0 -2px #0b1320; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="row" id="row"></div>
+<script>
+const SP = { yakobi: '../../public/characters/yakobihime-mini.webp', hanane: '../../public/characters/hanane-mini.webp' };
+const stars = (n, seed, h = 300) => { let s = seed, out = ''; const r = () => (s = (s * 9301 + 49297) % 233280) / 233280; for (let i = 0; i < n; i++) out += `<span style="left:${Math.floor(r() * 380)}px;top:${Math.floor(r() * h)}px"></span>`; return `<div class="stars">${out}</div>`; };
+const R = (x, y, w, h, c) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}"/>`;
+function dots(a, b, color, gap = 13) {
+  const [x1, y1] = a, [x2, y2] = b; const n = Math.max(1, Math.floor(Math.hypot(x2 - x1, y2 - y1) / gap)); let s = '';
+  for (let i = 1; i < n; i++) s += R(Math.round(x1 + (x2 - x1) * i / n - 3), Math.round(y1 + (y2 - y1) * i / n - 3), 6, 6, color);
+  return s;
+}
+// ---- ドット絵の建物(実際の棋戦の舞台)
+function kaikan(x, y, w = 150, floors = 5, sign = true) { // 将棋会館(ランキング戦・決勝T・挑決の舞台)
+  const fh = 26, h = floors * fh; let s = R(x - 4, y - h - 10, w + 8, 10, '#5d6f80') + R(x, y - h, w, h, '#8a98a8') + R(x, y - h, w, 4, '#a9b6c4');
+  for (let f = 0; f < floors; f++) for (let c = 0; c < Math.floor((w - 16) / 22); c++) s += R(x + 10 + c * 22, y - h + 8 + f * fh, 14, 12, (f + c) % 3 === 0 ? '#3b4a5c' : '#ffd27a');
+  s += R(x + w / 2 - 16, y - 24, 32, 24, '#3b1e1a') + R(x + w / 2 - 12, y - 20, 24, 20, '#ffd27a');
+  if (sign) s += R(x + 14, y - h - 34, w - 28, 22, '#fffcf4') + `<text x="${x + w / 2}" y="${y - h - 17}" text-anchor="middle" font-family="DotGothic16" font-size="15" fill="#1a2433">将棋会館</text>`;
+  return `<g shape-rendering="crispEdges">${s}</g>`;
+}
+function ryokan(x, y, w = 170, lit = true) { // 旅館(七番勝負の対局場)
+  let s = '';
+  for (let i = 0; i < 4; i++) s += R(x - 14 + i * 6, y - 74 + i * 6, w + 28 - i * 12, 6, i % 2 ? '#2b3446' : '#3b4558');
+  s += R(x, y - 50, w, 50, '#efe3c6') + R(x, y - 50, w, 5, '#d8c9a4');
+  for (let c = 0; c < 6; c++) s += R(x + 8 + c * (w - 16) / 6, y - 42, (w - 16) / 6 - 6, 18, lit ? '#ffd27a' : '#5d6f80');
+  s += R(x + w / 2 - 22, y - 22, 44, 22, '#1d3a6b') + R(x + w / 2 - 22, y - 22, 44, 5, '#2f5797');
+  [x + 10, x + w - 18].forEach((lx) => { s += R(lx, y - 30, 8, 12, '#e0745e') + R(lx + 2, y - 32, 4, 2, '#3b1e1a'); });
+  return `<g shape-rendering="crispEdges">${s}</g>`;
+}
+function byobu(x, y, panels = 6, pw = 22, h = 54) { // 金屏風(就位式)
+  let s = '';
+  for (let i = 0; i < panels; i++) s += R(x + i * pw, y - h + (i % 2) * 3, pw - 2, h - (i % 2) * 3, i % 2 ? '#e8b84a' : '#f6cf63') + R(x + i * pw, y - h + (i % 2) * 3, pw - 2, 4, '#fff1b0');
+  s += R(x - 3, y, panels * pw + 4, 5, '#7a4a1a');
+  return `<g shape-rendering="crispEdges">${s}</g>`;
+}
+function ban(x, y, size = 30) { // 将棋盤
+  let s = R(x, y + size * .9, size, size * .2, '#7a4a1a') + R(x, y, size, size * .9, '#d9a95a') + R(x, y, size, 3, '#f0c879');
+  for (let i = 1; i < 4; i++) s += R(x + i * size / 4, y + 3, 1, size * .85, '#7a4a1a') + R(x + 2, y + i * size * .9 / 4, size - 4, 1, '#7a4a1a');
+  return `<g shape-rendering="crispEdges">${s}</g>`;
+}
+function stairs(x, y, steps = 5, sw = 26, sh = 14) { // 決勝トーナメントの階段(下の組ほど下の段から)
+  let s = '';
+  for (let i = 0; i < steps; i++) s += R(x + i * sw, y - (i + 1) * sh, sw * (steps - i), sh, i % 2 ? '#4b6585' : '#55779c') + R(x + i * sw, y - (i + 1) * sh, sw, 3, '#8fb0d4');
+  return `<g shape-rendering="crispEdges">${s}</g>`;
+}
+function tatamiRoom(x, y, w = 110) { // 特別対局室(挑戦者決定戦)
+  let s = R(x, y - 52, w, 40, '#efe3c6') + R(x, y - 52, w, 4, '#7a4a1a');
+  for (let i = 0; i < 4; i++) s += R(x + 4 + i * (w - 8) / 4, y - 46, (w - 8) / 4 - 3, 32, '#f6efdc') + R(x + 4 + i * (w - 8) / 4 + (w - 8) / 8 - 3, y - 32, 6, 4, '#c9b48a');
+  s += R(x, y - 12, w, 12, '#8fae6a') + R(x, y - 12, w, 2, '#a9c886');
+  return `<g shape-rendering="crispEdges">${s}</g>`;
+}
+function node(x, y, { state = 'todo', boss = false, s = 30 } = {}) {
+  const fill = state === 'done' ? '#f1a54c' : state === 'current' ? '#fffcf4' : state === 'lost' ? '#5d6f80' : '#1b2a42';
+  const stroke = boss ? '#e0745e' : state === 'todo' ? '#8fa3b6' : '#fffcf4';
+  const z = boss ? s + 8 : s;
+  return `<g shape-rendering="crispEdges">${R(x - z / 2 + 3, y - z * .31 + 4, z, z * .62, '#0b1320')}<rect x="${x - z / 2}" y="${y - z * .31}" width="${z}" height="${z * .62}" fill="${fill}" stroke="${stroke}" stroke-width="3"/></g>`;
+}
+const lab = (x, y, t, color = '#fffcf4', size = 13) => `<div class="label" style="left:${x}px;top:${y}px;transform:translateX(-50%);color:${color};font-size:${size}px">${t}</div>`;
+function face(x, y, ch, bg = '#c4604c', size = 36, fg = '#fffcf4') { return `<div class="seal" style="position:absolute;left:${x - size / 2}px;top:${y - size / 2}px;width:${size}px;height:${size}px;font-size:${size * .5}px;background:${bg};color:${fg}">${ch}</div>`; }
+function spriteFace(name, x, y, size) { return `<div style="position:absolute;left:${x - size / 2}px;top:${y - size / 2}px;width:${size}px;height:${size}px;overflow:hidden;background:#d8d0ff;border:3px solid #fffcf4;box-shadow:3px 3px 0 #0b1320"><img class="px" src="${SP[name]}" style="width:100%;margin-top:4%"></div>`; }
+function piece(x, y, size = 30, label = '自') { return `<div style="position:absolute;left:${x - size / 2}px;top:${y - size * 1.15}px;width:${size}px;height:${size * 1.15}px;clip-path:polygon(50% 0,88% 16%,100% 100%,0 100%,12% 16%);background:#fffcf4;color:#1a2433;display:grid;place-items:center;padding-top:${size * .18}px;font:${size * .5}px DotGothic16;filter:drop-shadow(0 3px 0 #0b1320)">${label}</div>`; }
+const sprite = (name, x, y, h) => `<img class="px" src="${SP[name]}" style="position:absolute;left:${x}px;top:${y}px;height:${h}px">`;
+const ground = (y, c1 = '#1f3a3a', c2 = '#2a4b45') => `<g shape-rendering="crispEdges">${R(0, y, 390, 844 - y, c1)}${R(0, y, 390, 4, c2)}</g>`;
+
+// ---- 竜王への道(地図)。下から: 将棋会館(ランキング戦) → 決勝トーナメントの階段 → 特別対局室(挑戦者決定戦) → 旅館(七番勝負) → 金屏風(就位式)
+const P = { r1: [70, 640], r2: [175, 612], r3: [290, 590], r4: [300, 520], r5: [190, 494], main: [118, 418], playoff: [276, 330], finals: [150, 236], ryuo: [258, 148] };
+const ORDER = ['r1', 'r2', 'r3', 'r4', 'r5', 'main', 'playoff', 'finals', 'ryuo'];
+const NAMES = { r1: '1回戦', r2: '2回戦', r3: '準々決勝', r4: '準決勝', r5: '組の決勝', main: '決勝トーナメント', playoff: '挑戦者決定戦', finals: '七番勝負', ryuo: '竜王' };
+function map(upto, { scene = true } = {}) {
+  const st = (i) => (i < upto ? 'done' : i === upto ? 'current' : 'todo');
+  let svg = ground(560);
+  svg += kaikan(14, 560, 150, 4) + kaikan(250, 560, 120, 3, false);
+  svg += stairs(40, 448, 5, 24, 13);
+  svg += tatamiRoom(220, 352, 120) + ban(266, 312, 24);
+  svg += ryokan(70, 262, 170);
+  svg += byobu(196, 168, 6, 20, 46) + ban(244, 136, 22);
+  for (let i = 0; i < ORDER.length - 1; i++) svg += dots(P[ORDER[i]], P[ORDER[i + 1]], i < upto ? '#f1a54c' : 'rgba(255,252,244,.6)');
+  ORDER.slice(0, -1).forEach((k, i) => { svg += node(...P[k], { state: st(i), boss: k === 'r5' || k === 'playoff' || k === 'finals' }); });
+  let html = `<svg width="390" height="844" style="position:absolute;inset:0">${svg}</svg>`;
+  ORDER.slice(0, -1).forEach((k) => { html += lab(P[k][0], P[k][1] + 14, NAMES[k], k === 'finals' ? '#ffd27a' : '#fffcf4', 12); });
+  html += lab(P.ryuo[0], 172, '竜王', '#ffd27a', 15);
+  html += lab(85, 666, '6組ランキング戦（将棋会館）', '#cfe8d5', 12);
+  return html;
+}
+
+const frames = [];
+frames.push({ cap: '<b>1</b>入口', html: `
+  ${stars(40, 3, 260)}
+  <div style="position:absolute;left:0;right:0;top:520px;bottom:0;background:#1f3a3a"></div>
+  <div style="position:absolute;inset:0;transform:translateY(150px) scale(.74);transform-origin:50% 0">
+    ${map(0)}
+    ${face(P.ryuo[0], P.ryuo[1] - 52, '天', '#d9b860', 40, '#1a2433')}
+    ${piece(P.r1[0], P.r1[1] - 4, 32)}
+  </div>
+  <div style="position:absolute;left:0;right:0;top:40px;text-align:center">
+    <div style="display:inline-flex;align-items:center;gap:12px">
+      <div class="seal" style="width:56px;height:56px;font:30px DotGothic16">竜</div>
+      <div class="dot" style="font-size:66px;letter-spacing:.1em;color:#fffcf4;text-shadow:4px 4px 0 #c4604c,8px 8px 0 #0b1320">竜王戦</div>
+    </div>
+    <div><span class="chip" style="background:#f1a54c;color:#1a2433;font-size:16px;padding:4px 16px;margin-top:8px">第3期</span></div>
+  </div>
+  ${sprite('yakobi', 300, 612, 64)}
+  <div class="bubble" style="left:20px;top:640px;width:272px">6組から、竜王への挑戦がはじまるよ！</div>
+  <div class="win dot" style="left:20px;right:20px;top:704px;padding:8px 10px;text-align:center;font-size:16px;background:rgba(23,38,50,.95)">目標 6組で <span style="color:#ffd27a;font-size:21px">2位以内</span> なら昇級</div>
+  <div class="big" style="bottom:22px">▶ 出場する</div>
+  <div class="iconbtn" style="right:16px;top:16px">設定</div><div class="iconbtn" style="left:16px;top:16px">←</div>
+`, note: ['開くと、カメラが金屏風の竜王(就位式の舞台)から、将棋会館の6組ランキング戦まで降りてくる(1.2秒・押すと飛ばす)。いつか座る場所を最初に見せる(D:3-3)。', '舞台はすべて実際の竜王戦と同じ: ランキング戦・決勝トーナメント・挑戦者決定戦は将棋会館、七番勝負は全国の旅館やホテル、竜王になると金屏風の就位式。'] });
+
+frames.push({ cap: '<b>2</b>期の画面: 竜王への道', html: `
+  ${stars(26, 9, 120)}
+  ${map(2)}
+  ${piece(P.r3[0], P.r3[1] - 4, 30)}
+  ${face(P.r4[0] - 40, P.r4[1] - 6, '杉', '#c4604c', 32)}
+  ${spriteFace('hanane', P.r5[0] - 40, P.r5[1] - 10, 34)}
+  ${face(P.ryuo[0] + 2, P.ryuo[1] - 44, '天', '#d9b860', 30, '#1a2433')}
+  ${sprite('yakobi', P.r3[0] + 18, P.r3[1] - 50, 48)}
+  <div style="position:absolute;left:12px;right:12px;top:10px;display:flex;align-items:center;gap:10px">
+    <div class="seal" style="width:40px;height:40px;font:20px DotGothic16">竜</div>
+    <div class="dot" style="flex:1;line-height:1.25"><div style="font-size:17px">第3期 6組ランキング戦</div><div style="font-size:12px;color:#d8d0ff">★ 推し 中村蓮さん: 準々決勝</div></div>
+    <div class="iconbtn" style="position:static">表</div>
+  </div>
+  <div class="win" style="left:10px;right:10px;bottom:96px;height:150px;padding:12px 12px 0">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="seal" style="width:60px;height:60px;font:32px DotGothic16;flex:none">杉</div>
+      <div class="dot" style="flex:1">
+        <div style="font-size:12px;color:#ffd27a">準々決勝の相手</div>
+        <div style="font-size:24px;line-height:1.15">杉山颯太 <span style="font-size:13px">三段</span></div>
+        <div style="margin-top:4px"><span class="chip" style="background:#c4604c">攻め将棋</span> <span class="chip" style="background:#f1a54c;color:#1a2433">詰み S</span> <span class="chip" style="background:#55697d">受け C</span></div>
+      </div>
+    </div>
+    <div class="dot" style="display:flex;gap:8px;margin-top:10px;font-size:15px">
+      <div style="flex:1;padding:6px 8px;background:#3a2d1a;border:2px solid #f1a54c">勝てば <span style="color:#ffd27a">準決勝へ</span></div>
+      <div style="flex:1;padding:6px 8px;background:#1f2b38;border:2px solid #55697d;color:#c8d3de">負ければ ここまで</div>
+    </div>
+  </div>
+  <div class="big" style="bottom:18px">▶ 対局する</div>
+`, note: ['道は実際の竜王戦の順。将棋会館の前の段(ランキング戦)→ 決勝トーナメントの階段(下の組の優勝者ほど下の段から登る。実際と同じ形)→ 特別対局室の挑戦者決定戦 → 旅館の七番勝負 → 金屏風の竜王。', 'いまの段に自分の駒、次の段に次の相手、組の決勝にライバル、金屏風の前にいまの竜王。いつか戦う相手が最初から見える(D:5-2)。', '下の枠は次の一局の顔・棋風・勝てば/負ければと「対局する」だけ。くわしい情報は顔を押すと開く。'] });
+
+frames.push({ cap: '<b>3</b>VS画面: 対局の直前', html: `
+  <div style="position:absolute;inset:0;background:#3d6fa5;clip-path:polygon(0 0,100% 0,100% 40%,0 60%)"></div>
+  <div style="position:absolute;inset:0;background:#c4604c;clip-path:polygon(0 60%,100% 40%,100% 100%,0 100%)"></div>
+  <div style="position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.08) 0 2px,transparent 2px 4px)"></div>
+  <div style="position:absolute;left:0;right:0;top:36px;text-align:center"><span class="win dot" style="position:relative;display:inline-block;padding:6px 16px;font-size:16px">6組ランキング戦 準々決勝</span></div>
+  <div class="dot" style="position:absolute;left:0;right:0;top:82px;text-align:center;font-size:13px;color:#d8d0ff">東京・将棋会館 / 先手 あなた（振り駒）</div>
+  <div style="position:absolute;left:30px;top:140px">
+    <div style="position:relative;height:104px">${piece(44, 104, 88)}</div>
+    <div class="dot" style="margin-top:12px;font-size:40px;text-shadow:3px 3px 0 #0b1320">あなた</div>
+    <div class="dot" style="font-size:14px">R1007・先手</div>
+  </div>
+  <div class="dot" style="position:absolute;left:0;right:0;top:350px;text-align:center;font-size:110px;color:#ffd27a;text-shadow:5px 5px 0 #0b1320;letter-spacing:.02em">VS</div>
+  <div style="position:absolute;right:30px;top:490px;text-align:right">
+    <div class="seal" style="width:100px;height:100px;font:54px DotGothic16;margin-left:auto">杉</div>
+    <div class="dot" style="margin-top:12px;font-size:40px;text-shadow:3px 3px 0 #0b1320">杉山颯太</div>
+    <div class="dot" style="font-size:14px">三段・攻め将棋・後手</div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:48px;text-align:center"><span class="win dot" style="position:relative;display:inline-block;padding:8px 18px;font-size:17px">勝てば <span style="color:#ffd27a">準決勝へ</span></span></div>
+`, note: ['「対局する」を押すと出る、対局の直前の一瞬。対局場(将棋会館・旅館の名前)と先後(振り駒)を添えて、実際の対局に向かう気分にする。', '1.2秒で盤へ、押すとすぐ盤へ。山場の一局は少し長く、七番勝負では「第1局 ○○県・○○旅館」と出す。'] });
+
+frames.push({ cap: '<b>4</b>対局のあと: 勝ち上がり', html: `
+  ${stars(26, 9, 120)}
+  ${map(3)}
+  <svg width="390" height="844" style="position:absolute;inset:0" shape-rendering="crispEdges">
+    ${[[290, 560], [296, 540], [300, 524], [300, 512]].map(([x, y]) => R(x - 3, y - 3, 6, 6, '#ffd27a')).join('')}</svg>
+  ${piece(P.r4[0], P.r4[1] - 30, 30)}
+  <div class="seal dot" style="position:absolute;left:${P.r3[0] - 74}px;top:${P.r3[1] - 26}px;padding:4px 10px;font-size:18px;transform:rotate(-8deg)">勝ち上がり</div>
+  ${spriteFace('hanane', P.r5[0] - 40, P.r5[1] - 10, 34)}
+  <!-- 速報(新聞の見出しのように) -->
+  <div class="win dot" style="left:16px;right:16px;top:14px;padding:8px 12px;background:#fffcf4;color:#1a2433">
+    <div style="font-size:11px;color:#c4604c">竜王戦 速報</div>
+    <div style="font-size:18px">あなた四段、準決勝へ</div>
+    <div style="font-size:12px;color:#55697d">杉山颯太三段に勝利。次は天鷺羽音四段と対戦</div>
+  </div>
+  <div class="bubble" style="left:30px;top:410px;width:230px;font-size:12.5px">羽音さんは、前の回戦を<br>終盤の逆転で勝ち上がってきたよ！</div>
+  <div class="win" style="left:10px;right:10px;bottom:96px;height:96px;padding:12px">
+    <div style="display:flex;align-items:center;gap:12px">${spriteFace('hanane', 30, 30, 60).replace('position:absolute;', 'position:relative;flex:none;').replace(/left:[^;]+;top:[^;]+;/, '')}
+      <div class="dot"><div style="font-size:12px;color:#ffd27a">準決勝の相手・ライバル</div><div style="font-size:24px">天鷺羽音 <span style="font-size:13px">四段</span></div></div></div>
+  </div>
+  <div class="big" style="bottom:18px">▶ 対局する</div>
+`, note: ['勝つと、自分の駒が次の段へぴょんと跳び、倒した段に「勝ち上がり」の判子。上に新聞の見出しのような「竜王戦 速報」(実際の棋戦の雰囲気。D:2-3 現実のモチーフ)。', '次の相手が段に現れ、どう勝ち上がってきたかを1行。負けたときは駒はそのまま、段が灰色になるだけ(D:7-1)。'] });
+
+frames.push({ cap: '<b>5</b>七番勝負: 全国の対局場をめぐる', html: `
+  ${stars(40, 12, 420)}
+  <svg width="390" height="844" style="position:absolute;inset:0">${ground(470, '#1d2f45', '#2b4568')}
+    ${byobu(120, 150, 7, 22, 56)}${ban(170, 112, 50)}
+    ${[[40, 560], [130, 600], [220, 560], [310, 600], [80, 700], [190, 730], [300, 700]].map(([x, y], i) => ryokan(x - 34, y, 68, i < 3) + R(x - 12, y + 6, 24, 18, i < 2 ? '#f1a54c' : i === 2 ? '#1b2a42' : '#1b2a42')).join('')}
+  </svg>
+  ${face(190, 60, '天', '#d9b860', 44, '#1a2433')}
+  <div class="label" style="left:195px;top:160px;transform:translateX(-50%);font-size:15px;color:#ffd27a">竜王 天鷺善彦</div>
+  <div class="win dot" style="left:20px;right:20px;top:220px;padding:12px;text-align:center">
+    <div style="font-size:14px;color:#ffd27a">竜王戦七番勝負</div>
+    <div style="font-size:52px;letter-spacing:.1em">2 - 1</div>
+    <div style="font-size:14px">竜王まで あと2勝</div>
+    <div style="margin-top:6px;font-size:22px;letter-spacing:.3em"><span style="color:#ffd27a">○○</span>●<span style="color:#55697d">□□□□</span></div>
+  </div>
+  ${[['第1局', 40, 560, '○'], ['第2局', 130, 600, '○'], ['第3局', 220, 560, '●'], ['第4局', 310, 600, '']].map(([t, x, y, m]) => lab(x, y + 26, `${t}${m}`, '#fffcf4', 12)).join('')}
+  ${piece(310, 594, 28)}
+  <div class="bubble" style="left:20px;top:420px;width:350px;font-size:13px">次は第4局。○○県の旅館で、前夜祭もあるよ！</div>
+  <div class="big" style="bottom:22px">▶ 第4局へ</div>
+`, note: ['七番勝負は、1局ごとに対局場が変わる(実際の竜王戦と同じく全国の旅館・ホテル。名前は架空)。○●の星取りを大きく。', 'いまの竜王は金屏風の前で待つ。あと何勝で竜王かを、星取りの下に1行。'] });
+
+frames.push({ cap: '<b>6</b>期の結果: 番付', html: `
+  ${stars(40, 21, 300)}
+  <div style="position:absolute;left:0;right:0;top:40px;text-align:center">
+    <div class="dot" style="font-size:15px;color:#ffd27a">第3期竜王戦</div>
+    <div class="dot" style="font-size:44px;text-shadow:3px 3px 0 #c4604c,6px 6px 0 #0b1320">6組優勝！</div>
+  </div>
+  <!-- 番付(木の札) -->
+  <div class="win" style="left:30px;right:30px;top:150px;height:440px;background:#5a3a1e;padding:14px">
+    ${[['竜王', '天鷺善彦'], ['1組', ''], ['2組', ''], ['3組', ''], ['4組', ''], ['5組', 'あなた'], ['6組', '']].map(([g, n], i) => `<div class="dot" style="display:flex;align-items:center;gap:10px;height:54px;margin-bottom:4px;padding:0 10px;background:${n === 'あなた' ? '#f1a54c' : '#efe3c6'};color:#1a2433;font-size:20px;box-shadow:inset 0 -4px 0 rgba(0,0,0,.15)"><span style="width:56px">${g}</span><span style="flex:1;font-size:17px">${n}</span>${n === 'あなた' ? '<span style="font-size:14px">▲昇級</span>' : ''}</div>`).join('')}
+  </div>
+  <div class="seal dot" style="position:absolute;left:206px;top:470px;padding:8px 14px;font-size:24px;transform:rotate(-8deg)">5組へ昇級</div>
+  <div style="position:absolute;left:16px;right:16px;bottom:100px;display:flex;gap:8px">
+    ${[['5勝1敗', '戦績'], ['終盤', 'いちばん光った'], ['3連勝', '最長']].map(([v, l]) => `<div class="win dot" style="position:relative;flex:1;padding:8px 4px;text-align:center"><div style="font-size:19px;color:#ffd27a">${v}</div><div style="font-size:11px">${l}</div></div>`).join('')}
+  </div>
+  <div class="big" style="bottom:20px">▶ 次の期へ</div>
+`, note: ['結果は、番付の札で、自分の名前が6組から5組へ上がる(判子つき)。来期の組がひと目で分かる。', '数字は3枚の札だけ。レーダーチャートと統計は「くわしく」の奥へ。'] });
+
+const row = document.getElementById('row');
+for (const f of frames) {
+  const col = document.createElement('div');
+  col.innerHTML = `<p class="cap">${f.cap}</p><div class="phone">${f.html}</div><ul class="note">${f.note.map((t) => `<li>${t}</li>`).join('')}</ul>`;
+  row.appendChild(col);
+}
+</script>
+</body>
+</html>
