@@ -397,7 +397,7 @@ describe("match screen regressions", () => {
     // 強さは、実力と実績の見立て(play-coach)で決める。香落ちの立て直しは振り駒をしない。
     expect(quick).toMatch(/options\.level \?\? playPlan\.value\.level/);
     expect(quick).toMatch(/if \(options\.handicapId\) \{[\s\S]*?learningHandicapGiver\.value = "cpu";\s*beginMatch\(\);\s*return;/);
-    expect(source).toMatch(/default:[\s\S]{0,600}?return \{ id: "match", label: plan\.title, description: plan\.reason, handicapLevel: plan\.handicapLevel \}/);
+    expect(source).toMatch(/default:[\s\S]{0,1500}?return \{ id: "match", label: plan\.title, description: plan\.reason, handicapLevel: plan\.handicapLevel \}/);
     // 竜王戦の期の途中は、次の相手の対策か続き。主役でない方を小さな入口にする(docs/home-next-adaptive-design.mdの13章)。
     expect(source).toMatch(/const ryuo = homeRyuoPlan\.value;[\s\S]*?id: "ryuo-counter"[\s\S]*?sub: \{ id: "ryuo-season"[\s\S]*?id: "ryuo-season"[\s\S]*?sub: \{ id: "ryuo-counter"/);
     expect(source).toMatch(/v-if="homeNext\.sub"[\s\S]*?:data-next-sub="homeNext\.sub\.id"[\s\S]*?@click="startHomeNextSub"/);
@@ -413,6 +413,11 @@ describe("match screen regressions", () => {
     expect(matchup).toMatch(/settingsBeforePractice = captureMatchSettings\(\);[\s\S]*?matchKind\.value = "learning";[\s\S]*?cpuRookPreference\.value = rook;[\s\S]*?beginMatch\(\);/);
     expect(counter).toMatch(/settingsBeforePractice = captureMatchSettings\(\);/);
     expect(source).toMatch(/if \(settingsBeforePractice\) restoreMatchSettings\(settingsBeforePractice\);\s*settingsBeforePractice = null;/);
+    // 段階3(15章): ふだんの対局の場面だけ、まだ見ていない遊びと「今日の1局」。図鑑や終盤戦を開いたら見たことを残す。
+    expect(source).toMatch(/if \(plan\.kind === "normal"\) \{[\s\S]*?homeDiscovery\.value;[\s\S]*?id: "discover"[\s\S]*?todayPlan\(/);
+    expect(source).toMatch(/watch\(dexOpen, \(open\) => \{ if \(open\) noteFeatureSeen\("opening-dex"\); \}\)/);
+    expect(source).toMatch(/function startEndgameMatch\(\) \{\s*noteFeatureSeen\("endgame"\);/);
+    expect(homeNext).toContain('homeNext.value.id === "discover" && homeDiscovery.value) openDiscovery(');
     // 竜王戦の統計の裏の解析から、対局の中身の要約も足す(二度読まない)。
     expect(source).toMatch(/useRyuoStatsAnalysis\(\{[\s\S]*?storage: browserStorage,[\s\S]*?onInsight:/);
     // 勝ったら次のLvへ(同じ相手ともう一局は小さく残す)。

@@ -8,6 +8,7 @@ import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
 import { gradeName, levelRating, nextRatingGoal } from './player-rating.mjs';
 import { contentStrength, detectWeaknesses } from './play-insight.mjs';
 import { isReviewProblemId } from './review-problems.mjs';
+import { nearRewardLines } from './home-extras.mjs';
 
 const MAX_LEVEL = CPU_STRENGTH_PRESETS.at(-1).level;
 const RATING_PER_LEVEL = levelRating(1);
@@ -124,12 +125,15 @@ export function unbeatenCap(state) {
  * handicapLevelは、立て直しで「香落ちで挑む」ときのLv(連敗したLv)。practiceは、練習のときの中身。
  * 練習のときも、levelは対局で勧めるLv(弱点の練習の学習対局の強さに使う)。
  * @param {any} state player-ratingの記録
- * @param {{ insight?: any, reviewDueId?: string | null, problemIds?: Set<string> | null }} [context]
+ * @param {{
+ *   insight?: any, reviewDueId?: string | null, problemIds?: Set<string> | null,
+ *   reward?: { wonLevels: number[], themeRemaining: number | null } | null,
+ * }} [context]
  *   insightは対局の中身の記録(play-insight.mjs)、reviewDueIdは復習の期日が来た問題、problemIdsは「あなたの対局から」の問題のID
  * @returns {PlayPlan}
  */
 export function recommendPlay(state, context = {}) {
-  const plan = recommendMatch(state, contentStrength(context.insight?.games ?? []), context.insight?.games ?? []);
+  const plan = recommendMatch(state, contentStrength(context.insight?.games ?? []), context.insight?.games ?? [], context.reward ?? null);
   if (plan.kind !== 'normal' && plan.kind !== 'promotion') return plan;
   const practice = recommendPractice(state, context);
   return practice ? { ...plan, kind: 'practice', ...practice } : plan;
@@ -235,14 +239,14 @@ function recommendPractice(state, { insight = null, reviewDueId = null, problemI
 }
 
 /** 次の対局のLvと理由(段階1の見立てに、内容の強さを混ぜる)。insightGamesは対局の中身の記録(理由の1行に使う)。 */
-function recommendMatch(state, content, insightGames = []) {
+function recommendMatch(state, content, insightGames = [], reward = null) {
   const games = ratedHistory(state);
   const strength = blendedStrength(resultStrength(state), content);
   const base = clampLevel((strength - TARGET_MARGIN) / RATING_PER_LEVEL);
   const cap = unbeatenCap(state);
   const normal = (level) => ({
     level, kind: 'normal', title: '対局する', base, cap, handicapLevel: null,
-    reason: normalReason(state, games, level, insightGames),
+    reason: normalReason(state, games, level, insightGames, reward),
   });
   if ((state?.games ?? 0) < RULES_MIN_GAMES || !games.length) return withPromotion(state, normal(base));
 
@@ -287,9 +291,9 @@ function withPromotion(state, plan) {
 
 /**
  * 「対局する」の理由の1行(docs/home-next-adaptive-design.mdの13-4)。同じ状態なら同じ文にし、対局が1つ進むと変わるよう、
- * 候補をレーティングの対局の数で選ぶ: 最近5局の成績・前の対局・そのLvとの通算・次の級まで。
+ * 候補をレーティングの対局の数で選ぶ: 最近5局の成績・前の対局・そのLvとの通算・次の級まで・良い内容・あと少しのご褒美。
  */
-export function normalReason(state, games, level, insightGames = []) {
+export function normalReason(state, games, level, insightGames = [], reward = null) {
   const head = `Lv.${level} ${presetLabel(level)}の相手と。`;
   const recentText = recentRecordText(games);
   if (!games.length) return `${head}振り駒ですぐ始めるよ`;
@@ -307,6 +311,8 @@ export function normalReason(state, games, level, insightGames = []) {
   if (goal) candidates.push(`${gradeName(goal.label)}まであとR${goal.remaining}。Lv.${level}で一歩ずつ`);
   const good = goodContentLine(insightGames);
   if (good) candidates.push(`${good}その調子でLv.${level}と`);
+  // あと少しのご褒美(★・着せ替え。docs/home-next-adaptive-design.mdの15章)。
+  if (reward) candidates.push(...nearRewardLines({ level, ...reward }));
   return candidates[(state?.games ?? 0) % candidates.length];
 }
 

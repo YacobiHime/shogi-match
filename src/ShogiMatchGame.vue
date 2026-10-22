@@ -2147,6 +2147,7 @@ import { loadOshi, oshiSeasonResultLine } from "./core/ryuo-oshi.mjs";
 import { TESUJI_HINTS, TESUJI_NAMES, detectTesuji } from "./core/move-tesuji.mjs";
 import { addRecentGame, loadRecentGames, saveRecentGames } from "./core/recent-games.mjs";
 import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
+import { discoveryPlan, loadSeenFeatures, markFeatureSeen, todayPlan } from "./core/home-extras.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 
 // 対局のほかの画面は、開いたときに読み込む。最初に読むJSを小さくして、起動を速くするため。
@@ -2293,6 +2294,9 @@ const tournamentOpen = ref(false);
 const openingDexInitialId = ref("");
 // 駒図鑑・手筋図鑑・将棋界図鑑のうち、開いているもの。
 const referenceDexKind = ref<"" | "piece" | "tesuji" | "world" | "glossary">("");
+// 図鑑を開いたら、見たことを残す(つぎはこれの「まだ見ていない遊び」に使う)。
+watch(dexOpen, (open) => { if (open) noteFeatureSeen("opening-dex"); });
+watch(referenceDexKind, (kind) => { if (kind) noteFeatureSeen(kind); });
 const referenceDexInitialId = ref("");
 // やこび姫の将棋教室を開いているか。
 const tutorialOpen = ref(false);
@@ -2433,6 +2437,7 @@ const playPlan = computed(() => recommendPlay(ratingState.value, {
   insight: playInsight.value,
   reviewDueId: homeReviewDueId.value,
   problemIds: homeReviewProblemIds.value,
+  reward: homeReward.value,
 }));
 const playPreset = computed(() => CPU_STRENGTH_PRESETS.find((preset) => preset.level === playPlan.value.level)!);
 const reviewMode = ref(false);
@@ -4677,6 +4682,7 @@ function startMatchFromNote() {
  * 平手・先手・作戦おまかせ・助言なしで、CPUの強さはレーティングに近いレベルにする。
  */
 function startMeasureMatch() {
+  noteFeatureSeen("measure");
   confirmDiscardSuspended(() => startMeasureMatchNow());
 }
 /**
@@ -4768,6 +4774,7 @@ const ENDGAME_START_LABEL = "終盤戦";
  * 代表局の棋譜は重いので、押したときに読み込む。平手の初期局面ではないので、レーティングの対象にはならない。
  */
 function startEndgameMatch() {
+  noteFeatureSeen("endgame");
   confirmDiscardSuspended(() => { void startEndgameNow(); });
 }
 async function startEndgameNow({ excludeSfen = "", ownOnly = false } = {}) {
@@ -5079,6 +5086,13 @@ const homeLessonsDone = ref(0);
 /** 強くなる道(core/home-roadmap.mjs)を決める記録。タイトル画面を開くたびに読み直す。 */
 const homeTutorialProgress = ref(loadTutorialProgress(browserStorage()));
 const homeProblemsSolved = ref(0);
+/** あと少しのご褒美(docs/home-next-adaptive-design.mdの15章): 勝ったことのあるLvと、次の着せ替えまでの印の残り。 */
+const homeReward = ref<{ wonLevels: number[]; themeRemaining: number | null }>({ wonLevels: [], themeRemaining: null });
+/** 開いたことのある遊び(まだ見ていない遊びの紹介に使う)。 */
+const seenFeatures = ref<string[]>(loadSeenFeatures(browserStorage()));
+function noteFeatureSeen(id: string) {
+  if (markFeatureSeen(browserStorage(), id)) seenFeatures.value = loadSeenFeatures(browserStorage());
+}
 const homeWelcomeChoice = ref("");
 /** 続けて遊んだ日(core/play-streak.mjs)。タイトル画面の記録の帯とやこび姫の一言に使う。 */
 const homeStreak = ref(currentStreak(loadPlayStreak(browserStorage())));
@@ -5088,6 +5102,11 @@ function refreshHomeProgress() {
   homeProblemsSolved.value = Object.keys(loadProblemProgress(browserStorage()).solved).length;
   homeWelcomeChoice.value = welcomeChoiceFrom(browserStorage(), WELCOME_SEEN_KEY);
   homeStreak.value = currentStreak(loadPlayStreak(browserStorage()));
+  const collection = loadCollection(browserStorage());
+  homeReward.value = {
+    wonLevels: Object.keys(collection.levels ?? {}).map(Number).filter(Number.isFinite),
+    themeRemaining: nextThemeUnlock(collection)?.remaining ?? null,
+  };
   refreshPlayInsight();
   // 終えた対局の中身の解析が残っていれば、ホームにいるあいだに続ける。
   if (playInsight.value.queue.length) void playInsightAnalysis.processQueue();
@@ -5127,7 +5146,7 @@ function homeTileClass(id: string) {
 }
 
 type HomeNext = {
-  id: "resume" | "tutorial" | "match" | "tournament" | "ryuo-season" | "ryuo-counter" | "problems" | "practice"; label: string; description: string;
+  id: "resume" | "tutorial" | "match" | "tournament" | "ryuo-season" | "ryuo-counter" | "problems" | "practice" | "discover"; label: string; description: string;
   /** 立て直しのときの「香落ちで挑む」のLv。 */
   handicapLevel?: number | null;
   /** 竜王戦の期の途中の、主役でない方の小さな入口(対策か続き)。 */
@@ -5185,6 +5204,18 @@ const homeNext = computed<HomeNext>(() => {
       // 竜王戦の期を終えたばかりなら、次の期へ。
       if (homeNextSeason.value) return { id: "tournament", label: homeNextSeason.value.title, description: homeNextSeason.value.reason };
       if (plan.practice) return { id: "practice", label: plan.title, description: plan.reason };
+      // ふだんの対局の場面だけ: まだ見ていない遊び(今日1局以上指したあと、3局ごと)と、その日初めての「今日の1局」。
+      if (plan.kind === "normal") {
+        const discover = homeDiscovery.value;
+        if (discover) return { id: "discover", label: discover.title, description: discover.reason };
+        const today = todayPlan({
+          playedToday: homeStreak.value.playedToday,
+          streak: homeStreak.value.current,
+          level: plan.level,
+          everPlayed: ratingState.value.games > 0,
+        });
+        if (today) return { id: "match", label: today.title, description: today.reason, handicapLevel: plan.handicapLevel };
+      }
       return { id: "match", label: plan.title, description: plan.reason, handicapLevel: plan.handicapLevel };
   }
 });
@@ -5201,6 +5232,20 @@ watch(tutorialOpen, (open) => {
 function openTutorialLesson() {
   tutorialAutoStart.value = true;
   tutorialOpen.value = true;
+}
+/** まだ見ていない遊びの紹介(15章)。 */
+const homeDiscovery = computed(() => discoveryPlan({
+  seen: seenFeatures.value,
+  games: ratingState.value.games,
+  playedToday: homeStreak.value.playedToday,
+  measured: Boolean(ratingState.value.measured),
+}));
+/** まだ見ていない遊びを開く。 */
+function openDiscovery(id: string) {
+  if (id === "endgame") startEndgameMatch();
+  else if (id === "opening-dex") dexOpen.value = true;
+  else if (id === "measure") startMeasureMatch();
+  else if (id === "piece" || id === "tesuji" || id === "world" || id === "glossary") referenceDexKind.value = id;
 }
 /** 竜王戦の期を終えたあとの「次の期へ」(直前のレーティングの対局が竜王戦のとき)。 */
 const homeNextSeason = computed(() => {
@@ -5223,6 +5268,7 @@ function startHomeNext() {
   if (homeNext.value.id === "resume") resumeSuspendedMatch();
   else if (homeNext.value.id === "ryuo-counter") startRyuoCounter();
   else if (homeNext.value.id === "ryuo-season") openRyuoSeasonScreen();
+  else if (homeNext.value.id === "discover" && homeDiscovery.value) openDiscovery(homeDiscovery.value.id);
   else if (homeNext.value.id === "tutorial") openTutorialLesson();
   else if (homeNext.value.id === "tournament") openTournamentScreen();
   else if (homeNext.value.id === "problems") problemSetOpen.value = true;
@@ -5292,6 +5338,8 @@ const homeGreeting = computed(() => {
   if (homeNext.value.id === "ryuo-counter") return `${ryuoName}さんの対策、いっしょにしよう！`;
   if (homeNext.value.id === "ryuo-season") return `次は${ryuoName}さんとの一局だね！`;
   if (homeNext.value.id === "practice") return "いっしょに練習しよう！";
+  if (homeNext.value.id === "discover") return "ほかにも遊べるよ！";
+  if (homeNext.value.label === "今日の1局") return homeStreak.value.current >= 1 ? "今日も1局、指そう！" : "おかえり！ 待ってたよ";
   switch (homeRoadmapState.value.current) {
     case 1: return homeLessonsDone.value ? "今日も教室で練習しよう！" : "はじめまして！ いっしょに覚えよう";
     case 2: return "駒の動き、覚えたね！ CPUと指してみよう";
