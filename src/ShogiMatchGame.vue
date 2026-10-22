@@ -38,7 +38,7 @@
         class="shogi-title__exhibit-reset"
         data-exhibit-reset
         @click="openExhibitReset"
-      >最初から</button>
+      >データリセット</button>
       <div class="shogi-title__hero">
         <h1 class="shogi-title__logo">shogi-match</h1>
         <p class="shogi-title__bubble" aria-hidden="true">{{ homeGreeting }}</p>
@@ -1584,7 +1584,7 @@
     >
       <div class="shogi-game__confirm-panel">
         <h2 id="exhibit-reset-title">記録を消して、最初からにします。</h2>
-        <p>成績・教室の進み具合・竜王戦・中断した対局が消えます。音と盤・駒の見た目は残ります。</p>
+        <p>名前・成績・教室の進み具合・大会・中断した対局が消えます。音と盤・駒の見た目は残ります。</p>
         <div>
           <button type="button" class="shogi-game__confirm-danger" data-exhibit-reset-accept @click="acceptExhibitReset">最初からにする</button>
           <button ref="exhibitResetCancel" type="button" @click="exhibitResetOpen = false">やめる</button>
