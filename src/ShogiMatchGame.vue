@@ -1954,7 +1954,33 @@
             @click="applySkillDiagnosis"
           >{{ ratingState.rating === skillDiagnosis.rating ? "レーティングに設定済み" : "この棋力をレーティングに設定" }}</button>
         </template>
-        <div class="shogi-game__result-actions">
+        <!--
+          はじめての案内から測った人には、竜王戦への道(docs/first-play-design.mdの5-2)。
+          よく指している人は「竜王戦に出る」が主ボタン、少し指せる人は「ホームへ」(つぎはこれが練習と大会を勧める)が主ボタン。
+        -->
+        <template v-if="measureWelcome && showHome && !(skillDiagnosis.insufficient && measureNext)">
+          <p class="shogi-game__measure-welcome" data-measure-welcome>{{ measureWelcomeLine }}</p>
+          <div class="shogi-game__result-actions">
+            <button
+              type="button"
+              class="shogi-game__rematch"
+              :class="{ 'shogi-game__rematch--primary': measureWelcome === 'player' }"
+              data-measure-tournament
+              @click="enterTournamentFromMeasure"
+            >竜王戦に出る</button>
+            <button
+              type="button"
+              class="shogi-game__rematch"
+              :class="{ 'shogi-game__rematch--primary': measureWelcome === 'some' }"
+              data-measure-home
+              @click="leaveFinishedMatch()"
+            >ホームへ</button>
+          </div>
+          <div class="shogi-game__result-actions">
+            <button type="button" class="shogi-game__analysis-button" @click="measureReportDismissed = true">棋譜を見る</button>
+          </div>
+        </template>
+        <div v-else class="shogi-game__result-actions">
           <button type="button" class="shogi-game__analysis-button" @click="measureReportDismissed = true">棋譜を見る</button>
           <button type="button" class="shogi-game__rematch" @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
@@ -1991,7 +2017,7 @@ import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import { useBackNavigation } from "./composables/useBackNavigation";
-import { WELCOME_CHOICES, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
+import { WELCOME_CHOICES, WELCOME_MEASURE_LEVEL, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
 import { VOLUME_2_LAST_LESSON, homeRoadmap, roadmapTile, welcomeChoiceFrom } from "./core/home-roadmap.mjs";
 import { loadProblemProgress } from "./core/problem-progress.mjs";
 import {
@@ -2544,7 +2570,7 @@ const ryuoCounter = ref<{ opponentId: string; label: string; key: string } | nul
 const ryuoCounterOpponent = computed(() => (ryuoCounter.value ? ryuoSeason.value?.players?.[ryuoCounter.value.opponentId] ?? null : null));
 /** 対策をした次の一局の印(期と次の一局の組)。 */
 const ryuoCounterDoneKey = ref(loadCounterKey(browserStorage()));
-const tournamentStartAt = ref<"select" | "season" | "meijin">("select");
+const tournamentStartAt = ref<"select" | "season" | "meijin" | "ryuo">("select");
 /** いまの竜王(名簿の竜王。プレイヤーが竜王ならnull)。竜王戦の入口の山で、七番勝負に顔を出す。 */
 const ryuoHolder = computed(() => {
   const roster = ryuoRoster.value;
@@ -2605,6 +2631,11 @@ watch(measureAnalyzing, (analyzing) => {
 });
 onBeforeUnmount(() => { if (measureTipTimer) clearInterval(measureTipTimer); });
 const measureReportDismissed = ref(false);
+/**
+ * はじめての案内から始めた棋力測定の答え(少し指せる・よく指している)。測れたら、結果をそのままレーティングにし、
+ * 結果の画面に竜王戦への道を出す(docs/first-play-design.mdの5-2)。対局準備・ホームへ戻ると捨てる。
+ */
+const measureWelcome = ref<"" | "some" | "player">("");
 /**
  * 測れる手が足りなかった測定対局から持ち越した手と、その対局の数。次の測定対局の手と合わせて診断する。
  * 測定の対局を続けている間だけ持ち、対局準備・ホームへ戻ると捨てる(docs/skill-measure-design.md)。
@@ -5081,9 +5112,15 @@ function startMeasureMatch() {
  * @param options.level 相手のLv(省くとレーティングに近いLv)
  * @param options.carry 持ち越した手と対局の数
  */
-function startMeasureMatchNow(options: { level?: number; carry?: { moves: { loss: number; standing: number }[]; games: number } } = {}) {
+function startMeasureMatchNow(options: {
+  level?: number;
+  carry?: { moves: { loss: number; standing: number }[]; games: number };
+  /** はじめての案内の答え(少し指せる・よく指している)。続けて測るときは、前の対局のものを引き継ぐ。 */
+  welcome?: "some" | "player";
+} = {}) {
   yakobiNoteOpen.value = false;
   openPregame();
+  measureWelcome.value = options.welcome ?? (options.carry ? measureWelcome.value : "");
   measureCarry.value = options.carry ?? null;
   settingsBeforeMeasure = captureMatchSettings();
   matchKind.value = "normal";
@@ -5110,9 +5147,12 @@ function startMeasureMatchNow(options: { level?: number; carry?: { moves: { loss
 function chooseWelcome(choice: string) {
   markWelcomeSeen(browserStorage(), choice);
   welcomeOpen.value = false;
-  if (choice === "beginner") openTutorialLesson();
-  else if (choice === "rules") startQuickMatch();
-  else if (choice === "player") startMeasureMatch();
+  // ルールは分かる: 教室で、始める場所を1手詰めの1問で決める。少し指せる・よく指している: 1級くらいの相手と棋力測定。
+  if (choice === "beginner" || choice === "rules") openTutorialLesson();
+  else if (choice === "some" || choice === "player") {
+    noteFeatureSeen("measure");
+    startMeasureMatchNow({ level: WELCOME_MEASURE_LEVEL, welcome: choice });
+  }
 }
 
 /** 案内を閉じて、ホームから自分で選ぶ。 */
@@ -5525,6 +5565,7 @@ const homeRoadmapState = computed(() => {
     problemsSolved: homeProblemsSolved.value,
     ryuoPlayed: ryuoGames > 0 || ryuoCareer.value.seasons > 0,
     welcomeChoice: homeWelcomeChoice.value,
+    measured: Boolean(ratingState.value.measured),
   });
 });
 const homeRoadmapStep = computed(() => homeRoadmapState.value.steps[homeRoadmapState.value.current - 1]);
@@ -5839,6 +5880,7 @@ function openPregame() {
   suspendConfirmOpen.value = false;
   measureMode.value = false;
   measureSession.value = false;
+  measureWelcome.value = "";
   measureAnalyzing.value = false;
   measureCarry.value = null;
   if (settingsBeforeMeasure) restoreMatchSettings(settingsBeforeMeasure);
@@ -7429,6 +7471,28 @@ const measureStats = computed(() => (
 const measureReportOpen = computed(() => (
   measureSession.value && !measureReportDismissed.value && Boolean(skillDiagnosis.value)
 ));
+// はじめての案内から測ったときは、測れたらすぐレーティングにする(押し忘れても大会の難易度がずれないように)。
+watch(skillDiagnosis, (diagnosis) => {
+  if (!measureSession.value || !measureWelcome.value || !diagnosis || diagnosis.insufficient) return;
+  if (ratingState.value.rating !== diagnosis.rating) applySkillDiagnosis();
+});
+/** はじめての案内から測った人への1行。棋力と、竜王戦のちょうどいい難易度。 */
+const measureWelcomeLine = computed(() => {
+  if (!measureWelcome.value) return "";
+  const diagnosis = skillDiagnosis.value;
+  const grade = diagnosis && !diagnosis.insufficient ? gradeName(diagnosis.label ?? "") : "";
+  const difficulty = ryuoDefaultDifficulty.value;
+  return grade
+    ? `あなたは${grade}くらい。竜王戦は難易度${difficulty}がちょうどいいよ`
+    : `測りきれなかったけど、竜王戦は難易度${difficulty}から始められるよ`;
+});
+/** 棋力測定の結果から、竜王戦の入口を開く(難易度は、測った棋力に合わせた初期値)。 */
+function enterTournamentFromMeasure() {
+  leaveFinishedMatch({ toHome: true });
+  tournamentStartAt.value = "ryuo";
+  tournamentFromGame.value = false;
+  tournamentOpen.value = true;
+}
 function applySkillDiagnosis() {
   const diagnosis = skillDiagnosis.value;
   if (!diagnosis || diagnosis.insufficient || diagnosis.rating === undefined) return;

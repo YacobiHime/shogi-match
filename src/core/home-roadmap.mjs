@@ -37,18 +37,24 @@ function passed(tutorialProgress, lessonId) {
  *   problemsSolved?: number,
  *   ryuoPlayed?: boolean,
  *   welcomeChoice?: string,
+ *   measured?: boolean,
  * }} records
+ *   welcomeChoiceは、はじめての案内の答え(beginner・rules・some・player)。measuredは、棋力測定でレーティングを決めたか。
  * @returns {{ steps: { id: string, label: string, number: number, done: boolean, current: boolean }[], current: number }}
  *   currentは、いまの段の番号(1〜5)。
  */
 export function homeRoadmap(records = {}) {
-  const { tutorialProgress, ratedGames = 0, problemsSolved = 0, ryuoPlayed = false, welcomeChoice = "" } = records;
-  const experienced = welcomeChoice === "rules" || welcomeChoice === "player";
+  const { tutorialProgress, ratedGames = 0, problemsSolved = 0, ryuoPlayed = false, welcomeChoice = "", measured = false } = records;
+  // 答えごとに終えたことにする段(docs/first-play-design.mdの3章): ルールは分かる・少し指せる・よく指しているは駒を覚える段、
+  // 少し指せる・よく指しているは測定を終えたら初めての対局の段、よく指しているは詰みの段も。
+  const experienced = ["rules", "some", "player"].includes(welcomeChoice);
+  const measuredPlayer = (welcomeChoice === "some" || welcomeChoice === "player") && measured;
   const done = [
     passed(tutorialProgress, VOLUME_1_LAST_LESSON) || ratedGames >= ROADMAP_PIECES_GAMES || experienced,
-    ratedGames >= 1,
-    // ふだん指している人は、1局指したら詰みの段も終えたことにする(竜王戦へ案内する)。
-    passed(tutorialProgress, VOLUME_2_LAST_LESSON) || problemsSolved >= ROADMAP_MATE_PROBLEMS || (welcomeChoice === "player" && ratedGames >= 1),
+    ratedGames >= 1 || measuredPlayer,
+    // よく指している人は、1局指すか棋力を測ったら、詰みの段も終えたことにする(竜王戦へ案内する)。
+    passed(tutorialProgress, VOLUME_2_LAST_LESSON) || problemsSolved >= ROADMAP_MATE_PROBLEMS
+      || (welcomeChoice === "player" && (ratedGames >= 1 || measured)),
     ryuoPlayed,
     false,
   ];
@@ -78,7 +84,7 @@ export function roadmapTile(tileId, current) {
   return { dim, recommended, after: dim ? ROADMAP_STEPS[step - 2].after : "" };
 }
 
-/** はじめての案内で選んだ道(beginner・rules・player)。読めなければ""。 */
+/** はじめての案内で選んだ道(beginner・rules・some・player・skip)。読めなければ""。 */
 export function welcomeChoiceFrom(storage, key) {
   try {
     const value = JSON.parse(storage?.getItem(key) ?? "null");

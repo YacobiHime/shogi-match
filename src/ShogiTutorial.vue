@@ -601,7 +601,7 @@ import { CAPTURE_POP_MS, capturePop, materialLabel, materialSwing, materialTotal
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
-import { TUTORIAL_LESSONS, TUTORIAL_TITLE, TUTORIAL_VOLUMES, tutorialLesson } from "./core/tutorial-curriculum.mjs";
+import { PLACEMENT_CHECK_LESSON, TUTORIAL_LESSONS, TUTORIAL_TITLE, TUTORIAL_VOLUMES, tutorialLesson } from "./core/tutorial-curriculum.mjs";
 import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.mjs";
 import {
   INTERACTIVE_STEP_TYPES,
@@ -646,8 +646,10 @@ import {
   applyPlacement,
   firstSkippedLesson,
   markReviewOffered,
+  placementFromCheck,
   recommendedPlacement,
   shouldAskPlacement,
+  shouldCheckPlacement,
   shouldOfferReview,
   SKIP_AHEAD_MIN_STARS,
   isSkipAheadChallenge,
@@ -682,7 +684,7 @@ import { openingFormationSteps } from "./core/opening-formation.mjs";
 import { placeCallout, speechSegments, splitLeadPhrase, stepCallout } from "./core/tutorial-callout.mjs";
 import { loadTutorialVoiceOn, pickJapaneseVoice, saveTutorialVoiceOn, voiceText } from "./core/tutorial-voice.mjs";
 
-type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string; boss?: boolean; review?: boolean };
+type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string; boss?: boolean; review?: boolean; placementCheck?: boolean };
 type VolumeTitle = { id: string; label: string; detail: string; rank: number };
 type Volume = (typeof TUTORIAL_VOLUMES)[number];
 
@@ -731,7 +733,9 @@ function toggleGlasses() {
 // ===== 分かるところから始める(設計17章) =====
 const PLACEMENT_QUESTION = "将棋、どのくらい知ってる？";
 const placements = TUTORIAL_PLACEMENTS;
-const placementOpen = ref(shouldAskPlacement(progress.value, { welcomeChoice: props.welcomeChoice, storageAvailable: Boolean(storage) }));
+/** 「ルールは分かる」と答えた人は、札の代わりに1手詰めを1問解いて、始める場所を決める(docs/first-play-design.mdの4章)。 */
+const placementCheck = shouldCheckPlacement(progress.value, { welcomeChoice: props.welcomeChoice, storageAvailable: Boolean(storage) });
+const placementOpen = ref(!placementCheck && shouldAskPlacement(progress.value, { welcomeChoice: props.welcomeChoice, storageAvailable: Boolean(storage) }));
 const recommendedPlacementId = recommendedPlacement(props.welcomeChoice);
 let firstPlacementButton: HTMLButtonElement | null = null;
 onMounted(() => {
@@ -744,6 +748,23 @@ function choosePlacement(id: string) {
   placementOpen.value = false;
   moveSounds.play("normal");
   if (start) startLesson(start);
+}
+/**
+ * 始める場所を決める1問を終えた。まちがえずヒントも使わずに解けたら第3巻(戦法と囲い)、そうでなければ第2巻から。
+ * 始めるところより前は「とばした」にし(札を選んだときと同じ)、そのレッスンをすぐ始める。1問の記録は残さない。
+ */
+function finishPlacementCheck() {
+  const placement = placementFromCheck({ mistakes: mistakes.value, hints: hints.value });
+  const start = placementStartLesson(placement);
+  updateProgress(applyPlacement(lessons, progress.value, placement, start));
+  if (!start) {
+    openMap();
+    return;
+  }
+  startLesson(start);
+  setFeedback(placement === "mate"
+    ? "1手詰め、解けたね！ 戦法と囲いから始めよう。"
+    : "ここから一緒にやろう！ 駒の利きと、タダで取れる駒から。", placement === "mate" ? "good" : "info");
 }
 /** 「地図から自分で選ぶ」。答えたことだけ残し、今までどおり地図を開く。 */
 function choosePlacementMap() {
@@ -2000,6 +2021,10 @@ function choose(index: number) {
 function finishLesson() {
   const lesson = currentLesson.value;
   if (!lesson) return;
+  if (lesson.placementCheck) {
+    finishPlacementCheck();
+    return;
+  }
   if (lesson.review) {
     finishReview(lesson);
     return;
@@ -2057,6 +2082,12 @@ function skipCurrentLesson() {
   if (!lesson) return;
   if (lesson.review) {
     showChapterClear(lesson.chapterId);
+    return;
+  }
+  // 始める場所を決める1問をとばしたら、解けなかったときと同じく第2巻から。
+  if (lesson.placementCheck) {
+    hints.value += 1;
+    finishPlacementCheck();
     return;
   }
   updateProgress(recordLessonSkipped(progress.value, lesson.id));
@@ -2147,6 +2178,11 @@ watch(revealStage, (stage) => {
 });
 onMounted(() => {
   const report = props.matchReport;
+  // 「ルールは分かる」と答えて初めて開いたときは、始める場所を決める1問から。
+  if (!report && placementCheck) {
+    startLesson(PLACEMENT_CHECK_LESSON.id);
+    return;
+  }
   // タイトル画面の「将棋教室のつづき」からは、地図を通さずに次のレッスンを始める。
   // はじめての問いに答えるまでは、レッスンを自動で始めない。
   if (!report && props.autoStart && upcomingLesson.value && !placementOpen.value) {

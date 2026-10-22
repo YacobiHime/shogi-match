@@ -1,6 +1,8 @@
 /**
  * はじめて遊ぶ人への案内。ホームを最初に開いたとき、将棋をどのくらい知っているかを聞き、
- * 教室・対局・棋力測定のどれから始めるかを案内する。
+ * いちばん早く大会を楽しめる道へ案内する(docs/first-play-design.md)。
+ * 札は易しい順の1本の物差し: はじめて → 教室の第1巻、ルールは分かる → 教室の始める場所を1問で決める、
+ * 少し指せる → 棋力測定からホームの「つぎはこれ」、よく指している → 棋力測定から竜王戦。
  */
 
 import { EXHIBIT_KEEP_KEYS } from "./exhibit-reset.mjs";
@@ -12,9 +14,15 @@ const APP_KEY_PREFIXES = ["yacobihime:shogi-match:", "shogi-match:", "shogi-matc
 
 export const WELCOME_CHOICES = Object.freeze([
   Object.freeze({ id: "beginner", label: "はじめて", description: "駒の動かし方から、教室でいっしょに覚えよう" }),
-  Object.freeze({ id: "rules", label: "ルールは分かる", description: "やこび姫の助言つきで、CPUと指してみよう" }),
-  Object.freeze({ id: "player", label: "ふだん指している", description: "1局指して、棋力を測ってみよう" }),
+  Object.freeze({ id: "rules", label: "ルールは分かる", description: "戦法や囲いはまだ。教室の、ちょうどいいところから" }),
+  Object.freeze({ id: "some", label: "少し指せる", description: "戦法も少し分かる。1局指して、棋力を測ろう" }),
+  Object.freeze({ id: "player", label: "よく指している", description: "定跡も分かる。棋力を測って、大会に挑もう" }),
 ]);
+
+/** 棋力測定から始める答え(測定の最初の相手は1級くらい。docs/first-play-design.mdの5章)。 */
+export const WELCOME_MEASURE_CHOICES = Object.freeze(["some", "player"]);
+/** 棋力測定の最初の相手のLv(1級)。 */
+export const WELCOME_MEASURE_LEVEL = 15;
 
 function hasAppData(storage) {
   for (let index = 0; index < storage.length; index += 1) {

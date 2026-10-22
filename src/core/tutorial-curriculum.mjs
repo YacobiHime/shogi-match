@@ -1545,6 +1545,28 @@ export const TUTORIAL_LESSONS = Object.freeze(TUTORIAL_VOLUMES.flatMap((volume, 
   })))
 )));
 
+/**
+ * はじめる場所を決める1問(docs/first-play-design.mdの4章)。はじめての案内で「ルールは分かる」と答えた人に、
+ * 教室を初めて開いたとき、札を選ぶ代わりに出す。巻と章には入れない(地図に出さず、記録も残さない)。
+ * 頭金と同じ易しさの1手詰め(正解は金打ちの1つだけ)。
+ */
+export const PLACEMENT_CHECK_LESSON = Object.freeze({
+  id: "placement-check",
+  title: "はじめる場所を決める1問",
+  summary: "1手詰めを1問",
+  placementCheck: true,
+  steps: Object.freeze([
+    Object.freeze({
+      type: "mate",
+      sfen: "4k4/9/4P4/9/9/9/9/9/4K4 b G 1",
+      solution: Object.freeze(["G*5b"]),
+      speech: "この1手詰め、解けるかな？ 解けたら、戦法と囲いから始めよう。むずかしかったら、ここから一緒にやろう！",
+      praise: "正解！ 歩が守っているから、玉は金を取れないね。",
+    }),
+  ]),
+});
+
 export function tutorialLesson(id) {
+  if (id === PLACEMENT_CHECK_LESSON.id) return PLACEMENT_CHECK_LESSON;
   return TUTORIAL_LESSONS.find((lesson) => lesson.id === id) ?? null;
 }

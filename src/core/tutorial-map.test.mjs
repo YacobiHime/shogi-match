@@ -11,7 +11,7 @@ import {
   TUTORIAL_PLACEMENTS,
   tutorialMap,
 } from './tutorial-map.mjs';
-import { TUTORIAL_LESSONS, TUTORIAL_VOLUMES } from './tutorial-curriculum.mjs';
+import { PLACEMENT_CHECK_LESSON, TUTORIAL_LESSONS, TUTORIAL_VOLUMES, tutorialLesson } from './tutorial-curriculum.mjs';
 import {
   applyPlacement,
   emptyTutorialProgress,
@@ -20,6 +20,8 @@ import {
   markReviewOffered,
   nextLesson,
   recommendedPlacement,
+  placementFromCheck,
+  shouldCheckPlacement,
   recordLessonCleared,
   recordLessonSkipped,
   recordSkipAhead,
@@ -182,8 +184,29 @@ describe('分かるところから始める(設計17章)', () => {
   it('ホームの案内の答えを、おすすめの札にする', () => {
     expect(recommendedPlacement('rules')).toBe('rules');
     expect(recommendedPlacement('player')).toBe('mate');
+    expect(recommendedPlacement('some')).toBe('mate');
     expect(recommendedPlacement('beginner')).toBe('');
     expect(recommendedPlacement('')).toBe('');
+  });
+
+  it('「ルールは分かる」の人は、札の代わりに1手詰めの1問で始める場所を決める(docs/first-play-design.mdの4章)', () => {
+    const empty = { lessons: {} };
+    expect(shouldCheckPlacement(empty, { welcomeChoice: 'rules' })).toBe(true);
+    expect(shouldCheckPlacement(empty, { welcomeChoice: 'player' })).toBe(false);
+    expect(shouldCheckPlacement(empty, { welcomeChoice: 'rules', storageAvailable: false })).toBe(false);
+    expect(shouldCheckPlacement({ lessons: {}, placement: 'map' }, { welcomeChoice: 'rules' })).toBe(false);
+    expect(shouldCheckPlacement({ lessons: { 'v1-board': { status: 'cleared', stars: 3 } } }, { welcomeChoice: 'rules' })).toBe(false);
+    // まちがえずヒントも使わずに解けたら第3巻(戦法と囲い)、そうでなければ第2巻(タダの駒・両取り・詰み)。
+    expect(placementFromCheck({ mistakes: 0, hints: 0 })).toBe('mate');
+    expect(placementFromCheck({ mistakes: 1, hints: 0 })).toBe('rules');
+    expect(placementFromCheck({ mistakes: 0, hints: 1 })).toBe('rules');
+    expect(placementStartLesson('mate')).toBe('v3-rook-styles');
+    expect(placementStartLesson('rules')).toBe('v2-kiki');
+    // 1問は巻と章に入れない(地図に出さない)。正解は金打ちの1つ。
+    expect(tutorialLesson(PLACEMENT_CHECK_LESSON.id)).toBe(PLACEMENT_CHECK_LESSON);
+    expect(lessons.some(({ id }) => id === PLACEMENT_CHECK_LESSON.id)).toBe(false);
+    expect(PLACEMENT_CHECK_LESSON.steps).toHaveLength(1);
+    expect(PLACEMENT_CHECK_LESSON.steps[0]).toMatchObject({ type: 'mate', solution: ['G*5b'] });
   });
 
   it('答えと、復習を勧めたことを保存し、読めない値は捨てる', () => {

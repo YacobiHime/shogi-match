@@ -605,4 +605,18 @@ describe("match screen regressions", () => {
     expect(tutorial).toMatch(/data-stage-clear @click="continueChain"/);
     expect(tutorial).toMatch(/view === 'chapter' && clearedChapter/);
   });
+
+  it('はじめての案内の4つの札から、教室の1問か、1級くらいとの棋力測定、測ったあと竜王戦へ(docs/first-play-design.md)', () => {
+    expect(source).toMatch(/if \(choice === "beginner" \|\| choice === "rules"\) openTutorialLesson\(\);/);
+    expect(source).toMatch(/choice === "some" \|\| choice === "player"[\s\S]{0,120}?startMeasureMatchNow\(\{ level: WELCOME_MEASURE_LEVEL, welcome: choice \}\)/);
+    // 続けて測るときは、案内の答えを引き継ぐ。対局準備へ戻ると捨てる。
+    expect(source).toMatch(/measureWelcome\.value = options\.welcome \?\? \(options\.carry \? measureWelcome\.value : ""\);/);
+    expect(source).toMatch(/measureSession\.value = false;\s*measureWelcome\.value = "";/);
+    // 測れたら、そのままレーティングにする。
+    expect(source).toMatch(/watch\(skillDiagnosis, \(diagnosis\) => \{[\s\S]{0,200}?applySkillDiagnosis\(\);/);
+    // よく指している人は「竜王戦に出る」が主ボタン、少し指せる人は「ホームへ」が主ボタン。
+    expect(source).toMatch(/'shogi-game__rematch--primary': measureWelcome === 'player'[\s\S]{0,80}?data-measure-tournament[\s\S]{0,80}?竜王戦に出る/);
+    expect(source).toMatch(/'shogi-game__rematch--primary': measureWelcome === 'some'[\s\S]{0,80}?data-measure-home/);
+    expect(source).toMatch(/function enterTournamentFromMeasure\(\) \{[\s\S]{0,120}?tournamentStartAt\.value = "ryuo";/);
+  });
 });

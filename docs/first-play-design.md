@@ -185,3 +185,11 @@
 1. 「ルールは分かる」は、1手詰めの1問で第2巻か第3巻に決める（4章のとおり）。
 2. 棋力測定の最初の相手は、「少し指せる」「よく指している」のどちらも**1級くらい（Lv15）**にする（5-1の表を直す）。測りきれなければ、今までどおり相手を近づけてもう1局。
 3. 「よく指している」の測定のあとは、主ボタン1つで竜王戦の入口へ（おまかせ。5-2のとおり）。
+
+## 11. 段階2の実装（2026-10-22）
+
+- はじめての案内: `src/core/welcome.mjs`の`WELCOME_CHOICES`を4つ（beginner・rules・some・player）にした。`ShogiMatchGame.vue`の`chooseWelcome`で、はじめて・ルールは分かるは教室（`openTutorialLesson`）、少し指せる・よく指しているは1級（`WELCOME_MEASURE_LEVEL`）との棋力測定（`startMeasureMatchNow({ welcome })`）。
+- 始める場所を決める1問: `tutorial-curriculum.mjs`の`PLACEMENT_CHECK_LESSON`（巻と章に入れない。正解は金打ちの1つだけ）。`tutorial-progress.mjs`の`shouldCheckPlacement`・`placementFromCheck`。教室（`ShogiTutorial.vue`）は、ルールは分かると答えて初めて開いたとき、札の代わりにこの1問を始め、終えたら`finishPlacementCheck`で始めるレッスンを決めてすぐ始める（スキップは解けなかったのと同じ）。1問の記録は残さない。
+- 棋力測定から: `measureWelcome`（続けて測るときは引き継ぎ、対局準備へ戻ると捨てる）。測れたらすぐレーティングにする（`watch(skillDiagnosis)`）。結果の画面の1行（`measureWelcomeLine`）と「竜王戦に出る」（`enterTournamentFromMeasure`。大会の画面を`startAt: "ryuo"`で開き、期の途中でなければ竜王戦の入口。難易度の初期値は`recommendedDifficulty`）・「ホームへ」。
+- 強くなる道: `home-roadmap.mjs`の`homeRoadmap`に`measured`を足し、答えごとに終えたことにする段を3章の表のとおりにした。
+- 確かめ: 自動テスト（`welcome.test.mjs`・`home-roadmap.test.mjs`・`tutorial-map.test.mjs`・`match-ui-regression.test.mjs`）。ブラウザで、記録のない端末の案内に4つの札が出ること、「ルールは分かる」で1問が始まり、解けたら第3巻の「居飛車と振り飛車」、まちがえたら第2巻の「利きを見よう」がすぐ始まること、「少し指せる」「よく指している」でLv15との測定が始まること、測定の結果からの「竜王戦に出る」で竜王戦の入口が測った棋力の難易度（8級なら難易度6）で開くことを、スマホ縦・タブレット縦・デスクトップで確かめた。測定の結果の画面そのもの（実際の対局を最後まで指して解析を待つ流れ）は、ブラウザではまだ確かめていない。

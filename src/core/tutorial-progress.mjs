@@ -57,7 +57,27 @@ export function shouldAskPlacement(progress, { welcomeChoice = "", storageAvaila
 
 /** ホームのはじめての案内の答えから、おすすめの札。決めつけず「おすすめ」の印に使うだけ。 */
 export function recommendedPlacement(welcomeChoice) {
-  return ({ rules: "rules", player: "mate" })[welcomeChoice] ?? "";
+  return ({ rules: "rules", some: "mate", player: "mate" })[welcomeChoice] ?? "";
+}
+
+/**
+ * はじめての案内で「ルールは分かる」と答えた人は、札を選ぶ代わりに1手詰めを1問解いて、始める場所を決める
+ * (docs/first-play-design.mdの4章)。教室を初めて開いたときだけ。
+ * @param {{ lessons: Record<string, any>, placement?: string }} progress
+ * @param {{ welcomeChoice?: string, storageAvailable?: boolean }} [options]
+ */
+export function shouldCheckPlacement(progress, { welcomeChoice = "", storageAvailable = true } = {}) {
+  return welcomeChoice === "rules" && shouldAskPlacement(progress, { welcomeChoice, storageAvailable });
+}
+
+/**
+ * 始める場所を決める1問の結果。まちがえずヒントも使わずに解けたら、戦法と囲いから(第3巻・札のmate)。
+ * そうでなければ、タダの駒・両取り・詰みから(第2巻・札のrules)。
+ * @param {{ mistakes: number, hints: number }} result
+ * @returns {'mate' | 'rules'}
+ */
+export function placementFromCheck({ mistakes, hints }) {
+  return mistakes === 0 && hints === 0 ? "mate" : "rules";
 }
 
 /**

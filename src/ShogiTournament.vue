@@ -795,7 +795,8 @@ const props = defineProps({
   /** プレイヤーの棋力の目安(CPUのLv)。やこび姫が、相手の強さを話すのに使う。 */
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
-  startAt: { type: String as PropType<"select" | "season" | "meijin">, default: "select" },
+  /** 開いたときの画面。ryuoは竜王戦の入口(期の途中なら期の画面)。棋力測定の結果の「竜王戦に出る」から。 */
+  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo">, default: "select" },
   /** いまの竜王(プレイヤーが竜王ならnull)。入口の山で、七番勝負に顔を出す。 */
   ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
   /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。VS画面に出す。 */
@@ -845,7 +846,10 @@ const ROAD = [{ id: "kenshukai", label: "研修会" }, { id: "shoreikai", label:
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const inProgress = computed(() => Boolean(props.view && !props.view.result));
 const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin">(
-  props.startAt === "meijin" ? "meijin" : props.startAt === "season" && props.view ? (props.view.result ? "result" : "season") : "select",
+  props.startAt === "meijin" ? "meijin"
+    : props.startAt === "season" && props.view ? (props.view.result ? "result" : "season")
+      : props.startAt === "ryuo" ? (props.view && !props.view.result ? "season" : "ryuo")
+        : "select",
 );
 const meijinEl = ref<{ goBack: () => boolean } | null>(null);
 /** 名人戦の札の小さな説明(いまのクラス・期・名人の期数)。 */

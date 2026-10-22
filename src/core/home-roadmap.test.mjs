@@ -41,6 +41,13 @@ describe("ホームの強くなる道", () => {
     expect(homeRoadmap({ welcomeChoice: "rules" }).current).toBe(2);
     expect(homeRoadmap({ welcomeChoice: "player" }).current).toBe(2);
     expect(homeRoadmap({ welcomeChoice: "player", ratedGames: 1 }).current).toBe(4);
+    // 少し指せる: 駒を覚える段は終え、測ったら初めての対局の段も終える(詰みは、ここから覚える)。
+    expect(homeRoadmap({ welcomeChoice: "some" }).current).toBe(2);
+    expect(homeRoadmap({ welcomeChoice: "some", measured: true }).current).toBe(3);
+    // よく指している: 測ったら詰みの段まで終え、竜王戦へ。
+    expect(homeRoadmap({ welcomeChoice: "player", measured: true }).current).toBe(4);
+    // 案内なしで測っただけでは、段を飛ばさない。
+    expect(homeRoadmap({ measured: true }).current).toBe(1);
   });
 
   it("2つ以上先の段の入口だけを薄くし、鍵はかけない", () => {
