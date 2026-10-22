@@ -22,7 +22,9 @@ import {
   playLeagueYear,
   raiseDan,
   seedLeagueHistory,
+  createJunniWorld,
   settleLeague,
+  syncJunni,
 } from './ryuo-league.mjs';
 
 export { DAN_ORDER };
@@ -164,6 +166,8 @@ export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
   // 物語の人物は、履歴を作ったあとに加える(通算の記録は人物の決まりのまま。善彦は竜王を含む六冠)。
   roster.holder = USER_HOLDER;
   addStoryMembers(roster, { userGroup, userIsChampion, fresh: true });
+  // 順位戦の世界(クラスごとの順位の並び・降級点・名人)。名人戦の期と、名人戦に出る前の自動の期で進む。
+  createJunniWorld(roster);
   roster.ratingMean = Math.round(proMean(roster));
   roster.ratingSd = Math.round(proSd(roster));
   roster.ratingModel = RATING_MODEL;
@@ -186,6 +190,7 @@ export function withStoryMembers(roster, options) {
   if (!roster || (storyMemberId(roster, HANANE) && storyMemberId(roster, YOSHIHIKO))) return roster;
   const next = structuredClone(roster);
   addStoryMembers(next, options);
+  if (next.junni) syncJunni(next);
   return next;
 }
 
@@ -245,17 +250,34 @@ export function seasonEntry(roster, id) {
   };
 }
 
-/** プレイヤーとの対戦成績を足す。streakはプレイヤーから見た連勝(+)・連敗(-)。 */
+/** プレイヤーとの対戦成績を足す(竜王戦の期の終わり)。 */
 function recordVsUser(roster, season) {
+  addVsUser(roster, season.userGames ?? [], { no: season.no, event: 'ryuo' });
+}
+
+/**
+ * プレイヤーとの対戦成績を足す。streakはプレイヤーから見た連勝(+)・連敗(-)。byEventは大会ごとの内訳(竜王戦・名人戦)。
+ * lastNoは、最後に指した期の番号(大会ごとに数えるので、lastEventと組で見る)。
+ * @param {any} roster 書き換える名簿
+ * @param {{ opponentId: string, win: boolean }[]} games
+ * @param {{ no: number, event: 'ryuo' | 'meijin' }} options
+ */
+export function addVsUser(roster, games, { no, event }) {
   roster.vsUser ??= {};
-  for (const game of season.userGames ?? []) {
+  for (const game of games) {
     if (!roster.players[game.opponentId]) continue;
     const entry = roster.vsUser[game.opponentId] ?? { wins: 0, losses: 0, streak: 0, lastNo: null, lastWin: null };
     if (game.win) entry.wins += 1;
     else entry.losses += 1;
     entry.streak = game.win ? Math.max(0, entry.streak) + 1 : Math.min(0, entry.streak) - 1;
-    entry.lastNo = season.no;
+    entry.lastNo = no;
+    entry.lastEvent = event;
     entry.lastWin = game.win;
+    entry.byEvent ??= {};
+    const bucket = entry.byEvent[event] ?? { wins: 0, losses: 0 };
+    if (game.win) bucket.wins += 1;
+    else bucket.losses += 1;
+    entry.byEvent[event] = bucket;
     roster.vsUser[game.opponentId] = entry;
   }
 }

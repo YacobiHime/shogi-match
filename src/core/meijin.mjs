@@ -665,23 +665,27 @@ export const MEIJIN_OUTCOME_TEXT = Object.freeze({
  */
 export function advanceLeague(season, rng = createRng((Number(season.id) ^ 0x2545f491) >>> 0)) {
   const league = structuredClone(season.league);
+  const ratingOf = (id) => season.ratings?.[id] ?? season.players[id]?.rating ?? 0;
   const tables = {};
-  for (const cls of MEIJIN_CLASSES) {
-    if (cls === season.cls) {
-      tables[cls] = standings(season);
-      continue;
-    }
-    const ids = league.classes[cls];
-    const rule = CLASS_RULES[cls];
-    const rounds = Math.min(rule.rounds, Math.max(0, ids.length - 1));
-    const ratingOf = (id) => season.ratings?.[id] ?? season.players[id]?.rating ?? 0;
-    const mean = ids.length ? ids.reduce((sum, id) => sum + ratingOf(id), 0) / ids.length : 0;
-    tables[cls] = ids.map((id, rank) => {
-      let wins = 0;
-      for (let game = 0; game < rounds; game += 1) if (rng.next() < winProbability(ratingOf(id), mean)) wins += 1;
-      return { id, wins, losses: rounds - wins, rank };
-    }).sort((a, b) => b.wins - a.wins || a.rank - b.rank);
-  }
+  for (const cls of MEIJIN_CLASSES) tables[cls] = cls === season.cls ? standings(season) : autoTable(league.classes[cls], cls, ratingOf, rng);
+  const titleWinner = season.result?.titleWinner ?? league.holder;
+  return nextWorld(league, tables, titleWinner);
+}
+
+/** プレイヤーのいないクラスの1期の成績表。クラスの平均との勝率で、1期の対局数を指したことにする(順位の上が、同じ勝ち数なら上)。 */
+function autoTable(ids, cls, ratingOf, rng) {
+  const rule = CLASS_RULES[cls];
+  const rounds = Math.min(rule.rounds, Math.max(0, ids.length - 1));
+  const mean = ids.length ? ids.reduce((sum, id) => sum + ratingOf(id), 0) / ids.length : 0;
+  return ids.map((id, rank) => {
+    let wins = 0;
+    for (let game = 0; game < rounds; game += 1) if (rng.next() < winProbability(ratingOf(id), mean)) wins += 1;
+    return { id, wins, losses: rounds - wins, rank };
+  }).sort((a, b) => b.wins - a.wins || a.rank - b.rank);
+}
+
+/** 全クラスの成績表と名人戦の勝者から、次の期の順位戦の世界を作る。 */
+function nextWorld(league, tables, titleWinner) {
   const outcomes = Object.fromEntries(MEIJIN_CLASSES.map((cls) => [cls, classOutcome(cls, tables[cls], league)]));
   const nextClasses = Object.fromEntries(MEIJIN_CLASSES.map((cls) => [cls, []]));
   const points = {};
@@ -697,7 +701,6 @@ export function advanceLeague(season, rng = createRng((Number(season.id) ^ 0x254
       else if (result.outcome === 'demote' && lowerClass(cls)) comingDown[lowerClass(cls)].push(row.id);
     }
   }
-  const titleWinner = season.result?.titleWinner ?? league.holder;
   for (const cls of MEIJIN_CLASSES) {
     const stayers = tables[cls].filter((row) => !['promote', 'demote'].includes(outcomes[cls][row.id].outcome)).map(({ id }) => id);
     nextClasses[cls] = [...comingDown[cls], ...stayers, ...comingUp[cls]];
@@ -707,17 +710,48 @@ export function advanceLeague(season, rng = createRng((Number(season.id) ^ 0x254
     for (const cls of MEIJIN_CLASSES) nextClasses[cls] = nextClasses[cls].filter((id) => id !== titleWinner);
     if (league.holder) nextClasses.A.unshift(league.holder);
   }
-  return { holder: titleWinner ?? null, classes: nextClasses, points, even };
+  return { ...league, holder: titleWinner ?? null, classes: nextClasses, points, even };
+}
+
+/**
+ * プレイヤーのいない名人戦の1期(プレイヤーが名人戦に出る前の、棋界の1年。docs/player-world-note-design.mdの2章)。
+ * 全クラスを自動で進め、A級の1位(名人を除く)が名人と七番勝負を指す。名人がいなければ、A級の1位が名人になる。
+ * @param {{ holder: string | null, classes: Record<string, string[]>, points?: Record<string, number>, even?: Record<string, boolean> }} league
+ * @param {{ players: Record<string, any>, rng: { next(): number } }} options playersは名簿の棋士(idで引く)
+ * @returns {{ league: any, challenger: string | null, titleWinner: string | null, series: any }}
+ */
+export function autoMeijinSeason(league, { players, rng }) {
+  const ratingOf = (id) => players[id]?.rating ?? 0;
+  const tables = Object.fromEntries(MEIJIN_CLASSES.map((cls) => [cls, autoTable(league.classes[cls], cls, ratingOf, rng)]));
+  const challenger = tables.A[0]?.id ?? null;
+  const holder = league.holder && players[league.holder] ? league.holder : null;
+  let titleWinner = holder ?? challenger;
+  let series = null;
+  if (holder && challenger) {
+    series = createSeries('名人戦七番勝負', holder, challenger, MEIJIN_NEED);
+    let aColor = rng.next() < 0.5 ? 'black' : 'white';
+    while (series.winner === null) {
+      const result = simulateMemberGame(rng, players[series.a], players[series.b], { big: true, aColor });
+      recordSeriesGame(series, result.aWins ? series.a : series.b, gameRecordOf(result, series.a, series.b));
+      aColor = aColor === 'black' ? 'white' : 'black';
+    }
+    titleWinner = series.winner;
+  }
+  return { league: nextWorld({ ...league, holder }, tables, titleWinner), challenger, titleWinner, series };
 }
 
 // ---- キャリア
 
+/**
+ * 名人戦のキャリア(プレイヤー自身の歩み)。noは最後に指した期の番号、参加した期数はhistoryの長さ。
+ * 順位戦の世界は名簿(roster.junni)に持つ(junni-world.mjs)。前の保存のleagueは、読み込んだあと名簿へ移す。
+ */
 export function createMeijinCareer() {
-  return { version: 1, no: 0, best: 'C2', titles: 0, eternal: false, history: [], league: null };
+  return { version: 1, no: 0, best: 'C2', titles: 0, eternal: false, history: [] };
 }
 
 /**
- * 期の結果をキャリアに足す(順位戦の世界を次の期へ進め、名人の期数・永世名人・履歴を更新する)。
+ * 期の結果をキャリアに足す(次の期のクラス・名人の期数・永世名人・履歴。順位戦の世界を名簿へ書き戻すのはjunni-world.mjs)。
  * @param {ReturnType<typeof createMeijinCareer>} career
  * @param {any} season 終わった期
  */
@@ -735,7 +769,6 @@ export function applyMeijinSeason(career, season) {
     best,
     titles,
     eternal: career.eternal || titles >= ETERNAL_MEIJIN,
-    league,
     history: [...career.history, {
       no: season.no, cls: season.cls, wins: season.result?.wins ?? 0, losses: season.result?.losses ?? 0,
       place: season.result?.place ?? null, outcome: season.result?.outcome ?? 'stay', next: meijin ? 'meijin' : nextClass,

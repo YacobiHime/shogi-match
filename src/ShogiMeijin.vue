@@ -284,7 +284,7 @@ type Settings = { difficulty: number; scale: string; coachLevel: string; hintLim
 
 const props = defineProps({
   view: { type: Object as PropType<MeijinView | null>, default: null },
-  career: { type: Object as PropType<{ no: number; best: string; titles: number; eternal: boolean }>, required: true },
+  career: { type: Object as PropType<{ no: number; best: string; titles: number; eternal: boolean; history?: unknown[] }>, required: true },
   /** 次の期(か進行中の期)のプレイヤーのクラス。名人ならmeijin。 */
   entryClass: { type: String as PropType<"C2" | "C1" | "B2" | "B1" | "A" | "meijin">, default: "C2" },
   entryNo: { type: Number, default: 1 },
@@ -357,7 +357,7 @@ const entryTalk = computed(() => {
 });
 const careerText = computed(() => {
   const best = props.career.best === "meijin" ? "名人" : CLASS_LABELS[props.career.best as keyof typeof CLASS_LABELS] ?? "";
-  return `参加${props.career.no}期・最高 ${best}${props.career.titles ? `・名人${props.career.titles}期` : ""}${props.career.eternal ? "・永世名人" : ""}`;
+  return `参加${props.career.history?.length ?? props.career.no}期・最高 ${best}${props.career.titles ? `・名人${props.career.titles}期` : ""}${props.career.eternal ? "・永世名人" : ""}`;
 });
 const settingsSummary = computed(() => [
   `難易度 ${difficulty.value}`,

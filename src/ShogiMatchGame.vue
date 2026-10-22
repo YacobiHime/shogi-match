@@ -1929,7 +1929,7 @@ import {
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { MAX_MEASURE_GAMES, MIN_MEASURED_MOVES, estimateSkill, measurableMoves, measureStatistics, nextMeasureLevel } from "./core/skill-estimate.mjs";
-import { USER_ID, createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
+import { USER_ID, createRng, createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
 import { PLAYER_NAME_MAX, loadPlayerName, playerDisplayName, savePlayerName } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
@@ -2142,9 +2142,10 @@ import {
 import { type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor } from "./core/play-coach.mjs";
 import { counterStyle, loadCounterKey, ryuoNextPlan, ryuoNextSeasonPlan, saveCounterKey } from "./core/ryuo-next.mjs";
 import {
-  CLASS_LABELS, applyMeijinSeason, createLeague, createMeijinSeason, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
+  CLASS_LABELS, applyMeijinSeason, createMeijinSeason, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
   recordMeijinGame, resumeMeijinSeason, saveMeijinCareer, saveMeijinSeason, userClass,
 } from "./core/meijin.mjs";
+import { applyMeijinSeasonToRoster, autoJunniYear, ensureJunniWorld, joinJunni } from "./core/junni-world.mjs";
 import { enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight } from "./core/play-insight.mjs";
 import { loadReviewProblems } from "./core/review-problems.mjs";
 import { dueReviewId, loadReviewQueue } from "./core/review-queue.mjs";
@@ -2367,6 +2368,16 @@ const ryuoOpponent = computed(() => (ryuoGame.value ? tournamentSeasonOf(ryuoGam
 // ---- 名人戦(順位戦から名人へ。docs/meijin-design.md)。竜王戦とは別々の暦で進む。
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const meijinCareer = ref<any>(loadMeijinCareer(browserStorage()));
+// 順位戦の世界は名簿に1つ(docs/player-world-note-design.mdの2章)。前の保存(名人戦のキャリアのleague)は、ここで名簿へ移す。
+{
+  const migrated = ensureJunniWorld(ryuoRoster.value, meijinCareer.value);
+  if (migrated.changed) {
+    ryuoRoster.value = migrated.roster;
+    meijinCareer.value = migrated.career;
+    saveRoster(browserStorage(), ryuoRoster.value);
+    saveMeijinCareer(browserStorage(), meijinCareer.value);
+  }
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const meijinSeason = shallowRef<any>((() => {
   const saved = loadMeijinSeason(browserStorage());
@@ -2377,14 +2388,18 @@ const meijinView = computed(() => describeMeijinSeason(meijinSeason.value));
 const meijinEntryClass = computed(() => {
   const season = meijinSeason.value;
   if (season && season.phase !== "done") return season.mode === "defense" ? "meijin" : season.cls;
-  const league = meijinCareer.value.league;
-  if (!league) return "C2";
-  return league.holder === USER_ID ? "meijin" : userClass(league) ?? "C2";
+  const world = ryuoRoster.value?.junni;
+  if (!world) return "C2";
+  return world.holder === USER_ID ? "meijin" : userClass(world) ?? "C2";
 });
-const meijinEntryNo = computed(() => (meijinSeason.value && meijinSeason.value.phase !== "done" ? meijinSeason.value.no : meijinCareer.value.no + 1));
+/** 次の期(か進行中の期)の番号。期の番号は順位戦の世界のもの(名人戦に出る前の自動の期も数える)。 */
+const meijinEntryNo = computed(() => (
+  meijinSeason.value && meijinSeason.value.phase !== "done" ? meijinSeason.value.no : (ryuoRoster.value?.junni?.no ?? meijinCareer.value.no) + 1
+));
 /** いまの名人の名前(プレイヤーが名人なら空)。 */
 const meijinHolderName = computed(() => {
-  const holder = meijinSeason.value?.league?.holder ?? meijinCareer.value.league?.holder ?? ryuoRoster.value?.titles?.meijin ?? null;
+  const season = meijinSeason.value && meijinSeason.value.phase !== "done" ? meijinSeason.value : null;
+  const holder = season?.league?.holder ?? ryuoRoster.value?.junni?.holder ?? null;
   if (!holder || holder === USER_ID) return "";
   return meijinSeason.value?.players?.[holder]?.name ?? ryuoRoster.value?.players?.[holder]?.name ?? "";
 });
@@ -4441,6 +4456,8 @@ function finalizeRyuoSeason() {
   const oshiRank = oshiStandings ? oshiStandings.indexOf(oshiId) : -1;
   if (ryuoRoster.value) {
     ryuoRoster.value = applySeasonToRoster(ryuoRoster.value, season, { userGroup: career.group, promote: scaleById(season.settings.scale).promote });
+    // 名人戦に出る前は、棋界の1年で順位戦と名人戦も1期進む(出たあとは、名人戦を指したときだけ進む)。
+    ryuoRoster.value = autoJunniYear(ryuoRoster.value, createRng((Number(season.id) ^ 0x5bd1e995) >>> 0)).roster;
     saveRoster(browserStorage(), ryuoRoster.value);
   }
   let profile = profileState.value;
@@ -4699,10 +4716,14 @@ function enterMeijinSeason(settings: { difficulty: number; scale: string; coachL
     ryuoRoster.value = createRoster({ seed, userGroup: ryuoCareer.value.group });
     saveRoster(browserStorage(), ryuoRoster.value);
   }
-  const career = meijinCareer.value;
-  const league = career.league ?? createLeague(ryuoRoster.value);
+  // 順位戦の世界にプレイヤーを入れる(初めてならC級2組の最後)。期は世界の写しで指し、終わったら名簿へ書き戻す。
+  const migrated = ensureJunniWorld(ryuoRoster.value, meijinCareer.value);
+  ryuoRoster.value = joinJunni(migrated.roster);
+  saveRoster(browserStorage(), ryuoRoster.value);
+  const career = migrated.career;
+  const world = ryuoRoster.value.junni;
   meijinSeason.value = createMeijinSeason({
-    no: career.no + 1, league, roster: ryuoRoster.value, settings,
+    no: (world.no ?? 0) + 1, league: world, roster: ryuoRoster.value, settings,
     userLevel: recommendedStrengthPreset.value.level, userName: playerDisplayName(playerName.value), userDan: meijinDan(career), seed,
   });
   saveMeijinSeason(browserStorage(), meijinSeason.value);
@@ -4754,6 +4775,11 @@ function recordMeijinOutcome(matchResult: MatchResult) {
     meijinCareer.value = applyMeijinSeason(meijinCareer.value, next);
     saveMeijinCareer(browserStorage(), meijinCareer.value);
     awardMeijinSeason(next);
+    // 順位戦の世界を1期進めて名簿へ書き戻す(名人・クラス・対戦成績。名鑑と竜王戦の紹介も同じ世界を読む)。
+    if (ryuoRoster.value) {
+      ryuoRoster.value = applyMeijinSeasonToRoster(ryuoRoster.value, next);
+      saveRoster(browserStorage(), ryuoRoster.value);
+    }
   }
 }
 /** 中断した名人戦の対局が、いまの期の次の一局と同じ相手なら、その手数。 */

@@ -121,7 +121,7 @@ function playGame(rng, a, b, { ratingOf, big = false, aColor = null, record = tr
   return result.aWins;
 }
 
-function ensureLeagueFields(member) {
+export function ensureLeagueFields(member) {
   member.record ??= createRecord();
   member.titleCounts ??= {};
   member.awards ??= [];
@@ -277,6 +277,122 @@ function rebalanceJunni(roster) {
   }
 }
 
+// ---- 順位戦の世界(docs/player-world-note-design.mdの2章)
+//
+// 順位戦のクラスごとの順位の並び・降級点・名人は、名簿のroster.junniに1つだけ持つ。
+// 棋士のmember.junniと名簿の名人(roster.titles.meijin)は、ここから写す控え(writeJunniToMembers)。ほかでは書き換えない。
+// 世界を1期進める(名人戦の期・名人戦に出る前の自動の期)のは junni-world.mjs。
+
+/** 順位戦に出るクラス(上から)。 */
+export const JUNNI_LEAGUE_CLASSES = Object.freeze(['A', 'B1', 'B2', 'C1', 'C2']);
+/** プレイヤーのid(ryuo.mjsのUSER_IDと同じ)。 */
+const USER = 'user';
+
+/**
+ * 名簿の今の順位戦(member.junni)と名人(roster.titles.meijin)から、順位戦の世界を作る。クラスの中は強い順。
+ * プレイヤーはまだいない(名人戦に初めて出たときにC級2組の最後に入る)。
+ */
+export function createJunniWorld(roster) {
+  const holderId = roster.titles?.meijin ?? null;
+  const holder = holderId && roster.players[holderId]?.kind === 'pro' ? holderId : null;
+  const classes = Object.fromEntries(JUNNI_LEAGUE_CLASSES.map((cls) => [cls, []]));
+  const list = pros(roster).filter((member) => member.id !== holder).sort((a, b) => b.rating - a.rating);
+  for (const member of list) {
+    const cls = JUNNI_LEAGUE_CLASSES.includes(member.junni) ? member.junni : member.junni === 'F' ? null : 'C2';
+    if (cls) classes[cls].push(member.id);
+  }
+  const free = list.filter((member) => member.junni === 'F').map(({ id }) => id);
+  roster.junni = { version: 1, no: 0, holder, classes, points: {}, even: {}, free, userJoined: false };
+  syncJunni(roster);
+  return roster.junni;
+}
+
+/** プレイヤーのいるクラス(いなければnull。名人なら'meijin')。 */
+export function junniClassOf(world, id) {
+  if (!world) return null;
+  if (world.holder === id) return 'meijin';
+  return JUNNI_LEAGUE_CLASSES.find((cls) => world.classes[cls].includes(id)) ?? (world.free?.includes(id) ? 'F' : null);
+}
+
+/** クラスの中の順位(1から)。いなければnull。 */
+export function junniPlaceOf(world, id) {
+  const cls = junniClassOf(world, id);
+  if (!cls || cls === 'meijin' || cls === 'F') return null;
+  return world.classes[cls].indexOf(id) + 1;
+}
+
+/**
+ * 名簿と照らし合わせる。引退した棋士を外し、新四段をC級2組の最後に足し、クラスの人数を定員にそろえる
+ * (引退で減ったクラスは、下のクラスの順位の上から上げる。C級2組は、足りなければフリークラスの若い順から戻し、超えた分は下からフリークラスへ)。
+ * プレイヤーは、そろえるために動かさない。最後に、棋士の控え(member.junni・名人)を書く。
+ */
+export function syncJunni(roster) {
+  const world = roster.junni;
+  if (!world) return null;
+  const alive = (id) => id === USER || roster.players[id]?.kind === 'pro';
+  for (const cls of JUNNI_LEAGUE_CLASSES) world.classes[cls] = world.classes[cls].filter(alive);
+  world.free = (world.free ?? []).filter((id) => id !== USER && alive(id));
+  if (world.holder && !alive(world.holder)) world.holder = null;
+  const known = new Set([world.holder, ...world.free, ...JUNNI_LEAGUE_CLASSES.flatMap((cls) => world.classes[cls])]);
+  // 世界にまだいない棋士(新四段・あとから加わった物語の人物)は、控えのクラスがあればその最後、なければC級2組の最後に入れる。
+  const rookies = pros(roster).filter((member) => !known.has(member.id)).sort((a, b) => b.rating - a.rating);
+  // 物語の人物(あとから名簿に加わった善彦など)は、そのクラスの強さの順の位置に入れる(新四段は最後)。
+  for (const member of rookies) {
+    if (member.junni === 'F') {
+      world.free.push(member.id);
+      continue;
+    }
+    const list = world.classes[JUNNI_LEAGUE_CLASSES.includes(member.junni) ? member.junni : 'C2'];
+    const at = member.story ? list.findIndex((id) => (roster.players[id]?.rating ?? -Infinity) < member.rating) : -1;
+    if (at >= 0) list.splice(at, 0, member.id);
+    else list.push(member.id);
+  }
+  for (let index = 0; index < JUNNI_LEAGUE_CLASSES.length - 1; index += 1) {
+    const cls = JUNNI_LEAGUE_CLASSES[index];
+    const lower = JUNNI_LEAGUE_CLASSES[index + 1];
+    while (world.classes[cls].length < JUNNI_SIZES[cls]) {
+      const from = world.classes[lower].findIndex((id) => id !== USER);
+      if (from < 0) break;
+      world.classes[cls].push(...world.classes[lower].splice(from, 1));
+    }
+    while (world.classes[cls].length > JUNNI_SIZES[cls]) {
+      const from = world.classes[cls].findLastIndex((id) => id !== USER);
+      if (from < 0) break;
+      world.classes[lower].unshift(...world.classes[cls].splice(from, 1));
+    }
+  }
+  // C級2組が定員より少なければ、フリークラスの若い順に戻す(50歳以上は戻さない)。
+  while (world.classes.C2.length < JUNNI_SIZES.C2) {
+    const candidates = world.free.filter((id) => (roster.players[id]?.age ?? 99) < 50).sort((a, b) => roster.players[a].age - roster.players[b].age);
+    if (!candidates.length) break;
+    world.free = world.free.filter((id) => id !== candidates[0]);
+    world.classes.C2.push(candidates[0]);
+  }
+  while (world.classes.C2.length > JUNNI_SIZES.C2) {
+    const from = world.classes.C2.findLastIndex((id) => id !== USER);
+    if (from < 0) break;
+    world.free.unshift(...world.classes.C2.splice(from, 1));
+  }
+  for (const id of Object.keys(world.points ?? {})) if (!alive(id)) delete world.points[id];
+  for (const id of Object.keys(world.even ?? {})) if (!alive(id)) delete world.even[id];
+  writeJunniToMembers(roster);
+  return world;
+}
+
+/** 順位戦の世界から、棋士の控え(member.junni。名人はA級の扱い)と名簿の名人(roster.titles.meijin)を書く。 */
+export function writeJunniToMembers(roster) {
+  const world = roster.junni;
+  if (!world) return;
+  const classOf = new Map();
+  for (const cls of JUNNI_LEAGUE_CLASSES) for (const id of world.classes[cls]) classOf.set(id, cls);
+  for (const id of world.free ?? []) classOf.set(id, 'F');
+  if (world.holder) classOf.set(world.holder, 'A');
+  for (const member of pros(roster)) member.junni = classOf.get(member.id) ?? 'F';
+  roster.titles ??= {};
+  if (world.holder) roster.titles.meijin = world.holder;
+  else delete roster.titles.meijin;
+}
+
 // ---- タイトル戦
 
 /** 番勝負。1局目の先後は振り駒で、あとは交互。大事な対局なので、大舞台の特殊能力が効く。 */
@@ -314,11 +430,12 @@ function chooseChallenger(rng, pool, holderId, ratingOf, record) {
 }
 
 /** 竜王以外の7つのタイトル戦。結果を履歴に残し、獲得期数を数える。 */
-function playOtherTitles(roster, rng, { no, meijinChallenger, ratingOf }) {
+function playOtherTitles(roster, rng, { no, meijinChallenger, ratingOf, skipMeijin = false }) {
   roster.titles ??= {};
   const pool = pros(roster);
   const results = [];
   for (const title of OTHER_TITLES) {
+    if (skipMeijin && title.id === 'meijin') continue;
     let holder = roster.players[roster.titles[title.id]] ?? null;
     if (!holder) holder = [...pool].sort((a, b) => b.rating - a.rating)[0];
     const challenger = title.id === 'meijin' && meijinChallenger && meijinChallenger.id !== holder.id
@@ -451,10 +568,11 @@ export function playLeagueYear(roster, season, rng) {
       if (isMember(entry.loser)) addResult(roster.players[entry.loser], false, detail(entry.loser));
     }
   }
-  const meijinChallenger = playJunni(roster, rng);
+  // 順位戦の世界(roster.junni)がある名簿では、順位戦と名人は名人戦の期でだけ進める(junni-world.mjs。docs/player-world-note-design.md)。
+  const meijinChallenger = roster.junni ? null : playJunni(roster, rng);
   // タイトル戦も、ほかの対局と同じくレーティングの差どおりの勝率で決める(docs/rating-realism-design.md)。
   const ratingOf = (member) => member.rating;
-  const titleResults = playOtherTitles(roster, rng, { no: season.no, meijinChallenger, ratingOf });
+  const titleResults = playOtherTitles(roster, rng, { no: season.no, meijinChallenger, ratingOf, skipMeijin: Boolean(roster.junni) });
   for (const member of pros(roster)) {
     applyDanRules(member);
     applyWinsRule(member);
@@ -463,8 +581,14 @@ export function playLeagueYear(roster, season, rng) {
   return { titleResults, awards };
 }
 
-/** 引退・新四段のあとに、順位戦の定員をそろえ、新四段をC級2組に入れる。 */
+/** 引退・新四段のあとに、順位戦の定員をそろえ、新四段をC級2組に入れる。順位戦の世界がある名簿では、世界のほうをそろえる。 */
 export function settleLeague(roster) {
+  if (roster.junni) {
+    for (const member of pros(roster)) ensureLeagueFields(member);
+    syncJunni(roster);
+    for (const member of pros(roster)) applyDanRules(member);
+    return;
+  }
   for (const member of pros(roster)) {
     ensureLeagueFields(member);
     member.junni ??= 'C2';

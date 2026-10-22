@@ -51,8 +51,11 @@ describe('物語の人物を名簿に入れる', () => {
     }
     // 組の人数と順位戦の定員は、今までどおり。
     for (const group of [1, 2, 3, 4, 5]) expect(groupOf(roster, group)).toHaveLength(rosterTarget(group, 6, true));
+    // 順位戦の世界(roster.junni)のクラスは定員どおり。名人はA級の10名の外で、控え(member.junni)ではA級の扱い。
     for (const [cls, size] of Object.entries(JUNNI_SIZES)) {
-      expect(members(roster).filter((member) => member.kind === 'pro' && member.junni === cls)).toHaveLength(size);
+      expect(roster.junni.classes[cls]).toHaveLength(size);
+      const extra = cls === 'A' && roster.junni.holder ? 1 : 0;
+      expect(members(roster).filter((member) => member.kind === 'pro' && member.junni === cls)).toHaveLength(size + extra);
     }
   });
 
@@ -65,7 +68,9 @@ describe('物語の人物を名簿に入れる', () => {
   it('保存してあった名簿には、タイトルを書き換えずに加える。2度は加えない', () => {
     const roster = createRoster({ seed: 5 });
     for (const id of [storyMemberId(roster, HANANE), storyMemberId(roster, YOSHIHIKO)]) delete roster.players[id];
-    const meijin = Object.values(roster.players).find((member) => member.junni === 'A').id;
+    // 名人は順位戦の世界(roster.junni)が持つ。A級のいちばん上の棋士を名人にしておく。
+    const meijin = roster.junni.classes.A.shift();
+    roster.junni.holder = meijin;
     roster.titles.meijin = meijin;
     const next = withStoryMembers(roster, { userGroup: 5 });
     expect(next).not.toBe(roster);

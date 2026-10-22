@@ -47,7 +47,12 @@ describe('initial history', () => {
   });
 
   it('fills the Junni classes and raises dan by the rules', () => {
-    for (const [cls, size] of Object.entries(JUNNI_SIZES)) expect(pros(roster).filter(({ junni }) => junni === cls)).toHaveLength(size);
+    // 順位戦の世界(roster.junni)のクラスは定員どおり。名人はA級の10名の外で、控え(member.junni)ではA級の扱い。
+    for (const [cls, size] of Object.entries(JUNNI_SIZES)) {
+      expect(roster.junni.classes[cls]).toHaveLength(size);
+      const extra = cls === 'A' && roster.junni.holder ? 1 : 0;
+      expect(pros(roster).filter((member) => member.kind === 'pro' && member.junni === cls)).toHaveLength(size + extra);
+    }
     for (const member of pros(roster)) {
       if (member.junni === 'A') expect(index(member.dan)).toBeGreaterThanOrEqual(index('八段'));
       if (member.junni === 'B1') expect(index(member.dan)).toBeGreaterThanOrEqual(index('七段'));
@@ -75,12 +80,18 @@ describe('a league year', () => {
     expect(average).toBeGreaterThan(25);
     expect(average).toBeLessThan(50);
     for (const { record } of list) expect(record.season.wins + record.season.losses).toBe(record.season.games);
-    expect(roster.titleHistory.filter(({ no }) => no === season.no)).toHaveLength(8);
+    // 名人は棋界の1年では決めない(順位戦の世界で、名人戦の期に決める。junni-world.mjs)。
+    expect(roster.titleHistory.filter(({ no }) => no === season.no)).toHaveLength(7);
     const awards = roster.awards.filter(({ no }) => no === season.no);
     expect(awards.map(({ id }) => id).sort()).toEqual(AWARDS.map(({ id }) => id).sort());
     const best = roster.players[awards.find(({ id }) => id === 'best-rate').holder];
     if (best) expect(best.record.season.games).toBeGreaterThanOrEqual(30);
-    for (const [cls, size] of Object.entries(JUNNI_SIZES)) expect(list.filter(({ junni }) => junni === cls)).toHaveLength(size);
+    // 順位戦の世界(roster.junni)のクラスは定員どおり。名人はA級の10名の外で、控え(member.junni)ではA級の扱い。
+    for (const [cls, size] of Object.entries(JUNNI_SIZES)) {
+      expect(roster.junni.classes[cls]).toHaveLength(size);
+      const extra = cls === 'A' && roster.junni.holder ? 1 : 0;
+      expect(list.filter((member) => member.kind === 'pro' && member.junni === cls)).toHaveLength(size + extra);
+    }
   });
 
   it('counts the Ryuo games of roster players, from every bracket and series', () => {

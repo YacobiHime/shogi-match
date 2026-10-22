@@ -173,11 +173,14 @@ describe('名人戦七番勝負と、次の期', () => {
     expect(done.result).toMatchObject({ outcome: 'meijin', titleWinner: USER_ID });
     const career = applyMeijinSeason(createMeijinCareer(), done);
     expect(career).toMatchObject({ no: 1, titles: 1, best: 'meijin' });
-    expect(career.league.holder).toBe(USER_ID);
-    expect(userClass(career.league)).toBeNull();
+    // 順位戦の世界はキャリアに持たない(名簿のroster.junniへ書き戻す。junni-world.mjs)。
+    expect(career.league).toBeUndefined();
+    const league = advanceLeague(done);
+    expect(league.holder).toBe(USER_ID);
+    expect(userClass(league)).toBeNull();
     // 失冠した名人は、A級の順位1位。
-    expect(career.league.classes.A[0]).toBe(done.league.holder);
-    const defense = createMeijinSeason({ no: 2, league: career.league, roster, settings, userLevel: 30, seed: 14 });
+    expect(league.classes.A[0]).toBe(done.league.holder);
+    const defense = createMeijinSeason({ no: 2, league, roster, settings, userLevel: 30, seed: 14 });
     expect(defense.mode).toBe('defense');
     expect(defense.pending).toMatchObject({ kind: 'finals' });
     const kept = playOut(defense);
