@@ -13,6 +13,7 @@ import { matchStakes, seasonGoalLine } from './ryuo-stakes.mjs';
 import { opponentArrivalLine, previewRoad, seasonRoad } from './ryuo-road.mjs';
 import { lastGameMilestone, latestUpsetLine } from './ryuo-milestone.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
+import { LADDER_VERSION } from './level-ladder.mjs';
 import {
   BASE_DIFFICULTY,
   DIFFICULTY_LEVELS,
@@ -389,6 +390,7 @@ export function createSeason({ no, mode, group, settings, userLevel, career, ros
   const members = roster ?? createRoster({ seed, userGroup: group, userIsChampion: mode === 'defense' });
   const season = {
     version: SEASON_VERSION,
+    ladder: LADDER_VERSION,
     id: seed,
     no,
     mode,

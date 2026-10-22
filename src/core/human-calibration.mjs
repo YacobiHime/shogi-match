@@ -1,4 +1,5 @@
 import { CPU_STRENGTH_PRESETS } from "./strength-settings.mjs";
+import { ladderLabelFromOld } from "./level-ladder.mjs";
 
 /*
  * 人間の対局結果から、CPUのレベルの表示名(段級位)のずれを調べる。
@@ -6,15 +7,19 @@ import { CPU_STRENGTH_PRESETS } from "./strength-settings.mjs";
  * 申告した段級位ごとに、CPUのレベル別の勝敗を合わせ、勝率がちょうど50%になるLv(θ)を推定する。
  * 表示名どおりなら、θは申告と同じ表示名のLvになる。
  *
- * 勝率のモデルは、レーティングと同じElo式。CPUのLvはLv×80のレーティングなので、
- * Lvが5違うと勝ちやすさのオッズが10倍違う: P(勝ち) = 1 / (1 + 10^((Lv − θ) / 5))。
+ * 勝率のモデルは、レーティングと同じElo式。CPUのLvは1LvあたりR60(2026-10-22の段級位の作り直しから)なので、
+ * Lvが約6.7違うと勝ちやすさのオッズが10倍違う: P(勝ち) = 1 / (1 + 10^((Lv − θ) / 6.67))。
+ * 作り直しの前の戦績データ(Lv×80)は、やこびノートを開いたときに新しい表へ移したものを出す。
  */
-export const LEVELS_PER_TENFOLD_ODDS = 400 / 80;
+export const LEVELS_PER_TENFOLD_ODDS = 400 / 60;
 const LN10 = Math.log(10);
 
-/** 申告の表示名に対応するLv。同じ表示名のLvが2つあるとき(五級など)は、その真ん中。 */
+/**
+ * 申告の表示名に対応するLv。同じ表示名のLvが複数あるとき(アマ初段など)は、その真ん中。
+ * 段級位の作り直し(2026-10-22)の前の名前(「十級」など)も、新しい名前に直して読む。
+ */
 export function nominalLevel(label) {
-  const grade = String(label ?? "").replace(/程度$/, "");
+  const grade = ladderLabelFromOld(String(label ?? "")).replace(/程度$/, "");
   const levels = CPU_STRENGTH_PRESETS
     .filter((preset) => preset.label.replace(/程度$/, "") === grade)
     .map((preset) => preset.level);

@@ -3,6 +3,7 @@
 // 全クラスの「順位戦の世界」(棋士・順位・降級点・名人)の1期ぶんの進め方。
 // 竜王戦とは別々の暦で進む(13章)。保存と暦に依存しない(棋士として1年を過ごすモードのカレンダーからも呼べるように)。
 
+import { LADDER_VERSION, migrateSeasonLevels } from './level-ladder.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { USER_ID, createSeries, recordSeriesGame, seasonPlayerOf } from './ryuo.mjs';
 import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
@@ -120,6 +121,7 @@ export function createMeijinSeason({ no, league, roster, settings, userLevel, us
   const scale = meijinScale(settings.scale);
   const season = {
     version: MEIJIN_SEASON_VERSION,
+    ladder: LADDER_VERSION,
     id: seed,
     no,
     mode: cls ? 'challenge' : 'defense',
@@ -835,6 +837,8 @@ export const saveMeijinCareer = (storage, career) => writeJson(storage, MEIJIN_C
 
 export function loadMeijinSeason(storage) {
   const parsed = readJson(storage, MEIJIN_SEASON_KEY);
-  return parsed && parsed.version === MEIJIN_SEASON_VERSION && Array.isArray(parsed.order) && Array.isArray(parsed.schedule) ? parsed : null;
+  // 段級位の作り直し(2026-10-22)より前に始めた期は、棋士のLvを新しい表へ移す。
+  return parsed && parsed.version === MEIJIN_SEASON_VERSION && Array.isArray(parsed.order) && Array.isArray(parsed.schedule)
+    ? migrateSeasonLevels(parsed) : null;
 }
 export const saveMeijinSeason = (storage, season) => writeJson(storage, MEIJIN_SEASON_KEY, season);

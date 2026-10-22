@@ -114,7 +114,8 @@ describe('悪手判定の読み', () => {
   it('CPU本体の探索よりずっと深く、時間の上限つきで読む', async () => {
     const { getMoveJudgeSearchSettings } = await import('./match-assists.mjs');
     const { getStrengthSearchSettings, CPU_STRENGTH_PRESETS } = await import('./strength-settings.mjs');
-    const lv21 = getStrengthSearchSettings(CPU_STRENGTH_PRESETS.find(({ level }) => level === 21).value);
+    // 6級程度(Lv10。段級位の作り直しの前のLv21)。
+    const lv21 = getStrengthSearchSettings(CPU_STRENGTH_PRESETS.find(({ level }) => level === 10).value);
     for (const mobile of [false, true]) {
       const judge = getMoveJudgeSearchSettings(mobile);
       expect(judge.nodes).toBeGreaterThanOrEqual(100 * lv21.nodes);

@@ -1,6 +1,7 @@
 // 竜王戦のキャリア(何期目か、いま何組か、竜王を何期獲ったか)の記録。結果は1期ごとに保存する。
 
 import { SEASON_VERSION } from './ryuo.mjs';
+import { migrateSeasonLevels } from './level-ladder.mjs';
 
 export const CAREER_STORAGE_KEY = 'yacobihime:shogi-match:ryuo-career';
 export const SEASON_STORAGE_KEY = 'yacobihime:shogi-match:ryuo-season';
@@ -154,15 +155,16 @@ export function loadSeason(storage) {
     // 版4の期は、難易度が1〜12だった。下へ2段階足したので、同じ強さになるよう2つずらす。
     if (parsed.version === 4) {
       const difficulty = Number(parsed.settings?.difficulty);
-      return {
+      return migrateSeasonLevels({
         ...parsed,
         version: SEASON_VERSION,
         settings: { ...parsed.settings, ...(Number.isFinite(difficulty) ? { difficulty: difficulty + 2 } : {}) },
-      };
+      });
     }
     // 版3以前の期は、棋士が名簿の棋士でない。続きは指せないので、捨てて作り直してもらう。
     if (parsed.version !== SEASON_VERSION) return null;
-    return parsed;
+    // 段級位の作り直し(2026-10-22)より前に始めた期は、棋士のLvを新しい表へ移す。
+    return migrateSeasonLevels(parsed);
   } catch {
     return null;
   }

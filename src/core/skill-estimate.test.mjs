@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_MEASURE_GAMES, estimateSkill, levelForAverageLoss, measurableMoves, measureStatistics, nextMeasureLevel } from './skill-estimate.mjs';
+import { MAX_DIAGNOSED_LEVEL, MAX_MEASURE_GAMES, estimateSkill, levelForAverageLoss, measurableMoves, measureStatistics, nextMeasureLevel } from './skill-estimate.mjs';
+import { ladderLevelForSource } from './level-ladder.mjs';
 
 const movesWithLoss = (loss, count, mover = 'black', standing = 0) => (
   Array.from({ length: count }, () => ({ moveMeasure: { mover, loss, standing } }))
@@ -8,12 +9,14 @@ const movesWithLoss = (loss, count, mover = 'black', standing = 0) => (
 describe('skill estimate', () => {
   it('maps average loss to levels monotonically within the measured range', () => {
     expect(levelForAverageLoss(5000)).toBe(0);
-    expect(levelForAverageLoss(1)).toBe(36);
-    // 現在のレベル表での測定値(Lv16=約228、Lv26=約119、Lv30=約92)の近くに来る。
-    expect(levelForAverageLoss(228)).toBeGreaterThan(14);
-    expect(levelForAverageLoss(228)).toBeLessThan(19);
-    expect(levelForAverageLoss(119)).toBeGreaterThan(24);
-    expect(levelForAverageLoss(119)).toBeLessThan(28);
+    // 回帰はもとの校正のLvで測った(上端はLv36)。段級位の作り直し(2026-10-22)のあとは、同じ強さの新しい表のLvで返す。
+    expect(MAX_DIAGNOSED_LEVEL).toBeCloseTo(ladderLevelForSource(36), 6);
+    expect(levelForAverageLoss(1)).toBeCloseTo(MAX_DIAGNOSED_LEVEL, 6);
+    // もとの校正での測定値(Lv16=約228、Lv26=約119)は、新しい表の5級(Lv11)〜3級(Lv13)のあたり。
+    expect(levelForAverageLoss(228)).toBeGreaterThan(10);
+    expect(levelForAverageLoss(228)).toBeLessThan(12.5);
+    expect(levelForAverageLoss(119)).toBeGreaterThan(12);
+    expect(levelForAverageLoss(119)).toBeLessThan(14);
     let previous = Infinity;
     for (const loss of [80, 100, 150, 200, 300, 500, 900]) {
       const level = levelForAverageLoss(loss);
@@ -26,7 +29,7 @@ describe('skill estimate', () => {
     const points = [...movesWithLoss(134, 30), ...movesWithLoss(900, 30, 'white')];
     const estimate = estimateSkill(points, 'black');
     expect(estimate.insufficient).toBe(false);
-    expect(estimate).toMatchObject({ count: 30, averageLoss: 134, rating: 1921, label: '四級程度', reliability: 'estimate' });
+    expect(estimate).toMatchObject({ count: 30, averageLoss: 134, rating: 716, label: '4級程度', reliability: 'estimate' });
     expect(estimate.ratingLow).toBeLessThanOrEqual(estimate.rating);
     expect(estimate.ratingHigh).toBeGreaterThanOrEqual(estimate.rating);
   });
@@ -74,10 +77,11 @@ describe('skill estimate', () => {
   });
 
   it('moves the next measuring opponent toward the player within the diagnosed range', () => {
-    expect(nextMeasureLevel({ level: 10, outcome: 'win' })).toBe(18);
-    expect(nextMeasureLevel({ level: 10, outcome: 'loss' })).toBe(2);
-    expect(nextMeasureLevel({ level: 4, outcome: 'loss' })).toBe(0);
-    expect(nextMeasureLevel({ level: 33, outcome: 'win' })).toBe(36);
+    expect(nextMeasureLevel({ level: 10, outcome: 'win' })).toBe(16);
+    expect(nextMeasureLevel({ level: 10, outcome: 'loss' })).toBe(4);
+    // Lv0は練習相手なので、測定はLv1(15級)から。上は診断の上端まで。
+    expect(nextMeasureLevel({ level: 4, outcome: 'loss' })).toBe(1);
+    expect(nextMeasureLevel({ level: 25, outcome: 'win' })).toBe(Math.floor(MAX_DIAGNOSED_LEVEL));
     expect(nextMeasureLevel({ level: 15, outcome: 'draw' })).toBe(15);
     expect(MAX_MEASURE_GAMES).toBeGreaterThanOrEqual(2);
   });

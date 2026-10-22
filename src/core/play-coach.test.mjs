@@ -12,17 +12,17 @@ function play(rating, games, results) {
 }
 
 describe('勝ち越せる相手(基準のLv)', () => {
-  it('勝率6割の見込みで、レーティング÷80より約1つ下を勧める', () => {
+  it('勝率6割の見込みで、レーティングのLvより約1つ下を勧める', () => {
     expect(TARGET_MARGIN).toBe(70);
-    const state = { ...createRatingState(), rating: 1200, games: 3 };
-    expect(recommendedLevel(1200)).toBe(15);
+    const state = { ...createRatingState(), rating: 870, games: 3 };
+    expect(recommendedLevel(870)).toBe(15);
     expect(recommendPlay(state)).toMatchObject({ level: 14, kind: 'normal', title: '対局する' });
   });
 
-  it('記録がない人にも勧める(はじめての対局)', () => {
+  it('記録がない人にも勧める(はじめての対局は15級のLv1。Lv0は練習相手で勧めない)', () => {
     const plan = recommendPlay(createRatingState());
-    expect(plan.level).toBe(9);
-    expect(plan.reason).toContain('Lv.9');
+    expect(plan.level).toBe(1);
+    expect(plan.reason).toContain('Lv.1');
   });
 
   it('最近の成績が低ければ、そちらで見立てる(負けが続くと早く下げる)', () => {
@@ -71,11 +71,11 @@ describe('実際の勝ち負けで直す', () => {
     expect(recommendPlay(state)).toMatchObject({ level: 15, kind: 'first-win', reason: 'Lv.14に初勝利！ 次は1つ上へ' });
   });
 
-  it('直前に指したLvから、1回で2つより大きく動かさない。Lv0〜40に収める', () => {
+  it('直前に指したLvから、1回で2つより大きく動かさない。Lv1〜40に収める', () => {
     const state = play(2000, 12, [[5, 'draw']]);
     const plan = recommendPlay(state);
     expect(plan.level).toBeLessThanOrEqual(7);
-    expect(recommendPlay(play(0, 12, [[0, 'loss'], [0, 'loss'], [0, 'loss']])).level).toBe(0);
+    expect(recommendPlay(play(0, 12, [[0, 'loss'], [0, 'loss'], [0, 'loss']])).level).toBe(1);
     const top = play(3400, 30, [[40, 'win'], [40, 'win']]);
     expect(recommendPlay(top).level).toBeLessThanOrEqual(40);
   });
@@ -228,5 +228,22 @@ describe('段階2(14章): 戦型の癖と、良い内容の続き', () => {
     expect(goodContentLine([plain(60, 2), plain(60, 2), plain(40, 1)])).toBe('前の局は、いつもより損の少ない内容。');
     expect(goodContentLine([plain(60, 2), plain(55, 1)])).toBe('');
     expect(goodContentLine([])).toBe('');
+  });
+});
+
+describe('15級(Lv1)の立て直し(2026-10-22の段級位の作り直し)', () => {
+  it('Lv1に3連敗したら、Lv0で肩ならし(レーティングに数えない)と飛車落ち', () => {
+    const state = play(30, 12, [[1, 'loss'], [1, 'loss'], [1, 'loss']]);
+    expect(recommendPlay(state)).toMatchObject({
+      level: 0, kind: 'warmup', handicapLevel: 1, handicapId: { id: 'rook', label: '飛車落ち' },
+      reason: 'Lv.1に3連敗。Lv.0で肩ならししよう（レーティングには数えないよ）',
+    });
+    expect(recommendPlay(play(570, 12, [[10, 'loss'], [10, 'loss'], [10, 'loss']])).handicapId).toEqual({ id: 'lance', label: '香落ち' });
+  });
+
+  it('Lv0に勝ったら15級へ、飛車落ちで勝ったら平手へ', () => {
+    expect(resultNextStep({ won: true, rated: false, level: 0, firstWin: false })).toMatchObject({ kind: 'up', level: 1, title: 'Lv.1に挑戦' });
+    expect(resultNextStep({ won: true, rated: false, level: 1, handicapLabel: '飛車落ち', firstWin: false }))
+      .toMatchObject({ kind: 'even', reason: '飛車落ちで勝ったね。次は平手で', sameTitle: '飛車落ちでもう一局' });
   });
 });

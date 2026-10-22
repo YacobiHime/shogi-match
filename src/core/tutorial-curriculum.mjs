@@ -947,8 +947,8 @@ const VOLUME_3 = {
                 playerCastle: "mino",
                 opponentStrategy: "ibisha",
                 opponentCastle: "funagakoi",
-                // 十五級程度。
-                cpuLevel: 12,
+                // 15級程度。
+                cpuLevel: 1,
                 hintLimit: 3,
                 undoLimit: 3,
               },

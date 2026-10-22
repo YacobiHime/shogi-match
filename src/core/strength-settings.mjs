@@ -20,7 +20,7 @@ const CAREFUL_SKILL_END = 0.05;
 /** これ未満の技量では、浅い読みで良く見える悪手を選ぶ「見落とし」を混ぜる。 */
 const OVERSIGHT_SKILL_END = 0.75;
 /**
- * このレベル以下では、危険への態度(riskAttitude)を持つ。優勢・互角では道の細い最善手を避けて無難な手を、
+ * もとの校正のこのLv以下では、危険への態度(riskAttitude)を持つ。優勢・互角では道の細い最善手を避けて無難な手を、
  * 劣勢では相手が間違えやすい勝負手を選ぶ(cpu-move-choice.mjsのchooseRiskAwareMove)。
  */
 export const RISK_MAX_LEVEL = 30;
@@ -38,6 +38,7 @@ const roundSignificant = (value) => {
   return Math.round(value / unit) * unit;
 };
 const round2 = (value) => Math.round(value * 100) / 100;
+const round3 = (value) => Math.round(value * 1000) / 1000;
 
 /**
  * 技量(0〜1)から探索量と候補選択の設定を作る。0は探索しない自然さだけの着手、1は最善手だけの着手。
@@ -84,7 +85,7 @@ export function strengthParametersForSkill(skill) {
   // 低レベルでも大駒をただで渡すほどの損(1,000超)はまれにし、上のレベルほど締める。
   const moveLossCap = roundSignificant(Math.max(MIN_MOVE_LOSS_CAP, 1300 * (1 - s) ** 3));
   // 危険への態度。弱いほど強く(1)、RISK_MAX_LEVELで半分になり、それより上のレベルでは持たない。
-  const riskSkillEnd = CPU_STRENGTH_PRESETS.find(({ level }) => level === RISK_MAX_LEVEL)?.skill ?? 0;
+  const riskSkillEnd = CALIBRATION_PRESETS[RISK_MAX_LEVEL].skill;
   if (s <= riskSkillEnd) {
     Object.assign(settings, {
       riskAttitude: round2(1 - 0.5 * s / riskSkillEnd),
@@ -112,13 +113,13 @@ export function strengthParametersForSkill(skill) {
   return settings;
 }
 
-// 表示名は既存の段級位の目安を保つ。現在の実測が全LvでR約80刻みという意味ではない。
-// valueは既存URL(engine_nodes)・保存データとの互換用識別値で、実探索量ではない。
-// 旧版と同じ表示名のレベルには旧版の値を割り当て、名前の意味を保ったまま強さだけ正す。
-// skillは校正結果。Lv0は探索せず自然さだけで選ぶ。
-// 二十六〜十六級(Lv1〜11)は、Lv0と十五級の間を技量で等分した値で、自己対局では校正していない。
-// この区間の強さの差は、主に読まない手の割合(約94%〜37%)の差である。
-export const CPU_STRENGTH_PRESETS = [
+/**
+ * もとの校正(2026-09-27〜10-19のLv0〜40)。強さの設定(探索量・候補の選び方)は、このLv(小数も可)で引く。
+ * 表示のLv(CPU_STRENGTH_PRESETS)は、2026-10-22の段級位の作り直し(docs/level-ladder-design.md)で、
+ * このLvのどこの強さを使うか(source)を持つ形にした。表示名・識別値はこの表では使わない。
+ * Lv1〜10はロジックAIで指していた(新しい表では使わない)。
+ */
+export const CALIBRATION_PRESETS = Object.freeze([
   { level: 0, value: 1000, skill: 0, label: '駒の動きを覚えたて' },
   { level: 1, value: 1100, skill: 0.002, label: '二十六級程度' },
   { level: 2, value: 1200, skill: 0.004, label: '二十五級程度' },
@@ -160,25 +161,85 @@ export const CPU_STRENGTH_PRESETS = [
   { level: 38, value: 456000, skill: 0.915, label: 'アマ七段程度' },
   { level: 39, value: 472000, skill: 0.972, label: 'プロ級' },
   { level: 40, value: 480000, skill: 1, label: '藤井聡太並み' },
-];
+].map((preset) => Object.freeze(preset)));
+
+/** もとの校正のLv(小数)での技量。整数のLvの間は直線で補う。 */
+export function calibrationSkill(source) {
+  const level = Math.min(40, Math.max(0, Number(source) || 0));
+  const lo = Math.floor(level);
+  const hi = Math.ceil(level);
+  const low = CALIBRATION_PRESETS[lo].skill;
+  return hi === lo ? low : round3(low + (CALIBRATION_PRESETS[hi].skill - low) * (level - lo));
+}
 
 /**
- * 今の表にない識別値を、同じ段級位のレベルへ対応付ける。
- * 2026-10-07に、重なっていたアマ段位を1段位1レベルにした。削ったレベルの値(旧版の初段〜四段の値を含む)は、
- * 同じ段位の残したレベルへ引き継ぐ。
+ * 表示のLvと段級位(2026-10-22の作り直し。docs/level-ladder-design.md)。
+ * - Lv0はそのまま、Lv1〜15は15級〜1級(1級位に1Lv)、Lv16〜35はアマ初段〜七段(六段までは1つの段に3Lv、七段は2Lv)、
+ *   Lv36〜39はプロの道、Lv40「藤井聡太並み」は設定を変えない。
+ * - sourceは、もとの校正(CALIBRATION_PRESETS)のどのLv(小数)の強さを使うか。自己対局で隣の差が等しくなるように測って決める
+ *   (docs/difficulty-calibration.md の2026-10-22の節)。skillはsourceでの技量(棋風の詰みの見え方などに使う)。
+ * - valueは既存URL(engine_nodes)・保存データとの互換用識別値で、実探索量ではない。前の表と同じ名前のLvには、前の値を引き継ぐ。
+ * @type {[level: number, value: number, source: number, label: string][]}
+ */
+const LADDER = [
+  [0, 1000, 0, '駒の動きを覚えたて'],
+  [1, 5000, 11.93, '15級程度'],
+  [2, 6000, 12.08, '14級程度'],
+  [3, 7000, 12.15, '13級程度'],
+  [4, 8000, 12.29, '12級程度'],
+  [5, 10000, 12.47, '11級程度'],
+  [6, 12000, 12.58, '10級程度'],
+  [7, 15000, 12.67, '9級程度'],
+  [8, 20000, 12.79, '8級程度'],
+  [9, 25000, 12.89, '7級程度'],
+  [10, 30000, 13.6, '6級程度'],
+  [11, 60000, 14.9, '5級程度'],
+  [12, 70000, 20.2, '4級程度'],
+  [13, 80000, 28.98, '3級程度'],
+  [14, 100000, 30.78, '2級程度'],
+  [15, 150000, 31.75, '1級程度'],
+  [16, 200000, 32.45, 'アマ初段程度'],
+  [17, 225000, 33.05, 'アマ初段程度'],
+  [18, 240000, 33.29, 'アマ初段程度'],
+  [19, 250000, 33.53, 'アマ二段程度'],
+  [20, 265000, 33.76, 'アマ二段程度'],
+  [21, 280000, 34, 'アマ二段程度'],
+  [22, 300000, 34.55, 'アマ三段程度'],
+  [23, 320000, 35.03, 'アマ三段程度'],
+  [24, 340000, 35.24, 'アマ三段程度'],
+  [25, 360000, 35.44, 'アマ四段程度'],
+  [26, 400000, 35.65, 'アマ四段程度'],
+  [27, 408000, 35.85, 'アマ四段程度'],
+  [28, 416000, 36.05, 'アマ五段程度'],
+  [29, 424000, 36.26, 'アマ五段程度'],
+  [30, 432000, 36.47, 'アマ五段程度'],
+  [31, 436000, 36.68, 'アマ六段程度'],
+  [32, 440000, 36.89, 'アマ六段程度'],
+  [33, 448000, 37.16, 'アマ六段程度'],
+  [34, 456000, 37.48, 'アマ七段程度'],
+  [35, 464000, 37.8, 'アマ七段程度'],
+  [36, 466000, 38.11, '奨励会三段程度'],
+  [37, 468000, 38.41, '若手プロ程度'],
+  [38, 470000, 38.7, 'トッププロ程度'],
+  [39, 472000, 39, 'タイトル保持者程度'],
+  [40, 480000, 40, '藤井聡太並み'],
+];
+export const CPU_STRENGTH_PRESETS = Object.freeze(LADDER.map(([level, value, source, label]) => Object.freeze({
+  level, value, source, skill: calibrationSkill(source), label,
+})));
+
+/**
+ * 今の表にない識別値を、同じ段級位(なくなった級は15級)のレベルへ対応付ける。
+ * - 2026-10-22の作り直しで、26級〜16級(1100〜4500)をなくし、5級〜1級の2つ目のLv(65000など)を1つにした。
+ * - それより前(2026-10-07)に、重なっていたアマ段位を1段位1レベルにしたときの値は、作り直しで同じ段の値に戻った。
  */
 const LEGACY_STRENGTH_VALUES = new Map([
-  [200000, 225000],
-  [250000, 265000],
-  [280000, 265000],
-  [300000, 320000],
-  [340000, 320000],
-  [360000, 400000],
-  [408000, 400000],
-  [416000, 424000],
-  [432000, 424000],
-  [448000, 440000],
-  [464000, 456000],
+  ...[1100, 1200, 1300, 1400, 1500, 1600, 1800, 2000, 3000, 4000, 4500].map((value) => [value, 5000]),
+  [65000, 60000],
+  [75000, 70000],
+  [90000, 80000],
+  [125000, 100000],
+  [175000, 150000],
 ]);
 export const DEFAULT_STRENGTH_VALUE = 30000;
 
@@ -239,30 +300,24 @@ export function searchSettingsForSkill(skill) {
 /** UIの強さ識別値から探索量と候補選択設定を返す。 */
 export function getStrengthSearchSettings(preset) {
   const selected = strengthPresetFor(preset);
-  const settings = searchSettingsForSkill(selected.skill);
-  if (selected.level < 11 || selected.level >= 40) return settings;
-  if (LOGIC_HYBRID_DEFAULT) {
-    const source = LOW_BAND_SOURCE_LEVELS[selected.level];
-    return source === undefined ? calibratedHybridSearchSettings(selected.level, settings) : sourceLevelSettings(source);
-  }
-  return { ...settings, ...hybridSettingsForLevel(selected.level) };
+  // Lv0(読まない)とLv40(藤井聡太並み)は、技量の曲線の両端のまま。
+  if (selected.level === 0 || selected.level >= 40) return searchSettingsForSkill(selected.skill);
+  if (LOGIC_HYBRID_DEFAULT) return sourceLevelSettings(selected.source);
+  return { ...searchSettingsForSkill(selected.skill), ...hybridSettingsForLevel(selected.source) };
 }
 
 /**
- * 低級帯の付け替え(2026-10-21)。表示のLvに、もとの校正(段階4)のどのLv(小数)の強さを使うか。
- * ユーザーの実測で、Lv15(十二級程度)が、ぴよ将棋の五級(R630)くらいの強さだった。もとの校正ではLv12からLv13への段差が大きく
- * (自己対局で24勝0敗)、Lv13以上の低級帯が名前より強かった。表示の段級位はそのままにして、その名前に合う、もとの弱いLvの設定を当てる。
- * 書いていないLv(26以上)は、もとの校正のまま。値の決め方は docs/difficulty-calibration.md の2026-10-21の節。
+ * 表示のLvが、もとの校正のどのLv(小数)の強さを使うか(CPU_STRENGTH_PRESETSのsource)。
+ * 2026-10-21の低級帯の付け替えを、2026-10-22の段級位の作り直しで全部のLvに広げた。
+ * @param {number} level 表示のLv
  */
-export const LOW_BAND_SOURCE_LEVELS = Object.freeze({
-  11: 11.57, 12: 11.93, 13: 12.08, 14: 12.15, 15: 12.29, 16: 12.47, 17: 12.58, 18: 12.67,
-  19: 12.79, 20: 12.89, 21: 13.6, 22: 14.3, 23: 15.5, 24: 18.5,
-});
+export function sourceLevelOf(level) {
+  return CPU_STRENGTH_PRESETS.find((preset) => preset.level === level)?.source ?? 0;
+}
 
 /** もとの校正(段階4)の、整数のLvの設定。 */
 function calibratedSettingsAtLevel(level) {
-  const preset = CPU_STRENGTH_PRESETS.find((entry) => entry.level === level);
-  return calibratedHybridSearchSettings(level, searchSettingsForSkill(preset.skill));
+  return calibratedHybridSearchSettings(level, searchSettingsForSkill(CALIBRATION_PRESETS[level].skill));
 }
 
 /** 2つの設定を、数は直線で(どちらも整数なら整数に丸める)、入れ子はそれぞれ、それ以外は近いほうで混ぜる。 */
@@ -320,6 +375,13 @@ export function calibratedHybridSearchSettings(level, settings) {
     shallowDepth: level <= 12 ? 1 : level < 15 ? 2 : 4,
   };
 }
+
+/**
+ * ロジックAI(logic-ai.mjsのLv1〜10)で指すLv。段級位の作り直し(2026-10-22)で、新しい表のLv1(15級)がエンジンで指す強さになり、
+ * ロジックAIで指すLvはなくなった(null)。ファイルは、教室の練習相手などに使い道が出たときのために残す。
+ * @type {number | null}
+ */
+export const CPU_LOGIC_AI_LEVEL = null;
 
 /** 全対局で目的と局面の気づきを使う。比較用の旧方式は開発スクリプト内だけに残す。 */
 export const LOGIC_HYBRID_DEFAULT = true;

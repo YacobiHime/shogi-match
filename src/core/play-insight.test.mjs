@@ -1,3 +1,4 @@
+import { levelRating } from './player-rating.mjs';
 import { describe, expect, it } from 'vitest';
 import { clearExhibitRecords } from './exhibit-reset.mjs';
 import {
@@ -100,7 +101,7 @@ describe('内容の強さ', () => {
     expect(contentStrength([game(1, summary({ opening: [10, 1000, 0], middle: [10, 1000, 0], ending: [10, 1000, 0] }))])).toBeNull();
     const games = [game(1, summary()), game(2, summary())];
     expect(games.reduce((t, g) => t + g.summary.moves, 0)).toBeGreaterThanOrEqual(CONTENT_MIN_MOVES);
-    expect(contentStrength(games)).toBe(Math.round(levelForAverageLoss(30) * 80));
+    expect(contentStrength(games)).toBe(levelRating(levelForAverageLoss(30)));
     // 解析できなかった対局(summaryがnull)は数えない。
     expect(contentStrength([...games, game(3, null)])).toBe(contentStrength(games));
   });

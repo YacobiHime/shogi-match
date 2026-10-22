@@ -7,6 +7,7 @@
 import { buildGuidedReview } from './guided-review.mjs';
 import { REVIEW_PROBLEM_MAX_PLIES, reviewProblemId } from './review-problems.mjs';
 import { levelForAverageLoss } from './skill-estimate.mjs';
+import { levelRating } from './player-rating.mjs';
 
 export const PLAY_INSIGHT_KEY = 'yacobihime:shogi-match:play-insight:v1';
 /** 覚えておく対局の数。 */
@@ -203,7 +204,7 @@ export function contentStrength(games) {
   const moves = recent.reduce((total, game) => total + game.summary.moves, 0);
   if (moves < CONTENT_MIN_MOVES) return null;
   const mean = recent.reduce((total, game) => total + game.summary.sum, 0) / moves;
-  return Math.round(levelForAverageLoss(mean) * 80);
+  return levelRating(levelForAverageLoss(mean));
 }
 
 const average = (phase) => (phase.n ? phase.sum / phase.n : 0);

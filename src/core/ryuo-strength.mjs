@@ -2,6 +2,10 @@
 // - 自動対局の勝率: レーティングの差からElo式で決める。難易度には関係しない。
 // - 実際に指すときのCPUのLv: 難易度に合わせて、レーティングからLvへ換算する。
 // 換算の根拠と測定の方法は docs/tournament-design.md の「棋士の強さ」にある。
+// 換算の表(自己対局のレーティング・基準点)は、段級位の作り直し(2026-10-22)より前のLvで校正したもの。
+// 外へ出すLvは新しい表のLvにし、同じ強さのところへ移す(level-ladder.mjs)。同じ難易度なら、作り直しの前と同じ強さの相手になる。
+
+import { ladderLevelFromOld, oldLevelFromLadder } from './level-ladder.mjs';
 
 /**
  * 棋士の尺度。実物の非公式の棋士レーティング(Elo式、差400で勝率約91%)の、現役の棋士の分布に合わせる:
@@ -10,11 +14,15 @@
 export const PRO_MEAN_RATING = 1555;
 export const PRO_RATING_SD = 145;
 
-export const MIN_CPU_LEVEL = 0;
+/**
+ * 棋士として指させるいちばん弱いLv。Lv0(駒の動きを覚えたて)は練習相手で、大会の棋士にはしない(15級から)。
+ * 作り直しの前の表の26級〜16級の強さだった難易度1〜4の6組は、15級(Lv1)のあたりにそろう。
+ */
+export const MIN_CPU_LEVEL = 1;
 export const MAX_CPU_LEVEL = 40;
 
 /**
- * CPUのLvごとの、自己対局のレーティング(Lv0を0とする)。表の間は直線で補い、範囲の外は端の傾きで延ばす。
+ * CPUのLv(作り直しの前の表)ごとの、自己対局のレーティング(Lv0を0とする)。表の間は直線で補い、範囲の外は端の傾きで延ばす。
  * 仮の値: 2026-09-27の割り付け(docs/difficulty-calibration.md の「校正方法」)の、Lv0〜20は1Lvあたり約85、
  * Lv20〜40は約156という間隔をそのまま使う。CPUのLvごとの強さを調整したら、測り直してこの表を差し替える。
  */
@@ -72,17 +80,17 @@ export function levelForSelfplayRating(rating) {
 
 const normalizedDifficulty = (difficulty) => clamp(Math.round(Number(difficulty) || BASE_DIFFICULTY), 1, DIFFICULTY_LEVELS);
 
-/** 難易度での、基準点(6組の平均の棋士)のLv。 */
+/** 難易度での、基準点(6組の平均の棋士)のLv(作り直しの前の表)。 */
 export function anchorLevel(difficulty) {
   return ANCHOR.level + (normalizedDifficulty(difficulty) - BASE_DIFFICULTY) * LEVELS_PER_DIFFICULTY;
 }
 
 /**
- * レーティングを、難易度でのLv(小数、範囲外も含む)に換算する。
- * 基準点からのレーティング差を、自己対局で同じ差になるLvの差に置き換える。
+ * レーティングを、難易度でのLv(新しい表、小数、Lv0〜40)に換算する。
+ * 基準点からのレーティング差を、自己対局で同じ差になる(前の表の)Lvの差に置き換え、同じ強さの新しい表のLvへ移す。
  */
 export function exactLevelForRating(rating, difficulty) {
-  return levelForSelfplayRating(selfplayRating(anchorLevel(difficulty)) + (rating - ANCHOR.rating));
+  return ladderLevelFromOld(levelForSelfplayRating(selfplayRating(anchorLevel(difficulty)) + (rating - ANCHOR.rating)));
 }
 
 /** 実際に指すときのCPUのLv。整数で、Lv0〜40に収める。 */
@@ -92,7 +100,7 @@ export function ratingToLevel(rating, difficulty) {
 
 /** Lvを、難易度での棋士の尺度のレーティングに直す。ratingToLevelの逆(丸めの前)。 */
 export function levelToRating(level, difficulty) {
-  return Math.round(ANCHOR.rating + selfplayRating(level) - selfplayRating(anchorLevel(difficulty)));
+  return Math.round(ANCHOR.rating + selfplayRating(oldLevelFromLadder(level)) - selfplayRating(anchorLevel(difficulty)));
 }
 
 /** 自動対局の勝率。難易度は使わない。 */

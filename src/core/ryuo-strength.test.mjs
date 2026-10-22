@@ -15,6 +15,7 @@ import {
   selfplayRating,
   winProbability,
 } from './ryuo-strength.mjs';
+import { ladderLevelFromOld, oldLevelFromLadder } from './level-ladder.mjs';
 
 describe('self-play table', () => {
   it('covers Lv0 to Lv40 and rises with the level', () => {
@@ -34,11 +35,15 @@ describe('self-play table', () => {
 });
 
 describe('rating to level', () => {
-  it('moves the anchor by the difficulty', () => {
+  it('moves the anchor by the difficulty, and gives levels of the new ladder at the same strength (2026-10-22)', () => {
+    // 基準点と難易度の幅は、作り直しの前の表のLvで持つ。外へ出すLvは、同じ強さの新しい表のLv。
     expect(anchorLevel(BASE_DIFFICULTY)).toBe(ANCHOR.level);
     expect(anchorLevel(BASE_DIFFICULTY + 1) - anchorLevel(BASE_DIFFICULTY)).toBe(LEVELS_PER_DIFFICULTY);
-    expect(ratingToLevel(ANCHOR.rating, BASE_DIFFICULTY)).toBe(ANCHOR.level);
-    expect(ratingToLevel(ANCHOR.rating, BASE_DIFFICULTY - 2)).toBe(ANCHOR.level - 2 * LEVELS_PER_DIFFICULTY);
+    expect(ratingToLevel(ANCHOR.rating, BASE_DIFFICULTY)).toBe(Math.round(ladderLevelFromOld(ANCHOR.level)));
+    expect(ratingToLevel(ANCHOR.rating, BASE_DIFFICULTY - 2)).toBe(Math.round(ladderLevelFromOld(ANCHOR.level - 2 * LEVELS_PER_DIFFICULTY)));
+    // 基準の難易度の6組の平均は、前の表の一級(Lv30)と同じ強さで、新しい表の1級のあたり。
+    expect(Math.round(groupMeanLevel(6, BASE_DIFFICULTY))).toBeGreaterThanOrEqual(14);
+    expect(Math.round(groupMeanLevel(6, BASE_DIFFICULTY))).toBeLessThanOrEqual(16);
   });
 
   it('keeps the rating order and clamps to Lv0..40', () => {
@@ -55,7 +60,8 @@ describe('rating to level', () => {
   });
 
   it('gives the same rating gap the same self-play gap', () => {
-    const gap = (difficulty) => selfplayRating(exactLevelForRating(1700, difficulty)) - selfplayRating(exactLevelForRating(1500, difficulty));
+    const gap = (difficulty) => selfplayRating(oldLevelFromLadder(exactLevelForRating(1700, difficulty)))
+      - selfplayRating(oldLevelFromLadder(exactLevelForRating(1500, difficulty)));
     expect(gap(5)).toBeCloseTo(200, 6);
     expect(gap(9)).toBeCloseTo(200, 6);
   });
@@ -73,8 +79,14 @@ describe('rating to level', () => {
       expect(GROUP_MEAN_RATING[group - 1]).toBeGreaterThan(GROUP_MEAN_RATING[group]);
       expect(groupMeanLevel(group - 1, 9)).toBeGreaterThan(groupMeanLevel(group, 9));
     }
-    expect(recommendedDifficulty(30)).toBe(9);
-    expect(Math.abs(groupMeanLevel(6, recommendedDifficulty(22)) - 22)).toBeLessThanOrEqual(LEVELS_PER_DIFFICULTY / 2);
+    expect(recommendedDifficulty(Math.round(groupMeanLevel(6, 9)))).toBe(9);
+    // おすすめの難易度では、6組の平均の相手が、プレイヤーのLvにいちばん近い。
+    for (const level of [3, 10, 20]) {
+      const best = recommendedDifficulty(level);
+      for (let difficulty = 1; difficulty <= 14; difficulty += 1) {
+        expect(Math.abs(groupMeanLevel(6, best) - level)).toBeLessThanOrEqual(Math.abs(groupMeanLevel(6, difficulty) - level));
+      }
+    }
   });
 
   it('decides automatic games by rating only', () => {

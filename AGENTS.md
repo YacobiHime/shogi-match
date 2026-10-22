@@ -27,7 +27,7 @@
 | 戦法・囲いの解説文 | `src/core/opening-explanations.mjs` |
 | 戦型検出 | `src/core/formation-tracker.mjs`、`src/data/hiragana_suisho_formations.json` |
 | やこび姫の助言・称賛 | `src/core/coach-advice.mjs`、`src/core/move-praise.mjs`、神の一手の基準（対局中と棋譜解析で共通）は`src/core/god-move.mjs` |
-| CPU難易度 | `src/core/strength-settings.mjs`、Lv1〜10のロジックAIは`src/core/logic-ai.mjs`、局面の気づきは`src/core/position-awareness.mjs`、マスごとの利きから取り合いの損得を出す計算（見え方のレベル差つき）は`src/core/exchange-eval.mjs`、Lv11〜39の新しい選び方は`src/core/aware-move-choice.mjs`（設計は`docs/logic-ai-design.md`・`docs/cpu-purposeful-moves-design.md`。人間らしい思考のモデルとレベル表の設計（未実装）は`docs/cpu-human-model-design.md`、間違いの種類の測定は`scripts/cpu-mistake-report.mjs`） |
+| CPU難易度 | `src/core/strength-settings.mjs`（Lv0〜40の段級位の表。2026-10-22に15級〜タイトル保持者へ作り直した。各Lvは、もとの校正`CALIBRATION_PRESETS`のどの強さを使うか`source`で持つ。前の保存の移しかえは`src/core/level-ladder.mjs`、設計は`docs/level-ladder-design.md`）、ロジックAIは`src/core/logic-ai.mjs`（今の表では使わない。`CPU_LOGIC_AI_LEVEL`）、局面の気づきは`src/core/position-awareness.mjs`、マスごとの利きから取り合いの損得を出す計算（見え方のレベル差つき）は`src/core/exchange-eval.mjs`、Lv1〜39の選び方は`src/core/aware-move-choice.mjs`（設計は`docs/logic-ai-design.md`・`docs/cpu-purposeful-moves-design.md`。人間らしい思考のモデルとレベル表の設計（未実装）は`docs/cpu-human-model-design.md`、間違いの種類の測定は`scripts/cpu-mistake-report.mjs`） |
 | CPUの戦法の選び方 | `src/core/cpu-opening-repertoire.mjs` |
 | 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue`、解析用エンジンの追加と解放は`src/composables/match/analysisEngines.ts`、対局の振り返りは`src/composables/match/useGuidedReview.ts`（台本は`src/core/guided-review.mjs`） |
 | リロード復元 | `src/core/match-persistence.mjs` |

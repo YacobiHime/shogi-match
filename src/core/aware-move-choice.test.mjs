@@ -17,7 +17,9 @@ const fakeVerify = (values = {}) => vi.fn(async (moves) => fakeSearch(moves, val
 
 describe("気づきと評価値から選ぶCPU", () => {
   test("Lv11〜39だけに連続した設定を足し、Lv0とLv40を変えない", () => {
-    for (const level of [0, 1, 10, 40]) expect(getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value).logicHybrid).toBeUndefined();
+    for (const level of [0, 40]) expect(getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value).logicHybrid).toBeUndefined();
+    // 段級位の作り直し(2026-10-22)で、15級(Lv1)から上はみな、もとの校正のLv11以上の強さ(気づきと評価値で選ぶ)。
+    for (const level of [1, 10, 39]) expect(getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value).logicHybrid).toBe(true);
     expect(hybridSettingsForLevel(11)).toMatchObject({ logicHybrid: true, engineBestVisibility: 0.25, engineTopVisibility: 0.125, logicBonusCap: 200, takePolicyRate: 0.48 });
     expect(hybridSettingsForLevel(39)).toMatchObject({ engineBestVisibility: 0.995, engineTopVisibility: 0.4975, logicBonusCap: 20, takePolicyRate: 0 });
     expect(Object.values(hybridSettingsForLevel(20).perception).every((p) => p === 1)).toBe(true);

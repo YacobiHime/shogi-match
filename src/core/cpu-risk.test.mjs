@@ -4,7 +4,7 @@ import { Position } from 'tsshogi';
 import {
   RISK_MARGIN, chooseCpuMove, chooseRiskAwareMove, expectedWinRateLoss, riskStance,
 } from './cpu-move-choice.mjs';
-import { CPU_STRENGTH_PRESETS, RISK_MAX_LEVEL, getStrengthSearchSettings } from './strength-settings.mjs';
+import { CPU_STRENGTH_PRESETS, RISK_MAX_LEVEL, getStrengthSearchSettings, sourceLevelSettings } from './strength-settings.mjs';
 
 const cp = (value) => ({ type: 'cp', value });
 const naturalness = Object.assign(() => 1, { isSacrifice: () => false });
@@ -45,15 +45,16 @@ describe('形勢による危険への態度', () => {
     expect(riskStance(10, 1).swindle).toBe(1);
   });
 
-  test(`Lv${RISK_MAX_LEVEL}以下だけが持ち、強いほど弱める`, () => {
-    for (const { level } of CPU_STRENGTH_PRESETS) {
-      if (level < 11) continue;
+  test(`もとの校正のLv${RISK_MAX_LEVEL}以下の強さだけが持ち、強いほど弱める`, () => {
+    for (const { level, source } of CPU_STRENGTH_PRESETS) {
+      if (level < 1 || level >= 40) continue;
       const { riskAttitude } = strengthAt(level);
-      if (level <= RISK_MAX_LEVEL) expect(riskAttitude, `Lv${level}`).toBeGreaterThan(0);
+      // もとのLv30と31のあいだを混ぜたLvは、Lv30の態度を引き継ぐ(Lv31は持たない)。
+      if (source < RISK_MAX_LEVEL + 1) expect(riskAttitude, `Lv${level}`).toBeGreaterThan(0);
       else expect(riskAttitude, `Lv${level}`).toBeUndefined();
     }
-    expect(strengthAt(11).riskAttitude).toBeGreaterThan(strengthAt(RISK_MAX_LEVEL).riskAttitude);
-    expect(strengthAt(RISK_MAX_LEVEL).riskAttitude).toBe(0.5);
+    expect(strengthAt(1).riskAttitude).toBeGreaterThan(sourceLevelSettings(RISK_MAX_LEVEL).riskAttitude);
+    expect(sourceLevelSettings(RISK_MAX_LEVEL).riskAttitude).toBe(0.5);
   });
 });
 
@@ -147,11 +148,11 @@ describe('危険を見積もって選び直す', () => {
     });
     // 見落とし・最善手の抽選が起きない乱数にする。
     const random = () => 0.99;
-    const level25 = strengthAt(25);
+    const level25 = sourceLevelSettings(25);
     const choice = await chooseCpuMove({ strength: level25, sfen: STANDARD_SFEN, legalMoves, search, probe, random });
     expect(choice).toMatchObject({ move: '2g2f', kind: 'safe' });
-    // Lv31以上は危険を気にしない。
-    const level35 = strengthAt(35);
+    // もとの校正のLv31以上の強さ(アマ初段より上)は危険を気にしない。
+    const level35 = strengthAt(26);
     const strong = await chooseCpuMove({ strength: level35, sfen: STANDARD_SFEN, legalMoves, search, probe, random });
     expect(strong.kind).not.toBe('safe');
   });

@@ -611,6 +611,8 @@ import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 type Tally = { wins: number; losses: number; draws: number };
 type GameOutcome = "win" | "loss" | "draw";
 type RatingState = {
+  ladder: number;
+  ladderNotice: { beforeRating: number; afterRating: number; beforeLabel: string; afterLabel: string } | null;
   rating: number;
   games: number;
   wins: number;
@@ -923,7 +925,7 @@ async function copyRecord() {
   }
 }
 const percent = (ratio: number) => `${Math.round(ratio * 100)}%`;
-/** 「十四級程度」を、表紙では「十四級」と短く出す。 */
+/** 「14級程度」を、表紙では「14級」と短く出す。 */
 const gradeName = (label: string) => gradeNameOf(label);
 
 const nearestPreset = computed(() => {

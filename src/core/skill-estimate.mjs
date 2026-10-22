@@ -4,6 +4,7 @@
 
 import { levelRating } from './player-rating.mjs';
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
+import { ladderLevelForSource } from './level-ladder.mjs';
 
 /** 1手の損失の上限。1手の大悪手で平均が崩れすぎないようにする。 */
 const LOSS_CAP = 1000;
@@ -20,12 +21,25 @@ export const MIN_MEASURED_MOVES = 10;
  */
 const LEVEL_AT_LOSS_1 = 94.59;
 const LEVEL_PER_LN_LOSS = -14.41;
-const MAX_DIAGNOSED_LEVEL = 36;
+/** 回帰で測った範囲の上端(もとの校正のLv36)。 */
+const MAX_DIAGNOSED_SOURCE = 36;
 
-/** 平均損失を、Lv(小数)へ変換する。範囲外は両端のLvにそろえる。 */
+/**
+ * もとの校正のLv(小数)を、新しい表のLv(小数)へ。回帰はもとの校正のLvで測ったので、段級位の作り直し(2026-10-22)のあとは、
+ * 同じ強さの新しい表のLvへ移す。15級(もとの11.93)より弱いところは、Lv0〜1のあいだへ縮める。
+ */
+function ladderLevelOfSource(source) {
+  const bottom = CPU_STRENGTH_PRESETS[1].source;
+  return source < bottom ? Math.max(0, source / bottom) : ladderLevelForSource(source);
+}
+
+/** 診断の上端の、新しい表のLv。 */
+export const MAX_DIAGNOSED_LEVEL = ladderLevelOfSource(MAX_DIAGNOSED_SOURCE);
+
+/** 平均損失を、Lv(新しい表、小数)へ変換する。範囲外は両端のLvにそろえる。 */
 export function levelForAverageLoss(loss) {
-  const level = LEVEL_AT_LOSS_1 + LEVEL_PER_LN_LOSS * Math.log(Math.max(1, loss));
-  return Math.min(MAX_DIAGNOSED_LEVEL, Math.max(0, level));
+  const source = LEVEL_AT_LOSS_1 + LEVEL_PER_LN_LOSS * Math.log(Math.max(1, loss));
+  return ladderLevelOfSource(Math.min(MAX_DIAGNOSED_SOURCE, Math.max(0, source)));
 }
 
 const presetForLevel = (level) => {
@@ -65,13 +79,13 @@ export function estimateSkill(points, color, carried = []) {
   const variance = losses.reduce((sum, loss) => sum + (loss - mean) ** 2, 0) / (count - 1);
   const error = Math.sqrt(variance / count);
   const level = levelForAverageLoss(mean);
-  const ratingOf = (loss) => Math.round(levelForAverageLoss(Math.max(1, loss)) * 80);
+  const ratingOf = (loss) => levelRating(levelForAverageLoss(Math.max(1, loss)));
   return {
     insufficient: false,
     count,
     averageLoss: Math.round(mean),
     level,
-    rating: Math.round(level * 80),
+    rating: levelRating(level),
     // 平均損失の標準誤差ぶんだけ動かした範囲。損が小さいほど強いので、上下が逆になる。
     ratingLow: ratingOf(mean + error),
     ratingHigh: ratingOf(mean - error),
@@ -85,16 +99,19 @@ export function estimateSkill(points, color, carried = []) {
  * 2局を合わせると、力の差が大きい組み合わせでもほぼ足りる(docs/skill-measure-design.mdの2章)。
  */
 export const MAX_MEASURE_GAMES = 3;
-/** 続けて測るときに、相手のLvを動かす幅。勝ったら上げ、負けたら下げて、形勢が早く決まらない相手に近づける。 */
-export const MEASURE_LEVEL_STEP = 8;
+/**
+ * 続けて測るときに、相手のLvを動かす幅。勝ったら上げ、負けたら下げて、形勢が早く決まらない相手に近づける。
+ * 段級位の作り直し(2026-10-22)の前は8(1LvあたりR80)。新しい表(R60)では、近い幅の6にする。
+ */
+export const MEASURE_LEVEL_STEP = 6;
 
 /**
- * 測れる手が足りなかった対局の次に指す、測定対局の相手のLv。診断の範囲(Lv0〜36)に収める。
+ * 測れる手が足りなかった対局の次に指す、測定対局の相手のLv。診断の範囲(Lv1〜診断の上端)に収める。
  * @param {{ level: number, outcome: 'win' | 'loss' | 'draw' }} options level: いまの相手のLv、outcome: プレイヤーから見た結果
  */
 export function nextMeasureLevel({ level, outcome }) {
   const step = outcome === 'win' ? MEASURE_LEVEL_STEP : outcome === 'loss' ? -MEASURE_LEVEL_STEP : 0;
-  return Math.min(MAX_DIAGNOSED_LEVEL, Math.max(0, level + step));
+  return Math.min(Math.floor(MAX_DIAGNOSED_LEVEL), Math.max(1, level + step));
 }
 
 /** 診断した棋力に近い、CPUのLvのレーティング(おすすめの強さの目安に使う)。 */

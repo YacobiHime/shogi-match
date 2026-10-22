@@ -381,7 +381,7 @@ describe("match screen regressions", () => {
     expect(dialog.indexOf("data-rematch")).toBeGreaterThan(-1);
     expect(dialog.indexOf("data-rematch")).toBeLessThan(dialog.indexOf("対局を振り返る"));
     // 連敗の提案は、挑戦を続ける道を先頭に並べ、強さは自動では変えない。
-    expect(dialog).toMatch(/data-retry-suggestion[\s\S]*?もう一度挑む[\s\S]*?で腕ならし[\s\S]*?香落ちで挑む/);
+    expect(dialog).toMatch(/data-retry-suggestion[\s\S]*?もう一度挑む[\s\S]*?で腕ならし[\s\S]*?rematch\(\{ handicapId: resultRetrySuggestion\.handicapId \}\)">\{\{ resultRetrySuggestion\.handicapLabel \}\}で挑む/);
     expect(source).not.toMatch(/resultRetrySuggestion[^\n]*searchNodes\.value\s*=/);
     // 次の級・段までの残りを、対局直後に見せる。
     expect(dialog).toContain("data-next-goal");
@@ -426,7 +426,7 @@ describe("match screen regressions", () => {
     // 強さは、実力と実績の見立て(play-coach)で決める。香落ちの立て直しは振り駒をしない。
     expect(quick).toMatch(/options\.level \?\? playPlan\.value\.level/);
     expect(quick).toMatch(/if \(options\.handicapId\) \{[\s\S]*?learningHandicapGiver\.value = "cpu";\s*beginMatch\(\);\s*return;/);
-    expect(source).toMatch(/default:[\s\S]{0,1500}?return \{ id: "match", label: plan\.title, description: plan\.reason, handicapLevel: plan\.handicapLevel \}/);
+    expect(source).toMatch(/default:[\s\S]{0,1500}?return \{ id: "match", label: plan\.title, description: plan\.reason, handicapLevel: plan\.handicapLevel, handicapId: plan\.handicapId \?\? null \}/);
     // 竜王戦の期の途中は、次の相手の対策か続き。主役でない方を小さな入口にする(docs/home-next-adaptive-design.mdの13章)。
     expect(source).toMatch(/const ryuo = homeRyuoPlan\.value;[\s\S]*?id: "ryuo-counter"[\s\S]*?sub: \{ id: "ryuo-season"[\s\S]*?id: "ryuo-season"[\s\S]*?sub: \{ id: "ryuo-counter"/);
     expect(source).toMatch(/v-if="homeNext\.sub"[\s\S]*?:data-next-sub="homeNext\.sub\.id"[\s\S]*?@click="startHomeNextSub"/);
@@ -469,7 +469,7 @@ describe("match screen regressions", () => {
     const retry = source.split("function retryFromPly(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(retry).toContain("startPositionMatch(sfen, playerColor, RETRY_START_LABEL)");
     // 局面からの対局は平手の初期局面ではないので、レーティングの対象にならない。
-    expect(source).toMatch(/&& matchInitialSfen\.value === STANDARD_SFEN\s*&& level !== undefined/);
+    expect(source).toMatch(/&& matchInitialSfen\.value === STANDARD_SFEN[\s\S]{0,120}?&& isRatedLevel\(level\)/);
   });
 
   it("stops only what happens next for heavy moments, and the board can always cut the stop short", () => {

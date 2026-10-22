@@ -87,6 +87,7 @@ describe('コレクション', () => {
     const { state } = recordMatchCollection(createCollection(), { formations: ['本美濃'], wonLevel: 3, catalog, at: 1 });
     expect(saveCollection(storage, grantTheme(state, 'board', 'sunfish_dark'))).toBe(true);
     expect(loadCollection(storage)).toEqual({
+      ladder: 2,
       formations: { 本美濃: { count: 1, firstAt: 1 } },
       tesuji: {},
       levels: { 3: 1 },
@@ -159,5 +160,26 @@ describe('コレクション', () => {
     saveCollectionSeen(storage, 1234);
     expect(loadCollectionSeen(storage)).toBe(1234);
     expect(loadCollectionSeen({ getItem: () => { throw new Error('blocked'); } })).toBe(0);
+  });
+
+  it('段級位の作り直し(2026-10-22)の前の、勝ったLvを同じ強さの新しいLvへ移し、解放していた着せ替えは残す', () => {
+    const storage = memoryStorage();
+    // 前の表の15級(Lv12)・五級の2つ(Lv22・23)・三級(Lv26)に勝っていた。印は7個(形4つ+Lv4つ)。
+    storage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify({
+      formations: { 本美濃: { count: 1, firstAt: 1 }, 矢倉囲い: { count: 1, firstAt: 1 }, 棒銀: { count: 1, firstAt: 1 }, 船囲い: { count: 1, firstAt: 1 } },
+      levels: { 12: 5, 22: 7, 23: 6, 26: 9 },
+    }));
+    const state = loadCollection(storage);
+    expect(state.ladder).toBe(2);
+    // 前の五級の2つは、新しい5級(Lv11)の1つにまとまる(早いほうの日付)。
+    expect(state.levels[1]).toBe(5);
+    expect(state.levels[11]).toBe(6);
+    expect(Object.keys(state.levels)).toHaveLength(3);
+    // 印は6個に減るが、移す前の7個で解放していた着せ替え(6個以下)は残す。
+    expect(themeUnlock(state, 'piece', 'futamoji').unlocked).toBe(true);
+    expect(themeUnlock(state, 'piece', 'hitomoji_dark').unlocked).toBe(false);
+    // もう一度読んでも、移し直さない。
+    saveCollection(storage, state);
+    expect(loadCollection(storage).levels).toEqual(state.levels);
   });
 });

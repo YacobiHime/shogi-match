@@ -158,8 +158,8 @@
           type="button"
           class="shogi-title__next-sub"
           data-next-handicap
-          @click="startQuickMatch({ level: homeNext.handicapLevel, handicapId: 'lance' })"
-        >香落ちでLv.{{ homeNext.handicapLevel }}に挑む</button>
+          @click="startQuickMatch({ level: homeNext.handicapLevel, handicapId: homeNext.handicapId?.id ?? 'lance' })"
+        >{{ homeNext.handicapId?.label ?? "香落ち" }}でLv.{{ homeNext.handicapLevel }}に挑む</button>
         <!-- 竜王戦の期の途中: 主役でない方(対策か続き)を、小さな2つ目の入口にする(docs/home-next-adaptive-design.mdの13-3)。 -->
         <button
           v-if="homeNext.sub"
@@ -1541,6 +1541,36 @@
       </div>
     </div>
 
+    <!--
+      段級位の作り直し(2026-10-22。docs/level-ladder-design.mdの4章)のあと、前の記録を移した人に1回だけ。
+      数字が大きく変わって見えるので、段級位の名前が同じ(か、どれになったか)を先に言う。
+    -->
+    <div
+      v-if="ladderNoticeOpen"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ladder-notice-title"
+      data-ladder-notice
+      @click.self="dismissLadderNoticeDialog"
+    >
+      <div class="shogi-game__confirm-panel shogi-welcome">
+        <img
+          class="shogi-welcome__chara"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=4`"
+          alt=""
+          aria-hidden="true"
+        >
+        <h2 id="ladder-notice-title">段級位の物差しを作り直したよ</h2>
+        <p>CPUの強さを、15級からアマ七段、プロまで測り直したよ。</p>
+        <p v-if="ratingState.ladderNotice" class="shogi-game__ladder-notice">
+          あなたは<strong>{{ ratingState.ladderNotice.afterLabel }}</strong><template v-if="ratingState.ladderNotice.beforeLabel">（前は{{ ratingState.ladderNotice.beforeLabel }}）</template>。<br>
+          レーティングの数字は R{{ ratingState.ladderNotice.beforeRating }} → <strong>R{{ ratingState.ladderNotice.afterRating }}</strong> になったよ。
+        </p>
+        <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-ladder-notice-ok @click="dismissLadderNoticeDialog">わかった</button>
+      </div>
+    </div>
+
     <div
       v-if="exhibitResetOpen"
       class="shogi-game__confirm shogi-game__confirm--over-home"
@@ -1728,7 +1758,7 @@
                 type="button"
                 @click="rematch({ level: resultRetrySuggestion.lowerLevel })"
               >Lv.{{ resultRetrySuggestion.lowerLevel }}で腕ならし</button>
-              <button type="button" @click="rematch({ handicapId: 'lance' })">香落ちで挑む</button>
+              <button type="button" @click="rematch({ handicapId: resultRetrySuggestion.handicapId })">{{ resultRetrySuggestion.handicapLabel }}で挑む</button>
             </div>
           </div>
           <!-- 勝ったら、次のLvへ(香落ちで勝ったら平手へ)。同じ相手ともう一局は、小さく残す(docs/home-next-adaptive-design.mdの4-2)。 -->
@@ -2107,6 +2137,7 @@ import {
 import { canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice } from "./core/cpu-move-choice.mjs";
 import { chooseAwareMove } from "./core/aware-move-choice.mjs";
 import { chooseLogicMove, usesLogicAi } from "./core/logic-ai.mjs";
+import { CPU_LOGIC_AI_LEVEL } from "./core/strength-settings.mjs";
 import { createAssistSearchControl } from "./core/assist-search-control.mjs";
 import { findMateInOne } from "./core/mate-threat";
 import {
@@ -2210,6 +2241,8 @@ import {
   applyDeclaredGrade,
   applyMeasuredRating,
   applyRatedGame,
+  dismissLadderNotice,
+  isRatedLevel,
   gradeName,
   levelRatingText,
   loadRatingState,
@@ -2411,6 +2444,12 @@ const result = ref<MatchResult | null>(null);
 const resultDialogOpen = ref(false);
 // 通常対局(平手・対CPU)の結果で更新するプレイヤーのレーティング。
 const ratingState = ref(loadRatingState(browserStorage()));
+/** 段級位の作り直しの知らせ。ホームで、はじめての案内が出ていないときに1回だけ出す。 */
+const ladderNoticeOpen = computed(() => props.showHome && homeOpen.value && !welcomeOpen.value && Boolean(ratingState.value.ladderNotice));
+function dismissLadderNoticeDialog() {
+  ratingState.value = dismissLadderNotice(ratingState.value);
+  saveRatingState(browserStorage(), ratingState.value);
+}
 /** 自由対局の中身の記録(core/play-insight.mjs)。見立ての内容の強さと、弱点の練習に使う。 */
 const playInsight = ref(loadPlayInsight(browserStorage()));
 /** 復習の期日が来た問題と、「あなたの対局から」の問題のID。「つぎはこれ」の練習に使う。タイトル画面を開くたびに読み直す。 */
@@ -3175,11 +3214,15 @@ const resultGradeUp = computed(() => {
 const resultNextStep = computed(() => {
   if (!result.value?.winner || result.value.winner !== humanColor.value || ryuoGame.value) return null;
   const level = cpuStrengthLevel();
-  const lanceHandicap = matchKind.value === "learning" && learningStartType.value === "handicap"
-    && learningHandicapId.value === "lance" && learningHandicapGiver.value === "cpu";
+  // 立て直しの駒落ち(香落ち・飛車落ち)で勝ったら、次は平手で。
+  const retryHandicap = matchKind.value === "learning" && learningStartType.value === "handicap" && learningHandicapGiver.value === "cpu"
+    ? ({ lance: "香落ち", rook: "飛車落ち" } as { [id: string]: string })[learningHandicapId.value] ?? ""
+    : "";
   const rated = Boolean(ratingChange.value);
+  // Lv0(練習相手)は、平手の通常対局のときだけ、勝ったら15級へ(学習対局のLv0は今のまま)。
+  if (level === 0 && !retryHandicap && matchKind.value !== "normal") return null;
   return resultNextStepFor({
-    won: true, rated, level, lanceHandicap, firstWin: rated && level !== undefined && (ratingState.value.levels?.[level]?.wins ?? 0) === 1,
+    won: true, rated, level, handicapLabel: retryHandicap, firstWin: rated && level !== undefined && (ratingState.value.levels?.[level]?.wins ?? 0) === 1,
   });
 });
 /** 同じLvに続けて負けたときの、選べる提案(強さを2つ下げる・香落ち)。自動では変えない。 */
@@ -4486,7 +4529,15 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
   const single = (title: string, value: PickerValue, groups: PickerSection["groups"], note = "") => ({
     title, note, sections: [{ key: id, value, groups }],
   });
-  if (id === "strength") return single("CPUの強さ", searchNodes.value, [{ options: strengthPickerOptions.value }]);
+  if (id === "strength") {
+    // 41個を、級・段・プロの3つに分けて並べる(docs/level-ladder-design.mdの5章)。同じ名前の段は、Rと成績で見分ける。
+    const band = (from: number, to: number) => strengthPickerOptions.value.filter((_, level) => level >= from && level <= to);
+    return single("CPUの強さ", searchNodes.value, [
+      { label: "級（Lv.0〜15）", options: band(0, 15) },
+      { label: "アマ段（Lv.16〜35）", options: band(16, 35) },
+      { label: "プロ（Lv.36〜40）", options: band(36, 40) },
+    ]);
+  }
   if (id === "cpuFirstMove") return single("CPUの初手", cpuFirstMove.value, [{ options: CPU_FIRST_MOVE_OPTIONS }]);
   if (id === "tendency") {
     return {
@@ -5489,6 +5540,8 @@ type HomeNext = {
   id: "resume" | "tutorial" | "match" | "tournament" | "ryuo-season" | "ryuo-counter" | "problems" | "practice" | "discover"; label: string; description: string;
   /** 立て直しのときの「香落ちで挑む」のLv。 */
   handicapLevel?: number | null;
+  /** 立て直しの駒落ち(15級は飛車落ち、ほかは香落ち)。 */
+  handicapId?: { id: string; label: string } | null;
   /** 竜王戦の期の途中の、主役でない方の小さな入口(対策か続き)。 */
   sub?: { id: "ryuo-season" | "ryuo-counter"; label: string } | null;
 };
@@ -5554,9 +5607,9 @@ const homeNext = computed<HomeNext>(() => {
           level: plan.level,
           everPlayed: ratingState.value.games > 0,
         });
-        if (today) return { id: "match", label: today.title, description: today.reason, handicapLevel: plan.handicapLevel };
+        if (today) return { id: "match", label: today.title, description: today.reason, handicapLevel: plan.handicapLevel, handicapId: plan.handicapId ?? null };
       }
-      return { id: "match", label: plan.title, description: plan.reason, handicapLevel: plan.handicapLevel };
+      return { id: "match", label: plan.title, description: plan.reason, handicapLevel: plan.handicapLevel, handicapId: plan.handicapId ?? null };
   }
 });
 /**
@@ -5697,6 +5750,8 @@ const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.l
 function navigateBack() {
   if (welcomeOpen.value && homeOpen.value) {
     dismissWelcome();
+  } else if (ladderNoticeOpen.value) {
+    dismissLadderNoticeDialog();
   } else if (exhibitResetOpen.value) {
     exhibitResetOpen.value = false;
   } else if (discardSuspendedPending.value) {
@@ -5749,7 +5804,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
@@ -7439,7 +7494,8 @@ function recordRatedGame(matchResult: MatchResult) {
     && normalizedMode.value === "cpu"
     && !tutorialMatch.value
     && matchInitialSfen.value === STANDARD_SFEN
-    && level !== undefined;
+    // Lv0(駒の動きを覚えたて)は練習相手で、レーティングに数えない(docs/level-ladder-design.md)。
+    && isRatedLevel(level);
   // 竜王戦の千日手は、先後を入れ替えて指し直す(recordRyuoOutcome)ので、指し直した対局の結果だけを数える。
   if (!rated || (tournament && !matchResult.winner)) return;
   const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";
@@ -8059,8 +8115,8 @@ function scheduleReviewCpuMove() {
       ) return;
       const strength = getStrengthSearchSettings(searchNodes.value);
       const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi: moveUsi }) => moveUsi);
-      // Lv1〜10は、感想戦でもロジックAIで応じる(エンジンは使わない)。
-      const logicLevel = usesLogicAi(cpuStrengthPreset.value.level);
+      // ロジックAIのLvは、感想戦でもロジックAIで応じる(エンジンは使わない)。今の表には、ロジックAIのLvはない。
+      const logicLevel = usesLogicAi(CPU_LOGIC_AI_LEVEL);
       let search;
       let verify;
       let probe;
@@ -8087,7 +8143,7 @@ function scheduleReviewCpuMove() {
         );
       }
       const choice = logicLevel
-        ? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, level: cpuStrengthPreset.value.level, moveHistory })
+        ? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, level: CPU_LOGIC_AI_LEVEL ?? 10, moveHistory })
         : strength.logicHybrid
         ? (await chooseAwareMove({ strength, sfen: record.value.position.sfen, legalMoves, moveHistory, search, verify, probe }))
           ?? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, moveHistory, level: 10 })
@@ -8300,8 +8356,8 @@ async function scheduleCpuMove() {
         // MultiPVの候補数は合法手より少ないため、作戦の定跡手が候補に入っていない
         // 局面でも専用探索で評価してから、AI最善手との比較を行う。
         let searchedCandidates = search.candidates;
-        // Lv1〜10はロジックAIで指す。上の探索は、直前のプレイヤーの手への助言にだけ使う。
-        const logicLevel = usesLogicAi(cpuStrengthPreset.value.level);
+        // ロジックAIのLvは、ロジックAIで指す(今の表にはない)。上の探索は、直前のプレイヤーの手への助言にだけ使う。
+        const logicLevel = usesLogicAi(CPU_LOGIC_AI_LEVEL);
         if (
           !logicLevel && !selectionStrength.logicHybrid
           && allowedOpeningMove && !forceConfiguredOpening
@@ -8343,7 +8399,7 @@ async function scheduleCpuMove() {
           ? chooseLogicMove({
             sfen: record.value.position.sfen,
             legalMoves: allowedCpuMoveList,
-            level: cpuStrengthPreset.value.level,
+            level: CPU_LOGIC_AI_LEVEL ?? 10,
             moveHistory,
             planMove: allowedOpeningMove ?? null,
           })
@@ -8403,11 +8459,11 @@ async function scheduleCpuMove() {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
         // Lv1〜10は、エンジンがなくてもロジックAIで指せる。
         usi = forceConfiguredOpening && allowedOpeningMove ? allowedOpeningMove
-          : usesLogicAi(cpuStrengthPreset.value.level) || strength.logicHybrid
+          : usesLogicAi(CPU_LOGIC_AI_LEVEL) || strength.logicHybrid
           ? chooseLogicMove({
             sfen: record.value.position.sfen,
             legalMoves: allowedCpuMoveList,
-            level: usesLogicAi(cpuStrengthPreset.value.level) ? cpuStrengthPreset.value.level : 10,
+            level: CPU_LOGIC_AI_LEVEL ?? 10,
             moveHistory,
             planMove: allowedOpeningMove ?? null,
           })?.move ?? ""

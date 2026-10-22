@@ -11,6 +11,8 @@
  * まだ持っていないものも名前は見せる(存在だけ見せる)。保存は端末に置き、読めなくても遊びは止めない。
  */
 
+import { LADDER_VERSION, ladderLevelIndexFromOld } from './level-ladder.mjs';
+
 export const COLLECTION_STORAGE_KEY = 'yacobihime:shogi-match:collection:v1';
 /** 最後にコレクションを開いた時刻(それより後に初めて取った印に「NEW」を付ける)。 */
 export const COLLECTION_SEEN_KEY = 'yacobihime:shogi-match:collection-seen:v1';
@@ -143,7 +145,7 @@ export function saveCollectionSeen(storage, at = Date.now()) {
 export const COLLECTION_LEVELS = Object.freeze(Array.from({ length: 40 }, (_, index) => index + 1));
 
 export function createCollection() {
-  return { formations: {}, tesuji: {}, levels: {}, godMoves: 0, predictionsHit: 0, grantedThemes: [] };
+  return { ladder: LADDER_VERSION, formations: {}, tesuji: {}, levels: {}, godMoves: 0, predictionsHit: 0, grantedThemes: [] };
 }
 
 /**
@@ -268,18 +270,37 @@ export function loadCollection(storage) {
     for (const [id, entry] of Object.entries(parsed.tesuji ?? {})) {
       if (entry && count(entry.count)) tesuji[id] = { count: count(entry.count), firstAt: Number(entry.firstAt) || 0 };
     }
+    // 段級位の作り直し(2026-10-22)より前の保存は、勝ったLvを同じ強さの新しいLvへ移す(重なったら早いほうの日付)。
+    const migrate = parsed.ladder !== LADDER_VERSION;
     const levels = {};
     for (const [level, at] of Object.entries(parsed.levels ?? {})) {
-      if (COLLECTION_LEVELS.includes(Number(level))) levels[level] = Number(at) || 0;
+      const to = migrate ? ladderLevelIndexFromOld(Number(level)) : Number(level);
+      if (!COLLECTION_LEVELS.includes(to)) continue;
+      const time = Number(at) || 0;
+      levels[to] = levels[to] === undefined ? time : Math.min(levels[to], time);
     }
-    return {
+    const grantedThemes = Array.isArray(parsed.grantedThemes) ? parsed.grantedThemes.filter((key) => typeof key === 'string') : [];
+    const state = {
+      ladder: LADDER_VERSION,
       formations,
       tesuji,
       levels,
       godMoves: count(parsed.godMoves),
       predictionsHit: count(parsed.predictionsHit),
-      grantedThemes: Array.isArray(parsed.grantedThemes) ? parsed.grantedThemes.filter((key) => typeof key === 'string') : [],
+      grantedThemes,
     };
+    if (migrate) {
+      // Lvが重なって印が減っても、移す前に解放していた着せ替えは取り上げない。
+      const before = Object.keys(formations).length + Object.keys(tesuji).length
+        + Object.keys(parsed.levels ?? {}).filter((level) => COLLECTION_LEVELS.includes(Number(level))).length;
+      for (const [kind, themes] of Object.entries(THEME_UNLOCKS)) {
+        for (const [id, need] of Object.entries(themes)) {
+          const key = `${kind}:${id}`;
+          if (need > 0 && need <= before && !grantedThemes.includes(key)) grantedThemes.push(key);
+        }
+      }
+    }
+    return state;
   } catch {
     return createCollection();
   }

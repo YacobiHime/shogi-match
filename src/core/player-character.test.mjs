@@ -39,8 +39,8 @@ describe('finding mates', () => {
         expect(mateFindProbability(finding, plies)).toBeLessThanOrEqual(mateFindProbability(finding, plies - 2));
       }
     }
-    const weak = baseMateFinding(skillAt(21));
-    const strong = baseMateFinding(skillAt(35));
+    const weak = baseMateFinding(skillAt(10));
+    const strong = baseMateFinding(skillAt(26));
     expect(mateFindProbability(strong, 7)).toBeGreaterThan(mateFindProbability(weak, 7));
     expect(mateFindProbability(baseMateFinding(1), 31)).toBe(1);
   });
@@ -50,15 +50,15 @@ describe('finding mates', () => {
       const settings = applyCharacter(strengthAt(level), degree ? withTrait('tsume', degree) : null, quiet, { skill: skillAt(level) });
       return mateFindProbability(settings.mateFinding, plies);
     };
-    for (const level of [21, 30, 35]) {
+    for (const level of [10, 15, 26]) {
       for (const plies of [3, 5, 7, 9]) {
         expect(at(level, 1, plies)).toBeGreaterThanOrEqual(at(level, 0, plies));
         expect(at(level, 2, plies)).toBeGreaterThanOrEqual(at(level, 1, plies));
       }
     }
-    // 上がり幅はレベルで変わる。六級程度では3手詰め、アマ四段程度では11手詰めの上がり幅が大きい。
-    expect(at(21, 2, 3) - at(21, 0, 3)).toBeGreaterThan(at(35, 2, 3) - at(35, 0, 3));
-    expect(at(35, 2, 11) - at(35, 0, 11)).toBeGreaterThan(at(21, 2, 11) - at(21, 0, 11));
+    // 上がり幅はレベルで変わる。6級程度(Lv10)では3手詰め、アマ四段程度(Lv26)では11手詰めの上がり幅が大きい。
+    expect(at(10, 2, 3) - at(10, 0, 3)).toBeGreaterThan(at(26, 2, 3) - at(26, 0, 3));
+    expect(at(26, 2, 11) - at(26, 0, 11)).toBeGreaterThan(at(10, 2, 11) - at(10, 0, 11));
   });
 
   it('shifts probabilities by log-odds, staying inside 0..1', () => {

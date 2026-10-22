@@ -5,13 +5,12 @@
  * 黙って難易度を変えない。勧めるだけで、選ぶのは本人(自由対局ではどのLvでも選べる)。画面に依存しない。
  */
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
-import { gradeName, levelRating, nextRatingGoal } from './player-rating.mjs';
+import { INITIAL_RATING, gradeName, levelRating, nextRatingGoal, ratingLevel } from './player-rating.mjs';
 import { contentStrength, detectWeaknesses } from './play-insight.mjs';
 import { isReviewProblemId } from './review-problems.mjs';
 import { nearRewardLines } from './home-extras.mjs';
 
 const MAX_LEVEL = CPU_STRENGTH_PRESETS.at(-1).level;
-const RATING_PER_LEVEL = levelRating(1);
 
 /** 勧める相手の、勝率の見込み。0.6なら、相手はR約70下(Eloの式)。 */
 export const TARGET_WIN_RATE = 0.6;
@@ -30,7 +29,8 @@ export const MAX_STEP = 2;
 /** 「昇級をかけた一局」にする、次の級までの残り(勝ち1回分)。 */
 export const PROMOTION_MARGIN = 10;
 
-const clampLevel = (level) => Math.min(MAX_LEVEL, Math.max(0, Math.round(level)));
+/** 勧めるLv。Lv0は練習相手でレーティングに数えないので、ふだんはLv1(15級)から。 */
+const clampLevel = (level) => Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
 const presetLabel = (level) => CPU_STRENGTH_PRESETS.find((preset) => preset.level === level)?.label ?? '';
 
 /** レーティングの対象の対局の記録(申告・測定を除く)。 */
@@ -52,14 +52,14 @@ export function recentPerformance(games) {
 
 /** 結果の強さ。最近の成績のほうが低ければ、そちらを使う(負けが続いたときに、早く下げる)。 */
 export function resultStrength(state) {
-  const rating = Number.isFinite(state?.rating) ? state.rating : 800;
+  const rating = Number.isFinite(state?.rating) ? state.rating : INITIAL_RATING;
   const performance = recentPerformance(ratedHistory(state));
   return performance !== null && performance < rating ? performance : rating;
 }
 
-/** 内容の強さの重み(結果6：内容4)と、結果の強さから動かす幅の上限(Lv2つ分)。 */
+/** 内容の強さの重み(結果6：内容4)と、結果の強さから動かす幅の上限(Lv2つ分。1LvはR60)。 */
 export const CONTENT_WEIGHT = 0.4;
-export const CONTENT_SPREAD = 160;
+export const CONTENT_SPREAD = 120;
 
 /**
  * 見立ての強さ(3-2)。内容の強さ(R内容)がなければ結果の強さ。あれば0.6×R結果＋0.4×R内容を、R結果の±160に収める。
@@ -114,6 +114,7 @@ export function unbeatenCap(state) {
  *   rookは、matchupでは相手に指してもらう戦法、widenではプレイヤーが試す戦法
  * @typedef {{
  *   level: number, kind: string, title: string, reason: string, base: number, cap: number, handicapLevel: number | null,
+ *   handicapId?: { id: 'rook' | 'lance', label: string },
  *   practice?: PracticeStep,
  * }} PlayPlan
  */
@@ -242,7 +243,7 @@ function recommendPractice(state, { insight = null, reviewDueId = null, problemI
 function recommendMatch(state, content, insightGames = [], reward = null) {
   const games = ratedHistory(state);
   const strength = blendedStrength(resultStrength(state), content);
-  const base = clampLevel((strength - TARGET_MARGIN) / RATING_PER_LEVEL);
+  const base = clampLevel(ratingLevel(strength - TARGET_MARGIN));
   const cap = unbeatenCap(state);
   const normal = (level) => ({
     level, kind: 'normal', title: '対局する', base, cap, handicapLevel: null,
@@ -261,11 +262,14 @@ function recommendMatch(state, content, insightGames = [], reward = null) {
     return { level, kind: 'first-win', title: `Lv.${level}に挑戦`, reason: `Lv.${played}に初勝利！ 次は1つ上へ`, base, cap, handicapLevel: null };
   }
   if (losses >= 3) {
-    const level = clampLevel(played - 2);
+    // 15級(Lv1)に勝てないときは、Lv0(練習相手。レーティングに数えない)と飛車落ち(docs/level-ladder-design.mdの3-4)。
+    const level = played <= 1 ? 0 : clampLevel(played - 2);
     if (level < played) {
       return {
-        level, kind: 'warmup', title: `Lv.${level}で腕ならし`, base, cap, handicapLevel: played,
-        reason: `Lv.${played}に${losses}連敗。${played - level}つ下で、勝つ感覚を取り戻そう`,
+        level, kind: 'warmup', title: `Lv.${level}で腕ならし`, base, cap, handicapLevel: played, handicapId: handicapForLevel(played),
+        reason: level === 0
+          ? `Lv.${played}に${losses}連敗。Lv.0で肩ならししよう（レーティングには数えないよ）`
+          : `Lv.${played}に${losses}連敗。${played - level}つ下で、勝つ感覚を取り戻そう`,
       };
     }
   }
@@ -347,14 +351,28 @@ function recentRecordText(games) {
 }
 
 /**
- * 終局画面の主ボタン(4-2)。平手の通常対局で勝ったら1つ上のLv、香落ちで勝ったら平手。ほかはnull(今の「もう一局」)。
- * @param {{ won: boolean, rated: boolean, level: number | undefined, lanceHandicap: boolean, firstWin: boolean }} game
+ * 立て直しで勧める駒落ち。15級(Lv1)は飛車落ち、それより上は香落ち(docs/level-ladder-design.mdの3-4)。
+ * @param {number} level 連敗したLv
+ * @returns {{ id: 'rook' | 'lance', label: string }}
+ */
+export function handicapForLevel(level) {
+  return level <= 1 ? { id: 'rook', label: '飛車落ち' } : { id: 'lance', label: '香落ち' };
+}
+
+/**
+ * 終局画面の主ボタン(4-2)。平手の通常対局で勝ったら1つ上のLv、立て直しの駒落ち(香落ち・飛車落ち)で勝ったら平手。
+ * Lv0(練習相手。レーティングに数えない)に勝ったら15級(Lv1)へ。ほかはnull(今の「もう一局」)。
+ * @param {{ won: boolean, rated: boolean, level: number | undefined, lanceHandicap?: boolean, handicapLabel?: string, firstWin: boolean }} game
  * @returns {{ kind: 'up' | 'even' | 'top', level: number, title: string, reason: string, sameTitle: string } | null}
  */
-export function resultNextStep({ won, rated, level, lanceHandicap, firstWin }) {
+export function resultNextStep({ won, rated, level, lanceHandicap = false, handicapLabel = '', firstWin }) {
   if (!won || !Number.isFinite(level)) return null;
-  if (lanceHandicap) {
-    return { kind: 'even', level, title: `平手でLv.${level}に挑む`, reason: '香落ちで勝ったね。次は平手で', sameTitle: '香落ちでもう一局' };
+  const handicap = handicapLabel || (lanceHandicap ? '香落ち' : '');
+  if (handicap) {
+    return { kind: 'even', level, title: `平手でLv.${level}に挑む`, reason: `${handicap}で勝ったね。次は平手で`, sameTitle: `${handicap}でもう一局` };
+  }
+  if (level === 0) {
+    return { kind: 'up', level: 1, title: 'Lv.1に挑戦', reason: `Lv.0に勝ったね。次は${gradeName(presetLabel(1))}のLv.1へ`, sameTitle: '同じLv.0でもう一局' };
   }
   if (!rated) return null;
   if (level >= MAX_LEVEL) {
