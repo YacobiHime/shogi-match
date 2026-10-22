@@ -208,7 +208,8 @@
 
         <!--
           竜王戦の期の画面(docs/ryuo-ui-renewal-design.mdの5-2)。主役はドット絵の山の地図(竜王への道)と、下の次の一局の枠。
-          上の帯に期と推しの段と「表」。くわしい情報(相手の能力・やこび姫の話・予想)は、押すと下から重ねて開く。
+          上の帯に期と推しの段。地図とトーナメント表はタブで切り替える(広い画面では表を横にいつも)。相手の能力は下の枠にいつも出し、
+          くわしい情報(使用率・経歴・やこび姫の話・予想)は、押すと下から重ねて開く。
         -->
         <div
           v-else-if="screen === 'season' && view"
@@ -222,8 +223,16 @@
               <p v-if="oshiStep" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
             </div>
             <button v-if="predictionOptions" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-prediction-open @click="sheet = 'predict'">予想</button>
-            <button type="button" class="shogi-tournament__icon-btn" aria-label="トーナメント表" data-table-open @click="tableOpen = true">表</button>
           </header>
+
+          <!--
+            地図とトーナメント表の切り替え。表も竜王戦の大事な情報なので、小さな印の奥に隠さず、地図と並ぶタブにする。
+            表を見ている間も、下の次の一局の枠(相手と「対局する」)は残す。広い画面では表を地図の横にいつも出し、タブは出さない。
+          -->
+          <div class="shogi-tournament__view-switch" role="tablist" aria-label="地図と表の切り替え">
+            <button type="button" role="tab" :aria-selected="!tableOpen" data-view-map @click="tableOpen = false">竜王への道</button>
+            <button type="button" role="tab" :aria-selected="tableOpen" data-table-open @click="tableOpen = true">トーナメント表</button>
+          </div>
 
           <div class="shogi-tournament__mapwrap">
             <RyuoMountain
@@ -279,6 +288,34 @@
                 <small>第{{ view.pending.gameNo }}局</small>
               </div>
             </div>
+            <!--
+              相手の能力(レーダーチャートの形と8つのランク)と特殊能力の札。作戦を考える大事な手がかりなので、いつも出す。
+              押すと、使用率・棋風・経歴までのくわしい情報を開く。
+            -->
+            <button
+              v-if="opponentAbility"
+              type="button"
+              class="shogi-tournament__hud-ability"
+              :aria-label="`${view.pending.opponent.name}の能力。押すとくわしく`"
+              data-hud-ability
+              @click="sheet = 'opponent'"
+            >
+              <RadarChart class="shogi-tournament__mini-radar" :axes="opponentRadar" bare aria-hidden="true" />
+              <ul class="shogi-tournament__mini-ranks" aria-hidden="true">
+                <li v-for="item in opponentAbility.abilities" :key="item.key">
+                  <span>{{ item.label }}</span>
+                  <b :class="['player-ability__rank', `player-ability__rank--${item.rank}`]">{{ item.rank }}</b>
+                </li>
+              </ul>
+              <span class="shogi-tournament__mini-specials" data-hud-specials>
+                <span
+                  v-for="chip in opponentAbility.specials.slice(0, 3)"
+                  :key="chip.id"
+                  :class="['player-ability__chip', `player-ability__chip--${chip.tier}`]"
+                >{{ SPECIAL_MARK[chip.tier] }}{{ chip.label }}</span>
+                <span class="shogi-tournament__mini-more">くわしく ›</span>
+              </span>
+            </button>
             <!-- この一局に賭けているもの(core/ryuo-stakes.mjs)。 -->
             <div v-if="view.pending.stakes" class="shogi-tournament__stakes" data-stakes>
               <p class="shogi-tournament__stakes-goal" data-stakes-goal>{{ view.pending.stakes.goal }}</p>
@@ -376,27 +413,24 @@
             </div>
           </div>
 
-          <!-- トーナメント表。「表」で重ねて開く(地図と同じく、表は枠の中で動かす)。 -->
+          <!--
+            トーナメント表。狭い画面では「トーナメント表」のタブで地図の場所に出し、広い画面では地図の横にいつも出す。
+            表は枠の中で動かす(U:7-5)。
+          -->
           <section
-            v-if="tableOpen"
-            class="shogi-tournament__card shogi-tournament__tables"
-            role="dialog"
-            aria-modal="true"
+            :class="['shogi-tournament__tables', { 'shogi-tournament__tables--open': tableOpen }]"
             aria-label="トーナメント表"
             data-tables
           >
-            <div class="shogi-tournament__tables-head">
-              <div class="shogi-tournament__tabs" role="tablist">
-                <button
-                  v-for="table in view.tables"
-                  :key="table.key"
-                  type="button"
-                  role="tab"
-                  :aria-selected="table.key === activeTableKey"
-                  @click="tableChoice = table.key"
-                >{{ tableTab(table) }}</button>
-              </div>
-              <button type="button" class="shogi-tournament__sub shogi-tournament__table-close" data-table-close @click="tableOpen = false">閉じる</button>
+            <div v-if="view.tables.length > 1" class="shogi-tournament__tabs" role="tablist" aria-label="どの表を見るか">
+              <button
+                v-for="table in view.tables"
+                :key="table.key"
+                type="button"
+                role="tab"
+                :aria-selected="table.key === activeTableKey"
+                @click="tableChoice = table.key"
+              >{{ tableTab(table) }}</button>
             </div>
             <TournamentTree
               v-if="activeTable?.tree"
@@ -898,17 +932,20 @@ const hudRole = computed(() => {
   if (!pending) return "";
   return pending.kind === "game" ? `${pending.label.split(" ").at(-1)}の相手` : pending.label;
 });
-/** 次の相手の札: 棋風、いちばん高い能力、いちばん低い能力。 */
+/**
+ * 次の相手の札: 棋風と、いちばんよく指す戦法。能力の高い・低いは、すぐ下のランクの並びで見えるので札にしない。
+ */
 const hudChips = computed(() => {
   const chips: { text: string; kind: string }[] = [];
   if (opponentProfile.value.style) chips.push({ text: opponentProfile.value.style, kind: opponentStyleTone.value });
-  const abilities = [...(opponentAbility.value?.abilities ?? [])].sort((a, b) => b.value - a.value);
-  if (abilities.length) {
-    chips.push({ text: `${abilities[0].label} ${abilities[0].rank}`, kind: "best" });
-    chips.push({ text: `${abilities.at(-1)!.label} ${abilities.at(-1)!.rank}`, kind: "worst" });
-  }
+  const top = opponentAbility.value?.openings?.[0];
+  if (top) chips.push({ text: `${top.label} ${top.share}%`, kind: "opening" });
   return chips;
 });
+/** 次の一局の枠の小さなレーダーチャート(形だけ。軸の名前とランクは横の並びで読む)。 */
+const opponentRadar = computed(() => (opponentAbility.value?.abilities ?? []).map(({ key, label, value }) => ({ key, label, value })));
+/** 特殊能力の札の頭の印(PlayerAbilityPanel.vueと同じ。色だけに頼らず、形でも区別する)。 */
+const SPECIAL_MARK: Record<string, string> = Object.freeze({ gold: "★", blue: "＋", red: "−" });
 /** 対局の直前のVS画面。閉じたら(時間が来るか押すと)対局を始める。 */
 const versusOpen = ref(false);
 function startPlay() {
@@ -1224,8 +1261,6 @@ const statTiles = computed(() => {
     font-size: clamp(15px, min(1.15vw, 2vh), 24px);
     width: min(100%, 78em);
   }
-  /* 広い画面では、表はいつも右の列にあるので、開く・閉じるボタンはいらない。 */
-  .shogi-game .shogi-tournament__sub.shogi-tournament__table-close { display: none; }
 }
 
 /* ---- 相手のくわしい情報(折りたたみ) */
@@ -1472,9 +1507,6 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__choices button[aria-checked="true"]:hover,
 .shogi-game .shogi-tournament__tabs button[aria-selected="true"]:hover,
 .shogi-game .shogi-tournament__chapters button[aria-current="step"]:hover { border-color: #f1a54c; color: #172632; background: #f1a54c; }
-.shogi-game .shogi-tournament__tables-head { display: flex; align-items: flex-start; gap: var(--tr-gap); }
-.shogi-game .shogi-tournament__tables-head .shogi-tournament__tabs { flex: 1 1 auto; min-width: 0; }
-.shogi-game .shogi-tournament__tables-head .shogi-tournament__sub { flex: 0 0 auto; width: auto; height: var(--tr-control); }
 /* ライバル(天鷺羽音)の札と一言。色は羽音の目の黄色(升の強調ではないので、盤の色の決まりの対象外)。 */
 .shogi-game .shogi-tournament__rival-tag {
   padding: 0 0.5rem;
@@ -1856,6 +1888,8 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__main:has(> .shogi-tournament__stage) { overflow: hidden; }
 .shogi-game .shogi-tournament__stage {
   display: grid;
+  /* 列は画面の幅に固定する(トーナメント表の横幅で、画面が横に広がらないように)。 */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas: "top" "map" "hud";
   height: 100%;
@@ -1926,6 +1960,8 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__hud {
   grid-area: hud;
   display: grid;
+  /* 行は中身の高さ(ボタンのmin-heightまで縮んで、中身が重ならないように)。 */
+  grid-auto-rows: max-content;
   gap: 0.55rem;
   padding: 0.75rem 0.85rem max(0.75rem, env(safe-area-inset-bottom));
   border-top: 3px solid #fffcf4;
@@ -2007,20 +2043,129 @@ const statTiles = computed(() => {
 /* くわしい情報のシート。 */
 .shogi-game .shogi-tournament__detail { display: grid; gap: 0.8rem; padding: 1rem 1.1rem; border: 2px solid var(--tr-lavender); border-radius: 0.8rem; background: var(--tr-panel); }
 .shogi-game .shogi-tournament__detail h2 { margin: 0; color: var(--tr-gold); font-size: 1.1em; }
-/* トーナメント表は、画面いっぱいに重ねて開く(表は枠の中で動かす)。 */
-.shogi-game .shogi-tournament__stage > .shogi-tournament__tables {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
+/*
+ * 地図とトーナメント表の切り替え(地図の上の空に浮かべるタブ)。押せる高さは44px以上(U:7-4)。
+ * 選んでいる側は白地に濃い文字で、色だけでなく塗りの有無でも分かる。
+ */
+.shogi-game .shogi-tournament__view-switch {
+  grid-area: map;
+  z-index: 3;
+  align-self: start;
+  justify-self: center;
   display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  padding: max(0.7rem, env(safe-area-inset-top)) 0.7rem max(0.7rem, env(safe-area-inset-bottom));
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  padding: 0.25rem;
+  border: 2px solid #4b6585;
+  border-radius: 999px;
+  background: rgba(15, 24, 40, 0.92);
+  box-shadow: 0 3px 0 var(--tr-shadow);
+}
+.shogi-game .shogi-tournament__view-switch button {
+  min-height: 44px;
+  padding: 0 1rem;
   border: 0;
-  border-radius: 0;
+  border-radius: 999px;
+  color: #fffcf4;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.9em;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.shogi-game .shogi-tournament__view-switch button[aria-selected="true"] { color: #172632; background: #fffcf4; }
+@media (hover: hover) {
+  .shogi-game .shogi-tournament__view-switch button:not([aria-selected="true"]):hover { background: rgba(255, 252, 244, 0.14); }
+}
+/* 知らせの吹き出しは、切り替えのタブの下から出す。 */
+.shogi-game .shogi-tournament__stage .shogi-tournament__mapnotes { top: 4rem; }
+/* トーナメント表: 狭い画面では、タブで選んだときだけ地図の場所に出す(地図は下で描いたまま)。 */
+.shogi-game .shogi-tournament__stage > .shogi-tournament__tables {
+  grid-area: map;
+  z-index: 2;
+  display: none;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 4.2rem 0.6rem 0.6rem;
   background: #1e2d3d;
 }
+.shogi-game .shogi-tournament__stage > .shogi-tournament__tables--open { display: flex; }
+.shogi-game .shogi-tournament__stage > .shogi-tournament__tables .shogi-tournament__tabs button { min-height: var(--tr-control); }
 .shogi-game .shogi-tournament__stage > .shogi-tournament__tables .shogi-tree { --tree-fit: both; flex: 1 1 0; min-height: 0; }
+/*
+ * 次の一局の枠の、相手の能力。左にレーダーチャートの形、右に8つのランク、下に特殊能力の札。
+ * 全体が1つのボタンで、押すとくわしい情報を開く(「くわしく ›」で押せることを示す)。
+ */
+.shogi-game .shogi-tournament__hud-ability {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  grid-template-areas: "radar ranks" "specials specials";
+  align-items: center;
+  gap: 0.3rem 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border: 2px solid #4b6585;
+  border-radius: 0.6rem;
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.06);
+  box-shadow: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .shogi-game .shogi-tournament__hud-ability:hover { border-color: var(--tr-gold); background: rgba(255, 252, 244, 0.1); }
+}
+.shogi-game .shogi-tournament__mini-radar { grid-area: radar; width: 100%; height: auto; }
+.shogi-game .shogi-tournament__mini-ranks {
+  grid-area: ranks;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.15rem 0.7rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-tournament__mini-ranks li { display: flex; align-items: center; justify-content: space-between; gap: 0.3rem; min-width: 0; }
+.shogi-game .shogi-tournament__mini-ranks span { overflow: hidden; font-size: 0.78em; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .shogi-tournament__mini-ranks b { flex: none; width: 1.55em; height: 1.3em; font-size: 0.85em; }
+.shogi-game .shogi-tournament__mini-specials { grid-area: specials; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.shogi-game .shogi-tournament__mini-specials .player-ability__chip { font-size: 0.75em; }
+.shogi-game .shogi-tournament__mini-more { margin-left: auto; color: var(--tr-gold); font-size: 0.8em; font-weight: 800; white-space: nowrap; }
+.shogi-game .shogi-tournament__chip--opening { color: #172632; background: #c9d6e6; }
+/*
+ * 枠が広いとき(タブレット縦)は、ランクを4列にして低くする。間延びしないよう、列の幅を決めて左に寄せる。
+ * 画面の幅ではなく、この欄の幅で決める(広い画面でも、右の列の中では狭い)。
+ */
+.shogi-game .shogi-tournament__hud[data-pending] { container-type: inline-size; }
+@container (min-width: 36rem) {
+  .shogi-game .shogi-tournament__mini-ranks { grid-template-columns: repeat(4, minmax(0, 6.5rem)); column-gap: 1.2rem; }
+}
+/*
+ * 縦長の画面で表を見ているときは、表に高さを譲る: 能力の欄とやこび姫の1行をたたむ(相手の名前・札・「対局する」は残す。
+ * 地図に戻すと、また出る)。
+ */
+@media (max-width: 1199px) and (orientation: portrait) {
+  .shogi-game .shogi-tournament__stage--table-open .shogi-tournament__hud-ability,
+  .shogi-game .shogi-tournament__stage--table-open .shogi-tournament__hud[data-pending] .shogi-tournament__tip-line { display: none; }
+}
+/*
+ * 背の低い画面(スマホ横、小さいスマホの縦): 能力のランクを4列にし、レーダーチャートの横に札を並べて低くする。
+ * やこび姫の1行は省く(地図の高さを残すため)。スマホ横では、さらに相手の顔を小さくする。
+ */
+@media (max-height: 500px) and (orientation: landscape), (max-height: 700px) and (orientation: portrait) {
+  .shogi-game .shogi-tournament__hud-ability { grid-template-columns: 3.4rem minmax(0, 1fr); grid-template-areas: "radar ranks" "radar specials"; padding: 0.3rem 0.5rem; }
+  .shogi-game .shogi-tournament__mini-ranks { grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 0.4rem; }
+  .shogi-game .shogi-tournament__mini-ranks span { font-size: 0.7em; }
+  .shogi-game .shogi-tournament__hud[data-pending] .shogi-tournament__tip-line { display: none; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .shogi-game .shogi-tournament__hud[data-pending] .shogi-tournament__hud-face { width: 3.6rem; height: 3.6rem; }
+}
 /* 広い画面・横長の画面: 左に地図、右に次の一局の枠。 */
 @media (min-width: 900px), (orientation: landscape) and (max-height: 600px) {
   .shogi-game .shogi-tournament__stage {
@@ -2037,6 +2182,22 @@ const statTiles = computed(() => {
   }
   .shogi-game .shogi-tournament__hud--boss { border-left-color: var(--tr-red); }
   .shogi-game .shogi-tournament__hud-face { width: 5rem; height: 5rem; }
+}
+
+/* もっと広い画面: 左に地図、真ん中にトーナメント表、右に次の一局の枠(U:7-5「いつも見たいものは横に出す」)。 */
+@media (min-width: 1200px) and (min-aspect-ratio: 4/3) {
+  .shogi-game .shogi-tournament__stage:not(.shogi-tournament__stage--entry):not(.shogi-tournament__stage--result) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(19rem, 26rem);
+    grid-template-areas: "top top top" "map table hud";
+  }
+  .shogi-game .shogi-tournament__view-switch { display: none; }
+  .shogi-game .shogi-tournament__stage .shogi-tournament__mapnotes { top: 0.5rem; }
+  .shogi-game .shogi-tournament__stage > .shogi-tournament__tables {
+    grid-area: table;
+    display: flex;
+    padding-top: 0.6rem;
+    border-left: 3px solid #0f1828;
+  }
 }
 
 /* ===== 入口と結果: 山の全景と番付(docs/ryuo-ui-renewal-design.mdの5-1・5-5) ===== */

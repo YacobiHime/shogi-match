@@ -165,7 +165,12 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/shogi-tournament__hud--boss': view\.pending\.stakes\?\.boss/);
     expect(tournament).toMatch(/<RyuoMountain[\s\S]*?@open-opponent="sheet = 'opponent'"/);
     expect(tournament).not.toMatch(/data-pane=|pane-tabs/);
-    expect(tournament).toMatch(/\.shogi-tournament__stage > \.shogi-tournament__tables \{\s*position: fixed;/);
+    // トーナメント表と相手の能力は、奥に隠さない。表は地図と並ぶタブ(広い画面では横にいつも)、能力は次の一局の枠にいつも出す。
+    expect(tournament).toMatch(/role="tablist" aria-label="地図と表の切り替え"[\s\S]*?data-table-open @click="tableOpen = true">トーナメント表</);
+    expect(tournament).toMatch(/\.shogi-tournament__stage > \.shogi-tournament__tables \{\s*grid-area: map;/);
+    expect(tournament).toMatch(/grid-template-areas: "top top top" "map table hud";/);
+    expect(tournament).toMatch(/data-hud-ability\s*@click="sheet = 'opponent'"[\s\S]*?<RadarChart class="shogi-tournament__mini-radar"/);
+    expect(tournament).toMatch(/data-pending[\s\S]*?opponentAbility\.specials\.slice\(0, 3\)[\s\S]*?data-tournament-play/);
     // 重ねて開いたものは、ブラウザの戻る操作で先に閉じる。
     expect(tournament).toMatch(/function goBack\(\) \{\s*if \(sheet\.value\) sheet\.value = "";\s*else if \(resultDetailOpen\.value\)[\s\S]*?else if \(tableOpen\.value\) tableOpen\.value = false;/);
     // 入口と結果も、ドット絵の山の地図の画面(段階C)。入口はカメラが頂上から降りる。

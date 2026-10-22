@@ -1,7 +1,7 @@
 <template>
   <svg
-    class="shogi-radar"
-    :viewBox="`${-margin} 0 ${size + margin * 2} ${size}`"
+    :class="['shogi-radar', { 'shogi-radar--bare': bare }]"
+    :viewBox="bare ? `${center - radius - 8} ${center - radius - 8} ${(radius + 8) * 2} ${(radius + 8) * 2}` : `${-margin} 0 ${size + margin * 2} ${size}`"
     role="img"
     :aria-label="ariaLabel"
     data-radar
@@ -19,10 +19,10 @@
         :cy="axisPoint(index, axis.value).y"
         r="3.5"
       />
-      <text class="shogi-radar__label" :x="labelPoint(index).x" :y="labelPoint(index).y" :text-anchor="anchor(index)" dominant-baseline="middle">
+      <text v-if="!bare" class="shogi-radar__label" :x="labelPoint(index).x" :y="labelPoint(index).y" :text-anchor="anchor(index)" dominant-baseline="middle">
         {{ axis.label }}
       </text>
-      <text class="shogi-radar__value" :x="labelPoint(index).x" :y="labelPoint(index).y + valueOffset" :text-anchor="anchor(index)" dominant-baseline="middle">
+      <text v-if="!bare" class="shogi-radar__value" :x="labelPoint(index).x" :y="labelPoint(index).y + valueOffset" :text-anchor="anchor(index)" dominant-baseline="middle">
         {{ axis.value === null ? "—" : axis.value }}
       </text>
     </g>
@@ -38,6 +38,8 @@ const props = defineProps({
   axes: { type: Array as PropType<Axis[]>, required: true },
   /** 軸の名前から、値の文字までの縦の間(図の単位)。文字を大きくするときに広げる。 */
   valueOffset: { type: Number, default: 14 },
+  /** 小さく描くとき。軸の名前と値を出さず、図の枠を形だけに詰める(名前とランクは横に別に並べる)。 */
+  bare: { type: Boolean, default: false },
 });
 
 const RINGS = [20, 40, 60, 80, 100];
@@ -75,6 +77,11 @@ const ariaLabel = computed(() => `レーダーチャート: ${props.axes.map((ax
 .shogi-game .shogi-radar__grid line { stroke: rgba(255, 252, 244, 0.22); stroke-width: 1; }
 .shogi-game .shogi-radar__area { fill: rgba(241, 165, 76, 0.35); stroke: #f1a54c; stroke-width: 2; stroke-linejoin: round; }
 .shogi-game .shogi-radar__dot { fill: #f1a54c; stroke: #172632; stroke-width: 1.5; }
+/* 小さく描くときは、線を太くして形を読みやすくする。 */
+.shogi-game .shogi-radar--bare .shogi-radar__grid polygon,
+.shogi-game .shogi-radar--bare .shogi-radar__grid line { stroke: rgba(255, 252, 244, 0.3); stroke-width: 3; }
+.shogi-game .shogi-radar--bare .shogi-radar__area { fill: rgba(241, 165, 76, 0.5); stroke-width: 6; }
+.shogi-game .shogi-radar--bare .shogi-radar__dot { display: none; }
 .shogi-game .shogi-radar__label { fill: #fffcf4; font-size: 13px; font-weight: 700; }
 .shogi-game .shogi-radar__value { fill: #f1a54c; font-size: 12px; font-weight: 700; }
 </style>
