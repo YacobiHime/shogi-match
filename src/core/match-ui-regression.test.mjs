@@ -129,7 +129,7 @@ describe("match screen regressions", () => {
     // 説明・エントリーの一言・次の対局・結果の解説は、やこび姫のセリフにする。
     // 大きなやこび姫の解説役(xl)は、竜王戦の説明のシートと、結果の解説の2人だけ。次の一局では1行の手がかりにする。
     expect(tournament.match(/<YakobiSays[^>]*size="xl"/g)?.length).toBe(2);
-    expect(tournament).toMatch(/data-tip>\s*<YakobiSays :lines="\[tipLine\]" size="sm"/);
+    expect(tournament).toMatch(/data-tip data-coach-more @click="sheet = 'coach'">[\s\S]*?\{\{ tipLine \}\}/);
     // エントリーの設定を選ぶと、やこび姫がその設定について話す(選択シートで選んだとき)。
     expect(tournament).toMatch(/difficulty\.value = Number\(value\); talkTopic\.value = "difficulty";/);
     for (const helper of ["ryuoGuideLines", "entryDifficultyLine", "opponentLines", "resultLines", "seasonPhaseLines"]) {
@@ -143,12 +143,16 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/data-entry-goal>\{\{ entryGoal \}\}/);
     expect(tournament).toMatch(/v-if="settingsOpen" class="shogi-tournament__settings"/);
     expect(tournament).toMatch(/v-if="guideOpen"[^>]*role="dialog"/);
-    // 次の一局: 勝てば・負ければと、山場の札(4-2)。タブはやめ、狭い画面では表を重ねて開く。
+    // 次の一局: 勝てば・負ければと、山場の札(4-2)。期の画面はドット絵の山の地図と下の枠(docs/ryuo-ui-renewal-design.mdの5-2)。
+    // 表は「表」で重ねて開く。
     expect(tournament).toMatch(/data-stakes-win>\{\{ view\.pending\.stakes\.win \}\}/);
     expect(tournament).toMatch(/data-stakes-lose>\{\{ view\.pending\.stakes\.lose \}\}/);
-    expect(tournament).toMatch(/shogi-tournament__match--boss': view\.pending\.stakes\?\.boss/);
+    expect(tournament).toMatch(/shogi-tournament__hud--boss': view\.pending\.stakes\?\.boss/);
+    expect(tournament).toMatch(/<RyuoMountain[\s\S]*?@open-opponent="sheet = 'opponent'"/);
     expect(tournament).not.toMatch(/data-pane=|pane-tabs/);
-    expect(tournament).toMatch(/\.shogi-tournament__layout--table-open > \.shogi-tournament__tables \{\s*position: fixed;/);
+    expect(tournament).toMatch(/\.shogi-tournament__stage > \.shogi-tournament__tables \{\s*position: fixed;/);
+    // 重ねて開いたものは、ブラウザの戻る操作で先に閉じる。
+    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(sheet\.value\) sheet\.value = "";\s*else if \(tableOpen\.value\) tableOpen\.value = false;/);
     // ボタンは短い動詞(U:3-2)。結果の画面の主役は「次の期へ」。
     expect(tournament).toMatch(/data-tournament-play @click="emit\('play'\)">対局する</);
     expect(tournament).toMatch(/data-next-season @click="toNextSeason">次の期へ</);
@@ -398,7 +402,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/watch\(tournamentOpen, \(open\) => \{[\s\S]*?loadOshi\(browserStorage\(\)\)/);
     expect(source).toMatch(/:oshi="ryuoOshi"/);
     const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
-    expect(tournament).toMatch(/v-if="predictionOptions"[\s\S]*?data-prediction/);
+    expect(tournament).toMatch(/v-else-if="sheet === 'predict' && predictionOptions"[\s\S]*?data-prediction/);
     // 予想の的中は、計算(computed)の中ではなくwatchで一度だけ記録する。
     expect(tournament).toMatch(/watch\(predictionResult, countPredictionHit, \{ immediate: true \}\)/);
     expect(tournament).toMatch(/:mark-id="oshi\?\.id \?\? ''"/);
