@@ -242,7 +242,7 @@
           <i v-for="game in view.userGames" :key="`${game.kind}-${game.round}`" :class="game.win ? 'is-win' : 'is-loss'">{{ game.win ? "○" : "●" }}</i>
         </p>
         <p class="shogi-tournament__goal-box"><small>次の期</small><span>{{ nextText }}</span></p>
-        <button type="button" class="shogi-tournament__start" data-meijin-next @click="toNext">次の期へ</button>
+        <button type="button" class="shogi-tournament__start" data-meijin-next @click="emit('ceremony')">表彰式へ</button>
       </section>
     </div>
   </div>
@@ -304,6 +304,8 @@ const emit = defineEmits<{
   resume: [];
   "result-seen": [];
   back: [];
+  /** 結果の「表彰式へ」。賞状は大会の画面が出し、終えたら大会の選択へ。 */
+  ceremony: [];
 }>();
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
@@ -474,10 +476,6 @@ const nextText = computed(() => {
   if (props.entryClass === "meijin") return "名人として、防衛戦へ";
   return `${CLASS_LABELS[props.entryClass]}で、第${props.entryNo}期の順位戦`;
 });
-function toNext() {
-  emit("result-seen");
-  screen.value = "entry";
-}
 
 /** 戻る操作。重ねて開いたものを閉じるか、入口へ戻したら真。入口なら偽(大会の選択へ戻る)。 */
 function goBack() {

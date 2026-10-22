@@ -481,6 +481,7 @@
       @meijin-play="startMeijinGame"
       @meijin-resume="resumeMeijinGame"
       @meijin-result-seen="markMeijinResultSeen"
+      :awards="seasonAwards"
     />
     <YakobiNote
       v-if="yakobiNoteOpen"
@@ -1941,6 +1942,7 @@ import {
   saveCareer,
   saveSeason,
 } from "./core/ryuo-career.mjs";
+import { addAward, loadAwards, meijinAward, ryuoAward } from "./core/season-award.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { hasKikiGlasses, loadTutorialProgress } from "./core/tutorial-progress.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
@@ -2140,7 +2142,7 @@ import {
 import { type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor } from "./core/play-coach.mjs";
 import { counterStyle, loadCounterKey, ryuoNextPlan, ryuoNextSeasonPlan, saveCounterKey } from "./core/ryuo-next.mjs";
 import {
-  applyMeijinSeason, createLeague, createMeijinSeason, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
+  CLASS_LABELS, applyMeijinSeason, createLeague, createMeijinSeason, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
   recordMeijinGame, resumeMeijinSeason, saveMeijinCareer, saveMeijinSeason, userClass,
 } from "./core/meijin.mjs";
 import { enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight } from "./core/play-insight.mjs";
@@ -2611,6 +2613,20 @@ function acceptPlayerName() {
     saveSeason(browserStorage(), renamed);
   }
 }
+/** 賞状帳(core/season-award.mjs、docs/season-award-design.md)。竜王戦・名人戦の期が終わったら、賞状を1枚足す。 */
+const seasonAwards = ref(loadAwards(browserStorage()));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function awardRyuoSeason(season: any) {
+  seasonAwards.value = addAward(browserStorage(), ryuoAward(season, { playerName: playerDisplayName(playerName.value) }));
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function awardMeijinSeason(season: any) {
+  const nextClass = meijinCareer.value.history?.find((entry: { no: number }) => entry.no === season.no)?.next ?? null;
+  seasonAwards.value = addAward(browserStorage(), meijinAward(season, { playerName: playerDisplayName(playerName.value), classLabels: CLASS_LABELS, nextClass }));
+}
+// 賞状帳を作る前に終えて、まだ結果を見ていない期にも、表彰式で賞状を渡す。
+if (ryuoSeason.value?.phase === "done" && ryuoSeason.value.result) awardRyuoSeason(ryuoSeason.value);
+if (meijinSeason.value?.phase === "done" && meijinSeason.value.result) awardMeijinSeason(meijinSeason.value);
 const analysisMenuOpen = ref(false);
 // 対局準備で開いている選択シート。空なら閉じている。
 const pregamePicker = ref("");
@@ -4415,6 +4431,7 @@ function finalizeRyuoSeason() {
   const { career, titles } = applySeason(ryuoCareer.value, season);
   ryuoCareer.value = career;
   saveCareer(browserStorage(), career);
+  awardRyuoSeason(season);
   // 推しの棋士の、この期の組の順位(ほかの組でも、期の終わりには順位が決まっている)。名簿を進める前に控える。
   const oshiId = loadOshi(browserStorage());
   const oshiBefore = oshiId ? ryuoRoster.value?.players?.[oshiId] ?? null : null;
@@ -4736,6 +4753,7 @@ function recordMeijinOutcome(matchResult: MatchResult) {
   if (next.phase === "done") {
     meijinCareer.value = applyMeijinSeason(meijinCareer.value, next);
     saveMeijinCareer(browserStorage(), meijinCareer.value);
+    awardMeijinSeason(next);
   }
 }
 /** 中断した名人戦の対局が、いまの期の次の一局と同じ相手なら、その手数。 */

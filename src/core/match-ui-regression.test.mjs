@@ -213,7 +213,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/data-hud-ability\s*@click="sheet = 'opponent'"[\s\S]*?<RadarChart class="shogi-tournament__mini-radar"/);
     expect(tournament).toMatch(/data-pending[\s\S]*?opponentAbility\.specials\.slice\(0, 3\)[\s\S]*?data-tournament-play/);
     // 重ねて開いたものは、ブラウザの戻る操作で先に閉じる。
-    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(sheet\.value\) sheet\.value = "";\s*else if \(resultDetailOpen\.value\)[\s\S]*?else if \(tableOpen\.value\) tableOpen\.value = false;/);
+    expect(tournament).toMatch(/function goBack\(\) \{[\s\S]*?if \(sheet\.value\) sheet\.value = "";\s*else if \(resultDetailOpen\.value\)[\s\S]*?else if \(tableOpen\.value\) tableOpen\.value = false;/);
     // 入口と結果も、ドット絵の山の地図の画面(段階C)。入口はカメラが頂上から降りる。
     expect(tournament).toMatch(/<RyuoMountain :road="entryMapRoad" :asset-base-url="assetBaseUrl" intro/);
     expect(tournament).toMatch(/data-result-screen>[\s\S]*?<RyuoMountain v-if="view\.road"/);
@@ -242,7 +242,16 @@ describe("match screen regressions", () => {
     // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。
     expect(tournament).toMatch(/<RyuoVersus[\s\S]*?@done="startPlay"/);
     expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*emit\("play"\);/);
-    expect(tournament).toMatch(/data-next-season @click="toNextSeason">次の期へ</);
+    // 期の結果の主役は「表彰式へ」。賞状(縦書き・判子)をわたし、閉じると期を見終えて大会の選択へ(docs/season-award-design.md)。
+    expect(tournament).toMatch(/data-award-open @click="openCeremony\(`ryuo-\$\{seasonNo\}`\)">表彰式へ</);
+    expect(tournament).toMatch(/@ceremony="openCeremony\(`meijin-\$\{meijinView\?\.no \?\? 0\}`\)"/);
+    expect(tournament).toMatch(/:button-text="awardCeremony \? '大会の選択へ' : '閉じる'"/);
+    expect(tournament).toMatch(/function finishCeremony\(\) \{\s*if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
+    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(awardShown\.value\) \{/);
+    expect(tournament).toMatch(/data-award-book @click="bookOpen = true"/);
+    // 賞状は期が終わったときに対局画面が足す(竜王戦・名人戦とも)。
+    expect(source).toMatch(/saveCareer\(browserStorage\(\), career\);\s*awardRyuoSeason\(season\);/);
+    expect(source).toMatch(/saveMeijinCareer\(browserStorage\(\), meijinCareer\.value\);\s*awardMeijinSeason\(next\);/);
     expect(source).toContain('{{ tournamentResult.done ? "結果を見る" : tournamentResult.back }}');
     expect(source).toMatch(/back: "竜王戦へ戻る"/);
     expect(source).toMatch(/back: "名人戦へ戻る"/);

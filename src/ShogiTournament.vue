@@ -58,6 +58,25 @@
               </button>
             </div>
           </section>
+          <section class="shogi-title__group" aria-labelledby="shogi-tournament-record">
+            <h2 id="shogi-tournament-record" class="shogi-title__group-title">記録</h2>
+            <div class="shogi-title__tiles shogi-tournament__soon-tiles">
+              <button type="button" class="shogi-title__tile" data-award-book @click="bookOpen = true">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="2" y="3" width="12" height="10" />
+                  </g>
+                  <g fill="#172632">
+                    <rect x="9" y="5" width="1" height="6" />
+                    <rect x="6" y="5" width="1" height="4" />
+                  </g>
+                  <rect x="4" y="9" width="2" height="2" fill="#c4604c" />
+                </svg>
+                <span class="shogi-title__label">賞状帳</span>
+                <small class="shogi-title__desc">{{ awards.length ? `${awards.length}枚` : "期を終えるともらえる" }}</small>
+              </button>
+            </div>
+          </section>
           <section class="shogi-title__group" aria-labelledby="shogi-tournament-road">
             <h2 id="shogi-tournament-road" class="shogi-title__group-title">プロへの道</h2>
             <div class="shogi-title__tiles shogi-tournament__soon-tiles">
@@ -132,6 +151,7 @@
           @play="emit('meijin-play')"
           @resume="emit('meijin-resume')"
           @result-seen="emit('meijin-result-seen')"
+          @ceremony="openCeremony(`meijin-${meijinView?.no ?? 0}`)"
           @back="backToSelect"
         />
         <!--
@@ -581,7 +601,7 @@
               <button type="button" class="shogi-tournament__sub" data-result-table @click="screen = 'season'">表を見る</button>
               <button type="button" class="shogi-tournament__sub" @click="emit('open-note')">ノートを見る</button>
             </div>
-            <button type="button" class="shogi-tournament__start" data-next-season @click="toNextSeason">次の期へ</button>
+            <button type="button" class="shogi-tournament__start" data-award-open @click="openCeremony(`ryuo-${seasonNo}`)">表彰式へ</button>
           </section>
 
           <!-- くわしい結果(統計・レーダーチャート・やこび姫の解説)。 -->
@@ -629,6 +649,31 @@
 
       </div>
     </template>
+
+    <!-- 賞状帳(docs/season-award-design.md)。古い順に並べ、押すとその賞状を開く。 -->
+    <div v-if="bookOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="賞状帳" data-award-list @click.self="bookOpen = false">
+      <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
+        <h2>賞状帳</h2>
+        <ul v-if="awards.length" class="shogi-tournament__awards">
+          <li v-for="item in [...awards].reverse()" :key="item.id">
+            <button type="button" class="shogi-tournament__award-row" :data-award-row="item.id" @click="openBookAward(item)">
+              <span :class="['shogi-tournament__award-seal', `shogi-tournament__award-seal--${item.grade}`]" aria-hidden="true">{{ item.seal }}</span>
+              <span class="shogi-tournament__award-text">{{ awardLine(item) }}<small>{{ item.wins }}勝{{ item.losses }}敗{{ item.grade === "fight" ? "・敢闘賞" : "" }}</small></span>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="shogi-tournament__text">竜王戦や名人戦の期を終えると、表彰式で賞状がもらえるよ。ここにたまっていくからね。</p>
+        <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="bookOpen = false">閉じる</button>
+      </div>
+    </div>
+    <SeasonAward
+      v-if="awardShown"
+      :award="awardShown"
+      :ceremony="awardCeremony"
+      :button-text="awardCeremony ? '大会の選択へ' : '閉じる'"
+      :asset-base-url="assetBaseUrl"
+      @done="finishAward"
+    />
   </div>
 </template>
 
@@ -642,6 +687,8 @@ import RyuoMountain, { type RoadView } from "./RyuoMountain.vue";
 import RyuoVersus from "./RyuoVersus.vue";
 import ShogiMeijin, { type MeijinView } from "./ShogiMeijin.vue";
 import YakobiSays from "./YakobiSays.vue";
+import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
+import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
@@ -767,6 +814,8 @@ const props = defineProps({
   meijinHolderName: { type: String, default: "" },
   meijinSettings: { type: Object as PropType<Record<string, unknown> | null>, default: null },
   meijinSuspendedMoves: { type: Number as PropType<number | null>, default: null },
+  /** 賞状帳(core/season-award.mjs。古い順)。期が終わったときに、対局画面が足す。 */
+  awards: { type: Array as PropType<SeasonAwardData[]>, default: () => [] },
 });
 const emit = defineEmits<{
   close: [];
@@ -847,7 +896,11 @@ const backText = computed(() => (screen.value === "result" ? "大会選択へ" :
  * 結果は見終えたことにして、大会の選択へ。ほかの画面も、大会の選択へ。選択の画面なら、閉じる。
  */
 function goBack() {
-  if (sheet.value) sheet.value = "";
+  if (awardShown.value) {
+    awardShown.value = null;
+    awardCeremony.value = false;
+  } else if (bookOpen.value) bookOpen.value = false;
+  else if (sheet.value) sheet.value = "";
   else if (resultDetailOpen.value) resultDetailOpen.value = false;
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (tableOpen.value) tableOpen.value = false;
@@ -1249,14 +1302,39 @@ function enter() {
   settingsOpen.value = false;
   screen.value = "season";
 }
-/** 結果を見終えて、次の期の入口へ。 */
-function toNextSeason() {
-  emit("result-seen");
-  reEntry.value = false;
-  viewStage.value = null;
-  groupChoice.value = null;
-  talkTopic.value = "intro";
-  screen.value = "ryuo";
+// ---- 表彰式と賞状帳(docs/season-award-design.md)
+/** 開いている賞状。表彰式(期の結果から)なら、閉じると期を見終えて大会の選択へ。 */
+const awardShown = ref<SeasonAwardData | null>(null);
+const awardCeremony = ref(false);
+const bookOpen = ref(false);
+/** 期の結果の「表彰式へ」。賞状がなければ(保存できない環境など)、そのまま大会の選択へ。 */
+function openCeremony(id: string) {
+  const award = props.awards.find((item) => item.id === id) ?? null;
+  if (!award) {
+    finishCeremony();
+    return;
+  }
+  awardShown.value = award;
+  awardCeremony.value = true;
+}
+function openBookAward(award: SeasonAwardData) {
+  awardShown.value = award;
+  awardCeremony.value = false;
+}
+function finishAward() {
+  const ceremony = awardCeremony.value;
+  awardShown.value = null;
+  awardCeremony.value = false;
+  if (ceremony) finishCeremony();
+}
+/** 表彰式を終えた。期の結果は見終えたことにして、大会の選択へ(次の期は、そこから自分で選ぶ)。 */
+function finishCeremony() {
+  if (screen.value === "meijin") {
+    emit("meijin-result-seen");
+    screen.value = "select";
+    return;
+  }
+  backToSelect();
 }
 
 // ---- トーナメント表: 期の画面の「表」で重ねて開く。
@@ -1395,7 +1473,9 @@ const statTiles = computed(() => {
  *     --tr-action:  大きな操作ボタン(参加・対局開始など)の高さ
  *   選択肢の並びは、グリッドで等分して、幅もそろえる。
  */
-.shogi-game .shogi-dex.shogi-tournament {
+/* 色と大きさの変数。大会の選択の上に開く賞状帳(と賞状)でも使う。 */
+.shogi-game .shogi-dex.shogi-tournament,
+.shogi-game .shogi-tournament-home .shogi-tournament__sheet {
   --tr-control: 2.75rem;
   --tr-action: 3.25rem;
   --tr-gap: 0.5rem;
@@ -1407,6 +1487,8 @@ const statTiles = computed(() => {
   --tr-shadow: #121e29;
   --tr-line: rgba(255, 252, 244, 0.16);
   --tr-mincho: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
+}
+.shogi-game .shogi-dex.shogi-tournament {
   background: #1e2d3d;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
 }
@@ -1923,6 +2005,41 @@ const statTiles = computed(() => {
   overflow-y: auto;
   box-shadow: 0 6px 0 var(--tr-shadow);
 }
+/* 賞状帳の行。左の小さな判子の色は賞状の格(金・銀・朱・敢闘は灰青)。 */
+.shogi-game .shogi-tournament__awards { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-tournament__award-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 52px;
+  padding: 0.4rem 0.7rem;
+  border: 2px solid #33465e;
+  border-radius: 0.6rem;
+  color: #fffcf4;
+  background: #172632;
+  box-shadow: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.shogi-game .shogi-tournament__award-seal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 2px solid #fffcf4;
+  border-radius: 0.3rem;
+  background: #5d6f80;
+  font-family: var(--tr-mincho);
+  font-weight: 900;
+}
+.shogi-game .shogi-tournament__award-seal--gold { background: #c9962e; }
+.shogi-game .shogi-tournament__award-seal--silver { background: #8c98a6; }
+.shogi-game .shogi-tournament__award-seal--red { background: var(--tr-red); }
+.shogi-game .shogi-tournament__award-text { display: grid; gap: 0.1rem; min-width: 0; font-weight: 900; }
+.shogi-game .shogi-tournament__award-text small { color: #9fb3c8; font-size: 0.8em; font-weight: 800; }
 .shogi-game .shogi-tournament__arrival { margin: 0; color: rgba(255, 252, 244, 0.8); font-size: 0.85em; font-weight: 700; text-align: center; }
 
 /* この一局に賭けているもの。勝てば(金)・負ければ(灰)を並べ、目標まであと何勝を上に1行。 */
