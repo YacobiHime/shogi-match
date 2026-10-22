@@ -12,20 +12,131 @@
  */
 
 export const COLLECTION_STORAGE_KEY = 'yacobihime:shogi-match:collection:v1';
+/** 最後にコレクションを開いた時刻(それより後に初めて取った印に「NEW」を付ける)。 */
+export const COLLECTION_SEEN_KEY = 'yacobihime:shogi-match:collection-seen:v1';
 
 /** 印に数えない戦法(基本の居飛車は、意識しなくても組めてしまうため)。 */
 const EXCLUDED_STRATEGY_IDS = new Set(['ibisha']);
 
 /**
  * 集める戦法・囲いの一覧。定跡図鑑と同じ定義から作る。
- * @param {{ strategies: { id: string, label: string }[], castles: { id: string, label: string }[] }} definitions
- * @returns {{ kind: 'strategy' | 'castle', id: string, label: string }[]}
+ * @param {{ strategies: { id: string, label: string, family?: string }[], castles: { id: string, label: string }[] }} definitions
+ * @returns {{ kind: 'strategy' | 'castle', id: string, label: string, family: string }[]}
  */
 export function collectionCatalog({ strategies, castles }) {
   return [
-    ...strategies.filter(({ id }) => !EXCLUDED_STRATEGY_IDS.has(id)).map(({ id, label }) => ({ kind: 'strategy', id, label })),
-    ...castles.map(({ id, label }) => ({ kind: 'castle', id, label })),
+    ...strategies.filter(({ id }) => !EXCLUDED_STRATEGY_IDS.has(id)).map(({ id, label, family = '' }) => ({ kind: /** @type {'strategy'} */ ('strategy'), id, label, family })),
+    ...castles.map(({ id, label }) => ({ kind: /** @type {'castle'} */ ('castle'), id, label, family: 'castle' })),
   ];
+}
+
+// ---- アルバム(やこびノートのコレクション。docs/player-world-note-design.mdの4章)
+
+/** 振り飛車の戦法の系統(定跡図鑑のfamily)。奇襲はspecial。ほかの戦法は居飛車のページ。 */
+const RANGING_FAMILIES = new Set(['shiken', 'sangen', 'nakabisha', 'mukai']);
+
+/** アルバムのページ。 */
+export const ALBUM_PAGES = Object.freeze([
+  { id: 'static', label: '居飛車' },
+  { id: 'ranging', label: '振り飛車' },
+  { id: 'surprise', label: '奇襲' },
+  { id: 'castle', label: '囲い' },
+  { id: 'tesuji', label: '手筋' },
+  { id: 'levels', label: 'Lvの壁' },
+  { id: 'memorial', label: '記念' },
+]);
+
+/** 戦法・囲いのページ。 */
+export function albumPageOf(entry) {
+  if (entry.kind === 'castle') return 'castle';
+  if (entry.family === 'special') return 'surprise';
+  return RANGING_FAMILIES.has(entry.family) ? 'ranging' : 'static';
+}
+
+/**
+ * 作戦カードで使えるのに、まだ組んでいない戦法・囲い(「挑戦できる」)。作戦カードの戦法(名前のないもの)は戦法で、
+ * 囲いだけのカードと「矢倉」のように囲いが主役のカードは囲いで数える(opening-unlocks.mjsのplanCompletedCountと同じ)。
+ * @param {readonly { id: string, strategyId: string, castles: readonly string[], name?: string }[]} plans
+ * @param {Iterable<string>} unlockedIds
+ * @returns {Map<string, string>} 「kind:id」→ 作戦カードのid
+ */
+export function planCardsByFormation(plans, unlockedIds) {
+  const unlocked = new Set(unlockedIds);
+  const result = new Map();
+  for (const plan of plans) {
+    if (!unlocked.has(plan.id)) continue;
+    const key = !plan.strategyId || plan.name ? `castle:${plan.castles[0]}` : `strategy:${plan.strategyId}`;
+    if (!result.has(key)) result.set(key, plan.id);
+  }
+  return result;
+}
+
+/**
+ * アルバムの戦法・囲いのページのカード。挑戦できるカードを先に、あとは定跡図鑑の順。
+ * @param {ReturnType<typeof createCollection>} state
+ * @param {{ kind: string, id: string, label: string, family: string }[]} catalog
+ * @param {string} page
+ * @param {{ playable?: Map<string, string>, seenAt?: number }} [options] playableはplanCardsByFormationの結果
+ */
+export function albumCards(state, catalog, page, { playable = new Map(), seenAt = 0 } = {}) {
+  const cards = catalog.filter((entry) => albumPageOf(entry) === page).map((entry) => {
+    const got = state.formations[entry.label];
+    const key = `${entry.kind}:${entry.id}`;
+    return {
+      ...entry,
+      key,
+      count: got?.count ?? 0,
+      firstAt: got?.firstAt ?? 0,
+      got: Boolean(got),
+      planId: playable.get(key) ?? '',
+      ready: !got && playable.has(key),
+      isNew: Boolean(got && seenAt && got.firstAt > seenAt),
+    };
+  });
+  return [...cards.filter(({ ready }) => ready), ...cards.filter(({ ready }) => !ready)];
+}
+
+/**
+ * Lvの壁。Lv1〜40を10段ずつ4本の階段にする。nextは、勝つと印が増えるいちばん低いLv。
+ * @param {ReturnType<typeof createCollection>} state
+ * @param {{ recommended?: number | null }} [options] recommendedは、おすすめの強さのLv(その前後1つに印)
+ */
+export function levelWall(state, { recommended = null } = {}) {
+  const next = COLLECTION_LEVELS.find((level) => !state.levels[level]) ?? null;
+  const rows = [
+    { id: 'beginner', label: '初級', from: 1 },
+    { id: 'intermediate', label: '中級', from: 11 },
+    { id: 'advanced', label: '上級', from: 21 },
+    { id: 'master', label: '達人', from: 31 },
+  ];
+  return {
+    next,
+    rows: rows.map((row) => {
+      const levels = COLLECTION_LEVELS.slice(row.from - 1, row.from + 9).map((level) => ({
+        level,
+        got: Boolean(state.levels[level]),
+        next: level === next,
+        recommended: recommended !== null && Math.abs(level - recommended) <= 1,
+      }));
+      return { ...row, levels, got: levels.filter(({ got }) => got).length };
+    }),
+  };
+}
+
+/** 最後にコレクションを開いた時刻。読めなければ0(NEWは付けない)。 */
+export function loadCollectionSeen(storage) {
+  try {
+    return Number(storage?.getItem(COLLECTION_SEEN_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+export function saveCollectionSeen(storage, at = Date.now()) {
+  try {
+    storage?.setItem(COLLECTION_SEEN_KEY, String(at));
+  } catch {
+    // 保存できなくても、遊びは止めない。
+  }
 }
 
 /** Lvの壁。Lv1〜40に初めて勝つと印が1つ。 */

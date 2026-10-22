@@ -206,6 +206,8 @@ const props = defineProps({
   broadOptions: { type: Array as PropType<{ value: string | number; label: string }[]>, default: () => [] },
   // 大まかな方針を選んでいるときの値。作戦カードを選んでいるときは空。
   broadValue: { type: String, default: "" },
+  /** 開いたときに、くわしい画面を開く作戦(やこびノートのコレクションのカードから)。使えない作戦なら一覧のまま。 */
+  initialDetailId: { type: String, default: "" },
   // 手順の名前を、先手なら▲、後手なら盤を反転して△で書く。
   playerColor: { type: String as PropType<"black" | "white">, default: "black" },
 });
@@ -356,6 +358,8 @@ function onKeydown(event: KeyboardEvent) {
   else emit("close");
 }
 onMounted(() => {
+  const initial = props.initialDetailId ? props.entries.find((entry) => entry.plan.id === props.initialDetailId && !entry.locked) : null;
+  if (initial) openDetail(initial);
   window.addEventListener("keydown", onKeydown);
   panel.value?.focus({ preventScroll: true });
 });

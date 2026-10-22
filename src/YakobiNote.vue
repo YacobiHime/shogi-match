@@ -344,27 +344,131 @@
         </section>
 
         <!--
-          コレクション。対局で組んだ戦法・囲いと、初めて勝ったLvを印として並べる。まだのものも名前は見せる。
-          印の数で使えるようになる着せ替えは、ここで選ぶ。
+          コレクション(docs/player-world-note-design.mdの4章)。いちばん上に印の合計と次の着せ替えまでのゲージ、
+          「印のアルバム｜着せ替え」の切り替え。アルバムはページ(居飛車・振り飛車・奇襲・囲い・手筋・Lvの壁・記念)に分け、
+          戦法・囲いは完成形の小さな盤のカード。作戦カードで使えるのにまだ組んでいないものを「挑戦できる」として先に出す。
         -->
-        <section v-if="tab === 'collection'" id="shogi-note-pane-collection" class="shogi-note__panel" role="tabpanel" aria-label="コレクション">
-          <section class="shogi-note__card" aria-labelledby="shogi-note-collection-count" data-note-collection>
-            <h2 id="shogi-note-collection-count">集めた印</h2>
-            <dl class="shogi-note__tiles shogi-note__tiles--four">
-              <div><dt>印</dt><dd>{{ collectionTotal }}<small>/ {{ collectionMax }}</small></dd></div>
-              <div><dt>戦法・囲い・手筋</dt><dd>{{ collectedFormationCount + collectedTesujiCount }}<small>/ {{ COLLECTION_CATALOG.length + TESUJI_IDS.length }}</small></dd></div>
-              <div><dt>勝ったLv</dt><dd>{{ collectedLevelCount }}<small>/ {{ COLLECTION_LEVELS.length }}</small></dd></div>
-              <div><dt>神の一手</dt><dd>{{ collection.godMoves }}<small>回</small></dd></div>
-            </dl>
-            <p v-if="collection.predictionsHit" class="shogi-note__hint" data-note-predictions>竜王戦の組優勝の予想を、{{ collection.predictionsHit }}回当てたよ！</p>
-            <p class="shogi-note__hint">
-              対局で定跡図鑑の戦法・囲いを組んだり、手筋図鑑の手筋を指したりすると、印が1つ増えるよ。CPUの各Lvに初めて勝っても1つ（レーティングの対象の対局だけ）。
-              <template v-if="nextUnlock">次の着せ替えまで、印あと{{ nextUnlock.remaining }}個！</template>
-              <template v-else>着せ替えは全部使えるようになったよ！</template>
-            </p>
+        <section v-if="tab === 'collection'" id="shogi-note-pane-collection" class="shogi-note__panel shogi-note__panel--album" role="tabpanel" aria-label="コレクション">
+          <section class="shogi-note__card shogi-note__album-head" aria-labelledby="shogi-note-collection-count" data-note-collection>
+            <div class="shogi-note__album-gauge">
+              <h2 id="shogi-note-collection-count">集めた印<strong>{{ collectionTotal }}</strong><small>/ {{ collectionMax }}</small></h2>
+              <template v-if="nextThemeView">
+                <div class="shogi-note__gauge" role="progressbar" :aria-valuenow="nextThemeView.progress" aria-valuemin="0" aria-valuemax="100" :aria-label="`${nextThemeView.name}まで`">
+                  <span :style="{ width: `${nextThemeView.progress}%` }"></span>
+                </div>
+                <p class="shogi-note__gauge-text" data-note-next-theme>
+                  <img :src="nextThemeView.preview" alt="" aria-hidden="true">
+                  着せ替え「{{ nextThemeView.name }}」まで、あと<b>{{ nextThemeView.remaining }}</b>個
+                </p>
+              </template>
+              <p v-else class="shogi-note__gauge-text">着せ替えは全部使えるようになったよ！</p>
+            </div>
+            <div class="shogi-note__album-switch" role="tablist" aria-label="コレクションの切り替え">
+              <button type="button" role="tab" :aria-selected="albumView === 'album'" data-album-view="album" @click="albumView = 'album'">印のアルバム</button>
+              <button type="button" role="tab" :aria-selected="albumView === 'themes'" data-album-view="themes" @click="albumView = 'themes'">着せ替え</button>
+            </div>
           </section>
 
-          <section class="shogi-note__card" aria-labelledby="shogi-note-themes">
+          <template v-if="albumView === 'album'">
+            <nav class="shogi-note__album-pages" role="tablist" aria-label="アルバムのページ">
+              <button
+                v-for="item in albumPageTabs"
+                :key="item.id"
+                type="button"
+                role="tab"
+                :aria-selected="albumPage === item.id"
+                :data-album-page="item.id"
+                @click="chooseAlbumPage(item.id)"
+              >{{ item.label }}<small v-if="item.total">{{ item.got }}/{{ item.total }}</small></button>
+            </nav>
+
+            <!-- 戦法・囲い: 完成形の小さな盤のカード。押すと作戦カードのくわしい画面(なければ定跡図鑑)。 -->
+            <section v-if="albumFormationPage" class="shogi-note__card shogi-note__album" :aria-label="albumPageLabel" data-album-cards>
+              <p v-if="albumReadyCount" class="shogi-note__hint">「挑戦できる」は、作戦カードで選べるのに、まだ対局で組んでいない形だよ。押すと手順が見られるよ。</p>
+              <ul class="shogi-note__album-grid">
+                <li v-for="card in albumFormationCards" :key="card.key">
+                  <button
+                    type="button"
+                    :class="['shogi-note__album-card', { 'shogi-note__album-card--got': card.got, 'shogi-note__album-card--ready': card.ready, 'shogi-note__album-card--new': card.isNew }]"
+                    :data-album-card="card.key"
+                    @click="openAlbumCard(card)"
+                  >
+                    <FormationThumb
+                      class="shogi-note__album-thumb"
+                      :strategy-id="card.kind === 'strategy' ? card.id : ''"
+                      :castle-id="card.kind === 'castle' ? card.id : ''"
+                      :silhouette="!card.got && !card.ready"
+                    />
+                    <span class="shogi-note__album-name">{{ card.label }}</span>
+                    <small v-if="card.got" class="shogi-note__album-status">×{{ card.count }}</small>
+                    <small v-else-if="card.ready" class="shogi-note__album-status shogi-note__album-status--ready">挑戦できる</small>
+                    <small v-else class="shogi-note__album-status">まだ</small>
+                    <em v-if="card.isNew" class="shogi-note__album-new">NEW</em>
+                  </button>
+                </li>
+              </ul>
+            </section>
+
+            <!-- 手筋: 名前のカード。押すと手筋図鑑。 -->
+            <section v-else-if="albumPage === 'tesuji'" class="shogi-note__card shogi-note__album" aria-label="手筋" data-album-tesuji>
+              <p class="shogi-note__hint">対局で手筋図鑑の手筋や詰みの形を指すと、印が1つ増えるよ。</p>
+              <ul class="shogi-note__album-grid shogi-note__album-grid--text">
+                <li v-for="card in tesujiCards" :key="card.id">
+                  <button
+                    type="button"
+                    :class="['shogi-note__album-card', 'shogi-note__album-card--text', { 'shogi-note__album-card--got': card.got, 'shogi-note__album-card--new': card.isNew }]"
+                    :data-album-tesuji="card.id"
+                    @click="emit('open-dex', { kind: 'tesuji', id: card.id })"
+                  >
+                    <span class="shogi-note__album-name">{{ card.label }}</span>
+                    <small class="shogi-note__album-status">{{ card.got ? `×${card.count}` : "まだ" }}</small>
+                    <em v-if="card.isNew" class="shogi-note__album-new">NEW</em>
+                  </button>
+                </li>
+              </ul>
+            </section>
+
+            <!-- Lvの壁: 10段ずつ4本の階段。次の壁を縁取り、おすすめの強さの前後に印。 -->
+            <section v-else-if="albumPage === 'levels'" class="shogi-note__card shogi-note__album" aria-label="Lvの壁" data-album-levels>
+              <p class="shogi-note__hint">
+                CPUの各Lvに初めて勝つと、印が1つ増えるよ（レーティングの対象の対局だけ）。
+                <template v-if="wall.next">次の壁は<b>Lv.{{ wall.next }}</b>。</template>
+              </p>
+              <div v-for="row in wall.rows" :key="row.id" class="shogi-note__wall-row">
+                <p class="shogi-note__wall-label">{{ row.label }}<small>{{ row.got }}/10</small></p>
+                <ol class="shogi-note__wall" :aria-label="`${row.label}のLv`">
+                  <li
+                    v-for="cell in row.levels"
+                    :key="cell.level"
+                    :class="{ 'shogi-note__wall--got': cell.got, 'shogi-note__wall--next': cell.next, 'shogi-note__wall--recommended': cell.recommended }"
+                    :title="cell.got ? `Lv.${cell.level}に勝った` : `Lv.${cell.level}にはまだ勝っていない`"
+                  >{{ cell.level }}</li>
+                </ol>
+              </div>
+              <p class="shogi-note__wall-legend"><span class="shogi-note__wall-swatch shogi-note__wall-swatch--got"></span>勝った<span class="shogi-note__wall-swatch shogi-note__wall-swatch--next"></span>次の壁<span class="shogi-note__wall-swatch shogi-note__wall-swatch--recommended"></span>おすすめの強さ</p>
+            </section>
+
+            <!-- 記念: 印の数には入れないもの。 -->
+            <section v-else class="shogi-note__card shogi-note__album" aria-label="記念" data-album-memorial>
+              <dl class="shogi-note__tiles shogi-note__tiles--four">
+                <div><dt>神の一手</dt><dd>{{ collection.godMoves }}<small>回</small></dd></div>
+                <div data-note-predictions><dt>予想の的中</dt><dd>{{ collection.predictionsHit }}<small>回</small></dd></div>
+                <div><dt>賞状</dt><dd>{{ awards.length }}<small>枚</small></dd></div>
+                <div><dt>勝ったLv</dt><dd>{{ collectedLevelCount }}<small>/ {{ COLLECTION_LEVELS.length }}</small></dd></div>
+              </dl>
+              <template v-if="formationFanRows.length">
+                <h3 class="shogi-note__subhead" data-note-fans>同じ形を得意にしている棋士</h3>
+                <ul class="shogi-note__fans">
+                  <li v-for="row in formationFanRows" :key="row.label">
+                    <b>{{ row.label }}</b>
+                    <span>{{ row.fans.map((fan) => `${fan.name}（${fan.group}組）`).join("・") }}</span>
+                  </li>
+                </ul>
+              </template>
+            </section>
+          </template>
+
+          <section v-else class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-themes" data-album-themes>
             <h2 id="shogi-note-themes">着せ替え</h2>
             <div v-for="group in themeGroups" :key="group.kind" class="shogi-note__themes" role="radiogroup" :aria-label="group.label">
               <p class="shogi-note__subhead">{{ group.label }}</p>
@@ -388,45 +492,6 @@
                 </li>
               </ul>
             </div>
-          </section>
-
-          <section v-for="group in formationGroups" :key="group.kind" class="shogi-note__card" :aria-label="group.label">
-            <h2>{{ group.label }}<small class="shogi-note__count">{{ group.collected }} / {{ group.items.length }}</small></h2>
-            <ul class="shogi-note__stamps">
-              <li
-                v-for="item in group.items"
-                :key="item.label"
-                class="shogi-note__stamp"
-                :class="{ 'shogi-note__stamp--got': item.count }"
-              >
-                <span>{{ item.label }}</span>
-                <small v-if="item.count">×{{ item.count }}</small>
-              </li>
-            </ul>
-          </section>
-
-          <!-- 組んだ形を得意にしている棋士。コレクションから竜王戦の棋士名鑑へつなぐ。 -->
-          <section v-if="formationFanRows.length" class="shogi-note__card" aria-labelledby="shogi-note-fans" data-note-fans>
-            <h2 id="shogi-note-fans">同じ形を得意にしている棋士</h2>
-            <ul class="shogi-note__fans">
-              <li v-for="row in formationFanRows" :key="row.label">
-                <b>{{ row.label }}</b>
-                <span>{{ row.fans.map((fan) => `${fan.name}（${fan.group}組）`).join("・") }}</span>
-              </li>
-            </ul>
-            <p class="shogi-note__hint">竜王戦で当たったら、得意な形どうしの勝負になるかも。棋士名鑑で、くわしく見てみよう！</p>
-          </section>
-
-          <section class="shogi-note__card" aria-labelledby="shogi-note-levels">
-            <h2 id="shogi-note-levels">Lvの壁<small class="shogi-note__count">{{ collectedLevelCount }} / {{ COLLECTION_LEVELS.length }}</small></h2>
-            <ol class="shogi-note__levels" aria-label="初めて勝ったLv">
-              <li
-                v-for="level in COLLECTION_LEVELS"
-                :key="level"
-                :class="{ 'shogi-note__level--got': collection.levels[level] }"
-                :title="collection.levels[level] ? `Lv.${level}に勝った` : `Lv.${level}にはまだ勝っていない`"
-              >{{ level }}</li>
-            </ol>
           </section>
         </section>
 
@@ -491,7 +556,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type PropType } from "vue";
+import { computed, ref, watch, type PropType } from "vue";
 import RyuoLadder from "./RyuoLadder.vue";
 import RyuoRosterBook from "./RyuoRosterBook.vue";
 import YakobiSays from "./YakobiSays.vue";
@@ -508,13 +573,23 @@ import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
 import { currentAffiliation } from "./core/player-profile.mjs";
 import { currentStreak, loadPlayStreak, streakLine } from "./core/play-streak.mjs";
 import {
+  ALBUM_PAGES,
   COLLECTION_LEVELS,
+  THEME_UNLOCKS,
+  albumCards,
+  albumPageOf,
   collectionCatalog,
   collectionCount,
+  levelWall,
   loadCollection,
+  loadCollectionSeen,
   nextThemeUnlock,
+  planCardsByFormation,
+  saveCollectionSeen,
   themeUnlock,
 } from "./core/collection.mjs";
+import { ALL_OPENING_PLANS } from "./core/opening-catalog.mjs";
+import FormationThumb from "./FormationThumb.vue";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { TESUJI_NAMES } from "./core/move-tesuji.mjs";
 import { formationFans } from "./core/ryuo-book.mjs";
@@ -585,8 +660,19 @@ const props = defineProps({
   meijinCareer: { type: Object as PropType<MeijinCareer>, default: () => ({ no: 0, best: "C2", titles: 0, eternal: false, history: [] }) },
   /** 賞状帳(core/season-award.mjs。古い順)。 */
   awards: { type: Array as PropType<SeasonAwardData[]>, default: () => [] },
+  /** 作戦カードで使える作戦のid(コレクションの「挑戦できる」)。 */
+  unlockedPlanIds: { type: Array as PropType<string[]>, default: () => [] },
 });
-const emit = defineEmits(["close", "start-match", "start-measure", "declare"]);
+const emit = defineEmits<{
+  close: [];
+  "start-match": [];
+  "start-measure": [];
+  declare: [grade: unknown];
+  /** コレクションのカードから、作戦カードのくわしい画面を開く(対局準備へ)。 */
+  "open-plan": [planId: string];
+  /** コレクションのカードから、定跡図鑑・手筋図鑑を開く。 */
+  "open-dex": [target: { kind: string; id: string }];
+}>();
 
 /** ノートの項目。最後に開いた項目を、この端末で覚えておく。 */
 const TABS = [
@@ -625,31 +711,92 @@ function selectTab(id: TabId) {
  */
 const COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
 const collection = ref(loadCollection(safeStorage()));
-const collectedFormationCount = computed(() => COLLECTION_CATALOG.filter(({ label }) => collection.value.formations[label]).length);
 const collectedLevelCount = computed(() => COLLECTION_LEVELS.filter((level) => collection.value.levels[level]).length);
 const collectionTotal = computed(() => collectionCount(collection.value));
 const TESUJI_IDS = Object.keys(TESUJI_NAMES);
-const collectedTesujiCount = computed(() => TESUJI_IDS.filter((id) => collection.value.tesuji?.[id]).length);
 const collectionMax = COLLECTION_CATALOG.length + TESUJI_IDS.length + COLLECTION_LEVELS.length;
-const nextUnlock = computed(() => nextThemeUnlock(collection.value));
 /** 組んだ戦法・囲いごとに、それを得意にしている棋士(上の組から3人まで)。名鑑がないときは出さない。 */
 const formationFanRows = computed(() => COLLECTION_CATALOG
   .filter(({ label }) => collection.value.formations[label])
   .map((entry) => ({ label: entry.label, fans: formationFans(props.roster, { kind: entry.kind, id: entry.id }) }))
   .filter(({ fans }) => fans.length)
   .slice(0, 8));
-const formationGroups = computed(() => [
-  ...(["strategy", "castle"] as const).map((kind) => {
-    const items = COLLECTION_CATALOG
-      .filter((entry) => entry.kind === kind)
-      .map(({ label }) => ({ label, count: collection.value.formations[label]?.count ?? 0 }));
-    return { kind, label: kind === "strategy" ? "戦法" : "囲い", items, collected: items.filter(({ count }) => count).length };
-  }),
-  (() => {
-    const items = TESUJI_IDS.map((id) => ({ label: TESUJI_NAMES[id as keyof typeof TESUJI_NAMES], count: collection.value.tesuji?.[id]?.count ?? 0 }));
-    return { kind: "tesuji" as const, label: "手筋", items, collected: items.filter(({ count }) => count).length };
-  })(),
-]);
+
+// ---- アルバム(docs/player-world-note-design.mdの4章)
+/** 印のアルバムか、着せ替えか。 */
+const albumView = ref<"album" | "themes">("album");
+const ALBUM_PAGE_KEY = "yacobihime:shogi-match:note-album-page";
+const albumPage = ref((() => {
+  try {
+    const saved = localStorage.getItem(ALBUM_PAGE_KEY);
+    return ALBUM_PAGES.some(({ id }) => id === saved) ? saved as string : "static";
+  } catch {
+    return "static";
+  }
+})());
+function chooseAlbumPage(id: string) {
+  albumPage.value = id;
+  try {
+    localStorage.setItem(ALBUM_PAGE_KEY, id);
+  } catch {
+    // 覚えられなくても、ページは切り替わる。
+  }
+}
+/** 最後にコレクションを開いた時刻。これより後に初めて取った印に「NEW」を付ける(このノートを開いている間は付けたまま)。 */
+const collectionSeenAt = loadCollectionSeen(safeStorage());
+watch(tab, (id) => {
+  if (id === "collection") saveCollectionSeen(safeStorage());
+}, { immediate: true });
+/** 作戦カードで使える戦法・囲い(「挑戦できる」と、押したときに開く作戦カード)。 */
+const playable = computed(() => planCardsByFormation(ALL_OPENING_PLANS, props.unlockedPlanIds));
+const FORMATION_PAGES = new Set(["static", "ranging", "surprise", "castle"]);
+const albumFormationPage = computed(() => FORMATION_PAGES.has(albumPage.value));
+const albumFormationCards = computed(() => (albumFormationPage.value
+  ? albumCards(collection.value, COLLECTION_CATALOG, albumPage.value, { playable: playable.value, seenAt: collectionSeenAt })
+  : []));
+const albumReadyCount = computed(() => albumFormationCards.value.filter(({ ready }) => ready).length);
+const albumPageLabel = computed(() => ALBUM_PAGES.find(({ id }) => id === albumPage.value)?.label ?? "");
+const tesujiCards = computed(() => TESUJI_IDS.map((id) => {
+  const got = collection.value.tesuji?.[id];
+  return {
+    id, label: TESUJI_NAMES[id as keyof typeof TESUJI_NAMES], got: Boolean(got), count: got?.count ?? 0,
+    isNew: Boolean(got && collectionSeenAt && got.firstAt > collectionSeenAt),
+  };
+}));
+const wall = computed(() => levelWall(collection.value, { recommended: props.state.games ? recommendedLevel(props.state) : null }));
+/** ページの切り替えに、取った数と全部の数を添える(記念は数えない)。 */
+const albumPageTabs = computed(() => ALBUM_PAGES.map((page) => {
+  if (FORMATION_PAGES.has(page.id)) {
+    const cards = COLLECTION_CATALOG.filter((entry) => albumPageOf(entry) === page.id);
+    return { ...page, total: cards.length, got: cards.filter(({ label }) => collection.value.formations[label]).length };
+  }
+  if (page.id === "tesuji") return { ...page, total: TESUJI_IDS.length, got: TESUJI_IDS.filter((id) => collection.value.tesuji?.[id]).length };
+  if (page.id === "levels") return { ...page, total: COLLECTION_LEVELS.length, got: collectedLevelCount.value };
+  return { ...page, total: 0, got: 0 };
+}));
+/** 戦法・囲いのカードを押した。作戦カードがあれば、その作戦のくわしい画面(手順の再生と「この作戦にする」)。なければ定跡図鑑。 */
+function openAlbumCard(card: { kind: string; id: string; planId: string }) {
+  if (card.planId) emit("open-plan", card.planId);
+  else emit("open-dex", { kind: "opening", id: card.id });
+}
+/** 次に使えるようになる着せ替えと、そこまでのゲージ(前の着せ替えから次までの割合)。 */
+const nextThemeView = computed(() => {
+  const next = nextThemeUnlock(collection.value);
+  if (!next) return null;
+  const count = collectionTotal.value;
+  const needs = Object.values(THEME_UNLOCKS).flatMap((table) => Object.values(table) as number[]);
+  const previous = Math.max(0, ...needs.filter((need) => need <= count));
+  const kind = (["board", "piece"] as const).find((name) => (Object.values(THEME_UNLOCKS[name]) as number[]).includes(next.need)) ?? "board";
+  const id = Object.entries(THEME_UNLOCKS[kind]).find(([, need]) => need === next.need)?.[0] ?? "";
+  const theme = (kind === "board" ? BOARD_THEMES : PIECE_THEMES).find((entry) => entry.id === id);
+  const preview = kind === "board" ? `${assetBase.value}/board/${(theme as { file?: string } | undefined)?.file ?? ""}` : `${assetBase.value}/piece/${id}/black_king2.webp`;
+  return {
+    name: theme?.name ?? "",
+    preview,
+    remaining: next.remaining,
+    progress: Math.round(((count - previous) / Math.max(1, next.need - previous)) * 100),
+  };
+});
 function safeStorage(): Storage | null {
   try {
     return typeof localStorage === "undefined" ? null : localStorage;
@@ -1308,46 +1455,140 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 
 /* コレクション */
 .shogi-game .shogi-note__count { margin-left: auto; color: var(--note-muted); font-size: 0.85em; letter-spacing: 0; }
-.shogi-game .shogi-note__stamps { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
-.shogi-game .shogi-note__stamp {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.25rem;
-  padding: 0.25rem 0.55rem;
-  border: 1px dashed var(--note-line);
+/* ===== コレクション(アルバム) ===== */
+.shogi-game .shogi-note__panel.shogi-note__panel--album { grid-template-columns: minmax(0, 1fr); }
+/* いちばん上: 印の合計・次の着せ替えまでのゲージ・「印のアルバム｜着せ替え」。 */
+.shogi-game .shogi-note__album-head { gap: 0.6rem; }
+.shogi-game .shogi-note__album-gauge { display: grid; gap: 0.4rem; }
+.shogi-game .shogi-note__album-gauge h2 { display: flex; align-items: baseline; gap: 0.3rem; }
+.shogi-game .shogi-note__album-gauge h2 strong { margin-left: 0.4rem; color: #fffcf4; font-size: 1.6em; }
+.shogi-game .shogi-note__album-gauge h2 small { color: var(--note-muted); font-size: 0.8em; }
+.shogi-game .shogi-note__gauge { height: 0.8rem; overflow: hidden; border-radius: 999px; background: var(--note-deep); }
+.shogi-game .shogi-note__gauge span { display: block; height: 100%; min-width: 0.8rem; border-radius: inherit; background: var(--note-gold); }
+.shogi-game .shogi-note__gauge-text { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 0.9em; font-weight: 700; }
+.shogi-game .shogi-note__gauge-text img { width: 2.2rem; height: 2.2rem; object-fit: cover; border-radius: 0.25rem; }
+.shogi-game .shogi-note__gauge-text b { margin: 0 0.15em; color: var(--note-gold); font-size: 1.2em; }
+.shogi-game .shogi-note__album-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 0; padding: 0.2rem; border-radius: 999px; background: var(--note-deep); }
+.shogi-game .shogi-note__album-switch button,
+.shogi-game .shogi-note__album-pages button {
+  min-height: var(--note-control);
+  border: 0;
   border-radius: 999px;
-  color: var(--note-muted);
-  font-size: 0.82em;
-}
-.shogi-game .shogi-note__stamp--got {
-  border: 1px solid var(--note-gold);
-  color: var(--note-deep);
-  background: var(--note-gold);
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
   font-weight: 800;
+  cursor: pointer;
 }
-.shogi-game .shogi-note__stamp small { font-size: 0.85em; }
-.shogi-game .shogi-note__levels {
+.shogi-game .shogi-note__album-switch button[aria-selected="true"],
+.shogi-game .shogi-note__album-pages button[aria-selected="true"] { color: #172632; background: var(--note-gold); }
+/* ページ: 取った数と全部の数を添える。 */
+.shogi-game .shogi-note__album-pages { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.shogi-game .shogi-note__album-pages button { display: inline-flex; align-items: baseline; gap: 0.3rem; padding: 0 0.85rem; border: 2px solid #3b5570; background: var(--note-deep); }
+.shogi-game .shogi-note__album-pages button small { font-size: 0.78em; opacity: 0.8; }
+.shogi-game .shogi-note__album-pages button[aria-selected="true"] { border-color: var(--note-gold); }
+/* カード: 完成形の小さな盤と名前。取ったものは金の縁、挑戦できるものは点線の縁、まだのものは薄く。 */
+.shogi-game .shogi-note__album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr)); gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__album-card {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 0.3rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  justify-items: center;
+  align-content: start;
+  gap: 0.25rem;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.35rem 0.5rem;
+  border: 2px solid #33465e;
+  border-radius: 0.5rem;
+  color: var(--note-muted);
+  background: var(--note-deep);
+  box-shadow: none;
+  font: inherit;
+  cursor: pointer;
 }
-.shogi-game .shogi-note__levels li {
+.shogi-game .shogi-note__album-thumb { width: 100%; height: auto; }
+.shogi-game .shogi-note__album-card:not(.shogi-note__album-card--got):not(.shogi-note__album-card--ready) .shogi-note__album-thumb { opacity: 0.55; }
+.shogi-game .shogi-note__album-name {
+  display: -webkit-box;
+  min-height: 2.5em;
+  overflow: hidden;
+  font-size: 0.82em;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.shogi-game .shogi-note__album-status { font-size: 0.75em; font-weight: 800; }
+.shogi-game .shogi-note__album-card--got { border-color: var(--note-gold); color: #fffcf4; }
+.shogi-game .shogi-note__album-card--got .shogi-note__album-status { color: var(--note-gold); }
+.shogi-game .shogi-note__album-card--ready { border-style: dashed; border-color: var(--note-lavender); color: #fffcf4; }
+.shogi-game .shogi-note__album-status--ready { padding: 0.05rem 0.5rem; border-radius: 999px; color: #172632; background: var(--note-lavender); }
+.shogi-game .shogi-note__album-new {
+  position: absolute;
+  top: -0.45rem;
+  right: -0.3rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.3rem;
+  color: #fffcf4;
+  background: #c4604c;
+  font-size: 0.7em;
+  font-style: normal;
+  font-weight: 900;
+}
+.shogi-game .shogi-note__album-card--new { animation: shogi-note-album-new 0.9s ease-in-out 2; }
+@keyframes shogi-note-album-new {
+  50% { box-shadow: 0 0 0 4px rgba(241, 165, 76, 0.45); }
+}
+.shogi-game .shogi-note__album-grid--text { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }
+.shogi-game .shogi-note__album-card--text { min-height: 4.2rem; align-content: center; }
+.shogi-game .shogi-note__album-card--text .shogi-note__album-name { min-height: 0; font-size: 0.95em; }
+/* Lvの壁: 10段ずつ4本の階段。 */
+.shogi-game .shogi-note__wall-row { display: grid; grid-template-columns: 4.2rem minmax(0, 1fr); align-items: center; gap: 0.5rem; }
+.shogi-game .shogi-note__wall-label { display: grid; margin: 0; font-weight: 800; }
+.shogi-game .shogi-note__wall-label small { color: var(--note-muted); font-size: 0.75em; }
+.shogi-game .shogi-note__wall { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__wall li {
+  position: relative;
   display: grid;
   place-items: center;
-  min-height: 1.9rem;
+  min-height: 2.1rem;
   border: 1px dashed var(--note-line);
-  border-radius: 0.35rem;
+  border-radius: 0.3rem;
   color: var(--note-muted);
   font-size: 0.78em;
-  font-weight: 700;
+  font-weight: 800;
 }
-.shogi-game .shogi-note__levels .shogi-note__level--got {
-  border: 1px solid var(--note-gold);
-  color: var(--note-deep);
-  background: var(--note-gold);
+.shogi-game .shogi-note__wall .shogi-note__wall--got { border: 1px solid var(--note-gold); color: var(--note-deep); background: var(--note-gold); }
+.shogi-game .shogi-note__wall .shogi-note__wall--next { border: 2px solid #fffcf4; color: #fffcf4; }
+.shogi-game .shogi-note__wall .shogi-note__wall--recommended::after {
+  content: "";
+  position: absolute;
+  bottom: 0.15rem;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--note-lavender);
+}
+.shogi-game .shogi-note__wall-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; margin: 0; color: var(--note-muted); font-size: 0.8em; }
+.shogi-game .shogi-note__wall-swatch { display: inline-block; width: 0.9rem; height: 0.9rem; margin-right: 0.25rem; border-radius: 0.2rem; vertical-align: middle; }
+.shogi-game .shogi-note__wall-swatch--got { background: var(--note-gold); }
+.shogi-game .shogi-note__wall-swatch--next { border: 2px solid #fffcf4; box-sizing: border-box; }
+.shogi-game .shogi-note__wall-swatch--recommended { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--note-lavender); }
+/* スマホ縦: カードは3列。ページの切り替えは小さく。 */
+@media (max-width: 599px) {
+  .shogi-game .shogi-note__album-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
+  .shogi-game .shogi-note__album-grid--text { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shogi-game .shogi-note__album-card { padding: 0.35rem 0.2rem 0.4rem; }
+  .shogi-game .shogi-note__album-name { font-size: 0.74em; }
+  .shogi-game .shogi-note__album-pages button { min-height: 2.5rem; padding: 0 0.65rem; font-size: 0.88em; }
+  .shogi-game .shogi-note__wall-row { grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0.3rem; }
+  .shogi-game .shogi-note__wall { gap: 0.15rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-note__album-card--new { animation: none; }
 }
 .shogi-game .shogi-note__themes ul {
   display: grid;

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ALBUM_PAGES,
   COLLECTION_STORAGE_KEY,
+  albumCards,
+  albumPageOf,
+  levelWall,
+  loadCollectionSeen,
+  planCardsByFormation,
+  saveCollectionSeen,
   THEME_UNLOCKS,
   collectionCatalog,
   collectionCount,
@@ -108,5 +115,49 @@ describe('コレクション', () => {
     const state = recordPredictionHit(recordPredictionHit(createCollection()));
     expect(state.predictionsHit).toBe(2);
     expect(collectionCount(state)).toBe(0);
+  });
+
+  it('アルバム: 戦法は居飛車・振り飛車・奇襲のページに分け、作戦カードで使えるのにまだ組んでいないものを「挑戦できる」として先に出す', () => {
+    const real = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+    expect(albumPageOf(real.find(({ id }) => id === 'shiken'))).toBe('ranging');
+    expect(albumPageOf(real.find(({ id }) => id === 'kakugawari'))).toBe('static');
+    expect(albumPageOf(real.find(({ id }) => id === 'onigoroshi'))).toBe('surprise');
+    expect(albumPageOf({ kind: 'castle', id: 'mino', family: 'castle' })).toBe('castle');
+    // すべての戦法・囲いが、どれかのページに入る。
+    const pages = new Set(ALBUM_PAGES.map(({ id }) => id));
+    expect(real.every((entry) => pages.has(albumPageOf(entry)))).toBe(true);
+
+    const plans = [
+      { id: 'p-shiken', strategyId: 'shiken', castles: ['mino'] },
+      { id: 'p-yagura', strategyId: 'yagura-strategy', castles: ['kin-yagura'], name: '矢倉' },
+      { id: 'p-locked', strategyId: 'kakugawari', castles: [] },
+    ];
+    const playable = planCardsByFormation(plans, ['p-shiken', 'p-yagura']);
+    expect([...playable.keys()]).toEqual(['strategy:shiken', 'castle:kin-yagura']);
+    const state = recordMatchCollection(createCollection(), { formations: ['本美濃'], catalog: real, at: 200 }).state;
+    const ranging = albumCards(state, real, 'ranging', { playable, seenAt: 100 });
+    expect(ranging[0]).toMatchObject({ id: 'shiken', ready: true, got: false, planId: 'p-shiken' });
+    const castles = albumCards(state, real, 'castle', { playable, seenAt: 100 });
+    expect(castles.find(({ label }) => label === '本美濃')).toMatchObject({ got: true, count: 1, isNew: true, ready: false });
+    expect(albumCards(state, real, 'castle', { playable, seenAt: 300 }).find(({ label }) => label === '本美濃').isNew).toBe(false);
+  });
+
+  it('Lvの壁: 10段ずつ4本。次の壁は、まだ勝っていないいちばん低いLv。おすすめの前後に印', () => {
+    let state = createCollection();
+    for (const level of [1, 2, 3, 5]) state = recordMatchCollection(state, { wonLevel: level, catalog }).state;
+    const wall = levelWall(state, { recommended: 12 });
+    expect(wall.rows.map(({ label }) => label)).toEqual(['初級', '中級', '上級', '達人']);
+    expect(wall.rows.every(({ levels }) => levels.length === 10)).toBe(true);
+    expect(wall.next).toBe(4);
+    expect(wall.rows[0]).toMatchObject({ got: 4 });
+    expect(wall.rows[1].levels.filter(({ recommended }) => recommended).map(({ level }) => level)).toEqual([11, 12, 13]);
+  });
+
+  it('最後にコレクションを開いた時刻を覚える(読めなければ0)', () => {
+    const storage = memoryStorage();
+    expect(loadCollectionSeen(storage)).toBe(0);
+    saveCollectionSeen(storage, 1234);
+    expect(loadCollectionSeen(storage)).toBe(1234);
+    expect(loadCollectionSeen({ getItem: () => { throw new Error('blocked'); } })).toBe(0);
   });
 });

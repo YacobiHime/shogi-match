@@ -494,7 +494,10 @@
       :roster="ryuoRoster"
       :meijin-career="meijinCareer"
       :awards="seasonAwards"
+      :unlocked-plan-ids="[...planUnlocks.unlocked]"
       @close="yakobiNoteOpen = false"
+      @open-plan="openPlanFromNote"
+      @open-dex="openDexFromNote"
       @start-match="startMatchFromNote"
       @start-measure="startMeasureMatch"
       @declare="declareGrade"
@@ -898,6 +901,7 @@
       @fortune-result="onFortuneResult"
       @broad="chooseCpuBroadPlan"
       @close="closePlanSheet"
+      :initial-detail-id="planSheetDetailId"
     />
 
     <section
@@ -3954,7 +3958,27 @@ function openPlanSheet(context: "pregame" | "game" | "cpu") {
   onFortuneResult();
   planSheet.value = context;
 }
+/** コレクションのカードから開くときの、最初に開く作戦のくわしい画面(手順の再生と「この作戦にする」)。 */
+const planSheetDetailId = ref("");
+/**
+ * やこびノートのコレクションのカードから、その作戦のくわしい画面を開く。対局準備の作戦カードとして開くので、
+ * 「この作戦にする」で選んで、そのまま対局を始められる。
+ */
+function openPlanFromNote(planId: string) {
+  confirmDiscardSuspended(() => {
+    yakobiNoteOpen.value = false;
+    closeHome();
+    planSheetDetailId.value = planId;
+    openPlanSheet("pregame");
+  });
+}
+/** やこびノートのコレクションから、定跡図鑑・手筋図鑑を開く(ノートは閉じる。戻る操作で図鑑から先に閉じられるように)。 */
+function openDexFromNote(target: { kind: string; id: string }) {
+  yakobiNoteOpen.value = false;
+  openDexFromTutorial(target);
+}
 function closePlanSheet() {
+  planSheetDetailId.value = "";
   if (!planSheet.value) return;
   const context = planSheet.value;
   planSheet.value = "";
