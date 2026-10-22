@@ -9,6 +9,16 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("lets the player enter a name next to the notebook band and shows it on the board and in the Ryuo season", () => {
+    expect(source).toMatch(/<div class="shogi-title__record-row">[\s\S]*?data-player-name\s*@click="openNameDialog"[\s\S]*?class="shogi-title__record" @click="yakobiNoteOpen = true"/);
+    expect(source).toMatch(/v-if="nameDialogOpen"[\s\S]*?@submit\.prevent="acceptPlayerName"[\s\S]*?data-player-name-save>この名前にする</);
+    // CPUとの対局では、プレイヤーの側の名札に名前を出す。対局準備と竜王戦の新しい期にも使う。
+    expect(source).toMatch(/cpuColor\.value === Color\.WHITE && playerName\.value \? playerName\.value : props\.blackPlayerName/);
+    expect(source).toMatch(/userName: playerDisplayName\(playerName\.value\)/);
+    // 重ねて開く札は、ブラウザの戻る操作で閉じる。
+    expect(source).toMatch(/else if \(nameDialogOpen\.value\) \{\s*nameDialogOpen\.value = false;/);
+    expect(source).toMatch(/canGoBack: [^\n]*nameDialogOpen\.value/);
+  });
   it("shows a measuring card with one forward-only bar while the measurement is analyzed", () => {
     // 結果は少し遅れて出るので、測定中だと分かる札を盤の上に出す。閉じても状態表示の細い棒は残る。
     expect(source).toMatch(/v-if="measureAnalyzing && !measureWaitHidden"[\s\S]*?data-measure-wait[\s\S]*?role="progressbar"[\s\S]*?data-measure-wait-hide @click="measureWaitHidden = true">盤を見ながら待つ</);

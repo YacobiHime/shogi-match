@@ -345,6 +345,7 @@
             :label="view.pending.label"
             :you="view.pending.color === 'white' ? 'white' : 'black'"
             :rating-text="ratingText"
+            :you-name="playerName"
             :opponent="versusOpponent"
             :win="view.pending.stakes?.win ?? ''"
             :boss="Boolean(view.pending.stakes?.boss)"
@@ -645,6 +646,8 @@ const props = defineProps({
   startAt: { type: String as PropType<"select" | "season">, default: "select" },
   /** いまの竜王(プレイヤーが竜王ならnull)。入口の山で、七番勝負に顔を出す。 */
   ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
+  /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。VS画面に出す。 */
+  playerName: { type: String, default: "あなた" },
   /** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを1回だけ見せる。 */
   fromGame: { type: Boolean, default: false },
   /** 推しの棋士(core/ryuo-oshi.mjs)。やこび姫が、期の中での様子を知らせる。 */

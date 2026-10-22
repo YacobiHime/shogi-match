@@ -160,6 +160,36 @@
           @click="startQuickMatch({ level: homeNext.handicapLevel, handicapId: 'lance' })"
         >香落ちでLv.{{ homeNext.handicapLevel }}に挑む</button>
 
+        <!--
+          記録の帯の横に、プレイヤー名。押すと名前を入れる札を開く(docs/player-name-design.md)。
+          入れていなければ「名前を入れる」。名前は盤の名札・対局準備・竜王戦の表とVS画面に出る。
+        -->
+        <div class="shogi-title__record-row">
+        <button
+          type="button"
+          class="shogi-title__name"
+          :class="{ 'shogi-title__name--empty': !playerName }"
+          :aria-label="playerName ? `プレイヤー名 ${playerName}。押すと変える` : 'プレイヤー名を入れる'"
+          data-player-name
+          @click="openNameDialog"
+        >
+          <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <g fill="#f1a54c">
+              <rect x="10" y="2" width="2" height="2" />
+              <rect x="8" y="4" width="2" height="2" />
+              <rect x="6" y="6" width="2" height="2" />
+              <rect x="4" y="8" width="2" height="2" />
+            </g>
+            <g fill="#fffcf4">
+              <rect x="12" y="2" width="2" height="2" />
+              <rect x="10" y="4" width="2" height="2" />
+              <rect x="8" y="6" width="2" height="2" />
+              <rect x="6" y="8" width="2" height="2" />
+              <rect x="3" y="11" width="2" height="2" />
+            </g>
+          </svg>
+          <span class="shogi-title__name-text">{{ playerName || "名前を入れる" }}</span>
+        </button>
         <!-- 記録の帯。いまの棋力と所属を見せ、押すとやこびノートを開く。 -->
         <button type="button" class="shogi-title__record" @click="yakobiNoteOpen = true">
           <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
@@ -181,8 +211,9 @@
             <span v-if="homeAffiliation" class="shogi-title__record-badge">{{ homeAffiliation }}</span>
             <span v-if="homeStreak.current >= 2" class="shogi-title__record-badge shogi-title__record-badge--streak" data-home-streak>続けて{{ homeStreak.current }}日</span>
           </span>
-          <span class="shogi-title__record-link">やこびノート <span aria-hidden="true">›</span></span>
+          <span class="shogi-title__record-link"><span class="shogi-title__record-link-head">やこび</span>ノート <span aria-hidden="true">›</span></span>
         </button>
+        </div>
 
         <div class="shogi-title__groups">
           <section class="shogi-title__group shogi-title__group--play" aria-labelledby="shogi-home-play" data-home-group="play">
@@ -422,6 +453,7 @@
       :start-at="tournamentStartAt"
       :from-game="tournamentFromGame"
       :ryuo-holder="ryuoHolder"
+      :player-name="playerDisplayName(playerName)"
       :oshi="ryuoOshi"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
@@ -1431,6 +1463,39 @@
       </div>
     </div>
 
+    <!-- プレイヤー名を入れる札。ホームの上に出す。空にして決めると「あなた」に戻る。 -->
+    <div
+      v-if="nameDialogOpen"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="player-name-title"
+      data-player-name-dialog
+      @click.self="nameDialogOpen = false"
+    >
+      <form class="shogi-game__confirm-panel shogi-game__name-panel" @submit.prevent="acceptPlayerName">
+        <h2 id="player-name-title">プレイヤー名</h2>
+        <p>盤の名札や竜王戦の表に出る名前だよ（{{ PLAYER_NAME_MAX }}文字まで）。空にすると「あなた」になるよ。</p>
+        <input
+          ref="nameInput"
+          v-model="nameDraft"
+          class="shogi-game__name-input"
+          type="text"
+          inputmode="text"
+          autocomplete="nickname"
+          enterkeyhint="done"
+          :maxlength="PLAYER_NAME_MAX * 2"
+          placeholder="あなた"
+          aria-label="プレイヤー名"
+          data-player-name-input
+        >
+        <div>
+          <button type="submit" class="shogi-game__confirm-primary" data-player-name-save>この名前にする</button>
+          <button type="button" @click="nameDialogOpen = false">やめる</button>
+        </div>
+      </form>
+    </div>
+
     <div
       v-if="resignConfirmOpen"
       class="shogi-game__confirm"
@@ -1823,7 +1888,8 @@ import {
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import { MAX_MEASURE_GAMES, MIN_MEASURED_MOVES, estimateSkill, measurableMoves, measureStatistics, nextMeasureLevel } from "./core/skill-estimate.mjs";
-import { createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
+import { USER_ID, createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
+import { PLAYER_NAME_MAX, loadPlayerName, playerDisplayName, savePlayerName } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { comparableScore } from "./core/move-selection.mjs";
@@ -2399,6 +2465,28 @@ const suspendedMatch = ref<{ moves: number } | null>(null);
 const suspendConfirmOpen = ref(false);
 /** 中断した対局を消して新しく始める前の確認。承諾したら、保留した開始処理を行う。 */
 const discardSuspendedPending = ref<(() => void) | null>(null);
+/** プレイヤー名(core/player-name.mjs)。入れていなければ空。 */
+const playerName = ref(loadPlayerName(browserStorage()));
+const nameDialogOpen = ref(false);
+const nameDraft = ref("");
+const nameInput = ref<HTMLInputElement | null>(null);
+function openNameDialog() {
+  nameDraft.value = playerName.value;
+  nameDialogOpen.value = true;
+  void nextTick(() => nameInput.value?.focus());
+}
+/** 「この名前にする」。保存し、進めている竜王戦の期の表の名前も替える。 */
+function acceptPlayerName() {
+  playerName.value = savePlayerName(browserStorage(), nameDraft.value);
+  nameDialogOpen.value = false;
+  const season = ryuoSeason.value;
+  const user = season?.players?.[USER_ID];
+  if (season && user) {
+    const renamed = { ...season, players: { ...season.players, [USER_ID]: { ...user, name: playerDisplayName(playerName.value) } } };
+    ryuoSeason.value = renamed;
+    saveSeason(browserStorage(), renamed);
+  }
+}
 const analysisMenuOpen = ref(false);
 // 対局準備で開いている選択シート。空なら閉じている。
 const pregamePicker = ref("");
@@ -2590,11 +2678,16 @@ const cpuDisplayName = computed(() => {
 const cpuStrengthLabel = computed(() => (
   matchKind.value === "tournament" && ryuoOpponent.value ? "" : cpuStrengthPreset.value?.label ?? ""
 ));
+// CPUとの対局では、プレイヤーの側の名札に、タイトル画面で入れたプレイヤー名を出す(入れていなければ先手・後手の表示名)。
 const effectiveBlackPlayerName = computed(() =>
-  cpuColor.value === Color.BLACK ? cpuDisplayName.value : props.blackPlayerName,
+  cpuColor.value === Color.BLACK
+    ? cpuDisplayName.value
+    : cpuColor.value === Color.WHITE && playerName.value ? playerName.value : props.blackPlayerName,
 );
 const effectiveWhitePlayerName = computed(() =>
-  cpuColor.value === Color.WHITE ? cpuDisplayName.value : props.whitePlayerName,
+  cpuColor.value === Color.WHITE
+    ? cpuDisplayName.value
+    : cpuColor.value === Color.BLACK && playerName.value ? playerName.value : props.whitePlayerName,
 );
 /** 振り返りの詰みの問題で、相手の応手を指すまでの間。盤を触らせない。 */
 const guidedMateReplyPending = ref(false);
@@ -4032,7 +4125,7 @@ const pregameSides = computed(() => (["black", "white"] as const).map((color) =>
     isCpu,
     name: local
       ? (color === "black" ? props.blackPlayerName : props.whitePlayerName)
-      : isCpu ? (props.cpuPlayerName.trim() || "CPU") : "あなた",
+      : isCpu ? (props.cpuPlayerName.trim() || "CPU") : playerDisplayName(playerName.value),
     // CPUの強さは下の「強さ」の行に出す。駒落ちでは上手・下手の別を添える。
     detail: pregameUsesHandicap.value ? (color === "white" ? "駒を落とす側" : "駒を落とされる側") : "",
     rows,
@@ -4177,6 +4270,7 @@ function enterRyuoSeason(settings: {
     career,
     roster: ryuoRoster.value,
     seed,
+    userName: playerDisplayName(playerName.value),
   });
   ryuoSeason.value = season;
   saveSeason(browserStorage(), season);
@@ -4987,6 +5081,8 @@ function navigateBack() {
     exhibitResetOpen.value = false;
   } else if (discardSuspendedPending.value) {
     discardSuspendedPending.value = null;
+  } else if (nameDialogOpen.value) {
+    nameDialogOpen.value = false;
   } else if (tournamentOpen.value) {
     // 大会の画面は、中の画面(説明・トーナメント表)から、大会の選択へ、そして閉じる、の順に戻る。
     if (tournamentView.value) tournamentView.value.goBack();
@@ -5032,7 +5128,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 

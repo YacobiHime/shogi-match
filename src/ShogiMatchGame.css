@@ -1513,6 +1513,28 @@
   box-shadow: none;
   text-decoration: underline;
 }
+.shogi-game .shogi-game__confirm-primary {
+  border-color: var(--amber);
+  color: var(--night-deep);
+  background: var(--amber);
+}
+/* プレイヤー名の札。入力欄は押せる高さ44px以上(U:7-4)、文字は16px以上(スマホで拡大されないように)。 */
+.shogi-game__name-panel { width: min(26em, 100%); }
+.shogi-game .shogi-game__name-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 1em;
+  padding: 0.4em 0.7em;
+  border: 2px solid var(--amber);
+  border-radius: 0.5em;
+  color: #1d303f;
+  background: #fffcf4;
+  font: inherit;
+  font-size: max(16px, 1.1em);
+  font-weight: 700;
+}
+.shogi-game .shogi-game__name-input:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
 .shogi-game .shogi-game__confirm-danger {
   border-color: var(--rust);
   color: var(--night-deep);
@@ -2939,6 +2961,38 @@
   font-weight: 700;
 }
 .shogi-title__record .shogi-title__icon { flex: none; width: 1.7em; height: 1.7em; }
+/* 記録の帯と、その左のプレイヤー名。名前は短く、帯が残りの幅を使う。 */
+.shogi-title__record-row { display: flex; gap: 0.5em; align-items: stretch; width: 100%; min-width: 0; }
+.shogi-title__record-row > .shogi-title__record { flex: 1 1 auto; min-width: 0; }
+.shogi-game .shogi-title__name {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+  max-width: 40%;
+  min-height: 44px;
+  padding: 0.4em 0.8em;
+  border: 2px solid var(--amber);
+  border-radius: 0.6em;
+  color: #fffcf4;
+  background: rgba(29, 48, 63, 0.92);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.shogi-game .shogi-title__name--empty { border-style: dashed; color: var(--amber); }
+.shogi-title__name .shogi-title__icon { flex: none; width: 1.3em; height: 1.3em; }
+.shogi-title__name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 帯の中の札(R800・十七級など)は途中で折り返さない。入らなければ、札ごと次の行へ。 */
+.shogi-title__record-row .shogi-title__record-main > * { white-space: nowrap; }
+/* スマホの幅では、名前を細くして、帯(棋力とやこびノート)の幅を残す。 */
+@media (max-width: 480px) {
+  .shogi-game .shogi-title__name { max-width: 40%; padding-inline: 0.55em; gap: 0.3em; }
+  /* 「やこびノート」を「ノート」に縮めて、名前の幅を残す。 */
+  .shogi-title__record-row .shogi-title__record-link-head { display: none; }
+  .shogi-title__record-row > .shogi-title__record { gap: 0.45em; padding-inline: 0.8em; }
+}
 .shogi-title__record-main {
   display: flex;
   flex: 1 1 auto;

@@ -7,7 +7,7 @@
     :class="['ryuo-versus', { 'ryuo-versus--boss': boss }]"
     role="dialog"
     aria-modal="true"
-    :aria-label="`${label}。あなた 対 ${opponent.name}`"
+    :aria-label="`${label}。${youName} 対 ${opponent.name}`"
     data-versus
     @click="finish"
   >
@@ -17,7 +17,7 @@
     <p class="ryuo-versus__label">{{ label }}</p>
     <div class="ryuo-versus__player ryuo-versus__player--you">
       <span class="ryuo-versus__piece" aria-hidden="true">自</span>
-      <strong>あなた</strong>
+      <strong>{{ youName }}</strong>
       <small>{{ [ratingText, colorText(you)].filter(Boolean).join("・") }}</small>
     </div>
     <div class="ryuo-versus__mark" aria-hidden="true">VS</div>
@@ -42,6 +42,8 @@ const props = defineProps({
   /** 自分の手番。 */
   you: { type: String as PropType<"black" | "white">, default: "black" },
   ratingText: { type: String, default: "" },
+  /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。 */
+  youName: { type: String, default: "あなた" },
   opponent: {
     type: Object as PropType<{ name: string; char: string; tone: string; sprite: string; dan: string; style: string }>,
     required: true,
