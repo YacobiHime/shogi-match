@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>竜王戦 3段階 見本</title>
+<style>
+  :root {
+    --night: #121c2e; --night2: #1b2a42; --panel: #22344c; --deep: #172632; --cream: #fffcf4;
+    --gold: #f1a54c; --gold2: #ffd27a; --red: #c4604c; --red2: #e0745e; --lav: #d8d0ff; --ai: #3d6fa5; --grass: #3f7d5a;
+    --shadow: #0b1320; --line: #4b6585; --muted: #9fb3c8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #0a0f18; font-family: "IPAPGothic", "IPAGothic", sans-serif; color: var(--cream); }
+  .cap { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: var(--muted); }
+  .cap b { color: var(--gold); margin-right: 6px; }
+  .shot { margin-bottom: 36px; }
+  .pc { position: relative; width: 1366px; height: 768px; overflow: hidden; background: var(--night); box-shadow: 0 0 0 3px #2a3a52; display: grid; grid-template-rows: 56px 1fr; }
+  .phone { position: relative; width: 390px; height: 844px; overflow: hidden; border-radius: 26px; background: var(--night); box-shadow: 0 0 0 3px #2a3a52; display: grid; grid-template-rows: auto 1fr auto; }
+  .row { display: flex; gap: 28px; align-items: flex-start; }
+  /* 上の帯(1本にまとめる) */
+  .bar { display: flex; align-items: center; gap: 14px; padding: 0 16px; background: #0f1828; border-bottom: 2px solid #22344c; }
+  .back { height: 40px; padding: 0 14px; border: 2px solid var(--line); border-radius: 999px; display: grid; place-items: center; font-size: 14px; font-weight: 800; color: var(--cream); }
+  .seal { display: grid; place-items: center; width: 36px; height: 36px; border: 3px solid var(--cream); border-radius: 8px; background: var(--red); font-weight: 900; box-shadow: 3px 3px 0 var(--shadow); flex: none; }
+  .title { font-weight: 900; font-size: 17px; white-space: nowrap; }
+  .title small { display: block; font-size: 11px; color: var(--lav); font-weight: 800; }
+  .stepper { display: flex; align-items: center; gap: 0; margin: 0 auto; }
+  .step { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; font-size: 14px; font-weight: 900; color: var(--muted); border: 2px solid transparent; white-space: nowrap; }
+  .step i { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #2b3d55; color: var(--cream); font-style: normal; font-size: 13px; }
+  .step.done { color: var(--cream); }
+  .step.done i { background: var(--grass); }
+  .step.cur { color: #1a2433; background: var(--gold); box-shadow: 0 3px 0 #b0661b; }
+  .step.cur i { background: #1a2433; color: var(--gold); }
+  .step.view { border-color: var(--cream); }
+  .link { width: 34px; height: 3px; background: repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 10px); }
+  .link.done { background: var(--grass); }
+  .pill { height: 40px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--line); background: var(--deep); display: grid; place-items: center; font-weight: 900; color: var(--gold); box-shadow: 0 3px 0 var(--shadow); }
+  /* 3列(地図・段階の表・次の一局) */
+  .body { display: grid; grid-template-columns: 330px minmax(0, 1fr) 380px; min-height: 0; }
+  .map { position: relative; overflow: hidden; border-right: 3px solid #0f1828; }
+  .stage { position: relative; min-width: 0; padding: 16px 20px; background: #1a283c; overflow: hidden; }
+  .stage h2 { margin: 0; font-size: 20px; font-weight: 900; }
+  .stage h2 span { color: var(--gold); margin-right: 8px; }
+  .stage .sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+  .seg { display: inline-flex; gap: 4px; padding: 3px; border: 2px solid var(--line); border-radius: 999px; background: #0f1828; margin-left: 14px; vertical-align: middle; }
+  .seg b { padding: 4px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); }
+  .seg b.on { background: var(--cream); color: #1a2433; }
+  .heads { position: absolute; display: flex; white-space: nowrap; font-size: 12px; font-weight: 900; color: var(--muted); }
+  .heads span { display: grid; place-items: center; height: 26px; border-radius: 999px; background: #0f1828; border: 1px solid #2c4359; }
+  .heads span.cur { color: #1a2433; background: var(--gold); border-color: var(--gold); }
+  /* 試合の札(2人を上下に) */
+  .card { position: absolute; width: var(--cw, 168px); border: 2px solid #3a526e; border-radius: 8px; background: #22344c; font-size: 13px; }
+  .card .p:first-child { border-radius: 6px 6px 0 0; } .card .p:last-child { border-radius: 0 0 6px 6px; }
+  .card .p { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 6px; height: 24px; padding: 0 8px; }
+  .card .p + .p { border-top: 1px solid #3a526e; }
+  .card .p em { font-style: normal; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .card .p b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  .card .p u { text-decoration: none; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; font-size: 11px; font-weight: 900; }
+  .card .p.win b { font-weight: 900; color: var(--cream); }
+  .card .p.win u { background: var(--gold); color: #1a2433; }
+  .card .p.lose { color: #6f8096; }
+  .card .p.lose u { background: #33465e; color: #8ea0b4; }
+  .card .p.you { background: rgba(241, 165, 76, 0.18); }
+  .card .p.you b { color: var(--gold2); }
+  .card .p.opp { background: rgba(196, 96, 76, 0.22); }
+  .card .p .tag { padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 900; color: #1a2433; background: var(--lav); }
+  .card.pending { border-color: var(--red2); box-shadow: 0 0 0 3px rgba(224, 116, 94, 0.35); }
+  .card .vs { position: absolute; right: -2px; top: 50%; transform: translate(50%, -50%); }
+  .vsb { padding: 2px 8px; border-radius: 6px; background: var(--red); color: var(--cream); font-size: 11px; font-weight: 900; }
+  .card.ghost { border-style: dashed; background: transparent; color: var(--muted); }
+  svg.lines { position: absolute; left: 0; top: 0; overflow: visible; }
+  /* 次の一局(右) */
+  .hud { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: var(--deep); border-left: 3px solid var(--cream); min-height: 0; }
+  .hud .role { font-size: 12px; color: var(--gold); font-weight: 800; }
+  .hud .head { display: grid; grid-template-columns: 72px 1fr; gap: 12px; align-items: center; }
+  .hud .face { width: 72px; height: 72px; border: 3px solid var(--cream); border-radius: 8px; background: var(--red); display: grid; place-items: center; font-size: 34px; font-weight: 900; box-shadow: 4px 4px 0 var(--shadow); }
+  .hud .name { font-size: 24px; font-weight: 900; }
+  .hud .name small { font-size: 13px; }
+  .chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; margin-right: 4px; }
+  .abil { display: grid; grid-template-columns: 150px 1fr; gap: 6px 12px; padding: 10px; border: 2px solid var(--line); border-radius: 10px; background: rgba(255,252,244,.05); }
+  .abil ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 13px; }
+  .abil li { display: flex; justify-content: space-between; }
+  .rk { display: inline-grid; place-items: center; width: 22px; height: 18px; border-radius: 4px; font-weight: 900; font-size: 12px; color: #172632; }
+  .stakes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; }
+  .stakes div { padding: 6px 10px; border-left: 4px solid var(--gold); background: rgba(255,252,244,.05); }
+  .stakes div + div { border-color: #55697d; }
+  .stakes b { display: block; font-size: 15px; color: var(--gold); }
+  .tip { display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 12px; background: var(--cream); color: #1a2433; font-size: 13px; font-weight: 700; line-height: 1.45; box-shadow: 3px 3px 0 var(--lav); }
+  .tip img { width: 34px; image-rendering: pixelated; }
+  .go { margin-top: auto; height: 60px; border-radius: 14px; background: var(--gold); color: #1a2433; display: grid; place-items: center; font-size: 24px; font-weight: 900; letter-spacing: .12em; box-shadow: 0 6px 0 #b0661b; }
+  .notes { width: 1366px; margin-top: 10px; font-size: 14px; line-height: 1.7; color: #b9c7d6; }
+  /* 番勝負 */
+  .series { display: grid; gap: 14px; margin-top: 14px; }
+  .bout { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; padding: 18px 22px; border-radius: 14px; background: linear-gradient(100deg, rgba(61,111,165,.45), rgba(34,52,76,.6) 45%, rgba(196,96,76,.45)); border: 2px solid #3a526e; }
+  .who { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+  .who.r { grid-template-columns: 1fr auto; text-align: right; }
+  .who .nm { font-size: 26px; font-weight: 900; }
+  .who .nm small { display: block; font-size: 13px; color: var(--muted); font-weight: 800; }
+  .piece { width: 64px; height: 74px; clip-path: polygon(50% 0, 88% 16%, 100% 100%, 0 100%, 12% 16%); background: var(--cream); color: #1a2433; display: grid; place-items: center; padding-top: 10px; font-size: 30px; font-weight: 900; }
+  .score { text-align: center; }
+  .score strong { font-size: 56px; font-weight: 900; line-height: 1; }
+  .score strong i { font-style: normal; color: var(--muted); margin: 0 8px; }
+  .score small { display: block; color: var(--gold); font-weight: 900; font-size: 14px; }
+  .hoshi { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+  .g { padding: 14px 6px; border-radius: 10px; border: 2px solid #3a526e; background: #22344c; text-align: center; font-size: 12px; color: var(--muted); }
+  .g b { display: block; margin: 8px 0; font-size: 34px; line-height: 1; color: var(--cream); }
+  .g.w b { color: var(--gold); }
+  .g.next { border-color: var(--red2); box-shadow: 0 0 0 3px rgba(224,116,94,.35); color: var(--cream); }
+  .g.next b { color: var(--red2); font-size: 18px; margin: 8px 0; }
+  .g.later { opacity: .55; border-style: dashed; }
+  .journey h3 { margin: 6px 0 8px; font-size: 14px; color: var(--muted); }
+  .journey ol { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: none; }
+  .journey li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: #172632; border-top: 4px solid var(--grass); font-size: 13px; }
+  .journey li.now { border-top-color: var(--gold); }
+  .journey li span { font-size: 17px; font-weight: 900; }
+  .journey li small { color: var(--muted); }
+  .prev { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 10px; background: #172632; font-size: 13px; color: var(--muted); }
+  .prev b { color: var(--cream); }
+  .prev .mini { display: flex; gap: 4px; }
+  .prev .mini span { width: 22px; height: 22px; border-radius: 5px; display: grid; place-items: center; font-weight: 900; color: #1a2433; background: var(--gold); }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script>
+const SP = { yakobi: '../../public/characters/yakobihime-mini.webp', hanane: '../../public/characters/hanane-mini.webp' };
+const RK = { S: '#f1a54c', A: '#f1a54c', B: '#e6c88c', C: '#b9d18e', D: '#8ec5cf', E: '#a9b6c4' };
+
+function bar(stage, view = stage, opts = {}) {
+  const names = ['6組ランキング戦', '決勝トーナメント', '番勝負'];
+  const steps = names.map((n, i) => {
+    const k = i + 1;
+    const cls = k < stage ? 'done' : k === stage ? 'cur' : '';
+    const v = k === view && view !== stage ? ' view' : '';
+    return `<span class="step ${cls}${v}"><i>${k < stage ? '✓' : k}</i>${n}</span>`;
+  }).join('<span class="link' + '"></span>').replace('<span class="link"></span>', `<span class="link ${stage > 1 ? 'done' : ''}"></span>`);
+  return `<div class="bar"><span class="back">← 大会の選択へ</span><span class="seal">竜</span><span class="title">第2期 竜王戦<small>${opts.oshi ?? '★推し 中村蓮さん: 準決勝'}</small></span><div class="stepper">${steps}</div>${opts.predict === false ? '' : '<span class="pill">予想</span>'}</div>`;
+}
+
+// 山(左の列)。3つの段階を、麓・中腹・頂上の帯で見せる。
+function mountain(w, h, stage) {
+  const zones = [
+    { y: h * 0.66, h: h * 0.34, c: 'rgba(63,125,90,.22)', label: '① 6組ランキング戦' },
+    { y: h * 0.3, h: h * 0.36, c: 'rgba(61,111,165,.22)', label: '② 決勝トーナメント' },
+    { y: 0, h: h * 0.3, c: 'rgba(241,165,76,.16)', label: '③ 番勝負' },
+  ];
+  const pts = [[w*0.22,h*0.92],[w*0.6,h*0.84],[w*0.3,h*0.74],[w*0.68,h*0.6],[w*0.36,h*0.5],[w*0.66,h*0.38],[w*0.5,h*0.24],[w*0.5,h*0.09]];
+  const labels = ['1回戦','2回戦','準決勝','組の決勝','決勝T','挑戦者決定戦','七番勝負','竜王'];
+  const cur = stage === 1 ? 1 : stage === 2 ? 4 : 6;
+  let s = `<svg width="${w}" height="${h}" class="px">`;
+  s += `<rect width="${w}" height="${h}" fill="#121c2e"/>`;
+  s += `<polygon fill="#22385a" points="0,${h} 0,${h*.45} ${w*.25},${h*.38} ${w*.5},${h*.05} ${w*.78},${h*.33} ${w},${h*.42} ${w},${h}"/>`;
+  s += `<polygon fill="#2b4568" points="0,${h} 0,${h*.62} ${w*.3},${h*.5} ${w*.5},${h*.12} ${w*.72},${h*.48} ${w},${h*.6} ${w},${h}"/>`;
+  s += `<rect y="${h*.93}" width="${w}" height="${h*.07}" fill="#2a5047"/>`;
+  zones.forEach((z, i) => { s += `<rect y="${z.y}" width="${w}" height="${z.h}" fill="${z.c}"/>`; s += `<text x="10" y="${z.y + 20}" fill="${i + 1 === stage ? '#ffd27a' : '#9fb3c8'}" font-size="13" font-weight="900">${z.label}</text>`; });
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x1, y1] = pts[i], [x2, y2] = pts[i+1]; const n = Math.floor(Math.hypot(x2-x1, y2-y1) / 13);
+    for (let k = 1; k < n; k++) { const x = x1 + (x2-x1)*k/n, y = y1 + (y2-y1)*k/n; s += `<rect x="${x-3}" y="${y-3}" width="6" height="6" fill="${i < cur ? '#f1a54c' : '#9fb3c8'}"/>`; }
+  }
+  pts.forEach(([x, y], i) => {
+    const done = i < cur, here = i === cur;
+    if (i === pts.length - 1) { s += `<rect x="${x-34}" y="${y-22}" width="68" height="26" fill="#f1c862"/><rect x="${x-34}" y="${y+4}" width="68" height="4" fill="#8a5a1a"/>`; }
+    else s += `<rect x="${x-14}" y="${y-10}" width="28" height="20" fill="${done ? '#f1a54c' : here ? '#fffcf4' : '#2c4359'}" stroke="${done || here ? '#fffcf4' : '#9fb3c8'}" stroke-width="3"/>`;
+    s += `<text x="${x}" y="${y + 26}" fill="#fffcf4" font-size="12" font-weight="800" text-anchor="middle">${labels[i]}</text>`;
+    if (here) s += `<polygon points="${x+18},${y-30} ${x+28},${y-36} ${x+38},${y-30} ${x+40},${y-6} ${x+16},${y-6}" fill="#fffcf4"/><text x="${x+28}" y="${y-13}" font-size="13" font-weight="900" text-anchor="middle" fill="#1a2433">自</text>`;
+  });
+  return s + '</svg>';
+}
+
+// 試合の札の表(左から右へ勝ち上がる)。rounds: [{ label, matches: [[a, b, winner, flags]] }]
+function bracket(rounds, { x0 = 0, y0 = 40, colW = 200, cardW = 168, height = 560, cur = -1 } = {}) {
+  let html = '';
+  let lines = '';
+  const centers = [];
+  rounds.forEach((round, r) => {
+    const n = round.matches.length; const slot = height / n;
+    centers[r] = [];
+    round.matches.forEach((m, i) => {
+      const cy = y0 + slot * (i + 0.5); const x = x0 + r * colW;
+      centers[r][i] = cy;
+      const [a, b, win, f = {}] = m;
+      const p = (pl, side) => {
+        if (!pl) return `<div class="p"><u></u><b style="color:#6f8096">${f.wait ?? '—'}</b><em></em></div>`;
+        const st = win === side ? 'win' : win && win !== side ? 'lose' : '';
+        const you = pl.you ? ' you' : pl.opp ? ' opp' : '';
+        return `<div class="p ${st}${you}"><u>${win === side ? '○' : win ? '●' : ''}</u><b>${pl.tag ? `<span class="tag">${pl.tag}</span> ` : ''}${pl.n}</b><em>${pl.d ?? ''}</em></div>`;
+      };
+      html += `<div class="card ${f.pending ? 'pending' : ''} ${f.ghost ? 'ghost' : ''}" style="--cw:${cardW}px;left:${x}px;top:${cy - 26}px">${p(a, 'a')}${p(b, 'b')}${f.pending ? '<span class="vs"><span class="vsb">VS</span></span>' : ''}</div>`;
+      if (r > 0) {
+        const c1 = centers[r - 1][i * 2], c2 = centers[r - 1][i * 2 + 1];
+        const xa = x0 + (r - 1) * colW + cardW, xm = xa + (colW - cardW) / 2;
+        const hot1 = rounds[r - 1].matches[i * 2]?.[3]?.path, hot2 = rounds[r - 1].matches[i * 2 + 1]?.[3]?.path;
+        lines += `<path d="M${xa} ${c1} H${xm} V${cy}" stroke="${hot1 ? '#f1a54c' : '#4b6585'}" stroke-width="${hot1 ? 4 : 2}" fill="none"/>`;
+        if (c2 !== undefined) lines += `<path d="M${xa} ${c2} H${xm} V${cy}" stroke="${hot2 ? '#f1a54c' : '#4b6585'}" stroke-width="${hot2 ? 4 : 2}" fill="none"/>`;
+        lines += `<path d="M${xm} ${cy} H${x}" stroke="${hot1 || hot2 ? '#f1a54c' : '#4b6585'}" stroke-width="2" fill="none"/>`;
+      }
+    });
+  });
+  const heads = rounds.map((round, r) => `<span class="${r === cur ? 'cur' : ''}" style="width:${cardW}px;margin-right:${colW - cardW}px">${round.label}</span>`).join('');
+  return `<div class="heads" style="left:${x0 + 20}px;top:${y0 - 30 + 70}px">${heads}</div><div style="position:absolute;left:20px;top:70px"><svg class="lines" width="1" height="1">${lines}</svg>${html}</div>`;
+}
+
+const P = (n, d, extra = {}) => ({ n, d, ...extra });
+const YOU = P('ハル', '四段', { you: true });
+// 6組ランキング戦(16名)。あなたは準々決勝。
+const r1 = [
+  [P('永瀬大和','四段'), P('田中一輝','五段'), 'a'], [P('中村蓮','六段',{tag:'推し'}), P('小松翔','四段'), 'a'],
+  [P('飯田蒼','五段'), P('岡本陸','四段'), 'b'], [P('石井悠真','七段'), P('松本湊','四段'), 'a'],
+  [YOU, P('高橋圭','五段'), 'a', { path: true }], [P('杉山颯太','奨励会三段'), P('大野誠','六段'), 'a'],
+  [P('林海斗','四段'), P('森田智','八段'), 'b'], [P('清水直樹','六段'), P('佐々木翼','女流四段'), 'b'],
+];
+const r2 = [
+  [P('永瀬大和','四段'), P('中村蓮','六段',{tag:'推し'}), 'b'], [P('岡本陸','四段'), P('石井悠真','七段'), 'b'],
+  [YOU, P('杉山颯太','奨励会三段', { opp: true }), null, { pending: true, path: true }], [P('森田智','八段'), P('佐々木翼','女流四段'), null],
+];
+const r3 = [[P('中村蓮','六段',{tag:'推し'}), P('石井悠真','七段'), null], [null, null, null, { wait: '準々決勝の勝者' }]];
+const r4 = [[null, null, null, { wait: '準決勝の勝者' }]];
+
+function hud(o) {
+  const ranks = [['序盤','B'],['中盤','C'],['終盤','C'],['攻め','B'],['受け','C'],['読み','B'],['詰み','S'],['安定感','C']];
+  return `<div class="hud">
+    <div class="role">${o.role}</div>
+    <div class="head"><div class="face" style="background:${o.color ?? 'var(--red)'}">${o.n[0]}</div><div><div class="name">${o.n} <small>${o.d}</small></div><div><span class="chip" style="background:${o.color ?? 'var(--red)'}">${o.style}</span><span class="chip" style="background:#c9d6e6;color:#172632">${o.open}</span></div></div></div>
+    <div class="abil"><svg width="150" height="120" viewBox="-70 -60 140 120"><g fill="none" stroke="rgba(255,252,244,.25)">${[20,40,60].map(r => `<polygon points="${[...Array(8)].map((_, i) => `${Math.sin(i*Math.PI/4)*r},${-Math.cos(i*Math.PI/4)*r}`).join(' ')}"/>`).join('')}</g><polygon fill="rgba(241,165,76,.5)" stroke="#f1a54c" stroke-width="3" points="${[38,30,30,40,28,40,58,30].map((v, i) => `${Math.sin(i*Math.PI/4)*v},${-Math.cos(i*Math.PI/4)*v}`).join(' ')}"/></svg>
+      <ul>${ranks.map(([l, k]) => `<li><span>${l}</span><span class="rk" style="background:${RK[k]}">${k}</span></li>`).join('')}</ul>
+      <div style="grid-column:1/-1;display:flex;gap:6px;align-items:center"><span class="chip" style="background:#2f6fa8">＋詰将棋がとても得意</span><span style="margin-left:auto;color:var(--gold);font-size:13px;font-weight:800">くわしく ›</span></div></div>
+    <div style="font-size:13px;color:var(--lav);font-weight:800">${o.goal}</div>
+    <div class="stakes"><div>勝てば<b>${o.win}</b></div><div>負ければ<b style="color:var(--cream)">${o.lose}</b></div></div>
+    <div class="tip"><img src="${SP.yakobi}" alt=""><span>${o.tip}</span></div>
+    <div class="go">対局する</div>
+  </div>`;
+}
+
+function pcStage1() {
+  return `<div class="pc">${bar(1)}<div class="body"><div class="map">${mountain(330, 712, 1)}</div>
+    <div class="stage"><h2><span>①</span>6組ランキング戦<span class="seg"><b class="on">ランキング戦</b><b>昇級者決定戦</b></span></h2><p class="sub">16名のトーナメント。優勝すれば決勝トーナメントへ。2位以内で5組へ昇級。</p>
+    ${bracket([{ label: '1回戦', matches: r1 }, { label: '2回戦', matches: r2 }, { label: '準決勝', matches: r3 }, { label: '決勝', matches: r4 }], { colW: 160, cardW: 144, height: 600, cur: 1 })}
+    </div>${hud({ role: '2回戦の相手', n: '杉山颯太', d: '奨励会三段', style: '攻め将棋', open: '矢倉 47%', goal: '6組優勝まであと3勝・昇級まであと2勝', win: '準決勝へ', lose: '昇級者決定戦へ', tip: '能力は詰みがSで一番の武器。受けはCだから、攻め合いに持ち込めば、チャンスがありそう。' })}</div></div>`;
+}
+
+function pcStage2() {
+  const E = (n, d, tag, f = {}) => P(n, d, { tag, ...f });
+  const m1 = [
+    [E('田中一輝','八段','1組優勝'), null, 'a', { wait: 'シード' }], [E('森田智','八段','2組優勝'), E('大野誠','六段','4組優勝'), 'a'],
+    [{ ...YOU, tag: '6組優勝' }, E('飯田蒼','五段','5組優勝'), 'a', { path: true }], [E('石井悠真','七段','1組2位'), null, 'a', { wait: 'シード' }],
+    [E('林海斗','九段','1組3位'), E('小松翔','七段','3組優勝'), 'b'], [E('永瀬大和','九段','1組4位'), null, 'a', { wait: 'シード' }],
+    [E('松本湊','七段','2組2位'), E('岡本陸','九段','1組5位'), 'b'], [E('清水直樹','九段','1組優勝'), null, 'a', { wait: 'シード' }],
+  ];
+  const m2 = [[E('田中一輝','八段','1組優勝'), E('森田智','八段','2組優勝'), 'a'], [{ ...YOU, tag: '6組優勝' }, E('石井悠真','七段','1組2位', { opp: true }), null, { pending: true, path: true }], [E('小松翔','七段','3組優勝'), E('永瀬大和','九段','1組4位'), null], [E('岡本陸','九段','1組5位'), E('清水直樹','九段','1組優勝'), null]];
+  const m3 = [[E('田中一輝','八段','1組優勝'), null, null, { wait: '準々決勝の勝者' }], [null, null, null, { wait: '準々決勝の勝者' }]];
+  const m4 = [[null, null, null, { wait: '挑戦者決定三番勝負' }]];
+  return `<div class="pc">${bar(2)}<div class="body"><div class="map">${mountain(330, 712, 2)}</div>
+    <div class="stage"><h2><span>②</span>決勝トーナメント</h2><p class="sub">各組の上位11名。勝ち抜くと、挑戦者決定三番勝負へ。組が上ほどシードで有利。</p>
+    ${bracket([{ label: '1回戦', matches: m1 }, { label: '準々決勝', matches: m2 }, { label: '準決勝', matches: m3 }, { label: '挑戦者決定三番勝負', matches: m4 }], { colW: 160, cardW: 144, height: 600, cur: 1 })}
+    </div>${hud({ role: '準々決勝の相手', n: '石井悠真', d: '七段', color: '#d9b860', style: 'バランス型', open: '角換わり 38%', goal: '挑戦者決定戦まであと2勝', win: '準決勝へ', lose: '竜王戦はここまで', tip: '1組2位の強敵だよ。序盤はAで、研究が深い。早めに力戦に持ち込もう。' })}</div></div>`;
+}
+
+function pcStage3() {
+  return `<div class="pc">${bar(3)}<div class="body"><div class="map">${mountain(330, 712, 3)}</div>
+    <div class="stage"><h2><span>③</span>番勝負</h2><p class="sub">挑戦者決定三番勝負に勝ち、竜王に挑む七番勝負。先に4勝した方が竜王。</p>
+    <div class="series">
+      <div class="prev"><span>挑戦者決定三番勝負</span><b>ハル 2 - 0 田中一輝</b><span class="mini"><span>○</span><span>○</span></span><span style="margin-left:auto;color:var(--gold);font-weight:900">挑戦権獲得</span></div>
+      <div class="bout"><div class="who"><div class="piece">自</div><div class="nm">ハル<small>挑戦者・四段・第3局は先手</small></div></div>
+        <div class="score"><strong>2<i>-</i>0</strong><small>竜王まであと2勝</small></div>
+        <div class="who r"><div class="nm">天鷺善彦<small>竜王・6冠・第3局は後手</small></div><div class="seal" style="width:64px;height:64px;font-size:30px;background:#d9b860;color:#1a2433">天</div></div></div>
+      <div class="hoshi">${[['第1局','○','先手・終盤で逆転'],['第2局','○','後手・序盤から優勢']].map(([a,b,c]) => `<div class="g w">${a}<b>${b}</b>${c}</div>`).join('')}<div class="g next">第3局<b>次の対局</b>先手</div>${['第4局','第5局','第6局','第7局'].map(a => `<div class="g later">${a}<b>&nbsp;</b>　</div>`).join('')}</div>
+      <p class="sub" style="margin:0">○はあなたの勝ち、●は負け。第5局以降は、決着がつけば指さない。</p>
+      <div class="journey"><h3>この期の歩み</h3>
+        <ol><li><b>① 6組ランキング戦</b><span>4勝0敗・優勝</span><small>決勝 中村蓮 ○</small></li><li><b>② 決勝トーナメント</b><span>3勝0敗</span><small>準決勝 田中一輝 ○</small></li><li><b>挑戦者決定三番勝負</b><span>2勝0敗</span><small>挑戦権獲得</small></li><li class="now"><b>③ 七番勝負</b><span>2勝0敗</span><small>第3局へ</small></li></ol></div>
+    </div></div>${hud({ role: '竜王戦七番勝負 第3局', n: '天鷺善彦', d: '竜王', color: '#d9b860', style: 'バランス型', open: '角換わり腰掛け銀 17%', goal: '竜王まであと2勝', win: '竜王まであと1勝', lose: '相手はあと3勝', tip: '6冠の天鷺善彦さん。形勢判断と読みに穴がない。最後まで気をゆるめないで。' })}</div></div>`;
+}
+
+function phoneStage1() {
+  const cols = [{ label: '1回戦', matches: r1.slice(4, 8) }, { label: '2回戦', matches: r2.slice(2, 4) }];
+  return `<div class="phone">
+    <div style="padding:10px 12px;background:#0f1828;display:grid;gap:8px">
+      <div style="display:flex;gap:10px;align-items:center"><span class="seal">竜</span><span class="title">第2期 竜王戦<small>★推し 中村蓮さん: 準決勝</small></span><span class="pill" style="margin-left:auto">予想</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px;font-weight:900;text-align:center">
+        <span style="padding:8px 0;border-radius:999px;background:var(--gold);color:#1a2433">① 6組</span><span style="padding:8px 0;border-radius:999px;border:2px solid var(--line);color:var(--muted)">② 決勝T</span><span style="padding:8px 0;border-radius:999px;border:2px solid var(--line);color:var(--muted)">③ 番勝負</span></div>
+    </div>
+    <div class="stage" style="padding:12px">
+      <div style="display:flex;gap:4px;padding:3px;border:2px solid var(--line);border-radius:999px;background:#0f1828;width:max-content;margin:0 auto"><b style="padding:8px 14px;font-size:13px">竜王への道</b><b style="padding:8px 14px;border-radius:999px;background:var(--cream);color:#1a2433;font-size:13px">トーナメント表</b></div>
+      <p class="sub" style="text-align:center;margin:8px 0 0">← 横にすべらせて、ほかの回戦 →</p>
+      <div style="position:absolute;left:-8px;top:40px">${bracket(cols, { colW: 176, cardW: 160, y0: 70, height: 300, cur: 1 }).replace('left:20px;top:70px', 'left:24px;top:30px')}</div>
+      <div style="position:absolute;left:12px;right:12px;bottom:10px;display:flex;justify-content:center;gap:6px">${[0,1,2,3].map(i => `<span style="width:${i===1?18:8}px;height:8px;border-radius:999px;background:${i===1?'var(--gold)':'#4b6585'}"></span>`).join('')}</div>
+    </div>
+    <div class="hud" style="border-left:0;border-top:3px solid var(--cream);gap:8px">
+      <div class="head" style="grid-template-columns:60px 1fr"><div class="face" style="width:60px;height:60px;font-size:28px">杉</div><div><div class="role">2回戦の相手</div><div class="name" style="font-size:21px">杉山颯太 <small>奨励会三段</small></div><div><span class="chip" style="background:var(--red)">攻め将棋</span><span class="chip" style="background:#c9d6e6;color:#172632">矢倉 47%</span></div></div></div>
+      <div class="stakes"><div>勝てば<b>準決勝へ</b></div><div>負ければ<b style="color:var(--cream)">昇級者決定戦へ</b></div></div>
+      <div class="go" style="height:56px;margin-top:4px">対局する</div>
+    </div></div>`;
+}
+
+function phoneStage3() {
+  return `<div class="phone">
+    <div style="padding:10px 12px;background:#0f1828;display:grid;gap:8px">
+      <div style="display:flex;gap:10px;align-items:center"><span class="seal">竜</span><span class="title">第2期 竜王戦<small>竜王戦七番勝負</small></span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:12px;font-weight:900;text-align:center">
+        <span style="padding:8px 0;border-radius:999px;background:var(--grass)">✓ 6組</span><span style="padding:8px 0;border-radius:999px;background:var(--grass)">✓ 決勝T</span><span style="padding:8px 0;border-radius:999px;background:var(--gold);color:#1a2433">③ 番勝負</span></div>
+    </div>
+    <div class="stage" style="padding:12px;display:grid;align-content:start;gap:10px">
+      <div class="prev" style="font-size:12px"><span>挑戦者決定三番勝負</span><b>2-0</b><span class="mini"><span>○</span><span>○</span></span><span style="margin-left:auto;color:var(--gold);font-weight:900">挑戦権</span></div>
+      <div class="bout" style="grid-template-columns:1fr;gap:8px;padding:14px;text-align:center">
+        <div style="display:flex;justify-content:space-between;align-items:center"><div class="piece" style="width:52px;height:60px;font-size:24px">自</div><div class="score"><strong style="font-size:48px">2<i>-</i>0</strong><small>竜王まであと2勝</small></div><div class="seal" style="width:56px;height:56px;font-size:26px;background:#d9b860;color:#1a2433">天</div></div>
+        <div style="display:flex;justify-content:space-between;font-weight:900"><span>ハル<br><small style="color:var(--muted)">挑戦者</small></span><span style="text-align:right">天鷺善彦<br><small style="color:var(--muted)">竜王・6冠</small></span></div>
+      </div>
+      <div class="hoshi" style="grid-template-columns:repeat(4,1fr)">${[['第1局','○'],['第2局','○']].map(([a,b]) => `<div class="g w">${a}<b>${b}</b></div>`).join('')}<div class="g next">第3局<b>次</b></div><div class="g later">第4局<b>&nbsp;</b></div><div class="g later">第5局<b>&nbsp;</b></div><div class="g later">第6局<b>&nbsp;</b></div><div class="g later">第7局<b>&nbsp;</b></div></div>
+    </div>
+    <div class="hud" style="border-left:0;border-top:3px solid var(--red);gap:8px">
+      <div class="stakes"><div>勝てば<b>竜王まであと1勝</b></div><div>負ければ<b style="color:var(--cream)">相手はあと3勝</b></div></div>
+      <div class="go" style="height:56px">第3局を指す</div>
+    </div></div>`;
+}
+
+const out = document.getElementById('out');
+const which = new URLSearchParams(location.search).get('v') ?? 'all';
+const shots = {
+  pc1: ['PC：① 6組ランキング戦', pcStage1()],
+  pc2: ['PC：② 決勝トーナメント', pcStage2()],
+  pc3: ['PC：③ 番勝負（七番勝負）', pcStage3()],
+  phone: ['スマホ：① の表と ③ の番勝負', `<div class="row">${phoneStage1()}${phoneStage3()}</div>`],
+};
+for (const [key, [cap, html]] of Object.entries(shots)) {
+  if (which !== 'all' && which !== key) continue;
+  out.insertAdjacentHTML('beforeend', `<div class="shot"><p class="cap"><b>見本</b>${cap}</p>${html}</div>`);
+}
+</script>
+</body>
+</html>
