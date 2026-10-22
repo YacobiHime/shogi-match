@@ -407,6 +407,14 @@ describe("match screen regressions", () => {
     expect(counter).toMatch(/confirmDiscardSuspended[\s\S]*?matchKind\.value = "learning";[\s\S]*?selectedPlayerColor\.value = color;[\s\S]*?counterStyle\([\s\S]*?beginMatch\(\);/);
     expect(source).toMatch(/ryuoGame\.value \? ryuoOpponent\.value\?\.character \?\? null : ryuoCounterOpponent\.value\?\.character \?\? null/);
     expect(source).toMatch(/v-if="ryuoCounter && !tutorialMatch && !measureSession"[\s\S]*?data-counter-go @click="goToRyuoFromCounter"/);
+    // 段階2(14章): 苦手な戦型の練習は、その戦法を指すCPUとの学習対局。練習で変えたCPUの設定は、離れたら戻す。
+    expect(source).toMatch(/practice\.kind === "matchup"[\s\S]*?startMatchupPractice\(/);
+    const matchup = source.split("function startMatchupPractice(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(matchup).toMatch(/settingsBeforePractice = captureMatchSettings\(\);[\s\S]*?matchKind\.value = "learning";[\s\S]*?cpuRookPreference\.value = rook;[\s\S]*?beginMatch\(\);/);
+    expect(counter).toMatch(/settingsBeforePractice = captureMatchSettings\(\);/);
+    expect(source).toMatch(/if \(settingsBeforePractice\) restoreMatchSettings\(settingsBeforePractice\);\s*settingsBeforePractice = null;/);
+    // 竜王戦の統計の裏の解析から、対局の中身の要約も足す(二度読まない)。
+    expect(source).toMatch(/useRyuoStatsAnalysis\(\{[\s\S]*?storage: browserStorage,[\s\S]*?onInsight:/);
     // 勝ったら次のLvへ(同じ相手ともう一局は小さく残す)。
     expect(source).toMatch(/v-else-if="!tutorialMatch && !measureSession && resultNextStep"[\s\S]*?data-next-step-go[\s\S]*?data-next-step-same/);
     expect(quick).toMatch(/throwFurigoma\(\)[\s\S]*?beginMatch\(\);[\s\S]*?showFurigoma/);

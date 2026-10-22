@@ -4481,6 +4481,7 @@ function startRyuoCounter() {
     yakobiNoteOpen.value = false;
     tournamentOpen.value = false;
     openPregame();
+    settingsBeforePractice = captureMatchSettings();
     homeOpen.value = false;
     void initializeEngine();
     matchKind.value = "learning";
@@ -4566,6 +4567,8 @@ const ryuoStats = useRyuoStatsAnalysis({
   saveSeason: (season) => saveSeason(browserStorage(), season),
   engineFactory: ensureEngineFactory,
   compact: () => props.mobile || boardLayout.value === "portrait",
+  storage: browserStorage,
+  onInsight: (insight) => { playInsight.value = insight; },
 });
 
 // ---- 自由対局の中身の記録のための、裏の解析(docs/home-next-adaptive-design.mdの5章)。対局中は止める。
@@ -4655,6 +4658,11 @@ function declareGrade(grade: { label: string; level: number }) {
 
 /** 棋力測定の前の対局設定。測定の対局を離れたら戻す。 */
 let settingsBeforeMeasure: { [key: string]: unknown } | null = null;
+/**
+ * 練習(竜王戦の対策・苦手な戦型)で、CPUの戦法を一時的に変える前の対局設定。練習の対局を離れたら戻す
+ * (あとの「対局する」が、練習の相手の戦法のまま始まらないように)。
+ */
+let settingsBeforePractice: { [key: string]: unknown } | null = null;
 
 /** やこびノートの「対局する」。ノートを閉じて、通常対局の対局準備を開く。 */
 function startMatchFromNote() {
@@ -5244,6 +5252,9 @@ function startPractice(practice: PracticeStep) {
     confirmDiscardSuspended(() => { void startEndgameNow({ ownOnly: true }); });
   } else if (practice.kind === "free") {
     startQuickMatch({ attackGuide: true });
+  } else if (practice.kind === "matchup") {
+    // 苦手な戦型: その戦法を指すCPUと、おすすめの強さで学習対局(振り駒)。
+    confirmDiscardSuspended(() => startMatchupPractice(practice.rook === "static" ? "static" : "ranging"));
   } else {
     confirmDiscardSuspended(() => {
       matchKind.value = "learning";
@@ -5253,12 +5264,34 @@ function startPractice(practice: PracticeStep) {
     });
   }
 }
+/**
+ * 苦手な戦型の練習(docs/home-next-adaptive-design.mdの14章)。CPUの戦法の傾向を「居飛車」か「振り飛車」にした、
+ * おすすめの強さの学習対局(振り駒)。レーティングには数えない。CPUの設定は、練習の対局を離れたら戻す。
+ */
+function startMatchupPractice(rook: "static" | "ranging") {
+  yakobiNoteOpen.value = false;
+  openPregame();
+  settingsBeforePractice = captureMatchSettings();
+  searchNodes.value = playPreset.value.value;
+  homeOpen.value = false;
+  void initializeEngine();
+  matchKind.value = "learning";
+  learningStartType.value = "standard";
+  cpuStrategy.value = "random";
+  cpuStrategyDetailsOpen.value = false;
+  cpuRookPreference.value = rook;
+  const toss = throwFurigoma();
+  selectedPlayerColor.value = toss.playerColor;
+  beginMatch();
+  showFurigoma(toss);
+}
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
 const homeGreeting = computed(() => {
   if (homeNext.value.id === "resume") return "さっきの対局、続きをしよう！";
   const ryuoName = ryuoView.value?.pending?.opponent?.name ?? "";
   if (homeNext.value.id === "ryuo-counter") return `${ryuoName}さんの対策、いっしょにしよう！`;
   if (homeNext.value.id === "ryuo-season") return `次は${ryuoName}さんとの一局だね！`;
+  if (homeNext.value.id === "practice") return "いっしょに練習しよう！";
   switch (homeRoadmapState.value.current) {
     case 1: return homeLessonsDone.value ? "今日も教室で練習しよう！" : "はじめまして！ いっしょに覚えよう";
     case 2: return "駒の動き、覚えたね！ CPUと指してみよう";
@@ -5366,6 +5399,8 @@ function openPregame() {
   measureCarry.value = null;
   if (settingsBeforeMeasure) restoreMatchSettings(settingsBeforeMeasure);
   settingsBeforeMeasure = null;
+  if (settingsBeforePractice) restoreMatchSettings(settingsBeforePractice);
+  settingsBeforePractice = null;
   // 教室の対局から離れたら、教室の固定条件を元の設定へ戻す。
   if (tutorialMatch.value) {
     if (settingsBeforeTutorial) restoreMatchSettings(settingsBeforeTutorial);

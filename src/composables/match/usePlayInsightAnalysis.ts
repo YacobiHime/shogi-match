@@ -24,22 +24,24 @@ type PlayInsightDeps = {
  * 対局が始まったら止める(1局の途中なら、その対局は次の機会に読み直す)。
  * 見逃した短い詰みは、振り返りと同じく「あなたの対局から」の問題にして、復習の箱へ入れる。
  */
+/**
+ * 見逃した短い詰みを、「あなたの対局から」の問題にして、復習の箱へ入れる(自由対局と竜王戦の裏の解析で共通)。
+ * すでに復習の箱にある問題は、間隔を巻き戻さない。
+ */
+export function saveMissedMates(store: Storage | null, mates: { sfen: string; length: number }[]) {
+  const problems = mates.map(({ sfen, length }) => buildReviewProblem({ sfen, mateLength: length })).filter((problem) => problem !== null);
+  if (!problems.length) return;
+  saveReviewProblems(store, addReviewProblems(loadReviewProblems(store), problems));
+  let queue = loadReviewQueue(store);
+  for (const problem of problems) {
+    if (!queue.items[problem.id]) queue = recordReviewResult(queue, problem.id, { firstTry: false });
+  }
+  saveReviewQueue(store, queue);
+}
+
 export function usePlayInsightAnalysis({ storage, engineFactory, compact, paused, onUpdated }: PlayInsightDeps) {
   let engine: ShogiEngine | null = null;
   let running = false;
-
-  function saveMissedMates(mates: { sfen: string; length: number }[]) {
-    const problems = mates.map(({ sfen, length }) => buildReviewProblem({ sfen, mateLength: length })).filter((problem) => problem !== null);
-    if (!problems.length) return;
-    const store = storage();
-    saveReviewProblems(store, addReviewProblems(loadReviewProblems(store), problems));
-    let queue = loadReviewQueue(store);
-    for (const problem of problems) {
-      // すでに復習の箱にある問題は、間隔を巻き戻さない。
-      if (!queue.items[problem.id]) queue = recordReviewResult(queue, problem.id, { firstTry: false });
-    }
-    saveReviewQueue(store, queue);
-  }
 
   async function processQueue() {
     if (running) return;
@@ -61,7 +63,7 @@ export function usePlayInsightAnalysis({ storage, engineFactory, compact, paused
           }
         }
         // エンジンが使えない・解析に失敗したときは、勝ち負けだけ残す(内容の強さは使わず、結果だけで見立てる)。
-        if (summary) saveMissedMates(summary.mates);
+        if (summary) saveMissedMates(storage(), summary.mates);
         const updated = completePlayInsight(loadPlayInsight(storage()), job, summary);
         savePlayInsight(storage(), updated);
         onUpdated(updated);

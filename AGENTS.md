@@ -10,7 +10,7 @@
 | 作業 | 主な参照先 |
 | --- | --- |
 | 対局画面・状態遷移・やこび姫の表示 | `src/ShogiMatchGame.vue`、スタイルは`src/ShogiMatchGame.css`、対局画面から切り出した部品は`src/composables/match/` |
-| ホーム画面と強くなる道 | `src/ShogiMatchGame.vue`の`homeNext`・`homeRoadmapState`、段の判定は`src/core/home-roadmap.mjs`（問題集の解いた記録は`src/core/problem-progress.mjs`から読む）、設計は`docs/home-roadmap-design.md`。実力と実績で「つぎはこれ」とおすすめの強さを変える見立ては`src/core/play-coach.mjs`、自由対局の中身の記録と弱点の判定は`src/core/play-insight.mjs`、その裏の解析は`src/composables/match/usePlayInsightAnalysis.ts`（竜王戦の統計と共通の浅い読みは`scanAnalysis.ts`。設計は`docs/home-next-adaptive-design.md`） |
+| ホーム画面と強くなる道 | `src/ShogiMatchGame.vue`の`homeNext`・`homeRoadmapState`、段の判定は`src/core/home-roadmap.mjs`（問題集の解いた記録は`src/core/problem-progress.mjs`から読む）、設計は`docs/home-roadmap-design.md`。実力と実績で「つぎはこれ」とおすすめの強さを変える見立ては`src/core/play-coach.mjs`、対局の中身の記録（自由対局と竜王戦）と弱点の判定は`src/core/play-insight.mjs`、竜王戦の期の途中の「続きを指す」と「○○対策」・次の期へは`src/core/ryuo-next.mjs`、その裏の解析は`src/composables/match/usePlayInsightAnalysis.ts`（竜王戦の統計と共通の浅い読みは`scanAnalysis.ts`。設計は`docs/home-next-adaptive-design.md`） |
 | 対局準備の画面 | `src/ShogiMatchGame.vue`の対局準備（`pregameSides`・`pregameCommonRows`・`pregamePickerConfig`）、選択肢の定数は`src/composables/match/pregameOptions.ts`、選択シートは`src/PregamePicker.vue` |
 | ブラウザの戻る操作 | `src/composables/useBackNavigation.ts`、`src/ShogiMatchGame.vue`の`navigateBack` |
 | 画面の大きさによる配置の切り替え | `src/composables/useResponsiveLayout.ts` |

@@ -55,6 +55,7 @@ function validSummary(summary) {
 
 function validGame(game) {
   return game && finite(game.at) && finite(game.level) && isOutcome(game.outcome) && isColor(game.color)
+    && (game.event === undefined || typeof game.event === 'string')
     && (game.summary === null || validSummary(game.summary));
 }
 
@@ -107,6 +108,21 @@ export function completePlayInsight(insight, job, summary) {
     ...insight,
     games: [...insight.games.filter((entry) => entry.at !== job.at), game].sort((a, b) => a.at - b.at).slice(-MAX_INSIGHT_GAMES),
     queue: insight.queue.filter((entry) => entry.at !== job.at),
+  };
+}
+
+/**
+ * ほかで解析した対局(竜王戦の統計の裏の解析)の要約を、そのまま記録に足す。同じ時刻の記録は置き換える。
+ * eventは棋戦('ryuo'など)。自由対局は省く。
+ * @param {ReturnType<typeof createPlayInsight>} insight
+ * @param {{ at: number, level: number, outcome: string, color: string, event?: string, summary: ReturnType<typeof summarizePlayInsight> | null }} game
+ */
+export function addAnalyzedGame(insight, { at, level, outcome, color, event, summary }) {
+  const game = { at, level, outcome, color, summary, ...(event ? { event } : {}) };
+  if (!validGame(game)) return insight;
+  return {
+    ...insight,
+    games: [...insight.games.filter((entry) => entry.at !== at), game].sort((a, b) => a.at - b.at).slice(-MAX_INSIGHT_GAMES),
   };
 }
 

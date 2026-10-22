@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyRatedGame, createRatingState, recommendedLevel } from './player-rating.mjs';
-import { CONTENT_SPREAD, TARGET_MARGIN, blendedStrength, recentPerformance, recommendPlay, resultNextStep, resultStrength, unbeatenCap } from './play-coach.mjs';
+import { CONTENT_SPREAD, TARGET_MARGIN, blendedStrength, detectHabits, goodContentLine, recentPerformance, recommendPlay, resultNextStep, resultStrength, unbeatenCap } from './play-coach.mjs';
 import { completePlayInsight, createPlayInsight, recordPractice } from './play-insight.mjs';
 import { reviewProblemId } from './review-problems.mjs';
 
@@ -171,5 +171,62 @@ describe('段階2: 対局の中身', () => {
   it('立て直し・初勝利の次・連勝の挑戦は、練習より先', () => {
     const state = play(1200, 12, [[15, 'loss'], [15, 'loss'], [15, 'loss']]);
     expect(recommendPlay(state, { reviewDueId: 'tsume-1' }).kind).toBe('warmup');
+  });
+});
+
+describe('段階2(14章): 戦型の癖と、良い内容の続き', () => {
+  const tally = (wins, losses) => ({ wins, losses, draws: 0 });
+  /** 戦型の成績つきの記録。vsRangingは対振り飛車、ownRangingは自分が振り飛車を指した対局、castlesは戦型を記録した対局。 */
+  function withUsage({ wins, losses, vsRanging = tally(0, 0), ownRanging = 0, castles = 0, games = wins + losses }) {
+    return {
+      ...createRatingState(), rating: 1200, games, wins, losses,
+      usage: {
+        opponentRook: { 四間飛車: vsRanging },
+        rook: ownRanging ? { 中飛車: tally(ownRanging, 0) } : {},
+        castle: castles ? { 美濃囲い: tally(castles, 0) } : {},
+      },
+    };
+  }
+
+  it('対振り飛車だけ負け越していれば、振り飛車党と対局', () => {
+    // 対振り飛車 1勝5敗(17%)、対居飛車 6勝2敗(75%)
+    const habits = detectHabits(withUsage({ wins: 7, losses: 7, vsRanging: tally(1, 5) }));
+    expect(habits[0]).toEqual({
+      kind: 'matchup', rook: 'ranging', title: '振り飛車党と対局', reason: '対振り飛車は1勝5敗。振り飛車を指す相手で慣れよう',
+    });
+  });
+
+  it('対居飛車が苦手なら居飛車党。差が小さい・局数が少ないときは出さない', () => {
+    expect(detectHabits(withUsage({ wins: 7, losses: 7, vsRanging: tally(5, 1) }))[0]).toMatchObject({ kind: 'matchup', rook: 'static' });
+    expect(detectHabits(withUsage({ wins: 7, losses: 7, vsRanging: tally(3, 4) }))).toEqual([]);
+    expect(detectHabits(withUsage({ wins: 4, losses: 4, vsRanging: tally(0, 4) }))).toEqual([]);
+  });
+
+  it('自分の戦法が9割以上どちらかなら、もう片方を試そう(戦型を記録した15局以上)', () => {
+    expect(detectHabits(withUsage({ wins: 10, losses: 10, castles: 20, ownRanging: 1 }))[0]).toMatchObject({
+      kind: 'widen', rook: 'ranging', title: '振り飛車を試そう', reason: 'これまでの20局は、ほとんど居飛車。作戦カードで振り飛車を指してみよう',
+    });
+    expect(detectHabits(withUsage({ wins: 10, losses: 10, castles: 20, ownRanging: 19 }))[0]).toMatchObject({ kind: 'widen', rook: 'static' });
+    expect(detectHabits(withUsage({ wins: 10, losses: 10, castles: 20, ownRanging: 8 }))).toEqual([]);
+    // 戦型の記録がなければ出さない(古い記録)。
+    expect(detectHabits(withUsage({ wins: 10, losses: 10 }))).toEqual([]);
+  });
+
+  it('戦型の癖は、対局の中身の弱点より後。練習の決まり(2局に1回・同じ種類を続けない)も同じ', () => {
+    const state = withUsage({ wins: 7, losses: 7, vsRanging: tally(1, 5) });
+    expect(recommendPlay(state)).toMatchObject({ kind: 'practice', title: '振り飛車党と対局', practice: { kind: 'matchup', rook: 'ranging' } });
+    const mated = recommendPlay(state, { insight: insightOf([summary({ freeLosses: 3 })]) });
+    expect(mated.practice.kind).toBe('free');
+    // 前の練習が苦手な戦型なら、続けて出さない。
+    const after = recommendPlay({ ...state, games: 16 }, { insight: recordPractice(createPlayInsight(), { kind: 'matchup', games: 14 }) });
+    expect(after.kind).not.toBe('practice');
+  });
+
+  it('前の局の内容が良ければ、その1行', () => {
+    const plain = (loss, big = 0) => ({ summary: { ...summary({ loss }), big } });
+    expect(goodContentLine([plain(40, 0)])).toBe('前の局は大きな悪手なし！ ');
+    expect(goodContentLine([plain(60, 2), plain(60, 2), plain(40, 1)])).toBe('前の局は、いつもより損の少ない内容。');
+    expect(goodContentLine([plain(60, 2), plain(55, 1)])).toBe('');
+    expect(goodContentLine([])).toBe('');
   });
 });

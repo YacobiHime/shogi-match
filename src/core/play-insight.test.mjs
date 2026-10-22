@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { clearExhibitRecords } from './exhibit-reset.mjs';
 import {
-  CONTENT_MIN_MOVES, MAX_INSIGHT_GAMES, PLAY_INSIGHT_KEY, completePlayInsight, contentStrength, createPlayInsight, detectWeaknesses,
+  CONTENT_MIN_MOVES, MAX_INSIGHT_GAMES, PLAY_INSIGHT_KEY, addAnalyzedGame, completePlayInsight, contentStrength, createPlayInsight, detectWeaknesses,
   enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight, summarizePlayInsight,
 } from './play-insight.mjs';
 import { reviewProblemId } from './review-problems.mjs';
@@ -142,5 +142,20 @@ describe('弱点の見立て(直近3局)', () => {
     const old = game(1, summary({ mates: [{ sfen: 'old', length: 1 }] }));
     const recent = [2, 3, 4].map((at) => game(at, summary({ freeLosses: 2, opening: [10, 900, 1], standing30: -400 })));
     expect(detectWeaknesses([old, ...recent]).map(({ kind }) => kind)).toEqual(['free', 'opening']);
+  });
+});
+
+describe('竜王戦の対局の中身(docs/home-next-adaptive-design.mdの14章)', () => {
+  it('ほかで解析した対局を、棋戦の印つきで足す。保存から読み戻せて、弱点の見立てにも入る', () => {
+    let insight = addAnalyzedGame(createPlayInsight(), { at: 3, level: 20, outcome: 'win', color: 'white', event: 'ryuo', summary: summary({ freeLosses: 3 }) });
+    insight = addAnalyzedGame(insight, { at: 3, level: 20, outcome: 'win', color: 'white', event: 'ryuo', summary: summary({ freeLosses: 3 }) });
+    expect(insight.games).toHaveLength(1);
+    expect(insight.games[0].event).toBe('ryuo');
+    const storage = memoryStorage();
+    savePlayInsight(storage, insight);
+    expect(loadPlayInsight(storage).games[0].event).toBe('ryuo');
+    expect(detectWeaknesses(loadPlayInsight(storage).games).map(({ kind }) => kind)).toContain('free');
+    // 読めない値は足さない。
+    expect(addAnalyzedGame(createPlayInsight(), { at: 4, level: 20, outcome: 'win', color: 'red', summary: null }).games).toHaveLength(0);
   });
 });

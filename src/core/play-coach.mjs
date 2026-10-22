@@ -106,7 +106,11 @@ export function unbeatenCap(state) {
 }
 
 /**
- * @typedef {{ kind: 'review' | 'mate' | 'ending' | 'free' | 'opening', problemId?: string }} PracticeStep
+ * @typedef {{
+ *   kind: 'review' | 'mate' | 'ending' | 'free' | 'opening' | 'matchup' | 'widen', problemId?: string,
+ *   rook?: 'static' | 'ranging',
+ * }} PracticeStep
+ *   rookは、matchupでは相手に指してもらう戦法、widenではプレイヤーが試す戦法
  * @typedef {{
  *   level: number, kind: string, title: string, reason: string, base: number, cap: number, handicapLevel: number | null,
  *   practice?: PracticeStep,
@@ -125,7 +129,7 @@ export function unbeatenCap(state) {
  * @returns {PlayPlan}
  */
 export function recommendPlay(state, context = {}) {
-  const plan = recommendMatch(state, contentStrength(context.insight?.games ?? []));
+  const plan = recommendMatch(state, contentStrength(context.insight?.games ?? []), context.insight?.games ?? []);
   if (plan.kind !== 'normal' && plan.kind !== 'promotion') return plan;
   const practice = recommendPractice(state, context);
   return practice ? { ...plan, kind: 'practice', ...practice } : plan;
@@ -140,6 +144,66 @@ const PRACTICE_TEXT = Object.freeze({
   free: { title: '駒の利きを見ながら対局', reason: () => '駒をタダで取られる手が多め。利きを見ながら指そう' },
   opening: { title: '作戦カードで組み方を練習', reason: () => '序盤で押されたね。作戦カードで組み方を練習しよう' },
 });
+
+/** 振り飛車の戦法の名前(戦型検出のbt_match2のうち、飛車を振るもの)。ほかは居飛車として数える。 */
+const RANGING_ROOKS = Object.freeze(['四間飛車', '三間飛車', '向かい飛車', '中飛車']);
+/** 苦手な戦型を見る、片方の戦型の対局数の下限と、勝率の上限・もう片方との差。 */
+export const MATCHUP_MIN_GAMES = 5;
+const MATCHUP_MAX_RATE = 0.4;
+const MATCHUP_GAP = 0.2;
+/** 戦法を広げるを見る、対局数の下限と、片方に偏っているとみなす割合。 */
+export const WIDEN_MIN_GAMES = 15;
+const WIDEN_SHARE = 0.9;
+const ROOK_NAME = Object.freeze({ static: '居飛車', ranging: '振り飛車' });
+
+const sumTally = (table, names) => names.reduce((total, name) => {
+  const tally = table?.[name];
+  return { wins: total.wins + (tally?.wins ?? 0), losses: total.losses + (tally?.losses ?? 0), draws: total.draws + (tally?.draws ?? 0) };
+}, { wins: 0, losses: 0, draws: 0 });
+const gamesOf = (tally) => tally.wins + tally.losses + tally.draws;
+const rateOf = (tally) => (tally.wins + tally.losses ? tally.wins / (tally.wins + tally.losses) : 0);
+
+/**
+ * 戦型の癖(docs/home-next-adaptive-design.mdの14章)。レーティングの対局の戦法の成績(player-ratingのusage)から。
+ * - matchup: 相手の戦法(居飛車・振り飛車)の片方に、勝率4割以下で、もう片方より2割以上低い(両方5局以上)
+ * - widen: 自分の戦法が、戦型を記録した15局以上で、9割以上どちらかに偏っている
+ * @param {any} state player-ratingの記録
+ * @returns {{ kind: 'matchup' | 'widen', rook: 'static' | 'ranging', title: string, reason: string }[]}
+ */
+export function detectHabits(state) {
+  const found = [];
+  const total = { wins: state?.wins ?? 0, losses: state?.losses ?? 0, draws: state?.draws ?? 0 };
+  const vsRanging = sumTally(state?.usage?.opponentRook, RANGING_ROOKS);
+  const vsStatic = { wins: total.wins - vsRanging.wins, losses: total.losses - vsRanging.losses, draws: total.draws - vsRanging.draws };
+  if (gamesOf(vsRanging) >= MATCHUP_MIN_GAMES && gamesOf(vsStatic) >= MATCHUP_MIN_GAMES) {
+    for (const [rook, weak, strong] of [['ranging', vsRanging, vsStatic], ['static', vsStatic, vsRanging]]) {
+      if (rateOf(weak) <= MATCHUP_MAX_RATE && rateOf(strong) - rateOf(weak) >= MATCHUP_GAP) {
+        found.push({
+          kind: 'matchup', rook,
+          title: `${ROOK_NAME[rook]}党と対局`,
+          reason: `対${ROOK_NAME[rook]}は${weak.wins}勝${weak.losses}敗。${ROOK_NAME[rook]}を指す相手で慣れよう`,
+        });
+      }
+    }
+  }
+  // 戦型を記録した対局の数(囲いの記録がある対局)。記録の前の対局や、囲いの分からない対局は数えない。
+  const castleTable = state?.usage?.castle ?? {};
+  const games = gamesOf(sumTally(castleTable, Object.keys(castleTable)));
+  if (games >= WIDEN_MIN_GAMES) {
+    const ranging = gamesOf(sumTally(state?.usage?.rook, RANGING_ROOKS));
+    const share = ranging / games;
+    const rook = share <= 1 - WIDEN_SHARE ? 'ranging' : share >= WIDEN_SHARE ? 'static' : null;
+    if (rook) {
+      const other = rook === 'ranging' ? 'static' : 'ranging';
+      found.push({
+        kind: 'widen', rook,
+        title: `${ROOK_NAME[rook]}を試そう`,
+        reason: `これまでの${games}局は、ほとんど${ROOK_NAME[other]}。作戦カードで${ROOK_NAME[rook]}を指してみよう`,
+      });
+    }
+  }
+  return found;
+}
 
 /**
  * 復習の1問(ウ)・弱点の練習(エ)。練習のあと対局が2局たっていなければ出さない。弱点は、前の練習と同じ種類を続けない。
@@ -162,18 +226,23 @@ function recommendPractice(state, { insight = null, reviewDueId = null, problemI
       practice: weakness.problemId ? { kind: weakness.kind, problemId: weakness.problemId } : { kind: weakness.kind },
     };
   }
+  // 対局の中身に目立つ弱点がなければ、戦型の癖(苦手な戦型・戦法の偏り)。
+  for (const habit of detectHabits(state)) {
+    if (habit.kind === last?.kind) continue;
+    return { title: habit.title, reason: habit.reason, practice: { kind: habit.kind, rook: habit.rook } };
+  }
   return null;
 }
 
-/** 次の対局のLvと理由(段階1の見立てに、内容の強さを混ぜる)。 */
-function recommendMatch(state, content) {
+/** 次の対局のLvと理由(段階1の見立てに、内容の強さを混ぜる)。insightGamesは対局の中身の記録(理由の1行に使う)。 */
+function recommendMatch(state, content, insightGames = []) {
   const games = ratedHistory(state);
   const strength = blendedStrength(resultStrength(state), content);
   const base = clampLevel((strength - TARGET_MARGIN) / RATING_PER_LEVEL);
   const cap = unbeatenCap(state);
   const normal = (level) => ({
     level, kind: 'normal', title: '対局する', base, cap, handicapLevel: null,
-    reason: normalReason(state, games, level),
+    reason: normalReason(state, games, level, insightGames),
   });
   if ((state?.games ?? 0) < RULES_MIN_GAMES || !games.length) return withPromotion(state, normal(base));
 
@@ -220,7 +289,7 @@ function withPromotion(state, plan) {
  * 「対局する」の理由の1行(docs/home-next-adaptive-design.mdの13-4)。同じ状態なら同じ文にし、対局が1つ進むと変わるよう、
  * 候補をレーティングの対局の数で選ぶ: 最近5局の成績・前の対局・そのLvとの通算・次の級まで。
  */
-export function normalReason(state, games, level) {
+export function normalReason(state, games, level, insightGames = []) {
   const head = `Lv.${level} ${presetLabel(level)}の相手と。`;
   const recentText = recentRecordText(games);
   if (!games.length) return `${head}振り駒ですぐ始めるよ`;
@@ -236,7 +305,28 @@ export function normalReason(state, games, level) {
   else candidates.push(`Lv.${level}とは通算${tally.wins}勝${tally.losses}敗。ここで勝ち越そう`);
   const goal = nextRatingGoal(state?.rating);
   if (goal) candidates.push(`${gradeName(goal.label)}まであとR${goal.remaining}。Lv.${level}で一歩ずつ`);
+  const good = goodContentLine(insightGames);
+  if (good) candidates.push(`${good}その調子でLv.${level}と`);
   return candidates[(state?.games ?? 0) % candidates.length];
+}
+
+/** 良い内容とみなす、1局の測れた手の数の下限と、それまでの平均損失からの下がり方。 */
+const GOOD_MIN_MOVES = 15;
+const GOOD_IMPROVEMENT = 0.75;
+/**
+ * いちばん新しい対局の中身が良かったら、その1行(良い手の続き。docs/home-next-adaptive-design.mdの14章)。
+ * 大きな悪手がなければ「前の局は大きな悪手なし！」、それまでの平均損失より25%以上少なければ「いつもより損の少ない内容」。
+ */
+export function goodContentLine(insightGames) {
+  const analyzedGames = insightGames.filter((game) => game?.summary);
+  const last = analyzedGames.at(-1)?.summary;
+  if (!last || last.moves < GOOD_MIN_MOVES) return '';
+  if (last.big === 0) return '前の局は大きな悪手なし！ ';
+  const before = analyzedGames.slice(-6, -1).map((game) => game.summary);
+  const moves = before.reduce((total, summary) => total + summary.moves, 0);
+  if (moves < GOOD_MIN_MOVES) return '';
+  const mean = before.reduce((total, summary) => total + summary.sum, 0) / moves;
+  return last.sum / last.moves <= mean * GOOD_IMPROVEMENT ? '前の局は、いつもより損の少ない内容。' : '';
 }
 
 /** 最近5局の成績の1行(「ここ5局は3勝2敗、いい調子」)。対局がなければ空。 */
