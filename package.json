@@ -28,7 +28,8 @@
     "optimize:images": "node scripts/optimize-images.mjs",
     "deploy": "npm run build:hosting && npx firebase-tools deploy --only hosting",
     "test": "vitest run",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "build:exhibit:exe": "npm run build:exhibit && node scripts/build-exhibit-exe.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.7",
