@@ -63,6 +63,8 @@ function seasonPlayer(roster, id, difficulty) {
   const entry = seasonEntry(roster, id);
   return { ...entry, level: ratingToLevel(entry.rating + hananeGrudgeBonus(entry, entry.vsUser), difficulty) };
 }
+/** 期の中で使う棋士の写しと、難易度での実際に指すLv(名人戦の順位戦でも使う。core/meijin.mjs)。 */
+export const seasonPlayerOf = seasonPlayer;
 
 /**
  * 能力の配分と使用率を持たない、前の版で始めた期の棋士の写しに、名簿の能力と使用率を写す(名簿は版3へ移したもの)。
