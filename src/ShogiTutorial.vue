@@ -653,6 +653,7 @@ import {
   shouldOfferReview,
   SKIP_AHEAD_MIN_STARS,
   isSkipAheadChallenge,
+  lessonRecord,
   recordSkipAhead,
 } from "./core/tutorial-progress.mjs";
 import { referenceDexEntries } from "./core/reference-dex.mjs";
@@ -703,6 +704,11 @@ const props = defineProps({
   autoStart: { type: Boolean, default: false },
   /** ホームのはじめての案内で選んだ道(beginner・rules・player)。最初の問いの「おすすめ」に使う。 */
   welcomeChoice: { type: String, default: "" },
+  /**
+   * 「つぎはこれ」の弱点の練習(docs/first-play-design.mdの6-1)で開いたときの章。fromLessonIdから先で、
+   * まだクリアしていない最初のレッスンをすぐ始める(鍵はかけない)。
+   */
+  startChapter: { type: Object as PropType<{ chapterId: string; fromLessonId?: string } | null>, default: null },
 });
 const emit = defineEmits(["close", "open-dex", "start-match", "grant-title"]);
 
@@ -734,8 +740,8 @@ function toggleGlasses() {
 const PLACEMENT_QUESTION = "将棋、どのくらい知ってる？";
 const placements = TUTORIAL_PLACEMENTS;
 /** 「ルールは分かる」と答えた人は、札の代わりに1手詰めを1問解いて、始める場所を決める(docs/first-play-design.mdの4章)。 */
-const placementCheck = shouldCheckPlacement(progress.value, { welcomeChoice: props.welcomeChoice, storageAvailable: Boolean(storage) });
-const placementOpen = ref(!placementCheck && shouldAskPlacement(progress.value, { welcomeChoice: props.welcomeChoice, storageAvailable: Boolean(storage) }));
+const placementCheck = !props.startChapter && shouldCheckPlacement(progress.value, { welcomeChoice: props.welcomeChoice, storageAvailable: Boolean(storage) });
+const placementOpen = ref(!props.startChapter && !placementCheck && shouldAskPlacement(progress.value, { welcomeChoice: props.welcomeChoice, storageAvailable: Boolean(storage) }));
 const recommendedPlacementId = recommendedPlacement(props.welcomeChoice);
 let firstPlacementButton: HTMLButtonElement | null = null;
 onMounted(() => {
@@ -2178,6 +2184,12 @@ watch(revealStage, (stage) => {
 });
 onMounted(() => {
   const report = props.matchReport;
+  // 「つぎはこれ」の練習からは、その章のまだクリアしていないレッスンから。
+  const practiceLesson = report ? null : practiceStartLesson(props.startChapter);
+  if (practiceLesson) {
+    startLesson(practiceLesson);
+    return;
+  }
   // 「ルールは分かる」と答えて初めて開いたときは、始める場所を決める1問から。
   if (!report && placementCheck) {
     startLesson(PLACEMENT_CHECK_LESSON.id);
@@ -2197,6 +2209,14 @@ onMounted(() => {
   lessonId.value = report.lessonId;
   showResult(matchLessonStars(report), report);
 });
+/** 練習の章で始めるレッスン。fromLessonIdから先で、まだクリアしていない最初のもの(全部クリアなら腕だめし)。 */
+function practiceStartLesson(start: { chapterId: string; fromLessonId?: string } | null) {
+  if (!start) return null;
+  const inChapter = lessons.filter((lesson) => lesson.chapterId === start.chapterId && !lesson.comingSoon);
+  const from = Math.max(0, inChapter.findIndex(({ id }) => id === start.fromLessonId));
+  const candidates = inChapter.slice(from);
+  return (candidates.find(({ id }) => lessonRecord(progress.value, id).status !== "cleared") ?? candidates.find(({ boss }) => boss) ?? candidates[0])?.id ?? null;
+}
 /** 対局のレッスンの結果から、次へ進む(同じ章の次のレッスンか、章クリア)。 */
 function continueAfterResult() {
   if (currentLesson.value) continueAfter(currentLesson.value, null);

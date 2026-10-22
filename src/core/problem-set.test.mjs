@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "../game-state";
 import {
+  DRILL_SEVEN_AFTER,
   PROBLEMS,
+  drillProblems,
   JISSEN_SET,
   PROBLEM_SECTIONS,
   TSUME_KINDS,
@@ -362,5 +364,31 @@ describe("将棋問題集の進み具合", () => {
     saveProblemProgress(storage, progress);
     expect(loadProblemProgress(storage)).toEqual({ solved: { a: { firstTry: true } } });
     expect(loadProblemProgress({ getItem: () => "{壊れたデータ" })).toEqual({ solved: {} });
+  });
+});
+
+describe("「つぎはこれ」の5問の練習(docs/first-play-design.mdの6-1)", () => {
+  const ids = (problems) => problems.map(({ id }) => id);
+  it("練習問題は、まだ解いていない問題から", () => {
+    const first = PROBLEMS[0].id;
+    const { problems } = drillProblems({ section: "practice" }, [first]);
+    expect(problems).toHaveLength(PROBLEMS.length);
+    expect(problems.at(-1).id).toBe(first);
+  });
+
+  it("詰将棋は選んだ手数。手数がなければ、まだ解き終えていない最も短い手数", () => {
+    expect(drillProblems({ section: "tsume", kind: "tsume", plies: 3 }, []).plies).toBe(3);
+    const oneDone = ids(tsumeKindProblems("tsume", 1));
+    expect(drillProblems({ section: "tsume", kind: "jissen", plies: null }, []).plies).toBe(1);
+    expect(drillProblems({ section: "tsume", kind: "tsume", plies: null }, oneDone).plies).toBe(3);
+    // 選んだ手数を解き終えていたら、次の手数。
+    expect(drillProblems({ section: "tsume", kind: "tsume", plies: 1 }, oneDone).plies).toBe(3);
+    expect(drillProblems({ section: "tsume", kind: "jissen", plies: 1 }, []).problems.every(({ source, plies }) => source === "jissen" && plies === 1)).toBe(true);
+  });
+
+  it("5手詰めを10問解いていたら7手詰め", () => {
+    const five = ids(tsumeKindProblems("tsume", 5));
+    expect(drillProblems({ section: "tsume", kind: "tsume", plies: 5 }, five.slice(0, DRILL_SEVEN_AFTER - 1)).plies).toBe(5);
+    expect(drillProblems({ section: "tsume", kind: "tsume", plies: 5 }, five.slice(0, DRILL_SEVEN_AFTER)).plies).toBe(7);
   });
 });

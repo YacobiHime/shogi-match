@@ -18,7 +18,7 @@ export const ROADMAP_STEPS = Object.freeze([
   Object.freeze({ id: "first-game", label: "初めての対局", after: "1局指したら" }),
   Object.freeze({ id: "mate", label: "詰みを覚える", after: "詰みを覚えたら" }),
   Object.freeze({ id: "ryuo", label: "竜王戦に出る", after: "竜王戦のあとに" }),
-  Object.freeze({ id: "grade", label: "級・段を上げる", after: "" }),
+  Object.freeze({ id: "grade", label: "大会で勝ち上がる", after: "" }),
 ]);
 
 /** ホームの入口と、その入口がおすすめになる段(1から数える)。しらべる(図鑑)は道に入れない。 */

@@ -107,11 +107,17 @@ export function unbeatenCap(state) {
 }
 
 /**
+ * @typedef {{ section: 'practice' | 'tsume', kind?: 'tsume' | 'jissen', plies?: number | null, firstProblemId?: string }} PracticeDrill
+ *   問題集の5問の練習。kindとpliesは詰将棋の種類と手数(pliesがnullなら、まだ解き終えていない短い手数から)。
+ *   firstProblemIdは、最初に出す「あなたの対局から」の問題
  * @typedef {{
  *   kind: 'review' | 'mate' | 'ending' | 'free' | 'opening' | 'matchup' | 'widen', problemId?: string,
  *   rook?: 'static' | 'ranging',
+ *   via?: 'tutorial' | 'problems' | 'play', chapterId?: string, fromLessonId?: string, drill?: PracticeDrill,
  * }} PracticeStep
- *   rookは、matchupでは相手に指してもらう戦法、widenではプレイヤーが試す戦法
+ *   rookは、matchupでは相手に指してもらう戦法、widenではプレイヤーが試す戦法。
+ *   viaは弱点の練習の行き先(docs/first-play-design.mdの6-1): 教室の章(chapterIdの、fromLessonIdから)・問題集の5問(drill)・
+ *   今までの練習(play)。復習の1問と戦型の癖にはない
  * @typedef {{
  *   level: number, kind: string, title: string, reason: string, base: number, cap: number, handicapLevel: number | null,
  *   handicapId?: { id: 'rook' | 'lance', label: string },
@@ -129,8 +135,10 @@ export function unbeatenCap(state) {
  * @param {{
  *   insight?: any, reviewDueId?: string | null, problemIds?: Set<string> | null,
  *   reward?: { wonLevels: number[], themeRemaining: number | null } | null,
+ *   tutorialLessons?: { [lessonId: string]: { status: string } } | null,
  * }} [context]
- *   insightは対局の中身の記録(play-insight.mjs)、reviewDueIdは復習の期日が来た問題、problemIdsは「あなたの対局から」の問題のID
+ *   insightは対局の中身の記録(play-insight.mjs)、reviewDueIdは復習の期日が来た問題、problemIdsは「あなたの対局から」の問題のID、
+ *   tutorialLessonsは教室の記録(tutorial-progress.mjsのlessons。練習の行き先の章を、腕だめしをクリアしたかで選ぶ)
  * @returns {PlayPlan}
  */
 export function recommendPlay(state, context = {}) {
@@ -149,6 +157,92 @@ const PRACTICE_TEXT = Object.freeze({
   free: { title: '駒の利きを見ながら対局', reason: () => '駒をタダで取られる手が多め。利きを見ながら指そう' },
   opening: { title: '作戦カードで組み方を練習', reason: () => '序盤で押されたね。作戦カードで組み方を練習しよう' },
 });
+
+/**
+ * 練習の行き先の教室の章(docs/first-play-design.mdの6-1)。bossは章の腕だめし。対局画面から教室の重いデータを読まないよう、
+ * IDと名前だけをここに持つ(tutorial-curriculum.mjsと食い違わないことはテストで確かめる)。
+ */
+export const PRACTICE_CHAPTERS = Object.freeze({
+  'v2-c1': Object.freeze({ boss: 'v2-c1-boss', label: '第2巻1章', title: '三手先まで考えよう' }),
+  'v2-c3': Object.freeze({ boss: 'v2-c3-boss', label: '第2巻3章', title: '玉をつかまえよう' }),
+  'v3-c1': Object.freeze({ boss: 'v3-c1-boss', label: '第3巻1章', title: '戦法と囲いを知ろう' }),
+  'v3-c3': Object.freeze({ boss: 'v3-c3-boss', label: '第3巻3章', title: '攻めと守りのコツ' }),
+  'v4-c1': Object.freeze({ boss: 'v4-c1-boss', label: '第4巻1章', title: '振り飛車にチャレンジ' }),
+  'v4-c2': Object.freeze({ boss: 'v4-c2-boss', label: '第4巻2章', title: '居飛車にチャレンジ' }),
+  'v5-plan': Object.freeze({ boss: 'v5-plan-boss', label: '第5巻2章', title: '序盤・中盤・終盤の作戦' }),
+});
+/** 3手詰めを逃したときに始める、第2巻3章のレッスン。 */
+export const MATE_THREE_LESSON = 'v2-mate-three';
+/** 問題集の練習は5問で一区切り。 */
+export const DRILL_PROBLEMS = 5;
+/** 詰将棋の練習のいちばん長い手数(7手詰めは、問題集の側で5手詰めを10問解いてから)。 */
+const DRILL_MAX_PLIES = 5;
+
+/** 弱点ごとの、理由の1行(大会へのつながりを添える)。pliesは逃した詰みの手数。 */
+const DESTINATION_REASON = Object.freeze({
+  mate: (weakness) => (weakness.plies
+    ? `前の対局で、${weakness.plies}手で詰む局面を見逃したよ。詰みが見えると、竜王戦の終盤で勝ちきれる`
+    : '前の対局で、詰みを見逃したよ。詰みが見えると、竜王戦の終盤で勝ちきれる'),
+  free: () => '駒をタダで取られる手が多め。三手先が読めると、竜王戦で崩れにくくなる',
+  opening: () => '序盤で押されたね。戦法と囲いを覚えると、竜王戦でも互角に組める',
+  ending: () => '終盤で損が増えているね。終盤の力をつけて、竜王戦で勝ちきろう',
+});
+
+/** 自分の戦法(レーティングの対局の戦法の記録で、振り飛車が半分より多ければ振り飛車)。 */
+function ownRook(state) {
+  const table = state?.usage?.rook ?? {};
+  const all = gamesOf(sumTally(table, Object.keys(table)));
+  return all && gamesOf(sumTally(table, RANGING_ROOKS)) * 2 > all ? 'ranging' : 'static';
+}
+
+/**
+ * 弱点の練習の行き先(docs/first-play-design.mdの6-1)。教室の章(腕だめしをまだクリアしていない最初の章) → 問題集の5問 →
+ * 今までの練習の順。教室の章を終えたあとは、前にその弱点で行った先が問題集なら今までの練習、ほかは問題集にし、交互に勧める。
+ * @param {{ kind: string, count: number, problemId?: string, plies?: number }} weakness
+ * @param {{ state: any, problemIds: Set<string> | null, tutorialLessons: any, lastVia: { [kind: string]: string } }} options
+ * @returns {{ title: string, reason: string, practice: PracticeStep } | null}
+ */
+function practiceDestination(weakness, { state, problemIds, tutorialLessons, lastVia }) {
+  const kind = /** @type {PracticeStep['kind']} */ (weakness.kind);
+  const plies = Number.isFinite(weakness.plies) ? weakness.plies : null;
+  const reason = DESTINATION_REASON[kind]?.(weakness) ?? '';
+  const ownProblem = weakness.problemId && problemIds?.has(weakness.problemId) ? weakness.problemId : '';
+  /** @type {{ chapterId: string, fromLessonId?: string }[]} */
+  let chapters = [];
+  /** @type {{ drill: PracticeDrill, title: string } | null} */
+  let problems = null;
+  if (kind === 'mate') {
+    if (plies === null || plies <= 1) chapters = [{ chapterId: 'v2-c3' }];
+    else if (plies <= 3) chapters = [{ chapterId: 'v2-c3', fromLessonId: MATE_THREE_LESSON }];
+    const drillPlies = Math.min(DRILL_MAX_PLIES, plies ?? 1);
+    problems = {
+      drill: { section: 'tsume', kind: 'tsume', plies: drillPlies, ...(ownProblem ? { firstProblemId: ownProblem } : {}) },
+      title: `${drillPlies}手詰めを${DRILL_PROBLEMS}問`,
+    };
+  } else if (kind === 'free') {
+    chapters = [{ chapterId: 'v2-c1' }];
+    problems = { drill: { section: 'practice' }, title: `練習問題を${DRILL_PROBLEMS}問` };
+  } else if (kind === 'opening') {
+    chapters = [{ chapterId: 'v3-c1' }, { chapterId: ownRook(state) === 'ranging' ? 'v4-c1' : 'v4-c2' }];
+  } else if (kind === 'ending') {
+    chapters = [{ chapterId: 'v3-c3' }, { chapterId: 'v5-plan' }];
+    problems = { drill: { section: 'tsume', kind: 'jissen', plies: null }, title: `実戦詰将棋を${DRILL_PROBLEMS}問` };
+  }
+  const chapter = chapters.find(({ chapterId }) => tutorialLessons?.[PRACTICE_CHAPTERS[chapterId].boss]?.status !== 'cleared');
+  if (chapter) {
+    const { label, title } = PRACTICE_CHAPTERS[chapter.chapterId];
+    return { title: `教室 ${label}：${title}`, reason, practice: { kind, via: 'tutorial', ...chapter } };
+  }
+  // 今までの練習。詰みの解き直しは、その局面の問題があるときだけ。
+  const text = PRACTICE_TEXT[kind];
+  const play = text && (kind !== 'mate' || ownProblem)
+    ? { title: text.title, reason: text.reason(weakness.count), practice: { kind, via: /** @type {const} */ ('play'), ...(ownProblem ? { problemId: ownProblem } : {}) } }
+    : null;
+  if (problems && !(play && lastVia[kind] === 'problems')) {
+    return { title: problems.title, reason, practice: { kind, via: 'problems', drill: problems.drill } };
+  }
+  return play;
+}
 
 /** 振り飛車の戦法の名前(戦型検出のbt_match2のうち、飛車を振るもの)。ほかは居飛車として数える。 */
 const RANGING_ROOKS = Object.freeze(['四間飛車', '三間飛車', '向かい飛車', '中飛車']);
@@ -214,7 +308,7 @@ export function detectHabits(state) {
  * 復習の1問(ウ)・弱点の練習(エ)。練習のあと対局が2局たっていなければ出さない。弱点は、前の練習と同じ種類を続けない。
  * @returns {{ title: string, reason: string, practice: PracticeStep } | null}
  */
-function recommendPractice(state, { insight = null, reviewDueId = null, problemIds = null } = {}) {
+function recommendPractice(state, { insight = null, reviewDueId = null, problemIds = null, tutorialLessons = null } = {}) {
   const last = insight?.practice;
   if (last && (state?.games ?? 0) - last.games < PRACTICE_EVERY) return null;
   if (reviewDueId) {
@@ -223,13 +317,8 @@ function recommendPractice(state, { insight = null, reviewDueId = null, problemI
   }
   for (const weakness of detectWeaknesses(insight?.games ?? [])) {
     if (weakness.kind === last?.kind) continue;
-    if (weakness.kind === 'mate' && !(weakness.problemId && problemIds?.has(weakness.problemId))) continue;
-    const text = PRACTICE_TEXT[weakness.kind];
-    return {
-      title: text.title,
-      reason: text.reason(weakness.count),
-      practice: weakness.problemId ? { kind: weakness.kind, problemId: weakness.problemId } : { kind: weakness.kind },
-    };
+    const routed = practiceDestination(weakness, { state, problemIds, tutorialLessons, lastVia: last?.via ?? {} });
+    if (routed) return routed;
   }
   // 対局の中身に目立つ弱点がなければ、戦型の癖(苦手な戦型・戦法の偏り)。
   for (const habit of detectHabits(state)) {
@@ -385,4 +474,35 @@ export function resultNextStep({ won, rated, level, lanceHandicap = false, handi
     reason: firstWin ? `Lv.${level}に初勝利！ 次は1つ上へ` : `Lv.${level}に勝ったね。次は1つ上へ`,
     sameTitle: `同じLv.${level}でもう一局`,
   };
+}
+
+/** 竜王戦に誘う、レーティングの対局の数(測定を終えていなければ)。 */
+export const INVITE_MIN_GAMES = 3;
+
+/**
+ * 大会への誘い(docs/first-play-design.mdの6-2)。大会は主役なので、強くなる道の4段目を待たずに勧める。
+ * - ryuo: 竜王戦に出たことがなく、棋力が分かっていて(測定を終えたか、レーティングの対局が3局以上)、直前の2局で練習を勧めていない
+ * - meijin: 竜王戦の期を1つ終え、名人戦に出たことがない
+ * gradeは棋力の段級位の名前、difficultyは竜王戦のおすすめの難易度。
+ * @param {{
+ *   ryuoEntered: boolean, ryuoSeasons: number, meijinEntered: boolean, measured: boolean, ratedGames: number,
+ *   lastPractice?: { games: number } | null, grade?: string, difficulty?: number,
+ * }} input
+ * @returns {{ id: 'ryuo' | 'meijin', title: string, reason: string } | null}
+ */
+export function tournamentInvite({ ryuoEntered, ryuoSeasons, meijinEntered, measured, ratedGames, lastPractice = null, grade = '', difficulty }) {
+  if (!ryuoEntered) {
+    const known = measured || ratedGames >= INVITE_MIN_GAMES;
+    const afterPractice = lastPractice && ratedGames - lastPractice.games < PRACTICE_EVERY;
+    if (!known || afterPractice) return null;
+    const level = Number.isFinite(difficulty) ? `難易度${difficulty}の` : '';
+    return {
+      id: 'ryuo', title: '竜王戦に出よう',
+      reason: grade ? `あなたは${gradeName(grade)}くらい。${level}6組なら、勝ち上がれるよ` : `${level}6組から、竜王をめざそう`,
+    };
+  }
+  if (ryuoSeasons >= 1 && !meijinEntered) {
+    return { id: 'meijin', title: '名人戦に出よう', reason: '順位戦のC級2組から、名人をめざそう' };
+  }
+  return null;
 }

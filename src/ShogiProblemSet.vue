@@ -127,6 +127,10 @@
         </div>
         <div ref="panelEl" class="shogi-dex__explanation-col shogi-tutorial__panel">
           <div class="shogi-dex__explanation">
+            <!-- 「つぎはこれ」の練習: 5問で一区切り。 -->
+            <p v-if="drill" class="shogi-problems__drill" data-drill-count>
+              練習 <strong>{{ Math.min(drillSolvedIds.length, DRILL_PROBLEMS_PER_ROUND) }}</strong>/{{ DRILL_PROBLEMS_PER_ROUND }}問
+            </p>
             <div class="shogi-dex__speech">
               <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
               <p aria-live="polite">{{ speech }}</p>
@@ -152,10 +156,17 @@
               <button v-if="phase === 'wrong'" type="button" class="shogi-tutorial__primary" @click="retryStep">もう一度</button>
               <button v-if="phase === 'solved' && freeMoves.length" type="button" @click="undoFreeMove">1手戻す</button>
               <button v-if="phase === 'solved' && freeMoves.length" type="button" @click="restoreSolvedPosition">全部戻す</button>
-              <button v-if="phase === 'solved' && randomMode" type="button" class="shogi-tutorial__primary" @click="openRandomProblem">次の問題（ランダム）</button>
-              <button v-else-if="phase === 'solved' && nextProblem" type="button" class="shogi-tutorial__primary" @click="openProblem(nextProblem.id)">次の問題</button>
-              <button v-if="phase === 'solved'" type="button" @click="retry">もう一度解く</button>
-              <button v-if="phase === 'solved' && !nextProblem && !randomMode" type="button" class="shogi-tutorial__primary" @click="view = 'list'">問題一覧へ</button>
+              <template v-if="phase === 'solved' && drill">
+                <button v-if="drillDone" type="button" class="shogi-tutorial__primary" data-drill-done @click="emit('close')">つぎはこれへ戻る</button>
+                <button v-else-if="drillNext" type="button" class="shogi-tutorial__primary" @click="openProblem(drillNext.id)">次の問題</button>
+                <button type="button" @click="retry">もう一度解く</button>
+              </template>
+              <template v-else-if="phase === 'solved'">
+                <button v-if="randomMode" type="button" class="shogi-tutorial__primary" @click="openRandomProblem">次の問題（ランダム）</button>
+                <button v-else-if="nextProblem" type="button" class="shogi-tutorial__primary" @click="openProblem(nextProblem.id)">次の問題</button>
+                <button type="button" @click="retry">もう一度解く</button>
+                <button v-if="!nextProblem && !randomMode" type="button" class="shogi-tutorial__primary" @click="view = 'list'">問題一覧へ</button>
+              </template>
             </div>
           </div>
         </div>
@@ -165,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import {
@@ -177,6 +188,8 @@ import {
   judgeProblemMove,
   lineSfens,
   loadProblemProgress,
+  DRILL_PROBLEMS_PER_ROUND,
+  drillProblems,
   pickRandomProblem,
   problemById,
   problemHint,
@@ -216,6 +229,11 @@ const props = defineProps({
   startProblemId: { type: String, default: "" },
   /** startProblemIdを「やこび姫からの1問」として出すか。 */
   startReview: { type: Boolean, default: false },
+  /**
+   * 「つぎはこれ」の弱点の練習(docs/first-play-design.mdの6-1)。5問で一区切りにし、解き終えたら「つぎはこれ」へ戻す。
+   * firstProblemIdがあれば、その問題(あなたの対局で逃した詰み)から始める。
+   */
+  drill: { type: Object as PropType<{ section: "practice" | "tsume"; kind?: "tsume" | "jissen"; plies?: number | null; firstProblemId?: string } | null>, default: null },
 });
 const emit = defineEmits(["close"]);
 
@@ -409,8 +427,32 @@ function openProblem(id: string, { random = false, review = false } = {}) {
 }
 // ホームの「つぎはこれ」から開いたときは、その問題をすぐ出す。
 onMounted(() => {
+  if (drill.value) {
+    const first = props.drill?.firstProblemId && findProblem(props.drill.firstProblemId) ? props.drill.firstProblemId : drill.value.problems[0]?.id;
+    if (first) openProblem(first);
+    return;
+  }
   if (props.startProblemId && findProblem(props.startProblemId)) openProblem(props.startProblemId, { review: props.startReview });
 });
+
+// ===== 「つぎはこれ」の5問の練習 =====
+/** 練習で出す問題の並び(開いたときに決める。解いても並びは変えない)。 */
+const drill = ref(props.drill ? drillProblems(props.drill, Object.keys(progress.value.solved)) as { problems: Problem[]; plies: number | null } : null);
+/** 練習で解いた問題(この画面を開いているあいだ)。 */
+const drillSolvedIds = ref<string[]>([]);
+const drillDone = computed(() => drillSolvedIds.value.length >= DRILL_PROBLEMS_PER_ROUND);
+/** 練習の次の問題。並びの中で、この練習でまだ解いていない次の問題。 */
+const drillNext = computed(() => {
+  const list = drill.value?.problems ?? [];
+  const start = list.findIndex(({ id }) => id === problemId.value);
+  const rest = [...list.slice(start + 1), ...list.slice(0, Math.max(0, start))];
+  return rest.find(({ id }) => !drillSolvedIds.value.includes(id)) ?? null;
+});
+function noteDrillSolved(id: string) {
+  if (!drill.value || drillSolvedIds.value.includes(id)) return;
+  drillSolvedIds.value = [...drillSolvedIds.value, id];
+  if (drillDone.value) speech.value = `${speech.value} ${DRILL_PROBLEMS_PER_ROUND}問解けたね！ この力で、次の対局も勝ちにいこう！`;
+}
 /** 選んでいる詰将棋の種類から、手数も問わずランダムに出題する。まだ解いていない問題を優先する。 */
 function openRandomProblem() {
   const kind = tsumeKind.value;
@@ -578,6 +620,7 @@ function onBoardMove(usi: string) {
     recordReview(problem, firstTry);
     // 問題を1問解いたら、続けて遊んだ日に数える。
     savePlayStreak(storage, recordPlay(loadPlayStreak(storage)));
+    noteDrillSolved(problem.id);
   }
   if (result.next) {
     // 正解でまだ続くときは、相手の応手を並べ終えてから次の手を指せるようにする。
@@ -657,6 +700,15 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.shogi-game .shogi-problems__drill {
+  margin: 0 0 6px;
+  color: #cfd8de;
+  font-size: 0.85rem;
+}
+.shogi-game .shogi-problems__drill strong {
+  color: #fff;
+  font-size: 1.05rem;
 }
 .shogi-game .shogi-problems__free-note {
   margin: 0;

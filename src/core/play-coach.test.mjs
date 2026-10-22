@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { applyRatedGame, createRatingState, recommendedLevel } from './player-rating.mjs';
-import { CONTENT_SPREAD, TARGET_MARGIN, blendedStrength, detectHabits, goodContentLine, recentPerformance, recommendPlay, resultNextStep, resultStrength, unbeatenCap } from './play-coach.mjs';
+import {
+  CONTENT_SPREAD, MATE_THREE_LESSON, PRACTICE_CHAPTERS, TARGET_MARGIN, blendedStrength, detectHabits, goodContentLine, recentPerformance,
+  recommendPlay, resultNextStep, resultStrength, tournamentInvite, unbeatenCap,
+} from './play-coach.mjs';
+import { TUTORIAL_LESSONS, TUTORIAL_VOLUMES } from './tutorial-curriculum.mjs';
 import { completePlayInsight, createPlayInsight, recordPractice } from './play-insight.mjs';
 import { reviewProblemId } from './review-problems.mjs';
 
@@ -147,16 +151,73 @@ describe('段階2: 対局の中身', () => {
     expect(recommendPlay(state, { reviewDueId: 'tsume-1' }).reason).toBe('前に苦労した問題、今日は解けるかな');
   });
 
-  it('弱点の練習。詰みを逃したら、その局面の問題(問題があるときだけ)', () => {
+  it('弱点の練習。詰みを逃したら、教室の章(腕だめしが未クリアなら) → 詰将棋の5問 → その局面の問題', () => {
     const state = { ...createRatingState(), rating: 1200, games: 20, history: [] };
     const insight = insightOf([summary({ mates: [{ sfen: 'mate sfen', length: 1 }] })]);
     const id = reviewProblemId('mate sfen');
     expect(recommendPlay(state, { insight, problemIds: new Set([id]) })).toMatchObject({
-      kind: 'practice', title: '詰みを解き直そう', reason: '詰みを逃した局面があったね。解き直そう', practice: { kind: 'mate', problemId: id },
+      kind: 'practice', title: '教室 第2巻3章：玉をつかまえよう',
+      reason: '前の対局で、1手で詰む局面を見逃したよ。詰みが見えると、竜王戦の終盤で勝ちきれる',
+      practice: { kind: 'mate', via: 'tutorial', chapterId: 'v2-c3' },
     });
-    expect(recommendPlay(state, { insight, problemIds: new Set() }).kind).not.toBe('practice');
+    const cleared = { 'v2-c3-boss': { status: 'cleared' } };
+    expect(recommendPlay(state, { insight, problemIds: new Set([id]), tutorialLessons: cleared })).toMatchObject({
+      title: '1手詰めを5問', practice: { kind: 'mate', via: 'problems', drill: { section: 'tsume', kind: 'tsume', plies: 1, firstProblemId: id } },
+    });
+    // 前にこの弱点で問題集へ行ったなら、その局面の問題(今までの練習)。
+    // (同じ弱点は続けて出さないので、あいだに別の練習をはさむ)
+    const after = recordPractice(recordPractice(insight, { kind: 'mate', games: 8, via: 'problems' }), { kind: 'free', games: 10, via: 'tutorial' });
+    expect(recommendPlay(state, { insight: after, problemIds: new Set([id]), tutorialLessons: cleared })).toMatchObject({
+      title: '詰みを解き直そう', reason: '詰みを逃した局面があったね。解き直そう', practice: { kind: 'mate', via: 'play', problemId: id },
+    });
+    // その局面の問題がなければ、問題集を続ける。
+    expect(recommendPlay(state, { insight: after, problemIds: new Set(), tutorialLessons: cleared }).practice).toMatchObject({ via: 'problems' });
     const free = insightOf([summary({ freeLosses: 2 })]);
-    expect(recommendPlay(state, { insight: free })).toMatchObject({ kind: 'practice', practice: { kind: 'free' }, title: '駒の利きを見ながら対局' });
+    expect(recommendPlay(state, { insight: free })).toMatchObject({ kind: 'practice', practice: { kind: 'free', via: 'tutorial', chapterId: 'v2-c1' }, title: '教室 第2巻1章：三手先まで考えよう' });
+  });
+
+  it('逃した詰みの手数で、教室の始めるレッスンと詰将棋の手数を変える(7手詰めは問題集の側で)', () => {
+    const state = { ...createRatingState(), rating: 1200, games: 20, history: [] };
+    const missed = (length) => insightOf([summary({ mates: [{ sfen: `mate ${length}`, length }] })]);
+    expect(recommendPlay(state, { insight: missed(3) }).practice).toMatchObject({ via: 'tutorial', chapterId: 'v2-c3', fromLessonId: MATE_THREE_LESSON });
+    const cleared = { 'v2-c3-boss': { status: 'cleared' } };
+    expect(recommendPlay(state, { insight: missed(3), tutorialLessons: cleared })).toMatchObject({ title: '3手詰めを5問', practice: { drill: { plies: 3 } } });
+    // 5手以上は教室の章がなく、5手詰め。スキップした腕だめしは、クリアしていないのと同じ。
+    expect(recommendPlay(state, { insight: missed(7), tutorialLessons: { 'v2-c3-boss': { status: 'skipped' } } })).toMatchObject({ title: '5手詰めを5問', practice: { drill: { plies: 5 } } });
+  });
+
+  it('序盤は第3巻1章 → 第4巻(自分の戦法で章を選ぶ) → 作戦カード。終盤は第3巻3章 → 第5巻2章 → 実戦詰将棋と終盤戦を交互に', () => {
+    const opening = insightOf([{ ...summary({ loss: 30 }), phases: { opening: { n: 10, sum: 1000, big: 1 }, middle: { n: 10, sum: 100, big: 0 }, ending: { n: 10, sum: 100, big: 0 } }, standing30: -500 }]);
+    const state = { ...createRatingState(), rating: 1200, games: 20, history: [] };
+    expect(recommendPlay(state, { insight: opening }).practice).toMatchObject({ kind: 'opening', chapterId: 'v3-c1' });
+    const v3 = { 'v3-c1-boss': { status: 'cleared' } };
+    expect(recommendPlay(state, { insight: opening, tutorialLessons: v3 }).practice).toMatchObject({ chapterId: 'v4-c2' });
+    const ranging = { ...state, usage: { rook: { 四間飛車: { wins: 3, losses: 1, draws: 0 }, 居飛車: { wins: 1, losses: 0, draws: 0 } } } };
+    expect(recommendPlay(ranging, { insight: opening, tutorialLessons: v3 })).toMatchObject({ title: '教室 第4巻1章：振り飛車にチャレンジ' });
+    const v4 = { ...v3, 'v4-c2-boss': { status: 'cleared' } };
+    expect(recommendPlay(state, { insight: opening, tutorialLessons: v4 })).toMatchObject({ title: '作戦カードで組み方を練習', practice: { kind: 'opening', via: 'play' } });
+
+    const ending = insightOf([{ ...summary(), phases: { opening: { n: 10, sum: 100, big: 0 }, middle: { n: 10, sum: 100, big: 0 }, ending: { n: 10, sum: 1200, big: 1 } } }]);
+    expect(recommendPlay(state, { insight: ending }).practice).toMatchObject({ kind: 'ending', chapterId: 'v3-c3' });
+    const v3c3 = { 'v3-c3-boss': { status: 'cleared' } };
+    expect(recommendPlay(state, { insight: ending, tutorialLessons: v3c3 })).toMatchObject({ title: '教室 第5巻2章：序盤・中盤・終盤の作戦' });
+    const both = { ...v3c3, 'v5-plan-boss': { status: 'cleared' } };
+    expect(recommendPlay(state, { insight: ending, tutorialLessons: both })).toMatchObject({
+      title: '実戦詰将棋を5問', practice: { via: 'problems', drill: { section: 'tsume', kind: 'jissen', plies: null } },
+    });
+    const next = recordPractice(recordPractice(ending, { kind: 'ending', games: 8, via: 'problems' }), { kind: 'mate', games: 10, via: 'tutorial' });
+    expect(recommendPlay(state, { insight: next, tutorialLessons: both })).toMatchObject({ title: '自分の対局の終盤から', practice: { via: 'play' } });
+  });
+
+  it('教室の章のIDと名前は、教室のカリキュラムと同じ', () => {
+    for (const [chapterId, chapter] of Object.entries(PRACTICE_CHAPTERS)) {
+      const volume = TUTORIAL_VOLUMES.find(({ chapters }) => chapters.some(({ id }) => id === chapterId));
+      const index = volume.chapters.findIndex(({ id }) => id === chapterId);
+      expect(volume.chapters[index].title, chapterId).toBe(chapter.title);
+      expect(chapter.label, chapterId).toBe(`第${TUTORIAL_VOLUMES.indexOf(volume) + 1}巻${index + 1}章`);
+      expect(volume.chapters[index].lessons.some(({ id, boss }) => id === chapter.boss && boss), chapterId).toBe(true);
+    }
+    expect(TUTORIAL_LESSONS.find(({ id }) => id === MATE_THREE_LESSON)?.chapterId).toBe('v2-c3');
   });
 
   it('練習は対局2局に1回まで。同じ弱点を続けて出さない', () => {
@@ -245,5 +306,29 @@ describe('15級(Lv1)の立て直し(2026-10-22の段級位の作り直し)', () 
     expect(resultNextStep({ won: true, rated: false, level: 0, firstWin: false })).toMatchObject({ kind: 'up', level: 1, title: 'Lv.1に挑戦' });
     expect(resultNextStep({ won: true, rated: false, level: 1, handicapLabel: '飛車落ち', firstWin: false }))
       .toMatchObject({ kind: 'even', reason: '飛車落ちで勝ったね。次は平手で', sameTitle: '飛車落ちでもう一局' });
+  });
+});
+
+describe('大会への誘い(docs/first-play-design.mdの6-2)', () => {
+  const base = { ryuoEntered: false, ryuoSeasons: 0, meijinEntered: false, measured: false, ratedGames: 0, lastPractice: null };
+  it('竜王戦: 出たことがなく、測定を終えたかレーティングの対局が3局以上', () => {
+    expect(tournamentInvite(base)).toBeNull();
+    expect(tournamentInvite({ ...base, ratedGames: 2 })).toBeNull();
+    expect(tournamentInvite({ ...base, ratedGames: 3 })).toMatchObject({ id: 'ryuo', title: '竜王戦に出よう' });
+    expect(tournamentInvite({ ...base, measured: true, grade: '8級程度', difficulty: 3 })).toEqual({
+      id: 'ryuo', title: '竜王戦に出よう', reason: 'あなたは8級くらい。難易度3の6組なら、勝ち上がれるよ',
+    });
+  });
+
+  it('練習を勧めた直後(2局たつまで)は出さない', () => {
+    expect(tournamentInvite({ ...base, ratedGames: 5, lastPractice: { games: 4 } })).toBeNull();
+    expect(tournamentInvite({ ...base, ratedGames: 6, lastPractice: { games: 4 } })?.id).toBe('ryuo');
+  });
+
+  it('名人戦: 竜王戦の期を1つ終え、名人戦に出たことがない', () => {
+    const entered = { ...base, ryuoEntered: true, ratedGames: 10 };
+    expect(tournamentInvite(entered)).toBeNull();
+    expect(tournamentInvite({ ...entered, ryuoSeasons: 1 })).toEqual({ id: 'meijin', title: '名人戦に出よう', reason: '順位戦のC級2組から、名人をめざそう' });
+    expect(tournamentInvite({ ...entered, ryuoSeasons: 1, meijinEntered: true })).toBeNull();
   });
 });

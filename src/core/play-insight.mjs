@@ -35,6 +35,9 @@ export const CONTENT_GAMES = 10;
 /** 弱点を見る対局の数。 */
 export const WEAKNESS_GAMES = 3;
 
+/**
+ * @returns {{ games: any[], queue: any[], practice: { kind: string, games: number, via?: { [kind: string]: string } } | null }}
+ */
 export function createPlayInsight() {
   return { games: [], queue: [], practice: null };
 }
@@ -73,7 +76,9 @@ export function loadPlayInsight(storage) {
     return {
       games: (Array.isArray(parsed?.games) ? parsed.games : []).filter(validGame).slice(-MAX_INSIGHT_GAMES),
       queue: (Array.isArray(parsed?.queue) ? parsed.queue : []).filter(validJob).slice(-MAX_QUEUE),
-      practice: practice && typeof practice.kind === 'string' && finite(practice.games) ? { kind: practice.kind, games: practice.games } : null,
+      practice: practice && typeof practice.kind === 'string' && finite(practice.games)
+        ? { kind: practice.kind, games: practice.games, via: validVia(practice.via) }
+        : null,
     };
   } catch {
     return createPlayInsight();
@@ -127,9 +132,22 @@ export function addAnalyzedGame(insight, { at, level, outcome, color, event, sum
   };
 }
 
-/** 弱点の練習を始めたことを残す(練習は対局2局に1回まで、同じ弱点を続けない)。gamesは、そのときのレーティングの対局数。 */
-export function recordPractice(insight, { kind, games }) {
-  return { ...insight, practice: { kind, games } };
+const PRACTICE_VIA = new Set(['tutorial', 'problems', 'play']);
+/** 弱点ごとの、前に行った練習の先(教室・問題集・今までの練習)。読めない値は捨てる。 */
+function validVia(via) {
+  if (!via || typeof via !== 'object') return {};
+  return Object.fromEntries(Object.entries(via).filter(([, value]) => PRACTICE_VIA.has(value)));
+}
+
+/**
+ * 弱点の練習を始めたことを残す(練習は対局2局に1回まで、同じ弱点を続けない)。gamesは、そのときのレーティングの対局数。
+ * viaは練習の行き先(docs/first-play-design.mdの6-1)。弱点ごとに前の行き先を残し、教室の章を終えたあとの問題集と今までの練習を交互にする。
+ * @param {ReturnType<typeof createPlayInsight>} insight
+ * @param {{ kind: string, games: number, via?: string }} practice
+ */
+export function recordPractice(insight, { kind, games, via }) {
+  const before = insight.practice?.via ?? {};
+  return { ...insight, practice: { kind, games, via: via && PRACTICE_VIA.has(via) ? { ...before, [kind]: via } : before } };
 }
 
 /** 評価値(先手から見た値)を、colorの側から見た値に。詰みは±3000。 */
@@ -223,19 +241,22 @@ const PHASE_MIN_MOVES = 3;
 
 /**
  * 直近3局の要約から、目立つ弱点を、優先の順にすべて返す(4-1)。解析できた対局がなければ空。
- * - mate: 3手以内の詰みを1回以上逃した。problemIdは、いちばん新しい局面の問題のID(review-problems.mjs)
+ * - mate: 3手以内の詰みを1回以上逃した。problemIdとpliesは、いちばん新しい局面の問題のID(review-problems.mjs)と詰みの手数
  * - ending: 終盤の平均損失が、序盤・中盤の2倍以上で、終盤に大きな悪手がある
  * - free: 1局あたり、タダで取られて大きく損をした手が2回以上
  * - opening: 序盤の平均損失が中盤・終盤より大きく、30手目の形勢が−300以下(3局の平均)
  * @param {ReturnType<typeof createPlayInsight>['games']} games
- * @returns {{ kind: string, count: number, problemId?: string }[]}
+ * @returns {{ kind: string, count: number, problemId?: string, plies?: number }[]}
  */
 export function detectWeaknesses(games) {
   const recent = analyzed(games).slice(-WEAKNESS_GAMES);
   if (!recent.length) return [];
   const found = [];
   const mates = recent.flatMap((game) => game.summary.mates);
-  if (mates.length) found.push({ kind: 'mate', count: mates.length, problemId: reviewProblemId(mates.at(-1).sfen) });
+  if (mates.length) {
+    const latest = mates.at(-1);
+    found.push({ kind: 'mate', count: mates.length, problemId: reviewProblemId(latest.sfen), ...(finite(latest.length) ? { plies: latest.length } : {}) });
+  }
 
   const opening = mergedPhase(recent, 'opening');
   const middle = mergedPhase(recent, 'middle');

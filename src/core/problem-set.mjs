@@ -195,6 +195,31 @@ export function tsumeKindProblems(kindId, plies = null) {
   return plies === null ? problems : problems.filter((problem) => problem.plies === plies);
 }
 
+/** 「つぎはこれ」の練習の一区切りの問題数(play-coach.mjsのDRILL_PROBLEMSと同じ)。 */
+export const DRILL_PROBLEMS_PER_ROUND = 5;
+/** 「つぎはこれ」の練習で、7手詰めへ進む前に解いておく5手詰めの数(docs/first-play-design.mdの6-1)。 */
+export const DRILL_SEVEN_AFTER = 10;
+
+/**
+ * 「つぎはこれ」の5問の練習で出す問題の並び(docs/first-play-design.mdの6-1)。まだ解いていない問題を先に並べる。
+ * 詰将棋は手数を選ぶ: pliesがnullなら、まだ解き終えていない最も短い手数。5手詰めは、10問解いていれば7手詰め。
+ * 選んだ手数を解き終えていたら、まだ解き終えていない次の手数にする(全部解いていれば、選んだ手数を解き直す)。
+ * @param {{ section: string, kind?: string, plies?: number | null }} drill
+ * @param {Iterable<string>} solvedIds
+ * @returns {{ problems: any[], plies: number | null }}
+ */
+export function drillProblems(drill, solvedIds) {
+  const solved = new Set(solvedIds);
+  const unsolvedFirst = (problems) => [...problems.filter(({ id }) => !solved.has(id)), ...problems.filter(({ id }) => solved.has(id))];
+  if (drill?.section !== "tsume") return { problems: unsolvedFirst(PROBLEMS), plies: null };
+  const kind = drill.kind === "jissen" ? "jissen" : "tsume";
+  const left = (plies) => tsumeKindProblems(kind, plies).some(({ id }) => !solved.has(id));
+  let plies = Number.isFinite(drill.plies) ? Number(drill.plies) : (TSUME_PLIES.find(left) ?? TSUME_PLIES[0]);
+  if (plies === 5 && tsumeKindProblems(kind, 5).filter(({ id }) => solved.has(id)).length >= DRILL_SEVEN_AFTER) plies = 7;
+  if (!left(plies)) plies = TSUME_PLIES.find((other) => other > plies && left(other)) ?? plies;
+  return { problems: unsolvedFirst(tsumeKindProblems(kind, plies)), plies };
+}
+
 /**
  * ランダム出題で次に出す問題。手数も問わず、まだ解いていない問題から選び、全部解いたら全体から選ぶ。
  * 直前の問題（excludeId）は、ほかに候補がある限り出さない。

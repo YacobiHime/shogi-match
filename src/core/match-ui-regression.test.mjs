@@ -619,4 +619,17 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/'shogi-game__rematch--primary': measureWelcome === 'some'[\s\S]{0,80}?data-measure-home/);
     expect(source).toMatch(/function enterTournamentFromMeasure\(\) \{[\s\S]{0,120}?tournamentStartAt\.value = "ryuo";/);
   });
+
+  it('「つぎはこれ」の弱点の練習は教室の章・問題集の5問へ、大会への誘いは入口へ(docs/first-play-design.mdの6章)', () => {
+    expect(source).toMatch(/tutorialLessons: homeTutorialProgress\.value\.lessons,/);
+    expect(source).toMatch(/recordPractice\(loadPlayInsight\(browserStorage\(\)\), \{ kind: practice\.kind, games: ratingState\.value\.games, via: practice\.via \}\)/);
+    expect(source).toMatch(/practice\.via === "tutorial" && practice\.chapterId\)[\s\S]{0,200}?tutorialStartChapter\.value = \{[\s\S]{0,120}?tutorialOpen\.value = true;/);
+    expect(source).toMatch(/practice\.via === "problems" && practice\.drill\)[\s\S]{0,120}?problemSetDrill\.value = practice\.drill;[\s\S]{0,60}?problemSetOpen\.value = true;/);
+    expect(source).toMatch(/:start-chapter="tutorialStartChapter"/);
+    expect(source).toMatch(/:drill="problemSetDrill"/);
+    // 誘いは強くなる道の段より先(中断した対局と、竜王戦の期の途中の次)。
+    expect(source).toMatch(/const ryuo = homeRyuoPlan\.value;[\s\S]{0,1000}?const invite = homeInvite\.value;[\s\S]{0,400}?switch \(homeRoadmapState\.value\.current\)/);
+    expect(source).toMatch(/homeNext\.value\.id === "ryuo-entry"\) openTournamentAt\("ryuo"\)/);
+    expect(source).toMatch(/homeNext\.value\.id === "meijin-entry"\) openTournamentAt\("meijin"\)/);
+  });
 });

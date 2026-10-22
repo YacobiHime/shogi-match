@@ -45,6 +45,19 @@ describe('対局の中身の保存', () => {
     expect(insight.games.at(-1).at).toBe(39);
   });
 
+  it('練習の行き先を、弱点ごとに覚えて保存する(docs/first-play-design.mdの6-1)', () => {
+    const storage = memoryStorage();
+    let insight = recordPractice(createPlayInsight(), { kind: 'mate', games: 4, via: 'problems' });
+    insight = recordPractice(insight, { kind: 'free', games: 6, via: 'tutorial' });
+    expect(insight.practice).toEqual({ kind: 'free', games: 6, via: { mate: 'problems', free: 'tutorial' } });
+    // 行き先のない練習(復習の1問など)は、前の行き先を残す。
+    expect(recordPractice(insight, { kind: 'review', games: 8 }).practice.via).toEqual({ mate: 'problems', free: 'tutorial' });
+    savePlayInsight(storage, insight);
+    expect(loadPlayInsight(storage).practice).toEqual(insight.practice);
+    storage.setItem(PLAY_INSIGHT_KEY, JSON.stringify({ practice: { kind: 'mate', games: 1, via: { mate: 'x', free: 'play' } } }));
+    expect(loadPlayInsight(storage).practice.via).toEqual({ free: 'play' });
+  });
+
   it('保存して読み直す。読めない値は捨てる。展示の「最初から」で消える', () => {
     const storage = memoryStorage();
     let insight = completePlayInsight(createPlayInsight(), { at: 1, level: 3, outcome: 'draw', color: 'white' }, summary());
@@ -113,12 +126,12 @@ describe('弱点の見立て(直近3局)', () => {
     expect(detectWeaknesses([game(1, summary())])).toEqual([]);
   });
 
-  it('詰みを逃した: 最新の局面の問題のIDを添える', () => {
+  it('詰みを逃した: 最新の局面の問題のIDと詰みの手数を添える', () => {
     const found = detectWeaknesses([
       game(1, summary({ mates: [{ sfen: 'old', length: 1 }] })),
       game(2, summary({ mates: [{ sfen: 'new 1', length: 3 }] })),
     ]);
-    expect(found[0]).toEqual({ kind: 'mate', count: 2, problemId: reviewProblemId('new 1') });
+    expect(found[0]).toEqual({ kind: 'mate', count: 2, problemId: reviewProblemId('new 1'), plies: 3 });
   });
 
   it('終盤で崩れた: 終盤の平均損失が序盤・中盤の2倍以上で、終盤に大きな悪手がある', () => {

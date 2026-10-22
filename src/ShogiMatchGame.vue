@@ -83,7 +83,7 @@
                 </g>
               </svg>
             </template>
-            <template v-else-if="homeNext.id === 'tournament' || homeNext.id === 'ryuo-season' || homeNext.id === 'ryuo-counter'">
+            <template v-else-if="homeNextIcon === 'tournament'">
               <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#f1a54c">
                   <rect x="4" y="2" width="8" height="1" />
@@ -96,7 +96,7 @@
                 </g>
               </svg>
             </template>
-            <template v-else-if="homeNext.id === 'problems'">
+            <template v-else-if="homeNextIcon === 'problems'">
               <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#fffcf4">
                   <rect x="5" y="2" width="6" height="1" />
@@ -110,7 +110,7 @@
                 </g>
               </svg>
             </template>
-            <template v-else-if="homeNext.id === 'tutorial'">
+            <template v-else-if="homeNextIcon === 'tutorial'">
               <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                 <g fill="#f1a54c">
                   <rect x="1" y="5" width="14" height="1" />
@@ -427,7 +427,8 @@
       :asset-base-url="assetBaseUrl"
       :match-report="tutorialReport"
       :welcome-choice="tutorialWelcomeChoice"
-      @close="tutorialOpen = false; tutorialReport = null; tutorialAutoStart = false"
+      :start-chapter="tutorialStartChapter"
+      @close="tutorialOpen = false; tutorialReport = null; tutorialAutoStart = false; tutorialStartChapter = null"
       @open-dex="openDexFromTutorial"
       @start-match="startMatchFromTutorial"
       @grant-title="grantTutorialTitle"
@@ -438,6 +439,7 @@
       :asset-base-url="assetBaseUrl"
       :start-problem-id="problemSetStart?.id ?? ''"
       :start-review="problemSetStart?.review ?? false"
+      :drill="problemSetDrill"
       @close="problemSetOpen = false"
     />
     <!-- 図鑑は教室の上に重ねて開き、閉じると教室へ戻る。 -->
@@ -2277,7 +2279,7 @@ import {
   retrySuggestion,
   saveRatingState,
 } from "./core/player-rating.mjs";
-import { type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor } from "./core/play-coach.mjs";
+import { type PracticeDrill, type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor, tournamentInvite } from "./core/play-coach.mjs";
 import { counterStyle, loadCounterKey, ryuoNextPlan, ryuoNextSeasonPlan, saveCounterKey } from "./core/ryuo-next.mjs";
 import {
   CLASS_LABELS, applyMeijinSeason, createMeijinSeason, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
@@ -2659,6 +2661,7 @@ const playPlan = computed(() => recommendPlay(ratingState.value, {
   reviewDueId: homeReviewDueId.value,
   problemIds: homeReviewProblemIds.value,
   reward: homeReward.value,
+  tutorialLessons: homeTutorialProgress.value.lessons,
 }));
 const playPreset = computed(() => CPU_STRENGTH_PRESETS.find((preset) => preset.level === playPlan.value.level)!);
 const reviewMode = ref(false);
@@ -5305,6 +5308,13 @@ function openMatchSetup(kind: MatchKind) {
 }
 
 /** タイトル画面の「大会」。大会の画面を開く。 */
+/** 大会の画面を、竜王戦か名人戦の入口で開く(期の途中なら、その期の画面)。 */
+function openTournamentAt(startAt: "ryuo" | "meijin") {
+  tournamentStartAt.value = startAt;
+  tournamentFromGame.value = false;
+  tournamentOpen.value = true;
+  if (ryuoSeason.value?.analysisQueue?.length) void ryuoStats.processQueue();
+}
 function openTournamentScreen() {
   tournamentStartAt.value = "select";
   tournamentFromGame.value = false;
@@ -5556,14 +5566,18 @@ watch([homeOpen, tutorialOpen, problemSetOpen, welcomeOpen], ([home, tutorial, p
  * 強くなる道。5つの段のどこにいるかを、保存してある記録だけで決める(docs/home-roadmap-design.md)。
  * つぎはこれ・入口のおすすめ・薄くする入口・やこび姫の一言は、いまの段から決める。
  */
-const homeRoadmapState = computed(() => {
+/** 竜王戦で指したことがあるか(竜王戦のレーティングの対局か、終えた期がある)。 */
+const homeRyuoPlayed = computed(() => {
   const ryuoTally = (ratingState.value.events as { [event: string]: { wins: number; losses: number; draws: number } } | undefined)?.ryuo;
   const ryuoGames = ryuoTally ? ryuoTally.wins + ryuoTally.losses + ryuoTally.draws : 0;
+  return ryuoGames > 0 || ryuoCareer.value.seasons > 0;
+});
+const homeRoadmapState = computed(() => {
   return homeRoadmap({
     tutorialProgress: homeTutorialProgress.value,
     ratedGames: ratingState.value.games,
     problemsSolved: homeProblemsSolved.value,
-    ryuoPlayed: ryuoGames > 0 || ryuoCareer.value.seasons > 0,
+    ryuoPlayed: homeRyuoPlayed.value,
     welcomeChoice: homeWelcomeChoice.value,
     measured: Boolean(ratingState.value.measured),
   });
@@ -5578,7 +5592,8 @@ function homeTileClass(id: string) {
 }
 
 type HomeNext = {
-  id: "resume" | "tutorial" | "match" | "tournament" | "ryuo-season" | "ryuo-counter" | "problems" | "practice" | "discover"; label: string; description: string;
+  id: "resume" | "tutorial" | "match" | "tournament" | "ryuo-entry" | "meijin-entry" | "ryuo-season" | "ryuo-counter" | "problems" | "practice" | "discover";
+  label: string; description: string;
   /** 立て直しのときの「香落ちで挑む」のLv。 */
   handicapLevel?: number | null;
   /** 立て直しの駒落ち(15級は飛車落ち、ほかは香落ち)。 */
@@ -5615,6 +5630,9 @@ const homeNext = computed<HomeNext>(() => {
       ? { id: "ryuo-counter", label: ryuo.counter.title, description: ryuo.counter.reason, sub: { id: "ryuo-season", label: ryuo.continue.sub } }
       : { id: "ryuo-season", label: ryuo.continue.title, description: ryuo.continue.reason, sub: { id: "ryuo-counter", label: ryuo.counter.sub } };
   }
+  // 大会への誘い(竜王戦に出よう・名人戦に出よう)。大会は主役なので、強くなる道の段を待たずに勧める。
+  const invite = homeInvite.value;
+  if (invite) return { id: invite.id === "meijin" ? "meijin-entry" : "ryuo-entry", label: invite.title, description: invite.reason };
   const plan = playPlan.value;
   const preset = playPreset.value;
   switch (homeRoadmapState.value.current) {
@@ -5667,6 +5685,8 @@ function openTutorialLesson() {
   tutorialAutoStart.value = true;
   tutorialOpen.value = true;
 }
+/** 「つぎはこれ」の弱点の練習で開く教室の章(docs/first-play-design.mdの6-1)。教室を閉じたら捨てる。 */
+const tutorialStartChapter = ref<{ chapterId: string; fromLessonId?: string } | null>(null);
 /** まだ見ていない遊びの紹介(15章)。 */
 const homeDiscovery = computed(() => discoveryPlan({
   seen: seenFeatures.value,
@@ -5681,6 +5701,26 @@ function openDiscovery(id: string) {
   else if (id === "measure") startMeasureMatch();
   else if (id === "piece" || id === "tesuji" || id === "world" || id === "glossary") referenceDexKind.value = id;
 }
+/** 「つぎはこれ」の絵。弱点の練習は、行き先(教室・問題集)の絵にする。 */
+const homeNextIcon = computed(() => {
+  const { id } = homeNext.value;
+  if (["tournament", "ryuo-entry", "meijin-entry", "ryuo-season", "ryuo-counter"].includes(id)) return "tournament";
+  const via = id === "practice" ? playPlan.value.practice?.via : "";
+  if (id === "problems" || via === "problems") return "problems";
+  if (id === "tutorial" || via === "tutorial") return "tutorial";
+  return id;
+});
+/** 大会への誘い(docs/first-play-design.mdの6-2)。 */
+const homeInvite = computed(() => tournamentInvite({
+  ryuoEntered: homeRyuoPlayed.value || Boolean(ryuoSeason.value),
+  ryuoSeasons: ryuoCareer.value.seasons ?? 0,
+  meijinEntered: (meijinCareer.value?.no ?? 0) > 0 || Boolean(meijinSeason.value),
+  measured: Boolean(ratingState.value.measured),
+  ratedGames: ratingState.value.games,
+  lastPractice: playInsight.value.practice,
+  grade: recommendedStrengthPreset.value.label,
+  difficulty: ryuoDefaultDifficulty.value,
+}));
 /** 竜王戦の期を終えたあとの「次の期へ」(直前のレーティングの対局が竜王戦のとき)。 */
 const homeNextSeason = computed(() => {
   const season = ryuoSeason.value;
@@ -5705,27 +5745,43 @@ function startHomeNext() {
   else if (homeNext.value.id === "discover" && homeDiscovery.value) openDiscovery(homeDiscovery.value.id);
   else if (homeNext.value.id === "tutorial") openTutorialLesson();
   else if (homeNext.value.id === "tournament") openTournamentScreen();
+  else if (homeNext.value.id === "ryuo-entry") openTournamentAt("ryuo");
+  else if (homeNext.value.id === "meijin-entry") openTournamentAt("meijin");
   else if (homeNext.value.id === "problems") problemSetOpen.value = true;
   else if (homeNext.value.id === "practice" && playPlan.value.practice) startPractice(playPlan.value.practice);
   else startQuickMatch();
 }
 /** 問題集を開いたときに、すぐ出す問題(「つぎはこれ」の復習の1問・詰みの解き直し)。 */
 const problemSetStart = ref<{ id: string; review: boolean } | null>(null);
+/** 問題集を開いたときの5問の練習(「つぎはこれ」の弱点の練習。docs/first-play-design.mdの6-1)。 */
+const problemSetDrill = ref<PracticeDrill | null>(null);
 watch(problemSetOpen, (open) => {
-  if (!open) problemSetStart.value = null;
+  if (!open) {
+    problemSetStart.value = null;
+    problemSetDrill.value = null;
+  }
 });
 /**
  * 「つぎはこれ」の練習(docs/home-next-adaptive-design.mdの4章(ウ)(エ))。始めたことを記録し、次の2局は対局を勧める。
+ * 弱点の練習は、行き先(docs/first-play-design.mdの6-1)が教室の章ならその章、問題集なら5問の練習。今までの練習は次のとおり。
  * - review・mate: 問題集のその1問
  * - ending: 自分の最近の対局の終盤から指す
  * - free: 「駒の利き」を付けた学習対局(同じLv。レーティングの対象外)
  * - opening: 学習対局の対局準備で、作戦カードを選ぶ
  */
 function startPractice(practice: PracticeStep) {
-  const insight = recordPractice(loadPlayInsight(browserStorage()), { kind: practice.kind, games: ratingState.value.games });
+  const insight = recordPractice(loadPlayInsight(browserStorage()), { kind: practice.kind, games: ratingState.value.games, via: practice.via });
   savePlayInsight(browserStorage(), insight);
   playInsight.value = insight;
-  if (practice.kind === "review" || practice.kind === "mate") {
+  if (practice.via === "tutorial" && practice.chapterId) {
+    // 教室の章: その章のまだクリアしていないレッスンをすぐ始める。
+    tutorialStartChapter.value = { chapterId: practice.chapterId, fromLessonId: practice.fromLessonId };
+    tutorialOpen.value = true;
+  } else if (practice.via === "problems" && practice.drill) {
+    // 問題集の5問。
+    problemSetDrill.value = practice.drill;
+    problemSetOpen.value = true;
+  } else if (practice.kind === "review" || practice.kind === "mate") {
     problemSetStart.value = practice.problemId ? { id: practice.problemId, review: practice.kind === "review" } : null;
     problemSetOpen.value = true;
   } else if (practice.kind === "ending") {
@@ -5773,6 +5829,8 @@ const homeGreeting = computed(() => {
   if (homeNext.value.id === "ryuo-season") return `次は${ryuoName}さんとの一局だね！`;
   if (homeNext.value.id === "practice") return "いっしょに練習しよう！";
   if (homeNext.value.id === "discover") return "ほかにも遊べるよ！";
+  if (homeNext.value.id === "ryuo-entry") return "腕だめしに、竜王戦に出てみよう！";
+  if (homeNext.value.id === "meijin-entry") return "次は名人戦！ 順位戦を勝ち抜こう";
   if (homeNext.value.label === "今日の1局") return homeStreak.value.current >= 1 ? "今日も1局、指そう！" : "おかえり！ 待ってたよ";
   switch (homeRoadmapState.value.current) {
     case 1: return homeLessonsDone.value ? "今日も教室で練習しよう！" : "はじめまして！ いっしょに覚えよう";
