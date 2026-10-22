@@ -722,7 +722,7 @@ function lastGameView(season) {
   if (season.players[game.opponentId]?.story === HANANE) {
     const before = vsUserSoFar(season, game.opponentId, season.userGames.length - 1);
     view.rivalLine = hananeAfterLine({ userWon: game.win, vsUser: before });
-    // 初めて羽音に勝った(「絶対に許さないリスト」)は、注目の一言にする。
+    // 初めて羽音に勝ったあとの再戦の決意は、注目の一言にする。
     view.rivalNotice = game.win && before.wins === 0;
   }
   return view;

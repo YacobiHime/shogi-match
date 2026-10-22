@@ -175,7 +175,7 @@ describe('羽音の台詞', () => {
     expect(HANANE_LINES.againGrudge).toContain(hananeBeforeLine({ wins: 1, losses: 2 }));
   });
 
-  it('初めて負けたときだけ「絶対に許さないリスト」。2回目からは別の一言', () => {
+  it('初敗北は再戦の決意、2回目からは別の一言', () => {
     expect(hananeAfterLine({ userWon: true, vsUser: { wins: 0, losses: 3 } })).toBe(HANANE_LINES.firstLoss[0]);
     expect(HANANE_LINES.lost).toContain(hananeAfterLine({ userWon: true, vsUser: { wins: 1, losses: 3 } }));
     expect(HANANE_LINES.won).toContain(hananeAfterLine({ userWon: false, vsUser: null }));
@@ -209,7 +209,7 @@ describe('竜王戦の画面に出す、羽音の一言', () => {
     return null;
   }
 
-  it('対局前は羽音の一言とやこび姫の紹介、勝ったあとは「絶対に許さないリスト」(注目)', () => {
+  it('対局前は羽音の一言とやこび姫の紹介、初めて勝ったあとは再戦の決意(注目)', () => {
     const season = [1, 2, 3, 4, 5, 6, 7, 8].map(seasonBeforeRival).find(Boolean);
     expect(season).toBeTruthy();
     const before = describeSeason(season);
