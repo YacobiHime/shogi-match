@@ -211,7 +211,7 @@
           竜王戦の期の画面(docs/ryuo-ui-renewal-design.mdの5-2、docs/ryuo-stages-design.md)。ドット絵の山の地図(竜王への道)、
           いま見ている段階(① 組のトーナメント・② 決勝トーナメント・③ 番勝負)の表、次の一局の枠。
           上の帯は1本: 戻る・期と推しの段・段階の道のり(押すと、その段階の表)・予想。
-          狭い画面では地図と表をタブで切り替え、広い画面(幅1200px以上の横長)では、真ん中の列に表と、その下に横長の地図、右に次の一局。
+          狭い画面では地図と表をタブで切り替え、広い画面(幅1200px以上の横長)では、真ん中の列に横長の地図と、その下に表、右に次の一局。
           相手の能力は次の一局の枠にいつも出し、くわしい情報(使用率・経歴・やこび姫の話・予想)は、押すと下から重ねて開く。
         -->
         <div
@@ -1211,7 +1211,7 @@ watch(() => props.view?.pending?.label, () => {
 });
 
 // ---- 3つの段階(docs/ryuo-stages-design.md)
-/** PCの配置(幅1200px以上の横長。CSSの同じ条件と合わせる)。地図を横長にして、表の下に置く。 */
+/** PCの配置(幅1200px以上の横長。CSSの同じ条件と合わせる)。地図を横長にして、表の上に置く。 */
 const PC_WIDE_QUERY = "(min-width: 1200px) and (min-aspect-ratio: 4/3)";
 const pcWideList = typeof matchMedia === "function" ? matchMedia(PC_WIDE_QUERY) : null;
 const pcWide = ref(Boolean(pcWideList?.matches));
@@ -2402,24 +2402,26 @@ const statTiles = computed(() => {
 }
 
 /*
- * もっと広い画面: 真ん中の列に段階の表と、その下に横長の地図、右に次の一局の枠(U:7-5「いつも見たいものは横に出す」)。
- * ①②の表は高さを使うので、地図は下の帯(画面の高さの約3割)。③の番勝負は中身の高さだけで、残りを地図に回す。
+ * もっと広い画面: 真ん中の列に横長の地図と、その下に段階の表、右に次の一局の枠(U:7-5「いつも見たいものは横に出す」)。
+ * 地図は山の空から始まるので、上の帯の下に置くと空が帯に続いて見える。
+ * ①②の表は高さを使うので、地図は上の帯(画面の高さの約3割)。③の番勝負は中身の高さだけで、残りを地図に回す。
  */
 @media (min-width: 1200px) and (min-aspect-ratio: 4/3) {
   .shogi-game .shogi-tournament__stage:not(.shogi-tournament__stage--entry):not(.shogi-tournament__stage--result) {
     grid-template-columns: minmax(0, 1fr) minmax(21rem, 26rem);
-    grid-template-rows: auto minmax(0, 1fr) clamp(12rem, 28vh, 20rem);
-    grid-template-areas: "top top" "table hud" "map hud";
+    grid-template-rows: auto clamp(12rem, 28vh, 20rem) minmax(0, 1fr);
+    grid-template-areas: "top top" "map hud" "table hud";
   }
   .shogi-game .shogi-tournament__stage--series:not(.shogi-tournament__stage--entry):not(.shogi-tournament__stage--result) {
-    grid-template-rows: auto minmax(0, max-content) minmax(12rem, 1fr);
+    grid-template-rows: auto minmax(12rem, 1fr) minmax(0, max-content);
   }
   .shogi-game .shogi-tournament__stage--series > .shogi-tournament__tables { padding-bottom: 0.8rem; }
   .shogi-game .shogi-tournament__stage--series .shogi-tournament__series-view { flex: 0 1 auto; }
-  /* 番勝負の札は控えめな高さにして、下の地図に高さを回す。 */
+  /* 番勝負の札は控えめな高さにして、上の地図に高さを回す。 */
   .shogi-game .shogi-tournament__stage--series .ryuo-series__bout { min-height: clamp(7rem, 17vh, 12rem); }
   .shogi-game .shogi-tournament__stage--series .ryuo-series__game { min-height: clamp(4.5rem, 10vh, 7.5rem); }
-  .shogi-game .shogi-tournament__stage > .shogi-tournament__mapwrap { border-left: 3px solid #0f1828; border-top: 3px solid #0f1828; }
+  .shogi-game .shogi-tournament__stage > .shogi-tournament__mapwrap { border-left: 3px solid #0f1828; }
+  .shogi-game .shogi-tournament__stage > .shogi-tournament__tables { border-top: 3px solid #0f1828; }
   .shogi-game .shogi-tournament__view-switch { display: none; }
   /* 段階の道のりは、上の帯の真ん中に1行で(フルの名前)。 */
   .shogi-game .shogi-tournament__steps { order: 0; flex: 0 1 auto; margin: 0 auto; }

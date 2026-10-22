@@ -70,7 +70,7 @@ export function mountainLayers(height) {
   ];
 }
 
-// ---- 横長の地図(PCの期の画面で、真ん中の列の下に置く。docs/ryuo-stages-design.mdの10章)
+// ---- 横長の地図(PCの期の画面で、真ん中の列の表の上に置く。docs/ryuo-stages-design.mdの10章)
 // 麓(左)の将棋会館から、右へ登って頂上の竜王の座へ。段は左から右へ並べ、少しずつ高くする。
 
 /** 横長の図の高さ。 */

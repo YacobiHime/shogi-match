@@ -199,7 +199,7 @@ describe("match screen regressions", () => {
     // トーナメント表と相手の能力は、奥に隠さない。表は地図と並ぶタブ(広い画面では横にいつも)、能力は次の一局の枠にいつも出す。
     expect(tournament).toMatch(/role="tablist" aria-label="地図と表の切り替え"[\s\S]*?data-table-open @click="tableOpen = true">トーナメント表</);
     expect(tournament).toMatch(/\.shogi-tournament__stage > \.shogi-tournament__tables \{\s*grid-area: map;/);
-    expect(tournament).toMatch(/grid-template-areas: "top top" "table hud" "map hud";/);
+    expect(tournament).toMatch(/grid-template-areas: "top top" "map hud" "table hud";/);
     expect(tournament).toMatch(/:wide="pcWide"/);
     expect(tournament).toMatch(/data-hud-ability\s*@click="sheet = 'opponent'"[\s\S]*?<RadarChart class="shogi-tournament__mini-radar"/);
     expect(tournament).toMatch(/data-pending[\s\S]*?opponentAbility\.specials\.slice\(0, 3\)[\s\S]*?data-tournament-play/);
