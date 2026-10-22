@@ -938,6 +938,22 @@
   background: var(--lavender);
   box-shadow: 0 2px 0 rgba(23, 38, 50, 0.6), inset 0 0 0 2px var(--night-deep);
 }
+/*
+ * 駒の損得の札(状態表示の中)。色は駒得の数字・教室の札とそろえる(緑は得、赤は損)。色だけに頼らず、「駒得」「駒損」と文字でも出す。
+ */
+.shogi-game__material {
+  flex: none;
+  padding: 0.15em 0.55em;
+  border-radius: 999px;
+  color: #fffcf4;
+  background: #55697d;
+  font-size: 0.85em;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.shogi-game__material--good { background: #1f8a4c; }
+.shogi-game__material--bad { background: #c0392b; }
 .shogi-game__assist-actions small {
   margin-left: 0.15em;
   font-size: 0.8em;
@@ -3292,7 +3308,8 @@
 .shogi-game__toolbar--learning .shogi-game__turn {
   grid-column: 1 / -1;
 }
-.shogi-game .shogi-game__command--attack[aria-pressed="true"] {
+.shogi-game .shogi-game__command--attack[aria-pressed="true"],
+.shogi-game .shogi-game__command--material[aria-pressed="true"] {
   box-shadow: inset 0 0 0 2px var(--amber, #f5a645);
 }
 

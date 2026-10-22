@@ -9,6 +9,13 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("toggles a material balance chip and capture numbers in every match kind", () => {
+    expect(source).toMatch(/aria-label="駒の損得を表示"\s*:aria-pressed="materialGuideEnabled"[\s\S]*?@click="toggleMaterialGuide"/);
+    expect(source).toMatch(/v-if="materialChip"[\s\S]*?data-material-chip/);
+    expect(source).toMatch(/const materialChip = computed\(\(\) => \{\s*if \(!materialGuideEnabled\.value[\s\S]*?materialTotals\(currentSfen\.value\)/);
+    // 学習対局ではいつも、ほかの対局では付けているときに、取ったマスへ数字を浮かべる。
+    expect(source).toMatch(/\(matchKind\.value !== "learning" && !materialGuideEnabled\.value\)/);
+  });
   it("lets the player enter a name next to the notebook band and shows it on the board and in the Ryuo season", () => {
     expect(source).toMatch(/<div class="shogi-title__record-row">[\s\S]*?data-player-name\s*@click="openNameDialog"[\s\S]*?class="shogi-title__record" @click="yakobiNoteOpen = true"/);
     expect(source).toMatch(/v-if="nameDialogOpen"[\s\S]*?@submit\.prevent="acceptPlayerName"[\s\S]*?data-player-name-save>この名前にする</);

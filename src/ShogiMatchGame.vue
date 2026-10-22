@@ -535,6 +535,12 @@
             {{ analysisRunning ? `${ANALYSIS_STAGE_LABELS[analysisStage as keyof typeof ANALYSIS_STAGE_LABELS] ?? "解析"} ${analysisProgress}/${analysisTotal}` : "準備中" }}
           </small>
         </div>
+        <span
+          v-if="materialChip"
+          :class="['shogi-game__material', `shogi-game__material--${materialChip.tone}`]"
+          :aria-label="materialChip.aria"
+          data-material-chip
+        >{{ materialChip.text }}</span>
         <span>{{ moveCount }}手目</span>
       </div>
       <div
@@ -1125,8 +1131,8 @@
     </section>
 
     <!--
-      対局中の操作列は、閃き・待った・駒の利きだけにする。盤の反転や動きの矢印は見出しのメニューにしまう。
-      駒の利きは、学習対局だけでなく、通常対局・竜王戦でも付け外しできる(押すまでは出さない。補助は本人が選ぶ)。
+      対局中の操作列は、閃き・待った・駒の利き・駒の損得だけにする。盤の反転や動きの矢印は見出しのメニューにしまう。
+      駒の利きと駒の損得は、学習対局だけでなく、通常対局・竜王戦でも付け外しできる(押すまでは出さない。補助は本人が選ぶ)。
       棋譜解析中も、閃きと読みは、やこび姫のコメントの下の操作列に置く(通常時の閃き・待ったと同じ場所)。
     -->
     <div class="shogi-game__assist-actions">
@@ -1157,6 +1163,15 @@
         :aria-pressed="attackGuideEnabled"
         @click="attackGuideEnabled = !attackGuideEnabled"
       >駒の<wbr>利き</button>
+      <!-- 駒の損得。押すと、状態表示に自分から見た駒の損得(駒得＋3など)を出し、駒を取ったマスに数字を浮かべる。 -->
+      <button
+        type="button"
+        class="shogi-game__assist-toggle shogi-game__command--material"
+        aria-label="駒の損得を表示"
+        :aria-pressed="materialGuideEnabled"
+        data-material-toggle
+        @click="toggleMaterialGuide"
+      >駒の<wbr>損得</button>
       <button
         v-if="reviewMode && !analysisOpen"
         type="button"
@@ -2073,7 +2088,7 @@ import {
   learningStartPosition,
   normalizeAssistLimit,
 } from "./core/learning-setup.mjs";
-import { CAPTURE_POP_MS, capturePop } from "./core/piece-points.mjs";
+import { CAPTURE_POP_MS, capturePop, materialLabel, materialTotals } from "./core/piece-points.mjs";
 import { FURIGOMA_LAND_AT, createMoveSoundPlayer, loadSoundEnabled, saveSoundEnabled, selectMoveSound } from "./core/move-sound";
 import { IMPACT_STAGE, finishImpact, impactStopMs, moveImpact, praiseImpactStage } from "./core/move-impact.mjs";
 import {
@@ -2186,6 +2201,41 @@ const learningHintLimit = ref(3);
 const learningUndoLimit = ref(3);
 const learningStartLabel = ref("");
 const attackGuideEnabled = ref(false);
+/**
+ * 駒の損得の表示(docs/material-guide-design.md)。付けると、状態表示に自分から見た駒の損得を出し、駒を取ったマスに数字を浮かべる。
+ * 付け外しは端末に覚える(補助は本人が選ぶ。U:4-1)。
+ */
+const MATERIAL_GUIDE_KEY = "yacobihime:shogi-match:material-guide:v1";
+const materialGuideEnabled = ref((() => {
+  try {
+    return browserStorage()?.getItem(MATERIAL_GUIDE_KEY) === "1";
+  } catch {
+    return false;
+  }
+})());
+function toggleMaterialGuide() {
+  materialGuideEnabled.value = !materialGuideEnabled.value;
+  try {
+    if (materialGuideEnabled.value) browserStorage()?.setItem(MATERIAL_GUIDE_KEY, "1");
+    else browserStorage()?.removeItem(MATERIAL_GUIDE_KEY);
+  } catch {
+    // 覚えられなくても、この場では使う。
+  }
+}
+/**
+ * 状態表示の駒の損得の札。盤の上と持ち駒の点数(piece-points.mjsのmaterialTotals)を、自分と相手で比べる。
+ * 二人で指すときは先手から見る。振り返りでは、見ている局面の損得。
+ */
+const materialChip = computed(() => {
+  if (!materialGuideEnabled.value || !matchStarted.value || pregameOpen.value) return null;
+  const local = normalizedMode.value === "local";
+  const side = local || humanColor.value !== Color.WHITE ? "black" : "white";
+  const totals = materialTotals(currentSfen.value);
+  const diff = totals[side] - totals[side === "black" ? "white" : "black"];
+  const label = materialLabel(diff);
+  const text = diff === 0 ? "駒の損得 ±0" : `${local ? "先手 " : ""}${label.text}`;
+  return { text, tone: label.tone, aria: `${local ? "先手から見た" : "あなたから見た"}${text}` };
+});
 // 学習対局で、選んだ駒の動ける方向を矢印で見せるか。駒を選んだときだけ出るので、学習対局では最初からオンにする。
 const movementArrowsEnabled = ref(true);
 
@@ -5368,7 +5418,8 @@ function syncPosition(usi = "") {
 const captureFloatLabels = ref<{ id: number; file: number; rank: number; text: string; tone: "good" | "bad"; big: boolean }[]>([]);
 let captureFloatSeq = 0;
 function showCapturePop(previous: string, usi: string) {
-  if (matchKind.value !== "learning" || !matchStarted.value || reviewMode.value || !previous) return;
+  // 学習対局ではいつも、ほかの対局では「駒の損得」を付けているときに出す。
+  if ((matchKind.value !== "learning" && !materialGuideEnabled.value) || !matchStarted.value || reviewMode.value || !previous) return;
   // 直前の局面からこの手を指した結果が、いまの局面と同じときだけ出す。
   const check = createGameRecord(previous);
   if (!appendUsiMove(check, usi) || check.position.sfen.split(" ")[0] !== record.value.position.sfen.split(" ")[0]) return;
