@@ -398,3 +398,7 @@ GitHubからも公開できます。リポジトリのActionsの「Firebase Host
 ### 展示用のWindows exe
 
 `npm run build:exhibit:exe`で`exhibit/shogi-match-exhibit-windows-x64.zip`を作成します（ビルドにはGo 1.22以上とzipが必要。コンパイラは`GO_BINARY`で指定可能）。展開した`shogi-match-exhibit.exe`を起動すると、Windows 10/11 x64上のChromeまたはEdgeで、インターネットなしで遊べます。ゲーム本体はexeに内蔵されています。Alt+F4で終了、`--window`で窓表示できます。タイトル画面左下の「データリセット」は確認後に来場者の記録を消します。配布時は同梱の説明書・ライセンス・ソースzipも一緒に渡してください。
+
+### exeを使わないオフライン展示版
+
+公開サイトに接続できずexeも実行できないPCでは、`npm run build:exhibit`で生成する`exhibit/shogi-match-exhibit.zip`を使えます。ZIPを展開し、`start.bat`（全画面）または`start-window.bat`（窓表示）から起動してください。Windows標準のPowerShellで同梱のHTML・画像・音・WASMを配信するので、インターネットや追加のNode.jsは不要です。HTMLの直接起動では将棋エンジンが動きません。PowerShellやbatの実行も管理ポリシーで禁止されている場合は管理者への確認が必要です。展示版のビルドActionsは、exe版とこのブラウザ版を別々のArtifactsとして保存します。

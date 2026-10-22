@@ -30,3 +30,9 @@ jobs:
           path: exhibit/shogi-match-exhibit-windows-x64.zip
           if-no-files-found: error
           retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shogi-match-exhibit-browser-offline
+          path: exhibit/shogi-match-exhibit.zip
+          if-no-files-found: error
+          retention-days: 30

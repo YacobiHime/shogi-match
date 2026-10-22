@@ -64,3 +64,9 @@
 - 同じ埋め込み資産・サーバーをLinux用にもビルドして起動し、ChromiumでWASM Workerの`usiok`・`readyok`（`ok: true`、`crossOriginIsolated: true`）を確認。
 - 1366×768・390×844・820×1180で左下のボタンと44px以上の操作領域を確認。確認の初期フォーカスは「やめる」、Escで取り消し、実行後の記録消去と設定の保持、初回案内の再表示、通常版でのボタン非表示を確認。
 - 全1,580テスト・型チェック・公開用ビルド成功。Windows x64のGUI実行形式を生成済み。Windows実機でのブラウザ起動・全画面・終了操作は未検証。
+
+## 6. exeを実行できないPC向けの配布（2026-10-23）
+
+単体HTMLへ機能を削ってまとめる代わりに、3章のbat・PowerShell・HTML一式のオフライン版を配布する。HTMLをファイルとして直接開く制約を避け、通常のエンジン・助言・解析を維持する。公開サイトへの接続と独自exeの実行は不要。学校の管理ポリシーがbat・PowerShellも禁止している場合は管理者への確認が必要。
+
+展示用ビルドActionsで、`shogi-match-exhibit.zip`を`shogi-match-exhibit-browser-offline`のArtifactsとして保存する。展開後の入口は`start.bat`、窓表示は`start-window.bat`。`app/`と`server.ps1`を一緒に保持する。左下のデータリセットと来場者の記録を消す処理はexe版と同じ。
