@@ -31,7 +31,7 @@
         行の中のタイルは、どの画面でも横1列に並べる(区分を横に並べたり、タイルを折り返したりしない)。
         区分は枠で囲まず(囲むとごちゃつく)、行の上の小さな見出しと余白で分ける。
       -->
-      <!-- 展示モード(exhibit属性)だけの「最初から」。次の来場者のために記録を消す(docs/exhibit-design.md)。 -->
+      <!-- exhibit属性で表示するデータリセット。公開ページと展示版で使う(docs/exhibit-design.md)。 -->
       <button
         v-if="exhibit"
         type="button"
@@ -2354,7 +2354,7 @@ const props = defineProps({
   mobile: { type: Boolean, default: false },
   enableDragAndDrop: { type: Boolean, default: true },
   showHome: { type: Boolean, default: false },
-  /** 展示モード。ホームに「最初から」(記録をすべて消して読み直す)を出す。game.htmlでは ?exhibit=1。 */
+  /** ホームにデータリセットを出す。確認後、記録を消して読み直す。公開game.htmlでは既定で有効。 */
   exhibit: { type: Boolean, default: false },
 });
 const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error"]);

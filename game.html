@@ -13,7 +13,7 @@
   </style>
 </head>
 <body>
-  <shogi-match-game id="game" asset-base-url="./dist" engine-base-url="./"></shogi-match-game>
+  <shogi-match-game id="game" exhibit asset-base-url="./dist" engine-base-url="./"></shogi-match-game>
   <script type="module" src="./dist/shogi-match.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
@@ -35,7 +35,8 @@
     if (!params.has("mode") && !params.has("initial_sfen")) {
       game.setAttribute("show-home", "");
     }
-    // 展示用(docs/exhibit-design.md)。ホームに「最初から」を出す。
+    // 公開ページでもexhibit属性を既定で付け、ホーム左下にデータリセットを出す。
+    // ?exhibit=1 は従来の展示用URLとの互換性のため受け付ける。
     if (params.get("exhibit") === "1") game.setAttribute("exhibit", "");
   </script>
 </body>
