@@ -132,8 +132,35 @@ export function describeMatchStage({ event, season, label = '', userName = '', s
     sides,
     opponentRole,
     userRole,
+    scenery: stageScenery(event, pending, title),
+    longestDay: event === 'meijin' && pending.kind === 'league' && season.cls === 'A' && pending.round === season.rounds - 1,
     coachLine: stageCoachLine({ weight, tone, title: info.title, label: stageLabel, stakesText, win: stakes?.win ?? '', first: seriesInfo ? seriesInfo.marks.length === 0 : false, defense: holderIsUser }),
   };
+}
+
+/**
+ * 背景の景色(docs/tournament-match-presence-design.mdの5章)。
+ * 竜王戦は勝ち上がるほど山の上へ(麓・中腹・雪の稜線)、名人戦は暮れていく空、タイトル戦は今の金屏風。
+ */
+function stageScenery(event, pending, title) {
+  if (title) return 'title';
+  if (event === 'meijin') return 'sky';
+  if (pending.kind === 'playoff') return 'snow';
+  if (pending.phase === 'main') return 'mid';
+  return 'foot';
+}
+
+/** 名人戦の空の色の段(手数で暮れる)。昼・夕方・夜・深夜。 */
+export const SKY_PHASE_PLIES = Object.freeze({ evening: 40, night: 80, midnight: 120 });
+/**
+ * @param {number} ply いまの手数
+ * @returns {"day" | "evening" | "night" | "midnight"}
+ */
+export function skyPhase(ply) {
+  if (ply > SKY_PHASE_PLIES.midnight) return 'midnight';
+  if (ply > SKY_PHASE_PLIES.night) return 'night';
+  if (ply > SKY_PHASE_PLIES.evening) return 'evening';
+  return 'day';
 }
 
 /** 対局を始めたときの、やこび姫の一言。ふつうの1局は、いつもの一言のまま(null)。 */

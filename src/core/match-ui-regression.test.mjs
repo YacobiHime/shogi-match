@@ -709,4 +709,16 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/notePresenceScore\(score\);\s*if \(riskOnly\) \{/);
     expect(source).toMatch(/\.shogi-game__broadcast \{[^}]*min-height: 1\.4em;/);
   });
+  it("大会の1局の背景(竜王戦は山、名人戦は暮れる空)と、勝った終局の判子(docs/tournament-match-presence-design.mdの5・6章)", () => {
+    expect(source).toMatch(/matchStage\?\.scenery && !homeOpen \? `shogi-game--scenery-\$\{matchStage\.scenery\}`/);
+    expect(source).toMatch(/matchStage\?\.scenery === 'sky' && !homeOpen \? `shogi-game--sky-\$\{matchSky\}`/);
+    expect(source).toMatch(/v-if="matchStage\.longestDay"[^>]*>将棋界の一番長い日/);
+    // 判子は期の結果を記録した節目から決め、1.2秒で結果の窓へ。負けは判子を押さない。
+    expect(source).toMatch(/finishMilestone = lastGameMilestone\(next,/);
+    expect(source).toMatch(/recordRyuoOutcome\(matchResult\);\s*if \(tournamentFinish\) showFinishStamp\(outcome === "win",/);
+    expect(source).toMatch(/resultRevealTimer = setTimeout\(revealResult, FINISH_STAMP_MS\);/);
+    expect(source).toMatch(/v-if="finishStampShown && !resultDialogOpen"/);
+    // 大一番の朱の明かりは、景色の上に重ねる(景色の規則は大一番の背景より後ろに置く)。
+    expect(source).toMatch(/\.shogi-game\.shogi-game--stage-big \{[\s\S]*?\.shogi-game\.shogi-game--scenery-foot,/);
+  });
 });

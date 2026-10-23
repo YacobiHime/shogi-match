@@ -265,3 +265,22 @@ export function roomComment({
   }
   return null;
 }
+
+// ---- 終局の判子(段階3。docs/tournament-match-presence-design.mdの6章)
+
+/**
+ * 勝って終局したときに盤に押す判子。期の画面の節目の判子(ryuo-milestone.mjsのlastGameMilestone)と同じ言葉にする。
+ * 節目でない勝ちは「勝ち」の小さな判子。負けたときは押さない(null)。
+ * @param {{ win: boolean, milestone?: { seal: string, title: string, weight: string } | null, event?: string, crowned?: boolean, weight?: string }} options
+ *   crowned: 名人戦で名人になった(または防衛した)。weight: 対局の舞台の重さ(plain/big/title)。
+ * @returns {{ seal: string, title: string, size: "small" | "mid" | "big", confetti: boolean } | null}
+ */
+export function finishStamp({ win, milestone = null, event = 'ryuo', crowned = false, weight = 'plain' }) {
+  if (!win) return null;
+  if (event === 'meijin' && crowned) return { seal: '名人', title: '名人になった！', size: 'big', confetti: true };
+  if (milestone) {
+    const size = milestone.weight === 'max' ? 'big' : milestone.weight === 'big' ? 'mid' : 'small';
+    return { seal: milestone.seal, title: milestone.title, size, confetti: milestone.weight === 'max' };
+  }
+  return { seal: '勝ち', title: '', size: weight === 'title' ? 'big' : weight === 'big' ? 'mid' : 'small', confetti: false };
+}

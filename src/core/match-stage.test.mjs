@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STAGE_SEAL_PLY, STAGE_VENUES, describeMatchStage, seriesStakes, stageDay, stageSealPly, stageVenue } from './match-stage.mjs';
+import { STAGE_SEAL_PLY, STAGE_VENUES, describeMatchStage, seriesStakes, skyPhase, stageDay, stageSealPly, stageVenue } from './match-stage.mjs';
 
 const players = { p1: { name: '斎藤大和', dan: '九段' } };
 const games = (list) => list.map((winner) => ({ winner }));
@@ -116,5 +116,29 @@ describe('対局の舞台(大会の1局を見分ける形)', () => {
     expect(stageVenue('ryuo', 1, 1)).toBe(stageVenue('ryuo', 1, 1));
     const venues = new Set(Array.from({ length: 7 }, (_, index) => stageVenue('ryuo', 1, index + 1)));
     expect(venues.size).toBeGreaterThan(2);
+  });
+});
+
+describe('背景の景色(docs/tournament-match-presence-design.mdの5章)', () => {
+  const plain = (pending, extra = {}) => describeMatchStage({ event: extra.event ?? 'ryuo', season: { no: 1, players, pending: { opponentId: 'p1', ...pending }, ...extra.season } });
+  it('竜王戦は、組・決勝トーナメント・挑戦者決定戦で山の上へ。タイトル戦は金屏風', () => {
+    expect(plain({ kind: 'game', phase: 'ranking' }).scenery).toBe('foot');
+    expect(plain({ kind: 'game', phase: 'revival' }).scenery).toBe('foot');
+    expect(plain({ kind: 'game', phase: 'main' }).scenery).toBe('mid');
+    expect(plain({ kind: 'playoff' }, { season: { playoff: { wins: {}, games: [], need: 2 } } }).scenery).toBe('snow');
+    expect(describeMatchStage({ event: 'ryuo', season: finalsSeason() }).scenery).toBe('title');
+  });
+  it('名人戦は暮れていく空。A級の最終局は「将棋界の一番長い日」', () => {
+    const league = (cls, round) => describeMatchStage({ event: 'meijin', season: { no: 1, players, cls, rounds: 9, pending: { kind: 'league', round, opponentId: 'p1' } } });
+    expect(league('C2', 3).scenery).toBe('sky');
+    expect(league('A', 8).longestDay).toBe(true);
+    expect(league('A', 7).longestDay).toBe(false);
+    expect(league('B1', 8).longestDay).toBe(false);
+  });
+  it('空は手数で暮れる', () => {
+    expect(skyPhase(0)).toBe('day');
+    expect(skyPhase(41)).toBe('evening');
+    expect(skyPhase(81)).toBe('night');
+    expect(skyPhase(121)).toBe('midnight');
   });
 });

@@ -111,3 +111,16 @@ describe('中継(勝率と控室)', () => {
     expect(roomComment({ ply: 20, winRate: 0.5, previousWinRate: 0.48 })).toBeNull();
   });
 });
+
+describe('終局の判子', () => {
+  it('節目は期の画面と同じ言葉、ふつうの勝ちは小さな「勝ち」、負けは押さない', async () => {
+    const { finishStamp } = await import('./match-presence.mjs');
+    expect(finishStamp({ win: true, milestone: { seal: '竜王', title: '竜王になった！', weight: 'max' } }))
+      .toEqual({ seal: '竜王', title: '竜王になった！', size: 'big', confetti: true });
+    expect(finishStamp({ win: true, milestone: { seal: '優勝', title: '6組優勝！', weight: 'big' } })?.size).toBe('mid');
+    expect(finishStamp({ win: true })).toEqual({ seal: '勝ち', title: '', size: 'small', confetti: false });
+    expect(finishStamp({ win: true, weight: 'title' })?.size).toBe('big');
+    expect(finishStamp({ win: true, event: 'meijin', crowned: true })).toMatchObject({ seal: '名人', confetti: true });
+    expect(finishStamp({ win: false, milestone: { seal: '優勝', title: '', weight: 'big' } })).toBeNull();
+  });
+});

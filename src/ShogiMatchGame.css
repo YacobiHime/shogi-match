@@ -624,6 +624,56 @@
     linear-gradient(135deg, transparent 0 68%, rgba(43, 70, 91, 0.18) 68% 100%),
     var(--night);
 }
+/*
+ * 竜王戦・名人戦の背景の景色(docs/tournament-match-presence-design.mdの5章)。盤と升の色には触れない。
+ * 竜王戦は勝ち上がるほど山の上へ(麓・中腹・雪の稜線)。名人戦は手数で暮れていく空と、夜に灯る町の明かり。
+ * 大一番の朱の明かり(--stage-light)は、景色の上に重ねる。タイトル戦は今の金屏風のまま。
+ */
+.shogi-game.shogi-game--scenery-foot,
+.shogi-game.shogi-game--scenery-mid,
+.shogi-game.shogi-game--scenery-snow,
+.shogi-game.shogi-game--scenery-sky {
+  background-color: var(--night);
+  background-image: var(--stage-light, linear-gradient(transparent, transparent)), var(--scenery-ground), var(--scenery-sky);
+  background-position: center, bottom, center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%, 100% 30%, 100% 100%;
+}
+.shogi-game--stage-big {
+  --stage-light: radial-gradient(ellipse 80% 40% at 50% 0%, rgba(226, 85, 59, 0.18), transparent 72%);
+}
+.shogi-game--scenery-foot {
+  --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cpath d='M0 30V18Q15 8 30 16T60 14T100 12V30Z' fill='%232f5a3a' fill-opacity='.55'/%3E%3Cpath d='M0 30V24Q25 16 50 22T100 20V30Z' fill='%233d7047' fill-opacity='.6'/%3E%3Crect x='70' y='15' width='9' height='5' fill='%238a98a8' fill-opacity='.7'/%3E%3Crect x='69' y='14' width='11' height='1.4' fill='%23fffcf4' fill-opacity='.7'/%3E%3C/svg%3E");
+  --scenery-sky: linear-gradient(180deg, #16263a 0%, #1d3346 70%, #1e3a36 100%);
+}
+.shogi-game--scenery-mid {
+  --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cpath d='M0 30V20L12 10L22 18L35 6L48 17L60 9L74 19L86 8L100 16V30Z' fill='%234a5560' fill-opacity='.6'/%3E%3Cpath d='M0 30V25L18 20L30 24L45 19L62 25L80 21L100 24V30Z' fill='%23324048' fill-opacity='.75'/%3E%3Cpath d='M20 25L22 20L24 25ZM66 26L68 21L70 26Z' fill='%232f5a3a' fill-opacity='.8'/%3E%3C/svg%3E");
+  --scenery-sky: linear-gradient(180deg, #142233 0%, #1c3044 72%, #29363f 100%);
+}
+.shogi-game--scenery-snow {
+  --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cpath d='M0 30V22L16 6L30 18L46 2L62 16L78 5L100 20V30Z' fill='%23515e6b' fill-opacity='.65'/%3E%3Cpath d='M13 9L16 6L19 9L17 10ZM42 6L46 2L50 6L47 7ZM74 8L78 5L82 8L79 9Z' fill='%23fffcf4' fill-opacity='.9'/%3E%3Cpath d='M0 30V26L25 22L50 26L75 23L100 26V30Z' fill='%23e8eef4' fill-opacity='.35'/%3E%3C/svg%3E");
+  --scenery-sky: linear-gradient(180deg, #101c2c 0%, #1b2d42 68%, #34465a 100%);
+}
+.shogi-game--scenery-sky,
+.shogi-game--sky-day {
+  --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cg fill='%2328333f' fill-opacity='.8'%3E%3Crect x='0' y='22' width='8' height='8'/%3E%3Crect x='8' y='24' width='6' height='6'/%3E%3Crect x='14' y='20' width='7' height='10'/%3E%3Crect x='21' y='23' width='9' height='7'/%3E%3Crect x='30' y='19' width='6' height='11'/%3E%3Crect x='36' y='24' width='8' height='6'/%3E%3Crect x='44' y='21' width='7' height='9'/%3E%3Crect x='51' y='18' width='10' height='12'/%3E%3Crect x='61' y='23' width='6' height='7'/%3E%3Crect x='67' y='20' width='8' height='10'/%3E%3Crect x='75' y='24' width='7' height='6'/%3E%3Crect x='82' y='19' width='9' height='11'/%3E%3Crect x='91' y='22' width='9' height='8'/%3E%3C/g%3E%3C/svg%3E");
+  --scenery-sky: linear-gradient(180deg, #2a4864 0%, #34587a 70%, #3a5f74 100%);
+}
+.shogi-game--sky-evening {
+  --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cg fill='%2328333f' fill-opacity='.8'%3E%3Crect x='0' y='22' width='8' height='8'/%3E%3Crect x='8' y='24' width='6' height='6'/%3E%3Crect x='14' y='20' width='7' height='10'/%3E%3Crect x='21' y='23' width='9' height='7'/%3E%3Crect x='30' y='19' width='6' height='11'/%3E%3Crect x='36' y='24' width='8' height='6'/%3E%3Crect x='44' y='21' width='7' height='9'/%3E%3Crect x='51' y='18' width='10' height='12'/%3E%3Crect x='61' y='23' width='6' height='7'/%3E%3Crect x='67' y='20' width='8' height='10'/%3E%3Crect x='75' y='24' width='7' height='6'/%3E%3Crect x='82' y='19' width='9' height='11'/%3E%3Crect x='91' y='22' width='9' height='8'/%3E%3C/g%3E%3C/svg%3E");
+  --scenery-sky: linear-gradient(180deg, #2b2d4d 0%, #6b4258 62%, #b0654a 100%);
+}
+.shogi-game--sky-night {
+  --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cg fill='%2316202b' fill-opacity='.92'%3E%3Crect x='0' y='22' width='8' height='8'/%3E%3Crect x='8' y='24' width='6' height='6'/%3E%3Crect x='14' y='20' width='7' height='10'/%3E%3Crect x='21' y='23' width='9' height='7'/%3E%3Crect x='30' y='19' width='6' height='11'/%3E%3Crect x='36' y='24' width='8' height='6'/%3E%3Crect x='44' y='21' width='7' height='9'/%3E%3Crect x='51' y='18' width='10' height='12'/%3E%3Crect x='61' y='23' width='6' height='7'/%3E%3Crect x='67' y='20' width='8' height='10'/%3E%3Crect x='75' y='24' width='7' height='6'/%3E%3Crect x='82' y='19' width='9' height='11'/%3E%3Crect x='91' y='22' width='9' height='8'/%3E%3C/g%3E%3Cg fill='%23ffd27a' fill-opacity='.85'%3E%3Crect x='2' y='24' width='1.5' height='1.5'/%3E%3Crect x='5' y='26' width='1.5' height='1.5'/%3E%3Crect x='10' y='26' width='1.5' height='1.5'/%3E%3Crect x='11' y='28' width='1.5' height='1.5'/%3E%3Crect x='16' y='22' width='1.5' height='1.5'/%3E%3Crect x='18' y='24' width='1.5' height='1.5'/%3E%3Crect x='23' y='25' width='1.5' height='1.5'/%3E%3Crect x='27' y='27' width='1.5' height='1.5'/%3E%3Crect x='32' y='21' width='1.5' height='1.5'/%3E%3Crect x='33' y='23' width='1.5' height='1.5'/%3E%3Crect x='38' y='26' width='1.5' height='1.5'/%3E%3Crect x='41' y='28' width='1.5' height='1.5'/%3E%3Crect x='46' y='23' width='1.5' height='1.5'/%3E%3Crect x='48' y='25' width='1.5' height='1.5'/%3E%3Crect x='53' y='20' width='1.5' height='1.5'/%3E%3Crect x='58' y='22' width='1.5' height='1.5'/%3E%3Crect x='63' y='25' width='1.5' height='1.5'/%3E%3Crect x='64' y='27' width='1.5' height='1.5'/%3E%3Crect x='69' y='22' width='1.5' height='1.5'/%3E%3Crect x='72' y='24' width='1.5' height='1.5'/%3E%3Crect x='77' y='26' width='1.5' height='1.5'/%3E%3Crect x='79' y='28' width='1.5' height='1.5'/%3E%3Crect x='84' y='21' width='1.5' height='1.5'/%3E%3Crect x='88' y='23' width='1.5' height='1.5'/%3E%3Crect x='93' y='24' width='1.5' height='1.5'/%3E%3Crect x='97' y='26' width='1.5' height='1.5'/%3E%3C/g%3E%3C/svg%3E");
+  --scenery-sky: linear-gradient(180deg, #0f1b31 0%, #18263f 70%, #1f2f48 100%);
+}
+.shogi-game--sky-midnight {
+  --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cg fill='%2316202b' fill-opacity='.92'%3E%3Crect x='0' y='22' width='8' height='8'/%3E%3Crect x='8' y='24' width='6' height='6'/%3E%3Crect x='14' y='20' width='7' height='10'/%3E%3Crect x='21' y='23' width='9' height='7'/%3E%3Crect x='30' y='19' width='6' height='11'/%3E%3Crect x='36' y='24' width='8' height='6'/%3E%3Crect x='44' y='21' width='7' height='9'/%3E%3Crect x='51' y='18' width='10' height='12'/%3E%3Crect x='61' y='23' width='6' height='7'/%3E%3Crect x='67' y='20' width='8' height='10'/%3E%3Crect x='75' y='24' width='7' height='6'/%3E%3Crect x='82' y='19' width='9' height='11'/%3E%3Crect x='91' y='22' width='9' height='8'/%3E%3C/g%3E%3Cg fill='%23ffd27a' fill-opacity='.85'%3E%3Crect x='2' y='24' width='1.5' height='1.5'/%3E%3Crect x='5' y='26' width='1.5' height='1.5'/%3E%3Crect x='10' y='26' width='1.5' height='1.5'/%3E%3Crect x='11' y='28' width='1.5' height='1.5'/%3E%3Crect x='16' y='22' width='1.5' height='1.5'/%3E%3Crect x='18' y='24' width='1.5' height='1.5'/%3E%3Crect x='23' y='25' width='1.5' height='1.5'/%3E%3Crect x='27' y='27' width='1.5' height='1.5'/%3E%3Crect x='32' y='21' width='1.5' height='1.5'/%3E%3Crect x='33' y='23' width='1.5' height='1.5'/%3E%3Crect x='38' y='26' width='1.5' height='1.5'/%3E%3Crect x='41' y='28' width='1.5' height='1.5'/%3E%3Crect x='46' y='23' width='1.5' height='1.5'/%3E%3Crect x='48' y='25' width='1.5' height='1.5'/%3E%3Crect x='53' y='20' width='1.5' height='1.5'/%3E%3Crect x='58' y='22' width='1.5' height='1.5'/%3E%3Crect x='63' y='25' width='1.5' height='1.5'/%3E%3Crect x='64' y='27' width='1.5' height='1.5'/%3E%3Crect x='69' y='22' width='1.5' height='1.5'/%3E%3Crect x='72' y='24' width='1.5' height='1.5'/%3E%3Crect x='77' y='26' width='1.5' height='1.5'/%3E%3Crect x='79' y='28' width='1.5' height='1.5'/%3E%3Crect x='84' y='21' width='1.5' height='1.5'/%3E%3Crect x='88' y='23' width='1.5' height='1.5'/%3E%3Crect x='93' y='24' width='1.5' height='1.5'/%3E%3Crect x='97' y='26' width='1.5' height='1.5'/%3E%3C/g%3E%3C/svg%3E");
+  --scenery-sky:
+    radial-gradient(circle at 14% 16%, rgba(255, 252, 244, 0.5) 0 1px, transparent 2px),
+    radial-gradient(circle at 78% 10%, rgba(255, 252, 244, 0.45) 0 1px, transparent 2px),
+    linear-gradient(180deg, #060b18 0%, #0c1426 72%, #111a2c 100%);
+}
 @media (prefers-reduced-motion: reduce) {
   .shogi-game__stage-mark--now {
     animation: none;
@@ -3917,4 +3967,77 @@
   }
   .shogi-game__pregame-footer .shogi-game__pregame-note { margin: 0; }
   .shogi-game__pregame-footer .shogi-game__pregame-start { width: auto; min-width: 12em; }
+}
+
+/* 開幕の札の「将棋界の一番長い日」(A級の最終局)。 */
+.shogi-game__stage-card-longest {
+  color: #ffd27a;
+  font-family: var(--stage-mincho, "Hiragino Mincho ProN", "Yu Mincho", serif);
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+/* 大会の終局の判子。期の画面の節目の判子と同じ朱。重さで3段の大きさ。盤の操作は妨げない。 */
+.shogi-game__finish-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 45;
+  display: grid;
+  gap: 0.35em;
+  justify-items: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.shogi-game__finish-stamp b {
+  display: grid;
+  place-items: center;
+  width: 3.2em;
+  height: 3.2em;
+  border: 0.18em solid #c8433a;
+  border-radius: 0.35em;
+  color: #c8433a;
+  background: rgba(255, 252, 244, 0.92);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: 2.2em;
+  font-weight: 900;
+  line-height: 1;
+  animation: shogi-finish-stamp 0.26s cubic-bezier(0.2, 0.8, 0.3, 1.2) both;
+}
+.shogi-game__finish-stamp--mid b { font-size: 2.8em; }
+.shogi-game__finish-stamp--big b { font-size: 3.4em; }
+.shogi-game__finish-stamp span {
+  padding: 0.2em 0.8em;
+  border-radius: 0.4em;
+  color: var(--ivory);
+  background: rgba(23, 38, 50, 0.9);
+  font-weight: 700;
+}
+@keyframes shogi-finish-stamp {
+  from { opacity: 0; transform: scale(1.8) rotate(-8deg); }
+  to { opacity: 1; transform: scale(1) rotate(-4deg); }
+}
+.shogi-game__confetti {
+  position: absolute;
+  inset: -40% -60%;
+  pointer-events: none;
+}
+.shogi-game__confetti i {
+  position: absolute;
+  top: 0;
+  left: calc(var(--piece) * 7%);
+  width: 0.5em;
+  height: 0.8em;
+  background: hsl(calc(var(--piece) * 47deg) 80% 62%);
+  animation: shogi-confetti 1.5s ease-in both;
+  animation-delay: calc(var(--piece) * 40ms);
+}
+@keyframes shogi-confetti {
+  from { opacity: 1; transform: translateY(-20%) rotate(0deg); }
+  to { opacity: 0; transform: translateY(260%) rotate(540deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__finish-stamp b { animation: none; transform: rotate(-4deg); }
+  .shogi-game__confetti { display: none; }
 }

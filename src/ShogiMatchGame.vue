@@ -12,6 +12,8 @@
         'shogi-game--dex-over-match': dexOverMatch,
       },
       matchStage && !homeOpen ? `shogi-game--stage-${matchStage.weight}` : '',
+      matchStage?.scenery && !homeOpen ? `shogi-game--scenery-${matchStage.scenery}` : '',
+      matchStage?.scenery === 'sky' && !homeOpen ? `shogi-game--sky-${matchSky}` : '',
     ]"
     :style="uiLayoutStyle"
     aria-label="将棋対局"
@@ -1175,6 +1177,7 @@
         >
           <template v-if="stageCard.kind === 'opening'">
             <small>{{ matchStage.eventText }}</small>
+            <em v-if="matchStage.longestDay" class="shogi-game__stage-card-longest" data-longest-day>将棋界の一番長い日</em>
             <strong>{{ matchStage.shortLabel ?? matchStage.label }}</strong>
             <span v-if="matchStage.venue" class="shogi-game__stage-card-venue">{{ matchStage.venue }}</span>
             <span v-if="matchStage.weight === 'title'" class="shogi-game__stage-card-sides">
@@ -1192,6 +1195,24 @@
           </template>
         </div>
       </Transition>
+      <!--
+        大会の終局の判子(docs/tournament-match-presence-design.mdの6章)。勝った瞬間に盤の上へ押し、1.2秒で結果の窓へ。
+        言葉は期の画面の節目の判子と同じ。盤を触ると、すぐ結果の窓へ進む。負けたときは押さない。
+      -->
+      <div
+        v-if="finishStampShown && !resultDialogOpen"
+        :key="finishStampShown.id"
+        class="shogi-game__finish-stamp"
+        :class="`shogi-game__finish-stamp--${finishStampShown.size}`"
+        role="status"
+        data-finish-stamp
+      >
+        <b>{{ finishStampShown.seal }}</b>
+        <span v-if="finishStampShown.title">{{ finishStampShown.title }}</span>
+        <i v-if="finishStampShown.confetti" class="shogi-game__confetti" aria-hidden="true">
+          <i v-for="piece in 14" :key="piece" :style="{ '--piece': piece }"></i>
+        </i>
+      </div>
       <!-- 囲い完成の知らせ。教室の「囲いを組もう」と同じく、組み上げた瞬間をほめる。 -->
       <Transition name="shogi-game__callout">
         <div
@@ -2085,12 +2106,14 @@ import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { mistakeReason, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
 import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
+import { lastGameMilestone } from "./core/ryuo-milestone.mjs";
 import {
   formatWinRate,
   midgameMoment,
   newsDue,
   opponentLine,
   opponentMood,
+  finishStamp,
   playerWinRate,
   roomComment,
   roundNews,
@@ -2170,7 +2193,7 @@ import {
   saveSeason,
 } from "./core/ryuo-career.mjs";
 import { addAward, loadAwards, meijinAward, ryuoAward } from "./core/season-award.mjs";
-import { STAGE_CARD_MS, describeMatchStage, stageDay, stageSealPly } from "./core/match-stage.mjs";
+import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { hasKikiGlasses, loadTutorialProgress } from "./core/tutorial-progress.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
@@ -2671,6 +2694,14 @@ function toggleBroadcast() {
     // 保存できない環境では、この画面のあいだだけ切り替える。
   }
 }
+/** 名人戦の空の段(手数で暮れる)。 */
+const matchSky = computed(() => skyPhase(moveCount.value));
+/** 勝って終局したときの判子。期の結果を記録したときの節目から決める。 */
+const FINISH_STAMP_MS = 1200;
+const FINISH_STAMP_SOUND_AT = 300;
+const finishStampShown = ref<null | { id: number; seal: string; title: string; size: string; confetti: boolean }>(null);
+let finishMilestone: ReturnType<typeof lastGameMilestone> = null;
+let finishCrowned = false;
 let roomSaid: string[] = [];
 let roomWinRate: number | null = null;
 let presenceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -2724,6 +2755,23 @@ function resetPresence() {
   matchNewsShown = 0;
   roomSaid = [];
   roomWinRate = null;
+  finishStampShown.value = null;
+  finishMilestone = null;
+  finishCrowned = false;
+}
+/** 大会の終局。勝ちは判子を押して1.2秒で結果の窓へ、負けは感想戦を勧める(判子は押さない)。 */
+function showFinishStamp(win: boolean, { event, weight }: { event: string; weight: string }) {
+  const stamp = finishStamp({ win, milestone: finishMilestone, event, crowned: finishCrowned, weight });
+  if (!stamp) {
+    if (coachLevel.value !== "off") showCoachAdvice({ key: "tournament-loss-review", text: "悔しいね…。感想戦で、どこが分かれ目だったか見てみよう！" });
+    return;
+  }
+  finishStampShown.value = { id: Date.now(), ...stamp };
+  clearTimeout(resultRevealTimer);
+  resultRevealTimer = setTimeout(revealResult, FINISH_STAMP_MS);
+  setTimeout(() => {
+    if (finishStampShown.value) moveSounds.play("stamp");
+  }, FINISH_STAMP_SOUND_AT);
 }
 /** 大会の1局を始めたとき(リロードで戻ったときは、あいさつしない)。 */
 function startPresence({ greet = true }: { greet?: boolean } = {}) {
@@ -5181,6 +5229,7 @@ function recordRyuoOutcome(matchResult: MatchResult) {
   }
   const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
   const next = recordUserGame(rawRyuoSeason(), outcome);
+  finishMilestone = lastGameMilestone(next, { promote: scaleById(next.settings.scale).promote });
   // 相手の特徴が手の選び方に表れた場面を、この対局の記録に残す(大会の画面で、やこび姫が話す)。
   const last = next.userGames[next.userGames.length - 1];
   if (last) last.traitMoments = summarizeTraitMoments(ryuoCpuMoves);
@@ -5317,6 +5366,7 @@ function recordMeijinOutcome(matchResult: MatchResult) {
   }
   const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
   const next = recordMeijinGame(season, outcome);
+  finishCrowned = outcome === "win" && season.pending.kind === "finals" && next.phase === "done" && next.finals?.winner === USER_ID;
   meijinSeason.value = next;
   saveMeijinSeason(browserStorage(), next);
   ryuoGame.value = { ...game, outcome, replay: false };
@@ -8157,7 +8207,13 @@ function finish(matchResult: MatchResult) {
   }
   recordRatedGame(matchResult);
   recordCollection(outcome === "win");
+  const stageWeight = matchStage.value?.weight ?? "plain";
+  const tournamentEvent = ryuoGame.value?.event === "meijin" ? "meijin" : "ryuo";
+  const tournamentFinish = matchKind.value === "tournament" && Boolean(ryuoGame.value) && Boolean(matchResult.winner);
+  finishMilestone = null;
+  finishCrowned = false;
   recordRyuoOutcome(matchResult);
+  if (tournamentFinish) showFinishStamp(outcome === "win", { event: tournamentEvent, weight: stageWeight });
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
   measureMode.value = false;
   measureSession.value = measuring;
