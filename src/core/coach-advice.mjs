@@ -3,7 +3,7 @@ import shogiLib from './vendor/shogi.esm.js';
 
 const { Shogi } = shogiLib;
 
-const CASTLE_TIPS = [
+export const CASTLE_TIPS = [
   {
     key: 'elmo',
     names: ['エルモ囲い', '振り飛車エルモ'],

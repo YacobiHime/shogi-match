@@ -373,7 +373,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/:ghost-pieces="planGhosts"/);
     // 戦法占いで出た作戦は解放に加え、定跡図鑑の占いの結果から対局準備へ進める。
     expect(source).toMatch(/@fortune-result="onFortuneResult"/);
-    expect(source).toMatch(/extraIds: fortunePlanIds\.value/);
+    expect(source).toMatch(/extraIds: \[\.\.\.fortunePlanIds\.value,/);
     expect(source).toMatch(/@play-plan="playPlanFromDex"/);
     // 戻る操作で作戦カードのシートを閉じる。
     expect(source).toMatch(/else if \(planSheet\.value\) \{\s*closePlanSheet\(\);/);
@@ -660,5 +660,15 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/'shogi-game--dex-over-match': dexOverMatch/);
     expect(source).toMatch(/\.shogi-game--dex-over-match > :not\(\.shogi-dex\) \{\s*visibility: hidden;/);
     expect(source).toMatch(/\} else if \(dexShelfOpen\.value\) \{\s*dexShelfOpen\.value = false;/);
+  });
+  it("やこび姫の作戦の助言は、危険の知らせのあと・ほかの助言の前に、確かめの読みを通してから出す(docs/coach-plan-advice-design.md)", () => {
+    expect(source).toMatch(/const chosen = moveFeedback \?\? urgentAdvice \?\? planLine \?\? riskAdvice;/);
+    expect(source).toMatch(/URGENT_RISK_ADVICE = \/\^\(forced-mate-loss\|king-in-check\|mate-risk\|candidate-evaluation-cliff\)\//);
+    // 浅い読みの候補から提案を作り、2手に絞った読みで確かめる。
+    expect(source).toMatch(/const proposal = planAdvice\(\{[\s\S]{0,1200}?searchMoves: \[proposal\.swingMove, proposal\.otherMove\][\s\S]{0,400}?confirmPlanAdvice\(proposal,/);
+    // 「にする」は作戦カードに入れ、まだ使えない段でも使えるようにする。
+    expect(source).toMatch(/function acceptCoachPlanOffer\(\) \{[\s\S]{0,200}?recordCoachPlan\(browserStorage\(\), offer\.planId\)[\s\S]{0,200}?applyPlan\(entry\.plan\.id/);
+    expect(source).toMatch(/extraIds: \[\.\.\.fortunePlanIds\.value, \.\.\.coachPlanIds\.value\]/);
+    expect(source).toMatch(/v-if="coachPlanOffer"[\s\S]{0,200}?data-plan-offer[\s\S]{0,600}?data-plan-offer-basis/);
   });
 });

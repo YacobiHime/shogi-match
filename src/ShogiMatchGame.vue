@@ -967,6 +967,27 @@
           <button type="button" @click="openPlanSheet('game')">ほかの作戦を見る</button>
         </div>
       </div>
+      <!--
+        やこび姫の作戦の助言(docs/coach-plan-advice-design.md)。AIが飛車を振る手を強く勧めるときに出す。
+        根拠は2手に絞って読み直した点数。「にする」で作戦カードに入れ、矢印と薄い駒で案内する。
+      -->
+      <div v-if="coachPlanOffer" class="shogi-game__plan-interrupt shogi-game__plan-offer" data-plan-offer role="status">
+        <p><b>作戦の提案</b>{{ coachPlanOffer.label }}</p>
+        <p class="shogi-game__plan-offer-basis" data-plan-offer-basis>
+          <span>AIの読み</span>
+          <span>飛車を振る {{ coachPlanOffer.swingText }} <b>{{ coachPlanOffer.swingScore }}</b></span>
+          <span>振らない一番の手 {{ coachPlanOffer.otherText }} <b>{{ coachPlanOffer.otherScore }}</b></span>
+        </p>
+        <div>
+          <button
+            v-if="coachPlanOffer.selectable"
+            type="button"
+            data-plan-offer-accept
+            @click="acceptCoachPlanOffer"
+          >{{ coachPlanOffer.label }}にする</button>
+          <button type="button" data-plan-offer-dismiss @click="dismissCoachPlanOffer">このまま指す</button>
+        </div>
+      </div>
       <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
         <span>この囲いでは、先に飛車を振る場所を選んでね</span>
         <div>
@@ -2010,6 +2031,14 @@ import {
 } from "./core/opening-unlocks.mjs";
 import { openingFormationGhosts, openingFormationProgress } from "./core/opening-formation.mjs";
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
+import {
+  PLAN_CONFIRM_SEARCH,
+  confirmPlanAdvice,
+  loadCoachPlans,
+  planAdvice,
+  planSwingPraise,
+  recordCoachPlan,
+} from "./core/coach-plan-advice.mjs";
 import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
@@ -4071,6 +4100,8 @@ const seenPlanIds = ref<Set<string> | null>(loadSeenPlans(browserStorage()));
 const planCollectionVersion = ref(0);
 /** 戦法占いで出た作戦。まだ使えない段でも使える(占いのごほうび)。 */
 const fortunePlanIds = ref<string[]>(loadFortunePlans(browserStorage()));
+/** 作戦の助言で「にする」を押した作戦。占いと同じく、まだ使えない段でも使える。 */
+const coachPlanIds = ref<string[]>(loadCoachPlans(browserStorage()));
 function onFortuneResult() {
   fortunePlanIds.value = loadFortunePlans(browserStorage());
 }
@@ -4091,7 +4122,7 @@ function planUnlocksFor(formations: { [label: string]: { count: number } }) {
     welcomeChoice: homeWelcomeChoice.value,
     strong: ratingState.value.games > 0 && recommendedLevel(ratingState.value.rating) >= PLAN_ALL_LEVEL,
     showAll: showAllPlans.value,
-    extraIds: fortunePlanIds.value,
+    extraIds: [...fortunePlanIds.value, ...coachPlanIds.value],
   });
 }
 const planUnlocks = computed(() => planUnlocksFor(planFormations.value));
@@ -7092,11 +7123,128 @@ async function updateDedicatedCoachAdvice(
         ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
       })
     : null;
+  // 順番: 悪手の指摘 → 詰み・王手・詰めろ・評価の崖 → 作戦の助言(とほめる一言) → ほかの危険の知らせ。
+  const urgentAdvice = riskAdvice && URGENT_RISK_ADVICE.test(riskAdvice.key) ? riskAdvice : null;
+  let planLine: { key: string; text: string; topic?: string } | null = null;
+  if (coachLevel.value === "detailed" && !moveFeedback && !urgentAdvice) {
+    planLine = coachPlanPraise();
+    if (!planLine) {
+      const rookUnderThreat = bestMove ? Boolean(bestMoveTacticalContext(bestMove).rookUnderThreat) : false;
+      const offered = await offerCoachPlan(normalizedCandidates, { inCheck, mateThreat, rookUnderThreat }, analyzedHistoryLength);
+      if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
+      planLine = offered;
+    }
+  }
+  const chosen = moveFeedback ?? urgentAdvice ?? planLine ?? riskAdvice;
   if (riskOnly) {
-    if (moveFeedback ?? riskAdvice) showCoachAdvice(moveFeedback ?? riskAdvice);
+    if (chosen) showCoachAdvice(chosen);
     return;
   }
-  updateCoachAdviceFromPlayerScore(score, moveFeedback ?? riskAdvice, false);
+  updateCoachAdviceFromPlayerScore(score, chosen, false);
+}
+
+/** 作戦の助言より先に出す危険の知らせ(詰み・王手・詰めろ・評価の崖)。 */
+const URGENT_RISK_ADVICE = /^(forced-mate-loss|king-in-check|mate-risk|candidate-evaluation-cliff)/;
+/** 作戦の提案の札。駒を動かしたら閉じる。 */
+const coachPlanOffer = ref<null | {
+  planId: string;
+  label: string;
+  historyLength: number;
+  selectable: boolean;
+  swingText: string;
+  swingScore: string;
+  otherText: string;
+  otherScore: string;
+}>(null);
+/** 直前に出した提案。次の手番で、その作戦へ飛車を振っていたらほめる。 */
+let lastPlanAdvice: { advice: NonNullable<ReturnType<typeof planAdvice>>; sfen: string; historyLength: number } | null = null;
+// 駒を動かしたら(待ったで戻しても)札を閉じる。moveHistoryは反応しないので、棋譜の手数で見る。
+watch(moveCount, () => {
+  if (coachPlanOffer.value && coachPlanOffer.value.historyLength !== moveHistory.length) coachPlanOffer.value = null;
+});
+watch([reviewMode, active], () => { coachPlanOffer.value = null; });
+function formatPlanScore(score?: { type: string; value: number } | null) {
+  if (!score) return "—";
+  if (score.type === "mate") return score.value > 0 ? `詰み${score.value}手` : `被詰み${Math.abs(score.value)}手`;
+  return `${score.value >= 0 ? "+" : ""}${Math.trunc(score.value)}`;
+}
+/** 提案のあと、プレイヤーがその作戦の筋へ飛車を振っていたら、ほめる一言を返す(1回だけ)。 */
+function coachPlanPraise() {
+  const last = lastPlanAdvice;
+  if (!last || moveHistory.length < last.historyLength + 1) return null;
+  lastPlanAdvice = null;
+  const praise = planSwingPraise(last.advice, {
+    sfen: last.sfen,
+    usi: moveHistory[last.historyLength] ?? "",
+    color: humanColor.value === Color.WHITE ? "white" : "black",
+  });
+  return praise;
+}
+/**
+ * 飛車を振る提案。浅い読みで条件を満たしたら、2手に絞って深く読み直して確かめ、札と台詞を用意する。
+ * 呼び出し元(助言の順番待ち)の中で読むので、CPUの探索とは重ならない。
+ */
+async function offerCoachPlan(
+  candidates: { rank: number; move: string; score?: { type: "cp" | "mate"; value: number } }[],
+  { inCheck, mateThreat, rookUnderThreat }: { inCheck: boolean; mateThreat: boolean; rookUnderThreat: boolean },
+  historyLength: number,
+) {
+  if (!engine || !openingGuideAvailable.value || normalizedMode.value !== "cpu") return null;
+  const color = humanColor.value === Color.WHITE ? "white" : "black";
+  const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
+  const sfen = currentSfen.value;
+  const proposal = planAdvice({
+    candidates,
+    sfen,
+    color,
+    moveCount: moveCount.value,
+    inCheck,
+    mateThreat,
+    rookUnderThreat,
+    selectedStrategy: selectedStrategy.value,
+    opponentFormations: formationNamesForColor(sfen, opponentColor),
+    advisedTopics: advisedCoachTopics,
+  });
+  if (!proposal) return null;
+  const budget = PLAN_CONFIRM_SEARCH[props.mobile || boardLayout.value === "portrait" ? "compact" : "standard"];
+  const sideToMove = record.value.position.color;
+  engine.applyStrengthOptions({ multiPv: 2 });
+  engine.setPosition(currentEnginePosition());
+  const { value: search, interrupted } = await assistSearchControl.run(
+    () => engine!.go({ ...budget, searchMoves: [proposal.swingMove, proposal.otherMove] }),
+  );
+  if (interrupted || !active.value || moveHistory.length !== historyLength) return null;
+  const advice = confirmPlanAdvice(proposal, search.candidates.map((candidate) => ({
+    move: candidate.move,
+    score: scoreForPlayer(candidate.score, sideToMove, humanColor.value),
+  })));
+  if (!advice) return null;
+  coachPlanOffer.value = {
+    planId: advice.swing.planId,
+    label: advice.swing.label,
+    historyLength,
+    selectable: planEntries("game").some(({ plan }) => plan.id === advice.swing.planId),
+    swingText: formatHintMove(advice.swingMove, sfen),
+    swingScore: formatPlanScore(advice.swingScore),
+    otherText: formatHintMove(advice.otherMove, sfen),
+    otherScore: formatPlanScore(advice.otherScore),
+  };
+  lastPlanAdvice = { advice, sfen, historyLength };
+  return { key: advice.key, topic: advice.topic, text: advice.text };
+}
+/** 「◯◯にする」。作戦カードに入れ、まだ使えない段でも使えるようにする。 */
+function acceptCoachPlanOffer() {
+  const offer = coachPlanOffer.value;
+  if (!offer) return;
+  coachPlanOffer.value = null;
+  coachPlanIds.value = recordCoachPlan(browserStorage(), offer.planId);
+  const entry = planEntries("game").find(({ plan }) => plan.id === offer.planId);
+  if (!entry) return;
+  applyPlan(entry.plan.id, entry.castles[0] ?? "", "game");
+  if (coachLevel.value !== "off") guideText.value = `${offer.label}でいこう！ 盤の矢印と薄い駒を目指して指そう。`;
+}
+function dismissCoachPlanOffer() {
+  coachPlanOffer.value = null;
 }
 
 function scheduleDedicatedCoachAdvice(
@@ -9058,6 +9206,8 @@ function restart() {
   guideText.value = coachLevel.value === "off" ? "" : INITIAL_GUIDE_TEXT;
   advisedCoachTopics.clear();
   coachAdviceLastShownAt.clear();
+  coachPlanOffer.value = null;
+  lastPlanAdvice = null;
   formationState.value = createFormationState();
   syncPosition();
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });

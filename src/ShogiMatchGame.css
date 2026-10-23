@@ -654,6 +654,25 @@
   color: var(--amber);
   font-size: 0.85em;
 }
+/* やこび姫の作戦の提案。根拠は「振る手」と「振らない一番の手」の点数を並べる。 */
+.shogi-game__opening-guide .shogi-game__plan-offer-basis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15em 0.8em;
+  color: var(--muted);
+  font-size: 0.82em;
+}
+.shogi-game__plan-offer-basis b {
+  margin: 0;
+  color: var(--ivory);
+  font-variant-numeric: tabular-nums;
+}
+.shogi-game .shogi-game__plan-offer button {
+  align-content: center;
+}
+.shogi-game__opening-guide--collapsed .shogi-game__plan-offer {
+  margin-top: 0.4em;
+}
 .shogi-game__rook-choice {
   display: grid;
   gap: 0.4em;
