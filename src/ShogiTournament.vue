@@ -945,13 +945,17 @@ const REVIVAL_OPTIONS = [
   { value: false, label: "なし" },
 ];
 const difficulty = ref(props.defaultDifficulty);
+// おすすめを選んでいた場合は、次の期も新しい棋力に合わせる。手動で選んだ番号は保つ。
+watch(() => props.defaultDifficulty, (next, previous) => {
+  if (difficulty.value === previous) difficulty.value = next;
+});
 const scale = ref(props.career.settings.scale);
 const revival = ref(props.career.settings.revival);
 const coachLevel = ref(props.career.settings.coachLevel);
 const hintLimit = ref(props.career.settings.hintLimit);
 const undoLimit = ref(props.career.settings.undoLimit);
 
-const meanLevel = computed(() => groupMeanLevel(entry.value.group, difficulty.value));
+const meanLevel = computed(() => groupMeanLevel(entry.value.group, difficulty.value, props.userLevel));
 const scaleNote = computed(() => {
   const item = scaleById(scale.value);
   const group = entry.value.group;
@@ -1236,7 +1240,7 @@ const settingsOpen = ref(false);
 const entryPicker = ref("");
 const assistText = (value: number) => LEARNING_ASSIST_LIMITS.find((item) => item.value === value)?.label ?? String(value);
 const entryRows = computed(() => [
-  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `相手の平均 Lv.${Math.round(meanLevel.value)}・おすすめ ${props.defaultDifficulty}` },
+  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `相手の平均 Lv.${Math.round(meanLevel.value)}・おすすめ ${props.defaultDifficulty}（勝率6〜8割が目安）` },
   { id: "scale", label: "規模", value: SCALES.find((item) => item.id === scale.value)?.label ?? "", note: scaleMeta.value },
   { id: "revival", label: "敗者復活戦", value: REVIVAL_OPTIONS.find((item) => item.value === revival.value)?.label ?? "", note: "" },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
@@ -1249,7 +1253,7 @@ const entryPickerConfig = computed<{ title: string; sections: PickerSection[]; n
   switch (entryPicker.value) {
     case "difficulty":
       return single("難易度", "difficulty", difficulty.value, DIFFICULTY_STEPS.map((level) => ({
-        value: level, label: String(level), description: level === props.defaultDifficulty ? "おすすめ" : "",
+        value: level, label: String(level), description: level === props.defaultDifficulty ? "おすすめ・勝率6〜8割が目安" : "",
       })), "数字が大きいほど、相手が強くなるよ。");
     case "scale":
       return single("規模", "scale", scale.value, SCALES.map((item) => ({ value: item.id, label: item.label })));

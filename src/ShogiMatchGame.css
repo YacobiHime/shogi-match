@@ -3118,17 +3118,19 @@
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
   font-size: var(--title-base);
 }
-/* 展示モードのデータリセット。タイトル左下に置き、通常の入口と離す。 */
-.shogi-home.shogi-home--title:has(.shogi-title__exhibit-reset) {
-  padding-bottom: max(5em, calc(env(safe-area-inset-bottom) + 4em));
-}
+/* データリセットは通常の配置の末尾に置き、高さを確保してメニューとの重なりを防ぐ。
+ * 2列の画面ではタイトルの下(左列)へ置き、右列のメニューは2行分を使う。 */
+.shogi-home--title:has(.shogi-title__exhibit-reset) > .shogi-title__hero { grid-column: 1; grid-row: 1; }
+.shogi-home--title:has(.shogi-title__exhibit-reset) > .shogi-title__menu { grid-column: 2; grid-row: 1 / span 2; }
 .shogi-game .shogi-title__exhibit-reset {
-  position: absolute;
-  bottom: max(0.6em, env(safe-area-inset-bottom));
-  left: max(0.6em, env(safe-area-inset-left));
-  z-index: 2;
+  position: relative;
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
+  justify-self: start;
+  flex: none;
   min-width: 3.4em;
-  min-height: 3em;
+  min-height: max(3em, 44px);
   padding: 0.4em 1em;
   border: 2px solid #fffcf4;
   border-radius: 999px;

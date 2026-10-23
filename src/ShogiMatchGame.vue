@@ -32,14 +32,6 @@
         行の中のタイルは、どの画面でも横1列に並べる(区分を横に並べたり、タイルを折り返したりしない)。
         区分は枠で囲まず(囲むとごちゃつく)、行の上の小さな見出しと余白で分ける。
       -->
-      <!-- exhibit属性で表示するデータリセット。公開ページと展示版で使う(docs/exhibit-design.md)。 -->
-      <button
-        v-if="exhibit"
-        type="button"
-        class="shogi-title__exhibit-reset"
-        data-exhibit-reset
-        @click="openExhibitReset"
-      >データリセット</button>
       <div class="shogi-title__hero">
         <h1 class="shogi-title__logo">shogi-match</h1>
         <p class="shogi-title__bubble" aria-hidden="true">{{ homeGreeting }}</p>
@@ -346,6 +338,14 @@
           </section>
         </div>
       </nav>
+      <!-- exhibit属性で表示するデータリセット。公開ページと展示版で使う(docs/exhibit-design.md)。 -->
+      <button
+        v-if="exhibit"
+        type="button"
+        class="shogi-title__exhibit-reset"
+        data-exhibit-reset
+        @click="openExhibitReset"
+      >データリセット</button>
     </div>
 
     <ShogiTutorial
@@ -388,7 +388,7 @@
       :career="ryuoCareer"
       :view="ryuoView"
       :default-difficulty="ryuoDefaultDifficulty"
-      :user-level="recommendedStrengthPreset.level"
+      :user-level="ratingLevel(ratingState.rating)"
       :rating-text="`R${ratingState.rating}`"
       :start-at="tournamentStartAt"
       :from-game="tournamentFromGame"
@@ -2304,6 +2304,7 @@ import {
   loadRatingState,
   nextRatingGoal,
   recommendedLevel,
+  ratingLevel,
   retrySuggestion,
   saveRatingState,
 } from "./core/player-rating.mjs";
@@ -2644,8 +2645,8 @@ const ryuoHolder = computed(() => {
 });
 /** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを見せる。 */
 const tournamentFromGame = ref(false);
-/** 大会の難易度のおすすめ。6組の相手の平均が、レーティングに近いLvになる難易度。 */
-const ryuoDefaultDifficulty = computed(() => recommendedDifficulty(recommendedStrengthPreset.value.level));
+/** 大会の難易度のおすすめ。1局あたり勝率7割を目安にする難易度。 */
+const ryuoDefaultDifficulty = computed(() => recommendedDifficulty(ratingLevel(ratingState.value.rating)));
 const tournamentView = ref<{ goBack: () => void } | null>(null);
 const noteView = ref<{ goBack: () => boolean } | null>(null);
 /** 直近の対局で変動したレーティング。リロードで復元した終局画面では出さない。 */
@@ -4739,8 +4740,8 @@ function enterRyuoSeason(settings: {
   }
   const season = createSeason({
     ...entry,
-    settings,
-    userLevel: recommendedStrengthPreset.value.level,
+    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value },
+    userLevel: ratingLevel(ratingState.value.rating),
     career,
     roster: ryuoRoster.value,
     seed,
@@ -5054,11 +5055,11 @@ function enterMeijinSeason(settings: { difficulty: number; scale: string; coachL
   const career = migrated.career;
   const world = ryuoRoster.value.junni;
   meijinSeason.value = createMeijinSeason({
-    no: (world.no ?? 0) + 1, league: world, roster: ryuoRoster.value, settings,
-    userLevel: recommendedStrengthPreset.value.level, userName: playerDisplayName(playerName.value), userDan: meijinDan(career), seed,
+    no: (world.no ?? 0) + 1, league: world, roster: ryuoRoster.value, settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value },
+    userLevel: ratingLevel(ratingState.value.rating), userName: playerDisplayName(playerName.value), userDan: meijinDan(career), seed,
   });
   saveMeijinSeason(browserStorage(), meijinSeason.value);
-  meijinCareer.value = { ...career, settings };
+  meijinCareer.value = { ...career, settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value } };
   saveMeijinCareer(browserStorage(), meijinCareer.value);
 }
 /** 名人戦の期の結果を見終えた。次に名人戦を選ぶと、次の期の入口になる。 */

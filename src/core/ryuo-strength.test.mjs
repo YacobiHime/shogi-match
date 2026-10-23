@@ -15,6 +15,7 @@ import {
   selfplayRating,
   winProbability,
 } from './ryuo-strength.mjs';
+import { levelRating, ratingLevel } from './player-rating.mjs';
 import { ladderLevelFromOld, oldLevelFromLadder } from './level-ladder.mjs';
 
 describe('self-play table', () => {
@@ -79,12 +80,13 @@ describe('rating to level', () => {
       expect(GROUP_MEAN_RATING[group - 1]).toBeGreaterThan(GROUP_MEAN_RATING[group]);
       expect(groupMeanLevel(group - 1, 9)).toBeGreaterThan(groupMeanLevel(group, 9));
     }
-    expect(recommendedDifficulty(Math.round(groupMeanLevel(6, 9)))).toBe(9);
-    // おすすめの難易度では、6組の平均の相手が、プレイヤーのLvにいちばん近い。
+    expect(recommendedDifficulty(18)).toBe(9);
+    // おすすめの番号は、勝率7割に当たる相手のLvにいちばん近い。
     for (const level of [3, 10, 20]) {
       const best = recommendedDifficulty(level);
+      const target = Math.max(1, ratingLevel(levelRating(level) - 400 * Math.log10(0.7 / 0.3)));
       for (let difficulty = 1; difficulty <= 14; difficulty += 1) {
-        expect(Math.abs(groupMeanLevel(6, best) - level)).toBeLessThanOrEqual(Math.abs(groupMeanLevel(6, difficulty) - level));
+        expect(Math.abs(groupMeanLevel(6, best) - target)).toBeLessThanOrEqual(Math.abs(groupMeanLevel(6, difficulty) - target));
       }
     }
   });

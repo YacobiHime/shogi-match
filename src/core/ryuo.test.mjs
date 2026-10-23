@@ -74,7 +74,7 @@ describe('scales and difficulty', () => {
     }
   });
 
-  it('shifts the opponents by difficulty and recommends one near the player level', () => {
+  it('shifts manual opponents by difficulty and recommends a level below the player', () => {
     // 難易度の強さは、段級位の作り直し(2026-10-22)の前と同じ。Lvは同じ強さの新しい表のLvで出す(前のLv30は1級のあたり)。
     expect(groupMeanLevel(6, 9)).toBeCloseTo(ladderLevelFromOld(30));
     expect(groupMeanLevel(6, 7)).toBeCloseTo(ladderLevelFromOld(22));
@@ -84,9 +84,9 @@ describe('scales and difficulty', () => {
     for (let difficulty = 2; difficulty <= 14; difficulty += 1) {
       expect(groupMeanLevel(1, difficulty)).toBeGreaterThanOrEqual(groupMeanLevel(1, difficulty - 1));
     }
-    expect(recommendedDifficulty(Math.round(ladderLevelFromOld(30)))).toBe(9);
-    expect(recommendedDifficulty(40)).toBe(12);
-    expect(groupMeanLevel(6, recommendedDifficulty(25))).toBeCloseTo(25, -1);
+    expect(recommendedDifficulty(Math.round(ladderLevelFromOld(30)))).toBe(7);
+    expect(recommendedDifficulty(40)).toBe(11);
+    expect(groupMeanLevel(6, recommendedDifficulty(25), 25)).toBe(23);
   });
 
   it('gives a stronger player a higher win rate, by rating', () => {

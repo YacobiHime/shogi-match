@@ -21,7 +21,7 @@ export function ryuoGuideLines() {
 export function entryDifficultyLine({ group, meanLevel, difficulty, recommended, ratingText }) {
   const mean = Math.round(meanLevel);
   const head = `${group}組の相手は、平均でLv.${mean}くらいだよ。`;
-  if (difficulty === recommended) return `${head}あなたのレーティング（${ratingText}）にぴったりの難易度だね！`;
+  if (difficulty === recommended) return `${head}あなたのレーティング（${ratingText}）に合わせて、1局ごとに6〜8割くらい勝てる強さが目安だよ。`;
   if (difficulty < recommended) return `${head}おすすめより優しめ。じっくり勝ち上がりたいときにいいよ。`;
   return `${head}おすすめより手ごわいよ！ 強い相手と指したいときにどうぞ。点線の数字がおすすめだよ。`;
 }

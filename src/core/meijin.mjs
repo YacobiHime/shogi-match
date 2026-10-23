@@ -110,7 +110,7 @@ export const userClass = (league) => MEIJIN_CLASSES.find((cls) => league.classes
  * 名人戦の1期を始める。プレイヤーがクラスにいれば、そのクラスの順位戦。名人なら、A級を自動で進め、1位を迎えて防衛戦。
  * @param {{
  *   no: number, league: any, roster: any,
- *   settings: { difficulty: number, scale?: string, coachLevel?: string, hintLimit?: number, undoLimit?: number },
+ *   settings: { difficulty: number, scale?: string, coachLevel?: string, hintLimit?: number, undoLimit?: number, recommended?: boolean },
  *   userLevel: number, userName?: string, userDan?: string, seed?: number,
  * }} input
  */
@@ -149,7 +149,7 @@ export function createMeijinSeason({ no, league, roster, settings, userLevel, us
     level: Math.round(userLevel), rating: levelToRating(userLevel, settings.difficulty), style: null,
   };
   const snapshot = (id) => {
-    if (!season.players[id] && roster?.players?.[id]) season.players[id] = seasonPlayerOf(roster, id, settings.difficulty);
+    if (!season.players[id] && roster?.players?.[id]) season.players[id] = seasonPlayerOf(roster, id, settings.difficulty, typeof settings.recommended === 'boolean' ? userLevel : null);
   };
   if (world.holder) snapshot(world.holder);
   for (const cls of MEIJIN_CLASSES) {
