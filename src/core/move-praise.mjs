@@ -155,6 +155,21 @@ function formatPraiseEvaluation(score) {
   return `${value >= 0 ? '+' : ''}${value}`;
 }
 
+/** 手筋の名前でほめる一言(5-8 情報としての称賛)。IDは move-tesuji.mjs と同じ。 */
+export const TESUJI_PRAISE = Object.freeze({
+  'head-gold': '頭金！ 玉の頭に金、きれいに決まったね！',
+  'double-check': '両王手！ 相手は玉を逃げるしかないよ！',
+  'knight-fork': 'ふんどしの桂！ 桂の両取りだね！',
+  'knight-check': '桂の王手！ 合駒では防げない王手だよ！',
+  'rook-cross-fork': '十字飛車！ 飛車の両取りが決まったね！',
+  'belly-silver': '腹銀！ 玉の横から、逃げ道をふさいだね！',
+  'tapping-pawn': '叩きの歩！ 相手の駒の頭を叩いたね！',
+  'gold-bottom-pawn': '金底の歩！ 守りがぐっと堅くなったよ！',
+  'tokin-on-53': '5三のと金！ 相手の玉に、ぐいぐい迫れるよ！',
+});
+/** 形そのものが強い手筋(両取り・合駒の利かない王手・詰み)。評価値の好手でなくてもほめる。 */
+const STRONG_TESUJI = Object.freeze(['head-gold', 'double-check', 'knight-fork', 'rook-cross-fork', 'knight-check']);
+
 /**
  * 着手を褒める台詞を優先度順に1件返す。
  * fallback（敵陣へのかち込みなど）は好手系より後、粘りより前に扱う。
@@ -163,8 +178,9 @@ function formatPraiseEvaluation(score) {
  *   level?: string, beforeScore?: PraiseScore, afterScore?: PraiseScore,
  *   quality?: { kind: string, score: PraiseScore, gap: number } | null,
  *   gaveMateThreat?: boolean, defendedMateThreat?: boolean, materialGain?: number,
- *   turningAdvice?: PraiseAdvice | null, fallback?: PraiseAdvice | null,
+ *   turningAdvice?: PraiseAdvice | null, fallback?: PraiseAdvice | null, tesuji?: string[],
  * }} [options]
+ *   tesuji: 指した手が当たる手筋のID(move-tesuji.mjsのdetectTesuji)。何が良かったかを、手筋の名前でほめる。
  * @returns {PraiseAdvice | null}
  */
 export function getMovePraise({
@@ -177,6 +193,7 @@ export function getMovePraise({
   materialGain: gain = 0,
   turningAdvice = null,
   fallback = null,
+  tesuji = [],
 } = {}) {
   if (level === 'off') return null;
   const endurance = turningAdvice?.key === 'praise-endurance' ? turningAdvice : null;
@@ -197,6 +214,11 @@ export function getMovePraise({
   if (sound && defendedMateThreat) {
     return { key: 'praise-mate-defense', text: '相手の詰めろを受けきったね！これで一安心。' };
   }
+  // 手筋は、両取り・王手の形はいつも、ほかの形(叩きの歩など)は好手か駒得のときだけ、名前でほめる。
+  const tesujiId = sound ? tesuji.find((id) => TESUJI_PRAISE[id] && (
+    STRONG_TESUJI.includes(id) || quality?.kind === 'good' || gain >= MATERIAL_GAIN_MIN
+  )) : undefined;
+  if (tesujiId) return { key: `praise-tesuji-${tesujiId}`, text: TESUJI_PRAISE[tesujiId] };
   if (sound && gaveMateThreat) {
     return { key: 'praise-mate-threat', text: '詰めろを掛けたね。良い手だと思うよ！' };
   }

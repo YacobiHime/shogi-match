@@ -2925,6 +2925,8 @@ let playerMoveFlair: {
   sacrifice: boolean;
   obvious: boolean;
   materialGain: number;
+  /** 指した手が当たる手筋(move-tesuji.mjs)。手筋の名前でほめるのに使う。 */
+  tesuji: string[];
 } | undefined;
 type PraiseCandidate = { rank: number; move: string; score?: EngineEvaluation };
 // 好手・詰めろ受けの判定用に、プレイヤー手番開始時の解析を1局面分だけ保持する。
@@ -6592,8 +6594,15 @@ function updateCoachAdvice(
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
     playerFormations,
     advisedTopics: advisedCoachTopics,
+    materialBalance: playerMaterialBalance(),
   });
   showCoachAdvice(advice);
+}
+
+/** プレイヤーから見た駒の損得(図鑑のAI用の駒の値段。「駒の損得」の札と同じ数え方)。形勢の一言の方針に使う。 */
+function playerMaterialBalance() {
+  const totals = aiMaterialTotals(currentSfen.value);
+  return humanColor.value === Color.WHITE ? totals.white - totals.black : totals.black - totals.white;
 }
 
 function currentEnginePosition() {
@@ -7047,6 +7056,7 @@ function updateCoachAdviceFromPlayerScore(
     opponentFormations: formationNamesForColor(currentSfen.value, opponentColor),
     playerFormations,
     advisedTopics: advisedCoachTopics,
+    materialBalance: playerMaterialBalance(),
   });
   showCoachAdvice(advice);
 }
@@ -7400,6 +7410,7 @@ async function playerMovePraise(options: {
     quality,
     defendedMateThreat,
     materialGain: flair?.materialGain ?? 0,
+    tesuji: flair?.tesuji ?? [],
     turningAdvice: turning.advice,
     fallback,
   };
@@ -8036,6 +8047,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
               : undefined,
           })
         : 0,
+      tesuji: detectTesuji({ sfenBefore: sfenBeforeMove, usi }),
     };
     // 囲いの段階は上の距離判定で数え済みなので、ここでは戦法の寄り道だけを数える。
     if (!castleDistanceBefore && followedOpeningDecision?.source === "ai") {

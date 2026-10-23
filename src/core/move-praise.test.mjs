@@ -3,6 +3,7 @@ import {
   advanceTurningPoints,
   classifyMoveQuality,
   createTurningPointState,
+  TESUJI_PRAISE,
   getMovePraise,
   materialGain,
   movePraiseNeedsMateThreatCheck,
@@ -11,6 +12,7 @@ import {
 import { coachExpressionForText, coachPlainText, coachTextSegments } from './coach-expression.mjs';
 import { coachAdvicePriority } from './coach-advice-scheduler.mjs';
 import { formatSpokenMove } from './match-assists.mjs';
+import { TESUJI_NAMES } from './move-tesuji.mjs';
 
 const cp = (value) => ({ type: 'cp', value });
 
@@ -149,6 +151,24 @@ describe('advanceTurningPoints', () => {
 
 describe('getMovePraise', () => {
   const base = { level: 'detailed', beforeScore: cp(300), afterScore: cp(280) };
+
+  it('手筋の名前でほめる(両取り・王手の形はいつも、ほかは好手か駒得のとき)', () => {
+    expect(getMovePraise({ ...base, tesuji: ['knight-fork'] })).toEqual({ key: 'praise-tesuji-knight-fork', text: 'ふんどしの桂！ 桂の両取りだね！' });
+    expect(getMovePraise({ ...base, tesuji: ['tapping-pawn'] })).toBeNull();
+    expect(getMovePraise({ ...base, tesuji: ['tapping-pawn'], quality: { kind: 'good', score: cp(300), gap: 400 } })?.key).toBe('praise-tesuji-tapping-pawn');
+    expect(getMovePraise({ ...base, tesuji: ['gold-bottom-pawn'], materialGain: 3 })?.key).toBe('praise-tesuji-gold-bottom-pawn');
+    // 損をする手は、手筋の形でもほめない。神の一手と詰めろの受けは、手筋より先。
+    expect(getMovePraise({ ...base, afterScore: cp(-200), tesuji: ['knight-fork'] })).toBeNull();
+    expect(getMovePraise({ ...base, tesuji: ['knight-fork'], quality: { kind: 'god', score: cp(900), gap: 800 } })?.key).toBe('praise-god-move');
+    expect(getMovePraise({ ...base, tesuji: ['knight-fork'], defendedMateThreat: true })?.key).toBe('praise-mate-defense');
+    expect(getMovePraise({ ...base, tesuji: ['knight-fork'], gaveMateThreat: true })?.key).toBe('praise-tesuji-knight-fork');
+  });
+
+  it('見分けるすべての手筋に、ほめる一言がある', () => {
+    for (const id of Object.keys(TESUJI_NAMES)) {
+      expect(TESUJI_PRAISE[id], id).toMatch(new RegExp(`^${TESUJI_NAMES[id]}！ `));
+    }
+  });
 
   it('神の一手は評価値とルビ付きで伝える', () => {
     const praise = getMovePraise({ ...base, quality: { kind: 'god', score: cp(1234), gap: 800 } });

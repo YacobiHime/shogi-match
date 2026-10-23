@@ -320,3 +320,25 @@ describe('相手の戦法への対策助言', () => {
     expect(advise(['中飛車', 'ゴキゲン中飛車'])?.topic).toBe('strategy-gokigen');
   });
 });
+
+describe('形勢に合わせた方針', () => {
+  const cp = (value) => ({ type: 'cp', value });
+  const advice = (value, moveCount, materialBalance) => getCoachAdvice({ level: 'detailed', score: cp(value), moveCount, materialBalance });
+  test('中盤は、勝っていて駒得なら単純に、負けていて駒損なら複雑に', () => {
+    expect(advice(500, 50, 400)).toEqual({ key: 'middle-ahead-up', text: '駒得してるね！ 駒を交換して、局面を単純にしていこう！' });
+    expect(advice(500, 50, -400)?.key).toBe('middle-ahead-down');
+    expect(advice(-500, 50, -400)?.text).toBe('駒損してるね…。駒の交換は避けて、局面を複雑にして粘ろう！');
+    expect(advice(-500, 50, 400)?.key).toBe('middle-behind-up');
+  });
+  test('終盤は500点の差から言う', () => {
+    expect(advice(600, 100, 500)?.key).toBe('endgame-ahead-up');
+    expect(advice(-600, 100, -500)?.text).toBe('駒損だけど、相手玉に迫る勝負手を探そう！');
+    expect(advice(400, 100, 500)?.key).toBe('endgame-even');
+  });
+  test('駒の損得が小さい・分からない・序盤のときは、今までの一言', () => {
+    expect(advice(500, 50, 100)?.key).toBe('middle-good');
+    expect(advice(500, 50, null)?.key).toBe('middle-good');
+    expect(advice(500, 20, 600)?.key).toBe('opening-good');
+    expect(advice(100, 50, 600)?.key).toBe('middle-even');
+  });
+});

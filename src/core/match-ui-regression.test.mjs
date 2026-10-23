@@ -682,4 +682,9 @@ describe("match screen regressions", () => {
   it("大会の1局の始めに、相手の棋風と特殊能力から戦い方を一言いう(大一番は開幕の一言を優先)", () => {
     expect(source).toMatch(/const opponentLine = opponentStyleAdvice\(opponent\.character, opponent\.name\);[\s\S]{0,300}?if \(stage\?\.coachLine && coachLevel\.value !== "off"\) guideText\.value = stage\.coachLine;[\s\S]{0,200}?else if \(opponentLine && coachLevel\.value !== "off"\) showCoachAdvice\(opponentLine\);/);
   });
+  it("形勢の一言には駒の損得を、好手のほめ言葉には指した手の手筋を渡す", () => {
+    expect(source).toMatch(/advisedTopics: advisedCoachTopics,\s*materialBalance: playerMaterialBalance\(\),/);
+    expect(source).toMatch(/tesuji: detectTesuji\(\{ sfenBefore: sfenBeforeMove, usi \}\),/);
+    expect(source).toMatch(/tesuji: flair\?\.tesuji \?\? \[\],/);
+  });
 });

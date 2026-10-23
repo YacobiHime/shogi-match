@@ -282,6 +282,33 @@ export function isSideToMoveInCheck(sfen) {
   }
 }
 
+/** 駒の損得を「駒得」「駒損」と言う差(歩=90で、歩3枚とすこし)。 */
+export const POLICY_MATERIAL_MARGIN = 300;
+
+/** 形勢と駒の損得の組み合わせごとの、次にすること(勝っていれば単純に、負けていれば複雑に、の定跡の考え方)。 */
+const SITUATION_POLICIES = Object.freeze({
+  middle: {
+    'ahead-up': '駒得してるね！ 駒を交換して、局面を単純にしていこう！',
+    'ahead-down': '駒損だけど、攻めの勢いで勝ってるよ！ 手を緩めずにいこう！',
+    'behind-down': '駒損してるね…。駒の交換は避けて、局面を複雑にして粘ろう！',
+    'behind-up': '駒得はしてるよ！ 玉の守りを固めて、攻めをしのごう！',
+  },
+  endgame: {
+    'ahead-up': '駒得を生かして、確実に寄せよう！ 無理に急がなくても大丈夫だよ。',
+    'ahead-down': '駒損でも、寄せはこっちが速いよ！ 一気に迫ろう！',
+    'behind-down': '駒損だけど、相手玉に迫る勝負手を探そう！',
+    'behind-up': '駒得はしてるから、まず自分の玉の安全を確かめよう！',
+  },
+});
+
+/** 形勢がはっきりしていて、駒の損得もはっきりしているときだけ、方針の一言を返す。 */
+function situationPolicy(phase, value, materialBalance, threshold) {
+  if (!Number.isFinite(materialBalance) || Math.abs(value) < threshold) return null;
+  if (Math.abs(materialBalance) < POLICY_MATERIAL_MARGIN) return null;
+  const situation = `${value > 0 ? 'ahead' : 'behind'}-${materialBalance > 0 ? 'up' : 'down'}`;
+  return { key: `${phase}-${situation}`, text: SITUATION_POLICIES[phase][situation] };
+}
+
 /**
  * 表示すべき助言を優先度順に1件だけ返す。
  * level: off / encourage / detailed
@@ -290,7 +317,9 @@ export function isSideToMoveInCheck(sfen) {
  * @param {{
  *   level?: string, score?: { type: string, value: number } | null, moveCount?: number, inCheck?: boolean,
  *   opponentFormations?: string[], playerFormations?: string[], advisedTopics?: Iterable<string>,
+ *   materialBalance?: number | null,
  * }} [options]
+ *   materialBalance: プレイヤーから見た駒の損得(図鑑のAI用の駒の値段の合計の差。歩=90)。形勢の一言を、何をすればよいかの方針にする。
  */
 export function getCoachAdvice({
   level = 'encourage',
@@ -300,6 +329,7 @@ export function getCoachAdvice({
   opponentFormations = [],
   playerFormations = [],
   advisedTopics = [],
+  materialBalance = null,
 } = {}) {
   if (level === 'off') return null;
 
@@ -330,10 +360,14 @@ export function getCoachAdvice({
     }
     return { key: 'opening-even', text: '互角の出だしだね。じっくり指していこう！' };
   } else if (moveCount <= 80) {
+    const policy = situationPolicy('middle', score.value, materialBalance, 300);
+    if (policy) return policy;
     if (score.value >= 300) return { key: 'middle-good', text: '良い流れだね！' };
     if (score.value <= -300) return { key: 'middle-behind', text: 'まだまだやれるよ！' };
     return { key: 'middle-even', text: 'まだ互角だよ。焦らずいこう！' };
   }
+  const policy = situationPolicy('endgame', score.value, materialBalance, 500);
+  if (policy) return policy;
   if (score.value >= 500) return { key: 'endgame-good', text: '終盤は私たちが良さそうだよ！' };
   if (score.value <= -500) return { key: 'endgame-behind', text: '苦しい終盤だけど、最後まで手を探そう！' };
   return { key: 'endgame-even', text: '勝負どころだね。慎重に読もう！' };
