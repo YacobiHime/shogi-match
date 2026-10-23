@@ -701,7 +701,9 @@ import {
   resultLines,
   ryuoGuideLines,
   seasonPhaseLines,
+  entryByoyomiLine,
 } from "./core/ryuo-speech.mjs";
+import { BYOYOMI_CHOICES, byoyomiLabel, byoyomiSeconds } from "./core/byoyomi.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { describeCharacter } from "./core/player-character.mjs";
 import { repertoireText } from "./core/ryuo-repertoire.mjs";
@@ -720,7 +722,7 @@ import { loadCollection, recordPredictionHit, saveCollection } from "./core/coll
 
 type Career = {
   group: number; seasons: number; champion: boolean; titles: number; streak: number; eternal: boolean;
-  settings: { scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number };
+  settings: { scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi?: number };
 };
 type Brief = {
   id: string; name: string; dan: string; level: number; style?: { label: string; rook?: string } | null; story?: string | null;
@@ -816,12 +818,12 @@ const props = defineProps({
 });
 const emit = defineEmits<{
   close: [];
-  enter: [settings: { difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number }];
+  enter: [settings: { difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number }];
   play: [];
   resume: [];
   "open-note": [];
   "result-seen": [];
-  "meijin-enter": [settings: { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number }];
+  "meijin-enter": [settings: { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number }];
   "meijin-play": [];
   "meijin-resume": [];
   "meijin-result-seen": [];
@@ -954,6 +956,7 @@ const revival = ref(props.career.settings.revival);
 const coachLevel = ref(props.career.settings.coachLevel);
 const hintLimit = ref(props.career.settings.hintLimit);
 const undoLimit = ref(props.career.settings.undoLimit);
+const byoyomi = ref(byoyomiSeconds(props.career.settings));
 
 const meanLevel = computed(() => groupMeanLevel(entry.value.group, difficulty.value, props.userLevel));
 const scaleNote = computed(() => {
@@ -975,7 +978,7 @@ const scaleMeta = computed(() => {
 // ---- やこび姫のセリフ
 // エントリーでは、やこび姫がこの期のひとことを話す。設定を変えると、その設定について話す。
 // 竜王戦の説明は、「竜王戦ってなに？」で開くシートで、1つずつ話す(必要な人だけ。U:6-1)。
-type TalkTopic = "intro" | "difficulty" | "scale" | "revival" | "coach";
+type TalkTopic = "intro" | "difficulty" | "scale" | "revival" | "coach" | "byoyomi";
 const talkTopic = ref<TalkTopic>("intro");
 /** 説明の各ページの見出し(目次)。guideLinesと同じ順・同じ数。 */
 const GUIDE_TITLES = ["はじめに", "竜王戦とは", "出場できる人", "ランキング戦", "決勝トーナメント", "番勝負", "永世竜王"];
@@ -1003,6 +1006,7 @@ const talkLines = computed(() => {
     case "scale": return [scaleLine.value];
     case "revival": return [entryRevivalLine(revival.value)];
     case "coach": return [coachLine.value];
+    case "byoyomi": return [entryByoyomiLine(byoyomi.value)];
     default: return [introLine.value];
   }
 });
@@ -1022,6 +1026,7 @@ const settingsSummary = computed(() => [
   `規模 ${SCALES.find((item) => item.id === scale.value)?.label ?? ""}`,
   `敗者復活${revival.value ? "あり" : "なし"}`,
   coachLevel.value === "off" ? "助言なし" : COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "",
+  ...(byoyomi.value ? [`秒読み${byoyomiLabel(byoyomi.value)}`] : []),
 ].join("・"));
 /** おすすめ(前の期の設定と、おすすめの難易度)から変えたか。 */
 const settingsCustomized = computed(() => (
@@ -1031,6 +1036,7 @@ const settingsCustomized = computed(() => (
   || coachLevel.value !== props.career.settings.coachLevel
   || hintLimit.value !== props.career.settings.hintLimit
   || undoLimit.value !== props.career.settings.undoLimit
+  || byoyomi.value !== byoyomiSeconds(props.career.settings)
 ));
 const phaseLines = computed(() => seasonPhaseLines(props.view));
 /** 次の相手の棋風と特徴(得意・苦手)。 */
@@ -1245,6 +1251,7 @@ const entryRows = computed(() => [
   { id: "revival", label: "敗者復活戦", value: REVIVAL_OPTIONS.find((item) => item.value === revival.value)?.label ?? "", note: "" },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
+  { id: "byoyomi", label: "秒読みの演出", value: byoyomiLabel(byoyomi.value), note: byoyomi.value ? "0秒になっても負けにはならない" : "" },
 ]);
 const entryPickerConfig = computed<{ title: string; sections: PickerSection[]; note: string } | null>(() => {
   const single = (title: string, key: string, value: PickerValue, options: { value: PickerValue; label: string; description?: string }[], note = "") => (
@@ -1261,6 +1268,8 @@ const entryPickerConfig = computed<{ title: string; sections: PickerSection[]; n
       return single("敗者復活戦", "revival", String(revival.value), REVIVAL_OPTIONS.map((item) => ({ value: String(item.value), label: item.label })));
     case "coach":
       return single("やこび姫の助言", "coach", coachLevel.value, COACH_OPTIONS.map((item) => ({ value: item.value, label: item.label })));
+    case "byoyomi":
+      return single("秒読みの演出", "byoyomi", byoyomi.value, BYOYOMI_CHOICES.map((item) => ({ value: item.value, label: item.label })), "10秒から音で知らせるよ。0秒になっても負けにはならないよ。");
     case "assist":
       return {
         title: "閃き・待った",
@@ -1281,6 +1290,7 @@ function onEntryPick(key: string, value: PickerValue) {
   else if (key === "coach") { coachLevel.value = String(value); talkTopic.value = "coach"; }
   else if (key === "hint") { hintLimit.value = Number(value); talkTopic.value = "coach"; }
   else if (key === "undo") { undoLimit.value = Number(value); talkTopic.value = "coach"; }
+  else if (key === "byoyomi") { byoyomi.value = Number(value); talkTopic.value = "byoyomi"; }
   // 1項目だけのシートは、選んだら閉じる。
   if ((entryPickerConfig.value?.sections.length ?? 0) <= 1) entryPicker.value = "";
 }
@@ -1298,7 +1308,7 @@ const commentarySays = computed(() => (props.view?.stats.commentary ?? []).map((
 function enter() {
   emit("enter", {
     difficulty: difficulty.value, scale: scale.value, revival: revival.value,
-    coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value,
+    coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value, byoyomi: byoyomi.value,
   });
   reEntry.value = false;
   viewStage.value = null;

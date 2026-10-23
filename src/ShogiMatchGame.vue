@@ -1116,6 +1116,7 @@
         :white-player-name="effectiveWhitePlayerName"
         :black-player-detail="cpuColor === Color.BLACK ? cpuStrengthLabel : ''"
         :white-player-detail="cpuColor === Color.WHITE ? cpuStrengthLabel : ''"
+        :player-countdown="playerCountdown"
         :candidates="boardCandidates"
         :attack-marks="boardAttackMarks"
         :float-labels="captureFloatLabels"
@@ -2119,6 +2120,7 @@ import {
   roundNews,
   traitCard,
 } from "./core/match-presence.mjs";
+import { byoyomiSeconds } from "./core/byoyomi.mjs";
 import {
   PLAN_CONFIRM_SEARCH,
   confirmPlanAdvice,
@@ -2148,6 +2150,7 @@ import {
 import { useCpuSearchGauge } from "./composables/match/useCpuSearchGauge";
 import { useDexAnalysisEngine } from "./composables/match/useDexAnalysisEngine";
 import { useGuidedReview } from "./composables/match/useGuidedReview";
+import { useByoyomi } from "./composables/match/useByoyomi";
 import {
   type PregameRow,
   assistLimitOptions,
@@ -3528,6 +3531,21 @@ watch(moveCount, (ply, previous) => {
   if (ply === stageSealPly(activePlayerColor.value)) showStageCard("seal");
 });
 onBeforeUnmount(() => clearTimeout(stageCardTimer));
+/*
+ * 大会の秒読みの演出(エントリー設定の「秒読みの演出」。docs/tournament-match-presence-design.mdの7章)。
+ * プレイヤーの手番だけ、自分の名札に残り秒の輪を出す。閃き・図鑑・開幕の札のあいだは止め、0秒でも負けにはしない。
+ */
+const { byoyomiState } = useByoyomi({
+  seconds: () => (matchKind.value === "tournament" ? byoyomiSeconds(tournamentSeasonOf(ryuoGame.value)?.settings) : 0),
+  shown: () => active.value && !result.value && !reviewMode.value && normalizedMode.value === "cpu"
+    && record.value.position.color === humanColor.value,
+  paused: () => thinking.value || guidedMateReplyPending.value || dexFromMatch.value || dexShelfOpen.value || Boolean(stageCard.value),
+  turnKey: () => moveCount.value,
+  play: (kind) => moveSounds.play(kind),
+});
+const playerCountdown = computed(() => (
+  byoyomiState.value ? { color: humanColor.value === Color.BLACK ? "black" as const : "white" as const, ...byoyomiState.value } : null
+));
 function furigomaPieceUrl(face: "fu" | "to") {
   const name = face === "fu" ? "black_pawn" : "black_prom_pawn";
   return `${props.assetBaseUrl.replace(/\/$/, "")}/piece/${pregamePieceThemeId.value}/${name}.webp`;
@@ -4986,7 +5004,7 @@ function onPregamePick(key: string, value: PickerValue) {
 
 /** 大会の画面で「大会に参加する」を押したとき。新しい期を始める(進行中の期は破棄する)。 */
 function enterRyuoSeason(settings: {
-  difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number;
+  difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number;
 }) {
   const career = ryuoCareer.value;
   const entry = nextEntry(career);
@@ -5308,7 +5326,7 @@ function replayRyuoGame() {
 
 // ---- 名人戦の期と対局
 /** 名人戦の期を始める(大会の画面の「出場する」)。名簿がなければ作る(竜王戦と同じ名簿を使う)。 */
-function enterMeijinSeason(settings: { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number }) {
+function enterMeijinSeason(settings: { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number }) {
   const seed = Date.now();
   if (!ryuoRoster.value) {
     ryuoRoster.value = createRoster({ seed, userGroup: ryuoCareer.value.group });

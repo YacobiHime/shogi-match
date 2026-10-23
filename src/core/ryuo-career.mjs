@@ -17,6 +17,8 @@ export const DEFAULT_ENTRY_SETTINGS = Object.freeze({
   coachLevel: 'detailed',
   hintLimit: 3,
   undoLimit: 3,
+  // 秒読みの演出(core/byoyomi.mjs)。0はなし。負けにはしない。
+  byoyomi: 0,
 });
 
 export function createCareer() {

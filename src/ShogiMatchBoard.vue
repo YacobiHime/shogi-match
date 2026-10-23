@@ -49,6 +49,7 @@
       :white-player-name="whitePlayerName"
       :black-player-detail="blackPlayerDetail"
       :white-player-detail="whitePlayerDetail"
+      :player-countdown="playerCountdown"
       :hide-clock="true"
       :arrow-image-url="`${normalizedAssetBase}/arrow/arrow.svg`"
       @move="onMove"
@@ -130,6 +131,7 @@ const props = defineProps({
   whitePlayerName: { type: String, default: "後手" },
   blackPlayerDetail: { type: String, default: "" },
   whitePlayerDetail: { type: String, default: "" },
+  playerCountdown: { type: Object as PropType<{ color: "black" | "white"; left: number; fraction: number; stage: string; label: string } | null>, default: null },
 });
 const emit = defineEmits(["usi-move", "invalid-sfen", "resize"]);
 const root = ref<HTMLElement | null>(null);

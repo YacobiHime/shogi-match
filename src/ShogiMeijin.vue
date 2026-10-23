@@ -261,6 +261,7 @@ import { CLASS_LABELS, CLASS_RULES, MEIJIN_OUTCOME_TEXT, MEIJIN_SCALES, meijinGo
 import { DIFFICULTY_LEVELS } from "./core/ryuo.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
+import { BYOYOMI_CHOICES, byoyomiLabel, byoyomiSeconds } from "./core/byoyomi.mjs";
 import { memberAbilityView } from "./core/ryuo-book.mjs";
 
 type Brief = { id: string; name: string; dan: string; level: number; story?: string | null; character?: { attack: number } | null; style?: { label?: string } | null; repertoire?: unknown };
@@ -280,7 +281,7 @@ export type MeijinView = {
   resultSeen: boolean;
   settings: Settings;
 };
-type Settings = { recommended?: boolean; difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number };
+type Settings = { recommended?: boolean; difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
 
 const props = defineProps({
   view: { type: Object as PropType<MeijinView | null>, default: null },
@@ -340,6 +341,7 @@ const scale = ref(props.lastSettings?.scale ?? "full");
 const coachLevel = ref(props.lastSettings?.coachLevel ?? "detailed");
 const hintLimit = ref(props.lastSettings?.hintLimit ?? 3);
 const undoLimit = ref(props.lastSettings?.undoLimit ?? 3);
+const byoyomi = ref(byoyomiSeconds(props.lastSettings));
 const COACH_OPTIONS = [
   { value: "off", label: "なし" },
   { value: "encourage", label: "応援のみ" },
@@ -367,12 +369,14 @@ const settingsSummary = computed(() => [
   `難易度 ${difficulty.value}`,
   `規模 ${meijinScale(scale.value).label}`,
   `助言 ${COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? ""}`,
+  ...(byoyomi.value ? [`秒読み${byoyomiLabel(byoyomi.value)}`] : []),
 ].join("・"));
 const settingRows = computed(() => [
   { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `おすすめ ${props.defaultDifficulty}・1局の勝率6〜8割が目安` },
   { id: "scale", label: "規模", value: meijinScale(scale.value).label, note: `1期 ${entryRounds.value}局` },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
+  { id: "byoyomi", label: "秒読みの演出", value: byoyomiLabel(byoyomi.value), note: byoyomi.value ? "0秒になっても負けにはならない" : "" },
 ]);
 const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: string } | null>(() => {
   const single = (title: string, key: string, value: PickerValue, options: { value: PickerValue; label: string; description?: string }[], note = "") => (
@@ -389,6 +393,8 @@ const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: 
       })), "昇級と降級の人数は変わらないよ。局数が少ないほど、1敗が重くなる。");
     case "coach":
       return single("やこび姫の助言", "coach", coachLevel.value, COACH_OPTIONS);
+    case "byoyomi":
+      return single("秒読みの演出", "byoyomi", byoyomi.value, BYOYOMI_CHOICES.map((item) => ({ value: item.value, label: item.label })), "10秒から音で知らせるよ。0秒になっても負けにはならないよ。");
     case "assist":
       return {
         title: "閃き・待った",
@@ -408,10 +414,11 @@ function onPick(key: string, value: PickerValue) {
   else if (key === "coach") coachLevel.value = String(value);
   else if (key === "hint") hintLimit.value = Number(value);
   else if (key === "undo") undoLimit.value = Number(value);
+  else if (key === "byoyomi") byoyomi.value = Number(value);
   if ((pickerConfig.value?.sections.length ?? 0) <= 1) picker.value = "";
 }
 function enter() {
-  emit("enter", { difficulty: difficulty.value, scale: scale.value, coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value });
+  emit("enter", { difficulty: difficulty.value, scale: scale.value, coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value, byoyomi: byoyomi.value });
   settingsOpen.value = false;
   screen.value = "season";
 }

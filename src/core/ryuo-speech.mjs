@@ -49,6 +49,13 @@ export function entryCoachLine({ coachLevel, hintLimit, undoLimit }) {
   return `${COACH_TEXT[coachLevel] ?? COACH_TEXT.detailed} 閃きは${count(hintLimit)}、待ったは${count(undoLimit)}だよ。`;
 }
 
+/** 秒読みの演出についての一言。時間切れで負けにはしないことを、先に伝える。 */
+export function entryByoyomiLine(seconds) {
+  return seconds > 0
+    ? `1手${seconds}秒の秒読みだよ。10秒から音で知らせるね。0秒になっても負けにはならないから、安心してね。`
+    : '秒読みはなし。じっくり考えて指そう！';
+}
+
 /** 段階に応じた、いまの状況の一言。 */
 export function seasonPhaseLines(view) {
   if (!view) return [];

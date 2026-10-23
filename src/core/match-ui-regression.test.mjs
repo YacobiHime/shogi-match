@@ -721,4 +721,13 @@ describe("match screen regressions", () => {
     // 大一番の朱の明かりは、景色の上に重ねる(景色の規則は大一番の背景より後ろに置く)。
     expect(source).toMatch(/\.shogi-game\.shogi-game--stage-big \{[\s\S]*?\.shogi-game\.shogi-game--scenery-foot,/);
   });
+  it("大会の秒読みの演出は、プレイヤーの手番だけ名札に輪を出し、補助のあいだは止める(docs/tournament-match-presence-design.mdの7章)", () => {
+    expect(source).toMatch(/seconds: \(\) => \(matchKind\.value === "tournament" \? byoyomiSeconds\(tournamentSeasonOf\(ryuoGame\.value\)\?\.settings\) : 0\)/);
+    expect(source).toMatch(/record\.value\.position\.color === humanColor\.value,\s*paused: \(\) => thinking\.value \|\| guidedMateReplyPending\.value \|\| dexFromMatch\.value/);
+    expect(source).toMatch(/turnKey: \(\) => moveCount\.value,/);
+    expect(source).toMatch(/:player-countdown="playerCountdown"/);
+    // 画面を隠しているあいだは数えない。0秒でも負けにはしない(時間切れの処理を持たない)。
+    expect(source).toMatch(/if \(typeof document !== "undefined" && document\.hidden\) return;/);
+    expect(source).not.toMatch(/byoyomi[\s\S]{0,80}finish\(/);
+  });
 });

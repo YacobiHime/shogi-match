@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  entryByoyomiLine,
   entryCoachLine,
   entryDifficultyLine,
   entryRevivalLine,
@@ -38,6 +39,8 @@ describe('Yakobihime speech for the Ryuo screens', () => {
     expect(entryRevivalLine(false)).toContain('一発勝負');
     expect(entryCoachLine({ coachLevel: 'off', hintLimit: 0, undoLimit: -1 })).toContain('閃きはなし、待ったは無制限');
     expect(entryCoachLine({ coachLevel: 'detailed', hintLimit: 3, undoLimit: 5 })).toContain('閃きは3回、待ったは5回');
+    expect(entryByoyomiLine(30)).toContain('負けにはならない');
+    expect(entryByoyomiLine(0)).toContain('秒読みはなし');
   });
 
   it('says something for every phase of a real season and counts the remaining wins in a series', () => {

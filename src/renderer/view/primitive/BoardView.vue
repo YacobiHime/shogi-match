@@ -241,12 +241,21 @@
       <!-- 先手の対局者名 -->
       <div
         class="player-name"
-        :class="{ active: position.color == 'black', 'player-name--detail': blackPlayerDetail }"
+        :class="{ active: position.color == 'black', 'player-name--detail': blackPlayerDetail, 'player-name--countdown': playerCountdown?.color === 'black' }"
         :style="main.blackPlayerName.style"
         :title="blackPlayerDetail ? `${blackPlayerName} ${blackPlayerDetail}` : undefined"
       >
         <span class="player-name-text">☗{{ blackPlayerName }}</span>
         <span v-if="blackPlayerDetail" class="player-name-detail">{{ blackPlayerDetail }}</span>
+        <span
+          v-if="playerCountdown?.color === 'black'"
+          class="player-countdown"
+          :class="`player-countdown--${playerCountdown.stage}`"
+          :style="{ '--countdown': playerCountdown.fraction }"
+          role="timer"
+          :aria-label="playerCountdown.label"
+          data-player-countdown
+        >{{ playerCountdown.stage === "up" ? "時間いっぱい" : playerCountdown.left }}</span>
       </div>
 
       <!-- 先手の持ち時間 -->
@@ -262,12 +271,21 @@
       <!-- 後手の対局者名 -->
       <div
         class="player-name"
-        :class="{ active: position.color == 'white', 'player-name--detail': whitePlayerDetail }"
+        :class="{ active: position.color == 'white', 'player-name--detail': whitePlayerDetail, 'player-name--countdown': playerCountdown?.color === 'white' }"
         :style="main.whitePlayerName.style"
         :title="whitePlayerDetail ? `${whitePlayerName} ${whitePlayerDetail}` : undefined"
       >
         <span class="player-name-text">☖{{ whitePlayerName }}</span>
         <span v-if="whitePlayerDetail" class="player-name-detail">{{ whitePlayerDetail }}</span>
+        <span
+          v-if="playerCountdown?.color === 'white'"
+          class="player-countdown"
+          :class="`player-countdown--${playerCountdown.stage}`"
+          :style="{ '--countdown': playerCountdown.fraction }"
+          role="timer"
+          :aria-label="playerCountdown.label"
+          data-player-countdown
+        >{{ playerCountdown.stage === "up" ? "時間いっぱい" : playerCountdown.left }}</span>
       </div>
 
       <!-- 後手の持ち時間 -->
@@ -540,6 +558,12 @@ const props = defineProps({
     type: String,
     required: false,
     default: "",
+  },
+  // 大会の秒読みの演出(core/byoyomi.mjs)。手番のプレイヤーの名札に、残り秒の輪を出す。
+  playerCountdown: {
+    type: Object as PropType<{ color: "black" | "white"; left: number; fraction: number; stage: string; label: string } | null>,
+    required: false,
+    default: null,
   },
   blackPlayerTime: {
     type: Number,
@@ -1879,6 +1903,51 @@ const whitePlayerTimeSeverity = computed(() => {
 .player-name--detail .player-name-text {
   max-width: calc(100% - 5px);
   font-size: 0.8em;
+}
+.player-name--countdown {
+  padding-right: 2.1em;
+}
+/* 秒読みの輪。名札の右端に重ね、残りの割合を輪の長さで、10秒からは赤で示す(音を消しても分かる。U:5-3)。升の強調ではないが、黄色は使わない。 */
+.player-countdown {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 1.9em;
+  height: 1.9em;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #fffcf4 58%, transparent 60%),
+    conic-gradient(var(--countdown-color) calc(var(--countdown) * 360deg), rgba(29, 48, 63, 0.18) 0);
+  color: #1d303f;
+  font-size: 0.78em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1;
+  transform: translateY(-50%);
+  --countdown-color: #3d6fa5;
+}
+.player-countdown--hurry {
+  --countdown-color: #c8433a;
+  color: #b0322a;
+  animation: player-countdown-pulse 1s ease-out infinite;
+}
+.player-countdown--up {
+  width: auto;
+  height: auto;
+  padding: 0.25em 0.5em;
+  border-radius: 0.4em;
+  background: #c8433a;
+  color: #fff;
+  white-space: nowrap;
+}
+@keyframes player-countdown-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(200, 67, 58, 0.55); }
+  100% { box-shadow: 0 0 0 0.5em rgba(200, 67, 58, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .player-countdown--hurry { animation: none; }
 }
 .player-name-detail {
   max-width: calc(100% - 5px);
