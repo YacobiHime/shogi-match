@@ -464,6 +464,87 @@
   color: var(--ivory);
   font-size: 0.92em;
 }
+.shogi-game .shogi-game__stage-band .shogi-game__stage-opponent {
+  align-items: center;
+}
+/* 大会の相手の顔(期の画面の判子と同じ色: 攻め=朱・受け=藍・バランス=金)。表情は傾きと濃さで3段。 */
+.shogi-game__opponent-face {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.9em;
+  height: 1.9em;
+  overflow: hidden;
+  border: 2px solid rgba(255, 252, 244, 0.85);
+  border-radius: 0.3em;
+  color: var(--ivory);
+  background: #c8433a;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-weight: 900;
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+.shogi-game__opponent-face--defense { background: #3d6fa5; }
+.shogi-game__opponent-face--balance { color: #172632; background: #d9b860; }
+.shogi-game__opponent-face img {
+  align-self: start;
+  width: 100%;
+  margin-top: 6%;
+  image-rendering: pixelated;
+}
+.shogi-game__opponent-face--confident { transform: rotate(-6deg) scale(1.06); }
+.shogi-game__opponent-face--troubled { transform: rotate(5deg); filter: saturate(0.55) brightness(0.85); }
+/* 中継の1行(相手の一言・特殊能力の札・速報)。高さを決めておき、出ても消えても盤の大きさを変えない。 */
+.shogi-game .shogi-game__stage-band .shogi-game__presence-line {
+  display: block;
+  min-height: 1.4em;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.84em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+.shogi-game__presence-line span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: shogi-presence-in 0.25s ease-out both;
+}
+/* 広い画面(左の列)は幅が狭いので、2行ぶんの高さを決めておき、速報を省かずに見せる。 */
+.shogi-game.shogi-game--wide .shogi-game__stage-band .shogi-game__presence-line {
+  min-height: 2.8em;
+}
+.shogi-game--wide .shogi-game__presence-line span {
+  display: -webkit-box;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.shogi-game__presence-line--trait span {
+  display: inline-block;
+}
+.shogi-game__presence-line--speech { color: var(--ivory) !important; }
+.shogi-game__presence-line--trait span {
+  padding: 0 0.45em;
+  border-radius: 0.3em;
+  font-weight: 700;
+}
+.shogi-game__presence-line--gold span { color: #172632; background: #e6c15c; }
+.shogi-game__presence-line--blue span { color: #fff; background: #3d6fa5; }
+.shogi-game__presence-line--red span { color: #fff; background: #c8433a; }
+.shogi-game__presence-line--news { color: var(--amber) !important; }
+.shogi-game__presence-line--news.shogi-game__presence-line--oshi,
+.shogi-game__presence-line--news.shogi-game__presence-line--rival { font-weight: 700; }
+@keyframes shogi-presence-in {
+  from { opacity: 0; transform: translateY(0.3em); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__presence-line span { animation: none; }
+  .shogi-game__opponent-face { transition: none; }
+}
 /* スマホ縦などの狭い画面では、対局場は開幕の札だけに出し、札を3行に収める。 */
 .shogi-game:not(.shogi-game--wide) .shogi-game__stage-venue {
   display: none;

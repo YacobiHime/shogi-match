@@ -885,8 +885,30 @@
           <b v-if="matchStage.stakes" class="shogi-game__stage-stakes">{{ matchStage.stakes }}</b>
         </p>
         <p class="shogi-game__stage-opponent">
-          対 {{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}
+          <!-- 相手の顔(期の画面と同じ判子。羽音は絵)。表情は形勢で3段(docs/tournament-match-presence-design.mdの2章)。 -->
+          <span
+            v-if="opponentFace"
+            class="shogi-game__opponent-face"
+            :class="[`shogi-game__opponent-face--${opponentFace.tone}`, `shogi-game__opponent-face--${opponentFace.mood}`]"
+            role="img"
+            :aria-label="`${opponentFace.name}さん（${opponentFace.moodLabel}）`"
+            data-opponent-face
+            :data-mood="opponentFace.mood"
+          ><img v-if="opponentFace.sprite" :src="opponentFace.sprite" alt="" draggable="false"><span v-else aria-hidden="true">{{ opponentFace.char }}</span></span>
+          <span>対 {{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}</span>
         </p>
+        <!--
+          中継の1行。相手の一言・特殊能力の札・ほかの対局の速報を、決まった高さの1行に出す(盤の大きさを変えない)。
+          押すと消える。特殊能力の札 → 相手の一言 → 速報の順に、新しいものを上書きする。
+        -->
+        <p
+          class="shogi-game__presence-line"
+          :class="presenceLine ? `shogi-game__presence-line--${presenceLine.kind} shogi-game__presence-line--${presenceLine.tone}` : ''"
+          role="status"
+          aria-live="polite"
+          data-presence-line
+          @click="presenceLine = null"
+        ><span v-if="presenceLine" :key="presenceLine.id" :title="presenceLine.text">{{ presenceLine.text }}</span></p>
       </div>
       <div v-else-if="cpuColor !== null" class="shogi-game__summary-opponent">
         <b>対戦相手</b>
@@ -2033,6 +2055,8 @@ import { openingFormationGhosts, openingFormationProgress } from "./core/opening
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { mistakeReason, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
 import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
+import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
+import { midgameMoment, newsDue, opponentLine, opponentMood, roundNews, traitCard } from "./core/match-presence.mjs";
 import {
   PLAN_CONFIRM_SEARCH,
   confirmPlanAdvice,
@@ -2583,6 +2607,99 @@ const ryuoGame = ref<RyuoGame | null>(null);
 let ryuoCpuMoves: { ply: number; kind: string; traits: string[] }[] = [];
 const ryuoView = computed(() => (ryuoSeason.value ? describeSeason(ryuoSeason.value) : null));
 const ryuoOpponent = computed(() => (ryuoGame.value ? tournamentSeasonOf(ryuoGame.value)?.players?.[ryuoGame.value.opponentId] ?? null : null));
+/*
+ * 大会の相手を生きて見せる・ほかの対局の速報(docs/tournament-match-presence-design.mdの2章と4章)。
+ * 顔の表情は、助言の読みのプレイヤーから見た評価値で決める(助言が「なし」なら、ふつうの顔のまま)。
+ */
+const PRESENCE_LINE_MS = { speech: 2500, trait: 3500, news: 6000 } as const;
+const presenceScore = ref<EngineEvaluation | null>(null);
+const presenceLine = ref<{ id: number; kind: "speech" | "trait" | "news"; tone: string; text: string } | null>(null);
+let presenceTimer: ReturnType<typeof setTimeout> | undefined;
+let opponentSaid: string[] = [];
+let traitCardsShown: string[] = [];
+let matchNews: ReturnType<typeof roundNews> = [];
+let matchNewsShown = 0;
+const tournamentOpponent = computed(() => (matchStage.value && !reviewMode.value ? ryuoOpponent.value : null));
+const opponentFace = computed(() => {
+  const opponent = tournamentOpponent.value;
+  if (!opponent?.name) return null;
+  const attack = opponent.character?.attack ?? 0;
+  const mood = opponentMood(presenceScore.value);
+  return {
+    name: opponent.name,
+    char: opponent.name.slice(0, 1),
+    tone: attack >= 0.25 ? "attack" : attack <= -0.25 ? "defense" : "balance",
+    sprite: opponent.story === HANANE ? `${props.assetBaseUrl}/characters/${HANANE_SPRITE.file}?v=${HANANE_SPRITE.version}` : "",
+    mood,
+    moodLabel: mood === "confident" ? "余裕の表情" : mood === "troubled" ? "苦しい表情" : "落ち着いた表情",
+  };
+});
+function showPresence(kind: "speech" | "trait" | "news", text: string, tone = "") {
+  if (!text) return;
+  // 特殊能力の札は、相手の一言や速報で上書きしない(出ているあいだは待つ)。
+  if (presenceLine.value?.kind === "trait" && kind !== "trait") return;
+  clearTimeout(presenceTimer);
+  presenceLine.value = { id: Date.now(), kind, tone, text };
+  presenceTimer = setTimeout(() => { presenceLine.value = null; }, PRESENCE_LINE_MS[kind]);
+}
+function sayOpponent(moment: "start" | "ahead" | "behind" | "win" | "loss") {
+  const opponent = tournamentOpponent.value;
+  if (!opponent) return;
+  showPresence("speech", `${opponent.name}「${opponentLine(moment, opponent)}」`);
+}
+function resetPresence() {
+  clearTimeout(presenceTimer);
+  presenceLine.value = null;
+  presenceScore.value = null;
+  opponentSaid = [];
+  traitCardsShown = [];
+  matchNews = [];
+  matchNewsShown = 0;
+}
+/** 大会の1局を始めたとき(リロードで戻ったときは、あいさつしない)。 */
+function startPresence({ greet = true }: { greet?: boolean } = {}) {
+  resetPresence();
+  const game = ryuoGame.value;
+  if (!game) return;
+  matchNews = roundNews({
+    event: game.event === "meijin" ? "meijin" : "ryuo",
+    season: tournamentSeasonOf(game),
+    oshiId: ryuoOshi.value?.id ?? null,
+  });
+  if (greet) sayOpponent("start");
+}
+/** 助言の読みの評価値が出たら、相手の表情を変え、形勢が傾いた最初に相手が一言いう。 */
+function notePresenceScore(score?: EngineEvaluation | null) {
+  if (!tournamentOpponent.value) return;
+  presenceScore.value = score ?? null;
+  const moment = midgameMoment(score ?? null, opponentSaid);
+  if (!moment) return;
+  opponentSaid = [...opponentSaid, moment];
+  sayOpponent(moment);
+}
+/** CPUの1手で特殊能力が出たら、札を出す。苦手が出たときは、やこび姫が添える。 */
+function notePresenceCpuMove(move: { ply: number; kind: string; traits: string[] }) {
+  const opponent = tournamentOpponent.value;
+  if (!opponent) return;
+  const card = traitCard(move, { character: opponent.character ?? null, name: opponent.name, shown: traitCardsShown });
+  if (!card) return;
+  traitCardsShown = [...traitCardsShown, card.id];
+  showPresence("trait", card.text, card.tier);
+  if (card.coach && coachLevel.value !== "off") showCoachAdvice({ key: `opponent-weakness-${card.id}`, text: card.coach });
+}
+/** プレイヤーの手番が来たら、20手ごとにほかの対局の速報を1件出す。 */
+function tickPresenceNews() {
+  if (!tournamentOpponent.value) return;
+  const item = newsDue(matchNews, moveHistory.length, matchNewsShown);
+  if (!item) return;
+  matchNewsShown += 1;
+  showPresence("news", item.text, item.tone);
+}
+// 終局したら、相手があいさつする(千日手・持将棋は言わない)。
+watch(result, (value) => {
+  if (!value || value.winner === null || !tournamentOpponent.value) return;
+  sayOpponent(value.winner === humanColor.value ? "loss" : "win");
+});
 /** いま指している大会の1局の舞台(対局の札・開幕の札・名札の肩書。docs/match-stage-design.md)。 */
 const matchStage = computed(() => (matchKind.value === "tournament" && matchStarted.value ? ryuoGame.value?.stage ?? null : null));
 
@@ -4877,6 +4994,7 @@ function startRyuoMatch() {
   pregameOpen.value = false;
   scheduleDeferredCoachPortraitPreload();
   restart();
+  startPresence();
   // 大一番とタイトル戦は、開幕の札とやこび姫の一言で始める。ふだんの1局は、相手の棋風と特殊能力から戦い方を一言。
   const opponentLine = opponentStyleAdvice(opponent.character, opponent.name);
   if (stage?.coachLine && coachLevel.value !== "off") guideText.value = stage.coachLine;
@@ -6518,6 +6636,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
     active.value = snapshot.active === true && !restoredResult;
     thinking.value = false;
     guideText.value = coachLevel.value === "off" ? "" : "前の局面から対局を再開したよ！";
+    if (matchKind.value === "tournament" && ryuoGame.value) startPresence({ greet: false });
     return true;
   } catch {
     discardPersistedMatch();
@@ -6577,6 +6696,7 @@ function updateCoachAdvice(
   const score = scoreForPlayer(cpuScore, cpuColor, humanColor.value, 1);
   playerTurnScore = score;
   playerTurnScoreHistoryLength = score ? moveHistory.length : -1;
+  if (coachLevel.value !== "off") notePresenceScore(score);
   if (coachLevel.value === "off") {
     guideText.value = "";
     return;
@@ -7039,6 +7159,7 @@ function updateCoachAdviceFromPlayerScore(
     playerTurnScore = score;
     playerTurnScoreHistoryLength = score ? moveHistory.length : -1;
   }
+  if (coachLevel.value !== "off" && !reviewMode.value) notePresenceScore(score);
   if (coachLevel.value === "off") {
     guideText.value = "";
     return;
@@ -7485,6 +7606,7 @@ function schedulePostCpuAssists(hadScore = false) {
       scheduleMoveJudgeBaseline();
       schedulePlayerMoveBaseline();
       schedulePlayerIdleAdvice();
+      tickPresenceNews();
     }, 0);
   });
 }
@@ -8821,9 +8943,9 @@ async function scheduleCpuMove() {
         usi = selection?.move ?? "";
         if (cpuCharacter && usi) {
           const kind = (selection as { kind?: string } | null)?.kind ?? "opening";
-          ryuoCpuMoves = [...ryuoCpuMoves.filter(({ ply }) => ply < moveHistory.length), {
-            ply: moveHistory.length, kind, traits: selectionStrength.activeTraits ?? [],
-          }];
+          const cpuMoveRecord = { ply: moveHistory.length, kind, traits: selectionStrength.activeTraits ?? [] };
+          ryuoCpuMoves = [...ryuoCpuMoves.filter(({ ply }) => ply < moveHistory.length), cpuMoveRecord];
+          notePresenceCpuMove(cpuMoveRecord);
         }
         if (isBlunderChoice(selection)) {
           cpuBlunderPlies = [...cpuBlunderPlies.filter((ply) => ply < moveHistory.length), moveHistory.length];
@@ -9253,6 +9375,7 @@ function restart() {
   guideText.value = coachLevel.value === "off" ? "" : INITIAL_GUIDE_TEXT;
   advisedCoachTopics.clear();
   coachAdviceLastShownAt.clear();
+  resetPresence();
   coachPlanOffer.value = null;
   lastPlanAdvice = null;
   formationState.value = createFormationState();

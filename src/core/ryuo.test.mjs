@@ -557,3 +557,19 @@ describe('career', () => {
     expect(loadCareer(null)).toEqual(createCareer());
   });
 });
+
+describe('速報のために同じ回戦を先に決める(docs/tournament-match-presence-design.mdの4章)', () => {
+  it('プレイヤーの試合を待つときには、同じ表の同じ回戦のほかの試合はもう決まっている', () => {
+    let season = createSeason({ no: 1, mode: 'challenge', group: 6, settings: settings(), userLevel: 28, seed: 21 });
+    for (let game = 0; game < 6 && season.pending; game += 1) {
+      const pending = season.pending;
+      if (pending.kind === 'game') {
+        const bracket = pending.phase === 'ranking' ? season.ranking : pending.phase === 'revival' ? season.revival[pending.blockIndex] : season.main;
+        const round = bracket.nodes[pending.nodeId].round;
+        const sameRound = Object.values(bracket.nodes).filter((node) => node.id !== pending.nodeId && node.round === round && node.a && node.b);
+        for (const node of sameRound) expect(node.winner, `${pending.phase} ${node.id}`).not.toBeNull();
+      }
+      season = recordUserGame(season, game % 2 === 0 ? 'win' : 'loss');
+    }
+  });
+});

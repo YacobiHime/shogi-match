@@ -214,15 +214,22 @@ export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAt
   for (;;) {
     const ready = readyNodes(bracket, { stopAtRoot });
     if (!ready.length) break;
+    // プレイヤーの試合が見つかっても、同じ回戦のほかの試合は先に決め切る。
+    // 対局中に「速報」として少しずつ見せるため(docs/tournament-match-presence-design.mdの4章)。
+    let userNode = null;
     for (const node of ready) {
       const a = sidePid(bracket, node.a);
       const b = sidePid(bracket, node.b);
-      if (a === userId || b === userId) return { state: 'user', nodeId: node.id };
+      if (a === userId || b === userId) {
+        userNode ??= node;
+        continue;
+      }
       // 能力の配分で、序盤・中盤・終盤と形勢を進めて決める(ryuo-simulation.mjs)。決勝は大事な対局。
       const result = simulateMemberGame(rng, players[a], players[b], { ratingOf, big: node.id === finalId });
       node.winner = result.aWins ? a : b;
       node.game = gameRecordOf(result, a, b);
     }
+    if (userNode) return { state: 'user', nodeId: userNode.id };
   }
   const rootId = rootNodeId(bracket);
   if (!rootId) return { state: 'finished' };

@@ -687,4 +687,15 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/tesuji: detectTesuji\(\{ sfenBefore: sfenBeforeMove, usi \}\),/);
     expect(source).toMatch(/tesuji: flair\?\.tesuji \?\? \[\],/);
   });
+  it("大会の1局で、相手の顔・一言・特殊能力の札・速報を、決まった高さの中継の1行に出す(docs/tournament-match-presence-design.md)", () => {
+    expect(source).toMatch(/v-if="opponentFace"[\s\S]{0,300}?data-opponent-face/);
+    expect(source).toMatch(/class="shogi-game__presence-line"[\s\S]{0,300}?data-presence-line/);
+    // 始めのあいさつと速報の準備、CPUの手の特殊能力、手番ごとの速報、評価値での表情。
+    expect(source).toMatch(/restart\(\);\s*startPresence\(\);/);
+    expect(source).toMatch(/ryuoCpuMoves = \[[\s\S]{0,120}?cpuMoveRecord\];\s*notePresenceCpuMove\(cpuMoveRecord\);/);
+    expect(source).toMatch(/schedulePlayerIdleAdvice\(\);\s*tickPresenceNews\(\);/);
+    expect(source).toMatch(/if \(coachLevel\.value !== "off"\) notePresenceScore\(score\);/);
+    // 盤の大きさを変えないよう、中継の1行は高さを決めておく。
+    expect(source).toMatch(/\.shogi-game__presence-line \{\s*display: block;\s*min-height: 1\.4em;/);
+  });
 });

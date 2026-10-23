@@ -216,6 +216,8 @@ function setPending(season, rng) {
   season.pending = {
     kind: 'league', round: season.round, opponentId: entry.opponent, color, style,
     label: `${CLASS_LABELS[season.cls]} ${last ? '最終局' : `${season.round + 1}回戦`}`,
+    // 同じ回戦のほかの対局は、プレイヤーの局の前に決めておく(対局中の速報。docs/tournament-match-presence-design.mdの4章)。
+    others: playOthers(season, rng),
   };
 }
 
@@ -249,7 +251,8 @@ export function recordMeijinGame(season, outcome) {
   next.pending = null;
   const game = { black: pending.color === 'black' ? USER_ID : pending.opponentId, openings: { [pending.opponentId]: pending.style?.opening ?? null } };
   if (pending.kind === 'league') {
-    next.results[pending.round] = { user: { win, ...game }, ...playOthers(next, rng) };
+    // 前の保存の途中の期(先に決めた結果がない)は、ここで決める。
+    next.results[pending.round] = { user: { win, ...game }, ...(pending.others ?? playOthers(next, rng)) };
     next.round += 1;
   } else if (pending.kind === 'playoff') {
     const match = next.playoff.matches[next.playoff.matches.length - 1];

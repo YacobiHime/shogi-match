@@ -222,3 +222,18 @@ describe('名人戦七番勝負と、次の期', () => {
     expect(loadMeijinCareer(storage)).toMatchObject({ no: 0, best: 'C2', league: null });
   });
 });
+
+describe('速報のために同じ回戦を先に決める(docs/tournament-match-presence-design.mdの4章)', () => {
+  it('順位戦の局を待つときに、同じ回戦のほかの対局が決まっていて、指したあとの結果と同じ', () => {
+    const season = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings, userLevel: 12, seed: 31 });
+    const others = season.pending.others;
+    expect(others.games.length).toBeGreaterThan(0);
+    const after = recordMeijinGame(season, 'win');
+    expect(after.results[season.pending.round].games).toEqual(others.games);
+  });
+  it('前の保存の途中の期(先に決めた結果がない)も、指せば結果が決まる', () => {
+    const season = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings, userLevel: 12, seed: 32 });
+    const old = { ...season, pending: { ...season.pending, others: undefined } };
+    expect(recordMeijinGame(old, 'loss').results[season.pending.round].games.length).toBe(season.pending.others.games.length);
+  });
+});

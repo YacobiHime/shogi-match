@@ -423,15 +423,24 @@ export function ageCharacter(rng, character, { age, rating, style }) {
  * @param {{ ply: number, kind: string, traits: string[] }[]} moves plyは、その手を指す前の手数。
  * @returns {{ id: string, ply: number }[]}
  */
+/** 特徴が「出た」と言える、手の種類と特徴の組。対局中の札(match-presence.mjs)と結果の画面で同じものを使う。 */
+const TRAIT_MOMENT_RULES = Object.freeze([
+  ['endgame-collapse', 'oversight'], ['tsume', 'mate'],
+  ['fast-attack', 'style'], ['endgame-defense', 'style'], ['tenacious', 'style'],
+  ['comeback', 'style'], ['defense-master', 'style'],
+]);
+
+/** 1手で出た特徴のID(決まりの順)。出ていなければ空。 */
+export function traitMomentIds(move) {
+  return TRAIT_MOMENT_RULES
+    .filter(([id, kind]) => move?.kind === kind && move.traits?.includes(id))
+    .map(([id]) => id);
+}
+
 export function summarizeTraitMoments(moves) {
-  const RULES = [
-    ['endgame-collapse', 'oversight'], ['tsume', 'mate'],
-    ['fast-attack', 'style'], ['endgame-defense', 'style'], ['tenacious', 'style'],
-    ['comeback', 'style'], ['defense-master', 'style'],
-  ];
   const moments = [];
-  for (const [id, kind] of RULES) {
-    const move = (moves ?? []).find((entry) => entry.kind === kind && entry.traits?.includes(id));
+  for (const [id] of TRAIT_MOMENT_RULES) {
+    const move = (moves ?? []).find((entry) => traitMomentIds(entry).includes(id));
     if (move) moments.push({ id, ply: move.ply });
   }
   return moments.sort((a, b) => a.ply - b.ply);
