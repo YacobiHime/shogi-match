@@ -648,4 +648,17 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/homeNext\.value\.id === "ryuo-entry"\) openTournamentAt\("ryuo"\)/);
     expect(source).toMatch(/homeNext\.value\.id === "meijin-entry"\) openTournamentAt\("meijin"\)/);
   });
+  it("対局中も見出しの「図鑑」から図鑑を開き、閉じると対局へ戻る(docs/match-dex-design.md)", () => {
+    // メニューにしまわず、いつも見出しに出す。
+    expect(source).toMatch(/<template v-if="!menuCollapsed && !reviewMode">[\s\S]*?<\/template>[\s\S]{0,200}?class="shogi-game__command shogi-game__dex-open"[\s\S]{0,120}?data-match-dex\s*@click="openDexShelf"/);
+    expect(source).toMatch(/v-for="shelf in DEX_SHELF"[\s\S]{0,200}?@click="openDexFromMatch\(shelf\.kind\)"/);
+    // 対局のエンジンを借りない。占いから新しい対局を始めない。戻る先は対局。
+    expect(source).toMatch(/:analysis-engine="dexFromMatch \? null : dexAnalysisEngine"/);
+    expect(source).toMatch(/:can-play="!dexFromMatch"/);
+    expect(source).toMatch(/dexFromMatch\.value \? "対局へ戻る"/);
+    // 対局は残したまま隠す。
+    expect(source).toMatch(/'shogi-game--dex-over-match': dexOverMatch/);
+    expect(source).toMatch(/\.shogi-game--dex-over-match > :not\(\.shogi-dex\) \{\s*visibility: hidden;/);
+    expect(source).toMatch(/\} else if \(dexShelfOpen\.value\) \{\s*dexShelfOpen\.value = false;/);
+  });
 });

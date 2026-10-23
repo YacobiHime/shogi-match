@@ -204,7 +204,7 @@
         <div class="shogi-dex__fortune-body">
           <OpeningFortune
             :asset-base-url="assetBaseUrl"
-            :actions="['play', 'practice', 'dex']"
+            :actions="canPlay ? ['play', 'practice', 'dex'] : ['dex']"
             @action="onFortuneAction"
           />
         </div>
@@ -236,6 +236,8 @@ const props = defineProps({
   initialId: { type: String, default: "" },
   // 教室から重ねて開いたときは教室へ戻るため、「戻る」とだけ表示する。
   backLabel: { type: String, default: "タイトルへ戻る" },
+  // 対局中に開いたときは、占いの結果から新しい対局を始めない(指している対局が消えるため)。
+  canPlay: { type: Boolean, default: true },
 });
 const emit = defineEmits<{
   close: [];

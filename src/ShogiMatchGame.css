@@ -241,6 +241,19 @@
   background: var(--amber) !important;
   box-shadow: 0 2px 0 var(--amber-shadow);
 }
+/* 対局中の図鑑。メニューにしまわず、本の絵と「図鑑」の字で見つけられるようにする。 */
+.shogi-game__dex-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  min-height: max(2.2em, 44px);
+  border-color: rgba(241, 165, 76, 0.7) !important;
+}
+.shogi-game .shogi-game__dex-open-icon {
+  flex: none;
+  width: 1.2em;
+  height: 1.2em;
+}
 .shogi-game__menu-toggle {
   display: inline-flex;
   align-items: center;
@@ -1762,6 +1775,41 @@
 .shogi-game__confirm-panel p {
   margin: 0 0 1em;
   color: var(--muted);
+}
+/* 図鑑の棚。ホームの「しらべる」と同じ絵の大きなボタンを並べる。 */
+.shogi-game__dex-shelf {
+  z-index: 96;
+}
+.shogi-game__dex-shelf-panel {
+  width: min(30em, 100%);
+  max-height: calc(100% - 1em);
+  overflow-y: auto;
+}
+.shogi-game__confirm-panel > .shogi-game__dex-shelf-items {
+  grid-template-columns: repeat(auto-fit, minmax(7.5em, 1fr));
+  margin-bottom: 0.8em;
+}
+.shogi-game .shogi-game__dex-shelf-item {
+  display: grid;
+  justify-items: center;
+  gap: 0.2em;
+  min-height: 44px;
+  padding: 0.6em 0.4em;
+}
+.shogi-game .shogi-game__dex-shelf-icon {
+  width: 2.2em;
+  height: 2.2em;
+}
+.shogi-game__dex-shelf-item small {
+  color: var(--muted);
+  font-size: 0.78em;
+}
+.shogi-game__dex-shelf-close {
+  width: 100%;
+}
+/* 対局の上に開いた図鑑。対局は残したまま隠し、盤の中の大きなz-indexが図鑑の上に出ないようにする。 */
+.shogi-game--dex-over-match > :not(.shogi-dex) {
+  visibility: hidden;
 }
 .shogi-game__confirm-panel > div {
   display: grid;

@@ -9,6 +9,7 @@
         'shogi-game--short': uiShort,
         'shogi-game--narrow': uiNarrow,
         'shogi-game--home': homeOpen,
+        'shogi-game--dex-over-match': dexOverMatch,
       },
       matchStage && !homeOpen ? `shogi-game--stage-${matchStage.weight}` : '',
     ]"
@@ -331,88 +332,15 @@
           <section class="shogi-title__group shogi-title__group--dex" aria-labelledby="shogi-home-dex" data-home-group="dex">
             <h2 id="shogi-home-dex" class="shogi-title__group-title">しらべる</h2>
             <div class="shogi-title__tiles shogi-title__tiles--dex">
-              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'piece'">
-                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#f1a54c">
-                    <rect x="5" y="1" width="6" height="1" />
-                    <rect x="4" y="2" width="8" height="2" />
-                    <rect x="3" y="4" width="10" height="8" />
-                    <rect x="4" y="12" width="8" height="2" />
-                    <rect x="5" y="14" width="6" height="1" />
-                  </g>
-                  <text x="8" y="11" class="shogi-home__koma-char" aria-hidden="true">飛</text>
-                </svg>
-                <span class="shogi-title__label">駒図鑑</span>
-              </button>
-              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'tesuji'">
-                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#fffcf4">
-                    <rect x="3" y="2" width="10" height="12" />
-                    <rect x="2" y="1" width="2" height="14" />
-                  </g>
-                  <g fill="#f1a54c">
-                    <rect x="6" y="4" width="6" height="1" />
-                    <rect x="6" y="6" width="6" height="1" />
-                    <rect x="6" y="8" width="6" height="1" />
-                    <rect x="6" y="10" width="4" height="1" />
-                  </g>
-                </svg>
-                <span class="shogi-title__label">手筋図鑑</span>
-              </button>
-              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="dexOpen = true">
-                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#fffcf4">
-                    <rect x="2" y="3" width="5" height="10" />
-                    <rect x="9" y="3" width="5" height="10" />
-                    <rect x="7" y="2" width="2" height="12" />
-                  </g>
-                  <g fill="#f1a54c">
-                    <rect x="3" y="4" width="3" height="1" />
-                    <rect x="3" y="6" width="3" height="1" />
-                    <rect x="3" y="8" width="3" height="1" />
-                    <rect x="10" y="4" width="3" height="1" />
-                    <rect x="10" y="6" width="3" height="1" />
-                    <rect x="10" y="8" width="3" height="1" />
-                  </g>
-                </svg>
-                <span class="shogi-title__label">定跡図鑑</span>
-              </button>
-              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'world'">
-                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#f1a54c">
-                    <rect x="3" y="2" width="10" height="5" />
-                    <rect x="1" y="3" width="2" height="3" />
-                    <rect x="13" y="3" width="2" height="3" />
-                    <rect x="5" y="7" width="6" height="2" />
-                    <rect x="7" y="9" width="2" height="2" />
-                    <rect x="4" y="11" width="8" height="2" />
-                  </g>
-                  <g fill="#fffcf4">
-                    <rect x="7" y="3" width="2" height="3" />
-                    <rect x="3" y="13" width="10" height="1" />
-                  </g>
-                </svg>
-                <span class="shogi-title__label">将棋界図鑑</span>
-              </button>
-              <button type="button" class="shogi-title__tile shogi-title__tile--small" @click="referenceDexKind = 'glossary'">
-                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#f1a54c">
-                    <rect x="3" y="1" width="10" height="14" />
-                  </g>
-                  <g fill="#fffcf4">
-                    <rect x="4" y="2" width="8" height="12" />
-                    <rect x="13" y="3" width="2" height="2" />
-                    <rect x="13" y="7" width="2" height="2" />
-                    <rect x="13" y="11" width="2" height="2" />
-                  </g>
-                  <g fill="#1d303f">
-                    <rect x="5" y="4" width="4" height="1" />
-                    <rect x="5" y="6" width="6" height="1" />
-                    <rect x="5" y="8" width="6" height="1" />
-                    <rect x="5" y="10" width="5" height="1" />
-                  </g>
-                </svg>
-                <span class="shogi-title__label">用語辞典</span>
+              <button
+                v-for="shelf in DEX_SHELF"
+                :key="shelf.kind"
+                type="button"
+                class="shogi-title__tile shogi-title__tile--small"
+                @click="openDex(shelf.kind)"
+              >
+                <DexIcon class="shogi-title__icon" :kind="shelf.kind" />
+                <span class="shogi-title__label">{{ shelf.label }}</span>
               </button>
             </div>
           </section>
@@ -447,7 +375,8 @@
       v-if="dexOpen"
       :initial-id="openingDexInitialId"
       :asset-base-url="assetBaseUrl"
-      :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
+      :back-label="dexBackLabel"
+      :can-play="!dexFromMatch"
       @close="dexOpen = false; openingDexInitialId = ''"
       @play-plan="playPlanFromDex"
     />
@@ -509,10 +438,10 @@
       v-if="referenceDexKind"
       ref="referenceDexView"
       :kind="referenceDexKind"
-      :analysis-engine="dexAnalysisEngine"
+      :analysis-engine="dexFromMatch ? null : dexAnalysisEngine"
       :initial-id="referenceDexInitialId"
       :asset-base-url="assetBaseUrl"
-      :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
+      :back-label="dexBackLabel"
       @close="referenceDexKind = ''"
     />
 
@@ -605,6 +534,15 @@
             @click="suspendConfirmOpen = true"
           >中断</button>
         </template>
+        <!-- 対局中・検討中に図鑑を開く。画面の幅によらずメニューにしまわない。見終わると対局へ戻る。 -->
+        <button
+          type="button"
+          class="shogi-game__command shogi-game__dex-open"
+          aria-haspopup="dialog"
+          :aria-expanded="dexShelfOpen"
+          data-match-dex
+          @click="openDexShelf"
+        ><DexIcon kind="tesuji" class="shogi-game__dex-open-icon" />図鑑</button>
         <button
           type="button"
           class="shogi-game__command shogi-game__menu-toggle"
@@ -1521,6 +1459,38 @@
       <button type="button" aria-label="メッセージを閉じる" @click="errorMessage = ''">×</button>
     </div>
 
+    <!-- 対局中の図鑑の棚。ホームの「しらべる」と同じ絵と名前で選び、図鑑を閉じると対局へ戻る。 -->
+    <div
+      v-if="dexShelfOpen"
+      class="shogi-game__confirm shogi-game__dex-shelf"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dex-shelf-title"
+      data-dex-shelf
+      @click.self="dexShelfOpen = false"
+      @keydown.esc.stop="dexShelfOpen = false"
+    >
+      <div class="shogi-game__confirm-panel shogi-game__dex-shelf-panel">
+        <h2 id="dex-shelf-title">図鑑でしらべる</h2>
+        <p>見終わったら、この対局に戻ります。</p>
+        <div class="shogi-game__dex-shelf-items">
+          <button
+            v-for="shelf in DEX_SHELF"
+            :key="shelf.kind"
+            type="button"
+            class="shogi-game__dex-shelf-item"
+            :data-dex-kind="shelf.kind"
+            @click="openDexFromMatch(shelf.kind)"
+          >
+            <DexIcon class="shogi-game__dex-shelf-icon" :kind="shelf.kind" />
+            <span>{{ shelf.label }}</span>
+            <small>{{ shelf.desc }}</small>
+          </button>
+        </div>
+        <button type="button" class="shogi-game__dex-shelf-close" @click="dexShelfOpen = false">対局に戻る</button>
+      </div>
+    </div>
+
     <div
       v-if="suspendConfirmOpen"
       class="shogi-game__confirm"
@@ -2044,6 +2014,7 @@ import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import { useAssistTools } from "./composables/useAssistTools";
+import DexIcon from "./DexIcon.vue";
 import { useBackNavigation } from "./composables/useBackNavigation";
 import { WELCOME_CHOICES, WELCOME_MEASURE_LEVEL, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
 import { VOLUME_2_LAST_LESSON, homeRoadmap, roadmapTile, welcomeChoiceFrom } from "./core/home-roadmap.mjs";
@@ -2480,6 +2451,41 @@ const referenceDexKind = ref<"" | "piece" | "tesuji" | "world" | "glossary">("")
 watch(dexOpen, (open) => { if (open) noteFeatureSeen("opening-dex"); });
 watch(referenceDexKind, (kind) => { if (kind) noteFeatureSeen(kind); });
 const referenceDexInitialId = ref("");
+/*
+ * 図鑑の棚。ホームの「しらべる」と対局中の「図鑑」で同じ並び・同じ絵を使う。
+ * 対局中に開いた図鑑は対局の上に重ね、閉じると対局へ戻る。対局のエンジンは借りない(代表局のAI解析は出さない)。
+ * 定跡図鑑の戦法占いからは対局を始めない(指している対局が消えるため)。
+ */
+const DEX_SHELF = [
+  { kind: "piece", label: "駒図鑑", desc: "駒の動き" },
+  { kind: "tesuji", label: "手筋図鑑", desc: "うまい指し方" },
+  { kind: "opening", label: "定跡図鑑", desc: "戦法と囲い" },
+  { kind: "world", label: "将棋界図鑑", desc: "棋士とタイトル" },
+  { kind: "glossary", label: "用語辞典", desc: "ことばの意味" },
+] as const;
+type DexKind = (typeof DEX_SHELF)[number]["kind"];
+const dexShelfOpen = ref(false);
+const dexFromMatch = ref(false);
+const dexOverMatch = computed(() => dexFromMatch.value && (dexOpen.value || Boolean(referenceDexKind.value)));
+const dexBackLabel = computed(() => (tutorialOpen.value ? "戻る" : dexFromMatch.value ? "対局へ戻る" : "タイトルへ戻る"));
+watch(() => dexOpen.value || Boolean(referenceDexKind.value), (open) => { if (!open) dexFromMatch.value = false; });
+watch(homeOpen, (open) => { if (open) dexShelfOpen.value = false; });
+function openDex(kind: DexKind) {
+  openDexFromTutorial({ kind });
+}
+function openDexShelf() {
+  closeSettings();
+  closeAssistTools();
+  dexShelfOpen.value = true;
+  void nextTick(() => {
+    (gameRoot.value?.querySelector("[data-dex-shelf] button") as HTMLElement | null)?.focus();
+  });
+}
+function openDexFromMatch(kind: DexKind) {
+  dexShelfOpen.value = false;
+  dexFromMatch.value = true;
+  openDex(kind);
+}
 // やこび姫の将棋教室を開いているか。
 const tutorialOpen = ref(false);
 const tutorialView = ref<InstanceType<typeof ShogiTutorialComponent> | null>(null);
@@ -5930,6 +5936,8 @@ function navigateBack() {
     else problemSetOpen.value = false;
   } else if (homeOpen.value) {
     // ホームが最下段。
+  } else if (dexShelfOpen.value) {
+    dexShelfOpen.value = false;
   } else if (suspendConfirmOpen.value) {
     suspendConfirmOpen.value = false;
   } else if (resignConfirmOpen.value) {
