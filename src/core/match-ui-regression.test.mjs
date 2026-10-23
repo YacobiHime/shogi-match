@@ -715,7 +715,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/v-if="matchStage\.longestDay"[^>]*>将棋界の一番長い日/);
     // 判子は期の結果を記録した節目から決め、1.2秒で結果の窓へ。負けは判子を押さない。
     expect(source).toMatch(/finishMilestone = lastGameMilestone\(next,/);
-    expect(source).toMatch(/recordRyuoOutcome\(matchResult\);\s*if \(tournamentFinish\) showFinishStamp\(outcome === "win",/);
+    expect(source).toMatch(/recordRyuoOutcome\(matchResult\);\s*(?:if \(tournamentFinish\) writeTitleKansenki\([^;]*\);\s*)?if \(tournamentFinish\) showFinishStamp\(outcome === "win",/);
     expect(source).toMatch(/resultRevealTimer = setTimeout\(revealResult, FINISH_STAMP_MS\);/);
     expect(source).toMatch(/v-if="finishStampShown && !resultDialogOpen"/);
     // 大一番の朱の明かりは、景色の上に重ねる(景色の規則は大一番の背景より後ろに置く)。
@@ -729,5 +729,21 @@ describe("match screen regressions", () => {
     // 画面を隠しているあいだは数えない。0秒でも負けにはしない(時間切れの処理を持たない)。
     expect(source).toMatch(/if \(typeof document !== "undefined" && document\.hidden\) return;/);
     expect(source).not.toMatch(/byoyomi[\s\S]{0,80}finish\(/);
+  });
+  it("タイトル戦の封じ手は、1日目のまとめ・開封の札・勝負メシ・観戦記につなぐ(docs/title-match-day-design.md)", () => {
+    // 記録はタイトル戦(二日制)の局だけ。保存と一緒にリロードでも戻す。
+    expect(source).toMatch(/day: stage\?\.twoDay \? emptyDay\(\) : undefined/);
+    expect(source).toMatch(/day: savedRyuo\.stage\?\.twoDay \? normalizeDay\(savedRyuo\.day\) : undefined/);
+    // 封じ手の札のあとに開封の札。まとめは「2日目・まとめ」のボタンから開き、自動では開かない。
+    expect(source).toMatch(/if \(sealed && active\.value && unsealView\.value\) showStageCard\("unseal"\);/);
+    expect(source).toMatch(/v-if="stageDayText && titleDay\?\.seal"[\s\S]{0,200}?@click="daySummaryOpen = true"/);
+    expect(source).not.toMatch(/daySummaryOpen\.value = true/);
+    // 封じ手予想は、助言の読みの最善手(新しい探索は足さない)。
+    expect(source).toMatch(/if \(bestMove\) roomPick = \{ ply: analyzedHistoryLength, move: bestMove \};/);
+    // 観戦記は終局で書き、結果の窓から読める。重ねたシートは戻る操作で閉じ、開いているあいだは秒読みを止める。
+    expect(source).toMatch(/if \(tournamentFinish\) writeTitleKansenki\(outcome === "win", matchResult\.moveCount\);/);
+    expect(source).toMatch(/v-if="resultKansenki"[^>]*data-kansenki-open/);
+    expect(source).toMatch(/\} else if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(daySummaryOpen\.value\) \{/);
+    expect(source).toMatch(/\|\| daySummaryOpen\.value,/);
   });
 });

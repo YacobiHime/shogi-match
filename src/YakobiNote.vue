@@ -336,6 +336,22 @@
               {{ allAwards ? "新しい3枚だけ見る" : `すべて見る（${awards.length}枚）` }}
             </button>
           </section>
+          <!-- 観戦記(docs/title-match-day-design.mdの3章)。タイトル戦の1局ごとに、新しい順。押すと紙面を開く。 -->
+          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-kansenki" data-note-kansenki>
+            <h2 id="shogi-note-kansenki">観戦記<small class="shogi-note__count">{{ kansenki.length }}局</small></h2>
+            <ul v-if="kansenki.length" class="shogi-note__awards">
+              <li v-for="item in shownKansenki" :key="item.id">
+                <button type="button" class="shogi-note__award-row" data-note-kansenki-row @click="kansenkiShown = item">
+                  <span :class="['shogi-note__award-seal', item.win ? 'shogi-note__award-seal--gold' : 'shogi-note__award-seal--silver']" aria-hidden="true">{{ item.win ? "勝" : "負" }}</span>
+                  <span class="shogi-note__award-text">{{ item.headline }}<small>{{ item.eventText }} {{ item.label }}</small></span>
+                </button>
+              </li>
+            </ul>
+            <p v-else class="shogi-note__hint">竜王戦や名人戦のタイトル戦（七番勝負）を指すと、1局ごとに新聞の観戦記ができるよ。</p>
+            <button v-if="kansenki.length > AWARD_PREVIEW" type="button" class="shogi-note__button shogi-note__button--ghost" @click="allKansenki = !allKansenki">
+              {{ allKansenki ? "新しい3局だけ見る" : `すべて見る（${kansenki.length}局）` }}
+            </button>
+          </section>
         </section>
 
         <!-- 棋士名鑑(docs/player-world-note-design.mdの3-3)。 -->
@@ -551,6 +567,7 @@
         </section>
       </main>
       <SeasonAward v-if="awardShown" :award="awardShown" :asset-base-url="assetBaseUrl" @done="awardShown = null" />
+      <TitleDaySheet v-if="kansenkiShown" mode="kansenki" :article="kansenkiShown" @close="kansenkiShown = null" />
     </div>
   </div>
 </template>
@@ -607,6 +624,8 @@ import { CLASS_LABELS, MEIJIN_OUTCOME_TEXT } from "./core/meijin.mjs";
 import { junniClassOf, junniPlaceOf } from "./core/ryuo-league.mjs";
 import { awardLine } from "./core/season-award.mjs";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
+import TitleDaySheet, { type KansenkiView } from "./TitleDaySheet.vue";
+import { loadKansenki } from "./core/title-day.mjs";
 
 type Tally = { wins: number; losses: number; draws: number };
 type GameOutcome = "win" | "loss" | "draw";
@@ -880,10 +899,19 @@ const AWARD_PREVIEW = 3;
 const allAwards = ref(false);
 const shownAwards = computed(() => [...props.awards].reverse().slice(0, allAwards.value ? undefined : AWARD_PREVIEW));
 const awardShown = ref<SeasonAwardData | null>(null);
+// ---- 観戦記(大会の項目)。賞状帳と同じく、新しい順に3局、「すべて見る」で全部。
+const kansenki = ref<(KansenkiView & { id: string; win?: boolean })[]>(loadKansenki(typeof localStorage === "undefined" ? null : localStorage));
+const allKansenki = ref(false);
+const shownKansenki = computed(() => kansenki.value.slice(0, allKansenki.value ? undefined : AWARD_PREVIEW));
+const kansenkiShown = ref<KansenkiView | null>(null);
 
 // ---- 戻る操作(ブラウザの戻る)。重ねて開いたもの(賞状・名鑑のくわしい情報)から閉じる。閉じたら真。
 const bookEl = ref<{ goBack: () => boolean } | null>(null);
 function goBack() {
+  if (kansenkiShown.value) {
+    kansenkiShown.value = null;
+    return true;
+  }
   if (awardShown.value) {
     awardShown.value = null;
     return true;

@@ -4041,3 +4041,41 @@
   .shogi-game__finish-stamp b { animation: none; transform: rotate(-4deg); }
   .shogi-game__confetti { display: none; }
 }
+
+/* タイトル戦の二日制(docs/title-match-day-design.md)。封じ手の開封は、封じ手と同じ和紙の札で、開いた封筒。 */
+.shogi-game .shogi-game__stage-card--unseal {
+  border-color: var(--stage-red);
+  color: var(--night);
+  background: #f6eedd;
+}
+.shogi-game__stage-card--unseal small { color: #6b4b3a; }
+.shogi-game__stage-card--unseal span { font-size: 0.9em; font-weight: 700; }
+.shogi-game .shogi-game__stage-card--unseal b { color: var(--stage-red); font-size: 1.3em; }
+.shogi-game__stage-envelope--open {
+  background:
+    linear-gradient(to top right, transparent calc(50% - 1px), var(--stage-red) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) left top / 50% 45% no-repeat,
+    linear-gradient(to top left, transparent calc(50% - 1px), var(--stage-red) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) right top / 50% 45% no-repeat,
+    #fffcf4;
+}
+.shogi-game__stage-card-predict {
+  margin-top: 0.15em;
+  color: #6b4b3a;
+  font-size: 0.86em;
+  font-style: normal;
+  font-weight: 700;
+}
+.shogi-game__stage-card-predict--hit { color: #2f7a4a; }
+/* 封じ手のあとの「2日目・まとめ」。押せると分かるよう、下線と枠を付ける(タップ領域は札の行の高さ)。 */
+.shogi-game .shogi-game__stage-day--button {
+  min-height: 1.9em;
+  border: 1px solid rgba(255, 252, 244, 0.7);
+  font: inherit;
+  font-size: 0.8em;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+/* 見た目は札の行に収め、押せる範囲だけ上下に広げる(44pxに近づける)。 */
+.shogi-game .shogi-game__stage-day--button { position: relative; }
+.shogi-game .shogi-game__stage-day--button::after { position: absolute; inset: -0.6rem -0.3rem; content: ""; }

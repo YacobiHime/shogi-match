@@ -876,7 +876,16 @@
         <p class="shogi-game__stage-head">
           <span class="shogi-game__stage-event">{{ matchStage.eventText }}</span>
           <strong>{{ matchStage.shortLabel ?? matchStage.label }}</strong>
-          <span v-if="stageDayText" class="shogi-game__stage-day" data-stage-day>{{ stageDayText }}</span>
+          <!-- 封じ手のあとは「2日目・まとめ」のボタン。押すと1日目のまとめ(docs/title-match-day-design.md)。 -->
+          <button
+            v-if="stageDayText && titleDay?.seal"
+            type="button"
+            class="shogi-game__stage-day shogi-game__stage-day--button"
+            data-stage-day
+            data-day-summary-open
+            @click="daySummaryOpen = true"
+          >{{ stageDayText }}・まとめ</button>
+          <span v-else-if="stageDayText" class="shogi-game__stage-day" data-stage-day>{{ stageDayText }}</span>
         </p>
         <p v-if="matchStage.venue" class="shogi-game__stage-venue">対局場 {{ matchStage.venue }}</p>
         <p class="shogi-game__stage-line">
@@ -1041,6 +1050,16 @@
           <button type="button" data-plan-offer-dismiss @click="dismissCoachPlanOffer">このまま指す</button>
         </div>
       </div>
+      <!--
+        タイトル戦の勝負メシ(docs/title-match-day-design.mdの2章)。20手を越えたら、対局場の名物から選ぶ。
+        強さには関係しない。選ばずに指し続けてもよく、封じ手までに選ばなければ1品目にする。
+      -->
+      <div v-if="lunchOffer" class="shogi-game__plan-interrupt shogi-game__lunch-offer" data-lunch-offer role="status">
+        <p><b>お昼の休憩</b>勝負メシはどれにする？</p>
+        <div>
+          <button v-for="meal in lunchOffer" :key="meal" type="button" data-lunch-choice @click="chooseLunch(meal)">{{ meal }}</button>
+        </div>
+      </div>
       <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
         <span>この囲いでは、先に飛車を振る場所を選んでね</span>
         <div>
@@ -1188,11 +1207,26 @@
             </span>
             <b v-if="matchStage.stakes">{{ matchStage.stakes }}</b>
           </template>
-          <template v-else>
+          <template v-else-if="stageCard.kind === 'seal'">
             <i class="shogi-game__stage-envelope" aria-hidden="true"></i>
             <small>1日目はここまで</small>
             <strong>封じ手</strong>
             <span>この手を封筒にしまって、2日目に開けるよ</span>
+            <em v-if="unsealView?.predicted" class="shogi-game__stage-card-predict" data-seal-predict>控室の予想は{{ unsealView.predicted }}</em>
+          </template>
+          <!-- 2日目の朝、立会人が封筒を開けて封じ手を読み上げる。控室の予想と同じなら「予想どおり」。 -->
+          <template v-else>
+            <i class="shogi-game__stage-envelope shogi-game__stage-envelope--open" aria-hidden="true"></i>
+            <small>2日目の朝</small>
+            <strong>封じ手の開封</strong>
+            <span>{{ unsealView?.opener }}</span>
+            <b data-unseal-move>{{ unsealView?.move }}</b>
+            <em
+              v-if="unsealView?.verdict"
+              class="shogi-game__stage-card-predict"
+              :class="{ 'shogi-game__stage-card-predict--hit': unsealView.matched }"
+              data-unseal-verdict
+            >{{ unsealView.verdict }}</em>
           </template>
         </div>
       </Transition>
@@ -1924,11 +1958,15 @@
           <button v-else type="button" class="shogi-game__rematch" @click="leaveToTournamentScreen">
             {{ tournamentResult.done ? "結果を見る" : tournamentResult.back }}
           </button>
+          <button v-if="resultKansenki" type="button" class="shogi-game__analysis-button" data-kansenki-open @click="kansenkiShown = resultKansenki">観戦記を読む</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
           <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch({ toHome: true })">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
       </div>
     </div>
+    <!-- タイトル戦の1日目のまとめと観戦記(docs/title-match-day-design.md)。結果の窓の上にも重ねて開く。 -->
+    <TitleDaySheet v-if="daySummaryOpen && daySummaryView" mode="summary" :summary="daySummaryView" @close="daySummaryOpen = false" />
+    <TitleDaySheet v-if="kansenkiShown" mode="kansenki" :article="kansenkiShown" @close="kansenkiShown = null" />
 
     <!--
       棋力の測定中(終局から結果が出るまで)。結果は少し遅れて出るので、測定中だと分かる大きな札を盤の上に出す。
@@ -2090,6 +2128,7 @@ import type ShogiTutorialComponent from "./ShogiTutorial.vue";
 import type ShogiProblemSetComponent from "./ShogiProblemSet.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import OpeningPlanSheet, { type OpeningPlanEntry } from "./OpeningPlanSheet.vue";
+import TitleDaySheet, { type DaySummaryView, type KansenkiView } from "./TitleDaySheet.vue";
 import FormationThumb from "./FormationThumb.vue";
 import { ALL_OPENING_PLANS, openingPlanById, openingPlanFor } from "./core/opening-catalog.mjs";
 import {
@@ -2121,6 +2160,24 @@ import {
   traitCard,
 } from "./core/match-presence.mjs";
 import { byoyomiSeconds } from "./core/byoyomi.mjs";
+import {
+  LUNCH_PLY,
+  daySummary,
+  emptyDay,
+  lunchMenu,
+  normalizeDay,
+  noteDayRate,
+  noteDayThink,
+  opponentMeal,
+  ratePoints,
+  roomMembers,
+  roomVoices,
+  saveKansenki,
+  thinkText,
+  trimDay,
+  unsealCard,
+  writeKansenki,
+} from "./core/title-day.mjs";
 import {
   PLAN_CONFIRM_SEARCH,
   confirmPlanAdvice,
@@ -2262,6 +2319,7 @@ import {
 import { getIdleCoachAdvice, IDLE_COACH_DELAY_MS } from "./core/idle-coach-advice.mjs";
 import {
   formatHintMove,
+  formatHintPrincipalVariation,
   formatSpokenMove,
   getHintMoves,
   getHintSearchSettings,
@@ -2650,6 +2708,8 @@ type RyuoGame = {
   event?: "ryuo" | "meijin";
   /** 対局を始めたときの舞台(docs/match-stage-design.md)。終局後に期が次の局へ進んでも、この局の札のまま。 */
   stage?: MatchStage | null;
+  /** タイトル戦(二日制)の記録。勝率・考えた時間・勝負メシ・封じ手(docs/title-match-day-design.md)。 */
+  day?: ReturnType<typeof emptyDay>;
 };
 const ryuoCareer = ref(loadCareer(browserStorage()));
 /** 竜王戦に出る架空の棋士の名簿。期をまたいで残り、期が終わるたびに更新する。最初の期に作る。 */
@@ -2800,6 +2860,7 @@ function startPresence({ greet = true }: { greet?: boolean } = {}) {
 function notePresenceScore(score?: EngineEvaluation | null) {
   if (!tournamentOpponent.value) return;
   presenceScore.value = score ?? null;
+  noteTitleDayRate(score ?? null);
   const moment = midgameMoment(score ?? null, opponentSaid);
   if (moment) {
     opponentSaid = [...opponentSaid, moment];
@@ -3513,23 +3574,200 @@ watch(moveCount, (ply) => {
  * タイトル戦(二日制)は、1日目の終わりの手数を越えて最初にプレイヤーが指した手を封じ手にし、2日目へ進める。
  * どちらも盤の操作は妨げない(盤を触ると消える)。
  */
-const stageCard = ref<{ id: number; kind: "opening" | "seal" } | null>(null);
+const stageCard = ref<{ id: number; kind: "opening" | "seal" | "unseal" } | null>(null);
 let stageCardTimer: ReturnType<typeof setTimeout> | undefined;
-function showStageCard(kind: "opening" | "seal") {
+function showStageCard(kind: "opening" | "seal" | "unseal") {
   clearTimeout(stageCardTimer);
   stageCard.value = { id: Date.now(), kind };
   stageCardTimer = setTimeout(hideStageCard, STAGE_CARD_MS);
 }
 function hideStageCard() {
   clearTimeout(stageCardTimer);
+  const sealed = stageCard.value?.kind === "seal";
   stageCard.value = null;
+  // 封じ手の札のあとは、2日目の朝の「封じ手の開封」へ続ける(盤を触って閉じたときも)。
+  if (sealed && active.value && unsealView.value) showStageCard("unseal");
 }
 const stageDayText = computed(() => stageDay(matchStage.value, moveCount.value, activePlayerColor.value));
 watch(moveCount, (ply, previous) => {
   const stage = matchStage.value;
-  if (!stage?.twoDay || reviewMode.value || !active.value || previous !== ply - 1) return;
-  if (ply === stageSealPly(activePlayerColor.value)) showStageCard("seal");
+  if (!stage?.twoDay || reviewMode.value || !active.value) return;
+  // 待ったで戻したら、戻した手数より後の記録(封じ手も)を消す。
+  if (previous !== undefined && ply < previous) updateTitleDay((day) => trimDay(day, ply));
+  if (previous === ply - 1) {
+    // 指したのがプレイヤーなら(指したあとは相手の手番)、考えた時間を残す。
+    if (thinkStartedAt && record.value.position.color !== humanColor.value) {
+      const elapsed = thinkElapsed();
+      updateTitleDay((day) => noteDayThink(day, ply, elapsed));
+    }
+    if (ply === stageSealPly(activePlayerColor.value)) sealTitleDay(ply);
+  }
+  if (record.value.position.color === humanColor.value) startThink();
+  else thinkStartedAt = 0;
 });
+
+// ---- タイトル戦の二日制(docs/title-match-day-design.md): 1日目のまとめ・封じ手の開封・勝負メシ・観戦記
+/** いまの局の記録。タイトル戦(二日制)だけ。 */
+const titleDay = computed(() => (matchStage.value?.twoDay ? ryuoGame.value?.day ?? null : null));
+const daySummaryOpen = ref(false);
+const kansenkiShown = ref<KansenkiView | null>(null);
+/** 終えた局の観戦記(結果の窓の「観戦記を読む」)。 */
+const resultKansenki = ref<KansenkiView | null>(null);
+/** 控室の第1候補(助言の読みの最善手)。封じ手の前の局面のものを、封じ手予想にする。 */
+let roomPick: { ply: number; move: string } | null = null;
+function updateTitleDay(change: (day: ReturnType<typeof emptyDay>) => ReturnType<typeof emptyDay>) {
+  const game = ryuoGame.value;
+  if (!game?.day) return;
+  ryuoGame.value = { ...game, day: change(game.day) };
+}
+function resetTitleDay() {
+  roomPick = null;
+  daySummaryOpen.value = false;
+  kansenkiShown.value = null;
+  resultKansenki.value = null;
+  startThink();
+}
+// 考えた時間(手番が来てから指すまで)。画面を隠しているあいだは数えない。
+let thinkStartedAt = 0;
+let thinkHiddenAt = 0;
+let thinkHiddenMs = 0;
+function startThink() {
+  thinkStartedAt = Date.now();
+  thinkHiddenMs = 0;
+  thinkHiddenAt = typeof document !== "undefined" && document.hidden ? thinkStartedAt : 0;
+}
+function thinkElapsed() {
+  const now = Date.now();
+  return Math.max(0, now - thinkStartedAt - thinkHiddenMs - (thinkHiddenAt ? now - thinkHiddenAt : 0));
+}
+function onThinkVisibility() {
+  if (!thinkStartedAt) return;
+  if (document.hidden) thinkHiddenAt = Date.now();
+  else if (thinkHiddenAt) {
+    thinkHiddenMs += Date.now() - thinkHiddenAt;
+    thinkHiddenAt = 0;
+  }
+}
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", onThinkVisibility);
+onBeforeUnmount(() => {
+  if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onThinkVisibility);
+});
+/** 手番ごとの勝率(中継と同じ式)を残す。 */
+function noteTitleDayRate(score: EngineEvaluation | null) {
+  if (!titleDay.value || !score) return;
+  const rate = playerWinRate(score);
+  if (rate === null) return;
+  updateTitleDay((day) => noteDayRate(day, moveHistory.length, rate * 100));
+}
+/** ply手目の手の言葉(▲4五歩)。usiは、その手数で指した手(か、指さなかった予想の手)。 */
+function dayMoveText(ply: number, usi: string) {
+  if (!usi || ply < 1) return "";
+  try {
+    const texts = formatHintPrincipalVariation([...moveHistory.slice(0, ply - 1), usi], matchInitialSfen.value, ply).split(" → ");
+    return texts.length === ply ? `${ply % 2 === 1 ? "▲" : "△"}${texts[ply - 1]}` : "";
+  } catch {
+    return "";
+  }
+}
+const dayFormation = (color: Color) => {
+  const text = formationTextForColor(color);
+  return text === UNDETERMINED_FORMATION ? "" : text;
+};
+/** 封じ手。予想・駒の損得・戦型をそのときの形で残し、勝負メシを選んでいなければ1品目にする。 */
+function sealTitleDay(ply: number) {
+  const move = moveHistory[ply - 1] ?? "";
+  const predicted = roomPick && roomPick.ply === ply - 1 ? roomPick.move : "";
+  const venue = matchStage.value?.venue ?? "";
+  updateTitleDay((day) => ({
+    ...day,
+    meal: day.meal || lunchMenu(venue)[0],
+    seal: { ply, move, predicted, material: playerMaterialBalance(), black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE) },
+  }));
+  showStageCard("seal");
+}
+/** 控室の顔ぶれ(立会人・解説・観戦記者)。名簿の架空の棋士から選ぶ。 */
+const dayMembers = computed(() => roomMembers({
+  roster: ryuoRoster.value,
+  opponentId: ryuoGame.value?.opponentId ?? "",
+  oshiId: ryuoOshi.value?.id ?? null,
+  seed: `${matchStage.value?.eventText ?? ""}:${matchStage.value?.label ?? ""}`,
+}));
+const unsealView = computed(() => {
+  const seal = titleDay.value?.seal;
+  if (!seal) return null;
+  const witness = dayMembers.value.witness;
+  const predicted = seal.predicted ? dayMoveText(seal.ply, seal.predicted) : "";
+  return {
+    ...unsealCard({ witness: witness ? `${witness.name}${witness.dan}` : "", moveText: dayMoveText(seal.ply, seal.move), predictedText: predicted }),
+    predicted,
+  };
+});
+/** 勝負メシの札。20手を越えたら、選ぶか封じ手まで出す。 */
+const lunchOffer = computed(() => {
+  const day = titleDay.value;
+  if (!day || day.meal || day.seal || !active.value || result.value || moveCount.value <= LUNCH_PLY) return null;
+  return lunchMenu(matchStage.value?.venue ?? "");
+});
+function chooseLunch(meal: string) {
+  const venue = matchStage.value?.venue ?? "";
+  updateTitleDay((day) => ({ ...day, meal }));
+  const opponent = ryuoOpponent.value;
+  if (opponent) showPresence("news", `昼食休憩：${opponent.name}さんは${opponentMeal(venue, opponent.id)}を注文`);
+  persistMatchState();
+}
+const daySummaryView = computed<DaySummaryView | null>(() => {
+  const day = titleDay.value;
+  const stage = matchStage.value;
+  const seal = day?.seal;
+  if (!day || !stage || !seal) return null;
+  const summary = daySummary({ day, untilPly: seal.ply });
+  const you = playerDisplayName(playerName.value);
+  const opponentName = ryuoOpponent.value?.name ?? "相手";
+  const theirMeal = opponentMeal(stage.venue, ryuoGame.value?.opponentId ?? "");
+  const longest = summary.longest;
+  const longestText = longest ? `${longest.ply}手目 ${dayMoveText(longest.ply, moveHistory[longest.ply - 1] ?? "")}` : "";
+  return {
+    heading: `${stage.eventText} ${stage.shortLabel ?? stage.label}・封じ手まで${seal.ply}手`,
+    venue: stage.venue,
+    rate: summary.rate,
+    points: ratePoints(summary.rates, seal.ply),
+    formationText: seal.black && seal.white ? `先手 ${seal.black} 対 後手 ${seal.white}` : "定跡を離れた力戦",
+    materialText: `あなたから見て ${materialLabel(seal.material).text}`,
+    thinkText: `合計 ${thinkText(summary.thinkTotal)}${longest && longest.ms >= 30000 ? `・いちばん長いのは${longestText}（${thinkText(longest.ms)}）` : ""}`,
+    mealText: day.meal ? `あなた ${day.meal}・${opponentName}さん ${theirMeal}` : "",
+    voices: roomVoices({
+      summary, members: dayMembers.value, userColor: activePlayerColor.value, formations: { black: seal.black, white: seal.white },
+      material: seal.material, userName: you, opponentName, meal: day.meal, opponentMeal: theirMeal, longestText,
+    }),
+    sealText: dayMoveText(seal.ply, seal.move),
+    predictedText: unsealView.value?.predicted ?? "",
+  };
+});
+/** タイトル戦の終局で、観戦記を書いて残す(やこびノートの「大会」で読み返せる)。 */
+function writeTitleKansenki(win: boolean, plies: number) {
+  const game = ryuoGame.value;
+  const stage = matchStage.value;
+  const day = titleDay.value;
+  if (!game || !stage?.twoDay || !day) return;
+  const marks = [...stage.marks, win ? "win" : "loss"];
+  const wins = marks.filter((mark) => mark === "win").length;
+  const decided = finishMilestone?.kind === "crown" ? (finishMilestone.seal === "防衛" ? "竜王防衛" : "竜王獲得")
+    : finishCrowned ? (stage.userRole === "名人" ? "名人防衛" : "名人獲得") : "";
+  const label = stage.shortLabel ?? stage.label;
+  const text = writeKansenki({
+    eventText: stage.eventText, label, venue: stage.venue, userName: playerDisplayName(playerName.value),
+    opponentName: ryuoOpponent.value?.name ?? "相手", userColor: activePlayerColor.value,
+    formations: { black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE) }, day,
+    opponentMeal: opponentMeal(stage.venue, game.opponentId),
+    sealText: day.seal ? dayMoveText(day.seal.ply, day.seal.move) : "",
+    predictedText: unsealView.value?.predicted ?? "",
+    win, plies, decided, score: `${wins}勝${marks.length - wins}敗`,
+    moveText: (ply: number) => dayMoveText(ply, moveHistory[ply - 1] ?? ""),
+  });
+  const entry = { id: `${stage.eventText}:${label}:${Date.now()}`, at: Date.now(), eventText: stage.eventText, label, venue: stage.venue, win, ...text };
+  saveKansenki(browserStorage(), entry);
+  resultKansenki.value = entry;
+}
 onBeforeUnmount(() => clearTimeout(stageCardTimer));
 /*
  * 大会の秒読みの演出(エントリー設定の「秒読みの演出」。docs/tournament-match-presence-design.mdの7章)。
@@ -3539,7 +3777,8 @@ const { byoyomiState } = useByoyomi({
   seconds: () => (matchKind.value === "tournament" ? byoyomiSeconds(tournamentSeasonOf(ryuoGame.value)?.settings) : 0),
   shown: () => active.value && !result.value && !reviewMode.value && normalizedMode.value === "cpu"
     && record.value.position.color === humanColor.value,
-  paused: () => thinking.value || guidedMateReplyPending.value || dexFromMatch.value || dexShelfOpen.value || Boolean(stageCard.value),
+  paused: () => thinking.value || guidedMateReplyPending.value || dexFromMatch.value || dexShelfOpen.value || Boolean(stageCard.value)
+    || daySummaryOpen.value,
   turnKey: () => moveCount.value,
   play: (kind) => moveSounds.play(kind),
 });
@@ -5153,7 +5392,8 @@ function startRyuoMatch() {
     userName: playerName.value,
     stakes: (event === "meijin" ? meijinView.value : ryuoView.value)?.pending?.stakes ?? null,
   });
-  ryuoGame.value = { ...game, outcome: undefined, replay: false, stage };
+  ryuoGame.value = { ...game, outcome: undefined, replay: false, stage, day: stage?.twoDay ? emptyDay() : undefined };
+  resetTitleDay();
   ryuoCpuMoves = [];
   matchStarted.value = true;
   pregameOpen.value = false;
@@ -6228,6 +6468,10 @@ function navigateBack() {
   if (welcomeOpen.value && homeOpen.value) {
     // 初回の案内は、選択肢か「自分で選ぶ」を押すまで残す。戻るで回答済みにしない。
     return;
+  } else if (kansenkiShown.value) {
+    kansenkiShown.value = null;
+  } else if (daySummaryOpen.value) {
+    daySummaryOpen.value = false;
   } else if (assistToolsCollapsed.value && assistToolsOpen.value) {
     closeAssistTools(true);
   } else if (ladderNoticeOpen.value) {
@@ -6624,6 +6868,7 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
       stage: savedRyuo.stage && typeof savedRyuo.stage === "object" && ["plain", "big", "title"].includes(savedRyuo.stage.weight)
         ? savedRyuo.stage
         : null,
+      day: savedRyuo.stage?.twoDay ? normalizeDay(savedRyuo.day) : undefined,
     }
     : null;
   matchKind.value = snapshot.matchKind === "learning" ? "learning" : restoredRyuo ? "tournament" : "normal";
@@ -7431,6 +7676,8 @@ async function updateDedicatedCoachAdvice(
     : null;
   const mateThreat = mateThreatResult?.status === "mate";
   const bestMove = candidates.find((candidate) => candidate.rank === 1)?.move;
+  // タイトル戦の封じ手予想は、この読みの最善手(控室の第1候補)。
+  if (bestMove) roomPick = { ply: analyzedHistoryLength, move: bestMove };
   const riskAdvice = coachLevel.value === "detailed"
     ? getCandidateRiskAdvice(normalizedCandidates, {
         inCheck,
@@ -8231,6 +8478,7 @@ function finish(matchResult: MatchResult) {
   finishMilestone = null;
   finishCrowned = false;
   recordRyuoOutcome(matchResult);
+  if (tournamentFinish) writeTitleKansenki(outcome === "win", matchResult.moveCount);
   if (tournamentFinish) showFinishStamp(outcome === "win", { event: tournamentEvent, weight: stageWeight });
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
   measureMode.value = false;
