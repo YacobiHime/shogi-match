@@ -42,19 +42,19 @@ describe('rating to level', () => {
     expect(anchorLevel(BASE_DIFFICULTY + 1) - anchorLevel(BASE_DIFFICULTY)).toBe(LEVELS_PER_DIFFICULTY);
     expect(ratingToLevel(ANCHOR.rating, BASE_DIFFICULTY)).toBe(Math.round(ladderLevelFromOld(ANCHOR.level)));
     expect(ratingToLevel(ANCHOR.rating, BASE_DIFFICULTY - 2)).toBe(Math.round(ladderLevelFromOld(ANCHOR.level - 2 * LEVELS_PER_DIFFICULTY)));
-    // 基準の難易度の6組の平均は、前の表の一級(Lv30)と同じ強さで、新しい表の1級のあたり。
-    expect(Math.round(groupMeanLevel(6, BASE_DIFFICULTY))).toBeGreaterThanOrEqual(14);
-    expect(Math.round(groupMeanLevel(6, BASE_DIFFICULTY))).toBeLessThanOrEqual(16);
+    // 基準の難易度の6組の平均は、前の表の一級(Lv30)と同じ強さで、今の表の1級(Lv24)のあたり。
+    expect(Math.round(groupMeanLevel(6, BASE_DIFFICULTY))).toBeGreaterThanOrEqual(23);
+    expect(Math.round(groupMeanLevel(6, BASE_DIFFICULTY))).toBeLessThanOrEqual(25);
   });
 
-  it('keeps the rating order and clamps to Lv0..40', () => {
+  it('keeps the rating order and clamps to Lv1..49', () => {
     for (let difficulty = 1; difficulty <= 14; difficulty += 1) {
       let previous = -Infinity;
       for (let rating = 800; rating <= 2400; rating += 25) {
         const level = ratingToLevel(rating, difficulty);
         expect(level).toBeGreaterThanOrEqual(previous);
-        expect(level).toBeGreaterThanOrEqual(0);
-        expect(level).toBeLessThanOrEqual(40);
+        expect(level).toBeGreaterThanOrEqual(1);
+        expect(level).toBeLessThanOrEqual(49);
         previous = level;
       }
     }
@@ -80,7 +80,7 @@ describe('rating to level', () => {
       expect(GROUP_MEAN_RATING[group - 1]).toBeGreaterThan(GROUP_MEAN_RATING[group]);
       expect(groupMeanLevel(group - 1, 9)).toBeGreaterThan(groupMeanLevel(group, 9));
     }
-    expect(recommendedDifficulty(18)).toBe(9);
+    expect(recommendedDifficulty(27)).toBe(9);
     // おすすめの番号は、勝率7割に当たる相手のLvにいちばん近い。
     for (const level of [3, 10, 20]) {
       const best = recommendedDifficulty(level);

@@ -51,7 +51,7 @@ describe('実際の勝ち負けで直す', () => {
     state = play(state.rating, state.games, []);
     state = { ...state, history: [...play(1200, 12, [[15, 'loss'], [15, 'loss'], [15, 'loss'], [13, 'win'], [14, 'win'], [14, 'win']]).history] };
     state.levels = { 15: { wins: 0, losses: 3, draws: 0 }, 13: { wins: 1, losses: 0, draws: 0 }, 14: { wins: 2, losses: 0, draws: 0 } };
-    expect(unbeatenCap(state)).toBe(40);
+    expect(unbeatenCap(state)).toBe(49);
     expect(recommendPlay(state)).toMatchObject({ level: 15, kind: 'challenge', title: 'Lv.15に挑戦' });
   });
 
@@ -62,7 +62,7 @@ describe('実際の勝ち負けで直す', () => {
     const recovered = play(stuck.rating, stuck.games, [[15, 'win']]);
     recovered.history = [...stuck.history, ...recovered.history];
     recovered.levels = { ...stuck.levels, 15: { wins: 2, losses: 0, draws: 2 } };
-    expect(unbeatenCap(recovered)).toBe(40);
+    expect(unbeatenCap(recovered)).toBe(49);
   });
 
   it('同じLvに2連敗したら、1つ下', () => {
@@ -75,13 +75,13 @@ describe('実際の勝ち負けで直す', () => {
     expect(recommendPlay(state)).toMatchObject({ level: 15, kind: 'first-win', reason: 'Lv.14に初勝利！ 次は1つ上へ' });
   });
 
-  it('直前に指したLvから、1回で2つより大きく動かさない。Lv1〜40に収める', () => {
+  it('直前に指したLvから、1回で2つより大きく動かさない。Lv1〜49に収める', () => {
     const state = play(2000, 12, [[5, 'draw']]);
     const plan = recommendPlay(state);
     expect(plan.level).toBeLessThanOrEqual(7);
     expect(recommendPlay(play(0, 12, [[0, 'loss'], [0, 'loss'], [0, 'loss']])).level).toBe(1);
-    const top = play(3400, 30, [[40, 'win'], [40, 'win']]);
-    expect(recommendPlay(top).level).toBeLessThanOrEqual(40);
+    const top = play(3400, 30, [[49, 'win'], [49, 'win']]);
+    expect(recommendPlay(top).level).toBeLessThanOrEqual(49);
   });
 
   it('対局が少ないうち(10局未満)は、連敗などの規則を使わない', () => {
@@ -107,8 +107,8 @@ describe('終局画面の主ボタン', () => {
     expect(resultNextStep({ won: true, rated: true, level: 15, lanceHandicap: false, firstWin: false }).reason).toBe('Lv.15に勝ったね。次は1つ上へ');
   });
 
-  it('Lv40は上限なので上を勧めない。香落ちで勝ったら平手。負け・練習の対局はnull', () => {
-    expect(resultNextStep({ won: true, rated: true, level: 40, lanceHandicap: false, firstWin: false })).toMatchObject({ kind: 'top', title: 'もう一局' });
+  it('Lv49は上限なので上を勧めない。香落ちで勝ったら平手。負け・練習の対局はnull', () => {
+    expect(resultNextStep({ won: true, rated: true, level: 49, lanceHandicap: false, firstWin: false })).toMatchObject({ kind: 'top', title: 'もう一局' });
     expect(resultNextStep({ won: true, rated: false, level: 15, lanceHandicap: true, firstWin: false })).toMatchObject({ kind: 'even', level: 15, title: '平手でLv.15に挑む', sameTitle: '香落ちでもう一局' });
     expect(resultNextStep({ won: false, rated: true, level: 15, lanceHandicap: false, firstWin: false })).toBeNull();
     expect(resultNextStep({ won: true, rated: false, level: 15, lanceHandicap: false, firstWin: false })).toBeNull();

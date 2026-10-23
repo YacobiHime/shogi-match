@@ -1,23 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
   CALIBRATION_PRESETS,
-  CPU_LOGIC_AI_LEVEL,
   CPU_STRENGTH_PRESETS,
   sourceLevelSettings,
   DEFAULT_STRENGTH_VALUE,
   calibratedHybridSearchSettings,
   getStrengthSearchSettings,
+  logicLevelOf,
   normalizeStrengthValue,
   searchSettingsForSkill,
   strengthPresetFor,
   usesNaturalMoveOnly,
 } from './strength-settings.mjs';
 
-// 2026-09-26版・2026-10-07版の識別値と、2026-10-22の段級位の作り直しのあとの表示名。
-// 旧URL・保存データは、同じ段級位(なくなった26級〜16級は15級)のレベルへ引き継ぐ。
+// 2026-09-26版・2026-10-07版の識別値と、2026-10-23の50段階の表示名。
+// 旧URL・保存データは、同じ段級位(今の表にない26級・25級は24級)のレベルへ引き継ぐ。
 const LEGACY_PRESETS = [
-  [1000, '駒の動きを覚えたて'], [1100, '15級程度'], [2000, '15級程度'], [3000, '15級程度'], [4000, '15級程度'],
-  [4500, '15級程度'], [5000, '15級程度'], [6000, '14級程度'], [7000, '13級程度'],
+  [1000, '駒の動きを覚えたて'], [1100, '24級程度'], [1200, '24級程度'], [1300, '24級程度'], [1800, '20級程度'],
+  [2000, '19級程度'], [3000, '18級程度'], [4000, '17級程度'],
+  [4500, '16級程度'], [5000, '15級程度'], [6000, '14級程度'], [7000, '13級程度'],
   [8000, '12級程度'], [10000, '11級程度'], [12000, '10級程度'], [15000, '9級程度'],
   [20000, '8級程度'], [25000, '7級程度'], [30000, '6級程度'], [60000, '5級程度'], [65000, '5級程度'],
   [70000, '4級程度'], [75000, '4級程度'], [80000, '3級程度'], [90000, '3級程度'], [100000, '2級程度'], [125000, '2級程度'],
@@ -35,16 +36,16 @@ const LEGACY_PRESETS = [
 const presetByLabel = (label) => CPU_STRENGTH_PRESETS.find((preset) => preset.label === label);
 
 describe('CPU strength settings', () => {
-  it('offers Lv0 plus forty levels from 15級 to 藤井聡太並み (2026-10-22)', () => {
-    expect(CPU_STRENGTH_PRESETS).toHaveLength(41);
+  it('offers Lv0 plus forty-nine levels from 24級 to 藤井聡太並み (2026-10-23)', () => {
+    expect(CPU_STRENGTH_PRESETS).toHaveLength(50);
     expect(CPU_STRENGTH_PRESETS.map(({ level }) => level))
-      .toEqual(Array.from({ length: 41 }, (_, level) => level));
+      .toEqual(Array.from({ length: 50 }, (_, level) => level));
     expect(CPU_STRENGTH_PRESETS[0].label).toBe('駒の動きを覚えたて');
-    // 級は算用数字で1級位に1Lv。
-    for (let grade = 15; grade >= 1; grade -= 1) expect(CPU_STRENGTH_PRESETS[16 - grade].label).toBe(`${grade}級程度`);
-    expect(CPU_STRENGTH_PRESETS.slice(36).map(({ label }) => label))
+    // 級は算用数字で1級位に1Lv。24級がLv1、15級がLv10、1級がLv24。
+    for (let grade = 24; grade >= 1; grade -= 1) expect(CPU_STRENGTH_PRESETS[25 - grade].label).toBe(`${grade}級程度`);
+    expect(CPU_STRENGTH_PRESETS.slice(45).map(({ label }) => label))
       .toEqual(['奨励会三段程度', '若手プロ程度', 'トッププロ程度', 'タイトル保持者程度', '藤井聡太並み']);
-    expect(CPU_STRENGTH_PRESETS.at(-1)).toMatchObject({ level: 40, value: 480000, label: '藤井聡太並み' });
+    expect(CPU_STRENGTH_PRESETS.at(-1)).toMatchObject({ level: 49, value: 480000, label: '藤井聡太並み' });
   });
 
   it('splits amateur dan ranks (段位は漢字) into three levels each, and 七段 into two', () => {
@@ -54,19 +55,29 @@ describe('CPU strength settings', () => {
     expect(CPU_STRENGTH_PRESETS.filter(({ label }) => label === 'アマ七段程度')).toHaveLength(2);
   });
 
-  it('draws every level except Lv0 and Lv40 from the original calibration (source)', () => {
+  it('draws every level except Lv0 and the top from the original calibration (source)', () => {
     expect(CALIBRATION_PRESETS).toHaveLength(41);
     expect(CPU_STRENGTH_PRESETS[0].source).toBe(0);
     expect(CPU_STRENGTH_PRESETS.at(-1).source).toBe(40);
     for (const { level, value, source } of CPU_STRENGTH_PRESETS.slice(1, -1)) {
-      expect(source, `Lv${level}`).toBeGreaterThanOrEqual(11);
+      expect(source, `Lv${level}`).toBeGreaterThan(0);
       expect(source, `Lv${level}`).toBeLessThanOrEqual(39);
       expect(getStrengthSearchSettings(value), `Lv${level}`).toEqual(sourceLevelSettings(source));
     }
-    // 15級(Lv1)は、前の表の15級(もとの校正の11.93)と同じ強さ。
-    expect(CPU_STRENGTH_PRESETS[1].source).toBe(11.93);
-    // ロジックAIで指すLvはない(ファイルは残す)。
-    expect(CPU_LOGIC_AI_LEVEL).toBeNull();
+    // 15級(Lv10)は、前の表の15級(もとの校正の11.93)と同じ強さ。
+    expect(CPU_STRENGTH_PRESETS[10].source).toBe(11.93);
+  });
+
+  it('plays 24級〜16級 with the logic AI at a fractional level, and the rest with the engine', () => {
+    for (const { level, value, source } of CPU_STRENGTH_PRESETS) {
+      const logic = logicLevelOf(value);
+      if (level >= 1 && level <= 9) {
+        expect(logic, `Lv${level}`).toBe(source);
+        expect(source, `Lv${level}`).toBeLessThanOrEqual(10);
+      } else {
+        expect(logic, `Lv${level}`).toBeNull();
+      }
+    }
   });
 
   it('orders identifiers and calibrated skill from weakest to strongest', () => {
@@ -74,7 +85,9 @@ describe('CPU strength settings', () => {
       index === 0 || preset[key] > list[index - 1][key]
     ));
     expect(increasing('value')).toBe(true);
-    expect(increasing('skill')).toBe(true);
+    // 24級〜16級(ロジックAI)の技量は、もとの校正の0.002〜0.02を小数3桁に丸めたもので、隣が同じ値になることがある。
+    expect(CPU_STRENGTH_PRESETS.every((preset, index, list) => index === 0 || preset.skill >= list[index - 1].skill)).toBe(true);
+    expect(CPU_STRENGTH_PRESETS.slice(10).every((preset, index, list) => index === 0 || preset.skill > list[index - 1].skill)).toBe(true);
     expect(increasing('source')).toBe(true);
     expect(CPU_STRENGTH_PRESETS[0].skill).toBe(0);
     expect(CPU_STRENGTH_PRESETS.at(-1).skill).toBe(1);
@@ -89,8 +102,8 @@ describe('CPU strength settings', () => {
   it('rounds unknown values to the nearest level and falls back to the default', () => {
     expect(normalizeStrengthValue(130000)).toBe(150000);
     expect(normalizeStrengthValue(999)).toBe(1000);
-    // 藤井聡太並み(Lv40)が上限。それより大きい値(以前の版のLv41など)はLv40にする。
-    expect(strengthPresetFor(1500000).level).toBe(40);
+    // 藤井聡太並み(Lv49)が上限。それより大きい値(以前の版のLv41など)はLv49にする。
+    expect(strengthPresetFor(1500000).level).toBe(49);
     expect(normalizeStrengthValue(Number.NaN)).toBe(DEFAULT_STRENGTH_VALUE);
     expect(strengthPresetFor(DEFAULT_STRENGTH_VALUE).label).toBe('6級程度');
   });
@@ -125,22 +138,22 @@ describe('CPU strength settings', () => {
   it('plays unread natural moves only at level zero and narrows vision below', () => {
     const settings = (level) => getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value);
     expect(settings(0).naturalMoveRate).toBe(1);
-    // 15級(Lv1)は、もとの校正のLv11とLv12を混ぜた強さで、読まない手が少し残る。
-    expect(settings(1).naturalMoveRate).toBeGreaterThan(0);
-    expect(settings(1).naturalMoveRate).toBeLessThan(0.5);
-    // 6級(Lv10)までは、もとのLv12とLv13を混ぜた設定なので、読まない手が少しずつ減って残る。
-    const blended = CPU_STRENGTH_PRESETS.slice(1, 11).map(({ level }) => settings(level).naturalMoveRate);
+    // 15級(Lv10)は、もとの校正のLv11とLv12を混ぜた強さで、読まない手が少し残る(24級〜16級はロジックAIで指す)。
+    expect(settings(10).naturalMoveRate).toBeGreaterThan(0);
+    expect(settings(10).naturalMoveRate).toBeLessThan(0.5);
+    // 6級(Lv19)までは、もとのLv12とLv13を混ぜた設定なので、読まない手が少しずつ減って残る。
+    const blended = CPU_STRENGTH_PRESETS.slice(10, 20).map(({ level }) => settings(level).naturalMoveRate);
     expect(blended.every((rate, index) => index === 0 || rate <= blended[index - 1])).toBe(true);
-    for (const level of [11, 16, 30, 40]) expect(settings(level).naturalMoveRate, `Lv${level}`).toBe(0);
+    for (const level of [20, 25, 39, 49]) expect(settings(level).naturalMoveRate, `Lv${level}`).toBe(0);
     // 読まない手の代わりに、目に付く少数の手だけを読む。
-    expect(settings(1).visionWidth).toBeGreaterThanOrEqual(3);
-    expect(settings(40).visionWidth).toBeUndefined();
+    expect(settings(10).visionWidth).toBeGreaterThanOrEqual(3);
+    expect(settings(49).visionWidth).toBeUndefined();
   });
 
   it('keeps weaker levels on their chosen opening plan longer', () => {
     const scale = (level) => getStrengthSearchSettings(CPU_STRENGTH_PRESETS[level].value).openingPlanScoreScale;
     expect(scale(1)).toBeGreaterThan(2.9);
-    expect(scale(40)).toBe(1);
+    expect(scale(49)).toBe(1);
     expect(CPU_STRENGTH_PRESETS.slice(1).every(({ value }, index, list) => (
       index === 0 || getStrengthSearchSettings(value).openingPlanScoreScale
         <= getStrengthSearchSettings(list[index - 1].value).openingPlanScoreScale
@@ -193,7 +206,7 @@ describe('CPU strength settings', () => {
     expect(lv15.moveLossCap).toBeLessThanOrEqual(600);
     expect(lv15.blunderLimit).toBeLessThanOrEqual(2);
     // 低レベルでも、大駒をただで渡すほどの損は上限で防ぐ。
-    expect(getStrengthSearchSettings(CPU_STRENGTH_PRESETS[2].value).moveLossCap).toBeLessThanOrEqual(1300);
+    expect(getStrengthSearchSettings(CPU_STRENGTH_PRESETS[11].value).moveLossCap).toBeLessThanOrEqual(1300);
     expect(lv15.simplicity).toBeGreaterThan(0.5);
     expect(getStrengthSearchSettings(1000).simplicity).toBe(1);
   });
@@ -201,7 +214,7 @@ describe('CPU strength settings', () => {
   it('keeps the strongest level as a pure best-move search', () => {
     const strongest = getStrengthSearchSettings(480000);
     expect(calibratedHybridSearchSettings(40, strongest)).toBe(strongest);
-    // Lv40だけ、曲線の上端(48万)より1.5倍多く、2スレッドで読む。
+    // 藤井聡太並み(Lv49)だけ、曲線の上端(48万)より1.5倍多く、2スレッドで読む。
     expect(getStrengthSearchSettings(480000)).toEqual({
       nodes: 720000,
       searchThreads: 2,

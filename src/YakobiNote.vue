@@ -467,14 +467,14 @@
               </ul>
             </section>
 
-            <!-- Lvの壁: 10段ずつ4本の階段。次の壁を縁取り、おすすめの強さの前後に印。 -->
+            <!-- Lvの壁: 入門(24級〜16級)の9段と、10段ずつ4本の階段。次の壁を縁取り、おすすめの強さの前後に印。 -->
             <section v-else-if="albumPage === 'levels'" class="shogi-note__card shogi-note__album" aria-label="Lvの壁" data-album-levels>
               <p class="shogi-note__hint">
                 CPUの各Lvに初めて勝つと、印が1つ増えるよ（レーティングの対象の対局だけ）。
                 <template v-if="wall.next">次の壁は<b>Lv.{{ wall.next }}</b>。</template>
               </p>
               <div v-for="row in wall.rows" :key="row.id" class="shogi-note__wall-row">
-                <p class="shogi-note__wall-label">{{ row.label }}<small>{{ row.got }}/10</small></p>
+                <p class="shogi-note__wall-label">{{ row.label }}<small>{{ row.got }}/{{ row.levels.length }}</small></p>
                 <ol class="shogi-note__wall" :aria-label="`${row.label}のLv`">
                   <li
                     v-for="cell in row.levels"
@@ -808,7 +808,7 @@ const tesujiCards = computed(() => TESUJI_IDS.map((id) => {
     isNew: Boolean(got && collectionSeenAt && got.firstAt > collectionSeenAt),
   };
 }));
-const wall = computed(() => levelWall(collection.value, { recommended: props.state.games ? recommendedLevel(props.state) : null }));
+const wall = computed(() => levelWall(collection.value, { recommended: props.state.games ? recommendedLevel(props.state.rating) : null }));
 /** ページの切り替えに、取った数と全部の数を添える(記念は数えない)。 */
 const albumPageTabs = computed(() => ALBUM_PAGES.map((page) => {
   if (FORMATION_PAGES.has(page.id)) {

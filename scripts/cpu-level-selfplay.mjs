@@ -19,11 +19,11 @@ import { Position } from "tsshogi";
 import { canBlunder, isBlunderChoice } from "../src/core/cpu-move-choice.mjs";
 import { chooseLegacyCpuMove as chooseCpuMove } from "./lib/legacy-cpu-move-choice.mjs";
 import "./lib/ts-register.mjs";
-const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs");
+const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
-import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, searchSettingsForSkill, sourceLevelSettings } from "../src/core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf, searchSettingsForSkill, sourceLevelSettings } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
 
 const MAX_PLY = 256;
@@ -52,7 +52,7 @@ export function strengthForPlayer(spec) {
   const hybrid = spec.match(/^(.+?)(hybrid|legacy|tuned)$/);
   if (hybrid) {
     const base = strengthForPlayer(hybrid[1]);
-    if (!(base.level >= 11 && base.level <= 39)) throw new Error("hybrid/legacyの比較対象はLv11〜39です");
+    if (!(base.logicLevel === undefined && base.level >= 10 && base.level <= 48)) throw new Error("hybrid/legacyの比較対象は、エンジンで指すLv(15級〜タイトル保持者)です");
     if (hybrid[2] === "tuned") return purposefulCalibration(base);
     if (hybrid[2] === "legacy") {
       const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === base.level);
@@ -70,11 +70,17 @@ export function strengthForPlayer(spec) {
     const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === Number(spec.slice(1)));
     if (!preset) throw new Error(`存在しないレベルです: ${spec}`);
     const settings = getStrengthSearchSettings(preset.value);
-    return { ...settings, level: preset.level, ...(preset.level >= 11 && preset.level < 40 && process.argv.includes("--hybrid") ? { logicHybrid: true } : {}) };
+    // 24級〜16級(sourceが10以下)はロジックAIで指す。Lvの番号ではなくsourceで決める。
+    const logic = logicLevelOf(preset.value);
+    return { ...settings, level: preset.level, ...(logic !== null ? { logicLevel: logic } : {}) };
   }
   if (/^s[\d.]+$/.test(spec)) return searchSettingsForSkill(Number(spec.slice(1)));
   // e<もとの校正のLv(小数)>: 低級帯の付け替えを決めるための、もとの校正のLvの設定(例: e12.5)。
-  if (/^e[\d.]+$/.test(spec)) return { ...sourceLevelSettings(Number(spec.slice(1))), level: Math.round(Number(spec.slice(1))) };
+  // 10以下は、ロジックAIの小数のLv(0より大きい。表示の24級〜16級)。
+  if (/^e[\d.]+$/.test(spec)) {
+    const source = Number(spec.slice(1));
+    return { ...sourceLevelSettings(source), level: Math.round(source), ...(source > 0 && source <= 10 ? { logicLevel: source } : {}) };
+  }
   if (/^old\d+$/.test(spec)) {
     const old = OLD_SETTINGS.get(Number(spec.slice(3)));
     if (!old) throw new Error(`比較用の旧設定がありません: ${spec}`);
@@ -133,7 +139,7 @@ async function playGame(engines, players, seed, openingPlies = 0) {
     const engine = engines[color];
     const strength = ply < openingPlies ? OPENING_VARIETY : players[color];
     const sfen = position.sfen;
-    const logicLevel = usesLogicAi(strength.level) ? strength.level : null;
+    const logicLevel = strength.logicLevel ?? null;
     const result = !logicLevel && strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
     let choice = logicLevel ? chooseLogicMove({ sfen, legalMoves: moves, moveHistory: history, level: logicLevel, random }) : await (strength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
       strength,

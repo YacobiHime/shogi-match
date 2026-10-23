@@ -4,14 +4,14 @@
 import fs from "node:fs";
 import "./lib/ts-register.mjs";
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
-const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs");
+const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 import path from "node:path";
 import { Position } from "tsshogi";
 import { purposefulCalibration } from "./lib/purposeful-calibration.mjs";
 import { chooseLegacyCpuMove as chooseCpuMove } from "./lib/legacy-cpu-move-choice.mjs";
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator, LOW_NATURALNESS_THRESHOLD } from "../src/core/move-naturalness.mjs";
-import { CPU_STRENGTH_PRESETS, LOGIC_HYBRID_DEFAULT, getStrengthSearchSettings, searchSettingsForSkill, strengthPresetFor } from "../src/core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, LOGIC_HYBRID_DEFAULT, getStrengthSearchSettings, logicLevelOf, searchSettingsForSkill, strengthPresetFor } from "../src/core/strength-settings.mjs";
 import {
   STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom,
 } from "./lib/node-engine.mjs";
@@ -55,7 +55,7 @@ function reportStrength(preset) {
   const level = CPU_STRENGTH_PRESETS.find(({ value }) => value === preset)?.level;
   let strength = { ...(process.argv.includes("--hybrid") ? getStrengthSearchSettings(preset)
     : searchSettingsForSkill(strengthPresetFor(preset).skill)), level };
-  if (level >= 11 && level < 40) strength.logicHybrid = process.argv.includes("--hybrid");
+  if (level >= 10 && level < 49) strength.logicHybrid = process.argv.includes("--hybrid");
   if (strength.logicHybrid && process.argv.includes("--calibrated")) strength = purposefulCalibration(strength);
   return strength;
 }
@@ -63,7 +63,9 @@ function reportStrength(preset) {
 async function currentChoose(engine, preset, sample, moves, random) {
   const strength = reportStrength(preset);
   const level = strength.level;
-  if (usesLogicAi(level)) return chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level, random });
+  // 24級〜16級は、表のsourceのロジックAIのLvで指す(対局画面と同じ)。
+  const logicLevel = logicLevelOf(preset);
+  if (logicLevel !== null) return chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level: logicLevel, random });
   const result = strength.nodes === 0 ? undefined : await search(engine, sample.sfen, strength);
   const choice = (await (strength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
     strength,

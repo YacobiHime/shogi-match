@@ -947,8 +947,8 @@ const VOLUME_3 = {
                 playerCastle: "mino",
                 opponentStrategy: "ibisha",
                 opponentCastle: "funagakoi",
-                // 15級程度。
-                cpuLevel: 1,
+                // 20級程度(2026-10-23の50段階のLv。駒の動きを覚えた人が、囲いを組んでから戦える相手)。
+                cpuLevel: 5,
                 hintLimit: 3,
                 undoLimit: 3,
               },

@@ -79,8 +79,8 @@ describe('奨励会の世界', () => {
   });
   it('おすすめの受験級は、強いほど上の級', () => {
     expect(RANKS[recommendedExamRank(5)]).toBe('6級');
-    expect(RANKS[recommendedExamRank(24)]).toBe('3級');
-    expect(RANKS[recommendedExamRank(35)]).toBe('1級');
+    expect(RANKS[recommendedExamRank(33)]).toBe('3級');
+    expect(RANKS[recommendedExamRank(44)]).toBe('1級');
   });
 });
 
@@ -277,6 +277,23 @@ describe('保存', () => {
     expect(loaded.run.players[loaded.run.pending.opponentId].name).toBe(career.run.players[career.run.pending.opponentId].name);
     storage.setItem(SHOREIKAI_KEY, '{');
     expect(loadShoreikai(storage)).toEqual(createShoreikaiCareer());
+  });
+  it('50段階の表(2026-10-23)より前の保存は、奨励会員の指すLvを9つ上げる(1回だけ)', () => {
+    const storage = memory();
+    const career = { ...createShoreikaiCareer(), run: passed() };
+    const id = career.run.pending.opponentId;
+    const level = career.run.world.members[id].level;
+    saveShoreikai(storage, career);
+    const raw = JSON.parse(storage.data.get(SHOREIKAI_KEY));
+    delete raw.ladder;
+    raw.run.world.members[id].level = 3;
+    storage.setItem(SHOREIKAI_KEY, JSON.stringify(raw));
+    const loaded = loadShoreikai(storage);
+    expect(loaded.ladder).toBe(3);
+    expect(loaded.run.world.members[id].level).toBe(12);
+    saveShoreikai(storage, loaded);
+    expect(loadShoreikai(storage).run.world.members[id].level).toBe(12);
+    expect(Number.isFinite(level)).toBe(true);
   });
   it('四段になった挑戦を閉じると、要約と棋士番号が残る', () => {
     const pro = toPro(passed());

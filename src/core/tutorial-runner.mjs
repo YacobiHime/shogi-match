@@ -588,8 +588,8 @@ export function lessonStars({ mistakes = 0, hints = 0 } = {}) {
 export const TUTORIAL_MATCH_DEFAULTS = Object.freeze({
   startType: "standard",
   playerColor: "black",
-  // 15級程度。
-  cpuLevel: 1,
+  // 20級程度(2026-10-23の50段階のLv)。
+  cpuLevel: 5,
   hintLimit: 3,
   undoLimit: 3,
   attackGuide: false,

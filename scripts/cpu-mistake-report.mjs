@@ -11,11 +11,11 @@ import "./lib/ts-register.mjs";
 import { Position } from "tsshogi";
 import { chooseLegacyCpuMove } from "./lib/legacy-cpu-move-choice.mjs";
 import { comparableScore } from "../src/core/move-selection.mjs";
-import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf, searchSettingsForSkill } from "../src/core/strength-settings.mjs";
 import { material, playLight, replyLoss, stateFromSfen } from "../src/core/logic-position.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
-const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs");
+const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 const { findMateLine } = await import("../src/core/problem-solver.ts");
 
 function option(name, fallback) {
@@ -159,9 +159,11 @@ async function main() {
       for (let trial = 0; trial < trials; trial += 1) {
         engine.newGame();
         await engine.ready();
-        const logic = () => chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level: usesLogicAi(level) ? level : 10, random });
+        // 24級〜16級は、表のsourceのロジックAIのLvで指す(対局画面と同じ)。
+        const logicLevel = logicLevelOf(preset.value);
+        const logic = () => chooseLogicMove({ sfen: sample.sfen, legalMoves: moves, moveHistory: sample.history, level: logicLevel ?? 10, random });
         let choice;
-        if (usesLogicAi(level)) choice = logic();
+        if (logicLevel !== null) choice = logic();
         else {
           const result = await search(engine, sample.sfen, strength);
           choice = await (legacy ? chooseLegacyCpuMove : chooseAwareMove)({

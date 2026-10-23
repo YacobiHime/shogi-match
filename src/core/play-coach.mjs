@@ -29,7 +29,7 @@ export const MAX_STEP = 2;
 /** 「昇級をかけた一局」にする、次の級までの残り(勝ち1回分)。 */
 export const PROMOTION_MARGIN = 10;
 
-/** 勧めるLv。Lv0は練習相手でレーティングに数えないので、ふだんはLv1(15級)から。 */
+/** 勧めるLv。Lv0は練習相手でレーティングに数えないので、ふだんはLv1(24級)から。 */
 const clampLevel = (level) => Math.min(MAX_LEVEL, Math.max(1, Math.round(level)));
 const presetLabel = (level) => CPU_STRENGTH_PRESETS.find((preset) => preset.level === level)?.label ?? '';
 
@@ -351,7 +351,7 @@ function recommendMatch(state, content, insightGames = [], reward = null) {
     return { level, kind: 'first-win', title: `Lv.${level}に挑戦`, reason: `Lv.${played}に初勝利！ 次は1つ上へ`, base, cap, handicapLevel: null };
   }
   if (losses >= 3) {
-    // 15級(Lv1)に勝てないときは、Lv0(練習相手。レーティングに数えない)と飛車落ち(docs/level-ladder-design.mdの3-4)。
+    // いちばん下の24級(Lv1)に勝てないときは、Lv0(練習相手。レーティングに数えない)と飛車落ち(docs/level-ladder-design.mdの3-4)。
     const level = played <= 1 ? 0 : clampLevel(played - 2);
     if (level < played) {
       return {
@@ -440,7 +440,7 @@ function recentRecordText(games) {
 }
 
 /**
- * 立て直しで勧める駒落ち。15級(Lv1)は飛車落ち、それより上は香落ち(docs/level-ladder-design.mdの3-4)。
+ * 立て直しで勧める駒落ち。いちばん下の24級(Lv1)は飛車落ち、それより上は香落ち(docs/level-ladder-design.mdの3-4)。
  * @param {number} level 連敗したLv
  * @returns {{ id: 'rook' | 'lance', label: string }}
  */
@@ -450,7 +450,7 @@ export function handicapForLevel(level) {
 
 /**
  * 終局画面の主ボタン(4-2)。平手の通常対局で勝ったら1つ上のLv、立て直しの駒落ち(香落ち・飛車落ち)で勝ったら平手。
- * Lv0(練習相手。レーティングに数えない)に勝ったら15級(Lv1)へ。ほかはnull(今の「もう一局」)。
+ * Lv0(練習相手。レーティングに数えない)に勝ったら24級(Lv1)へ。ほかはnull(今の「もう一局」)。
  * @param {{ won: boolean, rated: boolean, level: number | undefined, lanceHandicap?: boolean, handicapLabel?: string, firstWin: boolean }} game
  * @returns {{ kind: 'up' | 'even' | 'top', level: number, title: string, reason: string, sameTitle: string } | null}
  */

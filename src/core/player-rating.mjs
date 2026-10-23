@@ -1,12 +1,14 @@
 // 通常対局(平手・対CPU)の結果から、プレイヤーのレーティングをElo式で計算する。
-// CPUの各レベルには、段級位の目安のレーティングを割り当てる(2026-10-22の作り直し。docs/level-ladder-design.md)。
-// 15級(Lv1)がR30、5級(Lv11)がR630(ユーザーの実測でぴよ将棋の五級)、1Lvあたり R60。Lv0は練習相手で、レーティングに数えない。
+// CPUの各レベルには、段級位の目安のレーティングを割り当てる(2026-10-22の作り直し、2026-10-23に50段階。docs/level-ladder-design.md)。
+// 24級(Lv1)がR30、15級(Lv10)がR570、5級(Lv20)がR1170、1Lvあたり R60。Lv0は練習相手で、レーティングに数えない。
 
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
-import { LADDER_VERSION, ladderLabelFromOld, ladderLevelIndexFromOld, ladderRatingFromOld } from './level-ladder.mjs';
+import {
+  LADDER_V2, LADDER_VERSION, ladderLabelFromOld, ladderLevelIndexFromOld, ladderLevelIndexFromV2, ladderRatingFromOld, ladderRatingFromV2,
+} from './level-ladder.mjs';
 
 export const RATING_STORAGE_KEY = 'yacobihime:shogi-match:player-rating';
-/** はじめの人は15級(Lv1)から。棋力測定とはじめての案内で決まる人は、そちらで決める。 */
+/** はじめの人は24級(Lv1)から。棋力測定とはじめての案内で決まる人は、そちらで決める。 */
 export const INITIAL_RATING = 30;
 const RATING_PER_LEVEL = 60;
 /** 最初の対局数まではレーティングが動きやすいよう、Kを大きくする。 */
@@ -17,7 +19,7 @@ const MAX_HISTORY = 30;
 
 const MAX_LEVEL = CPU_STRENGTH_PRESETS.at(-1).level;
 
-/** CPUのLv(小数も可)に割り当てるレーティング。Lv1(15級)がR30、1LvあたりR60。Lv0は0。 */
+/** CPUのLv(小数も可)に割り当てるレーティング。Lv1(24級)がR30、1LvあたりR60。Lv0は0。 */
 export function levelRating(level) {
   return level <= 0 ? 0 : Math.max(0, Math.round(level * RATING_PER_LEVEL - RATING_PER_LEVEL / 2));
 }
@@ -27,7 +29,7 @@ export function ratingLevel(rating) {
   return ((Number.isFinite(rating) ? rating : INITIAL_RATING) + RATING_PER_LEVEL / 2) / RATING_PER_LEVEL;
 }
 
-/** レーティングに最も近いCPUのLv。Lv1(15級)からLv40まで(Lv0は練習相手で、勧めない)。 */
+/** レーティングに最も近いCPUのLv。Lv1(24級)からいちばん上まで(Lv0は練習相手で、勧めない)。 */
 export function recommendedLevel(rating) {
   return Math.min(MAX_LEVEL, Math.max(1, Math.round(ratingLevel(rating))));
 }
@@ -89,7 +91,7 @@ export function losingStreakAt(state, level) {
 
 /**
  * 同じLvに続けて負けたときの、選べる提案。自動では下げず、挑戦を続ける道と並べて見せる。
- * lowerLevelはLv0の相手ではnull。15級(Lv1)の下は、Lv0(練習相手)。駒落ちは、15級なら飛車落ち、ほかは香落ち。
+ * lowerLevelはLv0の相手ではnull。いちばん下の24級(Lv1)の下は、Lv0(練習相手)。駒落ちは、24級なら飛車落ち、ほかは香落ち。
  * @param {ReturnType<typeof createRatingState>} state
  * @param {number} level
  * @returns {{ level: number, losses: number, lowerLevel: number | null, handicapId: 'rook' | 'lance', handicapLabel: string } | null}
@@ -215,7 +217,7 @@ export function applyRatedGame(state, { opponentLevel, outcome, color, profile, 
 }
 
 /**
- * 自己申告できる段級位の選択肢(15級〜アマ七段)。同じ表示名のレベルが複数あるときは、真ん中のレベルを代表にする。
+ * 自己申告できる段級位の選択肢(24級〜アマ七段)。同じ表示名のレベルが複数あるときは、真ん中のレベルを代表にする。
  * @returns {{ label: string, level: number }[]}
  */
 export function declarableGrades() {
@@ -291,50 +293,62 @@ function remapTally(tally, mapKey) {
 const presetLabelAt = (presets, level) => gradeName(presets.find((preset) => preset.level === level)?.label ?? '');
 
 /**
- * 段級位の作り直し(2026-10-22)の前の保存を、新しい表へ移す。レーティング・相手のLv・申告の名前を、同じ強さのところへ。
+ * 今の表(2026-10-23の50段階)より前の保存を、今の表へ移す。レーティング・相手のLv・申告の名前を、同じ強さのところへ。
+ * 印のない保存はv1(2026-10-21まで)、ladder: 2はv2(2026-10-22の41段階。15級から上は9つ上がり、Rは+540)。
+ * v2で一度も対局・測定・申告をしていない人は、はじめの人と同じ24級(INITIAL_RATING)から。
  * 対局したことのある人には、1回だけ知らせる(ladderNotice。やこび姫が「段級位の物差しを作り直したよ」)。
  * @param {any} parsed 前の版の保存
  */
 export function migrateRatingSnapshot(parsed) {
-  const mapLevel = (key) => String(ladderLevelIndexFromOld(Number(key)));
+  const fromV2 = parsed.ladder === LADDER_V2;
+  const levelIndex = fromV2 ? ladderLevelIndexFromV2 : ladderLevelIndexFromOld;
+  const ratingOf = fromV2 ? ladderRatingFromV2 : ladderRatingFromOld;
+  const labelOf = fromV2 ? (label) => String(label ?? '') : ladderLabelFromOld;
+  const mapLevel = (key) => String(levelIndex(Number(key)));
   const before = Math.max(0, Math.round(parsed.rating));
-  const after = ladderRatingFromOld(before);
   const played = count(parsed.games) > 0 || Boolean(parsed.measured) || Boolean(parsed.declared);
+  const after = fromV2 && !played ? INITIAL_RATING : ratingOf(before);
   return {
     ...parsed,
     ladder: LADDER_VERSION,
     rating: after,
     levels: remapTally(parsed.levels, mapLevel),
     declaredLevels: Object.fromEntries(Object.entries(parsed.declaredLevels ?? {}).map(([label, tally]) => [
-      ladderLabelFromOld(label), remapTally(tally, mapLevel),
+      labelOf(label), remapTally(tally, mapLevel),
     ])),
     declared: parsed.declared && typeof parsed.declared.label === 'string' && Number.isFinite(parsed.declared.level)
-      ? { ...parsed.declared, label: ladderLabelFromOld(parsed.declared.label), level: ladderLevelIndexFromOld(parsed.declared.level) }
+      ? { ...parsed.declared, label: labelOf(parsed.declared.label), level: levelIndex(parsed.declared.level) }
       : parsed.declared ?? null,
     measured: parsed.measured && Number.isFinite(parsed.measured.rating)
-      ? { ...parsed.measured, rating: ladderRatingFromOld(parsed.measured.rating), label: ladderLabelFromOld(parsed.measured.label ?? '') }
+      ? { ...parsed.measured, rating: ratingOf(parsed.measured.rating), label: labelOf(parsed.measured.label ?? '') }
       : parsed.measured ?? null,
     history: Array.isArray(parsed.history) ? parsed.history.filter(Boolean).map((entry) => ({
       ...entry,
-      ...(Number.isFinite(entry.rating) ? { rating: ladderRatingFromOld(entry.rating) } : {}),
-      ...(Number.isFinite(entry.opponentLevel) ? { opponentLevel: ladderLevelIndexFromOld(entry.opponentLevel) } : {}),
+      ...(Number.isFinite(entry.rating) ? { rating: ratingOf(entry.rating) } : {}),
+      ...(Number.isFinite(entry.opponentLevel) ? { opponentLevel: levelIndex(entry.opponentLevel) } : {}),
     })) : [],
     ladderNotice: played ? {
       beforeRating: before,
       afterRating: after,
-      beforeLabel: ladderOldLabel(before),
+      beforeLabel: fromV2 ? v2Label(before) : ladderOldLabel(before),
       afterLabel: presetLabelAt(CPU_STRENGTH_PRESETS, recommendedLevel(after)),
     } : null,
   };
 }
 
-/** 前の表(R=Lv×80)での段級位の名前(知らせに「前は十二級」と出す)。 */
+/** v2の表(R=60×Lv−30、Lv1〜40)での段級位の名前。v2の名前は、今の表の9つ上のLvと同じ。 */
+function v2Label(rating) {
+  const level = Math.min(40, Math.max(1, Math.round((rating + 30) / 60)));
+  return presetLabelAt(CPU_STRENGTH_PRESETS, ladderLevelIndexFromV2(level));
+}
+
+/** v1の表(R=Lv×80)での段級位の名前(知らせに「前は十二級」と出す)。 */
 function ladderOldLabel(rating) {
   const level = Math.min(40, Math.max(0, Math.round(rating / 80)));
   return OLD_LABELS[level] ?? '';
 }
 
-/** 前の表の段級位の名前(Lv0〜40)。知らせの「前は」にだけ使う。 */
+/** v1の表の段級位の名前(Lv0〜40)。知らせの「前は」にだけ使う。 */
 const OLD_LABELS = Object.freeze([
   '駒の動きを覚えたて', '二十六級', '二十五級', '二十四級', '二十三級', '二十二級', '二十一級', '二十級', '十九級', '十八級', '十七級',
   '十六級', '十五級', '十四級', '十三級', '十二級', '十一級', '十級', '九級', '八級', '七級', '六級', '五級', '五級', '四級', '四級',

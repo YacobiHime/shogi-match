@@ -1698,9 +1698,9 @@
           aria-hidden="true"
         >
         <h2 id="ladder-notice-title">段級位の物差しを作り直したよ</h2>
-        <p>CPUの強さを、15級からアマ七段、プロまで測り直したよ。</p>
+        <p>CPUの強さを、いちばん下の24級から藤井聡太並みまでの50段階にしたよ。</p>
         <p v-if="ratingState.ladderNotice" class="shogi-game__ladder-notice">
-          あなたは<strong>{{ ratingState.ladderNotice.afterLabel }}</strong><template v-if="ratingState.ladderNotice.beforeLabel">（前は{{ ratingState.ladderNotice.beforeLabel }}）</template>。<br>
+          あなたは<strong>{{ ratingState.ladderNotice.afterLabel }}</strong><template v-if="ratingState.ladderNotice.beforeLabel && ratingState.ladderNotice.beforeLabel !== gradeName(ratingState.ladderNotice.afterLabel)">（前は{{ ratingState.ladderNotice.beforeLabel }}）</template>。<br>
           レーティングの数字は R{{ ratingState.ladderNotice.beforeRating }} → <strong>R{{ ratingState.ladderNotice.afterRating }}</strong> になったよ。
         </p>
         <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-ladder-notice-ok @click="dismissLadderNoticeDialog">わかった</button>
@@ -2363,8 +2363,8 @@ import {
 } from "./core/engine-mate-check.mjs";
 import { canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice } from "./core/cpu-move-choice.mjs";
 import { chooseAwareMove } from "./core/aware-move-choice.mjs";
-import { chooseLogicMove, usesLogicAi } from "./core/logic-ai.mjs";
-import { CPU_LOGIC_AI_LEVEL } from "./core/strength-settings.mjs";
+import { chooseLogicMove } from "./core/logic-ai.mjs";
+import { logicLevelOf } from "./core/strength-settings.mjs";
 import { createAssistSearchControl } from "./core/assist-search-control.mjs";
 import { findMateInOne } from "./core/mate-threat";
 import {
@@ -3436,6 +3436,8 @@ const canAnalyzeReviewPosition = computed(() => (
 // CPU対局ではCPU側の名前にレベルを添え、棋力の説明を2行目に出す。
 const cpuColor = computed(() => (normalizedMode.value === "cpu" ? reverseColor(humanColor.value) : null));
 const cpuStrengthPreset = computed(() => strengthPresetFor(searchNodes.value));
+/** ロジックAIで指すLv(24級〜16級)なら、ロジックAIのLv(小数)。ほかはnull(docs/level-ladder-design.mdの12章)。 */
+const cpuLogicLevel = computed(() => logicLevelOf(searchNodes.value));
 const cpuDisplayName = computed(() => {
   // 大会では、対戦相手の棋士の名前と段位を出す。
   if (matchKind.value === "tournament" && ryuoOpponent.value) {
@@ -3896,7 +3898,7 @@ const resultNextStep = computed(() => {
     ? ({ lance: "香落ち", rook: "飛車落ち" } as { [id: string]: string })[learningHandicapId.value] ?? ""
     : "";
   const rated = Boolean(ratingChange.value);
-  // Lv0(練習相手)は、平手の通常対局のときだけ、勝ったら15級へ(学習対局のLv0は今のまま)。
+  // Lv0(練習相手)は、平手の通常対局のときだけ、勝ったら24級(Lv1)へ(学習対局のLv0は今のまま)。
   if (level === 0 && !retryHandicap && matchKind.value !== "normal") return null;
   return resultNextStepFor({
     won: true, rated, level, handicapLabel: retryHandicap, firstWin: rated && level !== undefined && (ratingState.value.levels?.[level]?.wins ?? 0) === 1,
@@ -5209,12 +5211,13 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
     title, note, sections: [{ key: id, value, groups }],
   });
   if (id === "strength") {
-    // 41個を、級・段・プロの3つに分けて並べる(docs/level-ladder-design.mdの5章)。同じ名前の段は、Rと成績で見分ける。
+    // 50個を、はじめの級・級・段・プロの4つに分けて並べる(docs/level-ladder-design.mdの5章・12章)。同じ名前の段は、Rと成績で見分ける。
     const band = (from: number, to: number) => strengthPickerOptions.value.filter((_, level) => level >= from && level <= to);
     return single("CPUの強さ", searchNodes.value, [
-      { label: "級（Lv.0〜15）", options: band(0, 15) },
-      { label: "アマ段（Lv.16〜35）", options: band(16, 35) },
-      { label: "プロ（Lv.36〜40）", options: band(36, 40) },
+      { label: "はじめの級（Lv.0〜9）", options: band(0, 9) },
+      { label: "級（Lv.10〜24）", options: band(10, 24) },
+      { label: "アマ段（Lv.25〜44）", options: band(25, 44) },
+      { label: "プロ（Lv.45〜49）", options: band(45, 49) },
     ]);
   }
   if (id === "cpuFirstMove") return single("CPUの初手", cpuFirstMove.value, [{ options: CPU_FIRST_MOVE_OPTIONS }]);
@@ -6362,7 +6365,7 @@ type HomeNext = {
   label: string; description: string;
   /** 立て直しのときの「香落ちで挑む」のLv。 */
   handicapLevel?: number | null;
-  /** 立て直しの駒落ち(15級は飛車落ち、ほかは香落ち)。 */
+  /** 立て直しの駒落ち(いちばん下の24級は飛車落ち、ほかは香落ち)。 */
   handicapId?: { id: string; label: string } | null;
   /** 竜王戦の期の途中の、主役でない方の小さな入口(対策か続き)。 */
   sub?: { id: "ryuo-season" | "ryuo-counter"; label: string } | null;
@@ -8147,7 +8150,7 @@ function candidateGivesCheck(usi: string): boolean {
 /**
  * CPUの着手を描画したあと、プレイヤーの手番に行う補助を、エンジンの待ち行列へ積む。
  * hadScore: CPUの選んだ手の評価値があり、形勢の助言をすでに出したか。
- *   Lv0〜10(ロジックAI)や、わざと候補外の手を選んだときは評価値がないため、読み直して形勢の助言を出す。
+ *   Lv0〜9(読まない手・ロジックAI)や、わざと候補外の手を選んだときは評価値がないため、読み直して形勢の助言を出す。
  */
 function schedulePostCpuAssists(hadScore = false) {
   const historyLength = moveHistory.length;
@@ -9181,12 +9184,12 @@ function scheduleReviewCpuMove() {
       ) return;
       const strength = getStrengthSearchSettings(searchNodes.value);
       const legalMoves = enumerateLegalMoves(record.value.position).map(({ usi: moveUsi }) => moveUsi);
-      // ロジックAIのLvは、感想戦でもロジックAIで応じる(エンジンは使わない)。今の表には、ロジックAIのLvはない。
-      const logicLevel = usesLogicAi(CPU_LOGIC_AI_LEVEL);
+      // ロジックAIのLv(24級〜16級)は、感想戦でもロジックAIで応じる(エンジンは使わない)。
+      const logicLevel = cpuLogicLevel.value;
       let search;
       let verify;
       let probe;
-      if (!logicLevel && !usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
+      if (logicLevel === null && !usesNaturalMoveOnly(searchNodes.value) && engine && engineReady.value) {
         const enginePosition = currentEnginePosition();
         engine.applyStrengthOptions({ multiPv: strength.multiPv });
         await engine.setSearchThreads(strength.searchThreads);
@@ -9208,8 +9211,8 @@ function scheduleReviewCpuMove() {
           () => generation === reviewCpuGeneration && reviewCpuEnabled.value,
         );
       }
-      const choice = logicLevel
-        ? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, level: CPU_LOGIC_AI_LEVEL ?? 10, moveHistory })
+      const choice = logicLevel !== null
+        ? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, level: logicLevel, moveHistory })
         : strength.logicHybrid
         ? (await chooseAwareMove({ strength, sfen: record.value.position.sfen, legalMoves, moveHistory, search, verify, probe }))
           ?? chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, moveHistory, level: 10 })
@@ -9428,10 +9431,10 @@ async function scheduleCpuMove() {
         // MultiPVの候補数は合法手より少ないため、作戦の定跡手が候補に入っていない
         // 局面でも専用探索で評価してから、AI最善手との比較を行う。
         let searchedCandidates = search.candidates;
-        // ロジックAIのLvは、ロジックAIで指す(今の表にはない)。上の探索は、直前のプレイヤーの手への助言にだけ使う。
-        const logicLevel = usesLogicAi(CPU_LOGIC_AI_LEVEL);
+        // ロジックAIのLv(24級〜16級)は、ロジックAIで指す。上の探索は、直前のプレイヤーの手への助言にだけ使う。
+        const logicLevel = cpuLogicLevel.value;
         if (
-          !logicLevel && !selectionStrength.logicHybrid
+          logicLevel === null && !selectionStrength.logicHybrid
           && allowedOpeningMove && !forceConfiguredOpening
           && !searchedCandidates.some(({ move }) => move === allowedOpeningMove)
         ) {
@@ -9462,16 +9465,16 @@ async function scheduleCpuMove() {
             * strength.openingPlanScoreScale,
           strength.maxScoreLoss,
         );
-        const safeOpening = allowedOpeningMove && !forceConfiguredOpening && !logicLevel && !selectionStrength.logicHybrid
+        const safeOpening = allowedOpeningMove && !forceConfiguredOpening && logicLevel === null && !selectionStrength.logicHybrid
           ? chooseSafeOpeningMove(allowedOpeningMove, searchedCandidates, planScoreLimit)
           : null;
         let selection = forceConfiguredOpening && allowedOpeningMove
           ? { move: allowedOpeningMove }
-          : logicLevel
+          : logicLevel !== null
           ? chooseLogicMove({
             sfen: record.value.position.sfen,
             legalMoves: allowedCpuMoveList,
-            level: CPU_LOGIC_AI_LEVEL ?? 10,
+            level: logicLevel,
             moveHistory,
             planMove: allowedOpeningMove ?? null,
           })
@@ -9529,13 +9532,13 @@ async function scheduleCpuMove() {
         )?.score;
       } else {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
-        // Lv1〜10は、エンジンがなくてもロジックAIで指せる。
+        // 24級〜16級(ロジックAI)とLv10以上(目的のある手)は、エンジンがなくてもロジックAIで指せる。
         usi = forceConfiguredOpening && allowedOpeningMove ? allowedOpeningMove
-          : usesLogicAi(CPU_LOGIC_AI_LEVEL) || strength.logicHybrid
+          : cpuLogicLevel.value !== null || strength.logicHybrid
           ? chooseLogicMove({
             sfen: record.value.position.sfen,
             legalMoves: allowedCpuMoveList,
-            level: CPU_LOGIC_AI_LEVEL ?? 10,
+            level: cpuLogicLevel.value ?? 10,
             moveHistory,
             planMove: allowedOpeningMove ?? null,
           })?.move ?? ""

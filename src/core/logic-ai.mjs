@@ -14,6 +14,11 @@ import { analyzePosition, perceptionForPosition } from "./position-awareness.mjs
 
 export const LOGIC_AI_MIN_LEVEL = 1;
 export const LOGIC_AI_MAX_LEVEL = 10;
+/**
+ * 気づきの表のいちばん下(Lv0の点)。表示のLvの24級〜16級(2026-10-23。docs/level-ladder-design.mdの12章)は、
+ * ロジックAIの小数のLv(0より大きく10まで)で指す。0の点は「動かし方を覚えたばかりの人」の気づき。
+ */
+export const LOGIC_AI_FLOOR_LEVEL = 0;
 
 /** ロジックAIで指すレベルか。Lv0(読まずに自然さだけで指す)と、Lv11以上(エンジン)は使わない。 */
 export function usesLogicAi(level) {
@@ -45,7 +50,8 @@ export function exchangeViewForLevel(level) {
 }
 
 /**
- * レベルごとの気づき。表の点(Lv1・3・5・8・10)の間は直線で補う。どれも「その局面で気づく確率」。
+ * レベルごとの気づき。表の点(Lv0・1・3・5・8・10)の間は直線で補う。どれも「その局面で気づく確率」。
+ * Lv0の点は、Lv1より弱い24級〜16級のために足した(タダの駒に半分も気づかず、取られる駒にはほぼ気づかない)。
  * - freeCapture: 駒を取る手の得に気づく
  * - hanging: 指したあと、相手に駒を取られることに気づく(取られそうな自分の駒を逃がすのも、これで決まる)
  * - exchange: 取り合いの損得(取り返し)まで読む
@@ -56,23 +62,23 @@ export function exchangeViewForLevel(level) {
  * - temperature: 手の選び方のばらつき(点数の差がこれくらいなら、選ばれやすさが約2.7倍違う)
  */
 const PERCEPTION_TABLE = Object.freeze({
-  freeCapture: [0.4, 0.6, 0.7, 0.71, 0.72],
-  hanging: [0.1, 0.3, 0.45, 0.47, 0.48],
-  hangingLastMoveMajor: [0.7, 0.8, 0.9, 0.95, 0.98],
-  hangingLastMoveMinor: [0.4, 0.55, 0.65, 0.72, 0.75],
-  exchange: [0, 0, 0.3, 0.45, 0.47],
-  threat: [0, 0, 0.2, 0.35, 0.4],
-  mate1: [0, 0, 0.3, 0.7, 0.9],
-  mate3: [0, 0, 0, 0, 0.3],
-  defendMate: [0, 0, 0.2, 0.6, 0.8],
-  followPlan: [0.6, 0.7, 0.8, 0.9, 0.95],
-  temperature: [280, 190, 150, 150, 150],
+  freeCapture: [0.2, 0.4, 0.6, 0.7, 0.71, 0.72],
+  hanging: [0, 0.1, 0.3, 0.45, 0.47, 0.48],
+  hangingLastMoveMajor: [0.4, 0.7, 0.8, 0.9, 0.95, 0.98],
+  hangingLastMoveMinor: [0.15, 0.4, 0.55, 0.65, 0.72, 0.75],
+  exchange: [0, 0, 0, 0.3, 0.45, 0.47],
+  threat: [0, 0, 0, 0.2, 0.35, 0.4],
+  mate1: [0, 0, 0, 0.3, 0.7, 0.9],
+  mate3: [0, 0, 0, 0, 0, 0.3],
+  defendMate: [0, 0, 0, 0.2, 0.6, 0.8],
+  followPlan: [0.4, 0.6, 0.7, 0.8, 0.9, 0.95],
+  temperature: [420, 280, 190, 150, 150, 150],
 });
-const PERCEPTION_LEVELS = [1, 3, 5, 8, 10];
+const PERCEPTION_LEVELS = [0, 1, 3, 5, 8, 10];
 
 /** レベルの気づきの確率と、ばらつき。 */
 export function logicPerception(level) {
-  const lv = Math.min(LOGIC_AI_MAX_LEVEL, Math.max(LOGIC_AI_MIN_LEVEL, Number(level) || LOGIC_AI_MIN_LEVEL));
+  const lv = Math.min(LOGIC_AI_MAX_LEVEL, Math.max(LOGIC_AI_FLOOR_LEVEL, Number.isFinite(Number(level)) ? Number(level) : LOGIC_AI_MIN_LEVEL));
   let upper = PERCEPTION_LEVELS.findIndex((anchor) => anchor >= lv);
   if (upper <= 0) upper = Math.max(1, upper);
   const lower = upper - 1;

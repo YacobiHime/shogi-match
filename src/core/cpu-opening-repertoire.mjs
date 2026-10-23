@@ -88,7 +88,7 @@ const TEMPO_STYLE_POOLS = {
 
 /**
  * 「おまかせ」で選ぶ戦法の出現比率（%の目安）。
- * [初級（Lv0〜10）, 級位者（Lv11〜15）, 有段者（Lv16〜30）, 高段・プロ（Lv31〜40）]の順。
+ * [初級（Lv0〜19）, 級位者（Lv20〜24）, 有段者（Lv25〜39）, 高段・プロ（Lv40〜49）]の順。
  * 将棋ウォーズの級位帯では振り飛車・棒銀・中飛車などの急戦や奇襲が多く、
  * 段位が上がるほど、プロ公式戦のように角換わり・相掛かり・矢倉が中心になる傾向を反映した概数。
  */
@@ -117,15 +117,15 @@ const OPENING_DISTRIBUTION = Object.freeze({
 });
 
 /**
- * 強さのLv（0〜40）から、戦法分布・囲い選びに使う棋力帯（0〜3）を返す。
- * Lv0〜10は6級程度まで、Lv11〜15は5級〜1級、Lv16〜30はアマ初段〜五段、Lv31以上はアマ六段〜藤井聡太並み
- * (2026-10-22の段級位の作り直しのあとのLv。docs/level-ladder-design.md)。
+ * 強さのLv（0〜49）から、戦法分布・囲い選びに使う棋力帯（0〜3）を返す。
+ * Lv0〜19は6級程度まで、Lv20〜24は5級〜1級、Lv25〜39はアマ初段〜五段、Lv40以上はアマ六段〜藤井聡太並み
+ * (2026-10-23の50段階のLv。docs/level-ladder-design.md)。
  */
 export function cpuOpeningTier(level) {
   if (!Number.isFinite(level)) return 1;
-  if (level <= 10) return 0;
-  if (level <= 15) return 1;
-  if (level <= 30) return 2;
+  if (level <= 19) return 0;
+  if (level <= 24) return 1;
+  if (level <= 39) return 2;
   return 3;
 }
 

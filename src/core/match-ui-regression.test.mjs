@@ -61,7 +61,10 @@ describe("match screen regressions", () => {
     expect(source).toContain('import { chooseAwareMove } from "./core/aware-move-choice.mjs"');
     expect(source).toContain('selectionStrength.logicHybrid ? chooseAwareMove : chooseCpuMove');
     expect(source).toMatch(/strength\.logicHybrid[\s\S]*?await chooseAwareMove\([\s\S]*?chooseLogicMove\([\s\S]*?level: 10/);
-    expect(source).toMatch(/!logicLevel && !selectionStrength\.logicHybrid[\s\S]*?allowedOpeningMove/);
+    expect(source).toMatch(/logicLevel === null && !selectionStrength\.logicHybrid[\s\S]*?allowedOpeningMove/);
+    // 24級〜16級(ロジックAI)は、対局でも感想戦でも、表のsourceのロジックAIのLvで指す(docs/level-ladder-design.mdの12章)。
+    expect(source).toMatch(/const cpuLogicLevel = computed\(\(\) => logicLevelOf\(searchNodes\.value\)\);/);
+    expect(source).toMatch(/: logicLevel !== null\s*\? chooseLogicMove\(\{[\s\S]*?level: logicLevel,/);
     expect(source).toMatch(/chooseAwareMove : chooseCpuMove\)\(\{[\s\S]*?legalMoves: allowedCpuMoveList[\s\S]*?planMove: allowedOpeningMove/);
     expect(source).toMatch(/const hybridFallback[\s\S]*?cpuMovesAllowedByBishopSetting\(\)[\s\S]*?chooseLogicMove\([\s\S]*?legalMoves: fallbackAllowed/);
   });

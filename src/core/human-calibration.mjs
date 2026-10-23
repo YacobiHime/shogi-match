@@ -63,7 +63,7 @@ function winProbability(level, theta) {
  * 勝率50%のLv(θ)の最尤推定と、その標準誤差。
  * 全勝・全敗のときは推定が無限に逃げるので、範囲の端(minLevel・maxLevel)で止め、bounded: trueを返す。
  */
-export function estimateEvenLevel(levels, { minLevel = -10, maxLevel = 50 } = {}) {
+export function estimateEvenLevel(levels, { minLevel = -10, maxLevel = 60 } = {}) {
   const rows = levels.map(({ level, wins, losses, draws }) => ({
     level, score: wins + draws / 2, games: wins + losses + draws,
   }));

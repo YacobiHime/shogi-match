@@ -27,7 +27,7 @@
 | 戦法・囲いの解説文 | `src/core/opening-explanations.mjs` |
 | 戦型検出 | `src/core/formation-tracker.mjs`、`src/data/hiragana_suisho_formations.json` |
 | やこび姫の助言・称賛 | `src/core/coach-advice.mjs`、AIの候補手を作戦の名前に翻訳して提案する作戦の助言（飛車を振る提案と振り直し）は`src/core/coach-plan-advice.mjs`と対局画面の`offerCoachPlan`・`coachPlanOffer`（設計と、ほかの助言の強化の検討は`docs/coach-plan-advice-design.md`、出る回数の測定は`scripts/coach-plan-advice-report.mjs`）、悪手の理由と相手の狙いは`src/core/coach-reason.mjs`（悪手判定の読み筋と詰めろの確かめの最善手を言葉にする。新しい探索は足さない）、大会の1局の始めの相手の棋風の一言は`src/core/coach-opponent.mjs`、形勢と駒の損得による方針の一言は`coach-advice.mjs`の`situationPolicy`、手筋の名前でほめる一言は`move-praise.mjs`の`TESUJI_PRAISE`、`src/core/move-praise.mjs`、神の一手の基準（対局中と棋譜解析で共通）は`src/core/god-move.mjs` |
-| CPU難易度 | `src/core/strength-settings.mjs`（Lv0〜40の段級位の表。2026-10-22に15級〜タイトル保持者へ作り直した。各Lvは、もとの校正`CALIBRATION_PRESETS`のどの強さを使うか`source`で持つ。前の保存の移しかえは`src/core/level-ladder.mjs`、設計は`docs/level-ladder-design.md`）、ロジックAIは`src/core/logic-ai.mjs`（今の表では使わない。`CPU_LOGIC_AI_LEVEL`）、局面の気づきは`src/core/position-awareness.mjs`、マスごとの利きから取り合いの損得を出す計算（見え方のレベル差つき）は`src/core/exchange-eval.mjs`、Lv1〜39の選び方は`src/core/aware-move-choice.mjs`（設計は`docs/logic-ai-design.md`・`docs/cpu-purposeful-moves-design.md`。人間らしい思考のモデルとレベル表の設計（未実装）は`docs/cpu-human-model-design.md`、間違いの種類の測定は`scripts/cpu-mistake-report.mjs`） |
+| CPU難易度 | `src/core/strength-settings.mjs`（Lv0〜49の段級位の表。2026-10-22に15級〜タイトル保持者へ作り直し、2026-10-23に下へ24級〜16級を足して50段階にした。各Lvは、もとの校正`CALIBRATION_PRESETS`のどの強さを使うか`source`で持つ。前の保存の移しかえ（v1・v2→今の版3）は`src/core/level-ladder.mjs`、設計は`docs/level-ladder-design.md`の12章）、ロジックAIは`src/core/logic-ai.mjs`（24級〜16級のLv1〜9で、表の`source`を小数のLvにして指す。`logicLevelOf`）、局面の気づきは`src/core/position-awareness.mjs`、マスごとの利きから取り合いの損得を出す計算（見え方のレベル差つき）は`src/core/exchange-eval.mjs`、Lv1〜39の選び方は`src/core/aware-move-choice.mjs`（設計は`docs/logic-ai-design.md`・`docs/cpu-purposeful-moves-design.md`。人間らしい思考のモデルとレベル表の設計（未実装）は`docs/cpu-human-model-design.md`、間違いの種類の測定は`scripts/cpu-mistake-report.mjs`） |
 | CPUの戦法の選び方 | `src/core/cpu-opening-repertoire.mjs` |
 | 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue`、解析用エンジンの追加と解放は`src/composables/match/analysisEngines.ts`、対局の振り返りは`src/composables/match/useGuidedReview.ts`（台本は`src/core/guided-review.mjs`） |
 | リロード復元 | `src/core/match-persistence.mjs` |
@@ -102,7 +102,7 @@
   - 閉じたまま
 - 角道の具体的な指定は、初手の指定の次に優先します。定跡が終わった後のAI候補にも、この制約を保ちます。
 - 交換を待つ設定や閉じる設定などでは、CPUの角で相手の角を取りに行く手を除外します。
-- CPU対局の強さの上限はLv40「藤井聡太並み」です。藤井聡太より強い人間はいないため、それより強いレベルは追加しません。棋譜解析は対局の強さとは別で、より深く読んでかまいません。
+- CPU対局の強さの上限はLv49「藤井聡太並み」です（2026-10-23に下へ9段階足す前はLv40）。藤井聡太より強い人間はいないため、それより強いレベルは追加しません。棋譜解析は対局の強さとは別で、より深く読んでかまいません。
 - 探索はエンジン内部のWorkerで動き、画面を止めません。
   - ただし、同じエンジンは一度に1つの探索しか処理できません。CPUが指す前に、助言用の探索を積まないでください。
   - JavaScript側の重い処理（詰み判定など）には時間の上限を付けます。原則としてエンジンに任せます。

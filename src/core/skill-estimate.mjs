@@ -24,26 +24,29 @@ const LEVEL_PER_LN_LOSS = -14.41;
 /** 回帰で測った範囲の上端(もとの校正のLv36)。 */
 const MAX_DIAGNOSED_SOURCE = 36;
 
+/** 回帰で測ったいちばん下の強さ(15級。もとの校正の11.93)の、今の表のLv。 */
+const KYU15 = CPU_STRENGTH_PRESETS.find((preset) => preset.label === '15級程度');
+
 /**
- * もとの校正のLv(小数)を、新しい表のLv(小数)へ。回帰はもとの校正のLvで測ったので、段級位の作り直し(2026-10-22)のあとは、
- * 同じ強さの新しい表のLvへ移す。15級(もとの11.93)より弱いところは、Lv0〜1のあいだへ縮める。
+ * もとの校正のLv(小数)を、今の表のLv(小数)へ。回帰はもとの校正のLvで測ったので、同じ強さの今の表のLvへ移す。
+ * 15級(もとの11.93)より弱いところは、回帰を延ばした値なので、Lv0〜15級(24級〜16級)のあいだへ直線で並べる
+ * (24級〜16級はロジックAIで指すので、sourceの数どうしは比べられない)。
  */
 function ladderLevelOfSource(source) {
-  const bottom = CPU_STRENGTH_PRESETS[1].source;
-  return source < bottom ? Math.max(0, source / bottom) : ladderLevelForSource(source);
+  return source < KYU15.source ? Math.max(0, KYU15.level * source / KYU15.source) : ladderLevelForSource(source);
 }
 
-/** 診断の上端の、新しい表のLv。 */
+/** 診断の上端の、今の表のLv。 */
 export const MAX_DIAGNOSED_LEVEL = ladderLevelOfSource(MAX_DIAGNOSED_SOURCE);
 
-/** 平均損失を、Lv(新しい表、小数)へ変換する。範囲外は両端のLvにそろえる。 */
+/** 平均損失を、Lv(今の表、小数)へ変換する。範囲外は両端のLvにそろえる。 */
 export function levelForAverageLoss(loss) {
   const source = LEVEL_AT_LOSS_1 + LEVEL_PER_LN_LOSS * Math.log(Math.max(1, loss));
   return ladderLevelOfSource(Math.min(MAX_DIAGNOSED_SOURCE, Math.max(0, source)));
 }
 
 const presetForLevel = (level) => {
-  const rounded = Math.min(40, Math.max(0, Math.round(level)));
+  const rounded = Math.min(CPU_STRENGTH_PRESETS.at(-1).level, Math.max(0, Math.round(level)));
   return CPU_STRENGTH_PRESETS.find((preset) => preset.level === rounded);
 };
 

@@ -6,12 +6,12 @@
 import fs from "node:fs";
 import "./lib/ts-register.mjs";
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
-const { chooseLogicMove, usesLogicAi } = await import("../src/core/logic-ai.mjs");
+const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 import { Position } from "tsshogi";
 import { chooseCpuMove } from "../src/core/cpu-move-choice.mjs";
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { formatHintMove } from "../src/core/match-assists.mjs";
-import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from "../src/core/strength-settings.mjs";
+import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, search, seededRandom } from "./lib/node-engine.mjs";
 
 const MAX_PLY = 200;
@@ -44,7 +44,8 @@ for (let ply = 0; ply < MAX_PLY; ply += 1) {
   if (!move && black) move = best.move;
   if (!move) {
     const moveHistory = record.map(({ usi }) => usi);
-    const logicLevel = usesLogicAi(preset.level) ? preset.level : null;
+    // 24級〜16級は、表のsourceのロジックAIのLvで指す(対局画面と同じ)。
+    const logicLevel = logicLevelOf(preset.value);
     const result = !logicLevel && weak.nodes > 0 ? await search(weakEngine, sfen, weak) : undefined;
     const choice = (logicLevel ? chooseLogicMove({ sfen, legalMoves: moves, moveHistory, level: logicLevel, random })
       : await (weak.logicHybrid ? chooseAwareMove : chooseCpuMove)({

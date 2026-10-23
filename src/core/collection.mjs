@@ -11,7 +11,7 @@
  * まだ持っていないものも名前は見せる(存在だけ見せる)。保存は端末に置き、読めなくても遊びは止めない。
  */
 
-import { LADDER_VERSION, ladderLevelIndexFromOld } from './level-ladder.mjs';
+import { LADDER_V2, LADDER_VERSION, ladderLevelIndexFromOld, ladderLevelIndexFromV2 } from './level-ladder.mjs';
 
 export const COLLECTION_STORAGE_KEY = 'yacobihime:shogi-match:collection:v1';
 /** 最後にコレクションを開いた時刻(それより後に初めて取った印に「NEW」を付ける)。 */
@@ -99,22 +99,23 @@ export function albumCards(state, catalog, page, { playable = new Map(), seenAt 
 }
 
 /**
- * Lvの壁。Lv1〜40を10段ずつ4本の階段にする。nextは、勝つと印が増えるいちばん低いLv。
+ * Lvの壁。Lv1〜49を5本の階段にする(入門は24級〜16級の9段、ほかは10段ずつ)。nextは、勝つと印が増えるいちばん低いLv。
  * @param {ReturnType<typeof createCollection>} state
  * @param {{ recommended?: number | null }} [options] recommendedは、おすすめの強さのLv(その前後1つに印)
  */
 export function levelWall(state, { recommended = null } = {}) {
   const next = COLLECTION_LEVELS.find((level) => !state.levels[level]) ?? null;
   const rows = [
-    { id: 'beginner', label: '初級', from: 1 },
-    { id: 'intermediate', label: '中級', from: 11 },
-    { id: 'advanced', label: '上級', from: 21 },
-    { id: 'master', label: '達人', from: 31 },
+    { id: 'starter', label: '入門', from: 1, to: 9 },
+    { id: 'beginner', label: '初級', from: 10, to: 19 },
+    { id: 'intermediate', label: '中級', from: 20, to: 29 },
+    { id: 'advanced', label: '上級', from: 30, to: 39 },
+    { id: 'master', label: '達人', from: 40, to: 49 },
   ];
   return {
     next,
     rows: rows.map((row) => {
-      const levels = COLLECTION_LEVELS.slice(row.from - 1, row.from + 9).map((level) => ({
+      const levels = COLLECTION_LEVELS.slice(row.from - 1, row.to).map((level) => ({
         level,
         got: Boolean(state.levels[level]),
         next: level === next,
@@ -141,8 +142,8 @@ export function saveCollectionSeen(storage, at = Date.now()) {
   }
 }
 
-/** Lvの壁。Lv1〜40に初めて勝つと印が1つ。 */
-export const COLLECTION_LEVELS = Object.freeze(Array.from({ length: 40 }, (_, index) => index + 1));
+/** Lvの壁。Lv1〜49に初めて勝つと印が1つ。 */
+export const COLLECTION_LEVELS = Object.freeze(Array.from({ length: 49 }, (_, index) => index + 1));
 
 export function createCollection() {
   return { ladder: LADDER_VERSION, formations: {}, tesuji: {}, levels: {}, godMoves: 0, predictionsHit: 0, grantedThemes: [] };
@@ -270,11 +271,13 @@ export function loadCollection(storage) {
     for (const [id, entry] of Object.entries(parsed.tesuji ?? {})) {
       if (entry && count(entry.count)) tesuji[id] = { count: count(entry.count), firstAt: Number(entry.firstAt) || 0 };
     }
-    // 段級位の作り直し(2026-10-22)より前の保存は、勝ったLvを同じ強さの新しいLvへ移す(重なったら早いほうの日付)。
+    // 今の表(2026-10-23の50段階)より前の保存は、勝ったLvを同じ強さの今のLvへ移す(重なったら早いほうの日付)。
+    // 印がなければv1(2026-10-21まで)、ladder: 2ならv2(2026-10-22。15級から上は9つ上がる)。
     const migrate = parsed.ladder !== LADDER_VERSION;
+    const moveLevel = parsed.ladder === LADDER_V2 ? ladderLevelIndexFromV2 : ladderLevelIndexFromOld;
     const levels = {};
     for (const [level, at] of Object.entries(parsed.levels ?? {})) {
-      const to = migrate ? ladderLevelIndexFromOld(Number(level)) : Number(level);
+      const to = migrate ? moveLevel(Number(level)) : Number(level);
       if (!COLLECTION_LEVELS.includes(to)) continue;
       const time = Number(at) || 0;
       levels[to] = levels[to] === undefined ? time : Math.min(levels[to], time);

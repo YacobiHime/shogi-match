@@ -64,6 +64,6 @@ describe("はじめての案内", () => {
     expect(WELCOME_CHOICES.map(({ label }) => label)).toEqual(["はじめて", "ルールは分かる", "少し指せる", "よく指している"]);
     // 少し指せる・よく指しているは、1級くらいの相手との棋力測定から。
     expect(WELCOME_MEASURE_CHOICES).toEqual(["some", "player"]);
-    expect(WELCOME_MEASURE_LEVEL).toBe(15);
+    expect(WELCOME_MEASURE_LEVEL).toBe(24);
   });
 });

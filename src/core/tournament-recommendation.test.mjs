@@ -37,7 +37,7 @@ describe('大会のおすすめの強さ', () => {
     expect(groupMeanLevel(6, recommendedDifficulty(11), 11)).toBe(9);
   });
 
-  it('最低レベルでは15級を下回らず、保存済みの旧設定は従来の換算を保つ', () => {
+  it('最低レベルでは24級(Lv1)を下回らず、保存済みの旧設定は従来の換算を保つ', () => {
     for (const level of [0.5, 1, 2]) {
       for (const rating of [800, 1450, 2130]) expect(recommendedTournamentLevel(rating, level)).toBe(1);
     }
@@ -49,14 +49,14 @@ describe('大会のおすすめの強さ', () => {
   });
 
   it('手動で番号を上げると強く、下げると弱くなり、おすすめと逆転しない', () => {
-    for (let level = 1; level <= 40; level += 0.5) {
+    for (let level = 1; level <= 49; level += 0.5) {
       for (let rating = 800; rating <= 2500; rating += 50) {
         let previous = 0;
         for (let difficulty = 1; difficulty <= 14; difficulty++) {
           const opponent = tournamentLevel(rating, difficulty, level);
           expect(opponent).toBeGreaterThanOrEqual(previous);
           expect(opponent).toBeGreaterThanOrEqual(1);
-          expect(opponent).toBeLessThanOrEqual(40);
+          expect(opponent).toBeLessThanOrEqual(49);
           previous = opponent;
         }
       }

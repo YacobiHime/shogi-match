@@ -78,15 +78,18 @@ describe('scales and difficulty', () => {
     // 難易度の強さは、段級位の作り直し(2026-10-22)の前と同じ。Lvは同じ強さの新しい表のLvで出す(前のLv30は1級のあたり)。
     expect(groupMeanLevel(6, 9)).toBeCloseTo(ladderLevelFromOld(30));
     expect(groupMeanLevel(6, 7)).toBeCloseTo(ladderLevelFromOld(22));
-    // 前の表の16級より弱かった難易度(1〜4)の6組は、15級(Lv1。大会の棋士のいちばん下)にそろう。
-    for (const difficulty of [1, 2, 3]) expect(groupMeanLevel(6, difficulty)).toBe(1);
-    expect(groupMeanLevel(1, 14)).toBe(40);
+    // 1つ目の表の16級より弱かった難易度(1〜4)の6組は、2026-10-23に足した24級〜16級(Lv1〜9)へ戻る。
+    // 難易度1・2はいちばん下の24級(Lv1。大会の棋士のいちばん下)、3は21級(Lv4)、4は17級(Lv8)。
+    for (const difficulty of [1, 2]) expect(groupMeanLevel(6, difficulty)).toBe(1);
+    expect(groupMeanLevel(6, 3)).toBeCloseTo(4);
+    expect(groupMeanLevel(6, 4)).toBeCloseTo(8);
+    expect(groupMeanLevel(1, 14)).toBe(49);
     for (let difficulty = 2; difficulty <= 14; difficulty += 1) {
       expect(groupMeanLevel(1, difficulty)).toBeGreaterThanOrEqual(groupMeanLevel(1, difficulty - 1));
     }
     expect(recommendedDifficulty(Math.round(ladderLevelFromOld(30)))).toBe(7);
-    expect(recommendedDifficulty(40)).toBe(11);
-    expect(groupMeanLevel(6, recommendedDifficulty(25), 25)).toBe(23);
+    expect(recommendedDifficulty(49)).toBe(11);
+    expect(groupMeanLevel(6, recommendedDifficulty(34), 34)).toBe(32);
   });
 
   it('gives a stronger player a higher win rate, by rating', () => {

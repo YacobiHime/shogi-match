@@ -178,7 +178,7 @@ describe('traits on the strength settings', () => {
     expect(apply(withTrait('deep-reading', 2), quiet, 39).nodes).toBeLessThanOrEqual(TOP_NODES);
   });
 
-  it('reflects traits in hybrid perception without changing the original probabilities or Lv40', () => {
+  it('reflects traits in hybrid perception without changing the original probabilities or the top level', () => {
     const original = { ...strengthAt(20), logicHybrid: true, perception: { hanging: 0.8, defendMate: 0.8,
       hangingLastMoveMajor: 0.9, hangingLastMoveMinor: 0.8, freeCapture: 0.8, exchange: 0.8, threat: 0.8, mate1: 0.8, mate3: 0.5 } };
     const danger = { ...quiet, phase: 'ending', kingDanger: true };
@@ -187,7 +187,7 @@ describe('traits on the strength settings', () => {
     expect(applyHybrid(withTrait('endgame-collapse', 2)).perception.defendMate).toBeLessThan(0.8);
     expect(applyHybrid(withTrait('tsume', 2)).perception.mate3).toBeGreaterThan(0.5);
     expect(original.perception.defendMate).toBe(0.8);
-    expect(apply(withTrait('endgame-collapse', 2), danger, 40).perception).toBeUndefined();
+    expect(apply(withTrait('endgame-collapse', 2), danger, 49).perception).toBeUndefined();
   });
 
   it('defends accurately in a dangerous endgame, and collapses there with the weakness, scaled to the level', () => {
@@ -219,8 +219,8 @@ describe('traits on the strength settings', () => {
 
   it('carries the attacking style into the settings, but never changes the top level', () => {
     expect(apply({ attack: 0.7, traits: [] }, quiet).style).toMatchObject({ attack: 0.7 });
-    const top = apply({ attack: 0.9, traits: [{ id: 'deep-reading', degree: 2 }, { id: 'middle-strong', degree: 2 }] }, quiet, 40);
-    expect(top).toEqual({ ...strengthAt(40), mateFinding: baseMateFinding(1), activeTraits: ['deep-reading', 'middle-strong'] });
+    const top = apply({ attack: 0.9, traits: [{ id: 'deep-reading', degree: 2 }, { id: 'middle-strong', degree: 2 }] }, quiet, 49);
+    expect(top).toEqual({ ...strengthAt(49), mateFinding: baseMateFinding(1), activeTraits: ['deep-reading', 'middle-strong'] });
   });
 });
 

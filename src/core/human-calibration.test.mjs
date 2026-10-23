@@ -10,13 +10,14 @@ import {
 
 describe("表示名のずれの推定", () => {
   it("申告の表示名をLvにする。同じ表示名が複数あるときは真ん中", () => {
-    expect(nominalLevel("10級")).toBe(6);
+    expect(nominalLevel("10級")).toBe(15);
     // 段級位の作り直し(2026-10-22)の前の名前も読む。
-    expect(nominalLevel("十級")).toBe(6);
-    expect(nominalLevel("五級")).toBe(11);
-    expect(nominalLevel("アマ初段")).toBe(17);
-    expect(nominalLevel("アマ初段程度")).toBe(17);
-    expect(nominalLevel("アマ七段")).toBe(34.5);
+    expect(nominalLevel("十級")).toBe(15);
+    expect(nominalLevel("五級")).toBe(20);
+    expect(nominalLevel("二十級")).toBe(5);
+    expect(nominalLevel("アマ初段")).toBe(26);
+    expect(nominalLevel("アマ初段程度")).toBe(26);
+    expect(nominalLevel("アマ七段")).toBe(43.5);
     expect(nominalLevel("名人")).toBeNull();
     // やこびノートで申告できる段級位は、すべてLvに直せる。
     for (const { label } of declarableGrades()) expect(nominalLevel(label), label).not.toBeNull();
@@ -45,7 +46,7 @@ describe("表示名のずれの推定", () => {
   });
 
   it("全勝・全敗は範囲の端で止める", () => {
-    expect(estimateEvenLevel([{ level: 10, wins: 5, losses: 0, draws: 0 }])).toMatchObject({ theta: 50, bounded: true });
+    expect(estimateEvenLevel([{ level: 10, wins: 5, losses: 0, draws: 0 }])).toMatchObject({ theta: 60, bounded: true });
     expect(estimateEvenLevel([{ level: 10, wins: 0, losses: 5, draws: 0 }])).toMatchObject({ theta: -10, bounded: true });
     expect(estimateEvenLevel([])).toBeNull();
   });
@@ -54,12 +55,12 @@ describe("表示名のずれの推定", () => {
     const report = calibrationReport([
       {
         declaredLevels: {
-          // 10級の人が、10級(Lv6)のCPUに40勝10敗: 表示名のLvは表示より弱い。
-          '10級': { 6: { wins: 40, losses: 10, draws: 0 } },
-          // 3級の人が、3級(Lv13)のまわりで互角。
-          '3級': { 12: { wins: 15, losses: 13, draws: 2 }, 14: { wins: 13, losses: 15, draws: 2 } },
-          // 1級の人が、1級のCPUに2勝8敗: 対局が少ない。
-          '1級': { 15: { wins: 2, losses: 8, draws: 0 } },
+          // 10級の人が、10級(Lv15)のCPUに40勝10敗: 表示名のLvは表示より弱い。
+          '10級': { 15: { wins: 40, losses: 10, draws: 0 } },
+          // 3級の人が、3級(Lv22)のまわりで互角。
+          '3級': { 21: { wins: 15, losses: 13, draws: 2 }, 23: { wins: 13, losses: 15, draws: 2 } },
+          // 1級の人が、1級(Lv24)のCPUに2勝8敗: 対局が少ない。
+          '1級': { 24: { wins: 2, losses: 8, draws: 0 } },
         },
       },
     ]);
@@ -74,12 +75,12 @@ describe("表示名のずれの推定", () => {
 
   it("報告をMarkdownの表にする", () => {
     const text = formatCalibrationReport(calibrationReport([
-      { declaredLevels: { '10級': { 6: { wins: 40, losses: 10, draws: 0 } }, '1級': { 15: { wins: 3, losses: 0, draws: 0 } } } },
+      { declaredLevels: { '10級': { 15: { wins: 40, losses: 10, draws: 0 } }, '1級': { 24: { wins: 3, losses: 0, draws: 0 } } } },
     ]));
     const lines = text.split("\n");
     expect(lines[0]).toMatch(/^\| 申告 \|/);
     expect(lines).toHaveLength(4);
-    expect(lines[2]).toMatch(/^\| 10級 \| 6\.0 \| 50 \| 10\.0 \|.*\| \+4\.0 \| 表示名より弱い \|$/);
-    expect(lines[3]).toMatch(/^\| 1級 \| 15\.0 \| 3 \| ≧50\.0 \|/);
+    expect(lines[2]).toMatch(/^\| 10級 \| 15\.0 \| 50 \| 19\.0 \|.*\| \+4\.0 \| 表示名より弱い \|$/);
+    expect(lines[3]).toMatch(/^\| 1級 \| 24\.0 \| 3 \| ≧60\.0 \|/);
   });
 });

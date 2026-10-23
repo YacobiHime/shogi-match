@@ -21,8 +21,8 @@ export const WELCOME_CHOICES = Object.freeze([
 
 /** 棋力測定から始める答え(測定の最初の相手は1級くらい。docs/first-play-design.mdの5章)。 */
 export const WELCOME_MEASURE_CHOICES = Object.freeze(["some", "player"]);
-/** 棋力測定の最初の相手のLv(1級)。 */
-export const WELCOME_MEASURE_LEVEL = 15;
+/** 棋力測定の最初の相手のLv(1級。2026-10-23の50段階のLv)。 */
+export const WELCOME_MEASURE_LEVEL = 24;
 
 function hasAppData(storage) {
   for (let index = 0; index < storage.length; index += 1) {

@@ -17,11 +17,12 @@ export const PRO_MEAN_RATING = 1555;
 export const PRO_RATING_SD = 145;
 
 /**
- * 棋士として指させるいちばん弱いLv。Lv0(駒の動きを覚えたて)は練習相手で、大会の棋士にはしない(15級から)。
- * 作り直しの前の表の26級〜16級の強さだった難易度1〜4の6組は、15級(Lv1)のあたりにそろう。
+ * 棋士として指させるいちばん弱いLv。Lv0(駒の動きを覚えたて)は練習相手で、大会の棋士にはしない(24級から)。
+ * 1つ目の表(v1)の26級〜16級の強さだった難易度1〜4の6組は、2026-10-23に足した24級〜16級(Lv1〜9)に戻る。
  */
 export const MIN_CPU_LEVEL = 1;
-export const MAX_CPU_LEVEL = 40;
+/** いちばん上(藤井聡太並み)。 */
+export const MAX_CPU_LEVEL = 49;
 
 /**
  * CPUのLv(作り直しの前の表)ごとの、自己対局のレーティング(Lv0を0とする)。表の間は直線で補い、範囲の外は端の傾きで延ばす。
@@ -88,14 +89,14 @@ export function anchorLevel(difficulty) {
 }
 
 /**
- * レーティングを、難易度でのLv(新しい表、小数、Lv0〜40)に換算する。
+ * レーティングを、難易度でのLv(今の表、小数、Lv0〜49)に換算する。
  * 基準点からのレーティング差を、自己対局で同じ差になる(前の表の)Lvの差に置き換え、同じ強さの新しい表のLvへ移す。
  */
 export function exactLevelForRating(rating, difficulty) {
   return ladderLevelFromOld(levelForSelfplayRating(selfplayRating(anchorLevel(difficulty)) + (rating - ANCHOR.rating)));
 }
 
-/** 実際に指すときのCPUのLv。整数で、Lv0〜40に収める。 */
+/** 実際に指すときのCPUのLv。整数で、Lv1〜49に収める。 */
 export function ratingToLevel(rating, difficulty) {
   return clamp(Math.round(exactLevelForRating(rating, difficulty)), MIN_CPU_LEVEL, MAX_CPU_LEVEL);
 }

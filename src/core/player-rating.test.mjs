@@ -29,17 +29,18 @@ const memoryStorage = () => {
 };
 
 describe('player rating', () => {
-  it('maps levels to ratings (15級=R30, 5級=R630, R60 per level) and back, from Lv1 to Lv40', () => {
+  it('maps levels to ratings (24級=R30, 15級=R570, 5級=R1170, R60 per level) and back, from Lv1 to Lv49', () => {
     expect(levelRating(0)).toBe(0);
     expect(levelRating(1)).toBe(30);
-    expect(levelRating(11)).toBe(630);
-    expect(levelRating(15)).toBe(870);
-    expect(levelRating(40)).toBe(2370);
-    expect(ratingLevel(630)).toBe(11);
+    expect(levelRating(10)).toBe(570);
+    expect(levelRating(20)).toBe(1170);
+    expect(levelRating(24)).toBe(1410);
+    expect(levelRating(49)).toBe(2910);
+    expect(ratingLevel(1170)).toBe(20);
     expect(INITIAL_RATING).toBe(30);
     expect(recommendedLevel(INITIAL_RATING)).toBe(1);
     expect(recommendedLevel(levelRating(25))).toBe(25);
-    expect(recommendedLevel(99999)).toBe(40);
+    expect(recommendedLevel(99999)).toBe(49);
     // Lv0は練習相手で、勧めない・数えない。
     expect(recommendedLevel(-50)).toBe(1);
     expect(isRatedLevel(0)).toBe(false);
@@ -133,27 +134,27 @@ describe('player rating', () => {
 
   it('offers kyu/dan grades for self declaration and records results against the declaration', () => {
     const grades = declarableGrades();
-    expect(grades[0]).toEqual({ label: '15級', level: 1 });
-    expect(grades).toHaveLength(15 + 7);
+    expect(grades[0]).toEqual({ label: '24級', level: 1 });
+    expect(grades).toHaveLength(24 + 7);
     // 同じ名前が3つある段は、真ん中のLv。
-    expect(grades.find(({ label }) => label === 'アマ初段')).toEqual({ label: 'アマ初段', level: 17 });
+    expect(grades.find(({ label }) => label === 'アマ初段')).toEqual({ label: 'アマ初段', level: 26 });
     expect(grades.at(-1).label).toBe('アマ七段');
     expect(grades.some(({ label }) => /プロ|藤井|奨励会|タイトル/.test(label))).toBe(false);
-    const declared = applyDeclaredGrade(createRatingState(), { label: '3級', level: 13, at: 5 });
-    expect(declared).toMatchObject({ rating: 750, games: 0, declared: { label: '3級', level: 13 } });
+    const declared = applyDeclaredGrade(createRatingState(), { label: '3級', level: 22, at: 5 });
+    expect(declared).toMatchObject({ rating: 1290, games: 0, declared: { label: '3級', level: 22 } });
     let state = declared;
-    for (const outcome of ['win', 'win', 'loss']) state = applyRatedGame(state, { opponentLevel: 13, outcome }).state;
-    expect(state.declaredLevels['3級'][13]).toEqual({ wins: 2, losses: 1, draws: 0 });
+    for (const outcome of ['win', 'win', 'loss']) state = applyRatedGame(state, { opponentLevel: 22, outcome }).state;
+    expect(state.declaredLevels['3級'][22]).toEqual({ wins: 2, losses: 1, draws: 0 });
     expect(loadRatingState({ getItem: () => JSON.stringify(state) }).declaredLevels).toEqual(state.declaredLevels);
     expect(applyRatedGame(createRatingState(), { opponentLevel: 5, outcome: 'win' }).state.declaredLevels).toEqual({});
   });
 
   it('shows the next grade goal and how far the rating has come', () => {
-    // R30はLv1(15級)。次の表示名はLv2の14級で、目安はR60から。
-    expect(nextRatingGoal(30)).toEqual({ label: '14級程度', level: 2, remaining: 30, percent: 50 });
-    // 同じ表示名が3レベルあるアマ初段(Lv16〜18)では、Lv19のアマ二段が次の目標になる。
-    expect(nextRatingGoal(990)).toMatchObject({ label: 'アマ二段程度', level: 19, remaining: 90 });
-    expect(nextRatingGoal(2370)).toBeNull();
+    // R30はLv1(24級)。次の表示名はLv2の23級で、目安はR60から。
+    expect(nextRatingGoal(30)).toEqual({ label: '23級程度', level: 2, remaining: 30, percent: 50 });
+    // 同じ表示名が3レベルあるアマ初段(Lv25〜27)では、Lv28のアマ二段が次の目標になる。
+    expect(nextRatingGoal(1530)).toMatchObject({ label: 'アマ二段程度', level: 28, remaining: 90 });
+    expect(nextRatingGoal(2910)).toBeNull();
     expect(gradeName('15級程度')).toBe('15級');
   });
 
@@ -213,7 +214,7 @@ describe('player rating', () => {
     expect(loadRatingState(storage).events).toEqual({});
   });
 
-  it('段級位の作り直し(2026-10-22)の前の保存を、同じ強さの新しい表へ1回だけ移し、知らせる', () => {
+  it('1つ目の表(2026-10-21まで)の保存を、同じ強さの今の表へ1回だけ移し、知らせる', () => {
     const storage = memoryStorage();
     storage.setItem(RATING_STORAGE_KEY, JSON.stringify({
       rating: 1200, games: 12, wins: 5, losses: 7, draws: 0,
@@ -224,25 +225,46 @@ describe('player rating', () => {
       history: [{ at: 1, rating: 1200, opponentLevel: 15, outcome: 'loss' }],
     }));
     const state = loadRatingState(storage);
-    // 前の十二級(Lv15、R1200)は、新しい12級(Lv4、R210)。
-    expect(state.rating).toBe(210);
-    expect(state.ladderNotice).toEqual({ beforeRating: 1200, afterRating: 210, beforeLabel: '十二級', afterLabel: '12級' });
-    expect(state.levels[4]).toEqual({ wins: 1, losses: 2, draws: 0 });
-    // 前の五級の2つ(Lv22・23)は、新しい5級(Lv11)にまとめる。前の22級(Lv5)はLv0へ。
-    expect(state.levels[11]).toEqual({ wins: 1, losses: 1, draws: 0 });
-    expect(state.levels[0]).toEqual({ wins: 1, losses: 0, draws: 0 });
-    expect(state.declared).toMatchObject({ label: '12級', level: 4 });
-    expect(state.declaredLevels).toEqual({ '12級': { 4: { wins: 1, losses: 2, draws: 0 } } });
-    expect(state.measured).toMatchObject({ rating: 210, label: '12級程度' });
-    expect(state.history[0]).toMatchObject({ rating: 210, opponentLevel: 4 });
+    // 前の十二級(Lv15、R1200)は、今の12級(Lv13、R750)。
+    expect(state.rating).toBe(750);
+    expect(state.ladderNotice).toEqual({ beforeRating: 1200, afterRating: 750, beforeLabel: '十二級', afterLabel: '12級' });
+    expect(state.levels[13]).toEqual({ wins: 1, losses: 2, draws: 0 });
+    // 前の五級の2つ(Lv22・23)は、今の5級(Lv20)にまとめる。前の22級(Lv5)は今の22級(Lv3)へ。
+    expect(state.levels[20]).toEqual({ wins: 1, losses: 1, draws: 0 });
+    expect(state.levels[3]).toEqual({ wins: 1, losses: 0, draws: 0 });
+    expect(state.declared).toMatchObject({ label: '12級', level: 13 });
+    expect(state.declaredLevels).toEqual({ '12級': { 13: { wins: 1, losses: 2, draws: 0 } } });
+    expect(state.measured).toMatchObject({ rating: 750, label: '12級程度' });
+    expect(state.history[0]).toMatchObject({ rating: 750, opponentLevel: 13 });
     // 一度移したら、もう移さない。知らせは見たら消す。
     saveRatingState(storage, dismissLadderNotice(state));
     const again = loadRatingState(storage);
-    expect(again.rating).toBe(210);
-    expect(again.levels[4]).toEqual({ wins: 1, losses: 2, draws: 0 });
+    expect(again.rating).toBe(750);
+    expect(again.levels[13]).toEqual({ wins: 1, losses: 2, draws: 0 });
     expect(again.ladderNotice).toBeNull();
     // 対局したことのない人には知らせない。
     storage.setItem(RATING_STORAGE_KEY, JSON.stringify({ rating: 800, games: 0, wins: 0, losses: 0, draws: 0 }));
     expect(loadRatingState(storage).ladderNotice).toBeNull();
+  });
+
+  it('2つ目の表(2026-10-22)の保存は、15級から上を9つ・R540上げ、名前はそのまま', () => {
+    const storage = memoryStorage();
+    storage.setItem(RATING_STORAGE_KEY, JSON.stringify({
+      ladder: 2, rating: 630, games: 8, wins: 4, losses: 4, draws: 0,
+      levels: { 11: { wins: 2, losses: 1, draws: 0 }, 0: { wins: 1, losses: 0, draws: 0 } },
+      declared: { label: '5級', level: 11, at: 1 },
+      declaredLevels: { '5級': { 11: { wins: 2, losses: 1, draws: 0 } } },
+      history: [{ at: 1, rating: 630, opponentLevel: 11, outcome: 'win' }],
+    }));
+    const state = loadRatingState(storage);
+    expect(state.rating).toBe(1170);
+    expect(state.ladderNotice).toEqual({ beforeRating: 630, afterRating: 1170, beforeLabel: '5級', afterLabel: '5級' });
+    expect(state.levels).toEqual({ 20: { wins: 2, losses: 1, draws: 0 }, 0: { wins: 1, losses: 0, draws: 0 } });
+    expect(state.declared).toMatchObject({ label: '5級', level: 20 });
+    expect(state.declaredLevels).toEqual({ '5級': { 20: { wins: 2, losses: 1, draws: 0 } } });
+    expect(state.history[0]).toMatchObject({ rating: 1170, opponentLevel: 20 });
+    // まだ対局していない人は、はじめの人と同じ24級(R30)から。知らせはない。
+    storage.setItem(RATING_STORAGE_KEY, JSON.stringify({ ladder: 2, rating: 30, games: 0, wins: 0, losses: 0, draws: 0 }));
+    expect(loadRatingState(storage)).toMatchObject({ rating: 30, ladderNotice: null });
   });
 });

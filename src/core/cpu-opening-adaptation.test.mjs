@@ -76,8 +76,8 @@ function playAdaptivePlan({ strategyId, cpuColor, opponentScript, level = 12, ra
 }
 
 describe("CPU opening adaptation", () => {
-  it("maps the 41 levels to four strength tiers by amateur rank", () => {
-    expect([0, 10, 11, 15, 16, 30, 31, 40].map(cpuOpeningTier)).toEqual([0, 0, 1, 1, 2, 2, 3, 3]);
+  it("maps the 50 levels to four strength tiers by amateur rank", () => {
+    expect([0, 19, 20, 24, 25, 39, 40, 49].map(cpuOpeningTier)).toEqual([0, 0, 1, 1, 2, 2, 3, 3]);
     expect(cpuOpeningTier(undefined)).toBe(1);
   });
 

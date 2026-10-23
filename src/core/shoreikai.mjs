@@ -12,6 +12,7 @@ import { newName } from './ryuo-names.mjs';
 import { createRepertoire, pickGameStyle, repertoireText, styleEntry, PARTY_LABELS } from './ryuo-repertoire.mjs';
 import { createCharacter } from './player-character.mjs';
 import { tournamentLevel } from './ryuo-strength.mjs';
+import { LADDER_VERSION, ladderLevelIndexFromV2 } from './level-ladder.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
 import { HANANE, STORY_PEOPLE, storyCharacter } from './ryuo-story.mjs';
 
@@ -639,11 +640,12 @@ export function mentorCandidates(roster, seed = 1) {
  */
 export function recommendedExamRank(userLevel) {
   const level = Number.isFinite(userLevel) ? userLevel : 0;
-  if (level >= 30) return 5;
-  if (level >= 26) return 4;
-  if (level >= 22) return 3;
-  if (level >= 16) return 2;
-  if (level >= 10) return 1;
+  // 今の表(50段階)のLv。アマ五段なら1級、アマ四段なら2級、アマ三段なら3級、アマ初段なら4級、6級なら5級から。
+  if (level >= 39) return 5;
+  if (level >= 35) return 4;
+  if (level >= 31) return 3;
+  if (level >= 25) return 2;
+  if (level >= 19) return 1;
   return 0;
 }
 
@@ -1378,7 +1380,7 @@ export function bestStreak(games) {
 
 /** 奨励会のキャリア(いまの挑戦と、これまでの挑戦の要約)。 */
 export function createShoreikaiCareer() {
-  return { version: SHOREIKAI_VERSION, settings: { ...DEFAULT_SETTINGS }, run: null, history: [], pro: null };
+  return { version: SHOREIKAI_VERSION, ladder: LADDER_VERSION, settings: { ...DEFAULT_SETTINGS }, run: null, history: [], pro: null };
 }
 
 /**
@@ -1413,7 +1415,13 @@ export function loadShoreikai(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(SHOREIKAI_KEY) ?? 'null');
     if (!parsed || parsed.version !== SHOREIKAI_VERSION) return createShoreikaiCareer();
-    const career = { ...createShoreikaiCareer(), ...parsed, settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) } };
+    const career = { ...createShoreikaiCareer(), ...parsed, ladder: LADDER_VERSION, settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) } };
+    // 50段階の表(2026-10-23)より前の保存は、奨励会員の指すLv(41段階の表)を同じ強さの今のLvへ移す。
+    if (parsed.ladder !== LADDER_VERSION && career.run?.world?.members) {
+      for (const member of Object.values(career.run.world.members)) {
+        if (member && Number.isFinite(member.level)) member.level = ladderLevelIndexFromV2(member.level);
+      }
+    }
     if (career.run?.world?.members) link(career.run);
     else career.run = null;
     return career;
