@@ -760,7 +760,9 @@ function rivalPendingView(season) {
   }
   if (!pid || season.players[pid]?.story !== HANANE) return null;
   const vsUser = vsUserSoFar(season, pid);
-  return { story: HANANE, line: hananeBeforeLine(vsUser), coach: hananeCoachIntro(vsUser), grudge: vsUser.wins > 0 };
+  const hanane = season.players[pid];
+  const standing = { dan: hanane.dan, held: hanane.profile?.held ?? [], rookie: hanane.rookie ?? hanane.dan === '四段' };
+  return { story: HANANE, line: hananeBeforeLine(vsUser), coach: hananeCoachIntro(vsUser, standing), grudge: vsUser.wins > 0 };
 }
 
 const playerBrief = (season, pid) => {

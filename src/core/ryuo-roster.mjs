@@ -243,6 +243,8 @@ export function seasonEntry(roster, id) {
     repertoire: structuredClone(member.repertoire ?? { party: 'static', styles: [member.style.id] }),
     ryuo: member.ryuo,
     age: member.age,
+    // 棋士になって1期以内か(物語の人物の紹介で「新四段」と言うかに使う)。
+    rookie: member.kind === 'pro' && Number.isFinite(member.since) && (roster.season ?? 0) - member.since <= 1,
     character: structuredClone(member.character ?? { attack: 0, traits: [] }),
     // 紹介用の実績(タイトル・順位戦・成績・将棋大賞)と、プレイヤーとの対戦成績。
     profile: careerSummary(roster, member),

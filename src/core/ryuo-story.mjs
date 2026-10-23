@@ -59,7 +59,8 @@ export const STORY_PEOPLE = Object.freeze({
       ),
     },
     character: { traits: [{ id: 'deep-reading', degree: 2 }, { id: 'tsume', degree: 2 }, { id: 'late-bloom', degree: 2 }] },
-    intro: '三段リーグを突破した新四段の女子高生。天鷺善彦の娘。読みの深さ・速さ・正確さがずば抜けていて、力戦でも崩れない。',
+    // 名鑑では、段位と年齢で言い分ける(hananeIntro)。ここは最初の立場のときの紹介。
+    intro: '三段リーグを突破したばかりの新四段。高校に通う、天鷺善彦の娘。読みの深さ・速さ・正確さがずば抜けていて、力戦でも崩れない。',
   }),
   [YOSHIHIKO]: Object.freeze({
     name: '天鷺善彦',
@@ -252,10 +253,38 @@ export function hananeAfterLine({ userWon, vsUser }) {
   return wins === 0 ? HANANE_LINES.firstLoss[0] : pick(HANANE_LINES.lost, wins);
 }
 
-/** やこび姫が、羽音と当たる対局の前に言う紹介(攻略の手がかりつき)。羽音は自分の弱点を言わない。 */
-export function hananeCoachIntro(vsUser) {
+/**
+ * 羽音のいまの立場の言葉。段位・タイトル・棋士になってからの期数で変わる(七段なのに「新四段」と言わない)。
+ * @param {{ dan?: string, held?: string[], rookie?: boolean }} [standing]
+ *   danは段位(竜王を持てば「竜王」)、heldは持っているタイトルの名前、rookieは棋士になって1期以内か。
+ */
+export function hananeStanding({ dan = '四段', held = [], rookie = true } = {}) {
+  const titles = held.length ? held : dan === '竜王' ? ['竜王'] : [];
+  if (titles.length >= 2) return `${titles.join('・')}の${titles.length}冠を持つ、若きタイトル保持者`;
+  if (titles.length === 1) return `${titles[0]}のタイトルを持つ、若きタイトル保持者`;
+  if (dan === '四段') return rookie ? '三段リーグを突破したばかりの新四段' : '若手の四段';
+  if (dan === '五段' || dan === '六段') return `勢いに乗る若手の${dan}`;
+  if (/段$/.test(dan)) return `トップ棋士に名を連ねる${dan}`;
+  return '若手棋士';
+}
+
+/**
+ * 名鑑に出す羽音の紹介。立場(hananeStanding)と、高校生かどうか(年齢)で変わる。
+ * @param {{ dan?: string, held?: string[], rookie?: boolean, age?: number }} [standing]
+ */
+export function hananeIntro({ age = STORY_PEOPLE[HANANE].age, ...standing } = {}) {
+  const school = age <= 18 ? '高校に通う、' : '';
+  return `${hananeStanding(standing)}。${school}天鷺善彦の娘。読みの深さ・速さ・正確さがずば抜けていて、力戦でも崩れない。`;
+}
+
+/**
+ * やこび姫が、羽音と当たる対局の前に言う紹介(攻略の手がかりつき)。羽音は自分の弱点を言わない。
+ * @param {{ wins: number, losses: number } | null} vsUser
+ * @param {{ dan?: string, held?: string[], rookie?: boolean }} [standing] 羽音のいまの立場(hananeStanding)
+ */
+export function hananeCoachIntro(vsUser, standing = {}) {
   if (!vsUser || !(vsUser.wins + vsUser.losses)) {
-    return '次の相手は天鷺羽音さん。天鷺善彦さんの娘で、三段リーグを突破したばかりの新四段だよ。読みがすごく深くて、力戦でも崩れない。終盤ほど強くなるから、序盤のうちにリードを取ろう。';
+    return `次の相手は天鷺羽音さん。天鷺善彦さんの娘で、${hananeStanding(standing)}だよ。読みがすごく深くて、力戦でも崩れない。終盤ほど強くなるから、序盤のうちにリードを取ろう。`;
   }
   if (vsUser.wins > 0) return '羽音さん、前の負けが悔しかったみたい。今日も本気で来るよ。序盤でリードを取って、終盤は1手ずつ確かめよう。';
   return 'また羽音さんだね。終盤の正確さは折り紙つき。勝負は序盤だよ。';

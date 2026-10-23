@@ -289,6 +289,8 @@ const props = defineProps({
   /** 次の期(か進行中の期)のプレイヤーのクラス。名人ならmeijin。 */
   entryClass: { type: String as PropType<"C2" | "C1" | "B2" | "B1" | "A" | "meijin">, default: "C2" },
   entryNo: { type: Number, default: 1 },
+  /** 羽音のいまの順位戦のクラス。同じクラスのときだけ「羽音さんも同じクラスだよ」と言う。 */
+  rivalClass: { type: String, default: "" },
   holderName: { type: String, default: "" },
   defaultDifficulty: { type: Number, default: 9 },
   lastSettings: { type: Object as PropType<Partial<Settings> | null>, default: null },
@@ -354,11 +356,13 @@ const entryRounds = computed(() => {
 });
 const entryGoal = computed(() => meijinGoalLine(props.entryClass === "meijin" ? null : props.entryClass, entryRounds.value));
 const entryTalk = computed(() => {
+  // 羽音が本当に同じクラスにいるときだけ、一言添える(羽音が昇級したあとも「同じクラス」と言わない)。
+  const rival = props.rivalClass && props.rivalClass === props.entryClass ? "。羽音さんも同じクラスだよ" : "";
   switch (props.entryClass) {
-    case "C2": return "新四段は、C級2組から。同じ勝ち数なら順位が上の人が上になるから、1局も落とせないね。羽音さんも同じクラスだよ";
-    case "A": return "A級は10人の総当たり。1位になれば名人への挑戦！ 将棋界でいちばん長い1年だよ";
-    case "meijin": return "名人として、A級を勝ち抜いた挑戦者を迎え撃とう";
-    default: return `${CLASS_LABELS[props.entryClass]}。1つずつ上がっていけば、いつか名人に届くよ`;
+    case "C2": return `新四段は、C級2組から。同じ勝ち数なら順位が上の人が上になるから、1局も落とせないね${rival}`;
+    case "A": return `A級は10人の総当たり。1位になれば名人への挑戦！ 将棋界でいちばん長い1年だよ${rival}`;
+    case "meijin": return props.rivalClass === "A" ? "名人として、A級を勝ち抜いた挑戦者を迎え撃とう。A級には羽音さんもいるよ" : "名人として、A級を勝ち抜いた挑戦者を迎え撃とう";
+    default: return `${CLASS_LABELS[props.entryClass]}。1つずつ上がっていけば、いつか名人に届くよ${rival}`;
   }
 });
 const careerText = computed(() => {

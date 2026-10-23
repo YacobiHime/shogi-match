@@ -134,6 +134,7 @@
           :view="meijinView"
           :career="meijinCareer"
           :entry-class="meijinEntryClass"
+          :rival-class="meijinRivalClass"
           :entry-no="meijinEntryNo"
           :holder-name="meijinHolderName"
           :default-difficulty="defaultDifficulty"
@@ -809,6 +810,8 @@ const props = defineProps({
   meijinView: { type: Object as PropType<MeijinView | null>, default: null },
   meijinCareer: { type: Object as PropType<{ no: number; best: string; titles: number; eternal: boolean }>, default: () => ({ no: 0, best: "C2", titles: 0, eternal: false }) },
   meijinEntryClass: { type: String as PropType<"C2" | "C1" | "B2" | "B1" | "A" | "meijin">, default: "C2" },
+  /** 羽音のいまの順位戦のクラス(同じクラスなら、入口で一言添える)。 */
+  meijinRivalClass: { type: String, default: "" },
   meijinEntryNo: { type: Number, default: 1 },
   meijinHolderName: { type: String, default: "" },
   meijinSettings: { type: Object as PropType<Record<string, unknown> | null>, default: null },

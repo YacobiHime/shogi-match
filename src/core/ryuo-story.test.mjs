@@ -17,7 +17,9 @@ import {
   hananeAfterLine,
   hananeBeforeLine,
   hananeCoachIntro,
+  hananeIntro,
   hananeRating,
+  hananeStanding,
   storyCharacter,
   storyMemberId,
 } from './ryuo-story.mjs';
@@ -194,6 +196,19 @@ describe('羽音の台詞', () => {
   it('やこび姫の紹介は、攻略の手がかり(序盤)を言う', () => {
     expect(hananeCoachIntro(null)).toMatch(/序盤/);
     expect(hananeCoachIntro({ wins: 1, losses: 0 })).toMatch(/本気/);
+  });
+
+  it('羽音の紹介は段位・タイトル・年齢で変わり、七段なのに「新四段」と言わない', () => {
+    expect(hananeStanding({ dan: '四段', rookie: true })).toBe('三段リーグを突破したばかりの新四段');
+    expect(hananeStanding({ dan: '四段', rookie: false })).toBe('若手の四段');
+    expect(hananeStanding({ dan: '六段' })).toBe('勢いに乗る若手の六段');
+    expect(hananeStanding({ dan: '七段' })).toBe('トップ棋士に名を連ねる七段');
+    expect(hananeStanding({ dan: '竜王' })).toBe('竜王のタイトルを持つ、若きタイトル保持者');
+    expect(hananeStanding({ dan: '八段', held: ['王位', '棋聖'] })).toContain('2冠');
+    expect(hananeIntro({ dan: '七段', age: 19 })).not.toMatch(/新四段|高校/);
+    expect(hananeIntro({ dan: '四段', age: 17, rookie: true })).toMatch(/^三段リーグを突破したばかりの新四段。高校に通う/);
+    expect(hananeCoachIntro(null, { dan: '七段' })).toContain('トップ棋士に名を連ねる七段だよ');
+    expect(hananeCoachIntro(null, { dan: '七段' })).not.toContain('新四段');
   });
 });
 

@@ -407,6 +407,7 @@
       :meijin-view="meijinView"
       :meijin-career="meijinCareer"
       :meijin-entry-class="meijinEntryClass"
+      :meijin-rival-class="hananeJunniClass"
       :meijin-entry-no="meijinEntryNo"
       :meijin-holder-name="meijinHolderName"
       :meijin-settings="meijinCareer.settings ?? null"
@@ -2145,7 +2146,7 @@ import { openingFormationGhosts, openingFormationProgress } from "./core/opening
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { mistakeReason, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
 import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
-import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
+import { HANANE, HANANE_SPRITE, storyMemberId } from "./core/ryuo-story.mjs";
 import { lastGameMilestone } from "./core/ryuo-milestone.mjs";
 import {
   formatWinRate,
@@ -2940,6 +2941,15 @@ const meijinEntryClass = computed(() => {
   const world = ryuoRoster.value?.junni;
   if (!world) return "C2";
   return world.holder === USER_ID ? "meijin" : userClass(world) ?? "C2";
+});
+/** 羽音のいまの順位戦のクラス(名人戦の入口で「羽音さんも同じクラスだよ」と言うか)。 */
+const hananeJunniClass = computed(() => {
+  const roster = ryuoRoster.value;
+  const id = storyMemberId(roster, HANANE);
+  const world = roster?.junni;
+  if (!id || !world) return "";
+  if (world.holder === id) return "meijin";
+  return (Object.entries(world.classes ?? {}) as [string, string[]][]).find(([, ids]) => ids.includes(id))?.[0] ?? "";
 });
 /** 次の期(か進行中の期)の番号。期の番号は順位戦の世界のもの(名人戦に出る前の自動の期も数える)。 */
 const meijinEntryNo = computed(() => (
