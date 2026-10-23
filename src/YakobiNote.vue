@@ -321,6 +321,29 @@
             </template>
             <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、名人戦に参加できます。</p>
           </section>
+          <!-- 奨励会の歩み(docs/shoreikai-design.mdの13章)。いまの段級か、四段の棋士番号と、これまでの挑戦。 -->
+          <section class="shogi-note__card" aria-labelledby="shogi-note-shoreikai" data-note-shoreikai>
+            <h2 id="shogi-note-shoreikai">奨励会</h2>
+            <dl class="shogi-note__tiles shogi-note__tiles--four">
+              <div><dt>現在</dt><dd data-note-shoreikai-now>{{ shoreikaiNow }}</dd></div>
+              <div><dt>挑戦</dt><dd>{{ shoreikai.history.length + (shoreikai.run ? 1 : 0) }}<small>回</small></dd></div>
+              <div><dt>対局</dt><dd>{{ shoreikaiGames }}<small>局</small></dd></div>
+              <div><dt>棋士番号</dt><dd>{{ shoreikai.pro ? shoreikai.pro.kishiNumber : "—" }}</dd></div>
+            </dl>
+            <p v-if="shoreikai.pro" class="shogi-note__hint">{{ shoreikai.pro.entry }}で入会し、{{ shoreikai.pro.games }}局で四段{{ shoreikai.pro.mentor ? `（師匠 ${shoreikai.pro.mentor}）` : "" }}</p>
+            <template v-if="shoreikai.history.length">
+              <h3 class="shogi-note__subhead">これまでの挑戦</h3>
+              <ol class="shogi-note__history" data-note-shoreikai-history>
+                <li v-for="entry in shoreikai.history.slice(0, 5)" :key="entry.id" :class="`shogi-note__history--${entry.result === 'pro' ? 'crown' : 'down'}`">
+                  <span class="shogi-note__history-no">{{ entry.entry }}入会</span>
+                  <span class="shogi-note__history-group">最高 {{ entry.rank }}</span>
+                  <span class="shogi-note__history-text">{{ entry.result === "pro" ? `四段・棋士番号${entry.kishiNumber}号` : "退会" }}</span>
+                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                </li>
+              </ol>
+            </template>
+            <p v-else-if="!shoreikai.run" class="shogi-note__hint">まだ受験していません。タイトル画面の「大会」の「奨励会」から、入会試験を受けられます。</p>
+          </section>
           <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-awards" data-note-awards>
             <h2 id="shogi-note-awards">賞状帳<small class="shogi-note__count">{{ awards.length }}枚</small></h2>
             <ul v-if="awards.length" class="shogi-note__awards">
@@ -626,6 +649,7 @@ import { awardLine } from "./core/season-award.mjs";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import TitleDaySheet, { type KansenkiView } from "./TitleDaySheet.vue";
 import { loadKansenki } from "./core/title-day.mjs";
+import { loadShoreikai, rankLabel } from "./core/shoreikai.mjs";
 
 type Tally = { wins: number; losses: number; draws: number };
 type GameOutcome = "win" | "loss" | "draw";
@@ -899,6 +923,16 @@ const AWARD_PREVIEW = 3;
 const allAwards = ref(false);
 const shownAwards = computed(() => [...props.awards].reverse().slice(0, allAwards.value ? undefined : AWARD_PREVIEW));
 const awardShown = ref<SeasonAwardData | null>(null);
+// ---- 奨励会の歩み(大会の項目)。保存から読む(対局画面と同じキー)。
+const shoreikai = ref(loadShoreikai(typeof localStorage === "undefined" ? null : localStorage));
+const shoreikaiNow = computed(() => {
+  const run = shoreikai.value.run;
+  if (run?.phase === "exam" || run?.phase === "failed") return `${rankLabel(run.exam?.rank ?? run.rank)}受験`;
+  if (run?.phase === "reikai" || run?.phase === "league") return rankLabel(run.rank);
+  return shoreikai.value.pro ? "四段" : "—";
+});
+const shoreikaiGames = computed(() => (shoreikai.value.run?.games?.length ?? 0)
+  + shoreikai.value.history.reduce((sum: number, entry: { games: number }) => sum + (entry.games ?? 0), 0));
 // ---- 観戦記(大会の項目)。賞状帳と同じく、新しい順に3局、「すべて見る」で全部。
 const kansenki = ref<(KansenkiView & { id: string; win?: boolean })[]>(loadKansenki(typeof localStorage === "undefined" ? null : localStorage));
 const allKansenki = ref(false);

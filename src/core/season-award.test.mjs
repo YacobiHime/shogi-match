@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addAward, awardLine, awardTalk, awardText, kanjiDate, kanjiNumber, kanjiText, loadAwards, meijinAward, ryuoAward } from "./season-award.mjs";
+import { addAward, awardLine, awardTalk, awardText, kanjiDate, kanjiNumber, kanjiText, loadAwards, meijinAward, ryuoAward, shoreikaiAward } from "./season-award.mjs";
 import { CLASS_LABELS } from "./meijin.mjs";
 
 function memoryStorage() {
@@ -69,6 +69,20 @@ describe("名人戦の賞状", () => {
     expect(meijinAward(season({ outcome: "defend" }, "defense"), { classLabels: CLASS_LABELS })).toMatchObject({ grade: "gold", entry: "名人" });
     expect(meijinAward(season({ cls: "A", outcome: "challenger" }), { classLabels: CLASS_LABELS }).grade).toBe("silver");
     expect(meijinAward(season({ outcome: "point" }), { classLabels: CLASS_LABELS })).toMatchObject({ grade: "fight", prize: "C級2組順位戦 出場" });
+  });
+});
+
+describe("奨励会の免状", () => {
+  it("四段の免状は金で、棋士番号と入会の級・成績・師匠を書く", () => {
+    const award = shoreikaiAward({ id: 3, kishiNumber: 352, entryRank: "4級", wins: 61, losses: 29, mentor: "森川修八段" }, { playerName: "やこび", at: AT });
+    expect(award).toMatchObject({ id: "shoreikai-3", grade: "gold", seal: "奨", prize: "四段", no: 352, notes: ["師匠 森川修八段"] });
+    const text = awardText(award);
+    expect(text.heading).toBe("免状");
+    expect(text.title).toBe("棋士番号 第三百五十二号");
+    expect(text.body).toContain("四級で入会し");
+    expect(text.name).toBe("やこび 殿");
+    expect(awardLine(award)).toBe("奨励会 四段昇段（棋士番号352号）");
+    expect(awardTalk(award)).toContain("プロ棋士");
   });
 });
 

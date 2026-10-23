@@ -53,7 +53,7 @@ describe("sound files", () => {
     expect(resolveSound("win", onlyKomaoto)).toBeNull();
     expect(resolveSound("win", new Set(["win"] as const))).toBe("win");
     // 届いている素材は、いまは駒音の2つだけ。
-    expect([...AVAILABLE_SOUNDS].sort()).toEqual(["byoyomi", "byoyomi-end", "climb", "furigoma", "furigoma-land", "normal", "stamp", "strong", "vs"]);
+    expect([...AVAILABLE_SOUNDS].sort()).toEqual(["byoyomi", "byoyomi-end", "climb", "furigoma", "furigoma-land", "nameplate", "normal", "stamp", "strong", "vs"]);
   });
 
   it("keeps sound on unless it was turned off", () => {

@@ -119,6 +119,7 @@ export const RATED_EVENTS = Object.freeze([
   Object.freeze({ id: 'free', label: '自由対局' }),
   Object.freeze({ id: 'ryuo', label: '竜王戦' }),
   Object.freeze({ id: 'meijin', label: '名人戦' }),
+  Object.freeze({ id: 'shoreikai', label: '奨励会' }),
 ]);
 const RATED_EVENT_IDS = new Set(RATED_EVENTS.map(({ id }) => id));
 

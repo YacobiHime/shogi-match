@@ -97,6 +97,19 @@ export function meijinAward(season, { playerName = 'あなた', at = Date.now(),
   });
 }
 
+/**
+ * 奨励会で四段になったときの免状(docs/shoreikai-design.mdの13章)。noは棋士番号。
+ * @param {{ id: number, kishiNumber: number, entryRank: string, wins: number, losses: number, mentor?: string }} run 四段になった挑戦の要約
+ * @param {{ playerName?: string, at?: number }} [options]
+ */
+export function shoreikaiAward(run, { playerName = 'あなた', at = Date.now() } = {}) {
+  const award = makeAward({
+    tournament: 'shoreikai', name: '奨励会', seal: '奨', no: run.kishiNumber, grade: 'gold', prize: '四段',
+    notes: run.mentor ? [`師匠 ${run.mentor}`] : [], entry: `${run.entryRank}`, wins: run.wins, losses: run.losses, playerName, at,
+  });
+  return { ...award, id: `shoreikai-${run.id}` };
+}
+
 /** @param {{ tournament: string, name: string, seal: string, no: number, grade: string, prize: string, notes: string[], entry: string, wins: number, losses: number, playerName: string, at: number }} fields */
 function makeAward(fields) {
   return {
@@ -121,6 +134,18 @@ function makeAward(fields) {
  * @param {ReturnType<typeof makeAward>} award
  */
 export function awardText(award) {
+  if (award.tournament === 'shoreikai') {
+    const games = record(award.wins, award.losses);
+    return {
+      heading: '免状',
+      title: kanjiText(`棋士番号 第${award.no}号`),
+      prize: '四段',
+      notes: award.notes.map(kanjiText),
+      name: `${award.playerName} 殿`,
+      body: kanjiText(`あなたは新進棋士奨励会に${award.entry}で入会し、${games}の成績で研鑽を重ね、三段リーグを勝ち抜きました。よってここに、四段を免許します。`),
+      date: kanjiDate(award.at),
+    };
+  }
   const fight = award.grade === 'fight';
   const title = `第${award.no}期${award.name}`;
   const games = record(award.wins, award.losses);
@@ -140,6 +165,7 @@ export function awardText(award) {
 
 /** 表彰式で、やこび姫が言うひとこと(どの格でも、まず「おつかれさま」。負けを責めない)。 */
 export function awardTalk(award) {
+  if (award.tournament === 'shoreikai') return '四段昇段、ほんとうにおめでとう！ 今日から、あなたはプロ棋士だよ';
   const head = `第${award.no}期、おつかれさま！`;
   switch (award.grade) {
     case 'gold': return `${head} ${award.prize.replace(/ /g, '')}、ほんとうにおめでとう！`;
@@ -150,7 +176,9 @@ export function awardTalk(award) {
 }
 
 /** 賞状帳の1行(横書き。例: 「第2期 竜王戦 5組 優勝」)。 */
-export const awardLine = (award) => `第${award.no}期 ${award.name} ${award.prize}`;
+export const awardLine = (award) => (award.tournament === 'shoreikai'
+  ? `奨励会 四段昇段（棋士番号${award.no}号）`
+  : `第${award.no}期 ${award.name} ${award.prize}`);
 
 const validAward = (award) => award && typeof award === 'object'
   && typeof award.id === 'string' && Number.isFinite(award.no) && AWARD_GRADES.includes(award.grade)

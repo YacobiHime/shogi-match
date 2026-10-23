@@ -135,6 +135,13 @@ describe('背景の景色(docs/tournament-match-presence-design.mdの5章)', () 
     expect(league('A', 7).longestDay).toBe(false);
     expect(league('B1', 8).longestDay).toBe(false);
   });
+  it('奨励会は道場。三段リーグは暮れていく空。期の番号の代わりに、いまの段階の名前', () => {
+    const shoreikai = (kind) => describeMatchStage({ event: 'shoreikai', season: { no: 1, players, pending: { kind, opponentId: 'p1', eventText: '奨励会 2級' } } });
+    expect(shoreikai('reikai').scenery).toBe('dojo');
+    expect(shoreikai('exam1').scenery).toBe('dojo');
+    expect(shoreikai('league').scenery).toBe('sky');
+    expect(shoreikai('reikai').eventText).toBe('奨励会 2級');
+  });
   it('空は手数で暮れる', () => {
     expect(skyPhase(0)).toBe('day');
     expect(skyPhase(41)).toBe('evening');

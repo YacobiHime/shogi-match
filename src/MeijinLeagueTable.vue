@@ -43,6 +43,10 @@
           <tr v-if="row.place === lines.promote && lines.promote" class="meijin-table__line meijin-table__line--promote" aria-hidden="true">
             <td colspan="4"><span>{{ promoteLabel }}</span></td>
           </tr>
+          <!-- 奨励会の三段リーグでは、四段の線の下に次点の線を引く。 -->
+          <tr v-if="jitenText && row.place === lines.promote + 1" class="meijin-table__line meijin-table__line--jiten" aria-hidden="true">
+            <td colspan="4"><span>{{ jitenText }}</span></td>
+          </tr>
           <tr v-if="bottomLine && row.place === rows.length - bottomLine.count" class="meijin-table__line meijin-table__line--bottom" aria-hidden="true">
             <td colspan="4"><span>{{ bottomLine.label }}</span></td>
           </tr>
@@ -68,9 +72,13 @@ const props = defineProps({
   /** A級なら、昇級ラインの代わりに「名人挑戦」。 */
   classId: { type: String, default: "C2" },
   youName: { type: String, default: "あなた" },
+  /** 昇級の線の言葉を変える(奨励会の三段リーグは「ここまで 四段」)。 */
+  promoteText: { type: String, default: "" },
+  /** 次点の線の言葉(奨励会の三段リーグだけ)。 */
+  jitenText: { type: String, default: "" },
 });
 
-const promoteLabel = computed(() => (props.classId === "A" ? "ここまで 名人挑戦" : "ここまで 昇級"));
+const promoteLabel = computed(() => props.promoteText || (props.classId === "A" ? "ここまで 名人挑戦" : "ここまで 昇級"));
 const bottomLine = computed(() => {
   if (props.lines.relegate) return { count: props.lines.relegate, label: "ここから 降級" };
   if (props.lines.point) return { count: props.lines.point, label: "ここから 降級点" };
@@ -140,6 +148,7 @@ watch(() => props.currentRound, () => nextTick(showYou));
 }
 .shogi-game .meijin-table__line--promote { color: #f1a54c; }
 .shogi-game .meijin-table__line--bottom { color: #e0745e; }
+.shogi-game .meijin-table__line--jiten { color: #9fb3c8; }
 /* 狭い枠では、回戦ごとの○●を省く(勝敗は残す)。 */
 @container (max-width: 26rem) {
   .shogi-game .meijin-table__marks { display: none; }

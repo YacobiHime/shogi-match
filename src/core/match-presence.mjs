@@ -134,7 +134,8 @@ const sidePid = (bracket, side) => (side ? (side.pid ?? bracket.nodes[side.from]
 function sameRoundGames(event, season) {
   const pending = season?.pending;
   if (!pending) return { games: [], nextFrom: null };
-  if (event === 'meijin') {
+  // 名人戦の順位戦と奨励会(例会・三段リーグ)は、同じ回のほかの対局をpending.othersに持つ。
+  if (event === 'meijin' || event === 'shoreikai') {
     const games = (pending.others?.games ?? []).map(({ a, b, winner }) => ({ winner, loser: winner === a ? b : a }));
     const nextOpponent = season.schedule?.[pending.round + 1]?.opponent ?? null;
     return { games, nextOpponent };
@@ -159,14 +160,14 @@ function sameRoundGames(event, season) {
 
 /**
  * 対局中に流す速報(優先順に、多くて4件)。推し → 羽音 → 次に当たるかもしれない試合 → 大番狂わせ → そのほか。
- * @param {{ event?: "ryuo" | "meijin", season?: any, oshiId?: string | null }} [options]
- * @returns {{ key: string, text: string, tone: "oshi" | "rival" | "next" | "upset" | "plain" }[]}
+ * @param {{ event?: "ryuo" | "meijin" | "shoreikai", season?: any, oshiId?: string | null }} [options]
+ * @returns {{ key: string, text: string, tone: "oshi" | "rival" | "peer" | "next" | "upset" | "plain" }[]}
  */
 export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {}) {
   const { games, nextFrom, nextOpponent } = sameRoundGames(event, season);
   const players = season?.players ?? {};
   const name = (pid) => `${players[pid]?.name ?? '？'}さん`;
-  const order = { oshi: 0, rival: 1, next: 2, upset: 3, plain: 4 };
+  const order = { oshi: 0, rival: 1, peer: 2, next: 3, upset: 4, plain: 5 };
   const items = games.filter(({ winner, loser }) => players[winner] && players[loser]).map((game) => {
     const { winner, loser } = game;
     const key = `news-${winner}-${loser}`;
@@ -180,6 +181,13 @@ export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {})
       return rival === winner
         ? { key, tone: 'rival', text: `速報：${name(winner)}が勝った！ 勝ち上がってくるよ` }
         : { key, tone: 'rival', text: `速報：${name(loser)}、まさかの負け…` };
+    }
+    // 奨励会の同期(どちらが先に上がるかの競争)。
+    const peer = [winner, loser].find((pid) => players[pid]?.peer);
+    if (peer) {
+      return peer === winner
+        ? { key, tone: 'peer', text: `速報：同期の${name(winner)}が勝った` }
+        : { key, tone: 'peer', text: `速報：同期の${name(loser)}は負け…` };
     }
     if ((nextFrom && game.id === nextFrom) || (nextOpponent && (winner === nextOpponent || loser === nextOpponent))) {
       return { key, tone: 'next', text: `速報：${name(winner)}が勝ちました。次に当たるかも？` };

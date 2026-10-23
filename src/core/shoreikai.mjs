@@ -137,16 +137,20 @@ export function promotionReached(rule, record) {
 export function promotionProgress(rule, record) {
   const marks = rule.marks
     .filter(([, losses]) => record.losses <= losses)
-    .map(([wins, losses]) => ({ mark: `${wins}勝${losses}敗`, winsLeft: Math.max(0, wins - record.wins), lossesLeft: losses - record.losses }))
+    .map(([wins, losses]) => ({ mark: `${wins}勝${losses}敗`, markWins: wins, markLosses: losses, winsLeft: Math.max(0, wins - record.wins), lossesLeft: losses - record.losses }))
     .sort((a, b) => a.winsLeft - b.winsLeft);
   const best = marks[0] ?? null;
   const streakLeft = Math.max(0, rule.streak - record.streak);
   return {
     record: `${record.wins}勝${record.losses}敗`,
+    wins: record.wins,
+    losses: record.losses,
     streak: record.streak,
     streakLeft,
     streakGoal: rule.streak,
     mark: best?.mark ?? null,
+    markWins: best?.markWins ?? 0,
+    markLosses: best?.markLosses ?? 0,
     winsLeft: best ? Math.min(best.winsLeft, streakLeft) : streakLeft,
     lossesLeft: best?.lossesLeft ?? 0,
   };
@@ -486,9 +490,10 @@ function newLeague(world, scale, rng, withUser) {
     ...world.nextSandan.filter((id) => world.members[id] && !world.sandanOrder.includes(id)),
   ];
   world.nextSandan = [];
-  // 三段が少なくなりすぎたら、三段編入の人を足す(リーグが成り立つように)。
+  // 三段が定員より少なければ、三段編入の人で補う(定員の目安。プレイヤーを含めて偶数にし、休みの回戦を出さない)。
   const used = usedNames(world);
-  while (ids.filter((id) => id !== USER_ID).length < Math.max(4, Math.ceil(scale.league.size / 2))) {
+  const total = () => ids.length + (withUser && !ids.includes(USER_ID) ? 1 : 0);
+  while (ids.filter((id) => id !== USER_ID).length < scale.league.size - (withUser ? 1 : 0) || total() % 2 === 1) {
     const member = createMember(world, rng, used, { rank: SANDAN, age: rankAge(rng, SANDAN) });
     world.members[member.id] = member;
     ids.push(member.id);
@@ -1151,6 +1156,7 @@ function closeUserLeague(run, rng, userLevel) {
     promoted: promotedNow || byJiten,
     jiten: jitenNow,
     byJiten,
+    endedAtGame: run.games.length,
     reveal: finalReveal(league, result.rows, people, result.promoted, result.jiten),
     rows: result.rows.map((row) => ({ id: row.id, wins: row.wins, losses: row.losses, place: row.place, name: people[row.id]?.name ?? '', you: row.id === USER_ID })),
   };
@@ -1270,20 +1276,39 @@ export function describeShoreikai(run) {
   const progress = rule ? promotionProgress(rule, run.record) : null;
   const league = run.league
     ? (() => {
-      const rows = leagueStandings(run.league);
+      const league = run.league;
+      const rows = leagueStandings(league);
+      const nextId = run.pending?.kind === 'league' ? run.pending.opponentId : null;
+      // 回戦ごとの○●(休みの回戦は空)。
+      const marksOf = (id) => Array.from({ length: league.rounds }, (_, round) => {
+        const game = league.results[round]?.find((item) => item.a === id || item.b === id);
+        return game ? (game.winner === id ? 'win' : 'loss') : null;
+      });
       return {
-        term: run.league.term,
-        round: run.league.round,
-        rounds: run.league.rounds,
-        promote: run.league.promote,
-        outlook: leagueOutlook(rows, USER_ID, run.league.rounds, run.league.promote),
-        rows: rows.map((row) => ({
-          ...row,
-          you: row.id === USER_ID,
-          name: row.id === USER_ID ? run.userName : run.world.members[row.id]?.name ?? '',
-          rival: run.world.members[row.id]?.story === HANANE,
-          peer: Boolean(run.world.members[row.id]?.peer),
-        })),
+        term: league.term,
+        round: league.round,
+        rounds: league.rounds,
+        promote: league.promote,
+        outlook: leagueOutlook(rows, USER_ID, league.rounds, league.promote),
+        demoteWins: sandanDemoteWins(league.rounds),
+        rows: rows.map((row) => {
+          const member = run.world.members[row.id];
+          return {
+            id: row.id,
+            place: row.place,
+            wins: row.wins,
+            losses: row.losses,
+            you: row.id === USER_ID,
+            next: row.id === nextId,
+            name: row.id === USER_ID ? run.userName : member?.name ?? '',
+            dan: row.id === USER_ID ? '三段' : `${Math.floor(member?.age ?? 0)}歳`,
+            story: member?.story ?? null,
+            peer: Boolean(member?.peer),
+            points: row.id === USER_ID ? run.sandanPoints : member?.sandan?.points ?? 0,
+            zone: row.place <= league.promote ? 'promote' : row.place === league.promote + 1 ? 'point' : 'mid',
+            marks: marksOf(row.id),
+          };
+        }),
       };
     })()
     : null;
@@ -1291,6 +1316,7 @@ export function describeShoreikai(run) {
   const hanane = membersOf(run.world).find((member) => member.story === HANANE);
   const wins = run.games.filter((game) => game.win).length;
   return {
+    runId: run.id,
     phase: run.phase,
     rank: run.rank,
     rankLabel: run.phase === 'exam' || run.phase === 'failed' ? `${rankLabel(run.exam?.rank ?? run.rank)}受験` : rankLabel(run.rank),
@@ -1318,6 +1344,8 @@ export function describeShoreikai(run) {
     board: nameboard(run),
     league,
     lastTerm: run.lastTerm,
+    // いま終えた1局で、三段リーグの1期が終わった(最終日の結果発表を出す)。
+    termJustEnded: Boolean(run.lastTerm) && run.lastTerm.endedAtGame === run.games.length,
     jiten: run.jiten,
     sandanPoints: run.sandanPoints,
     peers,
@@ -1371,7 +1399,7 @@ export function closeShoreikaiRun(career) {
     losses: run.games.length - wins,
     days: run.dayNo,
     kishiNumber: run.kishiNumber,
-    mentor: run.mentor?.name ?? '',
+    mentor: run.mentor ? `${run.mentor.name}${run.mentor.dan}` : '',
   };
   return {
     ...career,

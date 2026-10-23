@@ -76,7 +76,16 @@
           <section class="shogi-title__group" aria-labelledby="shogi-tournament-road">
             <h2 id="shogi-tournament-road" class="shogi-title__group-title">プロへの道</h2>
             <div class="shogi-title__tiles shogi-tournament__soon-tiles">
-              <button v-for="item in ROAD" :key="item.id" type="button" class="shogi-title__tile" disabled>
+              <!-- 奨励会(docs/shoreikai-design.md)。研修会は準備中のまま。 -->
+              <button
+                v-for="item in ROAD"
+                :key="item.id"
+                type="button"
+                class="shogi-title__tile"
+                :disabled="item.id !== 'shoreikai'"
+                :data-tournament="item.id"
+                @click="item.id === 'shoreikai' && chooseShoreikai()"
+              >
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#f1a54c">
                     <rect x="2" y="11" width="4" height="3" />
@@ -85,7 +94,7 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">{{ item.label }}</span>
-                <small class="shogi-title__desc">準備中</small>
+                <small class="shogi-title__desc">{{ item.id === "shoreikai" ? shoreikaiCardNote : "準備中" }}</small>
               </button>
             </div>
           </section>
@@ -95,7 +104,7 @@
 
     <template v-else>
       <!-- 期の画面は、上の帯を1本にする(戻るボタンは期の画面の帯に置く。docs/ryuo-stages-design.mdの5章)。 -->
-      <header v-if="screen !== 'season' && screen !== 'meijin'" class="shogi-dex__header">
+      <header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai'" class="shogi-dex__header">
         <button type="button" class="shogi-dex__back" @click="goBack">
           <span aria-hidden="true">←</span> {{ backText }}
         </button>
@@ -128,8 +137,30 @@
         </button>
 
         <div ref="mainEl" class="shogi-tournament__main">
+        <ShogiShoreikai
+          v-if="screen === 'shoreikai'"
+          ref="shoreikaiEl"
+          :view="shoreikaiView"
+          :career="shoreikaiCareer"
+          :mentors="shoreikaiMentors"
+          :recommended-rank="shoreikaiRecommendedRank"
+          :default-difficulty="defaultDifficulty"
+          :asset-base-url="assetBaseUrl"
+          :player-name="playerName"
+          :rating-text="ratingText"
+          :suspended-moves="shoreikaiSuspendedMoves"
+          :from-game="shoreikaiFromGame"
+          @enter="emit('shoreikai-enter', $event)"
+          @play="emit('shoreikai-play')"
+          @resume="emit('shoreikai-resume')"
+          @retry="emit('shoreikai-retry', $event)"
+          @close-run="emit('shoreikai-close')"
+          @ceremony="openCeremony(`shoreikai-${shoreikaiView?.runId ?? 0}`)"
+          @go="leaveShoreikaiTo"
+          @back="backToSelect"
+        />
         <ShogiMeijin
-          v-if="screen === 'meijin'"
+          v-else-if="screen === 'meijin'"
           ref="meijinEl"
           :view="meijinView"
           :career="meijinCareer"
@@ -683,6 +714,7 @@ import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RyuoMountain, { type RoadView } from "./RyuoMountain.vue";
 import RyuoVersus from "./RyuoVersus.vue";
 import ShogiMeijin, { type MeijinView } from "./ShogiMeijin.vue";
+import ShogiShoreikai, { type ShoreikaiView } from "./ShogiShoreikai.vue";
 import YakobiSays from "./YakobiSays.vue";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
@@ -795,7 +827,7 @@ const props = defineProps({
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
   /** 開いたときの画面。ryuoは竜王戦の入口(期の途中なら期の画面)。棋力測定の結果の「竜王戦に出る」から。 */
-  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo">, default: "select" },
+  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai">, default: "select" },
   /** いまの竜王(プレイヤーが竜王ならnull)。入口の山で、七番勝負に顔を出す。 */
   ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
   /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。VS画面に出す。 */
@@ -818,6 +850,12 @@ const props = defineProps({
   meijinSuspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** 賞状帳(core/season-award.mjs。古い順)。期が終わったときに、対局画面が足す。 */
   awards: { type: Array as PropType<SeasonAwardData[]>, default: () => [] },
+  // ---- 奨励会(docs/shoreikai-design.md)
+  shoreikaiView: { type: Object as PropType<ShoreikaiView | null>, default: null },
+  shoreikaiCareer: { type: Object as PropType<{ history: { result: string; kishiNumber: number | null }[]; pro: { kishiNumber: number } | null; settings?: Record<string, unknown> }>, default: () => ({ history: [], pro: null }) },
+  shoreikaiMentors: { type: Array as PropType<{ id: string; name: string; dan: string; age: number; party: string; partyLabel: string; styleLabel: string; repertoire: string }[]>, default: () => [] },
+  shoreikaiRecommendedRank: { type: Number, default: 0 },
+  shoreikaiSuspendedMoves: { type: Number as PropType<number | null>, default: null },
 });
 const emit = defineEmits<{
   close: [];
@@ -830,6 +868,11 @@ const emit = defineEmits<{
   "meijin-play": [];
   "meijin-resume": [];
   "meijin-result-seen": [];
+  "shoreikai-enter": [payload: { settings: Record<string, unknown>; examRank: number; mentorId: string }];
+  "shoreikai-play": [];
+  "shoreikai-resume": [];
+  "shoreikai-retry": [rank: number];
+  "shoreikai-close": [];
 }>();
 
 const HOME_STARS = [
@@ -846,13 +889,34 @@ const ROAD = [{ id: "kenshukai", label: "研修会" }, { id: "shoreikai", label:
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const inProgress = computed(() => Boolean(props.view && !props.view.result));
-const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin">(
-  props.startAt === "meijin" ? "meijin"
+const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin" | "shoreikai">(
+  props.startAt === "shoreikai" ? "shoreikai"
+  : props.startAt === "meijin" ? "meijin"
     : props.startAt === "season" && props.view ? (props.view.result ? "result" : "season")
       : props.startAt === "ryuo" ? (props.view && !props.view.result ? "season" : "ryuo")
         : "select",
 );
 const meijinEl = ref<{ goBack: () => boolean } | null>(null);
+// ---- 奨励会(docs/shoreikai-design.md)
+const shoreikaiEl = ref<{ goBack: () => boolean } | null>(null);
+/** 対局から奨励会へ戻ってきた(判子と最終日の結果発表を1回だけ出す)。大会の選択から選び直したら出さない。 */
+const shoreikaiFromGame = ref(props.fromGame && props.startAt === "shoreikai");
+const shoreikaiCardNote = computed(() => {
+  const view = props.shoreikaiView;
+  if (view && (view.phase === "exam" || view.phase === "reikai" || view.phase === "league")) return `${view.rankLabel}・挑戦中`;
+  if (props.shoreikaiCareer.pro) return `棋士番号${props.shoreikaiCareer.pro.kishiNumber}号`;
+  return "入会試験から四段へ";
+});
+function chooseShoreikai() {
+  shoreikaiFromGame.value = false;
+  screen.value = "shoreikai";
+}
+/** 四段の式から竜王戦・名人戦へ。挑戦を終えて(経歴に残して)から移る。 */
+function leaveShoreikaiTo(target: "ryuo" | "meijin") {
+  emit("shoreikai-close");
+  if (target === "meijin") chooseMeijin();
+  else chooseRyuo();
+}
 /** 名人戦の札の小さな説明(いまのクラス・期・名人の期数)。 */
 const meijinCardNote = computed(() => {
   const cls = props.meijinEntryClass === "meijin" ? "名人" : ({ C2: "C級2組", C1: "C級1組", B2: "B級2組", B1: "B級1組", A: "A級" } as Record<string, string>)[props.meijinEntryClass] ?? "";
@@ -911,6 +975,7 @@ function goBack() {
   else if (tableOpen.value) tableOpen.value = false;
   else if (guideOpen.value) guideOpen.value = false;
   else if (screen.value === "meijin" && meijinEl.value?.goBack()) return;
+  else if (screen.value === "shoreikai" && shoreikaiEl.value?.goBack()) return;
   else if (screen.value === "select") emit("close");
   else backToSelect();
 }
@@ -1346,6 +1411,12 @@ function finishAward() {
 }
 /** 表彰式を終えた。期の結果は見終えたことにして、大会の選択へ(次の期は、そこから自分で選ぶ)。 */
 function finishCeremony() {
+  if (screen.value === "shoreikai") {
+    // 四段の免状を受け取ったら、挑戦を終えて(経歴に残して)大会の選択へ。
+    emit("shoreikai-close");
+    screen.value = "select";
+    return;
+  }
   if (screen.value === "meijin") {
     emit("meijin-result-seen");
     screen.value = "select";

@@ -151,7 +151,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/matchKind\.value === "tournament"\) return assistAllowance\(Number\(tournamentSeasonOf\(ryuoGame\.value\)\?\.settings\?\.hintLimit/);
     // 竜王戦の対局も、自由対局と同じくレーティングとやこびノートに数え、棋戦・相手・段階を残す。千日手は指し直した対局だけを数える。
     expect(source).toMatch(/const rated = \(matchKind\.value === "normal" \|\| tournament\)/);
-    expect(source).toMatch(/event: tournament \? \(ryuoGame\.value\?\.event === "meijin" \? "meijin" : "ryuo"\) : "free"/);
+    expect(source).toMatch(/event: tournament \? ryuoGame\.value\?\.event \?\? "ryuo" : "free"/);
     expect(source).toMatch(/if \(!rated \|\| \(tournament && !matchResult\.winner\)\) return;/);
   });
 
@@ -170,10 +170,10 @@ describe("match screen regressions", () => {
     // 対局や検討を終えたら、竜王戦の対局なら竜王戦の画面(トーナメント表)へ戻る。明示的な「ホームへ」だけはホームへ。
     expect(source).toMatch(/const backToTournament = !toHome && props\.showHome && Boolean\(ryuoGame\.value\)/);
     // 対局から戻ったときは、竜王への道で前の段から登る動きを見せる(fromGame)。
-    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = backEvent === "meijin" \? "meijin" : "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
+    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = backEvent === "meijin" \? "meijin" : backEvent === "shoreikai" \? "shoreikai" : "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
     // 名人戦の対局も同じ道を通る(大会の対局のevent: "meijin")。終えたら名人戦の画面へ。
     expect(source).toMatch(/const backEvent = ryuoGame\.value\?\.event;\s*stopGuidedReview\(\);\s*openPregame\(\);/);
-    expect(source).toMatch(/function recordRyuoOutcome\(matchResult: MatchResult\) \{\s*if \(ryuoGame\.value\?\.event === "meijin"\) \{\s*recordMeijinOutcome\(matchResult\);/);
+    expect(source).toMatch(/function recordRyuoOutcome\(matchResult: MatchResult\) \{\s*if \(ryuoGame\.value\?\.event === "shoreikai"\) \{\s*recordShoreikaiOutcome\(matchResult\);\s*return;\s*\}\s*if \(ryuoGame\.value\?\.event === "meijin"\) \{\s*recordMeijinOutcome\(matchResult\);/);
     expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "meijin" \};\s*startRyuoMatch\(\);/);
     expect(source).toMatch(/:from-game="tournamentFromGame"/);
     expect(source).toMatch(/@click="leaveFinishedMatch\(\{ toHome: true \}\)"/);
@@ -235,10 +235,10 @@ describe("match screen regressions", () => {
     // 番勝負では「第3局を指す」(docs/ryuo-stages-design.mdの4章)。
     expect(tournament).toMatch(/pending && pending\.kind !== "game" \? `第\$\{pending\.gameNo\}局を指す` : "対局する"/);
     // 期の画面は3つの段階(① 組・② 決勝トーナメント・③ 番勝負)。上の帯は1本で、段階の道のりを押すと、その段階の表を見る。
-    expect(tournament).toMatch(/<header v-if="screen !== 'season' && screen !== 'meijin'" class="shogi-dex__header">/);
+    expect(tournament).toMatch(/<header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai'" class="shogi-dex__header">/);
     // 名人戦は大会の選択の札から入り、大会の画面の中に出す(docs/meijin-design.md)。
     expect(tournament).toMatch(/data-tournament="meijin" @click="chooseMeijin"/);
-    expect(tournament).toMatch(/<ShogiMeijin\s+v-if="screen === 'meijin'"/);
+    expect(tournament).toMatch(/<ShogiMeijin\s+v-(?:else-)?if="screen === 'meijin'"/);
     // 名人戦の3つの画面は、どれも同じ上の帯の左上に、行き先を書いた戻るを置く。入口は大会の選択へ、期の画面と結果は入口(五重塔)へ。
     // 大会の選択から選んだら入口から。対局から戻ったときだけ、期の画面を直接開く。
     const meijin = readFileSync(new URL("../ShogiMeijin.vue", import.meta.url), "utf8");
@@ -257,7 +257,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/data-award-open @click="openCeremony\(`ryuo-\$\{seasonNo\}`\)">表彰式へ</);
     expect(tournament).toMatch(/@ceremony="openCeremony\(`meijin-\$\{meijinView\?\.no \?\? 0\}`\)"/);
     expect(tournament).toMatch(/:button-text="awardCeremony \? '大会の選択へ' : '閉じる'"/);
-    expect(tournament).toMatch(/function finishCeremony\(\) \{\s*if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
+    expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
     expect(tournament).toMatch(/function goBack\(\) \{\s*if \(awardShown\.value\) \{/);
     expect(tournament).toMatch(/data-award-book @click="bookOpen = true"/);
     // 賞状は期が終わったときに対局画面が足す(竜王戦・名人戦とも)。
@@ -745,5 +745,21 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/v-if="resultKansenki"[^>]*data-kansenki-open/);
     expect(source).toMatch(/\} else if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(daySummaryOpen\.value\) \{/);
     expect(source).toMatch(/\|\| daySummaryOpen\.value,/);
+  });
+  it("奨励会は大会の画面から入り、1局を挑戦に記録して奨励会の画面へ戻る(docs/shoreikai-design.md)", () => {
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    expect(tournament).toMatch(/<ShogiShoreikai\s+v-if="screen === 'shoreikai'"/);
+    expect(tournament).toMatch(/@click="item\.id === 'shoreikai' && chooseShoreikai\(\)"/);
+    // 戻る操作は、奨励会の画面の中で重ねたものから閉じる。
+    expect(tournament).toMatch(/shoreikaiEl\.value\?\.goBack\(\)/);
+    // 新しい対局を始めるときは、中断した対局を消す確認を挟む。
+    expect(source).toMatch(/function startShoreikaiGame\(\) \{\s*confirmDiscardSuspended\(startShoreikaiGameNow\);/);
+    expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "shoreikai" \};/);
+    // 千日手は先後を入れ替えて指し直す。判子は勝って昇級・合格・三段・四段のときだけ。四段で免状を賞状帳へ。
+    expect(source).toMatch(/if \(!matchResult\.winner\) \{\s*const next = \{ \.\.\.run, pending: \{ \.\.\.run\.pending, color: run\.pending\.color === "black" \? "white" : "black" \} \};/);
+    expect(source).toMatch(/finishMilestone = outcome === "win" && stamp\?\.tone === "good"/);
+    expect(source).toMatch(/if \(next\.phase === "pro"\) \{\s*const wins[\s\S]*?shoreikaiAward\(/);
+    // 中断した奨励会の対局は、同じ相手の対局が残っているときだけ「対局を再開」。
+    expect(source).toMatch(/suspended\?\.event === "shoreikai" && suspended\.ryuoOpponentId && pending && suspended\.ryuoOpponentId === pending\.opponentId/);
   });
 });

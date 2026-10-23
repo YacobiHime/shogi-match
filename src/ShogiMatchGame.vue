@@ -417,6 +417,16 @@
       @meijin-resume="resumeMeijinGame"
       @meijin-result-seen="markMeijinResultSeen"
       :awards="seasonAwards"
+      :shoreikai-view="shoreikaiView"
+      :shoreikai-career="shoreikaiCareer"
+      :shoreikai-mentors="shoreikaiMentors"
+      :shoreikai-recommended-rank="shoreikaiRecommendedRank"
+      :shoreikai-suspended-moves="suspendedShoreikaiMoves"
+      @shoreikai-enter="enterShoreikai"
+      @shoreikai-play="startShoreikaiGame"
+      @shoreikai-resume="resumeShoreikaiGame"
+      @shoreikai-retry="retryShoreikai"
+      @shoreikai-close="closeShoreikai"
     />
     <YakobiNote
       v-if="yakobiNoteOpen"
@@ -2162,6 +2172,19 @@ import {
 } from "./core/match-presence.mjs";
 import { byoyomiSeconds } from "./core/byoyomi.mjs";
 import {
+  closeShoreikaiRun,
+  createShoreikaiRun,
+  describeShoreikai,
+  loadShoreikai,
+  mentorCandidates,
+  rankLabel as shoreikaiRankLabel,
+  recommendedExamRank,
+  recordShoreikaiGame,
+  retryExam,
+  saveShoreikai,
+} from "./core/shoreikai.mjs";
+import { eventStamp } from "./core/shoreikai-speech.mjs";
+import {
   LUNCH_PLY,
   daySummary,
   emptyDay,
@@ -2253,7 +2276,7 @@ import {
   saveCareer,
   saveSeason,
 } from "./core/ryuo-career.mjs";
-import { addAward, loadAwards, meijinAward, ryuoAward } from "./core/season-award.mjs";
+import { addAward, loadAwards, meijinAward, ryuoAward, shoreikaiAward } from "./core/season-award.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { hasKikiGlasses, loadTutorialProgress } from "./core/tutorial-progress.mjs";
@@ -2706,7 +2729,7 @@ type RyuoGame = {
   label: string;
   outcome?: "win" | "loss";
   replay?: boolean;
-  event?: "ryuo" | "meijin";
+  event?: "ryuo" | "meijin" | "shoreikai";
   /** 対局を始めたときの舞台(docs/match-stage-design.md)。終局後に期が次の局へ進んでも、この局の札のまま。 */
   stage?: MatchStage | null;
   /** タイトル戦(二日制)の記録。勝率・考えた時間・勝負メシ・封じ手(docs/title-match-day-design.md)。 */
@@ -2843,7 +2866,7 @@ function startPresence({ greet = true }: { greet?: boolean } = {}) {
   const game = ryuoGame.value;
   if (!game) return;
   matchNews = roundNews({
-    event: game.event === "meijin" ? "meijin" : "ryuo",
+    event: game.event === "meijin" || game.event === "shoreikai" ? game.event : "ryuo",
     season: tournamentSeasonOf(game),
     oshiId: ryuoOshi.value?.id ?? null,
   });
@@ -2962,8 +2985,9 @@ const meijinHolderName = computed(() => {
   if (!holder || holder === USER_ID) return "";
   return meijinSeason.value?.players?.[holder]?.name ?? ryuoRoster.value?.players?.[holder]?.name ?? "";
 });
-/** 大会の対局の期(竜王戦か名人戦)。 */
+/** 大会の対局の期(竜王戦・名人戦・奨励会の挑戦)。 */
 function tournamentSeasonOf(game: RyuoGame | null) {
+  if (game?.event === "shoreikai") return shoreikaiCareer.value.run;
   return game?.event === "meijin" ? meijinSeason.value : ryuoSeason.value;
 }
 /**
@@ -2974,7 +2998,7 @@ const ryuoCounter = ref<{ opponentId: string; label: string; key: string } | nul
 const ryuoCounterOpponent = computed(() => (ryuoCounter.value ? ryuoSeason.value?.players?.[ryuoCounter.value.opponentId] ?? null : null));
 /** 対策をした次の一局の印(期と次の一局の組)。 */
 const ryuoCounterDoneKey = ref(loadCounterKey(browserStorage()));
-const tournamentStartAt = ref<"select" | "season" | "meijin" | "ryuo">("select");
+const tournamentStartAt = ref<"select" | "season" | "meijin" | "ryuo" | "shoreikai">("select");
 /** いまの竜王(名簿の竜王。プレイヤーが竜王ならnull)。竜王戦の入口の山で、七番勝負に顔を出す。 */
 const ryuoHolder = computed(() => {
   const roster = ryuoRoster.value;
@@ -3190,7 +3214,7 @@ watch([homeOpen, pregameOpen, reviewMode], () => closeAssistTools());
 const resignConfirmOpen = ref(false);
 // 中断した対局(保存済み)。ホームの「対局を再開」から続ける。リロードしても残る。
 // 竜王戦の対局なら、相手(ryuoOpponentId)も持つ。竜王戦の画面の次の一局の枠からも再開できる。
-const suspendedMatch = ref<{ moves: number; ryuoOpponentId: string | null; event?: "ryuo" | "meijin" } | null>(null);
+const suspendedMatch = ref<{ moves: number; ryuoOpponentId: string | null; event?: "ryuo" | "meijin" | "shoreikai" } | null>(null);
 const suspendConfirmOpen = ref(false);
 /** 中断した対局を消して新しく始める前の確認。承諾したら、保留した開始処理を行う。 */
 const discardSuspendedPending = ref<(() => void) | null>(null);
@@ -5335,7 +5359,7 @@ const rawRyuoSeason = () => JSON.parse(JSON.stringify(ryuoSeason.value));
 const suspendedRyuoMoves = computed(() => {
   const suspended = suspendedMatch.value;
   const pending = ryuoSeason.value?.pending;
-  return suspended?.ryuoOpponentId && suspended.event !== "meijin" && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
+  return suspended?.ryuoOpponentId && (suspended.event ?? "ryuo") === "ryuo" && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
 });
 /** 名人戦の画面で「対局を再開」を押したとき。 */
 function resumeMeijinGame() {
@@ -5394,13 +5418,14 @@ function startRyuoMatch() {
     cpuDetailedCastle.value = gameStyle.castle;
   }
   const game: RyuoGame = ryuoGame.value ?? { opponentId: opponent.id, label: "" };
-  const event = game.event === "meijin" ? "meijin" : "ryuo";
+  const event = game.event === "meijin" || game.event === "shoreikai" ? game.event : "ryuo";
+  const stakesView = event === "shoreikai" ? shoreikaiView.value : event === "meijin" ? meijinView.value : ryuoView.value;
   const stage = describeMatchStage({
     event,
     season,
     label: game.label,
     userName: playerName.value,
-    stakes: (event === "meijin" ? meijinView.value : ryuoView.value)?.pending?.stakes ?? null,
+    stakes: stakesView?.pending?.stakes ?? null,
   });
   ryuoGame.value = { ...game, outcome: undefined, replay: false, stage, day: stage?.twoDay ? emptyDay() : undefined };
   resetTitleDay();
@@ -5480,6 +5505,10 @@ function goToRyuoFromCounter() {
 
 /** 終局を大会に記録する。勝敗は、トーナメント表を進める。千日手(引き分け)は、先後を入れ替えて指し直す。 */
 function recordRyuoOutcome(matchResult: MatchResult) {
+  if (ryuoGame.value?.event === "shoreikai") {
+    recordShoreikaiOutcome(matchResult);
+    return;
+  }
   if (ryuoGame.value?.event === "meijin") {
     recordMeijinOutcome(matchResult);
     return;
@@ -5547,6 +5576,17 @@ function markRyuoResultSeen() {
 
 /** 大会の対局の終局画面の文(竜王戦か名人戦)。 */
 const tournamentResult = computed(() => {
+  if (ryuoGame.value?.event === "shoreikai") {
+    const view = shoreikaiView.value;
+    const phase = view?.phase;
+    const done = phase === "pro" || phase === "retired" || phase === "failed";
+    return {
+      done,
+      doneText: phase === "pro" ? "四段昇段！ プロ棋士になりました！" : phase === "failed" ? "入会試験は不合格でした。すぐに受け直せます。" : "奨励会を退会しました。",
+      next: view?.pending?.label ?? "",
+      back: "奨励会へ戻る",
+    };
+  }
   if (ryuoGame.value?.event === "meijin") {
     const view = meijinView.value;
     return {
@@ -5655,6 +5695,104 @@ const suspendedMeijinMoves = computed(() => {
   const pending = meijinSeason.value?.pending;
   return suspended?.event === "meijin" && suspended.ryuoOpponentId && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
 });
+
+// ---- 奨励会(docs/shoreikai-design.md)。入会試験から四段まで。挑戦(run)は1つずつ、端末に保存する(竜王戦・名人戦とは別の暦)。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const shoreikaiCareer = shallowRef<any>(loadShoreikai(browserStorage()));
+const shoreikaiView = computed(() => describeShoreikai(shoreikaiCareer.value.run));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setShoreikaiCareer(career: any) {
+  shoreikaiCareer.value = career;
+  saveShoreikai(browserStorage(), career);
+}
+/** 推薦してくれる師匠の候補(竜王戦の名簿の年長の棋士から3人。挑戦のたびに変わる)。 */
+const shoreikaiMentors = computed(() => mentorCandidates(ryuoRoster.value, (shoreikaiCareer.value.history?.length ?? 0) + 1));
+/** おすすめの受験級(いまの棋力から)。 */
+const shoreikaiRecommendedRank = computed(() => recommendedExamRank(ratingLevel(ratingState.value.rating)));
+/** 中断した奨励会の対局が、いまの次の一局と同じ相手なら、その手数。 */
+const suspendedShoreikaiMoves = computed(() => {
+  const suspended = suspendedMatch.value;
+  const pending = shoreikaiCareer.value.run?.pending;
+  return suspended?.event === "shoreikai" && suspended.ryuoOpponentId && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
+});
+/** 入口の「受験する」。師匠の候補を出すため、名簿がなければ作る(竜王戦・名人戦と同じ名簿)。 */
+function enterShoreikai({ settings, examRank, mentorId }: { settings: { [key: string]: unknown }; examRank: number; mentorId: string }) {
+  if (!ryuoRoster.value) {
+    ryuoRoster.value = createRoster({ seed: Date.now(), userGroup: ryuoCareer.value.group });
+    saveRoster(browserStorage(), ryuoRoster.value);
+  }
+  const mentor = shoreikaiMentors.value.find((item) => item.id === mentorId) ?? shoreikaiMentors.value[0] ?? null;
+  const run = createShoreikaiRun({
+    seed: Date.now(),
+    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value },
+    examRank,
+    mentor,
+    userName: playerDisplayName(playerName.value),
+    userLevel: ratingLevel(ratingState.value.rating),
+  });
+  setShoreikaiCareer({ ...shoreikaiCareer.value, settings: { ...settings }, run });
+}
+function startShoreikaiGame() {
+  confirmDiscardSuspended(startShoreikaiGameNow);
+}
+function startShoreikaiGameNow() {
+  const run = shoreikaiCareer.value.run;
+  const pending = run?.pending;
+  if (!run || !pending) return;
+  tournamentOpen.value = false;
+  openPregame();
+  matchKind.value = "tournament";
+  homeOpen.value = false;
+  void initializeEngine();
+  coachLevel.value = ["off", "encourage", "detailed"].includes(run.settings.coachLevel) ? run.settings.coachLevel : "detailed";
+  ryuoGame.value = { opponentId: pending.opponentId, label: pending.label ?? "", event: "shoreikai" };
+  startRyuoMatch();
+}
+/** 奨励会の画面で「対局を再開」を押したとき。 */
+function resumeShoreikaiGame() {
+  tournamentOpen.value = false;
+  resumeSuspendedMatch();
+}
+/** 入会試験に落ちたあと、受け直す(受験級を選び直せる)。 */
+function retryShoreikai(rank: number) {
+  const run = shoreikaiCareer.value.run;
+  if (!run || run.phase !== "failed") return;
+  setShoreikaiCareer({ ...shoreikaiCareer.value, run: retryExam(run, rank, { userLevel: ratingLevel(ratingState.value.rating) }) });
+}
+/** 四段・退会の挑戦を終えて、経歴に残す(次は入口から)。 */
+function closeShoreikai() {
+  const run = shoreikaiCareer.value.run;
+  if (!run || (run.phase !== "pro" && run.phase !== "retired")) return;
+  setShoreikaiCareer(closeShoreikaiRun(shoreikaiCareer.value));
+}
+/** 奨励会の終局を挑戦に記録する。千日手は、先後を入れ替えて指し直す。四段になったら免状を賞状帳に足す。 */
+function recordShoreikaiOutcome(matchResult: MatchResult) {
+  const game = ryuoGame.value;
+  const run = shoreikaiCareer.value.run;
+  if (!game || !run?.pending) return;
+  if (!matchResult.winner) {
+    const next = { ...run, pending: { ...run.pending, color: run.pending.color === "black" ? "white" : "black" } };
+    setShoreikaiCareer({ ...shoreikaiCareer.value, run: next });
+    ryuoGame.value = { ...game, replay: true };
+    return;
+  }
+  const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
+  const next = recordShoreikaiGame(run, outcome, { userLevel: ratingLevel(ratingState.value.rating) });
+  // 終局の判子は、昇級・合格・三段・四段のときだけ(期の画面の判子と同じ言葉)。負けたときは押さない。
+  const stamp = eventStamp(next.events);
+  finishMilestone = outcome === "win" && stamp?.tone === "good"
+    ? { kind: "shoreikai", weight: stamp.weight, seal: stamp.seal, title: stamp.title, sub: stamp.sub, line: "" }
+    : null;
+  setShoreikaiCareer({ ...shoreikaiCareer.value, run: next });
+  ryuoGame.value = { ...game, outcome, replay: false };
+  if (next.phase === "pro") {
+    const wins = next.games.filter((item: { win: boolean }) => item.win).length;
+    seasonAwards.value = addAward(browserStorage(), shoreikaiAward({
+      id: next.id, kishiNumber: next.kishiNumber, entryRank: shoreikaiRankLabel(next.entryRank),
+      wins, losses: next.games.length - wins, mentor: next.mentor ? `${next.mentor.name}${next.mentor.dan}` : "",
+    }, { playerName: playerDisplayName(playerName.value) }));
+  }
+}
 
 function beginMatch() {
   ownsKikiGlasses.value = hasKikiGlasses(loadTutorialProgress(browserStorage()));
@@ -5937,7 +6075,7 @@ function openMatchSetup(kind: MatchKind) {
 
 /** タイトル画面の「大会」。大会の画面を開く。 */
 /** 大会の画面を、竜王戦か名人戦の入口で開く(期の途中なら、その期の画面)。 */
-function openTournamentAt(startAt: "ryuo" | "meijin") {
+function openTournamentAt(startAt: "ryuo" | "meijin" | "shoreikai") {
   tournamentStartAt.value = startAt;
   tournamentFromGame.value = false;
   tournamentOpen.value = true;
@@ -6248,7 +6386,9 @@ const homeRyuoPlan = computed(() => {
  */
 const homeNext = computed<HomeNext>(() => {
   if (suspendedMatch.value) {
-    const what = suspendedMatch.value.ryuoOpponentId ? (suspendedMatch.value.event === "meijin" ? "名人戦の対局" : "竜王戦の対局") : "対局";
+    const what = suspendedMatch.value.ryuoOpponentId
+      ? ({ meijin: "名人戦の対局", shoreikai: "奨励会の対局" } as { [key: string]: string })[suspendedMatch.value.event ?? ""] ?? "竜王戦の対局"
+      : "対局";
     return { id: "resume", label: "対局を再開", description: `中断した${what}（${suspendedMatch.value.moves}手目まで）` };
   }
   // 竜王戦の期の途中: 次の相手の対策か、続きを指すか。主役でない方を小さな入口にする。
@@ -6866,7 +7006,7 @@ function persistMatchState() {
 
 function restoreLearningSettings(snapshot: { [key: string]: any }) {
   const savedRyuo = snapshot.ryuoGame;
-  const savedEvent = savedRyuo?.event === "meijin" ? "meijin" : "ryuo";
+  const savedEvent = savedRyuo?.event === "meijin" || savedRyuo?.event === "shoreikai" ? savedRyuo.event : "ryuo";
   const restoredRyuo: RyuoGame | null = snapshot.matchKind === "tournament" && savedRyuo
     && typeof savedRyuo.opponentId === "string" && tournamentSeasonOf({ opponentId: "", label: "", event: savedEvent })?.players?.[savedRyuo.opponentId]
     ? {
@@ -6972,7 +7112,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
     suspendedMatch.value = {
       moves: Array.isArray(snapshot.moves) ? snapshot.moves.length : 0,
       ryuoOpponentId: typeof savedRyuo?.opponentId === "string" ? savedRyuo.opponentId : null,
-      event: savedRyuo?.event === "meijin" ? "meijin" : "ryuo",
+      event: savedRyuo?.event === "meijin" || savedRyuo?.event === "shoreikai" ? savedRyuo.event : "ryuo",
     };
     return false;
   }
@@ -8432,7 +8572,7 @@ function recordRatedGame(matchResult: MatchResult) {
       opponentRook: other.rook,
       opponentCastle: other.castle,
     },
-    event: tournament ? (ryuoGame.value?.event === "meijin" ? "meijin" : "ryuo") : "free",
+    event: tournament ? ryuoGame.value?.event ?? "ryuo" : "free",
     opponent: tournament ? ryuoOpponent.value?.name : undefined,
     stage: tournament ? ryuoGame.value?.label : undefined,
   });
@@ -8483,7 +8623,7 @@ function finish(matchResult: MatchResult) {
   recordRatedGame(matchResult);
   recordCollection(outcome === "win");
   const stageWeight = matchStage.value?.weight ?? "plain";
-  const tournamentEvent = ryuoGame.value?.event === "meijin" ? "meijin" : "ryuo";
+  const tournamentEvent = ryuoGame.value?.event ?? "ryuo";
   const tournamentFinish = matchKind.value === "tournament" && Boolean(ryuoGame.value) && Boolean(matchResult.winner);
   finishMilestone = null;
   finishCrowned = false;
@@ -9501,7 +9641,7 @@ function resign() {
 /** 検討を終えるボタンの文字。押すと行く先を書く(completeReview・leaveFinishedMatchと同じ分かれ方)。 */
 const reviewCompleteLabel = computed(() => {
   if (tutorialMatch.value?.report) return "完了して教室へ";
-  if (props.showHome && ryuoGame.value) return ryuoGame.value.event === "meijin" ? "完了して名人戦へ" : "完了して竜王戦へ";
+  if (props.showHome && ryuoGame.value) return ({ meijin: "完了して名人戦へ", shoreikai: "完了して奨励会へ" } as { [key: string]: string })[ryuoGame.value.event ?? ""] ?? "完了して竜王戦へ";
   return props.showHome ? "完了してホームへ" : "完了して対局準備へ";
 });
 
@@ -9524,7 +9664,7 @@ function leaveFinishedMatch({ toHome = false }: { toHome?: boolean } = {}) {
   openPregame();
   if (props.showHome) openHome();
   if (backToTournament) {
-    tournamentStartAt.value = backEvent === "meijin" ? "meijin" : "season";
+    tournamentStartAt.value = backEvent === "meijin" ? "meijin" : backEvent === "shoreikai" ? "shoreikai" : "season";
     tournamentFromGame.value = true;
     tournamentOpen.value = true;
   }

@@ -632,7 +632,8 @@
 .shogi-game.shogi-game--scenery-foot,
 .shogi-game.shogi-game--scenery-mid,
 .shogi-game.shogi-game--scenery-snow,
-.shogi-game.shogi-game--scenery-sky {
+.shogi-game.shogi-game--scenery-sky,
+.shogi-game.shogi-game--scenery-dojo {
   background-color: var(--night);
   background-image: var(--stage-light, linear-gradient(transparent, transparent)), var(--scenery-ground), var(--scenery-sky);
   background-position: center, bottom, center;
@@ -641,6 +642,11 @@
 }
 .shogi-game--stage-big {
   --stage-light: radial-gradient(ellipse 80% 40% at 50% 0%, rgba(226, 85, 59, 0.18), transparent 72%);
+}
+/* 奨励会(docs/shoreikai-design.mdの7章)は道場。暗い木の壁と、下に畳の縁と名札掛けの影。 */
+.shogi-game--scenery-dojo {
+  --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Crect x='0' y='18' width='100' height='12' fill='%23566a3e' fill-opacity='.45'/%3E%3Cg fill='%232a2416' fill-opacity='.7'%3E%3Crect x='0' y='18' width='100' height='1'/%3E%3Crect x='33' y='18' width='1' height='12'/%3E%3Crect x='66' y='18' width='1' height='12'/%3E%3C/g%3E%3Cg fill='%233a2512' fill-opacity='.75'%3E%3Crect x='6' y='4' width='22' height='10'/%3E%3C/g%3E%3Cg fill='%23d9b57a' fill-opacity='.55'%3E%3Crect x='8' y='6' width='1.4' height='6'/%3E%3Crect x='10.5' y='6' width='1.4' height='6'/%3E%3Crect x='13' y='6' width='1.4' height='6'/%3E%3Crect x='15.5' y='6' width='1.4' height='6'/%3E%3Crect x='18' y='6' width='1.4' height='6'/%3E%3Crect x='20.5' y='6' width='1.4' height='6'/%3E%3Crect x='23' y='6' width='1.4' height='6'/%3E%3C/g%3E%3C/svg%3E");
+  --scenery-sky: linear-gradient(180deg, #2a1f17 0%, #3a2a1c 62%, #4a3523 100%);
 }
 .shogi-game--scenery-foot {
   --scenery-ground: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'%3E%3Cpath d='M0 30V18Q15 8 30 16T60 14T100 12V30Z' fill='%232f5a3a' fill-opacity='.55'/%3E%3Cpath d='M0 30V24Q25 16 50 22T100 20V30Z' fill='%233d7047' fill-opacity='.6'/%3E%3Crect x='70' y='15' width='9' height='5' fill='%238a98a8' fill-opacity='.7'/%3E%3Crect x='69' y='14' width='11' height='1.4' fill='%23fffcf4' fill-opacity='.7'/%3E%3C/svg%3E");
