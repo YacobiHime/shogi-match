@@ -2031,6 +2031,8 @@ import {
 } from "./core/opening-unlocks.mjs";
 import { openingFormationGhosts, openingFormationProgress } from "./core/opening-formation.mjs";
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
+import { mistakeReason, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
+import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import {
   PLAN_CONFIRM_SEARCH,
   confirmPlanAdvice,
@@ -4872,8 +4874,11 @@ function startRyuoMatch() {
   pregameOpen.value = false;
   scheduleDeferredCoachPortraitPreload();
   restart();
-  // 大一番とタイトル戦は、開幕の札とやこび姫の一言で始める。
+  // 大一番とタイトル戦は、開幕の札とやこび姫の一言で始める。ふだんの1局は、相手の棋風と特殊能力から戦い方を一言。
+  const opponentLine = opponentStyleAdvice(opponent.character, opponent.name);
   if (stage?.coachLine && coachLevel.value !== "off") guideText.value = stage.coachLine;
+  // 最初の形勢の一言に上書きされないよう、助言の順番待ちを通して6秒は見せる。
+  else if (opponentLine && coachLevel.value !== "off") showCoachAdvice(opponentLine);
   if (stage && stage.weight !== "plain") showStageCard("opening");
   // 対局準備で選んだ作戦は、始めた瞬間にやこび姫が目指す形を伝える。
   if (openingGuideAvailable.value && (selectedStrategy.value || selectedCastle.value)) announceOpeningGuide();
@@ -6642,13 +6647,17 @@ function enginePositionAt(ply: number) {
   const moves = moveHistory.slice(0, ply);
   return `${base}${moves.length ? ` moves ${moves.join(" ")}` : ""}`;
 }
-async function judgeSearchScore(positionKey: string): Promise<EngineEvaluation | undefined> {
-  if (!engine) return undefined;
+async function judgeSearch(positionKey: string): Promise<{ score?: EngineEvaluation; pv: string[] }> {
+  if (!engine) return { pv: [] };
   const settings = getMoveJudgeSearchSettings(props.mobile || boardLayout.value === "portrait");
   engine.setPosition(positionKey);
   engine.applyStrengthOptions({ multiPv: 1 });
   const search = await engine.go({ nodes: settings.nodes, maxTimeMs: settings.maxTimeMs });
-  return search.candidates.find((candidate) => candidate.rank === 1)?.score as EngineEvaluation | undefined;
+  const best = search.candidates.find((candidate) => candidate.rank === 1);
+  return { score: best?.score as EngineEvaluation | undefined, pv: best?.pv ?? [] };
+}
+async function judgeSearchScore(positionKey: string): Promise<EngineEvaluation | undefined> {
+  return (await judgeSearch(positionKey)).score;
 }
 /** プレイヤーの手番の間に、着手前の局面を悪手判定の深さで読んでおく。詳しい助言のときだけ。 */
 function scheduleMoveJudgeBaseline() {
@@ -6688,9 +6697,11 @@ async function judgePlayerMove(isCurrent: () => boolean) {
     before = scoreForPlayer(await judgeSearchScore(beforeKey), reverseColor(sideAfter), humanColor.value);
     if (!isCurrent()) return null;
   }
-  const after = scoreForPlayer(await judgeSearchScore(afterKey), sideAfter, humanColor.value);
+  // 着手後の読み筋の1手目は、相手のいちばんの応手。悪手の理由を言うのに使う(coach-reason.mjs)。
+  const afterSearch = await judgeSearch(afterKey);
+  const after = scoreForPlayer(afterSearch.score, sideAfter, humanColor.value);
   if (!isCurrent() || !before || !after) return null;
-  return { before, after };
+  return { before, after, afterPv: afterSearch.pv };
 }
 
 async function analyzeOpeningFollowupPosition() {
@@ -7046,7 +7057,10 @@ function updateCoachAdviceFromPlayerScore(
 async function engineMateCheck(
   sfen: string,
   options: { nodes: number; maxTimeMs: number; maxPly?: number },
-): Promise<{ status: "mate"; plies: number } | { status: "no-mate" | "unknown" }> {
+): Promise<({ status: "mate"; plies: number } | { status: "no-mate" | "unknown" }) & {
+  /** 読んだ局面のいちばんの手(手番側から見た評価)。相手の狙いを言うのに使う。 */
+  best?: { move: string; score?: EngineEvaluation; pv: string[] };
+}> {
   if (!engine || !engineReady.value) return { status: "unknown" };
   const maxPly = options.maxPly ?? 7;
   try {
@@ -7057,7 +7071,10 @@ async function engineMateCheck(
     );
     if (interrupted) return { status: "unknown" };
     const best = search.candidates.find((candidate) => candidate.rank === 1);
-    return mateCheckResultFromCandidate(sfen, best, maxPly);
+    return {
+      ...mateCheckResultFromCandidate(sfen, best, maxPly),
+      best: best?.move ? { move: best.move, score: best.score as EngineEvaluation | undefined, pv: best.pv ?? [] } : undefined,
+    };
   } catch {
     return { status: "unknown" };
   }
@@ -7123,10 +7140,21 @@ async function updateDedicatedCoachAdvice(
         ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
       })
     : null;
-  // 順番: 悪手の指摘 → 詰み・王手・詰めろ・評価の崖 → 作戦の助言(とほめる一言) → ほかの危険の知らせ。
+  // 順番: 悪手の指摘 → 詰み・王手・詰めろ・評価の崖 → 相手の狙い → 作戦の助言(とほめる一言) → ほかの危険の知らせ。
   const urgentAdvice = riskAdvice && URGENT_RISK_ADVICE.test(riskAdvice.key) ? riskAdvice : null;
+  // 相手の狙い: 手番を入れ替えた局面(詰めろの確かめ)で、相手がいちばん指したい手が大きな駒を取る手なら言う。
+  const threatLine = coachLevel.value === "detailed" && !moveFeedback && !urgentAdvice && threatSfen && mateThreatResult?.best
+    ? threatAdvice({
+        threatSfen,
+        threatMove: mateThreatResult.best.move,
+        threatPv: mateThreatResult.best.pv,
+        threatScore: mateThreatResult.best.score ?? null,
+        playerScore: score ?? null,
+        playerColor: humanColor.value === Color.WHITE ? "white" : "black",
+      })
+    : null;
   let planLine: { key: string; text: string; topic?: string } | null = null;
-  if (coachLevel.value === "detailed" && !moveFeedback && !urgentAdvice) {
+  if (coachLevel.value === "detailed" && !moveFeedback && !urgentAdvice && !threatLine) {
     planLine = coachPlanPraise();
     if (!planLine) {
       const rookUnderThreat = bestMove ? Boolean(bestMoveTacticalContext(bestMove).rookUnderThreat) : false;
@@ -7135,7 +7163,7 @@ async function updateDedicatedCoachAdvice(
       planLine = offered;
     }
   }
-  const chosen = moveFeedback ?? urgentAdvice ?? planLine ?? riskAdvice;
+  const chosen = moveFeedback ?? urgentAdvice ?? threatLine ?? planLine ?? riskAdvice;
   if (riskOnly) {
     if (chosen) showCoachAdvice(chosen);
     return;
@@ -8550,7 +8578,7 @@ async function scheduleCpuMove() {
       // 悪手判定は、着手の前後を同じ深さで読んで比べる。この読みは、相手の思考時間として、CPUの探索の前に行う。
       // 悪手・かち込みは、相手が考えている間に伝える。
       // プレイヤーが指した直後だけ読む(CPUが先手の初手や、リロードで再開したCPUの手番では読まない)。
-      let judged: { before: EngineEvaluation; after: EngineEvaluation } | null = null;
+      let judged: { before: EngineEvaluation; after: EngineEvaluation; afterPv: string[] } | null = null;
       let shownFeedbackKey = "";
       if (moveFlair) {
         cpuSearchRunning = true;
@@ -8564,13 +8592,19 @@ async function scheduleCpuMove() {
         }
         if (generation !== matchGeneration) return;
         if (judged) {
-          moveFeedback = getMoveFeedback({
+          // 悪手のときは、相手のいちばんの応手から「なぜ悪いか」を1つ添える。
+          moveFeedback = withMistakeReason(getMoveFeedback({
             level: coachLevel.value,
             beforeScore: judged.before,
             afterScore: judged.after,
             wasPromotion: moveFlair.wasPromotion,
             wasEnemyCampDrop: moveFlair.wasEnemyCampDrop,
-          });
+          }), mistakeReason({
+            sfenAfter: record.value.position.sfen,
+            playedUsi: moveHistory[moveHistory.length - 1] ?? "",
+            pv: judged.afterPv,
+            playerColor: humanColor.value === Color.WHITE ? "white" : "black",
+          }));
           if (moveFeedback) {
             showCoachAdvice(moveFeedback);
             shownFeedbackKey = moveFeedback.key;

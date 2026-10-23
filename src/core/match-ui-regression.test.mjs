@@ -662,7 +662,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/\} else if \(dexShelfOpen\.value\) \{\s*dexShelfOpen\.value = false;/);
   });
   it("やこび姫の作戦の助言は、危険の知らせのあと・ほかの助言の前に、確かめの読みを通してから出す(docs/coach-plan-advice-design.md)", () => {
-    expect(source).toMatch(/const chosen = moveFeedback \?\? urgentAdvice \?\? planLine \?\? riskAdvice;/);
+    expect(source).toMatch(/const chosen = moveFeedback \?\? urgentAdvice \?\? threatLine \?\? planLine \?\? riskAdvice;/);
     expect(source).toMatch(/URGENT_RISK_ADVICE = \/\^\(forced-mate-loss\|king-in-check\|mate-risk\|candidate-evaluation-cliff\)\//);
     // 浅い読みの候補から提案を作り、2手に絞った読みで確かめる。
     expect(source).toMatch(/const proposal = planAdvice\(\{[\s\S]{0,1200}?searchMoves: \[proposal\.swingMove, proposal\.otherMove\][\s\S]{0,400}?confirmPlanAdvice\(proposal,/);
@@ -670,5 +670,16 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function acceptCoachPlanOffer\(\) \{[\s\S]{0,200}?recordCoachPlan\(browserStorage\(\), offer\.planId\)[\s\S]{0,200}?applyPlan\(entry\.plan\.id/);
     expect(source).toMatch(/extraIds: \[\.\.\.fortunePlanIds\.value, \.\.\.coachPlanIds\.value\]/);
     expect(source).toMatch(/v-if="coachPlanOffer"[\s\S]{0,200}?data-plan-offer[\s\S]{0,600}?data-plan-offer-basis/);
+  });
+  it("悪手には相手の応手から理由を添え、相手の狙いは詰めろの確かめの最善手から言う(docs/coach-plan-advice-design.mdの9章)", () => {
+    // 悪手判定の着手後の読み筋(相手のいちばんの応手)を、悪手の台詞に添える。
+    expect(source).toMatch(/return \{ before, after, afterPv: afterSearch\.pv \};/);
+    expect(source).toMatch(/moveFeedback = withMistakeReason\(getMoveFeedback\(\{[\s\S]{0,300}?\}\), mistakeReason\(\{[\s\S]{0,300}?pv: judged\.afterPv,/);
+    // 相手の狙いは、新しい探索を足さず、詰めろの確かめ(手番を入れ替えた局面)の最善手を使う。
+    expect(source).toMatch(/best: best\?\.move \? \{ move: best\.move, score: best\.score as EngineEvaluation \| undefined, pv: best\.pv/);
+    expect(source).toMatch(/threatAdvice\(\{\s*threatSfen,\s*threatMove: mateThreatResult\.best\.move,/);
+  });
+  it("大会の1局の始めに、相手の棋風と特殊能力から戦い方を一言いう(大一番は開幕の一言を優先)", () => {
+    expect(source).toMatch(/const opponentLine = opponentStyleAdvice\(opponent\.character, opponent\.name\);[\s\S]{0,300}?if \(stage\?\.coachLine && coachLevel\.value !== "off"\) guideText\.value = stage\.coachLine;[\s\S]{0,200}?else if \(opponentLine && coachLevel\.value !== "off"\) showCoachAdvice\(opponentLine\);/);
   });
 });

@@ -4,10 +4,14 @@ export function coachAdvicePriority(advice) {
   const key = advice?.key ?? '';
   if (/forced-mate|king-in-check|mate-danger|mate-risk|mate-win/.test(key)) return 100;
   if (/move-blunder|move-mistake/.test(key)) return 90;
+  // 相手の狙い(駒を取られそう)は、評価の崖より具体的なので先に出す。
+  if (/^threat-/.test(key)) return 75;
   if (/candidate-evaluation-cliff/.test(key)) return 70;
   // 直前の着手への褒め言葉は、CPU着手後の通常助言に上書きされないようにする。
   if (/^praise-/.test(key)) return 60;
-  if (/strategy-|castle-/.test(key)) return 40;
+  // 作戦の提案と、そのあとにほめる一言は、札と一緒に読めるよう形勢の一言より先にする。
+  if (/^plan-swing/.test(key)) return 50;
+  if (/strategy-|castle-|^opponent-style-/.test(key)) return 40;
   return 20;
 }
 

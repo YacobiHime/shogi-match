@@ -7,6 +7,7 @@
 import { CASTLE_TIPS } from './coach-advice.mjs';
 import { COUNTER_STRATEGY_TIPS, counterStrategyText } from './counter-strategy.mjs';
 import { openingExplanation } from './opening-explanations.mjs';
+import { pieceAt } from './sfen-piece.mjs';
 
 /** 最善手の飛車を振る手が、振らない一番の手より何点以上良ければ提案するか(浅い読み)。 */
 export const PLAN_SWING_MARGIN = 80;
@@ -39,29 +40,6 @@ export const ROOK_SWING_PLANS = Object.freeze([
   { file: 8, planId: 'mukai', strategyId: 'mukai', label: '向かい飛車' },
 ]);
 const HOME_FILE = 2;
-const RANK_LETTERS = 'abcdefghi';
-
-/** SFENの盤から、USIのマス(例 "2h")にある駒の文字(成り駒は"+R"など)を返す。 */
-function pieceAt(sfen, square) {
-  const rows = String(sfen ?? '').trim().split(/\s+/)[0]?.split('/') ?? [];
-  const file = Number(square[0]);
-  const rank = RANK_LETTERS.indexOf(square[1]);
-  const row = rows[rank];
-  if (!row || !file) return '';
-  let column = 9;
-  for (let index = 0; index < row.length; index += 1) {
-    const char = row[index];
-    if (/\d/.test(char)) {
-      column -= Number(char);
-      continue;
-    }
-    const piece = char === '+' ? `+${row[++index]}` : char;
-    if (column === file) return piece;
-    column -= 1;
-  }
-  return '';
-}
-
 /**
  * 候補手が「飛車を振る手」なら、その作戦を返す。
  * 成っていない自分の飛車が、自陣の飛車の段(先手は8段目、後手は2段目)で横に動く手。

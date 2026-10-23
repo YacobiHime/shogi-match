@@ -115,6 +115,10 @@ describe('対局中の応援・助言', () => {
     ], { inCheck: true })?.text).toBe('王手きたーっ！！');
     // 思い出王手も、王手の助言と同じ最優先で表示する。
     expect(coachAdvicePriority({ key: 'king-in-check-memorial' })).toBe(100);
+    // 相手の狙いは評価の崖より先、作戦の提案は形勢の一言より先、相手の棋風の一言は対策の台詞と同じ。
+    expect(coachAdvicePriority({ key: 'threat-capture-2b8h+' })).toBeGreaterThan(coachAdvicePriority({ key: 'candidate-evaluation-cliff' }));
+    expect(coachAdvicePriority({ key: 'plan-swing-shiken' })).toBeGreaterThan(coachAdvicePriority({ key: 'middle-even' }));
+    expect(coachAdvicePriority({ key: 'opponent-style-tsume' })).toBe(coachAdvicePriority({ key: 'castle-yagura' }));
   });
 
   test('王手で最善手が玉の移動なら逃げる助言を優先する', () => {
