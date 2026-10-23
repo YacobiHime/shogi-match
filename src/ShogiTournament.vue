@@ -1,8 +1,8 @@
 <template>
   <div :class="screen === 'select' ? 'shogi-home shogi-home--title shogi-tournament-home' : 'shogi-dex shogi-tournament'" role="dialog" aria-modal="true" aria-labelledby="shogi-tournament-title">
     <!--
-      大会の選択。タイトル画面と同じ部品（.shogi-title__*）で、参加できる竜王戦を1枚だけ大きく出し、
-      準備中の大会は小さな押せないタイルにする。
+      大会の選択。竜王戦と名人戦を同格のタイトル戦として、同じ枠・同じ大きさのタイルに並べる。
+      記録と、準備中の「プロへの道」は別のグループに置く。
     -->
     <template v-if="screen === 'select'">
       <span v-for="star in HOME_STARS" :key="star.id" class="shogi-home__star" :style="star.style" aria-hidden="true"></span>
@@ -16,30 +16,26 @@
         <img class="shogi-title__chara" :src="charaUrl" alt="" aria-hidden="true">
       </div>
       <nav class="shogi-title__menu" aria-label="大会">
-        <button type="button" class="shogi-title__next" data-tournament="ryuo" @click="chooseRyuo">
-          <span class="shogi-title__next-eyebrow">タイトル戦</span>
-          <span class="shogi-title__next-icon" aria-hidden="true">
-            <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-              <g fill="#f1a54c">
-                <rect x="4" y="2" width="8" height="1" />
-                <rect x="4" y="3" width="8" height="4" />
-                <rect x="2" y="3" width="2" height="1" />
-                <rect x="12" y="3" width="2" height="1" />
-                <rect x="5" y="7" width="6" height="1" />
-                <rect x="7" y="8" width="2" height="3" />
-                <rect x="5" y="11" width="6" height="2" />
-              </g>
-            </svg>
-          </span>
-          <span class="shogi-title__next-label">竜王戦</span>
-          <small class="shogi-title__next-desc">{{ ryuoCardNote }}</small>
-          <span class="shogi-title__next-go" aria-hidden="true">▶ 参加する</span>
-        </button>
         <div class="shogi-title__groups">
           <section class="shogi-title__group" aria-labelledby="shogi-tournament-titles">
             <h2 id="shogi-tournament-titles" class="shogi-title__group-title">タイトル戦</h2>
             <!-- 名人戦(順位戦から名人へ。docs/meijin-design.md)。順位戦と名人戦は1つの大会にまとめた。 -->
-            <div class="shogi-title__tiles shogi-tournament__soon-tiles">
+            <div class="shogi-title__tiles shogi-tournament__title-tiles" data-title-tournaments>
+              <button type="button" class="shogi-title__tile" data-tournament="ryuo" @click="chooseRyuo">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="4" y="2" width="8" height="1" />
+                    <rect x="4" y="3" width="8" height="4" />
+                    <rect x="2" y="3" width="2" height="1" />
+                    <rect x="12" y="3" width="2" height="1" />
+                    <rect x="5" y="7" width="6" height="1" />
+                    <rect x="7" y="8" width="2" height="3" />
+                    <rect x="5" y="11" width="6" height="2" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">竜王戦</span>
+                <small class="shogi-title__desc">{{ ryuoCardNote }}</small>
+              </button>
               <button type="button" class="shogi-title__tile" data-tournament="meijin" @click="chooseMeijin">
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#f1a54c">
@@ -1866,7 +1862,8 @@ const statTiles = computed(() => {
   .shogi-game .shogi-tournament__tabs button { min-width: 0; flex: 1 1 calc(50% - var(--tr-gap)); }
 }
 
-/* 大会の選択。タイトル画面の部品を使い、準備中のタイルは、どの段も同じ大きさで同じ列に並べる。 */
+/* 大会の選択。タイトル戦の2枚は同じ大きさで横並びにする。記録と準備中の大会は別の段。 */
+.shogi-game .shogi-tournament-home .shogi-tournament__title-tiles,
 .shogi-game .shogi-tournament-home .shogi-tournament__soon-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .shogi-game .shogi-tournament-home .shogi-title__tile:disabled { opacity: 0.55; box-shadow: none; }
 /* 左上の戻るボタンと、タイトルが重ならないよう、上を空ける。 */

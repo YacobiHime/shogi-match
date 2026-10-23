@@ -640,7 +640,7 @@
             @click="closeSettings(); suspendConfirmOpen = true"
           >対局を中断する</button>
         </template>
-        <!-- 盤の反転（ひふみんアイ）は、どの画面の形でもこのメニューから切り替える。 -->
+        <!-- 盤の反転は操作列からも切り替えられる。見出しのメニューにも同じ状態を表示する。 -->
         <button
           type="button"
           role="menuitemcheckbox"
@@ -1233,11 +1233,12 @@
     </section>
 
     <!--
-      対局中の操作列は、閃き・待った・駒の利き・駒の損得だけにする。盤の反転や動きの矢印は見出しのメニューにしまう。
+      閃き・待ったの隣に、ひふみんアイ・駒の利き・駒の損得を置く。
+      操作列の幅が足りないときは、表示の3つを「表示補助」にまとめ、ボタンを小さくしない。
       駒の利きと駒の損得は、学習対局だけでなく、通常対局・竜王戦でも付け外しできる(押すまでは出さない。補助は本人が選ぶ)。
       棋譜解析中も、閃きと読みは、やこび姫のコメントの下の操作列に置く(通常時の閃き・待ったと同じ場所)。
     -->
-    <div class="shogi-game__assist-actions">
+    <div ref="assistActions" class="shogi-game__assist-actions">
       <button
         type="button"
         class="shogi-game__awakening"
@@ -1258,22 +1259,47 @@
       <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
         待った <small>×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}</small>
       </button>
-      <button
-        type="button"
-        class="shogi-game__assist-toggle shogi-game__command--attack"
-        aria-label="駒の利きを表示"
-        :aria-pressed="attackGuideEnabled"
-        @click="attackGuideEnabled = !attackGuideEnabled"
-      >駒の<wbr>利き</button>
-      <!-- 駒の損得。押すと、状態表示に自分から見た駒の損得(駒得＋3など)を出し、駒を取ったマスに数字を浮かべる。 -->
-      <button
-        type="button"
-        class="shogi-game__assist-toggle shogi-game__command--material"
-        aria-label="駒の損得を表示"
-        :aria-pressed="materialGuideEnabled"
-        data-material-toggle
-        @click="toggleMaterialGuide"
-      >駒の<wbr>損得</button>
+      <details
+        ref="assistTools"
+        class="shogi-game__display-tools"
+        :class="{ 'shogi-game__display-tools--collapsed': assistToolsCollapsed }"
+        :open="!assistToolsCollapsed || assistToolsOpen"
+        data-display-tools
+        @toggle="syncAssistTools"
+        @keydown.esc.stop.prevent="closeAssistTools(true)"
+      >
+        <summary
+          class="shogi-game__display-tools-summary"
+          :aria-expanded="!assistToolsCollapsed || assistToolsOpen"
+          :aria-label="`表示補助${activeDisplayToolCount ? `（${activeDisplayToolCount}項目が有効）` : ''}`"
+        >表示補助<small v-if="activeDisplayToolCount" class="shogi-game__display-tools-count">{{ activeDisplayToolCount }}</small><span aria-hidden="true">{{ assistToolsOpen ? '▾' : '▴' }}</span></summary>
+        <div class="shogi-game__display-tools-buttons" aria-label="盤面の表示補助">
+          <button
+            type="button"
+            class="shogi-game__assist-toggle shogi-game__command--flip"
+            aria-label="盤面を上下反転（ひふみんアイ）"
+            :aria-pressed="boardFlipOverride"
+            data-assist-flip
+            @click="boardFlipOverride = !boardFlipOverride"
+          >ひふみん<wbr>アイ</button>
+          <button
+            type="button"
+            class="shogi-game__assist-toggle shogi-game__command--attack"
+            aria-label="駒の利きを表示"
+            :aria-pressed="attackGuideEnabled"
+            @click="attackGuideEnabled = !attackGuideEnabled"
+          >駒の<wbr>利き</button>
+          <!-- 駒の損得。押すと、状態表示に自分から見た駒の損得(駒得＋3など)を出し、駒を取ったマスに数字を浮かべる。 -->
+          <button
+            type="button"
+            class="shogi-game__assist-toggle shogi-game__command--material"
+            aria-label="駒の損得を表示"
+            :aria-pressed="materialGuideEnabled"
+            data-material-toggle
+            @click="toggleMaterialGuide"
+          >駒の<wbr>損得</button>
+        </div>
+      </details>
       <button
         v-if="reviewMode && !analysisOpen"
         type="button"
@@ -1520,7 +1546,6 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="welcome-title"
-      @click.self="dismissWelcome"
     >
       <div class="shogi-game__confirm-panel shogi-welcome">
         <img
@@ -2018,6 +2043,7 @@ import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { tutorialMatchOutcome } from "./core/tutorial-runner.mjs";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
+import { useAssistTools } from "./composables/useAssistTools";
 import { useBackNavigation } from "./composables/useBackNavigation";
 import { WELCOME_CHOICES, WELCOME_MEASURE_LEVEL, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
 import { VOLUME_2_LAST_LESSON, homeRoadmap, roadmapTile, welcomeChoiceFrom } from "./core/home-roadmap.mjs";
@@ -2760,9 +2786,31 @@ const {
   menuCollapsed,
   uiLayout,
   uiLayoutStyle,
+  uiFontPx,
   uiNarrow,
   uiShort,
 } = useResponsiveLayout({ analysisVisible });
+const assistActions = ref<HTMLElement | null>(null);
+const primaryAssistCount = computed(() => {
+  let count = 1; // 閃き
+  if (reviewMode.value && !guidedReview.value) count += 1; // 感想戦
+  if (!reviewMode.value || reviewCpuEnabled.value) count += 1; // 待った
+  if (reviewMode.value && !analysisOpen.value) {
+    count += 1; // 棋譜解析
+    if (!reviewCpuEnabled.value) count += 1; // 対局を振り返る
+  }
+  return count;
+});
+const {
+  tools: assistTools,
+  collapsed: assistToolsCollapsed,
+  open: assistToolsOpen,
+  close: closeAssistTools,
+  sync: syncAssistTools,
+} = useAssistTools(assistActions, uiFontPx, primaryAssistCount);
+const activeDisplayToolCount = computed(() => Number(boardFlipOverride.value) + Number(attackGuideEnabled.value) + Number(materialGuideEnabled.value));
+watch([homeOpen, pregameOpen, reviewMode], () => closeAssistTools());
+
 const resignConfirmOpen = ref(false);
 // 中断した対局(保存済み)。ホームの「対局を再開」から続ける。リロードしても残る。
 // 竜王戦の対局なら、相手(ryuoOpponentId)も持つ。竜王戦の画面の次の一局の枠からも再開できる。
@@ -5848,7 +5896,10 @@ const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.l
  */
 function navigateBack() {
   if (welcomeOpen.value && homeOpen.value) {
-    dismissWelcome();
+    // 初回の案内は、選択肢か「自分で選ぶ」を押すまで残す。戻るで回答済みにしない。
+    return;
+  } else if (assistToolsCollapsed.value && assistToolsOpen.value) {
+    closeAssistTools(true);
   } else if (ladderNoticeOpen.value) {
     dismissLadderNoticeDialog();
   } else if (exhibitResetOpen.value) {
@@ -9123,6 +9174,7 @@ function handlePageHide() {
 }
 function handleGlobalKeydown(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
+  closeAssistTools();
   exhibitResetOpen.value = false;
   settingsOpen.value = false;
   resignConfirmOpen.value = false;

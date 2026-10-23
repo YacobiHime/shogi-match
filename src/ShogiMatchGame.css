@@ -1137,16 +1137,19 @@
   color: var(--muted);
 }
 .shogi-game__assist-actions {
+  --assist-button-min-em: 5.5;
   display: flex;
   grid-area: actions;
   flex-wrap: wrap;
   gap: 0.5em;
   min-width: 0;
 }
-/* ボタンは同じ幅に並べ、狭いときは「閃き／×3」「ひふみん／アイ」のように区切りで2行にする。 */
-.shogi-game__assist-actions > button {
-  flex: 1 1 0;
-  min-width: 0;
+/* 押しやすい幅を保つ。表示補助の3つは、実寸が足りなければ折り畳む。 */
+.shogi-game__assist-actions > button,
+.shogi-game__display-tools-summary,
+.shogi-game__display-tools-buttons > button {
+  flex: 1 1 calc(var(--assist-button-min-em) * 1em);
+  min-width: calc(var(--assist-button-min-em) * 1em);
   min-height: max(3em, 44px);
   padding: 0.4em 0.3em;
   font-size: 1.02em;
@@ -1155,15 +1158,52 @@
   word-break: keep-all;
 }
 /* 駒の利き（学習対局）は、閃き・待ったと同じ並びの切り替えボタンにする。 */
-.shogi-game .shogi-game__assist-actions > .shogi-game__assist-toggle {
-  font-size: 0.9em;
+.shogi-game .shogi-game__display-tools-buttons > .shogi-game__assist-toggle {
+  font-size: 1em;
 }
-.shogi-game .shogi-game__assist-actions > .shogi-game__assist-toggle[aria-pressed="true"] {
+.shogi-game .shogi-game__display-tools-buttons > .shogi-game__assist-toggle[aria-pressed="true"] {
   border-color: var(--lavender);
   color: var(--night-deep);
   background: var(--lavender);
   box-shadow: 0 2px 0 rgba(23, 38, 50, 0.6), inset 0 0 0 2px var(--night-deep);
 }
+/* 表示補助は、広いときは操作列と一続き、狭いときは上に開く折り畳み。 */
+.shogi-game__display-tools {
+  flex: 3 1 calc(var(--assist-button-min-em) * 3em + 1em);
+  min-width: calc(var(--assist-button-min-em) * 3em + 1em);
+}
+.shogi-game__display-tools-summary { display: none; cursor: pointer; list-style: none; }
+.shogi-game__display-tools-summary::-webkit-details-marker { display: none; }
+.shogi-game__display-tools-buttons { display: flex; gap: 0.5em; }
+.shogi-game__display-tools--collapsed { position: relative; flex: 1 1 calc(var(--assist-button-min-em) * 1em); min-width: calc(var(--assist-button-min-em) * 1em); }
+.shogi-game__display-tools--collapsed > .shogi-game__display-tools-summary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.25em;
+  height: 100%;
+  border: 2px solid var(--line);
+  border-radius: 0.65em;
+  background: var(--slate);
+  color: var(--ink);
+  font-weight: 800;
+}
+.shogi-game__display-tools--collapsed[open] > .shogi-game__display-tools-summary { border-color: var(--lavender); }
+.shogi-game__display-tools--collapsed > .shogi-game__display-tools-buttons {
+  position: absolute;
+  bottom: calc(100% + 0.5em);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: min(20em, calc(100vw - 2em));
+  padding: 0.6em;
+  border: 2px solid var(--lavender);
+  border-radius: 0.7em;
+  background: var(--panel);
+  box-shadow: 0 0.3em 1em #0008;
+}
+.shogi-game__display-tools-count { padding: 0.05em 0.3em; border-radius: 0.5em; background: var(--lavender); color: var(--night-deep); }
 /*
  * 駒の損得の札(状態表示の中)。色は駒得の数字・教室の札とそろえる(緑は得、赤は損)。色だけに頼らず、「駒得」「駒損」と文字でも出す。
  */

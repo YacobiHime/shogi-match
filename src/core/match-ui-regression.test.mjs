@@ -71,13 +71,20 @@ describe("match screen regressions", () => {
     expect(source).toContain('const base = matchInitialSfen.value === STANDARD_SFEN ? "startpos" : matchInitialSfen.value;');
   });
 
-  it("keeps the flip control reachable on every layout from the header menu", () => {
-    // 対局中の操作列は閃き・待ったに絞り、ひふみんアイは見出しのメニューに置く。メニューはどの画面の形にもある。
+  it("keeps display tools next to hints and collapses them without shrinking buttons", () => {
+    // 頻繁に使う反転を操作列へ。幅が足りないときは3つを同じ折り畳みで開く。
+    const displayTools = source.split('data-display-tools')[1]?.split('</details>')[0] ?? "";
+    expect(displayTools).toContain('data-assist-flip');
+    expect(displayTools).toContain('class="shogi-game__assist-toggle shogi-game__command--attack"');
+    expect(displayTools).toContain('data-material-toggle');
+    expect(source).toContain(':open="!assistToolsCollapsed || assistToolsOpen"');
+    expect(source).toContain('@keydown.esc.stop.prevent="closeAssistTools(true)"');
+    // 見出しのメニューにも同じ反転状態を残す。
     const menu = source.split('class="shogi-game__menu" role="menu"')[1]?.split("</header>")[0] ?? "";
     expect(menu).toMatch(/role="menuitemcheckbox"[\s\S]*?aria-label="盤面を上下反転（ひふみんアイ）"[\s\S]*?@click="boardFlipOverride = !boardFlipOverride"/);
     expect(menu).not.toMatch(/v-if="menuCollapsed"[^>]*>\s*<button[^>]*aria-label="盤面を上下反転/);
     // 狭い画面でもはみ出さないよう、操作列のボタンは区切り（<wbr>や空白）でだけ2行に折り返す。
-    expect(source).toMatch(/\.shogi-game__assist-actions > button\s*\{[^}]*word-break:\s*keep-all/s);
+    expect(source).toMatch(/\.shogi-game__assist-actions > button,[^{]*\{[^}]*word-break:\s*keep-all/s);
     // PC以外では見出しにボタンを並べない。棋譜解析中は解析パネルの「その他」からも反転できる。
     expect(responsiveSource).toMatch(/const menuCollapsed = computed\(\(\) => uiLayout\.value !== "wide"\)/);
     expect(source).toMatch(/role="menuitemcheckbox"[\s\S]*?ひふみんアイ（盤を反転）/);
@@ -180,8 +187,10 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/\.shogi-tournament__choices--ten \{ grid-template-columns: repeat\(14, minmax\(0, 1fr\)\); \}/);
     expect(tournament).toMatch(/\.shogi-tournament__choices button,[\s\S]*?height: var\(--tr-control\);/);
     expect(tournament).toMatch(/\.shogi-tournament__start,\s*\.shogi-game \.shogi-tournament__sub \{[\s\S]*?height: var\(--tr-action\);/);
-    // 大会の選択は、参加できる竜王戦を1枚だけ大きく出し、準備中のタイルは、段によらず同じ大きさで同じ列に並べる。
-    expect(tournament).toMatch(/class="shogi-title__next" data-tournament="ryuo"/);
+    // 竜王戦と名人戦は、同じタイトル戦の枠に同格のタイルで並べる。
+    const titleChoices = tournament.match(/<div[^>]* data-title-tournaments>([\s\S]*?)<\/div>/)?.[1] ?? "";
+    expect(titleChoices.match(/class="shogi-title__tile" data-tournament="(?:ryuo|meijin)"/g)).toHaveLength(2);
+    expect(tournament).not.toMatch(/class="shogi-title__next" data-tournament=/);
     expect(tournament).toMatch(/shogi-tournament-home \.shogi-tournament__soon-tiles \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
     // 説明・エントリーの一言・次の対局・結果の解説は、やこび姫のセリフにする。
     // 大きなやこび姫の解説役(xl)は、竜王戦の説明のシートと、結果の解説の2人だけ。次の一局では1行の手がかりにする。
@@ -607,6 +616,13 @@ describe("match screen regressions", () => {
   });
 
   it('はじめての案内の4つの札から、教室の1問か、1級くらいとの棋力測定、測ったあと竜王戦へ(docs/first-play-design.md)', () => {
+    // 背景や戻るで案内を回答済みにしない。進むのは明示的に選んだときだけ。
+    const welcomeDialog = source.split('v-if="welcomeOpen && homeOpen"')[1]?.split('<!--')[0] ?? "";
+    expect(welcomeDialog).not.toMatch(/@click\.self=/);
+    expect(welcomeDialog).toContain('@click="chooseWelcome(choice.id)"');
+    expect(welcomeDialog).toContain('@click="dismissWelcome">自分で選ぶ');
+    expect(source).toMatch(/if \(welcomeOpen\.value && homeOpen\.value\) \{\s*(?:\/\/[^\n]*\n\s*)?return;/);
+
     expect(source).toMatch(/if \(choice === "beginner" \|\| choice === "rules"\) openTutorialLesson\(\);/);
     expect(source).toMatch(/choice === "some" \|\| choice === "player"[\s\S]{0,120}?startMeasureMatchNow\(\{ level: WELCOME_MEASURE_LEVEL, welcome: choice \}\)/);
     // 続けて測るときは、案内の答えを引き継ぐ。対局準備へ戻ると捨てる。
