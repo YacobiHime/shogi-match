@@ -87,3 +87,27 @@ describe('ほかの対局の速報', () => {
     expect(newsDue(news, NEWS_EVERY_PLIES * 5, 2)).toBeNull();
   });
 });
+
+describe('中継(勝率と控室)', () => {
+  it('プレイヤーの勝率は評価値から(0点は50%)', async () => {
+    const { playerWinRate, formatWinRate } = await import('./match-presence.mjs');
+    expect(playerWinRate(cp(0))).toBeCloseTo(0.5);
+    expect(playerWinRate(cp(600))).toBeGreaterThan(0.7);
+    expect(playerWinRate({ type: 'mate', value: 3 })).toBe(1);
+    expect(playerWinRate(null)).toBeNull();
+    expect(formatWinRate(0.623)).toBe('62%');
+  });
+  it('控室は、始め・形勢の動き・終盤・中盤を、それぞれ1回だけ言う', async () => {
+    const { roomComment } = await import('./match-presence.mjs');
+    expect(roomComment({ ply: 0, winRate: 0.5, weight: 'big' })?.key).toBe('room-opening');
+    expect(roomComment({ ply: 0, winRate: 0.5, weight: 'plain' })).toBeNull();
+    expect(roomComment({ ply: 20, winRate: 0.35, previousWinRate: 0.5, lastMoveText: '△4五歩' }))
+      .toEqual({ key: 'room-sharp', text: '控室：今の△4五歩は鋭い一手と話題に' });
+    expect(roomComment({ ply: 20, winRate: 0.65, previousWinRate: 0.5, lastMoverIsPlayer: true })?.text).toBe('控室：今の一手で、控室がどよめいています！');
+    expect(roomComment({ ply: 85, winRate: 0.62, previousWinRate: 0.6 })?.text).toBe('控室：いよいよ終盤戦。勝率はあなた62%です');
+    expect(roomComment({ ply: 31, winRate: 0.5, previousWinRate: 0.5 })?.key).toBe('room-middle');
+    expect(roomComment({ ply: 31, winRate: 0.5, previousWinRate: 0.5, said: ['room-middle'] })).toBeNull();
+    expect(roomComment({ ply: 50, winRate: 0.5, said: ['a', 'b', 'c', 'd', 'e'] })).toBeNull();
+    expect(roomComment({ ply: 20, winRate: 0.5, previousWinRate: 0.48 })).toBeNull();
+  });
+});

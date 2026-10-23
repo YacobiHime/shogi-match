@@ -603,6 +603,15 @@
           data-sound-toggle
           @click="toggleSound"
         >効果音<b>{{ soundEnabled ? "ON" : "OFF" }}</b></button>
+        <button
+          v-if="matchStage"
+          type="button"
+          role="menuitemcheckbox"
+          class="shogi-game__menu-item"
+          :aria-checked="broadcastEnabled"
+          data-broadcast-toggle
+          @click="toggleBroadcast"
+        >中継（勝率と控室）<b>{{ broadcastEnabled ? "ON" : "OFF" }}</b></button>
         <label class="shogi-game__menu-field">
           <span>やこび姫の助言</span>
           <select v-model="coachLevel" aria-label="対局中の助言">
@@ -884,6 +893,26 @@
           </span>
           <b v-if="matchStage.stakes" class="shogi-game__stage-stakes">{{ matchStage.stakes }}</b>
         </p>
+        <!--
+          中継の勝率バー(docs/tournament-match-presence-design.mdの3章)。左が先手(青)、右が後手(赤)。数字は自分の勝率だけ。
+          助言の読みの評価値から、棋譜解析の振り返りと同じ式で出す。助言が「なし」のときと、設定で中継を切ったときは出さない。
+        -->
+        <div
+          v-if="broadcastShown"
+          class="shogi-game__broadcast"
+          role="meter"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="broadcastRate === null ? undefined : Math.round(broadcastRate * 100)"
+          :aria-label="`AIの読みの勝率 あなた${formatWinRate(broadcastRate)}`"
+          data-broadcast
+        >
+          <span class="shogi-game__broadcast-tag">中継</span>
+          <span class="shogi-game__broadcast-bar" aria-hidden="true">
+            <i class="shogi-game__broadcast-black" :style="{ width: `${broadcastBlackShare * 100}%` }"></i>
+          </span>
+          <span class="shogi-game__broadcast-rate">あなた {{ formatWinRate(broadcastRate) }}</span>
+        </div>
         <p class="shogi-game__stage-opponent">
           <!-- 相手の顔(期の画面と同じ判子。羽音は絵)。表情は形勢で3段(docs/tournament-match-presence-design.mdの2章)。 -->
           <span
@@ -2056,7 +2085,17 @@ import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { mistakeReason, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
 import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
-import { midgameMoment, newsDue, opponentLine, opponentMood, roundNews, traitCard } from "./core/match-presence.mjs";
+import {
+  formatWinRate,
+  midgameMoment,
+  newsDue,
+  opponentLine,
+  opponentMood,
+  playerWinRate,
+  roomComment,
+  roundNews,
+  traitCard,
+} from "./core/match-presence.mjs";
 import {
   PLAN_CONFIRM_SEARCH,
   confirmPlanAdvice,
@@ -2611,9 +2650,29 @@ const ryuoOpponent = computed(() => (ryuoGame.value ? tournamentSeasonOf(ryuoGam
  * 大会の相手を生きて見せる・ほかの対局の速報(docs/tournament-match-presence-design.mdの2章と4章)。
  * 顔の表情は、助言の読みのプレイヤーから見た評価値で決める(助言が「なし」なら、ふつうの顔のまま)。
  */
-const PRESENCE_LINE_MS = { speech: 2500, trait: 3500, news: 6000 } as const;
+const PRESENCE_LINE_MS = { speech: 2500, trait: 3500, news: 6000, room: 4000 } as const;
 const presenceScore = ref<EngineEvaluation | null>(null);
-const presenceLine = ref<{ id: number; kind: "speech" | "trait" | "news"; tone: string; text: string } | null>(null);
+const presenceLine = ref<{ id: number; kind: "speech" | "trait" | "news" | "room"; tone: string; text: string } | null>(null);
+/** 中継(勝率バーと控室の一言)を出すか。設定のメニューで切り替え、端末に覚える。 */
+const BROADCAST_KEY = "yacobihime:shogi-match:broadcast:v1";
+function loadBroadcastEnabled() {
+  try {
+    return browserStorage()?.getItem(BROADCAST_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+const broadcastEnabled = ref(loadBroadcastEnabled());
+function toggleBroadcast() {
+  broadcastEnabled.value = !broadcastEnabled.value;
+  try {
+    browserStorage()?.setItem(BROADCAST_KEY, broadcastEnabled.value ? "on" : "off");
+  } catch {
+    // 保存できない環境では、この画面のあいだだけ切り替える。
+  }
+}
+let roomSaid: string[] = [];
+let roomWinRate: number | null = null;
 let presenceTimer: ReturnType<typeof setTimeout> | undefined;
 let opponentSaid: string[] = [];
 let traitCardsShown: string[] = [];
@@ -2634,7 +2693,15 @@ const opponentFace = computed(() => {
     moodLabel: mood === "confident" ? "余裕の表情" : mood === "troubled" ? "苦しい表情" : "落ち着いた表情",
   };
 });
-function showPresence(kind: "speech" | "trait" | "news", text: string, tone = "") {
+const broadcastShown = computed(() => Boolean(tournamentOpponent.value) && coachLevel.value !== "off" && broadcastEnabled.value);
+const broadcastRate = computed(() => playerWinRate(presenceScore.value));
+/** 先手の勝率(バーの青い部分)。まだ読んでいないときは半分。 */
+const broadcastBlackShare = computed(() => {
+  const rate = broadcastRate.value;
+  if (rate === null) return 0.5;
+  return humanColor.value === Color.WHITE ? 1 - rate : rate;
+});
+function showPresence(kind: "speech" | "trait" | "news" | "room", text: string, tone = "") {
   if (!text) return;
   // 特殊能力の札は、相手の一言や速報で上書きしない(出ているあいだは待つ)。
   if (presenceLine.value?.kind === "trait" && kind !== "trait") return;
@@ -2655,6 +2722,8 @@ function resetPresence() {
   traitCardsShown = [];
   matchNews = [];
   matchNewsShown = 0;
+  roomSaid = [];
+  roomWinRate = null;
 }
 /** 大会の1局を始めたとき(リロードで戻ったときは、あいさつしない)。 */
 function startPresence({ greet = true }: { greet?: boolean } = {}) {
@@ -2667,15 +2736,45 @@ function startPresence({ greet = true }: { greet?: boolean } = {}) {
     oshiId: ryuoOshi.value?.id ?? null,
   });
   if (greet) sayOpponent("start");
+  // 大一番とタイトル戦は、控室が「注目の一局」と始める(相手のあいさつのあとに出す)。
+  const opening = broadcastShown.value ? roomComment({ ply: 0, winRate: null, weight: matchStage.value?.weight ?? "plain" }) : null;
+  if (opening) {
+    roomSaid = [opening.key];
+    setTimeout(() => {
+      if (tournamentOpponent.value) showPresence("room", opening.text);
+    }, PRESENCE_LINE_MS.speech);
+  }
 }
 /** 助言の読みの評価値が出たら、相手の表情を変え、形勢が傾いた最初に相手が一言いう。 */
 function notePresenceScore(score?: EngineEvaluation | null) {
   if (!tournamentOpponent.value) return;
   presenceScore.value = score ?? null;
   const moment = midgameMoment(score ?? null, opponentSaid);
-  if (!moment) return;
-  opponentSaid = [...opponentSaid, moment];
-  sayOpponent(moment);
+  if (moment) {
+    opponentSaid = [...opponentSaid, moment];
+    sayOpponent(moment);
+    return;
+  }
+  noteRoomComment();
+}
+/** 控室の一言。前に控室が見たときから勝率が10%動いた・中盤や終盤に入った、などを1回ずつ。 */
+function noteRoomComment() {
+  if (!broadcastShown.value) return;
+  const winRate = broadcastRate.value;
+  const comment = roomComment({
+    ply: moveHistory.length,
+    winRate,
+    previousWinRate: roomWinRate,
+    inCheck: isSideToMoveInCheck(currentSfen.value),
+    lastMoveText: record.value.current.displayText ?? "",
+    lastMoverIsPlayer: record.value.position.color !== humanColor.value,
+    said: roomSaid,
+    weight: matchStage.value?.weight ?? "plain",
+  });
+  roomWinRate = winRate;
+  if (!comment) return;
+  roomSaid = [...roomSaid, comment.key];
+  showPresence("room", comment.text);
 }
 /** CPUの1手で特殊能力が出たら、札を出す。苦手が出たときは、やこび姫が添える。 */
 function notePresenceCpuMove(move: { ply: number; kind: string; traits: string[] }) {
@@ -6696,7 +6795,8 @@ function updateCoachAdvice(
   const score = scoreForPlayer(cpuScore, cpuColor, humanColor.value, 1);
   playerTurnScore = score;
   playerTurnScoreHistoryLength = score ? moveHistory.length : -1;
-  if (coachLevel.value !== "off") notePresenceScore(score);
+  // 詳しい助言では、このあと助言の読みでもう一度評価するので、浅いCPUの評価値は表情と中継に使わない(バーが跳ねないように)。
+  if (coachLevel.value === "encourage") notePresenceScore(score);
   if (coachLevel.value === "off") {
     guideText.value = "";
     return;
@@ -7296,6 +7396,8 @@ async function updateDedicatedCoachAdvice(
     }
   }
   const chosen = moveFeedback ?? urgentAdvice ?? threatLine ?? planLine ?? riskAdvice;
+  // 大会の相手の表情と中継は、この助言の読みの評価値で動かす(riskOnlyでも)。
+  notePresenceScore(score);
   if (riskOnly) {
     if (chosen) showCoachAdvice(chosen);
     return;

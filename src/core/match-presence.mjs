@@ -4,6 +4,7 @@
  */
 import { attackStyleLabel, specialAbilityChips, traitMomentIds } from './player-character.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
+import { winRateFor } from './guided-review.mjs';
 
 /** 形勢がこれだけ傾いたら、相手の表情と一言を変える(プレイヤーから見た評価値)。 */
 export const MOOD_SCORE = 500;
@@ -199,4 +200,68 @@ export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {})
 export function newsDue(news, ply, shownCount) {
   const due = Math.floor(ply / NEWS_EVERY_PLIES);
   return shownCount < due && shownCount < news.length ? news[shownCount] : null;
+}
+
+// ---- 中継(段階2): 勝率バーと控室の一言(docs/tournament-match-presence-design.mdの3章)
+
+/** 控室が「形勢が動いた」と言う、勝率の変わり方(10%)。 */
+export const ROOM_SWING = 0.1;
+/** 控室が話す回数の上限。 */
+export const ROOM_LINES_PER_GAME = 5;
+/** 中盤・終盤の入り(手数)。 */
+export const ROOM_MIDDLE_PLY = 30;
+export const ROOM_ENDGAME_PLY = 80;
+
+/**
+ * プレイヤーから見た評価値を、プレイヤーの勝率(0〜1)にする。棋譜解析の振り返りと同じ式(guided-review.mjsのwinRateFor)。
+ * @param {{ type: string, value: number } | null | undefined} playerScore
+ */
+export function playerWinRate(playerScore) {
+  return playerScore ? winRateFor(playerScore, 'black') ?? null : null;
+}
+
+/** 勝率を「62%」の形にする。 */
+export function formatWinRate(rate) {
+  return Number.isFinite(rate) ? `${Math.round(rate * 100)}%` : '—';
+}
+
+/**
+ * 控室の一言。言うことがなければnull。同じ場面は1局に1回、合わせて5回まで。
+ * どれも相手の指した手か形勢についてだけ言い、プレイヤーの次の手は勧めない(閃きの意味をなくさない)。
+ * @param {{
+ *   ply: number, winRate: number | null, previousWinRate?: number | null, inCheck?: boolean,
+ *   lastMoveText?: string, lastMoverIsPlayer?: boolean, said?: Iterable<string>, weight?: string,
+ * }} options
+ *   winRate・previousWinRate: プレイヤーの勝率(いまと、前に控室が見たとき)。lastMoveText: 直前の手の表記(「△4五歩」)。
+ * @returns {{ key: string, text: string } | null}
+ */
+export function roomComment({
+  ply, winRate, previousWinRate = null, inCheck = false, lastMoveText = '', lastMoverIsPlayer = false, said = [], weight = 'plain',
+}) {
+  const done = new Set(said);
+  if (done.size >= ROOM_LINES_PER_GAME) return null;
+  const pick = (key, text) => (done.has(key) ? null : { key, text });
+  if (ply <= 1) {
+    return weight === 'plain' ? null : pick('room-opening', '控室：注目の一局がまもなく始まります');
+  }
+  if (Number.isFinite(winRate) && Number.isFinite(previousWinRate)) {
+    const swing = winRate - previousWinRate;
+    if (swing <= -ROOM_SWING && !lastMoverIsPlayer && lastMoveText) {
+      const line = pick('room-sharp', `控室：今の${lastMoveText}は鋭い一手と話題に`);
+      if (line) return line;
+    }
+    if (swing >= ROOM_SWING) {
+      const line = pick('room-stir', lastMoverIsPlayer ? '控室：今の一手で、控室がどよめいています！' : '控室：形勢が動いた、との声が上がっています');
+      if (line) return line;
+    }
+  }
+  if ((inCheck || ply > ROOM_ENDGAME_PLY) && Number.isFinite(winRate)) {
+    const line = pick('room-endgame', `控室：いよいよ終盤戦。勝率はあなた${formatWinRate(winRate)}です`);
+    if (line) return line;
+  }
+  if (ply > ROOM_MIDDLE_PLY) {
+    const line = pick('room-middle', '控室：ここからが中盤戦。両者、作戦の方向が見えてきました');
+    if (line) return line;
+  }
+  return null;
 }

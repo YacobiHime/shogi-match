@@ -694,8 +694,19 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/restart\(\);\s*startPresence\(\);/);
     expect(source).toMatch(/ryuoCpuMoves = \[[\s\S]{0,120}?cpuMoveRecord\];\s*notePresenceCpuMove\(cpuMoveRecord\);/);
     expect(source).toMatch(/schedulePlayerIdleAdvice\(\);\s*tickPresenceNews\(\);/);
-    expect(source).toMatch(/if \(coachLevel\.value !== "off"\) notePresenceScore\(score\);/);
+    // 詳しい助言では、助言の読みの評価値だけを使う(浅いCPUの評価値でバーが跳ねないように)。
+    expect(source).toMatch(/if \(coachLevel\.value === "encourage"\) notePresenceScore\(score\);/);
+    expect(source).toMatch(/if \(coachLevel\.value !== "off" && !reviewMode\.value\) notePresenceScore\(score\);/);
     // 盤の大きさを変えないよう、中継の1行は高さを決めておく。
     expect(source).toMatch(/\.shogi-game__presence-line \{\s*display: block;\s*min-height: 1\.4em;/);
+  });
+  it("大会の1局で、中継の勝率バーと控室の一言を出す(助言なし・中継を切ったときは出さない)", () => {
+    expect(source).toMatch(/const broadcastShown = computed\(\(\) => Boolean\(tournamentOpponent\.value\) && coachLevel\.value !== "off" && broadcastEnabled\.value\);/);
+    expect(source).toMatch(/v-if="broadcastShown"[\s\S]{0,400}?data-broadcast/);
+    expect(source).toMatch(/data-broadcast-toggle\s*@click="toggleBroadcast"/);
+    expect(source).toMatch(/const BROADCAST_KEY = "yacobihime:shogi-match:broadcast:v1";/);
+    expect(source).toMatch(/function noteRoomComment\(\) \{\s*if \(!broadcastShown\.value\) return;/);
+    expect(source).toMatch(/notePresenceScore\(score\);\s*if \(riskOnly\) \{/);
+    expect(source).toMatch(/\.shogi-game__broadcast \{[^}]*min-height: 1\.4em;/);
   });
 });

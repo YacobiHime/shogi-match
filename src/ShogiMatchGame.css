@@ -493,6 +493,51 @@
 }
 .shogi-game__opponent-face--confident { transform: rotate(-6deg) scale(1.06); }
 .shogi-game__opponent-face--troubled { transform: rotate(5deg); filter: saturate(0.55) brightness(0.85); }
+/* 中継の勝率バー。先手は青、後手は赤(盤の利きの色とそろえる)。高さを決めておき、値が変わっても盤の大きさを変えない。 */
+.shogi-game__broadcast {
+  display: flex;
+  gap: 0.5em;
+  align-items: center;
+  min-height: 1.4em;
+  font-size: 0.82em;
+}
+.shogi-game__broadcast-tag {
+  flex: none;
+  padding: 0 0.4em;
+  border: 1px solid rgba(241, 165, 76, 0.7);
+  border-radius: 0.25em;
+  color: var(--amber);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.shogi-game--stage-title .shogi-game__broadcast-tag {
+  color: #172632;
+  background: #e6c15c;
+}
+.shogi-game__broadcast-bar {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 4em;
+  height: 0.55em;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #c8433a;
+}
+.shogi-game__broadcast-black {
+  display: block;
+  height: 100%;
+  background: #3d7fd6;
+  transition: width 0.3s ease;
+}
+.shogi-game__broadcast-rate {
+  flex: none;
+  color: var(--ivory);
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__broadcast-black { transition: none; }
+}
+.shogi-game__presence-line--room { color: #d7d1fd !important; }
 /* 中継の1行(相手の一言・特殊能力の札・速報)。高さを決めておき、出ても消えても盤の大きさを変えない。 */
 .shogi-game .shogi-game__stage-band .shogi-game__presence-line {
   display: block;
