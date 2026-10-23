@@ -16,9 +16,18 @@ import {
   referencePieceImageEntryId,
 } from "./reference-dex.mjs";
 
+import { AI_PIECE_POINTS } from "./piece-points.mjs";
+
 const KINDS = Object.keys(REFERENCE_DEX_KINDS);
 
 describe("reference dex", () => {
+  it("shares AI piece values with match material calculations", () => {
+    const table = referenceDexEntries("piece").find(entry => entry.id === "piece-values").aiTable;
+    const kinds = ["P", "L", "N", "S", "G", "B", "R", "+P", "+B", "+R"];
+    expect(table.pieces.map(piece => piece.value)).toEqual([90, 315, 405, 495, 540, 855, 990, 540, 945, 1395]);
+    expect(table.pieces.map(piece => piece.value)).toEqual(kinds.map(kind => AI_PIECE_POINTS[kind]));
+    expect([AI_PIECE_POINTS["+L"], AI_PIECE_POINTS["+N"], AI_PIECE_POINTS["+S"]]).toEqual([540, 540, 540]);
+  });
   it("links every piece image in the value tables to its piece entry", () => {
     const entries = referenceDexEntries("piece");
     const ids = new Set(entries.map(({ id }) => id));

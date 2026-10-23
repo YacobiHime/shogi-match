@@ -137,7 +137,7 @@ describe("利きメガネの所持", async () => {
 });
 
 describe("駒得の数字", async () => {
-  const { capturePop, materialTotals } = await import("./piece-points.mjs");
+  const { AI_PIECE_POINTS, aiMaterialTotals, capturePop, materialTotals } = await import("./piece-points.mjs");
   it("プレイヤーが取ったら緑の＋、取られたら赤の−を、取ったマスに浮かべる", () => {
     const sfen = "k8/9/7p1/7s1/9/9/9/7R1/8K b - 1";
     expect(capturePop(sfen, "2h2d", "black", 1)).toEqual({ id: 1, file: 2, rank: 4, text: "＋5", tone: "good", big: false, points: 5 });
@@ -148,4 +148,18 @@ describe("駒得の数字", async () => {
   it("盤の上と持ち駒の点数を合わせる", () => {
     expect(materialTotals("4k4/9/9/9/9/9/9/4+P4/4K4 b G2p 1")).toEqual({ black: 13, white: 2 });
   });
+  it("対局はAIの値で成り駒と持ち駒を合計し、玉は数えない", () => {
+    expect(aiMaterialTotals("4k4/9/9/9/9/9/9/4+P4/4K4 b G2p 1")).toEqual({ black: 1080, white: 180 });
+    expect(aiMaterialTotals("4k4/9/9/9/9/9/9/+R+B7/4K4 b - 1")).toEqual({ black: 2340, white: 0 });
+    expect(aiMaterialTotals("4k4/9/9/9/9/9/9/9/4K4 b R2bl 1")).toEqual({ black: 990, white: 2025 });
+    expect(aiMaterialTotals("4k4/9/9/9/9/9/9/9/4K4 b - 1")).toEqual({ black: 0, white: 0 });
+    expect(aiMaterialTotals("lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1")).toEqual({ black: 6165, white: 6165 });
+  });
+  it("対局の取得表示もAIの値を使い、成り駒は元の駒で数える", () => {
+    const pop = (sfen, move) => capturePop(sfen, move, "black", 1, AI_PIECE_POINTS, AI_PIECE_POINTS.B);
+    expect(pop("k8/9/7p1/7s1/9/9/9/7R1/8K b - 1", "2h2d")).toMatchObject({ text: "＋495", points: 495, big: false });
+    expect(pop("k8/9/7p1/7R1/9/9/9/9/8K w S 1", "2c2d")).toMatchObject({ text: "−990", points: -990, big: true });
+    expect(pop("k8/9/9/7+p1/9/9/9/7R1/8K b - 1", "2h2d")).toMatchObject({ text: "＋90", points: 90, big: false });
+  });
+
 });

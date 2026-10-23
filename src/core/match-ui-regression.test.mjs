@@ -12,7 +12,7 @@ describe("match screen regressions", () => {
   it("toggles a material balance chip and capture numbers in every match kind", () => {
     expect(source).toMatch(/aria-label="駒の損得を表示"\s*:aria-pressed="materialGuideEnabled"[\s\S]*?@click="toggleMaterialGuide"/);
     expect(source).toMatch(/v-if="materialChip"[\s\S]*?data-material-chip/);
-    expect(source).toMatch(/const materialChip = computed\(\(\) => \{\s*if \(!materialGuideEnabled\.value[\s\S]*?materialTotals\(currentSfen\.value\)/);
+    expect(source).toMatch(/const materialChip = computed\(\(\) => \{\s*if \(!materialGuideEnabled\.value[\s\S]*?aiMaterialTotals\(currentSfen\.value\)/);
     // 学習対局ではいつも、ほかの対局では付けているときに、取ったマスへ数字を浮かべる。
     expect(source).toMatch(/\(matchKind\.value !== "learning" && !materialGuideEnabled\.value\)/);
   });

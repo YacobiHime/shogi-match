@@ -1,6 +1,6 @@
 import { Position, RecordMetadataKey, Square, importKIF } from "tsshogi";
 import { appendUsiMove, createGameRecord } from "../game-state";
-import { PIECE_POINTS, PROMOTED_PIECE_POINTS } from "./piece-points.mjs";
+import { AI_PIECE_POINTS, PIECE_POINTS, PROMOTED_PIECE_POINTS } from "./piece-points.mjs";
 import {
   AMANO_SOHO_KIFU,
   COMPUTER_SHOGI_TOP_KIFU,
@@ -91,16 +91,16 @@ const PIECE_ENTRIES = [
       title: "将棋AI（やねうら王）が使う駒の価値",
       note: "歩を90点としたときの点数。右は歩を1としたときの目安だよ。",
       pieces: [
-        { label: "歩兵", images: ["black_pawn"], value: 90 },
-        { label: "香車", images: ["black_lance"], value: 315 },
-        { label: "桂馬", images: ["black_knight"], value: 405 },
-        { label: "銀将", images: ["black_silver"], value: 495 },
-        { label: "金将", images: ["black_gold"], value: 540 },
-        { label: "角行", images: ["black_bishop"], value: 855 },
-        { label: "飛車", images: ["black_rook"], value: 990 },
-        { label: "と金・成香・成桂・成銀", images: ["black_prom_pawn", "black_prom_lance", "black_prom_knight", "black_prom_silver"], value: 540 },
-        { label: "竜馬", images: ["black_horse"], value: 945 },
-        { label: "竜王", images: ["black_dragon"], value: 1395 },
+        { label: "歩兵", images: ["black_pawn"], value: AI_PIECE_POINTS["P"] },
+        { label: "香車", images: ["black_lance"], value: AI_PIECE_POINTS["L"] },
+        { label: "桂馬", images: ["black_knight"], value: AI_PIECE_POINTS["N"] },
+        { label: "銀将", images: ["black_silver"], value: AI_PIECE_POINTS["S"] },
+        { label: "金将", images: ["black_gold"], value: AI_PIECE_POINTS["G"] },
+        { label: "角行", images: ["black_bishop"], value: AI_PIECE_POINTS["B"] },
+        { label: "飛車", images: ["black_rook"], value: AI_PIECE_POINTS["R"] },
+        { label: "と金・成香・成桂・成銀", images: ["black_prom_pawn", "black_prom_lance", "black_prom_knight", "black_prom_silver"], value: AI_PIECE_POINTS["+P"] },
+        { label: "竜馬", images: ["black_horse"], value: AI_PIECE_POINTS["+B"] },
+        { label: "竜王", images: ["black_dragon"], value: AI_PIECE_POINTS["+R"] },
       ],
     },
     overview: "駒にはだいたいの「価値」があるよ。交換するときの損得の目安にしよう！",
