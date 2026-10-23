@@ -3,9 +3,11 @@
 // - 実際に指すときのCPUのLv: 難易度に合わせて、レーティングからLvへ換算する。
 // 換算の根拠と測定の方法は docs/tournament-design.md の「棋士の強さ」にある。
 // 換算の表(自己対局のレーティング・基準点)は、段級位の作り直し(2026-10-22)より前のLvで校正したもの。
-// 外へ出すLvは新しい表のLvにし、同じ強さのところへ移す(level-ladder.mjs)。同じ難易度なら、作り直しの前と同じ強さの相手になる。
+// 従来の換算は、同じ強さの新しい表のLvへ移す(level-ladder.mjs)。
+// 2026-10-23以降に始める期は、測定結果と同じEloでおすすめを補正する(tournamentLevel)。
 
 import { ladderLevelFromOld, oldLevelFromLadder } from './level-ladder.mjs';
+import { levelRating, ratingLevel } from './player-rating.mjs';
 
 /**
  * 棋士の尺度。実物の非公式の棋士レーティング(Elo式、差400で勝率約91%)の、現役の棋士の分布に合わせる:
@@ -108,16 +110,51 @@ export function winProbability(ratingA, ratingB) {
   return 1 / (1 + 10 ** ((ratingB - ratingA) / 400));
 }
 
-/** 難易度での、その組の相手のLvの平均(小数)。 */
-export function groupMeanLevel(group, difficulty) {
+/** その組の平均レーティングに当たるLv。棋力を渡すと新しい期のおすすめ・番号順の補正を含む。 */
+export function groupMeanLevel(group, difficulty, recommendedFor = null) {
+  if (Number.isFinite(recommendedFor)) return tournamentLevel(GROUP_MEAN_RATING[group], difficulty, recommendedFor);
   return clamp(exactLevelForRating(GROUP_MEAN_RATING[group], difficulty), MIN_CPU_LEVEL, MAX_CPU_LEVEL);
 }
 
-/** おすすめの難易度。6組の相手の平均のLvが、プレイヤーの棋力(Lv)に近くなる難易度。 */
+/** おすすめは1局あたり7割を中心に、6〜8割を目安にする。プレイヤー用Elo(R60/Lv)で換算する。 */
+export const TOURNAMENT_TARGET_WIN_RATE = 0.7;
+const marginFor = (rate) => 400 * Math.log10(rate / (1 - rate));
+const TARGET_MARGIN = marginFor(TOURNAMENT_TARGET_WIN_RATE);
+
+/**
+ * おすすめを明示して始める期のCPUのLv。棋士の強弱は残し、Elo上の見込み勝率を6〜8割に収める。
+ * 旧Lv換算表は刻みが粗いため使わず、測定結果と同じプレイヤー用Eloで計算する。
+ * 丸めた後も範囲を守る。Lv1より弱い大会棋士はいないので、低級帯では下限を優先する。
+ * @param {number} rating 棋士のレーティング(名簿の尺度)
+ * @param {number} playerLevel 測定・対局結果の棋力(小数可)。期の開始時に固定する。
+ */
+export function recommendedTournamentLevel(rating, playerLevel) {
+  const playerRating = levelRating(playerLevel);
+  const lowest = clamp(Math.ceil(ratingLevel(playerRating - marginFor(0.8))), MIN_CPU_LEVEL, MAX_CPU_LEVEL);
+  const highest = clamp(Math.floor(ratingLevel(playerRating - marginFor(0.6))), MIN_CPU_LEVEL, MAX_CPU_LEVEL);
+  const opponentRating = playerRating - TARGET_MARGIN + (rating - GROUP_MEAN_RATING[6]);
+  return clamp(Math.round(ratingLevel(opponentRating)), lowest, Math.max(lowest, highest));
+}
+
+/** おすすめの番号。6組の平均が、勝率7割に当たる相手のLvに近いものを選ぶ。実際のLvは上の関数で補正する。 */
 export function recommendedDifficulty(playerLevel) {
+  const target = clamp(ratingLevel(levelRating(playerLevel) - TARGET_MARGIN), MIN_CPU_LEVEL, MAX_CPU_LEVEL);
   let best = BASE_DIFFICULTY;
   for (let difficulty = 1; difficulty <= DIFFICULTY_LEVELS; difficulty += 1) {
-    if (Math.abs(groupMeanLevel(6, difficulty) - playerLevel) < Math.abs(groupMeanLevel(6, best) - playerLevel)) best = difficulty;
+    if (Math.abs(groupMeanLevel(6, difficulty) - target) < Math.abs(groupMeanLevel(6, best) - target)) best = difficulty;
   }
   return best;
+}
+
+/**
+ * 新しく始める期のLv。おすすめの上下を手動で選んだときも、番号と強さの順が逆転しないようにする。
+ * 従来の換算を使い、おすすめより高い番号は最低でも差の分だけ強く、低い番号はその分弱くする。
+ */
+export function tournamentLevel(rating, difficulty, playerLevel) {
+  const recommended = recommendedTournamentLevel(rating, playerLevel);
+  const delta = normalizedDifficulty(difficulty) - recommendedDifficulty(playerLevel);
+  if (!delta) return recommended;
+  const boundary = clamp(recommended + delta, MIN_CPU_LEVEL, MAX_CPU_LEVEL);
+  const legacy = ratingToLevel(rating, difficulty);
+  return delta > 0 ? Math.max(legacy, boundary) : Math.min(legacy, boundary);
 }

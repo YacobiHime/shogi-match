@@ -29,7 +29,7 @@ describe('Yakobihime speech for the Ryuo screens', () => {
 
   it('comments on the entry settings', () => {
     const base = { group: 6, meanLevel: 22.4, recommended: 3, ratingText: 'R800' };
-    expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('ぴったり');
+    expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('6〜8割');
     expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('Lv.22');
     expect(entryDifficultyLine({ ...base, difficulty: 1 })).toContain('優しめ');
     expect(entryDifficultyLine({ ...base, difficulty: 8 })).toContain('手ごわい');

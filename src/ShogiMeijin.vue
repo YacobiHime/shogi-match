@@ -249,7 +249,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type PropType } from "vue";
+import { computed, ref, watch, type PropType } from "vue";
 import MeijinPagoda from "./MeijinPagoda.vue";
 import MeijinLeagueTable, { type LeagueRow } from "./MeijinLeagueTable.vue";
 import RyuoSeries, { type SeriesView } from "./RyuoSeries.vue";
@@ -280,7 +280,7 @@ export type MeijinView = {
   resultSeen: boolean;
   settings: Settings;
 };
-type Settings = { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number };
+type Settings = { recommended?: boolean; difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number };
 
 const props = defineProps({
   view: { type: Object as PropType<MeijinView | null>, default: null },
@@ -331,7 +331,11 @@ function topBack() {
 // ---- 入口と設定
 const settingsOpen = ref(false);
 const picker = ref("");
-const difficulty = ref(props.lastSettings?.difficulty ?? props.defaultDifficulty);
+const difficulty = ref(props.lastSettings?.recommended === false ? props.lastSettings.difficulty ?? props.defaultDifficulty : props.defaultDifficulty);
+// おすすめを選んでいた場合は、次の期も新しい棋力に合わせる。手動で選んだ番号は保つ。
+watch(() => props.defaultDifficulty, (next, previous) => {
+  if (difficulty.value === previous) difficulty.value = next;
+});
 const scale = ref(props.lastSettings?.scale ?? "full");
 const coachLevel = ref(props.lastSettings?.coachLevel ?? "detailed");
 const hintLimit = ref(props.lastSettings?.hintLimit ?? 3);
@@ -365,7 +369,7 @@ const settingsSummary = computed(() => [
   `助言 ${COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? ""}`,
 ].join("・"));
 const settingRows = computed(() => [
-  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `おすすめ ${props.defaultDifficulty}` },
+  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `おすすめ ${props.defaultDifficulty}・1局の勝率6〜8割が目安` },
   { id: "scale", label: "規模", value: meijinScale(scale.value).label, note: `1期 ${entryRounds.value}局` },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
@@ -377,7 +381,7 @@ const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: 
   switch (picker.value) {
     case "difficulty":
       return single("難易度", "difficulty", difficulty.value, Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => ({
-        value: index + 1, label: String(index + 1), description: index + 1 === props.defaultDifficulty ? "おすすめ" : "",
+        value: index + 1, label: String(index + 1), description: index + 1 === props.defaultDifficulty ? "おすすめ・勝率6〜8割が目安" : "",
       })), "数字が大きいほど、相手が強くなるよ。");
     case "scale":
       return single("規模", "scale", scale.value, MEIJIN_SCALES.map((item) => ({

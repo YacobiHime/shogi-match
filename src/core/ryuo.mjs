@@ -22,6 +22,7 @@ import {
   levelToRating,
   ratingToLevel,
   recommendedDifficulty,
+  tournamentLevel,
   winProbability,
 } from './ryuo-strength.mjs';
 
@@ -58,11 +59,15 @@ export const scaleById = (id) => SCALES.find((scale) => scale.id === id) ?? SCAL
 
 /**
  * 期で使う棋士。強さはレーティングで持ち、Lvは、その期の難易度で換算した、実際に指すときの値。
+ * 新しい期は棋力も渡し、おすすめの勝率と手動の番号順を合わせる。旧保存のLvは読み込み時に変えない。
  * 羽音は、一度プレイヤーに負けていれば、プレイヤーと指すときだけ強くなる(Lvにだけ足し、自動対局のレーティングは変えない)。
  */
-function seasonPlayer(roster, id, difficulty) {
+function seasonPlayer(roster, id, difficulty, recommendedFor = null) {
   const entry = seasonEntry(roster, id);
-  return { ...entry, level: ratingToLevel(entry.rating + hananeGrudgeBonus(entry, entry.vsUser), difficulty) };
+  const rating = entry.rating + hananeGrudgeBonus(entry, entry.vsUser);
+  const level = Number.isFinite(recommendedFor)
+    ? tournamentLevel(rating, difficulty, recommendedFor) : ratingToLevel(rating, difficulty);
+  return { ...entry, level };
 }
 /** 期の中で使う棋士の写しと、難易度での実際に指すLv(名人戦の順位戦でも使う。core/meijin.mjs)。 */
 export const seasonPlayerOf = seasonPlayer;
@@ -380,7 +385,7 @@ export const userDan = userDanFor;
  * シーズン(1期)を始める。プレイヤーの最初の対局、または終了まで、プレイヤー以外の対局を自動で進める。
  * @param {{
  *   no: number, mode: 'challenge' | 'defense', group: number,
- *   settings: { difficulty: number, scale: number, revival: boolean },
+ *   settings: { difficulty: number, scale: number, revival: boolean, recommended?: boolean },
  *   userLevel: number, career?: object, roster?: object, seed?: number, userName?: string,
  * }} options
  */
@@ -426,12 +431,12 @@ export function createSeason({ no, mode, group, settings, userLevel, career, ros
   const holder = mode === 'defense' || members.holder === USER_HOLDER ? USER_ID : members.holder;
   season.champion = holder;
   season.defender = holder;
-  if (holder !== USER_ID) season.players[holder] = seasonPlayer(members, holder, settings.difficulty);
+  if (holder !== USER_ID) season.players[holder] = seasonPlayer(members, holder, settings.difficulty, typeof settings.recommended === 'boolean' ? userLevel : null);
   // 各組の出場者を、名簿から選ぶ(竜王は出ない)。プレイヤーの組は、プレイヤーの分を1名減らす。
   for (const g of GROUPS) {
     const userHere = mode === 'challenge' && g === group;
     const ids = selectParticipants(members, g, scale.sizes[g] - (userHere ? 1 : 0), rng);
-    for (const id of ids) season.players[id] = seasonPlayer(members, id, settings.difficulty);
+    for (const id of ids) season.players[id] = seasonPlayer(members, id, settings.difficulty, typeof settings.recommended === 'boolean' ? userLevel : null);
     season.fields[g] = userHere ? [...ids, USER_ID] : ids;
   }
   if (mode === 'challenge') {
