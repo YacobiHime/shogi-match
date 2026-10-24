@@ -230,6 +230,21 @@ function alignedSecondScore(pairRead, secondRead) {
 }
 
 /**
+ * 棋力診断(skill-estimate.mjs)に使う1手の損。指した手が、着手前の読みのいちばん良い手なら0、2番目の手なら
+ * 同じ読みの中の1番目と2番目の差にする。着手前と着手後を別々に読んだ評価値の差(loss)は、読みのぶれで
+ * 最善手でも損が出るため。読みの候補にない手は、そのままlossを使う(docs/skill-measure-design.mdの7章)。
+ */
+function readLoss(read, playedMove, loss) {
+  const best = rankOf(read?.candidates, 1);
+  if (best?.move === playedMove) return 0;
+  const second = rankOf(read?.candidates, 2);
+  const bestScore = comparable(best?.score);
+  const secondScore = comparable(second?.score);
+  if (second?.move === playedMove && bestScore !== undefined && secondScore !== undefined) return Math.max(0, bestScore - secondScore);
+  return loss;
+}
+
+/**
  * 段階解析の結果から、グラフの点と指し手の判定を作る。神の一手は上位3手に絞る。
  * steps[ply]は{ sfen, lastMove, label }。labelは「▲7六歩」のような指し手の表記。
  */
@@ -255,7 +270,7 @@ export function analysisPointsFromResults(steps, results, contexts = []) {
       const beforeBestScore = scoreForBlack(rankOf(pair.before?.candidates, 1)?.score, beforeSide);
       const afterScore = scoreForBlack(rankOf(pair.after?.candidates, 1)?.score, side);
       const measured = analyzedMoveLoss({ mover: beforeSide, beforeBestScore, afterScore });
-      if (measured) moveMeasure = { mover: beforeSide, ...measured };
+      if (measured) moveMeasure = { mover: beforeSide, ...measured, measureLoss: readLoss(deepestRead(before), steps[ply].lastMove, measured.loss) };
       annotation = classifyAnalyzedMove({
         ply,
         mover: beforeSide,

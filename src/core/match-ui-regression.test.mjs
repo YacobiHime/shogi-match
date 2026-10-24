@@ -44,12 +44,16 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/const openingGuideAvailable = computed\(\(\) => matchInitialSfen\.value === STANDARD_SFEN && !measureMode\.value\);/);
     expect(source).toMatch(/measure: measureMode\.value\s*\? \{ carry: measureCarry\.value, welcome: measureWelcome\.value, settingsBefore: settingsBeforeMeasure \}/);
     expect(source).toMatch(/restoredMeasureState\(snapshot\.measure\)/);
+    // 診断は、勝ち負け(持ち越した対局の分も)と、解析の読みの深さ(PC・スマホ)に合った表を使う(docs/skill-measure-design.mdの7章)。
+    expect(source).toMatch(/results,\s*plan: analysisCompact\.value \? "compact" : "desktop",/);
+    expect(source).toMatch(/results: \[\.\.\.\(measureCarry\.value\?\.results \?\? \[\]\), \.\.\.\(current \? \[current\] : \[\]\)\],/);
+    expect(source).toMatch(/const level = measureAnalyzing\.value \? MEASURE_ANALYSIS_LEVEL : analysisLevelChoice\.value;/);
     expect(source).toMatch(/\.shogi-game \.shogi-game__measure-band \{[^}]*border-left: 4px solid var\(--measure-accent\);/);
   });
   it("offers another measuring game with the carried moves when too few moves were measured", () => {
     // 力の差で早く形勢が決まると測れる手が足りない。相手を近づけてもう1局、手は持ち越す(docs/skill-measure-design.md)。
     expect(source).toMatch(/v-if="skillDiagnosis\.insufficient && measureNext"[\s\S]*?data-measure-continue @click="continueMeasure">もう1局指す（Lv\.\{\{ measureNext\.level \}\}）</);
-    expect(source).toMatch(/estimateSkill\(analysisPoints\.value, [^;]*carried\)/);
+    expect(source).toMatch(/estimateSkill\(analysisPoints\.value, [^;]*carried, \{/);
     expect(source).toMatch(/function continueMeasure\(\) \{[\s\S]*?measurableMoves\(analysisPoints\.value, color\)[\s\S]*?startMeasureMatchNow\(\{ level: next\.level, carry \}\)/);
     // 対局準備・ホームへ戻ると、持ち越した手は捨てる。
     expect(source).toMatch(/measureAnalyzing\.value = false;\s*measureCarry\.value = null;/);

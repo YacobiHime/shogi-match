@@ -1,10 +1,9 @@
-// 棋譜解析の結果から、対局で指した手の評価値の損(平均損失)を見て、棋力(レーティングと級・段)を推定する。
-// 平均損失とCPUのレベルの対応は、現在のレベル表でCPUの着手を測った値から作る(下のlevelForAverageLoss)。
-// 解析の探索量や対局の内容で値が動くため、結果は目安として扱う。
+// 棋譜解析の結果から、対局で指した手の評価値の損と対局の勝ち負けを見て、棋力(レーティングと級・段)を推定する。
+// 損とLvの対応は、強さの分かっているCPUどうしの対局を、アプリと同じ段階解析で読んで作った表で決める
+// (2026-10-24の作り直し。docs/skill-measure-design.mdの7章)。結果は目安として扱う。
 
 import { levelRating } from './player-rating.mjs';
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
-import { ladderLevelForSource } from './level-ladder.mjs';
 
 /** 1手の損失の上限。1手の大悪手で平均が崩れすぎないようにする。 */
 const LOSS_CAP = 1000;
@@ -12,43 +11,67 @@ const LOSS_CAP = 1000;
 const DECIDED_STANDING = 1500;
 /** 診断に必要な、測れる手の数の下限。 */
 export const MIN_MEASURED_MOVES = 10;
+/** 1手の損を対数にするときに足す値(損0の手を扱えるように)。 */
+const LOG_OFFSET = 10;
+/** 1LvあたりのレーティングR(player-rating.mjsと同じ)。勝ち負けの起こりやすさに使う。 */
+const RATING_PER_LEVEL = 60;
+const MAX_LEVEL = CPU_STRENGTH_PRESETS.at(-1).level;
 
 /**
- * 平均損失(1手1000で打ち切り)からLv(小数)への対応。CPUの着手を同じ基準(30,000nodes)で採点した
- * 平均損失を、Lv12〜35で測り、Lvが損失の対数にほぼ直線で並ぶことから回帰した(2026-10-09、
- * scripts/cpu-humanlike-report.mjs、36局面×3回、Lvごとに108手。残差はおおむね±3Lv)。
- * Lv0〜11は損失の差が小さく、Lv36〜40は損失が35前後で頭打ちになるため、診断はLv0〜36の範囲にする。
+ * Lvごとの「1手の損(上限1000)＋10」の対数の平均(単調に減るようにならした表、[Lv, 値])。
+ * 強さの分かっているCPU(Lv1〜48)どうしの96局を、アプリと同じ段階解析で読み、両方の側の手を数えた(2026-10-24)。
+ * desktopはPCの解析(全局面2万ノード)、compactはスマホ・タブレット縦の解析(全局面6千ノード)。読みが浅いと損が大きく出るので分ける。
+ * Lv36より上は損がほとんど変わらない(解析の読みより強い手の違いは見分けられない)。そこは勝ち負けで補う。
  */
-const LEVEL_AT_LOSS_1 = 94.59;
-const LEVEL_PER_LN_LOSS = -14.41;
-/** 回帰で測った範囲の上端(もとの校正のLv36)。 */
-const MAX_DIAGNOSED_SOURCE = 36;
-
-/** 回帰で測ったいちばん下の強さ(15級。もとの校正の11.93)の、今の表のLv。 */
-const KYU15 = CPU_STRENGTH_PRESETS.find((preset) => preset.label === '15級程度');
-
+export const LOG_LOSS_TABLES = Object.freeze({
+  desktop: Object.freeze([[1.5, 5.38], [5, 5.07], [8, 5], [10, 4.95], [13, 4.77], [17, 4.65], [20, 4.43], [23, 3.85], [26, 3.64], [29, 3.63], [32, 3.34], [38, 3.17], [44, 3.05], [47, 2.92]]),
+  compact: Object.freeze([[1, 5.48], [2, 5.39], [5, 5.03], [8, 5.02], [10, 4.99], [13, 4.81], [17, 4.67], [20, 4.35], [23, 3.9], [26, 3.71], [29, 3.65], [33, 3.39], [39, 3.21], [46, 3.09]]),
+});
+/** 1手の対数の損のばらつき(標準偏差)と、局ごとの調子のばらつき。同じ96局から測った。 */
+const MOVE_LOG_SD = 1.45;
+const GAME_LOG_SD = 0.24;
 /**
- * もとの校正のLv(小数)を、今の表のLv(小数)へ。回帰はもとの校正のLvで測ったので、同じ強さの今の表のLvへ移す。
- * 15級(もとの11.93)より弱いところは、回帰を延ばした値なので、Lv0〜15級(24級〜16級)のあいだへ直線で並べる
- * (24級〜16級はロジックAIで指すので、sourceの数どうしは比べられない)。
+ * Lvごとの1手の損(素の損、上限1000)の平均の表(単調に減る、[Lv, 平均])。R内容(play-insight.mjs)の換算に使う。
  */
-function ladderLevelOfSource(source) {
-  return source < KYU15.source ? Math.max(0, KYU15.level * source / KYU15.source) : ladderLevelForSource(source);
+const RAW_LOSS_TABLE = Object.freeze([[1.5, 466], [6, 363], [12, 305], [17, 272], [20, 226], [23, 171], [26, 150], [29, 147], [32, 124], [34, 121], [39, 113], [46, 90]]);
+
+/** 表を折れ線でつなぐ。両端より外は端の値。 */
+function tableValue(table, level) {
+  if (level <= table[0][0]) return table[0][1];
+  if (level >= table.at(-1)[0]) return table.at(-1)[1];
+  const index = table.findIndex(([at]) => at >= level);
+  const [fromLevel, from] = table[index - 1];
+  const [toLevel, to] = table[index];
+  return from + (to - from) * (level - fromLevel) / (toLevel - fromLevel);
 }
 
-/** 診断の上端の、今の表のLv。 */
-export const MAX_DIAGNOSED_LEVEL = ladderLevelOfSource(MAX_DIAGNOSED_SOURCE);
+/** 診断の上端のLv(表のいちばん強いところ)。これより強い人も、ここまでで診断する。 */
+export const MAX_DIAGNOSED_LEVEL = Math.ceil(LOG_LOSS_TABLES.desktop.at(-1)[0]);
 
-/** 平均損失を、Lv(今の表、小数)へ変換する。範囲外は両端のLvにそろえる。 */
+/**
+ * 平均損失(素の損、上限1000)を、Lv(小数)へ変換する(RAW_LOSS_TABLEの逆)。範囲外は両端のLvにそろえる。
+ * 棋力診断は手の損の対数と勝ち負けで決める(estimateSkill)。これは、最近の対局の平均損失しかないR内容のための換算。
+ */
 export function levelForAverageLoss(loss) {
-  const source = LEVEL_AT_LOSS_1 + LEVEL_PER_LN_LOSS * Math.log(Math.max(1, loss));
-  return ladderLevelOfSource(Math.min(MAX_DIAGNOSED_SOURCE, Math.max(0, source)));
+  const table = RAW_LOSS_TABLE;
+  if (loss >= table[0][1]) return 0;
+  if (loss <= table.at(-1)[1]) return table.at(-1)[0];
+  const index = table.findIndex(([, average]) => average <= loss);
+  const [fromLevel, from] = table[index - 1];
+  const [toLevel, to] = table[index];
+  return fromLevel + (toLevel - fromLevel) * (from - loss) / (from - to);
 }
 
 const presetForLevel = (level) => {
-  const rounded = Math.min(CPU_STRENGTH_PRESETS.at(-1).level, Math.max(0, Math.round(level)));
+  const rounded = Math.min(MAX_LEVEL, Math.max(0, Math.round(level)));
   return CPU_STRENGTH_PRESETS.find((preset) => preset.level === rounded);
 };
+
+/**
+ * 1手の損。指した手が、解析のいちばん良い手なら0、2番目の手なら同じ読みの中の差にする(kifu-analysis-pipeline.mjsのmeasureLoss)。
+ * 古い解析(measureLossがない)は、着手前と着手後の評価値の差(loss)を使う。
+ */
+const lossOf = (measure) => (Number.isFinite(measure.measureLoss) ? measure.measureLoss : measure.loss);
 
 /**
  * 診断に使える手(形勢に大差が付く前の手)の、評価値の損と着手前の形勢。測れる手が足りなかった対局から、
@@ -61,39 +84,68 @@ export function measurableMoves(points, color) {
   return (points ?? [])
     .map((point) => point.moveMeasure)
     .filter((measure) => measure && measure.mover === color && Math.abs(measure.standing) < DECIDED_STANDING)
-    .map(({ loss, standing }) => ({ loss, standing }));
+    .map((measure) => ({ loss: lossOf(measure), standing: measure.standing }));
 }
 
 /**
- * @param {any[]} points 棋譜解析の点。moveMeasure({ mover, loss, standing })を持つ点だけを使う
+ * Lv(0〜MAX_LEVEL、0.25刻み)ごとの起こりやすさから、推定のLv(平均)とばらつき(標準偏差)を出す。
+ * 手の損: 対数の損の平均が、そのLvの表の値のまわりに、1手のばらつき/√手数と局ごとのばらつきで散らばるとする。
+ * 勝ち負け: 相手のLvとの差から、Elo式の勝つ確率(1Lv=R60)。引き分けは勝ちと負けの中間。
+ * @param {{ logMean: number, count: number, results: { opponent: number, score: number }[], table: readonly (readonly number[])[] }} input
+ */
+function posteriorLevel({ logMean, count, results, table }) {
+  const variance = MOVE_LOG_SD ** 2 / count + GAME_LOG_SD ** 2;
+  let total = 0;
+  let sum = 0;
+  let squares = 0;
+  for (let level = 0; level <= MAX_LEVEL; level += 0.25) {
+    let weight = Math.exp(-((logMean - tableValue(table, level)) ** 2) / (2 * variance));
+    for (const { opponent, score } of results) {
+      const win = 1 / (1 + 10 ** (-(RATING_PER_LEVEL * (level - opponent)) / 400));
+      weight *= score >= 1 ? win : score <= 0 ? 1 - win : Math.sqrt(win * (1 - win));
+    }
+    total += weight;
+    sum += level * weight;
+    squares += level * level * weight;
+  }
+  const mean = sum / total;
+  return { level: mean, spread: Math.sqrt(Math.max(0, squares / total - mean * mean)) };
+}
+
+/**
+ * @param {any[]} points 棋譜解析の点。moveMeasure({ mover, loss, measureLoss, standing })を持つ点だけを使う
  * @param {'black' | 'white'} color 診断する側
  * @param {{ loss: number, standing: number }[]} [carried] 前の測定対局から持ち越した手(measurableMoves)
+ * @param {{
+ *   results?: { opponent: number, score: number }[],
+ *   plan?: 'desktop' | 'compact',
+ * }} [options] results: 測定対局の勝ち負け(相手のLvと、勝ち1・引き分け0.5・負け0。持ち越した対局の分も)。
+ *   plan: 解析の読みの深さ(PCかスマホ・タブレット縦か)。
  * @returns {{
  *   insufficient: boolean, count: number, averageLoss?: number, level?: number,
  *   rating?: number, ratingLow?: number, ratingHigh?: number, label?: string,
  *   reliability?: 'reference' | 'estimate' | 'stable',
  * }} insufficientが真のときは、countだけを持つ(測れる手が足りない)。
  */
-export function estimateSkill(points, color, carried = []) {
-  const losses = [...measurableMoves(points, color), ...carried].map(({ loss }) => Math.min(LOSS_CAP, loss));
+export function estimateSkill(points, color, carried = [], { results = [], plan = 'desktop' } = {}) {
+  const losses = [...measurableMoves(points, color), ...carried].map(({ loss }) => Math.min(LOSS_CAP, Math.max(0, loss)));
   const count = losses.length;
   if (count < MIN_MEASURED_MOVES) return { insufficient: true, count };
-  const mean = losses.reduce((sum, loss) => sum + loss, 0) / count;
-  const variance = losses.reduce((sum, loss) => sum + (loss - mean) ** 2, 0) / (count - 1);
-  const error = Math.sqrt(variance / count);
-  const level = levelForAverageLoss(mean);
-  const ratingOf = (loss) => levelRating(levelForAverageLoss(Math.max(1, loss)));
+  const average = losses.reduce((sum, loss) => sum + loss, 0) / count;
+  const logMean = losses.reduce((sum, loss) => sum + Math.log(loss + LOG_OFFSET), 0) / count;
+  const table = LOG_LOSS_TABLES[plan] ?? LOG_LOSS_TABLES.desktop;
+  const { level, spread } = posteriorLevel({ logMean, count, results, table });
   return {
     insufficient: false,
     count,
-    averageLoss: Math.round(mean),
+    averageLoss: Math.round(average),
     level,
     rating: levelRating(level),
-    // 平均損失の標準誤差ぶんだけ動かした範囲。損が小さいほど強いので、上下が逆になる。
-    ratingLow: ratingOf(mean + error),
-    ratingHigh: ratingOf(mean - error),
+    // 推定のばらつき(標準偏差)ぶんの幅。
+    ratingLow: levelRating(Math.max(0, level - spread)),
+    ratingHigh: levelRating(Math.min(MAX_LEVEL, level + spread)),
     label: presetForLevel(level).label,
-    reliability: count < 20 ? 'reference' : count < 40 ? 'estimate' : 'stable',
+    reliability: spread >= 7 ? 'reference' : spread >= 4 ? 'estimate' : 'stable',
   };
 }
 
@@ -122,7 +174,7 @@ export function nextMeasureLevel({ level, outcome }) {
  * 形がおかしいものは捨てる。測定の対局でなければnull。
  * @param {unknown} value 保存した{ carry, welcome, settingsBefore }
  * @returns {{
- *   carry: { moves: { loss: number, standing: number }[], games: number } | null,
+ *   carry: { moves: { loss: number, standing: number }[], games: number, results: { opponent: number, score: number }[] } | null,
  *   welcome: '' | 'some' | 'player',
  *   settingsBefore: { [key: string]: unknown } | null,
  * } | null}
@@ -135,8 +187,13 @@ export function restoredMeasureState(value) {
     ? carry.moves.filter((move) => finite(move?.loss) && finite(move?.standing)).map(({ loss, standing }) => ({ loss, standing }))
     : [];
   const games = Number.isInteger(carry?.games) ? Math.min(MAX_MEASURE_GAMES - 1, Math.max(0, carry.games)) : 0;
+  const results = Array.isArray(carry?.results)
+    ? carry.results
+      .filter((result) => finite(result?.opponent) && [0, 0.5, 1].includes(result?.score))
+      .map(({ opponent, score }) => ({ opponent, score }))
+    : [];
   return {
-    carry: games > 0 ? { moves, games } : null,
+    carry: games > 0 ? { moves, games, results } : null,
     welcome: welcome === 'some' || welcome === 'player' ? welcome : '',
     settingsBefore: settingsBefore && typeof settingsBefore === 'object' && !Array.isArray(settingsBefore) ? settingsBefore : null,
   };

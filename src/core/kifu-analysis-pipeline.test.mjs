@@ -63,6 +63,23 @@ describe("staged kifu analysis", () => {
     expect(moveFacts(steps, results, 1)).toEqual({ loss: 400, playedBest: true, mate: false });
   });
 
+  it("棋力診断の損(measureLoss)は、最善手なら0、2番目の手なら同じ読みの中の差にする(docs/skill-measure-design.mdの7章)", () => {
+    const steps = koyama.steps.slice(0, 3);
+    const read = (first, second, value) => ({ reads: [{ nodes: 100, multiPv: 2, candidates: [
+      { rank: 1, move: first, score: cp(value) },
+      { rank: 2, move: second, score: cp(value - 70) },
+    ] }] });
+    // 1手目は読みの1番目の手。着手後の読みとの差(読みのぶれ)で損120に見えても、診断の損は0。
+    // 2手目は読みの2番目の手。診断の損は、同じ読みの1番目との差70。
+    const results = [read(steps[1].lastMove, "2g2f", 100), read("8c8d", steps[2].lastMove, 20), read("7g7f", "2g2f", 100)];
+    const points = analysisPointsFromResults(steps, results);
+    expect(points[1].moveMeasure).toMatchObject({ mover: "black", loss: 120, measureLoss: 0 });
+    expect(points[2].moveMeasure).toMatchObject({ mover: "white", measureLoss: 70 });
+    // 読みの候補にない手は、着手前後の評価値の差のまま。
+    const other = analysisPointsFromResults(steps, [read("9g9f", "1g1f", 100), ...results.slice(1)]);
+    expect(other[1].moveMeasure.measureLoss).toBe(other[1].moveMeasure.loss);
+  });
+
   it("compares a move's loss only between reads of the same depth", () => {
     const steps = koyama.steps.slice(0, 2);
     const results = [

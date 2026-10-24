@@ -1551,7 +1551,7 @@
           <strong>棋力診断: R{{ skillDiagnosis.rating }}（{{ skillDiagnosis.label }}）</strong>
           <span>
             あなたの{{ skillDiagnosis.count }}手の平均損失は{{ skillDiagnosis.averageLoss }}。
-            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安です{{ skillDiagnosis.reliability === "reference" ? "（手数が少ない参考値）" : "" }}。
+            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安です{{ skillDiagnosis.reliability === "reference" ? "（幅の広い参考値）" : "" }}。
           </span>
           <!-- レーティングへの設定は、やこびノートの棋力測定の対局だけ。ほかの解析では、診断を表示するだけにする。 -->
           <button v-if="measureSession" type="button" :disabled="ratingState.rating === skillDiagnosis.rating" @click="applySkillDiagnosis">
@@ -2093,7 +2093,7 @@
             <span>（{{ skillDiagnosis.label }}）</span>
           </p>
           <p class="shogi-game__measure-range">
-            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安{{ skillDiagnosis.reliability === "reference" ? "（手数が少ない参考値）" : "" }}
+            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安{{ skillDiagnosis.reliability === "reference" ? "（幅の広い参考値）" : "" }}
           </p>
           <dl v-if="measureStats" class="shogi-game__result-details">
             <div>
@@ -2160,7 +2160,7 @@
           <button type="button" class="shogi-game__analysis-button" @click="measureReportDismissed = true">棋譜を見る</button>
           <button type="button" class="shogi-game__rematch" @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
-        <p class="shogi-game__measure-note">評価値の損から求めた目安です。解析の探索量や対局の内容で動きます。</p>
+        <p class="shogi-game__measure-note">指し手の評価値の損と、勝ち負けから求めた目安です。対局の内容で動きます。</p>
       </div>
     </div>
   </section>
@@ -3090,6 +3090,8 @@ const measureSession = ref(false);
 const measureAnalyzing = ref(false);
 /** 棋力測定の解析の深さ(KIFU_ANALYSIS_LEVELSの「速い」)。 */
 const MEASURE_ANALYSIS_LEVEL = 0;
+/** 最後の棋譜解析を、スマホ・タブレット縦の軽い読み(compact)で読んだか。棋力診断の表を選ぶ。 */
+const analysisCompact = ref(false);
 /**
  * 棋力の測定の進み具合(0〜100)。解析の3段階(全体を確認→怪しい手を読み直し→大事な局面を深読み)を、
  * 時間のかかり方に合わせた幅で1本の棒にまとめる。段階が変わっても棒が戻らない。
@@ -3112,7 +3114,7 @@ const measureWaitHidden = ref(false);
 /** 測定中に、やこび姫が話すこと(何を測っているか)。順番に替える。 */
 const MEASURE_WAIT_TIPS = Object.freeze([
   "1手ごとに、いちばん良い手と比べて、評価値をどれだけ損したかを調べているよ。",
-  "損が小さい手が多いほど、強いっていう目安になるんだ。",
+  "損が小さい手が多いほど、強いっていう目安になるんだ。勝ち負けも、相手の強さと合わせて少しだけ見るよ。",
   "形勢に大きな差がついたあとの手は、数えないよ。勝負が決まった後の手は、比べにくいからね。",
   "結果は目安だよ。何局か測ると、だんだん本当の棋力に近づくよ。",
 ]);
@@ -3139,7 +3141,9 @@ const measureWelcome = ref<"" | "some" | "player">("");
  * 測れる手が足りなかった測定対局から持ち越した手と、その対局の数。次の測定対局の手と合わせて診断する。
  * 測定の対局を続けている間だけ持ち、対局準備・ホームへ戻ると捨てる(docs/skill-measure-design.md)。
  */
-const measureCarry = ref<{ moves: { loss: number; standing: number }[]; games: number } | null>(null);
+/** 測定対局の勝ち負け(相手のLvと、勝ち1・引き分け0.5・負け0)。棋力診断で、手の損と合わせて使う。 */
+type MeasureResult = { opponent: number; score: number };
+const measureCarry = ref<{ moves: { loss: number; standing: number }[]; games: number; results: MeasureResult[] } | null>(null);
 /**
  * 棋力測定の対局中の札(docs/skill-measure-design.mdの6章)。対局中だけ出す(終局後は測定中・結果の札が出る)。
  * 続けて測る2局目からは、前の対局の手と合わせて測ることを添える。
@@ -6096,7 +6100,7 @@ function startMeasureMatch() {
  */
 function startMeasureMatchNow(options: {
   level?: number;
-  carry?: { moves: { loss: number; standing: number }[]; games: number };
+  carry?: { moves: { loss: number; standing: number }[]; games: number; results: MeasureResult[] };
   /** はじめての案内の答え(少し指せる・よく指している)。続けて測るときは、前の対局のものを引き継ぐ。 */
   welcome?: "some" | "player";
 } = {}) {
@@ -8654,8 +8658,21 @@ const skillDiagnosis = computed(() => {
   if (normalizedMode.value !== "cpu" || !analysisPoints.value.length) return null;
   // 棋力測定を続けているときは、前の測定対局から持ち越した手も合わせて診断する。
   const carried = measureSession.value ? measureCarry.value?.moves ?? [] : [];
-  return estimateSkill(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black", carried);
+  // 棋力測定では、勝ち負けも合わせて診断する(持ち越した対局の分も)。解析の読みの深さに合った表を使う。
+  const current = measureSession.value ? measureGameResult() : null;
+  const results = measureSession.value ? [...(measureCarry.value?.results ?? []), ...(current ? [current] : [])] : [];
+  return estimateSkill(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black", carried, {
+    results,
+    plan: analysisCompact.value ? "compact" : "desktop",
+  });
 });
+/** この測定対局の勝ち負け(相手のLvと、プレイヤーから見た点)。終局していなければnull。 */
+function measureGameResult(): MeasureResult | null {
+  const opponent = cpuStrengthLevel();
+  if (opponent === undefined || !result.value) return null;
+  const winner = result.value.winner;
+  return { opponent, score: !winner ? 0.5 : winner === humanColor.value ? 1 : 0 };
+}
 /**
  * 測れる手が足りなかったときに、続けて指す測定対局の相手(Lv)。勝ったら強く、負けたら弱くする。
  * 最初の1局を含めて MAX_MEASURE_GAMES 局まで。
@@ -8674,9 +8691,11 @@ function continueMeasure() {
   const next = measureNext.value;
   if (!next) return;
   const color = humanColor.value === Color.WHITE ? "white" : "black";
+  const current = measureGameResult();
   const carry = {
     moves: [...(measureCarry.value?.moves ?? []), ...measurableMoves(analysisPoints.value, color)],
     games: (measureCarry.value?.games ?? 0) + 1,
+    results: [...(measureCarry.value?.results ?? []), ...(current ? [current] : [])],
   };
   startMeasureMatchNow({ level: next.level, carry });
 }
@@ -9980,6 +9999,7 @@ async function runKifuAnalysis() {
     }
     analysisTotal.value = steps.length;
     const compact = props.mobile || boardLayout.value === "portrait";
+    analysisCompact.value = compact;
     const cancelled = () => generation !== analysisGeneration || !reviewMode.value;
     // 千日手を正しく判定できるよう、初期局面からの手順で読ませる。
     const laneFor = (laneEngine: ShogiEngine) => engineLane(laneEngine, (_sfen, ply) => movesPosition(base, moves, ply));
