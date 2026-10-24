@@ -1,7 +1,7 @@
 <template>
   <!--
     天鷺羽音の立ち絵(イラスト。docs/hanane-rival-design.mdの12章)。表情は4つ(core/ryuo-story.mjsのHANANE_PORTRAIT)。
-    使うのは、対局の始まりを告げる画面(VS画面と開幕の札)だけ。ほかの場面はドット絵(HANANE_SPRITE)。
+    使うのは、対局画面の開幕の札だけ。ほかの場面(VS画面も)はドット絵(HANANE_SPRITE)。
     crop: face(顔だけ。正方形の札の中)、bust(胸から上)、full(全身)。大きさは置く側で決め、ここは切り抜き方だけを持つ。
     表情が変わったときは、絵を短く入れ替える(動きを減らす設定では、すぐ替える)。
   -->
@@ -31,7 +31,7 @@ const src = computed(() => `${props.assetBaseUrl}/characters/${hananePortraitFil
  * 絵(662×2325)の中で、顔は上の約15%(髪の上から顎まで)、胸から上は上の約39%。
  * 切り抜きは、絵の幅と位置を枠に対する割合で決める(枠の大きさが変わっても、同じところが見える)。
  * 絵の切り抜き(img)は、置く側のimgの決まりに負けないよう、クラスを2つ重ねる。
- * 枠の大きさと置き場所は、置く側がクラスを重ねて決める(.ryuo-versus__portrait.ryuo-versus__portraitなど)。
+ * 枠の大きさと置き場所は、置く側がクラスを重ねて決める(.shogi-game__stage-card-rival .hanane-portraitなど)。
  */
 .shogi-game .hanane-portrait {
   position: relative;

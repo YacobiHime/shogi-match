@@ -14,15 +14,6 @@
     <div class="ryuo-versus__side ryuo-versus__side--you" aria-hidden="true"></div>
     <div class="ryuo-versus__side ryuo-versus__side--them" aria-hidden="true"></div>
     <div class="ryuo-versus__stripes" aria-hidden="true"></div>
-    <!-- 羽音は、相手の側に立ち絵(全身)を大きく出す(docs/hanane-rival-design.mdの12章)。 -->
-    <HananePortrait
-      v-if="opponent.portrait"
-      class="ryuo-versus__portrait"
-      crop="full"
-      :expression="opponent.portrait"
-      :asset-base-url="assetBaseUrl"
-      data-versus-portrait
-    />
     <p class="ryuo-versus__label">{{ label }}</p>
     <div class="ryuo-versus__player ryuo-versus__player--you">
       <span class="ryuo-versus__piece" aria-hidden="true">自</span>
@@ -31,8 +22,7 @@
     </div>
     <div class="ryuo-versus__mark" aria-hidden="true">VS</div>
     <div class="ryuo-versus__player ryuo-versus__player--them">
-      <span v-if="opponent.portrait" class="ryuo-versus__rival-tag" aria-hidden="true">ライバル</span>
-      <span v-else-if="opponent.sprite" class="ryuo-versus__seal ryuo-versus__seal--sprite" aria-hidden="true"><img :src="opponent.sprite" alt="" draggable="false"></span>
+      <span v-if="opponent.sprite" class="ryuo-versus__seal ryuo-versus__seal--sprite" aria-hidden="true"><img :src="opponent.sprite" alt="" draggable="false"></span>
       <span v-else :class="['ryuo-versus__seal', `ryuo-versus__seal--${opponent.tone}`]" aria-hidden="true">{{ opponent.char }}</span>
       <strong>{{ opponent.name }}</strong>
       <small>{{ [opponent.dan, opponent.style, colorText(you === "black" ? "white" : "black")].filter(Boolean).join("・") }}</small>
@@ -44,7 +34,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, type PropType } from "vue";
 import { createMoveSoundPlayer } from "./core/move-sound";
-import HananePortrait from "./HananePortrait.vue";
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
@@ -56,8 +45,7 @@ const props = defineProps({
   /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。 */
   youName: { type: String, default: "あなた" },
   opponent: {
-    /** portraitは、立ち絵のある人物(羽音)の表情。空なら判子。 */
-    type: Object as PropType<{ name: string; char: string; tone: string; sprite: string; dan: string; style: string; portrait?: string }>,
+    type: Object as PropType<{ name: string; char: string; tone: string; sprite: string; dan: string; style: string }>,
     required: true,
   },
   /** 勝てば(例: 準決勝へ)。 */
@@ -192,25 +180,6 @@ defineExpose({ finish });
   transform: translateX(-50%);
 }
 .shogi-game .ryuo-versus__stakes span { color: #ffd27a; }
-/* 羽音の立ち絵: 縦の画面は相手の側(下)の左に、横の画面は相手の側(右)の名前の左に、下から立たせる。 */
-.shogi-game .ryuo-versus__portrait.ryuo-versus__portrait {
-  position: absolute;
-  bottom: -6vh;
-  left: 4%;
-  width: auto;
-  height: 62vh;
-  filter: drop-shadow(0 0 0.6rem rgba(11, 19, 32, 0.6));
-  animation: ryuo-versus-in-right 300ms ease-out both;
-}
-.shogi-game .ryuo-versus__rival-tag {
-  padding: 0.15rem 0.7rem;
-  color: #1e2d3d;
-  background: #d4a93a;
-  font-size: 0.95rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  box-shadow: 3px 3px 0 #0b1320;
-}
 @keyframes ryuo-versus-in-left { from { transform: translateX(-100%); } }
 @keyframes ryuo-versus-in-right { from { transform: translateX(100%); } }
 @keyframes ryuo-versus-drop {
@@ -223,12 +192,10 @@ defineExpose({ finish });
   .shogi-game .ryuo-versus__side--them { clip-path: polygon(58% 0, 100% 0, 100% 100%, 42% 100%); }
   .shogi-game .ryuo-versus__player--you { top: 30%; left: 8%; }
   .shogi-game .ryuo-versus__player--them { top: 30%; bottom: auto; right: 8%; }
-  .shogi-game .ryuo-versus__portrait.ryuo-versus__portrait { right: 30%; left: auto; bottom: -4vh; height: 100vh; }
 }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .ryuo-versus__side,
   .shogi-game .ryuo-versus__player,
-  .shogi-game .ryuo-versus__mark,
-  .shogi-game .ryuo-versus__portrait.ryuo-versus__portrait { animation: none; }
+  .shogi-game .ryuo-versus__mark { animation: none; }
 }
 </style>

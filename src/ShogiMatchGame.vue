@@ -1218,7 +1218,7 @@
           <template v-if="stageCard.kind === 'opening'">
             <!--
               羽音との一局は、札の上に羽音の胸から上(立ち絵)と「ライバル」の名札を出す。
-              立ち絵は、この札とVS画面(対局の始まりを告げる画面)だけ。ほかの場面はドット絵(docs/hanane-rival-design.mdの12章)。
+              立ち絵は、この札だけ。ほかの場面(VS画面も)はドット絵(docs/hanane-rival-design.mdの12章)。
             -->
             <span v-if="rivalName" class="shogi-game__stage-card-rival" data-stage-card-rival>
               <HananePortrait crop="bust" small :asset-base-url="assetBaseUrl" />

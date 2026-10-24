@@ -25,7 +25,7 @@ export const HANANE_GRUDGE_RATING = 40;
 /** 羽音の絵。37×80ドットを8倍にした、劣化のない透過webp。差し替えたらversionを上げる。 */
 export const HANANE_SPRITE = Object.freeze({ file: 'hanane-mini.webp', version: 1, dots: { width: 37, height: 80 } });
 /**
- * 羽音の立ち絵(イラスト。4つの表情。docs/hanane-rival-design.mdの12章)。対局の始まりを告げる画面(VS画面と開幕の札)だけで使い、ほかはドット絵(HANANE_SPRITE)。public/characters/に、全身(662×2325)と小さい画面用の-320(265×930)。
+ * 羽音の立ち絵(イラスト。4つの表情。docs/hanane-rival-design.mdの12章)。対局画面の開幕の札だけで使い、ほかはドット絵(HANANE_SPRITE)。public/characters/に、全身(662×2325)と小さい画面用の-320(265×930)。
  * neutral: 口を結んだ無表情、smile: 小さな微笑み、gentle: 目を細めたやわらかい笑み、worried: 困り顔。差し替えたらversionを上げる。
  */
 export const HANANE_PORTRAIT = Object.freeze({
@@ -248,20 +248,6 @@ export const HANANE_LINES = Object.freeze({
   champion: ['ここまで来たんだね。……私も、追いつくから。'],
   father: ['父さんと指すと、いつも考えさせられる。簡単には勝たせてくれないよ。'],
 });
-
-/** 台詞の場面ごとの表情(立ち絵)。 */
-const LINE_EXPRESSIONS = Object.freeze({
-  first: 'neutral', againAhead: 'smile', againGrudge: 'neutral', won: 'gentle', firstLoss: 'worried', lost: 'worried', champion: 'gentle', father: 'neutral',
-});
-
-/**
- * 羽音の台詞に合う表情。HANANE_LINESにない文は無表情。
- * @param {string} line
- */
-export function hananeLineExpression(line) {
-  const scene = Object.entries(HANANE_LINES).find(([, lines]) => lines.includes(line))?.[0];
-  return scene ? LINE_EXPRESSIONS[/** @type {keyof typeof LINE_EXPRESSIONS} */ (scene)] : 'neutral';
-}
 
 const pick = (lines, count) => lines[Math.abs(count) % lines.length];
 

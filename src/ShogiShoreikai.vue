@@ -625,8 +625,6 @@ const detailOpen = ref(false);
 const versusOpponent = computed(() => ({
   name: opponent.value?.name ?? "", char: opponent.value?.name.slice(0, 1) ?? "", tone: opponentTone.value, sprite: opponentSprite.value,
   dan: opponent.value?.dan ?? "", style: favorite.value.split(" ")[0] ?? "",
-  // 羽音は、VS画面だけ立ち絵(全身)。
-  portrait: opponentSprite.value ? "neutral" : "",
 }));
 function startPlay() {
   versusOpen.value = false;

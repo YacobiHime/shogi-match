@@ -11,7 +11,6 @@ import {
   HANANE_GRUDGE_RATING,
   HANANE_LINES,
   HANANE_EXPRESSIONS,
-  hananeLineExpression,
   hananePortraitFile,
   STORY_PEOPLE,
   YOSHIHIKO,
@@ -199,16 +198,11 @@ describe('羽音の台詞', () => {
     }
   });
 
-  it('立ち絵は4つの表情。台詞で表情を選ぶ', () => {
+  it('立ち絵は4つの表情。知らない表情は無表情', () => {
     expect(HANANE_EXPRESSIONS).toEqual(['neutral', 'smile', 'gentle', 'worried']);
     expect(hananePortraitFile('smile')).toBe('hanane-smile.webp');
     expect(hananePortraitFile('worried', { small: true })).toBe('hanane-worried-320.webp');
     expect(hananePortraitFile('unknown')).toBe('hanane.webp');
-    expect(hananeLineExpression(HANANE_LINES.won[0])).toBe('gentle');
-    expect(hananeLineExpression(HANANE_LINES.firstLoss[0])).toBe('worried');
-    expect(hananeLineExpression(HANANE_LINES.first[0])).toBe('neutral');
-    expect(hananeLineExpression(HANANE_LINES.againAhead[0])).toBe('smile');
-    expect(hananeLineExpression('知らない文')).toBe('neutral');
   });
 
   it('やこび姫の紹介は、攻略の手がかり(序盤)を言う', () => {
