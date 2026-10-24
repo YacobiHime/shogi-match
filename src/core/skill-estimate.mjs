@@ -117,6 +117,31 @@ export function nextMeasureLevel({ level, outcome }) {
   return Math.min(Math.floor(MAX_DIAGNOSED_LEVEL), Math.max(1, level + step));
 }
 
+/**
+ * 対局の保存から、棋力測定の状態(持ち越した手・はじめての案内の答え・測定の前の設定)を読み直す。
+ * 形がおかしいものは捨てる。測定の対局でなければnull。
+ * @param {unknown} value 保存した{ carry, welcome, settingsBefore }
+ * @returns {{
+ *   carry: { moves: { loss: number, standing: number }[], games: number } | null,
+ *   welcome: '' | 'some' | 'player',
+ *   settingsBefore: { [key: string]: unknown } | null,
+ * } | null}
+ */
+export function restoredMeasureState(value) {
+  if (!value || typeof value !== 'object') return null;
+  const { carry, welcome, settingsBefore } = /** @type {{ [key: string]: any }} */ (value);
+  const finite = (number) => typeof number === 'number' && Number.isFinite(number);
+  const moves = Array.isArray(carry?.moves)
+    ? carry.moves.filter((move) => finite(move?.loss) && finite(move?.standing)).map(({ loss, standing }) => ({ loss, standing }))
+    : [];
+  const games = Number.isInteger(carry?.games) ? Math.min(MAX_MEASURE_GAMES - 1, Math.max(0, carry.games)) : 0;
+  return {
+    carry: games > 0 ? { moves, games } : null,
+    welcome: welcome === 'some' || welcome === 'player' ? welcome : '',
+    settingsBefore: settingsBefore && typeof settingsBefore === 'object' && !Array.isArray(settingsBefore) ? settingsBefore : null,
+  };
+}
+
 /** 診断した棋力に近い、CPUのLvのレーティング(おすすめの強さの目安に使う)。 */
 export function estimatedLevelRating(estimate) {
   return levelRating(presetForLevel(estimate.level).level);

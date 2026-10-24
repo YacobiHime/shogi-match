@@ -970,6 +970,18 @@
           @click="presenceLine = null"
         ><span v-if="presenceLine" :key="presenceLine.id" :title="presenceLine.text">{{ presenceLine.text }}</span></p>
       </div>
+      <!--
+        棋力測定の対局の札(docs/skill-measure-design.mdの6章)。測定中だと、対局中ずっと分かるようにする。
+        何局目か・相手・補助がお休みなことを、大会の対局の札と同じ場所に1枚で出す。
+      -->
+      <div v-else-if="measureBand" class="shogi-game__measure-band" data-measure-band>
+        <p class="shogi-game__measure-band-head">
+          <span class="shogi-game__measure-band-tag">棋力測定</span>
+          <strong>{{ measureBand.title }}</strong>
+        </p>
+        <p class="shogi-game__measure-band-opponent">対 {{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}<small v-if="cpuStrengthLabel">{{ cpuStrengthLabel }}</small></p>
+        <p class="shogi-game__measure-band-note">{{ measureBand.note }}</p>
+      </div>
       <div v-else-if="cpuColor !== null" class="shogi-game__summary-opponent">
         <b>対戦相手</b>
         <span>{{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}<small v-if="cpuStrengthLabel">{{ cpuStrengthLabel }}</small></span>
@@ -1207,15 +1219,22 @@
       -->
       <Transition name="shogi-game__callout">
         <div
-          v-if="stageCard && matchStage && !checkCallout"
+          v-if="stageCard && (matchStage || stageCard.kind === 'measure') && !checkCallout"
           :key="stageCard.id"
           class="shogi-game__stage-card"
-          :class="[`shogi-game__stage-card--${stageCard.kind}`, `shogi-game__stage-card--${matchStage.weight}`]"
+          :class="[`shogi-game__stage-card--${stageCard.kind}`, `shogi-game__stage-card--${matchStage?.weight ?? 'plain'}`]"
           role="status"
           data-stage-card
           :data-stage-card-kind="stageCard.kind"
         >
-          <template v-if="stageCard.kind === 'opening'">
+          <!-- 棋力測定の始まりの札。ふだんどおり指せばよいことと、補助がお休みなことを伝える。 -->
+          <template v-if="stageCard.kind === 'measure'">
+            <small>棋力測定</small>
+            <strong>{{ measureBand?.title }}</strong>
+            <span>{{ measureBand?.detail }}</span>
+            <b>{{ measureBand?.note }}</b>
+          </template>
+          <template v-else-if="stageCard.kind === 'opening' && matchStage">
             <!--
               羽音との一局は、札の上に羽音の胸から上(立ち絵)と「ライバル」の名札を出す。
               立ち絵は、この札だけ。ほかの場面(VS画面も)はドット絵(docs/hanane-rival-design.mdの12章)。
@@ -1235,7 +1254,7 @@
             </span>
             <b v-if="matchStage.stakes">{{ matchStage.stakes }}</b>
           </template>
-          <template v-else-if="stageCard.kind === 'seal'">
+          <template v-else-if="stageCard.kind === 'seal' && matchStage">
             <i class="shogi-game__stage-envelope" aria-hidden="true"></i>
             <small>1日目はここまで</small>
             <strong>封じ手</strong>
@@ -1339,7 +1358,7 @@
         :disabled="!canUseHint"
         @click="showHint"
       >
-        閃き <small>×{{ reviewMode ? "∞" : formatAssistCount(hintsRemaining) }}</small>
+        閃き <small>{{ reviewMode ? "×∞" : measureBand ? "お休み" : `×${formatAssistCount(hintsRemaining)}` }}</small>
       </button>
       <!-- 感想戦。押すと、盤で指した手に対局相手のCPUが同じ強さで応える。もう一度押すとやめる。 -->
       <button
@@ -1351,7 +1370,7 @@
         @click="toggleKansousen"
       >{{ reviewCpuEnabled ? "感想戦終了" : "感想戦" }}</button>
       <button v-if="!reviewMode || reviewCpuEnabled" type="button" :disabled="!canUndo" @click="undoTurn">
-        待った <small>×{{ reviewMode ? "∞" : formatAssistCount(undosRemaining) }}</small>
+        待った <small>{{ reviewMode ? "×∞" : measureBand ? "お休み" : `×${formatAssistCount(undosRemaining)}` }}</small>
       </button>
       <details
         ref="assistTools"
@@ -2293,7 +2312,15 @@ import {
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
-import { MAX_MEASURE_GAMES, MIN_MEASURED_MOVES, estimateSkill, measurableMoves, measureStatistics, nextMeasureLevel } from "./core/skill-estimate.mjs";
+import {
+  MAX_MEASURE_GAMES,
+  MIN_MEASURED_MOVES,
+  estimateSkill,
+  measurableMoves,
+  measureStatistics,
+  nextMeasureLevel,
+  restoredMeasureState,
+} from "./core/skill-estimate.mjs";
 import { USER_ID, createRng, createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
 import { PLAYER_NAME_MAX, loadPlayerName, playerDisplayName, savePlayerName } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
@@ -2651,6 +2678,8 @@ function isBlackMoveIndex(index: number) {
 }
 
 function matchHintAllowance() {
+  // 棋力測定では、閃き(最善手を教える)を使えない。使うと、その手の損が測れなくなる。
+  if (measureMode.value) return 0;
   if (matchKind.value === "tournament") return assistAllowance(Number(tournamentSeasonOf(ryuoGame.value)?.settings?.hintLimit ?? 3));
   return matchKind.value === "learning"
     ? assistAllowance(learningHintLimit.value)
@@ -2658,6 +2687,8 @@ function matchHintAllowance() {
 }
 
 function matchUndoAllowance() {
+  // 棋力測定では、待ったを使えない(指し直した手の損は、本当の読みの損ではない)。
+  if (measureMode.value) return 0;
   if (matchKind.value === "tournament") return assistAllowance(Number(tournamentSeasonOf(ryuoGame.value)?.settings?.undoLimit ?? 3));
   return matchKind.value === "learning"
     ? assistAllowance(learningUndoLimit.value)
@@ -3057,6 +3088,8 @@ const measureMode = ref(false);
 const measureSession = ref(false);
 /** 棋力測定の解析中。完了ボタンを隠し、「測定中」を表示する。 */
 const measureAnalyzing = ref(false);
+/** 棋力測定の解析の深さ(KIFU_ANALYSIS_LEVELSの「速い」)。 */
+const MEASURE_ANALYSIS_LEVEL = 0;
 /**
  * 棋力の測定の進み具合(0〜100)。解析の3段階(全体を確認→怪しい手を読み直し→大事な局面を深読み)を、
  * 時間のかかり方に合わせた幅で1本の棒にまとめる。段階が変わっても棒が戻らない。
@@ -3107,6 +3140,19 @@ const measureWelcome = ref<"" | "some" | "player">("");
  * 測定の対局を続けている間だけ持ち、対局準備・ホームへ戻ると捨てる(docs/skill-measure-design.md)。
  */
 const measureCarry = ref<{ moves: { loss: number; standing: number }[]; games: number } | null>(null);
+/**
+ * 棋力測定の対局中の札(docs/skill-measure-design.mdの6章)。対局中だけ出す(終局後は測定中・結果の札が出る)。
+ * 続けて測る2局目からは、前の対局の手と合わせて測ることを添える。
+ */
+const measureBand = computed(() => {
+  if (!measureMode.value || reviewMode.value || !matchStarted.value) return null;
+  const game = (measureCarry.value?.games ?? 0) + 1;
+  return {
+    title: game === 1 ? "ふだんどおり指してね" : `${game}局目`,
+    detail: game === 1 ? "終わったら、指し手から棋力を測るよ" : "前の対局の手と合わせて測るよ",
+    note: "閃き・待った・作戦の案内はお休み",
+  };
+});
 /** 棋力測定以外の解析で、棋力診断を表示するか。「その他」メニューから切り替える。 */
 const skillDiagnosisVisible = ref(false);
 /** レーティングに近いLvの段級位の表示名。 */
@@ -3648,9 +3694,9 @@ watch(moveCount, (ply) => {
  * タイトル戦(二日制)は、1日目の終わりの手数を越えて最初にプレイヤーが指した手を封じ手にし、2日目へ進める。
  * どちらも盤の操作は妨げない(盤を触ると消える)。
  */
-const stageCard = ref<{ id: number; kind: "opening" | "seal" | "unseal" } | null>(null);
+const stageCard = ref<{ id: number; kind: "opening" | "seal" | "unseal" | "measure" } | null>(null);
 let stageCardTimer: ReturnType<typeof setTimeout> | undefined;
-function showStageCard(kind: "opening" | "seal" | "unseal") {
+function showStageCard(kind: "opening" | "seal" | "unseal" | "measure") {
   clearTimeout(stageCardTimer);
   stageCard.value = { id: Date.now(), kind };
   stageCardTimer = setTimeout(hideStageCard, STAGE_CARD_MS);
@@ -4678,7 +4724,8 @@ const learningStartBlocked = computed(() => (
   learningFormationResult.value !== null && !learningFormationResult.value.ok
 ));
 // 平手以外の開始局面では、平手用の定跡（やこび姫補助・CPUの定跡）を当てはめない。
-const openingGuideAvailable = computed(() => matchInitialSfen.value === STANDARD_SFEN);
+// 棋力測定の対局では、作戦の案内(定跡の手順・AIの候補)を出さない。案内どおりに指した手は、本人の力として測れない。
+const openingGuideAvailable = computed(() => matchInitialSfen.value === STANDARD_SFEN && !measureMode.value);
 /** 通常対局で作戦を選んでいないあいだは、補助の欄を1行のボタンにたたむ。学習対局ではいつも開く。 */
 const openingGuideCollapsed = computed(() =>
   openingGuideAvailable.value &&
@@ -6076,6 +6123,7 @@ function startMeasureMatchNow(options: {
   homeOpen.value = false;
   void initializeEngine();
   beginMatch();
+  showStageCard("measure");
 }
 
 /** はじめての案内で選んだ道へ進む。 */
@@ -7135,6 +7183,10 @@ function persistMatchState() {
     ryuoCounter: ryuoCounter.value,
     tutorial: tutorialMatch.value,
     settingsBeforeTutorial: tutorialMatch.value ? settingsBeforeTutorial : null,
+    // 棋力測定の対局は、中断・リロードのあとも測定のまま続ける(持ち越した手と、測定の前の設定も残す)。
+    measure: measureMode.value
+      ? { carry: measureCarry.value, welcome: measureWelcome.value, settingsBefore: settingsBeforeMeasure }
+      : null,
     moves: [...moveHistory],
     active: active.value,
     result: result.value,
@@ -7221,6 +7273,11 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
   settingsBeforeTutorial = tutorialMatch.value && snapshot.settingsBeforeTutorial && typeof snapshot.settingsBeforeTutorial === "object"
     ? snapshot.settingsBeforeTutorial
     : null;
+  const measure = matchKind.value === "normal" && normalizedMode.value === "cpu" ? restoredMeasureState(snapshot.measure) : null;
+  measureMode.value = Boolean(measure);
+  measureCarry.value = measure?.carry ?? null;
+  measureWelcome.value = measure?.welcome ?? "";
+  settingsBeforeMeasure = measure?.settingsBefore ?? null;
 }
 
 function restoredTutorialMatch(value: unknown): typeof tutorialMatch.value {
@@ -9884,7 +9941,8 @@ async function runKifuAnalysis() {
   analysisStage.value = "";
   analysisTotal.value = reviewNavigation.value.mainLine.length + 1;
   analysisOpen.value = true;
-  const level = analysisLevelChoice.value;
+  // 棋力測定は、選んだ解析の深さによらず「速い」で読む。棋力の対応表(skill-estimate.mjs)を、この深さの損で作ったため。
+  const level = measureAnalyzing.value ? MEASURE_ANALYSIS_LEVEL : analysisLevelChoice.value;
   const resultsKey = `${matchInitialSfen.value} ${reviewNavigation.value.mainLine.join(" ")}`;
   // 同じ棋譜をもう一度解析するときは、前の読みを引き継ぎ、グラフも出したまま読み直す。
   if (gameAnalysisResults?.key !== resultsKey) {

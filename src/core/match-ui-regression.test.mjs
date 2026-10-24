@@ -34,6 +34,18 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/MEASURE_STAGE_SPANS[^=]*= \{ scan: \[0, 60\], review: \[60, 85\], focus: \[85, 100\] \}/);
     expect(source).toMatch(/if \(measuring\) \{\s*measureWaitHidden\.value = false;\s*measureAnalyzing\.value = true;/);
   });
+  it("棋力測定の対局中は、測定の札を出し、閃き・待った・作戦の案内を休む。中断・リロードのあとも測定のまま(docs/skill-measure-design.mdの6章)", () => {
+    expect(source).toMatch(/v-else-if="measureBand" class="shogi-game__measure-band" data-measure-band/);
+    expect(source).toMatch(/if \(!measureMode\.value \|\| reviewMode\.value \|\| !matchStarted\.value\) return null;/);
+    expect(source).toMatch(/beginMatch\(\);\s*showStageCard\("measure"\);/);
+    expect(source).toMatch(/<template v-if="stageCard\.kind === 'measure'">/);
+    expect(source).toMatch(/function matchHintAllowance\(\) \{[\s\S]{0,120}?if \(measureMode\.value\) return 0;/);
+    expect(source).toMatch(/function matchUndoAllowance\(\) \{[\s\S]{0,120}?if \(measureMode\.value\) return 0;/);
+    expect(source).toMatch(/const openingGuideAvailable = computed\(\(\) => matchInitialSfen\.value === STANDARD_SFEN && !measureMode\.value\);/);
+    expect(source).toMatch(/measure: measureMode\.value\s*\? \{ carry: measureCarry\.value, welcome: measureWelcome\.value, settingsBefore: settingsBeforeMeasure \}/);
+    expect(source).toMatch(/restoredMeasureState\(snapshot\.measure\)/);
+    expect(source).toMatch(/\.shogi-game \.shogi-game__measure-band \{[^}]*border-left: 4px solid var\(--measure-accent\);/);
+  });
   it("offers another measuring game with the carried moves when too few moves were measured", () => {
     // 力の差で早く形勢が決まると測れる手が足りない。相手を近づけてもう1局、手は持ち越す(docs/skill-measure-design.md)。
     expect(source).toMatch(/v-if="skillDiagnosis\.insufficient && measureNext"[\s\S]*?data-measure-continue @click="continueMeasure">もう1局指す（Lv\.\{\{ measureNext\.level \}\}）</);

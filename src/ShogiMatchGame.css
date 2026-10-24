@@ -383,6 +383,63 @@
   font-size: 0.92em;
 }
 
+/*
+ * 棋力測定の対局の札(docs/skill-measure-design.mdの6章)。測定の結果の札と同じ色(--measure-accent)の札と縁で、
+ * ふつうの対局と見分ける。中身は3行(棋力測定・相手・補助はお休み)。
+ */
+.shogi-game {
+  --measure-accent: #f1a54c;
+}
+.shogi-game .shogi-game__measure-band {
+  display: grid;
+  flex: 1 1 100%;
+  gap: 0.1em;
+  min-width: 0;
+  padding-left: 0.6em;
+  border-left: 4px solid var(--measure-accent);
+}
+.shogi-game .shogi-game__measure-band p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1em 0.6em;
+  align-items: baseline;
+  min-width: 0;
+  margin: 0;
+}
+.shogi-game .shogi-game__measure-band-tag {
+  flex: none;
+  padding: 0.05em 0.5em;
+  border-radius: 0.3em;
+  color: #1e2d3d;
+  background: var(--measure-accent);
+  font-size: 0.86em;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.shogi-game .shogi-game__measure-band-head strong {
+  min-width: 0;
+  color: var(--ivory);
+}
+.shogi-game .shogi-game__measure-band-opponent small {
+  color: var(--muted);
+  font-size: 0.92em;
+}
+.shogi-game .shogi-game__measure-band-note {
+  color: var(--muted);
+  font-size: 0.86em;
+}
+.shogi-game .shogi-game__measure-band-note,
+.shogi-game .shogi-game__measure-band p > * {
+  white-space: normal;
+}
+/* 測定の始まりの札は、縁を測定の色にする。 */
+.shogi-game .shogi-game__stage-card--measure {
+  border-color: var(--measure-accent);
+}
+.shogi-game .shogi-game__stage-card--measure b {
+  color: var(--measure-accent);
+}
+
 /* ===== 大会の舞台(docs/match-stage-design.md) ===== */
 /* 対局の札。ふつうの1局・大一番・タイトル戦の3段階で、少しずつ重くする。 */
 .shogi-game .shogi-game__stage-band {
