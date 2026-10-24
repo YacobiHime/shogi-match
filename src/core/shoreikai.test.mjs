@@ -295,6 +295,19 @@ describe('保存', () => {
     expect(loadShoreikai(storage).run.world.members[id].level).toBe(12);
     expect(Number.isFinite(level)).toBe(true);
   });
+  it('研修会から編入すると、入会試験なしで6級の例会から。同期が2人でき、経歴に編入と残る', () => {
+    const run = createShoreikaiRun({ seed: 9, settings: { scale: 'mini' }, examRank: 3, userName: 'やこび', userLevel: 20, transfer: { from: 'kenshukai', label: '研修会A2' } });
+    expect(run.phase).toBe('reikai');
+    expect(run.rank).toBe(0);
+    expect(run.exam).toBeNull();
+    expect(run.peers).toHaveLength(2);
+    expect(run.pending.kind).toBe('reikai');
+    expect(run.history[0].text).toBe('研修会A2から6級に編入');
+    const view = describeShoreikai(run);
+    expect(view.rankLabel).toBe('6級');
+    expect(view.transfer).toEqual({ from: 'kenshukai', label: '研修会A2' });
+    expect(createShoreikaiCareer().transfer).toBeNull();
+  });
   it('四段になった挑戦を閉じると、要約と棋士番号が残る', () => {
     const pro = toPro(passed());
     const career = closeShoreikaiRun({ ...createShoreikaiCareer(), run: pro });

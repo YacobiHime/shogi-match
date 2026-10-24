@@ -76,15 +76,14 @@
           <section class="shogi-title__group" aria-labelledby="shogi-tournament-road">
             <h2 id="shogi-tournament-road" class="shogi-title__group-title">プロへの道</h2>
             <div class="shogi-title__tiles shogi-tournament__soon-tiles">
-              <!-- 奨励会(docs/shoreikai-design.md)。研修会は準備中のまま。 -->
+              <!-- 研修会(docs/kenshukai-design.md)と奨励会(docs/shoreikai-design.md)。研修会でA2に上がると、奨励会6級に編入できる。 -->
               <button
                 v-for="item in ROAD"
                 :key="item.id"
                 type="button"
                 class="shogi-title__tile"
-                :disabled="item.id !== 'shoreikai'"
                 :data-tournament="item.id"
-                @click="item.id === 'shoreikai' && chooseShoreikai()"
+                @click="item.id === 'shoreikai' ? chooseShoreikai() : chooseKenshukai()"
               >
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#f1a54c">
@@ -94,7 +93,7 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">{{ item.label }}</span>
-                <small class="shogi-title__desc">{{ item.id === "shoreikai" ? shoreikaiCardNote : "準備中" }}</small>
+                <small class="shogi-title__desc">{{ item.id === "shoreikai" ? shoreikaiCardNote : kenshukaiCardNote }}</small>
               </button>
             </div>
           </section>
@@ -104,7 +103,7 @@
 
     <template v-else>
       <!-- 期の画面は、上の帯を1本にする(戻るボタンは期の画面の帯に置く。docs/ryuo-stages-design.mdの5章)。 -->
-      <header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai'" class="shogi-dex__header">
+      <header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai' && screen !== 'kenshukai'" class="shogi-dex__header">
         <button type="button" class="shogi-dex__back" @click="goBack">
           <span aria-hidden="true">←</span> {{ backText }}
         </button>
@@ -137,8 +136,30 @@
         </button>
 
         <div ref="mainEl" class="shogi-tournament__main">
+        <ShogiKenshukai
+          v-if="screen === 'kenshukai'"
+          ref="kenshukaiEl"
+          :view="kenshukaiView"
+          :career="kenshukaiCareer"
+          :recommended-class="kenshukaiRecommendedClass"
+          :default-difficulty="defaultDifficulty"
+          :asset-base-url="assetBaseUrl"
+          :player-name="playerName"
+          :rating-text="ratingText"
+          :suspended-moves="kenshukaiSuspendedMoves"
+          :from-game="kenshukaiFromGame"
+          :shoreikai-busy="shoreikaiBusy"
+          :shoreikai-failed="kenshukaiFromFailed"
+          @enter="emit('kenshukai-enter', $event)"
+          @play="emit('kenshukai-play')"
+          @resume="emit('kenshukai-resume')"
+          @transfer="transferToShoreikai"
+          @close-run="emit('kenshukai-close')"
+          @ceremony="openCeremony(`kenshukai-${kenshukaiView?.runId ?? 0}-S`)"
+          @back="backToSelect"
+        />
         <ShogiShoreikai
-          v-if="screen === 'shoreikai'"
+          v-else-if="screen === 'shoreikai'"
           ref="shoreikaiEl"
           :view="shoreikaiView"
           :career="shoreikaiCareer"
@@ -698,7 +719,7 @@
       v-if="awardShown"
       :award="awardShown"
       :ceremony="awardCeremony"
-      :button-text="awardCeremony ? '大会の選択へ' : '閉じる'"
+      :button-text="awardCeremony ? (screen === 'kenshukai' ? '研修会へ' : '大会の選択へ') : '閉じる'"
       :asset-base-url="assetBaseUrl"
       @done="finishAward"
     />
@@ -715,6 +736,8 @@ import RyuoMountain, { type RoadView } from "./RyuoMountain.vue";
 import RyuoVersus from "./RyuoVersus.vue";
 import ShogiMeijin, { type MeijinView } from "./ShogiMeijin.vue";
 import ShogiShoreikai, { type ShoreikaiView } from "./ShogiShoreikai.vue";
+import ShogiKenshukai, { type KenshukaiView } from "./ShogiKenshukai.vue";
+import { CLASSES as KENSHUKAI_CLASSES } from "./core/kenshukai.mjs";
 import YakobiSays from "./YakobiSays.vue";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
@@ -827,7 +850,7 @@ const props = defineProps({
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
   /** 開いたときの画面。ryuoは竜王戦の入口(期の途中なら期の画面)。棋力測定の結果の「竜王戦に出る」から。 */
-  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai">, default: "select" },
+  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai">, default: "select" },
   /** いまの竜王(プレイヤーが竜王ならnull)。入口の山で、七番勝負に顔を出す。 */
   ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
   /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。VS画面に出す。 */
@@ -856,6 +879,11 @@ const props = defineProps({
   shoreikaiMentors: { type: Array as PropType<{ id: string; name: string; dan: string; age: number; party: string; partyLabel: string; styleLabel: string; repertoire: string }[]>, default: () => [] },
   shoreikaiRecommendedRank: { type: Number, default: 0 },
   shoreikaiSuspendedMoves: { type: Number as PropType<number | null>, default: null },
+  // ---- 研修会(docs/kenshukai-design.md)
+  kenshukaiView: { type: Object as PropType<KenshukaiView | null>, default: null },
+  kenshukaiCareer: { type: Object as PropType<{ history: { result: string; best: string }[]; best: number | null; settings?: Record<string, unknown> }>, default: () => ({ history: [], best: null }) },
+  kenshukaiRecommendedClass: { type: Number, default: 0 },
+  kenshukaiSuspendedMoves: { type: Number as PropType<number | null>, default: null },
 });
 const emit = defineEmits<{
   close: [];
@@ -873,6 +901,11 @@ const emit = defineEmits<{
   "shoreikai-resume": [];
   "shoreikai-retry": [rank: number];
   "shoreikai-close": [];
+  "kenshukai-enter": [payload: { settings: Record<string, unknown>; entryClass: number }];
+  "kenshukai-play": [];
+  "kenshukai-resume": [];
+  "kenshukai-transfer": [];
+  "kenshukai-close": [];
 }>();
 
 const HOME_STARS = [
@@ -889,8 +922,9 @@ const ROAD = [{ id: "kenshukai", label: "研修会" }, { id: "shoreikai", label:
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const inProgress = computed(() => Boolean(props.view && !props.view.result));
-const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin" | "shoreikai">(
-  props.startAt === "shoreikai" ? "shoreikai"
+const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin" | "shoreikai" | "kenshukai">(
+  props.startAt === "kenshukai" ? "kenshukai"
+  : props.startAt === "shoreikai" ? "shoreikai"
   : props.startAt === "meijin" ? "meijin"
     : props.startAt === "season" && props.view ? (props.view.result ? "result" : "season")
       : props.startAt === "ryuo" ? (props.view && !props.view.result ? "season" : "ryuo")
@@ -911,11 +945,44 @@ function chooseShoreikai() {
   shoreikaiFromGame.value = false;
   screen.value = "shoreikai";
 }
-/** 四段の式から竜王戦・名人戦へ。挑戦を終えて(経歴に残して)から移る。 */
-function leaveShoreikaiTo(target: "ryuo" | "meijin") {
+/** 四段の式から竜王戦・名人戦へ。挑戦を終えて(経歴に残して)から移る。入会試験に落ちたところからは、研修会へ(挑戦は残す)。 */
+function leaveShoreikaiTo(target: "ryuo" | "meijin" | "kenshukai") {
+  if (target === "kenshukai") {
+    chooseKenshukai({ fromFailed: true });
+    return;
+  }
   emit("shoreikai-close");
   if (target === "meijin") chooseMeijin();
   else chooseRyuo();
+}
+// ---- 研修会(docs/kenshukai-design.md)
+const kenshukaiEl = ref<{ goBack: () => boolean } | null>(null);
+/** 対局から研修会へ戻ってきた(判子を1回だけ出す)。 */
+const kenshukaiFromGame = ref(props.fromGame && props.startAt === "kenshukai");
+/** 奨励会の入会試験に落ちたところから来た。 */
+const kenshukaiFromFailed = ref(false);
+/** 奨励会の挑戦の途中(研修会からの編入は、それを終えてから)。 */
+const shoreikaiBusy = computed(() => ["exam", "reikai", "league"].includes(props.shoreikaiView?.phase ?? ""));
+const kenshukaiCardNote = computed(() => {
+  const view = props.kenshukaiView;
+  if (view?.phase === "exam") return `${view.exam.label}受験・挑戦中`;
+  if (view?.phase === "top") return "Sクラス・研修会の頂点";
+  if (view) return `${view.classLabel}クラス・挑戦中`;
+  const best = props.kenshukaiCareer.best;
+  if (best !== null && best !== undefined) return `最高 ${KENSHUKAI_CLASSES[best]}クラス`;
+  return "F2からA2・Sクラスへ";
+});
+function chooseKenshukai({ fromFailed = false }: { fromFailed?: boolean } = {}) {
+  kenshukaiFromGame.value = false;
+  kenshukaiFromFailed.value = fromFailed;
+  screen.value = "kenshukai";
+}
+/** 研修会から奨励会6級へ編入する。研修会の挑戦を閉じ、奨励会の入口(編入の形)へ。 */
+function transferToShoreikai() {
+  if (shoreikaiBusy.value) return;
+  emit("kenshukai-transfer");
+  shoreikaiFromGame.value = false;
+  screen.value = "shoreikai";
 }
 /** 名人戦の札の小さな説明(いまのクラス・期・名人の期数)。 */
 const meijinCardNote = computed(() => {
@@ -976,6 +1043,7 @@ function goBack() {
   else if (guideOpen.value) guideOpen.value = false;
   else if (screen.value === "meijin" && meijinEl.value?.goBack()) return;
   else if (screen.value === "shoreikai" && shoreikaiEl.value?.goBack()) return;
+  else if (screen.value === "kenshukai" && kenshukaiEl.value?.goBack()) return;
   else if (screen.value === "select") emit("close");
   else backToSelect();
 }
@@ -1411,6 +1479,8 @@ function finishAward() {
 }
 /** 表彰式を終えた。期の結果は見終えたことにして、大会の選択へ(次の期は、そこから自分で選ぶ)。 */
 function finishCeremony() {
+  // 研修会の修了証は、受け取ったあとも頂点の画面に戻る(編入するか、終えるかを選ぶ)。
+  if (screen.value === "kenshukai") return;
   if (screen.value === "shoreikai") {
     // 四段の免状を受け取ったら、挑戦を終えて(経歴に残して)大会の選択へ。
     emit("shoreikai-close");

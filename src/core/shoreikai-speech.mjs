@@ -111,13 +111,14 @@ export function pendingTip(view) {
  * @returns {null | { seal: string, title: string, sub: string, weight: 'mid' | 'big' | 'max', tone: 'good' | 'soft' }}
  */
 export function eventStamp(events = []) {
-  const order = ['pro', 'league-entry', 'pass', 'promote', 'jiten', 'exam-first', 'extend', 'clear', 'demote', 'point', 'sandan-point', 'fail', 'retired'];
+  const order = ['pro', 'league-entry', 'pass', 'transfer', 'promote', 'jiten', 'exam-first', 'extend', 'clear', 'demote', 'point', 'sandan-point', 'fail', 'retired'];
   const event = [...events].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))[0];
   if (!event) return null;
   switch (event.kind) {
     case 'pro': return { seal: '四段', title: '四段昇段！', sub: event.text, weight: 'max', tone: 'good' };
     case 'league-entry': return { seal: '三段', title: '三段昇段！ 三段リーグへ', sub: '上位に入れば、四段（プロ）', weight: 'big', tone: 'good' };
     case 'pass': return { seal: '合格', title: '入会試験に合格！', sub: `${event.text}。今日から奨励会員`, weight: 'big', tone: 'good' };
+    case 'transfer': return { seal: '編入', title: '奨励会6級に編入！', sub: `${event.text}。今日から奨励会員`, weight: 'big', tone: 'good' };
     case 'promote': return { seal: event.word === '昇段' ? '昇段' : '昇級', title: `${rankLabel(event.rank ?? 0)}に${event.word}！`, sub: event.mark ? `${event.mark}で` : '', weight: (event.rank ?? 0) >= 6 ? 'big' : 'mid', tone: 'good' };
     case 'jiten': return { seal: '次点', title: '次点', sub: event.text, weight: 'mid', tone: 'soft' };
     case 'exam-first': return { seal: '通過', title: '一次試験通過！', sub: '次は二次試験。奨励会員に1勝で合格', weight: 'mid', tone: 'good' };
@@ -137,7 +138,7 @@ export function mentorMoment(events = []) {
   const kinds = events.map(({ kind }) => kind);
   if (kinds.includes('pro')) return 'pro';
   if (kinds.includes('league-entry')) return 'league';
-  if (kinds.includes('pass')) return 'pass';
+  if (kinds.includes('pass') || kinds.includes('transfer')) return 'pass';
   if (kinds.includes('fail')) return 'fail';
   if (kinds.includes('jiten')) return 'jiten';
   if (kinds.includes('retired')) return 'retired';

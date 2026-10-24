@@ -40,7 +40,7 @@ export function formationFans(roster, { kind, id }, limit = 3) {
     .map(({ id: memberId, name, group }) => ({ id: memberId, name, group }));
 }
 
-const KIND_LABELS = Object.freeze({ pro: '棋士', woman: '女流棋士', amateur: 'アマチュア', shoreikai: '奨励会員' });
+const KIND_LABELS = Object.freeze({ pro: '棋士', woman: '女流棋士', amateur: 'アマチュア', shoreikai: '奨励会員', kenshukai: '研修会員', teacher: '棋士' });
 
 const rateText = (record) => {
   const rate = record ? winRate(record) : null;

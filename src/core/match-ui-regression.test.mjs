@@ -173,10 +173,10 @@ describe("match screen regressions", () => {
     // 対局や検討を終えたら、竜王戦の対局なら竜王戦の画面(トーナメント表)へ戻る。明示的な「ホームへ」だけはホームへ。
     expect(source).toMatch(/const backToTournament = !toHome && props\.showHome && Boolean\(ryuoGame\.value\)/);
     // 対局から戻ったときは、竜王への道で前の段から登る動きを見せる(fromGame)。
-    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = backEvent === "meijin" \? "meijin" : backEvent === "shoreikai" \? "shoreikai" : "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
+    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = backEvent === "meijin" \|\| backEvent === "shoreikai" \|\| backEvent === "kenshukai" \? backEvent : "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
     // 名人戦の対局も同じ道を通る(大会の対局のevent: "meijin")。終えたら名人戦の画面へ。
     expect(source).toMatch(/const backEvent = ryuoGame\.value\?\.event;\s*stopGuidedReview\(\);\s*openPregame\(\);/);
-    expect(source).toMatch(/function recordRyuoOutcome\(matchResult: MatchResult\) \{\s*if \(ryuoGame\.value\?\.event === "shoreikai"\) \{\s*recordShoreikaiOutcome\(matchResult\);\s*return;\s*\}\s*if \(ryuoGame\.value\?\.event === "meijin"\) \{\s*recordMeijinOutcome\(matchResult\);/);
+    expect(source).toMatch(/function recordRyuoOutcome\(matchResult: MatchResult\) \{\s*if \(ryuoGame\.value\?\.event === "kenshukai"\) \{\s*recordKenshukaiOutcome\(matchResult\);\s*return;\s*\}\s*if \(ryuoGame\.value\?\.event === "shoreikai"\) \{\s*recordShoreikaiOutcome\(matchResult\);\s*return;\s*\}\s*if \(ryuoGame\.value\?\.event === "meijin"\) \{\s*recordMeijinOutcome\(matchResult\);/);
     expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "meijin" \};\s*startRyuoMatch\(\);/);
     expect(source).toMatch(/:from-game="tournamentFromGame"/);
     expect(source).toMatch(/@click="leaveFinishedMatch\(\{ toHome: true \}\)"/);
@@ -238,7 +238,7 @@ describe("match screen regressions", () => {
     // 番勝負では「第3局を指す」(docs/ryuo-stages-design.mdの4章)。
     expect(tournament).toMatch(/pending && pending\.kind !== "game" \? `第\$\{pending\.gameNo\}局を指す` : "対局する"/);
     // 期の画面は3つの段階(① 組・② 決勝トーナメント・③ 番勝負)。上の帯は1本で、段階の道のりを押すと、その段階の表を見る。
-    expect(tournament).toMatch(/<header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai'" class="shogi-dex__header">/);
+    expect(tournament).toMatch(/<header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai' && screen !== 'kenshukai'" class="shogi-dex__header">/);
     // 名人戦は大会の選択の札から入り、大会の画面の中に出す(docs/meijin-design.md)。
     expect(tournament).toMatch(/data-tournament="meijin" @click="chooseMeijin"/);
     expect(tournament).toMatch(/<ShogiMeijin\s+v-(?:else-)?if="screen === 'meijin'"/);
@@ -259,7 +259,9 @@ describe("match screen regressions", () => {
     // 期の結果の主役は「表彰式へ」。賞状(縦書き・判子)をわたし、閉じると期を見終えて大会の選択へ(docs/season-award-design.md)。
     expect(tournament).toMatch(/data-award-open @click="openCeremony\(`ryuo-\$\{seasonNo\}`\)">表彰式へ</);
     expect(tournament).toMatch(/@ceremony="openCeremony\(`meijin-\$\{meijinView\?\.no \?\? 0\}`\)"/);
-    expect(tournament).toMatch(/:button-text="awardCeremony \? '大会の選択へ' : '閉じる'"/);
+    // 研修会の修了証は、受け取ったあとも研修会の頂点の画面へ戻る(編入するか、終えるかを選ぶ)。
+    expect(tournament).toMatch(/:button-text="awardCeremony \? \(screen === 'kenshukai' \? '研修会へ' : '大会の選択へ'\) : '閉じる'"/);
+    expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "kenshukai"\) return;/);
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
     expect(tournament).toMatch(/function goBack\(\) \{\s*if \(awardShown\.value\) \{/);
     expect(tournament).toMatch(/data-award-book @click="bookOpen = true"/);
@@ -751,8 +753,8 @@ describe("match screen regressions", () => {
   });
   it("奨励会は大会の画面から入り、1局を挑戦に記録して奨励会の画面へ戻る(docs/shoreikai-design.md)", () => {
     const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
-    expect(tournament).toMatch(/<ShogiShoreikai\s+v-if="screen === 'shoreikai'"/);
-    expect(tournament).toMatch(/@click="item\.id === 'shoreikai' && chooseShoreikai\(\)"/);
+    expect(tournament).toMatch(/<ShogiShoreikai\s+v-else-if="screen === 'shoreikai'"/);
+    expect(tournament).toMatch(/@click="item\.id === 'shoreikai' \? chooseShoreikai\(\) : chooseKenshukai\(\)"/);
     // 戻る操作は、奨励会の画面の中で重ねたものから閉じる。
     expect(tournament).toMatch(/shoreikaiEl\.value\?\.goBack\(\)/);
     // 新しい対局を始めるときは、中断した対局を消す確認を挟む。
@@ -764,5 +766,25 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(next\.phase === "pro"\) \{\s*const wins[\s\S]*?shoreikaiAward\(/);
     // 中断した奨励会の対局は、同じ相手の対局が残っているときだけ「対局を再開」。
     expect(source).toMatch(/suspended\?\.event === "shoreikai" && suspended\.ryuoOpponentId && pending && suspended\.ryuoOpponentId === pending\.opponentId/);
+  });
+
+  it("研修会は大会の画面から入り、指導対局は駒落ちで始め、A2で奨励会へ編入できる(docs/kenshukai-design.md)", () => {
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    expect(tournament).toMatch(/<ShogiKenshukai\s+v-if="screen === 'kenshukai'"/);
+    expect(tournament).toMatch(/kenshukaiEl\.value\?\.goBack\(\)/);
+    // 奨励会の挑戦の途中は、編入できない(終えてから)。
+    expect(tournament).toMatch(/function transferToShoreikai\(\) \{\s*if \(shoreikaiBusy\.value\) return;\s*emit\("kenshukai-transfer"\);/);
+    expect(source).toMatch(/function startKenshukaiGame\(\) \{\s*confirmDiscardSuspended\(startKenshukaiGameNow\);/);
+    expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "kenshukai" \};/);
+    // 指導対局は駒落ちの開始局面(上手のCPUが先に指す)。作戦の指定はしない。平手でないので、レーティングには数えない。
+    expect(source).toMatch(/learningStartPosition\(\{ startType: "handicap", handicapId: pending\.handicap, handicapGiver: "cpu"/);
+    expect(source).toMatch(/const gameStyle = handicapStart \? null : pending\.style \?\? opponent\.style;/);
+    expect(source).toMatch(/&& matchInitialSfen\.value === STANDARD_SFEN\s*\/\/ Lv0/);
+    // 千日手は、駒落ちなら同じ手合いのまま指し直す。
+    expect(source).toMatch(/const color = run\.pending\.handicap \? run\.pending\.color : run\.pending\.color === "black" \? "white" : "black";/);
+    // A2・Sに上がったら賞状。編入は奨励会のキャリアに資格を書く。
+    expect(source).toMatch(/kenshukaiAward\(\{/);
+    expect(source).toMatch(/setShoreikaiCareer\(\{ \.\.\.base, run: null, transfer: \{ from: "kenshukai", label \} \}\);/);
+    expect(source).toMatch(/suspended\?\.event === "kenshukai" && suspended\.ryuoOpponentId && pending && suspended\.ryuoOpponentId === pending\.opponentId/);
   });
 });

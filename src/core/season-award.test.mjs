@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addAward, awardLine, awardTalk, awardText, kanjiDate, kanjiNumber, kanjiText, loadAwards, meijinAward, ryuoAward, shoreikaiAward } from "./season-award.mjs";
+import { addAward, awardLine, awardTalk, awardText, kanjiDate, kanjiNumber, kanjiText, kenshukaiAward, loadAwards, meijinAward, ryuoAward, shoreikaiAward } from "./season-award.mjs";
 import { CLASS_LABELS } from "./meijin.mjs";
 
 function memoryStorage() {
@@ -83,6 +83,23 @@ describe("奨励会の免状", () => {
     expect(text.name).toBe("やこび 殿");
     expect(awardLine(award)).toBe("奨励会 四段昇段（棋士番号352号）");
     expect(awardTalk(award)).toContain("プロ棋士");
+  });
+});
+
+describe("研修会の賞状", () => {
+  it("A2は朱の賞状で奨励会編入の資格を添え、Sは金の修了証。同じ挑戦でも別の1枚", () => {
+    const a2 = kenshukaiAward({ id: 5, cls: 10, label: "A2", entry: "D2", wins: 30, losses: 12 }, { playerName: "やこび", at: AT });
+    expect(a2).toMatchObject({ id: "kenshukai-5-A2", grade: "red", seal: "研", prize: "A2クラス昇級", notes: ["奨励会6級への編入の資格"] });
+    expect(awardText(a2).heading).toBe("賞状");
+    expect(awardText(a2).body).toContain("D2クラスで入会し");
+    expect(awardText(a2).body).toContain("三十勝十二敗");
+    expect(awardLine(a2)).toBe("研修会 A2クラス昇級");
+    expect(awardTalk(a2)).toContain("奨励会");
+    const top = kenshukaiAward({ id: 5, cls: 12, label: "S", entry: "D2", wins: 40, losses: 15 }, { playerName: "やこび", at: AT });
+    expect(top.id).not.toBe(a2.id);
+    expect(top.grade).toBe("gold");
+    expect(awardText(top).heading).toBe("修了証");
+    expect(awardTalk(top)).toContain("いちばん上");
   });
 });
 

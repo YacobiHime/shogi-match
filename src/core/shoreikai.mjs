@@ -853,12 +853,13 @@ function startLeague(run, rng, userLevel, { entering = false } = {}) {
 }
 
 /**
- * 新しい挑戦を始める(入会試験から)。
+ * 新しい挑戦を始める(入会試験から)。transferがあれば、入会試験なしで6級に編入する(研修会のA2以上から。docs/kenshukai-design.mdの4章)。
  * @param {{
  *   seed: number, settings: any, examRank: number, mentor?: any, userName?: string, userLevel: number,
+ *   transfer?: { from: string, label: string } | null,
  * }} input
  */
-export function createShoreikaiRun({ seed, settings, examRank, mentor = null, userName = 'あなた', userLevel }) {
+export function createShoreikaiRun({ seed, settings, examRank, mentor = null, userName = 'あなた', userLevel, transfer = null }) {
   const rng = createRng(seed);
   const merged = { ...DEFAULT_SETTINGS, ...settings };
   const scale = shoreikaiScale(merged.scale);
@@ -899,10 +900,41 @@ export function createShoreikaiRun({ seed, settings, examRank, mentor = null, us
     rng: 0,
     pending: null,
   };
-  beginExam(run, rng, rank, userLevel);
-  run.history.push({ day: 0, kind: 'exam', text: `${rankLabel(rank)}で入会試験を受験` });
+  if (transfer) {
+    transferIn(run, rng, transfer, userLevel);
+  } else {
+    beginExam(run, rng, rank, userLevel);
+    run.history.push({ day: 0, kind: 'exam', text: `${rankLabel(rank)}で入会試験を受験` });
+  }
   run.rng = rng.state;
   return link(run);
+}
+
+/**
+ * 研修会から6級に編入する(入会試験はない)。同じ月に入会した2人が同期になる。
+ * @param {any} run
+ * @param {{ next(): number, state: number }} rng
+ * @param {{ from: string, label: string }} transfer
+ * @param {number} userLevel
+ */
+function transferIn(run, rng, transfer, userLevel) {
+  run.rank = 0;
+  run.entryRank = 0;
+  run.best = 0;
+  run.transfer = { from: transfer.from, label: transfer.label };
+  const used = usedNames(run.world);
+  run.peers = [];
+  for (const talent of [40, 0]) {
+    const member = createMember(run.world, rng, used, { rank: 0, age: rankAge(rng, 0), talent });
+    member.peer = true;
+    run.world.members[member.id] = member;
+    run.peers.push(member.id);
+  }
+  run.phase = 'reikai';
+  run.events.push({ kind: 'transfer', rank: 0, text: `${transfer.label}から6級に編入` });
+  run.history.push({ day: 0, kind: 'pass', text: `${transfer.label}から6級に編入` });
+  link(run);
+  startReikaiDay(run, rng, userLevel);
 }
 
 function beginExam(run, rng, rank, userLevel) {
@@ -1362,6 +1394,7 @@ export function describeShoreikai(run) {
     bestStreak: bestStreak(run.games),
     kishiNumber: run.kishiNumber,
     resultSeen: run.resultSeen,
+    transfer: run.transfer ?? null,
   };
 }
 
@@ -1380,7 +1413,8 @@ export function bestStreak(games) {
 
 /** 奨励会のキャリア(いまの挑戦と、これまでの挑戦の要約)。 */
 export function createShoreikaiCareer() {
-  return { version: SHOREIKAI_VERSION, ladder: LADDER_VERSION, settings: { ...DEFAULT_SETTINGS }, run: null, history: [], pro: null };
+  // transferは、研修会でA2以上に上がって得た6級への編入の資格(使うまで残る。docs/kenshukai-design.mdの4章)。
+  return { version: SHOREIKAI_VERSION, ladder: LADDER_VERSION, settings: { ...DEFAULT_SETTINGS }, run: null, history: [], pro: null, transfer: null };
 }
 
 /**
@@ -1395,7 +1429,7 @@ export function closeShoreikaiRun(career) {
     id: run.id,
     result: run.phase,
     rank: rankLabel(run.best),
-    entry: rankLabel(run.entryRank),
+    entry: run.transfer ? `${rankLabel(run.entryRank)}（${run.transfer.label}から編入）` : rankLabel(run.entryRank),
     games: run.games.length,
     wins,
     losses: run.games.length - wins,

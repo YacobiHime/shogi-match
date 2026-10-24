@@ -122,6 +122,8 @@ export const RATED_EVENTS = Object.freeze([
   Object.freeze({ id: 'ryuo', label: '竜王戦' }),
   Object.freeze({ id: 'meijin', label: '名人戦' }),
   Object.freeze({ id: 'shoreikai', label: '奨励会' }),
+  // 研修会の指導対局は駒落ちなので数えない(平手だけを数える。recordRatedGame)。
+  Object.freeze({ id: 'kenshukai', label: '研修会' }),
 ]);
 const RATED_EVENT_IDS = new Set(RATED_EVENTS.map(({ id }) => id));
 

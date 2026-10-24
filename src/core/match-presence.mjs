@@ -134,8 +134,8 @@ const sidePid = (bracket, side) => (side ? (side.pid ?? bracket.nodes[side.from]
 function sameRoundGames(event, season) {
   const pending = season?.pending;
   if (!pending) return { games: [], nextFrom: null };
-  // 名人戦の順位戦と奨励会(例会・三段リーグ)は、同じ回のほかの対局をpending.othersに持つ。
-  if (event === 'meijin' || event === 'shoreikai') {
+  // 名人戦の順位戦と奨励会(例会・三段リーグ)と研修会(例会)は、同じ回のほかの対局をpending.othersに持つ。
+  if (event === 'meijin' || event === 'shoreikai' || event === 'kenshukai') {
     const games = (pending.others?.games ?? []).map(({ a, b, winner }) => ({ winner, loser: winner === a ? b : a }));
     const nextOpponent = season.schedule?.[pending.round + 1]?.opponent ?? null;
     return { games, nextOpponent };
@@ -160,7 +160,7 @@ function sameRoundGames(event, season) {
 
 /**
  * 対局中に流す速報(優先順に、多くて4件)。推し → 羽音 → 次に当たるかもしれない試合 → 大番狂わせ → そのほか。
- * @param {{ event?: "ryuo" | "meijin" | "shoreikai", season?: any, oshiId?: string | null }} [options]
+ * @param {{ event?: "ryuo" | "meijin" | "shoreikai" | "kenshukai", season?: any, oshiId?: string | null }} [options]
  * @returns {{ key: string, text: string, tone: "oshi" | "rival" | "peer" | "next" | "upset" | "plain" }[]}
  */
 export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {}) {
@@ -182,7 +182,7 @@ export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {})
         ? { key, tone: 'rival', text: `速報：${name(winner)}が勝った！ 勝ち上がってくるよ` }
         : { key, tone: 'rival', text: `速報：${name(loser)}、まさかの負け…` };
     }
-    // 奨励会の同期(どちらが先に上がるかの競争)。
+    // 奨励会・研修会の同期(どちらが先に上がるかの競争)。
     const peer = [winner, loser].find((pid) => players[pid]?.peer);
     if (peer) {
       return peer === winner

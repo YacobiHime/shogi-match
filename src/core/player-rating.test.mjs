@@ -192,7 +192,7 @@ describe('player rating', () => {
     });
     expect(state.history[0]).toMatchObject({ event: 'free', outcome: 'win' });
     expect(state.history[1]).toMatchObject({ event: 'ryuo', opponent: '桜井 一郎', stage: '6組 1回戦', opponentLevel: 12 });
-    expect(RATED_EVENTS.map(({ id }) => id)).toEqual(['free', 'ryuo', 'meijin', 'shoreikai']);
+    expect(RATED_EVENTS.map(({ id }) => id)).toEqual(['free', 'ryuo', 'meijin', 'shoreikai', 'kenshukai']);
 
     const storage = memoryStorage();
     saveRatingState(storage, state);

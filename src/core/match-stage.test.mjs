@@ -142,6 +142,11 @@ describe('背景の景色(docs/tournament-match-presence-design.mdの5章)', () 
     expect(shoreikai('league').scenery).toBe('sky');
     expect(shoreikai('reikai').eventText).toBe('奨励会 2級');
   });
+  it('研修会は道場。いまのクラスの名前を出す', () => {
+    const stage = describeMatchStage({ event: 'kenshukai', season: { players, pending: { kind: 'shido', opponentId: 'p1', eventText: '研修会 D2クラス' } } });
+    expect(stage.scenery).toBe('dojo');
+    expect(stage.eventText).toBe('研修会 D2クラス');
+  });
   it('空は手数で暮れる', () => {
     expect(skyPhase(0)).toBe('day');
     expect(skyPhase(41)).toBe('evening');

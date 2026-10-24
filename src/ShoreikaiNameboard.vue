@@ -1,16 +1,17 @@
 <template>
   <!--
     奨励会の名札掛け(docs/shoreikai-design.mdの7章)。道場の板に、段級ごとの列(左の6級から右の三段へ)と名札を掛ける。
+    研修会(docs/kenshukai-design.md)も同じ板で、13クラス(左のF2から右のSへ)の列を並べる。
     自分の名札は朱、同期は青、羽音は金の縁。名札は名前の1文字だけ(全員の名前は、押すと出る一覧で見る)。
     昇級したときは、自分の名札が上から掛かる動き(0.6秒)と、列の光り。動きを減らす設定では光るだけ。
   -->
   <figure class="nameboard" :class="{ 'nameboard--preview': preview }" data-nameboard>
-    <div class="nameboard__board" role="img" :aria-label="summary">
+    <div class="nameboard__board" role="img" :aria-label="summary" :style="{ '--nameboard-columns': String(columns.length) }">
       <div
         v-for="column in columns"
         :key="column.rank"
         class="nameboard__column"
-        :class="{ 'nameboard__column--you': column.rank === youRank, 'nameboard__column--moved': column.rank === youRank && moved, 'nameboard__column--sandan': column.rank === 8 }"
+        :class="{ 'nameboard__column--you': column.rank === youRank, 'nameboard__column--moved': column.rank === youRank && moved, 'nameboard__column--sandan': column.rank === topRank }"
         :data-nameboard-column="column.rank"
       >
         <span class="nameboard__label">{{ column.label }}</span>
@@ -29,7 +30,7 @@
       <span v-if="youRank >= 0"><i class="nameboard__tag nameboard__tag--you" aria-hidden="true"></i>あなた</span>
       <span v-if="hasPeer"><i class="nameboard__tag nameboard__tag--peer" aria-hidden="true"></i>同期</span>
       <span v-if="hasRival"><i class="nameboard__tag nameboard__tag--rival" aria-hidden="true"></i>羽音</span>
-      <span class="nameboard__legend-right">右ほど上の段級</span>
+      <span class="nameboard__legend-right">{{ direction }}</span>
     </figcaption>
   </figure>
 </template>
@@ -48,6 +49,10 @@ const props = defineProps({
   moved: { type: Boolean, default: false },
   /** 入口の、まだ自分の名札がない板(名札は飾り)。 */
   preview: { type: Boolean, default: false },
+  /** いちばん上の列(奨励会は三段、研修会はS)。暗い色の列にする。 */
+  topRank: { type: Number, default: 8 },
+  /** 凡例の右の言葉。 */
+  direction: { type: String, default: "右ほど上の段級" },
 });
 
 const youRank = computed(() => props.columns.find((column) => column.tags.some((tag) => tag.you))?.rank ?? -1);
@@ -70,7 +75,7 @@ const summary = computed(() => {
 }
 .shogi-game .nameboard__board {
   display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--nameboard-columns, 9), minmax(0, 1fr));
   gap: 2px;
   padding: 6px;
   border: 4px solid #4a2f17;
@@ -110,7 +115,8 @@ const summary = computed(() => {
   display: inline-grid;
   place-items: center;
   /* 大きさは置き場所の広さに合わせる(奨励会の画面の中の枠が入れ物。タブレットやPCの余白を、大きな名札で埋める)。 */
-  width: clamp(9px, 2.6cqw, 22px);
+  /* 列の数で割る(奨励会の9列で2.6cqw。研修会の13列では細くする)。 */
+  width: clamp(7px, calc(23.4cqw / var(--nameboard-columns, 9)), 22px);
   height: clamp(24px, min(6.4cqw, 7cqh), 60px);
   border: 1px solid #3a230f;
   border-radius: 1px;

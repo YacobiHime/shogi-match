@@ -321,6 +321,28 @@
             </template>
             <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、名人戦に参加できます。</p>
           </section>
+          <!-- 研修会の歩み(docs/kenshukai-design.md)。いまのクラスと、これまでの最高のクラス、これまでの挑戦。 -->
+          <section class="shogi-note__card" aria-labelledby="shogi-note-kenshukai" data-note-kenshukai>
+            <h2 id="shogi-note-kenshukai">研修会</h2>
+            <dl class="shogi-note__tiles shogi-note__tiles--four">
+              <div><dt>現在</dt><dd data-note-kenshukai-now>{{ kenshukaiNow }}</dd></div>
+              <div><dt>最高</dt><dd>{{ kenshukaiBest }}</dd></div>
+              <div><dt>挑戦</dt><dd>{{ kenshukai.history.length + (kenshukai.run ? 1 : 0) }}<small>回</small></dd></div>
+              <div><dt>対局</dt><dd>{{ kenshukaiGames }}<small>局</small></dd></div>
+            </dl>
+            <template v-if="kenshukai.history.length">
+              <h3 class="shogi-note__subhead">これまでの挑戦</h3>
+              <ol class="shogi-note__history" data-note-kenshukai-history>
+                <li v-for="entry in kenshukai.history.slice(0, 5)" :key="entry.id" :class="`shogi-note__history--${entry.result === 'closed' ? 'down' : 'crown'}`">
+                  <span class="shogi-note__history-no">{{ entry.entry }}入会</span>
+                  <span class="shogi-note__history-group">最高 {{ entry.best }}</span>
+                  <span class="shogi-note__history-text">{{ KENSHUKAI_RESULT[entry.result] ?? "" }}</span>
+                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                </li>
+              </ol>
+            </template>
+            <p v-else-if="!kenshukai.run" class="shogi-note__hint">まだ受験していません。タイトル画面の「大会」の「研修会」から、入会試験を受けられます。</p>
+          </section>
           <!-- 奨励会の歩み(docs/shoreikai-design.mdの13章)。いまの段級か、四段の棋士番号と、これまでの挑戦。 -->
           <section class="shogi-note__card" aria-labelledby="shogi-note-shoreikai" data-note-shoreikai>
             <h2 id="shogi-note-shoreikai">奨励会</h2>
@@ -650,6 +672,7 @@ import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import TitleDaySheet, { type KansenkiView } from "./TitleDaySheet.vue";
 import { loadKansenki } from "./core/title-day.mjs";
 import { loadShoreikai, rankLabel } from "./core/shoreikai.mjs";
+import { classLabel as kenshukaiClassLabel, loadKenshukai } from "./core/kenshukai.mjs";
 
 type Tally = { wins: number; losses: number; draws: number };
 type GameOutcome = "win" | "loss" | "draw";
@@ -933,6 +956,22 @@ const shoreikaiNow = computed(() => {
 });
 const shoreikaiGames = computed(() => (shoreikai.value.run?.games?.length ?? 0)
   + shoreikai.value.history.reduce((sum: number, entry: { games: number }) => sum + (entry.games ?? 0), 0));
+// ---- 研修会の歩み(大会の項目)。保存から読む(対局画面と同じキー)。
+const kenshukai = ref(loadKenshukai(typeof localStorage === "undefined" ? null : localStorage));
+const KENSHUKAI_RESULT: Record<string, string> = { transfer: "奨励会6級に編入", top: "Sクラス", closed: "終えた" };
+const kenshukaiNow = computed(() => {
+  const run = kenshukai.value.run;
+  if (run?.phase === "exam") return `${kenshukaiClassLabel(run.exam.cls)}受験`;
+  if (run) return kenshukaiClassLabel(run.cls);
+  return "—";
+});
+const kenshukaiBest = computed(() => {
+  const run = kenshukai.value.run;
+  const best = Math.max(kenshukai.value.best ?? -1, run && run.phase !== "exam" ? run.best : -1);
+  return best >= 0 ? kenshukaiClassLabel(best) : "—";
+});
+const kenshukaiGames = computed(() => (kenshukai.value.run?.games?.length ?? 0)
+  + kenshukai.value.history.reduce((sum: number, entry: { games: number }) => sum + (entry.games ?? 0), 0));
 // ---- 観戦記(大会の項目)。賞状帳と同じく、新しい順に3局、「すべて見る」で全部。
 const kansenki = ref<(KansenkiView & { id: string; win?: boolean })[]>(loadKansenki(typeof localStorage === "undefined" ? null : localStorage));
 const allKansenki = ref(false);

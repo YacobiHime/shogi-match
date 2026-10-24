@@ -14,6 +14,8 @@ const EVENTS = Object.freeze({
   meijin: { name: '名人戦', title: '名人' },
   // 奨励会(docs/shoreikai-design.md)。タイトル戦はない。期の番号の代わりに、いまの段階の名前(pending.eventText)を出す。
   shoreikai: { name: '奨励会', title: '四段' },
+  // 研修会(docs/kenshukai-design.md)。奨励会と同じく、いまの段階の名前を出す。
+  kenshukai: { name: '研修会', title: 'Sクラス' },
 });
 
 /**
@@ -70,7 +72,7 @@ export function seriesStakes({ need, winsUser, winsOpponent, goal, finish, prize
  * 対局を始めるときの舞台。期の保存形式から、対局の札・開幕の札・名札・やこび姫の一言を作る。
  * stakesは、期の画面と同じ「この1局に賭けているもの」(竜王戦はpendingStakes、名人戦はdescribeMeijinSeasonのstakes)。
  * @param {{
- *   event: 'ryuo' | 'meijin' | 'shoreikai', season: any, label?: string, userName?: string,
+ *   event: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai', season: any, label?: string, userName?: string,
  *   stakes?: { goal?: string, win?: string, text?: string, boss?: boolean } | null,
  * }} input
  */
@@ -120,7 +122,7 @@ export function describeMatchStage({ event, season, label = '', userName = '', s
   return {
     event,
     weight,
-    eventText: event === 'shoreikai' ? pending.eventText ?? info.name : `第${season.no}期 ${info.name}`,
+    eventText: event === 'shoreikai' || event === 'kenshukai' ? pending.eventText ?? info.name : `第${season.no}期 ${info.name}`,
     label: stageLabel,
     // 札では、大会の名前と重ねない(「第7期 竜王戦」の下の「七番勝負 第3局」)。
     shortLabel: stageLabel.startsWith(info.name) ? stageLabel.slice(info.name.length) : stageLabel,
@@ -144,10 +146,12 @@ export function describeMatchStage({ event, season, label = '', userName = '', s
  * 背景の景色(docs/tournament-match-presence-design.mdの5章)。
  * 竜王戦は勝ち上がるほど山の上へ(麓・中腹・雪の稜線)、名人戦は暮れていく空、タイトル戦は今の金屏風。
  * 奨励会は道場(畳と木の壁)。三段リーグだけは、名人戦と同じ暮れていく空(夕方の将棋会館。docs/shoreikai-design.mdの7-2)。
+ * 研修会も道場。
  */
 function stageScenery(event, pending, title) {
   if (title) return 'title';
   if (event === 'shoreikai') return pending.kind === 'league' ? 'sky' : 'dojo';
+  if (event === 'kenshukai') return 'dojo';
   if (event === 'meijin') return 'sky';
   if (pending.kind === 'playoff') return 'snow';
   if (pending.phase === 'main') return 'mid';

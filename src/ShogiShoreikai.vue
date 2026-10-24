@@ -28,7 +28,7 @@
         </div>
       </div>
       <section class="shogi-tournament__hud" aria-label="受験">
-        <p class="shogi-tournament__goal-box" data-shoreikai-goal><small>目標</small><span>入会試験に合格して、三段リーグを抜け、四段（プロ棋士）になる</span></p>
+        <p class="shogi-tournament__goal-box" data-shoreikai-goal><small>目標</small><span>{{ transfer ? "研修会から6級に編入して、三段リーグを抜け、四段（プロ棋士）になる" : "入会試験に合格して、三段リーグを抜け、四段（プロ棋士）になる" }}</span></p>
         <p class="shogi-tournament__tip-line shoreikai__tip" data-shoreikai-talk>
           <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
           <span class="shogi-tournament__tip-text">{{ entryLine }}</span>
@@ -40,12 +40,12 @@
           </p>
           <button type="button" class="shogi-tournament__sub" data-shoreikai-change @click="settingsOpen = true">変える</button>
         </div>
-        <button type="button" class="shogi-tournament__start" data-shoreikai-enter @click="enter">受験する</button>
+        <button type="button" class="shogi-tournament__start" data-shoreikai-enter @click="enter">{{ transfer ? "6級に編入する" : "受験する" }}</button>
       </section>
 
-      <div v-if="settingsOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="受験の設定" data-shoreikai-settings @click.self="settingsOpen = false">
+      <div v-if="settingsOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="transfer ? '編入の設定' : '受験の設定'" data-shoreikai-settings @click.self="settingsOpen = false">
         <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
-          <h2>受験の設定</h2>
+          <h2>{{ transfer ? "編入の設定" : "受験の設定" }}</h2>
           <p class="shogi-tournament__tip-line shoreikai__tip">
             <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
             <span class="shogi-tournament__tip-text">{{ settingTalk }}</span>
@@ -277,10 +277,13 @@
         <template v-if="view.phase === 'failed'">
           <p class="shogi-tournament__tip-line shoreikai__tip">
             <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
-            <span class="shogi-tournament__tip-text">惜しかったね。すぐに受け直せるよ。級を1つ下げると、試験の相手が少しやさしくなるよ</span>
+            <span class="shogi-tournament__tip-text">惜しかったね。すぐに受け直せるよ。研修会でA2に上がれば、試験なしで6級に編入する道もあるよ</span>
           </p>
           <button type="button" class="shogi-tournament__start" data-shoreikai-retry @click="emit('retry', view.exam?.rank ?? 0)">{{ view.rankLabel }}で受け直す</button>
-          <button v-if="(view.exam?.rank ?? 0) > 0" type="button" class="shogi-tournament__sub shoreikai__wide" data-shoreikai-retry-lower @click="emit('retry', (view.exam?.rank ?? 1) - 1)">{{ lowerRankLabel }}で受け直す</button>
+          <div class="shoreikai__next">
+            <button v-if="(view.exam?.rank ?? 0) > 0" type="button" class="shogi-tournament__sub" data-shoreikai-retry-lower @click="emit('retry', (view.exam?.rank ?? 1) - 1)">{{ lowerRankLabel }}で受け直す</button>
+            <button type="button" class="shogi-tournament__sub" data-shoreikai-go="kenshukai" @click="emit('go', 'kenshukai')">研修会へ</button>
+          </div>
         </template>
         <template v-else-if="view.phase === 'pro'">
           <button type="button" class="shogi-tournament__start" data-shoreikai-ceremony @click="emit('ceremony')">免状を受け取る</button>
@@ -366,7 +369,11 @@ import { createMoveSoundPlayer } from "./core/move-sound";
 export type ShoreikaiView = NonNullable<ReturnType<typeof describeShoreikai>>;
 type Mentor = { id: string; name: string; dan: string; age: number; party: string; partyLabel: string; styleLabel: string; repertoire: string };
 type Settings = { difficulty: number; scale: string; ageLimit: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
-type Career = { history: { result: string; kishiNumber: number | null }[]; pro: { kishiNumber: number } | null; settings?: Partial<Settings> };
+type Career = {
+  history: { result: string; kishiNumber: number | null }[]; pro: { kishiNumber: number } | null; settings?: Partial<Settings>;
+  /** 研修会でA2以上に上がって得た、6級への編入の資格(docs/kenshukai-design.md)。 */
+  transfer?: { from: string; label: string } | null;
+};
 
 const props = defineProps({
   view: { type: Object as PropType<ShoreikaiView | null>, default: null },
@@ -383,13 +390,13 @@ const props = defineProps({
   backLabel: { type: String, default: "大会の選択へ" },
 });
 const emit = defineEmits<{
-  enter: [payload: { settings: Settings; examRank: number; mentorId: string }];
+  enter: [payload: { settings: Settings; examRank: number; mentorId: string; transfer?: boolean }];
   play: [];
   resume: [];
   retry: [rank: number];
   "close-run": [];
   ceremony: [];
-  go: [target: "ryuo" | "meijin"];
+  go: [target: "ryuo" | "meijin" | "kenshukai"];
   back: [];
 }>();
 
@@ -435,7 +442,11 @@ const careerText = computed(() => {
   const tries = props.career.history.length;
   return tries ? `これまでの挑戦 ${tries}回` : "入会試験から、四段（プロ）へ";
 });
-const entryLine = computed(() => entryTalk({ pro: props.career.pro, runs: props.career.history.length }));
+/** 研修会からの編入の資格(あれば、入口は受験ではなく編入の形)。 */
+const transfer = computed(() => props.career.transfer ?? null);
+const entryLine = computed(() => (transfer.value
+  ? `${transfer.value.label}からの編入だね。試験なしで6級から！ 師匠を選んでね`
+  : entryTalk({ pro: props.career.pro, runs: props.career.history.length })));
 const settingTalk = computed(() => {
   if (settingTopic.value === "rank") return examRankTalk(examRank.value, props.recommendedRank);
   if (settingTopic.value === "mentor" && mentor.value) return `${mentor.value.name}${mentor.value.dan}は${mentor.value.partyLabel}。${mentorLine(mentor.value, "enter")}`;
@@ -444,14 +455,14 @@ const settingTalk = computed(() => {
   return "師匠と受験級を選んでね。受験級は、上の級ほど四段に近いけど、試験の相手が強くなるよ";
 });
 const settingsSummary = computed(() => [
-  `${RANKS[examRank.value]}受験`,
+  transfer.value ? "6級に編入" : `${RANKS[examRank.value]}受験`,
   `難易度${difficulty.value}`,
   shoreikaiScale(scale.value).label,
   ...(ageLimit.value ? ["年齢制限あり"] : []),
 ].join("・"));
 const settingRows = computed(() => [
   { id: "mentor", label: "師匠", value: mentor.value ? `${mentor.value.name}${mentor.value.dan}` : "なし", note: mentor.value ? `${mentor.value.partyLabel}・${mentor.value.age}歳` : "" },
-  { id: "rank", label: "受験級", value: RANKS[examRank.value], note: examRank.value === props.recommendedRank ? "おすすめ" : `おすすめは${RANKS[props.recommendedRank]}` },
+  ...(transfer.value ? [] : [{ id: "rank", label: "受験級", value: RANKS[examRank.value], note: examRank.value === props.recommendedRank ? "おすすめ" : `おすすめは${RANKS[props.recommendedRank]}` }]),
   { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `おすすめ ${props.defaultDifficulty}（勝率6〜8割が目安）` },
   { id: "scale", label: "規模", value: shoreikaiScale(scale.value).label, note: shoreikaiScale(scale.value).note },
   { id: "age", label: "年齢制限", value: ageLimit.value ? "あり" : "なし", note: ageLimit.value ? "21歳までに初段・26歳までに四段" : "" },
@@ -516,8 +527,9 @@ function enter() {
       difficulty: difficulty.value, scale: scale.value, ageLimit: ageLimit.value, coachLevel: coachLevel.value,
       hintLimit: hintLimit.value, undoLimit: undoLimit.value, byoyomi: byoyomi.value,
     },
-    examRank: examRank.value,
+    examRank: transfer.value ? 0 : examRank.value,
     mentorId: mentorId.value,
+    transfer: Boolean(transfer.value),
   });
 }
 /** 入口の名札掛け(飾り)。段級ごとに、規模の人数の名札。 */
