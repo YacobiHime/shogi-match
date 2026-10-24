@@ -65,12 +65,12 @@ export function mentorLine(mentor, moment) {
   return lines[moment] ?? '';
 }
 
-/** 羽音の一言(冷静で、感嘆符を使わない)。 */
+/** 羽音の一言(冷静で、感嘆符と敬語を使わない)。 */
 export const HANANE_SHOREIKAI_LINES = Object.freeze({
-  first: '三段リーグの天鷺です。……入会したばかりの人と話すのは、珍しいことですが',
-  promoted: '先に、四段で待っています',
-  league: '三段リーグは、一局ずつです。そうやって、私も抜けました',
-  pro: '……ようやく来ましたね。次は、盤の上で',
+  first: '三段リーグの天鷺羽音。……入ったばかりの人と話すの、珍しいんだけど',
+  promoted: '先に、四段で待ってる',
+  league: '三段リーグは、一局ずつ。私も、そうやって抜けた',
+  pro: '……やっと来たね。次は、盤の上で',
 });
 
 /**

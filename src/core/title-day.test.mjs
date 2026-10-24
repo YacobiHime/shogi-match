@@ -81,6 +81,9 @@ describe('控室', () => {
     expect(voices[2].text).toContain('5分の長考');
     expect(voices[2].text).toContain('うな重');
     expect(voices.map(({ text }) => text).join('')).not.toMatch(/指そう|指すべき|がいい手/);
+    // 解説が羽音なら、敬語を使わない。ほかの棋士はていねいに話す。
+    expect(voices[1].text).not.toMatch(/です|ます|ました|ません|ございます|お願い/);
+    expect(voices[0].text).toMatch(/です|でしょう/);
   });
   it('開封は予想と同じなら「予想どおり」', () => {
     expect(unsealCard({ witness: '老九段', moveText: '▲4五歩', predictedText: '▲4五歩' })).toMatchObject({ matched: true, verdict: '控室の予想どおり！' });

@@ -693,7 +693,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/tesuji: flair\?\.tesuji \?\? \[\],/);
   });
   it("大会の1局で、相手の顔・一言・特殊能力の札・速報を、決まった高さの中継の1行に出す(docs/tournament-match-presence-design.md)", () => {
-    expect(source).toMatch(/v-if="opponentFace"[\s\S]{0,300}?data-opponent-face/);
+    expect(source).toMatch(/v-if="opponentFace"[\s\S]{0,500}?data-opponent-face/);
     expect(source).toMatch(/class="shogi-game__presence-line"[\s\S]{0,300}?data-presence-line/);
     // 始めのあいさつと速報の準備、CPUの手の特殊能力、手番ごとの速報、評価値での表情。
     expect(source).toMatch(/restart\(\);\s*startPresence\(\);/);
@@ -704,6 +704,13 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(coachLevel\.value !== "off" && !reviewMode\.value\) notePresenceScore\(score\);/);
     // 盤の大きさを変えないよう、中継の1行は高さを決めておく。
     expect(source).toMatch(/\.shogi-game__presence-line \{\s*display: block;\s*min-height: 1\.4em;/);
+  });
+  it("羽音との1局では、開幕の札だけ立ち絵を出し、ほかはドット絵のまま(docs/hanane-rival-design.mdの12章)", () => {
+    expect(source).toMatch(/sprite: opponent\.story === HANANE \? `\$\{props\.assetBaseUrl\}\/characters\/\$\{HANANE_SPRITE\.file\}/);
+    expect(source).toMatch(/<img v-if="opponentFace\.sprite" :src="opponentFace\.sprite"/);
+    expect(source).toMatch(/v-if="rivalName" class="shogi-game__stage-card-rival" data-stage-card-rival>\s*<HananePortrait crop="bust"/);
+    expect(source).toMatch(/if \(stage && \(stage\.weight !== "plain" \|\| opponent\.story === HANANE\)\) showStageCard\("opening"\);/);
+    expect(source.match(/<HananePortrait/g)).toHaveLength(1);
   });
   it("大会の1局で、中継の勝率バーと控室の一言を出す(助言なし・中継を切ったときは出さない)", () => {
     expect(source).toMatch(/const broadcastShown = computed\(\(\) => Boolean\(tournamentOpponent\.value\) && coachLevel\.value !== "off" && broadcastEnabled\.value\);/);

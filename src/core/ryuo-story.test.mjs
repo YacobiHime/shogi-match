@@ -10,6 +10,9 @@ import {
   HANANE,
   HANANE_GRUDGE_RATING,
   HANANE_LINES,
+  HANANE_EXPRESSIONS,
+  hananeLineExpression,
+  hananePortraitFile,
   STORY_PEOPLE,
   YOSHIHIKO,
   YOSHIHIKO_RATING,
@@ -189,8 +192,23 @@ describe('羽音の台詞', () => {
     expect(a).not.toBe(b);
   });
 
-  it('台詞は感嘆符を使わない(冷静な人物)', () => {
-    for (const line of Object.values(HANANE_LINES).flat()) expect(line).not.toMatch(/[!！]/);
+  it('台詞は感嘆符と敬語を使わない(冷静な人物。敬語は使わない)', () => {
+    for (const line of Object.values(HANANE_LINES).flat()) {
+      expect(line).not.toMatch(/[!！]/);
+      expect(line).not.toMatch(/です|ます|ました|ません|ございます|お願い/);
+    }
+  });
+
+  it('立ち絵は4つの表情。台詞で表情を選ぶ', () => {
+    expect(HANANE_EXPRESSIONS).toEqual(['neutral', 'smile', 'gentle', 'worried']);
+    expect(hananePortraitFile('smile')).toBe('hanane-smile.webp');
+    expect(hananePortraitFile('worried', { small: true })).toBe('hanane-worried-320.webp');
+    expect(hananePortraitFile('unknown')).toBe('hanane.webp');
+    expect(hananeLineExpression(HANANE_LINES.won[0])).toBe('gentle');
+    expect(hananeLineExpression(HANANE_LINES.firstLoss[0])).toBe('worried');
+    expect(hananeLineExpression(HANANE_LINES.first[0])).toBe('neutral');
+    expect(hananeLineExpression(HANANE_LINES.againAhead[0])).toBe('smile');
+    expect(hananeLineExpression('知らない文')).toBe('neutral');
   });
 
   it('やこび姫の紹介は、攻略の手がかり(序盤)を言う', () => {

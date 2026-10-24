@@ -1156,6 +1156,26 @@
   text-decoration-color: rgba(232, 194, 122, 0.7);
   text-underline-offset: 0.25em;
 }
+/* 羽音との一局の札: 上に胸から上と「ライバル」の名札(羽音の目の黄色)。 */
+.shogi-game__stage-card-rival {
+  display: grid;
+  justify-items: center;
+  gap: 0.2em;
+  margin-bottom: 0.2em;
+}
+.shogi-game .shogi-game__stage-card-rival .hanane-portrait {
+  width: 6.4em;
+  border-bottom: 3px solid #d4a93a;
+}
+.shogi-game__stage-card-rival em {
+  padding: 0.05em 0.6em;
+  color: #1e2d3d;
+  background: #d4a93a;
+  font-size: 0.82em;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
 /* 大一番は朱の縁。タイトル戦は緋毛氈の赤に金の縁。 */
 .shogi-game__stage-card--big {
   border-color: #e2553b;

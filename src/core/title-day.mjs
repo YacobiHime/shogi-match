@@ -158,7 +158,7 @@ export function roomMembers({ roster, opponentId, oshiId = null, seed = '' }) {
     ?? rest.find((member) => member.story === 'hanane')
     ?? [...rest].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))[hashText(seed) % Math.max(1, Math.min(8, rest.length))]
     ?? null;
-  const pick = (member) => (member ? { name: member.name, dan: member.dan ?? '' } : null);
+  const pick = (member) => (member ? { name: member.name, dan: member.dan ?? '', story: member.story ?? null } : null);
   return {
     witness: pick(witness),
     commentator: pick(commentator),
@@ -193,15 +193,20 @@ export function roomVoices({ summary, members, userColor, formations, material, 
     voices.push({ role: '立会人', name: `${members.witness.name}${members.witness.dan}`, text });
   }
   if (members.commentator) {
+    // 羽音が解説のときは、敬語を使わない(ryuo-story.mjsのHANANE_LINESと同じ書き方)。
+    const plain = members.commentator.story === 'hanane';
     const known = formations.black && formations.white;
-    const parts = [known ? `戦型は${formations.black}対${formations.white}。` : '定跡を離れた力戦になりました。'];
+    const parts = [known ? `戦型は${formations.black}対${formations.white}。` : plain ? '定跡を離れた力戦になった。' : '定跡を離れた力戦になりました。'];
     const materialSide = sideName(material >= 0 ? userColor : other(userColor));
-    parts.push(Math.abs(material) < MATERIAL_EVEN ? '駒の損得はほとんどありません。' : `${materialSide}が${Math.abs(material) >= MATERIAL_BIG ? '大きく' : '少し'}駒得しています。`);
+    const degree = Math.abs(material) >= MATERIAL_BIG ? '大きく' : '少し';
+    parts.push(Math.abs(material) < MATERIAL_EVEN
+      ? (plain ? '駒の損得は、ほとんどない。' : '駒の損得はほとんどありません。')
+      : (plain ? `${materialSide}が${degree}駒得してる。` : `${materialSide}が${degree}駒得しています。`));
     const rates = summary.rates;
     const recent = rates.at(-1);
     const earlier = recent ? [...rates].reverse().find(({ ply }) => ply <= recent.ply - 14) : null;
     if (recent && earlier && Math.abs(recent.rate - earlier.rate) >= 10) {
-      parts.push(`ここ十数手で${sideName(recent.rate > earlier.rate ? userColor : other(userColor))}が盛り返しました。`);
+      parts.push(`ここ十数手で${sideName(recent.rate > earlier.rate ? userColor : other(userColor))}が盛り返し${plain ? 'た' : 'ました'}。`);
     }
     voices.push({ role: '解説', name: `${members.commentator.name}${members.commentator.dan}`, text: parts.join('') });
   }

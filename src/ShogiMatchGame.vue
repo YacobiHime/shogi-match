@@ -1216,6 +1216,14 @@
           :data-stage-card-kind="stageCard.kind"
         >
           <template v-if="stageCard.kind === 'opening'">
+            <!--
+              羽音との一局は、札の上に羽音の胸から上(立ち絵)と「ライバル」の名札を出す。
+              立ち絵は、この札とVS画面(対局の始まりを告げる画面)だけ。ほかの場面はドット絵(docs/hanane-rival-design.mdの12章)。
+            -->
+            <span v-if="rivalName" class="shogi-game__stage-card-rival" data-stage-card-rival>
+              <HananePortrait crop="bust" small :asset-base-url="assetBaseUrl" />
+              <em>ライバル {{ rivalName }}</em>
+            </span>
             <small>{{ matchStage.eventText }}</small>
             <em v-if="matchStage.longestDay" class="shogi-game__stage-card-longest" data-longest-day>将棋界の一番長い日</em>
             <strong>{{ matchStage.shortLabel ?? matchStage.label }}</strong>
@@ -2150,6 +2158,7 @@ import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePi
 import OpeningPlanSheet, { type OpeningPlanEntry } from "./OpeningPlanSheet.vue";
 import TitleDaySheet, { type DaySummaryView, type KansenkiView } from "./TitleDaySheet.vue";
 import FormationThumb from "./FormationThumb.vue";
+import HananePortrait from "./HananePortrait.vue";
 import { ALL_OPENING_PLANS, openingPlanById, openingPlanFor } from "./core/opening-catalog.mjs";
 import {
   autoPickPlan,
@@ -2837,6 +2846,8 @@ const opponentFace = computed(() => {
     moodLabel: mood === "confident" ? "余裕の表情" : mood === "troubled" ? "苦しい表情" : "落ち着いた表情",
   };
 });
+/** 対局の相手が羽音なら、その名前(開幕の札に立ち絵の胸から上を出す)。 */
+const rivalName = computed(() => (tournamentOpponent.value?.story === HANANE ? tournamentOpponent.value.name : ""));
 const broadcastShown = computed(() => Boolean(tournamentOpponent.value) && coachLevel.value !== "off" && broadcastEnabled.value);
 const broadcastRate = computed(() => playerWinRate(presenceScore.value));
 /** 先手の勝率(バーの青い部分)。まだ読んでいないときは半分。 */
@@ -5475,7 +5486,8 @@ function startRyuoMatch() {
   if (stage?.coachLine && coachLevel.value !== "off") guideText.value = stage.coachLine;
   // 最初の形勢の一言に上書きされないよう、助言の順番待ちを通して6秒は見せる。
   else if (opponentLine && coachLevel.value !== "off") showCoachAdvice(opponentLine);
-  if (stage && stage.weight !== "plain") showStageCard("opening");
+  // 羽音との一局は、ふだんの重さでも開幕の札を出す(ライバル戦だと分かるように)。
+  if (stage && (stage.weight !== "plain" || opponent.story === HANANE)) showStageCard("opening");
   // 対局準備で選んだ作戦は、始めた瞬間にやこび姫が目指す形を伝える。
   if (openingGuideAvailable.value && (selectedStrategy.value || selectedCastle.value)) announceOpeningGuide();
 }

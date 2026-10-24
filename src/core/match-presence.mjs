@@ -62,12 +62,13 @@ const LINES = Object.freeze({
     win: 'ありがとうございました',
     loss: '負けました',
   },
+  // 羽音は敬語を使わない(ryuo-story.mjsのHANANE_LINESと同じ書き方)。
   hanane: {
-    start: '……よろしくお願いします',
+    start: '……よろしく',
     ahead: '……このまま、決めるから',
     behind: '……まだ、終わってない',
-    win: 'ありがとうございました。……また指そう',
-    loss: '……負けました',
+    win: '……ありがとう。また指そう',
+    loss: '……私の負け',
   },
   yoshihiko: {
     start: 'よろしくお願いします。楽しませてもらうよ',

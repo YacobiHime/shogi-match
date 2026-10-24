@@ -24,6 +24,26 @@ export const HANANE_GRUDGE_RATING = 40;
 
 /** 羽音の絵。37×80ドットを8倍にした、劣化のない透過webp。差し替えたらversionを上げる。 */
 export const HANANE_SPRITE = Object.freeze({ file: 'hanane-mini.webp', version: 1, dots: { width: 37, height: 80 } });
+/**
+ * 羽音の立ち絵(イラスト。4つの表情。docs/hanane-rival-design.mdの12章)。対局の始まりを告げる画面(VS画面と開幕の札)だけで使い、ほかはドット絵(HANANE_SPRITE)。public/characters/に、全身(662×2325)と小さい画面用の-320(265×930)。
+ * neutral: 口を結んだ無表情、smile: 小さな微笑み、gentle: 目を細めたやわらかい笑み、worried: 困り顔。差し替えたらversionを上げる。
+ */
+export const HANANE_PORTRAIT = Object.freeze({
+  version: 1,
+  files: Object.freeze({ neutral: 'hanane', smile: 'hanane-smile', gentle: 'hanane-gentle', worried: 'hanane-worried' }),
+});
+export const HANANE_EXPRESSIONS = Object.freeze(Object.keys(HANANE_PORTRAIT.files));
+
+/**
+ * 立ち絵のファイル名(知らない表情は無表情)。
+ * @param {string} [expression]
+ * @param {{ small?: boolean }} [options] smallは小さい画面用の-320
+ */
+export function hananePortraitFile(expression = 'neutral', { small = false } = {}) {
+  const base = HANANE_PORTRAIT.files[/** @type {keyof typeof HANANE_PORTRAIT.files} */ (expression)] ?? HANANE_PORTRAIT.files.neutral;
+  return `${base}${small ? '-320' : ''}.webp`;
+}
+
 /** やこび姫の絵(yakobihime-mini.webp)の縦のドット数。並べるときに、1ドットの大きさをそろえる。 */
 export const YAKOBIHIME_SPRITE_DOTS = 53;
 
@@ -214,19 +234,34 @@ export function hananeGrudgeBonus(member, vsUser) {
 
 /**
  * 羽音の台詞。場面ごとに候補を並べ、対局の回数で順に回す(同じ文を続けて出さない)。
- * 書き方: 短く平らに話す。感嘆符を使わない。プレイヤーは「あなた」。
+ * 書き方: 短く平らに話す。感嘆符を使わない。敬語を使わない(「です・ます」「よろしくお願いします」「負けました」も言わない)。
+ * プレイヤーは「あなた」。
  * 勝敗と対戦歴だけで選ぶので、個別の指し手・読み筋・研究内容を決めつけない。
  */
 export const HANANE_LINES = Object.freeze({
-  first: ['天鷺羽音。……よろしく。', '天鷺羽音です。あなたと指すの、楽しみにしてた。'],
+  first: ['天鷺羽音。……よろしく。', '天鷺羽音。あなたと指すの、楽しみにしてた。'],
   againAhead: ['また当たったね。今日もよろしく。', '今日も、勝つつもりで来たよ。'],
   againGrudge: ['前に負けたの、忘れてないよ。今日は勝ちたい。', 'また指せるね。今度は、私が勝つから。'],
-  won: ['ありがとうございました。……また指そう。', '今日は私の勝ちだね。次も、よろしく。'],
-  firstLoss: ['……負けました。あなたとの対局、忘れない。次は勝つから。'],
-  lost: ['……負けました。もう一度、考え直さないと。', '悔しいけど、今日はあなたの勝ち。また指してくれる？'],
+  won: ['……ありがとう。また指そう。', '今日は私の勝ちだね。次も、よろしく。'],
+  firstLoss: ['……私の負け。あなたとの対局、忘れない。次は勝つから。'],
+  lost: ['……私の負け。もう一度、考え直さないと。', '悔しいけど、今日はあなたの勝ち。また指してくれる？'],
   champion: ['ここまで来たんだね。……私も、追いつくから。'],
   father: ['父さんと指すと、いつも考えさせられる。簡単には勝たせてくれないよ。'],
 });
+
+/** 台詞の場面ごとの表情(立ち絵)。 */
+const LINE_EXPRESSIONS = Object.freeze({
+  first: 'neutral', againAhead: 'smile', againGrudge: 'neutral', won: 'gentle', firstLoss: 'worried', lost: 'worried', champion: 'gentle', father: 'neutral',
+});
+
+/**
+ * 羽音の台詞に合う表情。HANANE_LINESにない文は無表情。
+ * @param {string} line
+ */
+export function hananeLineExpression(line) {
+  const scene = Object.entries(HANANE_LINES).find(([, lines]) => lines.includes(line))?.[0];
+  return scene ? LINE_EXPRESSIONS[/** @type {keyof typeof LINE_EXPRESSIONS} */ (scene)] : 'neutral';
+}
 
 const pick = (lines, count) => lines[Math.abs(count) % lines.length];
 

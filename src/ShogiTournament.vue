@@ -743,7 +743,7 @@ import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
-import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
+import { HANANE_SPRITE, hananeLineExpression } from "./core/ryuo-story.mjs";
 import { bestAxisLine } from "./core/ryuo-milestone.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
 import { nextEntry, outcomeText } from "./core/ryuo-career.mjs";
@@ -1294,6 +1294,8 @@ const versusOpponent = computed(() => {
   return {
     name: opponent?.name ?? "", char: opponent?.name.slice(0, 1) ?? "", tone: opponentStyleTone.value, sprite: opponentSprite.value,
     dan: opponent?.dan ?? "", style: opponentProfile.value.style ?? "",
+    // 羽音は、VS画面だけ立ち絵(全身)。表情は対局前の一言に合わせる(docs/hanane-rival-design.mdの12章)。
+    portrait: opponentSprite.value ? hananeLineExpression(props.view?.pending?.rival?.line ?? "") : "",
   };
 });
 /** 山の地図に置く、次の相手の顔。 */

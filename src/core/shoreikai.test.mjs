@@ -8,6 +8,7 @@ import {
 import { createRng } from './ryuo-random.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import { HANANE } from './ryuo-story.mjs';
+import { HANANE_SHOREIKAI_LINES } from './shoreikai-speech.mjs';
 
 const real = shoreikaiScale('real');
 const mini = shoreikaiScale('mini');
@@ -314,5 +315,14 @@ describe('保存', () => {
     expect(career.run).toBeNull();
     expect(career.history[0]).toMatchObject({ result: 'pro', kishiNumber: pro.kishiNumber });
     expect(career.pro.kishiNumber).toBe(pro.kishiNumber);
+  });
+});
+
+describe('羽音の一言', () => {
+  it('冷静で、感嘆符と敬語を使わない', () => {
+    for (const line of Object.values(HANANE_SHOREIKAI_LINES)) {
+      expect(line).not.toMatch(/[!！]/);
+      expect(line).not.toMatch(/です|ます|ました|ません|ございます|お願い/);
+    }
   });
 });
