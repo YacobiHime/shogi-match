@@ -50,7 +50,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/const level = measureAnalyzing\.value \? MEASURE_ANALYSIS_LEVEL : analysisLevelChoice\.value;/);
     // 推定の幅が広いときは、推定したLvの相手と「もう1局で確かめる」を主ボタンにする(docs/skill-measure-design.mdの8章)。
     expect(source).toMatch(/measureFollowUp\(\{ estimate: skillDiagnosis\.value, games: \(measureCarry\.value\?\.games \?\? 0\) \+ 1, opponent: from, outcome \}\)/);
-    expect(source).toMatch(/v-if="measureNext\?\.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>[\s\S]*?data-measure-continue @click="continueMeasure">もう1局で確かめる/);
+    // 確かめの1局は選べる形で、竜王戦へ進む主ボタンより後ろに置く(主ボタンにしない)。
+    expect(source).toMatch(/v-if="measureNext\?\.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>[\s\S]*?class="shogi-game__analysis-button" data-measure-continue @click="continueMeasure">もう1局で確かめる/);
     expect(source).toMatch(/\.shogi-game \.shogi-game__measure-band \{[^}]*border-left: 4px solid var\(--measure-accent\);/);
   });
   it("offers another measuring game with the carried moves when too few moves were measured", () => {
@@ -183,7 +184,7 @@ describe("match screen regressions", () => {
     // 「レーティングに設定」のボタンは、棋力測定の対局だけ。
     expect(source).toMatch(/v-if="skillDiagnosis && \(measureSession \|\| skillDiagnosisVisible\)"/);
     expect(source).toMatch(/v-if="skillDiagnosis && !measureSession"[^>]*@click="skillDiagnosisVisible = !skillDiagnosisVisible"/);
-    expect(source.match(/@click="applySkillDiagnosis"/g)).toHaveLength(2);
+    expect(source.match(/@click="applySkillDiagnosis"/g)).toHaveLength(1);
     expect(source).toMatch(/<button v-if="measureSession" type="button"[^>]*@click="applySkillDiagnosis"/);
     // 測定の結果のダイアログは、測定の対局(measureSession)のときだけ開く。
     expect(source).toMatch(/measureSession\.value && !measureReportDismissed\.value && Boolean\(skillDiagnosis\.value\)/);
@@ -670,11 +671,14 @@ describe("match screen regressions", () => {
     // 続けて測るときは、案内の答えを引き継ぐ。対局準備へ戻ると捨てる。
     expect(source).toMatch(/measureWelcome\.value = options\.welcome \?\? \(options\.carry \? measureWelcome\.value : ""\);/);
     expect(source).toMatch(/measureSession\.value = false;\s*measureWelcome\.value = "";/);
-    // 測れたら、そのままレーティングにする。
-    expect(source).toMatch(/watch\(skillDiagnosis, \(diagnosis\) => \{[\s\S]{0,200}?applySkillDiagnosis\(\);/);
-    // よく指している人は「竜王戦に出る」が主ボタン、少し指せる人は「ホームへ」が主ボタン。
-    expect(source).toMatch(/'shogi-game__rematch--primary': measureWelcome === 'player'[\s\S]{0,80}?data-measure-tournament[\s\S]{0,80}?竜王戦に出る/);
-    expect(source).toMatch(/'shogi-game__rematch--primary': measureWelcome === 'some'[\s\S]{0,80}?data-measure-home/);
+    // 測れたら、どこから測っても、そのままレーティングにする(棋力測定は大会の難易度を決めるため)。
+    expect(source).toMatch(/watch\(skillDiagnosis, \(diagnosis\) => \{\s*if \(!measureSession\.value \|\| !diagnosis \|\| diagnosis\.insufficient\) return;[\s\S]{0,120}?applySkillDiagnosis\(\);/);
+    // 結果の札は、どこから測っても「竜王戦に出る（難易度N）」が主ボタンで、確かめの1局や細かい数字より先に置く。
+    const report = source.split('data-measure-report')[1]?.split('</section>')[0] ?? "";
+    expect(report).toMatch(/class="shogi-game__rematch shogi-game__rematch--primary"\s*data-measure-tournament\s*@click="enterTournamentFromMeasure"\s*>竜王戦に出る（難易度\{\{ ryuoDefaultDifficulty \}\}）/);
+    expect(report.indexOf("data-measure-tournament")).toBeLessThan(report.indexOf("data-measure-confirm"));
+    expect(report.indexOf("data-measure-tournament")).toBeLessThan(report.indexOf("shogi-game__result-details"));
+    expect(report).not.toMatch(/measureWelcome/);
     expect(source).toMatch(/function enterTournamentFromMeasure\(\) \{[\s\S]{0,120}?tournamentStartAt\.value = "ryuo";/);
   });
 

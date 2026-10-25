@@ -1735,7 +1735,7 @@
           aria-hidden="true"
         >
         <h2 id="measure-start-title">棋力を測ろう</h2>
-        <p>どのくらい指せる？ 選んだ強さより、少しやさしい相手から始めるよ。強すぎたり弱すぎたりしたら、次の1局で相手を合わせるね。</p>
+        <p>1局指して、竜王戦のちょうどいい難易度を決めるよ。どのくらい指せる？ 選んだ強さより、少しやさしい相手から始めるね。</p>
         <ul class="shogi-welcome__choices">
           <li v-for="choice in measureStartOptions" :key="choice.id">
             <button type="button" :data-measure-start-choice="choice.id" @click="chooseMeasureStart(choice.level)">
@@ -2129,15 +2129,35 @@
             <span>（{{ skillDiagnosis.label }}）</span>
           </p>
           <p class="shogi-game__measure-range">
-            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安{{ skillDiagnosis.reliability === "reference" ? "（幅の広い参考値）" : "" }}
+            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安{{ skillDiagnosis.reliability === "reference" ? "（幅の広い参考値）" : "" }}。レーティングに設定したよ
           </p>
+        </template>
+        <!--
+          棋力測定は、竜王戦・名人戦のちょうどいい難易度を決めるためのもの(docs/skill-measure-design.mdの10章)。
+          測れたら(測りきれなくても、続けて測らないなら)、竜王戦へ進む道を主ボタンにして、結果の札のいちばん上に置く。
+          ホーム画面がない表示では、大会の画面がないので出さない。
+        -->
+        <template v-if="showHome && !(skillDiagnosis.insufficient && measureNext)">
+          <p class="shogi-game__measure-welcome" data-measure-welcome>{{ measureTournamentLine }}</p>
+          <button
+            type="button"
+            class="shogi-game__rematch shogi-game__rematch--primary"
+            data-measure-tournament
+            @click="enterTournamentFromMeasure"
+          >竜王戦に出る（難易度{{ ryuoDefaultDifficulty }}）</button>
+        </template>
+        <!-- 測りきれていないときは、測らずに竜王戦へ進む道も小さく残す(難易度は今の記録から)。 -->
+        <div v-else-if="showHome" class="shogi-game__result-actions">
+          <button type="button" class="shogi-game__analysis-button" data-measure-tournament @click="enterTournamentFromMeasure">測らずに竜王戦へ（難易度{{ ryuoDefaultDifficulty }}）</button>
+        </div>
+        <template v-if="!skillDiagnosis.insufficient">
           <!--
-            推定の幅が広いときは、推定したLvの相手ともう1局指して確かめる(docs/skill-measure-design.mdの8章)。
-            結果はいまの診断のまま使えるので、確かめは選べる形にする(主ボタンにするが、レーティングへの設定や竜王戦へも進める)。
+            推定の幅が広いときは、推定したLvの相手ともう1局指して確かめられる(docs/skill-measure-design.mdの8章)。
+            竜王戦への道を先にし、確かめは選べる形で添える(10章)。
           -->
           <div v-if="measureNext?.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>
-            <p>1局だけだと、まだ幅の広い目安だよ。{{ measureNextLabel }}（Lv.{{ measureNext.level }}）ともう1局指すと、2局分の手と勝ち負けで、もっと正確に測れるよ。</p>
-            <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-measure-continue @click="continueMeasure">もう1局で確かめる（Lv.{{ measureNext.level }}）</button>
+            <p>1局だけだと、まだ幅の広い目安だよ。もっと正確にしたいなら、{{ measureNextLabel }}（Lv.{{ measureNext.level }}）ともう1局指すと、2局分で測り直すよ。</p>
+            <button type="button" class="shogi-game__analysis-button" data-measure-continue @click="continueMeasure">もう1局で確かめる（Lv.{{ measureNext.level }}）</button>
           </div>
           <dl v-if="measureStats" class="shogi-game__result-details">
             <div>
@@ -2167,42 +2187,11 @@
               <dd>{{ measureStats.worst.label }}（損失{{ measureStats.worst.loss }}）</dd>
             </div>
           </dl>
-          <button
-            type="button"
-            class="shogi-game__rematch"
-            :disabled="ratingState.rating === skillDiagnosis.rating"
-            @click="applySkillDiagnosis"
-          >{{ ratingState.rating === skillDiagnosis.rating ? "レーティングに設定済み" : "この棋力をレーティングに設定" }}</button>
         </template>
-        <!--
-          はじめての案内から測った人には、竜王戦への道(docs/first-play-design.mdの5-2)。
-          よく指している人は「竜王戦に出る」が主ボタン、少し指せる人は「ホームへ」(つぎはこれが練習と大会を勧める)が主ボタン。
-        -->
-        <template v-if="measureWelcome && showHome && !(skillDiagnosis.insufficient && measureNext)">
-          <p class="shogi-game__measure-welcome" data-measure-welcome>{{ measureWelcomeLine }}</p>
-          <div class="shogi-game__result-actions">
-            <button
-              type="button"
-              class="shogi-game__rematch"
-              :class="{ 'shogi-game__rematch--primary': measureWelcome === 'player' && measureNext?.kind !== 'confirm' }"
-              data-measure-tournament
-              @click="enterTournamentFromMeasure"
-            >竜王戦に出る</button>
-            <button
-              type="button"
-              class="shogi-game__rematch"
-              :class="{ 'shogi-game__rematch--primary': measureWelcome === 'some' && measureNext?.kind !== 'confirm' }"
-              data-measure-home
-              @click="leaveFinishedMatch()"
-            >ホームへ</button>
-          </div>
-          <div class="shogi-game__result-actions">
-            <button type="button" class="shogi-game__analysis-button" @click="measureReportDismissed = true">棋譜を見る</button>
-          </div>
-        </template>
-        <div v-else class="shogi-game__result-actions">
+        <!-- 竜王戦へ進む主ボタンのほかは、脇役の色で1列にまとめる。 -->
+        <div class="shogi-game__result-actions">
           <button type="button" class="shogi-game__analysis-button" @click="measureReportDismissed = true">棋譜を見る</button>
-          <button type="button" class="shogi-game__rematch" @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
+          <button type="button" class="shogi-game__analysis-button" data-measure-home @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
         <p class="shogi-game__measure-note">指し手の評価値の損と、勝ち負けから求めた目安です。対局の内容で動きます。</p>
       </div>
@@ -8832,14 +8821,13 @@ const measureStats = computed(() => (
 const measureReportOpen = computed(() => (
   measureSession.value && !measureReportDismissed.value && Boolean(skillDiagnosis.value)
 ));
-// はじめての案内から測ったときは、測れたらすぐレーティングにする(押し忘れても大会の難易度がずれないように)。
+// 棋力測定は大会の難易度を決めるためのものなので、測れたらすぐレーティングにする(押し忘れても大会の難易度がずれないように)。
 watch(skillDiagnosis, (diagnosis) => {
-  if (!measureSession.value || !measureWelcome.value || !diagnosis || diagnosis.insufficient) return;
+  if (!measureSession.value || !diagnosis || diagnosis.insufficient) return;
   if (ratingState.value.rating !== diagnosis.rating) applySkillDiagnosis();
 });
-/** はじめての案内から測った人への1行。棋力と、竜王戦のちょうどいい難易度。 */
-const measureWelcomeLine = computed(() => {
-  if (!measureWelcome.value) return "";
+/** 測定の結果の1行。棋力と、竜王戦のちょうどいい難易度。 */
+const measureTournamentLine = computed(() => {
   const diagnosis = skillDiagnosis.value;
   const grade = diagnosis && !diagnosis.insufficient ? gradeName(diagnosis.label ?? "") : "";
   const difficulty = ryuoDefaultDifficulty.value;
