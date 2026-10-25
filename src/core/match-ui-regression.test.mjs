@@ -387,10 +387,22 @@ describe("match screen regressions", () => {
   it("picks the player's plan from opening plan cards and locks the CPU counterpart for combined definitions", () => {
     // やこび姫補助の作戦は、<select>ではなく、完成形の小さな盤が描かれた作戦カードのシートで選ぶ。
     expect(source).not.toMatch(/v-model="selected(Strategy|Castle)"/);
-    expect(source).toMatch(/<OpeningPlanSheet[\s\S]*?@choose="choosePlan"[\s\S]*?@auto="autoPickOpeningPlan/);
-    // 対局準備の「あなたの作戦」は、おまかせと変更の2つのボタンを持つ行。
+    // やこび姫のおすすめは、押すたびに変わるくじ引き(おまかせ)ではなく、決まった1枚をシートの上に見せ、くわしい画面で決めてもらう。
+    expect(source).toMatch(/<OpeningPlanSheet[\s\S]*?@choose="choosePlan"[\s\S]*?:recommended-id="planSheet === 'cpu' \? '' : recommendedPlanId"/);
+    expect(source).not.toMatch(/autoPickOpeningPlan|data-plan-auto/);
+    // 対局準備の「あなたの作戦」は、おすすめと変更の2つのボタンを持つ行。おすすめは、おすすめの作戦のくわしい画面を開く。
     expect(source).toMatch(/kind: "plan", id: "playerPlan", label: "あなたの作戦"/);
-    expect(source).toMatch(/row\.kind === 'plan'[\s\S]*?data-plan-auto[\s\S]*?openPlanSheet\('pregame'\)/);
+    expect(source).toMatch(/row\.kind === 'plan'[\s\S]*?data-plan-recommend[\s\S]*?openRecommendedPlan\('pregame'\)[\s\S]*?openPlanSheet\('pregame'\)/);
+    expect(source).toMatch(/function openRecommendedPlan[\s\S]*?planSheetDetailId\.value = recommendedPlanId\.value;/);
+    // 対局中の欄は「定跡の案内」。作戦を選ぶと「戦法」「囲い」を1行ずつ見せる。
+    expect(source).toMatch(/<h2>定跡の案内<\/h2>/);
+    expect(source).toMatch(/<span>戦法・囲いを選ぶ<\/span>/);
+    expect(source).toMatch(/data-plan-strategy><em>戦法<\/em>[\s\S]*?data-plan-castle><em>囲い<\/em>/);
+    // 序盤(30手目まで)を過ぎたり、今の局面から組める作戦がなくなったりしたら、作戦の選択と欄を消す。
+    expect(source).toMatch(/v-if="openingGuideShown"[\s\S]{0,80}class="shogi-game__opening-guide"/);
+    expect(source).toMatch(/const PLAN_CHOICE_MAX_PLY = 30;/);
+    expect(source).toMatch(/moveHistory\.length > PLAN_CHOICE_MAX_PLY\) return false;/);
+    expect(source).toMatch(/buildable\.strategies\.has\(id\)/);
     // 中断したら「作戦を変えよう」の札で、近い作戦を残り手数つきで並べる。
     expect(source).toMatch(/data-plan-interruption[\s\S]*?chooseSuggestedPlan\(suggestion\.kind, suggestion\.id\)/);
     // 完成形の駒を盤に薄く出す。

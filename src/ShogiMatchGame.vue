@@ -749,10 +749,10 @@
                     <button
                       type="button"
                       class="shogi-game__pregame-change shogi-game__pregame-auto"
-                      aria-label="あなたの作戦を、やこび姫におまかせする"
-                      data-plan-auto
-                      @click="autoPickOpeningPlan('pregame')"
-                    >おまかせ</button>
+                      aria-label="やこび姫のおすすめの作戦を見る"
+                      data-plan-recommend
+                      @click="openRecommendedPlan('pregame')"
+                    >おすすめ</button>
                     <button
                       type="button"
                       class="shogi-game__pregame-change"
@@ -863,10 +863,10 @@
       :allow-clear="Boolean(selectedStrategy || selectedCastle)"
       :show-switch="!planUnlocks.all || showAllPlans"
       :show-all="showAllPlans"
-      :note="planSheet === 'game' ? '今の局面から組める作戦だけを並べているよ。' : ''"
+      :note="planSheet === 'game' ? '今の局面から組める作戦だけを、完成までの手数つきで並べているよ。' : ''"
       @choose="choosePlan"
       @clear="clearPlan"
-      @auto="autoPickOpeningPlan(planSheet === 'pregame' ? 'pregame' : 'game')"
+      :recommended-id="planSheet === 'cpu' ? '' : recommendedPlanId"
       :asset-base-url="assetBaseUrl"
       :player-color="planSheet === 'cpu' ? (selectedPlayerColor === 'black' ? 'white' : 'black') : planSheet === 'pregame' ? pregamePlayerColor : playerColorKey"
       @toggle-all="togglePlanSwitch"
@@ -992,16 +992,17 @@
     </section>
 
     <section
-      v-if="openingGuideAvailable || matchKind === 'learning'"
+      v-if="openingGuideShown"
       class="shogi-game__opening-guide"
       :class="{ 'shogi-game__opening-guide--collapsed': openingGuideCollapsed }"
       aria-label="やこび姫補助"
     >
-      <h2>やこび姫補助</h2>
+      <h2>定跡の案内</h2>
       <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
       <!--
         作戦は、完成形の小さな盤が描かれた作戦カードで選ぶ(docs/opening-guide-ux-design.md)。
-        通常対局で作戦を選んでいないあいだは、1行のボタンにたたむ。押すと作戦カードのシートを開く。
+        作戦を選んでいないあいだは、何をする欄かを1行で伝えるボタンにたたむ。押すと作戦カードのシートを開く。
+        序盤(PLAN_CHOICE_MAX_PLY手目まで)を過ぎたり、今の局面から組める作戦がなくなったりしたら、ボタンごと消す(13章)。
       -->
       <button
         v-if="openingGuideCollapsed"
@@ -1010,35 +1011,35 @@
         data-plan-open
         @click="openPlanSheet('game')"
       >
-        <span>作戦を選ぶ</span>
-        <small>完成形を見て作戦を選ぶと、やこび姫が手順を案内するよ</small>
+        <span>戦法・囲いを選ぶ</span>
+        <small>選ぶと、組み上がるまでの指し手を盤の矢印で教えるよ</small>
       </button>
-      <div v-else-if="openingGuideAvailable" class="shogi-game__opening-plan">
+      <div v-else-if="planCardShown" class="shogi-game__opening-plan">
         <button
           type="button"
           class="shogi-game__opening-plan-card"
           data-plan-open
-          :aria-label="`作戦: ${selectedPlanLabel || 'なし'}。押すと作戦を変えられるよ`"
+          :disabled="!planChoiceOpen"
+          :aria-label="`作戦: ${selectedPlanLabel}。${planChoiceOpen ? '押すと作戦を変えられるよ' : ''}`"
           @click="openPlanSheet('game')"
         >
           <FormationThumb
-            v-if="selectedStrategy || selectedCastle"
             class="shogi-game__opening-plan-thumb"
             :strategy-id="selectedStrategy"
             :castle-id="selectedCastle"
             :filled-squares="planFilledSquares"
           />
           <span class="shogi-game__opening-plan-text">
-            <b>{{ selectedPlanLabel || "作戦なし" }}</b>
-            <small v-if="planProgress && planProgress.total">完成まで、あと{{ planProgress.total - planProgress.filled }}マス</small>
+            <span class="shogi-game__opening-plan-line" data-plan-strategy><em>戦法</em>{{ selectedStrategyLabel || "なし" }}</span>
+            <span class="shogi-game__opening-plan-line" data-plan-castle><em>囲い</em>{{ selectedCastleLabel || "なし" }}</span>
+            <small v-if="planProgress && planProgress.total">完成まで、あと{{ planProgress.total - planProgress.filled }}マス。盤の矢印の手を指そう</small>
             <small v-else-if="openingPlanComplete">完成！</small>
-            <small v-else-if="!selectedStrategy && !selectedCastle">押すと作戦カードから選べるよ</small>
           </span>
         </button>
         <div class="shogi-game__opening-plan-actions">
-          <button type="button" data-plan-auto @click="autoPickOpeningPlan('game')">おまかせ</button>
+          <button v-if="planChoiceOpen" type="button" data-plan-change @click="openPlanSheet('game')">作戦を変える</button>
           <button
-            v-if="selectedStrategy || selectedCastle"
+            v-if="planProgress"
             type="button"
             role="switch"
             class="shogi-game__opening-plan-ghosts"
@@ -1124,7 +1125,7 @@
           <button type="button" @click="finishAtNearForm">ここで終える</button>
         </div>
       </div>
-      <p v-if="openingGuideStatus">{{ openingGuideStatus }}</p>
+      <p v-if="planCardShown && openingGuideStatus">{{ openingGuideStatus }}</p>
     </section>
 
     <section v-if="uiLayout === 'wide'" class="shogi-game__kifu" aria-label="棋譜">
@@ -2188,12 +2189,12 @@ import FormationThumb from "./FormationThumb.vue";
 import HananePortrait from "./HananePortrait.vue";
 import { ALL_OPENING_PLANS, openingPlanById, openingPlanFor } from "./core/opening-catalog.mjs";
 import {
-  autoPickPlan,
   loadSeenPlans,
   loadShowAllPlans,
   newlyUnlockedPlans,
   openingUnlocks,
   planCompletedCount,
+  recommendPlan,
   saveSeenPlans,
   saveShowAllPlans,
 } from "./core/opening-unlocks.mjs";
@@ -2468,6 +2469,8 @@ import {
   isOpeningGuideExpired,
   isOpeningPlanComplete,
   isStandaloneOpening,
+  nearestOpeningCastles,
+  nearestOpeningStrategies,
   nextOpeningPlanMove,
   openingCanonicalFollowupCandidates as getOpeningCanonicalFollowupCandidates,
   openingCastleDistance,
@@ -4738,10 +4741,9 @@ const learningStartBlocked = computed(() => (
 // 平手以外の開始局面では、平手用の定跡（やこび姫補助・CPUの定跡）を当てはめない。
 // 棋力測定の対局では、作戦の案内(定跡の手順・AIの候補)を出さない。案内どおりに指した手は、本人の力として測れない。
 const openingGuideAvailable = computed(() => matchInitialSfen.value === STANDARD_SFEN && !measureMode.value);
-/** 通常対局で作戦を選んでいないあいだは、補助の欄を1行のボタンにたたむ。学習対局ではいつも開く。 */
+/** 作戦を選んでいないあいだは、補助の欄を「戦法・囲いを選ぶ」の1行のボタンにたたむ(選べるときだけ)。 */
 const openingGuideCollapsed = computed(() =>
-  openingGuideAvailable.value &&
-  matchKind.value !== "learning" &&
+  planChoiceOpen.value &&
   !selectedStrategy.value &&
   !selectedCastle.value
 );
@@ -4803,7 +4805,7 @@ function planAvailability(context: "pregame" | "game") {
     };
   }
   const { committedRookStyle, currentFormations, legalMoves, playerIsBlack, playerMoves, sfen } = openingAvailabilityContext.value;
-  const available = (kind: "strategy" | "castle") => new Set(availableOpeningDefinitions({
+  const available = (kind: "strategy" | "castle"): Set<string> => new Set(availableOpeningDefinitions({
     definitions: kind === "strategy" ? OPENING_STRATEGIES : OPENING_CASTLES,
     kind,
     color: playerIsBlack ? "black" : "white",
@@ -4813,14 +4815,56 @@ function planAvailability(context: "pregame" | "game") {
     detectedFormations: currentFormations,
     currentSfen: sfen,
     rookStyle: committedRookStyle,
-  }).map(({ id }) => id));
-  const strategies = available("strategy");
-  const castles = available("castle");
+  }).map(({ id }) => String(id)));
+  // 手順の途中を広く認める判定だけだと、中盤でも棒銀などが並ぶ。完成形まで今の局面から届くものだけを残す。
+  const buildable = planBuildable.value;
+  const strategies = new Set([...available("strategy")].filter((id) => buildable.strategies.has(id)));
+  const castles = new Set([...available("castle")].filter((id) => buildable.castles.has(id)));
   // 選んでいる作戦は、相手を待つ一時的な局面でもカードから消さない。
   if (selectedStrategy.value) strategies.add(selectedStrategy.value);
   if (selectedCastle.value) castles.add(selectedCastle.value);
   return { strategies, castles };
 }
+/**
+ * 今の局面から完成形まで、あと何手(自分の手)で組めるか。届く戦法・囲いだけが入る(13章)。
+ * 完成形までの距離が、平手の初形からの距離(短い作戦は最低OPENING_GUIDE_MAX_DISTANCE)を越えたら、もう組めないとみなす。
+ */
+const planBuildable = computed(() => {
+  const { committedRookStyle, playerIsBlack, sfen } = openingAvailabilityContext.value;
+  const color = playerIsBlack ? "black" : "white";
+  const limit = OPENING_STRATEGIES.length + OPENING_CASTLES.length;
+  const rookStyle = committedRookStyle ?? undefined;
+  return {
+    strategies: new Map(nearestOpeningStrategies({ color, currentSfen: sfen, moveHistory, rookStyle, limit })
+      .map(({ id, distance }) => [id, distance] as const)),
+    castles: new Map(nearestOpeningCastles({ color, currentSfen: sfen, rookStyle, limit })
+      .map(({ id, distance }) => [id, distance] as const)),
+  };
+});
+/** 作戦を選び直せる手数。助言(coach-advice.mjs)・棋力測定の「序盤」と同じく30手目まで。 */
+const PLAN_CHOICE_MAX_PLY = 30;
+/** 作戦カードから作戦を選べるか。序盤のうちで、今の局面から組める作戦が1枚でもあるときだけ。 */
+const planChoiceOpen = computed(() => {
+  void currentSfen.value;
+  if (!openingGuideAvailable.value || reviewMode.value || moveHistory.length > PLAN_CHOICE_MAX_PLY) return false;
+  return planEntries("game").some(({ plan, locked }) => !locked && plan.id !== selectedPlanId.value);
+});
+/** 選んだ作戦の札を出すか。完成したあとや形作りの期限のあとは、序盤のうちと、完成後の候補手を出しているあいだだけ。 */
+const planCardShown = computed(() => {
+  if (!openingGuideAvailable.value || (!selectedStrategy.value && !selectedCastle.value)) return false;
+  if (!openingPlanSettled.value) return true;
+  return moveHistory.length <= PLAN_CHOICE_MAX_PLY || openingCombinedFollowupCandidates.value.length > 0;
+});
+/** 補助の欄を出すか。出すものが何もなくなったら(中盤で作戦なし・組める作戦もない)、欄ごと消す。 */
+const openingGuideShown = computed(() => (
+  (matchKind.value === "learning" && !openingGuideAvailable.value)
+  || openingGuideCollapsed.value
+  || planCardShown.value
+  || Boolean(planInterruption.value || coachPlanOffer.value || lunchOffer.value)
+  || rangingRookChoiceRequired.value
+  || strategyCompletionChoiceRequired.value
+  || Boolean(nearCompletionPrompt.value)
+));
 function planEntries(context: "pregame" | "game"): OpeningPlanEntry[] {
   const unlocks = planUnlocks.value;
   const formations = planFormations.value;
@@ -4839,8 +4883,16 @@ function planEntries(context: "pregame" | "game"): OpeningPlanEntry[] {
       condition: unlocks.condition(plan.id),
       isNew: !locked && seen !== null && !seen.has(plan.id),
       count: planCompletedCount(plan, formations),
+      distance: context === "game" ? planDistance(plan, castles) : undefined,
     }];
   });
+}
+/** カードの「完成まであと◯手」。戦法のカードは戦法の、囲いだけのカードはいちばん近い囲いの残り手数。 */
+function planDistance(plan: { strategyId: string }, castles: string[]) {
+  const { strategies, castles: castleDistances } = planBuildable.value;
+  if (plan.strategyId) return strategies.get(plan.strategyId);
+  const near = castles.map((id) => castleDistances.get(id)).filter((distance): distance is number => distance !== undefined);
+  return near.length ? Math.min(...near) : undefined;
 }
 /**
  * CPUの作戦カード。CPUが指せる戦法(cpu-opening-repertoire.mjs)と、CPUの手番の色で使える作戦だけを並べる。
@@ -4880,6 +4932,9 @@ function openingPairLabel(strategyId: string, castleId: string) {
 }
 /** 補助の欄・対局準備の行に出す、あなたの作戦の名前。 */
 const selectedPlanLabel = computed(() => openingPairLabel(selectedStrategy.value, selectedCastle.value));
+/** 補助の欄に「戦法」「囲い」を1行ずつ書く(前の2つの選択の分かりやすさを残す。13章)。 */
+const selectedStrategyLabel = computed(() => OPENING_STRATEGIES.find(({ id }) => id === selectedStrategy.value)?.label ?? "");
+const selectedCastleLabel = computed(() => OPENING_CASTLES.find(({ id }) => id === selectedCastle.value)?.label ?? "");
 
 function markPlansSeen() {
   const ids = new Set([...(seenPlanIds.value ?? []), ...planUnlocks.value.unlocked]);
@@ -4974,21 +5029,23 @@ function opponentRangingFor(context: "pregame" | "game") {
     currentSfen: currentSfen.value,
   }) === "ranging";
 }
-/** おまかせ。使える作戦から、やこび姫が1枚を選んで入れる(まだ完成させたことのない作戦を優先)。 */
-function autoPickOpeningPlan(context: "pregame" | "game") {
+/**
+ * やこび姫のおすすめ(docs/opening-guide-ux-design.mdの13章)。使える作戦(対局中は今の局面から組める作戦)から、
+ * まだ完成させていない・やさしい・目録の順で1枚に決める。押すたびに変わらないよう、くじ引きにはしない。
+ */
+const recommendedPlanId = computed(() => {
+  const context = planSheet.value === "game" ? "game" : "pregame";
   const entries = planEntries(context).filter(({ locked }) => !locked);
-  const picked = autoPickPlan({
+  return recommendPlan({
     plans: entries.map(({ plan }) => plan),
     formations: planFormations.value,
     opponentRanging: opponentRangingFor(context),
-  });
-  if (planSheet.value) closePlanSheet();
-  if (!picked) return;
-  const castles = entries.find(({ plan }) => plan.id === picked.id)?.castles ?? [];
-  applyPlan(picked.id, castles[0] ?? "", context);
-  if (context === "game" && coachLevel.value !== "off") {
-    guideText.value = `やこび姫のおまかせは「${selectedPlanLabel.value}」！盤の矢印と薄い駒を目指して指そう。`;
-  }
+  })?.id ?? "";
+});
+/** 対局準備の［おすすめ］。おすすめの作戦のくわしい画面を開き、「この作戦にする」で決めてもらう(勝手に入れない)。 */
+function openRecommendedPlan(context: "pregame" | "game") {
+  openPlanSheet(context);
+  planSheetDetailId.value = recommendedPlanId.value;
 }
 
 /** 完成形の駒を盤に薄く出すか。保存した選択がなければ、強くなる道の5段目より前の人と学習対局で出す。 */
@@ -5038,7 +5095,8 @@ const planGhosts = computed(() => {
 });
 /** 中断したときの「作戦を変えよう」の札。今の局面から近い作戦を、残り手数つきで並べる。 */
 const planInterruption = computed(() => {
-  if (!openingGuideAvailable.value || reviewMode.value) return null;
+  // 中盤に入ったり、組める作戦がもうなかったりしたら、選び直しは勧めない(欄ごと消える)。
+  if (!planChoiceOpen.value) return null;
   const suggestions = [
     ...strategySuggestions.value.map((entry) => ({ ...entry, kind: "strategy" as const })),
     ...castleSuggestions.value.map((entry) => ({ ...entry, kind: "castle" as const })),

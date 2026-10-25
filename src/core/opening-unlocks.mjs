@@ -84,10 +84,18 @@ export function newlyUnlockedPlans(before, after) {
 }
 
 /**
- * おまかせ。使える作戦から1枚を選ぶ。まだ完成させたことのない作戦を優先し、相手が振り飛車と分かっていれば居飛車の作戦から選ぶ。
- * @param {{ plans: readonly any[], formations?: Record<string, { count: number }>, opponentRanging?: boolean, random?: () => number }} options
+ * やこび姫のおすすめ。使える作戦から1枚を決める。押すたびに変わらないよう、乱数は使わない
+ * (docs/opening-guide-ux-design.mdの13章。前は「おまかせ」で、押すたびに別の作戦へ変わって分かりにくかった)。
+ * 選ぶ順: 囲いだけとびっくり作戦は外す → 相手が振り飛車と分かっていれば居飛車の作戦 → まだ完成させたことのない作戦
+ * → やさしい(★の少ない)作戦 → 目録の順。今の局面からの近さでは選ばない(対局準備と対局中で、おすすめが変わらないように)。
+ * 対局中は、今の局面から組めない作戦を渡す前に外しておく。
+ * @param {{
+ *   plans: readonly any[],
+ *   formations?: Record<string, { count: number }>,
+ *   opponentRanging?: boolean,
+ * }} options
  */
-export function autoPickPlan({ plans, formations = {}, opponentRanging = false, random = Math.random }) {
+export function recommendPlan({ plans, formations = {}, opponentRanging = false }) {
   let pool = plans.filter((plan) => plan.group !== "castle" && plan.group !== "surprise");
   if (opponentRanging) {
     const staticPlans = pool.filter((plan) => plan.group === "static");
@@ -97,9 +105,11 @@ export function autoPickPlan({ plans, formations = {}, opponentRanging = false, 
   if (!pool.length) return null;
   const fresh = pool.filter((plan) => planCompletedCount(plan, formations) === 0);
   const candidates = fresh.length ? fresh : pool;
-  // 易しい作戦を少し多めに選ぶ(★1は2倍)。
-  const weighted = candidates.flatMap((plan) => (plan.difficulty <= 1 ? [plan, plan] : [plan]));
-  return weighted[Math.min(weighted.length - 1, Math.floor(random() * weighted.length))];
+  const order = new Map(plans.map((plan, index) => [plan.id, index]));
+  return [...candidates].sort((left, right) => (
+    left.difficulty - right.difficulty
+    || (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0)
+  ))[0];
 }
 
 /** スイッチと、見た作戦の保存。読めない環境でも遊びは止めない。 */

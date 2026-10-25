@@ -743,7 +743,7 @@
   }
 }
 
-/* ===== やこび姫補助 ===== */
+/* ===== やこび姫補助(見出しは「定跡の案内」) ===== */
 .shogi-game__opening-guide {
   display: flex;
   grid-area: guide;
@@ -823,9 +823,24 @@
   gap: 0.1em;
   min-width: 0;
 }
-.shogi-game__opening-plan-text b {
+/* 「戦法」「囲い」を1行ずつ、小さな札に続けて名前を書く。 */
+.shogi-game__opening-plan-line {
   color: var(--amber);
-  font-size: 1em;
+  font-weight: 800;
+}
+.shogi-game__opening-plan-line em {
+  margin-right: 0.45em;
+  padding: 0 0.35em;
+  border-radius: 0.25em;
+  color: var(--night-deep);
+  background: var(--muted);
+  font-size: 0.78em;
+  font-style: normal;
+  font-weight: 800;
+}
+.shogi-game .shogi-game__opening-plan-card:disabled {
+  opacity: 1;
+  cursor: default;
 }
 .shogi-game__opening-plan-text small {
   color: var(--muted);
@@ -1898,7 +1913,7 @@
 .shogi-game--short .shogi-game__rook-choice ~ p {
   display: none;
 }
-/* スマホの横向きでは、選ぶあいだだけ「おまかせ・完成形を盤に出す」をしまう(作戦カードからは選び直せる)。 */
+/* スマホの横向きでは、選ぶあいだだけ「作戦を変える・完成形を盤に出す」をしまう(作戦カードからは選び直せる)。 */
 .shogi-game--side.shogi-game--short .shogi-game__opening-guide:has(.shogi-game__rook-choice) .shogi-game__opening-plan-actions {
   display: none;
 }

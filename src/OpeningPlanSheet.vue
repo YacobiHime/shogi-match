@@ -96,9 +96,14 @@
           </div>
         </section>
         <div v-else class="plan-sheet__actions">
-          <button type="button" class="plan-sheet__auto" @click="emit('auto')">
-            <span>おまかせ</span>
-            <small>やこび姫が1つ選ぶよ</small>
+          <!-- やこび姫のおすすめ。どの作戦かを先に見せ、押すとくわしい画面へ(勝手には入れない。13章)。 -->
+          <button v-if="recommended" type="button" class="plan-sheet__auto" data-plan-recommended @click="openDetail(recommended)">
+            <FormationThumb class="plan-sheet__auto-thumb" :strategy-id="recommended.plan.strategyId" :castle-id="recommended.castles[0] ?? ''" />
+            <span class="plan-sheet__auto-text">
+              <small>やこび姫のおすすめ</small>
+              <span>{{ planTitle(recommended.plan) }}</span>
+              <small>{{ recommended.distance ? `完成まであと${recommended.distance}手。` : "" }}迷ったら、まずはこれ</small>
+            </span>
           </button>
           <button type="button" class="plan-sheet__fortune" data-fortune-open @click="fortuneOpen = true">
             <span>迷ったら占う</span>
@@ -129,6 +134,7 @@
                   <span class="plan-sheet__tag" :class="`plan-sheet__tag--${entry.plan.style}`">{{ OPENING_STYLE_LABELS[entry.plan.style] }}</span>
                   <span class="plan-sheet__stars" :aria-label="`難しさ${entry.plan.difficulty}`">{{ stars(entry.plan.difficulty) }}</span>
                   <span v-if="entry.count" class="plan-sheet__count">完成 {{ entry.count }}回</span>
+                  <span v-if="entry.distance" class="plan-sheet__distance">あと{{ entry.distance }}手</span>
                 </span>
               </span>
             </button>
@@ -189,6 +195,8 @@ export type OpeningPlanEntry = {
   condition: string;
   isNew: boolean;
   count: number;
+  // 対局中だけ: 今の局面から完成形まで、あと何手(自分の手)か。
+  distance?: number;
 };
 
 const props = defineProps({
@@ -201,20 +209,21 @@ const props = defineProps({
   showAll: { type: Boolean, default: false },
   note: { type: String, default: "" },
   assetBaseUrl: { type: String, default: "." },
-  // player: あなたの作戦(解放・おまかせ・占い)。cpu: CPUの作戦(大まかな方針と、全部のカード)。
+  // player: あなたの作戦(解放・おすすめ・占い)。cpu: CPUの作戦(大まかな方針と、全部のカード)。
   mode: { type: String as PropType<"player" | "cpu">, default: "player" },
   broadOptions: { type: Array as PropType<{ value: string | number; label: string }[]>, default: () => [] },
   // 大まかな方針を選んでいるときの値。作戦カードを選んでいるときは空。
   broadValue: { type: String, default: "" },
   /** 開いたときに、くわしい画面を開く作戦(やこびノートのコレクションのカードから)。使えない作戦なら一覧のまま。 */
   initialDetailId: { type: String, default: "" },
+  /** やこび姫のおすすめの作戦(一覧のいちばん上に出す)。空なら出さない。 */
+  recommendedId: { type: String, default: "" },
   // 手順の名前を、先手なら▲、後手なら盤を反転して△で書く。
   playerColor: { type: String as PropType<"black" | "white">, default: "black" },
 });
 const emit = defineEmits<{
   choose: [planId: string, castleId: string];
   clear: [];
-  auto: [];
   "toggle-all": [on: boolean];
   close: [];
   "fortune-result": [planId: string];
@@ -334,6 +343,7 @@ function openDetail(entry: OpeningPlanEntry) {
   const current = entry.plan.id === props.selectedId && entry.castles.includes(props.selectedCastle) ? props.selectedCastle : "";
   detailCastle.value = current || entry.castles[0] || "";
 }
+const recommended = computed(() => props.entries.find(({ plan, locked }) => plan.id === props.recommendedId && !locked) ?? null);
 const fortuneOpen = ref(false);
 const lockedIds = computed(() => props.entries.filter(({ locked }) => locked).map(({ plan }) => plan.id));
 function backToList() {
@@ -357,9 +367,14 @@ function onKeydown(event: KeyboardEvent) {
   if (detailId.value || fortuneOpen.value) backToList();
   else emit("close");
 }
-onMounted(() => {
+function openInitialDetail() {
   const initial = props.initialDetailId ? props.entries.find((entry) => entry.plan.id === props.initialDetailId && !entry.locked) : null;
   if (initial) openDetail(initial);
+}
+// 開いたあとに渡されたとき(対局準備の［おすすめ］)も、そのくわしい画面へ進む。
+watch(() => props.initialDetailId, openInitialDetail);
+onMounted(() => {
+  openInitialDetail();
   window.addEventListener("keydown", onKeydown);
   panel.value?.focus({ preventScroll: true });
 });
@@ -449,9 +464,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   gap: 0.5em;
 }
 .shogi-game .plan-sheet__auto {
-  display: grid;
-  flex: 1 1 12em;
-  justify-items: start;
+  display: flex;
+  flex: 1 1 100%;
+  gap: 0.7em;
+  align-items: center;
   min-height: 2.9em;
   padding: 0.4em 0.9em;
   border: 2px solid var(--plan-sheet-accent);
@@ -460,8 +476,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   background: var(--plan-sheet-accent);
   text-align: left;
 }
-.plan-sheet__auto span { font-size: 1.05em; font-weight: 800; }
-.plan-sheet__auto small { opacity: 0.9; }
+.plan-sheet__auto-thumb { flex: 0 0 4.2em; width: 4.2em; }
+.plan-sheet__auto-text { display: grid; gap: 0.1em; min-width: 0; }
+.plan-sheet__auto-text span { font-size: 1.15em; font-weight: 800; }
+.plan-sheet__auto-text small { opacity: 0.9; }
 .shogi-game .plan-sheet__fortune {
   display: grid;
   flex: 1 1 12em;
@@ -597,6 +615,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .plan-sheet__tag--counter { background: var(--plan-sheet-counter); }
 .plan-sheet__stars { color: #a86a1e; letter-spacing: 0.05em; }
 .plan-sheet__count { color: #2f7d3a; font-weight: 700; }
+.plan-sheet__distance { color: var(--plan-sheet-ink); font-weight: 700; }
 .plan-sheet__locked {
   display: grid;
   gap: 0.35em;

@@ -4,7 +4,7 @@ import {
   ADVANCED_UNLOCK_BASIC_PLANS,
   OPENING_PLANS_ALL_KEY,
   OPENING_PLANS_SEEN_KEY,
-  autoPickPlan,
+  recommendPlan,
   loadSeenPlans,
   loadShowAllPlans,
   newlyUnlockedPlans,
@@ -87,32 +87,40 @@ describe("作戦カードの解放", () => {
   });
 });
 
-describe("おまかせ", () => {
+describe("やこび姫のおすすめ", () => {
   const plans = ALL_OPENING_PLANS;
 
-  it("囲いだけとびっくり作戦は選ばない", () => {
-    for (let index = 0; index < 20; index += 1) {
-      const picked = autoPickPlan({ plans, random: () => index / 20 });
-      expect(["castle", "surprise"]).not.toContain(picked.group);
-    }
+  it("囲いだけとびっくり作戦は選ばず、やさしい作戦を勧める", () => {
+    const picked = recommendPlan({ plans });
+    expect(["castle", "surprise"]).not.toContain(picked.group);
+    expect(picked.difficulty).toBe(1);
+  });
+
+  it("何度聞いても同じ作戦を勧める(押すたびに変わらない)", () => {
+    const first = recommendPlan({ plans });
+    for (let index = 0; index < 5; index += 1) expect(recommendPlan({ plans }).id).toBe(first.id);
   });
 
   it("相手が振り飛車なら居飛車の作戦から選ぶ", () => {
-    for (let index = 0; index < 20; index += 1) {
-      expect(autoPickPlan({ plans, opponentRanging: true, random: () => index / 20 }).group).toBe("static");
-    }
+    expect(recommendPlan({ plans, opponentRanging: true }).group).toBe("static");
   });
 
   it("まだ完成させたことのない作戦を選ぶ", () => {
     const entry = plans.filter(({ tier }) => tier === "entry");
     const formations = done("棒銀", "ノーマル四間飛車");
-    for (let index = 0; index < 10; index += 1) {
-      expect(autoPickPlan({ plans: entry, formations, random: () => index / 10 }).id).toBe("nakabisha");
-    }
+    expect(recommendPlan({ plans: entry, formations }).id).toBe("nakabisha");
+  });
+
+  it("同じやさしさなら目録の順で選び、局面からの近さでは変えない(対局準備と対局中でそろえる)", () => {
+    const entry = plans.filter(({ tier }) => tier === "entry");
+    const first = recommendPlan({ plans: entry });
+    expect(first.id).toBe(entry.filter(({ group, difficulty }) => group !== "castle" && group !== "surprise" && difficulty === first.difficulty)[0].id);
+    // 前の作戦が今の局面から組めなければ(渡されなければ)、次の作戦にする。
+    expect(recommendPlan({ plans: entry.filter(({ id }) => id !== first.id) }).id).not.toBe(first.id);
   });
 
   it("選べる作戦がなければnull", () => {
-    expect(autoPickPlan({ plans: [] })).toBeNull();
+    expect(recommendPlan({ plans: [] })).toBeNull();
   });
 });
 

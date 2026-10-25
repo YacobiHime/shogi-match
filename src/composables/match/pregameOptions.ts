@@ -84,5 +84,5 @@ export function openingLabel(groups: OpeningOptionGroup[], id: string, emptyLabe
 
 export type PregameRow =
   | { kind: "pick"; id: string; label: string; value: string; disabled?: boolean }
-  // あなたの作戦。[おまかせ][変更]の2つのボタンを持つ(作戦カードのシートで選ぶ)。
+  // あなたの作戦。[おすすめ][変更]の2つのボタンを持つ(作戦カードのシートで選ぶ)。
   | { kind: "plan"; id: string; label: string; value: string };

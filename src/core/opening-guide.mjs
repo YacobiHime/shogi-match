@@ -1590,7 +1590,10 @@ export function openingCastleDistance({ castleId, castle: definition = null, col
   return { ...result, limit: castleDistanceLimit(castle) };
 }
 
-/** 現在局面から近い囲いを、残り手数の少ない順に返す。 */
+/**
+ * 現在局面から近い囲いを、残り手数の少ない順に返す。
+ * @param {{ color?: string, currentSfen?: string, excludeIds?: string[], rookStyle?: string, limit?: number }} [options]
+ */
 export function nearestOpeningCastles({
   color = "black",
   currentSfen = "",
@@ -1888,7 +1891,10 @@ function strategySuggestionTarget(strategy, color) {
   return strategySuggestionTargets.get(key);
 }
 
-/** 現在局面から近い戦法を、残り手数の少ない順に返す。 */
+/**
+ * 現在局面から近い戦法を、残り手数の少ない順に返す。
+ * @param {{ color?: string, currentSfen?: string, moveHistory?: string[], excludeIds?: string[], rookStyle?: string, limit?: number }} [options]
+ */
 export function nearestOpeningStrategies({
   color = "black",
   currentSfen = "",
