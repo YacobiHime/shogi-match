@@ -197,6 +197,43 @@ export function nextMeasureLevel({ level, outcome }) {
 }
 
 /**
+ * 棋力測定の最初の相手を決める札(docs/skill-measure-design.mdの9章)。自分で選んだ目安の幅の、下の方のLvから始める。
+ * 前は、はじめての案内からLv24(1級)で始め、強すぎて萎えることがあった。思っているより下げるのが、たいてい正しい(G:4-10)。
+ * 弱すぎたら、続けて測るとき(nextMeasureLevel・measureFollowUp)に相手を上げる。
+ * level: 最初の相手のLv(段級位の表のLv)。
+ */
+export const MEASURE_START_CHOICES = Object.freeze([
+  Object.freeze({ id: 'new', label: '指し始めたばかり', description: '駒の動きは分かる。対局はまだあまりしていない', level: 4 }),
+  Object.freeze({ id: 'kyu-low', label: '15級〜10級くらい', description: '囲いを組んで指せる。駒をタダで取られることもある', level: 11 }),
+  Object.freeze({ id: 'kyu', label: '9級〜1級くらい', description: '戦法と囲いを組んで、終盤まで指せる', level: 17 }),
+  Object.freeze({ id: 'dan', label: '初段以上', description: '定跡を知っている。道場やアプリで段を持っている', level: 26 }),
+]);
+/** 今までの記録から始めるとき、記録のLvから下げる幅(上と同じく、少しやさしい相手から)。 */
+export const MEASURE_START_RATED_OFFSET = 2;
+
+/**
+ * 棋力測定の最初の相手の札。対局の記録(レーティング)がある人には、いちばん上に「いつもの強さから」を足す。
+ * 札ごとに、最初の相手の段級位(「21級くらい」)を添える(押す前に相手が分かるように)。
+ * @param {{ ratedLevel?: number | null }} [options] ratedLevel: レーティングに当たるLv。記録がなければnull
+ * @returns {{ id: string, label: string, description: string, level: number, opponent: string }[]}
+ */
+export function measureStartChoices({ ratedLevel = null } = {}) {
+  const opponentOf = (/** @type {number} */ level) => gradeOf(level);
+  const choices = MEASURE_START_CHOICES.map((choice) => ({ ...choice, opponent: opponentOf(choice.level) }));
+  if (ratedLevel === null || !Number.isFinite(ratedLevel)) return choices;
+  const level = Math.min(Math.floor(MAX_DIAGNOSED_LEVEL), Math.max(1, Math.round(ratedLevel) - MEASURE_START_RATED_OFFSET));
+  return [
+    { id: 'rated', label: 'いつもの強さから', description: `今の記録は${gradeOf(Math.round(ratedLevel))}くらい`, level, opponent: opponentOf(level) },
+    ...choices,
+  ];
+}
+/** Lvの段級位の名前(「21級」「アマ初段」)。 */
+function gradeOf(/** @type {number} */ level) {
+  const label = CPU_STRENGTH_PRESETS.find((preset) => preset.level === level)?.label ?? '';
+  return label.replace(/程度$/, '');
+}
+
+/**
  * 確かめの1局を勧める、推定の幅(標準偏差、Lv)。1局の推定の幅がこれ以上なら、推定したLvの相手ともう1局指して、
  * 2局分の手と勝ち負けで測り直す。測定のまねの96局で、幅4.5以上はおよそ半分の局で、10Lv以上外れた局の
  * ほとんど(PC 12/13、スマホ 11/12)を含んだ(docs/skill-measure-design.mdの8章)。

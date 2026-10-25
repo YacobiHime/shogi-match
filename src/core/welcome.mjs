@@ -19,10 +19,11 @@ export const WELCOME_CHOICES = Object.freeze([
   Object.freeze({ id: "player", label: "よく指している", description: "定跡も分かる。棋力を測って、大会に挑もう" }),
 ]);
 
-/** 棋力測定から始める答え(測定の最初の相手は1級くらい。docs/first-play-design.mdの5章)。 */
+/**
+ * 棋力測定から始める答え(docs/first-play-design.mdの5章)。最初の相手は、続けて出す「どのくらい指せる？」の札で選ぶ
+ * (skill-estimate.mjsのMEASURE_START_CHOICES。前は1級のLv24に決めていて、強すぎた)。
+ */
 export const WELCOME_MEASURE_CHOICES = Object.freeze(["some", "player"]);
-/** 棋力測定の最初の相手のLv(1級。2026-10-23の50段階のLv)。 */
-export const WELCOME_MEASURE_LEVEL = 24;
 
 function hasAppData(storage) {
   for (let index = 0; index < storage.length; index += 1) {

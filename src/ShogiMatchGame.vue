@@ -1715,6 +1715,41 @@
     </div>
 
     <!--
+      棋力測定の最初の相手を選ぶ札(docs/skill-measure-design.mdの9章)。選んだ目安より少しやさしい相手から始める。
+      札ごとに最初の相手の段級位を書く(押す前に分かるように)。
+    -->
+    <div
+      v-if="measureStartFrom"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="measure-start-title"
+      data-measure-start
+      @click.self="measureStartFrom = ''"
+    >
+      <div class="shogi-game__confirm-panel shogi-welcome shogi-measure-start">
+        <img
+          class="shogi-welcome__chara"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=4`"
+          alt=""
+          aria-hidden="true"
+        >
+        <h2 id="measure-start-title">棋力を測ろう</h2>
+        <p>どのくらい指せる？ 選んだ強さより、少しやさしい相手から始めるよ。強すぎたり弱すぎたりしたら、次の1局で相手を合わせるね。</p>
+        <ul class="shogi-welcome__choices">
+          <li v-for="choice in measureStartOptions" :key="choice.id">
+            <button type="button" :data-measure-start-choice="choice.id" @click="chooseMeasureStart(choice.level)">
+              <strong>{{ choice.label }}</strong>
+              <small>{{ choice.description }}</small>
+              <small class="shogi-measure-start__opponent">最初の相手：{{ choice.opponent }}くらい（Lv.{{ choice.level }}）</small>
+            </button>
+          </li>
+        </ul>
+        <button type="button" class="shogi-welcome__skip" @click="measureStartFrom = ''">やめる</button>
+      </div>
+    </div>
+
+    <!--
       段級位の作り直し(2026-10-22。docs/level-ladder-design.mdの4章)のあと、前の記録を移した人に1回だけ。
       数字が大きく変わって見えるので、段級位の名前が同じ(か、どれになったか)を先に言う。
     -->
@@ -2275,7 +2310,7 @@ import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import { useAssistTools } from "./composables/useAssistTools";
 import DexIcon from "./DexIcon.vue";
 import { useBackNavigation } from "./composables/useBackNavigation";
-import { WELCOME_CHOICES, WELCOME_MEASURE_LEVEL, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
+import { WELCOME_CHOICES, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
 import { VOLUME_2_LAST_LESSON, homeRoadmap, roadmapTile, welcomeChoiceFrom } from "./core/home-roadmap.mjs";
 import { loadProblemProgress } from "./core/problem-progress.mjs";
 import {
@@ -2327,6 +2362,7 @@ import {
   estimateSkill,
   measurableMoves,
   measureFollowUp,
+  measureStartChoices,
   measureStatistics,
   restoredMeasureState,
 } from "./core/skill-estimate.mjs";
@@ -6152,12 +6188,28 @@ function startMatchFromNote() {
   });
 }
 /**
- * やこびノートから、棋力測定の対局を対局準備を通さずに始める。
- * 平手・先手・作戦おまかせ・助言なしで、CPUの強さはレーティングに近いレベルにする。
+ * やこびノート(とホームの紹介)から、棋力測定を始める。先に「どのくらい指せる？」の札で最初の相手を選んでもらい、
+ * 選んだら対局準備を通さずに始める(平手・先手・作戦おまかせ・助言なし)。docs/skill-measure-design.mdの9章。
  */
 function startMeasureMatch() {
   noteFeatureSeen("measure");
-  confirmDiscardSuspended(() => startMeasureMatchNow());
+  confirmDiscardSuspended(() => {
+    measureStartFrom.value = "note";
+  });
+}
+/**
+ * 棋力測定の最初の相手を選ぶ札を開いているか。値は開いた元(やこびノート、はじめての案内の答え)。
+ * 前は、はじめての案内からLv24(1級)、ノートからはレーティングに近いLvで、いきなり始めていた。
+ */
+const measureStartFrom = ref<"" | "note" | "some" | "player">("");
+const measureStartOptions = computed(() => measureStartChoices({
+  ratedLevel: ratingState.value.games > 0 ? recommendedLevel(ratingState.value.rating) : null,
+}));
+/** 札で選んだ強さで、測定の対局を始める。はじめての案内から来たときは、その答えを結果の画面まで引き継ぐ。 */
+function chooseMeasureStart(level: number) {
+  const from = measureStartFrom.value;
+  measureStartFrom.value = "";
+  startMeasureMatchNow({ level, welcome: from === "some" || from === "player" ? from : undefined });
 }
 /**
  * 測定の対局を始める。続けて測るとき(continueMeasure)は、相手のLvと、前の対局から持ち越した手を渡す。
@@ -6203,8 +6255,9 @@ function chooseWelcome(choice: string) {
   // ルールは分かる: 教室で、始める場所を1手詰めの1問で決める。少し指せる・よく指している: 1級くらいの相手と棋力測定。
   if (choice === "beginner" || choice === "rules") openTutorialLesson();
   else if (choice === "some" || choice === "player") {
+    // 少し指せる・よく指している: 棋力測定の最初の相手を、もう少しくわしく選んでもらう。
     noteFeatureSeen("measure");
-    startMeasureMatchNow({ level: WELCOME_MEASURE_LEVEL, welcome: choice });
+    measureStartFrom.value = choice;
   }
 }
 
@@ -6916,6 +6969,8 @@ function navigateBack() {
     discardSuspendedPending.value = null;
   } else if (nameDialogOpen.value) {
     nameDialogOpen.value = false;
+  } else if (measureStartFrom.value) {
+    measureStartFrom.value = "";
   } else if (tournamentOpen.value) {
     // 大会の画面は、中の画面(説明・トーナメント表)から、大会の選択へ、そして閉じる、の順に戻る。
     if (tournamentView.value) tournamentView.value.goBack();
@@ -6964,7 +7019,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 

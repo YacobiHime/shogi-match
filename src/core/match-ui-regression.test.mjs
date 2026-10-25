@@ -123,7 +123,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function resumeSuspendedMatch\(\)[\s\S]*?restorePersistedMatch\(\{ resume: true \}\)[\s\S]*?scheduleCpuMove\(\);/);
     // 新しい対局を始めると中断した対局が消えるため、開始の3経路で確認する。
     expect(source).toMatch(/function openMatchSetup[\s\S]*?confirmDiscardSuspended/);
-    expect(source).toContain("confirmDiscardSuspended(() => startMeasureMatchNow())");
+    // 棋力測定は、確認のあとに最初の相手を選ぶ札を開く。
+    expect(source).toMatch(/confirmDiscardSuspended\(\(\) => \{\s*measureStartFrom\.value = "note";/);
     expect(source).toContain("confirmDiscardSuspended(() => startMatchFromTutorialNow(request))");
     // ブラウザの戻る操作で、確認ダイアログも閉じられる。
     expect(source).toMatch(/function navigateBack\(\)[\s\S]*?discardSuspendedPending[\s\S]*?suspendConfirmOpen/);
@@ -660,7 +661,12 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(welcomeOpen\.value && homeOpen\.value\) \{\s*(?:\/\/[^\n]*\n\s*)?return;/);
 
     expect(source).toMatch(/if \(choice === "beginner" \|\| choice === "rules"\) openTutorialLesson\(\);/);
-    expect(source).toMatch(/choice === "some" \|\| choice === "player"[\s\S]{0,120}?startMeasureMatchNow\(\{ level: WELCOME_MEASURE_LEVEL, welcome: choice \}\)/);
+    expect(source).toMatch(/choice === "some" \|\| choice === "player"[\s\S]{0,200}?measureStartFrom\.value = choice;/);
+    // 棋力測定は、先に「どのくらい指せる？」の札で最初の相手を選ぶ(いきなり強い相手で始めない)。
+    expect(source).toMatch(/function startMeasureMatch\(\) \{[\s\S]{0,160}?measureStartFrom\.value = "note";/);
+    expect(source).toMatch(/v-if="measureStartFrom"[\s\S]{0,400}?data-measure-start[\s\S]*?v-for="choice in measureStartOptions"[\s\S]*?chooseMeasureStart\(choice\.level\)/);
+    expect(source).toMatch(/startMeasureMatchNow\(\{ level, welcome: from === "some" \|\| from === "player" \? from : undefined \}\);/);
+    expect(source).toMatch(/\} else if \(measureStartFrom\.value\) \{\s*measureStartFrom\.value = "";/);
     // 続けて測るときは、案内の答えを引き継ぐ。対局準備へ戻ると捨てる。
     expect(source).toMatch(/measureWelcome\.value = options\.welcome \?\? \(options\.carry \? measureWelcome\.value : ""\);/);
     expect(source).toMatch(/measureSession\.value = false;\s*measureWelcome\.value = "";/);

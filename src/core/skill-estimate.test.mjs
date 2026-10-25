@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONFIRM_SPREAD, LOG_LOSS_TABLES, MAX_DIAGNOSED_LEVEL, MAX_MEASURE_GAMES, estimateSkill, levelForAverageLoss, measurableMoves,
-  measureFollowUp, measureStatistics, nextMeasureLevel, restoredMeasureState,
+  MEASURE_START_CHOICES, measureFollowUp, measureStartChoices, measureStatistics, nextMeasureLevel, restoredMeasureState,
 } from './skill-estimate.mjs';
 
 const movesWithLoss = (loss, count, mover = 'black', standing = 0) => (
@@ -170,5 +170,21 @@ describe('skill estimate', () => {
       settingsBefore: { coachLevel: 'detailed' },
     });
     expect(restoredMeasureState({ carry: { games: 0 }, welcome: 'x', settingsBefore: [] })).toEqual({ carry: null, welcome: '', settingsBefore: null });
+  });
+
+  it('starts the measurement below the chosen band, easy first, and adds the rated choice on top', () => {
+    // 易しい順に並び、最初の相手は前の1級(Lv24)より弱い。いちばん強い札でもアマ初段から。
+    const levels = MEASURE_START_CHOICES.map(({ level }) => level);
+    expect(levels).toEqual([...levels].sort((left, right) => left - right));
+    expect(Math.max(...levels)).toBeLessThanOrEqual(26);
+    expect(levels.filter((level) => level >= 24)).toHaveLength(1);
+    const plain = measureStartChoices();
+    expect(plain.map(({ id }) => id)).toEqual(['new', 'kyu-low', 'kyu', 'dan']);
+    expect(plain[2]).toMatchObject({ level: 17, opponent: '8級' });
+    expect(plain[3].opponent).toBe('アマ初段');
+    // 記録がある人は「いつもの強さから」を先頭に。記録のLvより2つ下から始める。
+    const rated = measureStartChoices({ ratedLevel: 20 });
+    expect(rated[0]).toMatchObject({ id: 'rated', level: 18, opponent: '7級', description: '今の記録は5級くらい' });
+    expect(measureStartChoices({ ratedLevel: 1 })[0].level).toBe(1);
   });
 });

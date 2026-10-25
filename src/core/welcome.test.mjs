@@ -6,7 +6,7 @@ import { CAREER_STORAGE_KEY, SEASON_STORAGE_KEY } from "./ryuo-career.mjs";
 import { ROSTER_STORAGE_KEY } from "./ryuo-roster.mjs";
 import { TUTORIAL_PROGRESS_KEY } from "./tutorial-progress.mjs";
 import { matchSnapshotKey } from "./match-persistence.mjs";
-import { WELCOME_CHOICES, WELCOME_MEASURE_CHOICES, WELCOME_MEASURE_LEVEL, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./welcome.mjs";
+import { WELCOME_CHOICES, WELCOME_MEASURE_CHOICES, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./welcome.mjs";
 
 function memoryStorage(entries = {}) {
   const map = new Map(Object.entries(entries));
@@ -62,8 +62,7 @@ describe("はじめての案内", () => {
   it("はじめて・ルールは分かる・少し指せる・よく指している、の4つを易しい順に並べる(docs/first-play-design.mdの3章)", () => {
     expect(WELCOME_CHOICES.map(({ id }) => id)).toEqual(["beginner", "rules", "some", "player"]);
     expect(WELCOME_CHOICES.map(({ label }) => label)).toEqual(["はじめて", "ルールは分かる", "少し指せる", "よく指している"]);
-    // 少し指せる・よく指しているは、1級くらいの相手との棋力測定から。
+    // 少し指せる・よく指しているは、棋力測定から(最初の相手は、続けて出す札で選ぶ)。
     expect(WELCOME_MEASURE_CHOICES).toEqual(["some", "player"]);
-    expect(WELCOME_MEASURE_LEVEL).toBe(24);
   });
 });

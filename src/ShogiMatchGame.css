@@ -2144,6 +2144,14 @@
   font-weight: 500;
   line-height: 1.4;
 }
+/* 棋力測定の最初の相手の札。押す前に、最初の相手の段級位が分かるように1行添える。 */
+/* 札が5枚になるので、やこび姫を小さくして、縦長のスマホでも「やめる」まで1画面に収める(U:7-5)。 */
+.shogi-measure-start .shogi-welcome__chara { width: 3.2em; }
+.shogi-measure-start .shogi-welcome__choices button { padding-block: 0.5em; }
+.shogi-welcome__choices .shogi-measure-start__opponent {
+  color: var(--ivory);
+  font-weight: 700;
+}
 .shogi-game .shogi-welcome__skip {
   min-height: max(2.2em, 44px);
   border-color: transparent;
