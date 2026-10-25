@@ -136,6 +136,48 @@
           </ul>
         </section>
 
+        <!--
+          能力(docs/player-abilities-design.mdの12章)。名鑑の棋士と同じ8つの能力・ランク・特殊能力を、最近の対局の中身から出す。
+          主役はレーダーチャート。名鑑の棋士(ライバル・竜王・同じ組の平均)を点線で重ねて比べられる。
+        -->
+        <section v-if="tab === 'ability'" id="shogi-note-pane-ability" class="shogi-note__panel" role="tabpanel" aria-label="能力" data-note-ability>
+          <div v-if="!myAbility.ready" class="shogi-note__card shogi-note__empty">
+            <p>
+              対局を解析すると、名鑑の棋士と同じように、あなたの能力（序盤・中盤・終盤・攻め・受け・読み・詰み・安定感）がここに出るよ。
+              あと{{ myAbility.need }}手ぶんの解析で分かるよ。自由対局か竜王戦を指そう！
+            </p>
+            <button type="button" class="shogi-note__button shogi-note__button--primary" @click="emit('start-match')">対局する</button>
+          </div>
+          <template v-else>
+            <section class="shogi-note__card shogi-note__ability-card" aria-label="あなたの能力">
+              <h2>
+                あなたの能力
+                <small>{{ gradeName(nearestPreset.label) }}・R{{ state.rating }}</small>
+              </h2>
+              <div class="shogi-note__ability-compare" role="radiogroup" aria-label="比べる棋士">
+                <button
+                  v-for="option in abilityCompareOptions"
+                  :key="option.id"
+                  type="button"
+                  role="radio"
+                  class="shogi-note__chip"
+                  :class="{ 'shogi-note__chip--on': abilityCompareId === option.id }"
+                  :aria-checked="abilityCompareId === option.id"
+                  :data-ability-compare="option.id"
+                  @click="abilityCompareId = option.id"
+                >{{ option.label }}</button>
+              </div>
+              <PlayerAbilityPanel :view="myAbility.view" :compare="abilityCompare" />
+            </section>
+            <div class="shogi-note__coach shogi-note__ability-coach">
+              <YakobiSays :lines="abilityLines" merged :asset-base-url="assetBaseUrl" />
+            </div>
+            <p class="shogi-note__hint" data-ability-basis>
+              最近{{ myAbility.games }}局・{{ myAbility.moves }}手の解析から出した目安だよ。物差しは竜王戦（難易度{{ myAbility.difficulty }}）の棋士と同じで、対局するたびに動くよ。
+            </p>
+          </template>
+        </section>
+
         <!-- 成績 -->
         <section v-if="tab === 'record'" id="shogi-note-pane-record" class="shogi-note__panel shogi-note__panel--fill" role="tabpanel" aria-label="成績">
           <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
@@ -628,9 +670,14 @@ import {
   levelRating,
   nextRatingGoal,
   RATED_EVENTS,
+  ratingLevel,
   recommendedLevel,
   usageRows,
 } from "./core/player-rating.mjs";
+import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
+import { myAbilityProfile } from "./core/my-abilities.mjs";
+import { ABILITIES, abilityRank, abilityValues } from "./core/player-abilities.mjs";
+import { HANANE } from "./core/ryuo-story.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
 import { currentAffiliation } from "./core/player-profile.mjs";
 import { currentStreak, loadPlayStreak, streakLine } from "./core/play-streak.mjs";
@@ -730,6 +777,11 @@ const props = defineProps({
   awards: { type: Array as PropType<SeasonAwardData[]>, default: () => [] },
   /** 作戦カードで使える作戦のid(コレクションの「挑戦できる」)。 */
   unlockedPlanIds: { type: Array as PropType<string[]>, default: () => [] },
+  /** 最近の対局の中身の要約(play-insight.mjsのgames)。能力の項目に使う。 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  insightGames: { type: Array as PropType<any[]>, default: () => [] },
+  /** 竜王戦の難易度(能力の物差し)。期を始めていなければnull(おすすめを使う)。 */
+  ryuoDifficulty: { type: Number as PropType<number | null>, default: null },
 });
 const emit = defineEmits<{
   close: [];
@@ -745,6 +797,7 @@ const emit = defineEmits<{
 /** ノートの項目。最後に開いた項目を、この端末で覚えておく。 */
 const TABS = [
   { id: "summary", label: "まとめ", short: "まとめ", description: "いまの棋力と次の目標" },
+  { id: "ability", label: "能力", short: "能力", description: "得意と苦手のレーダーチャート" },
   { id: "record", label: "成績", short: "成績", description: "勝ち負けと推移" },
   { id: "style", label: "戦法", short: "戦法", description: "得意な戦法と囲い" },
   { id: "tournament", label: "大会", short: "大会", description: "竜王戦・名人戦と賞状帳" },
@@ -1036,6 +1089,62 @@ const nearestPreset = computed(() => {
 
 /** 次の目標と、そこまでの残り。計算は結果画面と共通(core/player-rating.mjs)。 */
 const nextGoal = computed(() => nextRatingGoal(props.state.rating));
+
+// ===== 能力(docs/player-abilities-design.mdの12章) =====
+const myAbility = computed(() => myAbilityProfile({
+  games: props.insightGames,
+  playerLevel: ratingLevel(props.state.rating),
+  difficulty: props.ryuoDifficulty,
+}));
+/** 名鑑の棋士の能力を、比べる形(軸ごとの値とランク)にする。 */
+function abilitiesOf(values: { [key: string]: number }) {
+  return ABILITIES.map(({ key }) => ({ key, value: values[key], rank: abilityRank(values[key]) }));
+}
+/** 比べる棋士の候補。同じ組の平均・ライバルの羽音・竜王。名簿がまだなければ比べない。 */
+const abilityCompareOptions = computed(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const players: any[] = props.roster ? Object.values(props.roster.players ?? {}) : [];
+  const withAbilities = players.filter((member) => member?.character?.abilities);
+  const options: { id: string; label: string; values: { [key: string]: number } | null }[] = [];
+  const group = props.career.champion ? 1 : props.career.group;
+  const sameGroup = withAbilities.filter((member) => member.group === group);
+  if (sameGroup.length) {
+    const all = sameGroup.map((member) => abilityValues(member) as { [key: string]: number });
+    options.push({
+      id: "group",
+      label: `${group}組の平均`,
+      values: Object.fromEntries(ABILITIES.map(({ key }) => [key, Math.round(all.reduce((total, values) => total + values[key], 0) / all.length)])),
+    });
+  }
+  const rival = withAbilities.find((member) => member.id === HANANE);
+  if (rival) options.push({ id: "rival", label: `ライバル ${rival.name}`, values: abilityValues(rival) });
+  const holder = props.roster?.holder && props.roster.holder !== "user" ? props.roster.players?.[props.roster.holder] : null;
+  if (holder?.character?.abilities && holder.id !== HANANE) options.push({ id: "holder", label: `竜王 ${holder.name}`, values: abilityValues(holder) });
+  return options.length ? [{ id: "none", label: "比べない", values: null }, ...options] : [];
+});
+const abilityCompareChoice = ref("group");
+/** 選んでいる比べる棋士。候補にないとき(名簿が変わったなど)は、候補のいちばん目(同じ組の平均)。 */
+const abilityCompareId = computed({
+  get: () => (abilityCompareOptions.value.some(({ id }) => id === abilityCompareChoice.value)
+    ? abilityCompareChoice.value
+    : abilityCompareOptions.value[1]?.id ?? "none"),
+  set: (id: string) => { abilityCompareChoice.value = id; },
+});
+const abilityCompare = computed(() => {
+  const option = abilityCompareOptions.value.find(({ id }) => id === abilityCompareId.value);
+  return option?.values ? { label: option.label, abilities: abilitiesOf(option.values) } : null;
+});
+/** やこび姫の一言。いちばんの武器と、伸びしろ(何をすれば伸びるか)。 */
+const abilityLines = computed(() => {
+  const profile = myAbility.value;
+  if (!profile.ready) return [];
+  const lines: string[] = [];
+  if (profile.best) lines.push(`いちばんの武器は${profile.best.label}（${profile.best.rank}）！ ${profile.view.type === "バランス型" ? "" : `${profile.view.type}の棋士だね。`}`);
+  else lines.push("どの能力も同じくらい。バランス型だね！");
+  if (profile.worst) lines.push(`伸びしろは${profile.worst.label}（${profile.worst.rank}）。${profile.worst.hint}`);
+  if (profile.missing.length) lines.push(`${profile.missing.join("・")}は、これからの対局の解析で分かるよ。`);
+  return lines;
+});
 
 /** 対局の結果だけを、古い順に並べたもの(申告・測定の記録は除く)。 */
 const gameHistory = computed(() => props.state.history.filter(
@@ -1546,6 +1655,23 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__pair { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
 .shogi-game .shogi-note__subhead { margin: 0.3rem 0 0; color: rgba(255, 252, 244, 0.8); font-size: 0.9em; }
 .shogi-game .shogi-note__hint { margin: 0; color: var(--note-muted); font-size: 0.8em; line-height: 1.6; }
+/* 能力。名鑑の棋士と同じ部品(PlayerAbilityPanel)に、比べる棋士を選ぶ札を添える。 */
+.shogi-game .shogi-note__ability-card h2 small { margin-left: 0.5em; color: var(--note-muted); font-size: 0.75em; font-weight: 700; }
+.shogi-game .shogi-note__ability-compare { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.shogi-game .shogi-note__chip {
+  min-height: var(--note-control);
+  padding: 0 0.8rem;
+  border: 2px solid #3b5570;
+  border-radius: 999px;
+  color: inherit;
+  background: var(--note-deep);
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.88em;
+  font-weight: 800;
+  cursor: pointer;
+}
+.shogi-game .shogi-note__chip--on { border-color: #8fc5ff; color: #172632; background: #8fc5ff; }
 
 .shogi-game .shogi-note__fans { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; font-size: 0.88em; }
 .shogi-game .shogi-note__fans li { display: grid; grid-template-columns: minmax(6rem, auto) minmax(0, 1fr); gap: 0.6rem; }

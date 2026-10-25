@@ -449,6 +449,8 @@
       :meijin-career="meijinCareer"
       :awards="seasonAwards"
       :unlocked-plan-ids="[...planUnlocks.unlocked]"
+      :insight-games="playInsight.games"
+      :ryuo-difficulty="ryuoSeason?.settings?.difficulty ?? (ryuoCareer.seasons ? ryuoCareer.settings?.difficulty ?? null : null)"
       @close="yakobiNoteOpen = false"
       @open-plan="openPlanFromNote"
       @open-dex="openDexFromNote"

@@ -5,15 +5,21 @@
   -->
   <div class="player-ability" :class="{ 'player-ability--compact': compact }" data-player-ability>
     <div class="player-ability__main">
-      <RadarChart class="player-ability__radar" :axes="radarAxes" :value-offset="20" />
-      <ul class="player-ability__ranks" aria-label="能力のランク">
-        <li v-for="item in view.abilities" :key="item.key" :title="item.hint">
+      <RadarChart class="player-ability__radar" :axes="radarAxes" :value-offset="20" :compare="compareValues" />
+      <ul class="player-ability__ranks" :class="{ 'player-ability__ranks--compare': compare }" aria-label="能力のランク">
+        <li v-for="(item, index) in view.abilities" :key="item.key" :title="item.hint">
           <span class="player-ability__label">{{ item.label }}</span>
           <b class="player-ability__rank" :class="`player-ability__rank--${item.rank}`" :data-rank="item.rank">{{ item.rank }}</b>
           <span class="player-ability__value">{{ item.value }}</span>
+          <span v-if="compare" class="player-ability__compare-rank" :aria-label="`${compare.label}は${compare.abilities[index]?.rank}`">{{ compare.abilities[index]?.rank }}</span>
         </li>
       </ul>
     </div>
+    <!-- 比べる相手がいるときの凡例。線の形(実線・点線)と名前で区別する。 -->
+    <p v-if="compare" class="player-ability__legend" data-ability-legend>
+      <span class="player-ability__legend-own">{{ ownLabel }}</span>
+      <span class="player-ability__legend-compare">{{ compare.label }}</span>
+    </p>
     <p v-if="view.type" class="player-ability__type">{{ view.type }}</p>
     <ul v-if="view.specials.length" class="player-ability__specials" aria-label="特殊能力">
       <li v-for="chip in view.specials" :key="chip.id" :data-special="chip.tier">
@@ -60,11 +66,16 @@ const props = defineProps({
   view: { type: Object as PropType<AbilityView>, required: true },
   /** 次の相手の札など、狭い場所に出すとき。特殊能力の説明と囲いを省き、戦法は3つまで。 */
   compact: { type: Boolean, default: false },
+  /** 比べる相手(やこびノートの自分の能力)。レーダーチャートに点線で重ね、ランクを横に小さく並べる。 */
+  compare: { type: Object as PropType<{ label: string; abilities: { key: string; value: number; rank: string }[] } | null>, default: null },
+  /** 比べるときの、自分の名前(凡例)。 */
+  ownLabel: { type: String, default: "あなた" },
 });
 
 /** 札の頭の印(色だけに頼らず、形でも区別する)。 */
 const TIER_MARK: Record<string, string> = Object.freeze({ gold: "★", blue: "＋", red: "−" });
 const radarAxes = computed(() => props.view.abilities.map(({ key, label, value }) => ({ key, label, value })));
+const compareValues = computed(() => (props.compare ? props.view.abilities.map(({ key }) => props.compare?.abilities.find((item) => item.key === key)?.value ?? null) : null));
 const shownOpenings = computed(() => props.view.openings.slice(0, props.compact ? 3 : 6));
 </script>
 
@@ -98,6 +109,11 @@ const shownOpenings = computed(() => props.view.openings.slice(0, props.compact 
 .shogi-game .player-ability__rank--F,
 .shogi-game .player-ability__rank--G { color: #fffcf4; background: #55697d; }
 .shogi-game .player-ability__value { color: rgba(255, 252, 244, 0.75); font-size: 0.82em; font-variant-numeric: tabular-nums; text-align: right; }
+.shogi-game .player-ability__ranks--compare li { grid-template-columns: 3.4em 1.7em 2em 1.4em; }
+.shogi-game .player-ability__compare-rank { color: #8fc5ff; font-size: 0.85em; font-weight: 900; text-align: center; }
+.shogi-game .player-ability__legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; margin: 0; font-size: 0.82em; }
+.shogi-game .player-ability__legend span::before { display: inline-block; width: 1.6em; margin-right: 0.35em; vertical-align: middle; border-top: 3px solid #f1a54c; content: ""; }
+.shogi-game .player-ability__legend-compare::before { border-top-style: dashed !important; border-top-color: #8fc5ff !important; }
 .shogi-game .player-ability__type { margin: 0; color: #f1a54c; font-size: 0.85em; font-weight: 800; }
 .shogi-game .player-ability__specials { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .player-ability--compact .player-ability__specials { display: flex; flex-wrap: wrap; }

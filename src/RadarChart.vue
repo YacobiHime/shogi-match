@@ -10,6 +10,8 @@
       <polygon v-for="ring in RINGS" :key="ring" :points="ringPoints(ring)" />
       <line v-for="(axis, index) in axes" :key="axis.key" :x1="center" :y1="center" :x2="axisPoint(index, 100).x" :y2="axisPoint(index, 100).y" />
     </g>
+    <!-- 比べる相手(名鑑の棋士など)。点線の輪郭だけを先に描き、自分の面を上に重ねる(色だけでなく線の形でも区別する)。 -->
+    <polygon v-if="compare" class="shogi-radar__compare" :points="comparePoints" data-radar-compare />
     <polygon class="shogi-radar__area" :points="areaPoints" />
     <g v-for="(axis, index) in axes" :key="`dot-${axis.key}`">
       <circle
@@ -40,6 +42,8 @@ const props = defineProps({
   valueOffset: { type: Number, default: 14 },
   /** 小さく描くとき。軸の名前と値を出さず、図の枠を形だけに詰める(名前とランクは横に別に並べる)。 */
   bare: { type: Boolean, default: false },
+  /** 比べる相手の値(軸と同じ順)。点線の輪郭で重ねる。 */
+  compare: { type: Array as PropType<(number | null)[] | null>, default: null },
 });
 
 const RINGS = [20, 40, 60, 80, 100];
@@ -68,7 +72,11 @@ const areaPoints = computed(() => props.axes.map((axis, index) => {
   const { x, y } = axisPoint(index, axis.value ?? 0);
   return `${x.toFixed(1)},${y.toFixed(1)}`;
 }).join(" "));
-const ariaLabel = computed(() => `レーダーチャート: ${props.axes.map((axis) => `${axis.label}${axis.value === null ? "データなし" : `${axis.value}点`}`).join("、")}`);
+const comparePoints = computed(() => props.axes.map((_, index) => {
+  const { x, y } = axisPoint(index, props.compare?.[index] ?? 0);
+  return `${x.toFixed(1)},${y.toFixed(1)}`;
+}).join(" "));
+const ariaLabel = computed(() => `レーダーチャート: ${props.axes.map((axis, index) => `${axis.label}${axis.value === null ? "データなし" : `${axis.value}点`}${props.compare ? `（比べる相手${props.compare[index] ?? "—"}点）` : ""}`).join("、")}`);
 </script>
 
 <style>
@@ -77,6 +85,7 @@ const ariaLabel = computed(() => `レーダーチャート: ${props.axes.map((ax
 .shogi-game .shogi-radar__grid line { stroke: rgba(255, 252, 244, 0.22); stroke-width: 1; }
 .shogi-game .shogi-radar__area { fill: rgba(241, 165, 76, 0.35); stroke: #f1a54c; stroke-width: 2; stroke-linejoin: round; }
 .shogi-game .shogi-radar__dot { fill: #f1a54c; stroke: #172632; stroke-width: 1.5; }
+.shogi-game .shogi-radar__compare { fill: rgba(143, 197, 255, 0.12); stroke: #8fc5ff; stroke-width: 2.5; stroke-dasharray: 6 4; stroke-linejoin: round; }
 /* 小さく描くときは、線を太くして形を読みやすくする。 */
 .shogi-game .shogi-radar--bare .shogi-radar__grid polygon,
 .shogi-game .shogi-radar--bare .shogi-radar__grid line { stroke: rgba(255, 252, 244, 0.3); stroke-width: 3; }

@@ -50,8 +50,21 @@ function validPhase(phase) {
   return phase && finite(phase.n) && finite(phase.sum) && finite(phase.big);
 }
 
+/** 能力の分析の集計の軸(my-abilities.mjs)。損の軸は{ n, sum }、割合の軸は{ n, hit }。 */
+export const LOSS_AXES = Object.freeze(['opening', 'middle', 'ending', 'attack', 'defense']);
+export const RATE_AXES = Object.freeze(['reading', 'stability', 'mate']);
+/** 優勢・劣勢とみなす形勢(攻め・受けの軸)。 */
+const AXIS_STANDING = 300;
+
+function validAxes(axes) {
+  return axes && typeof axes === 'object'
+    && LOSS_AXES.every((key) => finite(axes[key]?.n) && finite(axes[key]?.sum))
+    && RATE_AXES.every((key) => finite(axes[key]?.n) && finite(axes[key]?.hit));
+}
+
 function validSummary(summary) {
   return summary && finite(summary.moves) && finite(summary.sum) && finite(summary.big) && finite(summary.freeLosses)
+    && (summary.axes === undefined || validAxes(summary.axes))
     && PHASES.every(({ key }) => validPhase(summary.phases?.[key]))
     && Array.isArray(summary.mates) && summary.mates.every((mate) => typeof mate?.sfen === 'string' && Number.isInteger(mate.length))
     && (summary.standing30 === null || finite(summary.standing30));
@@ -165,6 +178,9 @@ function standingFor(score, color) {
  * - mates: 逃した3手以内の詰み(詰ませる側の手番の局面と手数)
  * - freeLosses: 駒をタダで取られる形にして、大きく損をした手の数
  * - standing30: 30手目の形勢(自分から見た評価値)。30手に届かなければnull
+ * - axes: 能力の分析(my-abilities.mjs)のための集計。損は同じ読みの中の差(measureLoss。棋力測定と同じ)。
+ *   序盤・中盤・終盤・攻め(優勢のとき)・受け(劣勢のとき)の損、読み(最善手を指した割合)、安定感(損300以上の割合)、
+ *   詰み(詰みが見えている局面で、詰みを逃さなかった割合)。2026-10-25より前の要約にはない
  * @param {{ points: any[], sfens: string[], moves: string[], color: 'black' | 'white', initialSfen: string }} game
  */
 export function summarizePlayInsight({ points, sfens, moves, color, initialSfen }) {
@@ -173,11 +189,31 @@ export function summarizePlayInsight({ points, sfens, moves, color, initialSfen 
   let sum = 0;
   let big = 0;
   const lossAt = new Map();
+  const axes = {
+    ...Object.fromEntries(LOSS_AXES.map((key) => [key, { n: 0, sum: 0 }])),
+    ...Object.fromEntries(RATE_AXES.map((key) => [key, { n: 0, hit: 0 }])),
+  };
+  const byPly = new Map(points.map((point) => [point.ply, point]));
   for (const point of points) {
     const measure = point.moveMeasure;
     if (!measure || measure.mover !== color) continue;
     lossAt.set(point.ply, measure.loss);
+    // 詰みが見えている局面(着手前の読みで自分の詰み)で、詰みを逃さずに指したか(ryuo-stats.mjsと同じ見方)。
+    if (isMateFor(byPly.get(point.ply - 1)?.score, color)) {
+      axes.mate.n += 1;
+      if (isMateFor(point.score, color) || point.score?.value === 0) axes.mate.hit += 1;
+    }
     if (Math.abs(measure.standing) >= DECIDED_STANDING) continue;
+    const axisLoss = Math.min(LOSS_CAP, measure.measureLoss ?? measure.loss);
+    const phaseKey = PHASES.find(({ until }) => point.ply <= until).key;
+    for (const key of [phaseKey, ...(measure.standing >= AXIS_STANDING ? ['attack'] : []), ...(measure.standing <= -AXIS_STANDING ? ['defense'] : [])]) {
+      axes[key].n += 1;
+      axes[key].sum += axisLoss;
+    }
+    axes.reading.n += 1;
+    axes.reading.hit += axisLoss === 0 ? 1 : 0;
+    axes.stability.n += 1;
+    axes.stability.hit += axisLoss >= BIG_LOSS ? 1 : 0;
     const loss = Math.min(LOSS_CAP, measure.loss);
     const isBig = measure.loss >= BIG_LOSS ? 1 : 0;
     measured += 1;
@@ -207,7 +243,13 @@ export function summarizePlayInsight({ points, sfens, moves, color, initialSfen 
     mates,
     freeLosses,
     standing30: at30 ? standingFor(at30.score, color) : null,
+    axes: Object.fromEntries(Object.entries(axes).map(([key, axis]) => [key, 'sum' in axis ? { ...axis, sum: Math.round(axis.sum) } : axis])),
   };
+}
+
+/** 詰みの評価が、その色の勝ち(詰ませる側)か。 */
+function isMateFor(score, color) {
+  return score?.type === 'mate' && (color === 'black' ? score.value > 0 : score.value < 0);
 }
 
 const analyzed = (games) => games.filter((game) => game.summary);

@@ -62,6 +62,18 @@ describe("match screen regressions", () => {
     // 対局準備・ホームへ戻ると、持ち越した手は捨てる。
     expect(source).toMatch(/measureAnalyzing\.value = false;\s*measureCarry\.value = null;/);
   });
+  it("shows the player's own abilities in the notebook like the roster players, with a roster player to compare", () => {
+    // 対局画面は、最近の対局の要約と竜王戦の難易度(能力の物差し)をノートへ渡す。
+    expect(source).toMatch(/<YakobiNote[\s\S]*?:insight-games="playInsight\.games"[\s\S]*?:ryuo-difficulty="/);
+    const note = readFileSync(new URL("../YakobiNote.vue", import.meta.url), "utf8");
+    expect(note).toMatch(/\{ id: "ability", label: "能力"/);
+    expect(note).toMatch(/v-if="tab === 'ability'"[\s\S]*?<PlayerAbilityPanel :view="myAbility\.view" :compare="abilityCompare" \/>/);
+    expect(note).toMatch(/myAbilityProfile\(\{\s*games: props\.insightGames,/);
+    // 比べる棋士は、名鑑と同じ能力の値(abilityValues)を使う。
+    expect(note).toMatch(/abilityValues\(rival\)/);
+    const panel = readFileSync(new URL("../PlayerAbilityPanel.vue", import.meta.url), "utf8");
+    expect(panel).toMatch(/<RadarChart[^>]*:compare="compareValues"/);
+  });
   it("keeps sheet close buttons still under the finger (no transform centering, 44px target)", () => {
     // ボタン共通の触れたとき・押したときのtransformが、真ん中寄せのtranslateY(-50%)を上書きして×が逃げていた。
     const sheets = [

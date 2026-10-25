@@ -102,6 +102,24 @@ describe('1局の要約', () => {
     expect(white.moves).toBe(2);
   });
 
+  it('能力の分析の集計(軸ごとの損と割合)。損は同じ読みの中の差(measureLoss)を使う', () => {
+    const points = [
+      { ply: 0, score: { type: 'mate', value: 3 } },
+      // 詰みが見えていたのに、詰みを逃した(読みの損400、同じ読みの差350)。優勢の局面なので攻めにも数える。
+      { ply: 1, score: { type: 'cp', value: 200 }, moveMeasure: { mover: 'black', loss: 400, measureLoss: 350, standing: 400 } },
+      { ply: 2, score: { type: 'cp', value: 200 }, moveMeasure: { mover: 'white', loss: 0, standing: -200 } },
+      // 劣勢の局面で、最善手を指した。
+      { ply: 3, score: { type: 'mate', value: 5 }, moveMeasure: { mover: 'black', loss: 30, measureLoss: 0, standing: -500 } },
+    ];
+    const { axes } = summarizePlayInsight({ points, sfens: [], moves: [], color: 'black', initialSfen: '' });
+    expect(axes.opening).toEqual({ n: 2, sum: 350 });
+    expect(axes.attack).toEqual({ n: 1, sum: 350 });
+    expect(axes.defense).toEqual({ n: 1, sum: 0 });
+    expect(axes.reading).toEqual({ n: 2, hit: 1 });
+    expect(axes.stability).toEqual({ n: 2, hit: 1 });
+    expect(axes.mate).toEqual({ n: 1, hit: 0 });
+  });
+
   it('30手目の形勢は、自分から見た値', () => {
     const points = [{ ply: 30, score: { type: 'cp', value: 420 } }];
     expect(summarizePlayInsight({ points, sfens: [], moves: [], color: 'white', initialSfen: '' }).standing30).toBe(-420);
