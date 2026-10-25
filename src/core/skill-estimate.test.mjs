@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  LOG_LOSS_TABLES, MAX_DIAGNOSED_LEVEL, MAX_MEASURE_GAMES, estimateSkill, levelForAverageLoss, measurableMoves, measureStatistics,
-  nextMeasureLevel, restoredMeasureState,
+  CONFIRM_SPREAD, LOG_LOSS_TABLES, MAX_DIAGNOSED_LEVEL, MAX_MEASURE_GAMES, estimateSkill, levelForAverageLoss, measurableMoves,
+  measureFollowUp, measureStatistics, nextMeasureLevel, restoredMeasureState,
 } from './skill-estimate.mjs';
 
 const movesWithLoss = (loss, count, mover = 'black', standing = 0) => (
@@ -24,10 +24,13 @@ describe('skill estimate', () => {
   });
 
   it('keeps the loss tables decreasing with level, and diagnoses up to the strongest measured CPU', () => {
-    for (const table of Object.values(LOG_LOSS_TABLES)) {
-      for (let index = 1; index < table.length; index += 1) {
-        expect(table[index][0]).toBeGreaterThan(table[index - 1][0]);
-        expect(table[index][1]).toBeLessThan(table[index - 1][1]);
+    for (const phases of Object.values(LOG_LOSS_TABLES)) {
+      expect(Object.keys(phases)).toEqual(['opening', 'middle', 'ending']);
+      for (const table of Object.values(phases)) {
+        for (let index = 1; index < table.length; index += 1) {
+          expect(table[index][0]).toBeGreaterThan(table[index - 1][0]);
+          expect(table[index][1]).toBeLessThanOrEqual(table[index - 1][1]);
+        }
       }
     }
     expect(MAX_DIAGNOSED_LEVEL).toBe(47);
@@ -47,11 +50,39 @@ describe('skill estimate', () => {
     expect(estimateSkill([...movesWithLoss(40, 30), ...movesWithLoss(900, 30, 'white')], 'black').level).toBeCloseTo(middle.level, 6);
   });
 
+  it('compares each move with the table of its phase (opening moves are easy for everyone)', () => {
+    // 同じ小さな損でも、序盤の手だけなら強くは出ない(序盤はだれでも損が小さい)。中盤で同じ損なら強く出る。
+    const at = (ply, loss) => ({ ply, moveMeasure: { mover: 'black', loss, standing: 0 } });
+    const opening = Array.from({ length: 15 }, (_, index) => at(index * 2 + 1, 30));
+    const middle = Array.from({ length: 15 }, (_, index) => at(41 + index * 2, 30));
+    expect(estimateSkill(middle, 'black').level).toBeGreaterThan(estimateSkill(opening, 'black').level + 3);
+    // 手数の分からない古い持ち越しの手は、中盤として数える。
+    expect(estimateSkill([], 'black', middle.map(({ moveMeasure }) => ({ loss: moveMeasure.loss, standing: 0 }))).level)
+      .toBeCloseTo(estimateSkill(middle, 'black').level, 6);
+    expect(measurableMoves(middle, 'black')[0]).toEqual({ loss: 30, standing: 0, ply: 41 });
+  });
+
+  it('offers a confirming game near the estimate when the estimate is still wide', () => {
+    const wide = { insufficient: false, level: 33.6, spread: CONFIRM_SPREAD + 1 };
+    expect(measureFollowUp({ estimate: wide, games: 1, opponent: 24, outcome: 'win' })).toEqual({ kind: 'confirm', level: 34 });
+    expect(measureFollowUp({ estimate: { ...wide, spread: CONFIRM_SPREAD - 1 }, games: 1, opponent: 24, outcome: 'win' })).toBeNull();
+    // 測れる手が足りないときは、勝ち負けで相手を動かす(前と同じ)。
+    expect(measureFollowUp({ estimate: { insufficient: true }, games: 1, opponent: 24, outcome: 'loss' })).toEqual({ kind: 'more', level: 18 });
+    // 最初の1局を含めて3局まで。推定のLvは測れる範囲に収める。
+    expect(measureFollowUp({ estimate: wide, games: MAX_MEASURE_GAMES, opponent: 24, outcome: 'win' })).toBeNull();
+    expect(measureFollowUp({ estimate: { ...wide, level: 49 }, games: 2, opponent: 40, outcome: 'win' })?.level).toBe(MAX_DIAGNOSED_LEVEL);
+    // 1局だけの推定はたいてい幅が広く、2局分の手と勝ち負けを合わせると狭くなる。
+    const game = (loss) => movesWithLoss(loss, 20);
+    const one = estimateSkill(game(60), 'black', [], { results: [{ opponent: 24, score: 1 }] });
+    const two = estimateSkill(game(60), 'black', measurableMoves(game(60), 'black'), { results: [{ opponent: 24, score: 1 }, { opponent: 30, score: 1 }] });
+    expect(two.spread).toBeLessThan(one.spread);
+  });
+
   it('uses the same-read loss (measureLoss) when the analysis has it', () => {
     // 読みのぶれで損120に見える最善手も、診断の損は0。
     const noisy = Array.from({ length: 20 }, () => ({ moveMeasure: { mover: 'black', loss: 120, measureLoss: 0, standing: 0 } }));
     expect(estimateSkill(noisy, 'black').averageLoss).toBe(0);
-    expect(measurableMoves(noisy, 'black')[0]).toEqual({ loss: 0, standing: 0 });
+    expect(measurableMoves(noisy, 'black')[0]).toMatchObject({ loss: 0, standing: 0 });
   });
 
   it('moves the estimate with the game result against the opponent level', () => {
@@ -109,7 +140,7 @@ describe('skill estimate', () => {
     // 1局目は早く大差が付いて6手しか測れない。持ち越して、2局目の6手と合わせて診断する。
     const first = [...movesWithLoss(100, 6), ...movesWithLoss(10, 20, 'black', 2500), ...movesWithLoss(500, 6, 'white')];
     const carried = measurableMoves(first, 'black');
-    expect(carried).toEqual(Array.from({ length: 6 }, () => ({ loss: 100, standing: 0 })));
+    expect(carried).toEqual(Array.from({ length: 6 }, () => ({ loss: 100, standing: 0, ply: undefined })));
     expect(estimateSkill(movesWithLoss(200, 6), 'black')).toEqual({ insufficient: true, count: 6 });
     const pooled = estimateSkill(movesWithLoss(200, 6), 'black', carried, { results: [{ opponent: 20, score: 0 }, { opponent: 14, score: 1 }] });
     expect(pooled).toMatchObject({ insufficient: false, count: 12, averageLoss: 150 });

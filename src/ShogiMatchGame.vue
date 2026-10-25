@@ -2095,6 +2095,14 @@
           <p class="shogi-game__measure-range">
             R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安{{ skillDiagnosis.reliability === "reference" ? "（幅の広い参考値）" : "" }}
           </p>
+          <!--
+            推定の幅が広いときは、推定したLvの相手ともう1局指して確かめる(docs/skill-measure-design.mdの8章)。
+            結果はいまの診断のまま使えるので、確かめは選べる形にする(主ボタンにするが、レーティングへの設定や竜王戦へも進める)。
+          -->
+          <div v-if="measureNext?.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>
+            <p>1局だけだと、まだ幅の広い目安だよ。{{ measureNextLabel }}（Lv.{{ measureNext.level }}）ともう1局指すと、2局分の手と勝ち負けで、もっと正確に測れるよ。</p>
+            <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-measure-continue @click="continueMeasure">もう1局で確かめる（Lv.{{ measureNext.level }}）</button>
+          </div>
           <dl v-if="measureStats" class="shogi-game__result-details">
             <div>
               <dt>対局</dt>
@@ -2140,14 +2148,14 @@
             <button
               type="button"
               class="shogi-game__rematch"
-              :class="{ 'shogi-game__rematch--primary': measureWelcome === 'player' }"
+              :class="{ 'shogi-game__rematch--primary': measureWelcome === 'player' && measureNext?.kind !== 'confirm' }"
               data-measure-tournament
               @click="enterTournamentFromMeasure"
             >竜王戦に出る</button>
             <button
               type="button"
               class="shogi-game__rematch"
-              :class="{ 'shogi-game__rematch--primary': measureWelcome === 'some' }"
+              :class="{ 'shogi-game__rematch--primary': measureWelcome === 'some' && measureNext?.kind !== 'confirm' }"
               data-measure-home
               @click="leaveFinishedMatch()"
             >ホームへ</button>
@@ -2317,8 +2325,8 @@ import {
   MIN_MEASURED_MOVES,
   estimateSkill,
   measurableMoves,
+  measureFollowUp,
   measureStatistics,
-  nextMeasureLevel,
   restoredMeasureState,
 } from "./core/skill-estimate.mjs";
 import { USER_ID, createRng, createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
@@ -8678,14 +8686,18 @@ function measureGameResult(): MeasureResult | null {
  * 最初の1局を含めて MAX_MEASURE_GAMES 局まで。
  */
 const measureNext = computed(() => {
-  if (!measureSession.value || !skillDiagnosis.value?.insufficient) return null;
-  if ((measureCarry.value?.games ?? 0) + 1 >= MAX_MEASURE_GAMES) return null;
+  if (!measureSession.value || !skillDiagnosis.value) return null;
   const from = cpuStrengthLevel();
   if (from === undefined) return null;
   const winner = result.value?.winner;
   const outcome = !winner ? "draw" : winner === humanColor.value ? "win" : "loss";
-  return { from, level: nextMeasureLevel({ level: from, outcome }) };
+  const next = measureFollowUp({ estimate: skillDiagnosis.value, games: (measureCarry.value?.games ?? 0) + 1, opponent: from, outcome });
+  return next ? { from, ...next } : null;
 });
+/** 確かめの1局の相手の段級位の名前。 */
+const measureNextLabel = computed(() => (
+  measureNext.value ? CPU_STRENGTH_PRESETS.find((preset) => preset.level === measureNext.value?.level)?.label ?? "" : ""
+));
 /** 「もう1局指す」。この対局の測れた手を持ち越して、相手のLvを変えた測定対局を始める。 */
 function continueMeasure() {
   const next = measureNext.value;

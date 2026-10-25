@@ -13,19 +13,32 @@ const DECIDED_STANDING = 1500;
 export const MIN_MEASURED_MOVES = 10;
 /** 1手の損を対数にするときに足す値(損0の手を扱えるように)。 */
 const LOG_OFFSET = 10;
-/** 1LvあたりのレーティングR(player-rating.mjsと同じ)。勝ち負けの起こりやすさに使う。 */
-const RATING_PER_LEVEL = 60;
+/**
+ * 勝ち負けの起こりやすさの、1Lvあたりのレーティング差。段級位の表は1Lv＝R60だが、測定のまねの96局の勝ち負けに
+ * Elo式を当てはめると、1Lvあたり約R75だった(2026-10-25。docs/skill-measure-design.mdの8章)。
+ */
+const RATING_PER_LEVEL = 75;
 const MAX_LEVEL = CPU_STRENGTH_PRESETS.at(-1).level;
 
 /**
- * Lvごとの「1手の損(上限1000)＋10」の対数の平均(単調に減るようにならした表、[Lv, 値])。
- * 強さの分かっているCPU(Lv1〜48)どうしの96局を、アプリと同じ段階解析で読み、両方の側の手を数えた(2026-10-24)。
+ * Lvごとの「1手の損(上限1000)＋10」の対数の平均を、序盤(30手目まで)・中盤(80手目まで)・終盤に分けた表
+ * (単調に減るようにならした表、[Lv, 値])。序盤はだれでも損が小さく、終盤は大きいので、その手の局面の表と比べる
+ * (序盤の手ばかりの短い対局で、強めに出ないように)。
+ * 強さの分かっているCPU(Lv1〜48)どうしの96局を、アプリと同じ段階解析で読み、両方の側の手を数えた(2026-10-25)。
  * desktopはPCの解析(全局面2万ノード)、compactはスマホ・タブレット縦の解析(全局面6千ノード)。読みが浅いと損が大きく出るので分ける。
  * Lv36より上は損がほとんど変わらない(解析の読みより強い手の違いは見分けられない)。そこは勝ち負けで補う。
  */
 export const LOG_LOSS_TABLES = Object.freeze({
-  desktop: Object.freeze([[1.5, 5.38], [5, 5.07], [8, 5], [10, 4.95], [13, 4.77], [17, 4.65], [20, 4.43], [23, 3.85], [26, 3.64], [29, 3.63], [32, 3.34], [38, 3.17], [44, 3.05], [47, 2.92]]),
-  compact: Object.freeze([[1, 5.48], [2, 5.39], [5, 5.03], [8, 5.02], [10, 4.99], [13, 4.81], [17, 4.67], [20, 4.35], [23, 3.9], [26, 3.71], [29, 3.65], [33, 3.39], [39, 3.21], [46, 3.09]]),
+  desktop: Object.freeze({
+    opening: Object.freeze([[4.2, 4.92], [10, 4.87], [14, 4.56], [18, 4.45], [20, 4.22], [22, 3.73], [24, 3.72], [26, 3.55], [28, 3.32], [30, 3.29], [32, 3.02], [38, 2.91], [44, 2.87], [47, 2.68]]),
+    middle: Object.freeze([[2.3, 6.25], [6, 6.17], [9, 5.39], [12, 5.33], [14, 5.07], [17, 4.78], [20, 4.7], [22, 4.08], [27, 4.01], [32, 3.75], [34, 3.72], [36, 3.27], [40, 3.26], [44, 3.1], [46, 3.07], [48, 2.96]]),
+    ending: Object.freeze([[1, 6.25], [7, 6.18], [24, 4.52], [30, 4.15], [35, 3.72], [42, 3.34], [47, 3.13]]),
+  }),
+  compact: Object.freeze({
+    opening: Object.freeze([[1.5, 5.02], [7, 4.89], [13, 4.65], [16, 4.63], [18, 4.48], [20, 4.15], [22, 3.79], [24, 3.78], [26, 3.74], [28, 3.46], [30, 3.34], [32, 3.06], [36, 3], [41, 2.96], [44, 2.96], [47, 2.89]]),
+    middle: Object.freeze([[2.3, 6.28], [6, 5.99], [9, 5.32], [12, 5.16], [15, 4.96], [18, 4.83], [20, 4.68], [22, 4.1], [24, 3.99], [28, 3.97], [32, 3.69], [34, 3.66], [36, 3.58], [40, 3.35], [45, 3.18], [48, 3.15]]),
+    ending: Object.freeze([[1, 6.16], [8.4, 6.07], [28.7, 4.22], [34, 3.95], [37, 3.9], [40, 3.45], [45, 3.38]]),
+  }),
 });
 /** 1手の対数の損のばらつき(標準偏差)と、局ごとの調子のばらつき。同じ96局から測った。 */
 const MOVE_LOG_SD = 1.45;
@@ -46,7 +59,7 @@ function tableValue(table, level) {
 }
 
 /** 診断の上端のLv(表のいちばん強いところ)。これより強い人も、ここまでで診断する。 */
-export const MAX_DIAGNOSED_LEVEL = Math.ceil(LOG_LOSS_TABLES.desktop.at(-1)[0]);
+export const MAX_DIAGNOSED_LEVEL = 47;
 
 /**
  * 平均損失(素の損、上限1000)を、Lv(小数)へ変換する(RAW_LOSS_TABLEの逆)。範囲外は両端のLvにそろえる。
@@ -74,32 +87,43 @@ const presetForLevel = (level) => {
 const lossOf = (measure) => (Number.isFinite(measure.measureLoss) ? measure.measureLoss : measure.loss);
 
 /**
- * 診断に使える手(形勢に大差が付く前の手)の、評価値の損と着手前の形勢。測れる手が足りなかった対局から、
- * 次の対局へ持ち越すときに使う(下のcontinueMeasure)。
+ * 診断に使える手(形勢に大差が付く前の手)の、評価値の損・着手前の形勢・手数。測れる手が足りなかった対局から、
+ * 次の対局へ持ち越すときにも使う(continueMeasure)。
  * @param {any[]} points 棋譜解析の点
  * @param {'black' | 'white'} color 測定する側
- * @returns {{ loss: number, standing: number }[]}
+ * @returns {{ loss: number, standing: number, ply: number }[]}
  */
 export function measurableMoves(points, color) {
   return (points ?? [])
-    .map((point) => point.moveMeasure)
-    .filter((measure) => measure && measure.mover === color && Math.abs(measure.standing) < DECIDED_STANDING)
-    .map((measure) => ({ loss: lossOf(measure), standing: measure.standing }));
+    .filter((point) => point.moveMeasure && point.moveMeasure.mover === color && Math.abs(point.moveMeasure.standing) < DECIDED_STANDING)
+    .map((point) => ({ loss: lossOf(point.moveMeasure), standing: point.moveMeasure.standing, ply: point.ply }));
+}
+
+/** 手数から、序盤・中盤・終盤の表の名前(PHASESと同じ区切り)。手数の分からない古い持ち越しの手は中盤。 */
+function phaseKeyOf(ply) {
+  if (!Number.isFinite(ply)) return 'middle';
+  return PHASES.find(({ until }) => ply <= until)?.key ?? 'ending';
 }
 
 /**
  * Lv(0〜MAX_LEVEL、0.25刻み)ごとの起こりやすさから、推定のLv(平均)とばらつき(標準偏差)を出す。
- * 手の損: 対数の損の平均が、そのLvの表の値のまわりに、1手のばらつき/√手数と局ごとのばらつきで散らばるとする。
- * 勝ち負け: 相手のLvとの差から、Elo式の勝つ確率(1Lv=R60)。引き分けは勝ちと負けの中間。
- * @param {{ logMean: number, count: number, results: { opponent: number, score: number }[], table: readonly (readonly number[])[] }} input
+ * 手の損: 対数の損の平均が、そのLvで、指した手の局面(序盤・中盤・終盤)の表の値を手数で平均した値のまわりに、
+ * 1手のばらつき/√手数と局ごとのばらつきで散らばるとする。
+ * 勝ち負け: 相手のLvとの差から、Elo式の勝つ確率(1Lv＝RATING_PER_LEVEL)。引き分けは勝ちと負けの中間。
+ * @param {{
+ *   logMean: number, count: number, phaseCounts: { [key: string]: number },
+ *   results: { opponent: number, score: number }[], tables: { [key: string]: readonly (readonly number[])[] },
+ * }} input
  */
-function posteriorLevel({ logMean, count, results, table }) {
+function posteriorLevel({ logMean, count, phaseCounts, results, tables }) {
   const variance = MOVE_LOG_SD ** 2 / count + GAME_LOG_SD ** 2;
   let total = 0;
   let sum = 0;
   let squares = 0;
   for (let level = 0; level <= MAX_LEVEL; level += 0.25) {
-    let weight = Math.exp(-((logMean - tableValue(table, level)) ** 2) / (2 * variance));
+    const expected = Object.entries(phaseCounts)
+      .reduce((acc, [key, phaseCount]) => acc + phaseCount * tableValue(tables[key], level), 0) / count;
+    let weight = Math.exp(-((logMean - expected) ** 2) / (2 * variance));
     for (const { opponent, score } of results) {
       const win = 1 / (1 + 10 ** (-(RATING_PER_LEVEL * (level - opponent)) / 400));
       weight *= score >= 1 ? win : score <= 0 ? 1 - win : Math.sqrt(win * (1 - win));
@@ -115,31 +139,34 @@ function posteriorLevel({ logMean, count, results, table }) {
 /**
  * @param {any[]} points 棋譜解析の点。moveMeasure({ mover, loss, measureLoss, standing })を持つ点だけを使う
  * @param {'black' | 'white'} color 診断する側
- * @param {{ loss: number, standing: number }[]} [carried] 前の測定対局から持ち越した手(measurableMoves)
+ * @param {{ loss: number, standing: number, ply?: number }[]} [carried] 前の測定対局から持ち越した手(measurableMoves)
  * @param {{
  *   results?: { opponent: number, score: number }[],
  *   plan?: 'desktop' | 'compact',
  * }} [options] results: 測定対局の勝ち負け(相手のLvと、勝ち1・引き分け0.5・負け0。持ち越した対局の分も)。
  *   plan: 解析の読みの深さ(PCかスマホ・タブレット縦か)。
  * @returns {{
- *   insufficient: boolean, count: number, averageLoss?: number, level?: number,
+ *   insufficient: boolean, count: number, averageLoss?: number, level?: number, spread?: number,
  *   rating?: number, ratingLow?: number, ratingHigh?: number, label?: string,
  *   reliability?: 'reference' | 'estimate' | 'stable',
  * }} insufficientが真のときは、countだけを持つ(測れる手が足りない)。
  */
 export function estimateSkill(points, color, carried = [], { results = [], plan = 'desktop' } = {}) {
-  const losses = [...measurableMoves(points, color), ...carried].map(({ loss }) => Math.min(LOSS_CAP, Math.max(0, loss)));
-  const count = losses.length;
+  const moves = [...measurableMoves(points, color), ...carried]
+    .map(({ loss, ply }) => ({ loss: Math.min(LOSS_CAP, Math.max(0, loss)), phase: phaseKeyOf(ply) }));
+  const count = moves.length;
   if (count < MIN_MEASURED_MOVES) return { insufficient: true, count };
-  const average = losses.reduce((sum, loss) => sum + loss, 0) / count;
-  const logMean = losses.reduce((sum, loss) => sum + Math.log(loss + LOG_OFFSET), 0) / count;
-  const table = LOG_LOSS_TABLES[plan] ?? LOG_LOSS_TABLES.desktop;
-  const { level, spread } = posteriorLevel({ logMean, count, results, table });
+  const average = moves.reduce((sum, { loss }) => sum + loss, 0) / count;
+  const logMean = moves.reduce((sum, { loss }) => sum + Math.log(loss + LOG_OFFSET), 0) / count;
+  const phaseCounts = moves.reduce((counts, { phase }) => ({ ...counts, [phase]: (counts[phase] ?? 0) + 1 }), /** @type {{ [key: string]: number }} */ ({}));
+  const tables = LOG_LOSS_TABLES[plan] ?? LOG_LOSS_TABLES.desktop;
+  const { level, spread } = posteriorLevel({ logMean, count, phaseCounts, results, tables });
   return {
     insufficient: false,
     count,
     averageLoss: Math.round(average),
     level,
+    spread,
     rating: levelRating(level),
     // 推定のばらつき(標準偏差)ぶんの幅。
     ratingLow: levelRating(Math.max(0, level - spread)),
@@ -170,11 +197,38 @@ export function nextMeasureLevel({ level, outcome }) {
 }
 
 /**
+ * 確かめの1局を勧める、推定の幅(標準偏差、Lv)。1局の推定の幅がこれ以上なら、推定したLvの相手ともう1局指して、
+ * 2局分の手と勝ち負けで測り直す。測定のまねの96局で、幅4.5以上はおよそ半分の局で、10Lv以上外れた局の
+ * ほとんど(PC 12/13、スマホ 11/12)を含んだ(docs/skill-measure-design.mdの8章)。
+ */
+export const CONFIRM_SPREAD = 4.5;
+
+/**
+ * 測定対局のあとに、もう1局指すかと、その相手のLv。
+ * - 測れる手が足りない: 勝ったら強く、負けたら弱くした相手ともう1局(kind: 'more')。
+ * - 推定の幅が広い: 推定したLvの相手ともう1局(kind: 'confirm')。勝ち負けが五分になる相手ほど、結果から分かることが多い。
+ * 最初の1局を含めてMAX_MEASURE_GAMES局まで。それ以外はnull。
+ * @param {{
+ *   estimate: { insufficient: boolean, level?: number, spread?: number },
+ *   games: number,
+ *   opponent: number,
+ *   outcome: 'win' | 'loss' | 'draw',
+ * }} options games: この対局を含めて指した測定対局の数、opponent: この対局の相手のLv
+ * @returns {{ kind: 'more' | 'confirm', level: number } | null}
+ */
+export function measureFollowUp({ estimate, games, opponent, outcome }) {
+  if (games >= MAX_MEASURE_GAMES) return null;
+  if (estimate.insufficient) return { kind: 'more', level: nextMeasureLevel({ level: opponent, outcome }) };
+  if ((estimate.spread ?? 0) < CONFIRM_SPREAD || !Number.isFinite(estimate.level)) return null;
+  return { kind: 'confirm', level: Math.min(MAX_DIAGNOSED_LEVEL, Math.max(1, Math.round(/** @type {number} */ (estimate.level)))) };
+}
+
+/**
  * 対局の保存から、棋力測定の状態(持ち越した手・はじめての案内の答え・測定の前の設定)を読み直す。
  * 形がおかしいものは捨てる。測定の対局でなければnull。
  * @param {unknown} value 保存した{ carry, welcome, settingsBefore }
  * @returns {{
- *   carry: { moves: { loss: number, standing: number }[], games: number, results: { opponent: number, score: number }[] } | null,
+ *   carry: { moves: { loss: number, standing: number, ply?: number }[], games: number, results: { opponent: number, score: number }[] } | null,
  *   welcome: '' | 'some' | 'player',
  *   settingsBefore: { [key: string]: unknown } | null,
  * } | null}
@@ -184,7 +238,7 @@ export function restoredMeasureState(value) {
   const { carry, welcome, settingsBefore } = /** @type {{ [key: string]: any }} */ (value);
   const finite = (number) => typeof number === 'number' && Number.isFinite(number);
   const moves = Array.isArray(carry?.moves)
-    ? carry.moves.filter((move) => finite(move?.loss) && finite(move?.standing)).map(({ loss, standing }) => ({ loss, standing }))
+    ? carry.moves.filter((move) => finite(move?.loss) && finite(move?.standing)).map(({ loss, standing, ply }) => ({ loss, standing, ...(Number.isInteger(ply) ? { ply } : {}) }))
     : [];
   const games = Number.isInteger(carry?.games) ? Math.min(MAX_MEASURE_GAMES - 1, Math.max(0, carry.games)) : 0;
   const results = Array.isArray(carry?.results)

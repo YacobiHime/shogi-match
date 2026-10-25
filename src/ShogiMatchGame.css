@@ -2666,6 +2666,18 @@
 .shogi-game__measure-rating strong { font-size: 2.6em; }
 .shogi-game__measure-range,
 .shogi-game__measure-note { margin: 0.3em 0 0.8em; font-size: 0.85em; opacity: 0.8; }
+/* 確かめの1局の案内。測定の色の縁で、結果の数字のすぐ下に置く(docs/skill-measure-design.mdの8章)。 */
+.shogi-game .shogi-game__measure-confirm {
+  display: grid;
+  gap: 0.5em;
+  margin: 0 0 0.8em;
+  padding: 0.6em 0.8em;
+  border-left: 4px solid var(--measure-accent);
+  border-radius: 0.4em;
+  background: rgba(241, 165, 76, 0.1);
+  text-align: left;
+}
+.shogi-game .shogi-game__measure-confirm p { margin: 0; font-size: 0.9em; line-height: 1.5; }
 .shogi-game__result-panel {
   position: relative;
   width: min(32em, 100%);

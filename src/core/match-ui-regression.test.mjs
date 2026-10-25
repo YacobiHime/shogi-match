@@ -48,6 +48,9 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/results,\s*plan: analysisCompact\.value \? "compact" : "desktop",/);
     expect(source).toMatch(/results: \[\.\.\.\(measureCarry\.value\?\.results \?\? \[\]\), \.\.\.\(current \? \[current\] : \[\]\)\],/);
     expect(source).toMatch(/const level = measureAnalyzing\.value \? MEASURE_ANALYSIS_LEVEL : analysisLevelChoice\.value;/);
+    // 推定の幅が広いときは、推定したLvの相手と「もう1局で確かめる」を主ボタンにする(docs/skill-measure-design.mdの8章)。
+    expect(source).toMatch(/measureFollowUp\(\{ estimate: skillDiagnosis\.value, games: \(measureCarry\.value\?\.games \?\? 0\) \+ 1, opponent: from, outcome \}\)/);
+    expect(source).toMatch(/v-if="measureNext\?\.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>[\s\S]*?data-measure-continue @click="continueMeasure">もう1局で確かめる/);
     expect(source).toMatch(/\.shogi-game \.shogi-game__measure-band \{[^}]*border-left: 4px solid var\(--measure-accent\);/);
   });
   it("offers another measuring game with the carried moves when too few moves were measured", () => {
