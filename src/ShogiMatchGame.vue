@@ -451,12 +451,15 @@
       :unlocked-plan-ids="[...planUnlocks.unlocked]"
       :insight-games="playInsight.games"
       :ryuo-difficulty="ryuoSeason?.settings?.difficulty ?? (ryuoCareer.seasons ? ryuoCareer.settings?.difficulty ?? null : null)"
+      :skill-data-consent="skillDataConsent"
+      :skill-data-available="skillDataAllowed"
       @close="yakobiNoteOpen = false"
       @open-plan="openPlanFromNote"
       @open-dex="openDexFromNote"
       @start-match="startMatchFromNote"
       @start-measure="startMeasureMatch"
       @declare="declareGrade"
+      @skill-data-consent="decideSkillDataConsent"
     />
     <ShogiReferenceDex
       v-if="referenceDexKind"
@@ -1556,10 +1559,6 @@
             あなたの{{ skillDiagnosis.count }}手の平均損失は{{ skillDiagnosis.averageLoss }}。
             R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安です{{ skillDiagnosis.reliability === "reference" ? "（幅の広い参考値）" : "" }}。
           </span>
-          <!-- レーティングへの設定は、やこびノートの棋力測定の対局だけ。ほかの解析では、診断を表示するだけにする。 -->
-          <button v-if="measureSession" type="button" :disabled="ratingState.rating === skillDiagnosis.rating" @click="applySkillDiagnosis">
-            {{ ratingState.rating === skillDiagnosis.rating ? "設定済み" : "この棋力をレーティングに設定" }}
-          </button>
         </template>
       </div>
       <div class="shogi-game__analysis-actions">
@@ -1748,6 +1747,59 @@
           </li>
         </ul>
         <button type="button" class="shogi-welcome__skip" @click="measureStartFrom = ''">やめる</button>
+      </div>
+    </div>
+
+    <!-- 棋力テスト(docs/skill-assessment-design.mdの4章)。札を選んだら、対局の代わりに16問で測る。 -->
+    <ShogiSkillTest
+      v-if="skillTestOpen"
+      :asset-base-url="assetBaseUrl"
+      :prior="skillTestPrior"
+      :ask-consent="skillDataAllowed && skillDataConsent === ''"
+      @close="skillTestOpen = false"
+      @consent="decideSkillDataConsent"
+      @finish="finishSkillTest"
+    />
+    <!--
+      棋力テストの結果。棋力はテストだけでなく、これまでの勝ち負けと対局の中身を合わせた見立て(棋力カルテ)。
+      測定は竜王戦の難易度を決めるためのものなので、竜王戦へ進む道を主ボタンにする(docs/skill-measure-design.mdの10章)。
+    -->
+    <div
+      v-if="skillTestReport"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="skill-test-report-title"
+      data-skill-test-report
+    >
+      <div class="shogi-game__confirm-panel shogi-welcome shogi-skill-report">
+        <img
+          class="shogi-welcome__chara"
+          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=4`"
+          alt=""
+          aria-hidden="true"
+        >
+        <h2 id="skill-test-report-title">あなたは{{ skillTestReportGrade }}くらい</h2>
+        <p class="shogi-skill-report__range">
+          R{{ skillTestReport.estimate.rating }}（R{{ skillTestReport.estimate.ratingLow }}〜R{{ skillTestReport.estimate.ratingHigh }}の目安）。{{ skillTestReportSources }}。レーティングに設定したよ
+        </p>
+        <ul class="shogi-skill-report__abilities" aria-label="力ごとの見立て">
+          <li v-for="row in skillTestReportAbilities" :key="row.id" :data-skill-ability="row.id">
+            <span class="shogi-skill-report__ability-label">{{ row.label }}</span>
+            <span class="shogi-skill-report__bar" aria-hidden="true"><span :style="{ width: `${row.percent}%` }"></span></span>
+            <span class="shogi-skill-report__ability-grade">{{ row.grade }}</span>
+          </li>
+        </ul>
+        <p v-if="skillTestReportPraise" class="shogi-skill-report__praise">{{ skillTestReportPraise }}</p>
+        <template v-if="showHome">
+          <p class="shogi-game__measure-welcome">竜王戦は難易度{{ ryuoDefaultDifficulty }}がちょうどいいよ</p>
+          <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-skill-report-tournament @click="enterTournamentFromSkillTest">竜王戦に出る（難易度{{ ryuoDefaultDifficulty }}）</button>
+        </template>
+        <div class="shogi-game__result-actions">
+          <button type="button" class="shogi-game__analysis-button" data-skill-report-game @click="confirmSkillByGame">1局指して確かめる（Lv.{{ skillTestReportLevel }}）</button>
+          <button type="button" class="shogi-game__analysis-button" data-skill-report-close @click="skillTestReport = null">{{ showHome ? "ホームへ" : "閉じる" }}</button>
+        </div>
+        <p class="shogi-game__measure-note">問題の答え・これまでの対局の勝ち負け・対局の中身を合わせた目安です。対局するたびに合わせ直します。</p>
       </div>
     </div>
 
@@ -2167,8 +2219,8 @@
               <dd>{{ resultPresentation?.title }}・{{ result?.moveCount }}手（{{ resultPresentation?.opponent }}）</dd>
             </div>
             <div>
-              <dt>測った手</dt>
-              <dd>{{ skillDiagnosis.count ? `31手目からの${skillDiagnosis.count}手${measureCarry ? `（${measureCarry.games + 1}局分）` : ""}・平均損失${skillDiagnosis.averageLoss}` : "31手目からの手が少なく、勝ち負けで測ったよ" }}</dd>
+              <dt>この局の場面</dt>
+              <dd>{{ measureContentLine }}</dd>
             </div>
             <div v-for="phase in measureStats.phases" :key="phase.key">
               <dt>{{ phase.label }}</dt>
@@ -2563,7 +2615,6 @@ import {
 } from "./core/match-persistence.mjs";
 import {
   applyDeclaredGrade,
-  applyMeasuredRating,
   applyRatedGame,
   dismissLadderNotice,
   isRatedLevel,
@@ -2576,6 +2627,12 @@ import {
   retrySuggestion,
   saveRatingState,
 } from "./core/player-rating.mjs";
+import { contentFromInsight, estimateProfile, loadSkillProfile, recordSkillTest, saveSkillProfile, setProfileBand } from "./core/skill-profile.mjs";
+import { ABILITIES, type testResult } from "./core/skill-test.mjs";
+import { contentEstimate, contentEvents } from "./core/play-content.mjs";
+import {
+  canSendSkillData, gamePayload, loadSkillDataConsent, saveSkillDataConsent, sendSkillData, skillDataAnonId, testPayload,
+} from "./core/skill-data.mjs";
 import { type PracticeDrill, type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor, tournamentInvite } from "./core/play-coach.mjs";
 import { counterStyle, loadCounterKey, ryuoNextPlan, ryuoNextSeasonPlan, saveCounterKey } from "./core/ryuo-next.mjs";
 import {
@@ -2611,12 +2668,14 @@ const loadTutorial = () => import("./ShogiTutorial.vue");
 const loadProblemSet = () => import("./ShogiProblemSet.vue");
 const loadYakobiNote = () => import("./YakobiNote.vue");
 const loadTournament = () => import("./ShogiTournament.vue");
+const loadSkillTest = () => import("./ShogiSkillTest.vue");
 const ShogiOpeningDex = defineAsyncComponent(loadOpeningDex);
 const ShogiReferenceDex = defineAsyncComponent(loadReferenceDex);
 const ShogiTutorial = defineAsyncComponent(loadTutorial);
 const ShogiProblemSet = defineAsyncComponent(loadProblemSet);
 const YakobiNote = defineAsyncComponent(loadYakobiNote);
 const ShogiTournament = defineAsyncComponent(loadTournament);
+const ShogiSkillTest = defineAsyncComponent(loadSkillTest);
 const SCREEN_LOADERS = [loadTutorial, loadProblemSet, loadOpeningDex, loadReferenceDex, loadYakobiNote, loadTournament];
 
 /** ホームを出したあと、手が空いたときに他の画面を先に読み込み、開くときに待たせないようにする。 */
@@ -2816,6 +2875,37 @@ function dismissLadderNoticeDialog() {
 }
 /** 自由対局の中身の記録(core/play-insight.mjs)。見立ての内容の強さと、弱点の練習に使う。 */
 const playInsight = ref(loadPlayInsight(browserStorage()));
+/**
+ * 棋力カルテ(core/skill-profile.mjs。docs/skill-assessment-design.mdの6章)。棋力テストの結果と札・申告の幅を持ち、
+ * CPUとの勝ち負け(レーティングの履歴)・対局の場面採点(playInsightの要約)と合わせて、棋力と幅を見立てる。
+ */
+const skillProfile = ref(loadSkillProfile(browserStorage()));
+const skillProfileEstimate = computed(() => estimateProfile({
+  history: ratingState.value.history,
+  profile: skillProfile.value,
+  content: contentFromInsight(playInsight.value.games),
+}));
+/**
+ * 棋力カルテの見立てで、レーティングと幅を置き換える(材料が十分あるときだけ。始めたばかりの人は今までどおりEloで動く)。
+ * mark: 'game'は直前の対局の記録の値をそろえる、'test'は棋力テストの記録を足す、'quiet'は記録を変えない。
+ */
+function applySkillProfileToRating({ mark = "quiet" }: { mark?: "game" | "test" | "quiet" } = {}) {
+  const estimate = skillProfileEstimate.value;
+  if (!estimate.enough) return null;
+  const state = ratingState.value;
+  const deviation = Math.round(estimate.spread * 60);
+  let history = state.history;
+  if (mark === "game" && history.length) history = [...history.slice(0, -1), { ...history[history.length - 1], rating: estimate.rating }];
+  if (mark === "test") history = [...history, { at: Date.now(), rating: estimate.rating, opponentLevel: null, outcome: "measure" }].slice(-30);
+  ratingState.value = { ...state, rating: estimate.rating, deviation: deviation > 100 ? deviation : null, history };
+  saveRatingState(browserStorage(), ratingState.value);
+  return estimate;
+}
+/** 対局の場面採点が増えたら(裏の解析が終わったら)、カルテの見立てを入れ直す。 */
+function onPlayInsightUpdated(insight: ReturnType<typeof loadPlayInsight>) {
+  playInsight.value = insight;
+  applySkillProfileToRating();
+}
 /** 復習の期日が来た問題と、「あなたの対局から」の問題のID。「つぎはこれ」の練習に使う。タイトル画面を開くたびに読み直す。 */
 const homeReviewDueId = ref<string | null>(null);
 const homeReviewProblemIds = ref<Set<string>>(new Set());
@@ -5757,7 +5847,7 @@ const ryuoStats = useRyuoStatsAnalysis({
   engineFactory: ensureEngineFactory,
   compact: () => props.mobile || boardLayout.value === "portrait",
   storage: browserStorage,
-  onInsight: (insight) => { playInsight.value = insight; },
+  onInsight: onPlayInsightUpdated,
 });
 
 // ---- 自由対局の中身の記録のための、裏の解析(docs/home-next-adaptive-design.mdの5章)。対局中は止める。
@@ -5766,7 +5856,7 @@ const playInsightAnalysis = usePlayInsightAnalysis({
   engineFactory: ensureEngineFactory,
   compact: () => props.mobile || boardLayout.value === "portrait",
   paused: () => active.value,
-  onUpdated: (insight) => { playInsight.value = insight; },
+  onUpdated: onPlayInsightUpdated,
 });
 
 /** 結果の画面を見終えた。次に竜王戦を選ぶと、次の期のエントリーになる。 */
@@ -6164,10 +6254,16 @@ function closeHome() {
   void initializeEngine();
 }
 
-/** やこびノートで自己申告した段級位を、レーティングに設定する。 */
+/**
+ * やこびノートで自己申告した段級位を、レーティングに設定する。棋力カルテには、申告の前後3Lvを幅として入れる
+ * (勝ち負けやテストがあれば、それと合わせて見立てる)。
+ */
 function declareGrade(grade: { label: string; level: number }) {
   ratingState.value = applyDeclaredGrade(ratingState.value, grade);
   saveRatingState(browserStorage(), ratingState.value);
+  skillProfile.value = setProfileBand(skillProfile.value, [Math.max(1, grade.level - 3), grade.level + 3]);
+  saveSkillProfile(browserStorage(), skillProfile.value);
+  applySkillProfileToRating();
 }
 
 /** 棋力測定の前の対局設定。測定の対局を離れたら戻す。 */
@@ -6205,17 +6301,92 @@ const measureStartOptions = computed(() => measureStartChoices({
   ratedLevel: ratingState.value.games > 0 ? recommendedLevel(ratingState.value.rating) : null,
 }));
 /**
- * 札で選んだ強さで、測定の対局を始める。はじめての案内から来たときは、その答えを結果の画面まで引き継ぐ。
- * 札の目安の幅と、ここまでの対局の勝ち負けを、測る前の目安にする。
+ * 札を選んだら、棋力テストを始める(docs/skill-assessment-design.mdの4章)。札の目安の幅は棋力カルテにも残す
+ * (自己申告として、勝ち負けやテストと合わせて見立てる)。「いつもの強さから」は幅を持たず、今の見立てから始める。
  */
 function chooseMeasureStart(choice: { level: number; band: readonly number[] | null }) {
-  const from = measureStartFrom.value;
   measureStartFrom.value = "";
-  startMeasureMatchNow({
-    level: choice.level,
-    welcome: from === "some" || from === "player" ? from : undefined,
-    prior: measurePrior({ band: choice.band, history: ratingState.value.history }),
-  });
+  if (choice.band) {
+    skillProfile.value = setProfileBand(skillProfile.value, [choice.band[0], choice.band[1]]);
+    saveSkillProfile(browserStorage(), skillProfile.value);
+  }
+  openSkillTest(choice.band);
+}
+
+/** 棋力テストを開いているか、最初の目安(札の幅か今の見立て)と、札の幅(送る答えに添える)。 */
+const skillTestOpen = ref(false);
+const skillTestPrior = ref<{ band?: number[] | null; level?: number; spread?: number } | null>(null);
+const skillTestBand = ref<number[] | null>(null);
+type SkillTestFinish = { result: ReturnType<typeof testResult>; answers: { id: string; type: string; correct: boolean; skipped: boolean; ms: number }[] };
+/** 棋力テストの結果の札(テストの結果と、それを合わせた棋力カルテの見立て)。 */
+const skillTestReport = ref<{ result: SkillTestFinish["result"]; estimate: ReturnType<typeof estimateProfile> } | null>(null);
+/** 答えを名前なしで送るかの同意と、送ってよい場所か(公式の公開先で、展示用でない。docs/skill-assessment-design.mdの7章)。 */
+const skillDataConsent = ref(loadSkillDataConsent(browserStorage()));
+const skillDataAllowed = computed(() => canSendSkillData({ hostname: typeof location === "undefined" ? "" : location.hostname, exhibit: props.exhibit }));
+function decideSkillDataConsent(value: "yes" | "no") {
+  skillDataConsent.value = value;
+  saveSkillDataConsent(browserStorage(), value);
+}
+/** 同意があり、送ってよい場所なら、1件を送る(失敗しても遊びは止めない)。 */
+function sendSkillPayload(build: (anon: string) => object) {
+  if (!skillDataAllowed.value || skillDataConsent.value !== "yes") return;
+  const anon = skillDataAnonId(browserStorage());
+  if (anon) void sendSkillData({ payload: build(anon) });
+}
+function openSkillTest(band: readonly number[] | null) {
+  noteFeatureSeen("measure");
+  skillTestBand.value = band ? [band[0], band[1]] : null;
+  const estimate = skillProfileEstimate.value;
+  skillTestPrior.value = band ? { band: [band[0], band[1]] } : estimate.enough ? { level: estimate.level, spread: estimate.spread } : null;
+  yakobiNoteOpen.value = false;
+  skillTestReport.value = null;
+  skillTestOpen.value = true;
+}
+function finishSkillTest({ result, answers }: SkillTestFinish) {
+  skillTestOpen.value = false;
+  skillProfile.value = recordSkillTest(skillProfile.value, { level: result.level, spread: result.spread, abilities: result.abilities });
+  saveSkillProfile(browserStorage(), skillProfile.value);
+  const estimate = applySkillProfileToRating({ mark: "test" }) ?? skillProfileEstimate.value;
+  sendSkillPayload((anon) => testPayload({ anon, app: "web", answers, result, band: skillTestBand.value }));
+  skillTestReport.value = { result, estimate };
+}
+const presetGrade = (level: number) => gradeName(CPU_STRENGTH_PRESETS.find((preset) => preset.level === Math.min(49, Math.max(1, Math.round(level))))?.label ?? "");
+const skillTestReportGrade = computed(() => (skillTestReport.value ? presetGrade(skillTestReport.value.estimate.level) : ""));
+const skillTestReportLevel = computed(() => (skillTestReport.value ? Math.min(47, Math.max(1, Math.round(skillTestReport.value.estimate.level))) : 1));
+/** 見立ての材料の1行(テストの回数・勝ち負けの局数・対局の中身の局数)。 */
+const skillTestReportSources = computed(() => {
+  const sources = skillTestReport.value?.estimate.sources;
+  if (!sources) return "";
+  const parts = [`テスト${sources.tests}回`];
+  if (sources.results) parts.push(`対局${sources.results}局の勝ち負け`);
+  if (sources.content) parts.push(`${sources.content}局の中身`);
+  return `${parts.join("・")}から見立てたよ`;
+});
+const skillTestReportAbilities = computed(() => ABILITIES.map(({ id, label }) => {
+  const report = skillTestReport.value;
+  const ability = report?.result.abilities[id];
+  // 力ごとの強さはテストの総合との差なので、札に出す総合(棋力カルテの見立て)に合わせて並べる。
+  const level = report && ability?.level != null ? Math.min(49, Math.max(0, ability.level - report.result.level + report.estimate.level)) : null;
+  return { id, label, grade: level === null ? "—" : `${presetGrade(level)}くらい`, percent: level === null ? 0 : Math.round(Math.min(100, Math.max(4, (level / 47) * 100))) };
+}));
+/** いちばん良かった力をほめ、伸びしろの力を1つだけ添える。 */
+const skillTestReportPraise = computed(() => {
+  const result = skillTestReport.value?.result;
+  if (!result?.best) return "";
+  const label = (id: string | null) => ABILITIES.find((ability) => ability.id === id)?.label ?? "";
+  return `${label(result.best)}がいちばん強いね！${result.weakest ? `${label(result.weakest)}を伸ばすと、もっと勝てるよ。` : ""}`;
+});
+function enterTournamentFromSkillTest() {
+  skillTestReport.value = null;
+  tournamentStartAt.value = "ryuo";
+  tournamentFromGame.value = false;
+  tournamentOpen.value = true;
+}
+/** 1局指して確かめる。見立てたLvの相手と、今までの測定の対局で指す(結果は棋力カルテに入る)。 */
+function confirmSkillByGame() {
+  const level = skillTestReportLevel.value;
+  skillTestReport.value = null;
+  confirmDiscardSuspended(() => startMeasureMatchNow({ level }));
 }
 /**
  * 測定の対局を始める。続けて測るとき(continueMeasure)は、相手のLvと、前の対局から持ち越した手を渡す。
@@ -6980,6 +7151,10 @@ function navigateBack() {
     discardSuspendedPending.value = null;
   } else if (nameDialogOpen.value) {
     nameDialogOpen.value = false;
+  } else if (skillTestReport.value) {
+    skillTestReport.value = null;
+  } else if (skillTestOpen.value) {
+    skillTestOpen.value = false;
   } else if (measureStartFrom.value) {
     measureStartFrom.value = "";
   } else if (tournamentOpen.value) {
@@ -7030,7 +7205,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
@@ -8790,6 +8965,28 @@ function scheduleReviewCoachAdvice() {
 const skillDiagnosis = computed(() => {
   if (!reviewMode.value || reviewCpuEnabled.value || analysisRunning.value || analyzedLevel.value < 0) return null;
   if (normalizedMode.value !== "cpu" || !analysisPoints.value.length) return null;
+  // 棋力測定の対局は、棋力カルテの見立てで出す(この局の勝ち負けは履歴に、中身はこの局の場面採点で入れる。
+  // docs/skill-assessment-design.mdの6章)。
+  if (measureSession.value) {
+    const estimate = estimateProfile({
+      history: ratingState.value.history,
+      profile: skillProfile.value,
+      content: [...contentFromInsight(playInsight.value.games), ...(measureContent.value ? [measureContent.value] : [])],
+    });
+    const counts = measureContent.value?.counts;
+    return {
+      insufficient: false,
+      count: counts ? Object.values(counts).reduce((sum, { n }) => sum + n, 0) : 0,
+      averageLoss: null,
+      level: estimate.level,
+      spread: estimate.spread,
+      rating: estimate.rating,
+      ratingLow: estimate.ratingLow,
+      ratingHigh: estimate.ratingHigh,
+      label: CPU_STRENGTH_PRESETS.find((preset) => preset.level === Math.min(49, Math.max(1, Math.round(estimate.level))))?.label ?? "",
+      reliability: estimate.spread >= 7 ? "reference" : estimate.spread >= 4 ? "estimate" : "stable",
+    };
+  }
   // 棋力測定を続けているときは、前の測定対局から持ち越した手も合わせて診断する。
   const carried = measureSession.value ? measureCarry.value?.moves ?? [] : [];
   // 棋力測定では、勝ち負けも合わせて診断する(持ち越した対局の分も)。解析の読みの深さに合った表を使う。
@@ -8800,6 +8997,28 @@ const skillDiagnosis = computed(() => {
     plan: analysisCompact.value ? "compact" : "desktop",
     prior: measureSession.value ? measurePriorState.value : null,
   });
+});
+/**
+ * 測定の対局の中身(場面採点。core/play-content.mjs)。この局の解析の点から、その場で数える
+ * (裏の解析を待たずに、結果の札の見立てに入れる)。
+ */
+const measureContent = computed(() => {
+  if (!measureSession.value || analysisRunning.value || !analysisPoints.value.length) return null;
+  const record = createGameRecord(matchInitialSfen.value);
+  const sfens = [record.position.sfen];
+  for (const usi of moveHistory) {
+    if (!appendUsiMove(record, usi)) break;
+    sfens.push(record.position.sfen);
+  }
+  const color = humanColor.value === Color.WHITE ? "white" : "black";
+  return contentEstimate(contentEvents({ points: analysisPoints.value, sfens, moves: [...moveHistory], color }));
+});
+/** 測定の対局の場面採点の1行(場面ごとに、できた数/あった数)。 */
+const measureContentLine = computed(() => {
+  const counts = measureContent.value?.counts;
+  if (!counts) return "場面が少なく、勝ち負けで見立てたよ";
+  const names: { [kind: string]: string } = { take: "取れる駒", save: "守る駒", safe: "駒損なし", mate: "詰み" };
+  return Object.entries(counts).filter(([, { n }]) => n).map(([kind, { n, hit }]) => `${names[kind] ?? kind} ${hit}/${n}`).join("・");
 });
 /** この測定対局の勝ち負け(相手のLvと、プレイヤーから見た点)。終局していなければnull。 */
 function measureGameResult(): MeasureResult | null {
@@ -8848,11 +9067,8 @@ const measureStats = computed(() => (
 const measureReportOpen = computed(() => (
   measureSession.value && !measureReportDismissed.value && Boolean(skillDiagnosis.value)
 ));
-// 棋力測定は大会の難易度を決めるためのものなので、測れたらすぐレーティングにする(押し忘れても大会の難易度がずれないように)。
-watch(skillDiagnosis, (diagnosis) => {
-  if (!measureSession.value || !diagnosis || diagnosis.insufficient) return;
-  if (ratingState.value.rating !== diagnosis.rating) applySkillDiagnosis();
-});
+// 棋力測定の対局の勝ち負けは、終局したときにレーティングの履歴と棋力カルテへ入っている(recordRatedGame)。
+// 中身(場面採点)は、裏の解析が終わったときにカルテへ入る(onPlayInsightUpdated)。
 /** 測定の結果の1行。棋力と、竜王戦のちょうどいい難易度。 */
 const measureTournamentLine = computed(() => {
   const diagnosis = skillDiagnosis.value;
@@ -8868,12 +9084,6 @@ function enterTournamentFromMeasure() {
   tournamentStartAt.value = "ryuo";
   tournamentFromGame.value = false;
   tournamentOpen.value = true;
-}
-function applySkillDiagnosis() {
-  const diagnosis = skillDiagnosis.value;
-  if (!diagnosis || diagnosis.insufficient || diagnosis.rating === undefined) return;
-  ratingState.value = applyMeasuredRating(ratingState.value, { rating: diagnosis.rating, label: diagnosis.label, spread: diagnosis.spread });
-  saveRatingState(browserStorage(), ratingState.value);
 }
 
 const turningPoints = computed(() => {
@@ -8959,8 +9169,14 @@ function recordRatedGame(matchResult: MatchResult) {
     stage: tournament ? ryuoGame.value?.label : undefined,
   });
   ratingState.value = applied.state;
-  ratingChange.value = { before: applied.before, after: applied.after, delta: applied.delta };
-  saveRatingState(browserStorage(), applied.state);
+  // 棋力カルテに材料があれば、Eloの代わりにカルテの見立てをレーティングにする(docs/skill-assessment-design.mdの6-3)。
+  const profiled = applySkillProfileToRating({ mark: "game" });
+  const after = profiled ? profiled.rating : applied.after;
+  ratingChange.value = { before: applied.before, after, delta: after - applied.before };
+  saveRatingState(browserStorage(), ratingState.value);
+  sendSkillPayload((anon) => gamePayload({
+    anon, app: "web", opponent: level as number, outcome, event: tournament ? ryuoGame.value?.event ?? "ryuo" : "free", plies: moveHistory.length,
+  }));
   // 自由対局は、中身を裏で解析して、見立てと弱点の練習に使う(竜王戦は大会の統計で解析する)。
   if (!tournament) {
     const insight = enqueuePlayInsight(loadPlayInsight(browserStorage()), { moves: [...moveHistory], color, outcome, level });

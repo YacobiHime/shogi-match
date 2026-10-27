@@ -603,13 +603,26 @@
           <section class="shogi-note__card shogi-note__card--minor">
             <h2>棋力を測る</h2>
             <p class="shogi-note__hint">
-              CPUと1局指すと、終局後に指し手を解析して、レーティングと級・段の目安を診断します。
-              結果は解析画面から、あなたのレーティングに設定できます。
+              16問の棋力テスト（約10分）で、棋力と力ごとの見立てを出します。テストの答え・これまでの対局の勝ち負け・対局の中身を合わせて、
+              あなたのレーティングに設定します。対局するたびに合わせ直します。
             </p>
             <p v-if="state.measured" class="shogi-note__hint" data-note-measured>
               棋力測定で R{{ state.measured.rating }}（{{ state.measured.label }}）を設定しました（{{ measuredDate }}）。
             </p>
             <button type="button" class="shogi-note__button shogi-note__button--ghost" @click="emit('start-measure')">棋力を測る</button>
+          </section>
+
+          <!-- 棋力テストの答えを名前なしで送るか(公式の公開先だけ。docs/skill-assessment-design.mdの7-2)。 -->
+          <section v-if="skillDataAvailable" class="shogi-note__card shogi-note__card--minor" data-note-skill-data>
+            <h2>答えを送って、問題を良くする</h2>
+            <p class="shogi-note__hint">
+              棋力テストの答えとCPUとの対局の結果を、名前なしで送ります。みんなの答えで、問題の難しさを正しくするのに使います。
+              名前や棋譜は送りません。
+            </p>
+            <div class="shogi-note__declare">
+              <button type="button" class="shogi-note__button" :class="{ 'shogi-note__button--ghost': skillDataConsent !== 'yes' }" :aria-pressed="skillDataConsent === 'yes'" @click="emit('skill-data-consent', 'yes')">送る</button>
+              <button type="button" class="shogi-note__button" :class="{ 'shogi-note__button--ghost': skillDataConsent === 'yes' }" :aria-pressed="skillDataConsent !== 'yes'" @click="emit('skill-data-consent', 'no')">送らない</button>
+            </div>
           </section>
 
           <section class="shogi-note__card shogi-note__card--minor">
@@ -784,12 +797,16 @@ const props = defineProps({
   insightGames: { type: Array as PropType<any[]>, default: () => [] },
   /** 竜王戦の難易度(能力の物差し)。期を始めていなければnull(おすすめを使う)。 */
   ryuoDifficulty: { type: Number as PropType<number | null>, default: null },
+  /** 棋力テストの答えを送るかの同意('yes'・'no'・'')と、送れる場所で開いているか(core/skill-data.mjs)。 */
+  skillDataConsent: { type: String, default: "" },
+  skillDataAvailable: { type: Boolean, default: false },
 });
 const emit = defineEmits<{
   close: [];
   "start-match": [];
   "start-measure": [];
   declare: [grade: unknown];
+  "skill-data-consent": [value: "yes" | "no"];
   /** コレクションのカードから、作戦カードのくわしい画面を開く(対局準備へ)。 */
   "open-plan": [planId: string];
   /** コレクションのカードから、定跡図鑑・手筋図鑑を開く。 */

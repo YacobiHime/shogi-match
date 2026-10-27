@@ -7,6 +7,7 @@
 import { buildGuidedReview } from './guided-review.mjs';
 import { REVIEW_PROBLEM_MAX_PLIES, reviewProblemId } from './review-problems.mjs';
 import { levelForAverageLoss } from './skill-estimate.mjs';
+import { contentEstimate, contentEvents } from './play-content.mjs';
 import { levelRating } from './player-rating.mjs';
 
 export const PLAY_INSIGHT_KEY = 'yacobihime:shogi-match:play-insight:v1';
@@ -67,7 +68,8 @@ function validSummary(summary) {
     && (summary.axes === undefined || validAxes(summary.axes))
     && PHASES.every(({ key }) => validPhase(summary.phases?.[key]))
     && Array.isArray(summary.mates) && summary.mates.every((mate) => typeof mate?.sfen === 'string' && Number.isInteger(mate.length))
-    && (summary.standing30 === null || finite(summary.standing30));
+    && (summary.standing30 === null || finite(summary.standing30))
+    && (summary.content === undefined || summary.content === null || (finite(summary.content.level) && finite(summary.content.spread)));
 }
 
 function validGame(game) {
@@ -181,6 +183,8 @@ function standingFor(score, color) {
  * - axes: 能力の分析(my-abilities.mjs)のための集計。損は同じ読みの中の差(measureLoss。棋力測定と同じ)。
  *   序盤・中盤・終盤・攻め(優勢のとき)・受け(劣勢のとき)の損、読み(最善手を指した割合)、安定感(損300以上の割合)、
  *   詰み(詰みが見えている局面で、詰みを逃さなかった割合)。2026-10-25より前の要約にはない
+ * - content: 場面採点(play-content.mjs)の、1局の中身の強さ(Lv)と幅と、場面ごとの数。場面が少なければnull。
+ *   棋力カルテ(skill-profile.mjs)の材料。2026-10-27より前の要約にはない
  * @param {{ points: any[], sfens: string[], moves: string[], color: 'black' | 'white', initialSfen: string }} game
  */
 export function summarizePlayInsight({ points, sfens, moves, color, initialSfen }) {
@@ -243,6 +247,7 @@ export function summarizePlayInsight({ points, sfens, moves, color, initialSfen 
     mates,
     freeLosses,
     standing30: at30 ? standingFor(at30.score, color) : null,
+    content: contentEstimate(contentEvents({ points, sfens, moves, color })),
     axes: Object.fromEntries(Object.entries(axes).map(([key, axis]) => [key, 'sum' in axis ? { ...axis, sum: Math.round(axis.sum) } : axis])),
   };
 }

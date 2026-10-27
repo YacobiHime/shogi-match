@@ -34,12 +34,22 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/MEASURE_STAGE_SPANS[^=]*= \{ scan: \[0, 60\], review: \[60, 85\], focus: \[85, 100\] \}/);
     expect(source).toMatch(/if \(measuring\) \{\s*measureWaitHidden\.value = false;\s*measureAnalyzing\.value = true;/);
   });
-  it("棋力測定は、測る前の実績と札の幅を目安にし、診断の幅をレーティングの幅にする(docs/skill-measure-design.mdの11章)", () => {
-    expect(source).toMatch(/prior: measureSession\.value \? measurePriorState\.value : null/);
-    expect(source).toMatch(/applyMeasuredRating\(ratingState\.value, \{ rating: diagnosis\.rating, label: diagnosis\.label, spread: diagnosis\.spread \}\)/);
-    // 続けて測るときは、最初の目安を持ち越す(測定の対局の勝ち負けを、実績として2回数えない)。
-    expect(source).toMatch(/options\.prior\s*\?\? \(options\.carry \? measurePriorState\.value : null\)/);
-    expect(source).toMatch(/measurePriorState\.value = measure\?\.prior \?\? null/);
+  it("棋力は棋力カルテ(勝ち負け・テスト・場面採点・札)で見立て、対局・テスト・中身が増えるたびにレーティングへ入れる(docs/skill-assessment-design.mdの6章)", () => {
+    // 見立ての材料: レーティングの履歴(勝ち負け)、カルテ(テストと札)、対局の中身の記録(場面採点)。
+    expect(source).toMatch(/estimateProfile\(\{\s*history: ratingState\.value\.history,\s*profile: skillProfile\.value,\s*content: contentFromInsight\(playInsight\.value\.games\),\s*\}\)/);
+    // 対局のたび(Eloの直後に置き換える)、裏の解析で中身が増えたとき、テストのあと、申告のあと。
+    expect(source).toMatch(/const profiled = applySkillProfileToRating\(\{ mark: "game" \}\);/);
+    expect(source).toMatch(/saveRatingState\(browserStorage\(\), ratingState\.value\);\s*sendSkillPayload/);
+    expect(source).toMatch(/function onPlayInsightUpdated\([^)]*\) \{\s*playInsight\.value = insight;\s*applySkillProfileToRating\(\);/);
+    expect(source).toMatch(/onInsight: onPlayInsightUpdated,/);
+    expect(source).toMatch(/onUpdated: onPlayInsightUpdated,/);
+    expect(source).toMatch(/recordSkillTest\(skillProfile\.value, \{ level: result\.level, spread: result\.spread, abilities: result\.abilities \}\);[\s\S]{0,120}?applySkillProfileToRating\(\{ mark: "test" \}\)/);
+    expect(source).toMatch(/function declareGrade[\s\S]{0,400}?setProfileBand\(skillProfile\.value, \[Math\.max\(1, grade\.level - 3\), grade\.level \+ 3\]\)/);
+    // 測定の対局の診断も、カルテの見立て(この局の中身を足す)。
+    expect(source).toMatch(/if \(measureSession\.value\) \{\s*const estimate = estimateProfile\(\{[\s\S]{0,200}?measureContent\.value \? \[measureContent\.value\] : \[\]/);
+    // 答えを送るのは、送ってよい場所で同意があるときだけ。同意は、送ってよい場所でまだ聞いていないときだけ聞く。
+    expect(source).toMatch(/if \(!skillDataAllowed\.value \|\| skillDataConsent\.value !== "yes"\) return;/);
+    expect(source).toMatch(/:ask-consent="skillDataAllowed && skillDataConsent === ''"/);
   });
 
   it("棋力測定の対局中は、測定の札を出し、閃き・待った・作戦の案内を休む。中断・リロードのあとも測定のまま(docs/skill-measure-design.mdの6章)", () => {
@@ -199,13 +209,12 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(!rated \|\| \(tournament && !matchResult\.winner\)\) return;/);
   });
 
-  it("offers to set the rating only in the measurement started from the notebook", () => {
+  it("shows the diagnosis in the measuring game and sets the rating through the skill profile, not by a button", () => {
     // 診断は、棋力測定の対局では常に出し、ほかの棋譜解析では「その他」から開いた人だけに出す。
-    // 「レーティングに設定」のボタンは、棋力測定の対局だけ。
+    // レーティングは棋力カルテが入れるので、「レーティングに設定」のボタンはない(docs/skill-assessment-design.mdの6-3)。
     expect(source).toMatch(/v-if="skillDiagnosis && \(measureSession \|\| skillDiagnosisVisible\)"/);
     expect(source).toMatch(/v-if="skillDiagnosis && !measureSession"[^>]*@click="skillDiagnosisVisible = !skillDiagnosisVisible"/);
-    expect(source.match(/@click="applySkillDiagnosis"/g)).toHaveLength(1);
-    expect(source).toMatch(/<button v-if="measureSession" type="button"[^>]*@click="applySkillDiagnosis"/);
+    expect(source).not.toMatch(/applySkillDiagnosis|applyMeasuredRating/);
     // 測定の結果のダイアログは、測定の対局(measureSession)のときだけ開く。
     expect(source).toMatch(/measureSession\.value && !measureReportDismissed\.value && Boolean\(skillDiagnosis\.value\)/);
   });
@@ -686,13 +695,18 @@ describe("match screen regressions", () => {
     // 棋力測定は、先に「どのくらい指せる？」の札で最初の相手を選ぶ(いきなり強い相手で始めない)。
     expect(source).toMatch(/function startMeasureMatch\(\) \{[\s\S]{0,160}?measureStartFrom\.value = "note";/);
     expect(source).toMatch(/v-if="measureStartFrom"[\s\S]{0,400}?data-measure-start[\s\S]*?v-for="choice in measureStartOptions"[\s\S]*?chooseMeasureStart\(choice\)/);
-    expect(source).toMatch(/startMeasureMatchNow\(\{\s*level: choice\.level,\s*welcome: from === "some" \|\| from === "player" \? from : undefined,\s*prior: measurePrior\(\{ band: choice\.band, history: ratingState\.value\.history \}\),\s*\}\);/);
+    // 札を選んだら、棋力テストを始める(札の幅はカルテにも残す)。対局で確かめるのは、テストの結果の札から(docs/skill-assessment-design.mdの4章)。
+    expect(source).toMatch(/function chooseMeasureStart\([^)]*\) \{[\s\S]{0,300}?setProfileBand\(skillProfile\.value, \[choice\.band\[0\], choice\.band\[1\]\]\)[\s\S]{0,120}?openSkillTest\(choice\.band\);/);
+    expect(source).toMatch(/function confirmSkillByGame\(\) \{[\s\S]{0,200}?startMeasureMatchNow\(\{ level \}\)/);
     expect(source).toMatch(/\} else if \(measureStartFrom\.value\) \{\s*measureStartFrom\.value = "";/);
     // 続けて測るときは、案内の答えを引き継ぐ。対局準備へ戻ると捨てる。
     expect(source).toMatch(/measureWelcome\.value = options\.welcome \?\? \(options\.carry \? measureWelcome\.value : ""\);/);
     expect(source).toMatch(/measureSession\.value = false;\s*measureWelcome\.value = "";/);
-    // 測れたら、どこから測っても、そのままレーティングにする(棋力測定は大会の難易度を決めるため)。
-    expect(source).toMatch(/watch\(skillDiagnosis, \(diagnosis\) => \{\s*if \(!measureSession\.value \|\| !diagnosis \|\| diagnosis\.insufficient\) return;[\s\S]{0,120}?applySkillDiagnosis\(\);/);
+    // テストの結果の札も、竜王戦に出るが主ボタンで、対局で確かめるより先に置く。
+    const skillReport = source.split('data-skill-test-report')[1]?.split('</div>\n    </div>')[0] ?? "";
+    expect(skillReport.indexOf("data-skill-report-tournament")).toBeGreaterThan(0);
+    expect(skillReport.indexOf("data-skill-report-tournament")).toBeLessThan(skillReport.indexOf("data-skill-report-game"));
+    expect(source).toMatch(/function enterTournamentFromSkillTest\(\) \{[\s\S]{0,120}?tournamentStartAt\.value = "ryuo";/);
     // 結果の札は、どこから測っても「竜王戦に出る（難易度N）」が主ボタンで、確かめの1局や細かい数字より先に置く。
     const report = source.split('data-measure-report')[1]?.split('</section>')[0] ?? "";
     expect(report).toMatch(/class="shogi-game__rematch shogi-game__rematch--primary"\s*data-measure-tournament\s*@click="enterTournamentFromMeasure"\s*>竜王戦に出る（難易度\{\{ ryuoDefaultDifficulty \}\}）/);

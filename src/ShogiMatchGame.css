@@ -2152,6 +2152,55 @@
   color: var(--ivory);
   font-weight: 700;
 }
+/* 棋力テストの結果(docs/skill-assessment-design.mdの4-5)。見立てと幅、力ごとの見立ての棒、竜王戦への道。 */
+.shogi-skill-report .shogi-welcome__chara { width: 3.2em; }
+.shogi-skill-report__range {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+.shogi-skill-report__abilities {
+  display: grid;
+  gap: 0.35em;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-skill-report__abilities li {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr) 6.5em;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.9em;
+}
+.shogi-skill-report__ability-label {
+  font-weight: 700;
+  text-align: left;
+}
+.shogi-skill-report__bar {
+  height: 0.6em;
+  border-radius: 999px;
+  background: rgba(255, 252, 244, 0.15);
+  overflow: hidden;
+}
+.shogi-skill-report__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #f1a54c);
+}
+.shogi-skill-report__ability-grade {
+  color: var(--ivory);
+  text-align: right;
+  white-space: nowrap;
+}
+.shogi-skill-report__praise {
+  margin: 0;
+  color: var(--ivory);
+  font-weight: 700;
+}
 .shogi-game .shogi-welcome__skip {
   min-height: max(2.2em, 44px);
   border-color: transparent;
@@ -3065,7 +3114,7 @@
 /* 縦画面メディアクエリの portrait 補助表示(display: grid)より優先させる。 */
 /* ホーム画面では対局UIを隠す。定跡図鑑はホームから開くため例外。 */
 /* ホームの上に出す確認(中断した対局を消す確認)だけは、ホームを開いたままでも見せる。 */
-.shogi-game--home > :not(.shogi-home):not(.shogi-dex):not(.shogi-game__confirm--over-home) { display: none !important; }
+.shogi-game--home > :not(.shogi-home):not(.shogi-dex):not(.shogi-game__confirm--over-home):not(.shogi-skill-test) { display: none !important; }
 .shogi-home {
   position: absolute;
   inset: 0;

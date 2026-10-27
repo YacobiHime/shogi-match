@@ -1,0 +1,32 @@
+rules_version = '2';
+// 棋力テストの答えと対局の結果を、同意を得て匿名で集める(docs/skill-assessment-design.mdの7章)。
+// 誰でも「作る」だけでき、読む・直す・消すはできない。項目の名前・型・大きさを決め、それ以外は断る。
+// 送る側は src/core/skill-data.mjs。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /skillAnswers/{entry} {
+      allow create: if request.resource.data.keys().hasOnly(['v', 'anon', 'kind', 'at', 'app', 'test', 'game'])
+        && request.resource.data.v == 1
+        && request.resource.data.anon is string
+        && request.resource.data.anon.size() >= 16 && request.resource.data.anon.size() <= 32
+        && request.resource.data.at is timestamp
+        && request.resource.data.app is string && request.resource.data.app.size() <= 40
+        && ((request.resource.data.kind == 'test'
+              && request.resource.data.test is map
+              && request.resource.data.test.keys().hasOnly(['answers', 'level', 'spread', 'band'])
+              && request.resource.data.test.answers is list
+              && request.resource.data.test.answers.size() <= 24
+              && !('game' in request.resource.data))
+          || (request.resource.data.kind == 'game'
+              && request.resource.data.game is map
+              && request.resource.data.game.keys().hasOnly(['opponent', 'outcome', 'event', 'plies', 'content'])
+              && request.resource.data.game.outcome in ['win', 'loss', 'draw']
+              && request.resource.data.game.event is string && request.resource.data.game.event.size() <= 12
+              && !('test' in request.resource.data)));
+      allow read, update, delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
