@@ -4,6 +4,7 @@ import {
   isOpeningPlanComplete,
   mirrorUsiMove,
   nextOpeningPlanMove,
+  openingDefinitionRookStyle,
   openingPlanInterruption,
 } from "./opening-guide.mjs";
 import { parseSfenBoard } from "./sfen-board.mjs";
@@ -88,9 +89,16 @@ const SHUFFLE_MOVES = Object.freeze([
 ]);
 const OWN_CAMP_RANKS = Object.freeze({ black: ["g", "h", "i"], white: ["a", "b", "c"] });
 
+// 振り飛車用の囲いだけを選んだ側は、先に飛車を振る(AGENTS.md)。対局画面では振り先を選ばせるが、ここでは四間飛車に振る。
+const DEFAULT_RANGING_STRATEGY = "shiken";
+
 function planFor(plans, color) {
   const plan = plans[color];
-  return plan && (plan.strategyId || plan.castleId) ? plan : null;
+  if (!plan || !(plan.strategyId || plan.castleId)) return null;
+  if (!plan.strategyId && openingDefinitionRookStyle(plan.castleId, "castle") === "ranging") {
+    return { ...plan, strategyId: DEFAULT_RANGING_STRATEGY };
+  }
+  return plan;
 }
 
 /**

@@ -259,7 +259,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
         ],
         [
           "7g",
-          "N"
+          "B"
         ]
       ]
     ],
@@ -270,7 +270,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "prompt": "",
       "strategyIds": []
     },
-    "updatedAt": "2026-09-06T04:39:34.252Z"
+    "updatedAt": "2026-10-27T00:00:00.000Z"
   },
   "castle:right-king": {
     "id": "right-king",
@@ -530,7 +530,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
     "completionVariants": [
       [
         [
-          "3f",
+          "7f",
           "R"
         ],
         [
@@ -562,7 +562,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "prompt": "",
       "strategyIds": []
     },
-    "updatedAt": "2026-09-06T10:00:18.303Z"
+    "updatedAt": "2026-10-27T00:00:00.000Z"
   },
   "strategy:kakugawari-45-knight": {
     "id": "kakugawari-45-knight",
@@ -692,7 +692,8 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "5i6i",
       "7i6h",
       "2g2f",
-      "2f2e"
+      "2f2e",
+      "4h3g"
     ],
     "completionVariants": [
       [
@@ -711,6 +712,10 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
         [
           "7h",
           "G"
+        ],
+        [
+          "6h",
+          "B"
         ]
       ]
     ],
@@ -721,7 +726,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "prompt": "",
       "strategyIds": []
     },
-    "updatedAt": "2026-09-06T10:20:26.081Z"
+    "updatedAt": "2026-10-27T00:00:00.000Z"
   },
   "strategy:nakabisha": {
     "id": "nakabisha",
@@ -755,7 +760,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
           "P"
         ],
         [
-          "5g",
+          "5f",
           "S"
         ]
       ]
@@ -767,7 +772,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "prompt": "",
       "strategyIds": []
     },
-    "updatedAt": "2026-09-06T10:55:46.199Z"
+    "updatedAt": "2026-10-27T00:00:00.000Z"
   },
   "strategy:fujii-system": {
     "id": "fujii-system",
@@ -817,8 +822,8 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
     "guideMoves": [
       "7g7f",
       "8i7g",
-      "8h2b+",
       "7g6e",
+      "8h2b+",
       "B*5e"
     ],
     "completionVariants": [],
@@ -870,7 +875,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "prompt": "",
       "strategyIds": []
     },
-    "updatedAt": "2026-09-06T11:32:44.575Z"
+    "updatedAt": "2026-10-27T00:00:00.000Z"
   },
   "strategy:sujichigai-kaku": {
     "id": "sujichigai-kaku",
@@ -1138,7 +1143,6 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "7g7f",
       "6g6f",
       "8h7g",
-      "6g6f",
       "5g5f",
       "5i6h",
       "6h7h",
@@ -1193,7 +1197,7 @@ export const OPENING_GUIDE_OVERRIDES = Object.freeze({
       "prompt": "",
       "strategyIds": []
     },
-    "updatedAt": "2026-09-06T12:09:54.783Z"
+    "updatedAt": "2026-10-27T00:00:00.000Z"
   },
   "castle:millennium": {
     "id": "millennium",

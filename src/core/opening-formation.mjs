@@ -1,4 +1,4 @@
-import { mirrorUsiMove, resolveOpeningPlanDefinitions } from "./opening-guide.mjs";
+import { composeOpeningPlan, mirrorUsiMove, resolveOpeningPlanDefinitions } from "./opening-guide.mjs";
 
 /**
  * 作戦カードの「完成形の小さな盤」と、対局中に薄く出す完成形の駒(docs/opening-guide-ux-design.mdの3章・6章)。
@@ -40,11 +40,9 @@ export function openingFormationSteps(strategyId = "", castleId = "") {
   if (cached) return cached;
   const board = new Map(INITIAL_BLACK.map(([square, kind]) => [square, { id: square, kind, promoted: false, moved: false }]));
   const { strategy, castle } = resolveOpeningPlanDefinitions(strategyId, castleId);
+  // 戦法と囲いは、対局中の案内と同じく駒ごとに合わせた手順で指す(docs/opening-guide-integrity-design.mdの5章)。
   /** @type {[string, "strategy" | "castle"][]} */
-  const moves = [
-    ...(strategy?.blackMoves ?? []).map((move) => [move, "strategy"]),
-    ...(castle?.blackMoves ?? []).map((move) => [move, "castle"]),
-  ];
+  const moves = composeOpeningPlan({ strategy, castle }).steps.map(({ usi, phase }) => [usi, phase]);
   /** @type {FormationStep[]} */
   const steps = [];
   const snapshot = () => Object.freeze([...board].map(([square, piece]) => Object.freeze({ square, ...piece })));

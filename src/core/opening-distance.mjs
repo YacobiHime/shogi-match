@@ -169,13 +169,18 @@ export function formationDistance(board, color, variants) {
   return best;
 }
 
-/** 完成までの距離を縮める合法手を、縮めた後の距離つきで返す。 */
+/**
+ * 完成までの距離を縮める合法手を、縮めた後の距離つきで返す。
+ * 動かすのは、完成形のマスに割り当てた駒だけ(docs/opening-guide-integrity-design.mdの4章)。
+ * 道をふさいでいるだけの駒(8九の桂など)をどかす手は、距離が縮んでも返さない。
+ */
 export function formationProgressMoves(board, color, variants, legalMoves) {
   const base = formationDistance(board, color, variants);
   if (base.unreachable || base.distance === 0) return { base, moves: [] };
+  const assigned = new Set((base.assignments ?? []).map(({ from }) => from));
   const moves = [];
   for (const usi of legalMoves) {
-    if (usi.includes("*")) continue;
+    if (usi.includes("*") || !assigned.has(usi.slice(0, 2))) continue;
     const applied = applyUsiToBoard(board, usi, color);
     if (!applied || applied.captured) continue;
     const next = formationDistance(applied.board, color, variants);

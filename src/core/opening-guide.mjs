@@ -12,7 +12,10 @@ export { OPENING_GUIDE_MAX_DISTANCE };
 
 // The built-in catalogue remains the stable fixture for the core unit tests. The
 // generated editor data is configuration, and is enabled in browser/production builds.
-const EDITOR_OVERRIDES_ENABLED = typeof process === "undefined" || process.env.VITEST !== "true";
+// 本番と同じデータで確かめるテスト(opening-guide-integrity.test.mjs)は、OPENING_GUIDE_EDITOR_OVERRIDES=1で読む。
+const EDITOR_OVERRIDES_ENABLED = typeof process === "undefined"
+  || process.env.VITEST !== "true"
+  || process.env.OPENING_GUIDE_EDITOR_OVERRIDES === "1";
 
 const YOKOFUDORI_MOVE_POSITION_PREREQUISITES = Object.freeze({
   // ▲同飛・▲同歩は、相手の歩がその地点へ来たときだけ案内する。
@@ -1405,26 +1408,171 @@ function openingStrategyPlan(strategy, {
     : { moves: strategy.blackMoves ?? [], variant: "default" };
 }
 
+const INITIAL_BLACK_PIECES = Object.freeze([
+  ["9i", "L"], ["8i", "N"], ["7i", "S"], ["6i", "G"], ["5i", "K"], ["4i", "G"], ["3i", "S"], ["2i", "N"], ["1i", "L"],
+  ["8h", "B"], ["2h", "R"],
+  ...[9, 8, 7, 6, 5, 4, 3, 2, 1].map((file) => [`${file}g`, "P"]),
+]);
+
+/**
+ * 手順(先手基準)を、初めの配置から自分の駒だけで指して、1手ごとに「どの駒の手か」を決める。
+ * 駒は初めにいたマスで呼ぶ(打った駒は「drop:マス」)。自分の駒がいるマスへ動く手は、そこで駒を交換したとして、いた駒を外す
+ * (opening-formation.mjsと同じ)。角換わりの手順(@kakugawari)は7六歩と角の交換として扱う。
+ * @param {string[]} moves
+ * @returns {{ usi: string, piece: string | null, kind: string | null }[]}
+ */
+export function trackPlanPieces(moves) {
+  const board = new Map(INITIAL_BLACK_PIECES.map(([square, kind]) => [square, { id: square, kind }]));
+  return moves.map((usi) => {
+    if (usi === "@kakugawari") {
+      const pawn = board.get("7g");
+      if (pawn) {
+        board.delete("7g");
+        board.set("7f", pawn);
+      }
+      board.delete("8h");
+      return { usi, piece: "8h", kind: "B" };
+    }
+    if (usi.startsWith("@")) return { usi, piece: null, kind: null };
+    const drop = /^([PLNSGBR])\*([1-9][a-i])$/.exec(usi);
+    if (drop) {
+      const id = `drop:${drop[2]}`;
+      board.set(drop[2], { id, kind: drop[1] });
+      return { usi, piece: id, kind: drop[1] };
+    }
+    const from = usi.slice(0, 2);
+    const to = usi.slice(2, 4);
+    const piece = board.get(from);
+    if (!piece) return { usi, piece: null, kind: null };
+    board.delete(from);
+    const kind = usi.endsWith("+") && !piece.kind.startsWith("+") ? `+${piece.kind}` : piece.kind;
+    board.set(to, { id: piece.id, kind });
+    return { usi, piece: piece.id, kind: piece.kind };
+  });
+}
+
+/**
+ * 戦法と囲いの手順を、駒ごとに合わせる(docs/opening-guide-integrity-design.mdの5章)。先手基準。
+ * - 戦法の手を先に、囲いの手を後ろに並べる。同じ手は一度だけ。
+ * - 囲いの手は、囲いだけで指したときに動かす駒が、戦法の手のあとでも同じマスにいるときだけ残す。
+ *   戦法が先に動かした駒(戦法の銀、振った飛車)を、囲いが初めの配置のつもりで動かす手は外す。
+ *   戦法の手の途中まで同じ道を通る駒(ゴキゲン中飛車の玉の▲4八玉▲3八玉のあとの美濃の▲2八玉)は、そこから続ける。
+ * 合わせた手順を自分の駒だけで指して、指せない手があるか、最後の形が戦法・囲いの完成形を満たさないなら、合わない組(conflicts)。
+ * @param {{ strategy?: any, castle?: any, strategyMoves?: string[] }} input strategyMovesは戦法の手順(分岐を選んだもの)。省くと戦法の手順
+ * @returns {{ steps: { usi: string, phase: "strategy" | "castle" }[], conflicts: string[] }}
+ */
+export function composeOpeningPlan({ strategy, castle, strategyMoves = strategy?.blackMoves ?? [] }) {
+  const strategyUsis = new Set(strategyMoves);
+  const continuation = Boolean(castle) && strategy?.integratedCastle === castle;
+  // 戦法の手のあとの、駒ごとのいる場所(初めのマスで呼ぶ)。
+  const where = new Map(INITIAL_BLACK_PIECES.map(([square]) => [square, square]));
+  for (const { usi, piece } of trackPlanPieces(strategyMoves)) {
+    if (!piece || usi.startsWith("@") || usi.includes("*")) {
+      if (usi === "@kakugawari") {
+        where.set("7g", "7f");
+        where.delete("8h");
+      }
+      continue;
+    }
+    where.set(piece, usi.slice(2, 4));
+  }
+  const castleSteps = [];
+  for (const { usi, piece } of trackPlanPieces(castle?.blackMoves ?? [])) {
+    if (strategyUsis.has(usi)) continue;
+    // 囲いの駒が、戦法の手のあとでもこの手の移動元にいるときだけ指す。
+    // 戦法に組み込みの囲い(森下システムの金矢倉など)は、戦法の手のあとから続けて書いてあるので、そのまま続ける。
+    if (piece && !continuation && !usi.includes("*") && !usi.startsWith("@")) {
+      if (where.get(piece) !== usi.slice(0, 2)) continue;
+      where.set(piece, usi.slice(2, 4));
+    }
+    castleSteps.push({ usi, phase: /** @type {const} */ ("castle") });
+  }
+  const steps = [
+    ...strategyMoves.map((usi) => ({ usi, phase: /** @type {const} */ ("strategy") })),
+    ...castleSteps,
+  ];
+  return { steps, conflicts: strategy && castle ? planConflicts(steps, [strategy, castle]) : [] };
+}
+
+/**
+ * 手順(先手基準)を、初めの配置から自分の駒だけで指した最後の形と、指せなかった手。
+ * 歩の交換(歩か飛車が自分の歩のマスへ)以外で、自分の駒がいるマスや通り道をふさがれている手は指せない。
+ * @param {{ usi: string, phase?: string }[]} steps
+ * @returns {{ board: Map<string, string>, blocked: { usi: string, phase?: string, reason: "no-piece" | "blocked" }[] }}
+ */
+export function playPlanSteps(steps) {
+  const blocked = [];
+  const board = new Map(INITIAL_BLACK_PIECES.map(([square, kind]) => [square, kind]));
+  for (const { usi, phase } of steps) {
+    if (usi === "@kakugawari") {
+      board.delete("7g");
+      board.set("7f", "P");
+      board.delete("8h");
+      continue;
+    }
+    const drop = /^([PLNSGBR])\*([1-9][a-i])$/.exec(usi);
+    if (drop) {
+      board.set(drop[2], drop[1]);
+      continue;
+    }
+    if (usi.startsWith("@")) continue;
+    const from = usi.slice(0, 2);
+    const to = usi.slice(2, 4);
+    const kind = board.get(from);
+    if (!kind) {
+      blocked.push({ usi, phase, reason: "no-piece" });
+      continue;
+    }
+    const occupied = board.get(to);
+    const exchange = occupied === "P" && (kind === "P" || kind === "R");
+    if ((occupied && !exchange) || squaresBetween(usi).some((square) => board.has(square))) {
+      blocked.push({ usi, phase, reason: "blocked" });
+      continue;
+    }
+    board.delete(from);
+    board.set(to, usi.endsWith("+") && !kind.startsWith("+") ? `+${kind}` : kind);
+  }
+  return { board, blocked };
+}
+
+/** 合わせた手順を自分の駒だけで指して、指せない手と、満たさない完成形を言葉で返す。 */
+function planConflicts(steps, definitions) {
+  const { board, blocked } = playPlanSteps(steps);
+  const conflicts = blocked.map(({ usi, phase, reason }) => (
+    `${phase === "castle" ? "囲い" : "戦法"}の${usi}: ${reason === "no-piece" ? "動かす駒がいない" : "自分の駒にふさがれている"}`
+  ));
+  for (const definition of definitions) {
+    const variants = completionVariantsOf(definition);
+    if (!variants.length) continue;
+    if (!variants.some((squares) => squares.every(([square, kind]) => board.get(square) === kind))) {
+      conflicts.push(`${definition.label}の完成形にならない`);
+    }
+  }
+  return conflicts;
+}
+
+/** 完成形の候補(先手基準)。 */
+export function openingCompletionVariants(definition) {
+  return completionVariantsOf(definition);
+}
+
+/** 戦法と囲いの組が、駒ごとに合わせて組めるか(合わない組は作戦カードに出さない)。 */
+export function openingPlanCompatibility(strategyId, castleId) {
+  const { strategy, castle } = resolveOpeningPlanDefinitions(strategyId, castleId);
+  if (!strategy || !castle || strategy.integrated) return { compatible: true, conflicts: [] };
+  const { conflicts } = composeOpeningPlan({ strategy, castle });
+  return { compatible: conflicts.length === 0, conflicts };
+}
+
 export function openingPlanSteps(strategyId, castleId, color = "black", context = {}) {
   const { strategy, castle } = resolveOpeningPlanDefinitions(strategyId, castleId);
   const convert = color === "white" ? mirrorUsiMove : (move) => move;
   const strategyPlan = openingStrategyPlan(strategy, { ...context, color });
-  const strategyRookMove = strategyPlan.moves.find((move) => /^2h[3-9]h$/.test(move));
-  const castleMoves = (castle?.blackMoves ?? [])
-    .filter((move) => !move.startsWith("@"))
-    .filter((move) => (
-      !strategyRookMove || !/^2h[3-9]h$/.test(move) || move === strategyRookMove
-    ));
-  const strategyMoves = strategyPlan.moves.filter((move) => !move.startsWith("@")).map(convert);
-  const sharedWithStrategy = new Set(strategyMoves);
-  return [
-    // 同じ表記の手を別の駒で後から指す手順があるため、同一フェーズ内は重複を残す。
-    ...strategyMoves.map((usi) => ({ usi, phase: "strategy" })),
-    // 戦法と囲いの双方に含まれる序盤の一手だけは一度指せばよい。
-    ...castleMoves.map(convert)
-      .filter((usi) => !sharedWithStrategy.has(usi))
-      .map((usi) => ({ usi, phase: "castle" })),
-  ];
+  // 戦法と囲いを駒ごとに合わせる。同じ表記の手を別の駒で後から指す手順があるため、同一フェーズ内は重複を残す。
+  const { steps } = composeOpeningPlan({ strategy, castle, strategyMoves: strategyPlan.moves });
+  return steps
+    .filter(({ usi }) => !usi.startsWith("@"))
+    .map(({ usi, phase }) => ({ usi: convert(usi), phase }));
 }
 
 const INITIAL_PLAN_SFEN = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
@@ -2607,13 +2755,13 @@ export function openingPlanCandidates({
     const definition = phase === "strategy" ? strategy : castle;
     const complete = phase === "strategy" ? strategyComplete : castleComplete;
     if (!definition || complete) continue;
-    if (phase === "castle" && currentSfen && completionVariantsOf(definition).length) {
-      const progress = castleProgressCandidates(
-        definition, steps, playedMoves, currentSfen, color, legalMoves,
-      );
-      if (progress.length) return progress;
-      // 桂を跳ねて飛車の通り道を空けるなど、完成形の駒を直接動かせないときは手順どおりに案内する。
-    }
+    // 囲いは、手順の手が指せるうちは手順どおりに案内し、指せないときだけ完成形までの距離を縮める手(完成形の駒の手だけ)を出す
+    // (docs/opening-guide-integrity-design.mdの4章。前は距離を先にしていて、手順にない道を選んで詰まることがあった)。
+    const castleProgress = () => (
+      phase === "castle" && currentSfen && completionVariantsOf(definition).length
+        ? castleProgressCandidates(definition, steps, playedMoves, currentSfen, color, legalMoves)
+        : []
+    );
     const pending = pendingPlanSteps(steps, phase, playedMoves, currentSfen, color);
     const combinedPrerequisites = {
       ...(definition.movePrerequisites ?? {}),
@@ -2699,12 +2847,19 @@ export function openingPlanCandidates({
       }
       if (next) {
         const candidate = availableMove(next);
-        return candidate ? [candidate] : shapeFallback();
+        if (candidate) return [candidate];
+        const progress = castleProgress();
+        return progress.length ? progress : shapeFallback();
       }
+      // 手順を指し終えたのに完成していない(金が1マスずれたなど)ときは、完成形の駒を戻す手を出す。
+      const progress = castleProgress();
+      if (progress.length) return progress;
       continue;
     }
     const candidates = pending.map(availableMove).filter(Boolean);
     if (candidates.length) return candidates;
+    const progress = castleProgress();
+    if (progress.length) return progress;
     const fallback = shapeFallback();
     if (fallback.length) return fallback;
   }

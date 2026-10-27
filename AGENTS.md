@@ -21,7 +21,7 @@
 | 対局準備の画面 | `src/ShogiMatchGame.vue`の対局準備（`pregameSides`・`pregameCommonRows`・`pregamePickerConfig`）、選択肢の定数は`src/composables/match/pregameOptions.ts`、選択シートは`src/PregamePicker.vue` |
 | ブラウザの戻る操作 | `src/composables/useBackNavigation.ts`、`src/ShogiMatchGame.vue`の`navigateBack` |
 | 画面の大きさによる配置の切り替え | `src/composables/useResponsiveLayout.ts` |
-| 戦法・囲いの手順、完成条件、分類 | `src/core/opening-guide.mjs` |
+| 戦法・囲いの手順、完成条件、分類 | `src/core/opening-guide.mjs`（戦法と囲いを駒ごとに合わせる`composeOpeningPlan`と合わない組の`openingPlanCompatibility`）、本番と同じデータでの監査は`src/core/opening-audit.mjs`・`src/core/opening-guide-integrity.test.mjs`・`scripts/opening-guide-audit.mjs`（設計は`docs/opening-guide-integrity-design.md`） |
 | やこび姫補助の作戦カード（選び方・解放・完成形の小さな盤と薄い駒） | 目録は`src/core/opening-catalog.mjs`、解放とやこび姫のおすすめ（`recommendPlan`）は`src/core/opening-unlocks.mjs`、完成形は`src/core/opening-formation.mjs`、戦法占いは`src/core/opening-fortune.mjs`と`src/OpeningFortune.vue`（作戦カードのシートと定跡図鑑から開く）、画面は`src/OpeningPlanSheet.vue`と`src/FormationThumb.vue`、対局画面の`planSheet`・`planGhosts`・`planInterruption`（今の局面から組める作戦と残り手数は`planBuildable`、作戦を選べるか・欄を出すかは`planChoiceOpen`・`openingGuideShown`）、設計は`docs/opening-guide-ux-design.md`（分かりやすさの見直しは13章） |
 | 定跡エディターの上書きデータ | `src/data/opening-guide-overrides.mjs`（`npm run import:opening-library`で生成） |
 | 戦法・囲いの解説文 | `src/core/opening-explanations.mjs` |
@@ -88,7 +88,9 @@
   - 現在の局面で、同じ種類の駒が目的地に着いたか
 - 予定の移動元が空でも、別の同じ種類の駒が目的地へ合法に動けるなら、その手を案内します。到達も代わりの手も無理なときだけ中断します。
 - 原始棒銀は、銀が2六へ出た時点で完成です。合法なら1五銀・3五銀と、その後の飛車先交換を定跡候補として案内します。
-- 定跡エディターの上書きデータは、テスト中は無効です（`opening-guide.mjs`の`EDITOR_OVERRIDES_ENABLED`）。
+- 完成形のマスは、その定義の手順を初めの配置から指した最後の形に合わせます。手順どおりに指せないときの近道は、完成形に割り当てた駒だけを動かし、道をふさぐだけの駒（8九の桂など）は動かしません。
+- 戦法と囲いは駒ごとに合わせます（`composeOpeningPlan`）。戦法が動かした駒を使う囲いの手は外し、それでも組めない組は作戦カードに出しません。
+- 定跡エディターの上書きデータは、テスト中は無効です（`opening-guide.mjs`の`EDITOR_OVERRIDES_ENABLED`）。環境変数`OPENING_GUIDE_EDITOR_OVERRIDES=1`を立ててから読むと有効になります（`opening-guide-integrity.test.mjs`）。
   - 本番では、上書きデータがある戦法・囲いに限り、`blackMoves`と完成条件がその内容で置き換わります。
   - 組み込みの定義を直す前に、`src/data/opening-guide-overrides.mjs`に同じIDのキー（`castle:<id>`・`strategy:<id>`）がないか確認してください。
   - 同じIDがあるときは、上書きデータも直さないと本番に反映されません。
@@ -158,6 +160,7 @@ git diff --check
   - 先後の反転
   - 完成条件
   - 分類
+- 定跡エディターの上書きデータを直したら、`src/core/opening-guide-integrity.test.mjs`（本番と同じデータ）が通ることを確かめます。一覧は`node scripts/opening-guide-audit.mjs`で出せます。
 - `src/core/match-ui-regression.test.mjs`は、`ShogiMatchGame.vue`のソースを正規表現で調べるテストです。
   - 調べるソースは、`ShogiMatchGame.vue`・`ShogiMatchGame.css`・`src/composables/match/*.ts`をつないだもの（`src/core/match-screen-source.mjs`）です。対局画面の処理を`src/composables/match/`へ移しても、同じテストで確かめられます。
   - 画面の書き方を変えると失敗することがあります。

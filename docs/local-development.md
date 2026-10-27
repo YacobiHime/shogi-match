@@ -137,6 +137,15 @@ npm run import:opening-library
 
 29件など、取り込んだ件数と生成先の`src/data/opening-guide-overrides.mjs`が表示されます。この生成ファイルをコミットしてビルド・デプロイすると、公開対局画面にも編集内容が反映されます。ブラウザ内の下書きそのものは引き続きローカル保存なので、再編集後は同じ手順で再取り込みしてください。
 
+取り込んだら、手順と完成形が合っているか、戦法と囲いの組が組めるか、案内が手順にない駒を動かさないかを、本番と同じデータで確かめます（`docs/opening-guide-integrity-design.md`）。
+
+```sh
+node scripts/opening-guide-audit.mjs
+npx vitest run src/core/opening-guide-integrity.test.mjs
+```
+
+監査の一覧は、4つの見出しの下がすべて空なら問題ありません。2026-10-27に、`opening-library-export.json`の6つの定義（居飛車穴熊・ひねり飛車・原始中飛車・森下システム・原始鬼殺し・松尾流穴熊）を直しました。手元のエディターの下書きは自動では直らないので、直した`opening-library-export.json`を「JSONを読み込む」で読み込み直してから編集を続けてください。
+
 ## 動作確認
 
 変更後は次を実行します。

@@ -14,6 +14,8 @@
  * - explanation: くわしい画面の解説(opening-explanations.mjs)のid。省くと戦法のid(囲いだけのカードは囲いのid)。
  */
 
+import { openingPlanCompatibility } from "./opening-guide.mjs";
+
 export const OPENING_PLAN_GROUPS = Object.freeze([
   Object.freeze({ id: "static", label: "居飛車で攻める" }),
   Object.freeze({ id: "ranging", label: "振り飛車で受ける" }),
@@ -32,8 +34,17 @@ export const OPENING_STYLE_LABELS = Object.freeze({ attack: "攻め", defense: "
 
 /** @typedef {{ id: string, strategyId: string, castles: string[], group: string, tier: string, style: string, difficulty: number, name?: string, catch?: string, explanation?: string }} OpeningPlan */
 
+/**
+ * 戦法と組み合わせても組めない囲いは、合う囲いから外す(docs/opening-guide-integrity-design.mdの5章)。
+ * 戦法と囲いが同じ駒を使う(原始棒銀の3九の銀と中住まい)、戦法の駒が囲いの行き先をふさぐ(中飛車の5八の飛車と本美濃の5八の金)など。
+ * 囲いの名前のカード(矢倉など)は、囲いがカードそのものなので外さない(テストで、合う組であることを確かめる)。
+ */
+const compatibleCastles = (strategyId, castles, named) => (
+  strategyId && !named ? castles.filter((castleId) => openingPlanCompatibility(strategyId, castleId).compatible) : castles
+);
+
 const plan = (id, strategyId, castles, group, tier, style, difficulty, extra = {}) => Object.freeze({
-  id, strategyId, castles: Object.freeze(castles), group, tier, style, difficulty, ...extra,
+  id, strategyId, castles: Object.freeze(compatibleCastles(strategyId, castles, Boolean(extra.name))), group, tier, style, difficulty, ...extra,
 });
 
 /** @type {readonly OpeningPlan[]} */
