@@ -854,7 +854,11 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/day: savedRyuo\.stage\?\.twoDay \? normalizeDay\(savedRyuo\.day\) : undefined/);
     // 封じ手の札のあとに開封の札。まとめは「2日目・まとめ」のボタンから開き、自動では開かない。
     expect(source).toMatch(/if \(sealed && active\.value && unsealView\.value\) showStageCard\("unseal"\);/);
-    expect(source).toMatch(/v-if="stageDayText && titleDay\?\.seal"[\s\S]{0,200}?@click="daySummaryOpen = true"/);
+    expect(source).toMatch(/v-if="stageDayText && titleDay\?\.meal"[\s\S]{0,200}?@click="daySummaryOpen = true"/);
+    // 休憩(昼休み・2日目の朝)は、次に自分が指すまで「ふりかえる」を勧める。押したときだけ開く(9章)。
+    expect(source).toMatch(/if \(record\.value\.position\.color !== humanColor\.value\) dayBreak\.value = null;/);
+    expect(source).toMatch(/data-day-break-open @click="daySummaryOpen = true; dayBreak = null"/);
+    expect(source).toMatch(/review: dayReview\(untilPly, day\.rates\),/);
     expect(source).not.toMatch(/daySummaryOpen\.value = true/);
     // 封じ手予想は、助言の読みの最善手(新しい探索は足さない)。
     expect(source).toMatch(/if \(bestMove\) roomPick = \{ ply: analyzedHistoryLength, move: bestMove \};/);

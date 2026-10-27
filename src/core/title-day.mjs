@@ -388,21 +388,25 @@ function balance(rate, userColor) {
 
 /**
  * 控室の声(3人)。盤の事実だけを言い、どちらの次の手も勧めない。
+ * momentは、昼休み('lunch'。午前のふりかえり)か、封じ手('seal'。1日目のまとめ)か。
  * @param {{
  *   summary: ReturnType<typeof daySummary>, members: ReturnType<typeof roomMembers>, userColor: 'black' | 'white',
  *   formations: { black: string, white: string }, material: number, userName: string, opponentName: string,
- *   meal: string, opponentMeal: string, longestText?: string,
+ *   meal: string, opponentMeal: string, longestText?: string, moment?: 'lunch' | 'seal',
  * }} input
  *   materialはプレイヤーから見た駒の損得の点数(piece-points.mjsのAI_PIECE_POINTS。歩が90)。longestTextは、いちばん長く考えた手の言葉(「29手目 ▲4五歩」)。
  */
-export function roomVoices({ summary, members, userColor, formations, material, userName, opponentName, meal, opponentMeal, longestText = '' }) {
+export function roomVoices({
+  summary, members, userColor, formations, material, userName, opponentName, meal, opponentMeal, longestText = '', moment = 'seal',
+}) {
   const voices = [];
   const state = balance(summary.rate, userColor);
+  const lunch = moment === 'lunch';
   if (members.witness) {
-    const text = !state ? 'じっくりした1日目でしたね。勝負は2日目です'
-      : state.diff < 8 ? 'ほぼ互角で1日目を終えました。勝負は2日目ですね'
+    const text = !state ? (lunch ? 'じっくりした午前でしたね。勝負は午後からです' : 'じっくりした1日目でしたね。勝負は2日目です')
+      : state.diff < 8 ? (lunch ? 'ほぼ互角で午前を終えました。午後に注目ですね' : 'ほぼ互角で1日目を終えました。勝負は2日目ですね')
         : state.diff < 20 ? `${state.lead}が少し指しやすいでしょうか。ただ、まだまだ長い将棋です`
-          : `${state.lead}がはっきり良くなりました。${state.trail}がどう粘るか、2日目に注目です`;
+          : `${state.lead}がはっきり良くなりました。${state.trail}がどう粘るか、${lunch ? '午後' : '2日目'}に注目です`;
     voices.push({ role: '立会人', name: `${members.witness.name}${members.witness.dan}`, text });
   }
   if (members.commentator) {
@@ -431,6 +435,23 @@ export function roomVoices({ summary, members, userColor, formations, material, 
   voices.push({ role: '記者', name: members.reporter.name, text: reporterParts.join('') });
   // 「」に入れて見せるので、最後の句点は付けない。
   return voices.map((voice) => ({ ...voice, text: voice.text.replace(/。$/, '') }));
+}
+
+/**
+ * 形勢が動いたところ(ふりかえりの「見どころ」)。勝率の記録(プレイヤーの手番ごと)の、となりどうしの差が大きい順にlimitか所。
+ * 誰の手のせいかは決めず(責めない)、どの手数のあいだで動いたかと、プレイヤーから見た勝率の上がり下がりだけを返す。手数の順に並べる。
+ * @param {Array<[number, number]>} rates
+ */
+export function dayHighlights(rates, untilPly, { limit = 3, min = 8 } = {}) {
+  const swings = [];
+  for (let index = 1; index < rates.length; index += 1) {
+    const [fromPly, before] = rates[index - 1];
+    const [toPly, after] = rates[index];
+    if (toPly > untilPly || toPly - fromPly > 2) continue;
+    const delta = after - before;
+    if (Math.abs(delta) >= min) swings.push({ from: fromPly + 1, to: toPly, delta });
+  }
+  return swings.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, limit).sort((a, b) => a.to - b.to);
 }
 
 /**

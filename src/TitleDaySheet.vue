@@ -7,7 +7,7 @@
     <section v-if="mode === 'summary' && summary" class="title-day__panel" data-day-summary>
       <header class="title-day__head">
         <small>{{ summary.heading }}</small>
-        <h2>1日目のまとめ</h2>
+        <h2>{{ summary.title }}</h2>
         <span v-if="summary.venue">{{ summary.venue }}</span>
       </header>
       <div v-if="summary.rate !== null" class="title-day__rate" data-day-rate>
@@ -16,8 +16,52 @@
           <rect x="0" y="0" width="100" height="20" class="title-day__rate-up" />
           <line x1="0" y1="20" x2="100" y2="20" class="title-day__rate-mid" />
           <polyline :points="summary.points" class="title-day__rate-line" />
+          <line :x1="cursorX" y1="0" :x2="cursorX" y2="40" class="title-day__rate-cursor" />
         </svg>
-        <small>上ほどあなたが良い。中継の勝率と同じ読み</small>
+        <small>上ほどあなたが良い。中継の勝率と同じ読み。縦の線は、下の盤の局面</small>
+      </div>
+      <!--
+        盤でふりかえる(docs/title-match-day-design.mdの9章)。ここまでの局面を1手ずつ戻して見る。指せない盤で、対局の盤は動かさない。
+        形勢が動いたところ(勝率の記録のとなりどうしの差が大きいところ)を押すと、その局面へ飛ぶ。どちらの手が悪いかは言わない。
+      -->
+      <div v-if="review" class="title-day__review" data-day-review>
+        <h3>盤でふりかえる</h3>
+        <div class="title-day__review-board">
+          <ShogiMatchBoard
+            :sfen="review.sfens[cursor] ?? review.sfens[0]"
+            :last-move="cursor > 0 ? review.moves[cursor - 1]?.usi ?? '' : ''"
+            :allow-move="false"
+            :enable-drag-and-drop="false"
+            :flip="review.flip"
+            layout="compact"
+            :asset-base-url="assetBaseUrl"
+            :black-player-name="review.blackName"
+            :white-player-name="review.whiteName"
+          />
+        </div>
+        <p class="title-day__review-move" data-day-review-move aria-live="polite">
+          {{ cursor > 0 ? `${cursor}手目 ${review.moves[cursor - 1]?.text ?? ""}` : "開始局面" }}<small>／{{ review.moves.length }}手</small>
+        </p>
+        <div class="title-day__review-nav">
+          <button type="button" aria-label="開始局面へ" :disabled="cursor === 0" @click="cursor = 0">⏮</button>
+          <button type="button" aria-label="一手戻る" :disabled="cursor === 0" data-day-review-prev @click="cursor -= 1">◀</button>
+          <button type="button" aria-label="一手進む" :disabled="cursor >= review.moves.length" data-day-review-next @click="cursor += 1">▶</button>
+          <button type="button" aria-label="いまの局面へ" :disabled="cursor >= review.moves.length" @click="cursor = review.moves.length">⏭</button>
+        </div>
+        <input
+          type="range"
+          min="0"
+          :max="review.moves.length"
+          :value="cursor"
+          aria-label="ふりかえる局面の手数"
+          @input="cursor = Number(($event.target as HTMLInputElement).value)"
+        >
+        <div v-if="review.highlights.length" class="title-day__review-points" data-day-review-points>
+          <span>形勢が動いたところ</span>
+          <button v-for="point in review.highlights" :key="point.ply" type="button" @click="cursor = point.ply">
+            {{ point.label }}<b>あなた {{ point.delta > 0 ? "+" : "−" }}{{ Math.abs(point.delta) }}%</b>
+          </button>
+        </div>
       </div>
       <dl class="title-day__facts">
         <div><dt>戦型</dt><dd>{{ summary.formationText }}</dd></div>
@@ -48,9 +92,20 @@
 </template>
 
 <script setup lang="ts">
-import type { PropType } from "vue";
+import { computed, ref, watch, type PropType } from "vue";
+import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 
+/** ふりかえりの盤。sfensは0手目からの局面、movesは1手目からの指し手、highlightsは形勢が動いたところ。 */
+export type DayReviewView = {
+  sfens: string[];
+  moves: { usi: string; text: string }[];
+  highlights: { ply: number; label: string; delta: number }[];
+  flip: boolean;
+  blackName: string;
+  whiteName: string;
+};
 export type DaySummaryView = {
+  title: string;
   heading: string;
   venue: string;
   rate: number | null;
@@ -62,15 +117,22 @@ export type DaySummaryView = {
   voices: { role: string; name: string; text: string }[];
   sealText: string;
   predictedText: string;
+  review: DayReviewView | null;
 };
 export type KansenkiView = { headline: string; paragraphs: string[]; eventText: string; label: string };
 
-defineProps({
+const props = defineProps({
   mode: { type: String as PropType<"summary" | "kansenki">, required: true },
   summary: { type: Object as PropType<DaySummaryView | null>, default: null },
   article: { type: Object as PropType<KansenkiView | null>, default: null },
+  assetBaseUrl: { type: String, default: "." },
 });
 const emit = defineEmits<{ close: [] }>();
+const review = computed(() => props.summary?.review ?? null);
+/** ふりかえる局面の手数。開いたときは、いちばん新しい局面。 */
+const cursor = ref(review.value?.moves.length ?? 0);
+watch(() => review.value?.moves.length ?? 0, (length) => { cursor.value = Math.min(cursor.value, length); });
+const cursorX = computed(() => ((cursor.value / Math.max(1, review.value?.moves.length ?? 1)) * 100).toFixed(1));
 </script>
 
 <style>
@@ -87,6 +149,8 @@ const emit = defineEmits<{ close: [] }>();
 .shogi-game .title-day__panel {
   box-sizing: border-box;
   display: grid;
+  /* 盤は枠の幅に合わせて描くので、列の幅を中身(盤)で広げない(横にはみ出さない)。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.55rem;
   width: min(34rem, 100%);
   max-height: 100%;
@@ -113,6 +177,31 @@ const emit = defineEmits<{ close: [] }>();
 .shogi-game .title-day__rate-mid { stroke: rgba(255, 252, 244, 0.5); stroke-width: 0.4; stroke-dasharray: 2 2; }
 .shogi-game .title-day__rate-line { fill: none; stroke: #fffcf4; stroke-width: 1.4; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .shogi-game .title-day__rate small { color: rgba(255, 252, 244, 0.65); font-size: 0.75em; }
+.shogi-game .title-day__rate-cursor { stroke: #e6c15c; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+/* 盤でふりかえる。盤は指せない(見るだけ)。着せ替えの選択は出さない。 */
+.shogi-game .title-day__review { display: grid; gap: 0.35rem; }
+.shogi-game .title-day__review-board { min-width: 0; height: min(42vh, 24rem); overflow: hidden; }
+.shogi-game .title-day__review-board .shogi-match-theme-controls { display: none; }
+.shogi-game .title-day__review-move { display: flex; gap: 0.4em; align-items: baseline; justify-content: center; margin: 0; font-weight: 800; }
+.shogi-game .title-day__review-move small { color: rgba(255, 252, 244, 0.65); font-weight: 600; }
+.shogi-game .title-day__review-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; }
+.shogi-game .title-day__review-nav button,
+.shogi-game .title-day__review-points button {
+  min-height: 44px;
+  border: 1px solid rgba(230, 193, 92, 0.6);
+  border-radius: 0.4rem;
+  color: #fffcf4;
+  background: rgba(255, 252, 244, 0.08);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.shogi-game .title-day__review-nav button:disabled { opacity: 0.4; cursor: default; }
+.shogi-game .title-day__review input[type="range"] { width: 100%; min-height: 32px; accent-color: #e6c15c; }
+.shogi-game .title-day__review-points { display: grid; gap: 0.3rem; }
+.shogi-game .title-day__review-points > span { color: #e6c15c; font-size: 0.85em; font-weight: 700; }
+.shogi-game .title-day__review-points button { display: flex; gap: 0.6em; align-items: center; justify-content: space-between; padding: 0.3rem 0.6rem; text-align: left; }
+.shogi-game .title-day__review-points b { flex: none; font-variant-numeric: tabular-nums; }
 .shogi-game .title-day__facts { display: grid; gap: 0.25rem; margin: 0; }
 .shogi-game .title-day__facts div { display: grid; grid-template-columns: 5.5em 1fr; gap: 0.5rem; }
 .shogi-game .title-day__facts dt { color: #f1a54c; font-weight: 700; }

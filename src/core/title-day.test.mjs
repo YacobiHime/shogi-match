@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   KANSENKI_LIMIT, LUNCH_PLY, LUNCH_RUSH_PLIES, LUNCH_WAIT_PLIES, MEAL_BOOK_KEY, MEAL_NOTES, STAGE_MEALS, THINK_CAP_MS, daySummary,
   emptyDay, emptyMealBook, loadKansenki, loadMealBook, lunchAutoDue, lunchCard, lunchCoachLine, lunchMenu, lunchOpponentLine,
-  lunchRushDue, lunchRushLine, mealBookView, mealPowerDue, mealPowerLine, normalizeDay, noteDayRate, noteDayThink, noteMealBook,
+  lunchRushDue, lunchRushLine, mealBookView, dayHighlights, mealPowerDue, mealPowerLine, normalizeDay, noteDayRate, noteDayThink, noteMealBook,
   opponentMeal, ratePoints, roomMembers, roomVoices, saveKansenki, saveMealBook, trimDay, turningPoint, unsealCard, winningMeals,
   writeKansenki,
 } from './title-day.mjs';
@@ -91,6 +91,17 @@ describe('勝負メシのその後(8章)', () => {
   });
 });
 
+describe('休憩のふりかえり(9章)', () => {
+  it('形勢が動いたところは差の大きい順に3か所まで、手数の順に並べる', () => {
+    const rates = [[0, 50], [2, 52], [4, 70], [6, 68], [8, 50], [10, 51], [12, 40], [14, 41]];
+    expect(dayHighlights(rates, 20)).toEqual([
+      { from: 3, to: 4, delta: 18 }, { from: 7, to: 8, delta: -18 }, { from: 11, to: 12, delta: -11 },
+    ]);
+    expect(dayHighlights(rates, 6)).toEqual([{ from: 3, to: 4, delta: 18 }]);
+    expect(dayHighlights([[0, 50], [6, 90]], 20)).toEqual([]);
+  });
+});
+
 describe('1日目の記録', () => {
   it('勝率と考えた時間を手数ごとに残し、待ったで戻すと後ろを消す', () => {
     let day = emptyDay();
@@ -154,7 +165,13 @@ describe('控室', () => {
     expect(voices.map(({ text }) => text).join('')).not.toMatch(/指そう|指すべき|がいい手/);
     // 解説が羽音なら、敬語を使わない。ほかの棋士はていねいに話す。
     expect(voices[1].text).not.toMatch(/です|ます|ました|ません|ございます|お願い/);
-    expect(voices[0].text).toMatch(/です|でしょう/);
+    expect(voices[0].text).toMatch(/です|でしょう/);    // 昼休みのふりかえりでは、「1日目」「2日目」ではなく「午前」「午後」で言う。
+    const lunch = roomVoices({
+      summary, members, userColor: 'white', formations: { black: '', white: '' }, material: 0,
+      userName: 'やこび', opponentName: '相手', meal: 'うな重', opponentMeal: '親子丼', moment: 'lunch',
+    });
+    expect(lunch[0].text).toContain('午後に注目');
+    expect(lunch.map(({ text }) => text).join('')).not.toMatch(/1日目|2日目/);
   });
   it('開封は予想と同じなら「予想どおり」', () => {
     expect(unsealCard({ witness: '老九段', moveText: '▲4五歩', predictedText: '▲4五歩' })).toMatchObject({ matched: true, verdict: '控室の予想どおり！' });

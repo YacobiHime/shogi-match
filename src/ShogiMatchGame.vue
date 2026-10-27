@@ -908,15 +908,18 @@
         <p class="shogi-game__stage-head">
           <span class="shogi-game__stage-event">{{ matchStage.eventText }}</span>
           <strong>{{ matchStage.shortLabel ?? matchStage.label }}</strong>
-          <!-- 封じ手のあとは「2日目・まとめ」のボタン。押すと1日目のまとめ(docs/title-match-day-design.md)。 -->
+          <!--
+            昼休みのあとは「1日目・ふりかえり」、封じ手のあとは「2日目・まとめ」のボタン。押すと、そこまでの将棋を盤でふりかえる
+            (docs/title-match-day-design.mdの1章と9章)。
+          -->
           <button
-            v-if="stageDayText && titleDay?.seal"
+            v-if="stageDayText && titleDay?.meal"
             type="button"
             class="shogi-game__stage-day shogi-game__stage-day--button"
             data-stage-day
             data-day-summary-open
             @click="daySummaryOpen = true"
-          >{{ stageDayText }}・まとめ</button>
+          >{{ stageDayText }}・{{ titleDay.seal ? "まとめ" : "ふりかえり" }}</button>
           <span v-else-if="stageDayText" class="shogi-game__stage-day" data-stage-day>{{ stageDayText }}</span>
         </p>
         <p v-if="matchStage.venue" class="shogi-game__stage-venue">対局場 {{ matchStage.venue }}</p>
@@ -1358,6 +1361,14 @@
               data-lunch-choice
               @click="chooseLunch(item.meal)"
             ><span v-if="item.win" class="shogi-game__lunch-star" aria-hidden="true">★</span>{{ item.meal }}</button>
+          </div>
+        </div>
+        <!-- 休憩の札(昼休み・2日目の朝)。次に自分が指すまで、ここまでの将棋を盤でふりかえるのを勧める(docs/title-match-day-design.mdの9章)。 -->
+        <div v-if="dayBreakOffer" class="shogi-game__plan-interrupt shogi-game__day-break" data-day-break role="status">
+          <p><b>{{ dayBreakOffer === "lunch" ? "昼休み" : "2日目の朝" }}</b>{{ dayBreakOffer === "lunch" ? "午前の将棋を盤でふりかえる？" : "1日目の将棋を盤でふりかえる？" }}</p>
+          <div>
+            <button type="button" data-day-break-open @click="daySummaryOpen = true; dayBreak = null">ふりかえる</button>
+            <button type="button" data-day-break-dismiss @click="dayBreak = null">このまま指す</button>
           </div>
         </div>
         <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
@@ -2151,7 +2162,13 @@
       </div>
     </div>
     <!-- タイトル戦の1日目のまとめと観戦記(docs/title-match-day-design.md)。結果の窓の上にも重ねて開く。 -->
-    <TitleDaySheet v-if="daySummaryOpen && daySummaryView" mode="summary" :summary="daySummaryView" @close="daySummaryOpen = false" />
+    <TitleDaySheet
+      v-if="daySummaryOpen && daySummaryView"
+      mode="summary"
+      :summary="daySummaryView"
+      :asset-base-url="assetBaseUrl"
+      @close="daySummaryOpen = false"
+    />
     <TitleDaySheet v-if="kansenkiShown" mode="kansenki" :article="kansenkiShown" @close="kansenkiShown = null" />
 
     <!--
@@ -2311,7 +2328,7 @@ import type ShogiTutorialComponent from "./ShogiTutorial.vue";
 import type ShogiProblemSetComponent from "./ShogiProblemSet.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import OpeningPlanSheet, { type OpeningPlanEntry } from "./OpeningPlanSheet.vue";
-import TitleDaySheet, { type DaySummaryView, type KansenkiView } from "./TitleDaySheet.vue";
+import TitleDaySheet, { type DayReviewView, type DaySummaryView, type KansenkiView } from "./TitleDaySheet.vue";
 import FormationThumb from "./FormationThumb.vue";
 import HananePortrait from "./HananePortrait.vue";
 import { ALL_OPENING_PLANS, openingPlanById, openingPlanFor } from "./core/opening-catalog.mjs";
@@ -2383,6 +2400,7 @@ import {
   lunchOpponentLine,
   lunchRushDue,
   lunchRushLine,
+  dayHighlights,
   mealPowerDue,
   mealPowerLine,
   normalizeDay,
@@ -3966,6 +3984,8 @@ watch(moveCount, (ply, previous) => {
       const elapsed = thinkElapsed();
       updateTitleDay((day) => noteDayThink(day, ply, elapsed));
     }
+    // 休憩の札は、次に自分が指すまで(指したあとは相手の手番)。
+    if (record.value.position.color !== humanColor.value) dayBreak.value = null;
     if (ply === stageSealPly(activePlayerColor.value)) sealTitleDay(ply);
     // 勝負メシ(docs/title-match-day-design.mdの8章)。選ばずに指し続けたら「おまかせ」を運び、選んだ少しあとに控室が湧く。
     else if (lunchAutoDue(titleDay.value, ply)) chooseLunch(lunchMenu(stage.venue ?? "")[0], { auto: true });
@@ -4052,6 +4072,7 @@ function resetTitleDay() {
   resultKansenki.value = null;
   lunchShown.value = null;
   resultMeal.value = null;
+  dayBreak.value = null;
   startThink();
 }
 // 考えた時間(手番が来てから指すまで)。画面を隠しているあいだは数えない。
@@ -4111,6 +4132,7 @@ function sealTitleDay(ply: number) {
     seal: { ply, move, predicted, material: playerMaterialBalance(), black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE) },
   }));
   showStageCard("seal");
+  dayBreak.value = "seal";
 }
 /** 控室の顔ぶれ(立会人・解説・観戦記者)。名簿の架空の棋士から選ぶ。 */
 const dayMembers = computed(() => roomMembers({
@@ -4153,6 +4175,7 @@ function chooseLunch(meal: string, { auto = false }: { auto?: boolean } = {}) {
     meal, auto, opponentMeal: theirMeal, opponentName: opponent ? `${opponent.name}${opponent.dan ?? ""}` : "",
   });
   showStageCard("lunch");
+  dayBreak.value = "lunch";
   if (coachLevel.value !== "off") showCoachAdvice({ key: "lunch-meal", text: lunchCoachLine(meal, { auto }) });
   if (opponent && theirMeal) showPresence("speech", `${opponent.name}「${lunchOpponentLine(theirMeal, opponentVoice(opponent))}」`);
   persistMatchState();
@@ -4173,34 +4196,77 @@ function recordTitleMeal(win: boolean) {
   mealBook.value = saveMealBook(browserStorage(), noteMealBook(mealBook.value, { venue: stage.venue, meal, win }));
   if (win) resultMeal.value = { meal, venue: stage.venue };
 }
+/**
+ * 休憩のふりかえり(docs/title-match-day-design.mdの9章)。昼休み(勝負メシのあと)は「午前のふりかえり」(いまの局面まで)、
+ * 封じ手のあとは「1日目のまとめ」(封じ手まで)。どちらも、盤で1手ずつ戻して見られる(局面・指し手・形勢が動いたところ)。
+ */
 const daySummaryView = computed<DaySummaryView | null>(() => {
   const day = titleDay.value;
   const stage = matchStage.value;
   const seal = day?.seal;
-  if (!day || !stage || !seal) return null;
-  const summary = daySummary({ day, untilPly: seal.ply });
+  if (!day || !stage || (!seal && !day.meal)) return null;
+  void moveCount.value;
+  const lunch = !seal;
+  const untilPly = seal ? seal.ply : moveHistory.length;
+  const summary = daySummary({ day, untilPly });
   const you = playerDisplayName(playerName.value);
   const opponentName = ryuoOpponent.value?.name ?? "相手";
   const theirMeal = opponentMeal(stage.venue, ryuoGame.value?.opponentId ?? "");
   const longest = summary.longest;
   const longestText = longest ? `${longest.ply}手目 ${dayMoveText(longest.ply, moveHistory[longest.ply - 1] ?? "")}` : "";
+  const black = seal ? seal.black : dayFormation(Color.BLACK);
+  const white = seal ? seal.white : dayFormation(Color.WHITE);
+  const material = seal ? seal.material : playerMaterialBalance();
   return {
-    heading: `${stage.eventText} ${stage.shortLabel ?? stage.label}・封じ手まで${seal.ply}手`,
+    title: lunch ? "午前のふりかえり" : "1日目のまとめ",
+    heading: `${stage.eventText} ${stage.shortLabel ?? stage.label}・${lunch ? `昼休み（${untilPly}手まで）` : `封じ手まで${untilPly}手`}`,
     venue: stage.venue,
     rate: summary.rate,
-    points: ratePoints(summary.rates, seal.ply),
-    formationText: seal.black && seal.white ? `先手 ${seal.black} 対 後手 ${seal.white}` : "定跡を離れた力戦",
-    materialText: `あなたから見て ${materialLabel(seal.material).text}`,
+    points: ratePoints(summary.rates, untilPly),
+    formationText: black && white ? `先手 ${black} 対 後手 ${white}` : lunch ? "まだ定まっていない（力戦か駒組みの途中）" : "定跡を離れた力戦",
+    materialText: `あなたから見て ${materialLabel(material).text}`,
     thinkText: `合計 ${thinkText(summary.thinkTotal)}${longest && longest.ms >= 30000 ? `・いちばん長いのは${longestText}（${thinkText(longest.ms)}）` : ""}`,
     mealText: day.meal ? `あなた ${day.meal}・${opponentName}さん ${theirMeal}` : "",
     voices: roomVoices({
-      summary, members: dayMembers.value, userColor: activePlayerColor.value, formations: { black: seal.black, white: seal.white },
-      material: seal.material, userName: you, opponentName, meal: day.meal, opponentMeal: theirMeal, longestText,
+      summary, members: dayMembers.value, userColor: activePlayerColor.value, formations: { black, white },
+      material, userName: you, opponentName, meal: day.meal, opponentMeal: theirMeal, longestText, moment: lunch ? "lunch" : "seal",
     }),
-    sealText: dayMoveText(seal.ply, seal.move),
-    predictedText: unsealView.value?.predicted ?? "",
+    sealText: seal ? dayMoveText(seal.ply, seal.move) : "",
+    predictedText: seal ? unsealView.value?.predicted ?? "" : "",
+    review: dayReview(untilPly, day.rates),
   };
 });
+/** ふりかえりの盤: 0手目からuntilPly手目までの局面と指し手、形勢が動いたところ(見どころ)。 */
+function dayReview(untilPly: number, rates: Array<[number, number]>): DayReviewView {
+  const line = createGameRecord(matchInitialSfen.value);
+  const sfens = [line.position.sfen];
+  const moves: DayReviewView["moves"] = [];
+  for (const usi of moveHistory.slice(0, untilPly)) {
+    if (!appendUsiMove(line, usi)) break;
+    sfens.push(line.position.sfen);
+    const entry = line.moves.at(-1);
+    moves.push({ usi, text: entry?.displayText ?? "" });
+  }
+  const highlights = dayHighlights(rates, untilPly).filter(({ to }) => to <= moves.length).map(({ from, to, delta }) => ({
+    ply: to,
+    label: `${from === to ? `${to}手目` : `${from}〜${to}手目`} ${moves[to - 1]?.text ?? ""}`,
+    delta: Math.round(delta),
+  }));
+  const flip = activePlayerColor.value === "white";
+  return {
+    sfens, moves, highlights, flip,
+    blackName: flip ? ryuoOpponent.value?.name ?? "先手" : playerDisplayName(playerName.value),
+    whiteName: flip ? playerDisplayName(playerName.value) : ryuoOpponent.value?.name ?? "後手",
+  };
+}
+/**
+ * 休憩の札(昼休み・2日目の朝)。休憩のあいだ(次に自分が指すまで)だけ、補助の欄で「ふりかえる」を勧める。
+ * 押さずに指してもよい(札は消える)。いつでも対局の札の日付のボタンから開ける。
+ */
+const dayBreak = ref<null | "lunch" | "seal">(null);
+const dayBreakOffer = computed(() => (
+  dayBreak.value && titleDay.value && active.value && !result.value && !reviewMode.value && !lunchOffer.value ? dayBreak.value : null
+));
 /** タイトル戦の終局で、観戦記を書いて残す(やこびノートの「大会」で読み返せる)。 */
 function writeTitleKansenki(win: boolean, plies: number) {
   const game = ryuoGame.value;
@@ -5208,7 +5274,7 @@ const openingGuideShown = computed(() => (
   (matchKind.value === "learning" && !openingGuideAvailable.value)
   || openingGuideCollapsed.value
   || planCardShown.value
-  || Boolean(planInterruption.value || coachPlanOffer.value || lunchOffer.value)
+  || Boolean(planInterruption.value || coachPlanOffer.value || lunchOffer.value || dayBreakOffer.value)
   || rangingRookChoiceRequired.value
   || strategyCompletionChoiceRequired.value
   || Boolean(nearCompletionPrompt.value)
