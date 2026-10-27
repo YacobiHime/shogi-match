@@ -171,10 +171,17 @@ export function noDefenseAdvice(value, { inCheck = false } = {}) {
   };
 }
 
+/** 最善手が2番目よりこれだけ良いとき、最善手の種類を言う(N1。docs/coach-advice-expansion-design.md)。 */
+export const INSIGHT_MARGIN = 300;
+
 /** 王手を掛けられても、プレイヤーがこれ以上の評価(詰みを含む)なら「思い出王手」とみなす。 */
 export const MEMORIAL_CHECK_SCORE = 2000;
 
-/** 上位候補の評価差から、一手の選択が勝敗へ直結する局面を知らせる。 */
+/**
+ * 上位候補の評価差から、一手の選択が勝敗へ直結する局面を知らせる。
+ * bestMoveInsight: 最善手の種類の一言(coach-insight.mjsのmeaningAdvice)。最善手が2番目よりINSIGHT_MARGIN以上良いとき、
+ *   「何かあるよ」の代わりに言う。insightAllowed: 種類を言ってよいか(教える助言の間隔。INSIGHT_INTERVAL_PLIES)。
+ */
 export function getCandidateRiskAdvice(candidates = [], {
   inCheck = false,
   mateThreat = false,
@@ -187,6 +194,8 @@ export function getCandidateRiskAdvice(candidates = [], {
   bestMoveSavesRook = false,
   opponentHasCheckingMove = false,
   moveCount = 0,
+  bestMoveInsight = null,
+  insightAllowed = false,
 } = {}) {
   const ranked = [...candidates]
     .filter((candidate) => Number.isInteger(candidate?.rank) && candidate.rank >= 1)
@@ -212,9 +221,17 @@ export function getCandidateRiskAdvice(candidates = [], {
     candidate.rank >= 4 && candidate.rank <= 5
     && candidate.score?.type === 'mate' && candidate.score.value < 0
   ))) {
-    return { key: 'mate-risk-top5', text: '詰みがありそうな気がするな～？' };
+    return { key: 'mate-risk-top5', text: '指す手によっては詰まされちゃう局面だよ。玉のまわりに気を付けて！' };
   }
   const bestValue = comparableScore(best?.score);
+  // 最善手が2番目よりはっきり良い(ほかに良い手がない)とき、最善手の種類を、答えを言わずに言う(N1)。
+  // 教える助言は何手かに1回まで(insightAllowed)。
+  const secondValue = comparableScore(ranked.find((candidate) => candidate.rank === 2)?.score);
+  if (insightAllowed && bestMoveInsight && bestValue !== undefined && secondValue !== undefined
+    && bestValue - secondValue >= INSIGHT_MARGIN && Math.abs(bestValue) < 50000) {
+    return bestMoveInsight;
+  }
+  // 評価の崖(上位の中に、大きく悪くなる手がある)。
   if (bestValue !== undefined && ranked.some((candidate) => {
     if (candidate.rank < 2 || candidate.rank > 5) return false;
     const value = comparableScore(candidate.score);

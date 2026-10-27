@@ -2648,7 +2648,21 @@ import {
   recordMeijinGame, resumeMeijinSeason, saveMeijinCareer, saveMeijinSeason, userClass,
 } from "./core/meijin.mjs";
 import { applyMeijinSeasonToRoster, autoJunniYear, ensureJunniWorld, joinJunni } from "./core/junni-world.mjs";
-import { enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight } from "./core/play-insight.mjs";
+import { detectWeaknesses, enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight } from "./core/play-insight.mjs";
+import {
+  INSIGHT_INTERVAL_PLIES,
+  SLIP_MAX_PER_GAME,
+  insightPraise,
+  loadWeaknessReminders,
+  meaningAdvice,
+  missedChanceAdvice,
+  moveMeaning,
+  opponentSlipAdvice,
+  saveWeaknessReminders,
+  selfMatePraise,
+  weaknessOvercomeLine,
+  weaknessReminder,
+} from "./core/coach-insight.mjs";
 import { loadReviewProblems } from "./core/review-problems.mjs";
 import { dueReviewId, loadReviewQueue } from "./core/review-queue.mjs";
 import { furigomaMessage, throwFurigoma } from "./core/furigoma.mjs";
@@ -3545,6 +3559,8 @@ let playerMoveFlair: {
   materialGain: number;
   /** 指した手が当たる手筋(move-tesuji.mjs)。手筋の名前でほめるのに使う。 */
   tesuji: string[];
+  /** 指す前の局面。見逃し(N4)で、指す前にあった手を言葉にするのに使う。 */
+  sfenBefore: string;
 } | undefined;
 type PraiseCandidate = { rank: number; move: string; score?: EngineEvaluation };
 // 好手・詰めろ受けの判定用に、プレイヤー手番開始時の解析を1局面分だけ保持する。
@@ -3906,6 +3922,52 @@ const kansenkiShown = ref<KansenkiView | null>(null);
 const resultKansenki = ref<KansenkiView | null>(null);
 /** 控室の第1候補(助言の読みの最善手)。封じ手の前の局面のものを、封じ手予想にする。 */
 let roomPick: { ply: number; move: string } | null = null;
+/**
+ * 助言の強化・段階1(docs/coach-advice-expansion-design.md)の、対局ごとの記録。
+ * lastInsightPly: 最善手の種類(N1)を最後に言った手数。opponentSlips・lastChancePly: 相手のミス(N5)を言った回数と手数。
+ * aiStreak: AIの最善手と同じ手の連続(N10)。lastThreatAdvice: 相手の狙いを言った手数と、その狙いの手(N10)。
+ * matchWeaknessKinds: 対局の始めにあった弱点(N8)。mateRun: 勝ちの詰みを最初に言った手数と手数(自分で詰ませたときのほめ言葉)。
+ */
+let lastInsightPly = Number.NEGATIVE_INFINITY;
+let opponentSlips = 0;
+let lastChancePly = -1;
+let aiStreak = 0;
+let lastThreatAdvice: { ply: number; move: string } | null = null;
+let matchWeaknessKinds: string[] = [];
+let mateRun: { ply: number; plies: number } | null = null;
+/** 30手目を過ぎて最初に読んだ形勢(プレイヤーから見た評価値)。序盤の弱点を乗り越えたかに使う(N8)。 */
+let standing30: number | null = null;
+/** 終局の画面に添える、弱点を乗り越えた・自分で詰ませたの一言。 */
+let finishInsightLine = "";
+function resetInsightState() {
+  lastInsightPly = Number.NEGATIVE_INFINITY;
+  opponentSlips = 0;
+  lastChancePly = -1;
+  aiStreak = 0;
+  lastThreatAdvice = null;
+  matchWeaknessKinds = [];
+  mateRun = null;
+  standing30 = null;
+  finishInsightLine = "";
+}
+
+/**
+ * 対局の始めに、前の対局の弱点を一言(N8)。ふつうの対局と大会で、助言がなしでも棋力測定でもないとき。
+ * 同じ弱点は、WEAKNESS_REMIND_GAMES局のあいだ繰り返さない(しつこくしない)。
+ */
+function announceWeakness() {
+  const weaknesses = normalizedMode.value === "cpu" && (matchKind.value === "normal" || matchKind.value === "tournament")
+    ? detectWeaknesses(playInsight.value.games)
+    : [];
+  matchWeaknessKinds = weaknesses.map(({ kind }) => kind);
+  if (!weaknesses.length || coachLevel.value === "off" || measureMode.value || reviewMode.value) return;
+  const gameCount = playInsight.value.games.length;
+  const reminders = loadWeaknessReminders(browserStorage());
+  const line = weaknessReminder(weaknesses, reminders, gameCount);
+  if (!line) return;
+  saveWeaknessReminders(browserStorage(), { ...reminders, [line.kind]: gameCount });
+  showCoachAdvice({ key: line.key, text: line.text });
+}
 function updateTitleDay(change: (day: ReturnType<typeof emptyDay>) => ReturnType<typeof emptyDay>) {
   const game = ryuoGame.value;
   if (!game?.day) return;
@@ -4084,6 +4146,21 @@ onBeforeUnmount(() => {
   clearTimeout(furigomaTimer);
   stopFurigomaShake();
 });
+/**
+ * 終局の画面に添える一言(N8・N10)。勝ったとき、前の対局の弱点を乗り越えたか、閃きを使わずに自分で詰ませたか。
+ * 助言が「なし」のときと、二人で指したときは添えない。
+ */
+function finishInsightFor(matchResult: MatchResult) {
+  if (normalizedMode.value !== "cpu" || coachLevel.value === "off" || matchResult.winner !== humanColor.value) return "";
+  const checkmate = matchResult.reason === "checkmate";
+  const overcome = weaknessOvercomeLine(matchWeaknessKinds, { won: true, checkmate, standing30 });
+  if (overcome) return overcome;
+  const lastMoveByPlayer = playerMoveFlair?.historyLength === moveHistory.length;
+  if (!checkmate || !lastMoveByPlayer || playerMoveFlair?.fromHint) return "";
+  const readThrough = mateRun && moveHistory.length - mateRun.ply === mateRun.plies ? mateRun.plies : 0;
+  return selfMatePraise(readThrough);
+}
+
 const resultPresentation = computed(() => {
   if (!result.value) return null;
   const loser = result.value.winner === Color.BLACK ? "後手" : "先手";
@@ -4127,7 +4204,7 @@ const resultPresentation = computed(() => {
   // 負けたときは責めずに次にすることを、指し直して勝ったときは何を越えたかを一言添える。
   const retried = learningStartLabel.value === RETRY_START_LABEL;
   return playerWon
-    ? { tone: "victory", title: "勝利", cheer: retried ? "さっきの分かれ道、今度は越えたね！" : "", ...common }
+    ? { tone: "victory", title: "勝利", cheer: retried ? "さっきの分かれ道、今度は越えたね！" : finishInsightLine, ...common }
     : { tone: "defeat", title: "敗北", cheer: "どこで分かれたか、いっしょに見てみよう。", ...common };
 });
 
@@ -7914,7 +7991,7 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
  * 着手前の局面は、プレイヤーの手番の間に読んでおく(moveJudgeBefore)。間に合わなかったときは、
  * 着手後の局面と一緒に、相手の思考時間として読む。
  */
-let moveJudgeBefore: { positionKey: string; score?: EngineEvaluation } | undefined;
+let moveJudgeBefore: { positionKey: string; score?: EngineEvaluation; pv?: string[] } | undefined;
 function enginePositionAt(ply: number) {
   const base = matchInitialSfen.value === STANDARD_SFEN ? "startpos" : matchInitialSfen.value;
   const moves = moveHistory.slice(0, ply);
@@ -7928,9 +8005,6 @@ async function judgeSearch(positionKey: string): Promise<{ score?: EngineEvaluat
   const search = await engine.go({ nodes: settings.nodes, maxTimeMs: settings.maxTimeMs });
   const best = search.candidates.find((candidate) => candidate.rank === 1);
   return { score: best?.score as EngineEvaluation | undefined, pv: best?.pv ?? [] };
-}
-async function judgeSearchScore(positionKey: string): Promise<EngineEvaluation | undefined> {
-  return (await judgeSearch(positionKey)).score;
 }
 /** プレイヤーの手番の間に、着手前の局面を悪手判定の深さで読んでおく。詳しい助言のときだけ。 */
 function scheduleMoveJudgeBaseline() {
@@ -7950,9 +8024,9 @@ function scheduleMoveJudgeBaseline() {
     .catch(() => undefined)
     .then(async () => {
       if (stale()) return;
-      const { value: score, interrupted } = await assistSearchControl.run(() => judgeSearchScore(positionKey));
+      const { value: search, interrupted } = await assistSearchControl.run(() => judgeSearch(positionKey));
       if (interrupted || stale()) return;
-      moveJudgeBefore = { positionKey, score: scoreForPlayer(score, humanColor.value, humanColor.value) };
+      moveJudgeBefore = { positionKey, score: scoreForPlayer(search.score, humanColor.value, humanColor.value), pv: search.pv };
     })
     .catch(() => undefined);
 }
@@ -7966,15 +8040,19 @@ async function judgePlayerMove(isCurrent: () => boolean) {
   const afterKey = currentEnginePosition();
   const sideAfter = record.value.position.color;
   let before = moveJudgeBefore?.positionKey === beforeKey ? moveJudgeBefore.score : undefined;
+  // 指す前の読み筋(最善手から)。見逃し(N4)で、指す前にあった手を言うのに使う。
+  let beforePv = moveJudgeBefore?.positionKey === beforeKey ? moveJudgeBefore.pv ?? [] : [];
   if (!before) {
-    before = scoreForPlayer(await judgeSearchScore(beforeKey), reverseColor(sideAfter), humanColor.value);
+    const beforeSearch = await judgeSearch(beforeKey);
+    before = scoreForPlayer(beforeSearch.score, reverseColor(sideAfter), humanColor.value);
+    beforePv = beforeSearch.pv;
     if (!isCurrent()) return null;
   }
   // 着手後の読み筋の1手目は、相手のいちばんの応手。悪手の理由を言うのに使う(coach-reason.mjs)。
   const afterSearch = await judgeSearch(afterKey);
   const after = scoreForPlayer(afterSearch.score, sideAfter, humanColor.value);
   if (!isCurrent() || !before || !after) return null;
-  return { before, after, afterPv: afterSearch.pv };
+  return { before, after, afterPv: afterSearch.pv, beforePv };
 }
 
 async function analyzeOpeningFollowupPosition() {
@@ -8304,6 +8382,9 @@ function updateCoachAdviceFromPlayerScore(
     playerTurnScoreHistoryLength = score ? moveHistory.length : -1;
   }
   if (coachLevel.value !== "off" && !reviewMode.value) notePresenceScore(score);
+  // 勝ちの詰みを最初に見つけた手数と手数(自分で詰ませたときのほめ言葉に使う)。詰みが消えたら忘れる。
+  if (score?.type === "mate" && score.value > 0) mateRun ??= { ply: moveHistory.length, plies: score.value };
+  else if (score) mateRun = null;
   if (coachLevel.value === "off") {
     guideText.value = "";
     return;
@@ -8409,6 +8490,7 @@ async function updateDedicatedCoachAdvice(
     score = { type: "mate", value: 1 };
     mateByChecks = true;
   }
+  if (standing30 === null && analyzedHistoryLength >= 30 && score?.type === "cp") standing30 = score.value;
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
   const inCheck = isSideToMoveInCheck(currentSfen.value);
   const threatSfen = coachLevel.value === "detailed" && !inCheck
@@ -8433,6 +8515,9 @@ async function updateDedicatedCoachAdvice(
         mateThreatChecked: mateThreatResult !== null && mateThreatResult.status !== "unknown",
         moveCount: moveCount.value,
         ...(bestMove ? bestMoveTacticalContext(bestMove) : {}),
+        // 最善手の種類(N1)。評価の崖では「何かあるよ」の代わりに、崖でなくても間隔が空いていれば言う。
+        bestMoveInsight: bestMove ? meaningAdvice(moveMeaning(currentSfen.value, bestMove)) : null,
+        insightAllowed: analyzedHistoryLength - lastInsightPly >= INSIGHT_INTERVAL_PLIES,
       })
     : null;
   // 順番: 悪手の指摘 → 詰み・王手・詰めろ・評価の崖 → 相手の狙い → 作戦の助言(とほめる一言) → ほかの危険の知らせ。
@@ -8459,6 +8544,8 @@ async function updateDedicatedCoachAdvice(
     }
   }
   const chosen = moveFeedback ?? (winningMate ? null : urgentAdvice ?? threatLine ?? planLine ?? riskAdvice);
+  if (chosen?.key.startsWith("candidate-evaluation-cliff-")) lastInsightPly = analyzedHistoryLength;
+  if (chosen && chosen === threatLine && mateThreatResult?.best) lastThreatAdvice = { ply: analyzedHistoryLength, move: mateThreatResult.best.move };
   // 大会の相手の表情と中継は、この助言の読みの評価値で動かす(riskOnlyでも)。
   notePresenceScore(score);
   if (riskOnly && !winningMate) {
@@ -8657,7 +8744,7 @@ async function playerMovePraise(options: {
   beforeScore?: EngineEvaluation;
   afterScore?: EngineEvaluation;
   fallback: { key: string; text: string } | null;
-  cpuCandidates: Array<{ rank: number; score?: EngineEvaluation }>;
+  cpuCandidates: Array<{ rank: number; score?: EngineEvaluation; move?: string }>;
   generation: number;
 }) {
   const {
@@ -8707,6 +8794,18 @@ async function playerMovePraise(options: {
       defendedMateThreat = false;
     }
   }
+  // N10: AIの最善手(助言の読み)と同じ手の連続・相手の狙いを受けた・チャンスを生かした。
+  // 助言の読みが間に合わなかった手は、連続を数えも切りもしない。閃きで指した手と、選びようのない手は数えない。
+  const bestBefore = roomPick?.ply === historyLength - 1 ? roomPick.move : "";
+  const matchedBest = Boolean(flair && bestBefore && flair.usi === bestBefore);
+  if (flair?.fromHint) aiStreak = 0;
+  else if (flair && bestBefore && !flair.trivial && historyLength > 10) aiStreak = matchedBest ? aiStreak + 1 : 0;
+  const cpuBestMove = cpuCandidates.find(({ rank }) => rank === 1)?.move;
+  const insight = detailed && flair && !flair.fromHint ? insightPraise({
+    aiStreak: matchedBest ? aiStreak : 0,
+    defendedThreat: lastThreatAdvice?.ply === historyLength - 1 && Boolean(cpuBestMove) && cpuBestMove !== lastThreatAdvice.move,
+    seizedChance: lastChancePly === historyLength - 1 && (matchedBest || flair.materialGain > 0),
+  }) : null;
   const praiseOptions = {
     level: coachLevel.value,
     historyLength,
@@ -8714,6 +8813,7 @@ async function playerMovePraise(options: {
     afterScore,
     quality,
     defendedMateThreat,
+    insight,
     materialGain: flair?.materialGain ?? 0,
     tesuji: flair?.tesuji ?? [],
     turningAdvice: turning.advice,
@@ -8974,6 +9074,7 @@ function schedulePlayerIdleAdvice() {
             color: move.color,
             lastMove: lastMove.value,
             givesCheck: candidateGivesCheck(best.move),
+            insight: meaningAdvice(moveMeaning(currentSfen.value, best.move)),
           }));
         } finally {
           engine?.applyStrengthOptions({ multiPv: 1 });
@@ -9275,6 +9376,7 @@ function finish(matchResult: MatchResult) {
   cancelPlayerIdleAdvice();
   active.value = false;
   thinking.value = false;
+  finishInsightLine = finishInsightFor(matchResult);
   result.value = matchResult;
   // 平手・対CPUで終局まで指した対局は、終盤戦の開始局面に使えるよう残す(短い対局は残さない)。
   if (normalizedMode.value === "cpu" && matchInitialSfen.value === STANDARD_SFEN && matchResult.winner) {
@@ -9424,6 +9526,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
           })
         : 0,
       tesuji: detectTesuji({ sfenBefore: sfenBeforeMove, usi }),
+      sfenBefore: sfenBeforeMove,
     };
     // 囲いの段階は上の距離判定で数え済みなので、ここでは戦法の寄り道だけを数える。
     if (!castleDistanceBefore && followedOpeningDecision?.source === "ai") {
@@ -9585,6 +9688,11 @@ function undoTurn() {
   playerMoveBaseline = undefined;
   playerMoveBaselineGeneration += 1;
   lastCpuCapture = undefined;
+  // 待ったで戻した局面には、連続・狙い・チャンス・詰みの記録は当てはまらない。
+  aiStreak = 0;
+  lastThreatAdvice = null;
+  lastChancePly = -1;
+  mateRun = null;
   turningPointState = rewindTurningPointState(turningPointState, moveHistory.length);
   hintCandidates.value = [];
   resetOpeningFollowup();
@@ -9960,6 +10068,8 @@ async function scheduleCpuMove() {
       }
       let usi = "";
       let selectedCpuScore: { type: "cp" | "mate"; value: number } | undefined;
+      // 相手のミス(N5)を言うための、CPUの読みの最善と選んだ手の評価(同じ物差しにそろえた値)。
+      let cpuSlip: { best?: EngineEvaluation; selected?: EngineEvaluation; reply: string } | null = null;
       let moveFeedback: { key: string; text: string } | null = null;
       const playerMoveHistoryLength = moveHistory.length;
       const reusedHintAssessment = playerMoveHintAssessment?.historyLength === playerMoveHistoryLength
@@ -9977,7 +10087,7 @@ async function scheduleCpuMove() {
       // 悪手判定は、着手の前後を同じ深さで読んで比べる。この読みは、相手の思考時間として、CPUの探索の前に行う。
       // 悪手・かち込みは、相手が考えている間に伝える。
       // プレイヤーが指した直後だけ読む(CPUが先手の初手や、リロードで再開したCPUの手番では読まない)。
-      let judged: { before: EngineEvaluation; after: EngineEvaluation; afterPv: string[] } | null = null;
+      let judged: { before: EngineEvaluation; after: EngineEvaluation; afterPv: string[]; beforePv: string[] } | null = null;
       let shownFeedbackKey = "";
       if (moveFlair) {
         cpuSearchRunning = true;
@@ -10004,6 +10114,14 @@ async function scheduleCpuMove() {
             pv: judged.afterPv,
             playerColor: humanColor.value === Color.WHITE ? "white" : "black",
           }));
+          // 指す前にあった詰み・タダの駒を逃したら、悪手の指摘より具体的なので、こちらを言う(N4)。
+          moveFeedback = missedChanceAdvice({
+            sfenBefore: moveFlair.sfenBefore,
+            playedUsi: moveFlair.usi,
+            before: judged.before,
+            after: judged.after,
+            beforePv: judged.beforePv,
+          }) ?? moveFeedback;
           if (moveFeedback) {
             showCoachAdvice(moveFeedback);
             shownFeedbackKey = moveFeedback.key;
@@ -10217,6 +10335,20 @@ async function scheduleCpuMove() {
         selectedCpuScore = searchedCandidates.find(
           (candidate) => candidate.move === usi,
         )?.score;
+        // 相手のミス(N5)。作戦の定跡手(わざと選んだ手)と序盤は数えない。止めた読みの浅い候補が混じらないよう、
+        // 候補を同じ物差しにそろえてから、選んだ手と最善の差を見る。
+        if (usi && usi !== allowedOpeningMove && moveHistory.length >= 10) {
+          const settled = settleMultiPvCandidates(search.candidates, search.completedCandidates ?? []);
+          const settledBest = settled.find(({ rank }) => rank === 1);
+          const chosen = settled.find(({ move }) => move === usi);
+          if (settledBest && chosen && settledBest.move !== usi) {
+            cpuSlip = {
+              best: settledBest.score as EngineEvaluation | undefined,
+              selected: chosen.score as EngineEvaluation | undefined,
+              reply: chosen.pv?.[1] ?? "",
+            };
+          }
+        }
       } else {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
         // 24級〜16級(ロジックAI)とLv10以上(目的のある手)は、エンジンがなくてもロジックAIで指せる。
@@ -10241,6 +10373,15 @@ async function scheduleCpuMove() {
       await waitForImpactHold();
       if (generation !== matchGeneration) return;
       if (applyMove(usi, "cpu") && active.value) {
+        // 相手のミスは、形勢の一言より先に知らせる(1局にSLIP_MAX_PER_GAME回まで。答えの手は言わない)。
+        const slipAdvice = cpuSlip && coachLevel.value !== "off" && opponentSlips < SLIP_MAX_PER_GAME
+          ? opponentSlipAdvice({ best: cpuSlip.best, selected: cpuSlip.selected, sfenAfter: currentSfen.value, reply: cpuSlip.reply })
+          : null;
+        if (slipAdvice) {
+          opponentSlips += 1;
+          lastChancePly = moveHistory.length;
+          showCoachAdvice(slipAdvice);
+        }
         const scoreAdviceShown = updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
         schedulePostCpuAssists(selectedCpuScore !== undefined && scoreAdviceShown);
@@ -10618,6 +10759,7 @@ function restart() {
   positionAnalysisCache.clear();
   moveHistory = [];
   coachAdviceHistory = [];
+  resetInsightState();
   openingGuideStartedAtPly.value = 0;
   openingGuideDetourCount.value = 0;
   openingGuideUnsafeTurns.value = 0;
@@ -10651,6 +10793,7 @@ function restart() {
   scheduleCpuMove();
   scheduleOpeningGuideSafety();
   schedulePlayerIdleAdvice();
+  announceWeakness();
   persistMatchState();
 }
 

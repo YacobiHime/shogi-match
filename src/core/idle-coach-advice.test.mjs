@@ -28,3 +28,12 @@ describe('長考中の軽い助言', () => {
     })?.text).toBe('７六歩あたりを考えてみる？');
   });
 });
+
+describe('考えているあいだの一言を、最善手の種類で言う(N1)', () => {
+  test('種類が分かれば、一般論の代わりにこの局面の中身を言う', () => {
+    expect(getIdleCoachAdvice({
+      usi: 'N*5f',
+      insight: { key: 'candidate-evaluation-cliff-tesuji-knight-fork', text: '「ふんどしの桂」の両取りがありそう！' },
+    })).toEqual({ key: 'idle-tesuji-knight-fork', text: '「ふんどしの桂」の両取りがありそう！' });
+  });
+});

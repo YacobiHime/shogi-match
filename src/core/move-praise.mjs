@@ -179,8 +179,10 @@ const STRONG_TESUJI = Object.freeze(['head-gold', 'double-check', 'knight-fork',
  *   quality?: { kind: string, score: PraiseScore, gap: number } | null,
  *   gaveMateThreat?: boolean, defendedMateThreat?: boolean, materialGain?: number,
  *   turningAdvice?: PraiseAdvice | null, fallback?: PraiseAdvice | null, tesuji?: string[],
+ *   insight?: PraiseAdvice | null,
  * }} [options]
  *   tesuji: 指した手が当たる手筋のID(move-tesuji.mjsのdetectTesuji)。何が良かったかを、手筋の名前でほめる。
+ *   insight: チャンスを生かした・狙いを受けた・AIと同じ手の連続のほめ言葉(coach-insight.mjsのinsightPraise)。手筋の次に見る。
  * @returns {PraiseAdvice | null}
  */
 export function getMovePraise({
@@ -194,6 +196,7 @@ export function getMovePraise({
   turningAdvice = null,
   fallback = null,
   tesuji = [],
+  insight = null,
 } = {}) {
   if (level === 'off') return null;
   const endurance = turningAdvice?.key === 'praise-endurance' ? turningAdvice : null;
@@ -219,6 +222,7 @@ export function getMovePraise({
     STRONG_TESUJI.includes(id) || quality?.kind === 'good' || gain >= MATERIAL_GAIN_MIN
   )) : undefined;
   if (tesujiId) return { key: `praise-tesuji-${tesujiId}`, text: TESUJI_PRAISE[tesujiId] };
+  if (sound && insight) return insight;
   if (sound && gaveMateThreat) {
     return { key: 'praise-mate-threat', text: '詰めろを掛けたね。良い手だと思うよ！' };
   }
@@ -237,7 +241,8 @@ export function getMovePraise({
  */
 export function movePraiseNeedsMateThreatCheck(options = {}) {
   const preliminary = getMovePraise({ ...options, gaveMateThreat: false });
-  if (['praise-god-move', 'praise-reversal', 'praise-mate-defense'].includes(preliminary?.key)) {
+  // 詰めろを掛けた一言より先に出るほめ言葉が決まっていれば、詰めろの確かめはいらない。
+  if (/^praise-(god-move|reversal|mate-defense|tesuji|seized-chance|threat-defended|ai-streak)/.test(preliminary?.key ?? '')) {
     return false;
   }
   const before = comparableScore(options.beforeScore);

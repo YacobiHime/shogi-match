@@ -753,9 +753,24 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/extraIds: \[\.\.\.fortunePlanIds\.value, \.\.\.coachPlanIds\.value\]/);
     expect(source).toMatch(/v-if="coachPlanOffer"[\s\S]{0,200}?data-plan-offer[\s\S]{0,600}?data-plan-offer-basis/);
   });
+  it("助言の強化・段階1をつなぐ(docs/coach-advice-expansion-design.md)", () => {
+    // N1: 最善手の種類を、助言の読みと考えているあいだの一言で言う。教える助言は間隔をあける。
+    expect(source).toMatch(/bestMoveInsight: bestMove \? meaningAdvice\(moveMeaning\(currentSfen\.value, bestMove\)\) : null,\s*insightAllowed: analyzedHistoryLength - lastInsightPly >= INSIGHT_INTERVAL_PLIES,/);
+    expect(source).toMatch(/insight: meaningAdvice\(moveMeaning\(currentSfen\.value, best\.move\)\),/);
+    // N4: 悪手の理由のあとで、見逃しを優先する。
+    expect(source).toMatch(/moveFeedback = missedChanceAdvice\(\{[\s\S]*?beforePv: judged\.beforePv,\s*\}\) \?\? moveFeedback;/);
+    // N5: 相手のミスは、CPUの手を指したあと、形勢の一言より先に言う。
+    expect(source).toMatch(/const slipAdvice = cpuSlip[\s\S]*?showCoachAdvice\(slipAdvice\);\s*\}\s*const scoreAdviceShown = updateCoachAdvice\(selectedCpuScore\);/);
+    // N8: 対局の始めの弱点の一言と、終局の画面の一言。
+    expect(source).toMatch(/schedulePlayerIdleAdvice\(\);\s*announceWeakness\(\);\s*persistMatchState\(\);/);
+    expect(source).toMatch(/finishInsightLine = finishInsightFor\(matchResult\);\s*result\.value = matchResult;/);
+    // N10: ほめ言葉は、手筋の次に見る。
+    expect(source).toMatch(/defendedMateThreat,\s*insight,/);
+  });
+
   it("悪手には相手の応手から理由を添え、相手の狙いは詰めろの確かめの最善手から言う(docs/coach-plan-advice-design.mdの9章)", () => {
     // 悪手判定の着手後の読み筋(相手のいちばんの応手)を、悪手の台詞に添える。
-    expect(source).toMatch(/return \{ before, after, afterPv: afterSearch\.pv \};/);
+    expect(source).toMatch(/return \{ before, after, afterPv: afterSearch\.pv, beforePv \};/);
     expect(source).toMatch(/moveFeedback = withMistakeReason\(getMoveFeedback\(\{[\s\S]{0,300}?\}\), mistakeReason\(\{[\s\S]{0,300}?pv: judged\.afterPv,/);
     // 相手の狙いは、新しい探索を足さず、詰めろの確かめ(手番を入れ替えた局面)の最善手を使う。
     expect(source).toMatch(/best: best\?\.move \? \{ move: best\.move, score: best\.score as EngineEvaluation \| undefined, pv: best\.pv/);

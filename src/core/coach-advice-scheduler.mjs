@@ -3,9 +3,10 @@ export const COACH_ADVICE_MIN_DISPLAY_MS = 6000;
 export function coachAdvicePriority(advice) {
   const key = advice?.key ?? '';
   if (/forced-mate|king-in-check|mate-danger|mate-risk|mate-win/.test(key)) return 100;
-  if (/move-blunder|move-mistake/.test(key)) return 90;
-  // 相手の狙い(駒を取られそう)は、評価の崖より具体的なので先に出す。
-  if (/^threat-/.test(key)) return 75;
+  // 悪手と、指した手で逃した詰み・タダの駒(N4。docs/coach-advice-expansion-design.md)。
+  if (/move-blunder|move-mistake|move-missed/.test(key)) return 90;
+  // 相手の狙い(駒を取られそう)は、評価の崖より具体的なので先に出す。相手のミス(N5)も同じ重さ。
+  if (/^(threat|chance)-/.test(key)) return 75;
   if (/candidate-evaluation-cliff/.test(key)) return 70;
   // 直前の着手への褒め言葉は、CPU着手後の通常助言に上書きされないようにする。
   if (/^praise-/.test(key)) return 60;

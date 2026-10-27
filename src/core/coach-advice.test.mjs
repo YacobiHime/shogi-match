@@ -37,7 +37,7 @@ describe('候補手ごとの危険度助言', () => {
     expect(getCandidateRiskAdvice([
       { rank: 1, score: { type: 'cp', value: 20 } },
       { rank: 4, score: { type: 'mate', value: -5 } },
-    ])?.text).toBe('詰みがありそうな気がするな～？');
+    ])?.text).toBe('指す手によっては詰まされちゃう局面だよ。玉のまわりに気を付けて！');
   });
 
   test('上位候補に大きな評価差があれば注意を促す', () => {
@@ -45,6 +45,29 @@ describe('候補手ごとの危険度助言', () => {
       { rank: 1, score: { type: 'cp', value: 500 } },
       { rank: 2, score: { type: 'cp', value: -250 } },
     ])?.text).toBe('何かあるよ、気を付けて！');
+  });
+
+  test('最善手が2番目よりはっきり良ければ、「何かあるよ」の代わりに中身を言う(N1)', () => {
+    const insight = { key: 'candidate-evaluation-cliff-free-capture', text: 'タダで取れる駒があるよ！ 探してみて' };
+    const cliff = [
+      { rank: 1, score: { type: 'cp', value: 500 } },
+      { rank: 2, score: { type: 'cp', value: -250 } },
+    ];
+    expect(getCandidateRiskAdvice(cliff, { bestMoveInsight: insight, insightAllowed: true })).toBe(insight);
+    // 教える助言の間隔が空いていなければ、今までの知らせにする。
+    expect(getCandidateRiskAdvice(cliff, { bestMoveInsight: insight, insightAllowed: false })?.text).toBe('何かあるよ、気を付けて！');
+    const gap = [
+      { rank: 1, score: { type: 'cp', value: 500 } },
+      { rank: 2, score: { type: 'cp', value: 150 } },
+    ];
+    expect(getCandidateRiskAdvice(gap, { bestMoveInsight: insight, insightAllowed: true })).toBe(insight);
+    expect(getCandidateRiskAdvice(gap, { bestMoveInsight: insight, insightAllowed: false })).toBeNull();
+    // 2番目の手も良い(下位にだけ悪い手がある)ときは、種類を言わず今までの知らせ。
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'cp', value: 500 } },
+      { rank: 2, score: { type: 'cp', value: 450 } },
+      { rank: 5, score: { type: 'cp', value: -400 } },
+    ], { bestMoveInsight: insight, insightAllowed: true })?.text).toBe('何かあるよ、気を付けて！');
   });
 });
 
