@@ -439,11 +439,16 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   font-size: 0.88rem;
   line-height: 1.55;
 }
+/* やこび姫の絵は縦長(286×689)。高さだけ決めて幅は絵の比率に任せる(正方形に押し込むと横長に潰れる)。 */
 .shogi-game .shogi-skill-test__chara {
-  width: 40px;
-  height: 40px;
+  width: auto;
+  height: 3.6rem;
   flex: none;
+  object-fit: contain;
   image-rendering: pixelated;
+}
+.shogi-game .shogi-skill-test__consent .shogi-skill-test__chara {
+  height: 5.5rem;
 }
 .shogi-game .shogi-skill-test__choices {
   display: grid;
