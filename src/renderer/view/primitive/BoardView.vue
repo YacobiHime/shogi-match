@@ -92,12 +92,12 @@
           :class="square.selectionClass"
           :style="square.selectionStyle"
         ></div>
-        <!-- 駒得の数字。取った駒の値段を、取ったマスの上に浮かべて消す(教室・学習対局)。 -->
+        <!-- 駒得の数字。取った駒の値段を、取ったマスの上に浮かべて消す(教室・学習対局)。成りの分は小さく、取った数字の下に出す。 -->
         <div
           v-for="label in floatLabelViews"
           :key="'float-' + label.id"
           class="float-label"
-          :class="[`float-label--${label.tone}`, { 'float-label--big': label.big }]"
+          :class="[`float-label--${label.tone}`, { 'float-label--big': label.big, 'float-label--sub': label.sub }]"
           :style="label.style"
           aria-hidden="true"
         ><span>{{ label.text }}</span></div>
@@ -476,7 +476,7 @@ const props = defineProps({
   },
   // 駒得の数字(＋6／−5)。取ったマスの上に浮かべる。idが変わるたびに動きをやり直す。
   floatLabels: {
-    type: Array as PropType<{ id: string | number; file: number; rank: number; text: string; tone: string; big?: boolean }[]>,
+    type: Array as PropType<{ id: string | number; file: number; rank: number; text: string; tone: string; big?: boolean; sub?: boolean; offset?: boolean }[]>,
     required: false,
     default: () => [],
   },
@@ -1125,9 +1125,16 @@ const floatLabelViews = computed(() => {
     const square = squares.get(`${label.file}${label.rank}`);
     if (!square) return [];
     const height = Number.parseFloat(String(square.style.height)) || 0;
+    const top = Number.parseFloat(String(square.style.top)) || 0;
+    const size = label.sub ? 0.3 : label.big ? 0.52 : 0.42;
     return [{
       ...label,
-      style: { ...square.style, fontSize: `${Math.max(14, height * (label.big ? 0.52 : 0.42))}px` },
+      style: {
+        ...square.style,
+        // 取った駒の数字と一緒に出す成りの分は、同じマスの下寄りにずらして重ならないようにする。
+        ...(label.offset ? { top: `${top + height * 0.5}px` } : {}),
+        fontSize: `${Math.max(label.sub ? 11 : 14, height * size)}px`,
+      },
     }];
   });
 });
@@ -1579,6 +1586,10 @@ const whitePlayerTimeSeverity = computed(() => {
 }
 .float-label--bad span {
   background: #c0392b;
+}
+.float-label--sub span {
+  padding: 0.06em 0.3em;
+  font-weight: 800;
 }
 .float-label--big span {
   box-shadow: 0 0 0 0.14em #fffcf4, 0 0.16em 0.35em rgba(0, 0, 0, 0.45);

@@ -92,7 +92,7 @@ import { Color, PieceType, type Move } from "tsshogi";
 
 type AttackMark = { file: number; rank: number; black: number; white: number };
 type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" | "covered" | "danger" };
-type FloatLabel = { id: string | number; file: number; rank: number; text: string; tone: "good" | "bad"; big?: boolean };
+type FloatLabel = { id: string | number; file: number; rank: number; text: string; tone: "good" | "bad"; big?: boolean; sub?: boolean; offset?: boolean };
 type BoardCallout = {
   at: string; text: string; side: "above" | "below" | "left" | "right";
   x: number; y: number; width: number; height: number; tail: number; reach?: number; tone?: string;

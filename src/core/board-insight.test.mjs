@@ -162,4 +162,48 @@ describe("駒得の数字", async () => {
     expect(pop("k8/9/9/7+p1/9/9/9/7R1/8K b - 1", "2h2d")).toMatchObject({ text: "＋90", points: 90, big: false });
   });
 
+  // 成りの分(docs/material-guide-design.mdの「成りの分」)。
+  const { materialBalance, materialPops, moveMaterial, promotionBonus } = await import("./piece-points.mjs");
+  const ai = (sfen, move, side = "black") => materialPops(sfen, move, side, 1, AI_PIECE_POINTS, AI_PIECE_POINTS.B).map(({ text, sub, offset, points }) => ({ text, sub, offset, points }));
+  it("成った分は、成った駒と元の駒の値段の差", () => {
+    expect(promotionBonus("+B", AI_PIECE_POINTS)).toBe(90);
+    expect(promotionBonus("+P", AI_PIECE_POINTS)).toBe(450);
+    expect(promotionBonus("+B")).toBe(2);
+    expect(promotionBonus("B", AI_PIECE_POINTS)).toBe(0);
+  });
+  it("成ったら「成り＋」、成駒を取られたら元の駒の値段と「成り−」を分けて浮かべる", () => {
+    // 角が成る(取らない)。
+    expect(ai("k8/9/9/9/9/9/9/7B1/8K b - 1", "2h4f")).toEqual([]);
+    expect(ai("k8/9/9/9/9/9/9/9/1B6K b - 1", "8i3d+")).toEqual([{ text: "成り＋90", sub: true, offset: false, points: 90 }]);
+    // 先手の馬を、後手の銀が取る: 先手から見て −855 と 成り−90。
+    expect(ai("k8/9/2s6/3+B5/9/9/9/9/8K w - 1", "7c6d")).toEqual([
+      { text: "−855", sub: false, offset: false, points: -855 },
+      { text: "成り−90", sub: true, offset: true, points: -90 },
+    ]);
+    // 飛車で角を取りながら成る: ＋855 と 成り＋405。
+    expect(ai("k8/9/7b1/9/9/9/9/7R1/8K b - 1", "2h2c+")).toEqual([
+      { text: "＋855", sub: false, offset: false, points: 855 },
+      { text: "成り＋405", sub: true, offset: true, points: 405 },
+    ]);
+    // 教室の値: と金を取られると −1 と 成り−6。
+    expect(materialPops("k8/9/9/9/9/2s6/2+P6/9/8K w - 1", "7f7g", "black", 1).map(({ text }) => text)).toEqual(["−1", "成り−6"]);
+    expect(moveMaterial("k8/9/9/9/9/9/9/7R1/8K b - 1", "2h2e", "black")).toBeNull();
+  });
+  it("駒の損得の札は、浮かべた数字の合計と同じ(歩を取ると＋90、角馬交換は馬の側が−90)", () => {
+    const start = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1";
+    const diff = (sfen, from = start) => { const t = materialBalance(sfen, from); return t.black - t.white; };
+    expect(diff(start)).toBe(0);
+    expect(diff("lnsgkgsnl/1r5b1/pppppppp1/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b P 1")).toBe(90);
+    // 先手の角が馬になった局面と、その馬と後手の角が交換になった局面。
+    const horse = "lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1+B5R1/LNSGKGSNL b - 1";
+    expect(diff(horse)).toBe(90);
+    expect(diff("lnsgkgsnl/1r7/ppppppppp/9/9/9/PPPPPPPPP/7R1/LNSGKGSNL b Bb 1") - diff(horse)).toBe(-90);
+    // 手順で数えた合計(materialSwing、教室の値)とも同じ考え方: 角を取りながら成ると ＋8＋2。
+    expect(materialSwing("k8/9/7b1/9/9/9/9/7R1/8K b - 1", ["2h2c+"])).toBe(10);
+    // 駒落ちは、開始局面の駒がまるごとない差をそのまま数える(香落ちの下手は＋315から)。
+    const kyo = "lnsgkgsn1/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL w - 1";
+    expect(diff(kyo, kyo)).toBe(315);
+    expect(diff("lnsgkgsn1/1r5b1/pppppppp1/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b P 1", kyo)).toBe(405);
+  });
+
 });

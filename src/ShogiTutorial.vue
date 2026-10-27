@@ -597,7 +597,7 @@ import { formatHintMove } from "./core/match-assists.mjs";
 import { appendUsiMove, createGameRecord } from "./game-state";
 import { attackMap } from "./core/learning-setup.mjs";
 import { controlCount, kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
-import { CAPTURE_POP_MS, capturePop, materialLabel, materialSwing, materialTotals } from "./core/piece-points.mjs";
+import { CAPTURE_POP_MS, materialLabel, materialPops, materialSwing, materialTotals } from "./core/piece-points.mjs";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
@@ -1155,7 +1155,7 @@ const streak = ref(0);
 const materialTotal = ref(0);
 const materialSeen = ref(false);
 /** 盤に浮かべている駒得の数字。 */
-const floatLabels = ref<{ id: string | number; file: number; rank: number; text: string; tone: "good" | "bad"; big: boolean }[]>([]);
+const floatLabels = ref<{ id: string | number; file: number; rank: number; text: string; tone: "good" | "bad"; big: boolean; sub?: boolean; offset?: boolean }[]>([]);
 let floatSeq = 0;
 let floatTimers: ReturnType<typeof setTimeout>[] = [];
 function clearFloats() {
@@ -1164,21 +1164,24 @@ function clearFloats() {
   floatLabels.value = [];
 }
 onBeforeUnmount(clearFloats);
+/** 浮かべる数字を盤に出し、決まった時間で消す。 */
+function showPops(pops: ReturnType<typeof materialPops>) {
+  const ids = new Set<string | number>(pops.map(({ id }) => id));
+  floatLabels.value = [...floatLabels.value, ...pops];
+  floatTimers.push(setTimeout(() => {
+    floatLabels.value = floatLabels.value.filter(({ id }) => !ids.has(id));
+  }, CAPTURE_POP_MS));
+}
 /**
- * 駒を取った手なら、取ったマスに＋N(先手が取った)・−N(後手が取った)を浮かべ、合計に足す。
+ * 駒を取った手・成った手なら、そのマスに＋N(先手が取った)・−N(後手が取った)と成りの分(「成り＋2」)を浮かべ、合計に足す。
  * delayは相手の応手のように、少し遅れて盤に出る手の数字を合わせるため(合計はすぐ足す)。
  */
 function popCapture(sfen: string, usi: string, delay = 0) {
-  const pop = capturePop(sfen, usi, "black", (floatSeq += 1));
-  if (!pop) return;
-  materialTotal.value += pop.points;
+  const pops = materialPops(sfen, usi, "black", (floatSeq += 1));
+  if (!pops.length) return;
+  materialTotal.value += pops.reduce((sum, pop) => sum + pop.points, 0);
   materialSeen.value = true;
-  const show = () => {
-    floatLabels.value = [...floatLabels.value, pop];
-    floatTimers.push(setTimeout(() => {
-      floatLabels.value = floatLabels.value.filter(({ id }) => id !== pop.id);
-    }, CAPTURE_POP_MS));
-  };
+  const show = () => showPops(pops);
   if (delay) floatTimers.push(setTimeout(show, delay));
   else show();
 }
@@ -1594,11 +1597,8 @@ function seekReplayTo(ply: number) {
   // 1手進めたときだけ駒音を鳴らし、駒を取った手なら先手から見た駒得の数字を浮かべる。
   if (stepState.value.ply === before.ply + 1) {
     playMoveSoundFor(before.sfen, step.moves[before.ply]);
-    const pop = capturePop(before.sfen, step.moves[before.ply], "black", (floatSeq += 1));
-    if (pop) {
-      floatLabels.value = [...floatLabels.value, pop];
-      floatTimers.push(setTimeout(() => { floatLabels.value = floatLabels.value.filter(({ id }) => id !== pop.id); }, CAPTURE_POP_MS));
-    }
+    const pops = materialPops(before.sfen, step.moves[before.ply], "black", (floatSeq += 1));
+    if (pops.length) showPops(pops);
   }
   stepSolved.value = stepState.value.solved;
   lastMove.value = step.moves[stepState.value.ply - 1] ?? "";

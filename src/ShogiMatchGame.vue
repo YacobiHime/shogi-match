@@ -2601,7 +2601,7 @@ import {
   learningStartPosition,
   normalizeAssistLimit,
 } from "./core/learning-setup.mjs";
-import { AI_PIECE_POINTS, CAPTURE_POP_MS, capturePop, materialLabel, aiMaterialTotals } from "./core/piece-points.mjs";
+import { AI_PIECE_POINTS, CAPTURE_POP_MS, materialBalance, materialLabel, materialPops } from "./core/piece-points.mjs";
 import { FURIGOMA_LAND_AT, createMoveSoundPlayer, loadSoundEnabled, saveSoundEnabled, selectMoveSound } from "./core/move-sound";
 import { IMPACT_STAGE, finishImpact, impactStopMs, moveImpact, praiseImpactStage } from "./core/move-impact.mjs";
 import {
@@ -2753,14 +2753,15 @@ function toggleMaterialGuide() {
   }
 }
 /**
- * 状態表示の駒の損得の札。盤の上と持ち駒の点数(piece-points.mjsのaiMaterialTotals)を、自分と相手で比べる。
+ * 状態表示の駒の損得の札。取った駒の差と成りの分の差(piece-points.mjsのmaterialBalance)を、自分と相手で比べる。
+ * 盤に浮かべる数字を足したものと同じ(歩を1枚取ると＋90、角が成ると＋90)。駒落ちの差は開始局面から数える。
  * 二人で指すときは先手から見る。振り返りでは、見ている局面の損得。
  */
 const materialChip = computed(() => {
   if (!materialGuideEnabled.value || !matchStarted.value || pregameOpen.value) return null;
   const local = normalizedMode.value === "local";
   const side = local || humanColor.value !== Color.WHITE ? "black" : "white";
-  const totals = aiMaterialTotals(currentSfen.value);
+  const totals = materialBalance(currentSfen.value, matchInitialSfen.value);
   const diff = totals[side] - totals[side === "black" ? "white" : "black"];
   const label = materialLabel(diff);
   const text = diff === 0 ? "駒の損得 ±0" : `${local ? "先手 " : ""}${label.text}`;
@@ -7447,7 +7448,7 @@ function syncPosition(usi = "") {
  * 対局の駒得の数字。AI用の値で、取ったマスに緑の「＋540」、取られたら赤の「−495」などを浮かべる。
  * 成った駒は、持ち駒になる元の駒の値段で数える(piece-points.mjs)。直前の局面から指した手のときだけ出す(復元・待ったでは出さない)。
  */
-const captureFloatLabels = ref<{ id: number; file: number; rank: number; text: string; tone: "good" | "bad"; big: boolean }[]>([]);
+const captureFloatLabels = ref<{ id: number; file: number; rank: number; text: string; tone: "good" | "bad"; big: boolean; sub?: boolean; offset?: boolean }[]>([]);
 let captureFloatSeq = 0;
 function showCapturePop(previous: string, usi: string) {
   // 学習対局ではいつも、ほかの対局では「駒の損得」を付けているときに出す。
@@ -7457,12 +7458,14 @@ function showCapturePop(previous: string, usi: string) {
   if (!appendUsiMove(check, usi) || check.position.sfen.split(" ")[0] !== record.value.position.sfen.split(" ")[0]) return;
   const side = humanColor.value === Color.WHITE ? "white" : "black";
   captureFloatSeq += 1;
-  const pop = capturePop(previous, usi, side, captureFloatSeq, AI_PIECE_POINTS, AI_PIECE_POINTS.B);
-  if (!pop) return;
-  const label = { id: captureFloatSeq, file: pop.file, rank: pop.rank, text: pop.text, tone: pop.tone, big: pop.big };
-  captureFloatLabels.value = [...captureFloatLabels.value, label];
+  // 取った駒の元の値段と、成りの分(成った・成駒を取った/取られた)を分けて浮かべる。
+  const pops = materialPops(previous, usi, side, captureFloatSeq, AI_PIECE_POINTS, AI_PIECE_POINTS.B);
+  if (!pops.length) return;
+  const labels = pops.map(({ id, file, rank, text, tone, big, sub, offset }) => ({ id, file, rank, text, tone, big, sub, offset }));
+  const ids = new Set(labels.map(({ id }) => id));
+  captureFloatLabels.value = [...captureFloatLabels.value, ...labels];
   setTimeout(() => {
-    captureFloatLabels.value = captureFloatLabels.value.filter(({ id }) => id !== label.id);
+    captureFloatLabels.value = captureFloatLabels.value.filter(({ id }) => !ids.has(id));
   }, CAPTURE_POP_MS);
 }
 
@@ -7819,9 +7822,9 @@ function updateCoachAdvice(
   showCoachAdvice(advice);
 }
 
-/** プレイヤーから見た駒の損得(図鑑のAI用の駒の値段。「駒の損得」の札と同じ数え方)。形勢の一言の方針に使う。 */
+/** プレイヤーから見た駒の損得(図鑑のAI用の駒の値段。「駒の損得」の札と同じ数え方)。形勢の一言の方針と封じ手の札に使う。 */
 function playerMaterialBalance() {
-  const totals = aiMaterialTotals(currentSfen.value);
+  const totals = materialBalance(currentSfen.value, matchInitialSfen.value);
   return humanColor.value === Color.WHITE ? totals.white - totals.black : totals.black - totals.white;
 }
 
