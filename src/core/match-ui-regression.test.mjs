@@ -34,6 +34,14 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/MEASURE_STAGE_SPANS[^=]*= \{ scan: \[0, 60\], review: \[60, 85\], focus: \[85, 100\] \}/);
     expect(source).toMatch(/if \(measuring\) \{\s*measureWaitHidden\.value = false;\s*measureAnalyzing\.value = true;/);
   });
+  it("棋力測定は、測る前の実績と札の幅を目安にし、診断の幅をレーティングの幅にする(docs/skill-measure-design.mdの11章)", () => {
+    expect(source).toMatch(/prior: measureSession\.value \? measurePriorState\.value : null/);
+    expect(source).toMatch(/applyMeasuredRating\(ratingState\.value, \{ rating: diagnosis\.rating, label: diagnosis\.label, spread: diagnosis\.spread \}\)/);
+    // 続けて測るときは、最初の目安を持ち越す(測定の対局の勝ち負けを、実績として2回数えない)。
+    expect(source).toMatch(/options\.prior\s*\?\? \(options\.carry \? measurePriorState\.value : null\)/);
+    expect(source).toMatch(/measurePriorState\.value = measure\?\.prior \?\? null/);
+  });
+
   it("棋力測定の対局中は、測定の札を出し、閃き・待った・作戦の案内を休む。中断・リロードのあとも測定のまま(docs/skill-measure-design.mdの6章)", () => {
     expect(source).toMatch(/v-else-if="measureBand" class="shogi-game__measure-band" data-measure-band/);
     expect(source).toMatch(/if \(!measureMode\.value \|\| reviewMode\.value \|\| !matchStarted\.value\) return null;/);
@@ -42,7 +50,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function matchHintAllowance\(\) \{[\s\S]{0,120}?if \(measureMode\.value\) return 0;/);
     expect(source).toMatch(/function matchUndoAllowance\(\) \{[\s\S]{0,120}?if \(measureMode\.value\) return 0;/);
     expect(source).toMatch(/const openingGuideAvailable = computed\(\(\) => matchInitialSfen\.value === STANDARD_SFEN && !measureMode\.value\);/);
-    expect(source).toMatch(/measure: measureMode\.value\s*\? \{ carry: measureCarry\.value, welcome: measureWelcome\.value, settingsBefore: settingsBeforeMeasure \}/);
+    expect(source).toMatch(/measure: measureMode\.value\s*\? \{ carry: measureCarry\.value, welcome: measureWelcome\.value, settingsBefore: settingsBeforeMeasure, prior: measurePriorState\.value \}/);
     expect(source).toMatch(/restoredMeasureState\(snapshot\.measure\)/);
     // 診断は、勝ち負け(持ち越した対局の分も)と、解析の読みの深さ(PC・スマホ)に合った表を使う(docs/skill-measure-design.mdの7章)。
     expect(source).toMatch(/results,\s*plan: analysisCompact\.value \? "compact" : "desktop",/);
@@ -677,8 +685,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/choice === "some" \|\| choice === "player"[\s\S]{0,200}?measureStartFrom\.value = choice;/);
     // 棋力測定は、先に「どのくらい指せる？」の札で最初の相手を選ぶ(いきなり強い相手で始めない)。
     expect(source).toMatch(/function startMeasureMatch\(\) \{[\s\S]{0,160}?measureStartFrom\.value = "note";/);
-    expect(source).toMatch(/v-if="measureStartFrom"[\s\S]{0,400}?data-measure-start[\s\S]*?v-for="choice in measureStartOptions"[\s\S]*?chooseMeasureStart\(choice\.level\)/);
-    expect(source).toMatch(/startMeasureMatchNow\(\{ level, welcome: from === "some" \|\| from === "player" \? from : undefined \}\);/);
+    expect(source).toMatch(/v-if="measureStartFrom"[\s\S]{0,400}?data-measure-start[\s\S]*?v-for="choice in measureStartOptions"[\s\S]*?chooseMeasureStart\(choice\)/);
+    expect(source).toMatch(/startMeasureMatchNow\(\{\s*level: choice\.level,\s*welcome: from === "some" \|\| from === "player" \? from : undefined,\s*prior: measurePrior\(\{ band: choice\.band, history: ratingState\.value\.history \}\),\s*\}\);/);
     expect(source).toMatch(/\} else if \(measureStartFrom\.value\) \{\s*measureStartFrom\.value = "";/);
     // 続けて測るときは、案内の答えを引き継ぐ。対局準備へ戻ると捨てる。
     expect(source).toMatch(/measureWelcome\.value = options\.welcome \?\? \(options\.carry \? measureWelcome\.value : ""\);/);

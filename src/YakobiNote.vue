@@ -739,6 +739,8 @@ type RatingState = {
   declared: { label: string; level: number; at: number } | null;
   declaredLevels: { [label: string]: { [level: string]: Tally } };
   history: HistoryRecord[];
+  /** レーティングの幅(棋力測定・申告のあとだけ。player-rating.mjs)。 */
+  deviation: number | null;
 };
 /** レーティングの記録。対局の結果には、棋戦・相手・段階も付く(棋戦を記録する前の対局は、自由対局)。 */
 type HistoryRecord = {

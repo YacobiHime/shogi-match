@@ -267,4 +267,28 @@ describe('player rating', () => {
     storage.setItem(RATING_STORAGE_KEY, JSON.stringify({ ladder: 2, rating: 30, games: 0, wins: 0, losses: 0, draws: 0 }));
     expect(loadRatingState(storage)).toMatchObject({ rating: 30, ladderNotice: null });
   });
+
+  it('moves fast after a measurement or a declaration, then settles back (docs/skill-measure-design.md 11章)', () => {
+    // 30局指した人(いつもはK20)が、測定でLv24(R1410)と出た。本当はLv20くらいで、Lv24に3連敗した。
+    let state = { ...createRatingState(), games: 30, rating: 1170 };
+    state = applyMeasuredRating(state, { rating: levelRating(24), spread: 4 });
+    expect(state.deviation).toBe(240);
+    const before = state.rating;
+    for (let index = 0; index < 3; index += 1) state = applyRatedGame(state, { opponentLevel: 24, outcome: 'loss' }).state;
+    // 前は1敗で約10点(3敗で30点)。幅があるので、3敗で3Lv(R180)以上下がる。
+    expect(before - state.rating).toBeGreaterThan(180);
+    expect(state.deviation).toBeLessThan(240);
+    // 幅は1局ごとに狭まり、狭くなったら持たず、いつもの動き方に戻る。
+    for (let index = 0; index < 20; index += 1) state = applyRatedGame(state, { opponentLevel: 20, outcome: index % 2 ? 'win' : 'loss' }).state;
+    expect(state.deviation).toBeNull();
+    const settled = applyRatedGame(state, { opponentLevel: 20, outcome: 'loss' });
+    expect(Math.abs(settled.delta)).toBeLessThanOrEqual(20);
+    // 幅が狭い測定でも、少しは幅を持つ。申告は広い幅。幅は保存して読み直せる。
+    expect(applyMeasuredRating(createRatingState(), { rating: 900, spread: 1 }).deviation).toBe(120);
+    expect(applyDeclaredGrade(createRatingState(), { label: '3級', level: 22 }).deviation).toBe(300);
+    const storage = memoryStorage();
+    saveRatingState(storage, applyMeasuredRating(createRatingState(), { rating: 900, spread: 3 }));
+    expect(loadRatingState(storage).deviation).toBe(180);
+    expect(createRatingState().deviation).toBeNull();
+  });
 });

@@ -16,6 +16,15 @@ const PROVISIONAL_GAMES = 10;
 const PROVISIONAL_K = 40;
 const STANDARD_K = 20;
 const MAX_HISTORY = 30;
+/**
+ * レーティングの幅(R。Glicko式のRD)。棋力測定と自己申告のあとは、本当の強さがまだはっきりしないので幅を持たせ、
+ * 勝ち負けで大きく動かす。幅は1局ごとに狭まり、SETTLED_DEVIATIONより狭くなったら持たず、いつもの動き方(K)に戻る。
+ * 測定が外れても、そのあとの数局で戻るように(docs/skill-measure-design.mdの11章、案E)。
+ */
+const DECLARED_DEVIATION = 300;
+const MIN_MEASURED_DEVIATION = 120;
+const SETTLED_DEVIATION = 100;
+const GLICKO_Q = Math.log(10) / 400;
 
 const MAX_LEVEL = CPU_STRENGTH_PRESETS.at(-1).level;
 
@@ -110,6 +119,7 @@ export function createRatingState() {
   return {
     ladder: LADDER_VERSION, rating: INITIAL_RATING, games: 0, wins: 0, losses: 0, draws: 0,
     levels: {}, colors: {}, events: {}, usage: {}, measured: null, declared: null, declaredLevels: {}, history: [], ladderNotice: null,
+    deviation: null,
   };
 }
 
@@ -189,11 +199,17 @@ export function applyRatedGame(state, { opponentLevel, outcome, color, profile, 
   const score = outcome === 'win' ? 1 : outcome === 'draw' ? 0.5 : 0;
   const opponent = levelRating(opponentLevel);
   const expected = 1 / (1 + 10 ** ((opponent - state.rating) / 400));
-  const k = state.games < PROVISIONAL_GAMES ? PROVISIONAL_K : STANDARD_K;
+  const baseK = state.games < PROVISIONAL_GAMES ? PROVISIONAL_K : STANDARD_K;
+  // 幅があるとき(測定・申告のあと)は、Glicko式で動かす(相手のCPUの強さは決まっているので、相手の幅は0)。
+  const deviation = Number.isFinite(state.deviation) && state.deviation > 0 ? state.deviation : 0;
+  const precision = deviation ? 1 / deviation ** 2 + GLICKO_Q ** 2 * expected * (1 - expected) : 0;
+  const k = deviation ? Math.max(baseK, GLICKO_Q / precision) : baseK;
+  const narrowed = deviation ? Math.round(Math.sqrt(1 / precision)) : 0;
   const after = Math.max(0, Math.round(state.rating + k * (score - expected)));
   const next = {
     ...state,
     rating: after,
+    deviation: narrowed > SETTLED_DEVIATION ? narrowed : null,
     games: state.games + 1,
     wins: state.wins + (outcome === 'win' ? 1 : 0),
     losses: state.losses + (outcome === 'loss' ? 1 : 0),
@@ -242,22 +258,26 @@ export function applyDeclaredGrade(state, { label, level, at = Date.now() }) {
   return {
     ...state,
     rating,
+    // 申告は目安なので、幅を広く持ち、そのあとの勝ち負けで大きく動かす。
+    deviation: DECLARED_DEVIATION,
     declared: { label, level, at },
     history: [...state.history, { at, rating, opponentLevel: null, outcome: 'declare' }].slice(-MAX_HISTORY),
   };
 }
 
 /**
- * 棋力測定の結果をレーティングとして設定する。対局数は変えない(測定は数局ぶんの精度のため、
- * 最初の10局のうちはその後の対局で動きやすいまま)。履歴にはoutcome: 'measure'で残す。
+ * 棋力測定の結果をレーティングとして設定する。対局数は変えない。診断の幅(標準偏差、Lv)をレーティングの幅にし、
+ * そのあとの対局で動きやすくする(外れても数局で戻る)。履歴にはoutcome: 'measure'で残す。
+ * 診断には測る前の実績も入っている(skill-estimate.mjsのmeasurePrior)ので、実績を捨てて上書きするのではない。
  * @param {ReturnType<typeof createRatingState>} state
- * @param {{ rating: number, label?: string, at?: number }} measurement
+ * @param {{ rating: number, label?: string, spread?: number, at?: number }} measurement spread: 診断の幅(Lv)
  */
-export function applyMeasuredRating(state, { rating, label = '', at = Date.now() }) {
+export function applyMeasuredRating(state, { rating, label = '', spread = 0, at = Date.now() }) {
   const value = Math.max(0, Math.round(rating));
   return {
     ...state,
     rating: value,
+    deviation: Math.max(MIN_MEASURED_DEVIATION, Math.round((Number.isFinite(spread) ? spread : 0) * RATING_PER_LEVEL)),
     measured: { rating: value, label, at },
     history: [...state.history, { at, rating: value, opponentLevel: null, outcome: 'measure' }].slice(-MAX_HISTORY),
   };
@@ -393,6 +413,8 @@ export function loadRatingState(storage) {
       history: Array.isArray(parsed.history)
         ? parsed.history.filter((entry) => entry && Number.isFinite(entry.rating)).slice(-MAX_HISTORY)
         : [],
+      deviation: Number.isFinite(parsed.deviation) && parsed.deviation > SETTLED_DEVIATION
+        ? Math.min(DECLARED_DEVIATION, Math.round(parsed.deviation)) : null,
     };
   } catch {
     return createRatingState();

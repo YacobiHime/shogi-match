@@ -1737,10 +1737,10 @@
           aria-hidden="true"
         >
         <h2 id="measure-start-title">棋力を測ろう</h2>
-        <p>1局指して、竜王戦のちょうどいい難易度を決めるよ。どのくらい指せる？ 選んだ強さより、少しやさしい相手から始めるね。</p>
+        <p>竜王戦のちょうどいい難易度を決めるよ。どのくらい指せる？ 少しやさしい相手から始めて、勝ち負けで相手を上げ下げしながら1〜3局で絞り込むね。</p>
         <ul class="shogi-welcome__choices">
           <li v-for="choice in measureStartOptions" :key="choice.id">
-            <button type="button" :data-measure-start-choice="choice.id" @click="chooseMeasureStart(choice.level)">
+            <button type="button" :data-measure-start-choice="choice.id" @click="chooseMeasureStart(choice)">
               <strong>{{ choice.label }}</strong>
               <small>{{ choice.description }}</small>
               <small class="shogi-measure-start__opponent">最初の相手：{{ choice.opponent }}くらい（Lv.{{ choice.level }}）</small>
@@ -2131,7 +2131,7 @@
             <span>（{{ skillDiagnosis.label }}）</span>
           </p>
           <p class="shogi-game__measure-range">
-            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安{{ skillDiagnosis.reliability === "reference" ? "（幅の広い参考値）" : "" }}。レーティングに設定したよ
+            R{{ skillDiagnosis.ratingLow }}〜R{{ skillDiagnosis.ratingHigh }}の範囲の目安{{ skillDiagnosis.reliability === "reference" ? "（幅の広い参考値）" : "" }}{{ measurePriorGames ? `。これまでの対局${measurePriorGames}局の勝ち負けも合わせたよ` : "" }}。レーティングに設定したよ
           </p>
         </template>
         <!--
@@ -2154,11 +2154,11 @@
         </div>
         <template v-if="!skillDiagnosis.insufficient">
           <!--
-            推定の幅が広いときは、推定したLvの相手ともう1局指して確かめられる(docs/skill-measure-design.mdの8章)。
+            推定の幅が広いときは、推定したLvの相手ともう1局指して確かめられる(上げ下げ式。docs/skill-measure-design.mdの8・11章)。
             竜王戦への道を先にし、確かめは選べる形で添える(10章)。
           -->
           <div v-if="measureNext?.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>
-            <p>1局だけだと、まだ幅の広い目安だよ。もっと正確にしたいなら、{{ measureNextLabel }}（Lv.{{ measureNext.level }}）ともう1局指すと、2局分で測り直すよ。</p>
+            <p>{{ (measureCarry?.games ?? 0) + 1 }}局だと、まだ幅のある目安だよ。もっと正確にしたいなら、{{ measureNextLabel }}（Lv.{{ measureNext.level }}）ともう1局。勝てば相手が上がり、負ければ下がって、絞り込むよ。</p>
             <button type="button" class="shogi-game__analysis-button" data-measure-continue @click="continueMeasure">もう1局で確かめる（Lv.{{ measureNext.level }}）</button>
           </div>
           <dl v-if="measureStats" class="shogi-game__result-details">
@@ -2168,7 +2168,7 @@
             </div>
             <div>
               <dt>測った手</dt>
-              <dd>{{ skillDiagnosis.count }}手{{ measureCarry ? `（${measureCarry.games + 1}局分）` : "" }}・平均損失{{ skillDiagnosis.averageLoss }}</dd>
+              <dd>{{ skillDiagnosis.count ? `31手目からの${skillDiagnosis.count}手${measureCarry ? `（${measureCarry.games + 1}局分）` : ""}・平均損失${skillDiagnosis.averageLoss}` : "31手目からの手が少なく、勝ち負けで測ったよ" }}</dd>
             </div>
             <div v-for="phase in measureStats.phases" :key="phase.key">
               <dt>{{ phase.label }}</dt>
@@ -2195,7 +2195,7 @@
           <button type="button" class="shogi-game__analysis-button" @click="measureReportDismissed = true">棋譜を見る</button>
           <button type="button" class="shogi-game__analysis-button" data-measure-home @click="leaveFinishedMatch()">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
-        <p class="shogi-game__measure-note">指し手の評価値の損と、勝ち負けから求めた目安です。対局の内容で動きます。</p>
+        <p class="shogi-game__measure-note">CPUと五分に指せる強さの目安です。勝ち負けを中心に、31手目からの指し手の損で絞り込みました。このあとの対局の勝ち負けで、早めに合わせ直します。</p>
       </div>
     </div>
   </section>
@@ -2353,6 +2353,7 @@ import {
   estimateSkill,
   measurableMoves,
   measureFollowUp,
+  measurePrior,
   measureStartChoices,
   measureStatistics,
   restoredMeasureState,
@@ -3176,6 +3177,13 @@ const measureReportDismissed = ref(false);
  */
 const measureWelcome = ref<"" | "some" | "player">("");
 /**
+ * 測る前の目安(最初に選んだ札の幅と、測定を始める前の最近のCPUとの対局の勝ち負け。skill-estimate.mjsのmeasurePrior)。
+ * 測定を始めるときに作り、続けて測る間は持ち越す。棋力は「CPUと五分に指せるLv」なので、実績を診断に入れる
+ * (docs/skill-measure-design.mdの11章)。
+ */
+type MeasurePrior = { band: number[] | null; results: { opponent: number; score: number }[] };
+const measurePriorState = ref<MeasurePrior | null>(null);
+/**
  * 測れる手が足りなかった測定対局から持ち越した手と、その対局の数。次の測定対局の手と合わせて診断する。
  * 測定の対局を続けている間だけ持ち、対局準備・ホームへ戻ると捨てる(docs/skill-measure-design.md)。
  */
@@ -3184,14 +3192,14 @@ type MeasureResult = { opponent: number; score: number };
 const measureCarry = ref<{ moves: { loss: number; standing: number }[]; games: number; results: MeasureResult[] } | null>(null);
 /**
  * 棋力測定の対局中の札(docs/skill-measure-design.mdの6章)。対局中だけ出す(終局後は測定中・結果の札が出る)。
- * 続けて測る2局目からは、前の対局の手と合わせて測ることを添える。
+ * 続けて測る2局目からは、前の対局の勝ち負けと合わせて測ることを添える。
  */
 const measureBand = computed(() => {
   if (!measureMode.value || reviewMode.value || !matchStarted.value) return null;
   const game = (measureCarry.value?.games ?? 0) + 1;
   return {
     title: game === 1 ? "ふだんどおり指してね" : `${game}局目`,
-    detail: game === 1 ? "終わったら、指し手から棋力を測るよ" : "前の対局の手と合わせて測るよ",
+    detail: game === 1 ? "終わったら、勝ち負けと指し手から棋力を測るよ" : "前の対局の勝ち負けと合わせて測るよ",
     note: "閃き・待った・作戦の案内はお休み",
   };
 });
@@ -6196,11 +6204,18 @@ const measureStartFrom = ref<"" | "note" | "some" | "player">("");
 const measureStartOptions = computed(() => measureStartChoices({
   ratedLevel: ratingState.value.games > 0 ? recommendedLevel(ratingState.value.rating) : null,
 }));
-/** 札で選んだ強さで、測定の対局を始める。はじめての案内から来たときは、その答えを結果の画面まで引き継ぐ。 */
-function chooseMeasureStart(level: number) {
+/**
+ * 札で選んだ強さで、測定の対局を始める。はじめての案内から来たときは、その答えを結果の画面まで引き継ぐ。
+ * 札の目安の幅と、ここまでの対局の勝ち負けを、測る前の目安にする。
+ */
+function chooseMeasureStart(choice: { level: number; band: readonly number[] | null }) {
   const from = measureStartFrom.value;
   measureStartFrom.value = "";
-  startMeasureMatchNow({ level, welcome: from === "some" || from === "player" ? from : undefined });
+  startMeasureMatchNow({
+    level: choice.level,
+    welcome: from === "some" || from === "player" ? from : undefined,
+    prior: measurePrior({ band: choice.band, history: ratingState.value.history }),
+  });
 }
 /**
  * 測定の対局を始める。続けて測るとき(continueMeasure)は、相手のLvと、前の対局から持ち越した手を渡す。
@@ -6212,11 +6227,16 @@ function startMeasureMatchNow(options: {
   carry?: { moves: { loss: number; standing: number }[]; games: number; results: MeasureResult[] };
   /** はじめての案内の答え(少し指せる・よく指している)。続けて測るときは、前の対局のものを引き継ぐ。 */
   welcome?: "some" | "player";
+  /** 測る前の目安。続けて測るときは、前の対局のものを引き継ぐ。省くと、ここまでの対局の勝ち負けだけ。 */
+  prior?: MeasurePrior;
 } = {}) {
   yakobiNoteOpen.value = false;
   openPregame();
   measureWelcome.value = options.welcome ?? (options.carry ? measureWelcome.value : "");
   measureCarry.value = options.carry ?? null;
+  measurePriorState.value = options.prior
+    ?? (options.carry ? measurePriorState.value : null)
+    ?? measurePrior({ history: ratingState.value.history });
   settingsBeforeMeasure = captureMatchSettings();
   matchKind.value = "normal";
   searchNodes.value = (options.level === undefined
@@ -7048,6 +7068,7 @@ function openPregame() {
   measureWelcome.value = "";
   measureAnalyzing.value = false;
   measureCarry.value = null;
+  measurePriorState.value = null;
   if (settingsBeforeMeasure) restoreMatchSettings(settingsBeforeMeasure);
   settingsBeforeMeasure = null;
   if (settingsBeforePractice) restoreMatchSettings(settingsBeforePractice);
@@ -7301,7 +7322,7 @@ function persistMatchState() {
     settingsBeforeTutorial: tutorialMatch.value ? settingsBeforeTutorial : null,
     // 棋力測定の対局は、中断・リロードのあとも測定のまま続ける(持ち越した手と、測定の前の設定も残す)。
     measure: measureMode.value
-      ? { carry: measureCarry.value, welcome: measureWelcome.value, settingsBefore: settingsBeforeMeasure }
+      ? { carry: measureCarry.value, welcome: measureWelcome.value, settingsBefore: settingsBeforeMeasure, prior: measurePriorState.value }
       : null,
     moves: [...moveHistory],
     active: active.value,
@@ -7393,6 +7414,7 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
   measureMode.value = Boolean(measure);
   measureCarry.value = measure?.carry ?? null;
   measureWelcome.value = measure?.welcome ?? "";
+  measurePriorState.value = measure?.prior ?? null;
   settingsBeforeMeasure = measure?.settingsBefore ?? null;
 }
 
@@ -8776,6 +8798,7 @@ const skillDiagnosis = computed(() => {
   return estimateSkill(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black", carried, {
     results,
     plan: analysisCompact.value ? "compact" : "desktop",
+    prior: measureSession.value ? measurePriorState.value : null,
   });
 });
 /** この測定対局の勝ち負け(相手のLvと、プレイヤーから見た点)。終局していなければnull。 */
@@ -8815,6 +8838,8 @@ function continueMeasure() {
   };
   startMeasureMatchNow({ level: next.level, carry });
 }
+/** 診断に合わせた、測る前の対局の数(実績。docs/skill-measure-design.mdの11章)。 */
+const measurePriorGames = computed(() => (measureSession.value ? measurePriorState.value?.results.length ?? 0 : 0));
 const measureStats = computed(() => (
   measureSession.value && skillDiagnosis.value && !skillDiagnosis.value.insufficient
     ? measureStatistics(analysisPoints.value, humanColor.value === Color.WHITE ? "white" : "black")
@@ -8847,7 +8872,7 @@ function enterTournamentFromMeasure() {
 function applySkillDiagnosis() {
   const diagnosis = skillDiagnosis.value;
   if (!diagnosis || diagnosis.insufficient || diagnosis.rating === undefined) return;
-  ratingState.value = applyMeasuredRating(ratingState.value, { rating: diagnosis.rating, label: diagnosis.label });
+  ratingState.value = applyMeasuredRating(ratingState.value, { rating: diagnosis.rating, label: diagnosis.label, spread: diagnosis.spread });
   saveRatingState(browserStorage(), ratingState.value);
 }
 
