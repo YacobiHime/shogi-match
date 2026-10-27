@@ -885,8 +885,11 @@
       :initial-detail-id="planSheetDetailId"
     />
 
+    <!--
+      対戦相手と戦型の欄。行の数は対局の種類ごとに決め、対局の途中で増やさない(docs/stable-board-layout-design.mdの2-4)。
+      戦型の行は、決まる前から取っておく。
+    -->
     <section
-      v-if="cpuColor !== null || blackFormationText !== UNDETERMINED_FORMATION || whiteFormationText !== UNDETERMINED_FORMATION"
       class="shogi-game__summary"
       :class="matchStage ? `shogi-game__summary--stage-${matchStage.weight}` : ''"
       aria-label="対戦相手と戦型"
@@ -932,6 +935,8 @@
             <i class="shogi-game__stage-mark--now">◇</i>
           </span>
           <b v-if="matchStage.stakes" class="shogi-game__stage-stakes">{{ matchStage.stakes }}</b>
+          <!-- 戦型は星取りの行の右に入れる。星取りのない局でも、この行は取っておく。 -->
+          <span v-if="stageFormationText" class="shogi-game__stage-formations" data-stage-formations>{{ stageFormationText }}</span>
         </p>
         <!--
           中継の勝率バー(docs/tournament-match-presence-design.mdの3章)。左が先手(青)、右が後手(赤)。数字は自分の勝率だけ。
@@ -964,7 +969,7 @@
             data-opponent-face
             :data-mood="opponentFace.mood"
           ><img v-if="opponentFace.sprite" :src="opponentFace.sprite" alt="" draggable="false"><span v-else aria-hidden="true">{{ opponentFace.char }}</span></span>
-          <span>対 {{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}</span>
+          <span class="shogi-game__stage-name"><span class="shogi-game__stage-vs">対 </span>{{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}</span>
         </p>
         <!--
           中継の1行。相手の一言・特殊能力の札・ほかの対局の速報を、決まった高さの1行に出す(盤の大きさを変えない)。
@@ -995,146 +1000,16 @@
         <b>対戦相手</b>
         <span>{{ cpuColor === Color.BLACK ? "☗" : "☖" }}{{ cpuDisplayName }}<small v-if="cpuStrengthLabel">{{ cpuStrengthLabel }}</small></span>
       </div>
-      <!-- 戦型は決まってから出す。「未判定」を並べて画面の上を埋めない。 -->
-      <div v-if="blackFormationText !== UNDETERMINED_FORMATION"><b>先手</b><span>{{ blackFormationText }}</span></div>
-      <div v-if="whiteFormationText !== UNDETERMINED_FORMATION"><b>後手</b><span>{{ whiteFormationText }}</span></div>
-    </section>
-
-    <section
-      v-if="openingGuideShown"
-      class="shogi-game__opening-guide"
-      :class="{ 'shogi-game__opening-guide--collapsed': openingGuideCollapsed }"
-      aria-label="やこび姫補助"
-    >
-      <h2>定跡の案内</h2>
-      <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
-      <!--
-        作戦は、完成形の小さな盤が描かれた作戦カードで選ぶ(docs/opening-guide-ux-design.md)。
-        作戦を選んでいないあいだは、何をする欄かを1行で伝えるボタンにたたむ。押すと作戦カードのシートを開く。
-        序盤(PLAN_CHOICE_MAX_PLY手目まで)を過ぎたり、今の局面から組める作戦がなくなったりしたら、ボタンごと消す(13章)。
-      -->
-      <button
-        v-if="openingGuideCollapsed"
-        type="button"
-        class="shogi-game__opening-expand"
-        data-plan-open
-        @click="openPlanSheet('game')"
-      >
-        <span>戦法・囲いを選ぶ</span>
-        <small>選ぶと、組み上がるまでの指し手を盤の矢印で教えるよ</small>
-      </button>
-      <div v-else-if="planCardShown" class="shogi-game__opening-plan">
-        <button
-          type="button"
-          class="shogi-game__opening-plan-card"
-          data-plan-open
-          :disabled="!planChoiceOpen"
-          :aria-label="`作戦: ${selectedPlanLabel}。${planChoiceOpen ? '押すと作戦を変えられるよ' : ''}`"
-          @click="openPlanSheet('game')"
-        >
-          <FormationThumb
-            class="shogi-game__opening-plan-thumb"
-            :strategy-id="selectedStrategy"
-            :castle-id="selectedCastle"
-            :filled-squares="planFilledSquares"
-          />
-          <span class="shogi-game__opening-plan-text">
-            <span class="shogi-game__opening-plan-line" data-plan-strategy><em>戦法</em>{{ selectedStrategyLabel || "なし" }}</span>
-            <span class="shogi-game__opening-plan-line" data-plan-castle><em>囲い</em>{{ selectedCastleLabel || "なし" }}</span>
-            <small v-if="planProgress && planProgress.total">完成まで、あと{{ planProgress.total - planProgress.filled }}マス。盤の矢印の手を指そう</small>
-            <small v-else-if="openingPlanComplete">完成！</small>
-          </span>
-        </button>
-        <div class="shogi-game__opening-plan-actions">
-          <button v-if="planChoiceOpen" type="button" data-plan-change @click="openPlanSheet('game')">作戦を変える</button>
-          <button
-            v-if="planProgress"
-            type="button"
-            role="switch"
-            class="shogi-game__opening-plan-ghosts"
-            :aria-checked="planGhostsOn"
-            data-plan-ghosts
-            @click="togglePlanGhosts"
-          >完成形を盤に出す<span aria-hidden="true">{{ planGhostsOn ? "ON" : "OFF" }}</span></button>
-        </div>
-      </div>
-      <!-- 中断したら、理由を一言で伝え、今の局面から近い作戦を並べる。押せばすぐ続けられる。 -->
-      <div v-if="planInterruption" class="shogi-game__plan-interrupt" data-plan-interruption role="status">
-        <p><b>作戦を変えよう</b>{{ planInterruption.reason }}</p>
-        <div>
-          <button
-            v-for="suggestion in planInterruption.suggestions"
-            :key="`${suggestion.kind}:${suggestion.id}`"
-            type="button"
-            @click="chooseSuggestedPlan(suggestion.kind, suggestion.id)"
-          >{{ suggestion.label }}<small>あと{{ suggestion.distance }}手</small></button>
-          <button type="button" @click="openPlanSheet('game')">ほかの作戦を見る</button>
-        </div>
-      </div>
-      <!--
-        やこび姫の作戦の助言(docs/coach-plan-advice-design.md)。AIが飛車を振る手を強く勧めるときに出す。
-        根拠は2手に絞って読み直した点数。「にする」で作戦カードに入れ、矢印と薄い駒で案内する。
-      -->
-      <div v-if="coachPlanOffer" class="shogi-game__plan-interrupt shogi-game__plan-offer" data-plan-offer role="status">
-        <p><b>作戦の提案</b>{{ coachPlanOffer.label }}</p>
-        <p class="shogi-game__plan-offer-basis" data-plan-offer-basis>
-          <span>AIの読み</span>
-          <span>飛車を振る {{ coachPlanOffer.swingText }} <b>{{ coachPlanOffer.swingScore }}</b></span>
-          <span>振らない一番の手 {{ coachPlanOffer.otherText }} <b>{{ coachPlanOffer.otherScore }}</b></span>
-        </p>
-        <div>
-          <button
-            v-if="coachPlanOffer.selectable"
-            type="button"
-            data-plan-offer-accept
-            @click="acceptCoachPlanOffer"
-          >{{ coachPlanOffer.label }}にする</button>
-          <button type="button" data-plan-offer-dismiss @click="dismissCoachPlanOffer">このまま指す</button>
-        </div>
-      </div>
-      <!--
-        タイトル戦の勝負メシ(docs/title-match-day-design.mdの2章)。20手を越えたら、対局場の名物から選ぶ。
-        強さには関係しない。選ばずに指し続けてもよく、封じ手までに選ばなければ1品目にする。
-      -->
-      <div v-if="lunchOffer" class="shogi-game__plan-interrupt shogi-game__lunch-offer" data-lunch-offer role="status">
-        <p><b>お昼の休憩</b>勝負メシはどれにする？</p>
-        <div>
-          <button v-for="meal in lunchOffer" :key="meal" type="button" data-lunch-choice @click="chooseLunch(meal)">{{ meal }}</button>
-        </div>
-      </div>
-      <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
-        <span>この囲いでは、先に飛車を振る場所を選んでね</span>
-        <div>
-          <button
-            v-for="choice in rangingRookChoices"
-            :key="choice.id"
-            type="button"
-            @click="chooseRangingRookStrategy(choice.id)"
-          >{{ choice.label }}</button>
-        </div>
-      </div>
-      <div v-if="strategyCompletionChoiceRequired" class="shogi-game__rook-choice shogi-game__strategy-choice">
-        <span>{{ strategyCompletionPrompt }}</span>
-        <div>
-          <button
-            v-for="choice in strategyCompletionChoices"
-            :key="choice.id"
-            type="button"
-            @click="chooseStrategyCompletion(choice.id)"
-          >{{ choice.label }}</button>
-        </div>
-      </div>
-      <div
-        v-if="nearCompletionPrompt"
-        class="shogi-game__rook-choice shogi-game__strategy-choice"
-      >
-        <span>{{ nearCompletionPrompt.label }}までできたよ！{{ nearCompletionPrompt.definitionLabel }}まで続ける？</span>
-        <div>
-          <button type="button" @click="continueToFullForm">完全形まで続ける</button>
-          <button type="button" @click="finishAtNearForm">ここで終える</button>
-        </div>
-      </div>
-      <p v-if="planCardShown && openingGuideStatus">{{ openingGuideStatus }}</p>
+      <!-- 戦型。決まるまでは「―」を薄く出して行を取っておく(大会の札では、星取りの行に入れる)。 -->
+      <template v-if="!matchStage">
+        <div
+          v-for="side in summaryFormations"
+          :key="side.label"
+          class="shogi-game__summary-formation"
+          :class="{ 'shogi-game__summary-formation--pending': !side.text }"
+          data-summary-formation
+        ><b>{{ side.label }}</b><span>{{ side.text || "―" }}</span></div>
+      </template>
     </section>
 
     <section v-if="uiLayout === 'wide'" class="shogi-game__kifu" aria-label="棋譜">
@@ -1271,6 +1146,19 @@
             <span>この手を封筒にしまって、2日目に開けるよ</span>
             <em v-if="unsealView?.predicted" class="shogi-game__stage-card-predict" data-seal-predict>控室の予想は{{ unsealView.predicted }}</em>
           </template>
+          <!-- お昼の休憩(docs/title-match-day-design.mdの8-1)。器の絵と、選んだ勝負メシ・一言・相手の注文。 -->
+          <template v-else-if="stageCard.kind === 'lunch' && lunchShown">
+            <i class="shogi-game__stage-bowl" aria-hidden="true"></i>
+            <small>{{ lunchShown.title }}</small>
+            <strong data-lunch-card-meal>{{ lunchShown.meal }}</strong>
+            <span v-if="lunchShown.note">{{ lunchShown.note }}</span>
+            <em
+              v-if="lunchShown.other"
+              class="shogi-game__stage-card-predict"
+              :class="{ 'shogi-game__stage-card-predict--hit': lunchShown.same }"
+              data-lunch-card-other
+            >{{ lunchShown.other }}</em>
+          </template>
           <!-- 2日目の朝、立会人が封筒を開けて封じ手を読み上げる。控室の予想と同じなら「予想どおり」。 -->
           <template v-else>
             <i class="shogi-game__stage-envelope shogi-game__stage-envelope--open" aria-hidden="true"></i>
@@ -1321,39 +1209,192 @@
       </Transition>
     </div>
 
-    <section class="shogi-game__coach" aria-label="やこび姫">
-      <div class="shogi-game__portrait">
-        <img
-          ref="portraitImage"
-          class="shogi-game__character"
-          :src="coachPortraitUrl"
-          :srcset="coachPortraitSrcsetValue"
-          :sizes="coachPortraitSizesValue"
-          :data-expression="coachExpression"
-          alt="助言役のやこび姫"
+    <!--
+      やこび姫の欄(docs/stable-board-layout-design.md)。台詞と補助(定跡の案内・札)を1つの入れ物に入れる。
+      縦積みでは盤の下の決まった高さの欄にし、中身が変わっても盤を動かさない。横並びとPCでは包みを消し(display: contents)、
+      台詞と補助をそれぞれグリッドに置く。
+    -->
+    <div class="shogi-game__dock" data-dock>
+      <section class="shogi-game__coach" aria-label="やこび姫">
+        <div class="shogi-game__portrait">
+          <img
+            ref="portraitImage"
+            class="shogi-game__character"
+            :src="coachPortraitUrl"
+            :srcset="coachPortraitSrcsetValue"
+            :sizes="coachPortraitSizesValue"
+            :data-expression="coachExpression"
+            alt="助言役のやこび姫"
+          >
+        </div>
+        <div v-if="hintText || guideText" class="shogi-game__dialogue">
+          <span class="shogi-game__dialogue-icon" aria-hidden="true">
+            <svg viewBox="0 0 26 32" focusable="false">
+              <path
+                class="shogi-game__flame-outer"
+                d="M13 1.5c1.1 4.8-1.6 7-3.6 9.7-2.1 2.9-3.8 5.6-3.8 9.1 0 5.8 3.8 10.2 8.9 10.2 5.8 0 9.9-4.2 9.9-10.1 0-4.8-2.7-9.2-7.2-13.5.3 3.3-.7 5.6-2.6 7.3.5-5.4-1.1-9.3-1.6-12.7Z"
+              />
+              <path
+                class="shogi-game__flame-inner"
+                d="M14.8 15.1c.2 2.1-.5 3.4-1.7 4.7-1.1 1.3-1.8 2.6-1.8 4.2 0 2.6 1.7 4.6 4.2 4.6 2.7 0 4.6-2 4.6-4.7 0-2.5-1.6-5.2-5.3-8.8Z"
+              />
+            </svg>
+          </span>
+          <span class="shogi-game__dialogue-text"><template
+            v-for="(segment, index) in dialogueSegments"
+            :key="index"
+          ><ruby v-if="segment.ruby">{{ segment.text }}<rt>{{ segment.ruby }}</rt></ruby><template
+            v-else
+          >{{ segment.text }}</template></template></span>
+        </div>
+      </section>
+
+      <section
+        v-if="openingGuideShown"
+        class="shogi-game__opening-guide"
+        :class="{ 'shogi-game__opening-guide--collapsed': openingGuideCollapsed }"
+        aria-label="やこび姫補助"
+      >
+        <h2>定跡の案内</h2>
+        <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
+        <!--
+          作戦は、完成形の小さな盤が描かれた作戦カードで選ぶ(docs/opening-guide-ux-design.md)。
+          作戦を選んでいないあいだは、何をする欄かを1行で伝えるボタンにたたむ。押すと作戦カードのシートを開く。
+          序盤(PLAN_CHOICE_MAX_PLY手目まで)を過ぎたり、今の局面から組める作戦がなくなったりしたら、ボタンごと消す(13章)。
+        -->
+        <button
+          v-if="openingGuideCollapsed"
+          type="button"
+          class="shogi-game__opening-expand"
+          data-plan-open
+          @click="openPlanSheet('game')"
         >
-      </div>
-      <div v-if="hintText || guideText" class="shogi-game__dialogue">
-        <span class="shogi-game__dialogue-icon" aria-hidden="true">
-          <svg viewBox="0 0 26 32" focusable="false">
-            <path
-              class="shogi-game__flame-outer"
-              d="M13 1.5c1.1 4.8-1.6 7-3.6 9.7-2.1 2.9-3.8 5.6-3.8 9.1 0 5.8 3.8 10.2 8.9 10.2 5.8 0 9.9-4.2 9.9-10.1 0-4.8-2.7-9.2-7.2-13.5.3 3.3-.7 5.6-2.6 7.3.5-5.4-1.1-9.3-1.6-12.7Z"
+          <span>戦法・囲いを選ぶ</span>
+          <small>選ぶと、組み上がるまでの指し手を盤の矢印で教えるよ</small>
+        </button>
+        <div v-else-if="planCardShown" class="shogi-game__opening-plan">
+          <button
+            type="button"
+            class="shogi-game__opening-plan-card"
+            data-plan-open
+            :disabled="!planChoiceOpen"
+            :aria-label="`作戦: ${selectedPlanLabel}。${planChoiceOpen ? '押すと作戦を変えられるよ' : ''}`"
+            @click="openPlanSheet('game')"
+          >
+            <FormationThumb
+              class="shogi-game__opening-plan-thumb"
+              :strategy-id="selectedStrategy"
+              :castle-id="selectedCastle"
+              :filled-squares="planFilledSquares"
             />
-            <path
-              class="shogi-game__flame-inner"
-              d="M14.8 15.1c.2 2.1-.5 3.4-1.7 4.7-1.1 1.3-1.8 2.6-1.8 4.2 0 2.6 1.7 4.6 4.2 4.6 2.7 0 4.6-2 4.6-4.7 0-2.5-1.6-5.2-5.3-8.8Z"
-            />
-          </svg>
-        </span>
-        <span class="shogi-game__dialogue-text"><template
-          v-for="(segment, index) in dialogueSegments"
-          :key="index"
-        ><ruby v-if="segment.ruby">{{ segment.text }}<rt>{{ segment.ruby }}</rt></ruby><template
-          v-else
-        >{{ segment.text }}</template></template></span>
-      </div>
-    </section>
+            <span class="shogi-game__opening-plan-text">
+              <span class="shogi-game__opening-plan-line" data-plan-strategy><em>戦法</em>{{ selectedStrategyLabel || "なし" }}</span>
+              <span class="shogi-game__opening-plan-line" data-plan-castle><em>囲い</em>{{ selectedCastleLabel || "なし" }}</span>
+              <small v-if="planProgress && planProgress.total">完成まで、あと{{ planProgress.total - planProgress.filled }}マス。盤の矢印の手を指そう</small>
+              <small v-else-if="openingPlanComplete">完成！</small>
+            </span>
+          </button>
+          <div class="shogi-game__opening-plan-actions">
+            <button v-if="planChoiceOpen" type="button" data-plan-change @click="openPlanSheet('game')">作戦を変える</button>
+            <button
+              v-if="planProgress"
+              type="button"
+              role="switch"
+              class="shogi-game__opening-plan-ghosts"
+              :aria-checked="planGhostsOn"
+              data-plan-ghosts
+              aria-label="完成形を盤に出す"
+              @click="togglePlanGhosts"
+            >完成形<span class="shogi-game__opening-plan-long">を盤に出す</span><span class="shogi-game__opening-plan-switch" aria-hidden="true">{{ planGhostsOn ? "ON" : "OFF" }}</span></button>
+          </div>
+        </div>
+        <!-- 中断したら、理由を一言で伝え、今の局面から近い作戦を並べる。押せばすぐ続けられる。 -->
+        <div v-if="planInterruption" class="shogi-game__plan-interrupt" data-plan-interruption role="status">
+          <p><b>作戦を変えよう</b>{{ planInterruption.reason }}</p>
+          <div>
+            <button
+              v-for="suggestion in planInterruption.suggestions"
+              :key="`${suggestion.kind}:${suggestion.id}`"
+              type="button"
+              @click="chooseSuggestedPlan(suggestion.kind, suggestion.id)"
+            >{{ suggestion.label }}<small>あと{{ suggestion.distance }}手</small></button>
+            <button type="button" @click="openPlanSheet('game')">ほかの作戦を見る</button>
+          </div>
+        </div>
+        <!--
+          やこび姫の作戦の助言(docs/coach-plan-advice-design.md)。AIが飛車を振る手を強く勧めるときに出す。
+          根拠は2手に絞って読み直した点数。「にする」で作戦カードに入れ、矢印と薄い駒で案内する。
+        -->
+        <div v-if="coachPlanOffer" class="shogi-game__plan-interrupt shogi-game__plan-offer" data-plan-offer role="status">
+          <p><b>作戦の提案</b>{{ coachPlanOffer.label }}</p>
+          <p class="shogi-game__plan-offer-basis" data-plan-offer-basis>
+            <span>AIの読み</span>
+            <span>飛車を振る {{ coachPlanOffer.swingText }} <b>{{ coachPlanOffer.swingScore }}</b></span>
+            <span>振らない一番の手 {{ coachPlanOffer.otherText }} <b>{{ coachPlanOffer.otherScore }}</b></span>
+          </p>
+          <div>
+            <button
+              v-if="coachPlanOffer.selectable"
+              type="button"
+              data-plan-offer-accept
+              @click="acceptCoachPlanOffer"
+            >{{ coachPlanOffer.label }}にする</button>
+            <button type="button" data-plan-offer-dismiss @click="dismissCoachPlanOffer">このまま指す</button>
+          </div>
+        </div>
+        <!--
+          タイトル戦の勝負メシ(docs/title-match-day-design.mdの2章と8章)。20手を越えたら、対局場の名物から選ぶ。
+          強さには関係しない。選ばずに6手指すと「おまかせ」(1品目)が運ばれる。前にこの対局場で勝った品(勝ちメシ)には★。
+        -->
+        <div v-if="lunchOffer" class="shogi-game__plan-interrupt shogi-game__lunch-offer" data-lunch-offer role="status">
+          <p><b>お昼の休憩</b>勝負メシはどれにする？</p>
+          <div>
+            <button
+              v-for="item in lunchOffer"
+              :key="item.meal"
+              type="button"
+              :class="{ 'shogi-game__lunch-win': item.win }"
+              :aria-label="item.win ? `${item.meal}（勝ちメシ）` : item.meal"
+              data-lunch-choice
+              @click="chooseLunch(item.meal)"
+            ><span v-if="item.win" class="shogi-game__lunch-star" aria-hidden="true">★</span>{{ item.meal }}</button>
+          </div>
+        </div>
+        <div v-if="rangingRookChoiceRequired" class="shogi-game__rook-choice">
+          <span>この囲いでは、先に飛車を振る場所を選んでね</span>
+          <div>
+            <button
+              v-for="choice in rangingRookChoices"
+              :key="choice.id"
+              type="button"
+              @click="chooseRangingRookStrategy(choice.id)"
+            >{{ choice.label }}</button>
+          </div>
+        </div>
+        <div v-if="strategyCompletionChoiceRequired" class="shogi-game__rook-choice shogi-game__strategy-choice">
+          <span>{{ strategyCompletionPrompt }}</span>
+          <div>
+            <button
+              v-for="choice in strategyCompletionChoices"
+              :key="choice.id"
+              type="button"
+              @click="chooseStrategyCompletion(choice.id)"
+            >{{ choice.label }}</button>
+          </div>
+        </div>
+        <div
+          v-if="nearCompletionPrompt"
+          class="shogi-game__rook-choice shogi-game__strategy-choice"
+        >
+          <span>{{ nearCompletionPrompt.label }}までできたよ！{{ nearCompletionPrompt.definitionLabel }}まで続ける？</span>
+          <div>
+            <button type="button" @click="continueToFullForm">完全形まで続ける</button>
+            <button type="button" @click="finishAtNearForm">ここで終える</button>
+          </div>
+        </div>
+        <p v-if="planCardShown && openingGuideStatus">{{ openingGuideStatus }}</p>
+      </section>
+    </div>
 
     <!--
       閃き・待ったの隣に、ひふみんアイ・駒の利き・駒の損得を置く。
@@ -2091,6 +2132,10 @@
           R{{ ratingChange.before }} → <strong>R{{ ratingChange.after }}</strong>
           <span>{{ ratingChange.delta >= 0 ? "+" : "−" }}{{ Math.abs(ratingChange.delta) }}</span>
         </p>
+        <!-- タイトル戦で勝った局の勝負メシは「勝ちメシ」。次に同じ対局場で選ぶとき★が付く(docs/title-match-day-design.mdの8-4)。 -->
+        <p v-if="resultMeal" class="shogi-game__result-meal" data-result-meal>
+          <b>勝ちメシ</b><span aria-hidden="true">★</span>{{ resultMeal.meal }}<small>{{ resultMeal.venue }}</small>
+        </p>
         <p v-if="ryuoGame.replay" class="shogi-game__tournament-title">千日手になりました。先後を入れ替えて、指し直します。</p>
         <p v-else-if="tournamentResult.done" class="shogi-game__tournament-title">{{ tournamentResult.doneText }}</p>
         <p v-else-if="tournamentResult.next" class="shogi-game__tournament-title">次の対局: {{ tournamentResult.next }}</p>
@@ -2292,6 +2337,7 @@ import {
   newsDue,
   opponentLine,
   opponentMood,
+  opponentVoice,
   finishStamp,
   playerWinRate,
   roomComment,
@@ -2329,18 +2375,30 @@ import {
   LUNCH_PLY,
   daySummary,
   emptyDay,
+  loadMealBook,
+  lunchAutoDue,
+  lunchCard,
+  lunchCoachLine,
   lunchMenu,
+  lunchOpponentLine,
+  lunchRushDue,
+  lunchRushLine,
+  mealPowerDue,
+  mealPowerLine,
   normalizeDay,
   noteDayRate,
   noteDayThink,
+  noteMealBook,
   opponentMeal,
   ratePoints,
   roomMembers,
   roomVoices,
   saveKansenki,
+  saveMealBook,
   thinkText,
   trimDay,
   unsealCard,
+  winningMeals,
   writeKansenki,
 } from "./core/title-day.mjs";
 import {
@@ -3881,9 +3939,10 @@ watch(moveCount, (ply) => {
  * タイトル戦(二日制)は、1日目の終わりの手数を越えて最初にプレイヤーが指した手を封じ手にし、2日目へ進める。
  * どちらも盤の操作は妨げない(盤を触ると消える)。
  */
-const stageCard = ref<{ id: number; kind: "opening" | "seal" | "unseal" | "measure" } | null>(null);
+type StageCardKind = "opening" | "seal" | "unseal" | "measure" | "lunch";
+const stageCard = ref<{ id: number; kind: StageCardKind } | null>(null);
 let stageCardTimer: ReturnType<typeof setTimeout> | undefined;
-function showStageCard(kind: "opening" | "seal" | "unseal" | "measure") {
+function showStageCard(kind: StageCardKind) {
   clearTimeout(stageCardTimer);
   stageCard.value = { id: Date.now(), kind };
   stageCardTimer = setTimeout(hideStageCard, STAGE_CARD_MS);
@@ -3908,6 +3967,13 @@ watch(moveCount, (ply, previous) => {
       updateTitleDay((day) => noteDayThink(day, ply, elapsed));
     }
     if (ply === stageSealPly(activePlayerColor.value)) sealTitleDay(ply);
+    // 勝負メシ(docs/title-match-day-design.mdの8章)。選ばずに指し続けたら「おまかせ」を運び、選んだ少しあとに控室が湧く。
+    else if (lunchAutoDue(titleDay.value, ply)) chooseLunch(lunchMenu(stage.venue ?? "")[0], { auto: true });
+    else if (lunchRushDue(titleDay.value, ply)) {
+      const meal = titleDay.value?.meal ?? "";
+      updateTitleDay((day) => ({ ...day, rush: true }));
+      if (broadcastShown.value) showPresence("room", lunchRushLine(meal));
+    }
   }
   if (record.value.position.color === humanColor.value) startThink();
   else thinkStartedAt = 0;
@@ -3920,6 +3986,12 @@ const daySummaryOpen = ref(false);
 const kansenkiShown = ref<KansenkiView | null>(null);
 /** 終えた局の観戦記(結果の窓の「観戦記を読む」)。 */
 const resultKansenki = ref<KansenkiView | null>(null);
+/** 「お昼の休憩」の札の中身(docs/title-match-day-design.mdの8-1)。 */
+const lunchShown = ref<ReturnType<typeof lunchCard> | null>(null);
+/** 勝負メシ帳(対局場ごとの食べた回数と勝った回数)。勝った局の勝負メシは勝ちメシ(8-4)。 */
+const mealBook = ref(loadMealBook(browserStorage()));
+/** 終えたタイトル戦の勝ちメシ(結果の窓に出す)。 */
+const resultMeal = ref<{ meal: string; venue: string } | null>(null);
 /** 控室の第1候補(助言の読みの最善手)。封じ手の前の局面のものを、封じ手予想にする。 */
 let roomPick: { ply: number; move: string } | null = null;
 /**
@@ -3978,6 +4050,8 @@ function resetTitleDay() {
   daySummaryOpen.value = false;
   kansenkiShown.value = null;
   resultKansenki.value = null;
+  lunchShown.value = null;
+  resultMeal.value = null;
   startThink();
 }
 // 考えた時間(手番が来てから指すまで)。画面を隠しているあいだは数えない。
@@ -4055,18 +4129,49 @@ const unsealView = computed(() => {
     predicted,
   };
 });
-/** 勝負メシの札。20手を越えたら、選ぶか封じ手まで出す。 */
+/**
+ * 勝負メシの札。20手を越えたら出し、選ぶか、選ばずに6手たって「おまかせ」になるまで出す。
+ * 前にこの対局場で勝った品(勝ちメシ)には★を付ける(ゲン担ぎ。docs/title-match-day-design.mdの8-4)。
+ */
 const lunchOffer = computed(() => {
   const day = titleDay.value;
   if (!day || day.meal || day.seal || !active.value || result.value || moveCount.value <= LUNCH_PLY) return null;
-  return lunchMenu(matchStage.value?.venue ?? "");
-});
-function chooseLunch(meal: string) {
   const venue = matchStage.value?.venue ?? "";
-  updateTitleDay((day) => ({ ...day, meal }));
+  const wins = winningMeals(mealBook.value, venue);
+  return lunchMenu(venue).map((meal) => ({ meal, win: wins.includes(meal) }));
+});
+/**
+ * 勝負メシを選んだとき(8-1)。盤の上に「お昼の休憩」の札、やこび姫の料理の一言、中継の1行に相手の一言。強さには効かない。
+ * autoは、選ばずに指し続けて「おまかせ」(1品目)を運ぶとき。
+ */
+function chooseLunch(meal: string, { auto = false }: { auto?: boolean } = {}) {
+  const venue = matchStage.value?.venue ?? "";
   const opponent = ryuoOpponent.value;
-  if (opponent) showPresence("news", `昼食休憩：${opponent.name}さんは${opponentMeal(venue, opponent.id)}を注文`);
+  const theirMeal = opponent ? opponentMeal(venue, opponent.id) : "";
+  updateTitleDay((day) => ({ ...day, meal, mealAt: moveHistory.length }));
+  lunchShown.value = lunchCard({
+    meal, auto, opponentMeal: theirMeal, opponentName: opponent ? `${opponent.name}${opponent.dan ?? ""}` : "",
+  });
+  showStageCard("lunch");
+  if (coachLevel.value !== "off") showCoachAdvice({ key: "lunch-meal", text: lunchCoachLine(meal, { auto }) });
+  if (opponent && theirMeal) showPresence("speech", `${opponent.name}「${lunchOpponentLine(theirMeal, opponentVoice(opponent))}」`);
   persistMatchState();
+}
+/** 午後(勝負メシを選んでから封じ手まで)の最初の好手のほめ言葉に「○○パワーだね！」を添える(8-3)。 */
+function withMealPower<T extends { key: string; text: string } | null>(praise: T): T {
+  const day = titleDay.value;
+  if (!praise || !praise.key.startsWith("praise-") || !day || !mealPowerDue(day)) return praise;
+  updateTitleDay((current) => ({ ...current, power: true }));
+  return { ...praise, text: `${praise.text} ${mealPowerLine(day.meal)}` };
+}
+/** タイトル戦の1局の勝負メシを勝負メシ帳に残す。勝った局は勝ちメシとして結果の窓に出す(8-4)。 */
+function recordTitleMeal(win: boolean) {
+  const stage = matchStage.value;
+  const meal = titleDay.value?.meal ?? "";
+  resultMeal.value = null;
+  if (!stage?.twoDay || !meal) return;
+  mealBook.value = saveMealBook(browserStorage(), noteMealBook(mealBook.value, { venue: stage.venue, meal, win }));
+  if (win) resultMeal.value = { meal, venue: stage.venue };
 }
 const daySummaryView = computed<DaySummaryView | null>(() => {
   const day = titleDay.value;
@@ -4244,6 +4349,16 @@ const resultRetrySuggestion = computed(() => {
 });
 const blackFormationText = computed(() => formationTextForColor(Color.BLACK));
 const whiteFormationText = computed(() => formationTextForColor(Color.WHITE));
+/** 対戦相手の欄の戦型の行(決まっていない側は空。画面が「―」を出す)。 */
+const summaryFormations = computed(() => [
+  { label: "先手", text: blackFormationText.value === UNDETERMINED_FORMATION ? "" : blackFormationText.value },
+  { label: "後手", text: whiteFormationText.value === UNDETERMINED_FORMATION ? "" : whiteFormationText.value },
+]);
+/** 大会の札の戦型(▲居飛車 △四間飛車)。どちらも決まっていなければ出さない(行は取ってある)。 */
+const stageFormationText = computed(() => {
+  const [black, white] = summaryFormations.value;
+  return black.text || white.text ? `▲${black.text || "―"} △${white.text || "―"}` : "";
+});
 const FORMATION_SNAPSHOT_CACHE_LIMIT = 4;
 const formationSnapshotCache = new Map<string, ReturnType<typeof detectFormationSnapshot>>();
 function formationSnapshotForSfen(sfen: string) {
@@ -9409,7 +9524,10 @@ function finish(matchResult: MatchResult) {
   finishMilestone = null;
   finishCrowned = false;
   recordRyuoOutcome(matchResult);
-  if (tournamentFinish) writeTitleKansenki(outcome === "win", matchResult.moveCount);
+  if (tournamentFinish) {
+    writeTitleKansenki(outcome === "win", matchResult.moveCount);
+    recordTitleMeal(outcome === "win");
+  }
   if (tournamentFinish) showFinishStamp(outcome === "win", { event: tournamentEvent, weight: stageWeight });
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
   measureMode.value = false;
@@ -10217,7 +10335,7 @@ async function scheduleCpuMove() {
           cpuCandidates: search.candidates,
           generation,
         });
-        if (!mistake) moveFeedback = praise;
+        if (!mistake) moveFeedback = withMealPower(praise);
       // この評価は、CPU着手ではなく直前のプレイヤー着手に対するもの。
       // CPUの駒を動かす前に表示を確定し、相手の手への反応に見えないようにする。
         if (moveFeedback && moveFeedback.key !== shownFeedbackKey) {

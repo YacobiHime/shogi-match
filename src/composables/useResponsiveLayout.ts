@@ -58,6 +58,9 @@ export function useResponsiveLayout({ analysisVisible }: ResponsiveLayoutOptions
   const uiLayout = ref<UiLayout>("stack");
   const uiFontPx = ref(15);
   const uiBoardSize = ref({ width: 0, height: 0 });
+  // 縦積みで、盤を画面の幅いっぱいにしたときの高さ。盤の段はここまでしか伸びず、残りはやこび姫の欄へ回す
+  // (docs/stable-board-layout-design.md)。画面の大きさだけで決まり、台詞や札の出入りでは変わらない。
+  const uiStackBoardMax = ref(0);
   const uiShort = ref(false);
   const uiNarrow = ref(false);
   const menuCollapsed = computed(() => uiLayout.value !== "wide");
@@ -65,6 +68,7 @@ export function useResponsiveLayout({ analysisVisible }: ResponsiveLayoutOptions
     "--ui-font": `${uiFontPx.value}px`,
     "--board-w": `${Math.floor(uiBoardSize.value.width)}px`,
     "--board-h": `${Math.floor(uiBoardSize.value.height)}px`,
+    ...(uiStackBoardMax.value ? { "--stack-board-max": `${Math.floor(uiStackBoardMax.value)}px` } : {}),
   }));
   let boardResizeObserver: ResizeObserver | undefined;
 
@@ -120,6 +124,8 @@ export function useResponsiveLayout({ analysisVisible }: ResponsiveLayoutOptions
       uiLayout.value = "stack";
       uiFontPx.value = Math.round(stackFont * 10) / 10;
       uiBoardSize.value = { width: stackBoard.width, height: stackBoard.height };
+      const preferred = BOARD_FRAMES[stackPreferredFrame(width, height).name];
+      uiStackBoardMax.value = ((width - stackPad * 2) * preferred.height) / preferred.width;
       uiShort.value = height < 700;
       uiNarrow.value = width < 600;
       updateStackBoardFrame();
@@ -147,6 +153,7 @@ export function useResponsiveLayout({ analysisVisible }: ResponsiveLayoutOptions
     menuCollapsed,
     uiBoardSize,
     uiFontPx,
+    uiStackBoardMax,
     uiLayout,
     uiLayoutStyle,
     uiNarrow,

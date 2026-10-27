@@ -344,11 +344,24 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/"完了して教室へ"[\s\S]*"完了して竜王戦へ"[\s\S]*"完了してホームへ" : "完了して対局準備へ"/);
   });
 
-  it("does not hide opening-guide choices behind a fixed height in portrait", () => {
+  it("keeps the board still in portrait while the coach and the guide change (docs/stable-board-layout-design.md)", () => {
     const stack = source.split(".shogi-game--stack {")[1]?.split("}")[0] ?? "";
-    expect(stack).toMatch(/grid-template-rows:\s*auto auto minmax\(0, 1fr\) auto auto auto;/);
-    expect(stack).toMatch(/"board" "coach" "guide" "actions"/);
+    // 盤の段は画面の幅で決まる上限まで、残りはやこび姫の欄(最低の高さを先に取る)。中身の高さで盤を動かさない。
+    expect(stack).toMatch(/grid-template-rows:\s*auto auto minmax\(0, var\(--stack-board-max, 200vh\)\) minmax\(var\(--stack-dock-min\), 1fr\) auto;/);
+    expect(stack).toMatch(/"board" "dock" "actions"/);
+    expect(responsiveSource).toMatch(/"--stack-board-max": `\$\{Math\.floor\(uiStackBoardMax\.value\)\}px`/);
+    expect(responsiveSource).toMatch(/uiStackBoardMax\.value = \(\(width - stackPad \* 2\) \* preferred\.height\) \/ preferred\.width;/);
+    // 台詞と補助は1つの入れ物(縦積みでは決まった高さの欄)に入れ、横並びとPCでは包みを消す。
+    expect(source).toMatch(/<div class="shogi-game__dock" data-dock>\s*<section class="shogi-game__coach"[\s\S]*?class="shogi-game__opening-guide"/);
     expect(source.match(/class="shogi-game__opening-guide"/g)).toHaveLength(1);
+    expect(source.split(".shogi-game__dock {")[1]?.split("}")[0] ?? "").toMatch(/display:\s*contents;/);
+    // いま答える札(勝負メシ・作戦の提案・振り先など)は、作戦カードなどをしまって、ボタンを横1列に出す(固定の高さで隠さない)。
+    expect(source).toMatch(/:is\(\.shogi-game--stack, \.shogi-game--side\.shogi-game--short\) \.shogi-game__opening-guide:has\(> \.shogi-game__plan-interrupt, > \.shogi-game__rook-choice\) > :is\(\.shogi-game__opening-expand, \.shogi-game__opening-plan, p\) \{\s*display: none;/);
+    expect(source).toMatch(/:is\(\.shogi-game--stack, \.shogi-game--side\.shogi-game--short\) \.shogi-game__rook-choice > div \{\s*grid-template-columns: none;\s*grid-auto-columns: minmax\(0, 1fr\);\s*grid-auto-flow: column;/);
+    // 戦型の行は決まる前から取っておく(途中で行が増えない)。大会の札では星取りの行に入れる。
+    expect(source).not.toMatch(/<div v-if="blackFormationText !== UNDETERMINED_FORMATION">/);
+    expect(source).toMatch(/v-for="side in summaryFormations"/);
+    expect(source).toMatch(/class="shogi-game__stage-formations" data-stage-formations/);
   });
 
   it("shows the opponent separately from the handicap", () => {
@@ -371,7 +384,8 @@ describe("match screen regressions", () => {
 
   it("praises good moves only after mistakes are ruled out", () => {
     expect(source).toMatch(/const mistake = moveFeedback && \/move-\(blunder\|mistake\)\/\.test\(moveFeedback\.key\);/);
-    expect(source).toMatch(/if \(!mistake\) moveFeedback = praise;/);
+    // 午後の勝負メシのパワーは、悪手でないと決まったほめ言葉にだけ添える(docs/title-match-day-design.mdの8-3)。
+    expect(source).toMatch(/if \(!mistake\) moveFeedback = withMealPower\(praise\);/);
     // 好手判定の解析はCPU着手を描画した後、定跡補助の後ろへ積む。その前に、局面の注意(詰み筋・評価の崖など)の解析を積む。
     expect(source).toMatch(/scheduleOpeningFollowupCandidates\(\);\s*if \([^)]*\)\) \{\s*scheduleDedicatedCoachAdvice\(null, \{ riskOnly: hadScore \}\);\s*\}\s*scheduleMoveJudgeBaseline\(\);\s*schedulePlayerMoveBaseline\(\);\s*schedulePlayerIdleAdvice\(\);/);
     // CPUの選んだ手の評価値がないとき(Lv0〜10など)も、プレイヤーの手番に読み直して形勢の助言を出す。
@@ -819,7 +833,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/v-if="matchStage\.longestDay"[^>]*>将棋界の一番長い日/);
     // 判子は期の結果を記録した節目から決め、1.2秒で結果の窓へ。負けは判子を押さない。
     expect(source).toMatch(/finishMilestone = lastGameMilestone\(next,/);
-    expect(source).toMatch(/recordRyuoOutcome\(matchResult\);\s*(?:if \(tournamentFinish\) writeTitleKansenki\([^;]*\);\s*)?if \(tournamentFinish\) showFinishStamp\(outcome === "win",/);
+    expect(source).toMatch(/recordRyuoOutcome\(matchResult\);\s*(?:if \(tournamentFinish\) \{\s*writeTitleKansenki\([^;]*\);\s*recordTitleMeal\([^;]*\);\s*\}\s*)?if \(tournamentFinish\) showFinishStamp\(outcome === "win",/);
     expect(source).toMatch(/resultRevealTimer = setTimeout\(revealResult, FINISH_STAMP_MS\);/);
     expect(source).toMatch(/v-if="finishStampShown && !resultDialogOpen"/);
     // 大一番の朱の明かりは、景色の上に重ねる(景色の規則は大一番の背景より後ろに置く)。
@@ -845,10 +859,22 @@ describe("match screen regressions", () => {
     // 封じ手予想は、助言の読みの最善手(新しい探索は足さない)。
     expect(source).toMatch(/if \(bestMove\) roomPick = \{ ply: analyzedHistoryLength, move: bestMove \};/);
     // 観戦記は終局で書き、結果の窓から読める。重ねたシートは戻る操作で閉じ、開いているあいだは秒読みを止める。
-    expect(source).toMatch(/if \(tournamentFinish\) writeTitleKansenki\(outcome === "win", matchResult\.moveCount\);/);
+    expect(source).toMatch(/if \(tournamentFinish\) \{\s*writeTitleKansenki\(outcome === "win", matchResult\.moveCount\);\s*recordTitleMeal\(outcome === "win"\);/);
     expect(source).toMatch(/v-if="resultKansenki"[^>]*data-kansenki-open/);
     expect(source).toMatch(/\} else if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(daySummaryOpen\.value\) \{/);
     expect(source).toMatch(/\|\| daySummaryOpen\.value,/);
+  });
+  it("勝負メシは、選ぶと札と一言が出て、午後のほめ言葉・控室・勝ちメシにつながる(docs/title-match-day-design.mdの8章)", () => {
+    // 選んだ瞬間: 札(盤の上に1.8秒)・やこび姫の料理の一言・中継の1行に相手の一言。
+    expect(source).toMatch(/function chooseLunch\(meal: string, \{ auto = false \}[\s\S]*?showStageCard\("lunch"\);[\s\S]*?lunchCoachLine\(meal, \{ auto \}\)[\s\S]*?lunchOpponentLine\(theirMeal, opponentVoice\(opponent\)\)/);
+    expect(source).toMatch(/v-else-if="stageCard\.kind === 'lunch' && lunchShown"/);
+    // 選ばずに指し続けたらおまかせ。選んだ少しあとに控室の注文(中継を出しているときだけ)。
+    expect(source).toMatch(/else if \(lunchAutoDue\(titleDay\.value, ply\)\) chooseLunch\(lunchMenu\(stage\.venue \?\? ""\)\[0\], \{ auto: true \}\);/);
+    expect(source).toMatch(/if \(broadcastShown\.value\) showPresence\("room", lunchRushLine\(meal\)\);/);
+    // 勝ちメシ: 終局で勝負メシ帳に残し、次の札では★。結果の窓に出す。
+    expect(source).toMatch(/mealBook\.value = saveMealBook\(browserStorage\(\), noteMealBook\(mealBook\.value, \{ venue: stage\.venue, meal, win \}\)\);/);
+    expect(source).toMatch(/const wins = winningMeals\(mealBook\.value, venue\);/);
+    expect(source).toMatch(/<p v-if="resultMeal" class="shogi-game__result-meal" data-result-meal>/);
   });
   it("奨励会は大会の画面から入り、1局を挑戦に記録して奨励会の画面へ戻る(docs/shoreikai-design.md)", () => {
     const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");

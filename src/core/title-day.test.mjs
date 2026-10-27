@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  KANSENKI_LIMIT, STAGE_MEALS, THINK_CAP_MS, daySummary, emptyDay, loadKansenki, lunchMenu, normalizeDay, noteDayRate,
-  noteDayThink, opponentMeal, ratePoints, roomMembers, roomVoices, saveKansenki, trimDay, turningPoint, unsealCard, writeKansenki,
+  KANSENKI_LIMIT, LUNCH_PLY, LUNCH_RUSH_PLIES, LUNCH_WAIT_PLIES, MEAL_BOOK_KEY, MEAL_NOTES, STAGE_MEALS, THINK_CAP_MS, daySummary,
+  emptyDay, emptyMealBook, loadKansenki, loadMealBook, lunchAutoDue, lunchCard, lunchCoachLine, lunchMenu, lunchOpponentLine,
+  lunchRushDue, lunchRushLine, mealBookView, mealPowerDue, mealPowerLine, normalizeDay, noteDayRate, noteDayThink, noteMealBook,
+  opponentMeal, ratePoints, roomMembers, roomVoices, saveKansenki, saveMealBook, trimDay, turningPoint, unsealCard, winningMeals,
+  writeKansenki,
 } from './title-day.mjs';
 import { STAGE_VENUES } from './match-stage.mjs';
 
@@ -22,6 +25,72 @@ describe('勝負メシ', () => {
   });
 });
 
+describe('勝負メシのその後(8章)', () => {
+  it('どの献立にも料理の一言があり、やこび姫はそれを使って話す', () => {
+    for (const menu of Object.values(STAGE_MEALS)) for (const meal of menu) expect(MEAL_NOTES[meal], meal).toBeTruthy();
+    for (const meal of lunchMenu('どこか')) expect(MEAL_NOTES[meal], meal).toBeTruthy();
+    expect(lunchCoachLine('海鮮丼')).toBe('海鮮丼、海の幸たっぷりだね！ 午後もがんばろう！');
+    expect(lunchCoachLine('海鮮丼', { auto: true })).toBe('おまかせで海鮮丼が来たよ。海の幸たっぷりだね！ 午後もがんばろう！');
+    expect(lunchCoachLine('')).toBe('');
+  });
+  it('相手の一言は棋風で言い分け、羽音は敬語を使わない', () => {
+    expect(lunchOpponentLine('天ぷらそば', 'attack')).toBe('天ぷらそばで腹ごしらえ。午後は攻めますよ');
+    expect(lunchOpponentLine('天ぷらそば', 'defense')).toContain('じっくり');
+    expect(lunchOpponentLine('天ぷらそば', 'balance')).toBe('天ぷらそば、いただきます');
+    expect(lunchOpponentLine('天ぷらそば', 'hanane')).not.toMatch(/ます|です/);
+    expect(lunchOpponentLine('天ぷらそば', 'yoshihiko')).toContain('名物');
+  });
+  it('札は料理と一言と相手の注文。同じ品なら「同じ」と言う', () => {
+    expect(lunchCard({ meal: '海鮮丼', opponentName: '天鷺善彦九段', opponentMeal: '味噌ラーメン' })).toEqual({
+      title: 'お昼の休憩', meal: '海鮮丼', note: '海の幸たっぷり', other: '天鷺善彦九段は 味噌ラーメン', same: false,
+    });
+    expect(lunchCard({ meal: '海鮮丼', opponentName: '天鷺善彦九段', opponentMeal: '海鮮丼', auto: true })).toMatchObject({
+      title: 'お昼の休憩・おまかせ', other: '天鷺善彦九段も 同じ海鮮丼！', same: true,
+    });
+    expect(lunchRushLine('海鮮丼')).toBe('控室：海鮮丼の注文が相次いでいます');
+    expect(mealPowerLine('海鮮丼')).toBe('海鮮丼パワーだね！');
+  });
+  it('選ばずに指し続けたらおまかせ、選んだら少しして控室の声、午後のパワーは封じ手まで1回', () => {
+    const day = emptyDay();
+    expect(lunchAutoDue(day, LUNCH_PLY + LUNCH_WAIT_PLIES)).toBe(false);
+    expect(lunchAutoDue(day, LUNCH_PLY + LUNCH_WAIT_PLIES + 1)).toBe(true);
+    expect(lunchAutoDue({ ...day, meal: '海鮮丼', mealAt: 22 }, 40)).toBe(false);
+    const chosen = { ...day, meal: '海鮮丼', mealAt: 22 };
+    expect(lunchRushDue(chosen, 22 + LUNCH_RUSH_PLIES - 1)).toBe(false);
+    expect(lunchRushDue(chosen, 22 + LUNCH_RUSH_PLIES)).toBe(true);
+    expect(lunchRushDue({ ...chosen, rush: true }, 30)).toBe(false);
+    expect(mealPowerDue(chosen)).toBe(true);
+    expect(mealPowerDue({ ...chosen, power: true })).toBe(false);
+    // 封じ手で決まった勝負メシ(選ばなかった)と、封じ手のあとは、パワーも控室の声も出さない。
+    expect(mealPowerDue({ ...day, meal: '海鮮丼', mealAt: 0 })).toBe(false);
+    expect(mealPowerDue({ ...chosen, seal: { ply: 41, move: '2g2f', predicted: '' } })).toBe(false);
+    expect(normalizeDay({ ...chosen, power: true, rush: 'x' })).toMatchObject({ meal: '海鮮丼', mealAt: 22, power: true, rush: false });
+  });
+  it('勝負メシ帳は食べた回数と勝った回数。勝った品は勝ちメシになり、ノートでは献立の3品を並べる', () => {
+    const storage = memoryStorage();
+    const venue = '北海道・湖のほとりの宿';
+    let book = loadMealBook(storage);
+    expect(book).toEqual(emptyMealBook());
+    book = noteMealBook(book, { venue, meal: '海鮮丼', win: true });
+    book = noteMealBook(book, { venue, meal: '海鮮丼', win: false });
+    book = noteMealBook(book, { venue, meal: '味噌ラーメン', win: false });
+    saveMealBook(storage, book);
+    expect(loadMealBook(storage).venues[venue]).toEqual({ 海鮮丼: { eaten: 2, wins: 1 }, 味噌ラーメン: { eaten: 1, wins: 0 } });
+    expect(winningMeals(book, venue)).toEqual(['海鮮丼']);
+    const view = mealBookView(book);
+    expect(view.total).toBe(42);
+    expect(view.tried).toBe(2);
+    expect(view.wins).toBe(1);
+    expect(view.venues).toEqual([{ venue, meals: [
+      { meal: '海鮮丼', state: 'win', wins: 1 }, { meal: '味噌ラーメン', state: 'eaten', wins: 0 }, { meal: 'ジンギスカン定食', state: 'new', wins: 0 },
+    ] }]);
+    storage.setItem(MEAL_BOOK_KEY, '{');
+    expect(loadMealBook(storage)).toEqual(emptyMealBook());
+    storage.setItem(MEAL_BOOK_KEY, JSON.stringify({ venues: { [venue]: { 海鮮丼: { eaten: 1, wins: 5 }, 鶏飯: { eaten: 0 } } } }));
+    expect(loadMealBook(storage).venues[venue]).toEqual({ 海鮮丼: { eaten: 1, wins: 1 } });
+  });
+});
+
 describe('1日目の記録', () => {
   it('勝率と考えた時間を手数ごとに残し、待ったで戻すと後ろを消す', () => {
     let day = emptyDay();
@@ -38,7 +107,9 @@ describe('1日目の記録', () => {
   });
   it('保存の形が崩れていても空の記録に戻す', () => {
     expect(normalizeDay(null)).toEqual(emptyDay());
-    expect(normalizeDay({ rates: [[1, 'x'], [2, 40]], think: 'x', meal: 3, seal: { ply: 'a' } })).toEqual({ rates: [[2, 40]], think: [], meal: '', seal: null });
+    expect(normalizeDay({ rates: [[1, 'x'], [2, 40]], think: 'x', meal: 3, seal: { ply: 'a' } })).toEqual({
+      rates: [[2, 40]], think: [], meal: '', mealAt: 0, power: false, rush: false, seal: null,
+    });
   });
   it('まとめは封じ手までの勝率と、いちばん長く考えた手', () => {
     const day = { ...emptyDay(), rates: [[0, 50], [20, 60], [40, 64], [50, 30]], think: [[21, 5000], [41, 240000], [51, 999]] };
@@ -110,6 +181,9 @@ describe('観戦記', () => {
     expect(text.paragraphs.join('')).toContain('控室の予想どおり');
     expect(text.paragraphs.join('')).toContain('のどぐろ御膳');
     expect(text.paragraphs.at(-1)).toContain('97手まで、やこびの勝ち。これで2勝0敗。');
+    // 勝った局の勝負メシは勝ちメシになる(負けた局は書かない)。
+    expect(text.paragraphs.at(-1)).toContain('昼ののどぐろ御膳は、やこびの勝ちメシになった。');
+    expect(writeKansenki({ ...base, day, win: false, plies: 97 }).paragraphs.join('')).not.toContain('勝ちメシ');
   });
   it('封じ手の前に終わった負けの局も、責めずに書く', () => {
     const text = writeKansenki({ ...base, day: emptyDay(), win: false, plies: 33 });

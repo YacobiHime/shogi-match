@@ -517,6 +517,37 @@
 .shogi-game .shogi-game__stage-band--final .shogi-game__stage-stakes {
   color: var(--stage-gold);
 }
+/*
+ * 札の行は、対局の途中で増やさない(docs/stable-board-layout-design.mdの2-4)。
+ * 星取りの行は星取りのない局でも取っておき、戦型が決まったら右に入れる。見出しの行は「2日目・まとめ」のボタンの高さを先に取る。
+ */
+.shogi-game .shogi-game__stage-band .shogi-game__stage-line {
+  flex-wrap: nowrap;
+  min-height: 1.45em;
+}
+.shogi-game .shogi-game__stage-band .shogi-game__stage-head {
+  min-height: 1.6em;
+  align-items: center;
+}
+.shogi-game .shogi-game__stage-formations {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.86em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game .shogi-game__stage-stakes {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 戦型が決まるまでは「―」を薄く出して、行を取っておく。 */
+.shogi-game__summary-formation--pending span {
+  color: var(--muted);
+}
 .shogi-game__stage-opponent {
   color: var(--ivory);
   font-size: 0.92em;
@@ -860,7 +891,7 @@
   background: var(--slate);
   font-size: 0.85em;
 }
-.shogi-game .shogi-game__opening-plan-ghosts span {
+.shogi-game .shogi-game__opening-plan-switch {
   margin-left: 0.4em;
   padding: 0 0.35em;
   border-radius: 0.25em;
@@ -869,7 +900,7 @@
   font-size: 0.85em;
   font-weight: 800;
 }
-.shogi-game .shogi-game__opening-plan-ghosts[aria-checked="true"] span {
+.shogi-game .shogi-game__opening-plan-ghosts[aria-checked="true"] .shogi-game__opening-plan-switch {
   background: var(--amber);
 }
 /* 中断したときの「作戦を変えよう」の札。近い作戦を、残り手数つきで並べる。 */
@@ -1384,6 +1415,10 @@
 }
 
 /* ===== やこび姫 ===== */
+/* 台詞と補助の包み。横並びとPCでは包みを消し、台詞と補助をそれぞれグリッドに置く(縦積みは「レイアウト: 縦積み」)。 */
+.shogi-game__dock {
+  display: contents;
+}
 .shogi-game__coach {
   position: relative;
   display: flex;
@@ -1808,55 +1843,195 @@
 }
 
 /* ===== レイアウト: 縦積み ===== */
+/*
+ * 盤を動かさない縦画面(docs/stable-board-layout-design.md)。5段: 見出し・対局の札・盤・やこび姫の欄・操作列。
+ * 盤の段は、盤を画面の幅いっぱいにしたときの高さ(--stack-board-max。useResponsiveLayout.tsが画面の大きさから出す)
+ * までしか伸びず、残りはやこび姫の欄へ回す。やこび姫の欄には最低の高さ(--stack-dock-min)を先に取っておくので、
+ * 台詞の長さや札の出入りで、盤の大きさと位置は変わらない(グリッドは上限のある段を先に伸ばし、残りをfrの段に渡す)。
+ */
 .shogi-game--stack {
+  --stack-dock-min: 10.4em;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
-  grid-template-areas: "header" "summary" "board" "coach" "guide" "actions";
+  grid-template-rows: auto auto minmax(0, var(--stack-board-max, 200vh)) minmax(var(--stack-dock-min), 1fr) auto;
+  grid-template-areas: "header" "summary" "board" "dock" "actions";
   gap: 0.45em;
   padding: 0.45em;
   padding-bottom: max(0.45em, env(safe-area-inset-bottom));
 }
+.shogi-game--stack.shogi-game--short {
+  --stack-dock-min: 9em;
+}
+/* 解析中は盤が残りを使い、やこび姫の欄は台詞1つ分の決まった高さにする(台詞の長さで盤を動かさない)。 */
 .shogi-game--stack.shogi-game--analysis {
-  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 17em) auto auto;
-  grid-template-areas: "header" "summary" "board" "analysis" "coach" "actions";
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 17em) 4.6em auto;
+  grid-template-areas: "header" "summary" "board" "analysis" "dock" "actions";
 }
 /* 棋力診断を出したら解析欄を広げ、グラフを潰さずに盤の方を縮める。 */
 .shogi-game--stack.shogi-game--analysis:has(.shogi-game__skill) {
-  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 23em) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 23em) 4.6em auto;
+}
+/* やこび姫の欄。台詞が残りの高さ、補助は下に寄せて中身の高さ。補助のボタンは欄の下にそろい、台詞の長さでは動かない。 */
+.shogi-game--stack .shogi-game__dock {
+  display: flex;
+  flex-direction: column;
+  grid-area: dock;
+  gap: 0.45em;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.shogi-game--stack .shogi-game__coach {
+  flex: 1 1 0;
+  min-height: 4.4em;
+}
+/* 台詞の枠は顔の横で下にそろえ、文が長いと上へ伸びる。欄に入りきらない分は、台詞の中でスクロールする(欄の高さは変えない)。 */
+.shogi-game--stack .shogi-game__dialogue {
+  min-height: 4.4em;
+  max-height: 100%;
+}
+.shogi-game--stack .shogi-game__opening-guide {
+  flex: 0 1 auto;
 }
 .shogi-game--stack .shogi-game__opening-guide h2 {
   display: none;
 }
-/* 補助は内容の高さに合わせ、盤が残りを使う。飛車選択などが出たら盤の方を縮める。 */
-.shogi-game--stack .shogi-game__opening-guide {
-  max-height: 20em;
-}
 .shogi-game--stack .shogi-game__portrait {
+  align-self: flex-end;
   width: 4em;
   height: 4.4em;
   border-bottom: 2px solid var(--amber);
 }
-.shogi-game--stack .shogi-game__dialogue {
-  min-height: 4.4em;
-  max-height: 5.6em;
-}
-.shogi-game--stack.shogi-game--analysis .shogi-game__opening-guide {
-  display: none;
-}
-.shogi-game--stack.shogi-game--analysis .shogi-game__dialogue {
-  min-height: 3em;
-  max-height: 4.6em;
-}
+.shogi-game--stack.shogi-game--analysis .shogi-game__opening-guide,
 .shogi-game--stack.shogi-game--analysis .shogi-game__portrait {
   display: none;
 }
+.shogi-game--stack.shogi-game--analysis .shogi-game__coach {
+  min-height: 0;
+}
+.shogi-game--stack.shogi-game--short .shogi-game__coach,
 .shogi-game--stack.shogi-game--short .shogi-game__dialogue {
   min-height: 3.6em;
-  max-height: 4.6em;
+}
+.shogi-game--stack.shogi-game--analysis .shogi-game__dialogue {
+  min-height: 0;
 }
 .shogi-game--stack.shogi-game--short .shogi-game__portrait {
   width: 3.4em;
   height: 3.6em;
+}
+/*
+ * いま答える札(勝負メシ・作戦の提案・中断・飛車の振り先など)があるときは、札だけを出す。
+ * 作戦カード・「戦法・囲いを選ぶ」・案内の文はしまい、台詞は1行に縮めて顔もしまう(欄の高さと盤は変えない)。
+ */
+.shogi-game--stack .shogi-game__dock:has(.shogi-game__plan-interrupt, .shogi-game__rook-choice) .shogi-game__coach {
+  min-height: 2.2em;
+}
+.shogi-game--stack .shogi-game__dock:has(.shogi-game__plan-interrupt, .shogi-game__rook-choice) .shogi-game__dialogue {
+  min-height: 0;
+  padding-block: 0.3em;
+}
+.shogi-game--stack .shogi-game__dock:has(.shogi-game__plan-interrupt, .shogi-game__rook-choice) .shogi-game__portrait,
+:is(.shogi-game--stack, .shogi-game--side.shogi-game--short) .shogi-game__opening-guide:has(> .shogi-game__plan-interrupt, > .shogi-game__rook-choice) > :is(.shogi-game__opening-expand, .shogi-game__opening-plan, p) {
+  display: none;
+}
+/* 作戦カードは1行(小さな完成形・戦法と囲い・残りのマス・「完成形 ON」)。「作戦を変える」は、カードを押せば同じシートが開く。 */
+.shogi-game--stack .shogi-game__opening-plan {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0.4em;
+}
+.shogi-game.shogi-game--stack .shogi-game__opening-plan-card {
+  gap: 0.5em;
+  padding: 0.2em 0.5em;
+}
+.shogi-game--stack .shogi-game__opening-plan-thumb {
+  flex-basis: 3.4em;
+  width: 3.4em;
+}
+.shogi-game--stack .shogi-game__opening-plan-text {
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  column-gap: 0.7em;
+  font-size: 0.9em;
+}
+.shogi-game--stack .shogi-game__opening-plan-text > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shogi-game--stack .shogi-game__opening-plan-text small {
+  grid-column: 1 / -1;
+}
+.shogi-game--stack .shogi-game__opening-plan-actions {
+  flex-wrap: nowrap;
+}
+.shogi-game.shogi-game--stack .shogi-game__opening-plan-actions button {
+  flex: none;
+  padding-inline: 0.6em;
+}
+.shogi-game--stack .shogi-game__opening-plan-actions [data-plan-change],
+.shogi-game--stack .shogi-game__opening-plan-long {
+  display: none;
+}
+/* 案内の文(「先に受けよう：▲6八金」など)は1行。入りきらないところは「…」。 */
+.shogi-game--stack .shogi-game__opening-guide > p {
+  padding: 0.25em 0.5em;
+  overflow: hidden;
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 札は、見出し1行(中断の理由は2行まで)と、ボタンを横1列にする(背の低い横画面も同じ)。 */
+:is(.shogi-game--stack, .shogi-game--side.shogi-game--short) .shogi-game__plan-interrupt,
+:is(.shogi-game--stack, .shogi-game--side.shogi-game--short) .shogi-game__rook-choice {
+  gap: 0.3em;
+  padding: 0.35em 0.45em;
+}
+:is(.shogi-game--stack, .shogi-game--side.shogi-game--short) .shogi-game__plan-interrupt > div,
+:is(.shogi-game--stack, .shogi-game--side.shogi-game--short) .shogi-game__rook-choice > div {
+  grid-template-columns: none;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+:is(.shogi-game--stack, .shogi-game--side.shogi-game--short) .shogi-game__plan-interrupt > p:first-child,
+:is(.shogi-game--stack, .shogi-game--side.shogi-game--short) .shogi-game__rook-choice > span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.shogi-game--stack .shogi-game__opening-guide .shogi-game__plan-offer-basis {
+  font-size: 0.76em;
+}
+/* 背の低い画面では、作戦の提案の根拠(AIの読みの点数)を省く(提案そのものは台詞でも伝える。UI_Nintendo_Implementation.md 7-5の3)。 */
+.shogi-game--stack.shogi-game--short .shogi-game__opening-guide .shogi-game__plan-offer-basis {
+  display: none;
+}
+/* 対局の札: 中継の勝率を相手の行に並べて1行減らし、相手の名前の前の「対」を省く(docs/stable-board-layout-design.mdの2-4)。 */
+.shogi-game--stack .shogi-game__stage-band {
+  grid-template-columns: minmax(0, 1fr) minmax(9em, 50%);
+  column-gap: 0.6em;
+}
+.shogi-game--stack .shogi-game__stage-band > * {
+  grid-column: 1 / -1;
+}
+.shogi-game--stack .shogi-game__stage-band > .shogi-game__broadcast {
+  grid-row: 3;
+  grid-column: 2;
+}
+.shogi-game--stack .shogi-game__stage-band:has(> .shogi-game__broadcast) > .shogi-game__stage-opponent {
+  grid-row: 3;
+  grid-column: 1;
+}
+.shogi-game--stack .shogi-game__stage-band .shogi-game__stage-opponent {
+  flex-wrap: nowrap;
+}
+.shogi-game--stack .shogi-game__stage-vs {
+  display: none;
+}
+.shogi-game--stack .shogi-game__opponent-face {
+  width: 1.6em;
+  height: 1.6em;
 }
 
 /* ===== レイアウト: 横並び（情報欄1列） ===== */
@@ -1903,18 +2078,9 @@
 }
 /*
  * 背の低い画面で飛車の振り先などを選ぶあいだは、選ぶボタンを欄の中で隠さないよう(AGENTS.md)、
- * ボタンを1行に並べ、下の補足の文を省く(UI_Nintendo_Implementation.md 7-5の1と3)。
+ * ボタンを1行に並べ(「レイアウト: 縦積み」の札の決まり)、下の補足の文を省く(UI_Nintendo_Implementation.md 7-5の1と3)。
  */
-.shogi-game--side.shogi-game--short .shogi-game__rook-choice > div {
-  grid-template-columns: none;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-}
 .shogi-game--short .shogi-game__rook-choice ~ p {
-  display: none;
-}
-/* スマホの横向きでは、選ぶあいだだけ「作戦を変える・完成形を盤に出す」をしまう(作戦カードからは選び直せる)。 */
-.shogi-game--side.shogi-game--short .shogi-game__opening-guide:has(.shogi-game__rook-choice) .shogi-game__opening-plan-actions {
   display: none;
 }
 
@@ -4232,6 +4398,95 @@
   font-weight: 700;
 }
 .shogi-game__stage-card-predict--hit { color: #2f7a4a; }
+/*
+ * お昼の休憩の札(docs/title-match-day-design.mdの8-1)。封じ手と同じ和紙の札に、湯気の立つ器。
+ * 料理の絵は使わず、器の形と料理の名前で見せる(盤の升の色には触れない)。
+ */
+.shogi-game .shogi-game__stage-card--lunch {
+  border-color: var(--stage-red);
+  color: var(--night);
+  background: #f6eedd;
+}
+.shogi-game__stage-card--lunch small { color: #6b4b3a; }
+.shogi-game__stage-card--lunch span { font-size: 0.9em; font-weight: 700; }
+.shogi-game__stage-bowl {
+  position: relative;
+  width: 2.6em;
+  height: 1.9em;
+  margin-bottom: 0.1em;
+}
+/* 器(下半分の丸)と、縁の線。 */
+.shogi-game__stage-bowl::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1.2em;
+  border: 2px solid var(--stage-red);
+  border-top-width: 3px;
+  border-radius: 0 0 1.3em 1.3em;
+  background: linear-gradient(180deg, #fffcf4 0 30%, #e9d3ae 30% 100%);
+  content: "";
+}
+/* 湯気。動きは控えめにし、動きを減らす設定では止める。 */
+.shogi-game__stage-bowl::after {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1.1em;
+  height: 0.7em;
+  border-top: 2px solid rgba(107, 75, 58, 0.55);
+  border-radius: 50%;
+  content: "";
+  transform: translateX(-50%);
+  animation: shogi-bowl-steam 1.2s ease-in-out infinite alternate;
+}
+@keyframes shogi-bowl-steam {
+  from { opacity: 0.35; transform: translate(-50%, 0.15em); }
+  to { opacity: 1; transform: translate(-50%, -0.1em); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__stage-bowl::after { animation: none; }
+}
+/* 勝負メシの札の、前にこの対局場で勝った品(勝ちメシ)の★。色だけでなく★の形でも分かるようにする。★は料理名と同じ行に置く。 */
+.shogi-game .shogi-game__lunch-offer button {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+.shogi-game .shogi-game__lunch-offer .shogi-game__lunch-win {
+  border-color: var(--stage-gold);
+}
+.shogi-game__lunch-star {
+  margin-right: 0.2em;
+  color: var(--stage-gold);
+}
+/* 結果の窓の「勝ちメシ ★ 海鮮丼」。 */
+.shogi-game__result-meal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em 0.45em;
+  align-items: baseline;
+  justify-content: center;
+  margin: 0.2em 0;
+  font-weight: 800;
+}
+.shogi-game__result-meal b {
+  padding: 0.05em 0.45em;
+  border-radius: 0.3em;
+  color: #172632;
+  background: var(--stage-gold);
+  font-size: 0.85em;
+}
+.shogi-game__result-meal span {
+  color: var(--stage-gold);
+}
+.shogi-game__result-meal small {
+  color: var(--muted);
+  font-size: 0.8em;
+  font-weight: 600;
+}
 /* 封じ手のあとの「2日目・まとめ」。押せると分かるよう、下線と枠を付ける(タップ領域は札の行の高さ)。 */
 .shogi-game .shogi-game__stage-day--button {
   min-height: 1.9em;

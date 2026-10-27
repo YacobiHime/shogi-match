@@ -3,6 +3,12 @@
 
 /** 勝負メシの札を出す手数。この手数を越えた最初の自分の手番で出す。 */
 export const LUNCH_PLY = 20;
+/** 札が出てから、選ばずにこの手数を指したら「おまかせ」(1品目)を運ぶ(docs/title-match-day-design.mdの8章)。 */
+export const LUNCH_WAIT_PLIES = 6;
+/** 選んでからこの手数で、控室に「注文が相次いでいます」の声が出る。 */
+export const LUNCH_RUSH_PLIES = 4;
+/** 勝負メシ帳(対局場ごとの食べた回数と勝った回数)の保存。 */
+export const MEAL_BOOK_KEY = 'yacobihime:shogi-match:meal-book:v1';
 /** 1手の考えた時間の上限(置きっぱなしで記録がゆがまないように)。 */
 export const THINK_CAP_MS = 10 * 60 * 1000;
 /** 観戦記を残す局数(新しい順)。 */
@@ -55,11 +61,210 @@ export function opponentMeal(venue, opponentId) {
   return menu[hashText(`${venue}:${opponentId}`) % menu.length];
 }
 
+// ---- 勝負メシのその後(docs/title-match-day-design.mdの8章)。強さ・助言・時間には効かせない。
+
+/** 料理ごとの一言(やこび姫の「○○、△△だね！」と、札の一言)。 */
+export const MEAL_NOTES = Object.freeze({
+  うな重: 'スタミナ満点',
+  天ぷらそば: 'さくさくの天ぷら',
+  親子丼: 'ふわとろの卵',
+  湯豆腐御膳: 'やさしい味',
+  にしんそば: '京都の名物',
+  カレーうどん: '体がぽかぽか',
+  博多ラーメン: '細めんのとんこつ',
+  明太子パスタ: 'ぴりっと明太子',
+  ちゃんぽん: '具だくさん',
+  海鮮丼: '海の幸たっぷり',
+  味噌ラーメン: 'こくのある味噌',
+  ジンギスカン定食: 'お肉でスタミナ満点',
+  牛肉のすき焼き重: '甘辛のお肉',
+  冷たい肉そば: 'つるつるの冷たいそば',
+  芋煮定食: '山形の秋の味',
+  桜えびのかき揚げ丼: '香ばしい桜えび',
+  ひつまぶし: '3回楽しめる',
+  富士宮やきそば: 'もちもちのめん',
+  黒豚とんかつ定食: 'ジューシーな黒豚',
+  鶏飯: 'さらさら食べられる',
+  さつま揚げ定食: '揚げたて',
+  へぎそば: 'つるっとしたのどごし',
+  のどぐろ御膳: 'とろける白身',
+  タレカツ丼: '甘辛のタレ',
+  治部煮御膳: '金沢の味',
+  金沢カレー: '濃いルー',
+  海鮮ちらし: '彩りあざやか',
+  きつねうどん: 'おあげが甘い',
+  お好み焼き定食: '大阪らしい',
+  串カツ定食: 'さくさくの衣',
+  柿の葉寿司: '柿の葉の香り',
+  三輪そうめん: '細くてつるつる',
+  茶粥御膳: 'おなかにやさしい',
+  穴子めし: 'ふっくら穴子',
+  牡蠣フライ定食: 'ぷりぷりの牡蠣',
+  お好み焼き: 'めんが入って食べごたえあり',
+  牛たん定食: '歯ごたえばつぐん',
+  牡蠣丼: '海のミルク',
+  はらこめし: 'いくらがきらきら',
+  信州そば: '香り高い',
+  ソースカツ丼: 'ソースがしみしみ',
+  おやき定食: '素朴な味',
+  幕の内弁当: 'いろいろ楽しめる',
+  ざるそば: 'さっぱり',
+  カツカレー: '勝つカレー',
+});
+
+/** 料理の一言(分からない料理は空)。 */
+export function mealNote(meal) {
+  return MEAL_NOTES[meal] ?? '';
+}
+
+/** 選んだ勝負メシへの、やこび姫の一言。 */
+export function lunchCoachLine(meal, { auto = false } = {}) {
+  if (!meal) return '';
+  const note = mealNote(meal);
+  const head = auto ? `おまかせで${meal}が来たよ。` : `${meal}、`;
+  return note ? `${head}${note}だね！ 午後もがんばろう！` : `${head}おいしそう！ 午後もがんばろう！`;
+}
+
+/**
+ * 相手の勝負メシの一言(中継の1行)。口調は match-presence.mjs の opponentVoice(棋風・物語の人物)。
+ * @param {string} meal 相手の勝負メシ
+ * @param {string} voice 'attack' | 'defense' | 'balance' | 'hanane' | 'yoshihiko'
+ */
+export function lunchOpponentLine(meal, voice) {
+  if (!meal) return '';
+  if (voice === 'attack') return `${meal}で腹ごしらえ。午後は攻めますよ`;
+  if (voice === 'defense') return `${meal}で、じっくり力をためます`;
+  // 羽音は敬語を使わない(ryuo-story.mjsのHANANE_LINESと同じ書き方)。
+  if (voice === 'hanane') return `……${meal}。午後も負けないから`;
+  if (voice === 'yoshihiko') return `${meal}か。ここの名物だよ`;
+  return `${meal}、いただきます`;
+}
+
+/**
+ * 「お昼の休憩」の札の中身。
+ * @param {{ meal: string, opponentName: string, opponentMeal: string, auto?: boolean }} input
+ */
+export function lunchCard({ meal, opponentName, opponentMeal: theirMeal, auto = false }) {
+  const same = Boolean(theirMeal) && theirMeal === meal;
+  return {
+    title: auto ? 'お昼の休憩・おまかせ' : 'お昼の休憩',
+    meal,
+    note: mealNote(meal),
+    other: !theirMeal ? '' : same ? `${opponentName}も 同じ${meal}！` : `${opponentName}は ${theirMeal}`,
+    same,
+  };
+}
+
+/** 選んでから少したって、控室が勝負メシで湧く(中継の1行)。 */
+export function lunchRushLine(meal) {
+  return meal ? `控室：${meal}の注文が相次いでいます` : '';
+}
+
+/** 午後の最初の好手のほめ言葉に添える一言。 */
+export function mealPowerLine(meal) {
+  return meal ? `${meal}パワーだね！` : '';
+}
+
+/** 選ばずに指し続けて、おまかせを運ぶときか(札が出てからLUNCH_WAIT_PLIES手)。 */
+export function lunchAutoDue(day, ply) {
+  return Boolean(day) && !day.meal && !day.seal && ply > LUNCH_PLY + LUNCH_WAIT_PLIES;
+}
+
+/** 控室の注文の声を出すときか(選んでからLUNCH_RUSH_PLIES手、封じ手の前、1局1回)。 */
+export function lunchRushDue(day, ply) {
+  return Boolean(day?.meal) && day.mealAt > 0 && !day.rush && !day.seal && ply >= day.mealAt + LUNCH_RUSH_PLIES;
+}
+
+/** 午後のパワーを添えるときか(選んでから封じ手まで、1局1回)。 */
+export function mealPowerDue(day) {
+  return Boolean(day?.meal) && day.mealAt > 0 && !day.power && !day.seal;
+}
+
+// ---- 勝負メシ帳(対局場ごとの食べた回数と勝った回数。勝った局の勝負メシは「勝ちメシ」)
+
+/** 空の勝負メシ帳。venues[対局場][料理] = { eaten, wins } */
+export function emptyMealBook() {
+  return { venues: {} };
+}
+
+/** 保存した勝負メシ帳。読めなければ空。 */
+export function loadMealBook(storage) {
+  try {
+    const parsed = JSON.parse(storage?.getItem(MEAL_BOOK_KEY) ?? 'null');
+    if (!parsed || typeof parsed !== 'object' || !parsed.venues || typeof parsed.venues !== 'object') return emptyMealBook();
+    const venues = {};
+    for (const [venue, meals] of Object.entries(parsed.venues)) {
+      if (!meals || typeof meals !== 'object') continue;
+      const kept = {};
+      for (const [meal, entry] of Object.entries(meals)) {
+        const eaten = Math.max(0, Math.floor(Number(entry?.eaten) || 0));
+        if (eaten) kept[meal] = { eaten, wins: Math.min(eaten, Math.max(0, Math.floor(Number(entry?.wins) || 0))) };
+      }
+      if (Object.keys(kept).length) venues[venue] = kept;
+    }
+    return { venues };
+  } catch {
+    return emptyMealBook();
+  }
+}
+
+/** 勝負メシ帳を保存する。保存できなくても遊びは止めない。 */
+export function saveMealBook(storage, book) {
+  try {
+    storage?.setItem(MEAL_BOOK_KEY, JSON.stringify(book));
+  } catch {
+    // 保存できない環境では、この局の勝ちメシだけ見せる。
+  }
+  return book;
+}
+
+/** タイトル戦の1局の勝負メシを記録する(勝った局は勝ちメシ)。 */
+export function noteMealBook(book, { venue, meal, win }) {
+  if (!venue || !meal) return book;
+  const meals = book.venues[venue] ?? {};
+  const entry = meals[meal] ?? { eaten: 0, wins: 0 };
+  return {
+    ...book,
+    venues: { ...book.venues, [venue]: { ...meals, [meal]: { eaten: entry.eaten + 1, wins: entry.wins + (win ? 1 : 0) } } },
+  };
+}
+
+/** この対局場の勝ちメシ(勝った回数が1回以上の料理)。 */
+export function winningMeals(book, venue) {
+  return Object.entries(book?.venues?.[venue] ?? {}).filter(([, entry]) => entry.wins > 0).map(([meal]) => meal);
+}
+
+/**
+ * やこびノートの勝負メシ帳。行ったことのある対局場ごとに、献立の3品の状態(win 勝ちメシ / eaten 食べた / new まだ)。
+ * 対局場の並びは STAGE_MEALS の順。食べた品の数は、対局場の献立(14か所×3品)のうち。
+ */
+export function mealBookView(book) {
+  const venues = Object.keys(STAGE_MEALS)
+    .filter((venue) => book?.venues?.[venue])
+    .map((venue) => ({
+      venue,
+      meals: STAGE_MEALS[venue].map((meal) => {
+        const entry = book.venues[venue][meal];
+        return { meal, state: entry?.wins ? 'win' : entry?.eaten ? 'eaten' : 'new', wins: entry?.wins ?? 0 };
+      }),
+    }));
+  const meals = venues.flatMap(({ meals: items }) => items);
+  return {
+    venues,
+    tried: meals.filter(({ state }) => state !== 'new').length,
+    wins: meals.filter(({ state }) => state === 'win').length,
+    total: Object.values(STAGE_MEALS).reduce((sum, items) => sum + items.length, 0),
+  };
+}
+
 // ---- 記録
 
-/** タイトル戦の1局の記録(対局の保存に入れる)。 */
+/**
+ * タイトル戦の1局の記録(対局の保存に入れる)。
+ * mealAtは勝負メシを選んだ手数(封じ手で決まったときは0)、powerは午後のパワーを添えたか、rushは控室の注文の声を出したか。
+ */
 export function emptyDay() {
-  return { rates: [], think: [], meal: '', seal: null };
+  return { rates: [], think: [], meal: '', mealAt: 0, power: false, rush: false, seal: null };
 }
 
 const pairs = (value) => (Array.isArray(value)
@@ -79,7 +284,15 @@ export function normalizeDay(raw) {
       white: typeof raw.seal.white === 'string' ? raw.seal.white : '',
     }
     : null;
-  return { rates: pairs(raw.rates), think: pairs(raw.think), meal: typeof raw.meal === 'string' ? raw.meal : '', seal };
+  return {
+    rates: pairs(raw.rates),
+    think: pairs(raw.think),
+    meal: typeof raw.meal === 'string' ? raw.meal : '',
+    mealAt: Number.isFinite(raw.mealAt) && raw.mealAt > 0 ? raw.mealAt : 0,
+    power: raw.power === true,
+    rush: raw.rush === true,
+    seal,
+  };
 }
 
 /** 手番の勝率(%)を記録する。同じ手数は上書き。 */
@@ -300,8 +513,10 @@ export function writeKansenki({
     const who = turning.by === 'user' ? userName : opponentName;
     paragraphs.push(`2日目、勝負を分けたのは${turning.ply}手目、${who}の${turningText}。この一手で、形勢は${who}に傾いた。`);
   }
+  // 勝った局の勝負メシは「勝ちメシ」として残る(8章)。
+  const winningMeal = win && day.meal ? `昼の${day.meal}は、${userName}の勝ちメシになった。` : '';
   paragraphs.push(win
-    ? `${plies}手まで、${userName}の勝ち。${score ? `これで${score}。` : ''}${decided ? `${userName}が${decided.replace(/(獲得|防衛)$/, '')}の座${decided.endsWith('防衛') ? 'を守った' : 'についた'}。` : ''}`
+    ? `${plies}手まで、${userName}の勝ち。${score ? `これで${score}。` : ''}${decided ? `${userName}が${decided.replace(/(獲得|防衛)$/, '')}の座${decided.endsWith('防衛') ? 'を守った' : 'についた'}。` : ''}${winningMeal}`
     : `${plies}手まで、${opponentName}の勝ち。${score ? `これで${score}。` : ''}${userName}は、次の局へ静かに闘志を燃やしていた。`);
   return { headline, paragraphs };
 }

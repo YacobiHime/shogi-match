@@ -439,6 +439,27 @@
               {{ allKansenki ? "新しい3局だけ見る" : `すべて見る（${kansenki.length}局）` }}
             </button>
           </section>
+          <!--
+            勝負メシ帳(docs/title-match-day-design.mdの8-4)。タイトル戦の昼に選んだ品を、行った対局場ごとに献立の3品で並べる。
+            勝った局の品は勝ちメシ(★)。まだ食べていない品も薄く出し、次に試す楽しみにする。
+          -->
+          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-meals" data-note-meals>
+            <h2 id="shogi-note-meals">勝負メシ帳<small class="shogi-note__count">{{ mealBook.tried }}/{{ mealBook.total }}品・勝ちメシ{{ mealBook.wins }}</small></h2>
+            <ul v-if="mealBook.venues.length" class="shogi-note__meals">
+              <li v-for="venue in mealBook.venues" :key="venue.venue" data-note-meal-venue>
+                <b>{{ venue.venue }}</b>
+                <span class="shogi-note__meal-items">
+                  <span
+                    v-for="item in venue.meals"
+                    :key="item.meal"
+                    :class="`shogi-note__meal--${item.state}`"
+                    :aria-label="item.state === 'win' ? `${item.meal}（勝ちメシ）` : item.state === 'eaten' ? `${item.meal}（食べた）` : `${item.meal}（まだ）`"
+                  ><i v-if="item.state === 'win'" aria-hidden="true">★</i>{{ item.meal }}</span>
+                </span>
+              </li>
+            </ul>
+            <p v-else class="shogi-note__hint">タイトル戦（七番勝負）の昼休みに選んだ勝負メシが、ここに並ぶよ。勝った局の勝負メシは「勝ちメシ」の★がつくよ。</p>
+          </section>
         </section>
 
         <!-- 棋士名鑑(docs/player-world-note-design.mdの3-3)。 -->
@@ -730,7 +751,7 @@ import { junniClassOf, junniPlaceOf } from "./core/ryuo-league.mjs";
 import { awardLine } from "./core/season-award.mjs";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import TitleDaySheet, { type KansenkiView } from "./TitleDaySheet.vue";
-import { loadKansenki } from "./core/title-day.mjs";
+import { loadKansenki, loadMealBook, mealBookView } from "./core/title-day.mjs";
 import { loadShoreikai, rankLabel } from "./core/shoreikai.mjs";
 import { classLabel as kenshukaiClassLabel, loadKenshukai } from "./core/kenshukai.mjs";
 
@@ -1051,6 +1072,8 @@ const kansenki = ref<(KansenkiView & { id: string; win?: boolean })[]>(loadKanse
 const allKansenki = ref(false);
 const shownKansenki = computed(() => kansenki.value.slice(0, allKansenki.value ? undefined : AWARD_PREVIEW));
 const kansenkiShown = ref<KansenkiView | null>(null);
+/** 勝負メシ帳(対局場ごとの献立の3品と、勝ちメシ)。 */
+const mealBook = mealBookView(loadMealBook(typeof localStorage === "undefined" ? null : localStorage));
 
 // ---- 戻る操作(ブラウザの戻る)。重ねて開いたもの(賞状・名鑑のくわしい情報)から閉じる。閉じたら真。
 const bookEl = ref<{ goBack: () => boolean } | null>(null);
@@ -1948,6 +1971,27 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 }
 /* 賞状帳の行(大会の画面の賞状帳と同じ形)。左の小さな判子の色は賞状の格。 */
 .shogi-game .shogi-note__awards { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+/* 勝負メシ帳。対局場ごとに1行、献立の3品を札で並べる(★勝ちメシ・食べた・まだは薄く)。 */
+.shogi-game .shogi-note__meals { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__meals li {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.3rem;
+  background: var(--note-deep);
+  font-size: 0.9em;
+}
+.shogi-game .shogi-note__meals b { color: var(--note-muted); font-size: 0.85em; }
+.shogi-game .shogi-note__meal-items { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.shogi-game .shogi-note__meal-items > span {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--note-line);
+  border-radius: 0.3rem;
+}
+.shogi-game .shogi-note__meal--win { border-color: var(--note-gold) !important; color: var(--note-gold); font-weight: 800; }
+.shogi-game .shogi-note__meal--win i { margin-right: 0.2em; font-style: normal; }
+.shogi-game .shogi-note__meal--eaten { color: var(--ivory, #fffcf4); }
+.shogi-game .shogi-note__meal--new { color: var(--note-muted); border-style: dashed !important; opacity: 0.75; }
 .shogi-game .shogi-note__award-row {
   display: flex;
   align-items: center;

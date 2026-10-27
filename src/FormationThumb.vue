@@ -1,5 +1,4 @@
 <template>
-  <!-- 作戦カードの完成形の小さな盤。自分の側の下5段だけを描く(盤の部品を何枚も並べると重いため、SVGの文字で描く)。 -->
   <svg
     class="formation-thumb"
     :class="{ 'formation-thumb--silhouette': silhouette }"
@@ -7,6 +6,10 @@
     aria-hidden="true"
     focusable="false"
   >
+    <!--
+      作戦カードの完成形の小さな盤。自分の側の下5段だけを描く(盤の部品を何枚も並べると重いため、SVGの文字で描く)。
+      説明はsvgの中に置く(外に置くと、コメントを残すビルドで部品の根が2つになり、親から渡したclassが付かない)。
+    -->
     <rect class="formation-thumb__board" x="0" y="0" :width="FILES * CELL" :height="RANKS.length * CELL" />
     <line
       v-for="index in FILES - 1"
