@@ -2507,6 +2507,7 @@ import {
   getPraiseBaselineSearchSettings,
   hintMoveAssessment,
   hintScoreForArrow,
+  settleMultiPvCandidates,
 } from "./core/match-assists.mjs";
 import {
   flipSideToMove,
@@ -7891,8 +7892,12 @@ async function analyzeCoachPosition(nodes: number, maxTimeMs: number, multiPv = 
     () => engine!.go({ nodes, maxTimeMs }),
   );
   if (interrupted) return [];
-  positionAnalysisCache.set(positionKey, analysis.candidates, { nodes, multiPv });
-  return analysis.candidates;
+  // 止めた探索の浅い候補が混じると、最善手より評価の高い候補が出る。同じ物差しの候補にそろえる。
+  const candidates = multiPv > 1
+    ? settleMultiPvCandidates(analysis.candidates, analysis.completedCandidates ?? [])
+    : analysis.candidates;
+  positionAnalysisCache.set(positionKey, candidates, { nodes, multiPv });
+  return candidates;
 }
 
 /**

@@ -281,8 +281,16 @@ export class ShogiEngine {
    *     pv?: string[],
    *     depth?: number,
    *     score?: { type: 'cp' | 'mate', value: number }
+   *   }[],
+   *   completedCandidates?: {
+   *     rank: number,
+   *     move: string,
+   *     pv?: string[],
+   *     depth?: number,
+   *     score?: { type: 'cp' | 'mate', value: number }
    *   }[]
    * }>}
+   * completedCandidatesは、すべての順位を同じ深さで出した最後の回の候補(なければ空)。
    */
   async go(goOptions = {}) {
     let cmd = 'go';
@@ -303,6 +311,20 @@ export class ShogiEngine {
     return new Promise((resolve, reject) => {
       const candidates = new Map();
       const candidateDetails = new Map();
+      // MultiPVの読み筋は、同じ時点の全順位を続けて出す(1回分)。探索を止めたときや読みの途中で出す回は、
+      // 読み直した順位だけが新しく、残りの順位は1つ浅い古い値を出し直す。全順位が同じ深さの、最後の回を残す。
+      let batch = new Map();
+      let batchKey = null;
+      let completedBatch = [];
+      let maxRank = 0;
+      const closeBatch = () => {
+        const details = [...batch.values()];
+        const depths = new Set(details.map(({ depth }) => depth));
+        if (batch.has(1) && details.length >= maxRank && depths.size === 1) {
+          completedBatch = details.sort((left, right) => left.rank - right.rank);
+        }
+        batch = new Map();
+      };
       let latestStats = {};
       let stopTimer = null;
       let responseTimer = null;
@@ -355,6 +377,11 @@ export class ShogiEngine {
             };
             candidates.set(rank, detail.move);
             candidateDetails.set(rank, detail);
+            const key = `${nodesMatch?.[1] ?? ''}|${line.match(/\btime\s+(\d+)\b/)?.[1] ?? ''}`;
+            if (key !== batchKey || batch.has(rank)) closeBatch();
+            batchKey = key;
+            maxRank = Math.max(maxRank, rank);
+            batch.set(rank, detail);
             if (typeof goOptions.onUpdate === 'function') {
               goOptions.onUpdate({
                 ...latestStats,
@@ -373,11 +400,14 @@ export class ShogiEngine {
             rank: 1,
             move: parts[1],
           });
+          closeBatch();
           finish({
             move: parts[1],
             ponder: parts[3],
             candidates: [...candidateDetails.values()]
               .sort((left, right) => left.rank - right.rank),
+            // すべての順位を同じ深さで読み終えた最後の回(同じ物差しで比べられる候補)。
+            completedCandidates: completedBatch,
           });
         }
       };

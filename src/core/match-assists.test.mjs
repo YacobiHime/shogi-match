@@ -8,6 +8,7 @@ import {
   getOpeningGuideSafetySearchSettings,
   hintMoveAssessment,
   hintScoreForArrow,
+  settleMultiPvCandidates,
 } from './match-assists.mjs';
 
 describe('hint arrow evaluations', () => {
@@ -121,5 +122,62 @@ describe('悪手判定の読み', () => {
       expect(judge.nodes).toBeGreaterThanOrEqual(100 * lv21.nodes);
       expect(judge.maxTimeMs).toBeLessThanOrEqual(2000);
     }
+  });
+});
+
+describe('MultiPVの候補を同じ物差しにそろえる', () => {
+  const cp = (value) => ({ type: 'cp', value });
+  it('止めた探索で2番目からが浅いとき、最善手より評価の高い古い候補を出さない(最善手が変わった)', () => {
+    // 実際のエンジンの出力: 深さ16で読み直した1番目と、深さ15の古い値を出し直した2・3番目。
+    const candidates = [
+      { rank: 1, move: 'B*5e', depth: 16, score: cp(1628) },
+      { rank: 2, move: 'B*2d', depth: 15, score: cp(2715) },
+      { rank: 3, move: 'B*3c', depth: 15, score: cp(2022) },
+    ];
+    const completed = [
+      { rank: 1, move: 'B*4b', depth: 15, score: cp(2971) },
+      { rank: 2, move: 'B*5b', depth: 15, score: cp(2790) },
+      { rank: 3, move: 'B*1b', depth: 15, score: cp(2406) },
+    ];
+    const settled = settleMultiPvCandidates(candidates, completed);
+    expect(settled.map(({ move }) => move)).toEqual(['B*5e']);
+    expect(settled[0].score).toEqual(cp(1628));
+  });
+
+  it('最善手が同じなら、読み終えた深さの候補を、その深さでの差のまま出す', () => {
+    const candidates = [
+      { rank: 1, move: 'G*3e', depth: 16, score: cp(-500) },
+      { rank: 2, move: 'S*7d', depth: 15, score: cp(-209) },
+      { rank: 3, move: 'P*3d', depth: 15, score: cp(-400) },
+    ];
+    const completed = [
+      { rank: 1, move: 'G*3e', depth: 15, score: cp(-150) },
+      { rank: 2, move: 'S*7d', depth: 15, score: cp(-209) },
+      { rank: 3, move: 'P*3d', depth: 15, score: cp(-441) },
+    ];
+    const settled = settleMultiPvCandidates(candidates, completed);
+    expect(settled.map(({ rank, move, score }) => [rank, move, score.value])).toEqual([
+      [1, 'G*3e', -500], [2, 'S*7d', -559], [3, 'P*3d', -791],
+    ]);
+    // 言葉の最善手(1番目)と、矢印の「最善」(評価がいちばん高い手)が同じになる。
+    const arrows = settled.map(({ move, score }) => ({ move, value: hintScoreForArrow(score) }));
+    expect(arrows.reduce((best, arrow) => (arrow.value > best.value ? arrow : best)).move).toBe(getHintMoves({ candidates: settled }, 3)[0].move);
+  });
+
+  it('すべて同じ深さなら変えない', () => {
+    const candidates = [
+      { rank: 1, move: '7g7f', depth: 12, score: cp(50) },
+      { rank: 2, move: '2g2f', depth: 12, score: cp(40) },
+    ];
+    expect(settleMultiPvCandidates(candidates, candidates)).toEqual(candidates);
+  });
+
+  it('最善手より高い評価の候補は、同じ深さでも外す', () => {
+    const settled = settleMultiPvCandidates([
+      { rank: 1, move: '7g7f', depth: 12, score: cp(50) },
+      { rank: 2, move: '2g2f', depth: 12, score: cp(80) },
+      { rank: 3, move: '5g5f', depth: 12, score: cp(10) },
+    ]);
+    expect(settled.map(({ rank, move }) => [rank, move])).toEqual([[1, '7g7f'], [2, '5g5f']]);
   });
 });

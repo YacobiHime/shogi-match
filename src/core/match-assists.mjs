@@ -47,6 +47,53 @@ export function getHintMoves(searchResult, limit = 3) {
   return moves;
 }
 
+/** 3つの評価がどれも評価値(cp)なら、fromからの差をtoに足す。詰みの絡む評価はそのまま返す。 */
+function shiftScore(score, from, to) {
+  if (score?.type === 'cp' && from?.type === 'cp' && to?.type === 'cp') {
+    return { type: 'cp', value: to.value + (score.value - from.value) };
+  }
+  return score;
+}
+
+/**
+ * MultiPVの候補を、同じ物差しで比べられる形にそろえる。
+ * 探索を止めると、エンジンは読み直した1番目だけを新しい深さで出し、2番目からは1つ浅い古い値を出し直す。
+ * そのままだと、1番目(最善手)より評価値の高い候補が混じり、言葉の最善手と矢印の「最善」が食い違う。
+ * - 最善手は、いちばん深く読んだ1番目のまま変えない。
+ * - 浅い候補が混じったら、すべての順位を同じ深さで読み終えた組(completed)の候補に置き換え、最善手との差をその組の中で測る。
+ *   その組の1番目が今の最善手と違う(深く読んで最善手が変わった)ときは、浅い候補を出さない。
+ * - 最後に、最善手より評価の高い候補を外す。
+ * @template {{ rank: number, move: string, depth?: number, score?: { type: string, value: number } }} T
+ * @param {readonly T[]} candidates
+ * @param {readonly T[]} [completed]
+ * @returns {T[]}
+ */
+export function settleMultiPvCandidates(candidates = [], completed = []) {
+  const best = candidates.find((candidate) => candidate?.rank === 1);
+  if (!best) return [...candidates];
+  const others = candidates.filter((candidate) => candidate !== best && candidate.move !== best.move);
+  const sameDepth = (candidate) => (
+    candidate.depth === undefined || best.depth === undefined || candidate.depth >= best.depth
+  );
+  let alternatives = others;
+  if (!others.every(sameDepth)) {
+    const anchor = completed.find((candidate) => candidate?.rank === 1);
+    alternatives = anchor && anchor.move === best.move
+      ? completed
+        .filter((candidate) => candidate.rank !== 1 && candidate.move !== best.move)
+        .map((candidate) => ({ ...candidate, score: shiftScore(candidate.score, anchor.score, best.score) }))
+      : others.filter(sameDepth);
+  }
+  const bestValue = hintScoreForArrow(best.score);
+  return [best, ...alternatives
+    .filter((candidate) => {
+      const value = hintScoreForArrow(candidate.score);
+      return value === undefined || bestValue === undefined || value <= bestValue;
+    })
+    .sort((left, right) => left.rank - right.rank)]
+    .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
+}
+
 /** 従来どおり最善手だけ必要な呼び出し向け。 */
 export function getHintMove(searchResult) {
   return getHintMoves(searchResult, 1)[0].move;

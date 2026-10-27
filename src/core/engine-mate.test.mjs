@@ -45,6 +45,30 @@ describe('USI通常探索', () => {
     });
   });
 
+  test('止めたときの古い値の出し直しを除き、全順位が同じ深さの最後の回を残す', async () => {
+    // 実際のやねうら王の出力: 止めた回は、1番目だけ新しく、2・3番目は1つ浅い古い値を出し直す。
+    const lines = [
+      'info depth 13 seldepth 20 score cp 867 multipv 1 nodes 360739 time 1134 pv S*7d',
+      'info depth 13 seldepth 16 score cp 804 multipv 2 nodes 360739 time 1134 pv 3f3e',
+      'info depth 13 seldepth 20 score cp 588 multipv 3 nodes 360739 time 1134 pv 5h6i',
+      'info depth 13 seldepth 22 score cp 703 multipv 1 nodes 701149 time 2138 pv S*7d',
+      'info depth 12 seldepth 16 score cp 804 multipv 2 nodes 701149 time 2138 pv 3f3e',
+      'info depth 12 seldepth 20 score cp 588 multipv 3 nodes 701149 time 2138 pv 5h6i',
+      'bestmove S*7d ponder 6c5c',
+    ];
+    const engine = new ShogiEngine({ factory: async () => ({}) });
+    engine.instance = {
+      postMessage(command) {
+        if (command.startsWith('go ')) queueMicrotask(() => lines.forEach((line) => engine._emit(line)));
+      },
+    };
+    const result = await engine.go({ nodes: 1000, maxTimeMs: 200 });
+    expect(result.candidates.map(({ score }) => score.value)).toEqual([703, 804, 588]);
+    expect(result.completedCandidates.map(({ move, depth, score }) => [move, depth, score.value])).toEqual([
+      ['S*7d', 13, 867], ['3f3e', 13, 804], ['5h6i', 13, 588],
+    ]);
+  });
+
   test('探索スレッド数はコア数から1本残し、変わったときだけ設定して準備を待つ', async () => {
     vi.stubGlobal('navigator', { hardwareConcurrency: 3 });
     try {
