@@ -144,6 +144,33 @@ function comparableScore(score) {
   return undefined;
 }
 
+/**
+ * 勝ちの詰み(手番側からplies手で詰む)の一言。エンジンの「N手で詰む」は、王手でない手(必至)を含むことがある。
+ * 詰将棋の「N手詰め」と言うのは、読み筋が王手の連続のときだけにする。
+ * @param {number} plies
+ * @param {{ byChecks?: boolean | null }} [options]
+ */
+export function mateWinAdvice(plies, { byChecks = null } = {}) {
+  const key = `mate-win-${plies}`;
+  if (byChecks === true) return { key, text: `${plies}手詰めだね、頑張って！` };
+  if (byChecks === false) return { key, text: `${plies}手で勝ちきれるよ。王手じゃない手から迫る形だよ！` };
+  return { key, text: `${plies}手で詰ませられるよ、頑張って！` };
+}
+
+/**
+ * 負けの詰み(どう受けても詰まされる)の一言。受けが無いことを伝えたうえで、最後まで指すよう励ます。
+ * @param {number} value 手番側から見た詰みの値(負)
+ * @param {{ inCheck?: boolean }} [options]
+ */
+export function noDefenseAdvice(value, { inCheck = false } = {}) {
+  return {
+    key: `forced-mate-loss-${Math.abs(value)}`,
+    text: inCheck
+      ? '王手だね…もう受けが無いけど、いちばん長く逃げよう。諦めずに指し続けよう！'
+      : 'もう受けが無いね…でも、諦めずに指し続けよう！ 相手が間違えるかもしれないよ。',
+  };
+}
+
 /** 王手を掛けられても、プレイヤーがこれ以上の評価(詰みを含む)なら「思い出王手」とみなす。 */
 export const MEMORIAL_CHECK_SCORE = 2000;
 
@@ -166,10 +193,7 @@ export function getCandidateRiskAdvice(candidates = [], {
     .sort((left, right) => left.rank - right.rank);
   const best = ranked.find((candidate) => candidate.rank === 1);
   if (best?.score?.type === 'mate' && best.score.value < 0) {
-    return {
-      key: `forced-mate-loss-${Math.abs(best.score.value)}`,
-      text: `詰んじゃった……${Math.abs(best.score.value)}手詰めだね。`,
-    };
+    return noDefenseAdvice(best.score.value, { inCheck });
   }
   if (inCheck) {
     // 大差で負けている相手が、投了の前に記念に掛ける王手。
@@ -317,9 +341,10 @@ function situationPolicy(phase, value, materialBalance, threshold) {
  * @param {{
  *   level?: string, score?: { type: string, value: number } | null, moveCount?: number, inCheck?: boolean,
  *   opponentFormations?: string[], playerFormations?: string[], advisedTopics?: Iterable<string>,
- *   materialBalance?: number | null,
+ *   materialBalance?: number | null, mateByChecks?: boolean | null,
  * }} [options]
  *   materialBalance: プレイヤーから見た駒の損得(図鑑のAI用の駒の値段の合計の差。歩=90)。形勢の一言を、何をすればよいかの方針にする。
+ *   mateByChecks: 詰みの読み筋が王手の連続か(true)、王手でない手を含むか(false)、読み筋が短くて分からないか(null)。
  */
 export function getCoachAdvice({
   level = 'encourage',
@@ -330,21 +355,13 @@ export function getCoachAdvice({
   playerFormations = [],
   advisedTopics = [],
   materialBalance = null,
+  mateByChecks = null,
 } = {}) {
   if (level === 'off') return null;
 
   if (level === 'detailed' && score?.type === 'mate' && Number.isFinite(score.value)) {
-    if (score.value > 0) {
-      return {
-        key: `mate-win-${score.value}`,
-        text: `${score.value}手詰めだね、頑張って！`,
-      };
-    }
-    if (score.value < 0) {
-      return inCheck
-        ? { key: 'mate-danger-check', text: '王手がかかっているよ。まずは受けよう！' }
-        : { key: 'mate-danger-threat', text: '詰めろだね。受けないと負けちゃう…' };
-    }
+    if (score.value > 0) return mateWinAdvice(score.value, { byChecks: mateByChecks });
+    if (score.value < 0) return noDefenseAdvice(score.value, { inCheck });
   }
 
   if (level === 'detailed') {

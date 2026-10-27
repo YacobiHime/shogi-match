@@ -46,6 +46,18 @@ describe('助言の表示時間', () => {
     vi.useRealTimers();
   });
 
+  test('詰みの助言どうしは、あとから届いた助言を待たずに出す', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const shown = [];
+    const scheduler = createCoachAdviceScheduler({ display: (advice) => shown.push(advice.key) });
+    scheduler.present({ key: 'mate-win-3', text: '3手で詰ませられるよ' });
+    scheduler.present({ key: 'mate-win-1', text: '1手詰めだね、頑張って！' });
+    scheduler.present({ key: 'mate-win-1', text: '1手詰めだね、頑張って！' });
+    expect(shown).toEqual(['mate-win-3', 'mate-win-1']);
+    vi.useRealTimers();
+  });
+
   test('リセットすると待機中の助言を表示しない', () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);

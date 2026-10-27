@@ -375,7 +375,7 @@ describe("match screen regressions", () => {
     // 好手判定の解析はCPU着手を描画した後、定跡補助の後ろへ積む。その前に、局面の注意(詰み筋・評価の崖など)の解析を積む。
     expect(source).toMatch(/scheduleOpeningFollowupCandidates\(\);\s*if \([^)]*\)\) \{\s*scheduleDedicatedCoachAdvice\(null, \{ riskOnly: hadScore \}\);\s*\}\s*scheduleMoveJudgeBaseline\(\);\s*schedulePlayerMoveBaseline\(\);\s*schedulePlayerIdleAdvice\(\);/);
     // CPUの選んだ手の評価値がないとき(Lv0〜10など)も、プレイヤーの手番に読み直して形勢の助言を出す。
-    expect(source).toContain("schedulePostCpuAssists(selectedCpuScore !== undefined);");
+    expect(source).toContain("schedulePostCpuAssists(selectedCpuScore !== undefined && scoreAdviceShown);");
     // 悪手判定は、着手の前後を同じ深さで読んで比べる。着手後の局面は、相手の思考時間としてCPUの探索の前に読む。
     const cpuTurn = source.split("async function scheduleCpuMove()")[1]?.split("// 図鑑の棋譜解析")[0] ?? "";
     expect(cpuTurn.indexOf("judged = await judgePlayerMove(")).toBeGreaterThan(-1);
@@ -385,7 +385,7 @@ describe("match screen regressions", () => {
   });
 
   it("announces the hint like a mentor naming the best move", () => {
-    expect(source).toMatch(/hintText\.value = `最善手は\$\{formatSpokenMove\(moves\[0\]\.move, currentSfen\.value\)\}だよ！`;/);
+    expect(source).toMatch(/hintText\.value = hintMoveText\(\{\s*moveText: formatSpokenMove\(bestHint\.move, currentSfen\.value\),/);
   });
 
   it("draws detour arrows from opening-compatible candidates", () => {
@@ -744,7 +744,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/\} else if \(dexShelfOpen\.value\) \{\s*dexShelfOpen\.value = false;/);
   });
   it("やこび姫の作戦の助言は、危険の知らせのあと・ほかの助言の前に、確かめの読みを通してから出す(docs/coach-plan-advice-design.md)", () => {
-    expect(source).toMatch(/const chosen = moveFeedback \?\? urgentAdvice \?\? threatLine \?\? planLine \?\? riskAdvice;/);
+    expect(source).toMatch(/const chosen = moveFeedback \?\? \(winningMate \? null : urgentAdvice \?\? threatLine \?\? planLine \?\? riskAdvice\);/);
     expect(source).toMatch(/URGENT_RISK_ADVICE = \/\^\(forced-mate-loss\|king-in-check\|mate-risk\|candidate-evaluation-cliff\)\//);
     // 浅い読みの候補から提案を作り、2手に絞った読みで確かめる。
     expect(source).toMatch(/const proposal = planAdvice\(\{[\s\S]{0,1200}?searchMoves: \[proposal\.swingMove, proposal\.otherMove\][\s\S]{0,400}?confirmPlanAdvice\(proposal,/);
@@ -795,7 +795,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/data-broadcast-toggle\s*@click="toggleBroadcast"/);
     expect(source).toMatch(/const BROADCAST_KEY = "yacobihime:shogi-match:broadcast:v1";/);
     expect(source).toMatch(/function noteRoomComment\(\) \{\s*if \(!broadcastShown\.value\) return;/);
-    expect(source).toMatch(/notePresenceScore\(score\);\s*if \(riskOnly\) \{/);
+    expect(source).toMatch(/notePresenceScore\(score\);\s*if \(riskOnly && !winningMate\) \{/);
     expect(source).toMatch(/\.shogi-game__broadcast \{[^}]*min-height: 1\.4em;/);
   });
   it("大会の1局の背景(竜王戦は山、名人戦は暮れる空)と、勝った終局の判子(docs/tournament-match-presence-design.mdの5・6章)", () => {

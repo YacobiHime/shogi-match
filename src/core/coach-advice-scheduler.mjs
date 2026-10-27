@@ -98,7 +98,9 @@ export function createCoachAdviceScheduler({
       return;
     }
     // 詰み・王手などは局面が進む前に伝える必要があるため、通常助言の保持時間を待たない。
-    if (priority >= 100 && displayedPriority < 100) {
+    // 詰みの助言どうしでも待たない。あとから届くほうが新しい局面・深い読みなので(前は、先の「3手詰め」が
+    // 6秒残り、あとから見つけた1手詰めを出す前にプレイヤーが指してしまうことがあった)。
+    if (priority >= 100 && advice.key !== displayedKey) {
       cancelTimer();
       pending = null;
       displayNow(advice);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   flipSideToMove,
   isContinuousCheckMate,
+  mateLineByChecks,
   mateCheckResultFromCandidate,
   parseMateScore,
 } from './engine-mate-check.mjs';
@@ -71,5 +72,19 @@ describe('flipSideToMove', () => {
 
   it('王手中の局面は反転しない', () => {
     expect(flipSideToMove('4k4/9/4R4/9/9/9/9/9/4K4 w - 1')).toBeNull();
+  });
+});
+
+describe('mateLineByChecks', () => {
+  const sfen = '4k4/9/4P4/9/9/9/9/9/4K4 b RG 1';
+  it('王手の連続で詰む読み筋はtrue', () => {
+    expect(mateLineByChecks(sfen, ['R*5b', '5a6a', 'G*7b'], 3)).toBe(true);
+  });
+  it('攻める側に王手でない手があればfalse(必至からの詰み)', () => {
+    expect(mateLineByChecks(sfen, ['5i4h', '5a6a', 'G*7b'], 3)).toBe(false);
+  });
+  it('読み筋が短くて最後まで確かめられなければnull', () => {
+    expect(mateLineByChecks(sfen, ['R*5b'], 3)).toBeNull();
+    expect(mateLineByChecks(sfen, [], 3)).toBeNull();
   });
 });

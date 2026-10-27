@@ -1355,6 +1355,19 @@ function arrowColor(guideKind: CandidateMove["guideKind"]) {
   return "#fe0000";
 }
 
+/** 矢印の評価の札で、詰みとみなす値(hintScoreForArrowは詰みを±100000から手数を引いた値にする)。 */
+const MATE_ARROW_SCORE = 50000;
+/**
+ * 矢印の評価の札。最善との差を出す。詰みの値は差にすると「-96853」のような意味のない数になるので、言葉にする。
+ */
+function arrowEvaluationLabel(score: number, best: number): string {
+  if (score === best) return "最善";
+  if (score >= MATE_ARROW_SCORE) return `${100000 - score}手詰`;
+  if (best >= MATE_ARROW_SCORE) return "詰みを逃す";
+  if (score <= -MATE_ARROW_SCORE) return "詰まされる";
+  return `${score - best}`;
+}
+
 const arrows = computed(() => {
   const arrowWidth = 30 * main.value.ratio;
   const candidates = shownCandidates.value;
@@ -1437,11 +1450,10 @@ const arrows = computed(() => {
       scoreRank = index + 1;
       evaluationLabel = "定跡注意";
     } else if (candidate.score !== undefined && bestScore !== undefined) {
-      const diff = candidate.score - bestScore;
       scoreRank =
         1 +
         candidates.filter((c) => c.score !== undefined && c.score > candidate.score!).length;
-      evaluationLabel = diff === 0 ? "最善" : `${diff}`;
+      evaluationLabel = arrowEvaluationLabel(candidate.score, bestScore);
     } else {
       scoreRank = index + 1;
       evaluationLabel = "";

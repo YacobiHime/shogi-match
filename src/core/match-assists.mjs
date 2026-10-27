@@ -94,6 +94,23 @@ export function settleMultiPvCandidates(candidates = [], completed = []) {
     .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
 }
 
+/**
+ * 閃きの一言。最善手が詰みの手なら、何手で詰むかと、王手でない手なら受けが無くなることを添える。
+ * 負けの詰み(どう指しても詰まされる)なら、いちばん長く粘れる手だと言って励ます。
+ * @param {{ moveText: string, score?: { type: string, value: number } | null, givesCheck?: boolean, byChecks?: boolean | null }} options
+ *   score: 最善手の評価(手番側=プレイヤーから見た値)。byChecks: 詰みの読み筋が王手の連続か(分からなければnull)。
+ */
+export function hintMoveText({ moveText, score = null, givesCheck = false, byChecks = null }) {
+  const head = `最善手は${moveText}だよ！`;
+  if (score?.type !== 'mate' || !Number.isFinite(score.value) || score.value === 0) return head;
+  const plies = Math.abs(score.value);
+  if (score.value < 0) return `${head} もう受けが無いけど、いちばん長く粘れる手だよ。諦めずに指し続けよう！`;
+  if (plies === 1) return `${head} これで詰みだよ！`;
+  if (byChecks === true) return `${head} ここから${plies}手詰めだよ！`;
+  if (!givesCheck) return `${head} 王手じゃないけど、これで相手はもう受けが無いよ。${plies}手で詰むよ！`;
+  return `${head} ${plies}手で詰ませられるよ！`;
+}
+
 /** 従来どおり最善手だけ必要な呼び出し向け。 */
 export function getHintMove(searchResult) {
   return getHintMoves(searchResult, 1)[0].move;

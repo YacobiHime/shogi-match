@@ -12,10 +12,16 @@ import {
 import { coachAdvicePriority } from './coach-advice-scheduler.mjs';
 
 describe('候補手ごとの危険度助言', () => {
-  test('最善手でも被詰みなら詰み手数を表示する', () => {
-    expect(getCandidateRiskAdvice([
+  test('最善手でも被詰みなら、受けが無いことを伝えて最後まで指すよう励ます', () => {
+    const advice = getCandidateRiskAdvice([
       { rank: 1, score: { type: 'mate', value: -7 } },
-    ])?.text).toBe('詰んじゃった……7手詰めだね。');
+    ]);
+    expect(advice?.key).toBe('forced-mate-loss-7');
+    expect(advice?.text).toContain('もう受けが無いね');
+    expect(advice?.text).toContain('諦めずに指し続けよう');
+    expect(getCandidateRiskAdvice([
+      { rank: 1, score: { type: 'mate', value: -6 } },
+    ], { inCheck: true })?.text).toContain('いちばん長く逃げよう');
   });
 
   test('王手と厳密な詰めろを区別して警告する', () => {
@@ -79,11 +85,17 @@ describe('対局中の応援・助言', () => {
       .toBe('endgame-behind');
   });
 
-  test('詳しい助言では詰み手数と詰めろを知らせる', () => {
-    expect(getCoachAdvice({ level: 'detailed', score: { type: 'mate', value: 7 } })?.text)
+  test('詳しい助言では、詰みの読み筋が王手の連続のときだけ「N手詰め」と言う', () => {
+    expect(getCoachAdvice({ level: 'detailed', score: { type: 'mate', value: 7 }, mateByChecks: true })?.text)
       .toBe('7手詰めだね、頑張って！');
-    expect(getCoachAdvice({ level: 'detailed', score: { type: 'mate', value: -5 } })?.text)
-      .toContain('詰めろだね');
+    expect(getCoachAdvice({ level: 'detailed', score: { type: 'mate', value: 19 }, mateByChecks: false })?.text)
+      .toBe('19手で勝ちきれるよ。王手じゃない手から迫る形だよ！');
+    expect(getCoachAdvice({ level: 'detailed', score: { type: 'mate', value: 9 } })?.text)
+      .toBe('9手で詰ませられるよ、頑張って！');
+    // 負けの詰みは、どう受けても詰まされる(詰めろではない)。
+    const loss = getCoachAdvice({ level: 'detailed', score: { type: 'mate', value: -5 } });
+    expect(loss?.text).toContain('もう受けが無いね');
+    expect(coachAdvicePriority(loss)).toBe(100);
   });
 
   test('手番側の玉に王手がかかっているかを判定する', () => {

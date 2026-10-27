@@ -7,6 +7,7 @@ import {
   getOpeningFollowupSearchSettings,
   getOpeningGuideSafetySearchSettings,
   hintMoveAssessment,
+  hintMoveText,
   hintScoreForArrow,
   settleMultiPvCandidates,
 } from './match-assists.mjs';
@@ -179,5 +180,22 @@ describe('MultiPVの候補を同じ物差しにそろえる', () => {
       { rank: 3, move: '5g5f', depth: 12, score: cp(10) },
     ]);
     expect(settled.map(({ rank, move }) => [rank, move])).toEqual([[1, '7g7f'], [2, '5g5f']]);
+  });
+});
+
+describe('閃きの一言', () => {
+  const mate = (value) => ({ type: 'mate', value });
+  it('詰みでなければ最善手だけ', () => {
+    expect(hintMoveText({ moveText: '7四銀', score: { type: 'cp', value: 300 } })).toBe('最善手は7四銀だよ！');
+  });
+  it('王手の連続なら「N手詰め」、王手でない手なら受けが無いことを添える', () => {
+    expect(hintMoveText({ moveText: '5二金', score: mate(1), givesCheck: true, byChecks: true })).toBe('最善手は5二金だよ！ これで詰みだよ！');
+    expect(hintMoveText({ moveText: '5二飛', score: mate(7), givesCheck: true, byChecks: true })).toBe('最善手は5二飛だよ！ ここから7手詰めだよ！');
+    expect(hintMoveText({ moveText: '3三歩', score: mate(19), givesCheck: false, byChecks: false }))
+      .toBe('最善手は3三歩だよ！ 王手じゃないけど、これで相手はもう受けが無いよ。19手で詰むよ！');
+    expect(hintMoveText({ moveText: '5二飛', score: mate(9), givesCheck: true, byChecks: null })).toBe('最善手は5二飛だよ！ 9手で詰ませられるよ！');
+  });
+  it('負けの詰みでは、いちばん長く粘れる手だと励ます', () => {
+    expect(hintMoveText({ moveText: '6八玉', score: mate(-6) })).toContain('諦めずに指し続けよう');
   });
 });

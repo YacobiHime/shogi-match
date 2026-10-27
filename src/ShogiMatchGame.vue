@@ -2506,12 +2506,14 @@ import {
   getOpeningGuideSafetySearchSettings,
   getPraiseBaselineSearchSettings,
   hintMoveAssessment,
+  hintMoveText,
   hintScoreForArrow,
   settleMultiPvCandidates,
 } from "./core/match-assists.mjs";
 import {
   flipSideToMove,
   mateCheckResultFromCandidate,
+  mateLineByChecks,
   parseMateScore,
 } from "./core/engine-mate-check.mjs";
 import { canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice } from "./core/cpu-move-choice.mjs";
@@ -7817,10 +7819,15 @@ function showCoachAdvice(advice?: { key: string; text: string; topic?: string } 
   } : advice);
 }
 
+/**
+ * CPUが指した直後に、CPUの読みの評価値から形勢の一言を出す。出したらtrue。
+ * 詳しい助言では、詰みの評価からは出さない(falseを返す)。CPUの読みは強さに合わせて浅く、指した手が読みの最善とも
+ * 限らないので、手数がずれる(1手詰めがあるのに「3手詰め」など)。詰みは、プレイヤーの手番に読み直した助言で言う。
+ */
 function updateCoachAdvice(
   cpuScore?: { type: "cp" | "mate"; value: number },
   moveFeedback?: { key: string; text: string } | null,
-) {
+): boolean {
   const cpuColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   const score = scoreForPlayer(cpuScore, cpuColor, humanColor.value, 1);
   playerTurnScore = score;
@@ -7829,12 +7836,13 @@ function updateCoachAdvice(
   if (coachLevel.value === "encourage") notePresenceScore(score);
   if (coachLevel.value === "off") {
     guideText.value = "";
-    return;
+    return true;
   }
   if (moveFeedback) {
     showCoachAdvice(moveFeedback);
-    return;
+    return true;
   }
+  if (coachLevel.value === "detailed" && score?.type === "mate") return false;
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
   const playerFormations = formationNamesForColor(currentSfen.value, humanColor.value);
   const advice = getCoachAdvice({
@@ -7848,6 +7856,7 @@ function updateCoachAdvice(
     materialBalance: playerMaterialBalance(),
   });
   showCoachAdvice(advice);
+  return true;
 }
 
 /** プレイヤーから見た駒の損得(図鑑のAI用の駒の値段。「駒の損得」の札と同じ数え方)。形勢の一言の方針と封じ手の札に使う。 */
@@ -8288,6 +8297,7 @@ function updateCoachAdviceFromPlayerScore(
   score?: { type: "cp" | "mate"; value: number },
   moveFeedback?: { key: string; text: string } | null,
   storeMoveBaseline = true,
+  mateByChecks: boolean | null = null,
 ) {
   if (storeMoveBaseline) {
     playerTurnScore = score;
@@ -8313,6 +8323,7 @@ function updateCoachAdviceFromPlayerScore(
     playerFormations,
     advisedTopics: advisedCoachTopics,
     materialBalance: playerMaterialBalance(),
+    mateByChecks,
   });
   showCoachAdvice(advice);
 }
@@ -8376,13 +8387,27 @@ async function updateDedicatedCoachAdvice(
     ),
   }));
   let score = normalizedCandidates.find((candidate) => candidate.rank === 1)?.score;
+  // 勝ちの詰みの読み筋が王手の連続か(「N手詰め」と言うのはそのときだけ)。
+  const bestPv = candidates.find((candidate) => candidate.rank === 1)?.pv;
+  let mateByChecks = score?.type === "mate" && score.value > 0
+    ? mateLineByChecks(currentSfen.value, bestPv, score.value)
+    : null;
   // 通常探索がまだmateを返していない明確な勝勢だけ、短時間の通常探索で再確認する。
   if (coachLevel.value === "detailed" && score?.type === "cp" && score.value >= 2500) {
     const mate = await engineMateCheck(currentSfen.value, {
       ...getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait"),
       maxPly: 7,
     });
-    if (mate.status === "mate") score = { type: "mate", value: mate.plies };
+    // 連続王手で詰むことを確かめた詰み。
+    if (mate.status === "mate") {
+      score = { type: "mate", value: mate.plies };
+      mateByChecks = true;
+    }
+  }
+  // 1手詰めは盤面から確かめられる。読みの手数より確かなので、こちらを使う(CPUの手のあとの「1手詰め」の知らせと食い違わないように)。
+  if (coachLevel.value === "detailed" && findMateInOne(currentSfen.value)) {
+    score = { type: "mate", value: 1 };
+    mateByChecks = true;
   }
   if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
   const inCheck = isSideToMoveInCheck(currentSfen.value);
@@ -8396,6 +8421,8 @@ async function updateDedicatedCoachAdvice(
       })
     : null;
   const mateThreat = mateThreatResult?.status === "mate";
+  // 勝ちの詰みがあるときは、詰みの一言を何より先に出す(相手の詰めろや作戦の提案より大事)。
+  const winningMate = coachLevel.value === "detailed" && score?.type === "mate" && score.value > 0;
   const bestMove = candidates.find((candidate) => candidate.rank === 1)?.move;
   // タイトル戦の封じ手予想は、この読みの最善手(控室の第1候補)。
   if (bestMove) roomPick = { ply: analyzedHistoryLength, move: bestMove };
@@ -8409,9 +8436,9 @@ async function updateDedicatedCoachAdvice(
       })
     : null;
   // 順番: 悪手の指摘 → 詰み・王手・詰めろ・評価の崖 → 相手の狙い → 作戦の助言(とほめる一言) → ほかの危険の知らせ。
-  const urgentAdvice = riskAdvice && URGENT_RISK_ADVICE.test(riskAdvice.key) ? riskAdvice : null;
+  const urgentAdvice = !winningMate && riskAdvice && URGENT_RISK_ADVICE.test(riskAdvice.key) ? riskAdvice : null;
   // 相手の狙い: 手番を入れ替えた局面(詰めろの確かめ)で、相手がいちばん指したい手が大きな駒を取る手なら言う。
-  const threatLine = coachLevel.value === "detailed" && !moveFeedback && !urgentAdvice && threatSfen && mateThreatResult?.best
+  const threatLine = coachLevel.value === "detailed" && !winningMate && !moveFeedback && !urgentAdvice && threatSfen && mateThreatResult?.best
     ? threatAdvice({
         threatSfen,
         threatMove: mateThreatResult.best.move,
@@ -8422,7 +8449,7 @@ async function updateDedicatedCoachAdvice(
       })
     : null;
   let planLine: { key: string; text: string; topic?: string } | null = null;
-  if (coachLevel.value === "detailed" && !moveFeedback && !urgentAdvice && !threatLine) {
+  if (coachLevel.value === "detailed" && !winningMate && !moveFeedback && !urgentAdvice && !threatLine) {
     planLine = coachPlanPraise();
     if (!planLine) {
       const rookUnderThreat = bestMove ? Boolean(bestMoveTacticalContext(bestMove).rookUnderThreat) : false;
@@ -8431,14 +8458,14 @@ async function updateDedicatedCoachAdvice(
       planLine = offered;
     }
   }
-  const chosen = moveFeedback ?? urgentAdvice ?? threatLine ?? planLine ?? riskAdvice;
+  const chosen = moveFeedback ?? (winningMate ? null : urgentAdvice ?? threatLine ?? planLine ?? riskAdvice);
   // 大会の相手の表情と中継は、この助言の読みの評価値で動かす(riskOnlyでも)。
   notePresenceScore(score);
-  if (riskOnly) {
+  if (riskOnly && !winningMate) {
     if (chosen) showCoachAdvice(chosen);
     return;
   }
-  updateCoachAdviceFromPlayerScore(score, chosen, false);
+  updateCoachAdviceFromPlayerScore(score, chosen, false, mateByChecks);
 }
 
 /** 作戦の助言より先に出す危険の知らせ(詰み・王手・詰めろ・評価の崖)。 */
@@ -8658,10 +8685,28 @@ async function playerMovePraise(options: {
       })
     : null;
   const cpuMatePly = parseMateScore(cpuCandidates.find(({ rank }) => rank === 1));
-  // CPU本体の探索結果を流用し、追加探索なしで詰めろを受けきったか判定する。
-  const defendedMateThreat = Boolean(
-    detailed && baseline?.mateThreat && !(cpuMatePly && cpuMatePly <= 7),
+  // 詰めろを受けきったか。CPU本体の探索は強さに合わせて浅く、自分の詰みを見落とすことがあるので、
+  // CPU本体が詰みを見ていなくても、着手後の局面(CPUの手番)で連続王手の詰みが残っていないかを確かめてから言う。
+  // 王手で詰めろをかわしただけの手(相手は王手を受けるだけで、狙いは残る)は、受けきったとは言わない。
+  let defendedMateThreat = Boolean(
+    detailed && baseline?.mateThreat && !(cpuMatePly && cpuMatePly <= 7)
+    && !isSideToMoveInCheck(currentSfen.value),
   );
+  if (defendedMateThreat) {
+    if (engine && engineReady.value) {
+      const settings = getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait");
+      cpuSearchRunning = true;
+      cpuSearchGeneration = generation;
+      try {
+        const remaining = await engineMateCheck(currentSfen.value, { ...settings, maxPly: 7 });
+        defendedMateThreat = remaining.status === "no-mate";
+      } finally {
+        if (cpuSearchGeneration === generation) cpuSearchRunning = false;
+      }
+    } else {
+      defendedMateThreat = false;
+    }
+  }
   const praiseOptions = {
     level: coachLevel.value,
     historyLength,
@@ -8734,6 +8779,7 @@ function schedulePostCpuAssists(hadScore = false) {
         showCoachAdvice(getCoachAdvice({
           level: coachLevel.value,
           score: { type: "mate", value: 1 },
+          mateByChecks: true,
         }));
       }
       scheduleOpeningGuideSafety();
@@ -9472,7 +9518,18 @@ async function showHint() {
     hintCandidates.value = moves.map(({ move, score }) => ({
       usi: move, score: hintScoreForArrow(score),
     }));
-    hintText.value = `最善手は${formatSpokenMove(moves[0].move, currentSfen.value)}だよ！`;
+    // 最善手が詰みの手なら、何手で詰むかを添える(読み筋が王手の連続のときだけ「N手詰め」と言う)。
+    const bestHint = moves[0];
+    const bestHintPv = candidates.find(({ move }) => move === bestHint.move)?.pv;
+    const bestHintScore = bestHint.score as EngineEvaluation | undefined;
+    hintText.value = hintMoveText({
+      moveText: formatSpokenMove(bestHint.move, currentSfen.value),
+      score: bestHintScore,
+      givesCheck: candidateGivesCheck(bestHint.move),
+      byChecks: bestHintScore?.type === "mate" && bestHintScore.value > 0
+        ? mateLineByChecks(currentSfen.value, bestHintPv, bestHintScore.value)
+        : null,
+    });
     if (!reviewMode.value) hintsRemaining.value -= 1;
   } catch (error) {
     hintText.value = `ヒントを出せませんでした: ${error instanceof Error ? error.message : String(error)}`;
@@ -10184,9 +10241,9 @@ async function scheduleCpuMove() {
       await waitForImpactHold();
       if (generation !== matchGeneration) return;
       if (applyMove(usi, "cpu") && active.value) {
-        updateCoachAdvice(selectedCpuScore);
+        const scoreAdviceShown = updateCoachAdvice(selectedCpuScore);
         thinking.value = false;
-        schedulePostCpuAssists(selectedCpuScore !== undefined);
+        schedulePostCpuAssists(selectedCpuScore !== undefined && scoreAdviceShown);
       }
       thinking.value = false;
     } catch (error) {

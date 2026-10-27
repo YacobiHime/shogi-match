@@ -41,6 +41,28 @@ export function isContinuousCheckMate(sfen, pv, plies) {
 }
 
 /**
+ * 手番側の勝ちの詰みの読み筋が、王手の連続か。エンジンの「N手で詰む」は、王手でない手(必至)を含むことがある。
+ * true: plies手まで攻める側の手がすべて王手で詰む。false: 攻める側に王手でない手がある。
+ * null: 読み筋が短い・壊れていて分からない。
+ * @param {string} sfen
+ * @param {readonly string[] | undefined} pv
+ * @param {number} plies
+ * @returns {boolean | null}
+ */
+export function mateLineByChecks(sfen, pv, plies) {
+  if (!Number.isInteger(plies) || plies < 1 || !Array.isArray(pv) || pv.length === 0) return null;
+  const position = Position.newBySFEN(sfen);
+  if (!position) return null;
+  const steps = Math.min(plies, pv.length);
+  for (let index = 0; index < steps; index += 1) {
+    const move = position.createMoveByUSI(pv[index]);
+    if (!move || !position.isValidMove(move) || !position.doMove(move)) return null;
+    if (index % 2 === 0 && !position.checked) return false;
+  }
+  return pv.length >= plies && isContinuousCheckMate(sfen, pv, plies) ? true : null;
+}
+
+/**
  * SFENの盤面を変えず手番だけを反転する。
  * 現在の手番側が王手中なら、反転後に相手玉を取れる不正局面になるためnullを返す。
  */
