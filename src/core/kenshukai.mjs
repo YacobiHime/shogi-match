@@ -12,7 +12,7 @@ import { createRng, gauss } from './ryuo-random.mjs';
 import { newName } from './ryuo-names.mjs';
 import { createRepertoire, pickGameStyle, styleEntry } from './ryuo-repertoire.mjs';
 import { createCharacter } from './player-character.mjs';
-import { GROUP_MEAN_RATING, tournamentLevel } from './ryuo-strength.mjs';
+import { GROUP_MEAN_RATING, tournamentLevel, worldCpuLevel } from './ryuo-strength.mjs';
 import { LADDER_VERSION } from './level-ladder.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
 import {
@@ -135,7 +135,7 @@ export function examJoinClass(scale, cls, wins) {
 }
 
 /**
- * 研修会員の強さ(名簿の尺度)を、相手のLvに換算する。研修会員はどれも6組の平均より300以上低く、そのままでは
+ * 世界の物差しを持たない前の挑戦で、研修会員の強さ(名簿の尺度)を、相手のLvに換算する。研修会員はどれも6組の平均より300以上低く、そのままでは
  * 全員が勝率8割の下限に張り付くので、6組の平均のまわりに縮めて写す(docs/kenshukai-design.mdの7章)。F2は勝率8割、Sは6割くらい。
  * @param {number} rating
  * @param {number} difficulty
@@ -343,7 +343,10 @@ function setPending(run, rng, { opponentId, kind, label, eventText, stakes, othe
   const all = players(run);
   const opponent = all[opponentId];
   const rating = kind === 'shido' ? CLASS_RATINGS[run.cls] + SHIDO_BONUS[handicap] : opponent.rating;
-  opponent.level = kenshukaiLevel(rating, run.settings.difficulty, userLevel);
+  // 世界の物差しを持つ挑戦は、会の中の差を残す(いちばん下のクラスを基準。docs/tournament-strength-spread-design.mdの4-4)。
+  opponent.level = Number.isFinite(run.settings.world)
+    ? worldCpuLevel(rating, run.settings.world, CLASS_RATINGS[0])
+    : kenshukaiLevel(rating, run.settings.difficulty, userLevel);
   // 駒落ちでは、下手(プレイヤー)が先手の側に座り、上手が先に指す。駒落ちの戦法は、CPUにまかせる。
   const color = handicap ? 'black' : rng.next() < 0.5 ? 'black' : 'white';
   const style = handicap ? null : opponent.repertoire

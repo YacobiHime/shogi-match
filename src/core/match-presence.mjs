@@ -280,16 +280,18 @@ export function roomComment({
 /**
  * 勝って終局したときに盤に押す判子。期の画面の節目の判子(ryuo-milestone.mjsのlastGameMilestone)と同じ言葉にする。
  * 節目でない勝ちは「勝ち」の小さな判子。負けたときは押さない(null)。
- * @param {{ win: boolean, milestone?: { seal: string, title: string, weight: string } | null, event?: string, crowned?: boolean, weight?: string }} options
- *   crowned: 名人戦で名人になった(または防衛した)。weight: 対局の舞台の重さ(plain/big/title)。
+ * @param {{ win: boolean, milestone?: { seal: string, title: string, weight: string } | null, event?: string, crowned?: boolean, weight?: string, upset?: boolean }} options
+ *   crowned: 名人戦で名人になった(または防衛した)。weight: 対局の舞台の重さ(plain/big/title)。upset: 格上(2Lv以上強い相手)に勝った。
  * @returns {{ seal: string, title: string, size: "small" | "mid" | "big", confetti: boolean } | null}
  */
-export function finishStamp({ win, milestone = null, event = 'ryuo', crowned = false, weight = 'plain' }) {
+export function finishStamp({ win, milestone = null, event = 'ryuo', crowned = false, weight = 'plain', upset = false }) {
   if (!win) return null;
   if (event === 'meijin' && crowned) return { seal: '名人', title: '名人になった！', size: 'big', confetti: true };
   if (milestone) {
     const size = milestone.weight === 'max' ? 'big' : milestone.weight === 'big' ? 'mid' : 'small';
     return { seal: milestone.seal, title: milestone.title, size, confetti: milestone.weight === 'max' };
   }
+  // 格上(2Lv以上強い相手)に勝ったときは、それを一言で伝える(G:4-8 どれぐらい良いことをした？。docs/tournament-strength-spread-design.md)。
+  if (upset) return { seal: '勝ち', title: '格上に勝った！', size: weight === 'title' ? 'big' : 'mid', confetti: false };
   return { seal: '勝ち', title: '', size: weight === 'title' ? 'big' : weight === 'big' ? 'mid' : 'small', confetti: false };
 }

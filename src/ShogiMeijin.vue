@@ -144,6 +144,7 @@
             <p class="shogi-tournament__hud-name">{{ view.pending.opponent.name }} <small>{{ view.pending.opponent.dan }}</small></p>
             <p class="shogi-tournament__hud-chips">
               <span class="shogi-tournament__chip">Lv.{{ view.pending.opponent.level }}</span>
+              <span v-if="rankTag(view.pending.opponent.level ?? NaN, userLevel)" class="shogi-tournament__chip" :class="rankTag(view.pending.opponent.level ?? NaN, userLevel) === '格上' ? 'shogi-tournament__chip--rank-up' : 'shogi-tournament__chip--rank-down'" data-rank-tag>{{ rankTag(view.pending.opponent.level ?? NaN, userLevel) }}</span>
               <span v-if="favorite" class="shogi-tournament__chip shogi-tournament__chip--opening">{{ favorite }}</span>
               <span v-if="opponentRecord" class="shogi-tournament__chip" data-meijin-opponent-record>{{ opponentRecord }}</span>
               <span class="shogi-tournament__chip">{{ view.pending.color === "black" ? "あなたが先手" : "あなたが後手" }}</span>
@@ -249,6 +250,7 @@
 </template>
 
 <script setup lang="ts">
+import { rankTag } from "./core/tournament-world.mjs";
 import { computed, ref, watch, type PropType } from "vue";
 import MeijinPagoda from "./MeijinPagoda.vue";
 import MeijinLeagueTable, { type LeagueRow } from "./MeijinLeagueTable.vue";
@@ -293,6 +295,10 @@ const props = defineProps({
   rivalClass: { type: String, default: "" },
   holderName: { type: String, default: "" },
   defaultDifficulty: { type: Number, default: 9 },
+  /** 世界の物差しが決まっているか(core/tournament-world.mjs)。決まっていれば、defaultDifficultyは「いつもの世界」の番号。 */
+  usualWorld: { type: Boolean, default: false },
+  /** プレイヤーの棋力(Lv)。次の相手の「格上」「格下」の札に使う。 */
+  userLevel: { type: Number, default: NaN },
   lastSettings: { type: Object as PropType<Partial<Settings> | null>, default: null },
   assetBaseUrl: { type: String, default: "." },
   playerName: { type: String, default: "あなた" },
@@ -334,7 +340,8 @@ function topBack() {
 // ---- 入口と設定
 const settingsOpen = ref(false);
 const picker = ref("");
-const difficulty = ref(props.lastSettings?.recommended === false ? props.lastSettings.difficulty ?? props.defaultDifficulty : props.defaultDifficulty);
+// 世界の物差しが決まっていれば、いつもの世界(竜王戦と共有)。なければ、前の期に手動で選んだ番号か、おすすめ。
+const difficulty = ref(props.usualWorld || props.lastSettings?.recommended !== false ? props.defaultDifficulty : props.lastSettings.difficulty ?? props.defaultDifficulty);
 // おすすめを選んでいた場合は、次の期も新しい棋力に合わせる。手動で選んだ番号は保つ。
 watch(() => props.defaultDifficulty, (next, previous) => {
   if (difficulty.value === previous) difficulty.value = next;
@@ -376,7 +383,7 @@ const settingsSummary = computed(() => [
   ...(byoyomi.value ? [`秒読み${byoyomiLabel(byoyomi.value)}`] : []),
 ].join("・"));
 const settingRows = computed(() => [
-  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `おすすめ ${props.defaultDifficulty}・1局の勝率6〜8割が目安` },
+  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `${props.usualWorld ? "いつもの世界" : "おすすめ"} ${props.defaultDifficulty}・上の級（クラス）ほど相手が強い` },
   { id: "scale", label: "規模", value: meijinScale(scale.value).label, note: `1期 ${entryRounds.value}局` },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
@@ -389,7 +396,7 @@ const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: 
   switch (picker.value) {
     case "difficulty":
       return single("難易度", "difficulty", difficulty.value, Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => ({
-        value: index + 1, label: String(index + 1), description: index + 1 === props.defaultDifficulty ? "おすすめ・勝率6〜8割が目安" : "",
+        value: index + 1, label: String(index + 1), description: index + 1 === props.defaultDifficulty ? (props.usualWorld ? "いつもの世界（竜王戦・名人戦と同じ）" : "おすすめ") : "",
       })), "数字が大きいほど、相手が強くなるよ。");
     case "scale":
       return single("規模", "scale", scale.value, MEIJIN_SCALES.map((item) => ({

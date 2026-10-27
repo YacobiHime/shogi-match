@@ -11,7 +11,7 @@ import { createRng, gauss, pick } from './ryuo-random.mjs';
 import { newName } from './ryuo-names.mjs';
 import { createRepertoire, pickGameStyle, repertoireText, styleEntry, PARTY_LABELS } from './ryuo-repertoire.mjs';
 import { createCharacter } from './player-character.mjs';
-import { tournamentLevel } from './ryuo-strength.mjs';
+import { tournamentLevel, worldCpuLevel } from './ryuo-strength.mjs';
 import { LADDER_VERSION, ladderLevelIndexFromV2 } from './level-ladder.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
 import { HANANE, STORY_PEOPLE, storyCharacter } from './ryuo-story.mjs';
@@ -672,7 +672,10 @@ function examSecondOpponents(world, rng, rank) {
 function setPending(run, rng, { opponentId, kind, label, eventText, stakes, others = [], userLevel }) {
   const all = players(run);
   const opponent = all[opponentId];
-  opponent.level = tournamentLevel(opponent.rating, run.settings.difficulty, Number.isFinite(userLevel) ? userLevel : 20);
+  // 世界の物差しを持つ挑戦は、会の中の差を残す(6級を基準。三段リーグがいちばん高い壁。docs/tournament-strength-spread-design.mdの4-4)。
+  opponent.level = Number.isFinite(run.settings.world)
+    ? worldCpuLevel(opponent.rating, run.settings.world, RANK_RATINGS[0])
+    : tournamentLevel(opponent.rating, run.settings.difficulty, Number.isFinite(userLevel) ? userLevel : 20);
   const color = rng.next() < 0.5 ? 'black' : 'white';
   const style = opponent.repertoire
     ? pickGameStyle(rng, opponent.repertoire, { color: color === 'black' ? 'white' : 'black' })

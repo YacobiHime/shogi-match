@@ -24,6 +24,8 @@ import {
   recommendedDifficulty,
   tournamentLevel,
   winProbability,
+  worldCpuLevel,
+  worldRating,
 } from './ryuo-strength.mjs';
 
 export { BASE_DIFFICULTY, DIFFICULTY_LEVELS, createRng, groupMeanLevel, recommendedDifficulty, winProbability };
@@ -62,12 +64,32 @@ export const scaleById = (id) => SCALES.find((scale) => scale.id === id) ?? SCAL
  * 新しい期は棋力も渡し、おすすめの勝率と手動の番号順を合わせる。旧保存のLvは読み込み時に変えない。
  * 羽音は、一度プレイヤーに負けていれば、プレイヤーと指すときだけ強くなる(Lvにだけ足し、自動対局のレーティングは変えない)。
  */
-function seasonPlayer(roster, id, difficulty, recommendedFor = null) {
+function seasonPlayer(roster, id, settings, userLevel = null) {
   const entry = seasonEntry(roster, id);
   const rating = entry.rating + hananeGrudgeBonus(entry, entry.vsUser);
-  const level = Number.isFinite(recommendedFor)
-    ? tournamentLevel(rating, difficulty, recommendedFor) : ratingToLevel(rating, difficulty);
-  return { ...entry, level };
+  return { ...entry, level: seasonLevelFor(rating, settings, userLevel) };
+}
+
+/**
+ * 期の設定で、名簿のレーティングratingの棋士を指させるLv。世界の物差し(settings.world)を持つ期は、棋士の差を残す
+ * (docs/tournament-strength-spread-design.md)。持たない前の期は、前の換算のまま(おすすめは勝率6〜8割に収める)。
+ * @param {number} rating
+ * @param {{ difficulty: number, world?: number, worldSpread?: number, recommended?: boolean }} settings
+ * @param {number | null} [userLevel]
+ */
+export function seasonLevelFor(rating, settings, userLevel = null) {
+  if (Number.isFinite(settings?.world)) {
+    // worldSpreadは確かめのまね(scripts/tournament-career-sim.mjs)だけが渡す。画面からの期は既定の倍率。
+    return worldCpuLevel(rating, /** @type {number} */ (settings.world), undefined, Number.isFinite(settings.worldSpread) ? settings.worldSpread : undefined);
+  }
+  return typeof settings?.recommended === 'boolean' && Number.isFinite(userLevel)
+    ? tournamentLevel(rating, settings.difficulty, /** @type {number} */ (userLevel)) : ratingToLevel(rating, settings.difficulty);
+}
+
+/** プレイヤーを、期の設定の物差しで名簿の尺度のレーティングに直す(表示と目安。自動対局には使わない)。 */
+export function seasonUserRating(userLevel, settings) {
+  return Number.isFinite(settings?.world)
+    ? worldRating(userLevel, /** @type {number} */ (settings.world)) : levelToRating(userLevel, settings.difficulty);
 }
 /** 期の中で使う棋士の写しと、難易度での実際に指すLv(名人戦の順位戦でも使う。core/meijin.mjs)。 */
 export const seasonPlayerOf = seasonPlayer;
@@ -392,7 +414,7 @@ export const userDan = userDanFor;
  * シーズン(1期)を始める。プレイヤーの最初の対局、または終了まで、プレイヤー以外の対局を自動で進める。
  * @param {{
  *   no: number, mode: 'challenge' | 'defense', group: number,
- *   settings: { difficulty: number, scale: number, revival: boolean, recommended?: boolean },
+ *   settings: { difficulty: number, scale: number, revival: boolean, recommended?: boolean, world?: number },
  *   userLevel: number, career?: object, roster?: object, seed?: number, userName?: string,
  * }} options
  */
@@ -433,17 +455,17 @@ export function createSeason({ no, mode, group, settings, userLevel, career, ros
   // プレイヤーのレーティングは、棋力(Lv)をこの難易度で棋士の尺度に直した値。自動対局には使わない(表示と目安)。
   season.players[USER_ID] = {
     id: USER_ID, name: userName, dan: userDanFor(career), kind: 'user', group,
-    level: Math.round(userLevel), rating: levelToRating(userLevel, settings.difficulty), style: null,
+    level: Math.round(userLevel), rating: seasonUserRating(userLevel, settings), style: null,
   };
   const holder = mode === 'defense' || members.holder === USER_HOLDER ? USER_ID : members.holder;
   season.champion = holder;
   season.defender = holder;
-  if (holder !== USER_ID) season.players[holder] = seasonPlayer(members, holder, settings.difficulty, typeof settings.recommended === 'boolean' ? userLevel : null);
+  if (holder !== USER_ID) season.players[holder] = seasonPlayer(members, holder, settings, userLevel);
   // 各組の出場者を、名簿から選ぶ(竜王は出ない)。プレイヤーの組は、プレイヤーの分を1名減らす。
   for (const g of GROUPS) {
     const userHere = mode === 'challenge' && g === group;
     const ids = selectParticipants(members, g, scale.sizes[g] - (userHere ? 1 : 0), rng);
-    for (const id of ids) season.players[id] = seasonPlayer(members, id, settings.difficulty, typeof settings.recommended === 'boolean' ? userLevel : null);
+    for (const id of ids) season.players[id] = seasonPlayer(members, id, settings, userLevel);
     season.fields[g] = userHere ? [...ids, USER_ID] : ids;
   }
   if (mode === 'challenge') {

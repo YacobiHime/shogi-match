@@ -6,7 +6,7 @@
 
 import { ABILITIES, ABILITY_KEYS, ABILITY_SIM_WEIGHTS, MAX_DEV, abilityBase, abilityRank, abilityTypeLabel, balanceDevs } from './player-abilities.mjs';
 import { specialAbilityChips } from './player-character.mjs';
-import { GROUP_MEAN_RATING, TOURNAMENT_TARGET_WIN_RATE, recommendedDifficulty } from './ryuo-strength.mjs';
+import { GROUP_MEAN_RATING, TOURNAMENT_TARGET_WIN_RATE, recommendedDifficulty, worldRating } from './ryuo-strength.mjs';
 import { LOSS_AXES, RATE_AXES } from './play-insight.mjs';
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
@@ -140,10 +140,11 @@ const GROWTH_HINTS = Object.freeze({
 /**
  * プレイヤーの能力。名鑑の棋士の能力の画面(PlayerAbilityPanel)と同じ形のview、比べるための棋士の形(member)、
  * いちばんの武器と伸びしろ、分析に使った対局と手の数。足りなければready: false。
- * @param {{ games: { summary: any }[], playerLevel: number, difficulty?: number | null }} input
- *   games: play-insight.mjsの最近の対局。playerLevel: レーティングのLv(小数)。difficulty: 竜王戦の難易度(なければおすすめ)
+ * @param {{ games: { summary: any }[], playerLevel: number, difficulty?: number | null, world?: number | null }} input
+ *   games: play-insight.mjsの最近の対局。playerLevel: レーティングのLv(小数)。difficulty: 竜王戦の難易度(なければおすすめ)。
+ *   world: 世界の物差し(6組の平均を指させるLv。tournament-world.mjs)。あれば、こちらで世界の中のレーティングを出す
  */
-export function myAbilityProfile({ games, playerLevel, difficulty = null }) {
+export function myAbilityProfile({ games, playerLevel, difficulty = null, world = null }) {
   const { totals, moves, games: count } = collectAxes(games ?? []);
   if (moves < MY_ABILITY_MIN_MOVES) return { ready: false, games: count, moves, need: MY_ABILITY_MIN_MOVES - moves };
   const levels = {};
@@ -169,7 +170,7 @@ export function myAbilityProfile({ games, playerLevel, difficulty = null }) {
   const devs = balanceDevs(raw);
   const trusted = new Set(Object.keys(weights).filter((key) => weights[key] >= 0.5));
   const usedDifficulty = Number.isFinite(difficulty) ? /** @type {number} */ (difficulty) : recommendedDifficulty(playerLevel);
-  const rating = worldRatingFor(playerLevel, usedDifficulty);
+  const rating = Number.isFinite(world) ? worldRating(playerLevel, /** @type {number} */ (world)) : worldRatingFor(playerLevel, usedDifficulty);
   const member = { rating, character: { abilities: devs, traits: traitsFor(devs, trusted) } };
   const base = abilityBase(rating);
   const values = Object.fromEntries(ABILITY_KEYS.map((key) => [key, Math.round(clamp(base + devs[key], 1, 100))]));

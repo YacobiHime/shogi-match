@@ -123,7 +123,8 @@ const marginFor = (rate) => 400 * Math.log10(rate / (1 - rate));
 const TARGET_MARGIN = marginFor(TOURNAMENT_TARGET_WIN_RATE);
 
 /**
- * おすすめを明示して始める期のCPUのLv。棋士の強弱は残し、Elo上の見込み勝率を6〜8割に収める。
+ * おすすめを明示して始める期のCPUのLv(2026-10-23〜10-27に始めた期と、世界の物差しを持たない期)。
+ * どの棋士も見込み勝率6〜8割に収めるので、上の組の棋士の差がほとんど出なかった。新しい期はworldCpuLevelを使う。
  * 旧Lv換算表は刻みが粗いため使わず、測定結果と同じプレイヤー用Eloで計算する。
  * 丸めた後も範囲を守る。Lv1より弱い大会棋士はいないので、低級帯では下限を優先する。
  * @param {number} rating 棋士のレーティング(名簿の尺度)
@@ -145,6 +146,48 @@ export function recommendedDifficulty(playerLevel) {
     if (Math.abs(groupMeanLevel(6, difficulty) - target) < Math.abs(groupMeanLevel(6, best) - target)) best = difficulty;
   }
   return best;
+}
+
+// ---- 世界の物差し(docs/tournament-strength-spread-design.md)
+// 2026-10-27から始める期は、棋士の差を残す。名簿のレーティングの差を WORLD_SPREAD 倍に縮めてLvの差にし、
+// 基準(6組の平均)を何Lvで指させるか(世界の基準Lv、W)は、期をまたいで同じものを使い続ける(tournament-world.mjs)。
+
+/**
+ * 名簿のレーティングの差を、プレイヤーが指す相手のLvの差に写すときの倍率。実物どおり(1)では、6組の平均に7割勝てる人が
+ * 竜王に4%しか勝てない。頭打ちは付けず、差を一様に縮めて、竜王に約2割(1局)になるようにした初期値。
+ */
+export const WORLD_SPREAD = 0.6;
+/** 世界の基準の棋士(竜王戦・名人戦では6組の平均)。 */
+export const WORLD_BASE_RATING = GROUP_MEAN_RATING[6];
+/** このゲームの1Lvのレーティングの差(player-rating.mjs。隣のLvに約58.5%)。 */
+export const RATING_PER_LEVEL = 60;
+/** 難易度の番号1つで、世界の基準Lvが動く幅。R90で、基準の棋士への勝率は7割から約58%・約80%に動く。 */
+export const WORLD_STEP_LEVELS = 1.5;
+
+/** おすすめの世界の基準Lv。基準の棋士(6組の平均)に、1局あたり7割勝てる。 */
+export function recommendedWorldLevel(playerLevel) {
+  return playerLevel - TARGET_MARGIN / RATING_PER_LEVEL;
+}
+
+/**
+ * 世界の物差しWで、名簿のレーティングratingの棋士を指させるLv(小数)。baseは、その大会の基準の棋士のレーティング
+ * (竜王戦・名人戦は6組の平均。奨励会・研修会は会の入口の級の平均)。
+ * @param {number} rating
+ * @param {number} world 基準の棋士を指させるLv
+ * @param {number} [base]
+ */
+export function worldExactLevel(rating, world, base = WORLD_BASE_RATING, spread = WORLD_SPREAD) {
+  return world + (spread * (rating - base)) / RATING_PER_LEVEL;
+}
+
+/** 世界の物差しで、実際に指すときのCPUのLv。整数で、Lv1〜49に収める。spreadは確かめ(scripts/tournament-career-sim.mjs)で変える。 */
+export function worldCpuLevel(rating, world, base = WORLD_BASE_RATING, spread = WORLD_SPREAD) {
+  return clamp(Math.round(worldExactLevel(rating, world, base, spread)), MIN_CPU_LEVEL, MAX_CPU_LEVEL);
+}
+
+/** 棋力levelのプレイヤーを、世界の物差しで名簿の尺度のレーティングに直す(worldExactLevelの逆)。 */
+export function worldRating(level, world, base = WORLD_BASE_RATING) {
+  return Math.round(base + ((level - world) * RATING_PER_LEVEL) / WORLD_SPREAD);
 }
 
 /**

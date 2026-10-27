@@ -17,13 +17,26 @@ export function ryuoGuideLines() {
   ];
 }
 
-/** 難易度についての一言。 */
-export function entryDifficultyLine({ group, meanLevel, difficulty, recommended, ratingText }) {
+/**
+ * 難易度(世界の物差し)についての一言(docs/tournament-strength-spread-design.mdの4-3)。
+ * recommendedは入口で選んでおいた番号(世界があれば「いつもの世界」、なければ棋力からのおすすめ)。
+ * mountainは上の組の強さ(1組の平均・竜王のLv)。reviewは、世界を決めたときからの棋力のずれ(tournament-world.mjsのworldReview)。
+ * @param {{ group: number, meanLevel: number, difficulty: number, recommended: number, ratingText?: string,
+ *   usual?: boolean, mountain?: { one: number, top: number } | null, review?: { kind: string, delta: number } | null }} input
+ */
+export function entryDifficultyLine({ group, meanLevel, difficulty, recommended, usual = false, mountain = null, review = null }) {
   const mean = Math.round(meanLevel);
-  const head = `${group}組の相手は、平均でLv.${mean}くらいだよ。`;
-  if (difficulty === recommended) return `${head}あなたのレーティング（${ratingText}）に合わせて、1局ごとに6〜8割くらい勝てる強さが目安だよ。`;
-  if (difficulty < recommended) return `${head}おすすめより優しめ。じっくり勝ち上がりたいときにいいよ。`;
-  return `${head}おすすめより手ごわいよ！ 強い相手と指したいときにどうぞ。点線の数字がおすすめだよ。`;
+  const head = mountain
+    ? `${group}組の相手は、平均でLv.${mean}くらい。上の組ほど強くて、1組の平均はLv.${mountain.one}、竜王はLv.${mountain.top}くらいだよ。`
+    : `${group}組の相手は、平均でLv.${mean}くらいだよ。`;
+  if (difficulty < recommended) return `${head}${usual ? 'いつもより' : 'おすすめより'}やさしい世界。どの棋士も、少しずつ弱くなるよ。選んだ世界は、次の期からも使うよ。`;
+  if (difficulty > recommended) return `${head}${usual ? 'いつもより' : 'おすすめより'}手ごわい世界！ 強い相手と指したいときにどうぞ。選んだ世界は、次の期からも使うよ。`;
+  if (!usual) return `${head}いまのあなたなら、6組の平均に7割くらい勝てる世界だよ。この世界で、上をめざそう！`;
+  if (review?.kind === 'grown') return `${head}前よりLv.${review.delta}強くなったね！ 同じ世界だから、上の組にも勝てるようになっているはずだよ。`;
+  if (review?.kind === 'dropped' || review?.kind === 'struggling') {
+    return `${head}苦しい期が続いたね。難易度を${Math.max(1, difficulty - 1)}にして、ひとつやさしい世界にしてもいいよ。`;
+  }
+  return `${head}いつもの世界だよ。強くなるほど、上の組で勝てるようになるよ。`;
 }
 
 /** 規模についての一言。noteは、組の人数などの説明(画面に表示するもの)。 */

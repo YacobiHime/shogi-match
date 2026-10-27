@@ -143,6 +143,8 @@
           :career="kenshukaiCareer"
           :recommended-class="kenshukaiRecommendedClass"
           :default-difficulty="defaultDifficulty"
+          :usual-world="Boolean(world)"
+          :user-level="userLevel"
           :asset-base-url="assetBaseUrl"
           :player-name="playerName"
           :rating-text="ratingText"
@@ -166,6 +168,8 @@
           :mentors="shoreikaiMentors"
           :recommended-rank="shoreikaiRecommendedRank"
           :default-difficulty="defaultDifficulty"
+          :usual-world="Boolean(world)"
+          :user-level="userLevel"
           :asset-base-url="assetBaseUrl"
           :player-name="playerName"
           :rating-text="ratingText"
@@ -190,6 +194,8 @@
           :entry-no="meijinEntryNo"
           :holder-name="meijinHolderName"
           :default-difficulty="defaultDifficulty"
+          :usual-world="Boolean(world)"
+          :user-level="userLevel"
           :last-settings="meijinSettings"
           :asset-base-url="assetBaseUrl"
           :player-name="playerName"
@@ -742,7 +748,9 @@ import YakobiSays from "./YakobiSays.vue";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
-import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, groupMeanLevel, scaleById } from "./core/ryuo.mjs";
+import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, scaleById } from "./core/ryuo.mjs";
+import { GROUP_MEAN_RATING, MAX_CPU_LEVEL, MIN_CPU_LEVEL, worldExactLevel } from "./core/ryuo-strength.mjs";
+import { rankTag, resolveWorld } from "./core/tournament-world.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { bestAxisLine } from "./core/ryuo-milestone.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
@@ -861,6 +869,13 @@ const props = defineProps({
   oshi: { type: Object as PropType<{ id: string; name: string } | null>, default: null },
   /** 中断した、この期の次の一局の手数(なければnull)。あれば「対局する」を「対局を再開」にする。 */
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
+  // ---- 世界の物差し(core/tournament-world.mjs。docs/tournament-strength-spread-design.md)
+  /** いまの棋力からのおすすめの番号(defaultDifficultyは、世界があれば「いつもの世界」の番号)。 */
+  recommendedDifficulty: { type: Number as PropType<number | null>, default: null },
+  /** 保存した世界の物差し。なければ、はじめての大会(おすすめで決める)。 */
+  world: { type: Object as PropType<{ level: number; difficulty: number; playerLevel: number; at: number } | null>, default: null },
+  /** 世界を決めたときからの棋力のずれ(強くなった・弱くなった・2期続けて降級した)。 */
+  worldReview: { type: Object as PropType<{ kind: "grown" | "dropped" | "struggling"; delta: number } | null>, default: null },
   // ---- 名人戦(docs/meijin-design.md)
   meijinView: { type: Object as PropType<MeijinView | null>, default: null },
   meijinCareer: { type: Object as PropType<{ no: number; best: string; titles: number; eternal: boolean }>, default: () => ({ no: 0, best: "C2", titles: 0, eternal: false }) },
@@ -1073,6 +1088,8 @@ function banzuke(you: number) {
 
 // ---- エントリー設定
 const DIFFICULTY_STEPS = Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => index + 1);
+/** 強さの山のいちばん上(名簿でいちばん強い棋士の目安。docs/rating-realism-design.md)。 */
+const TOP_RATING = 2130;
 const COACH_OPTIONS = [
   { value: "off", label: "なし" },
   { value: "encourage", label: "応援のみ" },
@@ -1094,7 +1111,14 @@ const hintLimit = ref(props.career.settings.hintLimit);
 const undoLimit = ref(props.career.settings.undoLimit);
 const byoyomi = ref(byoyomiSeconds(props.career.settings));
 
-const meanLevel = computed(() => groupMeanLevel(entry.value.group, difficulty.value, props.userLevel));
+/** 選んでいる番号での世界の基準Lv(6組の平均を指させるLv)。入口で「大会に参加する」を押したとき、この世界を保存する。 */
+const worldLevel = computed(() => resolveWorld({ stored: props.world, playerLevel: props.userLevel, difficulty: difficulty.value }).level);
+const levelIn = (rating: number) => Math.min(MAX_CPU_LEVEL, Math.max(MIN_CPU_LEVEL, Math.round(worldExactLevel(rating, worldLevel.value))));
+const meanLevel = computed(() => levelIn(GROUP_MEAN_RATING[entry.value.group as keyof typeof GROUP_MEAN_RATING]));
+/** 強さの山(1行)。6組の平均・1組の平均・竜王(いちばん上)のLvと、あなたのLv。 */
+const mountain = computed(() => ({
+  six: levelIn(GROUP_MEAN_RATING[6]), one: levelIn(GROUP_MEAN_RATING[1]), top: levelIn(TOP_RATING), you: Math.round(props.userLevel),
+}));
 const scaleNote = computed(() => {
   const item = scaleById(scale.value);
   const group = entry.value.group;
@@ -1115,7 +1139,8 @@ const scaleMeta = computed(() => {
 // エントリーでは、やこび姫がこの期のひとことを話す。設定を変えると、その設定について話す。
 // 竜王戦の説明は、「竜王戦ってなに？」で開くシートで、1つずつ話す(必要な人だけ。U:6-1)。
 type TalkTopic = "intro" | "difficulty" | "scale" | "revival" | "coach" | "byoyomi";
-const talkTopic = ref<TalkTopic>("intro");
+// 世界を決めたときから棋力が動いた(強くなった・苦しい)ときは、入口で最初にその一言を出す(4-3)。
+const talkTopic = ref<TalkTopic>(props.worldReview ? "difficulty" : "intro");
 /** 説明の各ページの見出し(目次)。guideLinesと同じ順・同じ数。 */
 const GUIDE_TITLES = ["はじめに", "竜王戦とは", "出場できる人", "ランキング戦", "決勝トーナメント", "番勝負", "永世竜王"];
 const guidePage = ref(0);
@@ -1133,6 +1158,7 @@ const guideLines = computed(() => [
 const difficultyLine = computed(() => entryDifficultyLine({
   group: entry.value.group, meanLevel: meanLevel.value, difficulty: difficulty.value,
   recommended: props.defaultDifficulty, ratingText: props.ratingText,
+  usual: Boolean(props.world), mountain: { one: mountain.value.one, top: mountain.value.top }, review: props.worldReview,
 }));
 const scaleLine = computed(() => entryScaleLine(scaleById(scale.value).label, scaleNote.value));
 const coachLine = computed(() => entryCoachLine({ coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value }));
@@ -1148,6 +1174,11 @@ const talkLines = computed(() => {
 });
 /** 入口のやこび姫のひとこと。目標(上の1行)を、気持ちの言葉で言い直す。 */
 const introLine = computed(() => {
+  // 世界の物差しを決める前の、前から遊んでいる人には、上の組が強くなったことを一度だけ先に伝える(4-6)。
+  const notice = !props.world && props.career.seasons ? "棋士の強さの差を、本物の棋界に近づけたよ。上の組ほど、ぐっと強くなるよ！ " : "";
+  return `${notice}${introGoalLine.value}`;
+});
+const introGoalLine = computed(() => {
   const { no, mode, group } = entry.value;
   if (mode === "defense") return `第${no}期は、竜王として防衛戦！ 挑戦者を迎え撃とう！`;
   if (group === 1) return `第${no}期は1組から。決勝トーナメントに出て、竜王への挑戦者をめざそう！`;
@@ -1273,6 +1304,9 @@ const hudRole = computed(() => {
  */
 const hudChips = computed(() => {
   const chips: { text: string; kind: string }[] = [];
+  // 世界の物差しで、上の組の棋士は強い。2Lv以上の差があれば、色だけでなく文字で先に知らせる(U:7-3)。
+  const tag = props.view?.pending ? rankTag(props.view.pending.opponent.level, props.userLevel) : null;
+  if (tag) chips.push({ text: tag, kind: tag === "格上" ? "rank-up" : "rank-down" });
   if (opponentProfile.value.style) chips.push({ text: opponentProfile.value.style, kind: opponentStyleTone.value });
   const top = opponentAbility.value?.openings?.[0];
   if (top) chips.push({ text: `${top.label} ${top.share}%`, kind: "opening" });
@@ -1382,13 +1416,20 @@ const settingsOpen = ref(false);
 const entryPicker = ref("");
 const assistText = (value: number) => LEARNING_ASSIST_LIMITS.find((item) => item.value === value)?.label ?? String(value);
 const entryRows = computed(() => [
-  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `相手の平均 Lv.${Math.round(meanLevel.value)}・おすすめ ${props.defaultDifficulty}（勝率6〜8割が目安）` },
+  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `6組 Lv.${mountain.value.six} → 1組 Lv.${mountain.value.one} → 竜王 Lv.${mountain.value.top}（あなた Lv.${mountain.value.you}）` },
   { id: "scale", label: "規模", value: SCALES.find((item) => item.id === scale.value)?.label ?? "", note: scaleMeta.value },
   { id: "revival", label: "敗者復活戦", value: REVIVAL_OPTIONS.find((item) => item.value === revival.value)?.label ?? "", note: "" },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
   { id: "byoyomi", label: "秒読みの演出", value: byoyomiLabel(byoyomi.value), note: byoyomi.value ? "0秒になっても負けにはならない" : "" },
 ]);
+/** 難易度の選択肢の説明。いつもの世界と、いまの棋力からのおすすめ。 */
+function difficultyDescription(level: number) {
+  const labels = [];
+  if (props.world && level === props.world.difficulty) labels.push("いつもの世界");
+  if (level === (props.recommendedDifficulty ?? props.defaultDifficulty)) labels.push("いまのあなたのおすすめ（6組の平均に7割）");
+  return labels.join("・");
+}
 const entryPickerConfig = computed<{ title: string; sections: PickerSection[]; note: string } | null>(() => {
   const single = (title: string, key: string, value: PickerValue, options: { value: PickerValue; label: string; description?: string }[], note = "") => (
     { title, note, sections: [{ key, value, groups: [{ options }] }] }
@@ -1396,8 +1437,8 @@ const entryPickerConfig = computed<{ title: string; sections: PickerSection[]; n
   switch (entryPicker.value) {
     case "difficulty":
       return single("難易度", "difficulty", difficulty.value, DIFFICULTY_STEPS.map((level) => ({
-        value: level, label: String(level), description: level === props.defaultDifficulty ? "おすすめ・勝率6〜8割が目安" : "",
-      })), "数字が大きいほど、相手が強くなるよ。");
+        value: level, label: String(level), description: difficultyDescription(level),
+      })), "数字が大きいほど、どの棋士も強くなるよ。選んだ世界は、次の期からも使うよ。");
     case "scale":
       return single("規模", "scale", scale.value, SCALES.map((item) => ({ value: item.id, label: item.label })));
     case "revival":
@@ -2083,6 +2124,10 @@ const statTiles = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 難易度の行の強さの山は、竜王とあなたのLvまで見えないと意味がないので、折り返す。 */
+.shogi-game .shogi-tournament__setting[data-entry-row="difficulty"] .shogi-tournament__setting-value small {
+  white-space: normal;
+}
 .shogi-game .shogi-tournament__setting-change {
   padding: 0.2rem 0.7rem;
   border-radius: 999px;
@@ -2527,6 +2572,8 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__hud-name small { font-size: 0.55em; font-weight: 700; }
 .shogi-game .shogi-tournament__hud-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.1rem 0 0; }
 .shogi-game .shogi-tournament__chip { padding: 0.05rem 0.5rem; border-radius: 999px; color: #fffcf4; background: #55697d; font-size: 0.75em; font-weight: 800; }
+.shogi-game .shogi-tournament__chip--rank-up { color: #fff; background: #c0392b; }
+.shogi-game .shogi-tournament__chip--rank-down { color: #fff; background: #1f8a4c; }
 .shogi-game .shogi-tournament__chip--attack { background: var(--tr-red); }
 .shogi-game .shogi-tournament__chip--defense { background: #3d6fa5; }
 .shogi-game .shogi-tournament__chip--balance,

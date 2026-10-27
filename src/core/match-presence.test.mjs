@@ -124,5 +124,8 @@ describe('終局の判子', () => {
     expect(finishStamp({ win: true, weight: 'title' })?.size).toBe('big');
     expect(finishStamp({ win: true, event: 'meijin', crowned: true })).toMatchObject({ seal: '名人', confetti: true });
     expect(finishStamp({ win: false, milestone: { seal: '優勝', title: '', weight: 'big' } })).toBeNull();
+    // 格上に勝ったときは、それを一言で伝える(節目の判子が先)。
+    expect(finishStamp({ win: true, upset: true })).toEqual({ seal: '勝ち', title: '格上に勝った！', size: 'mid', confetti: false });
+    expect(finishStamp({ win: true, upset: true, milestone: { seal: '優勝', title: '6組優勝！', weight: 'big' } })?.title).toBe('6組優勝！');
   });
 });

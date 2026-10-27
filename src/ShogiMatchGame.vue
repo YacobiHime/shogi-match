@@ -389,7 +389,10 @@
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
       :career="ryuoCareer"
       :view="ryuoView"
-      :default-difficulty="ryuoDefaultDifficulty"
+      :default-difficulty="tournamentEntryDifficulty"
+      :recommended-difficulty="ryuoDefaultDifficulty"
+      :world="tournamentWorld"
+      :world-review="tournamentWorldReview"
       :user-level="ratingLevel(ratingState.rating)"
       :rating-text="`R${ratingState.rating}`"
       :start-at="tournamentStartAt"
@@ -451,6 +454,7 @@
       :unlocked-plan-ids="[...planUnlocks.unlocked]"
       :insight-games="playInsight.games"
       :ryuo-difficulty="ryuoSeason?.settings?.difficulty ?? (ryuoCareer.seasons ? ryuoCareer.settings?.difficulty ?? null : null)"
+      :ryuo-world="tournamentWorld?.level ?? null"
       :skill-data-consent="skillDataConsent"
       :skill-data-available="skillDataAllowed"
       @close="yakobiNoteOpen = false"
@@ -2411,6 +2415,7 @@ import {
   restoredMeasureState,
 } from "./core/skill-estimate.mjs";
 import { USER_ID, createRng, createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
+import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
 import { PLAYER_NAME_MAX, loadPlayerName, playerDisplayName, savePlayerName } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
@@ -3046,7 +3051,8 @@ function resetPresence() {
 }
 /** 大会の終局。勝ちは判子を押して1.2秒で結果の窓へ、負けは感想戦を勧める(判子は押さない)。 */
 function showFinishStamp(win: boolean, { event, weight }: { event: string; weight: string }) {
-  const stamp = finishStamp({ win, milestone: finishMilestone, event, crowned: finishCrowned, weight });
+  const upset = rankTag(cpuStrengthLevel(), ratingLevel(ratingState.value.rating)) === "格上";
+  const stamp = finishStamp({ win, milestone: finishMilestone, event, crowned: finishCrowned, weight, upset });
   if (!stamp) {
     if (coachLevel.value !== "off") showCoachAdvice({ key: "tournament-loss-review", text: "悔しいね…。感想戦で、どこが分かれ目だったか見てみよう！" });
     return;
@@ -3208,6 +3214,27 @@ const ryuoHolder = computed(() => {
 const tournamentFromGame = ref(false);
 /** 大会の難易度のおすすめ。1局あたり勝率7割を目安にする難易度。 */
 const ryuoDefaultDifficulty = computed(() => recommendedDifficulty(ratingLevel(ratingState.value.rating)));
+/**
+ * 世界の物差し(core/tournament-world.mjs。docs/tournament-strength-spread-design.md)。大会の棋士を何Lvで指させるかの基準を、
+ * 竜王戦・名人戦・奨励会・研修会で共有し、期をまたいで使い続ける。入口では「いつもの世界」の番号を選んでおく。
+ */
+const tournamentWorld = ref(loadTournamentWorld(browserStorage()));
+const tournamentEntryDifficulty = computed(() => defaultWorldDifficulty(tournamentWorld.value, ratingLevel(ratingState.value.rating)));
+/** 入口で知らせる、世界と棋力のずれ(強くなった・弱くなった・2期続けて降級した)。 */
+const tournamentWorldReview = computed(() => worldReview({
+  stored: tournamentWorld.value, playerLevel: ratingLevel(ratingState.value.rating), history: ryuoCareer.value.history ?? [],
+}));
+/** 入口で選んだ番号から世界を決めて保存し、期の設定に入れる値(基準の棋士を指させるLv)を返す。 */
+function commitTournamentWorld(difficulty: number) {
+  // 番号がない(研修会からの編入など)ときは、いつもの世界のまま(なければ前の換算)。
+  if (!Number.isInteger(difficulty)) return tournamentWorld.value?.level;
+  const world = resolveWorld({ stored: tournamentWorld.value, playerLevel: ratingLevel(ratingState.value.rating), difficulty });
+  if (world !== tournamentWorld.value) {
+    tournamentWorld.value = world;
+    saveTournamentWorld(browserStorage(), world);
+  }
+  return world.level;
+}
 const tournamentView = ref<{ goBack: () => void } | null>(null);
 const noteView = ref<{ goBack: () => boolean } | null>(null);
 /** 直近の対局で変動したレーティング。リロードで復元した終局画面では出さない。 */
@@ -5579,7 +5606,7 @@ function enterRyuoSeason(settings: {
   }
   const season = createSeason({
     ...entry,
-    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value },
+    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(settings.difficulty) },
     userLevel: ratingLevel(ratingState.value.rating),
     career,
     roster: ryuoRoster.value,
@@ -5932,7 +5959,7 @@ function enterMeijinSeason(settings: { difficulty: number; scale: string; coachL
   const career = migrated.career;
   const world = ryuoRoster.value.junni;
   meijinSeason.value = createMeijinSeason({
-    no: (world.no ?? 0) + 1, league: world, roster: ryuoRoster.value, settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value },
+    no: (world.no ?? 0) + 1, league: world, roster: ryuoRoster.value, settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(settings.difficulty) },
     userLevel: ratingLevel(ratingState.value.rating), userName: playerDisplayName(playerName.value), userDan: meijinDan(career), seed,
   });
   saveMeijinSeason(browserStorage(), meijinSeason.value);
@@ -6027,7 +6054,7 @@ function enterShoreikai({ settings, examRank, mentorId, transfer = false }: { se
   const mentor = shoreikaiMentors.value.find((item) => item.id === mentorId) ?? shoreikaiMentors.value[0] ?? null;
   const run = createShoreikaiRun({
     seed: Date.now(),
-    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value },
+    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(Number(settings.difficulty)) },
     examRank,
     mentor,
     userName: playerDisplayName(playerName.value),
@@ -6124,7 +6151,7 @@ function enterKenshukai({ settings, entryClass }: { settings: { [key: string]: u
   }
   const run = createKenshukaiRun({
     seed: Date.now(),
-    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value },
+    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(Number(settings.difficulty)) },
     entryClass,
     userName: playerDisplayName(playerName.value),
     userLevel: ratingLevel(ratingState.value.rating),

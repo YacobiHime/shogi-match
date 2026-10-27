@@ -5,10 +5,10 @@
 
 import { LADDER_VERSION, migrateSeasonLevels } from './level-ladder.mjs';
 import { createRng } from './ryuo-random.mjs';
-import { USER_ID, createSeries, recordSeriesGame, seasonPlayerOf } from './ryuo.mjs';
+import { USER_ID, createSeries, recordSeriesGame, seasonPlayerOf, seasonUserRating } from './ryuo.mjs';
 import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
-import { levelToRating, winProbability } from './ryuo-strength.mjs';
+import { winProbability } from './ryuo-strength.mjs';
 import { HANANE } from './ryuo-story.mjs';
 import { seriesView } from './ryuo-stages.mjs';
 import { JUNNI_SIZES } from './ryuo-league.mjs';
@@ -110,7 +110,7 @@ export const userClass = (league) => MEIJIN_CLASSES.find((cls) => league.classes
  * 名人戦の1期を始める。プレイヤーがクラスにいれば、そのクラスの順位戦。名人なら、A級を自動で進め、1位を迎えて防衛戦。
  * @param {{
  *   no: number, league: any, roster: any,
- *   settings: { difficulty: number, scale?: string, coachLevel?: string, hintLimit?: number, undoLimit?: number, recommended?: boolean },
+ *   settings: { difficulty: number, scale?: string, coachLevel?: string, hintLimit?: number, undoLimit?: number, recommended?: boolean, world?: number },
  *   userLevel: number, userName?: string, userDan?: string, seed?: number,
  * }} input
  */
@@ -146,10 +146,10 @@ export function createMeijinSeason({ no, league, roster, settings, userLevel, us
   };
   season.players[USER_ID] = {
     id: USER_ID, name: userName, dan: userDan, kind: 'user',
-    level: Math.round(userLevel), rating: levelToRating(userLevel, settings.difficulty), style: null,
+    level: Math.round(userLevel), rating: seasonUserRating(userLevel, settings), style: null,
   };
   const snapshot = (id) => {
-    if (!season.players[id] && roster?.players?.[id]) season.players[id] = seasonPlayerOf(roster, id, settings.difficulty, typeof settings.recommended === 'boolean' ? userLevel : null);
+    if (!season.players[id] && roster?.players?.[id]) season.players[id] = seasonPlayerOf(roster, id, settings, userLevel);
   };
   if (world.holder) snapshot(world.holder);
   for (const cls of MEIJIN_CLASSES) {

@@ -190,6 +190,7 @@
             <p class="shogi-tournament__hud-name">{{ opponent?.name }} <small>{{ opponent?.dan }}・{{ opponent?.age }}歳</small></p>
             <p class="shogi-tournament__hud-chips">
               <span class="shogi-tournament__chip">Lv.{{ opponent?.level }}</span>
+              <span v-if="rankTag(opponent?.level ?? NaN, userLevel)" class="shogi-tournament__chip" :class="rankTag(opponent?.level ?? NaN, userLevel) === '格上' ? 'shogi-tournament__chip--rank-up' : 'shogi-tournament__chip--rank-down'" data-rank-tag>{{ rankTag(opponent?.level ?? NaN, userLevel) }}</span>
               <span v-if="favorite" class="shogi-tournament__chip shogi-tournament__chip--opening">{{ favorite }}</span>
               <span class="shogi-tournament__chip">{{ view.pending.color === "black" ? "あなたが先手" : "あなたが後手" }}</span>
             </p>
@@ -350,6 +351,7 @@
 </template>
 
 <script setup lang="ts">
+import { rankTag } from "./core/tournament-world.mjs";
 import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import ShoreikaiNameboard, { type NameboardColumn } from "./ShoreikaiNameboard.vue";
 import MeijinLeagueTable from "./MeijinLeagueTable.vue";
@@ -381,6 +383,10 @@ const props = defineProps({
   mentors: { type: Array as PropType<Mentor[]>, default: () => [] },
   recommendedRank: { type: Number, default: 0 },
   defaultDifficulty: { type: Number, default: 9 },
+  /** 世界の物差しが決まっているか(core/tournament-world.mjs)。決まっていれば、defaultDifficultyは「いつもの世界」の番号。 */
+  usualWorld: { type: Boolean, default: false },
+  /** プレイヤーの棋力(Lv)。次の相手の「格上」「格下」の札に使う。 */
+  userLevel: { type: Number, default: NaN },
   assetBaseUrl: { type: String, default: "." },
   playerName: { type: String, default: "あなた" },
   ratingText: { type: String, default: "" },
@@ -463,7 +469,7 @@ const settingsSummary = computed(() => [
 const settingRows = computed(() => [
   { id: "mentor", label: "師匠", value: mentor.value ? `${mentor.value.name}${mentor.value.dan}` : "なし", note: mentor.value ? `${mentor.value.partyLabel}・${mentor.value.age}歳` : "" },
   ...(transfer.value ? [] : [{ id: "rank", label: "受験級", value: RANKS[examRank.value], note: examRank.value === props.recommendedRank ? "おすすめ" : `おすすめは${RANKS[props.recommendedRank]}` }]),
-  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `おすすめ ${props.defaultDifficulty}（勝率6〜8割が目安）` },
+  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `${props.usualWorld ? "いつもの世界" : "おすすめ"} ${props.defaultDifficulty}・上の級（クラス）ほど相手が強い` },
   { id: "scale", label: "規模", value: shoreikaiScale(scale.value).label, note: shoreikaiScale(scale.value).note },
   { id: "age", label: "年齢制限", value: ageLimit.value ? "あり" : "なし", note: ageLimit.value ? "21歳までに初段・26歳までに四段" : "" },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
@@ -485,7 +491,7 @@ const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: 
       })), "上の級ほど四段に近い。試験の相手は、受験する級の強さだよ。");
     case "difficulty":
       return single("難易度", "difficulty", difficulty.value, Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => ({
-        value: index + 1, label: String(index + 1), description: index + 1 === props.defaultDifficulty ? "おすすめ・勝率6〜8割が目安" : "",
+        value: index + 1, label: String(index + 1), description: index + 1 === props.defaultDifficulty ? (props.usualWorld ? "いつもの世界（竜王戦・名人戦と同じ）" : "おすすめ") : "",
       })), "数字が大きいほど、相手が強くなるよ。");
     case "scale":
       return single("規模", "scale", scale.value, SHOREIKAI_SCALES.map((item) => ({ value: item.id, label: item.label, description: item.note })), "昇級の規定と三段リーグの局数が変わるよ。");

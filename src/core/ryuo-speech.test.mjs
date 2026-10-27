@@ -29,11 +29,16 @@ describe('Yakobihime speech for the Ryuo screens', () => {
   });
 
   it('comments on the entry settings', () => {
-    const base = { group: 6, meanLevel: 22.4, recommended: 3, ratingText: 'R800' };
-    expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('6〜8割');
+    const base = { group: 6, meanLevel: 22.4, recommended: 3, ratingText: 'R800', mountain: { one: 26, top: 29 } };
+    expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('7割');
     expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('Lv.22');
-    expect(entryDifficultyLine({ ...base, difficulty: 1 })).toContain('優しめ');
+    expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('竜王はLv.29');
+    expect(entryDifficultyLine({ ...base, difficulty: 1 })).toContain('やさしい世界');
     expect(entryDifficultyLine({ ...base, difficulty: 8 })).toContain('手ごわい');
+    // 世界を決めたあとは「いつもの世界」。強くなったら伸びを伝え、苦しいときはやさしい世界を選べる形で勧める。
+    expect(entryDifficultyLine({ ...base, difficulty: 3, usual: true })).toContain('いつもの世界');
+    expect(entryDifficultyLine({ ...base, difficulty: 3, usual: true, review: { kind: 'grown', delta: 3 } })).toContain('前よりLv.3強く');
+    expect(entryDifficultyLine({ ...base, difficulty: 3, usual: true, review: { kind: 'struggling', delta: 0 } })).toContain('難易度を2にして');
     expect(entryScaleLine('中', '6組は32名。')).toBe('規模は「中」。6組は32名。');
     expect(entryRevivalLine(true)).toContain('もう一度チャンス');
     expect(entryRevivalLine(false)).toContain('一発勝負');

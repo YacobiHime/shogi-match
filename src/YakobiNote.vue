@@ -797,6 +797,8 @@ const props = defineProps({
   insightGames: { type: Array as PropType<any[]>, default: () => [] },
   /** 竜王戦の難易度(能力の物差し)。期を始めていなければnull(おすすめを使う)。 */
   ryuoDifficulty: { type: Number as PropType<number | null>, default: null },
+  /** 世界の物差し(6組の平均を指させるLv。core/tournament-world.mjs)。あれば、能力の全体の高さをこれで出す。 */
+  ryuoWorld: { type: Number as PropType<number | null>, default: null },
   /** 棋力テストの答えを送るかの同意('yes'・'no'・'')と、送れる場所で開いているか(core/skill-data.mjs)。 */
   skillDataConsent: { type: String, default: "" },
   skillDataAvailable: { type: Boolean, default: false },
@@ -1114,6 +1116,7 @@ const myAbility = computed(() => myAbilityProfile({
   games: props.insightGames,
   playerLevel: ratingLevel(props.state.rating),
   difficulty: props.ryuoDifficulty,
+  world: props.ryuoWorld,
 }));
 /** 名鑑の棋士の能力を、比べる形(軸ごとの値とランク)にする。 */
 function abilitiesOf(values: { [key: string]: number }) {
