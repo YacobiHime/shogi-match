@@ -13,7 +13,7 @@
       <!-- 見た目は定跡図鑑のタブ（shogi-dex__modes）を使う。 -->
       <div class="shogi-dex__modes" role="tablist" aria-label="問題の種類">
         <button
-          v-for="item in PROBLEM_SECTIONS"
+          v-for="item in sectionTabs"
           :key="item.id"
           type="button"
           role="tab"
@@ -118,6 +118,7 @@
               :mobile="isNarrow"
               :layout="isNarrow ? 'portrait' : 'standard'"
               :asset-base-url="assetBaseUrl"
+              :flip="boardFlipped"
               :candidates="[]"
               :mark-squares="boardMarks"
               @usi-move="onBoardMove"
@@ -219,8 +220,10 @@ type Problem = {
   plies?: number;
   number?: number;
   line?: readonly string[];
+  /** 「あなたの対局から」の問題を作った時刻。 */
+  at?: number;
 };
-type SectionId = (typeof PROBLEM_SECTIONS)[number]["id"];
+type SectionId = (typeof PROBLEM_SECTIONS)[number]["id"] | "game";
 type TsumeKindId = (typeof TSUME_KINDS)[number]["id"];
 
 const props = defineProps({
@@ -242,8 +245,17 @@ const storage = typeof localStorage === "undefined" ? null : localStorage;
 const progress = ref(loadProblemProgress(storage));
 /** 復習の箱(core/review-queue.mjs)。一発で解けなかった問題を、日をあけて「やこび姫からの1問」に出す。 */
 const reviewQueue = ref(loadReviewQueue(storage));
-/** 振り返りで見つけた「あなたの対局から」の問題(core/review-problems.mjs)。問題集の問題と同じように開ける。 */
+/**
+ * 対局で見逃した詰みの「あなたの対局から」の問題(core/review-problems.mjs)。問題集の問題と同じように開け、
+ * 「あなたの対局」の棚に新しい順に並べる(docs/missed-mate-problems-design.md)。
+ */
 const reviewProblems = loadReviewProblems(storage);
+const gameProblems = [...reviewProblems].sort((a, b) => (b.at ?? 0) - (a.at ?? 0)) as Problem[];
+/** 区分のタブ。問題集の区分に「あなたの対局」を足す(まだ問題がなくても、できる場所を見せる)。 */
+const sectionTabs = [...PROBLEM_SECTIONS.map(({ id, label }) => ({ id: id as SectionId, label })), { id: "game" as SectionId, label: "あなたの対局" }];
+function listOf(sectionId: SectionId): Problem[] {
+  return sectionId === "game" ? gameProblems : sectionProblems(sectionId) as Problem[];
+}
 function findProblem(id: string): Problem | null {
   return (problemById(id) ?? reviewProblemById(reviewProblems, id)) as Problem | null;
 }
@@ -275,11 +287,13 @@ const tsumePlies = ref<number>(TSUME_PLIES[0]);
 const randomMode = ref(false);
 const problemId = ref("");
 const currentProblem = computed(() => (problemId.value ? findProblem(problemId.value) : null));
+/** 後手で詰ませる問題(あなたの対局で後手を持っていたとき)は、盤を反転して、詰ませる側を手前にする。 */
+const boardFlipped = computed(() => (currentProblem.value?.sfen ?? "").split(" ")[1] === "w");
 const tsumeKindLabel = computed(() => TSUME_KINDS.find(({ id }) => id === tsumeKind.value)?.label ?? "");
 /** 一覧に並べる問題。詰将棋は、選んだ種類と手数の問題だけ。 */
 const listedProblems = computed(() => {
   if (section.value === "tsume") return tsumeKind.value ? tsumeKindProblems(tsumeKind.value, tsumePlies.value) as Problem[] : [];
-  return sectionProblems(section.value) as Problem[];
+  return listOf(section.value);
 });
 /** 一覧で、まだ解いていない最初の問題。 */
 const nextUnsolvedProblem = computed(() => listedProblems.value.find((problem) => !solvedRecord(problem)) ?? null);
@@ -287,9 +301,10 @@ const nextUnsolvedProblem = computed(() => listedProblems.value.find((problem) =
 const nextProblem = computed(() => {
   const problem = currentProblem.value;
   if (!problem) return null;
-  const list = (problem.kind === "line" && problem.source !== "zukou"
+  const sectionId = problemSectionId(problem) as SectionId;
+  const list = (sectionId === "tsume"
     ? tsumeKindProblems(problem.source ?? "", problem.plies ?? null)
-    : sectionProblems(problemSectionId(problem))) as Problem[];
+    : listOf(sectionId)) as Problem[];
   return list[list.findIndex(({ id }) => id === problem.id) + 1] ?? null;
 });
 
@@ -339,6 +354,10 @@ function problemHeading(problem: Problem) {
 }
 function problemStatus(problem: Problem) {
   const record = solvedRecord(problem);
+  if (isReviewProblemId(problem.id)) {
+    const date = Number.isFinite(problem.at) ? `${new Date(problem.at as number).getMonth() + 1}月${new Date(problem.at as number).getDate()}日の対局から` : "あなたの対局から";
+    return `${date}・${record ? (record.firstTry ? "一発で正解！" : "正解ずみ") : "まだ解いていない"}`;
+  }
   if (record) return record.firstTry ? "一発で正解！" : "正解ずみ";
   if (problem.kind === "line") return problem.source === "zukou" ? "作者の手順に沿って解く" : "詰ませる問題";
   return problem.kind === "mate" ? "詰ませる問題" : "逃げる問題";
@@ -347,6 +366,7 @@ const SECTION_INTROS: Record<SectionId, string> = {
   practice: "やこび姫の将棋問題集へようこそ！ 詰ませ方や逃げ方の問題を出すから、盤で指して答えてね。",
   tsume: "詰将棋は2種類あるよ。駒が少なくて形を覚えやすい「詰将棋」と、本当の対局に出てきた局面の「実戦詰将棋」。どっちに挑戦する？",
   zukou: "江戸時代の名作、伊藤看寿の『将棋図巧』全100問だよ。とっても難しいから、「答えを見る」で手順を眺めるだけでも楽しいよ。",
+  game: "あなたが対局で見逃した詰みだよ。今度は見つけて、本番の大会で決めよう！",
 };
 /** 詰将棋の種類の説明（種類を選ぶボタンに添える）。 */
 const TSUME_KIND_NOTES: Record<TsumeKindId, string> = {
@@ -361,7 +381,11 @@ const listMessage = computed(() => {
   if (section.value === "tsume" && !tsumeKind.value) return SECTION_INTROS.tsume;
   const list = section.value === "tsume" && tsumeKind.value
     ? tsumeKindProblems(tsumeKind.value) as Problem[]
-    : sectionProblems(section.value) as Problem[];
+    : listOf(section.value);
+  if (section.value === "game" && !list.length) {
+    return "まだ問題はないよ。対局で詰みを見逃すと、対局のあとの解析や振り返りで見つけて、ここに問題にしておくよ。";
+  }
+  if (section.value === "game" && solvedCount(list) === list.length) return "見逃した詰みを、全部見つけられたね！ この力で、大会の終盤も勝ちきろう！";
   const solved = solvedCount(list);
   if (solved === list.length) return "全問正解！ すごいね！ 何度でも挑戦してみてね。";
   if (solved > 0) return `${list.length}問中${solved}問クリアだよ。この調子でいこう！`;
@@ -694,6 +718,22 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
 </script>
 
 <style>
+/* 区分のタブは4つ(「あなたの対局」を足した)。狭い画面では2列×2段に折り返し、横にはみ出さない。 */
+.shogi-game .shogi-problems .shogi-dex__modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 14rem));
+  justify-content: center;
+}
+.shogi-game .shogi-problems .shogi-dex__modes button {
+  max-width: none;
+  min-width: 0;
+}
+@media (max-width: 34rem) {
+  .shogi-game .shogi-problems .shogi-dex__modes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+}
 .shogi-game .shogi-problems__list {
   display: grid;
   gap: 0.6rem;

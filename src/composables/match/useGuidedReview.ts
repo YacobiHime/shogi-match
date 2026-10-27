@@ -241,7 +241,8 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
   }
 
   /**
-   * 見逃した短い詰みの局面を、問題集の「あなたの対局から」の問題にして、復習の箱へ入れる(core/review-problems.mjs)。
+   * 見逃した詰みの局面を、問題集の「あなたの対局から」の問題にして、復習の箱へ入れる(core/review-problems.mjs)。
+   * 解析の読み筋(bestLine)が詰みまで確かめられれば、長い詰みも問題にする。
    * 日をあけて「やこび姫からの1問」に出る。保存できない環境では何もしない。
    */
   function saveMissedMatesAsProblems(script: GuidedReviewScript) {
@@ -253,7 +254,7 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
       try {
         const record = createGameRecord(matchInitialSfen.value);
         for (const usi of moves.slice(0, quiz.ply - 1)) appendUsiMove(record, usi);
-        const problem = buildReviewProblem({ sfen: record.position.sfen, mateLength: quiz.mateLength });
+        const problem = buildReviewProblem({ sfen: record.position.sfen, mateLength: quiz.mateLength, line: quiz.bestLine });
         if (problem) problems.push(problem);
       } catch {
         // 局面を作れない手順は飛ばす。

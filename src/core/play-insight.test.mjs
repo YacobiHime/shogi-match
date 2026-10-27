@@ -84,7 +84,7 @@ describe('1局の要約', () => {
     // 先手が指し続ける形の点(手番は交互)。損は先手の手だけに付ける。
     const moves = ['7g7f', '3c3d', '2g2f', '8c8d'];
     const points = [
-      { ply: 0, score: { type: 'mate', value: 3 }, bestMove: '2g2f' },
+      { ply: 0, score: { type: 'mate', value: 3 }, bestMove: '2g2f', pv: ['2g2f', '3c3d', '2f2e', '4a3b'] },
       { ply: 1, score: { type: 'cp', value: 200 }, moveMeasure: { mover: 'black', loss: 400, standing: 100 } },
       { ply: 2, score: { type: 'cp', value: 200 }, moveMeasure: { mover: 'white', loss: 0, standing: -200 } },
       { ply: 3, score: { type: 'cp', value: 150 }, moveMeasure: { mover: 'black', loss: 50, standing: 2000 } },
@@ -95,7 +95,8 @@ describe('1局の要約', () => {
     // 3手目は形勢に大差(2000)があるので、損を測らない。
     expect(result).toMatchObject({ moves: 1, sum: 400, big: 1, freeLosses: 0, standing30: null });
     expect(result.phases.opening).toEqual({ n: 1, sum: 400, big: 1 });
-    expect(result.mates).toEqual([{ sfen: 's0', length: 3 }]);
+    // 逃した詰みには、指す前の局面の読み筋を手数分だけ残す(review-problems.mjsが詰みを確かめて答えにする)。
+    expect(result.mates).toEqual([{ sfen: 's0', length: 3, line: ['2g2f', '3c3d', '2f2e'] }]);
 
     const white = summarizePlayInsight({ points, sfens, moves, color: 'white', initialSfen: STANDARD_SFEN });
     expect(white.mates).toEqual([]);
@@ -150,6 +151,8 @@ describe('弱点の見立て(直近3局)', () => {
       game(2, summary({ mates: [{ sfen: 'new 1', length: 3 }] })),
     ]);
     expect(found[0]).toEqual({ kind: 'mate', count: 2, problemId: reviewProblemId('new 1'), plies: 3 });
+    // 7手より長い詰みは「あなたの対局から」の問題にはするが、弱点としては数えない。
+    expect(detectWeaknesses([game(1, summary({ mates: [{ sfen: 'long', length: 11, line: [] }] }))])).toEqual([]);
   });
 
   it('終盤で崩れた: 終盤の平均損失が序盤・中盤の2倍以上で、終盤に大きな悪手がある', () => {

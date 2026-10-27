@@ -3,7 +3,7 @@ import { JISSEN_TSUME_PROBLEMS } from "../data/jissen-tsume-problems.mjs";
 import { TSUME_PROBLEMS } from "../data/tsume-problems.mjs";
 import { ZUKOU_PROBLEMS } from "../data/zukou-problems.mjs";
 import { formatHintMove } from "./match-assists.mjs";
-import { analyzeProblem, findEscapeReply } from "./problem-solver";
+import { analyzeProblem, findEscapeReply, findMateLine, judgeMateStep } from "./problem-solver";
 
 /**
  * やこび姫の将棋問題集。詰ませる問題と、王手から逃げる問題を出す。
@@ -273,6 +273,8 @@ export function sectionProblems(sectionId) {
 
 /** 問題が属する区分。 */
 export function problemSectionId(problem) {
+  // 「あなたの対局から」の問題(review-problems.mjs。IDが review: で始まる)は、問題集の「あなたの対局」の棚。
+  if (typeof problem?.id === "string" && problem.id.startsWith("review:")) return "game";
   if (problem?.kind !== "line") return "practice";
   return problem.source === "zukou" ? "zukou" : "tsume";
 }
@@ -469,25 +471,22 @@ function judgeLineMove(problem, usi, sfen, step) {
   const position = positionAfter(sfen, [usi]);
   if (!position) return { correct: false, solved: false, speech: "その手は指せないよ。駒の動きをもう一度確かめてみよう！", line: [], next: null };
   const index = 2 * step;
-  const expected = problem.line[index];
+  // 「あなたの対局から」で読み筋と違う詰み方に進んだあとは、読み筋の手順は使わない(詰み探索で判定する)。
+  const onLine = problem.source !== "game" || lineSfens(problem.sfen, problem.line.slice(0, index))[index] === sfen;
+  const expected = onLine ? problem.line[index] : undefined;
   const [played] = moveLabels(sfen, [usi]);
   const mated = isCheckmate(position);
   if (mated || (usi === expected && index === problem.line.length - 1)) {
     const mate = mated ? `${played}で詰みだよ。` : `${played}で詰みだよ。間に駒を打っても、取れば詰むよ。`;
-    return {
-      correct: true,
-      solved: true,
-      speech: problem.source === "zukou"
-        ? `お見事！ ${mate}伊藤看寿の${problem.title}を解ききったね！`
-        : `正解！ ${mate}${problem.plies}手詰め、クリア！`,
-      line: [usi],
-      next: null,
-    };
+    let speech = `正解！ ${mate}${problem.plies}手詰め、クリア！`;
+    if (problem.source === "zukou") speech = `お見事！ ${mate}伊藤看寿の${problem.title}を解ききったね！`;
+    if (problem.source === "game") speech = `正解！ ${mate}${problem.explanation}`;
+    return { correct: true, solved: true, speech, line: [usi], next: null };
   }
   if (usi === expected && index + 1 < problem.line.length) {
     const line = [usi, problem.line[index + 1]];
     const [, replied] = moveLabels(sfen, line);
-    const progress = problem.source === "zukou" ? `（${index + 2}/${problem.plies}手）` : "";
+    const progress = problem.source === "zukou" || (problem.source === "game" && problem.plies > 3) ? `（${index + 2}/${problem.plies}手）` : "";
     return {
       correct: true,
       solved: false,
@@ -499,6 +498,7 @@ function judgeLineMove(problem, usi, sfen, step) {
   if (!position.checked) {
     return { correct: false, solved: false, speech: `${played}は王手になっていないよ。詰将棋は、王手を続けて詰ませるよ！`, line: [usi], next: null };
   }
+  if (problem.source === "game") return judgeGameDeviation(problem, usi, sfen, step, played);
   if (problem.source === "zukou") {
     return {
       correct: false,
@@ -522,6 +522,47 @@ function judgeLineMove(problem, usi, sfen, step) {
   };
 }
 
+/**
+ * 「あなたの対局から」の問題で、解析の読み筋と違う王手を指したとき。実戦の局面には別の詰み方があることが多いので、
+ * 詰み探索で、残りの手数で詰むかを確かめる。詰めば正解にして、相手の応手を探索で決めて続ける
+ * (別の正しい答えを不正解にしない。Game_Nintendo_Implementation.mdの9章)。
+ */
+function judgeGameDeviation(problem, usi, sfen, step, played) {
+  const remaining = problem.plies - 2 * step;
+  const verdict = judgeMateStep(sfen, usi, remaining, { slack: 0 });
+  if (verdict.status === "continue" && verdict.reply) {
+    const line = [usi, verdict.reply];
+    const [, replied] = moveLabels(sfen, line);
+    return {
+      correct: true,
+      solved: false,
+      speech: `いいね！ 対局の読み筋とは違うけど、${played}でも詰むよ。相手は${replied}。続けて詰ませてみよう！`,
+      line,
+      next: { sfen: positionAfter(sfen, line).sfen, step: step + 1 },
+    };
+  }
+  if (verdict.status === "unknown") {
+    return {
+      correct: false,
+      solved: false,
+      speech: `ごめんね、${played}は読み切れなかったよ。対局の読み筋で詰ませてみよう！ 困ったら「ヒント」を使ってね。`,
+      line: [usi],
+      next: null,
+    };
+  }
+  const reply = findEscapeReply(positionAfter(sfen, [usi]).sfen, Math.max(0, remaining - 2));
+  const [, escaped] = reply ? moveLabels(sfen, [usi, reply]) : [];
+  return {
+    correct: false,
+    solved: false,
+    speech: escaped
+      ? `${played}だと、${escaped}と逃げられちゃう…。もう一度考えてみよう！`
+      : `${played}では、${remaining}手で詰まないよ。もう一度考えてみよう！`,
+    line: reply ? [usi, reply] : [usi],
+    next: null,
+  };
+}
+
 const PIECE_NAMES = Object.freeze({
   pawn: "歩", lance: "香", knight: "桂", silver: "銀", gold: "金", bishop: "角", rook: "飛車", king: "玉",
   promPawn: "と", promLance: "成香", promKnight: "成桂", promSilver: "成銀", horse: "馬", dragon: "竜",
@@ -534,7 +575,11 @@ const PIECE_NAMES = Object.freeze({
  */
 export function problemHint(problem, sfen = problem.sfen, step = 0) {
   if (problem.kind !== "line") return step === 0 ? { text: problem.hint, square: problem.hintSquare } : null;
-  const usi = problem.line[2 * step];
+  let usi = problem.line[2 * step];
+  // 「あなたの対局から」で読み筋と違う詰み方に進んだときは、いまの局面から詰み探索で次の手を探す。
+  if (problem.source === "game" && lineSfens(problem.sfen, problem.line.slice(0, 2 * step))[2 * step] !== sfen) {
+    usi = findMateLine(sfen, problem.plies - 2 * step, { nodeLimit: 200000, maxTimeMs: 1500 })?.[0];
+  }
   const move = usi ? createGameRecord(sfen).position.createMoveByUSI(usi) : null;
   if (!move) return null;
   const name = PIECE_NAMES[move.pieceType] ?? "駒";

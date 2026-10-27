@@ -22,14 +22,15 @@ type PlayInsightDeps = {
  * 自由対局の中身の記録(core/play-insight.mjs)のために、終えた対局を、対局用とは別のエンジンで裏で解析する
  * (docs/home-next-adaptive-design.mdの5章)。解析を待つ対局は保存してあるので、リロードしても続きから解析する。
  * 対局が始まったら止める(1局の途中なら、その対局は次の機会に読み直す)。
- * 見逃した短い詰みは、振り返りと同じく「あなたの対局から」の問題にして、復習の箱へ入れる。
+ * 見逃した詰み(n手詰め)は、振り返りと同じく「あなたの対局から」の問題にして、復習の箱へ入れる。
  */
 /**
- * 見逃した短い詰みを、「あなたの対局から」の問題にして、復習の箱へ入れる(自由対局と竜王戦の裏の解析で共通)。
+ * 見逃した詰みを、「あなたの対局から」の問題にして、復習の箱へ入れる(自由対局と竜王戦の裏の解析で共通)。
+ * 解析の読み筋が詰みまで確かめられれば、長い詰みも問題にする(review-problems.mjs)。
  * すでに復習の箱にある問題は、間隔を巻き戻さない。
  */
-export function saveMissedMates(store: Storage | null, mates: { sfen: string; length: number }[]) {
-  const problems = mates.map(({ sfen, length }) => buildReviewProblem({ sfen, mateLength: length })).filter((problem) => problem !== null);
+export function saveMissedMates(store: Storage | null, mates: { sfen: string; length: number; line?: string[] }[]) {
+  const problems = mates.map(({ sfen, length, line }) => buildReviewProblem({ sfen, mateLength: length, line })).filter((problem) => problem !== null);
   if (!problems.length) return;
   saveReviewProblems(store, addReviewProblems(loadReviewProblems(store), problems));
   let queue = loadReviewQueue(store);

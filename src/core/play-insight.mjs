@@ -5,7 +5,7 @@
  * 画面に依存しない。
  */
 import { buildGuidedReview } from './guided-review.mjs';
-import { REVIEW_PROBLEM_MAX_PLIES, reviewProblemId } from './review-problems.mjs';
+import { REVIEW_LINE_MAX_PLIES, reviewProblemId } from './review-problems.mjs';
 import { levelForAverageLoss } from './skill-estimate.mjs';
 import { contentEstimate, contentEvents } from './play-content.mjs';
 import { levelRating } from './player-rating.mjs';
@@ -67,7 +67,8 @@ function validSummary(summary) {
   return summary && finite(summary.moves) && finite(summary.sum) && finite(summary.big) && finite(summary.freeLosses)
     && (summary.axes === undefined || validAxes(summary.axes))
     && PHASES.every(({ key }) => validPhase(summary.phases?.[key]))
-    && Array.isArray(summary.mates) && summary.mates.every((mate) => typeof mate?.sfen === 'string' && Number.isInteger(mate.length))
+    && Array.isArray(summary.mates) && summary.mates.every((mate) => typeof mate?.sfen === 'string' && Number.isInteger(mate.length)
+      && (mate.line === undefined || (Array.isArray(mate.line) && mate.line.every((usi) => typeof usi === 'string'))))
     && (summary.standing30 === null || finite(summary.standing30))
     && (summary.content === undefined || summary.content === null || (finite(summary.content.level) && finite(summary.content.spread)));
 }
@@ -177,7 +178,7 @@ function standingFor(score, color) {
  * 1局の要約。pointsは棋譜解析の点(kifu-analysis-pipeline.mjsのanalysisPointsFromResults)、sfensは0手目からの局面。
  * - moves・sum・big: 測れた手の数、損の合計(1手1000まで)、大きな悪手(損300以上)の数
  * - phases: 序盤(30手まで)・中盤(80手まで)・終盤の、測れた手の数・損の合計・大きな悪手の数
- * - mates: 逃した3手以内の詰み(詰ませる側の手番の局面と手数)
+ * - mates: 逃した詰み(詰ませる側の手番の局面と手数と、解析の読み筋line)。15手詰めまで。2026-10-27より前の要約は3手以内で、lineがない
  * - freeLosses: 駒をタダで取られる形にして、大きく損をした手の数
  * - standing30: 30手目の形勢(自分から見た評価値)。30手に届かなければnull
  * - axes: 能力の分析(my-abilities.mjs)のための集計。損は同じ読みの中の差(measureLoss。棋力測定と同じ)。
@@ -230,11 +231,15 @@ export function summarizePlayInsight({ points, sfens, moves, color, initialSfen 
   }
   const { moments = [] } = buildGuidedReview(points, { playerColor: color, moves, initialSfen, quizLimit: 0 });
   const mates = [];
+  const pvAt = new Map(points.map((point) => [point.ply, point.pv]));
   let freeLosses = 0;
   for (const moment of moments) {
     if (moment.mover !== color) continue;
-    if (moment.missedMate > 0 && moment.missedMate <= REVIEW_PROBLEM_MAX_PLIES && sfens[moment.ply - 1]) {
-      mates.push({ sfen: sfens[moment.ply - 1], length: moment.missedMate });
+    if (moment.missedMate > 0 && moment.missedMate <= REVIEW_LINE_MAX_PLIES && sfens[moment.ply - 1]) {
+      // 指す前の局面の読み筋が、詰みまでの手順(review-problems.mjsが確かめて答えにする)。
+      const pv = pvAt.get(moment.ply - 1);
+      const line = Array.isArray(pv) ? pv.slice(0, moment.missedMate).map(String) : [];
+      mates.push({ sfen: sfens[moment.ply - 1], length: moment.missedMate, ...(line.length ? { line } : {}) });
     }
     if (moment.leftFree && (lossAt.get(moment.ply) ?? 0) >= BIG_LOSS) freeLosses += 1;
   }
@@ -283,12 +288,15 @@ function mergedPhase(games, key) {
 
 /** 弱点の種類。上ほど優先(4-1の表の順)。 */
 export const WEAKNESS_KINDS = Object.freeze(['mate', 'ending', 'free', 'opening']);
+/** 弱点として数える、逃した詰みの手数の上限(問題集の詰将棋の手数と同じ)。 */
+const WEAKNESS_MATE_MAX_PLIES = 7;
 /** 終盤・序盤の弱点を見る、その局面の測れた手の数の下限。 */
 const PHASE_MIN_MOVES = 3;
 
 /**
  * 直近3局の要約から、目立つ弱点を、優先の順にすべて返す(4-1)。解析できた対局がなければ空。
- * - mate: 3手以内の詰みを1回以上逃した。problemIdとpliesは、いちばん新しい局面の問題のID(review-problems.mjs)と詰みの手数
+ * - mate: 7手以内の詰みを1回以上逃した。problemIdとpliesは、いちばん新しい局面の問題のID(review-problems.mjs)と詰みの手数。
+ *   それより長い詰みは「あなたの対局から」の問題にはするが、弱点としては数えない
  * - ending: 終盤の平均損失が、序盤・中盤の2倍以上で、終盤に大きな悪手がある
  * - free: 1局あたり、タダで取られて大きく損をした手が2回以上
  * - opening: 序盤の平均損失が中盤・終盤より大きく、30手目の形勢が−300以下(3局の平均)
@@ -299,7 +307,7 @@ export function detectWeaknesses(games) {
   const recent = analyzed(games).slice(-WEAKNESS_GAMES);
   if (!recent.length) return [];
   const found = [];
-  const mates = recent.flatMap((game) => game.summary.mates);
+  const mates = recent.flatMap((game) => game.summary.mates).filter((mate) => mate.length <= WEAKNESS_MATE_MAX_PLIES);
   if (mates.length) {
     const latest = mates.at(-1);
     found.push({ kind: 'mate', count: mates.length, problemId: reviewProblemId(latest.sfen), ...(finite(latest.length) ? { plies: latest.length } : {}) });

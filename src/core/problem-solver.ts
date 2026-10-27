@@ -190,3 +190,19 @@ export function findMateLine(
   if (result === undefined) return undefined;
   return result && result.line.length ? result.line : null;
 }
+
+/**
+ * 手順が、攻め方の連続王手で詰む手順か（どの手も指せて、攻め方の手はすべて王手、最後は詰み）。
+ * 対局の解析の読み筋を、「あなたの対局から」の詰将棋の手順にしてよいかを確かめるのに使う。
+ */
+export function isMatingLine(sfen: string, line: readonly string[]): boolean {
+  let position = Position.newBySFEN(sfen);
+  if (!position || line.length === 0 || line.length % 2 === 0) return false;
+  for (const [index, usi] of line.entries()) {
+    const next = play(position, usi);
+    if (!next) return false;
+    if (index % 2 === 0 && !next.checked) return false;
+    position = next;
+  }
+  return position.checked && enumerateLegalMoves(position).length === 0;
+}
