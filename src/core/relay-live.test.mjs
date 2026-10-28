@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, recordUserGame, replayRest, restGameKey, restOpen, seasonGameResults, settleRest } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
-  afterWatchRounds, applyWatchedRound, hiddenRoundIds, meijinHiddenKeys, meijinLiveEntry, meijinLiveRound, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyMeijinWatchedRound, applyWatchedRound, hiddenRoundIds, meijinAfterRounds, meijinFinale, meijinHiddenKeys, meijinLiveEntry, meijinLiveRound, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from './relay-live.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
@@ -354,5 +354,55 @@ describe('名人戦の回戦の中継ボード(22章)', () => {
     }
     // 自分で指す期では、伏せる対局はない。
     expect(meijinHiddenKeys({ ...season, spectator: false }).size).toBe(0);
+  });
+});
+
+describe('名人戦の番勝負の観戦(23章)', () => {
+  async function finished(seed, outcome = 'loss') {
+    const { createLeague, createMeijinSeason, recordMeijinGame } = await import('./meijin.mjs');
+    const roster = createRoster({ seed: 31 });
+    const meijinSettings = { difficulty: 9, scale: 'mini', coachLevel: 'detailed', hintLimit: 3, undoLimit: 3 };
+    let season = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings: meijinSettings, userLevel: 20, seed });
+    for (let guard = 0; guard < 30 && season.pending; guard += 1) season = recordMeijinGame(season, outcome);
+    return season;
+  }
+  const flip = (round) => new Map(round.entries.map((entry) => {
+    const aId = entry.black.id;
+    const aWins = entry.winner !== 'black';
+    return [entry.key, { aId, result: { aWins, how: 'middle', aColor: 'black', openings: { a: null, b: null }, castles: { a: null, b: null }, phases: [0, 0, aWins ? 300 : -300], probability: null } }];
+  }));
+
+  it('A級でない期も、A級の1位が名人に挑戦する七番勝負を指す。自分の出ない局を1局ずつ観戦できる', async () => {
+    const season = await finished(5);
+    expect(season.phase).toBe('done');
+    expect(season.cls).not.toBe('A');
+    expect(season.finals?.winner).toBeTruthy();
+    expect(season.challenger).toBe(season.tables.A[0].id);
+    const rounds = meijinAfterRounds(season);
+    expect(rounds.length).toBe(season.finals.games.length);
+    expect(rounds.every(({ entries }) => entries.length === 1 && entries[0].kind === 'finals')).toBe(true);
+    expect(meijinFinale(season).lines[0]).toMatch(/^第1期名人は、/);
+  });
+
+  it('1局ずつ逆の結果にして指し直しても、見た局は変わらず、七番勝負は先に4勝で終わり、プレイヤーの結果は変わらない', async () => {
+    for (const seed of [5, 11, 23]) {
+      let season = await finished(seed);
+      const userResult = { ...season.result, challenger: null, titleWinner: null };
+      const seen = [];
+      for (let index = 0; index < 8; index += 1) {
+        const rounds = meijinAfterRounds(season);
+        if (index >= rounds.length) break;
+        const round = rounds[index];
+        const results = index % 2 === 0 ? flip(round) : new Map();
+        const want = results.size ? (round.entries[0].winner === 'black' ? 'white' : 'black') : round.entries[0].winner;
+        season = applyMeijinWatchedRound(season, round, results);
+        seen.push([index, round.entries[0][want].id]);
+        for (const [at, winner] of seen) expect(season.finals.games[at].winner).toBe(winner);
+        expect(season.rest.revealed).toBe(index + 1);
+        expect(Math.max(...Object.values(season.finals.wins))).toBe(4);
+        expect(season.result.titleWinner).toBe(season.finals.winner);
+        expect({ ...season.result, challenger: null, titleWinner: null }).toEqual(userResult);
+      }
+    }
   });
 });

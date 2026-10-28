@@ -106,16 +106,16 @@
           <b>プレーオフ</b>{{ view.playoff.names.join(" → ") }}(順位の下から勝ち抜き)
         </p>
         <RyuoSeries
-          v-if="showSeries && view.series"
+          v-if="showSeries && seriesShown"
           class="meijin__series"
-          :series="[view.series]"
+          :series="[seriesShown]"
           :holder="view.holder"
           :stages="[]"
           :you-name="playerName"
           :next-color="view.pending?.kind === 'finals' ? view.pending.color : ''"
           :defense="view.mode === 'defense'"
           title-name="名人"
-          :journey-steps="journeySteps"
+          :journey-steps="afterWatch ? undefined : journeySteps ?? undefined"
         />
         <MeijinLeagueTable
           v-else
@@ -140,6 +140,12 @@
         @skip="emit('live-skip')"
         @finish="emit('live-finish')"
       />
+      <!-- 自分の出ない番勝負の観戦の最後(23章)。名人の判子と、誰が名人になったか。 -->
+      <section v-else-if="afterWatch?.finale" class="shogi-tournament__hud shogi-tournament__finale" aria-label="名人の発表" data-meijin-finale>
+        <p class="shogi-tournament__finale-seal" aria-hidden="true">名</p>
+        <p v-for="(line, index) in afterWatch.finale.lines" :key="line" :class="['shogi-tournament__finale-line', { 'shogi-tournament__finale-line--crown': index === 0 }]">{{ line }}</p>
+        <button type="button" class="shogi-tournament__start" data-meijin-finale-done @click="endAfter">観戦を終える</button>
+      </section>
       <section
         v-else-if="view.pending"
         :class="['shogi-tournament__hud', { 'shogi-tournament__hud--boss': view.pending.stakes.boss }]"
@@ -273,6 +279,10 @@
           <i v-for="game in view.userGames" :key="`${game.kind}-${game.round}`" :class="game.win ? 'is-win' : 'is-loss'">{{ game.win ? "○" : "●" }}</i>
         </p>
         <p class="shogi-tournament__goal-box"><small>次の期</small><span>{{ nextText }}</span></p>
+        <!-- 自分の出ない番勝負(A級プレーオフ・名人戦七番勝負)を1局ずつ観戦する(23章)。 -->
+        <button v-if="afterCount" type="button" class="shogi-tournament__sub relay-open" data-meijin-watch-after @click="startAfter">
+          名人戦の番勝負を観戦<small>{{ afterRevealed >= afterCount ? "見届けた" : `${afterCount}局` }}</small>
+        </button>
         <button type="button" class="shogi-tournament__start" data-meijin-next @click="emit('ceremony')">表彰式へ</button>
       </section>
     </div>
@@ -344,6 +354,13 @@ const props = defineProps({
   livePanel: { type: Object as PropType<LivePanelView | null>, default: null },
   /** リーグ表の行ごとの、いま指している対局(棋士のidごと)。 */
   liveRows: { type: Object as PropType<Record<string, LiveRow>>, default: () => ({}) },
+  /** 出す七番勝負(まだ見ていない局を伏せた形。23章)。なければview.series。 */
+  seriesView: { type: Object as PropType<SeriesView | null>, default: null },
+  /** 自分の出ない番勝負の観戦のようす(23章)。観戦していなければnull。 */
+  afterWatch: { type: Object as PropType<{ finale: { lines: string[] } | null; showSeries: boolean } | null>, default: null },
+  /** 観戦できる番勝負の局の数と、見届けた数。 */
+  afterCount: { type: Number, default: 0 },
+  afterRevealed: { type: Number, default: 0 },
 });
 const emit = defineEmits<{
   enter: [settings: Settings];
@@ -363,6 +380,9 @@ const emit = defineEmits<{
   "live-speed": [];
   "live-skip": [];
   "live-finish": [];
+  /** 自分の出ない番勝負の観戦を始める・終える(23章)。 */
+  "watch-after": [];
+  "watch-after-end": [];
 }>();
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
@@ -379,6 +399,11 @@ const backLabel = computed(() => (screen.value === "entry" ? "大会の選択へ
 function topBack() {
   if (screen.value === "entry") {
     emit("back");
+    return;
+  }
+  // 番勝負の観戦中(23章)は、観戦を終えて結果の画面へ。
+  if (props.afterWatch) {
+    endAfter();
     return;
   }
   if (screen.value === "result") emit("result-seen");
@@ -485,7 +510,30 @@ function enter(watch = false) {
 
 // ---- 期の画面
 const OUTLOOK_TAG: Record<string, string> = { clinched: "決定", self: "自力", others: "他力", out: "" };
-const showSeries = computed(() => Boolean(props.view?.series) && (props.view?.phase === "title" || props.view?.phase === "done"));
+const seriesShown = computed(() => props.seriesView ?? props.view?.series ?? null);
+/**
+ * リーグ表の代わりに七番勝負を出すか。自分が指す七番勝負と、A級の期(と名人の防衛の期)の終わり。
+ * 番勝負の観戦(23章)では、いまの局が七番勝負のとき。A級でない期の終わりは、ふだんはリーグ表。
+ */
+const showSeries = computed(() => {
+  if (props.afterWatch) return props.afterWatch.showSeries && Boolean(seriesShown.value);
+  const view = props.view;
+  if (!seriesShown.value || !view) return false;
+  return view.phase === "title" || (view.phase === "done" && (view.cls === "A" || view.mode === "defense"));
+});
+/** 番勝負の観戦を始める(期の画面へ)・終える(結果の画面へ)。 */
+function startAfter() {
+  screen.value = "season";
+  emit("watch-after");
+}
+function endAfter() {
+  screen.value = "result";
+  emit("watch-after-end");
+}
+// 大会の画面が観戦を終えたとき(戻る操作など)は、結果の画面へ戻す。
+watch(() => props.afterWatch, (now, before) => {
+  if (!now && before && screen.value === "season" && props.view?.result) screen.value = "result";
+});
 const goalLine = computed(() => (props.view ? meijinGoalLine(props.view.cls, props.view.rounds) : ""));
 const seasonSub = computed(() => {
   const view = props.view;
@@ -493,7 +541,10 @@ const seasonSub = computed(() => {
   if (view.mode === "defense") return "名人の防衛戦";
   return `${view.clsLabel} ${Math.min(view.round + (view.pending ? 1 : 0), view.rounds)}/${view.rounds}局${view.me ? `・${view.me.wins}勝${view.me.losses}敗` : ""}`;
 });
-const seriesNote = computed(() => (props.view?.mode === "defense" ? "A級の1位を迎えて、名人を守ろう。先に4勝で防衛" : "A級1位として、名人に挑む。先に4勝で名人"));
+const seriesNote = computed(() => {
+  if (props.afterWatch) return "A級の1位が名人に挑む。先に4勝で名人";
+  return props.view?.mode === "defense" ? "A級の1位を迎えて、名人を守ろう。先に4勝で防衛" : "A級1位として、名人に挑む。先に4勝で名人";
+});
 const journeySteps = computed(() => {
   const view = props.view;
   if (!view) return null;

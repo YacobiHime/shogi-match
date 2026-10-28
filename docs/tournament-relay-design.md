@@ -724,3 +724,25 @@
 - `src/core/meijin.mjs`：`applyMeijinRoundResults`と、`playMeijinSpectatorGame`の`round`。`src/core/relay-live.mjs`：`meijinLiveRound`（分身の局を先頭に同じ回戦の対局）・`meijinHiddenKeys`。テストは`relay-live.test.mjs`（並び・伏せる鍵・逆の結果に差し替えて記録）。
 - 画面：`src/RelayLivePanel.vue`（中継ボードの欄。竜王戦と名人戦で共通）、`src/MeijinLeagueTable.vue`の`live`（行のいまの対局と、終局した勝ち負け）、`src/ShogiMeijin.vue`の`livePanel`・`liveRows`、大会の画面`src/ShogiTournament.vue`の`startMeijinLive`・`meijinLiveRows`・`realRoundSpecs`（本局にする局の選び方を竜王戦と共通に）・`finishLive`（名人戦は`meijin-watch-play`に分身の局と同じ回戦の結果を渡す）、対局画面の`playMeijinWatchGame(real, round)`。
 - ブラウザ（この作業環境のChromium）で、3つの大きさとも：C級2組（50人）の1回戦25局がリーグ表の行に「n手目・勝率のバー・▶」で同時に進み、ほかの棋士の行を押すとその対局の中継が開く。PC（1366×768）とタブレット縦（820×1180）は25局すべてが本局で、約70〜80秒で全局が終局し、記録した表の勝者と中継の棋譜の勝者が全局で一致。スマホ縦（390×844）は分身の局だけが本局。「結果だけ見る」で記録して次の一局へ。レーティングの対局数は変わらない。横にはみ出しなし。上のクラス（強い世界）での時間、本物の端末での速さ、実際に遊んでの確認は未確認。
+
+## 23. 名人戦の番勝負の観戦（2026-10-28、ユーザーの依頼「次へ。3まで行ってください」の2つめ）
+
+### 23-1. 機能設計メモ
+
+- **何を作るか**：名人戦の期の結果の画面に「名人戦の番勝負を観戦」を足す。自分の出ない番勝負（A級プレーオフ・名人戦七番勝負）を1局ずつ、エンジンが本当に指して見届け、最後に「名人の発表」。竜王戦の敗退後の観戦（19章・20-10）の名人戦版。
+- **なぜ**：名人戦の山場は名人戦七番勝負。自分の期が終わっても、世界のいちばん上で誰が名人になるかを見届けられる（D:8-3 応援する楽しみ、N:6-1 見ている人も楽しい）。竜王戦と同じ見せ方にする（N:2-2）。
+- **決めたこと**：
+  1. **どのクラスの期でも名人戦七番勝負を指す**：これまでは、プレイヤーがA級にいないと七番勝負そのものを指さず、名人は変わらなかった。これからは、期の終わりにA級を自動で決め、1位が名人に挑戦する七番勝負を毎期指す（名人が替わることがある。A級の表は、名簿を進めるときにも同じものを使う）。世界が動き、名人戦の物語が毎期生まれる（D:8-1、世界の出来事）。
+  2. **1局ずつ観戦**：番勝負は1局ずつ順に指されるので、観戦も1局ずつ。期の画面の七番勝負の星取り（まだ見ていない局は、指していない形）の下に、竜王戦と同じ中継ボードの欄（`RelayLivePanel.vue`）を出す。局を見終えると「次の局へ」、最後は「名人の発表へ」→ 名人の判子と「第n期名人は、○○！」「4勝2敗で、名人を奪取（防衛）」。
+  3. **見た局の結果で、残りを指し直す**（20-10と同じ）：自分の対局が終わった時点の期の形を残し（`rest.base`）、見終えた局の結果を決めてある結果にして、残りの番勝負を指し直す（`meijin.mjs`の`replayMeijinRest`、`relay-live.mjs`の`applyMeijinWatchedRound`）。番狂わせで、七番勝負が何局まで続くかも変わる。見届けた局の数は期の保存（`rest.revealed`）に残す。
+  4. **プレイヤーの結果は変えない**：昇級・降級点などは自分の対局が終わった時点で決まる。指し直しで変えるのは、プレーオフ・七番勝負・挑戦者・名人だけ。
+  5. **名簿を進めるのは、確定してから**（20-10と同じ）：名人戦の期の名簿（順位戦の世界・名人）は、番勝負の残りを確定してから進める（対局画面の`settleMeijinSeason`）。確定するのは、名人の発表まで見たとき、結果の画面を見終えたとき、次の名人戦・竜王戦を始めるとき。確定前の入口と結果の画面の「次の期」は、期の結果から出した次のクラスで見せる。確定前は、まだ見ていない局を星取りと中継の一覧で伏せる。
+  6. 本局にする局の選び方は20-9と同じ（善彦・羽音の局は読む量を減らさず、スマホは主要キャラの局だけ本局）。自分が指した局と、自分の対局の前に決まっていたプレーオフの局は、観戦の対象にしない。
+- **原則**：世界のいちばん上の勝負を見届ける（D:8-3、N:6-1）。自分の結果は変わらない（D:7-2）。竜王戦と同じ見せ方（N:2-2）。
+
+### 23-2. 実装（2026-10-28、実装・自動テスト済み）
+
+- `src/core/meijin.mjs`：A級でない期の`finishLeague`で、A級の自動の表（`season.tables.A`）と挑戦者を決めて七番勝負へ（`advanceLeague`は記録した表を使う）。期の始めにA級の棋士も写す。`drivePlayoff`・`driveTitle`・`drive`に決めてある結果（`po#局`・`finals#局`）、`recordMeijinGame`で自分の対局が終わった時点の形（`rest`）、`meijinSeriesKeys`・`meijinSeriesResults`・`meijinRestOpen`・`replayMeijinRest`・`settleMeijinRest`。
+- `src/core/relay-live.mjs`：`meijinAfterRounds`（観戦できる局を1局ずつ）・`applyMeijinWatchedRound`・`meijinFinale`。テストは`relay-live.test.mjs`（A級でない期も七番勝負を指す・1局ずつ逆の結果にして指し直しても見た局は変わらず、先に4勝で終わり、プレイヤーの結果は変わらない）。
+- 画面：大会の画面`src/ShogiTournament.vue`の`startMeijinAfterWatch`・`playMeijinAfterRound`・`nextMeijinAfterRound`・`endMeijinAfterWatch`・`meijinSeriesView`（伏せた星取り）・`meijinAfterView`、`src/ShogiMeijin.vue`の結果の画面の`data-meijin-watch-after`・期の画面の`seriesView`・`afterWatch`・名人の発表`data-meijin-finale`、対局画面の`finalizeMeijinSeason`（名簿は確定してから）・`applyMeijinWorld`・`settleMeijinSeason`・`applyMeijinWatchRound`と、確定前の`meijinEntryClass`・`meijinEntryNo`。
+- ブラウザ（この作業環境のChromium）：分身の期を「結果だけ見る」で最後まで進め、結果の画面の「名人戦の番勝負を観戦」から、PC（1366×768）で3局、スマホ縦（390×844）で名人の発表まで見た。七番勝負の星取りの下に中継ボードの欄が出て、局ごとに本局が指され（中継の保存に1局ずつ増える）、見終えるたびに七番勝負が指し直され（見た局の勝ち負けはそのまま、局の数が変わる）、名簿はまだ進まない。名人の発表（スマホ）か、表彰式から大会の選択へ進んだとき（PC）に確定し、名簿の順位戦が1期進む。はみ出しなし。タブレット縦は未確認（PCとスマホで同じ画面の部品を確かめた）。自分で指したA級の期・強い世界での時間・実際に遊んでの確認は未確認。

@@ -448,6 +448,8 @@
       @watch-round="applyRyuoWatchRound"
       @watch-settle="settleRyuoSeason"
       @meijin-watch-play="playMeijinWatchGame"
+      @meijin-watch-round="applyMeijinWatchRound"
+      @meijin-watch-settle="settleMeijinSeason"
       :meijin-season="meijinSeason"
       :relay-engine-factory="ensureEngineFactory"
       :compact="mobile || boardLayout === 'portrait'"
@@ -2735,7 +2737,7 @@ import {
 import { type PracticeDrill, type PracticeStep, recommendPlay, resultNextStep as resultNextStepFor, tournamentInvite } from "./core/play-coach.mjs";
 import { counterStyle, loadCounterKey, ryuoNextPlan, ryuoNextSeasonPlan, saveCounterKey } from "./core/ryuo-next.mjs";
 import {
-  CLASS_LABELS, applyMeijinSeason, asAvatarMeijinSeason, createMeijinSeason, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
+  CLASS_LABELS, advanceLeague, applyMeijinSeason, asAvatarMeijinSeason, createMeijinSeason, meijinRestOpen, settleMeijinRest, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
   playMeijinSpectatorGame, recordMeijinGame, resumeMeijinSeason, saveMeijinCareer, saveMeijinSeason, userClass,
 } from "./core/meijin.mjs";
 import { applyMeijinSeasonToRoster, autoJunniYear, ensureJunniWorld, joinJunni } from "./core/junni-world.mjs";
@@ -3273,6 +3275,11 @@ const meijinView = computed(() => describeMeijinSeason(meijinSeason.value));
 const meijinEntryClass = computed(() => {
   const season = meijinSeason.value;
   if (season && season.phase !== "done") return season.mode === "defense" ? "meijin" : season.cls;
+  // 番勝負の残りが確定する前は、名簿はまだ進めていない。期の結果から次の期の世界を出す(23章。名人は確定前と同じ)。
+  if (season && meijinRestOpen(season)) {
+    const next = advanceLeague(season);
+    return next.holder === USER_ID ? "meijin" : userClass(next) ?? "C2";
+  }
   const world = ryuoRoster.value?.junni;
   if (!world) return "C2";
   return world.holder === USER_ID ? "meijin" : userClass(world) ?? "C2";
@@ -3287,9 +3294,13 @@ const hananeJunniClass = computed(() => {
   return (Object.entries(world.classes ?? {}) as [string, string[]][]).find(([, ids]) => ids.includes(id))?.[0] ?? "";
 });
 /** 次の期(か進行中の期)の番号。期の番号は順位戦の世界のもの(名人戦に出る前の自動の期も数える)。 */
-const meijinEntryNo = computed(() => (
-  meijinSeason.value && meijinSeason.value.phase !== "done" ? meijinSeason.value.no : (ryuoRoster.value?.junni?.no ?? meijinCareer.value.no) + 1
-));
+const meijinEntryNo = computed(() => {
+  const season = meijinSeason.value;
+  if (season && season.phase !== "done") return season.no;
+  // 番勝負の残りが確定する前は、名簿の期の数はまだ進めていない(23章)。
+  if (season && meijinRestOpen(season)) return season.no + 1;
+  return (ryuoRoster.value?.junni?.no ?? meijinCareer.value.no) + 1;
+});
 /** いまの名人の名前(プレイヤーが名人なら空)。 */
 const meijinHolderName = computed(() => {
   const season = meijinSeason.value && meijinSeason.value.phase !== "done" ? meijinSeason.value : null;
@@ -5866,8 +5877,9 @@ function onPregamePick(key: string, value: PickerValue) {
 function enterRyuoSeason(settings: {
   difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; watch?: boolean;
 }) {
-  // 前の期の残りの対局が確定していなければ、確定して名簿を進めてから始める(20-10)。
+  // 前の期の残りの対局(と名人戦の番勝負)が確定していなければ、確定して名簿を進めてから始める(20-10・23章)。
   settleRyuoSeason();
+  settleMeijinSeason();
   const career = ryuoCareer.value;
   const entry = nextEntry(career);
   const seed = Date.now();
@@ -5984,6 +5996,7 @@ function settleRyuoSeason() {
 // 結果の画面を見終えたまま残りの対局が確定していない期(前の版の画面で閉じたときなど)は、開いたときに確定する。
 onMounted(() => {
   if (ryuoSeason.value?.resultSeen) settleRyuoSeason();
+  if (meijinSeason.value?.resultSeen) settleMeijinSeason();
 });
 /** 敗退後の観戦で回戦を見終えた。本局の結果で残りを指し直した期(大会の画面が作る)に替える。 */
 function applyRyuoWatchRound(next: any) {
@@ -6312,8 +6325,9 @@ function replayRyuoGame() {
 // ---- 名人戦の期と対局
 /** 名人戦の期を始める(大会の画面の「出場する」)。名簿がなければ作る(竜王戦と同じ名簿を使う)。 */
 function enterMeijinSeason(settings: { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; watch?: boolean }) {
-  // 竜王戦の残りの対局が確定していなければ、名簿(順位戦の世界も)を進めてから始める(20-10)。
+  // 竜王戦の残りの対局・前の名人戦の番勝負が確定していなければ、名簿(順位戦の世界も)を進めてから始める(20-10・23章)。
   settleRyuoSeason();
+  settleMeijinSeason();
   const seed = Date.now();
   if (!ryuoRoster.value) {
     ryuoRoster.value = createRoster({ seed, userGroup: ryuoCareer.value.group });
@@ -6344,6 +6358,7 @@ function markMeijinResultSeen() {
   if (!season || season.resultSeen) return;
   meijinSeason.value = { ...season, resultSeen: true };
   saveMeijinSeason(browserStorage(), meijinSeason.value);
+  settleMeijinSeason();
 }
 function startMeijinGame() {
   confirmDiscardSuspended(startMeijinGameNow);
@@ -6382,18 +6397,44 @@ function recordMeijinOutcome(matchResult: MatchResult) {
   ryuoGame.value = { ...game, outcome, replay: false };
   finalizeMeijinSeason(next);
 }
-/** 終わった名人戦の期を、キャリア・賞状・名簿(順位戦の世界)に反映する。 */
+/**
+ * 終わった名人戦の期を、キャリア・賞状・名簿(順位戦の世界)に反映する。
+ * 自分の出ない番勝負(A級プレーオフ・名人戦七番勝負)が残っている期は、観戦で本局にできるので、名簿は確定してから進める(23章)。
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function finalizeMeijinSeason(next: any) {
   if (next.phase !== "done") return;
   meijinCareer.value = applyMeijinSeason(meijinCareer.value, next);
   saveMeijinCareer(browserStorage(), meijinCareer.value);
   awardMeijinSeason(next);
-  // 順位戦の世界を1期進めて名簿へ書き戻す(名人・クラス・対戦成績。名鑑と竜王戦の紹介も同じ世界を読む)。
-  if (ryuoRoster.value) {
-    ryuoRoster.value = applyMeijinSeasonToRoster(ryuoRoster.value, next);
-    saveRoster(browserStorage(), ryuoRoster.value);
-  }
+  if (!meijinRestOpen(next)) applyMeijinWorld(next);
+}
+/** 順位戦の世界を1期進めて名簿へ書き戻す(名人・クラス・対戦成績。名鑑と竜王戦の紹介も同じ世界を読む)。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyMeijinWorld(season: any) {
+  if (!ryuoRoster.value) return;
+  ryuoRoster.value = applyMeijinSeasonToRoster(ryuoRoster.value, season);
+  saveRoster(browserStorage(), ryuoRoster.value);
+}
+/**
+ * 名人戦の期の残りの番勝負を確定し、名簿を進める(23章)。名人の発表まで観戦したとき、結果の画面を見終えたとき、
+ * 次の名人戦・竜王戦を始めるとき。見ていない局は、自動対局の結果のまま。
+ */
+function settleMeijinSeason() {
+  const season = meijinSeason.value;
+  if (!season || season.phase !== "done" || !meijinRestOpen(season)) return;
+  const settled = settleMeijinRest(season);
+  meijinSeason.value = settled;
+  saveMeijinSeason(browserStorage(), settled);
+  applyMeijinWorld(settled);
+}
+/** 名人戦の番勝負の観戦で1局を見終えた。本局の結果で残りを指し直した期(大会の画面が作る)に替える。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyMeijinWatchRound(next: any) {
+  const season = meijinSeason.value;
+  if (!season || !next || next.id !== season.id || !meijinRestOpen(season)) return;
+  meijinSeason.value = next;
+  saveMeijinSeason(browserStorage(), next);
 }
 /**
  * 名人戦の分身の次の一局を記録する(21章)。realは、エンジンが本当に指した本局の結果。なければ自動対局で決める。

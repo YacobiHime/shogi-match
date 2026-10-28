@@ -6,7 +6,7 @@
 import { playSpectatorGame, replayRest, restGameKey, restOpen, seasonGameResults } from './ryuo.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
 import { meijinRelayGames, ryuoRelayGames } from './relay-games.mjs';
-import { playMeijinSpectatorGame } from './meijin.mjs';
+import { meijinRestOpen, meijinSeriesResults, playMeijinSpectatorGame, replayMeijinRest } from './meijin.mjs';
 import { blackWinRate, relayPlan, relaySeed, relayTarget } from './relay-game.mjs';
 import { relayAudience } from './relay-commentary.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
@@ -103,6 +103,84 @@ export function meijinHiddenKeys(season) {
   const pending = season?.spectator && season.pending?.kind === 'league' ? season.pending : null;
   if (!pending) return new Set();
   return new Set((pending.others?.games ?? []).map(({ a, b }) => `meijin:${season.id}:r${pending.round}:${a}-${b}`));
+}
+
+/** 名人戦の中継の項目の鍵を、決めてある結果の鍵(po#i・finals#i)に。番勝負の局でなければnull。 */
+function meijinSeriesKeyOf(entryKey) {
+  const { tag, id } = tableOf(entryKey);
+  if (tag === 'po') return `po#${id}`;
+  if (tag === 'finals') return `finals#${id}`;
+  return null;
+}
+
+/**
+ * 名人戦の、自分の出ない番勝負(A級プレーオフと名人戦七番勝負)の観戦の回戦(23章)。1局ずつ、期の順に並べる。
+ * 自分の対局の前に決まっていた局(rest.before)と、自分の対局は入れない。番勝負のない期は空。
+ * @param {any} season 名人戦の終わった期
+ * @param {{ oshiId?: string | null }} [options]
+ * @returns {{ id: string, label: string, stage: string, entries: any[] }[]}
+ */
+export function meijinAfterRounds(season, { oshiId = null } = {}) {
+  if (season?.phase !== 'done' || !season.rest) return [];
+  const before = new Set(season.rest.before ?? []);
+  return meijinRelayGames(season, { oshiId })
+    .filter((entry) => {
+      const key = meijinSeriesKeyOf(entry.key);
+      return key && !before.has(key) && !entry.tags?.self;
+    })
+    .sort((a, b) => a.order - b.order)
+    .map((entry) => ({ id: entry.key, label: entry.label, stage: entry.kind, entries: [entry] }));
+}
+
+/**
+ * 名人戦の番勝負の観戦で、1局を見終えた。その結果(本局ならその結果、そうでなければ見せた結果)を決めてある結果にして、
+ * 残りの番勝負を指し直す。初めてなら、観戦しない番勝負の局(自分の対局の前に決まっていた局)の結果も決めておく。
+ * @param {any} season (書き換えない)
+ * @param {{ entries: any[] }} round
+ * @param {Map<string, { aId: string, result: any }>} [results]
+ */
+export function applyMeijinWatchedRound(season, round, results = new Map()) {
+  if (!meijinRestOpen(season)) return season;
+  const current = meijinSeriesResults(season);
+  let overrides = season.rest.overrides;
+  if (!overrides) {
+    const watched = new Set(meijinAfterRounds(season).flatMap(({ entries }) => entries.map((entry) => meijinSeriesKeyOf(entry.key))));
+    overrides = Object.fromEntries(Object.entries(current).filter(([key]) => !watched.has(key)));
+  }
+  overrides = { ...overrides };
+  for (const entry of round?.entries ?? []) {
+    const key = meijinSeriesKeyOf(entry.key);
+    if (!key) continue;
+    const real = results.get(entry.key);
+    if (real) {
+      const bId = [entry.black.id, entry.white.id].find((id) => id !== real.aId);
+      overrides[key] = { ids: [real.aId, bId].sort(), winner: real.result.aWins ? real.aId : bId, game: gameRecordOf(real.result, real.aId, bId) };
+    } else if (current[key]) {
+      overrides[key] = current[key];
+    }
+  }
+  return replayMeijinRest(season, overrides, { revealed: (season.rest.revealed ?? 0) + 1 });
+}
+
+/**
+ * 名人戦の番勝負の観戦の最後の一言(名人の発表)。
+ * @param {any} season
+ */
+export function meijinFinale(season) {
+  const winnerId = season?.result?.titleWinner ?? season?.titleWinner ?? null;
+  const winner = winnerId ? season.players?.[winnerId] : null;
+  const title = `第${season?.no ?? 1}期名人`;
+  const lines = [];
+  // 段位の欄にはほかのタイトル(竜王など)が入っていることがあるので、名前だけにする。
+  if (winner) lines.push(winnerId === 'user' ? `${title}は、あなた！` : `${title}は、${winner.name}！`);
+  const finals = season?.finals;
+  if (finals?.winner) {
+    const loser = finals.winner === finals.a ? finals.b : finals.a;
+    const wins = finals.wins[finals.winner];
+    const losses = finals.wins[loser];
+    lines.push(finals.winner === finals.a ? `${wins}勝${losses}敗で、名人を防衛` : `${wins}勝${losses}敗で、名人を奪取`);
+  }
+  return { lines };
 }
 
 /**

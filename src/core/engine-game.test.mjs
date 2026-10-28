@@ -64,9 +64,12 @@ describe('本局(20章の段階1)', () => {
     const { search } = fakeSearch();
     const seen = [];
     const game = await playEngineGame({ spec: spec(20, 20), search, onMove: (entry, index) => seen.push(index) });
-    expect(game.end).toMatchObject({ winner: 'black', reason: 'resign' });
+    // 目的のある手の選び方(aware-move-choice.mjs)は時計で読みを打ち切るので、テストを並べて走らせて遅いときは、
+    // 投げる前に先手が詰ますこともある。どちらでも、劣勢の後手が負けて終わる。
+    expect(game.end.winner).toBe('black');
+    expect(['resign', 'mate']).toContain(game.end.reason);
     expect(game.entries.length).toBe(game.end.plies);
-    expect(game.entries.length).toBeGreaterThanOrEqual(60);
+    expect(game.entries.length).toBeGreaterThanOrEqual(game.end.reason === 'resign' ? 60 : 40);
     expect(seen).toEqual(game.entries.map((_, index) => index));
     const record = createGameRecord();
     for (const entry of game.entries) {

@@ -169,6 +169,10 @@ describe("match screen regressions", () => {
     // エントリーの「対局: 観戦」の期(17章)は、自分では指さず、期の画面の「観戦する」で分身の対局を見る。
     expect(source).toMatch(/function startRyuoGameNow\(\) \{[\s\S]*?if \(season\.spectator\) \{\s*openRyuoSeasonScreen\(\);/);
     expect(source).toMatch(/:spectating="Boolean\(ryuoSeason\?\.spectator\)"[\s\S]*?@watch-play="playRyuoWatchGame"/);
+    // 名人戦の自分の出ない番勝負(23章): 名簿は残りを確定してから進める。結果を見終えた・次の名人戦の始めにも確定する。
+    expect(source).toMatch(/if \(!meijinRestOpen\(next\)\) applyMeijinWorld\(next\);/);
+    expect(source).toMatch(/function markMeijinResultSeen\(\) \{[\s\S]*?settleMeijinSeason\(\);\s*\}/);
+    expect(source).toMatch(/@meijin-watch-round="applyMeijinWatchRound"\s*@meijin-watch-settle="settleMeijinSeason"/);
     // 名人戦の分身(21章): 自分の席を分身にし、分身の次の一局は本局の結果(なければ自動対局)で記録する。
     expect(source).toMatch(/if \(settings\.watch\) meijinSeason\.value = asAvatarMeijinSeason\(meijinSeason\.value, avatarMember\(settings\.difficulty\)\);/);
     expect(source).toMatch(/function playMeijinWatchGame\(real: any = null, round: any\[\] = \[\]\) \{[\s\S]*?playMeijinSpectatorGame\([\s\S]*?\{ real, round \}\)[\s\S]*?finalizeMeijinSeason\(next\);/);
@@ -176,7 +180,7 @@ describe("match screen regressions", () => {
     // 敗退後の観戦で見終えた回戦は、本局の結果で指し直した期に替え、竜王の発表・結果を見終えた・次の期で残りを確定する(20-10)。
     expect(source).toMatch(/@watch-round="applyRyuoWatchRound"\s*@watch-settle="settleRyuoSeason"/);
     expect(source).toMatch(/function markRyuoResultSeen\(\) \{[\s\S]*?settleRyuoSeason\(\);\s*\}/);
-    expect(source).toMatch(/function enterRyuoSeason\([\s\S]*?\) \{[\s\S]*?settleRyuoSeason\(\);\s*const career = ryuoCareer\.value;/);
+    expect(source).toMatch(/function enterRyuoSeason\([\s\S]*?\) \{[\s\S]*?settleRyuoSeason\(\);\s*settleMeijinSeason\(\);\s*const career = ryuoCareer\.value;/);
     // 本局の結果(分身の局と、同じ回戦のほかの局。20章)を、期を進める前に記録する。
     expect(source).toMatch(/function playRyuoWatchGame\(real: any = null, round: any\[\] = \[\]\) \{[\s\S]*?playSpectatorGame\(rawRyuoSeason\(\), \{ real, round \}\)/);
   });
@@ -324,7 +328,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*if \(props\.spectating\) \{\s*startLive\(\);\s*return;\s*\}\s*emit\("play"\);/);
     // 中継ボードは、見終えて(この回戦の結果へ)から本番の期を進める。途中で閉じても期は進めない。敗退後の観戦(19章)は次の回戦へ。
     // 回戦の対局は本局(20章)。エンジンが指し終えた分身の局と、同じ回戦のほかの局(20-9)の結果を記録する(終わっていなければ自動対局の結果)。
-    expect(tournament).toMatch(/async function finishLive\(\) \{\s*if \(afterWatch\.value\) \{\s*nextAfterRound\(\);\s*return;\s*\}\s*stopLiveTimer\(\);[\s\S]*?for \(const state of realGames\.values\(\)\) \{\s*if \(!state\.record\.end\) continue;[\s\S]*?real = engineGameResult\(state\.spec, game, "user"\);[\s\S]*?else round\.push\(\{ nodeId: tableOf\(state\.spec\.key\)\.id, aId, result: engineGameResult\([\s\S]*?stopRealGames\(\);[\s\S]*?live\.value = null;[\s\S]*?await commitAvatarGame\(real, round\);/);
+    expect(tournament).toMatch(/async function finishLive\(\) \{\s*if \(afterWatch\.value\) \{\s*nextAfterRound\(\);\s*return;\s*\}[\s\S]*?stopLiveTimer\(\);[\s\S]*?for \(const state of realGames\.values\(\)\) \{\s*if \(!state\.record\.end\) continue;[\s\S]*?real = engineGameResult\(state\.spec, game, "user"\);[\s\S]*?else round\.push\(\{ nodeId: tableOf\(state\.spec\.key\)\.id, aId, result: engineGameResult\([\s\S]*?stopRealGames\(\);[\s\S]*?live\.value = null;[\s\S]*?await commitAvatarGame\(real, round\);/);
     expect(tournament).toMatch(/emit\("watch-play", real, round\);/);
     // スマホと「結果だけ見る」は、主要キャラの局(と、指し終えた棋譜のある局)だけを本局にする。
     expect(tournament).toMatch(/if \(!props\.relayEngineFactory \|\| \(!main && !kept && \(fast \|\| phone\)\)\) return spec;\s*const real = startRealGame\(realGameSpec\(spec,/);
@@ -351,7 +355,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "kenshukai"\) return;/);
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
     // 戻る操作は、いちばん上に重ねた中継(画面→一覧)を先に閉じ、敗退後の観戦、回戦の中継ボード、次に賞状を閉じる。
-    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}\s*if \(afterWatch\.value\) \{\s*endAfterWatch\(\);\s*return;\s*\}\s*if \(live\.value\) \{\s*closeLive\(\);\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
+    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}\s*if \(afterWatch\.value\) \{\s*endAfterWatch\(\);\s*return;\s*\}\s*if \(meijinAfter\.value\) \{\s*endMeijinAfterWatch\(\);\s*return;\s*\}\s*if \(live\.value\) \{\s*closeLive\(\);\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
     expect(tournament).toMatch(/data-award-book @click="bookOpen = true"/);
     // 賞状は期が終わったときに対局画面が足す(竜王戦・名人戦とも)。
     expect(source).toMatch(/saveCareer\(browserStorage\(\), career\);\s*awardRyuoSeason\(season\);/);

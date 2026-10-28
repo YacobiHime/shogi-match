@@ -159,6 +159,8 @@ export function createMeijinSeason({ no, league, roster, settings, userLevel, us
   }
   season.order = [...world.classes[season.cls]];
   for (const id of season.order) if (id !== USER_ID) snapshot(id);
+  // A級の棋士も写す(A級の1位が名人に挑戦する七番勝負は、どのクラスの期でも指す。23章)。
+  for (const id of world.classes.A) if (id !== USER_ID) snapshot(id);
   const rule = CLASS_RULES[season.cls];
   season.rounds = Math.max(1, Math.min(scale.rounds ?? rule.rounds, season.order.length - 1));
   season.schedule = buildSchedule(season, rng);
@@ -267,7 +269,73 @@ export function recordMeijinGame(season, outcome, { game: recorded = null } = {}
   } else {
     recordSeriesGame(next.finals, win ? USER_ID : pending.opponentId, game);
   }
-  return drive(next, rng);
+  // 自分の対局が終わったら、プレーオフと七番勝負を決める前の形を残す(棋士の情報は除く。進めても変わらない)。
+  // 自分の出ない番勝負を観戦で本当に指し、その結果で残りを指し直すため(23章)。
+  const base = structuredClone({ ...next, players: null });
+  const done = drive(next, rng);
+  // 自分の対局の前に決まっていた局(プレーオフで自分の番より前の局)は、観戦の対象にしない。
+  const before = Object.keys(meijinSeriesResults(base));
+  if (done.phase === 'done' && meijinSeriesKeys(done).some((key) => !before.includes(key))) {
+    done.rest = { base, overrides: null, settled: false, revealed: 0, before };
+  }
+  return done;
+}
+
+// ---- 自分の出ない番勝負(A級プレーオフと名人戦七番勝負)の観戦(docs/tournament-relay-design.mdの23章)
+
+/** 期のプレーオフと七番勝負の対局のうち、プレイヤーが指さないものの鍵(po#i・finals#i)。 */
+export function meijinSeriesKeys(season) {
+  const keys = [];
+  (season.playoff?.matches ?? []).forEach((match, index) => {
+    if (match.winner && match.a !== USER_ID && match.b !== USER_ID) keys.push(`po#${index}`);
+  });
+  const finals = season.finals;
+  if (finals && finals.a !== USER_ID && finals.b !== USER_ID) finals.games.forEach((_, index) => keys.push(`finals#${index}`));
+  return keys;
+}
+
+/** プレーオフと七番勝負の決まった対局の結果(決めてある結果の形)。 */
+export function meijinSeriesResults(season) {
+  const results = {};
+  (season.playoff?.matches ?? []).forEach((match, index) => {
+    if (match.winner) results[`po#${index}`] = { ids: [match.a, match.b].sort(), winner: match.winner, game: structuredClone(match.game ?? null) };
+  });
+  const finals = season.finals;
+  if (finals) {
+    finals.games.forEach((game, index) => {
+      results[`finals#${index}`] = { ids: [finals.a, finals.b].sort(), winner: game.winner, game: structuredClone(game) };
+    });
+  }
+  return results;
+}
+
+/** 番勝負の残りが、まだ確定していないか(観戦で本局の結果が変わりうる)。 */
+export const meijinRestOpen = (season) => Boolean(season?.rest?.base && !season.rest.settled);
+
+/**
+ * 自分の対局が終わったあとのプレーオフと七番勝負を、決めてある結果(overrides)で指し直す。決めていない局は自動対局。
+ * プレイヤーの結果(昇級・降級点など)は変えない(名人と挑戦者だけ写す)。確定した期は変えない。
+ * @param {any} season (書き換えない)
+ * @param {Record<string, { ids: string[], winner: string, game: any }>} overrides
+ * @param {{ revealed?: number }} [options] 見届けた局の数
+ */
+export function replayMeijinRest(season, overrides, { revealed } = {}) {
+  const rest = season?.rest;
+  if (!rest?.base || rest.settled) return season;
+  const replay = structuredClone(rest.base);
+  replay.players = season.players;
+  drive(replay, createRng(replay.rngState), overrides);
+  const next = structuredClone(season);
+  for (const field of ['phase', 'playoff', 'finals', 'challenger', 'titleWinner', 'tables', 'pending', 'rngState']) next[field] = structuredClone(replay[field] ?? null);
+  if (next.result) next.result = { ...next.result, challenger: replay.result?.challenger ?? next.result.challenger, titleWinner: replay.result?.titleWinner ?? next.result.titleWinner };
+  next.rest = { ...rest, overrides: structuredClone(overrides), revealed: revealed ?? rest.revealed ?? 0 };
+  return next;
+}
+
+/** 番勝負の残りを確定する(名簿を進めるのは、確定してから。土台は要らなくなるので消す)。 */
+export function settleMeijinRest(season) {
+  if (!season?.rest || season.rest.settled) return season;
+  return { ...season, rest: { base: null, overrides: null, settled: true, revealed: season.rest.revealed ?? 0, before: season.rest.before ?? [] } };
 }
 
 // ---- 分身の期(docs/tournament-relay-design.mdの21章)。竜王戦の分身の期(17章)と同じく、期の進み方と記録はふつうの期と同じ。
@@ -322,8 +390,11 @@ export function applyMeijinRoundResults(season, results = []) {
   return next;
 }
 
-/** プレイヤーの次の対局まで、または期の終わりまで進める。 */
-function drive(season, rng) {
+/**
+ * プレイヤーの次の対局まで、または期の終わりまで進める。
+ * overridesに結果のあるプレーオフと七番勝負の局は、その結果にする(敗退後の観戦で見た本局。23章)。
+ */
+function drive(season, rng, overrides = null) {
   if (season.mode === 'defense' && season.phase === 'league') {
     // 名人は順位戦を指さない。A級を自動で進め、1位を迎える。
     while (season.round < season.rounds) {
@@ -336,8 +407,8 @@ function drive(season, rng) {
     if (season.round < season.rounds) setPending(season, rng);
     else finishLeague(season, rng);
   }
-  if (season.phase === 'playoff') drivePlayoff(season, rng);
-  if (season.phase === 'title') driveTitle(season, rng);
+  if (season.phase === 'playoff') drivePlayoff(season, rng, overrides);
+  if (season.phase === 'title') driveTitle(season, rng, overrides);
   season.rngState = rng.state;
   return season;
 }
@@ -504,10 +575,23 @@ function finishLeague(season, rng) {
     season.phase = 'title';
     return;
   }
-  finishSeason(season);
+  // A級は自動で決め、1位が名人に挑戦する(名人戦七番勝負はどのクラスの期でも指す。23章)。表は名簿を進めるときにも使う。
+  const ratingOf = (id) => season.ratings?.[id] ?? season.players[id]?.rating ?? 0;
+  const tableA = autoTable(season.league.classes.A.filter((id) => id !== USER_ID), 'A', ratingOf, rng);
+  season.tables = { ...(season.tables ?? {}), A: tableA };
+  season.challenger = tableA[0]?.id ?? null;
+  season.phase = 'title';
 }
 
-function drivePlayoff(season, rng) {
+/** 決めてある結果のうち、この2人の対局のもの(敗退後の観戦で見た本局。23章)。 */
+function overrideFor(overrides, key, a, b) {
+  const forced = overrides?.[key];
+  if (!forced || !Array.isArray(forced.ids)) return null;
+  const ids = [a, b].sort();
+  return forced.ids[0] === ids[0] && forced.ids[1] === ids[1] && ids.includes(forced.winner) ? forced : null;
+}
+
+function drivePlayoff(season, rng, overrides = null) {
   const playoff = season.playoff;
   for (;;) {
     const last = playoff.matches.at(-1);
@@ -536,13 +620,19 @@ function drivePlayoff(season, rng) {
       };
       return;
     }
+    const forced = overrideFor(overrides, `po#${step}`, a, b);
+    if (forced) {
+      match.winner = forced.winner;
+      match.game = structuredClone(forced.game);
+      continue;
+    }
     const result = simulateMemberGame(rng, season.players[a], season.players[b], { big: true });
     match.winner = result.aWins ? a : b;
     match.game = gameRecordOf(result, a, b);
   }
 }
 
-function driveTitle(season, rng) {
+function driveTitle(season, rng, overrides = null) {
   const holder = season.league.holder;
   const challenger = season.challenger;
   // 名人が空き(引退)なら、A級の1位がそのまま名人。
@@ -567,6 +657,11 @@ function driveTitle(season, rng) {
         label: `名人戦七番勝負 第${series.games.length + 1}局`,
       };
       return;
+    }
+    const forced = overrideFor(overrides, `finals#${series.games.length}`, series.a, series.b);
+    if (forced) {
+      recordSeriesGame(series, forced.winner, structuredClone(forced.game));
+      continue;
     }
     const result = simulateMemberGame(rng, season.players[series.a], season.players[series.b], { big: true, aColor });
     recordSeriesGame(series, result.aWins ? series.a : series.b, gameRecordOf(result, series.a, series.b));
@@ -732,7 +827,9 @@ export function advanceLeague(season, rng = createRng((Number(season.id) ^ 0x254
   const league = structuredClone(season.league);
   const ratingOf = (id) => season.ratings?.[id] ?? season.players[id]?.rating ?? 0;
   const tables = {};
-  for (const cls of MEIJIN_CLASSES) tables[cls] = cls === season.cls ? standings(season) : autoTable(league.classes[cls], cls, ratingOf, rng);
+  for (const cls of MEIJIN_CLASSES) {
+    tables[cls] = cls === season.cls ? standings(season) : season.tables?.[cls] ?? autoTable(league.classes[cls], cls, ratingOf, rng);
+  }
   const titleWinner = season.result?.titleWinner ?? league.holder;
   return nextWorld(league, tables, titleWinner);
 }

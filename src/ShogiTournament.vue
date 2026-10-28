@@ -209,7 +209,13 @@
           @ceremony="openCeremony(`meijin-${meijinView?.no ?? 0}`)"
           :relay-available="Boolean(relayEngineFactory)"
           @relay="openRelayList('meijin', $event)"
-          :live-panel="live?.kind === 'meijin' ? livePanel : null"
+          :live-panel="live?.kind === 'meijin' || live?.kind === 'meijin-after' ? livePanel : null"
+          :series-view="meijinSeriesView"
+          :after-watch="meijinAfterView"
+          :after-count="meijinAfterList.length"
+          :after-revealed="meijinRevealed"
+          @watch-after="startMeijinAfterWatch"
+          @watch-after-end="endMeijinAfterWatch"
           :live-rows="meijinLiveRows"
           @watch="startMeijinLive()"
           @watch-skip="startMeijinLive({ fast: true })"
@@ -834,7 +840,8 @@ import type { RelayMoveEntry } from "./core/relay-game.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
 import RelayLivePanel, { type LivePanelView } from "./RelayLivePanel.vue";
 import {
-  afterWatchRounds, applyWatchedRound, hiddenRoundIds, hiddenTables, meijinHiddenKeys, meijinLiveRound, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyMeijinWatchedRound, applyWatchedRound, hiddenRoundIds, hiddenTables, meijinAfterRounds, meijinFinale, meijinHiddenKeys,
+  meijinLiveRound, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from "./core/relay-live.mjs";
 import { rateVerdict } from "./core/relay-game.mjs";
@@ -845,6 +852,7 @@ import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, restOpen, scaleById } from "./core/ryuo.mjs";
+import { meijinRestOpen } from "./core/meijin.mjs";
 import { GROUP_MEAN_RATING, MAX_CPU_LEVEL, MIN_CPU_LEVEL, worldExactLevel } from "./core/ryuo-strength.mjs";
 import { rankTag, resolveWorld } from "./core/tournament-world.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
@@ -1017,6 +1025,9 @@ const emit = defineEmits<{
   "watch-round": [season: any];
   /** 名人戦の分身の次の一局を記録する(21章)。realは本局の結果、なければ自動対局。 */
   "meijin-watch-play": [real?: any, round?: any[]];
+  /** 名人戦の番勝負の観戦(23章): 1局を見終えて指し直した期・名人の発表で残りを確定。 */
+  "meijin-watch-round": [season: any];
+  "meijin-watch-settle": [];
   "watch-settle": [];
   play: [];
   resume: [];
@@ -1176,6 +1187,10 @@ function goBack() {
     endAfterWatch();
     return;
   }
+  if (meijinAfter.value) {
+    endMeijinAfterWatch();
+    return;
+  }
   if (live.value) {
     closeLive();
     return;
@@ -1243,6 +1258,7 @@ const meijinRelayGameList = computed(() => {
   const season = props.meijinSeason;
   if (!season) return [];
   const hidden = meijinHiddenKeys(season);
+  for (const entry of meijinAfterHidden.value) hidden.add(entry.key);
   return meijinRelayGames(season, { oshiId: props.oshi?.id ?? null }).filter((entry) => !hidden.has(entry.key));
 });
 /** 一覧(どの大会か、棋士を決めて開いたときはその棋士のid)。 */
@@ -1316,7 +1332,7 @@ type LiveGame = ReturnType<typeof liveGame>;
  * 見ている回戦。nullなら中継ボードではない。focusKeyは欄に大きく出す対局(分身の対局か、注目の対局)。
  * kindがavatarなら、本番の期は見終えてから進める。afterなら、見終えた回戦の数を残す。meijinは名人戦の分身の回戦(22章)。
  */
-type LiveKind = "avatar" | "after" | "meijin";
+type LiveKind = "avatar" | "after" | "meijin" | "meijin-after";
 const live = shallowRef<null | { games: LiveGame[]; focusKey: string; label: string; kind: LiveKind }>(null);
 /** ボードの時刻(秒)と速さ。1手はおよそ1.2〜1.8秒(速さ×1のとき)。 */
 const liveSeconds = ref(0);
@@ -1370,8 +1386,8 @@ function beginLive(
   live.value = { games: specs.map((spec) => liveGame(spec, records[spec.key] ?? liveRecord(store, spec.key))), focusKey, label, kind };
   liveSeconds.value = 0;
   sheet.value = "";
-  // 名人戦のボードは、名人戦の画面のリーグ表の上で進む(竜王戦の表は開かない)。
-  if (kind !== "meijin") {
+  // 名人戦のボードは、名人戦の画面のリーグ表と番勝負の上で進む(竜王戦の表は開かない)。
+  if (kind !== "meijin" && kind !== "meijin-after") {
     viewStage.value = table && table.stage !== stages.value?.current ? table.stage : null;
     groupChoice.value = table?.stage === 0 ? table.tag : null;
     tableOpen.value = true;
@@ -1639,10 +1655,94 @@ function startMeijinLive({ fast = false }: { fast?: boolean } = {}) {
   beginLive(specs, round.avatarKey, season.pending?.label ?? round.avatar.label, "meijin", null, records);
   if (fast) skipLive();
 }
+// ---- 名人戦の、自分の出ない番勝負の観戦(23章)。A級プレーオフと名人戦七番勝負を1局ずつ、エンジンが本当に指す。
+/** 観戦できる局(1局ずつ、期の順)。 */
+const meijinAfterList = computed(() => (props.meijinSeason ? meijinAfterRounds(props.meijinSeason, { oshiId: props.oshi?.id ?? null }) : []));
+/** 見届けた局の数(期の保存のrest.revealed)。 */
+const meijinRevealed = computed(() => Number(props.meijinSeason?.rest?.revealed ?? 0));
+/** 見ている番勝負の観戦。indexはいま進んでいる局、finaleなら名人の発表。 */
+const meijinAfter = shallowRef<null | { index: number; finale: boolean }>(null);
+/** 名人戦の結果の画面の「名人戦の番勝負を観戦」。見届けていない局から(見届けたあとは、はじめから)。 */
+function startMeijinAfterWatch() {
+  if (!meijinAfterList.value.length) return;
+  playMeijinAfterRound(meijinRevealed.value < meijinAfterList.value.length ? meijinRevealed.value : 0);
+}
+/** 1局をボードで始める。残りが確定していなければ本局にする(スマホは主要キャラの局だけ。20-9と同じ)。 */
+function playMeijinAfterRound(index: number) {
+  const round = meijinAfterList.value[index];
+  if (!round) return;
+  meijinAfter.value = { index, finale: false };
+  stopRealGames();
+  resultOnly = false;
+  const season = props.meijinSeason;
+  let specs = round.entries;
+  let records: Record<string, any> = {};
+  if (props.relayEngineFactory && meijinRestOpen(season)) ({ specs, records } = realRoundSpecs(round.entries, "", season.settings?.world, false));
+  beginLive(specs, specs[0]?.key ?? "", round.label, "meijin-after", null, records);
+}
+/** 1局を見終えた。本局の結果で残りの番勝負を指し直し(期は対局画面が保存する)、次の局へ。最後なら名人の発表で、残りを確定する。 */
+async function nextMeijinAfterRound() {
+  const after = meijinAfter.value;
+  const season = props.meijinSeason;
+  if (!after || !season) return;
+  const round = meijinAfterList.value[after.index];
+  if (meijinRestOpen(season) && round) {
+    const results = new Map<string, { aId: string; result: any }>();
+    for (const state of realGames.values()) {
+      if (!state.record.end) continue;
+      const game = { v: 2, key: state.spec.key, entries: state.record.entries, end: state.record.end };
+      results.set(state.spec.key, { aId: state.spec.black.id, result: engineGameResult(state.spec, game, state.spec.black.id) });
+    }
+    emit("meijin-watch-round", applyMeijinWatchedRound(JSON.parse(JSON.stringify(season)), round, results));
+  }
+  stopLiveTimer();
+  stopRealGames();
+  live.value = null;
+  await nextTick();
+  const done = after.index + 1;
+  if (done < meijinAfterList.value.length) {
+    playMeijinAfterRound(done);
+    return;
+  }
+  meijinAfter.value = { index: done, finale: true };
+  emit("meijin-watch-settle");
+}
+/** 番勝負の観戦を終える(途中でも。見届けた局の数は期に残っている。本局は止め、指した手は残す)。 */
+function endMeijinAfterWatch() {
+  stopLiveTimer();
+  stopRealGames();
+  live.value = null;
+  meijinAfter.value = null;
+}
+/** 確定していない期の、まだ見ていない番勝負の局(中継の一覧と番勝負の星取りで伏せる)。 */
+const meijinAfterHidden = computed(() => {
+  const season = props.meijinSeason;
+  if (!meijinRestOpen(season) || meijinAfter.value?.finale) return [] as any[];
+  const from = meijinAfter.value ? meijinAfter.value.index : meijinRevealed.value;
+  return meijinAfterList.value.slice(from).flatMap(({ entries }) => entries);
+});
+/** 名人戦の画面に出す七番勝負(まだ見ていない局から後ろは、指していない形)。番勝負の観戦で見ている局は、終局したら出す。 */
+const meijinSeriesView = computed(() => {
+  const series = props.meijinView?.series ?? null;
+  if (!series) return null;
+  const hidden = hiddenTables(meijinAfterHidden.value);
+  const reveal = new Map([...liveReveal.value].map(([tag, ids]) => [tag, new Set(ids.keys())]));
+  return (maskSeriesViews([series], hidden, reveal)[0] ?? null) as SeriesView | null;
+});
+/** 名人戦の画面に渡す、番勝負の観戦のようす(いまの局が番勝負か・名人の発表)。 */
+const meijinAfterView = computed(() => {
+  const after = meijinAfter.value;
+  if (!after) return null;
+  const round = meijinAfterList.value[after.index];
+  return {
+    finale: after.finale && props.meijinSeason ? meijinFinale(props.meijinSeason) : null,
+    showSeries: after.finale || round?.stage === "finals",
+  };
+});
 /** 名人戦のリーグ表の行ごとの、いま指している対局(何手目・自分の側の勝率・終局したら勝ち負け)。押すとその対局の中継。 */
 const meijinLiveRows = computed(() => {
   const rows: Record<string, { key: string; side: "black" | "white"; ply: number; done: boolean; percent: number; result: "win" | "loss" | null }> = {};
-  if (live.value?.kind !== "meijin") return rows;
+  if (live.value?.kind !== "meijin" && live.value?.kind !== "meijin-after") return rows;
   for (const { game, state } of liveStates.value) {
     for (const side of ["black", "white"] as const) {
       const id = game.spec[side].id;
@@ -1670,6 +1770,10 @@ watch(relayEntry, (now, before) => {
 async function finishLive() {
   if (afterWatch.value) {
     nextAfterRound();
+    return;
+  }
+  if (live.value?.kind === "meijin-after") {
+    void nextMeijinAfterRound();
     return;
   }
   stopLiveTimer();
@@ -1780,6 +1884,8 @@ const liveWatchText = computed(() => {
 /** 回戦が終わったときの主役のボタン。 */
 const liveFinishText = computed(() => {
   const after = afterWatch.value;
+  const meijinAfterNow = meijinAfter.value;
+  if (live.value?.kind === "meijin-after" && meijinAfterNow) return meijinAfterNow.index + 1 >= meijinAfterList.value.length ? "名人の発表へ" : "次の局へ";
   if (!after) return live.value?.kind === "meijin" && props.meijinSeason?.pending?.kind !== "league" ? "この局の結果へ" : "この回戦の結果へ";
   return after.index + 1 >= after.rounds.length ? "竜王の発表へ" : "次の回戦へ";
 });
@@ -1790,11 +1896,12 @@ const livePanel = computed<LivePanelView | null>(() => {
   const after = afterWatch.value;
   return {
     label: board.label,
-    step: after ? `${after.index + 1}/${after.rounds.length}` : "",
+    step: after ? `${after.index + 1}/${after.rounds.length}`
+      : board.kind === "meijin-after" && meijinAfter.value ? `${meijinAfter.value.index + 1}/${meijinAfterList.value.length}` : "",
     focus: liveFocusView.value,
     count: liveCount.value,
     multiple: board.games.length > 1,
-    tableWord: board.kind === "meijin" ? "リーグ表" : "表",
+    tableWord: board.kind === "meijin" || board.kind === "meijin-after" ? "リーグ表" : "表",
     speed: liveSpeed.value,
     finished: liveFinished.value,
     finishText: liveFinishText.value,
