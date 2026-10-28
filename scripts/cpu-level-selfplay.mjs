@@ -4,6 +4,8 @@
 //   選手はL<レベル>、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
 //   末尾にn<nodes>を付けると探索量だけを差し替える(例: L40n2000000)。
 //   末尾にnoriskを付けると、危険への態度(無難な手・勝負手の選び直し)を外す(例: L25norisk)。
+//   末尾にclassicを付けると、人間らしいCPUの選び方を外して今までの選び方で指す(例: L15classic)。
+//   末尾にsig<倍率>を付けると、人間らしいCPUの判断のぶれの倍率を差し替える(例: L15sig1.6)。
 //   --deadline-sec 280 で、指定秒数を過ぎたら対局中の局を打ち切り、終わった局だけで集計する。
 //   --opening-plies 12 で、序盤の指定手数まで両者とも評価差の小さい候補からばらして選ぶ。
 //   最上位レベル同士は着手にばらつきがなく、同じ棋譜を繰り返すのを避けるために使う。
@@ -61,6 +63,18 @@ export function strengthForPlayer(spec) {
       return { ...settings, ...(override ? { nodes: Number(override[1]) } : {}), level: base.level, logicHybrid: false };
     }
     return { ...base, logicHybrid: hybrid[2] === "hybrid" };
+  }
+  // classic: 人間らしいCPU(human-model.mjs)を外し、温度の抽選とわざと選ぶ見落としの、今までの選び方で指す。
+  const classic = spec.match(/^(.+)classic$/);
+  if (classic) {
+    const { human: _human, ...rest } = strengthForPlayer(classic[1]);
+    return rest;
+  }
+  // s<倍率>: 人間らしいCPUの判断のぶれの倍率だけを差し替える(例: L15s1.6)。校正用。
+  const sigma = spec.match(/^(.+?)sig([\d.]+)$/);
+  if (sigma) {
+    const base = strengthForPlayer(sigma[1]);
+    return { ...base, human: base.human ? { ...base.human, sigma: Number(sigma[2]) } : base.human };
   }
   const noRisk = spec.match(/^(.+)norisk$/);
   if (noRisk) return { ...strengthForPlayer(noRisk[1]), riskAttitude: 0 };

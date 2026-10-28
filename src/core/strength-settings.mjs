@@ -1,3 +1,5 @@
+import { humanSettingsForLevel } from './human-model.mjs';
+
 // CPUの強さは「技量」(0〜1)という1つの値から、探索量や候補選択の設定を連続的に決める。
 // 各レベルは、CPU同士の自動対局で従来の強さを目安に校正する（多少の弱化は許容）。
 // (scripts/cpu-level-selfplay.mjs、docs/difficulty-calibration.md)。
@@ -399,8 +401,13 @@ export function calibratedHybridSearchSettings(level, settings) {
     shallowReadRate: level >= 20 ? 0 : a + (b - a) * (level - lo) / (hi - lo),
     shallowTemperature: level === 11 ? 360 : level === 12 ? 320 : level === 13 ? 175 : level >= 15 ? 70 : 420 - (level - 11) * 87.5,
     shallowDepth: level <= 12 ? 1 : level < 15 ? 2 : 4,
+    // 人間らしいCPU(docs/cpu-human-model-design.md): 見えにくさつきの気づき・判断のぶれ・指す前の確認。
+    ...(HUMAN_MODEL_DEFAULT ? { human: humanSettingsForLevel(level) } : {}),
   };
 }
+
+/** Lv11〜39(もとの校正)を、人間らしいCPUの選び方で指す。比較用の今までの選び方は、自己対局の選手指定(classic)で残す。 */
+export const HUMAN_MODEL_DEFAULT = true;
 
 /** 全対局で目的と局面の気づきを使う。比較用の旧方式は開発スクリプト内だけに残す。 */
 export const LOGIC_HYBRID_DEFAULT = true;

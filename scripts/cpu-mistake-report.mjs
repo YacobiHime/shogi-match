@@ -4,7 +4,8 @@
 // - B級: 取りの読み4手で見える駒損、3手詰めを許す・逃す。
 // - C級: それ以外(深い筋・形の判断)。
 // 審判の評価は、最善手と選んだ手を同じ探索で比べ、別々の探索の揺れを避ける。互角に近い局面(最善の評価値の絶対値が1500未満)だけを数える。
-// 使い方: node scripts/cpu-mistake-report.mjs [--levels 11,20,30] [--legacy] [--low-nodes 200,1000] [--games 8] [--trials 3] [--ref 80000] [--out x.json]
+// 使い方: node scripts/cpu-mistake-report.mjs [--levels 11,20,30] [--legacy] [--classic] [--low-nodes 200,1000] [--games 8] [--trials 3] [--ref 80000] [--out x.json]
+// --classic: 人間らしいCPU(human-model.mjs)を外し、温度の抽選とわざと選ぶ見落としの選び方で測る(比べるため)。
 import fs from "node:fs";
 import path from "node:path";
 import "./lib/ts-register.mjs";
@@ -153,6 +154,7 @@ async function main() {
     const preset = CPU_STRENGTH_PRESETS.find((entry) => entry.level === level);
     if (!preset) continue;
     const strength = legacy ? { ...searchSettingsForSkill(preset.skill), level } : { ...getStrengthSearchSettings(preset.value), level };
+    if (process.argv.includes("--classic")) delete strength.human;
     const rows = [];
     for (const sample of samples) {
       const moves = legalMoves(Position.newBySFEN(sample.sfen));

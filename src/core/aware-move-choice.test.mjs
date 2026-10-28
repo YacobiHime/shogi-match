@@ -100,8 +100,8 @@ describe("気づきと評価値から選ぶCPU", () => {
     expect(await chooseAwareMove({ strength: strength(), sfen: STANDARD_SFEN, legalMoves: [] })).toBeNull();
   });
 
-  test("見落としの追加読みも候補内で直列に行い、深い損失を記録する", async () => {
-    const settings = { ...strength(20), oversightRate: 1, oversightShallowLoss: 100, oversightMaxLoss: 400, moveLossCap: 400 };
+  test("今までの選び方(人間らしいCPUでない)では、見落としの追加読みも候補内で直列に行い、深い損失を記録する", async () => {
+    const settings = { ...strength(20), human: null, oversightRate: 1, oversightShallowLoss: 100, oversightMaxLoss: 400, moveLossCap: 400 };
     let running = 0;
     let maximum = 0;
     const verify = vi.fn(async (moves, nodes) => {

@@ -7,16 +7,22 @@ import { BLUNDER_LOSS, chooseMatingMove, chooseRiskAwareMove, moveLeaning, pickW
 import { attackersOf, guardsSquare, isKingAttacked, opponentOf, parseUsiMove } from "./piece-movement.mjs";
 import { kingZonePressure, playLight, replyLoss, stateFromSfen } from "./logic-position.mjs";
 import { findMateLine } from "./problem-solver";
+import { blunderKind, humanPerception, pickByBelief, preventsBlunder } from "./human-model.mjs";
 
 /**
  * Lv11〜39。気づいた脅威・機会から候補を作り、読みとロジックの加点で選ぶ。
  * verifyとprobeは呼び出し側のエンジンを必ず直列に使う。
+ * strength.human(human-model.mjsのhumanSettingsForLevel)があれば、人間らしいCPU(docs/cpu-human-model-design.md)として選ぶ:
+ * 気づきは見えにくさの倍率つき、温度の抽選の代わりに判断のぶれ、わざと選ぶ見落としはなし、指す前に台無しの手を確かめる。
  * @param {{strength: ReturnType<typeof import('./strength-settings.mjs').getStrengthSearchSettings> & Record<string, any>, sfen: string, legalMoves: string[], moveHistory?: string[], planMove?: string | null, planScoreLossLimit?: number, search?: {move: string, candidates?: {rank: number, move: string, score?: any, pv?: string[]}[]}, verify?: (moves: string[], nodes: number) => Promise<any>, probe?: (moves: string[], options: {nodes: number, multiPv: number}) => Promise<any>, random?: () => number, blunderAllowed?: boolean, maxTimeMs?: number}} options
  */
 export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory = [], planMove = null, planScoreLossLimit,
   search, verify, probe, random = Math.random, blunderAllowed = true, maxTimeMs = 600 }) {
   if (!legalMoves.length || !search?.move) return null;
   const deadline = Date.now() + maxTimeMs;
+  const human = strength.human ?? null;
+  /** 指す前の確認で止めた手(人間らしいCPU)。 */
+  const prevented = [];
   const allowed = new Set(legalMoves);
   const engineCandidates = (search.candidates ?? []).filter(({ move }) => allowed.has(move));
   const bestValue = comparableScore(engineCandidates.find(({ move }) => move === search.move)?.score);
@@ -61,7 +67,14 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
       const result = await verify([shallowChoice.move], strength.nodes);
       candidate = result?.candidates?.find(({ move }) => move === shallowChoice.move);
     }
-    if (comparableScore(candidate?.score) !== undefined) {
+    const shallowLoss = comparableScore(candidate?.score) === undefined ? 0
+      : Math.max(0, (bestValue ?? comparableScore(candidate.score)) - comparableScore(candidate.score));
+    // 人間らしいCPU: 目に付いた手でも、指す前に台無しの手でないか確かめる(止めたら、ふつうの候補の比較へ)。
+    const shallowStopped = human && comparableScore(candidate?.score) !== undefined && preventsBlunder(
+      blunderKind({ state: stateFromSfen(sfen), sfen, move: shallowChoice.move, best: search.move, engineLoss: shallowLoss, deadline: Date.now() + 60, findMate: findMateLine }),
+      human.prevent, { blunderAllowed, random });
+    if (shallowStopped) prevented.push(shallowChoice.move);
+    if (comparableScore(candidate?.score) !== undefined && !shallowStopped) {
       return { ...shallowChoice, kind: "aware-shallow", rank: candidate.rank ?? 0,
         naturalness: shallowEvaluation.weight, loss: Math.max(0, (bestValue ?? comparableScore(candidate.score)) - comparableScore(candidate.score)),
         logicBonus: 0, consideredMoves: [shallowChoice.move] };
@@ -69,12 +82,17 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
     // 少ないnodesで候補の評価が返らなくても、通常探索の既知の候補を捨てない。
   }
   const awareness = analyzePosition(sfen, { moveHistory, legalMoves, maxTimeMs: Math.min(120, Math.max(0, deadline - Date.now())) });
-  const noticed = rollPerception(perceptionForPosition(strength.perception ?? {}, awareness), random);
+  const state = stateFromSfen(sfen);
+  const basePerception = perceptionForPosition(strength.perception ?? {}, awareness);
+  const noticed = rollPerception(human
+    ? humanPerception(basePerception, human, awareness, { lastMove: moveHistory.at(-1) ?? "", turn: state.turn })
+    : basePerception, random);
   const missed = [];
   if (!noticed.hanging && awareness.threats.some(({ kind }) => ["capture", "breakthrough"].includes(kind))) missed.push("hanging");
   if (!noticed.defendMate && awareness.threats.some(({ kind }) => kind === "mate-threat")) missed.push("mate-threat");
   const seesEngineBest = random() < (strength.engineBestVisibility ?? 1);
-  const wantsOversight = verify && blunderAllowed && (strength.moveLossCap ?? Infinity) >= BLUNDER_LOSS
+  // 人間らしいCPUは、深く読むと悪い手をわざと選ばない(弱さは見え方と判断のぶれから出す)。
+  const wantsOversight = !human && verify && blunderAllowed && (strength.moveLossCap ?? Infinity) >= BLUNDER_LOSS
     && strength.oversightRate > 0 && random() < strength.oversightRate;
   const expressesStyle = strength.style && random() < Math.abs(strength.style.attack ?? 0) * (strength.style.rate ?? 1);
   if (seesEngineBest && strength.trustedEngineRate > 0 && random() < strength.trustedEngineRate && !wantsOversight && !expressesStyle) {
@@ -89,7 +107,6 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
       reason: evaluate(candidate.move).tags.find((tag) => ["guard", "escape", "develop", "attack-plan", "guard-plan", "combination", "mate-plan"].includes(tag)) ?? "engine",
       missed, policy: null, logicBonus: 0, consideredMoves: [candidate.move] };
   }
-  const state = stateFromSfen(sfen);
   const opp = opponentOf(state.turn);
   const inCheck = isKingAttacked(state.board, state.turn);
   const rows = new Map();
@@ -214,7 +231,7 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
     const row = pool.find(({ move }) => move === picked.move);
     return { move: picked.move, rank: row?.candidate?.rank ?? 0, kind, naturalness: naturalness(picked.move),
       loss: Math.max(0, reference - (row?.engineValue ?? poolBest)), reason: row?.reason ?? "engine", missed, policy,
-      logicBonus: row?.logicBonus ?? 0, consideredMoves: pool.map(({ move }) => move) };
+      logicBonus: row?.logicBonus ?? 0, consideredMoves: pool.map(({ move }) => move), ...(human ? { prevented } : {}) };
   };
   if (Date.now() < deadline && wantsOversight && verify && lossCap >= BLUNDER_LOSS) {
     const oversight = await tryOversight({ search: { move: best.move }, candidates, legalMoves: pool.map(({ move }) => move), strength,
@@ -224,6 +241,19 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
   const risky = Date.now() < deadline
     ? await chooseRiskAwareMove({ sfen, search: { move: best.move }, candidates, strength, naturalness, probe, lossCap }) : null;
   if (risky) return finish(risky, risky.kind);
+  if (human) {
+    // 判断のぶれで信念が最大の手を選び、指す前に台無しでないか確かめる。止めたら、次に信念が高い手を同じように(4-5)。
+    const sigma = human.sigma * Math.max(1, strength.scoreTemperature ?? 1);
+    let remaining = pool;
+    for (let tries = 0; tries < 4 && remaining.length; tries += 1) {
+      const picked = pickByBelief(remaining, sigma, random);
+      const kind = blunderKind({ state, sfen, move: picked.move, best: best.move, engineLoss: reference - picked.engineValue, deadline: Date.now() + 60, findMate: findMateLine });
+      if (!preventsBlunder(kind, human.prevent, { blunderAllowed, random })) return { ...finish(picked), blunderKind: kind };
+      prevented.push(picked.move);
+      remaining = remaining.filter((entry) => entry !== picked);
+    }
+    return { ...finish(best), blunderKind: null };
+  }
   const top = Math.max(...pool.map(({ score }) => score));
   const picked = pickWeighted(pool.map((entry) => ({ ...entry, weight: Math.exp((entry.score - top) / Math.max(1, strength.scoreTemperature ?? 1)) })), random);
   return finish(picked);
