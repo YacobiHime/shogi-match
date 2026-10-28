@@ -14,7 +14,7 @@ import { proOpening, usageRows } from './opening-usage.mjs';
 import { SURNAME_WEIGHTS } from './ryuo-names.mjs';
 import { HOW_LABELS } from './ryuo-simulation.mjs';
 import { STAGE_MEALS } from './title-day.mjs';
-import { blackWinRate, clockText, relayPlan, relaySeed, thinkTimeText } from './relay-game.mjs';
+import { blackWinRate, clockText, isMateCp, relayPlan, relaySeed, thinkTimeText } from './relay-game.mjs';
 
 /** 将棋会館の対局(1日制)の昼食・夕食の出前。 */
 export const KAIKAN_MEALS = Object.freeze(['うな重', 'カツ丼', '天ぷらそば', 'カレーライス', 'オムライス', 'ざるそば', '親子丼', 'チャーハン', '鍋焼きうどん', 'ハンバーグ定食']);
@@ -173,7 +173,9 @@ export function moveMeaning(facts, { ply = 99 } = {}) {
   return '';
 }
 
-// ---- 視聴者のコメント(5-2)
+// ---- 視聴者のコメント(5-2・12章)
+// 書き手の種類(kind)ごとに言い方を持つ。{move}は指し手(▲2四歩)、{piece}は駒、{name}は棋士の呼び名など。
+// 責める言葉(「ひどい」「大悪手」「ミス」)は使わない。
 
 const VIEWER = Object.freeze({
   start: ['きたー', '待ってた', 'わこつ', 'よろしくお願いします', 'どっち応援する？', '今日はこの対局'],
@@ -187,6 +189,8 @@ const VIEWER = Object.freeze({
   promote: ['成った！', '{piece}できた', '成り込んだ'],
   longThink: ['長考きた', '考えてる考えてる', 'これは悩む', '長考入ったー', 'おやつ何かな', '時間使うねー'],
   byoyomi: ['秒読み入った', '1分将棋！', '50秒…', 'がんばれー', '時間ない！'],
+  // 秒読みの最中(記録係の読み上げをまねる)。
+  byoyomiOn: ['30秒…', '40秒', '50秒…', '1、2、3…', '早く早く', 'ドキドキする', '秒読みの中でよく指す'],
   swing: ['あれ？', '形勢動いた？', '勝率が…', 'えっ', 'これは痛い？', 'ガクッときた'],
   only: ['すごい', 'うますぎる', 'これは見えない', '!!', '神の一手？', 'さすが'],
   ending: ['終盤だ', '詰む？', '詰まない？', '手に汗にぎる', 'どっちだ', '見てられない'],
@@ -196,13 +200,83 @@ const VIEWER = Object.freeze({
   lunch: ['昼食休憩', '{meal}うまそう', '勝負メシきた', 'おなかすいた', 'お昼だー'],
   dinner: ['夕食休憩', '夜戦だ', '{meal}いいな', '長くなりそう'],
   seal: ['封じ手だ', '明日も楽しみ', '封じ手予想しよう', 'おつかれさま1日目'],
-  idle: ['駒音いいね', '勉強になる', '解説わかりやすい', 'やこび姫かわいい', '初見です', '今日は長いぞ', '盤がきれい', 'ほうほう', 'なるほど'],
+  idle: [
+    '駒音いいね', '勉強になる', '解説わかりやすい', 'やこび姫かわいい', '初見です', '今日は長いぞ', '盤がきれい', 'ほうほう', 'なるほど',
+    'いい対局', 'この局面むずい', 'わからん', '先手持ちたい', '後手持ちたい', '形勢わからん', '渋い', '見入ってしまう', '今北', '何手目？',
+  ],
   rival: ['羽音ちゃん！', 'はのんちゃんきた', '羽音ちゃんがんばれ', '天才少女'],
   father: ['善彦先生だ', '最強きた', '六冠の人', '善彦先生の将棋が見られる'],
   oshi: ['推しの{name}！', '{name}がんばれ', '{name}きたー'],
   cheer: ['{name}がんばれ', '{name}ファイト'],
   title: ['タイトル戦きた', '七番勝負！', '和服かっこいい', '大舞台だ'],
+  // 実況: 指し手をそのまま言う。
+  play: ['{move}', '{move}きた', '{move}か', '{move}！', 'はい{move}'],
+  drop: ['{piece}打ち！', '{move}', 'ここに{piece}を打つか', '{piece}を打った'],
+  // 予想: 考慮中に前の手の読み筋から。指したあとに当たり外れ。
+  predict: ['次は{move}と見た', '{move}でしょ', '{move}が見える', '{move}かな？', '自分なら{move}'],
+  predictHit: ['予想的中', '当たった！', '読み通り', 'やっぱり{move}', '的中ｷﾀ'],
+  predictMiss: ['そっちか', '予想外れた', 'え、そっち？', '{move}じゃないんだ', 'なるほどそっちか'],
+  // AI勢: 評価値と勝率。
+  ai: ['AI{side}{rate}%', '評価値{eval}', 'AI的には{side}よし', '評価値{eval}か', 'AIの読みだと{side}'],
+  aiEven: ['AIだと互角', '評価値ほぼ0', 'まだ互角', 'AI的には五分'],
+  aiBest: ['AIだと{best}らしい', 'AI推奨は{best}', '{best}が最善だったのか', '{best}は見えない'],
+  // 戦法通: 戦型・囲い・定跡。
+  battleKind: ['{kind}だ', '{kind}きた', 'これは{kind}', '{kind}好き'],
+  castles: ['{a}対{b}', '{a}と{b}か', '囲い合い、{a}対{b}'],
+  specialty: ['{opening}は{name}の十八番', '出た{name}の{opening}', '{name}といえば{opening}'],
+  theory: ['ここから未知の局面', '研究が外れた？', '定跡を離れた', '前例のない形'],
+  // 時計勢: 残り時間と配分。
+  clock: ['{name}残り{time}', '残り{time}か', '{name}の残り{time}'],
+  clockGap: ['持ち時間の差すごい', '時間の使い方が対照的', '{name}だいぶ時間残してる'],
+  fast: ['{name}早指しだな', 'ノータイムだ', '準備してたな'],
+  // ネタ: 対局室の様子とおやつ。
+  neta: ['正座つらそう', 'お茶飲んだ', '扇子パタパタしてる', '記録係さんおつかれ', '外は雨らしい', '首をかしげてる'],
+  oyatsu: ['おやつの時間', 'おやつ何？', '3時のおやつ', 'おやつタイム', 'ケーキかな'],
+  // 解説への反応。
+  castStart: ['{cast}先生の解説だ', '解説たすかる', '{cast}先生！', '解説の人好き'],
+  castHanane: ['羽音ちゃん解説！', '羽音ちゃんの解説めずらしい', '辛口解説きた', 'お父さんの対局を解説'],
+  castFather: ['親子解説！', 'パパ解説', '善彦先生の解説ぜいたく', '照れてる'],
+  castAgree: ['解説の通りだ', 'さすが解説', '解説が見えてる'],
+  // 応援(特殊能力の持ち主)と、次の相手の対局。
+  trait: ['{name}の{trait}見たい', '{trait}くる？', '{trait}の{name}', '{trait}出せ'],
+  next: ['次の相手の研究タイム', 'よく見ておこう', '対策メモ'],
+  // 盛り上がり(大きな字)。
+  hype: ['うおおおお', '!?!?', 'ｷﾀ━━', 'えええ', 'すげえ', 'まじか'],
 });
+
+/** 初心者の質問と、ほかの視聴者の答え(用語が出た場面で、1局に1回ずつ。D:6-2)。 */
+const NEWBIE = Object.freeze({
+  bishop: ['角交換って？', '→角どうしを取り合うこと。打ち込みのすきに注意'],
+  promote: ['成るとどうなるの？', '→裏返って強くなる。飛車は龍、角は馬'],
+  check: ['王手って何？', '→次に玉を取るぞ、という手'],
+  byoyomi: ['秒読みって？', '→持ち時間がなくなったら、1手60秒以内に指すルール'],
+  seal: ['封じ手って？', '→次の手を紙に書いて、封筒に入れておくやつ'],
+  castle: ['{name}ってなに？', '→玉を金や銀で守る形。囲いっていうよ'],
+  drop: ['取った駒って使えるの？', '→持ち駒になって、好きなところに打てるよ'],
+  theory: ['定跡って？', '→昔から研究されてる、決まった手順のこと'],
+  lunch: ['休憩中は何してるの？', '→ごはんを食べながら、作戦を考えてる'],
+  meaning: ['今の{move}ってどういう意味？', '→{meaning}'],
+});
+
+/** コメントの書き手の種類(色を決める)。 */
+const POOL_KIND = Object.freeze({
+  start: 'hype', opening: 'theory', formation: 'theory', castle: 'theory', capture: 'play', major: 'play', bishop: 'play', check: 'play',
+  promote: 'play', longThink: 'clock', byoyomi: 'clock', byoyomiOn: 'clock', swing: 'hype', only: 'hype', ending: 'hype', winning: 'hype', resign: 'hype',
+  winner: 'cheer', lunch: 'neta', dinner: 'neta', seal: 'neta', idle: 'idle', rival: 'cheer', father: 'cheer', oshi: 'cheer', cheer: 'cheer',
+  title: 'hype', play: 'play', drop: 'play', predict: 'predict', predictHit: 'predict', predictMiss: 'predict', ai: 'ai', aiEven: 'ai',
+  aiBest: 'ai', battleKind: 'theory', castles: 'theory', specialty: 'theory', theory: 'theory', clock: 'clock', clockGap: 'clock', fast: 'clock',
+  neta: 'neta', oyatsu: 'neta', castStart: 'cast', castHanane: 'cast', castFather: 'cast', castAgree: 'cast', trait: 'cheer', next: 'cheer', hype: 'hype',
+});
+
+/** 書き手の種類の色(盤の升の強調とは別の、縁取りの文字)。 */
+const KIND_TONE = Object.freeze({ ai: 'blue', newbie: 'green', answer: 'green', cheer: 'pink' });
+
+/** 対局の重さで、コメントの数を増やす(タイトル戦ほど多い)。 */
+const DENSITY = Object.freeze({ plain: 1, big: 1.3, title: 1.7 });
+
+/** 振り飛車の名前(対抗形・相振り飛車を見分ける)。 */
+const FURIBISHA = /(四間|三間|中|向かい)飛車|ゴキゲン|石田|振り飛車/;
+const isFuri = (name) => Boolean(name) && FURIBISHA.test(name) && !/右四間/.test(name);
 
 // ---- 心の声(5-3)
 
@@ -260,6 +334,13 @@ function favoriteOpening(player) {
 
 const has = (player, id) => Boolean(player?.character?.traits?.some((trait) => trait.id === id));
 
+/** 評価値の言い方(先手から見た値。「+350」「-120」。詰みは「詰み」)。 */
+function signedEval(cp) {
+  if (isMateCp(cp)) return cp > 0 ? '先手勝ち' : '後手勝ち';
+  const value = Math.round(cp / 10) * 10;
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
 /**
  * 中継の台本を、1手ずつ足して作る。
  * 項目のatは手数(1から。0は対局開始前)、whenは、その手を指す前の考慮中('think')か、指したとき('move')。
@@ -281,9 +362,52 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   let onlyCount = 0;
   const once = (key) => (said.has(key) ? false : (said.add(key), true));
   const fill = (text, values = {}) => text.replace(/\{(\w+)\}/g, (_, key) => values[key] ?? '');
-  const comment = (at, when, pool, values = {}, count = 1, tone = '') => {
-    for (let index = 0; index < count; index += 1) comments.push({ at, when, text: fill(pick(rng, VIEWER[pool]), values), tone });
+  const density = DENSITY[spec.weight] ?? 1;
+  /** 同じ書き手の種類で、最近の言い方をくり返さない(残りがなければ、くり返してよい)。 */
+  const recent = new Map();
+  const pickFresh = (pool) => {
+    const used = recent.get(pool) ?? [];
+    const fresh = VIEWER[pool].filter((text) => !used.includes(text));
+    const text = pick(rng, fresh.length ? fresh : VIEWER[pool]);
+    recent.set(pool, [...used, text].slice(-Math.max(1, Math.floor(VIEWER[pool].length / 2))));
+    return text;
   };
+  /**
+   * 視聴者のコメントを足す。toneを渡さなければ、書き手の種類の色。
+   * @param {number} at @param {string} when @param {string} pool
+   * @param {Record<string, string | number>} [values] @param {number} [count] @param {string} [tone]
+   * @param {{ size?: string, pos?: string }} [style]
+   */
+  const comment = (at, when, pool, values = {}, count = 1, tone = '', style = {}) => {
+    const kind = POOL_KIND[pool] ?? pool;
+    for (let index = 0; index < count; index += 1) {
+      comments.push({ at, when, text: fill(pickFresh(pool), values), tone: tone || KIND_TONE[kind] || '', kind, size: style.size ?? '', pos: style.pos ?? '' });
+    }
+  };
+  /**
+   * 確率pで1件(重さで増える)。
+   * @param {number} p @param {number} at @param {string} when @param {string} pool @param {Record<string, string | number>} [values]
+   */
+  const maybe = (p, at, when, pool, values = {}) => {
+    if (rng.next() < Math.min(0.95, p * density)) comment(at, when, pool, values);
+  };
+  /** 初心者の質問と答え(1局に1回ずつ)。 */
+  const newbie = (at, when, topic, values = {}, p = 0.6) => {
+    if (said.has(`newbie:${topic}`) || rng.next() >= p) return;
+    said.add(`newbie:${topic}`);
+    const [question, answer] = NEWBIE[topic];
+    comments.push({ at, when, text: fill(question, values), tone: 'green', kind: 'newbie', size: '', pos: '' });
+    comments.push({ at, when, text: fill(answer, values), tone: 'green', kind: 'answer', size: '', pos: '' });
+  };
+  /** 運営のコメント(上に止まる帯)。 */
+  const official = (at, when, text) => comments.push({ at, when, text, tone: 'official', kind: 'official', size: '', pos: 'top' });
+  /** 盛り上がりの弾幕(大きな字)。 */
+  const hype = (at, count, tone = '') => comment(at, 'move', 'hype', {}, count, tone, { size: 'big' });
+  const shortName = (side) => call(side).replace(/さん$/, '');
+  const news = [...(spec.news ?? [])];
+  let newsShown = 0;
+  let lastAi = 0;
+  let clockGapSaid = false;
   const line = (at, when, role, text) => lines.push({ at, when, role, text });
   const think = (at, when, side, moment) => {
     if (thoughtCount[side] + thoughtCount[other(side)] >= THOUGHT_LIMIT) return;
@@ -329,6 +453,17 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     }
     comment(0, 'move', 'start', {}, 3);
     if (spec.weight === 'title') comment(0, 'move', 'title', {}, 2, 'gold');
+    // 解説への反応(羽音の解説・親子の解説は特別)。
+    const hananePlaying = black?.story === HANANE || white?.story === HANANE;
+    if (cast.voice === 'hanane') comment(0, 'move', 'castHanane', {}, 2);
+    else if (cast.voice === 'yoshihiko' && hananePlaying) comment(0, 'move', 'castFather', {}, 2);
+    else comment(0, 'move', 'castStart', { cast: cast.name.slice(0, 2) });
+    if (next) comment(0, 'move', 'next');
+    // 特殊能力の持ち主への期待。
+    for (const side of /** @type {const} */ (['black', 'white'])) {
+      const trait = (players[side]?.character?.traits ?? []).find(({ id }) => isGoldTrait(id));
+      if (trait && rng.next() < 0.7) comment(0, 'move', 'trait', { name: shortName(side), trait: traitLabel(trait) }, 1, 'pink');
+    }
     for (const side of ['black', 'white']) {
       const pool = cheerPool(side);
       comment(0, 'move', pool, { name: call(side).replace(/さん$/, '') }, pool === 'cheer' ? 1 : 2, pool === 'cheer' ? '' : 'pink');
@@ -341,13 +476,16 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   let bookRun = true;
   let lastBishopCapture = -9;
   let pendingRegret = null;
+  /** 前の手の読み筋の1手目(視聴者の予想)と、予想を言った手数。 */
+  let predicted = '';
+  let predictedAt = 0;
 
   /**
    * 1手を足す。
    * @param {{
    *   index: number, entry: { move: string, eval: number, pv: string, best: string, loss: number, time: number, mark: string },
    *   previousEval: number, sfenBefore: string, sfenAfter: string,
-   *   before: { remaining: { black: number, white: number }, byoyomi: { black: boolean, white: boolean } },
+   *   before: { remaining: { black: number, white: number }, byoyomi: { black: boolean, white: boolean }, clock?: number, day?: number },
    *   after: { remaining: { black: number, white: number }, byoyomi: { black: boolean, white: boolean }, clock: number, day: number, breaks: { kind: string, from: number, to: number, day: number }[] },
    *   formations?: { battle?: string, black?: { rook?: string, castle?: string }, white?: { rook?: string, castle?: string } } | null,
    *   last?: boolean, end?: { winner: 'black' | 'white', reason: string } | null,
@@ -364,15 +502,41 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     const swing = moverRate(rateAfter) - moverRate(rateBefore);
     const winner = spec.winner;
 
-    // 考慮中(指す前): 長考と秒読み。
+    // 考慮中(指す前): 予想・長考と秒読み。
+    if (predicted && at >= 7 && rng.next() < Math.min(0.9, (at > plan.middleEnd ? 0.3 : 0.16) * density)) {
+      const guess = moveTextOf(sfenBefore, predicted, previousUsi);
+      if (!/[a-z*]/.test(guess)) {
+        comment(at, 'think', 'predict', { move: guess });
+        predictedAt = at;
+      }
+    }
     if (entry.time >= LONG_THINK_SECONDS) {
       if (once(`long:${side}`) || rng.next() < 0.5) line(at, 'think', 'commentator', speak(cast, `${call(side)}、ここで長考に入りました。`, `${call(side)}、ここで長考に入った。`));
       comment(at, 'think', 'longThink', {}, 2);
+      maybe(0.45, at, 'think', 'neta');
+      if (!before.byoyomi[side]) maybe(0.5, at, 'think', 'clock', { name: shortName(side), time: thinkTimeText(Math.max(0, before.remaining[side] - entry.time)) });
       think(at, 'think', side, 'think');
     }
     if (before.byoyomi[side]) {
-      if (rng.next() < 0.25) comment(at, 'think', 'byoyomi');
+      if (rng.next() < 0.25) comment(at, 'think', 'byoyomiOn');
       think(at, 'think', side, 'byoyomi');
+    }
+
+    // 予想の当たり外れ(外れても、指した手が悪くないときだけ「そっちか」)。
+    if (predictedAt === at) {
+      const played = moveTextOf(sfenBefore, entry.move, previousUsi);
+      if (entry.move === predicted) comment(at, 'move', 'predictHit', { move: played }, rng.next() < 0.4 * density ? 2 : 1);
+      else if ((entry.loss ?? 0) < 150 && rng.next() < 0.7) comment(at, 'move', 'predictMiss', { move: moveTextOf(sfenBefore, predicted, previousUsi) });
+    }
+
+    // 実況(駒を打つ・取る・長考のあとの手)。
+    if (facts?.drop) {
+      maybe(at > plan.openingEnd ? 0.35 : 0.2, at, 'move', 'drop', { move: text, piece: PIECE_NAMES[facts.kind] ?? '' });
+      if (at >= 15) newbie(at, 'move', 'drop', {}, 0.5);
+    } else if (facts?.captured && !MAJOR.has(facts.captured)) {
+      maybe(0.18, at, 'move', 'play', { move: text });
+    } else if (entry.time >= LONG_THINK_SECONDS || (facts?.check && at > plan.middleEnd)) {
+      maybe(0.4, at, 'move', 'play', { move: text });
     }
 
     // 指した手。
@@ -383,6 +547,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           line(at, 'move', 'commentator', speak(cast, '角を持ち合うと、打ち込みのすきに気をつける将棋になりますね。', '角を持ち合うと、打ち込みのすきに気をつける将棋になる。'));
         }
         comment(at, 'move', 'bishop', {}, 2);
+        newbie(at, 'move', 'bishop');
       } else {
         comment(at, 'move', 'major', { piece: PIECE_NAMES[facts.captured] }, 2);
         if (rng.next() < 0.5) line(at, 'move', 'host', `${PIECE_NAMES[facts.captured]}を取った！`);
@@ -394,9 +559,11 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (facts?.check) {
       comment(at, 'move', 'check', {}, at > plan.middleEnd ? 2 : 1, 'red');
       if (once(`check:${side}`)) line(at, 'move', 'host', `王手！ ${call(side)}が攻めかかったよ。`);
+      newbie(at, 'move', 'check', {}, 0.4);
     }
     if (facts?.promote && (facts.after === '+R' || facts.after === '+B') && once(`promote:${side}:${facts.after}`)) {
       comment(at, 'move', 'promote', { piece: PIECE_NAMES[facts.after] });
+      newbie(at, 'move', 'promote', {}, 0.5);
       line(at, 'move', 'commentator', speak(cast, `${call(side)}、${PIECE_NAMES[facts.after]}を作りました。大きいですね。`, `${call(side)}、${PIECE_NAMES[facts.after]}を作った。これは大きい。`));
     }
 
@@ -408,6 +575,19 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         formationsSeen.battle = formations.battle;
         line(at, 'move', 'commentator', speak(cast, `戦型は${formations.battle}になりました。`, `戦型は${formations.battle}。`));
         comment(at, 'move', 'formation', { name: formations.battle });
+      }
+      // 対抗形・相振り飛車(両方の飛車の形が分かったとき)。
+      if (rook('black') && rook('white') && once('battle-kind')) {
+        const furi = [isFuri(rook('black')), isFuri(rook('white'))].filter(Boolean).length;
+        if (furi > 0) comment(at, 'move', 'battleKind', { kind: furi === 2 ? '相振り飛車' : '対抗形' });
+      }
+      // 得意戦法を指した(使用率のいちばん上と、戦型の判定が合ったとき)。
+      for (const color of /** @type {const} */ (['black', 'white'])) {
+        const favorite = favoriteOpening(players[color]);
+        const shown = [formations.battle, rook(color)].filter(Boolean);
+        if (favorite && shown.some((name) => name.includes(favorite) || favorite.includes(name)) && once(`specialty:${color}`) && rng.next() < 0.8) {
+          comment(at, 'move', 'specialty', { name: shortName(color), opening: favorite });
+        }
       }
       for (const color of /** @type {const} */ (['black', 'white'])) {
         if (!formationsSeen[color] && rook(color) && rook(color) !== formationsSeen.battle) {
@@ -423,6 +603,12 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           line(at, 'move', 'host', `${SIDE_NAME[color]}の${call(color)}、${castle(color)}が完成！`);
           if (rng.next() < 0.6) line(at, 'move', 'commentator', speak(cast, 'しっかり囲いましたね。これで戦いの準備ができました。', 'しっかり囲った。これで戦いの準備ができた。'));
           comment(at, 'move', 'castle', { name: castle(color) });
+          newbie(at, 'move', 'castle', { name: castle(color) }, 0.45);
+          const otherCastle = formationsSeen[color === 'black' ? 'castleWhite' : 'castleBlack'];
+          if (otherCastle && once('castles')) {
+            const [a, b] = color === 'black' ? [castle(color), otherCastle] : [otherCastle, castle(color)];
+            comment(at, 'move', 'castles', { a, b });
+          }
         }
       }
     }
@@ -433,6 +619,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       if (once('theory')) {
         line(at, 'move', 'commentator', speak(cast, 'ここで定跡を離れました。ここからが本当の勝負です。', 'ここで定跡を離れた。ここからが本当の勝負。'));
         comment(at, 'move', 'opening');
+        maybe(0.5, at, 'move', 'theory');
+        newbie(at, 'move', 'theory', {}, 0.5);
       }
     }
 
@@ -444,6 +632,29 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         line(at, 'move', 'commentator', speak(cast, `${meaning}です。`, `${meaning}だね。`));
       }
     }
+
+    // 初心者が手の意味をたずね、ほかの視聴者が答える(1局に1回)。
+    if (at >= 8 && at <= 60 && !entry.loss && !said.has('newbie:meaning') && rng.next() < 0.08) {
+      const meaning = moveMeaning(facts, { ply: at });
+      if (meaning) newbie(at, 'move', 'meaning', { move: text, meaning }, 1);
+    }
+
+    // AI勢: 15手ごとくらいに、評価値か勝率を言う。
+    if (at - lastAi >= 15 && at >= 20 && rng.next() < 0.5) {
+      lastAi = at;
+      const lead = rateAfter >= 0.5 ? 'black' : 'white';
+      const rate = Math.round((lead === 'black' ? rateAfter : 1 - rateAfter) * 100);
+      if (rate <= 55) comment(at, 'move', 'aiEven');
+      else comment(at, 'move', 'ai', { side: SIDE_NAME[lead], rate, eval: signedEval(entry.eval) });
+    }
+
+    // 時計勢: 持ち時間の差が1時間以上ひらいた(1局に1回)。早指し。
+    if (!clockGapSaid && at >= 30 && Math.abs(after.remaining.black - after.remaining.white) >= 3600) {
+      clockGapSaid = true;
+      const rich = after.remaining.black > after.remaining.white ? 'black' : 'white';
+      comment(at, 'move', 'clockGap', { name: shortName(rich) });
+    }
+    if (entry.time <= 15 && at > 30 && at <= plan.middleEnd && rng.next() < 0.05 * density) comment(at, 'move', 'fast', { name: shortName(side) });
 
     // 形勢が動いた(分かれ目の手)。AIの推奨手と勝率の動きを添える。指した人を責めない。
     if ((entry.mark === 'error' || entry.mark === 'decisive' || swing <= -SWING) && entry.best) {
@@ -460,8 +671,12 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           : speak(cast, `今の${text}は、少し疑問手だったかもしれません。AIの推奨は${bestText}でした。`,
             `今の${text}は、少し疑問手だったかも。AIの推奨は${bestText}。`));
       }
-      line(at, 'move', 'host', `勝率が、${SIDE_NAME[side]}${Math.round(moverRate(rateBefore) * 100)}%から${Math.round(moverRate(rateAfter) * 100)}%に動いたよ。`);
+      const [fromRate, toRate] = [Math.round(moverRate(rateBefore) * 100), Math.round(moverRate(rateAfter) * 100)];
+      if (Math.abs(fromRate - toRate) >= 2) line(at, 'move', 'host', `勝率が、${SIDE_NAME[side]}${fromRate}%から${toRate}%に動いたよ。`);
       comment(at, 'move', 'swing', {}, heavy ? 3 : 2);
+      if (rng.next() < 0.6) comment(at, 'move', 'aiBest', { best: bestText });
+      if (heavy) hype(at, 1);
+      lastAi = at;
       pendingRegret = { side, at: at + 1 };
       think(at, 'move', other(side), 'chance');
       // 勝者の特殊能力が、相手の悪手を引き出した場面。
@@ -488,6 +703,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       onlyCount += 1;
       line(at, 'move', 'commentator', speak(cast, `${text}、見事な一手です。ここはこれしかありませんでした。`, `${text}、見事な一手。ここはこれしかなかった。`));
       comment(at, 'move', 'only', {}, 2, 'gold');
+      if (rng.next() < 0.5) comment(at, 'move', 'castAgree');
+      hype(at, 1, 'gold');
       if (at > plan.middleEnd && has(players[side], 'demon-reading') && once('trait:demon-reading')) {
         line(at, 'move', 'host', `${call(side)}の『鬼の読み』だね！`);
         cards.push({ at, when: 'move', kind: 'trait', tier: 'gold', title: `${players[side].name}『鬼の読み』`, text: '深く正確な読み' });
@@ -522,6 +739,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       line(at, 'move', 'commentator', speak(cast, `${call(side)}、持ち時間を使い切りました。ここから1手60秒未満の秒読みです。`, `${call(side)}、持ち時間を使い切った。ここから1手60秒未満の秒読み。`));
       cards.push({ at, when: 'move', kind: 'byoyomi', tier: '', title: '秒読み', text: `${players[side].name}、1分将棋に` });
       comment(at, 'move', 'byoyomi', {}, 2);
+      newbie(at, 'move', 'byoyomi', {}, 0.6);
       if (has(players[side], 'time-trouble') && once('trait:time-trouble')) {
         line(at, 'move', 'host', `${call(side)}は、終盤で時間に追われやすいんだよね……。`);
         cards.push({ at, when: 'move', kind: 'trait', tier: 'red', title: `${players[side].name}『時間に追われる』`, text: '早くも秒読みに' });
@@ -540,11 +758,15 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         cards.push({ at, when: 'move', kind: rest.kind, tier: '', title, text: `${clockText(rest.from)}〜${clockText(rest.to)}` });
         line(at, 'move', 'host', `${title}に入ったよ。${call('black')}は${food.black}、${call('white')}は${food.white}を注文したんだって。`);
         comment(at, 'move', rest.kind, { meal: pick(rng, [food.black, food.white]) }, 2);
+        official(at, 'move', `【お知らせ】${title}は${clockText(rest.to)}まで`);
+        if (rest.kind === 'lunch') newbie(at, 'move', 'lunch', {}, 0.5);
       } else if (rest.kind === 'seal') {
         const sealer = other(side);
         cards.push({ at, when: 'move', kind: 'seal', tier: '', title: '封じ手', text: `${players[sealer].name}が封じ手を記入。1日目が終わりました` });
         line(at, 'move', 'host', `1日目はここまで。${call(sealer)}が次の手を封じたよ。明日の朝、開封だね。`);
         comment(at, 'move', 'seal', {}, 2);
+        official(at, 'move', '【お知らせ】1日目の対局は終了しました。続きは明日9時から');
+        newbie(at, 'move', 'seal', {}, 0.8);
         said.add(`unseal:${at + 1}`);
       }
     }
@@ -553,8 +775,18 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       line(at, 'move', 'host', `2日目の朝。封じ手は${text}だったよ！`);
     }
 
+    // 3時のおやつ(1日目の15時をまたいだ手)。
+    if ((before.clock ?? 0) < 15 * 60 && (after.clock ?? 0) >= 15 * 60 && after.day === 1 && once('oyatsu')) {
+      comment(at, 'move', 'oyatsu', {}, 2);
+    }
+    // 運営: 同じ回戦のほかの結果を、少しずつ知らせる。
+    if (newsShown < news.length && at >= 18 + newsShown * 24) {
+      official(at, 'move', `【他の対局】${news[newsShown]}`);
+      newsShown += 1;
+    }
+
     // ふだんのざわめき。
-    if (rng.next() < 0.22) comment(at, 'move', 'idle');
+    if (rng.next() < 0.22 * density) comment(at, 'move', 'idle');
     if (rng.next() < 0.06) {
       const target = rng.next() < 0.5 ? 'black' : 'white';
       const pool = cheerPool(target);
@@ -578,9 +810,12 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         : speak(cast, '最後まで見ごたえのある将棋でした。', '最後まで見ごたえのある将棋だった。'));
       cards.push({ at, when: 'move', kind: 'end', tier: spec.weight === 'title' ? 'gold' : '', title: `${at}手まで ${SIDE_NAME[end.winner]}の勝ち`, text: end.reason === 'resign' ? `${players[loser].name}の投了` : '詰み' });
       comment(at, 'move', 'resign', {}, 5, spec.weight === 'title' ? 'gold' : '');
+      hype(at, spec.weight === 'title' ? 3 : 2, spec.weight === 'title' ? 'gold' : '');
+      official(at, 'move', `【終局】${at}手で${players[end.winner].name}${players[end.winner].dan}の勝ち`);
       comment(at, 'move', 'winner', { name: call(end.winner).replace(/さん$/, '') }, 2);
     }
     previousUsi = entry.move;
+    predicted = String(entry.pv ?? '').split(' ')[0] ?? '';
   }
 
   return {

@@ -3,7 +3,7 @@ import { USER_ID, createSeason, recordUserGame } from './ryuo.mjs';
 import { createLeague, createMeijinSeason, recordMeijinGame } from './meijin.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import { HANANE } from './ryuo-story.mjs';
-import { isFeatured, meijinRelayGames, relayGamesOf, relaySections, ryuoRelayGames } from './relay-games.mjs';
+import { isFeatured, meijinRelayGames, relayGamesOf, relayRoundNews, relaySections, ryuoRelayGames } from './relay-games.mjs';
 import { emptyRelayStore, loadRelayStore, markRelaySeen, packRelayGame, recallRelayGame, rememberRelayGame, saveRelayStore, unpackRelayGame } from './relay-store.mjs';
 
 const settings = { difficulty: 9, scale: 3, revival: true };
@@ -51,6 +51,16 @@ describe('ryuoRelayGames', () => {
     const sections = relaySections(games);
     expect(sections[0].id).toBe('featured');
     expect(sections.some(({ id }) => id === 'own')).toBe(true);
+  });
+
+  it('同じ回戦のほかの結果を、注目の対局から順に知らせる(自分の局は入れない)', () => {
+    const spec = games.find((entry) => games.filter((other) => other.label === entry.label).length >= 3);
+    const news = relayRoundNews(games, spec);
+    expect(news.length).toBeGreaterThan(0);
+    expect(news.length).toBeLessThanOrEqual(4);
+    expect(news.every((text) => /^.+ 勝ち（対 .+）$/.test(text))).toBe(true);
+    const own = spec.winner === 'black' ? spec.black : spec.white;
+    expect(news.some((text) => text.startsWith(`${own.name}${own.dan} 勝ち（対 ${(spec.winner === 'black' ? spec.white : spec.black).name}`))).toBe(false);
   });
 
   it('次の相手の対局には、次の相手の印が付く', () => {

@@ -756,6 +756,7 @@
       :asset-base-url="assetBaseUrl"
       :engine-factory="relayEngineFactory"
       :compact="compact"
+      :news="relayNews"
       @seen="noteRelaySeen"
       @close="relayEntry = null"
     />
@@ -783,7 +784,7 @@ import ShogiShoreikai, { type ShoreikaiView } from "./ShogiShoreikai.vue";
 import ShogiKenshukai, { type KenshukaiView } from "./ShogiKenshukai.vue";
 import RelayGameList from "./RelayGameList.vue";
 import RelayViewer from "./RelayViewer.vue";
-import { meijinRelayGames, relayGamesOf, ryuoRelayGames } from "./core/relay-games.mjs";
+import { meijinRelayGames, relayGamesOf, relayRoundNews, ryuoRelayGames } from "./core/relay-games.mjs";
 import { loadRelayStore } from "./core/relay-store.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
 import { CLASSES as KENSHUKAI_CLASSES } from "./core/kenshukai.mjs";
@@ -1163,6 +1164,10 @@ const opponentRelayCount = computed(() => {
 });
 /** 中継の解説者を選ぶ棋士(見ている大会の期の棋士)。 */
 const relayPool = computed(() => Object.values((relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason)?.players ?? {}));
+/** 同じ回戦のほかの結果(中継の運営のコメント)。 */
+const relayNews = computed(() => (relayEntry.value
+  ? relayRoundNews(relayEntry.value.event === "meijin" ? meijinRelayGameList.value : ryuoRelayGameList.value, relayEntry.value)
+  : []));
 const relayNextId = computed(() => (relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason)?.pending?.opponentId ?? "");
 
 // ---- 入口の山(期が始まる前の竜王への道)と番付

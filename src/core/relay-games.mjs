@@ -200,3 +200,19 @@ export function relaySections(entries) {
 export function relayGamesOf(entries, playerId) {
   return entries.filter((entry) => entry.black?.id === playerId || entry.white?.id === playerId);
 }
+
+/**
+ * 同じ回戦のほかの結果(中継の運営のコメントで知らせる。12章)。注目の対局を先に、多くて4件。
+ * 「中村大輔六段 勝ち（対 鈴木蓮五段）」の形。
+ * @param {any[]} entries
+ * @param {any} spec
+ * @param {number} [limit]
+ */
+export function relayRoundNews(entries, spec, limit = 4) {
+  const sameRound = entries.filter((entry) => entry.key !== spec?.key && entry.label === spec?.label);
+  const ordered = [...sameRound.filter(isFeatured), ...sameRound.filter((entry) => !isFeatured(entry))];
+  return ordered.slice(0, limit).map((entry) => {
+    const [winner, loser] = entry.winner === 'black' ? [entry.black, entry.white] : [entry.white, entry.black];
+    return `${winner.name}${winner.dan ?? ''} 勝ち（対 ${loser.name}${loser.dan ?? ''}）`;
+  });
+}

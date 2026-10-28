@@ -46,11 +46,13 @@
             <span
               v-for="item in flying"
               :key="item.id"
-              :class="['relay__comment', item.tone ? `relay__comment--${item.tone}` : '']"
+              :class="['relay__comment', item.tone ? `relay__comment--${item.tone}` : '', item.big ? 'relay__comment--big' : '']"
               :style="{ top: `${4 + item.lane * 12}%`, animationDelay: `${item.delay}ms`, animationDuration: `${item.duration}ms` }"
               @animationend="land(item.id)"
             >{{ item.text }}</span>
           </div>
+          <!-- 運営のコメント(ニコニコ動画の上コメ)。盤の上の端に3秒止まる。休憩・終局・同じ回戦のほかの結果。 -->
+          <p v-if="commentsOn && banner" :key="banner.id" class="relay__banner" aria-hidden="true" data-relay-banner>{{ banner.text }}</p>
           <!-- 心の声。対局者の名札の近く(上が後手、下が先手)。 -->
           <p
             v-for="bubble in bubbles"
@@ -196,6 +198,8 @@ const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   engineFactory: { type: Function as PropType<() => Promise<EngineFactory>>, required: true },
   compact: { type: Boolean, default: false },
+  /** 同じ回戦のほかの結果(運営のコメントで少しずつ知らせる。「鈴木蓮七段 勝ち」)。 */
+  news: { type: Array as PropType<string[]>, default: () => [] },
 });
 const emit = defineEmits<{ close: []; seen: [key: string] }>();
 
@@ -213,6 +217,8 @@ const CARD_HOLD_MS = { long: 2200, short: 1100 } as const;
 /** コメントが流れる時間と、流れる段の数。 */
 const COMMENT_MS = 5600;
 const COMMENT_LANES = 6;
+/** 運営のコメント(上に止まる帯)を出しておく時間。 */
+const BANNER_MS = 3000;
 
 function browserStorage(): Storage | null {
   try {
@@ -233,7 +239,7 @@ const saved = loadView();
 
 const players = computed<Record<Side, any>>(() => ({ black: props.spec.black, white: props.spec.white }));
 const cast = relayCast({ spec: props.spec, pool: props.pool, oshiId: props.oshiId || null });
-const script = createRelayScript({ spec: props.spec, cast, oshiId: props.oshiId || null, nextId: props.nextId || null });
+const script = createRelayScript({ spec: { ...props.spec, news: props.news }, cast, oshiId: props.oshiId || null, nextId: props.nextId || null });
 const control = relayTimeControl({ event: props.spec.event, kind: props.spec.kind });
 
 // ---- 棋譜(作られた分)と、台本に足した分
@@ -396,6 +402,7 @@ function seek(target: number) {
   thinkingAt.value = 0;
   waiting.value = false;
   flying.value = [];
+  banner.value = null;
   cursor.value = Math.max(0, Math.min(ready.value, Math.round(target)));
   activeCard.value = cards.value.find((item) => item.at === cursor.value) ?? null;
 }
@@ -430,18 +437,33 @@ function playSound(ply: number) {
 }
 
 // ---- 流れるコメント
-type Flying = { id: number; text: string; tone: string; lane: number; delay: number; duration: number };
+type Flying = { id: number; text: string; tone: string; big: boolean; lane: number; delay: number; duration: number };
 const flying = shallowRef<Flying[]>([]);
 let flyId = 0;
 let laneCursor = 0;
+const banner = shallowRef<{ id: number; text: string } | null>(null);
+let bannerTimer: ReturnType<typeof setTimeout> | undefined;
+function showBanner(text: string) {
+  flyId += 1;
+  banner.value = { id: flyId, text };
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => { banner.value = null; }, BANNER_MS / Math.sqrt(speed.value));
+}
 function spawn(at: number, when: string) {
-  if (!commentsOn.value || reducedMotion) return;
+  if (!commentsOn.value) return;
   const items = comments.value.filter((item) => item.at === at && item.when === when);
   if (!items.length) return;
-  const added = items.map((item, index) => {
+  // 運営のコメントは上に止める(動かないので、動きを減らす設定でも出す)。
+  const top = items.filter((item) => item.pos === "top");
+  if (top.length) showBanner(top[top.length - 1].text);
+  if (reducedMotion) return;
+  const added = items.filter((item) => item.pos !== "top").map((item, index) => {
     laneCursor = (laneCursor + 1 + (index % 2)) % COMMENT_LANES;
     flyId += 1;
-    return { id: flyId, text: item.text, tone: item.tone ?? "", lane: laneCursor, delay: index * 380, duration: COMMENT_MS / Math.sqrt(speed.value) };
+    return {
+      id: flyId, text: item.text, tone: item.tone ?? "", big: item.size === "big", lane: laneCursor,
+      delay: index * 380, duration: (COMMENT_MS * (item.size === "big" ? 1.15 : 1)) / Math.sqrt(speed.value),
+    };
   });
   flying.value = [...flying.value, ...added].slice(-24);
 }
@@ -610,6 +632,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   clearTimers();
+  clearTimeout(bannerTimer);
   resizeObserver?.disconnect();
   generator.dispose();
 });
@@ -696,6 +719,31 @@ onBeforeUnmount(() => {
 .shogi-game .relay__comment--red { color: #ff9c8c; }
 .shogi-game .relay__comment--gold { color: #ffd27a; font-size: clamp(1rem, 2.8vw, 1.45rem); }
 .shogi-game .relay__comment--pink { color: #ffc4e6; }
+/* AI勢は青、初心者と答える人は緑(書き手の種類。12章)。盛り上がりは大きな字。 */
+.shogi-game .relay__comment--blue { color: #9fd0ff; }
+.shogi-game .relay__comment--green { color: #b4ecb0; }
+.shogi-game .relay__comment--big { font-size: clamp(1.25rem, 3.6vw, 1.9rem); }
+/* 運営のコメント(上に止まる帯)。後手の名札と時計の下、心の声より上。 */
+.shogi-game .relay__banner {
+  position: absolute;
+  top: 13%;
+  left: 50%;
+  z-index: 4;
+  max-width: 92%;
+  margin: 0;
+  padding: 0.15rem 0.6rem;
+  overflow: hidden;
+  border: 1px solid rgba(241, 165, 76, 0.8);
+  border-radius: 0.3rem;
+  color: #ffd27a;
+  background: rgba(20, 34, 49, 0.88);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
 @keyframes relay-fly {
   from { transform: translateX(0); }
   to { transform: translateX(calc(-1 * var(--relay-width, 400px) - 100%)); }

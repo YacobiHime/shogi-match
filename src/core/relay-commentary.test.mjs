@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendUsiMove, createGameRecord, STANDARD_SFEN } from '../game-state';
+import { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } from '../game-state';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { relaySeed, relayTimeControl, relayTimeline } from './relay-game.mjs';
 import { callName, createRelayScript, moveFacts, moveMeaning, moveTextOf, pvTextOf, relayAudience, relayCast } from './relay-commentary.mjs';
@@ -111,5 +111,94 @@ describe('createRelayScript', () => {
 
   it('来場者数は、タイトル戦ほど多い', () => {
     expect(relayAudience({ ...spec, weight: 'title' }, 50)).toBeGreaterThan(relayAudience(spec, 50));
+  });
+});
+
+/** 決まった手順で長い1局を作り、台本を通す(コメントの種類を確かめる)。 */
+function longScript({ weight = 'plain', news = [] } = {}) {
+  const spec = {
+    key: `ryuo:9:main:long-${weight}`, event: 'ryuo', kind: weight === 'title' ? 'finals' : 'game', label: '決勝トーナメント 準決勝', weight,
+    black: player('a', '中村大輔', { character: { attack: 0.4, traits: [{ id: 'demon-reading' }], abilities: {} } }),
+    white: player('h', '天鷺羽音', { story: HANANE }), winner: 'black', how: 'middle', story: [80, 300, 900], news,
+  };
+  const cast = { id: 'y', name: '天鷺善彦', dan: '竜王', story: YOSHIHIKO, voice: 'yoshihiko' };
+  const script = createRelayScript({ spec, cast, nextId: 'a' });
+  const record = createGameRecord();
+  const sfens = [record.position.sfen];
+  const moves = [];
+  for (let ply = 0; ply < 110; ply += 1) {
+    const legal = enumerateLegalMoves(record.position).map(({ usi }) => usi).sort();
+    if (!legal.length) break;
+    const move = legal[relaySeed(`long:${ply}`) % legal.length];
+    appendUsiMove(record, move);
+    moves.push(move);
+    sfens.push(record.position.sfen);
+  }
+  const entries = moves.map((move, index) => ({
+    move,
+    eval: Math.round(Math.sin(index / 9) * 400 + index * 6),
+    // 偶数の手は、次の手を読み筋の1手目にする(視聴者の予想が当たる)。
+    pv: index % 2 === 0 && moves[index + 1] ? moves[index + 1] : '',
+    best: index === 40 ? moves[index] : moves[index],
+    loss: index === 41 ? 520 : 0,
+    time: index === 30 || index === 55 ? 5400 : index > 90 ? 50 : 300 + (index % 7) * 200,
+    mark: index < 14 ? 'book' : index === 41 ? 'error' : index === 70 ? 'only' : '',
+  }));
+  const timeline = relayTimeline({ entries }, relayTimeControl({ event: spec.event, kind: spec.kind }));
+  entries.forEach((entry, index) => {
+    const last = index === entries.length - 1;
+    script.add({
+      index, entry, previousEval: index ? entries[index - 1].eval : 40, sfenBefore: sfens[index], sfenAfter: sfens[index + 1],
+      before: timeline[index], after: timeline[index + 1], last, end: last ? { winner: 'black', reason: 'resign' } : null,
+    });
+  });
+  return script;
+}
+
+describe('視聴者のコメントの種類(12章)', () => {
+  const script = longScript();
+
+  it('1局に、6種類以上の書き手が出る', () => {
+    const kinds = new Set(script.comments.map(({ kind }) => kind));
+    expect(kinds.size).toBeGreaterThanOrEqual(6);
+    for (const kind of ['play', 'hype', 'cheer', 'cast', 'theory', 'clock']) expect(kinds.has(kind), kind).toBe(true);
+  });
+
+  it('予想は、当たったときだけ「的中」と言う', () => {
+    const predicts = script.comments.filter(({ kind, when }) => kind === 'predict' && when === 'think');
+    expect(predicts.length).toBeGreaterThan(0);
+    for (const hit of script.comments.filter(({ text }) => /予想的中|当たった|読み通り|的中/.test(text))) {
+      expect(script.comments.some(({ at, kind, when }) => at === hit.at && kind === 'predict' && when === 'think')).toBe(true);
+    }
+  });
+
+  it('初心者の質問のすぐあとに、答えが続く。AI勢は青、応援はピンク', () => {
+    const list = script.comments;
+    list.forEach((item, index) => {
+      if (item.kind === 'newbie') expect(list[index + 1]).toMatchObject({ kind: 'answer', at: item.at, tone: 'green' });
+    });
+    expect(list.filter(({ kind }) => kind === 'ai').every(({ tone }) => tone === 'blue')).toBe(true);
+    expect(list.some(({ text }) => /親子解説|パパ解説|善彦先生の解説|照れてる/.test(text))).toBe(true);
+  });
+
+  it('盛り上がりは大きな字、運営は上に止まる帯。終局と休憩を知らせる', () => {
+    expect(script.comments.filter(({ kind }) => kind === 'hype').some(({ size }) => size === 'big')).toBe(true);
+    const official = script.comments.filter(({ kind }) => kind === 'official');
+    expect(official.every(({ pos }) => pos === 'top')).toBe(true);
+    expect(official.some(({ text }) => text.startsWith('【終局】'))).toBe(true);
+    expect(official.some(({ text }) => text.startsWith('【お知らせ】'))).toBe(true);
+  });
+
+  it('同じ回戦のほかの結果を、運営が少しずつ知らせる', () => {
+    const withNews = longScript({ news: ['鈴木蓮七段 勝ち', '佐藤誠九段 勝ち'] });
+    const items = withNews.comments.filter(({ text }) => text.startsWith('【他の対局】'));
+    expect(items.map(({ text }) => text)).toEqual(['【他の対局】鈴木蓮七段 勝ち', '【他の対局】佐藤誠九段 勝ち']);
+    expect(items[1].at).toBeGreaterThan(items[0].at);
+  });
+
+  it('責める言葉を使わない。タイトル戦ほどコメントが多い', () => {
+    expect(script.comments.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(text))).toBe(true);
+    expect(script.comments.every(({ text }) => !/\{\w+\}/.test(text))).toBe(true);
+    expect(longScript({ weight: 'title' }).comments.length).toBeGreaterThan(script.comments.length);
   });
 });
