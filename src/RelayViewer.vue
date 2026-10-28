@@ -45,7 +45,7 @@
           </p>
           <span class="relay__rate-bar" aria-hidden="true"><span :style="{ width: `${blackPercent}%` }" /></span>
         </div>
-        <div ref="boardEl" class="relay__board">
+        <div ref="boardEl" class="relay__board" :style="{ '--relay-width': `${boardWidth}px` }">
           <ShogiMatchBoard
             :sfen="sfens[cursor] ?? sfens[0]"
             :last-move="cursor > 0 ? entries[cursor - 1]?.move ?? '' : ''"
@@ -58,7 +58,7 @@
             :clocks="clocks"
           />
           <!-- 視聴者のコメント(右から左へ流れる)。押せない飾りで、盤の操作は妨げない。 -->
-          <div v-if="commentsOn && !reducedMotion" class="relay__danmaku" aria-hidden="true" :style="{ '--relay-width': `${boardWidth}px` }">
+          <div v-if="commentsOn && !reducedMotion" class="relay__danmaku" aria-hidden="true">
             <span
               v-for="item in flying"
               :key="item.id"
@@ -110,10 +110,17 @@
           <button v-for="item in TABS" :key="item.id" type="button" role="tab" :aria-selected="tab === item.id" :data-relay-tab="item.id" @click="tab = item.id">{{ item.label }}</button>
         </div>
         <div class="relay__panel">
-          <div v-if="tab === 'talk'" class="relay__talk" aria-live="polite" data-relay-talk>
-            <p v-for="(item, index) in visibleLines" :key="`${item.at}-${index}-${item.role}`" :class="['relay__line', `relay__line--${item.role}`]">
-              <b>{{ item.role === "host" ? RELAY_HOST : `${cast.name}` }}</b>{{ item.text }}
-            </p>
+          <!--
+            解説と聞き手の言葉は、見たところまでを全部残し、欄の中をスクロールして読み返せる(16章)。
+            いちばん下を見ているあいだは新しい言葉に付いていき、上へ戻したら止まって「新しい解説へ」を出す。
+          -->
+          <div v-if="tab === 'talk'" class="relay__talk" data-relay-talk>
+            <div ref="talkEl" class="relay__talk-scroll" aria-live="polite" data-relay-talk-scroll @scroll="onTalkScroll">
+              <p v-for="(item, index) in visibleLines" :key="`${item.at}-${index}-${item.role}`" :class="['relay__line', `relay__line--${item.role}`]">
+                <b>{{ item.role === "host" ? RELAY_HOST : `${cast.name}` }}</b>{{ item.text }}
+              </p>
+            </div>
+            <button v-if="!talkPinned" type="button" class="relay__talk-latest" data-relay-talk-latest @click="scrollTalkToEnd">▼ 新しい解説へ</button>
             <p v-if="readingText" class="relay__reading" data-relay-reading><b>AIの読み筋</b>{{ readingText }}</p>
           </div>
           <div v-else-if="tab === 'graph'" class="relay__graph" data-relay-graph>
@@ -494,10 +501,30 @@ const blackPercent = computed(() => Math.round(blackWinRate(cursor.value ? entri
 const verdict = computed(() => rateVerdict(blackPercent.value));
 const verdictText = computed(() => (verdict.value.side ? `${players.value[verdict.value.side as Side].name}${verdict.value.word}` : verdict.value.word));
 
-/** いま見えている解説と聞き手の言葉(新しい4つ)。考慮中は、その手の「考慮中」の言葉まで。 */
+/** 見たところまでの解説と聞き手の言葉(欄の中でスクロールして読み返す。16章)。考慮中は、その手の「考慮中」の言葉まで。 */
 const visibleLines = computed(() => lines.value
-  .filter((item) => item.at <= cursor.value || (thinkingAt.value && item.at === thinkingAt.value && item.when === "think"))
-  .slice(-4));
+  .filter((item) => item.at <= cursor.value || (thinkingAt.value && item.at === thinkingAt.value && item.when === "think")));
+/** 解説の欄。いちばん下を見ているあいだ(pinned)は、新しい言葉が来たら下まで送る。 */
+const talkEl = ref<HTMLElement | null>(null);
+const talkPinned = ref(true);
+/** いちばん下とみなす余り(px)。 */
+const TALK_PIN_SLACK = 24;
+function onTalkScroll() {
+  const el = talkEl.value;
+  if (el) talkPinned.value = el.scrollHeight - el.scrollTop - el.clientHeight < TALK_PIN_SLACK;
+}
+function scrollTalkToEnd() {
+  const el = talkEl.value;
+  if (el) el.scrollTop = el.scrollHeight;
+  talkPinned.value = true;
+}
+watch(() => visibleLines.value.length, () => {
+  if (talkPinned.value) void nextTick(scrollTalkToEnd);
+}, { flush: "post" });
+// 解説の欄に戻ったら、いちばん新しい言葉から見せる。
+watch(tab, (next) => {
+  if (next === "talk") void nextTick(scrollTalkToEnd);
+}, { flush: "post" });
 
 /** いま出す心の声(指した手か、考慮中の手のもの)。 */
 const bubbles = computed(() => {
@@ -715,12 +742,16 @@ onBeforeUnmount(() => {
 /* 盤の中の重なり(名札など)を盤の中に閉じ込め、札・心の声・コメントを盤より前に出す。 */
 .shogi-game .relay__board > :first-child { isolation: isolate; }
 /* 流れるコメント。盤の上を右から左へ(押せない飾り)。 */
-.shogi-game .relay__danmaku { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+/*
+  流れるコメントの字は、盤の幅に合わせて大きくする(16章)。画面が大きいほど盤も大きいので、字が小さく見えないようにする。
+  --relay-widthは盤の欄の幅(px)。種類ごとの大きさは、この字に対する倍率(em)で持つ。
+*/
+.shogi-game .relay__danmaku { position: absolute; inset: 0; overflow: hidden; pointer-events: none; font-size: clamp(1rem, calc(var(--relay-width, 400px) * 0.036), 2rem); }
 .shogi-game .relay__comment {
   position: absolute;
   left: 100%;
   color: #fff;
-  font-size: clamp(0.9rem, 2.4vw, 1.25rem);
+  font-size: 1em;
   font-weight: 900;
   white-space: nowrap;
   text-shadow: 0 0 2px #000, 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
@@ -730,7 +761,7 @@ onBeforeUnmount(() => {
   animation-fill-mode: both;
 }
 .shogi-game .relay__comment--red { color: #ff9c8c; }
-.shogi-game .relay__comment--gold { color: #ffd27a; font-size: clamp(1rem, 2.8vw, 1.45rem); }
+.shogi-game .relay__comment--gold { color: #ffd27a; font-size: 1.12em; }
 .shogi-game .relay__comment--pink { color: #ffc4e6; }
 /* AI勢は青、初心者と答える人は緑(書き手の種類。12章)。盛り上がりは大きな字。 */
 .shogi-game .relay__comment--blue { color: #9fd0ff; }
@@ -738,7 +769,7 @@ onBeforeUnmount(() => {
 /* 駒割り勢はオレンジ、海外のファンは薄紫(12-5)。 */
 .shogi-game .relay__comment--orange { color: #ffb36b; }
 .shogi-game .relay__comment--lavender { color: #d9c8ff; }
-.shogi-game .relay__comment--big { font-size: clamp(1.25rem, 3.6vw, 1.9rem); }
+.shogi-game .relay__comment--big { font-size: 1.4em; }
 /* 運営のコメント(上に止まる帯)。後手の名札と時計の下、心の声より上。 */
 .shogi-game .relay__banner {
   position: absolute;
@@ -753,7 +784,7 @@ onBeforeUnmount(() => {
   border-radius: 0.3rem;
   color: #ffd27a;
   background: rgba(20, 34, 49, 0.88);
-  font-size: 0.82rem;
+  font-size: clamp(0.85rem, calc(var(--relay-width, 400px) * 0.024), 1.3rem);
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -798,8 +829,8 @@ onBeforeUnmount(() => {
 }
 .shogi-game .relay__thought-face img { width: 100%; margin-top: 30%; image-rendering: pixelated; }
 .shogi-game .relay__thought-face i { color: #fffcf4; font-style: normal; font-weight: 900; }
-.shogi-game .relay__thought-text { display: grid; font-size: 0.9rem; font-weight: 800; line-height: 1.3; }
-.shogi-game .relay__thought-text small { color: #5b6f82; font-size: 0.68rem; font-weight: 700; }
+.shogi-game .relay__thought-text { display: grid; font-size: clamp(0.9rem, calc(var(--relay-width, 400px) * 0.025), 1.3rem); font-weight: 800; line-height: 1.3; }
+.shogi-game .relay__thought-text small { color: #5b6f82; font-size: 0.75em; font-weight: 700; }
 @keyframes relay-pop {
   from { opacity: 0; transform: translate(-50%, 6px); }
   to { opacity: 1; transform: translate(-50%, 0); }
@@ -851,6 +882,7 @@ onBeforeUnmount(() => {
   margin: 0;
   overflow: hidden;
   color: #fff;
+  font-size: clamp(1rem, calc(var(--relay-width, 400px) * 0.03), 1.6rem);
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -905,12 +937,31 @@ onBeforeUnmount(() => {
 }
 .shogi-game .relay__tabs button[aria-selected="true"] { border-color: #f1a54c; color: #172632; background: #f1a54c; }
 .shogi-game .relay__panel { min-height: 0; overflow: hidden; border-radius: 0.45rem; background: rgba(255, 252, 244, 0.05); }
-.shogi-game .relay__talk { display: flex; flex-direction: column; justify-content: flex-end; gap: 0.25rem; height: 100%; box-sizing: border-box; padding: 0.35rem 0.5rem; overflow: hidden; }
-.shogi-game .relay__line { margin: 0; font-size: 0.86rem; line-height: 1.45; }
-.shogi-game .relay__line b { margin-right: 0.35rem; padding: 0 0.3rem; border-radius: 0.25rem; font-size: 0.72rem; }
+/* 解説の欄(16章)。言葉は下から積み、欄の中だけスクロールする。字は画面の幅に合わせて少し大きくする。 */
+.shogi-game .relay__talk { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; box-sizing: border-box; padding: 0.35rem 0.5rem; overflow: hidden; }
+.shogi-game .relay__talk-scroll { display: flex; flex-direction: column; gap: 0.3rem; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.shogi-game .relay__talk-scroll > :first-child { margin-top: auto; }
+.shogi-game .relay__talk-latest {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 2.2rem;
+  min-height: 44px;
+  padding: 0 0.8rem;
+  border: 1px solid #f1a54c;
+  border-radius: 999px;
+  color: #172632;
+  background: #f1a54c;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.shogi-game .relay__line { margin: 0; font-size: clamp(0.95rem, 0.75rem + 0.5vw, 1.25rem); line-height: 1.5; }
+.shogi-game .relay__line b { margin-right: 0.35rem; padding: 0 0.3rem; border-radius: 0.25rem; font-size: 0.8em; }
 .shogi-game .relay__line--commentator b { color: #172632; background: #e6c15c; }
 .shogi-game .relay__line--host b { color: #172632; background: #ffc4e6; }
-.shogi-game .relay__reading { margin: 0.1rem 0 0; padding-top: 0.25rem; border-top: 1px dashed rgba(255, 252, 244, 0.2); color: #c9d6e6; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .relay__reading { margin: 0.1rem 0 0; padding-top: 0.25rem; border-top: 1px dashed rgba(255, 252, 244, 0.2); color: #c9d6e6; font-size: clamp(0.85rem, 0.7rem + 0.35vw, 1.1rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shogi-game .relay__reading b { margin-right: 0.35rem; color: #9fd0ff; }
 .shogi-game .relay__graph { display: grid; grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.1rem; height: 100%; box-sizing: border-box; padding: 0.3rem 0.5rem; }
 .shogi-game .relay__graph-title { display: flex; justify-content: space-between; gap: 0.4rem; margin: 0; font-size: 0.72rem; }
@@ -962,7 +1013,6 @@ onBeforeUnmount(() => {
 @media (min-width: 900px) and (min-aspect-ratio: 1/1) {
   .shogi-game .relay__body { grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) minmax(19rem, 26rem); gap: 1rem; }
   .shogi-game .relay__side { grid-template-rows: auto minmax(0, 1fr) auto auto auto; }
-  .shogi-game .relay__line { font-size: 0.95rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .relay__thought { animation: none; }
