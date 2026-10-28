@@ -440,6 +440,10 @@
       @kenshukai-transfer="transferKenshukai"
       @kenshukai-close="closeKenshukai"
       :ryuo-season="ryuoSeason"
+      :ryuo-watch="ryuoWatch"
+      :avatar-profile="avatarProfile"
+      @watch-enter="enterRyuoWatch"
+      @watch-progress="noteRyuoWatch"
       :meijin-season="meijinSeason"
       :relay-engine-factory="ensureEngineFactory"
       :compact="mobile || boardLayout === 'portrait'"
@@ -2494,7 +2498,10 @@ import {
   measureStatistics,
   restoredMeasureState,
 } from "./core/skill-estimate.mjs";
-import { USER_ID, createRng, createSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
+import { USER_ID, createRng, createSeason, createSpectatorSeason, describeSeason, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
+import { loadWatchStore, noteWatchProgress, replaceWatchSeason, saveWatchStore } from "./core/ryuo-watch-store.mjs";
+import { myAbilityProfile, worldRatingFor } from "./core/my-abilities.mjs";
+import { worldRating } from "./core/ryuo-strength.mjs";
 import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
 import { PLAYER_NAME_MAX, loadPlayerName, playerDisplayName, savePlayerName } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
@@ -5885,6 +5892,54 @@ function enterRyuoSeason(settings: {
   ryuoCareer.value = { ...career, settings: saved };
   saveCareer(browserStorage(), ryuoCareer.value);
   finalizeRyuoSeason();
+}
+
+// ---- 分身で観戦参加と、回戦ごとの観戦(docs/tournament-relay-design.mdの13章)
+const ryuoWatch = ref(loadWatchStore(browserStorage()));
+/** 竜王戦の難易度(ノートの能力と同じ物差し)。 */
+const ryuoAbilityDifficulty = computed(() => ryuoSeason.value?.settings?.difficulty ?? (ryuoCareer.value.seasons ? ryuoCareer.value.settings?.difficulty ?? null : null));
+/** 分身の能力(やこびノートの「能力」と同じ計算)。 */
+const avatarProfile = computed(() => myAbilityProfile({
+  games: playInsight.value.games,
+  playerLevel: ratingLevel(ratingState.value.rating),
+  difficulty: ryuoAbilityDifficulty.value,
+  world: tournamentWorld.value?.level ?? null,
+}));
+/** 「観戦で参加」。分身が出る、もしもの期を最後まで決めて残す(本番の期・キャリア・名簿・称号は変えない)。 */
+function enterRyuoWatch(settings: { difficulty: number; scale: number; revival: boolean }) {
+  const career = ryuoCareer.value;
+  const entry = nextEntry(career);
+  const seed = Date.now();
+  if (!ryuoRoster.value) {
+    ryuoRoster.value = createRoster({ seed, userGroup: entry.group, userIsChampion: entry.mode === "defense" });
+    saveRoster(browserStorage(), ryuoRoster.value);
+  }
+  const level = ratingLevel(ratingState.value.rating);
+  const profile = avatarProfile.value;
+  const avatar = profile.ready
+    ? profile.member
+    : {
+      rating: Number.isFinite(tournamentWorld.value?.level)
+        ? worldRating(level, tournamentWorld.value!.level)
+        : worldRatingFor(level, ryuoAbilityDifficulty.value ?? settings.difficulty),
+      character: { abilities: {}, traits: [] },
+    };
+  const season = createSpectatorSeason({
+    ...entry,
+    settings: { ...settings, world: tournamentWorld.value?.level },
+    avatar,
+    career,
+    roster: ryuoRoster.value,
+    seed,
+    userName: playerDisplayName(playerName.value),
+  });
+  ryuoWatch.value = replaceWatchSeason(ryuoWatch.value, season);
+  saveWatchStore(browserStorage(), ryuoWatch.value);
+}
+/** 回戦の結果をめくった。 */
+function noteRyuoWatch(seasonId: string, revealed: number) {
+  ryuoWatch.value = noteWatchProgress(ryuoWatch.value, seasonId, revealed);
+  saveWatchStore(browserStorage(), ryuoWatch.value);
 }
 
 /** 終わった期を、キャリア(組・竜王の期数)と、プロフィール(称号)に反映する。1期につき1回だけ。 */

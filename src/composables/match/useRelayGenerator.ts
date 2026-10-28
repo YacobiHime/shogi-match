@@ -12,10 +12,12 @@ type RelayGeneratorDeps = {
   storage: () => Storage | null;
 };
 
-/** 1手を読む量。指し手の自然さと、作る速さ(1手30〜150ミリ秒ほど)の兼ね合い。 */
+/** 1手を読む量。指し手の自然さと、作る速さ(1手30〜150ミリ秒ほど)の兼ね合い。観戦の期はプロ並みに深く読む(13-3)。 */
 const RELAY_NODES = { compact: 6000, wide: 12000 } as const;
+const PRO_NODES = { compact: 15000, wide: 30000 } as const;
 /** 1回の読みの上限(遅い端末で止まらないように)。 */
 const RELAY_MAX_TIME_MS = 2500;
+const PRO_MAX_TIME_MS = 4000;
 
 /*
  * 大会のほかの対局の中継の棋譜を作る(docs/tournament-relay-design.mdの1章・3章)。
@@ -54,11 +56,14 @@ export function useRelayGenerator({ engineFactory, compact, storage }: RelayGene
       if (!worker) throw new Error("中継のエンジンを起動できませんでした");
       if (id !== generation) return null;
       worker.newGame();
-      const nodes = compact() ? RELAY_NODES.compact : RELAY_NODES.wide;
+      const pro = spec.quality === "pro";
+      const table = pro ? PRO_NODES : RELAY_NODES;
+      const nodes = compact() ? table.compact : table.wide;
+      const maxTimeMs = pro ? PRO_MAX_TIME_MS : RELAY_MAX_TIME_MS;
       const search = async ({ moves, multiPv, searchMoves }: { moves: string[]; multiPv: number; searchMoves?: string[] }) => {
         worker.applyStrengthOptions({ multiPv: Math.max(1, multiPv) });
         worker.setPosition(`startpos${moves.length ? ` moves ${moves.join(" ")}` : ""}`);
-        return worker.go({ nodes, maxTimeMs: RELAY_MAX_TIME_MS, searchMoves });
+        return worker.go({ nodes, maxTimeMs, searchMoves });
       };
       const game = await playRelayGame({
         spec, search, formationMaster: hiraganaFormationMaster, onMove, isCancelled: () => id !== generation,

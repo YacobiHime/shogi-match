@@ -236,6 +236,7 @@
               <p class="shogi-tournament__hud-name">{{ view?.title }} <small>{{ view?.phaseText }}</small></p>
               <div class="shogi-tournament__hud-row">
                 <button type="button" class="shogi-tournament__sub" @click="reEntry = true">破棄して、新しくエントリー</button>
+                <button type="button" class="shogi-tournament__sub" data-watch-enter @click="ryuoWatch?.season ? (watchTarget = 'spectator') : (watchConfirm = true)">{{ ryuoWatch?.season ? "観戦の続き" : "観戦で参加" }}</button>
               </div>
               <button type="button" class="shogi-tournament__start" data-tournament-continue @click="screen = 'season'">続きから参加する</button>
             </template>
@@ -252,6 +253,11 @@
                   <span data-entry-summary>{{ settingsSummary }}</span>
                 </p>
                 <button type="button" class="shogi-tournament__sub" data-entry-change @click="settingsOpen = true">変える</button>
+              </div>
+              <!-- 分身で観戦参加(docs/tournament-relay-design.mdの13章)。本番の期とは別の、もしもの期。 -->
+              <div class="shogi-tournament__hud-row">
+                <button type="button" class="shogi-tournament__sub" data-watch-enter @click="watchConfirm = true">観戦で参加</button>
+                <button v-if="ryuoWatch?.season" type="button" class="shogi-tournament__sub" data-watch-continue @click="watchTarget = 'spectator'">観戦の続き</button>
               </div>
               <button type="button" class="shogi-tournament__start" data-tournament-enter @click="enter">出場する</button>
             </template>
@@ -278,6 +284,21 @@
                 </li>
               </ul>
               <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="settingsOpen = false">閉じる</button>
+            </div>
+          </div>
+
+          <!-- 観戦で参加の確認(分身の能力を見てから始める)。 -->
+          <div v-if="watchConfirm" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="観戦で参加" data-watch-confirm @click.self="watchConfirm = false">
+            <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
+              <h2>観戦で参加</h2>
+              <p class="shogi-tournament__text">あなたの対局から出した能力を持つ「分身」が、竜王戦に出て自動で戦うよ。回戦ごとに中継を見て、結果をめくっていこう。中継はプロ並みの読みで作るよ。</p>
+              <p class="shogi-tournament__hint">もしもの期なので、本番の組・竜王・称号・賞状には数えないよ。{{ ryuoWatch?.season ? "前の観戦の期は、新しい期に置き換わるよ。" : "" }}</p>
+              <PlayerAbilityPanel v-if="avatarProfile?.ready" :view="avatarProfile.view" data-watch-avatar-panel />
+              <p v-else class="shogi-tournament__hint" data-watch-avatar-note>{{ avatarNoteText }}</p>
+              <div class="shogi-tournament__hud-row">
+                <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="watchConfirm = false">やめる</button>
+                <button type="button" class="shogi-tournament__start" data-watch-start @click="startWatch">分身を出場させる</button>
+              </div>
             </div>
           </div>
 
@@ -672,6 +693,10 @@
               <button type="button" class="shogi-tournament__sub" data-result-table @click="screen = 'season'">表を見る</button>
               <button type="button" class="shogi-tournament__sub" @click="emit('open-note')">ノートを見る</button>
             </div>
+            <!-- 敗退したあとの対局を、回戦ごとに観戦する(13章)。 -->
+            <button v-if="afterWatchCount" type="button" class="shogi-tournament__sub relay-open" data-watch-after @click="watchTarget = 'after'">
+              このあとの対局を観戦<small>{{ afterWatchRevealed >= afterWatchCount ? "見届けた" : `${afterWatchCount}回戦` }}</small>
+            </button>
             <button type="button" class="shogi-tournament__start" data-award-open @click="openCeremony(`ryuo-${seasonNo}`)">表彰式へ</button>
           </section>
 
@@ -737,6 +762,19 @@
         <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="bookOpen = false">閉じる</button>
       </div>
     </div>
+    <!-- 回戦ごとの観戦(docs/tournament-relay-design.mdの13章)。中継の画面はこの上に重ねる。 -->
+    <RyuoWatch
+      v-if="watchTarget && watchSeason"
+      :season="watchSeason"
+      :revealed="watchRevealed"
+      :oshi-id="oshi?.id ?? ''"
+      :seen="relaySeen"
+      :avatar-view="watchTarget === 'spectator' ? avatarViewOf(watchSeason) : null"
+      :avatar-note="watchTarget === 'spectator' && !avatarProfile?.ready ? '対局が増えると、分身の個性が出るよ' : ''"
+      @reveal="emit('watch-progress', String(watchSeason.id), $event)"
+      @watch="openWatchEntry"
+      @close="watchTarget = null"
+    />
     <!-- 対局中継の一覧と、中継の画面(docs/tournament-relay-design.md)。大会の画面の上に重ねる。 -->
     <RelayGameList
       v-if="relayList && !relayEntry"
@@ -785,6 +823,8 @@ import ShogiKenshukai, { type KenshukaiView } from "./ShogiKenshukai.vue";
 import RelayGameList from "./RelayGameList.vue";
 import RelayViewer from "./RelayViewer.vue";
 import { meijinRelayGames, relayGamesOf, relayRoundNews, ryuoRelayGames } from "./core/relay-games.mjs";
+import { stepsAfterElimination, userWonSeason, watchSteps } from "./core/ryuo-watch.mjs";
+import RyuoWatch from "./RyuoWatch.vue";
 import { loadRelayStore } from "./core/relay-store.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
 import { CLASSES as KENSHUKAI_CLASSES } from "./core/kenshukai.mjs";
@@ -945,6 +985,10 @@ const props = defineProps({
   kenshukaiSuspendedMoves: { type: Number as PropType<number | null>, default: null },
   // ---- 対局中継(docs/tournament-relay-design.md)。期の保存の形(見られる対局を集める)と、棋譜を作るエンジン。
   ryuoSeason: { type: Object as PropType<any>, default: null },
+  /** 回戦ごとの観戦の保存(観戦の期と、期ごとのめくった数。core/ryuo-watch-store.mjs)。 */
+  ryuoWatch: { type: Object as PropType<any>, default: null },
+  /** 分身の能力(core/my-abilities.mjsのmyAbilityProfile)。 */
+  avatarProfile: { type: Object as PropType<any>, default: null },
   meijinSeason: { type: Object as PropType<any>, default: null },
   relayEngineFactory: { type: Function as PropType<() => Promise<EngineFactory>>, default: null },
   /** スマホ・タブレット縦(中継の棋譜を作る読みの量を減らす)。 */
@@ -953,6 +997,8 @@ const props = defineProps({
 const emit = defineEmits<{
   close: [];
   enter: [settings: { difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number }];
+  "watch-enter": [settings: { difficulty: number; scale: number; revival: boolean }];
+  "watch-progress": [seasonId: string, revealed: number];
   play: [];
   resume: [];
   "open-note": [];
@@ -1105,6 +1151,14 @@ function goBack() {
     relayList.value = null;
     return;
   }
+  if (watchTarget.value) {
+    watchTarget.value = null;
+    return;
+  }
+  if (watchConfirm.value) {
+    watchConfirm.value = false;
+    return;
+  }
   if (awardShown.value) {
     awardShown.value = null;
     awardCeremony.value = false;
@@ -1163,11 +1217,49 @@ const opponentRelayCount = computed(() => {
   return id ? relayGamesOf(ryuoRelayGameList.value, id).length : 0;
 });
 /** 中継の解説者を選ぶ棋士(見ている大会の期の棋士)。 */
-const relayPool = computed(() => Object.values((relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason)?.players ?? {}));
+const relayPool = computed(() => {
+  const key = relayEntry.value?.key ?? "";
+  const season = [props.ryuoSeason, props.ryuoWatch?.season, props.meijinSeason]
+    .find((item) => item && key.startsWith(`${relayEntry.value?.event}:${item.id}:`));
+  return Object.values(season?.players ?? {});
+});
 /** 同じ回戦のほかの結果(中継の運営のコメント)。 */
-const relayNews = computed(() => (relayEntry.value
+const relayNews = computed(() => (relayEntry.value && !relayEntry.value.noNews
   ? relayRoundNews(relayEntry.value.event === "meijin" ? meijinRelayGameList.value : ryuoRelayGameList.value, relayEntry.value)
   : []));
+// ---- 回戦ごとの観戦(13章)
+/** 開いている観戦(分身が出る観戦の期か、本番の期の敗退後)。 */
+const watchTarget = ref<"spectator" | "after" | null>(null);
+const watchConfirm = ref(false);
+const watchSeason = computed(() => (watchTarget.value === "spectator" ? props.ryuoWatch?.season ?? null : props.ryuoSeason));
+const watchRevealed = computed(() => Number(props.ryuoWatch?.progress?.[String(watchSeason.value?.id)] ?? 0));
+/** 本番の期で敗退したとき、観戦できる回戦の数(竜王になった期・終わっていない期は0)。 */
+const afterWatchSteps = computed(() => {
+  const season = props.ryuoSeason;
+  if (!season || season.phase !== "done" || season.spectator || userWonSeason(season)) return [];
+  return stepsAfterElimination(season, watchSteps(season, { oshiId: props.oshi?.id ?? null }));
+});
+const afterWatchCount = computed(() => afterWatchSteps.value.length);
+const afterWatchRevealed = computed(() => Number(props.ryuoWatch?.progress?.[String(props.ryuoSeason?.id)] ?? 0));
+const avatarNoteText = computed(() => {
+  const need = props.avatarProfile?.need;
+  return need ? `まだ対局の解析が少ないので、分身の能力は平均だよ（あと${need}手ぶんの解析で個性が出るよ）。` : "分身の能力は、あなたの対局から出すよ。";
+});
+/** 分身の能力の札(期に入れた分身の能力を、名鑑と同じ形で)。 */
+function avatarViewOf(season: any) {
+  return props.avatarProfile?.ready && season?.spectator ? props.avatarProfile.view : null;
+}
+function startWatch() {
+  emit("watch-enter", { difficulty: difficulty.value, scale: scale.value, revival: revival.value });
+  watchConfirm.value = false;
+  watchTarget.value = "spectator";
+  relaySeen.value = loadRelayStore(relayStorage()).seen;
+}
+/** 観戦の中から中継を開く。めくる前の結果を見せないよう、同じ回戦のほかの結果(運営の帯)は出さない。 */
+function openWatchEntry(entry: any) {
+  relaySeen.value = loadRelayStore(relayStorage()).seen;
+  relayEntry.value = { ...entry, noNews: true };
+}
 const relayNextId = computed(() => (relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason)?.pending?.opponentId ?? "");
 
 // ---- 入口の山(期が始まる前の竜王への道)と番付

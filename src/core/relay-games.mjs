@@ -36,7 +36,9 @@ const rootId = (bracket) => bracket?.root?.from ?? null;
  * @returns {any | null}
  */
 function entryOf(season, { key, event, kind, label, section, order, round = 0, weight = 'plain', a, b, winnerId, game, venue = '', gameNo = 0 }, context) {
-  if (!a || !b || a === USER_ID || b === USER_ID || !winnerId) return null;
+  // 自分の対局は入れない(振り返りと棋譜解析がある)。観戦の期の分身の対局は入れる(13章)。
+  if (!a || !b || !winnerId) return null;
+  if (!context.includeUser && (a === USER_ID || b === USER_ID)) return null;
   const seed = relaySeed(key);
   const blackId = game?.black === a || game?.black === b ? game.black : (seed & 1 ? a : b);
   const whiteId = blackId === a ? b : a;
@@ -46,6 +48,8 @@ function entryOf(season, { key, event, kind, label, section, order, round = 0, w
   const ids = [blackId, whiteId];
   return {
     key, event, kind, label, section, order, round, weight, venue, gameNo, seed,
+    // 観戦の期の中継は、プロ並みの読みで作る(13-3)。
+    quality: context.pro ? 'pro' : '',
     black, white,
     winner: winnerId === blackId ? 'black' : 'white',
     openings: { black: game?.openings?.[blackId] ?? null, white: game?.openings?.[whiteId] ?? null },
@@ -57,13 +61,14 @@ function entryOf(season, { key, event, kind, label, section, order, round = 0, w
       father: ids.some((id) => season.players?.[id]?.story === YOSHIHIKO),
       oshi: Boolean(context.oshiId && ids.includes(context.oshiId)),
       next: Boolean(context.nextId && ids.includes(context.nextId)),
+      self: ids.includes(USER_ID),
       current: false,
     },
   };
 }
 
 /** 注目の対局か(羽音・善彦・推し・次の相手)。 */
-export const isFeatured = (entry) => Boolean(entry?.tags && (entry.tags.rival || entry.tags.father || entry.tags.oshi || entry.tags.next));
+export const isFeatured = (entry) => Boolean(entry?.tags && (entry.tags.rival || entry.tags.father || entry.tags.oshi || entry.tags.next || entry.tags.self));
 
 /** 新しい順(番勝負 → 決勝トーナメント → 自分の組 → ほかの組。中は回戦の遅い順)。 */
 const byOrder = (x, y) => y.order - x.order || (x.key < y.key ? -1 : 1);
@@ -75,7 +80,8 @@ const byOrder = (x, y) => y.order - x.order || (x.key < y.key ? -1 : 1);
  */
 export function ryuoRelayGames(season, { oshiId = null } = {}) {
   if (!season?.players) return [];
-  const context = { oshiId, nextId: season.pending?.opponentId ?? null };
+  const spectator = Boolean(season.spectator);
+  const context = { oshiId, nextId: season.pending?.opponentId ?? null, includeUser: spectator, pro: spectator };
   const id = season.id;
   const list = [];
   const pending = season.pending?.kind === 'game' ? season.pending : null;
@@ -110,7 +116,7 @@ export function ryuoRelayGames(season, { oshiId = null } = {}) {
   }
   const seriesList = [['playoff', season.playoff, '挑戦者決定三番勝負', 5, 'big'], ['finals', season.finals, '竜王戦七番勝負', 6, 'title']];
   for (const [tag, series, title, rank, weight] of seriesList) {
-    if (!series || series.a === USER_ID || series.b === USER_ID) continue;
+    if (!series || (!spectator && (series.a === USER_ID || series.b === USER_ID))) continue;
     (series.games ?? []).forEach((game, index) => {
       const entry = entryOf(season, {
         key: `ryuo:${id}:${tag}:${index}`, event: 'ryuo', kind: tag, label: `${title} 第${index + 1}局`,

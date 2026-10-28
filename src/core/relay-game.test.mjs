@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from '../game-state';
 import {
-  DECISIVE_CP, RELAY_MAX_PLIES, THEORY_PLY, clockText, createRelayClock, pickLoss, playRelayGame, relayPlan, relaySeed, relayStoryValues,
+  DECISIVE_CP, RELAY_MAX_PLIES, relayQuality, THEORY_PLY, clockText, createRelayClock, pickLoss, playRelayGame, relayPlan, relaySeed, relayStoryValues,
   relayTarget, relayTimeControl, relayTimeline, remainingText, shouldResign, thinkTimeText,
 } from './relay-game.mjs';
 
@@ -134,6 +134,24 @@ describe('playRelayGame', () => {
       expect(decisive % 2).toBe(winner === 'black' ? 1 : 0);
       for (const entry of game.entries) expect(entry.time).toBeGreaterThan(0);
     }
+  }, 60000);
+
+  it('観戦の期(プロ並み)は、分かれ目の悪手とふだんの損が小さく、決まった勝者が投了で勝つ', async () => {
+    const story = [150, 300, 300];
+    const normal = relayPlan(specOf({ story, key: 'q:n', seed: relaySeed('q') }));
+    const pro = relayPlan(specOf({ story, key: 'q:p', seed: relaySeed('q'), quality: 'pro' }));
+    const small = (plan) => plan.events.filter(({ phase }) => phase !== 'ending').reduce((sum, { size }) => sum + size, 0);
+    expect(small(pro)).toBeLessThan(small(normal));
+    expect(relayQuality({ quality: 'pro' }).slipMax).toBeLessThan(relayQuality({}).slipMax);
+    const engine = fakeSearch();
+    const game = await playRelayGame({ spec: specOf({ story, key: 'q:p', seed: relaySeed('q:p'), quality: 'pro' }), search: engine.search });
+    expect(game.end.winner).toBe('black');
+    expect(game.end.reason).toBe('resign');
+    expect(replay(game.entries.map(({ move }) => move))).not.toBeNull();
+    // 終盤の、敗者が良すぎるときの崩れ(上限400点)は別。中盤までのふだんの損を見る。
+    const { middleEnd } = relayPlan(specOf({ story, key: 'q:p', seed: relaySeed('q:p'), quality: 'pro' }));
+    const slips = game.entries.filter(({ mark }, index) => mark === 'slip' && index < middleEnd);
+    expect(slips.every(({ loss }) => loss <= 60 + 1)).toBe(true);
   }, 60000);
 
   it('序盤は、その棋士の戦法の定跡の手を指す(四間飛車なら飛車を6筋へ)', async () => {

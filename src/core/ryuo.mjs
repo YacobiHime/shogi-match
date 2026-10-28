@@ -712,8 +712,9 @@ function drive(season, rng) {
  * プレイヤーの対局の結果を記録して、シーズンを進める。
  * @param {object} season
  * @param {'win' | 'loss'} outcome
+ * @param {{ game?: object | null }} [options] gameは、自動対局の記録(分身の対局。先手・戦法・囲い・展開・勝ち方)
  */
-export function recordUserGame(season, outcome) {
+export function recordUserGame(season, outcome, { game: simulated = null } = {}) {
   const next = structuredClone(season);
   const pending = next.pending;
   if (!pending) return next;
@@ -730,7 +731,7 @@ export function recordUserGame(season, outcome) {
   });
   next.pending = null;
   // 相手の成績の内訳(先後・戦法)のために、この対局の先手と、相手の戦法を残す。
-  const game = {
+  const game = simulated ?? {
     black: pending.color === 'black' ? USER_ID : opponent,
     how: null,
     openings: { [opponent]: pending.style?.opening ?? null },
@@ -744,6 +745,39 @@ export function recordUserGame(season, outcome) {
     recordSeriesGame(series, win ? USER_ID : opponent, game);
   }
   return drive(next, rng);
+}
+
+// ---- 観戦の期(分身。docs/tournament-relay-design.mdの13章)
+
+/**
+ * 分身(プレイヤーの能力を持った棋士)が出る、観戦の期。分身の対局も、ほかの棋士と同じ自動対局で決め、最後まで進めて返す。
+ * 本番の記録(キャリア・名簿・称号)には数えない。名簿は読むだけ(写しを使う)。
+ * @param {{
+ *   no: number, mode: 'challenge' | 'defense', group: number,
+ *   settings: { difficulty: number, scale: number, revival: boolean, world?: number },
+ *   avatar: { rating: number, character: any }, career?: object, roster: object, seed?: number, userName?: string,
+ * }} options
+ */
+export function createSpectatorSeason({ no, mode, group, settings, avatar, career, roster, seed = Date.now(), userName = 'あなた' }) {
+  let season = createSeason({
+    no, mode, group, settings, userLevel: 0, career, roster: structuredClone(roster), seed, userName,
+  });
+  season.spectator = true;
+  season.players[USER_ID] = {
+    ...season.players[USER_ID], kind: 'avatar', rating: avatar.rating, character: structuredClone(avatar.character ?? { abilities: {}, traits: [] }),
+  };
+  const rng = createRng((seed ^ 0x6a09e667) >>> 0);
+  for (let guard = 0; guard < 200 && season.pending; guard += 1) {
+    const pending = season.pending;
+    const me = season.players[USER_ID];
+    const opponent = season.players[pending.opponentId];
+    const big = pending.kind !== 'game';
+    const result = simulateMemberGame(rng, me, opponent, { big, aColor: pending.color });
+    const game = gameRecordOf(result, USER_ID, pending.opponentId);
+    season = recordUserGame(season, result.aWins ? 'win' : 'loss', { game });
+    season.spectator = true;
+  }
+  return season;
 }
 
 // ---- 表示用

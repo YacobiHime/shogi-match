@@ -240,6 +240,8 @@ const VIEWER = Object.freeze({
   // 応援(特殊能力の持ち主)と、次の相手の対局。
   trait: ['{name}の{trait}見たい', '{trait}くる？', '{trait}の{name}', '{trait}出せ'],
   next: ['次の相手の研究タイム', 'よく見ておこう', '対策メモ'],
+  // 観戦の期の分身(13章)。
+  avatar: ['分身きた！', '分身がんばれ', '本人より強い？', '{name}の分身だ', '分身の終盤見たい'],
   // 盛り上がり(大きな字)。
   hype: ['うおおおお', '!?!?', 'ｷﾀ━━', 'えええ', 'すげえ', 'まじか'],
 });
@@ -265,7 +267,7 @@ const POOL_KIND = Object.freeze({
   winner: 'cheer', lunch: 'neta', dinner: 'neta', seal: 'neta', idle: 'idle', rival: 'cheer', father: 'cheer', oshi: 'cheer', cheer: 'cheer',
   title: 'hype', play: 'play', drop: 'play', predict: 'predict', predictHit: 'predict', predictMiss: 'predict', ai: 'ai', aiEven: 'ai',
   aiBest: 'ai', battleKind: 'theory', castles: 'theory', specialty: 'theory', theory: 'theory', clock: 'clock', clockGap: 'clock', fast: 'clock',
-  neta: 'neta', oyatsu: 'neta', castStart: 'cast', castHanane: 'cast', castFather: 'cast', castAgree: 'cast', trait: 'cheer', next: 'cheer', hype: 'hype',
+  neta: 'neta', oyatsu: 'neta', castStart: 'cast', castHanane: 'cast', castFather: 'cast', castAgree: 'cast', trait: 'cheer', next: 'cheer', avatar: 'cheer', hype: 'hype',
 });
 
 /** 書き手の種類の色(盤の升の強調とは別の、縁取りの文字)。 */
@@ -447,6 +449,12 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     line(0, 'move', 'host', `先手の${call('black')}は${playerHighlight(black)}。後手の${call('white')}は${playerHighlight(white)}。`);
     const next = nextId ? (['black', 'white']).find((side) => players[side]?.id === nextId) : null;
     if (next) line(0, 'move', 'host', `${call(next)}は、あなたの次の相手。どんな将棋を指すか、よく見ておこう！`);
+    // 観戦の期の分身(あなたの対局から出した能力で戦う棋士)。
+    const avatarSide = (['black', 'white']).find((side) => players[side]?.kind === 'avatar');
+    if (avatarSide) {
+      line(0, 'move', 'host', `${SIDE_NAME[avatarSide]}は、あなたの分身！ あなたの対局から出した能力で戦うよ。`);
+      comment(0, 'move', 'avatar', { name: players[avatarSide].name }, 2, 'pink');
+    }
     const favorite = favoriteOpening(black);
     if (favorite) {
       line(0, 'move', 'commentator', speak(cast, `${call('black')}は${favorite}が得意です。${call('white')}がどう応じるか、注目ですね。`, `${call('black')}は${favorite}が得意。${call('white')}がどう応じるか、見どころ。`));

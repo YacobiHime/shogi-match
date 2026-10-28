@@ -68,6 +68,16 @@ export const THEORY_PLY = 16;
 const EVENT_MIN = 200;
 /** 終盤の決め手を与える悪手の大きさの下限(点)。 */
 const DECISIVE_EVENT_MIN = 600;
+/**
+ * 棋譜の質。'pro'は観戦の期(13-3): 序盤・中盤の分かれ目の悪手を小さく、ふだんの手の損の上限を小さくする。
+ * 決め手の悪手(終盤)は同じ(勝ち負けと投了を決めるため)。
+ */
+const QUALITY = Object.freeze({
+  normal: Object.freeze({ eventScale: 0.8, slipMax: 120 }),
+  pro: Object.freeze({ eventScale: 0.6, slipMax: 60 }),
+});
+/** @param {{ quality?: string }} spec */
+export const relayQuality = (spec) => (spec?.quality === 'pro' ? QUALITY.pro : QUALITY.normal);
 
 /** 勝ち方ごとの、中盤の終わりから終局までの手数の幅。 */
 const ENDING_LENGTH = Object.freeze({
@@ -134,7 +144,7 @@ export function relayPlan(spec) {
       const ply = pickPly(from, to, side, taken);
       if (ply === null) continue;
       taken.push(ply);
-      events.push({ ply, side, size: Math.round((Math.abs(delta) * 0.8) / count), phase });
+      events.push({ ply, side, size: Math.round((Math.abs(delta) * relayQuality(spec).eventScale) / count), phase });
     }
   }
   // 終盤: 敗者が、決め手を与える悪手を指す。競り合い・逆転の局は終局の近くで、押し切る局は中盤の終わりの近くで。
@@ -212,8 +222,6 @@ export function blackWinRate(cp) {
 
 /** 目標より良すぎるとみなす幅(点)。 */
 const TOLERANCE = { opening: 200, middle: 200, ending: 300 };
-/** 分かれ目でない手で、目標に合わせて損をしてよい上限(点)。 */
-const SLIP_MAX = 120;
 /** 敗者が終盤で大きく良すぎるとき(目標から800点以上)、1手で損をしてよい上限。 */
 const COLLAPSE_SLIP = 400;
 /** 序盤の作戦の手を、最善手との差がこれ以内なら指す。 */
@@ -346,7 +354,7 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
         }
       } else if (!winnerLocked && excess > tolerance && Math.abs(best.value) < 90000) {
         const collapse = !isWinner && phase === 'ending' && excess > 800;
-        const cap = collapse ? COLLAPSE_SLIP : SLIP_MAX;
+        const cap = collapse ? COLLAPSE_SLIP : relayQuality(spec).slipMax;
         choice = pickLoss(usable, best, { want: Math.min(excess - tolerance / 2, cap), min: 0, max: cap, evaluate });
         if (collapse && (!choice || best.value - choice.value < 100)) {
           const wider = await widerCandidates({ sfen, moves, legal, candidates, search, evaluate, allowed });
