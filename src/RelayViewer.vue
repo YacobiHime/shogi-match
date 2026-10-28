@@ -1346,8 +1346,11 @@ onBeforeUnmount(() => {
   .shogi-game .relay__close-text { display: none; }
   .shogi-game .relay__chips { display: none; }
 }
-/* 横長の広い画面: 左に勝率と盤、右の列に欄・操作。 */
-@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+/*
+ * 横長の画面: 左に勝率と盤、右の列に欄・操作。スマホの横向き(844×390など)も、縦に積むと欄が高さを取って盤が消えるので、
+ * 幅が狭くても横長なら2列にする(UD 7-5の「並びを変える」)。
+ */
+@media (min-width: 900px) and (min-aspect-ratio: 1/1), (orientation: landscape) and (max-height: 600px) {
   .shogi-game .relay__body { grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) minmax(19rem, 26rem); gap: 1rem; }
   .shogi-game .relay__side { grid-template-rows: auto minmax(0, 1fr) auto auto auto; }
 }

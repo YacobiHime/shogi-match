@@ -26,6 +26,7 @@
             'ryuo-bracket__card--pending': match.pending && !live[match.id],
             'ryuo-bracket__card--final': match.final,
             'ryuo-bracket__card--live': live[match.id] && !live[match.id].done,
+            'ryuo-bracket__card--watch': live[match.id] || (watchable && canWatch(match)),
           }]"
           :style="{ left: `${(match.round - 1) * colW}px`, top: `${HEAD + match.y * leafGap - cardH / 2}px`, width: `${cardW}px`, height: `${cardH}px` }"
           :aria-label="matchAria(match)"
@@ -229,11 +230,13 @@ watch(() => `${props.view.userNext}:${props.view.matches.find((entry) => entry.p
 .shogi-game .ryuo-bracket--scroll { scroll-snap-type: x mandatory; }
 .shogi-game .ryuo-bracket__stage { position: relative; }
 .shogi-game .ryuo-bracket__snap { position: absolute; top: 0; width: 1px; height: 1px; scroll-snap-align: start; }
+/* 回戦の見出しは上に貼りつく。下を流れる札が見出しのすきまから透けないよう、表の地の色を敷く。 */
 .shogi-game .ryuo-bracket__heads {
   position: sticky;
   top: 0;
   z-index: 2;
   height: 32px;
+  background: var(--ryuo-bracket-bg, #1e2d3d);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -330,6 +333,8 @@ watch(() => `${props.view.userNext}:${props.view.matches.find((entry) => entry.p
   font-size: 0.55rem;
   box-shadow: 0 0 0 2px #142231;
 }
+/* 右端の印は札の縦の真ん中に出るので、中継中の札(3段)では2人目の段位に重なる。印のある札は、名前の行の右に印の分をあける。 */
+.shogi-game .ryuo-bracket__card--watch .ryuo-bracket__row { padding-right: 0.95rem; }
 .shogi-game .ryuo-bracket__watch:hover,
 .shogi-game .ryuo-bracket__watch:focus-visible { background: rgba(241, 165, 76, 0.12); outline: 2px solid #f1a54c; outline-offset: -2px; }
 /* 回戦の中継ボード(18章)。対局中の札は赤い縁で脈打つ(動きを減らす設定では止める)。 */

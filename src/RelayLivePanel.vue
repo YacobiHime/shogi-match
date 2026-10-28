@@ -27,7 +27,7 @@
     <!-- 勝敗の予想(24-1)。序盤のうちに勝つ側を選び、終局したら当たり外れ。 -->
     <p v-if="panel.predict" class="relay-live__predict" data-live-predict>
       <span>予想 <b>{{ panel.predict.hit }}/{{ panel.predict.decided }}</b> 的中<small>（通算 {{ panel.predict.totalHit }}/{{ panel.predict.total }}）</small></span>
-      <button type="button" class="shogi-tournament__sub" data-live-predict-open @click="predictOpen = true">勝敗を予想</button>
+      <button type="button" class="shogi-tournament__sub" data-live-predict-open @click="predictOpen = true">勝敗を予想<small class="relay-live__predict-mini">{{ panel.predict.hit }}/{{ panel.predict.decided }}</small></button>
     </p>
     <slot />
     <div class="shogi-tournament__hud-row">
@@ -116,4 +116,26 @@ function stateText(game: PredictGame) {
 .shogi-game .relay-live__predict-pick--white.is-picked { border-color: #c8433a; background: rgba(200, 67, 58, 0.45); }
 .shogi-game .relay-live__predict-pick:disabled { opacity: 0.55; cursor: default; }
 .shogi-game .relay-live__predict-state { color: #f1a54c; font-size: 0.85em; font-weight: 900; text-align: center; }
+.shogi-game .relay-live__predict-mini { display: none; }
+/*
+ * 背の低い縦の画面(スマホ縦の小さめ)。欄が高いと上の表がつぶれるので(UD 7-5)、補足の文を省き、
+ * 「勝敗を予想」「速さ」「結果まで進める」を横1列にする。的中の数は、予想のボタンの中に残す。
+ */
+@media (max-width: 899px) and (orientation: portrait) and (max-height: 760px) {
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live { display: flex; flex-wrap: wrap; gap: 0.45rem; padding-top: 0.55rem; }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live > * { flex: 1 1 100%; min-width: 0; }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .shogi-tournament__live-count { display: none; }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .relay-live__predict,
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .shogi-tournament__hud-row { display: contents; }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .relay-live__predict > span { display: none; }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .relay-live__predict button,
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .shogi-tournament__hud-row button {
+    flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0.2rem 0.3rem; font-size: 0.82em; line-height: 1.2;
+  }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .relay-live__predict-mini { display: block; color: #f1a54c; font-size: 0.9em; }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .shogi-tournament__live-game { padding-block: 0.45rem; }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .shogi-tournament__start { min-height: 48px; padding-block: 0.35rem; }
+  /* 中継のあいだは、表の上の段階の説明(補足)も省き、表に高さを回す(竜王戦の表・名人戦のリーグ表)。 */
+  .shogi-game .shogi-tournament__stage:has(.shogi-tournament__live) .shogi-tournament__stagehead p { display: none; }
+}
 </style>

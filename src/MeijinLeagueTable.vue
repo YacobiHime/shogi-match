@@ -165,8 +165,10 @@ watch(() => props.currentRound, () => nextTick(showYou));
 /* 回戦の中継ボード(22章)。名前の下に、何手目・この棋士の側の勝率(先手は青、後手は赤。表の札と同じ)・▶。 */
 .shogi-game .meijin-table__live {
   display: flex; align-items: center; gap: 0.35rem; width: 100%; min-height: 28px; margin-top: 0.15rem; padding: 0.1rem 0.3rem;
-  border: 1px solid rgba(159, 179, 200, 0.3); border-radius: 0.35rem; color: #fffcf4; background: rgba(15, 24, 40, 0.6); font: inherit; font-size: 0.8em; cursor: pointer;
+  position: relative; border: 1px solid rgba(159, 179, 200, 0.3); border-radius: 0.35rem; color: #fffcf4; background: rgba(15, 24, 40, 0.6); font: inherit; font-size: 0.8em; cursor: pointer;
 }
+/* 見た目の高さは28pxのまま、押せる範囲を上(名前の行)と下に広げて44px以上にする(UI 7-4)。 */
+.shogi-game .meijin-table__live::before { content: ""; position: absolute; inset: -1.1rem 0 -0.3rem; }
 .shogi-game .meijin-table__live-ply { min-width: 3.6em; color: #9fb3c8; font-weight: 900; font-variant-numeric: tabular-nums; }
 .shogi-game .meijin-table__live-ply--on { color: #f1a54c; }
 .shogi-game .meijin-table__live-bar { flex: 1; height: 0.4rem; overflow: hidden; border-radius: 999px; }
