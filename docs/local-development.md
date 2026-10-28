@@ -162,6 +162,8 @@ git diff --check
 
 `dist/`と`firebase-public/`は生成物です。直接編集しないでください。
 
+ビルドした画面をブラウザで見るときは、COOP/COEPを返してキャッシュさせない静的サーバー`node scripts/serve-static.mjs 8766`（<http://127.0.0.1:8766/game.html>）を使えます。ビルドし直してもすぐ新しいJSが届きます。スマホ縦・タブレット縦・デスクトップの3つの大きさで写真とはみ出しを出すには、Playwrightを用意したうえで`node scripts/browser-check.mjs --out <置き場所> --tile 大会`を実行します（使い方はスクリプトの先頭と`AGENTS.md`の「検証」）。
+
 展示用パッケージ（インターネットのないWindowsのPCで遊ぶフォルダーとzip）は`npm run build:exhibit`で`exhibit/`に作ります（生成物。gitに入れません）。中身と使い方は`docs/exhibit-design.md`と、パッケージの`README.txt`にあります。
 
 ## よくある問題
