@@ -165,7 +165,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/ryuoOpponentId: ryuoGame\.value\?\.opponentId \?\? null/);
     expect(source).toMatch(/suspended\.ryuoOpponentId === pending\.opponentId/);
     expect(source).toMatch(/function resumeRyuoGame\(\)[\s\S]*?tournamentOpen\.value = false;[\s\S]*?resumeSuspendedMatch\(\);/);
-    expect(source).toMatch(/:suspended-moves="suspendedRyuoMoves"[\s\S]*?@resume="resumeRyuoGame"/);
+    // 観戦の期(13-6)を見ているあいだは、本番の期の中断した対局を出さない。
+    expect(source).toMatch(/:suspended-moves="ryuoSpectating \? null : suspendedRyuoMoves"[\s\S]*?@resume="resumeRyuoGame"/);
   });
 
   it("runs the Ryuo tournament as its own mode from the title screen, with saved seasons and its own result dialog", () => {
@@ -195,7 +196,9 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/stages: \["scan"\]/);
     expect(source).toMatch(/current\.id !== job\.seasonId/);
     // 結果の画面を見終えたら記録し、次に竜王戦を選ぶと次の期のエントリーになる。
-    expect(source).toMatch(/@result-seen="markRyuoResultSeen"/);
+    // 観戦の期の結果を見ても、本番の期の「結果を見た」の印は変えない(13-6)。
+    expect(source).toMatch(/@result-seen="noteRyuoResultSeen"/);
+    expect(source).toMatch(/function noteRyuoResultSeen\(\) \{\s*if \(!ryuoSpectating\.value\) markRyuoResultSeen\(\);/);
     expect(source).toMatch(/season\.phase !== "done" \|\| season\.applied/);
     // 千日手は、結果に数えず、先後を入れ替えて指し直す。
     expect(source).toMatch(/if \(!matchResult\.winner\) \{[\s\S]*?next\.pending\.color = next\.pending\.color === "black" \? "white" : "black";/);
@@ -307,7 +310,8 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/<RyuoBracket\s+v-if="viewStageIndex === 0[\s\S]*?<RyuoBracket\s+v-if="viewStageIndex === 1[\s\S]*?<RyuoSeries\s+v-if="viewStageIndex === 2"/);
     // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。
     expect(tournament).toMatch(/<RyuoVersus[\s\S]*?@done="startPlay"/);
-    expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*emit\("play"\);/);
+    // 観戦の期(13-6)は、VS画面のあと、分身の対局の中継を開く。
+    expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*if \(props\.spectating\) \{\s*void watchAvatarGame\(true\);\s*return;\s*\}\s*emit\("play"\);/);
     // 期の結果の主役は「表彰式へ」。賞状(縦書き・判子)をわたし、閉じると期を見終えて大会の選択へ(docs/season-award-design.md)。
     expect(tournament).toMatch(/data-award-open @click="openCeremony\(`ryuo-\$\{seasonNo\}`\)">表彰式へ</);
     expect(tournament).toMatch(/@ceremony="openCeremony\(`meijin-\$\{meijinView\?\.no \?\? 0\}`\)"/);

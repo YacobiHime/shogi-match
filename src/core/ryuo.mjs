@@ -750,34 +750,47 @@ export function recordUserGame(season, outcome, { game: simulated = null } = {})
 // ---- 観戦の期(分身。docs/tournament-relay-design.mdの13章)
 
 /**
- * 分身(プレイヤーの能力を持った棋士)が出る、観戦の期。分身の対局も、ほかの棋士と同じ自動対局で決め、最後まで進めて返す。
- * 本番の記録(キャリア・名簿・称号)には数えない。名簿は読むだけ(写しを使う)。
+ * 分身(プレイヤーの能力を持った棋士)が出る、観戦の期。本番の記録(キャリア・名簿・称号)には数えない。名簿は読むだけ(写しを使う)。
+ * liveなら、ふつうの期と同じく分身の次の一局で止めて返す(「観戦する」で1局ずつ進める。13-6)。
+ * liveでなければ、分身の対局もほかの棋士と同じ自動対局で決め、最後まで進めて返す(前の版の観戦の期と、テスト)。
  * @param {{
  *   no: number, mode: 'challenge' | 'defense', group: number,
  *   settings: { difficulty: number, scale: number, revival: boolean, world?: number },
- *   avatar: { rating: number, character: any }, career?: object, roster: object, seed?: number, userName?: string,
+ *   avatar: { rating: number, character: any }, career?: object, roster: object, seed?: number, userName?: string, live?: boolean,
  * }} options
  */
-export function createSpectatorSeason({ no, mode, group, settings, avatar, career, roster, seed = Date.now(), userName = 'あなた' }) {
+export function createSpectatorSeason({ no, mode, group, settings, avatar, career, roster, seed = Date.now(), userName = 'あなた', live = true }) {
   let season = createSeason({
     no, mode, group, settings, userLevel: 0, career, roster: structuredClone(roster), seed, userName,
   });
   season.spectator = true;
+  if (live) season.live = true;
   season.players[USER_ID] = {
     ...season.players[USER_ID], kind: 'avatar', rating: avatar.rating, character: structuredClone(avatar.character ?? { abilities: {}, traits: [] }),
   };
-  const rng = createRng((seed ^ 0x6a09e667) >>> 0);
-  for (let guard = 0; guard < 200 && season.pending; guard += 1) {
-    const pending = season.pending;
-    const me = season.players[USER_ID];
-    const opponent = season.players[pending.opponentId];
-    const big = pending.kind !== 'game';
-    const result = simulateMemberGame(rng, me, opponent, { big, aColor: pending.color });
-    const game = gameRecordOf(result, USER_ID, pending.opponentId);
-    season = recordUserGame(season, result.aWins ? 'win' : 'loss', { game });
-    season.spectator = true;
-  }
+  if (live) return season;
+  for (let guard = 0; guard < 200 && season.pending; guard += 1) season = playSpectatorGame(season);
   return season;
+}
+
+/**
+ * 観戦の期の、分身の次の一局を決めて記録する(ほかの棋士と同じ自動対局。結果は期の種と局の数で決まる)。
+ * 決めた対局は、ほかの棋士の対局と同じく中継に並ぶ(relay-games.mjsのtags.self)。
+ * @param {any} season 観戦の期
+ */
+export function playSpectatorGame(season) {
+  if (!season?.pending) return season;
+  const pending = season.pending;
+  const count = season.userGames?.length ?? 0;
+  const rng = createRng(((Number(season.id) || 0) ^ 0x6a09e667 ^ Math.imul(count + 1, 0x9e3779b1)) >>> 0);
+  const me = season.players[USER_ID];
+  const opponent = season.players[pending.opponentId];
+  const result = simulateMemberGame(rng, me, opponent, { big: pending.kind !== 'game', aColor: pending.color });
+  const game = gameRecordOf(result, USER_ID, pending.opponentId);
+  const next = recordUserGame(season, result.aWins ? 'win' : 'loss', { game });
+  next.spectator = true;
+  if (season.live) next.live = true;
+  return next;
 }
 
 // ---- 表示用

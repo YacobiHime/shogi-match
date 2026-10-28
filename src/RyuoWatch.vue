@@ -100,7 +100,8 @@ const props = defineProps({
 });
 const emit = defineEmits<{ close: []; reveal: [count: number]; watch: [entry: any] }>();
 
-const spectator = computed(() => Boolean(props.season?.spectator));
+/** 前の版の観戦の期(最後まで決めてある)は、最初の回戦から見る。いまの観戦の期(live)は、ふつうの期と同じく敗退後の回戦だけ。 */
+const spectator = computed(() => Boolean(props.season?.spectator && !props.season?.live));
 const steps = computed(() => {
   const all = watchSteps(props.season, { oshiId: props.oshiId || null });
   return spectator.value ? all : stepsAfterElimination(props.season, all);
@@ -108,7 +109,7 @@ const steps = computed(() => {
 const heading = computed(() => `第${props.season?.no ?? 1}期 竜王戦 ${spectator.value ? "観戦" : "このあとの対局"}`);
 const subheading = computed(() => (spectator.value
   ? "分身が出る、もしもの期（本番の記録には残らないよ）"
-  : "あなたの敗退後の対局。誰が竜王になるか、見届けよう"));
+  : props.season?.spectator ? "分身の敗退後の対局。誰が竜王になるか、見届けよう" : "あなたの敗退後の対局。誰が竜王になるか、見届けよう"));
 const finale = computed(() => watchFinale(props.season));
 
 const viewIndex = ref(Math.min(props.revealed, steps.value.length));

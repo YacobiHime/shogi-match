@@ -236,7 +236,7 @@
               <p class="shogi-tournament__hud-name">{{ view?.title }} <small>{{ view?.phaseText }}</small></p>
               <div class="shogi-tournament__hud-row">
                 <button type="button" class="shogi-tournament__sub" @click="reEntry = true">破棄して、新しくエントリー</button>
-                <button type="button" class="shogi-tournament__sub" data-watch-enter @click="ryuoWatch?.season ? (watchTarget = 'spectator') : (watchConfirm = true)">{{ ryuoWatch?.season ? "観戦の続き" : "観戦で参加" }}</button>
+                <button type="button" class="shogi-tournament__sub" data-watch-enter @click="ryuoWatch?.season ? continueWatch() : (watchConfirm = true)">{{ ryuoWatch?.season ? "観戦の続き" : "観戦で参加" }}</button>
               </div>
               <button type="button" class="shogi-tournament__start" data-tournament-continue @click="screen = 'season'">続きから参加する</button>
             </template>
@@ -257,7 +257,7 @@
               <!-- 分身で観戦参加(docs/tournament-relay-design.mdの13章)。本番の期とは別の、もしもの期。 -->
               <div class="shogi-tournament__hud-row">
                 <button type="button" class="shogi-tournament__sub" data-watch-enter @click="watchConfirm = true">観戦で参加</button>
-                <button v-if="ryuoWatch?.season" type="button" class="shogi-tournament__sub" data-watch-continue @click="watchTarget = 'spectator'">観戦の続き</button>
+                <button v-if="ryuoWatch?.season" type="button" class="shogi-tournament__sub" data-watch-continue @click="continueWatch">観戦の続き</button>
               </div>
               <button type="button" class="shogi-tournament__start" data-tournament-enter @click="enter">出場する</button>
             </template>
@@ -291,7 +291,7 @@
           <div v-if="watchConfirm" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="観戦で参加" data-watch-confirm @click.self="watchConfirm = false">
             <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
               <h2>観戦で参加</h2>
-              <p class="shogi-tournament__text">あなたの対局から出した能力を持つ「分身」が、竜王戦に出て自動で戦うよ。回戦ごとに中継を見て、結果をめくっていこう。中継はプロ並みの読みで作るよ。</p>
+              <p class="shogi-tournament__text">あなたの対局から出した能力を持つ「分身」が、竜王戦に出て自動で戦うよ。画面はいつもの竜王戦と同じで、「対局する」の代わりに「観戦する」で分身の対局を中継で見られるよ。中継はプロ並みの読みで作るよ。</p>
               <p class="shogi-tournament__hint">もしもの期なので、本番の組・竜王・称号・賞状には数えないよ。{{ ryuoWatch?.season ? "前の観戦の期は、新しい期に置き換わるよ。" : "" }}</p>
               <PlayerAbilityPanel v-if="avatarProfile?.ready" :view="avatarProfile.view" data-watch-avatar-panel />
               <p v-else class="shogi-tournament__hint" data-watch-avatar-note>{{ avatarNoteText }}</p>
@@ -351,7 +351,7 @@
             </button>
             <span class="shogi-tournament__seal" aria-hidden="true">竜</span>
             <div class="shogi-tournament__topbar-title">
-              <h1 id="shogi-tournament-title" data-phase>{{ seasonHeading }}</h1>
+              <h1 id="shogi-tournament-title" data-phase>{{ seasonHeading }}<span v-if="spectating" class="shogi-tournament__watch-tag" data-watch-tag>観戦</span></h1>
               <p v-if="oshiStep" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
               <p v-else class="shogi-tournament__topbar-sub">{{ view.phaseText }}</p>
             </div>
@@ -363,7 +363,7 @@
                   type="button"
                   :class="['shogi-tournament__step', `shogi-tournament__step--${stage.status}`, {
                     'shogi-tournament__step--viewing': index === viewStageIndex,
-                    'shogi-tournament__step--arrived': fromGame && stages.arrived && stage.status === 'current',
+                    'shogi-tournament__step--arrived': arrivedFromGame && stages.arrived && stage.status === 'current',
                   }]"
                   :aria-pressed="index === viewStageIndex"
                   :aria-current="stage.status === 'current' ? 'step' : undefined"
@@ -376,7 +376,7 @@
                 </button>
               </template>
             </nav>
-            <button v-if="predictionOptions" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-prediction-open @click="sheet = 'predict'">予想</button>
+            <button v-if="predictionOptions && !spectating" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-prediction-open @click="sheet = 'predict'">予想</button>
             <!-- ほかの棋士の対局の中継(docs/tournament-relay-design.mdの7章)。 -->
             <button v-if="relayEngineFactory" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-relay-open @click="openRelayList('ryuo')">中継</button>
           </header>
@@ -502,6 +502,11 @@
             <button v-if="suspendedMoves !== null" type="button" class="shogi-tournament__start shogi-tournament__start--resume" data-tournament-resume @click="emit('resume')">
               対局を再開<small>中断した対局（{{ suspendedMoves }}手目まで）</small>
             </button>
+            <!-- 観戦の期(13-6)は、「観戦する」で分身の対局の中継を開く。「結果だけ見る」は中継を開かずに進める。 -->
+            <div v-else-if="spectating" class="shogi-tournament__hud-row shogi-tournament__watch-row">
+              <button type="button" class="shogi-tournament__sub" data-watch-skip @click="watchAvatarGame(false)">結果だけ見る</button>
+              <button type="button" class="shogi-tournament__start" data-watch-play @click="versusOpen = true">{{ playText }}</button>
+            </div>
             <button v-else type="button" class="shogi-tournament__start" data-tournament-play @click="versusOpen = true">{{ playText }}</button>
           </section>
           <section v-else-if="view.result" class="shogi-tournament__hud" aria-label="この期の結果">
@@ -517,7 +522,7 @@
             :label="view.pending.label"
             :you="view.pending.color === 'white' ? 'white' : 'black'"
             :rating-text="ratingText"
-            :you-name="playerName"
+            :you-name="spectating ? `${playerName}の分身` : playerName"
             :opponent="versusOpponent"
             :win="view.pending.stakes?.win ?? ''"
             :boss="Boolean(view.pending.stakes?.boss)"
@@ -661,13 +666,13 @@
           <div class="shogi-tournament__mapwrap">
             <RyuoMountain v-if="view.road" :road="view.road" :asset-base-url="assetBaseUrl" :glow-crown="groupMove.kind === 'crown'" :headroom="110" />
             <div class="shogi-tournament__result-head">
-              <p class="shogi-tournament__eyebrow">{{ view.title }}の結果</p>
+              <p class="shogi-tournament__eyebrow">{{ view.title }}の結果{{ spectating ? "（観戦）" : "" }}</p>
               <p class="shogi-tournament__headline">{{ outcomeHeadline }}</p>
               <p v-if="oshiStep" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
             </div>
             <ol class="shogi-tournament__banzuke" :aria-label="`番付。${groupMove.from}から${groupMove.to}（${groupMove.label}）`">
               <li v-for="row in banzuke(groupMove.kind === 'crown' ? 0 : view.result.newGroup)" :key="row.key" :class="{ 'shogi-tournament__banzuke--you': row.you }">
-                {{ row.label }}<span v-if="row.you" class="shogi-tournament__banzuke-you">あなた</span>
+                {{ row.label }}<span v-if="row.you" class="shogi-tournament__banzuke-you">{{ spectating ? "分身" : "あなた" }}</span>
                 <strong
                   v-if="row.you && (groupMove.kind === 'up' || groupMove.kind === 'crown' || groupMove.kind === 'down')"
                   :class="['shogi-tournament__move-label', `shogi-tournament__move-label--${groupMove.kind}`, { 'shogi-tournament__move-label--stamp': resultStamp }]"
@@ -683,7 +688,8 @@
               <div><dd>{{ bestAxisLabel || "—" }}</dd><dt>いちばん光った</dt></div>
               <div><dd>{{ stats.longestWinStreak }}連勝</dd><dt>最長</dt></div>
             </dl>
-            <p class="shogi-tournament__next-goal" data-next-goal><small>次の期</small>{{ entryGoalLine({ mode: entry.mode, group: entry.group, scale: scale }) }}</p>
+            <p v-if="spectating" class="shogi-tournament__next-goal" data-next-goal><small>観戦</small>もしもの期なので、本番の組・竜王・称号・賞状には数えないよ。</p>
+            <p v-else class="shogi-tournament__next-goal" data-next-goal><small>次の期</small>{{ entryGoalLine({ mode: entry.mode, group: entry.group, scale: scale }) }}</p>
             <button type="button" class="shogi-tournament__tip-line" data-result-more @click="resultDetailOpen = true">
               <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
               <span class="shogi-tournament__tip-text">{{ resultSays[0] }}</span>
@@ -691,13 +697,14 @@
             </button>
             <div class="shogi-tournament__hud-row">
               <button type="button" class="shogi-tournament__sub" data-result-table @click="screen = 'season'">表を見る</button>
-              <button type="button" class="shogi-tournament__sub" @click="emit('open-note')">ノートを見る</button>
+              <button v-if="!spectating" type="button" class="shogi-tournament__sub" @click="emit('open-note')">ノートを見る</button>
             </div>
             <!-- 敗退したあとの対局を、回戦ごとに観戦する(13章)。 -->
             <button v-if="afterWatchCount" type="button" class="shogi-tournament__sub relay-open" data-watch-after @click="watchTarget = 'after'">
               このあとの対局を観戦<small>{{ afterWatchRevealed >= afterWatchCount ? "見届けた" : `${afterWatchCount}回戦` }}</small>
             </button>
-            <button type="button" class="shogi-tournament__start" data-award-open @click="openCeremony(`ryuo-${seasonNo}`)">表彰式へ</button>
+            <button v-if="spectating" type="button" class="shogi-tournament__start" data-watch-finish @click="backToSelect">観戦を終える</button>
+            <button v-else type="button" class="shogi-tournament__start" data-award-open @click="openCeremony(`ryuo-${seasonNo}`)">表彰式へ</button>
           </section>
 
           <!-- くわしい結果(統計・レーダーチャート・やこび姫の解説)。 -->
@@ -810,7 +817,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import RyuoBracket, { type BracketView } from "./RyuoBracket.vue";
 import RyuoSeries, { type SeriesView } from "./RyuoSeries.vue";
 import RadarChart from "./RadarChart.vue";
@@ -989,6 +996,8 @@ const props = defineProps({
   ryuoWatch: { type: Object as PropType<any>, default: null },
   /** 分身の能力(core/my-abilities.mjsのmyAbilityProfile)。 */
   avatarProfile: { type: Object as PropType<any>, default: null },
+  /** 観戦の期を、ふつうの期の画面で見ているところ(13-6)。view・ryuoSeasonは観戦の期になる。 */
+  spectating: { type: Boolean, default: false },
   meijinSeason: { type: Object as PropType<any>, default: null },
   relayEngineFactory: { type: Function as PropType<() => Promise<EngineFactory>>, default: null },
   /** スマホ・タブレット縦(中継の棋譜を作る読みの量を減らす)。 */
@@ -999,6 +1008,10 @@ const emit = defineEmits<{
   enter: [settings: { difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number }];
   "watch-enter": [settings: { difficulty: number; scale: number; revival: boolean }];
   "watch-progress": [seasonId: string, revealed: number];
+  /** 観戦の期の画面に入る(true)・出る(false)。 */
+  spectate: [on: boolean];
+  /** 観戦の期の、分身の次の一局を決める。 */
+  "watch-play": [];
   play: [];
   resume: [];
   "open-note": [];
@@ -1111,6 +1124,8 @@ function chooseMeijin() {
 const reEntry = ref(false);
 /** 竜王への道の、登る動きをまだ見せていない。 */
 const climbPending = ref(props.fromGame);
+/** 対局から戻ったところ(観戦の期は、分身の対局の中継を閉じたところ)。節目の一言と段階の光りを出す。 */
+const arrivedFromGame = ref(props.fromGame);
 /** 中身の欄。画面を切り替えたら、上から見せる。 */
 const mainEl = ref<HTMLElement | null>(null);
 watch(screen, () => {
@@ -1137,7 +1152,7 @@ function chooseRyuo() {
   sheet.value = "";
 }
 
-const backText = computed(() => (screen.value === "result" ? "大会選択へ" : "大会の選択へ"));
+const backText = computed(() => (props.spectating ? "観戦を終える" : screen.value === "result" ? "大会選択へ" : "大会の選択へ"));
 /**
  * 戻る操作。重ねて開いたもの(くわしい情報・トーナメント表・説明)があれば、まずそれを閉じる。
  * 結果は見終えたことにして、大会の選択へ。ほかの画面も、大会の選択へ。選択の画面なら、閉じる。
@@ -1176,6 +1191,15 @@ function goBack() {
 }
 function backToSelect() {
   if (screen.value === "result") emit("result-seen");
+  // 観戦の期からは、竜王戦の入口へ戻る(本番の期の画面に替わる)。
+  if (props.spectating) {
+    emit("spectate", false);
+    screen.value = "ryuo";
+    viewStage.value = null;
+    groupChoice.value = null;
+    tableOpen.value = false;
+    return;
+  }
   screen.value = "select";
   reEntry.value = false;
   viewStage.value = null;
@@ -1236,7 +1260,7 @@ const watchRevealed = computed(() => Number(props.ryuoWatch?.progress?.[String(w
 /** 本番の期で敗退したとき、観戦できる回戦の数(竜王になった期・終わっていない期は0)。 */
 const afterWatchSteps = computed(() => {
   const season = props.ryuoSeason;
-  if (!season || season.phase !== "done" || season.spectator || userWonSeason(season)) return [];
+  if (!season || season.phase !== "done" || (season.spectator && !season.live) || userWonSeason(season)) return [];
   return stepsAfterElimination(season, watchSteps(season, { oshiId: props.oshi?.id ?? null }));
 });
 const afterWatchCount = computed(() => afterWatchSteps.value.length);
@@ -1252,9 +1276,59 @@ function avatarViewOf(season: any) {
 function startWatch() {
   emit("watch-enter", { difficulty: difficulty.value, scale: scale.value, revival: revival.value });
   watchConfirm.value = false;
-  watchTarget.value = "spectator";
   relaySeen.value = loadRelayStore(relayStorage()).seen;
+  openSpectatorSeason("season");
 }
+/**
+ * 観戦の期を、ふつうの期の画面で開く(13-6)。前の版の観戦の期(最後まで決めてある)は、回戦ごとの観戦で見る。
+ * @param target 期の画面か結果か
+ */
+function openSpectatorSeason(target: "season" | "result") {
+  viewStage.value = null;
+  groupChoice.value = null;
+  tableOpen.value = false;
+  sheet.value = "";
+  arrivedFromGame.value = false;
+  screen.value = target;
+}
+/** 入口の「観戦の続き」。 */
+function continueWatch() {
+  const season = props.ryuoWatch?.season;
+  if (!season) return;
+  if (!season.live) {
+    watchTarget.value = "spectator";
+    return;
+  }
+  relaySeen.value = loadRelayStore(relayStorage()).seen;
+  emit("spectate", true);
+  openSpectatorSeason(season.phase === "done" ? "result" : "season");
+}
+/** 中継を閉じたら、対局から戻ったときと同じく、竜王への道を登る(結果を見せる)。 */
+const arrivalPending = ref(false);
+/**
+ * 観戦の期の「観戦する」(VS画面のあと)・「結果だけ見る」。分身の次の一局を決め、その中継を開く。
+ * 中継を閉じたら(結果だけ見るときはすぐ)、対局から戻ったときと同じ演出で結果を見せる。
+ */
+async function watchAvatarGame(withRelay: boolean) {
+  versusOpen.value = false;
+  const before = new Set(ryuoRelayGameList.value.filter((item) => item.tags?.self).map((item) => item.key));
+  emit("watch-play");
+  await nextTick();
+  const entry = withRelay && props.relayEngineFactory
+    ? ryuoRelayGameList.value.find((item) => item.tags?.self && !before.has(item.key)) ?? null
+    : null;
+  if (entry) {
+    relaySeen.value = loadRelayStore(relayStorage()).seen;
+    arrivalPending.value = true;
+    relayEntry.value = entry;
+  } else arriveFromGame();
+}
+watch(relayEntry, (now, before) => {
+  if (!now && before && arrivalPending.value) {
+    arrivalPending.value = false;
+    arriveFromGame();
+  }
+});
 /** 観戦の中から中継を開く。めくる前の結果を見せないよう、同じ回戦のほかの結果(運営の帯)は出さない。 */
 function openWatchEntry(entry: any) {
   relaySeen.value = loadRelayStore(relayStorage()).seen;
@@ -1461,6 +1535,11 @@ const tipLine = computed(() => {
   const ability = opponentSays.value.find((line) => line.startsWith("能力は"));
   const firstSeason = !props.career.seasons;
   // 対局から戻った直後の節目は、やこび姫がまず喜ぶ(4-5)。
+  if (props.spectating) {
+    const name = props.view?.pending?.opponent?.name ?? "";
+    return (arrivedFromGame.value ? props.view?.milestone?.line : "")
+      || (name ? `分身の次の相手は${name}さん。「観戦する」で中継を見て応援しよう！` : "");
+  }
   return (props.fromGame ? props.view?.milestone?.line : "")
     || props.view?.pending?.rival?.coach
     || (firstSeason ? phaseLines.value[0] : ability)
@@ -1510,6 +1589,10 @@ const SPECIAL_MARK: Record<string, string> = Object.freeze({ gold: "★", blue: 
 const versusOpen = ref(false);
 function startPlay() {
   versusOpen.value = false;
+  if (props.spectating) {
+    void watchAvatarGame(true);
+    return;
+  }
   emit("play");
 }
 /** VS画面の相手。 */
@@ -1544,20 +1627,34 @@ const celebration = computed(() => {
   return resultStamp.value ? props.view?.milestone?.kind ?? "result" : "";
 });
 const milestoneTimers: ReturnType<typeof setTimeout>[] = [];
-onMounted(() => {
+/** 対局から戻ったときの判子(節目の札か、結果の画面の判子)。 */
+function playArrivalStamp() {
   if (milestoneOpen.value) {
     milestoneTimers.push(
       setTimeout(() => soundPlayer.play("stamp"), STAMP_SOUND_AT),
       setTimeout(() => { milestoneOpen.value = false; }, MILESTONE_SHOW_MS),
     );
-  } else if (props.fromGame && props.view?.result && (groupMove.value.kind === "up" || groupMove.value.kind === "crown")) {
+  } else if (arrivedFromGame.value && props.view?.result && (groupMove.value.kind === "up" || groupMove.value.kind === "crown")) {
     resultStamp.value = true;
     milestoneTimers.push(
       setTimeout(() => soundPlayer.play("stamp"), RESULT_STAMP_SOUND_AT),
       setTimeout(() => { resultStamp.value = false; }, MILESTONE_SHOW_MS),
     );
   }
-});
+}
+onMounted(playArrivalStamp);
+/**
+ * 観戦の期で、分身の対局の中継を閉じた(結果だけ見るときは、すぐ)。対局から戻ったときと同じく、
+ * 竜王への道を登り、知らせと節目の判子を出す。期が終われば結果の画面へ(13-6)。
+ */
+function arriveFromGame() {
+  arrivedFromGame.value = true;
+  climbPending.value = true;
+  newsOpen.value = true;
+  if (props.view?.result) screen.value = "result";
+  milestoneOpen.value = Boolean(props.view?.milestone) && !props.view?.result;
+  playArrivalStamp();
+}
 onBeforeUnmount(() => milestoneTimers.splice(0).forEach(clearTimeout));
 /** 期の結果の、くわしい情報(統計・レーダーチャート・解説)。 */
 const resultDetailOpen = ref(false);
@@ -1792,6 +1889,7 @@ const seasonHeading = computed(() => (props.view?.title ?? "").replace(/^(第\d+
 /** 「対局する」の文字。番勝負では「第3局を指す」。 */
 const playText = computed(() => {
   const pending = props.view?.pending;
+  if (props.spectating) return pending && pending.kind !== "game" ? `第${pending.gameNo}局を観戦` : "観戦する";
   return pending && pending.kind !== "game" ? `第${pending.gameNo}局を指す` : "対局する";
 });
 
@@ -2644,6 +2742,9 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__step--current { border-color: #f1a54c; color: #172632; background: #f1a54c; box-shadow: 0 3px 0 #b06a1c; }
 .shogi-game .shogi-tournament__step--current i { color: #f1a54c; background: #172632; }
 .shogi-game .shogi-tournament__step--watch { border-style: dashed; }
+/* 観戦の期の印と、「結果だけ見る」「観戦する」の行(13-6)。 */
+.shogi-game .shogi-tournament__watch-tag { margin-left: 0.4rem; padding: 0.05rem 0.4rem; border-radius: 0.3rem; color: #172632; background: #9fd0ff; font-size: 0.7em; vertical-align: middle; }
+
 /* 次の段階に進んだ直後: いまの段階を3回だけ光らせる(段階の解放。G:2-2)。 */
 .shogi-game .shogi-tournament__step--arrived { animation: shogi-tournament-step-arrive 0.7s ease-in-out 3; }
 @keyframes shogi-tournament-step-arrive {
@@ -3108,6 +3209,10 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__hud .shogi-tournament__entry-settings { padding: 0.35rem 0.35rem 0.35rem 0.7rem; background: rgba(255, 252, 244, 0.06); font-size: 0.88em; }
 .shogi-game .shogi-tournament__hud-row { display: flex; gap: var(--tr-gap); }
 .shogi-game .shogi-tournament__hud-row .shogi-tournament__sub { flex: 1 1 0; width: auto; height: var(--tr-control); font-size: 0.9em; }
+/* 観戦の期の「結果だけ見る」(1)と「観戦する」(2)。主役は「観戦する」(13-6)。 */
+.shogi-game .shogi-tournament__watch-row { align-items: stretch; }
+.shogi-game .shogi-tournament__watch-row .shogi-tournament__sub { flex: 1 1 0; min-width: 0; height: auto; }
+.shogi-game .shogi-tournament__watch-row .shogi-tournament__start { flex: 2 1 0; min-width: 0; margin: 0; }
 /* 結果の見出し(山の上)と、数字の札。 */
 .shogi-game .shogi-tournament__result-head { position: absolute; top: 0.7rem; left: 0; right: 0; display: grid; justify-items: center; gap: 0.15rem; text-align: center; pointer-events: none; }
 .shogi-game .shogi-tournament__result-head .shogi-tournament__headline { color: #fffcf4; font-size: clamp(1.8rem, 1.3rem + 2.5vw, 2.6rem); text-shadow: 0 3px 0 var(--tr-red), 0 6px 0 var(--tr-shadow); }

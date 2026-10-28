@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { USER_ID, createSeason, createSpectatorSeason, recordUserGame } from './ryuo.mjs';
+import { USER_ID, createSeason, createSpectatorSeason, playSpectatorGame, recordUserGame } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
   emptyWatchStore, loadWatchStore, noteWatchProgress, replaceWatchSeason, saveWatchStore, stepsAfterElimination, userWonSeason, watchFinale, watchSteps,
@@ -11,7 +11,27 @@ const avatar = { rating: 1500, character: { abilities: { ending: 12, opening: -8
 describe('観戦の期(分身)', () => {
   const roster = createRoster({ seed: 41, userGroup: 6 });
   const before = JSON.stringify(roster);
-  const season = createSpectatorSeason({ no: 3, mode: 'challenge', group: 6, settings, avatar, roster, seed: 77, userName: 'やこび' });
+  const season = createSpectatorSeason({ no: 3, mode: 'challenge', group: 6, settings, avatar, roster, seed: 77, userName: 'やこび', live: false });
+
+  it('ふつうの期と同じく、分身の次の一局で止まる。「観戦する」で1局ずつ決めて進む(13-6)', () => {
+    const live = createSpectatorSeason({ no: 3, mode: 'challenge', group: 6, settings, avatar, roster, seed: 77, userName: 'やこび' });
+    expect(live).toMatchObject({ spectator: true, live: true, phase: 'ranking' });
+    expect(live.pending).not.toBeNull();
+    expect(live.userGames).toHaveLength(0);
+    const next = playSpectatorGame(live);
+    expect(next).toMatchObject({ spectator: true, live: true });
+    expect(next.userGames).toHaveLength(1);
+    expect(live.userGames).toHaveLength(0);
+    // 同じ期・同じ局なら同じ結果。
+    expect(playSpectatorGame(live).userGames[0].win).toBe(next.userGames[0].win);
+    // 分身の対局は、中継に並ぶ(展開つき)。
+    expect(watchSteps(next).flatMap(({ entries }) => entries).filter((entry) => entry.tags.self)).toHaveLength(1);
+    // 最後まで進められる。
+    let season = next;
+    for (let guard = 0; guard < 200 && season.pending; guard += 1) season = playSpectatorGame(season);
+    expect(season.phase).toBe('done');
+    expect(JSON.stringify(roster)).toBe(before);
+  });
 
   it('分身の対局も自動で決め、最後まで進む。名簿は変えない', () => {
     expect(season.phase).toBe('done');
@@ -22,7 +42,7 @@ describe('観戦の期(分身)', () => {
     expect(season.result.outcome).toBeTruthy();
     expect(JSON.stringify(roster)).toBe(before);
     // 同じ種なら同じ期。
-    expect(createSpectatorSeason({ no: 3, mode: 'challenge', group: 6, settings, avatar, roster, seed: 77 }).result).toEqual(season.result);
+    expect(createSpectatorSeason({ no: 3, mode: 'challenge', group: 6, settings, avatar, roster, seed: 77, live: false }).result).toEqual(season.result);
   });
 
   it('分身の対局は、展開つきで中継に並び、プロ並みの棋譜で作る', () => {
