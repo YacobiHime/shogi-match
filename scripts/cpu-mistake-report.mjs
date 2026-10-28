@@ -175,6 +175,8 @@ async function main() {
             random,
           }) ?? logic();
         }
+        // 指せる手がない局面(詰み)は数えない。
+        if (!choice) continue;
         rows.push({ ...(await scored(sample, choice.move)), chooser: choice.kind, reason: choice.reason });
       }
     }
