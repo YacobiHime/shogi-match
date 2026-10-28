@@ -169,6 +169,10 @@ describe("match screen regressions", () => {
     // エントリーの「対局: 観戦」の期(17章)は、自分では指さず、期の画面の「観戦する」で分身の対局を見る。
     expect(source).toMatch(/function startRyuoGameNow\(\) \{[\s\S]*?if \(season\.spectator\) \{\s*openRyuoSeasonScreen\(\);/);
     expect(source).toMatch(/:spectating="Boolean\(ryuoSeason\?\.spectator\)"[\s\S]*?@watch-play="playRyuoWatchGame"/);
+    // 敗退後の観戦で見終えた回戦は、本局の結果で指し直した期に替え、竜王の発表・結果を見終えた・次の期で残りを確定する(20-10)。
+    expect(source).toMatch(/@watch-round="applyRyuoWatchRound"\s*@watch-settle="settleRyuoSeason"/);
+    expect(source).toMatch(/function markRyuoResultSeen\(\) \{[\s\S]*?settleRyuoSeason\(\);\s*\}/);
+    expect(source).toMatch(/function enterRyuoSeason\([\s\S]*?\) \{[\s\S]*?settleRyuoSeason\(\);\s*const career = ryuoCareer\.value;/);
     // 本局の結果(分身の局と、同じ回戦のほかの局。20章)を、期を進める前に記録する。
     expect(source).toMatch(/function playRyuoWatchGame\(real: any = null, round: any\[\] = \[\]\) \{[\s\S]*?playSpectatorGame\(rawRyuoSeason\(\), \{ real, round \}\)/);
   });
@@ -324,7 +328,9 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*stopRealGames\(\);/);
     // 敗退後の観戦は、結果の画面の「このあとの対局を観戦」から表のボードへ。見届けた回戦の数を残し、終えると結果の画面へ戻る。
     expect(tournament).toMatch(/data-watch-after @click="startAfterWatch"/);
-    expect(tournament).toMatch(/function nextAfterRound\(\) \{[\s\S]*?emit\("watch-progress", String\(props\.ryuoSeason\.id\), Math\.max\(afterWatchRevealed\.value, done\)\);/);
+    expect(tournament).toMatch(/async function nextAfterRound\(\) \{[\s\S]*?emit\("watch-round", applyWatchedRound\([\s\S]*?emit\("watch-progress", String\(season\.id\), Math\.max\(afterWatchRevealed\.value, done\)\);[\s\S]*?emit\("watch-settle"\);/);
+    // 残りの対局が確定していない期は、回戦の対局を本局にする(20-10)。
+    expect(tournament).toMatch(/function playAfterRound\([\s\S]*?if \(props\.relayEngineFactory && season && restOpen\(season\)\) \{[\s\S]*?startRealGame\(realGameSpec\(/);
     expect(tournament).toMatch(/function endAfterWatch\(\) \{[\s\S]*?afterWatch\.value = null;[\s\S]*?screen\.value = "result";\s*\}/);
     expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*stopRealGames\(\);\s*live\.value = null;\s*tableOpen\.value = false;\s*\}/);
     // 期の結果の主役は「表彰式へ」。賞状(縦書き・判子)をわたし、閉じると期を見終えて大会の選択へ(docs/season-award-design.md)。
@@ -669,9 +675,12 @@ describe("match screen regressions", () => {
     // 終局まで指した平手の対局を残し、終盤戦の候補に加える。
     expect(source).toMatch(/saveRecentGames\(browserStorage\(\), addRecentGame\(/);
     expect(source).toMatch(/pickEndgameStart\(\[\.\.\.endgameSources\(\), \.\.\.ownSources\]/);
-    // 推しの棋士の組の順位は、名簿を進める前に控える。
-    const finalize = source.split("function finalizeRyuoSeason(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
-    expect(finalize.indexOf("oshiStandings")).toBeLessThan(finalize.indexOf("applySeasonToRoster"));
+    // 推しの棋士の組の順位は、名簿を進める前に控える(名簿を進めるのはapplyRyuoWorld。敗退した期は残りの対局を確定してから)。
+    const world = source.split("function applyRyuoWorld(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
+    expect(world.indexOf("oshiStandings")).toBeGreaterThan(-1);
+    expect(world.indexOf("oshiStandings")).toBeLessThan(world.indexOf("applySeasonToRoster"));
+    expect(source).toMatch(/const oshiLine = restOpen\(season\) \? "" : applyRyuoWorld\(season, career\.group\);/);
+    expect(source).toMatch(/function settleRyuoSeason\(\) \{[\s\S]*?const settled = settleRest\(season\);\s*const oshiLine = applyRyuoWorld\(settled, ryuoCareer\.value\.group\);/);
     const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
     expect(tournament).toMatch(/props\.view\?\.result\?\.oshiLine/);
   });

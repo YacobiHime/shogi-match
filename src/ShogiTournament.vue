@@ -529,7 +529,7 @@
             <button v-else type="button" class="shogi-tournament__start" data-tournament-play @click="versusOpen = true">{{ playText }}</button>
           </section>
           <section v-else-if="view.result" class="shogi-tournament__hud" aria-label="この期の結果">
-            <p class="shogi-tournament__hud-role">この期の対局は、すべて終わりました</p>
+            <p class="shogi-tournament__hud-role">{{ restOpen(ryuoSeason) && afterWatchCount ? "あなたの対局は終わりました。このあとの対局は、観戦で本当に指されます" : "この期の対局は、すべて終わりました" }}</p>
             <p class="shogi-tournament__hud-name">{{ outcomeHeadline }} <small>{{ view.result.wins }}勝{{ view.result.losses }}敗</small></p>
             <button type="button" class="shogi-tournament__start" data-to-result @click="screen = 'result'">結果と統計を見る</button>
           </section>
@@ -844,7 +844,7 @@ import { engineGameResult, isMainCharacter, realGameSpec } from "./core/engine-g
 import type { RelayMoveEntry } from "./core/relay-game.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
 import {
-  afterWatchRounds, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyWatchedRound, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from "./core/relay-live.mjs";
 import { rateVerdict } from "./core/relay-game.mjs";
@@ -854,7 +854,7 @@ import YakobiSays from "./YakobiSays.vue";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
-import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, scaleById } from "./core/ryuo.mjs";
+import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, restOpen, scaleById } from "./core/ryuo.mjs";
 import { GROUP_MEAN_RATING, MAX_CPU_LEVEL, MIN_CPU_LEVEL, worldExactLevel } from "./core/ryuo-strength.mjs";
 import { rankTag, resolveWorld } from "./core/tournament-world.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
@@ -1024,6 +1024,8 @@ const emit = defineEmits<{
   "watch-progress": [seasonId: string, revealed: number];
   /** 観戦の期の、分身の次の一局を決める。 */
   "watch-play": [real?: any, round?: any[]];
+  "watch-round": [season: any];
+  "watch-settle": [];
   play: [];
   resume: [];
   "open-note": [];
@@ -1225,13 +1227,22 @@ const hiddenMap = computed<Map<string, Set<string>>>(() => {
     const root = stages.value?.final?.matches.find((match) => match.final);
     return hiddenTables(after.rounds.slice(after.index).flatMap(({ entries }) => entries), { mainRootId: root ? String(root.id) : null });
   }
+  // 残りの対局が確定していない敗退した期(20-10)は、まだ見ていない回戦を伏せる(本局で結果が変わりうる)。
+  if (restOpen(season) && season.phase === "done") {
+    const rounds = afterRounds.value;
+    const from = Math.min(afterWatchRevealed.value, rounds.length);
+    if (from < rounds.length) {
+      const root = stages.value?.final?.matches.find((match) => match.final);
+      return hiddenTables(rounds.slice(from).flatMap(({ entries }) => entries), { mainRootId: root ? String(root.id) : null });
+    }
+  }
   const table = props.spectating ? pendingTable(season) : null;
   const ids = table ? hiddenRoundIds(season) : new Set<string>();
   return table && ids.size ? new Map([[table.tag, ids]]) : new Map();
 });
 const hiddenKeys = computed(() => new Set([...hiddenMap.value].flatMap(([tag, ids]) => [...ids].map((id) => `ryuo:${props.ryuoSeason?.id}:${tag}:${id}`))));
 /** 決勝トーナメントの出場者を伏せるか(各組の対局を伏せている間。19章)。 */
-const blankEntrants = computed(() => Boolean(afterWatch.value) && [...hiddenMap.value.keys()].some((tag) => tag === "ranking" || /^(revival|group)-/.test(tag)));
+const blankEntrants = computed(() => (Boolean(afterWatch.value) || restOpen(props.ryuoSeason)) && [...hiddenMap.value.keys()].some((tag) => tag === "ranking" || /^(revival|group)-/.test(tag)));
 const ryuoRelayGameList = computed(() => (props.ryuoSeason
   ? ryuoRelayGames(props.ryuoSeason, { oshiId: props.oshi?.id ?? null }).filter((entry) => !hiddenKeys.value.has(entry.key))
   : []));
@@ -1499,30 +1510,70 @@ function startAfterWatch() {
   screen.value = "season";
   playAfterRound(rounds, start);
 }
+/**
+ * 回戦を表のボードで始める。残りの対局が確定していない期(20-10)は、回戦の対局を本局にする(エンジンが本当に指す)。
+ * スマホは主要キャラの局だけ(指し終えた棋譜のある局も)を本局にし、ほかの局はいまの結果の筋書きで進む(20-9と同じ)。
+ */
 function playAfterRound(rounds: WatchRound[], index: number) {
   afterWatch.value = { rounds, index, finale: false };
   const round = rounds[index];
-  beginLive(round.entries, round.entries[0]?.key ?? "", round.label, "after", roundTable(round));
+  stopRealGames();
+  resultOnly = false;
+  const season = props.ryuoSeason;
+  const records: Record<string, any> = {};
+  let specs = round.entries;
+  if (props.relayEngineFactory && season && restOpen(season)) {
+    const world = Number(season.settings?.world);
+    const phone = phoneScreen();
+    engineGame.setEngines(phone ? 1 : Math.min(2, Math.max(1, Math.floor((globalThis.navigator?.hardwareConcurrency ?? 4) / 4))));
+    const store = loadRelayStore(relayStorage());
+    specs = round.entries.map((spec: any) => {
+      const main = isMainCharacter(spec.black) || isMainCharacter(spec.white);
+      if (!main && phone && !recallRelayGame(store, spec.key).game) return spec;
+      const real = startRealGame(realGameSpec(spec, { world: Number.isFinite(world) ? world : null }), spec);
+      records[real.spec.key] = real.record;
+      return real.spec;
+    });
+  }
+  beginLive(specs, specs[0]?.key ?? "", round.label, "after", roundTable(round), records);
 }
-/** 敗退後の観戦で、回戦を見終えた。見届けた数を残し、次の回戦へ(最後なら竜王の発表)。 */
-function nextAfterRound() {
+/**
+ * 敗退後の観戦で、回戦を見終えた。本局の結果で残りの対局を指し直し(20-10)、見届けた数を残して、次の回戦へ。
+ * 次の回戦は、指し直した期から並べ直す(番狂わせで、あとの回戦の対局者が変わる)。最後なら竜王の発表で、残りを確定する。
+ */
+async function nextAfterRound() {
   const after = afterWatch.value;
   if (!after) return;
   const done = after.index + 1;
-  if (props.ryuoSeason) emit("watch-progress", String(props.ryuoSeason.id), Math.max(afterWatchRevealed.value, done));
-  if (done < after.rounds.length) {
-    playAfterRound(after.rounds, done);
+  const season = props.ryuoSeason;
+  if (season && restOpen(season)) {
+    const results = new Map<string, { aId: string; result: any }>();
+    for (const state of realGames.values()) {
+      if (!state.record.end) continue;
+      const game = { v: 2, key: state.spec.key, entries: state.record.entries, end: state.record.end };
+      results.set(state.spec.key, { aId: state.spec.black.id, result: engineGameResult(state.spec, game, state.spec.black.id) });
+    }
+    emit("watch-round", applyWatchedRound(JSON.parse(JSON.stringify(season)), after.rounds[after.index], results));
+  }
+  stopRealGames();
+  if (season) emit("watch-progress", String(season.id), Math.max(afterWatchRevealed.value, done));
+  await nextTick();
+  const rounds = restOpen(season) ? afterRounds.value : after.rounds;
+  if (done < rounds.length) {
+    playAfterRound(rounds, done);
     return;
   }
   stopLiveTimer();
   live.value = null;
-  afterWatch.value = { ...after, index: after.rounds.length, finale: true };
+  afterWatch.value = { rounds, index: rounds.length, finale: true };
   viewStage.value = stages.value?.current === 2 ? null : 2;
   tableOpen.value = true;
+  emit("watch-settle");
 }
-/** 敗退後の観戦を終えて、結果の画面へ戻る(途中でも。見届けた回戦の数は残っている)。 */
+/** 敗退後の観戦を終えて、結果の画面へ戻る(途中でも。見届けた回戦の数は残っている。本局は止め、指した手は残す)。 */
 function endAfterWatch() {
   stopLiveTimer();
+  stopRealGames();
   live.value = null;
   afterWatch.value = null;
   viewStage.value = null;

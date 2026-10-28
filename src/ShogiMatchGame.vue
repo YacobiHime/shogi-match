@@ -445,6 +445,8 @@
       :spectating="Boolean(ryuoSeason?.spectator)"
       @watch-play="playRyuoWatchGame"
       @watch-progress="noteRyuoWatch"
+      @watch-round="applyRyuoWatchRound"
+      @watch-settle="settleRyuoSeason"
       :meijin-season="meijinSeason"
       :relay-engine-factory="ensureEngineFactory"
       :compact="mobile || boardLayout === 'portrait'"
@@ -2499,7 +2501,7 @@ import {
   measureStatistics,
   restoredMeasureState,
 } from "./core/skill-estimate.mjs";
-import { USER_ID, asAvatarSeason, createRng, createSeason, describeSeason, playSpectatorGame, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
+import { USER_ID, asAvatarSeason, createRng, createSeason, describeSeason, playSpectatorGame, recommendedDifficulty, recordUserGame, restOpen, scaleById, settleRest, withRosterAbilities } from "./core/ryuo.mjs";
 import { loadWatchStore, noteWatchProgress, saveWatchStore } from "./core/ryuo-watch-store.mjs";
 import { myAbilityProfile, worldRatingFor } from "./core/my-abilities.mjs";
 import { worldRating } from "./core/ryuo-strength.mjs";
@@ -5863,6 +5865,8 @@ function onPregamePick(key: string, value: PickerValue) {
 function enterRyuoSeason(settings: {
   difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; watch?: boolean;
 }) {
+  // 前の期の残りの対局が確定していなければ、確定して名簿を進めてから始める(20-10)。
+  settleRyuoSeason();
   const career = ryuoCareer.value;
   const entry = nextEntry(career);
   const seed = Date.now();
@@ -5945,7 +5949,10 @@ function noteRyuoWatch(seasonId: string, revealed: number) {
   saveWatchStore(browserStorage(), ryuoWatch.value);
 }
 
-/** 終わった期を、キャリア(組・竜王の期数)と、プロフィール(称号)に反映する。1期につき1回だけ。 */
+/**
+ * 終わった期を、キャリア(組・竜王の期数)と、プロフィール(称号)に反映する。1期につき1回だけ。
+ * 敗退した期は、残りの対局(敗退後の観戦で本局にする。docs/tournament-relay-design.mdの20-10)が確定してから名簿を進める(settleRyuoSeason)。
+ */
 function finalizeRyuoSeason() {
   const season = ryuoSeason.value;
   if (!season || season.phase !== "done" || season.applied) return;
@@ -5953,6 +5960,40 @@ function finalizeRyuoSeason() {
   ryuoCareer.value = career;
   saveCareer(browserStorage(), career);
   awardRyuoSeason(season);
+  let profile = profileState.value;
+  for (const title of titles) profile = grantTitle(profile, title);
+  profileState.value = profile;
+  saveProfile(browserStorage(), profile);
+  const oshiLine = restOpen(season) ? "" : applyRyuoWorld(season, career.group);
+  ryuoSeason.value = { ...season, applied: true, result: { ...season.result, titles, oshiLine } };
+  saveSeason(browserStorage(), ryuoSeason.value);
+}
+/**
+ * 敗退した期の残りの対局を確定し、名簿(棋士の組・竜王)と棋界の1年を進める(20-10)。結果の画面を見終えたとき、
+ * 敗退後の観戦で竜王の発表まで見たとき、次の期や名人戦を始めるとき。見ていない回戦は、自動対局の結果のまま。
+ */
+function settleRyuoSeason() {
+  const season = ryuoSeason.value;
+  if (!season || !season.applied || !restOpen(season)) return;
+  const settled = settleRest(season);
+  const oshiLine = applyRyuoWorld(settled, ryuoCareer.value.group);
+  ryuoSeason.value = { ...settled, result: { ...settled.result, oshiLine } };
+  saveSeason(browserStorage(), ryuoSeason.value);
+}
+// 結果の画面を見終えたまま残りの対局が確定していない期(前の版の画面で閉じたときなど)は、開いたときに確定する。
+onMounted(() => {
+  if (ryuoSeason.value?.resultSeen) settleRyuoSeason();
+});
+/** 敗退後の観戦で回戦を見終えた。本局の結果で残りを指し直した期(大会の画面が作る)に替える。 */
+function applyRyuoWatchRound(next: any) {
+  const season = ryuoSeason.value;
+  if (!season || !next || next.id !== season.id || !restOpen(season)) return;
+  ryuoSeason.value = next;
+  saveSeason(browserStorage(), next);
+}
+/** 期の結果で、名簿(棋士の組・竜王)と棋界の1年を進める。推しの棋士の、この期の一言を返す。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyRyuoWorld(season: any, userGroup: number) {
   // 推しの棋士の、この期の組の順位(ほかの組でも、期の終わりには順位が決まっている)。名簿を進める前に控える。
   const oshiId = loadOshi(browserStorage());
   const oshiBefore = oshiId ? ryuoRoster.value?.players?.[oshiId] ?? null : null;
@@ -5961,17 +6002,13 @@ function finalizeRyuoSeason() {
     : undefined;
   const oshiRank = oshiStandings ? oshiStandings.indexOf(oshiId) : -1;
   if (ryuoRoster.value) {
-    ryuoRoster.value = applySeasonToRoster(ryuoRoster.value, season, { userGroup: career.group, promote: scaleById(season.settings.scale).promote });
+    ryuoRoster.value = applySeasonToRoster(ryuoRoster.value, season, { userGroup, promote: scaleById(season.settings.scale).promote });
     // 名人戦に出る前は、棋界の1年で順位戦と名人戦も1期進む(出たあとは、名人戦を指したときだけ進む)。
     ryuoRoster.value = autoJunniYear(ryuoRoster.value, createRng((Number(season.id) ^ 0x5bd1e995) >>> 0)).roster;
     saveRoster(browserStorage(), ryuoRoster.value);
   }
-  let profile = profileState.value;
-  for (const title of titles) profile = grantTitle(profile, title);
-  profileState.value = profile;
-  saveProfile(browserStorage(), profile);
   const oshiAfter = oshiBefore ? ryuoRoster.value?.players?.[oshiId] ?? null : null;
-  const oshiLine = oshiBefore
+  return oshiBefore
     ? oshiSeasonResultLine({
       name: oshiBefore.name,
       beforeGroup: oshiBefore.group,
@@ -5980,8 +6017,6 @@ function finalizeRyuoSeason() {
       champion: season.champion === oshiId,
     })
     : "";
-  ryuoSeason.value = { ...season, applied: true, result: { ...season.result, titles, oshiLine } };
-  saveSeason(browserStorage(), ryuoSeason.value);
 }
 
 const rawRyuoSeason = () => JSON.parse(JSON.stringify(ryuoSeason.value));
@@ -6221,6 +6256,7 @@ function markRyuoResultSeen() {
   if (!season || season.resultSeen) return;
   ryuoSeason.value = { ...season, resultSeen: true };
   saveSeason(browserStorage(), ryuoSeason.value);
+  settleRyuoSeason();
 }
 
 /** 大会の対局の終局画面の文(竜王戦か名人戦)。 */
@@ -6275,6 +6311,8 @@ function replayRyuoGame() {
 // ---- 名人戦の期と対局
 /** 名人戦の期を始める(大会の画面の「出場する」)。名簿がなければ作る(竜王戦と同じ名簿を使う)。 */
 function enterMeijinSeason(settings: { difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number }) {
+  // 竜王戦の残りの対局が確定していなければ、名簿(順位戦の世界も)を進めてから始める(20-10)。
+  settleRyuoSeason();
   const seed = Date.now();
   if (!ryuoRoster.value) {
     ryuoRoster.value = createRoster({ seed, userGroup: ryuoCareer.value.group });

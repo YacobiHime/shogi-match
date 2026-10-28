@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, recordUserGame } from './ryuo.mjs';
+import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, recordUserGame, replayRest, restGameKey, restOpen, seasonGameResults, settleRest } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
-  afterWatchRounds, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyWatchedRound, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from './relay-live.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
@@ -208,5 +208,92 @@ describe('回戦の全局を本局にする(20-9)', () => {
     const id = flip[0].nodeId;
     const kept = own.ranking.nodes[id].winner;
     expect(playSpectatorGame(own, { round: flip }).ranking.nodes[id].winner).toBe(kept);
+  });
+});
+
+describe('敗退後の観戦を本局にする(20-10)', () => {
+  /** 敗退した期(勝ってから負ける)。 */
+  function eliminated(seed, wins = 1) {
+    const roster = createRoster({ seed: seed + 11, userGroup: 6 });
+    let season = createSeason({ no: 1, mode: 'challenge', group: 6, settings, userLevel: 28, seed, roster });
+    for (let index = 0; index < wins && season.pending; index += 1) season = recordUserGame(season, 'win');
+    while (season.pending) season = recordUserGame(season, 'loss');
+    return season;
+  }
+  /** 回戦の対局をすべて逆の結果にする本局の結果。 */
+  const flipped = (round) => new Map(round.entries.map((entry) => {
+    const aId = entry.black.id;
+    const aWins = entry.winner !== 'black';
+    return [entry.key, { aId, result: { aWins, how: 'middle', aColor: 'black', openings: { a: null, b: null }, castles: { a: null, b: null }, phases: [0, 0, aWins ? 300 : -300], probability: null } }];
+  }));
+  const gameKey = (entry) => {
+    const { tag, id } = tableOf(entry.key);
+    return restGameKey(tag, id);
+  };
+  const winners = (season) => Object.fromEntries(Object.entries(seasonGameResults(season)).map(([key, value]) => [key, value.winner]));
+
+  it('敗退したら、残りを決める前の形を残す。竜王になった期は残さない', () => {
+    const season = eliminated(5);
+    expect(restOpen(season)).toBe(true);
+    expect(season.rest.base.players).toBeNull();
+    expect(season.rest.base.phase).not.toBe('done');
+    // 決めてある結果を全部渡して指し直すと、同じ期になる。
+    const same = replayRest(season, seasonGameResults(season));
+    expect(winners(same)).toEqual(winners(season));
+    expect(same.champion).toBe(season.champion);
+    expect(same.result).toEqual(season.result);
+    // 確定すると、土台は消え、指し直さない。
+    const settled = settleRest(season);
+    expect(restOpen(settled)).toBe(false);
+    expect(settled.rest.base).toBeNull();
+    expect(applyWatchedRound(settled, afterWatchRounds(settled)[0], flipped(afterWatchRounds(settled)[0]))).toBe(settled);
+  });
+
+  it('見終えた回戦は本局の結果に。見た回戦と、観戦しない回戦の結果は、そのあとの指し直しでも変わらない。プレイヤーの結果も変わらない', () => {
+    for (const seed of [5, 17, 29, 41]) {
+      let season = eliminated(seed, seed % 3);
+      const before = winners(season);
+      const userResult = JSON.stringify(season.result);
+      const unwatched = new Set(Object.keys(before));
+      for (const round of afterWatchRounds(season)) for (const entry of round.entries) unwatched.delete(gameKey(entry));
+      // 決勝トーナメントの決勝は、挑戦者決定三番勝負で決まる(番勝負の局として見る)。
+      unwatched.delete(season.main.root.from);
+      const revealed = {};
+      for (let index = 0; index < 40; index += 1) {
+        const rounds = afterWatchRounds(season);
+        if (index >= rounds.length) break;
+        // 1回戦おきに、逆の結果(番狂わせ)にする。
+        const round = rounds[index];
+        const results = index % 2 === 0 ? flipped(round) : new Map();
+        const next = applyWatchedRound(season, round, results);
+        const now = winners(next);
+        for (const entry of round.entries) {
+          const key = gameKey(entry);
+          const want = results.size ? (entry.winner === 'black' ? entry.white.id : entry.black.id) : (entry.winner === 'black' ? entry.black.id : entry.white.id);
+          expect(now[key]).toBe(want);
+          revealed[key] = want;
+        }
+        for (const [key, winner] of Object.entries(revealed)) expect(now[key]).toBe(winner);
+        for (const key of unwatched) expect(`${key}:${now[key]}`).toBe(`${key}:${before[key]}`);
+        expect(JSON.stringify({ ...next.result, champion: season.result.champion })).toBe(userResult.replace(/"champion":"[^"]*"/, `"champion":"${season.result.champion}"`));
+        expect(next.result.champion).toBe(next.champion);
+        expect(next.phase).toBe('done');
+        // 指し直した番勝負と表は、つじつまが合う(竜王は七番勝負の勝者)。
+        expect(next.champion).toBe(next.finals.winner);
+        season = next;
+      }
+    }
+  });
+
+  it('順位(プレイヤーの昇級・降級に使う)は、指し直しても変わらない', () => {
+    for (const seed of [7, 19, 31]) {
+      let season = eliminated(seed, 0);
+      const standing = season.standings.indexOf('user');
+      for (const round of afterWatchRounds(season).slice(0, 6)) {
+        const current = afterWatchRounds(season).find(({ id }) => id === round.id) ?? round;
+        season = applyWatchedRound(season, current, flipped(current));
+      }
+      expect(season.standings.indexOf('user')).toBe(standing);
+    }
   });
 });

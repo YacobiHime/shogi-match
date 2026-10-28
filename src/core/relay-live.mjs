@@ -3,7 +3,8 @@
 // 進み方は、中継の棋譜の筋書き(relay-game.mjsのrelayPlan。勝ち負けと展開は自動対局の記録のまま)から決める。
 // エンジンは使わない(何局も同時に作れないため)。中継で棋譜を作った局は、その棋譜の手数と形勢を使う。画面に依存しない。
 
-import { playSpectatorGame } from './ryuo.mjs';
+import { playSpectatorGame, replayRest, restGameKey, restOpen, seasonGameResults } from './ryuo.mjs';
+import { gameRecordOf } from './ryuo-simulation.mjs';
 import { ryuoRelayGames } from './relay-games.mjs';
 import { blackWinRate, relayPlan, relaySeed, relayTarget } from './relay-game.mjs';
 import { relayAudience } from './relay-commentary.mjs';
@@ -161,6 +162,40 @@ export function afterWatchRounds(season, { oshiId = null } = {}) {
       .sort(([a], [b]) => roundOrder(a) - roundOrder(b))
       .map(([name, entries]) => ({ id: `group:${name}`, label: `ほかの組 ${name}`, stage: 'group', entries }));
   });
+}
+
+/**
+ * 敗退後の観戦で、回戦を1つ見終えた(20-10)。その回戦の対局の結果を決めてある結果にして、残りの対局を指し直す。
+ * 本局(エンジンが本当に指した対局)はその結果、それ以外(スマホなどで本局にしなかった局)は、いま見せた結果のまま。
+ * 初めて見終えたときに、観戦しない回戦(自分の最後の対局より前の回戦など)の結果も決めておく(指し直しで変わらないように)。
+ * @param {any} season 敗退した期(書き換えない)
+ * @param {{ entries: any[] }} round 見終えた回戦(afterWatchRoundsの1つ)
+ * @param {Map<string, { aId: string, result: any }>} [results] 本局の結果(中継の項目の鍵ごと。resultはaIdから見た記録)
+ */
+export function applyWatchedRound(season, round, results = new Map()) {
+  if (!restOpen(season)) return season;
+  const current = seasonGameResults(season);
+  const keyOf = (entry) => {
+    const { tag, id } = tableOf(entry.key);
+    return restGameKey(tag, id);
+  };
+  let overrides = season.rest.overrides;
+  if (!overrides) {
+    const watched = new Set(afterWatchRounds(season).flatMap(({ entries }) => entries.map(keyOf)));
+    overrides = Object.fromEntries(Object.entries(current).filter(([key]) => !watched.has(key)));
+  }
+  overrides = { ...overrides };
+  for (const entry of round?.entries ?? []) {
+    const key = keyOf(entry);
+    const real = results.get(entry.key);
+    if (real) {
+      const bId = [entry.black.id, entry.white.id].find((id) => id !== real.aId);
+      overrides[key] = { ids: [real.aId, bId].sort(), winner: real.result.aWins ? real.aId : bId, game: gameRecordOf(real.result, real.aId, bId) };
+    } else if (current[key]) {
+      overrides[key] = current[key];
+    }
+  }
+  return replayRest(season, overrides);
 }
 
 /**

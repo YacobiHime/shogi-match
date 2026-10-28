@@ -225,10 +225,26 @@ function readyNodes(bracket, { stopAtRoot = false } = {}) {
 }
 
 /**
+ * 決めてある結果(敗退後の観戦で見た本局の結果。20-10)。対局の鍵(札のidか「番勝負#局の番号」)ごとに、対局者・勝者・記録。
+ * 対局者が違うときは使わない。
+ * @typedef {Record<string, { ids: string[], winner: string, game: any }>} GameOverrides
+ */
+
+/** 決めてある結果のうち、この2人の対局のもの。 */
+function overrideFor(overrides, key, a, b) {
+  const forced = overrides?.[key];
+  if (!forced || !Array.isArray(forced.ids)) return null;
+  const ids = [a, b].sort();
+  return forced.ids[0] === ids[0] && forced.ids[1] === ids[1] && ids.includes(forced.winner) ? forced : null;
+}
+
+/**
  * プレイヤー以外の対局を、棋力から自動で決めて進める。プレイヤーの対局が来たら止まる。
+ * overridesに結果のある対局は、その結果にする(20-10)。
+ * @param {{ stopAtRoot?: boolean, overrides?: GameOverrides | null }} [options]
  * @returns {{ state: 'user', nodeId: string } | { state: 'root', nodeId: string } | { state: 'finished' }}
  */
-export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAtRoot = false } = {}) {
+export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAtRoot = false, overrides = null } = {}) {
   // プレイヤーのいる表では、ライバル(羽音)が勝ち上がりやすい(ryuo-story.mjsのHANANE_RIVAL_RUN_RATING)。
   const rivalRun = bracket.ids?.includes(userId);
   const ratingOf = (member) => member.rating + (rivalRun && member.story === HANANE ? HANANE_RIVAL_RUN_RATING : 0);
@@ -244,6 +260,12 @@ export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAt
       const b = sidePid(bracket, node.b);
       if (a === userId || b === userId) {
         userNode ??= node;
+        continue;
+      }
+      const forced = overrideFor(overrides, node.id, a, b);
+      if (forced) {
+        node.winner = forced.winner;
+        node.game = structuredClone(forced.game);
         continue;
       }
       // 能力の配分で、序盤・中盤・終盤と形勢を進めて決める(ryuo-simulation.mjs)。決勝は大事な対局。
@@ -311,12 +333,21 @@ export function recordSeriesGame(series, winner, game = null) {
   return series;
 }
 
-/** 番勝負を自動で指す。先後は1局ごとに入れ替える(1局目のaの手番は振り駒)。大事な対局。 */
-function simulateSeries(series, players, rng) {
+/**
+ * 番勝負を自動で指す。先後は1局ごとに入れ替える(1局目のaの手番は振り駒)。大事な対局。
+ * overridesの「tag#局の番号」に結果のある局は、その結果にする(20-10)。
+ */
+function simulateSeries(series, players, rng, overrides = null, tag = '') {
   let aColor = series.games.length ? null : rng.next() < 0.5 ? 'black' : 'white';
   while (series.winner === null) {
     const last = series.games.at(-1);
     if (aColor === null) aColor = last?.black ? (last.black === series.a ? 'white' : 'black') : rng.next() < 0.5 ? 'black' : 'white';
+    const forced = overrideFor(overrides, `${tag}#${series.games.length}`, series.a, series.b);
+    if (forced) {
+      recordSeriesGame(series, forced.winner, structuredClone(forced.game));
+      aColor = forced.game?.black === series.a ? 'white' : 'black';
+      continue;
+    }
     const result = simulateMemberGame(rng, players[series.a], players[series.b], { big: true, aColor });
     recordSeriesGame(series, result.aWins ? series.a : series.b, gameRecordOf(result, series.a, series.b));
     aColor = aColor === 'black' ? 'white' : 'black';
@@ -489,14 +520,14 @@ const strengthsOf = (season) => Object.fromEntries(Object.entries(season.players
 ]));
 
 /** プレイヤーの組以外の組の、決勝トーナメント進出者を、自動で決める。 */
-function simulateGroupQualifiers(season, group, rng) {
+function simulateGroupQualifiers(season, group, rng, overrides = null) {
   const scale = scaleById(season.settings.scale);
   const ids = [...season.fields[group]].sort((x, y) => season.players[y].rating - season.players[x].rating);
   const ranking = buildSeededBracket(`${group}組`, ids, `o${group}rk`);
-  advanceBracket(ranking, season.players, rng);
+  advanceBracket(ranking, season.players, rng, USER_ID, { overrides });
   const strengths = strengthsOf(season);
   const blocks = season.settings.revival ? buildRevivalBlocks(group, ranking, group === 1 ? scale.slots[1] - 2 : 0, strengths, `o${group}`) : [];
-  for (const block of blocks) advanceBracket(block, season.players, rng);
+  for (const block of blocks) advanceBracket(block, season.players, rng, USER_ID, { overrides });
   // 名簿の年間成績に数えるので、表を残す。
   season.groupBrackets = { ...(season.groupBrackets ?? {}), [`${group}`]: ranking };
   blocks.forEach((block, index) => { season.groupBrackets[`${group}-r${index + 1}`] = block; });
@@ -506,12 +537,12 @@ function simulateGroupQualifiers(season, group, rng) {
   return standings.slice(0, scale.slots[group]);
 }
 
-function buildMainFor(season, userGroupQualified, rng) {
+function buildMainFor(season, userGroupQualified, rng, overrides = null) {
   const entrants = [];
   for (const group of GROUPS) {
     const qualified = group === season.startGroup && userGroupQualified
       ? userGroupQualified
-      : simulateGroupQualifiers(season, group, rng);
+      : simulateGroupQualifiers(season, group, rng, overrides);
     qualified.forEach((pid, rank) => entrants.push({ pid, weight: MAIN_WEIGHTS[group][rank] ?? MAIN_WEIGHTS[group].at(-1), group, rank }));
   }
   season.qualified = entrants.map(({ pid }) => pid);
@@ -616,11 +647,17 @@ function finishSeason(season) {
   season.pending = null;
 }
 
-/** 状態を進める。プレイヤーの対局が来るか、シーズンが終わるまで。 */
-function drive(season, rng) {
+/**
+ * 状態を進める。プレイヤーの対局が来るか、シーズンが終わるまで。
+ * overridesに結果のある対局は、その結果にする(敗退後の観戦で見た本局。20-10)。
+ * @param {any} season
+ * @param {any} rng
+ * @param {GameOverrides | null} [overrides]
+ */
+function drive(season, rng, overrides = null) {
   for (let guard = 0; guard < 1000; guard += 1) {
     if (season.phase === 'ranking') {
-      const advanced = advanceBracket(season.ranking, season.players, rng);
+      const advanced = advanceBracket(season.ranking, season.players, rng, USER_ID, { overrides });
       if (advanced.state === 'user') {
         const node = season.ranking.nodes[advanced.nodeId];
         const opponent = sidePid(season.ranking, node.a) === USER_ID ? sidePid(season.ranking, node.b) : sidePid(season.ranking, node.a);
@@ -637,7 +674,7 @@ function drive(season, rng) {
     if (season.phase === 'revival') {
       let pendingUser = false;
       for (const block of season.revival) {
-        const advanced = advanceBracket(block, season.players, rng);
+        const advanced = advanceBracket(block, season.players, rng, USER_ID, { overrides });
         if (advanced.state === 'user') {
           const node = block.nodes[advanced.nodeId];
           const opponent = sidePid(block, node.a) === USER_ID ? sidePid(block, node.b) : sidePid(block, node.a);
@@ -655,17 +692,17 @@ function drive(season, rng) {
       continue;
     }
     if (season.phase === 'prepare-defense') {
-      season.main = buildMainFor(season, null, rng);
+      season.main = buildMainFor(season, null, rng, overrides);
       season.phase = 'main';
       continue;
     }
     if (season.phase === 'main-setup') {
-      season.main = buildMainFor(season, season.qualifiedFromGroup, rng);
+      season.main = buildMainFor(season, season.qualifiedFromGroup, rng, overrides);
       season.phase = 'main';
       continue;
     }
     if (season.phase === 'main') {
-      const advanced = advanceBracket(season.main, season.players, rng, USER_ID, { stopAtRoot: true });
+      const advanced = advanceBracket(season.main, season.players, rng, USER_ID, { stopAtRoot: true, overrides });
       if (advanced.state === 'user') {
         const node = season.main.nodes[advanced.nodeId];
         const opponent = sidePid(season.main, node.a) === USER_ID ? sidePid(season.main, node.b) : sidePid(season.main, node.a);
@@ -683,7 +720,7 @@ function drive(season, rng) {
         setPending(season, seriesPendingFor(season, series, 'playoff'), rng);
         break;
       }
-      simulateSeries(series, season.players, rng);
+      simulateSeries(series, season.players, rng, overrides, 'playoff');
       season.main.nodes[rootNodeId(season.main)].winner = series.winner;
       const challenger = series.winner;
       season.finals = createSeries('竜王戦七番勝負', season.champion, challenger, 4);
@@ -697,7 +734,7 @@ function drive(season, rng) {
         setPending(season, seriesPendingFor(season, series, 'finals'), rng);
         break;
       }
-      simulateSeries(series, season.players, rng);
+      simulateSeries(series, season.players, rng, overrides, 'finals');
       season.champion = series.winner;
       finishSeason(season);
       continue;
@@ -744,8 +781,79 @@ export function recordUserGame(season, outcome, { game: simulated = null } = {})
     const series = pending.kind === 'playoff' ? next.playoff : next.finals;
     recordSeriesGame(series, win ? USER_ID : opponent, game);
   }
-  return drive(next, rng);
+  // 敗退したら、残りの対局を決める前の形(棋士の情報と統計は除く。進めても変わらない)を残す。敗退後の観戦で見た本局の結果で、
+  // 残りを指し直すため(20-10)。
+  const base = structuredClone({ ...next, players: null, analysis: null, analysisQueue: null });
+  const done = drive(next, rng);
+  if (done.phase === 'done' && done.result?.outcome !== 'champion') done.rest = { base, overrides: null, settled: false };
+  return done;
 }
+
+// ---- 敗退後の残りの対局(docs/tournament-relay-design.mdの20-10)
+
+/** 期の対局の鍵(決めてある結果の鍵)。表の札はそのid、番勝負は「tag#局の番号」。 */
+export const restGameKey = (tag, id) => (tag === 'playoff' || tag === 'finals' ? `${tag}#${id}` : String(id));
+
+/**
+ * 期の決まった対局すべての結果(決めてある結果の形)。
+ * @param {any} season
+ * @returns {GameOverrides}
+ */
+export function seasonGameResults(season) {
+  /** @type {GameOverrides} */
+  const results = {};
+  const brackets = [season.ranking, ...(season.revival ?? []), ...Object.values(season.groupBrackets ?? {}), season.main].filter(Boolean);
+  for (const bracket of brackets) {
+    for (const node of Object.values(bracket.nodes ?? {})) {
+      const a = sidePid(bracket, node.a);
+      const b = sidePid(bracket, node.b);
+      if (!node.winner || !a || !b) continue;
+      results[node.id] = { ids: [a, b].sort(), winner: node.winner, game: structuredClone(node.game ?? null) };
+    }
+  }
+  for (const tag of ['playoff', 'finals']) {
+    const series = season[tag];
+    if (!series) continue;
+    series.games.forEach((game, index) => {
+      results[restGameKey(tag, index)] = { ids: [series.a, series.b].sort(), winner: game.winner, game: structuredClone(game) };
+    });
+  }
+  return results;
+}
+
+/** 指し直すときに、土台の期から写す形(表・順位・番勝負・竜王)。プレイヤーの結果と統計は写さない。 */
+const REST_FIELDS = Object.freeze([
+  'phase', 'ranking', 'revival', 'groupBrackets', 'groupStandings', 'standings', 'qualifiedFromGroup', 'qualified',
+  'mainEntrants', 'main', 'playoff', 'finals', 'champion', 'pending', 'rngState',
+]);
+
+/**
+ * 敗退したあとの残りの対局を、決めてある結果(overrides)で指し直す。決めていない対局は、これまでと同じ自動対局。
+ * プレイヤーの結果(昇級・降級・賞状)は敗退した時点で決まっているので変えない(竜王だけ写す)。確定した期は変えない。
+ * @param {any} season 敗退した期(書き換えない)
+ * @param {GameOverrides} overrides
+ */
+export function replayRest(season, overrides) {
+  const rest = season?.rest;
+  if (!rest?.base || rest.settled) return season;
+  const replay = structuredClone(rest.base);
+  replay.players = season.players;
+  drive(replay, createRng(replay.rngState), overrides);
+  const next = structuredClone(season);
+  for (const field of REST_FIELDS) next[field] = structuredClone(replay[field] ?? null);
+  if (next.result) next.result = { ...next.result, champion: replay.champion };
+  next.rest = { ...rest, overrides: structuredClone(overrides) };
+  return next;
+}
+
+/** 残りの対局を確定する(名簿の更新などは、確定してから。土台は要らなくなるので消す)。 */
+export function settleRest(season) {
+  if (!season?.rest || season.rest.settled) return season;
+  return { ...season, rest: { base: null, overrides: null, settled: true } };
+}
+
+/** 残りの対局が、まだ確定していないか(敗退後の観戦で、本局の結果が変わりうる)。 */
+export const restOpen = (season) => Boolean(season?.rest?.base && !season.rest.settled);
 
 // ---- 観戦の期(分身。docs/tournament-relay-design.mdの13章)
 
