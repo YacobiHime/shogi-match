@@ -1187,7 +1187,7 @@
         言葉は期の画面の節目の判子と同じ。盤を触ると、すぐ結果の窓へ進む。負けたときは押さない。
       -->
       <div
-        v-if="finishStampShown && !resultDialogOpen"
+        v-if="finishStampShown && !resultDialogOpen && !reviewMode"
         :key="finishStampShown.id"
         class="shogi-game__finish-stamp"
         :class="`shogi-game__finish-stamp--${finishStampShown.size}`"
@@ -9189,6 +9189,10 @@ function revealResult() {
   resultRevealSound = null;
   resultDialogOpen.value = true;
 }
+// 判子は結果の窓へ渡すまでの演出。窓が開いたら消す(閉じて棋譜解析や盤へ戻っても、また出さない)。
+watch(resultDialogOpen, (open) => {
+  if (open) finishStampShown.value = null;
+});
 /** 止めと、結果画面を出す予約を取り消す。新しい対局を始めるとき・対局準備へ戻るときに呼ぶ。 */
 function cancelResultReveal() {
   clearTimeout(resultRevealTimer);

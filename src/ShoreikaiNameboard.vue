@@ -126,7 +126,6 @@ const summary = computed(() => {
   font-style: normal;
   font-weight: 900;
   line-height: 1;
-  writing-mode: vertical-rl;
 }
 .shogi-game .nameboard__tag--you { border-color: #fffcf4; background: #c4604c; box-shadow: 0 0 0 1px #c4604c; }
 .shogi-game .nameboard__tag--peer { background: #3d6fa5; }

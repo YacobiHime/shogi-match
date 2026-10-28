@@ -836,7 +836,9 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/finishMilestone = lastGameMilestone\(next,/);
     expect(source).toMatch(/recordRyuoOutcome\(matchResult\);\s*(?:if \(tournamentFinish\) \{\s*writeTitleKansenki\([^;]*\);\s*recordTitleMeal\([^;]*\);\s*\}\s*)?if \(tournamentFinish\) showFinishStamp\(outcome === "win",/);
     expect(source).toMatch(/resultRevealTimer = setTimeout\(revealResult, FINISH_STAMP_MS\);/);
-    expect(source).toMatch(/v-if="finishStampShown && !resultDialogOpen"/);
+    expect(source).toMatch(/v-if="finishStampShown && !resultDialogOpen && !reviewMode"/);
+    // 判子は結果の窓が開いたら消す(閉じて棋譜解析へ進んでも、勝ちの判子を盤に残さない)。
+    expect(source).toMatch(/watch\(resultDialogOpen, \(open\) => \{\s*if \(open\) finishStampShown\.value = null;/);
     // 大一番の朱の明かりは、景色の上に重ねる(景色の規則は大一番の背景より後ろに置く)。
     expect(source).toMatch(/\.shogi-game\.shogi-game--stage-big \{[\s\S]*?\.shogi-game\.shogi-game--scenery-foot,/);
   });

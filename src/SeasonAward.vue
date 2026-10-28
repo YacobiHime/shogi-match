@@ -2,6 +2,7 @@
   <!--
     表彰式(docs/season-award-design.md)。期の終わりに、縦書きの賞状を1枚わたし、判子を押す。
     紙が上がる → 一拍おいて判子(音) → やこび姫のねぎらい。押せば演出を飛ばす。賞状帳から開いたときは動かさない。
+    縦書きの字は、1字ずつ箱に入れて並べる(VerticalText.vue。字体によって漢字が重なって潰れるのを防ぐ)。
   -->
   <div
     :class="['season-award', `season-award--${award.grade}`, { 'season-award--play': playing }]"
@@ -14,15 +15,15 @@
     <span v-for="piece in confetti" :key="piece.id" class="season-award__confetti" :style="piece.style" aria-hidden="true"></span>
     <article class="season-award__paper" data-award-paper>
       <div class="season-award__frame">
-        <h2 class="season-award__heading">{{ text.heading }}</h2>
-        <p class="season-award__title">{{ text.title }}</p>
-        <p class="season-award__prize" data-award-prize>{{ text.prize }}</p>
-        <p v-for="note in text.notes" :key="note" class="season-award__note">{{ note }}</p>
-        <p class="season-award__name">{{ text.name }}</p>
-        <p class="season-award__body">{{ text.body }}</p>
-        <p class="season-award__date">{{ text.date }}</p>
+        <h2 class="season-award__heading"><VerticalText :text="text.heading" /></h2>
+        <p class="season-award__title"><VerticalText :text="text.title" /></p>
+        <p class="season-award__prize" data-award-prize><VerticalText :text="text.prize" /></p>
+        <p v-for="note in text.notes" :key="note" class="season-award__note"><VerticalText :text="note" /></p>
+        <p class="season-award__name"><VerticalText :text="text.name" /></p>
+        <p class="season-award__body"><VerticalText :text="text.body" /></p>
+        <p class="season-award__date"><VerticalText :text="text.date" /></p>
         <p class="season-award__signer">
-          やこび姫
+          <VerticalText text="やこび姫" />
           <span class="season-award__seal" aria-hidden="true">{{ award.seal }}</span>
         </p>
       </div>
@@ -40,6 +41,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
 import { awardTalk, awardText } from "./core/season-award.mjs";
+import VerticalText from "./VerticalText.vue";
 import { createMoveSoundPlayer } from "./core/move-sound";
 
 export type SeasonAwardData = {
@@ -132,7 +134,7 @@ const confetti = computed(() => {
 .shogi-game .season-award--red .season-award__frame { border: 5px double #c4604c; }
 .shogi-game .season-award__frame p,
 .shogi-game .season-award__frame h2 { margin: 0 0 0 0.5rem; }
-.shogi-game .season-award__heading { margin-left: 1.3rem !important; padding-top: 0.6em; font-size: 2.1rem; font-weight: 900; letter-spacing: 0.9em; }
+.shogi-game .season-award__heading { margin-left: 1.3rem !important; padding-top: 0.6em; font-size: 2.1rem; font-weight: 900; --vtext-gap: 0.9em; }
 .shogi-game .season-award__title { font-size: 1.05rem; font-weight: 800; }
 .shogi-game .season-award__prize { padding-top: 1em; color: #8f2f1f; font-size: 1.35rem; font-weight: 900; }
 .shogi-game .season-award--gold .season-award__prize { color: #9a6a10; }

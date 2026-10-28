@@ -31,7 +31,7 @@
           v-for="leaf in drawnLeaves"
           :key="leaf.planId"
           :class="{ 'fortune__leaf--hit': leaf.hit, 'fortune__leaf--off': leaf.off }"
-        >{{ leaf.label }}</li>
+        ><VerticalText :text="leaf.label" /></li>
       </ol>
     </div>
 
@@ -80,6 +80,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type PropType } from "vue";
 import YakobiSays from "./YakobiSays.vue";
+import VerticalText from "./VerticalText.vue";
 import FormationThumb from "./FormationThumb.vue";
 import { FORTUNE_RESULTS, fortuneLayout, loadFortunePlans, recordFortunePlan, walkFortune } from "./core/opening-fortune.mjs";
 import { openingPlanById } from "./core/opening-catalog.mjs";
