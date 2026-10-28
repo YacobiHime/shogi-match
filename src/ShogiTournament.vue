@@ -523,7 +523,7 @@
             </button>
             <!-- 観戦の期(13-6)は、「観戦する」で分身の対局の中継を開く。「結果だけ見る」は中継を開かずに進める。 -->
             <div v-else-if="spectating" class="shogi-tournament__hud-row shogi-tournament__watch-row">
-              <button type="button" class="shogi-tournament__sub" data-watch-skip @click="commitAvatarGame()">結果だけ見る</button>
+              <button type="button" class="shogi-tournament__sub" data-watch-skip @click="watchResultOnly">結果だけ見る</button>
               <button type="button" class="shogi-tournament__start" data-watch-play @click="versusOpen = true">{{ playText }}</button>
             </div>
             <button v-else type="button" class="shogi-tournament__start" data-tournament-play @click="versusOpen = true">{{ playText }}</button>
@@ -809,6 +809,7 @@
       :compact="compact"
       :news="relayNews"
       :start-at="relayEntry.startAt ?? 0"
+      :live="relayLive"
       @seen="noteRelaySeen"
       @close="relayEntry = null"
     />
@@ -839,6 +840,9 @@ import RelayViewer from "./RelayViewer.vue";
 import { isFeatured, meijinRelayGames, relayGamesOf, relayRoundNews, ryuoRelayGames } from "./core/relay-games.mjs";
 import { userWonSeason, watchFinale } from "./core/ryuo-watch.mjs";
 import { isStaleRelayGame, loadRelayStore, unpackRelayGame } from "./core/relay-store.mjs";
+import { engineGameResult } from "./core/engine-game.mjs";
+import type { RelayMoveEntry } from "./core/relay-game.mjs";
+import { useEngineGame } from "./composables/match/useEngineGame";
 import {
   afterWatchRounds, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
@@ -1019,7 +1023,7 @@ const emit = defineEmits<{
   enter: [settings: { difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; watch: boolean }];
   "watch-progress": [seasonId: string, revealed: number];
   /** 観戦の期の、分身の次の一局を決める。 */
-  "watch-play": [];
+  "watch-play": [real?: any];
   play: [];
   resume: [];
   "open-note": [];
@@ -1236,6 +1240,8 @@ const meijinRelayGameList = computed(() => (props.meijinSeason ? meijinRelayGame
 const relayList = ref<{ event: "ryuo" | "meijin"; playerId: string } | null>(null);
 /** いま見ている中継の対局(relay-games.mjsの項目)。 */
 const relayEntry = ref<any>(null);
+/** 中継で見ている本局(20章)の手の流れ。本局でなければnull(中継の画面が棋譜を作る)。 */
+const relayLive = shallowRef<any>(null);
 const relaySeen = ref<string[]>([]);
 function relayStorage(): Storage | null {
   try {
@@ -1310,7 +1316,12 @@ const LIVE_TICK_MS = 250;
 let liveTimer: ReturnType<typeof setInterval> | undefined;
 let liveLast = 0;
 const liveEnd = computed(() => (live.value ? liveDuration(live.value.games) : 0));
-const liveStates = computed(() => (live.value ? live.value.games.map((game) => ({ game, state: liveState(game, liveSeconds.value) })) : []));
+/** 本局(20章)の手が増えたとき・終局したときに、ボードを描き直す印。 */
+const liveTick = ref(0);
+const liveStates = computed(() => {
+  void liveTick.value;
+  return live.value ? live.value.games.map((game) => ({ game, state: liveState(game, liveSeconds.value) })) : [];
+});
 const liveFinished = computed(() => Boolean(live.value) && liveStates.value.every(({ state }) => state.done));
 const liveFocus = computed(() => liveStates.value.find(({ game }) => game.key === live.value?.focusKey) ?? null);
 const liveCount = computed(() => {
@@ -1333,11 +1344,17 @@ function tickLive() {
   liveSeconds.value = Math.min(liveEnd.value, liveSeconds.value + seconds);
   if (liveSeconds.value >= liveEnd.value) stopLiveTimer();
 }
-/** ボードを始める。tableは、その回戦の表(①の表はtagで選ぶ)。なければ、いまの段階の表。 */
-function beginLive(specs: any[], focusKey: string, label: string, kind: "avatar" | "after", table: { stage: number; tag: string } | null = null) {
+/**
+ * ボードを始める。tableは、その回戦の表(①の表はtagで選ぶ)。なければ、いまの段階の表。
+ * recordsは、保存の棋譜の代わりに使う棋譜(本局の、指している途中の棋譜)。
+ */
+function beginLive(
+  specs: any[], focusKey: string, label: string, kind: "avatar" | "after", table: { stage: number; tag: string } | null = null,
+  records: Record<string, any> = {},
+) {
   const store = loadRelayStore(relayStorage());
   relaySeen.value = store.seen;
-  live.value = { games: specs.map((spec) => liveGame(spec, liveRecord(store, spec.key))), focusKey, label, kind };
+  live.value = { games: specs.map((spec) => liveGame(spec, records[spec.key] ?? liveRecord(store, spec.key))), focusKey, label, kind };
   liveSeconds.value = 0;
   sheet.value = "";
   viewStage.value = table && table.stage !== stages.value?.current ? table.stage : null;
@@ -1349,17 +1366,92 @@ function beginLive(specs: any[], focusKey: string, label: string, kind: "avatar"
 }
 /**
  * 観戦の期の「観戦する」(VS画面のあと)。トーナメント表に移り、分身の対局と同じ回戦のほかの対局を同時に進める。
- * 分身の勝ち負けは、本番の期を進めたときと同じ(写しの期で先に決める)。
+ * 分身の対局は本局(20章): エンジンが本当に指し、勝ち負けは盤の上で決まる。ほかの対局は、先に決まった結果の筋書きで進む。
+ * エンジンが使えないときは、分身の対局も自動対局で決める(写しの期で先に決め、見終えたら本番の期を同じように進める)。
+ * fastは「結果だけ見る」: 待たずに指させ、終わったらすぐ記録する。
  */
-function startLive() {
+function startLive({ fast = false }: { fast?: boolean } = {}) {
   versusOpen.value = false;
   const round = props.ryuoSeason ? liveRound(props.ryuoSeason, { oshiId: props.oshi?.id ?? null }) : null;
   if (!round?.avatar) {
     void commitAvatarGame();
     return;
   }
-  beginLive(round.specs, round.avatarKey, props.view?.pending?.label ?? round.avatar.label, "avatar");
+  const specs = [...round.specs];
+  const records: Record<string, any> = {};
+  if (props.relayEngineFactory) {
+    const real = startRealGame({ ...round.avatar, winner: null, how: null, story: null }, round.avatar);
+    specs[0] = real.spec;
+    records[real.spec.key] = real.record;
+  }
+  resultOnly = fast;
+  beginLive(specs, round.avatarKey, props.view?.pending?.label ?? round.avatar.label, "avatar", null, records);
+  if (fast) skipLive();
 }
+/** 「結果だけ見る」。本局を待たずに指させ、終わったらすぐ記録する(見る・見ないで勝ち負けの決まり方を変えない。20-3)。 */
+function watchResultOnly() {
+  if (props.relayEngineFactory) startLive({ fast: true });
+  else void commitAvatarGame();
+}
+
+// ---- 本局(20章の段階1)。分身の対局を、エンジンが本当に指す。
+type RealGame = {
+  spec: any;
+  /** 自動対局で決めたときの項目(エンジンが使えなかったときに戻す)。 */
+  fallback: any;
+  record: { entries: RelayMoveEntry[]; end: { winner: "black" | "white"; reason: "mate" | "resign"; plies: number } | null };
+  listeners: Set<{ onMove: (entry: RelayMoveEntry) => void; onEnd: (end: any) => void }>;
+};
+const engineGame = useEngineGame({ engineFactory: () => props.relayEngineFactory!(), storage: relayStorage });
+let realGame: RealGame | null = null;
+/** 「結果だけ見る」で始めた本局(終わったら、すぐ記録する)。 */
+let resultOnly = false;
+function startRealGame(spec: any, fallback: any): RealGame {
+  const state: RealGame = { spec, fallback, record: { entries: [], end: null }, listeners: new Set() };
+  realGame = state;
+  engineGame.play(spec, (entry, index) => {
+    if (realGame !== state) return;
+    state.record.entries[index] = entry;
+    liveTick.value += 1;
+    for (const listener of state.listeners) listener.onMove(entry);
+  }).then((game) => {
+    if (!game || realGame !== state) return;
+    state.record.end = game.end;
+    liveTick.value += 1;
+    for (const listener of state.listeners) listener.onEnd(game.end);
+    if (resultOnly && live.value) void finishLive();
+  }).catch(() => {
+    if (realGame !== state) return;
+    // エンジンが使えない: 分身の対局も、自動対局で決めた筋書きに戻す。
+    realGame = null;
+    if (live.value) {
+      live.value = { ...live.value, games: live.value.games.map((game) => (game.key === spec.key ? liveGame(fallback) : game)) };
+      if (!liveTimer && liveSeconds.value < liveEnd.value) {
+        liveLast = performance.now();
+        liveTimer = setInterval(tickLive, LIVE_TICK_MS);
+      }
+    }
+  });
+  return state;
+}
+/** 本局の手の流れ(中継の画面に渡す)。 */
+function realSource(state: RealGame) {
+  return {
+    entries: [...state.record.entries],
+    end: state.record.end,
+    subscribe(onMove: (entry: RelayMoveEntry) => void, onEnd: (end: any) => void) {
+      const listener = { onMove, onEnd };
+      state.listeners.add(listener);
+      return () => { state.listeners.delete(listener); };
+    },
+  };
+}
+function stopRealGame() {
+  if (!realGame) return;
+  engineGame.cancel();
+  realGame = null;
+}
+onBeforeUnmount(() => engineGame.dispose());
 /**
  * 結果の画面の「このあとの対局を観戦」(19章)。期の画面のトーナメント表に移り、敗退したあとの回戦を1つずつ、
  * その回戦の対局を同時に進める。見届けていない回戦から(見届けたあとは、はじめから)。
@@ -1409,14 +1501,18 @@ function cycleLiveSpeed() {
   const index = LIVE_SPEEDS.indexOf(liveSpeed.value as (typeof LIVE_SPEEDS)[number]);
   liveSpeed.value = LIVE_SPEEDS[(index + 1) % LIVE_SPEEDS.length];
 }
-/** 「結果まで進める」。すべての対局を終局まで進める。 */
+/** 「結果まで進める」。すべての対局を終局まで進める(本局は、指したところまで。そのあとは指すたびに進む)。 */
 function skipLive() {
   liveSeconds.value = liveEnd.value;
-  stopLiveTimer();
+  if (Number.isFinite(liveEnd.value)) stopLiveTimer();
 }
-/** 中継ボードを閉じる(本番の期は進めない。もう一度「観戦する」で、はじめから見る)。 */
+/**
+ * 中継ボードを閉じる(本番の期は進めない。もう一度「観戦する」で、はじめから見る)。
+ * 本局は止める。指したところまでの手は残っていて、次は続きから指す。
+ */
 function closeLive() {
   stopLiveTimer();
+  stopRealGame();
   live.value = null;
   tableOpen.value = false;
 }
@@ -1424,10 +1520,13 @@ function closeLive() {
 function openLiveGame(key: string) {
   const item = liveStates.value.find(({ game }) => game.key === key);
   if (!item) return;
+  // 本局は、棋譜を作らず、指された手をそのまま見る。
+  relayLive.value = realGame && realGame.spec.key === key ? realSource(realGame) : null;
   relayEntry.value = { ...item.game.spec, noNews: true, startAt: item.state.done ? 0 : item.state.ply };
 }
 // 中継を閉じたら、作った棋譜をボードに取り込む(その対局は、棋譜の手数と形勢で進む)。
 watch(relayEntry, (now, before) => {
+  if (!now) relayLive.value = null;
   if (now || !before || !live.value) return;
   const store = loadRelayStore(relayStorage());
   live.value = { ...live.value, games: live.value.games.map((game) => (game.record ? game : liveGame(game.spec, liveRecord(store, game.key)))) };
@@ -1443,13 +1542,22 @@ async function finishLive() {
     return;
   }
   stopLiveTimer();
+  // 本局が終わっていれば、その結果を記録する(終わっていなければ、自動対局で決める)。
+  const real = realGame?.record.end
+    ? engineGameResult(realGame.spec, { v: 2, key: realGame.spec.key, entries: realGame.record.entries, end: realGame.record.end }, "user")
+    : null;
+  stopRealGame();
+  resultOnly = false;
   live.value = null;
-  await commitAvatarGame();
+  await commitAvatarGame(real);
 }
-/** 分身の次の一局を本番の期に記録し、竜王への道を登る(「結果だけ見る」はすぐ、中継ボードは見終えたとき)。 */
-async function commitAvatarGame() {
+/**
+ * 分身の次の一局を本番の期に記録し、竜王への道を登る(中継ボードは見終えたとき)。
+ * realは本局の結果(20章)。なければ自動対局で決める(エンジンが使えないとき)。
+ */
+async function commitAvatarGame(real: any = null) {
   versusOpen.value = false;
-  emit("watch-play");
+  emit("watch-play", real);
   await nextTick();
   tableOpen.value = false;
   arriveFromGame();
@@ -1482,7 +1590,7 @@ const liveReveal = computed(() => {
     if (!state.done) continue;
     const { tag, id } = tableOf(game.key);
     if (!reveal.has(tag)) reveal.set(tag, new Map());
-    reveal.get(tag)?.set(id, game.spec.winner === "black" ? game.spec.black.id : game.spec.white.id);
+    reveal.get(tag)?.set(id, state.winner === "black" ? game.spec.black.id : game.spec.white.id);
   }
   return reveal;
 });
@@ -1514,7 +1622,9 @@ const liveFocusView = computed(() => {
   return {
     black: nameOf(spec.black), white: nameOf(spec.white), ply: item.state.ply, done: item.state.done,
     blackPercent: item.state.blackPercent,
-    verdict: item.state.done ? `${nameOf(spec[spec.winner])}の勝ち` : side ? `${nameOf(side)}${verdict.word}` : verdict.word,
+    verdict: item.state.done && item.state.winner ? `${nameOf(spec[item.state.winner])}の勝ち`
+      : item.state.thinking ? `${nameOf(spec[item.state.ply % 2 === 0 ? "black" : "white"])}が考慮中`
+      : side ? `${nameOf(side)}${verdict.word}` : verdict.word,
   };
 });
 /** 欄の主役のボタン(回戦が終わる前)。分身の対局か、注目の対局(羽音・推しなど)を開く。 */

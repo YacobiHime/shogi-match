@@ -66,38 +66,59 @@ export function liveRound(season, { oshiId = null } = {}) {
 
 /**
  * ボードの1局。recordは、中継で作った棋譜(relay-store.mjsの形)。あれば、その手数と形勢を使う。
+ * 本局(20章。エンジンが本当に指している対局)は、recordにまだendがない。指した手まで進み、終局はendが来てから。
  * @param {any} spec 中継の項目
- * @param {{ entries: { eval: number }[] } | null} [record]
+ * @param {{ entries: { eval: number }[], end?: { winner: 'black' | 'white' } | null } | null} [record]
  */
 export function liveGame(spec, record = null) {
   const plan = relayPlan(spec);
   const pace = LIVE_PACE.min + ((relaySeed(`${spec.key}:pace`) % 1000) / 1000) * (LIVE_PACE.max - LIVE_PACE.min);
+  const live = Boolean(record && !record.end);
   const end = record?.entries?.length || plan.end;
-  return { key: spec.key, spec, plan, pace, end, record: record ?? null };
+  return { key: spec.key, spec, plan, pace, end, record: record ?? null, live };
 }
 
 /**
  * ボードの時刻(秒)での、その局のようす。blackPercentは先手の勝率(%)、viewersは視聴者数。
+ * thinkingは、本局がまだ次の手を指していない(表示の時刻が、指した手に追いついた)とき。
  * @param {ReturnType<typeof liveGame>} game
  * @param {number} seconds
  */
 export function liveState(game, seconds) {
   // 終わる時刻(end / pace)を掛け戻すと、小数の誤差で1手足りないことがあるので、わずかに足してから切り捨てる。
-  const ply = Math.max(0, Math.min(game.end, Math.floor(seconds * game.pace + 1e-9)));
+  const paced = Math.floor(seconds * game.pace + 1e-9);
+  if (game.live) {
+    const available = game.record.entries.length;
+    const ply = Math.max(0, Math.min(available, paced));
+    const over = Boolean(game.record.end);
+    const done = over && ply >= available;
+    const cp = ply ? game.record.entries[ply - 1].eval : 40;
+    return {
+      ply, done, thinking: !over && ply >= available,
+      blackPercent: Math.round(blackWinRate(cp) * 100),
+      viewers: relayAudience(game.spec, ply),
+      winner: done ? game.record.end.winner : null,
+    };
+  }
+  const ply = Math.max(0, Math.min(game.end, paced));
   const done = ply >= game.end;
   const cp = game.record ? (ply ? game.record.entries[ply - 1].eval : 40) : relayTarget(game.plan, ply);
   return {
     ply,
     done,
+    thinking: false,
     blackPercent: Math.round(blackWinRate(cp) * 100),
     viewers: relayAudience(game.spec, ply),
-    winner: done ? game.spec.winner : null,
+    winner: done ? (game.record?.end?.winner ?? game.spec.winner) : null,
   };
 }
 
-/** すべての局が終わる時刻(秒)。 */
+/** すべての局が終わる時刻(秒)。終わっていない本局があれば、終わりは分からない(Infinity)。 */
 export function liveDuration(games) {
-  return games.reduce((longest, game) => Math.max(longest, game.end / game.pace), 0);
+  return games.reduce((longest, game) => {
+    if (game.live) return game.record.end ? Math.max(longest, game.record.entries.length / game.pace) : Infinity;
+    return Math.max(longest, game.end / game.pace);
+  }, 0);
 }
 
 /** 視聴者数の短い書き方(1.2万・8,250)。 */

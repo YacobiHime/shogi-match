@@ -208,7 +208,7 @@ export function scoreToCp(score) {
 /** 保存した点が詰みか。 */
 export const isMateCp = (cp) => Math.abs(cp) >= MATE_CP - 1000;
 /** 比べるための値(comparableScore。詰みは±100000から手数を引いた値)を、保存の点にする。 */
-function valueToCp(value) {
+export function valueToCp(value) {
   if (!Number.isFinite(value)) return 0;
   if (Math.abs(value) >= 90000) return Math.sign(value) * (MATE_CP - (100000 - Math.abs(value)));
   return value;
@@ -251,7 +251,7 @@ const COLLAPSE_MAX = 2500;
 const COLLAPSE_SCALE_CP = 10000;
 const scaledCp = (value) => clamp(Math.abs(value) >= 90000 ? Math.sign(value) * COLLAPSE_SCALE_CP : value, -COLLAPSE_SCALE_CP, COLLAPSE_SCALE_CP);
 /** 序盤の作戦の手を、最善手との差がこれ以内なら指す。 */
-const PLAN_LOSS_LIMIT = 150;
+export const PLAN_LOSS_LIMIT = 150;
 /** 鋭い一手(最善手と次の手の差)。 */
 export const ONLY_MOVE_GAP = 300;
 /** 投了の決まり。 */
@@ -275,7 +275,7 @@ const sideOf = (ply) => (ply % 2 === 0 ? 'black' : 'white');
 const signOf = (side) => (side === 'black' ? 1 : -1);
 
 /** 候補(手番の側から見た評価値)を、比べられる形にそろえる。 */
-function rankedCandidates(result) {
+export function rankedCandidates(result) {
   const settled = settleMultiPvCandidates(result?.candidates ?? [], result?.completedCandidates ?? []);
   return settled
     .map((candidate) => ({ ...candidate, value: comparableScore(candidate.score) }))
@@ -573,7 +573,7 @@ async function widerCandidates({ sfen, moves, legal, candidates, search, evaluat
 // ---- 序盤の作戦
 
 /** 棋士の、この局の戦法と囲い(定跡案内の戦法・囲いのid)。 */
-function openingPlanOf(spec, side) {
+export function openingPlanOf(spec, side) {
   const id = spec.openings?.[side];
   if (!id || !proOpening(id)) return null;
   const castle = spec.castles?.[side] ?? proOpening(id)?.castles?.[0]?.[0] ?? '';
@@ -581,7 +581,7 @@ function openingPlanOf(spec, side) {
   return entry ? { strategyId: entry.strategy, castleId: entry.castle ?? '' } : null;
 }
 
-function openingPlanMove({ plans, side, ply, record, moves, legal, formations, lastCapture }) {
+export function openingPlanMove({ plans, side, ply, record, moves, legal, formations, lastCapture }) {
   const plan = plans[side];
   if (!plan) return null;
   const own = moves.filter((_, index) => sideOf(index) === side);

@@ -68,12 +68,26 @@ describe('回戦の中継ボード(18章)', () => {
 
   it('中継で作った棋譜があれば、その手数と形勢を使う', () => {
     const spec = liveRound(watchSeason()).avatar;
-    const record = { entries: [{ eval: 120 }, { eval: -300 }, { eval: 2600 }] };
+    const record = { entries: [{ eval: 120 }, { eval: -300 }, { eval: 2600 }], end: { winner: 'black' } };
     const game = liveGame(spec, record);
     expect(game.end).toBe(3);
     expect(liveState(game, 2.1 / game.pace)).toMatchObject({ ply: 2 });
     expect(liveState(game, 2.1 / game.pace).blackPercent).toBeLessThan(50);
     expect(liveState(game, 100).done).toBe(true);
+  });
+
+  it('本局(20章): 指した手まで進み、次の手を待つあいだは考慮中。終局は棋譜の終わりが来てから', () => {
+    const spec = liveRound(watchSeason()).avatar;
+    const record = { entries: [{ eval: 50 }, { eval: -80 }], end: null };
+    const game = liveGame({ ...spec, winner: null }, record);
+    expect(game.live).toBe(true);
+    expect(liveDuration([game])).toBe(Infinity);
+    expect(liveState(game, 100)).toMatchObject({ ply: 2, done: false, thinking: true, winner: null });
+    expect(liveState(game, 1.1 / game.pace)).toMatchObject({ ply: 1, thinking: false });
+    record.entries.push({ eval: 3000 });
+    record.end = { winner: 'black', reason: 'resign', plies: 3 };
+    expect(liveState(game, 100)).toMatchObject({ ply: 3, done: true, thinking: false, winner: 'black' });
+    expect(liveDuration([game])).toBeCloseTo(3 / game.pace);
   });
 
   it('表の結果を伏せる(次の試合は「○回戦の勝者」)・見せる', () => {

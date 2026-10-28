@@ -223,6 +223,18 @@ const props = defineProps({
    * 0なら、対局開始から。
    */
   startAt: { type: Number, default: 0 },
+  /**
+   * 本局(20章。エンジンが本当に指している対局)の手の流れ。あれば棋譜を作らず、指された手を受け取る。
+   * entriesはいままでの手、endは終局(まだならnull)、subscribeは新しい手と終局の知らせ(戻り値で止める)。
+   */
+  live: {
+    type: Object as PropType<{
+      entries: RelayMoveEntry[];
+      end: { winner: Side; reason: string } | null;
+      subscribe: (onMove: (entry: RelayMoveEntry) => void, onEnd: (end: { winner: Side; reason: string }) => void) => () => void;
+    } | null>,
+    default: null,
+  },
 });
 const emit = defineEmits<{ close: []; seen: [key: string] }>();
 
@@ -658,7 +670,8 @@ const commentPrefix = computed(() => comments.value.filter((item) => item.at <= 
 const audienceText = computed(() => relayAudience(props.spec, cursor.value).toLocaleString("ja-JP"));
 const commentCountText = computed(() => (commentPrefix.value * 37 + (cursor.value * 11)).toLocaleString("ja-JP"));
 
-// ---- 棋譜を作る
+// ---- 棋譜を作る(本局は、指された手を受け取る)
+let stopLive: (() => void) | null = null;
 const generator = useRelayGenerator({
   engineFactory: () => props.engineFactory(),
   compact: () => props.compact,
@@ -679,15 +692,33 @@ onMounted(() => {
   // 対局開始前の札(解説の紹介)を少し見せてから、1手目へ。途中から開いたときは、いまの手数まで追いかけてから。
   if (catchingUp.value) playing.value = false;
   else timer = setTimeout(schedule, 1500);
+  const finish = (end: { winner: Side; reason: string }) => {
+    endInfo.value = end;
+    finished.value = true;
+    feedScript();
+    if (catchingUp.value) catchUp();
+  };
+  // 本局は、指された手をそのまま受け取る(棋譜は作らない)。
+  if (props.live) {
+    const source = props.live;
+    source.entries.forEach((entry) => receive(entry));
+    if (source.entries.length && !catchingUp.value) statusText.value = "";
+    if (source.end) finish(source.end);
+    else {
+      stopLive = source.subscribe((entry) => {
+        if (!catchingUp.value) statusText.value = "";
+        receive(entry);
+      }, finish);
+    }
+    if (catchingUp.value) catchUp();
+    return;
+  }
   generator.play(props.spec, (entry) => {
     if (!catchingUp.value) statusText.value = "";
     receive(entry);
   }).then((game) => {
     if (!game) return;
-    endInfo.value = game.end;
-    finished.value = true;
-    feedScript();
-    if (catchingUp.value) catchUp();
+    finish(game.end);
   }).catch((error: unknown) => {
     errorText.value = `中継の準備ができませんでした（${error instanceof Error ? error.message : String(error)}）。閉じて、もう一度開いてください。`;
     playing.value = false;
@@ -697,6 +728,7 @@ onBeforeUnmount(() => {
   clearTimers();
   clearTimeout(bannerTimer);
   resizeObserver?.disconnect();
+  stopLive?.();
   generator.dispose();
 });
 

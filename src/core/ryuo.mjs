@@ -788,16 +788,19 @@ export function asAvatarSeason(season, avatar, { live = true } = {}) {
 /**
  * 観戦の期の、分身の次の一局を決めて記録する(ほかの棋士と同じ自動対局。結果は期の種と局の数で決まる)。
  * 決めた対局は、ほかの棋士の対局と同じく中継に並ぶ(relay-games.mjsのtags.self)。
+ * realは、エンジンが本当に指した本局の結果(engine-game.mjsのengineGameResult。docs/tournament-relay-design.mdの20章)。
+ * あれば、自動対局の代わりにそれを記録する。
  * @param {any} season 観戦の期
+ * @param {{ real?: ReturnType<typeof simulateMemberGame> | null }} [options]
  */
-export function playSpectatorGame(season) {
+export function playSpectatorGame(season, { real = null } = {}) {
   if (!season?.pending) return season;
   const pending = season.pending;
   const count = season.userGames?.length ?? 0;
   const rng = createRng(((Number(season.id) || 0) ^ 0x6a09e667 ^ Math.imul(count + 1, 0x9e3779b1)) >>> 0);
   const me = season.players[USER_ID];
   const opponent = season.players[pending.opponentId];
-  const result = simulateMemberGame(rng, me, opponent, { big: pending.kind !== 'game', aColor: pending.color });
+  const result = real ?? simulateMemberGame(rng, me, opponent, { big: pending.kind !== 'game', aColor: pending.color });
   const game = gameRecordOf(result, USER_ID, pending.opponentId);
   const next = recordUserGame(season, result.aWins ? 'win' : 'loss', { game });
   next.spectator = true;
