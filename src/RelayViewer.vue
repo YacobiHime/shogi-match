@@ -100,6 +100,7 @@
             <strong>{{ timeControlText }}</strong>
             <span>{{ statusText || "まもなく対局開始" }}</span>
           </p>
+          <p v-else-if="catchingUp" class="relay__waiting" role="status" data-relay-catchup>{{ cursor }}手目 → {{ startAt }}手目まで早送り中…</p>
           <p v-else-if="waiting" class="relay__waiting" role="status">考慮中…</p>
           <p v-if="commentsOn && reducedMotion && latestComment" class="relay__ticker" aria-hidden="true">{{ latestComment }}</p>
         </div>
@@ -217,6 +218,11 @@ const props = defineProps({
   compact: { type: Boolean, default: false },
   /** 同じ回戦のほかの結果(運営のコメントで少しずつ知らせる。「鈴木蓮七段 勝ち」)。 */
   news: { type: Array as PropType<string[]>, default: () => [] },
+  /**
+   * 回戦の中継ボード(18章)から開いたときの、いまの手数。棋譜をその手まで作るあいだ盤を早送りで追いかけ、着いたら再生を始める。
+   * 0なら、対局開始から。
+   */
+  startAt: { type: Number, default: 0 },
 });
 const emit = defineEmits<{ close: []; seen: [key: string] }>();
 
@@ -429,8 +435,23 @@ function cycleSpeed() {
 }
 
 watch(ready, () => {
-  if (playing.value && waiting.value) schedule();
+  if (catchingUp.value) catchUp();
+  else if (playing.value && waiting.value) schedule();
 });
+
+/** いまの手数(startAt)へ追いかけているところ。棋譜が作られるたびに盤を進め、着いたら再生を始める。 */
+const catchingUp = ref(props.startAt > 0);
+function catchUp() {
+  const target = props.startAt;
+  const reached = ready.value >= target || (finished.value && ready.value >= entries.value.length);
+  cursor.value = Math.min(ready.value, target);
+  if (!reached) return;
+  catchingUp.value = false;
+  statusText.value = "";
+  seek(Math.min(ready.value, target));
+  playing.value = true;
+  schedule();
+}
 
 function onKey(event: KeyboardEvent) {
   if (event.key === "ArrowLeft") seek(cursor.value - 1);
@@ -654,17 +675,19 @@ onMounted(() => {
     boardWidth.value = boardEl.value.clientWidth;
   }
   rootEl.value?.focus({ preventScroll: true });
-  statusText.value = "中継の準備中…";
-  // 対局開始前の札(解説の紹介)を少し見せてから、1手目へ。
-  timer = setTimeout(schedule, 1500);
+  statusText.value = catchingUp.value ? `いまの局面（${props.startAt}手目）まで進めています…` : "中継の準備中…";
+  // 対局開始前の札(解説の紹介)を少し見せてから、1手目へ。途中から開いたときは、いまの手数まで追いかけてから。
+  if (catchingUp.value) playing.value = false;
+  else timer = setTimeout(schedule, 1500);
   generator.play(props.spec, (entry) => {
-    statusText.value = "";
+    if (!catchingUp.value) statusText.value = "";
     receive(entry);
   }).then((game) => {
     if (!game) return;
     endInfo.value = game.end;
     finished.value = true;
     feedScript();
+    if (catchingUp.value) catchUp();
   }).catch((error: unknown) => {
     errorText.value = `中継の準備ができませんでした（${error instanceof Error ? error.message : String(error)}）。閉じて、もう一度開いてください。`;
     playing.value = false;

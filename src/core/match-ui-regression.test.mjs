@@ -310,8 +310,11 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/<RyuoBracket\s+v-if="viewStageIndex === 0[\s\S]*?<RyuoBracket\s+v-if="viewStageIndex === 1[\s\S]*?<RyuoSeries\s+v-if="viewStageIndex === 2"/);
     // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。
     expect(tournament).toMatch(/<RyuoVersus[\s\S]*?@done="startPlay"/);
-    // 観戦の期(17章)は、VS画面のあと、分身の対局の中継を開く。
-    expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*if \(props\.spectating\) \{\s*void watchAvatarGame\(true\);\s*return;\s*\}\s*emit\("play"\);/);
+    // 観戦の期(18章)は、VS画面のあと、トーナメント表の回戦の中継ボードへ移る。
+    expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*if \(props\.spectating\) \{\s*startLive\(\);\s*return;\s*\}\s*emit\("play"\);/);
+    // 中継ボードは、見終えて(この回戦の結果へ)から本番の期を進める。途中で閉じても期は進めない。
+    expect(tournament).toMatch(/async function finishLive\(\) \{\s*stopLiveTimer\(\);\s*live\.value = null;\s*await commitAvatarGame\(\);/);
+    expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*live\.value = null;\s*tableOpen\.value = false;\s*\}/);
     // 期の結果の主役は「表彰式へ」。賞状(縦書き・判子)をわたし、閉じると期を見終えて大会の選択へ(docs/season-award-design.md)。
     expect(tournament).toMatch(/data-award-open @click="openCeremony\(`ryuo-\$\{seasonNo\}`\)">表彰式へ</);
     expect(tournament).toMatch(/@ceremony="openCeremony\(`meijin-\$\{meijinView\?\.no \?\? 0\}`\)"/);
@@ -319,8 +322,8 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/:button-text="awardCeremony \? \(screen === 'kenshukai' \? '研修会へ' : '大会の選択へ'\) : '閉じる'"/);
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "kenshukai"\) return;/);
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
-    // 戻る操作は、いちばん上に重ねた中継(画面→一覧)を先に閉じ、回戦ごとの観戦、次に賞状を閉じる。
-    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}\s*if \(watchTarget\.value\) \{\s*watchTarget\.value = null;\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
+    // 戻る操作は、いちばん上に重ねた中継(画面→一覧)を先に閉じ、回戦ごとの観戦、回戦の中継ボード、次に賞状を閉じる。
+    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}\s*if \(watchTarget\.value\) \{\s*watchTarget\.value = null;\s*return;\s*\}\s*if \(live\.value\) \{\s*closeLive\(\);\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
     expect(tournament).toMatch(/data-award-book @click="bookOpen = true"/);
     // 賞状は期が終わったときに対局画面が足す(竜王戦・名人戦とも)。
     expect(source).toMatch(/saveCareer\(browserStorage\(\), career\);\s*awardRyuoSeason\(season\);/);

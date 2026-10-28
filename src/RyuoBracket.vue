@@ -22,8 +22,12 @@
         <li
           v-for="match in view.matches"
           :key="match.id"
-          :class="['ryuo-bracket__card', { 'ryuo-bracket__card--pending': match.pending, 'ryuo-bracket__card--final': match.final }]"
-          :style="{ left: `${(match.round - 1) * colW}px`, top: `${HEAD + match.y * leafGap - CARD_H / 2}px`, width: `${cardW}px` }"
+          :class="['ryuo-bracket__card', {
+            'ryuo-bracket__card--pending': match.pending && !live[match.id],
+            'ryuo-bracket__card--final': match.final,
+            'ryuo-bracket__card--live': live[match.id] && !live[match.id].done,
+          }]"
+          :style="{ left: `${(match.round - 1) * colW}px`, top: `${HEAD + match.y * leafGap - cardH / 2}px`, width: `${cardW}px`, height: `${cardH}px` }"
           :aria-label="matchAria(match)"
           :data-match="match.id"
         >
@@ -32,7 +36,7 @@
             :key="side"
             :class="rowClass(match, side)"
           >
-            <span class="ryuo-bracket__mark" aria-hidden="true">{{ match.winner === side ? "○" : match.winner ? "●" : "" }}</span>
+            <span class="ryuo-bracket__mark" aria-hidden="true">{{ markOf(match, side) }}</span>
             <span class="ryuo-bracket__name">
               <i v-if="oshiId && match[side].pid === oshiId" class="ryuo-bracket__tag ryuo-bracket__tag--oshi">推し</i>
               <i v-if="match[side].pid && match[side].pid === rivalId" class="ryuo-bracket__tag ryuo-bracket__tag--rival">ライバル</i>
@@ -43,10 +47,20 @@
             <i v-if="match[side].label" class="ryuo-bracket__label">{{ match[side].label }}</i>
             <span v-else class="ryuo-bracket__dan">{{ match[side].dan }}</span>
           </div>
-          <span v-if="match.pending" class="ryuo-bracket__vs" aria-hidden="true">VS</span>
+          <!--
+            回戦の中継ボード(docs/tournament-relay-design.mdの18章)。何手目・形勢のバー(上の棋士の勝率。色は先後の色)・視聴者数。
+          -->
+          <div v-if="live[match.id]" class="ryuo-bracket__live" :data-live-match="match.id">
+            <span :class="['ryuo-bracket__live-ply', { 'ryuo-bracket__live-ply--on': !live[match.id].done }]">{{ live[match.id].done ? "終局" : `${live[match.id].ply}手目` }}</span>
+            <span :class="['ryuo-bracket__live-bar', `ryuo-bracket__live-bar--${live[match.id].topSide}`]" aria-hidden="true">
+              <span :style="{ width: `${live[match.id].topPercent}%` }" />
+            </span>
+            <span class="ryuo-bracket__live-viewers"><span aria-hidden="true">👁</span>{{ live[match.id].viewers }}</span>
+          </div>
+          <span v-if="match.pending && !live[match.id]" class="ryuo-bracket__vs" aria-hidden="true">VS</span>
           <!-- 決着した棋士どうしの試合は、押すと中継を開く(docs/tournament-relay-design.mdの7章)。 -->
           <button
-            v-if="watchable && canWatch(match)"
+            v-if="live[match.id] || (watchable && canWatch(match))"
             type="button"
             class="ryuo-bracket__watch"
             :aria-label="`${matchAria(match)}。押すと中継を見る`"
@@ -67,6 +81,8 @@ type Match = {
   id: string; round: number; y: number; top: Slot; bottom: Slot; winner: "top" | "bottom" | null;
   how: string; pending: boolean; final: boolean; userIn: boolean; userWon: boolean;
 };
+/** 中継ボードの札の1行。topPercentは上の棋士の勝率(%)、topSideは上の棋士の先後。 */
+export type LiveCard = { ply: number; done: boolean; topPercent: number; topSide: "black" | "white"; viewers: string };
 export type BracketView = {
   rounds: { round: number; label: string }[];
   matches: Match[];
@@ -80,22 +96,37 @@ const props = defineProps({
   rivalId: { type: String, default: "" },
   /** 決着した棋士どうしの試合を押すと、中継を開く(watchを出す)。 */
   watchable: { type: Boolean, default: false },
+  /** 回戦の中継ボードの、試合ごとのようす(18章)。ある試合は札に1行足し、押すと中継を開く。 */
+  live: { type: Object as PropType<Record<string, LiveCard>>, default: () => ({}) },
 });
 const emit = defineEmits<{ watch: [matchId: string] }>();
 /** 中継を見られる試合(決着していて、プレイヤーが出ていない)。 */
 const canWatch = (match: Match) => Boolean(match.winner && !match.userIn && match.top.pid && match.bottom.pid);
 
-/** 札の高さ(2行)と、列の見出しの高さ(px)。 */
-const CARD_H = 52;
+/** 札の高さ(2行。中継ボードは3行)と、列の見出しの高さ(px)。 */
+const CARD_ROWS_H = 52;
+const LIVE_ROW_H = 22;
 const HEAD = 40;
-/** 葉(棋士)1人あたりの縦の間の下限・上限。1回戦の札は葉2人ぶんの高さに入る。 */
-const LEAF_MIN = 31;
+/** 葉(棋士)1人あたりの縦の間の下限・上限。1回戦の札は葉2人ぶんの高さに入る。中継ボードは札が高いので広げる。 */
+const LEAF_MIN_PLAIN = 31;
+const LEAF_MIN_LIVE = 42;
 const LEAF_MAX = 84;
 /** 列の幅の下限・上限(札の幅は列の幅から間を引く)。 */
 const COL_MIN = 168;
 const COL_MAX = 236;
 const COL_GAP = 22;
 
+const hasLive = computed(() => Object.keys(props.live).length > 0);
+const cardH = computed(() => (hasLive.value ? CARD_ROWS_H + LIVE_ROW_H : CARD_ROWS_H));
+const LEAF_MIN = computed(() => (hasLive.value ? LEAF_MIN_LIVE : LEAF_MIN_PLAIN));
+/** 札の左の印。決着は○●、中継ボードで対局中は先後(☗☖)。 */
+function markOf(match: Match, side: "top" | "bottom") {
+  if (match.winner) return match.winner === side ? "○" : "●";
+  const info = props.live[match.id];
+  if (!info || info.done) return "";
+  const black = info.topSide === "black" ? "top" : "bottom";
+  return side === black ? "☗" : "☖";
+}
 const frame = ref<HTMLElement | null>(null);
 const frameSize = ref({ width: 0, height: 0 });
 const roundCount = computed(() => Math.max(1, props.view.rounds.length));
@@ -107,7 +138,7 @@ const scrolls = computed(() => colW.value * roundCount.value - COL_GAP > frameSi
 const leafGap = computed(() => {
   const leaves = Math.max(1, props.view.leafCount);
   const fit = (frameSize.value.height - HEAD - 8) / leaves;
-  return Math.min(LEAF_MAX, Math.max(LEAF_MIN, fit));
+  return Math.min(LEAF_MAX, Math.max(LEAF_MIN.value, fit));
 });
 const stageWidth = computed(() => colW.value * roundCount.value - COL_GAP);
 const stageHeight = computed(() => HEAD + props.view.leafCount * leafGap.value + 8);
@@ -124,7 +155,7 @@ const lines = computed(() => {
       const x1 = (child.round - 1) * colW.value + cardW.value;
       const y1 = HEAD + child.y * leafGap.value;
       const x2 = (match.round - 1) * colW.value;
-      const y2 = HEAD + match.y * leafGap.value - CARD_H / 2 + (index === 0 ? CARD_H / 4 : (CARD_H * 3) / 4);
+      const y2 = HEAD + match.y * leafGap.value - cardH.value / 2 + (index === 0 ? CARD_ROWS_H / 4 : (CARD_ROWS_H * 3) / 4);
       const xm = x2 - COL_GAP / 2;
       out.push({ key: `${child.id}-${match.id}`, d: `M${x1} ${y1} H${xm} V${y2} H${x2}`, hot: child.userWon });
     });
@@ -176,7 +207,8 @@ onMounted(() => {
   void nextTick(scrollToUser);
 });
 onBeforeUnmount(() => observer?.disconnect());
-watch(() => props.view, () => void nextTick(scrollToUser));
+// 次の対局の回戦が変わったときだけ送る(中継ボードで結果が出るたびに、見ているところから動かさない)。
+watch(() => `${props.view.userNext}:${props.view.matches.find((entry) => entry.pending)?.id ?? ""}`, () => void nextTick(scrollToUser));
 </script>
 
 <style>
@@ -221,8 +253,8 @@ watch(() => props.view, () => void nextTick(scrollToUser));
 .shogi-game .ryuo-bracket__card {
   position: absolute;
   display: grid;
-  grid-template-rows: 1fr 1fr;
-  height: 52px;
+  grid-template-rows: 24px 24px;
+  grid-auto-rows: 22px;
   box-sizing: border-box;
   border: 2px solid #3a526e;
   border-radius: 8px;
@@ -293,6 +325,36 @@ watch(() => props.view, () => void nextTick(scrollToUser));
 }
 .shogi-game .ryuo-bracket__watch:hover,
 .shogi-game .ryuo-bracket__watch:focus-visible { background: rgba(241, 165, 76, 0.12); outline: 2px solid #f1a54c; outline-offset: -2px; }
+/* 回戦の中継ボード(18章)。対局中の札は赤い縁で脈打つ(動きを減らす設定では止める)。 */
+.shogi-game .ryuo-bracket__card--live { border-color: #e0745e; }
+.shogi-game .ryuo-bracket__live {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.3rem;
+  align-items: center;
+  padding: 0 0.4rem;
+  border-top: 1px solid #3a526e;
+  color: #c9d6e6;
+  font-size: 0.68rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.shogi-game .ryuo-bracket__live-ply--on { color: #ffb3a4; }
+.shogi-game .ryuo-bracket__live-ply--on::before { content: "●"; margin-right: 0.15rem; color: #e0745e; animation: ryuo-bracket-live 1.2s ease-in-out infinite; }
+.shogi-game .ryuo-bracket__live-bar { height: 0.42rem; overflow: hidden; border-radius: 999px; }
+.shogi-game .ryuo-bracket__live-bar span { display: block; height: 100%; transition: width 0.4s ease; }
+/* 上の棋士の色(先手は青・後手は赤)と、下の棋士の色。中継の勝率バーと同じ色。 */
+.shogi-game .ryuo-bracket__live-bar--black { background: #c8433a; }
+.shogi-game .ryuo-bracket__live-bar--black span { background: #3d78b8; }
+.shogi-game .ryuo-bracket__live-bar--white { background: #3d78b8; }
+.shogi-game .ryuo-bracket__live-bar--white span { background: #c8433a; }
+.shogi-game .ryuo-bracket__live-viewers { color: #9fb3c8; }
+@keyframes ryuo-bracket-live { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .ryuo-bracket__live-ply--on::before { animation: none; }
+  .shogi-game .ryuo-bracket__live-bar span { transition: none; }
+}
 .shogi-game .ryuo-bracket__vs {
   position: absolute;
   top: 50%;

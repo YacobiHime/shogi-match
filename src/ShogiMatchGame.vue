@@ -5886,12 +5886,14 @@ function enterRyuoSeason(settings: {
     seed,
     userName: playerDisplayName(playerName.value),
   });
-  // エントリーの「対局: 観戦」なら、自分の席を分身にする。期の進み方と記録はふつうの期と同じ(docs/tournament-relay-design.mdの17章)。
+  // 「分身を出場させる」なら、自分の席を分身にする。期の進み方と記録はふつうの期と同じ(docs/tournament-relay-design.mdの17・18章)。
   if (settings.watch) asAvatarSeason(season, avatarMember(settings.difficulty));
   ryuoSeason.value = season;
   saveSeason(browserStorage(), season);
-  const { difficulty: _difficulty, ...saved } = settings;
+  // 分身を出場させたか(watch)は、その期だけのもの。次の期の設定には残さない。
+  const { difficulty: _difficulty, watch: _watch, ...saved } = settings;
   void _difficulty;
+  void _watch;
   ryuoCareer.value = { ...career, settings: saved };
   saveCareer(browserStorage(), ryuoCareer.value);
   finalizeRyuoSeason();
