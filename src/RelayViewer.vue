@@ -735,6 +735,9 @@ onBeforeUnmount(() => {
 /* AI勢は青、初心者と答える人は緑(書き手の種類。12章)。盛り上がりは大きな字。 */
 .shogi-game .relay__comment--blue { color: #9fd0ff; }
 .shogi-game .relay__comment--green { color: #b4ecb0; }
+/* 駒割り勢はオレンジ、海外のファンは薄紫(12-5)。 */
+.shogi-game .relay__comment--orange { color: #ffb36b; }
+.shogi-game .relay__comment--lavender { color: #d9c8ff; }
 .shogi-game .relay__comment--big { font-size: clamp(1.25rem, 3.6vw, 1.9rem); }
 /* 運営のコメント(上に止まる帯)。後手の名札と時計の下、心の声より上。 */
 .shogi-game .relay__banner {

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } from '../game-state';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { relaySeed, relayTimeControl, relayTimeline } from './relay-game.mjs';
-import { callName, createRelayScript, moveFacts, moveMeaning, moveTextOf, pvTextOf, relayAudience, relayCast } from './relay-commentary.mjs';
+import {
+  callName, createRelayScript, kingGuard, materialSwap, materialText, moveFacts, moveMeaning, moveTextOf, pvTextOf, relayAudience, relayCast,
+} from './relay-commentary.mjs';
 
 const player = (id, name, extra = {}) => ({ id, name, dan: '七段', rating: 1600, character: { attack: 0, traits: [], abilities: {} }, repertoire: null, ...extra });
 
@@ -115,11 +117,11 @@ describe('createRelayScript', () => {
 });
 
 /** 決まった手順で長い1局を作り、台本を通す(コメントの種類を確かめる)。 */
-function longScript({ weight = 'plain', news = [] } = {}) {
+function longScript({ weight = 'plain', news = [], variant = '', venue = '' } = {}) {
   const spec = {
-    key: `ryuo:9:main:long-${weight}`, event: 'ryuo', kind: weight === 'title' ? 'finals' : 'game', label: '決勝トーナメント 準決勝', weight,
-    black: player('a', '中村大輔', { character: { attack: 0.4, traits: [{ id: 'demon-reading' }], abilities: {} } }),
-    white: player('h', '天鷺羽音', { story: HANANE }), winner: 'black', how: 'middle', story: [80, 300, 900], news,
+    key: `ryuo:9:main:long-${weight}${variant}`, venue, event: 'ryuo', kind: weight === 'title' ? 'finals' : 'game', label: '決勝トーナメント 準決勝', weight,
+    black: player('a', '中村大輔', { age: 41, character: { attack: 0.4, traits: [{ id: 'demon-reading' }], abilities: {} } }),
+    white: player('h', '天鷺羽音', { story: HANANE, age: 16 }), winner: 'black', how: 'middle', story: [80, 300, 900], news,
   };
   const cast = { id: 'y', name: '天鷺善彦', dan: '竜王', story: YOSHIHIKO, voice: 'yoshihiko' };
   const script = createRelayScript({ spec, cast, nextId: 'a' });
@@ -129,7 +131,7 @@ function longScript({ weight = 'plain', news = [] } = {}) {
   for (let ply = 0; ply < 110; ply += 1) {
     const legal = enumerateLegalMoves(record.position).map(({ usi }) => usi).sort();
     if (!legal.length) break;
-    const move = legal[relaySeed(`long:${ply}`) % legal.length];
+    const move = legal[relaySeed(`long${variant}:${ply}`) % legal.length];
     appendUsiMove(record, move);
     moves.push(move);
     sfens.push(record.position.sfen);
@@ -152,7 +154,7 @@ function longScript({ weight = 'plain', news = [] } = {}) {
       before: timeline[index], after: timeline[index + 1], last, end: last ? { winner: 'black', reason: 'resign' } : null,
     });
   });
-  return script;
+  return Object.assign(script, { sfens });
 }
 
 describe('視聴者のコメントの種類(12章)', () => {
@@ -200,5 +202,67 @@ describe('視聴者のコメントの種類(12章)', () => {
     expect(script.comments.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(text))).toBe(true);
     expect(script.comments.every(({ text }) => !/\{\w+\}/.test(text))).toBe(true);
     expect(longScript({ weight: 'title' }).comments.length).toBeGreaterThan(script.comments.length);
+  });
+});
+
+describe('視聴者のコメントの種類を増やす(12-5)', () => {
+  it('駒割りは、盤と持ち駒の駒の数から言う(角交換は互角、銀を持てば銀得、交換は得をした側から)', () => {
+    const record = createGameRecord();
+    for (const move of ['7g7f', '3c3d', '8h2b+', '3a2b']) appendUsiMove(record, move);
+    expect(materialText(record.position.sfen)).toMatchObject({ text: '', lead: null });
+    const silver = 'lnsgkg1nl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b S 1';
+    expect(materialSwap(silver).S).toBe(1);
+    expect(materialText(silver)).toMatchObject({ text: '先手の銀得', lead: 'black' });
+    const swap = 'lnsgk2nl/1r7/ppppppppp/9/9/9/PPPPPPPPP/7R1/LNSGKGSNL b GSb 1';
+    expect(materialText(swap)).toMatchObject({ text: '先手が角を渡して金と銀', lead: 'black' });
+  });
+
+  it('玉の守りは、まわり8マスの金銀を数え、隅の玉を穴熊と言う', () => {
+    expect(kingGuard(STANDARD_SFEN, 'black')).toEqual({ guards: 2, anaguma: false });
+    expect(kingGuard('lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/KNSG1GSNL b - 1', 'black')?.anaguma).toBe(true);
+  });
+
+  const scripts = ['', '-b', '-c', '-d'].flatMap((variant) => [
+    longScript({ variant }), longScript({ variant, weight: 'title', venue: '京都・古いお寺の大広間' }),
+  ]);
+  const NEW_KINDS = ['kifu', 'material', 'king', 'layman', 'local', 'room', 'veteran', 'overseas'];
+
+  it('いくつかの対局で、新しい書き手が6種類以上出る。終局では棋譜並べ勢が総手数を言う', () => {
+    const kinds = new Set(scripts.flatMap(({ comments }) => comments.map(({ kind }) => kind)));
+    expect(NEW_KINDS.filter((kind) => kinds.has(kind)).length).toBeGreaterThanOrEqual(6);
+    for (const script of scripts) {
+      const plies = script.sfens.length - 1;
+      expect(script.comments.some(({ kind, at }) => kind === 'kifu' && at === plies)).toBe(true);
+      for (const { text } of script.comments.filter(({ kind, at }) => kind === 'kifu' && at === plies)) {
+        if (/\d+手/.test(text)) expect(text).toContain(`${plies}手`);
+      }
+    }
+  });
+
+  it('駒割り勢の言う駒割りは、その手の盤と合う。素人の形勢判断には、AI勢(青)が評価値で答える', () => {
+    for (const script of scripts) {
+      for (const item of script.comments.filter(({ kind }) => kind === 'material')) {
+        const { text } = materialText(script.sfens[item.at]);
+        expect(item.tone).toBe('orange');
+        if (text) expect(item.text).toContain(text);
+        else expect(item.text).toMatch(/互角|損得はなし|五分/);
+      }
+      for (const item of script.comments.filter(({ kind }) => kind === 'veteran')) expect(item.text).toMatch(/中村|羽音/);
+      script.comments.forEach((item, index) => {
+        if (item.kind !== 'layman') return;
+        const { lead } = materialText(script.sfens[item.at]);
+        expect(item.text).toContain(lead === 'black' ? '先手' : '後手');
+        expect(script.comments[index + 1]).toMatchObject({ kind: 'ai', tone: 'blue', at: item.at });
+      });
+    }
+  });
+
+  it('ご当地勢は対局場の町を言い、海外のファンは薄紫。言い方の穴埋めが残らない', () => {
+    const title = scripts.filter((_, index) => index % 2 === 1).flatMap(({ comments }) => comments);
+    for (const { text } of title.filter(({ kind }) => kind === 'local')) expect(text).toMatch(/京都/);
+    const all = scripts.flatMap(({ comments }) => comments);
+    expect(all.filter(({ kind }) => kind === 'overseas').every(({ tone }) => tone === 'lavender')).toBe(true);
+    expect(all.every(({ text }) => !/\{\w+\}|undefined|NaN/.test(text))).toBe(true);
+    expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(text))).toBe(true);
   });
 });
