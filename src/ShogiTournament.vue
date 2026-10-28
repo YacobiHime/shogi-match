@@ -209,6 +209,10 @@
           @ceremony="openCeremony(`meijin-${meijinView?.no ?? 0}`)"
           :relay-available="Boolean(relayEngineFactory)"
           @relay="openRelayList('meijin', $event)"
+          :watching="meijinWatching"
+          @watch="startMeijinWatch(false)"
+          @watch-skip="startMeijinWatch(true)"
+          @watch-open="openMeijinWatch"
           @back="backToSelect"
         />
         <!--
@@ -844,7 +848,7 @@ import { engineGameResult, isMainCharacter, realGameSpec } from "./core/engine-g
 import type { RelayMoveEntry } from "./core/relay-game.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
 import {
-  afterWatchRounds, applyWatchedRound, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyWatchedRound, hiddenRoundIds, hiddenTables, meijinLiveEntry, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from "./core/relay-live.mjs";
 import { rateVerdict } from "./core/relay-game.mjs";
@@ -1025,6 +1029,8 @@ const emit = defineEmits<{
   /** 観戦の期の、分身の次の一局を決める。 */
   "watch-play": [real?: any, round?: any[]];
   "watch-round": [season: any];
+  /** 名人戦の分身の次の一局を記録する(21章)。realは本局の結果、なければ自動対局。 */
+  "meijin-watch-play": [real?: any];
   "watch-settle": [];
   play: [];
   resume: [];
@@ -1449,7 +1455,8 @@ engineGame.setPriority((key) => {
   const shown = Math.floor(liveSeconds.value * game.pace);
   return state.record.entries.length - shown;
 });
-function startRealGame(spec: any, fallback: any): RealGame {
+/** hooksは、終局したとき・エンジンが使えなかったときに呼ぶ(名人戦の分身の本局。21章)。渡すと、表のボードの処理はしない。 */
+function startRealGame(spec: any, fallback: any, hooks: { onEnd: () => void; onFail: () => void } | null = null): RealGame {
   const state: RealGame = { spec, fallback, record: { entries: [], end: null }, listeners: new Set() };
   const games = realGames;
   games.set(spec.key, state);
@@ -1464,11 +1471,19 @@ function startRealGame(spec: any, fallback: any): RealGame {
     state.record.end = game.end;
     liveTick.value += 1;
     for (const listener of state.listeners) listener.onEnd(game.end);
+    if (hooks) {
+      hooks.onEnd();
+      return;
+    }
     if (resultOnly && live.value && [...games.values()].every((item) => item.record.end)) void finishLive();
   }).catch(() => {
     if (!current()) return;
     // エンジンが使えない: その局は、自動対局で決めた筋書きに戻す。
     games.delete(spec.key);
+    if (hooks) {
+      hooks.onFail();
+      return;
+    }
     if (live.value) {
       live.value = { ...live.value, games: live.value.games.map((game) => (game.key === spec.key ? liveGame(fallback) : game)) };
       if (!liveTimer && liveSeconds.value < liveEnd.value) {
@@ -1611,9 +1626,67 @@ function openLiveGame(key: string) {
   relayLive.value = real ? realSource(real) : null;
   relayEntry.value = { ...item.game.spec, noNews: true, startAt: item.state.done ? 0 : item.state.ply };
 }
+// ---- 名人戦の分身の本局(21章)。分身の次の一局をエンジンが本当に指し、中継で見る(回戦のボードはまだない)。
+/** 指している分身の本局。fastは「結果だけ見る」(中継を開かず、終わったらすぐ記録する)。 */
+const meijinWatch = shallowRef<null | { state: RealGame; fast: boolean }>(null);
+const meijinWatching = computed(() => {
+  void liveTick.value;
+  const watching = meijinWatch.value;
+  if (!watching) return null;
+  return {
+    ply: watching.state.record.entries.length, done: Boolean(watching.state.record.end),
+    viewing: relayEntry.value?.key === watching.state.spec.key, fast: watching.fast,
+  };
+});
+/**
+ * 「観戦する」(VS画面のあと)と「結果だけ見る」。分身の次の一局をエンジンが指し始め、観戦するなら中継を開く。
+ * 中継を閉じても指し続け、期の画面の欄に手数を出す。終局したら、中継を見ていなければすぐ、見ていれば閉じたときに記録する。
+ * エンジンが使えないときは、自動対局で決める。
+ */
+function startMeijinWatch(fast: boolean) {
+  const season = props.meijinSeason;
+  const entry = season ? meijinLiveEntry(season) : null;
+  if (!props.relayEngineFactory || !entry) {
+    emit("meijin-watch-play", null);
+    return;
+  }
+  stopRealGames();
+  engineGame.setEngines(1);
+  const state = startRealGame(realGameSpec(entry, { world: null }), entry, {
+    onEnd: () => {
+      if (meijinWatch.value?.state === state && (meijinWatch.value.fast || relayEntry.value?.key !== state.spec.key)) finishMeijinWatch();
+    },
+    onFail: () => {
+      if (meijinWatch.value?.state !== state) return;
+      meijinWatch.value = null;
+      emit("meijin-watch-play", null);
+    },
+  });
+  meijinWatch.value = { state, fast };
+  if (!fast) openMeijinWatch();
+}
+/** 指している分身の本局の中継を、はじめから開く(指された手まで進めて見られる)。 */
+function openMeijinWatch() {
+  const watching = meijinWatch.value;
+  if (!watching) return;
+  relayLive.value = realSource(watching.state);
+  relayEntry.value = { ...watching.state.spec, noNews: true, startAt: 0 };
+}
+/** 分身の本局を記録する(終局していなければ何もしない)。 */
+function finishMeijinWatch() {
+  const watching = meijinWatch.value;
+  if (!watching?.state.record.end) return;
+  const { spec, record } = watching.state;
+  const real = engineGameResult(spec, { v: 2, key: spec.key, entries: record.entries, end: record.end }, "user");
+  meijinWatch.value = null;
+  stopRealGames();
+  emit("meijin-watch-play", real);
+}
 // 中継を閉じたら、作った棋譜をボードに取り込む(その対局は、棋譜の手数と形勢で進む)。
 watch(relayEntry, (now, before) => {
   if (!now) relayLive.value = null;
+  // 名人戦の分身の本局が終わっていれば、中継を閉じたときに記録する(21章)。
+  if (!now && before && meijinWatch.value?.state.spec.key === before.key && meijinWatch.value.state.record.end) finishMeijinWatch();
   if (now || !before || !live.value) return;
   const store = loadRelayStore(relayStorage());
   live.value = { ...live.value, games: live.value.games.map((game) => (game.record ? game : liveGame(game.spec, liveRecord(store, game.key)))) };

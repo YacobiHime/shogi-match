@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, recordUserGame, replayRest, restGameKey, restOpen, seasonGameResults, settleRest } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
-  afterWatchRounds, applyWatchedRound, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyWatchedRound, hiddenRoundIds, meijinLiveEntry, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from './relay-live.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
@@ -295,5 +295,28 @@ describe('敗退後の観戦を本局にする(20-10)', () => {
       }
       expect(season.standings.indexOf('user')).toBe(standing);
     }
+  });
+});
+
+describe('名人戦の分身の次の一局の中継(21章)', () => {
+  it('分身の次の一局の項目は、記録したあとの中継の項目と同じ鍵。本番の期は変えない', async () => {
+    const { asAvatarMeijinSeason, createLeague, createMeijinSeason, playMeijinSpectatorGame } = await import('./meijin.mjs');
+    const { meijinRelayGames } = await import('./relay-games.mjs');
+    const roster = createRoster({ seed: 31 });
+    const meijinSettings = { difficulty: 9, scale: 'full', coachLevel: 'detailed', hintLimit: 3, undoLimit: 3 };
+    let season = asAvatarMeijinSeason(createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings: meijinSettings, userLevel: 20, seed: 7 }), { rating: 1500, character: { abilities: {}, traits: [] } });
+    for (let index = 0; index < 3; index += 1) {
+      const before = JSON.stringify(season);
+      const entry = meijinLiveEntry(season);
+      expect(JSON.stringify(season)).toBe(before);
+      expect(entry?.tags.self).toBe(true);
+      expect([entry.black.id, entry.white.id]).toContain('user');
+      expect([entry.black.id, entry.white.id]).toContain(season.pending.opponentId);
+      season = playMeijinSpectatorGame(season);
+      expect(meijinRelayGames(season).some(({ key }) => key === entry.key)).toBe(true);
+    }
+    // 自分で指す期は、自分の対局を中継に並べない。
+    const own = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings: meijinSettings, userLevel: 20, seed: 7 });
+    expect(meijinLiveEntry(own)).toBeNull();
   });
 });

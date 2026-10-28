@@ -40,7 +40,11 @@
             <p><small>設定</small><span data-meijin-summary>{{ settingsSummary }}</span></p>
             <button type="button" class="shogi-tournament__sub" data-meijin-change @click="settingsOpen = true">変える</button>
           </div>
-          <button type="button" class="shogi-tournament__start" data-meijin-enter @click="enter">出場する</button>
+          <!-- 自分の代わりに分身を出場させる(docs/tournament-relay-design.mdの21章)。期はふつうの期と同じで、「対局する」が「観戦する」になる。 -->
+          <button type="button" class="shogi-tournament__sub shogi-tournament__avatar-enter" data-meijin-avatar-enter @click="enter(true)">
+            分身を出場させる<small>あなたの能力の分身が指し、中継で観戦する</small>
+          </button>
+          <button type="button" class="shogi-tournament__start" data-meijin-enter @click="enter()">出場する</button>
         </template>
       </section>
 
@@ -149,7 +153,7 @@
               <span v-if="rankTag(view.pending.opponent.level ?? NaN, userLevel)" class="shogi-tournament__chip" :class="rankTag(view.pending.opponent.level ?? NaN, userLevel) === '格上' ? 'shogi-tournament__chip--rank-up' : 'shogi-tournament__chip--rank-down'" data-rank-tag>{{ rankTag(view.pending.opponent.level ?? NaN, userLevel) }}</span>
               <span v-if="favorite" class="shogi-tournament__chip shogi-tournament__chip--opening">{{ favorite }}</span>
               <span v-if="opponentRecord" class="shogi-tournament__chip" data-meijin-opponent-record>{{ opponentRecord }}</span>
-              <span class="shogi-tournament__chip">{{ view.pending.color === "black" ? "あなたが先手" : "あなたが後手" }}</span>
+              <span class="shogi-tournament__chip">{{ `${view.spectator ? "分身" : "あなた"}が${view.pending.color === "black" ? "先手" : "後手"}` }}</span>
             </p>
           </div>
           <div v-if="view.pending.kind === 'finals' && view.series" class="shogi-tournament__hud-score">
@@ -187,7 +191,18 @@
           <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
           <span class="shogi-tournament__tip-text">{{ tipLine }}</span>
         </p>
-        <button v-if="suspendedMoves !== null" type="button" class="shogi-tournament__start shogi-tournament__start--resume" data-meijin-resume @click="emit('resume')">
+        <!-- 分身の期(21章): 分身の対局をエンジンが本当に指す。観戦するは中継で、結果だけ見るは待たずに指させて記録する。 -->
+        <template v-if="view.spectator">
+          <template v-if="watching">
+            <p class="shogi-tournament__hud-role" data-meijin-watching>分身が対局中（{{ watching.ply }}手目）{{ watching.done ? "。終局しました" : "" }}</p>
+            <button v-if="!watching.viewing && !watching.fast" type="button" class="shogi-tournament__start" data-meijin-watch-open @click="emit('watch-open')">中継を見る</button>
+          </template>
+          <template v-else>
+            <button type="button" class="shogi-tournament__start" data-meijin-watch @click="versusOpen = true">{{ watchText }}</button>
+            <button type="button" class="shogi-tournament__sub" data-meijin-watch-skip @click="emit('watch-skip')">結果だけ見る</button>
+          </template>
+        </template>
+        <button v-else-if="suspendedMoves !== null" type="button" class="shogi-tournament__start shogi-tournament__start--resume" data-meijin-resume @click="emit('resume')">
           対局を再開<small>中断した対局（{{ suspendedMoves }}手目まで）</small>
         </button>
         <button v-else type="button" class="shogi-tournament__start" data-meijin-play @click="versusOpen = true">{{ playText }}</button>
@@ -292,8 +307,9 @@ export type MeijinView = {
   result: { cls: string; wins: number; losses: number; place: number | null; outcome: string } | null;
   resultSeen: boolean;
   settings: Settings;
+  spectator?: boolean;
 };
-type Settings = { recommended?: boolean; difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
+type Settings = { recommended?: boolean; difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; watch?: boolean };
 
 const props = defineProps({
   view: { type: Object as PropType<MeijinView | null>, default: null },
@@ -318,6 +334,8 @@ const props = defineProps({
   openSeason: { type: Boolean, default: false },
   /** 対局中継を見られる(棋譜を作るエンジンがある)。 */
   relayAvailable: { type: Boolean, default: false },
+  /** 分身の対局(本局)を指している間の手数(21章)。viewingは中継を開いている、fastは「結果だけ見る」。 */
+  watching: { type: Object as PropType<{ ply: number; done: boolean; viewing: boolean; fast: boolean } | null>, default: null },
 });
 const emit = defineEmits<{
   enter: [settings: Settings];
@@ -329,6 +347,10 @@ const emit = defineEmits<{
   ceremony: [];
   /** 対局中継の一覧を開く(棋士のidを渡すと、その棋士の対局だけ)。 */
   relay: [playerId: string];
+  /** 分身の期の「観戦する」(VS画面のあと)・「結果だけ見る」・指している本局の中継を開く(21章)。 */
+  watch: [];
+  "watch-skip": [];
+  "watch-open": [];
 }>();
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
@@ -442,8 +464,9 @@ function onPick(key: string, value: PickerValue) {
   else if (key === "byoyomi") byoyomi.value = Number(value);
   if ((pickerConfig.value?.sections.length ?? 0) <= 1) picker.value = "";
 }
-function enter() {
-  emit("enter", { difficulty: difficulty.value, scale: scale.value, coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value, byoyomi: byoyomi.value });
+/** 出場する。watchなら分身を出場させる(21章)。 */
+function enter(watch = false) {
+  emit("enter", { difficulty: difficulty.value, scale: scale.value, coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value, byoyomi: byoyomi.value, watch });
   settingsOpen.value = false;
   screen.value = "season";
 }
@@ -492,6 +515,7 @@ const tipLine = computed(() => {
   return `${favorite.value ? `相手の得意は${favorite.value.split(" ")[0]}。` : ""}${aim}`;
 });
 const playText = computed(() => (props.view?.pending?.kind === "finals" && props.view.series ? `第${props.view.series.nextNo}局を指す` : "対局する"));
+const watchText = computed(() => (props.view?.pending?.kind === "finals" && props.view.series ? `第${props.view.series.nextNo}局を観戦する` : "観戦する"));
 const versusOpen = ref(false);
 const detailOpen = ref(false);
 const versusOpponent = computed(() => {
@@ -503,7 +527,8 @@ const versusOpponent = computed(() => {
 });
 function startPlay() {
   versusOpen.value = false;
-  emit("play");
+  if (props.view?.spectator) emit("watch");
+  else emit("play");
 }
 
 // ---- 結果

@@ -240,8 +240,14 @@ function playOthers(season, rng) {
   return { games, extra };
 }
 
-/** プレイヤーの1局を記録し、同じ回戦のほかの対局を指して、次の対局(か期の終わり)まで進める。 */
-export function recordMeijinGame(season, outcome) {
+/**
+ * プレイヤーの1局を記録し、同じ回戦のほかの対局を指して、次の対局(か期の終わり)まで進める。
+ * gameは、分身の対局の記録(先手・戦法・囲い・展開・勝ち方。gameRecordOfの形)。なければ先手と相手の戦法だけ。
+ * @param {any} season
+ * @param {'win' | 'loss'} outcome
+ * @param {{ game?: any }} [options]
+ */
+export function recordMeijinGame(season, outcome, { game: recorded = null } = {}) {
   const next = structuredClone(season);
   const pending = next.pending;
   if (!pending) return next;
@@ -249,7 +255,7 @@ export function recordMeijinGame(season, outcome) {
   const win = outcome === 'win';
   next.userGames.push({ kind: pending.kind, round: pending.round, opponentId: pending.opponentId, win, color: pending.color, label: pending.label });
   next.pending = null;
-  const game = { black: pending.color === 'black' ? USER_ID : pending.opponentId, openings: { [pending.opponentId]: pending.style?.opening ?? null } };
+  const game = recorded ?? { black: pending.color === 'black' ? USER_ID : pending.opponentId, openings: { [pending.opponentId]: pending.style?.opening ?? null } };
   if (pending.kind === 'league') {
     // 前の保存の途中の期(先に決めた結果がない)は、ここで決める。
     next.results[pending.round] = { user: { win, ...game }, ...(pending.others ?? playOthers(next, rng)) };
@@ -262,6 +268,36 @@ export function recordMeijinGame(season, outcome) {
     recordSeriesGame(next.finals, win ? USER_ID : pending.opponentId, game);
   }
   return drive(next, rng);
+}
+
+// ---- 分身の期(docs/tournament-relay-design.mdの21章)。竜王戦の分身の期(17章)と同じく、期の進み方と記録はふつうの期と同じ。
+
+/**
+ * 期の自分の席を、分身(プレイヤーの能力を持った棋士)にする。「対局する」が「観戦する」になる。
+ * @param {any} season 作ったばかりの期(書き換える)
+ * @param {{ rating: number, character: any }} avatar
+ */
+export function asAvatarMeijinSeason(season, avatar) {
+  season.spectator = true;
+  season.players[USER_ID] = {
+    ...season.players[USER_ID], kind: 'avatar', rating: avatar.rating, character: structuredClone(avatar.character ?? { abilities: {}, traits: [] }),
+  };
+  return season;
+}
+
+/**
+ * 分身の次の一局を決めて記録する。realは、エンジンが本当に指した本局の結果(engine-game.mjsのengineGameResult)。
+ * なければ、ほかの棋士と同じ自動対局(期の種と局の数で決まる)。
+ * @param {any} season 分身の期
+ * @param {{ real?: any }} [options]
+ */
+export function playMeijinSpectatorGame(season, { real = null } = {}) {
+  const pending = season?.pending;
+  if (!pending || !season.spectator) return season;
+  const count = season.userGames?.length ?? 0;
+  const rng = createRng(((Number(season.id) || 0) ^ 0x3c6ef372 ^ Math.imul(count + 1, 0x9e3779b1)) >>> 0);
+  const result = real ?? simulateMemberGame(rng, season.players[USER_ID], season.players[pending.opponentId], { big: pending.kind !== 'league', aColor: pending.color });
+  return recordMeijinGame(season, result.aWins ? 'win' : 'loss', { game: gameRecordOf(result, USER_ID, pending.opponentId) });
 }
 
 /** プレイヤーの次の対局まで、または期の終わりまで進める。 */
@@ -642,6 +678,8 @@ export function describeMeijinSeason(season) {
     result: season.result,
     resultSeen: season.resultSeen === true,
     settings: season.settings,
+    /** 分身の期(21章)。「対局する」が「観戦する」になる。 */
+    spectator: season.spectator === true,
   };
 }
 

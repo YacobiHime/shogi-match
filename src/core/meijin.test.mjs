@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CLASS_RULES, ETERNAL_MEIJIN, MEIJIN_CLASSES, advanceLeague, applyMeijinSeason, classOutcome, createLeague, createMeijinCareer,
+  CLASS_RULES, ETERNAL_MEIJIN, MEIJIN_CLASSES, advanceLeague, applyMeijinSeason, asAvatarMeijinSeason, playMeijinSpectatorGame, classOutcome, createLeague, createMeijinCareer,
   createMeijinSeason, higherDan, loadMeijinCareer, loadMeijinSeason, meijinDan, paramasLadder, promotionOutlook, recordMeijinGame,
   resumeMeijinSeason, saveMeijinCareer, saveMeijinSeason, seasonRecords, standings, syncLeague, userClass,
 } from './meijin.mjs';
@@ -235,5 +235,35 @@ describe('速報のために同じ回戦を先に決める(docs/tournament-match
     const season = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings, userLevel: 12, seed: 32 });
     const old = { ...season, pending: { ...season.pending, others: undefined } };
     expect(recordMeijinGame(old, 'loss').results[season.pending.round].games.length).toBe(season.pending.others.games.length);
+  });
+});
+
+describe('名人戦の分身の期(docs/tournament-relay-design.mdの21章)', () => {
+  const avatar = { rating: 1500, character: { abilities: {}, traits: [] } };
+  const make = (seed = 7) => asAvatarMeijinSeason(createMeijinSeason({ no: 1, league: leagueWithUserIn('A'), roster, settings, userLevel: 20, seed }), avatar);
+
+  it('自分の席を分身にする。期の進み方はふつうの期と同じで、分身の対局は自動対局か本局の結果で決まる', () => {
+    const season = make();
+    expect(season.spectator).toBe(true);
+    expect(season.players[USER_ID]).toMatchObject({ kind: 'avatar', rating: 1500 });
+    expect(season.pending?.kind).toBe('league');
+    const next = playMeijinSpectatorGame(season);
+    expect(next.userGames).toHaveLength(1);
+    // 同じ期・同じ局の数なら、同じ結果(見る・見ないで変わらない)。
+    expect(playMeijinSpectatorGame(season).userGames[0].win).toBe(next.userGames[0].win);
+    expect(next.results[0].user).toMatchObject({ black: expect.any(String), story: expect.any(Array) });
+    // 本局の結果があれば、それを記録する。
+    const real = { aWins: !next.userGames[0].win, how: 'middle', aColor: season.pending.color, openings: { a: null, b: null }, castles: { a: null, b: null }, phases: [0, 0, 300], probability: null };
+    expect(playMeijinSpectatorGame(season, { real }).userGames[0].win).toBe(real.aWins);
+    // 最後まで進む(プレーオフ・番勝負に出ても)。
+    let current = season;
+    for (let guard = 0; guard < 60 && current.pending; guard += 1) current = playMeijinSpectatorGame(current);
+    expect(current.phase).toBe('done');
+    expect(current.result).toBeTruthy();
+  });
+
+  it('自分で指す期では何もしない', () => {
+    const own = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings, userLevel: 12, seed: 7 });
+    expect(playMeijinSpectatorGame(own)).toBe(own);
   });
 });

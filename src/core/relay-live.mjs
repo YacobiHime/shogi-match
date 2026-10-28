@@ -5,7 +5,8 @@
 
 import { playSpectatorGame, replayRest, restGameKey, restOpen, seasonGameResults } from './ryuo.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
-import { ryuoRelayGames } from './relay-games.mjs';
+import { meijinRelayGames, ryuoRelayGames } from './relay-games.mjs';
+import { playMeijinSpectatorGame } from './meijin.mjs';
 import { blackWinRate, relayPlan, relaySeed, relayTarget } from './relay-game.mjs';
 import { relayAudience } from './relay-commentary.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
@@ -63,6 +64,22 @@ export function liveRound(season, { oshiId = null } = {}) {
   const avatar = list.find((entry) => entry.key === avatarKey) ?? null;
   const others = list.filter((entry) => hidden.has(entry.key));
   return { table, avatarKey, avatar, specs: avatar ? [avatar, ...others] : others };
+}
+
+/**
+ * 名人戦の分身の期で、分身の次の一局の中継の項目(21章)。分身の次の一局を決めた写しの期から取る(本番の期は変えない)。
+ * 中継の鍵は、記録したあとの期の項目と同じ(本局の棋譜を、あとで中継を開くと同じものを見られる)。
+ * @param {any} season 名人戦の分身の期(書き換えない)
+ * @returns {any | null}
+ */
+export function meijinLiveEntry(season) {
+  const pending = season?.spectator ? season.pending : null;
+  if (!pending) return null;
+  const provisional = playMeijinSpectatorGame(JSON.parse(JSON.stringify(season)));
+  const key = pending.kind === 'league' ? `meijin:${season.id}:r${pending.round}:user-${pending.opponentId}`
+    : pending.kind === 'playoff' ? `meijin:${season.id}:po:${pending.round}`
+      : `meijin:${season.id}:finals:${pending.round}`;
+  return meijinRelayGames(provisional).find((entry) => entry.key === key) ?? null;
 }
 
 /**

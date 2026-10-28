@@ -169,6 +169,10 @@ describe("match screen regressions", () => {
     // エントリーの「対局: 観戦」の期(17章)は、自分では指さず、期の画面の「観戦する」で分身の対局を見る。
     expect(source).toMatch(/function startRyuoGameNow\(\) \{[\s\S]*?if \(season\.spectator\) \{\s*openRyuoSeasonScreen\(\);/);
     expect(source).toMatch(/:spectating="Boolean\(ryuoSeason\?\.spectator\)"[\s\S]*?@watch-play="playRyuoWatchGame"/);
+    // 名人戦の分身(21章): 自分の席を分身にし、分身の次の一局は本局の結果(なければ自動対局)で記録する。
+    expect(source).toMatch(/if \(settings\.watch\) meijinSeason\.value = asAvatarMeijinSeason\(meijinSeason\.value, avatarMember\(settings\.difficulty\)\);/);
+    expect(source).toMatch(/function playMeijinWatchGame\(real: any = null\) \{[\s\S]*?playMeijinSpectatorGame\([\s\S]*?finalizeMeijinSeason\(next\);/);
+    expect(source).toMatch(/@meijin-watch-play="playMeijinWatchGame"/);
     // 敗退後の観戦で見終えた回戦は、本局の結果で指し直した期に替え、竜王の発表・結果を見終えた・次の期で残りを確定する(20-10)。
     expect(source).toMatch(/@watch-round="applyRyuoWatchRound"\s*@watch-settle="settleRyuoSeason"/);
     expect(source).toMatch(/function markRyuoResultSeen\(\) \{[\s\S]*?settleRyuoSeason\(\);\s*\}/);
@@ -329,6 +333,12 @@ describe("match screen regressions", () => {
     // 敗退後の観戦は、結果の画面の「このあとの対局を観戦」から表のボードへ。見届けた回戦の数を残し、終えると結果の画面へ戻る。
     expect(tournament).toMatch(/data-watch-after @click="startAfterWatch"/);
     expect(tournament).toMatch(/async function nextAfterRound\(\) \{[\s\S]*?emit\("watch-round", applyWatchedRound\([\s\S]*?emit\("watch-progress", String\(season\.id\), Math\.max\(afterWatchRevealed\.value, done\)\);[\s\S]*?emit\("watch-settle"\);/);
+    // 名人戦の分身の本局(21章): 中継を見ていなければ終局ですぐ、見ていれば閉じたときに記録する。
+    expect(tournament).toMatch(/function startMeijinWatch\(fast: boolean\) \{[\s\S]*?startRealGame\(realGameSpec\(entry, \{ world: null \}\), entry, \{/);
+    expect(tournament).toMatch(/function finishMeijinWatch\(\) \{[\s\S]*?engineGameResult\(spec, [\s\S]*?emit\("meijin-watch-play", real\);/);
+    const meijinScreen = readFileSync(new URL("../ShogiMeijin.vue", import.meta.url), "utf8");
+    expect(meijinScreen).toMatch(/data-meijin-avatar-enter @click="enter\(true\)"/);
+    expect(meijinScreen).toMatch(/data-meijin-watch-skip @click="emit\('watch-skip'\)"/);
     // 残りの対局が確定していない期は、回戦の対局を本局にする(20-10)。
     expect(tournament).toMatch(/function playAfterRound\([\s\S]*?if \(props\.relayEngineFactory && season && restOpen\(season\)\) \{[\s\S]*?startRealGame\(realGameSpec\(/);
     expect(tournament).toMatch(/function endAfterWatch\(\) \{[\s\S]*?afterWatch\.value = null;[\s\S]*?screen\.value = "result";\s*\}/);

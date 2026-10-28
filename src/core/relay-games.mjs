@@ -137,7 +137,9 @@ export function ryuoRelayGames(season, { oshiId = null } = {}) {
  */
 export function meijinRelayGames(season, { oshiId = null } = {}) {
   if (!season?.players) return [];
-  const context = { oshiId, nextId: season.pending?.opponentId ?? null };
+  // 分身の期(21章)は、分身の対局も中継に並べ、プロ並みの読みで作る(竜王戦の分身の期と同じ)。
+  const spectator = Boolean(season.spectator);
+  const context = { oshiId, nextId: season.pending?.opponentId ?? null, includeUser: spectator, pro: spectator };
   const id = season.id;
   const classLabel = CLASS_LABELS[season.cls] ?? '';
   const list = [];
@@ -154,7 +156,13 @@ export function meijinRelayGames(season, { oshiId = null } = {}) {
       list.push(entry);
     }
   };
-  (season.results ?? []).forEach((result, round) => roundGames(result?.games, round, false));
+  (season.results ?? []).forEach((result, round) => {
+    const opponent = season.schedule?.[round]?.opponent;
+    const own = spectator && result?.user && opponent
+      ? [{ a: USER_ID, b: opponent, winner: result.user.win ? USER_ID : opponent, ...result.user }]
+      : [];
+    roundGames([...own, ...(result?.games ?? [])], round, false);
+  });
   // いまの回戦のほかの対局は、プレイヤーの局の前に決まっている(pending.others)。
   if (season.pending?.kind === 'league' && season.pending.others) roundGames(season.pending.others.games, season.pending.round, true);
   (season.playoff?.matches ?? []).forEach((match, index) => {
@@ -166,7 +174,7 @@ export function meijinRelayGames(season, { oshiId = null } = {}) {
     if (entry) list.push(entry);
   });
   const finals = season.finals;
-  if (finals && finals.a !== USER_ID && finals.b !== USER_ID) {
+  if (finals && (spectator || (finals.a !== USER_ID && finals.b !== USER_ID))) {
     (finals.games ?? []).forEach((game, index) => {
       const entry = entryOf(season, {
         key: `meijin:${id}:finals:${index}`, event: 'meijin', kind: 'finals', label: `名人戦七番勝負 第${index + 1}局`,
