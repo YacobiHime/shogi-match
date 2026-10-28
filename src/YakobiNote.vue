@@ -439,6 +439,22 @@
               {{ allKansenki ? "新しい3局だけ見る" : `すべて見る（${kansenki.length}局）` }}
             </button>
           </section>
+          <!-- 研究ノート(docs/tournament-relay-design.mdの24-5)。中継で残した局面を新しい順に。押すと盤で見て、中継で開ける。 -->
+          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-study" data-note-study>
+            <h2 id="shogi-note-study">研究ノート<small class="shogi-note__count">{{ studyNotes.length }}局面</small></h2>
+            <ul v-if="studyNotes.length" class="shogi-note__awards">
+              <li v-for="note in shownStudyNotes" :key="note.id">
+                <button type="button" class="shogi-note__award-row" data-note-study-row @click="studyShown = note">
+                  <span class="shogi-note__award-seal shogi-note__award-seal--silver" aria-hidden="true">☆</span>
+                  <span class="shogi-note__award-text">{{ note.moveText }}<small>{{ note.spec.label }}・☗{{ note.spec.black.name }} ☖{{ note.spec.white.name }}</small></span>
+                </button>
+              </li>
+            </ul>
+            <p v-else class="shogi-note__hint">大会の中継の「☆ノート」で、気に入った局面を残せるよ。ここから、盤で見たり、中継をその手から見直したりできるよ。</p>
+            <button v-if="studyNotes.length > AWARD_PREVIEW" type="button" class="shogi-note__button shogi-note__button--ghost" @click="allStudyNotes = !allStudyNotes">
+              {{ allStudyNotes ? "新しい3つだけ見る" : `すべて見る（${studyNotes.length}局面）` }}
+            </button>
+          </section>
           <!--
             勝負メシ帳(docs/title-match-day-design.mdの8-4)。タイトル戦の昼に選んだ品を、行った対局場ごとに献立の3品で並べる。
             勝った局の品は勝ちメシ(★)。まだ食べていない品も薄く出し、次に試す楽しみにする。
@@ -689,12 +705,43 @@
       </main>
       <SeasonAward v-if="awardShown" :award="awardShown" :asset-base-url="assetBaseUrl" @done="awardShown = null" />
       <TitleDaySheet v-if="kansenkiShown" mode="kansenki" :article="kansenkiShown" @close="kansenkiShown = null" />
+      <!-- 研究ノートの局面(24-5)。盤と、中継で開く・消す。 -->
+      <div v-if="studyShown" class="shogi-note__sheet" role="dialog" aria-modal="true" aria-label="研究ノートの局面" data-note-study-sheet @click.self="studyShown = null">
+        <div class="shogi-note__sheet-panel shogi-note__study">
+          <h2>{{ studyShown.moveText }}</h2>
+          <p class="shogi-note__hint">{{ studyShown.spec.label }}・☗{{ studyShown.spec.black.name }} ☖{{ studyShown.spec.white.name }}</p>
+          <div class="shogi-note__study-board">
+            <StudyBoard
+              :sfen="studyShown.sfen"
+              :allow-move="false"
+              :enable-drag-and-drop="false"
+              layout="compact"
+              :asset-base-url="assetBaseUrl"
+              :black-player-name="studyShown.spec.black.name"
+              :white-player-name="studyShown.spec.white.name"
+            />
+          </div>
+          <div class="shogi-note__study-actions">
+            <button v-if="relayEngineFactory && studyRelayKept" type="button" class="shogi-note__button" data-note-study-relay @click="studyRelay = studyShown">中継で開く</button>
+            <button type="button" class="shogi-note__button shogi-note__button--ghost" data-note-study-remove @click="removeStudy(studyShown.id)">消す</button>
+            <button type="button" class="shogi-note__button shogi-note__button--ghost" @click="studyShown = null">閉じる</button>
+          </div>
+        </div>
+      </div>
+      <StudyRelay
+        v-if="studyRelay && relayEngineFactory"
+        :spec="studyRelay.spec"
+        :start-at="studyRelay.ply"
+        :asset-base-url="assetBaseUrl"
+        :engine-factory="relayEngineFactory"
+        @close="studyRelay = null"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, type PropType } from "vue";
+import { computed, defineAsyncComponent, ref, watch, type PropType } from "vue";
 import RyuoLadder from "./RyuoLadder.vue";
 import RyuoRosterBook from "./RyuoRosterBook.vue";
 import YakobiSays from "./YakobiSays.vue";
@@ -752,6 +799,9 @@ import { awardLine } from "./core/season-award.mjs";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import TitleDaySheet, { type KansenkiView } from "./TitleDaySheet.vue";
 import { loadKansenki, loadMealBook, mealBookView } from "./core/title-day.mjs";
+import { loadNotes, removeNote, saveNotes } from "./core/relay-fun.mjs";
+import { loadRelayStore, recallRelayGame } from "./core/relay-store.mjs";
+import type { EngineFactory } from "./composables/match/analysisEngines";
 import { loadShoreikai, rankLabel } from "./core/shoreikai.mjs";
 import { classLabel as kenshukaiClassLabel, loadKenshukai } from "./core/kenshukai.mjs";
 
@@ -823,6 +873,8 @@ const props = defineProps({
   /** 棋力テストの答えを送るかの同意('yes'・'no'・'')と、送れる場所で開いているか(core/skill-data.mjs)。 */
   skillDataConsent: { type: String, default: "" },
   skillDataAvailable: { type: Boolean, default: false },
+  /** 中継の棋譜を作るエンジン(研究ノートから中継を開くのに使う。24-5)。 */
+  relayEngineFactory: { type: Function as PropType<() => Promise<EngineFactory>>, default: null },
 });
 const emit = defineEmits<{
   close: [];
@@ -1075,9 +1127,37 @@ const kansenkiShown = ref<KansenkiView | null>(null);
 /** 勝負メシ帳(対局場ごとの献立の3品と、勝ちメシ)。 */
 const mealBook = mealBookView(loadMealBook(typeof localStorage === "undefined" ? null : localStorage));
 
+// ---- 研究ノート(24-5)。中継で残した局面。盤は開いたときに読み込む(重い部品なので)。
+const StudyBoard = defineAsyncComponent(() => import("./ShogiMatchBoard.vue"));
+const StudyRelay = defineAsyncComponent(() => import("./RelayViewer.vue"));
+const noteStorage = () => (typeof localStorage === "undefined" ? null : localStorage);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const studyNotes = ref<any[]>(loadNotes(noteStorage()));
+const allStudyNotes = ref(false);
+const shownStudyNotes = computed(() => studyNotes.value.slice(0, allStudyNotes.value ? undefined : AWARD_PREVIEW));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const studyShown = ref<any | null>(null);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const studyRelay = ref<any | null>(null);
+/** 中継の棋譜がまだ残っているか(残っていれば、その手から中継を開ける)。 */
+const studyRelayKept = computed(() => Boolean(studyShown.value && recallRelayGame(loadRelayStore(noteStorage()), studyShown.value.spec.key).game));
+function removeStudy(id: string) {
+  studyNotes.value = removeNote(studyNotes.value, id);
+  saveNotes(noteStorage(), studyNotes.value);
+  studyShown.value = null;
+}
+
 // ---- 戻る操作(ブラウザの戻る)。重ねて開いたもの(賞状・名鑑のくわしい情報)から閉じる。閉じたら真。
 const bookEl = ref<{ goBack: () => boolean } | null>(null);
 function goBack() {
+  if (studyRelay.value) {
+    studyRelay.value = null;
+    return true;
+  }
+  if (studyShown.value) {
+    studyShown.value = null;
+    return true;
+  }
   if (kansenkiShown.value) {
     kansenkiShown.value = null;
     return true;
@@ -1622,6 +1702,22 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   border-radius: 0.6rem;
   font: inherit;
 }
+/* 研究ノートの局面(24-5)。ノートの上に重ねる。盤は枠の幅に合わせて描く(横にはみ出さない)。 */
+.shogi-game .shogi-note__sheet {
+  position: fixed; inset: 0; z-index: 110; display: grid; place-items: center;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); background: rgba(10, 18, 30, 0.72);
+}
+.shogi-game .shogi-note__study {
+  box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; width: min(100%, 26rem); max-height: 100%;
+  overflow-y: auto; padding: 0.9rem; border-radius: 0.8rem; color: #fffcf4; background: #172632;
+}
+.shogi-game .shogi-note__study h2 { margin: 0; font-size: 1.05rem; }
+.shogi-game .shogi-note__study .shogi-note__hint { margin: 0; }
+.shogi-game .shogi-note__study-board { min-width: 0; }
+/* 「中継で開く」を上に大きく、「消す」「閉じる」はその下に横に並べる。 */
+.shogi-game .shogi-note__study-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
+.shogi-game .shogi-note__study-actions .shogi-note__button { width: 100%; min-height: 44px; }
+.shogi-game .shogi-note__study-actions [data-note-study-relay] { grid-column: 1 / -1; }
 .shogi-game .shogi-note__button {
   width: 100%;
   padding: 0 1rem;

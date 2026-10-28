@@ -223,6 +223,7 @@
           @live-speed="cycleLiveSpeed"
           @live-skip="skipLive"
           @live-finish="finishLive"
+          @live-predict="pickPrediction"
           @back="backToSelect"
         />
         <!--
@@ -427,6 +428,7 @@
             @speed="cycleLiveSpeed"
             @skip="skipLive"
             @finish="finishLive"
+            @predict="pickPrediction"
           />
           <!-- 敗退後の観戦の最後(19章)。竜王の判子と、誰が竜王になったか。表(③の番勝負)は、全部の結果を見せる。 -->
           <section v-else-if="afterFinale" class="shogi-tournament__hud shogi-tournament__finale" aria-label="竜王の発表" data-live-finale>
@@ -839,6 +841,7 @@ import { engineGameResult, isMainCharacter, realGameSpec } from "./core/engine-g
 import type { RelayMoveEntry } from "./core/relay-game.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
 import RelayLivePanel, { type LivePanelView } from "./RelayLivePanel.vue";
+import { PREDICT_UNTIL_PLY, boardPredictions, loadPredictions, pickWinner, savePredictions, settlePrediction } from "./core/relay-fun.mjs";
 import {
   afterWatchRounds, applyMeijinWatchedRound, applyWatchedRound, hiddenRoundIds, hiddenTables, meijinAfterRounds, meijinFinale, meijinHiddenKeys,
   meijinLiveRound, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
@@ -1889,6 +1892,39 @@ const liveFinishText = computed(() => {
   if (!after) return live.value?.kind === "meijin" && props.meijinSeason?.pending?.kind !== "league" ? "この局の結果へ" : "この回戦の結果へ";
   return after.index + 1 >= after.rounds.length ? "竜王の発表へ" : "次の回戦へ";
 });
+// ---- 勝敗の予想(24-1)。回戦の中継ボードで、序盤のうちに勝つ側を選び、終局したら当たり外れを数える。
+const predictions = shallowRef(loadPredictions(relayStorage()));
+function pickPrediction(key: string, side: "black" | "white") {
+  const item = liveStates.value.find(({ game }) => game.key === key);
+  if (!item || item.state.done) return;
+  predictions.value = pickWinner(predictions.value, key, side, item.state.ply);
+  savePredictions(relayStorage(), predictions.value);
+}
+// 予想した対局が終局したら、1局につき1回だけ数える。
+watch(liveRevealKey, () => {
+  let store = predictions.value;
+  for (const { game, state } of liveStates.value) {
+    if (state.done && state.winner) store = settlePrediction(store, game.key, state.winner);
+  }
+  if (store !== predictions.value) {
+    predictions.value = store;
+    savePredictions(relayStorage(), store);
+  }
+});
+const predictView = computed<LivePanelView["predict"]>(() => {
+  if (!live.value) return null;
+  const store = predictions.value;
+  const games = liveStates.value.map(({ game, state }) => ({
+    key: game.key,
+    black: game.spec.black.id === "user" ? `${props.playerName}の分身` : game.spec.black.name,
+    white: game.spec.white.id === "user" ? `${props.playerName}の分身` : game.spec.white.name,
+    pick: (store.picks[game.key] ?? null) as "black" | "white" | null,
+    open: !state.done && state.ply < PREDICT_UNTIL_PLY && !store.settled.includes(game.key),
+    winner: (state.done ? state.winner : null) as "black" | "white" | null,
+  }));
+  const board = boardPredictions(store, games);
+  return { games, hit: board.hit, decided: board.decided, total: store.total, totalHit: store.hit };
+});
 /** 中継ボードの欄(RelayLivePanel.vue)に渡す形。竜王戦の表と名人戦のリーグ表で共通。 */
 const livePanel = computed<LivePanelView | null>(() => {
   const board = live.value;
@@ -1903,6 +1939,7 @@ const livePanel = computed<LivePanelView | null>(() => {
     multiple: board.games.length > 1,
     tableWord: board.kind === "meijin" || board.kind === "meijin-after" ? "リーグ表" : "表",
     speed: liveSpeed.value,
+    predict: predictView.value,
     finished: liveFinished.value,
     finishText: liveFinishText.value,
     watchText: liveWatchText.value,

@@ -471,6 +471,7 @@
       :ryuo-world="tournamentWorld?.level ?? null"
       :skill-data-consent="skillDataConsent"
       :skill-data-available="skillDataAllowed"
+      :relay-engine-factory="ensureEngineFactory"
       @close="yakobiNoteOpen = false"
       @open-plan="openPlanFromNote"
       @open-dex="openDexFromNote"

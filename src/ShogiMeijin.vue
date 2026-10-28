@@ -139,6 +139,7 @@
         @speed="emit('live-speed')"
         @skip="emit('live-skip')"
         @finish="emit('live-finish')"
+        @predict="(key, side) => emit('live-predict', key, side)"
       />
       <!-- 自分の出ない番勝負の観戦の最後(23章)。名人の判子と、誰が名人になったか。 -->
       <section v-else-if="afterWatch?.finale" class="shogi-tournament__hud shogi-tournament__finale" aria-label="名人の発表" data-meijin-finale>
@@ -380,6 +381,8 @@ const emit = defineEmits<{
   "live-speed": [];
   "live-skip": [];
   "live-finish": [];
+  /** 勝敗の予想(24-1)。 */
+  "live-predict": [key: string, side: "black" | "white"];
   /** 自分の出ない番勝負の観戦を始める・終える(23章)。 */
   "watch-after": [];
   "watch-after-end": [];

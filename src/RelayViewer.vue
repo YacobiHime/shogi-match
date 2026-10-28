@@ -47,8 +47,8 @@
         </div>
         <div ref="boardEl" class="relay__board" :style="{ '--relay-width': `${boardWidth}px` }">
           <ShogiMatchBoard
-            :sfen="sfens[cursor] ?? sfens[0]"
-            :last-move="cursor > 0 ? entries[cursor - 1]?.move ?? '' : ''"
+            :sfen="boardSfen"
+            :last-move="boardLastMove"
             :allow-move="false"
             :enable-drag-and-drop="false"
             layout="compact"
@@ -103,10 +103,32 @@
           <p v-else-if="catchingUp" class="relay__waiting" role="status" data-relay-catchup>{{ cursor }}手目 → {{ startAt }}手目まで早送り中…</p>
           <p v-else-if="waiting" class="relay__waiting" role="status">考慮中…</p>
           <p v-if="commentsOn && reducedMotion && latestComment" class="relay__ticker" aria-hidden="true">{{ latestComment }}</p>
+          <p v-if="noteToast" class="relay__toast" role="status" data-relay-note-toast>{{ noteToast }}</p>
         </div>
       </div>
 
       <section class="relay__side" aria-label="解説と操作">
+        <!--
+          中継の楽しみ(24章)。次の一手クイズ・見どころ再生・大盤解説の札は、欄の切り替えと解説の欄の上に重ねる。
+          盤には重ねない(次の一手を考えるのに、盤の全部が見えるように)。
+        -->
+        <div v-if="quiz" class="relay__fun relay__fun--quiz" data-relay-quiz-panel>
+          <p class="relay__fun-head"><b>次の一手</b><span>{{ quiz.at }}手目、{{ players[quizSide].name }}はどう指す？</span></p>
+          <div v-if="!quiz.pick" class="relay__quiz-choices">
+            <button v-for="choice in quiz.choices" :key="choice.usi" type="button" data-relay-quiz-choice @click="answerQuiz(choice.usi)">{{ choice.text }}</button>
+          </div>
+          <p v-else-if="!quiz.result" class="relay__fun-text">予想：{{ quiz.pickText }}。指されるのを待っています…</p>
+          <p v-else :class="['relay__fun-text', `relay__fun-text--${quiz.result}`]" data-relay-quiz-result>{{ quiz.result === "hit" ? `的中！ ${quiz.actualText}` : `はずれ。正解は ${quiz.actualText}` }}</p>
+          <button type="button" class="relay__fun-close" @click="quiz = null">{{ quiz.result ? "閉じる" : "やめる" }}</button>
+        </div>
+        <div v-else-if="highlight" class="relay__fun" data-relay-highlight>
+          <p class="relay__fun-head"><b>見どころ {{ Math.min(highlight.index + 1, highlight.list.length) }}/{{ highlight.list.length }}</b><span>{{ highlight.caption }}</span></p>
+          <button type="button" class="relay__fun-close" @click="stopHighlight">やめる</button>
+        </div>
+        <div v-else-if="variation" class="relay__fun relay__fun--bigboard" data-relay-bigboard-panel>
+          <p class="relay__fun-head"><b>大盤解説（変化）</b><span>{{ cast.name }}「ここから {{ variation.text }} と進む変化が考えられます」</span></p>
+          <button type="button" class="relay__fun-close" @click="endVariation">戻る</button>
+        </div>
         <div class="relay__tabs" role="tablist" aria-label="欄の切り替え">
           <button v-for="item in TABS" :key="item.id" type="button" role="tab" :aria-selected="tab === item.id" :data-relay-tab="item.id" @click="tab = item.id">{{ item.label }}</button>
         </div>
@@ -168,6 +190,13 @@
           <button type="button" class="relay__toggle" :aria-label="`速さ ×${speed}。押すと変える`" data-relay-speed @click="cycleSpeed">×{{ speed }}</button>
           <button type="button" class="relay__toggle" :aria-pressed="commentsOn" aria-label="コメントの表示" data-relay-comments @click="commentsOn = !commentsOn">コメ{{ commentsOn ? "" : "✕" }}</button>
         </div>
+        <!-- 中継の楽しみ(24章)。次の一手クイズ・見どころ再生・大盤解説・研究ノート。 -->
+        <div class="relay__extras">
+          <button type="button" :disabled="!quizAvailable" data-relay-quiz @click="startQuiz">次の一手<small>{{ quizStore.hit }}/{{ quizStore.total }}</small></button>
+          <button type="button" :disabled="!highlightAvailable" data-relay-highlights @click="startHighlights">見どころ</button>
+          <button type="button" :disabled="!bigBoardAvailable" data-relay-bigboard @click="startBigBoard">大盤</button>
+          <button type="button" :disabled="cursor === 0 && !sfens.length" data-relay-note @click="saveNote">☆ノート</button>
+        </div>
         <input
           class="relay__seek"
           type="range"
@@ -194,6 +223,7 @@ import {
 import {
   RELAY_HOST, createRelayScript, moveTextOf, pvTextOf, relayAudience, relayCast,
 } from "./core/relay-commentary.mjs";
+import { addNote, highlightPlan, loadNotes, loadQuiz, quizChoices, saveNotes, saveQuiz, scoreQuiz } from "./core/relay-fun.mjs";
 import { loadRelayStore, markRelaySeen, saveRelayStore } from "./core/relay-store.mjs";
 import { createFormationState, detectFormationSnapshot, updateFormationState } from "./core/formation-tracker.mjs";
 import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
@@ -418,6 +448,8 @@ function advance() {
 }
 
 function togglePlay() {
+  stopHighlight();
+  endVariation();
   if (playing.value) {
     playing.value = false;
     clearTimers();
@@ -432,6 +464,8 @@ function togglePlay() {
 
 /** その手数へ飛ぶ(再生は止める)。 */
 function seek(target: number) {
+  stopHighlight();
+  endVariation();
   playing.value = false;
   clearTimers();
   thinkingAt.value = 0;
@@ -670,6 +704,184 @@ const commentPrefix = computed(() => comments.value.filter((item) => item.at <= 
 const audienceText = computed(() => relayAudience(props.spec, cursor.value).toLocaleString("ja-JP"));
 const commentCountText = computed(() => (commentPrefix.value * 37 + (cursor.value * 11)).toLocaleString("ja-JP"));
 
+// ---- 中継の楽しみ(24章)
+/** 再生を止める(考慮中の溜めも)。 */
+function pausePlayback() {
+  playing.value = false;
+  clearTimers();
+  thinkingAt.value = 0;
+  waiting.value = false;
+}
+
+// 次の一手クイズ(24-2)。次に指される手を3つから当てる。当たると視聴者が沸く。
+type Quiz = { at: number; choices: { usi: string; text: string }[]; pick: string; pickText: string; result: "hit" | "miss" | null; actualText: string };
+const quiz = shallowRef<Quiz | null>(null);
+const quizStore = ref(loadQuiz(browserStorage()));
+const quizSide = computed<Side>(() => ((quiz.value?.at ?? 1) % 2 === 1 ? "black" : "white"));
+const quizAvailable = computed(() => !quiz.value && !catchingUp.value && !(finished.value && cursor.value >= entries.value.length));
+let quizTimer: ReturnType<typeof setTimeout> | undefined;
+function startQuiz() {
+  const at = cursor.value + 1;
+  const sfen = sfens.value[cursor.value];
+  const previous = entries.value[cursor.value - 1];
+  const choices = quizChoices({
+    sfen, expected: (previous?.pv ?? "").split(" ")[0] ?? "", actual: entries.value[cursor.value]?.move ?? "", seed: `${props.spec.key}:${at}`,
+  }).map((usi) => ({ usi, text: moveTextOf(sfen, usi, previous?.move ?? "") }));
+  if (!choices.length) return;
+  stopHighlight();
+  endVariation();
+  pausePlayback();
+  quiz.value = { at, choices, pick: "", pickText: "", result: null, actualText: "" };
+}
+function answerQuiz(usi: string) {
+  const current = quiz.value;
+  if (!current) return;
+  quiz.value = { ...current, pick: usi, pickText: current.choices.find((choice) => choice.usi === usi)?.text ?? "" };
+  playing.value = true;
+  schedule();
+}
+watch(cursor, (value) => {
+  const current = quiz.value;
+  if (!current) return;
+  if (value === current.at && current.pick && !current.result) {
+    const hit = entries.value[current.at - 1]?.move === current.pick;
+    quizStore.value = scoreQuiz(quizStore.value, hit);
+    saveQuiz(browserStorage(), quizStore.value);
+    quiz.value = { ...current, result: hit ? "hit" : "miss", actualText: kifuText(current.at) };
+    if (hit) celebrateQuiz();
+    clearTimeout(quizTimer);
+    quizTimer = setTimeout(() => { if (quiz.value?.at === current.at) quiz.value = null; }, 3600 / Math.sqrt(speed.value));
+  } else if (value !== current.at - 1 && !(current.result && value === current.at)) {
+    quiz.value = null;
+  }
+});
+/** 的中したとき、視聴者のコメントが沸く(「予想的中」と同じ。動きを減らす設定では運営の帯で)。 */
+function celebrateQuiz() {
+  if (!commentsOn.value) return;
+  if (reducedMotion) {
+    showBanner("次の一手 的中！");
+    return;
+  }
+  const texts = ["次の一手的中！！", "読み筋どおり", "完全に読んでた", "的中おめ", "名人の読み", "8888"];
+  const added = texts.map((text, index) => {
+    laneCursor = (laneCursor + 1) % COMMENT_LANES;
+    flyId += 1;
+    return { id: flyId, text, tone: "hit", big: index === 0, lane: laneCursor, delay: index * 260, duration: COMMENT_MS / Math.sqrt(speed.value) };
+  });
+  flying.value = [...flying.value, ...added].slice(-24);
+}
+
+// 見どころ再生(24-3)。形勢が動いた手・長考・決め手・終局を、短く続けて見る。
+type Highlight = { list: ReturnType<typeof highlightPlan>; index: number; caption: string };
+const highlight = shallowRef<Highlight | null>(null);
+let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+/** 見どころの範囲。終局していれば全部、そうでなければ見たところまで(先の結末を見せない)。 */
+const highlightRange = computed(() => (finished.value ? ready.value : Math.max(revealed.value, cursor.value)));
+const highlightAvailable = computed(() => highlightRange.value >= 10 && !highlight.value);
+function startHighlights() {
+  const list = highlightPlan(entries.value.slice(0, highlightRange.value), { end: finished.value ? endInfo.value : null });
+  if (!list.length) return;
+  quiz.value = null;
+  endVariation();
+  pausePlayback();
+  highlight.value = { list, index: -1, caption: "" };
+  stepHighlight(0);
+}
+function stepHighlight(index: number) {
+  const current = highlight.value;
+  if (!current) return;
+  if (index >= current.list.length) {
+    highlight.value = { ...current, index: current.list.length, caption: "見どころは以上です" };
+    highlightTimer = setTimeout(() => { highlight.value = null; }, 2200);
+    return;
+  }
+  const item = current.list[index];
+  activeCard.value = null;
+  cursor.value = Math.max(0, item.ply - 1);
+  highlight.value = { ...current, index, caption: item.caption };
+  highlightTimer = setTimeout(() => {
+    cursor.value = item.ply;
+    playSound(item.ply);
+    highlightTimer = setTimeout(() => stepHighlight(index + 1), 2600 / speed.value);
+  }, 900 / speed.value);
+}
+function stopHighlight() {
+  clearTimeout(highlightTimer);
+  highlightTimer = undefined;
+  highlight.value = null;
+}
+
+// 大盤解説(24-4)。解説者が大盤で、いまの局面からAIの読み筋の手を進めて見せ、終わったら元の局面へ戻す。
+type Variation = { sfens: string[]; moves: string[]; index: number; text: string };
+const variation = shallowRef<Variation | null>(null);
+let variationTimer: ReturnType<typeof setTimeout> | undefined;
+const bigBoardAvailable = computed(() => cursor.value > 0 && Boolean(entries.value[cursor.value - 1]?.pv) && !variation.value);
+function startBigBoard() {
+  const entry = entries.value[cursor.value - 1];
+  const base = sfens.value[cursor.value];
+  if (!entry?.pv || !base) return;
+  const record = createGameRecord(base);
+  const list = [base];
+  const moves: string[] = [];
+  for (const usi of entry.pv.split(" ").filter(Boolean).slice(0, 4)) {
+    if (!appendUsiMove(record, usi)) break;
+    list.push(record.position.sfen);
+    moves.push(usi);
+  }
+  if (!moves.length) return;
+  quiz.value = null;
+  stopHighlight();
+  pausePlayback();
+  variation.value = { sfens: list, moves, index: 0, text: pvTextOf(base, moves.join(" "), entry.move) };
+  stepVariation();
+}
+function stepVariation() {
+  const current = variation.value;
+  if (!current) return;
+  if (current.index >= current.moves.length) {
+    variationTimer = setTimeout(endVariation, 2200 / speed.value);
+    return;
+  }
+  variationTimer = setTimeout(() => {
+    const now = variation.value;
+    if (!now) return;
+    try {
+      const kind = moveSoundForUsi(now.sfens[now.index], now.moves[now.index]);
+      if (kind) sounds.play(kind);
+    } catch {
+      // 音が鳴らなくても続ける。
+    }
+    variation.value = { ...now, index: now.index + 1 };
+    stepVariation();
+  }, 1300 / speed.value);
+}
+function endVariation() {
+  clearTimeout(variationTimer);
+  variationTimer = undefined;
+  variation.value = null;
+}
+/** 盤に出す局面(大盤解説の間は、変化の局面)。 */
+const boardSfen = computed(() => (variation.value ? variation.value.sfens[variation.value.index] : sfens.value[cursor.value] ?? sfens.value[0]));
+const boardLastMove = computed(() => {
+  if (variation.value) return variation.value.index ? variation.value.moves[variation.value.index - 1] : "";
+  return cursor.value > 0 ? entries.value[cursor.value - 1]?.move ?? "" : "";
+});
+
+// 研究ノート(24-5)。いまの局面を残し、やこびノートの「研究ノート」から開く。
+const noteToast = ref("");
+let noteTimer: ReturnType<typeof setTimeout> | undefined;
+function saveNote() {
+  const storage = browserStorage();
+  const ply = cursor.value;
+  const notes = addNote(loadNotes(storage), {
+    spec: props.spec, ply, sfen: sfens.value[ply] ?? sfens.value[0], moveText: ply ? `${ply}手目 ${kifuText(ply)}` : "対局開始前",
+  });
+  saveNotes(storage, notes);
+  noteToast.value = "研究ノートに残したよ（やこびノートの「研究ノート」から開ける）";
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => { noteToast.value = ""; }, 2600);
+}
+
 // ---- 棋譜を作る(本局は、指された手を受け取る)
 let stopLive: (() => void) | null = null;
 const generator = useRelayGenerator({
@@ -727,6 +939,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearTimers();
   clearTimeout(bannerTimer);
+  clearTimeout(quizTimer);
+  clearTimeout(highlightTimer);
+  clearTimeout(variationTimer);
+  clearTimeout(noteTimer);
   resizeObserver?.disconnect();
   stopLive?.();
   generator.dispose();
@@ -1057,6 +1273,34 @@ onBeforeUnmount(() => {
 .shogi-game .relay__play { color: #172632 !important; background: #f1a54c !important; border-color: #f1a54c !important; font-size: 1.05rem; }
 .shogi-game .relay__toggle { font-size: 0.82rem; }
 .shogi-game .relay__seek { width: 100%; min-height: 28px; margin: 0; accent-color: #f1a54c; }
+/* 中継の楽しみ(24章)。次の一手・見どころ・大盤・研究ノートのボタンと、盤の下の端の札。 */
+.shogi-game .relay__extras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.25rem; }
+.shogi-game .relay__extras button {
+  display: grid; place-items: center; min-height: 40px; padding: 0 0.2rem; border: 1px solid rgba(241, 165, 76, 0.5); border-radius: 0.4rem;
+  color: #fffcf4; background: rgba(241, 165, 76, 0.1); font: inherit; font-size: 0.82rem; font-weight: 800; line-height: 1.1; cursor: pointer;
+}
+.shogi-game .relay__extras button small { color: #f1a54c; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.shogi-game .relay__extras button:disabled { opacity: 0.4; cursor: default; }
+/* 札は欄の切り替えと解説の欄(1〜2段目)に重ねる。そのため、その2つの段を決めておく(ほかの段は順に並ぶ)。 */
+.shogi-game .relay__tabs { grid-row: 1; grid-column: 1; }
+.shogi-game .relay__panel { grid-row: 2; grid-column: 1; }
+.shogi-game .relay__fun {
+  position: relative; z-index: 2; grid-row: 1 / 3; grid-column: 1; align-self: start; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem;
+  box-sizing: border-box; max-height: 100%; margin: 0; padding: 0.45rem 0.55rem; overflow-y: auto;
+  border: 2px solid #f1a54c; border-radius: 0.5rem; color: #fffcf4; background: #142231; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); font-weight: 800;
+}
+.shogi-game .relay__fun--bigboard { border-color: #9fd0ff; }
+.shogi-game .relay__fun-head { display: grid; gap: 0.1rem; margin: 0; font-size: 0.86rem; line-height: 1.35; }
+.shogi-game .relay__fun-head b { color: #f1a54c; font-size: 0.8rem; }
+.shogi-game .relay__fun--bigboard .relay__fun-head b { color: #9fd0ff; }
+.shogi-game .relay__fun-text { grid-column: 1 / -1; margin: 0; font-size: 0.9rem; }
+.shogi-game .relay__fun-text--hit { color: #ffd27a; font-size: 1.05rem; }
+.shogi-game .relay__fun-text--miss { color: #c9d6e6; }
+.shogi-game .relay__fun-close { grid-row: 1; grid-column: 2; align-self: start; min-height: 36px; padding: 0 0.7rem; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 0.35rem; color: #fffcf4; background: transparent; font: inherit; font-size: 0.8rem; cursor: pointer; }
+.shogi-game .relay__quiz-choices { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; }
+.shogi-game .relay__quiz-choices button { min-height: 44px; padding: 0 0.2rem; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 0.4rem; color: #fffcf4; background: rgba(255, 252, 244, 0.08); font: inherit; font-weight: 900; cursor: pointer; }
+.shogi-game .relay__toast { position: absolute; left: 50%; top: 0.5rem; z-index: 7; margin: 0; padding: 0.3rem 0.7rem; border-radius: 999px; color: #172632; background: #f1a54c; font-size: 0.8rem; font-weight: 900; width: max-content; max-width: 90%; text-align: center; transform: translateX(-50%); }
+.shogi-game .relay__comment--hit { color: #ffd27a; text-shadow: 0 0 6px rgba(241, 165, 76, 0.9), 0 1px 2px #000; }
 .shogi-game .relay__error { position: absolute; left: 1rem; right: 1rem; bottom: 1rem; margin: 0; padding: 0.6rem; border-radius: 0.4rem; color: #fffcf4; background: #8a2f26; }
 /* 背の低い画面は、欄を低くする。 */
 @media (max-height: 700px) {
