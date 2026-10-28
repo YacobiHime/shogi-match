@@ -14,7 +14,8 @@ import { shouldUseCpuOpening } from './cpu-opening-repertoire.mjs';
 import { openingEntry, proOpening } from './opening-usage.mjs';
 import { createFormationState, detectFormationSnapshot, formationNamesFromState, updateFormationState } from './formation-tracker.mjs';
 
-export const RELAY_VERSION = 1;
+/** 棋譜の版。2は、敗者が優勢のまま投了しないようにした版(15章)。 */
+export const RELAY_VERSION = 2;
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
@@ -218,12 +219,37 @@ export function blackWinRate(cp) {
   return (winRate({ type: 'cp', value: cp }) ?? 50) / 100;
 }
 
+/** 勝率(先手の%)の言葉の段。将棋中継のAIの形勢の言い方に合わせる。 */
+const VERDICTS = Object.freeze([
+  { min: 92, word: '勝勢' },
+  { min: 80, word: '優勢' },
+  { min: 70, word: '有利' },
+  { min: 60, word: 'やや有利' },
+]);
+/**
+ * 勝率バーの真ん中の一言(15章)。どちらが良いかと、その程度。互角ならsideはnull。
+ * @param {number} blackPercent 先手の勝率(0〜100)
+ * @returns {{ side: 'black' | 'white' | null, word: string }}
+ */
+export function rateVerdict(blackPercent) {
+  const side = blackPercent >= 50 ? 'black' : 'white';
+  const lead = side === 'black' ? blackPercent : 100 - blackPercent;
+  const verdict = VERDICTS.find(({ min }) => lead >= min);
+  return verdict ? { side, word: verdict.word } : { side: null, word: '互角' };
+}
+
 // ---- 1手の選び方(3-3)
 
 /** 目標より良すぎるとみなす幅(点)。 */
 const TOLERANCE = { opening: 200, middle: 200, ending: 300 };
 /** 敗者が終盤で大きく良すぎるとき(目標から800点以上)、1手で損をしてよい上限。 */
 const COLLAPSE_SLIP = 400;
+/** 敗者が終盤でリードしている(詰みを含む)とき、良すぎる分のこの割合まで1手で損をしてよい(上限は下の値。15章)。 */
+const COLLAPSE_SHARE = 0.4;
+const COLLAPSE_MAX = 2500;
+/** 崩れ方を測るとき、詰みと大差はこの点とみなす(詰みの値のままでは、ふつうの手との差が大きすぎて選べない)。 */
+const COLLAPSE_SCALE_CP = 10000;
+const scaledCp = (value) => clamp(Math.abs(value) >= 90000 ? Math.sign(value) * COLLAPSE_SCALE_CP : value, -COLLAPSE_SCALE_CP, COLLAPSE_SCALE_CP);
 /** 序盤の作戦の手を、最善手との差がこれ以内なら指す。 */
 const PLAN_LOSS_LIMIT = 150;
 /** 鋭い一手(最善手と次の手の差)。 */
@@ -239,6 +265,10 @@ export const RELAY_MAX_PLIES = 300;
 const STYLE_MARGIN = 40;
 /** 悪手を探すとき、読み直す自然な手の数。 */
 const WIDE_MOVES = 8;
+/** 敗者が大差でリードしているとき、読み直す手の数(駒を渡す手も含める)。 */
+const DESPERATE_MOVES = 20;
+/** 敗者のリード(詰みは10000とみなす)がこれ以上なら、駒を渡す手でも崩れる。 */
+const DESPERATE_LEAD = 3000;
 
 const phaseOf = (plan, ply) => (ply < plan.openingEnd ? 'opening' : ply < plan.middleEnd ? 'middle' : 'ending');
 const sideOf = (ply) => (ply % 2 === 0 ? 'black' : 'white');
@@ -307,15 +337,18 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
       break;
     }
 
-    const evaluate = naturalnessOf(sfen, moves);
     const target = relayTarget(plan, ply + 1) * sign;
     const event = plan.events.find((entry) => entry.ply === ply && entry.side === side && !doneEvents.has(entry.ply));
+    const evaluate = naturalnessOf(sfen, moves);
     // 千日手にしない(同じ局面の3回目になる手は選ばない)。敗者は、自分が詰ます手・相手を詰ませる手を選ばない。
     const repeats = (usi) => (seen.get(positionKey(afterMove(sfen, usi))) ?? 0) >= 2;
     const allowed = (candidate) => !repeats(candidate.move)
       && (isWinner ? !(candidate.score?.type === 'mate' && candidate.score.value < 0) || candidate === best
         : !(candidate.score?.type === 'mate' && candidate.score.value > 0) && !matesOpponent(sfen, candidate.move));
-    const pool = candidates.filter(allowed);
+    let pool = candidates.filter(allowed);
+    // 候補がどれも使えない(敗者の候補がみな詰ます手など)ときは、候補の外の自然な手から選ぶ。敗者が相手を詰ますと、勝者が変わってしまう。
+    if (!pool.length) pool = await widerCandidates({ sfen, moves, legal, candidates, search, evaluate, allowed });
+    if (!pool.length) pool = await widerCandidates({ sfen, moves, legal, candidates, search, evaluate, allowed, desperate: true });
     const usable = pool.length ? pool : candidates;
 
     let choice = null;
@@ -352,14 +385,29 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
           kind = event.kind === 'decisive' ? 'decisive' : 'error';
           doneEvents.add(event.ply);
         }
-      } else if (!winnerLocked && excess > tolerance && Math.abs(best.value) < 90000) {
-        const collapse = !isWinner && phase === 'ending' && excess > 800;
-        const cap = collapse ? COLLAPSE_SLIP : relayQuality(spec).slipMax;
-        choice = pickLoss(usable, best, { want: Math.min(excess - tolerance / 2, cap), min: 0, max: cap, evaluate });
-        if (collapse && (!choice || best.value - choice.value < 100)) {
-          const wider = await widerCandidates({ sfen, moves, legal, candidates, search, evaluate, allowed });
-          choice = pickLoss([...usable, ...wider], best, { want: cap, min: 100, max: cap, evaluate }) ?? choice;
+      } else if (!isWinner && phase === 'ending' && scaledCp(best.value) - target > 800) {
+        // 敗者が終盤で良すぎる: 崩れる。リードしている(詰みがある)ときは、良すぎる分に合わせて大きく崩れる。
+        // そうしないと、敗者が優勢のまま指し続け、最後に投了することになる(15章)。
+        const lead = scaledCp(best.value);
+        const excessScaled = lead - target;
+        const cap = lead > 0 ? clamp(excessScaled * COLLAPSE_SHARE, COLLAPSE_SLIP, COLLAPSE_MAX) : COLLAPSE_SLIP;
+        const scaled = (list) => list.map((candidate) => ({ ...candidate, value: scaledCp(candidate.value), original: candidate }));
+        const anchor = { ...best, value: lead };
+        // 大差でリードしているときは、ふつうの手では崩れられない(どの手でも大差のまま)。駒を渡す手も選ぶ。
+        const desperate = lead >= DESPERATE_LEAD;
+        const range = { want: cap, min: 100, max: cap, evaluate, sacrifice: desperate };
+        let picked = pickLoss(scaled(usable), anchor, range);
+        if (!picked) {
+          const wider = await widerCandidates({ sfen, moves, legal, candidates, search, evaluate, allowed, desperate });
+          const all = scaled([...usable, ...wider]);
+          // 欲しい大きさの手がなければ、上限を少し広げる。
+          picked = pickLoss(all, anchor, range) ?? pickLoss(all, anchor, { ...range, max: cap * 1.6 });
         }
+        choice = picked?.original ?? null;
+        if (choice && choice.move !== best.move) kind = 'slip';
+      } else if (!winnerLocked && excess > tolerance && Math.abs(best.value) < 90000) {
+        const cap = relayQuality(spec).slipMax;
+        choice = pickLoss(usable, best, { want: Math.min(excess - tolerance / 2, cap), min: 0, max: cap, evaluate });
         if (choice && choice.move !== best.move) kind = 'slip';
       }
       if (event && !doneEvents.has(event.ply)) doneEvents.add(event.ply);
@@ -466,13 +514,14 @@ const isSacrifice = (evaluation) => evaluation.tags?.includes(PIECE_SACRIFICE_TA
  * 最善手との差がwantに近い手を選ぶ(min〜maxの範囲。駒をただで渡す手と、不自然な手は避ける)。範囲に手がなければnull。
  * @param {any[]} pool
  * @param {any} best
- * @param {{ want: number, min: number, max: number, evaluate: (usi: string) => any }} options
+ * @param {{ want: number, min: number, max: number, evaluate: (usi: string) => any, sacrifice?: boolean }} options
+ *   sacrificeは、駒を渡す手と不自然な手も選ぶ(敗者が大差でリードしていて、ふつうの手では崩れられないとき。15章)。
  */
-export function pickLoss(pool, best, { want, min, max, evaluate }) {
+export function pickLoss(pool, best, { want, min, max, evaluate, sacrifice = false }) {
   const options = pool
     .filter((candidate) => candidate.move !== best.move)
     .map((candidate) => ({ candidate, loss: best.value - candidate.value, evaluation: evaluate(candidate.move) }))
-    .filter(({ loss, evaluation }) => loss >= min && loss <= max && !isSacrifice(evaluation) && (evaluation.weight ?? 1) >= 0.2);
+    .filter(({ loss, evaluation }) => loss >= min && loss <= max && (sacrifice || (!isSacrifice(evaluation) && (evaluation.weight ?? 1) >= 0.2)));
   if (!options.length) return min <= 0 ? best : null;
   options.sort((a, b) => Math.abs(a.loss - want) - Math.abs(b.loss - want) || (b.evaluation.weight ?? 1) - (a.evaluation.weight ?? 1));
   return options[0].candidate;
@@ -498,13 +547,16 @@ async function valueOf(usi, candidates, read) {
   return ranked.find(({ move }) => move === usi) ?? null;
 }
 
-/** 悪手を探すとき、候補にない自然な手を読み直す(最善手も一緒に読んで、同じ物差しにする)。 */
-async function widerCandidates({ sfen, moves, legal, candidates, search, evaluate, allowed }) {
+/**
+ * 悪手を探すとき、候補にない自然な手を読み直す(最善手も一緒に読んで、同じ物差しにする)。
+ * desperateは、駒を渡す手も含めて多めに読む(敗者が大差でリードしているとき。15章)。
+ */
+async function widerCandidates({ sfen, moves, legal, candidates, search, evaluate, allowed, desperate = false }) {
   const known = new Set(candidates.map(({ move }) => move));
   const extra = legal
-    .filter((usi) => !known.has(usi) && !isSacrifice(evaluate(usi)))
+    .filter((usi) => !known.has(usi) && (desperate || !isSacrifice(evaluate(usi))))
     .sort((a, b) => (evaluate(b).weight ?? 1) - (evaluate(a).weight ?? 1))
-    .slice(0, WIDE_MOVES);
+    .slice(0, desperate ? DESPERATE_MOVES : WIDE_MOVES);
   if (!extra.length) return [];
   const bestMove = candidates[0].move;
   const result = await search({ moves: [...moves], multiPv: extra.length + 1, searchMoves: [bestMove, ...extra] });

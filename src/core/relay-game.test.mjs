@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from '../game-state';
 import {
-  DECISIVE_CP, RELAY_MAX_PLIES, relayQuality, THEORY_PLY, clockText, createRelayClock, pickLoss, playRelayGame, relayPlan, relaySeed, relayStoryValues,
+  DECISIVE_CP, RELAY_MAX_PLIES, rateVerdict, relayQuality, THEORY_PLY, clockText, createRelayClock, pickLoss, playRelayGame, relayPlan, relaySeed, relayStoryValues,
   relayTarget, relayTimeControl, relayTimeline, remainingText, shouldResign, thinkTimeText,
 } from './relay-game.mjs';
 
@@ -21,7 +21,7 @@ function specOf(extra = {}) {
  * にせのエンジン。局面ごとに、合法手を決まった順に並べた上位4手へ、決まった損(0・−60・−180・−450点)を割り当てる。
  * 指した手の損が、そのまま形勢に積み重なる(実際の評価値の代わり)。上位にない手は−200点。
  */
-function fakeSearch({ outside = -200 } = {}) {
+function fakeSearch({ outside = -200, shock = null, mateAbove = Infinity } = {}) {
   const deltas = [0, -60, -180, -450];
   const evals = new Map([['', 0]]);
   const sfens = new Map();
@@ -50,7 +50,8 @@ function fakeSearch({ outside = -200 } = {}) {
     if (evals.has(key)) return evals.get(key);
     const before = moves.slice(0, -1);
     const sign = before.length % 2 === 0 ? 1 : -1;
-    const value = evalOf(before) + sign * deltaOf(before, moves.at(-1));
+    // shockは、その手数で形勢が急に動く(読みの外の大きな見落とし)。先手から見た点。
+    const value = evalOf(before) + sign * deltaOf(before, moves.at(-1)) + (shock && moves.length === shock.ply ? shock.cp : 0);
     evals.set(key, value);
     return value;
   };
@@ -64,6 +65,8 @@ function fakeSearch({ outside = -200 } = {}) {
       .map((move) => ({ move, pv: [move], score: { type: 'cp', value: Math.round(base + deltaOf(moves, move)) } }))
       .sort((x, y) => y.score.value - x.score.value)
       .map((candidate, index) => ({ ...candidate, rank: index + 1, depth: 10 }));
+    // 手番の側が大差なら、最善手は詰みの読み(mateAbove)。
+    if (base > mateAbove) candidates[0] = { ...candidates[0], score: { type: 'mate', value: 9 } };
     return { move: candidates[0].move, candidates, completedCandidates: candidates };
   };
   return { search, calls, evalOf };
@@ -164,6 +167,20 @@ describe('playRelayGame', () => {
     expect(game.entries.slice(0, 8).every(({ mark }) => mark === 'book')).toBe(true);
   }, 60000);
 
+  it('敗者が終盤で詰みのある大差になっても、崩れて、勝者が優勢のまま投了で終わる(15章)', async () => {
+    // 先手が勝つ予定の局で、90手目に先手が読みの外の大きな見落としをし、後手(敗者)が7000点の大差・詰みの読みになる。
+    const engine = fakeSearch({ shock: { ply: 90, cp: -7000 }, mateAbove: 5000 });
+    const spec = specOf({ winner: 'black', story: [100, 200, 300], key: 'shock:1', seed: relaySeed('shock:1') });
+    const game = await playRelayGame({ spec, search: engine.search });
+    expect(game.end.winner).toBe('black');
+    expect(game.end.reason).toBe('resign');
+    expect(game.entries.length).toBeLessThan(RELAY_MAX_PLIES);
+    // 最後は、勝者(先手)がはっきり優勢(優勢なのに投了、にならない)。
+    expect(game.entries.at(-1).eval).toBeGreaterThan(1500);
+    // 敗者は崩れる手(slip)で大差を返している。
+    expect(game.entries.filter(({ mark }, index) => mark === 'slip' && index > 90 && index % 2 === 1).length).toBeGreaterThan(0);
+  }, 60000);
+
   it('止めると、途中でnullを返す', async () => {
     const engine = fakeSearch();
     let count = 0;
@@ -184,6 +201,18 @@ describe('pickLoss・shouldResign', () => {
     // 駒をただで渡す手は選ばない。
     const sacrifice = (usi) => (usi === 'c' ? { weight: 1, tags: ['piece-sacrifice'] } : { weight: 1, tags: [] });
     expect(pickLoss(pool, best, { want: 180, min: 90, max: 300, evaluate: sacrifice })).toBeNull();
+  });
+  it('敗者が大差でリードしているときは、駒を渡す手でも選べる(sacrifice)', () => {
+    const sacrifice = (usi) => (usi === 'c' ? { weight: 1, tags: ['piece-sacrifice'] } : { weight: 1, tags: [] });
+    expect(pickLoss(pool, best, { want: 180, min: 90, max: 300, evaluate: sacrifice, sacrifice: true }).move).toBe('c');
+  });
+  it('勝率バーの一言: 60%からやや有利、70%有利、80%優勢、92%勝勢。40〜60%は互角', () => {
+    expect(rateVerdict(50)).toEqual({ side: null, word: '互角' });
+    expect(rateVerdict(59)).toEqual({ side: null, word: '互角' });
+    expect(rateVerdict(60)).toEqual({ side: 'black', word: 'やや有利' });
+    expect(rateVerdict(25)).toEqual({ side: 'white', word: '有利' });
+    expect(rateVerdict(84)).toEqual({ side: 'black', word: '優勢' });
+    expect(rateVerdict(3)).toEqual({ side: 'white', word: '勝勢' });
   });
   it('敗者は、決め手のあと6手たって大差なら投了する', () => {
     const plan = { events: [{ kind: 'decisive' }] };

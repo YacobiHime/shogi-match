@@ -29,6 +29,22 @@
 
     <div class="relay__body">
       <div class="relay__stage">
+        <!--
+          勝率バー(15章)。盤のすぐ上に置き、盤から目を離さずに見る。先手は青・後手は赤で、名前の札も同じ色にして、
+          どちらの色がどちらの棋士かを、名前で分かるようにする。真ん中は「○○優勢」の一言(色だけで伝えない)。
+        -->
+        <div class="relay__rate" role="img" :aria-label="`AIの勝率 先手${players.black.name}${blackPercent}% 後手${players.white.name}${100 - blackPercent}% ${verdictText}`" data-relay-rate>
+          <p class="relay__rate-names" aria-hidden="true">
+            <span class="relay__rate-name relay__rate-name--black" data-relay-rate-black>
+              <i>☗</i><span class="relay__rate-who">{{ players.black.name }}</span><b>{{ blackPercent }}%</b>
+            </span>
+            <span :class="['relay__rate-verdict', verdict.side ? `relay__rate-verdict--${verdict.side}` : '']" data-relay-verdict>{{ verdictText }}</span>
+            <span class="relay__rate-name relay__rate-name--white" data-relay-rate-white>
+              <b>{{ 100 - blackPercent }}%</b><span class="relay__rate-who">{{ players.white.name }}</span><i>☖</i>
+            </span>
+          </p>
+          <span class="relay__rate-bar" aria-hidden="true"><span :style="{ width: `${blackPercent}%` }" /></span>
+        </div>
         <div ref="boardEl" class="relay__board">
           <ShogiMatchBoard
             :sfen="sfens[cursor] ?? sfens[0]"
@@ -87,12 +103,6 @@
           <p v-else-if="waiting" class="relay__waiting" role="status">考慮中…</p>
           <p v-if="commentsOn && reducedMotion && latestComment" class="relay__ticker" aria-hidden="true">{{ latestComment }}</p>
         </div>
-        <!-- 勝率バー(先手は青・後手は赤。対局中の中継と同じ式)。 -->
-        <div class="relay__rate" :aria-label="`AIの勝率 先手${blackPercent}% 後手${100 - blackPercent}%`" data-relay-rate>
-          <span class="relay__rate-side">☗ {{ blackPercent }}%</span>
-          <span class="relay__rate-bar" aria-hidden="true"><span :style="{ width: `${blackPercent}%` }" /></span>
-          <span class="relay__rate-side">{{ 100 - blackPercent }}% ☖</span>
-        </div>
       </div>
 
       <section class="relay__side" aria-label="解説と操作">
@@ -107,7 +117,7 @@
             <p v-if="readingText" class="relay__reading" data-relay-reading><b>AIの読み筋</b>{{ readingText }}</p>
           </div>
           <div v-else-if="tab === 'graph'" class="relay__graph" data-relay-graph>
-            <p class="relay__graph-title"><b>形勢</b><span>上ほど先手が良い</span></p>
+            <p class="relay__graph-title"><b>形勢</b><span>上(青)ほど☗{{ players.black.name }}、下(赤)ほど☖{{ players.white.name }}が良い</span></p>
             <svg viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="`勝率の移り変わり。いまは先手${blackPercent}%`" @click="seekGraph">
               <rect x="0" y="0" width="100" height="20" class="relay__graph-up" />
               <line x1="0" y1="20" x2="100" y2="20" class="relay__graph-mid" />
@@ -171,7 +181,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch,
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import { appendUsiMove, createGameRecord, STANDARD_SFEN } from "./game-state";
 import {
-  blackWinRate, clockText, relayTimeControl, relayTimeline, remainingText, thinkTimeText, type RelayMoveEntry,
+  blackWinRate, clockText, rateVerdict, relayTimeControl, relayTimeline, remainingText, thinkTimeText, type RelayMoveEntry,
 } from "./core/relay-game.mjs";
 import {
   RELAY_HOST, createRelayScript, moveTextOf, pvTextOf, relayAudience, relayCast,
@@ -480,6 +490,9 @@ const boardWidth = ref(360);
 let resizeObserver: ResizeObserver | undefined;
 
 const blackPercent = computed(() => Math.round(blackWinRate(cursor.value ? entries.value[cursor.value - 1]?.eval ?? 40 : 40) * 100));
+/** 勝率バーの真ん中の一言(「鈴木優勢」・「互角」)。 */
+const verdict = computed(() => rateVerdict(blackPercent.value));
+const verdictText = computed(() => (verdict.value.side ? `${players.value[verdict.value.side as Side].name}${verdict.value.word}` : verdict.value.word));
 
 /** いま見えている解説と聞き手の言葉(新しい4つ)。考慮中は、その手の「考慮中」の言葉まで。 */
 const visibleLines = computed(() => lines.value
@@ -696,7 +709,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   padding-top: 0.4rem;
 }
-.shogi-game .relay__stage { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 0.3rem; min-height: 0; }
+.shogi-game .relay__stage { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.3rem; min-height: 0; }
 .shogi-game .relay__board { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 .shogi-game .relay__board .shogi-match-theme-controls { display: none; }
 /* 盤の中の重なり(名札など)を盤の中に閉じ込め、札・心の声・コメントを盤より前に出す。 */
@@ -840,9 +853,34 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   text-shadow: 1px 1px 0 #000;
 }
-.shogi-game .relay__rate { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.4rem; align-items: center; font-size: 0.82rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-.shogi-game .relay__rate-bar { height: 0.55rem; overflow: hidden; border-radius: 999px; background: #c8433a; }
-.shogi-game .relay__rate-bar span { display: block; height: 100%; background: #3d6fa5; transition: width 0.3s ease; }
+/* 勝率バー(15章)。先手は青・後手は赤。名前の札をバーと同じ色にする。 */
+.shogi-game .relay { --relay-black: #3d78b8; --relay-white: #c8433a; }
+.shogi-game .relay__rate { display: grid; gap: 0.2rem; min-width: 0; font-variant-numeric: tabular-nums; }
+.shogi-game .relay__rate-names { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.4rem; align-items: center; margin: 0; }
+.shogi-game .relay__rate-name {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  min-width: 0;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.3rem;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+.shogi-game .relay__rate-name--black { justify-self: start; background: var(--relay-black); }
+.shogi-game .relay__rate-name--white { justify-self: end; background: var(--relay-white); }
+.shogi-game .relay__rate-name i { font-style: normal; }
+.shogi-game .relay__rate-name b { font-size: 1rem; font-weight: 900; }
+.shogi-game .relay__rate-who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .relay__rate-verdict { color: #e2e8ef; font-size: 0.85rem; font-weight: 900; white-space: nowrap; }
+.shogi-game .relay__rate-verdict--black { color: #9fd0ff; }
+.shogi-game .relay__rate-verdict--white { color: #ffa79a; }
+.shogi-game .relay__rate-bar { position: relative; height: 0.7rem; overflow: hidden; border-radius: 999px; background: var(--relay-white); }
+.shogi-game .relay__rate-bar span { display: block; height: 100%; background: var(--relay-black); transition: width 0.3s ease; }
+/* 五分の目印(真ん中の線)。 */
+.shogi-game .relay__rate-bar::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: rgba(255, 252, 244, 0.85); transform: translateX(-50%); }
 .shogi-game .relay__side {
   display: grid;
   grid-template-rows: auto var(--relay-panel, 8.6rem) auto auto auto;
@@ -874,8 +912,8 @@ onBeforeUnmount(() => {
 .shogi-game .relay__graph { display: grid; grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.1rem; height: 100%; box-sizing: border-box; padding: 0.3rem 0.5rem; }
 .shogi-game .relay__graph-title { display: flex; justify-content: space-between; gap: 0.4rem; margin: 0; font-size: 0.72rem; }
 .shogi-game .relay__graph-title span { color: #9fb3c8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.shogi-game .relay__graph svg { width: 100%; height: 100%; min-height: 0; border-radius: 0.25rem; background: rgba(200, 67, 58, 0.16); cursor: pointer; }
-.shogi-game .relay__graph-up { fill: rgba(61, 111, 165, 0.3); }
+.shogi-game .relay__graph svg { width: 100%; height: 100%; min-height: 0; border-radius: 0.25rem; background: rgba(200, 67, 58, 0.22); cursor: pointer; }
+.shogi-game .relay__graph-up { fill: rgba(61, 120, 184, 0.38); }
 .shogi-game .relay__graph-mid { stroke: rgba(255, 252, 244, 0.45); stroke-width: 0.4; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
 .shogi-game .relay__graph-line { fill: none; stroke: #fffcf4; stroke-width: 1.4; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .shogi-game .relay__graph-dot { fill: #f1a54c; }
@@ -917,7 +955,7 @@ onBeforeUnmount(() => {
   .shogi-game .relay__close-text { display: none; }
   .shogi-game .relay__chips { display: none; }
 }
-/* 横長の広い画面: 左に盤、右の列に勝率・欄・操作。 */
+/* 横長の広い画面: 左に勝率と盤、右の列に欄・操作。 */
 @media (min-width: 900px) and (min-aspect-ratio: 1/1) {
   .shogi-game .relay__body { grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) minmax(19rem, 26rem); gap: 1rem; }
   .shogi-game .relay__side { grid-template-rows: auto minmax(0, 1fr) auto auto auto; }

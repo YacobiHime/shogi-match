@@ -100,10 +100,20 @@ export function rememberRelayGame(store, game, limit = RELAY_STORE_LIMIT) {
   return { ...store, games, order: order.slice(drop.length) };
 }
 
-/** 残してある棋譜(なければnull)。見たものは、いちばん新しいものにする。 */
+/**
+ * 前の版(1)で作った棋譜のうち、最後の形勢が負けた側に傾いたまま終わったもの(優勢なのに投了。15章)。作り直す。
+ * @param {{ v: number, entries: { eval: number }[], end: { winner: string } }} game
+ */
+export function isStaleRelayGame(game) {
+  if ((game.v ?? 1) >= RELAY_VERSION) return false;
+  const last = game.entries.at(-1);
+  return Boolean(last) && (game.end.winner === 'black' ? last.eval : -last.eval) <= 0;
+}
+
+/** 残してある棋譜(なければnull)。見たものは、いちばん新しいものにする。前の版の崩れた棋譜は、ないものとして作り直す。 */
 export function recallRelayGame(store, key) {
   const game = unpackRelayGame(key, store.games?.[key]);
-  if (!game) return { store, game: null };
+  if (!game || isStaleRelayGame(game)) return { store, game: null };
   return { store: { ...store, order: [...store.order.filter((other) => other !== key), key] }, game };
 }
 

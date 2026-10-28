@@ -4,7 +4,7 @@ import { createLeague, createMeijinSeason, recordMeijinGame } from './meijin.mjs
 import { createRoster } from './ryuo-roster.mjs';
 import { HANANE } from './ryuo-story.mjs';
 import { isFeatured, meijinRelayGames, relayGamesOf, relayRoundNews, relaySections, ryuoRelayGames } from './relay-games.mjs';
-import { emptyRelayStore, loadRelayStore, markRelaySeen, packRelayGame, recallRelayGame, rememberRelayGame, saveRelayStore, unpackRelayGame } from './relay-store.mjs';
+import { emptyRelayStore, isStaleRelayGame, loadRelayStore, markRelaySeen, packRelayGame, recallRelayGame, rememberRelayGame, saveRelayStore, unpackRelayGame } from './relay-store.mjs';
 
 const settings = { difficulty: 9, scale: 3, revival: true };
 
@@ -96,7 +96,7 @@ describe('meijinRelayGames', () => {
 
 describe('relay-store', () => {
   const game = {
-    v: 1, key: 'k1',
+    v: 2, key: 'k1',
     entries: [
       { move: '7g7f', eval: 40, pv: '3c3d 2g2f', best: '', loss: 0, time: 30, mark: 'book' },
       { move: '3c3d', eval: 35, pv: '', best: '8c8d', loss: 20, time: 125, mark: 'slip' },
@@ -107,6 +107,16 @@ describe('relay-store', () => {
     const map = new Map();
     return { getItem: (key) => map.get(key) ?? null, setItem: (key, value) => map.set(key, String(value)), removeItem: (key) => map.delete(key) };
   }
+
+  it('前の版の棋譜で、最後の形勢が負けた側に傾いたまま終わったもの(優勢なのに投了)は、作り直す(15章)', () => {
+    const store = rememberRelayGame(emptyRelayStore(), { ...game, v: 1 });
+    expect(isStaleRelayGame({ ...game, v: 1 })).toBe(true);
+    expect(recallRelayGame(store, 'k1').game).toBeNull();
+    // 勝者に傾いて終わった前の版の棋譜は、そのまま見られる。
+    const fine = { ...game, v: 1, end: { ...game.end, winner: 'black' } };
+    expect(isStaleRelayGame(fine)).toBe(false);
+    expect(recallRelayGame(rememberRelayGame(emptyRelayStore(), fine), 'k1').game).not.toBeNull();
+  });
 
   it('保存の形にして、元に戻せる', () => {
     expect(unpackRelayGame('k1', packRelayGame(game))).toEqual(game);
