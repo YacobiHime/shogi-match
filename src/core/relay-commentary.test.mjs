@@ -281,7 +281,7 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
   it('善彦の解説は謙遜から始まり、視聴者がつっこむ。羽音の対局を解説するときは親子のやりとりにする', () => {
     const [script] = scripts;
     const intro = script.lines.filter(({ at }) => at === 0).map(({ text }) => text);
-    expect(intro).toContain('…そうですね、まあ、あの、専門家じゃないんで。全然、分かんないという感じなんですけど。');
+    expect(intro).toContain('まあ、専門家じゃないんで。全然分かんないという感じなんですけど。');
     expect(script.comments.some(({ kind, text }) => kind === 'cast' && /専門家/.test(text))).toBe(true);
     const family = longScript().lines.filter(({ at }) => at === 0).map(({ text }) => text);
     expect(family.some((text) => /専門家じゃない/.test(text))).toBe(false);
@@ -309,7 +309,8 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     const all = scripts.flatMap(({ comments }) => comments);
     expect(all.some(({ at, when, kind }) => at === 1 && when === 'think' && kind === 'predict')).toBe(true);
     expect(all.every(({ text }) => !/\{\w+\}|undefined|NaN/.test(text))).toBe(true);
-    expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手|酷い/.test(text))).toBe(true);
+    // 少しきつい笑い(「酷いｗ」)は27章で入れた。分身の手には出さない(下の27章のテスト)。
+    expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(text))).toBe(true);
   });
 
   it('羽音の解説は、新しい言い方でも敬語を使わない', () => {
@@ -317,6 +318,96 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     for (const variant of variants) {
       const script = longScript({ variant, cast: hanane, white: player('s', '鈴木蓮', { age: 28 }) });
       expect(script.lines.filter(({ role }) => role === 'commentator').every(({ text }) => !/です|ます/.test(text))).toBe(true);
+    }
+  });
+});
+
+describe('コメントの条件と名詞の差し替え、解説との連動(27章)', () => {
+  const yoshihiko = { id: 'y', name: '天鷺善彦', dan: '名人', story: YOSHIHIKO, voice: 'yoshihiko' };
+  const variants = ['', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+  it('善彦の「専門家じゃない」には、解説が出てから4種類のつっこみが流れる', () => {
+    const texts = new Set();
+    for (const variant of variants) {
+      const script = longScript({ variant, cast: yoshihiko, white: player('s', '鈴木蓮') });
+      const humble = script.comments.filter(({ at, kind, text }) => at === 0 && kind === 'cast' && /専門家/.test(text));
+      expect(humble.length).toBeGreaterThan(0);
+      expect(humble.every(({ lag }) => lag >= 1000)).toBe(true);
+      for (const { text } of humble) texts.add(text);
+    }
+    expect([...texts].sort()).toEqual(['あんた以上の専門家いないだろｗｗｗ', 'お前が専門家じゃないなら誰が専門家なんだよｗ', '専門家じゃないｗｗｗｗｗ', '振り飛車の専門家とかだろう'].sort());
+  });
+
+  it('解説へのつっこみ(しょうがない・意地でも・非常に良かった)は、解説と同じ手で遅れて流れる', () => {
+    for (const variant of variants) {
+      const script = longScript({ variant, cast: yoshihiko, white: player('s', '鈴木蓮') });
+      for (const item of script.comments.filter((comment) => comment.kind === 'cast' && item_is_reaction(comment))) {
+        expect(item.lag, item.text).toBeGreaterThanOrEqual(1000);
+        expect(script.lines.some(({ at, role }) => at === item.at && role === 'commentator'), `${item.at} ${item.text}`).toBe(true);
+      }
+    }
+    function item_is_reaction(item) { return /しょうがない|意地|いじでも|なにがなんでも|まてｗ|よくねえよ|言うなら|こっちが聞きたい|意外しかない/.test(item.text); }
+  });
+
+  it('振り駒: 前に「先手どっち」、結果のあとに反応。格上が後手なら「後手はアカン」(名前は苗字)', () => {
+    const spec = {
+      key: 'ryuo:3:main:m1', event: 'ryuo', kind: 'game', label: '決勝トーナメント 1回戦', weight: 'big',
+      black: player('a', '中村大輔'), white: player('y', '天鷺善彦', { story: YOSHIHIKO }), winner: 'white', how: 'middle', story: [100, 250, 300],
+    };
+    const script = createRelayScript({ spec, cast: { id: 'c', name: '佐藤誠', dan: '九段', story: null, voice: 'polite' } });
+    const zero = script.comments.filter(({ at }) => at === 0);
+    expect(zero.find(({ text }) => text === '先手どっちｗｗｗｗｗ')?.lag).toBeUndefined();
+    expect(zero.some(({ text, lag }) => text === '天鷺先生後手はアカン～～～' && lag >= 1000)).toBe(true);
+    // 振り駒の結果への反応も、読み上げのあとに流れる。
+    expect(zero.filter(({ kind, lag }) => kind === 'hype' && lag >= 1000).length).toBeGreaterThan(0);
+  });
+
+  it('得意戦法から戦型を予想する(名詞は対局者の戦法。決め打ちの「藤井システム」は使わない)', () => {
+    const fujii = player('f', '大山康', { repertoire: { usage: { black: { 'fujii-system': 80, shiken: 20 }, white: { 'fujii-system': 70, shiken: 30 } } } });
+    const guesses = variants.flatMap((variant) => longScript({ variant, white: fujii }).comments.filter(({ at, when }) => at === 1 && when === 'think'));
+    expect(guesses.some(({ text }) => /藤井システム/.test(text))).toBe(true);
+    const plain = variants.flatMap((variant) => longScript({ variant, white: player('s', '鈴木蓮') }).comments);
+    expect(plain.some(({ text }) => /藤井システム|エルモ急戦|ゴキゲン中飛車ありえるやん/.test(text))).toBe(false);
+  });
+
+  it('分身(プレイヤー自身の能力で戦う棋士)の手には、きつい笑いを出さない', () => {
+    for (const variant of variants) {
+      const script = longScript({ variant, white: player('v', 'やこび', { kind: 'avatar' }) });
+      expect(script.comments.some(({ text }) => /酷いｗ|明らかにおかしい/.test(text))).toBe(false);
+    }
+  });
+
+  it('玉が盤の真ん中より前に出たら「宇宙将棋ｗ」(1回だけ)', () => {
+    const spec = {
+      key: 'ryuo:3:ranking:u1', event: 'ryuo', kind: 'game', label: '6組ランキング戦 1回戦', weight: 'plain',
+      black: player('a', '中村大輔'), white: player('b', '鈴木蓮'), winner: 'black', how: 'middle', story: [100, 250, 300],
+    };
+    const moves = ['5g5f', '1c1d', '5f5e', '9c9d', '5e5d', '1a1b', '5i5h', '9a9b', '5h5g', '1d1e', '5g5f', '9d9e', '5f5e'];
+    const script = scriptFor(spec, moves);
+    expect(script.comments.filter(({ text }) => text === '宇宙将棋ｗ').map(({ at }) => at)).toEqual([13]);
+  });
+
+  it('序盤の角交換は「2二かくなり～」、初手7六歩には、どよめきとつっこみ', () => {
+    const spec = {
+      key: 'ryuo:3:ranking:k1', event: 'ryuo', kind: 'game', label: '6組ランキング戦 1回戦', weight: 'plain',
+      black: player('a', '中村大輔'), white: player('b', '鈴木蓮'), winner: 'black', how: 'middle', story: [100, 250, 300],
+    };
+    const texts = [];
+    for (const key of ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8']) {
+      const script = scriptFor({ ...spec, key: `ryuo:3:ranking:${key}` }, ['7g7f', '3c3d', '8h2b+', '3a2b']);
+      texts.push(...script.comments.map(({ text, lag }) => [text, lag ?? 0]));
+    }
+    expect(texts.some(([text]) => text === '2二かくなり～')).toBe(true);
+    expect(texts.some(([text]) => text === '※おおすぎｗ　7六歩')).toBe(true);
+    expect(texts.filter(([text]) => text === '※おおすぎｗ　7六歩').every(([, lag]) => lag >= 1000)).toBe(true);
+  });
+
+  it('新しいコメントの穴埋め({name}など)が全部埋まる', () => {
+    const fujii = player('f', '大山康', { repertoire: { usage: { black: { 'fujii-system': 80 }, white: { 'fujii-system': 70 } } } });
+    for (const variant of variants) {
+      for (const script of [longScript({ variant, white: fujii }), longScript({ variant, weight: 'title', cast: yoshihiko, white: fujii })]) {
+        expect(script.comments.every(({ text }) => text && !/\{\w+\}|undefined|NaN|null/.test(text))).toBe(true);
+      }
     }
   });
 });

@@ -6,7 +6,7 @@ import { createRng, pick } from './ryuo-random.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { opponentVoice } from './match-presence.mjs';
 import {
-  applyUsiToBoard, attackedSquares, findKing, isKingAttacked, opponentOf, parseSfenState, relativeRank, squareXY, xySquare,
+  applyUsiToBoard, attackedSquares, attackersOf, findKing, isKingAttacked, opponentOf, parseSfenState, parseUsiMove, relativeRank, squareXY, xySquare,
 } from './piece-movement.mjs';
 import { pieceAt } from './sfen-piece.mjs';
 import { detectTesuji, TESUJI_NAMES } from './move-tesuji.mjs';
@@ -198,7 +198,7 @@ const VIEWER = Object.freeze({
   // 秒読みの最中(記録係の読み上げをまねる)。
   byoyomiOn: ['30秒…', '40秒', '50秒…', '1、2、3…', '早く早く', 'ドキドキする', '秒読みの中でよく指す'],
   swing: ['あれ？', '形勢動いた？', '勝率が…', 'えっ', 'これは痛い？', 'ガクッときた'],
-  only: ['すごい', 'うますぎる', 'これは見えない', '!!', '神の一手？', 'さすが'],
+  only: ['すごい', 'うますぎる', 'これは見えない', '!!', '神の一手？', 'さすが', 'これほんとどうやってんだ？ｗ'],
   ending: ['終盤だ', '詰む？', '詰まない？', '手に汗にぎる', 'どっちだ', '見てられない'],
   winning: ['決まった？', 'これは寄った', 'もう勝ちかな', '受けがない？'],
   resign: ['投了', 'ありがとうございました', '8888888', 'おつかれさま', '名局だった', '888'],
@@ -221,7 +221,7 @@ const VIEWER = Object.freeze({
   drop: ['{piece}打ち！', '{move}', 'ここに{piece}を打つか', '{piece}を打った'],
   // 予想: 考慮中に前の手の読み筋から。指したあとに当たり外れ。
   predict: ['次は{move}と見た', '{move}でしょ', '{move}が見える', '{move}かな？', '自分なら{move}'],
-  predictHit: ['予想的中', '当たった！', '読み通り', 'やっぱり{move}', '的中ｷﾀ'],
+  predictHit: ['予想的中', '当たった！', '読み通り', 'やっぱり{move}', '的中ｷﾀ', 'これは読めたｗｗｗ'],
   predictMiss: ['そっちか', '予想外れた', 'え、そっち？', '{move}じゃないんだ', 'なるほどそっちか'],
   // AI勢: 評価値と勝率。
   ai: ['AI{side}{rate}%', '評価値{eval}', 'AI的には{side}よし', '評価値{eval}か', 'AIの読みだと{side}'],
@@ -237,7 +237,7 @@ const VIEWER = Object.freeze({
   clockGap: ['持ち時間の差すごい', '時間の使い方が対照的', '{name}だいぶ時間残してる'],
   fast: ['{name}早指しだな', 'ノータイムだ', '準備してたな'],
   // ネタ: 対局室の様子とおやつ。
-  neta: ['正座つらそう', 'お茶飲んだ', '扇子パタパタしてる', '記録係さんおつかれ', '外は雨らしい', '首をかしげてる', '記録さんベテランだな', '動かないｗ', '先生集中してるな'],
+  neta: ['正座つらそう', 'お茶飲んだ', '扇子パタパタしてる', '記録係さんおつかれ', '外は雨らしい', '首をかしげてる', '記録さん{title}戦のベテランだな。', '動かないｗ', '先生集中してるな'],
   oyatsu: ['おやつの時間', 'おやつ何？', '3時のおやつ', 'おやつタイム', 'ケーキかな'],
   // 解説への反応。
   castStart: ['{cast}先生の解説だ', '解説たすかる', '{cast}先生！', '解説の人好き'],
@@ -253,41 +253,89 @@ const VIEWER = Object.freeze({
   hype: ['うおおおお', '!?!?', 'ｷﾀ━━', 'えええ', 'すげえ', 'まじか'],
   // ---- 25章で足した書き手(ユーザーにもらったコメントの例から)。
   // 振り駒の結果(先手が決まった)。
-  furigoma: ['{name}さん先手だ', '先手{name}さんかーｗ', '{name}先手か', 'うひょー', 'おー', 'あ！'],
+  furigoma: ['{name}さん先手だ', '先手{name}さんかーｗ', '{name}先手か', 'うひょー', 'おー', 'あ！', 'うわあぁぁあぁぁぁぁ'],
+  // 27章: 振り駒の前と、強い棋士(人気の棋士)が先手・後手になったときの反応。{name}は視聴者の呼び方(苗字)。
+  furigomaWho: ['先手どっちｗｗｗｗｗ'],
+  furigomaWin: ['{name}先手勝ったわ', '勝ったな'],
+  furigomaLose: ['{name}後手はアカン～～～'],
+  chi: ['{name}「ちっ」'],
+  // 格上の棋士が、格下の相手に(番勝負は肩書、ほかは段位)。
+  kimino: ['{name}{title}「君の一番強いところみせてよ」'],
   // 初手の前の戦型予想(考慮中)。
-  openingGuess: ['7六かな', '8四指したら驚くわｗ', '居飛車かな', '振り飛車ありそう', '相振り見たいな', 'エルモ急戦かな', 'ゴキゲン中飛車ありえるやん', '藤井システム来るか'],
+  openingGuess: ['7六かな', '8四指したら驚くわｗ', '居飛車かな', '振り飛車ありそう', '相振り見たいな'],
+  // 27章: 対局者の得意戦法から予想する({opening}は使用率のいちばん上の戦法)。
+  openingGuessFav: ['{opening}来るか', '{opening}かな', '{opening}ありえるやん', '{name}なら{opening}でしょ'],
+  senichite: ['千日手からの一手損あるで'],
+  // 初手7六歩に、どよめく人と、つっこむ人(2つで1組)。
+  doyomeki: ['「おおおおおお」とどよめくのが聞こえる'],
+  ooSugi: ['※おおすぎｗ　{move}'],
   // 初手が7六歩・2六歩でなかった。
   firstSurprise: ['「おおおおおお」とどよめくのが聞こえる', 'なんだこれ！', 'そんで？', 'えっ、そこ？'],
   // 序盤に角道を止めた(先手の6六歩・後手の4四歩)。
   bishopClose: ['{move}キター！', 'きたあああああああ', "キターーー(*'▽')ーーー！！！", '角道止めただけで沸く', '止めるのか', '止めた！'],
   bishopCloseGuess: ['角道止めるだろうな', '止めるかどうか', '止める？'],
+  // 振り飛車党(得意戦法が振り飛車)が角道を止めた。
+  bishopCloseFuri: ['角道止めただけで沸く唯一の棋士'],
+  // 27章: 序盤の角交換(取った升の読み「8八かくなり～」)と、気合。
+  kakunari: ['{sq}かくなり～'],
+  kiai: ['気合が入ってるんや'],
+  // 序盤の端歩。
+  hashi: ['端歩？？？'],
+  // 戦法を判定したとき。予想どおり(得意戦法)なら当然と受け止め、劣勢側なら心配する。{short}は「システム」「四間」など短い呼び方。
+  formationSure: ['まぁ{short}ですよね', 'よし{side}{name}だな', '{name}来たな、風呂入ってくる'],
+  formationHard: ['{side}{short}は厳しいなｗ'],
+  treasure: ['伝家の宝刀', '見せ場を分かっている'],
+  // 珍しい囲いと、囲いの発展形。
+  rareCastle: ['まさかの{castle}'],
+  evolve: ['ここから{next}でもいいぞ'],
+  // 序盤の定跡の手(歩は現代的、角はよく指す手)と、序盤のリード。
+  modern: ['{move}は現代的'],
+  often: ['{move}はよく指す手ですよ'],
+  joban: ['序盤は{name}'],
+  // 早く終盤になった。
+  mouEnd: ['もう終盤？'],
+  // 考慮中、読み筋の1手目が香車を上がる手。
+  kyosha: ['香車上がるか？'],
   // 振り飛車・相振り飛車。
   furi: ['王道をゆく{name}', '不利飛車', '振り飛車きた', '{name}好き'],
   aifuri: ['相振りきたあああ', '相振り研究してきてる'],
   notAifuri: ['相振りではない', '対抗形か'],
   // 穴熊に組みにいった。
-  anagumaGo: ['まじで穴熊？', '{name}の穴熊は組めれば強いだろうが、相手は組ませないだろう。'],
+  anagumaGo: ['まじで穴熊？', '{name}の穴熊は組めれば強いだろうが、{opp}は組ませないだろう。'],
   // 中盤で大きく差がついた(気の早い人)。
   bath: ['よし、勝ったな　風呂入ってくる', 'よし風呂行ってくるか', '勝ったな'],
   // 顔文字(ごくまれに)。
   emoji: ['わがります✋🤡🤚', '🌜🤡🌛ﾊﾟｶｯ', '🐻'],
   // 意外な手・形勢が大きく動いた手(笑い。指した人を責める言葉は使わない)。
   chaos: ['えｗｗｗｗｗｗ', 'どうなってんだこれｗｗｗｗｗ', 'おいｗ', 'どういうことなの・・・', 'シュールすぎるｗｗ', 'ファッ！？', 'え？', 'ん？',
-    '無理っぽいｗｗｗｗ', 'wwwwwwwwww', 'ｪﾝ？', '？', '面白すぎるｗｗ', 'なんだそりゃｗ', 'あーｗｗｗ', 'ちょｗｗ', '通常の3倍ｗｗｗ'],
+    '無理っぽいｗｗｗｗ', 'wwwwwwwwww', 'ｪﾝ？', '？', '面白すぎるｗｗ', 'なんだそりゃｗ', 'あーｗｗｗ', 'ちょｗｗ', '通常の3倍ｗｗｗ',
+    '手ｗｗｗｗｗｗｗｗｗｗｗｗｗ', '無理すぎるｗｗｗ', '久々に腹筋崩壊したｗｗｗｗｗｗｗｗｗ', 'あｗ', 'あーーーーーーー', '涙出てきたわｗ', '大変すぎるｗｗｗ'],
+  // 少しきつい笑い。指したのが分身(プレイヤー自身の能力で戦う棋士)のときは出さない。
+  chaosHarsh: ['明らかにおかしいだろｗｗ', '酷いｗ'],
+  // 27章: 盤の上の事実から言える見せ場。
+  uchu: ['宇宙将棋ｗ'],
+  utitai: ['{best}ちてえええ'],
+  naruImi: ['取らなきゃ成った意味が無いｗｗｗｗｗ'],
+  bishopWonder: ['（角ってどう動くんだっけ？）'],
+  kakuAwase: ['角合わせればOK'],
+  retreat: ['{move}？'],
+  mushi: ['無視ｗ'],
+  hishaKawaii: ['王より飛車を可愛がり。。。'],
   // 駒の見せ場。
   knightHonki: ['桂の本気ｗ', '桂跳ねたー', 'つえええええええｗ'],
   bishopIji: ['角の意地ｗｗｗｗ', '角が働いた'],
   kakuto: ['角頭歩ｗｗ', '角頭の歩！'],
   ouhisha: ['王手飛車取りｗｗｗ', '王手飛車！', 'ひえええええええええ'],
   rookTwoStep: ['飛車の二段階右折', '二段階右折ｗｗｗｗ', '二段階右折ﾜﾛﾀ'],
-  noPromote: ['成らないの！？', '不成ｗ', '成らない方が強い？'],
+  noPromote: ['成らないの！？', '不成ｗ', '成らない方が強い？', '成らない方が強いだろｗｗｗ'],
   tempo: ['タン！タン！', '早い早い'],
   // 終局のあと。
   endGag: ['名勝負や', 'これが勝者の表情だ！', '名局になっちゃう', 'えええええええええ'],
   loserVoice: ['（・・・あれ？俺負けたの・・・？）'],
   // 解説への反応(解説者の言い方に、視聴者がつっこむ)。{cast}は解説者の苗字。
   castHumble: ['お前が専門家じゃないなら誰が専門家なんだよｗ', 'あんた以上の専門家いないだろｗｗｗ', '専門家じゃないｗｗｗｗｗ', '振り飛車の専門家とかだろう'],
-  castJudge: ['{cast}さんが言うならしょうがないｗ', 'まあ{cast}さんが言うなら…', 'まあお前が言うならｗ', 'まてｗｗｗｗｗ', 'よくねえよｗｗｗ'],
+  castJudge: ['{cast}さんが言うならしょうがないｗ', 'まてｗｗｗｗｗ', 'よくねえよふざけんなｗｗｗ'],
+  castSo: ['まあ{cast}さんが言うなら…', 'まあお前が言うならｗ'],
   castShikata: ['しょうがないのかｗ', 'しょうがないｗｗ', '{cast}さんが言うならしょうがないｗ'],
   castIji: ['なにがなんでもｗ', 'いじでも！', '意地でもｗ'],
   castDousuru: ['どうするんでしょうか←こっちが聞きたい', 'それを聞きたいｗ'],
@@ -349,7 +397,11 @@ const POOL_KIND = Object.freeze({
   furigoma: 'hype', openingGuess: 'predict', firstSurprise: 'hype', bishopClose: 'hype', bishopCloseGuess: 'predict', furi: 'theory', aifuri: 'theory', notAifuri: 'theory',
   anagumaGo: 'theory', bath: 'hype', emoji: 'idle', chaos: 'hype', knightHonki: 'play', bishopIji: 'play', kakuto: 'play', ouhisha: 'play', rookTwoStep: 'play',
   noPromote: 'play', tempo: 'play', endGag: 'hype', loserVoice: 'hype',
-  castHumble: 'cast', castJudge: 'cast', castShikata: 'cast', castIji: 'cast', castDousuru: 'cast', castIgai: 'cast', castGood: 'cast',
+  castHumble: 'cast', castJudge: 'cast', castSo: 'cast',
+  furigomaWho: 'hype', furigomaWin: 'cheer', furigomaLose: 'cheer', chi: 'idle', kimino: 'cheer', openingGuessFav: 'predict', senichite: 'theory',
+  doyomeki: 'hype', ooSugi: 'idle', bishopCloseFuri: 'hype', kakunari: 'play', kiai: 'hype', hashi: 'hype', formationSure: 'theory', formationHard: 'theory',
+  treasure: 'cheer', rareCastle: 'theory', evolve: 'theory', modern: 'theory', often: 'theory', joban: 'theory', mouEnd: 'hype', kyosha: 'predict',
+  chaosHarsh: 'hype', uchu: 'hype', utitai: 'predict', naruImi: 'play', bishopWonder: 'newbie', kakuAwase: 'theory', retreat: 'play', mushi: 'play', hishaKawaii: 'theory', castShikata: 'cast', castIji: 'cast', castDousuru: 'cast', castIgai: 'cast', castGood: 'cast',
   neta: 'neta', oyatsu: 'neta', castStart: 'cast', castHanane: 'cast', castFather: 'cast', castAgree: 'cast', trait: 'cheer', next: 'cheer', avatar: 'cheer', hype: 'hype',
   kifu: 'kifu', kifuNew: 'kifu', toryo: 'kifu', mateEnd: 'kifu', material: 'material', materialEven: 'material',
   kingSolid: 'king', kingThin: 'king', anaguma: 'king', layman: 'layman', laymanReply: 'ai', local: 'local', localKaikan: 'local',
@@ -519,6 +571,24 @@ function favoriteOpening(player) {
 
 const has = (player, id) => Boolean(player?.character?.traits?.some((trait) => trait.id === id));
 
+// ---- 27章: コメントの名詞を状況で差し替える材料
+
+/** 戦法の短い呼び方(「藤井システム」→「システム」、「四間飛車」→「四間」)。 */
+function shortOpening(name) {
+  if (/システム/.test(name)) return 'システム';
+  const furi = /^(四間|三間|向かい|中)飛車$/.exec(name);
+  return furi ? furi[1] : name;
+}
+/** 珍しい囲い(「まさかの○○」)と、囲いの発展形(「ここから○○でもいいぞ」。上から順に合わせる)。 */
+const RARE_CASTLE = /ミレニアム|エルモ|elmo|銀冠|天守閣|菊水|カニ囲い|木村美濃|中住まい/;
+const CASTLE_NEXT = Object.freeze([[/舟囲い/, 'エルモ'], [/片美濃/, '銀冠'], [/美濃囲い/, '銀冠']]);
+/** 8つのタイトル(記録係の経歴の言い方)。 */
+const TITLE_NAMES = Object.freeze(['竜王', '名人', '叡王', '王位', '王座', '棋王', '王将', '棋聖']);
+/** 解説へのつっこみは、解説の言葉が出てから少し遅れて流す(ミリ秒)。 */
+const REACT_LAG = 1600;
+/** 手の表記から先手・後手の印を外す(「▲7六歩」→「7六歩」)。 */
+const bareMove = (text) => String(text ?? '').replace(/^[▲△☗☖]/, '');
+
 /** 評価値の言い方(先手から見た値。「+350」「-120」。詰みは「詰み」)。 */
 function signedEval(cp) {
   if (isMateCp(cp)) return cp > 0 ? '先手勝ち' : '後手勝ち';
@@ -561,12 +631,15 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
    * 視聴者のコメントを足す。toneを渡さなければ、書き手の種類の色。
    * @param {number} at @param {string} when @param {string} pool
    * @param {Record<string, string | number>} [values] @param {number} [count] @param {string} [tone]
-   * @param {{ size?: string, pos?: string }} [style]
+   * @param {{ size?: string, pos?: string, lag?: number }} [style] lag: 流し始めを遅らせるミリ秒(解説へのつっこみ・振り駒の結果への反応)
    */
   const comment = (at, when, pool, values = {}, count = 1, tone = '', style = {}) => {
     const kind = POOL_KIND[pool] ?? pool;
     for (let index = 0; index < count; index += 1) {
-      comments.push({ at, when, text: fill(pickFresh(pool), values), tone: tone || KIND_TONE[kind] || '', kind, size: style.size ?? '', pos: style.pos ?? '' });
+      comments.push({
+        at, when, text: fill(pickFresh(pool), values), tone: tone || KIND_TONE[kind] || '', kind, size: style.size ?? '', pos: style.pos ?? '',
+        ...(style.lag ? { lag: style.lag } : {}),
+      });
     }
   };
   /**
@@ -604,8 +677,26 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   let lastAi = 0;
   let clockGapSaid = false;
   const line = (at, when, role, text) => lines.push({ at, when, role, text });
-  /** 解説への視聴者のつっこみ({cast}は解説者の苗字)。 */
-  const react = (at, pool, count = 1) => comment(at, 'move', pool, { cast: castSurname }, count);
+  /** 解説への視聴者のつっこみ({cast}は解説者の苗字)。解説の言葉が出てから流す(27章)。 */
+  const react = (at, pool, count = 1) => comment(at, 'move', pool, { cast: castSurname }, count, '', { lag: REACT_LAG });
+  /** 視聴者の呼び方(苗字。羽音は「羽音」、善彦は「天鷺」。同じ苗字の2人なら名前全部。27章)。 */
+  const fan = (side) => {
+    const player = players[side];
+    if (player?.story === HANANE) return '羽音';
+    if (player?.story === YOSHIHIKO) return '天鷺';
+    const name = player?.name ?? '';
+    const surname = SURNAMES.find((candidate) => name.startsWith(candidate) && name.length > candidate.length);
+    return surname && !(players[other(side)]?.name ?? '').startsWith(surname) ? surname : name;
+  };
+  const star = (side) => players[side]?.story === HANANE || players[side]?.story === YOSHIHIKO;
+  /** 格上の側(物語の人物と、そうでない棋士。または強さの差が200以上)。どちらでもなければnull。 */
+  const stronger = (() => {
+    if (star('black') !== star('white')) return star('black') ? 'black' : 'white';
+    const gap = (players.black?.rating ?? 0) - (players.white?.rating ?? 0);
+    return gap >= 200 ? 'black' : gap <= -200 ? 'white' : null;
+  })();
+  /** 記録係の経歴に出すタイトル(この棋戦のタイトルではないもの)。 */
+  const recordTitle = pick(rng, TITLE_NAMES.filter((title) => title !== (spec.event === 'meijin' ? '名人' : '竜王')));
   const think = (at, when, side, moment) => {
     if (thoughtCount[side] + thoughtCount[other(side)] >= THOUGHT_LIMIT) return;
     if (!once(`thought:${side}:${moment}`)) return;
@@ -644,7 +735,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     // 善彦の解説は、謙遜から始まる(視聴者がつっこむ。25章)。親子の対局は、上の親子のやりとりにする。
     if (cast.voice === 'yoshihiko' && spec.black?.story !== HANANE && spec.white?.story !== HANANE) {
       line(0, 'move', 'host', spec.weight === 'title' ? 'タイトル戦の大舞台ですけれども。' : '注目の一戦ですけれども。');
-      line(0, 'move', 'commentator', '…そうですね、まあ、あの、専門家じゃないんで。全然、分かんないという感じなんですけど。');
+      line(0, 'move', 'commentator', 'まあ、専門家じゃないんで。全然分かんないという感じなんですけど。');
       line(0, 'move', 'host', 'はい、どうもありがとうございました。');
       react(0, 'castHumble', 2);
     }
@@ -665,8 +756,20 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if ((spec.gameNo ?? 0) > 1) {
       line(0, 'move', 'reader', `先手は${black.name}${black.dan}です。それでは、対局を開始してください。`);
     } else {
+      // 振り駒の前に「先手どっち」、結果の読み上げのあとに反応(27章)。格上が先手なら「勝ったわ」、後手なら「アカン」。
+      comment(0, 'move', 'furigomaWho');
       line(0, 'move', 'reader', `振り駒の結果、先手は${black.name}${black.dan}に決まりました。それでは、お願いいたします。`);
-      comment(0, 'move', 'furigoma', { name: shortName('black') });
+      const after = { lag: 1100 };
+      comment(0, 'move', 'furigoma', { name: fan('black') }, 1, '', after);
+      if (stronger === 'black' && rng.next() < 0.7) comment(0, 'move', 'furigomaWin', { name: fan('black') }, 1, '', after);
+      // 視聴者は羽音を「羽音ちゃん」、ほかの棋士を「○○先生」と呼ぶ。
+      else if (stronger === 'white') comment(0, 'move', 'furigomaLose', { name: players.white?.story === HANANE ? '羽音ちゃん' : `${fan('white')}先生` }, 1, '', after);
+      if (rng.next() < 0.2) comment(0, 'move', 'chi', { name: fan('white') }, 1, '', after);
+    }
+    // 格上の棋士の心の声を、視聴者が想像する(27章)。番勝負は肩書(竜王・名人)、ほかは段位。
+    if (stronger && players[stronger]?.kind !== 'avatar' && rng.next() < 0.5) {
+      const title = spec.kind === 'finals' ? (spec.event === 'meijin' ? '名人' : '竜王') : (players[stronger]?.dan || '先生');
+      comment(0, 'move', 'kimino', { name: fan(stronger), title });
     }
     comment(0, 'move', 'start', {}, 3);
     if (cast.voice === 'polite' && rng.next() < 0.3) react(0, 'castGood');
@@ -717,6 +820,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   const lastRookAt = { black: -9, white: -9 };
   let previousTime = 999;
   let longThinks = 0;
+  /** 27章: 駒を取らずに成った駒(次の手で、その駒が動かなければ「成った意味が無い」)。 */
+  const promotedQuiet = { black: null, white: null };
 
   /**
    * 1手を足す。
@@ -743,14 +848,25 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     // 25章: 初手の前の戦型予想と、初手の驚き。
     if (at === 1) {
       comment(at, 'think', 'openingGuess', {}, rng.next() < 0.5 * density ? 2 : 1);
+      // 27章: 対局者の得意戦法から予想する(角換わりの得意な棋士なら、千日手からの一手損も)。
+      for (const guessSide of /** @type {const} */ (['white', 'black'])) {
+        const favorite = favoriteOpening(players[guessSide]);
+        if (favorite && rng.next() < 0.6) comment(at, 'think', 'openingGuessFav', { opening: favorite, name: fan(guessSide) });
+        if (/角換わり|一手損/.test(favorite) && once('senichite')) maybe(0.5, at, 'think', 'senichite');
+      }
       if (!['7g7f', '2g2f'].includes(entry.move)) comment(at, 'move', 'firstSurprise', {}, 2, '', { size: 'big' });
+      else if (entry.move === '7g7f' && rng.next() < 0.3) {
+        comment(at, 'move', 'doyomeki');
+        comment(at, 'move', 'ooSugi', { move: bareMove(text) }, 1, '', { lag: 1200 });
+      }
     }
     // 25章: 序盤に角道を止める手(先手の6六歩・後手の4四歩)。角が初めの升にいるときだけ。
     const closesBishop = at <= 16 && facts?.kind === 'P' && !facts.drop
       && ((side === 'black' && entry.move === '6g6f' && pieceAt(sfenBefore, '8h') === 'B') || (side === 'white' && entry.move === '4c4d' && pieceAt(sfenBefore, '2b') === 'b'));
     if (closesBishop && once('bishop-close')) {
       maybe(0.4, at, 'think', 'bishopCloseGuess');
-      comment(at, 'move', 'bishopClose', { move: text }, 2);
+      comment(at, 'move', 'bishopClose', { move: bareMove(text) }, 2);
+      if (isFuri(favoriteOpening(players[side]))) maybe(0.7, at, 'move', 'bishopCloseFuri');
     }
 
     // 考慮中(指す前): 予想・長考と秒読み。
@@ -761,6 +877,9 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         predictedAt = at;
       }
     }
+    // 27章: 読み筋の1手目が香車を上がる手(穴熊に組む・端攻め)。
+    const predictedParts = parseUsiMove(predicted);
+    if (predictedParts?.from && /^[Ll]$/.test(pieceAt(sfenBefore, predictedParts.from) ?? '') && once(`kyosha:${side}`)) maybe(0.5, at, 'think', 'kyosha');
     if (entry.time >= LONG_THINK_SECONDS) {
       longThinks += 1;
       if (once(`long:${side}`) || rng.next() < 0.5) line(at, 'think', 'commentator', speak(cast, `${call(side)}、ここで長考に入りました。`, `${call(side)}、ここで長考に入った。`));
@@ -771,7 +890,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         line(at, 'think', 'commentator', speak(cast, '落ち着いていますね。表情からは何も読めません。', '……変わらない。いつも通り。', '変わらない。いつも変わらないですね。'));
       }
       comment(at, 'think', 'longThink', {}, 2);
-      maybe(0.45, at, 'think', 'neta');
+      maybe(0.45, at, 'think', 'neta', { title: recordTitle });
       if (predicted) {
         const guess = moveTextOf(sfenBefore, predicted, previousUsi);
         if (!/[a-z*]/.test(guess)) maybe(0.5, at, 'think', 'room', { move: guess });
@@ -817,6 +936,42 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       if (['B', 'R', 'P'].includes(facts.kind) && !facts.drop && !facts.promote && (zone(facts.to) || (facts.from && zone(facts.from)))
         && once(`no-promote:${side}`)) maybe(0.6, at, 'move', 'noPromote');
       if (entry.time <= 10 && previousTime <= 10 && at > 40) maybe(0.1, at, 'move', 'tempo');
+
+      // ---- 27章: 盤の上の事実から言える見せ場(どれも1局に1回まで)。
+      const boardBefore = parseSfenState(sfenBefore).board;
+      const bare = bareMove(text);
+      const fresh = !bare.startsWith('同');
+      // 序盤の端歩(1筋・9筋の歩を突く)。
+      if (facts.kind === 'P' && !facts.drop && !facts.captured && at <= 24 && [1, 9].includes(squareXY(facts.to).x) && once(`hashi:${side}`)) maybe(0.6, at, 'move', 'hashi');
+      // 玉が盤の真ん中より前へ出た。
+      if (facts.kingMove && relativeRank(facts.to, side) <= 5 && once('uchu')) comment(at, 'move', 'uchu', {}, 1, '', { size: 'big' });
+      // 中盤からの角打ち(角を合わせて消せる)。
+      if (facts.drop && facts.kind === 'B' && at >= 15 && once(`kaku-awase:${side}`)) maybe(0.35, at, 'move', 'kakuAwase');
+      // 角が遠くまで動いた(初心者のつぶやき)。
+      if ((facts.kind === 'B' || facts.kind === '+B') && facts.from && distance(facts.from, facts.to) >= 5 && once('bishop-wonder')) maybe(0.3, at, 'move', 'bishopWonder');
+      // 大駒が自陣のほうへ引いた(「6八角？」)。
+      if (MAJOR.has(facts.kind) && facts.from && !facts.captured && fresh && at >= 16
+        && relativeRank(facts.to, side) > relativeRank(facts.from, side) && once(`retreat:${side}`)) maybe(0.3, at, 'move', 'retreat', { move: bare });
+      // 駒を取らずに成った駒が、次の手番で動かなかった。
+      const quiet = promotedQuiet[side];
+      if (quiet && quiet.at === at - 2) {
+        if (facts.from !== quiet.square && boardBefore.get(quiet.square)?.color === side && once(`naru-imi:${side}`)) maybe(0.4, at, 'move', 'naruImi');
+        promotedQuiet[side] = null;
+      }
+      if (facts.promote && !facts.captured && facts.kind !== 'B' && facts.kind !== 'R') promotedQuiet[side] = { square: facts.to, at };
+      // 直前の相手の手で大駒に当たりがかかったのに、逃げずに別の手(王手の受けは除く)。
+      const lastTo = parseUsiMove(previousUsi)?.to;
+      if (lastTo && !isKingAttacked(boardBefore, side) && facts.to !== lastTo && once(`mushi:${side}`)) {
+        const hanging = [...boardBefore].filter(([square, piece]) => piece.color === side && MAJOR.has(piece.kind)
+          && square !== facts.from && attackersOf(boardBefore, square, other(side)).some(({ square: from }) => from === lastTo));
+        if (hanging.length) maybe(0.5, at, 'move', 'mushi');
+        else said.delete(`mushi:${side}`);
+      }
+      // 終盤、自玉が薄いのに、当たりの飛車を逃がした(格言の逆)。
+      if ((facts.kind === 'R' || facts.kind === '+R') && facts.from && !facts.captured && at > plan.middleEnd
+        && attackersOf(boardBefore, facts.from, other(side)).length && (kingGuard(sfenBefore, side)?.guards ?? 9) <= 1 && once('hisha-kawaii')) {
+        maybe(0.6, at, 'move', 'hishaKawaii');
+      }
     }
 
     // 実況(駒を打つ・取る・長考のあとの手)。
@@ -846,6 +1001,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           line(at, 'move', 'commentator', speak(cast, '角を持ち合うと、打ち込みのすきに気をつける将棋になりますね。', '角を持ち合うと、打ち込みのすきに気をつける将棋になる。'));
         }
         comment(at, 'move', 'bishop', {}, 2);
+        maybe(0.4, at, 'move', 'kiai');
         newbie(at, 'move', 'bishop');
       } else {
         comment(at, 'move', 'major', { piece: PIECE_NAMES[facts.captured] }, 2);
@@ -858,6 +1014,10 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
             react(at, 'castDousuru');
           }
         } else if (rng.next() < 0.5) line(at, 'move', 'host', `${PIECE_NAMES[facts.captured]}を取った！`);
+      }
+      // 27章: 序盤に角を取って成る(「8八かくなり～」)。
+      if (facts.captured === 'B' && facts.kind === 'B' && facts.promote && at < 30 && !bareMove(text).startsWith('同') && once('kakunari')) {
+        maybe(0.6, at, 'move', 'kakunari', { sq: bareMove(text).replace(/角成$/, '') });
       }
       if (facts.captured === 'B') lastBishopCapture = at;
     } else if (facts?.captured && rng.next() < 0.3) {
@@ -889,6 +1049,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         formationsSeen.battle = formations.battle;
         line(at, 'move', 'commentator', speak(cast, `戦型は${formations.battle}になりました。`, `戦型は${formations.battle}。`));
         comment(at, 'move', 'formation', { name: formations.battle });
+        maybe(0.3, at, 'move', 'formationSure', { name: formations.battle, short: shortOpening(formations.battle), side: '' });
       }
       // 対抗形・相振り飛車(両方の飛車の形が分かったとき)。
       if (rook('black') && rook('white') && once('battle-kind')) {
@@ -903,6 +1064,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         const shown = [formations.battle, rook(color)].filter(Boolean);
         if (favorite && shown.some((name) => name.includes(favorite) || favorite.includes(name)) && once(`specialty:${color}`) && rng.next() < 0.8) {
           comment(at, 'move', 'specialty', { name: shortName(color), opening: favorite });
+          maybe(0.5, at, 'move', 'treasure');
         }
       }
       for (const color of /** @type {const} */ (['black', 'white'])) {
@@ -912,6 +1074,13 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
             line(at, 'move', 'host', `${SIDE_NAME[color]}は${rook(color)}だね！`);
             comment(at, 'move', 'formation', { name: rook(color) });
             if (isFuri(rook(color))) maybe(0.6, at, 'move', 'furi', { name: rook(color) });
+            // 27章: 得意戦法どおりなら当然と受け止め、その側が苦しければ心配する(名詞は判定した戦法)。
+            const name = rook(color);
+            const favorite = favoriteOpening(players[color]);
+            const values = { name, short: shortOpening(name), side: SIDE_NAME[color] };
+            const colorRate = color === 'black' ? rateAfter : 1 - rateAfter;
+            if (colorRate <= 0.4) maybe(0.6, at, 'move', 'formationHard', values);
+            else if (favorite && (name.includes(favorite) || favorite.includes(name))) maybe(0.6, at, 'move', 'formationSure', values);
           }
         }
         const castleKey = color === 'black' ? 'castleBlack' : 'castleWhite';
@@ -921,7 +1090,11 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           if (rng.next() < 0.6) line(at, 'move', 'commentator', speak(cast, 'しっかり囲いましたね。これで戦いの準備ができました。', 'しっかり囲った。これで戦いの準備ができた。'));
           comment(at, 'move', 'castle', { name: castle(color) });
           const guard = kingGuard(sfenAfter, color);
-          if (/穴熊/.test(castle(color)) && once(`anaguma-go:${color}`)) maybe(0.6, at, 'move', 'anagumaGo', { name: shortName(color) });
+          if (/穴熊/.test(castle(color)) && once(`anaguma-go:${color}`)) maybe(0.6, at, 'move', 'anagumaGo', { name: fan(color), opp: fan(other(color)) });
+          // 27章: 珍しい囲い(「まさかのミレニアム」)と、発展形(「ここからエルモでもいいぞ」)。
+          if (RARE_CASTLE.test(castle(color))) maybe(0.7, at, 'move', 'rareCastle', { castle: castle(color).replace(/囲い$/, '') });
+          const next = CASTLE_NEXT.find(([pattern]) => pattern.test(castle(color)))?.[1];
+          if (next && at < plan.middleEnd) maybe(0.4, at, 'move', 'evolve', { next });
           if (guard?.anaguma) maybe(0.6, at, 'move', 'anaguma', { side: SIDE_NAME[color] });
           else if (guard && guard.guards >= 3) maybe(0.35, at, 'move', 'kingSolid', { side: SIDE_NAME[color], n: guard.guards });
           newbie(at, 'move', 'castle', { name: castle(color) }, 0.45);
@@ -947,6 +1120,15 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     }
 
     if (entry.mark === 'book' && bookRun && (at === 10 || at === 20)) maybe(0.45, at, 'move', 'kifu', { at });
+    // 27章: 定跡の手への通の一言(歩は「現代的」、角は「よく指す手」)。
+    if (entry.mark === 'book' && facts && !facts.captured && !facts.drop && at >= 6 && at <= 30 && !bareMove(text).startsWith('同')) {
+      // それぞれ1局に1回(言わなかった手は数えず、次の機会を待つ)。
+      const pool = facts.kind === 'P' && at >= 10 ? 'modern' : facts.kind === 'B' ? 'often' : '';
+      if (pool && !said.has(pool) && rng.next() < Math.min(0.9, (pool === 'modern' ? 0.12 : 0.4) * density)) {
+        said.add(pool);
+        comment(at, 'move', pool, { move: bareMove(text) });
+      }
+    }
 
     // 駒割り勢(駒を取った手のあと、12手あけて)と、素人の形勢判断(駒の数と評価値が食い違うとき。AI勢が答える)。
     if (facts?.captured && at >= 16 && at - lastMaterial >= 12 && rng.next() < Math.min(0.9, 0.4 * density)) {
@@ -1017,6 +1199,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       }
       if (heavy) {
         comment(at, 'move', 'chaos', {}, 2);
+        if (players[side]?.kind !== 'avatar' && once('chaos-harsh')) maybe(0.5, at, 'move', 'chaosHarsh');
         under(at, rng.next() < 0.5 ? 'sasshi' : 'oi', 0.5);
       }
       if (collapse) {
@@ -1033,6 +1216,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       if (Math.abs(fromRate - toRate) >= 2) line(at, 'move', 'host', `勝率が、${SIDE_NAME[side]}${fromRate}%から${toRate}%に動いたよ。`);
       comment(at, 'move', 'swing', {}, heavy ? 3 : 2);
       if (rng.next() < 0.6) comment(at, 'move', 'aiBest', { best: bestText });
+      // 27章: AIの推奨が駒を打つ手だった(「7一銀打ちてえええ」)。
+      if (entry.best.includes('*') && bareMove(bestText).endsWith('打') && once(`utitai:${side}`)) maybe(0.5, at, 'move', 'utitai', { best: bareMove(bestText) });
       maybe(0.35, at, 'move', 'roomSwing', { best: bestText });
       if (heavy) hype(at, 1);
       lastAi = at;
@@ -1062,6 +1247,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       onlyCount += 1;
       line(at, 'move', 'commentator', speak(cast, `${text}、見事な一手です。ここはこれしかありませんでした。`, `${text}、見事な一手。ここはこれしかなかった。`));
       comment(at, 'move', 'only', {}, 2, 'gold');
+      maybe(0.25, at, 'move', 'chi', { name: fan(other(side)) });
       under(at, onlyCount === 1 ? 'god' : 'nattoku', 0.7);
       if (rng.next() < 0.5) comment(at, 'move', 'castAgree');
       maybe(0.45, at, 'move', 'roomOnly');
@@ -1095,6 +1281,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (at > plan.openingEnd + 4 && at < plan.middleEnd && Math.abs(rateAfter - 0.5) < 0.05 && once('balanced') && rng.next() < 0.7) {
       line(at, 'move', 'commentator', speak(cast, '形勢は互角。どちらも譲りませんね。', '互角。……どっちも引かない。',
         'まあ非常に、えー拮抗しているというか。まあ、あと、大きなところでの対局が多いという印象が、ありますね。はい。'));
+      if (cast.voice === 'yoshihiko') react(at, 'castSo');
     }
     // 中盤で大きく差がついた(気の早い視聴者)。
     if (at > plan.openingEnd && at <= plan.middleEnd && moverRate(rateAfter) >= 0.8 && once('bath')) maybe(0.7, at, 'move', 'bath');
@@ -1105,6 +1292,10 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     }
 
     // 局面の節目。
+    // 27章: 序盤の終わりに差がついていたら「序盤は○○」。早く終盤になったら「もう終盤？」。
+    if (at === plan.openingEnd && Math.abs(rateAfter - 0.5) >= 0.1) maybe(0.5, at, 'move', 'joban', { name: fan(rateAfter >= 0.5 ? 'black' : 'white') });
+    // 終盤の始まりは筋書きで76〜96手目。早いほう(80手目まで)なら「もう終盤？」。
+    if (at === plan.middleEnd && at <= 80) maybe(0.45, at, 'move', 'mouEnd');
     if (at === plan.openingEnd && once('middle')) {
       line(at, 'move', 'commentator', speak(cast, 'ここから中盤戦。両者、作戦の方向がはっきりしてきました。', 'ここから中盤戦。両者の作戦の方向が、はっきりしてきた。'));
     }

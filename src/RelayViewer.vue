@@ -320,10 +320,11 @@ const errorText = ref("");
 const statusText = ref("");
 /** 台本を足した手の数(作られた手のうち、次の手が来た分と、終局した最後の手)。再生はここまで進められる。 */
 const ready = ref(0);
-const lines = shallowRef<any[]>([]);
-const comments = shallowRef<any[]>([]);
-const thoughts = shallowRef<any[]>([]);
-const cards = shallowRef<Card[]>([]);
+// 対局開始前(手数0)の言葉とコメントは、台本を作ったときにもうある。1手目の棋譜ができる前から見せる(27章)。
+const lines = shallowRef<any[]>([...script.lines]);
+const comments = shallowRef<any[]>([...script.comments]);
+const thoughts = shallowRef<any[]>([...script.thoughts]);
+const cards = shallowRef<Card[]>([...script.cards]);
 let formationState = createFormationState();
 let timeline = relayTimeline({ entries: [] }, control);
 
@@ -557,12 +558,16 @@ function spawn(at: number, when: string) {
   const bottom = items.filter((item) => item.pos === "bottom");
   if (bottom.length) showUnder(bottom[bottom.length - 1].text);
   if (reducedMotion) return;
+  // 解説へのつっこみ・振り駒の結果への反応(lag)は、解説の言葉が出てから流す(27章)。ほかは順に0.38秒ずつ。
+  let plain = 0;
+  let lagged = 0;
   const added = items.filter((item) => item.pos !== "top" && item.pos !== "bottom").map((item, index) => {
     laneCursor = (laneCursor + 1 + (index % 2)) % COMMENT_LANES;
     flyId += 1;
+    const delay = item.lag ? item.lag / Math.sqrt(speed.value) + (lagged++) * 450 : (plain++) * 380;
     return {
       id: flyId, text: item.text, tone: item.tone ?? "", big: item.size === "big", lane: laneCursor,
-      delay: index * 380, duration: (COMMENT_MS * (item.size === "big" ? 1.15 : 1)) / Math.sqrt(speed.value),
+      delay, duration: (COMMENT_MS * (item.size === "big" ? 1.15 : 1)) / Math.sqrt(speed.value),
     };
   });
   flying.value = [...flying.value, ...added].slice(-24);
@@ -917,9 +922,14 @@ onMounted(() => {
   }
   rootEl.value?.focus({ preventScroll: true });
   statusText.value = catchingUp.value ? `いまの局面（${props.startAt}手目）まで進めています…` : "中継の準備中…";
-  // 対局開始前の札(解説の紹介)を少し見せてから、1手目へ。途中から開いたときは、いまの手数まで追いかけてから。
+  // 対局開始前の札(解説の紹介)と、手数0のコメント(振り駒の反応・解説へのつっこみ)を流してから、1手目へ。
+  // つっこみは解説の言葉のあとに遅れて流れるので、そのぶん少し待つ(27章)。途中から開いたときは、いまの手数まで追いかけてから。
   if (catchingUp.value) playing.value = false;
-  else timer = setTimeout(schedule, 1500);
+  else {
+    spawn(0, "move");
+    const lagged = comments.value.some((item) => item.at === 0 && item.lag);
+    timer = setTimeout(schedule, lagged ? 3200 : 1500);
+  }
   const finish = (end: { winner: Side; reason: string }) => {
     endInfo.value = end;
     finished.value = true;
