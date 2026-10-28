@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mistakeReason, pieceAt, threatAdvice, withMistakeReason } from './coach-reason.mjs';
+import { mistakeReason, mistakeTarget, pieceAt, threatAdvice, withMistakeReason } from './coach-reason.mjs';
 
 // 先手が7六歩・3四歩のあと、2二の角が8八の角を取れる局面(後手の手番)。
 const OPEN = 'lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL w - 3';
@@ -72,5 +72,15 @@ describe('threatAdvice', () => {
     expect(threatAdvice({ threatSfen: OPEN, threatMove: '2b8h+', threatScore: cp(4000), playerScore: cp(-3500), playerColor: 'black' })).toBeNull();
     expect(threatAdvice({ threatSfen: OPEN, threatMove: '8c8d', threatScore: cp(900), playerScore: cp(0), playerColor: 'black' })).toBeNull();
     expect(threatAdvice({ threatSfen: OPEN, threatMove: '2b8h+', threatScore: { type: 'mate', value: 5 }, playerScore: cp(0) })).toBeNull();
+  });
+});
+
+describe('mistakeTarget(N2 盤の赤い輪)', () => {
+  it('取られちゃうと言う駒の升を返し、取り返せる交換や歩では返さない', () => {
+    // 先手が5五に銀を出し、後手の5四の歩…ではなく、後手の飛車が5五の銀を取る。
+    expect(mistakeTarget({ sfenAfter: '4k4/4r4/9/9/4S4/9/9/9/4K4 w - 1', pv: ['5b5e'], playerColor: 'black' })).toBe('5e');
+    expect(mistakeTarget({ sfenAfter: '4k4/4r4/9/9/4S4/9/9/4R4/4K4 w - 1', pv: ['5b5e', '5h5e'], playerColor: 'black' })).toBe('');
+    expect(mistakeTarget({ sfenAfter: '4k4/4r4/9/9/4P4/9/9/9/4K4 w - 1', pv: ['5b5e'], playerColor: 'black' })).toBe('');
+    expect(mistakeTarget({ sfenAfter: '4k4/4r4/9/9/9/9/9/9/4K4 w - 1', pv: [], playerColor: 'black' })).toBe('');
   });
 });

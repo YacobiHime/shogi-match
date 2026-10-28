@@ -1473,6 +1473,59 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* もう一言(N11)。「なぜ？」の小さなボタンと、足した1行。顔を押すとさっきの話。 */
+.shogi-game__why {
+  flex: none;
+  align-self: center;
+  min-height: 32px;
+  padding: 0 0.6em;
+  border: 1px solid var(--line, rgba(29, 48, 63, 0.3));
+  border-radius: 999px;
+  color: inherit;
+  background: rgba(255, 252, 244, 0.6);
+  font: inherit;
+  font-size: 0.8em;
+  font-weight: 800;
+  cursor: pointer;
+}
+.shogi-game__dialogue-reason {
+  display: block;
+  margin-top: 0.25em;
+  font-size: 0.86em;
+  opacity: 0.85;
+}
+.shogi-game__portrait { position: relative; }
+.shogi-game__portrait-talk {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+/* 台詞の欄の上に重ねる(やこび姫の欄の中に収め、画面の端で切れないように)。 */
+.shogi-game__talk {
+  position: absolute;
+  left: 0.3em;
+  bottom: 0.3em;
+  z-index: 30;
+  display: grid;
+  gap: 0.3em;
+  width: min(22em, calc(100% - 0.6em));
+  max-height: calc(100% - 0.6em);
+  padding: 0.6em 0.75em;
+  overflow: auto;
+  border: 2px solid #f1a54c;
+  border-radius: 0.6em;
+  color: #1d303f;
+  background: #fffcf4;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+.shogi-game__talk p { margin: 0; }
+.shogi-game__talk small { margin-right: 0.4em; color: #8a6a3a; font-weight: 800; }
+.shogi-game__talk-title { font-weight: 900; color: #b5651d; }
 .shogi-game__dialogue-text rt {
   font-size: 0.55em;
   color: var(--muted);

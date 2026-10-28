@@ -439,7 +439,36 @@ describe("match screen regressions", () => {
   });
 
   it("announces the hint like a mentor naming the best move", () => {
-    expect(source).toMatch(/hintText\.value = hintMoveText\(\{\s*moveText: formatSpokenMove\(bestHint\.move, currentSfen\.value\),/);
+    expect(source).toMatch(/const answerText = hintMoveText\(\{\s*moveText: formatSpokenMove\(bestHint\.move, currentSfen\.value\),/);
+  });
+
+  it("閃きは、言葉 → 動かす駒 → 矢印の3段階。1回分で3段目まで見られ、棋譜検討と「すぐ答え」はすぐ矢印(N7)", () => {
+    expect(source).toMatch(/if \(reviewMode\.value \|\| hintStyle\.value === "instant"\) \{\s*hintStage\.value = 0;\s*hintCandidates\.value = arrowMoves;/);
+    expect(source).toMatch(/hintStage\.value = 1;\s*hintCandidates\.value = \[\];\s*hintText\.value = hintStageOneLine\(/);
+    // 2・3段目は読み直さず、回数も減らさない。
+    expect(source).toMatch(/if \(hintStage\.value > 0 && hintStage\.value < 3 && advanceHintStage\(\)\) return;\s*thinking\.value = true;/);
+    expect(source).toMatch(/hintsRemaining\.value > 0 \|\| \(hintStage\.value > 0 && hintStage\.value < 3\)/);
+    expect(source).toMatch(/const boardSquareMarks = computed\(\(\) => \[\.\.\.boardEscapeMarks\.value, \.\.\.hintPieceMarks\.value\]\);/);
+  });
+
+  it("格言(N6)と大会の物語(N9)は、ほかに言うことがない手番だけ。格言は格言帳に入れる", () => {
+    expect(source).toMatch(/riskAdvice \?\? proverbLine \?\? storyLine\);/);
+    expect(source).toMatch(/recordProverb\(browserStorage\(\), proverbLine\.dex\)\.isNew/);
+    expect(source).toMatch(/const quietTurn = !winningMate && !moveFeedback && !urgentAdvice && !threatLine && !policyLine && !planLine;/);
+  });
+
+  it("「なぜ？」で理由を1行足し、顔を押すとさっきの話(N11)。戻る操作で閉じる", () => {
+    expect(source).toMatch(/v-if="adviceReasonText && !hintText && !reasonShown"[\s\S]{0,120}data-coach-why/);
+    expect(source).toMatch(/data-coach-talk\s+@click="talkOpen = !talkOpen"/);
+    expect(source).toMatch(/\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;/);
+    expect(source).toMatch(/currentAdviceKey\.value = advice\.key;\s*guideText\.value = advice\.text;/);
+  });
+
+  it("相手の狙いは点線の矢印、悪手で取られる駒は赤い輪で盤に出し、指したら消す(N2)", () => {
+    expect(source).toMatch(/threatArrow\.value = \{ usi: mateThreatResult\.best\.move, color: humanColor\.value === Color\.WHITE \? "black" : "white" \};/);
+    expect(source).toMatch(/mistakeRingSquare\.value = mistakeTarget\(\{/);
+    expect(source).toMatch(/clearHintMarks\(\{ keepMistakeRing: actor !== "player" \}\);/);
+    expect(source).toMatch(/:threat-arrows="boardThreatArrows"/);
   });
 
   it("draws detour arrows from opening-compatible candidates", () => {
@@ -801,7 +830,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/\} else if \(dexShelfOpen\.value\) \{\s*dexShelfOpen\.value = false;/);
   });
   it("やこび姫の作戦の助言は、危険の知らせのあと・ほかの助言の前に、確かめの読みを通してから出す(docs/coach-plan-advice-design.md)", () => {
-    expect(source).toMatch(/const chosen = moveFeedback \?\? \(winningMate \? null : urgentAdvice \?\? threatLine \?\? planLine \?\? riskAdvice\);/);
+    // 王手・詰まされる知らせ → 終盤の方針(N3) → 詰めろ・評価の崖 → 相手の狙い → 作戦の提案 → ほかの知らせ。
+    expect(source).toMatch(/\?\? \(winningMate \? null : urgentFirst \?\? policyLine \?\? urgentAdvice \?\? threatLine \?\? planLine \?\? riskAdvice \?\? proverbLine \?\? storyLine\);/);
     expect(source).toMatch(/URGENT_RISK_ADVICE = \/\^\(forced-mate-loss\|king-in-check\|mate-risk\|candidate-evaluation-cliff\)\//);
     // 浅い読みの候補から提案を作り、2手に絞った読みで確かめる。
     expect(source).toMatch(/const proposal = planAdvice\(\{[\s\S]{0,1200}?searchMoves: \[proposal\.swingMove, proposal\.otherMove\][\s\S]{0,400}?confirmPlanAdvice\(proposal,/);
@@ -910,7 +940,7 @@ describe("match screen regressions", () => {
     // 観戦記は終局で書き、結果の窓から読める。重ねたシートは戻る操作で閉じ、開いているあいだは秒読みを止める。
     expect(source).toMatch(/if \(tournamentFinish\) \{\s*writeTitleKansenki\(outcome === "win", matchResult\.moveCount\);\s*recordTitleMeal\(outcome === "win"\);/);
     expect(source).toMatch(/v-if="resultKansenki"[^>]*data-kansenki-open/);
-    expect(source).toMatch(/\} else if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(daySummaryOpen\.value\) \{/);
+    expect(source).toMatch(/\} else if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;\s*\} else if \(daySummaryOpen\.value\) \{/);
     expect(source).toMatch(/\|\| daySummaryOpen\.value,/);
   });
   it("勝負メシは、選ぶと札と一言が出て、午後のほめ言葉・控室・勝ちメシにつながる(docs/title-match-day-design.mdの8章)", () => {

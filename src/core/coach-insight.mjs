@@ -5,6 +5,8 @@
  * - N5 相手のミス: CPUが読みの最善より大きく悪い手を指したとき
  * - N8 弱点の記憶: 前の対局の弱点(play-insight.mjsのdetectWeaknesses)を、始めの一言と乗り越えたときのほめ言葉に使う
  * - N10 ほめる: AIと同じ手の連続・狙いを受けた・自分で詰ませた・チャンスを生かした
+ * 段階2(10章): N7 閃きの3段階(言葉 → 動かす駒 → 矢印)・N3 終盤の方針(攻めるか受けるか)。
+ * 段階3(11章): N6 格言・N9 大会の物語・N11 もう一言(「なぜ？」とさっきの話)。
  * どれも、すでに読んでいる結果だけを使い、新しい探索は足さない。台詞はこのファイルにまとめる。
  */
 import { detectTesuji } from './move-tesuji.mjs';
@@ -12,7 +14,7 @@ import { exchangeGain, captureSwing } from './exchange-eval.mjs';
 import { value } from './logic-position.mjs';
 import { mateLineByChecks } from './engine-mate-check.mjs';
 import {
-  applyUsiToBoard, attackedSquares, findKing, isKingAttacked, opponentOf, parseSfenState, parseUsiMove, squareXY,
+  applyUsiToBoard, attackedSquares, attackersOf, findKing, isKingAttacked, opponentOf, parseSfenState, parseUsiMove, squareXY,
 } from './piece-movement.mjs';
 
 const PIECE_NAMES = Object.freeze({
@@ -153,6 +155,8 @@ function comparable(score) {
 
 /** 見逃したタダの駒として言う、取れた駒の最小の値打ち(銀以上)。 */
 const MISSED_CAPTURE_MIN = value('S');
+/** 見逃した詰みとして言う、いちばん長い手数(これより長い詰みは、勝ちの局面の一手の違いにすぎない)。 */
+export const MISSED_MATE_MAX_PLIES = 9;
 /** 見逃しとして言う、指した手の損(プレイヤーから見た点)。 */
 export const MISSED_LOSS = 300;
 
@@ -165,7 +169,9 @@ export const MISSED_LOSS = 300;
  */
 export function missedChanceAdvice({ sfenBefore, playedUsi, before = null, after = null, beforePv = [] }) {
   if (!before || !after) return null;
+  // 長い詰み(MISSED_MATE_MAX_PLIESより長い)は、見つけてほしい見逃しではないので言わない。
   if (before.type === 'mate' && before.value > 0 && !(after.type === 'mate' && after.value > 0)) {
+    if (before.value > MISSED_MATE_MAX_PLIES) return null;
     const plies = before.value;
     const byChecks = mateLineByChecks(sfenBefore, beforePv, plies);
     return {
@@ -314,4 +320,256 @@ export function insightPraise({ aiStreak = 0, defendedThreat = false, seizedChan
 /** 自分の力で詰ませたときの一言(閃きを使わずに、詰ませる手を指した)。 */
 export function selfMatePraise(plies = 0) {
   return Number.isInteger(plies) && plies > 1 ? `自分の力で${plies}手の詰みを読みきったね！ お見事！` : '自分の力で詰ませたね！ お見事！';
+}
+
+// ---- 段階2(docs/coach-advice-expansion-design.mdの10章)。N7 閃きの3段階・N3 終盤の方針。
+
+/** 閃きの出し方(N7)。staged: 言葉 → 動かす駒 → 矢印の3段階。instant: すぐ答え(今までどおり)。 */
+export const HINT_STYLES = Object.freeze(['staged', 'instant']);
+export const HINT_STYLE_KEY = 'yacobihime:shogi-match:hint-style:v1';
+
+/**
+ * 閃きの出し方を読む。読めなければ段階(おすすめ)。
+ * @param {Pick<Storage, 'getItem'> | null | undefined} storage
+ * @returns {'staged' | 'instant'}
+ */
+export function loadHintStyle(storage) {
+  try {
+    const value = storage?.getItem(HINT_STYLE_KEY);
+    return value === 'instant' ? 'instant' : 'staged';
+  } catch {
+    return 'staged';
+  }
+}
+
+/**
+ * @param {Pick<Storage, 'setItem'> | null | undefined} storage
+ * @param {'staged' | 'instant'} style
+ */
+export function saveHintStyle(storage, style) {
+  try {
+    storage?.setItem(HINT_STYLE_KEY, style === 'instant' ? 'instant' : 'staged');
+  } catch {
+    // 保存できなくても、その対局のあいだは選んだ出し方で遊べる。
+  }
+}
+
+/**
+ * 閃きの1段目(N7)。最善手の種類だけを言う(答えの手は言わない)。詰みがあるときは詰みを先に言う。
+ * @param {ReturnType<typeof moveMeaning>} meaning
+ * @param {{ mate?: { plies: number, byChecks: boolean | null } | null }} [options]
+ */
+export function hintStageOneLine(meaning, { mate = null } = {}) {
+  if (mate && Number.isInteger(mate.plies) && mate.plies > 0) {
+    return mate.byChecks === true
+      ? `${mate.plies}手詰めがあるよ！ 王手の続く手から探してみよう`
+      : `${mate.plies}手で詰ませる手順があるよ！ 相手の玉の逃げ道から考えてみよう`;
+  }
+  const name = PIECE_NAMES[meaning?.piece ?? ''] ?? '';
+  switch (meaning?.kind) {
+    case 'free-capture': return 'タダで取れる駒があるよ。どの駒にも守られていない相手の駒を探してみて';
+    case 'tesuji': return TESUJI_HINT_LINES[meaning.tesuji ?? ''] ?? '手筋が使えそうだよ！';
+    case 'capture-gain': return '駒得できる取りがあるよ。取れる駒を探してみて';
+    case 'check': return '王手をかける手だよ。相手の玉に迫ってみよう';
+    case 'escape': return `ねらわれている${name || '駒'}を逃がす手だよ`;
+    case 'drop': return `持ち駒の${name}を使う手があるよ`;
+    case 'activate': return `${name}をもっと働かせる手だよ`;
+    case 'defend': return '守りの手だよ。玉のまわりを固めてみよう';
+    case 'capture': return '駒を取る手だよ。どの駒で取るかがポイント';
+    default: return 'じっくり形を良くする手だよ。駒の働きを考えてみて';
+  }
+}
+
+/**
+ * 閃きの2段目(N7)。動かす駒を言う(盤では、その駒の升を緑で光らせる)。打つ手は持ち駒の名前。
+ * @param {{ drop?: boolean, piece?: string }} input pieceはSFENの駒の文字(成り駒は'+'付き)
+ */
+export function hintStageTwoLine({ drop = false, piece = '' }) {
+  const name = PIECE_NAMES[piece] ?? '駒';
+  return drop ? `持ち駒の${name}を打つ手だよ！ どこに打つかな？` : `緑に光っている${name}を動かす手だよ！ どこへ動かす？`;
+}
+
+/** この手数からは終盤として方針を言う(N3)。 */
+export const ENDGAME_PLY = 60;
+/** これより前は、玉のまわりの様子に関係なく終盤とみなさない。 */
+const ENDGAME_EARLIEST_PLY = 30;
+/** 玉のまわり8升のうち、相手の利きがこれだけあれば、玉のまわりで戦いが始まったとみなす。 */
+const KING_PRESSURE_SQUARES = 3;
+
+/**
+ * 終盤か(N3)。61手目から、または31手目からで、どちらかの玉のまわりに相手の利きが集まっているとき。
+ * @param {string} sfen
+ * @param {number} ply いま何手目まで指したか
+ */
+export function isEndgame(sfen, ply) {
+  if (ply >= ENDGAME_PLY) return true;
+  if (ply < ENDGAME_EARLIEST_PLY) return false;
+  const { board } = parseSfenState(sfen);
+  for (const color of ['black', 'white']) {
+    const king = findKing(board, color);
+    if (!king) continue;
+    const { x, y } = squareXY(king);
+    let pressed = 0;
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        if ((!dx && !dy) || x + dx < 1 || x + dx > 9 || y + dy < 1 || y + dy > 9) continue;
+        const square = `${x + dx}${String.fromCharCode(96 + y + dy)}`;
+        if (attackersOf(board, square, opponentOf(color)).length) pressed += 1;
+      }
+    }
+    if (pressed >= KING_PRESSURE_SQUARES) return true;
+  }
+  return false;
+}
+
+/**
+ * N3 終盤の「攻めるか、受けるか」。どちらの玉が先に詰むかから方針を言う。答えの手は言わない。
+ * @param {{ mateThreat: boolean, bestGivesCheck: boolean, bestGivesMateThreat?: boolean | null, bestIsDefensive?: boolean,
+ *   playerScore?: { type: string, value: number } | null }} input
+ *   mateThreat: 自玉が詰めろか。bestGivesMateThreat: 最善手が相手玉に詰めろをかけるか(確かめていなければnull)。
+ * @returns {{ key: string, text: string } | null}
+ */
+export function endgamePolicyAdvice({ mateThreat, bestGivesCheck, bestGivesMateThreat = null, bestIsDefensive = false, playerScore = null }) {
+  // 詰みがあるとき・詰まされるときは、詰みの一言が言う。
+  if (playerScore?.type === 'mate') return null;
+  if (mateThreat) {
+    return bestGivesCheck
+      ? { key: 'endgame-threat-check', text: '自玉に詰めろがかかってる。王手で迫りながら、しのごう！' }
+      : { key: 'endgame-threat-defend', text: '自玉に詰めろがかかってるよ。まずは受けよう！' };
+  }
+  if (bestGivesMateThreat === true && !bestGivesCheck) {
+    return { key: 'endgame-race-attack', text: '自玉はまだ安全！ 相手玉に詰めろをかけて、攻め合いで勝とう！' };
+  }
+  if (bestIsDefensive && !bestGivesCheck) {
+    return { key: 'endgame-defend-first', text: '相手の攻めのほうが速いよ。一手かけて守ろう' };
+  }
+  return null;
+}
+
+// ---- 段階3(docs/coach-advice-expansion-design.mdの11章)。N6 格言・N9 大会の物語・N11 もう一言。
+
+/** 格言(N6)。dexは手筋図鑑の項目(格言帳に入れる。図鑑にない格言は'')。 */
+export const COACH_PROVERBS = Object.freeze({
+  'idle-king': { dex: 'avoid-idle-king', text: '『居玉は避けよ』だよ。玉を横に動かして囲おう！' },
+  'king-rook': { dex: '', text: '『玉飛接近すべからず』。玉と飛車は離しておこう' },
+  'high-knight': { dex: 'high-knight', text: '『桂の高跳び歩の餌食』。その桂、歩でねらわれちゃうよ' },
+});
+/** 居玉を言うのは、この手数を過ぎてから。玉飛接近は、この手数まで。 */
+const IDLE_KING_AFTER_PLY = 24;
+const KING_ROOK_UNTIL_PLY = 40;
+
+/**
+ * 格言(N6)。AIの最善手が格言に沿うときだけ言う(桂の高跳びは、跳ねた桂が歩でねらわれたとき)。1局に1回ずつ。
+ * @param {{ sfen: string, ply: number, color: 'black' | 'white', bestMove?: string, lastPlayerMove?: string, said?: readonly string[] }} input
+ *   sfen: プレイヤーの手番の局面。lastPlayerMove: プレイヤーが前に指した手。said: この対局で言った格言。
+ * @returns {{ key: string, text: string, proverb: string, dex: string } | null}
+ */
+export function proverbAdvice({ sfen, ply, color, bestMove = '', lastPlayerMove = '', said = [] }) {
+  const { board } = parseSfenState(sfen);
+  const make = (proverb) => ({ key: `proverb-${proverb}`, text: COACH_PROVERBS[proverb].text, proverb, dex: COACH_PROVERBS[proverb].dex });
+  const king = findKing(board, color);
+  const home = color === 'black' ? '5i' : '5a';
+  const fromOf = (usi) => (usi && !usi.includes('*') ? usi.slice(0, 2) : '');
+  // 桂の高跳び: 前に跳ねた桂が、相手の歩に取られる升にいる。
+  const parsed = parseUsiMove(lastPlayerMove);
+  if (!said.includes('high-knight') && parsed && !parsed.drop) {
+    const knight = board.get(parsed.to);
+    const { y } = squareXY(parsed.to);
+    const deep = color === 'black' ? y <= 4 : y >= 6;
+    if (knight?.color === color && knight.kind === 'N' && deep
+      && attackersOf(board, parsed.to, opponentOf(color)).some(({ kind }) => kind === 'P')) return make('high-knight');
+  }
+  if (!bestMove) return null;
+  // 居玉: 駒の取り合いが始まった(持ち駒がある)のに、玉が初めの升のまま。最善手が玉を動かす手。
+  const anyHand = (String(sfen).replace(/^sfen\s+/, '').trim().split(/\s+/)[2] ?? '-') !== '-';
+  if (!said.includes('idle-king') && ply > IDLE_KING_AFTER_PLY && king === home && anyHand && fromOf(bestMove) === home) {
+    return make('idle-king');
+  }
+  // 玉飛接近: 玉と飛車が同じ段で隣り合い、最善手が玉か飛車を離す手。
+  if (!said.includes('king-rook') && ply <= KING_ROOK_UNTIL_PLY && king) {
+    const kingXY = squareXY(king);
+    for (const [square, piece] of board) {
+      if (piece.color !== color || piece.kind !== 'R') continue;
+      const rookXY = squareXY(square);
+      if (rookXY.y === kingXY.y && Math.abs(rookXY.x - kingXY.x) === 1 && [king, square].includes(fromOf(bestMove))) return make('king-rook');
+    }
+  }
+  return null;
+}
+
+/**
+ * 大会の物語(N9)。相手と、この1局に賭けているものに触れる。種類ごとに1局に1回。
+ * @param {{ playerScore?: { type: string, value: number } | null, previousScore?: { type: string, value: number } | null,
+ *   endgame: boolean, opponent?: { id?: string, name?: string, character?: { traits?: { id: string }[] } } | null,
+ *   stakes?: string, tone?: string, said?: readonly string[] }} input
+ *   stakes: 舞台の「勝てば○○」。tone: 番勝負のfinal・reach・kadoban。
+ * @returns {{ key: string, text: string } | null}
+ */
+export function storyAdvice({ playerScore = null, previousScore = null, endgame, opponent = null, stakes = '', tone = '', said = [] }) {
+  if (!opponent || playerScore?.type !== 'cp') return null;
+  const value = playerScore.value;
+  const has = (id) => Boolean(opponent.character?.traits?.some((trait) => trait.id === id));
+  const name = opponent.name ?? '相手';
+  const fresh = (key) => !said.includes(key);
+  if (opponent.id === 'hanane' && fresh('story-hanane-turn') && previousScore?.type === 'cp' && previousScore.value <= -300 && value >= 300) {
+    return { key: 'story-hanane-turn', text: '羽音ちゃん、悔しそう…でもまだ油断しないで！' };
+  }
+  if (has('comeback') && fresh('story-comeback') && value >= 1000) {
+    return { key: 'story-comeback', text: `${name}さんは逆転の名手。最後まで気を抜かないで！` };
+  }
+  if ((has('endgame-collapse') || has('weak-defense')) && fresh('story-endgame-weak') && endgame && Math.abs(value) < 300) {
+    return { key: 'story-endgame-weak', text: `${name}さんは終盤が苦手。ここからがチャンスだよ！` };
+  }
+  if (stakes.startsWith('勝てば') && fresh('story-stakes') && endgame && value >= 1500) {
+    return { key: 'story-stakes', text: `${stakes}！ 最後の詰みまで、丁寧にいこう` };
+  }
+  if ((tone === 'kadoban' || tone === 'final') && fresh('story-crunch') && endgame && Math.abs(value) < 300) {
+    return { key: 'story-crunch', text: 'ここが正念場。一手ずつ、落ち着いて！' };
+  }
+  return null;
+}
+
+/** 吹き出しの「なぜ？」で足す1行(N11)。助言の鍵の頭で決める。ないときは''。 */
+const ADVICE_REASONS = Object.freeze([
+  [/^candidate-evaluation-cliff-free-capture/, '相手の駒で、どの駒にも守られていない駒を探してみて。取っても取り返されないよ'],
+  [/^candidate-evaluation-cliff-capture-gain/, '取り返されても、取った駒のほうが値打ちが高ければ得だよ'],
+  [/^candidate-evaluation-cliff-check/, '王手は相手が必ず受けないといけないから、こっちが手番を握れるよ'],
+  [/^candidate-evaluation-cliff-escape/, '取られそうな駒は、取られない升へ動かすか、守りの駒を足そう'],
+  [/^candidate-evaluation-cliff-drop/, '持ち駒は好きな空き升に打てるよ。相手の駒に2つ当たる升はないかな？'],
+  [/^candidate-evaluation-cliff-activate/, '大駒は通り道が開くと、遠くまで利くよ。前にある駒をどけてみよう'],
+  [/^candidate-evaluation-cliff-defend/, '玉のまわりに金銀が多いほど、詰まされにくいよ'],
+  [/^candidate-evaluation-cliff-tesuji/, '手筋は昔から伝わる、決まりの良い手の形だよ。図鑑の「手筋」でも見られるよ'],
+  [/^candidate-evaluation-cliff-capture/, '取り合いは、最後に取ったほうが得をするか、駒の値打ちを数えてみよう'],
+  [/^candidate-evaluation-cliff$/, '上の候補と、それ以外の手で、形勢が大きく違う局面だよ。相手の駒の利きをよく見て'],
+  [/^move-missed-mate/, '王手を続けて、玉の逃げ道を1つずつふさいでいくと、詰みが見つかるよ'],
+  [/^move-missed-capture/, '指す前に「取れる駒はないかな？」と一度見るくせをつけよう'],
+  [/^move-(blunder|mistake)/, '指す前に、動かした駒が相手の駒に取られないか確かめよう（「駒の利き」が使えるよ）'],
+  [/^threat-/, '点線の矢印が相手の狙いだよ。その升を守るか、ねらわれた駒を動かそう'],
+  [/^endgame-threat/, '詰めろは「次に詰ませるぞ」という手。受けないと、次の手で負けちゃう'],
+  [/^endgame-race-attack/, '相手玉に詰めろをかけ続ければ、相手は受けるしかなくて、こっちの玉は安全なままだよ'],
+  [/^endgame-defend-first/, '相手の攻めが先に届くときは、一手守ってから攻め返そう'],
+  [/^chance-escaped-mate/, '相手が気づかなかった詰み筋があるよ。玉のまわりの穴をふさごう'],
+  [/^chance-/, '相手の今の手で、空いた升や守りの外れた駒がないか見てみよう'],
+  [/^mate-risk/, '詰めろかどうかは、相手にもう1手指させたら詰むかで考えるよ'],
+  [/^king-in-check/, '王手は、玉が逃げる・王手の駒を取る・間に駒を打つ、の3つで受けるよ'],
+  [/^proverb-idle-king/, '玉が初めの升のままだと、飛車や角の利きに入りやすくて、戦いが始まると危ないんだ'],
+  [/^proverb-king-rook/, '玉と飛車が近いと、両方まとめてねらわれやすいよ'],
+  [/^proverb-high-knight/, '桂は前にしか進めないから、跳ねすぎると逃げ場がなくなるよ'],
+]);
+export function adviceReason(key = '') {
+  // 考えているあいだの一言(idle-<種類>)は、最善手の種類の一言と同じ理由。
+  const normalized = key.replace(/^idle-(?=free-capture|capture-gain|check|escape|drop|activate|defend|tesuji|capture)/, 'candidate-evaluation-cliff-');
+  return ADVICE_REASONS.find(([pattern]) => pattern.test(normalized))?.[1] ?? '';
+}
+
+/** やこび姫の顔を押すと見られる「さっきの話」の数(N11)。 */
+export const RECENT_TALK_LIMIT = 3;
+/**
+ * さっきの話に足す(新しい順、同じ台詞は1つ)。
+ * @param {{ ply: number, text: string }[]} talk
+ * @param {{ ply: number, text: string }} line
+ */
+export function addRecentTalk(talk, line) {
+  if (!line?.text) return talk;
+  return [line, ...talk.filter(({ text }) => text !== line.text)].slice(0, RECENT_TALK_LIMIT);
 }

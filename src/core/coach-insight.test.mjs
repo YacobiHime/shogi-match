@@ -1,11 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addRecentTalk,
+  adviceReason,
+  endgamePolicyAdvice,
+  hintStageOneLine,
+  hintStageTwoLine,
   insightPraise,
+  isEndgame,
+  loadHintStyle,
   meaningAdvice,
   missedChanceAdvice,
   moveMeaning,
   opponentSlipAdvice,
+  proverbAdvice,
+  saveHintStyle,
   selfMatePraise,
+  storyAdvice,
   weaknessOvercomeLine,
   weaknessReminder,
 } from './coach-insight.mjs';
@@ -47,6 +57,10 @@ describe('N1 最善手の翻訳', () => {
 });
 
 describe('N4 見逃し', () => {
+  it('9手より長い詰みは、見逃しとして言わない', () => {
+    expect(missedChanceAdvice({ sfenBefore: '4k4/9/9/9/9/9/9/9/4K4 b R 1', playedUsi: 'R*5e', before: mate(21), after: cp(3000), beforePv: [] })).toBeNull();
+  });
+
   it('指す前にあった詰みを逃したら、王手の連続かで言い分けて知らせる', () => {
     const sfen = '4k4/9/4P4/9/9/9/9/9/4K4 b RG 1';
     expect(missedChanceAdvice({
@@ -125,5 +139,107 @@ describe('N10 ほめる', () => {
   it('自分で詰ませたときは手数を添える', () => {
     expect(selfMatePraise(7)).toBe('自分の力で7手の詰みを読みきったね！ お見事！');
     expect(selfMatePraise(1)).toBe('自分の力で詰ませたね！ お見事！');
+  });
+});
+
+describe('段階2: N7 閃きの3段階', () => {
+  it('1段目は種類だけを言い、詰みがあれば詰みを先に言う', () => {
+    expect(hintStageOneLine({ kind: 'drop', piece: 'N' })).toBe('持ち駒の桂を使う手があるよ');
+    expect(hintStageOneLine({ kind: 'free-capture', captured: 'S', square: '5e' })).not.toMatch(/5e|五/);
+    expect(hintStageOneLine(null)).toContain('形を良くする');
+    expect(hintStageOneLine({ kind: 'check' }, { mate: { plies: 3, byChecks: true } })).toBe('3手詰めがあるよ！ 王手の続く手から探してみよう');
+    expect(hintStageOneLine(null, { mate: { plies: 5, byChecks: false } })).toContain('5手で詰ませる手順');
+  });
+
+  it('2段目は動かす駒(打つなら持ち駒)を言う', () => {
+    expect(hintStageTwoLine({ drop: false, piece: '+R' })).toBe('緑に光っている竜を動かす手だよ！ どこへ動かす？');
+    expect(hintStageTwoLine({ drop: true, piece: 'G' })).toBe('持ち駒の金を打つ手だよ！ どこに打つかな？');
+  });
+
+  it('出し方は保存し、読めなければ段階にする', () => {
+    const store = new Map();
+    const storage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+    expect(loadHintStyle(storage)).toBe('staged');
+    saveHintStyle(storage, 'instant');
+    expect(loadHintStyle(storage)).toBe('instant');
+    expect(loadHintStyle({ getItem: () => { throw new Error('x'); } })).toBe('staged');
+  });
+});
+
+describe('段階2: N3 終盤の方針', () => {
+  it('61手目からと、玉のまわりに相手の利きが集まったときを終盤とする', () => {
+    const quiet = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1';
+    expect(isEndgame(quiet, 20)).toBe(false);
+    expect(isEndgame(quiet, 40)).toBe(false);
+    expect(isEndgame(quiet, 60)).toBe(true);
+    // 先手の玉(5九)のまわりに後手の竜と馬が利いている。
+    expect(isEndgame('4k4/9/9/9/9/9/2+B6/4+r4/4K4 b - 1', 40)).toBe(true);
+    expect(isEndgame('4k4/9/9/9/9/9/2+B6/4+r4/4K4 b - 1', 20)).toBe(false);
+  });
+
+  it('詰めろなら受けか王手、詰めろでなければ攻め合いか守り', () => {
+    expect(endgamePolicyAdvice({ mateThreat: true, bestGivesCheck: true })?.key).toBe('endgame-threat-check');
+    expect(endgamePolicyAdvice({ mateThreat: true, bestGivesCheck: false })?.key).toBe('endgame-threat-defend');
+    expect(endgamePolicyAdvice({ mateThreat: false, bestGivesCheck: false, bestGivesMateThreat: true })?.key).toBe('endgame-race-attack');
+    expect(endgamePolicyAdvice({ mateThreat: false, bestGivesCheck: false, bestIsDefensive: true })?.key).toBe('endgame-defend-first');
+    expect(endgamePolicyAdvice({ mateThreat: false, bestGivesCheck: true, bestGivesMateThreat: true })).toBeNull();
+    expect(endgamePolicyAdvice({ mateThreat: true, bestGivesCheck: false, playerScore: mate(3) })).toBeNull();
+    expect(coachAdvicePriority({ key: 'endgame-threat-defend' })).toBeGreaterThan(coachAdvicePriority({ key: 'threat-capture-5e5d' }));
+    expect(coachAdvicePriority({ key: 'endgame-race-attack' })).toBeLessThan(coachAdvicePriority({ key: 'move-blunder' }));
+  });
+});
+
+describe('段階3: N6 格言', () => {
+  it('居玉: 取り合いが始まり、最善手が玉を動かす手のときだけ', () => {
+    const sfen = 'lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/2P6/PP1PPPPPP/1B5R1/LNSGKGSNL b P 27';
+    expect(proverbAdvice({ sfen, ply: 26, color: 'black', bestMove: '5i6h' })?.key).toBe('proverb-idle-king');
+    expect(proverbAdvice({ sfen, ply: 26, color: 'black', bestMove: '2h2d' })).toBeNull();
+    expect(proverbAdvice({ sfen, ply: 20, color: 'black', bestMove: '5i6h' })).toBeNull();
+    expect(proverbAdvice({ sfen, ply: 26, color: 'black', bestMove: '5i6h', said: ['idle-king'] })).toBeNull();
+    expect(proverbAdvice({ sfen: sfen.replace(' P ', ' - '), ply: 26, color: 'black', bestMove: '5i6h' })).toBeNull();
+  });
+
+  it('玉飛接近: 玉と飛車が隣り合い、最善手がどちらかを離す手', () => {
+    const sfen = 'lnsgkgsnl/7b1/ppppppppp/9/9/9/PPPPPPPPP/1B7/LNSGKRSNL b - 9';
+    expect(proverbAdvice({ sfen, ply: 8, color: 'black', bestMove: '4i4h' })?.text).toContain('玉飛接近すべからず');
+    expect(proverbAdvice({ sfen, ply: 44, color: 'black', bestMove: '4i4h' })).toBeNull();
+  });
+
+  it('桂の高跳び: 跳ねた桂が相手の歩にねらわれる(後手も同じ)', () => {
+    expect(proverbAdvice({ sfen: '4k4/9/4p4/4N4/9/9/9/9/4K4 b - 1', ply: 30, color: 'black', lastPlayerMove: '6f5d' })?.key).toBe('proverb-high-knight');
+    expect(proverbAdvice({ sfen: '4k4/9/9/4N4/9/9/9/9/4K4 b - 1', ply: 30, color: 'black', lastPlayerMove: '6f5d' })).toBeNull();
+    expect(proverbAdvice({ sfen: '4k4/9/9/9/9/4n4/4P4/9/4K4 w - 1', ply: 30, color: 'white', lastPlayerMove: '4d5f' })?.dex).toBe('high-knight');
+  });
+});
+
+describe('段階3: N9 大会の物語', () => {
+  const opponent = (traits, id = 'p1') => ({ id, name: '中村', character: { traits: traits.map((trait) => ({ id: trait })) } });
+  it('相手の特徴・賭けているもの・カド番・羽音の逆転', () => {
+    expect(storyAdvice({ playerScore: cp(1200), endgame: false, opponent: opponent(['comeback']) })?.text).toBe('中村さんは逆転の名手。最後まで気を抜かないで！');
+    expect(storyAdvice({ playerScore: cp(100), endgame: true, opponent: opponent(['endgame-collapse']) })?.key).toBe('story-endgame-weak');
+    expect(storyAdvice({ playerScore: cp(100), endgame: false, opponent: opponent(['endgame-collapse']) })).toBeNull();
+    expect(storyAdvice({ playerScore: cp(2000), endgame: true, opponent: opponent([]), stakes: '勝てば竜王' })?.text).toBe('勝てば竜王！ 最後の詰みまで、丁寧にいこう');
+    expect(storyAdvice({ playerScore: cp(0), endgame: true, opponent: opponent([]), tone: 'kadoban' })?.key).toBe('story-crunch');
+    expect(storyAdvice({ playerScore: cp(400), previousScore: cp(-500), endgame: false, opponent: opponent([], 'hanane') })?.text).toContain('羽音ちゃん');
+    expect(storyAdvice({ playerScore: cp(1200), endgame: false, opponent: opponent(['comeback']), said: ['story-comeback'] })).toBeNull();
+    expect(storyAdvice({ playerScore: mate(3), endgame: true, opponent: opponent(['comeback']) })).toBeNull();
+    expect(coachAdvicePriority({ key: 'story-comeback' })).toBeLessThan(coachAdvicePriority({ key: 'plan-swing-x' }));
+    expect(coachAdvicePriority({ key: 'story-comeback' })).toBeGreaterThan(coachAdvicePriority({ key: 'situation-good' }));
+  });
+});
+
+describe('段階3: N11 もう一言', () => {
+  it('なぜ？の1行は答えの手を言わず、鍵の頭で決まる', () => {
+    expect(adviceReason('candidate-evaluation-cliff-free-capture')).toContain('守られていない駒');
+    expect(adviceReason('candidate-evaluation-cliff-drop-N')).toContain('持ち駒');
+    expect(adviceReason('threat-capture-2b8h+')).toContain('点線');
+    expect(adviceReason('situation-good')).toBe('');
+    expect(adviceReason('idle-defend')).toBe(adviceReason('candidate-evaluation-cliff-defend'));
+    expect(adviceReason('idle-recapture-pawn')).toBe('');
+  });
+  it('さっきの話は新しい順に3つまで、同じ台詞は1つ', () => {
+    let talk = [];
+    for (const [ply, text] of [[1, 'a'], [3, 'b'], [5, 'a'], [7, 'c'], [9, 'd']]) talk = addRecentTalk(talk, { ply, text });
+    expect(talk.map(({ text }) => text)).toEqual(['d', 'c', 'a']);
   });
 });

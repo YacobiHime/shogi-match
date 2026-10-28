@@ -68,7 +68,7 @@
 | 定跡エディターの上書きデータ | `src/data/opening-guide-overrides.mjs`（`npm run import:opening-library`で生成） |
 | 戦法・囲いの解説文 | `src/core/opening-explanations.mjs` |
 | 戦型検出 | `src/core/formation-tracker.mjs`、`src/data/hiragana_suisho_formations.json` |
-| やこび姫の助言・称賛 | `src/core/coach-advice.mjs`、AIの候補手を作戦の名前に翻訳して提案する作戦の助言（飛車を振る提案と振り直し）は`src/core/coach-plan-advice.mjs`と対局画面の`offerCoachPlan`・`coachPlanOffer`（設計と、ほかの助言の強化の検討は`docs/coach-plan-advice-design.md`、出る回数の測定は`scripts/coach-plan-advice-report.mjs`）、悪手の理由と相手の狙いは`src/core/coach-reason.mjs`（悪手判定の読み筋と詰めろの確かめの最善手を言葉にする。新しい探索は足さない）、大会の1局の始めの相手の棋風の一言は`src/core/coach-opponent.mjs`、形勢と駒の損得による方針の一言は`coach-advice.mjs`の`situationPolicy`、手筋の名前でほめる一言は`move-praise.mjs`の`TESUJI_PRAISE`、`src/core/move-praise.mjs`、神の一手の基準（対局中と棋譜解析で共通）は`src/core/god-move.mjs`。助言の大幅な強化（設計は`docs/coach-advice-expansion-design.md`）の段階1（最善手の種類を答えを言わずに言う・見逃し・相手のミス・前の対局の弱点・ほめ言葉。新しい探索は足さない）は`src/core/coach-insight.mjs`、出る回数の測定は`npx vite-node scripts/coach-insight-report.mjs --`。段階2・3（閃きの3段階・相手の狙いの点線の矢印・終盤の方針・格言・大会の物語・もう一言）は未実装 |
+| やこび姫の助言・称賛 | `src/core/coach-advice.mjs`、AIの候補手を作戦の名前に翻訳して提案する作戦の助言（飛車を振る提案と振り直し）は`src/core/coach-plan-advice.mjs`と対局画面の`offerCoachPlan`・`coachPlanOffer`（設計と、ほかの助言の強化の検討は`docs/coach-plan-advice-design.md`、出る回数の測定は`scripts/coach-plan-advice-report.mjs`）、悪手の理由と相手の狙いは`src/core/coach-reason.mjs`（悪手判定の読み筋と詰めろの確かめの最善手を言葉にする。新しい探索は足さない）、大会の1局の始めの相手の棋風の一言は`src/core/coach-opponent.mjs`、形勢と駒の損得による方針の一言は`coach-advice.mjs`の`situationPolicy`、手筋の名前でほめる一言は`move-praise.mjs`の`TESUJI_PRAISE`、`src/core/move-praise.mjs`、神の一手の基準（対局中と棋譜解析で共通）は`src/core/god-move.mjs`。助言の大幅な強化（設計は`docs/coach-advice-expansion-design.md`）の段階1（最善手の種類を答えを言わずに言う・見逃し・相手のミス・前の対局の弱点・ほめ言葉。新しい探索は足さない）は`src/core/coach-insight.mjs`、出る回数の測定は`npx vite-node scripts/coach-insight-report.mjs --`。段階2（閃きの3段階`hintStageOneLine`・`hintStageTwoLine`と対局画面の`hintStage`・`advanceHintStage`、出し方の設定`hint-style:v1`、相手の狙いの点線の矢印`threatArrow`と悪手で取られる駒の赤い輪`mistakeRingSquare`（`coach-reason.mjs`の`mistakeTarget`、盤は`ShogiMatchBoard.vue`の`threatArrows`・`riskSquares`）、終盤の方針`isEndgame`・`endgamePolicyAdvice`（詰めろの確かめを1回だけ足す））と段階3（格言`proverbAdvice`（格言帳へ`recordProverb`）・大会の物語`storyAdvice`・「なぜ？」の`adviceReason`と顔を押すとさっきの話`addRecentTalk`・`recentTalk`）も`coach-insight.mjs`（設計は10・11章） |
 | CPU難易度 | `src/core/strength-settings.mjs`（Lv0〜49の段級位の表。2026-10-22に15級〜タイトル保持者へ作り直し、2026-10-23に下へ24級〜16級を足して50段階にした。各Lvは、もとの校正`CALIBRATION_PRESETS`のどの強さを使うか`source`で持つ。前の保存の移しかえ（v1・v2→今の版3）は`src/core/level-ladder.mjs`、設計は`docs/level-ladder-design.md`の12章）、ロジックAIは`src/core/logic-ai.mjs`（24級〜16級のLv1〜9で、表の`source`を小数のLvにして指す。`logicLevelOf`）、局面の気づきは`src/core/position-awareness.mjs`、マスごとの利きから取り合いの損得を出す計算（見え方のレベル差つき）は`src/core/exchange-eval.mjs`、Lv1〜39の選び方は`src/core/aware-move-choice.mjs`（設計は`docs/logic-ai-design.md`・`docs/cpu-purposeful-moves-design.md`。人間らしい思考のモデルとレベル表の設計（未実装）は`docs/cpu-human-model-design.md`、間違いの種類の測定は`scripts/cpu-mistake-report.mjs`） |
 | CPUの戦法の選び方 | `src/core/cpu-opening-repertoire.mjs` |
 | 棋譜解析 | `src/core/kifu-analysis.mjs`、`src/EvaluationGraph.vue`、解析用エンジンの追加と解放は`src/composables/match/analysisEngines.ts`、対局の振り返りは`src/composables/match/useGuidedReview.ts`（台本は`src/core/guided-review.mjs`） |
@@ -183,11 +183,11 @@
 | 赤 | ねらう駒・目標のマス（`square-mark--target`）、駒を選んだときの相手の駒を取れる移動先 | `BoardView.vue`の`.square-mark--target`、`params.ts`の`captureDestination` |
 | 青・赤・紫の面と数字 | 駒の利き（対局の「駒の利き」。学習・通常・竜王戦のどれでも使える。教室の利きメガネ）。青は先手、赤は後手、紫は両方の利き | `BoardView.vue`の`.attack-tint--*`・`.attack-count--*` |
 | 青・赤の× | 玉の逃げ道で、相手の駒が利いているマス。後手の玉のまわりは先手の利き（青、`square-mark--covered`）、先手の玉のまわりは後手の利き（赤、`square-mark--danger`）。逃げられるマスは緑（`square-mark--key`） | `BoardView.vue`の`.square-mark--covered`・`.square-mark--danger` |
-| 赤い輪 | 利きメガネで、駒を選んだとき、動かすと取られて損をする移動先 | `BoardView.vue`の`.risk-ring` |
+| 赤い輪 | 利きメガネで、駒を選んだとき、動かすと取られて損をする移動先。やこび姫が悪手の理由で「取られちゃう」と言った駒の升（次に自分が指すまで） | `BoardView.vue`の`.risk-ring`（固定の輪は`riskSquares`） |
 
 - 図鑑の凡例（`ShogiReferenceDex.vue`の`__swatch--*`）と、教室の吹き出しの色の札（`ShogiTutorial.vue`の`__swatch--*`。「緑のマス」などの言葉の前に付く）は、盤上の色と同じ色相にします。
 - 升の色を変えるときは、台詞や凡例にある色の名前（「緑のマス」など）も同じ変更で直します。
-- 対局中の矢印（危険な定跡手の黄色、AI候補の赤など）は升の強調とは別の表示で、この表の対象外です。
+- 対局中の矢印（危険な定跡手の黄色、AI候補の赤など）は升の強調とは別の表示で、この表の対象外です。やこび姫が言った相手の狙いは**点線**の矢印で、色は「駒の利き」と同じ（先手の狙いは青、後手の狙いは赤。`BoardView.vue`の`threat-black`・`threat-white`）にして、AI候補の赤い実線と見分けます。
 - 駒得の数字（取ったマスに浮かべる緑の「＋6」・赤の「−5」、`BoardView.vue`の`.float-label`）と、囲いを組もうの薄い駒（`.ghost-piece`）、教室の盤の上のひとこと（`.board-callout`。白地に濃い縁で、黄色は使わない）も、升の強調とは別の表示です。駒得の数字の色は、教室の札（`ShogiTutorial.vue`の`--material-good`・`--material-bad`）とそろえます。
 
 ## 検証
@@ -260,7 +260,6 @@ git diff --check
   - 観戦する対局をエンジンが本当に指して勝ち負けを決める（`docs/tournament-relay-design.md`の20章）。段階0（測定）は済み（20-6。見積もりは`scripts/engine-world-sim.mjs`）。段階1（分身の対局を本局にする、20-8）・段階2（分身の回戦の全局を本局にする、20-9。主要キャラ（分身・羽音・善彦）のいない局は観戦用の読み。強さの表は測り直し済み）・段階3（敗退後の観戦を本局にする、20-10。見終えるたびに残りを指し直し、名簿は残りを確定してから進める）も済み。20章の段階はここまで。本物のスマホ・タブレットでの速さと、上の世界（基準Lv40以上）のブラウザでの時間はまだ測っていない。
   - 名人戦の分身の観戦参加は21章、回戦の中継ボード（リーグ表の上で同時に進める・ほかの対局も本局に）は22章、自分の出ない番勝負の観戦（名人の発表）は23章で済み。
   - 中継の楽しみ（勝敗の予想・次の一手クイズ・見どころ再生・大盤解説・研究ノート）は24章で済み。14章の候補はこれで全部済み。20章の段階0〜3と21〜24章は、mainに公開済み（2026-10-28）。
-  - やこび姫の助言の強化の段階2・3（`docs/coach-advice-expansion-design.md`）。
   - 人間らしいCPUのレベル表（`docs/cpu-human-model-design.md`、未実装）。
   - 物語モード（主役の1つ。まだ設計もない）。
 - 実際に遊んでの確認がまだのもの: 検証記録（`docs/yakobihime-opening-guide-verification.md`）の最近の行のうち「未確認」と書いたもの。

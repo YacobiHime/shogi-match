@@ -40,6 +40,7 @@
       :float-labels="floatLabels"
       :callout="callout"
       :risk-destinations="riskDestinations"
+      :risk-squares="riskSquares"
       :mark-squares="markSquares"
       :flip="flip"
       :mobile="mobile"
@@ -124,6 +125,10 @@ const props = defineProps({
   ghostPieces: { type: Array as () => GhostPiece[], default: () => [] },
   // 利きメガネ: 選んだ駒を動かすと取られて損をする行き先を返す。
   riskDestinations: { type: Function as PropType<((source: string) => string[]) | null>, default: null },
+  // 悪手の理由で取られる駒の升(N2)。次の手を指すまで赤い輪を出す。
+  riskSquares: { type: Array as PropType<string[]>, default: () => [] },
+  // 相手の狙い(N2)。相手の手を、その側の色の点線の矢印で出す。手番は相手でないので、手番を入れ替えた局面で手を作る。
+  threatArrows: { type: Array as PropType<{ usi: string; color: "black" | "white" }[]>, default: () => [] },
   lastMove: { type: String, default: "" },
   allowMove: { type: Boolean, default: true },
   enableDragAndDrop: { type: Boolean, default: true },
@@ -213,9 +218,21 @@ watch(() => props.sfen, (_, old) => { previousSfen.value = old ?? ""; });
 const lastMoveObject = computed(() =>
   position.value && props.lastMove ? lastMoveBetween(previousSfen.value, position.value, props.lastMove) : null
 );
-const candidateMoves = computed(() =>
-  position.value ? candidateMovesFromUsi(position.value, props.candidates) : []
-);
+const candidateMoves = computed(() => {
+  if (!position.value) return [];
+  const moves = candidateMovesFromUsi(position.value, props.candidates);
+  for (const { usi, color } of props.threatArrows) {
+    try {
+      const parts = props.sfen.trim().split(/\s+/);
+      parts[1] = color === "white" ? "w" : "b";
+      const flipped = positionFromSfen(parts.join(" "));
+      moves.push(...candidateMovesFromUsi(flipped, [{ usi, guideKind: color === "white" ? "threat-white" : "threat-black" }]));
+    } catch {
+      // 作れない手は出さない。
+    }
+  }
+  return moves;
+});
 
 const ghostPieceInputs = computed(() => props.ghostPieces.flatMap(({ file, rank, kind, color }) => (
   GHOST_PIECE_TYPES[kind] ? [{ file, rank, type: GHOST_PIECE_TYPES[kind], color: color === "white" ? Color.WHITE : Color.BLACK }] : []

@@ -5,6 +5,8 @@ export function coachAdvicePriority(advice) {
   if (/forced-mate|king-in-check|mate-danger|mate-risk|mate-win/.test(key)) return 100;
   // 悪手と、指した手で逃した詰み・タダの駒(N4。docs/coach-advice-expansion-design.md)。
   if (/move-blunder|move-mistake|move-missed/.test(key)) return 90;
+  // 終盤の「攻めるか、受けるか」(N3)。相手の狙いより上、悪手の指摘より下。
+  if (/^endgame-/.test(key)) return 80;
   // 相手の狙い(駒を取られそう)は、評価の崖より具体的なので先に出す。相手のミス(N5)も同じ重さ。
   if (/^(threat|chance)-/.test(key)) return 75;
   if (/candidate-evaluation-cliff/.test(key)) return 70;
@@ -12,7 +14,9 @@ export function coachAdvicePriority(advice) {
   if (/^praise-/.test(key)) return 60;
   // 作戦の提案と、そのあとにほめる一言は、札と一緒に読めるよう形勢の一言より先にする。
   if (/^plan-swing/.test(key)) return 50;
-  if (/strategy-|castle-|^opponent-style-/.test(key)) return 40;
+  if (/strategy-|castle-|^opponent-style-|^proverb-/.test(key)) return 40;
+  // 大会の物語(N9)。形勢の一言より上、ほかの助言より下。
+  if (/^story-/.test(key)) return 30;
   return 20;
 }
 

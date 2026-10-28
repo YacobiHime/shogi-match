@@ -76,6 +76,17 @@ export function mistakeReason({ sfenAfter = '', playedUsi = '', pv = [], playerC
 }
 
 /**
+ * 悪手の理由で「取られちゃう」と言った駒の升(N2。盤に赤い輪を出す)。mistakeReasonの取られる駒と同じ決まり。なければ''。
+ * @param {{ sfenAfter?: string, pv?: string[], playerColor?: "black" | "white" }} [options]
+ */
+export function mistakeTarget({ sfenAfter = '', pv = [], playerColor = 'black' } = {}) {
+  const parts = moveParts(pv[0]);
+  if (!parts || moveParts(pv[1])?.to === parts.to) return '';
+  const captured = pieceAt(sfenAfter, parts.to);
+  return captured && pieceOwner(captured) === playerColor && PIECE_WORTH[pieceKey(captured)] >= 3 ? parts.to : '';
+}
+
+/**
  * B. 相手の狙い。手番を入れ替えた局面で、相手がいちばん指したい手が、大きな駒を取る手・大駒が成り込む手なら言う。
  * @param {{
  *   threatSfen?: string, threatMove?: string, threatPv?: string[], threatScore?: { type: string, value: number } | null,

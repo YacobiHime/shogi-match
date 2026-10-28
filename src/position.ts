@@ -9,7 +9,8 @@ import {
   unpromotedPieceType,
 } from "tsshogi";
 
-export type CandidateGuideKind = "plan" | "unsafe-plan" | "urgent" | "ai" | "move";
+/** threat-black・threat-white: 相手の狙い(N2)。点線で、その側の利きの色(先手は青、後手は赤)。 */
+export type CandidateGuideKind = "plan" | "unsafe-plan" | "urgent" | "ai" | "move" | "threat-black" | "threat-white";
 export type CandidateInput = { usi: string; score?: number; guideKind?: CandidateGuideKind };
 export type CandidateMove = {
   move: Move;

@@ -1074,8 +1074,10 @@
         :candidates="boardCandidates"
         :attack-marks="boardAttackMarks"
         :float-labels="captureFloatLabels"
-        :mark-squares="boardEscapeMarks"
+        :mark-squares="boardSquareMarks"
         :risk-destinations="boardRiskDestinations"
+        :risk-squares="boardRiskSquares"
+        :threat-arrows="boardThreatArrows"
         :ghost-pieces="planGhosts"
         :movement-arrows="matchKind === 'learning' && movementArrowsEnabled && matchStarted && !pregameOpen"
         @usi-move="onPlayerMove"
@@ -1244,6 +1246,20 @@
             :data-expression="coachExpression"
             alt="助言役のやこび姫"
           >
+          <!-- 顔を押すと、この対局のさっきの話(直近3つ)を見られる(N11)。 -->
+          <button
+            v-if="recentTalk.length && matchStarted && !reviewMode"
+            type="button"
+            class="shogi-game__portrait-talk"
+            :aria-expanded="talkOpen"
+            aria-label="やこび姫のさっきの話を見る"
+            data-coach-talk
+            @click="talkOpen = !talkOpen"
+          ></button>
+        </div>
+        <div v-if="talkOpen && recentTalk.length" class="shogi-game__talk" role="dialog" aria-label="さっきの話" data-coach-talk-list @click="talkOpen = false">
+          <p class="shogi-game__talk-title">さっきの話</p>
+          <p v-for="line in recentTalk" :key="`${line.ply}-${line.text}`"><small>{{ line.ply }}手目</small>{{ line.text }}</p>
         </div>
         <div v-if="hintText || guideText" class="shogi-game__dialogue">
           <span class="shogi-game__dialogue-icon" aria-hidden="true">
@@ -1263,7 +1279,19 @@
             :key="index"
           ><ruby v-if="segment.ruby">{{ segment.text }}<rt>{{ segment.ruby }}</rt></ruby><template
             v-else
-          >{{ segment.text }}</template></template></span>
+          >{{ segment.text }}</template></template><small
+            v-if="reasonShown && adviceReasonText && !hintText"
+            class="shogi-game__dialogue-reason"
+            data-coach-reason
+          >{{ adviceReasonText }}</small></span>
+          <!-- 「なぜ？」で理由を1行足す(N11)。答えの手は言わない。 -->
+          <button
+            v-if="adviceReasonText && !hintText && !reasonShown"
+            type="button"
+            class="shogi-game__why"
+            data-coach-why
+            @click="reasonShown = true"
+          >なぜ？</button>
         </div>
       </section>
 
@@ -1435,7 +1463,7 @@
         :disabled="!canUseHint"
         @click="showHint"
       >
-        閃き <small>{{ reviewMode ? "×∞" : measureBand ? "お休み" : `×${formatAssistCount(hintsRemaining)}` }}</small>
+        閃き <small>{{ hintStage === 1 ? "▸駒" : hintStage === 2 ? "▸答え" : reviewMode ? "×∞" : measureBand ? "お休み" : `×${formatAssistCount(hintsRemaining)}` }}</small>
       </button>
       <!-- 感想戦。押すと、盤で指した手に対局相手のCPUが同じ強さで応える。もう一度押すとやめる。 -->
       <button
@@ -2359,7 +2387,7 @@ import {
 } from "./core/opening-unlocks.mjs";
 import { openingFormationGhosts, openingFormationProgress } from "./core/opening-formation.mjs";
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
-import { mistakeReason, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
+import { mistakeReason, mistakeTarget, pieceAt, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
 import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import { HANANE, HANANE_SPRITE, storyMemberId } from "./core/ryuo-story.mjs";
 import { lastGameMilestone } from "./core/ryuo-milestone.mjs";
@@ -2468,6 +2496,7 @@ import {
   type PregameRow,
   assistLimitOptions,
   COACH_LEVEL_OPTIONS,
+  HINT_STYLE_OPTIONS,
   CPU_BISHOP_OPTIONS,
   CPU_FIRST_MOVE_OPTIONS,
   CPU_ROOK_OPTIONS,
@@ -2525,7 +2554,7 @@ import {
 import { addAward, kenshukaiAward, loadAwards, meijinAward, ryuoAward, shoreikaiAward } from "./core/season-award.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
-import { hasKikiGlasses, loadTutorialProgress } from "./core/tutorial-progress.mjs";
+import { hasKikiGlasses, loadTutorialProgress, recordProverb } from "./core/tutorial-progress.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
@@ -2746,14 +2775,24 @@ import { detectWeaknesses, enqueuePlayInsight, loadPlayInsight, recordPractice, 
 import {
   INSIGHT_INTERVAL_PLIES,
   SLIP_MAX_PER_GAME,
+  addRecentTalk,
+  adviceReason,
+  endgamePolicyAdvice,
+  hintStageOneLine,
+  hintStageTwoLine,
   insightPraise,
+  isEndgame,
+  loadHintStyle,
   loadWeaknessReminders,
   meaningAdvice,
   missedChanceAdvice,
   moveMeaning,
   opponentSlipAdvice,
+  proverbAdvice,
+  saveHintStyle,
   saveWeaknessReminders,
   selfMatePraise,
+  storyAdvice,
   weaknessOvercomeLine,
   weaknessReminder,
 } from "./core/coach-insight.mjs";
@@ -3484,6 +3523,44 @@ const reviewCpuStartedAtPly = ref(0);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
+/*
+ * 閃きの3段階(N7。docs/coach-advice-expansion-design.mdの10章)。1回の閃きで、言葉 → 動かす駒(緑) → 矢印の順に見られる。
+ * hintStage: いま見せている段(0は閃いていない)。hintPlan: 1回目に読んだ答え(2・3段目はこれを見せるだけで、読み直さない)。
+ * 指したら(待ったでも)次の局面でまた1段目から。棋譜検討と「すぐ答え」の設定では、今までどおりすぐ矢印。
+ */
+const hintStyle = ref<"staged" | "instant">(loadHintStyle(typeof localStorage === "undefined" ? null : localStorage));
+watch(hintStyle, (style) => saveHintStyle(browserStorage(), style));
+const hintStage = ref(0);
+let hintPlan: null | {
+  historyLength: number;
+  moves: { usi: string; score?: number }[];
+  answerText: string;
+  pieceSquare: string;
+  pieceLine: string;
+} = null;
+const hintPieceMarks = computed(() => {
+  if (hintStage.value !== 2 || !hintPlan?.pieceSquare) return [];
+  const square = hintPlan.pieceSquare;
+  return [{ file: Number(square[0]), rank: square.charCodeAt(1) - 96, tone: "key" as const }];
+});
+/** 相手の狙いの点線の矢印(N2)。相手の狙いを言ったときに出し、プレイヤーが指したら消す。 */
+const threatArrow = ref<{ usi: string; color: "black" | "white" } | null>(null);
+/** 悪手の理由で「取られちゃう」と言った駒の升(N2)。次の手を指すまで赤い輪を出す。 */
+const mistakeRingSquare = ref("");
+const boardThreatArrows = computed(() => (threatArrow.value && !hintCandidates.value.length ? [threatArrow.value] : []));
+const boardRiskSquares = computed(() => (mistakeRingSquare.value ? [mistakeRingSquare.value] : []));
+function resetHintStage() {
+  hintStage.value = 0;
+  hintPlan = null;
+}
+/** 閃きの矢印・段階と、盤で指し示した印(相手の狙い・取られる駒)を消す。CPUが指した手では、取られる駒の輪を残す。 */
+function clearHintMarks({ keepMistakeRing = false }: { keepMistakeRing?: boolean } = {}) {
+  hintCandidates.value = [];
+  resetHintStage();
+  threatArrow.value = null;
+  talkOpen.value = false;
+  if (!keepMistakeRing) mistakeRingSquare.value = "";
+}
 const openingFollowupCandidates = ref<{ usi: string; score?: number }[]>([]);
 const openingFollowupRemaining = ref(0);
 const openingFollowupStarted = ref(false);
@@ -3519,6 +3596,20 @@ const openingGuideBranchNotice = ref("");
 const openingGuideBranchNoticePly = ref(-1);
 const hintText = ref("");
 const guideText = ref(INITIAL_GUIDE_TEXT);
+/*
+ * もう一言(N11)。いま出している助言の鍵(理由の1行を決める)、理由を開いたか、この対局のさっきの話(直近3つ)。
+ * 助言以外の文(定跡の案内など)に替わったら、鍵を消す(理由のボタンを出さない)。
+ */
+const currentAdviceKey = ref("");
+const reasonShown = ref(false);
+const recentTalk = ref<{ ply: number; text: string }[]>([]);
+const talkOpen = ref(false);
+const adviceReasonText = computed(() => adviceReason(currentAdviceKey.value));
+let settingStructuredAdvice = false;
+watch(guideText, () => {
+  if (!settingStructuredAdvice) currentAdviceKey.value = "";
+  reasonShown.value = false;
+}, { flush: "sync" });
 const activeCoachText = computed(() => hintText.value || guideText.value);
 const coachExpression = computed(() => coachExpressionForText(activeCoachText.value));
 const dialogueSegments = computed(() => coachTextSegments(activeCoachText.value));
@@ -3858,7 +3949,7 @@ const canMove = computed(() =>
 const canUseHint = computed(() =>
   canMove.value
   && engineReady.value
-  && (reviewMode.value || hintsRemaining.value > 0)
+  && (reviewMode.value || hintsRemaining.value > 0 || (hintStage.value > 0 && hintStage.value < 3))
   && (!reviewMode.value || enumerateLegalMoves(record.value.position).length > 0)
 );
 const canUndo = computed(() =>
@@ -4048,6 +4139,13 @@ let roomPick: { ply: number; move: string } | null = null;
  * matchWeaknessKinds: 対局の始めにあった弱点(N8)。mateRun: 勝ちの詰みを最初に言った手数と手数(自分で詰ませたときのほめ言葉)。
  */
 let lastInsightPly = Number.NEGATIVE_INFINITY;
+/** 終盤の方針(N3)の攻め合い・守りの一言を最後に言った手数(教える助言の間隔。詰めろの一言は毎回)。 */
+let lastPolicyPly = Number.NEGATIVE_INFINITY;
+/** この対局で言った格言(N6)と大会の物語(N9)の種類。1局に1回ずつ。 */
+let saidProverbs: string[] = [];
+let saidStories: string[] = [];
+/** 大会の物語(N9)で、逆転を見るための前の手番の形勢。 */
+let storyPreviousScore: { type: "cp" | "mate"; value: number } | null = null;
 let opponentSlips = 0;
 let lastChancePly = -1;
 let aiStreak = 0;
@@ -4060,6 +4158,11 @@ let standing30: number | null = null;
 let finishInsightLine = "";
 function resetInsightState() {
   lastInsightPly = Number.NEGATIVE_INFINITY;
+  lastPolicyPly = Number.NEGATIVE_INFINITY;
+  saidProverbs = [];
+  saidStories = [];
+  storyPreviousScore = null;
+  recentTalk.value = [];
   opponentSlips = 0;
   lastChancePly = -1;
   aiStreak = 0;
@@ -5145,6 +5248,8 @@ const boardRiskDestinations = computed(() => {
   const sfen = currentSfen.value;
   return (source: string) => unsafeDestinations(sfen, source);
 });
+/** 盤の升の印。玉の逃げ道と、閃きの2段目の動かす駒(緑)。 */
+const boardSquareMarks = computed(() => [...boardEscapeMarks.value, ...hintPieceMarks.value]);
 const boardEscapeMarks = computed(() => {
   if (!matchStarted.value || pregameOpen.value) return [];
   const position = createGameRecord(currentSfen.value).position;
@@ -5770,6 +5875,7 @@ const pregameCommonRows = computed(() => {
     );
   }
   rows.push({ id: "coach", label: "やこび姫の助言", value: optionLabel(COACH_LEVEL_OPTIONS, coachLevel.value) });
+  rows.push({ id: "hintStyle", label: "閃きの出し方", value: optionLabel(HINT_STYLE_OPTIONS, hintStyle.value) });
   return rows;
 });
 
@@ -5832,6 +5938,7 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
   if (id === "hintLimit") return single("閃きの回数", learningHintLimit.value, [{ options: assistLimitOptions }]);
   if (id === "undoLimit") return single("待ったの回数", learningUndoLimit.value, [{ options: assistLimitOptions }]);
   if (id === "coach") return single("やこび姫の助言", coachLevel.value, [{ options: COACH_LEVEL_OPTIONS }]);
+  if (id === "hintStyle") return single("閃きの出し方", hintStyle.value, [{ options: HINT_STYLE_OPTIONS }]);
   const plan = LEARNING_PLAN_PICKER.exec(id);
   if (plan) {
     const side = plan[1] as "player" | "opponent";
@@ -5866,6 +5973,7 @@ function onPregamePick(key: string, value: PickerValue) {
   else if (key === "hintLimit") learningHintLimit.value = Number(value);
   else if (key === "undoLimit") learningUndoLimit.value = Number(value);
   else if (key === "coach") coachLevel.value = text as typeof coachLevel.value;
+  else if (key === "hintStyle") hintStyle.value = text === "instant" ? "instant" : "staged";
   else {
     const plan = LEARNING_PLAN_PICKER.exec(key);
     if (plan) setLearningPlan(plan[1] as "player" | "opponent", plan[2] as "strategy" | "castle", text);
@@ -7600,6 +7708,8 @@ function navigateBack() {
     return;
   } else if (kansenkiShown.value) {
     kansenkiShown.value = null;
+  } else if (talkOpen.value) {
+    talkOpen.value = false;
   } else if (daySummaryOpen.value) {
     daySummaryOpen.value = false;
   } else if (assistToolsCollapsed.value && assistToolsOpen.value) {
@@ -8224,11 +8334,15 @@ function displayCoachAdvice(advice: {
   coachAdviceLastShownAt.set(advice.key, moveCount.value);
   if (advice.topic) advisedCoachTopics.add(advice.topic);
   displayingStructuredCoachAdvice = true;
+  settingStructuredAdvice = true;
   try {
+    currentAdviceKey.value = advice.key;
     guideText.value = advice.text;
   } finally {
     displayingStructuredCoachAdvice = false;
+    settingStructuredAdvice = false;
   }
+  if (!reviewMode.value) recentTalk.value = addRecentTalk(recentTalk.value, { ply: moveCount.value, text: advice.text });
   if (
     !reviewMode.value && typeof advice.sfen === "string"
     && typeof advice.ply === "number" && Number.isInteger(advice.ply) && advice.ply >= 0
@@ -8886,8 +9000,37 @@ async function updateDedicatedCoachAdvice(
         playerColor: humanColor.value === Color.WHITE ? "white" : "black",
       })
     : null;
+  // N3 終盤の「攻めるか、受けるか」。詰めろの一言(mate-risk-top3)の代わりと、評価の崖より先。
+  // 最善手が相手玉に詰めろをかけるかは、終盤で、自玉が詰めろでなく最善手が王手でないときだけ1回読んで確かめる。
+  let policyLine: { key: string; text: string } | null = null;
+  const endgame = coachLevel.value === "detailed" && !winningMate && !moveFeedback && bestMove
+    && !inCheck && isEndgame(currentSfen.value, analyzedHistoryLength);
+  if (endgame && bestMove && (!riskAdvice || /^(mate-risk-top3|candidate-evaluation-cliff|save-threatened-rook|prefer-defense|not-mate-threat|still-resilient)/.test(riskAdvice.key))) {
+    const context = bestMoveTacticalContext(bestMove);
+    const bestGivesCheck = Boolean(context.bestMoveGivesCheck);
+    const policyAllowed = mateThreat || analyzedHistoryLength - lastPolicyPly >= INSIGHT_INTERVAL_PLIES;
+    let bestGivesMateThreat: boolean | null = null;
+    if (policyAllowed && !mateThreat && !bestGivesCheck) {
+      const preview = createGameRecord(currentSfen.value);
+      if (appendUsiMove(preview, bestMove)) {
+        const check = await engineMateCheck(flipSideToMove(preview.position.sfen), {
+          ...getMateCheckSearchSettings(props.mobile || boardLayout.value === "portrait"),
+          maxPly: 7,
+        });
+        if (!active.value || moveHistory.length !== analyzedHistoryLength) return;
+        bestGivesMateThreat = check.status === "unknown" ? null : check.status === "mate";
+      }
+    }
+    policyLine = policyAllowed ? endgamePolicyAdvice({
+      mateThreat,
+      bestGivesCheck,
+      bestGivesMateThreat,
+      bestIsDefensive: Boolean(context.bestMoveIsDefensive),
+      playerScore: score ?? null,
+    }) : null;
+  }
   let planLine: { key: string; text: string; topic?: string } | null = null;
-  if (coachLevel.value === "detailed" && !winningMate && !moveFeedback && !urgentAdvice && !threatLine) {
+  if (coachLevel.value === "detailed" && !winningMate && !moveFeedback && !urgentAdvice && !threatLine && !policyLine) {
     planLine = coachPlanPraise();
     if (!planLine) {
       const rookUnderThreat = bestMove ? Boolean(bestMoveTacticalContext(bestMove).rookUnderThreat) : false;
@@ -8896,9 +9039,48 @@ async function updateDedicatedCoachAdvice(
       planLine = offered;
     }
   }
-  const chosen = moveFeedback ?? (winningMate ? null : urgentAdvice ?? threatLine ?? planLine ?? riskAdvice);
+  // N6 格言(詳しい助言・作戦の案内中でないとき)と N9 大会の物語(応援のみでも)。どちらも優先度は低く、ほかに言うことがないときだけ。
+  const quietTurn = !winningMate && !moveFeedback && !urgentAdvice && !threatLine && !policyLine && !planLine;
+  const proverbLine = quietTurn && coachLevel.value === "detailed" && !openingGuideDecision.value && normalizedMode.value === "cpu"
+    ? proverbAdvice({
+        sfen: currentSfen.value,
+        ply: analyzedHistoryLength,
+        color: humanColor.value === Color.WHITE ? "white" : "black",
+        bestMove: bestMove ?? "",
+        lastPlayerMove: moveHistory[analyzedHistoryLength - 2] ?? "",
+        said: saidProverbs,
+      })
+    : null;
+  const stage = ryuoGame.value?.stage;
+  const storyLine = quietTurn && matchKind.value === "tournament" && ryuoOpponent.value
+    ? storyAdvice({
+        playerScore: score ?? null,
+        previousScore: storyPreviousScore,
+        endgame: isEndgame(currentSfen.value, analyzedHistoryLength),
+        opponent: { id: ryuoGame.value?.opponentId, name: ryuoOpponent.value.name, character: ryuoOpponent.value.character },
+        stakes: stage?.stakes ?? "",
+        tone: stage?.tone ?? "",
+        said: saidStories,
+      })
+    : null;
+  if (score) storyPreviousScore = score;
+  // 王手・詰まされる知らせ(forced-mate-loss・king-in-check・mate-risk-top5)は、終盤の方針より先。
+  const urgentFirst = urgentAdvice && !/^(mate-risk-top3|candidate-evaluation-cliff)/.test(urgentAdvice.key) ? urgentAdvice : null;
+  let chosen: { key: string; text: string; topic?: string } | null = moveFeedback
+    ?? (winningMate ? null : urgentFirst ?? policyLine ?? urgentAdvice ?? threatLine ?? planLine ?? riskAdvice ?? proverbLine ?? storyLine);
+  if (chosen && chosen === proverbLine && proverbLine) {
+    saidProverbs = [...saidProverbs, proverbLine.proverb];
+    // 図鑑にある格言は、教室の格言帳に入れる(G:5-1 集めたものに使い道)。
+    if (proverbLine.dex && recordProverb(browserStorage(), proverbLine.dex).isNew) chosen = { key: proverbLine.key, text: `${proverbLine.text}（格言帳に入ったよ）` };
+  }
+  if (chosen && chosen === storyLine && storyLine) saidStories = [...saidStories, storyLine.key];
   if (chosen?.key.startsWith("candidate-evaluation-cliff-")) lastInsightPly = analyzedHistoryLength;
-  if (chosen && chosen === threatLine && mateThreatResult?.best) lastThreatAdvice = { ply: analyzedHistoryLength, move: mateThreatResult.best.move };
+  if (chosen && chosen === policyLine) lastPolicyPly = analyzedHistoryLength;
+  if (chosen && chosen === threatLine && mateThreatResult?.best) {
+    lastThreatAdvice = { ply: analyzedHistoryLength, move: mateThreatResult.best.move };
+    // 相手の狙いの手を、相手の色の点線の矢印で盤に出す(N2)。プレイヤーが指したら消す。
+    threatArrow.value = { usi: mateThreatResult.best.move, color: humanColor.value === Color.WHITE ? "black" : "white" };
+  }
   // 大会の相手の表情と中継は、この助言の読みの評価値で動かす(riskOnlyでも)。
   notePresenceScore(score);
   if (riskOnly && !winningMate) {
@@ -9911,7 +10093,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
     latestHintAnalysis = undefined;
   }
   resetOpeningGuideSafety();
-  hintCandidates.value = [];
+  clearHintMarks({ keepMistakeRing: actor !== "player" });
   openingFollowupCandidates.value = [];
   hintText.value = "";
   const terminalResult = resultAfterMove(record.value);
@@ -9945,8 +10127,27 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   return true;
 }
 
+/** 閃きの2・3段目(N7)。1段目で読んだ答えを、駒 → 矢印の順に見せる。読み直さず、回数も減らさない。 */
+function advanceHintStage() {
+  const plan = hintPlan;
+  if (!plan || plan.historyLength !== moveHistory.length) {
+    resetHintStage();
+    return false;
+  }
+  if (hintStage.value === 1 && plan.pieceLine) {
+    hintStage.value = 2;
+    hintText.value = plan.pieceLine;
+    return true;
+  }
+  hintStage.value = 3;
+  hintCandidates.value = plan.moves;
+  hintText.value = plan.answerText;
+  return true;
+}
+
 async function showHint() {
   if (!canUseHint.value || !engine) return;
+  if (hintStage.value > 0 && hintStage.value < 3 && advanceHintStage()) return;
   thinking.value = true;
   hintText.value = "やこび姫が候補手を考えています…";
   try {
@@ -9978,22 +10179,45 @@ async function showHint() {
     }
     const search = { move: candidates.find(({ rank }) => rank === 1)?.move ?? "", candidates };
     const moves = getHintMoves(search, 3);
-    hintCandidates.value = moves.map(({ move, score }) => ({
+    const arrowMoves = moves.map(({ move, score }) => ({
       usi: move, score: hintScoreForArrow(score),
     }));
     // 最善手が詰みの手なら、何手で詰むかを添える(読み筋が王手の連続のときだけ「N手詰め」と言う)。
     const bestHint = moves[0];
     const bestHintPv = candidates.find(({ move }) => move === bestHint.move)?.pv;
     const bestHintScore = bestHint.score as EngineEvaluation | undefined;
-    hintText.value = hintMoveText({
+    const byChecks = bestHintScore?.type === "mate" && bestHintScore.value > 0
+      ? mateLineByChecks(currentSfen.value, bestHintPv, bestHintScore.value)
+      : null;
+    const answerText = hintMoveText({
       moveText: formatSpokenMove(bestHint.move, currentSfen.value),
       score: bestHintScore,
       givesCheck: candidateGivesCheck(bestHint.move),
-      byChecks: bestHintScore?.type === "mate" && bestHintScore.value > 0
-        ? mateLineByChecks(currentSfen.value, bestHintPv, bestHintScore.value)
-        : null,
+      byChecks,
     });
     if (!reviewMode.value) hintsRemaining.value -= 1;
+    if (reviewMode.value || hintStyle.value === "instant") {
+      hintStage.value = 0;
+      hintCandidates.value = arrowMoves;
+      hintText.value = answerText;
+    } else {
+      // 1段目: 最善手の種類だけを言う(答えの手は言わない)。2段目の動かす駒は、盤の升かは持ち駒の名前。
+      const drop = bestHint.move.includes("*");
+      const pieceSquare = drop ? "" : bestHint.move.slice(0, 2);
+      const piece = drop ? bestHint.move[0] : (pieceAt(currentSfen.value, pieceSquare) ?? "");
+      hintPlan = {
+        historyLength: moveHistory.length,
+        moves: arrowMoves,
+        answerText,
+        pieceSquare,
+        pieceLine: hintStageTwoLine({ drop, piece: piece.startsWith("+") ? `+${piece[1].toUpperCase()}` : piece.toUpperCase() }),
+      };
+      hintStage.value = 1;
+      hintCandidates.value = [];
+      hintText.value = hintStageOneLine(moveMeaning(currentSfen.value, bestHint.move), {
+        mate: bestHintScore?.type === "mate" && bestHintScore.value > 0 ? { plies: bestHintScore.value, byChecks } : null,
+      });
+    }
   } catch (error) {
     hintText.value = `ヒントを出せませんでした: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
@@ -10054,7 +10278,7 @@ function undoTurn() {
   lastChancePly = -1;
   mateRun = null;
   turningPointState = rewindTurningPointState(turningPointState, moveHistory.length);
-  hintCandidates.value = [];
+  clearHintMarks();
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   openingGuideDetourCount.value = 0;
@@ -10085,7 +10309,7 @@ function onReviewSliderInput(event: Event) {
     cursor - reviewNavigation.value.cursor,
   );
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
-  hintCandidates.value = [];
+  clearHintMarks();
   hintText.value = "";
   refreshReviewCoachAdvice({ analyze: false });
 }
@@ -10163,7 +10387,7 @@ function placeReviewLine() {
   coachAdviceScheduler.reset();
   reviewNavigation.value = previewReviewLine(reviewNavigation.value, line.pv);
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
-  hintCandidates.value = [];
+  clearHintMarks();
   hintText.value = "読み筋を盤に並べたよ。▶で1手ずつ進めてみてね。";
   refreshReviewCoachAdvice();
 }
@@ -10232,7 +10456,7 @@ function navigateAnalysis(delta: number) {
   if (reviewCpuEnabled.value) return;
   reviewNavigation.value = moveReviewCursor(reviewNavigation.value, delta);
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
-  hintCandidates.value = [];
+  clearHintMarks();
   hintText.value = "";
   refreshReviewCoachAdvice();
 }
@@ -10243,7 +10467,7 @@ function returnToMainLine() {
   coachAdviceScheduler.reset();
   reviewNavigation.value = returnReviewToMainLine(reviewNavigation.value);
   rebuildRecord(visibleReviewMoves(reviewNavigation.value));
-  hintCandidates.value = [];
+  clearHintMarks();
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : "本筋の局面に戻したよ！";
   refreshReviewCoachAdvice();
@@ -10298,7 +10522,7 @@ async function startReviewCpu() {
   reviewCpuStartedAtPly.value = moveHistory.length;
   reviewCpuEnabled.value = true;
   analysisMenuOpen.value = false;
-  hintCandidates.value = [];
+  clearHintMarks();
   hintText.value = "";
   const cpuTurn = record.value.position.color !== humanColor.value;
   guideText.value = coachLevel.value === "off"
@@ -10485,6 +10709,14 @@ async function scheduleCpuMove() {
           if (moveFeedback) {
             showCoachAdvice(moveFeedback);
             shownFeedbackKey = moveFeedback.key;
+            // 悪手の理由で「取られちゃう」と言った駒に、次の手を指すまで赤い輪を出す(N2)。
+            if (/^move-(blunder|mistake)/.test(moveFeedback.key)) {
+              mistakeRingSquare.value = mistakeTarget({
+                sfenAfter: record.value.position.sfen,
+                pv: judged.afterPv,
+                playerColor: humanColor.value === Color.WHITE ? "white" : "black",
+              });
+            }
           }
         }
       }
@@ -10873,7 +11105,7 @@ function enterAnalysisMode(message = "棋譜を一緒に振り返ってみよう
   reviewNavigation.value = createReviewNavigation(moveHistory);
   active.value = true;
   thinking.value = false;
-  hintCandidates.value = [];
+  clearHintMarks();
   resetOpeningFollowup();
   resetOpeningGuideSafety();
   hintText.value = "";
@@ -11014,7 +11246,7 @@ function goToAnalysisPly(ply: number) {
     branch: false,
   };
   rebuildRecord(mainLine.slice(0, cursor));
-  hintCandidates.value = [];
+  clearHintMarks();
   hintText.value = "";
   refreshReviewCoachAdvice();
 }
@@ -11138,7 +11370,7 @@ function restart() {
   resetOpeningGuideSafety();
   hintsRemaining.value = matchHintAllowance();
   undosRemaining.value = matchUndoAllowance();
-  hintCandidates.value = [];
+  clearHintMarks();
   hintText.value = "";
   guideText.value = coachLevel.value === "off" ? "" : INITIAL_GUIDE_TEXT;
   advisedCoachTopics.clear();

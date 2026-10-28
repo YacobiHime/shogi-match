@@ -169,6 +169,7 @@
           :y2="arrow.shaftEnd.y"
           :stroke-width="arrow.shaftWidth"
           :stroke="arrow.color"
+          :stroke-dasharray="arrow.dash"
           class="arrow-shaft"
         />
         <polygon :points="arrow.headPoints" :fill="arrow.color" class="arrow-head" />
@@ -381,7 +382,7 @@ type CandidateMove = {
   move: Move;
   score?: number; // 手番側視点の数値スコア（showArrowScore が有効な場合のみ設定）
   promotion?: "成" | "不成";
-  guideKind?: "plan" | "unsafe-plan" | "urgent" | "ai" | "move";
+  guideKind?: "plan" | "unsafe-plan" | "urgent" | "ai" | "move" | "threat-black" | "threat-white";
 };
 
 type State = {
@@ -503,6 +504,12 @@ const props = defineProps({
   },
   attackMarks: {
     type: Array as PropType<{ file: number; rank: number; black: number; white: number }[]>,
+    required: false,
+    default: () => [],
+  },
+  // 悪手の理由で取られる駒の升(USIの升。"5e"など)。赤い輪を出す(N2)。
+  riskSquares: {
+    type: Array as PropType<string[]>,
     required: false,
     default: () => [],
   },
@@ -1222,6 +1229,16 @@ const USI_HAND_LETTERS: Partial<Record<PieceType, string>> = {
 };
 
 const riskSquareViews = computed(() => {
+  // 悪手の理由で「取られちゃう」と言った駒の升(N2)。駒を選んでいなくても出す。
+  const fixed = new Set(props.riskSquares);
+  const fixedViews = fixed.size
+    ? board.value.squares.flatMap((square) => (
+        fixed.has(`${square.file}${String.fromCharCode(96 + square.rank)}`) ? [{ id: `fixed-${square.id}`, style: square.style }] : []
+      ))
+    : [];
+  return [...fixedViews, ...pointerRiskViews()];
+});
+function pointerRiskViews() {
   if (!props.riskDestinations || !props.allowMove) return [];
   const pointer = state.pointer;
   const source = pointer instanceof Square
@@ -1235,7 +1252,7 @@ const riskSquareViews = computed(() => {
   return board.value.squares.flatMap((square) => (
     risky.has(`${square.file}${String.fromCharCode(96 + square.rank)}`) ? [{ id: square.id, style: square.style }] : []
   ));
-});
+}
 
 const attackMarkViews = computed(() => {
   if (!props.attackMarks.length) return [];
@@ -1352,6 +1369,9 @@ const shownCandidates = computed(() => (
 function arrowColor(guideKind: CandidateMove["guideKind"]) {
   if (guideKind === "unsafe-plan") return "#ff9d00";
   if (guideKind === "move") return "#1d6fe0";
+  // 相手の狙い(N2)。「駒の利き」と同じ色相(先手は青、後手は赤)で、点線にしてAIの候補手と見分ける。
+  if (guideKind === "threat-black") return "#2563eb";
+  if (guideKind === "threat-white") return "#dc2626";
   return "#fe0000";
 }
 
@@ -1449,6 +1469,9 @@ const arrows = computed(() => {
     if (candidate.guideKind === "unsafe-plan") {
       scoreRank = index + 1;
       evaluationLabel = "定跡注意";
+    } else if (candidate.guideKind === "threat-black" || candidate.guideKind === "threat-white") {
+      scoreRank = index + 1;
+      evaluationLabel = "狙い";
     } else if (candidate.score !== undefined && bestScore !== undefined) {
       scoreRank =
         1 +
@@ -1466,6 +1489,7 @@ const arrows = computed(() => {
     return {
       id: move.usi,
       color: arrowColor(candidate.guideKind),
+      dash: candidate.guideKind?.startsWith("threat-") ? `${arrowWidth * 0.45} ${arrowWidth * 0.35}` : undefined,
       labelText,
       start: shiftedStart,
       shaftEnd,
