@@ -287,17 +287,39 @@ export function asAvatarMeijinSeason(season, avatar) {
 
 /**
  * 分身の次の一局を決めて記録する。realは、エンジンが本当に指した本局の結果(engine-game.mjsのengineGameResult)。
- * なければ、ほかの棋士と同じ自動対局(期の種と局の数で決まる)。
+ * なければ、ほかの棋士と同じ自動対局(期の種と局の数で決まる)。roundは、同じ回戦のほかの本局の結果(applyMeijinRoundResults)。
  * @param {any} season 分身の期
- * @param {{ real?: any }} [options]
+ * @param {{ real?: any, round?: { aId: string, bId: string, result: any }[] }} [options]
  */
-export function playMeijinSpectatorGame(season, { real = null } = {}) {
+export function playMeijinSpectatorGame(season, { real = null, round = [] } = {}) {
   const pending = season?.pending;
   if (!pending || !season.spectator) return season;
+  if (round.length) season = applyMeijinRoundResults(season, round);
   const count = season.userGames?.length ?? 0;
   const rng = createRng(((Number(season.id) || 0) ^ 0x3c6ef372 ^ Math.imul(count + 1, 0x9e3779b1)) >>> 0);
   const result = real ?? simulateMemberGame(rng, season.players[USER_ID], season.players[pending.opponentId], { big: pending.kind !== 'league', aColor: pending.color });
   return recordMeijinGame(season, result.aWins ? 'win' : 'loss', { game: gameRecordOf(result, USER_ID, pending.opponentId) });
+}
+
+/**
+ * 分身の期で、いまの回戦のほかの対局の結果を、本局(エンジンが本当に指した対局。22章)の結果に差し替える。
+ * ほかの対局はプレイヤーの局の前に決めてある(pending.others)が、記録して表に数えるのはプレイヤーの局を記録したときなので、
+ * 差し替えてもほかの記録と食い違わない。resultはaIdから見た記録(gameRecordOfに渡す形)。
+ * @param {any} season
+ * @param {{ aId: string, bId: string, result: any }[]} results
+ */
+export function applyMeijinRoundResults(season, results = []) {
+  const games = season?.pending?.kind === 'league' ? season.pending.others?.games : null;
+  if (!season?.spectator || !games?.length || !results.length) return season;
+  const next = structuredClone(season);
+  for (const { aId, bId, result } of results) {
+    const index = next.pending.others.games.findIndex(({ a, b }) => (a === aId && b === bId) || (a === bId && b === aId));
+    if (index < 0 || !result) continue;
+    const { a, b } = next.pending.others.games[index];
+    const winner = result.aWins ? aId : bId;
+    next.pending.others.games[index] = { a, b, winner, ...gameRecordOf(result, aId, bId) };
+  }
+  return next;
 }
 
 /** プレイヤーの次の対局まで、または期の終わりまで進める。 */

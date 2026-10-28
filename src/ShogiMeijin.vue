@@ -126,11 +126,22 @@
           :lines="view.lines"
           :class-id="view.cls"
           :you-name="playerName"
+          :live="liveRows"
+          @watch="emit('live-open', $event)"
         />
       </section>
 
+      <!-- 分身の回戦の中継ボード(docs/tournament-relay-design.mdの22章)。リーグ表の上で、同じ回戦の対局が同時に進む。 -->
+      <RelayLivePanel
+        v-if="livePanel"
+        :panel="livePanel"
+        @open="emit('live-open', '')"
+        @speed="emit('live-speed')"
+        @skip="emit('live-skip')"
+        @finish="emit('live-finish')"
+      />
       <section
-        v-if="view.pending"
+        v-else-if="view.pending"
         :class="['shogi-tournament__hud', { 'shogi-tournament__hud--boss': view.pending.stakes.boss }]"
         aria-label="次の対局"
         data-pending
@@ -191,16 +202,10 @@
           <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
           <span class="shogi-tournament__tip-text">{{ tipLine }}</span>
         </p>
-        <!-- 分身の期(21章): 分身の対局をエンジンが本当に指す。観戦するは中継で、結果だけ見るは待たずに指させて記録する。 -->
+        <!-- 分身の期(21章): 「観戦する」はリーグ表の上の回戦の中継ボード(22章)、「結果だけ見る」は待たずに指させて記録する。 -->
         <template v-if="view.spectator">
-          <template v-if="watching">
-            <p class="shogi-tournament__hud-role" data-meijin-watching>分身が対局中（{{ watching.ply }}手目）{{ watching.done ? "。終局しました" : "" }}</p>
-            <button v-if="!watching.viewing && !watching.fast" type="button" class="shogi-tournament__start" data-meijin-watch-open @click="emit('watch-open')">中継を見る</button>
-          </template>
-          <template v-else>
-            <button type="button" class="shogi-tournament__start" data-meijin-watch @click="versusOpen = true">{{ watchText }}</button>
-            <button type="button" class="shogi-tournament__sub" data-meijin-watch-skip @click="emit('watch-skip')">結果だけ見る</button>
-          </template>
+          <button type="button" class="shogi-tournament__start" data-meijin-watch @click="versusOpen = true">{{ watchText }}</button>
+          <button type="button" class="shogi-tournament__sub" data-meijin-watch-skip @click="emit('watch-skip')">結果だけ見る</button>
         </template>
         <button v-else-if="suspendedMoves !== null" type="button" class="shogi-tournament__start shogi-tournament__start--resume" data-meijin-resume @click="emit('resume')">
           対局を再開<small>中断した対局（{{ suspendedMoves }}手目まで）</small>
@@ -278,7 +283,8 @@
 import { rankTag } from "./core/tournament-world.mjs";
 import { computed, ref, watch, type PropType } from "vue";
 import MeijinPagoda from "./MeijinPagoda.vue";
-import MeijinLeagueTable, { type LeagueRow } from "./MeijinLeagueTable.vue";
+import MeijinLeagueTable, { type LeagueRow, type LiveRow } from "./MeijinLeagueTable.vue";
+import RelayLivePanel, { type LivePanelView } from "./RelayLivePanel.vue";
 import RyuoSeries, { type SeriesView } from "./RyuoSeries.vue";
 import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
@@ -334,8 +340,10 @@ const props = defineProps({
   openSeason: { type: Boolean, default: false },
   /** 対局中継を見られる(棋譜を作るエンジンがある)。 */
   relayAvailable: { type: Boolean, default: false },
-  /** 分身の対局(本局)を指している間の手数(21章)。viewingは中継を開いている、fastは「結果だけ見る」。 */
-  watching: { type: Object as PropType<{ ply: number; done: boolean; viewing: boolean; fast: boolean } | null>, default: null },
+  /** 分身の回戦の中継ボードの欄(22章)。ボードを見ていないときはnull。 */
+  livePanel: { type: Object as PropType<LivePanelView | null>, default: null },
+  /** リーグ表の行ごとの、いま指している対局(棋士のidごと)。 */
+  liveRows: { type: Object as PropType<Record<string, LiveRow>>, default: () => ({}) },
 });
 const emit = defineEmits<{
   enter: [settings: Settings];
@@ -347,10 +355,14 @@ const emit = defineEmits<{
   ceremony: [];
   /** 対局中継の一覧を開く(棋士のidを渡すと、その棋士の対局だけ)。 */
   relay: [playerId: string];
-  /** 分身の期の「観戦する」(VS画面のあと)・「結果だけ見る」・指している本局の中継を開く(21章)。 */
+  /** 分身の期の「観戦する」(VS画面のあと)・「結果だけ見る」(21章)。 */
   watch: [];
   "watch-skip": [];
-  "watch-open": [];
+  /** 回戦の中継ボード(22章): 対局の中継を開く(鍵が空なら分身の対局)・速さ・結果まで進める・この回戦の結果へ。 */
+  "live-open": [key: string];
+  "live-speed": [];
+  "live-skip": [];
+  "live-finish": [];
 }>();
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);

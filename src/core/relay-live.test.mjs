@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, recordUserGame, replayRest, restGameKey, restOpen, seasonGameResults, settleRest } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
-  afterWatchRounds, applyWatchedRound, hiddenRoundIds, meijinLiveEntry, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyWatchedRound, hiddenRoundIds, meijinHiddenKeys, meijinLiveEntry, meijinLiveRound, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from './relay-live.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
@@ -318,5 +318,41 @@ describe('名人戦の分身の次の一局の中継(21章)', () => {
     // 自分で指す期は、自分の対局を中継に並べない。
     const own = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings: meijinSettings, userLevel: 20, seed: 7 });
     expect(meijinLiveEntry(own)).toBeNull();
+  });
+});
+
+describe('名人戦の回戦の中継ボード(22章)', () => {
+  it('分身の局を先頭に、同じ回戦のほかの対局を並べ、ボードで見るまで伏せる。本局の結果に差し替えて記録する', async () => {
+    const { asAvatarMeijinSeason, createLeague, createMeijinSeason, playMeijinSpectatorGame } = await import('./meijin.mjs');
+    const { meijinRelayGames } = await import('./relay-games.mjs');
+    const roster = createRoster({ seed: 31 });
+    const meijinSettings = { difficulty: 9, scale: 'full', coachLevel: 'detailed', hintLimit: 3, undoLimit: 3 };
+    const season = asAvatarMeijinSeason(createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings: meijinSettings, userLevel: 20, seed: 9 }), { rating: 1500, character: { abilities: {}, traits: [] } });
+    const before = JSON.stringify(season);
+    const round = meijinLiveRound(season);
+    expect(JSON.stringify(season)).toBe(before);
+    expect(round.specs[0]).toBe(round.avatar);
+    const hidden = meijinHiddenKeys(season);
+    expect(round.specs).toHaveLength(season.pending.others.games.length + 1);
+    for (const spec of round.specs.slice(1)) expect(hidden.has(spec.key)).toBe(true);
+    // 伏せた対局は、いまの期の中継の一覧から外せる(鍵が一覧の項目と同じ)。
+    const listed = new Set(meijinRelayGames(season).map(({ key }) => key));
+    for (const key of hidden) expect(listed.has(key)).toBe(true);
+    // ほかの対局を逆の結果にして記録すると、表(結果)にその勝者が残る。
+    const flips = round.specs.slice(1).map((spec) => {
+      const aId = spec.black.id;
+      const bId = spec.white.id;
+      const aWins = spec.winner !== 'black';
+      return { aId, bId, result: { aWins, how: 'middle', aColor: 'black', openings: { a: null, b: null }, castles: { a: null, b: null }, phases: [0, 0, aWins ? 300 : -300], probability: null } };
+    });
+    const next = playMeijinSpectatorGame(season, { round: flips });
+    const recorded = next.results[season.pending.round].games;
+    for (const { aId, bId, result } of flips) {
+      const game = recorded.find(({ a, b }) => [a, b].sort().join() === [aId, bId].sort().join());
+      expect(game.winner).toBe(result.aWins ? aId : bId);
+      expect(game.black).toBe(aId);
+    }
+    // 自分で指す期では、伏せる対局はない。
+    expect(meijinHiddenKeys({ ...season, spectator: false }).size).toBe(0);
   });
 });

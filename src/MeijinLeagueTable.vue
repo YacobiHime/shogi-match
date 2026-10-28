@@ -32,11 +32,24 @@
               <span v-else-if="row.next" class="meijin-table__tag meijin-table__tag--next">次の相手</span>
               <span v-if="row.story === 'hanane'" class="meijin-table__tag meijin-table__tag--rival">ライバル</span>
               <span v-if="row.points" class="meijin-table__tag meijin-table__tag--point" :aria-label="`降級点${row.points}`">{{ "▼".repeat(row.points) }}</span>
+              <!-- 回戦の中継ボード(docs/tournament-relay-design.mdの22章): いま指している対局の何手目と、この棋士の側の勝率。押すと中継。 -->
+              <button
+                v-if="live[row.id]"
+                type="button"
+                class="meijin-table__live"
+                :data-live-row="row.id"
+                :aria-label="`${row.you ? youName : row.name}の対局。${live[row.id].done ? '終局' : `${live[row.id].ply}手目`}。押すと中継`"
+                @click="emit('watch', live[row.id].key)"
+              >
+                <span :class="['meijin-table__live-ply', { 'meijin-table__live-ply--on': !live[row.id].done }]">{{ live[row.id].done ? "終局" : `${live[row.id].ply}手目` }}</span>
+                <span :class="['meijin-table__live-bar', `meijin-table__live-bar--${live[row.id].side}`]" aria-hidden="true"><span :style="{ width: `${live[row.id].percent}%` }" /></span>
+                <span class="meijin-table__live-play" aria-hidden="true">▶</span>
+              </button>
             </th>
             <td class="meijin-table__score"><b>{{ row.wins }}</b>-{{ row.losses }}</td>
             <td class="meijin-table__marks">
               <span class="meijin-table__marks-row" :style="{ '--rounds': String(rounds) }" aria-hidden="true">
-                <i v-for="(mark, index) in row.marks" :key="index" :class="`is-${mark ?? 'later'}`">{{ mark === "win" ? "○" : mark === "loss" ? "●" : "" }}</i>
+                <i v-for="(mark, index) in liveMarks(row)" :key="index" :class="`is-${mark ?? 'later'}`">{{ mark === "win" ? "○" : mark === "loss" ? "●" : "" }}</i>
               </span>
             </td>
           </tr>
@@ -59,6 +72,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch, type PropType } from "vue";
 
+/** いま指している対局(22章)。percentはこの棋士の側の勝率、resultは終局したときの勝ち負け。 */
+export type LiveRow = { key: string; side: "black" | "white"; ply: number; done: boolean; percent: number; result: "win" | "loss" | null };
 export type LeagueRow = {
   id: string; place: number; name: string; dan: string; wins: number; losses: number; story: string | null;
   you: boolean; next: boolean; points: number; zone: string; marks: (string | null)[];
@@ -76,7 +91,16 @@ const props = defineProps({
   promoteText: { type: String, default: "" },
   /** 次点の線の言葉(奨励会の三段リーグだけ)。 */
   jitenText: { type: String, default: "" },
+  /** 回戦の中継ボードで、いま指している対局(棋士のidごと。22章)。 */
+  live: { type: Object as PropType<Record<string, LiveRow>>, default: () => ({}) },
 });
+const emit = defineEmits<{ watch: [key: string] }>();
+/** 回戦の○●。ボードで終局した対局は、いまの回戦の欄に勝ち負けを出す(記録する前でも)。 */
+function liveMarks(row: LeagueRow) {
+  const result = props.live[row.id]?.result;
+  if (!result || props.currentRound < 0) return row.marks;
+  return row.marks.map((mark, index) => (index === props.currentRound ? result : mark));
+}
 
 const promoteLabel = computed(() => props.promoteText || (props.classId === "A" ? "ここまで 名人挑戦" : "ここまで 昇級"));
 const bottomLine = computed(() => {
@@ -138,6 +162,20 @@ watch(() => props.currentRound, () => nextTick(showYou));
 .shogi-game .meijin-table__tag--next { color: #fffcf4; background: #c4604c; }
 .shogi-game .meijin-table__tag--rival { color: #1e2d3d; background: #d4a93a; }
 .shogi-game .meijin-table__tag--point { padding: 0; color: #e0745e; background: none; }
+/* 回戦の中継ボード(22章)。名前の下に、何手目・この棋士の側の勝率(先手は青、後手は赤。表の札と同じ)・▶。 */
+.shogi-game .meijin-table__live {
+  display: flex; align-items: center; gap: 0.35rem; width: 100%; min-height: 28px; margin-top: 0.15rem; padding: 0.1rem 0.3rem;
+  border: 1px solid rgba(159, 179, 200, 0.3); border-radius: 0.35rem; color: #fffcf4; background: rgba(15, 24, 40, 0.6); font: inherit; font-size: 0.8em; cursor: pointer;
+}
+.shogi-game .meijin-table__live-ply { min-width: 3.6em; color: #9fb3c8; font-weight: 900; font-variant-numeric: tabular-nums; }
+.shogi-game .meijin-table__live-ply--on { color: #f1a54c; }
+.shogi-game .meijin-table__live-bar { flex: 1; height: 0.4rem; overflow: hidden; border-radius: 999px; }
+.shogi-game .meijin-table__live-bar span { display: block; height: 100%; }
+.shogi-game .meijin-table__live-bar--black { background: #c8433a; }
+.shogi-game .meijin-table__live-bar--black span { background: #3d78b8; }
+.shogi-game .meijin-table__live-bar--white { background: #3d78b8; }
+.shogi-game .meijin-table__live-bar--white span { background: #c8433a; }
+.shogi-game .meijin-table__live-play { color: #f1a54c; }
 .shogi-game .meijin-table__line td { padding: 0; border-bottom: 0; }
 .shogi-game .meijin-table__line span {
   display: block;

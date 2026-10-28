@@ -72,14 +72,37 @@ export function liveRound(season, { oshiId = null } = {}) {
  * @param {any} season 名人戦の分身の期(書き換えない)
  * @returns {any | null}
  */
-export function meijinLiveEntry(season) {
+export function meijinLiveEntry(season, { oshiId = null } = {}) {
   const pending = season?.spectator ? season.pending : null;
   if (!pending) return null;
   const provisional = playMeijinSpectatorGame(JSON.parse(JSON.stringify(season)));
   const key = pending.kind === 'league' ? `meijin:${season.id}:r${pending.round}:user-${pending.opponentId}`
     : pending.kind === 'playoff' ? `meijin:${season.id}:po:${pending.round}`
       : `meijin:${season.id}:finals:${pending.round}`;
-  return meijinRelayGames(provisional).find((entry) => entry.key === key) ?? null;
+  return meijinRelayGames(provisional, { oshiId }).find((entry) => entry.key === key) ?? null;
+}
+
+/**
+ * 名人戦の分身の期の、回戦の中継ボードに並べる対局(22章)。分身の対局を先頭に、同じ回戦のほかの対局。
+ * ほかの対局は分身の局より先に決めてあるが、ボードで終局するまで伏せる(meijinHiddenKeys)。番勝負とプレーオフは分身の局だけ。
+ * @param {any} season 名人戦の分身の期(書き換えない)
+ * @param {{ oshiId?: string | null }} [options]
+ */
+export function meijinLiveRound(season, { oshiId = null } = {}) {
+  const avatar = meijinLiveEntry(season, { oshiId });
+  if (!avatar) return null;
+  const pending = season.pending;
+  const hidden = meijinHiddenKeys(season);
+  const provisional = playMeijinSpectatorGame(JSON.parse(JSON.stringify(season)));
+  const others = pending.kind === 'league' ? meijinRelayGames(provisional, { oshiId }).filter((entry) => hidden.has(entry.key)) : [];
+  return { avatarKey: avatar.key, avatar, specs: [avatar, ...others] };
+}
+
+/** 名人戦の分身の期で、まだ見ていない同じ回戦のほかの対局の中継の鍵(先に決めてあるが、ボードで見るまで伏せる)。 */
+export function meijinHiddenKeys(season) {
+  const pending = season?.spectator && season.pending?.kind === 'league' ? season.pending : null;
+  if (!pending) return new Set();
+  return new Set((pending.others?.games ?? []).map(({ a, b }) => `meijin:${season.id}:r${pending.round}:${a}-${b}`));
 }
 
 /**

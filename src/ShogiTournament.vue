@@ -209,10 +209,14 @@
           @ceremony="openCeremony(`meijin-${meijinView?.no ?? 0}`)"
           :relay-available="Boolean(relayEngineFactory)"
           @relay="openRelayList('meijin', $event)"
-          :watching="meijinWatching"
-          @watch="startMeijinWatch(false)"
-          @watch-skip="startMeijinWatch(true)"
-          @watch-open="openMeijinWatch"
+          :live-panel="live?.kind === 'meijin' ? livePanel : null"
+          :live-rows="meijinLiveRows"
+          @watch="startMeijinLive()"
+          @watch-skip="startMeijinLive({ fast: true })"
+          @live-open="openLiveGame($event || live?.focusKey || '')"
+          @live-speed="cycleLiveSpeed"
+          @live-skip="skipLive"
+          @live-finish="finishLive"
           @back="backToSelect"
         />
         <!--
@@ -410,33 +414,14 @@
             表の札を押すと、その対局の中継をいまの手数から開く。回戦が終わったら「この回戦の結果へ」で期を進め、竜王への道を登る。
             敗退後の観戦(19章)は、注目の対局を大きく出し、回戦が終わったら「次の回戦へ」。最後は竜王の発表。
           -->
-          <section v-if="live" class="shogi-tournament__hud shogi-tournament__live" aria-label="回戦の中継" data-live-panel>
-            <p class="shogi-tournament__hud-role">
-              <span class="shogi-tournament__live-tag" aria-hidden="true">中継</span>{{ live.label }}
-              <small v-if="afterWatch" class="shogi-tournament__live-step" data-live-step>{{ afterWatch.index + 1 }}/{{ afterWatch.rounds.length }}</small>
-            </p>
-            <button v-if="liveFocusView" type="button" class="shogi-tournament__live-game" data-live-avatar @click="openLiveGame(live.focusKey)">
-              <span class="shogi-tournament__live-names">
-                <span class="shogi-tournament__live-name shogi-tournament__live-name--black">☗{{ liveFocusView.black }}</span>
-                <span class="shogi-tournament__live-name shogi-tournament__live-name--white">☖{{ liveFocusView.white }}</span>
-              </span>
-              <span class="shogi-tournament__live-bar" aria-hidden="true"><span :style="{ width: `${liveFocusView.blackPercent}%` }" /></span>
-              <span class="shogi-tournament__live-meta">
-                <b data-live-ply>{{ liveFocusView.done ? "終局" : `${liveFocusView.ply}手目` }}</b>
-                <span data-live-verdict>{{ liveFocusView.verdict }}</span>
-                <small>押すと中継</small>
-              </span>
-            </button>
-            <p class="shogi-tournament__live-count" data-live-count>
-              対局中 {{ liveCount.playing }}局・終局 {{ liveCount.done }}局。{{ live.games.length > 1 ? "表の札を押すと、その対局の中継を見られるよ。" : "押すと、その対局の中継を見られるよ。" }}
-            </p>
-            <div class="shogi-tournament__hud-row">
-              <button type="button" class="shogi-tournament__sub" :aria-label="`速さ ×${liveSpeed}。押すと変える`" data-live-speed @click="cycleLiveSpeed">速さ ×{{ liveSpeed }}</button>
-              <button type="button" class="shogi-tournament__sub" :disabled="liveFinished" data-live-skip @click="skipLive">結果まで進める</button>
-            </div>
-            <button v-if="liveFinished" type="button" class="shogi-tournament__start" data-live-finish @click="finishLive">{{ liveFinishText }}</button>
-            <button v-else type="button" class="shogi-tournament__start" data-live-avatar-watch @click="openLiveGame(live.focusKey)">{{ liveWatchText }}</button>
-          </section>
+          <RelayLivePanel
+            v-if="live && livePanel"
+            :panel="livePanel"
+            @open="openLiveGame(live.focusKey)"
+            @speed="cycleLiveSpeed"
+            @skip="skipLive"
+            @finish="finishLive"
+          />
           <!-- 敗退後の観戦の最後(19章)。竜王の判子と、誰が竜王になったか。表(③の番勝負)は、全部の結果を見せる。 -->
           <section v-else-if="afterFinale" class="shogi-tournament__hud shogi-tournament__finale" aria-label="竜王の発表" data-live-finale>
             <p class="shogi-tournament__finale-seal" aria-hidden="true">竜</p>
@@ -847,8 +832,9 @@ import { isStaleRelayGame, loadRelayStore, recallRelayGame, unpackRelayGame } fr
 import { engineGameResult, isMainCharacter, realGameSpec } from "./core/engine-game.mjs";
 import type { RelayMoveEntry } from "./core/relay-game.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
+import RelayLivePanel, { type LivePanelView } from "./RelayLivePanel.vue";
 import {
-  afterWatchRounds, applyWatchedRound, hiddenRoundIds, hiddenTables, meijinLiveEntry, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyWatchedRound, hiddenRoundIds, hiddenTables, meijinHiddenKeys, meijinLiveRound, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from "./core/relay-live.mjs";
 import { rateVerdict } from "./core/relay-game.mjs";
@@ -1030,7 +1016,7 @@ const emit = defineEmits<{
   "watch-play": [real?: any, round?: any[]];
   "watch-round": [season: any];
   /** 名人戦の分身の次の一局を記録する(21章)。realは本局の結果、なければ自動対局。 */
-  "meijin-watch-play": [real?: any];
+  "meijin-watch-play": [real?: any, round?: any[]];
   "watch-settle": [];
   play: [];
   resume: [];
@@ -1252,7 +1238,13 @@ const blankEntrants = computed(() => (Boolean(afterWatch.value) || restOpen(prop
 const ryuoRelayGameList = computed(() => (props.ryuoSeason
   ? ryuoRelayGames(props.ryuoSeason, { oshiId: props.oshi?.id ?? null }).filter((entry) => !hiddenKeys.value.has(entry.key))
   : []));
-const meijinRelayGameList = computed(() => (props.meijinSeason ? meijinRelayGames(props.meijinSeason, { oshiId: props.oshi?.id ?? null }) : []));
+// 名人戦の分身の期は、いまの回戦のほかの対局を、リーグ表のボードで見るまで一覧から外す(22章)。
+const meijinRelayGameList = computed(() => {
+  const season = props.meijinSeason;
+  if (!season) return [];
+  const hidden = meijinHiddenKeys(season);
+  return meijinRelayGames(season, { oshiId: props.oshi?.id ?? null }).filter((entry) => !hidden.has(entry.key));
+});
 /** 一覧(どの大会か、棋士を決めて開いたときはその棋士のid)。 */
 const relayList = ref<{ event: "ryuo" | "meijin"; playerId: string } | null>(null);
 /** いま見ている中継の対局(relay-games.mjsの項目)。 */
@@ -1322,9 +1314,10 @@ const avatarNoteText = computed(() => {
 type LiveGame = ReturnType<typeof liveGame>;
 /**
  * 見ている回戦。nullなら中継ボードではない。focusKeyは欄に大きく出す対局(分身の対局か、注目の対局)。
- * kindがavatarなら、本番の期は見終えてから進める。afterなら、見終えた回戦の数を残す。
+ * kindがavatarなら、本番の期は見終えてから進める。afterなら、見終えた回戦の数を残す。meijinは名人戦の分身の回戦(22章)。
  */
-const live = shallowRef<null | { games: LiveGame[]; focusKey: string; label: string; kind: "avatar" | "after" }>(null);
+type LiveKind = "avatar" | "after" | "meijin";
+const live = shallowRef<null | { games: LiveGame[]; focusKey: string; label: string; kind: LiveKind }>(null);
 /** ボードの時刻(秒)と速さ。1手はおよそ1.2〜1.8秒(速さ×1のとき)。 */
 const liveSeconds = ref(0);
 const LIVE_SPEEDS = [1, 2, 4] as const;
@@ -1369,7 +1362,7 @@ function tickLive() {
  * recordsは、保存の棋譜の代わりに使う棋譜(本局の、指している途中の棋譜)。
  */
 function beginLive(
-  specs: any[], focusKey: string, label: string, kind: "avatar" | "after", table: { stage: number; tag: string } | null = null,
+  specs: any[], focusKey: string, label: string, kind: LiveKind, table: { stage: number; tag: string } | null = null,
   records: Record<string, any> = {},
 ) {
   const store = loadRelayStore(relayStorage());
@@ -1377,9 +1370,12 @@ function beginLive(
   live.value = { games: specs.map((spec) => liveGame(spec, records[spec.key] ?? liveRecord(store, spec.key))), focusKey, label, kind };
   liveSeconds.value = 0;
   sheet.value = "";
-  viewStage.value = table && table.stage !== stages.value?.current ? table.stage : null;
-  groupChoice.value = table?.stage === 0 ? table.tag : null;
-  tableOpen.value = true;
+  // 名人戦のボードは、名人戦の画面のリーグ表の上で進む(竜王戦の表は開かない)。
+  if (kind !== "meijin") {
+    viewStage.value = table && table.stage !== stages.value?.current ? table.stage : null;
+    groupChoice.value = table?.stage === 0 ? table.tag : null;
+    tableOpen.value = true;
+  }
   liveLast = performance.now();
   stopLiveTimer();
   liveTimer = setInterval(tickLive, LIVE_TICK_MS);
@@ -1400,15 +1396,24 @@ function startLive({ fast = false }: { fast?: boolean } = {}) {
     void commitAvatarGame();
     return;
   }
-  const records: Record<string, any> = {};
   stopRealGames();
   resultOnly = fast;
-  const world = Number(season?.settings?.world);
+  const { specs, records } = realRoundSpecs(round.specs, round.avatarKey, season?.settings?.world, fast);
+  beginLive(specs, round.avatarKey, props.view?.pending?.label ?? round.avatar.label, "avatar", null, records);
+  if (fast) skipLive();
+}
+/**
+ * 回戦の対局のうち、本局にする局を指し始める(20-9)。分身の局と主要キャラの局は本局。ほかの局は、スマホと「結果だけ見る」では
+ * 先に決まった結果の筋書きのまま(指し終えた棋譜があれば、その局も本局として読み出す)。エンジンが使えないときは全部筋書き。
+ */
+function realRoundSpecs(list: any[], avatarKey: string, worldLevel: unknown, fast: boolean) {
+  const records: Record<string, any> = {};
+  const world = Number(worldLevel);
   const phone = phoneScreen();
   engineGame.setEngines(phone ? 1 : Math.min(2, Math.max(1, Math.floor((globalThis.navigator?.hardwareConcurrency ?? 4) / 4))));
   const store = loadRelayStore(relayStorage());
-  const specs = round.specs.map((spec: any) => {
-    const main = spec.key === round.avatarKey || isMainCharacter(spec.black) || isMainCharacter(spec.white);
+  const specs = list.map((spec: any) => {
+    const main = spec.key === avatarKey || isMainCharacter(spec.black) || isMainCharacter(spec.white);
     // 指し終えた棋譜があれば、その局も本局として読み出す(前に見たときの勝ち負けのまま)。
     const kept = Boolean(recallRelayGame(store, spec.key).game);
     if (!props.relayEngineFactory || (!main && !kept && (fast || phone))) return spec;
@@ -1416,8 +1421,7 @@ function startLive({ fast = false }: { fast?: boolean } = {}) {
     records[real.spec.key] = real.record;
     return real.spec;
   });
-  beginLive(specs, round.avatarKey, props.view?.pending?.label ?? round.avatar.label, "avatar", null, records);
-  if (fast) skipLive();
+  return { specs, records };
 }
 /** 「結果だけ見る」。本局を待たずに指させ、終わったらすぐ記録する(見る・見ないで勝ち負けの決まり方を変えない。20-3)。 */
 function watchResultOnly() {
@@ -1455,8 +1459,7 @@ engineGame.setPriority((key) => {
   const shown = Math.floor(liveSeconds.value * game.pace);
   return state.record.entries.length - shown;
 });
-/** hooksは、終局したとき・エンジンが使えなかったときに呼ぶ(名人戦の分身の本局。21章)。渡すと、表のボードの処理はしない。 */
-function startRealGame(spec: any, fallback: any, hooks: { onEnd: () => void; onFail: () => void } | null = null): RealGame {
+function startRealGame(spec: any, fallback: any): RealGame {
   const state: RealGame = { spec, fallback, record: { entries: [], end: null }, listeners: new Set() };
   const games = realGames;
   games.set(spec.key, state);
@@ -1471,19 +1474,11 @@ function startRealGame(spec: any, fallback: any, hooks: { onEnd: () => void; onF
     state.record.end = game.end;
     liveTick.value += 1;
     for (const listener of state.listeners) listener.onEnd(game.end);
-    if (hooks) {
-      hooks.onEnd();
-      return;
-    }
     if (resultOnly && live.value && [...games.values()].every((item) => item.record.end)) void finishLive();
   }).catch(() => {
     if (!current()) return;
     // エンジンが使えない: その局は、自動対局で決めた筋書きに戻す。
     games.delete(spec.key);
-    if (hooks) {
-      hooks.onFail();
-      return;
-    }
     if (live.value) {
       live.value = { ...live.value, games: live.value.games.map((game) => (game.key === spec.key ? liveGame(fallback) : game)) };
       if (!liveTimer && liveSeconds.value < liveEnd.value) {
@@ -1626,67 +1621,43 @@ function openLiveGame(key: string) {
   relayLive.value = real ? realSource(real) : null;
   relayEntry.value = { ...item.game.spec, noNews: true, startAt: item.state.done ? 0 : item.state.ply };
 }
-// ---- 名人戦の分身の本局(21章)。分身の次の一局をエンジンが本当に指し、中継で見る(回戦のボードはまだない)。
-/** 指している分身の本局。fastは「結果だけ見る」(中継を開かず、終わったらすぐ記録する)。 */
-const meijinWatch = shallowRef<null | { state: RealGame; fast: boolean }>(null);
-const meijinWatching = computed(() => {
-  void liveTick.value;
-  const watching = meijinWatch.value;
-  if (!watching) return null;
-  return {
-    ply: watching.state.record.entries.length, done: Boolean(watching.state.record.end),
-    viewing: relayEntry.value?.key === watching.state.spec.key, fast: watching.fast,
-  };
-});
+// ---- 名人戦の分身の回戦(21章・22章)。分身の対局と同じ回戦のほかの対局を、名人戦の画面のリーグ表の上で同時に進める。
 /**
- * 「観戦する」(VS画面のあと)と「結果だけ見る」。分身の次の一局をエンジンが指し始め、観戦するなら中継を開く。
- * 中継を閉じても指し続け、期の画面の欄に手数を出す。終局したら、中継を見ていなければすぐ、見ていれば閉じたときに記録する。
- * エンジンが使えないときは、自動対局で決める。
+ * 名人戦の分身の期の「観戦する」(VS画面のあと)と「結果だけ見る」。回戦の対局を本局にして(選び方は竜王戦と同じ。20-9)、
+ * リーグ表の上で同時に進める。番勝負とプレーオフは分身の局だけ。エンジンが使えないときは、全局を先に決まった結果の筋書きで進める。
  */
-function startMeijinWatch(fast: boolean) {
+function startMeijinLive({ fast = false }: { fast?: boolean } = {}) {
   const season = props.meijinSeason;
-  const entry = season ? meijinLiveEntry(season) : null;
-  if (!props.relayEngineFactory || !entry) {
-    emit("meijin-watch-play", null);
+  const round = season ? meijinLiveRound(season, { oshiId: props.oshi?.id ?? null }) : null;
+  if (!round) {
+    emit("meijin-watch-play", null, []);
     return;
   }
   stopRealGames();
-  engineGame.setEngines(1);
-  const state = startRealGame(realGameSpec(entry, { world: null }), entry, {
-    onEnd: () => {
-      if (meijinWatch.value?.state === state && (meijinWatch.value.fast || relayEntry.value?.key !== state.spec.key)) finishMeijinWatch();
-    },
-    onFail: () => {
-      if (meijinWatch.value?.state !== state) return;
-      meijinWatch.value = null;
-      emit("meijin-watch-play", null);
-    },
-  });
-  meijinWatch.value = { state, fast };
-  if (!fast) openMeijinWatch();
+  resultOnly = fast;
+  const { specs, records } = realRoundSpecs(round.specs, round.avatarKey, season.settings?.world, fast);
+  beginLive(specs, round.avatarKey, season.pending?.label ?? round.avatar.label, "meijin", null, records);
+  if (fast) skipLive();
 }
-/** 指している分身の本局の中継を、はじめから開く(指された手まで進めて見られる)。 */
-function openMeijinWatch() {
-  const watching = meijinWatch.value;
-  if (!watching) return;
-  relayLive.value = realSource(watching.state);
-  relayEntry.value = { ...watching.state.spec, noNews: true, startAt: 0 };
-}
-/** 分身の本局を記録する(終局していなければ何もしない)。 */
-function finishMeijinWatch() {
-  const watching = meijinWatch.value;
-  if (!watching?.state.record.end) return;
-  const { spec, record } = watching.state;
-  const real = engineGameResult(spec, { v: 2, key: spec.key, entries: record.entries, end: record.end }, "user");
-  meijinWatch.value = null;
-  stopRealGames();
-  emit("meijin-watch-play", real);
-}
+/** 名人戦のリーグ表の行ごとの、いま指している対局(何手目・自分の側の勝率・終局したら勝ち負け)。押すとその対局の中継。 */
+const meijinLiveRows = computed(() => {
+  const rows: Record<string, { key: string; side: "black" | "white"; ply: number; done: boolean; percent: number; result: "win" | "loss" | null }> = {};
+  if (live.value?.kind !== "meijin") return rows;
+  for (const { game, state } of liveStates.value) {
+    for (const side of ["black", "white"] as const) {
+      const id = game.spec[side].id;
+      rows[id] = {
+        key: game.key, side, ply: state.ply, done: state.done,
+        percent: side === "black" ? state.blackPercent : 100 - state.blackPercent,
+        result: state.done && state.winner ? (state.winner === side ? "win" : "loss") : null,
+      };
+    }
+  }
+  return rows;
+});
 // 中継を閉じたら、作った棋譜をボードに取り込む(その対局は、棋譜の手数と形勢で進む)。
 watch(relayEntry, (now, before) => {
   if (!now) relayLive.value = null;
-  // 名人戦の分身の本局が終わっていれば、中継を閉じたときに記録する(21章)。
-  if (!now && before && meijinWatch.value?.state.spec.key === before.key && meijinWatch.value.state.record.end) finishMeijinWatch();
   if (now || !before || !live.value) return;
   const store = loadRelayStore(relayStorage());
   live.value = { ...live.value, games: live.value.games.map((game) => (game.record ? game : liveGame(game.spec, liveRecord(store, game.key)))) };
@@ -1705,15 +1676,24 @@ async function finishLive() {
   // 終わった本局は、その結果を記録する(終わっていなければ、自動対局で決めた結果のまま)。
   let real = null;
   const round = [];
+  const meijinRound = [];
   for (const state of realGames.values()) {
     if (!state.record.end) continue;
     const game = { v: 2, key: state.spec.key, entries: state.record.entries, end: state.record.end };
-    if (state.spec.black.id === "user" || state.spec.white.id === "user") real = engineGameResult(state.spec, game, "user");
-    else round.push({ nodeId: tableOf(state.spec.key).id, aId: state.spec.black.id, result: engineGameResult(state.spec, game, state.spec.black.id) });
+    const aId = state.spec.black.id;
+    if (aId === "user" || state.spec.white.id === "user") real = engineGameResult(state.spec, game, "user");
+    else if (live.value?.kind === "meijin") meijinRound.push({ aId, bId: state.spec.white.id, result: engineGameResult(state.spec, game, aId) });
+    else round.push({ nodeId: tableOf(state.spec.key).id, aId, result: engineGameResult(state.spec, game, aId) });
   }
+  const kind = live.value?.kind;
   stopRealGames();
   resultOnly = false;
   live.value = null;
+  // 名人戦の分身の回戦(22章)は、名人戦の画面のまま次の一局へ。
+  if (kind === "meijin") {
+    emit("meijin-watch-play", real, meijinRound);
+    return;
+  }
   await commitAvatarGame(real, round);
 }
 /**
@@ -1794,14 +1774,32 @@ const liveFocusView = computed(() => {
 });
 /** 欄の主役のボタン(回戦が終わる前)。分身の対局か、注目の対局(羽音・推しなど)を開く。 */
 const liveWatchText = computed(() => {
-  if (live.value?.kind === "avatar") return "分身の対局を見る";
+  if (live.value?.kind === "avatar" || live.value?.kind === "meijin") return "分身の対局を見る";
   return liveFocus.value && isFeatured(liveFocus.value.game.spec) ? "注目の対局を見る" : "この対局を見る";
 });
 /** 回戦が終わったときの主役のボタン。 */
 const liveFinishText = computed(() => {
   const after = afterWatch.value;
-  if (!after) return "この回戦の結果へ";
+  if (!after) return live.value?.kind === "meijin" && props.meijinSeason?.pending?.kind !== "league" ? "この局の結果へ" : "この回戦の結果へ";
   return after.index + 1 >= after.rounds.length ? "竜王の発表へ" : "次の回戦へ";
+});
+/** 中継ボードの欄(RelayLivePanel.vue)に渡す形。竜王戦の表と名人戦のリーグ表で共通。 */
+const livePanel = computed<LivePanelView | null>(() => {
+  const board = live.value;
+  if (!board) return null;
+  const after = afterWatch.value;
+  return {
+    label: board.label,
+    step: after ? `${after.index + 1}/${after.rounds.length}` : "",
+    focus: liveFocusView.value,
+    count: liveCount.value,
+    multiple: board.games.length > 1,
+    tableWord: board.kind === "meijin" ? "リーグ表" : "表",
+    speed: liveSpeed.value,
+    finished: liveFinished.value,
+    finishText: liveFinishText.value,
+    watchText: liveWatchText.value,
+  };
 });
 const relayNextId = computed(() => (relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason)?.pending?.opponentId ?? "");
 

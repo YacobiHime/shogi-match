@@ -171,7 +171,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/:spectating="Boolean\(ryuoSeason\?\.spectator\)"[\s\S]*?@watch-play="playRyuoWatchGame"/);
     // 名人戦の分身(21章): 自分の席を分身にし、分身の次の一局は本局の結果(なければ自動対局)で記録する。
     expect(source).toMatch(/if \(settings\.watch\) meijinSeason\.value = asAvatarMeijinSeason\(meijinSeason\.value, avatarMember\(settings\.difficulty\)\);/);
-    expect(source).toMatch(/function playMeijinWatchGame\(real: any = null\) \{[\s\S]*?playMeijinSpectatorGame\([\s\S]*?finalizeMeijinSeason\(next\);/);
+    expect(source).toMatch(/function playMeijinWatchGame\(real: any = null, round: any\[\] = \[\]\) \{[\s\S]*?playMeijinSpectatorGame\([\s\S]*?\{ real, round \}\)[\s\S]*?finalizeMeijinSeason\(next\);/);
     expect(source).toMatch(/@meijin-watch-play="playMeijinWatchGame"/);
     // 敗退後の観戦で見終えた回戦は、本局の結果で指し直した期に替え、竜王の発表・結果を見終えた・次の期で残りを確定する(20-10)。
     expect(source).toMatch(/@watch-round="applyRyuoWatchRound"\s*@watch-settle="settleRyuoSeason"/);
@@ -324,7 +324,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*if \(props\.spectating\) \{\s*startLive\(\);\s*return;\s*\}\s*emit\("play"\);/);
     // 中継ボードは、見終えて(この回戦の結果へ)から本番の期を進める。途中で閉じても期は進めない。敗退後の観戦(19章)は次の回戦へ。
     // 回戦の対局は本局(20章)。エンジンが指し終えた分身の局と、同じ回戦のほかの局(20-9)の結果を記録する(終わっていなければ自動対局の結果)。
-    expect(tournament).toMatch(/async function finishLive\(\) \{\s*if \(afterWatch\.value\) \{\s*nextAfterRound\(\);\s*return;\s*\}\s*stopLiveTimer\(\);[\s\S]*?for \(const state of realGames\.values\(\)\) \{\s*if \(!state\.record\.end\) continue;[\s\S]*?real = engineGameResult\(state\.spec, game, "user"\);\s*else round\.push\(\{ nodeId: tableOf\(state\.spec\.key\)\.id, aId: state\.spec\.black\.id, result: engineGameResult\([\s\S]*?stopRealGames\(\);[\s\S]*?live\.value = null;\s*await commitAvatarGame\(real, round\);/);
+    expect(tournament).toMatch(/async function finishLive\(\) \{\s*if \(afterWatch\.value\) \{\s*nextAfterRound\(\);\s*return;\s*\}\s*stopLiveTimer\(\);[\s\S]*?for \(const state of realGames\.values\(\)\) \{\s*if \(!state\.record\.end\) continue;[\s\S]*?real = engineGameResult\(state\.spec, game, "user"\);[\s\S]*?else round\.push\(\{ nodeId: tableOf\(state\.spec\.key\)\.id, aId, result: engineGameResult\([\s\S]*?stopRealGames\(\);[\s\S]*?live\.value = null;[\s\S]*?await commitAvatarGame\(real, round\);/);
     expect(tournament).toMatch(/emit\("watch-play", real, round\);/);
     // スマホと「結果だけ見る」は、主要キャラの局(と、指し終えた棋譜のある局)だけを本局にする。
     expect(tournament).toMatch(/if \(!props\.relayEngineFactory \|\| \(!main && !kept && \(fast \|\| phone\)\)\) return spec;\s*const real = startRealGame\(realGameSpec\(spec,/);
@@ -333,9 +333,9 @@ describe("match screen regressions", () => {
     // 敗退後の観戦は、結果の画面の「このあとの対局を観戦」から表のボードへ。見届けた回戦の数を残し、終えると結果の画面へ戻る。
     expect(tournament).toMatch(/data-watch-after @click="startAfterWatch"/);
     expect(tournament).toMatch(/async function nextAfterRound\(\) \{[\s\S]*?emit\("watch-round", applyWatchedRound\([\s\S]*?emit\("watch-progress", String\(season\.id\), Math\.max\(afterWatchRevealed\.value, done\)\);[\s\S]*?emit\("watch-settle"\);/);
-    // 名人戦の分身の本局(21章): 中継を見ていなければ終局ですぐ、見ていれば閉じたときに記録する。
-    expect(tournament).toMatch(/function startMeijinWatch\(fast: boolean\) \{[\s\S]*?startRealGame\(realGameSpec\(entry, \{ world: null \}\), entry, \{/);
-    expect(tournament).toMatch(/function finishMeijinWatch\(\) \{[\s\S]*?engineGameResult\(spec, [\s\S]*?emit\("meijin-watch-play", real\);/);
+    // 名人戦の分身の回戦(22章): リーグ表の上のボードで回戦の対局を本局にして進め、見終えたら分身の局と同じ回戦の結果を記録する。
+    expect(tournament).toMatch(/function startMeijinLive\([\s\S]*?meijinLiveRound\([\s\S]*?realRoundSpecs\([\s\S]*?beginLive\(specs, round\.avatarKey, [^)]*"meijin"/);
+    expect(tournament).toMatch(/if \(kind === "meijin"\) \{\s*emit\("meijin-watch-play", real, meijinRound\);\s*return;\s*\}/);
     const meijinScreen = readFileSync(new URL("../ShogiMeijin.vue", import.meta.url), "utf8");
     expect(meijinScreen).toMatch(/data-meijin-avatar-enter @click="enter\(true\)"/);
     expect(meijinScreen).toMatch(/data-meijin-watch-skip @click="emit\('watch-skip'\)"/);

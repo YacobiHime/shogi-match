@@ -6399,10 +6399,11 @@ function finalizeMeijinSeason(next: any) {
  * 名人戦の分身の次の一局を記録する(21章)。realは、エンジンが本当に指した本局の結果。なければ自動対局で決める。
  * レーティングと対局の記録には数えない(自分で指していないため)。期の記録はふつうの期と同じ。
  */
-function playMeijinWatchGame(real: any = null) {
+function playMeijinWatchGame(real: any = null, round: any[] = []) {
   const season = meijinSeason.value;
   if (!season?.pending || !season.spectator) return;
-  const next = playMeijinSpectatorGame(JSON.parse(JSON.stringify(season)), { real });
+  // roundは、同じ回戦のほかの本局の結果(22章)。その対局の勝者を差し替えてから記録する。
+  const next = playMeijinSpectatorGame(JSON.parse(JSON.stringify(season)), { real, round });
   meijinSeason.value = next;
   saveMeijinSeason(browserStorage(), next);
   finalizeMeijinSeason(next);
