@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from '../game-state';
 import {
-  ENGINE_RESIGN_CP, clearEngineGameProgress, engineGameResult, engineMark, engineStrength, loadEngineGameProgress, playEngineGame,
-  saveEngineGameProgress, shouldEngineResign,
+  ENGINE_RESIGN_CP, LEVEL_STRENGTH, LIGHT_NODES_FLOOR, clearEngineGameProgress, engineGameResult, engineLevel, engineMark, engineStrength,
+  isMainCharacter, levelStrength, lightReading, loadEngineGameProgress, playEngineGame, realGameSpec, saveEngineGameProgress, shouldEngineResign,
 } from './engine-game.mjs';
+import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO } from './ryuo-story.mjs';
+import { WORLD_BASE_RATING } from './ryuo-strength.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
 
 /** 作りものの読み: 合法手を決まった順に並べ、手番の側から見た値を返す。60手目からは先手が大きく優勢。 */
@@ -115,5 +117,62 @@ describe('本局(20章の段階1)', () => {
     const stored = gameRecordOf(result, 'user', 'p1');
     expect(stored).toMatchObject({ black: 'user', how: 'middle' });
     expect(stored.story[2]).toBeGreaterThan(0);
+  });
+});
+
+describe('回戦の全局を本局にする(20-9)', () => {
+  it('主要キャラは分身・羽音・善彦', () => {
+    expect(isMainCharacter({ id: 'user' })).toBe(true);
+    expect(isMainCharacter({ id: 'p1', story: HANANE })).toBe(true);
+    expect(isMainCharacter({ id: 'p2', story: YOSHIHIKO })).toBe(true);
+    expect(isMainCharacter({ id: 'p3', story: null })).toBe(false);
+  });
+
+  it('観戦用の読みは4分の1(下限より少なくしない。下限以下の強さはそのまま)', () => {
+    const strong = engineStrength({ level: 49 }).settings;
+    const light = engineStrength({ level: 49 }, { light: true }).settings;
+    expect(light.nodes).toBe(Math.max(LIGHT_NODES_FLOOR, Math.round(strong.nodes / 4)));
+    expect(light.searchThreads).toBe(1);
+    const weak = engineStrength({ level: 22 }).settings;
+    expect(lightReading(weak)).toEqual(weak.nodes > LIGHT_NODES_FLOOR ? { ...weak, nodes: Math.max(LIGHT_NODES_FLOOR, Math.round(weak.nodes / 4)), searchThreads: 1 } : weak);
+  });
+
+  it('強さの表は強い順に並び、表の外は直線で延ばす', () => {
+    for (const table of [LEVEL_STRENGTH.full, LEVEL_STRENGTH.light]) {
+      for (let level = 2; level <= 49; level += 1) expect(levelStrength(level, table)).toBeGreaterThan(levelStrength(level - 1, table));
+    }
+    expect(levelStrength(14)).toBe(0);
+    expect(levelStrength(13)).toBe(-60);
+  });
+
+  it('CPU同士のLv: 基準の棋士は世界の基準Lv、レーティングが高いほど上(Elo式の差をそのまま強さの表で上る)', () => {
+    expect(engineLevel(WORLD_BASE_RATING, 26)).toBe(26);
+    const up = engineLevel(WORLD_BASE_RATING + 300, 26);
+    expect(up).toBeGreaterThan(26);
+    expect(Math.abs(levelStrength(up) - (levelStrength(26) + 300))).toBeLessThan(80);
+    expect(engineLevel(WORLD_BASE_RATING - 5000, 26)).toBe(1);
+    expect(engineLevel(WORLD_BASE_RATING + 5000, 26)).toBe(49);
+  });
+
+  it('本局の設定: 勝ち負けは決めない。分身の局はLvのまま、CPU同士はLvを当て直し、主要キャラがいなければ観戦用の読み', () => {
+    const base = {
+      key: 'ryuo:1:ranking:n2', winner: 'black', how: 'middle', story: [1, 2, 3],
+      black: { id: 'p1', rating: WORLD_BASE_RATING + 200, level: 10, story: null },
+      white: { id: 'p2', rating: WORLD_BASE_RATING, level: 10, story: null },
+    };
+    const other = realGameSpec(base, { world: 24 });
+    expect(other).toMatchObject({ winner: null, how: null, story: null, light: true });
+    expect(other.white.level).toBe(24);
+    expect(other.black.level).toBe(engineLevel(WORLD_BASE_RATING + 200, 24, { light: true }));
+    const rival = realGameSpec({ ...base, white: { ...base.white, story: HANANE } }, { world: 24 });
+    expect(rival.light).toBe(false);
+    // 羽音は、分身のいる表では勝ち上がりやすい(自動対局と同じ)。
+    expect(rival.white.level).toBe(engineLevel(WORLD_BASE_RATING + HANANE_RIVAL_RUN_RATING, 24));
+    const avatar = realGameSpec({ ...base, black: { ...base.black, id: 'user' } }, { world: 24 });
+    expect(avatar.light).toBe(false);
+    expect(avatar.black.level).toBe(10);
+    expect(avatar.white.level).toBe(10);
+    // 世界の物差しのない期は、期のLvのまま。
+    expect(realGameSpec(base, { world: null }).black.level).toBe(10);
   });
 });

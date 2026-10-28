@@ -786,15 +786,45 @@ export function asAvatarSeason(season, avatar, { live = true } = {}) {
 }
 
 /**
+ * @typedef {{ nodeId: string, aId: string, result: ReturnType<typeof simulateMemberGame> }} RoundResult
+ */
+
+/**
+ * 観戦の期で、分身と同じ回戦のほかの試合の結果を、本局(エンジンが本当に指した対局。20-9)の結果に差し替える。
+ * advanceBracketは同じ回戦のほかの試合を分身の局より先に決めるが、その先の回戦はまだ決めていないので、
+ * 勝者を差し替えても、ほかの記録と食い違わない。分身の局・ほかの回戦・決まっていない試合は差し替えない。
+ * @param {any} season 観戦の期(書き換える)
+ * @param {RoundResult[]} results aIdは、resultの主(aWinsがその棋士の勝ち)
+ */
+export function applyRoundResults(season, results = []) {
+  const pending = season?.pending;
+  if (!season?.spectator || pending?.kind !== 'game' || !results.length) return season;
+  const block = pending.blockIndex ?? 0;
+  const bracket = pending.phase === 'revival' ? season.revival?.[block] : pending.phase === 'main' ? season.main : season.ranking;
+  const round = bracket?.nodes?.[pending.nodeId]?.round;
+  for (const { nodeId, aId, result } of results) {
+    const node = bracket?.nodes?.[nodeId];
+    if (!node || !result || node.id === pending.nodeId || node.round !== round || node.winner === null) continue;
+    const sides = [sidePid(bracket, node.a), sidePid(bracket, node.b)];
+    if (!sides.includes(aId) || sides.includes(USER_ID)) continue;
+    const bId = sides.find((pid) => pid !== aId);
+    node.winner = result.aWins ? aId : bId;
+    node.game = gameRecordOf(result, aId, bId);
+  }
+  return season;
+}
+
+/**
  * 観戦の期の、分身の次の一局を決めて記録する(ほかの棋士と同じ自動対局。結果は期の種と局の数で決まる)。
  * 決めた対局は、ほかの棋士の対局と同じく中継に並ぶ(relay-games.mjsのtags.self)。
  * realは、エンジンが本当に指した本局の結果(engine-game.mjsのengineGameResult。docs/tournament-relay-design.mdの20章)。
- * あれば、自動対局の代わりにそれを記録する。
+ * あれば、自動対局の代わりにそれを記録する。roundは、同じ回戦のほかの本局の結果(applyRoundResults)。
  * @param {any} season 観戦の期
- * @param {{ real?: ReturnType<typeof simulateMemberGame> | null }} [options]
+ * @param {{ real?: ReturnType<typeof simulateMemberGame> | null, round?: RoundResult[] }} [options]
  */
-export function playSpectatorGame(season, { real = null } = {}) {
+export function playSpectatorGame(season, { real = null, round = [] } = {}) {
   if (!season?.pending) return season;
+  applyRoundResults(season, round);
   const pending = season.pending;
   const count = season.userGames?.length ?? 0;
   const rng = createRng(((Number(season.id) || 0) ^ 0x6a09e667 ^ Math.imul(count + 1, 0x9e3779b1)) >>> 0);

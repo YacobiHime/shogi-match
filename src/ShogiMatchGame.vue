@@ -5914,12 +5914,15 @@ const avatarProfile = computed(() => myAbilityProfile({
  * エントリーの「対局: 観戦」で始めた期の「観戦する」(17章)。分身の次の一局を、ほかの棋士と同じ自動対局で決めて記録する
  * (中継は大会の画面が開く)。レーティングと対局の記録には数えない(自分で指していないため)。期の記録はふつうの期と同じ。
  */
-/** 分身の次の一局を記録する。realは、エンジンが本当に指した本局の結果(20章)。なければ自動対局で決める。 */
-function playRyuoWatchGame(real: any = null) {
+/**
+ * 分身の次の一局を記録する。realは、エンジンが本当に指した本局の結果(20章)。なければ自動対局で決める。
+ * roundは、同じ回戦のほかの本局の結果(20-9)。その試合の勝者を差し替えてから進める。
+ */
+function playRyuoWatchGame(real: any = null, round: any[] = []) {
   const season = ryuoSeason.value;
   if (!season?.pending || !season.spectator) return;
   // 画面の状態(リアクティブ)のままでは複製できないので、保存と同じ形の写しから進める。
-  const next = playSpectatorGame(rawRyuoSeason(), { real });
+  const next = playSpectatorGame(rawRyuoSeason(), { real, round });
   ryuoSeason.value = next;
   saveSeason(browserStorage(), next);
   finalizeRyuoSeason();

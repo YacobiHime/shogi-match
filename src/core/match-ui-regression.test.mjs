@@ -169,6 +169,8 @@ describe("match screen regressions", () => {
     // エントリーの「対局: 観戦」の期(17章)は、自分では指さず、期の画面の「観戦する」で分身の対局を見る。
     expect(source).toMatch(/function startRyuoGameNow\(\) \{[\s\S]*?if \(season\.spectator\) \{\s*openRyuoSeasonScreen\(\);/);
     expect(source).toMatch(/:spectating="Boolean\(ryuoSeason\?\.spectator\)"[\s\S]*?@watch-play="playRyuoWatchGame"/);
+    // 本局の結果(分身の局と、同じ回戦のほかの局。20章)を、期を進める前に記録する。
+    expect(source).toMatch(/function playRyuoWatchGame\(real: any = null, round: any\[\] = \[\]\) \{[\s\S]*?playSpectatorGame\(rawRyuoSeason\(\), \{ real, round \}\)/);
   });
 
   it("runs the Ryuo tournament as its own mode from the title screen, with saved seasons and its own result dialog", () => {
@@ -313,16 +315,18 @@ describe("match screen regressions", () => {
     // 観戦の期(18章)は、VS画面のあと、トーナメント表の回戦の中継ボードへ移る。
     expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*if \(props\.spectating\) \{\s*startLive\(\);\s*return;\s*\}\s*emit\("play"\);/);
     // 中継ボードは、見終えて(この回戦の結果へ)から本番の期を進める。途中で閉じても期は進めない。敗退後の観戦(19章)は次の回戦へ。
-    // 分身の対局が本局(20章)なら、エンジンが指し終えた結果を記録する(終わっていなければ自動対局で決める)。
-    expect(tournament).toMatch(/async function finishLive\(\) \{\s*if \(afterWatch\.value\) \{\s*nextAfterRound\(\);\s*return;\s*\}\s*stopLiveTimer\(\);[\s\S]*?const real = realGame\?\.record\.end\s*\?\s*engineGameResult\([\s\S]*?: null;\s*stopRealGame\(\);[\s\S]*?live\.value = null;\s*await commitAvatarGame\(real\);/);
-    expect(tournament).toMatch(/emit\("watch-play", real\);/);
+    // 回戦の対局は本局(20章)。エンジンが指し終えた分身の局と、同じ回戦のほかの局(20-9)の結果を記録する(終わっていなければ自動対局の結果)。
+    expect(tournament).toMatch(/async function finishLive\(\) \{\s*if \(afterWatch\.value\) \{\s*nextAfterRound\(\);\s*return;\s*\}\s*stopLiveTimer\(\);[\s\S]*?for \(const state of realGames\.values\(\)\) \{\s*if \(!state\.record\.end\) continue;[\s\S]*?real = engineGameResult\(state\.spec, game, "user"\);\s*else round\.push\(\{ nodeId: tableOf\(state\.spec\.key\)\.id, aId: state\.spec\.black\.id, result: engineGameResult\([\s\S]*?stopRealGames\(\);[\s\S]*?live\.value = null;\s*await commitAvatarGame\(real, round\);/);
+    expect(tournament).toMatch(/emit\("watch-play", real, round\);/);
+    // スマホと「結果だけ見る」は、主要キャラの局(と、指し終えた棋譜のある局)だけを本局にする。
+    expect(tournament).toMatch(/if \(!props\.relayEngineFactory \|\| \(!main && !kept && \(fast \|\| phone\)\)\) return spec;\s*const real = startRealGame\(realGameSpec\(spec,/);
     // 中継ボードを閉じると、本局は止める(途中の手は残り、次は続きから)。
-    expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*stopRealGame\(\);/);
+    expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*stopRealGames\(\);/);
     // 敗退後の観戦は、結果の画面の「このあとの対局を観戦」から表のボードへ。見届けた回戦の数を残し、終えると結果の画面へ戻る。
     expect(tournament).toMatch(/data-watch-after @click="startAfterWatch"/);
     expect(tournament).toMatch(/function nextAfterRound\(\) \{[\s\S]*?emit\("watch-progress", String\(props\.ryuoSeason\.id\), Math\.max\(afterWatchRevealed\.value, done\)\);/);
     expect(tournament).toMatch(/function endAfterWatch\(\) \{[\s\S]*?afterWatch\.value = null;[\s\S]*?screen\.value = "result";\s*\}/);
-    expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*stopRealGame\(\);\s*live\.value = null;\s*tableOpen\.value = false;\s*\}/);
+    expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*stopRealGames\(\);\s*live\.value = null;\s*tableOpen\.value = false;\s*\}/);
     // 期の結果の主役は「表彰式へ」。賞状(縦書き・判子)をわたし、閉じると期を見終えて大会の選択へ(docs/season-award-design.md)。
     expect(tournament).toMatch(/data-award-open @click="openCeremony\(`ryuo-\$\{seasonNo\}`\)">表彰式へ</);
     expect(tournament).toMatch(/@ceremony="openCeremony\(`meijin-\$\{meijinView\?\.no \?\? 0\}`\)"/);

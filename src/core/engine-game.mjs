@@ -18,6 +18,8 @@ import {
 import { winRate } from './move-selection.mjs';
 import { createFormationState, detectFormationSnapshot, updateFormationState } from './formation-tracker.mjs';
 import { packRelayGame, unpackRelayGame } from './relay-store.mjs';
+import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO } from './ryuo-story.mjs';
+import { WORLD_BASE_RATING } from './ryuo-strength.mjs';
 
 /** ロジックAIで指すLvの手の、形勢を見るための読み(画面のバーと解説に使う)。 */
 export const EVAL_NODES = 3000;
@@ -34,14 +36,90 @@ const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 /** 盤の局面の鍵(手数を除く)。千日手を避けるのに使う。 */
 const positionKey = (sfen) => sfen.split(' ').slice(0, 3).join(' ');
 
+// ---- 主要キャラと、観戦用の読み(20-9)
+
+/** 主要キャラ(分身・羽音・善彦)か。主要キャラの対局は、対局用と同じ読みの量で指す(ユーザーの判断)。 */
+export function isMainCharacter(player) {
+  return player?.id === 'user' || player?.story === HANANE || player?.story === YOSHIHIKO;
+}
+
+/** 観戦用の読み: 主要キャラ以外の対局は、読む量を4分の1にする(10,000ノードより少なくはしない。それ以下のLvは同じ)。 */
+export const LIGHT_NODES_FLOOR = 10000;
+export function lightReading(settings) {
+  if (!(settings.nodes > LIGHT_NODES_FLOOR)) return settings;
+  return { ...settings, nodes: Math.max(LIGHT_NODES_FLOOR, Math.round(settings.nodes / 4)), searchThreads: 1 };
+}
+
 /**
  * 棋士のLvの強さ設定。Lv1〜49(大会の棋士にLv0はいない)。sourceが10以下のLvはロジックAIで指す。
+ * lightは観戦用の読み(主要キャラ以外どうしの対局)。
  * @param {{ level?: number | null }} player
+ * @param {{ light?: boolean }} [options]
  */
-export function engineStrength(player) {
+export function engineStrength(player, { light = false } = {}) {
   const level = clamp(Math.round(Number(player?.level) || 1), 1, 49);
   const preset = CPU_STRENGTH_PRESETS.find((entry) => entry.level === level) ?? CPU_STRENGTH_PRESETS.at(-1);
-  return { level, skill: preset.skill, settings: getStrengthSearchSettings(preset.value), logicLevel: logicLevelOf(preset.value) };
+  const settings = getStrengthSearchSettings(preset.value);
+  return { level, skill: preset.skill, settings: light ? lightReading(settings) : settings, logicLevel: logicLevelOf(preset.value) };
+}
+
+/**
+ * CPU同士の自己対局で測った、Lvごとの強さ(L14を0とするレーティング。docs/tournament-relay-design.mdの20-6・20-9)。
+ * fullは対局用の読み、lightは観戦用の読み(L30以下はほぼ同じ読みなので、同じ値。L34から上は、L22・L26・L30で尺度を合わせた測定値)。
+ * lightのL49は、測定でほかに全勝して値が決まらなかったので、対局用のL46とL49のあいだに置いた見積もり。測り直したら、ここを差し替える。
+ */
+export const LEVEL_STRENGTH = Object.freeze({
+  full: Object.freeze([[14, 0], [18, 157], [22, 541], [26, 823], [30, 1043], [34, 1389], [38, 1542], [42, 1782], [46, 1882], [49, 2220]]),
+  light: Object.freeze([[14, 0], [18, 157], [22, 541], [26, 823], [30, 1043], [34, 1130], [38, 1205], [42, 1423], [46, 1593], [49, 2000]]),
+});
+/** 表の外(L14より下)の、1Lvあたりの強さ(段級位の表の間隔)。 */
+const STRENGTH_PER_LEVEL_BELOW = 60;
+
+/** Lv(小数)の強さ。表の点を直線でつなぐ。 */
+export function levelStrength(level, table = LEVEL_STRENGTH.full) {
+  if (level <= table[0][0]) return table[0][1] - (table[0][0] - level) * STRENGTH_PER_LEVEL_BELOW;
+  for (let index = 1; index < table.length; index += 1) {
+    const [l1, s1] = table[index];
+    const [l0, s0] = table[index - 1];
+    if (level <= l1) return s0 + ((s1 - s0) * (level - l0)) / (l1 - l0);
+  }
+  const [l0, s0] = table.at(-2);
+  const [l1, s1] = table.at(-1);
+  return s1 + ((s1 - s0) * (level - l1)) / (l1 - l0);
+}
+
+/**
+ * CPU同士の本局で指すLv。エンジン同士の勝率が、見ない対局の自動対局(Elo式)とそろうように、
+ * 基準の棋士(6組の平均)を世界の基準Lv(world)に置き、レーティングの差だけ強さの表を上り下りしたLv(20-6の決めたこと2)。
+ * @param {number} rating 棋士のレーティング(名簿の尺度)
+ * @param {number} world 世界の基準Lv
+ * @param {{ light?: boolean, base?: number }} [options]
+ */
+export function engineLevel(rating, world, { light = false, base = WORLD_BASE_RATING } = {}) {
+  const table = light ? LEVEL_STRENGTH.light : LEVEL_STRENGTH.full;
+  const target = levelStrength(world, table) + (rating - base);
+  let best = 1;
+  for (let level = 1; level <= 49; level += 1) {
+    if (Math.abs(levelStrength(level, table) - target) < Math.abs(levelStrength(best, table) - target)) best = level;
+  }
+  return best;
+}
+
+/**
+ * 本局の設定。分身の対局は、期の棋士のLv(プレイヤーが当たるときと同じ世界の物差し)のまま。
+ * CPU同士の対局は、engineLevelのLvにし、主要キャラがいなければ観戦用の読み(light)にする。
+ * 本局は分身のいる表の対局なので、羽音は自動対局と同じく勝ち上がりやすい(ryuo.mjsのadvanceBracket)。
+ * @param {any} spec 中継の項目(blackとwhiteにレーティング)
+ * @param {{ world?: number | null }} options
+ */
+export function realGameSpec(spec, { world = null } = {}) {
+  const avatar = spec.black?.id === 'user' || spec.white?.id === 'user';
+  const light = !isMainCharacter(spec.black) && !isMainCharacter(spec.white);
+  const base = { ...spec, winner: null, how: null, story: null, light };
+  if (avatar || !Number.isFinite(world)) return base;
+  const ratingOf = (player) => (Number(player.rating) || 0) + (player.story === HANANE ? HANANE_RIVAL_RUN_RATING : 0);
+  const levelOf = (player) => ({ ...player, level: engineLevel(ratingOf(player), /** @type {number} */ (world), { light }) });
+  return { ...base, black: levelOf(spec.black), white: levelOf(spec.white) };
 }
 
 /**
@@ -81,7 +159,8 @@ export function shouldEngineResign({ ply, best, lastValue }) {
  * @returns {Promise<import('./relay-game.mjs').RelayGame | null>} 止めたらnull
  */
 export async function playEngineGame({ spec, search, formationMaster = null, onMove = () => {}, isCancelled = () => false, resume = [] }) {
-  const strengths = { black: engineStrength(spec.black), white: engineStrength(spec.white) };
+  const light = Boolean(spec.light);
+  const strengths = { black: engineStrength(spec.black, { light }), white: engineStrength(spec.white, { light }) };
   // 持ち時間の時計だけに使う筋書き(勝ち負けは決めない。手数の目安で時間を配る)。
   const clock = createRelayClock(spec, relayPlan({ ...spec, winner: spec.winner ?? 'black' }));
   const plans = { black: openingPlanOf(spec, 'black'), white: openingPlanOf(spec, 'white') };
@@ -256,8 +335,8 @@ export function engineGameResult(spec, game, aId) {
 // ---- 指している途中の本局の保存(画面を離れても、戻ったら続きから指す)
 
 export const ENGINE_GAME_KEY = 'yacobihime:shogi-match:engine-game:v1';
-/** 途中の本局を残す数。 */
-const PROGRESS_LIMIT = 4;
+/** 途中の本局を残す数(回戦の全局を本局にするので、1回戦ぶんより多く)。 */
+const PROGRESS_LIMIT = 40;
 
 function loadProgressStore(storage) {
   try {

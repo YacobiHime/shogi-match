@@ -177,3 +177,36 @@ describe('敗退後の観戦を表で見る(19章)', () => {
     expect(masked.matches.every(({ winner }) => winner === null)).toBe(true);
   });
 });
+
+describe('回戦の全局を本局にする(20-9)', () => {
+  it('同じ回戦のほかの試合の勝者を本局の結果に差し替える。分身の局とほかの回戦は変えない', () => {
+    const season = watchSeason();
+    const round = liveRound(season);
+    const others = round.specs.slice(1);
+    const flip = others.map((spec) => {
+      const { id } = tableOf(spec.key);
+      const winner = season.ranking.nodes[id].winner;
+      const aId = spec.black.id;
+      // 自動対局と逆の結果にする。
+      return { nodeId: id, aId, result: { aWins: winner !== aId, how: 'middle', aColor: 'black', openings: { a: null, b: null }, castles: { a: null, b: null }, phases: [0, 0, 300], probability: null } };
+    });
+    const before = JSON.parse(JSON.stringify(season));
+    const next = playSpectatorGame(JSON.parse(JSON.stringify(season)), { round: [...flip, { nodeId: round.table.nodeId, aId: 'user', result: flip[0].result }] });
+    for (const { nodeId, aId, result } of flip) {
+      const node = before.ranking.nodes[nodeId];
+      const loser = node.winner;
+      expect(next.ranking.nodes[nodeId].winner).not.toBe(loser);
+      expect(next.ranking.nodes[nodeId].game.black).toBe(aId);
+      expect(result.aWins ? aId : null).toBe(result.aWins ? next.ranking.nodes[nodeId].winner : null);
+    }
+    // 分身の局は、本局の結果(real)か自動対局で決まり、差し替えの対象にしない。
+    expect(next.userGames).toHaveLength(1);
+    expect(next.userGames[0].win).toBe(playSpectatorGame(JSON.parse(JSON.stringify(season))).userGames[0].win);
+    // 自分で指す期は差し替えない。
+    const own = JSON.parse(JSON.stringify(season));
+    own.spectator = false;
+    const id = flip[0].nodeId;
+    const kept = own.ranking.nodes[id].winner;
+    expect(playSpectatorGame(own, { round: flip }).ranking.nodes[id].winner).toBe(kept);
+  });
+});
