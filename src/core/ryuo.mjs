@@ -763,13 +763,25 @@ export function createSpectatorSeason({ no, mode, group, settings, avatar, caree
   let season = createSeason({
     no, mode, group, settings, userLevel: 0, career, roster: structuredClone(roster), seed, userName,
   });
+  season = asAvatarSeason(season, avatar, { live });
+  if (live) return season;
+  for (let guard = 0; guard < 200 && season.pending; guard += 1) season = playSpectatorGame(season);
+  return season;
+}
+
+/**
+ * 期の自分の席を、分身(プレイヤーの能力を持った棋士)にする。エントリーの「対局: 観戦」で始めた期(16-1)と、観戦の期で使う。
+ * 期の進み方・記録はふつうの期と同じで、分身の対局は「観戦する」(playSpectatorGame)で決める。
+ * @param {any} season 作ったばかりの期(書き換える)
+ * @param {{ rating: number, character: any }} avatar
+ * @param {{ live?: boolean }} [options]
+ */
+export function asAvatarSeason(season, avatar, { live = true } = {}) {
   season.spectator = true;
   if (live) season.live = true;
   season.players[USER_ID] = {
     ...season.players[USER_ID], kind: 'avatar', rating: avatar.rating, character: structuredClone(avatar.character ?? { abilities: {}, traits: [] }),
   };
-  if (live) return season;
-  for (let guard = 0; guard < 200 && season.pending; guard += 1) season = playSpectatorGame(season);
   return season;
 }
 

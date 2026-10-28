@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { USER_ID, createSeason, createSpectatorSeason, playSpectatorGame, recordUserGame } from './ryuo.mjs';
+import { USER_ID, asAvatarSeason, createSeason, createSpectatorSeason, playSpectatorGame, recordUserGame } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
   emptyWatchStore, loadWatchStore, noteWatchProgress, replaceWatchSeason, saveWatchStore, stepsAfterElimination, userWonSeason, watchFinale, watchSteps,
@@ -70,6 +70,19 @@ describe('観戦の期(分身)', () => {
     expect(finale.champion).not.toBeNull();
     expect(finale.lines[0]).toMatch(/^第3期竜王は/);
     expect(finale.lines.some((line) => /分身の成績は\d+勝\d+敗/.test(line))).toBe(true);
+  });
+});
+
+describe('エントリーの「対局: 観戦」(17章)', () => {
+  it('ふつうの期の自分の席を分身にし、「観戦する」で1局ずつ最後まで進める(期の形はふつうの期のまま)', () => {
+    const roster = createRoster({ seed: 52, userGroup: 6 });
+    let season = asAvatarSeason(createSeason({ no: 2, mode: 'challenge', group: 6, settings, userLevel: 20, seed: 9, roster, userName: 'やこび' }), avatar);
+    expect(season).toMatchObject({ spectator: true, live: true });
+    expect(season.players[USER_ID]).toMatchObject({ kind: 'avatar', rating: 1500, name: 'やこび' });
+    for (let guard = 0; guard < 200 && season.pending; guard += 1) season = playSpectatorGame(season);
+    expect(season.phase).toBe('done');
+    expect(season.result).toMatchObject({ wins: expect.any(Number), losses: expect.any(Number) });
+    expect(season.userGames.length).toBeGreaterThan(0);
   });
 });
 

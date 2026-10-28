@@ -165,8 +165,10 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/ryuoOpponentId: ryuoGame\.value\?\.opponentId \?\? null/);
     expect(source).toMatch(/suspended\.ryuoOpponentId === pending\.opponentId/);
     expect(source).toMatch(/function resumeRyuoGame\(\)[\s\S]*?tournamentOpen\.value = false;[\s\S]*?resumeSuspendedMatch\(\);/);
-    // 観戦の期(13-6)を見ているあいだは、本番の期の中断した対局を出さない。
-    expect(source).toMatch(/:suspended-moves="ryuoSpectating \? null : suspendedRyuoMoves"[\s\S]*?@resume="resumeRyuoGame"/);
+    expect(source).toMatch(/:suspended-moves="suspendedRyuoMoves"[\s\S]*?@resume="resumeRyuoGame"/);
+    // エントリーの「対局: 観戦」の期(17章)は、自分では指さず、期の画面の「観戦する」で分身の対局を見る。
+    expect(source).toMatch(/function startRyuoGameNow\(\) \{[\s\S]*?if \(season\.spectator\) \{\s*openRyuoSeasonScreen\(\);/);
+    expect(source).toMatch(/:spectating="Boolean\(ryuoSeason\?\.spectator\)"[\s\S]*?@watch-play="playRyuoWatchGame"/);
   });
 
   it("runs the Ryuo tournament as its own mode from the title screen, with saved seasons and its own result dialog", () => {
@@ -196,9 +198,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/stages: \["scan"\]/);
     expect(source).toMatch(/current\.id !== job\.seasonId/);
     // 結果の画面を見終えたら記録し、次に竜王戦を選ぶと次の期のエントリーになる。
-    // 観戦の期の結果を見ても、本番の期の「結果を見た」の印は変えない(13-6)。
-    expect(source).toMatch(/@result-seen="noteRyuoResultSeen"/);
-    expect(source).toMatch(/function noteRyuoResultSeen\(\) \{\s*if \(!ryuoSpectating\.value\) markRyuoResultSeen\(\);/);
+    expect(source).toMatch(/@result-seen="markRyuoResultSeen"/);
     expect(source).toMatch(/season\.phase !== "done" \|\| season\.applied/);
     // 千日手は、結果に数えず、先後を入れ替えて指し直す。
     expect(source).toMatch(/if \(!matchResult\.winner\) \{[\s\S]*?next\.pending\.color = next\.pending\.color === "black" \? "white" : "black";/);
@@ -310,7 +310,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/<RyuoBracket\s+v-if="viewStageIndex === 0[\s\S]*?<RyuoBracket\s+v-if="viewStageIndex === 1[\s\S]*?<RyuoSeries\s+v-if="viewStageIndex === 2"/);
     // 「対局する」のあとは、VS画面(段階B)を出してから対局を始める。押せばすぐ始まる。
     expect(tournament).toMatch(/<RyuoVersus[\s\S]*?@done="startPlay"/);
-    // 観戦の期(13-6)は、VS画面のあと、分身の対局の中継を開く。
+    // 観戦の期(17章)は、VS画面のあと、分身の対局の中継を開く。
     expect(tournament).toMatch(/function startPlay\(\) \{\s*versusOpen\.value = false;\s*if \(props\.spectating\) \{\s*void watchAvatarGame\(true\);\s*return;\s*\}\s*emit\("play"\);/);
     // 期の結果の主役は「表彰式へ」。賞状(縦書き・判子)をわたし、閉じると期を見終えて大会の選択へ(docs/season-award-design.md)。
     expect(tournament).toMatch(/data-award-open @click="openCeremony\(`ryuo-\$\{seasonNo\}`\)">表彰式へ</);
@@ -319,8 +319,8 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/:button-text="awardCeremony \? \(screen === 'kenshukai' \? '研修会へ' : '大会の選択へ'\) : '閉じる'"/);
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "kenshukai"\) return;/);
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
-    // 戻る操作は、いちばん上に重ねた中継(画面→一覧)を先に閉じ、回戦ごとの観戦とその確認、次に賞状を閉じる。
-    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}\s*if \(watchTarget\.value\) \{\s*watchTarget\.value = null;\s*return;\s*\}\s*if \(watchConfirm\.value\) \{\s*watchConfirm\.value = false;\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
+    // 戻る操作は、いちばん上に重ねた中継(画面→一覧)を先に閉じ、回戦ごとの観戦、次に賞状を閉じる。
+    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}\s*if \(watchTarget\.value\) \{\s*watchTarget\.value = null;\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
     expect(tournament).toMatch(/data-award-book @click="bookOpen = true"/);
     // 賞状は期が終わったときに対局画面が足す(竜王戦・名人戦とも)。
     expect(source).toMatch(/saveCareer\(browserStorage\(\), career\);\s*awardRyuoSeason\(season\);/);

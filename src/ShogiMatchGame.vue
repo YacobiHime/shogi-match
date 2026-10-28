@@ -388,7 +388,7 @@
       :asset-base-url="assetBaseUrl"
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
       :career="ryuoCareer"
-      :view="ryuoSpectating ? ryuoWatchView : ryuoView"
+      :view="ryuoView"
       :default-difficulty="tournamentEntryDifficulty"
       :recommended-difficulty="ryuoDefaultDifficulty"
       :world="tournamentWorld"
@@ -402,11 +402,11 @@
       :oshi="ryuoOshi"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
-      :suspended-moves="ryuoSpectating ? null : suspendedRyuoMoves"
+      :suspended-moves="suspendedRyuoMoves"
       @play="startRyuoGame"
       @resume="resumeRyuoGame"
       @open-note="tournamentOpen = false; yakobiNoteOpen = true"
-      @result-seen="noteRyuoResultSeen"
+      @result-seen="markRyuoResultSeen"
       :meijin-view="meijinView"
       :meijin-career="meijinCareer"
       :meijin-entry-class="meijinEntryClass"
@@ -439,13 +439,11 @@
       @kenshukai-resume="resumeKenshukaiGame"
       @kenshukai-transfer="transferKenshukai"
       @kenshukai-close="closeKenshukai"
-      :ryuo-season="ryuoSpectating ? ryuoWatch.season : ryuoSeason"
+      :ryuo-season="ryuoSeason"
       :ryuo-watch="ryuoWatch"
       :avatar-profile="avatarProfile"
-      :spectating="ryuoSpectating"
-      @spectate="ryuoSpectating = $event"
+      :spectating="Boolean(ryuoSeason?.spectator)"
       @watch-play="playRyuoWatchGame"
-      @watch-enter="enterRyuoWatch"
       @watch-progress="noteRyuoWatch"
       :meijin-season="meijinSeason"
       :relay-engine-factory="ensureEngineFactory"
@@ -2501,8 +2499,8 @@ import {
   measureStatistics,
   restoredMeasureState,
 } from "./core/skill-estimate.mjs";
-import { USER_ID, createRng, createSeason, createSpectatorSeason, describeSeason, playSpectatorGame, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
-import { loadWatchStore, noteWatchProgress, replaceWatchSeason, saveWatchStore } from "./core/ryuo-watch-store.mjs";
+import { USER_ID, asAvatarSeason, createRng, createSeason, describeSeason, playSpectatorGame, recommendedDifficulty, recordUserGame, scaleById, withRosterAbilities } from "./core/ryuo.mjs";
+import { loadWatchStore, noteWatchProgress, saveWatchStore } from "./core/ryuo-watch-store.mjs";
 import { myAbilityProfile, worldRatingFor } from "./core/my-abilities.mjs";
 import { worldRating } from "./core/ryuo-strength.mjs";
 import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
@@ -5863,7 +5861,7 @@ function onPregamePick(key: string, value: PickerValue) {
 
 /** 大会の画面で「大会に参加する」を押したとき。新しい期を始める(進行中の期は破棄する)。 */
 function enterRyuoSeason(settings: {
-  difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number;
+  difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; watch?: boolean;
 }) {
   const career = ryuoCareer.value;
   const entry = nextEntry(career);
@@ -5888,6 +5886,8 @@ function enterRyuoSeason(settings: {
     seed,
     userName: playerDisplayName(playerName.value),
   });
+  // エントリーの「対局: 観戦」なら、自分の席を分身にする。期の進み方と記録はふつうの期と同じ(docs/tournament-relay-design.mdの17章)。
+  if (settings.watch) asAvatarSeason(season, avatarMember(settings.difficulty));
   ryuoSeason.value = season;
   saveSeason(browserStorage(), season);
   const { difficulty: _difficulty, ...saved } = settings;
@@ -5909,58 +5909,29 @@ const avatarProfile = computed(() => myAbilityProfile({
   world: tournamentWorld.value?.level ?? null,
 }));
 /**
- * 観戦の期を、ふつうの竜王戦の期の画面で見ているところ(13-6)。大会の画面へ渡す期と表示を、観戦の期に替える。
- * 本番の期の記録(結果を見たこと・中断した対局)には触らない。
+ * エントリーの「対局: 観戦」で始めた期の「観戦する」(17章)。分身の次の一局を、ほかの棋士と同じ自動対局で決めて記録する
+ * (中継は大会の画面が開く)。レーティングと対局の記録には数えない(自分で指していないため)。期の記録はふつうの期と同じ。
  */
-const ryuoSpectating = ref(false);
-const ryuoWatchView = computed(() => (ryuoWatch.value.season ? describeSeason(ryuoWatch.value.season) : null));
-// 大会の画面を閉じたら、次に開くときは本番の期から。
-watch(tournamentOpen, (open) => {
-  if (!open) ryuoSpectating.value = false;
-});
-/** 観戦の期の「観戦する」。分身の次の一局を、ほかの棋士と同じ自動対局で決めて記録する(中継は大会の画面が開く)。 */
 function playRyuoWatchGame() {
-  const season = ryuoWatch.value.season;
-  if (!season?.pending) return;
+  const season = ryuoSeason.value;
+  if (!season?.pending || !season.spectator) return;
   // 画面の状態(リアクティブ)のままでは複製できないので、保存と同じ形の写しから進める。
-  ryuoWatch.value = { ...ryuoWatch.value, season: playSpectatorGame(JSON.parse(JSON.stringify(season))) };
-  saveWatchStore(browserStorage(), ryuoWatch.value);
+  const next = playSpectatorGame(rawRyuoSeason());
+  ryuoSeason.value = next;
+  saveSeason(browserStorage(), next);
+  finalizeRyuoSeason();
 }
-/** 竜王戦の期の結果を見終えた(観戦の期は、本番の期の印を変えない)。 */
-function noteRyuoResultSeen() {
-  if (!ryuoSpectating.value) markRyuoResultSeen();
-}
-/** 「観戦で参加」。分身が出る、もしもの期を始める(本番の期・キャリア・名簿・称号は変えない)。 */
-function enterRyuoWatch(settings: { difficulty: number; scale: number; revival: boolean }) {
-  const career = ryuoCareer.value;
-  const entry = nextEntry(career);
-  const seed = Date.now();
-  if (!ryuoRoster.value) {
-    ryuoRoster.value = createRoster({ seed, userGroup: entry.group, userIsChampion: entry.mode === "defense" });
-    saveRoster(browserStorage(), ryuoRoster.value);
-  }
-  const level = ratingLevel(ratingState.value.rating);
+/** 分身の棋士の強さと能力。対局が少なく能力が出ないときは、世界の物差しでいまの棋力のレーティングと、平均の能力。 */
+function avatarMember(difficulty: number) {
   const profile = avatarProfile.value;
-  const avatar = profile.ready
-    ? profile.member
-    : {
-      rating: Number.isFinite(tournamentWorld.value?.level)
-        ? worldRating(level, tournamentWorld.value!.level)
-        : worldRatingFor(level, ryuoAbilityDifficulty.value ?? settings.difficulty),
-      character: { abilities: {}, traits: [] },
-    };
-  const season = createSpectatorSeason({
-    ...entry,
-    settings: { ...settings, world: tournamentWorld.value?.level },
-    avatar,
-    career,
-    roster: ryuoRoster.value,
-    seed,
-    userName: playerDisplayName(playerName.value),
-  });
-  ryuoWatch.value = replaceWatchSeason(ryuoWatch.value, season);
-  saveWatchStore(browserStorage(), ryuoWatch.value);
-  ryuoSpectating.value = true;
+  if (profile.ready) return profile.member;
+  const level = ratingLevel(ratingState.value.rating);
+  return {
+    rating: Number.isFinite(tournamentWorld.value?.level)
+      ? worldRating(level, tournamentWorld.value!.level)
+      : worldRatingFor(level, ryuoAbilityDifficulty.value ?? difficulty),
+    character: { abilities: {}, traits: [] },
+  };
 }
 /** 回戦の結果をめくった。 */
 function noteRyuoWatch(seasonId: string, revealed: number) {
@@ -6037,6 +6008,11 @@ function startRyuoGameNow() {
   const season = ryuoSeason.value;
   const pending = season?.pending;
   if (!season || !pending) return;
+  // 観戦の期は自分では指さない(分身の対局は、大会の画面の「観戦する」で見る)。
+  if (season.spectator) {
+    openRyuoSeasonScreen();
+    return;
+  }
   const label = ryuoView.value?.pending?.label ?? "";
   tournamentOpen.value = false;
   openPregame();
@@ -7286,6 +7262,8 @@ const homeNext = computed<HomeNext>(() => {
   }
   // 竜王戦の期の途中: 次の相手の対策か、続きを指すか。主役でない方を小さな入口にする。
   const ryuo = homeRyuoPlan.value;
+  // 観戦の期(エントリーの「対局: 観戦」)は、対策の練習を出さず、期の画面へ(「観戦する」で見る)。
+  if (ryuo && ryuoSeason.value?.spectator) return { id: "ryuo-season", label: ryuo.continue.title, description: ryuo.continue.reason, sub: null };
   if (ryuo) {
     return ryuo.main === "counter"
       ? { id: "ryuo-counter", label: ryuo.counter.title, description: ryuo.counter.reason, sub: { id: "ryuo-season", label: ryuo.continue.sub } }
