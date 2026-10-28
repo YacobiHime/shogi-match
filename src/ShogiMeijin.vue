@@ -86,6 +86,8 @@
           <h1 id="shogi-tournament-title">{{ view.title }}</h1>
           <p class="shogi-tournament__topbar-sub">{{ seasonSub }}</p>
         </div>
+        <!-- ほかの棋士の対局の中継(docs/tournament-relay-design.mdの7章)。 -->
+        <button v-if="relayAvailable" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-meijin-relay @click="emit('relay', '')">中継</button>
       </header>
 
       <section class="meijin__main" :aria-label="showSeries ? '名人戦七番勝負' : `${view.clsLabel}の順位表`">
@@ -212,6 +214,14 @@
         <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
           <h2>{{ view.pending.opponent.name }} <small>{{ view.pending.opponent.dan }}</small></h2>
           <PlayerAbilityPanel v-if="ability" :view="ability" />
+          <!-- 相手のこの期の対局を、中継で見て対策を考える。 -->
+          <button
+            v-if="relayAvailable"
+            type="button"
+            class="shogi-tournament__sub relay-open"
+            data-meijin-opponent-relay
+            @click="detailOpen = false; emit('relay', view.pending.opponentId)"
+          >{{ view.pending.opponent.name }}さんの対局を見る</button>
           <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="detailOpen = false">閉じる</button>
         </div>
       </div>
@@ -306,6 +316,8 @@ const props = defineProps({
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** 対局から戻ったとき。進行中の期の画面を直接開く(大会の選択から来たときは、入口の五重塔から)。 */
   openSeason: { type: Boolean, default: false },
+  /** 対局中継を見られる(棋譜を作るエンジンがある)。 */
+  relayAvailable: { type: Boolean, default: false },
 });
 const emit = defineEmits<{
   enter: [settings: Settings];
@@ -315,6 +327,8 @@ const emit = defineEmits<{
   back: [];
   /** 結果の「表彰式へ」。賞状は大会の画面が出し、終えたら大会の選択へ。 */
   ceremony: [];
+  /** 対局中継の一覧を開く(棋士のidを渡すと、その棋士の対局だけ)。 */
+  relay: [playerId: string];
 }>();
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);

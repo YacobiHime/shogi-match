@@ -85,8 +85,11 @@ export function classifyWin([w1, w2]) {
  * @param {any} a
  * @param {any} b
  * @param {{ ratingOf?: (member: any) => number, big?: boolean, aColor?: 'black' | 'white' | null }} [options]
- * @returns {{ aWins: boolean, how: string, aColor: 'black' | 'white', openings: { a: string | null, b: string | null }, phases: number[], probability: number }}
- *   probabilityは、この1局のaの勝率(レーティングの差・先手・上乗せから、Elo式で)。
+ * @returns {{
+ *   aWins: boolean, how: string, aColor: 'black' | 'white', openings: { a: string | null, b: string | null },
+ *   castles: { a: string | null, b: string | null }, phases: number[], probability: number,
+ * }}
+ *   probabilityは、この1局のaの勝率(レーティングの差・先手・上乗せから、Elo式で)。castlesは、戦法といっしょに選んだ囲い。
  */
 export function simulateMemberGame(rng, a, b, { ratingOf = (member) => member.rating, big = false, aColor = null } = {}) {
   const color = aColor ?? (rng.next() < 0.5 ? 'black' : 'white');
@@ -158,16 +161,24 @@ export function simulateMemberGame(rng, a, b, { ratingOf = (member) => member.ra
     how: classifyWin([phases[0] * sign, phases[1] * sign, phases[2] * sign]),
     aColor: color,
     openings: { a: aOpening?.opening ?? null, b: bOpening?.opening ?? null },
+    castles: { a: aOpening?.castle || null, b: bOpening?.castle || null },
     phases: phases.map((value) => Math.round(value)),
     probability,
   };
 }
 
-/** 対局の記録(トーナメント表の結果・番勝負の1局)に残す形。blackは先手のid、openingsは棋士のidごとの戦法。 */
+/**
+ * 対局の記録(トーナメント表の結果・番勝負の1局)に残す形。blackは先手のid、openingsは棋士のidごとの戦法。
+ * storyは、序盤・中盤・終盤のあとの形勢(先手から見たレーティングの単位)、castlesは棋士のidごとの囲い。
+ * どちらも、中継の棋譜を展開どおりに作るのに使う(docs/tournament-relay-design.mdの3章)。前の保存の記録にはない。
+ */
 export function gameRecordOf(result, aId, bId) {
+  const sign = result.aColor === 'black' ? 1 : -1;
   return {
     black: result.aColor === 'black' ? aId : bId,
     how: result.how,
     openings: { [aId]: result.openings.a, [bId]: result.openings.b },
+    castles: { [aId]: result.castles?.a ?? null, [bId]: result.castles?.b ?? null },
+    story: (result.phases ?? []).map((value) => value * sign + 0),
   };
 }

@@ -50,7 +50,11 @@
       :black-player-detail="blackPlayerDetail"
       :white-player-detail="whitePlayerDetail"
       :player-countdown="playerCountdown"
-      :hide-clock="true"
+      :hide-clock="!clocks"
+      :black-player-time="clocks?.black"
+      :white-player-time="clocks?.white"
+      :black-player-byoyomi="clocks?.blackByoyomi"
+      :white-player-byoyomi="clocks?.whiteByoyomi"
       :arrow-image-url="`${normalizedAssetBase}/arrow/arrow.svg`"
       @move="onMove"
       @resize="onResize"
@@ -132,6 +136,11 @@ const props = defineProps({
   blackPlayerDetail: { type: String, default: "" },
   whitePlayerDetail: { type: String, default: "" },
   playerCountdown: { type: Object as PropType<{ color: "black" | "white"; left: number; fraction: number; stage: string; label: string } | null>, default: null },
+  // 名札の横の時計(残りの持ち時間の秒と、秒読みの残り秒)。中継(RelayViewer.vue)だけで使う。なければ時計を出さない。
+  clocks: {
+    type: Object as PropType<{ black: number; white: number; blackByoyomi?: number; whiteByoyomi?: number } | null>,
+    default: null,
+  },
 });
 const emit = defineEmits(["usi-move", "invalid-sfen", "resize"]);
 const root = ref<HTMLElement | null>(null);

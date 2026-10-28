@@ -207,6 +207,8 @@
           @resume="emit('meijin-resume')"
           @result-seen="emit('meijin-result-seen')"
           @ceremony="openCeremony(`meijin-${meijinView?.no ?? 0}`)"
+          :relay-available="Boolean(relayEngineFactory)"
+          @relay="openRelayList('meijin', $event)"
           @back="backToSelect"
         />
         <!--
@@ -354,6 +356,8 @@
               </template>
             </nav>
             <button v-if="predictionOptions" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-prediction-open @click="sheet = 'predict'">予想</button>
+            <!-- ほかの棋士の対局の中継(docs/tournament-relay-design.mdの7章)。 -->
+            <button v-if="relayEngineFactory" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-relay-open @click="openRelayList('ryuo')">中継</button>
           </header>
 
           <!--
@@ -531,6 +535,14 @@
                   <div v-if="opponentProfile.lastSeason"><dt>昨年度</dt><dd>{{ opponentProfile.lastSeason }}</dd></div>
                   <div><dt>対戦</dt><dd>{{ opponentProfile.vsUser }}</dd></div>
                 </dl>
+                <!-- 相手のこの期の対局を、中継で見て対策を考える(docs/tournament-relay-design.mdの7章)。 -->
+                <button
+                  v-if="opponentRelayCount && relayEngineFactory"
+                  type="button"
+                  class="shogi-tournament__sub relay-open"
+                  data-opponent-relay
+                  @click="sheet = ''; openRelayList('ryuo', view.pending.opponent.id)"
+                >{{ view.pending.opponent.name }}さんの対局を見る<small>この期 {{ opponentRelayCount }}局</small></button>
               </template>
               <aside v-else-if="sheet === 'coach'" class="shogi-tournament__coach" aria-label="やこび姫" data-coach>
                 <YakobiSays :lines="seasonSays" size="md" merged :asset-base-url="assetBaseUrl" />
@@ -593,6 +605,8 @@
               :view="groupTable.view"
               :oshi-id="oshi?.id ?? ''"
               :rival-id="view.rivalId ?? ''"
+              :watchable="Boolean(relayEngineFactory)"
+              @watch="watchMatch"
             />
             <p v-else-if="viewStageIndex === 0" class="shogi-tournament__stage-empty">各組のランキング戦は、決勝トーナメントの組み合わせが決まると見られます。</p>
             <RyuoBracket
@@ -602,6 +616,8 @@
               :view="stages.final"
               :oshi-id="oshi?.id ?? ''"
               :rival-id="view.rivalId ?? ''"
+              :watchable="Boolean(relayEngineFactory) && !stages.final.preview"
+              @watch="watchMatch"
             />
             <RyuoSeries
               v-if="viewStageIndex === 2"
@@ -721,6 +737,28 @@
         <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="bookOpen = false">閉じる</button>
       </div>
     </div>
+    <!-- 対局中継の一覧と、中継の画面(docs/tournament-relay-design.md)。大会の画面の上に重ねる。 -->
+    <RelayGameList
+      v-if="relayList && !relayEntry"
+      :entries="relayList.event === 'meijin' ? meijinRelayGameList : ryuoRelayGameList"
+      :seen="relaySeen"
+      :focus-id="relayList.playerId"
+      @watch="relayEntry = $event"
+      @all="relayList = { ...relayList, playerId: '' }"
+      @close="relayList = null"
+    />
+    <RelayViewer
+      v-if="relayEntry && relayEngineFactory"
+      :spec="relayEntry"
+      :pool="relayPool"
+      :oshi-id="oshi?.id ?? ''"
+      :next-id="relayNextId"
+      :asset-base-url="assetBaseUrl"
+      :engine-factory="relayEngineFactory"
+      :compact="compact"
+      @seen="noteRelaySeen"
+      @close="relayEntry = null"
+    />
     <SeasonAward
       v-if="awardShown"
       :award="awardShown"
@@ -743,6 +781,11 @@ import RyuoVersus from "./RyuoVersus.vue";
 import ShogiMeijin, { type MeijinView } from "./ShogiMeijin.vue";
 import ShogiShoreikai, { type ShoreikaiView } from "./ShogiShoreikai.vue";
 import ShogiKenshukai, { type KenshukaiView } from "./ShogiKenshukai.vue";
+import RelayGameList from "./RelayGameList.vue";
+import RelayViewer from "./RelayViewer.vue";
+import { meijinRelayGames, relayGamesOf, ryuoRelayGames } from "./core/relay-games.mjs";
+import { loadRelayStore } from "./core/relay-store.mjs";
+import type { EngineFactory } from "./composables/match/analysisEngines";
 import { CLASSES as KENSHUKAI_CLASSES } from "./core/kenshukai.mjs";
 import YakobiSays from "./YakobiSays.vue";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
@@ -899,6 +942,12 @@ const props = defineProps({
   kenshukaiCareer: { type: Object as PropType<{ history: { result: string; best: string }[]; best: number | null; settings?: Record<string, unknown> }>, default: () => ({ history: [], best: null }) },
   kenshukaiRecommendedClass: { type: Number, default: 0 },
   kenshukaiSuspendedMoves: { type: Number as PropType<number | null>, default: null },
+  // ---- 対局中継(docs/tournament-relay-design.md)。期の保存の形(見られる対局を集める)と、棋譜を作るエンジン。
+  ryuoSeason: { type: Object as PropType<any>, default: null },
+  meijinSeason: { type: Object as PropType<any>, default: null },
+  relayEngineFactory: { type: Function as PropType<() => Promise<EngineFactory>>, default: null },
+  /** スマホ・タブレット縦(中継の棋譜を作る読みの量を減らす)。 */
+  compact: { type: Boolean, default: false },
 });
 const emit = defineEmits<{
   close: [];
@@ -1047,6 +1096,14 @@ const backText = computed(() => (screen.value === "result" ? "大会選択へ" :
  * 結果は見終えたことにして、大会の選択へ。ほかの画面も、大会の選択へ。選択の画面なら、閉じる。
  */
 function goBack() {
+  if (relayEntry.value) {
+    relayEntry.value = null;
+    return;
+  }
+  if (relayList.value) {
+    relayList.value = null;
+    return;
+  }
   if (awardShown.value) {
     awardShown.value = null;
     awardCeremony.value = false;
@@ -1071,6 +1128,42 @@ function backToSelect() {
   tableOpen.value = false;
 }
 defineExpose({ goBack });
+
+// ---- 対局中継(docs/tournament-relay-design.md)。決着した棋士どうしの対局を、解説つきで見る。
+const ryuoRelayGameList = computed(() => (props.ryuoSeason ? ryuoRelayGames(props.ryuoSeason, { oshiId: props.oshi?.id ?? null }) : []));
+const meijinRelayGameList = computed(() => (props.meijinSeason ? meijinRelayGames(props.meijinSeason, { oshiId: props.oshi?.id ?? null }) : []));
+/** 一覧(どの大会か、棋士を決めて開いたときはその棋士のid)。 */
+const relayList = ref<{ event: "ryuo" | "meijin"; playerId: string } | null>(null);
+/** いま見ている中継の対局(relay-games.mjsの項目)。 */
+const relayEntry = ref<any>(null);
+const relaySeen = ref<string[]>([]);
+function relayStorage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+function openRelayList(event: "ryuo" | "meijin", playerId = "") {
+  relaySeen.value = loadRelayStore(relayStorage()).seen;
+  relayList.value = { event, playerId: playerId || "" };
+}
+function noteRelaySeen(key: string) {
+  if (!relaySeen.value.includes(key)) relaySeen.value = [...relaySeen.value, key];
+}
+/** トーナメント表の札を押した。決着した棋士どうしの試合なら、その中継を開く。 */
+function watchMatch(matchId: string) {
+  const found = ryuoRelayGameList.value.find((item) => item.key.endsWith(`:${matchId}`));
+  if (found) relayEntry.value = found;
+}
+/** 次の相手の、この期の対局の数。 */
+const opponentRelayCount = computed(() => {
+  const id = props.view?.pending?.opponent?.id;
+  return id ? relayGamesOf(ryuoRelayGameList.value, id).length : 0;
+});
+/** 中継の解説者を選ぶ棋士(見ている大会の期の棋士)。 */
+const relayPool = computed(() => Object.values((relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason)?.players ?? {}));
+const relayNextId = computed(() => (relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason)?.pending?.opponentId ?? "");
 
 // ---- 入口の山(期が始まる前の竜王への道)と番付
 /** 入口の山。進行中の期があれば、その期の道。なければ、次の期の道(規模を変えると段の数も変わる)。 */

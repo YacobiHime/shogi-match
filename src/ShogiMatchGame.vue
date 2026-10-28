@@ -439,6 +439,10 @@
       @kenshukai-resume="resumeKenshukaiGame"
       @kenshukai-transfer="transferKenshukai"
       @kenshukai-close="closeKenshukai"
+      :ryuo-season="ryuoSeason"
+      :meijin-season="meijinSeason"
+      :relay-engine-factory="ensureEngineFactory"
+      :compact="mobile || boardLayout === 'portrait'"
     />
     <YakobiNote
       v-if="yakobiNoteOpen"

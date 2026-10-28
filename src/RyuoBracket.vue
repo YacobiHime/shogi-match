@@ -44,6 +44,15 @@
             <span v-else class="ryuo-bracket__dan">{{ match[side].dan }}</span>
           </div>
           <span v-if="match.pending" class="ryuo-bracket__vs" aria-hidden="true">VS</span>
+          <!-- 決着した棋士どうしの試合は、押すと中継を開く(docs/tournament-relay-design.mdの7章)。 -->
+          <button
+            v-if="watchable && canWatch(match)"
+            type="button"
+            class="ryuo-bracket__watch"
+            :aria-label="`${matchAria(match)}。押すと中継を見る`"
+            :data-watch-match="match.id"
+            @click="emit('watch', match.id)"
+          ><span aria-hidden="true">▶</span></button>
         </li>
       </ul>
     </div>
@@ -69,7 +78,12 @@ const props = defineProps({
   view: { type: Object as PropType<BracketView>, required: true },
   oshiId: { type: String, default: "" },
   rivalId: { type: String, default: "" },
+  /** 決着した棋士どうしの試合を押すと、中継を開く(watchを出す)。 */
+  watchable: { type: Boolean, default: false },
 });
+const emit = defineEmits<{ watch: [matchId: string] }>();
+/** 中継を見られる試合(決着していて、プレイヤーが出ていない)。 */
+const canWatch = (match: Match) => Boolean(match.winner && !match.userIn && match.top.pid && match.bottom.pid);
 
 /** 札の高さ(2行)と、列の見出しの高さ(px)。 */
 const CARD_H = 52;
@@ -252,6 +266,33 @@ watch(() => props.view, () => void nextTick(scrollToUser));
 .shogi-game .ryuo-bracket__label { color: #172632; background: #c9d6e6; }
 .shogi-game .ryuo-bracket__tag--oshi { color: #172632; background: #d8d0ff; }
 .shogi-game .ryuo-bracket__tag--rival { color: #fffcf4; background: #8a5ad1; }
+/* 中継を見られる試合。札全体を押せるようにし、右端に小さな印を出す。 */
+.shogi-game .ryuo-bracket__watch {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0.15rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.shogi-game .ryuo-bracket__watch span {
+  display: grid;
+  place-items: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-right: -0.6rem;
+  border-radius: 50%;
+  color: #172632;
+  background: #f1a54c;
+  font-size: 0.55rem;
+  box-shadow: 0 0 0 2px #142231;
+}
+.shogi-game .ryuo-bracket__watch:hover,
+.shogi-game .ryuo-bracket__watch:focus-visible { background: rgba(241, 165, 76, 0.12); outline: 2px solid #f1a54c; outline-offset: -2px; }
 .shogi-game .ryuo-bracket__vs {
   position: absolute;
   top: 50%;
