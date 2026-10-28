@@ -69,6 +69,8 @@
           </div>
           <!-- 運営のコメント(ニコニコ動画の上コメ)。盤の上の端に3秒止まる。休憩・終局・同じ回戦のほかの結果。 -->
           <p v-if="commentsOn && banner" :key="banner.id" class="relay__banner" aria-hidden="true" data-relay-banner>{{ banner.text }}</p>
+          <!-- 下に止まる大きなコメント(下コメ。5秒。見せ場の一言だけ。25章)。 -->
+          <p v-if="commentsOn && under" :key="under.id" class="relay__under" aria-hidden="true" data-relay-under>{{ under.text }}</p>
           <!-- 心の声。対局者の名札の近く(上が後手、下が先手)。 -->
           <p
             v-for="bubble in bubbles"
@@ -140,7 +142,7 @@
           <div v-if="tab === 'talk'" class="relay__talk" data-relay-talk>
             <div ref="talkEl" class="relay__talk-scroll" aria-live="polite" data-relay-talk-scroll @scroll="onTalkScroll">
               <p v-for="(item, index) in visibleLines" :key="`${item.at}-${index}-${item.role}`" :class="['relay__line', `relay__line--${item.role}`]">
-                <b>{{ item.role === "host" ? RELAY_HOST : `${cast.name}` }}</b>{{ item.text }}
+                <b>{{ item.role === "host" ? RELAY_HOST : item.role === "reader" ? RELAY_READER : `${cast.name}` }}</b>{{ item.text }}
               </p>
             </div>
             <button v-if="!talkPinned" type="button" class="relay__talk-latest" data-relay-talk-latest @click="scrollTalkToEnd">▼ 新しい解説へ</button>
@@ -221,7 +223,7 @@ import {
   blackWinRate, clockText, rateVerdict, relayTimeControl, relayTimeline, remainingText, thinkTimeText, type RelayMoveEntry,
 } from "./core/relay-game.mjs";
 import {
-  RELAY_HOST, createRelayScript, moveTextOf, pvTextOf, relayAudience, relayCast,
+  RELAY_HOST, RELAY_READER, createRelayScript, moveTextOf, pvTextOf, relayAudience, relayCast,
 } from "./core/relay-commentary.mjs";
 import { addNote, highlightPlan, loadNotes, loadQuiz, quizChoices, saveNotes, saveQuiz, scoreQuiz } from "./core/relay-fun.mjs";
 import { loadRelayStore, markRelaySeen, saveRelayStore } from "./core/relay-store.mjs";
@@ -284,6 +286,8 @@ const COMMENT_MS = 5600;
 const COMMENT_LANES = 6;
 /** 運営のコメント(上に止まる帯)を出しておく時間。 */
 const BANNER_MS = 3000;
+/** 下に止まる大きなコメントを見せる時間(下コメ。25章)。 */
+const UNDER_MS = 5000;
 
 function browserStorage(): Storage | null {
   try {
@@ -472,6 +476,7 @@ function seek(target: number) {
   waiting.value = false;
   flying.value = [];
   banner.value = null;
+  under.value = null;
   cursor.value = Math.max(0, Math.min(ready.value, Math.round(target)));
   activeCard.value = cards.value.find((item) => item.at === cursor.value) ?? null;
 }
@@ -533,15 +538,26 @@ function showBanner(text: string) {
   clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => { banner.value = null; }, BANNER_MS / Math.sqrt(speed.value));
 }
+/** 下に止まる大きなコメント(25章)。 */
+const under = shallowRef<{ id: number; text: string } | null>(null);
+let underTimer: ReturnType<typeof setTimeout> | undefined;
+function showUnder(text: string) {
+  flyId += 1;
+  under.value = { id: flyId, text };
+  clearTimeout(underTimer);
+  underTimer = setTimeout(() => { under.value = null; }, UNDER_MS / Math.sqrt(speed.value));
+}
 function spawn(at: number, when: string) {
   if (!commentsOn.value) return;
   const items = comments.value.filter((item) => item.at === at && item.when === when);
   if (!items.length) return;
-  // 運営のコメントは上に止める(動かないので、動きを減らす設定でも出す)。
+  // 運営のコメントは上に止め、見せ場の一言は下に止める(動かないので、動きを減らす設定でも出す)。
   const top = items.filter((item) => item.pos === "top");
   if (top.length) showBanner(top[top.length - 1].text);
+  const bottom = items.filter((item) => item.pos === "bottom");
+  if (bottom.length) showUnder(bottom[bottom.length - 1].text);
   if (reducedMotion) return;
-  const added = items.filter((item) => item.pos !== "top").map((item, index) => {
+  const added = items.filter((item) => item.pos !== "top" && item.pos !== "bottom").map((item, index) => {
     laneCursor = (laneCursor + 1 + (index % 2)) % COMMENT_LANES;
     flyId += 1;
     return {
@@ -939,6 +955,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearTimers();
   clearTimeout(bannerTimer);
+  clearTimeout(underTimer);
   clearTimeout(quizTimer);
   clearTimeout(highlightTimer);
   clearTimeout(variationTimer);
@@ -1041,6 +1058,26 @@ onBeforeUnmount(() => {
 .shogi-game .relay__comment--orange { color: #ffb36b; }
 .shogi-game .relay__comment--lavender { color: #d9c8ff; }
 .shogi-game .relay__comment--big { font-size: 1.4em; }
+/* 下に止まる大きなコメント(下コメ。25章)。先手の名札の上、盤の下の端に5秒。縁取りの金色の大きな字。 */
+.shogi-game .relay__under {
+  position: absolute;
+  bottom: 14%;
+  left: 50%;
+  z-index: 4;
+  max-width: 94%;
+  margin: 0;
+  overflow: hidden;
+  color: #ffd27a;
+  font-size: clamp(1.2rem, calc(var(--relay-width, 400px) * 0.06), 2.6rem);
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 3px #000, 0 2px 4px #000, 0 0 10px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
 /* 運営のコメント(上に止まる帯)。後手の名札と時計の下、心の声より上。 */
 .shogi-game .relay__banner {
   position: absolute;
@@ -1232,6 +1269,7 @@ onBeforeUnmount(() => {
 .shogi-game .relay__line b { margin-right: 0.35rem; padding: 0 0.3rem; border-radius: 0.25rem; font-size: 0.8em; }
 .shogi-game .relay__line--commentator b { color: #172632; background: #e6c15c; }
 .shogi-game .relay__line--host b { color: #172632; background: #ffc4e6; }
+.shogi-game .relay__line--reader b { color: #172632; background: #c9d6e6; }
 .shogi-game .relay__reading { margin: 0.1rem 0 0; padding-top: 0.25rem; border-top: 1px dashed rgba(255, 252, 244, 0.2); color: #c9d6e6; font-size: clamp(0.85rem, 0.7rem + 0.35vw, 1.1rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shogi-game .relay__reading b { margin-right: 0.35rem; color: #9fd0ff; }
 .shogi-game .relay__graph { display: grid; grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.1rem; height: 100%; box-sizing: border-box; padding: 0.3rem 0.5rem; }

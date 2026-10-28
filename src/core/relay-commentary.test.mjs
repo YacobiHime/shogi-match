@@ -117,13 +117,13 @@ describe('createRelayScript', () => {
 });
 
 /** 決まった手順で長い1局を作り、台本を通す(コメントの種類を確かめる)。 */
-function longScript({ weight = 'plain', news = [], variant = '', venue = '' } = {}) {
+function longScript({ weight = 'plain', news = [], variant = '', venue = '', cast: castOverride = null, white = null } = {}) {
   const spec = {
     key: `ryuo:9:main:long-${weight}${variant}`, venue, event: 'ryuo', kind: weight === 'title' ? 'finals' : 'game', label: '決勝トーナメント 準決勝', weight,
     black: player('a', '中村大輔', { age: 41, character: { attack: 0.4, traits: [{ id: 'demon-reading' }], abilities: {} } }),
-    white: player('h', '天鷺羽音', { story: HANANE, age: 16 }), winner: 'black', how: 'middle', story: [80, 300, 900], news,
+    white: white ?? player('h', '天鷺羽音', { story: HANANE, age: 16 }), winner: 'black', how: 'middle', story: [80, 300, 900], news,
   };
-  const cast = { id: 'y', name: '天鷺善彦', dan: '竜王', story: YOSHIHIKO, voice: 'yoshihiko' };
+  const cast = castOverride ?? { id: 'y', name: '天鷺善彦', dan: '竜王', story: YOSHIHIKO, voice: 'yoshihiko' };
   const script = createRelayScript({ spec, cast, nextId: 'a' });
   const record = createGameRecord();
   const sfens = [record.position.sfen];
@@ -264,5 +264,59 @@ describe('視聴者のコメントの種類を増やす(12-5)', () => {
     expect(all.filter(({ kind }) => kind === 'overseas').every(({ tone }) => tone === 'lavender')).toBe(true);
     expect(all.every(({ text }) => !/\{\w+\}|undefined|NaN/.test(text))).toBe(true);
     expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(text))).toBe(true);
+  });
+});
+
+describe('解説の掛け合いと、コメントの例の取り込み(25章)', () => {
+  const yoshihiko = { id: 'y', name: '天鷺善彦', dan: '名人', story: YOSHIHIKO, voice: 'yoshihiko' };
+  const variants = ['', 'b', 'c', 'd', 'e', 'f'];
+  const scripts = variants.map((variant) => longScript({ variant, cast: yoshihiko, white: player('s', '鈴木蓮', { age: 28 }) }));
+
+  it('棋譜読み上げが振り駒の結果を告げ、視聴者が先手を言う', () => {
+    const [script] = scripts;
+    expect(script.lines.find(({ role }) => role === 'reader')?.text).toBe('振り駒の結果、先手は中村大輔七段に決まりました。それでは、お願いいたします。');
+    expect(script.comments.some(({ at, text }) => at === 0 && /中村/.test(text) && /先手/.test(text))).toBe(true);
+  });
+
+  it('善彦の解説は謙遜から始まり、視聴者がつっこむ。羽音の対局を解説するときは親子のやりとりにする', () => {
+    const [script] = scripts;
+    const intro = script.lines.filter(({ at }) => at === 0).map(({ text }) => text);
+    expect(intro).toContain('…そうですね、まあ、あの、専門家じゃないんで。全然、分かんないという感じなんですけど。');
+    expect(script.comments.some(({ kind, text }) => kind === 'cast' && /専門家/.test(text))).toBe(true);
+    const family = longScript().lines.filter(({ at }) => at === 0).map(({ text }) => text);
+    expect(family.some((text) => /専門家じゃない/.test(text))).toBe(false);
+  });
+
+  it('仕掛け・互角・終局のふり返りで、善彦らしい言い方をし、聞き手がたずねる', () => {
+    const all = scripts.flatMap(({ lines }) => lines.map(({ text }) => text));
+    expect(all).toContain('決断としては非常に良かったような、えぇ、ええ。感じがありますね、えぇ。');
+    expect(all).toContain('出だしから意外な将棋でしたけど、まあ、あのー、大熱戦だったと、思います。はい。');
+    expect(all).toContain('この一局、ふり返ってどうだった？');
+    expect(scripts.some(({ comments }) => comments.some(({ text }) => /言うなら|まてｗ|よくねえよ/.test(text)))).toBe(true);
+  });
+
+  it('見せ場の一言は、下に止まる大きな字。続けて出さない', () => {
+    const unders = scripts.flatMap(({ comments }) => comments.filter(({ pos }) => pos === 'bottom'));
+    expect(unders.length).toBeGreaterThan(0);
+    expect(unders.every(({ size }) => size === 'big')).toBe(true);
+    for (const { comments } of scripts) {
+      const ats = comments.filter(({ pos }) => pos === 'bottom').map(({ at }) => at);
+      for (let i = 1; i < ats.length; i += 1) expect(ats[i] - ats[i - 1]).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('戦型予想・駒の見せ場などの新しいコメントが出る。穴埋めが残らず、責める言葉もない', () => {
+    const all = scripts.flatMap(({ comments }) => comments);
+    expect(all.some(({ at, when, kind }) => at === 1 && when === 'think' && kind === 'predict')).toBe(true);
+    expect(all.every(({ text }) => !/\{\w+\}|undefined|NaN/.test(text))).toBe(true);
+    expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手|酷い/.test(text))).toBe(true);
+  });
+
+  it('羽音の解説は、新しい言い方でも敬語を使わない', () => {
+    const hanane = { id: 'h', name: '天鷺羽音', dan: '四段', story: HANANE, voice: 'hanane' };
+    for (const variant of variants) {
+      const script = longScript({ variant, cast: hanane, white: player('s', '鈴木蓮', { age: 28 }) });
+      expect(script.lines.filter(({ role }) => role === 'commentator').every(({ text }) => !/です|ます/.test(text))).toBe(true);
+    }
   });
 });
