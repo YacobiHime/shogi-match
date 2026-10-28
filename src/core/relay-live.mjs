@@ -7,6 +7,7 @@ import { playSpectatorGame } from './ryuo.mjs';
 import { ryuoRelayGames } from './relay-games.mjs';
 import { blackWinRate, relayPlan, relaySeed, relayTarget } from './relay-game.mjs';
 import { relayAudience } from './relay-commentary.mjs';
+import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
 
 /** 1秒(ボードの時間)あたりに進む手の数の幅。局ごとに種で決め、終わる時刻をばらつかせる。 */
 export const LIVE_PACE = Object.freeze({ min: 0.55, max: 0.85 });
@@ -81,7 +82,8 @@ export function liveGame(spec, record = null) {
  * @param {number} seconds
  */
 export function liveState(game, seconds) {
-  const ply = Math.max(0, Math.min(game.end, Math.floor(seconds * game.pace)));
+  // 終わる時刻(end / pace)を掛け戻すと、小数の誤差で1手足りないことがあるので、わずかに足してから切り捨てる。
+  const ply = Math.max(0, Math.min(game.end, Math.floor(seconds * game.pace + 1e-9)));
   const done = ply >= game.end;
   const cp = game.record ? (ply ? game.record.entries[ply - 1].eval : 40) : relayTarget(game.plan, ply);
   return {
@@ -104,14 +106,109 @@ export function viewersText(count) {
   return count.toLocaleString('ja-JP');
 }
 
+/** 中継の項目の鍵(`ryuo:期:表:札`)から、表のtagと札のid。 */
+export function tableOf(key) {
+  const parts = String(key).split(':');
+  return { tag: parts[2] ?? '', id: parts.slice(3).join(':') };
+}
+
+/** 回戦の名前(「準決勝」など)の順。n回戦が先、決勝が最後。 */
+function roundOrder(name) {
+  const number = /^(\d+)回戦$/.exec(name);
+  if (number) return Number(number[1]);
+  return { 準々決勝: 100, 準決勝: 101, 決勝: 102 }[name] ?? 50;
+}
+
+/**
+ * 敗退したあとの回戦(19章)。回戦ごとの観戦(ryuo-watch.mjsのwatchSteps)と同じ並びで、ほかの組のランキング戦だけは、
+ * 組をまたいで同じ名前の回戦ごとに分ける(表の上で、各組の同じ回戦が同時に進む)。番勝負は1局ずつ。
+ * @param {any} season 終わった期
+ * @param {{ oshiId?: string | null }} [options]
+ * @returns {{ id: string, label: string, stage: string, entries: any[] }[]}
+ */
+export function afterWatchRounds(season, { oshiId = null } = {}) {
+  const steps = stepsAfterElimination(season, watchSteps(season, { oshiId }));
+  return steps.flatMap((step) => {
+    if (step.stage !== 'group') return [step];
+    const rounds = new Map();
+    for (const entry of step.entries) {
+      const name = String(entry.label).split(' ').at(-1) ?? '';
+      if (!rounds.has(name)) rounds.set(name, []);
+      rounds.get(name).push(entry);
+    }
+    return [...rounds.entries()]
+      .sort(([a], [b]) => roundOrder(a) - roundOrder(b))
+      .map(([name, entries]) => ({ id: `group:${name}`, label: `ほかの組 ${name}`, stage: 'group', entries }));
+  });
+}
+
+/**
+ * その回戦を見せる表。①(組の表。tagで選ぶ)・②決勝トーナメント・③番勝負。いちばん前の対局(注目の対局が先)の表。
+ * @param {{ entries: any[] }} round
+ * @returns {{ stage: 0 | 1 | 2, tag: string }}
+ */
+export function roundTable(round) {
+  const { tag } = tableOf(round?.entries?.[0]?.key ?? '');
+  if (tag === 'main') return { stage: 1, tag };
+  if (tag === 'playoff' || tag === 'finals') return { stage: 2, tag };
+  return { stage: 0, tag };
+}
+
+/**
+ * 伏せる対局を、表ごとの札のidにまとめる。決勝トーナメントの決勝(挑戦者決定三番勝負で決まる)は、三番勝負を伏せている間は伏せる。
+ * @param {any[]} entries 伏せる中継の項目
+ * @param {{ mainRootId?: string | null }} [options]
+ * @returns {Map<string, Set<string>>}
+ */
+export function hiddenTables(entries, { mainRootId = null } = {}) {
+  const tables = new Map();
+  const add = (tag, id) => {
+    if (!tables.has(tag)) tables.set(tag, new Set());
+    tables.get(tag).add(String(id));
+  };
+  for (const entry of entries) {
+    const { tag, id } = tableOf(entry.key);
+    add(tag, id);
+  }
+  if (mainRootId !== null && tables.has('playoff')) add('main', mainRootId);
+  return tables;
+}
+
+/**
+ * 番勝負の星取り(ryuo-stages.mjsのseriesView)の結果を伏せる。伏せた局から後ろは指していない形にし、勝ち数を数え直す。
+ * 三番勝負の決着を伏せている間は、七番勝負(挑戦者が分かる)を出さない。
+ * @param {any[]} list seriesViewの並び
+ * @param {Map<string, Set<string>>} hidden 表ごとの伏せる局(局の番号は0から)
+ * @param {Map<string, Set<string>>} [reveal] ボードで終局した局
+ */
+export function maskSeriesViews(list, hidden, reveal = new Map()) {
+  if (!hidden.size) return list;
+  const masked = [];
+  for (const view of list) {
+    const hide = hidden.get(view.key);
+    const open = reveal.get(view.key) ?? new Set();
+    const cut = view.games.findIndex((_, index) => hide?.has(String(index)) && !open.has(String(index)));
+    if (cut < 0) {
+      masked.push(view);
+      continue;
+    }
+    if (view.key === 'finals' && masked.some((item) => item.key === 'playoff' && !item.winner)) continue;
+    const games = view.games.slice(0, cut);
+    const me = games.filter((game) => game.win).length;
+    masked.push({ ...view, games, wins: { me, them: games.length - me }, nextNo: games.length + 1, unplayed: 0, winner: null });
+  }
+  return masked;
+}
+
 /**
  * トーナメント表(ryuo-stages.mjsのmatchBracket)の結果を伏せる・見せる。hiddenの試合は勝者を伏せ、その勝者が入る次の試合の札は
  * 「○回戦の勝者」にする。revealの試合(ボードで終局した対局。値は勝者のid)は、その勝者を見せる。
+ * blankEntrantsなら、どの試合からも来ない札(決勝トーナメントの各組の勝者)も伏せ、枠の名前(「3組優勝」など)にする。
  * @param {any} view
- * @param {{ hidden?: Set<string>, reveal?: Map<string, string> }} [options]
+ * @param {{ hidden?: Set<string>, reveal?: Map<string, string>, blankEntrants?: boolean }} [options]
  */
-export function maskBracketView(view, { hidden = new Set(), reveal = new Map() } = {}) {
-  if (!view?.matches || (!hidden.size && !reveal.size)) return view;
+export function maskBracketView(view, { hidden = new Set(), reveal = new Map(), blankEntrants = false } = {}) {
+  if (!view?.matches || (!hidden.size && !reveal.size && !blankEntrants)) return view;
   const byId = new Map(view.matches.map((match) => [String(match.id), match]));
   const roundLabel = (round) => view.rounds?.[round - 1]?.label ?? '';
   const matches = view.matches.map((match) => {
@@ -120,6 +217,10 @@ export function maskBracketView(view, { hidden = new Set(), reveal = new Map() }
     if (reveal.has(id)) next = { ...next, winner: next.top?.pid === reveal.get(id) ? 'top' : 'bottom' };
     else if (hidden.has(id)) next = { ...next, winner: null, how: '' };
     for (const side of /** @type {const} */ (['top', 'bottom'])) {
+      if (blankEntrants && next[side]?.pid && !next[side].from) {
+        next = { ...next, winner: null, how: '', [side]: { ...next[side], pid: null, name: '', dan: '', story: null, you: false, placeholder: next[side].label || '？' } };
+        continue;
+      }
       const from = next[side]?.from ? String(next[side].from) : null;
       if (!from || !hidden.has(from) || reveal.has(from) || !next[side].pid) continue;
       const child = byId.get(from);

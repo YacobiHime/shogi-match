@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { asAvatarSeason, createSeason, playSpectatorGame } from './ryuo.mjs';
+import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, recordUserGame } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
-  hiddenRoundIds, liveDuration, liveGame, liveRound, liveState, maskBracketView, pendingTable, viewersText,
+  afterWatchRounds, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  pendingTable, roundTable, tableOf, viewersText,
 } from './relay-live.mjs';
+import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
 
 const settings = { difficulty: 9, scale: 3, revival: true };
 const avatar = { rating: 1500, character: { abilities: {}, traits: [] } };
@@ -57,6 +59,9 @@ describe('回戦の中継ボード(18章)', () => {
     // 終局では、勝った側の勝率が高い。
     const winnerPercent = game.spec.winner === 'black' ? end.blackPercent : 100 - end.blackPercent;
     expect(winnerPercent).toBeGreaterThanOrEqual(85);
+    // どの局も、終わる時刻ちょうどで終局する(小数の誤差で1手足りなくならない)。
+    for (const item of games) expect(liveState(item, item.end / item.pace).done).toBe(true);
+    for (const pace of [0.57, 0.61, 0.73, 0.83]) expect(liveState({ ...game, end: 118, pace }, 118 / pace).done).toBe(true);
     // 局ごとに終わる時刻がばらつく。
     expect(new Set(games.map((item) => Math.round(item.end / item.pace))).size).toBeGreaterThan(1);
   });
@@ -95,5 +100,66 @@ describe('回戦の中継ボード(18章)', () => {
     expect(viewersText(8250)).toBe('8,250');
     expect(viewersText(12000)).toBe('1.2万');
     expect(viewersText(30000)).toBe('3万');
+  });
+});
+
+describe('敗退後の観戦を表で見る(19章)', () => {
+  const roster = createRoster({ seed: 21, userGroup: 6 });
+  let season = createSeason({ no: 1, mode: 'challenge', group: 6, settings, userLevel: 28, seed: 5, roster });
+  season = recordUserGame(season, 'win');
+  season = recordUserGame(season, 'loss');
+  while (season.pending) season = recordUserGame(season, 'loss');
+
+  it('回戦の並び: ほかの組は同じ名前の回戦ごと、番勝負は1局ずつ。対局は敗退後の観戦と同じ', () => {
+    const rounds = afterWatchRounds(season);
+    const steps = stepsAfterElimination(season, watchSteps(season));
+    expect(rounds.flatMap(({ entries }) => entries).map(({ key }) => key).sort()).toEqual(steps.flatMap(({ entries }) => entries).map(({ key }) => key).sort());
+    const groups = rounds.filter(({ stage }) => stage === 'group');
+    expect(groups.length).toBeGreaterThan(1);
+    expect(groups.at(-1).label).toBe('ほかの組 決勝');
+    for (const round of groups) expect(new Set(round.entries.map(({ label }) => label.split(' ').at(-1))).size).toBe(1);
+    expect(rounds.at(-1).stage).toBe('finals');
+    expect(roundTable(rounds.at(-1))).toMatchObject({ stage: 2, tag: 'finals' });
+    expect(roundTable(groups[0]).stage).toBe(0);
+    expect(roundTable(groups[0]).tag).toMatch(/^group-/);
+    expect(roundTable(rounds.find(({ stage }) => stage === 'main'))).toEqual({ stage: 1, tag: 'main' });
+  });
+
+  it('伏せる札は表ごと。三番勝負を伏せている間は、決勝トーナメントの決勝も伏せる', () => {
+    const rounds = afterWatchRounds(season);
+    const hidden = hiddenTables(rounds.flatMap(({ entries }) => entries), { mainRootId: 'root' });
+    expect(hidden.get('main')?.has('root')).toBe(true);
+    expect(hidden.has('playoff')).toBe(true);
+    const entry = rounds[0].entries[0];
+    expect(hidden.get(tableOf(entry.key).tag)?.has(tableOf(entry.key).id)).toBe(true);
+    expect(hiddenTables([{ key: 'ryuo:s1:main:n3' }], { mainRootId: 'root' }).get('main')).toEqual(new Set(['n3']));
+  });
+
+  it('番勝負の星取りを伏せる(勝ち数を数え直す。三番勝負の決着前は七番勝負を出さない)', () => {
+    const series = describeSeason(season).stages.series;
+    expect(series.map(({ key }) => key)).toEqual(['playoff', 'finals']);
+    const all = new Map([['playoff', new Set(['0', '1', '2'])], ['finals', new Set(['0', '1', '2', '3', '4', '5', '6'])]]);
+    const masked = maskSeriesViews(series, all);
+    expect(masked).toHaveLength(1);
+    expect(masked[0]).toMatchObject({ key: 'playoff', games: [], wins: { me: 0, them: 0 }, nextNo: 1, winner: null });
+    const reveal = new Map([['playoff', new Set(['0'])]]);
+    const one = maskSeriesViews(series, all, reveal)[0];
+    expect(one.games).toHaveLength(1);
+    expect(one.wins.me + one.wins.them).toBe(1);
+    // 三番勝負が終われば、七番勝負は第1局から。
+    const finalsOnly = maskSeriesViews(series, new Map([['finals', new Set(['0', '1', '2', '3', '4', '5', '6'])]]));
+    expect(finalsOnly.map(({ key }) => key)).toEqual(['playoff', 'finals']);
+    expect(finalsOnly[1].games).toHaveLength(0);
+    expect(maskSeriesViews(series, new Map())).toBe(series);
+  });
+
+  it('決勝トーナメントの出場者を枠の名前で伏せる', () => {
+    const final = describeSeason(season).stages.final;
+    const ids = new Set(final.matches.map(({ id }) => String(id)));
+    const masked = maskBracketView(final, { hidden: ids, blankEntrants: true });
+    const slots = masked.matches.flatMap(({ top, bottom }) => [top, bottom]);
+    expect(slots.every((slot) => slot.pid === null && slot.placeholder)).toBe(true);
+    expect(slots.some((slot) => /組/.test(slot.placeholder))).toBe(true);
+    expect(masked.matches.every(({ winner }) => winner === null)).toBe(true);
   });
 });

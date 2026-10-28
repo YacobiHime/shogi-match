@@ -55,7 +55,7 @@
         <small>{{ cell.note }}</small>
       </li>
     </ol>
-    <p class="ryuo-series__hint">○はあなたの勝ち、●は負け。先に{{ main?.need ?? 4 }}勝した方の勝ち。決着がつけば、残りの局は指さない。</p>
+    <p class="ryuo-series__hint">{{ main && !main.userIn ? `○は${main.me?.name ?? ""}の勝ち、●は${main.them?.name ?? ""}の勝ち` : "○はあなたの勝ち、●は負け" }}。先に{{ main?.need ?? 4 }}勝した方の勝ち。決着がつけば、残りの局は指さない。</p>
     <p v-if="!before && main?.key === 'playoff'" class="ryuo-series__line ryuo-series__line--next">
       <span>勝てば竜王戦七番勝負</span><b>竜王 {{ holder?.name ?? "" }} が待つ</b>
     </p>
@@ -141,6 +141,8 @@ function sideNote(series: SeriesView, side: "me" | "them") {
   // 防衛戦の七番勝負は、自分が竜王で、相手が挑戦者。
   if (series.key === "finals" && props.defense) return side === "me" ? `${props.titleName}(防衛)` : "挑戦者";
   if (side === "me" && series.userIn) return series.key === "finals" ? "挑戦者" : props.titleName === "竜王" ? "決勝トーナメント勝者" : "";
+  // プレイヤーが出ていない七番勝負(敗退後の観戦など)は、どちらが防衛する側かを名前で決める。
+  if (series.key === "finals" && !series.userIn) return brief?.id && brief.id === props.holder?.id ? titleHolder(brief) : "挑戦者";
   if (series.key === "finals" && side === "them") return titleHolder(brief);
   return brief?.dan ?? "";
 }
@@ -148,6 +150,7 @@ function scoreNote(series: SeriesView) {
   const defending = series.key === "finals" && props.defense;
   if (series.winner === "me") return series.userIn ? (defending ? `${props.titleName}防衛` : series.key === "finals" ? `${props.titleName}獲得` : "挑戦権獲得") : `${series.me?.name}の勝ち`;
   if (series.winner === "them") return `${series.them?.name}の勝ち`;
+  if (!series.userIn) return series.key === "finals" ? `先に${series.need}勝で${props.titleName}` : `先に${series.need}勝で挑戦権`;
   const rest = series.need - series.wins.me;
   return defending ? `防衛まであと${rest}勝` : series.key === "finals" ? `${props.titleName}まであと${rest}勝` : `挑戦権まであと${rest}勝`;
 }

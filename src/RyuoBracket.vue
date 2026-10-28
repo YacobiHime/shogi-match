@@ -189,13 +189,20 @@ function measure() {
   if (!el) return;
   frameSize.value = { width: el.clientWidth, height: el.clientHeight };
 }
-/** 開いたとき、次の対局(なければ最後に指した試合)の回戦が左に来るよう、横に送る。縦は、その札が見えるように。 */
+/** 中継ボードで進んでいる試合のid(回戦が替わったときだけ変わる)。 */
+const liveIds = computed(() => Object.keys(props.live).sort().join(","));
+/**
+ * 開いたとき、次の対局(なければ最後に指した試合)の回戦が左に来るよう、横に送る。縦は、その札が見えるように。
+ * 敗退後の観戦(中継ボードに自分の対局がない。19章)では、進んでいるいちばん上の試合へ。
+ */
 function scrollToUser() {
   const el = frame.value;
   if (!el) return;
-  const round = props.view.userNext;
+  const pending = props.view.matches.find((entry) => entry.pending);
+  const live = pending ? null : props.view.matches.find((entry) => String(entry.id) in props.live) ?? null;
+  const round = live?.round ?? props.view.userNext;
   if (round && scrolls.value) el.scrollLeft = Math.max(0, (round - 2) * colW.value);
-  const match = props.view.matches.find((entry) => entry.pending) ?? [...props.view.matches].reverse().find((entry) => entry.userIn);
+  const match = pending ?? live ?? [...props.view.matches].reverse().find((entry) => entry.userIn);
   if (match && el.scrollHeight > el.clientHeight) {
     el.scrollTop = Math.max(0, HEAD + match.y * leafGap.value - el.clientHeight / 2);
   }
@@ -208,7 +215,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => observer?.disconnect());
 // 次の対局の回戦が変わったときだけ送る(中継ボードで結果が出るたびに、見ているところから動かさない)。
-watch(() => `${props.view.userNext}:${props.view.matches.find((entry) => entry.pending)?.id ?? ""}`, () => void nextTick(scrollToUser));
+watch(() => `${props.view.userNext}:${props.view.matches.find((entry) => entry.pending)?.id ?? ""}:${liveIds.value}`, () => void nextTick(scrollToUser));
 </script>
 
 <style>

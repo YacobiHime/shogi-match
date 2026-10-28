@@ -333,8 +333,8 @@
             <span class="shogi-tournament__seal" aria-hidden="true">竜</span>
             <div class="shogi-tournament__topbar-title">
               <h1 id="shogi-tournament-title" data-phase>{{ seasonHeading }}</h1>
-              <p v-if="oshiStep" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
-              <p v-else class="shogi-tournament__topbar-sub">{{ view.phaseText }}</p>
+              <p v-if="oshiStep && !afterWatch" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
+              <p v-else class="shogi-tournament__topbar-sub">{{ afterWatch ? "このあとの対局を観戦" : view.phaseText }}</p>
             </div>
             <!-- 段階の道のり。済みは緑の✓、いまは琥珀。押すと、その段階の表を見る(まだの段階は下見)。 -->
             <nav v-if="stages" class="shogi-tournament__steps" aria-label="竜王戦の段階" data-stage-steps>
@@ -404,30 +404,40 @@
           <!--
             回戦の中継ボードの欄(18章)。分身の対局(先後・何手目・勝率・一言。押すと中継)、対局中と終局の数、速さ、結果まで進める。
             表の札を押すと、その対局の中継をいまの手数から開く。回戦が終わったら「この回戦の結果へ」で期を進め、竜王への道を登る。
+            敗退後の観戦(19章)は、注目の対局を大きく出し、回戦が終わったら「次の回戦へ」。最後は竜王の発表。
           -->
           <section v-if="live" class="shogi-tournament__hud shogi-tournament__live" aria-label="回戦の中継" data-live-panel>
-            <p class="shogi-tournament__hud-role"><span class="shogi-tournament__live-tag" aria-hidden="true">中継</span>{{ live.label }}</p>
-            <button v-if="liveAvatarView" type="button" class="shogi-tournament__live-game" data-live-avatar @click="openLiveGame(live.avatarKey)">
+            <p class="shogi-tournament__hud-role">
+              <span class="shogi-tournament__live-tag" aria-hidden="true">中継</span>{{ live.label }}
+              <small v-if="afterWatch" class="shogi-tournament__live-step" data-live-step>{{ afterWatch.index + 1 }}/{{ afterWatch.rounds.length }}</small>
+            </p>
+            <button v-if="liveFocusView" type="button" class="shogi-tournament__live-game" data-live-avatar @click="openLiveGame(live.focusKey)">
               <span class="shogi-tournament__live-names">
-                <span class="shogi-tournament__live-name shogi-tournament__live-name--black">☗{{ liveAvatarView.black }}</span>
-                <span class="shogi-tournament__live-name shogi-tournament__live-name--white">☖{{ liveAvatarView.white }}</span>
+                <span class="shogi-tournament__live-name shogi-tournament__live-name--black">☗{{ liveFocusView.black }}</span>
+                <span class="shogi-tournament__live-name shogi-tournament__live-name--white">☖{{ liveFocusView.white }}</span>
               </span>
-              <span class="shogi-tournament__live-bar" aria-hidden="true"><span :style="{ width: `${liveAvatarView.blackPercent}%` }" /></span>
+              <span class="shogi-tournament__live-bar" aria-hidden="true"><span :style="{ width: `${liveFocusView.blackPercent}%` }" /></span>
               <span class="shogi-tournament__live-meta">
-                <b data-live-ply>{{ liveAvatarView.done ? "終局" : `${liveAvatarView.ply}手目` }}</b>
-                <span data-live-verdict>{{ liveAvatarView.verdict }}</span>
+                <b data-live-ply>{{ liveFocusView.done ? "終局" : `${liveFocusView.ply}手目` }}</b>
+                <span data-live-verdict>{{ liveFocusView.verdict }}</span>
                 <small>押すと中継</small>
               </span>
             </button>
             <p class="shogi-tournament__live-count" data-live-count>
-              対局中 {{ liveCount.playing }}局・終局 {{ liveCount.done }}局。表の札を押すと、その対局の中継を見られるよ。
+              対局中 {{ liveCount.playing }}局・終局 {{ liveCount.done }}局。{{ live.games.length > 1 ? "表の札を押すと、その対局の中継を見られるよ。" : "押すと、その対局の中継を見られるよ。" }}
             </p>
             <div class="shogi-tournament__hud-row">
               <button type="button" class="shogi-tournament__sub" :aria-label="`速さ ×${liveSpeed}。押すと変える`" data-live-speed @click="cycleLiveSpeed">速さ ×{{ liveSpeed }}</button>
               <button type="button" class="shogi-tournament__sub" :disabled="liveFinished" data-live-skip @click="skipLive">結果まで進める</button>
             </div>
-            <button v-if="liveFinished" type="button" class="shogi-tournament__start" data-live-finish @click="finishLive">この回戦の結果へ</button>
-            <button v-else type="button" class="shogi-tournament__start" data-live-avatar-watch @click="openLiveGame(live.avatarKey)">分身の対局を見る</button>
+            <button v-if="liveFinished" type="button" class="shogi-tournament__start" data-live-finish @click="finishLive">{{ liveFinishText }}</button>
+            <button v-else type="button" class="shogi-tournament__start" data-live-avatar-watch @click="openLiveGame(live.focusKey)">{{ liveWatchText }}</button>
+          </section>
+          <!-- 敗退後の観戦の最後(19章)。竜王の判子と、誰が竜王になったか。表(③の番勝負)は、全部の結果を見せる。 -->
+          <section v-else-if="afterFinale" class="shogi-tournament__hud shogi-tournament__finale" aria-label="竜王の発表" data-live-finale>
+            <p class="shogi-tournament__finale-seal" aria-hidden="true">竜</p>
+            <p v-for="(line, index) in afterFinale.lines" :key="line" :class="['shogi-tournament__finale-line', { 'shogi-tournament__finale-line--crown': index === 0 }]">{{ line }}</p>
+            <button type="button" class="shogi-tournament__start" data-live-finale-done @click="endAfterWatch">観戦を終える</button>
           </section>
           <!-- 次の一局の枠。相手の顔(押すとくわしい情報)、棋風の札、勝てば/負ければ、やこび姫の1行、「対局する」。 -->
           <section
@@ -659,7 +669,7 @@
             <RyuoSeries
               v-if="viewStageIndex === 2"
               class="shogi-tournament__series-view"
-              :series="stages.series"
+              :series="seriesTableView"
               :holder="stages.holder"
               :stages="stages.stages"
               :you-name="playerName"
@@ -679,7 +689,7 @@
             <div class="shogi-tournament__result-head">
               <p class="shogi-tournament__eyebrow">{{ view.title }}の結果</p>
               <p class="shogi-tournament__headline">{{ outcomeHeadline }}</p>
-              <p v-if="oshiStep" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
+              <p v-if="oshiStep && !afterWatch" class="shogi-tournament__oshi" data-oshi-step><span aria-hidden="true">★</span>{{ oshiStep }}</p>
             </div>
             <ol class="shogi-tournament__banzuke" :aria-label="`番付。${groupMove.from}から${groupMove.to}（${groupMove.label}）`">
               <li v-for="row in banzuke(groupMove.kind === 'crown' ? 0 : view.result.newGroup)" :key="row.key" :class="{ 'shogi-tournament__banzuke--you': row.you }">
@@ -710,7 +720,7 @@
               <button type="button" class="shogi-tournament__sub" @click="emit('open-note')">ノートを見る</button>
             </div>
             <!-- 敗退したあとの対局を、回戦ごとに観戦する(13章)。 -->
-            <button v-if="afterWatchCount" type="button" class="shogi-tournament__sub relay-open" data-watch-after @click="watchTarget = 'after'">
+            <button v-if="afterWatchCount" type="button" class="shogi-tournament__sub relay-open" data-watch-after @click="startAfterWatch">
               このあとの対局を観戦<small>{{ afterWatchRevealed >= afterWatchCount ? "見届けた" : `${afterWatchCount}回戦` }}</small>
             </button>
             <button type="button" class="shogi-tournament__start" data-award-open @click="openCeremony(`ryuo-${seasonNo}`)">表彰式へ</button>
@@ -778,17 +788,6 @@
         <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="bookOpen = false">閉じる</button>
       </div>
     </div>
-    <!-- 回戦ごとの観戦(docs/tournament-relay-design.mdの13章)。中継の画面はこの上に重ねる。 -->
-    <RyuoWatch
-      v-if="watchTarget && watchSeason"
-      :season="watchSeason"
-      :revealed="watchRevealed"
-      :oshi-id="oshi?.id ?? ''"
-      :seen="relaySeen"
-      @reveal="emit('watch-progress', String(watchSeason.id), $event)"
-      @watch="openWatchEntry"
-      @close="watchTarget = null"
-    />
     <!-- 対局中継の一覧と、中継の画面(docs/tournament-relay-design.md)。大会の画面の上に重ねる。 -->
     <RelayGameList
       v-if="relayList && !relayEntry"
@@ -837,12 +836,12 @@ import ShogiShoreikai, { type ShoreikaiView } from "./ShogiShoreikai.vue";
 import ShogiKenshukai, { type KenshukaiView } from "./ShogiKenshukai.vue";
 import RelayGameList from "./RelayGameList.vue";
 import RelayViewer from "./RelayViewer.vue";
-import { meijinRelayGames, relayGamesOf, relayRoundNews, ryuoRelayGames } from "./core/relay-games.mjs";
-import { stepsAfterElimination, userWonSeason, watchSteps } from "./core/ryuo-watch.mjs";
-import RyuoWatch from "./RyuoWatch.vue";
+import { isFeatured, meijinRelayGames, relayGamesOf, relayRoundNews, ryuoRelayGames } from "./core/relay-games.mjs";
+import { userWonSeason, watchFinale } from "./core/ryuo-watch.mjs";
 import { isStaleRelayGame, loadRelayStore, unpackRelayGame } from "./core/relay-store.mjs";
 import {
-  hiddenRoundIds, liveDuration, liveGame, liveRound, liveState, maskBracketView, pendingTable, viewersText,
+  afterWatchRounds, hiddenRoundIds, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  pendingTable, roundTable, tableOf, viewersText,
 } from "./core/relay-live.mjs";
 import { rateVerdict } from "./core/relay-game.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
@@ -1175,8 +1174,8 @@ function goBack() {
     relayList.value = null;
     return;
   }
-  if (watchTarget.value) {
-    watchTarget.value = null;
+  if (afterWatch.value) {
+    endAfterWatch();
     return;
   }
   if (live.value) {
@@ -1209,10 +1208,26 @@ function backToSelect() {
 defineExpose({ goBack });
 
 // ---- 対局中継(docs/tournament-relay-design.md)。決着した棋士どうしの対局を、解説つきで見る。
-/** 観戦の期で、まだ見ていない(伏せる)同じ回戦のほかの試合(18章)。中継の一覧と表から外す。 */
-const hiddenTable = computed(() => (props.spectating && props.ryuoSeason ? pendingTable(props.ryuoSeason) : null));
-const hiddenIds = computed(() => (props.spectating && props.ryuoSeason ? hiddenRoundIds(props.ryuoSeason) : new Set<string>()));
-const hiddenKeys = computed(() => new Set([...hiddenIds.value].map((id) => `ryuo:${props.ryuoSeason?.id}:${hiddenTable.value?.tag}:${id}`)));
+/**
+ * まだ見ていない(伏せる)対局。表のtagごとの札のid。中継の一覧と表から外す。
+ * 観戦の期は同じ回戦のほかの試合(18章)、敗退後の観戦は、いま見ている回戦から後ろの全部(19章)。
+ */
+const hiddenMap = computed<Map<string, Set<string>>>(() => {
+  const season = props.ryuoSeason;
+  if (!season) return new Map();
+  const after = afterWatch.value;
+  if (after) {
+    if (after.finale) return new Map();
+    const root = stages.value?.final?.matches.find((match) => match.final);
+    return hiddenTables(after.rounds.slice(after.index).flatMap(({ entries }) => entries), { mainRootId: root ? String(root.id) : null });
+  }
+  const table = props.spectating ? pendingTable(season) : null;
+  const ids = table ? hiddenRoundIds(season) : new Set<string>();
+  return table && ids.size ? new Map([[table.tag, ids]]) : new Map();
+});
+const hiddenKeys = computed(() => new Set([...hiddenMap.value].flatMap(([tag, ids]) => [...ids].map((id) => `ryuo:${props.ryuoSeason?.id}:${tag}:${id}`))));
+/** 決勝トーナメントの出場者を伏せるか(各組の対局を伏せている間。19章)。 */
+const blankEntrants = computed(() => Boolean(afterWatch.value) && [...hiddenMap.value.keys()].some((tag) => tag === "ranking" || /^(revival|group)-/.test(tag)));
 const ryuoRelayGameList = computed(() => (props.ryuoSeason
   ? ryuoRelayGames(props.ryuoSeason, { oshiId: props.oshi?.id ?? null }).filter((entry) => !hiddenKeys.value.has(entry.key))
   : []));
@@ -1262,27 +1277,31 @@ const relayPool = computed(() => {
 const relayNews = computed(() => (relayEntry.value && !relayEntry.value.noNews
   ? relayRoundNews(relayEntry.value.event === "meijin" ? meijinRelayGameList.value : ryuoRelayGameList.value, relayEntry.value)
   : []));
-// ---- 回戦ごとの観戦(13章)
-/** 開いている観戦(分身が出る観戦の期か、本番の期の敗退後)。 */
-const watchTarget = ref<"after" | null>(null);
-const watchSeason = computed(() => props.ryuoSeason);
-const watchRevealed = computed(() => Number(props.ryuoWatch?.progress?.[String(watchSeason.value?.id)] ?? 0));
-/** 本番の期で敗退したとき、観戦できる回戦の数(竜王になった期・終わっていない期は0)。 */
-const afterWatchSteps = computed(() => {
+// ---- 敗退後の観戦(13章。19章でトーナメント表の上で回戦ごとに進める形にした)
+/** 敗退したとき、観戦できる回戦(竜王になった期・終わっていない期は空)。 */
+const afterRounds = computed(() => {
   const season = props.ryuoSeason;
   if (!season || season.phase !== "done" || (season.spectator && !season.live) || userWonSeason(season)) return [];
-  return stepsAfterElimination(season, watchSteps(season, { oshiId: props.oshi?.id ?? null }));
+  return afterWatchRounds(season, { oshiId: props.oshi?.id ?? null });
 });
-const afterWatchCount = computed(() => afterWatchSteps.value.length);
+const afterWatchCount = computed(() => afterRounds.value.length);
+/** 見届けた回戦の数(保存。core/ryuo-watch-store.mjs)。 */
 const afterWatchRevealed = computed(() => Number(props.ryuoWatch?.progress?.[String(props.ryuoSeason?.id)] ?? 0));
+type WatchRound = ReturnType<typeof afterWatchRounds>[number];
+/** 見ている敗退後の観戦。indexは、いま表の上で進んでいる回戦。finaleなら竜王の発表。 */
+const afterWatch = shallowRef<null | { rounds: WatchRound[]; index: number; finale: boolean }>(null);
 const avatarNoteText = computed(() => {
   const need = props.avatarProfile?.need;
   return need ? `まだ対局の解析が少ないので、分身の能力は平均だよ（あと${need}手ぶんの解析で個性が出るよ）。` : "分身の能力は、あなたの対局から出すよ。";
 });
 // ---- 回戦の中継ボード(18章)。分身の対局と同じ回戦のほかの対局が、トーナメント表の上で同時に進む。
+// 敗退後の観戦(19章)も同じボードで、敗退したあとの回戦を1つずつ進める。
 type LiveGame = ReturnType<typeof liveGame>;
-/** 見ている回戦(分身の対局が先頭)。nullなら中継ボードではない。本番の期は、見終えてから進める。 */
-const live = shallowRef<null | { games: LiveGame[]; avatarKey: string; tableKey: string; label: string }>(null);
+/**
+ * 見ている回戦。nullなら中継ボードではない。focusKeyは欄に大きく出す対局(分身の対局か、注目の対局)。
+ * kindがavatarなら、本番の期は見終えてから進める。afterなら、見終えた回戦の数を残す。
+ */
+const live = shallowRef<null | { games: LiveGame[]; focusKey: string; label: string; kind: "avatar" | "after" }>(null);
 /** ボードの時刻(秒)と速さ。1手はおよそ1.2〜1.8秒(速さ×1のとき)。 */
 const liveSeconds = ref(0);
 const LIVE_SPEEDS = [1, 2, 4] as const;
@@ -1293,7 +1312,7 @@ let liveLast = 0;
 const liveEnd = computed(() => (live.value ? liveDuration(live.value.games) : 0));
 const liveStates = computed(() => (live.value ? live.value.games.map((game) => ({ game, state: liveState(game, liveSeconds.value) })) : []));
 const liveFinished = computed(() => Boolean(live.value) && liveStates.value.every(({ state }) => state.done));
-const liveAvatar = computed(() => liveStates.value.find(({ game }) => game.key === live.value?.avatarKey) ?? null);
+const liveFocus = computed(() => liveStates.value.find(({ game }) => game.key === live.value?.focusKey) ?? null);
 const liveCount = computed(() => {
   const done = liveStates.value.filter(({ state }) => state.done).length;
   return { playing: liveStates.value.length - done, done };
@@ -1314,6 +1333,20 @@ function tickLive() {
   liveSeconds.value = Math.min(liveEnd.value, liveSeconds.value + seconds);
   if (liveSeconds.value >= liveEnd.value) stopLiveTimer();
 }
+/** ボードを始める。tableは、その回戦の表(①の表はtagで選ぶ)。なければ、いまの段階の表。 */
+function beginLive(specs: any[], focusKey: string, label: string, kind: "avatar" | "after", table: { stage: number; tag: string } | null = null) {
+  const store = loadRelayStore(relayStorage());
+  relaySeen.value = store.seen;
+  live.value = { games: specs.map((spec) => liveGame(spec, liveRecord(store, spec.key))), focusKey, label, kind };
+  liveSeconds.value = 0;
+  sheet.value = "";
+  viewStage.value = table && table.stage !== stages.value?.current ? table.stage : null;
+  groupChoice.value = table?.stage === 0 ? table.tag : null;
+  tableOpen.value = true;
+  liveLast = performance.now();
+  stopLiveTimer();
+  liveTimer = setInterval(tickLive, LIVE_TICK_MS);
+}
 /**
  * 観戦の期の「観戦する」(VS画面のあと)。トーナメント表に移り、分身の対局と同じ回戦のほかの対局を同時に進める。
  * 分身の勝ち負けは、本番の期を進めたときと同じ(写しの期で先に決める)。
@@ -1325,23 +1358,53 @@ function startLive() {
     void commitAvatarGame();
     return;
   }
-  const store = loadRelayStore(relayStorage());
-  relaySeen.value = store.seen;
-  live.value = {
-    games: round.specs.map((spec) => liveGame(spec, liveRecord(store, spec.key))),
-    avatarKey: round.avatarKey,
-    tableKey: round.table.tag,
-    label: props.view?.pending?.label ?? round.avatar.label,
-  };
-  liveSeconds.value = 0;
-  sheet.value = "";
+  beginLive(round.specs, round.avatarKey, props.view?.pending?.label ?? round.avatar.label, "avatar");
+}
+/**
+ * 結果の画面の「このあとの対局を観戦」(19章)。期の画面のトーナメント表に移り、敗退したあとの回戦を1つずつ、
+ * その回戦の対局を同時に進める。見届けていない回戦から(見届けたあとは、はじめから)。
+ */
+function startAfterWatch() {
+  const rounds = afterRounds.value;
+  if (!rounds.length) return;
+  const start = afterWatchRevealed.value < rounds.length ? afterWatchRevealed.value : 0;
+  resultDetailOpen.value = false;
+  screen.value = "season";
+  playAfterRound(rounds, start);
+}
+function playAfterRound(rounds: WatchRound[], index: number) {
+  afterWatch.value = { rounds, index, finale: false };
+  const round = rounds[index];
+  beginLive(round.entries, round.entries[0]?.key ?? "", round.label, "after", roundTable(round));
+}
+/** 敗退後の観戦で、回戦を見終えた。見届けた数を残し、次の回戦へ(最後なら竜王の発表)。 */
+function nextAfterRound() {
+  const after = afterWatch.value;
+  if (!after) return;
+  const done = after.index + 1;
+  if (props.ryuoSeason) emit("watch-progress", String(props.ryuoSeason.id), Math.max(afterWatchRevealed.value, done));
+  if (done < after.rounds.length) {
+    playAfterRound(after.rounds, done);
+    return;
+  }
+  stopLiveTimer();
+  live.value = null;
+  afterWatch.value = { ...after, index: after.rounds.length, finale: true };
+  viewStage.value = stages.value?.current === 2 ? null : 2;
+  tableOpen.value = true;
+}
+/** 敗退後の観戦を終えて、結果の画面へ戻る(途中でも。見届けた回戦の数は残っている)。 */
+function endAfterWatch() {
+  stopLiveTimer();
+  live.value = null;
+  afterWatch.value = null;
   viewStage.value = null;
   groupChoice.value = null;
-  tableOpen.value = true;
-  liveLast = performance.now();
-  stopLiveTimer();
-  liveTimer = setInterval(tickLive, LIVE_TICK_MS);
+  tableOpen.value = false;
+  screen.value = "result";
 }
+/** 竜王の発表(敗退後の観戦の最後)。 */
+const afterFinale = computed(() => (afterWatch.value?.finale && props.ryuoSeason ? watchFinale(props.ryuoSeason) : null));
 function cycleLiveSpeed() {
   const index = LIVE_SPEEDS.indexOf(liveSpeed.value as (typeof LIVE_SPEEDS)[number]);
   liveSpeed.value = LIVE_SPEEDS[(index + 1) % LIVE_SPEEDS.length];
@@ -1373,8 +1436,12 @@ watch(relayEntry, (now, before) => {
     liveTimer = setInterval(tickLive, LIVE_TICK_MS);
   }
 });
-/** 回戦を見終えた。本番の期を進め、対局から戻ったときと同じく竜王への道を登る。 */
+/** 回戦を見終えた。観戦の期は本番の期を進め、対局から戻ったときと同じく竜王への道を登る。敗退後の観戦は次の回戦へ。 */
 async function finishLive() {
+  if (afterWatch.value) {
+    nextAfterRound();
+    return;
+  }
   stopLiveTimer();
   live.value = null;
   await commitAvatarGame();
@@ -1389,15 +1456,16 @@ async function commitAvatarGame() {
 }
 onBeforeUnmount(stopLiveTimer);
 /** 表の札の、中継ボードの1行(何手目・形勢のバー・視聴者数)。上の棋士の先後で、バーの色と割合を決める。 */
-function liveCardsFor(view: BracketView | null) {
+function liveCardsFor(view: BracketView | null, tag: string) {
   const cards: Record<string, LiveCard> = {};
   if (!view || !live.value) return cards;
   for (const { game, state } of liveStates.value) {
-    const id = game.key.split(":").at(-1) ?? "";
-    const match = view.matches.find((item) => String(item.id) === id);
+    const at = tableOf(game.key);
+    if (at.tag !== tag) continue;
+    const match = view.matches.find((item) => String(item.id) === at.id);
     if (!match) continue;
     const topSide = match.top.pid === game.spec.black.id ? "black" : "white";
-    cards[id] = {
+    cards[at.id] = {
       ply: state.ply, done: state.done, topSide,
       topPercent: topSide === "black" ? state.blackPercent : 100 - state.blackPercent,
       viewers: viewersText(state.viewers),
@@ -1405,29 +1473,39 @@ function liveCardsFor(view: BracketView | null) {
   }
   return cards;
 }
-/** 表の結果を伏せる・見せる。中継ボードで終局した対局は、その勝者を見せる。 */
+/** ボードで終局した対局(表のtagごとに、札のidと勝者のid)。表と番勝負で、その結果を見せる。 */
 const liveRevealKey = computed(() => liveStates.value.filter(({ state }) => state.done).map(({ game }) => game.key).join(","));
 const liveReveal = computed(() => {
   void liveRevealKey.value;
-  const reveal = new Map<string, string>();
+  const reveal = new Map<string, Map<string, string>>();
   for (const { game, state } of liveStates.value) {
     if (!state.done) continue;
-    const winner = game.spec.winner === "black" ? game.spec.black.id : game.spec.white.id;
-    reveal.set(game.key.split(":").at(-1) ?? "", winner);
+    const { tag, id } = tableOf(game.key);
+    if (!reveal.has(tag)) reveal.set(tag, new Map());
+    reveal.get(tag)?.set(id, game.spec.winner === "black" ? game.spec.black.id : game.spec.white.id);
   }
   return reveal;
 });
 function maskedTable(view: BracketView | null, key: string) {
-  if (!view || key !== hiddenTable.value?.tag) return view;
-  return maskBracketView(view, { hidden: hiddenIds.value, reveal: live.value ? liveReveal.value : new Map() }) as BracketView;
+  if (!view) return view;
+  const hidden = hiddenMap.value.get(key) ?? new Set<string>();
+  const blank = key === "main" && blankEntrants.value;
+  if (!hidden.size && !blank) return view;
+  return maskBracketView(view, { hidden, reveal: liveReveal.value.get(key) ?? new Map(), blankEntrants: blank }) as BracketView;
 }
 const groupTableView = computed(() => (groupTable.value ? maskedTable(groupTable.value.view, groupTable.value.key) : null));
 const finalTableView = computed(() => (stages.value ? maskedTable(stages.value.final, "main") : null));
-const liveGroupCards = computed(() => (live.value && groupTable.value?.key === live.value.tableKey ? liveCardsFor(groupTableView.value) : {}));
-const liveFinalCards = computed(() => (live.value?.tableKey === "main" ? liveCardsFor(finalTableView.value) : {}));
-/** 中継ボードの欄の、分身の対局(先後・何手目・勝率・一言)。 */
-const liveAvatarView = computed(() => {
-  const item = liveAvatar.value;
+/** ③の番勝負(伏せている局から後ろは、まだ指していない形)。 */
+const seriesTableView = computed(() => {
+  const list = (stages.value?.series ?? []) as SeriesView[];
+  const reveal = new Map([...liveReveal.value].map(([tag, ids]) => [tag, new Set(ids.keys())]));
+  return maskSeriesViews(list, hiddenMap.value, reveal) as SeriesView[];
+});
+const liveGroupCards = computed(() => (live.value && groupTable.value ? liveCardsFor(groupTableView.value, groupTable.value.key) : {}));
+const liveFinalCards = computed(() => (live.value ? liveCardsFor(finalTableView.value, "main") : {}));
+/** 中継ボードの欄の、大きく出す対局(分身の対局か、注目の対局。先後・何手目・勝率・一言)。 */
+const liveFocusView = computed(() => {
+  const item = liveFocus.value;
   if (!item) return null;
   const { spec } = item.game;
   const nameOf = (player: any) => (player.id === "user" ? `${props.playerName}の分身` : player.name);
@@ -1439,11 +1517,17 @@ const liveAvatarView = computed(() => {
     verdict: item.state.done ? `${nameOf(spec[spec.winner])}の勝ち` : side ? `${nameOf(side)}${verdict.word}` : verdict.word,
   };
 });
-/** 観戦の中から中継を開く。めくる前の結果を見せないよう、同じ回戦のほかの結果(運営の帯)は出さない。 */
-function openWatchEntry(entry: any) {
-  relaySeen.value = loadRelayStore(relayStorage()).seen;
-  relayEntry.value = { ...entry, noNews: true };
-}
+/** 欄の主役のボタン(回戦が終わる前)。分身の対局か、注目の対局(羽音・推しなど)を開く。 */
+const liveWatchText = computed(() => {
+  if (live.value?.kind === "avatar") return "分身の対局を見る";
+  return liveFocus.value && isFeatured(liveFocus.value.game.spec) ? "注目の対局を見る" : "この対局を見る";
+});
+/** 回戦が終わったときの主役のボタン。 */
+const liveFinishText = computed(() => {
+  const after = afterWatch.value;
+  if (!after) return "この回戦の結果へ";
+  return after.index + 1 >= after.rounds.length ? "竜王の発表へ" : "次の回戦へ";
+});
 const relayNextId = computed(() => (relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason)?.pending?.opponentId ?? "");
 
 // ---- 入口の山(期が始まる前の竜王への道)と番付
@@ -3318,6 +3402,25 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament__avatar-enter small { color: #9fb3c8; font-size: 0.72rem; font-weight: 700; }
 /* 回戦の中継ボードの欄(18章)。 */
 .shogi-game .shogi-tournament__live-tag { margin-right: 0.35rem; padding: 0 0.35rem; border-radius: 0.25rem; color: #fffcf4; background: #c8433a; font-size: 0.85em; }
+/* 敗退後の観戦の、いま何回戦目か(19章)。 */
+.shogi-game .shogi-tournament__live-step { margin-left: 0.4rem; color: #9fb3c8; font-variant-numeric: tabular-nums; }
+/* 敗退後の観戦の最後、竜王の発表(19章)。判子は押した瞬間だけ大きく(D:3-2 大事なところはストップ)。 */
+.shogi-game .shogi-tournament__finale { justify-items: center; text-align: center; }
+.shogi-game .shogi-tournament__finale-seal {
+  display: grid; place-items: center; width: 3.6rem; height: 3.6rem; margin: 0; border: 4px solid #c4604c; border-radius: 0.5rem;
+  color: #c4604c; background: #fbf6e6; font-family: "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif; font-size: 2rem; font-weight: 900; rotate: -6deg;
+  animation: shogi-tournament-finale-stamp 360ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.shogi-game .shogi-tournament__finale-line { margin: 0; font-weight: 800; }
+.shogi-game .shogi-tournament__finale-line--crown { color: #e6c15c; font-size: 1.2em; font-weight: 900; }
+.shogi-game .shogi-tournament__finale .shogi-tournament__start { width: 100%; }
+@keyframes shogi-tournament-finale-stamp {
+  from { opacity: 0; transform: scale(2.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-tournament__finale-seal { animation: none; }
+}
 .shogi-game .shogi-tournament__live-game {
   display: grid;
   gap: 0.3rem;
