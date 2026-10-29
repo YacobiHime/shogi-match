@@ -7,6 +7,9 @@ import {
   callName, createRelayScript, kingGuard, materialSwap, materialText, moveFacts, moveMeaning, moveTextOf, pvTextOf, relayAudience, relayCast,
 } from './relay-commentary.mjs';
 
+/** 30章の同情の一言(秒読み・寄せ。分身には出さない)を除いた文(責める言葉を調べる)。 */
+const sympathyRemoved = (text) => String(text).replace(/1分だからそりゃミスも出るか|珍しく.+先生が寄せでミスったな…/, '');
+
 const player = (id, name, extra = {}) => ({ id, name, dan: '七段', rating: 1600, character: { attack: 0, traits: [], abilities: {} }, repertoire: null, ...extra });
 
 describe('名前と配役', () => {
@@ -118,11 +121,13 @@ describe('createRelayScript', () => {
 });
 
 /** 決まった手順で長い1局を作り、台本を通す(コメントの種類を確かめる)。 */
-function longScript({ weight = 'plain', news = [], variant = '', venue = '', cast: castOverride = null, white = null } = {}) {
+function longScript({
+  weight = 'plain', news = [], variant = '', venue = '', cast: castOverride = null, white = null, evalOf = null, end = { winner: 'black', reason: 'resign' }, how = 'middle', series = null,
+} = {}) {
   const spec = {
     key: `ryuo:9:main:long-${weight}${variant}`, venue, event: 'ryuo', kind: weight === 'title' ? 'finals' : 'game', label: '決勝トーナメント 準決勝', weight,
     black: player('a', '中村大輔', { age: 41, character: { attack: 0.4, traits: [{ id: 'demon-reading' }], abilities: {} } }),
-    white: white ?? player('h', '天鷺羽音', { story: HANANE, age: 16 }), winner: 'black', how: 'middle', story: [80, 300, 900], news,
+    white: white ?? player('h', '天鷺羽音', { story: HANANE, age: 16 }), winner: end.winner, how, story: [80, 300, 900], news, series,
   };
   const cast = castOverride ?? { id: 'y', name: '天鷺善彦', dan: '竜王', story: YOSHIHIKO, voice: 'yoshihiko' };
   const script = createRelayScript({ spec, cast, nextId: 'a' });
@@ -139,7 +144,7 @@ function longScript({ weight = 'plain', news = [], variant = '', venue = '', cas
   }
   const entries = moves.map((move, index) => ({
     move,
-    eval: Math.round(Math.sin(index / 9) * 400 + index * 6),
+    eval: evalOf ? evalOf(index) : Math.round(Math.sin(index / 9) * 400 + index * 6),
     // 偶数の手は、次の手を読み筋の1手目にする(視聴者の予想が当たる)。
     pv: index % 2 === 0 && moves[index + 1] ? moves[index + 1] : '',
     best: index === 40 ? moves[index] : moves[index],
@@ -152,10 +157,10 @@ function longScript({ weight = 'plain', news = [], variant = '', venue = '', cas
     const last = index === entries.length - 1;
     script.add({
       index, entry, previousEval: index ? entries[index - 1].eval : 40, sfenBefore: sfens[index], sfenAfter: sfens[index + 1],
-      before: timeline[index], after: timeline[index + 1], last, end: last ? { winner: 'black', reason: 'resign' } : null,
+      before: timeline[index], after: timeline[index + 1], last, end: last ? end : null,
     });
   });
-  return Object.assign(script, { sfens });
+  return Object.assign(script, { sfens, moves, spec });
 }
 
 describe('視聴者のコメントの種類(12章)', () => {
@@ -200,7 +205,7 @@ describe('視聴者のコメントの種類(12章)', () => {
   });
 
   it('責める言葉を使わない。タイトル戦ほどコメントが多い', () => {
-    expect(script.comments.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(text))).toBe(true);
+    expect(script.comments.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(sympathyRemoved(text)))).toBe(true);
     expect(script.comments.every(({ text }) => !/\{\w+\}/.test(text))).toBe(true);
     expect(longScript({ weight: 'title' }).comments.length).toBeGreaterThan(script.comments.length);
   });
@@ -264,7 +269,7 @@ describe('視聴者のコメントの種類を増やす(12-5)', () => {
     const all = scripts.flatMap(({ comments }) => comments);
     expect(all.filter(({ kind }) => kind === 'overseas').every(({ tone }) => tone === 'lavender')).toBe(true);
     expect(all.every(({ text }) => !/\{\w+\}|undefined|NaN/.test(text))).toBe(true);
-    expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(text))).toBe(true);
+    expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(sympathyRemoved(text)))).toBe(true);
   });
 });
 
@@ -311,7 +316,7 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     expect(all.some(({ at, when, kind }) => at === 1 && when === 'think' && kind === 'predict')).toBe(true);
     expect(all.every(({ text }) => !/\{\w+\}|undefined|NaN/.test(text))).toBe(true);
     // 少しきつい笑い(「酷いｗ」)は27章で入れた。分身の手には出さない(下の27章のテスト)。
-    expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(text))).toBe(true);
+    expect(all.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(sympathyRemoved(text)))).toBe(true);
   });
 
   it('羽音の解説は、新しい言い方でも敬語を使わない', () => {
@@ -436,5 +441,148 @@ describe('投了の早さの終局(29章)', () => {
     expect(clean.comments.some(({ text }) => /潔い|投げっぷり|もう詰んでる/.test(text))).toBe(true);
     const stubborn = scriptFor({ ...base, black: player('a', '中村大輔'), white: player(idOf('stubborn'), '鈴木蓮') }, moves, { end: { winner: 'black', reason: 'resign', plies: 4 } });
     expect(stubborn.comments.some(({ text }) => /粘/.test(text) || text === '3手詰めまで指したね')).toBe(true);
+  });
+});
+
+describe('二日制のタイトル戦の配信のコメント(30章)', () => {
+  const variants = ['', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const suzuki = (extra = {}) => player('s', '鈴木蓮', { age: 28, ...extra });
+  /** 投了の早さが指定の段になる棋士のid。 */
+  const idOf = (style) => {
+    for (let index = 0; index < 500; index += 1) if (resignStyleOf({ id: `z${index}` }).id === style) return `z${index}`;
+    throw new Error(style);
+  };
+  const strip = (text) => text.replace(/^[▲△]/, '');
+
+  it('会場をたずねる人には、対局場の町と場所(番勝負でなければ将棋会館)が遅れて答え、きつい返しはさらに遅れる', () => {
+    let asked = 0;
+    for (const variant of variants) {
+      for (const [venue, answer] of [['神奈川・元湯陣屋', '神奈川の「元湯陣屋」です'], ['', '東京の「将棋会館」です']]) {
+        const zero = longScript({ variant, venue, weight: venue ? 'title' : 'plain' }).comments.filter(({ at }) => at === 0);
+        const reply = zero.find(({ text }) => text === answer);
+        if (!zero.some(({ text }) => text === 'これどこでやってるんだろう')) {
+          expect(reply).toBeUndefined();
+          continue;
+        }
+        asked += 1;
+        expect(reply?.lag).toBeGreaterThanOrEqual(1000);
+        const rude = zero.find(({ text }) => text === '場所なんか自ら調べろや');
+        if (rude) expect(rude.lag).toBeGreaterThan(reply.lag);
+      }
+    }
+    expect(asked).toBeGreaterThan(0);
+  });
+
+  it('視聴者の数が節目を越えた手で「○人いったよ」(3桁区切り)。1万人には㊗', () => {
+    const marks = [];
+    for (const variant of variants) {
+      const script = longScript({ variant });
+      for (const { at, text } of script.comments.filter(({ text }) => /^(もう)?[\d,]+人(いった|行った|オメ|超え)/.test(text))) {
+        const n = Number(text.match(/[\d,]+/)[0].replace(/,/g, ''));
+        expect(relayAudience(script.spec, at)).toBeGreaterThanOrEqual(n);
+        expect(relayAudience(script.spec, at - 1)).toBeLessThan(n);
+        if (n >= 1000) expect(text).toContain(n.toLocaleString('en-US'));
+        marks.push(n);
+      }
+      if (script.comments.some(({ text }) => text === '㊗一万人！')) marks.push('㊗');
+    }
+    expect(marks).toContain(7500);
+    expect(marks).toContain('㊗');
+  });
+
+  it('昼食休憩: 「昼飯は○○らしいよ」(注文した料理)→「まだわかりません」→「昼飯の話ではないです」が、遅れて順に流れる', () => {
+    let seen = 0;
+    for (const variant of variants) {
+      const script = longScript({ variant, weight: 'title', venue: '神奈川・元湯陣屋' });
+      const menu = script.comments.find(({ text }) => /^昼飯は.+らしいよ$/.test(text));
+      if (!menu) continue;
+      seen += 1;
+      const host = script.lines.find(({ at, role, text }) => at === menu.at && role === 'host' && text.includes('昼食休憩'));
+      expect(host?.text).toContain(menu.text.replace(/^昼飯は|らしいよ$/g, ''));
+      const same = script.comments.filter(({ at }) => at === menu.at);
+      expect(same.find(({ text }) => text === 'まだわかりません')?.lag).toBe(1300);
+      expect(same.find(({ text }) => text === 'あ、昼飯の話ではないです💦')?.lag).toBe(2700);
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('2日目の朝は「対局再開」。封じ手の手を言う', () => {
+    let seen = 0;
+    for (const variant of variants) {
+      const script = longScript({ variant, weight: 'title', venue: '神奈川・元湯陣屋' });
+      const card = script.cards.find(({ kind }) => kind === 'unseal');
+      if (!card) continue;
+      seen += 1;
+      const same = script.comments.filter(({ at }) => at === card.at);
+      expect(same.some(({ text }) => text === '対局再開')).toBe(true);
+      const sealed = strip(card.text.replace(/^封じ手は/, ''));
+      for (const { text } of same.filter(({ text }) => /封じ手は|最善と言われていた/.test(text))) expect(text).toContain(sealed);
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('形勢が3回入れ替わって勝ったら「A勝ちそう→B勝ちそう→A勝ちそう→さすがにB勝ち」と大逆転', () => {
+    const evalOf = (index) => (index < 20 ? 0 : index < 45 ? 1200 : index < 70 ? -1200 : index < 90 ? 1200 : -1500);
+    const script = longScript({ variant: 'b', white: suzuki(), evalOf, end: { winner: 'white', reason: 'resign' }, how: 'comeback' });
+    const last = script.sfens.length - 1;
+    const end = script.comments.filter(({ at }) => at === last).map(({ text }) => text);
+    expect(end).toContain('中村勝ちそう→鈴木勝ちそう→中村勝ちそう→さすがに鈴木勝ち');
+    expect(end.some((text) => /大逆転|二転三転|あの展開で後手/.test(text))).toBe(true);
+    // 入れ替わりのない対局では言わない。
+    const plain = longScript({ variant: 'b', white: suzuki(), evalOf: () => 300 });
+    expect(plain.comments.some(({ text }) => /勝ちそう→/.test(text))).toBe(false);
+  });
+
+  it('負けが見えても投げない人(詰みまで指す・粘る)には「投了せずに行ける所まで行くのが○○流」。潔い人には言わない', () => {
+    const evalOf = (index) => (index < 90 ? 100 : 5000);
+    const said = (style) => variants.some((variant) => longScript({ variant, white: suzuki({ id: idOf(style) }), evalOf })
+      .comments.some(({ text }) => text === '投了せずに行ける所まで行くのが鈴木流'));
+    expect(said('full')).toBe(true);
+    expect(said('clean')).toBe(false);
+  });
+
+  it('番勝負で挑戦者があと1敗で防衛を許す局(角番)、負けが見えたら「これで負けたら防衛だから粘るんやろ？」', () => {
+    const evalOf = (index) => (index < 90 ? 100 : 5000);
+    const said = (wins) => variants.some((variant) => longScript({ variant, weight: 'title', white: suzuki(), evalOf, series: { holder: 'black', need: 4, wins } })
+      .comments.some(({ text }) => text === 'これで負けたら防衛だから粘るんやろ？'));
+    expect(said({ black: 3, white: 1 })).toBe(true);
+    expect(said({ black: 2, white: 1 })).toBe(false);
+  });
+
+  it('負けた側のいちばんの悪手を「転機は○○かぁ…」とふり返る(名詞はその手)', () => {
+    let seen = 0;
+    for (const variant of variants) {
+      const script = longScript({ variant, white: suzuki() });
+      const turning = script.comments.find(({ text }) => text.startsWith('転機は'));
+      if (!turning) continue;
+      seen += 1;
+      // 後手(負けた側)の損の大きい手は、42手目(損520)。
+      expect(turning.text).toBe(`転機は${strip(moveTextOf(script.sfens[41], script.moves[41], script.moves[40]))}かぁ…`);
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('分身の手には、ダメ・ミス・舐めプの一言を出さない', () => {
+    const evalOf = (index) => (index < 80 ? Math.round(Math.sin(index / 7) * 900) : 4000);
+    for (const variant of variants) {
+      const script = longScript({ variant, weight: 'title', white: player('v', 'やこび', { kind: 'avatar' }), evalOf });
+      // 後手(分身)の手は、偶数の手数。
+      const harsh = script.comments.filter(({ at, text }) => at % 2 === 0 && /ダメだろ|ミス|舐めプ/.test(text));
+      expect(harsh).toEqual([]);
+      expect(script.comments.some(({ text }) => /やこび先生が寄せで/.test(text))).toBe(false);
+    }
+  });
+
+  it('30章のコメントの穴埋め({name}など)が全部埋まり、同情の一言のほかに責める言葉がない', () => {
+    const evalOf = (index) => (index < 20 ? 0 : index < 45 ? 1200 : index < 70 ? -1200 : index < 90 ? 1200 : -30000 + 120 - index);
+    for (const variant of variants) {
+      for (const script of [
+        longScript({ variant, weight: 'title', venue: '神奈川・元湯陣屋', white: suzuki({ id: idOf('full') }), evalOf, end: { winner: 'white', reason: 'mate' } }),
+        longScript({ variant, weight: 'big', white: player('y', '天鷺善彦', { story: YOSHIHIKO }) }),
+      ]) {
+        expect(script.comments.every(({ text }) => text && !/\{\w+\}|undefined|NaN|null/.test(text))).toBe(true);
+        expect(script.comments.every(({ text }) => !/ひどい|大悪手|ミス|下手/.test(sympathyRemoved(text)))).toBe(true);
+      }
+    }
   });
 });

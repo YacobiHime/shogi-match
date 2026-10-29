@@ -36,7 +36,7 @@ const rootId = (bracket) => bracket?.root?.from ?? null;
  * 1局の項目。aとbは棋士のid、gameは自動対局の記録(先手・戦法・囲い・展開・勝ち方)。先手が記録にない前の保存の局は、種で決める。
  * @returns {any | null}
  */
-function entryOf(season, { key, event, kind, label, section, order, round = 0, weight = 'plain', a, b, winnerId, game, venue = '', gameNo = 0 }, context) {
+function entryOf(season, { key, event, kind, label, section, order, round = 0, weight = 'plain', a, b, winnerId, game, venue = '', gameNo = 0, series = null }, context) {
   // 自分の対局は入れない(振り返りと棋譜解析がある)。観戦の期の分身の対局は入れる(13章)。
   if (!a || !b || !winnerId) return null;
   if (!context.includeUser && (a === USER_ID || b === USER_ID)) return null;
@@ -49,6 +49,11 @@ function entryOf(season, { key, event, kind, label, section, order, round = 0, w
   const ids = [blackId, whiteId];
   return {
     key, event, kind, label, section, order, round, weight, venue, gameNo, seed,
+    // 番勝負のこの局の前の星(holderはタイトル保持者の側。30章の「これで負けたら防衛」)。
+    series: series ? {
+      holder: series.holderId === blackId ? 'black' : 'white', need: series.need,
+      wins: { black: series.wins[blackId] ?? 0, white: series.wins[whiteId] ?? 0 },
+    } : null,
     // 観戦の期と本物の世界の期(docs/tournament-strength-spread-design.mdの9章)の中継は、プロ並みの読みで作る(13-3)。
     quality: context.pro ? 'pro' : '',
     black, white,
@@ -66,6 +71,16 @@ function entryOf(season, { key, event, kind, label, section, order, round = 0, w
       current: false,
     },
   };
+}
+
+/**
+ * 番勝負のindex局目の前の星(タイトル戦の番勝負は、aがタイトル保持者)。
+ * @returns {{ holderId: string, need: number, wins: Record<string, number> }}
+ */
+function seriesBefore(series, index) {
+  const wins = { [series.a]: 0, [series.b]: 0 };
+  for (const game of (series.games ?? []).slice(0, index)) if (game?.winner in wins) wins[game.winner] += 1;
+  return { holderId: series.a, need: series.need ?? 4, wins };
 }
 
 /** 注目の対局か(羽音・善彦・推し・次の相手)。 */
@@ -124,6 +139,7 @@ export function ryuoRelayGames(season, { oshiId = null } = {}) {
         section: 'series', order: rank * 1000 + index, round: index + 1, weight,
         a: series.a, b: series.b, winnerId: game.winner, game,
         venue: tag === 'finals' ? stageVenue('ryuo', season.no, index + 1) : '', gameNo: index + 1,
+        series: tag === 'finals' ? seriesBefore(series, index) : null,
       }, context);
       if (entry) list.push(entry);
     });
@@ -180,7 +196,7 @@ export function meijinRelayGames(season, { oshiId = null } = {}) {
       const entry = entryOf(season, {
         key: `meijin:${id}:finals:${index}`, event: 'meijin', kind: 'finals', label: `名人戦七番勝負 第${index + 1}局`,
         section: 'series', order: 3000 + index, round: index + 1, weight: 'title', a: finals.a, b: finals.b, winnerId: game.winner, game,
-        venue: stageVenue('meijin', season.no, index + 1), gameNo: index + 1,
+        venue: stageVenue('meijin', season.no, index + 1), gameNo: index + 1, series: seriesBefore(finals, index),
       }, context);
       if (entry) list.push(entry);
     });

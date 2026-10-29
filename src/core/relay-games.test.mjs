@@ -71,6 +71,22 @@ describe('ryuoRelayGames', () => {
   });
 });
 
+describe('番勝負の星(30章)', () => {
+  it('タイトル戦の各局に、その局の前の星とタイトル保持者の側を持たせる', () => {
+    const pro = (name) => ({ name, dan: '九段', rating: 1900 });
+    const season = {
+      id: 's1', no: 1, players: { h: pro('天野一郎'), c: pro('川口二郎') },
+      finals: { a: 'h', b: 'c', need: 4, games: [{ winner: 'h' }, { winner: 'h' }, { winner: 'c' }, { winner: 'h' }] },
+    };
+    const finals = ryuoRelayGames(season).filter(({ kind }) => kind === 'finals').sort((x, y) => x.gameNo - y.gameNo);
+    expect(finals).toHaveLength(4);
+    const fourth = finals[3];
+    const holder = fourth.black.id === 'h' ? 'black' : 'white';
+    expect(fourth.series).toEqual({ holder, need: 4, wins: { [holder]: 2, [holder === 'black' ? 'white' : 'black']: 1 } });
+    expect(finals[0].series.wins).toEqual({ black: 0, white: 0 });
+  });
+});
+
 describe('meijinRelayGames', () => {
   const roster = createRoster({ seed: 31 });
   const season = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings: { difficulty: 9, scale: 'mini' }, userLevel: 12, seed: 7 });

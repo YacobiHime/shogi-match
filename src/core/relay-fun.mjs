@@ -202,7 +202,7 @@ export function addNote(notes, { spec, ply, sfen, moveText, savedAt = Date.now()
     key: spec.key, event: spec.event, kind: spec.kind, label: spec.label, section: spec.section, order: spec.order, round: spec.round,
     weight: spec.weight, venue: spec.venue ?? '', gameNo: spec.gameNo ?? 0, seed: spec.seed, quality: spec.quality ?? '',
     black: light(spec.black), white: light(spec.white), winner: spec.winner ?? null, openings: spec.openings ?? null,
-    castles: spec.castles ?? null, story: spec.story ?? null, how: spec.how ?? null, tags: spec.tags ?? {},
+    castles: spec.castles ?? null, story: spec.story ?? null, how: spec.how ?? null, tags: spec.tags ?? {}, series: spec.series ?? null,
   };
   const id = `${spec.key}#${ply}`;
   const next = [{ id, spec: keep, ply: clamp(Math.round(ply), 0, 999), sfen, moveText, savedAt }, ...notes.filter((note) => note.id !== id)];

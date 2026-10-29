@@ -19,7 +19,7 @@ import { SURNAME_WEIGHTS } from './ryuo-names.mjs';
 import { HOW_LABELS } from './ryuo-simulation.mjs';
 import { STAGE_MEALS } from './title-day.mjs';
 import { PIECE_POINTS } from './piece-points.mjs';
-import { blackWinRate, clockText, isMateCp, relayPlan, relaySeed, thinkTimeText } from './relay-game.mjs';
+import { MATE_CP, blackWinRate, clockText, isMateCp, relayPlan, relaySeed, relayTimeControl, thinkTimeText } from './relay-game.mjs';
 
 /** 将棋会館の対局(1日制)の昼食・夕食の出前。 */
 export const KAIKAN_MEALS = Object.freeze(['うな重', 'カツ丼', '天ぷらそば', 'カレーライス', 'オムライス', 'ざるそば', '親子丼', 'チャーハン', '鍋焼きうどん', 'ハンバーグ定食']);
@@ -182,7 +182,8 @@ export function moveMeaning(facts, { ply = 99 } = {}) {
 
 // ---- 視聴者のコメント(5-2・12章)
 // 書き手の種類(kind)ごとに言い方を持つ。{move}は指し手(▲2四歩)、{piece}は駒、{name}は棋士の呼び名など。
-// 責める言葉(「ひどい」「大悪手」「ミス」)は使わない。
+// 責める言葉(「ひどい」「大悪手」「ミス」)は使わない。例外は、分身ではない棋士への少しきつい笑い(27章の「酷いｗ」)と、
+// 同情の一言(30章の「1分だからそりゃミスも出るか」「珍しく○○先生が寄せでミスったな…」)だけ。
 
 const VIEWER = Object.freeze({
   start: ['きたー', '待ってた', 'わこつ', 'よろしくお願いします', 'どっち応援する？', '今日はこの対局', '期待', '深呼吸して、からの～？', 'ワクワク', '興奮してきた', 'これは楽しみ'],
@@ -321,7 +322,7 @@ const VIEWER = Object.freeze({
   kakuAwase: ['角合わせればOK'],
   retreat: ['{move}？'],
   mushi: ['無視ｗ'],
-  hishaKawaii: ['王より飛車を可愛がり。。。'],
+  hishaKawaii: ['王より飛車を可愛がり。。。', '飛車可愛がりすぎだろ'],
   // 駒の見せ場。
   knightHonki: ['桂の本気ｗ', '桂跳ねたー', 'つえええええええｗ'],
   bishopIji: ['角の意地ｗｗｗｗ', '角が働いた'],
@@ -352,6 +353,111 @@ const VIEWER = Object.freeze({
   fullMate: ['最後まで指すのが{name}流', '最後まで諦めない{name}', '詰みまで指すのかっこいい', '{name}は最後まで指す人だからな'],
   cleanResign: ['潔い投了', 'さすが{name}、潔い', '投げっぷりがいい', '早いけど、もう詰んでるのか'],
   stubbornResign: ['よく粘った', '{name}粘ったなあ', '粘り強い', '3手詰めまで指したね'],
+  // ---- 30章: 二日制のタイトル戦の配信の例から(名詞は会場・棋士・手・駒・視聴者の数で差し替える)。
+  venueAsk: ['これどこでやってるんだろう'],
+  venueAnswer: ['{city}の「{place}」です'],
+  venueRude: ['場所なんか自ら調べろや'],
+  greet: ['こんにちは！本日も配信ありがとうございます。', '♪───Ｏ（≧∇≦）Ｏ────♪'],
+  audience: ['{n}人いったよ', '{n}人行ったよ。', '{n}人オメ', 'もう{n}人超えとる。'],
+  audienceBig: ['㊗{word}！'],
+  resume: ['対局再開'],
+  day2: ['流石二日目', 'タイトルの将棋ってなんで２日もかけるんでしょう'],
+  unsealGuess: ['まあ　{name}さんも予想してたやろな'],
+  unsealMorning: ['今北　おはようございます　封じ手は{move}'],
+  unsealBest: ['ほー最善と言われていた{move}'],
+  imakita: ['今北産業'],
+  dropGuess: ['{piece}打つのかな？'],
+  recaptureGuess: ['{move}かな。'],
+  umaOk: ['へぇ{piece}作られても平気だと'],
+  lunchCurious: ['{name}先生の昼飯メニューが気になりますね'],
+  lunchMenu: ['昼飯は{meal}らしいよ'],
+  lunchUnknown: ['まだわかりません'],
+  lunchJoke: ['あ、昼飯の話ではないです💦'],
+  mochi: ['{side}持ちたい'],
+  mochiOther: ['私は{side}持ちです'],
+  mochiNeither: ['どっちも持ちたくない'],
+  lookGood: ['{side}だいぶ良く見えてます'],
+  starBehind: ['だからこそ、{name}先生が今回{side}でどういう手を指すか'],
+  laymanDoubt: ['これで互角か{side}良しなら自分の棋力が足りてないです'],
+  tsukkomi: ['{move}突っ込んだｗｗｗ'],
+  bold: ['これ指せるのか', '怖いですねぇ', 'なんか毒饅頭っぽい気が…', 'はえー', 'おお'],
+  boldLosing: ['形作りにも見えるけどそういう表情じゃないっすね'],
+  weather: ['雨で洗車できそう'],
+  takeOnly: ['取るしかないですかね。'],
+  took: ['とったか'],
+  shousei: ['{side}勝勢じゃない？'],
+  igyoku: ['居玉の弱点を突きにきたということか'],
+  unclear: ['あーはっきりしない局面だ'],
+  stillChance: ['捕まらなければ{name}さんまだ勝ちの目ある'],
+  aseri: ['{full}焦ってる　なかなか見られへんでこの対局は', '{name}焦っとるな'],
+  legend: ['かつての{pair}の激戦を思い起こされる'],
+  handOnly: ['持ち駒{piece}だけなのはつらいなあ'],
+  twoNari: ['{name}「僕の飛車は……二度、“成る”」'],
+  twoNariReply: ['森内竜王の飛車は二度曲がるけどな'],
+  longImportant: ['ここで長考するってことは大事な場面だろうけど、この後はどうなるのかわからない', '天井見た！', '迷い道クネクネ'],
+  maegami: ['{name}さん、前髪気になる'],
+  unbeaten: ['二日制のタイトル戦まだ失陥したことなかったはず。というか無敗'],
+  beatLegend: ['全タイトル制覇した人だしな。その人に勝った{name}さんも強い'],
+  zenkan: ['この二人で全冠持っています'],
+  tokin: ['{move}「ワシは飛車の生まれ変わりなんや！頑張らなあかん！」'],
+  kyoDeban: ['香車「出番っすか？」'],
+  douDame: ['同{piece}はダメ', 'ここで同{piece}は罠'],
+  toreNai: ['とれないのか'],
+  nanda: ['{move}なんだ'],
+  miseru: ['魅せますねぇ'],
+  douHisha: ['同{piece}は覚悟決まりすぎだろｗｗ'],
+  douHishaThink: ['同{piece}はいきすぎな感じがする'],
+  yomikiri: ['読み切ってるね', '読み切った感', '間違えないな', '流石だわ', 'もう間違えようがない'],
+  owari: ['あぁ終わっちまったかなぁ…', '詰みではないけどほぼ終わり', 'まもなく決着', '終わりの予感', 'さすがに無理だ', 'ここまでか', 'やむなし',
+    'まだ詰みはないんだろうけど、逃げ切れる気はしない', '即詰みはなくてももうどうしようもない', '詰みはないけど、ここから受けなしか'],
+  owariPiece: ['{piece}がきておわりか'],
+  reversal: ['大逆転しすぎ', '二転三転したなあ', 'あの展開で{side}勝てるんだ…', 'あの展開で{side}勝つとか恐ろしい', '大逆転劇'],
+  magic: ['マジックありますな', 'ってかこれは形勢もどるのでは', '揺らぐな'],
+  wasted: ['いやー{move}すごかったけどなぁ勝ち切れんかったか'],
+  nebare: ['粘ればまだあるぞ', 'まだ全然終わってはない'],
+  byoMiss: ['1分だからそりゃミスも出るか'],
+  byoRisk: ['一分将棋なんで外れる危険はまだありうる'],
+  muhon: ['飛車の謀反ｗ'],
+  muzukashii: ['将棋難しすぎぃ'],
+  dameDrop: ['{move}はダメだろ　絶対打ったらアカンやつや'],
+  teban: ['{move}で手番渡したの痛かった'],
+  ocha: ['お茶飲む余裕がある'],
+  ippute: ['1手詰ですｗ'],
+  tsumero: ['詰めろ'],
+  hisshi: ['{move}で必死'],
+  tsunderu: ['詰んでる。'],
+  namepu: ['これは舐めプ{name}'],
+  saizen: ['最善手しか指してなくて草'],
+  yonaga: ['米長先生「わっはっは」'],
+  toryoAru: ['投了ある', 'もうさすがに投げるかな'],
+  nageDokoro: ['投了するなら　{move}が投げ所でしょう'],
+  nageLine: ['{line}で投了やな'],
+  nageNai: ['投げきれないか'],
+  ryu: ['投了せずに行ける所まで行くのが{name}流'],
+  boei: ['これで負けたら防衛だから粘るんやろ？'],
+  tanoshi: ['{name}さん楽しそうだね😆'],
+  wakaran: ['なんでこれで詰むのか分からん'],
+  wakaranReply: ['わしも分からん'],
+  owatteta: ['{move}で終わってたんじゃないの？'],
+  taeru: ['ギリギリ詰まないけども', '耐えてますかね？', '結構耐えてはいるのか'],
+  jikan: ['考える時間稼いでるっぽい？'],
+  madaka: ['{move}までか'],
+  sokuuchi: ['詰んでるなら{name}さんが即指しするやろうし、まだじゃないの？'],
+  sokuuchiReply: ['即指ししないのは確認作業やろ'],
+  seikai: ['さあ、正解を見せてください', 'まだ読めない、、、'],
+  kyosoku: ['強く同{piece}'],
+  kyosokuReply: ['強く同{piece}は草'],
+  docchi: ['どっち優勢なん？{side}？'],
+  leadChain: ['{a}勝ちそう→{b}勝ちそう→{a}勝ちそう→さすがに{b}勝ち'],
+  tataki: ['詰みを探す歩のたたきか'],
+  jitto: ['じっと{move}かー'],
+  hmm: ['ん？', 'なんか違う手だけど', 'おや', 'おほー', 'あら', 'やっと見えてきた', 'にゃるほど'],
+  omoide: ['思い出王手キターーーーーー( ﾉД`)ｼｸｼｸ…'],
+  endPraise: ['激闘だった　見応え満点', 'すごい将棋だった', '名局賞щ(ﾟДﾟщ)ｶﾓｰﾝ'],
+  endBye: ['お疲れさまでした', 'お疲れ様でした', '８８８８８８', '拍手👏👏👏👏👏', 'おめでとう🎊', 'え、終わりました？', '終了'],
+  turning: ['転機は{move}かぁ…'],
+  munen: ['{given}　無念'],
+  yoseMiss: ['珍しく{name}先生が寄せでミスったな…'],
   // 駒割り勢: 盤と持ち駒の駒の数(materialSwap)。
   material: ['駒割りは{text}', '数えると{text}', '{text}だね', 'いま{text}'],
   materialEven: ['駒割りは互角', '駒の損得はなし', '駒割りは五分'],
@@ -408,7 +514,20 @@ const POOL_KIND = Object.freeze({
   treasure: 'cheer', rareCastle: 'theory', evolve: 'theory', modern: 'theory', often: 'theory', joban: 'theory', mouEnd: 'hype', kyosha: 'predict',
   chaosHarsh: 'hype', uchu: 'hype', utitai: 'predict', naruImi: 'play', bishopWonder: 'newbie', kakuAwase: 'theory', retreat: 'play', mushi: 'play', hishaKawaii: 'theory', castShikata: 'cast', castIji: 'cast', castDousuru: 'cast', castIgai: 'cast', castGood: 'cast',
   neta: 'neta', oyatsu: 'neta', castStart: 'cast', castHanane: 'cast', castFather: 'cast', castAgree: 'cast', trait: 'cheer', next: 'cheer', avatar: 'cheer', hype: 'hype',
-  kifu: 'kifu', kifuNew: 'kifu', toryo: 'kifu', mateEnd: 'kifu', fullMate: 'cheer', cleanResign: 'kifu', stubbornResign: 'cheer', material: 'material', materialEven: 'material',
+  kifu: 'kifu', kifuNew: 'kifu', toryo: 'kifu', mateEnd: 'kifu', fullMate: 'cheer', cleanResign: 'kifu', stubbornResign: 'cheer',
+  venueAsk: 'newbie', venueAnswer: 'answer', venueRude: 'idle', greet: 'hype', audience: 'hype', audienceBig: 'hype', resume: 'play', day2: 'idle',
+  unsealGuess: 'predict', unsealMorning: 'idle', unsealBest: 'ai', imakita: 'idle', dropGuess: 'predict', recaptureGuess: 'predict', umaOk: 'play',
+  lunchCurious: 'neta', lunchMenu: 'neta', lunchUnknown: 'idle', lunchJoke: 'idle', mochi: 'idle', mochiOther: 'idle', mochiNeither: 'idle',
+  lookGood: 'idle', starBehind: 'cheer', laymanDoubt: 'idle', tsukkomi: 'hype', bold: 'hype', boldLosing: 'idle', weather: 'idle', takeOnly: 'predict',
+  took: 'play', shousei: 'ai', igyoku: 'theory', unclear: 'idle', stillChance: 'cheer', aseri: 'hype', legend: 'history', handOnly: 'theory',
+  twoNari: 'neta', twoNariReply: 'history', longImportant: 'clock', maegami: 'neta', unbeaten: 'history', beatLegend: 'history', zenkan: 'history',
+  tokin: 'neta', kyoDeban: 'neta', douDame: 'predict', toreNai: 'play', nanda: 'play', miseru: 'hype', douHisha: 'hype', douHishaThink: 'theory',
+  yomikiri: 'hype', owari: 'idle', owariPiece: 'play', reversal: 'hype', magic: 'hype', wasted: 'idle', nebare: 'cheer', byoMiss: 'clock', byoRisk: 'clock',
+  muhon: 'neta', muzukashii: 'idle', dameDrop: 'play', teban: 'theory', ocha: 'clock', ippute: 'ai', tsumero: 'ai', hisshi: 'ai', tsunderu: 'ai',
+  namepu: 'neta', saizen: 'ai', yonaga: 'history', toryoAru: 'idle', nageDokoro: 'theory', nageLine: 'predict', nageNai: 'idle', ryu: 'cheer', boei: 'theory', tanoshi: 'cheer',
+  wakaran: 'newbie', wakaranReply: 'idle', owatteta: 'ai', taeru: 'idle', jikan: 'clock', madaka: 'predict', sokuuchi: 'idle', sokuuchiReply: 'idle',
+  seikai: 'hype', kyosoku: 'play', kyosokuReply: 'idle', docchi: 'newbie', leadChain: 'idle', tataki: 'theory', jitto: 'play', hmm: 'idle', omoide: 'hype',
+  endPraise: 'hype', endBye: 'kifu', turning: 'theory', munen: 'cheer', yoseMiss: 'idle', material: 'material', materialEven: 'material',
   kingSolid: 'king', kingThin: 'king', anaguma: 'king', layman: 'layman', laymanReply: 'ai', local: 'local', localKaikan: 'local',
   room: 'room', roomOnly: 'room', roomSwing: 'room', veteran: 'veteran', rookie: 'veteran', overseas: 'overseas', overseasWow: 'overseas', overseasEnd: 'overseas',
 });
@@ -593,6 +712,23 @@ const TITLE_NAMES = Object.freeze(['竜王', '名人', '叡王', '王位', '王�
 const REACT_LAG = 1600;
 /** 手の表記から先手・後手の印を外す(「▲7六歩」→「7六歩」)。 */
 const bareMove = (text) => String(text ?? '').replace(/^[▲△☗☖]/, '');
+/** 数の3桁区切り(「7,500」)。 */
+const grouped = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** 視聴者の数の節目(30章)。 */
+const AUDIENCE_MARKS = Object.freeze([1000, 2000, 5000, 7500, 10000, 20000, 50000, 100000, 200000]);
+/** 視聴者が思い出す、昔の激戦の2人(30章)。 */
+const LEGEND_PAIRS = Object.freeze(['羽生森内', '大山升田', '中原米長', '谷川羽生']);
+/** 持ち駒の種類(sfenの持ち駒の欄から、その側の駒の字と数)。 */
+function handPieces(sfen, side) {
+  const hand = String(sfen).replace(/^sfen\s+/, '').trim().split(/\s+/)[2] ?? '-';
+  const pieces = [];
+  if (hand === '-') return pieces;
+  for (const [, count, letter] of hand.matchAll(/(\d*)([a-zA-Z])/g)) {
+    const own = side === 'black' ? letter === letter.toUpperCase() : letter === letter.toLowerCase();
+    if (own) pieces.push({ kind: letter.toUpperCase(), count: Number(count || 1) });
+  }
+  return pieces;
+}
 
 /** 評価値の言い方(先手から見た値。「+350」「-120」。詰みは「詰み」)。 */
 function signedEval(cp) {
@@ -777,6 +913,20 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       comment(0, 'move', 'kimino', { name: fan(stronger), title });
     }
     comment(0, 'move', 'start', {}, 3);
+    // 30章: 配信のあいさつと、会場をたずねる人(番勝負は対局場、ほかは将棋会館)。答えと、きつい返しは遅れて流れる。
+    maybe(0.5, 0, 'move', 'greet');
+    if (rng.next() < 0.45 * density) {
+      const [city, place] = spec.venue ? String(spec.venue).split('・') : ['東京', '将棋会館'];
+      comment(0, 'move', 'venueAsk');
+      comment(0, 'move', 'venueAnswer', { city, place: place ?? city }, 1, '', { lag: 1400 });
+      if (rng.next() < 0.4) comment(0, 'move', 'venueRude', {}, 1, '', { lag: 2700 });
+    }
+    // 番勝負の善彦(二日制で無敗)。善彦と羽音の番勝負なら「この二人で全冠」。
+    if (spec.kind === 'finals') {
+      const father = (/** @type {const} */ (['black', 'white'])).find((color) => players[color]?.story === YOSHIHIKO);
+      if (father && rng.next() < 0.6) comment(0, 'move', 'unbeaten');
+      if (father && players[other(father)]?.story === HANANE) maybe(0.6, 0, 'move', 'zenkan');
+    }
     if (cast.voice === 'polite' && rng.next() < 0.3) react(0, 'castGood');
     if (spec.weight === 'title') comment(0, 'move', 'title', {}, 2, 'gold');
     // 解説への反応(羽音の解説・親子の解説は特別)。
@@ -827,6 +977,24 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   let longThinks = 0;
   /** 27章: 駒を取らずに成った駒(次の手で、その駒が動かなければ「成った意味が無い」)。 */
   const promotedQuiet = { black: null, white: null };
+  /** 30章: 視聴者の数の節目、形勢の入れ替わり(優勢の側の並び)、いちばんの悪手と鋭い一手、詰みが読めた最初の手、続けて最善を指した数。 */
+  let audienceShown = relayAudience(spec, 0);
+  const leaders = [];
+  const worstMove = { black: null, white: null };
+  const sharpMove = { black: '', white: '' };
+  let firstMate = null;
+  const bestRun = { black: 0, white: 0 };
+  const rookPromotions = { black: 0, white: 0 };
+  let resumeAt = -1;
+  /** 決着が見えたあとの一言を最後に言った手数。 */
+  let settledAt = -99;
+  const lunchAt = relayTimeControl({ event: spec.event, kind: spec.kind }).breaks.find(({ kind }) => kind === 'lunch')?.at ?? 12 * 60;
+  /** 名前(苗字を除いた部分)。苗字が分からなければ名前全部。 */
+  const givenName = (side) => {
+    const name = players[side]?.name ?? '';
+    const surname = SURNAMES.find((candidate) => name.startsWith(candidate) && name.length > candidate.length);
+    return surname ? name.slice(surname.length) : name;
+  };
 
   /**
    * 1手を足す。
@@ -1345,6 +1513,13 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         comment(at, 'move', rest.kind, { meal: pick(rng, [food.black, food.white]) }, 2);
         official(at, 'move', `【お知らせ】${title}は${clockText(rest.to)}まで`);
         if (rest.kind === 'lunch') newbie(at, 'move', 'lunch', {}, 0.5);
+        // 30章: 「昼飯は○○らしいよ」→「まだわかりません」→「あ、昼飯の話ではないです」(遅れて流れる掛け合い)。
+        if (rest.kind === 'lunch' && rng.next() < 0.5) {
+          comment(at, 'move', 'lunchMenu', { meal: pick(rng, [food.black, food.white]) });
+          comment(at, 'move', 'lunchUnknown', {}, 1, '', { lag: 1300 });
+          comment(at, 'move', 'lunchJoke', {}, 1, '', { lag: 2700 });
+        }
+        resumeAt = at + 1;
       } else if (rest.kind === 'seal') {
         const sealer = other(side);
         cards.push({ at, when: 'move', kind: 'seal', tier: '', title: '封じ手', text: `${players[sealer].name}が封じ手を記入。1日目が終わりました` });
@@ -1358,6 +1533,12 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (said.has(`unseal:${at}`)) {
       cards.push({ at, when: 'move', kind: 'unseal', tier: '', title: '2日目', text: `封じ手は${text}` });
       line(at, 'move', 'host', `2日目の朝。封じ手は${text}だったよ！`);
+      // 30章: 2日目の朝の視聴者(封じ手が最善なら「最善と言われていた」、相手も予想していた)。
+      comment(at, 'move', 'resume');
+      maybe(0.6, at, 'move', 'unsealMorning', { move: bareMove(text) });
+      if (!entry.best) maybe(0.6, at, 'move', 'unsealBest', { move: bareMove(text) });
+      maybe(0.4, at, 'move', 'unsealGuess', { name: fan(other(side)) });
+      maybe(0.5, at, 'move', 'day2');
     }
 
     // 3時のおやつ(1日目の15時をまたいだ手)。
@@ -1368,6 +1549,255 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (newsShown < news.length && at >= 18 + newsShown * 24) {
       official(at, 'move', `【他の対局】${news[newsShown]}`);
       newsShown += 1;
+    }
+
+    // ---- 30章: 二日制のタイトル戦の配信の例。盤・形勢・時刻・視聴者の数から言える条件で流し、名詞は差し替える。
+    {
+      const ending = at > plan.middleEnd;
+      const opp = other(side);
+      const moverNow = moverRate(rateAfter);
+      const oppNow = 1 - moverNow;
+      const moverEval = side === 'black' ? entry.eval : -entry.eval;
+      /** 指した側の詰み(指す前から数えた手数)。詰みが読めていなければnull。 */
+      const moverMate = isMateCp(moverEval) && moverEval > 0 ? MATE_CP - moverEval : null;
+      const prevMover = side === 'black' ? previousEval : -previousEval;
+      const boardBefore = parseSfenState(sfenBefore).board;
+      const boardAfter = parseSfenState(sfenAfter).board;
+      const lastTo = parseUsiMove(previousUsi)?.to ?? null;
+      const bare = bareMove(text);
+      /** 分身(プレイヤー自身の能力で戦う棋士)の手には、少しきつい言葉(ダメ・ミス・舐めプ)を出さない(27章と同じ)。 */
+      const gentle = players[side]?.kind === 'avatar';
+
+      // 視聴者の数の節目(1,000人・7,500人・1万人…)。
+      const audienceNow = relayAudience(spec, at);
+      const mark = AUDIENCE_MARKS.filter((n) => audienceShown < n && audienceNow >= n).at(-1);
+      if (mark) {
+        audienceShown = mark;
+        comment(at, 'move', 'audience', { n: grouped(mark) });
+        if (mark === 10000 || mark === 100000) comment(at, 'move', 'audienceBig', { word: mark === 10000 ? '一万人' : '十万人' }, 1, 'gold');
+      }
+      // 休憩のあとの再開、昼食の少し前、途中から来た人、天気。
+      if (at === resumeAt) maybe(0.6, at, 'think', 'resume');
+      if ((before.clock ?? 0) < lunchAt - 30 && (after.clock ?? 0) >= lunchAt - 30 && once('lunch-curious')) {
+        maybe(0.6, at, 'move', 'lunchCurious', { name: fan(stronger ?? (rng.next() < 0.5 ? 'black' : 'white')) });
+      }
+      if (at >= 40 && !said.has('imakita') && rng.next() < 0.01 * density) { said.add('imakita'); comment(at, 'move', 'imakita'); }
+      if (spec.weight === 'title' && !said.has('weather') && rng.next() < 0.01) { said.add('weather'); comment(at, 'move', 'weather'); }
+
+      // 考慮中の予想(駒を打つ・同○○)。
+      if (predicted && at >= 20) {
+        const guess = bareMove(moveTextOf(sfenBefore, predicted, previousUsi));
+        if (predicted.includes('*') && rng.next() < 0.06 * density) comment(at, 'think', 'dropGuess', { piece: PIECE_NAMES[predicted[0]] ?? '駒' });
+        if (guess.startsWith('同') && !/[a-z*]/.test(guess) && rng.next() < 0.08 * density) comment(at, 'think', 'recaptureGuess', { move: guess });
+      }
+      // 勝ちが見えている側の考慮中(「さあ、正解を見せてください」)。負けが見えている側の考慮中(「○○までか」「時間稼いでる？」)。
+      if (isMateCp(prevMover) && prevMover > 0 && once(`seikai:${side}`)) maybe(0.4, at, 'think', 'seikai');
+      if (ending && moverRate(rateBefore) <= 0.05 && predicted) {
+        const guess = bareMove(moveTextOf(sfenBefore, predicted, previousUsi));
+        if (!/[a-z*]/.test(guess) && once('madaka')) maybe(0.25, at, 'think', 'madaka', { move: guess });
+        if (entry.time >= 5 * 60 && once('jikan')) maybe(0.5, at, 'think', 'jikan');
+      }
+
+      // 直前に動いた相手の駒を取れるとき(取るしかない／取れない・同○○はダメ)。
+      if (lastTo && at >= 30 && !isKingAttacked(boardBefore, side)) {
+        const target = boardBefore.get(lastTo);
+        const takers = target && target.color === opp && target.kind !== 'K' ? attackersOf(boardBefore, lastTo, side) : [];
+        if (takers.length) {
+          if (facts?.to === lastTo && facts.captured) {
+            maybe(0.15, at, 'think', 'takeOnly');
+            maybe(0.25, at, 'move', 'took');
+          } else if (at >= 40 && !said.has('dou-dame') && rng.next() < 0.05) {
+            // 取り返さなかった(1局に1回)。
+            said.add('dou-dame');
+            comment(at, 'think', 'douDame', { piece: PIECE_NAMES[takers[0].kind] ?? '' });
+            comment(at, 'move', 'toreNai');
+          }
+        }
+      }
+
+      if (facts) {
+        // 敵陣に飛び込んだ(取られる升へ)。負けている側なら「形作りにも見えるけど」。
+        if (at >= 30 && !facts.kingMove && !facts.captured && relativeRank(facts.to, side) <= 3
+          && attackersOf(boardAfter, facts.to, opp).length && once(`tsukkomi:${side}`) && rng.next() < 0.45 * density) {
+          comment(at, 'move', 'tsukkomi', { move: bare.replace(/(打|成|不成)$/, '') });
+          comment(at, 'move', 'bold', {}, rng.next() < 0.5 ? 2 : 1, '', { lag: 1200 });
+          if (moverNow <= 0.2) comment(at, 'move', 'boldLosing', {}, 1, '', { lag: 2400 });
+        }
+        // 大駒を成られても平気(成った側がまだ苦しい)。
+        if (facts.promote && (facts.after === '+B' || facts.after === '+R') && moverNow <= 0.45 && once(`uma-ok:${side}`)) {
+          maybe(0.5, at, 'move', 'umaOk', { piece: PIECE_NAMES[facts.after] });
+        }
+        // 飛車が二度成った(「僕の飛車は……二度、“成る”」)。
+        if (facts.promote && facts.after === '+R') {
+          rookPromotions[side] += 1;
+          if (rookPromotions[side] === 2 && once(`two-nari:${side}`)) {
+            comment(at, 'move', 'twoNari', { name: fan(side) });
+            comment(at, 'move', 'twoNariReply', {}, 1, '', { lag: 1500 });
+          }
+        }
+        // と金ができた・香車が動いた(終盤の駒のせりふ)。
+        if (facts.promote && facts.kind === 'P' && at > plan.openingEnd && once('tokin')) maybe(0.4, at, 'move', 'tokin', { move: bare.replace(/歩成$/, 'と') });
+        if (ending && facts.kind === 'L' && once('kyo-deban')) maybe(0.4, at, 'move', 'kyoDeban');
+        // 大駒で取り返した(終盤の「同飛車」)。取られる升なら、覚悟が決まりすぎ。
+        if (ending && bare.startsWith('同') && MAJOR.has(facts.kind) && attackersOf(boardAfter, facts.to, opp).length && once('dou-hisha')) {
+          comment(at, 'move', 'douHisha', { piece: PIECE_NAMES[facts.kind] });
+          maybe(0.6, at, 'move', 'douHishaThink', { piece: PIECE_NAMES[facts.kind] });
+        }
+        // 玉で取り返した(強く同玉)。
+        if (facts.kingMove && bare.startsWith('同') && once('kyosoku') && rng.next() < 0.6) {
+          comment(at, 'move', 'kyosoku', { piece: '玉' });
+          comment(at, 'move', 'kyosokuReply', { piece: '玉' }, 1, '', { lag: 1300 });
+        }
+        // 居玉への攻め・玉の前の歩のたたき・持ち駒が1枚だけ。
+        const kingHome = opp === 'black' ? ['5i', 'K'] : ['5a', 'k'];
+        if (at >= 30 && (facts.check || facts.nearEnemyKing) && pieceAt(sfenAfter, kingHome[0]) === kingHome[1] && once('igyoku')) maybe(0.5, at, 'move', 'igyoku');
+        if (ending && facts.drop && facts.kind === 'P' && facts.nearEnemyKing && once('tataki')) maybe(0.5, at, 'move', 'tataki');
+        // 取られた飛車が、もとの持ち主の玉に向かう(飛車の謀反)。
+        if (ending && facts.drop && facts.kind === 'R' && (facts.check || facts.nearEnemyKing) && once('muhon')) maybe(0.5, at, 'move', 'muhon');
+        const hand = handPieces(sfenAfter, side);
+        if (ending && hand.length === 1 && hand[0].count === 1 && once('hand-only')) maybe(0.4, at, 'move', 'handOnly', { piece: PIECE_NAMES[hand[0].kind] });
+        // 負けが見えている側の王手(思い出王手)。
+        if (facts.check && moverNow <= 0.05 && once('omoide')) maybe(0.7, at, 'move', 'omoide');
+        // 終盤の静かな好手(じっと○○)。
+        if (ending && moverNow >= 0.7 && !facts.check && !facts.captured && !facts.drop && !entry.loss && once('jitto')) maybe(0.25, at, 'move', 'jitto', { move: bare });
+        // 勝ちに向かう駒(○○がきておわりか)。
+        if (ending && oppNow <= 0.1 && facts.nearEnemyKing && ['N', 'S', 'G'].includes(facts.kind) && once('owari-piece')) maybe(0.4, at, 'move', 'owariPiece', { piece: PIECE_NAMES[facts.kind] });
+      }
+
+      // 予想と違う手(「○○なんだ」「ん？」「おや」)。
+      if (predictedAt === at && entry.move !== predicted && (entry.loss ?? 0) < 150) {
+        maybe(0.3, at, 'move', 'nanda', { move: bare });
+        if (ending) maybe(0.3, at, 'move', 'hmm');
+      }
+      if (entry.mark === 'only') maybe(0.4, at, 'move', 'miseru');
+
+      // 悪手の種類(打った手・手番を渡した手)、秒読みのミス。
+      if (entry.mark === 'error' || entry.mark === 'decisive') {
+        if (facts?.drop && !gentle) maybe(0.5, at, 'move', 'dameDrop', { move: bare });
+        else if (facts && !facts.captured && !facts.check) maybe(0.4, at, 'move', 'teban', { move: bare });
+        if (before.byoyomi[side] && !gentle) maybe(0.6, at, 'move', 'byoMiss');
+      }
+      if (swing <= -0.25) {
+        maybe(0.3, at, 'move', 'muzukashii');
+        if (!said.has('yonaga') && rng.next() < 0.05) { said.add('yonaga'); comment(at, 'move', 'yonaga'); }
+      }
+      // 中盤の形勢(どっちを持ちたいか・良く見える・格上が苦しい・駒割りと評価値の食い違い)。
+      if (at > plan.openingEnd && at <= plan.middleEnd) {
+        const lead = rateAfter >= 0.5 ? 'black' : 'white';
+        const leadRate = lead === 'black' ? rateAfter : 1 - rateAfter;
+        if (leadRate >= 0.6 && once('mochi')) {
+          comment(at, 'move', 'mochi', { side: SIDE_NAME[lead] });
+          maybe(0.6, at, 'move', 'mochiOther', { side: SIDE_NAME[other(lead)] });
+          if (leadRate < 0.7) maybe(0.4, at, 'move', 'mochiNeither');
+        }
+        if (leadRate >= 0.62 && once('look-good')) {
+          maybe(0.5, at, 'move', 'lookGood', { side: SIDE_NAME[lead] });
+          if (stronger === other(lead)) maybe(0.7, at, 'move', 'starBehind', { name: fan(stronger), side: SIDE_NAME[stronger] });
+        }
+        if (at >= 30 && facts?.captured && !said.has('layman-doubt')) {
+          const { lead: materialLead } = materialText(sfenAfter);
+          const materialRate = materialLead === 'black' ? rateAfter : materialLead === 'white' ? 1 - rateAfter : 1;
+          if (materialLead && materialRate <= 0.5 && rng.next() < 0.4) {
+            said.add('layman-doubt');
+            comment(at, 'move', 'laymanDoubt', { side: SIDE_NAME[other(materialLead)] });
+          }
+        }
+        // 格上(物語の人物か、強さの差200以上)が苦しい(焦っている)。
+        if (stronger && (stronger === 'black' ? rateAfter : 1 - rateAfter) <= 0.35 && once('aseri')) {
+          maybe(0.6, at, 'move', 'aseri', { full: players[stronger]?.name ?? '', name: givenName(stronger) });
+        }
+      }
+      // 長考(大事な場面・天井を見た・前髪)。
+      if (entry.time >= LONG_THINK_SECONDS && at > plan.openingEnd) {
+        maybe(0.3, at, 'think', 'longImportant');
+        if (spec.weight !== 'plain' && once('maegami')) maybe(0.15, at, 'think', 'maegami', { name: fan(side) });
+      }
+      // 長い熱戦で互角(昔の激戦を思い出す)。
+      if (at >= 100 && Math.abs(rateAfter - 0.5) < 0.1 && spec.weight !== 'plain' && once('legend')) maybe(0.5, at, 'move', 'legend', { pair: pick(rng, LEGEND_PAIRS) });
+
+      // 形勢の入れ替わり(優勢の側の並び。65%と35%で区切る)。
+      const nowLeader = rateAfter >= 0.65 ? 'black' : rateAfter <= 0.35 ? 'white' : null;
+      if (nowLeader && leaders.at(-1) !== nowLeader) leaders.push(nowLeader);
+      // 終盤の形勢の言葉。
+      if (ending) {
+        if (moverNow >= 0.9 && once('shousei')) maybe(0.5, at, 'move', 'shousei', { side: SIDE_NAME[side] });
+        if (Math.max(rateAfter, 1 - rateAfter) >= 0.8 && once('docchi')) maybe(0.25, at, 'move', 'docchi', { side: SIDE_NAME[rateAfter >= 0.5 ? 'black' : 'white'] });
+        if (Math.abs(rateAfter - 0.5) < 0.1 && once('unclear')) maybe(0.5, at, 'move', 'unclear');
+        if (facts?.check && oppNow >= 0.2 && oppNow <= 0.4 && once('still-chance')) maybe(0.5, at, 'move', 'stillChance', { name: fan(opp) });
+        if (moverRate(rateBefore) <= 0.4 && moverNow >= 0.55) maybe(0.5, at, 'move', 'magic');
+        if (oppNow >= 0.15 && oppNow <= 0.4) maybe(0.1, at, 'move', 'nebare');
+        if (lastCheckAt[opp] === at - 1 && moverNow >= 0.15 && moverNow <= 0.5) maybe(0.3, at, 'move', 'taeru');
+        if (after.byoyomi.black && after.byoyomi.white && Math.max(rateAfter, 1 - rateAfter) >= 0.8 && once('byo-risk')) maybe(0.4, at, 'move', 'byoRisk');
+        if ((after.remaining[side] ?? 0) >= 3600 && after.byoyomi[opp] && once('ocha')) maybe(0.5, at, 'move', 'ocha');
+        if (moverNow >= 0.85 && !entry.loss) maybe(0.12, at, 'move', 'yomikiri');
+        if (moverNow >= 0.9 && entry.mark === 'slip' && (entry.loss ?? 0) >= 100 && !gentle && once('namepu')) maybe(0.4, at, 'move', 'namepu', { name: fan(side) });
+        bestRun[side] = entry.loss ? 0 : bestRun[side] + 1;
+        if (bestRun[side] === 8 && once('saizen')) comment(at, 'move', 'saizen');
+        // 負けが見えてきた(相手の勝率10%以下)。投げどころ・詰みまで指す人・楽しそう。
+        // 決着が見えたあとの一言(終わり・投了ある・投げきれない)は、続けて言わない(10手あける)。投了が遅い人(29章)では長く続くため。
+        const settled = (pool, p) => {
+          if (at - settledAt < 10 || rng.next() >= Math.min(0.95, p * density)) return;
+          settledAt = at;
+          comment(at, 'move', pool);
+        };
+        if (oppNow <= 0.1) settled('owari', 0.15);
+        if (oppNow <= 0.03 && !(last && end)) {
+          settled('toryoAru', 0.15);
+          if (once('nage-dokoro')) maybe(0.3, at, 'move', 'nageDokoro', { move: bare });
+          const line3 = pvTextOf(sfenAfter, entry.pv, entry.move, 3).replace(/[▲△]/g, '').split(' → ').join('　');
+          if (line3 && once('nage-line')) maybe(0.3, at, 'move', 'nageLine', { line: line3 });
+          const style = resignStyleOf(players[opp]).id;
+          if ((style === 'full' || style === 'stubborn') && once('ryu')) {
+            maybe(0.6, at, 'move', 'ryu', { name: fan(opp) });
+            maybe(0.3, at, 'move', 'tanoshi', { name: fan(opp) });
+          }
+          settled('nageNai', 0.08);
+          // 番勝負で、挑戦者があと1敗で防衛を許す局(角番)。
+          const series = spec.series;
+          if (series && opp !== series.holder && series.wins[series.holder] === series.need - 1 && once('boei')) maybe(0.6, at, 'move', 'boei');
+        }
+      }
+      // 詰み(詰めろ・必死・1手詰・詰んでる・分からん)。
+      if (moverMate !== null) {
+        if (firstMate === null) {
+          firstMate = { move: bare, at };
+          maybe(0.5, at, 'move', 'tsunderu');
+          if (moverMate >= 9 && once('wakaran')) {
+            comment(at, 'move', 'wakaran');
+            comment(at, 'move', 'wakaranReply', {}, 1, '', { lag: 1300 });
+          }
+        }
+        if (!facts?.check) {
+          if (once('tsumero')) maybe(0.6, at, 'move', 'tsumero');
+          else if (once('hisshi')) maybe(0.5, at, 'move', 'hisshi', { move: bare });
+        }
+        if (moverMate === 3 && once('ippute')) maybe(0.6, at, 'move', 'ippute');
+        if (entry.time >= 60 && once('sokuuchi')) {
+          comment(at, 'think', 'sokuuchi', { name: fan(side) });
+          comment(at, 'think', 'sokuuchiReply', {}, 1, '', { lag: 1300 });
+        }
+      }
+      // いちばんの悪手と、鋭い一手(終局のふり返りで使う)。
+      if ((entry.loss ?? 0) > (worstMove[side]?.loss ?? 0)) worstMove[side] = { loss: entry.loss, move: bare, at };
+      if (entry.mark === 'only') sharpMove[side] = bare;
+
+      // 終局のふり返り(大逆転・転機・惜しかった一手・名局・無念)。
+      if (last && end) {
+        const loser = other(end.winner);
+        if (leaders.length >= 4 && leaders.at(-1) === end.winner && once('lead-chain')) {
+          comment(at, 'move', 'leadChain', { a: fan(leaders.at(-4)), b: fan(leaders.at(-3)) });
+        }
+        if (leaders.length >= 3 || spec.how === 'comeback') comment(at, 'move', 'reversal', { side: SIDE_NAME[end.winner] }, 2);
+        if (at >= 120 || leaders.length >= 3) comment(at, 'move', 'endPraise', {}, rng.next() < 0.5 ? 2 : 1);
+        comment(at, 'move', 'endBye', {}, 2);
+        const worst = worstMove[loser];
+        if (worst && worst.loss >= 300) maybe(0.6, at, 'move', 'turning', { move: worst.move });
+        if (sharpMove[loser]) maybe(0.6, at, 'move', 'wasted', { move: sharpMove[loser] });
+        if (firstMate && at - firstMate.at >= 6) maybe(0.4, at, 'move', 'owatteta', { move: firstMate.move });
+        if (spec.weight !== 'plain') maybe(0.5, at, 'move', 'munen', { given: givenName(loser) });
+        if (worst && worst.at > plan.middleEnd && players[loser]?.kind !== 'avatar' && (star(loser) || (players[loser]?.rating ?? 0) >= 1700)) maybe(0.6, at, 'move', 'yoseMiss', { name: fan(loser) });
+        if (spec.kind === 'finals' && players[loser]?.story === YOSHIHIKO) comment(at, 'move', 'beatLegend', { name: fan(end.winner) });
+      }
     }
 
     // ふだんのざわめき。
