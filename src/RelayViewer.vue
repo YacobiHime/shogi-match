@@ -59,12 +59,13 @@
             :flip="flipped"
           />
           <!-- 視聴者のコメント(右から左へ流れる)。押せない飾りで、盤の操作は妨げない。 -->
-          <div v-if="commentsOn && !reducedMotion" class="relay__danmaku" aria-hidden="true">
+          <!-- 段は、前のコメントに追いつかない段を上から選ぶ(ニコニコ動画のように重ならない。33章)。 -->
+          <div v-if="commentsOn && !reducedMotion" ref="danmakuEl" class="relay__danmaku" aria-hidden="true">
             <span
               v-for="item in flying"
               :key="item.id"
               :class="['relay__comment', item.tone ? `relay__comment--${item.tone}` : '', item.big ? 'relay__comment--big' : '']"
-              :style="{ top: `${4 + item.lane * 12}%`, animationDelay: `${item.delay}ms`, animationDuration: `${item.duration}ms` }"
+              :style="{ top: `${item.top}px`, animationDelay: `${item.delay}ms`, animationDuration: `${item.duration}ms` }"
               @animationend="land(item.id)"
             >{{ item.text }}</span>
           </div>
@@ -230,6 +231,7 @@ import {
 } from "./core/relay-commentary.mjs";
 import { addNote, highlightPlan, loadNotes, loadQuiz, quizChoices, saveNotes, saveQuiz, scoreQuiz } from "./core/relay-fun.mjs";
 import { loadRelayStore, markRelaySeen, saveRelayStore } from "./core/relay-store.mjs";
+import { DANMAKU_GAP_EM, createDanmaku, estimateTextWidth, placeComment } from "./core/danmaku-lanes.mjs";
 import { createFormationState, detectFormationSnapshot, updateFormationState } from "./core/formation-tracker.mjs";
 import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
@@ -284,9 +286,13 @@ const MOVE_BASE_MS = 750;
 const THINK_MAX_MS = 2600;
 /** 札を出しているあいだ、次の手を待つ時間。 */
 const CARD_HOLD_MS = { long: 2200, short: 1100 } as const;
-/** コメントが流れる時間と、流れる段の数。 */
+/** コメントが流れる時間。段の数は、盤の欄の高さと字の大きさから決める(33章)。 */
 const COMMENT_MS = 5600;
-const COMMENT_LANES = 6;
+/** 段の高さ(字の大きさに対する倍率)と、段を置く範囲(盤の欄の高さに対する割合。下の端は下コメと名札に空ける)。 */
+const LANE_HEIGHT_EM = 1.35;
+const LANE_AREA = { top: 0.03, bottom: 0.8 } as const;
+/** 同時に出しておくコメントの上限。 */
+const FLYING_MAX = 40;
 /** 運営のコメント(上に止まる帯)を出しておく時間。 */
 const BANNER_MS = 3000;
 /** 下に止まる大きなコメントを見せる時間(下コメ。25章)。 */
@@ -484,6 +490,7 @@ function seek(target: number) {
   thinkingAt.value = 0;
   waiting.value = false;
   flying.value = [];
+  danmaku = createDanmaku();
   banner.value = null;
   under.value = null;
   cursor.value = Math.max(0, Math.min(ready.value, Math.round(target)));
@@ -536,10 +543,58 @@ function playSound(ply: number) {
 }
 
 // ---- 流れるコメント
-type Flying = { id: number; text: string; tone: string; big: boolean; lane: number; delay: number; duration: number };
+type Flying = { id: number; text: string; tone: string; big: boolean; top: number; delay: number; duration: number };
 const flying = shallowRef<Flying[]>([]);
+const danmakuEl = ref<HTMLElement | null>(null);
 let flyId = 0;
-let laneCursor = 0;
+let danmaku = createDanmaku();
+let measureContext: CanvasRenderingContext2D | null | undefined;
+/** 字の幅(px)。canvasで測り、測れなければ見積もる。 */
+function textWidth(text: string, fontPx: number, family: string) {
+  if (measureContext === undefined) {
+    try {
+      measureContext = typeof document === "undefined" ? null : document.createElement("canvas").getContext("2d");
+    } catch {
+      measureContext = null;
+    }
+  }
+  if (!measureContext) return estimateTextWidth(text, fontPx);
+  measureContext.font = `900 ${fontPx}px ${family}`;
+  return measureContext.measureText(text).width;
+}
+/**
+ * コメントを流す。段は、同じ段の前のコメントに入る時にも流れているあいだにも追いつかない段を上から選び、
+ * どの段もふさがっていれば少し待つ(33章)。大きな字は2段を使う。
+ */
+function launch(list: { text: string; tone: string; big: boolean; delay: number; duration: number }[]) {
+  if (!list.length) return;
+  const area = danmakuEl.value ?? boardEl.value;
+  const height = area?.clientHeight || boardWidth.value;
+  const style = danmakuEl.value ? getComputedStyle(danmakuEl.value) : null;
+  const fontPx = Number.parseFloat(style?.fontSize ?? "") || Math.min(32, Math.max(16, boardWidth.value * 0.036));
+  const family = style?.fontFamily || "sans-serif";
+  const laneHeight = fontPx * LANE_HEIGHT_EM;
+  const laneCount = Math.max(3, Math.floor((height * (LANE_AREA.bottom - LANE_AREA.top)) / laneHeight));
+  const now = performance.now();
+  const added = list.map((item) => {
+    const scale = item.big ? 1.4 : item.tone === "gold" ? 1.12 : 1;
+    const placed = placeComment(danmaku, {
+      start: now + item.delay,
+      width: textWidth(item.text, fontPx * scale, family),
+      duration: item.duration,
+      areaWidth: boardWidth.value,
+      laneCount,
+      span: item.big ? 2 : 1,
+      gap: fontPx * DANMAKU_GAP_EM,
+    });
+    flyId += 1;
+    return {
+      id: flyId, text: item.text, tone: item.tone, big: item.big,
+      top: height * LANE_AREA.top + placed.lane * laneHeight, delay: placed.start - now, duration: item.duration,
+    };
+  });
+  flying.value = [...flying.value, ...added].slice(-FLYING_MAX);
+}
 const banner = shallowRef<{ id: number; text: string } | null>(null);
 let bannerTimer: ReturnType<typeof setTimeout> | undefined;
 function showBanner(text: string) {
@@ -570,16 +625,11 @@ function spawn(at: number, when: string) {
   // 解説へのつっこみ・振り駒の結果への反応(lag)は、解説の言葉が出てから流す(27章)。ほかは順に0.38秒ずつ。
   let plain = 0;
   let lagged = 0;
-  const added = items.filter((item) => item.pos !== "top" && item.pos !== "bottom").map((item, index) => {
-    laneCursor = (laneCursor + 1 + (index % 2)) % COMMENT_LANES;
-    flyId += 1;
-    const delay = item.lag ? item.lag / Math.sqrt(speed.value) + (lagged++) * 450 : (plain++) * 380;
-    return {
-      id: flyId, text: item.text, tone: item.tone ?? "", big: item.size === "big", lane: laneCursor,
-      delay, duration: (COMMENT_MS * (item.size === "big" ? 1.15 : 1)) / Math.sqrt(speed.value),
-    };
-  });
-  flying.value = [...flying.value, ...added].slice(-24);
+  launch(items.filter((item) => item.pos !== "top" && item.pos !== "bottom").map((item) => ({
+    text: item.text, tone: item.tone ?? "", big: item.size === "big",
+    delay: item.lag ? item.lag / Math.sqrt(speed.value) + (lagged++) * 450 : (plain++) * 380,
+    duration: (COMMENT_MS * (item.size === "big" ? 1.15 : 1)) / Math.sqrt(speed.value),
+  })));
 }
 function land(id: number) {
   flying.value = flying.value.filter((item) => item.id !== id);
@@ -793,12 +843,7 @@ function celebrateQuiz() {
     return;
   }
   const texts = ["次の一手的中！！", "読み筋どおり", "完全に読んでた", "的中おめ", "名人の読み", "8888"];
-  const added = texts.map((text, index) => {
-    laneCursor = (laneCursor + 1) % COMMENT_LANES;
-    flyId += 1;
-    return { id: flyId, text, tone: "hit", big: index === 0, lane: laneCursor, delay: index * 260, duration: COMMENT_MS / Math.sqrt(speed.value) };
-  });
-  flying.value = [...flying.value, ...added].slice(-24);
+  launch(texts.map((text, index) => ({ text, tone: "hit", big: index === 0, delay: index * 260, duration: COMMENT_MS / Math.sqrt(speed.value) })));
 }
 
 // 見どころ再生(24-3)。形勢が動いた手・長考・決め手・終局を、短く続けて見る。
@@ -1060,6 +1105,8 @@ onBeforeUnmount(() => {
   color: #fff;
   font-size: 1em;
   font-weight: 900;
+  /* 行の高さを段の高さ(LANE_HEIGHT_EM)より低くし、上下の段の字が触れないようにする(33章)。 */
+  line-height: 1.2;
   white-space: nowrap;
   text-shadow: 0 0 2px #000, 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
   opacity: 0.92;
