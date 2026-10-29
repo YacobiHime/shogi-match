@@ -86,11 +86,27 @@ export function relayCast({ spec, pool = [], oshiId = null }) {
     ?? (oshiId ? free.find((member) => member.id === oshiId) : null)
     ?? [...free].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))[relaySeed(`${spec.key}:cast`) % Math.max(1, Math.min(8, free.length))]
     ?? null;
-  if (!chosen) return { id: '', name: '解説者', dan: '', story: null, voice: 'polite' };
+  // 棋譜読み上げは、解説者でも対局者でもない若手(強さの低いほうから種で1人)。名簿がなければ名前なし。
+  const juniors = free.filter((member) => member !== chosen && !member.story).sort((a, b) => (a.rating ?? 0) - (b.rating ?? 0));
+  const readerMember = juniors[relaySeed(`${spec.key}:reader`) % Math.max(1, Math.min(4, juniors.length))] ?? null;
+  const reader = readerMember ? surnameOf(readerMember.name ?? '') : '';
+  if (!chosen) return { id: '', name: '解説者', dan: '', title: '', story: null, voice: 'polite', reader };
   return {
-    id: chosen.id, name: chosen.name, dan: chosen.dan ?? '', story: chosen.story ?? null,
+    id: chosen.id, name: chosen.name, dan: chosen.dan ?? '', title: titleOf(chosen), story: chosen.story ?? null,
     voice: chosen.story === HANANE ? 'hanane' : chosen.story === YOSHIHIKO ? 'yoshihiko' : 'polite',
+    reader,
   };
+}
+
+/** 苗字(名簿の苗字の表から。分からなければ名前の頭2字)。 */
+function surnameOf(name) {
+  return SURNAMES.find((candidate) => name.startsWith(candidate) && name.length > candidate.length) ?? name.slice(0, 2);
+}
+
+/** いま持っているタイトル(名人を先に)。なければ段位。棋士の写しは、期の棋士のprofile.heldか、中継の写しのheldを持つ。 */
+export function titleOf(player) {
+  const held = player?.held ?? player?.profile?.held ?? [];
+  return (held.includes('名人') ? '名人' : held[0]) ?? player?.dan ?? '';
 }
 
 // ---- 手の事実と表記
@@ -873,9 +889,15 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     const black = players.black;
     const white = players.white;
     line(0, 'move', 'host', `こんにちは、${RELAY_HOST}だよ。今日は${spec.label}、${black.name}${black.dan}と${white.name}${white.dan}の一局を見ていくよ。`);
-    line(0, 'move', 'commentator', cast.voice === 'hanane'
-      ? `解説の${cast.name}。……よろしく。`
-      : `解説の${cast.name}${cast.dan}です。よろしくお願いします。`);
+    if (cast.voice === 'yoshihiko') {
+      // 善彦の解説は、聞き手が肩書で紹介する(配信の例のまま)。
+      line(0, 'move', 'host', `${cast.name}${cast.title || cast.dan}です。先生よろしくお願いします。`);
+      line(0, 'move', 'commentator', 'あぁ、よろしくお願いします。');
+    } else {
+      line(0, 'move', 'commentator', cast.voice === 'hanane'
+        ? `解説の${cast.name}。……よろしく。`
+        : `解説の${cast.name}${cast.dan}です。よろしくお願いします。`);
+    }
     if (spec.black?.story === HANANE || spec.white?.story === HANANE) {
       if (cast.voice === 'yoshihiko') {
         line(0, 'move', 'host', 'お父さんとして、羽音さんの将棋をどう見てる？');
@@ -883,13 +905,6 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       }
     } else if ((spec.black?.story === YOSHIHIKO || spec.white?.story === YOSHIHIKO) && cast.voice === 'hanane') {
       line(0, 'move', 'commentator', '父さんの将棋。……いつも通り、隙がないと思う。');
-    }
-    // 善彦の解説は、謙遜から始まる(視聴者がつっこむ。25章)。親子の対局は、上の親子のやりとりにする。
-    if (cast.voice === 'yoshihiko' && spec.black?.story !== HANANE && spec.white?.story !== HANANE) {
-      line(0, 'move', 'host', spec.weight === 'title' ? 'タイトル戦の大舞台ですけれども。' : '注目の一戦ですけれども。');
-      line(0, 'move', 'commentator', 'まあ、専門家じゃないんで。全然分かんないという感じなんですけど。');
-      line(0, 'move', 'host', 'はい、どうもありがとうございました。');
-      react(0, 'castHumble', 2);
     }
     line(0, 'move', 'host', `先手の${call('black')}は${playerHighlight(black)}。後手の${call('white')}は${playerHighlight(white)}。`);
     // 観戦の期の分身(あなたの対局から出した能力で戦う棋士)。
@@ -907,6 +922,18 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     const favorite = favoriteOpening(black);
     if (favorite) {
       line(0, 'move', 'commentator', speak(cast, `${call('black')}は${favorite}が得意です。${call('white')}がどう応じるか、注目ですね。`, `${call('black')}は${favorite}が得意。${call('white')}がどう応じるか、見どころ。`));
+    }
+    // 善彦の解説は、謙遜から始まる(視聴者がつっこむ。25章)。親子の対局は、上の親子のやりとりにする。
+    // 両者がタイトルを持っていれば「タイトルホルダー同士」。そのあと聞き手が棋譜読み上げに振る(36章)。
+    if (cast.voice === 'yoshihiko' && spec.black?.story !== HANANE && spec.white?.story !== HANANE) {
+      const holders = (black.held ?? []).length > 0 && (white.held ?? []).length > 0;
+      line(0, 'move', 'host', holders ? 'タイトルホルダー同士の一戦ですけれども。' : spec.weight === 'title' ? 'タイトル戦の大舞台ですけれども。' : '注目の一戦ですけれども。');
+      line(0, 'move', 'commentator', '…そうですね、まあ、あの、専門家じゃないんで。全然、分かんないという感じなんですけど。');
+      line(0, 'move', 'host', 'はい、どうもありがとうございました。');
+      react(0, 'castHumble', 2);
+    }
+    if (cast.voice === 'yoshihiko') {
+      line(0, 'move', 'host', cast.reader ? `それでは棋譜読み上げの${cast.reader}さん、よろしくお願いします。` : 'それでは棋譜読み上げ、よろしくお願いします。');
     }
     // 棋譜読み上げが、先手と対局の開始を告げる(番勝負の2局目からは振り駒をしない)。
     if ((spec.gameNo ?? 0) > 1) {
@@ -1076,10 +1103,11 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (entry.time >= LONG_THINK_SECONDS) {
       longThinks += 1;
       if (once(`long:${side}`) || rng.next() < 0.5) line(at, 'think', 'commentator', speak(cast, `${call(side)}、ここで長考に入りました。`, `${call(side)}、ここで長考に入った。`));
-      // 2回目の長考で、聞き手が対局者の表情をたずねる(25章)。
-      if (longThinks >= 2 && once('face')) {
-        const dan = players[side]?.dan ?? '';
-        line(at, 'think', 'host', `${shortName(side)}${dan}の対局中の表情とかは、どう？`);
+      // 2回目の長考で、聞き手が対局者の表情をたずねる(25章)。善彦には最初の長考で、苗字と肩書(タイトルか段位)で丁寧にたずねる(36章)。
+      if (longThinks >= (cast.voice === 'yoshihiko' ? 1 : 2) && once('face')) {
+        line(at, 'think', 'host', cast.voice === 'yoshihiko'
+          ? `${shortName(side)}${titleOf(players[side])}の対局中の表情とかは、どうですか？`
+          : `${shortName(side)}${players[side]?.dan ?? ''}の対局中の表情とかは、どう？`);
         line(at, 'think', 'commentator', speak(cast, '落ち着いていますね。表情からは何も読めません。', '……変わらない。いつも通り。', '変わらない。いつも変わらないですね。'));
       }
       comment(at, 'think', 'longThink', {}, 2);
@@ -1386,7 +1414,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       if (heavy && cast.voice === 'yoshihiko' && once('odd')) {
         line(at, 'move', 'commentator', 'あぁ～～～～……？');
         line(at, 'move', 'host', 'これは……？');
-        line(at, 'move', 'commentator', 'なんか実践的な手ですよね。');
+        line(at, 'move', 'commentator', 'なんか実践的な手ですよね。反則ですけど。');
       } else if (heavy && once('odd')) {
         line(at, 'move', 'host', 'これは……？');
       }
@@ -1462,6 +1490,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         line(at, 'move', 'host', 'ちょっと無理っぽいような…');
         line(at, 'move', 'commentator', '凄いところから仕掛けたなっていう印象は、あるんですけど。');
         line(at, 'move', 'commentator', 'ただ、まあもう行かざるを得ないという部分も、あったんでは無いかな…');
+        line(at, 'move', 'host', 'はい。');
         line(at, 'move', 'commentator', '決断としては非常に良かったような、えぇ、ええ。感じがありますね、えぇ。');
         react(at, 'castJudge', 2);
         under(at, 'judge', 0.6);
@@ -1471,10 +1500,16 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       }
     }
     // 中盤の互角(1局に1回)。
-    if (at > plan.openingEnd + 4 && at < plan.middleEnd && Math.abs(rateAfter - 0.5) < 0.05 && once('balanced') && rng.next() < 0.7) {
+    // 善彦は、互角に近い局面(55%まで)で必ず一度言い、言葉に詰まる(36章)。
+    const yoshihikoBalanced = cast.voice === 'yoshihiko';
+    if (at > plan.openingEnd + 4 && at < plan.middleEnd && Math.abs(rateAfter - 0.5) < (yoshihikoBalanced ? 0.1 : 0.05)
+      && once('balanced') && (yoshihikoBalanced || rng.next() < 0.7)) {
       line(at, 'move', 'commentator', speak(cast, '形勢は互角。どちらも譲りませんね。', '互角。……どっちも引かない。',
         'まあ非常に、えー拮抗しているというか。まあ、あと、大きなところでの対局が多いという印象が、ありますね。はい。'));
-      if (cast.voice === 'yoshihiko') react(at, 'castSo');
+      if (yoshihikoBalanced) {
+        line(at, 'move', 'commentator', 'え…');
+        react(at, 'castSo');
+      }
     }
     // 中盤で大きく差がついた(気の早い視聴者)。
     if (at > plan.openingEnd && at <= plan.middleEnd && moverRate(rateAfter) >= 0.8 && once('bath')) maybe(0.7, at, 'move', 'bath');
@@ -1846,12 +1881,12 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       const how = HOW_LABELS[spec.how];
       if (how) line(at, 'move', 'commentator', speak(cast, `${call(end.winner)}が、${how}一局でした。`, `${call(end.winner)}が、${how}一局だった。`));
       // 聞き手が一局をふり返ってたずね、解説者が答え、聞き手がお礼を言う(25章)。
-      line(at, 'move', 'host', 'この一局、ふり返ってどうだった？');
+      line(at, 'move', 'host', cast.voice === 'yoshihiko' ? 'この一局振り返っていかがだったでしょうか。' : 'この一局、ふり返ってどうだった？');
       line(at, 'move', 'commentator', cast.voice === 'yoshihiko' && players[end.winner]?.story === HANANE
         ? '……強くなったな。いや、失礼。良い将棋でした。'
         : speak(cast, '最後まで見ごたえのある将棋でした。', '最後まで見ごたえのある将棋だった。',
           '出だしから意外な将棋でしたけど、まあ、あのー、大熱戦だったと、思います。はい。'));
-      line(at, 'move', 'host', 'ありがとうございました！');
+      line(at, 'move', 'host', cast.voice === 'yoshihiko' ? 'はい、どうもありがとうございました。' : 'ありがとうございました！');
       if (cast.voice === 'yoshihiko' && players[end.winner]?.story !== HANANE) react(at, 'castIgai');
       cards.push({ at, when: 'move', kind: 'end', tier: spec.weight === 'title' ? 'gold' : '', title: `${at}手まで ${SIDE_NAME[end.winner]}の勝ち`, text: end.reason === 'resign' ? `${players[loser].name}の投了` : endMate ? `${endMate}手詰め` : '詰み' });
       comment(at, 'move', 'resign', {}, 5, spec.weight === 'title' ? 'gold' : '');

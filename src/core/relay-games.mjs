@@ -28,6 +28,8 @@ function relayPlayer(season, id) {
     id, name: player.name ?? '', dan: player.dan ?? '', rating: player.rating ?? 0, level: player.level ?? null,
     story: player.story ?? null, kind: player.kind ?? 'pro', age: player.age ?? null,
     character: player.character ?? null, repertoire: player.repertoire ?? null,
+    // いま持っているタイトル(解説の「タイトルホルダー同士」と肩書。36章)。
+    held: [...(player.profile?.held ?? [])],
   };
 }
 

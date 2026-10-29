@@ -287,7 +287,7 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
   it('善彦の解説は謙遜から始まり、視聴者がつっこむ。羽音の対局を解説するときは親子のやりとりにする', () => {
     const [script] = scripts;
     const intro = script.lines.filter(({ at }) => at === 0).map(({ text }) => text);
-    expect(intro).toContain('まあ、専門家じゃないんで。全然分かんないという感じなんですけど。');
+    expect(intro).toContain('…そうですね、まあ、あの、専門家じゃないんで。全然、分かんないという感じなんですけど。');
     expect(script.comments.some(({ kind, text }) => kind === 'cast' && /専門家/.test(text))).toBe(true);
     const family = longScript().lines.filter(({ at }) => at === 0).map(({ text }) => text);
     expect(family.some((text) => /専門家じゃない/.test(text))).toBe(false);
@@ -297,8 +297,64 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     const all = scripts.flatMap(({ lines }) => lines.map(({ text }) => text));
     expect(all).toContain('決断としては非常に良かったような、えぇ、ええ。感じがありますね、えぇ。');
     expect(all).toContain('出だしから意外な将棋でしたけど、まあ、あのー、大熱戦だったと、思います。はい。');
-    expect(all).toContain('この一局、ふり返ってどうだった？');
+    expect(all).toContain('この一局振り返っていかがだったでしょうか。');
     expect(scripts.some(({ comments }) => comments.some(({ text }) => /言うなら|まてｗ|よくねえよ/.test(text)))).toBe(true);
+  });
+
+  it('善彦の解説では、配信の例の掛け合いをそのまま入れる(36章)', () => {
+    const all = scripts.flatMap(({ lines }) => lines.map(({ role, text }) => `${role}:${text}`));
+    const [script] = scripts;
+    const intro = script.lines.filter(({ at }) => at === 0).map(({ role, text }) => `${role}:${text}`);
+    // 紹介から振り駒までは、この順に続く。
+    const order = [
+      'host:天鷺善彦名人です。先生よろしくお願いします。',
+      'commentator:あぁ、よろしくお願いします。',
+      'host:注目の一戦ですけれども。',
+      'commentator:…そうですね、まあ、あの、専門家じゃないんで。全然、分かんないという感じなんですけど。',
+      'host:はい、どうもありがとうございました。',
+      'host:それでは棋譜読み上げ、よろしくお願いします。',
+      'reader:振り駒の結果、先手は中村大輔七段に決まりました。それでは、お願いいたします。',
+    ];
+    const positions = order.map((text) => intro.indexOf(text));
+    expect(positions.every((index) => index >= 0), JSON.stringify(intro)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(positions.at(-1) - positions.at(-3)).toBe(2);
+    for (const text of [
+      'host:ちょっと無理っぽいような…', 'commentator:凄いところから仕掛けたなっていう印象は、あるんですけど。',
+      'commentator:ただ、まあもう行かざるを得ないという部分も、あったんでは無いかな…', 'host:はい。',
+      'commentator:決断としては非常に良かったような、えぇ、ええ。感じがありますね、えぇ。',
+      'commentator:まあ非常に、えー拮抗しているというか。まあ、あと、大きなところでの対局が多いという印象が、ありますね。はい。', 'commentator:え…',
+      'commentator:変わらない。いつも変わらないですね。',
+      'host:この一局振り返っていかがだったでしょうか。',
+      'commentator:出だしから意外な将棋でしたけど、まあ、あのー、大熱戦だったと、思います。はい。',
+    ]) expect(all, text).toContain(text);
+    // 表情は「苗字＋肩書(タイトルか段位)」でたずねる。
+    expect(all.some((text) => /^host:(中村七段|鈴木七段)の対局中の表情とかは、どうですか？$/.test(text))).toBe(true);
+  });
+
+  it('善彦の見せ場の掛け合い(歩打ち・続けて王手・意外な手・大駒の取り・終盤の大変な局面)も、場面が来れば出る(36章)', () => {
+    const all = scripts.flatMap(({ lines }) => lines.map(({ text }) => text));
+    for (const text of ['これは……一体……？', 'まぁ、しょうがないんですね。攻め手がちょっと少ないので。', 'やっぱりちょっと、手駒を増やさないことには、仕方がないという…',
+      'あ、なにがなんでも……', 'え～～～～～～、意地でも。', 'あぁ～～～～……？', 'これは……？', 'なんか実践的な手ですよね。反則ですけど。',
+      'うわぁ！', 'うわぁ～流石に……', 'う～ん、どうするんでしょうか……']) expect(all, text).toContain(text);
+    // 終盤に形勢が大きく傾いた局。
+    const swing = longScript({ cast: yoshihiko, white: player('s', '鈴木蓮'), evalOf: (index) => (index < 96 ? 0 : index % 2 ? 1500 : -1500) });
+    const lines = swing.lines.map(({ text }) => text);
+    expect(lines).toContain('あぁ～……');
+    expect(lines).toContain('うーん……いやぁ、大変です。');
+  });
+
+  it('タイトルホルダー同士なら、そう紹介する。棋譜読み上げは名鑑の若手の苗字で呼ぶ', () => {
+    const black = player('a', '中村大輔', { held: ['王位'] });
+    const white = player('s', '鈴木蓮', { held: ['棋聖'] });
+    const spec = { key: 'ryuo:9:main:holders', event: 'ryuo', kind: 'game', label: '準決勝', weight: 'plain', black, white, winner: 'black', how: 'middle', story: [80, 300, 900] };
+    const pool = [player('y', '天鷺善彦', { story: YOSHIHIKO, profile: { held: ['名人', '竜王'] } }), player('r', '小林直人', { rating: 1200 })];
+    const cast = relayCast({ spec: { ...spec, black: player('h', '天鷺羽音', { story: HANANE }) }, pool });
+    expect(cast).toMatchObject({ voice: 'yoshihiko', title: '名人', reader: '小林' });
+    const lines = createRelayScript({ spec, cast }).lines.map(({ text }) => text);
+    expect(lines).toContain('天鷺善彦名人です。先生よろしくお願いします。');
+    expect(lines).toContain('タイトルホルダー同士の一戦ですけれども。');
+    expect(lines).toContain('それでは棋譜読み上げの小林さん、よろしくお願いします。');
   });
 
   it('見せ場の一言は、下に止まる大きな字。続けて出さない', () => {
