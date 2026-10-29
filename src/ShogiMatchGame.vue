@@ -195,7 +195,7 @@
           <span class="shogi-title__name-text">{{ playerName || "名前を入れる" }}</span>
         </button>
         <!-- 記録の帯。いまの棋力と所属を見せ、押すとやこびノートを開く。 -->
-        <button type="button" class="shogi-title__record" @click="yakobiNoteOpen = true">
+        <button type="button" class="shogi-title__record" @click="openYakobiNote">
           <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
             <g fill="#f1a54c">
               <rect x="3" y="1" width="10" height="14" />
@@ -409,7 +409,7 @@
       :suspended-moves="suspendedRyuoMoves"
       @play="startRyuoGame"
       @resume="resumeRyuoGame"
-      @open-note="tournamentOpen = false; yakobiNoteOpen = true"
+      @open-note="openNoteFromTournament"
       @result-seen="markRyuoResultSeen"
       :meijin-view="meijinView"
       :meijin-career="meijinCareer"
@@ -464,7 +464,8 @@
       v-if="yakobiNoteOpen"
       ref="noteView"
       :asset-base-url="assetBaseUrl"
-      :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
+      :back-label="noteFromTournament ? '大会へ戻る' : tutorialOpen ? '戻る' : 'タイトルへ戻る'"
+      :initial-tab="noteInitialTab"
       :state="ratingState"
       :profile="profileState"
       :career="ryuoCareer"
@@ -478,7 +479,7 @@
       :skill-data-consent="skillDataConsent"
       :skill-data-available="skillDataAllowed"
       :relay-engine-factory="ensureEngineFactory"
-      @close="yakobiNoteOpen = false"
+      @close="closeYakobiNote"
       @open-plan="openPlanFromNote"
       @open-dex="openDexFromNote"
       @start-match="startMatchFromNote"
@@ -690,10 +691,11 @@
             v-if="showHome"
             type="button"
             class="shogi-game__pregame-back"
-            aria-label="タイトルへ戻る"
-            @click="openHome"
+            :aria-label="`${pregameBackLabel}へ戻る`"
+            data-pregame-back
+            @click="leavePregame"
           >
-            <span aria-hidden="true">←</span><span class="shogi-game__pregame-back-label">タイトル</span>
+            <span aria-hidden="true">←</span><span class="shogi-game__pregame-back-label">{{ pregameBackLabel }}</span>
           </button>
           <h2 id="pregame-title">対局設定</h2>
         </header>
@@ -1865,7 +1867,7 @@
       :asset-base-url="assetBaseUrl"
       :prior="skillTestPrior"
       :ask-consent="skillDataAllowed && skillDataConsent === ''"
-      @close="skillTestOpen = false"
+      @close="closeSkillTest"
       @consent="decideSkillDataConsent"
       @finish="finishSkillTest"
     />
@@ -1906,7 +1908,7 @@
         </template>
         <div class="shogi-game__result-actions">
           <button type="button" class="shogi-game__analysis-button" data-skill-report-game @click="confirmSkillByGame">1局指して確かめる（Lv.{{ skillTestReportLevel }}）</button>
-          <button type="button" class="shogi-game__analysis-button" data-skill-report-close @click="skillTestReport = null">{{ showHome ? "ホームへ" : "閉じる" }}</button>
+          <button type="button" class="shogi-game__analysis-button" data-skill-report-close @click="closeSkillTestReport">{{ skillTestFromNote ? "ノートへ戻る" : showHome ? "ホームへ" : "閉じる" }}</button>
         </div>
         <p class="shogi-game__measure-note">問題の答え・これまでの対局の勝ち負け・対局の中身を合わせた目安です。対局するたびに合わせ直します。</p>
       </div>
@@ -2978,10 +2980,78 @@ const homeOpen = ref(props.showHome);
 const welcomeOpen = ref(props.showHome && shouldShowWelcome(typeof localStorage === "undefined" ? null : localStorage));
 const dexOpen = ref(false);
 const yakobiNoteOpen = ref(false);
+/** 大会の結果の画面から開いたノート。「大会へ戻る」で、閉じると大会の画面へ戻る(タイトルまで戻さない)。 */
+const noteFromTournament = ref(false);
+function openYakobiNote() {
+  noteFromTournament.value = false;
+  yakobiNoteOpen.value = true;
+}
+/** ノートを開いたときの項目。大会から来たら「大会」で開く(開いたあと、ほかの画面から戻ったときは最後の項目)。 */
+const noteInitialTab = ref("");
+function openNoteFromTournament() {
+  tournamentOpen.value = false;
+  noteFromTournament.value = true;
+  noteInitialTab.value = "tournament";
+  yakobiNoteOpen.value = true;
+}
+// 項目は開いたときに1回だけ読むので、閉じたら忘れる(図鑑・対局準備から戻ったときは、最後に見た項目で開く)。
+watch(yakobiNoteOpen, (open) => {
+  if (!open) noteInitialTab.value = "";
+});
+function closeYakobiNote() {
+  yakobiNoteOpen.value = false;
+  if (!noteFromTournament.value) return;
+  noteFromTournament.value = false;
+  // 結果の画面はまだ「見た」にしていないので、"season"で開くと結果の画面に戻る。
+  tournamentStartAt.value = "season";
+  tournamentFromGame.value = false;
+  tournamentOpen.value = true;
+}
 const tournamentOpen = ref(false);
 const openingDexInitialId = ref("");
 // 駒図鑑・手筋図鑑・将棋界図鑑のうち、開いているもの。
 const referenceDexKind = ref<"" | "piece" | "tesuji" | "world" | "glossary">("");
+/*
+ * 来た場所へ戻る(UD:3-2 導線のルール。docs/return-path-design.md)。ノートから開いた図鑑・対局準備・棋力テストは、閉じるとノートへ戻る。
+ * 図鑑の戦法占いから開いた対局準備は、図鑑へ戻る。先へ進んだら(対局を始めた・大会へ進んだ)忘れる。
+ */
+const dexFromNote = ref(false);
+watch(() => dexOpen.value || Boolean(referenceDexKind.value), (open) => {
+  if (open || !dexFromNote.value) return;
+  dexFromNote.value = false;
+  yakobiNoteOpen.value = true;
+});
+type PregameReturn = { to: "note" } | { to: "dex"; fromNote: boolean } | null;
+const pregameReturn = ref<PregameReturn>(null);
+const pregameBackLabel = computed(() => (pregameReturn.value?.to === "note" ? "ノート" : pregameReturn.value?.to === "dex" ? "図鑑" : "タイトル"));
+/** 対局準備の「←」と戻る操作。開いた元(ノート・図鑑)があればそこへ、なければタイトルへ。 */
+function leavePregame() {
+  const back = pregameReturn.value;
+  pregameReturn.value = null;
+  planSheetFromNote = false;
+  openHome();
+  if (back?.to === "note") yakobiNoteOpen.value = true;
+  else if (back?.to === "dex") {
+    dexFromNote.value = back.fromNote;
+    dexOpen.value = true;
+  }
+}
+/** ノートのコレクションから開いた作戦カード。選ばずに閉じたら、対局準備を通さずにノートへ戻る。 */
+let planSheetFromNote = false;
+/** ノートから始めた棋力テスト。やめたとき・結果を閉じたときにノートへ戻る。 */
+const skillTestFromNote = ref(false);
+function closeSkillTest() {
+  skillTestOpen.value = false;
+  if (!skillTestFromNote.value) return;
+  skillTestFromNote.value = false;
+  yakobiNoteOpen.value = true;
+}
+function closeSkillTestReport() {
+  skillTestReport.value = null;
+  if (!skillTestFromNote.value) return;
+  skillTestFromNote.value = false;
+  yakobiNoteOpen.value = true;
+}
 // 図鑑を開いたら、見たことを残す(つぎはこれの「まだ見ていない遊び」に使う)。
 watch(dexOpen, (open) => { if (open) noteFeatureSeen("opening-dex"); });
 watch(referenceDexKind, (kind) => { if (kind) noteFeatureSeen(kind); });
@@ -3002,7 +3072,9 @@ type DexKind = (typeof DEX_SHELF)[number]["kind"];
 const dexShelfOpen = ref(false);
 const dexFromMatch = ref(false);
 const dexOverMatch = computed(() => dexFromMatch.value && (dexOpen.value || Boolean(referenceDexKind.value)));
-const dexBackLabel = computed(() => (tutorialOpen.value ? "戻る" : dexFromMatch.value ? "対局へ戻る" : "タイトルへ戻る"));
+const dexBackLabel = computed(() => (
+  tutorialOpen.value ? "戻る" : dexFromMatch.value ? "対局へ戻る" : dexFromNote.value ? "ノートへ戻る" : "タイトルへ戻る"
+));
 watch(() => dexOpen.value || Boolean(referenceDexKind.value), (open) => { if (!open) dexFromMatch.value = false; });
 watch(homeOpen, (open) => { if (open) dexShelfOpen.value = false; });
 function openDex(kind: DexKind) {
@@ -4474,41 +4546,45 @@ const dayBreak = ref<null | "lunch" | "seal">(null);
 const dayBreakOffer = computed(() => (
   dayBreak.value && titleDay.value && active.value && !result.value && !reviewMode.value && !lunchOffer.value ? dayBreak.value : null
 ));
-/** タイトル戦の終局で、観戦記を書いて残す(やこびノートの「大会」で読み返せる)。 */
+/** 舞台の札がない局の観戦記に書く大会の名前。 */
+const TOURNAMENT_EVENT_TEXT: { [event in TournamentEvent]: string } = { ryuo: "竜王戦", meijin: "名人戦", shoreikai: "奨励会", kenshukai: "研修会" };
 /**
- * 大会の対局の観戦記を書く。タイトル戦(二日制)は1日目のまとめと封じ手つきの観戦記、ほかの対局は短い観戦記
+ * 大会の対局の観戦記を書く(やこびノートの「大会」で読み返せる)。タイトル戦(二日制)は1日目のまとめと封じ手つきの観戦記、ほかの対局は短い観戦記
  * (docs/mate-finish-design.md)。詰ませて勝ったら、最後の寄せを書く。
  */
 function writeTournamentKansenki(win: boolean, plies: number) {
   const game = ryuoGame.value;
-  const stage = matchStage.value;
-  if (!game || !stage) return;
-  const day = titleDay.value;
-  const marks = [...(stage.marks ?? []), win ? "win" : "loss"];
+  if (!game) return;
+  // 舞台の札がない局(前の版で始めた局・期の途中から戻した局)でも、大会の名前と回戦で必ず書く。
+  const stage = matchStage.value ?? game.stage ?? null;
+  const eventText = stage?.eventText || TOURNAMENT_EVENT_TEXT[tournamentEventOf(game.event)];
+  const venue = stage?.venue ?? "";
+  const day = stage?.twoDay ? titleDay.value : null;
+  const marks = [...(stage?.marks ?? []), win ? "win" : "loss"];
   const wins = marks.filter((mark) => mark === "win").length;
   const decided = finishMilestone?.kind === "crown" ? (finishMilestone.seal === "防衛" ? "竜王防衛" : "竜王獲得")
-    : finishCrowned ? (stage.userRole === "名人" ? "名人防衛" : "名人獲得") : "";
-  const label = stage.shortLabel ?? stage.label;
+    : finishCrowned ? (stage?.userRole === "名人" ? "名人防衛" : "名人獲得") : "";
+  const label = stage?.shortLabel ?? stage?.label ?? game.label;
   const mate = win && finishMate.value ? { plies: finishMate.value.plies, from: finishMate.value.from } : null;
   const moveText = (ply: number) => dayMoveText(ply, moveHistory[ply - 1] ?? "");
   const formations = { black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE) };
-  if (!stage.twoDay || !day) {
+  if (!stage?.twoDay || !day) {
     // 番勝負(三番勝負など)のときだけ星を書く。ふつうの1局は、節目の言葉(「6組優勝」など)を書く。
     const milestoneText = finishMilestone?.kind === "group" ? finishMilestone.title.replace(/！$/, "")
       : finishMilestone?.kind === "challenger" ? "竜王挑戦" : "";
     const text = writeGameKansenki({
-      eventText: stage.eventText, label, venue: stage.venue, userName: playerDisplayName(playerName.value),
+      eventText, label, venue, userName: playerDisplayName(playerName.value),
       opponentName: ryuoOpponent.value?.name ?? "相手", userColor: activePlayerColor.value, formations,
-      win, plies, decided: decided || (win ? milestoneText : ""), score: stage.marks?.length ? `${wins}勝${marks.length - wins}敗` : "",
+      win, plies, decided: decided || (win ? milestoneText : ""), score: stage?.marks?.length ? `${wins}勝${marks.length - wins}敗` : "",
       rates: gameRates, moveText, mate,
     });
-    const entry = { id: `${stage.eventText}:${label}:${Date.now()}`, at: Date.now(), eventText: stage.eventText, label, venue: stage.venue, win, ...text };
+    const entry = { id: `${eventText}:${label}:${Date.now()}`, at: Date.now(), eventText, label, venue, win, ...text };
     saveKansenki(browserStorage(), entry);
     resultKansenki.value = entry;
     return;
   }
   const text = writeKansenki({
-    eventText: stage.eventText, label, venue: stage.venue, userName: playerDisplayName(playerName.value),
+    eventText, label, venue, userName: playerDisplayName(playerName.value),
     opponentName: ryuoOpponent.value?.name ?? "相手", userColor: activePlayerColor.value,
     formations, day,
     opponentMeal: opponentMeal(stage.venue, game.opponentId),
@@ -4517,7 +4593,7 @@ function writeTournamentKansenki(win: boolean, plies: number) {
     win, plies, decided, score: `${wins}勝${marks.length - wins}敗`,
     moveText, mate,
   });
-  const entry = { id: `${stage.eventText}:${label}:${Date.now()}`, at: Date.now(), eventText: stage.eventText, label, venue: stage.venue, win, ...text };
+  const entry = { id: `${eventText}:${label}:${Date.now()}`, at: Date.now(), eventText, label, venue, win, ...text };
   saveKansenki(browserStorage(), entry);
   resultKansenki.value = entry;
 }
@@ -5601,6 +5677,8 @@ function openPlanFromNote(planId: string) {
   confirmDiscardSuspended(() => {
     yakobiNoteOpen.value = false;
     closeHome();
+    pregameReturn.value = { to: "note" };
+    planSheetFromNote = true;
     planSheetDetailId.value = planId;
     openPlanSheet("pregame");
   });
@@ -5608,6 +5686,7 @@ function openPlanFromNote(planId: string) {
 /** やこびノートのコレクションから、定跡図鑑・手筋図鑑を開く(ノートは閉じる。戻る操作で図鑑から先に閉じられるように)。 */
 function openDexFromNote(target: { kind: string; id: string }) {
   yakobiNoteOpen.value = false;
+  dexFromNote.value = true;
   openDexFromTutorial(target);
 }
 function closePlanSheet() {
@@ -5617,6 +5696,8 @@ function closePlanSheet() {
   planSheet.value = "";
   // CPUの作戦カードは解放と関係なく全部並べるので、見たことにはしない。
   if (context !== "cpu") markPlansSeen();
+  // ノートから開いて選ばずに閉じたら、対局準備を通さずにノートへ戻る。
+  if (planSheetFromNote) leavePregame();
 }
 function togglePlanSwitch(on: boolean) {
   showAllPlans.value = on;
@@ -5638,11 +5719,13 @@ function applyPlan(planId: string, castleId: string, context: "pregame" | "game"
 }
 function choosePlan(planId: string, castleId: string) {
   const context = planSheet.value || "game";
+  planSheetFromNote = false;
   closePlanSheet();
   applyPlan(planId, castleId, context);
 }
 function clearPlan() {
   const context = planSheet.value || "game";
+  planSheetFromNote = false;
   closePlanSheet();
   selectedStrategy.value = "";
   selectedCastle.value = "";
@@ -5760,6 +5843,9 @@ function playPlanFromDex(planId: string, practice: boolean) {
   const plan = openingPlanById(planId);
   if (!plan) return;
   onFortuneResult();
+  // 対局準備の「←」で図鑑へ戻る(図鑑をノートから開いていたら、図鑑の次はノートへ)。
+  const back: PregameReturn = { to: "dex", fromNote: dexFromNote.value };
+  dexFromNote.value = false;
   // 中断した対局を消す確認はホームの上に出すので、先に図鑑と教室を閉じる。
   dexOpen.value = false;
   openingDexInitialId.value = "";
@@ -5767,6 +5853,7 @@ function playPlanFromDex(planId: string, practice: boolean) {
   confirmDiscardSuspended(() => {
     matchKind.value = practice ? "learning" : "normal";
     closeHome();
+    pregameReturn.value = back;
     if (practice) {
       learningStartType.value = "formation";
       learningPlayerStrategy.value = plan.strategyId;
@@ -7009,6 +7096,7 @@ function startMatchFromNote() {
     yakobiNoteOpen.value = false;
     matchKind.value = "normal";
     closeHome();
+    pregameReturn.value = { to: "note" };
   });
 }
 /**
@@ -7067,6 +7155,7 @@ function openSkillTest(band: readonly number[] | null) {
   skillTestBand.value = band ? [band[0], band[1]] : null;
   const estimate = skillProfileEstimate.value;
   skillTestPrior.value = band ? { band: [band[0], band[1]] } : estimate.enough ? { level: estimate.level, spread: estimate.spread } : null;
+  skillTestFromNote.value = yakobiNoteOpen.value;
   yakobiNoteOpen.value = false;
   skillTestReport.value = null;
   skillTestOpen.value = true;
@@ -7107,6 +7196,7 @@ const skillTestReportPraise = computed(() => {
 });
 function enterTournamentFromSkillTest() {
   skillTestReport.value = null;
+  skillTestFromNote.value = false;
   tournamentStartAt.value = "ryuo";
   tournamentFromGame.value = false;
   tournamentOpen.value = true;
@@ -7115,6 +7205,7 @@ function enterTournamentFromSkillTest() {
 function confirmSkillByGame() {
   const level = skillTestReportLevel.value;
   skillTestReport.value = null;
+  skillTestFromNote.value = false;
   confirmDiscardSuspended(() => startMeasureMatchNow({ level }));
 }
 /**
@@ -7885,9 +7976,9 @@ function navigateBack() {
   } else if (nameDialogOpen.value) {
     nameDialogOpen.value = false;
   } else if (skillTestReport.value) {
-    skillTestReport.value = null;
+    closeSkillTestReport();
   } else if (skillTestOpen.value) {
-    skillTestOpen.value = false;
+    closeSkillTest();
   } else if (measureStartFrom.value) {
     measureStartFrom.value = "";
   } else if (tournamentOpen.value) {
@@ -7896,7 +7987,7 @@ function navigateBack() {
     else tournamentOpen.value = false;
   } else if (yakobiNoteOpen.value) {
     // やこびノートは、重ねて開いたもの(賞状・棋士名鑑のくわしい情報)から閉じる。
-    if (!noteView.value?.goBack()) yakobiNoteOpen.value = false;
+    if (!noteView.value?.goBack()) closeYakobiNote();
   } else if (referenceDexKind.value) {
     // 駒の説明へ飛んできたときは、先に元の表へ戻す。
     if (referenceDexView.value) referenceDexView.value.goBack();
@@ -7927,7 +8018,7 @@ function navigateBack() {
   } else if (pregamePicker.value) {
     pregamePicker.value = "";
   } else if (pregameOpen.value) {
-    openHome();
+    leavePregame();
   } else if (guidedReview.value) {
     stopGuidedReview();
   } else if (reviewMode.value && analysisOpen.value) {
@@ -7958,6 +8049,9 @@ function openPregame() {
   thinking.value = false;
   matchStarted.value = false;
   pregameOpen.value = true;
+  // 対局準備を開き直したら、前に来た元は忘れる(ノート・図鑑から来たときは、開いたあとで入れ直す)。
+  pregameReturn.value = null;
+  planSheetFromNote = false;
   settingsOpen.value = false;
   resignConfirmOpen.value = false;
   analysisMenuOpen.value = false;

@@ -864,6 +864,8 @@ type UsageRow = { name: string; wins: number; losses: number; draws: number; gam
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   backLabel: { type: String, default: "タイトルへ戻る" },
+  /** 開いたときの項目(大会の結果の画面からは「大会」)。空なら最後に開いた項目。覚えている項目は変えない。 */
+  initialTab: { type: String, default: "" },
   state: { type: Object as PropType<RatingState>, required: true },
   profile: { type: Object as PropType<ProfileState>, default: () => ({ titles: [] }) },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -925,7 +927,7 @@ function loadTab(): TabId {
     return "summary";
   }
 }
-const tab = ref<TabId>(loadTab());
+const tab = ref<TabId>(TABS.some(({ id }) => id === props.initialTab) ? props.initialTab as TabId : loadTab());
 function selectTab(id: TabId) {
   tab.value = id;
   try {

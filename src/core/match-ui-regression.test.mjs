@@ -19,7 +19,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/\(matchKind\.value !== "learning" && !materialGuideEnabled\.value\)/);
   });
   it("lets the player enter a name next to the notebook band and shows it on the board and in the Ryuo season", () => {
-    expect(source).toMatch(/<div class="shogi-title__record-row">[\s\S]*?data-player-name\s*@click="openNameDialog"[\s\S]*?class="shogi-title__record" @click="yakobiNoteOpen = true"/);
+    expect(source).toMatch(/<div class="shogi-title__record-row">[\s\S]*?data-player-name\s*@click="openNameDialog"[\s\S]*?class="shogi-title__record" @click="openYakobiNote"/);
     expect(source).toMatch(/v-if="nameDialogOpen"[\s\S]*?@submit\.prevent="acceptPlayerName"[\s\S]*?data-player-name-save>この名前にする</);
     // CPUとの対局では、プレイヤーの側の名札に名前を出す。対局準備と竜王戦の新しい期にも使う。
     // タイトル戦の防衛戦では、名前に肩書を足す(docs/match-stage-design.md)。名前を入れていなければ先手・後手の表示名。
@@ -939,6 +939,33 @@ describe("match screen regressions", () => {
     // 観戦記は終局で書き、結果の窓から読める。重ねたシートは戻る操作で閉じ、開いているあいだは秒読みを止める。
     expect(source).toMatch(/if \(tournamentFinish\) \{\s*writeTournamentKansenki\(outcome === "win", matchResult\.moveCount\);\s*recordTitleMeal\(outcome === "win"\);/);
     expect(source).toMatch(/v-if="resultKansenki"[^>]*data-kansenki-open/);
+    // 舞台の札がない局(前の版で始めた局など)でも、大会の名前と回戦で必ず書く(docs/mate-finish-design.mdの3章)。
+    expect(source).toMatch(/function writeTournamentKansenki\(win: boolean, plies: number\) \{\s*const game = ryuoGame\.value;\s*if \(!game\) return;/);
+    expect(source).toMatch(/const stage = matchStage\.value \?\? game\.stage \?\? null;\s*const eventText = stage\?\.eventText \|\| TOURNAMENT_EVENT_TEXT\[/);
+    // 大会の結果の画面から開いたノートは「大会へ戻る」で、閉じると大会の画面(結果)へ戻る。戻る操作も同じ。
+    expect(source).toMatch(/@open-note="openNoteFromTournament"/);
+    expect(source).toMatch(/:back-label="noteFromTournament \? '大会へ戻る' :/);
+    expect(source).toMatch(/function closeYakobiNote\(\) \{[\s\S]*?tournamentStartAt\.value = "season";[\s\S]*?tournamentOpen\.value = true;/);
+    expect(source).toMatch(/if \(!noteView\.value\?\.goBack\(\)\) closeYakobiNote\(\);/);
+  });
+  it("ノート・図鑑から開いた画面は、閉じると来た場所へ戻る(docs/return-path-design.md)", () => {
+    // 対局準備の「←」と戻る操作は、開いた元(ノート・図鑑)へ。開き直したら忘れる。
+    expect(source).toMatch(/data-pregame-back\s*@click="leavePregame"/);
+    expect(source).toMatch(/\} else if \(pregameOpen\.value\) \{\s*leavePregame\(\);/);
+    expect(source).toMatch(/pregameOpen\.value = true;\s*\/\/[^\n]*\n\s*pregameReturn\.value = null;/);
+    expect(source).toMatch(/function openPlanFromNote\(planId: string\) \{[\s\S]*?closeHome\(\);\s*pregameReturn\.value = \{ to: "note" \};\s*planSheetFromNote = true;/);
+    expect(source).toMatch(/function startMatchFromNote\(\) \{[\s\S]*?closeHome\(\);\s*pregameReturn\.value = \{ to: "note" \};/);
+    expect(source).toMatch(/closeHome\(\);\s*pregameReturn\.value = back;/);
+    // 作戦カードを選ばずに閉じたら、ノートへ。選んだら対局準備に残る。
+    expect(source).toMatch(/if \(planSheetFromNote\) leavePregame\(\);/);
+    expect(source).toMatch(/function choosePlan\([^)]*\) \{\s*const context = [^;]*;\s*planSheetFromNote = false;\s*closePlanSheet\(\);/);
+    // ノートから開いた図鑑は「ノートへ戻る」で、閉じるとノートへ。
+    expect(source).toMatch(/dexFromNote\.value \? "ノートへ戻る"/);
+    expect(source).toMatch(/function openDexFromNote\([^)]*\) \{\s*yakobiNoteOpen\.value = false;\s*dexFromNote\.value = true;/);
+    // ノートから始めた棋力テストは、やめても結果を閉じてもノートへ。
+    expect(source).toMatch(/skillTestFromNote\.value = yakobiNoteOpen\.value;/);
+    expect(source).toMatch(/@close="closeSkillTest"/);
+    expect(source).toMatch(/data-skill-report-close @click="closeSkillTestReport">\{\{ skillTestFromNote \? "ノートへ戻る"/);
     expect(source).toMatch(/\} else if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;\s*\} else if \(daySummaryOpen\.value\) \{/);
     expect(source).toMatch(/\|\| daySummaryOpen\.value,/);
   });
@@ -1000,6 +1027,6 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/data-my-relay @click="watchOwnRelay"/);
     expect(source).toMatch(/:relay-key="tournamentRelayKey"/);
     // 観戦記は、タイトル戦でなくても書く(寄せの一文つき)。
-    expect(source).toMatch(/if \(!stage\.twoDay \|\| !day\) \{[\s\S]{0,600}?writeGameKansenki\(\{/);
+    expect(source).toMatch(/if \(!stage\?\.twoDay \|\| !day\) \{[\s\S]{0,600}?writeGameKansenki\(\{/);
   });
 });
