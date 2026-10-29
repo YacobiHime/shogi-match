@@ -2,11 +2,13 @@
   <!--
     棋士の能力値(パワプロの基本能力に当たる)。主役はレーダーチャートとランクの文字(U:4。数字を読まなくても、何が得意か分かる)。
     その下に、特殊能力の札(金・青・赤)と、戦法の使用率。名鑑と、竜王戦の次の相手の札で共通に使う。
+    やこびノートの自分の能力は、チャート(part="chart")とランク・型・特殊能力(part="details")を別の列に置き、
+    戦法の使用率は「戦型」の項目に出すので省く(docs/player-world-note-design.mdの8-3)。
   -->
-  <div class="player-ability" :class="{ 'player-ability--compact': compact }" data-player-ability>
-    <div class="player-ability__main">
+  <div class="player-ability" :class="[{ 'player-ability--compact': compact }, `player-ability--${part}`]" data-player-ability>
+    <div v-if="part !== 'details'" class="player-ability__main">
       <RadarChart class="player-ability__radar" :axes="radarAxes" :value-offset="20" :compare="compareValues" />
-      <ul class="player-ability__ranks" :class="{ 'player-ability__ranks--compare': compare }" aria-label="能力のランク">
+      <ul v-if="part === 'all'" class="player-ability__ranks" :class="{ 'player-ability__ranks--compare': compare }" aria-label="能力のランク">
         <li v-for="(item, index) in view.abilities" :key="item.key" :title="item.hint">
           <span class="player-ability__label">{{ item.label }}</span>
           <b class="player-ability__rank" :class="`player-ability__rank--${item.rank}`" :data-rank="item.rank">{{ item.rank }}</b>
@@ -16,37 +18,47 @@
       </ul>
     </div>
     <!-- 比べる相手がいるときの凡例。線の形(実線・点線)と名前で区別する。 -->
-    <p v-if="compare" class="player-ability__legend" data-ability-legend>
+    <p v-if="compare && part !== 'details'" class="player-ability__legend" data-ability-legend>
       <span class="player-ability__legend-own">{{ ownLabel }}</span>
       <span class="player-ability__legend-compare">{{ compare.label }}</span>
     </p>
-    <p v-if="view.type" class="player-ability__type">{{ view.type }}</p>
-    <ul v-if="view.specials.length" class="player-ability__specials" aria-label="特殊能力">
-      <li v-for="chip in view.specials" :key="chip.id" :data-special="chip.tier">
-        <span class="player-ability__chip" :class="`player-ability__chip--${chip.tier}`">{{ TIER_MARK[chip.tier] }}{{ chip.label }}</span>
-        <small v-if="!compact && chip.hint">{{ chip.hint }}</small>
+    <ul v-if="part === 'details'" class="player-ability__ranks player-ability__ranks--grid" :class="{ 'player-ability__ranks--compare': compare }" aria-label="能力のランク">
+      <li v-for="(item, index) in view.abilities" :key="item.key" :title="item.hint">
+        <span class="player-ability__label">{{ item.label }}</span>
+        <b class="player-ability__rank" :class="`player-ability__rank--${item.rank}`" :data-rank="item.rank">{{ item.rank }}</b>
+        <span class="player-ability__value">{{ item.value }}</span>
+        <span v-if="compare" class="player-ability__compare-rank" :aria-label="`${compare.label}は${compare.abilities[index]?.rank}`">{{ compare.abilities[index]?.rank }}</span>
       </li>
     </ul>
-    <div v-if="view.openings.length" class="player-ability__openings" data-player-openings>
-      <p v-if="view.staticShare !== null" class="player-ability__party">
-        <span class="player-ability__party-bar" aria-hidden="true">
-          <span class="player-ability__party-static" :style="{ width: `${view.staticShare}%` }" />
-        </span>
-        <span>居飛車 {{ view.staticShare }}%・振り飛車 {{ 100 - view.staticShare }}%</span>
-      </p>
-      <ul class="player-ability__usage" aria-label="戦法の使用率">
-        <li v-for="row in shownOpenings" :key="row.id">
-          <span class="player-ability__usage-label">{{ row.label }}</span>
-          <span class="player-ability__usage-bar" aria-hidden="true">
-            <span :class="`player-ability__usage-fill--${row.rook}`" :style="{ width: `${Math.max(4, row.share)}%` }" />
-          </span>
-          <span class="player-ability__usage-share">{{ row.share }}%</span>
-          <small v-if="!compact && (row.castles.length || row.record)" class="player-ability__usage-note">
-            {{ [row.castles.map((castle) => `${castle.label} ${castle.share}%`).join("・"), row.record ? `通算${row.record}` : ""].filter(Boolean).join("　") }}
-          </small>
+    <template v-if="part !== 'chart'">
+      <p v-if="view.type" class="player-ability__type">{{ view.type }}</p>
+      <ul v-if="view.specials.length" class="player-ability__specials" aria-label="特殊能力">
+        <li v-for="chip in view.specials" :key="chip.id" :data-special="chip.tier">
+          <span class="player-ability__chip" :class="`player-ability__chip--${chip.tier}`">{{ TIER_MARK[chip.tier] }}{{ chip.label }}</span>
+          <small v-if="!compact && chip.hint">{{ chip.hint }}</small>
         </li>
       </ul>
-    </div>
+      <div v-if="openings && view.openings.length" class="player-ability__openings" data-player-openings>
+        <p v-if="view.staticShare !== null" class="player-ability__party">
+          <span class="player-ability__party-bar" aria-hidden="true">
+            <span class="player-ability__party-static" :style="{ width: `${view.staticShare}%` }" />
+          </span>
+          <span>居飛車 {{ view.staticShare }}%・振り飛車 {{ 100 - view.staticShare }}%</span>
+        </p>
+        <ul class="player-ability__usage" aria-label="戦法の使用率">
+          <li v-for="row in shownOpenings" :key="row.id">
+            <span class="player-ability__usage-label">{{ row.label }}</span>
+            <span class="player-ability__usage-bar" aria-hidden="true">
+              <span :class="`player-ability__usage-fill--${row.rook}`" :style="{ width: `${Math.max(4, row.share)}%` }" />
+            </span>
+            <span class="player-ability__usage-share">{{ row.share }}%</span>
+            <small v-if="!compact && (row.castles.length || row.record)" class="player-ability__usage-note">
+              {{ [row.castles.map((castle) => `${castle.label} ${castle.share}%`).join("・"), row.record ? `通算${row.record}` : ""].filter(Boolean).join("　") }}
+            </small>
+          </li>
+        </ul>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -70,6 +82,10 @@ const props = defineProps({
   compare: { type: Object as PropType<{ label: string; abilities: { key: string; value: number; rank: string }[] } | null>, default: null },
   /** 比べるときの、自分の名前(凡例)。 */
   ownLabel: { type: String, default: "あなた" },
+  /** 出す部分。all: 全部、chart: レーダーチャートと凡例だけ、details: ランク(2列×4行)・型・特殊能力。 */
+  part: { type: String as PropType<"all" | "chart" | "details">, default: "all" },
+  /** 戦法の使用率を出すか(やこびノートの自分の能力では「戦型」の項目に出すので出さない)。 */
+  openings: { type: Boolean, default: true },
 });
 
 /** 札の頭の印(色だけに頼らず、形でも区別する)。 */
@@ -142,6 +158,14 @@ const shownOpenings = computed(() => props.view.openings.slice(0, props.compact 
 .shogi-game .player-ability__usage-fill--ranging { background: #c56a5f; }
 .shogi-game .player-ability__usage-share { font-size: 0.82em; font-variant-numeric: tabular-nums; text-align: right; }
 .shogi-game .player-ability__usage-note { grid-column: 1 / -1; color: rgba(255, 252, 244, 0.65); font-size: 0.75em; }
+/* ランクを2列×4行で並べる(やこびノートの自分の能力の右の列)。 */
+.shogi-game .player-ability__ranks--grid { grid-template-columns: repeat(2, max-content); justify-content: start; column-gap: 1.4rem; row-gap: 0.25rem; }
+/* チャートだけのときは、置き場所の高さに合わせて描く(幅と高さの小さいほう)。 */
+.shogi-game .player-ability--chart { grid-template-rows: minmax(0, 1fr) auto; height: 100%; }
+.shogi-game .player-ability--chart .player-ability__main { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; min-height: 0; height: 100%; }
+.shogi-game .player-ability--chart .player-ability__radar .shogi-radar__label { font-size: 23px; }
+.shogi-game .player-ability--chart .player-ability__radar .shogi-radar__value { font-size: 20px; }
+.shogi-game .player-ability--chart .player-ability__radar { width: auto; max-width: 100%; height: 100%; max-height: 100%; aspect-ratio: 460 / 360; }
 /* 置き場所の幅で並べ方を変える(名鑑はタブレットでも狭いので、画面の幅ではなく、この欄の幅で決める)。 */
 @container (max-width: 34rem) {
   .shogi-game .player-ability__main { grid-template-columns: minmax(0, 1fr); }

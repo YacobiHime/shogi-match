@@ -1,29 +1,17 @@
 <template>
   <!--
     棋士名鑑(docs/player-world-note-design.mdの3-3)。竜王戦と名人戦(順位戦)の棋士を、顔の判子と肩書きで覚えられるようにする。
-    上にタイトル保持者、絞り込み(あなたのまわり・タイトル・竜王戦・順位戦・注目)、1人1行の一覧。押すと、くわしい情報を重ねて開く
-    (広い画面では一覧の右に並べる)。閉じると一覧の同じ位置に戻る。
+    絞り込み(あなたのまわり・タイトル・竜王戦・順位戦・注目)と、1人1行の一覧。一覧は枠の中だけを動かす。
+    押すと、くわしい情報を重ねて開く。閉じると一覧の同じ位置に戻る。
+    横長の広い画面では、くわしい情報を一覧の右にいつも並べ、はじめは一覧の先頭の棋士を出しておく
+    (どの棋士を押しても、同じ場所に出る。docs/player-world-note-design.mdの8-3)。
+    タイトル保持者は「タイトル」の絞り込みで見る(行に持っているタイトルの名前が出る)。
   -->
-  <section :class="['shogi-note__card', 'shogi-note__book', { 'shogi-note__book--open': selected }]" aria-labelledby="shogi-note-book" data-note-roster-book>
+  <section :class="['shogi-note__card', 'shogi-note__book', { 'shogi-note__book--open': selected, 'shogi-note__book--side': side }]" aria-labelledby="shogi-note-book" data-note-roster-book>
     <div class="shogi-note__book-main">
       <h2 id="shogi-note-book">棋士名鑑</h2>
       <p v-if="!book" class="shogi-note__hint">竜王戦か名人戦に参加すると、対戦する棋士たちの名鑑ができます。</p>
       <template v-else>
-        <h3 class="shogi-note__subhead">タイトル保持者</h3>
-        <ul class="shogi-note__book-holders" data-note-book-holders>
-          <li v-for="holder in book.holders" :key="holder.title">
-            <button
-              type="button"
-              class="shogi-note__book-holder"
-              :disabled="!holder.id || holder.user"
-              :data-book-holder="holder.title"
-              @click="holder.id && !holder.user && openMember(holder.id)"
-            >
-              <span :class="['shogi-note__book-seal', `shogi-note__book-seal--${holder.tone}`]" aria-hidden="true">{{ holder.face || "—" }}</span>
-              <span class="shogi-note__book-holder-text"><small>{{ holder.title }}</small>{{ holder.name }}</span>
-            </button>
-          </li>
-        </ul>
         <div class="shogi-note__book-filters" role="tablist" aria-label="名鑑の絞り込み">
           <button
             v-for="item in BOOK_FILTERS"
@@ -44,7 +32,7 @@
           </template>
         </div>
         <p v-if="filter === 'around' && oshiName" class="shogi-note__hint" data-book-oshi>推しの棋士: <b class="shogi-note__book-oshi-name">★{{ oshiName }}</b>。竜王戦の画面で、やこび姫が様子を知らせるよ。</p>
-        <ul v-if="members.length" ref="listEl" class="shogi-note__book-list" role="tabpanel" data-book-list>
+        <ul v-if="members.length" ref="listEl" v-scroll-more class="shogi-note__book-list shogi-note__scroll" role="tabpanel" data-book-list>
           <li v-for="row in members" :key="row.id">
             <button
               type="button"
@@ -72,9 +60,17 @@
       </template>
     </div>
 
-    <!-- くわしい情報。狭い画面では下から重ねて開き、広い画面では一覧の右に並べる。 -->
-    <div v-if="selected" class="shogi-note__book-sheet" role="dialog" aria-modal="true" :aria-label="`${selected.name}のくわしい情報`" data-book-detail @click.self="closeMember">
-      <article class="shogi-note__book-detail">
+    <!-- くわしい情報。狭い画面では下から重ねて開き、横長の広い画面では一覧の右に並べる(重ねない)。 -->
+    <div
+      v-if="selected"
+      class="shogi-note__book-sheet"
+      :role="side ? 'region' : 'dialog'"
+      :aria-modal="side ? undefined : 'true'"
+      :aria-label="`${selected.name}のくわしい情報`"
+      data-book-detail
+      @click.self="closeMember"
+    >
+      <article v-scroll-more class="shogi-note__book-detail">
         <header class="shogi-note__book-detail-head">
           <span v-if="selected.story === 'hanane'" class="shogi-note__book-seal shogi-note__book-seal--face shogi-note__book-seal--big" aria-hidden="true"><img :src="hananeUrl" alt="" draggable="false"></span>
           <span v-else :class="['shogi-note__book-seal', 'shogi-note__book-seal--big', `shogi-note__book-seal--${selected.tone}`]" aria-hidden="true">{{ selected.face }}</span>
@@ -83,7 +79,7 @@
             <p v-if="selected.held.length" class="shogi-note__book-crowns">{{ selected.held.join("・") }}</p>
             <p class="shogi-note__book-catch">{{ selected.catchphrase }}</p>
           </div>
-          <button type="button" class="shogi-note__book-close" aria-label="閉じる" data-book-close @click="closeMember">×</button>
+          <button v-if="!side" type="button" class="shogi-note__book-close" aria-label="閉じる" data-book-close @click="closeMember"><span aria-hidden="true">×</span></button>
         </header>
         <!-- 物語の人物の紹介。 -->
         <p v-if="selected.intro" class="shogi-note__book-intro" data-book-intro><span><small>{{ selected.reading }}</small>{{ selected.intro }}</span></p>
@@ -130,8 +126,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, type PropType } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, type PropType } from "vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
+import { vScrollMore } from "./composables/vScrollMore";
 import { BOOK_FILTERS, BOOK_JUNNI_TABS, bookMembers, rosterBook } from "./core/ryuo-book.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { loadOshi, saveOshi } from "./core/ryuo-oshi.mjs";
@@ -186,9 +183,21 @@ const emptyText = computed(() => (filter.value === "watch"
   ? "推しにした棋士・ライバル・対戦した棋士が、ここに並ぶよ。"
   : "この絞り込みには、まだ棋士がいません。"));
 
-/** くわしい情報を開いている棋士。閉じたら、一覧の同じ位置に戻る(一覧のスクロールは動かさない)。 */
+/** 横長の広い画面(くわしい情報を一覧の右に並べる)。やこびノートの2列の画面と同じ境目。 */
+const SIDE_QUERY = "(orientation: landscape) and (min-width: 700px)";
+const sideMedia = typeof window !== "undefined" && window.matchMedia ? window.matchMedia(SIDE_QUERY) : null;
+const side = ref(Boolean(sideMedia?.matches));
+const onSideChange = () => { side.value = Boolean(sideMedia?.matches); };
+sideMedia?.addEventListener("change", onSideChange);
+onBeforeUnmount(() => sideMedia?.removeEventListener("change", onSideChange));
+
+/** くわしい情報を開いている棋士。閉じたら、一覧の同じ位置に戻る(一覧のスクロールは動かさない)。横に並べる画面では、選ぶ前は一覧の先頭。 */
 const selectedId = ref("");
-const selected = computed(() => book.value?.groups.flatMap((entry) => entry.members).find((member) => member.id === selectedId.value) ?? null);
+const selected = computed(() => {
+  const all = book.value?.groups.flatMap((entry) => entry.members) ?? [];
+  const id = selectedId.value || (side.value ? members.value[0]?.id ?? "" : "");
+  return all.find((member) => member.id === id) ?? null;
+});
 const listEl = ref<HTMLElement | null>(null);
 function openMember(id: string) {
   selectedId.value = id;
@@ -198,9 +207,9 @@ function closeMember() {
   selectedId.value = "";
   void nextTick(() => listEl.value?.querySelector<HTMLElement>(`[data-book-member="${id}"]`)?.focus({ preventScroll: true }));
 }
-/** 戻る操作。くわしい情報を開いていれば閉じて真。 */
+/** 戻る操作。くわしい情報を重ねて開いていれば閉じて真(横に並べているときは閉じない)。 */
 function goBack() {
-  if (!selectedId.value) return false;
+  if (!selectedId.value || side.value) return false;
   closeMember();
   return true;
 }
@@ -230,35 +239,10 @@ function toggleOshi(id: string) {
 </script>
 
 <style>
-.shogi-game .shogi-note__book-main { display: grid; align-content: start; gap: 0.75rem; min-width: 0; }
-/* タイトル保持者: 顔の判子と肩書き。押すと、その棋士のくわしい情報。 */
-.shogi-game .shogi-note__book-holders {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  gap: 0.4rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.shogi-game .shogi-note__book-holder {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  min-height: 48px;
-  padding: 0.3rem 0.5rem;
-  border: 0;
-  border-radius: 0.3rem;
-  color: inherit;
-  background: var(--note-deep);
-  box-shadow: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.shogi-game .shogi-note__book-holder:disabled { cursor: default; opacity: 1; }
-.shogi-game .shogi-note__book-holder-text { display: grid; min-width: 0; font-weight: 800; overflow-wrap: anywhere; }
-.shogi-game .shogi-note__book-holder-text small { color: var(--note-gold); font-size: 0.75em; }
+/* 名鑑は欄の高さいっぱいに置き、一覧だけが枠の中で動く。 */
+.shogi-game .shogi-note__book { height: 100%; box-sizing: border-box; grid-template-rows: minmax(0, 1fr); }
+.shogi-game .shogi-note__book-main { display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); align-content: stretch; gap: 0.6rem; min-width: 0; min-height: 0; }
+.shogi-game .shogi-note__book-main > .shogi-note__hint:only-of-type { align-self: start; }
 /* 顔の判子。名前の1文字、色は棋風(攻めは朱、受けは青、そのほかは金。大会の画面の次の相手の顔と同じ)。 */
 .shogi-game .shogi-note__book-seal {
   flex: none;
@@ -303,7 +287,7 @@ function toggleOshi(id: string) {
 .shogi-game .shogi-note__book-filters button[aria-selected="true"],
 .shogi-game .shogi-note__book-tabs button[aria-selected="true"] { border-color: var(--note-gold); color: #172632; background: var(--note-gold); }
 /* 一覧: 1人1行。左に顔、真ん中に名前と1行、右にあなたとの対戦成績。 */
-.shogi-game .shogi-note__book-list { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__book-list { display: grid; align-content: start; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .shogi-note__book-row {
   display: flex;
   align-items: center;
@@ -364,10 +348,17 @@ function toggleOshi(id: string) {
 .shogi-game .shogi-note__book-detail-title h3 small { margin-left: 0.3em; color: rgba(255, 252, 244, 0.7); font-size: 0.7em; }
 .shogi-game .shogi-note__book-detail-title p { margin: 0.1rem 0 0; }
 .shogi-game .shogi-note__book-catch { color: rgba(255, 252, 244, 0.75); font-size: 0.82em; }
+/* ×は44pxの丸(ボタン共通の最低の高さと余白を消して、縦長の楕円にしない。U:7-4)。 */
 .shogi-game .shogi-note__book-close {
   flex: none;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
   width: 44px;
   height: 44px;
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 0;
   border: 2px solid rgba(255, 252, 244, 0.4);
   border-radius: 50%;
   color: inherit;
@@ -375,6 +366,7 @@ function toggleOshi(id: string) {
   box-shadow: none;
   font: inherit;
   font-size: 1.2rem;
+  line-height: 1;
   cursor: pointer;
 }
 .shogi-game .shogi-note__book-places { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; margin: 0; }
@@ -404,11 +396,14 @@ function toggleOshi(id: string) {
 .shogi-game .shogi-note__book-profile > div { display: grid; grid-template-columns: 6.5em minmax(0, 1fr); gap: 0.5rem; }
 .shogi-game .shogi-note__book-profile dt { color: rgba(255, 252, 244, 0.65); font-size: 0.82em; font-weight: 700; }
 .shogi-game .shogi-note__book-profile dd { margin: 0; font-size: 0.9em; overflow-wrap: anywhere; }
-/* 広い画面: 一覧の右に、くわしい情報を並べる(重ねない)。 */
-@media (min-width: 1100px) {
-  .shogi-game .shogi-note__book.shogi-note__book--open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem); gap: 1rem; align-items: start; }
-  .shogi-game .shogi-note__book-main { display: grid; gap: inherit; min-width: 0; }
-  .shogi-game .shogi-note__book-sheet { position: sticky; top: 0; inset: auto; z-index: auto; display: block; padding: 0; background: none; }
-  .shogi-game .shogi-note__book-detail { width: 100%; max-height: calc(100dvh - 9rem); border: 2px solid var(--note-lavender); border-radius: 0.5rem; }
+/* 横向きのスマホ(背の低い画面): 見出しは左の項目の名前と同じなので省き、絞り込みは1行にして(はみ出す分は横に動かす)、一覧を広く取る。 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .shogi-game .shogi-note__book-main > h2 { display: none; }
+  .shogi-game .shogi-note__book-filters { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .shogi-game .shogi-note__book-filters button { flex: none; padding: 0 0.65rem; font-size: 0.88em; }
 }
+/* 横長の広い画面: 一覧の右に、くわしい情報を並べる(重ねない)。くわしい情報は欄の高さに収め、収まらない分は枠の中で動く。 */
+.shogi-game .shogi-note__book.shogi-note__book--side { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 1rem; align-items: stretch; }
+.shogi-game .shogi-note__book--side .shogi-note__book-sheet { position: static; inset: auto; z-index: auto; display: block; min-height: 0; padding: 0; background: none; }
+.shogi-game .shogi-note__book--side .shogi-note__book-detail { width: 100%; height: 100%; max-height: none; border: 2px solid var(--note-lavender); border-radius: 0.5rem; }
 </style>

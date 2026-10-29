@@ -122,8 +122,8 @@
             <li>
               <button type="button" class="shogi-note__highlight" @click="selectTab('style')">
                 <small>得意な戦法</small>
-                <strong>{{ favoriteStrategy ? favoriteStrategy.name : "—" }}</strong>
-                <span>{{ favoriteStrategy ? `勝率${percent(favoriteStrategy.winRate)}・${favoriteStrategy.games}局` : "3局以上で見つかるよ" }}</span>
+                <strong>{{ favoriteStrategy ? favoriteStrategy.label : "—" }}</strong>
+                <span>{{ favoriteStrategy ? `勝率${percent(favoriteStrategy.winRate ?? 0)}・${favoriteStrategy.games}局` : "3局以上で見つかるよ" }}</span>
               </button>
             </li>
             <li>
@@ -139,8 +139,10 @@
         <!--
           能力(docs/player-abilities-design.mdの12章)。名鑑の棋士と同じ8つの能力・ランク・特殊能力を、最近の対局の中身から出す。
           主役はレーダーチャート。名鑑の棋士(ライバル・竜王・同じ組の平均)を点線で重ねて比べられる。
+          横長の画面は2列(左にチャート、右にやこび姫の一言・ランク・型・特殊能力)、縦長は1列で、1画面に収める(8-3)。
+          戦法の使用率は「戦型」の項目に出す。
         -->
-        <section v-if="tab === 'ability'" id="shogi-note-pane-ability" class="shogi-note__panel" role="tabpanel" aria-label="能力" data-note-ability>
+        <section v-if="tab === 'ability'" id="shogi-note-pane-ability" class="shogi-note__panel shogi-note__panel--fit shogi-note__ability" role="tabpanel" aria-label="能力" data-note-ability>
           <div v-if="!myAbility.ready" class="shogi-note__card shogi-note__empty">
             <p>
               対局を解析すると、名鑑の棋士と同じように、あなたの能力（序盤・中盤・終盤・攻め・受け・読み・詰み・安定感）がここに出るよ。
@@ -149,6 +151,9 @@
             <button type="button" class="shogi-note__button shogi-note__button--primary" @click="emit('start-match')">対局する</button>
           </div>
           <template v-else>
+            <div class="shogi-note__coach shogi-note__ability-coach">
+              <YakobiSays :lines="abilityLines" merged :asset-base-url="assetBaseUrl" />
+            </div>
             <section class="shogi-note__card shogi-note__ability-card" aria-label="あなたの能力">
               <h2>
                 あなたの能力
@@ -167,24 +172,47 @@
                   @click="abilityCompareId = option.id"
                 >{{ option.label }}</button>
               </div>
-              <PlayerAbilityPanel :view="myAbility.view" :compare="abilityCompare" />
+              <div class="shogi-note__ability-chart">
+                <PlayerAbilityPanel :view="myAbility.view" :compare="abilityCompare" part="chart" />
+              </div>
             </section>
-            <div class="shogi-note__coach shogi-note__ability-coach">
-              <YakobiSays :lines="abilityLines" merged :asset-base-url="assetBaseUrl" />
-            </div>
-            <p class="shogi-note__hint" data-ability-basis>
-              最近{{ myAbility.games }}局・{{ myAbility.moves }}手の解析から出した目安だよ。物差しは竜王戦（難易度{{ difficultyName(myAbility.difficulty) }}）の棋士と同じで、対局するたびに動くよ。
-            </p>
+            <section v-scroll-more class="shogi-note__card shogi-note__ability-details shogi-note__scroll" aria-label="能力のランクと特殊能力">
+              <PlayerAbilityPanel :view="myAbility.view" :compare="abilityCompare" part="details" :openings="false" />
+              <p class="shogi-note__hint" data-ability-basis>
+                最近{{ myAbility.games }}局・{{ myAbility.moves }}手の解析から出した目安だよ。物差しは竜王戦（難易度{{ difficultyName(myAbility.difficulty) }}）の棋士と同じで、対局するたびに動くよ。
+              </p>
+            </section>
           </template>
         </section>
 
-        <!-- 成績 -->
-        <section v-if="tab === 'record'" id="shogi-note-pane-record" class="shogi-note__panel shogi-note__panel--fill" role="tabpanel" aria-label="成績">
+        <!--
+          成績。横長の画面は2列(左に勝ち負け、右の上に推移、右の下に最近の対局)、
+          スマホの縦は項目の中のタブ(勝ち負け・推移・最近の対局)で分ける。最近の対局は枠の中だけを動かす(8-3)。
+        -->
+        <section
+          v-if="tab === 'record'"
+          id="shogi-note-pane-record"
+          class="shogi-note__panel shogi-note__panel--fit shogi-note__record"
+          role="tabpanel"
+          aria-label="成績"
+          :data-view="recordView"
+        >
           <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
             <p>まだ記録がないよ。平手でCPUと対局したり、竜王戦で指したりすると、勝ち負けとレーティングの推移がここに書き込まれるよ。</p>
           </div>
           <template v-else>
-            <section class="shogi-note__card shogi-note__score" aria-labelledby="shogi-note-score" data-note-record>
+            <div class="shogi-note__segmented shogi-note__narrow-only" role="tablist" aria-label="成績の切り替え">
+              <button
+                v-for="item in RECORD_VIEWS"
+                :key="item.id"
+                type="button"
+                role="tab"
+                :aria-selected="recordView === item.id"
+                :data-record-view="item.id"
+                @click="recordView = item.id"
+              >{{ item.label }}</button>
+            </div>
+            <section v-scroll-more class="shogi-note__card shogi-note__score shogi-note__scroll" :class="{ 'shogi-note__part--off': recordView !== 'score' }" aria-labelledby="shogi-note-score" data-note-record>
               <h2 id="shogi-note-score">勝ち負け</h2>
               <div class="shogi-note__score-body">
                 <div
@@ -219,7 +247,7 @@
               <p class="shogi-note__hint">平手でCPUと指した自由対局と竜王戦の結果を数えています。</p>
             </section>
 
-            <figure class="shogi-note__card shogi-note__trend-card">
+            <figure class="shogi-note__card shogi-note__trend-card" :class="{ 'shogi-note__part--off': recordView !== 'trend' }">
               <h2>レーティングの推移</h2>
               <div v-if="trend" class="shogi-note__trend-box">
                 <div class="shogi-note__trend-axis" aria-hidden="true"><span>R{{ trend.max }}</span><span>R{{ trend.min }}</span></div>
@@ -245,9 +273,9 @@
               <p v-else class="shogi-note__hint">2局以上指すと、ここに推移の線が出るよ。</p>
             </figure>
 
-            <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-recent" data-note-recent-games>
-              <h2 id="shogi-note-recent">最近の対局</h2>
-              <ol class="shogi-note__games">
+            <section class="shogi-note__card shogi-note__recent" :class="{ 'shogi-note__part--off': recordView !== 'recent' }" aria-labelledby="shogi-note-recent" data-note-recent-games>
+              <h2 id="shogi-note-recent">最近の対局<small class="shogi-note__count">{{ recentGames.length }}局</small></h2>
+              <ol v-scroll-more class="shogi-note__games shogi-note__scroll">
                 <li v-for="game in recentGames" :key="game.key" :class="`shogi-note__game--${game.outcome}`">
                   <span class="shogi-note__game-mark" aria-hidden="true">{{ game.mark }}</span>
                   <span class="shogi-note__game-body">
@@ -261,156 +289,234 @@
           </template>
         </section>
 
-        <!-- 戦法: 自分の戦法・囲い・戦型を勝率で比べ、得意とにがてに札を付ける。相手の戦法・囲いはその下に小さく。 -->
-        <section v-if="tab === 'style'" id="shogi-note-pane-style" class="shogi-note__panel shogi-note__panel--style" role="tabpanel" aria-label="戦法">
+        <!--
+          戦型(8-3)。いちばん上に戦型(相居飛車・対抗形・相振り飛車)の割合、その下に「あなた」「相手」の戦法と囲いの使用率と勝率。
+          横長とタブレットは2列、スマホの縦は「あなた」「相手」のタブ。表は5つまでで、残りは「ほか○個」。
+        -->
+        <section
+          v-if="tab === 'style'"
+          id="shogi-note-pane-style"
+          class="shogi-note__panel shogi-note__panel--fit shogi-note__style"
+          role="tabpanel"
+          aria-label="戦型"
+          :data-view="styleSide"
+        >
           <div v-if="!state.games" class="shogi-note__card shogi-note__empty">
-            <p>対局すると、使った戦法と囲いの勝率がここに並ぶよ。得意な戦法を見つけよう！</p>
+            <p>対局すると、使った戦法と囲いの使用率と勝率がここに並ぶよ。得意な戦法を見つけよう！</p>
           </div>
           <template v-else>
-            <section
-              v-for="group in ownUsageGroups"
-              :key="group.category"
-              class="shogi-note__card"
-              :aria-label="group.title"
-            >
-              <h2>{{ group.title }}</h2>
-              <p v-if="!group.rows.length" class="shogi-note__hint">まだ記録がありません。</p>
-              <ul v-else class="shogi-note__rows shogi-note__rows--style">
-                <li v-for="row in group.rows" :key="row.name">
-                  <span class="shogi-note__name">
-                    {{ row.name }}
-                    <em v-if="row.tag === 'best'" class="shogi-note__tag shogi-note__tag--best">★得意</em>
-                    <em v-else-if="row.tag === 'weak'" class="shogi-note__tag shogi-note__tag--weak">にがて</em>
-                  </span>
-                  <span class="shogi-note__bar" :title="`勝率 ${percent(row.winRate)}`" aria-hidden="true">
-                    <span :style="{ width: percent(row.winRate) }"></span>
-                  </span>
-                  <span class="shogi-note__stat">勝率{{ percent(row.winRate) }}・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws ? `${row.draws}分` : "" }}</span>
+            <section class="shogi-note__card shogi-note__battle" aria-labelledby="shogi-note-battle" data-note-battle>
+              <h2 id="shogi-note-battle">戦型<small class="shogi-note__count">{{ state.games }}局</small></h2>
+              <p class="shogi-note__share" role="img" :aria-label="battleRows.map((row) => `${row.label}${row.share}%`).join('・')">
+                <span
+                  v-for="row in battleRows"
+                  :key="row.id"
+                  :class="`shogi-note__share--${row.id}`"
+                  :style="{ width: `${row.share}%` }"
+                ></span>
+              </p>
+              <ul class="shogi-note__share-legend">
+                <li v-for="row in battleRows" :key="row.id">
+                  <i :class="`shogi-note__share-swatch shogi-note__share--${row.id}`" aria-hidden="true"></i>
+                  <b>{{ row.label }}</b> {{ row.share }}%<small>{{ row.winRate === null ? "" : `勝率${percent(row.winRate)}` }}</small>
                 </li>
               </ul>
             </section>
-            <div class="shogi-note__pair">
-              <section
-                v-for="group in opponentUsageGroups"
-                :key="group.category"
-                class="shogi-note__card shogi-note__card--minor"
-                :aria-label="group.title"
-              >
-                <h2>{{ group.title }}</h2>
-                <p v-if="!group.rows.length" class="shogi-note__hint">まだ記録がありません。</p>
-                <ul v-else class="shogi-note__rows">
-                  <li v-for="row in group.rows" :key="row.name">
-                    <span class="shogi-note__name">{{ row.name }}</span>
-                    <span class="shogi-note__stat">{{ row.games }}局・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws ? `${row.draws}分` : "" }}</span>
-                  </li>
-                </ul>
-              </section>
+            <div class="shogi-note__segmented shogi-note__narrow-only" role="tablist" aria-label="あなたと相手の切り替え">
+              <button type="button" role="tab" :aria-selected="styleSide === 'own'" data-style-side="own" @click="styleSide = 'own'">あなた</button>
+              <button type="button" role="tab" :aria-selected="styleSide === 'opponent'" data-style-side="opponent" @click="styleSide = 'opponent'">相手</button>
             </div>
+            <section
+              v-for="side in styleSides"
+              :key="side.id"
+              v-scroll-more
+              class="shogi-note__card shogi-note__style-side shogi-note__scroll"
+              :class="{ 'shogi-note__part--off': styleSide !== side.id }"
+              :aria-label="side.title"
+              :data-note-style="side.id"
+            >
+              <h2>{{ side.title }}</h2>
+              <h3 class="shogi-note__subhead">戦法</h3>
+              <p class="shogi-note__party" :aria-label="side.rook.map((row) => `${row.label}${row.share}%`).join('・')">
+                <span class="shogi-note__party-bar" aria-hidden="true"><span :style="{ width: `${side.rook[0].share}%` }"></span></span>
+                <span v-for="row in side.rook" :key="row.id" class="shogi-note__party-item">
+                  <b>{{ row.label }}</b> {{ row.share }}%<small>{{ row.winRate === null ? "" : `勝率${percent(row.winRate)}` }}</small>
+                </span>
+              </p>
+              <ul v-if="side.strategies.rows.length" class="shogi-note__usage" :aria-label="`${side.title}の戦法の使用率`">
+                <li v-for="row in side.strategies.rows" :key="row.id">
+                  <span class="shogi-note__name">
+                    {{ row.label }}
+                    <em v-if="row.tag === 'best'" class="shogi-note__tag shogi-note__tag--best">★得意</em>
+                    <em v-else-if="row.tag === 'weak'" class="shogi-note__tag shogi-note__tag--weak">にがて</em>
+                  </span>
+                  <span class="shogi-note__bar" aria-hidden="true"><span :style="{ width: `${Math.max(3, row.share)}%` }"></span></span>
+                  <span class="shogi-note__usage-share">{{ row.share }}%</span>
+                  <span class="shogi-note__usage-stat">{{ row.stat }}</span>
+                </li>
+                <li v-if="side.strategies.restText" class="shogi-note__usage-rest">{{ side.strategies.restText }}</li>
+              </ul>
+              <p v-else class="shogi-note__hint">{{ side.strategies.empty }}</p>
+              <p v-if="side.strategies.note" class="shogi-note__hint">{{ side.strategies.note }}</p>
+              <h3 class="shogi-note__subhead">囲い</h3>
+              <ul v-if="side.castles.rows.length" class="shogi-note__usage" :aria-label="`${side.title}の囲いの使用率`">
+                <li v-for="row in side.castles.rows" :key="row.id">
+                  <span class="shogi-note__name">
+                    {{ row.label }}
+                    <em v-if="row.tag === 'best'" class="shogi-note__tag shogi-note__tag--best">★得意</em>
+                    <em v-else-if="row.tag === 'weak'" class="shogi-note__tag shogi-note__tag--weak">にがて</em>
+                  </span>
+                  <span class="shogi-note__bar" aria-hidden="true"><span :style="{ width: `${Math.max(3, row.share)}%` }"></span></span>
+                  <span class="shogi-note__usage-share">{{ row.share }}%</span>
+                  <span class="shogi-note__usage-stat">{{ row.stat }}</span>
+                </li>
+                <li v-if="side.castles.restText" class="shogi-note__usage-rest">{{ side.castles.restText }}</li>
+              </ul>
+              <p v-else class="shogi-note__hint">まだ記録がありません。</p>
+            </section>
           </template>
         </section>
 
         <!--
-          大会(docs/player-world-note-design.mdの3-2)。竜王戦と名人戦の歩みと、賞状帳。
+          大会(docs/player-world-note-design.mdの3-2・8-3)。項目の中のタブで、棋戦(竜王戦・名人戦・研修会・奨励会の歩み)・
+          賞状帳・観戦記・記録(寄せの記録・勝負メシ帳・研究ノート)に分ける。タブの名前に数を添える。
+          棋戦の札は、いま(大きく)・最高・回数の同じ形。出ていない棋戦は1行の札。一覧は枠の中だけを動かす。
         -->
-        <section v-if="tab === 'tournament'" id="shogi-note-pane-tournament" class="shogi-note__panel" role="tabpanel" aria-label="大会">
-          <section class="shogi-note__card" aria-labelledby="shogi-note-ryuo" data-note-ryuo>
-            <h2 id="shogi-note-ryuo">竜王戦</h2>
-            <RyuoLadder :group="career.group" :champion="career.champion" />
-            <dl class="shogi-note__tiles shogi-note__tiles--four">
-              <div><dt>現在</dt><dd>{{ career.champion ? "竜王" : `${career.group}組` }}</dd></div>
-              <div><dt>参加</dt><dd>{{ career.seasons }}<small>期</small></dd></div>
-              <div><dt>挑戦者</dt><dd>{{ career.challenges }}<small>回</small></dd></div>
-              <div><dt>竜王</dt><dd>{{ career.titles }}<small>期</small></dd></div>
-            </dl>
-            <p v-if="career.titles" class="shogi-note__hint">
-              連続{{ career.streak }}期・最長{{ career.bestStreak }}期{{ career.eternal ? "・永世竜王" : "" }}
-            </p>
-            <template v-if="career.history.length">
-              <h3 class="shogi-note__subhead">これまでの成績</h3>
-              <ol class="shogi-note__history" data-note-ryuo-history>
-                <li v-for="entry in recentHistory" :key="entry.no" :class="`shogi-note__history--${historyKind(entry)}`">
-                  <span class="shogi-note__history-no">第{{ entry.no }}期</span>
-                  <span class="shogi-note__history-group">{{ entry.mode === "defense" ? "防衛戦" : `${entry.startGroup}組` }}</span>
-                  <span class="shogi-note__history-text">
-                    {{ outcomeText(entry.outcome) }}{{ entry.promoted ? `・${entry.newGroup}組へ昇級` : "" }}{{ entry.relegated ? `・${entry.newGroup}組へ降級` : "" }}
-                  </span>
-                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
-                </li>
-              </ol>
-            </template>
-            <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、竜王戦に参加できます。</p>
-          </section>
-          <section class="shogi-note__card" aria-labelledby="shogi-note-meijin" data-note-meijin>
-            <h2 id="shogi-note-meijin">名人戦</h2>
-            <RyuoLadder kind="meijin" :meijin-class="meijinNow.cls" />
-            <dl class="shogi-note__tiles shogi-note__tiles--four">
-              <div><dt>現在</dt><dd data-note-meijin-now>{{ meijinNow.text }}</dd></div>
-              <div><dt>参加</dt><dd>{{ meijinHistory.length }}<small>期</small></dd></div>
-              <div><dt>最高</dt><dd>{{ meijinBest }}</dd></div>
-              <div><dt>名人</dt><dd>{{ meijinCareer.titles ?? 0 }}<small>期</small></dd></div>
-            </dl>
-            <p v-if="meijinCareer.eternal" class="shogi-note__hint">永世名人</p>
-            <template v-if="meijinHistory.length">
-              <h3 class="shogi-note__subhead">これまでの成績</h3>
-              <ol class="shogi-note__history" data-note-meijin-history>
-                <li v-for="entry in recentMeijinHistory" :key="entry.no" :class="`shogi-note__history--${meijinHistoryKind(entry)}`">
-                  <span class="shogi-note__history-no">第{{ entry.no }}期</span>
-                  <span class="shogi-note__history-group">{{ meijinClassLabel(entry.cls) }}</span>
-                  <span class="shogi-note__history-text">{{ meijinOutcome(entry.outcome) }}{{ entry.place ? `・${entry.place}位` : "" }}</span>
-                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
-                </li>
-              </ol>
-            </template>
-            <p v-else class="shogi-note__hint">まだ参加していません。タイトル画面の「大会」から、名人戦に参加できます。</p>
-          </section>
-          <!-- 研修会の歩み(docs/kenshukai-design.md)。いまのクラスと、これまでの最高のクラス、これまでの挑戦。 -->
-          <section class="shogi-note__card" aria-labelledby="shogi-note-kenshukai" data-note-kenshukai>
-            <h2 id="shogi-note-kenshukai">研修会</h2>
-            <dl class="shogi-note__tiles shogi-note__tiles--four">
-              <div><dt>現在</dt><dd data-note-kenshukai-now>{{ kenshukaiNow }}</dd></div>
-              <div><dt>最高</dt><dd>{{ kenshukaiBest }}</dd></div>
-              <div><dt>挑戦</dt><dd>{{ kenshukai.history.length + (kenshukai.run ? 1 : 0) }}<small>回</small></dd></div>
-              <div><dt>対局</dt><dd>{{ kenshukaiGames }}<small>局</small></dd></div>
-            </dl>
-            <template v-if="kenshukai.history.length">
-              <h3 class="shogi-note__subhead">これまでの挑戦</h3>
-              <ol class="shogi-note__history" data-note-kenshukai-history>
-                <li v-for="entry in kenshukai.history.slice(0, 5)" :key="entry.id" :class="`shogi-note__history--${entry.result === 'closed' ? 'down' : 'crown'}`">
-                  <span class="shogi-note__history-no">{{ entry.entry }}入会</span>
-                  <span class="shogi-note__history-group">最高 {{ entry.best }}</span>
-                  <span class="shogi-note__history-text">{{ KENSHUKAI_RESULT[entry.result] ?? "" }}</span>
-                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
-                </li>
-              </ol>
-            </template>
-            <p v-else-if="!kenshukai.run" class="shogi-note__hint">まだ受験していません。タイトル画面の「大会」の「研修会」から、入会試験を受けられます。</p>
-          </section>
-          <!-- 奨励会の歩み(docs/shoreikai-design.mdの13章)。いまの段級か、四段の棋士番号と、これまでの挑戦。 -->
-          <section class="shogi-note__card" aria-labelledby="shogi-note-shoreikai" data-note-shoreikai>
-            <h2 id="shogi-note-shoreikai">奨励会</h2>
-            <dl class="shogi-note__tiles shogi-note__tiles--four">
-              <div><dt>現在</dt><dd data-note-shoreikai-now>{{ shoreikaiNow }}</dd></div>
-              <div><dt>挑戦</dt><dd>{{ shoreikai.history.length + (shoreikai.run ? 1 : 0) }}<small>回</small></dd></div>
-              <div><dt>対局</dt><dd>{{ shoreikaiGames }}<small>局</small></dd></div>
-              <div><dt>棋士番号</dt><dd>{{ shoreikai.pro ? shoreikai.pro.kishiNumber : "—" }}</dd></div>
-            </dl>
-            <p v-if="shoreikai.pro" class="shogi-note__hint">{{ shoreikai.pro.entry }}で入会し、{{ shoreikai.pro.games }}局で四段{{ shoreikai.pro.mentor ? `（師匠 ${shoreikai.pro.mentor}）` : "" }}</p>
-            <template v-if="shoreikai.history.length">
-              <h3 class="shogi-note__subhead">これまでの挑戦</h3>
-              <ol class="shogi-note__history" data-note-shoreikai-history>
-                <li v-for="entry in shoreikai.history.slice(0, 5)" :key="entry.id" :class="`shogi-note__history--${entry.result === 'pro' ? 'crown' : 'down'}`">
-                  <span class="shogi-note__history-no">{{ entry.entry }}入会</span>
-                  <span class="shogi-note__history-group">最高 {{ entry.rank }}</span>
-                  <span class="shogi-note__history-text">{{ entry.result === "pro" ? `四段・棋士番号${entry.kishiNumber}号` : "退会" }}</span>
-                  <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
-                </li>
-              </ol>
-            </template>
-            <p v-else-if="!shoreikai.run" class="shogi-note__hint">まだ受験していません。タイトル画面の「大会」の「奨励会」から、入会試験を受けられます。</p>
-          </section>
-          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-awards" data-note-awards>
+        <section
+          v-if="tab === 'tournament'"
+          id="shogi-note-pane-tournament"
+          class="shogi-note__panel shogi-note__panel--fit shogi-note__tournament"
+          role="tabpanel"
+          aria-label="大会"
+        >
+          <div class="shogi-note__segmented" role="tablist" aria-label="大会の切り替え">
+            <button
+              v-for="item in tournamentViews"
+              :key="item.id"
+              type="button"
+              role="tab"
+              :aria-selected="tournamentView === item.id"
+              :data-tournament-view="item.id"
+              @click="tournamentView = item.id"
+            >{{ item.label }}<small v-if="item.count !== null">{{ item.count }}</small></button>
+          </div>
+
+          <div v-if="tournamentView === 'events'" class="shogi-note__events" :style="eventGridStyle" data-note-events-view>
+            <section
+              :class="['shogi-note__card', 'shogi-note__event', eventClass('ryuo')]"
+              :style="{ order: eventOrder.ryuo }"
+              aria-labelledby="shogi-note-ryuo"
+              data-note-ryuo
+            >
+              <h2 id="shogi-note-ryuo">竜王戦</h2>
+              <template v-if="eventJoined.ryuo">
+                <RyuoLadder class="shogi-note__event-ladder" :group="career.group" :champion="career.champion" />
+                <dl class="shogi-note__event-stats">
+                  <div class="shogi-note__event-now"><dt>いま</dt><dd>{{ career.champion ? "竜王" : `${career.group}組` }}</dd></div>
+                  <div><dt>最高</dt><dd>{{ ryuoBest }}</dd></div>
+                  <div><dt>参加</dt><dd>{{ career.seasons }}<small>期</small></dd><small class="shogi-note__event-sub">挑戦{{ career.challenges }}・竜王{{ career.titles }}</small></div>
+                </dl>
+                <p v-if="career.titles" class="shogi-note__hint">
+                  連続{{ career.streak }}期・最長{{ career.bestStreak }}期{{ career.eternal ? "・永世竜王" : "" }}
+                </p>
+                <ol v-if="career.history.length" v-scroll-more class="shogi-note__history shogi-note__event-history shogi-note__scroll" aria-label="竜王戦のこれまでの成績" data-note-ryuo-history>
+                  <li v-for="entry in recentHistory" :key="entry.no" :class="`shogi-note__history--${historyKind(entry)}`">
+                    <span class="shogi-note__history-no">第{{ entry.no }}期</span>
+                    <span class="shogi-note__history-group">{{ entry.mode === "defense" ? "防衛戦" : `${entry.startGroup}組` }}</span>
+                    <span class="shogi-note__history-text">
+                      {{ outcomeText(entry.outcome) }}{{ entry.promoted ? `・${entry.newGroup}組へ昇級` : "" }}{{ entry.relegated ? `・${entry.newGroup}組へ降級` : "" }}
+                    </span>
+                    <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                  </li>
+                </ol>
+              </template>
+              <p v-else class="shogi-note__hint">まだ参加していません<span class="shogi-note__event-where">（タイトル画面の「大会」から）</span></p>
+            </section>
+
+            <section
+              :class="['shogi-note__card', 'shogi-note__event', eventClass('meijin')]"
+              :style="{ order: eventOrder.meijin }"
+              aria-labelledby="shogi-note-meijin"
+              data-note-meijin
+            >
+              <h2 id="shogi-note-meijin">名人戦</h2>
+              <template v-if="eventJoined.meijin">
+                <RyuoLadder class="shogi-note__event-ladder" kind="meijin" :meijin-class="meijinNow.cls" />
+                <dl class="shogi-note__event-stats">
+                  <div class="shogi-note__event-now"><dt>いま</dt><dd data-note-meijin-now>{{ meijinNow.text }}</dd></div>
+                  <div><dt>最高</dt><dd>{{ meijinBest }}</dd></div>
+                  <div><dt>参加</dt><dd>{{ meijinHistory.length }}<small>期</small></dd><small class="shogi-note__event-sub">名人{{ meijinCareer.titles ?? 0 }}期</small></div>
+                </dl>
+                <p v-if="meijinCareer.eternal" class="shogi-note__hint">永世名人</p>
+                <ol v-if="meijinHistory.length" v-scroll-more class="shogi-note__history shogi-note__event-history shogi-note__scroll" aria-label="名人戦のこれまでの成績" data-note-meijin-history>
+                  <li v-for="entry in recentMeijinHistory" :key="entry.no" :class="`shogi-note__history--${meijinHistoryKind(entry)}`">
+                    <span class="shogi-note__history-no">第{{ entry.no }}期</span>
+                    <span class="shogi-note__history-group">{{ meijinClassLabel(entry.cls) }}</span>
+                    <span class="shogi-note__history-text">{{ meijinOutcome(entry.outcome) }}{{ entry.place ? `・${entry.place}位` : "" }}</span>
+                    <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                  </li>
+                </ol>
+              </template>
+              <p v-else class="shogi-note__hint">まだ参加していません<span class="shogi-note__event-where">（タイトル画面の「大会」から）</span></p>
+            </section>
+
+            <!-- 研修会の歩み(docs/kenshukai-design.md)。いまのクラスと、これまでの最高のクラス、これまでの挑戦。 -->
+            <section
+              :class="['shogi-note__card', 'shogi-note__event', eventClass('kenshukai')]"
+              :style="{ order: eventOrder.kenshukai }"
+              aria-labelledby="shogi-note-kenshukai"
+              data-note-kenshukai
+            >
+              <h2 id="shogi-note-kenshukai">研修会</h2>
+              <template v-if="eventJoined.kenshukai">
+                <dl class="shogi-note__event-stats">
+                  <div class="shogi-note__event-now"><dt>いま</dt><dd data-note-kenshukai-now>{{ kenshukaiNow }}</dd></div>
+                  <div><dt>最高</dt><dd>{{ kenshukaiBest }}</dd></div>
+                  <div><dt>挑戦</dt><dd>{{ kenshukai.history.length + (kenshukai.run ? 1 : 0) }}<small>回</small></dd><small class="shogi-note__event-sub">{{ kenshukaiGames }}局</small></div>
+                </dl>
+                <ol v-if="kenshukai.history.length" v-scroll-more class="shogi-note__history shogi-note__event-history shogi-note__scroll" aria-label="研修会のこれまでの挑戦" data-note-kenshukai-history>
+                  <li v-for="entry in kenshukai.history.slice(0, 5)" :key="entry.id" :class="`shogi-note__history--${entry.result === 'closed' ? 'down' : 'crown'}`">
+                    <span class="shogi-note__history-no">{{ entry.entry }}入会</span>
+                    <span class="shogi-note__history-group">最高 {{ entry.best }}</span>
+                    <span class="shogi-note__history-text">{{ KENSHUKAI_RESULT[entry.result] ?? "" }}</span>
+                    <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                  </li>
+                </ol>
+              </template>
+              <p v-else class="shogi-note__hint">まだ受験していません<span class="shogi-note__event-where">（タイトル画面の「大会」の「研修会」から）</span></p>
+            </section>
+
+            <!-- 奨励会の歩み(docs/shoreikai-design.mdの13章)。いまの段級か、四段の棋士番号と、これまでの挑戦。 -->
+            <section
+              :class="['shogi-note__card', 'shogi-note__event', eventClass('shoreikai')]"
+              :style="{ order: eventOrder.shoreikai }"
+              aria-labelledby="shogi-note-shoreikai"
+              data-note-shoreikai
+            >
+              <h2 id="shogi-note-shoreikai">奨励会</h2>
+              <template v-if="eventJoined.shoreikai">
+                <dl class="shogi-note__event-stats">
+                  <div class="shogi-note__event-now"><dt>いま</dt><dd data-note-shoreikai-now>{{ shoreikaiNow }}</dd></div>
+                  <div><dt>最高</dt><dd>{{ shoreikaiBest }}</dd></div>
+                  <div><dt>挑戦</dt><dd>{{ shoreikai.history.length + (shoreikai.run ? 1 : 0) }}<small>回</small></dd><small class="shogi-note__event-sub">{{ shoreikaiGames }}局</small></div>
+                </dl>
+                <p v-if="shoreikai.pro" class="shogi-note__hint">棋士番号{{ shoreikai.pro.kishiNumber }}号。{{ shoreikai.pro.entry }}で入会し、{{ shoreikai.pro.games }}局で四段{{ shoreikai.pro.mentor ? `（師匠 ${shoreikai.pro.mentor}）` : "" }}</p>
+                <ol v-if="shoreikai.history.length" v-scroll-more class="shogi-note__history shogi-note__event-history shogi-note__scroll" aria-label="奨励会のこれまでの挑戦" data-note-shoreikai-history>
+                  <li v-for="entry in shoreikai.history.slice(0, 5)" :key="entry.id" :class="`shogi-note__history--${entry.result === 'pro' ? 'crown' : 'down'}`">
+                    <span class="shogi-note__history-no">{{ entry.entry }}入会</span>
+                    <span class="shogi-note__history-group">最高 {{ entry.rank }}</span>
+                    <span class="shogi-note__history-text">{{ entry.result === "pro" ? `四段・棋士番号${entry.kishiNumber}号` : "退会" }}</span>
+                    <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                  </li>
+                </ol>
+              </template>
+              <p v-else class="shogi-note__hint">まだ受験していません<span class="shogi-note__event-where">（タイトル画面の「大会」の「奨励会」から）</span></p>
+            </section>
+          </div>
+
+          <section v-else-if="tournamentView === 'awards'" class="shogi-note__card shogi-note__list-card" aria-labelledby="shogi-note-awards" data-note-awards>
             <h2 id="shogi-note-awards">賞状帳<small class="shogi-note__count">{{ awards.length }}枚</small></h2>
-            <ul v-if="awards.length" class="shogi-note__awards">
+            <ul v-if="awards.length" v-scroll-more class="shogi-note__awards shogi-note__scroll">
               <li v-for="item in shownAwards" :key="item.id">
                 <button type="button" class="shogi-note__award-row" :data-note-award="item.id" @click="awardShown = item">
                   <span :class="['shogi-note__award-seal', `shogi-note__award-seal--${item.grade}`]" aria-hidden="true">{{ item.seal }}</span>
@@ -419,28 +525,13 @@
               </li>
             </ul>
             <p v-else class="shogi-note__hint">竜王戦や名人戦の期を終えると、表彰式で賞状がもらえるよ。ここにたまっていくからね。</p>
-            <button v-if="awards.length > AWARD_PREVIEW" type="button" class="shogi-note__button shogi-note__button--ghost" data-note-awards-all @click="allAwards = !allAwards">
-              {{ allAwards ? "新しい3枚だけ見る" : `すべて見る（${awards.length}枚）` }}
-            </button>
           </section>
-          <!-- 寄せの記録(docs/mate-finish-design.md)。大会で詰ませて勝った局の数、いちばん長い寄せ、最近の寄せ。 -->
-          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-mates" data-note-mates>
-            <h2 id="shogi-note-mates">寄せの記録<small class="shogi-note__count">{{ mates.count }}局</small></h2>
-            <template v-if="mates.best">
-              <p class="shogi-note__mate-best" data-note-mate-best>
-                <b>{{ mates.best.plies }}手詰め</b><span>いちばん長い寄せ</span><small>{{ mateWhere(mates.best) }}</small>
-              </p>
-              <ol class="shogi-note__mate-recent" aria-label="最近の寄せ">
-                <li v-for="(item, index) in mates.recent.slice(0, 5)" :key="`${item.at}-${index}`"><b>{{ item.plies }}手詰め</b><small>{{ mateWhere(item) }}</small></li>
-              </ol>
-            </template>
-            <p v-else class="shogi-note__hint">大会の対局で詰ませて勝つと、最後の寄せが何手詰めだったかを、ここに残すよ。</p>
-          </section>
+
           <!-- 観戦記(docs/title-match-day-design.mdの3章、docs/mate-finish-design.md)。大会の1局ごとに、新しい順。押すと紙面を開く。 -->
-          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-kansenki" data-note-kansenki>
+          <section v-else-if="tournamentView === 'kansenki'" class="shogi-note__card shogi-note__list-card" aria-labelledby="shogi-note-kansenki" data-note-kansenki>
             <h2 id="shogi-note-kansenki">観戦記<small class="shogi-note__count">{{ kansenki.length }}局</small></h2>
-            <ul v-if="kansenki.length" class="shogi-note__awards">
-              <li v-for="item in shownKansenki" :key="item.id">
+            <ul v-if="kansenki.length" v-scroll-more class="shogi-note__awards shogi-note__scroll">
+              <li v-for="item in kansenki" :key="item.id">
                 <button type="button" class="shogi-note__award-row" data-note-kansenki-row @click="kansenkiShown = item">
                   <span :class="['shogi-note__award-seal', item.win ? 'shogi-note__award-seal--gold' : 'shogi-note__award-seal--silver']" aria-hidden="true">{{ item.win ? "勝" : "負" }}</span>
                   <span class="shogi-note__award-text">{{ item.headline }}<small>{{ item.eventText }} {{ item.label }}</small></span>
@@ -448,60 +539,72 @@
               </li>
             </ul>
             <p v-else class="shogi-note__hint">大会の対局を指すと、1局ごとに新聞の観戦記ができるよ。</p>
-            <button v-if="kansenki.length > AWARD_PREVIEW" type="button" class="shogi-note__button shogi-note__button--ghost" @click="allKansenki = !allKansenki">
-              {{ allKansenki ? "新しい3局だけ見る" : `すべて見る（${kansenki.length}局）` }}
-            </button>
           </section>
-          <!-- 研究ノート(docs/tournament-relay-design.mdの24-5)。中継で残した局面を新しい順に。押すと盤で見て、中継で開ける。 -->
-          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-study" data-note-study>
-            <h2 id="shogi-note-study">研究ノート<small class="shogi-note__count">{{ studyNotes.length }}局面</small></h2>
-            <ul v-if="studyNotes.length" class="shogi-note__awards">
-              <li v-for="note in shownStudyNotes" :key="note.id">
-                <button type="button" class="shogi-note__award-row" data-note-study-row @click="studyShown = note">
-                  <span class="shogi-note__award-seal shogi-note__award-seal--silver" aria-hidden="true">☆</span>
-                  <span class="shogi-note__award-text">{{ note.moveText }}<small>{{ note.spec.label }}・☗{{ note.spec.black.name }} ☖{{ note.spec.white.name }}</small></span>
-                </button>
-              </li>
-            </ul>
-            <p v-else class="shogi-note__hint">大会の中継の「☆ノート」で、気に入った局面を残せるよ。ここから、盤で見たり、中継をその手から見直したりできるよ。</p>
-            <button v-if="studyNotes.length > AWARD_PREVIEW" type="button" class="shogi-note__button shogi-note__button--ghost" @click="allStudyNotes = !allStudyNotes">
-              {{ allStudyNotes ? "新しい3つだけ見る" : `すべて見る（${studyNotes.length}局面）` }}
-            </button>
-          </section>
-          <!--
-            勝負メシ帳(docs/title-match-day-design.mdの8-4)。タイトル戦の昼に選んだ品を、行った対局場ごとに献立の3品で並べる。
-            勝った局の品は勝ちメシ(★)。まだ食べていない品も薄く出し、次に試す楽しみにする。
-          -->
-          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-meals" data-note-meals>
-            <h2 id="shogi-note-meals">勝負メシ帳<small class="shogi-note__count">{{ mealBook.tried }}/{{ mealBook.total }}品・勝ちメシ{{ mealBook.wins }}</small></h2>
-            <ul v-if="mealBook.venues.length" class="shogi-note__meals">
-              <li v-for="venue in mealBook.venues" :key="venue.venue" data-note-meal-venue>
-                <b>{{ venue.venue }}</b>
-                <span class="shogi-note__meal-items">
-                  <span
-                    v-for="item in venue.meals"
-                    :key="item.meal"
-                    :class="`shogi-note__meal--${item.state}`"
-                    :aria-label="item.state === 'win' ? `${item.meal}（勝ちメシ）` : item.state === 'eaten' ? `${item.meal}（食べた）` : `${item.meal}（まだ）`"
-                  ><i v-if="item.state === 'win'" aria-hidden="true">★</i>{{ item.meal }}</span>
-                </span>
-              </li>
-            </ul>
-            <p v-else class="shogi-note__hint">タイトル戦（七番勝負）の昼休みに選んだ勝負メシが、ここに並ぶよ。勝った局の勝負メシは「勝ちメシ」の★がつくよ。</p>
-          </section>
+
+          <div v-else class="shogi-note__records" data-note-records>
+            <!-- 寄せの記録(docs/mate-finish-design.md)。大会で詰ませて勝った局の数、いちばん長い寄せ、最近の寄せ。 -->
+            <section class="shogi-note__card shogi-note__list-card" aria-labelledby="shogi-note-mates" data-note-mates>
+              <h2 id="shogi-note-mates">寄せの記録<small class="shogi-note__count">{{ mates.count }}局</small></h2>
+              <template v-if="mates.best">
+                <p class="shogi-note__mate-best" data-note-mate-best>
+                  <b>{{ mates.best.plies }}手詰め</b><span>いちばん長い寄せ</span><small>{{ mateWhere(mates.best) }}</small>
+                </p>
+                <ol v-scroll-more class="shogi-note__mate-recent shogi-note__scroll" aria-label="最近の寄せ">
+                  <li v-for="(item, index) in mates.recent" :key="`${item.at}-${index}`"><b>{{ item.plies }}手詰め</b><small>{{ mateWhere(item) }}</small></li>
+                </ol>
+              </template>
+              <p v-else class="shogi-note__hint">大会の対局で詰ませて勝つと、最後の寄せが何手詰めだったかを、ここに残すよ。</p>
+            </section>
+            <!--
+              勝負メシ帳(docs/title-match-day-design.mdの8-4)。タイトル戦の昼に選んだ品を、行った対局場ごとに献立の3品で並べる。
+              勝った局の品は勝ちメシ(★)。まだ食べていない品も薄く出し、次に試す楽しみにする。
+            -->
+            <section class="shogi-note__card shogi-note__list-card" aria-labelledby="shogi-note-meals" data-note-meals>
+              <h2 id="shogi-note-meals">勝負メシ帳<small class="shogi-note__count">{{ mealBook.tried }}/{{ mealBook.total }}品・勝ちメシ{{ mealBook.wins }}</small></h2>
+              <ul v-if="mealBook.venues.length" v-scroll-more class="shogi-note__meals shogi-note__scroll">
+                <li v-for="venue in mealBook.venues" :key="venue.venue" data-note-meal-venue>
+                  <b>{{ venue.venue }}</b>
+                  <span class="shogi-note__meal-items">
+                    <span
+                      v-for="item in venue.meals"
+                      :key="item.meal"
+                      :class="`shogi-note__meal--${item.state}`"
+                      :aria-label="item.state === 'win' ? `${item.meal}（勝ちメシ）` : item.state === 'eaten' ? `${item.meal}（食べた）` : `${item.meal}（まだ）`"
+                    ><i v-if="item.state === 'win'" aria-hidden="true">★</i>{{ item.meal }}</span>
+                  </span>
+                </li>
+              </ul>
+              <p v-else class="shogi-note__hint">タイトル戦（七番勝負）の昼休みに選んだ勝負メシが、ここに並ぶよ。勝った局の勝負メシは「勝ちメシ」の★がつくよ。</p>
+            </section>
+            <!-- 研究ノート(docs/tournament-relay-design.mdの24-5)。中継で残した局面を新しい順に。押すと盤で見て、中継で開ける。 -->
+            <section class="shogi-note__card shogi-note__list-card" aria-labelledby="shogi-note-study" data-note-study>
+              <h2 id="shogi-note-study">研究ノート<small class="shogi-note__count">{{ studyNotes.length }}局面</small></h2>
+              <ul v-if="studyNotes.length" v-scroll-more class="shogi-note__awards shogi-note__scroll">
+                <li v-for="note in studyNotes" :key="note.id">
+                  <button type="button" class="shogi-note__award-row" data-note-study-row @click="studyShown = note">
+                    <span class="shogi-note__award-seal shogi-note__award-seal--silver" aria-hidden="true">☆</span>
+                    <span class="shogi-note__award-text">{{ note.moveText }}<small>{{ note.spec.label }}・☗{{ note.spec.black.name }} ☖{{ note.spec.white.name }}</small></span>
+                  </button>
+                </li>
+              </ul>
+              <p v-else class="shogi-note__hint">大会の中継の「☆ノート」で、気に入った局面を残せるよ。ここから、盤で見たり、中継をその手から見直したりできるよ。</p>
+            </section>
+          </div>
         </section>
 
         <!-- 棋士名鑑(docs/player-world-note-design.mdの3-3)。 -->
-        <section v-if="tab === 'book'" id="shogi-note-pane-book" class="shogi-note__panel shogi-note__panel--book" role="tabpanel" aria-label="棋士名鑑">
+        <section v-if="tab === 'book'" id="shogi-note-pane-book" class="shogi-note__panel shogi-note__panel--fit shogi-note__panel--book" role="tabpanel" aria-label="棋士名鑑">
           <RyuoRosterBook ref="bookEl" :roster="roster" :initial-group="career.champion ? 1 : career.group" :asset-base-url="assetBaseUrl" />
         </section>
 
         <!--
-          コレクション(docs/player-world-note-design.mdの4章)。いちばん上に印の合計と次の着せ替えまでのゲージ、
-          「印のアルバム｜着せ替え」の切り替え。アルバムはページ(居飛車・振り飛車・奇襲・囲い・手筋・Lvの壁・記念)に分け、
+          コレクション(docs/player-world-note-design.mdの4章・8-3)。いちばん上に印の合計と次の着せ替えまでのゲージ、
+          「印のアルバム｜着せ替え」の切り替え。アルバムはページに分け、ページの切り替えは「戦法」(居飛車・振り飛車・奇襲)・
+          「囲い」(居飛車・振り飛車)・「そのほか」(手筋・Lvの壁・記念)の見出しでまとめる。
           戦法・囲いは完成形の小さな盤のカード。作戦カードで使えるのにまだ組んでいないものを「挑戦できる」として先に出す。
+          カードの一覧は枠の中だけを動かす。
         -->
-        <section v-if="tab === 'collection'" id="shogi-note-pane-collection" class="shogi-note__panel shogi-note__panel--album" role="tabpanel" aria-label="コレクション">
+        <section v-if="tab === 'collection'" id="shogi-note-pane-collection" class="shogi-note__panel shogi-note__panel--fit shogi-note__panel--album" role="tabpanel" aria-label="コレクション">
           <section class="shogi-note__card shogi-note__album-head" aria-labelledby="shogi-note-collection-count" data-note-collection>
             <div class="shogi-note__album-gauge">
               <h2 id="shogi-note-collection-count">集めた印<strong>{{ collectionTotal }}</strong><small>/ {{ collectionMax }}</small></h2>
@@ -524,21 +627,25 @@
 
           <template v-if="albumView === 'album'">
             <nav class="shogi-note__album-pages" role="tablist" aria-label="アルバムのページ">
-              <button
-                v-for="item in albumPageTabs"
-                :key="item.id"
-                type="button"
-                role="tab"
-                :aria-selected="albumPage === item.id"
-                :data-album-page="item.id"
-                @click="chooseAlbumPage(item.id)"
-              >{{ item.label }}<small v-if="item.total">{{ item.got }}/{{ item.total }}</small></button>
+              <div v-for="group in albumPageGroups" :key="group.label" class="shogi-note__album-group">
+                <span class="shogi-note__album-group-label" aria-hidden="true">{{ group.label }}</span>
+                <button
+                  v-for="item in group.pages"
+                  :key="item.id"
+                  type="button"
+                  role="tab"
+                  :aria-selected="albumPage === item.id"
+                  :aria-label="item.total ? `${item.name} ${item.got}/${item.total}` : item.name"
+                  :data-album-page="item.id"
+                  @click="chooseAlbumPage(item.id)"
+                >{{ item.label }}<small v-if="item.total">{{ item.got }}/{{ item.total }}</small></button>
+              </div>
             </nav>
 
             <!-- 戦法・囲い: 完成形の小さな盤のカード。押すと作戦カードのくわしい画面(なければ定跡図鑑)。 -->
             <section v-if="albumFormationPage" class="shogi-note__card shogi-note__album" :aria-label="albumPageLabel" data-album-cards>
               <p v-if="albumReadyCount" class="shogi-note__hint">「挑戦できる」は、作戦カードで選べるのに、まだ対局で組んでいない形だよ。押すと手順が見られるよ。</p>
-              <ul class="shogi-note__album-grid">
+              <ul v-scroll-more class="shogi-note__album-grid shogi-note__scroll">
                 <li v-for="card in albumFormationCards" :key="card.key">
                   <button
                     type="button"
@@ -565,7 +672,7 @@
             <!-- 手筋: 名前のカード。押すと手筋図鑑。 -->
             <section v-else-if="albumPage === 'tesuji'" class="shogi-note__card shogi-note__album" aria-label="手筋" data-album-tesuji>
               <p class="shogi-note__hint">対局で手筋図鑑の手筋や詰みの形を指すと、印が1つ増えるよ。</p>
-              <ul class="shogi-note__album-grid shogi-note__album-grid--text">
+              <ul v-scroll-more class="shogi-note__album-grid shogi-note__album-grid--text shogi-note__scroll">
                 <li v-for="card in tesujiCards" :key="card.id">
                   <button
                     type="button"
@@ -582,7 +689,7 @@
             </section>
 
             <!-- Lvの壁: 入門(24級〜16級)の9段と、10段ずつ4本の階段。次の壁を縁取り、おすすめの強さの前後に印。 -->
-            <section v-else-if="albumPage === 'levels'" class="shogi-note__card shogi-note__album" aria-label="Lvの壁" data-album-levels>
+            <section v-else-if="albumPage === 'levels'" v-scroll-more class="shogi-note__card shogi-note__album shogi-note__scroll" aria-label="Lvの壁" data-album-levels>
               <p class="shogi-note__hint">
                 CPUの各Lvに初めて勝つと、印が1つ増えるよ（レーティングの対象の対局だけ）。
                 <template v-if="wall.next">次の壁は<b>Lv.{{ wall.next }}</b>。</template>
@@ -602,7 +709,7 @@
             </section>
 
             <!-- 記念: 印の数には入れないもの。 -->
-            <section v-else class="shogi-note__card shogi-note__album" aria-label="記念" data-album-memorial>
+            <section v-else v-scroll-more class="shogi-note__card shogi-note__album shogi-note__scroll" aria-label="記念" data-album-memorial>
               <dl class="shogi-note__tiles shogi-note__tiles--four">
                 <div><dt>神の一手</dt><dd>{{ collection.godMoves }}<small>回</small></dd></div>
                 <div data-note-predictions><dt>予想の的中</dt><dd>{{ collection.predictionsHit }}<small>回</small></dd></div>
@@ -621,7 +728,7 @@
             </section>
           </template>
 
-          <section v-else class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-themes" data-album-themes>
+          <section v-else v-scroll-more class="shogi-note__card shogi-note__card--wide shogi-note__scroll" aria-labelledby="shogi-note-themes" data-album-themes>
             <h2 id="shogi-note-themes">着せ替え</h2>
             <div v-for="group in themeGroups" :key="group.kind" class="shogi-note__themes" role="radiogroup" :aria-label="group.label">
               <p class="shogi-note__subhead">{{ group.label }}</p>
@@ -648,20 +755,10 @@
           </section>
         </section>
 
-        <!-- 棋力の調整に使う項目。 -->
-        <section v-if="tab === 'settings'" id="shogi-note-pane-settings" class="shogi-note__panel" role="tabpanel" aria-label="設定">
-          <section class="shogi-note__card shogi-note__card--minor">
-            <h2>棋力を測る</h2>
-            <p class="shogi-note__hint">
-              16問の棋力テスト（約10分）で、棋力と力ごとの見立てを出します。テストの答え・これまでの対局の勝ち負け・対局の中身を合わせて、
-              あなたのレーティングに設定します。対局するたびに合わせ直します。
-            </p>
-            <p v-if="state.measured" class="shogi-note__hint" data-note-measured>
-              棋力測定で R{{ state.measured.rating }}（{{ state.measured.label }}）を設定しました（{{ measuredDate }}）。
-            </p>
-            <button type="button" class="shogi-note__button shogi-note__button--ghost" @click="emit('start-measure')">棋力を測る</button>
-          </section>
-
+        <!--
+          棋力の調整に使う項目。棋力を測るのは「まとめ」のボタンだけにする(重ねて置かない。8-3)。
+        -->
+        <section v-if="tab === 'settings'" id="shogi-note-pane-settings" class="shogi-note__panel shogi-note__panel--fit shogi-note__settings" role="tabpanel" aria-label="設定">
           <!-- 棋力テストの答えを名前なしで送るか(公式の公開先だけ。docs/skill-assessment-design.mdの7-2)。 -->
           <section v-if="skillDataAvailable" class="shogi-note__card shogi-note__card--minor" data-note-skill-data>
             <h2>答えを送って、問題を良くする</h2>
@@ -684,6 +781,9 @@
             <p v-if="state.declared" class="shogi-note__hint" data-note-declared>
               申告中: {{ state.declared.label }}（{{ declaredDate }}に設定）
             </p>
+            <p v-if="state.measured" class="shogi-note__hint" data-note-measured>
+              棋力測定で R{{ state.measured.rating }}（{{ state.measured.label }}）を設定しました（{{ measuredDate }}）。棋力は「まとめ」の「棋力を測る」から測れます。
+            </p>
             <div class="shogi-note__declare">
               <select v-model="declareLabel" aria-label="申告する段級位">
                 <option value="">段級位を選ぶ</option>
@@ -693,9 +793,9 @@
             </div>
           </section>
 
-          <section v-if="levelRows.length" class="shogi-note__card shogi-note__card--minor" aria-labelledby="shogi-note-levels">
+          <section v-if="levelRows.length" class="shogi-note__card shogi-note__card--minor shogi-note__level-card" aria-labelledby="shogi-note-levels">
             <h2 id="shogi-note-levels">CPUのレベルごとの成績</h2>
-            <ul class="shogi-note__rows">
+            <ul v-scroll-more class="shogi-note__rows shogi-note__scroll">
               <li v-for="row in levelRows" :key="row.level">
                 <span class="shogi-note__name">Lv.{{ row.level }} {{ row.label }}</span>
                 <span class="shogi-note__stat">R{{ row.rating }}・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws }}分</span>
@@ -754,7 +854,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, watch, type PropType } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch, type PropType } from "vue";
+import { vScrollMore } from "./composables/vScrollMore";
+import { battleSplit, repertoireTable, rookSplit, usageTable } from "./core/style-usage.mjs";
+import { usageRows as openingUsageRows } from "./core/opening-usage.mjs";
 import RyuoLadder from "./RyuoLadder.vue";
 import RyuoRosterBook from "./RyuoRosterBook.vue";
 import YakobiSays from "./YakobiSays.vue";
@@ -778,9 +881,11 @@ import { currentAffiliation } from "./core/player-profile.mjs";
 import { currentStreak, loadPlayStreak, streakLine } from "./core/play-streak.mjs";
 import {
   ALBUM_PAGES,
+  ALBUM_PAGE_GROUPS,
   COLLECTION_LEVELS,
   THEME_UNLOCKS,
   albumCards,
+  albumPageId,
   albumPageOf,
   collectionCatalog,
   collectionCount,
@@ -910,11 +1015,11 @@ const TABS = [
   { id: "summary", label: "まとめ", short: "まとめ", description: "いまの棋力と次の目標" },
   { id: "ability", label: "能力", short: "能力", description: "得意と苦手のレーダーチャート" },
   { id: "record", label: "成績", short: "成績", description: "勝ち負けと推移" },
-  { id: "style", label: "戦法", short: "戦法", description: "得意な戦法と囲い" },
-  { id: "tournament", label: "大会", short: "大会", description: "竜王戦・名人戦と賞状帳" },
+  { id: "style", label: "戦型", short: "戦型", description: "得意な戦法・囲いと使用率" },
+  { id: "tournament", label: "大会", short: "大会", description: "棋戦の歩み・賞状・観戦記" },
   { id: "book", label: "棋士名鑑", short: "名鑑", description: "棋士と、あなたとの対戦" },
   { id: "collection", label: "コレクション", short: "コレクション", description: "集めた印と着せ替え" },
-  { id: "settings", label: "設定", short: "設定", description: "棋力の測定と申告" },
+  { id: "settings", label: "設定", short: "設定", description: "段級位の申告と、Lvごとの成績" },
 ] as const;
 type TabId = typeof TABS[number]["id"];
 const TAB_STORAGE_KEY = "yacobihime:shogi-match:note-tab";
@@ -960,8 +1065,7 @@ const albumView = ref<"album" | "themes">("album");
 const ALBUM_PAGE_KEY = "yacobihime:shogi-match:note-album-page";
 const albumPage = ref((() => {
   try {
-    const saved = localStorage.getItem(ALBUM_PAGE_KEY);
-    return ALBUM_PAGES.some(({ id }) => id === saved) ? saved as string : "static";
+    return albumPageId(localStorage.getItem(ALBUM_PAGE_KEY));
   } catch {
     return "static";
   }
@@ -981,13 +1085,13 @@ watch(tab, (id) => {
 }, { immediate: true });
 /** 作戦カードで使える戦法・囲い(「挑戦できる」と、押したときに開く作戦カード)。 */
 const playable = computed(() => planCardsByFormation(ALL_OPENING_PLANS, props.unlockedPlanIds));
-const FORMATION_PAGES = new Set(["static", "ranging", "surprise", "castle"]);
+const FORMATION_PAGES = new Set(["static", "ranging", "surprise", "castle-static", "castle-ranging"]);
 const albumFormationPage = computed(() => FORMATION_PAGES.has(albumPage.value));
 const albumFormationCards = computed(() => (albumFormationPage.value
   ? albumCards(collection.value, COLLECTION_CATALOG, albumPage.value, { playable: playable.value, seenAt: collectionSeenAt })
   : []));
 const albumReadyCount = computed(() => albumFormationCards.value.filter(({ ready }) => ready).length);
-const albumPageLabel = computed(() => ALBUM_PAGES.find(({ id }) => id === albumPage.value)?.label ?? "");
+const albumPageLabel = computed(() => ALBUM_PAGES.find(({ id }) => id === albumPage.value)?.name ?? "");
 const tesujiCards = computed(() => TESUJI_IDS.map((id) => {
   const got = collection.value.tesuji?.[id];
   return {
@@ -1006,6 +1110,8 @@ const albumPageTabs = computed(() => ALBUM_PAGES.map((page) => {
   if (page.id === "levels") return { ...page, total: COLLECTION_LEVELS.length, got: collectedLevelCount.value };
   return { ...page, total: 0, got: 0 };
 }));
+/** ページの切り替えを、見出し(戦法・囲い・そのほか)ごとにまとめる。 */
+const albumPageGroups = computed(() => ALBUM_PAGE_GROUPS.map((label) => ({ label, pages: albumPageTabs.value.filter((page) => page.group === label) })));
 /** 戦法・囲いのカードを押した。作戦カードがあれば、その作戦のくわしい画面(手順の再生と「この作戦にする」)。なければ定跡図鑑。 */
 function openAlbumCard(card: { kind: string; id: string; planId: string }) {
   if (card.planId) emit("open-plan", card.planId);
@@ -1105,10 +1211,8 @@ function meijinHistoryKind(entry: MeijinHistoryEntry) {
   return "stay";
 }
 
-// ---- 賞状帳(大会の項目)。新しい順に3枚、「すべて見る」で全部。押すと賞状を開く(動かさない)。
-const AWARD_PREVIEW = 3;
-const allAwards = ref(false);
-const shownAwards = computed(() => [...props.awards].reverse().slice(0, allAwards.value ? undefined : AWARD_PREVIEW));
+// ---- 賞状帳(大会の項目の「賞状」)。新しい順に全部(一覧は枠の中で動かす)。押すと賞状を開く(動かさない)。
+const shownAwards = computed(() => [...props.awards].reverse());
 const awardShown = ref<SeasonAwardData | null>(null);
 // ---- 奨励会の歩み(大会の項目)。保存から読む(対局画面と同じキー)。
 const shoreikai = ref(loadShoreikai(typeof localStorage === "undefined" ? null : localStorage));
@@ -1136,7 +1240,7 @@ const kenshukaiBest = computed(() => {
 });
 const kenshukaiGames = computed(() => (kenshukai.value.run?.games?.length ?? 0)
   + kenshukai.value.history.reduce((sum: number, entry: { games: number }) => sum + (entry.games ?? 0), 0));
-// ---- 観戦記(大会の項目)。賞状帳と同じく、新しい順に3局、「すべて見る」で全部。
+// ---- 観戦記(大会の項目の「観戦記」)。新しい順に全部。
 const kansenki = ref<(KansenkiView & { id: string; win?: boolean })[]>(loadKansenki(typeof localStorage === "undefined" ? null : localStorage));
 /** 寄せの記録(docs/mate-finish-design.md)。 */
 const mates = loadMateRecords(typeof localStorage === "undefined" ? null : localStorage);
@@ -1144,8 +1248,6 @@ const mates = loadMateRecords(typeof localStorage === "undefined" ? null : local
 function mateWhere(item: { eventText?: string; label?: string; opponent?: string }) {
   return [[item.eventText, item.label].filter(Boolean).join(" "), item.opponent ? `対 ${item.opponent}` : ""].filter(Boolean).join("・");
 }
-const allKansenki = ref(false);
-const shownKansenki = computed(() => kansenki.value.slice(0, allKansenki.value ? undefined : AWARD_PREVIEW));
 const kansenkiShown = ref<KansenkiView | null>(null);
 /** 勝負メシ帳(対局場ごとの献立の3品と、勝ちメシ)。 */
 const mealBook = mealBookView(loadMealBook(typeof localStorage === "undefined" ? null : localStorage));
@@ -1156,8 +1258,6 @@ const StudyRelay = defineAsyncComponent(() => import("./RelayViewer.vue"));
 const noteStorage = () => (typeof localStorage === "undefined" ? null : localStorage);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const studyNotes = ref<any[]>(loadNotes(noteStorage()));
-const allStudyNotes = ref(false);
-const shownStudyNotes = computed(() => studyNotes.value.slice(0, allStudyNotes.value ? undefined : AWARD_PREVIEW));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const studyShown = ref<any | null>(null);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1328,7 +1428,7 @@ const messages = computed(() => {
     .filter((row: UsageRow) => row.games >= 3)
     .sort((a: UsageRow, b: UsageRow) => b.wins / b.games - a.wins / a.games)[0];
   if (best) lines.push(`いちばん勝てているのは「${best.name}」。勝率${percent(best.wins / best.games)}だよ！`);
-  if (nextGoal.value) lines.push(`${gradeName(nextGoal.value.label)}まで、あとR${nextGoal.value.remaining}。いっしょにがんばろう！`);
+  // 次の目標(「○級まで、あとR○」)は、すぐ下のゲージに書いてあるので、台詞では繰り返さない(1画面に収める。8-3)。
   if (playStreakLine) lines.push(playStreakLine);
   return lines;
 });
@@ -1375,7 +1475,8 @@ const eventRows = computed(() => RATED_EVENTS.map(({ id, label }) => {
 }).filter(({ games }) => games > 0));
 
 const EVENT_LABEL: Record<string, string> = Object.fromEntries(RATED_EVENTS.map(({ id, label }) => [id, label]));
-const RECENT_GAME_LIMIT = 8;
+/** 最近の対局の数(枠の中で動かして見る)。 */
+const RECENT_GAME_LIMIT = 30;
 /** 最近の対局(新しい順)。棋戦・段階・相手・結果と、終局後のレーティング。 */
 const recentGames = computed(() => {
   const history = props.state.history;
@@ -1397,29 +1498,131 @@ const recentGames = computed(() => {
     }));
 });
 
-const USAGE_LIMIT = 8;
-/** 「得意」「にがて」の札を付けるのに要る対局数。 */
-const TAG_MIN_GAMES = 3;
-function usageGroup(category: string, title: string) {
-  const rows = (usageRows(props.state, category) as UsageRow[]).slice(0, USAGE_LIMIT)
-    .map((row) => ({ ...row, winRate: row.games ? row.wins / row.games : 0, tag: "" as "" | "best" | "weak" }));
-  const tagged = rows.filter((row) => row.games >= TAG_MIN_GAMES);
-  const best = tagged.reduce<typeof rows[number] | null>((top, row) => (!top || row.winRate > top.winRate ? row : top), null);
-  if (best && best.winRate >= 0.5) best.tag = "best";
-  for (const row of tagged) if (row !== best && row.winRate < 0.5) row.tag = "weak";
-  return { category, title, rows };
+// ---- 戦型(8-3)。使用率と勝率の表は core/style-usage.mjs。
+/** まとめに出す得意な戦法(振り飛車の戦法の中で「★得意」の札が付いたもの)。 */
+const favoriteStrategy = computed(() => usageTable(props.state, "rook").rows.find((row) => row.tag === "best") ?? null);
+const battleRows = computed(() => battleSplit(props.state));
+/** 1行の右の数(局数と勝率)。 */
+function usageStat(row: { games: number; winRate: number | null }) {
+  return `${row.games}局${row.winRate === null ? "" : `・勝率${percent(row.winRate)}`}`;
 }
-/** まとめに出す得意な戦法。戦法の中で「★得意」の札が付いたもの。 */
-const favoriteStrategy = computed(() => usageGroup("rook", "").rows.find((row) => row.tag === "best") ?? null);
-const ownUsageGroups = computed(() => [
-  usageGroup("rook", "あなたの戦法"),
-  usageGroup("castle", "あなたの囲い"),
-  usageGroup("battle", "戦型"),
+function restLine(rest: { count: number; games: number }) {
+  return rest.count ? `ほか${rest.count}個（${rest.games}局）` : "";
+}
+/** 自分の戦法: コレクションで組んだ回数からの、くわしい戦法の使用率(なければ振り飛車の戦法の記録)。 */
+const ownStrategies = computed(() => {
+  const repertoire = myRepertoire({ formations: collection.value.formations, catalog: COLLECTION_CATALOG });
+  if (repertoire) {
+    const table = repertoireTable(openingUsageRows(repertoire.usage), repertoire.games);
+    return {
+      rows: table.rows.map((row) => ({ ...row, tag: "", stat: `${row.games}回` })),
+      restText: table.rest.count ? `ほか${table.rest.count}個（${table.rest.share}%）` : "",
+      empty: "",
+      note: "くわしい戦法は、対局で組んだ回数から数えているよ。",
+    };
+  }
+  const table = usageTable(props.state, "rook");
+  return {
+    rows: table.rows.map((row) => ({ ...row, stat: usageStat(row) })),
+    restText: restLine(table.rest),
+    empty: "作戦を3回組むと、四間飛車や角換わりのような、くわしい戦法の使用率が出るよ。",
+    note: "",
+  };
+});
+const styleSides = computed(() => {
+  const opponentRook = usageTable(props.state, "opponentRook");
+  const castles = (category: string) => {
+    const table = usageTable(props.state, category);
+    return { rows: table.rows.map((row) => ({ ...row, stat: usageStat(row) })), restText: restLine(table.rest) };
+  };
+  return [
+    { id: "own", title: "あなた", rook: rookSplit(props.state, "own"), strategies: ownStrategies.value, castles: castles("castle") },
+    {
+      id: "opponent",
+      title: "相手",
+      rook: rookSplit(props.state, "opponent"),
+      strategies: {
+        rows: opponentRook.rows.map((row) => ({ ...row, stat: usageStat(row) })),
+        restText: restLine(opponentRook.rest),
+        empty: "相手の振り飛車の戦法は、まだ記録がありません。",
+        note: opponentRook.rows.length ? "勝率は、その戦法の相手にあなたが勝った割合だよ。" : "",
+      },
+      castles: castles("opponentCastle"),
+    },
+  ];
+});
+
+// ---- 項目の中のタブ(8-3)。ノートを閉じるまで覚えておく(同じ項目に戻ったとき同じタブ)。
+const RECORD_VIEWS = [
+  { id: "score", label: "勝ち負け" },
+  { id: "trend", label: "推移" },
+  { id: "recent", label: "最近の対局" },
+] as const;
+const recordView = ref<typeof RECORD_VIEWS[number]["id"]>("score");
+const styleSide = ref<"own" | "opponent">("own");
+const tournamentView = ref<"events" | "awards" | "kansenki" | "records">("events");
+const tournamentViews = computed(() => [
+  { id: "events" as const, label: "棋戦", count: null },
+  { id: "awards" as const, label: "賞状", count: props.awards.length },
+  { id: "kansenki" as const, label: "観戦記", count: kansenki.value.length },
+  { id: "records" as const, label: "記録", count: null },
 ]);
-const opponentUsageGroups = computed(() => [
-  usageGroup("opponentRook", "相手の戦法"),
-  usageGroup("opponentCastle", "相手の囲い"),
-]);
+
+/** 横長の広い画面(2列に並べる)。名鑑と同じ境目。 */
+const WIDE_QUERY = "(orientation: landscape) and (min-width: 700px)";
+const wideMedia = typeof window !== "undefined" && window.matchMedia ? window.matchMedia(WIDE_QUERY) : null;
+const wide = ref(Boolean(wideMedia?.matches));
+const onWideChange = () => { wide.value = Boolean(wideMedia?.matches); };
+wideMedia?.addEventListener("change", onWideChange);
+onBeforeUnmount(() => wideMedia?.removeEventListener("change", onWideChange));
+
+// ---- 棋戦の札(大会の項目の「棋戦」)。出た棋戦は大きな札を先に、出ていない棋戦は1行の札を後に並べる。
+const EVENT_IDS = ["ryuo", "meijin", "kenshukai", "shoreikai"] as const;
+type EventId = typeof EVENT_IDS[number];
+const eventJoined = computed<Record<EventId, boolean>>(() => ({
+  ryuo: props.career.seasons > 0 || props.career.history.length > 0,
+  meijin: meijinHistory.value.length > 0 || Boolean(meijinNow.value.cls),
+  kenshukai: kenshukai.value.history.length > 0 || Boolean(kenshukai.value.run),
+  shoreikai: shoreikai.value.history.length > 0 || Boolean(shoreikai.value.run) || Boolean(shoreikai.value.pro),
+}));
+const eventOrder = computed(() => {
+  const order = [...EVENT_IDS.filter((id) => eventJoined.value[id]), ...EVENT_IDS.filter((id) => !eventJoined.value[id])];
+  return Object.fromEntries(order.map((id, index) => [id, index])) as Record<EventId, number>;
+});
+/** 出た棋戦の札の数が奇数のとき、横に2つ並べる画面では、最後の大きな札を横いっぱいにする。1行の札はいつも横いっぱい。 */
+function eventClass(id: EventId) {
+  if (!eventJoined.value[id]) return "shogi-note__event--none shogi-note__event--span";
+  const joined = EVENT_IDS.filter((key) => eventJoined.value[key]);
+  return joined.length % 2 === 1 && joined[joined.length - 1] === id ? "shogi-note__event--span" : "";
+}
+/** 札の段の高さ。大きな札の段は残りの高さを分け合い、1行の札の段は中身の高さ。 */
+const eventGridStyle = computed(() => {
+  const columns = wide.value ? 2 : 1;
+  const full = EVENT_IDS.filter((id) => eventJoined.value[id]).length;
+  const none = EVENT_IDS.length - full;
+  const rows = [
+    ...Array(Math.ceil(full / columns)).fill("minmax(min-content, 1fr)"),
+    ...Array(none).fill("auto"),
+  ];
+  return { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: rows.join(" ") };
+});
+/** 竜王戦のいちばん上の組(竜王になっていれば竜王)。 */
+const ryuoBest = computed(() => {
+  if (props.career.titles || props.career.champion) return "竜王";
+  const groups = [props.career.group, ...props.career.history.flatMap((entry) => [entry.startGroup, entry.newGroup])].filter((group) => Number.isFinite(group) && group > 0);
+  return groups.length ? `${Math.min(...groups)}組` : "—";
+});
+/** 奨励会のいちばん上の段級(四段になっていれば四段)。これまでの挑戦の記録は段級の名前なので、段級の番号に引き直して比べる。 */
+const shoreikaiBest = computed(() => {
+  if (shoreikai.value.pro) return "四段";
+  const rankOf = (label: string) => Array.from({ length: 30 }, (_, rank) => rank).find((rank) => rankLabel(rank) === label) ?? -1;
+  const run = shoreikai.value.run;
+  const ranks = [
+    ...shoreikai.value.history.map((entry: { rank: string }) => rankOf(entry.rank)),
+    run && run.phase !== "exam" && run.phase !== "failed" ? run.best ?? run.rank : -1,
+  ].filter((rank) => rank >= 0);
+  return ranks.length ? rankLabel(Math.max(...ranks)) : "—";
+});
 
 const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .filter((preset) => {
@@ -1510,16 +1713,11 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   overscroll-behavior: contain;
 }
 .shogi-game .shogi-note__pane > * { flex: none; }
-.shogi-game .shogi-note__pane > .shogi-note__cover,
-.shogi-game .shogi-note__pane > .shogi-note__panel--fill {
+.shogi-game .shogi-note__pane > .shogi-note__cover {
   flex: 1 0 auto;
   box-sizing: border-box;
+  align-content: space-evenly;
 }
-.shogi-game .shogi-note__pane > .shogi-note__cover { align-content: space-evenly; }
-.shogi-game .shogi-note__panel.shogi-note__panel--fill { align-items: stretch; }
-.shogi-game .shogi-note__panel--fill > .shogi-note__card { align-content: start; }
-.shogi-game .shogi-note__panel--fill .shogi-note__trend-card { grid-template-rows: auto minmax(0, 1fr); }
-.shogi-game .shogi-note__panel--fill .shogi-note__trend-box { height: 100%; box-sizing: border-box; }
 .shogi-game .shogi-note__nav-short { display: none; }
 /* スマホでは見出しの帯が2行にならないよう、レーティングは「まとめ」にだけ出す。項目は4列2段で、短い名前にする。 */
 @media (max-width: 599px) {
@@ -1549,6 +1747,229 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__nav-label { font-size: 1.1em; }
   .shogi-game .shogi-note__nav-desc { display: block; color: var(--note-muted); font-size: 0.75em; }
   .shogi-game .shogi-note__nav .shogi-note__nav-item[aria-selected="true"] .shogi-note__nav-desc { color: rgba(23, 38, 50, 0.75); }
+}
+
+/* ===== 項目を1画面に収める(docs/player-world-note-design.mdの8-3) =====
+ * 項目の欄は中身の欄の高さいっぱいに置き、一覧(最近の対局・棋士・賞状・カードなど)だけが枠の中で動く。
+ * 欄の高さが足りない小さな画面では、項目の欄ごと中身の欄の中で動く(今までどおり)。 */
+.shogi-game .shogi-note__pane > .shogi-note__panel--fit { flex: 1 1 0; min-height: 0; box-sizing: border-box; }
+.shogi-game .shogi-note__panel.shogi-note__panel--fit { align-items: stretch; align-content: stretch; }
+.shogi-game .shogi-note__scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; align-content: start; }
+/* 下に続きがあるあいだ、下の端を薄くして続きを見せる(説明の文で言わない。UD:6-1。印はvScrollMore)。 */
+.shogi-game .shogi-note__scroll[data-more="true"] {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.8rem), rgba(0, 0, 0, 0.2));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.8rem), rgba(0, 0, 0, 0.2));
+}
+/* 項目の中のタブ(アルバムの切り替えと同じ形)。 */
+.shogi-game .shogi-note__segmented {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--note-deep);
+}
+.shogi-game .shogi-note__segmented button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 0.4rem;
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.shogi-game .shogi-note__segmented button[aria-selected="true"] { color: #172632; background: var(--note-gold); }
+.shogi-game .shogi-note__segmented small { margin-left: 0.3em; font-size: 0.8em; opacity: 0.85; }
+/* 項目の中のタブは、スマホの縦だけで使う(広い画面は並べて全部見せる)。 */
+.shogi-game .shogi-note__narrow-only { display: none; }
+@media (orientation: portrait) and (max-width: 759px) {
+  .shogi-game .shogi-note__narrow-only { display: grid; }
+  .shogi-game .shogi-note__part--off { display: none !important; }
+}
+
+/* 能力: 縦長は1列(一言・チャート・ランク)、横長は2列(左にチャート、右に一言とランク)。 */
+.shogi-game .shogi-note__panel.shogi-note__ability {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(11rem, 1fr) auto;
+  grid-template-areas: "coach" "chart" "details";
+  gap: 0.6rem;
+}
+.shogi-game .shogi-note__ability > .shogi-note__empty { grid-area: auto; align-self: start; }
+.shogi-game .shogi-note__ability-coach { grid-area: coach; }
+.shogi-game .shogi-note__ability-card { grid-area: chart; grid-template-rows: auto auto minmax(0, 1fr); gap: 0.5rem; min-height: 0; }
+.shogi-game .shogi-note__ability-chart { min-height: 0; }
+.shogi-game .shogi-note__ability-details { grid-area: details; gap: 0.5rem; }
+@media (orientation: landscape) and (min-width: 700px) {
+  .shogi-game .shogi-note__ability-details { align-self: start; max-height: 100%; }
+}
+/* スマホの縦: チャートを大きく取るため、目安の説明(補足の文)を省く(U:7-5の③)。 */
+@media (orientation: portrait) and (max-width: 759px) {
+  .shogi-game .shogi-note__ability-details [data-ability-basis] { display: none; }
+  .shogi-game .shogi-note__ability-card,
+  .shogi-game .shogi-note__ability-details { padding: 0.7rem 0.8rem; }
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  .shogi-game .shogi-note__panel.shogi-note__ability {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "chart coach" "chart details";
+  }
+}
+
+/* 成績: スマホの縦はタブで1つずつ、タブレットの縦は上に2枚と下に最近の対局、横長は左に勝ち負けと右に推移・最近の対局。 */
+.shogi-game .shogi-note__panel.shogi-note__record { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 0.6rem; }
+.shogi-game .shogi-note__record > .shogi-note__empty { align-self: start; }
+.shogi-game .shogi-note__record > .shogi-note__card { min-height: 0; }
+.shogi-game .shogi-note__recent { grid-template-rows: auto minmax(0, 1fr); }
+.shogi-game .shogi-note__record .shogi-note__trend-card { grid-template-rows: auto minmax(0, 1fr); }
+.shogi-game .shogi-note__record .shogi-note__trend-box { height: 100%; box-sizing: border-box; }
+@media (orientation: portrait) and (min-width: 760px) {
+  .shogi-game .shogi-note__panel.shogi-note__record {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "score trend" "recent recent";
+  }
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  .shogi-game .shogi-note__panel.shogi-note__record {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1.25fr);
+    grid-template-areas: "score trend" "score recent";
+  }
+  .shogi-game .shogi-note__record .shogi-note__trend-box { grid-template-rows: minmax(3rem, 1fr) auto; }
+}
+@media (min-width: 700px) {
+  .shogi-game .shogi-note__record .shogi-note__score { grid-area: score; }
+  .shogi-game .shogi-note__record .shogi-note__trend-card { grid-area: trend; }
+  .shogi-game .shogi-note__record .shogi-note__recent { grid-area: recent; }
+  .shogi-game .shogi-note__record .shogi-note__trend { min-height: 3rem; }
+}
+
+/* 戦型: いちばん上に戦型の割合、その下に「あなた」「相手」(スマホの縦はタブ)。 */
+.shogi-game .shogi-note__panel.shogi-note__style { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); gap: 0.6rem; }
+.shogi-game .shogi-note__style > .shogi-note__empty { align-self: start; }
+.shogi-game .shogi-note__style-side { gap: 0.55rem; min-height: 0; }
+@media (orientation: landscape), (min-width: 760px) {
+  .shogi-game .shogi-note__panel.shogi-note__style { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .shogi-game .shogi-note__style .shogi-note__battle,
+  .shogi-game .shogi-note__style > .shogi-note__empty { grid-column: 1 / -1; }
+}
+.shogi-game .shogi-note__battle { gap: 0.5rem; }
+.shogi-game .shogi-note__share { display: flex; height: 0.9rem; margin: 0; overflow: hidden; border-radius: 999px; background: var(--note-deep); }
+.shogi-game .shogi-note__share > span { height: 100%; }
+.shogi-game .shogi-note__share--static { background: #4d8ac4; }
+.shogi-game .shogi-note__share--opposed { background: var(--note-gold); }
+.shogi-game .shogi-note__share--ranging { background: #c56a5f; }
+.shogi-game .shogi-note__share-legend { display: flex; flex-wrap: wrap; gap: 0.2rem 1.1rem; margin: 0; padding: 0; list-style: none; font-size: 0.88em; }
+.shogi-game .shogi-note__share-swatch { display: inline-block; width: 0.8rem; height: 0.8rem; margin-right: 0.3rem; border-radius: 0.2rem; vertical-align: -0.05em; }
+.shogi-game .shogi-note__share-legend small,
+.shogi-game .shogi-note__party small { margin-left: 0.35em; color: var(--note-muted); }
+.shogi-game .shogi-note__party { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 1rem; margin: 0; font-size: 0.88em; }
+.shogi-game .shogi-note__party-bar { display: block; flex: 1 0 100%; height: 0.6rem; overflow: hidden; border-radius: 999px; background: #c56a5f; }
+.shogi-game .shogi-note__party-bar span { display: block; height: 100%; background: #4d8ac4; }
+/* 表の列(名前・棒・％・局数と勝率)は、行どうしでそろえる(subgrid)。 */
+.shogi-game .shogi-note__usage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(2rem, 1fr) 2.7em auto;
+  gap: 0.35rem 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .shogi-note__usage li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; }
+.shogi-game .shogi-note__usage .shogi-note__bar { grid-column: auto; grid-row: auto; }
+.shogi-game .shogi-note__usage-share { font-size: 0.9em; font-variant-numeric: tabular-nums; font-weight: 800; text-align: right; }
+.shogi-game .shogi-note__usage-stat { color: var(--note-muted); font-size: 0.8em; text-align: right; white-space: nowrap; }
+.shogi-game .shogi-note__usage .shogi-note__usage-rest { display: block; color: var(--note-muted); font-size: 0.8em; }
+.shogi-game .shogi-note__style-side .shogi-note__subhead { margin: 0.2rem 0 0; }
+.shogi-game .shogi-note__usage .shogi-note__tag { display: inline-block; white-space: nowrap; }
+/* スマホの縦はタブに「あなた」「相手」と出ているので、札の見出しは省く。 */
+@media (orientation: portrait) and (max-width: 759px) {
+  .shogi-game .shogi-note__style-side > h2 { display: none; }
+}
+
+/* 大会: 上にタブ、下に選んだもの。棋戦の札は大きな札が残りの高さを分け、これまでの成績は札の中の枠で動く。 */
+.shogi-game .shogi-note__panel.shogi-note__tournament { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 0.6rem; }
+.shogi-game .shogi-note__events { display: grid; gap: 0.6rem; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.shogi-game .shogi-note__card.shogi-note__event { display: flex; flex-direction: column; gap: 0.5rem; min-height: 0; padding: 0.75rem 0.9rem; }
+.shogi-game .shogi-note__event--span { grid-column: 1 / -1; }
+.shogi-game .shogi-note__card.shogi-note__event--none { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.9rem; padding: 0.55rem 0.9rem; }
+.shogi-game .shogi-note__event-stats { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); gap: 0.4rem; margin: 0; }
+.shogi-game .shogi-note__event-stats > div { display: grid; align-content: start; gap: 0.05rem; min-width: 0; padding: 0.35rem 0.6rem; border-radius: 0.5rem; background: var(--note-deep); }
+.shogi-game .shogi-note__event-stats dt { color: var(--note-muted); font-size: 0.75em; font-weight: 700; }
+.shogi-game .shogi-note__event-stats dd { margin: 0; overflow-wrap: anywhere; font-size: 1.15em; font-weight: 900; line-height: 1.2; }
+.shogi-game .shogi-note__event-stats dd small { margin-left: 0.1rem; font-size: 0.6em; }
+.shogi-game .shogi-note__event-stats .shogi-note__event-now dd { color: var(--note-gold); font-size: 1.45em; }
+.shogi-game .shogi-note__event-sub { color: var(--note-muted); font-size: 0.72em; font-weight: 700; }
+.shogi-game .shogi-note__event-history { flex: 1 1 0; min-height: 2.6rem; contain: size; }
+/* スマホ: 出ていない棋戦の行き方の補足は省き、1行に収める(U:7-5の③)。いまの位置の字も少し小さく。 */
+/* 背の低い縦の画面: 階段は省く(いまの位置は「いま」の札で分かる)。これまでの成績を広く取る。 */
+@media (orientation: portrait) and (max-height: 700px) {
+  .shogi-game .shogi-note__event-ladder { display: none; }
+}
+@media (max-width: 599px) {
+  .shogi-game .shogi-note__event-where { display: none; }
+  .shogi-game .shogi-note__event-stats .shogi-note__event-now dd { font-size: 1.2em; }
+  .shogi-game .shogi-note__event-stats > div { padding: 0.3rem 0.45rem; }
+}
+.shogi-game .shogi-note__event-history li { padding: 0.3rem 0.6rem; font-size: 0.85em; }
+/* 棋戦の札の階段は低くする(自分の位置が分かれば足りる)。 */
+.shogi-game .shogi-note__event-ladder { flex: none; padding-top: 1.2rem; }
+.shogi-game .shogi-note__event-ladder .ryuo-ladder__step { font-size: 0.72em; }
+.shogi-game .shogi-note__event-ladder .ryuo-ladder__step--ryuo { height: 2.3rem; }
+.shogi-game .shogi-note__event-ladder .ryuo-ladder__step--g1 { height: 2.1rem; }
+.shogi-game .shogi-note__event-ladder .ryuo-ladder__step--g2 { height: 1.9rem; }
+.shogi-game .shogi-note__event-ladder .ryuo-ladder__step--g3 { height: 1.75rem; }
+.shogi-game .shogi-note__event-ladder .ryuo-ladder__step--g4 { height: 1.6rem; }
+.shogi-game .shogi-note__event-ladder .ryuo-ladder__step--g5 { height: 1.45rem; }
+.shogi-game .shogi-note__event-ladder .ryuo-ladder__step--g6 { height: 1.3rem; }
+/* 一覧の札(賞状・観戦記・記録): 見出しの下の一覧が残りの高さで動く。 */
+.shogi-game .shogi-note__card.shogi-note__list-card { display: flex; flex-direction: column; gap: 0.6rem; min-height: 0; }
+.shogi-game .shogi-note__list-card > .shogi-note__scroll { flex: 1 1 0; min-height: 3rem; contain: size; }
+.shogi-game .shogi-note__records { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(min-content, 1fr); gap: 0.6rem; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+@media (min-width: 700px) {
+  .shogi-game .shogi-note__records { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); }
+}
+
+/* 棋士名鑑: 名鑑の札を欄の高さいっぱいに置く。 */
+.shogi-game .shogi-note__panel.shogi-note__panel--book.shogi-note__panel--fit { grid-template-rows: minmax(0, 1fr); }
+
+/* コレクション: 上のゲージとページの切り替えは動かさず、カードの一覧だけが動く。 */
+.shogi-game .shogi-note__panel.shogi-note__panel--album.shogi-note__panel--fit { display: flex; flex-direction: column; gap: 0.6rem; }
+.shogi-game .shogi-note__panel--album.shogi-note__panel--fit > * { flex: none; }
+.shogi-game .shogi-note__panel--album.shogi-note__panel--fit > :last-child { flex: 1 1 0; min-height: 6rem; }
+.shogi-game .shogi-note__card.shogi-note__album { display: flex; flex-direction: column; gap: 0.5rem; }
+.shogi-game .shogi-note__album > .shogi-note__album-grid { flex: 1 1 0; min-height: 4rem; contain: size; padding-top: 0.5rem; }
+/* 背の低い画面: 印の数と「印のアルバム｜着せ替え」を1行にし、「挑戦できる」の説明(補足)を省いて、カードの枠を広く取る。 */
+@media (max-height: 700px) {
+  .shogi-game .shogi-note__album-head { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; gap: 0.4rem 0.8rem; padding: 0.6rem 0.8rem; }
+  .shogi-game .shogi-note__album-head .shogi-note__gauge-text { font-size: 0.8em; }
+  .shogi-game .shogi-note__album-head .shogi-note__gauge-text img { width: 1.6rem; height: 1.6rem; }
+  .shogi-game .shogi-note__album-switch button { min-height: 44px; font-size: 0.88em; }
+  .shogi-game .shogi-note__album > .shogi-note__hint:first-child { display: none; }
+  .shogi-game .shogi-note__card.shogi-note__album { padding: 0.5rem 0.6rem; }
+}
+
+/* 設定: レベルごとの成績は枠の中で動かす。スマホの縦は札を縦に並べ、成績の札が残りの高さに収まる。 */
+.shogi-game .shogi-note__level-card .shogi-note__rows { max-height: max(10rem, 45dvh); }
+@media (max-width: 759px) {
+  .shogi-game .shogi-note__panel.shogi-note__settings { display: flex; flex-direction: column; gap: 0.6rem; }
+  .shogi-game .shogi-note__settings > * { flex: none; }
+  .shogi-game .shogi-note__settings > .shogi-note__level-card { display: flex; flex: 0 1 auto; flex-direction: column; min-height: 7.5rem; }
+  .shogi-game .shogi-note__level-card .shogi-note__rows { flex: 1 1 auto; max-height: none; }
+  .shogi-game .shogi-note__settings .shogi-note__card { padding: 0.75rem 0.85rem; gap: 0.5rem; }
+}
+/* 横向きのスマホ: 左に申告と申告した棋力での成績、右にレベルごとの成績。 */
+@media (orientation: landscape) and (max-height: 500px) {
+  .shogi-game .shogi-note__panel.shogi-note__settings { align-content: start; align-items: stretch; }
+  .shogi-game .shogi-note__settings > .shogi-note__level-card { display: flex; flex-direction: column; grid-column: 2; grid-row: 1 / span 3; min-height: 0; }
+  .shogi-game .shogi-note__level-card .shogi-note__rows { flex: 1 1 0; max-height: none; contain: size; }
+  .shogi-game .shogi-note__settings .shogi-note__card { padding: 0.6rem 0.8rem; gap: 0.4rem; }
 }
 
 /* ===== 表紙 ===== */
@@ -1717,7 +2138,14 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__form-mark--win { color: var(--note-deep); background: var(--note-gold); }
 .shogi-game .shogi-note__form-mark--loss { color: var(--note-deep); background: var(--note-lavender); }
 .shogi-game .shogi-note__form-mark--draw { color: #fffcf4; background: #445c6d; }
+/* 「対局する」と「棋力を測る」は、スマホでも縦に積まず横に並べ、2つとも1画面に入れる(U:7-5の①)。 */
 .shogi-game .shogi-note__actions { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 0.6rem; margin-top: 0.2rem; }
+@media (max-width: 599px) {
+  .shogi-game .shogi-note__actions { gap: 0.4rem; }
+  .shogi-game .shogi-note__actions .shogi-note__button { padding: 0 0.5rem; }
+  /* 下の3枚の近道は、小さな文(補足)を省く(U:7-5の③)。 */
+  .shogi-game .shogi-note__highlight span { display: none; }
+}
 
 /* ===== ボタン ===== */
 .shogi-game .shogi-note__button,
@@ -1887,8 +2315,10 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 }
 .shogi-game .shogi-note__album-switch button[aria-selected="true"],
 .shogi-game .shogi-note__album-pages button[aria-selected="true"] { color: #172632; background: var(--note-gold); }
-/* ページ: 取った数と全部の数を添える。 */
-.shogi-game .shogi-note__album-pages { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+/* ページ: 見出し(戦法・囲い・そのほか)ごとにまとめ、取った数と全部の数を添える。 */
+.shogi-game .shogi-note__album-pages { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; }
+.shogi-game .shogi-note__album-group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.shogi-game .shogi-note__album-group-label { margin-right: 0.15rem; color: var(--note-muted); font-size: 0.75em; font-weight: 800; letter-spacing: 0.08em; }
 .shogi-game .shogi-note__album-pages button { display: inline-flex; align-items: baseline; gap: 0.3rem; padding: 0 0.85rem; border: 2px solid #3b5570; background: var(--note-deep); }
 .shogi-game .shogi-note__album-pages button small { font-size: 0.78em; opacity: 0.8; }
 .shogi-game .shogi-note__album-pages button[aria-selected="true"] { border-color: var(--note-gold); }
@@ -2232,10 +2662,8 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__rows li:not(:has(.shogi-note__bar)) { grid-template-columns: 1fr auto; }
   .shogi-game .shogi-note__bar { grid-column: 1 / -1; grid-row: 2; }
   .shogi-game .shogi-note__tiles--four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .shogi-game .shogi-note__declare { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-note__history li { grid-template-columns: auto auto minmax(0, 1fr); }
   .shogi-game .shogi-note__history-record { grid-column: 3; justify-self: end; }
-  .shogi-game .shogi-note__actions { grid-template-columns: minmax(0, 1fr); }
   .shogi-game .shogi-note__ring { width: 6.2rem; height: 6.2rem; }
 }
 /* ===== 背の低い画面(2026-10 レスポンシブの見直し) =====
@@ -2256,6 +2684,9 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__tiles dd { font-size: 1.1em; }
   /* 下の3つの近道は、上のメニューと同じ行き先なので、背の低い画面では省く。 */
   .shogi-game .shogi-note__highlights { display: none; }
+  /* 棋力の欄の行の間を詰め、「対局する」まで1画面に入れる(8-3)。 */
+  .shogi-game .shogi-note__rank { gap: 0.35rem; }
+  .shogi-game .shogi-note__form li { width: 1.45rem; height: 1.45rem; }
 }
 @media (orientation: landscape) and (max-height: 500px) and (max-width: 899px) {
   .shogi-game .shogi-note__highlights { display: none; }
@@ -2281,5 +2712,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__rating strong { font-size: 2.3rem; }
   .shogi-game .shogi-note__grade { font-size: 1.15em; }
   .shogi-game .shogi-note__coach img { max-height: 4.5rem; }
+  .shogi-game .shogi-note__rank { gap: 0.35rem; }
+  .shogi-game .shogi-note__form li { width: 1.45rem; height: 1.45rem; }
 }
 </style>

@@ -87,13 +87,38 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/<YakobiNote[\s\S]*?:insight-games="playInsight\.games"[\s\S]*?:ryuo-difficulty="/);
     const note = readFileSync(new URL("../YakobiNote.vue", import.meta.url), "utf8");
     expect(note).toMatch(/\{ id: "ability", label: "能力"/);
-    expect(note).toMatch(/v-if="tab === 'ability'"[\s\S]*?<PlayerAbilityPanel :view="myAbility\.view" :compare="abilityCompare" \/>/);
+    // 横長の画面は2列(左にチャート、右にランク・型・特殊能力)。戦法の使用率は「戦型」の項目に出す(docs/player-world-note-design.mdの8-3)。
+    expect(note).toMatch(/v-if="tab === 'ability'"[\s\S]*?<PlayerAbilityPanel :view="myAbility\.view" :compare="abilityCompare" part="chart" \/>[\s\S]*?<PlayerAbilityPanel :view="myAbility\.view" :compare="abilityCompare" part="details" :openings="false" \/>/);
     expect(note).toMatch(/myAbilityProfile\(\{\s*games: props\.insightGames,/);
     // 比べる棋士は、名鑑と同じ能力の値(abilityValues)を使う。
     expect(note).toMatch(/abilityValues\(rival\)/);
     const panel = readFileSync(new URL("../PlayerAbilityPanel.vue", import.meta.url), "utf8");
     expect(panel).toMatch(/<RadarChart[^>]*:compare="compareValues"/);
   });
+  it("fits each notebook item on one screen and scrolls only the lists inside their frames", () => {
+    const note = readFileSync(new URL("../YakobiNote.vue", import.meta.url), "utf8");
+    const book = readFileSync(new URL("../RyuoRosterBook.vue", import.meta.url), "utf8");
+    // 項目の欄は中身の欄の高さいっぱい。一覧は枠の中で動き、下に続きがあれば下の端を薄くする(vScrollMore)。
+    expect(note).toMatch(/\.shogi-note__pane > \.shogi-note__panel--fit \{ flex: 1 1 0; min-height: 0;/);
+    expect(note).toMatch(/\.shogi-note__scroll\[data-more="true"\]/);
+    // 「戦法」は「戦型」になり、使用率の表を出す。設定から「棋力を測る」をなくす(まとめだけに置く)。
+    expect(note).toMatch(/\{ id: "style", label: "戦型", short: "戦型", description: "得意な戦法・囲いと使用率" \}/);
+    expect(note).toMatch(/battleSplit\(props\.state\)/);
+    const settings = note.slice(note.indexOf("v-if=\"tab === 'settings'\""), note.indexOf("</main>"));
+    expect(settings).not.toMatch(/emit\('start-measure'\)/);
+    expect(note.match(/emit\('start-measure'\)/g)).toHaveLength(1);
+    // 大会は項目の中のタブ(棋戦・賞状・観戦記・記録)。成績と戦型は、スマホの縦だけタブで分ける。
+    expect(note).toMatch(/data-tournament-view/);
+    expect(note).toMatch(/shogi-note__segmented shogi-note__narrow-only/);
+    // 名鑑はタイトル保持者の札をなくし、横長の広い画面では一覧の右にくわしい情報を並べる。×は44pxの丸。
+    expect(book).not.toMatch(/data-note-book-holders/);
+    expect(book).toMatch(/const id = selectedId\.value \|\| \(side\.value \? members\.value\[0\]\?\.id/);
+    const close = book.match(/\.shogi-note__book-close \{([^}]*)\}/)?.[1] ?? "";
+    expect(close).toContain("min-height: 0;");
+    expect(close).toContain("aspect-ratio: 1;");
+    expect(close).toContain("border-radius: 50%;");
+  });
+
   it("keeps sheet close buttons still under the finger (no transform centering, 44px target)", () => {
     // ボタン共通の触れたとき・押したときのtransformが、真ん中寄せのtranslateY(-50%)を上書きして×が逃げていた。
     const sheets = [

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALBUM_PAGES,
+  ALBUM_PAGE_GROUPS,
+  albumPageId,
   COLLECTION_STORAGE_KEY,
   albumCards,
   albumPageOf,
@@ -123,7 +125,19 @@ describe('コレクション', () => {
     expect(albumPageOf(real.find(({ id }) => id === 'shiken'))).toBe('ranging');
     expect(albumPageOf(real.find(({ id }) => id === 'kakugawari'))).toBe('static');
     expect(albumPageOf(real.find(({ id }) => id === 'onigoroshi'))).toBe('surprise');
-    expect(albumPageOf({ kind: 'castle', id: 'mino', family: 'castle' })).toBe('castle');
+    // 囲いは、定義の場面(contextsの最初)で居飛車の囲いと振り飛車の囲いに分ける。
+    const castlePage = (id) => albumPageOf(real.find((entry) => entry.kind === 'castle' && entry.id === id));
+    expect(castlePage('mino')).toBe('castle-ranging');
+    expect(castlePage('funagakoi')).toBe('castle-static');
+    expect(castlePage('yagura')).toBe('castle-static');
+    expect(castlePage('millennium')).toBe('castle-static');
+    expect(castlePage('kinmusou')).toBe('castle-ranging');
+    // 前の版で覚えた「囲い」のページは、居飛車の囲いで開く。
+    expect(albumPageId('castle')).toBe('castle-static');
+    expect(albumPageId('levels')).toBe('levels');
+    expect(albumPageId('???')).toBe('static');
+    // ページの見出しは、戦法・囲い・そのほかの順に並ぶ。
+    expect([...new Set(ALBUM_PAGES.map(({ group }) => group))]).toEqual([...ALBUM_PAGE_GROUPS]);
     // すべての戦法・囲いが、どれかのページに入る。
     const pages = new Set(ALBUM_PAGES.map(({ id }) => id));
     expect(real.every((entry) => pages.has(albumPageOf(entry)))).toBe(true);
@@ -138,9 +152,9 @@ describe('コレクション', () => {
     const state = recordMatchCollection(createCollection(), { formations: ['本美濃'], catalog: real, at: 200 }).state;
     const ranging = albumCards(state, real, 'ranging', { playable, seenAt: 100 });
     expect(ranging[0]).toMatchObject({ id: 'shiken', ready: true, got: false, planId: 'p-shiken' });
-    const castles = albumCards(state, real, 'castle', { playable, seenAt: 100 });
+    const castles = albumCards(state, real, 'castle-ranging', { playable, seenAt: 100 });
     expect(castles.find(({ label }) => label === '本美濃')).toMatchObject({ got: true, count: 1, isNew: true, ready: false });
-    expect(albumCards(state, real, 'castle', { playable, seenAt: 300 }).find(({ label }) => label === '本美濃').isNew).toBe(false);
+    expect(albumCards(state, real, 'castle-ranging', { playable, seenAt: 300 }).find(({ label }) => label === '本美濃').isNew).toBe(false);
   });
 
   it('Lvの壁: 入門(24級〜16級の9段)と10段ずつ4本。次の壁は、まだ勝っていないいちばん低いLv。おすすめの前後に印', () => {

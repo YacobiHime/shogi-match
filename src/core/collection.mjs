@@ -20,15 +20,26 @@ export const COLLECTION_SEEN_KEY = 'yacobihime:shogi-match:collection-seen:v1';
 /** 印に数えない戦法(基本の居飛車は、意識しなくても組めてしまうため)。 */
 const EXCLUDED_STRATEGY_IDS = new Set(['ibisha']);
 
+/** 居飛車で組む囲いの場面(囲いの定義のcontextsの最初がこれなら、居飛車の囲い)。 */
+const STATIC_CASTLE_CONTEXTS = new Set(['aibisha', 'anti-ranging-static']);
+
 /**
  * 集める戦法・囲いの一覧。定跡図鑑と同じ定義から作る。
- * @param {{ strategies: { id: string, label: string, family?: string }[], castles: { id: string, label: string }[] }} definitions
- * @returns {{ kind: 'strategy' | 'castle', id: string, label: string, family: string }[]}
+ * 囲いのrookは、居飛車の囲い('static')か振り飛車の囲い('ranging')か。定義のcontextsの最初で決める
+ * (ミレニアムのように両方で組めるものも、最初の場面で1つに決める)。
+ * @param {{ strategies: { id: string, label: string, family?: string }[], castles: { id: string, label: string, contexts?: readonly string[] }[] }} definitions
+ * @returns {{ kind: 'strategy' | 'castle', id: string, label: string, family: string, rook?: 'static' | 'ranging' }[]}
  */
 export function collectionCatalog({ strategies, castles }) {
   return [
     ...strategies.filter(({ id }) => !EXCLUDED_STRATEGY_IDS.has(id)).map(({ id, label, family = '' }) => ({ kind: /** @type {'strategy'} */ ('strategy'), id, label, family })),
-    ...castles.map(({ id, label }) => ({ kind: /** @type {'castle'} */ ('castle'), id, label, family: 'castle' })),
+    ...castles.map(({ id, label, contexts = [] }) => ({
+      kind: /** @type {'castle'} */ ('castle'),
+      id,
+      label,
+      family: 'castle',
+      rook: /** @type {'static' | 'ranging'} */ (STATIC_CASTLE_CONTEXTS.has(contexts[0]) ? 'static' : 'ranging'),
+    })),
   ];
 }
 
@@ -37,20 +48,36 @@ export function collectionCatalog({ strategies, castles }) {
 /** 振り飛車の戦法の系統(定跡図鑑のfamily)。奇襲はspecial。ほかの戦法は居飛車のページ。 */
 const RANGING_FAMILIES = new Set(['shiken', 'sangen', 'nakabisha', 'mukai']);
 
-/** アルバムのページ。 */
+/**
+ * アルバムのページ。groupはページの切り替えの小さな見出し(戦法・囲い・そのほか)。
+ * labelは見出しの下に出す短い名前、nameは読み上げとページの見出しに使う全部の名前(「居飛車の囲い」)。
+ * 囲いは居飛車の囲いと振り飛車の囲いに分ける(docs/player-world-note-design.mdの8-3)。
+ */
 export const ALBUM_PAGES = Object.freeze([
-  { id: 'static', label: '居飛車' },
-  { id: 'ranging', label: '振り飛車' },
-  { id: 'surprise', label: '奇襲' },
-  { id: 'castle', label: '囲い' },
-  { id: 'tesuji', label: '手筋' },
-  { id: 'levels', label: 'Lvの壁' },
-  { id: 'memorial', label: '記念' },
+  { id: 'static', group: '戦法', label: '居飛車', name: '居飛車の戦法' },
+  { id: 'ranging', group: '戦法', label: '振り飛車', name: '振り飛車の戦法' },
+  { id: 'surprise', group: '戦法', label: '奇襲', name: '奇襲' },
+  { id: 'castle-static', group: '囲い', label: '居飛車', name: '居飛車の囲い' },
+  { id: 'castle-ranging', group: '囲い', label: '振り飛車', name: '振り飛車の囲い' },
+  { id: 'tesuji', group: 'そのほか', label: '手筋', name: '手筋' },
+  { id: 'levels', group: 'そのほか', label: 'Lvの壁', name: 'Lvの壁' },
+  { id: 'memorial', group: 'そのほか', label: '記念', name: '記念' },
 ]);
+/** ページの切り替えの見出しの順。 */
+export const ALBUM_PAGE_GROUPS = Object.freeze(['戦法', '囲い', 'そのほか']);
+
+/**
+ * 保存したページのid(前の版の「囲い」は、居飛車の囲い)。知らないidは居飛車の戦法。
+ * @param {string | null | undefined} id
+ */
+export function albumPageId(id) {
+  if (id === 'castle') return 'castle-static';
+  return ALBUM_PAGES.some((page) => page.id === id) ? /** @type {string} */ (id) : 'static';
+}
 
 /** 戦法・囲いのページ。 */
 export function albumPageOf(entry) {
-  if (entry.kind === 'castle') return 'castle';
+  if (entry.kind === 'castle') return entry.rook === 'ranging' ? 'castle-ranging' : 'castle-static';
   if (entry.family === 'special') return 'surprise';
   return RANGING_FAMILIES.has(entry.family) ? 'ranging' : 'static';
 }
