@@ -5,7 +5,8 @@
     縦書きの字は、1字ずつ箱に入れて並べる(VerticalText.vue。字体によって漢字が重なって潰れるのを防ぐ)。
   -->
   <div
-    :class="['season-award', `season-award--${award.grade}`, { 'season-award--play': playing }]"
+    ref="rootEl"
+    :class="['season-award', `season-award--${award.grade}`, { 'season-award--play': playing, 'season-award--fitting': !fit }]"
     role="dialog"
     aria-modal="true"
     :aria-label="`${text.title} ${text.heading}`"
@@ -13,8 +14,8 @@
     @click="skip"
   >
     <span v-for="piece in confetti" :key="piece.id" class="season-award__confetti" :style="piece.style" aria-hidden="true"></span>
-    <article class="season-award__paper" data-award-paper>
-      <div class="season-award__frame">
+    <article ref="paperEl" class="season-award__paper" :style="fit ? { zoom: fit.zoom, maxWidth: 'none' } : undefined" data-award-paper>
+      <div ref="frameEl" class="season-award__frame" :style="fit ? { width: `${fit.width}px`, maxWidth: 'none' } : undefined">
         <h2 class="season-award__heading"><VerticalText :text="text.heading" /></h2>
         <p class="season-award__title"><VerticalText :text="text.title" /></p>
         <p class="season-award__prize" data-award-prize><VerticalText :text="text.prize" /></p>
@@ -28,7 +29,7 @@
         </p>
       </div>
     </article>
-    <div class="season-award__foot">
+    <div ref="footEl" class="season-award__foot">
       <p class="season-award__talk">
         <img class="season-award__face" :src="charaUrl" alt="" draggable="false">
         <span>{{ talk }}</span>
@@ -39,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, type PropType } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { awardTalk, awardText } from "./core/season-award.mjs";
 import VerticalText from "./VerticalText.vue";
 import { createMoveSoundPlayer } from "./core/move-sound";
@@ -69,10 +70,72 @@ const playing = ref(props.ceremony && !reducedMotion);
 const soundPlayer = createMoveSoundPlayer(() => props.assetBaseUrl);
 const timers: ReturnType<typeof setTimeout>[] = [];
 onMounted(() => {
+  void fitPaper();
+  void document.fonts?.ready.then(() => fitPaper());
+  window.addEventListener("resize", onResize);
   if (!props.ceremony) return;
   timers.push(setTimeout(() => soundPlayer.play("stamp"), playing.value ? STAMP_SOUND_AT : 0));
 });
-onBeforeUnmount(() => timers.splice(0).forEach(clearTimeout));
+onBeforeUnmount(() => {
+  timers.splice(0).forEach(clearTimeout);
+  window.removeEventListener("resize", onResize);
+  if (resizeFrame) cancelAnimationFrame(resizeFrame);
+});
+
+/*
+ * 紙の大きさ(docs/season-award-design.mdの8章)。縦書きの紙の幅は、ブラウザに中身から計算させると、
+ * iPadのSafariでは1列分ほどに縮み、字が切れた。そこで、字の並び(各行の位置)を測って幅を決め、
+ * 画面に収まらないとき(横向きのスマホなど)は紙ごと縮め、広い画面では少し大きくする(zoom。字と枠の釣り合いはそのまま)。
+ */
+const rootEl = ref<HTMLElement | null>(null);
+const paperEl = ref<HTMLElement | null>(null);
+const frameEl = ref<HTMLElement | null>(null);
+const footEl = ref<HTMLElement | null>(null);
+/** 測った枠の幅(px)と、紙の縮め方。測るまではnull(紙を隠す)。 */
+const fit = ref<{ width: number; zoom: number } | null>(null);
+/** 縮めすぎると読めないので、ここより小さくはしない。広い画面(iPadなど)では、余裕があればここまで大きく出す。 */
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 1.35;
+const px = (value: string) => Number.parseFloat(value) || 0;
+async function fitPaper() {
+  fit.value = null;
+  await nextTick();
+  const root = rootEl.value;
+  const paper = paperEl.value;
+  const frame = frameEl.value;
+  if (!root || !paper || !frame) return;
+  // 行(見出し・賞・本文など)は右から左へ並ぶ。枠の幅に関係なく、各行の位置は高さだけで決まる(変形は数えないoffsetで測る)。
+  let left = Infinity;
+  let right = -Infinity;
+  for (const child of Array.from(frame.children) as HTMLElement[]) {
+    const style = getComputedStyle(child);
+    left = Math.min(left, child.offsetLeft - px(style.marginLeft));
+    right = Math.max(right, child.offsetLeft + child.offsetWidth + px(style.marginRight));
+  }
+  if (!Number.isFinite(left) || right <= left) return;
+  const frameStyle = getComputedStyle(frame);
+  const width = Math.ceil(right - left + px(frameStyle.paddingLeft) + px(frameStyle.paddingRight)
+    + px(frameStyle.borderLeftWidth) + px(frameStyle.borderRightWidth));
+  const paperStyle = getComputedStyle(paper);
+  const paperWidth = width + px(paperStyle.paddingLeft) + px(paperStyle.paddingRight);
+  // 紙の影(下に10px)も入れる。
+  const paperHeight = frame.offsetHeight + px(paperStyle.paddingTop) + px(paperStyle.paddingBottom) + 10;
+  const rootStyle = getComputedStyle(root);
+  const roomWidth = root.clientWidth - px(rootStyle.paddingLeft) - px(rootStyle.paddingRight);
+  const roomHeight = root.clientHeight - px(rootStyle.paddingTop) - px(rootStyle.paddingBottom)
+    - (footEl.value?.offsetHeight ?? 0) - px(rootStyle.rowGap);
+  const zoom = Math.min(MAX_ZOOM, roomWidth / paperWidth, roomHeight / paperHeight);
+  fit.value = { width, zoom: Math.max(MIN_ZOOM, Math.floor(zoom * 100) / 100) };
+}
+let resizeFrame = 0;
+function onResize() {
+  if (resizeFrame) cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = 0;
+    void fitPaper();
+  });
+}
+watch(() => props.award, () => { void fitPaper(); });
 /** 押したら、演出を最後の形へ飛ばす(操作を止めない)。 */
 function skip() {
   playing.value = false;
@@ -108,7 +171,7 @@ const confetti = computed(() => {
   padding: 1rem max(16px, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   background: radial-gradient(ellipse at 50% 35%, #2b3d58 0%, #121c2e 70%);
 }
-/* 紙: 縦書き。右から、見出し・期・賞・名前・本文・日付・やこび姫と判子。紙の幅は中身に合わせる(縦の長さだけ決める)。 */
+/* 紙: 縦書き。右から、見出し・期・賞・名前・本文・日付・やこび姫と判子。紙の幅は、字の並びを測って決める(fitPaper)。 */
 .shogi-game .season-award__paper {
   align-self: center;
   box-sizing: border-box;
@@ -119,8 +182,10 @@ const confetti = computed(() => {
   box-shadow: 0 10px 0 rgba(0, 0, 0, 0.35), 0 0 0 1px #d8cba5;
 }
 .shogi-game .season-award__frame {
+  position: relative;
   box-sizing: border-box;
-  height: min(26rem, calc(100dvh - 15rem));
+  /* 背の低い画面でも18remは取る(低くすると横に長くなりすぎる)。収まらない分は紙ごと縮める(fitPaper)。 */
+  height: max(18rem, min(26rem, calc(100dvh - 15rem)));
   max-width: 100%;
   padding: 1.1rem 1.2rem;
   border: 3px double #8a6d3b;
@@ -191,6 +256,8 @@ const confetti = computed(() => {
 /* 触れても琥珀色のまま少し明るくする(全体のボタンの灰色の触れ方に負けないよう、同じ書き方で)。 */
 .shogi-game .season-award__button:not(:disabled):hover,
 .shogi-game .season-award__button:focus-visible { border-color: #f6bb6e; color: #172632; background: #f6bb6e; }
+/* 紙の大きさを測るあいだ(一瞬)は、紙を見せない。 */
+.shogi-game .season-award--fitting .season-award__paper { visibility: hidden; }
 .shogi-game .season-award__confetti { position: absolute; top: -12px; opacity: 0; pointer-events: none; }
 /* 表彰式の動き: 紙が下から上がり、判子が落ちる。紙吹雪は1回だけ降る。ねぎらいとボタンは判子のあと。 */
 .shogi-game .season-award--play .season-award__paper { animation: season-award-rise 500ms cubic-bezier(0.2, 0.8, 0.3, 1) both; }
