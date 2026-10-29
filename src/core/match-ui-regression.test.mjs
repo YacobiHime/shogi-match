@@ -442,13 +442,9 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/const answerText = hintMoveText\(\{\s*moveText: formatSpokenMove\(bestHint\.move, currentSfen\.value\),/);
   });
 
-  it("閃きは、言葉 → 動かす駒 → 矢印の3段階。1回分で3段目まで見られ、棋譜検討と「すぐ答え」はすぐ矢印(N7)", () => {
-    expect(source).toMatch(/if \(reviewMode\.value \|\| hintStyle\.value === "instant"\) \{\s*hintStage\.value = 0;\s*hintCandidates\.value = arrowMoves;/);
-    expect(source).toMatch(/hintStage\.value = 1;\s*hintCandidates\.value = \[\];\s*hintText\.value = hintStageOneLine\(/);
-    // 2・3段目は読み直さず、回数も減らさない。
-    expect(source).toMatch(/if \(hintStage\.value > 0 && hintStage\.value < 3 && advanceHintStage\(\)\) return;\s*thinking\.value = true;/);
-    expect(source).toMatch(/hintsRemaining\.value > 0 \|\| \(hintStage\.value > 0 && hintStage\.value < 3\)/);
-    expect(source).toMatch(/const boardSquareMarks = computed\(\(\) => \[\.\.\.boardEscapeMarks\.value, \.\.\.hintPieceMarks\.value\]\);/);
+  it("閃きは、1回押せばすぐ矢印と答えを出す(3段階は2026-10-29に外した。docs/coach-advice-expansion-design.mdの10-3)", () => {
+    expect(source).toMatch(/if \(!reviewMode\.value\) hintsRemaining\.value -= 1;\s*hintCandidates\.value = arrowMoves;\s*hintText\.value = answerText;/);
+    expect(source).not.toMatch(/hintStage|hintStyle|閃きの出し方/);
   });
 
   it("格言(N6)と大会の物語(N9)は、ほかに言うことがない手番だけ。格言は格言帳に入れる", () => {

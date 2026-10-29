@@ -322,72 +322,7 @@ export function selfMatePraise(plies = 0) {
   return Number.isInteger(plies) && plies > 1 ? `自分の力で${plies}手の詰みを読みきったね！ お見事！` : '自分の力で詰ませたね！ お見事！';
 }
 
-// ---- 段階2(docs/coach-advice-expansion-design.mdの10章)。N7 閃きの3段階・N3 終盤の方針。
-
-/** 閃きの出し方(N7)。staged: 言葉 → 動かす駒 → 矢印の3段階。instant: すぐ答え(今までどおり)。 */
-export const HINT_STYLES = Object.freeze(['staged', 'instant']);
-export const HINT_STYLE_KEY = 'yacobihime:shogi-match:hint-style:v1';
-
-/**
- * 閃きの出し方を読む。読めなければ段階(おすすめ)。
- * @param {Pick<Storage, 'getItem'> | null | undefined} storage
- * @returns {'staged' | 'instant'}
- */
-export function loadHintStyle(storage) {
-  try {
-    const value = storage?.getItem(HINT_STYLE_KEY);
-    return value === 'instant' ? 'instant' : 'staged';
-  } catch {
-    return 'staged';
-  }
-}
-
-/**
- * @param {Pick<Storage, 'setItem'> | null | undefined} storage
- * @param {'staged' | 'instant'} style
- */
-export function saveHintStyle(storage, style) {
-  try {
-    storage?.setItem(HINT_STYLE_KEY, style === 'instant' ? 'instant' : 'staged');
-  } catch {
-    // 保存できなくても、その対局のあいだは選んだ出し方で遊べる。
-  }
-}
-
-/**
- * 閃きの1段目(N7)。最善手の種類だけを言う(答えの手は言わない)。詰みがあるときは詰みを先に言う。
- * @param {ReturnType<typeof moveMeaning>} meaning
- * @param {{ mate?: { plies: number, byChecks: boolean | null } | null }} [options]
- */
-export function hintStageOneLine(meaning, { mate = null } = {}) {
-  if (mate && Number.isInteger(mate.plies) && mate.plies > 0) {
-    return mate.byChecks === true
-      ? `${mate.plies}手詰めがあるよ！ 王手の続く手から探してみよう`
-      : `${mate.plies}手で詰ませる手順があるよ！ 相手の玉の逃げ道から考えてみよう`;
-  }
-  const name = PIECE_NAMES[meaning?.piece ?? ''] ?? '';
-  switch (meaning?.kind) {
-    case 'free-capture': return 'タダで取れる駒があるよ。どの駒にも守られていない相手の駒を探してみて';
-    case 'tesuji': return TESUJI_HINT_LINES[meaning.tesuji ?? ''] ?? '手筋が使えそうだよ！';
-    case 'capture-gain': return '駒得できる取りがあるよ。取れる駒を探してみて';
-    case 'check': return '王手をかける手だよ。相手の玉に迫ってみよう';
-    case 'escape': return `ねらわれている${name || '駒'}を逃がす手だよ`;
-    case 'drop': return `持ち駒の${name}を使う手があるよ`;
-    case 'activate': return `${name}をもっと働かせる手だよ`;
-    case 'defend': return '守りの手だよ。玉のまわりを固めてみよう';
-    case 'capture': return '駒を取る手だよ。どの駒で取るかがポイント';
-    default: return 'じっくり形を良くする手だよ。駒の働きを考えてみて';
-  }
-}
-
-/**
- * 閃きの2段目(N7)。動かす駒を言う(盤では、その駒の升を緑で光らせる)。打つ手は持ち駒の名前。
- * @param {{ drop?: boolean, piece?: string }} input pieceはSFENの駒の文字(成り駒は'+'付き)
- */
-export function hintStageTwoLine({ drop = false, piece = '' }) {
-  const name = PIECE_NAMES[piece] ?? '駒';
-  return drop ? `持ち駒の${name}を打つ手だよ！ どこに打つかな？` : `緑に光っている${name}を動かす手だよ！ どこへ動かす？`;
-}
+// ---- 段階2(docs/coach-advice-expansion-design.mdの10章)。N3 終盤の方針(N7 閃きの3段階は、2026-10-29に外した。10-3)。
 
 /** この手数からは終盤として方針を言う(N3)。 */
 export const ENDGAME_PLY = 60;

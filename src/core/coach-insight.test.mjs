@@ -3,17 +3,13 @@ import {
   addRecentTalk,
   adviceReason,
   endgamePolicyAdvice,
-  hintStageOneLine,
-  hintStageTwoLine,
   insightPraise,
   isEndgame,
-  loadHintStyle,
   meaningAdvice,
   missedChanceAdvice,
   moveMeaning,
   opponentSlipAdvice,
   proverbAdvice,
-  saveHintStyle,
   selfMatePraise,
   storyAdvice,
   weaknessOvercomeLine,
@@ -139,30 +135,6 @@ describe('N10 ほめる', () => {
   it('自分で詰ませたときは手数を添える', () => {
     expect(selfMatePraise(7)).toBe('自分の力で7手の詰みを読みきったね！ お見事！');
     expect(selfMatePraise(1)).toBe('自分の力で詰ませたね！ お見事！');
-  });
-});
-
-describe('段階2: N7 閃きの3段階', () => {
-  it('1段目は種類だけを言い、詰みがあれば詰みを先に言う', () => {
-    expect(hintStageOneLine({ kind: 'drop', piece: 'N' })).toBe('持ち駒の桂を使う手があるよ');
-    expect(hintStageOneLine({ kind: 'free-capture', captured: 'S', square: '5e' })).not.toMatch(/5e|五/);
-    expect(hintStageOneLine(null)).toContain('形を良くする');
-    expect(hintStageOneLine({ kind: 'check' }, { mate: { plies: 3, byChecks: true } })).toBe('3手詰めがあるよ！ 王手の続く手から探してみよう');
-    expect(hintStageOneLine(null, { mate: { plies: 5, byChecks: false } })).toContain('5手で詰ませる手順');
-  });
-
-  it('2段目は動かす駒(打つなら持ち駒)を言う', () => {
-    expect(hintStageTwoLine({ drop: false, piece: '+R' })).toBe('緑に光っている竜を動かす手だよ！ どこへ動かす？');
-    expect(hintStageTwoLine({ drop: true, piece: 'G' })).toBe('持ち駒の金を打つ手だよ！ どこに打つかな？');
-  });
-
-  it('出し方は保存し、読めなければ段階にする', () => {
-    const store = new Map();
-    const storage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
-    expect(loadHintStyle(storage)).toBe('staged');
-    saveHintStyle(storage, 'instant');
-    expect(loadHintStyle(storage)).toBe('instant');
-    expect(loadHintStyle({ getItem: () => { throw new Error('x'); } })).toBe('staged');
   });
 });
 

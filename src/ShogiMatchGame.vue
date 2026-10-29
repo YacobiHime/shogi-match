@@ -1076,7 +1076,7 @@
         :candidates="boardCandidates"
         :attack-marks="boardAttackMarks"
         :float-labels="captureFloatLabels"
-        :mark-squares="boardSquareMarks"
+        :mark-squares="boardEscapeMarks"
         :risk-destinations="boardRiskDestinations"
         :risk-squares="boardRiskSquares"
         :threat-arrows="boardThreatArrows"
@@ -1465,7 +1465,7 @@
         :disabled="!canUseHint"
         @click="showHint"
       >
-        閃き <small>{{ hintStage === 1 ? "▸駒" : hintStage === 2 ? "▸答え" : reviewMode ? "×∞" : measureBand ? "お休み" : `×${formatAssistCount(hintsRemaining)}` }}</small>
+        閃き <small>{{ reviewMode ? "×∞" : measureBand ? "お休み" : `×${formatAssistCount(hintsRemaining)}` }}</small>
       </button>
       <!-- 感想戦。押すと、盤で指した手に対局相手のCPUが同じ強さで応える。もう一度押すとやめる。 -->
       <button
@@ -2389,7 +2389,7 @@ import {
 } from "./core/opening-unlocks.mjs";
 import { openingFormationGhosts, openingFormationProgress } from "./core/opening-formation.mjs";
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
-import { mistakeReason, mistakeTarget, pieceAt, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
+import { mistakeReason, mistakeTarget, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
 import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import { HANANE, HANANE_SPRITE, storyMemberId } from "./core/ryuo-story.mjs";
 import { lastGameMilestone } from "./core/ryuo-milestone.mjs";
@@ -2498,7 +2498,6 @@ import {
   type PregameRow,
   assistLimitOptions,
   COACH_LEVEL_OPTIONS,
-  HINT_STYLE_OPTIONS,
   CPU_BISHOP_OPTIONS,
   CPU_FIRST_MOVE_OPTIONS,
   CPU_ROOK_OPTIONS,
@@ -2780,18 +2779,14 @@ import {
   addRecentTalk,
   adviceReason,
   endgamePolicyAdvice,
-  hintStageOneLine,
-  hintStageTwoLine,
   insightPraise,
   isEndgame,
-  loadHintStyle,
   loadWeaknessReminders,
   meaningAdvice,
   missedChanceAdvice,
   moveMeaning,
   opponentSlipAdvice,
   proverbAdvice,
-  saveHintStyle,
   saveWeaknessReminders,
   selfMatePraise,
   storyAdvice,
@@ -3526,40 +3521,15 @@ const reviewCpuStartedAtPly = ref(0);
 const hintsRemaining = ref(Math.max(0, Math.trunc(props.hintCount)));
 const undosRemaining = ref(Math.max(0, Math.trunc(props.undoCount)));
 const hintCandidates = ref<{ usi: string; score?: number }[]>([]);
-/*
- * 閃きの3段階(N7。docs/coach-advice-expansion-design.mdの10章)。1回の閃きで、言葉 → 動かす駒(緑) → 矢印の順に見られる。
- * hintStage: いま見せている段(0は閃いていない)。hintPlan: 1回目に読んだ答え(2・3段目はこれを見せるだけで、読み直さない)。
- * 指したら(待ったでも)次の局面でまた1段目から。棋譜検討と「すぐ答え」の設定では、今までどおりすぐ矢印。
- */
-const hintStyle = ref<"staged" | "instant">(loadHintStyle(typeof localStorage === "undefined" ? null : localStorage));
-watch(hintStyle, (style) => saveHintStyle(browserStorage(), style));
-const hintStage = ref(0);
-let hintPlan: null | {
-  historyLength: number;
-  moves: { usi: string; score?: number }[];
-  answerText: string;
-  pieceSquare: string;
-  pieceLine: string;
-} = null;
-const hintPieceMarks = computed(() => {
-  if (hintStage.value !== 2 || !hintPlan?.pieceSquare) return [];
-  const square = hintPlan.pieceSquare;
-  return [{ file: Number(square[0]), rank: square.charCodeAt(1) - 96, tone: "key" as const }];
-});
 /** 相手の狙いの点線の矢印(N2)。相手の狙いを言ったときに出し、プレイヤーが指したら消す。 */
 const threatArrow = ref<{ usi: string; color: "black" | "white" } | null>(null);
 /** 悪手の理由で「取られちゃう」と言った駒の升(N2)。次の手を指すまで赤い輪を出す。 */
 const mistakeRingSquare = ref("");
 const boardThreatArrows = computed(() => (threatArrow.value && !hintCandidates.value.length ? [threatArrow.value] : []));
 const boardRiskSquares = computed(() => (mistakeRingSquare.value ? [mistakeRingSquare.value] : []));
-function resetHintStage() {
-  hintStage.value = 0;
-  hintPlan = null;
-}
-/** 閃きの矢印・段階と、盤で指し示した印(相手の狙い・取られる駒)を消す。CPUが指した手では、取られる駒の輪を残す。 */
+/** 閃きの矢印と、盤で指し示した印(相手の狙い・取られる駒)を消す。CPUが指した手では、取られる駒の輪を残す。 */
 function clearHintMarks({ keepMistakeRing = false }: { keepMistakeRing?: boolean } = {}) {
   hintCandidates.value = [];
-  resetHintStage();
   threatArrow.value = null;
   talkOpen.value = false;
   if (!keepMistakeRing) mistakeRingSquare.value = "";
@@ -3952,7 +3922,7 @@ const canMove = computed(() =>
 const canUseHint = computed(() =>
   canMove.value
   && engineReady.value
-  && (reviewMode.value || hintsRemaining.value > 0 || (hintStage.value > 0 && hintStage.value < 3))
+  && (reviewMode.value || hintsRemaining.value > 0)
   && (!reviewMode.value || enumerateLegalMoves(record.value.position).length > 0)
 );
 const canUndo = computed(() =>
@@ -5251,8 +5221,6 @@ const boardRiskDestinations = computed(() => {
   const sfen = currentSfen.value;
   return (source: string) => unsafeDestinations(sfen, source);
 });
-/** 盤の升の印。玉の逃げ道と、閃きの2段目の動かす駒(緑)。 */
-const boardSquareMarks = computed(() => [...boardEscapeMarks.value, ...hintPieceMarks.value]);
 const boardEscapeMarks = computed(() => {
   if (!matchStarted.value || pregameOpen.value) return [];
   const position = createGameRecord(currentSfen.value).position;
@@ -5878,7 +5846,6 @@ const pregameCommonRows = computed(() => {
     );
   }
   rows.push({ id: "coach", label: "やこび姫の助言", value: optionLabel(COACH_LEVEL_OPTIONS, coachLevel.value) });
-  rows.push({ id: "hintStyle", label: "閃きの出し方", value: optionLabel(HINT_STYLE_OPTIONS, hintStyle.value) });
   return rows;
 });
 
@@ -5941,7 +5908,6 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
   if (id === "hintLimit") return single("閃きの回数", learningHintLimit.value, [{ options: assistLimitOptions }]);
   if (id === "undoLimit") return single("待ったの回数", learningUndoLimit.value, [{ options: assistLimitOptions }]);
   if (id === "coach") return single("やこび姫の助言", coachLevel.value, [{ options: COACH_LEVEL_OPTIONS }]);
-  if (id === "hintStyle") return single("閃きの出し方", hintStyle.value, [{ options: HINT_STYLE_OPTIONS }]);
   const plan = LEARNING_PLAN_PICKER.exec(id);
   if (plan) {
     const side = plan[1] as "player" | "opponent";
@@ -5976,7 +5942,6 @@ function onPregamePick(key: string, value: PickerValue) {
   else if (key === "hintLimit") learningHintLimit.value = Number(value);
   else if (key === "undoLimit") learningUndoLimit.value = Number(value);
   else if (key === "coach") coachLevel.value = text as typeof coachLevel.value;
-  else if (key === "hintStyle") hintStyle.value = text === "instant" ? "instant" : "staged";
   else {
     const plan = LEARNING_PLAN_PICKER.exec(key);
     if (plan) setLearningPlan(plan[1] as "player" | "opponent", plan[2] as "strategy" | "castle", text);
@@ -10164,27 +10129,8 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   return true;
 }
 
-/** 閃きの2・3段目(N7)。1段目で読んだ答えを、駒 → 矢印の順に見せる。読み直さず、回数も減らさない。 */
-function advanceHintStage() {
-  const plan = hintPlan;
-  if (!plan || plan.historyLength !== moveHistory.length) {
-    resetHintStage();
-    return false;
-  }
-  if (hintStage.value === 1 && plan.pieceLine) {
-    hintStage.value = 2;
-    hintText.value = plan.pieceLine;
-    return true;
-  }
-  hintStage.value = 3;
-  hintCandidates.value = plan.moves;
-  hintText.value = plan.answerText;
-  return true;
-}
-
 async function showHint() {
   if (!canUseHint.value || !engine) return;
-  if (hintStage.value > 0 && hintStage.value < 3 && advanceHintStage()) return;
   thinking.value = true;
   hintText.value = "やこび姫が候補手を考えています…";
   try {
@@ -10233,28 +10179,8 @@ async function showHint() {
       byChecks,
     });
     if (!reviewMode.value) hintsRemaining.value -= 1;
-    if (reviewMode.value || hintStyle.value === "instant") {
-      hintStage.value = 0;
-      hintCandidates.value = arrowMoves;
-      hintText.value = answerText;
-    } else {
-      // 1段目: 最善手の種類だけを言う(答えの手は言わない)。2段目の動かす駒は、盤の升かは持ち駒の名前。
-      const drop = bestHint.move.includes("*");
-      const pieceSquare = drop ? "" : bestHint.move.slice(0, 2);
-      const piece = drop ? bestHint.move[0] : (pieceAt(currentSfen.value, pieceSquare) ?? "");
-      hintPlan = {
-        historyLength: moveHistory.length,
-        moves: arrowMoves,
-        answerText,
-        pieceSquare,
-        pieceLine: hintStageTwoLine({ drop, piece: piece.startsWith("+") ? `+${piece[1].toUpperCase()}` : piece.toUpperCase() }),
-      };
-      hintStage.value = 1;
-      hintCandidates.value = [];
-      hintText.value = hintStageOneLine(moveMeaning(currentSfen.value, bestHint.move), {
-        mate: bestHintScore?.type === "mate" && bestHintScore.value > 0 ? { plies: bestHintScore.value, byChecks } : null,
-      });
-    }
+    hintCandidates.value = arrowMoves;
+    hintText.value = answerText;
   } catch (error) {
     hintText.value = `ヒントを出せませんでした: ${error instanceof Error ? error.message : String(error)}`;
   } finally {

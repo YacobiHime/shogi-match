@@ -50,11 +50,6 @@ export const COACH_LEVEL_OPTIONS: PregameOption[] = [
   { value: "encourage", label: "応援のみ" },
   { value: "detailed", label: "詳しい助言" },
 ];
-/** 閃きの出し方(N7。docs/coach-advice-expansion-design.mdの10章)。 */
-export const HINT_STYLE_OPTIONS: PregameOption[] = [
-  { value: "staged", label: "少しずつ（言葉 → 駒 → 答え）" },
-  { value: "instant", label: "すぐ答え" },
-];
 export const strengthOptions: PregameOption[] = CPU_STRENGTH_PRESETS.map((preset) => ({
   value: preset.value, label: `Lv.${preset.level} ${preset.label}`,
 }));
