@@ -148,7 +148,8 @@
               </p>
             </div>
             <button v-if="!talkPinned" type="button" class="relay__talk-latest" data-relay-talk-latest @click="scrollTalkToEnd">▼ 新しい解説へ</button>
-            <p v-if="readingText" class="relay__reading" data-relay-reading><b>AIの読み筋</b>{{ readingText }}</p>
+            <!-- 次の一手クイズの答えが出るまでは、読み筋(答えの手)を隠す(34章)。 -->
+            <p v-if="readingText && !(quiz && !quiz.result)" class="relay__reading" data-relay-reading><b>AIの読み筋</b>{{ readingText }}</p>
           </div>
           <div v-else-if="tab === 'graph'" class="relay__graph" data-relay-graph>
             <p class="relay__graph-title"><b>形勢</b><span>上(青)ほど☗{{ players.black.name }}、下(赤)ほど☖{{ players.white.name }}が良い</span></p>
@@ -193,8 +194,6 @@
           <button type="button" aria-label="いちばん新しい手へ" :disabled="cursor >= ready" @click="seek(ready)">⏭</button>
           <button type="button" class="relay__toggle" :aria-label="`速さ ×${speed}。押すと変える`" data-relay-speed @click="cycleSpeed">×{{ speed }}</button>
           <button type="button" class="relay__toggle" :aria-pressed="commentsOn" aria-label="コメントの表示" data-relay-comments @click="commentsOn = !commentsOn">コメ{{ commentsOn ? "" : "✕" }}</button>
-          <!-- 盤面の反転(32章)。後手の側から見る。押すたびに切り替わる(Fキーでも)。 -->
-          <button type="button" class="relay__toggle" :aria-pressed="flipped" aria-label="盤面を反転" data-relay-flip @click="flipped = !flipped">反転</button>
         </div>
         <!-- 中継の楽しみ(24章)。次の一手クイズ・見どころ再生・大盤解説・研究ノート。 -->
         <div class="relay__extras">
@@ -202,6 +201,11 @@
           <button type="button" :disabled="!highlightAvailable" data-relay-highlights @click="startHighlights">見どころ</button>
           <button type="button" :disabled="!bigBoardAvailable" data-relay-bigboard @click="startBigBoard">大盤</button>
           <button type="button" :disabled="cursor === 0 && !sfens.length" data-relay-note @click="saveNote">☆ノート</button>
+          <!--
+            盤面の反転(32章)。後手の側から見る。押すたびに切り替わる(Fキーでも)。
+            再生の列が8つだとスマホで1つが44pxより細くなるので、こちらの列に置く(34章)。
+          -->
+          <button type="button" :aria-pressed="flipped" aria-label="盤面を反転" data-relay-flip @click="flipped = !flipped">反転</button>
         </div>
         <input
           class="relay__seek"
@@ -574,7 +578,8 @@ function launch(list: { text: string; tone: string; big: boolean; delay: number;
   const fontPx = Number.parseFloat(style?.fontSize ?? "") || Math.min(32, Math.max(16, boardWidth.value * 0.036));
   const family = style?.fontFamily || "sans-serif";
   const laneHeight = fontPx * LANE_HEIGHT_EM;
-  const laneCount = Math.max(3, Math.floor((height * (LANE_AREA.bottom - LANE_AREA.top)) / laneHeight));
+  const bounds = laneBounds(area, height);
+  const laneCount = Math.max(3, Math.floor((bounds.bottom - bounds.top) / laneHeight));
   const now = performance.now();
   const added = list.map((item) => {
     const scale = item.big ? 1.4 : item.tone === "gold" ? 1.12 : 1;
@@ -590,10 +595,30 @@ function launch(list: { text: string; tone: string; big: boolean; delay: number;
     flyId += 1;
     return {
       id: flyId, text: item.text, tone: item.tone, big: item.big,
-      top: height * LANE_AREA.top + placed.lane * laneHeight, delay: placed.start - now, duration: item.duration,
+      top: bounds.top + placed.lane * laneHeight, delay: placed.start - now, duration: item.duration,
     };
   });
   flying.value = [...flying.value, ...added].slice(-FLYING_MAX);
+}
+/**
+ * コメントを流す段の上と下(コメントの欄の中の位置)。対局者の名札と残り時間には重ねない(34章)。
+ * 上半分にある名札の下から、下半分にある名札の上までにする。名札が見つからなければ、欄の割合(LANE_AREA)で決める。
+ */
+function laneBounds(area: HTMLElement | null, height: number) {
+  let top = height * LANE_AREA.top;
+  let bottom = height * LANE_AREA.bottom;
+  const box = area?.getBoundingClientRect();
+  if (box && boardEl.value) {
+    for (const el of Array.from(boardEl.value.querySelectorAll(".player-name, .clock"))) {
+      const rect = el.getBoundingClientRect();
+      if (!rect.height || !rect.width) continue;
+      if ((rect.top + rect.bottom) / 2 - box.top < height / 2) top = Math.max(top, rect.bottom - box.top + 2);
+      else bottom = Math.min(bottom, rect.top - box.top - 2);
+    }
+  }
+  // 名札が大きくて段が取れないときは、割合に戻す(3段は必ず流せるように)。
+  if (bottom - top < height * 0.3) return { top: height * LANE_AREA.top, bottom: height * LANE_AREA.bottom };
+  return { top, bottom };
 }
 const banner = shallowRef<{ id: number; text: string } | null>(null);
 let bannerTimer: ReturnType<typeof setTimeout> | undefined;
@@ -801,6 +826,9 @@ const quizSide = computed<Side>(() => ((quiz.value?.at ?? 1) % 2 === 1 ? "black"
 const quizAvailable = computed(() => !quiz.value && !catchingUp.value && !(finished.value && cursor.value >= entries.value.length));
 let quizTimer: ReturnType<typeof setTimeout> | undefined;
 function startQuiz() {
+  // 見どころ・大盤解説を先に終える(見どころは元の手数へ戻るので、その局面で出題する。34章)。
+  stopHighlight();
+  endVariation();
   const at = cursor.value + 1;
   const sfen = sfens.value[cursor.value];
   const previous = entries.value[cursor.value - 1];
@@ -808,8 +836,6 @@ function startQuiz() {
     sfen, expected: (previous?.pv ?? "").split(" ")[0] ?? "", actual: entries.value[cursor.value]?.move ?? "", seed: `${props.spec.key}:${at}`,
   }).map((usi) => ({ usi, text: moveTextOf(sfen, usi, previous?.move ?? "") }));
   if (!choices.length) return;
-  stopHighlight();
-  endVariation();
   pausePlayback();
   quiz.value = { at, choices, pick: "", pickText: "", result: null, actualText: "" };
 }
@@ -847,7 +873,8 @@ function celebrateQuiz() {
 }
 
 // 見どころ再生(24-3)。形勢が動いた手・長考・決め手・終局を、短く続けて見る。
-type Highlight = { list: ReturnType<typeof highlightPlan>; index: number; caption: string };
+/** fromは、見どころを始める前に見ていた手数(終わったら・やめたら、そこへ戻る。34章)。 */
+type Highlight = { list: ReturnType<typeof highlightPlan>; index: number; caption: string; from: number };
 const highlight = shallowRef<Highlight | null>(null);
 let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 /** 見どころの範囲。終局していれば全部、そうでなければ見たところまで(先の結末を見せない)。 */
@@ -859,7 +886,7 @@ function startHighlights() {
   quiz.value = null;
   endVariation();
   pausePlayback();
-  highlight.value = { list, index: -1, caption: "" };
+  highlight.value = { list, index: -1, caption: "", from: cursor.value };
   stepHighlight(0);
 }
 function stepHighlight(index: number) {
@@ -867,7 +894,7 @@ function stepHighlight(index: number) {
   if (!current) return;
   if (index >= current.list.length) {
     highlight.value = { ...current, index: current.list.length, caption: "見どころは以上です" };
-    highlightTimer = setTimeout(() => { highlight.value = null; }, 2200);
+    highlightTimer = setTimeout(stopHighlight, 2200);
     return;
   }
   const item = current.list[index];
@@ -880,10 +907,13 @@ function stepHighlight(index: number) {
     highlightTimer = setTimeout(() => stepHighlight(index + 1), 2600 / speed.value);
   }, 900 / speed.value);
 }
+/** 見どころを終える。始める前に見ていた手数へ戻す(見どころで見ていた場所を失わない。34章)。 */
 function stopHighlight() {
   clearTimeout(highlightTimer);
   highlightTimer = undefined;
+  const from = highlight.value?.from;
   highlight.value = null;
+  if (from !== undefined && from !== cursor.value) cursor.value = from;
 }
 
 // 大盤解説(24-4)。解説者が大盤で、いまの局面からAIの読み筋の手を進めて見せ、終わったら元の局面へ戻す。
@@ -1355,7 +1385,7 @@ onBeforeUnmount(() => {
   grid-template-columns: 2.4em minmax(0, 1fr) auto;
   gap: 0.4rem;
   width: 100%;
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 0.4rem;
   border: 0;
   border-radius: 0.3rem;
@@ -1371,20 +1401,22 @@ onBeforeUnmount(() => {
 .shogi-game .relay__kifu-time { color: inherit; opacity: 0.75; font-variant-numeric: tabular-nums; }
 .shogi-game .relay__move { display: flex; gap: 0.5rem; align-items: baseline; justify-content: center; margin: 0; min-height: 1.5em; font-size: 0.95rem; white-space: nowrap; overflow: hidden; }
 .shogi-game .relay__move small { color: #9fb3c8; font-size: 0.78rem; }
-.shogi-game .relay__controls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(3, minmax(0, 1.1fr)); gap: 0.25rem; }
+.shogi-game .relay__controls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 1.1fr)); gap: 0.25rem; }
 .shogi-game .relay__controls button { min-height: 44px; padding: 0; }
 .shogi-game .relay__controls button:disabled { opacity: 0.4; cursor: default; }
 .shogi-game .relay__play { color: #172632 !important; background: #f1a54c !important; border-color: #f1a54c !important; font-size: 1.05rem; }
 .shogi-game .relay__toggle { font-size: 0.82rem; }
-.shogi-game .relay__seek { width: 100%; min-height: 28px; margin: 0; accent-color: #f1a54c; }
+/* 見る手数のつまみ。指で動かすので、高さを44px取る(34章。UI 7-4)。 */
+.shogi-game .relay__seek { width: 100%; min-height: 44px; margin: 0; accent-color: #f1a54c; }
 /* 中継の楽しみ(24章)。次の一手・見どころ・大盤・研究ノートのボタンと、盤の下の端の札。 */
-.shogi-game .relay__extras { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.25rem; }
+.shogi-game .relay__extras { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.25rem; }
 .shogi-game .relay__extras button {
-  display: grid; place-items: center; min-height: 40px; padding: 0 0.2rem; border: 1px solid rgba(241, 165, 76, 0.5); border-radius: 0.4rem;
+  display: grid; place-items: center; min-height: 44px; padding: 0 0.2rem; border: 1px solid rgba(241, 165, 76, 0.5); border-radius: 0.4rem;
   color: #fffcf4; background: rgba(241, 165, 76, 0.1); font: inherit; font-size: 0.82rem; font-weight: 800; line-height: 1.1; cursor: pointer;
 }
 .shogi-game .relay__extras button small { color: #f1a54c; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 .shogi-game .relay__extras button:disabled { opacity: 0.4; cursor: default; }
+.shogi-game .relay__extras button[aria-pressed="true"] { border-color: #f1a54c; color: #172632; background: #f1a54c; }
 /* 札は欄の切り替えと解説の欄(1〜2段目)に重ねる。そのため、その2つの段を決めておく(ほかの段は順に並ぶ)。 */
 .shogi-game .relay__tabs { grid-row: 1; grid-column: 1; }
 .shogi-game .relay__panel { grid-row: 2; grid-column: 1; }
@@ -1400,7 +1432,7 @@ onBeforeUnmount(() => {
 .shogi-game .relay__fun-text { grid-column: 1 / -1; margin: 0; font-size: 0.9rem; }
 .shogi-game .relay__fun-text--hit { color: #ffd27a; font-size: 1.05rem; }
 .shogi-game .relay__fun-text--miss { color: #c9d6e6; }
-.shogi-game .relay__fun-close { grid-row: 1; grid-column: 2; align-self: start; min-height: 36px; padding: 0 0.7rem; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 0.35rem; color: #fffcf4; background: transparent; font: inherit; font-size: 0.8rem; cursor: pointer; }
+.shogi-game .relay__fun-close { grid-row: 1; grid-column: 2; align-self: start; min-height: 44px; padding: 0 0.8rem; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 0.35rem; color: #fffcf4; background: transparent; font: inherit; font-size: 0.8rem; cursor: pointer; }
 .shogi-game .relay__quiz-choices { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; }
 .shogi-game .relay__quiz-choices button { min-height: 44px; padding: 0 0.2rem; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 0.4rem; color: #fffcf4; background: rgba(255, 252, 244, 0.08); font: inherit; font-weight: 900; cursor: pointer; }
 .shogi-game .relay__toast { position: absolute; left: 50%; top: 0.5rem; z-index: 7; margin: 0; padding: 0.3rem 0.7rem; border-radius: 999px; color: #172632; background: #f1a54c; font-size: 0.8rem; font-weight: 900; width: max-content; max-width: 90%; text-align: center; transform: translateX(-50%); }

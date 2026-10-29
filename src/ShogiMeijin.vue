@@ -32,10 +32,12 @@
         </template>
         <template v-else>
           <p class="shogi-tournament__goal-box" data-meijin-goal><small>この期の目標</small><span>{{ entryGoal }}</span></p>
-          <p class="shogi-tournament__tip-line meijin__tip" data-meijin-talk>
+          <!-- やこび姫の一言。2行で切れるので、押すと全部を読める(もう一度押すと戻る。34章)。 -->
+          <button type="button" :class="['shogi-tournament__tip-line', 'meijin__tip', { 'meijin__tip--open': tipOpen }]" :aria-expanded="tipOpen" data-meijin-talk @click="tipOpen = !tipOpen">
             <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
             <span class="shogi-tournament__tip-text">{{ entryTalk }}</span>
-          </p>
+            <span class="shogi-tournament__tip-more">{{ tipOpen ? "とじる" : "ぜんぶ" }}</span>
+          </button>
           <div class="shogi-tournament__entry-settings">
             <p><small>設定</small><span data-meijin-summary>{{ settingsSummary }}</span></p>
             <button type="button" class="shogi-tournament__sub" data-meijin-change @click="settingsOpen = true">変える</button>
@@ -134,6 +136,7 @@
       <!-- 分身の回戦の中継ボード(docs/tournament-relay-design.mdの22章)。リーグ表の上で、同じ回戦の対局が同時に進む。 -->
       <RelayLivePanel
         v-if="livePanel"
+        ref="livePanelEl"
         :panel="livePanel"
         @open="emit('live-open', '')"
         @watch="(key) => emit('live-open', key)"
@@ -206,10 +209,11 @@
             <b>{{ row.share }}%</b>
           </li>
         </ul>
-        <p class="shogi-tournament__tip-line meijin__tip" data-meijin-tip>
+        <button type="button" :class="['shogi-tournament__tip-line', 'meijin__tip', { 'meijin__tip--open': tipOpen }]" :aria-expanded="tipOpen" data-meijin-tip @click="tipOpen = !tipOpen">
           <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
           <span class="shogi-tournament__tip-text">{{ tipLine }}</span>
-        </p>
+          <span class="shogi-tournament__tip-more">{{ tipOpen ? "とじる" : "ぜんぶ" }}</span>
+        </button>
         <!-- 分身の期(21章): 「観戦する」はリーグ表の上の回戦の中継ボード(22章)、「結果だけ見る」は待たずに指させて記録する。 -->
         <template v-if="view.spectator">
           <button type="button" class="shogi-tournament__start" data-meijin-watch @click="versusOpen = true">{{ watchText }}</button>
@@ -634,12 +638,20 @@ function goBack() {
   else return false;
   return true;
 }
-defineExpose({ goBack });
+/** 中継ボードの欄の予想のシート(34章)。開いていれば閉じて真。大会の画面の戻る操作が、中継ボードを終える前に呼ぶ。 */
+const livePanelEl = ref<InstanceType<typeof RelayLivePanel> | null>(null);
+/** やこび姫の一言を全部出しているか(34章)。画面が変わったら戻す。 */
+const tipOpen = ref(false);
+watch(() => screen.value, () => { tipOpen.value = false; });
+function closeLiveSheet() {
+  return Boolean(livePanelEl.value?.closeSheet());
+}
+defineExpose({ goBack, closeLiveSheet });
 </script>
 
 <style>
 .shogi-game .meijin { display: contents; }
-.shogi-game .meijin__tip { cursor: default; }
+.shogi-game .meijin__tip--open .shogi-tournament__tip-text { display: block; -webkit-line-clamp: unset; }
 /* 上の帯は3つの画面で同じ。戻るは、狭い画面でも行き先の文字を出す(竜王戦の帯より中身が少ない)。 */
 .shogi-game .meijin__topbar .shogi-tournament__topbar-back-text { display: inline; }
 .shogi-game .shogi-tournament__stage.meijin__framed { grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "top" "map" "hud"; }

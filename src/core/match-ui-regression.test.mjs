@@ -355,7 +355,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "kenshukai"\) return;/);
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
     // 戻る操作は、いちばん上に重ねた中継(画面→一覧)を先に閉じ、敗退後の観戦、回戦の中継ボード、次に賞状を閉じる。
-    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}\s*if \(afterWatch\.value\) \{\s*endAfterWatch\(\);\s*return;\s*\}\s*if \(meijinAfter\.value\) \{\s*endMeijinAfterWatch\(\);\s*return;\s*\}\s*if \(live\.value\) \{\s*closeLive\(\);\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
+    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}[\s\S]{0,120}?if \(livePanelEl\.value\?\.closeSheet\(\) \|\| meijinEl\.value\?\.closeLiveSheet\(\)\) return;\s*if \(afterWatch\.value\) \{\s*endAfterWatch\(\);\s*return;\s*\}\s*if \(meijinAfter\.value\) \{\s*endMeijinAfterWatch\(\);\s*return;\s*\}\s*if \(live\.value\) \{\s*closeLive\(\);\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
     expect(tournament).toMatch(/data-award-book @click="bookOpen = true"/);
     // 賞状は期が終わったときに対局画面が足す(竜王戦・名人戦とも)。
     expect(source).toMatch(/saveCareer\(browserStorage\(\), career\);\s*awardRyuoSeason\(season\);/);

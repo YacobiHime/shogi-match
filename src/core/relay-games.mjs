@@ -66,7 +66,8 @@ function entryOf(season, { key, event, kind, label, section, order, round = 0, w
       rival: ids.some((id) => season.players?.[id]?.story === HANANE),
       father: ids.some((id) => season.players?.[id]?.story === YOSHIHIKO),
       oshi: Boolean(context.oshiId && ids.includes(context.oshiId)),
-      next: Boolean(context.nextId && ids.includes(context.nextId)),
+      // 分身(あなた)の対局の相手は、いま戦っている相手なので「次の相手」の札を付けない(34章)。
+      next: Boolean(context.nextId && ids.includes(context.nextId) && !ids.includes(USER_ID)),
       self: ids.includes(USER_ID),
       current: false,
     },

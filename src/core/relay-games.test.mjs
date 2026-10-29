@@ -69,6 +69,18 @@ describe('ryuoRelayGames', () => {
     const tagged = games.filter((entry) => entry.tags.next);
     expect(tagged.every((entry) => entry.black.id === nextId || entry.white.id === nextId)).toBe(true);
   });
+
+  it('分身(あなた)の対局には、次の相手の印を付けない(いま戦っている相手。34章)', () => {
+    // 観戦の期で、分身の対局の相手が「次の相手」と同じ棋士のとき(中継ボードで、いま指している局)。
+    const own = ryuoRelayGames({ ...season, spectator: true }).filter((entry) => entry.tags.self);
+    expect(own.length).toBeGreaterThan(0);
+    const opponent = own[0].black.id === USER_ID ? own[0].white.id : own[0].black.id;
+    const watched = ryuoRelayGames({ ...season, spectator: true, pending: { ...season.pending, opponentId: opponent } });
+    const same = watched.find((entry) => entry.key === own[0].key);
+    expect(same?.tags.self).toBe(true);
+    expect(same?.tags.next).toBe(false);
+    expect(watched.some((entry) => !entry.tags.self && entry.tags.next)).toBe(true);
+  });
 });
 
 describe('番勝負の星(30章)', () => {

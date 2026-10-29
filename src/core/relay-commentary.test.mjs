@@ -383,6 +383,16 @@ describe('コメントの条件と名詞の差し替え、解説との連動(27�
     }
   });
 
+  it('分身の対局では、相手が次の相手でも「よく見ておこう」と言わない(34章)', () => {
+    const plain = longScript({ variant: 'n0' });
+    expect(plain.lines.some(({ text }) => text.includes('あなたの次の相手'))).toBe(true);
+    for (const variant of variants) {
+      const script = longScript({ variant, white: player('v', 'やこび', { kind: 'avatar' }) });
+      expect(script.lines.some(({ text }) => text.includes('あなたの次の相手'))).toBe(false);
+      expect(script.comments.some(({ text }) => /次の相手の研究タイム|よく見ておこう|対策メモ/.test(text))).toBe(false);
+    }
+  });
+
   it('玉が盤の真ん中より前に出たら「宇宙将棋ｗ」(1回だけ)', () => {
     const spec = {
       key: 'ryuo:3:ranking:u1', event: 'ryuo', kind: 'game', label: '6組ランキング戦 1回戦', weight: 'plain',

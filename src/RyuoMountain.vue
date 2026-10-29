@@ -119,6 +119,8 @@
         @click.stop="face.opponent && emit('open-opponent')"
         @keydown.enter.prevent="face.opponent && emit('open-opponent')"
       >
+        <!-- 押せる顔は、押せる広さを顔より少し広く取る(地図が縮んでも44pxほど。34章)。 -->
+        <rect v-if="face.opponent" x="-25" y="-25" width="50" height="50" fill="transparent" />
         <rect x="-16" y="-16" width="35" height="35" fill="#0b1320" />
         <rect x="-18" y="-18" width="36" height="36" :fill="face.sprite ? '#d8d0ff' : FACE_FILL[face.tone] ?? FACE_FILL.balance" stroke="#fffcf4" stroke-width="3" />
         <image v-if="face.sprite" :href="face.sprite" x="-15" y="-14" width="30" height="66" preserveAspectRatio="xMidYMin meet" clip-path="url(#ryuo-mountain-face-clip)" class="ryuo-mountain__sprite" />

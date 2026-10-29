@@ -881,10 +881,11 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       react(0, 'castHumble', 2);
     }
     line(0, 'move', 'host', `先手の${call('black')}は${playerHighlight(black)}。後手の${call('white')}は${playerHighlight(white)}。`);
-    const next = nextId ? (['black', 'white']).find((side) => players[side]?.id === nextId) : null;
-    if (next) line(0, 'move', 'host', `${call(next)}は、あなたの次の相手。どんな将棋を指すか、よく見ておこう！`);
     // 観戦の期の分身(あなたの対局から出した能力で戦う棋士)。
     const avatarSide = (['black', 'white']).find((side) => players[side]?.kind === 'avatar');
+    // 分身の対局の相手は「次の相手」だが、いま戦っている相手なので「よく見ておこう」は言わない(34章)。
+    const next = nextId && !avatarSide ? (['black', 'white']).find((side) => players[side]?.id === nextId) : null;
+    if (next) line(0, 'move', 'host', `${call(next)}は、あなたの次の相手。どんな将棋を指すか、よく見ておこう！`);
     if (avatarSide) {
       line(0, 'move', 'host', `${SIDE_NAME[avatarSide]}は、あなたの分身！ あなたの対局から出した能力で戦うよ。`);
       comment(0, 'move', 'avatar', { name: players[avatarSide].name }, 2, 'pink');

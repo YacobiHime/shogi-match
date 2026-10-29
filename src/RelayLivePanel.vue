@@ -48,7 +48,8 @@
     <slot />
     <div class="shogi-tournament__hud-row">
       <button type="button" class="shogi-tournament__sub" :aria-label="`速さ ×${panel.speed}。押すと変える`" data-live-speed @click="emit('speed')">速さ ×{{ panel.speed }}</button>
-      <button type="button" class="shogi-tournament__sub" :disabled="panel.finished" data-live-skip @click="emit('skip')">結果まで進める</button>
+      <!-- 本局はエンジンが指し終えるまで待つので、押したあとは「最後まで指しています…」にする(34章)。 -->
+      <button type="button" class="shogi-tournament__sub" :disabled="panel.finished || panel.skipping" :aria-busy="panel.skipping || undefined" data-live-skip @click="emit('skip')">{{ panel.skipping ? "最後まで指しています…" : "結果まで進める" }}</button>
     </div>
     <button v-if="panel.finished" type="button" class="shogi-tournament__start" data-live-finish @click="emit('finish')">{{ panel.finishText }}</button>
     <button v-else type="button" class="shogi-tournament__start" data-live-avatar-watch @click="emit('open')">{{ panel.watchText }}</button>
@@ -100,6 +101,8 @@ export type LivePanelView = {
     hit: number; decided: number; total: number; totalHit: number;
   } | null;
   finished: boolean;
+  /** 「結果まで進める」を押して、本局が指し終えるのを待っている(34章)。 */
+  skipping?: boolean;
   finishText: string;
   watchText: string;
 };
@@ -111,6 +114,13 @@ const emit = defineEmits<{ open: []; watch: [key: string]; speed: []; skip: []; 
 const SIDES = ["black", "white"] as const;
 const untilPly = PREDICT_UNTIL_PLY;
 const predictOpen = ref(false);
+/** 戻る操作(34章)。予想のシートを開いていれば閉じて真(中継ボードは終えない)。 */
+function closeSheet() {
+  if (!predictOpen.value) return false;
+  predictOpen.value = false;
+  return true;
+}
+defineExpose({ closeSheet });
 type PredictGame = NonNullable<LivePanelView["predict"]>["games"][number];
 function stateText(game: PredictGame) {
   if (game.winner) return game.pick ? (game.pick === game.winner ? "的中！" : "はずれ") : "終局";
@@ -146,12 +156,18 @@ function stateText(game: PredictGame) {
 .shogi-game .relay-live__predict-pick:disabled { opacity: 0.55; cursor: default; }
 .shogi-game .relay-live__predict-state { color: #f1a54c; font-size: 0.85em; font-weight: 900; text-align: center; }
 .shogi-game .relay-live__predict-mini { display: none; }
+/* 予想のシートは対局が多いと長いので、「閉じる」をシートの下の端に止めておく(34章。スクロールしなくても閉じられる)。 */
+.shogi-game .relay-live__predict-sheet .shogi-tournament__sheet-close {
+  position: sticky; bottom: 0; z-index: 1; width: 100%; background: var(--tr-panel, #2c4359); box-shadow: 0 -0.8rem 0.8rem var(--tr-panel, #2c4359);
+}
 /*
  * 背の低い縦の画面(スマホ縦の小さめ)。欄が高いと上の表がつぶれるので(UD 7-5)、補足の文を省き、
  * 「勝敗を予想」「速さ」「結果まで進める」を横1列にする。的中の数は、予想のボタンの中に残す。
+ * スマホの横向き(844×390など)も同じにする。右の列は縦に並べると札がつぶれて字が重なり、
+ * 主役のボタンが画面の外へ出ていた(34章)。行は縮めず、はみ出す分は欄の中でスクロールする。
  */
-@media (max-width: 899px) and (orientation: portrait) and (max-height: 760px) {
-  .shogi-game .shogi-tournament__hud.shogi-tournament__live { display: flex; flex-wrap: wrap; gap: 0.45rem; padding-top: 0.55rem; }
+@media (max-width: 899px) and (orientation: portrait) and (max-height: 760px), (orientation: landscape) and (max-height: 500px) {
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live { display: flex; flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 0.45rem; padding-top: 0.55rem; }
   .shogi-game .shogi-tournament__hud.shogi-tournament__live > * { flex: 1 1 100%; min-width: 0; }
   .shogi-game .shogi-tournament__hud.shogi-tournament__live .shogi-tournament__live-count { display: none; }
   .shogi-game .shogi-tournament__hud.shogi-tournament__live .relay-live__predict,

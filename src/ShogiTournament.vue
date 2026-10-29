@@ -453,6 +453,7 @@
           -->
           <RelayLivePanel
             v-if="live && livePanel"
+            ref="livePanelEl"
             :panel="livePanel"
             @open="openLiveGame(live.focusKey)"
             @watch="openLiveGame"
@@ -1139,7 +1140,7 @@ const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin" | "shoreik
       : props.startAt === "ryuo" ? (props.view && !props.view.result ? "season" : "ryuo")
         : "select",
 );
-const meijinEl = ref<{ goBack: () => boolean } | null>(null);
+const meijinEl = ref<{ goBack: () => boolean; closeLiveSheet: () => boolean } | null>(null);
 // ---- 奨励会(docs/shoreikai-design.md)
 const shoreikaiEl = ref<{ goBack: () => boolean } | null>(null);
 /** 対局から奨励会へ戻ってきた(判子と最終日の結果発表を1回だけ出す)。大会の選択から選び直したら出さない。 */
@@ -1251,6 +1252,8 @@ function goBack() {
     relayList.value = null;
     return;
   }
+  // 中継ボードの予想のシートは、ボードを終える前に閉じる(34章)。
+  if (livePanelEl.value?.closeSheet() || meijinEl.value?.closeLiveSheet()) return;
   if (afterWatch.value) {
     endAfterWatch();
     return;
@@ -1289,6 +1292,7 @@ function backToSelect() {
   tableOpen.value = false;
 }
 defineExpose({ goBack });
+const livePanelEl = ref<InstanceType<typeof RelayLivePanel> | null>(null);
 
 // ---- 対局中継(docs/tournament-relay-design.md)。決着した棋士どうしの対局を、解説つきで見る。
 /**
@@ -1413,6 +1417,11 @@ let liveTimer: ReturnType<typeof setInterval> | undefined;
 let liveLast = 0;
 /** 本局(20章)の手が増えたとき・終局したときに、ボードを描き直す印。 */
 const liveTick = ref(0);
+/**
+ * 「結果まで進める」を押したか。本局はエンジンが指し終えるまで終わらないので、押したあとは
+ * ボタンを「最後まで指しています…」にして、押したことが分かるようにする(34章)。回戦を始めるたびに戻す。
+ */
+const liveSkipped = ref(false);
 const liveEnd = computed(() => {
   void liveTick.value;
   return live.value ? liveDuration(live.value.games) : 0;
@@ -1455,6 +1464,7 @@ function beginLive(
   relaySeen.value = store.seen;
   live.value = { games: specs.map((spec) => liveGame(spec, records[spec.key] ?? liveRecord(store, spec.key))), focusKey, label, kind };
   liveSeconds.value = 0;
+  liveSkipped.value = false;
   sheet.value = "";
   // 名人戦のボードは、名人戦の画面のリーグ表と番勝負の上で進む(竜王戦の表は開かない)。
   if (kind !== "meijin" && kind !== "meijin-after") {
@@ -1687,6 +1697,7 @@ function cycleLiveSpeed() {
 }
 /** 「結果まで進める」。すべての対局を終局まで進める(本局は、指したところまで。そのあとは指すたびに進む)。 */
 function skipLive() {
+  liveSkipped.value = true;
   liveSeconds.value = liveEnd.value;
   if (Number.isFinite(liveEnd.value)) stopLiveTimer();
 }
@@ -2027,6 +2038,7 @@ const livePanel = computed<LivePanelView | null>(() => {
     speed: liveSpeed.value,
     predict: predictView.value,
     finished: liveFinished.value,
+    skipping: liveSkipped.value && !liveFinished.value,
     finishText: liveFinishText.value,
     watchText: liveWatchText.value,
   };
@@ -3816,6 +3828,16 @@ const statTiles = computed(() => {
   .shogi-game .shogi-tournament__hud--boss { border-left-color: var(--tr-red); }
   .shogi-game .shogi-tournament__hud-face { width: 5rem; height: 5rem; }
   .shogi-game .shogi-tournament__hud[data-pending] > .shogi-tournament__start { margin-top: auto; }
+}
+/*
+ * スマホの横向き(844×390など): 右の列は低いので、中身を縮めずに列の中でスクロールし(縮めると札の字が重なる)、
+ * いちばん下の主役のボタン(「表彰式へ」「対局する」など)は列の下の端に止めて、いつも見えるようにする(34章。UD 7-5)。
+ */
+@media (orientation: landscape) and (max-height: 600px) {
+  .shogi-game .shogi-tournament__hud > * { flex-shrink: 0; }
+  .shogi-game .shogi-tournament__hud > .shogi-tournament__start:last-child {
+    position: sticky; bottom: 0; z-index: 1; margin-top: auto; box-shadow: 0 -0.5rem 0.8rem rgba(11, 19, 32, 0.85);
+  }
 }
 
 /*
