@@ -2,7 +2,10 @@
 // 竜王戦・名人戦・奨励会・研修会で1つ共有し、期をまたいで同じものを使い続ける。プレイヤーが強くなると、
 // 同じ世界で上の組に勝てるようになる。期ごとに棋力へ合わせ直さない(強くなった実感を残す。G:6-1)。
 
-import { WORLD_STEP_LEVELS, recommendedDifficulty, recommendedWorldLevel } from './ryuo-strength.mjs';
+import {
+  MAX_CPU_LEVEL, REAL_DIFFICULTY, REAL_WORLD, WORLD_STEP_LEVELS, isRealWorld, recommendedDifficulty, recommendedWorldLevel, worldCpuLevel,
+} from './ryuo-strength.mjs';
+import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
 
 export const TOURNAMENT_WORLD_KEY = 'yacobihime:shogi-match:tournament-world:v1';
 /** 棋力が、世界を決めたときからこれだけ動いたら、入口で知らせる(Lv)。 */
@@ -45,10 +48,53 @@ export function defaultWorldDifficulty(stored, playerLevel) {
  */
 export function resolveWorld({ stored, playerLevel, difficulty, at = Date.now() }) {
   if (stored && stored.difficulty === difficulty) return stored;
-  const level = stored
-    ? stored.level + (difficulty - stored.difficulty) * WORLD_STEP_LEVELS
+  // 本物は、棋力に合わせない世界(9章)。本物から番号の世界へ戻るときは、はじめてと同じく棋力のおすすめから決める。
+  if (difficulty === REAL_DIFFICULTY) return { level: REAL_WORLD, difficulty, playerLevel, at };
+  const numbered = stored && !isRealWorld(stored.level) ? stored : null;
+  const level = numbered
+    ? numbered.level + (difficulty - numbered.difficulty) * WORLD_STEP_LEVELS
     : recommendedWorldLevel(playerLevel) + (difficulty - recommendedDifficulty(playerLevel)) * WORLD_STEP_LEVELS;
   return { level, difficulty, playerLevel, at };
+}
+
+/** 段級位の表の名前(「程度」を除く。例: 5級・アマ初段・若手プロ・藤井聡太並み)。 */
+export function levelGradeName(level) {
+  const rounded = Math.min(MAX_CPU_LEVEL, Math.max(0, Math.round(Number(level) || 0)));
+  const preset = CPU_STRENGTH_PRESETS.find((entry) => entry.level === rounded) ?? CPU_STRENGTH_PRESETS[0];
+  return preset.label.replace(/程度$/, '');
+}
+
+/** 難易度の番号の呼び名(本物は「本物」)。 */
+export function difficultyName(difficulty) {
+  return difficulty === REAL_DIFFICULTY ? '本物' : String(difficulty);
+}
+
+/**
+ * 難易度の選択肢(8章)。番号ごとに、その世界でのいちばん下といちばん上の相手の段級位を説明に出す(数字だけでは強さが分からないため。
+ * U:5-3 情報を言葉で)。いちばん上は「本物」(9章)。
+ * @param {{ stored: ReturnType<typeof loadTournamentWorld>, playerLevel: number, base: number,
+ *   bottom: { label: string, rating: number }, top: { label: string, rating: number },
+ *   recommended?: number | null }} input
+ *   bottomとtopは、説明に出す相手(竜王戦なら6組の平均と竜王)。baseは、その大会の基準の棋士のレーティング。
+ * @returns {{ value: number, label: string, description: string }[]}
+ */
+export function difficultyOptions({ stored, playerLevel, base, bottom, top, recommended = null }) {
+  const options = [];
+  const gradeIn = (rating, world) => levelGradeName(worldCpuLevel(rating, world, base));
+  for (let difficulty = 1; difficulty <= REAL_DIFFICULTY; difficulty += 1) {
+    const world = resolveWorld({ stored, playerLevel, difficulty, at: stored?.at ?? 0 }).level;
+    const tags = [];
+    if (stored && stored.difficulty === difficulty) tags.push('いつもの世界');
+    if (difficulty === recommended) tags.push('おすすめ');
+    const strength = `${bottom.label} ${gradeIn(bottom.rating, world)}〜${top.label} ${gradeIn(top.rating, world)}`;
+    const real = difficulty === REAL_DIFFICULTY;
+    options.push({
+      value: difficulty,
+      label: real ? '本物' : String(difficulty),
+      description: [real ? `実際の大会と同じ強さ。${strength}` : strength, ...tags].join('・'),
+    });
+  }
+  return options;
 }
 
 /**
@@ -58,7 +104,8 @@ export function resolveWorld({ stored, playerLevel, difficulty, at = Date.now() 
  * @returns {{ kind: 'grown' | 'dropped' | 'struggling', delta: number } | null}
  */
 export function worldReview({ stored, playerLevel, history = [] }) {
-  if (!stored || !finite(playerLevel)) return null;
+  // 本物の世界は棋力に合わせない世界なので、見直しの一言は出さない(9章)。
+  if (!stored || !finite(playerLevel) || isRealWorld(stored.level)) return null;
   const delta = Math.round((playerLevel - stored.playerLevel) * 10) / 10;
   if (delta >= WORLD_DRIFT_LEVELS) return { kind: 'grown', delta };
   if (delta <= -WORLD_DRIFT_LEVELS) return { kind: 'dropped', delta };

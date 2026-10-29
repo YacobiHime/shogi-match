@@ -2536,7 +2536,7 @@ import {
 } from "./core/skill-estimate.mjs";
 import { USER_ID, asAvatarSeason, createRng, createSeason, describeSeason, playSpectatorGame, recommendedDifficulty, recordUserGame, restOpen, scaleById, settleRest, withRosterAbilities } from "./core/ryuo.mjs";
 import { loadWatchStore, noteWatchProgress, saveWatchStore } from "./core/ryuo-watch-store.mjs";
-import { myAbilityProfile, worldRatingFor } from "./core/my-abilities.mjs";
+import { myAbilityProfile, myRepertoire, myStyleAttack, worldRatingFor } from "./core/my-abilities.mjs";
 import { worldRating } from "./core/ryuo-strength.mjs";
 import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
 import { PLAYER_NAME_MAX, loadPlayerName, playerDisplayName, savePlayerName } from "./core/player-name.mjs";
@@ -6030,11 +6030,19 @@ const ryuoWatch = ref(loadWatchStore(browserStorage()));
 /** 竜王戦の難易度(ノートの能力と同じ物差し)。 */
 const ryuoAbilityDifficulty = computed(() => ryuoSeason.value?.settings?.difficulty ?? (ryuoCareer.value.seasons ? ryuoCareer.value.settings?.difficulty ?? null : null));
 /** 分身の能力(やこびノートの「能力」と同じ計算)。 */
+/**
+ * 分身の得意戦法(組んだ戦法・囲いの回数から。docs/tournament-relay-design.mdの28章)。対局が終わってコレクションが増えたら作り直す。
+ */
+const avatarRepertoire = computed(() => {
+  void planCollectionVersion.value;
+  return myRepertoire({ formations: loadCollection(browserStorage()).formations, catalog: COLLECTION_CATALOG });
+});
 const avatarProfile = computed(() => myAbilityProfile({
   games: playInsight.value.games,
   playerLevel: ratingLevel(ratingState.value.rating),
   difficulty: ryuoAbilityDifficulty.value,
   world: tournamentWorld.value?.level ?? null,
+  repertoire: avatarRepertoire.value,
 }));
 /**
  * エントリーの「対局: 観戦」で始めた期の「観戦する」(17章)。分身の次の一局を、ほかの棋士と同じ自動対局で決めて記録する
@@ -6053,16 +6061,21 @@ function playRyuoWatchGame(real: any = null, round: any[] = []) {
   saveSeason(browserStorage(), next);
   finalizeRyuoSeason();
 }
-/** 分身の棋士の強さと能力。対局が少なく能力が出ないときは、世界の物差しでいまの棋力のレーティングと、平均の能力。 */
+/**
+ * 分身の棋士の強さ・能力・得意戦法・棋風。対局が少なく能力が出ないときは、世界の物差しでいまの棋力のレーティングと、平均の能力
+ * (得意戦法と、それから決まる棋風は、能力とは別に持たせる)。
+ */
 function avatarMember(difficulty: number) {
   const profile = avatarProfile.value;
   if (profile.ready) return profile.member;
   const level = ratingLevel(ratingState.value.rating);
+  const repertoire = avatarRepertoire.value;
   return {
     rating: Number.isFinite(tournamentWorld.value?.level)
       ? worldRating(level, tournamentWorld.value!.level)
       : worldRatingFor(level, ryuoAbilityDifficulty.value ?? difficulty),
-    character: { abilities: {}, traits: [] },
+    character: { abilities: {}, traits: [], attack: myStyleAttack(null, repertoire) },
+    ...(repertoire ? { repertoire } : {}),
   };
 }
 /** 回戦の結果をめくった。 */

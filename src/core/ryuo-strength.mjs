@@ -37,6 +37,11 @@ export const SELFPLAY_LEVEL_RATINGS = Object.freeze([
 
 export const DIFFICULTY_LEVELS = 14;
 /**
+ * いちばん上の難易度「本物」(docs/tournament-strength-spread-design.mdの9章)。番号の世界(1〜DIFFICULTY_LEVELS)の上に1つ置く。
+ * 棋力に合わせず、実際の竜王戦の強さ(本物の世界。REAL_WORLD)で指す。
+ */
+export const REAL_DIFFICULTY = DIFFICULTY_LEVELS + 1;
+/**
  * 基準の難易度。2026-10-10と2026-10-13に、それぞれ下へ2段階足した。最初の5が、いまの9にあたる。
  * いちばん下の1は、6組の相手の平均がLv.-2(Lv0に丸める)。
  */
@@ -177,6 +182,8 @@ export function recommendedWorldLevel(playerLevel) {
  * @param {number} [base]
  */
 export function worldExactLevel(rating, world, base = WORLD_BASE_RATING, spread = WORLD_SPREAD) {
+  // 本物の世界は、大会ごとの基準の棋士を使わず、レーティングをそのまま段級位の強さに置く(9章)。
+  if (isRealWorld(world)) return realExactLevel(rating);
   return world + (spread * (rating - base)) / RATING_PER_LEVEL;
 }
 
@@ -187,7 +194,51 @@ export function worldCpuLevel(rating, world, base = WORLD_BASE_RATING, spread = 
 
 /** 棋力levelのプレイヤーを、世界の物差しで名簿の尺度のレーティングに直す(worldExactLevelの逆)。 */
 export function worldRating(level, world, base = WORLD_BASE_RATING) {
+  if (isRealWorld(world)) return realRating(level);
   return Math.round(base + ((level - world) * RATING_PER_LEVEL) / WORLD_SPREAD);
+}
+
+// ---- 本物の世界(docs/tournament-strength-spread-design.mdの9章)
+// いちばん上の難易度「本物」は、プレイヤーの棋力に合わせない。名簿のレーティングを、段級位の表の名前(アマ初段・奨励会三段・
+// 若手プロ・トッププロ・タイトル保持者・藤井聡太並み)に合う強さのLvへ、そのまま置く。竜王戦の棋士は奨励会三段〜藤井聡太並み、
+// 奨励会・研修会の会員はアマ初段〜奨励会三段になる(大会ごとの基準の棋士は使わない)。
+
+/** 本物の世界を表す、世界の基準Lvの値(Lvの範囲の外。ほかの世界と混ざらない)。 */
+export const REAL_WORLD = 100;
+/** 本物の世界か。 */
+export const isRealWorld = (world) => world === REAL_WORLD;
+/**
+ * 本物の世界の換算の点(名簿のレーティング → Lv)。点の間は直線でつなぐ。
+ * 研修会のいちばん下(R870)はアマ初段、奨励会6級(R1150)はアマ三段、奨励会1級(R1325)はアマ六段、二段(R1415)はアマ七段、
+ * 6組の平均(R1450)と奨励会三段(R1490)が奨励会三段、5組から2組(R1520〜1660)が若手プロ〜トッププロ、竜王(R1950)がタイトル保持者、
+ * 天鷺善彦(R2130)が藤井聡太並み。
+ */
+export const REAL_WORLD_POINTS = Object.freeze([
+  [870, 26], [1150, 33], [1325, 40], [1415, 44], [1470, 45], [1530, 46], [1700, 47], [1880, 48], [2050, 49],
+]);
+
+/** 本物の世界での、レーティングのLv(小数)。点の外は端のLvのまま。 */
+export function realExactLevel(rating) {
+  const points = REAL_WORLD_POINTS;
+  if (rating <= points[0][0]) return points[0][1];
+  for (let index = 1; index < points.length; index += 1) {
+    const [r1, l1] = points[index];
+    const [r0, l0] = points[index - 1];
+    if (rating <= r1) return l0 + ((l1 - l0) * (rating - r0)) / (r1 - r0);
+  }
+  return points.at(-1)[1];
+}
+
+/** 本物の世界での、Lvのレーティング(realExactLevelの逆。点の外は端のレーティング)。 */
+export function realRating(level) {
+  const points = REAL_WORLD_POINTS;
+  if (level <= points[0][1]) return points[0][0];
+  for (let index = 1; index < points.length; index += 1) {
+    const [r1, l1] = points[index];
+    const [r0, l0] = points[index - 1];
+    if (level <= l1) return Math.round(r0 + ((r1 - r0) * (level - l0)) / (l1 - l0));
+  }
+  return points.at(-1)[0];
 }
 
 /**

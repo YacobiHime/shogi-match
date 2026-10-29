@@ -4,6 +4,7 @@
 import { USER_ID, resultRoundLabel } from './ryuo.mjs';
 import { CLASS_LABELS } from './meijin.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
+import { isRealWorld } from './ryuo-strength.mjs';
 import { stageVenue } from './match-stage.mjs';
 import { relaySeed } from './relay-game.mjs';
 
@@ -48,7 +49,7 @@ function entryOf(season, { key, event, kind, label, section, order, round = 0, w
   const ids = [blackId, whiteId];
   return {
     key, event, kind, label, section, order, round, weight, venue, gameNo, seed,
-    // 観戦の期の中継は、プロ並みの読みで作る(13-3)。
+    // 観戦の期と本物の世界の期(docs/tournament-strength-spread-design.mdの9章)の中継は、プロ並みの読みで作る(13-3)。
     quality: context.pro ? 'pro' : '',
     black, white,
     winner: winnerId === blackId ? 'black' : 'white',
@@ -81,7 +82,7 @@ const byOrder = (x, y) => y.order - x.order || (x.key < y.key ? -1 : 1);
 export function ryuoRelayGames(season, { oshiId = null } = {}) {
   if (!season?.players) return [];
   const spectator = Boolean(season.spectator);
-  const context = { oshiId, nextId: season.pending?.opponentId ?? null, includeUser: spectator, pro: spectator };
+  const context = { oshiId, nextId: season.pending?.opponentId ?? null, includeUser: spectator, pro: spectator || isRealWorld(season.settings?.world) };
   const id = season.id;
   const list = [];
   const pending = season.pending?.kind === 'game' ? season.pending : null;
@@ -139,7 +140,7 @@ export function meijinRelayGames(season, { oshiId = null } = {}) {
   if (!season?.players) return [];
   // 分身の期(21章)は、分身の対局も中継に並べ、プロ並みの読みで作る(竜王戦の分身の期と同じ)。
   const spectator = Boolean(season.spectator);
-  const context = { oshiId, nextId: season.pending?.opponentId ?? null, includeUser: spectator, pro: spectator };
+  const context = { oshiId, nextId: season.pending?.opponentId ?? null, includeUser: spectator, pro: spectator || isRealWorld(season.settings?.world) };
   const id = season.id;
   const classLabel = CLASS_LABELS[season.cls] ?? '';
   const list = [];

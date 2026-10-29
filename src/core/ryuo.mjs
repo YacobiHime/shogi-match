@@ -18,7 +18,10 @@ import {
   BASE_DIFFICULTY,
   DIFFICULTY_LEVELS,
   GROUP_MEAN_RATING,
+  MAX_CPU_LEVEL,
+  REAL_DIFFICULTY,
   groupMeanLevel,
+  isRealWorld,
   levelToRating,
   ratingToLevel,
   recommendedDifficulty,
@@ -28,7 +31,7 @@ import {
   worldRating,
 } from './ryuo-strength.mjs';
 
-export { BASE_DIFFICULTY, DIFFICULTY_LEVELS, createRng, groupMeanLevel, recommendedDifficulty, winProbability };
+export { BASE_DIFFICULTY, DIFFICULTY_LEVELS, REAL_DIFFICULTY, createRng, groupMeanLevel, recommendedDifficulty, winProbability };
 
 /**
  * 期の保存形式。3から、棋士はレーティング(rating)を持ち、Lvは難易度から換算した値になった。
@@ -67,6 +70,8 @@ export const scaleById = (id) => SCALES.find((scale) => scale.id === id) ?? SCAL
 function seasonPlayer(roster, id, settings, userLevel = null) {
   const entry = seasonEntry(roster, id);
   const rating = entry.rating + hananeGrudgeBonus(entry, entry.vsUser);
+  // 本物の世界(docs/tournament-strength-spread-design.mdの9章)の天鷺善彦は、いつも藤井聡太並み(Lv49)。
+  if (isRealWorld(settings?.world) && entry.story === YOSHIHIKO) return { ...entry, level: MAX_CPU_LEVEL };
   return { ...entry, level: seasonLevelFor(rating, settings, userLevel) };
 }
 
@@ -889,6 +894,8 @@ export function asAvatarSeason(season, avatar, { live = true } = {}) {
   if (live) season.live = true;
   season.players[USER_ID] = {
     ...season.players[USER_ID], kind: 'avatar', rating: avatar.rating, character: structuredClone(avatar.character ?? { abilities: {}, traits: [] }),
+    // 得意戦法(プレイヤーが組んだ戦法から。docs/tournament-relay-design.mdの28章)。なければ、序盤はエンジンに任せる。
+    repertoire: avatar.repertoire ? structuredClone(avatar.repertoire) : null,
   };
   return season;
 }

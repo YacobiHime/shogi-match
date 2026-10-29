@@ -4,8 +4,11 @@
 //   その平均からの差を、名鑑の棋士と同じ「平均からの差(dev)」にする。
 // - 全体の高さ: 竜王戦の世界の物差し。おすすめの難易度なら、6組の平均の棋士に7割勝てる棋士として置く(ryuo-strength.mjsの考え方)。
 
-import { ABILITIES, ABILITY_KEYS, ABILITY_SIM_WEIGHTS, MAX_DEV, abilityBase, abilityRank, abilityTypeLabel, balanceDevs } from './player-abilities.mjs';
+import {
+  ABILITIES, ABILITY_KEYS, ABILITY_SIM_WEIGHTS, MAX_DEV, abilityBase, abilityRank, abilityTypeLabel, balanceDevs, styleAttackOf,
+} from './player-abilities.mjs';
 import { specialAbilityChips } from './player-character.mjs';
+import { defaultCastleShares, favoriteStyleIds, partyOfUsage, proOpening, staticShare, toPercent, usageRows } from './opening-usage.mjs';
 import { GROUP_MEAN_RATING, TOURNAMENT_TARGET_WIN_RATE, recommendedDifficulty, worldRating } from './ryuo-strength.mjs';
 import { LOSS_AXES, RATE_AXES } from './play-insight.mjs';
 
@@ -137,14 +140,89 @@ const GROWTH_HINTS = Object.freeze({
   stability: '大きな悪手が出やすいみたい。指す前に、タダで取られる駒がないか確かめよう。',
 });
 
+// ---- 得意戦法と棋風(docs/tournament-relay-design.mdの28章)
+// 分身は、プレイヤーが対局で組んだ戦法・囲いの回数(コレクション。collection.mjsのformations)から、名鑑の棋士と同じ形の
+// 使用率(opening-usage.mjs)を持つ。1局ごとに、その使用率で戦法と囲いを選び、序盤は定跡で指す(自分らしい分身)。
+
+/**
+ * 定跡図鑑の戦法(opening-guide.mjsのid)を、大会の戦法の目録(opening-usage.mjsのPRO_OPENINGS)の近い戦法へ寄せる。
+ * 目録にない戦法(横歩取り・原始中飛車など)は、同じ系統の近い戦法に数える。奇襲と、どの形にもなる腰掛け銀は数えない。
+ */
+export const STRATEGY_TO_OPENING = Object.freeze({
+  aigakari: 'aigakari', hineribisha: 'aigakari', yokofudori: 'aigakari', 'yokofudori-33-bishop': 'aigakari', 'aono-ryu': 'aigakari',
+  'gangi-strategy': 'gangi', 'gangi-right-shiken': 'gangi',
+  kakugawari: 'kakugawari', 'kakugawari-koshikake-gin': 'kakugawari-kg', 'kakugawari-45-knight': 'kakugawari-45',
+  'yagura-strategy': 'yagura', 'suzume-zashi': 'yagura', 'yagura-37-silver': 'yagura', 'morishita-system': 'yagura',
+  'hayaguri-gin': 'hayaguri', bougin: 'bougin', 'right-shiken': 'right-shiken', 'right-shiken-elmo': 'right-shiken',
+  sodebisha: 'ibisha', 'chikatetsu-bisha': 'ibisha', torizashi: 'ibisha',
+  shiken: 'shiken', 'fujii-system': 'fujii-system', sangen: 'sangen', 'first-78-rook': 'sangen', 'second-32-rook': 'sangen',
+  ishida: 'ishida', 'shin-onigoroshi': 'ishida', nakabisha: 'gokigen', gokigen: 'gokigen', 'hashikaku-nakabisha': 'gokigen',
+  mukai: 'mukai',
+});
+/** 得意戦法を持たせるのに要る、組んだ戦法の回数(合わせて)。少ないうちは、序盤をエンジンに任せる。 */
+export const MY_REPERTOIRE_MIN_GAMES = 3;
+
+/**
+ * プレイヤーの得意戦法(名鑑の棋士と同じ形: 党・得意戦法・使用率)。組んだ戦法が少なければnull。
+ * 囲いの使用率は、その戦法で組める囲いのうち、プレイヤーが組んだ回数の割合(組んだことがなければ、目録の重み)。
+ * 居飛車を指すなら、相手が振り飛車のときの対抗形(ibisha)の囲いも、組んだ回数から決める。
+ * @param {{ formations?: { [label: string]: { count?: number } } | object, catalog: { kind: string, id: string, label: string }[] }} input
+ *   formationsは、コレクションの戦型の名前ごとの回数。catalogは、その名前の一覧(collection.mjsのcollectionCatalog)。
+ * @returns {{ party: 'static' | 'ranging' | 'both', styles: string[], usage: any, games: number } | null}
+ */
+export function myRepertoire({ formations = {}, catalog }) {
+  const weights = {};
+  const castleCounts = {};
+  let games = 0;
+  for (const entry of catalog ?? []) {
+    const count = Math.max(0, Math.trunc(/** @type {any} */ (formations)?.[entry.label]?.count ?? 0));
+    if (!count) continue;
+    if (entry.kind === 'castle') {
+      castleCounts[entry.id] = (castleCounts[entry.id] ?? 0) + count;
+      continue;
+    }
+    const opening = STRATEGY_TO_OPENING[entry.id];
+    if (!opening) continue;
+    weights[opening] = (weights[opening] ?? 0) + count;
+    games += count;
+  }
+  if (games < MY_REPERTOIRE_MIN_GAMES) return null;
+  const shares = toPercent(weights);
+  const castles = {};
+  const castleShares = (id) => {
+    const opening = proOpening(id);
+    const counted = Object.fromEntries((opening?.castles ?? []).filter(([castle]) => castle && castleCounts[castle]).map(([castle]) => [castle, castleCounts[castle]]));
+    return Object.keys(counted).length ? toPercent(counted) : defaultCastleShares(id);
+  };
+  for (const id of Object.keys(shares)) castles[id] = castleShares(id);
+  const usage = { black: shares, white: { ...shares }, castles };
+  if (staticShare(usage) > 0 && !castles.ibisha) castles.ibisha = castleShares('ibisha');
+  return { party: partyOfUsage(usage), styles: favoriteStyleIds(usage), usage, games };
+}
+
+/**
+ * プレイヤーの棋風(攻め将棋⇔受け将棋、−1〜1)。能力の攻めと受けの差(名鑑の棋士と同じstyleAttackOf)に、
+ * よく指す戦法の攻めっ気(目録のattack。急戦は攻め、矢倉・対抗形の持久戦は受け)を少し足す。
+ * @param {Record<string, number> | null} abilities 能力の平均からの差(なければ戦法だけで決める)
+ * @param {ReturnType<typeof myRepertoire>} repertoire
+ */
+export function myStyleAttack(abilities, repertoire) {
+  const rows = usageRows(repertoire?.usage ?? null);
+  const total = rows.reduce((sum, row) => sum + row.share, 0);
+  const lean = total ? rows.reduce((sum, row) => sum + (proOpening(row.id)?.attack ?? 0) * row.share, 0) / total : 0;
+  return Math.round(clamp(styleAttackOf(abilities) + 0.4 * lean, -1, 1) * 100) / 100 + 0;
+}
+
 /**
  * プレイヤーの能力。名鑑の棋士の能力の画面(PlayerAbilityPanel)と同じ形のview、比べるための棋士の形(member)、
  * いちばんの武器と伸びしろ、分析に使った対局と手の数。足りなければready: false。
- * @param {{ games: { summary: any }[], playerLevel: number, difficulty?: number | null, world?: number | null }} input
+ * @param {{ games: { summary: any }[], playerLevel: number, difficulty?: number | null, world?: number | null,
+ *   repertoire?: ReturnType<typeof myRepertoire> }} input
  *   games: play-insight.mjsの最近の対局。playerLevel: レーティングのLv(小数)。difficulty: 竜王戦の難易度(なければおすすめ)。
- *   world: 世界の物差し(6組の平均を指させるLv。tournament-world.mjs)。あれば、こちらで世界の中のレーティングを出す
+ *   world: 世界の物差し(6組の平均を指させるLv。tournament-world.mjs)。あれば、こちらで世界の中のレーティングを出す。
+ *   repertoire: 得意戦法(myRepertoire)。あれば、memberに持たせ、棋風と使用率の表示にも使う
  */
-export function myAbilityProfile({ games, playerLevel, difficulty = null, world = null }) {
+export function myAbilityProfile({ games, playerLevel, difficulty = null, world = null, repertoire = null }) {
   const { totals, moves, games: count } = collectAxes(games ?? []);
   if (moves < MY_ABILITY_MIN_MOVES) return { ready: false, games: count, moves, need: MY_ABILITY_MIN_MOVES - moves };
   const levels = {};
@@ -171,7 +249,11 @@ export function myAbilityProfile({ games, playerLevel, difficulty = null, world 
   const trusted = new Set(Object.keys(weights).filter((key) => weights[key] >= 0.5));
   const usedDifficulty = Number.isFinite(difficulty) ? /** @type {number} */ (difficulty) : recommendedDifficulty(playerLevel);
   const rating = Number.isFinite(world) ? worldRating(playerLevel, /** @type {number} */ (world)) : worldRatingFor(playerLevel, usedDifficulty);
-  const member = { rating, character: { abilities: devs, traits: traitsFor(devs, trusted) } };
+  const member = {
+    rating,
+    character: { abilities: devs, traits: traitsFor(devs, trusted), attack: myStyleAttack(devs, repertoire) },
+    ...(repertoire ? { repertoire } : {}),
+  };
   const base = abilityBase(rating);
   const values = Object.fromEntries(ABILITY_KEYS.map((key) => [key, Math.round(clamp(base + devs[key], 1, 100))]));
   const known = ABILITIES.filter(({ key }) => key in levels);
@@ -188,8 +270,8 @@ export function myAbilityProfile({ games, playerLevel, difficulty = null, world 
       abilities: ABILITIES.map(({ key, label, hint }) => ({ key, label, hint, value: values[key], rank: abilityRank(values[key]) })),
       type: abilityTypeLabel(member),
       specials: specialAbilityChips(member.character),
-      staticShare: null,
-      openings: [],
+      staticShare: repertoire ? staticShare(repertoire.usage) : null,
+      openings: usageRows(repertoire?.usage ?? null).slice(0, 6).map((row) => ({ ...row, record: '' })),
     },
     /** 分析に使えなかった能力(まだ材料のない能力。平均のまま出す)。 */
     missing: ABILITIES.filter(({ key }) => !(key in levels)).map(({ label }) => label),

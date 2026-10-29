@@ -13,6 +13,7 @@ import {
   recommendedDifficulty,
   recordUserGame,
   scaleById,
+  seasonPlayerOf,
   winProbability,
 } from './ryuo.mjs';
 import {
@@ -27,6 +28,8 @@ import {
 } from './ryuo-career.mjs';
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
 import { createRoster } from './ryuo-roster.mjs';
+import { addStoryMembers, storyMemberId, YOSHIHIKO } from './ryuo-story.mjs';
+import { REAL_DIFFICULTY, REAL_WORLD } from './ryuo-strength.mjs';
 import { OPPONENT_STYLES } from './ryuo-data.mjs';
 import { CPU_OPENING_STRATEGY_IDS } from './cpu-opening-repertoire.mjs';
 import { OPENING_CASTLES, OPENING_STRATEGIES, openingDefinitionRookStyle } from './opening-guide.mjs';
@@ -574,5 +577,24 @@ describe('速報のために同じ回戦を先に決める(docs/tournament-match
       }
       season = recordUserGame(season, game % 2 === 0 ? 'win' : 'loss');
     }
+  });
+});
+
+describe('本物の世界の期(docs/tournament-strength-spread-design.mdの9章)', () => {
+  it('棋士は奨励会三段〜タイトル保持者の強さ、天鷺善彦はいつも藤井聡太並み(Lv49)', () => {
+    const roster = createRoster({ seed: 3 });
+    addStoryMembers(roster, { userGroup: 6, fresh: true });
+    const fatherId = storyMemberId(roster, YOSHIHIKO);
+    roster.players[fatherId].rating = 1800;
+    const father = seasonPlayerOf(roster, fatherId, { difficulty: REAL_DIFFICULTY, world: REAL_WORLD });
+    expect(father.level).toBe(49);
+    const others = Object.values(roster.players).filter((member) => member.group >= 1 && member.group <= 5 && !member.story);
+    for (const member of others.slice(0, 20)) {
+      const level = seasonPlayerOf(roster, member.id, { difficulty: REAL_DIFFICULTY, world: REAL_WORLD }).level;
+      expect(level).toBeGreaterThanOrEqual(44);
+      expect(level).toBeLessThanOrEqual(49);
+    }
+    // ほかの世界では、善彦もほかの棋士と同じく世界の物差しのまま。
+    expect(seasonPlayerOf(roster, fatherId, { difficulty: 9, world: 20 }).level).toBeLessThan(49);
   });
 });

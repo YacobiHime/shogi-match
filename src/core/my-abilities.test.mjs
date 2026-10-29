@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { AXIS_MODELS, MY_ABILITY_MIN_MOVES, axisLevel, collectAxes, myAbilityProfile, worldRatingFor } from './my-abilities.mjs';
+import {
+  AXIS_MODELS, MY_ABILITY_MIN_MOVES, MY_REPERTOIRE_MIN_GAMES, axisLevel, collectAxes, myAbilityProfile, myRepertoire, myStyleAttack, worldRatingFor,
+} from './my-abilities.mjs';
+import { collectionCatalog } from './collection.mjs';
+import { OPENING_CASTLES, OPENING_STRATEGIES } from './opening-guide.mjs';
+import { defaultCastleShares } from './opening-usage.mjs';
+import { createRng } from './ryuo-random.mjs';
+import { pickGameStyle } from './ryuo-repertoire.mjs';
 import { abilityBase } from './player-abilities.mjs';
 import { GROUP_MEAN_RATING, recommendedDifficulty } from './ryuo-strength.mjs';
 
@@ -76,5 +83,73 @@ describe('自分の能力', () => {
     expect(worldRatingFor(20, recommended)).toBe(worldRatingFor(20, null));
     expect(worldRatingFor(20, recommended) - GROUP_MEAN_RATING[6]).toBeGreaterThan(140);
     expect(worldRatingFor(20, recommended + 2)).toBe(worldRatingFor(20, recommended) - 120);
+  });
+});
+
+describe('分身の得意戦法と棋風(docs/tournament-relay-design.mdの28章)', () => {
+  const catalog = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+  const labelOf = (kind, id) => catalog.find((entry) => entry.kind === kind && entry.id === id).label;
+
+  it('組んだ戦法が少ないうちは持たない(序盤はエンジンに任せる)', () => {
+    expect(myRepertoire({ formations: {}, catalog })).toBeNull();
+    expect(myRepertoire({ formations: { [labelOf('strategy', 'shiken')]: { count: MY_REPERTOIRE_MIN_GAMES - 1 } }, catalog })).toBeNull();
+  });
+
+  it('組んだ回数から、名鑑の棋士と同じ形の使用率を作る。囲いは組んだ回数の割合', () => {
+    const repertoire = myRepertoire({
+      formations: {
+        [labelOf('strategy', 'shiken')]: { count: 6 },
+        [labelOf('strategy', 'fujii-system')]: { count: 2 },
+        [labelOf('strategy', 'gokigen')]: { count: 2 },
+        [labelOf('castle', 'furibisha-anaguma')]: { count: 5 },
+        [labelOf('castle', 'mino')]: { count: 1 },
+      },
+      catalog,
+    });
+    expect(repertoire.party).toBe('ranging');
+    expect(repertoire.games).toBe(10);
+    expect(repertoire.usage.black).toEqual({ shiken: 60, 'fujii-system': 20, gokigen: 20 });
+    expect(repertoire.usage.castles.shiken['furibisha-anaguma']).toBeGreaterThan(repertoire.usage.castles.shiken.mino);
+    expect(repertoire.usage.castles.gokigen).toEqual({ 'furibisha-anaguma': 83, mino: 17 });
+    // 組んだ囲いのない戦法(囲いと一体の藤井システム)は、目録の重み。
+    expect(repertoire.usage.castles['fujii-system']).toEqual(defaultCastleShares('fujii-system'));
+    expect(repertoire.styles[0]).toBe('shiken-anaguma');
+    // 1局ずつ、その使用率で戦法を選べる(名鑑の棋士と同じ)。
+    const picked = pickGameStyle(createRng(3), repertoire, { color: 'black', opponentRook: 'static' });
+    expect(['shiken', 'fujii-system', 'gokigen']).toContain(picked.opening);
+  });
+
+  it('目録にない戦法は近い戦法に数え、居飛車なら対抗形の囲いも持つ。奇襲は数えない', () => {
+    const repertoire = myRepertoire({
+      formations: {
+        [labelOf('strategy', 'yokofudori')]: { count: 2 },
+        [labelOf('strategy', 'yagura-strategy')]: { count: 2 },
+        [labelOf('strategy', 'onigoroshi')]: { count: 9 },
+        [labelOf('castle', 'ibisha-anaguma')]: { count: 3 },
+      },
+      catalog,
+    });
+    expect(repertoire.usage.black).toEqual({ aigakari: 50, yagura: 50 });
+    expect(repertoire.party).toBe('static');
+    expect(repertoire.usage.castles.ibisha).toEqual({ 'ibisha-anaguma': 100 });
+  });
+
+  it('棋風は能力の攻めと受けの差に、よく指す戦法の攻めっ気を少し足す', () => {
+    const attacking = myRepertoire({ formations: { [labelOf('strategy', 'hayaguri-gin')]: { count: 4 } }, catalog });
+    const solid = myRepertoire({ formations: { [labelOf('strategy', 'yagura-strategy')]: { count: 4 } }, catalog });
+    expect(myStyleAttack(null, attacking)).toBeCloseTo(0.4, 5);
+    expect(myStyleAttack(null, solid)).toBeCloseTo(-0.4, 5);
+    expect(myStyleAttack({ attack: 20, defense: -20 }, null)).toBe(1);
+    expect(myStyleAttack(null, null)).toBe(0);
+  });
+
+  it('能力が出たら、分身の棋士の形(member)に得意戦法と棋風を持たせ、使用率も見せる', () => {
+    const repertoire = myRepertoire({ formations: { [labelOf('strategy', 'aigakari')]: { count: 5 } }, catalog });
+    const profile = myAbilityProfile({ games: [gameAt({ all: 20 })], playerLevel: 20, repertoire });
+    expect(profile.ready).toBe(true);
+    expect(profile.member.repertoire).toBe(repertoire);
+    expect(typeof profile.member.character.attack).toBe('number');
+    expect(profile.view.openings[0]).toMatchObject({ id: 'aigakari', share: 100 });
+    expect(profile.view.staticShare).toBe(100);
   });
 });

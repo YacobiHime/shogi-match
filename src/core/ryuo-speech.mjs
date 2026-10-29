@@ -4,6 +4,7 @@ import { describeCharacter, traitMomentText } from './player-character.mjs';
 import { styleEntry } from './ryuo-repertoire.mjs';
 import { usageRows } from './opening-usage.mjs';
 import { abilityHighlights } from './player-abilities.mjs';
+import { levelGradeName } from './tournament-world.mjs';
 
 /** 竜王戦の説明。やこび姫が、順に話す。 */
 export function ryuoGuideLines() {
@@ -21,14 +22,20 @@ export function ryuoGuideLines() {
  * 難易度(世界の物差し)についての一言(docs/tournament-strength-spread-design.mdの4-3)。
  * recommendedは入口で選んでおいた番号(世界があれば「いつもの世界」、なければ棋力からのおすすめ)。
  * mountainは上の組の強さ(1組の平均・竜王のLv)。reviewは、世界を決めたときからの棋力のずれ(tournament-world.mjsのworldReview)。
+ * Lvの数字には段級位の名前を添える(数字だけでは強さが分からないため。8章)。realは、いちばん上の難易度「本物」(9章)。
  * @param {{ group: number, meanLevel: number, difficulty: number, recommended: number, ratingText?: string,
- *   usual?: boolean, mountain?: { one: number, top: number } | null, review?: { kind: string, delta: number } | null }} input
+ *   usual?: boolean, mountain?: { one: number, top: number } | null, review?: { kind: string, delta: number } | null, real?: boolean }} input
  */
-export function entryDifficultyLine({ group, meanLevel, difficulty, recommended, usual = false, mountain = null, review = null }) {
+export function entryDifficultyLine({ group, meanLevel, difficulty, recommended, usual = false, mountain = null, review = null, real = false }) {
   const mean = Math.round(meanLevel);
+  const at = (level) => `Lv.${level}（${levelGradeName(level)}）`;
+  if (real) {
+    return `本物の竜王戦だよ！ ${group}組の相手は、平均で${levelGradeName(mean)}くらい。上の組はトッププロやタイトル保持者、`
+      + '天鷺善彦さんは藤井聡太並みの読みで指すよ。観戦では、プロどうしの対局が見られるよ。選んだ世界は、次の期からも使うよ。';
+  }
   const head = mountain
-    ? `${group}組の相手は、平均でLv.${mean}くらい。上の組ほど強くて、1組の平均はLv.${mountain.one}、竜王はLv.${mountain.top}くらいだよ。`
-    : `${group}組の相手は、平均でLv.${mean}くらいだよ。`;
+    ? `${group}組の相手は、平均で${at(mean)}くらい。上の組ほど強くて、1組の平均は${at(mountain.one)}、竜王は${at(mountain.top)}くらいだよ。`
+    : `${group}組の相手は、平均で${at(mean)}くらいだよ。`;
   if (difficulty < recommended) return `${head}${usual ? 'いつもより' : 'おすすめより'}やさしい世界。どの棋士も、少しずつ弱くなるよ。選んだ世界は、次の期からも使うよ。`;
   if (difficulty > recommended) return `${head}${usual ? 'いつもより' : 'おすすめより'}手ごわい世界！ 強い相手と指したいときにどうぞ。選んだ世界は、次の期からも使うよ。`;
   if (!usual) return `${head}いまのあなたなら、6組の平均に7割くらい勝てる世界だよ。この世界で、上をめざそう！`;

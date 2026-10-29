@@ -291,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { rankTag } from "./core/tournament-world.mjs";
+import { difficultyName, difficultyOptions, rankTag } from "./core/tournament-world.mjs";
 import { computed, ref, watch, type PropType } from "vue";
 import MeijinPagoda from "./MeijinPagoda.vue";
 import MeijinLeagueTable, { type LeagueRow, type LiveRow } from "./MeijinLeagueTable.vue";
@@ -302,7 +302,7 @@ import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { CLASS_LABELS, CLASS_RULES, MEIJIN_OUTCOME_TEXT, MEIJIN_SCALES, meijinGoalLine, meijinScale } from "./core/meijin.mjs";
-import { DIFFICULTY_LEVELS } from "./core/ryuo.mjs";
+import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { BYOYOMI_CHOICES, byoyomiLabel, byoyomiSeconds } from "./core/byoyomi.mjs";
@@ -340,6 +340,10 @@ const props = defineProps({
   defaultDifficulty: { type: Number, default: 9 },
   /** 世界の物差しが決まっているか(core/tournament-world.mjs)。決まっていれば、defaultDifficultyは「いつもの世界」の番号。 */
   usualWorld: { type: Boolean, default: false },
+  /** 保存した世界の物差し(難易度の選択肢の強さの目安に使う)。 */
+  world: { type: Object as PropType<{ level: number; difficulty: number; playerLevel: number; at: number } | null>, default: null },
+  /** いまの棋力からのおすすめの番号。 */
+  recommendedDifficulty: { type: Number as PropType<number | null>, default: null },
   /** プレイヤーの棋力(Lv)。次の相手の「格上」「格下」の札に使う。 */
   userLevel: { type: Number, default: NaN },
   lastSettings: { type: Object as PropType<Partial<Settings> | null>, default: null },
@@ -453,27 +457,37 @@ const careerText = computed(() => {
   return `参加${props.career.history?.length ?? props.career.no}期・最高 ${best}${props.career.titles ? `・名人${props.career.titles}期` : ""}${props.career.eternal ? "・永世名人" : ""}`;
 });
 const settingsSummary = computed(() => [
-  `難易度 ${difficulty.value}`,
+  `難易度 ${difficultyName(difficulty.value)}`,
   `規模 ${meijinScale(scale.value).label}`,
   `助言 ${COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? ""}`,
   ...(byoyomi.value ? [`秒読み${byoyomiLabel(byoyomi.value)}`] : []),
 ].join("・"));
 const settingRows = computed(() => [
-  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `${props.usualWorld ? "いつもの世界" : "おすすめ"} ${props.defaultDifficulty}・上の級（クラス）ほど相手が強い` },
+  {
+    id: "difficulty", label: "難易度", value: difficultyName(difficulty.value),
+    note: difficultyChoices.value.find((option) => option.value === difficulty.value)?.description ?? "",
+  },
   { id: "scale", label: "規模", value: meijinScale(scale.value).label, note: `1期 ${entryRounds.value}局` },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
   { id: "byoyomi", label: "秒読みの演出", value: byoyomiLabel(byoyomi.value), note: byoyomi.value ? "0秒になっても負けにはならない" : "" },
 ]);
+/** 強さの目安のいちばん上(名簿でいちばん強い棋士。竜王戦の強さの山と同じ)。 */
+const TOP_RATING = 2130;
+/** 難易度の選択肢(竜王戦と同じ世界。番号ごとにC級2組と名人の段級位。docs/tournament-strength-spread-design.mdの8・9章)。 */
+const difficultyChoices = computed(() => difficultyOptions({
+  stored: props.world, playerLevel: props.userLevel, base: WORLD_BASE_RATING,
+  bottom: { label: "C級2組", rating: GROUP_MEAN_RATING[6] }, top: { label: "名人", rating: TOP_RATING },
+  recommended: props.recommendedDifficulty ?? props.defaultDifficulty,
+}));
 const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: string } | null>(() => {
   const single = (title: string, key: string, value: PickerValue, options: { value: PickerValue; label: string; description?: string }[], note = "") => (
     { title, note, sections: [{ key, value, groups: [{ options }] }] }
   );
   switch (picker.value) {
     case "difficulty":
-      return single("難易度", "difficulty", difficulty.value, Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => ({
-        value: index + 1, label: String(index + 1), description: index + 1 === props.defaultDifficulty ? (props.usualWorld ? "いつもの世界（竜王戦・名人戦と同じ）" : "おすすめ") : "",
-      })), "数字が大きいほど、相手が強くなるよ。");
+      return single("難易度", "difficulty", difficulty.value, difficultyChoices.value,
+        "数字が大きいほど、相手が強くなるよ。いちばん上の「本物」は、実際の大会と同じ強さ。世界は竜王戦・名人戦と同じだよ。");
     case "scale":
       return single("規模", "scale", scale.value, MEIJIN_SCALES.map((item) => ({
         value: item.id, label: item.label, description: item.rounds ? `1期${item.rounds}局` : "C級10局・B級1組12局・A級9局",

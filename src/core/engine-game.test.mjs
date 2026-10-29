@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from '../game-state';
 import {
   ENGINE_RESIGN_CP, LEVEL_STRENGTH, LIGHT_NODES_FLOOR, clearEngineGameProgress, engineGameResult, engineLevel, engineMark, engineStrength,
-  isMainCharacter, levelStrength, lightReading, loadEngineGameProgress, playEngineGame, realGameSpec, saveEngineGameProgress, shouldEngineResign,
+  isMainCharacter, levelStrength, lightReading, loadEngineGameProgress, playEngineGame, realGameSpec, realPlayerLevel, saveEngineGameProgress,
+  shouldEngineResign,
 } from './engine-game.mjs';
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO } from './ryuo-story.mjs';
-import { WORLD_BASE_RATING } from './ryuo-strength.mjs';
+import { GROUP_MEAN_RATING, REAL_WORLD, WORLD_BASE_RATING, worldCpuLevel } from './ryuo-strength.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
 
 /** 作りものの読み: 合法手を決まった順に並べ、手番の側から見た値を返す。60手目からは先手が大きく優勢。 */
@@ -177,5 +178,30 @@ describe('回戦の全局を本局にする(20-9)', () => {
     expect(avatar.white.level).toBe(10);
     // 世界の物差しのない期は、期のLvのまま。
     expect(realGameSpec(base, { world: null }).black.level).toBe(10);
+  });
+});
+
+describe('本物の世界の本局(docs/tournament-strength-spread-design.mdの9章)', () => {
+  const base = {
+    key: 'ryuo:1:main:n1', winner: 'black', how: 'middle', story: [1, 2, 3],
+    black: { id: 'p1', rating: GROUP_MEAN_RATING[1], level: 10, story: null },
+    white: { id: 'p2', rating: GROUP_MEAN_RATING[6], level: 10, story: null },
+  };
+  it('プロどうしの対局を見せる: 観戦用の読みにせず、段級位の強さのLv(奨励会三段〜タイトル保持者)で指す', () => {
+    const spec = realGameSpec(base, { world: REAL_WORLD });
+    expect(spec.light).toBe(false);
+    expect(spec.black.level).toBe(worldCpuLevel(GROUP_MEAN_RATING[1], REAL_WORLD));
+    expect(spec.white.level).toBe(worldCpuLevel(GROUP_MEAN_RATING[6], REAL_WORLD));
+    expect(spec.black.level).toBeGreaterThanOrEqual(45);
+    expect(engineStrength(spec.black, { light: spec.light }).settings.nodes).toBe(engineStrength(spec.black).settings.nodes);
+  });
+
+  it('天鷺善彦は、いつも藤井聡太並み(Lv49。読む量も最上位)', () => {
+    const father = { id: 'p9', rating: 1700, story: YOSHIHIKO };
+    expect(realPlayerLevel(father)).toBe(49);
+    const spec = realGameSpec({ ...base, white: father }, { world: REAL_WORLD });
+    expect(spec.white.level).toBe(49);
+    expect(engineStrength(spec.white).settings.nodes).toBe(engineStrength({ level: 49 }).settings.nodes);
+    expect(engineStrength(spec.white).settings.searchThreads).toBe(2);
   });
 });

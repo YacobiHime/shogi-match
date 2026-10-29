@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GROUP_MEAN_RATING, WORLD_SPREAD, recommendedDifficulty, recommendedWorldLevel, winProbability, worldCpuLevel, worldExactLevel, worldRating,
+  GROUP_MEAN_RATING, REAL_DIFFICULTY, REAL_WORLD, WORLD_SPREAD, isRealWorld, realExactLevel, realRating, recommendedDifficulty,
+  recommendedWorldLevel, winProbability, worldCpuLevel, worldExactLevel, worldRating,
 } from './ryuo-strength.mjs';
 import {
-  TOURNAMENT_WORLD_KEY, defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview,
+  TOURNAMENT_WORLD_KEY, defaultWorldDifficulty, difficultyName, difficultyOptions, levelGradeName, loadTournamentWorld, rankTag, resolveWorld,
+  saveTournamentWorld, worldReview,
 } from './tournament-world.mjs';
 import { GROUPS, USER_ID, createSeason } from './ryuo.mjs';
 
@@ -76,5 +78,62 @@ describe('世界の物差し(docs/tournament-strength-spread-design.md)', () => 
     expect(season.players[season.champion].level).toBeGreaterThanOrEqual(Math.max(...GROUPS.flatMap((group) => season.fields[group].filter((id) => id !== USER_ID).map((id) => season.players[id].level))) - 1);
     // プレイヤーの名簿の尺度のレーティングは、6組の平均に7割勝てる強さ(6組の平均より上)。
     expect(season.players[USER_ID].rating).toBeGreaterThan(GROUP_MEAN_RATING[6] + 150);
+  });
+});
+
+describe('難易度の目安と本物の世界(docs/tournament-strength-spread-design.mdの8・9章)', () => {
+  it('本物の世界は棋力に合わせず、レーティングを段級位の強さに置く(竜王戦の棋士は奨励会三段〜藤井聡太並み)', () => {
+    expect(isRealWorld(REAL_WORLD)).toBe(true);
+    expect(isRealWorld(30)).toBe(false);
+    // 大会ごとの基準の棋士を使わない(奨励会・研修会でも同じ物差し)。
+    expect(worldCpuLevel(GROUP_MEAN_RATING[6], REAL_WORLD)).toBe(45);
+    expect(worldCpuLevel(GROUP_MEAN_RATING[6], REAL_WORLD, 870)).toBe(45);
+    expect(worldCpuLevel(GROUP_MEAN_RATING[5], REAL_WORLD)).toBe(46);
+    expect(worldCpuLevel(GROUP_MEAN_RATING[1], REAL_WORLD)).toBe(47);
+    expect(worldCpuLevel(1950, REAL_WORLD)).toBe(48);
+    expect(worldCpuLevel(2130, REAL_WORLD)).toBe(49);
+    expect(worldCpuLevel(870, REAL_WORLD)).toBe(26);
+    expect(worldCpuLevel(1150, REAL_WORLD)).toBe(33);
+    // 上の組ほど強い。プレイヤーのレーティングは、同じ物差しの逆。
+    for (let rating = 900; rating <= 2100; rating += 50) expect(realExactLevel(rating)).toBeGreaterThanOrEqual(realExactLevel(rating - 50));
+    expect(worldExactLevel(worldRating(30, REAL_WORLD), REAL_WORLD)).toBeCloseTo(30, 1);
+    expect(realRating(20)).toBe(870);
+  });
+
+  it('本物を選ぶと本物の世界。本物から番号の世界へ戻るときは、棋力のおすすめから決め直す。見直しの一言は出さない', () => {
+    const real = resolveWorld({ stored: null, playerLevel: 20, difficulty: REAL_DIFFICULTY, at: 5 });
+    expect(real).toEqual({ level: REAL_WORLD, difficulty: REAL_DIFFICULTY, playerLevel: 20, at: 5 });
+    expect(resolveWorld({ stored: real, playerLevel: 30, difficulty: REAL_DIFFICULTY })).toBe(real);
+    expect(defaultWorldDifficulty(real, 30)).toBe(REAL_DIFFICULTY);
+    const back = resolveWorld({ stored: real, playerLevel: 20, difficulty: recommendedDifficulty(20) });
+    expect(back.level).toBeCloseTo(recommendedWorldLevel(20), 5);
+    expect(worldReview({ stored: real, playerLevel: 10 })).toBeNull();
+  });
+
+  it('難易度の選択肢は、番号ごとに下と上の相手の段級位を言う。いちばん上は「本物」', () => {
+    const options = difficultyOptions({
+      stored: null, playerLevel: 20, base: GROUP_MEAN_RATING[6],
+      bottom: { label: '6組', rating: GROUP_MEAN_RATING[6] }, top: { label: '竜王', rating: 2130 }, recommended: recommendedDifficulty(20),
+    });
+    expect(options).toHaveLength(REAL_DIFFICULTY);
+    expect(options.map(({ value }) => value)).toEqual(Array.from({ length: REAL_DIFFICULTY }, (_, index) => index + 1));
+    const recommended = options.find(({ value }) => value === recommendedDifficulty(20));
+    const bottomLevel = worldCpuLevel(GROUP_MEAN_RATING[6], recommendedWorldLevel(20));
+    expect(recommended.description).toContain(`6組 ${levelGradeName(bottomLevel)}`);
+    expect(recommended.description).toContain('おすすめ');
+    expect(options.at(-1)).toMatchObject({ label: '本物' });
+    expect(options.at(-1).description).toContain('実際の大会と同じ強さ。6組 奨励会三段〜竜王 藤井聡太並み');
+    // 数字は「程度」を除いた段級位の名前で言う。
+    expect(levelGradeName(25)).toBe('アマ初段');
+    expect(levelGradeName(49)).toBe('藤井聡太並み');
+    expect(difficultyName(REAL_DIFFICULTY)).toBe('本物');
+    expect(difficultyName(9)).toBe('9');
+    // いつもの世界の番号には「いつもの世界」。
+    const stored = resolveWorld({ stored: null, playerLevel: 20, difficulty: 7, at: 1 });
+    const usual = difficultyOptions({
+      stored, playerLevel: 20, base: GROUP_MEAN_RATING[6],
+      bottom: { label: '6組', rating: GROUP_MEAN_RATING[6] }, top: { label: '竜王', rating: 2130 },
+    });
+    expect(usual.find(({ value }) => value === 7).description).toContain('いつもの世界');
   });
 });

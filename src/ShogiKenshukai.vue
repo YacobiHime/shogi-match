@@ -286,16 +286,15 @@
 </template>
 
 <script setup lang="ts">
-import { rankTag } from "./core/tournament-world.mjs";
+import { difficultyName, difficultyOptions, rankTag } from "./core/tournament-world.mjs";
 import { computed, onMounted, ref, watch, type PropType } from "vue";
 import ShoreikaiNameboard, { type NameboardColumn } from "./ShoreikaiNameboard.vue";
 import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
-import { CLASSES, DEFAULT_SETTINGS, ENTRY_CLASSES, KENSHUKAI_SCALES, TOP, describeKenshukai, kenshukaiScale } from "./core/kenshukai.mjs";
+import { CLASSES, CLASS_RATINGS, DEFAULT_SETTINGS, ENTRY_CLASSES, KENSHUKAI_SCALES, TOP, describeKenshukai, kenshukaiScale } from "./core/kenshukai.mjs";
 import { entryClassTalk, entryTalk, eventStamp, pendingTip, transferTalk } from "./core/kenshukai-speech.mjs";
-import { DIFFICULTY_LEVELS } from "./core/ryuo.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { BYOYOMI_CHOICES, byoyomiLabel, byoyomiSeconds } from "./core/byoyomi.mjs";
 import { memberAbilityView } from "./core/ryuo-book.mjs";
@@ -312,6 +311,10 @@ const props = defineProps({
   defaultDifficulty: { type: Number, default: 9 },
   /** 世界の物差しが決まっているか(core/tournament-world.mjs)。決まっていれば、defaultDifficultyは「いつもの世界」の番号。 */
   usualWorld: { type: Boolean, default: false },
+  /** 保存した世界の物差し(難易度の選択肢の強さの目安に使う)。 */
+  world: { type: Object as PropType<{ level: number; difficulty: number; playerLevel: number; at: number } | null>, default: null },
+  /** いまの棋力からのおすすめの番号。 */
+  recommendedDifficulty: { type: Number as PropType<number | null>, default: null },
   /** プレイヤーの棋力(Lv)。次の相手の「格上」「格下」の札に使う。 */
   userLevel: { type: Number, default: NaN },
   assetBaseUrl: { type: String, default: "." },
@@ -381,19 +384,28 @@ const settingTalk = computed(() => {
 });
 const settingsSummary = computed(() => [
   `${CLASSES[entryClass.value]}受験`,
-  `難易度${difficulty.value}`,
+  `難易度 ${difficultyName(difficulty.value)}`,
   kenshukaiScale(scale.value).label,
   ...(shido.value ? [] : ["指導対局なし"]),
 ].join("・"));
 const settingRows = computed(() => [
   { id: "class", label: "受験クラス", value: CLASSES[entryClass.value], note: entryClass.value === props.recommendedClass ? "おすすめ" : `おすすめは${CLASSES[props.recommendedClass]}` },
-  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `${props.usualWorld ? "いつもの世界" : "おすすめ"} ${props.defaultDifficulty}・上の級（クラス）ほど相手が強い` },
+  {
+    id: "difficulty", label: "難易度", value: difficultyName(difficulty.value),
+    note: difficultyChoices.value.find((option) => option.value === difficulty.value)?.description ?? "",
+  },
   { id: "scale", label: "規模", value: kenshukaiScale(scale.value).label, note: kenshukaiScale(scale.value).note },
   { id: "shido", label: "指導対局", value: shido.value ? "あり" : "なし", note: shido.value ? "2回に1回の例会で、プロと駒落ち" : "" },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
   { id: "byoyomi", label: "秒読みの演出", value: byoyomiLabel(byoyomi.value), note: byoyomi.value ? "0秒になっても負けにはならない" : "" },
 ]);
+/** 難易度の選択肢(竜王戦と同じ世界。番号ごとにF2とSクラスの段級位。docs/tournament-strength-spread-design.mdの8・9章)。 */
+const difficultyChoices = computed(() => difficultyOptions({
+  stored: props.world, playerLevel: props.userLevel, base: CLASS_RATINGS[0],
+  bottom: { label: "F2", rating: CLASS_RATINGS[0] }, top: { label: "S", rating: CLASS_RATINGS[CLASSES.length - 1] },
+  recommended: props.recommendedDifficulty ?? props.defaultDifficulty,
+}));
 const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: string } | null>(() => {
   const single = (title: string, key: string, value: PickerValue, options: { value: PickerValue; label: string; description?: string }[], note = "") => (
     { title, note, sections: [{ key, value, groups: [{ options }] }] }
@@ -404,9 +416,8 @@ const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: 
         value: cls, label: CLASSES[cls], description: cls === props.recommendedClass ? "おすすめ" : cls > props.recommendedClass ? "近道・試験の相手が強い" : "じっくり",
       })), "上のクラスほどA2に近い。試験の相手は、受験するクラスの研修会員だよ。");
     case "difficulty":
-      return single("難易度", "difficulty", difficulty.value, Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => ({
-        value: index + 1, label: String(index + 1), description: index + 1 === props.defaultDifficulty ? (props.usualWorld ? "いつもの世界（竜王戦・名人戦と同じ）" : "おすすめ") : "",
-      })), "数字が大きいほど、相手が強くなるよ。");
+      return single("難易度", "difficulty", difficulty.value, difficultyChoices.value,
+        "数字が大きいほど、相手が強くなるよ。いちばん上の「本物」は、実際の大会と同じ強さ。世界は竜王戦・名人戦と同じだよ。");
     case "scale":
       return single("規模", "scale", scale.value, KENSHUKAI_SCALES.map((item) => ({ value: item.id, label: item.label, description: item.note })), "昇級の規定と入会試験の局数が変わるよ。");
     case "shido":

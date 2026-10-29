@@ -33,6 +33,11 @@ describe('Yakobihime speech for the Ryuo screens', () => {
     expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('7割');
     expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('Lv.22');
     expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('竜王はLv.29');
+    // Lvの数字には段級位の名前を添える(8章)。いちばん上の「本物」は、プロの強さを言う(9章)。
+    expect(entryDifficultyLine({ ...base, difficulty: 3 })).toContain('竜王はLv.29（アマ二段）');
+    expect(entryDifficultyLine({ ...base, difficulty: 15, meanLevel: 45, real: true })).toContain('本物の竜王戦');
+    expect(entryDifficultyLine({ ...base, difficulty: 15, meanLevel: 45, real: true })).toContain('奨励会三段');
+    expect(entryDifficultyLine({ ...base, difficulty: 15, meanLevel: 45, real: true })).toContain('藤井聡太並み');
     expect(entryDifficultyLine({ ...base, difficulty: 1 })).toContain('やさしい世界');
     expect(entryDifficultyLine({ ...base, difficulty: 8 })).toContain('手ごわい');
     // 世界を決めたあとは「いつもの世界」。強くなったら伸びを伝え、苦しいときはやさしい世界を選べる形で勧める。

@@ -349,6 +349,8 @@ export function asAvatarMeijinSeason(season, avatar) {
   season.spectator = true;
   season.players[USER_ID] = {
     ...season.players[USER_ID], kind: 'avatar', rating: avatar.rating, character: structuredClone(avatar.character ?? { abilities: {}, traits: [] }),
+    // 得意戦法(プレイヤーが組んだ戦法から。docs/tournament-relay-design.mdの28章)。なければ、序盤はエンジンに任せる。
+    repertoire: avatar.repertoire ? structuredClone(avatar.repertoire) : null,
   };
   return season;
 }

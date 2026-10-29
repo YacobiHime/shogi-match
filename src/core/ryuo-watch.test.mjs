@@ -84,6 +84,19 @@ describe('エントリーの「対局: 観戦」(17章)', () => {
     expect(season.result).toMatchObject({ wins: expect.any(Number), losses: expect.any(Number) });
     expect(season.userGames.length).toBeGreaterThan(0);
   });
+
+  it('分身に得意戦法を持たせると、期の対局でその戦法を指す(28章)', () => {
+    const roster = createRoster({ seed: 52, userGroup: 6 });
+    const repertoire = { party: 'ranging', styles: ['shiken-mino'], usage: { black: { shiken: 100 }, white: { shiken: 100 }, castles: { shiken: { mino: 100 } } } };
+    let season = asAvatarSeason(createSeason({ no: 2, mode: 'challenge', group: 6, settings, userLevel: 20, seed: 9, roster, userName: 'やこび' }), { ...avatar, repertoire });
+    expect(season.players[USER_ID].repertoire).toEqual(repertoire);
+    for (let guard = 0; guard < 200 && season.pending; guard += 1) season = playSpectatorGame(season);
+    const brackets = [season.ranking, season.main, ...(season.revival ?? [])].filter(Boolean);
+    const openings = brackets.flatMap((bracket) => Object.values(bracket.nodes ?? {}))
+      .map((node) => node.game?.openings?.[USER_ID]).filter(Boolean);
+    expect(openings.length).toBeGreaterThan(0);
+    expect(openings.every((id) => id === 'shiken')).toBe(true);
+  });
 });
 
 describe('敗退後の観戦', () => {

@@ -173,7 +173,7 @@
               <YakobiSays :lines="abilityLines" merged :asset-base-url="assetBaseUrl" />
             </div>
             <p class="shogi-note__hint" data-ability-basis>
-              最近{{ myAbility.games }}局・{{ myAbility.moves }}手の解析から出した目安だよ。物差しは竜王戦（難易度{{ myAbility.difficulty }}）の棋士と同じで、対局するたびに動くよ。
+              最近{{ myAbility.games }}局・{{ myAbility.moves }}手の解析から出した目安だよ。物差しは竜王戦（難易度{{ difficultyName(myAbility.difficulty) }}）の棋士と同じで、対局するたびに動くよ。
             </p>
           </template>
         </section>
@@ -756,7 +756,8 @@ import {
   usageRows,
 } from "./core/player-rating.mjs";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
-import { myAbilityProfile } from "./core/my-abilities.mjs";
+import { myAbilityProfile, myRepertoire } from "./core/my-abilities.mjs";
+import { difficultyName } from "./core/tournament-world.mjs";
 import { ABILITIES, abilityRank, abilityValues } from "./core/player-abilities.mjs";
 import { HANANE } from "./core/ryuo-story.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
@@ -1220,6 +1221,8 @@ const myAbility = computed(() => myAbilityProfile({
   playerLevel: ratingLevel(props.state.rating),
   difficulty: props.ryuoDifficulty,
   world: props.ryuoWorld,
+  // 得意戦法(組んだ戦法・囲いの回数から。分身もこれで指す。docs/tournament-relay-design.mdの28章)。
+  repertoire: myRepertoire({ formations: collection.value.formations, catalog: COLLECTION_CATALOG }),
 }));
 /** 名鑑の棋士の能力を、比べる形(軸ごとの値とランク)にする。 */
 function abilitiesOf(values: { [key: string]: number }) {

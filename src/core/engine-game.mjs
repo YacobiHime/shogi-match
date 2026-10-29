@@ -19,7 +19,7 @@ import { winRate } from './move-selection.mjs';
 import { createFormationState, detectFormationSnapshot, updateFormationState } from './formation-tracker.mjs';
 import { packRelayGame, unpackRelayGame } from './relay-store.mjs';
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO } from './ryuo-story.mjs';
-import { WORLD_BASE_RATING } from './ryuo-strength.mjs';
+import { MAX_CPU_LEVEL, REAL_WORLD, WORLD_BASE_RATING, isRealWorld, worldCpuLevel } from './ryuo-strength.mjs';
 
 /** ロジックAIで指すLvの手の、形勢を見るための読み(画面のバーと解説に使う)。 */
 export const EVAL_NODES = 3000;
@@ -114,12 +114,24 @@ export function engineLevel(rating, world, { light = false, base = WORLD_BASE_RA
  */
 export function realGameSpec(spec, { world = null } = {}) {
   const avatar = spec.black?.id === 'user' || spec.white?.id === 'user';
-  const light = !isMainCharacter(spec.black) && !isMainCharacter(spec.white);
+  // 本物の世界(docs/tournament-strength-spread-design.mdの9章)は、プロどうしの対局を見せるので、観戦用の読みにしない。
+  const real = isRealWorld(world);
+  const light = !real && !isMainCharacter(spec.black) && !isMainCharacter(spec.white);
   const base = { ...spec, winner: null, how: null, story: null, light };
   if (avatar || !Number.isFinite(world)) return base;
   const ratingOf = (player) => (Number(player.rating) || 0) + (player.story === HANANE ? HANANE_RIVAL_RUN_RATING : 0);
-  const levelOf = (player) => ({ ...player, level: engineLevel(ratingOf(player), /** @type {number} */ (world), { light }) });
+  // 本物の世界は、プレイヤーが当たるときと同じ段級位の強さのLv(天鷺善彦は藤井聡太並みのLv49)。ほかの世界は、強さの表で当て直す。
+  const levelOf = (player) => ({
+    ...player,
+    level: real ? realPlayerLevel(player, ratingOf(player)) : engineLevel(ratingOf(player), /** @type {number} */ (world), { light }),
+  });
   return { ...base, black: levelOf(spec.black), white: levelOf(spec.white) };
+}
+
+/** 本物の世界で棋士が指すLv。天鷺善彦は、いつも藤井聡太並み(Lv49。読む量も最上位のまま)。 */
+export function realPlayerLevel(player, rating = Number(player?.rating) || 0) {
+  if (player?.story === YOSHIHIKO) return MAX_CPU_LEVEL;
+  return worldCpuLevel(rating, REAL_WORLD);
 }
 
 /**

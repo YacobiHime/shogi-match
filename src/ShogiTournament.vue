@@ -144,6 +144,8 @@
           :recommended-class="kenshukaiRecommendedClass"
           :default-difficulty="defaultDifficulty"
           :usual-world="Boolean(world)"
+          :world="world"
+          :recommended-difficulty="recommendedDifficulty"
           :user-level="userLevel"
           :asset-base-url="assetBaseUrl"
           :player-name="playerName"
@@ -169,6 +171,8 @@
           :recommended-rank="shoreikaiRecommendedRank"
           :default-difficulty="defaultDifficulty"
           :usual-world="Boolean(world)"
+          :world="world"
+          :recommended-difficulty="recommendedDifficulty"
           :user-level="userLevel"
           :asset-base-url="assetBaseUrl"
           :player-name="playerName"
@@ -195,6 +199,8 @@
           :holder-name="meijinHolderName"
           :default-difficulty="defaultDifficulty"
           :usual-world="Boolean(world)"
+          :world="world"
+          :recommended-difficulty="recommendedDifficulty"
           :user-level="userLevel"
           :last-settings="meijinSettings"
           :asset-base-url="assetBaseUrl"
@@ -854,10 +860,10 @@ import YakobiSays from "./YakobiSays.vue";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
-import { DIFFICULTY_LEVELS, SCALES, entryGoalLine, entryRoad, restOpen, scaleById } from "./core/ryuo.mjs";
+import { SCALES, entryGoalLine, entryRoad, restOpen, scaleById } from "./core/ryuo.mjs";
 import { meijinRestOpen } from "./core/meijin.mjs";
-import { GROUP_MEAN_RATING, MAX_CPU_LEVEL, MIN_CPU_LEVEL, worldExactLevel } from "./core/ryuo-strength.mjs";
-import { rankTag, resolveWorld } from "./core/tournament-world.mjs";
+import { GROUP_MEAN_RATING, MAX_CPU_LEVEL, MIN_CPU_LEVEL, REAL_DIFFICULTY, WORLD_BASE_RATING, worldExactLevel } from "./core/ryuo-strength.mjs";
+import { difficultyName, difficultyOptions, levelGradeName, rankTag, resolveWorld } from "./core/tournament-world.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { bestAxisLine } from "./core/ryuo-milestone.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
@@ -1962,7 +1968,6 @@ function banzuke(you: number) {
 }
 
 // ---- エントリー設定
-const DIFFICULTY_STEPS = Array.from({ length: DIFFICULTY_LEVELS }, (_, index) => index + 1);
 /** 強さの山のいちばん上(名簿でいちばん強い棋士の目安。docs/rating-realism-design.md)。 */
 const TOP_RATING = 2130;
 const COACH_OPTIONS = [
@@ -2034,6 +2039,7 @@ const difficultyLine = computed(() => entryDifficultyLine({
   group: entry.value.group, meanLevel: meanLevel.value, difficulty: difficulty.value,
   recommended: props.defaultDifficulty, ratingText: props.ratingText,
   usual: Boolean(props.world), mountain: { one: mountain.value.one, top: mountain.value.top }, review: props.worldReview,
+  real: difficulty.value === REAL_DIFFICULTY,
 }));
 const scaleLine = computed(() => entryScaleLine(scaleById(scale.value).label, scaleNote.value));
 const coachLine = computed(() => entryCoachLine({ coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value }));
@@ -2064,7 +2070,7 @@ const introGoalLine = computed(() => {
 const entryGoal = computed(() => entryGoalLine({ mode: entry.value.mode, group: entry.value.group, scale: scale.value }));
 /** 設定の要約(1行)。初めての人は、そのまま「大会に参加する」を押せばよい。 */
 const settingsSummary = computed(() => [
-  `難易度${difficulty.value}`,
+  difficulty.value === REAL_DIFFICULTY ? "難易度 本物" : `難易度${difficulty.value}`,
   `規模 ${SCALES.find((item) => item.id === scale.value)?.label ?? ""}`,
   `敗者復活${revival.value ? "あり" : "なし"}`,
   coachLevel.value === "off" ? "助言なし" : COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "",
@@ -2309,29 +2315,33 @@ const settingsOpen = ref(false);
 const entryPicker = ref("");
 const assistText = (value: number) => LEARNING_ASSIST_LIMITS.find((item) => item.value === value)?.label ?? String(value);
 const entryRows = computed(() => [
-  { id: "difficulty", label: "難易度", value: String(difficulty.value), note: `6組 Lv.${mountain.value.six} → 1組 Lv.${mountain.value.one} → 竜王 Lv.${mountain.value.top}（あなた Lv.${mountain.value.you}）` },
+  // 強さの山は、Lvの数字より段級位の名前のほうが分かる(8章)。
+  {
+    id: "difficulty", label: "難易度", value: difficultyName(difficulty.value),
+    note: `6組 ${levelGradeName(mountain.value.six)} → 1組 ${levelGradeName(mountain.value.one)} → 竜王 ${levelGradeName(mountain.value.top)}（あなた ${levelGradeName(mountain.value.you)}）`,
+  },
   { id: "scale", label: "規模", value: SCALES.find((item) => item.id === scale.value)?.label ?? "", note: scaleMeta.value },
   { id: "revival", label: "敗者復活戦", value: REVIVAL_OPTIONS.find((item) => item.value === revival.value)?.label ?? "", note: "" },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
   { id: "byoyomi", label: "秒読みの演出", value: byoyomiLabel(byoyomi.value), note: byoyomi.value ? "0秒になっても負けにはならない" : "" },
 ]);
-/** 難易度の選択肢の説明。いつもの世界と、いまの棋力からのおすすめ。 */
-function difficultyDescription(level: number) {
-  const labels = [];
-  if (props.world && level === props.world.difficulty) labels.push("いつもの世界");
-  if (level === (props.recommendedDifficulty ?? props.defaultDifficulty)) labels.push("いまのあなたのおすすめ（6組の平均に7割）");
-  return labels.join("・");
-}
+/**
+ * 難易度の選択肢。番号ごとに6組の平均と竜王の段級位(8章)、いつもの世界と、いまの棋力からのおすすめ。いちばん上は「本物」(9章)。
+ */
+const difficultyChoices = computed(() => difficultyOptions({
+  stored: props.world, playerLevel: props.userLevel, base: WORLD_BASE_RATING,
+  bottom: { label: "6組", rating: GROUP_MEAN_RATING[6] }, top: { label: "竜王", rating: TOP_RATING },
+  recommended: props.recommendedDifficulty ?? props.defaultDifficulty,
+}));
 const entryPickerConfig = computed<{ title: string; sections: PickerSection[]; note: string } | null>(() => {
   const single = (title: string, key: string, value: PickerValue, options: { value: PickerValue; label: string; description?: string }[], note = "") => (
     { title, note, sections: [{ key, value, groups: [{ options }] }] }
   );
   switch (entryPicker.value) {
     case "difficulty":
-      return single("難易度", "difficulty", difficulty.value, DIFFICULTY_STEPS.map((level) => ({
-        value: level, label: String(level), description: difficultyDescription(level),
-      })), "数字が大きいほど、どの棋士も強くなるよ。選んだ世界は、次の期からも使うよ。");
+      return single("難易度", "difficulty", difficulty.value, difficultyChoices.value,
+        "数字が大きいほど、どの棋士も強くなるよ。いちばん上の「本物」は、実際の竜王戦と同じ強さ。選んだ世界は、次の期からも使うよ。");
     case "scale":
       return single("規模", "scale", scale.value, SCALES.map((item) => ({ value: item.id, label: item.label })));
     case "revival":
@@ -3019,8 +3029,11 @@ const statTiles = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 難易度の行の強さの山は、竜王とあなたのLvまで見えないと意味がないので、折り返す。 */
-.shogi-game .shogi-tournament__setting[data-entry-row="difficulty"] .shogi-tournament__setting-value small {
+/* 難易度の行の強さの山(段級位の目安)は、いちばん上とあなたまで見えないと意味がないので、折り返す。名人戦・奨励会・研修会の入口も同じ。 */
+.shogi-game .shogi-tournament__setting[data-entry-row="difficulty"] .shogi-tournament__setting-value small,
+.shogi-game .shogi-tournament__setting[data-meijin-row="difficulty"] .shogi-tournament__setting-value small,
+.shogi-game .shogi-tournament__setting[data-shoreikai-row="difficulty"] .shogi-tournament__setting-value small,
+.shogi-game .shogi-tournament__setting[data-kenshukai-row="difficulty"] .shogi-tournament__setting-value small {
   white-space: normal;
 }
 .shogi-game .shogi-tournament__setting-change {
