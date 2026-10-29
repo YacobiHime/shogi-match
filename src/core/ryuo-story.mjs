@@ -14,11 +14,6 @@ export const YOSHIHIKO = 'yoshihiko';
 
 /** 羽音の強さ: その組の平均より、ばらつきの2倍上(組のおよそ上位2%。6組なら2組の平均に近い)。 */
 export const HANANE_RATING_SIGMA = 2;
-/**
- * プレイヤーと同じランキング戦の表で、羽音がほかの棋士と指す自動対局だけに足すレーティング。
- * ライバルは勝ち上がってきて、組の決勝で待つ(山場。D:4-4)。プレイヤーとの対局と、ほかの組・棋界の1年には足さない。
- */
-export const HANANE_RIVAL_RUN_RATING = 120;
 /** 一度プレイヤーに負けたあと(「絶対に許さないリスト」のあと)、プレイヤーとの対局で上乗せするレーティング。重ねない。 */
 export const HANANE_GRUDGE_RATING = 40;
 

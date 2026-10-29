@@ -98,6 +98,15 @@
             </div>
           </section>
         </div>
+        <!--
+          棋士の世界を最初に戻す(docs/player-world-note-design.mdの7章)。名簿(棋士の年齢・段位・強さ・組・タイトル・順位戦)を作り直す。
+          あなたの組・クラスと記録はそのまま。取り消せないので確認を出す(UD:5-2)。期・挑戦の途中は押せない。
+        -->
+        <p v-if="worldReset.available" class="shogi-tournament__world-reset">
+          <button type="button" class="shogi-tournament__sub" data-world-reset :disabled="Boolean(worldReset.blocked)" @click="openWorldReset">棋士の世界を最初に戻す</button>
+          <small v-if="worldReset.blocked" data-world-reset-blocked>{{ worldReset.blocked }}なので、終わってから戻せるよ。</small>
+          <small v-else-if="worldResetDone" role="status" data-world-reset-done>棋士の世界を最初に戻したよ。</small>
+        </p>
       </nav>
     </template>
 
@@ -776,6 +785,18 @@
       </div>
     </template>
 
+    <!-- 棋士の世界を最初に戻す確認(UD:5-2。取り消せない操作。はじめに「やめる」を選んでおく)。 -->
+    <div v-if="worldResetOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="棋士の世界を最初に戻す" data-world-reset-sheet @click.self="worldResetOpen = false">
+      <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
+        <h2>棋士の世界を最初に戻す</h2>
+        <p class="shogi-tournament__text">棋士の年齢・段位・強さ・組・タイトル・順位戦の順位と、あなたとの対戦成績を、最初の名簿に作り直すよ。もとには戻せないよ。</p>
+        <p class="shogi-tournament__text">あなたの竜王戦の組・順位戦のクラス・タイトル、賞状帳とこれまでの期の記録は、そのまま。推しは外れるよ。</p>
+        <div class="shogi-tournament__actions shogi-tournament__actions--two">
+          <button ref="worldResetCancel" type="button" class="shogi-tournament__sub" data-world-reset-cancel @click="worldResetOpen = false">やめる</button>
+          <button type="button" class="shogi-tournament__start" data-world-reset-confirm @click="confirmWorldReset">最初に戻す</button>
+        </div>
+      </div>
+    </div>
     <!-- 賞状帳(docs/season-award-design.md)。古い順に並べ、押すとその賞状を開く。 -->
     <div v-if="bookOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="賞状帳" data-award-list @click.self="bookOpen = false">
       <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
@@ -973,6 +994,8 @@ const props = defineProps({
   ratingText: { type: String, default: "" },
   /** 開いたときの画面。ryuoは竜王戦の入口(期の途中なら期の画面)。棋力測定の結果の「竜王戦に出る」から。 */
   startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai">, default: "select" },
+  /** 棋士の世界を最初に戻すボタン(名簿があれば出す。blockedは、戻せない理由「竜王戦の期の途中」など)。 */
+  worldReset: { type: Object as PropType<{ available: boolean; blocked: string | null }>, default: () => ({ available: false, blocked: null }) },
   /** いまの竜王(プレイヤーが竜王ならnull)。入口の山で、七番勝負に顔を出す。 */
   ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
   /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。VS画面に出す。 */
@@ -1030,6 +1053,8 @@ const emit = defineEmits<{
   close: [];
   enter: [settings: { difficulty: number; scale: number; revival: boolean; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; watch: boolean }];
   "watch-progress": [seasonId: string, revealed: number];
+  /** 棋士の世界を最初に戻す(確認のあと)。 */
+  "world-reset": [];
   /** 観戦の期の、分身の次の一局を決める。 */
   "watch-play": [real?: any, round?: any[]];
   "watch-round": [season: any];
@@ -1208,7 +1233,8 @@ function goBack() {
   if (awardShown.value) {
     awardShown.value = null;
     awardCeremony.value = false;
-  } else if (bookOpen.value) bookOpen.value = false;
+  } else if (worldResetOpen.value) worldResetOpen.value = false;
+  else if (bookOpen.value) bookOpen.value = false;
   else if (sheet.value) sheet.value = "";
   else if (resultDetailOpen.value) resultDetailOpen.value = false;
   else if (settingsOpen.value) settingsOpen.value = false;
@@ -2422,6 +2448,21 @@ function enter(watch = false) {
 const awardShown = ref<SeasonAwardData | null>(null);
 const awardCeremony = ref(false);
 const bookOpen = ref(false);
+// ---- 棋士の世界を最初に戻す(docs/player-world-note-design.mdの7章)
+const worldResetOpen = ref(false);
+const worldResetDone = ref(false);
+const worldResetCancel = ref<HTMLButtonElement | null>(null);
+/** 確認を開き、はじめに「やめる」を選んでおく(UD:5-2。取り消せない操作)。 */
+function openWorldReset() {
+  worldResetDone.value = false;
+  worldResetOpen.value = true;
+  void nextTick(() => worldResetCancel.value?.focus());
+}
+function confirmWorldReset() {
+  worldResetOpen.value = false;
+  emit("world-reset");
+  worldResetDone.value = true;
+}
 /** 期の結果の「表彰式へ」。賞状がなければ(保存できない環境など)、そのまま大会の選択へ。 */
 function openCeremony(id: string) {
   const award = props.awards.find((item) => item.id === id) ?? null;
@@ -2990,6 +3031,11 @@ const statTiles = computed(() => {
 .shogi-game .shogi-tournament-home .shogi-tournament__title-tiles,
 .shogi-game .shogi-tournament-home .shogi-tournament__soon-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .shogi-game .shogi-tournament-home .shogi-title__tile:disabled { opacity: 0.55; box-shadow: none; }
+/* 棋士の世界を最初に戻す(7章)。大会のタイルより目立たせない、いちばん下の脇役のボタン。 */
+.shogi-game .shogi-tournament__world-reset { display: grid; gap: 0.35rem; justify-items: center; margin: 1.25rem 0 0; }
+.shogi-game .shogi-tournament__world-reset .shogi-tournament__sub { width: auto; max-width: 100%; height: auto; min-height: 44px; padding: 0.4rem 1.1rem; font-size: 0.9em; }
+.shogi-game .shogi-tournament__world-reset .shogi-tournament__sub:disabled { opacity: 0.5; cursor: default; }
+.shogi-game .shogi-tournament__world-reset small { color: #c9d6e2; font-size: 0.8em; text-align: center; }
 /* 左上の戻るボタンと、タイトルが重ならないよう、上を空ける。 */
 .shogi-game .shogi-home.shogi-home--title.shogi-tournament-home { padding-top: max(4rem, env(safe-area-inset-top)); }
 .shogi-game .shogi-tournament-home .shogi-title__logo {

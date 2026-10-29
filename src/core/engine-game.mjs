@@ -18,7 +18,7 @@ import {
 import { winRate } from './move-selection.mjs';
 import { createFormationState, detectFormationSnapshot, updateFormationState } from './formation-tracker.mjs';
 import { packRelayGame, unpackRelayGame } from './relay-store.mjs';
-import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO } from './ryuo-story.mjs';
+import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { MAX_CPU_LEVEL, REAL_WORLD, WORLD_BASE_RATING, isRealWorld, worldCpuLevel } from './ryuo-strength.mjs';
 import { resignStyleById, resignStyleOf, resignsBy } from './resign-style.mjs';
 
@@ -118,7 +118,8 @@ export function realGameSpec(spec, { world = null } = {}) {
   const light = !real && !isMainCharacter(spec.black) && !isMainCharacter(spec.white);
   const base = { ...spec, winner: null, how: null, story: null, light };
   if (avatar || !Number.isFinite(world)) return base;
-  const ratingOf = (player) => (Number(player.rating) || 0) + (player.story === HANANE ? HANANE_RIVAL_RUN_RATING : 0);
+  // 羽音の勝ち上がり補正は外した(docs/hanane-rival-design.mdの13章)。羽音もレーティングのまま。
+  const ratingOf = (player) => Number(player.rating) || 0;
   // 本物の世界は、プレイヤーが当たるときと同じ段級位の強さのLv(天鷺善彦は藤井聡太並みのLv49)。ほかの世界は、強さの表で当て直す。
   const levelOf = (player) => ({
     ...player,

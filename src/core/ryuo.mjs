@@ -6,7 +6,7 @@
 import { aggregateSeasonStats } from './ryuo-stats.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { USER_HOLDER, createRoster, seasonEntry, selectParticipants } from './ryuo-roster.mjs';
-import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO, hananeAfterLine, hananeBeforeLine, hananeCoachIntro, hananeGrudgeBonus, yoshihikoCoachIntro } from './ryuo-story.mjs';
+import { HANANE, YOSHIHIKO, hananeAfterLine, hananeBeforeLine, hananeCoachIntro, hananeGrudgeBonus, yoshihikoCoachIntro } from './ryuo-story.mjs';
 import { gameRecordOf, simulateMemberGame } from './ryuo-simulation.mjs';
 import { matchBracket, seasonStages, seriesView, winsToPlayoff } from './ryuo-stages.mjs';
 import { matchStakes, seasonGoalLine } from './ryuo-stakes.mjs';
@@ -250,9 +250,8 @@ function overrideFor(overrides, key, a, b) {
  * @returns {{ state: 'user', nodeId: string } | { state: 'root', nodeId: string } | { state: 'finished' }}
  */
 export function advanceBracket(bracket, players, rng, userId = USER_ID, { stopAtRoot = false, overrides = null } = {}) {
-  // プレイヤーのいる表では、ライバル(羽音)が勝ち上がりやすい(ryuo-story.mjsのHANANE_RIVAL_RUN_RATING)。
-  const rivalRun = bracket.ids?.includes(userId);
-  const ratingOf = (member) => member.rating + (rivalRun && member.story === HANANE ? HANANE_RIVAL_RUN_RATING : 0);
+  // 羽音の勝ち上がり補正(+120)は外した(docs/hanane-rival-design.mdの13章)。羽音もレーティングのとおりに勝ち負けが決まる。
+  const ratingOf = (member) => member.rating;
   const finalId = rootNodeId(bracket);
   for (;;) {
     const ready = readyNodes(bracket, { stopAtRoot });

@@ -400,6 +400,8 @@
       :ryuo-holder="ryuoHolder"
       :player-name="playerDisplayName(playerName)"
       :oshi="ryuoOshi"
+      :world-reset="worldResetState"
+      @world-reset="resetTournamentWorld"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
       :suspended-moves="suspendedRyuoMoves"
@@ -2808,7 +2810,8 @@ import {
   saveCollection,
 } from "./core/collection.mjs";
 import { themeName } from "./core/themes.mjs";
-import { loadOshi, oshiSeasonResultLine } from "./core/ryuo-oshi.mjs";
+import { loadOshi, oshiSeasonResultLine, saveOshi } from "./core/ryuo-oshi.mjs";
+import { resetRoster, worldResetBlocker } from "./core/world-reset.mjs";
 import { TESUJI_HINTS, TESUJI_NAMES, detectTesuji } from "./core/move-tesuji.mjs";
 import { addRecentGame, loadRecentGames, saveRecentGames } from "./core/recent-games.mjs";
 import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
@@ -6681,6 +6684,27 @@ function recordShoreikaiOutcome(matchResult: MatchResult) {
 // ---- 研修会(docs/kenshukai-design.md)。入会試験からクラスを上げ、A2で奨励会6級へ編入できる。挑戦(run)は1つずつ、端末に保存する。
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const kenshukaiCareer = shallowRef<any>(loadKenshukai(browserStorage()));
+/**
+ * 棋士の世界を最初に戻す(docs/player-world-note-design.mdの7章)。名簿があれば出し、期・挑戦の途中は戻せない。
+ * 戻すと、名簿を作り直し(プレイヤーの竜王・順位戦のクラスはそのまま)、推しを外す。キャリアと賞状帳は変えない。
+ */
+const worldResetState = computed(() => ({
+  available: Boolean(ryuoRoster.value),
+  blocked: worldResetBlocker({
+    ryuoSeason: ryuoSeason.value, meijinSeason: meijinSeason.value,
+    shoreikaiRun: shoreikaiCareer.value?.run ?? null, kenshukaiRun: kenshukaiCareer.value?.run ?? null,
+  }),
+}));
+function resetTournamentWorld() {
+  if (!ryuoRoster.value || worldResetState.value.blocked) return;
+  // 敗退後の残りの対局が確定していなければ、前の世界で確定させてから作り直す(期の記録と賞状は残る)。
+  settleRyuoSeason();
+  settleMeijinSeason();
+  ryuoRoster.value = resetRoster(ryuoRoster.value, { seed: Date.now(), userGroup: ryuoCareer.value.group });
+  saveRoster(browserStorage(), ryuoRoster.value);
+  saveOshi(browserStorage(), null);
+  ryuoOshi.value = null;
+}
 const kenshukaiView = computed(() => describeKenshukai(kenshukaiCareer.value.run));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function setKenshukaiCareer(career: any) {

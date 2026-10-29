@@ -250,8 +250,9 @@ describe('竜王戦の画面に出す、羽音の一言', () => {
     expect(HANANE_LINES.won).toContain(lost.lastGame.rivalLine);
   });
 
-  it('自動対局では、プレイヤーと同じ表の羽音だけが勝ち上がりやすい(多くの期で組の決勝で当たる)', () => {
+  it('勝ち上がり補正はない(13章)が、羽音は組の上位の強さなので、何期かに1度はプレイヤーと当たる', () => {
     const met = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter((seed) => seasonBeforeRival(seed)).length;
-    expect(met).toBeGreaterThanOrEqual(5);
+    expect(met).toBeGreaterThanOrEqual(2);
+    expect(met).toBeLessThan(10);
   });
 });

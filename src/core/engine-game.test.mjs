@@ -5,7 +5,7 @@ import {
   isMainCharacter, levelStrength, lightReading, loadEngineGameProgress, playEngineGame, realGameSpec, realPlayerLevel, saveEngineGameProgress,
   shouldEngineResign,
 } from './engine-game.mjs';
-import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO } from './ryuo-story.mjs';
+import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { resignStyleById } from './resign-style.mjs';
 import { GROUP_MEAN_RATING, REAL_WORLD, WORLD_BASE_RATING, worldCpuLevel } from './ryuo-strength.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
@@ -179,8 +179,8 @@ describe('回戦の全局を本局にする(20-9)', () => {
     expect(other.black.level).toBe(engineLevel(WORLD_BASE_RATING + 200, 24, { light: true }));
     const rival = realGameSpec({ ...base, white: { ...base.white, story: HANANE } }, { world: 24 });
     expect(rival.light).toBe(false);
-    // 羽音は、分身のいる表では勝ち上がりやすい(自動対局と同じ)。
-    expect(rival.white.level).toBe(engineLevel(WORLD_BASE_RATING + HANANE_RIVAL_RUN_RATING, 24));
+    // 羽音も、レーティングのまま(勝ち上がり補正は外した。docs/hanane-rival-design.mdの13章)。
+    expect(rival.white.level).toBe(engineLevel(WORLD_BASE_RATING, 24));
     const avatar = realGameSpec({ ...base, black: { ...base.black, id: 'user' } }, { world: 24 });
     expect(avatar.light).toBe(false);
     expect(avatar.black.level).toBe(10);
