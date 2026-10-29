@@ -277,6 +277,8 @@
       <section class="shogi-tournament__hud" aria-label="この期の結果" data-meijin-result>
         <p class="meijin__stamp" :class="`meijin__stamp--${view.result.outcome}`" data-meijin-stamp>{{ resultHeadline }}</p>
         <p class="shogi-tournament__hud-name">{{ view.clsLabel }} <small>{{ view.result.wins }}勝{{ view.result.losses }}敗{{ view.result.place ? `・${view.result.place}位` : "" }}</small></p>
+        <!-- 途中で棄権した期(docs/tournament-withdraw-design.md)。 -->
+        <p v-if="view.result.withdrawn" class="shogi-tournament__hint" data-withdrawn>途中で棄権しました（不戦敗{{ view.result.forfeits }}局）。</p>
         <p class="meijin__record" aria-label="今期の成績">
           <i v-for="game in view.userGames" :key="`${game.kind}-${game.round}`" :class="game.win ? 'is-win' : 'is-loss'">{{ game.win ? "○" : "●" }}</i>
         </p>
@@ -322,7 +324,7 @@ export type MeijinView = {
   pending: Pending | null; holder: Brief | null;
   playoff: { names: string[] } | null; series: SeriesView | null;
   userGames: { kind: string; round: number; win: boolean }[];
-  result: { cls: string; wins: number; losses: number; place: number | null; outcome: string } | null;
+  result: { cls: string; wins: number; losses: number; place: number | null; outcome: string; withdrawn?: boolean; forfeits?: number } | null;
   resultSeen: boolean;
   settings: Settings;
   spectator?: boolean;
@@ -613,7 +615,10 @@ function startPlay() {
 }
 
 // ---- 結果
-const resultHeadline = computed(() => MEIJIN_OUTCOME_TEXT[props.view?.result?.outcome as keyof typeof MEIJIN_OUTCOME_TEXT] ?? "");
+// 途中で棄権した期は「途中で棄権」(docs/tournament-withdraw-design.md)。
+const resultHeadline = computed(() => (props.view?.result?.withdrawn
+  ? "途中で棄権"
+  : MEIJIN_OUTCOME_TEXT[props.view?.result?.outcome as keyof typeof MEIJIN_OUTCOME_TEXT] ?? ""));
 const nextText = computed(() => {
   if (props.entryClass === "meijin") return "名人として、防衛戦へ";
   return `${CLASS_LABELS[props.entryClass]}で、第${props.entryNo}期の順位戦`;

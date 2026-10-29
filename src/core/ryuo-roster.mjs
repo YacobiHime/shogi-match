@@ -267,7 +267,8 @@ function recordVsUser(roster, season) {
 export function addVsUser(roster, games, { no, event }) {
   roster.vsUser ??= {};
   for (const game of games) {
-    if (!roster.players[game.opponentId]) continue;
+    // 棄権の不戦敗(docs/tournament-withdraw-design.md)は、盤で指していないので対戦成績に数えない。
+    if (game.forfeit || !roster.players[game.opponentId]) continue;
     const entry = roster.vsUser[game.opponentId] ?? { wins: 0, losses: 0, streak: 0, lastNo: null, lastWin: null };
     if (game.win) entry.wins += 1;
     else entry.losses += 1;

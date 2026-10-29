@@ -1448,6 +1448,20 @@ export function closeShoreikaiRun(career) {
   };
 }
 
+/**
+ * 自分から奨励会をやめる(docs/tournament-withdraw-design.md)。会員なら退会として経歴に残し、入会試験の途中なら、そのまま閉じる
+ * (まだ会員でないので、経歴には残さない)。四段になった挑戦は変えない。
+ * @param {ReturnType<typeof createShoreikaiCareer>} career
+ */
+export function withdrawShoreikaiRun(career) {
+  const run = career?.run;
+  if (!run || run.phase === 'pro') return career;
+  if (run.phase === 'exam' || run.phase === 'failed') return { ...career, run: null };
+  const next = structuredClone(run);
+  if (next.phase !== 'retired') retire(next, '自分から');
+  return closeShoreikaiRun({ ...career, run: next });
+}
+
 export function loadShoreikai(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(SHOREIKAI_KEY) ?? 'null');

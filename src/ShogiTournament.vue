@@ -99,12 +99,27 @@
           </section>
         </div>
         <!--
+          大会を途中でやめる(docs/tournament-withdraw-design.md)。進行中の大会ごとに1つ。竜王戦・名人戦は棄権(残りは不戦敗)、
+          奨励会は退会、研修会はやめる。取り消せないので確認を出す(UD:5-2)。ふだんの道(対局する)の邪魔にならない下の端に置く。
+        -->
+        <p v-if="withdraw.length || withdrawDone" class="shogi-tournament__world-reset shogi-tournament__withdraw" data-withdraw>
+          <button
+            v-for="item in withdraw"
+            :key="item.id"
+            type="button"
+            class="shogi-tournament__sub"
+            :data-withdraw-open="item.id"
+            @click="openWithdraw(item)"
+          >{{ item.label }}を{{ item.action }}</button>
+          <small v-if="withdrawDone" role="status" data-withdraw-done>{{ withdrawDone }}</small>
+        </p>
+        <!--
           棋士の世界を最初に戻す(docs/player-world-note-design.mdの7章)。名簿(棋士の年齢・段位・強さ・組・タイトル・順位戦)を作り直す。
           あなたの組・クラスと記録はそのまま。取り消せないので確認を出す(UD:5-2)。期・挑戦の途中は押せない。
         -->
         <p v-if="worldReset.available" class="shogi-tournament__world-reset">
           <button type="button" class="shogi-tournament__sub" data-world-reset :disabled="Boolean(worldReset.blocked)" @click="openWorldReset">棋士の世界を最初に戻す</button>
-          <small v-if="worldReset.blocked" data-world-reset-blocked>{{ worldReset.blocked }}なので、終わってから戻せるよ。</small>
+          <small v-if="worldReset.blocked" data-world-reset-blocked>{{ worldReset.blocked }}なので、終わるか、途中でやめてから戻せるよ。</small>
           <small v-else-if="worldResetDone" role="status" data-world-reset-done>棋士の世界を最初に戻したよ。</small>
         </p>
       </nav>
@@ -797,6 +812,18 @@
         </div>
       </div>
     </div>
+    <!-- 大会を途中でやめる確認(UD:5-2。取り消せない操作。はじめに「続ける」を選んでおく)。 -->
+    <div v-if="withdrawItem" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="`${withdrawItem.label}を${withdrawItem.action}`" data-withdraw-sheet @click.self="withdrawItem = null">
+      <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
+        <h2>{{ withdrawItem.label }}を{{ withdrawItem.action }}？</h2>
+        <p class="shogi-tournament__text">{{ withdrawItem.note }}</p>
+        <p class="shogi-tournament__text">もとには戻せないよ。中断している{{ withdrawItem.label }}の対局があれば、それも消えるよ。</p>
+        <div class="shogi-tournament__actions shogi-tournament__actions--two">
+          <button ref="withdrawCancel" type="button" class="shogi-tournament__sub" data-withdraw-cancel @click="withdrawItem = null">続ける</button>
+          <button type="button" class="shogi-tournament__start" data-withdraw-confirm @click="confirmWithdraw">{{ withdrawItem.action }}</button>
+        </div>
+      </div>
+    </div>
     <!-- 賞状帳(docs/season-award-design.md)。古い順に並べ、押すとその賞状を開く。 -->
     <div v-if="bookOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="賞状帳" data-award-list @click.self="bookOpen = false">
       <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
@@ -971,6 +998,9 @@ type View = {
     wins: number; losses: number; standing: number | null; exitLabel: string; path: { stage: string; label: string; text: string }[];
     titles?: { id: string; label: string; detail: string }[];
     oshiLine?: string;
+    /** 途中で棄権した期と、その不戦敗の数(docs/tournament-withdraw-design.md)。 */
+    withdrawn?: boolean;
+    forfeits?: number;
   };
   defender: Brief | null;
   lastGame?: null | {
@@ -996,6 +1026,8 @@ const props = defineProps({
   startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai">, default: "select" },
   /** 棋士の世界を最初に戻すボタン(名簿があれば出す。blockedは、戻せない理由「竜王戦の期の途中」など)。 */
   worldReset: { type: Object as PropType<{ available: boolean; blocked: string | null }>, default: () => ({ available: false, blocked: null }) },
+  /** いま途中でやめられる大会(docs/tournament-withdraw-design.md。core/tournament-withdraw.mjsのwithdrawOptions)。 */
+  withdraw: { type: Array as PropType<WithdrawOption[]>, default: () => [] },
   /** いまの竜王(プレイヤーが竜王ならnull)。入口の山で、七番勝負に顔を出す。 */
   ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
   /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。VS画面に出す。 */
@@ -1055,6 +1087,7 @@ const emit = defineEmits<{
   "watch-progress": [seasonId: string, revealed: number];
   /** 棋士の世界を最初に戻す(確認のあと)。 */
   "world-reset": [];
+  withdraw: [id: "ryuo" | "meijin" | "shoreikai" | "kenshukai"];
   /** 観戦の期の、分身の次の一局を決める。 */
   "watch-play": [real?: any, round?: any[]];
   "watch-round": [season: any];
@@ -1234,6 +1267,7 @@ function goBack() {
     awardShown.value = null;
     awardCeremony.value = false;
   } else if (worldResetOpen.value) worldResetOpen.value = false;
+  else if (withdrawItem.value) withdrawItem.value = null;
   else if (bookOpen.value) bookOpen.value = false;
   else if (sheet.value) sheet.value = "";
   else if (resultDetailOpen.value) resultDetailOpen.value = false;
@@ -2463,6 +2497,27 @@ function confirmWorldReset() {
   emit("world-reset");
   worldResetDone.value = true;
 }
+// ---- 大会を途中でやめる(docs/tournament-withdraw-design.md)
+type WithdrawOption = { id: "ryuo" | "meijin" | "shoreikai" | "kenshukai"; label: string; action: string; note: string };
+const withdrawItem = ref<WithdrawOption | null>(null);
+const withdrawDone = ref("");
+const withdrawCancel = ref<HTMLButtonElement | null>(null);
+/** 確認を開き、はじめに「続ける」を選んでおく(UD:5-2。取り消せない操作)。 */
+function openWithdraw(item: WithdrawOption) {
+  withdrawDone.value = "";
+  worldResetDone.value = false;
+  withdrawItem.value = item;
+  void nextTick(() => withdrawCancel.value?.focus());
+}
+function confirmWithdraw() {
+  const item = withdrawItem.value;
+  withdrawItem.value = null;
+  if (!item) return;
+  emit("withdraw", item.id);
+  withdrawDone.value = item.id === "ryuo" || item.id === "meijin"
+    ? `${item.label}を棄権したよ。結果は${item.id === "ryuo" ? "竜王戦" : "名人戦"}の画面で見られるよ。`
+    : `${item.label}を${item.action === "退会する" ? "退会し" : "やめ"}たよ。`;
+}
 /** 期の結果の「表彰式へ」。賞状がなければ(保存できない環境など)、そのまま大会の選択へ。 */
 function openCeremony(id: string) {
   const award = props.awards.find((item) => item.id === id) ?? null;
@@ -2572,11 +2627,13 @@ const playText = computed(() => {
 });
 
 // ---- 結果
-const outcomeHeadline = computed(() => (props.view?.result ? outcomeText(props.view.result.outcome) : ""));
+// 途中で棄権した期は「途中で棄権」(docs/tournament-withdraw-design.md)。
+const outcomeHeadline = computed(() => (props.view?.result ? (props.view.result.withdrawn ? "途中で棄権" : outcomeText(props.view.result.outcome)) : ""));
 const outcomeDetail = computed(() => {
   const result = props.view?.result;
   if (!result) return "";
-  const record = `${result.wins}勝${result.losses}敗`;
+  // 途中で棄権した期は、そのことを先に言う(docs/tournament-withdraw-design.md)。
+  const record = `${result.wins}勝${result.losses}敗${result.withdrawn ? `（途中で棄権。不戦敗${result.forfeits}局）` : ""}`;
   if (result.outcome === "champion") return `${record}。竜王になりました。次の期は防衛戦です。`;
   if (result.outcome === "defense-lost") return `${record}。竜王の座を明け渡し、次の期は1組から挑戦します。`;
   const move = result.promoted ? `${result.startGroup}組から${result.newGroup}組へ昇級。`

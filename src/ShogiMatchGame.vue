@@ -401,7 +401,9 @@
       :player-name="playerDisplayName(playerName)"
       :oshi="ryuoOshi"
       :world-reset="worldResetState"
+      :withdraw="tournamentWithdraw"
       @world-reset="resetTournamentWorld"
+      @withdraw="withdrawTournament"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
       :suspended-moves="suspendedRyuoMoves"
@@ -2409,6 +2411,7 @@ import {
 import { byoyomiSeconds } from "./core/byoyomi.mjs";
 import {
   closeShoreikaiRun,
+  withdrawShoreikaiRun,
   createShoreikaiRun,
   describeShoreikai,
   loadShoreikai,
@@ -2807,6 +2810,7 @@ import {
 import { themeName } from "./core/themes.mjs";
 import { loadOshi, oshiSeasonResultLine, saveOshi } from "./core/ryuo-oshi.mjs";
 import { resetRoster, worldResetBlocker } from "./core/world-reset.mjs";
+import { withdrawMeijinSeason, withdrawOptions, withdrawRyuoSeason } from "./core/tournament-withdraw.mjs";
 import { TESUJI_HINTS, TESUJI_NAMES, detectTesuji } from "./core/move-tesuji.mjs";
 import { addRecentGame, loadRecentGames, saveRecentGames } from "./core/recent-games.mjs";
 import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
@@ -6669,6 +6673,40 @@ function resetTournamentWorld() {
   saveRoster(browserStorage(), ryuoRoster.value);
   saveOshi(browserStorage(), null);
   ryuoOshi.value = null;
+}
+/**
+ * 大会を途中でやめる(docs/tournament-withdraw-design.md)。竜王戦・名人戦は棄権(残りは不戦敗で、期はほかの棋士どうしで最後まで決まる。
+ * 結果・昇級降級・賞状・名簿は、ふつうに期が終わったときと同じ)。奨励会は退会、研修会はやめる。不戦敗はレーティングに数えない。
+ */
+const tournamentWithdraw = computed(() => withdrawOptions({
+  ryuoSeason: ryuoSeason.value, meijinSeason: meijinSeason.value,
+  shoreikaiRun: shoreikaiCareer.value?.run ?? null, kenshukaiRun: kenshukaiCareer.value?.run ?? null,
+}));
+function withdrawTournament(id: TournamentEvent) {
+  if (!tournamentWithdraw.value.some((item) => item.id === id)) return;
+  // 中断しているこの大会の対局は、続けられなくなるので消す。
+  const suspended = suspendedMatch.value;
+  if (suspended?.ryuoOpponentId && (suspended.event ?? "ryuo") === id) {
+    suspendedMatch.value = null;
+    discardPersistedMatch();
+  }
+  if (id === "ryuo") {
+    ryuoSeason.value = withdrawRyuoSeason(rawRyuoSeason());
+    saveSeason(browserStorage(), ryuoSeason.value);
+    finalizeRyuoSeason();
+    // 棄権した期は、このあとの対局の観戦を待たずに確定する。
+    settleRyuoSeason();
+  } else if (id === "meijin") {
+    const next = withdrawMeijinSeason(JSON.parse(JSON.stringify(meijinSeason.value)));
+    meijinSeason.value = next;
+    saveMeijinSeason(browserStorage(), next);
+    finalizeMeijinSeason(next);
+    settleMeijinSeason();
+  } else if (id === "shoreikai") {
+    setShoreikaiCareer(withdrawShoreikaiRun(shoreikaiCareer.value));
+  } else {
+    setKenshukaiCareer(closeKenshukaiRun(kenshukaiCareer.value));
+  }
 }
 const kenshukaiView = computed(() => describeKenshukai(kenshukaiCareer.value.run));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -4,6 +4,7 @@ import {
   addToRecord, addToSlump, closeShoreikaiRun, createShoreikaiCareer, createShoreikaiRun, createWorld, describeShoreikai,
   leagueOutlook, leagueSchedule, leagueStandings, loadShoreikai, mentorCandidates, nameboard, promotionProgress,
   promotionReached, recommendedExamRank, recordShoreikaiGame, retryExam, saveShoreikai, shoreikaiScale, slumpWarning,
+  withdrawShoreikaiRun,
 } from './shoreikai.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { createRoster } from './ryuo-roster.mjs';
@@ -324,5 +325,16 @@ describe('羽音の一言', () => {
       expect(line).not.toMatch(/[!！]/);
       expect(line).not.toMatch(/です|ます|ました|ません|ございます|お願い/);
     }
+  });
+});
+
+describe('自分から奨励会をやめる(docs/tournament-withdraw-design.md)', () => {
+  it('会員なら退会として経歴に残し、入会試験の途中なら経歴に残さず閉じる', () => {
+    const member = withdrawShoreikaiRun({ ...createShoreikaiCareer(), run: passed() });
+    expect(member.run).toBeNull();
+    expect(member.history[0].result).toBe('retired');
+    const exam = withdrawShoreikaiRun({ ...createShoreikaiCareer(), run: run0() });
+    expect(exam.run).toBeNull();
+    expect(exam.history).toEqual([]);
   });
 });
