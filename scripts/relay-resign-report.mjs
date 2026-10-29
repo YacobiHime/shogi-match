@@ -1,10 +1,11 @@
 // 中継の棋譜の終わり方を測る(docs/tournament-relay-design.mdの15章)。Nodeのエンジンで何局か作り、投了・詰みの手数と、
-// 投了した局面の形勢(投了した側から見た評価値)、最後に表示される形勢を出す。
+// 投了した局面の形勢(投了した側から見た評価値)、最後に表示される形勢、敗者の投了の早さ(29章)と、投げたときに残っていた詰みの手数を出す。
 // 使い方: node scripts/relay-resign-report.mjs [局数=12] [読む局面数=6000] [quality(pro|空)]
 import './lib/ts-register.mjs';
 import { createNodeEngine } from './lib/node-engine.mjs';
 
-const { playRelayGame, blackWinRate } = await import('../src/core/relay-game.mjs');
+const { playRelayGame, blackWinRate, isMateCp, MATE_CP } = await import('../src/core/relay-game.mjs');
+const { resignStyleOf } = await import('../src/core/resign-style.mjs');
 const formationMaster = (await import('../src/data/hiragana_suisho_formations.json', { with: { type: 'json' } })).default;
 
 const count = Number(process.argv[2] ?? 12);
@@ -16,7 +17,7 @@ const rows = [];
 for (let index = 0; index < count; index += 1) {
   const winner = index % 2 ? 'white' : 'black';
   const how = HOWS[index % HOWS.length];
-  const spec = { key: `measure:${index}`, seed: 1000 + index * 7919, winner, how, story: null, quality, event: 'ryuo', kind: 'game', black: {}, white: {} };
+  const spec = { key: `measure:${index}`, seed: 1000 + index * 7919, winner, how, story: null, quality, event: 'ryuo', kind: 'game', black: { id: `m${index}b` }, white: { id: `m${index}w` } };
   engine.newGame();
   const search = ({ moves, multiPv, searchMoves }) => {
     engine.applyStrengthOptions({ multiPv: Math.max(1, multiPv) });
@@ -31,7 +32,13 @@ for (let index = 0; index < count; index += 1) {
   const winnerEval = (last?.eval ?? 0) * sign;
   const winnerRate = Math.round((winner === 'black' ? blackWinRate(last?.eval ?? 0) : 1 - blackWinRate(last?.eval ?? 0)) * 100);
   const maxLoserLead = Math.max(...game.entries.slice(-12).map((entry) => -entry.eval * sign));
-  const row = { index, how, winner, reason: game.end.reason, plies: game.end.plies, winnerEval, winnerRate, loserLeadLast12: maxLoserLead, seconds: Math.round((Date.now() - started) / 1000) };
+  const loser = winner === 'black' ? 'white' : 'black';
+  // 投げたときに残っていた詰み(勝者の最後の手のあとの、勝者の何手詰め)。詰みが読めていなければnull。
+  const mateLeft = last && isMateCp(last.eval) ? MATE_CP - Math.abs(last.eval) : null;
+  const row = {
+    index, how, winner, loserStyle: resignStyleOf(spec[loser]).id, reason: game.end.reason, plies: game.end.plies, mateLeft,
+    winnerEval, winnerRate, loserLeadLast12: maxLoserLead, seconds: Math.round((Date.now() - started) / 1000),
+  };
   row.tail = game.entries.slice(-16).map((entry) => entry.eval * sign).join(","); row.marks = game.entries.slice(-16).map((entry) => entry.mark || "-").join(",");
   // 敗者が大きくリードした最初の手(どちらの手で、何の印で、どれだけ損をしたか)。
   const swing = game.entries.findIndex((entry) => -entry.eval * sign > 2000);

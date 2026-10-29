@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOOK_JUNNI_TABS, bookMembers, junniText, memberTone, rosterBook } from './ryuo-book.mjs';
+import { BOOK_JUNNI_TABS, bookMembers, junniText, memberProfile, memberTone, rosterBook } from './ryuo-book.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import { addVsUser } from './ryuo-roster.mjs';
 import { HANANE, storyMemberId } from './ryuo-story.mjs';
@@ -54,5 +54,14 @@ describe('棋士名鑑(やこびノートの棋士名鑑)', () => {
     expect(watch.map(({ id }) => id)).toContain(opponent);
     expect(watch.map(({ id }) => id)).toContain(hanane);
     expect(BOOK_JUNNI_TABS.map(({ id }) => id)).toEqual(['meijin', 'A', 'B1', 'B2', 'C1', 'C2', 'F']);
+  });
+});
+
+describe('名鑑の投了の早さ(docs/tournament-relay-design.mdの29章)', () => {
+  it('どの棋士にも投了の早さの一言があり、羽音は粘る', () => {
+    const roster = createRoster({ seed: 51 });
+    const profiles = Object.values(roster.players).slice(0, 60).map((member) => memberProfile(roster, member));
+    expect(profiles.every(({ resign }) => /^(潔い|ふつう|粘る|最後まで指す)（/.test(resign))).toBe(true);
+    expect(memberProfile(roster, roster.players[storyMemberId(roster, HANANE)]).resign.startsWith('粘る')).toBe(true);
   });
 });

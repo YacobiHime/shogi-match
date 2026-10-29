@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resignStyleById } from './resign-style.mjs';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from '../game-state';
 import {
   DECISIVE_CP, RELAY_MAX_PLIES, rateVerdict, relayQuality, THEORY_PLY, clockText, createRelayClock, pickLoss, playRelayGame, relayPlan, relaySeed, relayStoryValues,
@@ -214,15 +215,23 @@ describe('pickLoss・shouldResign', () => {
     expect(rateVerdict(84)).toEqual({ side: 'black', word: '優勢' });
     expect(rateVerdict(3)).toEqual({ side: 'white', word: '勝勢' });
   });
-  it('敗者は、決め手のあと6手たって大差なら投了する', () => {
-    const plan = { events: [{ kind: 'decisive' }] };
-    const lost = { value: -2400, score: { type: 'cp', value: -2400 } };
-    expect(shouldResign({ ply: 90, best: lost, decisiveAt: 87, plan })).toBe(false);
-    expect(shouldResign({ ply: 95, best: lost, decisiveAt: 87, plan })).toBe(true);
-    expect(shouldResign({ ply: 95, best: { value: -800, score: { type: 'cp', value: -800 } }, decisiveAt: 87, plan })).toBe(false);
-    expect(shouldResign({ ply: 95, best: { value: -99990, score: { type: 'mate', value: -10 } }, decisiveAt: 87, plan })).toBe(true);
-    // 決め手の前でも、どうにもならない大差なら投げる。
-    expect(shouldResign({ ply: 60, best: { value: -4000, score: { type: 'cp', value: -4000 } }, decisiveAt: null, plan })).toBe(true);
+  it('敗者は、投了の早さの手数の詰みまで指す(29章)。点で投げるのは決め手のあと6手たってから', () => {
+    const plan = { end: 110, events: [{ kind: 'decisive' }] };
+    const mated = (plies) => ({ value: -100000 + plies, score: { type: 'mate', value: -plies } });
+    const lost = { value: -6500, score: { type: 'cp', value: -6500 } };
+    // ふつうは5手詰めあたりまで指す。
+    expect(shouldResign({ ply: 95, best: mated(10), decisiveAt: 87, plan })).toBe(false);
+    expect(shouldResign({ ply: 95, best: mated(6), decisiveAt: 87, plan })).toBe(true);
+    expect(shouldResign({ ply: 95, best: { value: -2400, score: { type: 'cp', value: -2400 } }, decisiveAt: 87, plan, lastValue: -2400 })).toBe(false);
+    expect(shouldResign({ ply: 90, best: lost, decisiveAt: 87, plan, lastValue: lost.value })).toBe(false);
+    expect(shouldResign({ ply: 95, best: lost, decisiveAt: 87, plan, lastValue: lost.value })).toBe(true);
+    // 決め手の前は、点では投げない(寄せを見せる)。
+    expect(shouldResign({ ply: 60, best: lost, decisiveAt: null, plan, lastValue: lost.value })).toBe(false);
+    // 詰みまで指す人は、詰みが目の前でも投げない。予定を大きく過ぎて詰みが読めないときだけ、長引かせない。
+    const full = resignStyleById('full');
+    expect(shouldResign({ ply: 95, best: mated(2), decisiveAt: 87, plan, style: full })).toBe(false);
+    expect(shouldResign({ ply: 95, best: lost, decisiveAt: 87, plan, style: full, lastValue: lost.value })).toBe(false);
+    expect(shouldResign({ ply: 200, best: lost, decisiveAt: 87, plan, style: full })).toBe(true);
   });
 });
 

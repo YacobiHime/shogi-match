@@ -9,6 +9,7 @@ import { JUNNI_LABELS, JUNNI_LEAGUE_CLASSES, OTHER_TITLES, awardLabel, careerSum
 import { characterCatchphrase } from './ryuo-oshi.mjs';
 import { styleEntry } from './ryuo-repertoire.mjs';
 import { HANANE, STORY_PEOPLE, YOSHIHIKO, hananeIntro } from './ryuo-story.mjs';
+import { resignStyleOf } from './resign-style.mjs';
 
 /** 基本の居飛車は、どの居飛車の戦法にも付くので、結びつきには使わない。 */
 const GENERIC_STRATEGIES = new Set(['ibisha']);
@@ -151,6 +152,8 @@ export function memberProfile(roster, member) {
     totalTitles: career.totalTitles,
     repertoire: repertoireText(member.repertoire),
     style: character.style,
+    // 投了の早さ(潔い・ふつう・粘る・最後まで指す。docs/tournament-relay-design.mdの29章)。
+    resign: (() => { const style = resignStyleOf(member); return `${style.label}（${style.note}）`; })(),
     // 一覧の行にも出す、個性の一言(棋風と、いちばん目立つ特徴)。物語の人物は、立場の一言。
     catchphrase: member.story === HANANE ? 'ライバル' : member.story === YOSHIHIKO ? '羽音の父・史上最強' : characterCatchphrase(character),
     // 物語の人物(core/ryuo-story.mjs)。読みと紹介の文を、名鑑のくわしい情報に出す。

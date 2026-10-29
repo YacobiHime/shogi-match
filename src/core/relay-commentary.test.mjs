@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } from '../game-state';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
+import { resignStyleOf } from './resign-style.mjs';
 import { relaySeed, relayTimeControl, relayTimeline } from './relay-game.mjs';
 import {
   callName, createRelayScript, kingGuard, materialSwap, materialText, moveFacts, moveMeaning, moveTextOf, pvTextOf, relayAudience, relayCast,
@@ -409,5 +410,31 @@ describe('コメントの条件と名詞の差し替え、解説との連動(27�
         expect(script.comments.every(({ text }) => text && !/\{\w+\}|undefined|NaN|null/.test(text))).toBe(true);
       }
     }
+  });
+});
+
+describe('投了の早さの終局(29章)', () => {
+  const base = {
+    key: 'ryuo:3:ranking:e1', event: 'ryuo', kind: 'game', label: '6組ランキング戦 1回戦', weight: 'plain', winner: 'black', how: 'middle', story: [100, 250, 300],
+  };
+  const moves = ['7g7f', '3c3d', '2g2f', '8c8d'];
+  /** 投了の早さが指定の段になる棋士のid。 */
+  const idOf = (style) => {
+    for (let index = 0; index < 500; index += 1) if (resignStyleOf({ id: `z${index}` }).id === style) return `z${index}`;
+    throw new Error(style);
+  };
+
+  it('詰みまで指した人には、解説者が一言添え、視聴者が「最後まで」と反応する', () => {
+    const loser = player(idOf('full'), '鈴木蓮');
+    const script = scriptFor({ ...base, black: player('a', '中村大輔'), white: loser }, moves, { end: { winner: 'black', reason: 'mate', plies: 4 } });
+    expect(script.lines.some(({ role, text }) => role === 'commentator' && text.includes('最後まで指す棋士'))).toBe(true);
+    expect(script.comments.some(({ text }) => /最後まで|詰みまで/.test(text))).toBe(true);
+  });
+
+  it('潔い人の投了・粘った人の投了には、それぞれの反応', () => {
+    const clean = scriptFor({ ...base, black: player('a', '中村大輔'), white: player(idOf('clean'), '鈴木蓮') }, moves, { end: { winner: 'black', reason: 'resign', plies: 4 } });
+    expect(clean.comments.some(({ text }) => /潔い|投げっぷり|もう詰んでる/.test(text))).toBe(true);
+    const stubborn = scriptFor({ ...base, black: player('a', '中村大輔'), white: player(idOf('stubborn'), '鈴木蓮') }, moves, { end: { winner: 'black', reason: 'resign', plies: 4 } });
+    expect(stubborn.comments.some(({ text }) => /粘/.test(text) || text === '3手詰めまで指したね')).toBe(true);
   });
 });

@@ -4,6 +4,7 @@
 
 import { createRng, pick } from './ryuo-random.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
+import { resignStyleOf } from './resign-style.mjs';
 import { opponentVoice } from './match-presence.mjs';
 import {
   applyUsiToBoard, attackedSquares, attackersOf, findKing, isKingAttacked, opponentOf, parseSfenState, parseUsiMove, relativeRank, squareXY, xySquare,
@@ -347,6 +348,10 @@ const VIEWER = Object.freeze({
   kifuNew: ['定跡は{at}手目まで', '{at}手目から新しい形', '{at}手目で前例を離れた'],
   toryo: ['美しい投了図', '投了図きれい', '{at}手の熱戦', 'あとで棋譜並べしよう', '総手数{at}手'],
   mateEnd: ['詰みまで指した', '最後まで指したね', '詰め上がり図きれい', '{at}手で詰み'],
+  // 投了の早さ(29章): 詰みまで指す人・潔い人・粘る人の終局。
+  fullMate: ['最後まで指すのが{name}流', '最後まで諦めない{name}', '詰みまで指すのかっこいい', '{name}は最後まで指す人だからな'],
+  cleanResign: ['潔い投了', 'さすが{name}、潔い', '投げっぷりがいい', '早いけど、もう詰んでるのか'],
+  stubbornResign: ['よく粘った', '{name}粘ったなあ', '粘り強い', '3手詰めまで指したね'],
   // 駒割り勢: 盤と持ち駒の駒の数(materialSwap)。
   material: ['駒割りは{text}', '数えると{text}', '{text}だね', 'いま{text}'],
   materialEven: ['駒割りは互角', '駒の損得はなし', '駒割りは五分'],
@@ -403,7 +408,7 @@ const POOL_KIND = Object.freeze({
   treasure: 'cheer', rareCastle: 'theory', evolve: 'theory', modern: 'theory', often: 'theory', joban: 'theory', mouEnd: 'hype', kyosha: 'predict',
   chaosHarsh: 'hype', uchu: 'hype', utitai: 'predict', naruImi: 'play', bishopWonder: 'newbie', kakuAwase: 'theory', retreat: 'play', mushi: 'play', hishaKawaii: 'theory', castShikata: 'cast', castIji: 'cast', castDousuru: 'cast', castIgai: 'cast', castGood: 'cast',
   neta: 'neta', oyatsu: 'neta', castStart: 'cast', castHanane: 'cast', castFather: 'cast', castAgree: 'cast', trait: 'cheer', next: 'cheer', avatar: 'cheer', hype: 'hype',
-  kifu: 'kifu', kifuNew: 'kifu', toryo: 'kifu', mateEnd: 'kifu', material: 'material', materialEven: 'material',
+  kifu: 'kifu', kifuNew: 'kifu', toryo: 'kifu', mateEnd: 'kifu', fullMate: 'cheer', cleanResign: 'kifu', stubbornResign: 'cheer', material: 'material', materialEven: 'material',
   kingSolid: 'king', kingThin: 'king', anaguma: 'king', layman: 'layman', laymanReply: 'ai', local: 'local', localKaikan: 'local',
   room: 'room', roomOnly: 'room', roomSwing: 'room', veteran: 'veteran', rookie: 'veteran', overseas: 'overseas', overseasWow: 'overseas', overseasEnd: 'overseas',
 });
@@ -1402,6 +1407,18 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       comment(at, 'move', end.reason === 'resign' ? 'toryo' : 'mateEnd', { at });
       comment(at, 'move', 'endGag');
       if (end.reason === 'resign') maybe(0.4, at, 'move', 'loserVoice');
+      // 投了の早さ(29章)。詰みまで指した人は解説者が一言添え、潔い人・粘る人には視聴者が反応する。
+      const loserStyle = resignStyleOf(players[loser]);
+      const loserName = call(loser).replace(/さん$/, '');
+      if (end.reason === 'mate' && loserStyle.id === 'full') {
+        line(at, 'move', 'commentator', speak(cast, `${call(loser)}は、最後まで指す棋士なんです。`, `${call(loser)}は、最後まで指す人なんだ。`,
+          `${call(loser)}は、最後まで指すんですよね。まあ、それも一つの、あのー、美学かと。`));
+        comment(at, 'move', 'fullMate', { name: loserName });
+      } else if (end.reason === 'resign' && loserStyle.id === 'clean') {
+        comment(at, 'move', 'cleanResign', { name: loserName });
+      } else if (end.reason === 'resign' && loserStyle.id === 'stubborn') {
+        comment(at, 'move', 'stubbornResign', { name: loserName });
+      }
       if (end.reason === 'mate') under(at, 'oushou', 0.5);
       maybe(0.6, at, 'move', 'overseasEnd');
     }

@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from '../game-state';
 import {
-  ENGINE_RESIGN_CP, LEVEL_STRENGTH, LIGHT_NODES_FLOOR, clearEngineGameProgress, engineGameResult, engineLevel, engineMark, engineStrength,
+  LEVEL_STRENGTH, LIGHT_NODES_FLOOR, clearEngineGameProgress, engineGameResult, engineLevel, engineMark, engineStrength,
   isMainCharacter, levelStrength, lightReading, loadEngineGameProgress, playEngineGame, realGameSpec, realPlayerLevel, saveEngineGameProgress,
   shouldEngineResign,
 } from './engine-game.mjs';
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO } from './ryuo-story.mjs';
+import { resignStyleById } from './resign-style.mjs';
 import { GROUP_MEAN_RATING, REAL_WORLD, WORLD_BASE_RATING, worldCpuLevel } from './ryuo-strength.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
 
-/** 作りものの読み: 合法手を決まった順に並べ、手番の側から見た値を返す。60手目からは先手が大きく優勢。 */
+/** 作りものの読み: 合法手を決まった順に並べ、手番の側から見た値を返す。60手目からは先手が大差(粘る人でも投げる点)。 */
 function fakeSearch() {
   const calls = [];
   const search = async ({ moves, multiPv, searchMoves }) => {
@@ -19,7 +20,7 @@ function fakeSearch() {
     const legal = enumerateLegalMoves(record.position).map(({ usi }) => usi).sort();
     const pool = searchMoves?.length ? legal.filter((usi) => searchMoves.includes(usi)) : legal;
     const blackToMove = moves.length % 2 === 0;
-    const base = moves.length >= 60 ? (blackToMove ? 3000 : -3000) : 30;
+    const base = moves.length >= 60 ? (blackToMove ? 9600 : -9600) : 30;
     const candidates = pool.slice(0, Math.max(1, multiPv)).map((move, index) => ({
       rank: index + 1, move, pv: [move], score: { type: 'cp', value: base - index * 40 },
     }));
@@ -54,11 +55,19 @@ describe('本局(20章の段階1)', () => {
     expect(engineMark({ planned: false, mate: false, loss: 300, onlyMove: false })).toBe('error');
     expect(engineMark({ planned: false, mate: false, loss: 120, onlyMove: false })).toBe('slip');
     expect(engineMark({ planned: false, mate: false, loss: 0, onlyMove: true })).toBe('only');
-    const bad = { value: ENGINE_RESIGN_CP - 100 };
+    // 投了は棋士の投了の早さで決める(29章)。ふつうは5手詰めあたりまで指し、点ではよほどの大差を2回続けたら投げる。
+    const normal = resignStyleById('normal');
+    const bad = { value: normal.cp - 100 };
     expect(shouldEngineResign({ ply: 20, best: bad, lastValue: bad.value })).toBe(false);
     expect(shouldEngineResign({ ply: 60, best: bad, lastValue: null })).toBe(false);
     expect(shouldEngineResign({ ply: 60, best: bad, lastValue: bad.value })).toBe(true);
-    expect(shouldEngineResign({ ply: 60, best: { value: -99990, score: { type: 'mate', value: -9 } }, lastValue: null })).toBe(true);
+    expect(shouldEngineResign({ ply: 60, best: { value: -3000 }, lastValue: -3000 })).toBe(false);
+    const mated = (plies) => ({ value: -100000 + plies, score: { type: 'mate', value: -plies } });
+    expect(shouldEngineResign({ ply: 60, best: mated(10), lastValue: null })).toBe(false);
+    expect(shouldEngineResign({ ply: 60, best: mated(6), lastValue: null })).toBe(true);
+    // 詰みまで指す人は投げない。潔い人は9手詰めで投げる。
+    expect(shouldEngineResign({ ply: 60, best: mated(2), lastValue: null, style: resignStyleById('full') })).toBe(false);
+    expect(shouldEngineResign({ ply: 60, best: mated(10), lastValue: null, style: resignStyleById('clean') })).toBe(true);
   });
 
   it('本当に指して、劣勢の側が投了する。手はどれも合法で、中継の棋譜の形', async () => {

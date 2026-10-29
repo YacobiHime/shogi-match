@@ -101,6 +101,7 @@
           <div><dt>立場</dt><dd>{{ selected.kind }}・{{ selected.age }}歳</dd></div>
           <div><dt>得意戦法</dt><dd>{{ selected.repertoire }}</dd></div>
           <div><dt>棋風</dt><dd>{{ selected.style }}</dd></div>
+          <div data-book-resign><dt>投了</dt><dd>{{ selected.resign }}</dd></div>
           <div v-if="selected.strengths.length"><dt>得意</dt><dd>{{ selected.strengths.join("・") }}</dd></div>
           <div v-if="selected.weaknesses.length"><dt>苦手</dt><dd>{{ selected.weaknesses.join("・") }}</dd></div>
           <div v-if="selected.titleCounts.length"><dt>タイトル</dt><dd>{{ selected.titleCounts.join("・") }}（通算{{ selected.totalTitles }}期）</dd></div>
@@ -139,7 +140,7 @@ import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 
 type Profile = {
   id: string; name: string; dan: string; kind: string; age: number; group: number; ryuoHolder: boolean; junni: string | null;
-  held: string[]; former: string[]; titleCounts: string[]; totalTitles: number; repertoire: string; style: string; catchphrase: string;
+  held: string[]; former: string[]; titleCounts: string[]; totalTitles: number; repertoire: string; style: string; resign: string; catchphrase: string;
   formations: { kind: "strategy" | "castle"; id: string }[];
   strengths: string[]; weaknesses: string[]; lastSeason: string; total: string; awards: string[]; vsUser: string; played: boolean;
   story: string | null; reading: string; intro: string;

@@ -13,6 +13,7 @@ import { nextOpeningPlanMove } from './opening-guide.mjs';
 import { shouldUseCpuOpening } from './cpu-opening-repertoire.mjs';
 import { openingEntry, proOpening } from './opening-usage.mjs';
 import { createFormationState, detectFormationSnapshot, formationNamesFromState, updateFormationState } from './formation-tracker.mjs';
+import { matedIn, resignStyleById, resignStyleOf, resignsBy } from './resign-style.mjs';
 
 /** 棋譜の版。2は、敗者が優勢のまま投了しないようにした版(15章)。 */
 export const RELAY_VERSION = 2;
@@ -254,12 +255,12 @@ const scaledCp = (value) => clamp(Math.abs(value) >= 90000 ? Math.sign(value) * 
 export const PLAN_LOSS_LIMIT = 150;
 /** 鋭い一手(最善手と次の手の差)。 */
 export const ONLY_MOVE_GAP = 300;
-/** 投了の決まり。 */
+/** 投了の決まり。いつ投げるかは、敗者の投了の早さ(resign-style.mjs。29章)。予定の終局を大きく過ぎても詰みが読めないときだけ、この点で投げる。 */
 export const RESIGN_CP = -2000;
-const RESIGN_ANYTIME_CP = -3500;
-const RESIGN_MATE_PLIES = 21;
 const RESIGN_MIN_PLY = 50;
 const RESIGN_AFTER_DECISIVE = 6;
+/** 予定の終局をこれだけ過ぎても詰みが読めないなら、長引かせない(勝者が決めきれないとき)。 */
+const RESIGN_OVERTIME = 60;
 export const RELAY_MAX_PLIES = 300;
 /** 棋風で手を選ぶ幅(点)。 */
 const STYLE_MARGIN = 40;
@@ -310,6 +311,8 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
   let formations = createFormationState();
   const doneEvents = new Set();
   let decisiveAt = null;
+  const loserStyle = resignStyleOf(spec[spec.winner === 'black' ? 'white' : 'black']);
+  let loserLast = null;
   let lastEval = BLACK_EDGE;
   let end = null;
 
@@ -331,11 +334,12 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
     const best = candidates[0];
     const phase = phaseOf(plan, ply);
 
-    // 投了: 敗者の手番で、もう勝ち目がない。
-    if (!isWinner && shouldResign({ ply, best, decisiveAt, plan })) {
+    // 投了: 敗者の手番で、もう勝ち目がない(いつ投げるかは、敗者の投了の早さ。29章)。
+    if (!isWinner && shouldResign({ ply, best, decisiveAt, plan, style: loserStyle, lastValue: loserLast })) {
       end = { winner: spec.winner, reason: 'resign', plies: ply };
       break;
     }
+    if (!isWinner) loserLast = best.value;
 
     const target = relayTarget(plan, ply + 1) * sign;
     const event = plan.events.find((entry) => entry.ply === ply && entry.side === side && !doneEvents.has(entry.ply));
@@ -458,20 +462,21 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
  * @typedef {{ v: number, key: string, entries: RelayMoveEntry[], end: { winner: 'black' | 'white', reason: 'resign' | 'mate', plies: number } }} RelayGame
  */
 
-/** 投了するか。bestは、敗者の手番での最善手(敗者から見た値)。 */
-export function shouldResign({ ply, best, decisiveAt, plan }) {
-  if (best.value <= RESIGN_ANYTIME_CP) return ply >= 30;
+/**
+ * 投了するか。bestは、敗者の手番での最善手(敗者から見た値)。styleは敗者の投了の早さ(29章。ふつうは5手詰めあたりまで指す)、
+ * lastValueは敗者の1つ前の手番の最善の値。詰みが段の手数まで迫ったら投げる。点で投げるのは、決め手の悪手のあと6手たってから。
+ * @param {{ ply: number, best: { value: number, score?: any }, decisiveAt: number | null, plan: any,
+ *   style?: ReturnType<typeof resignStyleById>, lastValue?: number | null }} input
+ */
+export function shouldResign({ ply, best, decisiveAt, plan, style = resignStyleById('normal'), lastValue = null }) {
   if (ply < RESIGN_MIN_PLY) return false;
-  // 終局の予定を大きく過ぎたら、はっきり不利なところで投げる(長引かせない)。
-  if (Number.isFinite(plan.end) && ply > plan.end + 40) return best.value <= RESIGN_CP / 2;
-  if (Number.isFinite(plan.end) && ply > plan.end) return best.value <= RESIGN_CP;
-  if (decisiveAt === null && plan.events.some((event) => event.kind === 'decisive')) {
-    // 決め手の悪手がまだなら、もう少し指す(寄せを見せる)。ただし大差なら投げる。
-    return best.value <= RESIGN_ANYTIME_CP;
-  }
+  if (matedIn(best.score) !== null) return resignsBy(style, { best });
+  // 終局の予定を大きく過ぎても詰みが読めない(勝者が決めきれない)ときは、はっきり不利なところで投げる(長引かせない)。
+  if (Number.isFinite(plan.end) && ply > plan.end + RESIGN_OVERTIME) return best.value <= RESIGN_CP;
+  // 決め手の悪手がまだなら、もう少し指す(寄せを見せる)。
+  if (decisiveAt === null && plan.events.some((event) => event.kind === 'decisive')) return false;
   if (decisiveAt !== null && ply - decisiveAt < RESIGN_AFTER_DECISIVE) return false;
-  if (best.score?.type === 'mate' && best.score.value < 0 && -best.score.value <= RESIGN_MATE_PLIES) return true;
-  return best.value <= RESIGN_CP;
+  return resignsBy(style, { best, lastValue });
 }
 
 function afterMove(sfen, usi) {

@@ -20,15 +20,14 @@ import { createFormationState, detectFormationSnapshot, updateFormationState } f
 import { packRelayGame, unpackRelayGame } from './relay-store.mjs';
 import { HANANE, HANANE_RIVAL_RUN_RATING, YOSHIHIKO } from './ryuo-story.mjs';
 import { MAX_CPU_LEVEL, REAL_WORLD, WORLD_BASE_RATING, isRealWorld, worldCpuLevel } from './ryuo-strength.mjs';
+import { resignStyleById, resignStyleOf, resignsBy } from './resign-style.mjs';
 
 /** ロジックAIで指すLvの手の、形勢を見るための読み(画面のバーと解説に使う)。 */
 export const EVAL_NODES = 3000;
 /** 手の印の、最善手との差(点)。 */
 export const MARK_LOSS = Object.freeze({ decisive: 600, error: 250, slip: 100 });
-/** 投了の決まり: 手番の側から見た最善の値がこれ以下を、2回続けたら投げる(序盤は投げない)。詰みを読まれたら早めに投げる。 */
-export const ENGINE_RESIGN_CP = -2500;
+/** 投了は、この手数までは投げない(序盤の大差は、まだ指す)。いつ投げるかは、棋士の投了の早さ(resign-style.mjs。29章)。 */
 const RESIGN_MIN_PLY = 40;
-const RESIGN_MATE_PLIES = 21;
 
 const sideOf = (ply) => (ply % 2 === 0 ? 'black' : 'white');
 const other = (side) => (side === 'black' ? 'white' : 'black');
@@ -149,12 +148,12 @@ export function engineMark({ planned, mate, loss, onlyMove }) {
 
 /**
  * 投了するか。bestは、手番の側から見た最善の候補(valueは比べられる値)。lastValueは、同じ側の1つ前の手番の最善の値。
- * @param {{ ply: number, best: { value: number, score?: any } | null, lastValue: number | null }} input
+ * styleは、その棋士の投了の早さ(29章。ふつうは5手詰めあたりまで指す。詰みまで指す人もいる)。
+ * @param {{ ply: number, best: { value: number, score?: any } | null, lastValue: number | null, style?: ReturnType<typeof resignStyleById> }} input
  */
-export function shouldEngineResign({ ply, best, lastValue }) {
+export function shouldEngineResign({ ply, best, lastValue, style = resignStyleById('normal') }) {
   if (!best || ply < RESIGN_MIN_PLY) return false;
-  if (best.score?.type === 'mate' && best.score.value < 0 && -best.score.value <= RESIGN_MATE_PLIES) return true;
-  return best.value <= ENGINE_RESIGN_CP && lastValue !== null && lastValue <= ENGINE_RESIGN_CP;
+  return resignsBy(style, { best, lastValue });
 }
 
 /**
@@ -176,6 +175,7 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
   // 持ち時間の時計だけに使う筋書き(勝ち負けは決めない。手数の目安で時間を配る)。
   const clock = createRelayClock(spec, relayPlan({ ...spec, winner: spec.winner ?? 'black' }));
   const plans = { black: openingPlanOf(spec, 'black'), white: openingPlanOf(spec, 'white') };
+  const resignStyles = { black: resignStyleOf(spec.black), white: resignStyleOf(spec.white) };
   const record = createGameRecord(STANDARD_SFEN);
   const moves = [];
   const entries = [];
@@ -240,7 +240,7 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     if (isCancelled()) return null;
     const ranked = rankedCandidates(read).filter(({ move }) => legal.includes(move));
     const best = ranked[0] ?? null;
-    if (shouldEngineResign({ ply, best, lastValue: lastBest[side] })) {
+    if (shouldEngineResign({ ply, best, lastValue: lastBest[side], style: resignStyles[side] })) {
       end = { winner: other(side), reason: 'resign', plies: ply };
       break;
     }
@@ -310,8 +310,8 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     lastEval = evalCp;
     onMove(entry, entries.length - 1);
   }
-  // 手数の上限(ほぼ起きない)は、最後の形勢で決める。
-  if (!end) end = { winner: (entries.at(-1)?.eval ?? 0) >= 0 ? 'white' : 'black', reason: 'resign', plies: moves.length };
+  // 手数の上限(ほぼ起きない。詰みまで指す人が負けて、勝つ側が詰ませきれないとき)は、最後の形勢(先手から見た値)で決める。
+  if (!end) end = { winner: (entries.at(-1)?.eval ?? 0) >= 0 ? 'black' : 'white', reason: 'resign', plies: moves.length };
   if (end.reason === 'resign' && !end.plies) end.plies = moves.length;
   return { v: RELAY_VERSION, key: spec.key, entries, end };
 }
