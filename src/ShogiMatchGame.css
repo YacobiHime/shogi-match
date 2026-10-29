@@ -1495,13 +1495,25 @@
   opacity: 0.85;
 }
 .shogi-game__portrait { position: relative; }
-.shogi-game__portrait-talk {
+/*
+ * 顔の上に重ねる透明なボタン。全体のボタンの書式(.shogi-game button。背景・影・最低の高さ)より強く書く。
+ * 弱く書くと、最初の助言(「なぜ？」が出るとき)でこのボタンが出たとたん、ボタンの背景が立ち絵を塗りつぶす。
+ */
+.shogi-game .shogi-game__portrait-talk {
   position: absolute;
   inset: 0;
+  min-height: 0;
+  padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
   cursor: pointer;
   pointer-events: auto;
+}
+.shogi-game .shogi-game__portrait-talk:not(:disabled):is(:hover, :active) {
+  background: transparent;
+  transform: none;
 }
 /* 台詞の欄の上に重ねる(やこび姫の欄の中に収め、画面の端で切れないように)。 */
 .shogi-game__talk {

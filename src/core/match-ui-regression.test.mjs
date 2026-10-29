@@ -462,6 +462,9 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/data-coach-talk\s+@click="talkOpen = !talkOpen"/);
     expect(source).toMatch(/\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;/);
     expect(source).toMatch(/currentAdviceKey\.value = advice\.key;\s*guideText\.value = advice\.text;/);
+    // 顔の上の透明なボタンは、全体のボタンの書式(.shogi-game button)より強く書き、背景で立ち絵を塗りつぶさない。
+    expect(source).toMatch(/\.shogi-game \.shogi-game__portrait-talk \{[^}]*background: transparent;[^}]*\}/);
+    expect(source).not.toMatch(/^\.shogi-game__portrait-talk \{/m);
   });
 
   it("相手の狙いは点線の矢印、悪手で取られる駒は赤い輪で盤に出し、指したら消す(N2)", () => {
