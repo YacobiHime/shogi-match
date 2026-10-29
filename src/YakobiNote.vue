@@ -763,8 +763,7 @@
           <section v-if="skillDataAvailable" class="shogi-note__card shogi-note__card--minor" data-note-skill-data>
             <h2>答えを送って、問題を良くする</h2>
             <p class="shogi-note__hint">
-              棋力テストの答えとCPUとの対局の結果を、名前なしで送ります。みんなの答えで、問題の難しさを正しくするのに使います。
-              名前や棋譜は送りません。
+              棋力テストの答えとCPUとの対局の結果を、名前なしで送ります。<span class="shogi-note__more">みんなの答えで、問題の難しさを正しくするのに使います。</span>名前や棋譜は送りません。
             </p>
             <div class="shogi-note__declare">
               <button type="button" class="shogi-note__button" :class="{ 'shogi-note__button--ghost': skillDataConsent !== 'yes' }" :aria-pressed="skillDataConsent === 'yes'" @click="emit('skill-data-consent', 'yes')">送る</button>
@@ -775,14 +774,13 @@
           <section class="shogi-note__card shogi-note__card--minor">
             <h2>段級位を申告する</h2>
             <p class="shogi-note__hint">
-              日本将棋連盟の段級位で申告すると、レーティングをその棋力に設定します。
-              以降の対局は申告ごとにCPUのレベル別の成績を記録し、表示名と実際の棋力のずれを調べるのに使います。
+              日本将棋連盟の段級位で申告すると、レーティングをその棋力に設定します。<span class="shogi-note__more">以降の対局は申告ごとにCPUのレベル別の成績を記録し、表示名と実際の棋力のずれを調べるのに使います。</span>
             </p>
             <p v-if="state.declared" class="shogi-note__hint" data-note-declared>
               申告中: {{ state.declared.label }}（{{ declaredDate }}に設定）
             </p>
             <p v-if="state.measured" class="shogi-note__hint" data-note-measured>
-              棋力測定で R{{ state.measured.rating }}（{{ state.measured.label }}）を設定しました（{{ measuredDate }}）。棋力は「まとめ」の「棋力を測る」から測れます。
+              棋力測定で R{{ state.measured.rating }}（{{ state.measured.label }}）を設定しました（{{ measuredDate }}）。<span class="shogi-note__more">棋力は「まとめ」の「棋力を測る」から測れます。</span>
             </p>
             <div class="shogi-note__declare">
               <select v-model="declareLabel" aria-label="申告する段級位">
@@ -793,26 +791,33 @@
             </div>
           </section>
 
-          <section v-if="levelRows.length" class="shogi-note__card shogi-note__card--minor shogi-note__level-card" aria-labelledby="shogi-note-levels">
-            <h2 id="shogi-note-levels">CPUのレベルごとの成績</h2>
-            <ul v-scroll-more class="shogi-note__rows shogi-note__scroll">
-              <li v-for="row in levelRows" :key="row.level">
-                <span class="shogi-note__name">Lv.{{ row.level }} {{ row.label }}</span>
-                <span class="shogi-note__stat">R{{ row.rating }}・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws }}分</span>
-              </li>
-            </ul>
-          </section>
-
-          <section v-if="declaredRows.length || state.games" class="shogi-note__card shogi-note__card--minor" aria-labelledby="shogi-note-declared">
-            <h2 id="shogi-note-declared">申告した棋力での成績</h2>
-            <ul v-if="declaredRows.length" class="shogi-note__rows">
-              <li v-for="row in declaredRows" :key="row.level">
-                <span class="shogi-note__name">Lv.{{ row.level }} {{ row.label }}</span>
-                <span class="shogi-note__stat">{{ row.wins }}勝{{ row.losses }}敗{{ row.draws }}分</span>
-              </li>
-            </ul>
-            <p v-else class="shogi-note__hint">段級位を申告すると、ここにCPUのレベル別の成績が出ます。</p>
-            <button v-if="state.games" type="button" class="shogi-note__button shogi-note__button--ghost" @click="copyRecord">{{ copied ? "コピーしました" : "戦績データをコピー" }}</button>
+          <!--
+            CPUのレベルごとの成績。申告中なら、申告した棋力での成績を同じ札の下に続ける(札を1枚にして、小さいスマホでも1画面に収める。8-6)。
+            「戦績データをコピー」は見出しの横に小さく置く。
+          -->
+          <section v-if="levelRows.length || declaredRows.length || state.games" class="shogi-note__card shogi-note__card--minor shogi-note__level-card" aria-labelledby="shogi-note-levels">
+            <div class="shogi-note__level-head">
+              <h2 id="shogi-note-levels">CPUのレベルごとの成績</h2>
+              <button v-if="state.games" type="button" class="shogi-note__button shogi-note__button--ghost shogi-note__copy" data-note-copy @click="copyRecord">{{ copied ? "コピーしました" : "戦績をコピー" }}</button>
+            </div>
+            <div v-scroll-more class="shogi-note__level-lists shogi-note__scroll">
+              <ul v-if="levelRows.length" class="shogi-note__rows">
+                <li v-for="row in levelRows" :key="row.level">
+                  <span class="shogi-note__name">Lv.{{ row.level }} {{ row.label }}</span>
+                  <span class="shogi-note__stat">R{{ row.rating }}・{{ row.wins }}勝{{ row.losses }}敗{{ row.draws }}分</span>
+                </li>
+              </ul>
+              <p v-else class="shogi-note__hint">レーティングに数える対局をすると、ここにLvごとの成績が出ます。</p>
+              <template v-if="declaredRows.length">
+                <h3 id="shogi-note-declared" class="shogi-note__subhead">申告した棋力（{{ state.declared?.label }}）での成績</h3>
+                <ul class="shogi-note__rows" aria-labelledby="shogi-note-declared">
+                  <li v-for="row in declaredRows" :key="row.level">
+                    <span class="shogi-note__name">Lv.{{ row.level }} {{ row.label }}</span>
+                    <span class="shogi-note__stat">{{ row.wins }}勝{{ row.losses }}敗{{ row.draws }}分</span>
+                  </li>
+                </ul>
+              </template>
+            </div>
           </section>
         </section>
       </main>
@@ -1955,22 +1960,32 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__card.shogi-note__album { padding: 0.5rem 0.6rem; }
 }
 
-/* 設定: レベルごとの成績は枠の中で動かす。スマホの縦は札を縦に並べ、成績の札が残りの高さに収まる。 */
-.shogi-game .shogi-note__level-card .shogi-note__rows { max-height: max(10rem, 45dvh); }
+/* 設定: 札は縦に並べ、レベルごとの成績の札が残りの高さに収まる(一覧は枠の中で動く)。広い画面は2列。 */
+.shogi-game .shogi-note__level-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.shogi-game .shogi-note__level-head .shogi-note__copy { flex: none; height: auto; min-height: 44px; padding: 0 0.8rem; font-size: 0.85em; }
+.shogi-game .shogi-note__level-lists { display: grid; align-content: start; gap: 0.6rem; }
+.shogi-game .shogi-note__settings > .shogi-note__level-card { display: flex; flex-direction: column; min-height: 0; }
+.shogi-game .shogi-note__level-card .shogi-note__level-lists { flex: 1 1 0; min-height: 4.5rem; contain: size; }
 @media (max-width: 759px) {
   .shogi-game .shogi-note__panel.shogi-note__settings { display: flex; flex-direction: column; gap: 0.6rem; }
   .shogi-game .shogi-note__settings > * { flex: none; }
-  .shogi-game .shogi-note__settings > .shogi-note__level-card { display: flex; flex: 0 1 auto; flex-direction: column; min-height: 7.5rem; }
-  .shogi-game .shogi-note__level-card .shogi-note__rows { flex: 1 1 auto; max-height: none; }
+  .shogi-game .shogi-note__settings > .shogi-note__level-card { flex: 1 1 0; }
   .shogi-game .shogi-note__settings .shogi-note__card { padding: 0.75rem 0.85rem; gap: 0.5rem; }
 }
-/* 横向きのスマホ: 左に申告と申告した棋力での成績、右にレベルごとの成績。 */
-@media (orientation: landscape) and (max-height: 500px) {
-  .shogi-game .shogi-note__panel.shogi-note__settings { align-content: start; align-items: stretch; }
-  .shogi-game .shogi-note__settings > .shogi-note__level-card { display: flex; flex-direction: column; grid-column: 2; grid-row: 1 / span 3; min-height: 0; }
-  .shogi-game .shogi-note__level-card .shogi-note__rows { flex: 1 1 0; max-height: none; contain: size; }
-  .shogi-game .shogi-note__settings .shogi-note__card { padding: 0.6rem 0.8rem; gap: 0.4rem; }
+@media (min-width: 760px) {
+  .shogi-game .shogi-note__panel.shogi-note__settings { grid-template-rows: auto minmax(0, 1fr); align-content: stretch; align-items: start; }
+  .shogi-game .shogi-note__settings > .shogi-note__level-card { grid-column: 2; grid-row: 1 / span 2; align-self: stretch; }
 }
+/* 背の低い画面(小さいスマホ・横向きのスマホ): 説明の続き(補足)を省き、札の余白を詰めて1画面に収める(U:7-5の③)。 */
+@media (orientation: portrait) and (max-height: 700px), (orientation: landscape) and (max-height: 500px) {
+  .shogi-game .shogi-note__settings .shogi-note__more,
+  .shogi-game .shogi-note__settings [data-note-measured] { display: none; }
+  .shogi-game .shogi-note__panel.shogi-note__settings { gap: 0.45rem; }
+  .shogi-game .shogi-note__settings .shogi-note__card { padding: 0.55rem 0.75rem; gap: 0.35rem; }
+  .shogi-game .shogi-note__settings .shogi-note__hint { line-height: 1.4; }
+}
+/* 送る・送らないは、同じ幅で横に並べる(片方だけ細くならない)。 */
+.shogi-game .shogi-note__settings .shogi-note__declare .shogi-note__button { justify-self: stretch; width: 100%; }
 
 /* ===== 表紙 ===== */
 .shogi-game .shogi-note__cover {
