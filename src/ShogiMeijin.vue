@@ -136,6 +136,7 @@
         v-if="livePanel"
         :panel="livePanel"
         @open="emit('live-open', '')"
+        @watch="(key) => emit('live-open', key)"
         @speed="emit('live-speed')"
         @skip="emit('live-skip')"
         @finish="emit('live-finish')"

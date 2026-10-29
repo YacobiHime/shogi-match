@@ -524,8 +524,18 @@ const strengthsOf = (season) => Object.fromEntries(Object.entries(season.players
   pid === USER_ID ? GROUP_MEAN_RATING[season.startGroup] : player.rating,
 ]));
 
-/** プレイヤーの組以外の組の、決勝トーナメント進出者を、自動で決める。 */
-function simulateGroupQualifiers(season, group, rng, overrides = null) {
+/**
+ * ほかの組の自動対局の乱数。期と組ごとに決まった種から作り、期の乱数とは分ける(31章)。いつ決めても同じ結果になるので、
+ * 観戦の期で、自分の組の回戦と同じ時に指されている、ほかの組の羽音・推しの対局を先に見せられる(previewGroupBrackets)。
+ */
+const groupRng = (season, group) => createRng((Number(season.id) ^ Math.imul(group + 1, 0x9e3779b1)) >>> 0);
+
+/**
+ * プレイヤーの組以外の組の、決勝トーナメント進出者を、自動で決める。乱数は組ごとの種(groupRng)で、期の乱数は使わない。
+ * overridesに結果のある対局は、その結果にする(敗退後の観戦で見た本局。20-10)。
+ */
+function simulateGroupQualifiers(season, group, overrides = null) {
+  const rng = groupRng(season, group);
   const scale = scaleById(season.settings.scale);
   const ids = [...season.fields[group]].sort((x, y) => season.players[y].rating - season.players[x].rating);
   const ranking = buildSeededBracket(`${group}組`, ids, `o${group}rk`);
@@ -547,12 +557,31 @@ function buildMainFor(season, userGroupQualified, rng, overrides = null) {
   for (const group of GROUPS) {
     const qualified = group === season.startGroup && userGroupQualified
       ? userGroupQualified
-      : simulateGroupQualifiers(season, group, rng, overrides);
+      : simulateGroupQualifiers(season, group, overrides);
     qualified.forEach((pid, rank) => entrants.push({ pid, weight: MAIN_WEIGHTS[group][rank] ?? MAIN_WEIGHTS[group].at(-1), group, rank }));
   }
   season.qualified = entrants.map(({ pid }) => pid);
   season.mainEntrants = entrants.map(({ pid, group, rank }) => ({ pid, group, rank }));
   return buildMainBracket(entrants);
+}
+
+/**
+ * 自分の組のランキング戦・敗者復活戦のあいだに、ほかの組の表を先に決めた形(31章)。期は書き換えず、表だけを返す。
+ * ほかの組は自分の組が終わってから決めるが、組ごとの種で決めるので、ここで決めた結果とあとで決める結果は同じ。
+ * 決まっている組(防衛の期・決勝トーナメントのあと)は、そのまま返す。
+ * @param {any} season
+ * @returns {Record<string, any>}
+ */
+export function previewGroupBrackets(season) {
+  if (!season?.fields || !season.players) return season?.groupBrackets ?? {};
+  // 画面の期はVueの反応する入れ物のことがあるので、structuredCloneではなくJSONで写す(liveRoundと同じ)。
+  const copy = JSON.parse(JSON.stringify({ ...season, analysis: null, analysisQueue: null }));
+  for (const group of GROUPS) {
+    if (group === season.startGroup && season.mode === 'challenge') continue;
+    if (copy.groupBrackets?.[`${group}`] || !copy.fields[group]?.length) continue;
+    simulateGroupQualifiers(copy, group);
+  }
+  return copy.groupBrackets ?? {};
 }
 
 function seriesPendingFor(season, series, kind) {

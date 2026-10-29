@@ -3,9 +3,9 @@
 // 進み方は、中継の棋譜の筋書き(relay-game.mjsのrelayPlan。勝ち負けと展開は自動対局の記録のまま)から決める。
 // エンジンは使わない(何局も同時に作れないため)。中継で棋譜を作った局は、その棋譜の手数と形勢を使う。画面に依存しない。
 
-import { playSpectatorGame, replayRest, restGameKey, restOpen, seasonGameResults } from './ryuo.mjs';
+import { playSpectatorGame, previewGroupBrackets, replayRest, restGameKey, restOpen, seasonGameResults } from './ryuo.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
-import { meijinRelayGames, ryuoRelayGames } from './relay-games.mjs';
+import { isFeatured, meijinRelayGames, ryuoRelayGames } from './relay-games.mjs';
 import { meijinRestOpen, meijinSeriesResults, playMeijinSpectatorGame, replayMeijinRest } from './meijin.mjs';
 import { blackWinRate, relayPlan, relaySeed, relayTarget } from './relay-game.mjs';
 import { relayAudience } from './relay-commentary.mjs';
@@ -63,7 +63,43 @@ export function liveRound(season, { oshiId = null } = {}) {
   const list = ryuoRelayGames(provisional, { oshiId });
   const avatar = list.find((entry) => entry.key === avatarKey) ?? null;
   const others = list.filter((entry) => hidden.has(entry.key));
-  return { table, avatarKey, avatar, specs: avatar ? [avatar, ...others] : others };
+  const elsewhere = elsewhereGames(season, { oshiId });
+  const specs = [...(avatar ? [avatar] : []), ...others, ...elsewhere];
+  return { table, avatarKey, avatar, specs, elsewhereKeys: elsewhere.map(({ key }) => key) };
+}
+
+/** 表の中の、ランキング戦から数えた段(ランキング戦のn回戦はn、敗者復活戦のn回戦は、ランキング戦の回戦の数+n)。 */
+const stepOf = (rankingRounds, phase, round) => (phase === 'revival' ? rankingRounds + round : round);
+const roundsOf = (bracket) => Math.max(0, ...Object.values(bracket?.nodes ?? {}).map((node) => node.round ?? 0));
+
+/**
+ * ほかの組の、注目の棋士(羽音・善彦・推し)の対局のうち、分身の次の一局と同じ時に指されているもの(31章)。
+ * 自分の組のランキング戦・敗者復活戦のあいだだけ。ほかの組は、組ごとの種で先に決めた表(previewGroupBrackets)から取り、
+ * ランキング戦から数えた段が、分身の前の局の段より後で、次の一局の段まで(分身が段を飛ばしたあいだの局も入れる)の局を選ぶ。
+ * 勝ち負けは自動対局の結果のまま(本局にしない)。期は書き換えない。
+ * @param {any} season 観戦の期
+ * @param {{ oshiId?: string | null }} [options]
+ * @returns {any[]} 中継の項目(elsewhere: true)
+ */
+export function elsewhereGames(season, { oshiId = null } = {}) {
+  const table = season?.spectator ? pendingTable(season) : null;
+  if (!table || table.stage !== 'group' || table.round === null) return [];
+  const phase = season.pending.phase;
+  const rankingRounds = roundsOf(season.ranking);
+  const step = stepOf(rankingRounds, phase, table.round);
+  const last = (season.userGames ?? []).filter((game) => game.phase === 'ranking' || game.phase === 'revival').at(-1);
+  const after = last ? stepOf(rankingRounds, last.phase, last.round) : 0;
+  const groupBrackets = previewGroupBrackets(season);
+  const list = ryuoRelayGames({ ...season, groupBrackets, ranking: null, revival: [], main: null, playoff: null, finals: null }, { oshiId });
+  return list
+    .filter((entry) => entry.key.split(':')[2]?.startsWith('group-') && isFeatured(entry))
+    .map((entry) => {
+      const [group, block] = entry.key.split(':')[2].slice('group-'.length).split('-');
+      return { entry, at: stepOf(roundsOf(groupBrackets[group]), block ? 'revival' : 'ranking', entry.round) };
+    })
+    .filter(({ at }) => at > after && at <= step)
+    .sort((x, y) => x.at - y.at || (x.entry.key < y.entry.key ? -1 : 1))
+    .map(({ entry }) => ({ ...entry, elsewhere: true }));
 }
 
 /**

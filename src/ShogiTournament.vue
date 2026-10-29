@@ -431,6 +431,7 @@
             v-if="live && livePanel"
             :panel="livePanel"
             @open="openLiveGame(live.focusKey)"
+            @watch="openLiveGame"
             @speed="cycleLiveSpeed"
             @skip="skipLive"
             @finish="finishLive"
@@ -1438,6 +1439,8 @@ function realRoundSpecs(list: any[], avatarKey: string, worldLevel: unknown, fas
   engineGame.setEngines(phone ? 1 : Math.min(2, Math.max(1, Math.floor((globalThis.navigator?.hardwareConcurrency ?? 4) / 4))));
   const store = loadRelayStore(relayStorage());
   const specs = list.map((spec: any) => {
+    // ほかの組の注目の対局(31章)は、先に決まった結果の筋書きで進む(勝ち負けは、あとで決めるほかの組の表と同じ)。
+    if (spec.elsewhere) return spec;
     const main = spec.key === avatarKey || isMainCharacter(spec.black) || isMainCharacter(spec.white);
     // 指し終えた棋譜があれば、その局も本局として読み出す(前に見たときの勝ち負けのまま)。
     const kept = Boolean(recallRelayGame(store, spec.key).game);
@@ -1885,6 +1888,22 @@ const liveFocusView = computed(() => {
       : side ? `${nameOf(side)}${verdict.word}` : verdict.word,
   };
 });
+/**
+ * 欄の注目の対局(31章)。大きく出す対局のほかの、羽音・善彦・推しの局。分身の回戦では、ほかの組で同じ時に指されている局
+ * (relay-live.mjsのelsewhereGames)も入る。4局まで。押すと、その局の中継をいまの手数から開く。
+ */
+const liveFeatured = computed(() => {
+  const board = live.value;
+  if (!board) return [];
+  const nameOf = (player: any) => (player.id === "user" ? `${props.playerName}の分身` : player.name);
+  return liveStates.value
+    .filter(({ game }) => game.key !== board.focusKey && (game.spec.tags?.rival || game.spec.tags?.father || game.spec.tags?.oshi))
+    .slice(0, 4)
+    .map(({ game, state }) => ({
+      key: game.key, black: nameOf(game.spec.black), white: nameOf(game.spec.white),
+      where: game.spec.elsewhere ? String(game.spec.label ?? "") : "同じ回戦", ply: state.ply, done: state.done,
+    }));
+});
 /** 欄の主役のボタン(回戦が終わる前)。分身の対局か、注目の対局(羽音・推しなど)を開く。 */
 const liveWatchText = computed(() => {
   if (live.value?.kind === "avatar" || live.value?.kind === "meijin") return "分身の対局を見る";
@@ -1941,6 +1960,7 @@ const livePanel = computed<LivePanelView | null>(() => {
     step: after ? `${after.index + 1}/${after.rounds.length}`
       : board.kind === "meijin-after" && meijinAfter.value ? `${meijinAfter.value.index + 1}/${meijinAfterList.value.length}` : "",
     focus: liveFocusView.value,
+    featured: liveFeatured.value,
     count: liveCount.value,
     multiple: board.games.length > 1,
     tableWord: board.kind === "meijin" || board.kind === "meijin-after" ? "リーグ表" : "表",

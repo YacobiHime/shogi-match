@@ -21,6 +21,22 @@
         <small>押すと中継</small>
       </span>
     </button>
+    <!-- 注目の対局(31章)。ほかの組の羽音・推しの対局も、同じ時に指されていれば並べる。押すと、その対局の中継へ。 -->
+    <div v-if="panel.featured?.length" class="relay-live__featured" data-live-featured>
+      <p class="relay-live__featured-head">注目の対局</p>
+      <button
+        v-for="game in panel.featured"
+        :key="game.key"
+        type="button"
+        class="relay-live__featured-game"
+        :data-live-featured-game="game.key"
+        @click="emit('watch', game.key)"
+      >
+        <span class="relay-live__featured-names">☗{{ game.black }} ☖{{ game.white }}</span>
+        <small class="relay-live__featured-where">{{ game.where }}</small>
+        <b class="relay-live__featured-ply">{{ game.done ? "終局" : `${game.ply}手目` }}</b>
+      </button>
+    </div>
     <p class="shogi-tournament__live-count" data-live-count>
       対局中 {{ panel.count.playing }}局・終局 {{ panel.count.done }}局。{{ panel.multiple ? `${panel.tableWord}の札を押すと、その対局の中継を見られるよ。` : "押すと、その対局の中継を見られるよ。" }}
     </p>
@@ -70,6 +86,8 @@ export type LivePanelView = {
   /** 敗退後の観戦の、いま何回戦目か(「3/18」)。 */
   step: string;
   focus: { black: string; white: string; ply: number; done: boolean; blackPercent: number; verdict: string } | null;
+  /** 注目の対局(31章)。羽音・善彦・推しの、大きく出す対局のほかの局(ほかの組の局を含む)。whereは「5組ランキング戦 1回戦」など。 */
+  featured?: { key: string; black: string; white: string; where: string; ply: number; done: boolean }[];
   count: { playing: number; done: number };
   /** 対局が2局以上(札を押すと中継、と案内する)。 */
   multiple: boolean;
@@ -89,7 +107,7 @@ export type LivePanelView = {
 defineProps({
   panel: { type: Object as PropType<LivePanelView>, required: true },
 });
-const emit = defineEmits<{ open: []; speed: []; skip: []; finish: []; predict: [key: string, side: "black" | "white"] }>();
+const emit = defineEmits<{ open: []; watch: [key: string]; speed: []; skip: []; finish: []; predict: [key: string, side: "black" | "white"] }>();
 const SIDES = ["black", "white"] as const;
 const untilPly = PREDICT_UNTIL_PLY;
 const predictOpen = ref(false);
@@ -102,6 +120,17 @@ function stateText(game: PredictGame) {
 </script>
 
 <style>
+/* 注目の対局(31章)。1局1行で、名前・どこの対局か・何手目。押すと中継。 */
+.shogi-game .relay-live__featured { display: grid; gap: 0.3rem; margin: 0; }
+.shogi-game .relay-live__featured-head { margin: 0; color: #f6a5c0; font-size: 0.85em; font-weight: 900; }
+.shogi-game .relay-live__featured-game {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 0.5rem; align-items: center; min-height: 44px;
+  padding: 0.3rem 0.6rem; border: 2px solid rgba(246, 165, 192, 0.55); border-radius: 0.5rem;
+  color: #fffcf4; background: rgba(15, 24, 40, 0.6); font: inherit; text-align: left; cursor: pointer;
+}
+.shogi-game .relay-live__featured-names { overflow: hidden; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .relay-live__featured-where { grid-column: 1; overflow: hidden; color: #9fb3c8; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .relay-live__featured-ply { grid-column: 2; grid-row: 1 / span 2; color: #f1a54c; font-weight: 900; white-space: nowrap; }
 /* 勝敗の予想(24-1)。 */
 .shogi-game .relay-live__predict { display: flex; gap: 0.5rem; align-items: center; justify-content: space-between; margin: 0; font-weight: 800; }
 .shogi-game .relay-live__predict b { color: #f1a54c; font-size: 1.1em; }
@@ -134,6 +163,8 @@ function stateText(game: PredictGame) {
   }
   .shogi-game .shogi-tournament__hud.shogi-tournament__live .relay-live__predict-mini { display: block; color: #f1a54c; font-size: 0.9em; }
   .shogi-game .shogi-tournament__hud.shogi-tournament__live .shogi-tournament__live-game { padding-block: 0.45rem; }
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .relay-live__featured-head,
+  .shogi-game .shogi-tournament__hud.shogi-tournament__live .relay-live__featured-where { display: none; }
   .shogi-game .shogi-tournament__hud.shogi-tournament__live .shogi-tournament__start { min-height: 48px; padding-block: 0.35rem; }
   /* 中継のあいだは、表の上の段階の説明(補足)も省き、表に高さを回す(竜王戦の表・名人戦のリーグ表)。 */
   .shogi-game .shogi-tournament__stage:has(.shogi-tournament__live) .shogi-tournament__stagehead p { display: none; }

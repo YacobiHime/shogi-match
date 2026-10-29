@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, recordUserGame, replayRest, restGameKey, restOpen, seasonGameResults, settleRest } from './ryuo.mjs';
+import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, previewGroupBrackets, recordUserGame, replayRest, restGameKey, restOpen, seasonGameResults, settleRest } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
-  afterWatchRounds, applyMeijinWatchedRound, applyWatchedRound, hiddenRoundIds, meijinAfterRounds, meijinFinale, meijinHiddenKeys, meijinLiveEntry, meijinLiveRound, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyMeijinWatchedRound, applyWatchedRound, elsewhereGames, hiddenRoundIds, meijinAfterRounds, meijinFinale, meijinHiddenKeys, meijinLiveEntry, meijinLiveRound, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   pendingTable, roundTable, tableOf, viewersText,
 } from './relay-live.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
+import { HANANE } from './ryuo-story.mjs';
 
 const settings = { difficulty: 9, scale: 3, revival: true };
 const avatar = { rating: 1500, character: { abilities: {}, traits: [] } };
@@ -404,5 +405,59 @@ describe('名人戦の番勝負の観戦(23章)', () => {
         expect({ ...season.result, challenger: null, titleWinner: null }).toEqual(userResult);
       }
     }
+  });
+});
+
+describe('ほかの組の注目の対局を見に行く(31章)', () => {
+  /** 羽音をほかの組(groupの組)に移した名簿で、6組から出る観戦の期。 */
+  function apartSeason(hananeGroup = 5, seed = 9) {
+    const roster = createRoster({ seed: 52, userGroup: 6 });
+    Object.values(roster.players).find((member) => member.story === HANANE).group = hananeGroup;
+    return asAvatarSeason(createSeason({ no: 2, mode: 'challenge', group: 6, settings, userLevel: 20, seed, roster, userName: 'やこび' }), avatar);
+  }
+  const hananeIn = (entry) => entry.black.story === HANANE || entry.white.story === HANANE;
+
+  it('ほかの組は組ごとの種で決めるので、先に決めた表と、自分の組が終わってから決めた表は同じ', () => {
+    let season = apartSeason();
+    const preview = previewGroupBrackets(season);
+    expect(Object.keys(preview)).toContain('5');
+    expect(season.groupBrackets ?? {}).toEqual({});
+    for (let index = 0; index < 12 && season.phase !== 'main' && season.pending; index += 1) season = playSpectatorGame(season);
+    for (const [tag, bracket] of Object.entries(preview)) {
+      const winners = (table) => Object.fromEntries(Object.values(table.nodes).map((node) => [node.id, node.winner]));
+      expect(winners(season.groupBrackets[tag]), tag).toEqual(winners(bracket));
+    }
+  });
+
+  it('分身の次の一局と同じ時に、ほかの組で指されている羽音の対局を、ボードに足す(勝ち負けは先に決めた結果のまま)', () => {
+    const season = apartSeason();
+    const before = JSON.stringify(season);
+    const games = elsewhereGames(season);
+    expect(games.length).toBe(1);
+    expect(games[0]).toMatchObject({ elsewhere: true, round: 1 });
+    expect(hananeIn(games[0])).toBe(true);
+    expect(games[0].label).toMatch(/^5組ランキング戦/);
+    expect(games[0].tags.rival).toBe(true);
+    const round = liveRound(season);
+    expect(round.specs.at(-1).key).toBe(games[0].key);
+    expect(round.elsewhereKeys).toEqual([games[0].key]);
+    expect(JSON.stringify(season)).toBe(before);
+    // 同じ組なら、表の上の局なので足さない。
+    expect(elsewhereGames(watchSeason())).toEqual([]);
+    // 自分で指す期では足さない。
+    expect(elsewhereGames({ ...season, spectator: false })).toEqual([]);
+  });
+
+  it('分身が段を飛ばしたあいだ(敗者復活戦へ回ったとき)の羽音の対局も、次のボードに古い順で入る', () => {
+    let season = apartSeason(6 - 1, 9);
+    const seen = [];
+    for (let index = 0; index < 8 && season.pending && season.pending.phase !== 'main'; index += 1) {
+      seen.push(...elsewhereGames(season).map(({ key, round }) => ({ key, round })));
+      season = playSpectatorGame(season);
+    }
+    // 同じ局は2度入らない。入った局は羽音のいる組の局だけ。
+    expect(new Set(seen.map(({ key }) => key)).size).toBe(seen.length);
+    expect(seen.every(({ key }) => key.includes(':group-5'))).toBe(true);
+    expect(seen.length).toBeGreaterThan(0);
   });
 });
