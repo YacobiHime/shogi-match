@@ -95,8 +95,10 @@ describe("指す前の確認(4-5・5章)", () => {
   test("相手の1手詰めを許す手を見分ける", () => {
     // 後手玉5一の両脇は桂、5三に先手の歩、先手は飛車を持っている。何もしないと▲5二飛で詰む。玉が逃げれば詰まない。
     const sfen = "3nkn3/9/4P3p/9/9/9/9/9/4K4 w R 1";
-    expect(allowsMateInOne(sfen, "1c1d", findMateLine)).toBe(true);
-    expect(allowsMateInOne(sfen, "5a4b", findMateLine)).toBe(false);
+    // 本番の時間の上限(20ミリ秒)は、テストを並べて走らせると足りないことがある。手数とノードの上限はそのまま、時間だけ広げる。
+    const roomy = (position, plies, options) => findMateLine(position, plies, { ...options, maxTimeMs: 2000 });
+    expect(allowsMateInOne(sfen, "1c1d", roomy)).toBe(true);
+    expect(allowsMateInOne(sfen, "5a4b", roomy)).toBe(false);
     // 詰みの探索を渡さないとき・探索が上限に達したとき(undefined)は、詰みがあるとは言わない。
     expect(allowsMateInOne(sfen, "1c1d")).toBe(false);
     expect(allowsMateInOne(sfen, "1c1d", () => undefined)).toBe(false);
