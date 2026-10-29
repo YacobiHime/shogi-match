@@ -56,6 +56,7 @@
             :black-player-name="`${spec.black.name}${spec.black.dan ? ` ${spec.black.dan}` : ''}`"
             :white-player-name="`${spec.white.name}${spec.white.dan ? ` ${spec.white.dan}` : ''}`"
             :clocks="clocks"
+            :flip="flipped"
           />
           <!-- 視聴者のコメント(右から左へ流れる)。押せない飾りで、盤の操作は妨げない。 -->
           <div v-if="commentsOn && !reducedMotion" class="relay__danmaku" aria-hidden="true">
@@ -191,6 +192,8 @@
           <button type="button" aria-label="いちばん新しい手へ" :disabled="cursor >= ready" @click="seek(ready)">⏭</button>
           <button type="button" class="relay__toggle" :aria-label="`速さ ×${speed}。押すと変える`" data-relay-speed @click="cycleSpeed">×{{ speed }}</button>
           <button type="button" class="relay__toggle" :aria-pressed="commentsOn" aria-label="コメントの表示" data-relay-comments @click="commentsOn = !commentsOn">コメ{{ commentsOn ? "" : "✕" }}</button>
+          <!-- 盤面の反転(32章)。後手の側から見る。押すたびに切り替わる(Fキーでも)。 -->
+          <button type="button" class="relay__toggle" :aria-pressed="flipped" aria-label="盤面を反転" data-relay-flip @click="flipped = !flipped">反転</button>
         </div>
         <!-- 中継の楽しみ(24章)。次の一手クイズ・見どころ再生・大盤解説・研究ノート。 -->
         <div class="relay__extras">
@@ -371,6 +374,11 @@ const cursor = ref(0);
 const playing = ref(true);
 const speed = ref<number>(saved.speed);
 const commentsOn = ref<boolean>(saved.comments);
+/**
+ * 盤面の反転(32章)。分身が後手の対局は、はじめから分身の側(後手が手前)で見る。ほかは先手が手前。
+ * 局ごとに選ぶので保存しない(次の局は、また手前が先手か分身の側から)。
+ */
+const flipped = ref<boolean>(props.spec.white?.id === "user");
 const tab = ref<(typeof TABS)[number]["id"]>("talk");
 const waiting = ref(false);
 /** 考慮中の手(この手数の手を指す前)。0なら考慮中ではない。 */
@@ -509,6 +517,7 @@ function onKey(event: KeyboardEvent) {
   if (event.key === "ArrowLeft") seek(cursor.value - 1);
   else if (event.key === "ArrowRight") seek(cursor.value + 1);
   else if (event.key === " ") togglePlay();
+  else if (event.key === "f" || event.key === "F") flipped.value = !flipped.value;
   else return;
   event.preventDefault();
 }
@@ -1315,7 +1324,7 @@ onBeforeUnmount(() => {
 .shogi-game .relay__kifu-time { color: inherit; opacity: 0.75; font-variant-numeric: tabular-nums; }
 .shogi-game .relay__move { display: flex; gap: 0.5rem; align-items: baseline; justify-content: center; margin: 0; min-height: 1.5em; font-size: 0.95rem; white-space: nowrap; overflow: hidden; }
 .shogi-game .relay__move small { color: #9fb3c8; font-size: 0.78rem; }
-.shogi-game .relay__controls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 1.1fr)); gap: 0.25rem; }
+.shogi-game .relay__controls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) repeat(3, minmax(0, 1.1fr)); gap: 0.25rem; }
 .shogi-game .relay__controls button { min-height: 44px; padding: 0; }
 .shogi-game .relay__controls button:disabled { opacity: 0.4; cursor: default; }
 .shogi-game .relay__play { color: #172632 !important; background: #f1a54c !important; border-color: #f1a54c !important; font-size: 1.05rem; }
