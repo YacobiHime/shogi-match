@@ -13,6 +13,7 @@ import { pieceAt } from './sfen-piece.mjs';
 import { detectTesuji, TESUJI_NAMES } from './move-tesuji.mjs';
 import { formatHintMove } from './match-assists.mjs';
 import { appendUsiMove, createGameRecord } from '../game-state';
+import { mateStreak } from './mate-finish.mjs';
 import { attackStyleLabel, isGoldTrait, traitById, traitLabel } from './player-character.mjs';
 import { proOpening, usageRows } from './opening-usage.mjs';
 import { SURNAME_WEIGHTS } from './ryuo-names.mjs';
@@ -46,6 +47,16 @@ const MAJOR = new Set(['B', 'R', '+B', '+R']);
 const SURNAMES = [...SURNAME_WEIGHTS.map(([surname]) => surname)].sort((a, b) => b.length - a.length);
 
 const other = (side) => (side === 'black' ? 'white' : 'black');
+/** 分身か、プレイヤー本人(自分の対局の中継)か。きつい笑いのコメントを出さない(責めない。G:7)。 */
+const isYou = (player) => player?.kind === 'avatar' || player?.kind === 'user';
+/** その局面で、手番の側が王手されているか。 */
+function givesCheck(sfen) {
+  try {
+    return Boolean(createGameRecord(sfen).position.checked);
+  } catch {
+    return false;
+  }
+}
 
 // ---- 名前と配役
 
@@ -883,8 +894,11 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     line(0, 'move', 'host', `先手の${call('black')}は${playerHighlight(black)}。後手の${call('white')}は${playerHighlight(white)}。`);
     // 観戦の期の分身(あなたの対局から出した能力で戦う棋士)。
     const avatarSide = (['black', 'white']).find((side) => players[side]?.kind === 'avatar');
-    // 分身の対局の相手は「次の相手」だが、いま戦っている相手なので「よく見ておこう」は言わない(34章)。
-    const next = nextId && !avatarSide ? (['black', 'white']).find((side) => players[side]?.id === nextId) : null;
+    // 自分の対局の中継(docs/mate-finish-design.md)。プレイヤー本人が指した局を振り返る。
+    const userSide = (['black', 'white']).find((side) => players[side]?.kind === 'user');
+    if (userSide) line(0, 'move', 'host', `今日は、あなたの対局をふり返るよ。${SIDE_NAME[userSide]}が、あなた！ 解説つきで、もう一度見ていこう。`);
+    // 分身の対局の相手は「次の相手」だが、いま戦っている相手なので「よく見ておこう」は言わない(34章)。自分の対局も同じ。
+    const next = nextId && !avatarSide && !userSide ? (['black', 'white']).find((side) => players[side]?.id === nextId) : null;
     if (next) line(0, 'move', 'host', `${call(next)}は、あなたの次の相手。どんな将棋を指すか、よく見ておこう！`);
     if (avatarSide) {
       line(0, 'move', 'host', `${SIDE_NAME[avatarSide]}は、あなたの分身！ あなたの対局から出した能力で戦うよ。`);
@@ -909,7 +923,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       if (rng.next() < 0.2) comment(0, 'move', 'chi', { name: fan('white') }, 1, '', after);
     }
     // 格上の棋士の心の声を、視聴者が想像する(27章)。番勝負は肩書(竜王・名人)、ほかは段位。
-    if (stronger && players[stronger]?.kind !== 'avatar' && rng.next() < 0.5) {
+    if (stronger && !isYou(players[stronger]) && rng.next() < 0.5) {
       const title = spec.kind === 'finals' ? (spec.event === 'meijin' ? '名人' : '竜王') : (players[stronger]?.dan || '先生');
       comment(0, 'move', 'kimino', { name: fan(stronger), title });
     }
@@ -945,7 +959,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     for (const side of /** @type {const} */ (['black', 'white'])) {
       const player = players[side];
       const age = Number(player?.age);
-      if (!player || player.kind === 'avatar' || !player.age || !Number.isFinite(age) || rng.next() >= 0.5) continue;
+      if (!player || isYou(player) || !player.age || !Number.isFinite(age) || rng.next() >= 0.5) continue;
       const values = { name: shortName(side), dan: player.dan || '棋士', age };
       if (age <= 22) comment(0, 'move', 'rookie', values);
       else if (age >= 35 || /[八九]段/.test(player.dan ?? '')) comment(0, 'move', 'veteran', values);
@@ -961,6 +975,9 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   }
 
   let previousUsi = '';
+  /** 各手のあとに王手だったか(手数-1の位置)と、詰みで終わったときの寄せの手数。 */
+  const checks = [];
+  let endMate = 0;
   let formationsSeen = { battle: '', black: '', white: '', castleBlack: '', castleWhite: '' };
   let bookRun = true;
   let lastBishopCapture = -9;
@@ -1011,6 +1028,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   function add({ index, entry, previousEval, sfenBefore, sfenAfter, before, after, formations = null, last = false, end = null }) {
     const at = index + 1;
     const side = index % 2 === 0 ? 'black' : 'white';
+    // 王手だったか(終局のときに、最後の寄せが何手詰めだったかを数える。docs/mate-finish-design.md)。
+    checks[index] = givesCheck(sfenAfter);
     const facts = moveFacts(sfenBefore, entry.move);
     const text = moveTextOf(sfenBefore, entry.move, previousUsi);
     const rateBefore = blackWinRate(previousEval);
@@ -1373,7 +1392,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       }
       if (heavy) {
         comment(at, 'move', 'chaos', {}, 2);
-        if (players[side]?.kind !== 'avatar' && once('chaos-harsh')) maybe(0.5, at, 'move', 'chaosHarsh');
+        if (!isYou(players[side]) && once('chaos-harsh')) maybe(0.5, at, 'move', 'chaosHarsh');
         under(at, rng.next() < 0.5 ? 'sasshi' : 'oi', 0.5);
       }
       if (collapse) {
@@ -1567,7 +1586,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       const lastTo = parseUsiMove(previousUsi)?.to ?? null;
       const bare = bareMove(text);
       /** 分身(プレイヤー自身の能力で戦う棋士)の手には、少しきつい言葉(ダメ・ミス・舐めプ)を出さない(27章と同じ)。 */
-      const gentle = players[side]?.kind === 'avatar';
+      const gentle = isYou(players[side]);
 
       // 視聴者の数の節目(1,000人・7,500人・1万人…)。
       const audienceNow = relayAudience(spec, at);
@@ -1796,7 +1815,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         if (sharpMove[loser]) maybe(0.6, at, 'move', 'wasted', { move: sharpMove[loser] });
         if (firstMate && at - firstMate.at >= 6) maybe(0.4, at, 'move', 'owatteta', { move: firstMate.move });
         if (spec.weight !== 'plain') maybe(0.5, at, 'move', 'munen', { given: givenName(loser) });
-        if (worst && worst.at > plan.middleEnd && players[loser]?.kind !== 'avatar' && (star(loser) || (players[loser]?.rating ?? 0) >= 1700)) maybe(0.6, at, 'move', 'yoseMiss', { name: fan(loser) });
+        if (worst && worst.at > plan.middleEnd && !isYou(players[loser]) && (star(loser) || (players[loser]?.rating ?? 0) >= 1700)) maybe(0.6, at, 'move', 'yoseMiss', { name: fan(loser) });
         if (spec.kind === 'finals' && players[loser]?.story === YOSHIHIKO) comment(at, 'move', 'beatLegend', { name: fan(end.winner) });
       }
     }
@@ -1817,7 +1836,11 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         think(at, 'move', loser, 'resign');
         line(at, 'move', 'host', `${players[loser].name}${players[loser].dan}が投了。${at}手まで、${players[end.winner].name}${players[end.winner].dan}の勝ち！`);
       } else {
-        line(at, 'move', 'host', `詰みました！ ${at}手まで、${players[end.winner].name}${players[end.winner].dan}の勝ち！`);
+        const plies = mateStreak(checks.slice(0, at));
+        line(at, 'move', 'host', plies
+          ? `詰みました！ 最後は${plies}手詰め、${call(end.winner)}が寄せ切りました！ ${at}手まで、${players[end.winner].name}${players[end.winner].dan}の勝ち！`
+          : `詰みました！ ${at}手まで、${players[end.winner].name}${players[end.winner].dan}の勝ち！`);
+        endMate = plies;
       }
       think(at, 'move', end.winner, 'win');
       const how = HOW_LABELS[spec.how];
@@ -1830,7 +1853,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           '出だしから意外な将棋でしたけど、まあ、あのー、大熱戦だったと、思います。はい。'));
       line(at, 'move', 'host', 'ありがとうございました！');
       if (cast.voice === 'yoshihiko' && players[end.winner]?.story !== HANANE) react(at, 'castIgai');
-      cards.push({ at, when: 'move', kind: 'end', tier: spec.weight === 'title' ? 'gold' : '', title: `${at}手まで ${SIDE_NAME[end.winner]}の勝ち`, text: end.reason === 'resign' ? `${players[loser].name}の投了` : '詰み' });
+      cards.push({ at, when: 'move', kind: 'end', tier: spec.weight === 'title' ? 'gold' : '', title: `${at}手まで ${SIDE_NAME[end.winner]}の勝ち`, text: end.reason === 'resign' ? `${players[loser].name}の投了` : endMate ? `${endMate}手詰め` : '詰み' });
       comment(at, 'move', 'resign', {}, 5, spec.weight === 'title' ? 'gold' : '');
       hype(at, spec.weight === 'title' ? 3 : 2, spec.weight === 'title' ? 'gold' : '');
       official(at, 'move', `【終局】${at}手で${players[end.winner].name}${players[end.winner].dan}の勝ち`);

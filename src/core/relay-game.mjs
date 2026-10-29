@@ -457,6 +457,75 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
   return { v: RELAY_VERSION, key: spec.key, entries, end };
 }
 
+/** 指し終えた棋譜を読み直すとき(自分の対局の中継)の、悪手と決め手の印の損(点)。定跡の印は、序盤の小さな損の手まで。 */
+const KIFU_ERROR_LOSS = 300;
+const KIFU_DECISIVE_LOSS = 800;
+const KIFU_BOOK_PLY = 12;
+const KIFU_BOOK_LOSS = 80;
+
+/**
+ * 指し終えた棋譜(自分の対局。my-games.mjsのmyRelaySpecのkifu)を1手ずつ読み、中継の棋譜の形にする(docs/mate-finish-design.md)。
+ * 手は変えず、各局面の最善手・指した手の評価値・損・読み筋を付ける。考えた時間は残した秒数のまま。勝ち負けと終わり方も残したまま。
+ * 止めたらnull。
+ * @param {{
+ *   spec: any,
+ *   search: (request: { moves: string[], multiPv: number, searchMoves?: string[] }) => Promise<any>,
+ *   onMove?: (entry: RelayMoveEntry, index: number) => void,
+ *   isCancelled?: () => boolean,
+ *   multiPv?: number,
+ * }} options
+ * @returns {Promise<RelayGame | null>}
+ */
+export async function replayKifuGame({ spec, search, onMove = () => {}, isCancelled = () => false, multiPv = 2 }) {
+  const moves = spec.kifu?.moves ?? [];
+  const times = spec.kifu?.times ?? [];
+  const record = createGameRecord(STANDARD_SFEN);
+  const played = [];
+  const entries = [];
+  for (let ply = 0; ply < moves.length; ply += 1) {
+    if (isCancelled()) return null;
+    const usi = moves[ply];
+    const side = sideOf(ply);
+    const legal = enumerateLegalMoves(record.position).map((move) => move.usi);
+    if (!legal.includes(usi)) break;
+    const result = await search({ moves: [...played], multiPv });
+    if (isCancelled()) return null;
+    const candidates = rankedCandidates(result).filter(({ move }) => legal.includes(move));
+    const best = candidates[0] ?? null;
+    let chosen = candidates.find(({ move }) => move === usi) ?? null;
+    // 指した手が候補になければ、その手だけを読む(損を測る)。
+    if (!chosen && best) {
+      const single = rankedCandidates(await search({ moves: [...played], multiPv: 1, searchMoves: [usi] }))[0];
+      if (isCancelled()) return null;
+      chosen = single?.move === usi ? single : null;
+    }
+    const value = chosen?.value ?? best?.value ?? 0;
+    const loss = best && chosen ? Math.max(0, best.value - chosen.value) : 0;
+    const second = candidates[1];
+    let mark = '';
+    if (ply < KIFU_BOOK_PLY && loss <= KIFU_BOOK_LOSS) mark = 'book';
+    else if (loss >= KIFU_DECISIVE_LOSS && !isMateCp(valueToCp(best?.value ?? 0))) mark = 'decisive';
+    else if (loss >= KIFU_ERROR_LOSS) mark = 'error';
+    else if (side === spec.winner && chosen?.score?.type === 'mate' && chosen.score.value > 0) mark = 'mate';
+    else if (best && usi === best.move && second && best.value - second.value >= ONLY_MOVE_GAP && !isMateCp(best.value) && ply >= THEORY_PLY) mark = 'only';
+    if (!appendUsiMove(record, usi)) break;
+    played.push(usi);
+    const entry = {
+      move: usi,
+      eval: Math.round(valueToCp(value) * signOf(side)),
+      pv: (chosen?.pv ?? []).slice(1, 5).join(' '),
+      best: best && best.move !== usi ? best.move : '',
+      loss: Math.round(loss),
+      time: Math.max(1, Math.round(Number(times[ply]) || 1)),
+      mark,
+    };
+    entries.push(entry);
+    onMove(entry, entries.length - 1);
+  }
+  const mated = entries.length === moves.length && spec.kifu?.reason === 'mate';
+  return { v: RELAY_VERSION, key: spec.key, entries, end: { winner: spec.winner, reason: mated ? 'mate' : 'resign', plies: entries.length } };
+}
+
 /**
  * @typedef {{ move: string, eval: number, pv: string, best: string, loss: number, time: number, mark: string }} RelayMoveEntry
  * @typedef {{ v: number, key: string, entries: RelayMoveEntry[], end: { winner: 'black' | 'white', reason: 'resign' | 'mate', plies: number } }} RelayGame

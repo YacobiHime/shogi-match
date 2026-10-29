@@ -596,3 +596,41 @@ describe('二日制のタイトル戦の配信のコメント(30章)', () => {
     }
   });
 });
+
+describe('自分の対局と寄せの手数(docs/mate-finish-design.md)', () => {
+  it('詰みで終わった局は、最後の寄せが何手詰めかを聞き手が言い、終局の札にも書く', () => {
+    // 玉が5一、先手の歩が5三、先手が飛と金を持つ局面から、▲5二飛 △6一玉 ▲7二金で3手詰め。
+    const start = '4k4/9/4P4/9/9/9/9/9/4K4 b RG 1';
+    const spec = {
+      key: 'mine:ryuo:7', event: 'ryuo', kind: 'game', label: '第1期 竜王戦 6組ランキング戦 1回戦', weight: 'plain',
+      black: player('user', 'やこび', { kind: 'user' }), white: player('p', '中村大輔'), winner: 'black', how: 'ending', seed: relaySeed('mine:ryuo:7'),
+    };
+    const cast = { id: 'c', name: '佐藤誠', dan: '九段', story: null, voice: 'polite' };
+    const script = createRelayScript({ spec, cast, nextId: 'p' });
+    const record = createGameRecord(start);
+    const moves = ['R*5b', '5a6a', 'G*7b'];
+    const entries = moves.map((move) => ({ move, eval: 30000, pv: '', best: '', loss: 0, time: 30, mark: '' }));
+    const timeline = relayTimeline({ entries }, relayTimeControl({ event: 'ryuo', kind: 'game' }));
+    entries.forEach((entry, index) => {
+      const before = record.position.sfen;
+      appendUsiMove(record, entry.move);
+      const last = index === entries.length - 1;
+      script.add({
+        index, entry, previousEval: 0, sfenBefore: before, sfenAfter: record.position.sfen,
+        before: timeline[index], after: timeline[index + 1], last, end: last ? { winner: 'black', reason: 'mate' } : null,
+      });
+    });
+    expect(script.lines.some(({ text }) => text.includes('最後は3手詰め'))).toBe(true);
+    expect(script.cards.find(({ kind }) => kind === 'end')?.text).toBe('3手詰め');
+    // 自分の対局は「あなたの対局」と紹介し、相手が次の相手でも「よく見ておこう」と言わない。
+    expect(script.lines.some(({ text }) => text.includes('あなたの対局をふり返る'))).toBe(true);
+    expect(script.lines.some(({ text }) => text.includes('あなたの次の相手'))).toBe(false);
+  });
+
+  it('自分の対局の手には、分身と同じく、きつい笑いを出さない', () => {
+    for (const variant of ['u1', 'u2', 'u3']) {
+      const script = longScript({ variant, white: player('user', 'やこび', { kind: 'user' }) });
+      expect(script.comments.some(({ text }) => /酷いｗ|明らかにおかしい/.test(text))).toBe(false);
+    }
+  });
+});

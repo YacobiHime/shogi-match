@@ -423,7 +423,20 @@
               {{ allAwards ? "新しい3枚だけ見る" : `すべて見る（${awards.length}枚）` }}
             </button>
           </section>
-          <!-- 観戦記(docs/title-match-day-design.mdの3章)。タイトル戦の1局ごとに、新しい順。押すと紙面を開く。 -->
+          <!-- 寄せの記録(docs/mate-finish-design.md)。大会で詰ませて勝った局の数、いちばん長い寄せ、最近の寄せ。 -->
+          <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-mates" data-note-mates>
+            <h2 id="shogi-note-mates">寄せの記録<small class="shogi-note__count">{{ mates.count }}局</small></h2>
+            <template v-if="mates.best">
+              <p class="shogi-note__mate-best" data-note-mate-best>
+                <b>{{ mates.best.plies }}手詰め</b><span>いちばん長い寄せ</span><small>{{ mateWhere(mates.best) }}</small>
+              </p>
+              <ol class="shogi-note__mate-recent" aria-label="最近の寄せ">
+                <li v-for="(item, index) in mates.recent.slice(0, 5)" :key="`${item.at}-${index}`"><b>{{ item.plies }}手詰め</b><small>{{ mateWhere(item) }}</small></li>
+              </ol>
+            </template>
+            <p v-else class="shogi-note__hint">大会の対局で詰ませて勝つと、最後の寄せが何手詰めだったかを、ここに残すよ。</p>
+          </section>
+          <!-- 観戦記(docs/title-match-day-design.mdの3章、docs/mate-finish-design.md)。大会の1局ごとに、新しい順。押すと紙面を開く。 -->
           <section class="shogi-note__card shogi-note__card--wide" aria-labelledby="shogi-note-kansenki" data-note-kansenki>
             <h2 id="shogi-note-kansenki">観戦記<small class="shogi-note__count">{{ kansenki.length }}局</small></h2>
             <ul v-if="kansenki.length" class="shogi-note__awards">
@@ -434,7 +447,7 @@
                 </button>
               </li>
             </ul>
-            <p v-else class="shogi-note__hint">竜王戦や名人戦のタイトル戦（七番勝負）を指すと、1局ごとに新聞の観戦記ができるよ。</p>
+            <p v-else class="shogi-note__hint">大会の対局を指すと、1局ごとに新聞の観戦記ができるよ。</p>
             <button v-if="kansenki.length > AWARD_PREVIEW" type="button" class="shogi-note__button shogi-note__button--ghost" @click="allKansenki = !allKansenki">
               {{ allKansenki ? "新しい3局だけ見る" : `すべて見る（${kansenki.length}局）` }}
             </button>
@@ -800,6 +813,7 @@ import { awardLine } from "./core/season-award.mjs";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import TitleDaySheet, { type KansenkiView } from "./TitleDaySheet.vue";
 import { loadKansenki, loadMealBook, mealBookView } from "./core/title-day.mjs";
+import { loadMateRecords } from "./core/mate-finish.mjs";
 import { loadNotes, removeNote, saveNotes } from "./core/relay-fun.mjs";
 import { loadRelayStore, recallRelayGame } from "./core/relay-store.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
@@ -1122,6 +1136,12 @@ const kenshukaiGames = computed(() => (kenshukai.value.run?.games?.length ?? 0)
   + kenshukai.value.history.reduce((sum: number, entry: { games: number }) => sum + (entry.games ?? 0), 0));
 // ---- 観戦記(大会の項目)。賞状帳と同じく、新しい順に3局、「すべて見る」で全部。
 const kansenki = ref<(KansenkiView & { id: string; win?: boolean })[]>(loadKansenki(typeof localStorage === "undefined" ? null : localStorage));
+/** 寄せの記録(docs/mate-finish-design.md)。 */
+const mates = loadMateRecords(typeof localStorage === "undefined" ? null : localStorage);
+/** どの対局の寄せか(「第3期 竜王戦 決勝トーナメント 2回戦・対 中村大輔」)。 */
+function mateWhere(item: { eventText?: string; label?: string; opponent?: string }) {
+  return [[item.eventText, item.label].filter(Boolean).join(" "), item.opponent ? `対 ${item.opponent}` : ""].filter(Boolean).join("・");
+}
 const allKansenki = ref(false);
 const shownKansenki = computed(() => kansenki.value.slice(0, allKansenki.value ? undefined : AWARD_PREVIEW));
 const kansenkiShown = ref<KansenkiView | null>(null);
@@ -1799,6 +1819,15 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__pair { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
 .shogi-game .shogi-note__subhead { margin: 0.3rem 0 0; color: rgba(255, 252, 244, 0.8); font-size: 0.9em; }
 .shogi-game .shogi-note__hint { margin: 0; color: var(--note-muted); font-size: 0.8em; line-height: 1.6; }
+/* 寄せの記録。いちばん長い寄せを大きく、最近の寄せを小さく並べる。 */
+.shogi-game .shogi-note__mate-best { display: flex; flex-wrap: wrap; gap: 0.2em 0.6em; align-items: baseline; margin: 0; }
+.shogi-game .shogi-note__mate-best b { color: #f1a54c; font-size: 1.6em; font-weight: 900; }
+.shogi-game .shogi-note__mate-best span { font-weight: 800; }
+.shogi-game .shogi-note__mate-best small,
+.shogi-game .shogi-note__mate-recent small { color: var(--note-muted); font-size: 0.8em; }
+.shogi-game .shogi-note__mate-recent { display: grid; gap: 0.2em; margin: 0.4em 0 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__mate-recent li { display: flex; flex-wrap: wrap; gap: 0 0.6em; align-items: baseline; }
+.shogi-game .shogi-note__mate-recent b { min-width: 4.5em; font-weight: 800; }
 /* 能力。名鑑の棋士と同じ部品(PlayerAbilityPanel)に、比べる棋士を選ぶ札を添える。 */
 .shogi-game .shogi-note__ability-card h2 small { margin-left: 0.5em; color: var(--note-muted); font-size: 0.75em; font-weight: 700; }
 .shogi-game .shogi-note__ability-compare { display: flex; flex-wrap: wrap; gap: 0.35rem; }

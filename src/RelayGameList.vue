@@ -74,13 +74,18 @@ const shown = computed(() => (props.focusId ? relayGamesOf(props.entries, props.
 const heading = computed(() => (focusPlayer.value ? `${focusPlayer.value.name}さんの対局` : "対局中継"));
 const hint = computed(() => (focusPlayer.value
   ? "この期の対局を、解説つきで見られるよ。得意な戦法や、終盤の指し方を見て、対策を考えよう。"
-  : "決着した棋士どうしの対局を、解説と視聴者のコメントつきで見られるよ。"));
+  : "決着した対局を、解説と視聴者のコメントつきで見られるよ。「あなたの対局」では、自分の対局をふり返れるよ。"));
 
 function metaText(entry: any) {
   const black = openingLabel(entry.openings?.black);
   const white = openingLabel(entry.openings?.white);
   const opening = black && white ? `${black} 対 ${white}` : black || white || "";
   const winner = entry.winner === "black" ? entry.black.name : entry.white.name;
+  // 自分の対局は、勝ち負けと寄せの手数(docs/mate-finish-design.md)。
+  if (entry.tags?.mine) {
+    const won = (entry.winner === "black" ? entry.black : entry.white)?.kind === "user";
+    return [won ? "あなたの勝ち" : `${winner}の勝ち`, won && entry.mate ? `${entry.mate.plies}手詰め` : ""].filter(Boolean).join("・");
+  }
   return [opening, `${winner}の勝ち`].filter(Boolean).join("・");
 }
 </script>

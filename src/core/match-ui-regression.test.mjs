@@ -905,7 +905,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/v-if="matchStage\.longestDay"[^>]*>将棋界の一番長い日/);
     // 判子は期の結果を記録した節目から決め、1.2秒で結果の窓へ。負けは判子を押さない。
     expect(source).toMatch(/finishMilestone = lastGameMilestone\(next,/);
-    expect(source).toMatch(/recordRyuoOutcome\(matchResult\);\s*(?:if \(tournamentFinish\) \{\s*writeTitleKansenki\([^;]*\);\s*recordTitleMeal\([^;]*\);\s*\}\s*)?if \(tournamentFinish\) showFinishStamp\(outcome === "win",/);
+    expect(source).toMatch(/recordRyuoOutcome\(matchResult\);\s*(?:if \(tournamentFinish\) \{\s*writeTournamentKansenki\([^;]*\);\s*recordTitleMeal\([^;]*\);\s*\}\s*)?if \(tournamentFinish\) showFinishStamp\(outcome === "win",/);
     expect(source).toMatch(/resultRevealTimer = setTimeout\(revealResult, FINISH_STAMP_MS\);/);
     expect(source).toMatch(/v-if="finishStampShown && !resultDialogOpen && !reviewMode"/);
     // 判子は結果の窓が開いたら消す(閉じて棋譜解析へ進んでも、勝ちの判子を盤に残さない)。
@@ -937,7 +937,7 @@ describe("match screen regressions", () => {
     // 封じ手予想は、助言の読みの最善手(新しい探索は足さない)。
     expect(source).toMatch(/if \(bestMove\) roomPick = \{ ply: analyzedHistoryLength, move: bestMove \};/);
     // 観戦記は終局で書き、結果の窓から読める。重ねたシートは戻る操作で閉じ、開いているあいだは秒読みを止める。
-    expect(source).toMatch(/if \(tournamentFinish\) \{\s*writeTitleKansenki\(outcome === "win", matchResult\.moveCount\);\s*recordTitleMeal\(outcome === "win"\);/);
+    expect(source).toMatch(/if \(tournamentFinish\) \{\s*writeTournamentKansenki\(outcome === "win", matchResult\.moveCount\);\s*recordTitleMeal\(outcome === "win"\);/);
     expect(source).toMatch(/v-if="resultKansenki"[^>]*data-kansenki-open/);
     expect(source).toMatch(/\} else if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;\s*\} else if \(daySummaryOpen\.value\) \{/);
     expect(source).toMatch(/\|\| daySummaryOpen\.value,/);
@@ -989,5 +989,17 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/kenshukaiAward\(\{/);
     expect(source).toMatch(/setShoreikaiCareer\(\{ \.\.\.base, run: null, transfer: \{ from: "kenshukai", label \} \}\);/);
     expect(source).toMatch(/suspended\?\.event === "kenshukai" && suspended\.ryuoOpponentId && pending && suspended\.ryuoOpponentId === pending\.opponentId/);
+  });
+
+  it("大会で詰ませて勝ったら、寄せの手数を判子と結果の窓に出し、棋譜を残して中継で振り返れる(docs/mate-finish-design.md)", () => {
+    // 期を記録する前(相手と回戦が次の局に変わる前)に、寄せを数えて棋譜を残す。
+    expect(source).toMatch(/finishMate\.value = tournamentFinish && outcome === "win" && matchResult\.reason === "checkmate" \? noteMateFinish\(\) : null;\s*lastMyRelayKey\.value = tournamentFinish \? saveOwnGame\(matchResult\) : "";\s*recordRyuoOutcome\(matchResult\);/);
+    expect(source).toMatch(/mateTier: win \? finishMate\.value\?\.tier \?\? null : null/);
+    expect(source).toMatch(/v-if="finishMate"[^>]*data-finish-mate/);
+    expect(source).toMatch(/data-result-mate/);
+    expect(source).toMatch(/data-my-relay @click="watchOwnRelay"/);
+    expect(source).toMatch(/:relay-key="tournamentRelayKey"/);
+    // 観戦記は、タイトル戦でなくても書く(寄せの一文つき)。
+    expect(source).toMatch(/if \(!stage\.twoDay \|\| !day\) \{[\s\S]{0,600}?writeGameKansenki\(\{/);
   });
 });

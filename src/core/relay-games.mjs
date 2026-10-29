@@ -10,6 +10,8 @@ import { relaySeed } from './relay-game.mjs';
 
 /** 一覧の区分(並べる順)。 */
 export const RELAY_SECTIONS = Object.freeze({
+  // 自分の対局(my-games.mjs。docs/mate-finish-design.md)。残した手を読み直して見る。
+  mine: 'あなたの対局',
   series: '番勝負',
   main: '決勝トーナメント',
   own: 'あなたの組',

@@ -208,6 +208,15 @@ describe('観戦記', () => {
     expect(text.paragraphs.join('')).toContain('決着は、1日目のうちについた');
     expect(text.paragraphs.length).toBeLessThanOrEqual(5);
   });
+  it('詰ませて勝った局は、寄せの手数を見出しと最後の段落に書く(docs/mate-finish-design.md)', () => {
+    const text = writeKansenki({ ...base, day: emptyDay(), win: true, plies: 101, mate: { plies: 7, from: 95 } });
+    expect(text.headline).toBe('やこび、7手詰めで寄せ切る');
+    expect(text.paragraphs.at(-1)).toBe('最後は95手目95手目の手からの7手詰め。やこびが鮮やかに寄せ切った。101手まで、やこびの勝ち。');
+    // タイトルが決まった勝ちは、決まったことを見出しにする(寄せは最後の段落に書く)。
+    const crowned = writeKansenki({ ...base, day: emptyDay(), win: true, plies: 101, decided: '竜王獲得', mate: { plies: 7, from: 95 } });
+    expect(crowned.headline).toBe('やこび、竜王獲得');
+    expect(crowned.paragraphs.at(-1)).toContain('7手詰め');
+  });
   it('タイトルが決まった勝ちは見出しにする', () => {
     expect(writeKansenki({ ...base, day: emptyDay(), win: true, plies: 120, decided: '竜王獲得' }).headline).toBe('やこび、竜王獲得');
     expect(writeKansenki({ ...base, day: emptyDay(), win: true, plies: 120, decided: '竜王防衛' }).paragraphs.at(-1)).toContain('竜王の座を守った');

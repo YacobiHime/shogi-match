@@ -844,7 +844,7 @@
     <!-- 対局中継の一覧と、中継の画面(docs/tournament-relay-design.md)。大会の画面の上に重ねる。 -->
     <RelayGameList
       v-if="relayList && !relayEntry"
-      :entries="relayList.event === 'meijin' ? meijinRelayGameList : ryuoRelayGameList"
+      :entries="[...myRelayEntries, ...(relayList.event === 'meijin' ? meijinRelayGameList : ryuoRelayGameList)]"
       :seen="relaySeen"
       :focus-id="relayList.playerId"
       @watch="relayEntry = $event"
@@ -893,6 +893,7 @@ import RelayViewer from "./RelayViewer.vue";
 import { isFeatured, meijinRelayGames, relayGamesOf, relayRoundNews, ryuoRelayGames } from "./core/relay-games.mjs";
 import { userWonSeason, watchFinale } from "./core/ryuo-watch.mjs";
 import { isStaleRelayGame, loadRelayStore, recallRelayGame, unpackRelayGame } from "./core/relay-store.mjs";
+import { loadMyGames, myRelayKey, myRelaySpec } from "./core/my-games.mjs";
 import { engineGameResult, isMainCharacter, realGameSpec } from "./core/engine-game.mjs";
 import type { RelayMoveEntry } from "./core/relay-game.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
@@ -1081,6 +1082,8 @@ const props = defineProps({
   relayEngineFactory: { type: Function as PropType<() => Promise<EngineFactory>>, default: null },
   /** スマホ・タブレット縦(中継の棋譜を作る読みの量を減らす)。 */
   compact: { type: Boolean, default: false },
+  /** 開いたらすぐ見る、自分の対局の中継の鍵(core/my-games.mjsのmyRelayKey。終局の「中継で振り返る」。docs/mate-finish-design.md)。 */
+  relayKey: { type: String, default: "" },
 });
 const emit = defineEmits<{
   close: [];
@@ -1116,6 +1119,8 @@ const emit = defineEmits<{
   "kenshukai-resume": [];
   "kenshukai-transfer": [];
   "kenshukai-close": [];
+  /** relayKeyの中継を開いた(対局画面は鍵を消す)。 */
+  "relay-shown": [];
 }>();
 
 const HOME_STARS = [
@@ -1351,8 +1356,23 @@ function relayStorage(): Storage | null {
 }
 function openRelayList(event: "ryuo" | "meijin", playerId = "") {
   relaySeen.value = loadRelayStore(relayStorage()).seen;
+  myRelayEntries.value = loadMyGames(relayStorage()).map(myRelaySpec);
   relayList.value = { event, playerId: playerId || "" };
 }
+/** 自分の対局の中継(docs/mate-finish-design.md)。一覧の「あなたの対局」に、どの大会の対局も新しい順に並べる。 */
+const myRelayEntries = shallowRef<any[]>([]);
+/** 終局の「中継で振り返る」から開いたとき、その対局の中継を開く。 */
+function openMyRelay(key: string) {
+  if (!key) return;
+  const game = loadMyGames(relayStorage()).find((item) => myRelayKey(item) === key);
+  if (game) {
+    relayLive.value = null;
+    relayEntry.value = myRelaySpec(game);
+  }
+  emit("relay-shown");
+}
+watch(() => props.relayKey, (key) => openMyRelay(key));
+onMounted(() => openMyRelay(props.relayKey));
 function noteRelaySeen(key: string) {
   if (!relaySeen.value.includes(key)) relaySeen.value = [...relaySeen.value, key];
 }
@@ -1374,12 +1394,15 @@ const opponentRelayCount = computed(() => {
 /** 中継の解説者を選ぶ棋士(見ている大会の期の棋士)。 */
 const relayPool = computed(() => {
   const key = relayEntry.value?.key ?? "";
-  const season = [props.ryuoSeason, props.ryuoWatch?.season, props.meijinSeason]
-    .find((item) => item && key.startsWith(`${relayEntry.value?.event}:${item.id}:`));
+  // 自分の対局は、その大会のいまの期の棋士から解説者を選ぶ(奨励会・研修会は竜王戦の棋士)。
+  const season = key.startsWith("mine:")
+    ? (relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason) ?? props.ryuoSeason ?? props.meijinSeason
+    : [props.ryuoSeason, props.ryuoWatch?.season, props.meijinSeason]
+      .find((item) => item && key.startsWith(`${relayEntry.value?.event}:${item.id}:`));
   return Object.values(season?.players ?? {});
 });
 /** 同じ回戦のほかの結果(中継の運営のコメント)。 */
-const relayNews = computed(() => (relayEntry.value && !relayEntry.value.noNews
+const relayNews = computed(() => (relayEntry.value && !relayEntry.value.noNews && !relayEntry.value.tags?.mine
   ? relayRoundNews(relayEntry.value.event === "meijin" ? meijinRelayGameList.value : ryuoRelayGameList.value, relayEntry.value)
   : []));
 // ---- 敗退後の観戦(13章。19章でトーナメント表の上で回戦ごとに進める形にした)

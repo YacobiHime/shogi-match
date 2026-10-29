@@ -3,7 +3,7 @@ import { resignStyleById } from './resign-style.mjs';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from '../game-state';
 import {
   DECISIVE_CP, RELAY_MAX_PLIES, rateVerdict, relayQuality, THEORY_PLY, clockText, createRelayClock, pickLoss, playRelayGame, relayPlan, relaySeed, relayStoryValues,
-  relayTarget, relayTimeControl, relayTimeline, remainingText, shouldResign, thinkTimeText,
+  relayTarget, relayTimeControl, relayTimeline, remainingText, replayKifuGame, shouldResign, thinkTimeText,
 } from './relay-game.mjs';
 
 const player = (id, extra = {}) => ({ id, name: id, dan: '七段', rating: 1600, character: { attack: 0, traits: [], abilities: {} }, ...extra });
@@ -283,5 +283,52 @@ describe('持ち時間と時刻', () => {
     expect(thinkTimeText(30)).toBe('30秒');
     expect(thinkTimeText(12 * 60)).toBe('12分');
     expect(thinkTimeText(65 * 60)).toBe('1時間5分');
+  });
+});
+
+describe('指し終えた棋譜を読み直す(自分の対局の中継。docs/mate-finish-design.md)', () => {
+  /** 最善手を指し続け、ply手目だけ候補の4番目(450点の損)、ply2手目だけ候補の外の手を指した棋譜。 */
+  async function kifuOf(search, { worst = 5, outside = 7, length = 10 } = {}) {
+    const moves = [];
+    for (let ply = 0; ply < length; ply += 1) {
+      const { candidates } = await search({ moves: [...moves], multiPv: 4 });
+      let move = candidates[0].move;
+      if (ply === worst) move = candidates[3].move;
+      if (ply === outside) {
+        const record = createGameRecord();
+        moves.forEach((usi) => appendUsiMove(record, usi));
+        move = enumerateLegalMoves(record.position).map(({ usi }) => usi).find((usi) => !candidates.some((candidate) => candidate.move === usi));
+      }
+      moves.push(move);
+    }
+    return moves;
+  }
+
+  it('手は変えず、損・最善手・悪手の印・考えた時間を付ける', async () => {
+    const engine = fakeSearch();
+    const moves = await kifuOf(engine.search);
+    const times = moves.map((_, index) => index + 3);
+    const spec = specOf({ key: 'mine:ryuo:1', winner: 'white', kifu: { moves, times, reason: 'resign' } });
+    const seen = [];
+    const game = await replayKifuGame({ spec, search: engine.search, onMove: (entry, index) => seen.push(index) });
+    expect(game.entries.map(({ move }) => move)).toEqual(moves);
+    expect(seen).toEqual(moves.map((_, index) => index));
+    expect(game.entries.map(({ time }) => time)).toEqual(times);
+    expect(game.entries[0]).toMatchObject({ mark: 'book', loss: 0, best: '' });
+    expect(game.entries[5]).toMatchObject({ mark: 'error', loss: 450 });
+    expect(game.entries[5].best).not.toBe('');
+    // 候補の外の手は、その手だけを読んで損を測る。
+    expect(engine.calls.some(({ ply, searchMoves }) => ply === 7 && searchMoves?.length === 1)).toBe(true);
+    expect(game.entries[7].loss).toBe(200);
+    expect(game.end).toEqual({ winner: 'white', reason: 'resign', plies: 10 });
+  });
+
+  it('詰みで終わった棋譜は詰み、止めたらnull', async () => {
+    const engine = fakeSearch();
+    const moves = await kifuOf(engine.search, { length: 4 });
+    const spec = specOf({ key: 'mine:ryuo:2', kifu: { moves, times: [], reason: 'mate' } });
+    expect((await replayKifuGame({ spec, search: engine.search })).end).toEqual({ winner: 'black', reason: 'mate', plies: 4 });
+    expect((await replayKifuGame({ spec, search: engine.search })).entries.every(({ time }) => time === 1)).toBe(true);
+    expect(await replayKifuGame({ spec, search: engine.search, isCancelled: () => true })).toBeNull();
   });
 });

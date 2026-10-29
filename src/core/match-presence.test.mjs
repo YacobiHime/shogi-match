@@ -127,5 +127,10 @@ describe('終局の判子', () => {
     // 格上に勝ったときは、それを一言で伝える(節目の判子が先)。
     expect(finishStamp({ win: true, upset: true })).toEqual({ seal: '勝ち', title: '格上に勝った！', size: 'mid', confetti: false });
     expect(finishStamp({ win: true, upset: true, milestone: { seal: '優勝', title: '6組優勝！', weight: 'big' } })?.title).toBe('6組優勝！');
+    // 長い寄せで勝ったら判子を1段大きく、15手以上は紙吹雪も(docs/mate-finish-design.md)。短い寄せは変えない。
+    expect(finishStamp({ win: true, mateTier: 'mid' })).toEqual({ seal: '勝ち', title: '', size: 'small', confetti: false });
+    expect(finishStamp({ win: true, mateTier: 'long' })).toMatchObject({ size: 'mid', confetti: false });
+    expect(finishStamp({ win: true, mateTier: 'legend', weight: 'big' })).toMatchObject({ size: 'big', confetti: true });
+    expect(finishStamp({ win: true, mateTier: 'long', weight: 'title' })?.size).toBe('big');
   });
 });

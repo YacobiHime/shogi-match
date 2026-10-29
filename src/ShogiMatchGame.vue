@@ -457,6 +457,8 @@
       :meijin-season="meijinSeason"
       :relay-engine-factory="ensureEngineFactory"
       :compact="mobile || boardLayout === 'portrait'"
+      :relay-key="tournamentRelayKey"
+      @relay-shown="tournamentRelayKey = ''"
     />
     <YakobiNote
       v-if="yakobiNoteOpen"
@@ -1213,6 +1215,10 @@
       >
         <b>{{ finishStampShown.seal }}</b>
         <span v-if="finishStampShown.title">{{ finishStampShown.title }}</span>
+        <!-- 詰ませて勝ったときの寄せ(docs/mate-finish-design.md)。長い寄せほど目立たせ、自己最長なら添える。 -->
+        <em v-if="finishMate" :class="['shogi-game__finish-mate', `shogi-game__finish-mate--${finishMate.tier}`]" data-finish-mate>
+          {{ finishMate.text }}<small v-if="finishMate.best">自己最長！</small>
+        </em>
         <i v-if="finishStampShown.confetti" class="shogi-game__confetti" aria-hidden="true">
           <i v-for="piece in 14" :key="piece" :style="{ '--piece': piece }"></i>
         </i>
@@ -2190,6 +2196,9 @@
           R{{ ratingChange.before }} → <strong>R{{ ratingChange.after }}</strong>
           <span>{{ ratingChange.delta >= 0 ? "+" : "−" }}{{ Math.abs(ratingChange.delta) }}</span>
         </p>
+        <p v-if="finishMate" class="shogi-game__result-mate" data-result-mate>
+          <b>{{ finishMate.label }}</b>で寄せ切り<small v-if="finishMate.best">自己最長</small>
+        </p>
         <!-- タイトル戦で勝った局の勝負メシは「勝ちメシ」。次に同じ対局場で選ぶとき★が付く(docs/title-match-day-design.mdの8-4)。 -->
         <p v-if="resultMeal" class="shogi-game__result-meal" data-result-meal>
           <b>勝ちメシ</b><span aria-hidden="true">★</span>{{ resultMeal.meal }}<small>{{ resultMeal.venue }}</small>
@@ -2203,6 +2212,8 @@
             {{ tournamentResult.done ? "結果を見る" : tournamentResult.back }}
           </button>
           <button v-if="resultKansenki" type="button" class="shogi-game__analysis-button" data-kansenki-open @click="kansenkiShown = resultKansenki">観戦記を読む</button>
+          <!-- 自分の対局を、解説とコメントつきの中継で振り返る(docs/mate-finish-design.md)。 -->
+          <button v-if="lastMyRelayKey && !ryuoGame.replay" type="button" class="shogi-game__analysis-button" data-my-relay @click="watchOwnRelay">中継で振り返る</button>
           <button type="button" class="shogi-game__analysis-button" @click="startKifuAnalysis">棋譜解析</button>
           <button type="button" class="shogi-game__analysis-button" @click="leaveFinishedMatch({ toHome: true })">{{ showHome ? "ホームへ" : "対局準備" }}</button>
         </div>
@@ -2395,6 +2406,9 @@ import { mistakeReason, mistakeTarget, threatAdvice, withMistakeReason } from ".
 import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import { HANANE, HANANE_SPRITE, storyMemberId } from "./core/ryuo-story.mjs";
 import { lastGameMilestone } from "./core/ryuo-milestone.mjs";
+import { writeGameKansenki } from "./core/game-kansenki.mjs";
+import { myGameRecord, myRelayKey, saveMyGame } from "./core/my-games.mjs";
+import { addMateRecord, finishingMate, loadMateRecords, mateFinishText, mateLabel, mateTier, saveMateRecords } from "./core/mate-finish.mjs";
 import {
   formatWinRate,
   midgameMoment,
@@ -3140,6 +3154,12 @@ const matchSky = computed(() => skyPhase(moveCount.value));
 const FINISH_STAMP_MS = 1200;
 const FINISH_STAMP_SOUND_AT = 300;
 const finishStampShown = ref<null | { id: number; seal: string; title: string; size: string; confetti: boolean }>(null);
+/**
+ * 大会で詰ませて勝ったときの寄せ(docs/mate-finish-design.md)。何手詰めか、寄せの最初の手数、重さ、言葉、自己最長か。
+ * 判子の下と結果の窓に出し、観戦記と自分の対局の中継にも残す。
+ */
+type FinishMate = { plies: number; from: number; tier: string; label: string; text: string; best: boolean };
+const finishMate = ref<FinishMate | null>(null);
 let finishMilestone: ReturnType<typeof lastGameMilestone> = null;
 let finishCrowned = false;
 let roomSaid: string[] = [];
@@ -3198,13 +3218,80 @@ function resetPresence() {
   roomSaid = [];
   roomWinRate = null;
   finishStampShown.value = null;
+  finishMate.value = null;
   finishMilestone = null;
   finishCrowned = false;
+}
+/**
+ * 大会の対局の、各手の考えた時間(秒)。両者の手を数える(自分の対局の中継で、考慮時間として見せる。docs/mate-finish-design.md)。
+ * 待ったで戻したら、戻した手数より後を消す。
+ */
+let moveSeconds: number[] = [];
+let lastMoveAt = 0;
+watch(() => record.value.current.ply, (ply, previous) => {
+  if (matchKind.value !== "tournament" || reviewMode.value) return;
+  const now = Date.now();
+  if (ply < moveSeconds.length) moveSeconds = moveSeconds.slice(0, ply);
+  if (previous !== undefined && ply === previous + 1 && lastMoveAt) moveSeconds[ply - 1] = Math.round((now - lastMoveAt) / 1000);
+  lastMoveAt = now;
+});
+/** 終局の「中継で振り返る」で開く、いまの対局の中継の鍵。 */
+const lastMyRelayKey = ref("");
+/** 大会の対局の棋譜を、あとで中継で振り返れるように残す(my-games:v1)。期を記録する前に呼ぶ。鍵を返す。 */
+function saveOwnGame(matchResult: MatchResult) {
+  const game = ryuoGame.value;
+  if (!game || matchInitialSfen.value !== STANDARD_SFEN || !matchResult.winner) return "";
+  const stage = matchStage.value;
+  const season = tournamentSeasonOf(game);
+  const userColor = humanColor.value === Color.BLACK ? "black" : "white";
+  const moves = [...moveHistory];
+  const times = moves.map((_, index) => moveSeconds[index] ?? 0);
+  // 詰ませた最後の手は、記録の前に終局したので、ここで数える。
+  if (lastMoveAt && !moveSeconds[moves.length - 1]) times[moves.length - 1] = Math.round((Date.now() - lastMoveAt) / 1000);
+  const record = myGameRecord({
+    at: Date.now(), event: game.event ?? "ryuo", eventText: stage?.eventText ?? "", label: stage?.shortLabel ?? stage?.label ?? game.label ?? "",
+    venue: stage?.venue ?? "", weight: stage?.weight ?? "plain", userColor,
+    user: { name: playerDisplayName(playerName.value), dan: season?.players?.[USER_ID]?.dan ?? "", rating: ratingState.value.rating },
+    opponent: ryuoOpponent.value ? { ...ryuoOpponent.value, id: game.opponentId } : { id: game.opponentId, name: "相手" },
+    winner: matchResult.winner === Color.BLACK ? "black" : "white", reason: matchResult.reason === "checkmate" ? "mate" : "resign",
+    moves, times, mate: finishMate.value ? { plies: finishMate.value.plies, from: finishMate.value.from } : null,
+  });
+  saveMyGame(browserStorage(), record);
+  return myRelayKey(record);
+}
+/** 終局の「中継で振り返る」。大会の画面に戻り、この対局の中継を開く。 */
+function watchOwnRelay() {
+  const key = lastMyRelayKey.value;
+  if (!key) return;
+  tournamentRelayKey.value = key;
+  leaveFinishedMatch();
+  if (!tournamentOpen.value) {
+    tournamentStartAt.value = "select";
+    tournamentFromGame.value = false;
+    tournamentOpen.value = true;
+  }
+}
+/**
+ * 詰ませて勝った大会の対局の、最後の寄せを数えて記録する(寄せの記録 mate-finish:v1)。
+ * 期を記録する前(相手と回戦の名前が次の局に変わる前)に呼ぶ。
+ */
+function noteMateFinish(): FinishMate | null {
+  const mate = finishingMate([...moveHistory], { initialSfen: matchInitialSfen.value });
+  if (!mate) return null;
+  const stage = matchStage.value;
+  const store = browserStorage();
+  const { records, isBest } = addMateRecord(loadMateRecords(store), {
+    plies: mate.plies, at: Date.now(), event: ryuoGame.value?.event ?? "ryuo",
+    eventText: stage?.eventText ?? "", label: stage?.shortLabel ?? stage?.label ?? ryuoGame.value?.label ?? "",
+    opponent: ryuoOpponent.value?.name ?? "",
+  });
+  saveMateRecords(store, records);
+  return { plies: mate.plies, from: mate.from, tier: mateTier(mate.plies), label: mateLabel(mate.plies), text: mateFinishText(mate.plies), best: isBest };
 }
 /** 大会の終局。勝ちは判子を押して1.2秒で結果の窓へ、負けは感想戦を勧める(判子は押さない)。 */
 function showFinishStamp(win: boolean, { event, weight }: { event: string; weight: string }) {
   const upset = rankTag(cpuStrengthLevel(), ratingLevel(ratingState.value.rating)) === "格上";
-  const stamp = finishStamp({ win, milestone: finishMilestone, event, crowned: finishCrowned, weight, upset });
+  const stamp = finishStamp({ win, milestone: finishMilestone, event, crowned: finishCrowned, weight, upset, mateTier: win ? finishMate.value?.tier ?? null : null });
   if (!stamp) {
     if (coachLevel.value !== "off") showCoachAdvice({ key: "tournament-loss-review", text: "悔しいね…。感想戦で、どこが分かれ目だったか見てみよう！" });
     return;
@@ -3373,6 +3460,8 @@ const ryuoHolder = computed(() => {
 });
 /** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを見せる。 */
 const tournamentFromGame = ref(false);
+/** 大会の画面を開いたら、すぐ見る自分の対局の中継の鍵(終局の「中継で振り返る」。docs/mate-finish-design.md)。 */
+const tournamentRelayKey = ref("");
 /** 大会の難易度のおすすめ。1局あたり勝率7割を目安にする難易度。 */
 const ryuoDefaultDifficulty = computed(() => recommendedDifficulty(ratingLevel(ratingState.value.rating)));
 /**
@@ -4174,6 +4263,10 @@ function updateTitleDay(change: (day: ReturnType<typeof emptyDay>) => ReturnType
 }
 function resetTitleDay() {
   roomPick = null;
+  gameRates = [];
+  moveSeconds = [];
+  lastMoveAt = Date.now();
+  lastMyRelayKey.value = "";
   daySummaryOpen.value = false;
   kansenkiShown.value = null;
   resultKansenki.value = null;
@@ -4207,12 +4300,19 @@ if (typeof document !== "undefined") document.addEventListener("visibilitychange
 onBeforeUnmount(() => {
   if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onThinkVisibility);
 });
-/** 手番ごとの勝率(中継と同じ式)を残す。 */
+/**
+ * 大会の対局の、手番ごとの勝率の記録([手数, プレイヤーから見た勝率%])。やこび姫の読みがあったときだけ残る。
+ * ふつうの対局の観戦記の「勝負を分けた一手」に使う(docs/mate-finish-design.md)。タイトル戦は1日目のまとめにも残す。
+ */
+let gameRates: Array<[number, number]> = [];
+/** 手番ごとの勝率(中継と同じ式)を残す。待ったで戻したときは、戻した手数より後の記録を消す。 */
 function noteTitleDayRate(score: EngineEvaluation | null) {
-  if (!titleDay.value || !score) return;
+  if (!score) return;
   const rate = playerWinRate(score);
   if (rate === null) return;
-  updateTitleDay((day) => noteDayRate(day, moveHistory.length, rate * 100));
+  const ply = moveHistory.length;
+  gameRates = [...gameRates.filter(([at]) => at < ply), [ply, rate * 100]];
+  if (titleDay.value) updateTitleDay((day) => noteDayRate(day, ply, rate * 100));
 }
 /** ply手目の手の言葉(▲4五歩)。usiは、その手数で指した手(か、指さなかった予想の手)。 */
 function dayMoveText(ply: number, usi: string) {
@@ -4375,25 +4475,47 @@ const dayBreakOffer = computed(() => (
   dayBreak.value && titleDay.value && active.value && !result.value && !reviewMode.value && !lunchOffer.value ? dayBreak.value : null
 ));
 /** タイトル戦の終局で、観戦記を書いて残す(やこびノートの「大会」で読み返せる)。 */
-function writeTitleKansenki(win: boolean, plies: number) {
+/**
+ * 大会の対局の観戦記を書く。タイトル戦(二日制)は1日目のまとめと封じ手つきの観戦記、ほかの対局は短い観戦記
+ * (docs/mate-finish-design.md)。詰ませて勝ったら、最後の寄せを書く。
+ */
+function writeTournamentKansenki(win: boolean, plies: number) {
   const game = ryuoGame.value;
   const stage = matchStage.value;
+  if (!game || !stage) return;
   const day = titleDay.value;
-  if (!game || !stage?.twoDay || !day) return;
-  const marks = [...stage.marks, win ? "win" : "loss"];
+  const marks = [...(stage.marks ?? []), win ? "win" : "loss"];
   const wins = marks.filter((mark) => mark === "win").length;
   const decided = finishMilestone?.kind === "crown" ? (finishMilestone.seal === "防衛" ? "竜王防衛" : "竜王獲得")
     : finishCrowned ? (stage.userRole === "名人" ? "名人防衛" : "名人獲得") : "";
   const label = stage.shortLabel ?? stage.label;
+  const mate = win && finishMate.value ? { plies: finishMate.value.plies, from: finishMate.value.from } : null;
+  const moveText = (ply: number) => dayMoveText(ply, moveHistory[ply - 1] ?? "");
+  const formations = { black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE) };
+  if (!stage.twoDay || !day) {
+    // 番勝負(三番勝負など)のときだけ星を書く。ふつうの1局は、節目の言葉(「6組優勝」など)を書く。
+    const milestoneText = finishMilestone?.kind === "group" ? finishMilestone.title.replace(/！$/, "")
+      : finishMilestone?.kind === "challenger" ? "竜王挑戦" : "";
+    const text = writeGameKansenki({
+      eventText: stage.eventText, label, venue: stage.venue, userName: playerDisplayName(playerName.value),
+      opponentName: ryuoOpponent.value?.name ?? "相手", userColor: activePlayerColor.value, formations,
+      win, plies, decided: decided || (win ? milestoneText : ""), score: stage.marks?.length ? `${wins}勝${marks.length - wins}敗` : "",
+      rates: gameRates, moveText, mate,
+    });
+    const entry = { id: `${stage.eventText}:${label}:${Date.now()}`, at: Date.now(), eventText: stage.eventText, label, venue: stage.venue, win, ...text };
+    saveKansenki(browserStorage(), entry);
+    resultKansenki.value = entry;
+    return;
+  }
   const text = writeKansenki({
     eventText: stage.eventText, label, venue: stage.venue, userName: playerDisplayName(playerName.value),
     opponentName: ryuoOpponent.value?.name ?? "相手", userColor: activePlayerColor.value,
-    formations: { black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE) }, day,
+    formations, day,
     opponentMeal: opponentMeal(stage.venue, game.opponentId),
     sealText: day.seal ? dayMoveText(day.seal.ply, day.seal.move) : "",
     predictedText: unsealView.value?.predicted ?? "",
     win, plies, decided, score: `${wins}勝${marks.length - wins}敗`,
-    moveText: (ply: number) => dayMoveText(ply, moveHistory[ply - 1] ?? ""),
+    moveText, mate,
   });
   const entry = { id: `${stage.eventText}:${label}:${Date.now()}`, at: Date.now(), eventText: stage.eventText, label, venue: stage.venue, win, ...text };
   saveKansenki(browserStorage(), entry);
@@ -9987,9 +10109,12 @@ function finish(matchResult: MatchResult) {
   const tournamentFinish = matchKind.value === "tournament" && Boolean(ryuoGame.value) && Boolean(matchResult.winner);
   finishMilestone = null;
   finishCrowned = false;
+  // 詰ませて勝ったら、最後の寄せを数える(期を記録すると、相手と回戦が次の局に変わるので、その前に)。
+  finishMate.value = tournamentFinish && outcome === "win" && matchResult.reason === "checkmate" ? noteMateFinish() : null;
+  lastMyRelayKey.value = tournamentFinish ? saveOwnGame(matchResult) : "";
   recordRyuoOutcome(matchResult);
   if (tournamentFinish) {
-    writeTitleKansenki(outcome === "win", matchResult.moveCount);
+    writeTournamentKansenki(outcome === "win", matchResult.moveCount);
     recordTitleMeal(outcome === "win");
   }
   if (tournamentFinish) showFinishStamp(outcome === "win", { event: tournamentEvent, weight: stageWeight });

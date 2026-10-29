@@ -18,6 +18,7 @@
           <span v-if="spec.tags?.next" class="relay__chip relay__chip--next">次の相手</span>
           <span v-if="spec.tags?.rival" class="relay__chip relay__chip--rival">ライバル</span>
           <span v-if="spec.tags?.oshi" class="relay__chip relay__chip--oshi">推し</span>
+          <span v-if="spec.tags?.mine" class="relay__chip relay__chip--mine" data-relay-mine>あなたの対局</span>
           <span class="relay__chip">解説 {{ cast.name }}{{ cast.dan }}</span>
         </p>
       </div>
@@ -1109,6 +1110,7 @@ onBeforeUnmount(() => {
 .shogi-game .relay__chip--next { color: #fffcf4; background: #c4604c; }
 .shogi-game .relay__chip--rival { color: #fffcf4; background: #8a5ad1; }
 .shogi-game .relay__chip--oshi { color: #172632; background: #d8d0ff; }
+.shogi-game .relay__chip--mine { color: #172632; background: #f1a54c; }
 .shogi-game .relay__audience { display: grid; gap: 0.1rem; margin: 0; color: #c9d6e6; font-size: 0.72rem; text-align: right; font-variant-numeric: tabular-nums; }
 .shogi-game .relay__audience b { margin-right: 0.25rem; color: #9fb3c8; font-weight: 700; }
 .shogi-game .relay__body {

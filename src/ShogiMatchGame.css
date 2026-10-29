@@ -4412,6 +4412,32 @@
   background: rgba(23, 38, 50, 0.9);
   font-weight: 700;
 }
+/*
+ * 詰ませて勝ったときの寄せ(docs/mate-finish-design.md)。判子の下に、遅れて出す(判子が着いてから読む)。
+ * 長い寄せほど金に近い色にする(G:3-1 出来事の重さ)。升の強調ではないので、黄色を使ってよい札の色にそろえる。
+ */
+.shogi-game__finish-mate {
+  display: grid;
+  justify-items: center;
+  gap: 0.1em;
+  padding: 0.25em 0.9em;
+  border: 2px solid rgba(255, 252, 244, 0.6);
+  border-radius: 0.45em;
+  color: var(--ivory);
+  background: rgba(23, 38, 50, 0.92);
+  font-style: normal;
+  font-weight: 900;
+  font-size: 1.1em;
+  white-space: nowrap;
+  animation: shogi-finish-mate 0.3s ease-out 0.35s both;
+}
+.shogi-game__finish-mate small { color: #ffd27a; font-size: 0.8em; }
+.shogi-game__finish-mate--long { border-color: #e6c15c; color: #ffe6a6; font-size: 1.25em; }
+.shogi-game__finish-mate--legend { border-color: #f1a54c; color: #ffd27a; font-size: 1.4em; box-shadow: 0 0 18px rgba(241, 165, 76, 0.55); }
+@keyframes shogi-finish-mate {
+  from { opacity: 0; transform: translateY(0.4em); }
+  to { opacity: 1; transform: none; }
+}
 @keyframes shogi-finish-stamp {
   from { opacity: 0; transform: scale(1.8) rotate(-8deg); }
   to { opacity: 1; transform: scale(1) rotate(-4deg); }
@@ -4437,6 +4463,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game__finish-stamp b { animation: none; transform: rotate(-4deg); }
+  .shogi-game__finish-mate { animation: none; }
   .shogi-game__confetti { display: none; }
 }
 
@@ -4526,6 +4553,24 @@
 .shogi-game__lunch-star {
   margin-right: 0.2em;
   color: var(--stage-gold);
+}
+/* 結果の窓の「7手詰めで寄せ切り 自己最長」(docs/mate-finish-design.md)。 */
+.shogi-game__result-mate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em 0.45em;
+  align-items: baseline;
+  justify-content: center;
+  margin: 0.2em 0;
+  font-weight: 800;
+}
+.shogi-game__result-mate b { color: var(--amber); font-size: 1.15em; }
+.shogi-game__result-mate small {
+  padding: 0.05em 0.45em;
+  border-radius: 0.3em;
+  color: #172632;
+  background: var(--stage-gold, #e6c15c);
+  font-size: 0.8em;
 }
 /* 結果の窓の「勝ちメシ ★ 海鮮丼」。 */
 .shogi-game__result-meal {

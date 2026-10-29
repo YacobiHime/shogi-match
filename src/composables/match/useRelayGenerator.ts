@@ -1,5 +1,5 @@
 import type { ShogiEngine } from "../../core/engine.js";
-import { playRelayGame, type RelayGame, type RelayMoveEntry } from "../../core/relay-game.mjs";
+import { playRelayGame, replayKifuGame, type RelayGame, type RelayMoveEntry } from "../../core/relay-game.mjs";
 import { loadRelayStore, recallRelayGame, rememberRelayGame, saveRelayStore } from "../../core/relay-store.mjs";
 import hiraganaFormationMaster from "../../data/hiragana_suisho_formations.json";
 import type { EngineFactory } from "./analysisEngines";
@@ -56,7 +56,7 @@ export function useRelayGenerator({ engineFactory, compact, storage }: RelayGene
       if (!worker) throw new Error("中継のエンジンを起動できませんでした");
       if (id !== generation) return null;
       worker.newGame();
-      const pro = spec.quality === "pro";
+      const pro = spec.quality === "pro" && !spec.kifu;
       const table = pro ? PRO_NODES : RELAY_NODES;
       const nodes = compact() ? table.compact : table.wide;
       const maxTimeMs = pro ? PRO_MAX_TIME_MS : RELAY_MAX_TIME_MS;
@@ -65,9 +65,12 @@ export function useRelayGenerator({ engineFactory, compact, storage }: RelayGene
         worker.setPosition(`startpos${moves.length ? ` moves ${moves.join(" ")}` : ""}`);
         return worker.go({ nodes, maxTimeMs, searchMoves });
       };
-      const game = await playRelayGame({
-        spec, search, formationMaster: hiraganaFormationMaster, onMove, isCancelled: () => id !== generation,
-      });
+      // 自分の対局(docs/mate-finish-design.md)は、棋譜を作らず、残した手を1手ずつ読み直す。
+      const game = spec.kifu
+        ? await replayKifuGame({ spec, search, onMove, isCancelled: () => id !== generation })
+        : await playRelayGame({
+          spec, search, formationMaster: hiraganaFormationMaster, onMove, isCancelled: () => id !== generation,
+        });
       if (game && id === generation) saveRelayStore(storage(), rememberRelayGame(loadRelayStore(storage()), game));
       return game;
     })();

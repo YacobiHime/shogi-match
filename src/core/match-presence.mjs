@@ -280,12 +280,19 @@ export function roomComment({
 /**
  * 勝って終局したときに盤に押す判子。期の画面の節目の判子(ryuo-milestone.mjsのlastGameMilestone)と同じ言葉にする。
  * 節目でない勝ちは「勝ち」の小さな判子。負けたときは押さない(null)。
- * @param {{ win: boolean, milestone?: { seal: string, title: string, weight: string } | null, event?: string, crowned?: boolean, weight?: string, upset?: boolean }} options
+ * @param {{ win: boolean, milestone?: { seal: string, title: string, weight: string } | null, event?: string, crowned?: boolean, weight?: string, upset?: boolean,
+ *   mateTier?: string | null }} options
  *   crowned: 名人戦で名人になった(または防衛した)。weight: 対局の舞台の重さ(plain/big/title)。upset: 格上(2Lv以上強い相手)に勝った。
+ *   mateTier: 詰ませて勝ったときの寄せの重さ(mate-finish.mjsのmateTier)。9手以上の寄せは判子を1段大きく、15手以上は紙吹雪も
+ *   (docs/mate-finish-design.md。G:3-1 出来事の重さ)。
  * @returns {{ seal: string, title: string, size: "small" | "mid" | "big", confetti: boolean } | null}
  */
-export function finishStamp({ win, milestone = null, event = 'ryuo', crowned = false, weight = 'plain', upset = false }) {
+export function finishStamp({ win, milestone = null, event = 'ryuo', crowned = false, weight = 'plain', upset = false, mateTier = null }) {
   if (!win) return null;
+  return withMateWeight(baseFinishStamp({ milestone, event, crowned, weight, upset }), mateTier);
+}
+
+function baseFinishStamp({ milestone, event, crowned, weight, upset }) {
   if (event === 'meijin' && crowned) return { seal: '名人', title: '名人になった！', size: 'big', confetti: true };
   if (milestone) {
     const size = milestone.weight === 'max' ? 'big' : milestone.weight === 'big' ? 'mid' : 'small';
@@ -294,4 +301,12 @@ export function finishStamp({ win, milestone = null, event = 'ryuo', crowned = f
   // 格上(2Lv以上強い相手)に勝ったときは、それを一言で伝える(G:4-8 どれぐらい良いことをした？。docs/tournament-strength-spread-design.md)。
   if (upset) return { seal: '勝ち', title: '格上に勝った！', size: weight === 'title' ? 'big' : 'mid', confetti: false };
   return { seal: '勝ち', title: '', size: weight === 'title' ? 'big' : weight === 'big' ? 'mid' : 'small', confetti: false };
+}
+
+const STAMP_SIZES = Object.freeze(['small', 'mid', 'big']);
+/** 長い寄せで勝ったら、判子を1段大きくする(大きい判子はそのまま)。15手以上は紙吹雪も降らせる。 */
+function withMateWeight(stamp, mateTier) {
+  if (mateTier !== 'long' && mateTier !== 'legend') return stamp;
+  const size = STAMP_SIZES[Math.min(STAMP_SIZES.length - 1, STAMP_SIZES.indexOf(stamp.size) + 1)];
+  return { ...stamp, size, confetti: stamp.confetti || mateTier === 'legend' };
 }
