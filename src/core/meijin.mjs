@@ -375,12 +375,14 @@ export function playMeijinSpectatorGame(season, { real = null, round = [] } = {}
  * 分身の期で、いまの回戦のほかの対局の結果を、本局(エンジンが本当に指した対局。22章)の結果に差し替える。
  * ほかの対局はプレイヤーの局の前に決めてある(pending.others)が、記録して表に数えるのはプレイヤーの局を記録したときなので、
  * 差し替えてもほかの記録と食い違わない。resultはaIdから見た記録(gameRecordOfに渡す形)。
+ * ふつうの期(自分で指す期)は、自分の対局を記録する前の形に使う(playedなら差し替える。replayMeijinUserRound。35章)。
  * @param {any} season
  * @param {{ aId: string, bId: string, result: any }[]} results
+ * @param {{ played?: boolean }} [options]
  */
-export function applyMeijinRoundResults(season, results = []) {
+export function applyMeijinRoundResults(season, results = [], { played = false } = {}) {
   const games = season?.pending?.kind === 'league' ? season.pending.others?.games : null;
-  if (!season?.spectator || !games?.length || !results.length) return season;
+  if ((!season?.spectator && !played) || !games?.length || !results.length) return season;
   const next = structuredClone(season);
   for (const { aId, bId, result } of results) {
     const index = next.pending.others.games.findIndex(({ a, b }) => (a === aId && b === bId) || (a === bId && b === aId));
@@ -1004,3 +1006,24 @@ export function loadMeijinSeason(storage) {
     ? migrateSeasonLevels(parsed) : null;
 }
 export const saveMeijinSeason = (storage, season) => writeJson(storage, MEIJIN_SEASON_KEY, season);
+
+// ---- ふつうの期の回戦の中継ボード(docs/tournament-relay-design.mdの35章)
+
+/**
+ * ふつうの期で、自分の対局のあとに同じ回戦のほかの対局を中継ボードで見たとき、その本局の結果で回戦を決め直す。
+ * 自分の対局を記録する前の形(before)に、ほかの対局の結果を差し替えてから、同じ勝ち負けで自分の対局を記録し直す。
+ * 自分の対局の記録(userGames)は、いまの期(current)のものを使う。差し替える結果がなければ、いまの期をそのまま返す。
+ * 順位戦の最終回戦(昇級・降級が決まる)では使わない(呼ぶ側で、期が順位戦のまま続くときだけにする)。
+ * @param {any} current 自分の対局を記録した期(書き換えない)
+ * @param {any} before 自分の対局を記録する前の期(書き換えない)
+ * @param {'win' | 'loss'} outcome
+ * @param {{ aId: string, bId: string, result: any }[]} results
+ */
+export function replayMeijinUserRound(current, before, outcome, results = []) {
+  if (!results.length || before?.pending?.kind !== 'league' || before.id !== current?.id) return current;
+  const redo = applyMeijinRoundResults({ ...structuredClone({ ...before, players: null }), players: current.players }, results, { played: true });
+  const next = recordMeijinGame(redo, outcome);
+  next.players = current.players;
+  next.userGames = structuredClone(current.userGames);
+  return next;
+}

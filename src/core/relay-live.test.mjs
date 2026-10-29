@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, previewGroupBrackets, recordUserGame, replayRest, restGameKey, restOpen, seasonGameResults, settleRest } from './ryuo.mjs';
+import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, previewGroupBrackets, recordUserGame, replayRest, replayUserRound, restGameKey, restOpen, seasonGameResults, settleRest, siblingNodeId } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
   afterWatchRounds, applyMeijinWatchedRound, applyWatchedRound, elsewhereGames, hiddenRoundIds, meijinAfterRounds, meijinFinale, meijinHiddenKeys, meijinLiveEntry, meijinLiveRound, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
-  pendingTable, roundTable, tableOf, viewersText,
+  meijinPlayedRound, pendingTable, playedRound, roundTable, tableOf, viewersText,
 } from './relay-live.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
 import { HANANE } from './ryuo-story.mjs';
@@ -459,5 +459,107 @@ describe('ほかの組の注目の対局を見に行く(31章)', () => {
     expect(new Set(seen.map(({ key }) => key)).size).toBe(seen.length);
     expect(seen.every(({ key }) => key.includes(':group-5'))).toBe(true);
     expect(seen.length).toBeGreaterThan(0);
+  });
+});
+
+describe('ふつうの期の回戦の中継ボード(35章)', () => {
+  const ownSeason = (seed = 9) => {
+    const roster = createRoster({ seed: 52, userGroup: 6 });
+    return createSeason({ no: 2, mode: 'challenge', group: 6, settings, userLevel: 20, seed, roster, userName: 'やこび' });
+  };
+  const flipOf = (season, specs) => specs.filter((spec) => !spec.elsewhere).map((spec) => {
+    const { id } = tableOf(spec.key);
+    const aId = spec.black.id;
+    return { nodeId: id, aId, result: { aWins: season.ranking.nodes[id].winner !== aId, how: 'middle', aColor: 'black', openings: { a: null, b: null }, castles: { a: null, b: null }, phases: [0, 0, 300], probability: null } };
+  });
+
+  it('自分の対局は終局した札で先頭、同じ回戦のほかの対局が続く。速報で伝えた対局も終局した札。期は書き換えない', () => {
+    const before = ownSeason();
+    const text = JSON.stringify(before);
+    const others = [...hiddenRoundIds({ ...before, spectator: true })].map((id) => before.ranking.nodes[id]);
+    const news = others[0];
+    const loser = [news.a.pid, news.b.pid].find((pid) => pid !== news.winner);
+    const user = { key: 'mine:ryuo:1', kifu: { moves: ['7g7f', '3c3d'], times: [1, 1], reason: 'resign' }, winner: 'black', tags: { mine: true } };
+    const round = playedRound(before, { user, settled: [[news.winner, loser]] });
+    expect(JSON.stringify(before)).toBe(text);
+    expect(round.specs[0]).toMatchObject({ key: round.userKey, ended: true, winner: 'black' });
+    expect(round.specs[0].tags).toMatchObject({ mine: true, self: true });
+    expect(round.specs).toHaveLength(others.length + 1);
+    const ended = round.specs.slice(1).filter((spec) => spec.ended);
+    expect(ended).toHaveLength(1);
+    expect(tableOf(ended[0].key).id).toBe(String(news.id));
+    // 終局した札は、時刻0でも終局で、ボードの終わる時刻に数えない。
+    const games = round.specs.map((spec) => liveGame(spec));
+    expect(liveState(games[0], 0)).toMatchObject({ ply: 2, done: true, winner: 'black' });
+    expect(liveDuration([games[0]])).toBe(0);
+    // 大きく出すのは、まだ終わっていない対局(自分の次の相手が決まる対局を先に)。
+    const focus = round.specs.find((spec) => spec.key === round.focusKey);
+    expect(focus.ended).toBeFalsy();
+    const sibling = siblingNodeId(before.ranking, before.pending.nodeId);
+    const featured = round.specs.slice(1).find((spec) => !spec.ended && (spec.tags?.rival || spec.tags?.father || spec.tags?.oshi));
+    if (featured) expect(round.focusKey).toBe(featured.key);
+    else if (sibling && !ended.some((spec) => tableOf(spec.key).id === String(sibling))) expect(tableOf(round.focusKey).id).toBe(String(sibling));
+    // 分身の期と番勝負は対象にしない。
+    expect(playedRound(watchSeason())).toBeNull();
+  });
+
+  it('見終えた本局の結果で回戦を決め直す。同じ結果なら記録した期と同じ。自分の記録と解析は残す', () => {
+    const before = ownSeason();
+    const current = recordUserGame(JSON.parse(JSON.stringify(before)), 'win');
+    current.userGames.at(-1).traitMoments = [{ id: 'x' }];
+    current.analysisQueue = [{ index: 0 }];
+    expect(replayUserRound(current, before, 'win', [])).toBe(current);
+    const round = playedRound(before);
+    const flip = flipOf(before, round.specs.slice(1));
+    const same = flip.map((item) => ({ ...item, result: { ...item.result, aWins: !item.result.aWins } }));
+    // 勝者が同じなら、表の勝者と次の一局は記録した期と同じ(対局の内訳だけが本局のものになる)。
+    const kept = replayUserRound(current, before, 'win', same);
+    const winners = (season) => Object.values(season.ranking.nodes).map((node) => node.winner);
+    expect(winners(kept)).toEqual(winners(current));
+    expect(kept.pending).toEqual(current.pending);
+    const next = replayUserRound(current, before, 'win', flip);
+    for (const { nodeId } of flip) expect(next.ranking.nodes[nodeId].winner).not.toBe(before.ranking.nodes[nodeId].winner);
+    expect(next.ranking.nodes[before.pending.nodeId].winner).toBe('user');
+    expect(next.userGames).toEqual(current.userGames);
+    expect(next.analysisQueue).toEqual([{ index: 0 }]);
+    // 次の相手は、決め直した回戦の勝者から。
+    const sibling = siblingNodeId(before.ranking, before.pending.nodeId);
+    if (sibling && next.pending?.phase === 'ranking') expect(next.pending.opponentId).toBe(next.ranking.nodes[sibling].winner);
+  });
+});
+
+describe('名人戦のふつうの期の回戦の中継ボード(35章)', () => {
+  it('自分の対局と速報の対局は終局した札。本局の結果で回戦を決め直し、同じ結果なら記録した期と同じ順位', async () => {
+    const { createLeague, createMeijinSeason, recordMeijinGame, replayMeijinUserRound } = await import('./meijin.mjs');
+    const roster = createRoster({ seed: 31 });
+    const meijinSettings = { difficulty: 9, scale: 'full', coachLevel: 'detailed', hintLimit: 3, undoLimit: 3 };
+    const before = createMeijinSeason({ no: 1, league: createLeague(roster), roster, settings: meijinSettings, userLevel: 20, seed: 9 });
+    const text = JSON.stringify(before);
+    const others = before.pending.others.games;
+    const news = others[0];
+    const round = meijinPlayedRound(before, { settled: [[news.winner, news.winner === news.a ? news.b : news.a]] });
+    expect(JSON.stringify(before)).toBe(text);
+    expect(round.specs[0]).toMatchObject({ key: round.userKey, ended: true });
+    expect(round.specs).toHaveLength(others.length + 1);
+    expect(round.specs.slice(1).filter((spec) => spec.ended)).toHaveLength(1);
+    expect(round.specs.find((spec) => spec.key === round.focusKey).ended).toBeFalsy();
+    // 分身の期は対象にしない。
+    expect(meijinPlayedRound({ ...before, spectator: true })).toBeNull();
+    const current = recordMeijinGame(JSON.parse(text), 'loss');
+    expect(replayMeijinUserRound(current, before, 'loss', [])).toBe(current);
+    const flips = round.specs.slice(1).map((spec) => {
+      const aId = spec.black.id;
+      const aWins = spec.winner !== 'black';
+      return { aId, bId: spec.white.id, result: { aWins, how: 'middle', aColor: 'black', openings: { a: null, b: null }, castles: { a: null, b: null }, phases: [0, 0, aWins ? 300 : -300], probability: null } };
+    });
+    const next = replayMeijinUserRound(current, before, 'loss', flips);
+    const recorded = next.results[before.pending.round].games;
+    for (const { aId, bId, result } of flips) {
+      const game = recorded.find(({ a, b }) => [a, b].sort().join() === [aId, bId].sort().join());
+      expect(game.winner).toBe(result.aWins ? aId : bId);
+    }
+    expect(next.results[before.pending.round].user.win).toBe(false);
+    expect(next.userGames).toEqual(current.userGames);
+    expect(next.round).toBe(current.round);
   });
 });

@@ -3,7 +3,7 @@
 // 進み方は、中継の棋譜の筋書き(relay-game.mjsのrelayPlan。勝ち負けと展開は自動対局の記録のまま)から決める。
 // エンジンは使わない(何局も同時に作れないため)。中継で棋譜を作った局は、その棋譜の手数と形勢を使う。画面に依存しない。
 
-import { playSpectatorGame, previewGroupBrackets, replayRest, restGameKey, restOpen, seasonGameResults } from './ryuo.mjs';
+import { playSpectatorGame, previewGroupBrackets, replayRest, restGameKey, restOpen, seasonGameResults, siblingNodeId } from './ryuo.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
 import { isFeatured, meijinRelayGames, ryuoRelayGames } from './relay-games.mjs';
 import { meijinRestOpen, meijinSeriesResults, playMeijinSpectatorGame, replayMeijinRest } from './meijin.mjs';
@@ -66,6 +66,39 @@ export function liveRound(season, { oshiId = null } = {}) {
   const elsewhere = elsewhereGames(season, { oshiId });
   const specs = [...(avatar ? [avatar] : []), ...others, ...elsewhere];
   return { table, avatarKey, avatar, specs, elsewhereKeys: elsewhere.map(({ key }) => key) };
+}
+
+/**
+ * ふつうの期(自分で指す期)の、自分の対局を終えたあとの回戦の中継ボード(35章)。自分の対局を記録する前の期(before)を、
+ * 分身の期と同じ形(spectator)にした写しで、同じ回戦のほかの対局と、ほかの組の注目の対局を並べる。
+ * 自分の対局(user。my-games.mjsの中継の項目)は、はじめから終局した札にする。対局中の速報で結果を伝えた対局(settled。
+ * [勝者, 敗者]の組)も、あなたの対局のあいだに終わった札にする(速報と食い違わないように)。ほかの対局は本局にしてよい。
+ * 大きく出す対局は、まだ終わっていない注目の対局(羽音・善彦・推し)、なければ次の相手が決まる対局、なければいちばん前の対局。
+ * @param {any} before 自分の対局を記録する前の期(書き換えない)
+ * @param {{ oshiId?: string | null, user?: any, settled?: string[][] }} [options]
+ */
+export function playedRound(before, { oshiId = null, user = null, settled = [] } = {}) {
+  if (before?.spectator || before?.pending?.kind !== 'game') return null;
+  const shown = { ...JSON.parse(JSON.stringify(before)), spectator: true };
+  const round = liveRound(shown, { oshiId });
+  if (!round) return null;
+  const pairKey = (a, b) => [a, b].sort().join('|');
+  const ended = new Set(settled.map(([a, b]) => pairKey(a, b)));
+  const base = round.avatar ?? {};
+  const userSpec = { ...base, ...(user ?? {}), key: round.avatarKey, ended: true, tags: { ...(base.tags ?? {}), ...(user?.tags ?? {}), self: true } };
+  const others = round.specs
+    .filter((spec) => spec.key !== round.avatarKey)
+    .map((spec) => (!spec.elsewhere && ended.has(pairKey(spec.black.id, spec.white.id)) ? { ...spec, ended: true } : spec));
+  if (!others.some((spec) => !spec.elsewhere)) return null;
+  const sibling = siblingNodeId(round.table.bracket, round.table.nodeId);
+  const open = others.filter((spec) => !spec.ended);
+  const focus = open.find((spec) => isFeatured(spec) && !spec.tags?.next)
+    ?? open.find((spec) => !spec.elsewhere && sibling && tableOf(spec.key).id === String(sibling))
+    ?? open.find((spec) => !spec.elsewhere) ?? others[0];
+  return {
+    season: shown, table: round.table, userKey: round.avatarKey, focusKey: focus.key,
+    specs: [userSpec, ...others], elsewhereKeys: round.elsewhereKeys,
+  };
 }
 
 /** 表の中の、ランキング戦から数えた段(ランキング戦のn回戦はn、敗者復活戦のn回戦は、ランキング戦の回戦の数+n)。 */
@@ -132,6 +165,27 @@ export function meijinLiveRound(season, { oshiId = null } = {}) {
   const provisional = playMeijinSpectatorGame(JSON.parse(JSON.stringify(season)));
   const others = pending.kind === 'league' ? meijinRelayGames(provisional, { oshiId }).filter((entry) => hidden.has(entry.key)) : [];
   return { avatarKey: avatar.key, avatar, specs: [avatar, ...others] };
+}
+
+/**
+ * 名人戦のふつうの期の、自分の対局を終えたあとの回戦の中継ボード(35章)。竜王戦のplayedRoundと同じく、自分の対局を記録する前の期を
+ * 分身の期の形にした写しで並べ、自分の対局と速報で伝えた対局は、はじめから終局した札にする。順位戦の回戦だけ。
+ * @param {any} before 自分の対局を記録する前の期(書き換えない)
+ * @param {{ oshiId?: string | null, user?: any, settled?: string[][] }} [options]
+ */
+export function meijinPlayedRound(before, { oshiId = null, user = null, settled = [] } = {}) {
+  if (before?.spectator || before?.pending?.kind !== 'league') return null;
+  const shown = { ...JSON.parse(JSON.stringify(before)), spectator: true };
+  const round = meijinLiveRound(shown, { oshiId });
+  if (!round || round.specs.length < 2) return null;
+  const pairKey = (a, b) => [a, b].sort().join('|');
+  const ended = new Set(settled.map(([a, b]) => pairKey(a, b)));
+  const base = round.avatar ?? {};
+  const userSpec = { ...base, ...(user ?? {}), key: round.avatarKey, ended: true, tags: { ...(base.tags ?? {}), ...(user?.tags ?? {}), self: true } };
+  const others = round.specs.slice(1).map((spec) => (ended.has(pairKey(spec.black.id, spec.white.id)) ? { ...spec, ended: true } : spec));
+  const open = others.filter((spec) => !spec.ended);
+  const focus = open.find((spec) => isFeatured(spec) && !spec.tags?.next) ?? open[0] ?? others[0];
+  return { season: shown, userKey: round.avatarKey, focusKey: focus.key, specs: [userSpec, ...others] };
 }
 
 /** 名人戦の分身の期で、まだ見ていない同じ回戦のほかの対局の中継の鍵(先に決めてあるが、ボードで見るまで伏せる)。 */
@@ -228,9 +282,11 @@ export function meijinFinale(season) {
 export function liveGame(spec, record = null) {
   const plan = relayPlan(spec);
   const pace = LIVE_PACE.min + ((relaySeed(`${spec.key}:pace`) % 1000) / 1000) * (LIVE_PACE.max - LIVE_PACE.min);
-  const live = Boolean(record && !record.end);
-  const end = record?.entries?.length || plan.end;
-  return { key: spec.key, spec, plan, pace, end, record: record ?? null, live };
+  // はじめから終局している札(ふつうの期の自分の対局と、速報で結果を伝えた対局。35章)。
+  const ended = Boolean(spec.ended);
+  const live = !ended && Boolean(record && !record.end);
+  const end = (ended ? spec.kifu?.moves?.length : 0) || record?.entries?.length || plan.end;
+  return { key: spec.key, spec, plan, pace, end, record: record ?? null, live, ended };
 }
 
 /**
@@ -242,6 +298,15 @@ export function liveGame(spec, record = null) {
 export function liveState(game, seconds) {
   // 終わる時刻(end / pace)を掛け戻すと、小数の誤差で1手足りないことがあるので、わずかに足してから切り捨てる。
   const paced = Math.floor(seconds * game.pace + 1e-9);
+  if (game.ended) {
+    const cp = game.record?.entries?.length ? game.record.entries[game.record.entries.length - 1].eval : relayTarget(game.plan, game.plan.end);
+    return {
+      ply: game.end, done: true, thinking: false,
+      blackPercent: Math.round(blackWinRate(cp) * 100),
+      viewers: relayAudience(game.spec, game.end),
+      winner: game.record?.end?.winner ?? game.spec.winner,
+    };
+  }
   if (game.live) {
     const available = game.record.entries.length;
     const ply = Math.max(0, Math.min(available, paced));
@@ -271,6 +336,7 @@ export function liveState(game, seconds) {
 /** すべての局が終わる時刻(秒)。終わっていない本局があれば、終わりは分からない(Infinity)。 */
 export function liveDuration(games) {
   return games.reduce((longest, game) => {
+    if (game.ended) return longest;
     if (game.live) return game.record.end ? Math.max(longest, game.record.entries.length / game.pace) : Infinity;
     return Math.max(longest, game.end / game.pace);
   }, 0);

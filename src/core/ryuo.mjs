@@ -936,12 +936,14 @@ export function asAvatarSeason(season, avatar, { live = true } = {}) {
  * 観戦の期で、分身と同じ回戦のほかの試合の結果を、本局(エンジンが本当に指した対局。20-9)の結果に差し替える。
  * advanceBracketは同じ回戦のほかの試合を分身の局より先に決めるが、その先の回戦はまだ決めていないので、
  * 勝者を差し替えても、ほかの記録と食い違わない。分身の局・ほかの回戦・決まっていない試合は差し替えない。
+ * ふつうの期(自分で指す期)は、自分の対局を記録する前の形に使う(replayUserRound。35章)。
  * @param {any} season 観戦の期(書き換える)
  * @param {RoundResult[]} results aIdは、resultの主(aWinsがその棋士の勝ち)
+ * @param {{ played?: boolean }} [options] playedなら、ふつうの期でも差し替える
  */
-export function applyRoundResults(season, results = []) {
+export function applyRoundResults(season, results = [], { played = false } = {}) {
   const pending = season?.pending;
-  if (!season?.spectator || pending?.kind !== 'game' || !results.length) return season;
+  if ((!season?.spectator && !played) || pending?.kind !== 'game' || !results.length) return season;
   const block = pending.blockIndex ?? 0;
   const bracket = pending.phase === 'revival' ? season.revival?.[block] : pending.phase === 'main' ? season.main : season.ranking;
   const round = bracket?.nodes?.[pending.nodeId]?.round;
@@ -979,6 +981,46 @@ export function playSpectatorGame(season, { real = null, round = [] } = {}) {
   next.spectator = true;
   if (season.live) next.live = true;
   return next;
+}
+
+// ---- ふつうの期の回戦の中継ボード(docs/tournament-relay-design.mdの35章)
+
+/**
+ * ふつうの期(自分で指す期)で、自分の対局のあとに同じ回戦のほかの対局を中継ボードで見たとき、その本局の結果で回戦を決め直す。
+ * 自分の対局を記録する前の形(before)に、ほかの対局の結果を差し替えてから、同じ勝ち負けで自分の対局を記録し直す
+ * (recordUserGameは期の種で決まるので、結果が同じなら同じ期になる)。自分の対局の記録(userGames)と、
+ * 記録したあとに足した統計の解析(analysis・analysisQueue)は、いまの期(current)のものを使う。
+ * 差し替える結果がなければ、いまの期をそのまま返す。
+ * @param {any} current 自分の対局を記録した期(書き換えない)
+ * @param {any} before 自分の対局を記録する前の期(書き換えない)
+ * @param {'win' | 'loss'} outcome 自分の対局の勝ち負け
+ * @param {RoundResult[]} results 同じ回戦のほかの本局の結果
+ */
+export function replayUserRound(current, before, outcome, results = []) {
+  if (!results.length || !before?.pending || before.id !== current?.id) return current;
+  const redo = structuredClone({ ...before, players: null });
+  redo.players = current.players;
+  applyRoundResults(redo, results, { played: true });
+  const next = recordUserGame(redo, outcome);
+  next.players = current.players;
+  next.userGames = structuredClone(current.userGames);
+  next.analysis = structuredClone(current.analysis ?? null);
+  next.analysisQueue = structuredClone(current.analysisQueue ?? []);
+  return next;
+}
+
+/**
+ * 表の札の、勝者が次の回戦で当たる相手を決める札(兄弟の札)。なければnull。ふつうの期の中継ボードで、
+ * 自分の次の相手が決まる対局を大きく出すのに使う(35章)。
+ * @param {any} bracket
+ * @param {string} nodeId
+ */
+export function siblingNodeId(bracket, nodeId) {
+  for (const node of Object.values(bracket?.nodes ?? {})) {
+    if (node.a?.from === nodeId && node.b?.from) return node.b.from;
+    if (node.b?.from === nodeId && node.a?.from) return node.a.from;
+  }
+  return null;
 }
 
 // ---- 表示用

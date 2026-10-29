@@ -247,7 +247,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/const backEvent = ryuoGame\.value\?\.event;\s*stopGuidedReview\(\);\s*openPregame\(\);/);
     expect(source).toMatch(/function recordRyuoOutcome\(matchResult: MatchResult\) \{\s*if \(ryuoGame\.value\?\.event === "kenshukai"\) \{\s*recordKenshukaiOutcome\(matchResult\);\s*return;\s*\}\s*if \(ryuoGame\.value\?\.event === "shoreikai"\) \{\s*recordShoreikaiOutcome\(matchResult\);\s*return;\s*\}\s*if \(ryuoGame\.value\?\.event === "meijin"\) \{\s*recordMeijinOutcome\(matchResult\);/);
     expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "meijin" \};\s*startRyuoMatch\(\);/);
-    expect(source).toMatch(/:from-game="tournamentFromGame"/);
+    expect(source).toMatch(/:from-game="tournamentFromGame[^"]*"/);
     expect(source).toMatch(/@click="leaveFinishedMatch\(\{ toHome: true \}\)"/);
   });
 
@@ -355,7 +355,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "kenshukai"\) return;/);
     expect(tournament).toMatch(/function finishCeremony\(\) \{[\s\S]*?if \(screen\.value === "meijin"\) \{\s*emit\("meijin-result-seen"\);\s*screen\.value = "select";[\s\S]*?backToSelect\(\);/);
     // 戻る操作は、いちばん上に重ねた中継(画面→一覧)を先に閉じ、敗退後の観戦、回戦の中継ボード、次に賞状を閉じる。
-    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}[\s\S]{0,120}?if \(livePanelEl\.value\?\.closeSheet\(\) \|\| meijinEl\.value\?\.closeLiveSheet\(\)\) return;\s*if \(afterWatch\.value\) \{\s*endAfterWatch\(\);\s*return;\s*\}\s*if \(meijinAfter\.value\) \{\s*endMeijinAfterWatch\(\);\s*return;\s*\}\s*if \(live\.value\) \{\s*closeLive\(\);\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
+    expect(tournament).toMatch(/function goBack\(\) \{\s*if \(relayEntry\.value\) \{\s*relayEntry\.value = null;\s*return;\s*\}\s*if \(relayList\.value\) \{\s*relayList\.value = null;\s*return;\s*\}[\s\S]{0,120}?if \(livePanelEl\.value\?\.closeSheet\(\) \|\| meijinEl\.value\?\.closeLiveSheet\(\)\) return;\s*if \(afterWatch\.value\) \{\s*endAfterWatch\(\);\s*return;\s*\}\s*if \(meijinAfter\.value\) \{\s*endMeijinAfterWatch\(\);\s*return;\s*\}\s*if \(live\.value\) \{[\s\S]{0,200}?else closeLive\(\);\s*return;\s*\}\s*if \(awardShown\.value\) \{/);
     expect(tournament).toMatch(/data-award-book @click="bookOpen = true"/);
     // 賞状は期が終わったときに対局画面が足す(竜王戦・名人戦とも)。
     expect(source).toMatch(/saveCareer\(browserStorage\(\), career\);\s*awardRyuoSeason\(season\);/);
@@ -1020,7 +1020,7 @@ describe("match screen regressions", () => {
 
   it("大会で詰ませて勝ったら、寄せの手数を判子と結果の窓に出し、棋譜を残して中継で振り返れる(docs/mate-finish-design.md)", () => {
     // 期を記録する前(相手と回戦が次の局に変わる前)に、寄せを数えて棋譜を残す。
-    expect(source).toMatch(/finishMate\.value = tournamentFinish && outcome === "win" && matchResult\.reason === "checkmate" \? noteMateFinish\(\) : null;\s*lastMyRelayKey\.value = tournamentFinish \? saveOwnGame\(matchResult\) : "";\s*recordRyuoOutcome\(matchResult\);/);
+    expect(source).toMatch(/finishMate\.value = tournamentFinish && outcome === "win" && matchResult\.reason === "checkmate" \? noteMateFinish\(\) : null;\s*lastMyRelayKey\.value = tournamentFinish \? saveOwnGame\(matchResult\) : "";\s*pendingPlayed = null;\s*recordRyuoOutcome\(matchResult\);/);
     expect(source).toMatch(/mateTier: win \? finishMate\.value\?\.tier \?\? null : null/);
     expect(source).toMatch(/v-if="finishMate"[^>]*data-finish-mate/);
     expect(source).toMatch(/data-result-mate/);
@@ -1028,5 +1028,23 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/:relay-key="tournamentRelayKey"/);
     // 観戦記は、タイトル戦でなくても書く(寄せの一文つき)。
     expect(source).toMatch(/if \(!stage\?\.twoDay \|\| !day\) \{[\s\S]{0,600}?writeGameKansenki\(\{/);
+  });
+  it("ふつうの期も、対局後に同じ回戦のほかの対局を中継ボードで見て、本局の結果で回戦を決める(docs/tournament-relay-design.mdの35章)", () => {
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    // 期が続くときだけ、記録する前の期と勝ち負けを控える(分身の期・敗退・順位戦の最終回戦は対象にしない)。
+    expect(source).toMatch(/if \(!season\.spectator && before\.pending\?\.kind === "game" && !next\.result\) notePlayedRound\("ryuo", before, outcome\);/);
+    expect(source).toMatch(/notePlayedRound\("meijin", before, outcome\)/);
+    // 速報で伝えた対局は、ボードではじめから終局した札にする。
+    expect(source).toMatch(/const settled = matchNews\.slice\(0, matchNewsShown\)\.map\(\(item\) => \[\.\.\.item\.pair\]\);/);
+    // 大会の画面へ戻るときだけボードを開く。ボードのあいだは記録する前の期を見せ、見終えたら決め直す。
+    expect(source).toMatch(/playedBoard\.value = backToTournament \? pendingPlayed : null;/);
+    expect(source).toMatch(/:ryuo-season="playedBoard\?\.event === 'ryuo' \? playedBoard\.before : ryuoSeason"/);
+    expect(source).toMatch(/const next = replayUserRound\(current, board\.before, board\.outcome, results\);/);
+    expect(source).toMatch(/const next = replayMeijinUserRound\(current, board\.before, board\.outcome, results\);/);
+    // 大会の画面: 開いたらすぐボード。戻ると、終わった本局の結果で回戦を決めて閉じる。終わったら竜王への道を登る。
+    expect(tournament).toMatch(/onMounted\(startPlayedLive\);/);
+    expect(tournament).toMatch(/if \(live\.value\.kind === "played" \|\| live\.value\.kind === "meijin-played"\) void finishLive\(\);/);
+    expect(tournament).toMatch(/emit\("played-round", kind === "played" \? round : meijinRound\);[\s\S]{0,120}?arriveFromGame\(\);/);
+    expect(tournament).toMatch(/if \(spec\.elsewhere \|\| spec\.ended\) return spec;/);
   });
 });

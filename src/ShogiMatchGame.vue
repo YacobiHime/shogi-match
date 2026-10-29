@@ -388,7 +388,7 @@
       :asset-base-url="assetBaseUrl"
       :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
       :career="ryuoCareer"
-      :view="ryuoView"
+      :view="playedRyuoView ?? ryuoView"
       :default-difficulty="tournamentEntryDifficulty"
       :recommended-difficulty="ryuoDefaultDifficulty"
       :world="tournamentWorld"
@@ -396,7 +396,7 @@
       :user-level="ratingLevel(ratingState.rating)"
       :rating-text="`R${ratingState.rating}`"
       :start-at="tournamentStartAt"
-      :from-game="tournamentFromGame"
+      :from-game="tournamentFromGame && playedBoard?.event !== 'ryuo'"
       :ryuo-holder="ryuoHolder"
       :player-name="playerDisplayName(playerName)"
       :oshi="ryuoOshi"
@@ -411,7 +411,7 @@
       @resume="resumeRyuoGame"
       @open-note="openNoteFromTournament"
       @result-seen="markRyuoResultSeen"
-      :meijin-view="meijinView"
+      :meijin-view="playedMeijinView ?? meijinView"
       :meijin-career="meijinCareer"
       :meijin-entry-class="meijinEntryClass"
       :meijin-rival-class="hananeJunniClass"
@@ -443,7 +443,7 @@
       @kenshukai-resume="resumeKenshukaiGame"
       @kenshukai-transfer="transferKenshukai"
       @kenshukai-close="closeKenshukai"
-      :ryuo-season="ryuoSeason"
+      :ryuo-season="playedBoard?.event === 'ryuo' ? playedBoard.before : ryuoSeason"
       :ryuo-watch="ryuoWatch"
       :avatar-profile="avatarProfile"
       :spectating="Boolean(ryuoSeason?.spectator)"
@@ -454,7 +454,9 @@
       @meijin-watch-play="playMeijinWatchGame"
       @meijin-watch-round="applyMeijinWatchRound"
       @meijin-watch-settle="settleMeijinSeason"
-      :meijin-season="meijinSeason"
+      :meijin-season="playedBoard?.event === 'meijin' ? playedBoard.before : meijinSeason"
+      :played-board="playedBoard"
+      @played-round="applyPlayedRound"
       :relay-engine-factory="ensureEngineFactory"
       :compact="mobile || boardLayout === 'portrait'"
       :relay-key="tournamentRelayKey"
@@ -2409,7 +2411,7 @@ import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import { HANANE, HANANE_SPRITE, storyMemberId } from "./core/ryuo-story.mjs";
 import { lastGameMilestone } from "./core/ryuo-milestone.mjs";
 import { writeGameKansenki } from "./core/game-kansenki.mjs";
-import { myGameRecord, myRelayKey, saveMyGame } from "./core/my-games.mjs";
+import { myGameRecord, myRelayKey, myRelaySpec, saveMyGame } from "./core/my-games.mjs";
 import { addMateRecord, finishingMate, loadMateRecords, mateFinishText, mateLabel, mateTier, saveMateRecords } from "./core/mate-finish.mjs";
 import {
   formatWinRate,
@@ -2554,7 +2556,7 @@ import {
   measureStatistics,
   restoredMeasureState,
 } from "./core/skill-estimate.mjs";
-import { USER_ID, asAvatarSeason, createRng, createSeason, describeSeason, playSpectatorGame, recommendedDifficulty, recordUserGame, restOpen, scaleById, settleRest, withRosterAbilities } from "./core/ryuo.mjs";
+import { USER_ID, asAvatarSeason, createRng, createSeason, describeSeason, playSpectatorGame, recommendedDifficulty, recordUserGame, replayUserRound, restOpen, scaleById, settleRest, withRosterAbilities } from "./core/ryuo.mjs";
 import { loadWatchStore, noteWatchProgress, saveWatchStore } from "./core/ryuo-watch-store.mjs";
 import { myAbilityProfile, myRepertoire, myStyleAttack, worldRatingFor } from "./core/my-abilities.mjs";
 import { worldRating } from "./core/ryuo-strength.mjs";
@@ -2788,7 +2790,7 @@ import { type PracticeDrill, type PracticeStep, recommendPlay, resultNextStep as
 import { counterStyle, loadCounterKey, ryuoNextPlan, ryuoNextSeasonPlan, saveCounterKey } from "./core/ryuo-next.mjs";
 import {
   CLASS_LABELS, advanceLeague, applyMeijinSeason, asAvatarMeijinSeason, createMeijinSeason, meijinRestOpen, settleMeijinRest, describeMeijinSeason, loadMeijinCareer, loadMeijinSeason, meijinDan,
-  playMeijinSpectatorGame, recordMeijinGame, resumeMeijinSeason, saveMeijinCareer, saveMeijinSeason, userClass,
+  playMeijinSpectatorGame, recordMeijinGame, replayMeijinUserRound, resumeMeijinSeason, saveMeijinCareer, saveMeijinSeason, userClass,
 } from "./core/meijin.mjs";
 import { applyMeijinSeasonToRoster, autoJunniYear, ensureJunniWorld, joinJunni } from "./core/junni-world.mjs";
 import { detectWeaknesses, enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight } from "./core/play-insight.mjs";
@@ -3329,12 +3331,55 @@ function saveOwnGame(matchResult: MatchResult) {
     moves, times, mate: finishMate.value ? { plies: finishMate.value.plies, from: finishMate.value.from } : null,
   });
   saveMyGame(browserStorage(), record);
+  lastOwnGame = record;
   return myRelayKey(record);
+}
+/*
+ * ふつうの期の、対局後の回戦の中継ボード(docs/tournament-relay-design.mdの35章)。自分の対局を記録する前の期(before)と勝ち負け、
+ * 自分の対局の中継の項目、対局中に速報で伝えた対局([勝者, 敗者])を控え、大会の画面に戻ったときにボードで見る。
+ * 見終えたら(途中で戻っても)、終わった本局の結果で回戦を決め直す(replayUserRound)。ボードのあいだ、大会の画面には記録する前の期を見せる
+ * (次の相手が決まるのは回戦が終わってから)。
+ */
+type PlayedBoard = { event: "ryuo" | "meijin"; before: any; outcome: "win" | "loss"; user: any | null; settled: string[][] };
+let lastOwnGame: ReturnType<typeof myGameRecord> | null = null;
+let pendingPlayed: PlayedBoard | null = null;
+const playedBoard = shallowRef<PlayedBoard | null>(null);
+const playedRyuoView = computed(() => (playedBoard.value?.event === "ryuo" ? describeSeason(playedBoard.value.before) : null));
+const playedMeijinView = computed(() => (playedBoard.value?.event === "meijin" ? describeMeijinSeason(playedBoard.value.before) : null));
+// 大会の画面を閉じたら、ボードは終わり(見終えずに閉じたときの結果は、大会の画面が渡す)。
+watch(tournamentOpen, (open) => {
+  if (!open) playedBoard.value = null;
+});
+function notePlayedRound(event: "ryuo" | "meijin", before: any, outcome: "win" | "loss") {
+  const user = lastOwnGame && lastMyRelayKey.value === myRelayKey(lastOwnGame) ? myRelaySpec(lastOwnGame) : null;
+  const settled = matchNews.slice(0, matchNewsShown).map((item) => [...item.pair]);
+  pendingPlayed = { event, before, outcome, user: user ? { ...user, relayKey: user.key } : null, settled };
+}
+/** 回戦の中継ボードを見終えた(途中で戻ったときも)。終わった本局の結果で、回戦を決め直して保存する。 */
+function applyPlayedRound(results: any[]) {
+  const board = playedBoard.value;
+  playedBoard.value = null;
+  if (!board || !results.length) return;
+  if (board.event === "ryuo") {
+    const current = rawRyuoSeason();
+    const next = replayUserRound(current, board.before, board.outcome, results);
+    if (next === current) return;
+    ryuoSeason.value = next;
+    saveSeason(browserStorage(), next);
+    return;
+  }
+  const current = JSON.parse(JSON.stringify(meijinSeason.value));
+  const next = replayMeijinUserRound(current, board.before, board.outcome, results);
+  if (next === current) return;
+  meijinSeason.value = next;
+  saveMeijinSeason(browserStorage(), next);
 }
 /** 終局の「中継で振り返る」。大会の画面に戻り、この対局の中継を開く。 */
 function watchOwnRelay() {
   const key = lastMyRelayKey.value;
   if (!key) return;
+  // 自分の対局の中継を見るので、同じ回戦の中継ボードは開かない(回戦は、先に決まった結果のまま)。
+  pendingPlayed = null;
   tournamentRelayKey.value = key;
   leaveFinishedMatch();
   if (!tournamentOpen.value) {
@@ -6526,7 +6571,10 @@ function recordRyuoOutcome(matchResult: MatchResult) {
     return;
   }
   const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
+  const before = rawRyuoSeason();
   const next = recordUserGame(rawRyuoSeason(), outcome);
+  // 期が続くなら、大会の画面に戻ったときに、同じ回戦のほかの対局を中継ボードで見る(35章)。
+  if (!season.spectator && before.pending?.kind === "game" && !next.result) notePlayedRound("ryuo", before, outcome);
   finishMilestone = lastGameMilestone(next, { promote: scaleById(next.settings.scale).promote });
   // 相手の特徴が手の選び方に表れた場面を、この対局の記録に残す(大会の画面で、やこび姫が話す)。
   const last = next.userGames[next.userGames.length - 1];
@@ -6693,7 +6741,10 @@ function recordMeijinOutcome(matchResult: MatchResult) {
     return;
   }
   const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
+  const before = JSON.parse(JSON.stringify(season));
   const next = recordMeijinGame(season, outcome);
+  // 順位戦が続くなら(最終回戦ではないなら)、同じ回戦のほかの対局を中継ボードで見る(35章)。
+  if (!season.spectator && before.pending?.kind === "league" && next.phase === "league" && next.pending?.kind === "league") notePlayedRound("meijin", before, outcome);
   finishCrowned = outcome === "win" && season.pending.kind === "finals" && next.phase === "done" && next.finals?.winner === USER_ID;
   meijinSeason.value = next;
   saveMeijinSeason(browserStorage(), next);
@@ -10206,6 +10257,7 @@ function finish(matchResult: MatchResult) {
   // 詰ませて勝ったら、最後の寄せを数える(期を記録すると、相手と回戦が次の局に変わるので、その前に)。
   finishMate.value = tournamentFinish && outcome === "win" && matchResult.reason === "checkmate" ? noteMateFinish() : null;
   lastMyRelayKey.value = tournamentFinish ? saveOwnGame(matchResult) : "";
+  pendingPlayed = null;
   recordRyuoOutcome(matchResult);
   if (tournamentFinish) {
     writeTournamentKansenki(outcome === "win", matchResult.moveCount);
@@ -11306,6 +11358,9 @@ function leaveFinishedMatch({ toHome = false }: { toHome?: boolean } = {}) {
   stopGuidedReview();
   openPregame();
   if (props.showHome) openHome();
+  // 大会の画面へ戻るときだけ、同じ回戦の中継ボードを開く(ほかへ行くなら、回戦は先に決まった結果のまま)。
+  playedBoard.value = backToTournament ? pendingPlayed : null;
+  pendingPlayed = null;
   if (backToTournament) {
     tournamentStartAt.value = backEvent === "meijin" || backEvent === "shoreikai" || backEvent === "kenshukai" ? backEvent : "season";
     tournamentFromGame.value = true;

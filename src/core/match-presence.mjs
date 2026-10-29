@@ -162,14 +162,17 @@ function sameRoundGames(event, season) {
 /**
  * 対局中に流す速報(優先順に、多くて4件)。推し → 羽音 → 次に当たるかもしれない試合 → 大番狂わせ → そのほか。
  * @param {{ event?: "ryuo" | "meijin" | "shoreikai" | "kenshukai", season?: any, oshiId?: string | null }} [options]
- * @returns {{ key: string, text: string, tone: "oshi" | "rival" | "peer" | "next" | "upset" | "plain" }[]}
+ * @returns {{ key: string, text: string, tone: "oshi" | "rival" | "peer" | "next" | "upset" | "plain", pair: string[] }[]}
  */
 export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {}) {
   const { games, nextFrom, nextOpponent } = sameRoundGames(event, season);
   const players = season?.players ?? {};
   const name = (pid) => `${players[pid]?.name ?? '？'}さん`;
   const order = { oshi: 0, rival: 1, peer: 2, next: 3, upset: 4, plain: 5 };
-  const items = games.filter(({ winner, loser }) => players[winner] && players[loser]).map((game) => {
+  const items = games.filter(({ winner, loser }) => players[winner] && players[loser]).map((game) => ({ ...newsItem(game), pair: [game.winner, game.loser] }));
+  return items.sort((a, b) => order[a.tone] - order[b.tone]).slice(0, NEWS_PER_GAME);
+  /** 1件の速報。pairは[勝者, 敗者](対局後の中継ボードで、速報で伝えた対局を終局した札にする。docs/tournament-relay-design.mdの35章)。 */
+  function newsItem(game) {
     const { winner, loser } = game;
     const key = `news-${winner}-${loser}`;
     if (oshiId && (winner === oshiId || loser === oshiId)) {
@@ -196,8 +199,7 @@ export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {})
     const gap = (players[loser].rating ?? 0) - (players[winner].rating ?? 0);
     if (gap >= NEWS_UPSET_GAP) return { key, tone: 'upset', text: `速報：大番狂わせ！ ${name(winner)}が${name(loser)}に勝ちました` };
     return { key, tone: 'plain', text: `速報：${name(winner)}が${name(loser)}に勝ちました` };
-  });
-  return items.sort((a, b) => order[a.tone] - order[b.tone]).slice(0, NEWS_PER_GAME);
+  }
 }
 
 /**
