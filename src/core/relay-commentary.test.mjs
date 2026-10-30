@@ -115,6 +115,15 @@ describe('createRelayScript', () => {
     expect(lines.every((text) => !/です|ます/.test(text))).toBe(true);
   });
 
+  it('善彦の心の声は、解説と同じ口調(42章)', () => {
+    const father = { ...spec, white: player('y', '天鷺善彦', { story: YOSHIHIKO }) };
+    const script = scriptFor(father, moves, { evals, end: { winner: 'white', reason: 'resign' } });
+    const lines = script.thoughts.filter(({ side }) => side === 'white').map(({ text }) => text);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.every((text) => /まあ|あの|あぁ～|うーん|え～|え…/.test(text)), lines.join('/')).toBe(true);
+    expect(lines.some((text) => /楽しませて|ほう、|見事だった|面白い/.test(text))).toBe(false);
+  });
+
   it('来場者数は、タイトル戦ほど多い', () => {
     expect(relayAudience({ ...spec, weight: 'title' }, 50)).toBeGreaterThan(relayAudience(spec, 50));
   });

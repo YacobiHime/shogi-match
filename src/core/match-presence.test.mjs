@@ -12,7 +12,7 @@ import {
 import { USER_ID, createSeason } from './ryuo.mjs';
 import { createLeague, createMeijinSeason } from './meijin.mjs';
 import { createRoster } from './ryuo-roster.mjs';
-import { HANANE } from './ryuo-story.mjs';
+import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 
 const cp = (value) => ({ type: 'cp', value });
 
@@ -33,6 +33,11 @@ describe('相手の表情と一言', () => {
     expect(opponentLine('loss', { story: HANANE })).toBe('……私の負け');
     // 羽音は敬語を使わない。
     for (const moment of ['start', 'ahead', 'behind', 'win', 'loss']) expect(opponentLine(moment, { story: HANANE })).not.toMatch(/です|ます|ました|ません|ございます|お願い/);
+    // 善彦は、中継の解説と同じ口調(「まあ」「あの」「あぁ～」をはさむ。大物ぶった言い方をしない。42章)。
+    const father = ['start', 'ahead', 'behind', 'win', 'loss'].map((moment) => opponentLine(moment, { story: YOSHIHIKO }));
+    expect(father[0]).toBe('あぁ、よろしくお願いします');
+    expect(father.slice(1).every((text) => /まあ|あの|あぁ～/.test(text))).toBe(true);
+    expect(father.some((text) => /楽しませて|ふむ|やるね|良い将棋だった|強くなったね/.test(text))).toBe(false);
   });
   it('途中の一言は、形勢が傾いた最初だけ、合わせて2回まで', () => {
     expect(midgameMoment(cp(-600), [])).toBe('ahead');
