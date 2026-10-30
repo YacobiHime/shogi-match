@@ -18,7 +18,8 @@ const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
  * 集計の軸ごとの「Lvと値の対応」。強さの分かっているCPU(Lv1〜48)どうしの96局を、アプリと同じ段階解析で読み(棋力測定の表と同じデータ。
  * docs/skill-measure-design.mdの7章)、1局ずつの値をLvに直線で当てはめた。キーは集計の軸(play-insight.mjsのaxes)。
  * - loss: 1手の損(同じ読みの中の差、1000まで)の平均+10の対数 = a + b×Lv
- * - rate: 割合のロジット = a + b×Lv(読み: 最善手を指した割合、安定感: 損300以上の割合、詰み: 詰みを逃さなかった割合)
+ * - rate: 割合のロジット = a + b×Lv(読み: 最善手を指した割合、安定感: 損300以上の割合、詰み: 詰みを逃さなかった割合、
+ *   視野: 駒をタダで取られる形にした・タダの駒を取り逃した手の割合、発想: 手筋の形か捨て駒の最善手を指した割合)。割合はfloor〜1−floorで打ち切る(既定2%)
  * shrink: 手(詰みは機会)の数がこれだけあると、Lvの差を半分だけ信じる(少ない手の偶然で、能力をとがらせすぎない)。
  */
 export const AXIS_MODELS = Object.freeze({
@@ -30,6 +31,11 @@ export const AXIS_MODELS = Object.freeze({
   reading: Object.freeze({ kind: 'rate', a: -2.2923, b: 0.07151, shrink: 60 }),
   stability: Object.freeze({ kind: 'rate', a: 0.113, b: -0.07016, shrink: 60 }),
   mate: Object.freeze({ kind: 'rate', a: 1.2952, b: 0.06667, shrink: 8 }),
+  // 視野・発想(2026-10-30。docs/player-abilities-design.mdの13-7)。CPUの88局(Lv2〜46を4Lvおき)を同じ段階解析で読み、
+  // めったに起きないことを数えるので、Lvごとに合わせた割合を当てはめた(scripts/my-ability-axis-calibration.mjs)。
+  // 視野は強いほど1%前後まで下がるので、割合の下限(floor)を0.5%にする(2%で打ち切るとLv35で頭打ちになる)。
+  vision: Object.freeze({ kind: 'rate', a: -1.5617, b: -0.06678, shrink: 120, floor: 0.005 }),
+  idea: Object.freeze({ kind: 'rate', a: -1.257, b: 0.0512, shrink: 10 }),
 });
 /**
  * 詰みは、Lv20あたりから上は、どのCPUもほとんど逃さない(割合が1に張りつく)。逃さなかっただけでは、
@@ -61,9 +67,9 @@ const TARGET_MARGIN = 400 * Math.log10(TOURNAMENT_TARGET_WIN_RATE / (1 - TOURNAM
 export function axisLevel(key, { n, value }) {
   const model = AXIS_MODELS[key];
   if (!model || !n) return null;
-  const y = model.kind === 'loss'
-    ? Math.log(Math.max(0, value) + 10)
-    : Math.log(clamp(value, 0.02, 0.98) / (1 - clamp(value, 0.02, 0.98)));
+  const floor = /** @type {{ floor?: number }} */ (model).floor ?? 0.02;
+  const rate = clamp(value, floor, 1 - floor);
+  const y = model.kind === 'loss' ? Math.log(Math.max(0, value) + 10) : Math.log(rate / (1 - rate));
   return clamp((y - model.a) / model.b, MIN_AXIS_LEVEL, MAX_AXIS_LEVEL);
 }
 
