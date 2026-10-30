@@ -4063,11 +4063,8 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5em;
 }
-.shogi-title__tiles--play { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.shogi-title__tiles--dex {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.4em;
-}
+.shogi-title__tiles--play,
+.shogi-title__tiles--learn { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .shogi-game .shogi-title__tile {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -4123,9 +4120,10 @@
   font-size: 0.72em;
   line-height: 1.3;
 }
-/* 縦向きの画面(スマホ・タブレット)では、あそぶの3つを横1列に収めるため、アイコンの下に名前を置く縦長のタイルにする。 */
+/* 縦向きの画面(スマホ・タブレット)では、あそぶ・まなぶの3つを横1列に収めるため、アイコンの下に名前を置く縦長のタイルにする。 */
 @media (orientation: portrait) and (max-width: 1099px) {
-  .shogi-game .shogi-title__tiles--play .shogi-title__tile {
+  .shogi-game .shogi-title__tiles--play .shogi-title__tile,
+  .shogi-game .shogi-title__tiles--learn .shogi-title__tile {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "icon" "label" "desc";
     justify-items: center;
@@ -4134,26 +4132,33 @@
     padding: 0.55em 0.2em 0.5em;
     text-align: center;
   }
-  .shogi-title__tiles--play .shogi-title__icon { width: 2.2em; height: 2.2em; }
-  .shogi-title__tiles--play .shogi-title__desc { font-size: 0.66em; }
+  .shogi-title__tiles--play .shogi-title__icon,
+  .shogi-title__tiles--learn .shogi-title__icon { width: 2.2em; height: 2.2em; }
+  .shogi-title__tiles--play .shogi-title__desc,
+  .shogi-title__tiles--learn .shogi-title__desc { font-size: 0.66em; }
 }
-/* 図鑑の5つは、アイコンと短い名前だけの小さなタイルにする。 */
-.shogi-game .shogi-title__tile--small {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "icon" "label";
-  justify-items: center;
-  row-gap: 0.3em;
+/*
+ * 図鑑の5つは、1枚の横長のタイルにまとめる。中に5つの絵を小さく並べて何が入っているかを見せ、
+ * 押すと棚のシートから選ぶ(docs/brain-training-design.mdの4章)。
+ */
+.shogi-game .shogi-title__tile--dex {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "icons label desc go";
   min-height: 0;
-  padding: 0.6em 0.1em 0.45em;
-  border-radius: 0.7em;
-  box-shadow: 0 0.2em 0 rgba(23, 38, 50, 0.85);
-  text-align: center;
+  width: 100%;
+  padding: 0.45em 0.8em;
 }
-.shogi-title__tile--small .shogi-title__icon { width: 2.2em; height: 2.2em; }
-.shogi-title__tile--small .shogi-title__label {
-  font-size: 0.72em;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+.shogi-title__dex-icons {
+  grid-area: icons;
+  display: flex;
+  gap: 0.15em;
+}
+.shogi-title__tile--dex .shogi-title__dex-icons .shogi-title__icon { width: 1.6em; height: 1.6em; }
+.shogi-title__dex-go {
+  grid-area: go;
+  color: var(--group-color);
+  font-size: 1.4em;
+  font-weight: 900;
 }
 @media (hover: hover) {
   .shogi-game .shogi-title__tile:not(:disabled):hover,
@@ -4227,9 +4232,7 @@
   .shogi-title__tile .shogi-title__icon { width: 2.8em; height: 2.8em; }
   .shogi-title__label { font-size: 1.15em; }
   .shogi-title__desc { font-size: 0.75em; }
-  .shogi-game .shogi-title__tile--small { padding: 0.75em 0.2em 0.6em; }
-  .shogi-title__tile--small .shogi-title__icon { width: 2.5em; height: 2.5em; }
-  .shogi-title__tile--small .shogi-title__label { font-size: 0.82em; }
+  .shogi-title__tile--dex .shogi-title__dex-icons .shogi-title__icon { width: 1.9em; height: 1.9em; }
 }
 /* 背の低いスマホの縦向き: 基準の文字を少し小さくし、すき間を詰めて、スクロールせずに1画面へ収める。 */
 @media (orientation: portrait) and (max-height: 700px) {
@@ -4281,7 +4284,7 @@
   .shogi-title__group { gap: 0.2em; }
   /* 基準の文字が小さくなっても、タイルの押せる高さは44px以上にする(7-4)。 */
   .shogi-game .shogi-title__tile { min-height: max(3.2em, 44px); padding: 0.35em 0.6em; }
-  .shogi-game .shogi-title__tile--small { min-height: 44px; }
+  .shogi-game .shogi-title__tile--dex { min-height: 44px; }
   .shogi-title__tile .shogi-title__icon { width: 2.2em; height: 2.2em; }
 }
 @media (prefers-reduced-motion: reduce) {

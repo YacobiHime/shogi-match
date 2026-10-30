@@ -84,7 +84,7 @@
 | 将棋教室 | `src/ShogiTutorial.vue`、`src/core/tutorial-curriculum.mjs`、盤の上のひとこと（文・マス・位置）と吹き出しの色の札は`src/core/tutorial-callout.mjs`、読み上げの読み方は`src/core/tutorial-voice.mjs`、判定は`src/core/tutorial-runner.mjs`（問題集の問題と攻めくらべは`src/core/tutorial-problem.mjs`。対局画面から読まない。駒得するまで指す課題・角打ちの隙の駒の損得の読みは`src/core/material-tactics.mjs`）、地図・メダル・称号は`src/core/tutorial-map.mjs`、利きメガネの所持・にがての記録・格言帳は`src/core/tutorial-progress.mjs`、設計は`docs/nyumon-mode-design.md` |
 | 盤の見える化 | 駒の値段と駒得の数字は`src/core/piece-points.mjs`（入門用のtier表・教室の値と、図鑑のAI用の表・対局の「駒の損得」で使う`AI_PIECE_POINTS`、札の点数`materialBalance`と盤に浮かべる数字`materialPops`（取った駒の元の値段と成りの分`promotionBonus`を分ける）を管理。対局の札は`src/ShogiMatchGame.vue`の`materialChip`、設計は`docs/material-guide-design.md`）、取られるマス・玉の逃げ道・取り返し・利いているマスの数は`src/core/board-insight.mjs`（取られるかの判断はCPUと同じ`src/core/exchange-eval.mjs`の取り合いの計算）、利きの地図は`src/core/learning-setup.mjs`の`attackMap` |
 | 将棋問題集 | `src/ShogiProblemSet.vue`、問題とやこび姫の台詞は`src/core/problem-set.mjs`、対局で見逃したn手詰めの「あなたの対局から」の問題（解析の読み筋を答えにし、違う詰み方は詰み探索で確かめる。問題集の「あなたの対局」の棚と復習の箱）は`src/core/review-problems.mjs`と`problem-set.mjs`の`judgeGameDeviation`、読み筋の確かめは`problem-solver.ts`の`isMatingLine`（設計は`docs/missed-mate-problems-design.md`）、練習問題の正誤判定の詰み探索は`src/core/problem-solver.ts`（正解は書かず探索で決める）、詰将棋（駒の少ない詰将棋と実戦詰将棋）と詰将棋図巧のデータは`src/data/tsume-problems.mjs`・`src/data/jissen-tsume-problems.mjs`・`src/data/zukou-problems.mjs`（外部データの手順で判定する。手で書き換えない） |
-| 図鑑 | 対局中に開く「図鑑」のボタンと図鑑の棚は`src/ShogiMatchGame.vue`の`DEX_SHELF`・`dexShelfOpen`・`dexFromMatch`（図鑑の絵は`src/DexIcon.vue`でホームと共通。設計は`docs/match-dex-design.md`）、`src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、「詰将棋の名作」で解ける『将棋図巧』は将棋問題集の`ZUKOU_SET`と判定を使う、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`src/composables/match/useDexAnalysisEngine.ts`で対局用のものを借りる） |
+| 図鑑 | 対局中に開く「図鑑」のボタンと図鑑の棚は`src/ShogiMatchGame.vue`の`DEX_SHELF`・`dexShelfOpen`・`dexFromMatch`（ホームの「しらべる」は1枚の図鑑のタイル`data-dex-tile`で、同じ棚をホームの上に開く`openHomeDexShelf`・`dexShelfFrom`。`docs/brain-training-design.md`の4章）（図鑑の絵は`src/DexIcon.vue`でホームと共通。設計は`docs/match-dex-design.md`）、`src/ShogiOpeningDex.vue`（定跡）、`src/ShogiReferenceDex.vue`と`src/core/reference-dex.mjs`（駒・手筋・将棋界・用語辞典）、用語辞典の項目は`src/data/shogi-glossary.mjs`、将棋界図鑑の代表局のKIFは`src/data/reference-kifu.mjs`、「詰将棋の名作」で解ける『将棋図巧』は将棋問題集の`ZUKOU_SET`と判定を使う、AI解析は`src/core/reference-kifu-analysis.mjs`（エンジンは`src/composables/match/useDexAnalysisEngine.ts`で対局用のものを借りる） |
 | 展示（「最初から」と、インターネットなしのWindows用パッケージ） | 記録の消去は`src/core/exhibit-reset.mjs`、ボタンは`src/ShogiMatchGame.vue`の`exhibit`、パッケージは`scripts/build-exhibit.mjs`と`scripts/exhibit/`（PowerShellのサーバー・bat・説明書）、設計は`docs/exhibit-design.md` |
 | iframe・ノベル連携 | `src/novel-bridge.ts`、RPGは`integrations/shogi-rpg.js` |
 | 手動検証履歴 | `docs/yakobihime-opening-guide-verification.md` |
@@ -269,7 +269,7 @@ git diff --check
 
 | 段階 | 内容 | 設計 | 状態 |
 |---|---|---|---|
-| B1 | ホームの整理（まなぶ3枚・図鑑のタイル1枚と棚のシート・脳トレの入口） | `docs/brain-training-design.md`の4章 | まだ |
+| B1 | ホームの整理（まなぶ3枚・図鑑のタイル1枚と棚のシート・脳トレの入口） | `docs/brain-training-design.md`の4章 | 済み |
 | B2 | 脳トレの土台（保存・階段・今日の3種目）とちらっと盤、根拠のシート | 同3-1・3-5・5・6章 | まだ |
 | B3 | 盤面の記憶と頭の中の盤 | 同3-2・3-3 | まだ |
 | B4 | 記憶の宮殿の学校（場所法） | 同3-4 | まだ |

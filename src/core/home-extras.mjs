@@ -8,6 +8,7 @@ export const SEEN_FEATURES_KEY = 'yacobihime:shogi-match:seen-features:v1';
 export const DISCOVER_FEATURES = Object.freeze([
   { id: 'endgame', title: '終盤戦をやってみよう', reason: '名局の終盤の局面から、すぐ指せるよ。まだ遊んでいないね' },
   { id: 'opening-dex', title: '定跡図鑑をのぞいてみよう', reason: '戦法と囲いの組み方を、1手ずつ再生して見られるよ' },
+  { id: 'brain', title: '脳トレをやってみよう', reason: '盤をちらっと見て当てる、局面を覚えて並べる。5分で終わるよ' },
   { id: 'tesuji', title: '手筋図鑑をのぞいてみよう', reason: '叩きの歩や割り打ちの銀。知っていると一気に強くなるよ' },
   { id: 'world', title: '将棋界図鑑をのぞいてみよう', reason: 'タイトル戦や名局のこと。AIの解析つきで並べられるよ' },
   { id: 'piece', title: '駒図鑑をのぞいてみよう', reason: '駒の動きと値段を、もう一度たしかめよう' },

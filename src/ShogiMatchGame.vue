@@ -283,7 +283,7 @@
           </section>
           <section class="shogi-title__group shogi-title__group--learn" aria-labelledby="shogi-home-school" data-home-group="learn">
             <h2 id="shogi-home-school" class="shogi-title__group-title">まなぶ</h2>
-            <div class="shogi-title__tiles">
+            <div class="shogi-title__tiles shogi-title__tiles--learn">
               <button type="button" class="shogi-title__tile" :class="homeTileClass('tutorial')" @click="tutorialOpen = true">
                 <span v-if="homeTile('tutorial').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
@@ -321,22 +321,42 @@
                 <span class="shogi-title__label">問題集</span>
                 <small class="shogi-title__desc">{{ homeTile("problems").after || "詰ませ方・逃げ方" }}</small>
               </button>
-            </div>
-          </section>
-          <section class="shogi-title__group shogi-title__group--dex" aria-labelledby="shogi-home-dex" data-home-group="dex">
-            <h2 id="shogi-home-dex" class="shogi-title__group-title">しらべる</h2>
-            <div class="shogi-title__tiles shogi-title__tiles--dex">
-              <button
-                v-for="shelf in DEX_SHELF"
-                :key="shelf.kind"
-                type="button"
-                class="shogi-title__tile shogi-title__tile--small"
-                @click="openDex(shelf.kind)"
-              >
-                <DexIcon class="shogi-title__icon" :kind="shelf.kind" />
-                <span class="shogi-title__label">{{ shelf.label }}</span>
+              <!-- 脳トレ道場(docs/brain-training-design.md)。将棋の盤で、見る速さと記憶をきたえる。 -->
+              <button type="button" class="shogi-title__tile" data-brain-tile @click="openBrainTraining">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#fffcf4">
+                    <rect x="5" y="4" width="6" height="1" />
+                    <rect x="3" y="5" width="10" height="1" />
+                    <rect x="1" y="6" width="14" height="4" />
+                    <rect x="3" y="10" width="10" height="1" />
+                    <rect x="5" y="11" width="6" height="1" />
+                  </g>
+                  <g fill="#f1a54c">
+                    <rect x="6" y="5" width="4" height="6" />
+                    <rect x="5" y="6" width="6" height="4" />
+                    <rect x="13" y="1" width="1" height="3" />
+                    <rect x="12" y="2" width="3" height="1" />
+                  </g>
+                  <g fill="#1d303f">
+                    <rect x="7" y="7" width="2" height="2" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">脳トレ</span>
+                <small class="shogi-title__desc">見る速さと記憶</small>
               </button>
             </div>
+          </section>
+          <!-- 図鑑は5つを1枚のタイルにまとめ、押すと棚のシートから選ぶ(docs/brain-training-design.mdの4章)。 -->
+          <section class="shogi-title__group shogi-title__group--dex" aria-labelledby="shogi-home-dex" data-home-group="dex">
+            <h2 id="shogi-home-dex" class="shogi-title__group-title">しらべる</h2>
+            <button type="button" class="shogi-title__tile shogi-title__tile--dex" data-dex-tile @click="openHomeDexShelf">
+              <span class="shogi-title__dex-icons" aria-hidden="true">
+                <DexIcon v-for="shelf in DEX_SHELF" :key="shelf.kind" class="shogi-title__icon" :kind="shelf.kind" />
+              </span>
+              <span class="shogi-title__label">図鑑</span>
+              <small class="shogi-title__desc">駒・手筋・定跡など</small>
+              <span class="shogi-title__dex-go" aria-hidden="true">›</span>
+            </button>
           </section>
         </div>
       </nav>
@@ -362,6 +382,12 @@
       @open-dex="openDexFromTutorial"
       @start-match="startMatchFromTutorial"
       @grant-title="grantTutorialTitle"
+    />
+    <ShogiBrainTraining
+      v-if="brainTrainingOpen"
+      ref="brainTrainingView"
+      :asset-base-url="assetBaseUrl"
+      @close="brainTrainingOpen = false"
     />
     <ShogiProblemSet
       v-if="problemSetOpen"
@@ -1758,20 +1784,25 @@
       <button type="button" aria-label="メッセージを閉じる" @click="errorMessage = ''">×</button>
     </div>
 
-    <!-- 対局中の図鑑の棚。ホームの「しらべる」と同じ絵と名前で選び、図鑑を閉じると対局へ戻る。 -->
+    <!--
+      図鑑の棚。対局中の「図鑑」とホームの「図鑑」のタイルで同じ棚を開く。
+      対局から開いた図鑑は閉じると対局へ、ホームから開いた図鑑は閉じるとホームへ戻る。
+    -->
     <div
       v-if="dexShelfOpen"
       class="shogi-game__confirm shogi-game__dex-shelf"
+      :class="{ 'shogi-game__confirm--over-home': dexShelfFrom === 'home' }"
       role="dialog"
       aria-modal="true"
       aria-labelledby="dex-shelf-title"
       data-dex-shelf
+      :data-dex-shelf-from="dexShelfFrom"
       @click.self="dexShelfOpen = false"
       @keydown.esc.stop="dexShelfOpen = false"
     >
       <div class="shogi-game__confirm-panel shogi-game__dex-shelf-panel">
         <h2 id="dex-shelf-title">図鑑でしらべる</h2>
-        <p>見終わったら、この対局に戻ります。</p>
+        <p>{{ dexShelfFrom === "home" ? "見たい図鑑を選んでね。" : "見終わったら、この対局に戻ります。" }}</p>
         <div class="shogi-game__dex-shelf-items">
           <button
             v-for="shelf in DEX_SHELF"
@@ -1779,14 +1810,14 @@
             type="button"
             class="shogi-game__dex-shelf-item"
             :data-dex-kind="shelf.kind"
-            @click="openDexFromMatch(shelf.kind)"
+            @click="openDexFromShelf(shelf.kind)"
           >
             <DexIcon class="shogi-game__dex-shelf-icon" :kind="shelf.kind" />
             <span>{{ shelf.label }}</span>
             <small>{{ shelf.desc }}</small>
           </button>
         </div>
-        <button type="button" class="shogi-game__dex-shelf-close" @click="dexShelfOpen = false">対局に戻る</button>
+        <button type="button" class="shogi-game__dex-shelf-close" @click="dexShelfOpen = false">{{ dexShelfFrom === "home" ? "ホームに戻る" : "対局に戻る" }}</button>
       </div>
     </div>
 
@@ -2402,6 +2433,7 @@ import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import type ShogiReferenceDexComponent from "./ShogiReferenceDex.vue";
 import type ShogiTutorialComponent from "./ShogiTutorial.vue";
 import type ShogiProblemSetComponent from "./ShogiProblemSet.vue";
+import type ShogiBrainTrainingComponent from "./ShogiBrainTraining.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import OpeningPlanSheet, { type OpeningPlanEntry } from "./OpeningPlanSheet.vue";
 import TitleDaySheet, { type DayReviewView, type DaySummaryView, type KansenkiView } from "./TitleDaySheet.vue";
@@ -2858,6 +2890,7 @@ const loadOpeningDex = () => import("./ShogiOpeningDex.vue");
 const loadReferenceDex = () => import("./ShogiReferenceDex.vue");
 const loadTutorial = () => import("./ShogiTutorial.vue");
 const loadProblemSet = () => import("./ShogiProblemSet.vue");
+const loadBrainTraining = () => import("./ShogiBrainTraining.vue");
 const loadYakobiNote = () => import("./YakobiNote.vue");
 const loadTournament = () => import("./ShogiTournament.vue");
 const loadSkillTest = () => import("./ShogiSkillTest.vue");
@@ -2865,10 +2898,11 @@ const ShogiOpeningDex = defineAsyncComponent(loadOpeningDex);
 const ShogiReferenceDex = defineAsyncComponent(loadReferenceDex);
 const ShogiTutorial = defineAsyncComponent(loadTutorial);
 const ShogiProblemSet = defineAsyncComponent(loadProblemSet);
+const ShogiBrainTraining = defineAsyncComponent(loadBrainTraining);
 const YakobiNote = defineAsyncComponent(loadYakobiNote);
 const ShogiTournament = defineAsyncComponent(loadTournament);
 const ShogiSkillTest = defineAsyncComponent(loadSkillTest);
-const SCREEN_LOADERS = [loadTutorial, loadProblemSet, loadOpeningDex, loadReferenceDex, loadYakobiNote, loadTournament];
+const SCREEN_LOADERS = [loadTutorial, loadProblemSet, loadBrainTraining, loadOpeningDex, loadReferenceDex, loadYakobiNote, loadTournament];
 
 /** ホームを出したあと、手が空いたときに他の画面を先に読み込み、開くときに待たせないようにする。 */
 function prefetchScreens() {
@@ -3116,6 +3150,8 @@ const DEX_SHELF = [
 ] as const;
 type DexKind = (typeof DEX_SHELF)[number]["kind"];
 const dexShelfOpen = ref(false);
+/** 棚をどこから開いたか。ホームから開いた棚はホームの上に出し、図鑑を閉じるとホームへ戻る。 */
+const dexShelfFrom = ref<"home" | "match">("match");
 const dexFromMatch = ref(false);
 const dexOverMatch = computed(() => dexFromMatch.value && (dexOpen.value || Boolean(referenceDexKind.value)));
 const dexBackLabel = computed(() => (
@@ -3129,14 +3165,23 @@ function openDex(kind: DexKind) {
 function openDexShelf() {
   closeSettings();
   closeAssistTools();
+  dexShelfFrom.value = "match";
+  showDexShelf();
+}
+/** ホームの「図鑑」のタイル。5つの図鑑を、対局中と同じ棚から選ぶ。 */
+function openHomeDexShelf() {
+  dexShelfFrom.value = "home";
+  showDexShelf();
+}
+function showDexShelf() {
   dexShelfOpen.value = true;
   void nextTick(() => {
     (gameRoot.value?.querySelector("[data-dex-shelf] button") as HTMLElement | null)?.focus();
   });
 }
-function openDexFromMatch(kind: DexKind) {
+function openDexFromShelf(kind: DexKind) {
   dexShelfOpen.value = false;
-  dexFromMatch.value = true;
+  dexFromMatch.value = dexShelfFrom.value === "match";
   openDex(kind);
 }
 // やこび姫の将棋教室を開いているか。
@@ -3146,6 +3191,13 @@ const referenceDexView = ref<InstanceType<typeof ShogiReferenceDexComponent> | n
 // やこび姫の将棋問題集を開いているか。
 const problemSetOpen = ref(false);
 const problemSetView = ref<InstanceType<typeof ShogiProblemSetComponent> | null>(null);
+// 脳トレ道場(docs/brain-training-design.md)を開いているか。
+const brainTrainingOpen = ref(false);
+const brainTrainingView = ref<InstanceType<typeof ShogiBrainTrainingComponent> | null>(null);
+function openBrainTraining() {
+  noteFeatureSeen("brain");
+  brainTrainingOpen.value = true;
+}
 // 教室のレッスンから始めた対局。終局後は教室へ戻り、reportで★を付ける。
 type TutorialMatchReport = { lessonId: string; outcome: "win" | "lose" | "draw"; reason: string; assistsUsed: number };
 const tutorialMatch = ref<{ lessonId: string; playerColor: "black" | "white"; report: TutorialMatchReport | null } | null>(null);
@@ -7940,6 +7992,7 @@ const homeDiscovery = computed(() => discoveryPlan({
 function openDiscovery(id: string) {
   if (id === "endgame") startEndgameMatch();
   else if (id === "opening-dex") dexOpen.value = true;
+  else if (id === "brain") openBrainTraining();
   else if (id === "measure") startMeasureMatch();
   else if (id === "piece" || id === "tesuji" || id === "world" || id === "glossary") referenceDexKind.value = id;
 }
@@ -8134,6 +8187,11 @@ function navigateBack() {
   } else if (problemSetOpen.value) {
     if (problemSetView.value) problemSetView.value.goBack();
     else problemSetOpen.value = false;
+  } else if (brainTrainingOpen.value) {
+    if (brainTrainingView.value) brainTrainingView.value.goBack();
+    else brainTrainingOpen.value = false;
+  } else if (dexShelfOpen.value && dexShelfFrom.value === "home") {
+    dexShelfOpen.value = false;
   } else if (homeOpen.value) {
     // ホームが最下段。
   } else if (dexShelfOpen.value) {
@@ -8162,7 +8220,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 

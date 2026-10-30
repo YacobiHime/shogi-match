@@ -887,7 +887,8 @@ describe("match screen regressions", () => {
   it("対局中も見出しの「図鑑」から図鑑を開き、閉じると対局へ戻る(docs/match-dex-design.md)", () => {
     // メニューにしまわず、いつも見出しに出す。
     expect(source).toMatch(/<template v-if="!menuCollapsed && !reviewMode">[\s\S]*?<\/template>[\s\S]{0,200}?class="shogi-game__command shogi-game__dex-open"[\s\S]{0,120}?data-match-dex\s*@click="openDexShelf"/);
-    expect(source).toMatch(/v-for="shelf in DEX_SHELF"[\s\S]{0,200}?@click="openDexFromMatch\(shelf\.kind\)"/);
+    expect(source).toMatch(/v-for="shelf in DEX_SHELF"[\s\S]{0,200}?@click="openDexFromShelf\(shelf\.kind\)"/);
+    expect(source).toMatch(/function openDexFromShelf\(kind: DexKind\) \{\s*dexShelfOpen\.value = false;\s*dexFromMatch\.value = dexShelfFrom\.value === "match";/);
     // 対局のエンジンを借りない。占いから新しい対局を始めない。戻る先は対局。
     expect(source).toMatch(/:analysis-engine="dexFromMatch \? null : dexAnalysisEngine"/);
     expect(source).toMatch(/:can-play="!dexFromMatch"/);
@@ -896,6 +897,20 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/'shogi-game--dex-over-match': dexOverMatch/);
     expect(source).toMatch(/\.shogi-game--dex-over-match > :not\(\.shogi-dex\) \{\s*visibility: hidden;/);
     expect(source).toMatch(/\} else if \(dexShelfOpen\.value\) \{\s*dexShelfOpen\.value = false;/);
+  });
+  it("ホームの図鑑は1枚のタイルにまとめ、対局中と同じ棚をホームの上に開く。戻る操作で閉じる(docs/brain-training-design.mdの4章)", () => {
+    expect(source).not.toMatch(/shogi-title__tile--small/);
+    expect(source).toMatch(/class="shogi-title__tile shogi-title__tile--dex" data-dex-tile @click="openHomeDexShelf"/);
+    expect(source).toMatch(/'shogi-game__confirm--over-home': dexShelfFrom === 'home'/);
+    expect(source).toMatch(/dexShelfFrom === "home" \? "ホームに戻る" : "対局に戻る"/);
+    expect(source).toMatch(/\} else if \(dexShelfOpen\.value && dexShelfFrom\.value === "home"\) \{\s*dexShelfOpen\.value = false;\s*\} else if \(homeOpen\.value\) \{/);
+    expect(source).toMatch(/canGoBack: \(\) => [^\n]*\(dexShelfOpen\.value && dexShelfFrom\.value === "home"\)/);
+  });
+  it("まなぶは将棋教室・問題集・脳トレの3枚。脳トレは遅れて読み込み、戻る操作で閉じる", () => {
+    expect(source).toMatch(/class="shogi-title__tiles shogi-title__tiles--learn"[\s\S]*?将棋教室[\s\S]*?問題集[\s\S]*?data-brain-tile @click="openBrainTraining"/);
+    expect(source).toMatch(/const ShogiBrainTraining = defineAsyncComponent\(loadBrainTraining\);/);
+    expect(source).toMatch(/canGoBack: \(\) => [^\n]*brainTrainingOpen\.value/);
+    expect(source).toMatch(/\} else if \(brainTrainingOpen\.value\) \{\s*if \(brainTrainingView\.value\) brainTrainingView\.value\.goBack\(\);/);
   });
   it("やこび姫の作戦の助言は、危険の知らせのあと・ほかの助言の前に、確かめの読みを通してから出す(docs/coach-plan-advice-design.md)", () => {
     // 王手・詰まされる知らせ → 終盤の方針(N3) → 詰めろ・評価の崖 → 相手の狙い → 作戦の提案 → ほかの知らせ。
