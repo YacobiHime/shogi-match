@@ -344,6 +344,25 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     expect(lines).toContain('うーん……いやぁ、大変です。');
   });
 
+  it('善彦は、ほかの解説者の決まり文句を使わず、例の口調の案から局ごとに選ぶ(37章)', () => {
+    const many = ['', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((variant) => longScript({ variant, cast: yoshihiko, white: player('s', '鈴木蓮', { age: 28 }) }));
+    const said = many.flatMap(({ lines }) => lines.filter(({ role }) => role === 'commentator').map(({ text }) => text));
+    // ほかの解説者の決まり文句(丁寧語の言い切り)は出さない。
+    for (const stock of [/がどう応じるか、注目ですね/, /ここで長考に入りました/, /ここから本当の勝負です/, /ここから中盤戦。両者/, /いよいよ終盤戦。勝率は/, /見事な一手です/, /少し疑問手だったかもしれません/, /痛い一手になりそうです/]) {
+      expect(said.some((text) => stock.test(text)), String(stock)).toBe(false);
+    }
+    // 案は局ごとに替わる(10局で、同じ場面の2つの言い方がどちらも出る)。
+    expect(said.some((text) => text.startsWith('まあ、そろそろ中盤という感じですかね。'))).toBe(true);
+    expect(said.some((text) => text.startsWith('方針は、まあ、だいたい見えてきたかな'))).toBe(true);
+    // 聞き手は短く振る。
+    const host = many.flatMap(({ lines }) => lines.filter(({ role }) => role === 'host').map(({ text }) => text));
+    expect(host).toContain('この辺りは、いかがですか？');
+    // ほかの解説者の台本は、善彦の案を足しても変わらない(言い方は丁寧語のまま)。
+    const plain = longScript({ cast: { id: 'c', name: '佐藤誠', dan: '九段', story: null, voice: 'polite' }, white: player('s', '鈴木蓮') });
+    expect(plain.lines.some(({ text }) => /ここから中盤戦。両者、作戦の方向がはっきりしてきました。/.test(text))).toBe(true);
+    expect(plain.lines.some(({ text }) => /この辺りは、いかがですか/.test(text))).toBe(false);
+  });
+
   it('タイトルホルダー同士なら、そう紹介する。棋譜読み上げは名鑑の若手の苗字で呼ぶ', () => {
     const black = player('a', '中村大輔', { held: ['王位'] });
     const white = player('s', '鈴木蓮', { held: ['棋聖'] });

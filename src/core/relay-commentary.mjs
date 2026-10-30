@@ -840,6 +840,12 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     comments.push({ at, when: 'move', text: fill(pick(rng, UNDER[key]), { cast: castTitle }), tone: 'gold', kind: 'under', size: 'big', pos: 'bottom' });
   };
   const shortName = (side) => call(side).replace(/さん$/, '');
+  /**
+   * 善彦の言い方を、案の中から局ごとに選ぶ(37章)。善彦でないときは1つ目を返し、種も使わない。
+   * 善彦の選びは別の種にし、ほかのコメントの選び方を動かさない。
+   */
+  const yoshihikoRng = createRng(relaySeed(`${spec.key}:yoshihiko`));
+  const yo = (...options) => (cast.voice === 'yoshihiko' ? pick(yoshihikoRng, options) : options[0]);
   const news = [...(spec.news ?? [])];
   let newsShown = 0;
   let lastAi = 0;
@@ -921,7 +927,9 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     }
     const favorite = favoriteOpening(black);
     if (favorite) {
-      line(0, 'move', 'commentator', speak(cast, `${call('black')}は${favorite}が得意です。${call('white')}がどう応じるか、注目ですね。`, `${call('black')}は${favorite}が得意。${call('white')}がどう応じるか、見どころ。`));
+      if (cast.voice === 'yoshihiko') line(0, 'move', 'host', `${call('black')}の得意な形ですけれども。`);
+      line(0, 'move', 'commentator', speak(cast, `${call('black')}は${favorite}が得意です。${call('white')}がどう応じるか、注目ですね。`, `${call('black')}は${favorite}が得意。${call('white')}がどう応じるか、見どころ。`,
+        yo(`${call('black')}は${favorite}を、まあ、よく指されますよね。えぇ。`, `${favorite}が得意ということで。まあ、あの、今日も出るんでは無いかな…という感じはありますね。`)));
     }
     // 善彦の解説は、謙遜から始まる(視聴者がつっこむ。25章)。親子の対局は、上の親子のやりとりにする。
     // 両者がタイトルを持っていれば「タイトルホルダー同士」。そのあと聞き手が棋譜読み上げに振る(36章)。
@@ -1102,7 +1110,11 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (predictedParts?.from && /^[Ll]$/.test(pieceAt(sfenBefore, predictedParts.from) ?? '') && once(`kyosha:${side}`)) maybe(0.5, at, 'think', 'kyosha');
     if (entry.time >= LONG_THINK_SECONDS) {
       longThinks += 1;
-      if (once(`long:${side}`) || rng.next() < 0.5) line(at, 'think', 'commentator', speak(cast, `${call(side)}、ここで長考に入りました。`, `${call(side)}、ここで長考に入った。`));
+      if (once(`long:${side}`) || rng.next() < 0.5) {
+        if (cast.voice === 'yoshihiko') line(at, 'think', 'host', 'ここで長考ですけれども。');
+        line(at, 'think', 'commentator', speak(cast, `${call(side)}、ここで長考に入りました。`, `${call(side)}、ここで長考に入った。`,
+          yo('……まあ、考えますよね。ここは。', '長考ですね。まあ、私でも、ここは考えると思います。えぇ。')));
+      }
       // 2回目の長考で、聞き手が対局者の表情をたずねる(25章)。善彦には最初の長考で、苗字と肩書(タイトルか段位)で丁寧にたずねる(36章)。
       if (longThinks >= (cast.voice === 'yoshihiko' ? 1 : 2) && once('face')) {
         line(at, 'think', 'host', cast.voice === 'yoshihiko'
@@ -1219,7 +1231,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       if (facts.captured === 'B' && at - lastBishopCapture <= 2 && at < 50) {
         if (once('bishop-exchange')) {
           line(at, 'move', 'host', '角交換になったね！');
-          line(at, 'move', 'commentator', speak(cast, '角を持ち合うと、打ち込みのすきに気をつける将棋になりますね。', '角を持ち合うと、打ち込みのすきに気をつける将棋になる。'));
+          line(at, 'move', 'commentator', speak(cast, '角を持ち合うと、打ち込みのすきに気をつける将棋になりますね。', '角を持ち合うと、打ち込みのすきに気をつける将棋になる。',
+            yo('角交換ですね。まあ、打ち込みには、お互い気をつけないといけないという…', 'えー、角が手に入ったので。まあ、あの、隙は作りにくくなりましたね。')));
         }
         comment(at, 'move', 'bishop', {}, 2);
         maybe(0.4, at, 'move', 'kiai');
@@ -1259,7 +1272,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (facts?.promote && (facts.after === '+R' || facts.after === '+B') && once(`promote:${side}:${facts.after}`)) {
       comment(at, 'move', 'promote', { piece: PIECE_NAMES[facts.after] });
       newbie(at, 'move', 'promote', {}, 0.5);
-      line(at, 'move', 'commentator', speak(cast, `${call(side)}、${PIECE_NAMES[facts.after]}を作りました。大きいですね。`, `${call(side)}、${PIECE_NAMES[facts.after]}を作った。これは大きい。`));
+      line(at, 'move', 'commentator', speak(cast, `${call(side)}、${PIECE_NAMES[facts.after]}を作りました。大きいですね。`, `${call(side)}、${PIECE_NAMES[facts.after]}を作った。これは大きい。`,
+        yo(`${PIECE_NAMES[facts.after]}ができましたね。まあ、これは大きいんでは無いかな…`, `え～、${PIECE_NAMES[facts.after]}ですか。いやぁ、これは、えぇ、ええ。大きいですね。`)));
     }
 
     // 戦型と囲い(判定が初めて付いたとき)。
@@ -1268,7 +1282,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       const castle = (color) => formations[color]?.castle ?? '';
       if (!formationsSeen.battle && formations.battle) {
         formationsSeen.battle = formations.battle;
-        line(at, 'move', 'commentator', speak(cast, `戦型は${formations.battle}になりました。`, `戦型は${formations.battle}。`));
+        line(at, 'move', 'commentator', speak(cast, `戦型は${formations.battle}になりました。`, `戦型は${formations.battle}。`,
+          yo(`まあ、${formations.battle}ということで。えぇ。`, `${formations.battle}ですか。……まあ、最近よく見る形ではありますね、はい。`)));
         comment(at, 'move', 'formation', { name: formations.battle });
         maybe(0.3, at, 'move', 'formationSure', { name: formations.battle, short: shortOpening(formations.battle), side: '' });
       }
@@ -1308,7 +1323,10 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         if (!formationsSeen[castleKey] && castle(color) && at >= 10) {
           formationsSeen[castleKey] = castle(color);
           line(at, 'move', 'host', `${SIDE_NAME[color]}の${call(color)}、${castle(color)}が完成！`);
-          if (rng.next() < 0.6) line(at, 'move', 'commentator', speak(cast, 'しっかり囲いましたね。これで戦いの準備ができました。', 'しっかり囲った。これで戦いの準備ができた。'));
+          if (rng.next() < 0.6) {
+            line(at, 'move', 'commentator', speak(cast, 'しっかり囲いましたね。これで戦いの準備ができました。', 'しっかり囲った。これで戦いの準備ができた。',
+              yo('しっかり、囲いましたね。まあ、これで一応、準備はできたという感じで。', `えー、${castle(color)}が完成と。まあ、固いのは固いですよね、えぇ。`)));
+          }
           comment(at, 'move', 'castle', { name: castle(color) });
           const guard = kingGuard(sfenAfter, color);
           if (/穴熊/.test(castle(color)) && once(`anaguma-go:${color}`)) maybe(0.6, at, 'move', 'anagumaGo', { name: fan(color), opp: fan(other(color)) });
@@ -1332,7 +1350,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (entry.mark !== 'book' && bookRun && at >= 12) {
       bookRun = false;
       if (once('theory')) {
-        line(at, 'move', 'commentator', speak(cast, 'ここで定跡を離れました。ここからが本当の勝負です。', 'ここで定跡を離れた。ここからが本当の勝負。'));
+        line(at, 'move', 'commentator', speak(cast, 'ここで定跡を離れました。ここからが本当の勝負です。', 'ここで定跡を離れた。ここからが本当の勝負。',
+          yo('この辺から、まあ、前例は無いんでは無いかな…という印象ですね。', 'ここからは、えー、もう分かんないです。正直。')));
         comment(at, 'move', 'opening');
         maybe(0.5, at, 'move', 'theory');
         maybe(0.4, at, 'move', 'kifuNew', { at });
@@ -1378,7 +1397,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       const meaning = moveMeaning(facts, { ply: at });
       if (meaning) {
         line(at, 'move', 'host', `今の${text}は、どういう手？`);
-        line(at, 'move', 'commentator', speak(cast, `${meaning}です。`, `${meaning}だね。`));
+        line(at, 'move', 'commentator', speak(cast, `${meaning}です。`, `${meaning}だね。`,
+          yo(`まあ、${meaning}という感じですかね。たぶん。`, `えー、${meaning}……だと思うんですけど。違ったらすみません。`)));
       }
     }
 
@@ -1424,14 +1444,17 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         under(at, rng.next() < 0.5 ? 'sasshi' : 'oi', 0.5);
       }
       if (collapse) {
-        line(at, 'move', 'commentator', speak(cast, `……これは、${call(side)}の玉に危ない筋が残ったかもしれません。終盤の頓死の癖が出てしまったか。`, `……${call(side)}の玉に、危ない筋が残ったかも。頓死の癖が出たのかな。`));
+        line(at, 'move', 'commentator', speak(cast, `……これは、${call(side)}の玉に危ない筋が残ったかもしれません。終盤の頓死の癖が出てしまったか。`, `……${call(side)}の玉に、危ない筋が残ったかも。頓死の癖が出たのかな。`,
+          yo('あぁ～……玉が、ちょっと、危ないかもしれないですね。', 'これは、まあ、あの……見落としがあったかな、という。')));
         cards.push({ at, when: 'move', kind: 'trait', tier: 'red', title: `${players[side].name}『終盤での頓死』`, text: '自玉の危険を見落とした' });
       } else {
         line(at, 'move', 'commentator', heavy
           ? speak(cast, `今の${text}は、${call(side)}にとって痛い一手になりそうです。AIの推奨は${bestText}でした。`,
-            `今の${text}は、${call(side)}にとって痛い一手になりそう。AIの推奨は${bestText}。`)
+            `今の${text}は、${call(side)}にとって痛い一手になりそう。AIの推奨は${bestText}。`,
+            yo(`今の${text}は、まあ、痛かったかもしれないですね。AIは${bestText}と言ってるんですけど。`, `あの、AIは${bestText}らしいです。……人間には、ちょっと、難しいですよね。`))
           : speak(cast, `今の${text}は、少し疑問手だったかもしれません。AIの推奨は${bestText}でした。`,
-            `今の${text}は、少し疑問手だったかも。AIの推奨は${bestText}。`));
+            `今の${text}は、少し疑問手だったかも。AIの推奨は${bestText}。`,
+            yo(`まあ、AIは${bestText}と言ってるんですけど。人間には、ちょっと、あの、難しいですよね。`, `${bestText}が良かったらしいです。……らしいです。`)));
       }
       const [fromRate, toRate] = [Math.round(moverRate(rateBefore) * 100), Math.round(moverRate(rateAfter) * 100)];
       if (Math.abs(fromRate - toRate) >= 2) line(at, 'move', 'host', `勝率が、${SIDE_NAME[side]}${fromRate}%から${toRate}%に動いたよ。`);
@@ -1448,13 +1471,16 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       const opponent = other(side);
       if (opponent === winner) {
         if (at <= plan.openingEnd && has(players[opponent], 'research-demon') && once('trait:research-demon')) {
-          line(at, 'move', 'commentator', speak(cast, `これが${call(opponent)}の『研究の鬼』。序盤で差をつけました。`, `これが${call(opponent)}の『研究の鬼』。序盤で差をつけた。`));
+          line(at, 'move', 'commentator', speak(cast, `これが${call(opponent)}の『研究の鬼』。序盤で差をつけました。`, `これが${call(opponent)}の『研究の鬼』。序盤で差をつけた。`,
+            yo(`まあ、${call(opponent)}は、研究が深いので。えぇ。ここで差がついたという感じはありますね。`, `この辺は、${call(opponent)}の、まあ、得意なところという印象は、あるんですけど。`)));
           cards.push({ at, when: 'move', kind: 'trait', tier: 'gold', title: `${players[opponent].name}『研究の鬼』`, text: '序盤の研究で差をつけた' });
         } else if (at > plan.openingEnd && at <= plan.middleEnd && has(players[opponent], 'grand-view') && once('trait:grand-view')) {
-          line(at, 'move', 'commentator', speak(cast, `${call(opponent)}の『大局観』。中盤の形勢判断が正確です。`, `${call(opponent)}の『大局観』。中盤の形勢判断が正確。`));
+          line(at, 'move', 'commentator', speak(cast, `${call(opponent)}の『大局観』。中盤の形勢判断が正確です。`, `${call(opponent)}の『大局観』。中盤の形勢判断が正確。`,
+            yo(`まあ、${call(opponent)}は、形勢判断が正確なので。えぇ。この辺で差がついたという感じはありますね。`, `この辺は、${call(opponent)}の、まあ、得意なところという印象は、あるんですけど。`)));
           cards.push({ at, when: 'move', kind: 'trait', tier: 'gold', title: `${players[opponent].name}『大局観』`, text: '中盤の形勢判断で上回った' });
         } else if (entry.mark === 'decisive' && spec.how === 'comeback' && has(players[opponent], 'comeback') && once('trait:comeback')) {
-          line(at, 'move', 'commentator', speak(cast, `${call(opponent)}の勝負手に、${call(side)}が間違えました。これが『逆転の名手』です。`, `${call(opponent)}の勝負手に、${call(side)}が間違えた。これが『逆転の名手』。`));
+          line(at, 'move', 'commentator', speak(cast, `${call(opponent)}の勝負手に、${call(side)}が間違えました。これが『逆転の名手』です。`, `${call(opponent)}の勝負手に、${call(side)}が間違えた。これが『逆転の名手』。`,
+            yo(`まあ、${call(opponent)}は、こういうところで、あの、勝負手を出してくるので。えぇ。`, `この辺は、${call(opponent)}の、まあ、得意なところという印象は、あるんですけど。`)));
           cards.push({ at, when: 'move', kind: 'trait', tier: 'gold', title: `${players[opponent].name}『逆転の名手』`, text: '劣勢から勝負手で逆転' });
         }
       }
@@ -1466,7 +1492,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     // 鋭い一手。
     if (entry.mark === 'only' && onlyCount < ONLY_LIMIT && at >= 20) {
       onlyCount += 1;
-      line(at, 'move', 'commentator', speak(cast, `${text}、見事な一手です。ここはこれしかありませんでした。`, `${text}、見事な一手。ここはこれしかなかった。`));
+      line(at, 'move', 'commentator', speak(cast, `${text}、見事な一手です。ここはこれしかありませんでした。`, `${text}、見事な一手。ここはこれしかなかった。`,
+        yo('……いやぁ、これは。まあ、これしか無いんですけど、指せないですよね、普通。', `あぁ～、${text}。えぇ、ええ。これは、凄いですね。`)));
       comment(at, 'move', 'only', {}, 2, 'gold');
       maybe(0.25, at, 'move', 'chi', { name: fan(other(side)) });
       under(at, onlyCount === 1 ? 'god' : 'nattoku', 0.7);
@@ -1480,7 +1507,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       }
     }
     if (entry.mark === 'mate' && side === winner && has(players[side], 'tsume') && once('trait:tsume')) {
-      line(at, 'move', 'commentator', speak(cast, `詰将棋が得意な${call(side)}、詰みを読み切っていますね。`, `詰将棋が得意な${call(side)}、詰みを読み切ってる。`));
+      line(at, 'move', 'commentator', speak(cast, `詰将棋が得意な${call(side)}、詰みを読み切っていますね。`, `詰将棋が得意な${call(side)}、詰みを読み切ってる。`,
+        yo('これは、まあ、読み切ってるんでは無いかな…という感じですね。', 'えー、詰んでますね。たぶん。えぇ、ええ。')));
       cards.push({ at, when: 'move', kind: 'trait', tier: 'blue', title: `${players[side].name}『詰将棋が得意』`, text: '詰みを読み切った' });
     }
 
@@ -1525,12 +1553,15 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     // 終盤の始まりは筋書きで76〜96手目。早いほう(80手目まで)なら「もう終盤？」。
     if (at === plan.middleEnd && at <= 80) maybe(0.45, at, 'move', 'mouEnd');
     if (at === plan.openingEnd && once('middle')) {
-      line(at, 'move', 'commentator', speak(cast, 'ここから中盤戦。両者、作戦の方向がはっきりしてきました。', 'ここから中盤戦。両者の作戦の方向が、はっきりしてきた。'));
+      if (cast.voice === 'yoshihiko') line(at, 'move', 'host', 'この辺りは、いかがですか？');
+      line(at, 'move', 'commentator', speak(cast, 'ここから中盤戦。両者、作戦の方向がはっきりしてきました。', 'ここから中盤戦。両者の作戦の方向が、はっきりしてきた。',
+        yo('まあ、そろそろ中盤という感じですかね。えぇ。', '方針は、まあ、だいたい見えてきたかな…という印象は、あるんですけど。')));
     }
     if (at === plan.middleEnd && once('ending')) {
       const lead = rateAfter >= 0.5 ? 'black' : 'white';
       const leadRate = Math.round((lead === 'black' ? rateAfter : 1 - rateAfter) * 100);
-      line(at, 'move', 'commentator', speak(cast, `いよいよ終盤戦。勝率は${SIDE_NAME[lead]}${leadRate}%です。`, `いよいよ終盤戦。勝率は${SIDE_NAME[lead]}${leadRate}%。`));
+      line(at, 'move', 'commentator', speak(cast, `いよいよ終盤戦。勝率は${SIDE_NAME[lead]}${leadRate}%です。`, `いよいよ終盤戦。勝率は${SIDE_NAME[lead]}${leadRate}%。`,
+        yo(`まあ、ここからは終盤ですね。勝率は${SIDE_NAME[lead]}${leadRate}%と出てますけど。……数字ほどは、分かんないです。`, `いよいよ、という感じですね。えぇ。勝率は${SIDE_NAME[lead]}${leadRate}%ですか。`)));
       comment(at, 'move', 'ending', {}, 2);
     }
     // 形勢が傾いたときの心の声(それぞれ1回)。
@@ -1544,7 +1575,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
 
     // 秒読みに入った。
     if (!before.byoyomi[side] && after.byoyomi[side]) {
-      line(at, 'move', 'commentator', speak(cast, `${call(side)}、持ち時間を使い切りました。ここから1手60秒未満の秒読みです。`, `${call(side)}、持ち時間を使い切った。ここから1手60秒未満の秒読み。`));
+      line(at, 'move', 'commentator', speak(cast, `${call(side)}、持ち時間を使い切りました。ここから1手60秒未満の秒読みです。`, `${call(side)}、持ち時間を使い切った。ここから1手60秒未満の秒読み。`,
+        yo(`${call(side)}、秒読みですね。まあ、ここからは、あの、大変ですよ。`, `${call(side)}、1分将棋に入りました。……私も、苦手なんですよね、えぇ。`)));
       cards.push({ at, when: 'move', kind: 'byoyomi', tier: '', title: '秒読み', text: `${players[side].name}、1分将棋に` });
       comment(at, 'move', 'byoyomi', {}, 2);
       newbie(at, 'move', 'byoyomi', {}, 0.6);
@@ -1879,7 +1911,10 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       }
       think(at, 'move', end.winner, 'win');
       const how = HOW_LABELS[spec.how];
-      if (how) line(at, 'move', 'commentator', speak(cast, `${call(end.winner)}が、${how}一局でした。`, `${call(end.winner)}が、${how}一局だった。`));
+      if (how) {
+        line(at, 'move', 'commentator', speak(cast, `${call(end.winner)}が、${how}一局でした。`, `${call(end.winner)}が、${how}一局だった。`,
+          yo(`まあ、${call(end.winner)}らしい、${how}一局だったという印象ですね。はい。`, `${call(end.winner)}が、${how}一局でしたね。えぇ、ええ。`)));
+      }
       // 聞き手が一局をふり返ってたずね、解説者が答え、聞き手がお礼を言う(25章)。
       line(at, 'move', 'host', cast.voice === 'yoshihiko' ? 'この一局振り返っていかがだったでしょうか。' : 'この一局、ふり返ってどうだった？');
       line(at, 'move', 'commentator', cast.voice === 'yoshihiko' && players[end.winner]?.story === HANANE
