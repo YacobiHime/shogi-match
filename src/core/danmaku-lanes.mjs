@@ -1,16 +1,19 @@
-// 流れるコメントの段の選び方(docs/tournament-relay-design.mdの33章)。ニコニコ動画と同じく、
-// コメントは右の端から左の端の外まで、決まった時間で流れる(長い字ほど速い)。同じ段の前のコメントに、
-// 入る時にも、流れているあいだにも追いつかない段を、上から選ぶ。どの段も空いていなければ、少しだけ待ってから流す。
-// それでも空かなければ、重なりのいちばん少ない段にする。画面に依存しない(時間と幅はミリ秒とpxで受け取る)。
+// 流れるコメントの置き方(docs/tournament-relay-design.mdの33章・45章)。ニコニコ動画の置き方をもとにする。
+// - コメントは右の端から左の端の外まで、4秒で流れる(長い字ほど速い。ニコニコと同じ時間)。
+// - 置く高さで、そこにいるコメントとぶつかれば、ぶつかったコメントのすぐ下へずらして探し直す。
+//   どこにも空きがなければ(弾幕)、無作為の高さに置く。待たない。
+// - ニコニコは上の端から探し始めるので、コメントが少ないと上に集まる(この中継の量では7割が上の1割)。
+//   画面全体に出すため、探し始める高さだけ無作為にし、下の端まで行ったら上の端へ回って探す。
+// - ぶつかるかは、ニコニコの2本の判定線より厳しく、流れているあいだ一度も近づきすぎないかで見る(33章)。
+// 画面に依存しない(時間はミリ秒、幅と高さはpxで受け取る)。
 
 /** 前のコメントとのあいだに空ける幅(字の大きさに対する倍率)。 */
 export const DANMAKU_GAP_EM = 1.2;
-/** 空いた段がないとき、流し始めを遅らせてよい時間(ミリ秒)と、探す刻み。 */
-export const DANMAKU_MAX_WAIT_MS = 1600;
-const WAIT_STEP_MS = 100;
+/** コメントが右の端から左の端の外まで流れる時間(ミリ秒)。ニコニコ動画と同じ4秒。 */
+export const DANMAKU_DURATION_MS = 4000;
 
 /**
- * @typedef {{ start: number, width: number, duration: number, lane: number, span: number }} Placed
+ * @typedef {{ start: number, width: number, duration: number, top: number, height: number }} Placed
  * @typedef {{ placed: Placed[] }} DanmakuState
  */
 
@@ -42,44 +45,30 @@ export function collides(a, b, areaWidth, gap) {
 }
 
 /**
- * コメントを1つ置く。置いた段と、流し始める時刻を返し、stateに覚える。
+ * コメントを1つ置く。置いた高さ(欄の上からのpx)と、流し始める時刻を返し、stateに覚える。
  * @param {DanmakuState} state
- * @param {{ start: number, width: number, duration: number, areaWidth: number, laneCount: number,
- *   span?: number, gap?: number, maxWait?: number }} input
- *   startは流し始めたい時刻、widthは字の幅(px)、spanは大きな字が使う段の数
- * @returns {{ lane: number, start: number }}
+ * @param {{ start: number, width: number, height: number, duration: number, areaWidth: number, areaHeight: number,
+ *   gap?: number, random?: () => number }} input
+ *   startは流し始める時刻、width・heightは字の幅と行の高さ(px)、areaWidth・areaHeightは流す欄の大きさ(px)
+ * @returns {{ top: number, start: number, crowded: boolean }} crowdedは、空きがなく無作為に置いたか
  */
-export function placeComment(state, { start, width, duration, areaWidth, laneCount, span = 1, gap = 0, maxWait = DANMAKU_MAX_WAIT_MS }) {
+export function placeComment(state, { start, width, height, duration, areaWidth, areaHeight, gap = 0, random = Math.random }) {
   // 流れ終わったコメントは忘れる(いま置くコメントより前に終わるもの)。
   state.placed = state.placed.filter((item) => item.start + item.duration > start);
-  const lanes = Math.max(1, Math.trunc(laneCount));
-  const size = Math.min(Math.max(1, Math.trunc(span)), lanes);
-  const top = lanes - size;
-  const blockers = (lane, at) => state.placed.filter((item) => (
-    item.lane < lane + size && lane < item.lane + item.span
-    && collides(item, { start: at, width, duration }, areaWidth, gap)
-  )).length;
-  let choice = null;
-  for (let wait = 0; wait <= maxWait && !choice; wait += WAIT_STEP_MS) {
-    for (let lane = 0; lane <= top; lane += 1) {
-      if (!blockers(lane, start + wait)) {
-        choice = { lane, start: start + wait };
-        break;
-      }
-    }
-  }
-  if (!choice) {
-    // どの段もふさがっている(コメントがとても多い)。待たずに、重なるコメントのいちばん少ない段へ。
-    let best = 0;
-    let fewest = Infinity;
-    for (let lane = 0; lane <= top; lane += 1) {
-      const count = blockers(lane, start);
-      if (count < fewest) [best, fewest] = [lane, count];
-    }
-    choice = { lane: best, start };
-  }
-  state.placed.push({ start: choice.start, width, duration, lane: choice.lane, span: size });
-  return choice;
+  const room = Math.max(0, areaHeight - height);
+  const me = { start, width, duration };
+  // ぶつかるかもしれないのは、流れているあいだに近づきすぎるコメントだけ(高さは置く場所を決めてから見る)。
+  const near = state.placed.filter((item) => collides(item, me, areaWidth, gap));
+  const free = (/** @type {number} */ top) => !near.some((item) => top < item.top + item.height && item.top < top + height);
+  // 探す高さ: 無作為の高さ、そこから下のぶつかるコメントのすぐ下、上の端、それより上のぶつかるコメントのすぐ下(回って探す)。
+  const from = random() * room;
+  const below = near.map((item) => item.top + item.height).filter((top) => top <= room).sort((a, b) => a - b);
+  const order = [from, ...below.filter((top) => top > from), 0, ...below.filter((top) => top <= from)];
+  let top = order.find(free);
+  const crowded = top === undefined;
+  if (top === undefined) top = random() * room;
+  state.placed.push({ start, width, duration, top, height });
+  return { top, start, crowded };
 }
 
 /**

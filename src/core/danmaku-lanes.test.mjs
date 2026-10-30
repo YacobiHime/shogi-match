@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { collides, createDanmaku, estimateTextWidth, placeComment } from './danmaku-lanes.mjs';
 
 const W = 400;
-const base = { duration: 5000, areaWidth: W, laneCount: 6, gap: 20 };
 
 describe('collides', () => {
   it('同じ速さなら、入る時に離れていれば、ずっと重ならない', () => {
@@ -23,48 +22,59 @@ describe('collides', () => {
   });
 });
 
-describe('placeComment', () => {
-  it('同じ時に来た6つのコメントは、上から別々の段に入る', () => {
+describe('placeComment(ニコニコ動画の置き方をもとに、探し始める高さを無作為にする。45章)', () => {
+  const H = 300;
+  const area = { duration: 4000, areaWidth: W, areaHeight: H, height: 20, gap: 20 };
+  /** 決まった順の乱数(テストで同じ結果にする)。 */
+  const seq = (...values) => { let index = 0; return () => values[index++ % values.length]; };
+  const overlapY = (a, b) => a.top < b.top + 20 && b.top < a.top + 20;
+
+  it('空いていれば、無作為に選んだ高さにそのまま置く', () => {
     const state = createDanmaku();
-    const lanes = Array.from({ length: 6 }, () => placeComment(state, { ...base, start: 0, width: 120 }).lane);
-    expect(lanes).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(placeComment(state, { ...area, start: 0, width: 100, random: seq(0.5) })).toEqual({ top: 140, start: 0, crowded: false });
   });
-  it('間をおいて来たコメントは、空いた上の段に戻る', () => {
+  it('ぶつかるコメントがあれば、そのすぐ下へずらす。下の端まで行けば上の端へ回る', () => {
     const state = createDanmaku();
-    placeComment(state, { ...base, start: 0, width: 80 });
-    expect(placeComment(state, { ...base, start: 2500, width: 80 })).toEqual({ lane: 0, start: 2500 });
+    placeComment(state, { ...area, start: 0, width: 100, random: seq(0.5) });
+    const next = placeComment(state, { ...area, start: 0, width: 100, random: seq(0.5) });
+    expect(next.top).toBe(160);
+    // 下の端の近くから探して空きがなければ、上の端(0)に置く。
+    const bottom = createDanmaku();
+    placeComment(bottom, { ...area, start: 0, width: 100, random: seq(1) });
+    expect(placeComment(bottom, { ...area, start: 0, width: 100, random: seq(1) }).top).toBe(0);
   });
-  it('大きな字は2段を使い、その2段のどちらにも重ならない', () => {
+  it('流れているあいだにぶつからないコメントとは、同じ高さに置いてよい(先のコメントが出きったあとなど)', () => {
     const state = createDanmaku();
-    placeComment(state, { ...base, start: 0, width: 100 });
-    const big = placeComment(state, { ...base, start: 0, width: 200, span: 2 });
-    expect(big.lane).toBe(1);
-    expect(placeComment(state, { ...base, start: 0, width: 100 }).lane).toBe(3);
+    placeComment(state, { ...area, start: 0, width: 100, random: seq(0.5) });
+    expect(placeComment(state, { ...area, start: 3500, width: 100, random: seq(0.5) }).top).toBe(140);
   });
-  it('段が全部ふさがっていれば少し待ち、待ってもだめなら重なりの少ない段にする', () => {
+  it('どこにも空きがなければ(弾幕)、待たずに無作為の高さに置く', () => {
     const state = createDanmaku();
-    const two = { ...base, laneCount: 2 };
-    placeComment(state, { ...two, start: 0, width: 100 });
-    placeComment(state, { ...two, start: 0, width: 100 });
-    const waited = placeComment(state, { ...two, start: 0, width: 100 });
-    expect(waited.start).toBeGreaterThan(0);
-    expect(waited.start).toBeLessThanOrEqual(1600);
-    const crowded = createDanmaku();
-    for (let index = 0; index < 4; index += 1) placeComment(crowded, { ...two, start: 0, width: 100, maxWait: 0 });
-    const forced = placeComment(crowded, { ...two, start: 0, width: 100, maxWait: 0 });
-    expect(forced.start).toBe(0);
+    const small = { ...area, areaHeight: 40 };
+    placeComment(state, { ...small, start: 0, width: 100, random: seq(0) });
+    placeComment(state, { ...small, start: 0, width: 100, random: seq(0) });
+    const crowded = placeComment(state, { ...small, start: 0, width: 100, random: seq(0.25) });
+    expect(crowded).toMatchObject({ start: 0, crowded: true });
+    expect(crowded.top).toBeGreaterThanOrEqual(0);
+    expect(crowded.top).toBeLessThanOrEqual(20);
   });
-  it('20個のコメントを0.38秒ずつ流すと、8段なら1つも重ならない', () => {
+  it('0.4秒ずつ流す60個のコメントは、欄の上下に散らばり(上半分と下半分の両方に2割以上)、1つも重ならない', () => {
     const state = createDanmaku();
+    let seed = 7;
+    const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const placed = [];
-    for (let index = 0; index < 20; index += 1) {
+    for (let index = 0; index < 60; index += 1) {
       const width = 60 + (index * 37) % 260;
-      const result = placeComment(state, { ...base, laneCount: 8, start: index * 380, width });
-      placed.push({ ...result, width, duration: 5000 });
+      const result = placeComment(state, { ...area, start: index * 400, width, random });
+      placed.push({ ...result, width, duration: 4000 });
     }
+    const upper = placed.filter(({ top }) => top < H / 2).length;
+    expect(upper / placed.length).toBeGreaterThan(0.2);
+    expect(upper / placed.length).toBeLessThan(0.8);
+    expect(placed.every(({ crowded }) => !crowded)).toBe(true);
     for (let i = 0; i < placed.length; i += 1) {
       for (let j = i + 1; j < placed.length; j += 1) {
-        if (placed[i].lane === placed[j].lane) expect(collides(placed[i], placed[j], W, 0)).toBe(false);
+        if (overlapY(placed[i], placed[j])) expect(collides(placed[i], placed[j], W, 0)).toBe(false);
       }
     }
   });

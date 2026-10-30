@@ -236,7 +236,7 @@ import {
 } from "./core/relay-commentary.mjs";
 import { addNote, highlightPlan, loadNotes, loadQuiz, quizChoices, saveNotes, saveQuiz, scoreQuiz } from "./core/relay-fun.mjs";
 import { loadRelayStore, markRelaySeen, saveRelayStore } from "./core/relay-store.mjs";
-import { DANMAKU_GAP_EM, createDanmaku, estimateTextWidth, placeComment } from "./core/danmaku-lanes.mjs";
+import { DANMAKU_DURATION_MS, DANMAKU_GAP_EM, createDanmaku, estimateTextWidth, placeComment } from "./core/danmaku-lanes.mjs";
 import { createFormationState, detectFormationSnapshot, updateFormationState } from "./core/formation-tracker.mjs";
 import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
@@ -291,9 +291,9 @@ const MOVE_BASE_MS = 750;
 const THINK_MAX_MS = 2600;
 /** 札を出しているあいだ、次の手を待つ時間。 */
 const CARD_HOLD_MS = { long: 2200, short: 1100 } as const;
-/** コメントが流れる時間。段の数は、盤の欄の高さと字の大きさから決める(33章)。 */
-const COMMENT_MS = 5600;
-/** 段の高さ(字の大きさに対する倍率)と、段を置く範囲(盤の欄の高さに対する割合。下の端は下コメと名札に空ける)。 */
+/** コメントが流れる時間(ニコニコ動画と同じ4秒。45章)。 */
+const COMMENT_MS = DANMAKU_DURATION_MS;
+/** 1行の高さ(字の大きさに対する倍率)と、コメントを置く範囲(盤の欄の高さに対する割合。下の端は下コメと名札に空ける)。 */
 const LANE_HEIGHT_EM = 1.35;
 const LANE_AREA = { top: 0.03, bottom: 0.8 } as const;
 /** 同時に出しておくコメントの上限。 */
@@ -568,8 +568,8 @@ function textWidth(text: string, fontPx: number, family: string) {
   return measureContext.measureText(text).width;
 }
 /**
- * コメントを流す。段は、同じ段の前のコメントに入る時にも流れているあいだにも追いつかない段を上から選び、
- * どの段もふさがっていれば少し待つ(33章)。大きな字は2段を使う。
+ * コメントを流す。高さは、ニコニコ動画の置き方をもとに、流れているあいだにぶつかるコメントを避けて決める。
+ * 探し始める高さは無作為にして、欄の全体に散らす。空きがなければ無作為の高さに置く(33章・45章)。
  */
 function launch(list: { text: string; tone: string; big: boolean; delay: number; duration: number }[]) {
   if (!list.length) return;
@@ -578,25 +578,23 @@ function launch(list: { text: string; tone: string; big: boolean; delay: number;
   const style = danmakuEl.value ? getComputedStyle(danmakuEl.value) : null;
   const fontPx = Number.parseFloat(style?.fontSize ?? "") || Math.min(32, Math.max(16, boardWidth.value * 0.036));
   const family = style?.fontFamily || "sans-serif";
-  const laneHeight = fontPx * LANE_HEIGHT_EM;
   const bounds = laneBounds(area, height);
-  const laneCount = Math.max(3, Math.floor((bounds.bottom - bounds.top) / laneHeight));
   const now = performance.now();
   const added = list.map((item) => {
     const scale = item.big ? 1.4 : item.tone === "gold" ? 1.12 : 1;
     const placed = placeComment(danmaku, {
       start: now + item.delay,
       width: textWidth(item.text, fontPx * scale, family),
+      height: fontPx * scale * LANE_HEIGHT_EM,
       duration: item.duration,
       areaWidth: boardWidth.value,
-      laneCount,
-      span: item.big ? 2 : 1,
+      areaHeight: bounds.bottom - bounds.top,
       gap: fontPx * DANMAKU_GAP_EM,
     });
     flyId += 1;
     return {
       id: flyId, text: item.text, tone: item.tone, big: item.big,
-      top: bounds.top + placed.lane * laneHeight, delay: placed.start - now, duration: item.duration,
+      top: bounds.top + placed.top, delay: placed.start - now, duration: item.duration,
     };
   });
   flying.value = [...flying.value, ...added].slice(-FLYING_MAX);
