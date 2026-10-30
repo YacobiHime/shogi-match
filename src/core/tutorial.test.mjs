@@ -54,7 +54,7 @@ import { kingEscapeMap } from "./board-insight.mjs";
 import { openingFormationSteps } from "./opening-formation.mjs";
 import { bestGainMove, dropThreat } from "./material-tactics.mjs";
 
-const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "play", "replay", "capture", "problem", "build", "attack-test"];
+const STEP_TYPES = ["explain", "move-piece", "find-move", "mate", "choose", "play", "replay", "capture", "problem", "build", "attack-test", "castle-compare"];
 /** 二歩の筋。同じ側の成っていない歩が2枚以上ある筋を「▲3筋」のように返す。 */
 function doublePawnFiles(sfen) {
   const files = [];
@@ -139,8 +139,14 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
       lesson.steps.forEach((step, index) => {
         const label = `${lesson.id}#${index} ${step.type}`;
         expect(STEP_TYPES, label).toContain(step.type);
-        // 問題集の問題は、台詞を省くと問題集の出題の台詞を使う。
-        if (step.type !== "problem") expect(step.speech ?? step.question, label).toEqual(expect.any(String));
+        // 問題集の問題は、台詞を省くと問題集の出題の台詞を使う。見くらべは、局面ごとに台詞を持つ。
+        if (step.type === "castle-compare") {
+          expect(step.sides, label).toHaveLength(2);
+          for (const side of step.sides) {
+            expect(side.speech, label).toEqual(expect.any(String));
+            expect(() => createGameRecord(side.sfen), label).not.toThrow();
+          }
+        } else if (step.type !== "problem") expect(step.speech ?? step.question, label).toEqual(expect.any(String));
         const sfen = tutorialStepSfen(step);
         if (sfen) {
           expect(() => createGameRecord(sfen), label).not.toThrow();
@@ -387,10 +393,15 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
     }
   });
 
-  it("詰まないことを確かめる攻めくらべは、王手の回数を約束しない(囲いによって王手が続く回数が違う)", () => {
-    const holds = TUTORIAL_LESSONS.flatMap(({ steps }) => steps).filter(({ type, expect: goal }) => type === "attack-test" && goal === "hold");
-    expect(holds.length).toBeGreaterThanOrEqual(2);
-    for (const step of holds) expect(step.speech, step.label).not.toMatch(/王手を[0-9０-９一二三四五六七八九]+回/);
+  it("見くらべの吹き出しは、初めに添えるめがねの説明と合わせても60字まで(設計16-3・21-3)", () => {
+    const compares = TUTORIAL_LESSONS.flatMap(({ steps }) => steps).filter(({ type }) => type === "castle-compare");
+    expect(compares.length).toBeGreaterThanOrEqual(3);
+    for (const step of compares) {
+      step.sides.forEach((side, index) => {
+        const text = index === 0 && step.intro ? `${step.intro}${side.speech}` : side.speech;
+        expect([...text].length, text).toBeLessThanOrEqual(60);
+      });
+    }
   });
 
   it("吹き出しの文は1ステップ60字まで(大事なことは盤の上のひとことで見せる。設計16-3)", () => {

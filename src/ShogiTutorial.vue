@@ -230,7 +230,23 @@
             <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
             <div class="shogi-tutorial__bubble-body">
               <!-- 課題の種類・腕だめしの何問目か・駒取りの手数・れんぞく正解を、1行の札で並べる。 -->
-              <p v-if="currentStep.dex || taskLabel || bossProgress || captureCount || buildCount || attackChips.length || insightChips.length || materialChip || streak >= 2" class="shogi-tutorial__chips">
+              <p v-if="currentStep.dex || taskLabel || bossProgress || captureCount || buildCount || attackChips.length || insightChips.length || materialChip || streak >= 2 || currentStep.type === 'castle-compare'" class="shogi-tutorial__chips">
+                <!--
+                  囲いの見くらべ(21-3): めがねの名前と、2つの局面の切り替え。札に同じめがねの数を並べ、押すと盤がその局面になる。
+                -->
+                <template v-if="currentStep.type === 'castle-compare'">
+                  <span class="shogi-tutorial__task-label" data-compare-lens>見くらべ：{{ currentStep.title }}</span>
+                  <button
+                    v-for="(side, index) in currentStep.sides"
+                    :key="side.label"
+                    type="button"
+                    class="shogi-tutorial__chip shogi-tutorial__compare-side"
+                    :class="{ 'shogi-tutorial__compare-side--on': compareSide === index, 'shogi-tutorial__compare-side--better': compareBetter === index }"
+                    :aria-pressed="compareSide === index"
+                    :data-compare-side="index"
+                    @click="showCompareSide(Number(index))"
+                  >{{ side.label }}<small>{{ currentStep.countLabel }} {{ side.count ?? "−" }}</small></button>
+                </template>
                 <span v-if="taskLabel" class="shogi-tutorial__task-label">{{ taskLabel }}</span>
                 <!-- その場の図鑑: どの図鑑の項目かと、行をめくった位置。 -->
                 <span v-if="currentStep.dex" class="shogi-tutorial__chip shogi-tutorial__chip--dex" data-dex-chip>
@@ -1228,7 +1244,23 @@ let refuteRestore: (() => void) | null = null;
 const currentStep = computed(() => currentLesson.value?.steps?.[stepIndex.value] ?? null);
 const isProblemStep = computed(() => currentStep.value?.type === "problem");
 const stepInteractive = computed(() => INTERACTIVE_STEP_TYPES.includes(currentStep.value?.type));
-const boardSfen = computed(() => stepState.value.sfen);
+/** 囲いの見くらべ(21-3)で、いま見ている局面(0がくらべる玉、1が囲い)と、見たことのある局面。 */
+const compareSide = ref(0);
+const compareSeen = ref<number[]>([0]);
+const compareView = computed(() => (currentStep.value?.type === "castle-compare" ? currentStep.value.sides[compareSide.value] ?? null : null));
+/** 見くらべの数が良いほうの局面(切り替えの札を緑の縁にする)。両方見るまでは出さない(先に答えを言わない)。 */
+const compareBetter = computed(() => {
+  const step = currentStep.value;
+  if (step?.type !== "castle-compare" || compareSeen.value.length < step.sides.length) return -1;
+  const counts = step.sides.map((side: { count: number | null }) => side.count ?? (step.better === "more" ? -1 : Infinity));
+  const best = step.better === "more" ? Math.max(...counts) : Math.min(...counts);
+  return counts.filter((count: number) => count === best).length === 1 ? counts.indexOf(best) : -1;
+});
+function showCompareSide(index: number) {
+  compareSide.value = index;
+  if (!compareSeen.value.includes(index)) compareSeen.value = [...compareSeen.value, index];
+}
+const boardSfen = computed(() => compareView.value?.sfen ?? stepState.value.sfen);
 const boardInteractive = computed(() => stepInteractive.value && !stepSolved.value && !stageClear.value && !refuting.value);
 const problemHint = computed(() => (
   isProblemStep.value && hintLevel.value ? problemStepHint(currentStep.value, stepState.value, hintLevel.value) : null
@@ -1263,7 +1295,9 @@ const boardMarks = computed(() => {
   const step = currentStep.value;
   const marks = step.type === "problem"
     ? []
-    : tutorialStepMarks(
+    : step.type === "castle-compare"
+      ? tutorialStepMarks({ marks: compareView.value?.marks ?? [] }, boardSfen.value)
+      : tutorialStepMarks(
       step.type === "move-piece" ? { ...step, pieceSquare: stepState.value.square } : step,
       boardSfen.value,
     );
@@ -1276,6 +1310,7 @@ const boardMarks = computed(() => {
 const escapeColors = computed<("black" | "white")[]>(() => {
   const step = currentStep.value;
   if (!step) return [];
+  if (step.type === "castle-compare") return compareView.value?.escapeMap ? [compareView.value.escapeMap] : [];
   if (step.escapeMap) return step.escapeMap === "both" ? ["white", "black"] : [step.escapeMap];
   if (isMateTask.value && (mateShown.value || hintLevel.value === 1)) return ["white"];
   return [];
@@ -1402,7 +1437,9 @@ function usiDestination(usi: string) {
 }
 const boardArrows = computed(() => (
   [...(currentStep.value?.type === "explain" ? currentStep.value.arrows ?? [] : []), ...hintView.value.arrows]
-    .map((usi: string) => ({ usi, guideKind: "plan" as const }))
+    .map((usi: string) => ({ usi, guideKind: "plan" as "plan" | "move" }))
+    // 見くらべのひもの矢印は、AI候補の赤と見分けるため青(守っている駒→守られている駒)。
+    .concat((compareView.value?.arrows ?? []).map((usi: string) => ({ usi, guideKind: "move" as const })))
 ));
 /** 課題のステップ(盤で指す・選択問題)。吹き出しを目標の見た目にする。 */
 const isTaskStep = computed(() => stepInteractive.value || currentStep.value?.type === "choose");
@@ -1438,13 +1475,14 @@ const captureCount = computed(() => (
  */
 const tapToAdvance = computed(() => {
   const type = currentStep.value?.type;
-  if (type === "explain" || type === "replay") return true;
+  if (type === "explain" || type === "replay" || type === "castle-compare") return true;
   return isTaskStep.value && stepSolved.value;
 });
 const tapLabel = computed(() => {
   const step = currentStep.value;
   if (step?.type === "replay" && stepState.value.ply < step.moves.length) return "タップで次の手";
   if (dexPage.value < dexPages.value.length) return "タップで次の行";
+  if (step?.type === "castle-compare" && compareSeen.value.length < step.sides.length) return `タップで${step.sides[compareSide.value === 0 ? 1 : 0].label}を見る`;
   return stepIndex.value >= (currentLesson.value?.steps?.length ?? 0) - 1 ? "タップでレッスン完了" : "タップで次へ";
 });
 /**
@@ -1502,6 +1540,10 @@ function advanceByTap() {
   if (now - lastTapAt < TUTORIAL_TAP_GUARD_MS || now - solvedAt < 400) return;
   lastTapAt = now;
   if (step.type === "replay" && stepState.value.ply < step.moves.length) seekReplayBy(1);
+  // 見くらべは、まだ見ていない局面があれば、押すとその局面へ切り替える(両方見てから次へ)。
+  else if (step.type === "castle-compare" && compareSeen.value.length < step.sides.length) {
+    showCompareSide(step.sides.findIndex((_: unknown, index: number) => !compareSeen.value.includes(index)));
+  }
   else if (dexPage.value < dexPages.value.length) dexPage.value += 1;
   else advance();
 }
@@ -1567,6 +1609,10 @@ const stepSpeech = computed(() => {
   if (page) return `${page.title}：${page.text}`;
   if (step?.type === "replay") return replaySpeech(step, stepState.value.ply);
   if (step?.type === "problem") return tutorialProblemSpeech(step);
+  // 見くらべは、初めの局面を初めて見るときだけ、めがねの説明を前に添える。
+  if (step?.type === "castle-compare" && compareView.value) {
+    return compareSide.value === 0 && compareSeen.value.length === 1 && step.intro ? `${step.intro}\n${compareView.value.speech}` : compareView.value.speech;
+  }
   return step?.question ?? step?.speech;
 });
 // ステップが変わったら(観戦は1手ごとにも)吹き出しの文を読み上げ、レッスンを離れたら止める。
@@ -1633,6 +1679,8 @@ function loadStep(index: number) {
     ? createProblemState(step)
     : step?.type === "attack-test" ? createAttackState(step) : createStepState(step);
   stepSolved.value = false;
+  compareSide.value = 0;
+  compareSeen.value = [0];
   clearFloats();
   materialTotal.value = 0;
   materialSeen.value = false;
@@ -2750,7 +2798,19 @@ const resultMessage = computed(() => {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
 }
-.shogi-game .shogi-tutorial__chip--dex {
+.shogi-game .shogi-game .shogi-tutorial__compare-side {
+  display: inline-grid;
+  justify-items: center;
+  min-height: 44px;
+  padding: 0.2rem 0.7rem;
+  border: 2px solid rgba(255, 252, 244, 0.35);
+  font: inherit;
+  cursor: pointer;
+}
+.shogi-game .shogi-tutorial__compare-side small { font-size: 0.75em; opacity: 0.85; }
+.shogi-game .shogi-tutorial__compare-side--on { border-color: #f1a54c; background: #3c5f78; }
+.shogi-game .shogi-tutorial__compare-side--better { box-shadow: 0 0 0 2px #9fe0b4; }
+.shogi-tutorial__chip--dex {
   border-color: rgba(147, 197, 253, 0.6);
   color: #bfdbfe;
 }

@@ -1,6 +1,8 @@
 import { appendUsiMove, createGameRecord } from "../game-state";
 import { OPENING_CASTLES, OPENING_GUIDE_ROUTINES, OPENING_STRATEGIES } from "./opening-guide.mjs";
-import { controlCount } from "./board-insight.mjs";
+import { controlCount, isPieceLoose } from "./board-insight.mjs";
+import { castleInsight } from "./castle-insight.mjs";
+import { parseSfenState } from "./piece-movement.mjs";
 import { PIECE_POINTS, PROMOTED_PIECE_POINTS, materialTotals } from "./piece-points.mjs";
 import { openingExplanation } from "./opening-explanations.mjs";
 import { buildOpeningDexSteps } from "./opening-dex-replay.mjs";
@@ -419,6 +421,52 @@ function sfenAfter(sfen, moves, { blackOnly = false } = {}) {
   return blackOnly ? withBlackToMove(current) : current;
 }
 
+/** 囲いの見くらべのめがね(21-3)。countLabelは表の数の名前、betterは囲いのほうが良いときの向き。 */
+export const CASTLE_LENSES = Object.freeze({
+  escape: { title: "逃げ道", countLabel: "逃げられるマス", better: "more" },
+  holes: { title: "打ち込みの隙", countLabel: "取られない王手", better: "less" },
+  links: { title: "ひも", countLabel: "浮き駒", better: "less" },
+});
+
+/** 見くらべの1つの局面のめがね。盤・印・矢印・数・台詞は、局面から計算した値で作る(将棋として正しく)。 */
+function castleCompareView(lens, label, sfen) {
+  const insight = castleInsight(sfen);
+  if (lens === "escape") {
+    const worst = insight.worst;
+    if (!worst) return { label, sfen, count: null, speech: `${label}には、王手できる手がないよ。` };
+    const count = insight.escapes;
+    const tail = count === 0
+      ? (insight.blocked ? "味方の駒が逃げ道をふさいでいるね。" : "逃げ道がないんだ。")
+      : "いちばん厳しい王手でも、逃げ道があるんだ。";
+    const where = count === 0 ? `${label}の玉は、逃げられるマスがない（0）。` : `${label}の玉は、逃げられるマスが${count}つ（緑）。`;
+    return { label, sfen: worst.sfen, escapeMap: "white", count, speech: `${worst.label}と王手！ ${where}${tail}` };
+  }
+  if (lens === "holes") {
+    const count = insight.holes.length;
+    const speech = count
+      ? `取られずに王手できるマス（赤）が${count}つ。${label}は、ここから攻めこまれるよ。`
+      : insight.checks.length
+        ? `${label}には、取られずに王手できるマスがない。駒を打っても、守りの駒に取られちゃうんだ。`
+        : `${label}には、王手できるマスがないよ。`;
+    return { label, sfen, marks: insight.holes.map((square) => [square, "target"]), count, speech };
+  }
+  const { board } = parseSfenState(sfen);
+  const count = insight.loose.length;
+  const hanging = insight.loose.some((square) => isPieceLoose(board, square));
+  const speech = count
+    ? `だれにも守られていない駒（赤）が${count}枚。${hanging ? "タダで取られちゃう。" : "ねらわれたら取られちゃう。"}`
+    : `${label}は、金・銀・玉が青い矢印のように守り合っている。1枚取られても、すぐ取り返せるよ。`;
+  return { label, sfen, marks: insight.loose.map((square) => [square, "target"]), arrows: insight.links.map(([from, to]) => `${from}${to}`), count, speech };
+}
+
+/**
+ * 囲いの見くらべのステップ(21-3)。sidesは[{label, sfen}]を2つ(くらべる玉 → 囲い)。sfenは攻める側の手番。
+ * 盤の上の切り替えで2つの局面を行き来し、同じめがねで数をくらべる。正解・不正解はない。
+ */
+function castleCompareStep(lens, sides, extra = {}) {
+  return { type: "castle-compare", lens, ...CASTLE_LENSES[lens], sides: sides.map(({ label, sfen }) => castleCompareView(lens, label, sfen)), ...extra };
+}
+
 /**
  * 囲いを組もうのステップ。完成形と手順は、定跡図鑑と同じ囲いの定義(opening-guide.mjs)から作る。
  * skipは、手順のうち先に指しておく手の数(美濃囲いの飛車を振る手など)。parは手順の長さ(テストで最短と確かめる)。
@@ -820,6 +868,10 @@ const ATTACKER = "/4+R4/9/9/9/4K4 b G 1";
 const IGYOKU_SFEN = `ln1gkg1nl/2s3s2/pppppp1pp/6p2${ATTACKER}`;
 const MINO_SFEN = `ln1g3nl/1ks1g4/pppppp1pp/6p2${ATTACKER}`;
 const FUNA_SFEN = `lns2gsnl/4g1kb1/pppppp1pp/6p2${ATTACKER}`;
+/** 攻めに出て金銀がばらばらになった玉(ひもの見くらべ用)。5四の金はだれにも守られず、竜にタダで取られる。 */
+/** 舟囲いの打ち込みの隙の数(腕だめしの問いの答え。テストで0と確かめる)。 */
+const FUNA_HOLES = castleInsight(FUNA_SFEN).holes.length;
+const SCATTERED_SFEN = `ln3g1nl/4k4/ppsp1pspp/2p1g4${ATTACKER}`;
 /** 居玉を詰ませた局面(▲5三竜△5二金▲6二金)。玉の逃げ道を見せる。 */
 const IGYOKU_MATED_SFEN = sfenAfter(IGYOKU_SFEN, ["5e5c", "6a5b", "G*6b"]);
 /** 先手の美濃囲い(四間飛車)の完成形。 */
@@ -877,15 +929,15 @@ const VOLUME_3 = {
           title: "囲いで玉を守ろう",
           summary: "美濃囲いを組める",
           steps: [
-            {
-              type: "attack-test", sfen: MINO_SFEN, expect: "hold", label: "美濃囲い",
-              compareTo: { label: "居玉", result: "3手で詰み" },
-              speech: "さっきと同じ竜と金で、こんどは「美濃囲い」の玉を攻めてみよう！ 王手が続くか、ためしてみてね。",
-            },
-            {
-              type: "explain", sfen: MINO_SFEN, kiki: "white",
-              speech: "同じ攻めでも、美濃囲いは詰まなかったね。玉が戦いから遠く、金銀が何重にも守っている（赤い数字）からだよ。",
-            },
+            castleCompareStep("escape", [{ label: "居玉", sfen: IGYOKU_SFEN }, { label: "美濃囲い", sfen: MINO_SFEN }], {
+              intro: "居玉と美濃囲いをくらべよう！",
+            }),
+            castleCompareStep("holes", [{ label: "居玉", sfen: IGYOKU_SFEN }, { label: "美濃囲い", sfen: MINO_SFEN }], {
+              intro: "取られずに王手できるかな？",
+            }),
+            castleCompareStep("links", [{ label: "ばらばらの玉", sfen: SCATTERED_SFEN }, { label: "美濃囲い", sfen: MINO_SFEN }], {
+              intro: "青い矢印は「守っている」だよ。",
+            }),
             {
               type: "move-piece", sfen: STANDARD_SFEN, from: "2h", target: "6h", maxMoves: 1,
               speech: "こんどは君の玉を囲おう！ 美濃囲いは振り飛車の囲い。まず飛車を6八（緑のマス）へ振ろう！",
@@ -901,7 +953,11 @@ const VOLUME_3 = {
               type: "explain", sfen: MINO_BLACK_SFEN, kiki: "black",
               speech: "完成した美濃囲い。金と銀が手をつないで、玉のまわりのマスを何重にも見張っているね（青い数字）。これが囲いの堅さなんだ。",
             },
-            { type: "choose", question: "囲いの基本はどれ？", options: ["金銀3枚で玉を守る", "玉をひとりにする", "飛車で玉を守る"], answer: 0, explanation: "玉の守りは金銀3枚が基本だよ！" },
+            {
+              type: "choose", question: "美濃囲いが強いのはなぜ？",
+              options: ["逃げ道があって、駒を打たれづらく、金銀が守り合っているから", "玉がまん中にいるから", "飛車が玉のそばにいるから"], answer: 0,
+              explanation: "囲うと、逃げ道ができて、打ち込みの隙が消え、金銀がひもでつながる。玉の守りは金銀3枚が基本だよ！",
+            },
           ],
         },
         {
@@ -972,9 +1028,12 @@ const VOLUME_3 = {
               praise: "完成形を見ずに、美濃囲いを組めたね！",
             }),
             {
-              type: "attack-test", sfen: FUNA_SFEN, expect: "hold", label: "舟囲い",
-              compareTo: { label: "居玉", result: "3手で詰み" },
-              speech: "相手は舟囲い。竜と金で、王手を続けてみよう！ 居玉とくらべて、どうかな？",
+              type: "choose", sfen: FUNA_SFEN,
+              question: "相手は舟囲い。同じ竜と金で、取られずに王手できるマスはある？",
+              options: ["ない（どこに打っても取られる）", "ある"], answer: FUNA_HOLES ? 1 : 0,
+              explanation: FUNA_HOLES
+                ? `取られずに王手できるマスが${FUNA_HOLES}つあるよ。`
+                : "舟囲いにも打ち込みの隙はない。居玉には▲5三竜の隙があったね。囲うと隙が消えるんだ。",
             },
             { type: "choose", question: "玉の守りの基本は？", options: ["金銀3枚", "飛車と角", "歩をたくさん"], answer: 0, explanation: "「玉の守りは金銀3枚」。この格言を覚えておこう！" },
             problemStep("gts-22d2d6dacae5", { speech: "【前の巻から】1手で詰ませよう！ 歩を成るのもありだよ。" }),

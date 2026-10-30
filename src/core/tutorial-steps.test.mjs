@@ -109,7 +109,13 @@ describe("囲いの教え方（攻めくらべ・囲いを組もう）", async (
   const stepOf = (lessonId, type, nth = 0) => tutorialLesson(lessonId).steps.filter((step) => step.type === type)[nth];
 
   it("攻めくらべは、どの局面も攻める側の駒が同じ（玉の形だけを変える）", () => {
-    const attackers = TUTORIAL_LESSONS.flatMap(({ steps }) => steps.filter(({ type }) => type === "attack-test")).map(({ sfen }) => {
+    // 攻めくらべ(居玉)と、見くらべの初めの局面(逃げ道のめがねは王手のあとの局面なので除く)。
+    const sfens = TUTORIAL_LESSONS.flatMap(({ steps }) => steps.flatMap((step) => {
+      if (step.type === "attack-test") return [step.sfen];
+      if (step.type === "castle-compare" && step.lens !== "escape") return step.sides.map(({ sfen }) => sfen);
+      return [];
+    }));
+    const attackers = sfens.map((sfen) => {
       const { board } = parseSfenState(sfen);
       const black = [...board].filter(([, piece]) => piece.color === "black").map(([square, piece]) => `${square}${piece.kind}`).sort();
       return `${black.join(",")}|${sfen.split(" ")[2]}`;
@@ -133,21 +139,33 @@ describe("囲いの教え方（攻めくらべ・囲いを組もう）", async (
     expect(attackResultLabel({ mated: true, checks: result.state.checks })).toBe("3手で詰み");
   });
 
-  it("美濃囲いは、王手を続けても詰まずにクリアになる", () => {
-    const step = stepOf("v3-castles", "attack-test");
-    let state = createAttackState(step);
-    let result;
-    for (let turn = 0; turn < 8; turn += 1) {
-      const usi = attackStepHint(step, state);
-      if (!usi) break;
-      result = attemptAttackMove(step, state, usi);
-      expect(result.outcome).not.toBe("wrong");
-      expect(result.mated).toBeFalsy();
-      state = result.state;
-      if (result.outcome === "correct") break;
+  it("美濃囲いを王手で攻めて駒を捨てさせる攻めくらべ(hold)は、どのレッスンにもない(21-3)", () => {
+    const holds = TUTORIAL_LESSONS.flatMap(({ steps }) => steps.filter(({ type, expect: outcome }) => type === "attack-test" && outcome === "hold"));
+    expect(holds).toEqual([]);
+  });
+
+  it("囲いの見くらべは、表に出す数がどれも囲いのほうが良く、台詞の数字が計算と一致する(21-3)", () => {
+    const compares = TUTORIAL_LESSONS.flatMap(({ steps }) => steps.filter(({ type }) => type === "castle-compare"));
+    expect(compares.map(({ lens }) => lens)).toEqual(["escape", "holes", "links"]);
+    for (const step of compares) {
+      const [other, castle] = step.sides;
+      expect(other.count).not.toBeNull();
+      expect(castle.count).not.toBeNull();
+      if (step.better === "more") expect(castle.count).toBeGreaterThan(other.count);
+      else expect(castle.count).toBeLessThan(other.count);
+      for (const side of step.sides) {
+        // 局面は合法(手番の側の合法手を作れる)。
+        expect(createStepState({ sfen: side.sfen }).sfen).toBe(side.sfen);
+        if (step.lens !== "links" && side.count > 0) expect(side.speech).toContain(`${side.count}つ`);
+        if (step.lens === "escape") expect(side.speech).toContain(side.count ? `${side.count}つ` : "逃げられるマスがない（0）");
+      }
     }
-    expect(result.outcome).toBe("correct");
-    expect(result.held).toBe(true);
+    // 居玉は王手されると逃げ道が0、美濃囲いは逃げ道がある。
+    const escape = compares.find(({ lens }) => lens === "escape");
+    expect(escape.sides[0].count).toBe(0);
+    expect(escape.sides[0].speech).toContain("▲5三竜");
+    const map = kingEscapeMap(escape.sides[0].sfen, "white");
+    expect(map.squares.filter(({ state }) => state === "open")).toEqual([]);
   });
 
   it("居玉を詰ませた局面では、玉の逃げ道がない", () => {
