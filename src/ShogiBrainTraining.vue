@@ -51,6 +51,22 @@
         @sound="playSound"
         @finish="finishGame('glance', $event)"
       />
+      <BrainBoardMemory
+        v-else-if="currentGame === 'board-memory'"
+        :key="`memory-${runKey}`"
+        :start-level="startLevel(record, 'board-memory')"
+        :count="questionCount('board-memory')"
+        @sound="playSound"
+        @finish="finishGame('board-memory', $event)"
+      />
+      <BrainMentalBoard
+        v-else-if="currentGame === 'mental'"
+        :key="`mental-${runKey}`"
+        :start-level="startLevel(record, 'mental')"
+        :count="questionCount('mental')"
+        @sound="playSound"
+        @finish="finishGame('mental', $event)"
+      />
     </section>
 
     <!-- 結果。種目ごとの記録と、前の日より伸びたものを並べる。 -->
@@ -94,6 +110,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import BrainGlance from "./brain/BrainGlance.vue";
+import BrainBoardMemory from "./brain/BrainBoardMemory.vue";
+import BrainMentalBoard from "./brain/BrainMentalBoard.vue";
 import { glanceLevelLabel } from "./core/brain-glance.mjs";
 import {
   BRAIN_GAMES,
@@ -120,7 +138,7 @@ const emit = defineEmits(["close"]);
 
 const BRAIN_TITLE = "脳トレ道場";
 /** いま遊べる種目。作った段階から足す(docs/brain-training-design.mdの9章)。 */
-const AVAILABLE: readonly GameId[] = ["glance"];
+const AVAILABLE: readonly GameId[] = ["glance", "board-memory", "mental"];
 /** 種目の棚。見る(処理速度)と覚える(記憶)の2つに分ける(3章)。 */
 const BRAIN_SHELVES = [
   {
@@ -147,6 +165,13 @@ const EVIDENCE = [
   { title: "思い出す・日をあける", text: "読み返すより思い出してみるほうが、同じ時間でも日をあけて練習するほうが、長く覚えていられます。", source: "Roediger・Karpicke（2006年）、Cepedaほか（2006年）" },
 ];
 
+/** 自己ベストのほめ言葉。何ができたかを言う(D:5-4)。 */
+const BEST_LINES: Record<GameId, (value: string) => string> = {
+  glance: (value) => `${value}でも見えたね。`,
+  "board-memory": (value) => `${value}を覚えて並べられたね。`,
+  mental: (value) => `頭の中で${value}を追えたね。`,
+  palace: (value) => `${value}を覚えたね。`,
+};
 const storage = typeof localStorage === "undefined" ? null : localStorage;
 const record = ref(loadBrainRecord(storage));
 const today = dayKey();
@@ -171,15 +196,15 @@ const homeMessage = computed(() => (
 ));
 const summaryMessage = computed(() => {
   const best = results.value.find((row) => row.newBest);
-  if (best) return `${gameLabel(best.game)}で自己ベスト！ ${valueText(best.game, best.value)}まで見えたね。`;
+  if (best) return `${gameLabel(best.game)}で自己ベスト！ ${BEST_LINES[best.game](valueText(best.game, best.value))}`;
   if (results.value.some((row) => row.grew)) return "前の日より伸びたよ。続けると、もっと速く見えるようになるよ。";
   return "おつかれさま！ また明日、同じ練習をしてみよう。";
 });
 
 const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
 onMounted(() => moveSounds.preload());
-function playSound(kind: "correct" | "miss" | "best") {
-  if (kind === "correct") moveSounds.play("normal");
+function playSound(kind: "correct" | "miss" | "best" | "place") {
+  if (kind === "correct" || kind === "place") moveSounds.play("normal");
   else if (kind === "best") moveSounds.play("stamp");
 }
 
@@ -190,6 +215,8 @@ function gameLabel(id: GameId) {
 function valueText(id: GameId, value: number | undefined) {
   if (!value) return "";
   if (id === "glance") return glanceLevelLabel(value - 1);
+  if (id === "board-memory") return `駒${value}枚`;
+  if (id === "mental") return `${value}手`;
   return String(value);
 }
 function bestText(id: GameId) {
@@ -465,15 +492,21 @@ defineExpose({ goBack });
   position: relative;
   display: grid;
   grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-rows: repeat(9, minmax(0, 1fr));
   width: min(100%, 24rem, 46vh);
   aspect-ratio: 1;
   border: 3px solid #6b4423;
   background: #e8c07a;
+  /* 駒の字の大きさを盤の幅に合わせる(駒が増えても升の高さが変わらない)。 */
+  container-type: inline-size;
 }
 .shogi-game .brain-board__cell {
   position: relative;
   display: grid;
   place-items: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   border: 1px solid rgba(80, 50, 20, 0.45);
 }
 .shogi-game .brain-board__cell--ok { background: rgba(60, 170, 90, 0.45); }
@@ -486,7 +519,7 @@ defineExpose({ goBack });
   color: #1d1d1d;
   background: #f6dfae;
   clip-path: polygon(50% 0, 88% 18%, 100% 100%, 0 100%, 12% 18%);
-  font-size: clamp(0.8rem, 3.6vw, 1.35rem);
+  font-size: 6.4cqw;
   font-weight: 900;
   line-height: 1;
   padding-top: 12%;
@@ -516,6 +549,92 @@ defineExpose({ goBack });
   text-shadow: 0 0 6px #fffcf4;
 }
 .shogi-game .brain-board__verdict--ok { color: rgba(40, 150, 80, 0.7); }
+
+/* 盤の部品(BrainBoard.vue)。押せる盤はボタンの見た目を消す。後手の駒は逆さ、薄い駒は答えの見せ方。 */
+.shogi-game .brain-board-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  width: 100%;
+}
+.shogi-game .brain-board-wrap--coords {
+  grid-template-columns: min(calc(100% - 1.4rem), 24rem, 46vh) 1.4rem;
+  grid-template-areas: "files ." "board ranks";
+  justify-content: center;
+}
+.shogi-game .brain-board-wrap--coords .brain-board { grid-area: board; width: 100%; }
+.shogi-game .brain-board__files {
+  grid-area: files;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  width: 100%;
+  color: #cfd8de;
+  font-size: 0.75rem;
+  text-align: center;
+}
+.shogi-game .brain-board__ranks {
+  grid-area: ranks;
+  display: grid;
+  grid-template-rows: repeat(9, minmax(0, 1fr));
+  padding-left: 0.2rem;
+  color: #cfd8de;
+  font-size: 0.75rem;
+  align-items: center;
+}
+.shogi-game .brain-board__cell--button {
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+}
+.shogi-game .brain-board__cell--button:focus-visible { outline: 3px solid #3c6dd1; outline-offset: -3px; }
+.shogi-game .brain-board__cell--wrong { background: rgba(220, 70, 60, 0.4); }
+.shogi-game .brain-board__cell--missed { background: rgba(220, 70, 60, 0.25); }
+.shogi-game .brain-piece--white { transform: rotate(180deg); }
+.shogi-game .brain-piece--ghost { opacity: 0.45; }
+
+/* 盤面の記憶の道具(先手・後手と駒箱)と、覚える時間の帯。 */
+.shogi-game .brain-memory__tools {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+}
+.shogi-game .brain-memory__colors,
+.shogi-game .brain-memory__palette,
+.shogi-game .brain-mental__choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.shogi-game .brain-memory__colors .brain-glance__choice { font-size: 1rem; padding: 0 0.8rem; }
+.shogi-game .brain-mental__choices .brain-glance__choice { padding: 0 0.8rem; }
+.shogi-game .brain-memory__timer {
+  width: min(100%, 24rem);
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 252, 244, 0.15);
+  overflow: hidden;
+}
+.shogi-game .brain-memory__timer span {
+  display: block;
+  height: 100%;
+  background: #f1a54c;
+  transform-origin: left;
+  animation: brain-timer linear forwards;
+}
+@keyframes brain-timer {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+.shogi-game .brain-mental__move {
+  display: grid;
+  justify-items: center;
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 900;
+}
+.shogi-game .brain-mental__move small { color: #cfd8de; font-size: 0.8rem; font-weight: 700; }
 
 /* ちらっと盤の答え。金・銀の2つと、8方向の矢印。 */
 .shogi-game .brain-glance__answer {
@@ -572,7 +691,27 @@ defineExpose({ goBack });
   .shogi-game .brain-glance .brain-glance__answer,
   .shogi-game .brain-glance .brain-game__actions { grid-area: answer; }
 }
+@media (orientation: landscape) and (max-height: 600px) {
+  .shogi-game .brain-memory,
+  .shogi-game .brain-mental {
+    grid-template-columns: auto minmax(0, 16rem);
+    grid-template-areas: "status status" "board prompt" "board tools";
+    align-items: center;
+    width: auto;
+  }
+  .shogi-game .brain-memory .brain-game__status,
+  .shogi-game .brain-mental .brain-game__status { grid-area: status; }
+  .shogi-game .brain-memory .brain-game__prompt,
+  .shogi-game .brain-mental .brain-game__prompt { grid-area: prompt; }
+  .shogi-game .brain-memory .brain-board-wrap,
+  .shogi-game .brain-mental .brain-board-wrap { grid-area: board; }
+  .shogi-game .brain-memory .brain-board { width: min(66vh, 20rem); }
+  .shogi-game .brain-mental .brain-board-wrap--coords { grid-template-columns: min(62vh, 19rem) 1.4rem; }
+  .shogi-game .brain-memory > :is(.brain-memory__tools, .brain-game__actions, .brain-memory__timer),
+  .shogi-game .brain-mental > :is(.brain-mental__move, .brain-mental__choices, .brain-game__actions) { grid-area: tools; }
+}
 @media (prefers-reduced-motion: reduce) {
+  .shogi-game .brain-memory__timer span { animation: none; }
   .shogi-game .shogi-brain__today,
   .shogi-game .shogi-brain__card { transition: none; transform: none !important; }
 }
