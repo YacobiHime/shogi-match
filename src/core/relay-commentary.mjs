@@ -932,8 +932,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     }
     if (spec.black?.story === HANANE || spec.white?.story === HANANE) {
       if (cast.voice === 'yoshihiko') {
-        line(0, 'move', 'host', 'お父さんとして、羽音さんの将棋をどう見てる？');
-        line(0, 'move', 'commentator', '親としてではなく、一人の棋士として見ますよ。……少し照れますけどね。');
+        line(0, 'move', 'host', 'お父さんとして、羽音さんの将棋は、いかがですか？');
+        line(0, 'move', 'commentator', 'まあ、あの……親子なんで。こう、なかなか、言いにくいんですけど。えぇ。');
       }
     } else if ((spec.black?.story === YOSHIHIKO || spec.white?.story === YOSHIHIKO) && cast.voice === 'hanane') {
       line(0, 'move', 'commentator', '父さんの将棋。……いつも通り、隙がないと思う。');
@@ -1258,7 +1258,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         if (once('bishop-exchange')) {
           line(at, 'move', 'host', '角交換になったね！');
           line(at, 'move', 'commentator', speak(cast, '角を持ち合うと、打ち込みのすきに気をつける将棋になりますね。', ha('角が持ち駒になった。ここからは、打ち込みの隙の探し合い。', '角交換。……隙を作ったほうが、損をする。'),
-            yo('角交換ですね。まあ、打ち込みには、お互い気をつけないといけないという…', 'えー、角が手に入ったので。まあ、あの、隙は作りにくくなりましたね。')));
+            yo('角交換ですね。まあ、打ち込みには、お互い気をつけないといけないという…', 'えー、角が持ち駒になったので。まあ、あの、隙は作りにくいという感じは、ありますね。')));
         }
         comment(at, 'move', 'bishop', {}, 2);
         maybe(0.4, at, 'move', 'kiai');
@@ -1424,7 +1424,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       if (meaning) {
         line(at, 'move', 'host', `今の${text}は、どういう手？`);
         line(at, 'move', 'commentator', speak(cast, `${meaning}です。`, ha(`${meaning}。`, `……${meaning}。ほかの手も、あったけど。`),
-          yo(`まあ、${meaning}という感じですかね。たぶん。`, `えー、${meaning}……だと思うんですけど。違ったらすみません。`)));
+          yo(`まあ、${meaning}という感じですかね。えぇ。`, `えー、${meaning}……という、まあ、そういう手なんでは無いかな…`)));
       }
     }
 
@@ -1480,7 +1480,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
             yo(`今の${text}は、まあ、痛かったかもしれないですね。AIは${bestText}と言ってるんですけど。`, `あの、AIは${bestText}らしいです。……人間には、ちょっと、難しいですよね。`))
           : speak(cast, `今の${text}は、少し疑問手だったかもしれません。AIの推奨は${bestText}でした。`,
             ha(`${bestText}のほうが、少し良かった。`, `……${bestText}もあった。でも、今の${text}も悪くはない。`),
-            yo(`まあ、AIは${bestText}と言ってるんですけど。人間には、ちょっと、あの、難しいですよね。`, `${bestText}が良かったらしいです。……らしいです。`)));
+            yo(`まあ、AIは${bestText}と言ってるんですけど。人間には、ちょっと、あの、難しいですよね。`, `あの、${bestText}が良かったらしいです。……まあ、言われてみれば、という感じですけど。`)));
       }
       const [fromRate, toRate] = [Math.round(moverRate(rateBefore) * 100), Math.round(moverRate(rateAfter) * 100)];
       if (Math.abs(fromRate - toRate) >= 2) line(at, 'move', 'host', `勝率が、${SIDE_NAME[side]}${fromRate}%から${toRate}%に動いたよ。`);
@@ -1603,7 +1603,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     // 秒読みに入った。
     if (!before.byoyomi[side] && after.byoyomi[side]) {
       line(at, 'move', 'commentator', speak(cast, `${call(side)}、持ち時間を使い切りました。ここから1手60秒未満の秒読みです。`, ha(`${call(side)}、秒読み。……ここから、1手1分。`, `${call(side)}、時間が切れた。……でも、読めてるなら、関係ない。`),
-        yo(`${call(side)}、秒読みですね。まあ、ここからは、あの、大変ですよ。`, `${call(side)}、1分将棋に入りました。……私も、苦手なんですよね、えぇ。`)));
+        yo(`${call(side)}、秒読みですね。まあ、ここからは、あの、大変なんでは無いかな…`, `${call(side)}、1分将棋に入りました。……私も、苦手なんですよね、えぇ。`)));
       cards.push({ at, when: 'move', kind: 'byoyomi', tier: '', title: '秒読み', text: `${players[side].name}、1分将棋に` });
       comment(at, 'move', 'byoyomi', {}, 2);
       newbie(at, 'move', 'byoyomi', {}, 0.6);
@@ -1945,7 +1945,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       // 聞き手が一局をふり返ってたずね、解説者が答え、聞き手がお礼を言う(25章)。
       line(at, 'move', 'host', cast.voice === 'yoshihiko' ? 'この一局振り返っていかがだったでしょうか。' : 'この一局、ふり返ってどうだった？');
       line(at, 'move', 'commentator', cast.voice === 'yoshihiko' && players[end.winner]?.story === HANANE
-        ? '……強くなったな。いや、失礼。良い将棋でした。'
+        ? 'まあ、あの……強くなったな、という感じは、ありますね。……いや、すみません。はい。'
         : speak(cast, '最後まで見ごたえのある将棋でした。', ha('最後まで見ごたえのある将棋だった。', '……いい将棋だった。私も、指してみたい。'),
           '出だしから意外な将棋でしたけど、まあ、あのー、大熱戦だったと、思います。はい。'));
       line(at, 'move', 'host', cast.voice === 'yoshihiko' ? 'はい、どうもありがとうございました。' : 'ありがとうございました！');

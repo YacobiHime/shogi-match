@@ -363,6 +363,20 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     expect(plain.lines.some(({ text }) => /この辺りは、いかがですか/.test(text))).toBe(false);
   });
 
+  it('善彦は、言い切って教える言い方・謝る言い方・大物ぶった言い方をしない。羽音の対局でも同じ口調(41章)', () => {
+    const many = ['', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((variant) => longScript({ variant, cast: yoshihiko, white: player('s', '鈴木蓮', { age: 28 }) }));
+    // 羽音の対局(親子のやりとりと、羽音が勝ったふり返り)。
+    const family = ['', 'b', 'c'].map((variant) => longScript({ variant, cast: yoshihiko, end: { winner: 'white', reason: 'resign' } }));
+    const said = [...many, ...family].flatMap(({ lines }) => lines.filter(({ role }) => role === 'commentator').map(({ text }) => text));
+    for (const odd of [/違ったらすみません/, /らしいです。……らしいです/, /大変ですよ/, /親としてではなく/, /一人の棋士として見ますよ/, /強くなったな。いや、失礼。良い将棋でした/, /隙は作りにくくなりましたね/]) {
+      expect(said.some((text) => odd.test(text)), String(odd)).toBe(false);
+    }
+    const familyLines = family.flatMap(({ lines }) => lines.map(({ role, text }) => `${role}:${text}`));
+    expect(familyLines).toContain('host:お父さんとして、羽音さんの将棋は、いかがですか？');
+    expect(familyLines).toContain('commentator:まあ、あの……親子なんで。こう、なかなか、言いにくいんですけど。えぇ。');
+    expect(familyLines).toContain('commentator:まあ、あの……強くなったな、という感じは、ありますね。……いや、すみません。はい。');
+  });
+
   it('羽音は、短く平らに話す。敬語も感嘆符も使わず、言い方は局ごとに替わる(39章)', () => {
     const hanane = { id: 'h', name: '天鷺羽音', dan: '四段', story: HANANE, voice: 'hanane' };
     const many = ['', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((variant) => longScript({ variant, cast: hanane, white: player('s', '鈴木蓮', { age: 28 }) }));
