@@ -112,3 +112,48 @@ describe("すぐ使えるコツ(21-4・21-5)", () => {
     expect(TUTORIAL_LESSONS.some(({ steps }) => steps.some(({ problemId }) => problemId === step.problemId))).toBe(false);
   });
 });
+
+describe("じっくり基礎の寄り道(21-6)", async () => {
+  const { TUTORIAL_PLACEMENTS, earnedVolumeTitles, tutorialMap: map } = await import("./tutorial-map.mjs");
+  const { TUTORIAL_VOLUMES } = await import("./tutorial-curriculum.mjs");
+  const { lessonsProgress, recordLessonCleared, skipAheadTargets } = await import("./tutorial-progress.mjs");
+  const SIDE = ["v1-setup", "v2-watch-opening", "v2-watch-endgame", "v2-double-check", "v3-watch-attack", "v5-evaluation"];
+
+  it("寄り道は決めた6つで、はじめての札の始めるレッスンは寄り道でない", () => {
+    expect(TUTORIAL_LESSONS.filter(({ side }) => side).map(({ id }) => id)).toEqual(SIDE);
+    for (const { start } of TUTORIAL_PLACEMENTS) expect(tutorialLesson(start).side).toBeFalsy();
+  });
+
+  it("寄り道を遊ばなくても、次のレッスンが開き、巻の称号ももらえる", () => {
+    let progress = emptyTutorialProgress();
+    const volume1 = TUTORIAL_LESSONS.filter(({ volumeId }) => volumeId === "v1");
+    for (const lesson of volume1) if (!lesson.side) progress = recordLessonCleared(progress, lesson.id, 3);
+    expect(nextLesson(TUTORIAL_LESSONS, progress)?.volumeId).toBe("v2");
+    expect(earnedVolumeTitles(TUTORIAL_VOLUMES, TUTORIAL_LESSONS, progress).map(({ id }) => id)).toContain("tutorial-v1");
+    // 寄り道は、前のレッスンを終えれば遊べる(鍵はかからない)。
+    expect(isLessonUnlocked(TUTORIAL_LESSONS, progress, "v1-setup")).toBe(true);
+    // 進み具合のメーターに数えない。
+    expect(lessonsProgress(volume1, progress).done).toBe(lessonsProgress(volume1, progress).total);
+  });
+
+  it("寄り道は地図で印が付き、章をとばす対象・飛び級の対象にならない", () => {
+    const rows = map(TUTORIAL_VOLUMES, TUTORIAL_LESSONS, emptyTutorialProgress()).rows;
+    expect(rows.filter(({ side }) => side).map(({ id }) => id)).toEqual(SIDE);
+    // 観戦だけの章(全部が寄り道)は、とばすボタンを出さない。
+    expect(rows.find(({ id }) => id === "v2-c2").skippable).toBe(false);
+    const targets = skipAheadTargets(TUTORIAL_LESSONS, emptyTutorialProgress(), "v2-c3-boss");
+    for (const id of SIDE) {
+      expect(targets.tested).not.toContain(id);
+      expect(targets.skipped).not.toContain(id);
+    }
+  });
+
+  it("腕だめしは、寄り道のレッスンの内容(両王手・評価値)を問わない", () => {
+    const texts = TUTORIAL_LESSONS.filter(({ boss }) => boss)
+      .flatMap(({ steps }) => steps.map((step) => `${step.question ?? ""}${step.speech ?? ""}${(step.options ?? []).join("")}`));
+    for (const text of texts) {
+      expect(text).not.toMatch(/両王手/);
+      expect(text).not.toMatch(/評価値/);
+    }
+  });
+});

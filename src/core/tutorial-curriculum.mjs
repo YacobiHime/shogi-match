@@ -222,7 +222,7 @@ const VOLUME_1 = {
           ],
         },
         {
-          id: "v1-setup",
+          id: "v1-setup", side: true,
           title: "駒を並べよう",
           summary: "最初の並べ方がわかる",
           steps: [
@@ -530,7 +530,7 @@ const VOLUME_2 = {
         {
           id: "v2-kiki",
           title: "利きを見よう",
-          summary: "相手の駒が見張っているマスがわかる",
+          summary: "タダで取られる場所が見える",
           icon: "利",
           steps: [
             {
@@ -556,7 +556,7 @@ const VOLUME_2 = {
         {
           id: "v2-free-piece",
           title: "ただで取れる駒",
-          summary: "取られない駒を取ろう",
+          summary: "タダの駒を見つけて取れる",
           steps: [
             { type: "explain", sfen: "k8/9/9/7s1/9/9/9/7R1/8K b - 1", marks: [["2d", "target"]], kiki: "both", speech: "2四の銀には、相手の利き（赤い数字）がないね。どの駒にも守られていない駒は「ただ」で取れるんだ。" },
             { type: "find-move", sfen: "k8/9/9/7s1/9/9/9/7R1/8K b - 1", answers: ["2h2d"], speech: "飛車で2四の銀を取ってみよう！", praise: "守られていない銀を、ただで取れたね。＋5！" },
@@ -576,7 +576,7 @@ const VOLUME_2 = {
         {
           id: "v2-three-moves",
           title: "三手の読み",
-          summary: "自分→相手→自分の順に考える",
+          summary: "相手の返し手まで考えて指せる",
           steps: [
             { type: "explain", speech: "強い人は、指す前に「自分の手 → 相手の応手 → 自分の次の手」の3手を考えているよ。これを「三手の読み」というんだ。" },
             { type: "explain", sfen: "k8/9/7p1/7s1/9/9/9/7R1/8K b - 1", marks: [["2d", "target"]], speech: "2四の銀を取る（自分）→ 歩に取り返される（相手）→ 飛車を損した（自分）。3手読めば、取ってはいけないね。" },
@@ -596,7 +596,7 @@ const VOLUME_2 = {
         {
           id: "v2-fork",
           title: "両取りをかけよう",
-          summary: "2枚の駒を同時にねらう",
+          summary: "両取りで駒得できる",
           steps: [
             { type: "explain", sfen: TESUJI["knight-fork"].sfen, marks: TESUJI["knight-fork"].marks, speech: "1つの駒で2枚の駒を同時にねらう手を「両取り」というよ。相手はどちらか1枚しか守れないんだ。" },
             {
@@ -614,7 +614,7 @@ const VOLUME_2 = {
         {
           id: "v2-values",
           title: "駒の価値を知ろう",
-          summary: "得な取り方がわかる",
+          summary: "得な取り方を選べる",
           steps: [
             { type: "explain", speech: "「＋6」みたいな数字が、駒の値段！ 歩1・香3・桂4・銀5・金6・角8・飛車10。高い駒を取るのが「駒得」だよ。" },
             {
@@ -662,7 +662,7 @@ const VOLUME_2 = {
       title: "強い人の対局を観戦しよう",
       lessons: [
         {
-          id: "v2-watch-opening",
+          id: "v2-watch-opening", side: true,
           title: "序盤の駒組みを観戦しよう",
           summary: "囲ってから戦いを始める",
           steps: [
@@ -692,7 +692,7 @@ const VOLUME_2 = {
           ],
         },
         {
-          id: "v2-watch-endgame",
+          id: "v2-watch-endgame", side: true,
           title: "終盤の寄せを観戦しよう",
           summary: "と金で玉をつつみこむ",
           steps: [
@@ -733,7 +733,7 @@ const VOLUME_2 = {
         {
           id: "v2-check",
           title: "王手と詰み",
-          summary: "王手のかけ方と防ぎ方",
+          summary: "王手をかけて、防げる",
           steps: [
             { type: "explain", sfen: "4k4/9/9/9/9/9/9/9/4R3K w - 1", marks: [["5a", "target"], ["5i", "key"]], speech: "次に玉を取ろうとする手を「王手」というよ。この盤面では、5九の飛車が王手をかけているね。" },
             { type: "explain", speech: "王手をかけられたら、①玉が逃げる ②王手している駒を取る ③間に駒を置く（合駒）のどれかで防ぐよ。" },
@@ -761,7 +761,7 @@ const VOLUME_2 = {
         {
           id: "v2-mate-head-gold",
           title: "1手詰め：頭金",
-          summary: "玉の頭に金を打つ",
+          summary: "頭金で詰ませられる",
           steps: [
             { type: "explain", sfen: TESUJI["head-gold"].sfen, marks: TESUJI["head-gold"].marks, speech: "玉の頭（真上）に金を打つ「頭金」は、詰みの基本の形だよ。" },
             { type: "mate", sfen: TESUJI["head-gold"].sfen, solution: ["G*5b"], speech: "1手で詰ませてみよう！", praise: "頭金！ 4三の銀が金を守っているから、玉は金を取れないんだ。", proverb: "head-gold" },
@@ -770,14 +770,14 @@ const VOLUME_2 = {
         {
           id: "v2-mate-knight",
           title: "1手詰め：桂の王手",
-          summary: "合駒できない王手",
+          summary: "桂の王手で詰ませられる",
           steps: [
             { type: "explain", sfen: "7nk/7bp/9/9/9/9/9/9/1K7 b N 1", marks: [["1a", "target"]], speech: "桂馬の王手は、間に駒を置いて防げないよ。玉のまわりが自分の駒でふさがっていたら大チャンス！" },
             { type: "mate", sfen: "7nk/7bp/9/9/9/9/9/9/1K7 b N 1", solution: ["N*2c"], speech: "持ち駒の桂馬で、1手で詰ませてみよう！", praise: "玉のまわりは自分の駒でいっぱい。桂の王手は間に駒を置けないから、詰みだよ！", proverb: "knight-check" },
           ],
         },
         {
-          id: "v2-double-check",
+          id: "v2-double-check", side: true,
           title: "両王手",
           summary: "2つの王手を同時にかける",
           steps: [
@@ -802,7 +802,7 @@ const VOLUME_2 = {
         {
           id: "v2-mate-three",
           title: "3手詰めに挑戦",
-          summary: "捨て駒で守りをくずす",
+          summary: "駒を捨てて3手で詰ませられる",
           steps: [
             { type: "explain", speech: "3手詰めは「王手 → 応手 → 詰み」の3手。1手目に、わざと駒を取らせる「捨て駒」がよく出てくるよ。" },
             { type: "mate", sfen: "7gk/9/7BP/9/9/9/9/9/K8 b G 1", solution: ["G*1b", "2a1b", "1c1b+"], speech: "3手で詰ませてみよう！ 1手目は、取られてもいい場所に金を打つのがポイントだよ。" },
@@ -828,7 +828,7 @@ const VOLUME_2 = {
         {
           id: "v2-mating-shapes",
           title: "詰みの形を覚えよう",
-          summary: "頭金と腹銀",
+          summary: "詰みの形を見て、すぐ詰ませられる",
           steps: [
             { type: "explain", speech: "詰みには、よく出てくる「形」があるよ。形を覚えておくと、実戦ですぐに気づけるんだ。" },
             dexStep("tesuji", "head-gold"),
@@ -845,7 +845,7 @@ const VOLUME_2 = {
             problemStep("gts-2ee7a9e93d50", { speech: "持ち駒の銀で、1手で詰ませよう！" }),
             problemStep("gts-09300d8d51d8", { speech: "3手で詰ませよう！ 1手目は、駒を成る王手から考えてみてね。" }),
             problemStep("rook-and-bishop"),
-            { type: "choose", question: "両王手をかけられたら、防ぎ方は？", options: ["玉が逃げる", "間に駒を打つ", "王手の駒を1つ取る"], answer: 0, explanation: "2つの王手は、間に打っても1つ取っても防げない。玉が逃げるしかないよ。" },
+            { type: "choose", question: "王手をかけられたら、まずすることは？", options: ["王手を防ぐ（逃げる・取る・合駒）", "ほかの駒で攻め返す"], answer: 0, explanation: "王手を放っておくと、次に玉を取られて負け。逃げる・取る・合駒のどれかで、まず防ごう。" },
             {
               type: "find-move", sfen: "k8/9/3r1g3/9/3SP4/9/9/9/8K b - 1", answers: ["6e5d"],
               speech: "【前の章から】銀で両取りをかけよう！",
@@ -889,7 +889,7 @@ const VOLUME_3 = {
         {
           id: "v3-rook-styles",
           title: "居飛車と振り飛車",
-          summary: "飛車の使い方で2つに分かれる",
+          summary: "居飛車か振り飛車か、戦い方を選べる",
           steps: [
             { type: "explain", moves: ["2g2f", "8c8d", "2f2e", "8d8e"], marks: [["2h", "key"]], speech: "飛車を最初の2筋のまま使って戦うのが「居飛車」だよ。" },
             { type: "explain", moves: ["7g7f", "3c3d", "6g6f", "8c8d", "2h6h"], marks: [["6h", "key"]], speech: "飛車を左へ動かして戦うのが「振り飛車」。この盤面は、飛車を6筋に振った「四間飛車」だよ。" },
@@ -900,7 +900,7 @@ const VOLUME_3 = {
         {
           id: "v3-igyoku",
           title: "居玉はあぶない",
-          summary: "囲わない玉は詰みやすい",
+          summary: "居玉の危なさが分かり、囲ってから戦える",
           icon: "居",
           steps: [
             {
@@ -990,7 +990,7 @@ const VOLUME_3 = {
         {
           id: "v3-play-formation",
           title: "囲いを完成させて指そう",
-          summary: "完成した形から対局",
+          summary: "組んだ囲いで対局できる",
           steps: [
             { type: "explain", speech: "四間飛車と美濃囲いが完成した局面から、CPUと指してみよう！ 相手は舟囲いの居飛車だよ。" },
             {
@@ -1046,7 +1046,7 @@ const VOLUME_3 = {
       title: "攻めと受けを観戦しよう",
       lessons: [
         {
-          id: "v3-watch-attack",
+          id: "v3-watch-attack", side: true,
           title: "攻めと受けの対局を観戦しよう",
           summary: "銀の繰り出しと玉の早逃げ",
           steps: [
@@ -1100,7 +1100,7 @@ const VOLUME_3 = {
         {
           id: "v3-attack-pieces",
           title: "攻めは飛角銀桂",
-          summary: "攻めの駒を2枚以上で使う",
+          summary: "飛角銀桂で攻められる",
           steps: [
             { type: "explain", sfen: TESUJI["attack-pieces"].sfen, marks: TESUJI["attack-pieces"].marks, speech: "攻めの主役は、飛車・角・銀・桂の4枚だよ。金は玉の守りに残しておくのが基本なんだ。" },
             {
@@ -1115,7 +1115,7 @@ const VOLUME_3 = {
         {
           id: "v3-defense",
           title: "王手を受けよう",
-          summary: "逃げる・取る・合駒で防ぐ",
+          summary: "王手を3つの方法で受けられる",
           steps: [
             { type: "explain", speech: "王手の防ぎ方は3つ。①玉が逃げる ②王手している駒を取る ③間に駒を置く（合駒）。1つずつやってみよう！" },
             {
@@ -1135,7 +1135,7 @@ const VOLUME_3 = {
         {
           id: "v3-early-escape",
           title: "玉の早逃げ",
-          summary: "危なくなる前に逃げる",
+          summary: "危なくなる前に玉を逃がせる",
           steps: [
             { type: "explain", sfen: TESUJI["early-escape"].sfen, marks: TESUJI["early-escape"].marks, kiki: "white", speech: "「玉の早逃げ八手の得」。竜の利き（赤い数字）が玉のそばまで来たね。王手される前に、玉を安全な場所へ逃がそう。" },
             { ...tesujiFindStep("early-escape", "玉を2九へ逃がしてみよう！", "王手をかけられる前に、竜から離れられたね。早逃げは何手分もの得になるよ！"), kiki: "white", proverb: "early-escape" },
@@ -1144,7 +1144,7 @@ const VOLUME_3 = {
         {
           id: "v3-bottom-pawn",
           title: "金底の歩",
-          summary: "一段目の歩は堅い",
+          summary: "金底の歩で竜の攻めを受けられる",
           steps: [
             { type: "explain", sfen: TESUJI["gold-bottom-pawn"].sfen, marks: TESUJI["gold-bottom-pawn"].marks, kiki: "white", speech: "竜が一段目から、玉の下をねらっているよ。一段目に赤い数字が並んでいるね。こういうときは「金底の歩」が効くんだ。" },
             { ...tesujiFindStep("gold-bottom-pawn", "金の真下の3九に歩を打って、竜の横利き（赤い数字）を止めよう！", "金底の歩で、3九から先の赤い数字が消えた！ 竜の横利きが止まったね。「岩よりも堅し」だよ！"), kiki: "white", proverb: "gold-bottom-pawn" },
@@ -1388,7 +1388,7 @@ const VOLUME_5 = {
         {
           id: "v5-judgement",
           title: "形勢の3つのものさし",
-          summary: "駒の損得・玉の堅さ・駒の働き",
+          summary: "どちらが有利か、3つのものさしで比べられる",
           steps: [
             { type: "explain", moves: JUDGE_MOVES, speech: "どちらが有利かを「形勢」というよ。①駒の損得 ②玉の堅さ ③駒の働き の3つで考えよう。" },
             {
@@ -1408,7 +1408,7 @@ const VOLUME_5 = {
           ],
         },
         {
-          id: "v5-evaluation",
+          id: "v5-evaluation", side: true,
           title: "評価値ってなに？",
           summary: "AIの形勢判断を読む",
           steps: [
@@ -1429,11 +1429,11 @@ const VOLUME_5 = {
         },
         bossLesson("v5-c1-boss", {
           title: "形勢判断",
-          summary: "形勢の3つのものさしと評価値を使える",
+          summary: "形勢の3つのものさしを使える",
           chapterLabel: "形勢の読み方",
           steps: [
             { type: "choose", sfen: TESUJI["dragon-enemy-horse-home"].sfen, marks: TESUJI["dragon-enemy-horse-home"].marks, question: "敵陣の竜と、自陣の馬。3つのものさしのどれに当たる？", options: ["駒の損得", "玉の堅さ", "駒の働き"], answer: 2, explanation: "よく利く場所にいる駒は強い。「駒の働き」だね。" },
-            { type: "choose", question: "評価値が -1500 のときは？", options: ["先手が有利", "後手が有利", "互角"], answer: 1, explanation: "マイナスは後手が有利。1500は大きな差だよ。" },
+            { type: "choose", question: "玉のまわりに金銀がいて、逃げ道もある。3つのものさしのどれ？", options: ["玉の堅さ", "駒の損得", "駒の働き"], answer: 0, explanation: "金銀に守られ、逃げ道のある玉は堅い。囲いの見くらべで見た「逃げ道」と「ひも」だね。" },
             { type: "choose", question: "飛車（10点）と金（6点）を交換したら？", options: ["飛車を渡したほうが駒損", "飛車を渡したほうが駒得", "同じ"], answer: 0, explanation: "10点を渡して6点もらうから、4点の駒損だね。" },
             problemStep("where-to-drop-bishop", { speech: "【前の巻から】角をどこに打てば詰むかな？ 3手で詰ませよう！" }),
           ],

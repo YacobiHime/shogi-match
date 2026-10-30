@@ -33,7 +33,8 @@ export function chapterMedal(lessons, progress, chapterId) {
 export function volumeTitle(volumes, lessons, progress, volumeId) {
   const index = volumes.findIndex(({ id }) => id === volumeId);
   if (index < 0) return null;
-  const volumeLessons = lessons.filter((lesson) => lesson.volumeId === volumeId && !lesson.comingSoon);
+  // 寄り道(21-6)は、遊ばなくても巻を終えたことにする。
+  const volumeLessons = lessons.filter((lesson) => lesson.volumeId === volumeId && !lesson.comingSoon && !lesson.side);
   const finished = volumeLessons.every((lesson) => lessonRecord(progress, lesson.id).status !== 'new');
   const bossesCleared = volumeLessons.filter(({ boss }) => boss).every((lesson) => lessonRecord(progress, lesson.id).status === 'cleared');
   if (!volumeLessons.length || !finished || !bossesCleared) return null;
@@ -131,7 +132,7 @@ export function tutorialMap(volumes, lessons, progress) {
     });
     volume.chapters.forEach((chapter, chapterIndex) => {
       const chapterLessons = lessons.filter((lesson) => lesson.chapterId === chapter.id);
-      const pending = chapterLessons.filter((lesson) => !lesson.comingSoon && lessonRecord(progress, lesson.id).status === 'new');
+      const pending = chapterLessons.filter((lesson) => !lesson.comingSoon && !lesson.side && lessonRecord(progress, lesson.id).status === 'new');
       rows.push({
         type: 'chapter', id: chapter.id, number: chapterIndex + 1, title: chapter.title, volumeNumber: volumeIndex + 1,
         summary: lessonsProgress(chapterLessons, progress),
@@ -143,7 +144,7 @@ export function tutorialMap(volumes, lessons, progress) {
       chapterLessons.forEach((lesson, lessonIndex) => {
         rows.push({
           type: 'lesson', id: lesson.id, title: lesson.title, summary: lesson.summary ?? '', volumeNumber: volumeIndex + 1,
-          icon: lessonIcon(lesson), boss: Boolean(lesson.boss),
+          icon: lessonIcon(lesson), boss: Boolean(lesson.boss), side: Boolean(lesson.side),
           // 腕だめしは道のまん中に置く(山場を目立たせる)。
           lane: lesson.boss ? 2 : LANES[lessonIndex % LANES.length],
           state: lessonState(lessons, progress, lesson, current),

@@ -616,7 +616,8 @@ describe("やこび姫の将棋教室の進捗", () => {
     progress = recordLessonCleared(progress, "v1-board", 1);
     progress = recordLessonSkipped(progress, "v1-board");
     expect(progress.lessons["v1-board"]).toEqual({ status: "cleared", stars: 3 });
-    const summary = lessonsProgress(lessons.slice(0, 2), progress);
+    // 寄り道(21-6)はメーターに数えないので、寄り道でないレッスン2つで確かめる。
+    const summary = lessonsProgress(lessons.filter(({ side }) => !side).slice(0, 2), progress);
     expect(summary).toMatchObject({ cleared: 1, total: 2, stars: 3, maxStars: 6 });
   });
 

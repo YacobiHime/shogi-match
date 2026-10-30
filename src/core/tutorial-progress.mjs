@@ -119,7 +119,7 @@ export function applyPlacement(lessons, progress, placement, startLessonId = nul
 export function firstSkippedLesson(lessons, progress) {
   return lessons.find((lesson) => {
     const record = lessonRecord(progress, lesson.id);
-    return !lesson.comingSoon && record.status === "skipped" && !record.tested;
+    return !lesson.comingSoon && !lesson.side && record.status === "skipped" && !record.tested;
   }) ?? null;
 }
 
@@ -179,7 +179,8 @@ export function skipAheadTargets(lessons, progress, bossId) {
   const index = lessons.findIndex(({ id }) => id === bossId);
   const boss = lessons[index];
   if (!boss?.boss) return { tested: [], skipped: [] };
-  const before = lessons.slice(0, index).filter(({ comingSoon }) => !comingSoon);
+  // 寄り道(21-6)は、飛び級で修了にも「とばした」にもしない(遊ばなくてもよいレッスンのまま)。
+  const before = lessons.slice(0, index).filter(({ comingSoon, side }) => !comingSoon && !side);
   const tested = before
     .filter((lesson) => lesson.chapterId === boss.chapterId)
     .filter(({ id }) => {
@@ -221,9 +222,9 @@ export function lessonRecord(progress, lessonId) {
   return progress.lessons[lessonId] ?? { status: "new", stars: 0 };
 }
 
-/** 次のレッスンへ進めるか。準備中のレッスンは通過済みとして扱う。 */
+/** 次のレッスンへ進めるか。準備中と寄り道(side。21-6)のレッスンは通過済みとして扱う。 */
 function passed(lesson, progress) {
-  if (lesson.comingSoon) return true;
+  if (lesson.comingSoon || lesson.side) return true;
   const { status } = lessonRecord(progress, lesson.id);
   return status === "cleared" || status === "skipped";
 }
@@ -243,7 +244,8 @@ export function nextLesson(lessons, progress) {
 
 /** 巻や章の進み具合。 */
 export function lessonsProgress(lessons, progress) {
-  const playable = lessons.filter(({ comingSoon }) => !comingSoon);
+  // 寄り道(21-6)は進み具合のメーターに数えない(遊ばなくても巻を終えられる)。
+  const playable = lessons.filter(({ comingSoon, side }) => !comingSoon && !side);
   const records = playable.map(({ id }) => lessonRecord(progress, id));
   return {
     cleared: records.filter(({ status }) => status === "cleared").length,

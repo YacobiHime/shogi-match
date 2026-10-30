@@ -267,17 +267,21 @@ describe('腕だめしで飛び級(設計20章)', () => {
     const result = recordSkipAhead(lessons, progress, boss.id);
     // クリアの記録は残し、章の残りを修了に。
     expect(result.progress.lessons[inChapter[0].id]).toEqual({ status: 'cleared', stars: 2 });
-    expect(result.tested).toEqual(inChapter.filter(({ id }) => id !== boss.id && id !== inChapter[0].id).map(({ id }) => id));
+    // 寄り道(21-6)は修了にしない(遊ばなくてもよいレッスンのまま)。
+    expect(result.tested).toEqual(inChapter.filter(({ id, side }) => id !== boss.id && id !== inChapter[0].id && !side).map(({ id }) => id));
     for (const id of result.tested) expect(result.progress.lessons[id]).toEqual({ status: 'skipped', stars: 0, tested: true });
     expect(result.progress.lessons[lessons[0].id]).toEqual({ status: 'cleared', stars: 3 });
-    expect(result.progress.lessons[lessons[1].id]).toEqual({ status: 'skipped', stars: 0 });
+    // 前の章の遊んでいないレッスンは「とばした」に(寄り道はそのまま)。
+    const second = lessons.slice(1).find(({ side }) => !side);
+    expect(result.progress.lessons[second.id]).toEqual({ status: 'skipped', stars: 0 });
+    expect(result.progress.lessons[lessons[1].id]).toBeUndefined();
     // 次は、腕だめしの次の章から。
     expect(nextLesson(lessons, result.progress).id).toBe(firstLessonOfNextChapter(lessons, boss.id).id);
     const map = tutorialMap(volumes, lessons, result.progress);
     expect(map.rows.find(({ id }) => id === result.tested[0]).state).toBe('tested');
     expect(map.rows.find(({ id }) => id === boss.id)).toMatchObject({ state: 'cleared', skipAhead: false });
     // 修了は「はじめから学ぶ」の行き先にしない(とばした最初のレッスンへ)。
-    expect(firstSkippedLesson(lessons, result.progress).id).toBe(lessons[1].id);
+    expect(firstSkippedLesson(lessons, result.progress).id).toBe(second.id);
   });
 
   it('修了の記録は、章をとばしても消えず、クリアすれば★に変わる。保存して読み直しても残る', () => {

@@ -179,8 +179,8 @@
             <button
               type="button"
               class="shogi-tutorial__node"
-              :class="[`shogi-tutorial__node--${row.state}`, { 'shogi-tutorial__node--boss': row.boss }]"
-              :aria-label="`${row.title}（${nodeStateText(row)}）`"
+              :class="[`shogi-tutorial__node--${row.state}`, { 'shogi-tutorial__node--boss': row.boss, 'shogi-tutorial__node--side': row.side }]"
+              :aria-label="`${row.title}（${row.side ? '寄り道・' : ''}${nodeStateText(row)}）`"
               :data-map-current="row.state === 'next' ? '' : undefined"
               :data-lesson-node="row.id"
               :disabled="row.state === 'soon'"
@@ -195,6 +195,8 @@
             </span>
             <span v-else-if="row.state === 'tested'" class="shogi-tutorial__node-tag" aria-hidden="true">修了</span>
             <span v-if="row.skipAhead" class="shogi-tutorial__node-tag shogi-tutorial__node-tag--jump" aria-hidden="true">飛び級できる</span>
+            <!-- 寄り道(21-6)。道の横の小さなマス。遊ばなくても次へ進め、巻も終えられる。 -->
+            <span v-if="row.side" class="shogi-tutorial__node-tag shogi-tutorial__node-tag--side" data-side-lesson aria-hidden="true">寄り道</span>
           </div>
         </li>
       </ol>
@@ -2848,7 +2850,15 @@ const resultMessage = computed(() => {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
 }
-.shogi-game .shogi-game .shogi-tutorial__placement-links {
+.shogi-game .shogi-game .shogi-tutorial__node--side {
+  transform: scale(0.82);
+  border-style: dashed;
+  opacity: 0.85;
+}
+.shogi-game .shogi-tutorial__node-tag--side {
+  color: #d7d1fd;
+}
+.shogi-game .shogi-tutorial__placement-links {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
