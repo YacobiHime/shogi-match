@@ -8672,6 +8672,8 @@ function displayCoachAdvice(advice: {
     currentSfen: currentSfen.value,
     moveCount: moveCount.value,
     lastShownAt: coachAdviceLastShownAt.get(advice.key),
+    // いま出ている助言が過ぎた局面の話なら、繰り返しでも新しい局面の助言に替える(11-5)。
+    displayed: coachAdviceScheduler.displayed(),
   })) return false;
   coachAdviceLastShownAt.set(advice.key, moveCount.value);
   if (advice.topic) advisedCoachTopics.add(advice.topic);
@@ -8698,11 +8700,19 @@ function displayCoachAdvice(advice: {
 
 const coachAdviceScheduler = createCoachAdviceScheduler({ display: displayCoachAdvice });
 
-function showCoachAdvice(advice?: { key: string; text: string; reason?: string; topic?: string } | null) {
+/**
+ * 助言を順番待ちに出す。atは、その助言を読んだ局面(裏の読みの結果を出すとき)。省くと今の局面。
+ * 読み終える前に盤が進んだ助言は、読んだ局面の印のまま渡すので、順番待ちと表示の前の確かめで捨てられる
+ * (前は出すときの局面の印を付けていたので、1つ前の局面の助言が、新しい局面の話として出ていた。11-5)。
+ */
+function showCoachAdvice(
+  advice?: { key: string; text: string; reason?: string; topic?: string } | null,
+  at?: { sfen: string; ply: number },
+) {
   coachAdviceScheduler.present(advice ? {
     ...advice,
-    sfen: currentSfen.value,
-    ply: moveCount.value,
+    sfen: at?.sfen ?? currentSfen.value,
+    ply: at?.ply ?? moveCount.value,
   } : advice);
 }
 
@@ -9186,6 +9196,7 @@ function updateCoachAdviceFromPlayerScore(
   moveFeedback?: { key: string; text: string } | null,
   storeMoveBaseline = true,
   mateByChecks: boolean | null = null,
+  at?: { sfen: string; ply: number },
 ) {
   if (storeMoveBaseline) {
     playerTurnScore = score;
@@ -9200,7 +9211,7 @@ function updateCoachAdviceFromPlayerScore(
     return;
   }
   if (moveFeedback) {
-    showCoachAdvice(moveFeedback);
+    showCoachAdvice(moveFeedback, at);
     return;
   }
   const opponentColor = humanColor.value === Color.BLACK ? Color.WHITE : Color.BLACK;
@@ -9216,7 +9227,7 @@ function updateCoachAdviceFromPlayerScore(
     materialBalance: playerMaterialBalance(),
     mateByChecks,
   });
-  showCoachAdvice(advice);
+  showCoachAdvice(advice, at);
 }
 
 /**
@@ -9262,6 +9273,9 @@ async function updateDedicatedCoachAdvice(
   if (record.value.position.color !== humanColor.value) return;
   const analyzedHistoryLength = moveHistory.length;
   const analyzedSideToMove = record.value.position.color;
+  // 読んだ局面。出すときに、この局面の印を付ける(読み終える前に盤が進んだら、出さずに捨てられる。11-5)。
+  const analyzedAt = { sfen: currentSfen.value, ply: moveCount.value };
+  const stillAnalyzedPosition = () => active.value && moveHistory.length === analyzedHistoryLength && currentSfen.value === analyzedAt.sfen;
   const budget = coachSearchBudget();
   const candidates = await analyzeCoachPosition(
     budget.nodes,
@@ -9312,6 +9326,8 @@ async function updateDedicatedCoachAdvice(
         maxPly: 7,
       })
     : null;
+  // 詰めろの確かめのあいだにプレイヤーが指すと、読みは中断される(onPlayerMove)。そのときは、前の局面の助言を出さない。
+  if (!stillAnalyzedPosition()) return;
   const mateThreat = mateThreatResult?.status === "mate";
   // 勝ちの詰みがあるときは、詰みの一言を何より先に出す(相手の詰めろや作戦の提案より大事)。
   const winningMate = coachLevel.value === "detailed" && score?.type === "mate" && score.value > 0;
@@ -9424,13 +9440,14 @@ async function updateDedicatedCoachAdvice(
     // 相手の狙いの手を、相手の色の点線の矢印で盤に出す(N2)。プレイヤーが指したら消す。
     threatArrow.value = { usi: mateThreatResult.best.move, color: humanColor.value === Color.WHITE ? "black" : "white" };
   }
+  if (!stillAnalyzedPosition()) return;
   // 大会の相手の表情と中継は、この助言の読みの評価値で動かす(riskOnlyでも)。
   notePresenceScore(score);
   if (riskOnly && !winningMate) {
-    if (chosen) showCoachAdvice(chosen);
+    if (chosen) showCoachAdvice(chosen, analyzedAt);
     return;
   }
-  updateCoachAdviceFromPlayerScore(score, chosen, false, mateByChecks);
+  updateCoachAdviceFromPlayerScore(score, chosen, false, mateByChecks, analyzedAt);
 }
 
 /** 作戦の助言より先に出す危険の知らせ(詰み・王手・詰めろ・評価の崖)。 */

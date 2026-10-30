@@ -9,6 +9,16 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("never shows coach advice about a position the board has already left", () => {
+    // 裏の読みの助言は、読んだ局面の印で出す(出すときの局面の印にしない)。docs/coach-advice-expansion-design.mdの11-5。
+    expect(source).toMatch(/sfen: at\?\.sfen \?\? currentSfen\.value,\s*ply: at\?\.ply \?\? moveCount\.value,/);
+    expect(source).toMatch(/const analyzedAt = \{ sfen: currentSfen\.value, ply: moveCount\.value \};/);
+    // プレイヤーが指すと中断される詰めろの確かめのあとで、まだ同じ局面かを確かめる。
+    expect(source).toMatch(/const mateThreatResult = threatSfen\s*\? await engineMateCheck\(threatSfen,[\s\S]{0,200}?: null;[\s\S]{0,160}?if \(!stillAnalyzedPosition\(\)\) return;/);
+    expect(source).toMatch(/if \(!stillAnalyzedPosition\(\)\) return;\s*\/\/ 大会の相手の表情と中継は[\s\S]{0,160}?showCoachAdvice\(chosen, analyzedAt\);[\s\S]{0,40}?updateCoachAdviceFromPlayerScore\(score, chosen, false, mateByChecks, analyzedAt\);/);
+    // いま出ている助言が過ぎた局面の話なら、繰り返しでも替える。
+    expect(source).toMatch(/displayed: coachAdviceScheduler\.displayed\(\),/);
+  });
   it("keeps what the human-like CPU missed for each of its moves and explains it in the review", () => {
     // CPUの手ごとに気づかなかったことを残し(待ったで戻した手は捨てる)、保存・復元し、新しい対局で消す(docs/cpu-human-model-design.mdの13-4)。
     expect(source).toMatch(/cpuNotes = normalizeCpuNotes\(\{\s*\.\.\.cpuNotes,\s*\[moveHistory\.length \+ 1\]: \(selection as \{ oversights\?: unknown\[\] \} \| null\)\?\.oversights \?\? \[\],\s*\}, moveHistory\.length \+ 1\);/);
