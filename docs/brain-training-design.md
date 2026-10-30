@@ -190,6 +190,38 @@
 | B2 | 道場の土台（`brain-training.mjs`の保存・階段・今日の3種目）と、ちらっと盤（`brain-glance.mjs`と画面）、根拠のシート | 済み（2026-10-30。ブラウザで盤を読んで正しく答え続けると、16問で0.8秒→0.12秒まで段が上がり、記録が残ることを確かめた） |
 | B3 | 盤面の記憶（`brain-board-memory.mjs`と画面）と、頭の中の盤（`brain-mental-board.mjs`と画面）。今日の3種目をつなぐ | 済み（2026-10-30。形は`MEMORY_FORMATIONS`の11組から作る。「囲いをまるごと覚えた」は、囲いの完成形の駒がすべて出た問題だけで言う（駒3枚で囲いの名前を言わないため）。盤の部品は`src/brain/BrainBoard.vue`。ブラウザで今日の3種目を通しで操作し、4つの大きさで崩れがないことを確かめた） |
 | B4 | 記憶の宮殿の学校（`memory-palace.mjs`・言葉・講1〜6・毎日の練習・自分の宮殿） | 済み（2026-10-30。言葉は120語（`src/data/memory-palace-words.mjs`）。明かりは初めから5か所、講を1つ終えるごとに5か所。講6の定跡は四間飛車と美濃囲いの8手（作戦カードと同じ手順`openingFormationSteps('shiken','mino')`）。講は最後まで解けば終えたことにする（教室と同じく、点数で止めない）。ブラウザで講1〜6と毎日の練習を4つの大きさで最後まで操作した） |
-| B5 | 確認（3つの大きさのブラウザ）、`README.md`・`AGENTS.md`の表・検証記録、この文書の「実装」の章 | まだ |
+| B5 | 確認（3つの大きさのブラウザ）、`README.md`・`AGENTS.md`の表・検証記録、この文書の「実装」の章 | 済み（2026-10-30。10章） |
 
 各段階で、`Game_Nintendo_Implementation.md`と`UI_Nintendo_Implementation.md`の「実装後のチェックリスト」で確かめます。
+
+## 10. 実装（2026-10-30、実装・自動テスト済み）
+
+| もの | 置き場所 |
+|---|---|
+| 記録・階段・今日の3種目・日ごとの記録・続けた日数 | `src/core/brain-training.mjs`（`nextStair`・`startLevel`・`recordBrainSession`・`todayMenu`・`growthSince`・`brainStreak`、保存`brain-training:v1`） |
+| ちらっと盤 | `src/core/brain-glance.mjs`（`GLANCE_LEVELS`・`glanceProblem`・`scoreGlance`・`glanceTimingValid`・`glanceSummary`）、画面`src/brain/BrainGlance.vue` |
+| 盤面の記憶 | `src/core/brain-board-memory.mjs`（`BOARD_MEMORY_LEVELS`・`MEMORY_FORMATIONS`・`boardMemoryProblem`・`scoreBoardMemory`・`boardMemorySummary`）、画面`src/brain/BrainBoardMemory.vue` |
+| 頭の中の盤 | `src/core/brain-mental-board.mjs`（`MENTAL_LEVELS`・`mentalProblem`・`mentalPieceChoices`・`mentalSummary`）、画面`src/brain/BrainMentalBoard.vue` |
+| 記憶の宮殿 | `src/core/memory-palace.mjs`（`CASTLE_LOCI`・`PALACE_LESSONS`・`palaceWordSet`・`nextPracticeCount`・`shogiSequence`・`cleanCustomLoci`）、言葉と格言`src/data/memory-palace-words.mjs`、画面`src/brain/BrainPalace.vue` |
+| 盤の部品 | `src/brain/BrainBoard.vue`（駒・薄い駒・緑と赤の升の印・座標・押せる盤）。駒の字は盤の幅に合わせる（`container-type`）ので、駒が増えても升の高さが変わらない |
+| 道場の入口・結果・根拠のシート | `src/ShogiBrainTraining.vue`（遊べる種目`AVAILABLE`、根拠の文`EVIDENCE`は1章の「言ってよいこと」だけ） |
+| ホーム | `src/ShogiMatchGame.vue`の脳トレのタイル（`data-brain-tile`・`openBrainTraining`）、図鑑のタイル（`data-dex-tile`・`openHomeDexShelf`・`dexShelfFrom`）、`navigateBack`・`canGoBack`、まだ見ていない遊びの`brain`（`home-extras.mjs`） |
+
+設計から変えたこと・決めたこと:
+
+- 盤は対局の盤（`ShogiMatchBoard`）ではなく、軽い格子の盤（`BrainBoard.vue`）にした。ちらっと盤は0.05秒の表示を数えるので、重い盤の描き直しで遅れないようにするため（D:12 正しさ）。色の約束（緑・赤、黄色を使わない）は同じ。
+- ちらっと盤のまちがいは、盤に大きな×を出さず、答えのマスを赤で見せるだけにした（×が答えの駒を隠したため。UD:5-3 責めない）。
+- 「囲いをまるごと覚えた」は、囲いの完成形の駒がすべて出た問題だけで言う（駒3枚の問題で囲いの名前を言わないため。D:5-8 情報としてほめる）。
+- 講は最後まで解けば終えたことにする（点数で止めない。教室の腕だめしと同じ。D:4-3）。
+- 言葉は200語の予定を120語にした（毎日の練習の最大30個＋じゃまの30個に足りる）。
+
+実装後のチェックリスト（`Game_Nintendo_Implementation.md`の12章・`UI_Nintendo_Implementation.md`の9章）:
+
+- 判定・評価値は変えていない。頭の中の盤と講6の手順は合法手だけ（テストで確かめる）。
+- 押した瞬間に反応する（駒音・選んだボタンの縁）。演出（正解の○、答えの表示）は0.5〜1.6秒で、「つぎへ」で飛ばせる。
+- 自己ベストは「何ができたか」を言う（「0.15秒でも見えた」「頭の中で8手を追えた」）。
+- 続けた日数は出すが、途切れても責めない。ランキングは作らない。
+- 確認ダイアログは増やしていない。ボタンは動詞（「はじめる」「覚えた」「できた」「つぎへ」）。
+- タップ領域は44px以上（答えのボタンは52px）。フォーカスは`:focus-visible`で見える。`prefers-reduced-motion`では覚える時間の帯を動かさない。
+- 保存のキーは`yacobihime:shogi-match:brain-training:v1`。読めない値は捨てて遊べる（テストで確かめる）。
+- ブラウザ（ヘッドレスChrome）で、スマホ縦・タブレット縦・デスクトップ・スマホ横の4つで操作し、横にはみ出さないことを確かめた。作った人以外に触ってもらう確かめはまだ（実機での確認はユーザーが行う）。
