@@ -120,7 +120,7 @@ describe('createRelayScript', () => {
     const script = scriptFor(father, moves, { evals, end: { winner: 'white', reason: 'resign' } });
     const lines = script.thoughts.filter(({ side }) => side === 'white').map(({ text }) => text);
     expect(lines.length).toBeGreaterThan(0);
-    expect(lines.every((text) => /まあ|あの|あぁ～|うーん|え～|え…/.test(text)), lines.join('/')).toBe(true);
+    expect(lines.every((text) => /まあ|かな|ちょっと|少し|一手一手/.test(text)), lines.join('/')).toBe(true);
     expect(lines.some((text) => /楽しませて|ほう、|見事だった|面白い/.test(text))).toBe(false);
   });
 
@@ -377,13 +377,13 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     // 羽音の対局(親子のやりとりと、羽音が勝ったふり返り)。
     const family = ['', 'b', 'c'].map((variant) => longScript({ variant, cast: yoshihiko, end: { winner: 'white', reason: 'resign' } }));
     const said = [...many, ...family].flatMap(({ lines }) => lines.filter(({ role }) => role === 'commentator').map(({ text }) => text));
-    for (const odd of [/違ったらすみません/, /らしいです。……らしいです/, /大変ですよ/, /親としてではなく/, /一人の棋士として見ますよ/, /強くなったな。いや、失礼。良い将棋でした/, /隙は作りにくくなりましたね/]) {
+    for (const odd of [/正直。$/, /普通。$/, /たぶん。/, /苦手なんですよね/, /私でも/, /分かんないです。$/, /違ったらすみません/, /らしいです。……らしいです/, /大変ですよ/, /親としてではなく/, /一人の棋士として見ますよ/, /強くなったな。いや、失礼。良い将棋でした/, /隙は作りにくくなりましたね/]) {
       expect(said.some((text) => odd.test(text)), String(odd)).toBe(false);
     }
     const familyLines = family.flatMap(({ lines }) => lines.map(({ role, text }) => `${role}:${text}`));
     expect(familyLines).toContain('host:お父さんとして、羽音さんの将棋は、いかがですか？');
-    expect(familyLines).toContain('commentator:まあ、あの……親子なんで。こう、なかなか、言いにくいんですけど。えぇ。');
-    expect(familyLines).toContain('commentator:まあ、あの……強くなったな、という感じは、ありますね。……いや、すみません。はい。');
+    expect(familyLines).toContain('commentator:そうですね……まあ、あの、親子なので。なかなか、言いにくいところはあるんですけど。えぇ。');
+    expect(familyLines).toContain('commentator:そうですね……まあ、あの、強くなったなという気はしますね。はい。');
   });
 
   it('羽音は、短く平らに話す。敬語も感嘆符も使わず、言い方は局ごとに替わる(39章)', () => {

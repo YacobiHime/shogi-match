@@ -35,8 +35,10 @@ describe('相手の表情と一言', () => {
     for (const moment of ['start', 'ahead', 'behind', 'win', 'loss']) expect(opponentLine(moment, { story: HANANE })).not.toMatch(/です|ます|ました|ません|ございます|お願い/);
     // 善彦は、中継の解説と同じ口調(「まあ」「あの」「あぁ～」をはさむ。大物ぶった言い方をしない。42章)。
     const father = ['start', 'ahead', 'behind', 'win', 'loss'].map((moment) => opponentLine(moment, { story: YOSHIHIKO }));
-    expect(father[0]).toBe('あぁ、よろしくお願いします');
-    expect(father.slice(1).every((text) => /まあ|あの|あぁ～/.test(text))).toBe(true);
+    expect(father[0]).toBe('よろしくお願いします');
+    // モデルの羽生善治・藤井聡太の話し方(「ちょっと」「少し」「〜かな」で言い切らない。43章)。
+    expect(father.slice(1).every((text) => /ちょっと|少し/.test(text) && /かな/.test(text))).toBe(true);
+    expect(father.some((text) => /たまたま|強かったです/.test(text))).toBe(false);
     expect(father.some((text) => /楽しませて|ふむ|やるね|良い将棋だった|強くなったね/.test(text))).toBe(false);
   });
   it('途中の一言は、形勢が傾いた最初だけ、合わせて2回まで', () => {
