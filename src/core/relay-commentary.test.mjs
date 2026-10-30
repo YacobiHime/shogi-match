@@ -386,7 +386,7 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     expect(familyLines).toContain('commentator:そうですね……まあ、あの、強くなったなという気はしますね。はい。');
   });
 
-  it('羽音は、短く平らに話す。敬語も感嘆符も使わず、言い方は局ごとに替わる(39章)', () => {
+  it('羽音は、淡々としているが親しみを込めて話す。敬語も感嘆符も使わず、言い方は局ごとに替わる(39・44章)', () => {
     const hanane = { id: 'h', name: '天鷺羽音', dan: '四段', story: HANANE, voice: 'hanane' };
     const many = ['', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((variant) => longScript({ variant, cast: hanane, white: player('s', '鈴木蓮', { age: 28 }) }));
     const said = many.flatMap(({ lines }) => lines.filter(({ role }) => role === 'commentator').map(({ text }) => text));
@@ -395,8 +395,12 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     // 前の言い換えの文(ほかの解説者の文をため口にしただけ)は出さない。
     for (const stock of [/見どころ。$/, /意地でも攻める気だ/, /ここで長考に入った/, /両者の作戦の方向/]) expect(said.some((text) => stock.test(text)), String(stock)).toBe(false);
     // 同じ場面の2つの言い方が、局によってどちらも出る。
-    expect(said).toContain('ここから中盤。……作戦が、はっきりしてきた。');
-    expect(said).toContain('……ここから、読み合い。');
+    expect(said).toContain('ここから中盤だね。作戦が、はっきりしてきたよ。');
+    expect(said).toContain('ここから、読み合いでしょ。');
+    // ノベルの設定の口調(docs/hanane-character.md): 「よ」「でしょ」「ね」で終える行が多く、「……」で始めてばかりにしない。
+    const friendly = said.filter((text) => /(よ|でしょ|ね)[。？]?$/.test(text)).length;
+    expect(friendly / said.length).toBeGreaterThan(0.5);
+    expect(said.filter((text) => text.startsWith('……')).length / said.length).toBeLessThan(0.1);
     const host = many.flatMap(({ lines }) => lines.filter(({ role }) => role === 'host').map(({ text }) => text));
     expect(host).toContain('羽音さん、ここはどう見る？');
   });

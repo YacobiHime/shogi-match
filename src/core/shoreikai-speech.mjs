@@ -65,12 +65,12 @@ export function mentorLine(mentor, moment) {
   return lines[moment] ?? '';
 }
 
-/** 羽音の一言(冷静で、感嘆符と敬語を使わない)。 */
+/** 羽音の一言(淡々として親しみのある口調。感嘆符と敬語を使わない。docs/hanane-character.md)。 */
 export const HANANE_SHOREIKAI_LINES = Object.freeze({
-  first: '三段リーグの天鷺羽音。……入ったばかりの人と話すの、珍しいんだけど',
-  promoted: '先に、四段で待ってる',
-  league: '三段リーグは、一局ずつ。私も、そうやって抜けた',
-  pro: '……やっと来たね。次は、盤の上で',
+  first: '三段リーグの天鷺羽音。はじめまして。入ったばかりの人と話すの、珍しいんだけどね',
+  promoted: '先に、四段で待ってるよ',
+  league: '三段リーグは、一局ずつだよ。私も、そうやって抜けた',
+  pro: 'やっと来たね。……次は、盤の上で会おう',
 });
 
 /**

@@ -62,13 +62,13 @@ const LINES = Object.freeze({
     win: 'ありがとうございました',
     loss: '負けました',
   },
-  // 羽音は敬語を使わない(ryuo-story.mjsのHANANE_LINESと同じ書き方)。
+  // 羽音は敬語を使わない。口調は docs/hanane-character.md(ryuo-story.mjsのHANANE_LINESと同じ書き方)。
   hanane: {
-    start: '……よろしく',
-    ahead: '……このまま、決めるから',
-    behind: '……まだ、終わってない',
-    win: '……ありがとう。また指そう',
-    loss: '……私の負け',
+    start: 'よろしく。いい将棋にしよう',
+    ahead: 'このまま、決めるよ',
+    behind: 'へえ、やるね。でも、まだ終わってないよ',
+    win: 'ありがとう。また指そう',
+    loss: '私の負け。……悔しいけど',
   },
   // 善彦は、中継の解説と同じ口調(「そうですね」「ちょっと」「〜かなと思います」。モデルの羽生善治・藤井聡太の対局後の話し方。
   // docs/tournament-relay-design.mdの36・37・42・43章)。

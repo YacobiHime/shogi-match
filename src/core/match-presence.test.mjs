@@ -30,7 +30,7 @@ describe('相手の表情と一言', () => {
     expect(opponentVoice({ character: { attack: 0 } })).toBe('balance');
     expect(opponentVoice({ story: HANANE, character: { attack: 0.7 } })).toBe('hanane');
     expect(opponentLine('start', { character: { attack: 0.7 } })).toBe('よろしくお願いします。今日も攻めますよ');
-    expect(opponentLine('loss', { story: HANANE })).toBe('……私の負け');
+    expect(opponentLine('loss', { story: HANANE })).toBe('私の負け。……悔しいけど');
     // 羽音は敬語を使わない。
     for (const moment of ['start', 'ahead', 'behind', 'win', 'loss']) expect(opponentLine(moment, { story: HANANE })).not.toMatch(/です|ます|ました|ません|ございます|お願い/);
     // 善彦は、中継の解説と同じ口調(「まあ」「あの」「あぁ～」をはさむ。大物ぶった言い方をしない。42章)。
