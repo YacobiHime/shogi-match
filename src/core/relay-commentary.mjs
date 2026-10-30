@@ -845,6 +845,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
    * 善彦の選びは別の種にし、ほかのコメントの選び方を動かさない。
    */
   const yoshihikoRng = createRng(relaySeed(`${spec.key}:yoshihiko`));
+  /** 善彦の解説へのつっこみの順(38章)。ほかの選び方を動かさないよう、別の種。 */
+  const yoshihikoReactRng = createRng(relaySeed(`${spec.key}:yoshihiko-react`));
   const yo = (...options) => (cast.voice === 'yoshihiko' ? pick(yoshihikoRng, options) : options[0]);
   const news = [...(spec.news ?? [])];
   let newsShown = 0;
@@ -853,6 +855,25 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   const line = (at, when, role, text) => lines.push({ at, when, role, text });
   /** 解説への視聴者のつっこみ({cast}は解説者の苗字)。解説の言葉が出てから流す(27章)。 */
   const react = (at, pool, count = 1) => comment(at, 'move', pool, { cast: castSurname }, count, '', { lag: REACT_LAG });
+  /**
+   * 善彦の解説への視聴者のつっこみは、その場面の組の行を全部流す(配信の例のとおり。38章)。
+   * 順は種で混ぜ、少しずつずらして流す。善彦でなければ、ふだんのreactと同じ数だけ。
+   */
+  const reactAll = (at, pool, count = 1) => {
+    if (cast.voice !== 'yoshihiko') {
+      react(at, pool, count);
+      return;
+    }
+    const kind = POOL_KIND[pool] ?? pool;
+    const texts = [...VIEWER[pool]];
+    for (let index = texts.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(yoshihikoReactRng.next() * (index + 1));
+      [texts[index], texts[swap]] = [texts[swap], texts[index]];
+    }
+    texts.forEach((text, index) => comments.push({
+      at, when: 'move', text: fill(text, { cast: castSurname }), tone: KIND_TONE[kind] || '', kind, size: '', pos: '', lag: REACT_LAG + index * 700,
+    }));
+  };
   /** 視聴者の呼び方(苗字。羽音は「羽音」、善彦は「天鷺」。同じ苗字の2人なら名前全部。27章)。 */
   const fan = (side) => {
     const player = players[side];
@@ -938,7 +959,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       line(0, 'move', 'host', holders ? 'タイトルホルダー同士の一戦ですけれども。' : spec.weight === 'title' ? 'タイトル戦の大舞台ですけれども。' : '注目の一戦ですけれども。');
       line(0, 'move', 'commentator', '…そうですね、まあ、あの、専門家じゃないんで。全然、分かんないという感じなんですけど。');
       line(0, 'move', 'host', 'はい、どうもありがとうございました。');
-      react(0, 'castHumble', 2);
+      reactAll(0, 'castHumble', 2);
     }
     if (cast.voice === 'yoshihiko') {
       line(0, 'move', 'host', cast.reader ? `それでは棋譜読み上げの${cast.reader}さん、よろしくお願いします。` : 'それでは棋譜読み上げ、よろしくお願いします。');
@@ -1217,7 +1238,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         line(at, 'move', 'commentator', speak(cast, '持ち駒が少ないので、歩で手をつなぐ場面ですね。', '持ち駒が少ないから、歩でつなぐしかない。', 'まぁ、しょうがないんですね。攻め手がちょっと少ないので。'));
         if (cast.voice === 'yoshihiko') {
           line(at, 'move', 'commentator', 'やっぱりちょっと、手駒を増やさないことには、仕方がないという…');
-          react(at, 'castShikata', 2);
+          reactAll(at, 'castShikata', 2);
         }
       }
     } else if (facts?.captured && !MAJOR.has(facts.captured)) {
@@ -1245,7 +1266,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           line(at, 'move', 'commentator', speak(cast, 'これは大きいですね。どう受けるでしょうか。', 'これは大きい。どう受けるか。', 'うわぁ～流石に……'));
           if (cast.voice === 'yoshihiko') {
             line(at, 'move', 'commentator', 'う～ん、どうするんでしょうか……');
-            react(at, 'castDousuru');
+            reactAll(at, 'castDousuru');
           }
         } else if (rng.next() < 0.5) line(at, 'move', 'host', `${PIECE_NAMES[facts.captured]}を取った！`);
       }
@@ -1262,7 +1283,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       if (lastCheckAt[side] === at - 2 && once('iji')) {
         line(at, 'move', 'host', 'あ、なにがなんでも……');
         line(at, 'move', 'commentator', speak(cast, '攻めを続けますね。手を緩めません。', '意地でも攻める気だ。', 'え～～～～～～、意地でも。'));
-        react(at, 'castIji', cast.voice === 'yoshihiko' ? 2 : 1);
+        reactAll(at, 'castIji');
       }
       lastCheckAt[side] = at;
       comment(at, 'move', 'check', {}, at > plan.middleEnd ? 2 : 1, 'red');
@@ -1520,7 +1541,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         line(at, 'move', 'commentator', 'ただ、まあもう行かざるを得ないという部分も、あったんでは無いかな…');
         line(at, 'move', 'host', 'はい。');
         line(at, 'move', 'commentator', '決断としては非常に良かったような、えぇ、ええ。感じがありますね、えぇ。');
-        react(at, 'castJudge', 2);
+        reactAll(at, 'castJudge', 2);
         under(at, 'judge', 0.6);
       } else {
         line(at, 'move', 'host', 'ここで仕掛けたね！');
@@ -1536,7 +1557,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         'まあ非常に、えー拮抗しているというか。まあ、あと、大きなところでの対局が多いという印象が、ありますね。はい。'));
       if (yoshihikoBalanced) {
         line(at, 'move', 'commentator', 'え…');
-        react(at, 'castSo');
+        reactAll(at, 'castSo');
       }
     }
     // 中盤で大きく差がついた(気の早い視聴者)。
@@ -1922,7 +1943,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         : speak(cast, '最後まで見ごたえのある将棋でした。', '最後まで見ごたえのある将棋だった。',
           '出だしから意外な将棋でしたけど、まあ、あのー、大熱戦だったと、思います。はい。'));
       line(at, 'move', 'host', cast.voice === 'yoshihiko' ? 'はい、どうもありがとうございました。' : 'ありがとうございました！');
-      if (cast.voice === 'yoshihiko' && players[end.winner]?.story !== HANANE) react(at, 'castIgai');
+      if (cast.voice === 'yoshihiko' && players[end.winner]?.story !== HANANE) reactAll(at, 'castIgai');
       cards.push({ at, when: 'move', kind: 'end', tier: spec.weight === 'title' ? 'gold' : '', title: `${at}手まで ${SIDE_NAME[end.winner]}の勝ち`, text: end.reason === 'resign' ? `${players[loser].name}の投了` : endMate ? `${endMate}手詰め` : '詰み' });
       comment(at, 'move', 'resign', {}, 5, spec.weight === 'title' ? 'gold' : '');
       hype(at, spec.weight === 'title' ? 3 : 2, spec.weight === 'title' ? 'gold' : '');

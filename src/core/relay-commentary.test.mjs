@@ -419,6 +419,31 @@ describe('コメントの条件と名詞の差し替え、解説との連動(27�
     expect([...texts].sort()).toEqual(['あんた以上の専門家いないだろｗｗｗ', 'お前が専門家じゃないなら誰が専門家なんだよｗ', '専門家じゃないｗｗｗｗｗ', '振り飛車の専門家とかだろう'].sort());
   });
 
+  it('善彦の解説へのつっこみは、その場面の行を全部、少しずつずらして流す(38章)', () => {
+    const wanted = [
+      '天鷺さんが言うならしょうがないｗ', 'まあ天鷺さんが言うなら…', 'まあお前が言うならｗ', 'まてｗｗｗｗｗ', 'よくねえよふざけんなｗｗｗ',
+      'しょうがないのかｗ', 'しょうがないｗｗ', 'なにがなんでもｗ', 'いじでも！', '意地でもｗ', 'どうするんでしょうか←こっちが聞きたい',
+      '意外しかないｗｗｗｗ', 'お前が専門家じゃないなら誰が専門家なんだよｗ', 'あんた以上の専門家いないだろｗｗｗ', '振り飛車の専門家とかだろう', '専門家じゃないｗｗｗｗｗ',
+    ];
+    const all = variants.map((variant) => longScript({ variant, cast: yoshihiko, white: player('s', '鈴木蓮') }));
+    const [script] = all;
+    const texts = all.flatMap(({ comments }) => comments.map(({ text }) => text));
+    for (const text of wanted) expect(texts, text).toContain(text);
+    // 場面が来た局では、その場面の行が全部そろう(1つ出たら、同じ組の残りも出る)。
+    const groups = [['なにがなんでもｗ', 'いじでも！', '意地でもｗ'], ['しょうがないのかｗ', 'しょうがないｗｗ'], ['まてｗｗｗｗｗ', 'よくねえよふざけんなｗｗｗ']];
+    for (const { comments } of all) {
+      const said = comments.map(({ text }) => text);
+      for (const group of groups) if (group.some((text) => said.includes(text))) expect(group.every((text) => said.includes(text)), group.join('/')).toBe(true);
+    }
+    // 開始前の「専門家」の4行は、同じ手で少しずつ遅れて流れる(重ならない)。
+    const humble = script.comments.filter(({ at, text }) => at === 0 && /専門家/.test(text)).map(({ lag }) => lag);
+    expect(humble).toHaveLength(4);
+    expect(new Set(humble).size).toBe(4);
+    // ほかの解説者のときは、今までどおり一部だけ。
+    const plain = longScript({ cast: { id: 'c', name: '佐藤誠', dan: '九段', story: null, voice: 'polite' }, white: player('s', '鈴木蓮') });
+    expect(plain.comments.filter(({ text }) => /専門家/.test(text))).toHaveLength(0);
+  });
+
   it('解説へのつっこみ(しょうがない・意地でも・非常に良かった)は、解説と同じ手で遅れて流れる', () => {
     for (const variant of variants) {
       const script = longScript({ variant, cast: yoshihiko, white: player('s', '鈴木蓮') });
