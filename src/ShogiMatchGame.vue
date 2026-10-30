@@ -1530,6 +1530,15 @@
             data-material-toggle
             @click="toggleMaterialGuide"
           >駒の<wbr>損得</button>
+          <!-- 危機感知センサー。相手の手で取られて損をする形になった駒に赤い輪を出し、やこび姫が知らせる(初心者向けに自動で付く)。 -->
+          <button
+            type="button"
+            class="shogi-game__assist-toggle shogi-game__command--sensor"
+            aria-label="危機感知センサー（駒が狙われたら知らせる）"
+            :aria-pressed="dangerSensorEnabled"
+            data-danger-sensor
+            @click="toggleDangerSensor"
+          >危機<wbr>センサー</button>
         </div>
       </details>
       <button
@@ -2412,6 +2421,7 @@ import {
 import { openingFormationGhosts, openingFormationProgress } from "./core/opening-formation.mjs";
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { mistakeReason, mistakeTarget, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
+import { dangerSensor, dangerSensorAuto } from "./core/danger-sensor.mjs";
 import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import { HANANE, HANANE_SPRITE, storyMemberId } from "./core/ryuo-story.mjs";
 import { lastGameMilestone } from "./core/ryuo-milestone.mjs";
@@ -2925,6 +2935,33 @@ const materialGuideEnabled = ref((() => {
     return false;
   }
 })());
+/**
+ * 危機感知センサー(docs/coach-advice-expansion-design.mdの12章)。相手が指した直後、取られて損をする自分の駒に赤い輪を出し、
+ * やこび姫が「銀が角に狙われてるよ！」と言う。付け外しは端末に覚え、決めていなければ初心者向けに自動(学習対局と7級までの相手)。
+ */
+const DANGER_SENSOR_KEY = "yacobihime:shogi-match:danger-sensor:v1";
+const dangerSensorChoice = ref<"on" | "off" | "">((() => {
+  try {
+    const saved = browserStorage()?.getItem(DANGER_SENSOR_KEY);
+    return saved === "on" || saved === "off" ? saved : "";
+  } catch {
+    return "";
+  }
+})());
+const dangerSensorEnabled = computed(() => (dangerSensorChoice.value
+  ? dangerSensorChoice.value === "on"
+  : dangerSensorAuto({ learning: matchKind.value === "learning", cpuLevel: cpuStrengthPreset.value.level })));
+/** センサーが知らせている駒の升(赤い輪)。次にプレイヤーが指すまで出す。 */
+const dangerSquares = ref<string[]>([]);
+function toggleDangerSensor() {
+  dangerSensorChoice.value = dangerSensorEnabled.value ? "off" : "on";
+  if (!dangerSensorEnabled.value) dangerSquares.value = [];
+  try {
+    browserStorage()?.setItem(DANGER_SENSOR_KEY, dangerSensorChoice.value);
+  } catch {
+    // 覚えられなくても、この場では使う。
+  }
+}
 function toggleMaterialGuide() {
   materialGuideEnabled.value = !materialGuideEnabled.value;
   try {
@@ -3747,13 +3784,25 @@ const threatArrow = ref<{ usi: string; color: "black" | "white" } | null>(null);
 /** 悪手の理由で「取られちゃう」と言った駒の升(N2)。次の手を指すまで赤い輪を出す。 */
 const mistakeRingSquare = ref("");
 const boardThreatArrows = computed(() => (threatArrow.value && !hintCandidates.value.length ? [threatArrow.value] : []));
-const boardRiskSquares = computed(() => (mistakeRingSquare.value ? [mistakeRingSquare.value] : []));
-/** 閃きの矢印と、盤で指し示した印(相手の狙い・取られる駒)を消す。CPUが指した手では、取られる駒の輪を残す。 */
+const boardRiskSquares = computed(() => [...new Set([...(mistakeRingSquare.value ? [mistakeRingSquare.value] : []), ...dangerSquares.value])]);
+/** 閃きの矢印と、盤で指し示した印(相手の狙い・取られる駒・センサー)を消す。CPUが指した手では、取られる駒の輪を残す。 */
 function clearHintMarks({ keepMistakeRing = false }: { keepMistakeRing?: boolean } = {}) {
   hintCandidates.value = [];
   threatArrow.value = null;
   talkOpen.value = false;
+  dangerSquares.value = [];
   if (!keepMistakeRing) mistakeRingSquare.value = "";
+}
+/**
+ * 危機感知センサー: CPUが指した直後に、新しく取られて損をする形になった駒を知らせる。取り合いの計算だけで決めるので、
+ * エンジンの読みを待たず、指された局面ですぐ出る(遅れない)。棋力測定・教室の対局・二人で指すときは出さない。
+ */
+function senseDanger(previousSfen: string) {
+  if (!dangerSensorEnabled.value || reviewMode.value || measureMode.value || tutorialMatch.value || normalizedMode.value === "local") return;
+  const sensed = dangerSensor({ sfen: currentSfen.value, previousSfen, color: humanColor.value === Color.WHITE ? "white" : "black" });
+  if (!sensed) return;
+  dangerSquares.value = sensed.squares;
+  if (coachLevel.value !== "off") showCoachAdvice({ key: sensed.key, text: sensed.text });
 }
 const openingFollowupCandidates = ref<{ usi: string; score?: number }[]>([]);
 const openingFollowupRemaining = ref(0);
@@ -3870,7 +3919,8 @@ const {
   close: closeAssistTools,
   sync: syncAssistTools,
 } = useAssistTools(assistActions, uiFontPx, primaryAssistCount);
-const activeDisplayToolCount = computed(() => Number(boardFlipOverride.value) + Number(attackGuideEnabled.value) + Number(materialGuideEnabled.value));
+const activeDisplayToolCount = computed(() => Number(boardFlipOverride.value) + Number(attackGuideEnabled.value) + Number(materialGuideEnabled.value)
+  + Number(dangerSensorEnabled.value));
 watch([homeOpen, pregameOpen, reviewMode], () => closeAssistTools());
 
 const resignConfirmOpen = ref(false);
@@ -10441,6 +10491,7 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   }
   resetOpeningGuideSafety();
   clearHintMarks({ keepMistakeRing: actor !== "player" });
+  if (actor === "cpu") senseDanger(sfenBeforeMove);
   openingFollowupCandidates.value = [];
   hintText.value = "";
   const terminalResult = resultAfterMove(record.value);

@@ -1550,7 +1550,7 @@
   gap: 0.5em;
   min-width: 0;
 }
-/* 押しやすい幅を保つ。表示補助の3つは、実寸が足りなければ折り畳む。 */
+/* 押しやすい幅を保つ。表示補助の4つは、実寸が足りなければ折り畳む。 */
 .shogi-game__assist-actions > button,
 .shogi-game__display-tools-summary,
 .shogi-game__display-tools-buttons > button {
@@ -1575,8 +1575,8 @@
 }
 /* 表示補助は、広いときは操作列と一続き、狭いときは上に開く折り畳み。 */
 .shogi-game__display-tools {
-  flex: 3 1 calc(var(--assist-button-min-em) * 3em + 1em);
-  min-width: calc(var(--assist-button-min-em) * 3em + 1em);
+  flex: 4 1 calc(var(--assist-button-min-em) * 4em + 1.5em);
+  min-width: calc(var(--assist-button-min-em) * 4em + 1.5em);
 }
 .shogi-game__display-tools-summary { display: none; cursor: pointer; list-style: none; }
 .shogi-game__display-tools-summary::-webkit-details-marker { display: none; }
@@ -4293,7 +4293,8 @@
   grid-column: 1 / -1;
 }
 .shogi-game .shogi-game__command--attack[aria-pressed="true"],
-.shogi-game .shogi-game__command--material[aria-pressed="true"] {
+.shogi-game .shogi-game__command--material[aria-pressed="true"],
+.shogi-game .shogi-game__command--sensor[aria-pressed="true"] {
   box-shadow: inset 0 0 0 2px var(--amber, #f5a645);
 }
 
