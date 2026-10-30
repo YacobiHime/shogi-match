@@ -67,6 +67,18 @@
         @sound="playSound"
         @finish="finishGame('mental', $event)"
       />
+      <BrainPalace
+        v-else-if="currentGame === 'palace'"
+        ref="palaceView"
+        :key="`palace-${runKey}`"
+        :mode="mode === 'today' ? 'practice' : 'school'"
+        :lessons="record.palace.lessons"
+        :custom="record.palace.custom"
+        :practice-count="record.levels.palace || PRACTICE_MIN"
+        @sound="playSound"
+        @save="savePalace"
+        @finish="finishGame('palace', $event)"
+      />
     </section>
 
     <!-- 結果。種目ごとの記録と、前の日より伸びたものを並べる。 -->
@@ -112,6 +124,8 @@ import { computed, onMounted, ref } from "vue";
 import BrainGlance from "./brain/BrainGlance.vue";
 import BrainBoardMemory from "./brain/BrainBoardMemory.vue";
 import BrainMentalBoard from "./brain/BrainMentalBoard.vue";
+import BrainPalace from "./brain/BrainPalace.vue";
+import { PRACTICE_MIN, practiceOpen } from "./core/memory-palace.mjs";
 import { glanceLevelLabel } from "./core/brain-glance.mjs";
 import {
   BRAIN_GAMES,
@@ -138,7 +152,7 @@ const emit = defineEmits(["close"]);
 
 const BRAIN_TITLE = "脳トレ道場";
 /** いま遊べる種目。作った段階から足す(docs/brain-training-design.mdの9章)。 */
-const AVAILABLE: readonly GameId[] = ["glance", "board-memory", "mental"];
+const AVAILABLE: readonly GameId[] = ["glance", "board-memory", "mental", "palace"];
 /** 種目の棚。見る(処理速度)と覚える(記憶)の2つに分ける(3章)。 */
 const BRAIN_SHELVES = [
   {
@@ -185,7 +199,8 @@ const results = ref<(GameResult & { game: GameId; newBest: boolean; grew: boolea
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const headerTitle = computed(() => (view.value === "game" && currentGame.value ? gameLabel(currentGame.value) : BRAIN_TITLE));
 const backLabel = computed(() => (view.value === "home" ? "ホームへ戻る" : "道場へ戻る"));
-const todayList = computed(() => todayMenu({ available: [...AVAILABLE], day: today }) as GameId[]);
+const todayList = computed(() => todayMenu({ available: [...AVAILABLE], palaceOpen: practiceOpen(record.value.palace.lessons), day: today }) as GameId[]);
+const palaceView = ref<InstanceType<typeof BrainPalace> | null>(null);
 const todayMinutes = computed(() => Math.max(1, Math.round(todayList.value.length * 1.6)));
 const doneToday = computed(() => todayDone(record.value, today));
 const streak = computed(() => brainStreak(record.value, today));
@@ -217,6 +232,7 @@ function valueText(id: GameId, value: number | undefined) {
   if (id === "glance") return glanceLevelLabel(value - 1);
   if (id === "board-memory") return `駒${value}枚`;
   if (id === "mental") return `${value}手`;
+  if (id === "palace") return `言葉${value}個`;
   return String(value);
 }
 function bestText(id: GameId) {
@@ -263,6 +279,11 @@ function finishRun() {
   }
   view.value = "summary";
 }
+/** 記憶の宮殿の講の進みと自分の宮殿を残す。 */
+function savePalace(palace: { lessons: string[]; custom: string[] }) {
+  record.value = { ...record.value, palace: { lessons: [...palace.lessons], custom: [...palace.custom] } };
+  saveBrainRecord(storage, record.value);
+}
 function again() {
   if (mode.value === "today") startToday();
   else if (results.value[0]) startSingle(results.value[0].game);
@@ -270,6 +291,7 @@ function again() {
 
 /** ブラウザの戻る操作と、見出しの戻るボタン。種目・結果・根拠からは入口へ、入口からはホームへ。 */
 function goBack() {
+  if (view.value === "game" && currentGame.value === "palace" && palaceView.value?.goBack()) return;
   if (view.value === "home") emit("close");
   else {
     queue.value = [];
@@ -635,6 +657,110 @@ defineExpose({ goBack });
   font-weight: 900;
 }
 .shogi-game .brain-mental__move small { color: #cfd8de; font-size: 0.8rem; font-weight: 700; }
+
+/* 記憶の宮殿。お城の明かり、講の道、覚える場面、言葉の札。 */
+.shogi-game .brain-palace { width: min(100%, 36rem); }
+.shogi-game .brain-palace__castle {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0.2rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.5rem;
+  border-radius: 0.8rem;
+  background: #172632;
+  list-style: none;
+}
+.shogi-game .brain-palace__castle li {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 0.3rem;
+  color: #5d6f7c;
+  background: #22394a;
+  font-size: clamp(0.8rem, 3.6vw, 1.2rem);
+}
+.shogi-game .brain-palace__castle .brain-palace__room--lit {
+  background: #3c5f78;
+  box-shadow: 0 0 6px rgba(241, 165, 76, 0.55);
+}
+.shogi-game .brain-palace__lessons {
+  display: grid;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .brain-palace .shogi-brain__today:disabled { opacity: 0.55; cursor: default; }
+.shogi-game .brain-palace__scene {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  background: #2b465b;
+  text-align: center;
+}
+.shogi-game .brain-palace__locus { color: #f1a54c; font-size: 1.1rem; font-weight: 800; }
+.shogi-game .brain-palace__locus span { margin-right: 0.3rem; font-size: 1.6rem; }
+.shogi-game .brain-palace__item { font-size: 1.8rem; }
+.shogi-game .brain-palace__item span { margin-right: 0.3rem; }
+.shogi-game .brain-palace__image { margin: 0; font-size: 1.05rem; line-height: 1.6; }
+.shogi-game .brain-palace__tip { color: #cfd8de; }
+.shogi-game .brain-palace__pool,
+.shogi-game .brain-palace__choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .brain-palace__choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shogi-game .brain-palace__tile { padding: 0.3rem 0.8rem; font-size: 1rem; }
+.shogi-game .brain-palace__tile:disabled { opacity: 0.35; }
+.shogi-game .brain-palace__choices .brain-palace__tile:disabled { opacity: 1; }
+.shogi-game .brain-palace__tile--ok { border-color: #9fe0b4; background: rgba(60, 170, 90, 0.45); }
+.shogi-game .brain-palace__tile--miss { border-color: #e58d84; background: rgba(220, 70, 60, 0.45); }
+.shogi-game .brain-palace__custom {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding-left: 1.6rem;
+}
+.shogi-game .brain-palace__custom input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 0.6rem;
+  border: 2px solid rgba(255, 252, 244, 0.3);
+  border-radius: 0.5rem;
+  color: #fffcf4;
+  background: #172632;
+  font: inherit;
+}
+.shogi-game .brain-palace__review {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shogi-game .brain-palace__review li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.5rem;
+  background: #2b465b;
+}
+.shogi-game .brain-palace__review--ok { border-left: 4px solid #9fe0b4; }
+.shogi-game .brain-palace__review--miss { border-left: 4px solid #e58d84; }
 
 /* ちらっと盤の答え。金・銀の2つと、8方向の矢印。 */
 .shogi-game .brain-glance__answer {
