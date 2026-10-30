@@ -322,7 +322,7 @@ export function mateSightChance(plies, sight) {
 
 /**
  * 候補ごとの信念(4-2・13-3)。評価値の代わりに、CPUの目で見た良さで比べる。
- * - believed: CPUから見た評価値(損の上限の判定に使う)。気づかなかった詰めろ・見つけなかった詰みは、いちばん良い候補の大局観で見る
+ * - believed: CPUから見た評価値(損の上限の判定に使う)。気づかなかった詰めろ・見つけなかった詰みは、詰みのない候補の大局観の平均で見る(ふつうの手として比べる)
  * - belief: 見えている駒の損得＋w×大局観(好みは呼ぶ側で足す)
  * - mateUnseen: 気づかなかった相手の詰みの手数、ownMateUnseen: 見つけなかった自分の詰みの手数
  * 読みが時間の上限に届いたらnullを返す(呼ぶ側は評価値と好みで選ぶ)。
@@ -349,10 +349,9 @@ export function beliefScores(entries, { state, belief, blind = new Set(), random
     const ownMateUnseen = ownMateMissed && score?.type === 'mate' && score.value > 0 ? score.value : 0;
     rows.push({ entry, full, seen, hidden: Boolean(mateUnseen || ownMateUnseen), mateUnseen, ownMateUnseen });
   }
-  // 詰みの見えない手は、詰みのない手のいちばん良い大局観で見る(詰みのない手として比べる)。
+  // 詰みの見えない手は、詰みのない手の大局観の平均で見る(手がかりがないので、ふつうの手として比べる)。
   const plain = rows.filter(({ entry }) => entry.candidate?.score?.type !== 'mate');
-  const reference = plain.length ? plain.reduce((a, b) => (b.entry.engineValue > a.entry.engineValue ? b : a)) : null;
-  const referenceView = reference ? reference.entry.engineValue - reference.full : 0;
+  const referenceView = plain.length ? plain.reduce((sum, { entry, full }) => sum + entry.engineValue - full, 0) / plain.length : 0;
   return rows.map(({ entry, full, seen, hidden, mateUnseen, ownMateUnseen }) => {
     const view = hidden ? referenceView : entry.engineValue - full;
     return { ...entry, believed: full + view, belief: seen + belief.w * view, mateUnseen, ownMateUnseen };
