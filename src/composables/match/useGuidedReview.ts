@@ -6,6 +6,7 @@ import {
   guidedReviewDelay,
   nextGuidedReviewSpeed,
   normalizeGuidedReviewSpeed,
+  type CpuOversight,
 } from "../../core/guided-review.mjs";
 import { formatHintMove } from "../../core/match-assists.mjs";
 import { judgeMateStep } from "../../core/problem-solver";
@@ -86,6 +87,8 @@ type GuidedReviewDeps = {
   applyMove: (usi: string, actor: "player" | "cpu") => unknown;
   /** 振り返りで局面を動かしたとき、走っている検討の助言を捨てる。 */
   invalidateReviewCoach: () => void;
+  /** CPUの手ごとに、人間らしいCPUが気づかなかったこと(相手の手の一言に理由を足す)。 */
+  cpuNotes: () => Record<number, CpuOversight[]>;
 };
 
 /*
@@ -116,6 +119,7 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
     rebuildRecord,
     applyMove,
     invalidateReviewCoach,
+    cpuNotes,
   } = deps;
 
   const guidedReview = ref<GuidedReviewState | null>(null);
@@ -223,6 +227,7 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
       moves: [...reviewNavigation.value.mainLine],
       moverForPly: (ply: number) => ((ply % 2 === 1) === (firstMover === "black") ? "black" : "white"),
       initialSfen: matchInitialSfen.value,
+      cpuNotes: cpuNotes(),
     }) as GuidedReviewScript;
     saveMissedMatesAsProblems(guidedReviewScript);
     const winner = winnerColor();

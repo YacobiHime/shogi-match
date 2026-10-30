@@ -6,6 +6,7 @@
 //   末尾にnoriskを付けると、危険への態度(無難な手・勝負手の選び直し)を外す(例: L25norisk)。
 //   末尾にclassicを付けると、人間らしいCPUの選び方を外して今までの選び方で指す(例: L15classic)。
 //   末尾にsig<倍率>を付けると、人間らしいCPUの判断のぶれの倍率を差し替える(例: L15sig1.6)。
+//   末尾にnobeliefを付けると、人間らしいCPUの信念の式(見えている駒の損得・大局観の重み・詰めろの見落とし)を外す(例: L21nobelief)。
 //   --deadline-sec 280 で、指定秒数を過ぎたら対局中の局を打ち切り、終わった局だけで集計する。
 //   --opening-plies 12 で、序盤の指定手数まで両者とも評価差の小さい候補からばらして選ぶ。
 //   最上位レベル同士は着手にばらつきがなく、同じ棋譜を繰り返すのを避けるために使う。
@@ -63,6 +64,14 @@ export function strengthForPlayer(spec) {
       return { ...settings, ...(override ? { nodes: Number(override[1]) } : {}), level: base.level, logicHybrid: false };
     }
     return { ...base, logicHybrid: hybrid[2] === "hybrid" };
+  }
+  // nobelief: 信念の式(docs/cpu-human-model-design.mdの13-3)を外し、評価値と好みで比べる。校正用。
+  const noBelief = spec.match(/^(.+)nobelief$/);
+  if (noBelief) {
+    const base = strengthForPlayer(noBelief[1]);
+    if (!base.human) return base;
+    const { belief: _belief, ...human } = base.human;
+    return { ...base, human };
   }
   // classic: 人間らしいCPU(human-model.mjs)を外し、温度の抽選とわざと選ぶ見落としの、今までの選び方で指す。
   const classic = spec.match(/^(.+)classic$/);

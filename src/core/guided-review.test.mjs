@@ -8,7 +8,9 @@ import {
   guidedReviewDelay,
   guidedReviewSummary,
   nextGuidedReviewSpeed,
+  normalizeCpuNotes,
   normalizeGuidedReviewSpeed,
+  oversightReason,
   winRateFor,
 } from './guided-review.mjs';
 
@@ -127,5 +129,42 @@ describe('guided review speed', () => {
     }
     expect(id).toBe('slow');
     expect(seen).toEqual(GUIDED_REVIEW_SPEEDS.map((speed) => speed.id));
+  });
+});
+
+describe('CPUが間違えた理由(13-4)', () => {
+  // CPU(先手)が▲3六歩と突き、後手の飛車(4二)に4八の金をタダで取られる形にする。プレイヤーは後手。
+  const GOLD = '8k/5r3/9/9/9/9/2P3P2/2B2G3/K8 b - 1';
+  const hanging = { kind: 'hanging', square: '4h', piece: 'G', attacker: 'R', hard: ['far'] };
+  const reviewWith = (cpuNotes) => buildGuidedReview(
+    [{ ply: 0, score: cp(0), bestMove: '4h3h' }, { ply: 1, score: cp(-600), bestMove: '4b4h+' }, { ply: 2, score: cp(-700), bestMove: '9i8h' }],
+    { playerColor: 'white', moves: ['3g3f', '4b4h+'], initialSfen: GOLD, cpuNotes },
+  );
+
+  test('駒をタダで取られる形にした手に、気づかなかった当たりの理由を足す', () => {
+    expect(reviewWith({}).steps.get(1)?.comment).toBe('相手の金がタダで取れる形になったよ！');
+    expect(reviewWith({ 1: [hanging] }).steps.get(1)?.comment).toBe('相手の金がタダで取れる形になったよ！相手は、遠くの飛車の利きに気づかなかったみたい。');
+    // 記録の升が盤の事実と合わなければ、言わない。
+    expect(reviewWith({ 1: [{ ...hanging, square: '5h' }] }).steps.get(1)?.comment).toBe('相手の金がタダで取れる形になったよ！');
+  });
+
+  test('見えにくさごとの言い方', () => {
+    const info = { leftFree: { square: '4h', name: '金' } };
+    expect(oversightReason(info, null, [{ ...hanging, hard: ['away'] }])).toBe('相手は、離れた場所の金の当たりに気づかなかったみたい。');
+    expect(oversightReason(info, null, [{ ...hanging, hard: [] }])).toBe('相手は、金の当たりに気づかなかったみたい。');
+    expect(oversightReason({ allowedMate: true }, null, [{ kind: 'mate', plies: 7 }])).toBe('相手は、詰みの筋に気づかなかったみたい。');
+    expect(oversightReason({ missedMate: 7 }, null, [{ kind: 'own-mate', plies: 7 }])).toBe('長い詰みは、相手にも見えにくかったみたい。');
+    // 短い詰みの見逃しは、見逃しの一言で足りる。
+    expect(oversightReason({ missedMate: 3 }, null, [{ kind: 'own-mate', plies: 3 }])).toBe('');
+    const previous = { leftFree: { square: '5e', name: '銀' } };
+    expect(oversightReason({ tookFree: null }, previous, [{ kind: 'free', square: '5e', piece: 'S', hard: ['back'] }])).toBe('後ろに下がって取る手は、見えにくいんだ。');
+    expect(oversightReason({ tookFree: null }, previous, [{ kind: 'free', square: '5e', piece: 'S', hard: [] }])).toBe('');
+  });
+
+  test('保存から戻す記録は、形をそろえ、待ったで戻した手を捨てる', () => {
+    expect(normalizeCpuNotes({ 1: [hanging, { kind: 'x' }], 3: [{ kind: 'mate', plies: 5 }], 9: [hanging], a: [hanging] }, 4))
+      .toEqual({ 1: [hanging], 3: [{ kind: 'mate', plies: 5 }] });
+    expect(normalizeCpuNotes(null, 4)).toEqual({});
+    expect(normalizeCpuNotes({ 2: [{ ...hanging, square: 'zz' }] }, 4)).toEqual({});
   });
 });

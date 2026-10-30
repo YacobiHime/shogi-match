@@ -15,9 +15,12 @@
  * - 駒をタダで取られる形にした手: 指した後、相手の最善手がタダで駒を取る手だった。悪手の問題の文を具体的にする。
  * - タダの駒を取った手、相手がタダの駒を見逃した手などには、一言を添える。
  * どれも、エンジンの最善手がその取る手のときだけ言う（取れそうに見えても取ると損な形は言わない）。
+ *
+ * CPUの手の記録（cpuNotes。人間らしいCPUが気づかなかったこと）を渡すと、相手の手の一言に、
+ * 盤の事実と升・手数が合うときだけ、なぜ間違えたかを1文足す（docs/cpu-human-model-design.mdの13-4）。
  */
 
-import { capturedValue, freeCapture, freeCaptureOrigins, usiTo, boardsAlongLine } from './review-tactics.mjs';
+import { capturedValue, freeCapture, freeCaptureOrigins, pieceName, usiTo, boardsAlongLine } from './review-tactics.mjs';
 
 /** 振り返りで手を進める間隔（ミリ秒）。 */
 export const GUIDED_REVIEW_STEP_MS = 1300;
@@ -98,6 +101,7 @@ function mateLengthFor(score, color) {
  *   moverForPly?: (ply: number) => 'black' | 'white',
  *   quizLimit?: number,
  *   initialSfen?: string,
+ *   cpuNotes?: Record<number, CpuOversight[]>,
  * }} [options]
  */
 export function buildGuidedReview(points, {
@@ -107,6 +111,7 @@ export function buildGuidedReview(points, {
   moverForPly = (ply) => (ply % 2 === 1 ? 'black' : 'white'),
   quizLimit = GUIDED_REVIEW_QUIZ_LIMIT,
   initialSfen = '',
+  cpuNotes = {},
 } = {}) {
   const boards = initialSfen ? boardsAlongLine(initialSfen, moves, moverForPly) : null;
   const byPly = new Map(points.map((point) => [point.ply, point]));
@@ -269,6 +274,9 @@ export function buildGuidedReview(points, {
     } else if (kind === 'dubious') {
       step.comment = isPlayer ? 'ちょっと疑問手だったかも。' : '相手の疑問手だね。';
     }
+    // 相手(CPU)が間違えた理由。記録と盤の事実が合うときだけ足す(13-4)。
+    const reason = !isPlayer && step.comment ? oversightReason(info, previous, cpuNotes[info.ply] ?? []) : '';
+    if (reason) step.comment += reason;
     // 考えさせた手は、問題の答え合わせで説明するので短い一言だけにする。
     if (quizPlies.has(info.ply) && step.comment) step.pause = false;
   }
@@ -329,4 +337,80 @@ function tacticCommentFor(info, isPlayer, previous) {
 export function guidedReviewSummary({ quizCount = 0, solved = 0 } = {}) {
   if (!quizCount) return '振り返りおしまい！大きなミスのない、いい将棋だったね！';
   return `振り返りおしまい！考えた${quizCount}問のうち、${solved}問で一番いい手を見つけたよ。次の対局に生かそうね！`;
+}
+
+/**
+ * @typedef {{ kind: 'hanging', square: string, piece: string, attacker: string, hard: string[] }
+ *   | { kind: 'free', square: string, piece: string, hard: string[] }
+ *   | { kind: 'mate' | 'own-mate', plies: number }} CpuOversight
+ */
+
+const OVERSIGHT_KINDS = new Set(['hanging', 'free', 'mate', 'own-mate']);
+/** 遠くから利く駒の呼び方(「遠くの飛車の利き」)。 */
+const FAR_PIECE_NAMES = Object.freeze({ R: '飛車', B: '角', L: '香車', '+R': '竜', '+B': '馬' });
+const SQUARE = /^[1-9][a-i]$/;
+
+/** 1つの記録を、保存してよい形にそろえる。合わないものはnull。 */
+function normalizeOversight(value) {
+  if (!value || typeof value !== 'object' || !OVERSIGHT_KINDS.has(value.kind)) return null;
+  if (value.kind === 'mate' || value.kind === 'own-mate') {
+    return Number.isInteger(value.plies) && value.plies > 0 ? { kind: value.kind, plies: value.plies } : null;
+  }
+  if (typeof value.square !== 'string' || !SQUARE.test(value.square)) return null;
+  const hard = Array.isArray(value.hard) ? value.hard.filter((reason) => ['far', 'away', 'drop', 'back'].includes(reason)) : [];
+  const piece = typeof value.piece === 'string' ? value.piece : '';
+  return value.kind === 'hanging'
+    ? { kind: 'hanging', square: value.square, piece, attacker: typeof value.attacker === 'string' ? value.attacker : '', hard }
+    : { kind: 'free', square: value.square, piece, hard };
+}
+
+/**
+ * CPUの手の記録を、手数(1から数える、その手を指したあとの手数)ごとにそろえる。maxPlyより後ろ(待ったで戻した手)は捨てる。
+ * 対局中の記録と、保存から戻すときの両方で使う。
+ * @param {unknown} value
+ * @param {number} maxPly
+ * @returns {Record<number, CpuOversight[]>}
+ */
+export function normalizeCpuNotes(value, maxPly) {
+  if (!value || typeof value !== 'object') return {};
+  /** @type {Record<number, CpuOversight[]>} */
+  const notes = {};
+  for (const [key, list] of Object.entries(value)) {
+    const ply = Number(key);
+    if (!Number.isInteger(ply) || ply < 1 || ply > maxPly || !Array.isArray(list)) continue;
+    const kept = list.map(normalizeOversight).filter((entry) => entry !== null).slice(0, 8);
+    if (kept.length) notes[ply] = kept;
+  }
+  return notes;
+}
+
+/**
+ * 相手(CPU)の手の一言に足す、間違えた理由の1文。記録と盤の事実(升・詰み)が合わなければ空。
+ * @param {any} info この手
+ * @param {any} previous 直前の手(プレイヤーの手)
+ * @param {CpuOversight[]} notes この手の記録
+ */
+export function oversightReason(info, previous, notes) {
+  if (!notes.length) return '';
+  const find = (kind, square) => notes.find((note) => note.kind === kind && (!square || ('square' in note && note.square === square)));
+  // 駒をタダで取られる形にした: 同じ升の当たりに気づかなかった。
+  const hanging = info.leftFree && find('hanging', info.leftFree.square);
+  if (hanging && hanging.kind === 'hanging') {
+    if (hanging.hard.includes('far') && hanging.attacker) {
+      return `相手は、遠くの${FAR_PIECE_NAMES[hanging.attacker] ?? pieceName(hanging.attacker)}の利きに気づかなかったみたい。`;
+    }
+    if (hanging.hard.includes('away')) return `相手は、離れた場所の${info.leftFree.name}の当たりに気づかなかったみたい。`;
+    return `相手は、${info.leftFree.name}の当たりに気づかなかったみたい。`;
+  }
+  // 相手に詰みが生まれた: 詰めろに気づかなかった。
+  if (info.allowedMate && find('mate')) return '相手は、詰みの筋に気づかなかったみたい。';
+  // 自分の詰みを見逃した(長い詰みだけ。短い詰みは見逃しの一言で足りる)。
+  if (info.missedMate >= 5 && find('own-mate')) return '長い詰みは、相手にも見えにくかったみたい。';
+  // タダの駒を取らなかった: 取る手が見えにくかった(見えにくさの理由があるときだけ)。
+  const free = previous?.leftFree && !info.tookFree && find('free', previous.leftFree.square);
+  if (free && free.kind === 'free') {
+    if (free.hard.includes('back')) return '後ろに下がって取る手は、見えにくいんだ。';
+    if (free.hard.includes('far')) return '遠くから取る手は、見えにくいんだ。';
+  }
+  return '';
 }

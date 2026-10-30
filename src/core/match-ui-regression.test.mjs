@@ -9,6 +9,15 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("keeps what the human-like CPU missed for each of its moves and explains it in the review", () => {
+    // CPUの手ごとに気づかなかったことを残し(待ったで戻した手は捨てる)、保存・復元し、新しい対局で消す(docs/cpu-human-model-design.mdの13-4)。
+    expect(source).toMatch(/cpuNotes = normalizeCpuNotes\(\{\s*\.\.\.cpuNotes,\s*\[moveHistory\.length \+ 1\]: \(selection as \{ oversights\?: unknown\[\] \} \| null\)\?\.oversights \?\? \[\],\s*\}, moveHistory\.length \+ 1\);/);
+    expect(source).toMatch(/cpuNotes: normalizeCpuNotes\(cpuNotes, moveHistory\.length\),/);
+    expect(source).toMatch(/cpuNotes = normalizeCpuNotes\(snapshot\.cpuNotes, moves\.length\);/);
+    expect(source).toMatch(/cpuBlunderPlies = \[\];\s*cpuNotes = \{\};/);
+    expect(source).toMatch(/cpuNotes: \(\) => cpuNotes,/);
+    expect(source).toMatch(/initialSfen: matchInitialSfen\.value,\s*cpuNotes: cpuNotes\(\),/);
+  });
   it("toggles a material balance chip and capture numbers in every match kind", () => {
     expect(source).toMatch(/aria-label="駒の損得を表示"\s*:aria-pressed="materialGuideEnabled"[\s\S]*?@click="toggleMaterialGuide"/);
     expect(source).toMatch(/v-if="materialChip"[\s\S]*?data-material-chip/);

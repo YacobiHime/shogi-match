@@ -5,10 +5,12 @@
 // - 悪手の抑え(moveLossCap・blunderLimit・oversightRate): 大きな悪手や見落としの出にくさ
 // - 棋風の重み(style): 最善手に近い候補の中で、攻めの手と受けの手のどちらを選びやすいか
 // - 詰みを見つける確率(mateFinding): n手詰めを、どれだけの確率で詰ますか
+// - 人間らしいCPU(human): 見落とし率・指す前の確認・判断のぶれ・詰めろに気づく手数(human-model.mjsのcharacterHuman、docs/cpu-human-model-design.mdの13-2)
 // 効果は、そのレベルの元の値に対する割合や確率のずらしで掛け、レベルに応じて上がり幅が変わるようにする。
 // 設計は docs/tournament-design.md の「棋風と特徴」。
 
 import { TOP_NODES } from './strength-settings.mjs';
+import { characterHuman } from './human-model.mjs';
 import { ABILITY_KEYS, ageAbilities, createAbilities, styleAttackOf } from './player-abilities.mjs';
 import { attackersOf, findKing, isKingAttacked, opponentOf, parseSfenState, relativeFile, squareXY, xySquare } from './piece-movement.mjs';
 
@@ -173,7 +175,8 @@ export const TRAITS = Object.freeze([
   {
     id: 'weak-defense', kind: 'weakness', label: (d) => `受けが${DEGREE_WORDS[d]}苦手`,
     when: { kingDanger: true },
-    effect: (d) => ({ sharpen: -0.5 * d }),
+    // blind: 自分の駒への当たりの見落とし率を×(1+blind)にする(人間らしいCPU、6-4)。
+    effect: (d) => ({ sharpen: -0.5 * d, blind: 0.5 * d }),
   },
   {
     id: 'loose-when-ahead', kind: 'weakness', label: (d) => `優勢になると${DEGREE_WORDS[d]}緩みやすい`,
@@ -266,7 +269,7 @@ const TRAIT_HINTS = Object.freeze({
   'late-bloom': '序盤は並み、中盤から読みで上回り、終盤がいちばん正確',
   'big-stage': '互角の終盤で、手の選び方が鋭い。決勝や番勝負に強い',
   'endgame-collapse': '終盤で自玉が危ないとき、詰みや大きな損を見落としやすい',
-  'weak-defense': '自玉が危ないとき、手の選び方が鈍い',
+  'weak-defense': '自玉が危ないとき、手の選び方が鈍く、駒への当たりを見落としやすい',
   'loose-when-ahead': '大きく優勢になると、大きな悪手が出やすい',
   'big-stage-weak': '互角の終盤で、手の選び方が鈍い。決勝や番勝負に弱い',
   'time-trouble': '終盤で、読みが浅くなり、手の選び方が鈍い',
@@ -581,6 +584,7 @@ export function applyCharacter(strength, character, situation, { skill }) {
   let overlook = 0;
   let loose = 0;
   let mate = 0;
+  let blind = 0;
   let style = character.attack ?? 0;
   const active = activeTraits(character, situation);
   for (const { id, degree } of active) {
@@ -591,6 +595,7 @@ export function applyCharacter(strength, character, situation, { skill }) {
     overlook = Math.max(overlook, effect.overlook ?? 0);
     loose = Math.max(loose, effect.loose ?? 0);
     mate += effect.mate ?? 0;
+    blind += effect.blind ?? 0;
     style += effect.style ?? 0;
   }
   next.activeTraits = active.map(({ id }) => id);
@@ -650,6 +655,8 @@ export function applyCharacter(strength, character, situation, { skill }) {
     }
     for (const key of ["mate1", "mate3"]) next.perception[key] = adjust(next.perception[key], 0.5 * mate);
   }
+  // 人間らしいCPUは、同じつまみを見落とし率・確認・ぶれ・詰めろに気づく手数・取り合いの手数のずれにする(13-2)。
+  if (next.human && !bestOnly) next.human = characterHuman(next.human, { sharpen, steady, overlook, loose, mate, blind, nodes });
   // 詰将棋が得意: n手詰めを見つける確率を、ロジットで+1.0(やや)・+2.0(とても)ずらす(中心の手数が約1.4・2.9手延びるのと同じ)。
   // 確率が半分前後の長さの詰みで最も上がり、そのレベルで確実に解ける短い詰みや、とても長い詰みでは、あまり変わらない。
   // 詰みの能力が低い棋士は、逆に中心の手数が縮む(1手より短くはしない)。

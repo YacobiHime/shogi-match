@@ -7,13 +7,14 @@ import { BLUNDER_LOSS, chooseMatingMove, chooseRiskAwareMove, moveLeaning, pickW
 import { attackersOf, guardsSquare, isKingAttacked, opponentOf, parseUsiMove } from "./piece-movement.mjs";
 import { kingZonePressure, playLight, replyLoss, stateFromSfen } from "./logic-position.mjs";
 import { findMateLine } from "./problem-solver";
-import { blunderKind, humanPerception, pickByBelief, preventsBlunder } from "./human-model.mjs";
+import { allowedMatePlies, beliefScores, blunderKind, chanceHardReasons, humanPerception, pickByBelief, preventsBlunder, threatHardReasons } from "./human-model.mjs";
 
 /**
  * Lv11〜39。気づいた脅威・機会から候補を作り、読みとロジックの加点で選ぶ。
  * verifyとprobeは呼び出し側のエンジンを必ず直列に使う。
  * strength.human(human-model.mjsのhumanSettingsForLevel)があれば、人間らしいCPU(docs/cpu-human-model-design.md)として選ぶ:
  * 気づきは見えにくさの倍率つき、温度の抽選の代わりに判断のぶれ、わざと選ぶ見落としはなし、指す前に台無しの手を確かめる。
+ * human.beliefがあれば、評価値の代わりに信念(見えている駒の損得＋大局観の重み×大局観、13-3)で比べ、気づかなかったことをoversightsに残す(13-4)。
  * @param {{strength: ReturnType<typeof import('./strength-settings.mjs').getStrengthSearchSettings> & Record<string, any>, sfen: string, legalMoves: string[], moveHistory?: string[], planMove?: string | null, planScoreLossLimit?: number, search?: {move: string, candidates?: {rank: number, move: string, score?: any, pv?: string[]}[]}, verify?: (moves: string[], nodes: number) => Promise<any>, probe?: (moves: string[], options: {nodes: number, multiPv: number}) => Promise<any>, random?: () => number, blunderAllowed?: boolean, maxTimeMs?: number}} options
  */
 export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory = [], planMove = null, planScoreLossLimit,
@@ -89,6 +90,27 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
     : basePerception, random);
   const missed = [];
   if (!noticed.hanging && awareness.threats.some(({ kind }) => ["capture", "breakthrough"].includes(kind))) missed.push("hanging");
+  /** 気づかなかったこと(振り返りの説明、13-4)と、見えている駒の損得から除く当たりの升。人間らしいCPUだけ。 */
+  const oversights = [];
+  const blind = new Set();
+  if (human) {
+    const lastTo = parseUsiMove(moveHistory.at(-1) ?? "")?.to ?? "";
+    if (!noticed.hanging) {
+      for (const threat of awareness.threats.filter(({ kind }) => kind === "capture")) {
+        blind.add(threat.square);
+        oversights.push({ kind: "hanging", square: threat.square, piece: state.board.get(threat.square)?.kind ?? "",
+          attacker: state.board.get(threat.attackers[0])?.kind ?? "", hard: threatHardReasons(threat, lastTo) });
+      }
+    }
+    if (!noticed.freeCapture) {
+      for (const chance of awareness.chances.filter(({ kind }) => ["free-capture", "winning-capture"].includes(kind))) {
+        const square = parseUsiMove(chance.moves[0])?.to ?? "";
+        if (!oversights.some((entry) => entry.kind === "free" && entry.square === square)) {
+          oversights.push({ kind: "free", square, piece: state.board.get(square)?.kind ?? "", hard: chanceHardReasons(chance, state.turn) });
+        }
+      }
+    }
+  }
   if (!noticed.defendMate && awareness.threats.some(({ kind }) => kind === "mate-threat")) missed.push("mate-threat");
   const seesEngineBest = random() < (strength.engineBestVisibility ?? 1);
   // 人間らしいCPUは、深く読むと悪い手をわざと選ばない(弱さは見え方と判断のぶれから出す)。
@@ -199,8 +221,18 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
   if (!pool.length) return null;
   const reference = Math.max(comparableScore(scored.get(search.move)?.score) ?? bestValue ?? -Infinity,
     ...pool.map(({ engineValue }) => engineValue));
+  // 信念の式(13-3)。CPUから見た評価(believed)で損の上限を比べ、信念(belief)で選ぶ。読みが間に合わなければ評価値のまま。
+  const believed = human?.belief && Date.now() < deadline
+    ? beliefScores(pool, { state, belief: human.belief, blind, random, blunderAllowed,
+      ownMateMissed: Boolean(strength.mateFinding) && engineCandidates.some(({ score }) => score?.type === "mate" && score.value > 0),
+      deadline: Math.min(deadline, Date.now() + 150) })
+    : null;
+  if (believed) pool = believed;
+  const seenValue = (entry) => entry.believed ?? entry.engineValue;
+  // 見つけなかった自分の詰みは、損の上限の基準にもしない(詰む手の点の高さで、ほかの手が全部落ちないように)。
+  const seenReference = believed?.some(({ ownMateUnseen }) => ownMateUnseen) ? Math.max(...pool.map(seenValue)) : reference;
   // 候補内の最高点というだけで、大駒をただで渡す手を損失上限の例外にしない。
-  pool = pool.filter(({ move, engineValue }) => move === search.move || !naturalness.isSacrifice(move) || reference - engineValue <= 150);
+  pool = pool.filter((entry) => entry.move === search.move || !naturalness.isSacrifice(entry.move) || seenReference - seenValue(entry) <= 150);
   if (!pool.length) {
     const safe = legalMoves.filter((move) => purposeful(move) && !naturalness.isSacrifice(move));
     if (!safe.length) return null;
@@ -211,9 +243,9 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
   const poolBest = Math.max(...pool.map(({ engineValue }) => engineValue));
   const cap = strength.logicBonusCap ?? 0;
   const openingLimit = planScoreLossLimit ?? Math.min(250 * (strength.openingPlanScoreScale ?? 1), strength.maxScoreLoss ?? Infinity);
-  pool = pool.filter(({ move, engineValue }) => engineValue === poolBest || (reference - engineValue <= lossCap
-    && (move !== plan || reference - engineValue <= openingLimit)
-    && (!naturalness.isSacrifice(move) || reference - engineValue <= 150)));
+  pool = pool.filter((entry) => entry.engineValue === poolBest || (seenReference - seenValue(entry) <= lossCap
+    && (entry.move !== plan || seenReference - seenValue(entry) <= openingLimit)
+    && (!naturalness.isSacrifice(entry.move) || seenReference - seenValue(entry) <= 150)));
   for (const entry of pool) {
     let bonus = 0;
     if (entry.move === plan && moveHistory.length <= 30 && reference - entry.engineValue <= openingLimit) bonus += cap;
@@ -223,7 +255,7 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
     if (evaluate(entry.move).tags.some((tag) => ["free-capture", "winning-capture", "even-trade", "desperado", "recapture"].includes(tag))) bonus += cap * (strength.simplicity ?? 0) * 0.5;
     if (policy === "take" ? state.board.get(parseUsiMove(entry.move).to)?.color === opp : policy === "attack" && leaning === 1) bonus += cap;
     entry.logicBonus = Math.min(cap, bonus);
-    entry.score = entry.engineValue + entry.logicBonus;
+    entry.score = (entry.belief ?? entry.engineValue) + entry.logicBonus;
   }
   const candidates = pool.map(({ candidate, move }, index) => ({ ...candidate, move, rank: candidate?.rank ?? index + 1 }));
   const best = pool.find(({ engineValue }) => engineValue === poolBest);
@@ -231,7 +263,7 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
     const row = pool.find(({ move }) => move === picked.move);
     return { move: picked.move, rank: row?.candidate?.rank ?? 0, kind, naturalness: naturalness(picked.move),
       loss: Math.max(0, reference - (row?.engineValue ?? poolBest)), reason: row?.reason ?? "engine", missed, policy,
-      logicBonus: row?.logicBonus ?? 0, consideredMoves: pool.map(({ move }) => move), ...(human ? { prevented } : {}) };
+      logicBonus: row?.logicBonus ?? 0, consideredMoves: pool.map(({ move }) => move), ...(human ? { prevented, oversights } : {}) };
   };
   if (Date.now() < deadline && wantsOversight && verify && lossCap >= BLUNDER_LOSS) {
     const oversight = await tryOversight({ search: { move: best.move }, candidates, legalMoves: pool.map(({ move }) => move), strength,
@@ -245,14 +277,23 @@ export async function chooseAwareMove({ strength, sfen, legalMoves, moveHistory 
     // 判断のぶれで信念が最大の手を選び、指す前に台無しでないか確かめる。止めたら、次に信念が高い手を同じように(4-5)。
     const sigma = human.sigma * Math.max(1, strength.scoreTemperature ?? 1);
     let remaining = pool;
+    const ownMate = Math.min(Infinity, ...pool.map(({ ownMateUnseen }) => ownMateUnseen || Infinity));
+    // 台無しの手が確認を通ったら、見落とし(oversight)の手にする(頓死の特徴が出た場面、13-2)。気づかなかった詰みは振り返りで説明する。
+    const chosen = (picked, kind) => {
+      const mating = picked.candidate?.score?.type === "mate" && picked.candidate.score.value > 0;
+      const notes = [...oversights, ...(picked.mateUnseen ? [{ kind: "mate", plies: picked.mateUnseen }] : []),
+        ...(Number.isFinite(ownMate) && !mating ? [{ kind: "own-mate", plies: ownMate }] : [])];
+      return { ...finish(picked, picked.mateUnseen || kind === "A" || kind === "B" ? "oversight" : "aware"), oversights: notes, blunderKind: kind };
+    };
     for (let tries = 0; tries < 4 && remaining.length; tries += 1) {
       const picked = pickByBelief(remaining, sigma, random);
-      const kind = blunderKind({ state, sfen, move: picked.move, best: best.move, engineLoss: reference - picked.engineValue, deadline: Date.now() + 60, findMate: findMateLine });
-      if (!preventsBlunder(kind, human.prevent, { blunderAllowed, random })) return { ...finish(picked), blunderKind: kind };
+      const kind = blunderKind({ state, sfen, move: picked.move, best: best.move, engineLoss: reference - picked.engineValue, deadline: Date.now() + 60,
+        findMate: findMateLine, allowedMate: allowedMatePlies(picked.candidate?.score) });
+      if (!preventsBlunder(kind, human.prevent, { blunderAllowed, random })) return chosen(picked, kind);
       prevented.push(picked.move);
       remaining = remaining.filter((entry) => entry !== picked);
     }
-    return { ...finish(best), blunderKind: null };
+    return chosen(best, null);
   }
   const top = Math.max(...pool.map(({ score }) => score));
   const picked = pickWeighted(pool.map((entry) => ({ ...entry, weight: Math.exp((entry.score - top) / Math.max(1, strength.scoreTemperature ?? 1)) })), random);
