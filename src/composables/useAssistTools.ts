@@ -13,7 +13,8 @@ export function useAssistTools(actions: Ref<HTMLElement | null>, fontSize: Ref<n
     const style = getComputedStyle(element);
     const minimum = parseFloat(style.getPropertyValue("--assist-button-min-em")) || 5.5;
     const gap = parseFloat(style.columnGap) || 0;
-    const count = primaryCount.value + 3;
+    // 表示補助は4つ(ひふみんアイ・駒の利き・駒の損得・危機センサー)。
+    const count = primaryCount.value + 4;
     // Primary buttons can have a slightly larger font than the row itself.
     const buttonFont = parseFloat(getComputedStyle(element.querySelector("button") ?? element).fontSize) || fontSize.value;
     const unit = Math.max(fontSize.value, buttonFont);

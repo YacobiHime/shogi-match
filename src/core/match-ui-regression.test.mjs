@@ -9,6 +9,18 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("warns about newly attacked pieces right after the CPU's move with the danger sensor", () => {
+    // CPUが指した直後に、取り合いの計算だけで知らせる(エンジンの読みを待たない。docs/coach-advice-expansion-design.mdの12章)。
+    expect(source).toMatch(/clearHintMarks\(\{ keepMistakeRing: actor !== "player" \}\);\s*if \(actor === "cpu"\) senseDanger\(sfenBeforeMove\);/);
+    expect(source).toMatch(/function senseDanger\(previousSfen: string\) \{\s*if \(!dangerSensorEnabled\.value \|\| reviewMode\.value \|\| measureMode\.value \|\| tutorialMatch\.value/);
+    expect(source).toMatch(/if \(coachLevel\.value !== "off"\) showCoachAdvice\(\{ key: sensed\.key, text: sensed\.text \}\);/);
+    // 輪は悪手の取られる駒の輪と同じ赤い輪。プレイヤーが指したら消す。
+    expect(source).toMatch(/const boardRiskSquares = computed\(\(\) => \[\.\.\.new Set\(\[\.\.\.\(mistakeRingSquare\.value \? \[mistakeRingSquare\.value\] : \[\]\), \.\.\.dangerSquares\.value\]\)\]\);/);
+    expect(source).toMatch(/talkOpen\.value = false;\s*dangerSquares\.value = \[\];/);
+    // 表示補助の4つめの切り替え。決めていなければ、初心者向けに自動。
+    expect(source).toMatch(/:aria-pressed="dangerSensorEnabled"\s*data-danger-sensor\s*@click="toggleDangerSensor"/);
+    expect(source).toMatch(/: dangerSensorAuto\(\{ learning: matchKind\.value === "learning", cpuLevel: cpuStrengthPreset\.value\.level \}\)\)\);/);
+  });
   it("keeps what the human-like CPU missed for each of its moves and explains it in the review", () => {
     // CPUの手ごとに気づかなかったことを残し(待ったで戻した手は捨てる)、保存・復元し、新しい対局で消す(docs/cpu-human-model-design.mdの13-4)。
     expect(source).toMatch(/cpuNotes = normalizeCpuNotes\(\{\s*\.\.\.cpuNotes,\s*\[moveHistory\.length \+ 1\]: \(selection as \{ oversights\?: unknown\[\] \} \| null\)\?\.oversights \?\? \[\],\s*\}, moveHistory\.length \+ 1\);/);
