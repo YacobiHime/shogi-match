@@ -476,7 +476,7 @@
       :awards="seasonAwards"
       :unlocked-plan-ids="[...planUnlocks.unlocked]"
       :insight-games="playInsight.games"
-      :ryuo-difficulty="ryuoSeason?.settings?.difficulty ?? (ryuoCareer.seasons ? ryuoCareer.settings?.difficulty ?? null : null)"
+      :ryuo-difficulty="ryuoAbilityDifficulty"
       :ryuo-world="tournamentWorld?.level ?? null"
       :skill-data-consent="skillDataConsent"
       :skill-data-available="skillDataAllowed"
@@ -3591,12 +3591,16 @@ const tournamentEntryDifficulty = computed(() => defaultWorldDifficulty(tourname
 const tournamentWorldReview = computed(() => worldReview({
   stored: tournamentWorld.value, playerLevel: ratingLevel(ratingState.value.rating), history: ryuoCareer.value.history ?? [],
 }));
-/** 入口で選んだ番号から世界を決めて保存し、期の設定に入れる値(基準の棋士を指させるLv)を返す。 */
-function commitTournamentWorld(difficulty: number) {
+/**
+ * 入口で選んだ番号から世界を決めて保存し、期の設定に入れる値(基準の棋士を指させるLv)を返す。
+ * 分身を出場させる期(keep: false)は、その期の世界を決めるだけで「いつもの世界」は変えない。いつもの世界は、
+ * やこびノートの能力値の物差しでもあるので、分身の期の難易度で自分の能力値が動かないようにする(docs/tournament-relay-design.mdの40章)。
+ */
+function commitTournamentWorld(difficulty: number, { keep = true }: { keep?: boolean } = {}) {
   // 番号がない(研修会からの編入など)ときは、いつもの世界のまま(なければ前の換算)。
   if (!Number.isInteger(difficulty)) return tournamentWorld.value?.level;
   const world = resolveWorld({ stored: tournamentWorld.value, playerLevel: ratingLevel(ratingState.value.rating), difficulty });
-  if (world !== tournamentWorld.value) {
+  if (keep && world !== tournamentWorld.value) {
     tournamentWorld.value = world;
     saveTournamentWorld(browserStorage(), world);
   }
@@ -6229,9 +6233,11 @@ function enterRyuoSeason(settings: {
       saveRoster(browserStorage(), withStory);
     }
   }
+  // 分身の期の難易度は、その期だけのもの(いつもの世界と能力値の物差しは変えない。40章)。
+  const world = commitTournamentWorld(settings.difficulty, { keep: !settings.watch });
   const season = createSeason({
     ...entry,
-    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(settings.difficulty) },
+    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world },
     userLevel: ratingLevel(ratingState.value.rating),
     career,
     roster: ryuoRoster.value,
@@ -6239,7 +6245,7 @@ function enterRyuoSeason(settings: {
     userName: playerDisplayName(playerName.value),
   });
   // 「分身を出場させる」なら、自分の席を分身にする。期の進み方と記録はふつうの期と同じ(docs/tournament-relay-design.mdの17・18章)。
-  if (settings.watch) asAvatarSeason(season, avatarMember(settings.difficulty));
+  if (settings.watch) asAvatarSeason(season, avatarMember(settings.difficulty, world));
   ryuoSeason.value = season;
   saveSeason(browserStorage(), season);
   // 分身を出場させたか(watch)は、その期だけのもの。次の期の設定には残さない。
@@ -6253,8 +6259,14 @@ function enterRyuoSeason(settings: {
 
 // ---- 分身で観戦参加と、回戦ごとの観戦(docs/tournament-relay-design.mdの13章)
 const ryuoWatch = ref(loadWatchStore(browserStorage()));
-/** 竜王戦の難易度(ノートの能力と同じ物差し)。 */
-const ryuoAbilityDifficulty = computed(() => ryuoSeason.value?.settings?.difficulty ?? (ryuoCareer.value.seasons ? ryuoCareer.value.settings?.difficulty ?? null : null));
+/**
+ * 竜王戦の難易度(ノートの能力と同じ物差し)。分身を出場させた期の難易度は使わない(分身の期で自分の能力値を動かさない。40章)。
+ */
+const ryuoAbilityDifficulty = computed(() => {
+  const season = ryuoSeason.value;
+  const own = season && !season.spectator ? season.settings?.difficulty : undefined;
+  return own ?? (ryuoCareer.value.seasons ? ryuoCareer.value.settings?.difficulty ?? null : null);
+});
 /** 分身の能力(やこびノートの「能力」と同じ計算)。 */
 /**
  * 分身の得意戦法(組んだ戦法・囲いの回数から。docs/tournament-relay-design.mdの28章)。対局が終わってコレクションが増えたら作り直す。
@@ -6291,15 +6303,15 @@ function playRyuoWatchGame(real: any = null, round: any[] = []) {
  * 分身の棋士の強さ・能力・得意戦法・棋風。対局が少なく能力が出ないときは、世界の物差しでいまの棋力のレーティングと、平均の能力
  * (得意戦法と、それから決まる棋風は、能力とは別に持たせる)。
  */
-function avatarMember(difficulty: number) {
-  const profile = avatarProfile.value;
-  if (profile.ready) return profile.member;
+function avatarMember(difficulty: number, world: number | null | undefined) {
   const level = ratingLevel(ratingState.value.rating);
   const repertoire = avatarRepertoire.value;
+  const seasonWorld = Number.isFinite(world) ? world as number : null;
+  // 強さは、分身を出場させる期の世界の物差しで決める(いつもの世界とは別のことがある)。
+  const profile = myAbilityProfile({ games: playInsight.value.games, playerLevel: level, difficulty, world: seasonWorld, repertoire });
+  if (profile.ready) return profile.member;
   return {
-    rating: Number.isFinite(tournamentWorld.value?.level)
-      ? worldRating(level, tournamentWorld.value!.level)
-      : worldRatingFor(level, ryuoAbilityDifficulty.value ?? difficulty),
+    rating: seasonWorld !== null ? worldRating(level, seasonWorld) : worldRatingFor(level, difficulty),
     character: { abilities: {}, traits: [], attack: myStyleAttack(null, repertoire) },
     ...(repertoire ? { repertoire } : {}),
   };
@@ -6690,12 +6702,14 @@ function enterMeijinSeason(settings: { difficulty: number; scale: string; coachL
   saveRoster(browserStorage(), ryuoRoster.value);
   const career = migrated.career;
   const world = ryuoRoster.value.junni;
+  // 分身の期の難易度は、その期だけのもの(いつもの世界と能力値の物差しは変えない。40章)。
+  const strengthWorld = commitTournamentWorld(settings.difficulty, { keep: !settings.watch });
   meijinSeason.value = createMeijinSeason({
-    no: (world.no ?? 0) + 1, league: world, roster: ryuoRoster.value, settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(settings.difficulty) },
+    no: (world.no ?? 0) + 1, league: world, roster: ryuoRoster.value, settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: strengthWorld },
     userLevel: ratingLevel(ratingState.value.rating), userName: playerDisplayName(playerName.value), userDan: meijinDan(career), seed,
   });
   // 「分身を出場させる」なら、自分の席を分身にする。期の進み方と記録はふつうの期と同じ(docs/tournament-relay-design.mdの21章)。
-  if (settings.watch) meijinSeason.value = asAvatarMeijinSeason(meijinSeason.value, avatarMember(settings.difficulty));
+  if (settings.watch) meijinSeason.value = asAvatarMeijinSeason(meijinSeason.value, avatarMember(settings.difficulty, strengthWorld));
   saveMeijinSeason(browserStorage(), meijinSeason.value);
   // 分身を出場させたか(watch)は、その期だけのもの。次の期の設定には残さない。
   const { watch: _watch, ...saved } = settings;

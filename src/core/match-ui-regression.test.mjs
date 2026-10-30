@@ -199,7 +199,16 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function markMeijinResultSeen\(\) \{[\s\S]*?settleMeijinSeason\(\);\s*\}/);
     expect(source).toMatch(/@meijin-watch-round="applyMeijinWatchRound"\s*@meijin-watch-settle="settleMeijinSeason"/);
     // 名人戦の分身(21章): 自分の席を分身にし、分身の次の一局は本局の結果(なければ自動対局)で記録する。
-    expect(source).toMatch(/if \(settings\.watch\) meijinSeason\.value = asAvatarMeijinSeason\(meijinSeason\.value, avatarMember\(settings\.difficulty\)\);/);
+    expect(source).toMatch(/if \(settings\.watch\) meijinSeason\.value = asAvatarMeijinSeason\(meijinSeason\.value, avatarMember\(settings\.difficulty, strengthWorld\)\);/);
+    // 分身の期の記録と難易度は、自分の能力値に入れない(40章)。いつもの世界(能力値の物差し)を保存しない・ノートの難易度に使わない・
+    // 分身の対局は解析(play-insight)・レーティング・コレクションに数えない(それらは自分で指した対局の終局でだけ記録する)。
+    expect(source).toMatch(/const world = commitTournamentWorld\(settings\.difficulty, \{ keep: !settings\.watch \}\);[\s\S]{0,800}?if \(settings\.watch\) asAvatarSeason\(season, avatarMember\(settings\.difficulty, world\)\);/);
+    expect(source).toMatch(/const strengthWorld = commitTournamentWorld\(settings\.difficulty, \{ keep: !settings\.watch \}\);/);
+    expect(source).toMatch(/if \(keep && world !== tournamentWorld\.value\) \{/);
+    expect(source).toMatch(/const own = season && !season\.spectator \? season\.settings\?\.difficulty : undefined;/);
+    expect(source).toMatch(/:ryuo-difficulty="ryuoAbilityDifficulty"/);
+    expect(source).not.toMatch(/function playRyuoWatchGame\([^)]*\) \{[^}]*?(enqueuePlayInsight|applyRatedGame|recordCollection|analysisQueue)/);
+    expect(source).not.toMatch(/function playMeijinWatchGame\([^)]*\) \{[^}]*?(enqueuePlayInsight|applyRatedGame|recordCollection|analysisQueue)/);
     expect(source).toMatch(/function playMeijinWatchGame\(real: any = null, round: any\[\] = \[\]\) \{[\s\S]*?playMeijinSpectatorGame\([\s\S]*?\{ real, round \}\)[\s\S]*?finalizeMeijinSeason\(next\);/);
     expect(source).toMatch(/@meijin-watch-play="playMeijinWatchGame"/);
     // 敗退後の観戦で見終えた回戦は、本局の結果で指し直した期に替え、竜王の発表・結果を見終えた・次の期で残りを確定する(20-10)。
