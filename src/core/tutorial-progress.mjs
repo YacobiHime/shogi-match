@@ -25,6 +25,7 @@ export function loadTutorialProgress(storage) {
     const result = { lessons };
     if (PLACEMENT_IDS.includes(parsed?.placement)) result.placement = parsed.placement;
     if (parsed?.reviewOffered === true) result.reviewOffered = true;
+    if (TUTORIAL_COURSE_IDS.includes(parsed?.course)) result.course = parsed.course;
     return result;
   } catch {
     return emptyTutorialProgress();
@@ -40,9 +41,26 @@ export function saveTutorialProgress(storage, progress) {
   }
 }
 
+// ===== 2つのコース(21-4) =====
+/** 教室のコース。basicsはじっくり基礎(今の5巻)、tipsはすぐ使えるコツ。地図のタブで選び、記録に残す。 */
+export const TUTORIAL_COURSE_IDS = Object.freeze(["basics", "tips"]);
+
+/** 地図で開くコース。記録がなければじっくり基礎。 */
+export function tutorialCourse(progress) {
+  return TUTORIAL_COURSE_IDS.includes(progress?.course) ? progress.course : "basics";
+}
+
+/** 選んだコースを記録に残す。 */
+export function withTutorialCourse(progress, course) {
+  return TUTORIAL_COURSE_IDS.includes(course) ? { ...progress, course } : progress;
+}
+
 // ===== どこから始めるか(17章) =====
-/** 最初の問いの答え。札のID(tutorial-map.mjsのTUTORIAL_PLACEMENTS)と、地図から自分で選んだ「map」。 */
-export const PLACEMENT_IDS = Object.freeze(["beginner", "pieces", "rules", "mate", "map"]);
+/**
+ * 最初の問いの答え。札のID(tutorial-map.mjsのTUTORIAL_PLACEMENTS)と、地図から自分で選んだ「map」、
+ * すぐ使えるコツだけ見る「tips」(21-4)。
+ */
+export const PLACEMENT_IDS = Object.freeze(["beginner", "pieces", "rules", "mate", "map", "tips"]);
 
 /**
  * 教室を開いたときに「どのくらい知ってる？」と聞くか。記録が1つもなく、まだ答えていないときだけ聞く。
@@ -210,9 +228,10 @@ function passed(lesson, progress) {
   return status === "cleared" || status === "skipped";
 }
 
-/** 教室全体を通した順番で、前のレッスンを終えていれば解放する。 */
+/** 教室全体を通した順番で、前のレッスンを終えていれば解放する。すぐ使えるコツ(free)は、いつでも遊べる(21-4)。 */
 export function isLessonUnlocked(lessons, progress, lessonId) {
   const index = lessons.findIndex(({ id }) => id === lessonId);
+  if (lessons[index]?.free) return true;
   if (index <= 0) return index === 0;
   return lessons.slice(0, index).every((lesson) => passed(lesson, progress));
 }

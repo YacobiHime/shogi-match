@@ -302,7 +302,7 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">将棋教室</span>
-                <small class="shogi-title__desc">ルールから戦法まで</small>
+                <small class="shogi-title__desc">基礎とすぐ使えるコツ</small>
               </button>
               <button type="button" class="shogi-title__tile" :class="homeTileClass('problems')" @click="problemSetOpen = true">
                 <span v-if="homeTile('problems').recommended" class="shogi-title__tile-badge">おすすめ</span>

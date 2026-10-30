@@ -87,9 +87,27 @@
           </button>
         </li>
       </ul>
-      <button type="button" class="shogi-tutorial__placement-map" data-placement="map" @click="choosePlacementMap">地図から自分で選ぶ</button>
+      <div class="shogi-tutorial__placement-links">
+        <button type="button" class="shogi-tutorial__placement-map" data-placement="map" @click="choosePlacementMap">地図から自分で選ぶ</button>
+        <button type="button" class="shogi-tutorial__placement-map" data-placement="tips" @click="choosePlacementTips">すぐ使えるコツだけ見る</button>
+      </div>
     </section>
     <section v-if="view === 'map' && !placementOpen" ref="mapEl" class="shogi-tutorial__map" aria-label="レッスンの地図" data-tutorial-map>
+      <!-- 2つのコース(21-4)。じっくり基礎は今の5巻の道、すぐ使えるコツはどこからでも遊べるカード。 -->
+      <div class="shogi-dex__modes shogi-tutorial__courses" role="tablist" aria-label="コース">
+        <button
+          v-for="item in TUTORIAL_COURSES"
+          :key="item.id"
+          type="button"
+          role="tab"
+          :aria-selected="course === item.id"
+          :class="{ 'shogi-dex__mode--active': course === item.id }"
+          :data-tutorial-course="item.id"
+          @click="selectCourse(item.id)"
+        >
+          <span class="shogi-dex__mode-label">{{ item.label }}</span>
+        </button>
+      </div>
       <div class="shogi-tutorial__map-hero">
         <img class="shogi-tutorial__chara" :src="charaUrl" alt="" aria-hidden="true">
         <div class="shogi-tutorial__map-hero-body">
@@ -126,7 +144,7 @@
         >
           <!-- 巻の看板 -->
           <div v-if="row.type === 'volume'" class="shogi-tutorial__world">
-            <span class="shogi-tutorial__world-number">第{{ row.number }}巻</span>
+            <span class="shogi-tutorial__world-number">{{ row.id === "tips" ? "コツ" : `第${row.number}巻` }}</span>
             <strong>{{ row.title }}</strong>
             <span class="shogi-tutorial__meter" aria-hidden="true">
               <span :style="{ width: `${row.summary.total ? Math.round((row.summary.done / row.summary.total) * 100) : 0}%` }"></span>
@@ -617,7 +635,7 @@ import { CAPTURE_POP_MS, materialLabel, materialPops, materialSwing, materialTot
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
-import { PLACEMENT_CHECK_LESSON, TUTORIAL_LESSONS, TUTORIAL_TITLE, TUTORIAL_VOLUMES, tutorialLesson } from "./core/tutorial-curriculum.mjs";
+import { PLACEMENT_CHECK_LESSON, TIPS_LESSONS, TIPS_VOLUMES, TUTORIAL_COURSES, TUTORIAL_LESSONS, TUTORIAL_TITLE, TUTORIAL_VOLUMES, tutorialLesson } from "./core/tutorial-curriculum.mjs";
 import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.mjs";
 import {
   INTERACTIVE_STEP_TYPES,
@@ -671,6 +689,8 @@ import {
   isSkipAheadChallenge,
   lessonRecord,
   recordSkipAhead,
+  tutorialCourse,
+  withTutorialCourse,
 } from "./core/tutorial-progress.mjs";
 import { referenceDexEntries } from "./core/reference-dex.mjs";
 import {
@@ -730,6 +750,18 @@ const emit = defineEmits(["close", "open-dex", "start-match", "grant-title"]);
 
 const volumes = TUTORIAL_VOLUMES as unknown as Volume[];
 const lessons = TUTORIAL_LESSONS as unknown as Lesson[];
+/**
+ * すぐ使えるコツ(21-4)。じっくり基礎(lessons)とは別の道で、解放・称号・はじめる場所には数えない。
+ * 章ごとの処理(次のレッスン・章クリア・にがて)は、両方を合わせた一覧で探す。
+ */
+const tipsVolumes = TIPS_VOLUMES as unknown as Volume[];
+const tipsLessons = TIPS_LESSONS as unknown as Lesson[];
+const allVolumes = [...volumes, ...tipsVolumes];
+const allLessons = [...lessons, ...tipsLessons];
+/** そのレッスンのコースの一覧(次の章・次のレッスンを、同じコースの中で探す)。 */
+function courseLessonsOf(id: string) {
+  return tipsLessons.some((lesson) => lesson.id === id) ? tipsLessons : lessons;
+}
 const storage = typeof localStorage === "undefined" ? null : localStorage;
 const progress = ref(loadTutorialProgress(storage));
 // ===== 道具: 利きメガネ =====
@@ -791,6 +823,12 @@ function finishPlacementCheck() {
 /** 「地図から自分で選ぶ」。答えたことだけ残し、今までどおり地図を開く。 */
 function choosePlacementMap() {
   updateProgress(applyPlacement(lessons, progress.value, "map"));
+  placementOpen.value = false;
+  openMap();
+}
+/** はじめての問いの「すぐ使えるコツだけ見る」(21-4)。何もとばさず、コツのコースの地図を開く。 */
+function choosePlacementTips() {
+  updateProgress(withTutorialCourse(applyPlacement(lessons, progress.value, "tips"), "tips"));
   placementOpen.value = false;
   openMap();
 }
@@ -969,13 +1007,13 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
 
 // ===== にがてをもう1回 =====
 /** レッスンでまちがえた課題の記録。章クリアの画面と地図の章の看板から、章の苦手だけを解き直せる。 */
-const weakSteps = ref<Record<string, number[]>>(loadWeakSteps(storage, lessons));
+const weakSteps = ref<Record<string, number[]>>(loadWeakSteps(storage, allLessons));
 function updateWeakSteps(next: Record<string, number[]>) {
   weakSteps.value = next;
   saveWeakSteps(storage, next);
 }
 function weakCount(chapterId: string) {
-  return chapterWeakSteps(lessons, weakSteps.value, chapterId).length;
+  return chapterWeakSteps(allLessons, weakSteps.value, chapterId).length;
 }
 /** 遊んでいる「にがてをもう1回」(章の苦手だけを並べたレッスン)。 */
 const reviewLesson = ref<Lesson | null>(null);
@@ -986,7 +1024,7 @@ let reviewSolved: { lessonId: string; index: number }[] = [];
 /** にがてをもう1回の結果。章クリアの画面で知らせる。 */
 const reviewResult = ref<{ cleared: number; left: number } | null>(null);
 function startReview(chapterId: string) {
-  const lesson = weakReviewLesson(lessons, weakSteps.value, chapterId) as Lesson | null;
+  const lesson = weakReviewLesson(allLessons, weakSteps.value, chapterId) as Lesson | null;
   if (!lesson) return;
   reviewLesson.value = lesson;
   startLesson(lesson.id);
@@ -1011,11 +1049,22 @@ function goBack() {
 defineExpose({ goBack });
 
 // ===== 地図(すごろくの道) =====
-const upcomingLesson = computed(() => nextLesson(lessons, progress.value) as Lesson | null);
-const map = computed(() => tutorialMap(volumes, lessons, progress.value));
+/** 地図で開いているコース。記録に残し、次に開いたときも同じコース。 */
+const course = computed(() => tutorialCourse(progress.value));
+function selectCourse(id: string) {
+  mapMessage.value = "";
+  updateProgress(withTutorialCourse(progress.value, id));
+}
+const upcomingLesson = computed(() => nextLesson(course.value === "tips" ? tipsLessons : lessons, progress.value) as Lesson | null);
+const map = computed(() => (
+  course.value === "tips" ? tutorialMap(tipsVolumes, tipsLessons, progress.value) : tutorialMap(volumes, lessons, progress.value)
+));
 /** 集めた腕だめしのメダルの数。 */
 const medalCount = computed(() => map.value.rows.filter((row: any) => row.type === "chapter" && row.medal).length);
 const shelfMessage = computed(() => {
+  if (course.value === "tips") {
+    return upcomingLesson.value ? "明日の対局ですぐ使えるコツだよ。どのカードからでも遊べるよ。" : "コツのカードを全部集めたね！ 対局で使ってみよう。";
+  }
   if (!Object.keys(progress.value.lessons).length) return "ようこそ、やこび姫の将棋教室へ！ 光っているマスから始めよう。";
   return upcomingLesson.value ? "おかえり！ 光っているマスから続けよう。" : "全部のレッスンを終えたね！ 好きなマスで、もう一度遊べるよ。";
 });
@@ -1051,7 +1100,7 @@ function openMap() {
 }
 function skipChapterById(chapterId: string) {
   let next = progress.value;
-  for (const lesson of lessons.filter((entry) => entry.chapterId === chapterId)) {
+  for (const lesson of allLessons.filter((entry) => entry.chapterId === chapterId)) {
     if (!lesson.comingSoon) next = recordLessonSkipped(next, lesson.id);
   }
   updateProgress(next);
@@ -1075,10 +1124,10 @@ function continueChain() {
 }
 /** 章クリアの画面に出す章。 */
 const clearedChapterId = ref("");
-const clearedChapter = computed(() => (clearedChapterId.value ? chapterSummary(volumes, lessons, progress.value, clearedChapterId.value) : null));
+const clearedChapter = computed(() => (clearedChapterId.value ? chapterSummary(allVolumes, allLessons, progress.value, clearedChapterId.value) : null));
 const nextChapterLesson = computed(() => {
   const last = clearedChapter.value?.lessons.at(-1);
-  return last ? firstLessonOfNextChapter(lessons, last.id) as Lesson | null : null;
+  return last ? firstLessonOfNextChapter(courseLessonsOf(last.id), last.id) as Lesson | null : null;
 });
 /** 腕だめしで飛び級・修了にした結果。章クリアの画面で知らせる。jumpedは、順に進まずに挑んだ飛び級か。 */
 const skipAheadResult = ref<{ tested: number; jumped: boolean } | null>(null);
@@ -1120,7 +1169,7 @@ function showChapterClear(chapterId: string) {
  * stars が null のとき(スキップ・対局の結果のあと)は、知らせを出さずにすぐ進む。
  */
 function continueAfter(lesson: Lesson, stars: number | null) {
-  const next = nextLessonInChapter(lessons, lesson.id) as Lesson | null;
+  const next = nextLessonInChapter(allLessons, lesson.id) as Lesson | null;
   if (!next) {
     showChapterClear(lesson.chapterId);
     return;
@@ -1134,11 +1183,11 @@ function continueAfter(lesson: Lesson, stars: number | null) {
 }
 
 /** 見出しの進み具合: 章のレッスンの区切りと、いまのレッスンの中のステップ。 */
-const chapterTrack = computed(() => chapterPosition(lessons, lessonId.value));
+const chapterTrack = computed(() => chapterPosition(allLessons, lessonId.value));
 const chapterInfo = computed(() => {
   const lesson = currentLesson.value;
   if (!lesson) return null;
-  return chapterSummary(volumes, lessons, progress.value, lesson.chapterId);
+  return chapterSummary(allVolumes, allLessons, progress.value, lesson.chapterId);
 });
 const chapterNumber = computed(() => chapterInfo.value?.number ?? 0);
 const chapterTitle = computed(() => (chapterInfo.value ? `第${chapterInfo.value.number}章 ${chapterInfo.value.title}` : ""));
@@ -2260,7 +2309,7 @@ onMounted(() => {
 /** 練習の章で始めるレッスン。fromLessonIdから先で、まだクリアしていない最初のもの(全部クリアなら腕だめし)。 */
 function practiceStartLesson(start: { chapterId: string; fromLessonId?: string } | null) {
   if (!start) return null;
-  const inChapter = lessons.filter((lesson) => lesson.chapterId === start.chapterId && !lesson.comingSoon);
+  const inChapter = allLessons.filter((lesson) => lesson.chapterId === start.chapterId && !lesson.comingSoon);
   const from = Math.max(0, inChapter.findIndex(({ id }) => id === start.fromLessonId));
   const candidates = inChapter.slice(from);
   return (candidates.find(({ id }) => lessonRecord(progress.value, id).status !== "cleared") ?? candidates.find(({ boss }) => boss) ?? candidates[0])?.id ?? null;
@@ -2270,8 +2319,9 @@ function continueAfterResult() {
   if (currentLesson.value) continueAfter(currentLesson.value, null);
 }
 const followingLesson = computed(() => {
-  const index = lessons.findIndex(({ id }) => id === lessonId.value);
-  return lessons.slice(index + 1).find((lesson) => !lesson.comingSoon) ?? null;
+  const list = courseLessonsOf(lessonId.value);
+  const index = list.findIndex(({ id }) => id === lessonId.value);
+  return list.slice(index + 1).find((lesson) => !lesson.comingSoon) ?? null;
 });
 const resultMessage = computed(() => {
   if (matchResult.value) {
@@ -2798,7 +2848,22 @@ const resultMessage = computed(() => {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
 }
-.shogi-game .shogi-game .shogi-tutorial__compare-side {
+.shogi-game .shogi-game .shogi-tutorial__placement-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1rem;
+}
+.shogi-game .shogi-tutorial__courses {
+  /* 地図をスクロールしても、コースの切り替えはいつも上に見せる。 */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0 auto 0.6rem;
+  padding: 0.3rem 0;
+  background: #1d303f;
+}
+.shogi-game .shogi-tutorial__compare-side {
   display: inline-grid;
   justify-items: center;
   min-height: 44px;

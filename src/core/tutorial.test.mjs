@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Position } from "tsshogi";
 import { createGameRecord, enumerateLegalMoves } from "../game-state";
-import { TUTORIAL_LESSONS, TUTORIAL_VOLUMES, tutorialLesson } from "./tutorial-curriculum.mjs";
+import { TIPS_LESSONS, TUTORIAL_LESSONS, TUTORIAL_VOLUMES, tutorialLesson } from "./tutorial-curriculum.mjs";
 import {
   attemptTutorialChoice,
   attemptTutorialMove,
@@ -134,7 +134,8 @@ describe("やこび姫の将棋教室のカリキュラム", () => {
       world: new Set(referenceDexEntries("world").map(({ id }) => id)),
       opening: new Set([...OPENING_STRATEGIES, ...OPENING_CASTLES].map(({ id }) => id)),
     };
-    for (const lesson of TUTORIAL_LESSONS.filter(({ comingSoon }) => !comingSoon)) {
+    // じっくり基礎とすぐ使えるコツ(21-5)の全ステップ。
+    for (const lesson of [...TUTORIAL_LESSONS, ...TIPS_LESSONS].filter(({ comingSoon }) => !comingSoon)) {
       expect(lesson.steps.length, lesson.id).toBeGreaterThan(0);
       lesson.steps.forEach((step, index) => {
         const label = `${lesson.id}#${index} ${step.type}`;

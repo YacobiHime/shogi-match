@@ -137,7 +137,8 @@ export function tutorialMap(volumes, lessons, progress) {
         summary: lessonsProgress(chapterLessons, progress),
         medal: chapterMedal(lessons, progress, chapter.id),
         // まだ終えていないレッスンがあり、その最初が遊べるときだけ、章ごと飛ばせる。
-        skippable: pending.length > 0 && isLessonUnlocked(lessons, progress, pending[0].id),
+        // すぐ使えるコツ(free)は、どこからでも遊べるので、とばす必要がない。
+        skippable: pending.length > 0 && !pending[0].free && isLessonUnlocked(lessons, progress, pending[0].id),
       });
       chapterLessons.forEach((lesson, lessonIndex) => {
         rows.push({

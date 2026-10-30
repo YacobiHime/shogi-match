@@ -1604,6 +1604,290 @@ export const TUTORIAL_LESSONS = Object.freeze(TUTORIAL_VOLUMES.flatMap((volume, 
   })))
 )));
 
+// ===== すぐ使えるコツ(21-5) =====
+/**
+ * 「すぐ使えるコツ」のコース。1枚1〜2分で、明日の対局でそのまま使える将棋の常識を覚える。
+ * どのカードからでも遊べる(free)。じっくり基礎の解放・称号・強くなる道・札には数えない(TUTORIAL_LESSONSに入れない)。
+ * 局面は自作し(捨て駒の詰みだけ問題集の問題)、正誤は今の教室と同じ判定で決める。
+ */
+/** 相掛かりの出だし(▲2六歩△8四歩▲2五歩△8五歩▲7八金△3二金)。飛車先の歩を交換する前。 */
+const TIP_ROOK_PAWN_SFEN = sfenAfter(STANDARD_SFEN, ["2g2f", "8c8d", "2f2e", "8d8e", "6i7h", "4a3b"]);
+/** 相手が飛車先の歩を8五まで伸ばした局面(▲7六歩△8四歩▲6八銀△8五歩)。7七銀・7八金で受ける。 */
+const TIP_VS_IBISHA_SFEN = sfenAfter(STANDARD_SFEN, ["7g7f", "8c8d", "7i6h", "8d8e"]);
+/** 角道を開け合って、6筋の歩を突いた局面(▲7六歩△3四歩▲6六歩△8四歩)。飛車を6八へ振る。 */
+const TIP_SHIKEN_SFEN = sfenAfter(STANDARD_SFEN, ["7g7f", "3c3d", "6g6f", "8c8d"]);
+/** 前のマスにはそれぞれ相手の利きと味方の利きがある局面。飛車が後ろから5五を守っている。 */
+const TIP_SUPPORTED_SFEN = "3rk4/8b/4p4/9/9/4S4/3G5/4R4/4K4 b - 1";
+/** 2四の銀がタダで取れる局面(だれにも守られていない)。 */
+const TIP_FREE_PIECE_SFEN = "4k4/5g3/9/7s1/9/9/9/7R1/4K4 b - 1";
+/** 桂を打つと、飛車と金の両取りになる局面。 */
+const TIP_FORK_SFEN = "4k4/9/3r1g3/9/9/9/9/9/4K4 b N 1";
+/** 2筋に歩がなく、2四に歩を垂らすと、次に2三でと金を作れる局面。 */
+const TIP_PAWN_HAND_SFEN = "9/1k7/ppp6/9/9/9/9/9/4K4 b P 1";
+/** 玉の頭に金を打つ1手詰め(歩が金を守る)。はじめる場所を決める1問とは別の局面。 */
+const TIP_HEAD_GOLD_SFEN = "6k2/9/6P2/9/9/9/9/9/4K4 b G 1";
+/** 四間飛車と美濃囲いの完成形(作戦カードと同じ手順)。 */
+const TIP_SHIKEN_MINO_SFEN = sfenAfter(STANDARD_SFEN, ["7g7f", "6g6f", ...OPENING_CASTLES.find(({ id }) => id === "mino").blackMoves], { blackOnly: true });
+/** エルモ囲いの完成形。 */
+const TIP_ELMO_SFEN = sfenAfter(STANDARD_SFEN, OPENING_CASTLES.find(({ id }) => id === "elmo").blackMoves, { blackOnly: true });
+/** 前に進める手のうち、取られて損をしない行き先(コツ「味方の利きがあるマスに進めよう」の答え)。テストで答えと外れの両方があることを確かめる。 */
+const TIP_SUPPORTED_ANSWERS = ["5f5e"];
+
+const TIPS_VOLUME = {
+  id: "tips",
+  title: "すぐ使えるコツ",
+  description: "明日の対局で、そのまま使える将棋の常識",
+  chapters: [
+    {
+      id: "tips-opening",
+      title: "序盤のコツ",
+      lessons: [
+        {
+          id: "tip-rook-pawn",
+          title: "飛車先の歩はどんどん伸ばそう",
+          summary: "飛車先の歩を交換できる",
+          icon: "飛",
+          free: true,
+          steps: [
+            { type: "explain", sfen: STANDARD_SFEN, arrows: ["2g2f"], marks: [["2h", "key"]], speech: "居飛車なら、飛車の前の歩をどんどん伸ばそう。歩が進むほど、飛車の道が開くよ。" },
+            {
+              type: "find-move", sfen: TIP_ROOK_PAWN_SFEN, line: ["2e2d", "2c2d", "2h2d"], material: true,
+              speech: "歩を2四へ突いて、取られたら飛車で取り返そう！ 飛車先の歩の交換だよ。",
+              praise: "飛車先の歩を交換できたね。歩が1枚手に入って、飛車が前に出られたよ。",
+            },
+            {
+              type: "choose", question: "飛車先の歩を交換すると、どうなる？",
+              options: ["歩が1枚手に入り、飛車が前に出られる", "飛車がタダで取られる"], answer: 0,
+              explanation: "交換すると、持ち駒の歩が増えて、飛車が働くようになるよ。",
+            },
+          ],
+        },
+        {
+          id: "tip-castle-first",
+          title: "戦う前に、玉を囲おう",
+          summary: "居玉のまま戦わない",
+          icon: "囲",
+          free: true,
+          steps: [
+            castleBuildStep("funagakoi", {
+              name: "舟囲い",
+              speech: "戦いを始める前に、玉を囲おう。いちばん早く組める「舟囲い」を3手で組んでみて！",
+              praise: "舟囲い、完成！ たった3手でも、居玉よりずっと安全だよ。",
+            }),
+            castleCompareStep("escape", [{ label: "居玉", sfen: IGYOKU_SFEN }, { label: "舟囲い", sfen: FUNA_SFEN }], {
+              intro: "居玉と舟囲いをくらべよう！",
+            }),
+          ],
+        },
+        {
+          id: "tip-vs-ibisha",
+          title: "相手が居飛車なら、7七銀と7八金",
+          summary: "飛車先の歩を受けられる",
+          icon: "銀",
+          free: true,
+          steps: [
+            {
+              type: "build", name: "7七銀・7八金の形", sfen: withBlackToMove(TIP_VS_IBISHA_SFEN),
+              targets: [["7g", "S"], ["7h", "G"]], moves: ["6h7g", "6i7h"], par: 2, pieces: [],
+              speech: "相手は居飛車で、飛車先の歩が8五まで来たよ。銀を7七、金を7八へ動かして受けよう！",
+              praise: "7七銀と7八金の形ができた！ 矢倉の入り口の、堅い形だよ。",
+            },
+            {
+              type: "explain", sfen: sfenAfter(withBlackToMove(TIP_VS_IBISHA_SFEN), ["6h7g", "6i7h"], { blackOnly: true }), kiki: "black", marks: [["8f", "key"]],
+              speech: "相手が8六に歩を突いても、銀・角・歩が見張っている（青い数字）。飛車先を突破されないよ。",
+            },
+            {
+              type: "choose", question: "相手が居飛車で、飛車先の歩を伸ばしてきたら？",
+              options: ["7七銀と7八金の形で受ける", "8筋をあけたままにする"], answer: 0,
+              explanation: "銀と金で8筋の前を固めると、相手の飛車が進めなくなるよ。",
+            },
+          ],
+        },
+        {
+          id: "tip-vs-furibisha",
+          title: "相手が振り飛車なら、エルモ囲い",
+          summary: "エルモ囲いを組める",
+          icon: "エ",
+          free: true,
+          steps: [
+            castleBuildStep("elmo", {
+              name: "エルモ囲い",
+              speech: "相手が振り飛車なら「エルモ囲い」。5手で組める、早くて堅い囲いだよ。組んでみよう！",
+              praise: "エルモ囲い、完成！",
+            }),
+            {
+              type: "explain", sfen: TIP_ELMO_SFEN, kiki: "black",
+              speech: "銀と金が玉にぴったりくっついて、玉のまわりを何重にも見張っている（青い数字）。振り飛車との急戦でよく使われるよ。",
+            },
+            {
+              type: "choose", question: "振り飛車を相手に、少ない手数で堅く組める囲いは？",
+              options: ["エルモ囲い", "居玉のまま"], answer: 0,
+              explanation: "エルモ囲いは5手で組めるのに、金銀が玉にくっついていて堅いんだ。",
+            },
+          ],
+        },
+        {
+          id: "tip-shiken",
+          title: "自分が振り飛車なら、四間飛車",
+          summary: "四間飛車と美濃囲いで戦える",
+          icon: "四",
+          free: true,
+          steps: [
+            {
+              type: "find-move", sfen: TIP_SHIKEN_SFEN, answers: ["2h6h"], marks: [["6h", "key"]],
+              speech: "振り飛車なら、まずは「四間飛車」。飛車を6八（緑のマス）へ振ろう！",
+              praise: "四間飛車！ 角道を止めて守りやすく、初めての振り飛車にぴったりだよ。",
+            },
+            {
+              type: "explain", sfen: TIP_SHIKEN_MINO_SFEN, kiki: "black",
+              speech: "四間飛車には「美濃囲い」を合わせよう。飛車と玉が離れていて、攻めと守りがはっきり分かれるよ。",
+            },
+            {
+              type: "play",
+              speech: "四間飛車と美濃囲いが組めた局面から、CPUと指してみよう！ 準備ができたら「対局をはじめる」を押してね。",
+              preset: {
+                startType: "formation",
+                playerStrategy: "shiken",
+                playerCastle: "mino",
+                opponentStrategy: "ibisha",
+                opponentCastle: "funagakoi",
+                cpuLevel: 5,
+                hintLimit: 3,
+                undoLimit: 3,
+              },
+              comments: {
+                win: "四間飛車と美濃囲い、使いこなせたね！",
+                lose: "飛車と玉が離れていると、守りながら反撃できるよ。もう一度ためしてみよう！",
+                draw: "美濃囲いが堅いと、なかなか負けないんだよ。",
+              },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "tips-middle",
+      title: "中盤のコツ",
+      lessons: [
+        {
+          id: "tip-supported",
+          title: "味方の利きがあるマスに進めよう",
+          summary: "取られないマスへ駒を進められる",
+          icon: "利",
+          free: true,
+          steps: [
+            {
+              type: "find-move", sfen: TIP_SUPPORTED_SFEN, answers: TIP_SUPPORTED_ANSWERS, kiki: "both", danger: true, refute: true,
+              speech: "銀を前に進めよう。赤い数字（相手の利き）があって青い数字（味方の利き）がないマスは、タダで取られるよ。",
+              praise: "5五は、後ろの飛車が守っているマス。取られても取り返せるね！",
+            },
+            {
+              type: "choose", question: "駒を進めるなら、どんなマス？",
+              options: ["味方の利きがあるマス", "相手の利きだけがあるマス"], answer: 0,
+              explanation: "味方の利きの上なら、取られても取り返せる。駒どうしが守り合う形になるよ。",
+            },
+          ],
+        },
+        {
+          id: "tip-free-piece",
+          title: "タダの駒は取ろう",
+          summary: "タダで取れる駒を見つけられる",
+          icon: "取",
+          free: true,
+          steps: [
+            {
+              type: "find-move", sfen: TIP_FREE_PIECE_SFEN, answers: ["2h2d"], kiki: "both", refute: true, material: true,
+              speech: "相手の駒で、だれにも守られていない駒があるよ。タダで取ろう！",
+              praise: "2四の銀は、だれにも守られていなかった。タダで銀が手に入ったね！",
+            },
+            {
+              type: "choose", question: "タダで取られる場所に、自分の駒を置くと？",
+              options: ["その駒を損する", "相手が損をする"], answer: 0,
+              explanation: "相手の利きだけがあるマスに置くと、タダで取られちゃう。置く前に、相手の利きを見よう。",
+            },
+          ],
+        },
+        {
+          id: "tip-fork",
+          title: "両取りをねらおう",
+          summary: "桂の両取りをかけられる",
+          icon: "桂",
+          free: true,
+          steps: [
+            {
+              type: "find-move", sfen: TIP_FORK_SFEN, answers: ["N*5e"], marks: [["6c", "target"], ["4c", "target"]],
+              speech: "持ち駒の桂馬で、飛車と金を一度にねらおう！ 赤い2枚の両方に利くマスはどこかな？",
+              praise: "桂の両取り！ 相手はどちらか1枚しか逃げられないから、次に駒得できるよ。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "tips-endgame",
+      title: "終盤のコツ",
+      lessons: [
+        {
+          id: "tip-head-gold",
+          title: "玉の頭に金を打とう",
+          summary: "頭金で詰ませられる",
+          icon: "金",
+          free: true,
+          steps: [
+            {
+              type: "mate", sfen: TIP_HEAD_GOLD_SFEN, solution: ["G*3b"],
+              speech: "玉の頭（すぐ前）に金を打つと、詰むことが多いよ。1手で詰ませてみよう！",
+              praise: "頭金！ 歩が金を守っているから、玉は金を取れないね。",
+            },
+          ],
+        },
+        {
+          id: "tip-pawn-hand",
+          title: "歩は持ち駒で使おう",
+          summary: "垂れ歩でと金を作れる",
+          icon: "歩",
+          free: true,
+          steps: [
+            {
+              type: "find-move", sfen: TIP_PAWN_HAND_SFEN, line: ["P*2d", "8b7b", "2d2c+"],
+              speech: "持ち駒の歩を2四に打って（垂れ歩）、次に2三へ進めてと金を作ろう！",
+              praise: "と金ができた！ と金は金と同じ動きなのに、取られても相手には歩しか渡らないんだ。",
+            },
+          ],
+        },
+        {
+          id: "tip-speed",
+          title: "終盤は、駒の得より速さ",
+          summary: "駒を捨てて詰ませられる",
+          icon: "速",
+          free: true,
+          steps: [
+            problemStep("gts-1b9a04eaca2e", {
+              speech: "終盤は、駒を損しても先に詰ませたほうが勝ち。金を捨てて、3手で詰ませよう！",
+            }),
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+/** 「すぐ使えるコツ」の巻と、レッスン一覧(巻・章のIDつき)。 */
+export const TIPS_VOLUMES = Object.freeze([TIPS_VOLUME]);
+export const TIPS_LESSONS = Object.freeze(TIPS_VOLUMES.flatMap((volume) => (
+  volume.chapters.flatMap((chapter) => chapter.lessons.map((lesson) => ({
+    ...lesson,
+    volumeId: volume.id,
+    volumeNumber: 0,
+    chapterId: chapter.id,
+  })))
+)));
+/** 教室のコース(21-4)。basicsは今の5巻、tipsはすぐ使えるコツ。 */
+export const TUTORIAL_COURSES = Object.freeze([
+  { id: "basics", label: "じっくり基礎" },
+  { id: "tips", label: "すぐ使えるコツ" },
+]);
+
 /**
  * はじめる場所を決める1問(docs/first-play-design.mdの4章)。はじめての案内で「ルールは分かる」と答えた人に、
  * 教室を初めて開いたとき、札を選ぶ代わりに出す。巻と章には入れない(地図に出さず、記録も残さない)。
@@ -1627,5 +1911,5 @@ export const PLACEMENT_CHECK_LESSON = Object.freeze({
 
 export function tutorialLesson(id) {
   if (id === PLACEMENT_CHECK_LESSON.id) return PLACEMENT_CHECK_LESSON;
-  return TUTORIAL_LESSONS.find((lesson) => lesson.id === id) ?? null;
+  return TUTORIAL_LESSONS.find((lesson) => lesson.id === id) ?? TIPS_LESSONS.find((lesson) => lesson.id === id) ?? null;
 }
