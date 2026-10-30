@@ -74,12 +74,16 @@ function shiftLogit(probability, delta) {
 
 /**
  * 棋士の特徴と能力の配分(player-character.mjsのつまみ)を、人間らしいCPUの値のずれにする(6-4・13-2)。
+ * blindは見落とし率の倍率(×(1+blind)。負なら見落としにくい。視野の能力・視野の特殊能力)、
+ * wShiftは大局観の重みのずれ(大局観の能力。1を超えない)、sightは相手の詰めろに気づく手数のずれ(受けの能力)。
+ * docs/player-abilities-design.mdの13章。
  * @param {ReturnType<typeof humanSettingsForLevel>} human
- * @param {{ sharpen?: number, steady?: number, overlook?: number, loose?: number, mate?: number, blind?: number, nodes?: number }} knobs
+ * @param {{ sharpen?: number, steady?: number, overlook?: number, loose?: number, mate?: number, blind?: number, nodes?: number,
+ *   wShift?: number, sight?: number }} knobs
  */
-export function characterHuman(human, { sharpen = 0, steady = 0, overlook = 0, loose = 0, mate = 0, blind = 0, nodes = 1 } = {}) {
+export function characterHuman(human, { sharpen = 0, steady = 0, overlook = 0, loose = 0, mate = 0, blind = 0, nodes = 1, wShift = 0, sight = 0 } = {}) {
   const sharp = Math.min(1, Math.max(-1, sharpen));
-  const missScale = 2 ** (-0.5 * sharp) * (1 - 0.3 * steady) * (1 + 0.8 * overlook) * (1 + 0.5 * loose) * (1 + blind);
+  const missScale = 2 ** (-0.5 * sharp) * (1 - 0.3 * steady) * (1 + 0.8 * overlook) * (1 + 0.5 * loose) * (1 + Math.max(-0.8, blind));
   const preventShift = 1.0 * steady - 1.2 * overlook - 0.8 * loose;
   const round = (value) => Math.round(value * 10000) / 10000;
   const belief = human.belief ?? { w: 1, depth: 6, mateSight: 15 };
@@ -90,8 +94,9 @@ export function characterHuman(human, { sharpen = 0, steady = 0, overlook = 0, l
     sigma: round(human.sigma * (1 - 0.15 * steady) * (1 + 0.25 * loose)),
     belief: {
       ...belief,
+      w: round(Math.min(1, Math.max(0.3, belief.w + wShift))),
       depth: Math.min(6, Math.max(1, belief.depth + (nodes >= 1.25 ? 1 : nodes <= 0.85 ? -1 : 0))),
-      mateSight: round(Math.max(1, belief.mateSight + steady - 2 * overlook + 0.5 * mate)),
+      mateSight: round(Math.max(1, belief.mateSight + steady - 2 * overlook + 0.5 * mate + sight)),
     },
   };
 }

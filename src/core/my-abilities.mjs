@@ -5,7 +5,7 @@
 // - 全体の高さ: 竜王戦の世界の物差し。おすすめの難易度なら、6組の平均の棋士に7割勝てる棋士として置く(ryuo-strength.mjsの考え方)。
 
 import {
-  ABILITIES, ABILITY_KEYS, ABILITY_SIM_WEIGHTS, MAX_DEV, abilityBase, abilityRank, abilityTypeLabel, balanceDevs, styleAttackOf,
+  ABILITIES, ABILITY_KEYS, ABILITY_SIM_WEIGHTS, MAX_DEV, abilityBase, abilityRank, abilityTypeLabel, balanceDevs, phaseStrengths, styleAttackOf,
 } from './player-abilities.mjs';
 import { specialAbilityChips } from './player-character.mjs';
 import { defaultCastleShares, favoriteStyleIds, partyOfUsage, proOpening, staticShare, toPercent, usageRows } from './opening-usage.mjs';
@@ -15,8 +15,8 @@ import { LOSS_AXES, RATE_AXES } from './play-insight.mjs';
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
 /**
- * 能力ごとの「Lvと値の対応」。強さの分かっているCPU(Lv1〜48)どうしの96局を、アプリと同じ段階解析で読み(棋力測定の表と同じデータ。
- * docs/skill-measure-design.mdの7章)、1局ずつの値をLvに直線で当てはめた。
+ * 集計の軸ごとの「Lvと値の対応」。強さの分かっているCPU(Lv1〜48)どうしの96局を、アプリと同じ段階解析で読み(棋力測定の表と同じデータ。
+ * docs/skill-measure-design.mdの7章)、1局ずつの値をLvに直線で当てはめた。キーは集計の軸(play-insight.mjsのaxes)。
  * - loss: 1手の損(同じ読みの中の差、1000まで)の平均+10の対数 = a + b×Lv
  * - rate: 割合のロジット = a + b×Lv(読み: 最善手を指した割合、安定感: 損300以上の割合、詰み: 詰みを逃さなかった割合)
  * shrink: 手(詰みは機会)の数がこれだけあると、Lvの差を半分だけ信じる(少ない手の偶然で、能力をとがらせすぎない)。
@@ -36,6 +36,15 @@ export const AXIS_MODELS = Object.freeze({
  * ほかの能力の平均よりこれだけ上までしか上げない(逃した分は、そのまま下げる)。
  */
 export const MATE_CEILING = 4;
+/**
+ * 能力(player-abilities.mjsの項目)ごとに、どの集計の軸で測るか(docs/player-abilities-design.mdの13-7)。
+ * 研究は序盤、大局観は中盤の1手の損、寄せは優勢での1手の損と詰みを逃さなかった割合、受けは劣勢での1手の損で測る。
+ * 視野・発想は2026-10-30に足した軸(前の要約にはないので、新しい対局が解析されるまでは「まだ材料がない」)。
+ */
+export const ABILITY_AXES = Object.freeze({
+  opening: ['opening'], judgment: ['middle'], vision: ['vision'], idea: ['idea'], reading: ['reading'],
+  stability: ['stability'], attack: ['attack', 'mate'], defense: ['defense'],
+});
 /** 能力の差を出すLvの範囲。 */
 const MIN_AXIS_LEVEL = 0;
 const MAX_AXIS_LEVEL = 49;
@@ -80,8 +89,9 @@ export function collectAxes(games) {
         totals[key].sum += summary.axes[key].sum;
       }
       for (const key of RATE_AXES) {
-        totals[key].n += summary.axes[key].n;
-        totals[key].hit += summary.axes[key].hit;
+        // 視野・発想は、2026-10-30より前の要約にはない(数えない)。
+        totals[key].n += summary.axes[key]?.n ?? 0;
+        totals[key].hit += summary.axes[key]?.hit ?? 0;
       }
     } else {
       for (const key of ['opening', 'middle', 'ending']) {
@@ -108,13 +118,14 @@ export function worldRatingFor(playerLevel, difficulty) {
  */
 const STRONG_TRAITS = Object.freeze({
   opening: { id: 'opening-study', gold: 'research-demon' },
-  middle: { id: 'middle-strong', gold: 'grand-view' },
+  judgment: { id: 'middle-strong', gold: 'grand-view' },
+  vision: { id: 'wide-vision', gold: 'clairvoyance' },
+  idea: { id: 'creative', gold: 'myoshu' },
+  reading: { id: 'deep-reading', gold: 'demon-reading' },
   attack: { id: 'fast-attack' },
   defense: { id: 'endgame-defense', gold: 'defense-master' },
-  reading: { id: 'deep-reading', gold: 'demon-reading' },
-  mate: { id: 'tsume' },
 });
-const WEAK_TRAITS = Object.freeze({ ending: 'endgame-collapse', defense: 'weak-defense', attack: 'loose-when-ahead' });
+const WEAK_TRAITS = Object.freeze({ judgment: 'loose-when-ahead', vision: 'careless', defense: 'weak-defense' });
 function traitsFor(devs, trusted) {
   const traits = [];
   for (const [key, { id, gold }] of Object.entries(STRONG_TRAITS)) {
@@ -130,14 +141,14 @@ function traitsFor(devs, trusted) {
 
 /** 苦手な能力ごとの、やこび姫の一言(何をすれば伸びるか)。 */
 const GROWTH_HINTS = Object.freeze({
-  opening: '序盤は、作戦カードで戦法と囲いの手順を覚えると伸びるよ。',
-  middle: '中盤は、指す前に「取られる駒はないか」を確かめると伸びるよ。',
-  ending: '終盤は、詰みと必至の問題集で寄せの形に慣れると伸びるよ。',
-  attack: '有利なときほど、相手の狙いを1手だけ確かめてから攻めよう。',
-  defense: '不利なときは、あわてずに玉の逃げ道を広げる手を探そう。',
+  opening: '研究は、作戦カードで戦法と囲いの手順を覚えると伸びるよ。',
+  judgment: '中盤は、指す前に駒の損得と玉の堅さで「どちらが良いか」を比べると伸びるよ。',
+  vision: '指す前に、相手の駒の利きを見渡して、タダで取られる駒や取れる駒がないか確かめよう。',
+  idea: '問題集の手筋の問題で、捨て駒や両取りの形を覚えると、発想が伸びるよ。',
   reading: '候補手を2つ比べてから指すと、読みが伸びるよ。',
-  mate: '短い詰将棋で、詰みの筋を見つける練習をしよう。',
   stability: '大きな悪手が出やすいみたい。指す前に、タダで取られる駒がないか確かめよう。',
+  attack: '有利なときは、相手玉の逃げ道をふさぐ手を探そう。短い詰将棋で詰みの筋に慣れると、寄せが伸びるよ。',
+  defense: '不利なときは、あわてずに玉の逃げ道を広げる手を探そう。',
 });
 
 // ---- 得意戦法と棋風(docs/tournament-relay-design.mdの28章)
@@ -225,23 +236,37 @@ export function myStyleAttack(abilities, repertoire) {
 export function myAbilityProfile({ games, playerLevel, difficulty = null, world = null, repertoire = null }) {
   const { totals, moves, games: count } = collectAxes(games ?? []);
   if (moves < MY_ABILITY_MIN_MOVES) return { ready: false, games: count, moves, need: MY_ABILITY_MIN_MOVES - moves };
+  // 集計の軸ごとのLvと、信じる度合い(手が少ないほど小さい)。
+  const axisLevels = {};
+  const axisWeights = {};
+  for (const axis of new Set(Object.values(ABILITY_AXES).flat())) {
+    const total = totals[axis];
+    if (!total?.n || !AXIS_MODELS[axis]) continue;
+    const value = 'sum' in total ? total.sum / total.n : total.hit / total.n;
+    const level = axisLevel(axis, { n: total.n, value });
+    if (level === null) continue;
+    axisLevels[axis] = level;
+    axisWeights[axis] = total.n / (total.n + AXIS_MODELS[axis].shrink);
+  }
+  // 能力のLvの平均(自動対局の重みと、信じる度合いで重みをつける。詰みの軸は割合が1に張りつくので入れない)。
+  // 全体の高さは世界の物差しで決めるので、ここでは配分だけを見る。
+  const primary = (key) => ABILITY_AXES[key][0];
+  const centerKeys = ABILITY_KEYS.filter((key) => ABILITY_SIM_WEIGHTS[key] && primary(key) in axisLevels);
+  const centerWeight = centerKeys.reduce((total, key) => total + ABILITY_SIM_WEIGHTS[key] * axisWeights[primary(key)], 0);
+  const center = centerWeight
+    ? centerKeys.reduce((total, key) => total + ABILITY_SIM_WEIGHTS[key] * axisWeights[primary(key)] * axisLevels[primary(key)], 0) / centerWeight
+    : 0;
+  if ('mate' in axisLevels) axisLevels.mate = Math.min(axisLevels.mate, center + MATE_CEILING);
+  // 能力ごとのLvは、その能力の軸のLvを、信じる度合いで合わせる(寄せは、優勢での損と、詰みを逃さなかった割合)。
   const levels = {};
   const weights = {};
   for (const key of ABILITY_KEYS) {
-    const total = totals[key];
-    const value = total.n ? ('sum' in total ? total.sum / total.n : total.hit / total.n) : 0;
-    const level = axisLevel(key, { n: total.n, value });
-    if (level === null) continue;
-    levels[key] = level;
-    weights[key] = total.n / (total.n + AXIS_MODELS[key].shrink);
+    const axes = ABILITY_AXES[key].filter((axis) => axis in axisLevels);
+    if (!axes.length || !(primary(key) in axisLevels)) continue;
+    const weight = axes.reduce((total, axis) => total + axisWeights[axis], 0);
+    levels[key] = axes.reduce((total, axis) => total + axisWeights[axis] * axisLevels[axis], 0) / weight;
+    weights[key] = axisWeights[primary(key)];
   }
-  // 能力のLvの平均(自動対局の重みと、信じる度合いで重みをつける)。全体の高さは世界の物差しで決めるので、ここでは配分だけを見る。
-  const centerKeys = Object.keys(levels).filter((key) => ABILITY_SIM_WEIGHTS[key] && key !== 'mate');
-  const centerWeight = centerKeys.reduce((total, key) => total + ABILITY_SIM_WEIGHTS[key] * weights[key], 0);
-  const center = centerWeight
-    ? centerKeys.reduce((total, key) => total + ABILITY_SIM_WEIGHTS[key] * weights[key] * levels[key], 0) / centerWeight
-    : 0;
-  if ('mate' in levels) levels.mate = Math.min(levels.mate, center + MATE_CEILING);
   const raw = Object.fromEntries(ABILITY_KEYS.map((key) => [
     key, key in levels ? clamp(POINTS_PER_LEVEL * weights[key] * (levels[key] - center), -MAX_DEV, MAX_DEV) : 0,
   ]));
@@ -269,6 +294,7 @@ export function myAbilityProfile({ games, playerLevel, difficulty = null, world 
     view: {
       abilities: ABILITIES.map(({ key, label, hint }) => ({ key, label, hint, value: values[key], rank: abilityRank(values[key]) })),
       type: abilityTypeLabel(member),
+      phases: phaseStrengths(values),
       specials: specialAbilityChips(member.character),
       staticShare: repertoire ? staticShare(repertoire.usage) : null,
       openings: usageRows(repertoire?.usage ?? null).slice(0, 6).map((row) => ({ ...row, record: '' })),

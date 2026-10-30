@@ -2569,6 +2569,7 @@ import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, sav
 import { PLAYER_NAME_MAX, loadPlayerName, playerDisplayName, savePlayerName } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
+import { abilityRank, abilityValues } from "./core/player-abilities.mjs";
 import { comparableScore } from "./core/move-selection.mjs";
 import {
   applySeason,
@@ -11610,6 +11611,12 @@ const {
   applyMove,
   invalidateReviewCoach: () => { reviewCoachGeneration += 1; },
   cpuNotes: () => cpuNotes,
+  reviewOpponent: () => {
+    const member = ryuoOpponent.value;
+    if (!member?.character?.abilities) return null;
+    const values = abilityValues(member) as { [key: string]: number };
+    return { name: member.name, ranks: Object.fromEntries(Object.entries(values).map(([key, value]) => [key, abilityRank(value)])) };
+  },
 });
 
 function restart() {

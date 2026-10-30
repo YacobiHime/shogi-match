@@ -102,7 +102,9 @@ function mateLengthFor(score, color) {
  *   quizLimit?: number,
  *   initialSfen?: string,
  *   cpuNotes?: Record<number, CpuOversight[]>,
+ *   opponent?: { name: string, ranks: Record<string, string> } | null,
  * }} [options]
+ * opponentは大会の相手(棋士の名前と能力のランク)。CPUが間違えた理由に、低い能力を添える(player-abilities-design.mdの13-7)。
  */
 export function buildGuidedReview(points, {
   playerColor = 'black',
@@ -112,6 +114,7 @@ export function buildGuidedReview(points, {
   quizLimit = GUIDED_REVIEW_QUIZ_LIMIT,
   initialSfen = '',
   cpuNotes = {},
+  opponent = null,
 } = {}) {
   const boards = initialSfen ? boardsAlongLine(initialSfen, moves, moverForPly) : null;
   const byPly = new Map(points.map((point) => [point.ply, point]));
@@ -275,7 +278,7 @@ export function buildGuidedReview(points, {
       step.comment = isPlayer ? 'ちょっと疑問手だったかも。' : '相手の疑問手だね。';
     }
     // 相手(CPU)が間違えた理由。記録と盤の事実が合うときだけ足す(13-4)。
-    const reason = !isPlayer && step.comment ? oversightReason(info, previous, cpuNotes[info.ply] ?? []) : '';
+    const reason = !isPlayer && step.comment ? oversightReason(info, previous, cpuNotes[info.ply] ?? [], opponent) : '';
     if (reason) step.comment += reason;
     // 考えさせた手は、問題の答え合わせで説明するので短い一言だけにする。
     if (quizPlies.has(info.ply) && step.comment) step.pause = false;
@@ -287,8 +290,10 @@ export function buildGuidedReview(points, {
     losingPly: losingMove?.ply ?? null,
     decisivePly: decisiveMove?.ply ?? null,
     quizCount: quizzes.length,
-    // 1手ごとの詰み逃しとタダ取られ。「つぎはこれ」の弱点の見立て(core/play-insight.mjs)が使う。
-    moments: moveInfos.map(({ ply, mover, missedMate, leftFree }) => ({ ply, mover, missedMate, leftFree: Boolean(leftFree) })),
+    // 1手ごとの詰み逃しとタダ取られ・タダの駒の取り逃し。「つぎはこれ」の弱点の見立てと能力の視野(core/play-insight.mjs)が使う。
+    moments: moveInfos.map(({ ply, mover, missedMate, leftFree, missedFree }) => ({
+      ply, mover, missedMate, leftFree: Boolean(leftFree), missedFree: Boolean(missedFree),
+    })),
   };
 }
 
@@ -384,33 +389,52 @@ export function normalizeCpuNotes(value, maxPly) {
   return notes;
 }
 
+/** 理由に添える、低い能力のランク(D以下)。 */
+const LOW_RANKS = new Set(['D', 'E', 'F', 'G']);
+
 /**
  * 相手(CPU)の手の一言に足す、間違えた理由の1文。記録と盤の事実(升・詰み)が合わなければ空。
+ * 大会の相手で、その間違いに当たる能力(見落とし→視野、詰めろ→受け、詰みの見逃し→寄せ)が低ければ、ランクを添える。
  * @param {any} info この手
  * @param {any} previous 直前の手(プレイヤーの手)
  * @param {CpuOversight[]} notes この手の記録
+ * @param {{ name: string, ranks: Record<string, string> } | null} [opponent]
  */
-export function oversightReason(info, previous, notes) {
-  if (!notes.length) return '';
+export function oversightReason(info, previous, notes, opponent = null) {
+  const line = oversightLine(info, previous, notes);
+  if (!line.text || !opponent?.name) return line.text;
+  const rank = opponent.ranks?.[line.ability];
+  const label = { vision: '視野', defense: '受け', attack: '寄せ' }[line.ability];
+  return rank && label && LOW_RANKS.has(rank) ? `${line.text}${opponent.name}さんは${label}が${rank}だからね。` : line.text;
+}
+
+/**
+ * 理由の1文と、その間違いに当たる能力。
+ * @returns {{ text: string, ability: 'vision' | 'defense' | 'attack' | '' }}
+ */
+function oversightLine(info, previous, notes) {
+  const none = { text: '', ability: /** @type {''} */ ('') };
+  if (!notes.length) return none;
   const find = (kind, square) => notes.find((note) => note.kind === kind && (!square || ('square' in note && note.square === square)));
   // 駒をタダで取られる形にした: 同じ升の当たりに気づかなかった。
   const hanging = info.leftFree && find('hanging', info.leftFree.square);
   if (hanging && hanging.kind === 'hanging') {
+    const vision = (text) => ({ text, ability: /** @type {'vision'} */ ('vision') });
     if (hanging.hard.includes('far') && hanging.attacker) {
-      return `相手は、遠くの${FAR_PIECE_NAMES[hanging.attacker] ?? pieceName(hanging.attacker)}の利きに気づかなかったみたい。`;
+      return vision(`相手は、遠くの${FAR_PIECE_NAMES[hanging.attacker] ?? pieceName(hanging.attacker)}の利きに気づかなかったみたい。`);
     }
-    if (hanging.hard.includes('away')) return `相手は、離れた場所の${info.leftFree.name}の当たりに気づかなかったみたい。`;
-    return `相手は、${info.leftFree.name}の当たりに気づかなかったみたい。`;
+    if (hanging.hard.includes('away')) return vision(`相手は、離れた場所の${info.leftFree.name}の当たりに気づかなかったみたい。`);
+    return vision(`相手は、${info.leftFree.name}の当たりに気づかなかったみたい。`);
   }
   // 相手に詰みが生まれた: 詰めろに気づかなかった。
-  if (info.allowedMate && find('mate')) return '相手は、詰みの筋に気づかなかったみたい。';
+  if (info.allowedMate && find('mate')) return { text: '相手は、詰みの筋に気づかなかったみたい。', ability: 'defense' };
   // 自分の詰みを見逃した(長い詰みだけ。短い詰みは見逃しの一言で足りる)。
-  if (info.missedMate >= 5 && find('own-mate')) return '長い詰みは、相手にも見えにくかったみたい。';
+  if (info.missedMate >= 5 && find('own-mate')) return { text: '長い詰みは、相手にも見えにくかったみたい。', ability: 'attack' };
   // タダの駒を取らなかった: 取る手が見えにくかった(見えにくさの理由があるときだけ)。
   const free = previous?.leftFree && !info.tookFree && find('free', previous.leftFree.square);
   if (free && free.kind === 'free') {
-    if (free.hard.includes('back')) return '後ろに下がって取る手は、見えにくいんだ。';
-    if (free.hard.includes('far')) return '遠くから取る手は、見えにくいんだ。';
+    if (free.hard.includes('back')) return { text: '後ろに下がって取る手は、見えにくいんだ。', ability: 'vision' };
+    if (free.hard.includes('far')) return { text: '遠くから取る手は、見えにくいんだ。', ability: 'vision' };
   }
-  return '';
+  return none;
 }

@@ -9,6 +9,9 @@ import { REVIEW_LINE_MAX_PLIES, reviewProblemId } from './review-problems.mjs';
 import { levelForAverageLoss } from './skill-estimate.mjs';
 import { contentEstimate, contentEvents } from './play-content.mjs';
 import { levelRating } from './player-rating.mjs';
+import { detectTesujiShape } from './tesuji-shape.mjs';
+import { exchangeGain } from './exchange-eval.mjs';
+import { applyUsiToBoard, opponentOf, parseSfenState } from './piece-movement.mjs';
 
 export const PLAY_INSIGHT_KEY = 'yacobihime:shogi-match:play-insight:v1';
 /** 覚えておく対局の数。 */
@@ -53,14 +56,41 @@ function validPhase(phase) {
 
 /** 能力の分析の集計の軸(my-abilities.mjs)。損の軸は{ n, sum }、割合の軸は{ n, hit }。 */
 export const LOSS_AXES = Object.freeze(['opening', 'middle', 'ending', 'attack', 'defense']);
-export const RATE_AXES = Object.freeze(['reading', 'stability', 'mate']);
+export const RATE_AXES = Object.freeze(['reading', 'stability', 'mate', 'vision', 'idea']);
+/**
+ * 2026-10-30に足した割合の軸(docs/player-abilities-design.mdの13-7)。前の要約にはないので、なくても正しい要約とする。
+ * - vision: 視野。測れた手のうち、駒をタダで取られる形にした・タダの駒を取り逃した(どちらも損300以上)手の割合
+ * - idea: 発想。最善手が名前の付いた手筋の形か捨て駒の局面で、その手を指した割合
+ */
+export const LATER_RATE_AXES = Object.freeze(['vision', 'idea']);
 /** 優勢・劣勢とみなす形勢(攻め・受けの軸)。 */
 const AXIS_STANDING = 300;
+/** 発想の軸で、捨て駒とみなす、動かした駒を取られて失う駒の損(取り合いの計算。金1枚くらいより大きい)。 */
+const SACRIFICE_GAIN = 300;
 
 function validAxes(axes) {
   return axes && typeof axes === 'object'
     && LOSS_AXES.every((key) => finite(axes[key]?.n) && finite(axes[key]?.sum))
-    && RATE_AXES.every((key) => finite(axes[key]?.n) && finite(axes[key]?.hit));
+    && RATE_AXES.every((key) => (LATER_RATE_AXES.includes(key) && axes[key] === undefined)
+      || (finite(axes[key]?.n) && finite(axes[key]?.hit)));
+}
+
+/**
+ * 発想の軸で数える最善手か: 名前の付いた手筋の形(tesuji-shape.mjs)か、動かした駒を取られて駒を失う捨て駒。
+ * @param {string} sfen 指す前の局面
+ * @param {string} usi
+ */
+export function isInventiveMove(sfen, usi) {
+  if (!sfen || !usi) return false;
+  try {
+    if (detectTesujiShape({ sfenBefore: sfen, usi })) return true;
+    const { board, turn } = parseSfenState(sfen);
+    const applied = applyUsiToBoard(board, usi, turn);
+    if (!applied) return false;
+    return exchangeGain(applied.board, applied.moved.to, opponentOf(turn), { mode: 'full' }).gain >= SACRIFICE_GAIN;
+  } catch {
+    return false;
+  }
 }
 
 function validSummary(summary) {
@@ -183,7 +213,8 @@ function standingFor(score, color) {
  * - standing30: 30手目の形勢(自分から見た評価値)。30手に届かなければnull
  * - axes: 能力の分析(my-abilities.mjs)のための集計。損は同じ読みの中の差(measureLoss。棋力測定と同じ)。
  *   序盤・中盤・終盤・攻め(優勢のとき)・受け(劣勢のとき)の損、読み(最善手を指した割合)、安定感(損300以上の割合)、
- *   詰み(詰みが見えている局面で、詰みを逃さなかった割合)。2026-10-25より前の要約にはない
+ *   詰み(詰みが見えている局面で、詰みを逃さなかった割合)。2026-10-25より前の要約にはない。
+ *   視野・発想(LATER_RATE_AXES)は2026-10-30より前の要約にはない
  * - content: 場面採点(play-content.mjs)の、1局の中身の強さ(Lv)と幅と、場面ごとの数。場面が少なければnull。
  *   棋力カルテ(skill-profile.mjs)の材料。2026-10-27より前の要約にはない
  * @param {{ points: any[], sfens: string[], moves: string[], color: 'black' | 'white', initialSfen: string }} game
@@ -199,6 +230,8 @@ export function summarizePlayInsight({ points, sfens, moves, color, initialSfen 
     ...Object.fromEntries(RATE_AXES.map((key) => [key, { n: 0, hit: 0 }])),
   };
   const byPly = new Map(points.map((point) => [point.ply, point]));
+  /** 測れた手(形勢が決まっていない)の、能力の分析の損。視野の軸で、見落としを数える手を決める。 */
+  const axisLossAt = new Map();
   for (const point of points) {
     const measure = point.moveMeasure;
     if (!measure || measure.mover !== color) continue;
@@ -219,6 +252,13 @@ export function summarizePlayInsight({ points, sfens, moves, color, initialSfen 
     axes.reading.hit += axisLoss === 0 ? 1 : 0;
     axes.stability.n += 1;
     axes.stability.hit += axisLoss >= BIG_LOSS ? 1 : 0;
+    axisLossAt.set(point.ply, axisLoss);
+    // 発想: 最善手が手筋の形か捨て駒の局面で、それを指したか。
+    const best = byPly.get(point.ply - 1)?.bestMove;
+    if (best && isInventiveMove(sfens[point.ply - 1], best)) {
+      axes.idea.n += 1;
+      axes.idea.hit += moves[point.ply - 1] === best || axisLoss === 0 ? 1 : 0;
+    }
     const loss = Math.min(LOSS_CAP, measure.loss);
     const isBig = measure.loss >= BIG_LOSS ? 1 : 0;
     measured += 1;
@@ -242,7 +282,10 @@ export function summarizePlayInsight({ points, sfens, moves, color, initialSfen 
       mates.push({ sfen: sfens[moment.ply - 1], length: moment.missedMate, ...(line.length ? { line } : {}) });
     }
     if (moment.leftFree && (lossAt.get(moment.ply) ?? 0) >= BIG_LOSS) freeLosses += 1;
+    // 視野: 駒をタダで取られる形にした・タダの駒を取り逃した手(損300以上)。
+    if ((moment.leftFree || moment.missedFree) && (axisLossAt.get(moment.ply) ?? 0) >= BIG_LOSS) axes.vision.hit += 1;
   }
+  axes.vision.n = axes.reading.n;
   const at30 = points.find((point) => point.ply === OPENING_CHECK_PLY);
   return {
     moves: measured,

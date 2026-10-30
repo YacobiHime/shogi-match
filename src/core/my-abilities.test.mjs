@@ -46,25 +46,28 @@ describe('自分の能力', () => {
     for (const { value } of profile.view.abilities) expect(Math.abs(value - base)).toBeLessThanOrEqual(3);
   });
 
-  it('終盤だけ強い人は終盤が高く、ほかが少し低い。いちばんの武器と伸びしろを返す', () => {
-    const games = Array.from({ length: 8 }, () => gameAt({ all: 15, ending: 30, defense: 8 }));
+  it('寄せだけ強い人は寄せが高く、ほかが少し低い。いちばんの武器と伸びしろを返す', () => {
+    const games = Array.from({ length: 8 }, () => gameAt({ all: 15, attack: 30, defense: 8 }));
     const profile = myAbilityProfile({ games, playerLevel: 15 });
     const devs = profile.member.character.abilities;
-    expect(devs.ending).toBeGreaterThanOrEqual(15);
+    // 寄せは、優勢での損と詰みを逃さなかった割合を合わせるので、片方だけ高いと少し低めに出る。
+    expect(devs.attack).toBeGreaterThanOrEqual(8);
     expect(devs.defense).toBeLessThan(0);
-    expect(profile.best).toMatchObject({ key: 'ending', label: '終盤' });
+    expect(profile.best).toMatchObject({ key: 'attack', label: '寄せ' });
     expect(profile.worst).toMatchObject({ key: 'defense' });
     expect(profile.worst.hint).toMatch(/玉/);
-    expect(profile.view.type).toBe('終盤型');
+    expect(profile.view.type).toBe('寄せ型');
+    // 序盤・中盤・終盤の帯も出す。
+    expect(profile.view.phases.map(({ key }) => key)).toEqual(['opening', 'middle', 'ending']);
   });
 
-  it('詰みを逃さなかっただけでは、詰みを大きくは上げない(割合が1に張りつくため)', () => {
+  it('詰みを逃さなかっただけでは、寄せを大きくは上げない(割合が1に張りつくため)', () => {
     const games = Array.from({ length: 8 }, () => {
       const game = gameAt({ all: 20 });
       game.summary.axes.mate = { n: 6, hit: 6 };
       return game;
     });
-    expect(myAbilityProfile({ games, playerLevel: 20 }).member.character.abilities.mate).toBeLessThanOrEqual(8);
+    expect(myAbilityProfile({ games, playerLevel: 20 }).member.character.abilities.attack).toBeLessThanOrEqual(8);
   });
 
   it('前の要約(axesなし)は、序盤・中盤・終盤と安定感だけを数える', () => {
@@ -75,7 +78,7 @@ describe('自分の能力', () => {
     expect(totals.stability).toEqual({ n: 40, hit: 4 });
     expect(totals.attack.n).toBe(0);
     const profile = myAbilityProfile({ games: [old], playerLevel: 15 });
-    expect(profile.missing).toEqual(['攻め', '受け', '読み', '詰み']);
+    expect(profile.missing).toEqual(['視野', '発想', '読み', '寄せ', '受け']);
   });
 
   it('おすすめの難易度なら、6組の平均の棋士に7割勝てる強さ。難しい難易度ほど、世界の中では低い', () => {

@@ -6,12 +6,13 @@
 // - 棋風の重み(style): 最善手に近い候補の中で、攻めの手と受けの手のどちらを選びやすいか
 // - 詰みを見つける確率(mateFinding): n手詰めを、どれだけの確率で詰ますか
 // - 人間らしいCPU(human): 見落とし率・指す前の確認・判断のぶれ・詰めろに気づく手数(human-model.mjsのcharacterHuman、docs/cpu-human-model-design.mdの13-2)
+// - 最善手と上位の手が候補に入る率(engineBestVisibility・engineTopVisibility): 発想(insight。docs/player-abilities-design.mdの13-7)
 // 効果は、そのレベルの元の値に対する割合や確率のずらしで掛け、レベルに応じて上がり幅が変わるようにする。
 // 設計は docs/tournament-design.md の「棋風と特徴」。
 
 import { TOP_NODES } from './strength-settings.mjs';
 import { characterHuman } from './human-model.mjs';
-import { ABILITY_KEYS, ageAbilities, createAbilities, styleAttackOf } from './player-abilities.mjs';
+import { ABILITY_KEYS, abilityDevs, ageAbilities, createAbilities, styleAttackOf } from './player-abilities.mjs';
 import { attackersOf, findKing, isKingAttacked, opponentOf, parseSfenState, relativeFile, squareXY, xySquare } from './piece-movement.mjs';
 
 /** 局面の区切り(手数)。竜王戦の統計(ryuo-stats.mjs)と同じ。 */
@@ -115,6 +116,18 @@ export const TRAITS = Object.freeze([
     effect: (d) => ({ sharpen: d * 0.4 }),
   },
   {
+    // 視野が広い: 当たり・タダの駒・両取りを見落としにくい(人間らしいCPUの見落とし率。docs/player-abilities-design.mdの13-3)。
+    id: 'wide-vision', kind: 'strength', label: (d) => `視野が${DEGREE_WORDS[d]}広い`,
+    when: {},
+    effect: (d) => ({ blind: -0.3 * d }),
+  },
+  {
+    // 発想が豊か: 捨て駒・手筋・勝負手を思いつきやすい(最善手と上位の手が候補に入る率。insight)。
+    id: 'creative', kind: 'strength', label: (d) => `発想が${DEGREE_WORDS[d]}豊か`,
+    when: {},
+    effect: (d) => ({ insight: 0.6 * d }),
+  },
+  {
     id: 'tenacious', kind: 'strength', label: (d) => `劣勢でも${d === 2 ? 'まったく' : 'あまり'}崩れない`,
     when: { behind: true },
     effect: (d) => ({ steady: d, style: -0.3 * d }),
@@ -162,6 +175,18 @@ export const TRAITS = Object.freeze([
     effect: () => ({ sharpen: 1, steady: 2 }),
   },
   {
+    id: 'clairvoyance', kind: 'strength', tier: 'gold', label: () => '千里眼',
+    hint: '盤の全体が見えている。当たり・タダの駒・両取りの見落としがほとんどない',
+    when: {},
+    effect: () => ({ blind: -0.75, steady: 1 }),
+  },
+  {
+    id: 'myoshu', kind: 'strength', tier: 'gold', label: () => '妙手',
+    hint: 'ほかの人が思いつかない捨て駒や手筋を見つける。最善手をほとんど見逃さない',
+    when: {},
+    effect: () => ({ insight: 1.5, sharpen: 0.3 }),
+  },
+  {
     id: 'defense-master', kind: 'strength', tier: 'gold', label: () => '受けの達人',
     hint: '自玉が危ないとき、悪手がほとんどなく、手厚く受ける',
     when: { kingDanger: true },
@@ -177,6 +202,12 @@ export const TRAITS = Object.freeze([
     when: { kingDanger: true },
     // blind: 自分の駒への当たりの見落とし率を×(1+blind)にする(人間らしいCPU、6-4)。
     effect: (d) => ({ sharpen: -0.5 * d, blind: 0.5 * d }),
+  },
+  {
+    // うっかりが多い: 当たり・タダの駒を見落としやすい(見落とし率×(1+0.5×度合い))。
+    id: 'careless', kind: 'weakness', label: (d) => `うっかりが${d === 2 ? 'とても' : 'やや'}多い`,
+    when: {},
+    effect: (d) => ({ blind: 0.5 * d }),
   },
   {
     id: 'loose-when-ahead', kind: 'weakness', label: (d) => `優勢になると${DEGREE_WORDS[d]}緩みやすい`,
@@ -209,6 +240,7 @@ const EXCLUSIVE = [
   ['vs-ranging', 'vs-static'], ['tenacious', 'weak-defense'],
   ['big-stage', 'big-stage-weak'], ['defense-master', 'weak-defense'], ['defense-master', 'endgame-collapse'],
   ['demon-reading', 'time-trouble'],
+  ['wide-vision', 'careless'], ['clairvoyance', 'careless'],
 ];
 
 export function traitLabel({ id, degree }) {
@@ -273,6 +305,9 @@ const TRAIT_HINTS = Object.freeze({
   'loose-when-ahead': '大きく優勢になると、大きな悪手が出やすい',
   'big-stage-weak': '互角の終盤で、手の選び方が鈍い。決勝や番勝負に弱い',
   'time-trouble': '終盤で、読みが浅くなり、手の選び方が鈍い',
+  'wide-vision': 'いつも、当たり・タダの駒・両取りを見落としにくい',
+  creative: 'いつも、捨て駒や手筋を思いつきやすい',
+  careless: 'いつも、当たりやタダの駒をうっかり見落としやすい',
 });
 
 // ---- 個性を作る
@@ -308,6 +343,9 @@ function traitWeights({ attack, age, rook }) {
     'big-stage': 0.8,
     'big-stage-weak': 0.6,
     'time-trouble': 0.5 + (veteran ? 0.5 : 0),
+    'wide-vision': 1 + (young ? 0.3 : 0),
+    creative: 1 + (young ? 0.5 : 0),
+    careless: 0.8 + (age >= 50 ? 0.5 : 0),
     // 物語の人物だけの特徴と、金の特殊能力(addGoldTraitで別に付ける)は、ふつうには選ばない。
     'late-bloom': 0,
     ...Object.fromEntries(GOLD_TRAIT_IDS.map((id) => [id, 0])),
@@ -321,14 +359,15 @@ export function goldTraitChance(rating) {
 
 /** いちばん高い能力に合う、金の特殊能力。 */
 const GOLD_FOR_ABILITY = Object.freeze({
-  opening: 'research-demon', middle: 'grand-view', ending: 'comeback', attack: 'comeback',
-  defense: 'defense-master', reading: 'demon-reading', mate: 'demon-reading', stability: 'grand-view',
+  opening: 'research-demon', judgment: 'grand-view', vision: 'clairvoyance', idea: 'myoshu',
+  reading: 'demon-reading', stability: 'grand-view', attack: 'comeback', defense: 'defense-master',
 });
 
 /** 金の特殊能力を1つ足す(まだ持っていなければ)。いちばん高い能力に合うものを選ぶ。 */
 export function addGoldTrait(character) {
-  if (!character?.abilities || (character.traits ?? []).some(({ id }) => isGoldTrait(id))) return character;
-  const best = [...ABILITY_KEYS].sort((a, b) => (character.abilities[b] ?? 0) - (character.abilities[a] ?? 0))[0];
+  const devs = abilityDevs(character);
+  if (!devs || (character.traits ?? []).some(({ id }) => isGoldTrait(id))) return character;
+  const best = [...ABILITY_KEYS].sort((a, b) => (devs[b] ?? 0) - (devs[a] ?? 0))[0];
   const id = GOLD_FOR_ABILITY[best];
   const blocked = EXCLUSIVE.some(([a, b]) => (a === id && character.traits.some((trait) => trait.id === b)) || (b === id && character.traits.some((trait) => trait.id === a)));
   if (blocked) return character;
@@ -428,7 +467,7 @@ export function ageCharacter(rng, character, { age, rating, style }) {
  */
 /** 特徴が「出た」と言える、手の種類と特徴の組。対局中の札(match-presence.mjs)と結果の画面で同じものを使う。 */
 const TRAIT_MOMENT_RULES = Object.freeze([
-  ['endgame-collapse', 'oversight'], ['tsume', 'mate'],
+  ['endgame-collapse', 'oversight'], ['careless', 'oversight'], ['tsume', 'mate'],
   ['fast-attack', 'style'], ['endgame-defense', 'style'], ['tenacious', 'style'],
   ['comeback', 'style'], ['defense-master', 'style'],
 ]);
@@ -451,6 +490,7 @@ export function summarizeTraitMoments(moves) {
 
 const MOMENT_TEXT = Object.freeze({
   'endgame-collapse': '終盤での頓死の癖が出ていたよ。',
+  careless: 'うっかりの癖が出ていたよ。',
   tsume: '詰将棋の得意な人らしく、詰みをしっかり読み切っていたね。',
   'fast-attack': '寄せの速さが出ていたよ。',
   'endgame-defense': '終盤の正確な受けが出ていたよ。',
@@ -542,28 +582,40 @@ export function activeTraits(character, situation) {
 const round2 = (value) => Math.round(value * 100) / 100;
 
 /**
- * 能力の配分(平均からの差、±30まで)の、この場面での効き方。どれも特徴の「やや」と同じくらいを上限にする。
- * - 序盤・中盤・終盤: その局面で、差30で手の選び方が「やや」鋭い(sharpen 0.5)
- * - 攻め・受け: 相手玉に迫れる・自玉が危ない場面で、差40でsharpen 0.5
- * - 読み: 探索量を、差30で×1.41、−30で×0.71
- * - 詰み: 詰みを見つける確率を、差15ごとにロジット1ずらす
- * - 安定感: 差12以上で悪手を抑える(25以上で「とても」)、−15以下で悪手が増える
+ * 能力の配分(平均からの差、±30まで)の、この場面での効き方(docs/player-abilities-design.mdの13-7)。
+ * どれも特徴の「やや」と同じくらいを上限にし、人間らしいCPUのつまみ(human-model.mjsのcharacterHuman)に1つずつ対応させる。
+ * - 研究: 序盤で、差30で手の選び方が「やや」鋭い(sharpen 0.5)
+ * - 大局観: 中盤で差30でsharpen 0.5(ほかの局面は半分。判断のぶれ)、大局観の重みwを差30で±0.2(wShift)
+ * - 視野: 見落とし率を、差30で×0.5、−30で×1.5(blind)
+ * - 発想: 最善手と上位の手が候補に入る率を、差15ごとにロジット1ずらす(insight)
+ * - 読み: 探索量を、差30で×1.41、−30で×0.71(取り合いの手数も)
+ * - 安定感: 差12以上で悪手を抑える(25以上で「とても」。確認と悪手の回数)、−15以下で悪手が増える
+ * - 寄せ: 相手玉に迫れる場面で、差40でsharpen 0.5。詰みを見つける確率を、差15ごとにロジット1ずらす(mate)
+ * - 受け: 自玉が危ない場面で、差40でsharpen 0.5。相手の詰めろに気づく手数を差10ごとに1手(sight)
+ * - 終盤は、寄せと受けの平均でも鋭さが変わる
  * @param {Record<string, number>} abilities
  * @param {{ phase?: string, kingDanger?: boolean, attackChance?: boolean }} situation
  */
 export function abilityEffect(abilities, situation) {
-  const dev = (key) => clamp(abilities?.[key] ?? 0, -30, 30);
+  const dev = (key) => clamp(Number(abilities?.[key]) || 0, -30, 30);
   let sharpen = 0;
-  if (situation?.phase) sharpen += dev(situation.phase) / 60;
+  if (situation?.phase === 'opening') sharpen += dev('opening') / 60;
+  sharpen += dev('judgment') / (situation?.phase === 'middle' ? 60 : 120);
+  if (situation?.phase === 'ending') sharpen += (dev('attack') + dev('defense')) / 120;
   if (situation?.attackChance) sharpen += dev('attack') / 80;
   if (situation?.kingDanger) sharpen += dev('defense') / 80;
   const stability = dev('stability');
+  const insight = dev('idea') / 15;
   return {
     nodes: 2 ** (dev('reading') / 60),
     sharpen,
     steady: stability >= 25 ? 2 : stability >= 12 ? 1 : 0,
     loose: stability <= -15 ? 1 : 0,
-    mate: dev('mate') / 15,
+    mate: dev('attack') / 15,
+    insight,
+    blind: -dev('vision') / 60,
+    wShift: dev('judgment') / 150,
+    sight: dev('defense') / 10,
   };
 }
 
@@ -585,6 +637,9 @@ export function applyCharacter(strength, character, situation, { skill }) {
   let loose = 0;
   let mate = 0;
   let blind = 0;
+  let wShift = 0;
+  let sight = 0;
+  let insight = 0;
   let style = character.attack ?? 0;
   const active = activeTraits(character, situation);
   for (const { id, degree } of active) {
@@ -596,17 +651,24 @@ export function applyCharacter(strength, character, situation, { skill }) {
     loose = Math.max(loose, effect.loose ?? 0);
     mate += effect.mate ?? 0;
     blind += effect.blind ?? 0;
+    insight += effect.insight ?? 0;
     style += effect.style ?? 0;
   }
   next.activeTraits = active.map(({ id }) => id);
   // 能力の配分(平均からの差)を、同じつまみで効かせる。上下の合計が0に近いので、強さ全体はLvのまま、場面ごとに強弱が出る。
-  if (character.abilities) {
-    const effect = abilityEffect(character.abilities, situation);
+  // 前の項目で保存した配分は、今の項目へ移しかえて読む。
+  const devs = abilityDevs(character);
+  if (devs) {
+    const effect = abilityEffect(devs, situation);
     nodes *= effect.nodes;
     sharpen += effect.sharpen;
     steady = Math.max(steady, effect.steady);
     loose = Math.max(loose, effect.loose);
     mate += effect.mate;
+    blind += effect.blind;
+    wShift += effect.wShift;
+    sight += effect.sight;
+    insight += effect.insight;
   }
   // 最善手だけを指す設定(Lv40「藤井聡太並み」)は、上限なので、探索量も手の選び方も変えない。
   const bestOnly = next.bestMoveRate >= 1;
@@ -656,7 +718,13 @@ export function applyCharacter(strength, character, situation, { skill }) {
     for (const key of ["mate1", "mate3"]) next.perception[key] = adjust(next.perception[key], 0.5 * mate);
   }
   // 人間らしいCPUは、同じつまみを見落とし率・確認・ぶれ・詰めろに気づく手数・取り合いの手数のずれにする(13-2)。
-  if (next.human && !bestOnly) next.human = characterHuman(next.human, { sharpen, steady, overlook, loose, mate, blind, nodes });
+  if (next.human && !bestOnly) next.human = characterHuman(next.human, { sharpen, steady, overlook, loose, mate, blind, nodes, wShift, sight });
+  // 発想: 最善手と上位の手が候補に入る率(気づき・目に付く手)を、ロジットでずらす(13-7)。最善手だけを指す設定は変えない。
+  if (insight !== 0 && !bestOnly) {
+    for (const key of ['engineBestVisibility', 'engineTopVisibility']) {
+      if (Number.isFinite(next[key])) next[key] = round2(shiftProbability(Math.min(next[key], 0.995), insight));
+    }
+  }
   // 詰将棋が得意: n手詰めを見つける確率を、ロジットで+1.0(やや)・+2.0(とても)ずらす(中心の手数が約1.4・2.9手延びるのと同じ)。
   // 確率が半分前後の長さの詰みで最も上がり、そのレベルで確実に解ける短い詰みや、とても長い詰みでは、あまり変わらない。
   // 詰みの能力が低い棋士は、逆に中心の手数が縮む(1手より短くはしない)。

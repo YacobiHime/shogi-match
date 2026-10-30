@@ -89,6 +89,8 @@ type GuidedReviewDeps = {
   invalidateReviewCoach: () => void;
   /** CPUの手ごとに、人間らしいCPUが気づかなかったこと(相手の手の一言に理由を足す)。 */
   cpuNotes: () => Record<number, CpuOversight[]>;
+  /** 大会の相手(名前と能力のランク)。CPUが間違えた理由に、低い能力を添える。 */
+  reviewOpponent: () => { name: string; ranks: Record<string, string> } | null;
 };
 
 /*
@@ -120,6 +122,7 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
     applyMove,
     invalidateReviewCoach,
     cpuNotes,
+    reviewOpponent,
   } = deps;
 
   const guidedReview = ref<GuidedReviewState | null>(null);
@@ -228,6 +231,7 @@ export function useGuidedReview(deps: GuidedReviewDeps) {
       moverForPly: (ply: number) => ((ply % 2 === 1) === (firstMover === "black") ? "black" : "white"),
       initialSfen: matchInitialSfen.value,
       cpuNotes: cpuNotes(),
+      opponent: reviewOpponent(),
     }) as GuidedReviewScript;
     saveMissedMatesAsProblems(guidedReviewScript);
     const winner = winnerColor();

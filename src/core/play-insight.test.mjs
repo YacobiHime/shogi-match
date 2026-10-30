@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { clearExhibitRecords } from './exhibit-reset.mjs';
 import {
   CONTENT_MIN_MOVES, MAX_INSIGHT_GAMES, PLAY_INSIGHT_KEY, addAnalyzedGame, completePlayInsight, contentStrength, createPlayInsight, detectWeaknesses,
-  enqueuePlayInsight, loadPlayInsight, recordPractice, savePlayInsight, summarizePlayInsight,
+  enqueuePlayInsight, isInventiveMove, loadPlayInsight, recordPractice, savePlayInsight, summarizePlayInsight,
 } from './play-insight.mjs';
 import { reviewProblemId } from './review-problems.mjs';
 import { levelForAverageLoss } from './skill-estimate.mjs';
@@ -119,6 +119,31 @@ describe('1局の要約', () => {
     expect(axes.reading).toEqual({ n: 2, hit: 1 });
     expect(axes.stability).toEqual({ n: 2, hit: 1 });
     expect(axes.mate).toEqual({ n: 1, hit: 0 });
+    // 視野・発想(2026-10-30に足した軸)。局面がないので、機会は数えない。
+    expect(axes.vision).toEqual({ n: 2, hit: 0 });
+    expect(axes.idea).toEqual({ n: 0, hit: 0 });
+  });
+
+  it('発想の軸で数える最善手は、名前の付いた手筋の形か捨て駒。視野・発想のない前の要約も読める', () => {
+    // ふんどしの桂(飛車と金の両取り)。
+    expect(isInventiveMove('k8/9/9/3r1g3/9/9/9/9/K8 b N 1', 'N*5f')).toBe(true);
+    // ただの歩突き。
+    expect(isInventiveMove(STANDARD_SFEN, '7g7f')).toBe(false);
+    // 角を取られる場所へ打つ(捨て駒)。
+    expect(isInventiveMove('4k4/4g4/9/9/9/9/9/9/4K4 b B 1', 'B*5c')).toBe(true);
+    expect(isInventiveMove('', '7g7f')).toBe(false);
+    const storage = memoryStorage();
+    const loss = { n: 4, sum: 200 };
+    const rate = { n: 4, hit: 1 };
+    // 2026-10-25〜10-29の要約: 軸はあるが、視野・発想がない。
+    const before = { ...summary(), axes: { opening: loss, middle: loss, ending: loss, attack: loss, defense: loss, reading: rate, stability: rate, mate: rate } };
+    const insight = completePlayInsight(createPlayInsight(), { at: 1, level: 3, outcome: 'win', color: 'black' }, before);
+    savePlayInsight(storage, insight);
+    expect(loadPlayInsight(storage).games[0].summary.axes).toEqual(before.axes);
+    // 視野の形が壊れた要約は、その対局ごと捨てる(前からの読み方と同じ)。
+    savePlayInsight(storage, completePlayInsight(createPlayInsight(), { at: 2, level: 3, outcome: 'win', color: 'black' },
+      { ...before, axes: { ...before.axes, vision: { n: 'x' } } }));
+    expect(loadPlayInsight(storage).games).toEqual([]);
   });
 
   it('30手目の形勢は、自分から見た値', () => {

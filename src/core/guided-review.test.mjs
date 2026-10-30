@@ -161,6 +161,15 @@ describe('CPUが間違えた理由(13-4)', () => {
     expect(oversightReason({ tookFree: null }, previous, [{ kind: 'free', square: '5e', piece: 'S', hard: [] }])).toBe('');
   });
 
+  test('大会の相手なら、その間違いに当たる能力が低いとき(D以下)だけ、ランクを添える', () => {
+    const info = { leftFree: { square: '4h', name: '金' } };
+    const low = { name: '中村', ranks: { vision: 'D', defense: 'B', attack: 'E' } };
+    expect(oversightReason(info, null, [hanging], low)).toBe('相手は、遠くの飛車の利きに気づかなかったみたい。中村さんは視野がDだからね。');
+    expect(oversightReason({ allowedMate: true }, null, [{ kind: 'mate', plies: 7 }], low)).toBe('相手は、詰みの筋に気づかなかったみたい。');
+    expect(oversightReason({ missedMate: 7 }, null, [{ kind: 'own-mate', plies: 7 }], low)).toBe('長い詰みは、相手にも見えにくかったみたい。中村さんは寄せがEだからね。');
+    expect(oversightReason(info, null, [hanging], { name: '中村', ranks: { vision: 'C' } })).toBe('相手は、遠くの飛車の利きに気づかなかったみたい。');
+  });
+
   test('保存から戻す記録は、形をそろえ、待ったで戻した手を捨てる', () => {
     expect(normalizeCpuNotes({ 1: [hanging, { kind: 'x' }], 3: [{ kind: 'mate', plies: 5 }], 9: [hanging], a: [hanging] }, 4))
       .toEqual({ 1: [hanging], 3: [{ kind: 'mate', plies: 5 }] });

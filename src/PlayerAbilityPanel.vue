@@ -32,6 +32,13 @@
     </ul>
     <template v-if="part !== 'chart'">
       <p v-if="view.type" class="player-ability__type">{{ view.type }}</p>
+      <!-- 序盤・中盤・終盤の強さ(能力から計算する帯。docs/player-abilities-design.mdの13-7)。1行に収め、文字のランクで読む。 -->
+      <p v-if="view.phases?.length" class="player-ability__phases" aria-label="局面ごとの強さ" data-ability-phases>
+        <span v-for="phase in view.phases" :key="phase.key" class="player-ability__phase" :title="`${phase.label} ${phase.value}`">
+          <span class="player-ability__label">{{ phase.label }}</span>
+          <b class="player-ability__rank" :class="`player-ability__rank--${phase.rank}`" :data-rank="phase.rank">{{ phase.rank }}</b>
+        </span>
+      </p>
       <ul v-if="view.specials.length" class="player-ability__specials" aria-label="特殊能力">
         <li v-for="chip in view.specials" :key="chip.id" :data-special="chip.tier">
           <span class="player-ability__chip" :class="`player-ability__chip--${chip.tier}`">{{ TIER_MARK[chip.tier] }}{{ chip.label }}</span>
@@ -69,6 +76,8 @@ import RadarChart from "./RadarChart.vue";
 type AbilityView = {
   abilities: { key: string; label: string; hint: string; value: number; rank: string }[];
   type: string;
+  /** 序盤・中盤・終盤の強さ(player-abilities.mjsのphaseStrengths)。 */
+  phases?: { key: string; label: string; value: number; rank: string }[];
   specials: { id: string; tier: string; label: string; hint: string }[];
   staticShare: number | null;
   openings: { id: string; label: string; rook: string; share: number; castles: { id: string; label: string; share: number }[]; record: string }[];
@@ -131,6 +140,8 @@ const shownOpenings = computed(() => props.view.openings.slice(0, props.compact 
 .shogi-game .player-ability__legend span::before { display: inline-block; width: 1.6em; margin-right: 0.35em; vertical-align: middle; border-top: 3px solid #f1a54c; content: ""; }
 .shogi-game .player-ability__legend-compare::before { border-top-style: dashed !important; border-top-color: #8fc5ff !important; }
 .shogi-game .player-ability__type { margin: 0; color: #f1a54c; font-size: 0.85em; font-weight: 800; }
+.shogi-game .player-ability__phases { display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; margin: 0; }
+.shogi-game .player-ability__phase { display: inline-grid; grid-template-columns: auto 1.7em; align-items: center; gap: 0.3rem; }
 .shogi-game .player-ability__specials { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .player-ability--compact .player-ability__specials { display: flex; flex-wrap: wrap; }
 .shogi-game .player-ability__specials li { display: grid; gap: 0.1rem; }

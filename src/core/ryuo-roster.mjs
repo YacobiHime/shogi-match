@@ -9,12 +9,14 @@ import { GROUP_DAN_WEIGHTS, SPECIAL_RATING_OFFSET } from './ryuo-data.mjs';
 import { GROUP_MEAN_RATING, GROUP_RATING_SPREAD, PRO_MEAN_RATING, PRO_RATING_SD } from './ryuo-strength.mjs';
 import { createRng, gauss, weightedPick } from './ryuo-random.mjs';
 import { ageCharacter, createCharacter, withAbilities } from './player-character.mjs';
+import { isLegacyAbilities, migrateAbilityDevs } from './player-abilities.mjs';
 import { newName } from './ryuo-names.mjs';
 import { HANANE, STORY_PEOPLE, YOSHIHIKO, YOSHIHIKO_RATING, addStoryMembers, storyCharacter, storyMemberId } from './ryuo-story.mjs';
 import { createRepertoire, styleEntry, withUsage } from './ryuo-repertoire.mjs';
 import { driftUsage } from './opening-usage.mjs';
 import {
   DAN_ORDER,
+  applyDanRules,
   assignJunni,
   careerSummary,
   createRecord,
@@ -149,7 +151,7 @@ export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
   const rng = createRng((seed ^ 0x9e3779b9) >>> 0);
   const roster = {
     version: ROSTER_VERSION, season: 0, nextId: 1, players: {}, holder: USER_HOLDER, history: [], retired: 0, ratingMean: 0, ratingSd: 0,
-    titles: {}, titleHistory: [], awards: [], vsUser: {}, lastYear: null,
+    titles: {}, titleHistory: [], awards: [], vsUser: {}, lastYear: null, abilityModel: ABILITY_MODEL,
   };
   const used = new Set();
   // 名簿の竜王は、天鷺善彦(竜王を含む六冠。履歴を作ったあとに加える)。プレイヤーが竜王なら、善彦は1組の棋士。
@@ -168,6 +170,8 @@ export function createRoster({ seed, userGroup = 6, userIsChampion = false }) {
   addStoryMembers(roster, { userGroup, userIsChampion, fresh: true });
   // 順位戦の世界(クラスごとの順位の並び・降級点・名人)。名人戦の期と、名人戦に出る前の自動の期で進む。
   createJunniWorld(roster);
+  // 世界を作るとき、定員をそろえるためにクラスが上がる棋士がいる(A級なら八段など)。クラスに合わせて段位を当て直す。
+  for (const member of Object.values(roster.players)) applyDanRules(member);
   roster.ratingMean = Math.round(proMean(roster));
   roster.ratingSd = Math.round(proSd(roster));
   roster.ratingModel = RATING_MODEL;
@@ -190,7 +194,10 @@ export function withStoryMembers(roster, options) {
   if (!roster || (storyMemberId(roster, HANANE) && storyMemberId(roster, YOSHIHIKO))) return roster;
   const next = structuredClone(roster);
   addStoryMembers(next, options);
-  if (next.junni) syncJunni(next);
+  if (next.junni) {
+    syncJunni(next);
+    for (const member of Object.values(next.players)) applyDanRules(member);
+  }
   return next;
 }
 
@@ -492,13 +499,37 @@ export function rescaleRosterRatings(roster) {
   return next;
 }
 
+/**
+ * 能力の項目の版。2は、研究・大局観・視野・発想・読み・安定感・寄せ・受け(2026-10-30。docs/player-abilities-design.mdの13-7)。
+ * 前の項目(序盤・中盤・終盤・攻め・受け・読み・詰み・安定感)の名簿は、読むときに移しかえる(remapRosterAbilities)。
+ */
+export const ABILITY_MODEL = 2;
+
+/**
+ * 前の項目の能力の配分を、今の項目へ移しかえる(13-7)。強さ(レーティング)・特徴・タイトルは変えない。
+ * 物語の人物は、人物の決まりにそろえる。同じ配分からは、いつも同じ結果になる。
+ */
+export function remapRosterAbilities(roster) {
+  if (!roster || roster.abilityModel === ABILITY_MODEL) return roster;
+  const next = structuredClone(roster);
+  for (const member of members(next)) {
+    if (member.story && STORY_PEOPLE[member.story]) {
+      member.character = storyCharacter(member.story);
+      continue;
+    }
+    if (isLegacyAbilities(member.character?.abilities)) member.character.abilities = migrateAbilityDevs(member.character.abilities);
+  }
+  next.abilityModel = ABILITY_MODEL;
+  return next;
+}
+
 export function loadRoster(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(ROSTER_STORAGE_KEY) ?? 'null');
     if (!parsed || !parsed.players || typeof parsed.players !== 'object') return null;
-    if (parsed.version === 2) return rescaleRosterRatings(migrateRoster(parsed));
+    if (parsed.version === 2) return remapRosterAbilities(rescaleRosterRatings(migrateRoster(parsed)));
     if (parsed.version !== ROSTER_VERSION) return null;
-    return rescaleRosterRatings(parsed);
+    return remapRosterAbilities(rescaleRosterRatings(parsed));
   } catch {
     return null;
   }

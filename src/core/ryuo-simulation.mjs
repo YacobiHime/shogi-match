@@ -5,6 +5,7 @@
 // だから、序盤型が逃げ切る・終盤型が逆転する、という勝ち方の違いは残り、勝率はレーティングの差どおりになる。画面に依存しない。
 
 import { matchupBonus } from './player-character.mjs';
+import { abilityDevs } from './player-abilities.mjs';
 import { winProbability } from './ryuo-strength.mjs';
 import { pickGameStyle, styleEntry } from './ryuo-repertoire.mjs';
 import { staticShare } from './opening-usage.mjs';
@@ -56,7 +57,8 @@ function gaussOf(rng) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng.next());
 }
 
-const dev = (member, key) => clamp(member?.character?.abilities?.[key] ?? 0, -30, 30);
+// 前の項目で保存した配分は、今の項目へ移しかえて読む(player-abilities.mjsのabilityDevs)。
+const dev = (member, key) => clamp(Number(abilityDevs(member?.character)?.[key]) || 0, -30, 30);
 const traitDegree = (member, id) => {
   const trait = member?.character?.traits?.find((entry) => entry.id === id);
   return trait ? (trait.degree === 2 ? 2 : 1) : 0;
@@ -116,13 +118,18 @@ export function simulateMemberGame(rng, a, b, { ratingOf = (member) => member.ra
   };
   // 序盤より中盤、中盤より終盤と強くなる(羽音)。合わせると0。
   const bloom = (phase) => (traitDegree(a, 'late-bloom') - traitDegree(b, 'late-bloom')) * (phase === 0 ? -10 : phase === 2 ? 10 : 0);
+  // 寄せと受けは、かみ合わせで効く(docs/player-abilities-design.mdの13-7)。攻める側の寄せと、受ける側の受けの差。
+  // 勝ち負けには、どちらが攻める側になりやすいか(レーティングの差からの見込み)で重みをつけ、展開では中盤を終えて優勢な側が攻める。
+  const yoseA = dev(a, 'attack') - dev(b, 'defense');
+  const yoseB = dev(b, 'attack') - dev(a, 'defense');
+  const leadA = winProbability(ratingOf(a) - ratingOf(b), 0);
   const abilityEdge = [
     ABILITY_POINT * (dev(a, 'opening') - dev(b, 'opening')),
-    ABILITY_POINT * (dev(a, 'middle') - dev(b, 'middle'))
-      + (ABILITY_POINT / 2) * (dev(a, 'attack') + dev(a, 'defense') - dev(b, 'attack') - dev(b, 'defense')),
-    ABILITY_POINT * (dev(a, 'ending') - dev(b, 'ending'))
-      + (ABILITY_POINT / 2) * (dev(a, 'reading') - dev(b, 'reading') + dev(a, 'mate') - dev(b, 'mate')),
+    ABILITY_POINT * (dev(a, 'judgment') - dev(b, 'judgment')) + ABILITY_POINT * 0.75 * (dev(a, 'vision') - dev(b, 'vision'))
+      + (ABILITY_POINT / 2) * (dev(a, 'idea') - dev(b, 'idea')),
+    (ABILITY_POINT / 2) * (dev(a, 'reading') - dev(b, 'reading')),
   ];
+  const yoseEdge = ABILITY_POINT * (leadA * yoseA - (1 - leadA) * yoseB);
   const bigEdge = big
     ? BIG_STAGE_ELO * (traitDegree(a, 'big-stage') - traitDegree(a, 'big-stage-weak') - traitDegree(b, 'big-stage') + traitDegree(b, 'big-stage-weak'))
     : 0;
@@ -130,7 +137,7 @@ export function simulateMemberGame(rng, a, b, { ratingOf = (member) => member.ra
   // 勝ち負け: レーティングの差 + 先手 + 能力・相性・特殊能力の上乗せ(上限つき)を、Elo式の勝率にする。
   const comebackEdge = COMEBACK_EDGE * (traitDegree(a, 'comeback') - traitDegree(b, 'comeback'));
   const edge = clamp(
-    style + abilityEdge[0] + abilityEdge[1] + abilityEdge[2] + gold(0) + gold(1) + gold(2) + bigEdge + comebackEdge,
+    style + abilityEdge[0] + abilityEdge[1] + abilityEdge[2] + yoseEdge + gold(0) + gold(1) + gold(2) + bigEdge + comebackEdge,
     -STYLE_EDGE_MAX,
     STYLE_EDGE_MAX,
   );
@@ -142,7 +149,9 @@ export function simulateMemberGame(rng, a, b, { ratingOf = (member) => member.ra
   const story = () => {
     const p1 = PHASE_SHARES[0] * delta + abilityEdge[0] + firstMove + gold(0) + bloom(0) + gaussOf(rng) * noise;
     const p2 = p1 + PHASE_SHARES[1] * delta + abilityEdge[1] + gold(1) + gaussOf(rng) * noise;
-    let p3 = p2 + PHASE_SHARES[2] * delta + abilityEdge[2] + gold(2) + bloom(2) + gaussOf(rng) * noise;
+    // 中盤を終えて優勢な側が攻め、相手の受けとぶつかる。
+    const yose = ABILITY_POINT * (p2 > 0 ? yoseA : -yoseB);
+    let p3 = p2 + PHASE_SHARES[2] * delta + abilityEdge[2] + yose + gold(2) + bloom(2) + gaussOf(rng) * noise;
     // 安定感の低い棋士は、優勢から崩れることがある。
     if (p2 > 0) p3 -= (p2 * clamp(-dev(a, 'stability'), 0, 30)) / 120;
     else p3 += (-p2 * clamp(-dev(b, 'stability'), 0, 30)) / 120;

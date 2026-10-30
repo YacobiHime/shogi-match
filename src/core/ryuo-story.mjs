@@ -63,8 +63,8 @@ export const STORY_PEOPLE = Object.freeze({
     name: '天鷺羽音',
     reading: 'あまさぎ はのん',
     age: 17,
-    // 序盤は並み、読み・詰み・終盤がずば抜ける(late-bloom)。若く、調子の波はまだある。
-    abilities: { opening: -12, middle: 0, ending: 9, attack: 1, defense: -2, reading: 12, mate: 10, stability: -6 },
+    // 研究は並み、読み・発想・寄せがずば抜ける(late-bloom)。若く、視野は広いが、調子の波はまだある。
+    abilities: { opening: -12, judgment: 0, vision: 6, idea: 10, reading: 12, stability: -6, attack: 10, defense: 2 },
     repertoire: {
       party: 'static',
       styles: ['aigakari', 'kakugawari'],
@@ -83,7 +83,8 @@ export const STORY_PEOPLE = Object.freeze({
     // 娘の羽音がまだ高校生なので、40代前半。
     age: 43,
     // 羽生善治を参考にしたオールラウンダー。武器は、中盤の形勢判断(大局観)と、深く正確な読み。ほかもA以上で、穴がない。
-    abilities: { opening: -6, middle: 6, ending: 2, attack: -5, defense: -4, reading: 6, mate: -2, stability: 4 },
+    // 発想(羽生マジックのような、思いもよらない一手)も高い。
+    abilities: { opening: -6, judgment: 6, vision: 4, idea: 5, reading: 6, stability: 4, attack: -4, defense: -3 },
     repertoire: {
       party: 'both',
       styles: ['kakugawari-kg', 'yagura', 'shiken-mino'],

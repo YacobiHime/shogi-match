@@ -1,7 +1,7 @@
 // 棋士名鑑。名簿から、画面に出す一覧とプロフィールを作る。画面に依存しない。
 
 import { describeCharacter, specialAbilityChips } from './player-character.mjs';
-import { ABILITIES, abilityRank, abilityTypeLabel, abilityValues } from './player-abilities.mjs';
+import { ABILITIES, abilityRank, abilityTypeLabel, abilityValues, phaseStrengths } from './player-abilities.mjs';
 import { proOpening, staticShare, usageRows } from './opening-usage.mjs';
 import { HOW_LABELS } from './ryuo-simulation.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
@@ -72,6 +72,7 @@ export function memberAbilityView(member) {
   return {
     abilities: ABILITIES.map(({ key, label, hint }) => ({ key, label, hint, value: values[key], rank: abilityRank(values[key]) })),
     type: abilityTypeLabel(member),
+    phases: phaseStrengths(values),
     specials: specialAbilityChips(member.character),
     staticShare: usage ? staticShare(usage) : null,
     openings: usageRows(usage).slice(0, 6).map((row) => ({

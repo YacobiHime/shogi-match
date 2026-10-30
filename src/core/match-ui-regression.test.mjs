@@ -16,7 +16,9 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/cpuNotes = normalizeCpuNotes\(snapshot\.cpuNotes, moves\.length\);/);
     expect(source).toMatch(/cpuBlunderPlies = \[\];\s*cpuNotes = \{\};/);
     expect(source).toMatch(/cpuNotes: \(\) => cpuNotes,/);
-    expect(source).toMatch(/initialSfen: matchInitialSfen\.value,\s*cpuNotes: cpuNotes\(\),/);
+    expect(source).toMatch(/initialSfen: matchInitialSfen\.value,\s*cpuNotes: cpuNotes\(\),\s*opponent: reviewOpponent\(\),/);
+    // 大会の相手なら、名前と能力のランクを渡す(低い能力を理由に添える。docs/player-abilities-design.mdの13-7)。
+    expect(source).toMatch(/reviewOpponent: \(\) => \{\s*const member = ryuoOpponent\.value;/);
   });
   it("toggles a material balance chip and capture numbers in every match kind", () => {
     expect(source).toMatch(/aria-label="駒の損得を表示"\s*:aria-pressed="materialGuideEnabled"[\s\S]*?@click="toggleMaterialGuide"/);
