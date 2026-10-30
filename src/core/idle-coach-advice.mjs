@@ -4,7 +4,7 @@ export const IDLE_COACH_DELAY_MS = 10000;
 /**
  * @param {{
  *   usi?: string, formattedMove?: string, pieceType?: string, capturedPieceType?: string, toRank?: number,
- *   color?: string, lastMove?: string, givesCheck?: boolean, insight?: { key: string, text: string } | null,
+ *   color?: string, lastMove?: string, givesCheck?: boolean, insight?: { key: string, text: string, reason?: string } | null,
  * }} [options]
  *   insight: 最善手の種類の一言(coach-insight.mjsのmeaningAdvice)。分かるときは、一般論の代わりにこの局面の中身を言う
  *   (docs/coach-advice-expansion-design.mdのN1)。同歩の取り返しは、今までどおり先に言う。
@@ -30,7 +30,7 @@ export function getIdleCoachAdvice({
   ) {
     return { key: 'idle-recapture-pawn', text: 'ここは同歩で良さそうじゃない？' };
   }
-  if (insight) return { key: `idle-${insight.key.replace(/^candidate-evaluation-cliff-/, '')}`, text: insight.text };
+  if (insight) return { key: `idle-${insight.key.replace(/^candidate-evaluation-cliff-/, '')}`, text: insight.text, ...(insight.reason ? { reason: insight.reason } : {}) };
   if (/^[A-Z]\*/.test(usi)) {
     return { key: 'idle-drop', text: '持ち駒は何があるかな？ 使えそうな駒を探してみよう！' };
   }

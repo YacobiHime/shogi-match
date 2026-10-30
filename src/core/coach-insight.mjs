@@ -9,7 +9,8 @@
  * 段階3(11章): N6 格言・N9 大会の物語・N11 もう一言(「なぜ？」とさっきの話)。
  * どれも、すでに読んでいる結果だけを使い、新しい探索は足さない。台詞はこのファイルにまとめる。
  */
-import { detectTesuji } from './move-tesuji.mjs';
+import { detectTesuji, TESUJI_HINTS } from './move-tesuji.mjs';
+import { detectTesujiShape, tesujiShape } from './tesuji-shape.mjs';
 import { exchangeGain, captureSwing } from './exchange-eval.mjs';
 import { value } from './logic-position.mjs';
 import { mateLineByChecks } from './engine-mate-check.mjs';
@@ -63,10 +64,19 @@ function distance(a, b) {
  * 上から先に当たったものにする: タダで取る → 手筋 → 駒得の取り → 王手 → 逃げる → 打つ → 大駒を働かせる → 守る → 取り合い。
  * @param {string} sfen 手番の側が指す前の局面
  * @param {string} usi
+ * reasonは「なぜ？」で言う、その手の中身(手筋の名前・ねらう駒・取れる駒)。分からなければ付けない(11-4)。
  * @returns {{ kind: 'free-capture' | 'tesuji' | 'capture-gain' | 'check' | 'escape' | 'drop' | 'activate' | 'defend' | 'capture',
- *   piece?: string, captured?: string, square?: string, tesuji?: string } | null}
+ *   piece?: string, captured?: string, square?: string, tesuji?: string, reason?: string } | null}
  */
 export function moveMeaning(sfen, usi) {
+  const meaning = classifyMove(sfen, usi);
+  if (!meaning) return null;
+  const reason = concreteReason(sfen, usi, meaning);
+  return reason ? { ...meaning, reason } : meaning;
+}
+
+/** moveMeaningの種類(上から先に当たったもの)。 */
+function classifyMove(sfen, usi) {
   const { board, turn } = parseSfenState(sfen);
   const parsed = parseUsiMove(usi);
   const applied = parsed ? applyUsiToBoard(board, usi, turn) : null;
@@ -108,6 +118,72 @@ export function moveMeaning(sfen, usi) {
   return null;
 }
 
+/** 「なぜ？」で手筋の形の中身を言う一言(TESUJI_HINTSのうち、今の局面の話として読めるもの)。 */
+const TESUJI_REASON_IDS = new Set(['head-gold', 'double-check', 'knight-check', 'gold-bottom-pawn', 'tokin-on-53']);
+
+/**
+ * 「なぜ？」で言う、その手の中身(11-4)。一言(meaningAdvice)と食い違わないよう、取る手・逃げる手はその話を、
+ * ほかは名前の付いた手筋の形(tesuji-shape.mjs)を先に言う。「2つ当たる升を探そう」のような探し方ではなく、何ができるかを言う。
+ * @param {string} sfen
+ * @param {string} usi
+ * @param {NonNullable<ReturnType<typeof classifyMove>>} meaning
+ */
+function concreteReason(sfen, usi, meaning) {
+  const { board, turn } = parseSfenState(sfen);
+  const parsed = parseUsiMove(usi);
+  const applied = parsed ? applyUsiToBoard(board, usi, turn) : null;
+  if (!parsed || !applied) return '';
+  const after = applied.board;
+  const enemy = opponentOf(turn);
+  const mark = turn === 'black' ? '△' : '▲';
+  const nameAt = (square) => PIECE_NAMES[after.get(square)?.kind ?? ''] ?? '駒';
+  const moverName = PIECE_NAMES[parsed.drop ?? board.get(parsed.from ?? '')?.kind ?? ''] ?? '駒';
+  if (meaning.kind === 'free-capture' && meaning.square && meaning.captured) {
+    return `${mark}${squareText(meaning.square)}の${PIECE_NAMES[meaning.captured]}は、取っても取り返されないよ！`;
+  }
+  if (meaning.kind === 'capture-gain' && meaning.square && meaning.captured) {
+    return `${mark}${squareText(meaning.square)}の${PIECE_NAMES[meaning.captured]}を取れば、取り返されても駒得だよ！`;
+  }
+  if (meaning.kind === 'escape' && parsed.from) {
+    const attacker = attackersOf(board, parsed.from, enemy)[0];
+    const by = attacker ? PIECE_NAMES[board.get(attacker.square)?.kind ?? ''] : '';
+    return by ? `相手の${by}が、${moverName}をねらってるよ。取られない升へ動かそう！` : '';
+  }
+  const shape = detectTesujiShape({ sfenBefore: sfen, usi });
+  if (shape) {
+    const info = tesujiShape(shape.id);
+    // ねらう駒は、値打ちの高い順に言う(玉が先)。
+    const worth = (square) => (after.get(square)?.kind === 'K' ? Infinity : value(after.get(square)?.kind ?? 'P'));
+    const [a, b] = [...shape.targets].sort((x, y) => worth(y) - worth(x)).map(nameAt);
+    const both = a && b ? `${a}と${b}` : '';
+    const put = parsed.drop ? '打てる' : '使える';
+    switch (shape.id) {
+      case 'knight-fork':
+      case 'waruuchi': return `${info?.name}を${put}よ！ ${both}の両取りだよ`;
+      case 'rook-cross-fork': return `十字飛車で、${both}の両取りにできるよ！`;
+      case 'ote-bisha': return '王手飛車をかけられるよ！';
+      case 'ryodori': return `${moverName}で、${both}の両取りにできるよ！`;
+      case 'dengaku': return `${moverName}で、${both}を串刺し（田楽刺し）にできるよ！`;
+      case 'focal-pawn': return `焦点の歩を${parsed.drop ? '打てる' : '突ける'}よ！ 相手の駒の利きが集まる升だよ`;
+      case 'tapping-pawn': return `叩きの歩で、${a}の頭をたたけるよ！`;
+      case 'edge-king-edge-pawn': return '端玉には端歩。端の歩で玉に迫れるよ！';
+      case 'belly-silver': return '腹銀を打てるよ！ 玉の横から逃げ道をふさげるよ';
+      case 'one-gap-dragon': return '一間竜の形を作れるよ！';
+      default: break;
+    }
+  }
+  if (meaning.kind === 'tesuji' && meaning.tesuji && TESUJI_REASON_IDS.has(meaning.tesuji)) return TESUJI_HINTS[meaning.tesuji] ?? '';
+  const targets = attackedSquares(after, applied.moved.to)
+    .filter((square) => after.get(square)?.color === enemy && after.get(square)?.kind !== 'P');
+  if (meaning.kind === 'check') return `${moverName}で王手をかけられるよ！ 相手は受けるしかないよ`;
+  if (meaning.kind === 'drop') {
+    const target = targets.filter((square) => after.get(square)?.kind !== 'K')
+      .sort((x, y) => value(after.get(y)?.kind ?? 'P') - value(after.get(x)?.kind ?? 'P'))[0];
+    if (target) return `${moverName}を打って、${mark}${squareText(target)}の${nameAt(target)}をねらえるよ！`;
+  }
+  return '';
+}
+
 /** 手筋の形があるときの一言(答えの手は言わない)。 */
 const TESUJI_HINT_LINES = Object.freeze({
   'head-gold': '「頭金」の形が見えるよ！',
@@ -123,10 +199,18 @@ const TESUJI_HINT_LINES = Object.freeze({
 
 /**
  * N1の一言。キーは評価の崖(`candidate-evaluation-cliff`)の続きにして、今の優先度と急ぎの扱いをそのまま使う。
+ * reasonは「なぜ？」で言うその手の中身(moveMeaningのreason)。
  * @param {ReturnType<typeof moveMeaning>} meaning
- * @returns {{ key: string, text: string } | null}
+ * @returns {{ key: string, text: string, reason?: string } | null}
  */
 export function meaningAdvice(meaning) {
+  const advice = meaningLine(meaning);
+  // 「なぜ？」で言う、その手の中身(11-4)。なければ鍵で決まる一般の理由(adviceReason)。
+  return advice && meaning?.reason ? { ...advice, reason: meaning.reason } : advice;
+}
+
+/** @param {ReturnType<typeof moveMeaning>} meaning */
+function meaningLine(meaning) {
   if (!meaning) return null;
   const key = `candidate-evaluation-cliff-${meaning.kind}`;
   const name = PIECE_NAMES[meaning.piece ?? ''] ?? '';
@@ -464,13 +548,13 @@ export function storyAdvice({ playerScore = null, previousScore = null, endgame,
   return null;
 }
 
-/** 吹き出しの「なぜ？」で足す1行(N11)。助言の鍵の頭で決める。ないときは''。 */
+/** 吹き出しの「なぜ？」で足す1行(N11)。助言の鍵の頭で決める。ないときは''。その手の中身(助言のreason)があれば、そちらを先に言う(11-4)。 */
 const ADVICE_REASONS = Object.freeze([
   [/^candidate-evaluation-cliff-free-capture/, '相手の駒で、どの駒にも守られていない駒を探してみて。取っても取り返されないよ'],
   [/^candidate-evaluation-cliff-capture-gain/, '取り返されても、取った駒のほうが値打ちが高ければ得だよ'],
   [/^candidate-evaluation-cliff-check/, '王手は相手が必ず受けないといけないから、こっちが手番を握れるよ'],
   [/^candidate-evaluation-cliff-escape/, '取られそうな駒は、取られない升へ動かすか、守りの駒を足そう'],
-  [/^candidate-evaluation-cliff-drop/, '持ち駒は好きな空き升に打てるよ。相手の駒に2つ当たる升はないかな？'],
+  [/^candidate-evaluation-cliff-drop/, '持ち駒は好きな空き升に打てるよ。相手の駒をねらえる升を探してみて'],
   [/^candidate-evaluation-cliff-activate/, '大駒は通り道が開くと、遠くまで利くよ。前にある駒をどけてみよう'],
   [/^candidate-evaluation-cliff-defend/, '玉のまわりに金銀が多いほど、詰まされにくいよ'],
   [/^candidate-evaluation-cliff-tesuji/, '手筋は昔から伝わる、決まりの良い手の形だよ。図鑑の「手筋」でも見られるよ'],

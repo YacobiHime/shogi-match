@@ -500,7 +500,9 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/v-if="adviceReasonText && !hintText && !reasonShown"[\s\S]{0,120}data-coach-why/);
     expect(source).toMatch(/data-coach-talk\s+@click="talkOpen = !talkOpen"/);
     expect(source).toMatch(/\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;/);
-    expect(source).toMatch(/currentAdviceKey\.value = advice\.key;\s*guideText\.value = advice\.text;/);
+    expect(source).toMatch(/currentAdviceKey\.value = advice\.key;\s*currentAdviceReason\.value = advice\.reason \?\? "";\s*guideText\.value = advice\.text;/);
+    // 「なぜ？」は、その手の中身(最善手の手筋の名前など)があれば先に言う(docs/coach-advice-expansion-design.mdの11-4)。
+    expect(source).toMatch(/const adviceReasonText = computed\(\(\) => currentAdviceReason\.value \|\| adviceReason\(currentAdviceKey\.value\)\);/);
     // 顔の上の透明なボタンは、全体のボタンの書式(.shogi-game button)より強く書き、背景で立ち絵を塗りつぶさない。
     expect(source).toMatch(/\.shogi-game \.shogi-game__portrait-talk \{[^}]*background: transparent;[^}]*\}/);
     expect(source).not.toMatch(/^\.shogi-game__portrait-talk \{/m);

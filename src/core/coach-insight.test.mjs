@@ -16,31 +16,50 @@ import {
   weaknessReminder,
 } from './coach-insight.mjs';
 import { coachAdvicePriority } from './coach-advice-scheduler.mjs';
+import { getIdleCoachAdvice } from './idle-coach-advice.mjs';
 
 const cp = (value) => ({ type: 'cp', value });
 const mate = (value) => ({ type: 'mate', value });
 
 describe('N1 最善手の翻訳', () => {
   it('タダで取る手と、取り返される取り合いを見分ける', () => {
-    expect(moveMeaning('4k4/9/9/9/4s4/9/9/9/4R3K b - 1', '5i5e')).toEqual({ kind: 'free-capture', captured: 'S', square: '5e' });
+    expect(moveMeaning('4k4/9/9/9/4s4/9/9/9/4R3K b - 1', '5i5e')).toEqual({ kind: 'free-capture', captured: 'S', square: '5e',
+      reason: '△5五の銀は、取っても取り返されないよ！' });
     expect(moveMeaning('4k4/9/9/4g4/4s4/9/9/9/4R3K b - 1', '5i5e')?.kind).toBe('capture');
   });
 
   it('後手の手も、後手から見て同じように見分ける', () => {
-    expect(moveMeaning('k3r4/9/9/9/4S4/9/9/9/4K4 w - 1', '5a5e')).toEqual({ kind: 'free-capture', captured: 'S', square: '5e' });
+    expect(moveMeaning('k3r4/9/9/9/4S4/9/9/9/4K4 w - 1', '5a5e')).toMatchObject({ kind: 'free-capture', captured: 'S', square: '5e',
+      reason: '▲5五の銀は、取っても取り返されないよ！' });
   });
 
   it('王手・打つ・逃げる・守る', () => {
     expect(moveMeaning('4k4/9/9/9/9/9/9/9/K2R5 b - 1', '6i5i')?.kind).toBe('check');
     expect(moveMeaning('8k/9/9/9/9/9/9/9/K8 b P 1', 'P*5e')).toEqual({ kind: 'drop', piece: 'P' });
-    expect(moveMeaning('k8/9/9/9/4S3r/9/9/9/K8 b - 1', '5e6d')).toEqual({ kind: 'escape', piece: 'S' });
+    expect(moveMeaning('k8/9/9/9/4S3r/9/9/9/K8 b - 1', '5e6d')).toEqual({ kind: 'escape', piece: 'S',
+      reason: '相手の飛車が、銀をねらってるよ。取られない升へ動かそう！' });
     expect(moveMeaning('k8/9/9/9/9/9/9/9/4K4 b - 1', '5i4h')).toEqual({ kind: 'defend', piece: 'K' });
   });
 
   it('手筋の形は名前で言う(ふんどしの桂)', () => {
     const meaning = moveMeaning('k8/9/9/3r1g3/9/9/9/9/K8 b N 1', 'N*5f');
-    expect(meaning).toEqual({ kind: 'tesuji', tesuji: 'knight-fork' });
+    expect(meaning).toEqual({ kind: 'tesuji', tesuji: 'knight-fork', reason: 'ふんどしの桂を打てるよ！ 飛車と金の両取りだよ' });
     expect(meaningAdvice(meaning)?.text).toContain('ふんどしの桂');
+  });
+
+  it('「なぜ？」は、探し方ではなく、その手で何ができるかを言う(11-4)', () => {
+    // 割り打ちの銀: 一言は「持ち駒の銀が光る場面だよ！」、なぜ？で手筋の名前と、ねらう駒。
+    const split = meaningAdvice(moveMeaning('8k/1r1g5/9/9/9/9/9/9/K8 b S 1', 'S*7a'));
+    expect(split).toMatchObject({ text: '持ち駒の銀が光る場面だよ！', reason: '割り打ちの銀を打てるよ！ 飛車と金の両取りだよ' });
+    // 名前の付いた形がない打つ手は、ねらう駒を言う。
+    expect(moveMeaning('4k4/9/9/9/9/9/2g6/9/K8 b S 1', 'S*7h')?.reason).toBe('銀を打って、△7七の金をねらえるよ！');
+    expect(moveMeaning('4k4/9/9/9/9/9/9/9/K8 b G 1', 'G*5b')?.reason).toBe('金で王手をかけられるよ！ 相手は受けるしかないよ');
+    // 中身の分からない手は付けない(鍵で決まる一般の理由になる)。
+    expect(moveMeaning('k8/9/9/9/9/9/9/9/4K4 b - 1', '5i4h')?.reason).toBeUndefined();
+    expect(adviceReason('candidate-evaluation-cliff-drop')).not.toMatch(/2つ/);
+    // 考えているあいだの一言にも、同じ中身を渡す。
+    expect(getIdleCoachAdvice({ usi: 'S*7a', formattedMove: '▲7一銀', pieceType: 'silver', capturedPieceType: '', toRank: 1, color: 'black', insight: split }))
+      .toMatchObject({ reason: '割り打ちの銀を打てるよ！ 飛車と金の両取りだよ' });
   });
 
   it('台詞は答えの手を言わず、評価の崖と同じ優先度にする', () => {

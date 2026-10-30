@@ -3794,13 +3794,18 @@ const guideText = ref(INITIAL_GUIDE_TEXT);
  * 助言以外の文(定跡の案内など)に替わったら、鍵を消す(理由のボタンを出さない)。
  */
 const currentAdviceKey = ref("");
+/** いまの助言の「なぜ？」で言う、その手の中身(最善手の手筋の名前など。docs/coach-advice-expansion-design.mdの11-4)。なければ鍵で決まる一般の理由。 */
+const currentAdviceReason = ref("");
 const reasonShown = ref(false);
 const recentTalk = ref<{ ply: number; text: string }[]>([]);
 const talkOpen = ref(false);
-const adviceReasonText = computed(() => adviceReason(currentAdviceKey.value));
+const adviceReasonText = computed(() => currentAdviceReason.value || adviceReason(currentAdviceKey.value));
 let settingStructuredAdvice = false;
 watch(guideText, () => {
-  if (!settingStructuredAdvice) currentAdviceKey.value = "";
+  if (!settingStructuredAdvice) {
+    currentAdviceKey.value = "";
+    currentAdviceReason.value = "";
+  }
   reasonShown.value = false;
 }, { flush: "sync" });
 const activeCoachText = computed(() => hintText.value || guideText.value);
@@ -8655,6 +8660,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
 function displayCoachAdvice(advice: {
   key: string;
   text: string;
+  reason?: string;
   topic?: string;
   sfen?: string;
   ply?: number;
@@ -8672,6 +8678,7 @@ function displayCoachAdvice(advice: {
   settingStructuredAdvice = true;
   try {
     currentAdviceKey.value = advice.key;
+    currentAdviceReason.value = advice.reason ?? "";
     guideText.value = advice.text;
   } finally {
     displayingStructuredCoachAdvice = false;
@@ -8690,7 +8697,7 @@ function displayCoachAdvice(advice: {
 
 const coachAdviceScheduler = createCoachAdviceScheduler({ display: displayCoachAdvice });
 
-function showCoachAdvice(advice?: { key: string; text: string; topic?: string } | null) {
+function showCoachAdvice(advice?: { key: string; text: string; reason?: string; topic?: string } | null) {
   coachAdviceScheduler.present(advice ? {
     ...advice,
     sfen: currentSfen.value,

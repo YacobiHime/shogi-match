@@ -9,8 +9,12 @@ import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { resignStyleById } from './resign-style.mjs';
 import { GROUP_MEAN_RATING, REAL_WORLD, WORLD_BASE_RATING, worldCpuLevel } from './ryuo-strength.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
+import { material, playLight, stateFromSfen } from './logic-position.mjs';
 
-/** 作りものの読み: 合法手を決まった順に並べ、手番の側から見た値を返す。60手目からは先手が大差(粘る人でも投げる点)。 */
+/**
+ * 作りものの読み: 合法手を決まった順に並べ、手番の側から見た値を返す。60手目からは先手が大差(粘る人でも投げる点)。
+ * 本物の読みと同じく、指したあとの駒の損得も値に入れる(人間らしいCPUの信念の式は、駒の損得を自分でも読むので、食い違わないように)。
+ */
 function fakeSearch() {
   const calls = [];
   const search = async ({ moves, multiPv, searchMoves }) => {
@@ -21,9 +25,11 @@ function fakeSearch() {
     const pool = searchMoves?.length ? legal.filter((usi) => searchMoves.includes(usi)) : legal;
     const blackToMove = moves.length % 2 === 0;
     const base = moves.length >= 60 ? (blackToMove ? 9600 : -9600) : 30;
-    const candidates = pool.slice(0, Math.max(1, multiPv)).map((move, index) => ({
-      rank: index + 1, move, pv: [move], score: { type: 'cp', value: base - index * 40 },
-    }));
+    const state = stateFromSfen(record.position.sfen);
+    const worth = (move) => material(playLight(state, move), state.turn) - material(state, state.turn);
+    const candidates = pool.map((move, index) => ({ move, value: base - index * 40 + worth(move) }))
+      .sort((a, b) => b.value - a.value).slice(0, Math.max(1, multiPv))
+      .map(({ move, value }, index) => ({ rank: index + 1, move, pv: [move], score: { type: 'cp', value } }));
     return { move: candidates[0]?.move ?? '', candidates, completedCandidates: [] };
   };
   return { search, calls };

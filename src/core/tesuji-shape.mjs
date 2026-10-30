@@ -3,7 +3,8 @@
  * 盤の形だけで判定する(良い手かどうかは見ない。効き目は問題を作るときに読み筋で確かめる)。
  * IDは手筋図鑑(core/reference-dex.mjs)か用語辞典(data/shogi-glossary.mjs)の項目と同じにする。
  * 図鑑は重いので、名前と一言はここにも書く(テストで図鑑の一言と一致を確かめる)。
- * 対局画面のコレクションの印は move-tesuji.mjs の detectTesuji のまま(こちらは棋力テストの画面と問題作りだけが読む)。
+ * 対局画面のコレクションの印は move-tesuji.mjs の detectTesuji のまま。こちらは棋力テストの画面と問題作りと、
+ * やこび姫の「なぜ？」で最善手の手筋の名前を言うところ(coach-insight.mjs)が読む(軽いので対局画面から読んでよい)。
  */
 import {
   applyUsiToBoard,
