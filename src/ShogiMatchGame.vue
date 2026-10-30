@@ -1904,6 +1904,11 @@
           </li>
         </ul>
         <p v-if="skillTestReportPraise" class="shogi-skill-report__praise">{{ skillTestReportPraise }}</p>
+        <!-- 出てきた手筋の名前(解けたものは色を付ける)。手筋図鑑はホームから開ける(docs/skill-assessment-design.mdの10-7)。 -->
+        <p v-if="skillTestReport.tesuji.length" class="shogi-skill-report__tesuji" data-skill-report-tesuji>
+          出てきた手筋:
+          <span v-for="(entry, index) in skillTestReport.tesuji" :key="index" :class="{ 'is-solved': entry.correct }">{{ entry.name }}</span>
+        </p>
         <template v-if="showHome">
           <p class="shogi-game__measure-welcome">竜王戦は難易度{{ ryuoDefaultDifficulty }}がちょうどいいよ</p>
           <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-skill-report-tournament @click="enterTournamentFromSkillTest">竜王戦に出る（難易度{{ ryuoDefaultDifficulty }}）</button>
@@ -7199,9 +7204,13 @@ function chooseMeasureStart(choice: { level: number; band: readonly number[] | n
 const skillTestOpen = ref(false);
 const skillTestPrior = ref<{ band?: number[] | null; level?: number; spread?: number } | null>(null);
 const skillTestBand = ref<number[] | null>(null);
-type SkillTestFinish = { result: ReturnType<typeof testResult>; answers: { id: string; type: string; correct: boolean; skipped: boolean; ms: number }[] };
-/** 棋力テストの結果の札(テストの結果と、それを合わせた棋力カルテの見立て)。 */
-const skillTestReport = ref<{ result: SkillTestFinish["result"]; estimate: ReturnType<typeof estimateProfile> } | null>(null);
+type SkillTestFinish = {
+  result: ReturnType<typeof testResult>;
+  answers: { id: string; type: string; correct: boolean; skipped: boolean; ms: number }[];
+  tesuji?: { name: string; correct: boolean }[];
+};
+/** 棋力テストの結果の札(テストの結果と、それを合わせた棋力カルテの見立てと、出てきた手筋)。 */
+const skillTestReport = ref<{ result: SkillTestFinish["result"]; estimate: ReturnType<typeof estimateProfile>; tesuji: { name: string; correct: boolean }[] } | null>(null);
 /** 答えを名前なしで送るかの同意と、送ってよい場所か(公式の公開先で、展示用でない。docs/skill-assessment-design.mdの7章)。 */
 const skillDataConsent = ref(loadSkillDataConsent(browserStorage()));
 const skillDataAllowed = computed(() => canSendSkillData({ hostname: typeof location === "undefined" ? "" : location.hostname, exhibit: props.exhibit }));
@@ -7225,13 +7234,13 @@ function openSkillTest(band: readonly number[] | null) {
   skillTestReport.value = null;
   skillTestOpen.value = true;
 }
-function finishSkillTest({ result, answers }: SkillTestFinish) {
+function finishSkillTest({ result, answers, tesuji = [] }: SkillTestFinish) {
   skillTestOpen.value = false;
   skillProfile.value = recordSkillTest(skillProfile.value, { level: result.level, spread: result.spread, abilities: result.abilities });
   saveSkillProfile(browserStorage(), skillProfile.value);
   const estimate = applySkillProfileToRating({ mark: "test" }) ?? skillProfileEstimate.value;
   sendSkillPayload((anon) => testPayload({ anon, app: "web", answers, result, band: skillTestBand.value }));
-  skillTestReport.value = { result, estimate };
+  skillTestReport.value = { result, estimate, tesuji };
 }
 const presetGrade = (level: number) => gradeName(CPU_STRENGTH_PRESETS.find((preset) => preset.level === Math.min(49, Math.max(1, Math.round(level))))?.label ?? "");
 const skillTestReportGrade = computed(() => (skillTestReport.value ? presetGrade(skillTestReport.value.estimate.level) : ""));

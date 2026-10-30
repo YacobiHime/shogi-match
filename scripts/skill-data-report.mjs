@@ -94,10 +94,16 @@ export function skillDataReport(records) {
   }
 
   // 問題ごと: 解いた人のテストのθで、正答率と難しさを見直す。
+  // 問題を作り直した前の版(idが st- で始まる。docs/skill-assessment-design.mdの10-6)の答えは、今の束の問題ではないので数えない。
   const responses = new Map();
+  let oldAnswers = 0;
   for (const person of byAnon.values()) {
     for (const test of person.tests) {
       for (const answer of test.test?.answers ?? []) {
+        if (!bank.has(answer.id)) {
+          oldAnswers += 1;
+          continue;
+        }
         if (!responses.has(answer.id)) responses.set(answer.id, []);
         responses.get(answer.id).push({ level: test.test.level, correct: Boolean(answer.correct), skipped: Boolean(answer.skipped), ms: answer.ms });
       }
@@ -159,6 +165,7 @@ export function skillDataReport(records) {
   return {
     people: byAnon.size,
     tests: [...byAnon.values()].reduce((sum, person) => sum + person.tests.length, 0),
+    oldAnswers,
     games: [...byAnon.values()].reduce((sum, person) => sum + person.games.length, 0),
     items,
     types,
@@ -169,6 +176,7 @@ export function skillDataReport(records) {
 
 function print(report) {
   console.log(`人 ${report.people}・テスト ${report.tests}回・対局 ${report.games}局`);
+  if (report.oldAnswers) console.log(`今の束にない問題(前の版)の答え ${report.oldAnswers}件は、問題ごとの集計に数えない`);
   console.log('\n■ テストと、そのあとの勝ち負け(10局以上)のずれ。目標は8割が±2Lv以内、外れても±4Lv');
   for (const [label, gap] of [['テスト', report.test], ['場面採点', report.content]]) {
     console.log(`${label}: ${gap.people}人 偏り${fixed(gap.bias)}Lv(正なら勝ち負けより高く出る) ばらつき${fixed(gap.spread)}Lv(τの目安) ±2以内${fixed(gap.within2 * 100, 0)}% ±4以内${fixed(gap.within4 * 100, 0)}% いちばん外れ${fixed(gap.worst)}Lv`);

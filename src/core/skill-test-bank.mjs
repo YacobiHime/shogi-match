@@ -59,6 +59,7 @@ export const TYPE_OFFSETS = Object.freeze({
  * @typedef {{
  *   id: string, type: string, ability: string, b: number, guess: number, sfen: string,
  *   accepted?: readonly string[], choices?: readonly string[], best?: string, pv?: readonly string[], problem?: any,
+ *   line?: readonly string[], threat?: string, threatMate?: number, target?: string, tesuji?: string, targets?: readonly string[], gap?: number,
  * }} SkillTestItem
  */
 

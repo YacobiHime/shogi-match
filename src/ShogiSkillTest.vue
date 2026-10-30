@@ -35,6 +35,9 @@
           :asset-base-url="assetBaseUrl"
           :flip="flipped"
           :candidates="arrows"
+          :mark-squares="marks"
+          :risk-squares="riskSquares"
+          :threat-arrows="threatArrows"
           @usi-move="onBoardMove"
           @resize="onBoardResize"
         />
@@ -81,9 +84,14 @@ import { formatHintMove } from "./core/match-assists.mjs";
 import { judgeProblemMove, lineSfens } from "./core/problem-set.mjs";
 import { ABILITIES, TEST_LENGTH, answerItem, createTestState, nextItem, testFinished, testResult } from "./core/skill-test.mjs";
 import { SKILL_TEST_BANK } from "./core/skill-test-bank.mjs";
+import { answerFeedback, moveText, questionText } from "./core/skill-test-feedback.mjs";
+import { tesujiShape } from "./core/tesuji-shape.mjs";
 import { appendUsiMove, createGameRecord } from "./game-state";
 
 type Item = (typeof SKILL_TEST_BANK)[number];
+type Mark = ReturnType<typeof answerFeedback>["marks"][number];
+/** 結果の札に並べる、出てきた手筋の名前と、解けたか。 */
+type TesujiSeen = { name: string; correct: boolean };
 type Prior = { band?: number[] | null; level?: number; spread?: number } | null;
 
 const props = defineProps({
@@ -96,21 +104,18 @@ const props = defineProps({
 const emit = defineEmits<{
   (event: "close"): void;
   (event: "consent", value: "yes" | "no"): void;
-  (event: "finish", payload: { result: ReturnType<typeof testResult>; answers: ReturnType<typeof createTestState>["answers"] }): void;
+  (event: "finish", payload: { result: ReturnType<typeof testResult>; answers: ReturnType<typeof createTestState>["answers"]; tesuji: TesujiSeen[] }): void;
 }>();
 
-/** 答えたあと、答えを見せてから次の問題へ進むまで(ms)。盤やボタンを押せば待たずに進む。 */
-const FEEDBACK_MS = { correct: 900, wrong: 1800 } as const;
-/** 詰将棋の続きで、相手の応手を並べる間(ms)。 */
+/**
+ * 正解のあと、次の問題へ進むまで(ms)。手筋は名前を読めるだけ長く見せる(docs/skill-assessment-design.mdの10-7)。
+ * 不正解は理由を読む前に消えないように、自動では進めず「次の問題」を押して進む。
+ */
+const FEEDBACK_MS = { correct: 900, tesuji: 1600 } as const;
+/** 詰将棋の続きや読み筋で、1手ずつ並べる間(ms)。 */
 const REPLY_MS = 650;
-
-const QUESTIONS: Record<string, string> = {
-  take: "得する駒取りがあるよ。見つけて指そう",
-  save: "このままだと駒を取られちゃう！ いちばん良い手を指そう",
-  tactic: "駒得できる手があるよ（手筋）。見つけて指そう",
-  defend: "このままだと詰まされちゃう！ 詰まない手を指そう",
-  judge: "いちばん良い手はどれ？ 3つから選ぼう",
-};
+/** 不正解のとき、答えの矢印を見せてから読み筋を動かし始めるまで(ms)。 */
+const LINE_DELAY_MS = 1200;
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
@@ -126,12 +131,20 @@ const stepSfen = ref("");
 const boardSfen = ref("");
 const lastMove = ref("");
 const arrows = ref<{ usi: string; guideKind?: "move" }[]>([]);
+/** 答えのあとの盤の印: ねらう駒(赤)、取られそうだった駒の赤い輪、相手の狙いの点線の矢印。 */
+const marks = ref<Mark[]>([]);
+const riskSquares = ref<string[]>([]);
+const threatArrows = ref<{ usi: string; color: "black" | "white" }[]>([]);
 const speech = ref("");
+const tesujiSeen = ref<TesujiSeen[]>([]);
 let startedAt = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
+let lineTimers: ReturnType<typeof setTimeout>[] = [];
 const clearTimer = () => {
   if (timer) clearTimeout(timer);
   timer = null;
+  for (const lineTimer of lineTimers) clearTimeout(lineTimer);
+  lineTimers = [];
 };
 onBeforeUnmount(clearTimer);
 
@@ -140,12 +153,7 @@ const sideToMove = (sfen: string) => (sfen.split(" ")[1] === "w" ? "white" : "bl
 const flipped = computed(() => Boolean(item.value) && sideToMove(item.value?.sfen ?? "") === "white");
 const sideLabel = computed(() => (flipped.value ? "あなたは△後手（盤の下側）" : "あなたは▲先手（盤の下側）"));
 const abilityLabel = computed(() => ABILITIES.find(({ id }) => id === item.value?.ability)?.label ?? "");
-const question = computed(() => {
-  const current = item.value;
-  if (!current) return "";
-  if (current.type === "mate") return `${current.problem?.plies ?? ""}手で詰ませよう`;
-  return QUESTIONS[current.type] ?? "";
-});
+const question = computed(() => (item.value ? questionText(item.value) : ""));
 function moveLabel(usi: string, sfen: string) {
   return formatHintMove(usi, sfen);
 }
@@ -156,17 +164,27 @@ function decideConsent(value: "yes" | "no") {
   showNext();
 }
 
+function finishTest() {
+  emit("finish", { result: testResult(state.value), answers: state.value.answers, tesuji: tesujiSeen.value });
+}
+function clearMarks() {
+  marks.value = [];
+  riskSquares.value = [];
+  threatArrows.value = [];
+}
+
 function showNext() {
   clearTimer();
   if (testFinished(state.value)) {
-    emit("finish", { result: testResult(state.value), answers: state.value.answers });
+    finishTest();
     return;
   }
   const next = nextItem(state.value, SKILL_TEST_BANK) as Item | null;
   if (!next) {
-    emit("finish", { result: testResult(state.value), answers: state.value.answers });
+    finishTest();
     return;
   }
+  clearMarks();
   item.value = next;
   step.value = 0;
   stepSfen.value = next.sfen;
@@ -190,23 +208,64 @@ function positionAfter(sfen: string, usi: string) {
   return appendUsiMove(record, usi) ? record.position.sfen : sfen;
 }
 
-/** 答えを記録して、答えを見せる。 */
-function finishItem(correct: boolean, { skipped = false, shown = "" } = {}) {
+/** 読み筋を、fromSfenから1手ずつ盤で動かして見せる(delayのあとに始める)。 */
+function playLine(fromSfen: string, moves: readonly string[], delay: number) {
+  let sfen = fromSfen;
+  moves.forEach((usi, index) => {
+    lineTimers.push(setTimeout(() => {
+      const next = positionAfter(sfen, usi);
+      if (next === sfen) {
+        // 指せない手が来たら、そこで止める(残りも指さない)。
+        for (const lineTimer of lineTimers) clearTimeout(lineTimer);
+        return;
+      }
+      playSound(sfen, usi);
+      arrows.value = [];
+      threatArrows.value = [];
+      sfen = next;
+      boardSfen.value = next;
+      lastMove.value = usi;
+    }, delay + index * REPLY_MS));
+  });
+}
+
+/** 答えを記録して、答えと理由を見せる。playedは指した手(わからないで飛ばしたときは空)。 */
+function finishItem(correct: boolean, { skipped = false, played = "" } = {}) {
   const current = item.value;
   if (!current) return;
   state.value = answerItem(state.value, current, { correct, skipped, ms: performance.now() - startedAt });
-  const answer = current.type === "mate" ? current.problem?.line?.[step.value] : (current.accepted?.[0] ?? current.best);
-  if (correct) {
-    speech.value = "いいね！ そのとおり。";
-  } else {
-    // 責めずに、答えの手を盤に見せる(U:4-3)。
-    boardSfen.value = stepSfen.value;
-    lastMove.value = "";
-    arrows.value = answer ? [{ usi: answer, guideKind: "move" }] : [];
-    speech.value = answer ? `答えは${moveLabel(answer, stepSfen.value)}だったよ。${skipped ? "" : shown}` : "次の問題へ進もう。";
-  }
+  const shape = current.tesuji ? tesujiShape(current.tesuji) : null;
+  if (shape) tesujiSeen.value = [...tesujiSeen.value, { name: shape.name, correct: correct && !skipped }];
   phase.value = "feedback";
-  timer = setTimeout(advance, correct ? FEEDBACK_MS.correct : FEEDBACK_MS.wrong);
+  if (current.type === "mate") {
+    const answer = current.problem?.line?.[step.value];
+    if (correct) {
+      speech.value = "いいね！ 詰ませたね。";
+      timer = setTimeout(advance, FEEDBACK_MS.correct);
+    } else {
+      // 責めずに、答えの手を盤に見せる(U:4-3)。
+      boardSfen.value = stepSfen.value;
+      lastMove.value = "";
+      arrows.value = answer ? [{ usi: answer, guideKind: "move" }] : [];
+      speech.value = answer ? `答えは${moveText(answer, stepSfen.value)}だったよ。` : "次の問題へ進もう。";
+    }
+    return;
+  }
+  const feedback = answerFeedback(current, { correct: correct && !skipped, played });
+  speech.value = feedback.speech;
+  marks.value = feedback.marks;
+  riskSquares.value = feedback.riskSquares;
+  threatArrows.value = feedback.threatArrows;
+  if (!correct) {
+    // 責めずに、答えの手を盤に見せ、何が起きるところだったかを印で見せる(U:4-3、10-4)。
+    boardSfen.value = current.sfen;
+    lastMove.value = "";
+    arrows.value = current.best ? [{ usi: current.best, guideKind: "move" }] : [];
+  }
+  if (feedback.line.length) playLine(correct ? boardSfen.value : current.sfen, feedback.line, correct ? REPLY_MS : LINE_DELAY_MS);
+  if (feedback.hold !== "manual") {
+    timer = setTimeout(advance, (feedback.hold === "tesuji" ? FEEDBACK_MS.tesuji : FEEDBACK_MS.correct) + feedback.line.length * REPLY_MS);
+  }
 }
 function advance() {
   if (phase.value !== "feedback") return;
@@ -223,7 +282,7 @@ function answerChoice(usi: string) {
   boardSfen.value = positionAfter(current.sfen, usi);
   lastMove.value = usi;
   arrows.value = [];
-  finishItem(Boolean(current.accepted?.includes(usi)));
+  finishItem(Boolean(current.accepted?.includes(usi)), { played: usi });
 }
 
 function onBoardMove(usi: string) {
@@ -263,7 +322,7 @@ function onBoardMove(usi: string) {
   }
   boardSfen.value = positionAfter(current.sfen, usi);
   lastMove.value = usi;
-  finishItem(Boolean(current.accepted?.includes(usi)));
+  finishItem(Boolean(current.accepted?.includes(usi)), { played: usi });
 }
 
 // 狭い縦長の画面では縦長の盤にする(問題集と同じ基準)。

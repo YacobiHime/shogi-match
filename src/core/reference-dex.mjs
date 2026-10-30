@@ -407,6 +407,16 @@ const TESUJI_ENTRY_LIST = [
       ["使いどころ", "端攻めでは、下段の香の後押しで歩を進めると、相手は受けにくくなるよ。"],
     ],
   },
+  {
+    id: "dengaku", group: "駒の使い方", label: "田楽刺し",
+    sfen: "4r3k/9/4g4/9/9/9/9/9/K8 b L 1",
+    arrows: ["L*5e"], marks: [["5c", "target"], ["5a", "target"], ["5e", "key"]],
+    overview: "まっすぐ並んだ2枚の駒を、香や飛車・角で串刺しにする手筋だよ！",
+    rows: [
+      ["意味", "香・飛車・角のまっすぐな利きの上に、相手の駒が2枚並んでいるとき、手前の駒をねらう手だよ。手前の駒が逃げると、奥の駒が取れるんだ。田楽の串に見立てた名前だよ。"],
+      ["使いどころ", "盤面では5五に香を打つと、5三の金と5一の飛車が串刺し。金が逃げると、香で飛車が取れるよ。"],
+    ],
+  },
 
   {
     id: "head-gold", label: "頭金",
@@ -598,7 +608,7 @@ const TESUJI_GROUPS = [
     "one-pawn", "gold-bottom-pawn", "focal-pawn", "joined-pawns", "dangling-pawn", "tapping-pawn",
     "edge-pawn-when-idle", "pawn-against-advanced-silver", "rook-pawn-exchange", "edge-king-edge-pawn",
   ]],
-  ["香の格言", ["bottom-lance"]],
+  ["香の格言", ["bottom-lance", "dengaku"]],
   ["桂の格言", ["high-knight", "knight-check", "knight-fork"]],
   ["銀の格言", ["silver-zigzag", "silver-without-promotion", "silver-attacks-gold-defends"]],
   ["金の格言", ["lure-gold-diagonally", "tokin-on-53"]],
