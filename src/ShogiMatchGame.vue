@@ -1259,12 +1259,21 @@
           v-if="castleCallout && !checkCallout && !furigomaCallout && !stageCard"
           :key="castleCallout.id"
           class="shogi-game__castle-callout"
+          :class="{ 'shogi-game__castle-callout--tip': castleCallout.tip }"
           role="status"
           data-castle-callout
         >
-          <small v-if="castleCallout.first">はじめて！</small>
-          <strong>{{ castleCallout.label }} 完成！</strong>
-          <small>{{ castleCallout.first ? "終局後、コレクションに印がつくよ" : "玉が堅くなったね" }}</small>
+          <!-- 教室のコツの形ができた札(21-14-2)。囲いの札と同じ場所・形で、上の行を「教室のコツ」にする。 -->
+          <template v-if="castleCallout.tip">
+            <small data-tip-callout>教室のコツ</small>
+            <strong>{{ castleCallout.tip.title }}</strong>
+            <small>{{ castleCallout.tip.line }}</small>
+          </template>
+          <template v-else>
+            <small v-if="castleCallout.first">はじめて！</small>
+            <strong>{{ castleCallout.label }} 完成！</strong>
+            <small>{{ castleCallout.first ? "終局後、コレクションに印がつくよ" : "玉が堅くなったね" }}</small>
+          </template>
         </div>
       </Transition>
     </div>
@@ -2624,7 +2633,8 @@ import {
 import { addAward, kenshukaiAward, loadAwards, meijinAward, ryuoAward, shoreikaiAward } from "./core/season-award.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
-import { hasKikiGlasses, loadTutorialProgress, recordProverb } from "./core/tutorial-progress.mjs";
+import { hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb } from "./core/tutorial-progress.mjs";
+import { noteTipUse, startTipMoments, tipMoment } from "./core/tip-moments.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
@@ -5607,13 +5617,42 @@ const boardEscapeMarks = computed(() => {
  * 初めての囲いなら、終局後にコレクションの印がつくことを添える。
  */
 const CASTLE_CALLOUT_MS = 1600;
-const castleCallout = ref<{ id: number; label: string; first: boolean } | null>(null);
+/** コツの札は文が長いぶん、囲いの札より長く出す(21-14-2)。 */
+const TIP_CALLOUT_MS = 2200;
+const castleCallout = ref<{ id: number; label: string; first: boolean; tip?: { title: string; line: string } } | null>(null);
 let castleCalloutTimer: ReturnType<typeof setTimeout> | undefined;
 function showCastleCallout(label: string) {
   const first = !loadCollection(browserStorage()).formations?.[label];
   clearTimeout(castleCalloutTimer);
   castleCallout.value = { id: Date.now(), label, first };
   castleCalloutTimer = setTimeout(() => { castleCallout.value = null; }, CASTLE_CALLOUT_MS);
+}
+
+/*
+ * 対局でコツの形ができた瞬間(docs/nyumon-mode-design.mdの21-14-2)。教室の「すぐ使えるコツ」でクリアしたコツの形が
+ * プレイヤーの手でできたら、囲いの札と同じ場所に「コツどおり！」を出し、使った回数を残す。同じコツは1局に1回。
+ * 対局の始め(と復元した局面)ですでにできている形は、その対局では出さない。
+ */
+let tipMomentsFired = new Set<string>();
+let tipMomentsLearned: string[] = [];
+function resetTipMoments() {
+  tipMomentsLearned = learnedTips(loadTutorialProgress(browserStorage()));
+  tipMomentsFired = new Set(startTipMoments(currentSfen.value, playerColorKey.value));
+}
+function notePlayerTipMoment(previous: string, usi: string) {
+  if (!active.value || reviewMode.value || measureMode.value || tutorialMatch.value || normalizedMode.value !== "cpu") return null;
+  const color = playerColorKey.value;
+  if ((previous.split(" ")[1] === "w" ? "white" : "black") !== color) return null;
+  const moment = tipMoment({ before: previous, usi, after: currentSfen.value, color, learned: tipMomentsLearned, fired: tipMomentsFired });
+  if (!moment) return null;
+  tipMomentsFired.add(moment.id);
+  noteTipUse(browserStorage(), moment.id);
+  return moment;
+}
+function showTipCallout(moment: { title: string; line: string }) {
+  clearTimeout(castleCalloutTimer);
+  castleCallout.value = { id: Date.now(), label: moment.title, first: false, tip: { title: moment.title, line: moment.line } };
+  castleCalloutTimer = setTimeout(() => { castleCallout.value = null; }, TIP_CALLOUT_MS);
 }
 
 const boardAttackMarks = computed(() => (
@@ -8457,7 +8496,10 @@ function syncPosition(usi = "") {
     showCapturePop(previous, usi);
     // この手で初めて組めた囲いを知らせる(開始局面ですでに組んである囲いや、復元では出さない)。
     const castle = [...matchFormationNames].find((name) => !formationsBefore.has(name) && CASTLE_LABELS.has(name));
-    if (castle) showCastleCallout(castle);
+    // 同じ手で教室のコツの形もできたら、コツの札にまとめる(1つの手に札は1つ。囲いはコレクションの印で残る)。
+    const tip = notePlayerTipMoment(previous, usi);
+    if (tip) showTipCallout(tip);
+    else if (castle) showCastleCallout(castle);
   }
 }
 
@@ -8757,6 +8799,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
     thinking.value = false;
     guideText.value = coachLevel.value === "off" ? "" : "前の局面から対局を再開したよ！";
     if (matchKind.value === "tournament" && ryuoGame.value) startPresence({ greet: false });
+    resetTipMoments();
     return true;
   } catch {
     discardPersistedMatch();
@@ -11830,6 +11873,7 @@ function restart() {
   lastPlanAdvice = null;
   formationState.value = createFormationState();
   syncPosition();
+  resetTipMoments();
   emit("match-ready", { mode: normalizedMode.value, sfen: currentSfen.value });
   initializeEngine();
   scheduleCpuMove();

@@ -1343,6 +1343,17 @@
   font-size: 0.8em;
   font-weight: 700;
 }
+/* 教室のコツの札(21-14-2)。文が長いので、盤からはみ出さない幅にし、見出しを少し小さくする。 */
+.shogi-game__castle-callout--tip {
+  width: max-content;
+  max-width: 92%;
+}
+.shogi-game__castle-callout--tip strong {
+  font-size: 1.3em;
+}
+.shogi-game__castle-callout--tip small:first-child {
+  color: #2f7a4f;
+}
 .shogi-game__furigoma-pieces {
   display: flex;
   gap: 0.3em;

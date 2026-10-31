@@ -55,6 +55,21 @@ export function withTutorialCourse(progress, course) {
   return TUTORIAL_COURSE_IDS.includes(course) ? { ...progress, course } : progress;
 }
 
+/** コツのレッスンのID(tutorial-curriculum.mjsのTIPS_LESSONSはどれも「tip-」で始まる。対局画面からカリキュラムを読まずに見分ける)。 */
+const isTipLessonId = (id) => id.startsWith("tip-");
+
+/** すぐ使えるコツに触れたことがあるか(コツのタブを開いたか、コツのカードを1枚でも遊んだ)。ホームの入口に使う(21-14-4)。 */
+export function tipsTouched(progress) {
+  return progress?.course === "tips" || Object.keys(progress?.lessons ?? {}).some(isTipLessonId);
+}
+
+/** クリアしたコツのカードのID。対局の「コツどおり！」は、覚えたコツだけに出す(21-14-2)。 */
+export function learnedTips(progress) {
+  return Object.entries(progress?.lessons ?? {})
+    .filter(([id, entry]) => isTipLessonId(id) && entry?.status === "cleared")
+    .map(([id]) => id);
+}
+
 // ===== どこから始めるか(17章) =====
 /**
  * 最初の問いの答え。札のID(tutorial-map.mjsのTUTORIAL_PLACEMENTS)と、地図から自分で選んだ「map」、

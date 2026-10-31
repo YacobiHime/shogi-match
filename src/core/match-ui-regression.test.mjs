@@ -9,6 +9,15 @@ const responsiveSource = readFileSync(
 );
 
 describe("match screen regressions", () => {
+  it("shows the tutorial-tip callout only for the player's own move in CPU games, once per game", () => {
+    // 教室のコツの形ができた手に「コツどおり！」(docs/nyumon-mode-design.mdの21-14-2)。同じ手の囲いの札はまとめる。
+    expect(source).toMatch(/const tip = notePlayerTipMoment\(previous, usi\);\s*if \(tip\) showTipCallout\(tip\);\s*else if \(castle\) showCastleCallout\(castle\);/);
+    expect(source).toMatch(/if \(!active\.value \|\| reviewMode\.value \|\| measureMode\.value \|\| tutorialMatch\.value \|\| normalizedMode\.value !== "cpu"\) return null;/);
+    expect(source).toMatch(/tipMomentsFired\.add\(moment\.id\);\s*noteTipUse\(browserStorage\(\), moment\.id\);/);
+    // 対局の始めと、復元した局面で、もうできている形の印を作り直す。
+    expect(source).toMatch(/syncPosition\(\);\s*resetTipMoments\(\);\s*emit\("match-ready"/);
+    expect(source).toMatch(/startPresence\(\{ greet: false \}\);\s*resetTipMoments\(\);\s*return true;/);
+  });
   it("warns about newly attacked pieces right after the CPU's move with the danger sensor", () => {
     // CPUが指した直後に、取り合いの計算だけで知らせる(エンジンの読みを待たない。docs/coach-advice-expansion-design.mdの12章)。
     expect(source).toMatch(/clearHintMarks\(\{ keepMistakeRing: actor !== "player" \}\);\s*if \(actor === "cpu"\) senseDanger\(sfenBeforeMove\);/);
