@@ -924,6 +924,13 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function acceptExhibitReset\(\) \{\s*const id = resetChoice\.value \|\| "all";\s*resetData\(browserStorage\(\), id\);/);
   });
 
+  it('ホームのあそぶの行に物語(近日公開)を置き、押すと吹き出しで知らせる(docs/team-battle-design.mdの9章)', () => {
+    expect(source).toMatch(/class="shogi-title__tile shogi-title__tile--soon" data-story-tile @click="tapStoryTile"/);
+    expect(source).toMatch(/const homeGreeting = computed\(\(\) => \{\s*if \(storyNotice\.value\) return STORY_SOON_TEXT;/);
+    expect(source).toMatch(/<p class="shogi-title__live" role="status">\{\{ storyNotice \? STORY_SOON_TEXT : "" \}\}<\/p>/);
+    expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); \}/);
+  });
+
   it('問題集は解く時間を測り、正解で止めて自己ベストを残す(docs/problem-set-timing-design.md)', () => {
     const problemSet = readFileSync(new URL("../ShogiProblemSet.vue", import.meta.url), "utf8");
     expect(problemSet).toMatch(/const ms = answerSeen\.value \? null : clockElapsed\(\);[\s\S]{0,200}?recordProblemSolved\(progress\.value, problem\.id, \{ firstTry, ms \}\)/);

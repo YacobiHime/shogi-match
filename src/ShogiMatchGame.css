@@ -4117,8 +4117,29 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5em;
 }
-.shogi-title__tiles--play,
 .shogi-title__tiles--learn { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* あそぶの行は、自由対局・大会・終盤戦と物語(近日公開)の4つ。 */
+.shogi-title__tiles--play { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* まだ遊べない入口(物語)。点線の縁で「準備中」と分かるようにし、押せば吹き出しで知らせる。 */
+.shogi-game .shogi-title__tile--soon {
+  position: relative;
+  border-style: dashed;
+  background: rgba(43, 70, 91, 0.6);
+}
+.shogi-title__tile-badge--soon {
+  color: #172632;
+  background: var(--lavender);
+}
+/* 物語の知らせを読み上げる欄。見た目はやこび姫の吹き出しが受け持つ。 */
+.shogi-title__live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .shogi-game .shogi-title__tile {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -4190,6 +4211,9 @@
   .shogi-title__tiles--learn .shogi-title__icon { width: 2.2em; height: 2.2em; }
   .shogi-title__tiles--play .shogi-title__desc,
   .shogi-title__tiles--learn .shogi-title__desc { font-size: 0.66em; }
+  /* あそぶは4つ並ぶので、名前と一言を少し小さくして1行に収める(行の高さを、まなぶの行とそろえる)。 */
+  .shogi-title__tiles--play .shogi-title__label { font-size: 1em; }
+  .shogi-title__tiles--play .shogi-title__desc { font-size: 0.6em; letter-spacing: -0.02em; }
 }
 /*
  * 図鑑の5つは、1枚の横長のタイルにまとめる。中に5つの絵を小さく並べて何が入っているかを見せ、

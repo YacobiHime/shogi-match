@@ -279,7 +279,35 @@
                 <span class="shogi-title__label">終盤戦</span>
                 <small class="shogi-title__desc">{{ homeTile("endgame").after || "名局の終盤から" }}</small>
               </button>
+              <!--
+                物語(近日公開)。大会と並ぶこのゲームの主役なので、あそぶの行に置いて存在だけ見せる(Game 6-1の4)。
+                まだ遊べないので、押すとやこび姫の吹き出しで知らせる(無反応にしない。docs/team-battle-design.mdの9章)。
+              -->
+              <button type="button" class="shogi-title__tile shogi-title__tile--soon" data-story-tile @click="tapStoryTile">
+                <span class="shogi-title__tile-badge shogi-title__tile-badge--soon">近日公開</span>
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#fffcf4">
+                    <rect x="1" y="3" width="6" height="10" />
+                    <rect x="9" y="3" width="6" height="10" />
+                  </g>
+                  <g fill="#f1a54c">
+                    <rect x="7" y="3" width="2" height="11" />
+                    <rect x="1" y="13" width="14" height="1" />
+                  </g>
+                  <g fill="#1d303f">
+                    <rect x="2" y="5" width="4" height="1" />
+                    <rect x="2" y="7" width="4" height="1" />
+                    <rect x="2" y="9" width="3" height="1" />
+                    <rect x="10" y="5" width="4" height="1" />
+                    <rect x="10" y="7" width="4" height="1" />
+                    <rect x="10" y="9" width="3" height="1" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">物語</span>
+                <small class="shogi-title__desc">羽音と百花と</small>
+              </button>
             </div>
+            <p class="shogi-title__live" role="status">{{ storyNotice ? STORY_SOON_TEXT : "" }}</p>
           </section>
           <section class="shogi-title__group shogi-title__group--learn" aria-labelledby="shogi-home-school" data-home-group="learn">
             <h2 id="shogi-home-school" class="shogi-title__group-title">まなぶ</h2>
@@ -8287,8 +8315,20 @@ function startMatchupPractice(rook: "static" | "ranging") {
   beginMatch();
   showFurigoma(toss);
 }
+/** 物語のタイルを押したときの一言。物語はまだ遊べないので、吹き出しで知らせる(docs/team-battle-design.mdの9章)。 */
+const STORY_SOON_TEXT = "物語はただいま準備中！ もうすぐ遊べるよ";
+/** 物語の知らせを吹き出しに出す時間。助言の最低表示(6秒)より短く、読める長さ。 */
+const STORY_NOTICE_MS = 4000;
+const storyNotice = ref(false);
+let storyNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+function tapStoryTile() {
+  storyNotice.value = true;
+  if (storyNoticeTimer) clearTimeout(storyNoticeTimer);
+  storyNoticeTimer = setTimeout(() => { storyNotice.value = false; storyNoticeTimer = null; }, STORY_NOTICE_MS);
+}
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
 const homeGreeting = computed(() => {
+  if (storyNotice.value) return STORY_SOON_TEXT;
   if (homeNext.value.id === "resume") return "さっきの対局、続きをしよう！";
   const ryuoName = ryuoView.value?.pending?.opponent?.name ?? "";
   if (homeNext.value.id === "ryuo-counter") return `${ryuoName}さんの対策、いっしょにしよう！`;
