@@ -48,8 +48,18 @@
     <slot />
     <div class="shogi-tournament__hud-row">
       <button type="button" class="shogi-tournament__sub" :aria-label="`速さ ×${panel.speed}。押すと変える`" data-live-speed @click="emit('speed')">速さ ×{{ panel.speed }}</button>
-      <!-- 本局はエンジンが指し終えるまで待つので、押したあとは「最後まで指しています…」にする(34章)。 -->
-      <button type="button" class="shogi-tournament__sub" :disabled="panel.finished || panel.skipping" :aria-busy="panel.skipping || undefined" data-live-skip @click="emit('skip')">{{ panel.skipping ? "最後まで指しています…" : "結果まで進める" }}</button>
+      <!--
+        本局はエンジンが指し終えるまで待つ(34章)。待っているあいだは「待たずに結果を出す」に替え、押すと指し終えていない本局は
+        自動対局の結果ですぐ決める(46章。強い世界ほど待たされるため)。
+      -->
+      <button
+        type="button"
+        class="shogi-tournament__sub"
+        :disabled="panel.finished"
+        :aria-busy="panel.skipping || undefined"
+        :data-live-skip="panel.skipping ? 'now' : 'wait'"
+        @click="panel.skipping ? emit('finish') : emit('skip')"
+      >{{ panel.skipping ? "待たずに結果を出す" : "結果まで進める" }}</button>
     </div>
     <button v-if="panel.finished" type="button" class="shogi-tournament__start" data-live-finish @click="emit('finish')">{{ panel.finishText }}</button>
     <button v-else type="button" class="shogi-tournament__start" data-live-avatar-watch @click="emit('open')">{{ panel.watchText }}</button>
