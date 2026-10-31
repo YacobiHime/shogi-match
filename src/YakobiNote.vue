@@ -688,6 +688,25 @@
               </ul>
             </section>
 
+            <!--
+              教室のコツ(docs/nyumon-mode-design.mdの22-3): 12枚の文字のカード。対局で使ったカードは回数、覚えたがまだ使っていないカードは「覚えた」、
+              覚えていないカードは薄く「まだ」(存在だけ見せる)。眺めるだけで、押しても画面は移らない。
+            -->
+            <section v-else-if="albumPage === 'tips'" class="shogi-note__card shogi-note__album" aria-label="教室のコツ" data-album-tips>
+              <p class="shogi-note__hint">教室の「すぐ使えるコツ」で覚えた形を対局で使うと、回数が1つ増えるよ。</p>
+              <ul v-scroll-more class="shogi-note__album-grid shogi-note__album-grid--text shogi-note__scroll">
+                <li v-for="card in tipCards" :key="card.id">
+                  <div
+                    :class="['shogi-note__album-card', 'shogi-note__album-card--text', 'shogi-note__album-card--static', { 'shogi-note__album-card--got': card.count > 0 }]"
+                    :data-album-tip="card.id"
+                  >
+                    <span class="shogi-note__album-name">{{ card.label }}</span>
+                    <small class="shogi-note__album-status">{{ card.count ? `対局で×${card.count}` : card.learned ? "覚えた" : "まだ" }}</small>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
             <!-- Lvの壁: 入門(24級〜16級)の9段と、10段ずつ4本の階段。次の壁を縁取り、おすすめの強さの前後に印。 -->
             <section v-else-if="albumPage === 'levels'" v-scroll-more class="shogi-note__card shogi-note__album shogi-note__scroll" aria-label="Lvの壁" data-album-levels>
               <p class="shogi-note__hint">
@@ -924,6 +943,8 @@ import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import TitleDaySheet, { type KansenkiView } from "./TitleDaySheet.vue";
 import { loadKansenki, loadMealBook, mealBookView } from "./core/title-day.mjs";
 import { loadMateRecords } from "./core/mate-finish.mjs";
+import { TIP_MOMENTS, loadTipUses } from "./core/tip-moments.mjs";
+import { learnedTips, loadTutorialProgress } from "./core/tutorial-progress.mjs";
 import { loadNotes, removeNote, saveNotes } from "./core/relay-fun.mjs";
 import { loadRelayStore, recallRelayGame } from "./core/relay-store.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
@@ -1104,6 +1125,10 @@ const tesujiCards = computed(() => TESUJI_IDS.map((id) => {
     isNew: Boolean(got && collectionSeenAt && got.firstAt > collectionSeenAt),
   };
 }));
+/** 教室のコツ(22-3)。使った回数は対局画面が残し(tip-moments.mjs)、覚えたかは教室の記録で決める。ノートを開くたびに読む。 */
+const tipUses = loadTipUses(safeStorage());
+const tipsLearned = new Set(learnedTips(loadTutorialProgress(safeStorage())));
+const tipCards = TIP_MOMENTS.map(({ id, short }) => ({ id, label: short, count: tipUses[id] ?? 0, learned: tipsLearned.has(id) }));
 const wall = computed(() => levelWall(collection.value, { recommended: props.state.games ? recommendedLevel(props.state.rating) : null }));
 /** ページの切り替えに、取った数と全部の数を添える(記念は数えない)。 */
 const albumPageTabs = computed(() => ALBUM_PAGES.map((page) => {
@@ -1113,6 +1138,7 @@ const albumPageTabs = computed(() => ALBUM_PAGES.map((page) => {
   }
   if (page.id === "tesuji") return { ...page, total: TESUJI_IDS.length, got: TESUJI_IDS.filter((id) => collection.value.tesuji?.[id]).length };
   if (page.id === "levels") return { ...page, total: COLLECTION_LEVELS.length, got: collectedLevelCount.value };
+  if (page.id === "tips") return { ...page, total: tipCards.length, got: tipCards.filter(({ count }) => count > 0).length };
   return { ...page, total: 0, got: 0 };
 }));
 /** ページの切り替えを、見出し(戦法・囲い・そのほか)ごとにまとめる。 */
@@ -2394,6 +2420,8 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__album-grid--text { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }
 .shogi-game .shogi-note__album-card--text { min-height: 4.2rem; align-content: center; }
 .shogi-game .shogi-note__album-card--text .shogi-note__album-name { min-height: 0; font-size: 0.95em; }
+/* 眺めるだけのカード(教室のコツ)。押せないので、指の形にしない。 */
+.shogi-game .shogi-note__album-card--static { cursor: default; }
 /* Lvの壁: 10段ずつ4本の階段。 */
 .shogi-game .shogi-note__wall-row { display: grid; grid-template-columns: 4.2rem minmax(0, 1fr); align-items: center; gap: 0.5rem; }
 .shogi-game .shogi-note__wall-label { display: grid; margin: 0; font-weight: 800; }

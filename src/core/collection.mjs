@@ -60,6 +60,7 @@ export const ALBUM_PAGES = Object.freeze([
   { id: 'castle-static', group: '囲い', label: '居飛車', name: '居飛車の囲い' },
   { id: 'castle-ranging', group: '囲い', label: '振り飛車', name: '振り飛車の囲い' },
   { id: 'tesuji', group: 'そのほか', label: '手筋', name: '手筋' },
+  { id: 'tips', group: 'そのほか', label: 'コツ', name: '教室のコツ' },
   { id: 'levels', group: 'そのほか', label: 'Lvの壁', name: 'Lvの壁' },
   { id: 'memorial', group: 'そのほか', label: '記念', name: '記念' },
 ]);

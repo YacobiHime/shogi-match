@@ -135,6 +135,9 @@ describe('コレクション', () => {
     // 前の版で覚えた「囲い」のページは、居飛車の囲いで開く。
     expect(albumPageId('castle')).toBe('castle-static');
     expect(albumPageId('levels')).toBe('levels');
+    // 教室のコツのページは、そのほかの手筋の次(docs/nyumon-mode-design.mdの22-3)。
+    expect(albumPageId('tips')).toBe('tips');
+    expect(ALBUM_PAGES.filter(({ group }) => group === 'そのほか').map(({ id }) => id)).toEqual(['tesuji', 'tips', 'levels', 'memorial']);
     expect(albumPageId('???')).toBe('static');
     // ページの見出しは、戦法・囲い・そのほかの順に並ぶ。
     expect([...new Set(ALBUM_PAGES.map(({ group }) => group))]).toEqual([...ALBUM_PAGE_GROUPS]);
