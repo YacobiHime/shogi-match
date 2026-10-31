@@ -212,6 +212,16 @@
         @sound="playSound"
         @finish="finishGame($event)"
       />
+      <BrainShogiSense
+        v-else-if="currentItem.id === 'intuition' || currentItem.id === 'einstellung' || currentItem.id === 'blind'"
+        :key="`sense-${currentItem.id}-${runKey}`"
+        :kind="currentItem.id"
+        :start-level="startLevel(record, currentItem.id)"
+        :count="currentItem.id === 'intuition' ? 10 : 6"
+        :asset-base-url="assetBaseUrl"
+        @sound="playSound"
+        @finish="finishGame($event)"
+      />
       <BrainMemoryTest
         v-else-if="currentItem.id === 'memory-test'"
         :key="`test-${runKey}`"
@@ -337,6 +347,7 @@ import { computed, onMounted, ref } from "vue";
 import BrainGlance from "./brain/BrainGlance.vue";
 import BrainBoardMemory from "./brain/BrainBoardMemory.vue";
 import BrainMentalBoard from "./brain/BrainMentalBoard.vue";
+import BrainShogiSense from "./brain/BrainShogiSense.vue";
 import BrainSpeedCalc from "./brain/BrainSpeedCalc.vue";
 import BrainNBack from "./brain/BrainNBack.vue";
 import BrainSwitch from "./brain/BrainSwitch.vue";
@@ -344,6 +355,7 @@ import BrainMemoryTest from "./brain/BrainMemoryTest.vue";
 import BrainPalace from "./brain/BrainPalace.vue";
 import BrainPalaceBuilder from "./brain/BrainPalaceBuilder.vue";
 import { glanceLevelLabel } from "./core/brain-glance.mjs";
+import { blindLevelText, intuitionLevelText } from "./core/brain-shogi-sense.mjs";
 import { nbackText, perProblemText, switchLevelText } from "./core/brain-calc.mjs";
 import {
   BRAIN_GAMES,
@@ -386,7 +398,7 @@ import { PALACE_MAX } from "./core/palace-builder.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
 
 type RoomId = "calc" | "memory";
-type GameId = "speed" | "nback" | "glance-sym" | "switch" | "glance" | "mental" | "memory-test" | "board-memory";
+type GameId = "speed" | "nback" | "glance-sym" | "switch" | "glance" | "mental" | "intuition" | "einstellung" | "blind" | "memory-test" | "board-memory";
 type QueueItem = { id: GameId; mode: "train" | "measure" | "single"; measure?: "before" | "after" };
 type GameResult = { value: number; level: number; correct: number; total: number; recordId?: string; extraLevels?: Record<string, number>; text?: string };
 type ResultRow = { label: string; text: string; correct: number; total: number; newBest: boolean; grew: boolean; measure: boolean };
@@ -413,6 +425,9 @@ const EVIDENCE = [
   { title: "自分の宮殿", text: "自分のよく知る場所で作るのがいちばん始めやすい。見本の宮殿でも、よく歩いて覚えれば同じように使えます。同じ宮殿にすぐ別のものを置くと混ざるので、日をあけるか、別の宮殿を使いましょう。", source: "Leggeほか（2012年）、De Beni・Cornoldi（1988年）" },
   { title: "思い出す・日をあける", text: "読み返すより思い出してみるほうが、同じ時間でも日をあけて練習するほうが、長く覚えていられます。", source: "Roediger・Karpicke（2006年）、Cepedaほか（2006年）" },
   { title: "将棋の棚（局面の記憶）", text: "強い人は、駒を1枚ずつではなく、囲いや形のまとまりで覚えています。", source: "Chase・Simon（1973年）" },
+  { title: "直観の一手", text: "プロは次の一手を直観で思いつくときに、脳の尾状核が働きます。将棋を知らない人も、4か月練習すると素早く良い手を思いつく直観が育ちました。将棋の力を、将棋の中で練習します。", source: "理化学研究所（2011年）、電気通信大学・理化学研究所（2012年）" },
+  { title: "思い込み外し", text: "強い人でも、良い手を1つ見つけると、その手のまわりばかり見て、もっと良い手を見落とすことがあります。目に付く手で止まらずに探す練習です。", source: "Bilalićほか（2008年）" },
+  { title: "目隠しの詰将棋", text: "頭の中で駒を動かして先を読む練習です。将棋の力を、将棋の中で練習します（頭全体が良くなるとは言えません）。", source: "Sala・Gobet（2017年）" },
 ];
 
 const storage = typeof localStorage === "undefined" ? null : localStorage;
@@ -549,6 +564,9 @@ function valueText(recordId: string, value: number | undefined) {
     case "glance": return glanceLevelLabel(value - 1);
     case "board-memory": return `駒${value}枚`;
     case "mental": return `${value}手`;
+    case "intuition": return intuitionLevelText(value);
+    case "einstellung": return `6問中${value}問`;
+    case "blind": return blindLevelText(value);
     case "palace": return `宮殿で${value}個`;
     case "recall": return `前の回の言葉${value}個`;
     case "digits": return `数字${value}けた`;

@@ -97,7 +97,7 @@
           v-for="label in floatLabelViews"
           :key="'float-' + label.id"
           class="float-label"
-          :class="[`float-label--${label.tone}`, { 'float-label--big': label.big, 'float-label--sub': label.sub }]"
+          :class="[`float-label--${label.tone}`, { 'float-label--big': label.big, 'float-label--sub': label.sub, 'float-label--pin': label.pin }]"
           :style="label.style"
           aria-hidden="true"
         ><span>{{ label.text }}</span></div>
@@ -477,7 +477,7 @@ const props = defineProps({
   },
   // 駒得の数字(＋6／−5)。取ったマスの上に浮かべる。idが変わるたびに動きをやり直す。
   floatLabels: {
-    type: Array as PropType<{ id: string | number; file: number; rank: number; text: string; tone: string; big?: boolean; sub?: boolean; offset?: boolean }[]>,
+    type: Array as PropType<{ id: string | number; file: number; rank: number; text: string; tone: string; big?: boolean; sub?: boolean; offset?: boolean; pin?: boolean }[]>,
     required: false,
     default: () => [],
   },
@@ -1629,6 +1629,10 @@ const whitePlayerTimeSeverity = computed(() => {
 }
 .float-label--big span {
   box-shadow: 0 0 0 0.14em #fffcf4, 0 0.16em 0.35em rgba(0, 0, 0, 0.45);
+}
+/* 消さずに残す札(脳トレの直観の一手の選択肢A・B・C)。 */
+.float-label.float-label--pin {
+  animation: none;
 }
 @keyframes float-label-rise {
   0% { opacity: 0; transform: translateY(0) scale(0.7); }
