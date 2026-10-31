@@ -65,14 +65,38 @@ function distance(a, b) {
  * @param {string} sfen 手番の側が指す前の局面
  * @param {string} usi
  * reasonは「なぜ？」で言う、その手の中身(手筋の名前・ねらう駒・取れる駒)。分からなければ付けない(11-4)。
+ * reasonDexは、その中身が手筋の名前のとき、図鑑のどの項目か(「なぜ？」の隣の「？」で開く。13章)。
  * @returns {{ kind: 'free-capture' | 'tesuji' | 'capture-gain' | 'check' | 'escape' | 'drop' | 'activate' | 'defend' | 'capture',
- *   piece?: string, captured?: string, square?: string, tesuji?: string, reason?: string } | null}
+ *   piece?: string, captured?: string, square?: string, tesuji?: string, reason?: string, reasonDex?: ReasonDex } | null}
  */
 export function moveMeaning(sfen, usi) {
   const meaning = classifyMove(sfen, usi);
   if (!meaning) return null;
   const reason = concreteReason(sfen, usi, meaning);
-  return reason ? { ...meaning, reason } : meaning;
+  if (!reason) return meaning;
+  const reasonDex = reasonDexEntry(sfen, usi, meaning);
+  return reasonDex ? { ...meaning, reason, reasonDex } : { ...meaning, reason };
+}
+
+/** @typedef {{ kind: 'tesuji' | 'glossary', id: string, name: string }} ReasonDex */
+/** 手筋図鑑の項目の名前(TESUJI_REASON_IDSの手筋。「なぜ？」の「？」の読み上げに使う)。 */
+const TESUJI_DEX_NAMES = Object.freeze({
+  'head-gold': '頭金', 'double-check': '両王手', 'knight-check': '桂の王手', 'gold-bottom-pawn': '金底の歩', 'tokin-on-53': '5三のと金',
+});
+/**
+ * 「なぜ？」の中身が手筋の名前のとき、その手筋の図鑑の項目(13章)。concreteReasonと同じ順に見る
+ * (取る手・逃げる手の話のときは図鑑へつなげない)。
+ * @returns {ReasonDex | null}
+ */
+function reasonDexEntry(sfen, usi, meaning) {
+  if (['free-capture', 'capture-gain', 'escape'].includes(meaning.kind)) return null;
+  const shape = detectTesujiShape({ sfenBefore: sfen, usi });
+  const info = shape ? tesujiShape(shape.id) : null;
+  if (info) return { kind: info.dex === 'glossary' ? 'glossary' : 'tesuji', id: info.id, name: info.name };
+  if (meaning.kind === 'tesuji' && meaning.tesuji && TESUJI_REASON_IDS.has(meaning.tesuji)) {
+    return { kind: 'tesuji', id: meaning.tesuji, name: TESUJI_DEX_NAMES[meaning.tesuji] ?? '' };
+  }
+  return null;
 }
 
 /** moveMeaningの種類(上から先に当たったもの)。 */
@@ -201,12 +225,13 @@ const TESUJI_HINT_LINES = Object.freeze({
  * N1の一言。キーは評価の崖(`candidate-evaluation-cliff`)の続きにして、今の優先度と急ぎの扱いをそのまま使う。
  * reasonは「なぜ？」で言うその手の中身(moveMeaningのreason)。
  * @param {ReturnType<typeof moveMeaning>} meaning
- * @returns {{ key: string, text: string, reason?: string } | null}
+ * @returns {{ key: string, text: string, reason?: string, reasonDex?: ReasonDex } | null}
  */
 export function meaningAdvice(meaning) {
   const advice = meaningLine(meaning);
   // 「なぜ？」で言う、その手の中身(11-4)。なければ鍵で決まる一般の理由(adviceReason)。
-  return advice && meaning?.reason ? { ...advice, reason: meaning.reason } : advice;
+  if (!advice || !meaning?.reason) return advice;
+  return meaning.reasonDex ? { ...advice, reason: meaning.reason, reasonDex: meaning.reasonDex } : { ...advice, reason: meaning.reason };
 }
 
 /** @param {ReturnType<typeof moveMeaning>} meaning */

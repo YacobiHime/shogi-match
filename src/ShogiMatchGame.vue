@@ -1335,7 +1335,15 @@
             v-if="reasonShown && adviceReasonText && !hintText"
             class="shogi-game__dialogue-reason"
             data-coach-reason
-          >{{ adviceReasonText }}</small></span>
+          >{{ adviceReasonText }}<button
+            v-if="adviceReasonDex"
+            type="button"
+            class="shogi-game__reason-dex"
+            data-coach-reason-dex
+            :aria-label="`図鑑で「${adviceReasonDex.name}」を見る`"
+            :title="`図鑑で「${adviceReasonDex.name}」を見る`"
+            @click="openAdviceDex"
+          >？</button></small></span>
           <!-- 「なぜ？」で理由を1行足す(N11)。答えの手は言わない。 -->
           <button
             v-if="adviceReasonText && !hintText && !reasonShown"
@@ -3918,6 +3926,22 @@ const guideText = ref(INITIAL_GUIDE_TEXT);
 const currentAdviceKey = ref("");
 /** いまの助言の「なぜ？」で言う、その手の中身(最善手の手筋の名前など。docs/coach-advice-expansion-design.mdの11-4)。なければ鍵で決まる一般の理由。 */
 const currentAdviceReason = ref("");
+/**
+ * いまの助言の「なぜ？」が手筋の名前のとき、その手筋の図鑑の項目(docs/coach-advice-expansion-design.mdの13章)。
+ * 理由の隣の「？」で、対局の上に図鑑を開く。
+ */
+type ReasonDex = { kind: "tesuji" | "glossary"; id: string; name: string };
+const currentAdviceDex = ref<ReasonDex | null>(null);
+/** 「？」を出すのは、理由が手筋の中身(currentAdviceReason)のときだけ(鍵で決まる一般の理由には出さない)。 */
+const adviceReasonDex = computed(() => (currentAdviceReason.value ? currentAdviceDex.value : null));
+/** 「なぜ？」の手筋を、対局の上に図鑑で開く(閉じると対局へ戻る)。 */
+function openAdviceDex() {
+  const entry = adviceReasonDex.value;
+  if (!entry) return;
+  dexFromMatch.value = true;
+  referenceDexInitialId.value = entry.id;
+  referenceDexKind.value = entry.kind;
+}
 const reasonShown = ref(false);
 const recentTalk = ref<{ ply: number; text: string }[]>([]);
 const talkOpen = ref(false);
@@ -3927,6 +3951,7 @@ watch(guideText, () => {
   if (!settingStructuredAdvice) {
     currentAdviceKey.value = "";
     currentAdviceReason.value = "";
+    currentAdviceDex.value = null;
   }
   reasonShown.value = false;
 }, { flush: "sync" });
@@ -8874,6 +8899,7 @@ function displayCoachAdvice(advice: {
   key: string;
   text: string;
   reason?: string;
+  reasonDex?: ReasonDex;
   topic?: string;
   sfen?: string;
   ply?: number;
@@ -8894,6 +8920,7 @@ function displayCoachAdvice(advice: {
   try {
     currentAdviceKey.value = advice.key;
     currentAdviceReason.value = advice.reason ?? "";
+    currentAdviceDex.value = advice.reasonDex ?? null;
     guideText.value = advice.text;
   } finally {
     displayingStructuredCoachAdvice = false;
@@ -8918,7 +8945,7 @@ const coachAdviceScheduler = createCoachAdviceScheduler({ display: displayCoachA
  * (前は出すときの局面の印を付けていたので、1つ前の局面の助言が、新しい局面の話として出ていた。11-5)。
  */
 function showCoachAdvice(
-  advice?: { key: string; text: string; reason?: string; topic?: string } | null,
+  advice?: { key: string; text: string; reason?: string; reasonDex?: ReasonDex; topic?: string } | null,
   at?: { sfen: string; ply: number },
 ) {
   coachAdviceScheduler.present(advice ? {

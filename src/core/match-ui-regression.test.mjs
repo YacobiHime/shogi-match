@@ -553,7 +553,12 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/v-if="adviceReasonText && !hintText && !reasonShown"[\s\S]{0,120}data-coach-why/);
     expect(source).toMatch(/data-coach-talk\s+@click="talkOpen = !talkOpen"/);
     expect(source).toMatch(/\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;/);
-    expect(source).toMatch(/currentAdviceKey\.value = advice\.key;\s*currentAdviceReason\.value = advice\.reason \?\? "";\s*guideText\.value = advice\.text;/);
+    expect(source).toMatch(/currentAdviceKey\.value = advice\.key;\s*currentAdviceReason\.value = advice\.reason \?\? "";\s*currentAdviceDex\.value = advice\.reasonDex \?\? null;\s*guideText\.value = advice\.text;/);
+    // 理由が手筋の名前なら、隣の「？」で図鑑のその項目を対局の上に開く(docs/coach-advice-expansion-design.mdの13章)。
+    expect(source).toMatch(/v-if="adviceReasonDex"[\s\S]{0,120}data-coach-reason-dex[\s\S]{0,200}@click="openAdviceDex"/);
+    expect(source).toMatch(/function openAdviceDex\(\) \{[\s\S]{0,120}dexFromMatch\.value = true;\s*referenceDexInitialId\.value = entry\.id;\s*referenceDexKind\.value = entry\.kind;/);
+    expect(source).toMatch(/currentAdviceReason\.value = "";\s*currentAdviceDex\.value = null;/);
+    expect(source).toMatch(/\.shogi-game \.shogi-game__reason-dex::before \{[^}]*inset: calc\(\(1\.9em - 44px\) \/ 2\);/);
     // 「なぜ？」は、その手の中身(最善手の手筋の名前など)があれば先に言う(docs/coach-advice-expansion-design.mdの11-4)。
     expect(source).toMatch(/const adviceReasonText = computed\(\(\) => currentAdviceReason\.value \|\| adviceReason\(currentAdviceKey\.value\)\);/);
     // 顔の上の透明なボタンは、全体のボタンの書式(.shogi-game button)より強く書き、背景で立ち絵を塗りつぶさない。

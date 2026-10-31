@@ -1505,6 +1505,36 @@
   font-size: 0.86em;
   opacity: 0.85;
 }
+/*
+ * 「なぜ？」の手筋の名前の隣の「？」。押すと図鑑のその手筋を開く(docs/coach-advice-expansion-design.mdの13章)。
+ * 見た目は「なぜ？」と同じ丸。押せる広さは、見えない縁で44pxにする(U:7-4)。全体のボタンの書式より強く書く。
+ */
+.shogi-game .shogi-game__reason-dex {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 1.9em;
+  height: 1.9em;
+  min-width: 0;
+  min-height: 0;
+  margin-left: 0.4em;
+  padding: 0;
+  border: 1px solid var(--line, rgba(29, 48, 63, 0.3));
+  border-radius: 50%;
+  color: inherit;
+  background: rgba(255, 252, 244, 0.6);
+  box-shadow: none;
+  font: inherit;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.shogi-game .shogi-game__reason-dex::before {
+  content: "";
+  position: absolute;
+  inset: calc((1.9em - 44px) / 2);
+}
 .shogi-game__portrait { position: relative; }
 /*
  * 顔の上に重ねる透明なボタン。全体のボタンの書式(.shogi-game button。背景・影・最低の高さ)より強く書く。

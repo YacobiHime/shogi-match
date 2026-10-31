@@ -30,7 +30,7 @@ export function getIdleCoachAdvice({
   ) {
     return { key: 'idle-recapture-pawn', text: 'ここは同歩で良さそうじゃない？' };
   }
-  if (insight) return { key: `idle-${insight.key.replace(/^candidate-evaluation-cliff-/, '')}`, text: insight.text, ...(insight.reason ? { reason: insight.reason } : {}) };
+  if (insight) return { key: `idle-${insight.key.replace(/^candidate-evaluation-cliff-/, '')}`, text: insight.text, ...(insight.reason ? { reason: insight.reason } : {}), ...(insight.reasonDex ? { reasonDex: insight.reasonDex } : {}) };
   if (/^[A-Z]\*/.test(usi)) {
     return { key: 'idle-drop', text: '持ち駒は何があるかな？ 使えそうな駒を探してみよう！' };
   }

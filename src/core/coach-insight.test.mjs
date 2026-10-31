@@ -43,7 +43,8 @@ describe('N1 最善手の翻訳', () => {
 
   it('手筋の形は名前で言う(ふんどしの桂)', () => {
     const meaning = moveMeaning('k8/9/9/3r1g3/9/9/9/9/K8 b N 1', 'N*5f');
-    expect(meaning).toEqual({ kind: 'tesuji', tesuji: 'knight-fork', reason: 'ふんどしの桂を打てるよ！ 飛車と金の両取りだよ' });
+    expect(meaning).toEqual({ kind: 'tesuji', tesuji: 'knight-fork', reason: 'ふんどしの桂を打てるよ！ 飛車と金の両取りだよ',
+      reasonDex: { kind: 'tesuji', id: 'knight-fork', name: 'ふんどしの桂' } });
     expect(meaningAdvice(meaning)?.text).toContain('ふんどしの桂');
   });
 
@@ -60,6 +61,21 @@ describe('N1 最善手の翻訳', () => {
     // 考えているあいだの一言にも、同じ中身を渡す。
     expect(getIdleCoachAdvice({ usi: 'S*7a', formattedMove: '▲7一銀', pieceType: 'silver', capturedPieceType: '', toRank: 1, color: 'black', insight: split }))
       .toMatchObject({ reason: '割り打ちの銀を打てるよ！ 飛車と金の両取りだよ' });
+  });
+
+  it('「なぜ？」が手筋の名前のときは、図鑑のその項目を添える(13章)', () => {
+    // 割り打ちの銀は用語辞典、ふんどしの桂は手筋図鑑。助言と、考えているあいだの一言にも渡す。
+    const split = meaningAdvice(moveMeaning('8k/1r1g5/9/9/9/9/9/9/K8 b S 1', 'S*7a'));
+    expect(split?.reasonDex).toEqual({ kind: 'glossary', id: 'waruuchi', name: '割り打ちの銀' });
+    expect(getIdleCoachAdvice({ usi: 'S*7a', formattedMove: '▲7一銀', pieceType: 'silver', capturedPieceType: '', toRank: 1, color: 'black', insight: split }))
+      .toMatchObject({ reasonDex: { kind: 'glossary', id: 'waruuchi' } });
+    // 頭金は手筋図鑑の項目(形の判定ではなく、手筋の印から)。
+    const headGold = moveMeaning('4k4/9/4P4/9/9/9/9/9/K8 b G 1', 'G*5b');
+    if (headGold?.reason && headGold.kind === 'tesuji') expect(headGold.reasonDex).toMatchObject({ kind: 'tesuji', id: headGold.tesuji });
+    // 取る手・王手・打つ手の話には付けない。
+    expect(moveMeaning('4k4/9/9/9/4s4/9/9/9/4R3K b - 1', '5i5e')?.reasonDex).toBeUndefined();
+    expect(moveMeaning('4k4/9/9/9/9/9/2g6/9/K8 b S 1', 'S*7h')?.reasonDex).toBeUndefined();
+    expect(moveMeaning('4k4/9/9/9/9/9/9/9/K8 b G 1', 'G*5b')?.reasonDex).toBeUndefined();
   });
 
   it('台詞は答えの手を言わず、評価の崖と同じ優先度にする', () => {
