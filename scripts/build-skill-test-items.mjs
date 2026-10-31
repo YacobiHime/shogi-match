@@ -14,7 +14,8 @@
 // 6. write: src/data/skill-test-items.mjs(生成物。手で書き換えない)へ書き出す。詰将棋のcpuBは前の版の値を引き継ぐ。
 // 寄せの手筋を足す(10-12): 対局からはほとんど見つからないので、局面を作って探し、今の束に足す。
 //    make-yose: 囲いの形(崩れかけ)の玉と、竜・持ち駒のある終盤の局面を作り、寄せの手筋の問題を探す(--tries N)。
-//    select-yose: 3つの名前がそろうように選び、今の束の続きのidを付ける(--count N)。
+//      --belly: 腹銀の形だけを作る(10-13)。玉が2段目に来る囲い・1段目の竜・玉の真横の空き升・先手の持ち駒の銀(金と大駒は持たせない)。
+//    select-yose: 3つの名前がそろうように選び、今の束の続きのidを付ける(--count N。--only 名前 で1つの名前だけ)。
 //    calibrateで解かせたあと、append: 今の束を残したまま、選んだ問題を足して書き出す。
 // 使い方の例(作業用の一時フォルダーを WORK に):
 //   node scripts/build-skill-test-items.mjs --phase games --seed 1 --games 120 --out $WORK/games-1.json
@@ -26,6 +27,8 @@
 //   node scripts/build-skill-test-items.mjs --phase write --in $WORK/verified.json --cal $WORK/cal-0.json,...
 //   node scripts/build-skill-test-items.mjs --phase make-yose --seed 1 --tries 4000 --out $WORK/made-yose-1.json
 //   node scripts/build-skill-test-items.mjs --phase select-yose --in $WORK/made-yose-1.json,... --count 24 --out $WORK/yose.json
+//   node scripts/build-skill-test-items.mjs --phase make-yose --belly --seed 500 --tries 2000 --out $WORK/belly-500.json
+//   node scripts/build-skill-test-items.mjs --phase select-yose --only belly-silver --in $WORK/belly-500.json,... --count 12 --out $WORK/belly.json
 //   node scripts/build-skill-test-items.mjs --phase calibrate --in $WORK/yose.json --out $WORK/cal-yose.json
 //   node scripts/build-skill-test-items.mjs --phase append --in $WORK/yose.json --cal $WORK/cal-yose.json
 import fs from "node:fs";
@@ -89,6 +92,8 @@ const QUOTA = { take: 80, save: 80, gain: 60, yose: 30, defend: 80, judge: 80 };
 const SAME_GAME_PLIES = 6;
 
 const random = seededRandom(SEED);
+/** make-yoseで腹銀の形の局面だけを作る(--belly。docs/skill-assessment-design.mdの10-13)。 */
+const BELLY = process.argv.includes("--belly");
 const positionOf = (sfen) => Position.newBySFEN(sfen);
 
 function presetSettings(level) {
@@ -446,7 +451,12 @@ function outputItem(item, cpuB) {
 const MADE_CASTLES = ["mino", "high-mino", "half-mino", "diamond-mino", "silver-crown", "furibisha-anaguma", "yagura", "doi-yagura",
   "kikusui-yagura", "ibisha-anaguma", "millennium", "funagakoi", "elmo", "kanigakoi", "left-mino", "kinmusou", "gangi"];
 const PIECE_LIMIT = { P: 18, L: 4, N: 4, S: 4, G: 4, B: 2, R: 2, K: 2 };
-function madeEndgameSfen(rng) {
+/**
+ * @param {() => number} rng
+ * @param {{ belly?: boolean }} [options] belly: 腹銀の形(10-13)。玉の真横の升を空け、先手には銀を持たせ、金と大駒は持たせない
+ *   (金を持つと頭金が、大駒を持つと大駒の打ち込みが、腹銀より良い手になった)。
+ */
+function madeEndgameSfen(rng, { belly = false } = {}) {
   const pick = (list) => list[Math.floor(rng() * list.length)];
   const board = new Map();
   const count = { P: 0, L: 0, N: 0, S: 0, G: 0, B: 0, R: 0, K: 0 };
@@ -460,8 +470,17 @@ function madeEndgameSfen(rng) {
   const rotate = (square) => `${10 - Number(square[0])}${String.fromCharCode(96 + 10 - (square.charCodeAt(1) - 96))}`;
   const castle = (id) => OPENING_CASTLES.find((entry) => entry.id === id)?.completionSquares ?? [];
   // 後手の囲い(先手の形を180度回す)。玉のほかの駒を0〜2枚はがす。
-  const defense = castle(pick(MADE_CASTLES)).map(([square, kind]) => [rotate(square), kind]);
-  const stripped = new Set(defense.filter(([, kind]) => kind !== "K").sort(() => rng() - 0.5).slice(0, Math.floor(rng() * 3)).map(([square]) => square));
+  // 腹銀では、玉が2段目に来る囲いだけを使う(見つかった腹銀は、どれも2段目の玉と1段目の竜の形だった。10-13)。
+  const castles = belly ? MADE_CASTLES.filter((id) => castle(id).some(([square, kind]) => kind === "K" && square[1] === "h")) : MADE_CASTLES;
+  const defense = castle(pick(castles)).map(([square, kind]) => [rotate(square), kind]);
+  const stripped = new Set(defense.filter(([, kind]) => kind !== "K").sort(() => rng() - 0.5).slice(0, Math.floor(rng() * (belly ? 2 : 3))).map(([square]) => square));
+  if (belly) {
+    // 玉の腹(真横の升)の1つを空ける。
+    const king = defense.find(([, kind]) => kind === "K")?.[0];
+    if (!king) return null;
+    const sides = [-1, 1].map((step) => `${Number(king[0]) + step}${king[1]}`).filter((square) => Number(square[0]) >= 1 && Number(square[0]) <= 9);
+    stripped.add(pick(sides));
+  }
   for (const [square, kind] of defense) if (!stripped.has(square)) put(square, kind.toLowerCase());
   for (const [square, kind] of castle(pick(MADE_CASTLES))) put(square, kind);
   if (count.K !== 2) return null;
@@ -481,31 +500,29 @@ function madeEndgameSfen(rng) {
     return squares;
   };
   // 敵陣に入った大駒は成っている(成らずに敵陣にいる大駒は、実戦ではまず出ない)。
-  if (!(rng() < 0.85 ? put(pick(empty(["a", "b", "c"])), "+R") : put(pick(empty(["d"])), "R"))) return null;
+  if (belly) {
+    // 1段目の竜(玉の真横へ利かない升。王手の局面はあとではじく)。
+    if (!put(pick(empty(["a"])), "+R")) return null;
+  } else if (!(rng() < 0.85 ? put(pick(empty(["a", "b", "c"])), "+R") : put(pick(empty(["d"])), "R"))) return null;
   if (rng() < 0.25) rng() < 0.5 ? put(pick(empty(["b", "c", "d", "e"])), "+B") : put(pick(empty(["d", "e"])), "B");
   if (rng() < 0.7) rng() < 0.6 ? put(pick(empty(["g", "h", "i"])), "+r") : put(pick(empty(["f"])), "r");
   if (rng() < 0.3) rng() < 0.5 ? put(pick(empty(["e", "f", "g"])), "+b") : put(pick(empty(["e", "f"])), "b");
-  // 二歩と、行き所のない駒をはじく。
-  for (const color of ["P", "p"]) {
-    for (let file = 1; file <= 9; file += 1) {
-      if ([..."abcdefghi"].filter((rank) => board.get(`${file}${rank}`) === color).length > 1) return null;
-    }
-  }
-  for (const [square, piece] of board) {
-    const rank = square.charCodeAt(1) - 96;
-    if ((piece === "P" || piece === "L") && rank === 1) return null;
-    if ((piece === "p" || piece === "l") && rank === 9) return null;
-    if (piece === "N" && rank <= 2) return null;
-    if (piece === "n" && rank >= 8) return null;
-  }
   // 残りの駒は持ち駒(どちらかに。先手に偏らせると、もう大差か詰みの局面ばかりになった)。
   const hands = { b: {}, w: {} };
   for (const kind of ["R", "B", "G", "S", "N", "L", "P"]) {
     for (let index = count[kind]; index < PIECE_LIMIT[kind]; index += 1) {
-      const side = rng() < 0.45 ? "b" : "w";
+      const toBlack = belly
+        ? (kind === "S" ? !hands.b.S || rng() < 0.45 : !["R", "B", "G"].includes(kind) && rng() < 0.3)
+        : rng() < 0.45;
+      const side = toBlack ? "b" : "w";
       hands[side][kind] = (hands[side][kind] ?? 0) + 1;
     }
   }
+  return playableSfen(board, hands);
+}
+
+/** 盤(升→駒)と持ち駒から、先手番のSFENを作る。 */
+function boardSfen(board, hands) {
   const rows = [];
   for (let rank = 1; rank <= 9; rank += 1) {
     let row = "";
@@ -524,7 +541,23 @@ function madeEndgameSfen(rng) {
   }
   const hand = ["R", "B", "G", "S", "N", "L", "P"].map((kind) => `${hands.b[kind] > 1 ? hands.b[kind] : ""}${hands.b[kind] ? kind : ""}`).join("")
     + ["R", "B", "G", "S", "N", "L", "P"].map((kind) => `${hands.w[kind] > 1 ? hands.w[kind] : ""}${hands.w[kind] ? kind.toLowerCase() : ""}`).join("");
-  const sfen = `${rows.join("/")} b ${hand || "-"} 1`;
+  return `${rows.join("/")} b ${hand || "-"} 1`;
+}
+/** 実戦で出る形のSFENか(二歩・行き所のない駒・どちらかの玉に王手がかかっている局面ははじく)。出ない形ならnull。 */
+function playableSfen(board, hands) {
+  for (const color of ["P", "p"]) {
+    for (let file = 1; file <= 9; file += 1) {
+      if ([..."abcdefghi"].filter((rank) => board.get(`${file}${rank}`) === color).length > 1) return null;
+    }
+  }
+  for (const [square, piece] of board) {
+    const rank = square.charCodeAt(1) - 96;
+    if ((piece === "P" || piece === "L") && rank === 1) return null;
+    if ((piece === "p" || piece === "l") && rank === 9) return null;
+    if (piece === "N" && rank <= 2) return null;
+    if (piece === "n" && rank >= 8) return null;
+  }
+  const sfen = boardSfen(board, hands);
   try {
     const position = Position.newBySFEN(sfen);
     if (!position || position.checked) return null;
@@ -536,6 +569,7 @@ function madeEndgameSfen(rng) {
     return null;
   }
 }
+
 
 async function main() {
   if (PHASE === "detect") {
@@ -599,8 +633,9 @@ async function main() {
     let made = 0;
     let read = 0;
     const tryOne = async (index) => {
-      const sfen = madeEndgameSfen(random);
+      const sfen = madeEndgameSfen(random, { belly: BELLY });
       if (!sfen) return;
+      if (BELLY && !legalMoves(positionOf(sfen)).some((usi) => detectTesujiShape({ sfenBefore: sfen, usi })?.id === "belly-silver")) return;
       made += 1;
       const position = positionOf(sfen);
       const legal = legalMoves(position);
@@ -612,6 +647,13 @@ async function main() {
       const why = first.length < 3 ? "few" : isMate(first[0].score) ? (first[0].score.value > 0 ? "mate-win" : "mate-lose")
         : Math.abs(first[0].value) >= 3000 ? (first[0].value > 0 ? "lopsided+" : "lopsided-") : tesujiShape(shape?.id ?? "")?.family !== "yose" ? "best-not-yose" : "shape";
       reasons[why] = (reasons[why] ?? 0) + 1;
+      if (BELLY && why === "best-not-yose") {
+        // 腹銀の作り方を直す手がかり: いちばん良い手の種類と、腹銀が何番目か。
+        const rank = first.findIndex(({ move }) => detectTesujiShape({ sfenBefore: sfen, usi: move })?.id === "belly-silver");
+        const kind = first[0].move.includes("*") ? `drop-${first[0].move[0]}` : shape?.id ?? (isCaptureMove(sfen, first[0].move) ? "capture" : "move");
+        const key = `${kind}/${rank < 0 ? "none" : rank < 3 ? `r${rank}` : "r3+"}`;
+        reasons.detail = { ...(reasons.detail ?? {}), [key]: (reasons.detail?.[key] ?? 0) + 1 };
+      }
       if (why === "shape") {
         const entry = { sfen, history: [], game: `made-${SEED}-${index}`, ply: 0 };
         const item = await detectTactic(engine, entry, legal, first);
@@ -636,7 +678,9 @@ async function main() {
     // 3つの名前がそろうように選び(1つの名前は3分の1まで、D:4-7)、今の束の続きのidを付ける。
     const { SKILL_TEST_ITEMS } = await import("../src/data/skill-test-items.mjs");
     const want = Number(option("count", "24"));
-    const pool = INPUTS.flatMap(readJson).map((item) => ({ item, key: random() })).sort((a, b) => a.key - b.key).map(({ item }) => item);
+    const only = option("only", "");
+    const pool = INPUTS.flatMap(readJson).filter(({ tesuji }) => !only || tesuji === only)
+      .map((item) => ({ item, key: random() })).sort((a, b) => a.key - b.key).map(({ item }) => item);
     const names = [...new Set(pool.map(({ tesuji }) => tesuji))];
     const cap = Math.ceil(want / Math.max(1, names.length));
     const picked = [];
