@@ -15,6 +15,7 @@
 // 寄せの手筋を足す(10-12): 対局からはほとんど見つからないので、局面を作って探し、今の束に足す。
 //    make-yose: 囲いの形(崩れかけ)の玉と、竜・持ち駒のある終盤の局面を作り、寄せの手筋の問題を探す(--tries N)。
 //      --belly: 腹銀の形だけを作る(10-13)。玉が2段目に来る囲い・1段目の竜・玉の真横の空き升・先手の持ち駒の銀(金と大駒は持たせない)。
+//      --belly-shape rank3|nodragon: 3段目の玉(囲いを1段ずらす)・竜のない腹銀(馬かと金)(10-14)。
 //    select-yose: 3つの名前がそろうように選び、今の束の続きのidを付ける(--count N。--only 名前 で1つの名前だけ)。
 //    calibrateで解かせたあと、append: 今の束を残したまま、選んだ問題を足して書き出す。
 // 使い方の例(作業用の一時フォルダーを WORK に):
@@ -94,6 +95,8 @@ const SAME_GAME_PLIES = 6;
 const random = seededRandom(SEED);
 /** make-yoseで腹銀の形の局面だけを作る(--belly。docs/skill-assessment-design.mdの10-13)。 */
 const BELLY = process.argv.includes("--belly");
+/** 腹銀の形(--belly-shape rank2|rank3|nodragon。10-14)。 */
+const BELLY_SHAPE = option("belly-shape", "rank2");
 const positionOf = (sfen) => Position.newBySFEN(sfen);
 
 function presetSettings(level) {
@@ -453,10 +456,11 @@ const MADE_CASTLES = ["mino", "high-mino", "half-mino", "diamond-mino", "silver-
 const PIECE_LIMIT = { P: 18, L: 4, N: 4, S: 4, G: 4, B: 2, R: 2, K: 2 };
 /**
  * @param {() => number} rng
- * @param {{ belly?: boolean }} [options] belly: 腹銀の形(10-13)。玉の真横の升を空け、先手には銀を持たせ、金と大駒は持たせない
+ * @param {{ belly?: boolean, bellyShape?: string }} [options] belly: 腹銀の形(10-13)。bellyShapeは玉と攻め駒の形(10-14):
+ *   rank2(2段目の玉と1段目の竜)・rank3(囲いを1段ずらした3段目の玉と、1・2段目の竜)・nodragon(竜の代わりに馬かと金)。玉の真横の升を空け、先手には銀を持たせ、金と大駒は持たせない
  *   (金を持つと頭金が、大駒を持つと大駒の打ち込みが、腹銀より良い手になった)。
  */
-function madeEndgameSfen(rng, { belly = false } = {}) {
+function madeEndgameSfen(rng, { belly = false, bellyShape = "rank2" } = {}) {
   const pick = (list) => list[Math.floor(rng() * list.length)];
   const board = new Map();
   const count = { P: 0, L: 0, N: 0, S: 0, G: 0, B: 0, R: 0, K: 0 };
@@ -472,7 +476,9 @@ function madeEndgameSfen(rng, { belly = false } = {}) {
   // 後手の囲い(先手の形を180度回す)。玉のほかの駒を0〜2枚はがす。
   // 腹銀では、玉が2段目に来る囲いだけを使う(見つかった腹銀は、どれも2段目の玉と1段目の竜の形だった。10-13)。
   const castles = belly ? MADE_CASTLES.filter((id) => castle(id).some(([square, kind]) => kind === "K" && square[1] === "h")) : MADE_CASTLES;
-  const defense = castle(pick(castles)).map(([square, kind]) => [rotate(square), kind]);
+  // 3段目の玉(10-14)は、2段目に玉が来る囲いを、まるごと1段下(先手側)へずらす(玉が上がって逃げ出した形)。
+  const shiftRank = (square) => (belly && bellyShape === "rank3" ? `${square[0]}${String.fromCharCode(square.charCodeAt(1) + 1)}` : square);
+  const defense = castle(pick(castles)).map(([square, kind]) => [shiftRank(rotate(square)), kind]);
   const stripped = new Set(defense.filter(([, kind]) => kind !== "K").sort(() => rng() - 0.5).slice(0, Math.floor(rng() * (belly ? 2 : 3))).map(([square]) => square));
   if (belly) {
     // 玉の腹(真横の升)の1つを空ける。
@@ -486,7 +492,7 @@ function madeEndgameSfen(rng, { belly = false } = {}) {
   if (count.K !== 2) return null;
   // 歩の列(ところどころ交換して持ち駒になっている)。
   for (let file = 1; file <= 9; file += 1) {
-    if (rng() > 0.25) put(`${file}${rng() < 0.2 ? "d" : "c"}`, "p");
+    if (rng() > 0.25) put(`${file}${belly && bellyShape === "rank3" ? (rng() < 0.3 ? "e" : "d") : rng() < 0.2 ? "d" : "c"}`, "p");
     if (rng() > 0.25) put(`${file}${rng() < 0.2 ? "f" : "g"}`, "P");
   }
   // 端の香と桂(残っていれば)。
@@ -500,9 +506,17 @@ function madeEndgameSfen(rng, { belly = false } = {}) {
     return squares;
   };
   // 敵陣に入った大駒は成っている(成らずに敵陣にいる大駒は、実戦ではまず出ない)。
-  if (belly) {
-    // 1段目の竜(玉の真横へ利かない升。王手の局面はあとではじく)。
-    if (!put(pick(empty(["a"])), "+R")) return null;
+  if (belly && bellyShape === "nodragon") {
+    // 竜のない腹銀(10-14): 竜の代わりに、玉の近くの馬かと金。どちらもないこともある(持ち駒の銀だけで迫る)。
+    const king = [...board].find(([, piece]) => piece === "k")?.[0];
+    if (!king) return null;
+    const near = empty(["a", "b", "c", "d"]).filter((square) => Math.abs(Number(square[0]) - Number(king[0])) <= 2 && Math.abs(square.charCodeAt(1) - king.charCodeAt(1)) <= 2);
+    // 馬かと金の片方だけでは1000回あまりで1問も出なかったので、馬(1〜3段目)はいつも置き、と金は半分、銀は2枚持たせる(下の持ち駒)。
+    if (!put(pick(empty(["a", "b", "c"])), "+B")) return null;
+    if (rng() < 0.5) put(pick(near.filter((square) => square[1] !== "a")), "+P");
+  } else if (belly) {
+    // 竜(玉の真横へ利かない升。王手の局面はあとではじく)。2段目の玉は1段目(一段竜)、3段目の玉は2段目(二段竜。同じ形を1段ずらす)。
+    if (!put(pick(empty(bellyShape === "rank3" ? ["b"] : ["a"])), "+R")) return null;
   } else if (!(rng() < 0.85 ? put(pick(empty(["a", "b", "c"])), "+R") : put(pick(empty(["d"])), "R"))) return null;
   if (rng() < 0.25) rng() < 0.5 ? put(pick(empty(["b", "c", "d", "e"])), "+B") : put(pick(empty(["d", "e"])), "B");
   if (rng() < 0.7) rng() < 0.6 ? put(pick(empty(["g", "h", "i"])), "+r") : put(pick(empty(["f"])), "r");
@@ -512,7 +526,7 @@ function madeEndgameSfen(rng, { belly = false } = {}) {
   for (const kind of ["R", "B", "G", "S", "N", "L", "P"]) {
     for (let index = count[kind]; index < PIECE_LIMIT[kind]; index += 1) {
       const toBlack = belly
-        ? (kind === "S" ? !hands.b.S || rng() < 0.45 : !["R", "B", "G"].includes(kind) && rng() < 0.3)
+        ? (kind === "S" ? (hands.b.S ?? 0) < (bellyShape === "nodragon" ? 2 : 1) || rng() < 0.45 : !["R", "B", "G"].includes(kind) && rng() < 0.3)
         : rng() < 0.45;
       const side = toBlack ? "b" : "w";
       hands[side][kind] = (hands[side][kind] ?? 0) + 1;
@@ -633,7 +647,7 @@ async function main() {
     let made = 0;
     let read = 0;
     const tryOne = async (index) => {
-      const sfen = madeEndgameSfen(random, { belly: BELLY });
+      const sfen = madeEndgameSfen(random, { belly: BELLY, bellyShape: BELLY_SHAPE });
       if (!sfen) return;
       if (BELLY && !legalMoves(positionOf(sfen)).some((usi) => detectTesujiShape({ sfenBefore: sfen, usi })?.id === "belly-silver")) return;
       made += 1;
