@@ -449,6 +449,14 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   background: #f1a54c;
   color: #1d303f;
 }
+/* 横向きのスマホ: 高さが足りないので、右の欄を細くして盤に幅を回す(欄が広いと、盤が小さすぎて駒が読めなかった)。 */
+@media (orientation: landscape) and (max-height: 600px) {
+  .shogi-game .brain-sense { gap: 0.6rem; }
+  .shogi-game .brain-sense__panel { flex-basis: 15rem; gap: 0.45rem; }
+  .shogi-game .brain-sense__prompt { font-size: 0.92rem; line-height: 1.4; }
+  .shogi-game .brain-sense__choice { min-height: 2.6rem; padding: 0.35rem 0.7rem; font-size: 0.95rem; }
+  .shogi-game .brain-sense__moves { font-size: 1rem; }
+}
 @media (max-width: 56rem) and (orientation: portrait), (max-width: 30rem) {
   .shogi-game .brain-sense { flex-direction: column; justify-content: flex-start; }
   .shogi-game .brain-sense__panel { flex: none; width: 100%; }

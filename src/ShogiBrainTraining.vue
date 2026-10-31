@@ -1158,6 +1158,13 @@ defineExpose({ goBack });
   .shogi-game .shogi-brain__home { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .shogi-game .shogi-brain__home > .shogi-dex__speech { grid-column: 1 / -1; }
   .shogi-game .shogi-brain__room-card { min-height: 7rem; }
+  /* 横向きのスマホでも、6週間のカレンダーが1画面に収まる高さにする。 */
+  .shogi-game .shogi-brain__home { gap: 0.5rem; }
+  .shogi-game .shogi-brain__calendar td { height: 1.3rem; }
+  .shogi-game .shogi-brain__room-side { gap: 0.45rem; }
+  /* 計算力の部屋は種目が9つあるので、横向きのスマホでは説明の文を省いて1画面に収める(U:7-5の3)。 */
+  .shogi-game [data-brain-room-view="calc"] .shogi-brain__card small { display: none; }
+  .shogi-game .shogi-brain__room .shogi-brain__card { padding: 0.45rem 0.8rem; }
 }
 
 /* ===== 種目で共通の部品 ===== */
@@ -1536,7 +1543,10 @@ defineExpose({ goBack });
   .shogi-game .brain-mental .brain-board-wrap { grid-area: board; }
   .shogi-game .brain-memory .brain-board { width: min(66vh, 20rem); }
   .shogi-game .brain-mental .brain-board-wrap--coords { grid-template-columns: min(62vh, 19rem) 1.4rem; }
-  .shogi-game .brain-memory > :is(.brain-memory__tools, .brain-game__actions, .brain-memory__timer),
+  /* 盤面の記憶は、時間のバーとボタンを別の段にする(同じ段だと、バーがボタンの後ろに重なった)。 */
+  .shogi-game .brain-memory { grid-template-areas: "status status" "board prompt" "board timer" "board tools"; }
+  .shogi-game .brain-memory > .brain-memory__timer { grid-area: timer; align-self: end; width: 100%; }
+  .shogi-game .brain-memory > :is(.brain-memory__tools, .brain-game__actions),
   .shogi-game .brain-mental > :is(.brain-mental__move, .brain-mental__choices, .brain-game__actions) { grid-area: tools; }
 }
 @media (prefers-reduced-motion: reduce) {
