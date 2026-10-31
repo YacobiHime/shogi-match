@@ -8,7 +8,7 @@ import { repertoireText } from './ryuo-repertoire.mjs';
 import { JUNNI_LABELS, JUNNI_LEAGUE_CLASSES, OTHER_TITLES, awardLabel, careerSummary, junniClassOf, junniPlaceOf, titleLabel, winRate } from './ryuo-league.mjs';
 import { characterCatchphrase } from './ryuo-oshi.mjs';
 import { styleEntry } from './ryuo-repertoire.mjs';
-import { HANANE, STORY_PEOPLE, YOSHIHIKO, hananeIntro } from './ryuo-story.mjs';
+import { HANANE, STORY_PEOPLE, YOSHIHIKO, hananeIntro, yoshihikoIntro } from './ryuo-story.mjs';
 import { resignStyleOf } from './resign-style.mjs';
 
 /** 基本の居飛車は、どの居飛車の戦法にも付くので、結びつきには使わない。 */
@@ -163,7 +163,8 @@ export function memberProfile(roster, member) {
     // 羽音の紹介は、段位・タイトル・年齢で変わる(七段なのに「新四段」と言わない)。
     intro: member.story === HANANE
       ? hananeIntro({ dan: member.dan, held: career.held, age: member.age, rookie: (roster.season ?? 0) - (member.since ?? 0) <= 1 })
-      : STORY_PEOPLE[member.story]?.intro ?? '',
+      : member.story === YOSHIHIKO ? yoshihikoIntro({ held: career.held, totalTitles: career.totalTitles })
+        : STORY_PEOPLE[member.story]?.intro ?? '',
     formations: memberFormations(member),
     strengths: character.strengths,
     weaknesses: character.weaknesses,

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { asAvatarSeason, createSeason, describeSeason, playSpectatorGame, previewGroupBrackets, recordUserGame, replayRest, replayUserRound, restGameKey, restOpen, seasonGameResults, settleRest, siblingNodeId } from './ryuo.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import {
-  afterWatchRounds, applyMeijinWatchedRound, applyWatchedRound, elsewhereGames, hiddenRoundIds, meijinAfterRounds, meijinFinale, meijinHiddenKeys, meijinLiveEntry, meijinLiveRound, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
+  afterWatchRounds, applyMeijinWatchedRound, applyWatchedRound, elsewhereGames, elsewhereTables, hiddenRoundIds, meijinAfterRounds, meijinFinale, meijinHiddenKeys, meijinLiveEntry, meijinLiveRound, hiddenTables, liveDuration, liveGame, liveRound, liveState, maskBracketView, maskSeriesViews,
   meijinPlayedRound, pendingTable, playedRound, roundTable, tableOf, viewersText,
 } from './relay-live.mjs';
 import { stepsAfterElimination, watchSteps } from './ryuo-watch.mjs';
@@ -459,6 +459,51 @@ describe('ほかの組の注目の対局を見に行く(31章)', () => {
     expect(new Set(seen.map(({ key }) => key)).size).toBe(seen.length);
     expect(seen.every(({ key }) => key.includes(':group-5'))).toBe(true);
     expect(seen.length).toBeGreaterThan(0);
+  });
+});
+
+describe('ほかの組の羽音の表を、同じ時点まで見る(46章)', () => {
+  /** 羽音を5組に移した名簿で、6組から出る観戦の期。分身は強くして、組のあいだを勝ち進める。 */
+  function apartSeason(hananeGroup = 5, seed = 9) {
+    const roster = createRoster({ seed: 52, userGroup: 6 });
+    Object.values(roster.players).find((member) => member.story === HANANE).group = hananeGroup;
+    return asAvatarSeason(createSeason({ no: 2, mode: 'challenge', group: 6, settings, userLevel: 20, seed, roster, userName: 'やこび' }), { ...avatar, rating: 2400 });
+  }
+
+  it('自分の組のあいだ、羽音のいる組の表を出し、次の一局と同じ段からあとの結果は伏せる(期は書き換えない)', () => {
+    const season = apartSeason();
+    const before = JSON.stringify(season);
+    const tables = elsewhereTables(season);
+    expect(tables.map(({ key }) => key)).toEqual(['group-5']);
+    const [table] = tables;
+    expect(table).toMatchObject({ label: '5組', group: 5, own: false });
+    expect(table.view.matches.some((match) => match.top?.story === HANANE || match.bottom?.story === HANANE)).toBe(true);
+    // 1回戦の前なので、結果はすべて伏せる。見られる対局もない。
+    const decided = table.view.matches.filter((match) => match.winner).map((match) => String(match.id));
+    expect(table.hidden.sort()).toEqual(decided.sort());
+    expect(table.entries).toEqual([]);
+    expect(JSON.stringify(season)).toBe(before);
+    // 自分で指す期でも同じ表を出す。
+    expect(elsewhereTables({ ...season, spectator: false }).map(({ key }) => key)).toEqual(['group-5']);
+  });
+
+  it('1局進むと、前の段の結果が見え、その局は中継で見られる(同じ段からあとはまだ伏せる)', () => {
+    let season = apartSeason();
+    season = playSpectatorGame(season);
+    expect(season.pending?.phase).toBe('ranking');
+    const [table] = elsewhereTables(season);
+    const shown = table.view.matches.filter((match) => match.winner && !table.hidden.includes(String(match.id)));
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.every((match) => match.round === 1)).toBe(true);
+    expect(table.entries.length).toBe(shown.length);
+    expect(table.entries.every((entry) => entry.key.includes(':group-5:'))).toBe(true);
+    // 次の一局まで進むと、伏せる試合は減っていく。
+    const next = elsewhereTables(playSpectatorGame(season))[0];
+    expect(next.hidden.length).toBeLessThan(table.hidden.length);
+  });
+
+  it('羽音が同じ組なら、ほかの組の表は出さない', () => {
+    expect(elsewhereTables(watchSeason())).toEqual([]);
   });
 });
 

@@ -8,6 +8,9 @@ import { applyCharacter } from './player-character.mjs';
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings } from './strength-settings.mjs';
 import {
   HANANE,
+  crownText,
+  yoshihikoIntro,
+  yoshihikoCoachIntro,
   HANANE_GRUDGE_RATING,
   HANANE_LINES,
   HANANE_EXPRESSIONS,
@@ -254,5 +257,20 @@ describe('竜王戦の画面に出す、羽音の一言', () => {
     const met = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter((seed) => seasonBeforeRival(seed)).length;
     expect(met).toBeGreaterThanOrEqual(2);
     expect(met).toBeLessThan(10);
+  });
+});
+
+describe('善彦の冠の言い方(持っているタイトルの数で変わる)', () => {
+  it('crownTextは数と竜王で言い方を変え、yoshihikoIntroは六冠に決め打ちしない', () => {
+    expect(crownText(['竜王', '名人', '王位', '王座', '棋王', '棋聖'])).toBe('竜王を含む六冠');
+    expect(crownText(['名人', '王位', '王座'])).toBe('三冠');
+    expect(crownText(['名人', '王位'])).toBe('名人と王位の二冠');
+    expect(crownText(['名人'])).toBe('名人');
+    expect(crownText([])).toBe('');
+    expect(crownText(['竜王', '名人', '王位', '叡王', '王座', '棋王', '王将', '棋聖'])).toBe('全八冠');
+    expect(yoshihikoIntro({ held: ['名人', '王位', '王座'] })).toContain('三冠の棋士');
+    expect(yoshihikoIntro({ held: ['名人', '王位', '王座'] })).not.toContain('六冠');
+    expect(yoshihikoIntro({ held: [], totalTitles: 80 })).toContain('タイトル通算80期で、いまは無冠');
+    expect(yoshihikoCoachIntro(false, ['名人', '王位'])).toMatch(/^名人と王位の二冠の天鷺善彦さん/);
   });
 });

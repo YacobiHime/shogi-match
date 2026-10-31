@@ -295,6 +295,31 @@ export function hananeIntro({ age = STORY_PEOPLE[HANANE].age, ...standing } = {}
   return `${hananeStanding(standing)}。${school}天鷺善彦の娘。読みの深さ・速さ・正確さがずば抜けていて、力戦でも崩れない。`;
 }
 
+const CROWN_KANJI = ['', '一', '二', '三', '四', '五', '六', '七', '八'];
+
+/**
+ * いま持っているタイトルの言い方(竜王を含む六冠・名人と王位の二冠・名人)。持っていなければ''。
+ * 竜王があれば「竜王を含む」を添える(2つ以上のとき)。2つだけなら名前を並べる。
+ * @param {string[]} held
+ */
+export function crownText(held = []) {
+  if (held.length >= 8) return '全八冠';
+  if (held.length >= 3) return `${held.includes('竜王') ? '竜王を含む' : ''}${CROWN_KANJI[held.length]}冠`;
+  if (held.length === 2) return `${held.join('と')}の二冠`;
+  return held[0] ?? '';
+}
+
+/**
+ * 名鑑の善彦の紹介。持っているタイトルの数で変わる(期を重ねて失冠しても「六冠」と言わない)。
+ * @param {{ held?: string[], totalTitles?: number }} [standing]
+ */
+export function yoshihikoIntro({ held = [], totalTitles = 0 } = {}) {
+  const crown = crownText(held);
+  const head = crown ? `史上最強と言われる、${crown}の棋士。`
+    : `史上最強と言われる棋士。${totalTitles ? `タイトル通算${totalTitles}期で、` : ''}いまは無冠。`;
+  return `${head}居飛車も振り飛車も指すオールラウンダーで、形勢判断と深く正確な読みが武器。天鷺羽音の父。`;
+}
+
 /**
  * やこび姫が、羽音と当たる対局の前に言う紹介(攻略の手がかりつき)。羽音は自分の弱点を言わない。
  * @param {{ wins: number, losses: number } | null} vsUser
@@ -314,7 +339,7 @@ export function hananeCoachIntro(vsUser, standing = {}) {
  * @param {string[]} [held] 善彦がいま持っているタイトル
  */
 export function yoshihikoCoachIntro(metHanane, held = []) {
-  const crown = held.length >= 2 ? `${held.length}冠の` : held.length === 1 ? `${held[0]}の` : '';
+  const crown = held.length ? `${crownText(held)}の` : '';
   const lines = `${crown}天鷺善彦さんは、羽音さんのお父さん。史上最強って言われる人だよ。形勢判断と読みに穴がなくて、劣勢からでもひっくり返してくる。最後まで気をゆるめないで。`;
   return metHanane ? `${lines}羽音さんは「${HANANE_LINES.father[0]}」って言ってた。` : lines;
 }

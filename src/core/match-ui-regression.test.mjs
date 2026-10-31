@@ -423,8 +423,11 @@ describe("match screen regressions", () => {
     // 回戦の対局は本局(20章)。エンジンが指し終えた分身の局と、同じ回戦のほかの局(20-9)の結果を記録する(終わっていなければ自動対局の結果)。
     expect(tournament).toMatch(/async function finishLive\(\) \{\s*if \(afterWatch\.value\) \{\s*nextAfterRound\(\);\s*return;\s*\}[\s\S]*?stopLiveTimer\(\);[\s\S]*?for \(const state of realGames\.values\(\)\) \{\s*if \(!state\.record\.end\) continue;[\s\S]*?real = engineGameResult\(state\.spec, game, "user"\);[\s\S]*?else round\.push\(\{ nodeId: tableOf\(state\.spec\.key\)\.id, aId, result: engineGameResult\([\s\S]*?stopRealGames\(\);[\s\S]*?live\.value = null;[\s\S]*?await commitAvatarGame\(real, round\);/);
     expect(tournament).toMatch(/emit\("watch-play", real, round\);/);
-    // スマホと「結果だけ見る」は、主要キャラの局(と、指し終えた棋譜のある局)だけを本局にする。
-    expect(tournament).toMatch(/if \(!props\.relayEngineFactory \|\| \(!main && !kept && \(fast \|\| phone\)\)\) return spec;\s*const real = startRealGame\(realGameSpec\(spec,/);
+    // 注目の棋士のいない局は、はじめから決着した札(46章)。注目の局(と、指し終えた棋譜のある局)だけを本局にする。
+    expect(tournament).toMatch(/if \(!kept && !featuredGame\(spec, avatarKey\)\) return \{ \.\.\.spec, ended: true \};\s*if \(!props\.relayEngineFactory\) return spec;\s*const real = startRealGame\(realGameSpec\(spec,/);
+    // 「結果だけ見る」は、エンジンで指さずにすぐ決めて記録する(46章)。
+    expect(tournament).toMatch(/function watchResultOnly\(\) \{\s*stopRealGames\(\);\s*void commitAvatarGame\(\);/);
+    expect(tournament).toMatch(/@watch-skip="meijinResultOnly"/);
     // 中継ボードを閉じると、本局は止める(途中の手は残り、次は続きから)。
     expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*stopRealGames\(\);/);
     // 敗退後の観戦は、結果の画面の「このあとの対局を観戦」から表のボードへ。見届けた回戦の数を残し、終えると結果の画面へ戻る。
@@ -437,7 +440,7 @@ describe("match screen regressions", () => {
     expect(meijinScreen).toMatch(/data-meijin-avatar-enter @click="enter\(true\)"/);
     expect(meijinScreen).toMatch(/data-meijin-watch-skip @click="emit\('watch-skip'\)"/);
     // 残りの対局が確定していない期は、回戦の対局を本局にする(20-10)。
-    expect(tournament).toMatch(/function playAfterRound\([\s\S]*?if \(props\.relayEngineFactory && season && restOpen\(season\)\) \{[\s\S]*?startRealGame\(realGameSpec\(/);
+    expect(tournament).toMatch(/function playAfterRound\([\s\S]*?if \(props\.relayEngineFactory && season && restOpen\(season\)\) \(\{ specs, records \} = realRoundSpecs\(round\.entries,[\s\S]*?else specs = quickEnded\(round\.entries\);/);
     expect(tournament).toMatch(/function endAfterWatch\(\) \{[\s\S]*?afterWatch\.value = null;[\s\S]*?screen\.value = "result";\s*\}/);
     expect(tournament).toMatch(/function closeLive\(\) \{\s*stopLiveTimer\(\);\s*stopRealGames\(\);\s*live\.value = null;\s*tableOpen\.value = false;\s*\}/);
     // 期の結果の主役は「表彰式へ」。賞状(縦書き・判子)をわたし、閉じると期を見終えて大会の選択へ(docs/season-award-design.md)。

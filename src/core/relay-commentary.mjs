@@ -3,7 +3,7 @@
 // 対局者を責める言葉は使わない(U:4-3, 8)。種(対局の鍵)が同じなら、同じ中継になる。保存はしない。画面に依存しない。
 
 import { createRng, pick } from './ryuo-random.mjs';
-import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
+import { HANANE, YOSHIHIKO, crownText } from './ryuo-story.mjs';
 import { resignStyleOf } from './resign-style.mjs';
 import { opponentVoice } from './match-presence.mjs';
 import {
@@ -103,9 +103,12 @@ function surnameOf(name) {
   return SURNAMES.find((candidate) => name.startsWith(candidate) && name.length > candidate.length) ?? name.slice(0, 2);
 }
 
+/** 棋士の写しの、いま持っているタイトル。 */
+const heldOf = (player) => player?.held ?? player?.profile?.held ?? [];
+
 /** いま持っているタイトル(名人を先に)。なければ段位。棋士の写しは、期の棋士のprofile.heldか、中継の写しのheldを持つ。 */
 export function titleOf(player) {
-  const held = player?.held ?? player?.profile?.held ?? [];
+  const held = heldOf(player);
   return (held.includes('名人') ? '名人' : held[0]) ?? player?.dan ?? '';
 }
 
@@ -241,7 +244,7 @@ const VIEWER = Object.freeze({
     'いい対局', 'この局面むずい', 'わからん', '先手持ちたい', '後手持ちたい', '形勢わからん', '渋い', '見入ってしまう', '今北', '何手目？',
   ],
   rival: ['羽音ちゃん！', 'はのんちゃんきた', '羽音ちゃんがんばれ', '天才少女'],
-  father: ['善彦先生だ', '最強きた', '六冠の人', '善彦先生の将棋が見られる'],
+  father: ['善彦先生だ', '最強きた', '{crown}の人', '善彦先生の将棋が見られる'],
   oshi: ['推しの{name}！', '{name}がんばれ', '{name}きたー'],
   cheer: ['{name}がんばれ', '{name}ファイト'],
   title: ['タイトル戦きた', '七番勝負！', '和服かっこいい', '大舞台だ', '頂上決戦', 'すげぇ絵面だ', 'どっちも好きだから困る'],
@@ -905,6 +908,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     thoughtCount[side] += 1;
     thoughts.push({ at, when, side, text: `（${THOUGHTS[voices[side]][moment]}）` });
   };
+  /** 善彦の応援の「○○の人」(持っているタイトルで変わる。無冠なら「史上最強」)。 */
+  const crownOf = (side) => crownText(heldOf(players[side])) || '史上最強';
   const cheerPool = (side) => {
     const player = players[side];
     if (player?.story === HANANE) return 'rival';
@@ -1003,7 +1008,9 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (spec.kind === 'finals') {
       const father = (/** @type {const} */ (['black', 'white'])).find((color) => players[color]?.story === YOSHIHIKO);
       if (father && rng.next() < 0.6) comment(0, 'move', 'unbeaten');
-      if (father && players[other(father)]?.story === HANANE) maybe(0.6, 0, 'move', 'zenkan');
+      // 「全冠」は、2人のタイトルを合わせて8つあるときだけ(期を重ねると変わる)。
+      const both = father ? new Set([...heldOf(players[father]), ...heldOf(players[other(father)])]) : new Set();
+      if (father && players[other(father)]?.story === HANANE && both.size >= 8) maybe(0.6, 0, 'move', 'zenkan');
     }
     if (cast.voice === 'polite' && rng.next() < 0.3) react(0, 'castGood');
     if (spec.weight === 'title') comment(0, 'move', 'title', {}, 2, 'gold');
@@ -1032,7 +1039,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     maybe(0.35, 0, 'move', 'overseas');
     for (const side of ['black', 'white']) {
       const pool = cheerPool(side);
-      comment(0, 'move', pool, { name: call(side).replace(/さん$/, '') }, pool === 'cheer' ? 1 : 2, pool === 'cheer' ? '' : 'pink');
+      comment(0, 'move', pool, { name: call(side).replace(/さん$/, ''), crown: crownOf(side) }, pool === 'cheer' ? 1 : 2, pool === 'cheer' ? '' : 'pink');
       think(0, 'move', side, 'start');
     }
   }
@@ -1922,7 +1929,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (rng.next() < 0.06) {
       const target = rng.next() < 0.5 ? 'black' : 'white';
       const pool = cheerPool(target);
-      comment(at, 'move', pool, { name: call(target).replace(/さん$/, '') }, 1, pool === 'cheer' ? '' : 'pink');
+      comment(at, 'move', pool, { name: call(target).replace(/さん$/, ''), crown: crownOf(target) }, 1, pool === 'cheer' ? '' : 'pink');
     }
 
     // 終局。

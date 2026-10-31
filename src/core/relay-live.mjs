@@ -3,8 +3,9 @@
 // 進み方は、中継の棋譜の筋書き(relay-game.mjsのrelayPlan。勝ち負けと展開は自動対局の記録のまま)から決める。
 // エンジンは使わない(何局も同時に作れないため)。中継で棋譜を作った局は、その棋譜の手数と形勢を使う。画面に依存しない。
 
-import { playSpectatorGame, previewGroupBrackets, replayRest, restGameKey, restOpen, seasonGameResults, siblingNodeId } from './ryuo.mjs';
+import { groupBracketView, playSpectatorGame, previewGroupBrackets, replayRest, restGameKey, restOpen, seasonGameResults, siblingNodeId } from './ryuo.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
+import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { isFeatured, meijinRelayGames, ryuoRelayGames } from './relay-games.mjs';
 import { meijinRestOpen, meijinSeriesResults, playMeijinSpectatorGame, replayMeijinRest } from './meijin.mjs';
 import { blackWinRate, relayPlan, relaySeed, relayTarget } from './relay-game.mjs';
@@ -133,6 +134,45 @@ export function elsewhereGames(season, { oshiId = null } = {}) {
     .filter(({ at }) => at > after && at <= step)
     .sort((x, y) => x.at - y.at || (x.entry.key < y.entry.key ? -1 : 1))
     .map(({ entry }) => ({ ...entry, elsewhere: true }));
+}
+
+/**
+ * 自分の組のランキング戦・敗者復活戦のあいだに見る、ほかの組の表(46章)。羽音・善彦・推しのいる組だけ。
+ * ほかの組は自分の組が終わってから決めるので、それまで表がなく、羽音の組の進み具合を見られなかった。先に決めた表
+ * (previewGroupBrackets。期は書き換えない)から、自分(分身)の次の一局と同じ段より前の結果だけを見せ、同じ段からあとは伏せる
+ * (hidden。同じ時に指されている局は、中継ボードで終局すると見える)。見られる対局(entries)は、伏せていない局だけ。
+ * ほかの組がもう決まっている期(期の画面のstagesに入っている)では、何も返さない。
+ * @param {any} season 竜王戦の期(書き換えない)
+ * @param {{ oshiId?: string | null }} [options]
+ * @returns {{ key: string, label: string, group: number, own: false, view: any, hidden: string[], entries: any[] }[]}
+ */
+export function elsewhereTables(season, { oshiId = null } = {}) {
+  const table = pendingTable(season);
+  if (!table || table.stage !== 'group' || table.round === null || !season.players) return [];
+  const step = stepOf(roundsOf(season.ranking), season.pending.phase, table.round);
+  const preview = previewGroupBrackets(season);
+  const fresh = Object.entries(preview).filter(([key]) => !season.groupBrackets?.[key]);
+  if (!fresh.length) return [];
+  const featured = (pid) => Boolean(pid) && (pid === oshiId || [HANANE, YOSHIHIKO].includes(season.players[pid]?.story));
+  // 表に入っている棋士(はじめの枠の棋士。勝ち上がりの枠は、どれかの枠の棋士)。
+  const pidsOf = (bracket) => Object.values(bracket.nodes ?? {}).flatMap((node) => [node.a?.pid, node.b?.pid]);
+  const groups = new Set(fresh.filter(([, bracket]) => pidsOf(bracket).some(featured)).map(([key]) => key.split('-')[0]));
+  const entries = ryuoRelayGames({ ...season, groupBrackets: Object.fromEntries(fresh), ranking: null, revival: [], main: null, playoff: null, finals: null }, { oshiId });
+  return fresh
+    .filter(([key]) => groups.has(key.split('-')[0]))
+    .map(([key, bracket]) => {
+      const [group, block] = key.split('-');
+      const rankingRounds = roundsOf(preview[group]);
+      const hidden = Object.values(bracket.nodes ?? {})
+        .filter((node) => node.winner && stepOf(rankingRounds, block ? 'revival' : 'ranking', node.round) >= step)
+        .map((node) => String(node.id));
+      const tag = `group-${key}`;
+      return {
+        key: tag, label: block ? `${group}組 ${bracket.label}` : `${group}組`, group: Number(group), own: /** @type {false} */ (false),
+        view: groupBracketView(season, bracket), hidden,
+        entries: entries.filter((entry) => entry.key.split(':')[2] === tag && !hidden.includes(entry.key.split(':')[3])),
+      };
+    });
 }
 
 /**

@@ -1191,6 +1191,15 @@ function previewMain(season, brief) {
  * 3つの段階の一覧と、段階ごとの表・番勝負(docs/ryuo-stages-design.md)。
  * ①は、プレイヤーの組のランキング戦と昇級者決定戦(出場者決定戦)、決まっていればほかの組の表も。②は決勝トーナメント(まだなら下見)。
  */
+/**
+ * ほかの組の表(ランキング戦・昇級者決定戦)の、試合の札の形(46章。中継の画面で、先に決めた表を見せるのに使う)。
+ * @param {any} season
+ * @param {any} bracket
+ */
+export function groupBracketView(season, bracket) {
+  return matchBracket(bracket, { brief: (pid) => playerBrief(season, pid), roundLabel: (round) => resultRoundLabel(bracket, round, { series: false }) });
+}
+
 function stagesView(season) {
   const brief = (pid) => playerBrief(season, pid);
   const pending = season.pending;
