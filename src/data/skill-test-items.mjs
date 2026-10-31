@@ -5,6 +5,7 @@
 // cpuBは、CPUの各Lvに解かせて半分が解けたLv(難しさの元。人に合わせた補正はskill-test-bank.mjsのTYPE_OFFSETS)。
 // 生成: CPUどうしの対局480局(seed 20261031〜20261034、各120局)、審判 60000nodes(二度目 400000nodes)、解かせたLv 1,4,7,10,13,16,19,22,25,28,31,34×2回。
 // 足した問題: 作った局面の寄せの手筋（21問、審判 60000nodes・二度目 400000nodes）。
+// 足した問題: 作った局面の腹銀（10-13）（10問、審判 60000nodes・二度目 400000nodes）。
 
 export const SKILL_TEST_ITEMS = Object.freeze([
  {
@@ -9682,6 +9683,286 @@ export const SKILL_TEST_ITEMS = Object.freeze([
    "R*8b"
   ],
   "cpuB": 13
+ },
+ {
+  "id": "st2-tactic-85",
+  "type": "tactic",
+  "sfen": "ln2g2n+R/6k2/pp2pppp1/2p5p/6+b2/5P3/P1SGP1PPP/1KG6/1N5N1 b 2S3LPrbgs3p 1",
+  "accepted": [
+   "S*2b"
+  ],
+  "best": "S*2b",
+  "pv": [
+   "S*2b",
+   "S*6i",
+   "7h6h",
+   "P*6f",
+   "1a2a",
+   "3b4b",
+   "6g6f"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "S*2b",
+   "S*6i",
+   "7h6h"
+  ],
+  "cpuB": 26.25
+ },
+ {
+  "id": "st2-tactic-86",
+  "type": "tactic",
+  "sfen": "ln3+R1nl/7k1/1pp2gs2/3p4p/9/2P1P4/P2SSP3/2G1G4/LN1K3NL b S6Pr2bg4p 1",
+  "accepted": [
+   "S*3b"
+  ],
+  "best": "S*3b",
+  "pv": [
+   "S*3b",
+   "3c4b",
+   "5h5i",
+   "2b3c",
+   "4a2a",
+   "4c5c",
+   "N*4e"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "2b"
+  ],
+  "line": [
+   "S*3b",
+   "3c4b",
+   "5h5i"
+  ],
+  "cpuB": 20.75
+ },
+ {
+  "id": "st2-tactic-87",
+  "type": "tactic",
+  "sfen": "ln1+R4l/1k2g4/1pp1p1p1p/3p5/1+b7/2P2r2P/P2PPGPS1/6GK1/LN5NL b S2Pbg2sn4p 1",
+  "accepted": [
+   "S*7b"
+  ],
+  "best": "S*7b",
+  "pv": [
+   "S*7b",
+   "4f4a",
+   "6a4a",
+   "8b7b",
+   "R*7a",
+   "7b6c",
+   "7a6a+"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "8b"
+  ],
+  "line": [
+   "S*7b",
+   "4f4a",
+   "6a4a"
+  ],
+  "cpuB": 33
+ },
+ {
+  "id": "st2-tactic-88",
+  "type": "tactic",
+  "sfen": "ln5n+R/4g1k2/p3pgpp1/2p2p3/9/1PP2P3/3PP1PPP/1BK1G4/LNS6 b SLPrbg2snl3p 1",
+  "accepted": [
+   "S*2b"
+  ],
+  "best": "S*2b",
+  "pv": [
+   "S*2b",
+   "4c4b",
+   "1a2a",
+   "3b4c",
+   "N*3e",
+   "4c3d",
+   "3e2c+"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "S*2b",
+   "4c4b",
+   "1a2a"
+  ],
+  "cpuB": 22
+ },
+ {
+  "id": "st2-tactic-89",
+  "type": "tactic",
+  "sfen": "ln2+R2n1/1sk6/pp1pp1p1p/5p1p1/9/+b4Pr2/1PPPP2PP/6GS1/LN4G1K b SNb2gs2l3p 1",
+  "accepted": [
+   "S*6b"
+  ],
+  "best": "S*6b",
+  "pv": [
+   "S*6b",
+   "B*3d",
+   "9i9f",
+   "L*6a",
+   "6b5c+",
+   "G*7a",
+   "5a2a"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "7b"
+  ],
+  "line": [
+   "S*6b",
+   "B*3d",
+   "9i9f"
+  ],
+  "cpuB": 29
+ },
+ {
+  "id": "st2-tactic-90",
+  "type": "tactic",
+  "sfen": "l4g1nl/4g2k1/ppp+Rp1b1p/3p1p3/3B5/1P5P1/P1PPPPP1P/6SK1/1N3G1NL b 2S2Prgsnl 1",
+  "accepted": [
+   "S*3b"
+  ],
+  "best": "S*3b",
+  "pv": [
+   "S*3b",
+   "G*2d",
+   "S*3a",
+   "4a3a",
+   "3b3a",
+   "2b2c",
+   "6e5f"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "2b"
+  ],
+  "line": [
+   "S*3b",
+   "G*2d",
+   "S*3a"
+  ],
+  "cpuB": 33
+ },
+ {
+  "id": "st2-tactic-91",
+  "type": "tactic",
+  "sfen": "+Rn7/2kg5/ppppp1p2/9/9/2P1+bPP2/PP5PP/6GS1/6GNK b SL4Prbg2s2n3lp 1",
+  "accepted": [
+   "S*8b"
+  ],
+  "best": "S*8b",
+  "pv": [
+   "S*8b",
+   "R*2a",
+   "P*5g",
+   "5f5e",
+   "9a9b",
+   "N*1e",
+   "L*8f"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "7b"
+  ],
+  "line": [
+   "S*8b",
+   "R*2a",
+   "P*5g"
+  ],
+  "cpuB": 33
+ },
+ {
+  "id": "st2-tactic-92",
+  "type": "tactic",
+  "sfen": "ln3+R1nl/7k1/3ppgspp/p1p3p2/9/9/PPPPPG1PP/6SK1/LN3G1NL b S3Pr2bgsp 1",
+  "accepted": [
+   "S*3b"
+  ],
+  "best": "S*3b",
+  "pv": [
+   "S*3b",
+   "B*7c",
+   "4g3g",
+   "3c4b",
+   "4a2a",
+   "2b3c",
+   "2a2c"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "2b"
+  ],
+  "line": [
+   "S*3b",
+   "B*7c",
+   "4g3g"
+  ],
+  "cpuB": 22.75
+ },
+ {
+  "id": "st2-tactic-93",
+  "type": "tactic",
+  "sfen": "ln1+R3nl/1k7/2ppppppp/p8/5b3/1P1P5/P2SSPP1P/2G1G4/LN1K3N1 b SPrb2gsl3p 1",
+  "accepted": [
+   "S*7b"
+  ],
+  "best": "S*7b",
+  "pv": [
+   "S*7b",
+   "7c7d",
+   "6g5f",
+   "R*4i",
+   "P*5i",
+   "4e2g+",
+   "6a8a"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "8b"
+  ],
+  "line": [
+   "S*7b",
+   "7c7d",
+   "6g5f"
+  ],
+  "cpuB": 24.75
+ },
+ {
+  "id": "st2-tactic-94",
+  "type": "tactic",
+  "sfen": "l4+R1nl/7k1/pp1p1gsp1/2p5p/9/P8/1PPSS1PPP/2G1G2+r1/L2K4L b S2P2bg3n4p 1",
+  "accepted": [
+   "S*3b"
+  ],
+  "best": "S*3b",
+  "pv": [
+   "S*3b",
+   "B*1b",
+   "3b4c+",
+   "P*3a",
+   "G*3b",
+   "3a3b",
+   "4a3b"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "2b"
+  ],
+  "line": [
+   "S*3b",
+   "B*1b",
+   "3b4c+"
+  ],
+  "cpuB": 17.25
  }
 ]);
 

@@ -707,7 +707,8 @@ async function main() {
     const items = [...SKILL_TEST_ITEMS, ...added];
     const start = source.indexOf("export const SKILL_TEST_ITEMS");
     const end = source.indexOf("/** 問題集の詰将棋");
-    const header = source.slice(0, start).trimEnd().split("\n").filter((line) => !line.startsWith("// 足した問題:"));
+    // 前に足した問題の行は残し、今回の行を足す。
+    const header = source.slice(0, start).trimEnd().split("\n");
     header.push(`// 足した問題: ${option("note", "作った局面の寄せの手筋")}（${added.length}問、審判 ${FIRST_NODES}nodes・二度目 ${DEEP_NODES}nodes）。`);
     const lines = [...header, "", `export const SKILL_TEST_ITEMS = Object.freeze(${JSON.stringify(items, null, 1)});`, "", source.slice(end).trimEnd(), ""];
     fs.writeFileSync(OUT, lines.join("\n"));
