@@ -8,6 +8,7 @@
 //   末尾にsig<倍率>を付けると、人間らしいCPUの判断のぶれの倍率を差し替える(例: L15sig1.6)。
 //   末尾にnobeliefを付けると、人間らしいCPUの信念の式(見えている駒の損得・大局観の重み・詰めろの見落とし)を外す(例: L21nobelief)。
 //   末尾にsight<±手数>を付けると、相手の詰みに気づく手数をずらす(例: L30sight+3)。校正用。
+//   末尾にprevを付けると、14章の前の版(候補数12・1局の上限は今までの悪手の回数)で指す(例: L21prev)。比べる用。
 //   --deadline-sec 280 で、指定秒数を過ぎたら対局中の局を打ち切り、終わった局だけで集計する。
 //   --opening-plies 12 で、序盤の指定手数まで両者とも評価差の小さい候補からばらして選ぶ。
 //   最上位レベル同士は着手にばらつきがなく、同じ棋譜を繰り返すのを避けるために使う。
@@ -21,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { purposefulCalibration } from "./lib/purposeful-calibration.mjs";
 import { Position } from "tsshogi";
 import { canBlunder, isBlunderChoice } from "../src/core/cpu-move-choice.mjs";
+import { humanBlunderAllowance, noteHumanBlunder } from "../src/core/human-model.mjs";
 import { chooseLegacyCpuMove as chooseCpuMove } from "./lib/legacy-cpu-move-choice.mjs";
 import "./lib/ts-register.mjs";
 const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
@@ -65,6 +67,14 @@ export function strengthForPlayer(spec) {
       return { ...settings, ...(override ? { nodes: Number(override[1]) } : {}), level: base.level, logicHybrid: false };
     }
     return { ...base, logicHybrid: hybrid[2] === "hybrid" };
+  }
+  // prev: docs/cpu-human-model-design.mdの14章の前の版(候補数12・A級とB級を分けない今までの悪手の回数)。比べる用。
+  const prev = spec.match(/^(.+)prev$/);
+  if (prev) {
+    const base = strengthForPlayer(prev[1]);
+    if (!base.human) throw new Error("prevは人間らしいCPUのLvだけに付けられます");
+    const { limit: _limit, ...human } = base.human;
+    return { ...base, human: { ...human, candidates: 12 } };
   }
   // sight<±手数>: 相手の詰みに気づく手数(13-3のc')をずらす。校正用。
   const sight = spec.match(/^(.+?)sight([+-][\d.]+)$/);
@@ -159,6 +169,7 @@ async function playGame(engines, players, seed, openingPlies = 0) {
   const decisions = [];
   // 対局画面と同じく、大きな悪手の回数と間隔を選手ごとに数える。
   const blunderPlies = { black: [], white: [] };
+  const humanBlunders = { black: [], white: [] };
   for (let ply = 0; ply < MAX_PLY; ply += 1) {
     const color = position.color === "black" ? "black" : "white";
     const moves = legalMoves(position);
@@ -186,7 +197,9 @@ async function playGame(engines, players, seed, openingPlies = 0) {
         : undefined,
       random,
       blunderAllowed: canBlunder(strength, blunderPlies[color], ply),
+      blunderAllowance: humanBlunderAllowance(strength.human?.limit, humanBlunders[color], ply),
     });
+    humanBlunders[color] = noteHumanBlunder(humanBlunders[color], ply, choice?.blunderKind);
     if (process.argv.includes("--diagnostics") && strength.logicHybrid) {
       const root = createNaturalnessEvaluator(sfen, { moveHistory: history, continuations: result.candidates })(result.move);
       decisions.push({ ply, color, sfen, root: result.move, actual: choice?.move ?? null, purposeful: root.purposeful, tags: root.tags,

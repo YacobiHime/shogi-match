@@ -2727,6 +2727,7 @@ import {
   parseMateScore,
 } from "./core/engine-mate-check.mjs";
 import { canBlunder, chooseCpuMove, chooseNaturalMove, isBlunderChoice } from "./core/cpu-move-choice.mjs";
+import { humanBlunderAllowance, normalizeHumanBlunders, noteHumanBlunder } from "./core/human-model.mjs";
 import { chooseAwareMove } from "./core/aware-move-choice.mjs";
 import { normalizeCpuNotes, type CpuOversight } from "./core/guided-review.mjs";
 import { chooseLogicMove } from "./core/logic-ai.mjs";
@@ -4124,6 +4125,8 @@ type CpuOpeningPlan = {
 let cpuOpeningPlan: CpuOpeningPlan | null = null;
 /** CPUが大きな悪手を指した手数。1局の回数と間隔の制限に使い、待ったで戻した分は数えない。 */
 let cpuBlunderPlies: number[] = [];
+/** 人間らしいCPUの台無しの手(A級・B級を分けて1局の上限まで数える。docs/cpu-human-model-design.mdの14章)。 */
+let cpuHumanBlunders: { ply: number, kind: "A" | "B" }[] = [];
 /** CPUの手(指したあとの手数)ごとに、人間らしいCPUが気づかなかったこと。振り返りで間違えた理由を言う(docs/cpu-human-model-design.mdの13-4)。 */
 let cpuNotes: { [ply: number]: CpuOversight[] } = {};
 const positionAnalysisCache = createPositionAnalysisCache();
@@ -8642,6 +8645,7 @@ function persistMatchState() {
     // おまかせで組んだ作戦をリロード後も引き継ぐ。
     cpuOpeningPlan,
     cpuBlunderPlies: cpuBlunderPlies.filter((ply) => ply < moveHistory.length),
+    cpuHumanBlunders: normalizeHumanBlunders(cpuHumanBlunders, moveHistory.length),
     cpuNotes: normalizeCpuNotes(cpuNotes, moveHistory.length),
     coachLevel: coachLevel.value,
     selectedStrategy: selectedStrategy.value,
@@ -8830,6 +8834,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
     cpuBlunderPlies = Array.isArray(snapshot.cpuBlunderPlies)
       ? snapshot.cpuBlunderPlies.filter((ply: unknown) => Number.isInteger(ply) && (ply as number) >= 0 && (ply as number) < moves.length)
       : [];
+    cpuHumanBlunders = normalizeHumanBlunders(snapshot.cpuHumanBlunders, moves.length);
     cpuNotes = normalizeCpuNotes(snapshot.cpuNotes, moves.length);
     coachLevel.value = ["off", "encourage", "detailed"].includes(snapshot.coachLevel)
       ? snapshot.coachLevel
@@ -11430,6 +11435,8 @@ async function scheduleCpuMove() {
             search: { ...search, candidates: searchedCandidates },
             ...(selectionStrength.logicHybrid ? { planMove: allowedOpeningMove ?? null, planScoreLossLimit: planScoreLimit } : {}),
             blunderAllowed: canBlunder(selectionStrength, cpuBlunderPlies, moveHistory.length),
+            ...(selectionStrength.logicHybrid
+              ? { blunderAllowance: humanBlunderAllowance(selectionStrength.human?.limit, cpuHumanBlunders, moveHistory.length) } : {}),
             verify: async (searchMoves: string[], nodes: number) => {
               cpuSearchRunning = true;
               cpuSearchGeneration = generation;
@@ -11466,6 +11473,7 @@ async function scheduleCpuMove() {
         if (isBlunderChoice(selection)) {
           cpuBlunderPlies = [...cpuBlunderPlies.filter((ply) => ply < moveHistory.length), moveHistory.length];
         }
+        cpuHumanBlunders = noteHumanBlunder(cpuHumanBlunders, moveHistory.length, (selection as { blunderKind?: unknown } | null)?.blunderKind);
         // 待ったで戻した手の記録を捨て、この手の気づかなかったことを残す(振り返りの説明)。
         cpuNotes = normalizeCpuNotes({
           ...cpuNotes,
@@ -11906,6 +11914,7 @@ function restart() {
   cpuOpeningPlan = null;
   cpuBlunderPlies = [];
   cpuNotes = {};
+  cpuHumanBlunders = [];
   positionAnalysisCache.clear();
   moveHistory = [];
   coachAdviceHistory = [];

@@ -8,6 +8,7 @@ import { createRng } from './ryuo-random.mjs';
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf } from './strength-settings.mjs';
 import { applyCharacter, characterSituation } from './player-character.mjs';
 import { canBlunder, chooseCpuMove, isBlunderChoice } from './cpu-move-choice.mjs';
+import { humanBlunderAllowance, noteHumanBlunder } from './human-model.mjs';
 import { chooseAwareMove } from './aware-move-choice.mjs';
 import { chooseLogicMove } from './logic-ai.mjs';
 import { classifyWin } from './ryuo-simulation.mjs';
@@ -182,6 +183,8 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
   const entries = [];
   const seen = new Map([[positionKey(record.position.sfen), 1]]);
   const blunderPlies = { black: [], white: [] };
+  /** 人間らしいCPUの台無しの手(A級・B級を分けて1局の上限まで数える。docs/cpu-human-model-design.mdの14章)。 */
+  const humanBlunders = { black: [], white: [] };
   const lastBest = { black: null, white: null };
   let formations = createFormationState();
   let lastEval = 40;
@@ -258,8 +261,10 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
         choice = await chooseAwareMove({
           strength: selection, sfen, legalMoves: allowed, moveHistory: moves, search: read, planMove,
           planScoreLossLimit: PLAN_LOSS_LIMIT * (selection.openingPlanScoreScale ?? 1),
-          blunderAllowed: canBlunder(selection, blunderPlies[side], ply), verify, probe, random,
+          blunderAllowed: canBlunder(selection, blunderPlies[side], ply),
+          blunderAllowance: humanBlunderAllowance(selection.human?.limit, humanBlunders[side], ply), verify, probe, random,
         });
+        humanBlunders[side] = noteHumanBlunder(humanBlunders[side], ply, choice?.blunderKind);
         choice ??= chooseLogicMove({ sfen, legalMoves: allowed, moveHistory: moves, level: 10, planMove, random });
       } else {
         const planned = planMove ? ranked.find(({ move }) => move === planMove) : null;

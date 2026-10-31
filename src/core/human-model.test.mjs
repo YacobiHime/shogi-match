@@ -3,8 +3,9 @@ import { Position } from "tsshogi";
 import { enumerateLegalMoves } from "../game-state";
 import { chooseAwareMove } from "./aware-move-choice.mjs";
 import {
-  RUIN_LOSS, allowedMatePlies, allowsMateInOne, beliefScores, blunderKind, chanceHardReasons, chanceHardness, characterHuman,
-  gaussian, humanPerception, humanSettingsForLevel, mateSightChance, pickByBelief, preventsBlunder, seenReplyLoss, threatHardReasons, threatHardness,
+  OPENING_SIGMA_SCALE, RUIN_LOSS, allowedMatePlies, allowsMateInOne, beliefScores, blunderKind, chanceHardReasons, chanceHardness, characterHuman,
+  gaussian, humanBlunderAllowance, humanPerception, humanSettingsForLevel, mateSightChance, normalizeHumanBlunders, noteHumanBlunder, pickByBelief,
+  preventsBlunder, seenReplyLoss, threatHardReasons, threatHardness,
 } from "./human-model.mjs";
 import { playLight, replyLoss, stateFromSfen } from "./logic-position.mjs";
 import { applyCharacter } from "./player-character.mjs";
@@ -303,5 +304,58 @@ describe("見えにくさの理由(13-4の記録)", () => {
     expect(chanceHardReasons({ moves: ["N*5e"] }, "black")).toEqual(["drop"]);
     expect(chanceHardReasons({ moves: ["5e5f"] }, "black")).toEqual(["back"]);
     expect(chanceHardReasons({ moves: ["N*5e", "5e5d"] }, "black")).toEqual([]);
+  });
+});
+
+describe("1局の上限・候補数・序盤のぶれ(14章)", () => {
+  test("1局の上限はA級とB級を分け、表3の帯に入ったら下げる。候補数は初段前後を最大にし、上で絞る", () => {
+    expect(humanSettingsForLevel(11).limit).toEqual({ A: 1, B: 2 });
+    expect(humanSettingsForLevel(15).limit).toEqual({ A: 1, B: 2 });
+    // 表3の「16〜18」: 15を超えたらA級は0回、B級は1回。
+    expect(humanSettingsForLevel(16).limit).toEqual({ A: 0, B: 1 });
+    expect(humanSettingsForLevel(25).limit).toEqual({ A: 0, B: 1 });
+    expect(humanSettingsForLevel(26).limit).toEqual({ A: 0, B: 0 });
+    expect(humanSettingsForLevel(39).limit).toEqual({ A: 0, B: 0 });
+    expect(humanSettingsForLevel(11).candidates).toBe(4);
+    expect(humanSettingsForLevel(32).candidates).toBe(8);
+    expect(humanSettingsForLevel(39).candidates).toBe(3);
+    expect(OPENING_SIGMA_SCALE).toBe(0.5);
+  });
+
+  test("台無しの手は種類ごとに数え、使い切った種類だけ止める。待ったで戻した手は数えない", () => {
+    let records = noteHumanBlunder([], 10, "A");
+    records = noteHumanBlunder(records, 20, "small");
+    records = noteHumanBlunder(records, 30, "B");
+    expect(records).toEqual([{ ply: 10, kind: "A" }, { ply: 30, kind: "B" }]);
+    expect(humanBlunderAllowance({ A: 1, B: 2 }, records, 40)).toEqual({ A: false, B: true });
+    // 30手目より前に戻せば、30手目のB級は数えない。
+    expect(humanBlunderAllowance({ A: 1, B: 1 }, records, 25)).toEqual({ A: false, B: true });
+    expect(humanBlunderAllowance(undefined, records, 40)).toBeNull();
+    expect(normalizeHumanBlunders([{ ply: 3, kind: "A" }, { ply: -1, kind: "B" }, { ply: 5, kind: "C" }, "x"], 10)).toEqual([{ ply: 3, kind: "A" }]);
+    const prevent = { A: 0, B: 0, small: 0 };
+    const random = () => 0.5;
+    expect(preventsBlunder("A", prevent, { blunderAllowed: true, allowance: { A: false, B: true }, random })).toBe(true);
+    expect(preventsBlunder("B", prevent, { blunderAllowed: true, allowance: { A: false, B: true }, random })).toBe(false);
+    // 上限の残りがなければ、今までの悪手の回数で決める。
+    expect(preventsBlunder("B", prevent, { blunderAllowed: false, random })).toBe(true);
+  });
+
+  test("詰めろの見落としも種類ごとの上限で止める。1手詰めはA級、3手詰めまではB級、長い詰めろは数えない", () => {
+    const state = stateFromSfen(GOLD);
+    const belief = { w: 1, depth: 6, mateSight: 0 };
+    const random = () => 0.5;
+    const entry = (plies) => [{ move: "4h3h", engineValue: 0, candidate: { score: cp(0) } },
+      { move: "4h5h", engineValue: -99990, candidate: { score: { type: "mate", value: -(plies + 1) } } }];
+    const noB = { A: true, B: false };
+    expect(beliefScores(entry(1), { state, belief, random, allowance: noB })[1].mateUnseen).toBe(1);
+    expect(beliefScores(entry(3), { state, belief, random, allowance: noB })[1].mateUnseen).toBe(0);
+    expect(beliefScores(entry(5), { state, belief, random, allowance: { A: false, B: false } })[1].mateUnseen).toBe(5);
+  });
+
+  test("うっかり・甘い棋士は1局の上限が少し多く、悪手を抑える棋士は少ない", () => {
+    const base = humanSettingsForLevel(20);
+    expect(characterHuman(base, { overlook: 1 }).limit).toEqual({ A: 1, B: 2 });
+    expect(characterHuman(base, { steady: 1 }).limit).toEqual({ A: 0, B: 1 });
+    expect(characterHuman(base, { steady: 2 }).limit).toEqual({ A: 0, B: 0 });
   });
 });

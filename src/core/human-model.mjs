@@ -29,20 +29,22 @@ const AWAY = 4;
  * prevent*: 指す前の確認で防ぐ確率(A: 1手で見える台無し、B: 3手前後で見える台無し、small: 1手で見える小さな損)。
  * sigma: 判断のぶれ(温度に掛ける倍率)。自己対局で今の強さにそろえて決めた(docs/difficulty-calibration.md)。
  * w: 大局観の重み、depth: 見えている取り合いの手数、mateSight: 相手の詰みに半分の確率で気づく手数(13-3)。
+ * limitA・limitB: 1局で指してよい台無しの手の回数(A級・B級を分けて数える。6-2の表3)。点の間では上の点の値(表3の「16〜18」のように、その帯に入ったら下げる)。
+ * k: 候補数の上限(6-2の表1)。上限で落ちる手は「目に付かなかった手」になる。初段前後を最大にし、上で絞る(上はエンジンの上位手がそのまま候補になる)。
  */
 export const HUMAN_TABLE = Object.freeze([
-  { lv: 11, major: 0.02, minor: 0.08, other: 0.15, free: 0.05, fork: 0.45, preventA: 0.9, preventB: 0.5, preventSmall: 0.5, sigma: 1.28, w: 0.5, depth: 2, mateSight: 2.4 },
-  { lv: 13, major: 0.015, minor: 0.07, other: 0.13, free: 0.05, fork: 0.42, preventA: 0.95, preventB: 0.6, preventSmall: 0.55, sigma: 1.28, w: 0.55, depth: 3, mateSight: 2.8 },
-  { lv: 15, major: 0.01, minor: 0.06, other: 0.11, free: 0.04, fork: 0.38, preventA: 0.98, preventB: 0.7, preventSmall: 0.6, sigma: 1.28, w: 0.6, depth: 4, mateSight: 3.2 },
-  { lv: 18, major: 0.005, minor: 0.04, other: 0.08, free: 0.03, fork: 0.32, preventA: 1, preventB: 0.8, preventSmall: 0.7, sigma: 1.28, w: 0.65, depth: 4, mateSight: 3.8 },
-  { lv: 20, major: 0, minor: 0.03, other: 0.07, free: 0.03, fork: 0.28, preventA: 1, preventB: 0.85, preventSmall: 0.75, sigma: 1.28, w: 0.7, depth: 5, mateSight: 4.2 },
-  { lv: 23, major: 0, minor: 0.02, other: 0.05, free: 0.02, fork: 0.22, preventA: 1, preventB: 0.92, preventSmall: 0.85, sigma: 1.28, w: 0.8, depth: 6, mateSight: 5.0 },
-  { lv: 25, major: 0, minor: 0.015, other: 0.04, free: 0.02, fork: 0.18, preventA: 1, preventB: 0.95, preventSmall: 0.9, sigma: 1.28, w: 0.85, depth: 6, mateSight: 5.5 },
-  { lv: 28, major: 0, minor: 0.005, other: 0.03, free: 0.01, fork: 0.13, preventA: 1, preventB: 1, preventSmall: 0.95, sigma: 1.28, w: 0.95, depth: 6, mateSight: 6.3 },
-  { lv: 30, major: 0, minor: 0, other: 0.02, free: 0.01, fork: 0.1, preventA: 1, preventB: 1, preventSmall: 0.95, sigma: 1.28, w: 1, depth: 6, mateSight: 7.0 },
-  { lv: 32, major: 0, minor: 0, other: 0.01, free: 0.005, fork: 0.06, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 8.5 },
-  { lv: 35, major: 0, minor: 0, other: 0.003, free: 0, fork: 0.02, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 10.5 },
-  { lv: 39, major: 0, minor: 0, other: 0, free: 0, fork: 0, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 15 },
+  { lv: 11, major: 0.02, minor: 0.08, other: 0.15, free: 0.05, fork: 0.45, preventA: 0.9, preventB: 0.5, preventSmall: 0.5, sigma: 1.28, w: 0.5, depth: 2, mateSight: 2.4, limitA: 1, limitB: 2, k: 4 },
+  { lv: 13, major: 0.015, minor: 0.07, other: 0.13, free: 0.05, fork: 0.42, preventA: 0.95, preventB: 0.6, preventSmall: 0.55, sigma: 1.28, w: 0.55, depth: 3, mateSight: 2.8, limitA: 1, limitB: 2, k: 4 },
+  { lv: 15, major: 0.01, minor: 0.06, other: 0.11, free: 0.04, fork: 0.38, preventA: 0.98, preventB: 0.7, preventSmall: 0.6, sigma: 1.28, w: 0.6, depth: 4, mateSight: 3.2, limitA: 1, limitB: 2, k: 5 },
+  { lv: 18, major: 0.005, minor: 0.04, other: 0.08, free: 0.03, fork: 0.32, preventA: 1, preventB: 0.8, preventSmall: 0.7, sigma: 1.28, w: 0.65, depth: 4, mateSight: 3.8, limitA: 0, limitB: 1, k: 5 },
+  { lv: 20, major: 0, minor: 0.03, other: 0.07, free: 0.03, fork: 0.28, preventA: 1, preventB: 0.85, preventSmall: 0.75, sigma: 1.28, w: 0.7, depth: 5, mateSight: 4.2, limitA: 0, limitB: 1, k: 6 },
+  { lv: 23, major: 0, minor: 0.02, other: 0.05, free: 0.02, fork: 0.22, preventA: 1, preventB: 0.92, preventSmall: 0.85, sigma: 1.28, w: 0.8, depth: 6, mateSight: 5.0, limitA: 0, limitB: 1, k: 6 },
+  { lv: 25, major: 0, minor: 0.015, other: 0.04, free: 0.02, fork: 0.18, preventA: 1, preventB: 0.95, preventSmall: 0.9, sigma: 1.28, w: 0.85, depth: 6, mateSight: 5.5, limitA: 0, limitB: 1, k: 7 },
+  { lv: 28, major: 0, minor: 0.005, other: 0.03, free: 0.01, fork: 0.13, preventA: 1, preventB: 1, preventSmall: 0.95, sigma: 1.28, w: 0.95, depth: 6, mateSight: 6.3, limitA: 0, limitB: 0, k: 7 },
+  { lv: 30, major: 0, minor: 0, other: 0.02, free: 0.01, fork: 0.1, preventA: 1, preventB: 1, preventSmall: 0.95, sigma: 1.28, w: 1, depth: 6, mateSight: 7.0, limitA: 0, limitB: 0, k: 8 },
+  { lv: 32, major: 0, minor: 0, other: 0.01, free: 0.005, fork: 0.06, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 8.5, limitA: 0, limitB: 0, k: 8 },
+  { lv: 35, major: 0, minor: 0, other: 0.003, free: 0, fork: 0.02, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 10.5, limitA: 0, limitB: 0, k: 6 },
+  { lv: 39, major: 0, minor: 0, other: 0, free: 0, fork: 0, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 15, limitA: 0, limitB: 0, k: 3 },
 ].map((row) => Object.freeze(row)));
 
 /**
@@ -61,7 +63,51 @@ export function humanSettingsForLevel(level) {
     prevent: { A: mix('preventA'), B: mix('preventB'), small: mix('preventSmall') },
     sigma: mix('sigma'),
     belief: { w: mix('w'), depth: Math.round(mix('depth')), mateSight: mix('mateSight') },
+    limit: { A: t > 0 ? b.limitA : a.limitA, B: t > 0 ? b.limitB : a.limitB },
+    candidates: Math.round(mix('k')),
   };
+}
+
+/** 序盤(作戦の定跡手があるうち)の判断のぶれの倍率(4-3・6-3)。定跡を覚えている人は、序盤では迷いが少ない。 */
+export const OPENING_SIGMA_SCALE = 0.5;
+
+/**
+ * 1局の台無しの手の記録(手数と種類)を整える。待ったで戻した手(maxPly以降)と、形の違う値は捨てる。
+ * @param {unknown} value
+ * @param {number} maxPly
+ * @returns {{ ply: number, kind: 'A' | 'B' }[]}
+ */
+export function normalizeHumanBlunders(value, maxPly = Infinity) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry) => entry && Number.isInteger(entry.ply) && entry.ply >= 0 && entry.ply < maxPly && (entry.kind === 'A' || entry.kind === 'B'))
+    .map(({ ply, kind }) => ({ ply, kind }));
+}
+
+/**
+ * 選んだ手が台無し(A級・B級)なら記録に足す。plyはその手の手数(0始まり)。
+ * @param {{ ply: number, kind: 'A' | 'B' }[]} records
+ * @param {number} ply
+ * @param {unknown} kind
+ * @returns {{ ply: number, kind: 'A' | 'B' }[]}
+ */
+export function noteHumanBlunder(records, ply, kind) {
+  const kept = normalizeHumanBlunders(records, ply);
+  return kind === 'A' || kind === 'B' ? [...kept, { ply, kind: /** @type {'A' | 'B'} */ (kind) }] : kept;
+}
+
+/**
+ * この手番で、まだ台無しの手を指してよいか(A級・B級を分けて、1局の上限まで。6-2の表3)。
+ * limitがなければ(前の版の強さ設定)、nullを返す(呼ぶ側は今までの悪手の回数で決める)。
+ * @param {{ A: number, B: number } | undefined} limit
+ * @param {{ ply: number, kind: 'A' | 'B' }[]} records
+ * @param {number} ply
+ * @returns {{ A: boolean, B: boolean } | null}
+ */
+export function humanBlunderAllowance(limit, records, ply) {
+  if (!limit) return null;
+  const past = normalizeHumanBlunders(records, ply);
+  const used = (kind) => past.filter((entry) => entry.kind === kind).length;
+  return { A: used('A') < limit.A, B: used('B') < limit.B };
 }
 
 /** 確率をロジットでずらす。1は0.995から下げる(上げるときは1のまま)。 */
@@ -92,6 +138,11 @@ export function characterHuman(human, { sharpen = 0, steady = 0, overlook = 0, l
     miss: Object.fromEntries(Object.entries(human.miss).map(([key, value]) => [key, round(Math.min(MISS_CAP, value * missScale))])),
     prevent: Object.fromEntries(Object.entries(human.prevent).map(([key, value]) => [key, shiftLogit(value, preventShift)])),
     sigma: round(human.sigma * (1 - 0.15 * steady) * (1 + 0.25 * loose)),
+    // うっかり・甘い棋士は、1局の上限も少し多い(今までの悪手の回数blunderLimitのずれと同じ向き)。
+    ...(human.limit ? { limit: {
+      A: Math.max(0, Math.round(human.limit.A + 0.5 * overlook)),
+      B: Math.max(0, Math.round(human.limit.B + overlook + 0.5 * loose - 0.5 * steady)),
+    } } : {}),
     belief: {
       ...belief,
       w: round(Math.min(1, Math.max(0.3, belief.w + wShift))),
@@ -279,14 +330,15 @@ export function blunderKind({ state, sfen, move, best, engineLoss, deadline = In
 }
 
 /**
- * 指す前の確認(4-5)で、この手を止めるか。止める確率はレベルの値。1局の悪手の回数を使い切った(blunderAllowed=false)ら、台無しは必ず止める。
+ * 指す前の確認(4-5)で、この手を止めるか。止める確率はレベルの値。
+ * 1局の上限を使い切った種類の台無しは必ず止める。allowance(A級・B級を分けた残り)がなければ、今までの悪手の回数(blunderAllowed)で決める。
  * @param {'A' | 'B' | 'small' | null} kind
  * @param {ReturnType<typeof humanSettingsForLevel>['prevent']} prevent
- * @param {{ blunderAllowed: boolean, random: () => number }} options
+ * @param {{ blunderAllowed: boolean, allowance?: { A: boolean, B: boolean } | null, random: () => number }} options
  */
-export function preventsBlunder(kind, prevent, { blunderAllowed, random }) {
+export function preventsBlunder(kind, prevent, { blunderAllowed, allowance = null, random }) {
   if (!kind) return false;
-  if (!blunderAllowed && kind !== 'small') return true;
+  if (kind !== 'small' && (allowance ? !allowance[kind] : !blunderAllowed)) return true;
   return random() < (prevent[kind] ?? 1);
 }
 
@@ -334,10 +386,10 @@ export function mateSightChance(plies, sight) {
  * @template {{ move: string, engineValue: number, candidate?: { score?: { type: string, value: number } } }} T
  * @param {T[]} entries
  * @param {{ state: any, belief: { w: number, depth: number, mateSight: number }, blind?: Set<string>, random: () => number,
- *   blunderAllowed?: boolean, ownMateMissed?: boolean, deadline?: number }} options
+ *   blunderAllowed?: boolean, allowance?: { A: boolean, B: boolean } | null, ownMateMissed?: boolean, deadline?: number }} options
  * @returns {(T & { believed: number, belief: number, mateUnseen: number, ownMateUnseen: number })[] | null}
  */
-export function beliefScores(entries, { state, belief, blind = new Set(), random, blunderAllowed = true, ownMateMissed = false, deadline = Infinity }) {
+export function beliefScores(entries, { state, belief, blind = new Set(), random, blunderAllowed = true, allowance = null, ownMateMissed = false, deadline = Infinity }) {
   const me = state.turn;
   const rows = [];
   for (const entry of entries) {
@@ -349,8 +401,9 @@ export function beliefScores(entries, { state, belief, blind = new Set(), random
     if (Date.now() >= deadline) return null;
     const score = entry.candidate?.score;
     const allowed = allowedMatePlies(score);
-    // 悪手の回数を使い切った手番は、詰めろに必ず気づく(1局の上限、4-5)。
-    const mateUnseen = allowed && blunderAllowed && random() >= mateSightChance(allowed, belief.mateSight) ? allowed : 0;
+    // 1局の上限を使い切った種類の詰めろには必ず気づく(4-5)。1手詰めはA級、3手詰めまではB級、それより長い詰めろはC級で数えない(5-1・5-2)。
+    const unseenAllowed = allowance ? (allowed === 1 ? allowance.A : allowed <= 3 ? allowance.B : true) : blunderAllowed;
+    const mateUnseen = allowed && unseenAllowed && random() >= mateSightChance(allowed, belief.mateSight) ? allowed : 0;
     const ownMateUnseen = ownMateMissed && score?.type === 'mate' && score.value > 0 ? score.value : 0;
     rows.push({ entry, full, seen, hidden: Boolean(mateUnseen || ownMateUnseen), mateUnseen, ownMateUnseen });
   }
