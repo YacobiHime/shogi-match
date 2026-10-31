@@ -1987,21 +1987,53 @@
       </div>
     </div>
 
+    <!--
+      データリセット(docs/data-reset-design.md)。まず消す種類を選び、選んだ種類だけを確認してから消す。
+      消すと元に戻せないので、確認の窓の最初のフォーカスは「戻る」(UI_Nintendo_Implementation.mdの3-1)。
+    -->
     <div
-      v-if="exhibitResetOpen"
+      v-if="exhibitResetOpen && !resetChoice"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="data-reset-title"
+      data-data-reset
+      @click.self="exhibitResetOpen = false"
+    >
+      <div class="shogi-game__confirm-panel shogi-welcome shogi-data-reset">
+        <h2 id="data-reset-title">消す記録を選んでね</h2>
+        <p>選んだ記録だけを消すよ。音と盤・駒の見た目は、どれを選んでも残るよ。</p>
+        <ul class="shogi-welcome__choices">
+          <li v-for="group in RESET_GROUPS" :key="group.id">
+            <button
+              type="button"
+              :class="{ 'shogi-data-reset__all': group.id === 'all' }"
+              :data-reset-group="group.id"
+              @click="chooseDataReset(group.id)"
+            >
+              <strong>{{ group.label }}</strong>
+              <small>{{ group.summary }}</small>
+            </button>
+          </li>
+        </ul>
+        <button ref="exhibitResetCancel" type="button" class="shogi-welcome__skip" @click="exhibitResetOpen = false">やめる</button>
+      </div>
+    </div>
+    <div
+      v-if="exhibitResetOpen && resetChoiceGroup"
       class="shogi-game__confirm shogi-game__confirm--over-home"
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="exhibit-reset-title"
       data-exhibit-reset-dialog
-      @click.self="exhibitResetOpen = false"
+      @click.self="resetChoice = ''"
     >
       <div class="shogi-game__confirm-panel">
-        <h2 id="exhibit-reset-title">記録を消して、最初からにします。</h2>
-        <p>名前・成績・教室の進み具合・大会・中断した対局が消えます。音と盤・駒の見た目は残ります。</p>
+        <h2 id="exhibit-reset-title">{{ resetChoiceGroup.id === "all" ? "記録を消して、最初からにします。" : `${resetChoiceGroup.label}を消します。` }}</h2>
+        <p>消えるもの：{{ resetChoiceGroup.erases }}。{{ resetChoiceGroup.keeps }}</p>
         <div>
-          <button type="button" class="shogi-game__confirm-danger" data-exhibit-reset-accept @click="acceptExhibitReset">最初からにする</button>
-          <button ref="exhibitResetCancel" type="button" @click="exhibitResetOpen = false">やめる</button>
+          <button type="button" class="shogi-game__confirm-danger" data-exhibit-reset-accept @click="acceptExhibitReset">{{ resetChoiceGroup.id === "all" ? "最初からにする" : "消す" }}</button>
+          <button ref="resetConfirmCancel" type="button" @click="resetChoice = ''">戻る</button>
         </div>
       </div>
     </div>
@@ -2632,6 +2664,7 @@ import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, reco
 import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoments } from "./core/tip-moments.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
+import { RESET_GROUPS, resetData, resetGroup } from "./core/data-reset.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -7889,24 +7922,36 @@ function openHome() {
   homeOpen.value = true;
 }
 
-// ===== 展示モードの「最初から」 =====
+// ===== データリセット(展示モードの「最初から」と、種類を選んで消す。docs/data-reset-design.md) =====
 const exhibitResetOpen = ref(false);
 const exhibitResetCancel = ref<HTMLButtonElement | null>(null);
+const resetConfirmCancel = ref<HTMLButtonElement | null>(null);
+/** 選んだ消す種類(確認の窓を出しているあいだ)。空なら種類を選ぶ札。 */
+const resetChoice = ref("");
+const resetChoiceGroup = computed(() => (resetChoice.value ? resetGroup(resetChoice.value) : null));
 function openExhibitReset() {
+  resetChoice.value = "";
   exhibitResetOpen.value = true;
-  // 取り消せない操作なので、最初のフォーカスは「やめる」(UI_Nintendo_Implementation.mdの3-1)。
   void nextTick(() => exhibitResetCancel.value?.focus());
+}
+function chooseDataReset(id: string) {
+  resetChoice.value = id;
+  // 取り消せない操作なので、確認の窓の最初のフォーカスは「戻る」(UI_Nintendo_Implementation.mdの3-1)。
+  void nextTick(() => resetConfirmCancel.value?.focus());
 }
 /**
  * 記録を消して、ページを読み直す(画面の状態も、来場者が来る前に戻す)。
  * 確認は閉じないまま読み直す。閉じると、戻る操作の見張りを外すhistory.back()が走り、読み直しが取り消される。
  */
 function acceptExhibitReset() {
-  clearExhibitRecords(browserStorage());
-  try {
-    clearExhibitRecords(typeof sessionStorage === "undefined" ? null : sessionStorage);
-  } catch {
-    // セッションの保存が使えなくても、読み直す。
+  const id = resetChoice.value || "all";
+  resetData(browserStorage(), id);
+  if (id === "all") {
+    try {
+      clearExhibitRecords(typeof sessionStorage === "undefined" ? null : sessionStorage);
+    } catch {
+      // セッションの保存が使えなくても、読み直す。
+    }
   }
   window.location.reload();
 }
@@ -8279,7 +8324,8 @@ function navigateBack() {
   } else if (ladderNoticeOpen.value) {
     dismissLadderNoticeDialog();
   } else if (exhibitResetOpen.value) {
-    exhibitResetOpen.value = false;
+    if (resetChoice.value) resetChoice.value = "";
+    else exhibitResetOpen.value = false;
   } else if (discardSuspendedPending.value) {
     discardSuspendedPending.value = null;
   } else if (nameDialogOpen.value) {

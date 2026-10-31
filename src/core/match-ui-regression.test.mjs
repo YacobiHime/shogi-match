@@ -915,6 +915,25 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function enterTournamentFromMeasure\(\) \{[\s\S]{0,120}?tournamentStartAt\.value = "ryuo";/);
   });
 
+  it('データリセットは種類を選んでから、選んだ種類だけ確認して消す(docs/data-reset-design.md)', () => {
+    expect(source).toMatch(/v-if="exhibitResetOpen && !resetChoice"[\s\S]{0,900}?v-for="group in RESET_GROUPS"[\s\S]{0,300}?@click="chooseDataReset\(group\.id\)"/);
+    expect(source).toMatch(/v-if="exhibitResetOpen && resetChoiceGroup"[\s\S]{0,200}?role="alertdialog"/);
+    // 確認の窓の最初のフォーカスは「戻る」。戻る操作は、確認の窓から種類の札へ、種類の札から閉じる。
+    expect(source).toMatch(/function chooseDataReset\(id: string\) \{\s*resetChoice\.value = id;[\s\S]{0,160}?resetConfirmCancel\.value\?\.focus\(\)/);
+    expect(source).toMatch(/\} else if \(exhibitResetOpen\.value\) \{\s*if \(resetChoice\.value\) resetChoice\.value = "";\s*else exhibitResetOpen\.value = false;/);
+    expect(source).toMatch(/function acceptExhibitReset\(\) \{\s*const id = resetChoice\.value \|\| "all";\s*resetData\(browserStorage\(\), id\);/);
+  });
+
+  it('問題集は解く時間を測り、正解で止めて自己ベストを残す(docs/problem-set-timing-design.md)', () => {
+    const problemSet = readFileSync(new URL("../ShogiProblemSet.vue", import.meta.url), "utf8");
+    expect(problemSet).toMatch(/const ms = answerSeen\.value \? null : clockElapsed\(\);[\s\S]{0,200}?recordProblemSolved\(progress\.value, problem\.id, \{ firstTry, ms \}\)/);
+    // 答えを見たら測らない。画面を離れているあいだは止める。
+    expect(problemSet).toMatch(/function openAnswer\(\) \{[\s\S]{0,200}?answerSeen\.value = true;\s*stopClock\(\);/);
+    expect(problemSet).toMatch(/document\.addEventListener\("visibilitychange", onVisibility\)/);
+    expect(problemSet).toMatch(/data-problem-clock/);
+    expect(problemSet).toMatch(/data-solve-time/);
+  });
+
   it('「つぎはこれ」の弱点の練習は教室の章・問題集の5問へ、大会への誘いは入口へ(docs/first-play-design.mdの6章)', () => {
     expect(source).toMatch(/tutorialLessons: homeTutorialProgress\.value\.lessons,/);
     expect(source).toMatch(/recordPractice\(loadPlayInsight\(browserStorage\(\)\), \{ kind: practice\.kind, games: ratingState\.value\.games, via: practice\.via \}\)/);

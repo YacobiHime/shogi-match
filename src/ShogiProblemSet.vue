@@ -138,8 +138,15 @@
             </div>
             <!-- 正解のあとに続きを指しているあいだも、正解の表示は残す。 -->
             <p v-if="phase !== 'answer' && (phase === 'wrong' || answered)" class="shogi-tutorial__feedback" :class="`shogi-tutorial__feedback--${phase === 'wrong' ? 'bad' : 'good'}`" role="status">
-              {{ phase === "wrong" ? (answered ? "おしい！" : "ざんねん…") : "正解！" }}
+              {{ phase === "wrong" ? (answered ? "おしい！" : "ざんねん…") : "正解！" }}<small
+                v-if="answered && solveResult"
+                class="shogi-problems__solve-time"
+                :class="{ 'shogi-problems__solve-time--best': solveResult.best }"
+                data-solve-time
+              >{{ solveResult.text }}</small>
             </p>
+            <!-- 解いている時間(docs/problem-set-timing-design.md)。正解したら止める。答えを見たら測らない。 -->
+            <p v-if="!answered && phase !== 'answer' && !answerSeen" class="shogi-problems__clock" data-problem-clock aria-hidden="true">⏱ {{ clockText }}</p>
             <p v-if="phase === 'solved'" class="shogi-problems__free-note">盤の駒は、先手も後手も自由に動かせるよ。満足するまで確かめてみてね。</p>
             <!-- 答えを見る: 手順を1手ずつ盤に並べる（詰将棋・図巧）。 -->
             <div v-if="phase === 'answer'" class="shogi-tutorial__actions shogi-problems__answer-controls">
@@ -205,6 +212,7 @@ import { formatHintMove } from "./core/match-assists.mjs";
 import { dueReviewId, loadReviewQueue, recordReviewResult, saveReviewQueue } from "./core/review-queue.mjs";
 import { isReviewProblemId, loadReviewProblems, reviewProblemById } from "./core/review-problems.mjs";
 import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.mjs";
+import { solveTimeResult, solveTimeText } from "./core/problem-progress.mjs";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "./game-state";
 import { JISSEN_TSUME_SOURCE } from "./data/jissen-tsume-problems.mjs";
 import { TSUME_PROBLEM_SOURCE } from "./data/tsume-problems.mjs";
@@ -337,7 +345,12 @@ defineExpose({ goBack });
 
 // ===== 一覧 =====
 function solvedRecord(problem: Problem) {
-  return (progress.value.solved as Record<string, { firstTry: boolean }>)[problem.id] ?? null;
+  return (progress.value.solved as Record<string, { firstTry: boolean; bestMs?: number }>)[problem.id] ?? null;
+}
+/** 一覧の「ベスト12.3秒」(時間の記録がある問題だけ)。 */
+function bestTimeNote(problem: Problem) {
+  const best = solvedRecord(problem)?.bestMs;
+  return best ? `・ベスト${solveTimeText(best)}` : "";
 }
 function solvedCount(problems: readonly Problem[]) {
   return problems.filter((problem) => solvedRecord(problem)).length;
@@ -356,9 +369,9 @@ function problemStatus(problem: Problem) {
   const record = solvedRecord(problem);
   if (isReviewProblemId(problem.id)) {
     const date = Number.isFinite(problem.at) ? `${new Date(problem.at as number).getMonth() + 1}月${new Date(problem.at as number).getDate()}日の対局から` : "あなたの対局から";
-    return `${date}・${record ? (record.firstTry ? "一発で正解！" : "正解ずみ") : "まだ解いていない"}`;
+    return `${date}・${record ? (record.firstTry ? "一発で正解！" : "正解ずみ") + bestTimeNote(problem) : "まだ解いていない"}`;
   }
-  if (record) return record.firstTry ? "一発で正解！" : "正解ずみ";
+  if (record) return (record.firstTry ? "一発で正解！" : "正解ずみ") + bestTimeNote(problem);
   if (problem.kind === "line") return problem.source === "zukou" ? "作者の手順に沿って解く" : "詰ませる問題";
   return problem.kind === "mate" ? "詰ませる問題" : "逃げる問題";
 }
@@ -408,6 +421,55 @@ const hintStep = ref<number | null>(null);
 // 問題に正解したか。逃げる問題では、正解のあとも続きの1手を指す。
 const answered = ref(false);
 
+// ===== 解く時間(docs/problem-set-timing-design.md) =====
+// 問題を開いた(解き直した)ときから正解までを測る。画面を離れていたあいだ(タブを切り替えたなど)は数えない。
+// 答えを見た問題は、開き直すまで測らない(答えを見てから解いた時間は記録にしない)。
+const answerSeen = ref(false);
+const solveResult = ref<{ text: string; best: boolean } | null>(null);
+const clockMs = ref(0);
+let clockBase = 0;
+let clockStartedAt: number | null = null;
+let clockTimer: ReturnType<typeof setInterval> | null = null;
+const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+function clockElapsed() {
+  return clockBase + (clockStartedAt === null ? 0 : now() - clockStartedAt);
+}
+function stopClock() {
+  clockBase = clockElapsed();
+  clockStartedAt = null;
+  if (clockTimer) clearInterval(clockTimer);
+  clockTimer = null;
+  clockMs.value = clockBase;
+}
+function startClock() {
+  if (clockStartedAt !== null) return;
+  clockStartedAt = now();
+  if (!clockTimer) clockTimer = setInterval(() => { clockMs.value = clockElapsed(); }, 200);
+}
+function restartClock() {
+  if (clockTimer) clearInterval(clockTimer);
+  clockTimer = null;
+  clockBase = 0;
+  clockStartedAt = null;
+  clockMs.value = 0;
+  solveResult.value = null;
+  if (!document.hidden) startClock();
+}
+/** 画面を離れたら止め、戻ったら続きから測る(解いている途中だけ)。 */
+function onVisibility() {
+  if (answered.value || answerSeen.value || view.value !== "problem") return;
+  if (document.hidden) stopClock();
+  else startClock();
+}
+onMounted(() => document.addEventListener("visibilitychange", onVisibility));
+// 問題の画面を離れたら止める(一覧に戻ったあとも時計が進まないように)。
+watch(view, (next) => { if (next !== "problem") stopClock(); });
+onBeforeUnmount(() => {
+  document.removeEventListener("visibilitychange", onVisibility);
+  if (clockTimer) clearInterval(clockTimer);
+});
+const clockText = computed(() => solveTimeText(clockMs.value).replace(/\.\d秒$/, "秒"));
+
 let timers: ReturnType<typeof setTimeout>[] = [];
 function clearTimers() {
   for (const timer of timers) clearTimeout(timer);
@@ -428,6 +490,7 @@ function resetBoard() {
   hintStep.value = null;
   freeMoves.value = [];
   phase.value = "question";
+  restartClock();
   // 「あなたの対局から」の問題は、問いかけ自体が対局の局面だと伝えるので、前置きを付けない。
   speech.value = reviewing.value && !isReviewProblemId(problem.id) ? `前に苦労した問題だよ。${problemQuestion(problem)}` : problemQuestion(problem);
 }
@@ -446,6 +509,7 @@ function openProblem(id: string, { random = false, review = false } = {}) {
   }
   mistakes.value = 0;
   hintShown.value = false;
+  answerSeen.value = false;
   view.value = "problem";
   resetBoard();
 }
@@ -556,6 +620,8 @@ function openAnswer() {
   clearTimers();
   // 答えを見たら、一発正解の記録にはしない。日をあけてもう一度出す。
   hintShown.value = true;
+  answerSeen.value = true;
+  stopClock();
   if (currentProblem.value && !answered.value) recordReview(currentProblem.value, false);
   phase.value = "answer";
   showAnswerAt(0);
@@ -639,7 +705,10 @@ function onBoardMove(usi: string) {
   if (result.solved && !answered.value) {
     answered.value = true;
     const firstTry = mistakes.value === 0 && !hintShown.value;
-    progress.value = recordProblemSolved(progress.value, problem.id, { firstTry });
+    stopClock();
+    const ms = answerSeen.value ? null : clockElapsed();
+    solveResult.value = ms === null ? null : solveTimeResult(solvedRecord(problem), ms);
+    progress.value = recordProblemSolved(progress.value, problem.id, { firstTry, ms });
     saveProblemProgress(storage, progress.value);
     recordReview(problem, firstTry);
     // 問題を1問解いたら、続けて遊んだ日に数える。
@@ -750,6 +819,20 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   color: #fff;
   font-size: 1.05rem;
 }
+/* 解いている時間と、正解の時間(docs/problem-set-timing-design.md)。自己ベストは緑で(盤の色とは別の表示)。 */
+.shogi-game .shogi-problems__clock {
+  margin: 0;
+  color: #cfd8de;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.shogi-game .shogi-problems__solve-time {
+  margin-left: 0.6em;
+  font-size: 0.85em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.shogi-game .shogi-problems__solve-time--best { color: #9fe0b4; }
 .shogi-game .shogi-problems__free-note {
   margin: 0;
   color: #cfd8de;

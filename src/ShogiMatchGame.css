@@ -2424,6 +2424,14 @@
   color: var(--ivory);
   font-weight: 700;
 }
+/*
+ * データリセットの種類を選ぶ札(docs/data-reset-design.md)。8つの札を縦長のスマホで1画面に収めるよう詰める(U:7-5)。
+ * いちばん下の「すべて」は、ほかと違う重い操作なので赤い縁で分ける(色だけでなく位置でも分かる。U:7-3)。
+ */
+.shogi-data-reset .shogi-welcome__choices { gap: 0.4em; }
+.shogi-game .shogi-data-reset .shogi-welcome__choices button { gap: 0.1em; padding-block: 0.45em; }
+.shogi-game .shogi-data-reset .shogi-welcome__choices .shogi-data-reset__all { border-color: #d9534f; }
+.shogi-data-reset .shogi-data-reset__all strong { color: #f08a86; }
 /* 棋力テストの結果(docs/skill-assessment-design.mdの4-5)。見立てと幅、力ごとの見立ての棒、竜王戦への道。 */
 .shogi-skill-report .shogi-welcome__chara { width: 3.2em; }
 .shogi-skill-report__range {
