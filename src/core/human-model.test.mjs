@@ -318,7 +318,8 @@ describe("1局の上限・候補数・序盤のぶれ(14章)", () => {
     expect(humanSettingsForLevel(39).limit).toEqual({ A: 0, B: 0 });
     expect(humanSettingsForLevel(11).candidates).toBe(4);
     expect(humanSettingsForLevel(32).candidates).toBe(8);
-    expect(humanSettingsForLevel(39).candidates).toBe(3);
+    // 上の帯は今までと同じ12(14-3)。
+    expect(humanSettingsForLevel(39).candidates).toBe(12);
     expect(OPENING_SIGMA_SCALE).toBe(0.5);
   });
 

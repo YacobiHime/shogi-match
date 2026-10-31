@@ -30,7 +30,8 @@ const AWAY = 4;
  * sigma: 判断のぶれ(温度に掛ける倍率)。自己対局で今の強さにそろえて決めた(docs/difficulty-calibration.md)。
  * w: 大局観の重み、depth: 見えている取り合いの手数、mateSight: 相手の詰みに半分の確率で気づく手数(13-3)。
  * limitA・limitB: 1局で指してよい台無しの手の回数(A級・B級を分けて数える。6-2の表3)。点の間では上の点の値(表3の「16〜18」のように、その帯に入ったら下げる)。
- * k: 候補数の上限(6-2の表1)。上限で落ちる手は「目に付かなかった手」になる。初段前後を最大にし、上で絞る(上はエンジンの上位手がそのまま候補になる)。
+ * k: 候補数の上限(6-2の表1)。上限で落ちる手は「目に付かなかった手」になる。下の級ほど絞る。Lv35・39の点は今までと同じ12(上で絞ると、
+ *    自己対局でLv40は強く・Lv46は弱くと向きがそろわず揺れたため。docs/cpu-human-model-design.mdの14-3)。
  */
 export const HUMAN_TABLE = Object.freeze([
   { lv: 11, major: 0.02, minor: 0.08, other: 0.15, free: 0.05, fork: 0.45, preventA: 0.9, preventB: 0.5, preventSmall: 0.5, sigma: 1.28, w: 0.5, depth: 2, mateSight: 2.4, limitA: 1, limitB: 2, k: 4 },
@@ -43,8 +44,8 @@ export const HUMAN_TABLE = Object.freeze([
   { lv: 28, major: 0, minor: 0.005, other: 0.03, free: 0.01, fork: 0.13, preventA: 1, preventB: 1, preventSmall: 0.95, sigma: 1.28, w: 0.95, depth: 6, mateSight: 6.3, limitA: 0, limitB: 0, k: 7 },
   { lv: 30, major: 0, minor: 0, other: 0.02, free: 0.01, fork: 0.1, preventA: 1, preventB: 1, preventSmall: 0.95, sigma: 1.28, w: 1, depth: 6, mateSight: 7.0, limitA: 0, limitB: 0, k: 8 },
   { lv: 32, major: 0, minor: 0, other: 0.01, free: 0.005, fork: 0.06, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 8.5, limitA: 0, limitB: 0, k: 8 },
-  { lv: 35, major: 0, minor: 0, other: 0.003, free: 0, fork: 0.02, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 10.5, limitA: 0, limitB: 0, k: 6 },
-  { lv: 39, major: 0, minor: 0, other: 0, free: 0, fork: 0, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 15, limitA: 0, limitB: 0, k: 3 },
+  { lv: 35, major: 0, minor: 0, other: 0.003, free: 0, fork: 0.02, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 10.5, limitA: 0, limitB: 0, k: 12 },
+  { lv: 39, major: 0, minor: 0, other: 0, free: 0, fork: 0, preventA: 1, preventB: 1, preventSmall: 1, sigma: 1.28, w: 1, depth: 6, mateSight: 15, limitA: 0, limitB: 0, k: 12 },
 ].map((row) => Object.freeze(row)));
 
 /**
