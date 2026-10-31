@@ -12,6 +12,10 @@
 // 4. verify: 受けの正解と判断の答えを読み直す(詰みが見つかった手は正解から外し、答えが揺れる判断の問題は外す)。
 // 5. calibrate: CPUの各Lvに解かせ、半分が解けるLv(cpuB)を求める(--shard i/n)。
 // 6. write: src/data/skill-test-items.mjs(生成物。手で書き換えない)へ書き出す。詰将棋のcpuBは前の版の値を引き継ぐ。
+// 寄せの手筋を足す(10-12): 対局からはほとんど見つからないので、局面を作って探し、今の束に足す。
+//    make-yose: 囲いの形(崩れかけ)の玉と、竜・持ち駒のある終盤の局面を作り、寄せの手筋の問題を探す(--tries N)。
+//    select-yose: 3つの名前がそろうように選び、今の束の続きのidを付ける(--count N)。
+//    calibrateで解かせたあと、append: 今の束を残したまま、選んだ問題を足して書き出す。
 // 使い方の例(作業用の一時フォルダーを WORK に):
 //   node scripts/build-skill-test-items.mjs --phase games --seed 1 --games 120 --out $WORK/games-1.json
 //   node scripts/build-skill-test-items.mjs --phase detect --in $WORK/games-1.json,$WORK/games-2.json --shard 0/4 --out $WORK/found-0.json
@@ -20,6 +24,10 @@
 //   node scripts/build-skill-test-items.mjs --phase verify --in $WORK/selected.json --out $WORK/verified.json
 //   node scripts/build-skill-test-items.mjs --phase calibrate --in $WORK/verified.json --shard 0/4 --out $WORK/cal-0.json
 //   node scripts/build-skill-test-items.mjs --phase write --in $WORK/verified.json --cal $WORK/cal-0.json,...
+//   node scripts/build-skill-test-items.mjs --phase make-yose --seed 1 --tries 4000 --out $WORK/made-yose-1.json
+//   node scripts/build-skill-test-items.mjs --phase select-yose --in $WORK/made-yose-1.json,... --count 24 --out $WORK/yose.json
+//   node scripts/build-skill-test-items.mjs --phase calibrate --in $WORK/yose.json --out $WORK/cal-yose.json
+//   node scripts/build-skill-test-items.mjs --phase append --in $WORK/yose.json --cal $WORK/cal-yose.json
 import fs from "node:fs";
 import path from "node:path";
 import "./lib/ts-register.mjs";
@@ -29,6 +37,7 @@ import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf } from ".
 import { material, playLight, replyLoss, stateFromSfen } from "../src/core/logic-position.mjs";
 import { SAVE_LOSS_MAX, TAKE_GAIN_MIN, THREAT_LOSS_MIN, isCaptureMove, materialSwing, passLoss, profitableCaptures, savingMoves } from "../src/core/skill-test-promise.mjs";
 import { detectTesujiShape, tesujiShape } from "../src/core/tesuji-shape.mjs";
+import { OPENING_CASTLES } from "../src/core/opening-guide.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
 const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
@@ -428,6 +437,106 @@ function outputItem(item, cpuB) {
   return { ...Object.fromEntries(keep.filter((key) => item[key] !== undefined).map((key) => [key, item[key]])), cpuB };
 }
 
+/**
+ * 寄せの手筋の問題にする終盤の局面を作る(10-12)。後手の玉は囲い(1〜3枚がはがれた形)に、先手の玉も囲いに入れ、
+ * 先手には敵陣の竜、両方に歩の列と持ち駒を持たせる。駒は40枚(足りない駒は、どちらかの持ち駒)。手番は先手。
+ * 作れなかった(二歩・行き所のない駒・王手がかかっている・駒が多すぎる)ときはnull。
+ * @param {() => number} rng
+ */
+const MADE_CASTLES = ["mino", "high-mino", "half-mino", "diamond-mino", "silver-crown", "furibisha-anaguma", "yagura", "doi-yagura",
+  "kikusui-yagura", "ibisha-anaguma", "millennium", "funagakoi", "elmo", "kanigakoi", "left-mino", "kinmusou", "gangi"];
+const PIECE_LIMIT = { P: 18, L: 4, N: 4, S: 4, G: 4, B: 2, R: 2, K: 2 };
+function madeEndgameSfen(rng) {
+  const pick = (list) => list[Math.floor(rng() * list.length)];
+  const board = new Map();
+  const count = { P: 0, L: 0, N: 0, S: 0, G: 0, B: 0, R: 0, K: 0 };
+  const base = (piece) => piece.replace("+", "").toUpperCase();
+  const put = (square, piece) => {
+    if (!square || board.has(square) || count[base(piece)] >= PIECE_LIMIT[base(piece)]) return false;
+    board.set(square, piece);
+    count[base(piece)] += 1;
+    return true;
+  };
+  const rotate = (square) => `${10 - Number(square[0])}${String.fromCharCode(96 + 10 - (square.charCodeAt(1) - 96))}`;
+  const castle = (id) => OPENING_CASTLES.find((entry) => entry.id === id)?.completionSquares ?? [];
+  // 後手の囲い(先手の形を180度回す)。玉のほかの駒を0〜2枚はがす。
+  const defense = castle(pick(MADE_CASTLES)).map(([square, kind]) => [rotate(square), kind]);
+  const stripped = new Set(defense.filter(([, kind]) => kind !== "K").sort(() => rng() - 0.5).slice(0, Math.floor(rng() * 3)).map(([square]) => square));
+  for (const [square, kind] of defense) if (!stripped.has(square)) put(square, kind.toLowerCase());
+  for (const [square, kind] of castle(pick(MADE_CASTLES))) put(square, kind);
+  if (count.K !== 2) return null;
+  // 歩の列(ところどころ交換して持ち駒になっている)。
+  for (let file = 1; file <= 9; file += 1) {
+    if (rng() > 0.25) put(`${file}${rng() < 0.2 ? "d" : "c"}`, "p");
+    if (rng() > 0.25) put(`${file}${rng() < 0.2 ? "f" : "g"}`, "P");
+  }
+  // 端の香と桂(残っていれば)。
+  for (const [square, piece] of [["1a", "l"], ["9a", "l"], ["1i", "L"], ["9i", "L"], ["2a", "n"], ["8a", "n"], ["2i", "N"], ["8i", "N"]]) {
+    if (rng() < 0.6) put(square, piece);
+  }
+  // 攻めの大駒: 先手は敵陣の竜(または4段目の飛車)、ときどき馬か角。後手も先手陣に竜(または6段目の飛車)を入れることがある。
+  const empty = (ranks) => {
+    const squares = [];
+    for (let file = 1; file <= 9; file += 1) for (const rank of ranks) if (!board.has(`${file}${rank}`)) squares.push(`${file}${rank}`);
+    return squares;
+  };
+  // 敵陣に入った大駒は成っている(成らずに敵陣にいる大駒は、実戦ではまず出ない)。
+  if (!(rng() < 0.85 ? put(pick(empty(["a", "b", "c"])), "+R") : put(pick(empty(["d"])), "R"))) return null;
+  if (rng() < 0.25) rng() < 0.5 ? put(pick(empty(["b", "c", "d", "e"])), "+B") : put(pick(empty(["d", "e"])), "B");
+  if (rng() < 0.7) rng() < 0.6 ? put(pick(empty(["g", "h", "i"])), "+r") : put(pick(empty(["f"])), "r");
+  if (rng() < 0.3) rng() < 0.5 ? put(pick(empty(["e", "f", "g"])), "+b") : put(pick(empty(["e", "f"])), "b");
+  // 二歩と、行き所のない駒をはじく。
+  for (const color of ["P", "p"]) {
+    for (let file = 1; file <= 9; file += 1) {
+      if ([..."abcdefghi"].filter((rank) => board.get(`${file}${rank}`) === color).length > 1) return null;
+    }
+  }
+  for (const [square, piece] of board) {
+    const rank = square.charCodeAt(1) - 96;
+    if ((piece === "P" || piece === "L") && rank === 1) return null;
+    if ((piece === "p" || piece === "l") && rank === 9) return null;
+    if (piece === "N" && rank <= 2) return null;
+    if (piece === "n" && rank >= 8) return null;
+  }
+  // 残りの駒は持ち駒(どちらかに。先手に偏らせると、もう大差か詰みの局面ばかりになった)。
+  const hands = { b: {}, w: {} };
+  for (const kind of ["R", "B", "G", "S", "N", "L", "P"]) {
+    for (let index = count[kind]; index < PIECE_LIMIT[kind]; index += 1) {
+      const side = rng() < 0.45 ? "b" : "w";
+      hands[side][kind] = (hands[side][kind] ?? 0) + 1;
+    }
+  }
+  const rows = [];
+  for (let rank = 1; rank <= 9; rank += 1) {
+    let row = "";
+    let gap = 0;
+    for (let file = 9; file >= 1; file -= 1) {
+      const piece = board.get(`${file}${String.fromCharCode(96 + rank)}`);
+      if (!piece) gap += 1;
+      else {
+        if (gap) row += String(gap);
+        gap = 0;
+        row += piece;
+      }
+    }
+    if (gap) row += String(gap);
+    rows.push(row);
+  }
+  const hand = ["R", "B", "G", "S", "N", "L", "P"].map((kind) => `${hands.b[kind] > 1 ? hands.b[kind] : ""}${hands.b[kind] ? kind : ""}`).join("")
+    + ["R", "B", "G", "S", "N", "L", "P"].map((kind) => `${hands.w[kind] > 1 ? hands.w[kind] : ""}${hands.w[kind] ? kind.toLowerCase() : ""}`).join("");
+  const sfen = `${rows.join("/")} b ${hand || "-"} 1`;
+  try {
+    const position = Position.newBySFEN(sfen);
+    if (!position || position.checked) return null;
+    // 後手の玉に王手がかかっている(手番でないのに)局面ははじく。
+    const flipped = Position.newBySFEN(nullMoveSfen(sfen));
+    if (!flipped || flipped.checked) return null;
+    return position.sfen;
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   if (PHASE === "detect") {
     const engine = await createNodeEngine();
@@ -479,6 +588,86 @@ async function main() {
       }
     }
     engine.quit();
+    process.exit(0);
+  }
+  if (PHASE === "make-yose") {
+    // 寄せの手筋の局面を作って探す(10-12)。detect-yoseと同じ決め方で、局面だけが作ったもの。
+    const engine = await createNodeEngine();
+    const tries = Number(option("tries", "2000"));
+    const found = [];
+    const reasons = {};
+    let made = 0;
+    let read = 0;
+    const tryOne = async (index) => {
+      const sfen = madeEndgameSfen(random);
+      if (!sfen) return;
+      made += 1;
+      const position = positionOf(sfen);
+      const legal = legalMoves(position);
+      if (!legal.some((usi) => tesujiShape(detectTesujiShape({ sfenBefore: sfen, usi })?.id ?? "")?.family === "yose")) return;
+      read += 1;
+      const first = ranked(await search(engine, sfen, { nodes: FIRST_NODES, multiPv: 12 }));
+      const shape = first[0] && detectTesujiShape({ sfenBefore: sfen, usi: first[0].move });
+      // 落ちた理由を数える(作り方を直すときの手がかり)。
+      const why = first.length < 3 ? "few" : isMate(first[0].score) ? (first[0].score.value > 0 ? "mate-win" : "mate-lose")
+        : Math.abs(first[0].value) >= 3000 ? (first[0].value > 0 ? "lopsided+" : "lopsided-") : tesujiShape(shape?.id ?? "")?.family !== "yose" ? "best-not-yose" : "shape";
+      reasons[why] = (reasons[why] ?? 0) + 1;
+      if (why === "shape") {
+        const entry = { sfen, history: [], game: `made-${SEED}-${index}`, ply: 0 };
+        const item = await detectTactic(engine, entry, legal, first);
+        if (item) {
+          const { deep, ...rest } = item;
+          found.push({ ...entry, ...rest, made: true, best: deep[0].move, pv: deep[0].pv.slice(0, 7), line: deep[0].pv.slice(0, 3) });
+        }
+      }
+    };
+    for (let index = 0; index < tries; index += 1) {
+      await tryOne(index);
+      if (index % 200 === 199 || index === tries - 1) {
+        fs.writeFileSync(OUT_FILE, JSON.stringify(found));
+        const names = found.reduce((counts, { tesuji }) => ({ ...counts, [tesuji]: (counts[tesuji] ?? 0) + 1 }), {});
+        console.error(`寄せの局面 ${index + 1}/${tries}（作れた${made}・読んだ${read}） 見つかった${found.length} ${JSON.stringify(names)} ${JSON.stringify(reasons)}`);
+      }
+    }
+    engine.quit();
+    process.exit(0);
+  }
+  if (PHASE === "select-yose") {
+    // 3つの名前がそろうように選び(1つの名前は3分の1まで、D:4-7)、今の束の続きのidを付ける。
+    const { SKILL_TEST_ITEMS } = await import("../src/data/skill-test-items.mjs");
+    const want = Number(option("count", "24"));
+    const pool = INPUTS.flatMap(readJson).map((item) => ({ item, key: random() })).sort((a, b) => a.key - b.key).map(({ item }) => item);
+    const names = [...new Set(pool.map(({ tesuji }) => tesuji))];
+    const cap = Math.ceil(want / Math.max(1, names.length));
+    const picked = [];
+    for (const item of pool) {
+      if (picked.length >= want) break;
+      if (picked.filter(({ tesuji }) => tesuji === item.tesuji).length >= cap) continue;
+      if (picked.some(({ sfen }) => sfen === item.sfen) || SKILL_TEST_ITEMS.some(({ sfen }) => sfen === item.sfen)) continue;
+      picked.push(item);
+    }
+    const next = Math.max(-1, ...SKILL_TEST_ITEMS.filter(({ type }) => type === "tactic").map(({ id }) => Number(id.split("-").at(-1)))) + 1;
+    const out = picked.map((item, index) => ({ ...item, id: `st2-tactic-${next + index}` }));
+    fs.writeFileSync(OUT_FILE, JSON.stringify(out));
+    console.error(`選んだ寄せの手筋 ${out.length}: ${JSON.stringify(out.reduce((counts, { tesuji }) => ({ ...counts, [tesuji]: (counts[tesuji] ?? 0) + 1 }), {}))}`);
+    process.exit(0);
+  }
+  if (PHASE === "append") {
+    // 今の束を残したまま、解かせた新しい問題を足して書き出す(id・sfenが重なるものは足さない)。
+    const source = fs.readFileSync(OUT, "utf8");
+    const { SKILL_TEST_ITEMS } = await import("../src/data/skill-test-items.mjs");
+    const calibrated = Object.assign({}, ...String(option("cal", "")).split(",").filter(Boolean).map(readJson));
+    const known = new Set(SKILL_TEST_ITEMS.flatMap(({ id, sfen }) => [id, sfen]));
+    const added = INPUTS.flatMap(readJson).filter((item) => calibrated[item.id] && !known.has(item.id) && !known.has(item.sfen))
+      .map((item) => outputItem(item, calibrated[item.id].cpuB));
+    const items = [...SKILL_TEST_ITEMS, ...added];
+    const start = source.indexOf("export const SKILL_TEST_ITEMS");
+    const end = source.indexOf("/** 問題集の詰将棋");
+    const header = source.slice(0, start).trimEnd().split("\n").filter((line) => !line.startsWith("// 足した問題:"));
+    header.push(`// 足した問題: ${option("note", "作った局面の寄せの手筋")}（${added.length}問、審判 ${FIRST_NODES}nodes・二度目 ${DEEP_NODES}nodes）。`);
+    const lines = [...header, "", `export const SKILL_TEST_ITEMS = Object.freeze(${JSON.stringify(items, null, 1)});`, "", source.slice(end).trimEnd(), ""];
+    fs.writeFileSync(OUT, lines.join("\n"));
+    console.error(`書き出し ${path.relative(projectRoot, OUT)}（足した問題 ${added.length}、全部で ${items.length}）`);
     process.exit(0);
   }
   if (PHASE === "select") {
