@@ -3,19 +3,22 @@ import { describe, expect, test } from 'vitest';
 import {
   BRAIN_DAYS_KEPT,
   BRAIN_TRAINING_KEY,
+  BRAIN_TRAINING_V1_KEY,
   brainStreak,
   dailySeries,
   dayKey,
   emptyBrainRecord,
   growthSince,
   loadBrainRecord,
-  markTodayDone,
+  migrateBrainRecordV1,
   nextStair,
   recordBrainSession,
+  rememberRoom,
   saveBrainRecord,
+  stampCalendar,
+  stampRoom,
+  stamped,
   startLevel,
-  todayDone,
-  todayMenu,
 } from './brain-training.mjs';
 import {
   GLANCE_CENTER,
@@ -61,45 +64,62 @@ describe('脳トレの記録', () => {
     expect(startLevel(record, 'glance')).toBe(0);
   });
 
-  test('1回の結果で、自己ベストと日ごとの記録と次の段を残す', () => {
+  test('1回の結果で、自己ベストと日ごとの記録と次の段を残し、部屋の判子を押す', () => {
     let { record, newBest } = recordBrainSession(emptyBrainRecord(), 'glance', { value: 5, level: 6 }, '2026-10-30');
     expect(newBest).toBe(true);
     expect(record.best.glance).toBe(5);
     expect(record.levels.glance).toBe(6);
-    expect(record.days['2026-10-30'].glance).toBe(5);
+    expect(record.days['2026-10-30']).toEqual({ calc: 1, glance: 5 });
     ({ record, newBest } = recordBrainSession(record, 'glance', { value: 3, level: 4 }, '2026-10-30'));
     expect(newBest).toBe(false);
     expect(record.best.glance).toBe(5);
     expect(record.days['2026-10-30'].glance).toBe(5);
     expect(record.levels.glance).toBe(4);
-    // 記録0は自己ベストにしない。知らない種目は無視する。
-    expect(recordBrainSession(emptyBrainRecord(), 'glance', { value: 0, level: 0 }, '2026-10-30').newBest).toBe(false);
+    // 記録0は自己ベストにしない(判子は押す)。知らない種目は無視する。
+    const zero = recordBrainSession(emptyBrainRecord(), 'board-memory', { value: 0, level: 0 }, '2026-10-30');
+    expect(zero.newBest).toBe(false);
+    expect(zero.record.days['2026-10-30']).toEqual({ memory: 1 });
     expect(recordBrainSession(emptyBrainRecord(), 'warp', { value: 9, level: 9 }, '2026-10-30').record.best).toEqual({});
   });
 
-  test('日ごとの記録は30日分だけ残す', () => {
+  test('スピード計算は段ごとに記録し、小さいほど良い', () => {
+    let { record, newBest } = recordBrainSession(emptyBrainRecord(), 'speed', { value: 2100, level: 1, recordId: 'speed-1', extraLevels: { 'speed-slow': 1 } }, '2026-10-30');
+    expect(newBest).toBe(true);
+    expect(record.best['speed-1']).toBe(2100);
+    expect(record.levels).toEqual({ speed: 1, 'speed-slow': 1 });
+    ({ record, newBest } = recordBrainSession(record, 'speed', { value: 2400, level: 1, recordId: 'speed-1' }, '2026-10-30'));
+    expect(newBest).toBe(false);
+    expect(record.days['2026-10-30']['speed-1']).toBe(2100);
+    ({ record, newBest } = recordBrainSession(record, 'speed', { value: 1800, level: 2, recordId: 'speed-1' }, '2026-10-31'));
+    expect(newBest).toBe(true);
+    expect(growthSince(record, 'speed-1', '2026-10-31')).toEqual({ previous: 2100, today: 1800, grew: true });
+    expect(dailySeries(record, 'speed-1').map(({ value }) => value)).toEqual([2100, 1800]);
+  });
+
+  test('日ごとの記録は決めた日数だけ残す', () => {
     let record = emptyBrainRecord();
-    for (let day = 1; day <= 40; day += 1) {
-      const date = new Date(2026, 8, day, 12);
+    for (let day = 1; day <= BRAIN_DAYS_KEPT + 10; day += 1) {
+      const date = new Date(2026, 0, day, 12);
       record = recordBrainSession(record, 'glance', { value: day, level: 1 }, dayKey(date)).record;
     }
     expect(Object.keys(record.days)).toHaveLength(BRAIN_DAYS_KEPT);
-    expect(dailySeries(record, 'glance').at(-1).value).toBe(40);
+    expect(dailySeries(record, 'glance').at(-1).value).toBe(BRAIN_DAYS_KEPT + 10);
   });
 
-  test('今日の3種目を終えた印', () => {
-    const record = markTodayDone(emptyBrainRecord(), '2026-10-30');
-    expect(todayDone(record, '2026-10-30')).toBe(true);
-    expect(todayDone(record, '2026-10-31')).toBe(false);
-  });
-
-  test('今日の3種目は遊べる種目から並べ、場所法は日替わりで入れ替える', () => {
-    expect(todayMenu({ available: ['glance'], day: '2026-10-30' })).toEqual(['glance']);
-    const all = ['glance', 'board-memory', 'mental', 'palace'];
-    expect(todayMenu({ available: all, day: '2026-10-30' })).toEqual(['glance', 'board-memory', 'mental']);
-    expect(todayMenu({ available: all, palaceOpen: true, day: '2026-10-30' })).toEqual(['glance', 'board-memory', 'mental']);
-    expect(todayMenu({ available: all, palaceOpen: true, day: '2026-10-31' })).toEqual(['glance', 'palace', 'mental']);
-    expect(todayMenu({ available: all, palaceOpen: true, day: '2026-10-29' })).toEqual(['glance', 'board-memory', 'palace']);
+  test('判子とカレンダー。6週間を日曜はじまりで並べる', () => {
+    let record = stampRoom(emptyBrainRecord(), 'memory', '2026-10-29');
+    record = recordBrainSession(record, 'nback', { value: 2, level: 2 }, '2026-10-31').record;
+    expect(stamped(record, '2026-10-29', 'memory')).toBe(true);
+    expect(stamped(record, '2026-10-29', 'calc')).toBe(false);
+    expect(stamped(record, '2026-10-31')).toBe(true);
+    const weeks = stampCalendar(record, '2026-10-31');
+    expect(weeks).toHaveLength(6);
+    expect(weeks.every((week) => week.length === 7)).toBe(true);
+    expect(new Date(`${weeks[0][0].day}T12:00:00`).getDay()).toBe(0);
+    const today = weeks.flat().find((cell) => cell.today);
+    expect(today).toMatchObject({ day: '2026-10-31', calc: true, memory: false, future: false });
+    expect(weeks.flat().find((cell) => cell.day === '2026-10-29').memory).toBe(true);
+    expect(stampRoom(record, 'nope', '2026-10-31')).toBe(record);
   });
 
   test('前の日より伸びたか', () => {
@@ -112,7 +132,7 @@ describe('脳トレの記録', () => {
 
   test('続けた日数は今日か昨日から数え、途切れたら0から', () => {
     let record = emptyBrainRecord();
-    for (const day of ['2026-10-27', '2026-10-28', '2026-10-29']) record = markTodayDone(record, day);
+    for (const day of ['2026-10-27', '2026-10-28', '2026-10-29']) record = stampRoom(record, 'calc', day);
     expect(brainStreak(record, '2026-10-29')).toBe(3);
     expect(brainStreak(record, '2026-10-30')).toBe(3);
     expect(brainStreak(record, '2026-11-01')).toBe(0);
@@ -122,20 +142,43 @@ describe('脳トレの記録', () => {
     const storage = memoryStorage();
     expect(loadBrainRecord(storage)).toEqual(emptyBrainRecord());
     let record = recordBrainSession(emptyBrainRecord(), 'glance', { value: 3, level: 2 }, '2026-10-30').record;
-    record = markTodayDone(record, '2026-10-30');
-    record.palace.custom = ['玄関', '  ', '台所'];
+    record = rememberRoom(record, 'calc');
     saveBrainRecord(storage, record);
     const loaded = loadBrainRecord(storage);
     expect(loaded.best).toEqual({ glance: 3 });
-    expect(loaded.days['2026-10-30']).toEqual({ glance: 3, today: 1 });
-    expect(loaded.palace.custom).toEqual(['玄関', '台所']);
+    expect(loaded.days['2026-10-30']).toEqual({ glance: 3, calc: 1 });
+    expect(loaded.room).toBe('calc');
     expect(loadBrainRecord(memoryStorage({ [BRAIN_TRAINING_KEY]: '{' }))).toEqual(emptyBrainRecord());
-    expect(loadBrainRecord(memoryStorage({ [BRAIN_TRAINING_KEY]: JSON.stringify({ version: 2 }) }))).toEqual(emptyBrainRecord());
-    const odd = loadBrainRecord(memoryStorage({ [BRAIN_TRAINING_KEY]: JSON.stringify({ version: 1, levels: { glance: -1, warp: 3, mental: 2 }, days: { nope: { glance: 1 }, '2026-10-01': { glance: 'x' } } }) }));
-    expect(odd.levels).toEqual({ mental: 2 });
+    expect(loadBrainRecord(memoryStorage({ [BRAIN_TRAINING_KEY]: JSON.stringify({ version: 3 }) }))).toEqual(emptyBrainRecord());
+    const odd = loadBrainRecord(memoryStorage({ [BRAIN_TRAINING_KEY]: JSON.stringify({ version: 2, room: 'gym', levels: { glance: -1, warp: 3, mental: 2, 'speed-slow': 1 }, best: { 'speed-9': 3, 'speed-2': 1500 }, days: { nope: { glance: 1 }, '2026-10-01': { glance: 'x' } }, program: { calc: { sessions: 3 } } }) }));
+    expect(odd.levels).toEqual({ mental: 2, 'speed-slow': 1 });
+    expect(odd.best).toEqual({ 'speed-2': 1500 });
     expect(odd.days).toEqual({});
+    expect(odd.room).toBe('');
+    expect(odd.program.calc.sessions).toBe(3);
     // 保存できない環境でも投げない。
     expect(() => saveBrainRecord({ setItem() { throw new Error('full'); } }, record)).not.toThrow();
+  });
+
+  test('版1の記録は将棋の棚の記録として残り、練習した日に部屋の判子が押される', () => {
+    const v1 = {
+      version: 1,
+      levels: { glance: 6, palace: 9, mental: 3 },
+      best: { glance: 7, 'board-memory': 12 },
+      days: { '2026-10-30': { glance: 7, today: 1 }, '2026-10-31': { palace: 9 } },
+      palace: { lessons: ['walk'], custom: [] },
+    };
+    const migrated = migrateBrainRecordV1(v1);
+    expect(migrated.version).toBe(2);
+    expect(migrated.levels).toEqual({ glance: 6, palace: 9, mental: 3 });
+    expect(migrated.best).toEqual({ glance: 7, 'board-memory': 12 });
+    expect(migrated.days).toEqual({ '2026-10-30': { glance: 7, calc: 1 }, '2026-10-31': { palace: 9, memory: 1 } });
+    // 版2がなければ版1を読み、版2があれば版1は読まない。
+    const storage = memoryStorage({ [BRAIN_TRAINING_V1_KEY]: JSON.stringify(v1) });
+    expect(loadBrainRecord(storage).best.glance).toBe(7);
+    saveBrainRecord(storage, emptyBrainRecord());
+    expect(loadBrainRecord(storage).best).toEqual({});
+    expect(migrateBrainRecordV1({ version: 2 })).toEqual(emptyBrainRecord());
   });
 });
 

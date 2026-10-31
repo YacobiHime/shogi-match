@@ -321,7 +321,7 @@
                 <span class="shogi-title__label">問題集</span>
                 <small class="shogi-title__desc">{{ homeTile("problems").after || "詰ませ方・逃げ方" }}</small>
               </button>
-              <!-- 脳トレ道場(docs/brain-training-design.md)。将棋の盤で、見る速さと記憶をきたえる。 -->
+              <!-- 脳トレ道場(docs/brain-training-design.mdの11章)。計算力と記憶力の2つの部屋。 -->
               <button type="button" class="shogi-title__tile" data-brain-tile @click="openBrainTraining">
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#fffcf4">
@@ -342,7 +342,7 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">脳トレ</span>
-                <small class="shogi-title__desc">見る速さと記憶</small>
+                <small class="shogi-title__desc">計算力と記憶力</small>
               </button>
             </div>
           </section>

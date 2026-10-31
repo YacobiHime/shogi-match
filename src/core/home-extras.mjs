@@ -9,7 +9,7 @@ export const DISCOVER_FEATURES = Object.freeze([
   { id: 'endgame', title: '終盤戦をやってみよう', reason: '名局の終盤の局面から、すぐ指せるよ。まだ遊んでいないね' },
   { id: 'tips', title: 'すぐ使えるコツを見てみよう', reason: '飛車先の歩、7七銀と7八金…1枚1分で、次の対局ですぐ使えるよ' },
   { id: 'opening-dex', title: '定跡図鑑をのぞいてみよう', reason: '戦法と囲いの組み方を、1手ずつ再生して見られるよ' },
-  { id: 'brain', title: '脳トレをやってみよう', reason: '盤をちらっと見て当てる、局面を覚えて並べる。5分で終わるよ' },
+  { id: 'brain', title: '脳トレをやってみよう', reason: '計算力と記憶力をきたえる。自分の家で記憶の宮殿も作れるよ' },
   { id: 'tesuji', title: '手筋図鑑をのぞいてみよう', reason: '叩きの歩や割り打ちの銀。知っていると一気に強くなるよ' },
   { id: 'world', title: '将棋界図鑑をのぞいてみよう', reason: 'タイトル戦や名局のこと。AIの解析つきで並べられるよ' },
   { id: 'piece', title: '駒図鑑をのぞいてみよう', reason: '駒の動きと値段を、もう一度たしかめよう' },

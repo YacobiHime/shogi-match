@@ -105,11 +105,14 @@ export function glanceTimingValid(targetMs, shownMs, frameMs = 17) {
   return shownMs <= targetMs + frameMs * 1.5 && shownMs >= targetMs - frameMs * 1.5;
 }
 
-/** 記録の見せ方。「0.12秒」、じゃまの駒があれば「（じゃま駒4枚）」を添える。 */
-export function glanceLevelLabel(level) {
+/**
+ * 記録の見せ方。「0.12秒」、じゃまの駒があれば「（じゃま駒4枚）」を添える。
+ * 記号版(計算力の「ちらっと見る」)は noun を「じゃまの印」にする。
+ */
+export function glanceLevelLabel(level, noun = 'じゃま駒') {
   const { ms, distractors } = glanceLevel(level);
   const seconds = `${(ms / 1000).toFixed(ms >= 100 ? 2 : 3).replace(/0$/, '')}秒`;
-  return distractors ? `${seconds}（じゃま駒${distractors}枚）` : seconds;
+  return distractors ? `${seconds}（${noun}${distractors}${noun === 'じゃま駒' ? '枚' : 'つ'}）` : seconds;
 }
 
 /**

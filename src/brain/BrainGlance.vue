@@ -2,21 +2,23 @@
   <!--
     ちらっと盤(docs/brain-training-design.mdの3-1)。盤が一瞬だけ出て隠れる。真ん中の駒と、玉の方向を答える。
     答えは2回押すだけ(金か銀か・8方向)。両方押したらすぐ採点し、答えを盤で見せて次へ進む。
+    variantが'symbols'なら、計算力の「ちらっと見る」(11-5)。白い紙に、真ん中の●か■と、まわりの★を見せる。
   -->
-  <section class="brain-game brain-glance" aria-label="ちらっと盤" data-brain-glance>
+  <section class="brain-game brain-glance" :class="{ 'brain-glance--symbols': symbols }" :aria-label="symbols ? 'ちらっと見る' : 'ちらっと盤'" :data-brain-glance="variant">
     <p class="brain-game__status" aria-live="polite">
       <span>{{ Math.min(trials.length + (phase === 'feedback' || phase === 'done' ? 0 : 1), count) }} / {{ count }}</span>
       <span>見せる時間 {{ levelLabel }}</span>
     </p>
     <p class="brain-game__prompt">{{ prompt }}</p>
-    <div class="brain-board" :class="{ 'brain-board--mask': phase === 'mask' }" aria-hidden="true">
+    <div class="brain-board" :class="{ 'brain-board--mask': phase === 'mask', 'brain-board--sym': symbols }" aria-hidden="true">
       <span
         v-for="cell in cells"
         :key="cell.square"
         class="brain-board__cell"
         :class="cell.mark ? `brain-board__cell--${cell.mark}` : ''"
       >
-        <span v-if="cell.piece" class="brain-piece" :class="{ 'brain-piece--king': cell.piece === '玉' }">{{ cell.piece }}</span>
+        <span v-if="cell.piece && symbols" class="brain-sym" :class="`brain-sym--${cell.role}`">{{ cell.piece }}</span>
+        <span v-else-if="cell.piece" class="brain-piece" :class="{ 'brain-piece--king': cell.piece === '玉' }">{{ cell.piece }}</span>
         <span v-else-if="cell.square === GLANCE_CENTER && phase === 'ready'" class="brain-board__dot"></span>
       </span>
       <span v-if="phase === 'mask'" class="brain-board__noise"></span>
@@ -37,9 +39,9 @@
           :aria-pressed="answer.center === piece.id"
           :data-glance-center="piece.id"
           @click="chooseCenter(piece.id)"
-        >{{ piece.label }}</button>
+        >{{ symbols ? SYMBOL_CENTER[piece.id] : piece.label }}</button>
       </div>
-      <div class="brain-glance__pad" role="group" aria-label="玉の方向">
+      <div class="brain-glance__pad" role="group" :aria-label="symbols ? '★の方向' : '玉の方向'">
         <template v-for="(cell, index) in PAD" :key="index">
           <button
             v-if="cell"
@@ -50,7 +52,7 @@
             :data-glance-direction="cell.id"
             @click="chooseDirection(cell.id)"
           ><span :style="{ transform: `rotate(${cell.angle}deg)` }" aria-hidden="true">↑</span></button>
-          <span v-else class="brain-glance__pad-center" aria-hidden="true">玉は？</span>
+          <span v-else class="brain-glance__pad-center" aria-hidden="true">{{ symbols ? "★は？" : "玉は？" }}</span>
         </template>
       </div>
     </div>
@@ -61,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, ref, type PropType } from "vue";
 import {
   GLANCE_CENTER,
   GLANCE_CENTER_PIECES,
@@ -86,11 +88,18 @@ const props = defineProps({
   startLevel: { type: Number, default: 0 },
   /** 問題の数。 */
   count: { type: Number, default: 16 },
+  /** board(将棋の棚のちらっと盤)か、symbols(計算力のちらっと見る)。 */
+  variant: { type: String as PropType<"board" | "symbols">, default: "board" },
 });
 const emit = defineEmits<{
-  (event: "finish", result: { value: number; level: number; correct: number; total: number }): void;
+  (event: "finish", result: { value: number; level: number; correct: number; total: number; text: string }): void;
   (event: "sound", kind: "correct" | "miss"): void;
 }>();
+
+const symbols = props.variant === "symbols";
+/** 記号版の真ん中の形(金→●、銀→■)と、まわりの印。 */
+const SYMBOL_CENTER: Record<string, string> = { G: "●", S: "■" };
+const SYMBOL_NOUN = "じゃまの印";
 
 /** 方向のボタンの3×3の並び(真ん中は空ける)。矢印の向きは上を0度にした角度。 */
 const ANGLES: Record<string, number> = { "up-left": -45, up: 0, "up-right": 45, left: -90, right: 90, "down-left": -135, down: 180, "down-right": 135 };
@@ -115,14 +124,14 @@ let timers: ReturnType<typeof setTimeout>[] = [];
 let frame = 0;
 const seedBase = Math.floor(Math.random() * 1e9);
 
-const levelLabel = computed(() => glanceLevelLabel(problem.value?.level ?? stair.value.level));
+const levelLabel = computed(() => glanceLevelLabel(problem.value?.level ?? stair.value.level, symbols ? SYMBOL_NOUN : undefined));
 const prompt = computed(() => {
   switch (phase.value) {
-    case "intro": return "真ん中の駒と、玉の場所を覚えてね。盤は一瞬で消えるよ。";
+    case "intro": return symbols ? "真ん中の形と、★の場所を覚えてね。一瞬で消えるよ。" : "真ん中の駒と、玉の場所を覚えてね。盤は一瞬で消えるよ。";
     case "ready": return "見て！";
     case "show":
     case "mask": return "";
-    case "answer": return "真ん中は金？銀？ 玉はどっちにあった？";
+    case "answer": return symbols ? "真ん中は●？■？ ★はどっちにあった？" : "真ん中は金？銀？ 玉はどっちにあった？";
     case "feedback": return lastCorrect.value ? "正解！" : "答えはここだよ。";
     default: return "";
   }
@@ -130,7 +139,7 @@ const prompt = computed(() => {
 
 /** 盤のマス。見せるとき・答え合わせのときだけ駒を置く。 */
 const cells = computed(() => {
-  const list: { square: string; piece: string; mark: string }[] = [];
+  const list: { square: string; piece: string; mark: string; role: string }[] = [];
   const visible = phase.value === "show" || phase.value === "feedback" || phase.value === "intro";
   const current = phase.value === "intro" ? glanceProblem(seedBase, 0) : problem.value;
   for (let rank = 1; rank <= 9; rank += 1) {
@@ -138,16 +147,17 @@ const cells = computed(() => {
       const square = squareOf(file, rank)!;
       let piece = "";
       let mark = "";
+      let role = "";
       if (visible && current) {
-        if (square === GLANCE_CENTER) piece = current.center === "G" ? "金" : "銀";
-        else if (square === current.king) piece = "玉";
-        else if (current.distractors.includes(square)) piece = "歩";
+        if (square === GLANCE_CENTER) [piece, role] = [symbols ? SYMBOL_CENTER[current.center] : current.center === "G" ? "金" : "銀", "center"];
+        else if (square === current.king) [piece, role] = [symbols ? "★" : "玉", "target"];
+        else if (current.distractors.includes(square)) [piece, role] = [symbols ? "▲" : "歩", "noise"];
         if (phase.value === "feedback") {
           if (square === current.king) mark = scoreGlance(current, answer.value).directionOk ? "ok" : "answer";
           if (square === GLANCE_CENTER) mark = scoreGlance(current, answer.value).centerOk ? "ok" : "answer";
         }
       }
-      list.push({ square, piece, mark });
+      list.push({ square, piece, mark, role });
     }
   }
   return list;
@@ -218,7 +228,8 @@ function advance() {
   if (trials.value.length >= props.count) {
     phase.value = "done";
     const summary = glanceSummary(trials.value);
-    emit("finish", { value: summary.value, level: stair.value.level, correct: summary.correct, total: summary.total });
+    const text = summary.value ? `${glanceLevelLabel(summary.value - 1, symbols ? SYMBOL_NOUN : undefined)}で見えた` : "";
+    emit("finish", { value: summary.value, level: stair.value.level, correct: summary.correct, total: summary.total, text });
     return;
   }
   startTrial();
