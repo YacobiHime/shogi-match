@@ -18,8 +18,8 @@ function memoryStorage() {
 }
 
 describe("すぐ使えるコツ(21-4・21-5)", () => {
-  it("コツは11枚・3章で、じっくり基礎の一覧には入らず、tutorialLessonで探せる", () => {
-    expect(TIPS_LESSONS).toHaveLength(11);
+  it("コツは12枚・3章で、じっくり基礎の一覧には入らず、tutorialLessonで探せる", () => {
+    expect(TIPS_LESSONS).toHaveLength(12);
     expect(TIPS_VOLUMES[0].chapters.map(({ id }) => id)).toEqual(["tips-opening", "tips-middle", "tips-endgame"]);
     const basics = new Set(TUTORIAL_LESSONS.map(({ id }) => id));
     for (const lesson of TIPS_LESSONS) {
@@ -77,6 +77,42 @@ describe("すぐ使えるコツ(21-4・21-5)", () => {
     expect(attackersOf(board, "6c", "black").some(({ square }) => square === "5e")).toBe(true);
     expect(attackersOf(board, "4c", "black").some(({ square }) => square === "5e")).toBe(true);
     expect(attackersOf(board, "5e", "white")).toEqual([]);
+  });
+
+  it("金の両取り(21-14-5): 答えは▲5四金打だけで、飛車と角の両方に利き、どちらも金を取れない", () => {
+    const step = stepOf("tip-fork", "find-move", 1);
+    const forks = legal(step.sfen).filter((usi) => usi.startsWith("G*")).filter((usi) => {
+      const record = createGameRecord(step.sfen);
+      appendUsiMove(record, usi);
+      const { board } = parseSfenState(record.position.sfen);
+      return ["4c", "6d"].every((target) => attackersOf(board, target, "black").some(({ square }) => square === usi.slice(2, 4)));
+    });
+    expect(forks).toEqual(step.answers);
+    const record = createGameRecord(step.sfen);
+    appendUsiMove(record, "G*5d");
+    expect(attackersOf(parseSfenState(record.position.sfen).board, "5d", "white")).toEqual([]);
+  });
+
+  it("玉は下段に落とせ(21-14-5): 3手で詰み、詰む1手目は▲2四金だけ。上や横からの王手では逃げられる", async () => {
+    const { analyzeProblem } = await import("./problem-solver.ts");
+    const step = stepOf("tip-bottom", "mate");
+    const { verdicts, exhausted } = analyzeProblem({ sfen: step.sfen, kind: "mate", depth: 3 });
+    expect(exhausted).toBe(false);
+    expect(verdicts.filter(({ correct }) => correct).map(({ usi }) => usi)).toEqual([step.solution[0]]);
+    // 2四の金のあと、玉の逃げ場は奥の段(二段目)だけ。
+    const record = createGameRecord(step.sfen);
+    appendUsiMove(record, step.solution[0]);
+    const kingMoves = enumerateLegalMoves(record.position).filter(({ usi }) => usi.startsWith("2c")).map(({ usi }) => usi);
+    expect(kingMoves).toContain(step.solution[1]);
+    expect(kingMoves.every((usi) => usi[3] === "b")).toBe(true);
+    // 上(2二)から王手すると、詰まない。
+    expect(verdicts.find(({ usi }) => usi === "G*2b")?.reason).toBe("escapes");
+    // 手順どおりに指すと詰む。
+    let state = createStepState(step);
+    let result = attemptTutorialMove(step, state, step.solution[0]);
+    expect(result.outcome).toBe("continue");
+    result = attemptTutorialMove(step, result.state, step.solution[2]);
+    expect(result.outcome).toBe("correct");
   });
 
   it("垂れ歩: 手順どおりに指すと、2三にと金ができる", () => {

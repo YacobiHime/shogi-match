@@ -1622,10 +1622,20 @@ const TIP_SUPPORTED_SFEN = "3rk4/8b/4p4/9/9/4S4/3G5/4R4/4K4 b - 1";
 const TIP_FREE_PIECE_SFEN = "4k4/5g3/9/7s1/9/9/9/7R1/4K4 b - 1";
 /** 桂を打つと、飛車と金の両取りになる局面。 */
 const TIP_FORK_SFEN = "4k4/9/3r1g3/9/9/9/9/9/4K4 b N 1";
+/**
+ * 金を打つと、斜め前の飛車と横の角の両取りになる局面(▲5四金打だけが答え)。
+ * 飛車は斜めに、角は縦横に動けないので、どちらも金を取れない。
+ */
+const TIP_GOLD_FORK_SFEN = "8k/9/5r3/3b5/9/9/9/9/4K4 b G 1";
 /** 2筋に歩がなく、2四に歩を垂らすと、次に2三でと金を作れる局面。 */
 const TIP_PAWN_HAND_SFEN = "9/1k7/ppp6/9/9/9/9/9/4K4 b P 1";
 /** 玉の頭に金を打つ1手詰め(歩が金を守る)。はじめる場所を決める1問とは別の局面。 */
 const TIP_HEAD_GOLD_SFEN = "6k2/9/6P2/9/9/9/9/9/4K4 b G 1";
+/**
+ * 玉は下段に落とせ(▲2四金△2二玉▲2三金の3手詰め)。2四から打つと玉は奥へ下がるしかない。
+ * 横や上から王手すると、玉は広いほうへ逃げる(詰み探索で、詰む1手目は▲2四金だけ)。
+ */
+const TIP_BOTTOM_SFEN = "6gsl/6p2/7k1/9/7P1/9/9/9/4K4 b 2G 1";
 /** 四間飛車と美濃囲いの完成形(作戦カードと同じ手順)。 */
 const TIP_SHIKEN_MINO_SFEN = sfenAfter(STANDARD_SFEN, ["7g7f", "6g6f", ...OPENING_CASTLES.find(({ id }) => id === "mino").blackMoves], { blackOnly: true });
 /** エルモ囲いの完成形。 */
@@ -1810,7 +1820,7 @@ const TIPS_VOLUME = {
         {
           id: "tip-fork",
           title: "両取りをねらおう",
-          summary: "桂の両取りをかけられる",
+          summary: "両取りをかけられる",
           icon: "桂",
           free: true,
           steps: [
@@ -1818,6 +1828,11 @@ const TIPS_VOLUME = {
               type: "find-move", sfen: TIP_FORK_SFEN, answers: ["N*5e"], marks: [["6c", "target"], ["4c", "target"]],
               speech: "持ち駒の桂馬で、飛車と金を一度にねらおう！ 赤い2枚の両方に利くマスはどこかな？",
               praise: "桂の両取り！ 相手はどちらか1枚しか逃げられないから、次に駒得できるよ。",
+            },
+            {
+              type: "find-move", sfen: TIP_GOLD_FORK_SFEN, answers: ["G*5d"], marks: [["4c", "target"], ["6d", "target"]],
+              speech: "こんどは金で両取り！ 飛車は斜めに、角は縦横に動けない。両方に利いて、取られないマスは？",
+              praise: "金の両取り！ 飛車も角も、金を取れないね。",
             },
           ],
         },
@@ -1838,6 +1853,25 @@ const TIPS_VOLUME = {
               type: "mate", sfen: TIP_HEAD_GOLD_SFEN, solution: ["G*3b"],
               speech: "玉の頭（すぐ前）に金を打つと、詰むことが多いよ。1手で詰ませてみよう！",
               praise: "頭金！ 歩が金を守っているから、玉は金を取れないね。",
+            },
+          ],
+        },
+        {
+          id: "tip-bottom",
+          title: "玉は下段に落とせ",
+          summary: "玉を奥へ押しこんで詰ませられる",
+          icon: "落",
+          free: true,
+          steps: [
+            {
+              type: "mate", sfen: TIP_BOTTOM_SFEN, solution: ["G*2d", "2c2b", "G*2c"], proverb: "drop-to-bottom",
+              speech: "玉を奥（いちばん上の段）へ押しこむ向きに王手しよう。金2枚で、3手で詰むよ！",
+              praise: "2四の金で玉を奥へ落として、頭金！ 奥の段の玉は、後ろへ逃げられないね。",
+            },
+            {
+              type: "choose", question: "王手をかけるなら、どっちの向きから？",
+              options: ["玉を奥へ押しこむ向き", "玉が広いほうへ逃げられる向き"], answer: 0,
+              explanation: "奥の段の玉は逃げ道が少ない。横や上から王手すると、広いほうへ逃げられちゃうよ。",
             },
           ],
         },
