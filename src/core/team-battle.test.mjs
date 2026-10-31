@@ -64,7 +64,7 @@ describe('形式', () => {
 });
 
 describe('高校の団体戦', () => {
-  it('48校。自分たちは宵月高校の3人で、羽音は高校生の中で飛び抜けて強い', () => {
+  it('48校。自分たちは燈ヶ丘高校の3人で、羽音は高校生の中で飛び抜けて強い', () => {
     const run = school();
     expect(Object.keys(run.teams)).toHaveLength(48);
     expect(run.teams[USER_TEAM]).toMatchObject({ name: SCHOOL_NAME, members: [TEAM_HANANE_ID, TEAM_USER_ID, TEAM_MOMOKA_ID] });
@@ -255,7 +255,7 @@ describe('対局画面とのつなぎ', () => {
     const award = teamAward({ id: 'team-school-1', name: '全国高校将棋団体戦', team: SCHOOL_NAME, members: ['天鷺羽音', '桜乃百花'], wins: 7, losses: 0 }, { playerName: 'やこび', at: 0 });
     expect(award).toMatchObject({ id: 'team-team-school-1', grade: 'gold', prize: '団体優勝' });
     expect(awardText(award).body).toMatch(/仲間とともに優勝/);
-    expect(awardLine(award)).toBe('全国高校将棋団体戦 団体優勝（宵月高校）');
+    expect(awardLine(award)).toBe('全国高校将棋団体戦 団体優勝（燈ヶ丘高校）');
     const { withdrawOptions } = await import('./tournament-withdraw.mjs');
     expect(withdrawOptions({ teamRun: school() }).map(({ id }) => id)).toEqual(['team']);
     const { withdrawTeamRun } = await import('./team-battle.mjs');

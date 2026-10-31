@@ -41,7 +41,7 @@ export const TEAM_SCENES = Object.freeze({
       line('hanane', 'gentle', '団体戦は、3局のうち2つ勝てばいい。1人で全部勝たなくていいんだよ。'),
       line('hanane', 'neutral', '私が1つ取る。君と百花で、もう1つ。どう？'),
       line('momoka', 'neutral', 'お願い！ 一緒に出よう！'),
-      line('narration', 'neutral', 'こうして{name}は、宵月高校将棋部の団体戦メンバーになった。'),
+      line('narration', 'neutral', 'こうして{name}は、燈ヶ丘（ともりがおか）高校将棋部の団体戦メンバーになった。'),
     ],
   }),
   'invite-pro': Object.freeze({

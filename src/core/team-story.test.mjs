@@ -31,7 +31,7 @@ describe('団体戦のノベルの場面(docs/team-battle-design.mdの6章)', ()
     expect(scene.cast).toEqual(['hanane', 'momoka']);
     expect(scene.lines[2].text).toMatch(/団体戦/);
     expect(scene.lines.some((entry) => entry.text.includes('やこびさん'))).toBe(true);
-    expect(scene.lines.at(-1).text).toMatch(/やこびは、宵月高校将棋部/);
+    expect(scene.lines.at(-1).text).toMatch(/やこびは、燈ヶ丘（ともりがおか）高校将棋部/);
     expect(teamScene('invite-pro').cast).toEqual(['hanane']);
   });
 
