@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { appendUsiMove, createGameRecord } from "../game-state";
 import { OPENING_CASTLES } from "./opening-guide.mjs";
-import { TIP_MOMENTS, TIP_USES_KEY, loadTipUses, noteTipUse, startTipMoments, tipMoment, tipShapesHolding } from "./tip-moments.mjs";
+import { TIP_CALLOUT_LIMIT, TIP_MOMENTS, TIP_USES_KEY, loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoment, tipMoments, tipShapesHolding } from "./tip-moments.mjs";
+import { problemById } from "./problem-set.mjs";
 import { TIPS_LESSONS } from "./tutorial-curriculum.mjs";
 import { emptyTutorialProgress, learnedTips, recordLessonCleared, recordLessonSkipped, tipsTouched, withTutorialCourse } from "./tutorial-progress.mjs";
 
@@ -109,5 +110,89 @@ describe("コツに触れたか・覚えたコツ(21-14-4)", () => {
     const progress = recordLessonSkipped(recordLessonCleared(emptyTutorialProgress(), "tip-rook-pawn", 2), "tip-shiken");
     expect(tipsTouched(progress)).toBe(true);
     expect(learnedTips(progress)).toEqual(["tip-rook-pawn"]);
+  });
+});
+
+/** 局面から1手指し、前後の局面と手を返す。 */
+function fromSfen(sfen, usi) {
+  const record = createGameRecord(sfen);
+  expect(appendUsiMove(record, usi), usi).toBe(true);
+  return { before: sfen, usi, after: record.position.sfen };
+}
+const ids = (moments) => moments.map(({ id }) => id);
+
+describe("コツの残り8枚の判定(22-2)", () => {
+  it("12枚のコツが、教室のカードと同じ並びでそろっている", () => {
+    expect(ALL).toEqual(TIPS_LESSONS.map(({ id }) => id));
+    expect(TIP_MOMENTS.filter(({ mate }) => mate).map(({ id }) => id)).toEqual(["tip-head-gold", "tip-bottom", "tip-speed"]);
+  });
+
+  it("囲ってから戦う: 囲いが完成していて、大きな駒の取り合いの前に駒を取ると出る。囲っていなければ出ない", () => {
+    const funa = castleMoves("funagakoi");
+    const attack = ["2g2f", "2f2e", "2e2d", "2h2d"];
+    const whiteMoves = ["8c8d", "9c9d", "1c1d", "4a3b", "6a5b", "9d9e", "2c2d"];
+    const castled = lastMove(interleave([...funa, ...attack], whiteMoves.slice(-(funa.length + attack.length - 1))));
+    expect(ids(tipMoments({ ...castled, color: "black", learned: ALL, fired: [] }))).toEqual(["tip-rook-pawn", "tip-castle-first"]);
+    const bare = lastMove(interleave(attack, ["8c8d", "9c9d", "2c2d"]));
+    expect(ids(tipMoments({ ...bare, color: "black", learned: ALL, fired: [] }))).not.toContain("tip-castle-first");
+  });
+
+  it("味方の利きの上へ: 角に当たるマスへ銀を進めても、金が守っていて取り合いで損をしないなら出る", () => {
+    const supported = fromSfen("4k4/9/7b1/9/9/4GS3/9/9/4K4 b - 1", "4f4e");
+    expect(ids(tipMoments({ ...supported, color: "black", learned: ALL, fired: [] }))).toEqual(["tip-supported"]);
+    // 守りの金がいなければ、角にタダで取られるので出ない。
+    const loose = fromSfen("4k4/9/7b1/9/9/5S3/9/9/4K4 b - 1", "4f4e");
+    expect(tipMoments({ ...loose, color: "black", learned: ALL, fired: [] })).toEqual([]);
+  });
+
+  it("タダの駒を取る: だれも守っていない駒を取ると出る。守られた駒・歩では出ない", () => {
+    const free = fromSfen("4k4/5g3/9/7s1/9/9/9/7R1/4K4 b - 1", "2h2d");
+    expect(ids(tipMoments({ ...free, color: "black", learned: ALL, fired: [] }))).toContain("tip-free-piece");
+    const guarded = fromSfen("4k4/9/6g2/7s1/9/9/9/7R1/4K4 b - 1", "2h2d");
+    expect(ids(tipMoments({ ...guarded, color: "black", learned: ALL, fired: [] }))).not.toContain("tip-free-piece");
+    const pawn = fromSfen("4k4/9/9/7p1/9/9/9/7R1/4K4 b - 1", "2h2d");
+    expect(ids(tipMoments({ ...pawn, color: "black", learned: ALL, fired: [] }))).not.toContain("tip-free-piece");
+  });
+
+  it("両取り: 桂・金の両取りで出る。後手の桂の両取りでも出る。ねらいが1つなら出ない", () => {
+    const knight = fromSfen("4k4/9/3r1g3/9/9/9/9/9/4K4 b N 1", "N*5e");
+    expect(ids(tipMoments({ ...knight, color: "black", learned: ALL, fired: [] }))).toEqual(["tip-fork"]);
+    const gold = fromSfen("8k/9/5r3/3b5/9/9/9/9/4K4 b G 1", "G*5d");
+    expect(ids(tipMoments({ ...gold, color: "black", learned: ALL, fired: [] }))).toEqual(["tip-fork"]);
+    const white = fromSfen("4k4/9/9/9/9/9/3G1R3/9/4K4 w n 1", "N*5e");
+    expect(tipMoment({ ...white, color: "white", learned: ALL, fired: [] })?.id).toBe("tip-fork");
+    const single = fromSfen("4k4/9/3r5/9/9/9/9/9/4K4 b N 1", "N*5e");
+    expect(tipMoments({ ...single, color: "black", learned: ALL, fired: [] })).toEqual([]);
+  });
+
+  it("垂れ歩でと金: 打った歩が進んでと金になると出る。はじめから盤にあった歩では出ない", () => {
+    const record = createGameRecord("9/1k7/ppp6/9/9/9/9/9/4K4 b P 1");
+    for (const usi of ["P*2d", "8b7b"]) appendUsiMove(record, usi);
+    const dropped = fromSfen(record.position.sfen, "2d2c+");
+    expect(ids(tipMoments({ ...dropped, history: ["P*2d", "8b7b"], color: "black", learned: ALL, fired: [] }))).toContain("tip-pawn-hand");
+    const native = fromSfen("9/2k6/ppp6/7P1/9/9/9/9/4K4 b - 1", "2d2c+");
+    expect(ids(tipMoments({ ...native, history: [], color: "black", learned: ALL, fired: [] }))).not.toContain("tip-pawn-hand");
+  });
+
+  it("詰ませた手のコツ: 頭金・下段に落とす・駒を捨てて詰ますを見分ける", () => {
+    const headGold = mateTipMoments({ moves: ["G*3b"], initialSfen: "6k2/9/6P2/9/9/9/9/9/4K4 b G 1", color: "black", learned: ALL, fired: [] });
+    expect(ids(headGold)).toEqual(["tip-head-gold"]);
+    // ▲2四金△2二玉▲2三金: 2三の玉が奥の2段目へ下がって、頭金で詰む。
+    const bottom = mateTipMoments({ moves: ["G*2d", "2c2b", "G*2c"], initialSfen: "6gsl/6p2/7k1/9/7P1/9/9/9/4K4 b 2G 1", color: "black", learned: ALL, fired: [] });
+    expect(ids(bottom)).toEqual(["tip-head-gold", "tip-bottom"]);
+    // 金を捨てて角を打つ3手詰め(問題集の問題)。
+    const problem = problemById("gts-1b9a04eaca2e");
+    const line = typeof problem.line === "string" ? problem.line.split(/\s+/) : problem.line;
+    expect(ids(mateTipMoments({ moves: line, initialSfen: problem.sfen, color: "black", learned: ALL, fired: [] }))).toContain("tip-speed");
+    // 詰んでいない、詰ませたのが相手、覚えていない、もう出した、のときは出ない。
+    expect(mateTipMoments({ moves: ["G*2d", "2c2b"], initialSfen: "6gsl/6p2/7k1/9/7P1/9/9/9/4K4 b 2G 1", color: "black", learned: ALL, fired: [] })).toEqual([]);
+    expect(mateTipMoments({ moves: ["G*3b"], initialSfen: "6k2/9/6P2/9/9/9/9/9/4K4 b G 1", color: "white", learned: ALL, fired: [] })).toEqual([]);
+    expect(mateTipMoments({ moves: ["G*3b"], initialSfen: "6k2/9/6P2/9/9/9/9/9/4K4 b G 1", color: "black", learned: [], fired: [] })).toEqual([]);
+    expect(mateTipMoments({ moves: ["G*3b"], initialSfen: "6k2/9/6P2/9/9/9/9/9/4K4 b G 1", color: "black", learned: ALL, fired: ["tip-head-gold"] })).toEqual([]);
+  });
+
+  it("盤の札は、そのコツを使った3回目までだけ出す", () => {
+    expect(TIP_CALLOUT_LIMIT).toBe(3);
+    expect([0, 1, 2, 3, 10].map(tipCalloutDue)).toEqual([true, true, true, false, false]);
   });
 });
