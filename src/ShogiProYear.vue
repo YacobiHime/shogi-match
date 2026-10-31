@@ -594,7 +594,7 @@ defineExpose({ goBack });
 .shogi-game .pro-year__main--wide .pro-year__side { grid-template-rows: auto minmax(0, 1fr); gap: 0.4rem; }
 .shogi-game .pro-year__tabs { display: flex; gap: 0.3rem; }
 .shogi-game .pro-year__tabs button {
-  min-height: 40px; padding: 0.2rem 0.9rem; border: 0.1rem solid rgba(255, 252, 244, 0.35); border-radius: 999px;
+  min-height: 44px; padding: 0.2rem 0.9rem; border: 0.1rem solid rgba(255, 252, 244, 0.35); border-radius: 999px;
   color: #fffcf4; background: transparent; font: inherit; font-size: 0.85rem; font-weight: 800; cursor: pointer;
 }
 .shogi-game .pro-year__tabs button[aria-selected="true"] { color: #172632; background: var(--amber, #f1a54c); border-color: var(--amber, #f1a54c); }
@@ -603,7 +603,7 @@ defineExpose({ goBack });
 .shogi-game .pro-year__month-bar { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; }
 .shogi-game .pro-year__month-title { margin: 0; color: #fffcf4; font-size: 1.05rem; text-align: center; }
 .shogi-game .pro-year__month-step {
-  width: 44px; height: 40px; border: 0.1rem solid rgba(255, 252, 244, 0.35); border-radius: 0.6rem;
+  width: 44px; height: 44px; border: 0.1rem solid rgba(255, 252, 244, 0.35); border-radius: 0.6rem;
   color: #fffcf4; background: rgba(43, 70, 91, 0.9); font: inherit; font-size: 1.3rem; font-weight: 900; cursor: pointer;
 }
 .shogi-game .pro-year__month-step:disabled { opacity: 0.35; cursor: default; }
