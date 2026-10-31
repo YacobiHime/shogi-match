@@ -28,7 +28,8 @@ describe('まだ見ていない遊び', () => {
     expect(discoveryPlan({ seen: [], games: 9, playedToday: true })?.id).toBe('endgame');
     expect(discoveryPlan({ seen: [], games: 10, playedToday: true })).toBeNull();
     expect(discoveryPlan({ seen: [], games: 9, playedToday: false })).toBeNull();
-    expect(discoveryPlan({ seen: ['endgame'], games: 9, playedToday: true })?.id).toBe('opening-dex');
+    expect(discoveryPlan({ seen: ['endgame'], games: 9, playedToday: true })?.id).toBe('tips');
+    expect(discoveryPlan({ seen: ['endgame', 'tips'], games: 9, playedToday: true })?.id).toBe('opening-dex');
     const allButMeasure = DISCOVER_FEATURES.map(({ id }) => id).filter((id) => id !== 'measure');
     expect(discoveryPlan({ seen: allButMeasure, games: 9, playedToday: true })?.id).toBe('measure');
     expect(discoveryPlan({ seen: allButMeasure, games: 9, playedToday: true, measured: true })).toBeNull();

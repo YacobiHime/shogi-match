@@ -2633,7 +2633,7 @@ import {
 import { addAward, kenshukaiAward, loadAwards, meijinAward, ryuoAward, shoreikaiAward } from "./core/season-award.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
-import { hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb } from "./core/tutorial-progress.mjs";
+import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
 import { noteTipUse, startTipMoments, tipMoment } from "./core/tip-moments.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
@@ -7869,6 +7869,8 @@ const homeStreak = ref(currentStreak(loadPlayStreak(browserStorage())));
 function refreshHomeProgress() {
   homeTutorialProgress.value = loadTutorialProgress(browserStorage());
   homeLessonsDone.value = Object.keys(homeTutorialProgress.value.lessons).length;
+  // 教室でコツのタブを開いたか、コツを遊んだら、まだ見ていない遊びの「すぐ使えるコツ」は見たことにする(21-14-4)。
+  if (tipsTouched(homeTutorialProgress.value)) noteFeatureSeen("tips");
   homeProblemsSolved.value = Object.keys(loadProblemProgress(browserStorage()).solved).length;
   homeWelcomeChoice.value = welcomeChoiceFrom(browserStorage(), WELCOME_SEEN_KEY);
   homeStreak.value = currentStreak(loadPlayStreak(browserStorage()));
@@ -7927,8 +7929,8 @@ type HomeNext = {
   handicapLevel?: number | null;
   /** 立て直しの駒落ち(いちばん下の24級は飛車落ち、ほかは香落ち)。 */
   handicapId?: { id: string; label: string } | null;
-  /** 竜王戦の期の途中の、主役でない方の小さな入口(対策か続き)。 */
-  sub?: { id: "ryuo-season" | "ryuo-counter"; label: string } | null;
+  /** 主役でない方の小さな入口。竜王戦の期の途中の対策か続き、またはすぐ使えるコツ(21-14-4)。 */
+  sub?: { id: "ryuo-season" | "ryuo-counter" | "tips"; label: string } | null;
 };
 /** 竜王戦の期の途中の「つぎはこれ」(対策か続き。docs/home-next-adaptive-design.mdの13-3)。 */
 const homeRyuoPlan = computed(() => {
@@ -7945,9 +7947,19 @@ const homeRyuoPlan = computed(() => {
   });
 });
 /**
+ * すぐ使えるコツの小さな入口(docs/nyumon-mode-design.mdの21-14-4)。強くなる道の1段目(教室で駒の動き)を終え、
+ * コツにまだ触れていない人に、「つぎはこれ」の下へ出す。ほかの小さな入口が出ているときは出さない(1つまで)。
+ */
+const homeTipsInvite = computed(() => Boolean(homeRoadmapState.value.steps[0]?.done) && !tipsTouched(homeTutorialProgress.value));
+const homeNext = computed<HomeNext>(() => {
+  const main = homeNextMain.value;
+  if (main.id === "resume" || main.sub || (main.handicapLevel !== undefined && main.handicapLevel !== null) || !homeTipsInvite.value) return main;
+  return { ...main, sub: { id: "tips", label: "すぐ使えるコツ（1枚1分）" } };
+});
+/**
  * タイトル画面の「つぎはこれ」。中断した対局があれば再開を最優先にし、それ以外は強くなる道のいまの段の行き先にする。
  */
-const homeNext = computed<HomeNext>(() => {
+const homeNextMain = computed<HomeNext>(() => {
   if (suspendedMatch.value) {
     const what = suspendedMatch.value.ryuoOpponentId
       ? ({ meijin: "名人戦の対局", shoreikai: "奨励会の対局", kenshukai: "研修会の対局" } as { [key: string]: string })[suspendedMatch.value.event ?? ""] ?? "竜王戦の対局"
@@ -8032,6 +8044,7 @@ function openDiscovery(id: string) {
   if (id === "endgame") startEndgameMatch();
   else if (id === "opening-dex") dexOpen.value = true;
   else if (id === "brain") openBrainTraining();
+  else if (id === "tips") openTutorialTips();
   else if (id === "measure") startMeasureMatch();
   else if (id === "piece" || id === "tesuji" || id === "world" || id === "glossary") referenceDexKind.value = id;
 }
@@ -8071,6 +8084,20 @@ function startHomeNextSub() {
   const sub = homeNext.value.sub;
   if (sub?.id === "ryuo-counter") startRyuoCounter();
   else if (sub?.id === "ryuo-season") openRyuoSeasonScreen();
+  else if (sub?.id === "tips") openTutorialTips();
+}
+/**
+ * 将棋教室を「すぐ使えるコツ」の地図で開く(21-14-4)。開いたコースは教室の記録に残る。
+ * 教室を初めて開く人(案内で駒の段を終えた人)には、はじめての問いの「すぐ使えるコツだけ見る」と同じ記録を付け、問いを出さずに地図を開く。
+ */
+function openTutorialTips() {
+  const store = browserStorage();
+  const progress = loadTutorialProgress(store);
+  const placed = progress.placement || Object.keys(progress.lessons).length ? progress : applyPlacement([], progress, "tips");
+  saveTutorialProgress(store, withTutorialCourse(placed, "tips"));
+  noteFeatureSeen("tips");
+  tutorialAutoStart.value = false;
+  tutorialOpen.value = true;
 }
 function startHomeNext() {
   if (homeNext.value.id === "resume") resumeSuspendedMatch();

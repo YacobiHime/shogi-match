@@ -18,6 +18,15 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/syncPosition\(\);\s*resetTipMoments\(\);\s*emit\("match-ready"/);
     expect(source).toMatch(/startPresence\(\{ greet: false \}\);\s*resetTipMoments\(\);\s*return true;/);
   });
+  it("offers the tips course as the one small entry under the home's next step (21-14-4)", () => {
+    // 駒の段を終えてコツに触れていない人だけ。ほかの小さな入口(竜王戦の対策・続き、立て直しの駒落ち)があれば出さない。
+    expect(source).toMatch(/const homeTipsInvite = computed\(\(\) => Boolean\(homeRoadmapState\.value\.steps\[0\]\?\.done\) && !tipsTouched\(homeTutorialProgress\.value\)\);/);
+    expect(source).toMatch(/if \(main\.id === "resume" \|\| main\.sub \|\| \(main\.handicapLevel !== undefined && main\.handicapLevel !== null\) \|\| !homeTipsInvite\.value\) return main;/);
+    expect(source).toMatch(/else if \(sub\?\.id === "tips"\) openTutorialTips\(\);/);
+    expect(source).toMatch(/else if \(id === "tips"\) openTutorialTips\(\);/);
+    // 開くときは、コツのコースを記録に残してから(教室は開いたときに記録を読む)。
+    expect(source).toMatch(/saveTutorialProgress\(store, withTutorialCourse\(placed, "tips"\)\);\s*noteFeatureSeen\("tips"\);\s*tutorialAutoStart\.value = false;\s*tutorialOpen\.value = true;/);
+  });
   it("warns about newly attacked pieces right after the CPU's move with the danger sensor", () => {
     // CPUが指した直後に、取り合いの計算だけで知らせる(エンジンの読みを待たない。docs/coach-advice-expansion-design.mdの12章)。
     expect(source).toMatch(/clearHintMarks\(\{ keepMistakeRing: actor !== "player" \}\);\s*if \(actor === "cpu"\) senseDanger\(sfenBeforeMove\);/);
