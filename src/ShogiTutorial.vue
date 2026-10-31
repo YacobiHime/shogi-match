@@ -3274,7 +3274,12 @@ const resultMessage = computed(() => {
   font-size: 1.1rem;
 }
 .shogi-game .shogi-tutorial__world small {
+  /* ★の数は見出しの右(1段目の3列目)。メーターの下へ回り込んで、左の巻の札を引き伸ばさない。 */
+  grid-row: 1;
+  grid-column: 3;
+  justify-self: end;
   font-weight: 800;
+  white-space: nowrap;
 }
 .shogi-game .shogi-tutorial__world .shogi-tutorial__meter {
   grid-column: 1 / -1;
