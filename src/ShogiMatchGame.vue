@@ -2129,6 +2129,10 @@
             :aria-label="`${gradeName(resultNextGoal.label)}まで${resultNextGoal.percent}%`"
           ><span :style="{ width: `${resultNextGoal.percent}%` }"></span></div>
         </div>
+        <!-- この対局で使えた教室のコツ(docs/nyumon-mode-design.mdの22-3)。 -->
+        <p v-if="matchTipsUsed.length" class="shogi-game__result-tips" data-result-tips>
+          <b>教室のコツ</b>{{ matchTipsUsed.map(({ short }) => short).join("・") }}<small>コツどおり！</small>
+        </p>
         <details class="shogi-game__result-record">
           <summary>対局の記録</summary>
           <dl class="shogi-game__result-details">
@@ -2256,6 +2260,9 @@
         </p>
         <p v-if="finishMate" class="shogi-game__result-mate" data-result-mate>
           <b>{{ finishMate.label }}</b>で寄せ切り<small v-if="finishMate.best">自己最長</small>
+        </p>
+        <p v-if="matchTipsUsed.length" class="shogi-game__result-tips" data-result-tips>
+          <b>教室のコツ</b>{{ matchTipsUsed.map(({ short }) => short).join("・") }}<small>コツどおり！</small>
         </p>
         <!-- タイトル戦で勝った局の勝負メシは「勝ちメシ」。次に同じ対局場で選ぶとき★が付く(docs/title-match-day-design.mdの8-4)。 -->
         <p v-if="resultMeal" class="shogi-game__result-meal" data-result-meal>
@@ -2634,7 +2641,7 @@ import { addAward, kenshukaiAward, loadAwards, meijinAward, ryuoAward, shoreikai
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
-import { noteTipUse, startTipMoments, tipMoment } from "./core/tip-moments.mjs";
+import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoments } from "./core/tip-moments.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
@@ -5629,25 +5636,54 @@ function showCastleCallout(label: string) {
 }
 
 /*
- * 対局でコツの形ができた瞬間(docs/nyumon-mode-design.mdの21-14-2)。教室の「すぐ使えるコツ」でクリアしたコツの形が
- * プレイヤーの手でできたら、囲いの札と同じ場所に「コツどおり！」を出し、使った回数を残す。同じコツは1局に1回。
+ * 対局でコツの形ができた瞬間(docs/nyumon-mode-design.mdの21-14-2と22章)。教室の「すぐ使えるコツ」でクリアしたコツが
+ * プレイヤーの手でできたら数え、囲いの札と同じ場所に「コツどおり！」を出す。同じコツは1局に1回。
+ * 札は、そのコツを使ったのが3回目までのあいだだけ(慣れたら数えるだけ)。詰ませた手のコツは結果の窓の行にだけ出す。
  * 対局の始め(と復元した局面)ですでにできている形は、その対局では出さない。
  */
 let tipMomentsFired = new Set<string>();
 let tipMomentsLearned: string[] = [];
+/** この対局で使えたコツ。結果の窓の「教室のコツ」の行に並べる(22-3)。 */
+const matchTipsUsed = ref<{ id: string; short: string }[]>([]);
+/** 札を出した手(指したあとのmoveHistoryの長さ)。その手では、同じ形の手筋のほめ言葉を出さない(22-1)。 */
+let tipCalloutHistoryLength = -1;
 function resetTipMoments() {
   tipMomentsLearned = learnedTips(loadTutorialProgress(browserStorage()));
   tipMomentsFired = new Set(startTipMoments(currentSfen.value, playerColorKey.value));
+  matchTipsUsed.value = [];
+  tipCalloutHistoryLength = -1;
+}
+/** コツを使えたことを数え、札に出す1つ(まだ3回目までのもの)を返す。 */
+function useTips(moments: { id: string; short: string; title: string; line: string }[]) {
+  const store = browserStorage();
+  let callout: (typeof moments)[number] | null = null;
+  for (const moment of moments) {
+    const usesBefore = loadTipUses(store)[moment.id] ?? 0;
+    tipMomentsFired.add(moment.id);
+    noteTipUse(store, moment.id);
+    matchTipsUsed.value = [...matchTipsUsed.value, { id: moment.id, short: moment.short }];
+    if (!callout && tipCalloutDue(usesBefore)) callout = moment;
+  }
+  return callout;
+}
+function tipsCounted() {
+  return !reviewMode.value && !measureMode.value && !tutorialMatch.value && normalizedMode.value === "cpu";
 }
 function notePlayerTipMoment(previous: string, usi: string) {
-  if (!active.value || reviewMode.value || measureMode.value || tutorialMatch.value || normalizedMode.value !== "cpu") return null;
+  if (!active.value || !tipsCounted()) return null;
   const color = playerColorKey.value;
   if ((previous.split(" ")[1] === "w" ? "white" : "black") !== color) return null;
-  const moment = tipMoment({ before: previous, usi, after: currentSfen.value, color, learned: tipMomentsLearned, fired: tipMomentsFired });
-  if (!moment) return null;
-  tipMomentsFired.add(moment.id);
-  noteTipUse(browserStorage(), moment.id);
-  return moment;
+  // syncPositionはmoveHistoryに足す前に呼ばれるので、moveHistoryはこの手を指す前までの手。
+  const moments = tipMoments({ before: previous, usi, after: currentSfen.value, color, learned: tipMomentsLearned, fired: tipMomentsFired, history: moveHistory });
+  if (!moments.length) return null;
+  const callout = useTips(moments);
+  if (callout) tipCalloutHistoryLength = moveHistory.length + 1;
+  return callout;
+}
+/** 詰ませて勝ったときの、詰ませた手のコツ(頭金・下段に落とす・駒を捨てて詰ます)。結果の窓の行にだけ出す。 */
+function noteMateTips() {
+  if (!tipsCounted()) return;
+  useTips(mateTipMoments({ moves: [...moveHistory], initialSfen: matchInitialSfen.value, color: playerColorKey.value, learned: tipMomentsLearned, fired: tipMomentsFired }));
 }
 function showTipCallout(moment: { title: string; line: string }) {
   clearTimeout(castleCalloutTimer);
@@ -9888,7 +9924,8 @@ async function playerMovePraise(options: {
     defendedMateThreat,
     insight,
     materialGain: flair?.materialGain ?? 0,
-    tesuji: flair?.tesuji ?? [],
+    // コツの札を出した手では、同じ形を手筋の名前でほめない(1つの手に、ほめるのは1つ。22-1)。
+    tesuji: flair && flair.historyLength === tipCalloutHistoryLength ? [] : flair?.tesuji ?? [],
     turningAdvice: turning.advice,
     fallback,
   };
@@ -10480,6 +10517,7 @@ function finish(matchResult: MatchResult) {
   }
   recordRatedGame(matchResult);
   recordCollection(outcome === "win");
+  if (outcome === "win" && matchResult.reason === "checkmate") noteMateTips();
   const stageWeight = matchStage.value?.weight ?? "plain";
   const tournamentEvent = ryuoGame.value?.event ?? "ryuo";
   const tournamentFinish = matchKind.value === "tournament" && Boolean(ryuoGame.value) && Boolean(matchResult.winner);

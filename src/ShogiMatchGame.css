@@ -4609,6 +4609,27 @@
   background: var(--stage-gold, #e6c15c);
   font-size: 0.8em;
 }
+/* 結果の窓の「教室のコツ 両取り・頭金 コツどおり！」(docs/nyumon-mode-design.mdの22-3)。 */
+.shogi-game__result-tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2em 0.45em;
+  align-items: baseline;
+  justify-content: center;
+  margin: 0.2em 0;
+  font-weight: 800;
+}
+.shogi-game__result-tips b {
+  padding: 0.05em 0.45em;
+  border-radius: 0.3em;
+  color: #10281b;
+  background: #8fdcaa;
+  font-size: 0.8em;
+}
+.shogi-game__result-tips small {
+  color: #8fdcaa;
+  font-size: 0.85em;
+}
 /* 結果の窓の「勝ちメシ ★ 海鮮丼」。 */
 .shogi-game__result-meal {
   display: flex;

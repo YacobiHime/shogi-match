@@ -12,8 +12,16 @@ describe("match screen regressions", () => {
   it("shows the tutorial-tip callout only for the player's own move in CPU games, once per game", () => {
     // 教室のコツの形ができた手に「コツどおり！」(docs/nyumon-mode-design.mdの21-14-2)。同じ手の囲いの札はまとめる。
     expect(source).toMatch(/const tip = notePlayerTipMoment\(previous, usi\);\s*if \(tip\) showTipCallout\(tip\);\s*else if \(castle\) showCastleCallout\(castle\);/);
-    expect(source).toMatch(/if \(!active\.value \|\| reviewMode\.value \|\| measureMode\.value \|\| tutorialMatch\.value \|\| normalizedMode\.value !== "cpu"\) return null;/);
-    expect(source).toMatch(/tipMomentsFired\.add\(moment\.id\);\s*noteTipUse\(browserStorage\(\), moment\.id\);/);
+    expect(source).toMatch(/return !reviewMode\.value && !measureMode\.value && !tutorialMatch\.value && normalizedMode\.value === "cpu";/);
+    expect(source).toMatch(/if \(!active\.value \|\| !tipsCounted\(\)\) return null;/);
+    // 1つの手でできたコツは全部数え、札はそのコツを使った3回目までのものだけ(docs/nyumon-mode-design.mdの22-1)。
+    expect(source).toMatch(/const usesBefore = loadTipUses\(store\)\[moment\.id\] \?\? 0;\s*tipMomentsFired\.add\(moment\.id\);\s*noteTipUse\(store, moment\.id\);/);
+    expect(source).toMatch(/if \(!callout && tipCalloutDue\(usesBefore\)\) callout = moment;/);
+    // 札を出した手では、同じ形の手筋のほめ言葉を出さない。
+    expect(source).toMatch(/tesuji: flair && flair\.historyLength === tipCalloutHistoryLength \? \[\] : flair\?\.tesuji \?\? \[\],/);
+    // 詰ませて勝ったら、詰ませた手のコツを数え、結果の窓(ふつうの対局と大会の両方)に「教室のコツ」の行。
+    expect(source).toMatch(/if \(outcome === "win" && matchResult\.reason === "checkmate"\) noteMateTips\(\);/);
+    expect(source.match(/<p v-if="matchTipsUsed\.length" class="shogi-game__result-tips" data-result-tips>/g)?.length).toBe(2);
     // 対局の始めと、復元した局面で、もうできている形の印を作り直す。
     expect(source).toMatch(/syncPosition\(\);\s*resetTipMoments\(\);\s*emit\("match-ready"/);
     expect(source).toMatch(/startPresence\(\{ greet: false \}\);\s*resetTipMoments\(\);\s*return true;/);
@@ -970,7 +978,8 @@ describe("match screen regressions", () => {
   it("形勢の一言には駒の損得を、好手のほめ言葉には指した手の手筋を渡す", () => {
     expect(source).toMatch(/advisedTopics: advisedCoachTopics,\s*materialBalance: playerMaterialBalance\(\),/);
     expect(source).toMatch(/tesuji: detectTesuji\(\{ sfenBefore: sfenBeforeMove, usi \}\),/);
-    expect(source).toMatch(/tesuji: flair\?\.tesuji \?\? \[\],/);
+    // コツの札を出した手だけは空にする(docs/nyumon-mode-design.mdの22-1)。ほかの手は、指した手の手筋を渡す。
+    expect(source).toMatch(/tesuji: flair && flair\.historyLength === tipCalloutHistoryLength \? \[\] : flair\?\.tesuji \?\? \[\],/);
   });
   it("大会の1局で、相手の顔・一言・特殊能力の札・速報を、決まった高さの中継の1行に出す(docs/tournament-match-presence-design.md)", () => {
     expect(source).toMatch(/v-if="opponentFace"[\s\S]{0,500}?data-opponent-face/);
