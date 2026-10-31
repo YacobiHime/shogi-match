@@ -3378,6 +3378,11 @@
 /* 縦画面メディアクエリの portrait 補助表示(display: grid)より優先させる。 */
 /* ホーム画面では対局UIを隠す。定跡図鑑はホームから開くため例外。 */
 /* ホームの上に出す確認(中断した対局を消す確認)だけは、ホームを開いたままでも見せる。 */
+/*
+ * 棋力測定の札と結果の窓は、対局準備(z-index 100)とその選択シート(110)の上に出す。
+ * 対局準備の強さのシートの「棋力を測る」から開くため(docs/first-play-design.mdの13章)。
+ */
+.shogi-game__confirm--measure { z-index: 115; }
 .shogi-game--home > :not(.shogi-home):not(.shogi-dex):not(.shogi-game__confirm--over-home):not(.shogi-skill-test) { display: none !important; }
 .shogi-home {
   position: absolute;

@@ -73,8 +73,10 @@
         :title="pickerConfig.title"
         :sections="pickerConfig.sections"
         :note="pickerConfig.note"
+        :action="picker === 'difficulty' ? MEASURE_PICKER_ACTION : null"
         @select="onPick"
         @close="picker = ''"
+        @action="picker = ''; emit('measure')"
       />
     </div>
 
@@ -359,6 +361,7 @@ import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
+import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { DEFAULT_SETTINGS, EXAM_RANKS, RANKS, RANK_RATINGS, SHOREIKAI_SCALES, describeShoreikai, shoreikaiScale } from "./core/shoreikai.mjs";
 import { HANANE_SHOREIKAI_LINES, entryTalk, eventStamp, examRankTalk, mentorLine, mentorMoment, pendingTip } from "./core/shoreikai-speech.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
@@ -399,6 +402,8 @@ const props = defineProps({
   backLabel: { type: String, default: "大会の選択へ" },
 });
 const emit = defineEmits<{
+  /** 難易度のシートの「棋力を測る」(docs/first-play-design.mdの13章)。 */
+  measure: [];
   enter: [payload: { settings: Settings; examRank: number; mentorId: string; transfer?: boolean }];
   play: [];
   resume: [];

@@ -261,6 +261,12 @@ export function nextMeasureLevel({ level, outcome }) {
  * 弱すぎたら、続けて測るとき(measureFollowUp)に相手を上げる。
  * level: 最初の相手のLv(段級位の表のLv)。band: 札の目安の幅(Lv)。診断の事前の目安にする(measurePrior。11章)。
  */
+/**
+ * 強さ・難易度を選ぶシートの先頭に置く「棋力を測る」(docs/first-play-design.mdの13章)。はじめての案内をやめたので、
+ * 強さに迷ったときにその場で測れるようにする。
+ */
+export const MEASURE_PICKER_ACTION = Object.freeze({ label: "棋力を測る", description: "16問のテストで、ちょうどいい強さを見つけるよ" });
+
 export const MEASURE_START_CHOICES = Object.freeze([
   Object.freeze({ id: 'new', label: '指し始めたばかり', description: '駒の動きは分かる。対局はまだあまりしていない', level: 4, band: Object.freeze([1, 9]) }),
   Object.freeze({ id: 'kyu-low', label: '15級〜10級くらい', description: '囲いを組んで指せる。駒をタダで取られることもある', level: 11, band: Object.freeze([10, 15]) }),

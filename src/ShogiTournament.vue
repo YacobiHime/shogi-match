@@ -183,6 +183,7 @@
           @resume="emit('kenshukai-resume')"
           @transfer="transferToShoreikai"
           @close-run="emit('kenshukai-close')"
+          @measure="emit('measure', 'kenshukai')"
           @ceremony="openCeremony(`kenshukai-${kenshukaiView?.runId ?? 0}-S`)"
           @back="backToSelect"
         />
@@ -208,6 +209,7 @@
           @resume="emit('shoreikai-resume')"
           @retry="emit('shoreikai-retry', $event)"
           @close-run="emit('shoreikai-close')"
+          @measure="emit('measure', 'shoreikai')"
           @ceremony="openCeremony(`shoreikai-${shoreikaiView?.runId ?? 0}`)"
           @go="leaveShoreikaiTo"
           @back="backToSelect"
@@ -236,6 +238,7 @@
           @play="emit('meijin-play')"
           @resume="emit('meijin-resume')"
           @result-seen="emit('meijin-result-seen')"
+          @measure="emit('measure', 'meijin')"
           @ceremony="openCeremony(`meijin-${meijinView?.no ?? 0}`)"
           :relay-available="Boolean(relayEngineFactory)"
           @relay="openRelayList('meijin', $event)"
@@ -351,8 +354,10 @@
             :title="entryPickerConfig.title"
             :sections="entryPickerConfig.sections"
             :note="entryPickerConfig.note"
+            :action="entryPicker === 'difficulty' ? MEASURE_PICKER_ACTION : null"
             @select="onEntryPick"
             @close="entryPicker = ''"
+            @action="entryPicker = ''; emit('measure', 'ryuo')"
           />
         </div>
 
@@ -911,6 +916,7 @@ import YakobiSays from "./YakobiSays.vue";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
+import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { SCALES, entryGoalLine, entryRoad, restOpen, scaleById } from "./core/ryuo.mjs";
 import { meijinRestOpen } from "./core/meijin.mjs";
 import { GROUP_MEAN_RATING, MAX_CPU_LEVEL, MIN_CPU_LEVEL, REAL_DIFFICULTY, WORLD_BASE_RATING, worldExactLevel } from "./core/ryuo-strength.mjs";
@@ -1128,6 +1134,8 @@ const emit = defineEmits<{
   "kenshukai-close": [];
   /** relayKeyの中継を開いた(対局画面は鍵を消す)。 */
   "relay-shown": [];
+  /** 難易度のシートの「棋力を測る」。どの大会から来たかを渡し、測ったあとにそこへ戻す(docs/first-play-design.mdの13章)。 */
+  measure: [from: "ryuo" | "meijin" | "shoreikai" | "kenshukai"];
 }>();
 
 const HOME_STARS = [

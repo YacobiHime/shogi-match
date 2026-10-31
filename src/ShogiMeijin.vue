@@ -76,8 +76,10 @@
         :title="pickerConfig.title"
         :sections="pickerConfig.sections"
         :note="pickerConfig.note"
+        :action="picker === 'difficulty' ? MEASURE_PICKER_ACTION : null"
         @select="onPick"
         @close="picker = ''"
+        @action="picker = ''; emit('measure')"
       />
     </div>
 
@@ -308,6 +310,7 @@ import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
+import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { CLASS_LABELS, CLASS_RULES, MEIJIN_OUTCOME_TEXT, MEIJIN_SCALES, meijinGoalLine, meijinScale } from "./core/meijin.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
@@ -375,6 +378,8 @@ const props = defineProps({
   afterRevealed: { type: Number, default: 0 },
 });
 const emit = defineEmits<{
+  /** 難易度のシートの「棋力を測る」(docs/first-play-design.mdの13章)。 */
+  measure: [];
   enter: [settings: Settings];
   play: [];
   resume: [];

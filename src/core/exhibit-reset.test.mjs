@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { EXHIBIT_KEEP_KEYS, clearExhibitRecords, isAppStorageKey } from "./exhibit-reset.mjs";
-import { shouldShowWelcome } from "./welcome.mjs";
 
 function memoryStorage(entries) {
   const map = new Map(Object.entries(entries));
@@ -31,8 +30,6 @@ describe("展示の「最初から」", () => {
     const removed = clearExhibitRecords(storage);
     expect(removed).toHaveLength(6);
     expect(storage.keys()).toEqual([...EXHIBIT_KEEP_KEYS, "other-site"].sort());
-    // 残した設定は遊んだ記録に数えないので、次の来場者には、はじめての案内が出る。
-    expect(shouldShowWelcome(storage)).toBe(true);
   });
 
   it("鍵の見分け", () => {

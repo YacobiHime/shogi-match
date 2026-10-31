@@ -6,6 +6,11 @@
         <button type="button" class="pregame-picker__close" aria-label="閉じる" @click="emit('close')">×</button>
       </header>
       <div class="pregame-picker__body">
+        <!-- 選ぶ前にできること(強さ・難易度のシートの「棋力を測る」)。選択肢と見分けるよう、点線の枠で先頭に置く。 -->
+        <button v-if="action" type="button" class="pregame-picker__action" data-picker-action @click="emit('action')">
+          <span>{{ action.label }}</span>
+          <small v-if="action.description">{{ action.description }}</small>
+        </button>
         <section v-for="section in sections" :key="section.key" class="pregame-picker__section">
           <h4 v-if="section.label">{{ section.label }}</h4>
           <template v-for="(group, groupIndex) in section.groups" :key="`${section.key}-${groupIndex}`">
@@ -43,6 +48,7 @@ import type { PropType } from "vue";
 
 export type PickerValue = string | number;
 export type PickerOption = { value: PickerValue; label: string; description?: string; disabled?: boolean };
+export type PickerAction = { label: string; description?: string };
 export type PickerSection = {
   key: string;
   label?: string;
@@ -54,10 +60,13 @@ defineProps({
   title: { type: String, required: true },
   sections: { type: Array as PropType<PickerSection[]>, required: true },
   note: { type: String, default: "" },
+  /** 選ぶ前にできること(例: 棋力を測る)。押すとactionを出す。 */
+  action: { type: Object as PropType<PickerAction | null>, default: null },
 });
 const emit = defineEmits<{
   select: [key: string, value: PickerValue];
   close: [];
+  action: [];
 }>();
 </script>
 
@@ -164,6 +173,25 @@ const emit = defineEmits<{
   background: #fff;
   box-shadow: none;
   text-align: left;
+}
+.shogi-game .pregame-picker__action {
+  display: grid;
+  gap: 0.1em;
+  justify-items: start;
+  min-height: 2.8em;
+  padding: 0.45em 0.75em;
+  border: 2px dashed #c98a3d;
+  border-radius: 0.45em;
+  color: #1d303f;
+  background: #fffcf4;
+  box-shadow: none;
+  font-weight: 700;
+  text-align: left;
+}
+.shogi-game .pregame-picker__action small {
+  color: #6b5a45;
+  font-size: 0.75em;
+  font-weight: 400;
 }
 .shogi-game .pregame-picker__option small {
   color: #6b5a45;

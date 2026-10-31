@@ -8,7 +8,7 @@ import {
   welcomeChoiceFrom,
 } from "./home-roadmap.mjs";
 import { TUTORIAL_VOLUMES } from "./tutorial-curriculum.mjs";
-import { WELCOME_SEEN_KEY, markWelcomeSeen } from "./welcome.mjs";
+import { WELCOME_SEEN_KEY } from "./welcome.mjs";
 
 const cleared = (...ids) => ({ lessons: Object.fromEntries(ids.map((id) => [id, { status: "cleared", stars: 3 }])) });
 
@@ -62,11 +62,11 @@ describe("ホームの強くなる道", () => {
     expect(roadmapTile("dex", 1)).toEqual({ dim: false, recommended: false, after: "" });
   });
 
-  it("はじめての案内で選んだ道を読む", () => {
+  it("前の版のはじめての案内で選んだ道を読む", () => {
     const store = new Map();
     const storage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
     expect(welcomeChoiceFrom(storage, WELCOME_SEEN_KEY)).toBe("");
-    markWelcomeSeen(storage, "rules", 1);
+    storage.setItem(WELCOME_SEEN_KEY, JSON.stringify({ choice: "rules", at: 1 }));
     expect(welcomeChoiceFrom(storage, WELCOME_SEEN_KEY)).toBe("rules");
     expect(welcomeChoiceFrom({ getItem: () => "{" }, WELCOME_SEEN_KEY)).toBe("");
   });

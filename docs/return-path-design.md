@@ -41,7 +41,7 @@
   - ノート：`noteFromTournament`（大会から開いた）・`noteInitialTab`・`openYakobiNote`・`openNoteFromTournament`・`closeYakobiNote`。ノートの部品は`initialTab`で開く項目を受け取る（`src/YakobiNote.vue`。覚えている項目は変えない）。
   - 対局準備：`pregameReturn`（`{ to: "note" }`か`{ to: "dex", fromNote }`）・`pregameBackLabel`・`leavePregame`（「←」と戻る操作）。`openPregame`で忘れ、ノート・図鑑から開いたときは開いたあとで入れ直す。作戦カードは`planSheetFromNote`で、選ばずに閉じたら`leavePregame`。
   - 図鑑：`dexFromNote`。閉じたら（定跡図鑑・駒や手筋の図鑑のどちらでも）ノートを開き直す。`dexBackLabel`は「ノートへ戻る」。
-  - 棋力テスト：`skillTestFromNote`・`closeSkillTest`・`closeSkillTestReport`。結果から竜王戦へ進む・1局指して確かめるときは忘れる。
+  - 棋力テスト：`skillTestFrom`（ノート・対局準備・4つの大会。前は`skillTestFromNote`。docs/first-play-design.mdの13章）・`returnToMeasureOrigin`・`closeSkillTest`・`closeSkillTestReport`。結果から竜王戦へ進む・1局指して確かめるときは忘れる。
 - テスト：`src/core/match-ui-regression.test.mjs`の「ノート・図鑑から開いた画面は、閉じると来た場所へ戻る」と、観戦記の行の「大会の結果の画面から開いたノート」。
 - 確かめたこと：`npm test`・型・ビルド・`git diff --check`。ブラウザ（この作業環境のChromium、390×844・820×1180・1366×768）で、大会の結果 →ノート（「大会へ戻る」・「大会」の項目で観戦記が見える）→ 大会の結果の画面（ボタンとブラウザの戻る操作の両方）、コレクションの作戦 →「この作戦にする」→ 対局準備の「← ノート」→ コレクション、作戦を選ばずに閉じる → ノート、対局準備でブラウザの戻る → ノート、手筋図鑑の「ノートへ戻る」→ 手筋のページ、棋力テストをやめる → ノート。
 - 確かめていないこと：定跡図鑑の戦法占いから対局準備へ行き「← 図鑑」で戻る流れはブラウザで通していない（ソースの回帰テストだけ）。棋力テストの結果の「ノートへ戻る」も、テストを最後まで解いてはいない。実際に遊んでの確認は未確認。

@@ -380,7 +380,8 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   --skill-sub: #cfd8de;
   position: absolute;
   inset: 0;
-  z-index: 6;
+  /* 対局準備(z-index 100)の強さのシートからも開くので、その上に出す(docs/first-play-design.mdの13章)。 */
+  z-index: 105;
   display: flex;
   flex-direction: column;
   background: #1d303f;

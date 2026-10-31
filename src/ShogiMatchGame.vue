@@ -430,6 +430,7 @@
       :withdraw="tournamentWithdraw"
       @world-reset="resetTournamentWorld"
       @withdraw="withdrawTournament"
+      @measure="openMeasureFromTournament"
       @close="tournamentOpen = false"
       @enter="enterRyuoSeason"
       :suspended-moves="suspendedRyuoMoves"
@@ -906,8 +907,10 @@
         :title="pregamePickerConfig.title"
         :sections="pregamePickerConfig.sections"
         :note="pregamePickerConfig.note"
+        :action="pregamePicker === 'strength' ? MEASURE_PICKER_ACTION : null"
         @select="onPregamePick"
         @close="pregamePicker = ''"
+        @action="pregamePicker = ''; openMeasureStart('pregame')"
       />
     </div>
     <!-- 作戦カードのシート。対局準備の「あなたの作戦」と、対局中のやこび姫補助の欄から開く。 -->
@@ -1848,47 +1851,18 @@
       </div>
     </div>
 
-    <!-- はじめて遊ぶ人への案内。将棋をどのくらい知っているかで、教室・対局・棋力測定へ案内する。 -->
-    <div
-      v-if="welcomeOpen && homeOpen"
-      class="shogi-game__confirm shogi-game__confirm--over-home"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="welcome-title"
-    >
-      <div class="shogi-game__confirm-panel shogi-welcome">
-        <img
-          class="shogi-welcome__chara"
-          :src="`${assetBaseUrl}/characters/yakobihime-mini.webp?v=4`"
-          alt=""
-          aria-hidden="true"
-        >
-        <h2 id="welcome-title">ようこそ！</h2>
-        <p>わたしはやこび姫。将棋はどのくらい知ってる？ 合わせて、はじめの一歩を案内するね。</p>
-        <ul class="shogi-welcome__choices">
-          <li v-for="choice in WELCOME_CHOICES" :key="choice.id">
-            <button type="button" @click="chooseWelcome(choice.id)">
-              <strong>{{ choice.label }}</strong>
-              <small>{{ choice.description }}</small>
-            </button>
-          </li>
-        </ul>
-        <button type="button" class="shogi-welcome__skip" @click="dismissWelcome">自分で選ぶ</button>
-      </div>
-    </div>
-
     <!--
       棋力測定の最初の相手を選ぶ札(docs/skill-measure-design.mdの9章)。選んだ目安より少しやさしい相手から始める。
       札ごとに最初の相手の段級位を書く(押す前に分かるように)。
     -->
     <div
       v-if="measureStartFrom"
-      class="shogi-game__confirm shogi-game__confirm--over-home"
+      class="shogi-game__confirm shogi-game__confirm--over-home shogi-game__confirm--measure"
       role="dialog"
       aria-modal="true"
       aria-labelledby="measure-start-title"
       data-measure-start
-      @click.self="measureStartFrom = ''"
+      @click.self="cancelMeasureStart"
     >
       <div class="shogi-game__confirm-panel shogi-welcome shogi-measure-start">
         <img
@@ -1898,17 +1872,17 @@
           aria-hidden="true"
         >
         <h2 id="measure-start-title">棋力を測ろう</h2>
-        <p>竜王戦のちょうどいい難易度を決めるよ。どのくらい指せる？ 少しやさしい相手から始めて、勝ち負けで相手を上げ下げしながら1〜3局で絞り込むね。</p>
+        <p>ちょうどいい強さを、16問のテストで見つけるよ。どのくらい指せる？ その近くの問題から出して、答えに合わせて難しさを変えるね。</p>
         <ul class="shogi-welcome__choices">
           <li v-for="choice in measureStartOptions" :key="choice.id">
             <button type="button" :data-measure-start-choice="choice.id" @click="chooseMeasureStart(choice)">
               <strong>{{ choice.label }}</strong>
               <small>{{ choice.description }}</small>
-              <small class="shogi-measure-start__opponent">最初の相手：{{ choice.opponent }}くらい（Lv.{{ choice.level }}）</small>
+              <small class="shogi-measure-start__opponent">はじめの目安：{{ choice.opponent }}くらい（Lv.{{ choice.level }}）</small>
             </button>
           </li>
         </ul>
-        <button type="button" class="shogi-welcome__skip" @click="measureStartFrom = ''">やめる</button>
+        <button type="button" class="shogi-welcome__skip" @click="cancelMeasureStart">やめる</button>
       </div>
     </div>
 
@@ -1928,7 +1902,7 @@
     -->
     <div
       v-if="skillTestReport"
-      class="shogi-game__confirm shogi-game__confirm--over-home"
+      class="shogi-game__confirm shogi-game__confirm--over-home shogi-game__confirm--measure"
       role="dialog"
       aria-modal="true"
       aria-labelledby="skill-test-report-title"
@@ -1958,13 +1932,18 @@
           出てきた手筋:
           <span v-for="(entry, index) in skillTestReport.tesuji" :key="index" :class="{ 'is-solved': entry.correct }">{{ entry.name }}</span>
         </p>
-        <template v-if="showHome">
+        <!-- 大会の難易度のシートから測ったときは、その大会へ戻るのがいちばん大きいボタン(docs/first-play-design.mdの13章)。 -->
+        <template v-if="skillTestFromTournament">
+          <p class="shogi-game__measure-welcome">{{ skillTestFromTournament }}は難易度{{ ryuoDefaultDifficulty }}がちょうどいいよ</p>
+          <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-skill-report-close @click="closeSkillTestReport">{{ skillTestBackLabel }}</button>
+        </template>
+        <template v-else-if="showHome">
           <p class="shogi-game__measure-welcome">竜王戦は難易度{{ ryuoDefaultDifficulty }}がちょうどいいよ</p>
           <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-skill-report-tournament @click="enterTournamentFromSkillTest">竜王戦に出る（難易度{{ ryuoDefaultDifficulty }}）</button>
         </template>
         <div class="shogi-game__result-actions">
           <button type="button" class="shogi-game__analysis-button" data-skill-report-game @click="confirmSkillByGame">1局指して確かめる（Lv.{{ skillTestReportLevel }}）</button>
-          <button type="button" class="shogi-game__analysis-button" data-skill-report-close @click="closeSkillTestReport">{{ skillTestFromNote ? "ノートへ戻る" : showHome ? "ホームへ" : "閉じる" }}</button>
+          <button v-if="!skillTestFromTournament" type="button" class="shogi-game__analysis-button" data-skill-report-close @click="closeSkillTestReport">{{ skillTestBackLabel }}</button>
         </div>
         <p class="shogi-game__measure-note">問題の答え・これまでの対局の勝ち負け・対局の中身を合わせた目安です。対局するたびに合わせ直します。</p>
       </div>
@@ -2562,7 +2541,7 @@ import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import { useAssistTools } from "./composables/useAssistTools";
 import DexIcon from "./DexIcon.vue";
 import { useBackNavigation } from "./composables/useBackNavigation";
-import { WELCOME_CHOICES, WELCOME_SEEN_KEY, markWelcomeSeen, shouldShowWelcome } from "./core/welcome.mjs";
+import { WELCOME_SEEN_KEY } from "./core/welcome.mjs";
 import { VOLUME_2_LAST_LESSON, homeRoadmap, roadmapTile, welcomeChoiceFrom } from "./core/home-roadmap.mjs";
 import { loadProblemProgress } from "./core/problem-progress.mjs";
 import {
@@ -2610,6 +2589,7 @@ import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
 import {
   MAX_MEASURE_GAMES,
+  MEASURE_PICKER_ACTION,
   MIN_MEASURED_MOVES,
   estimateSkill,
   measurableMoves,
@@ -3075,7 +3055,6 @@ const matchStarted = ref(false);
 const pregameOpen = ref(true);
 const homeOpen = ref(props.showHome);
 // はじめて遊ぶ人への案内。ホームのある表示で、遊んだ記録が何もない端末だけで出す。
-const welcomeOpen = ref(props.showHome && shouldShowWelcome(typeof localStorage === "undefined" ? null : localStorage));
 const dexOpen = ref(false);
 const yakobiNoteOpen = ref(false);
 /** 大会の結果の画面から開いたノート。「大会へ戻る」で、閉じると大会の画面へ戻る(タイトルまで戻さない)。 */
@@ -3136,19 +3115,42 @@ function leavePregame() {
 }
 /** ノートのコレクションから開いた作戦カード。選ばずに閉じたら、対局準備を通さずにノートへ戻る。 */
 let planSheetFromNote = false;
-/** ノートから始めた棋力テスト。やめたとき・結果を閉じたときにノートへ戻る。 */
-const skillTestFromNote = ref(false);
+/**
+ * 棋力テストを始めた場所(docs/first-play-design.mdの13章・docs/return-path-design.md)。やめたとき・結果を閉じたときにそこへ戻る。
+ * 対局準備の強さのシートからなら、見立てたLvを強さにして戻る。大会の難易度のシートからなら、その大会の入口へ戻る。
+ */
+type MeasureOrigin = "" | "note" | "pregame" | "ryuo" | "meijin" | "shoreikai" | "kenshukai";
+const MEASURE_TOURNAMENTS = { ryuo: "竜王戦", meijin: "名人戦", shoreikai: "奨励会", kenshukai: "研修会" } as const;
+const skillTestFrom = ref<MeasureOrigin>("");
+const skillTestFromTournament = computed(() => (skillTestFrom.value in MEASURE_TOURNAMENTS ? MEASURE_TOURNAMENTS[skillTestFrom.value as keyof typeof MEASURE_TOURNAMENTS] : ""));
+/** 結果の窓の戻るボタンの言葉。 */
+const skillTestBackLabel = computed(() => {
+  if (skillTestFrom.value === "note") return "ノートへ戻る";
+  if (skillTestFrom.value === "pregame") return `対局準備へ（Lv.${skillTestReportLevel.value}にする）`;
+  if (skillTestFromTournament.value) return `${skillTestFromTournament.value}へ戻る`;
+  return props.showHome ? "ホームへ" : "閉じる";
+});
+function returnToMeasureOrigin(from: MeasureOrigin | "home") {
+  if (from === "note") yakobiNoteOpen.value = true;
+  else if (from in MEASURE_TOURNAMENTS) {
+    tournamentStartAt.value = from as keyof typeof MEASURE_TOURNAMENTS;
+    tournamentFromGame.value = false;
+    tournamentOpen.value = true;
+  }
+}
 function closeSkillTest() {
   skillTestOpen.value = false;
-  if (!skillTestFromNote.value) return;
-  skillTestFromNote.value = false;
-  yakobiNoteOpen.value = true;
+  const from = skillTestFrom.value;
+  skillTestFrom.value = "";
+  returnToMeasureOrigin(from);
 }
 function closeSkillTestReport() {
+  const from = skillTestFrom.value;
+  // 対局準備から測ったら、見立てたLvを強さにして戻る(強さのシートで迷った人の答え)。
+  if (from === "pregame" && skillTestReport.value) searchNodes.value = skillTestReportLevel.value;
   skillTestReport.value = null;
-  if (!skillTestFromNote.value) return;
-  skillTestFromNote.value = false;
-  yakobiNoteOpen.value = true;
+  skillTestFrom.value = "";
+  returnToMeasureOrigin(from);
 }
 // 図鑑を開いたら、見たことを残す(つぎはこれの「まだ見ていない遊び」に使う)。
 watch(dexOpen, (open) => { if (open) noteFeatureSeen("opening-dex"); });
@@ -3228,7 +3230,7 @@ const resultDialogOpen = ref(false);
 // 通常対局(平手・対CPU)の結果で更新するプレイヤーのレーティング。
 const ratingState = ref(loadRatingState(browserStorage()));
 /** 段級位の作り直しの知らせ。ホームで、はじめての案内が出ていないときに1回だけ出す。 */
-const ladderNoticeOpen = computed(() => props.showHome && homeOpen.value && !welcomeOpen.value && Boolean(ratingState.value.ladderNotice));
+const ladderNoticeOpen = computed(() => props.showHome && homeOpen.value && Boolean(ratingState.value.ladderNotice));
 function dismissLadderNoticeDialog() {
   ratingState.value = dismissLadderNotice(ratingState.value);
   saveRatingState(browserStorage(), ratingState.value);
@@ -7363,16 +7365,28 @@ function startMatchFromNote() {
  * 選んだら対局準備を通さずに始める(平手・先手・作戦おまかせ・助言なし)。docs/skill-measure-design.mdの9章。
  */
 function startMeasureMatch() {
+  confirmDiscardSuspended(() => openMeasureStart(yakobiNoteOpen.value ? "note" : "home"));
+}
+/** 「どのくらい指せる？」の札を開く。fromは開いた元(やめたら、そこへ戻す)。 */
+function openMeasureStart(from: MeasureOrigin | "home") {
   noteFeatureSeen("measure");
-  confirmDiscardSuspended(() => {
-    measureStartFrom.value = "note";
-  });
+  measureStartFrom.value = from || "home";
+}
+/** 大会の難易度のシートの「棋力を測る」。大会の画面を閉じて札を出し、測ったら(やめたら)その大会の入口へ戻る。 */
+function openMeasureFromTournament(from: "ryuo" | "meijin" | "shoreikai" | "kenshukai") {
+  tournamentOpen.value = false;
+  openMeasureStart(from);
+}
+function cancelMeasureStart() {
+  const from = measureStartFrom.value;
+  measureStartFrom.value = "";
+  returnToMeasureOrigin(from);
 }
 /**
  * 棋力測定の最初の相手を選ぶ札を開いているか。値は開いた元(やこびノート、はじめての案内の答え)。
  * 前は、はじめての案内からLv24(1級)、ノートからはレーティングに近いLvで、いきなり始めていた。
  */
-const measureStartFrom = ref<"" | "note" | "some" | "player">("");
+const measureStartFrom = ref<"" | "home" | MeasureOrigin>("");
 const measureStartOptions = computed(() => measureStartChoices({
   ratedLevel: ratingState.value.games > 0 ? recommendedLevel(ratingState.value.rating) : null,
 }));
@@ -7381,12 +7395,13 @@ const measureStartOptions = computed(() => measureStartChoices({
  * (自己申告として、勝ち負けやテストと合わせて見立てる)。「いつもの強さから」は幅を持たず、今の見立てから始める。
  */
 function chooseMeasureStart(choice: { level: number; band: readonly number[] | null }) {
+  const from = measureStartFrom.value;
   measureStartFrom.value = "";
   if (choice.band) {
     skillProfile.value = setProfileBand(skillProfile.value, [choice.band[0], choice.band[1]]);
     saveSkillProfile(browserStorage(), skillProfile.value);
   }
-  openSkillTest(choice.band);
+  openSkillTest(choice.band, from === "home" ? "" : from);
 }
 
 /** 棋力テストを開いているか、最初の目安(札の幅か今の見立て)と、札の幅(送る答えに添える)。 */
@@ -7413,12 +7428,12 @@ function sendSkillPayload(build: (anon: string) => object) {
   const anon = skillDataAnonId(browserStorage());
   if (anon) void sendSkillData({ payload: build(anon) });
 }
-function openSkillTest(band: readonly number[] | null) {
+function openSkillTest(band: readonly number[] | null, from: MeasureOrigin = yakobiNoteOpen.value ? "note" : "") {
   noteFeatureSeen("measure");
   skillTestBand.value = band ? [band[0], band[1]] : null;
   const estimate = skillProfileEstimate.value;
   skillTestPrior.value = band ? { band: [band[0], band[1]] } : estimate.enough ? { level: estimate.level, spread: estimate.spread } : null;
-  skillTestFromNote.value = yakobiNoteOpen.value;
+  skillTestFrom.value = from;
   yakobiNoteOpen.value = false;
   skillTestReport.value = null;
   skillTestOpen.value = true;
@@ -7459,7 +7474,7 @@ const skillTestReportPraise = computed(() => {
 });
 function enterTournamentFromSkillTest() {
   skillTestReport.value = null;
-  skillTestFromNote.value = false;
+  skillTestFrom.value = "";
   tournamentStartAt.value = "ryuo";
   tournamentFromGame.value = false;
   tournamentOpen.value = true;
@@ -7468,7 +7483,7 @@ function enterTournamentFromSkillTest() {
 function confirmSkillByGame() {
   const level = skillTestReportLevel.value;
   skillTestReport.value = null;
-  skillTestFromNote.value = false;
+  skillTestFrom.value = "";
   confirmDiscardSuspended(() => startMeasureMatchNow({ level }));
 }
 /**
@@ -7511,25 +7526,6 @@ function startMeasureMatchNow(options: {
   void initializeEngine();
   beginMatch();
   showStageCard("measure");
-}
-
-/** はじめての案内で選んだ道へ進む。 */
-function chooseWelcome(choice: string) {
-  markWelcomeSeen(browserStorage(), choice);
-  welcomeOpen.value = false;
-  // ルールは分かる: 教室で、始める場所を1手詰めの1問で決める。少し指せる・よく指している: 1級くらいの相手と棋力測定。
-  if (choice === "beginner" || choice === "rules") openTutorialLesson();
-  else if (choice === "some" || choice === "player") {
-    // 少し指せる・よく指している: 棋力測定の最初の相手を、もう少しくわしく選んでもらう。
-    noteFeatureSeen("measure");
-    measureStartFrom.value = choice;
-  }
-}
-
-/** 案内を閉じて、ホームから自分で選ぶ。 */
-function dismissWelcome() {
-  markWelcomeSeen(browserStorage(), "skip");
-  welcomeOpen.value = false;
 }
 
 /**
@@ -7928,7 +7924,7 @@ function refreshPlayInsight() {
   homeReviewProblemIds.value = new Set(loadReviewProblems(store).map((problem: { id: string }) => problem.id));
   homeReviewDueId.value = dueReviewId(loadReviewQueue(store));
 }
-watch([homeOpen, tutorialOpen, problemSetOpen, welcomeOpen], ([home, tutorial, problems]) => {
+watch([homeOpen, tutorialOpen, problemSetOpen], ([home, tutorial, problems]) => {
   if (home && !tutorial && !problems) refreshHomeProgress();
 }, { immediate: true });
 
@@ -8247,10 +8243,7 @@ const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.l
  * 対局中と振り返り中は、保存を消さないよう対局画面から離れない。ホームでは元のページへ戻る。
  */
 function navigateBack() {
-  if (welcomeOpen.value && homeOpen.value) {
-    // 初回の案内は、選択肢か「自分で選ぶ」を押すまで残す。戻るで回答済みにしない。
-    return;
-  } else if (kansenkiShown.value) {
+  if (kansenkiShown.value) {
     kansenkiShown.value = null;
   } else if (talkOpen.value) {
     talkOpen.value = false;
@@ -8271,7 +8264,7 @@ function navigateBack() {
   } else if (skillTestOpen.value) {
     closeSkillTest();
   } else if (measureStartFrom.value) {
-    measureStartFrom.value = "";
+    cancelMeasureStart();
   } else if (tournamentOpen.value) {
     // 大会の画面は、中の画面(説明・トーナメント表)から、大会の選択へ、そして閉じる、の順に戻る。
     if (tournamentView.value) tournamentView.value.goBack();
@@ -8325,7 +8318,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || (welcomeOpen.value && homeOpen.value) || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 

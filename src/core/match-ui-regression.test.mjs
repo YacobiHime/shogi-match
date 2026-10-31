@@ -241,7 +241,7 @@ describe("match screen regressions", () => {
     // 新しい対局を始めると中断した対局が消えるため、開始の3経路で確認する。
     expect(source).toMatch(/function openMatchSetup[\s\S]*?confirmDiscardSuspended/);
     // 棋力測定は、確認のあとに最初の相手を選ぶ札を開く。
-    expect(source).toMatch(/confirmDiscardSuspended\(\(\) => \{\s*measureStartFrom\.value = "note";/);
+    expect(source).toMatch(/confirmDiscardSuspended\(\(\) => openMeasureStart\(yakobiNoteOpen\.value \? "note" : "home"\)\)/);
     expect(source).toContain("confirmDiscardSuspended(() => startMatchFromTutorialNow(request))");
     // ブラウザの戻る操作で、確認ダイアログも閉じられる。
     expect(source).toMatch(/function navigateBack\(\)[\s\S]*?discardSuspendedPending[\s\S]*?suspendConfirmOpen/);
@@ -867,23 +867,32 @@ describe("match screen regressions", () => {
     expect(tutorial).toMatch(/view === 'chapter' && clearedChapter/);
   });
 
-  it('はじめての案内の4つの札から、教室の1問か、1級くらいとの棋力測定、測ったあと竜王戦へ(docs/first-play-design.md)', () => {
-    // 背景や戻るで案内を回答済みにしない。進むのは明示的に選んだときだけ。
-    const welcomeDialog = source.split('v-if="welcomeOpen && homeOpen"')[1]?.split('<!--')[0] ?? "";
-    expect(welcomeDialog).not.toMatch(/@click\.self=/);
-    expect(welcomeDialog).toContain('@click="chooseWelcome(choice.id)"');
-    expect(welcomeDialog).toContain('@click="dismissWelcome">自分で選ぶ');
-    expect(source).toMatch(/if \(welcomeOpen\.value && homeOpen\.value\) \{\s*(?:\/\/[^\n]*\n\s*)?return;/);
-
-    expect(source).toMatch(/if \(choice === "beginner" \|\| choice === "rules"\) openTutorialLesson\(\);/);
-    expect(source).toMatch(/choice === "some" \|\| choice === "player"[\s\S]{0,200}?measureStartFrom\.value = choice;/);
+  it('はじめての案内は出さず、棋力測定は強さ・難易度のシートの「棋力を測る」から測って来た場所へ戻る(docs/first-play-design.mdの13章)', () => {
+    // はじめての案内(4つの札)はやめた。データを消して開いても、ホームからすぐ遊べる。
+    expect(source).not.toMatch(/welcomeOpen|chooseWelcome|dismissWelcome|shouldShowWelcome/);
+    // 対局準備の強さのシートと、4つの大会の難易度のシートの先頭に「棋力を測る」。
+    expect(source).toContain(":action=\"pregamePicker === 'strength' ? MEASURE_PICKER_ACTION : null\"");
+    expect(source).toContain("@action=\"pregamePicker = ''; openMeasureStart('pregame')\"");
+    expect(source).toContain('@measure="openMeasureFromTournament"');
+    const tournamentSource = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    expect(tournamentSource).toContain(":action=\"entryPicker === 'difficulty' ? MEASURE_PICKER_ACTION : null\"");
+    for (const [file, kind] of [["ShogiMeijin", "meijin"], ["ShogiShoreikai", "shoreikai"], ["ShogiKenshukai", "kenshukai"]]) {
+      const child = readFileSync(new URL(`../${file}.vue`, import.meta.url), "utf8");
+      expect(child, file).toContain(":action=\"picker === 'difficulty' ? MEASURE_PICKER_ACTION : null\"");
+      expect(child, file).toContain("@action=\"picker = ''; emit('measure')\"");
+      expect(tournamentSource, file).toContain(`@measure="emit('measure', '${kind}')"`);
+    }
+    // 大会から測ったら大会の画面を閉じて札を出し、やめても結果を閉じても、その大会の入口へ戻る。
+    expect(source).toMatch(/function openMeasureFromTournament\([^)]*\) \{\s*tournamentOpen\.value = false;\s*openMeasureStart\(from\);/);
+    expect(source).toMatch(/function returnToMeasureOrigin\([^)]*\) \{[\s\S]{0,200}?tournamentStartAt\.value = from as[^;]*;\s*tournamentFromGame\.value = false;\s*tournamentOpen\.value = true;/);
+    // 対局準備から測ったら、見立てたLvを強さにして戻る。
+    expect(source).toMatch(/if \(from === "pregame" && skillTestReport\.value\) searchNodes\.value = skillTestReportLevel\.value;/);
     // 棋力測定は、先に「どのくらい指せる？」の札で最初の相手を選ぶ(いきなり強い相手で始めない)。
-    expect(source).toMatch(/function startMeasureMatch\(\) \{[\s\S]{0,160}?measureStartFrom\.value = "note";/);
     expect(source).toMatch(/v-if="measureStartFrom"[\s\S]{0,400}?data-measure-start[\s\S]*?v-for="choice in measureStartOptions"[\s\S]*?chooseMeasureStart\(choice\)/);
     // 札を選んだら、棋力テストを始める(札の幅はカルテにも残す)。対局で確かめるのは、テストの結果の札から(docs/skill-assessment-design.mdの4章)。
-    expect(source).toMatch(/function chooseMeasureStart\([^)]*\) \{[\s\S]{0,300}?setProfileBand\(skillProfile\.value, \[choice\.band\[0\], choice\.band\[1\]\]\)[\s\S]{0,120}?openSkillTest\(choice\.band\);/);
+    expect(source).toMatch(/function chooseMeasureStart\([^)]*\) \{[\s\S]{0,300}?setProfileBand\(skillProfile\.value, \[choice\.band\[0\], choice\.band\[1\]\]\)[\s\S]{0,120}?openSkillTest\(choice\.band, from === "home" \? "" : from\);/);
     expect(source).toMatch(/function confirmSkillByGame\(\) \{[\s\S]{0,200}?startMeasureMatchNow\(\{ level \}\)/);
-    expect(source).toMatch(/\} else if \(measureStartFrom\.value\) \{\s*measureStartFrom\.value = "";/);
+    expect(source).toMatch(/\} else if \(measureStartFrom\.value\) \{\s*cancelMeasureStart\(\);/);
     // 続けて測るときは、案内の答えを引き継ぐ。対局準備へ戻ると捨てる。
     expect(source).toMatch(/measureWelcome\.value = options\.welcome \?\? \(options\.carry \? measureWelcome\.value : ""\);/);
     expect(source).toMatch(/measureSession\.value = false;\s*measureWelcome\.value = "";/);
@@ -1077,10 +1086,12 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/dexFromNote\.value \? "ノートへ戻る"/);
     expect(source).toMatch(/function openDexFromNote\([^)]*\) \{\s*yakobiNoteOpen\.value = false;\s*dexFromNote\.value = true;/);
     // ノートから始めた棋力テストは、やめても結果を閉じてもノートへ。
-    expect(source).toMatch(/skillTestFromNote\.value = yakobiNoteOpen\.value;/);
+    expect(source).toMatch(/function openSkillTest\(band: readonly number\[\] \| null, from: MeasureOrigin = yakobiNoteOpen\.value \? "note" : ""\)/);
+    expect(source).toMatch(/skillTestFrom\.value = from;/);
     expect(source).toMatch(/@close="closeSkillTest"/);
-    expect(source).toMatch(/data-skill-report-close @click="closeSkillTestReport">\{\{ skillTestFromNote \? "ノートへ戻る"/);
-    expect(source).toMatch(/\} else if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;\s*\} else if \(daySummaryOpen\.value\) \{/);
+    expect(source).toMatch(/if \(skillTestFrom\.value === "note"\) return "ノートへ戻る";/);
+    expect(source).toMatch(/data-skill-report-close @click="closeSkillTestReport">\{\{ skillTestBackLabel \}\}/);
+    expect(source).toMatch(/(?:\} else )?if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;\s*\} else if \(daySummaryOpen\.value\) \{/);
     expect(source).toMatch(/\|\| daySummaryOpen\.value,/);
   });
   it("勝負メシは、選ぶと札と一言が出て、午後のほめ言葉・控室・勝ちメシにつながる(docs/title-match-day-design.mdの8章)", () => {
