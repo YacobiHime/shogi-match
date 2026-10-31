@@ -20,8 +20,11 @@ export const TEAM_MOMOKA_ID = 'momoka';
 /** 自分のチーム。 */
 export const USER_TEAM = 'T0';
 
-/** 高校の団体戦の、自分たちの学校(ノベルの設定。羽音と百花が通う)。 */
-export const SCHOOL_NAME = '燈ヶ丘高校';
+/**
+ * 高校の団体戦の、自分たちの学校(羽音と百花が通う)。仮の名前。ノベルは別作品で舞台は使わないので、物語モードで決め直す
+ * (docs/team-battle-design.mdの13章)。
+ */
+export const SCHOOL_NAME = '宵月高校';
 /** 高校の選手のレーティングの真ん中。研修会のクラス(870〜1170)の上のほう。自分の相手のLvは、これを世界の基準にする。 */
 export const SCHOOL_BASE = 1000;
 /** 羽音は高校生の中では飛び抜けて強い(ほぼ勝つ。4章の7)。 */

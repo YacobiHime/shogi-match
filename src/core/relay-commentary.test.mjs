@@ -397,7 +397,7 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     // 同じ場面の2つの言い方が、局によってどちらも出る。
     expect(said).toContain('ここから中盤だね。作戦が、はっきりしてきたよ。');
     expect(said).toContain('ここから、読み合いでしょ。');
-    // ノベルの設定の口調(docs/hanane-character.md): 「よ」「でしょ」「ね」で終える行が多く、「……」で始めてばかりにしない。
+    // ノベルのキャラクター性を参考にした口調(docs/hanane-character.md): 「よ」「でしょ」「ね」で終える行が多く、「……」で始めてばかりにしない。
     const friendly = said.filter((text) => /(よ|でしょ|ね)[。？]?$/.test(text)).length;
     expect(friendly / said.length).toBeGreaterThan(0.5);
     expect(said.filter((text) => text.startsWith('……')).length / said.length).toBeLessThan(0.1);

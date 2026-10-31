@@ -1,4 +1,5 @@
 // 団体戦のノベルの場面(docs/team-battle-design.mdの6章)。羽音に誘われるところから、試合の節目ごとの短い掛け合い。
+// 仮の台本。ノベルのリポジトリは別作品で、キャラクター性(性格・口調)だけを参考にし、ストーリーは使わない。物語モードで考え直す(13章)。
 // 台本の形 { id, title, background, lines: [{ who, face, text }] } は、後の物語モードでも使う(NovelScene.vue)。
 // 羽音は敬語と「！」を使わない(docs/hanane-character.md)。百花は明るく、「！」を使う(この依頼で決めた初期値。0章)。
 // 長い場面で遊びを止めない(D:8-2)ので、どの場面も12行まで。
@@ -40,7 +41,7 @@ export const TEAM_SCENES = Object.freeze({
       line('hanane', 'gentle', '団体戦は、3局のうち2つ勝てばいい。1人で全部勝たなくていいんだよ。'),
       line('hanane', 'neutral', '私が1つ取る。君と百花で、もう1つ。どう？'),
       line('momoka', 'neutral', 'お願い！ 一緒に出よう！'),
-      line('narration', 'neutral', 'こうして{name}は、燈ヶ丘高校将棋部の団体戦メンバーになった。'),
+      line('narration', 'neutral', 'こうして{name}は、宵月高校将棋部の団体戦メンバーになった。'),
     ],
   }),
   'invite-pro': Object.freeze({
