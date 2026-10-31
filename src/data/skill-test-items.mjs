@@ -4,6 +4,7 @@
 // threatは何もしないときの相手の手(守る: 駒を取る手、受け: 詰み筋の1手目)、targetは取られそうな駒のマス、tesujiは手筋の形のid、targetsはその形でねらう駒のマス。
 // cpuBは、CPUの各Lvに解かせて半分が解けたLv(難しさの元。人に合わせた補正はskill-test-bank.mjsのTYPE_OFFSETS)。
 // 生成: CPUどうしの対局480局(seed 20261031〜20261034、各120局)、審判 60000nodes(二度目 400000nodes)、解かせたLv 1,4,7,10,13,16,19,22,25,28,31,34×2回。
+// 足した問題: 作った局面の寄せの手筋（21問、審判 60000nodes・二度目 400000nodes）。
 
 export const SKILL_TEST_ITEMS = Object.freeze([
  {
@@ -9099,6 +9100,588 @@ export const SKILL_TEST_ITEMS = Object.freeze([
    "7c7d"
   ],
   "cpuB": -10
+ },
+ {
+  "id": "st2-tactic-64",
+  "type": "tactic",
+  "sfen": "6s2/3+Rg1kb1/1p1p2pp1/5p3/9/2b6/1P4PPP/4G1SK1/1N5N1 b GSN2L2Prgsn2l7p 1",
+  "accepted": [
+   "6b5b"
+  ],
+  "best": "6b5b",
+  "pv": [
+   "6b5b",
+   "G*4b",
+   "S*4a",
+   "3b2a",
+   "L*2d",
+   "S*1b",
+   "2d2c+"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "6b5b",
+   "G*4b",
+   "S*4a"
+  ],
+  "cpuB": 2
+ },
+ {
+  "id": "st2-tactic-65",
+  "type": "tactic",
+  "sfen": "ln1g3nl/1ks3+R2/p1pg2ppp/9/9/+b5r1P/PPBPPP3/LSG6/KN5NL b S5Pgs2p 1",
+  "accepted": [
+   "9g9f"
+  ],
+  "best": "9g9f",
+  "pv": [
+   "9g9f",
+   "3f3h+",
+   "P*7i",
+   "S*6i",
+   "7h6h",
+   "G*5h",
+   "B*6e"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "8b"
+  ],
+  "line": [
+   "9g9f",
+   "3f3h+",
+   "P*7i"
+  ],
+  "cpuB": 4.5
+ },
+ {
+  "id": "st2-tactic-66",
+  "type": "tactic",
+  "sfen": "l3+R1snl/4g1kb1/3p1pp2/2p1p2p1/4+b4/2P3P2/PPSGP2PP/2K1G4/7N1 b RG2P2s2n2l3p 1",
+  "accepted": [
+   "5a5b"
+  ],
+  "best": "5a5b",
+  "pv": [
+   "5a5b",
+   "3b2c",
+   "5g5f",
+   "5e6d",
+   "P*4d",
+   "N*4f",
+   "5h4h"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "5a5b",
+   "3b2c",
+   "5g5f"
+  ],
+  "cpuB": 3.75
+ },
+ {
+  "id": "st2-tactic-67",
+  "type": "tactic",
+  "sfen": "ln4s1l/2+R1g1k2/p2pp1pp1/1p7/9/P3PP3/1PPP+r3P/6SK1/LN3G1N1 b BNL2Pb2g2s3p 1",
+  "accepted": [
+   "7b5b"
+  ],
+  "best": "7b5b",
+  "pv": [
+   "7b5b",
+   "P*4b",
+   "L*2g",
+   "3b2b",
+   "G*4g",
+   "5g6g",
+   "P*3b"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "7b5b",
+   "P*4b",
+   "L*2g"
+  ],
+  "cpuB": 12
+ },
+ {
+  "id": "st2-tactic-68",
+  "type": "tactic",
+  "sfen": "l8/5sk2/3p1ppp1/4p3R/3b5/4Pr2P/P1PP3P1/2KS5/1NG1G2NL b SN2L3Pb2gsn4p 1",
+  "accepted": [
+   "1d1b+"
+  ],
+  "best": "1d1b+",
+  "pv": [
+   "1d1b+",
+   "G*2b"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "1d1b+",
+   "G*2b"
+  ],
+  "cpuB": 27.75
+ },
+ {
+  "id": "st2-tactic-69",
+  "type": "tactic",
+  "sfen": "7nl/1sk1g1+R2/p4pppp/9/8b/5P3/P1BPP3P/LSG5+r/KN5N1 b N4P2g2s2l4p 1",
+  "accepted": [
+   "3b5b"
+  ],
+  "best": "3b5b",
+  "pv": [
+   "3b5b",
+   "P*6b",
+   "P*8c",
+   "7b8c",
+   "N*7e",
+   "8c7d",
+   "5b5d"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "7b"
+  ],
+  "line": [
+   "3b5b",
+   "P*6b",
+   "P*8c"
+  ],
+  "cpuB": 5.75
+ },
+ {
+  "id": "st2-tactic-70",
+  "type": "tactic",
+  "sfen": "ln4s1l/1+R2g1kb1/p2p2ppp/4p4/9/9/P1PPP1P1P/6SK1/LN3G1N1 b R2S3Pb2gnl3p 1",
+  "accepted": [
+   "8b5b"
+  ],
+  "best": "8b5b",
+  "pv": [
+   "8b5b",
+   "3b2a",
+   "S*4c",
+   "L*2f",
+   "P*2g",
+   "B*3b",
+   "4c3b+"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "8b5b",
+   "3b2a",
+   "S*4c"
+  ],
+  "cpuB": 5
+ },
+ {
+  "id": "st2-tactic-71",
+  "type": "tactic",
+  "sfen": "1n4snl/3+Rg1kb1/2p1pp2p/p2p2pp1/9/3P1r3/1PSGP1PP1/1KG6/LN7 b BPg2sn2l4p 1",
+  "accepted": [
+   "6b5b"
+  ],
+  "best": "6b5b",
+  "pv": [
+   "6b5b",
+   "3b2c",
+   "5b6a",
+   "8a9c",
+   "B*6c",
+   "4f4i+",
+   "6c4a+"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "6b5b",
+   "3b2c",
+   "5b6a"
+  ],
+  "cpuB": 12
+ },
+ {
+  "id": "st2-tactic-72",
+  "type": "tactic",
+  "sfen": "l6n1/2k1g4/1p1pp+R1pp/2p2p3/9/9/1PPPP1PPP/+rBK1G4/2S6 b G2SNL2Pbgs2n2l2p 1",
+  "accepted": [
+   "4c5b"
+  ],
+  "best": "4c5b",
+  "pv": [
+   "4c5b",
+   "L*6b",
+   "S*6a",
+   "7b8a",
+   "5b6b",
+   "L*8b",
+   "G*8f"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "7b"
+  ],
+  "line": [
+   "4c5b",
+   "L*6b",
+   "S*6a"
+  ],
+  "cpuB": -0.25
+ },
+ {
+  "id": "st2-tactic-73",
+  "type": "tactic",
+  "sfen": "1n5n1/2k1g2+R1/p1ppp1ppp/1p7/9/1P2P2P1/P1SG2P1P/2K1G4/L6NL b L2Pr2bg3snl2p 1",
+  "accepted": [
+   "2b5b"
+  ],
+  "best": "2b5b",
+  "pv": [
+   "2b5b",
+   "G*6b",
+   "5b4b",
+   "S*8g",
+   "7h8g",
+   "N*7e",
+   "8g7f"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "7b"
+  ],
+  "line": [
+   "2b5b",
+   "G*6b",
+   "5b4b"
+  ],
+  "cpuB": 4
+ },
+ {
+  "id": "st2-tactic-74",
+  "type": "tactic",
+  "sfen": "ln4sn1/+R3g1kb1/p1p1p1p1p/9/9/2P1PrP2/PP3P3/6SK1/LN3G2L b S2Pb2gsnl5p 1",
+  "accepted": [
+   "9b5b"
+  ],
+  "best": "9b5b",
+  "pv": [
+   "9b5b",
+   "G*4b",
+   "S*4a",
+   "3b2c",
+   "P*2d",
+   "2c2d",
+   "G*3e"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "9b5b",
+   "G*4b",
+   "S*4a"
+  ],
+  "cpuB": 10
+ },
+ {
+  "id": "st2-tactic-75",
+  "type": "tactic",
+  "sfen": "ln2+R1s2/4g1k2/pp1pp1ppp/7+B1/9/1PP6/P2PPP1PP/6SK1/1N3G1NL b 2Lrb2g2sn3p 1",
+  "accepted": [
+   "5a5b"
+  ],
+  "best": "5a5b",
+  "pv": [
+   "5a5b",
+   "P*4b",
+   "G*4c",
+   "3b2a",
+   "4c4b",
+   "N*3f",
+   "2h3g"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "5a5b",
+   "P*4b",
+   "G*4c"
+  ],
+  "cpuB": 2
+ },
+ {
+  "id": "st2-tactic-76",
+  "type": "tactic",
+  "sfen": "ln7/1kg5+R/1s1gpppp1/p1pp5/9/r8/PPPPPS3/4G1SK1/L4G1N1 b B4Pbs2n2l2p 1",
+  "accepted": [
+   "9g9f"
+  ],
+  "best": "9g9f",
+  "pv": [
+   "9g9f",
+   "L*2d",
+   "P*2f",
+   "B*5e",
+   "P*4f",
+   "N*3e",
+   "P*3f"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "8b"
+  ],
+  "line": [
+   "9g9f",
+   "L*2d",
+   "P*2f"
+  ],
+  "cpuB": 3.75
+ },
+ {
+  "id": "st2-tactic-77",
+  "type": "tactic",
+  "sfen": "kng3+Rnl/2g6/1ppppppp1/9/9/r1PP1Pb2/PP2P2PP/2KS5/L1G1G2NL b SPb2snl2p 1",
+  "accepted": [
+   "9g9f"
+  ],
+  "best": "9g9f",
+  "pv": [
+   "9g9f",
+   "P*9h",
+   "9i9h",
+   "S*5h",
+   "R*4a",
+   "S*6b",
+   "5i4h"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "9a"
+  ],
+  "line": [
+   "9g9f",
+   "P*9h",
+   "9i9h"
+  ],
+  "cpuB": 2
+ },
+ {
+  "id": "st2-tactic-78",
+  "type": "tactic",
+  "sfen": "ln5nk/7sl/pppp+Rpb1p/7p1/9/8b/1PPP1PPPP/2KS5/L1G1G2N1 b GSLPrgsn3p 1",
+  "accepted": [
+   "1g1f"
+  ],
+  "best": "1g1f",
+  "pv": [
+   "1g1f",
+   "S*4b",
+   "5c5b",
+   "P*5a",
+   "5b5h",
+   "P*3a",
+   "S*3d"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "1a"
+  ],
+  "line": [
+   "1g1f",
+   "S*4b",
+   "5c5b"
+  ],
+  "cpuB": 4.75
+ },
+ {
+  "id": "st2-tactic-79",
+  "type": "tactic",
+  "sfen": "2+R3gk1/7s1/1p1pppn1p/p6p1/6+B2/8r/1PP1P1PPP/4GGKS1/7NL b SL4Pbgs2n2lp 1",
+  "accepted": [
+   "1g1f"
+  ],
+  "best": "1g1f",
+  "pv": [
+   "1g1f",
+   "G*3b",
+   "R*7b",
+   "L*4d",
+   "P*4g",
+   "L*4e",
+   "3e4d"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "2a"
+  ],
+  "line": [
+   "1g1f",
+   "G*3b",
+   "R*7b"
+  ],
+  "cpuB": 3
+ },
+ {
+  "id": "st2-tactic-80",
+  "type": "tactic",
+  "sfen": "ln5nl/2+R1g1k2/1ppp1pp1p/4p2p1/6+b2/9/2PP2PPP/4G1SK1/L6N1 b RS2Pb2g2snl3p 1",
+  "accepted": [
+   "7b5b"
+  ],
+  "best": "7b5b",
+  "pv": [
+   "7b5b",
+   "L*4b",
+   "S*4a",
+   "3b2c",
+   "5b4b",
+   "G*2b",
+   "R*5b"
+  ],
+  "tesuji": "one-gap-dragon",
+  "targets": [
+   "3b"
+  ],
+  "line": [
+   "7b5b",
+   "L*4b",
+   "S*4a"
+  ],
+  "cpuB": 13.5
+ },
+ {
+  "id": "st2-tactic-81",
+  "type": "tactic",
+  "sfen": "ln5nk/6gsl/p1pp2b2/1R2p3p/6b2/P3P3r/1PNP1PPPP/1SG6/LKG4NL b S3Pgs2p 1",
+  "accepted": [
+   "1g1f"
+  ],
+  "best": "1g1f",
+  "pv": [
+   "1g1f",
+   "3e7i+",
+   "7h7i",
+   "G*7f",
+   "P*7h",
+   "P*8f",
+   "8d8a+"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "1a"
+  ],
+  "line": [
+   "1g1f",
+   "3e7i+",
+   "7h7i"
+  ],
+  "cpuB": 2.25
+ },
+ {
+  "id": "st2-tactic-82",
+  "type": "tactic",
+  "sfen": "ln2+R1gk1/7s1/pp2pp2p/2p6/6B1+b/1P1P1P1rP/P1P1P1PP1/6SK1/LN3G3 b 2GP2s2n2l2p 1",
+  "accepted": [
+   "1f1e"
+  ],
+  "best": "1f1e",
+  "pv": [
+   "1f1e",
+   "N*1f",
+   "2h3i",
+   "L*4g",
+   "3h4g",
+   "2f2g+",
+   "G*3h"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "2a"
+  ],
+  "line": [
+   "1f1e",
+   "N*1f",
+   "2h3i"
+  ],
+  "cpuB": 8.75
+ },
+ {
+  "id": "st2-tactic-83",
+  "type": "tactic",
+  "sfen": "k1g4n1/1sg1+R4/pp1ppp3/2p4p1/9/r6P1/P1PSSPP2/2G1G4/LN1K4L b S3P2b2n2l3p 1",
+  "accepted": [
+   "9g9f"
+  ],
+  "best": "9g9f",
+  "pv": [
+   "9g9f",
+   "N*7e",
+   "R*3a",
+   "7e6g+",
+   "5h6g",
+   "S*8a",
+   "P*8d"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "9a"
+  ],
+  "line": [
+   "9g9f",
+   "N*7e",
+   "R*3a"
+  ],
+  "cpuB": 5.25
+ },
+ {
+  "id": "st2-tactic-84",
+  "type": "tactic",
+  "sfen": "ln5k1/3+R2gs1/ppp1p1npp/3p5/9/b7r/PP1P1PPPP/2KS5/L1G1G2NL b BSPgsnl3p 1",
+  "accepted": [
+   "1g1f"
+  ],
+  "best": "1g1f",
+  "pv": [
+   "1g1f",
+   "9f7d",
+   "R*8b",
+   "7d6e",
+   "8b8a+",
+   "P*3a",
+   "N*4d"
+  ],
+  "tesuji": "edge-king-edge-pawn",
+  "targets": [
+   "2a"
+  ],
+  "line": [
+   "1g1f",
+   "9f7d",
+   "R*8b"
+  ],
+  "cpuB": 13
  }
 ]);
 
