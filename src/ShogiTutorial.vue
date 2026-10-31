@@ -145,11 +145,15 @@
           <!-- 巻の看板 -->
           <div v-if="row.type === 'volume'" class="shogi-tutorial__world">
             <span class="shogi-tutorial__world-number">{{ row.id === "tips" ? "コツ" : `第${row.number}巻` }}</span>
-            <strong>{{ row.title }}</strong>
+            <strong>
+              {{ row.title }}
+              <!-- コツを全部そろえた判子(21-14-3)。 -->
+              <span v-if="row.id === 'tips' && tipsComplete" class="shogi-tutorial__tips-seal shogi-tutorial__tips-seal--small" role="img" :aria-label="`コツ${tipsLessons.length}枚そろった`" data-tips-stamp>完</span>
+            </strong>
             <span class="shogi-tutorial__meter" aria-hidden="true">
               <span :style="{ width: `${row.summary.total ? Math.round((row.summary.done / row.summary.total) * 100) : 0}%` }"></span>
             </span>
-            <small>★{{ row.summary.stars }}/{{ row.summary.maxStars }}</small>
+            <small>★{{ row.summary.stars }}/{{ row.summary.maxStars }}<template v-if="row.id === 'tips'"><span data-tips-count>・{{ tipsClearedCount }}/{{ tipsLessons.length }}枚</span></template></small>
           </div>
           <!-- 章の看板 -->
           <div v-else-if="row.type === 'chapter'" class="shogi-tutorial__signpost">
@@ -197,6 +201,8 @@
             <span v-if="row.skipAhead" class="shogi-tutorial__node-tag shogi-tutorial__node-tag--jump" aria-hidden="true">飛び級できる</span>
             <!-- 寄り道(21-6)。道の横の小さなマス。遊ばなくても次へ進め、巻も終えられる。 -->
             <span v-if="row.side" class="shogi-tutorial__node-tag shogi-tutorial__node-tag--side" data-side-lesson aria-hidden="true">寄り道</span>
+            <!-- コツを対局で使った回数(21-14-3)。 -->
+            <span v-if="tipUses[row.id]" class="shogi-tutorial__node-tag shogi-tutorial__node-tag--used" :data-tip-uses="row.id">対局で×{{ tipUses[row.id] }}</span>
           </div>
         </li>
       </ol>
@@ -517,8 +523,13 @@
       できるようになったことを並べ、次の章へすぐ進めるようにする。
     -->
     <section v-else-if="view === 'chapter' && clearedChapter" class="shogi-tutorial__chapter-clear" aria-label="章クリア" data-chapter-clear>
-      <p class="shogi-tutorial__chapter-clear-eyebrow">第{{ clearedChapter.volumeNumber }}巻 第{{ clearedChapter.number }}章</p>
+      <p class="shogi-tutorial__chapter-clear-eyebrow">{{ clearedChapter.volumeId === "tips" ? "すぐ使えるコツ" : `第${clearedChapter.volumeNumber}巻 第${clearedChapter.number}章` }}</p>
       <h2>「{{ clearedChapter.title }}」クリア！</h2>
+      <!-- コツの最後の1枚を終えた瞬間の判子(21-14-3)。腕だめしのメダルと同じ出方。 -->
+      <div v-if="tipsStampShown" class="shogi-tutorial__medal shogi-tutorial__tips-complete" data-tips-complete>
+        <span class="shogi-tutorial__tips-seal" aria-hidden="true">完</span>
+        <span>コツ{{ tipsLessons.length }}枚、ぜんぶそろった！</span>
+      </div>
       <!-- 腕だめしのメダル。判を押すように出す。 -->
       <div
         v-if="clearedChapter.medal"
@@ -722,6 +733,7 @@ import FormationThumb from "./FormationThumb.vue";
 import { openingFormationSteps } from "./core/opening-formation.mjs";
 import { placeCallout, speechSegments, splitLeadPhrase, stepCallout } from "./core/tutorial-callout.mjs";
 import { loadTutorialVoiceOn, pickJapaneseVoice, saveTutorialVoiceOn, voiceText } from "./core/tutorial-voice.mjs";
+import { loadTipUses } from "./core/tip-moments.mjs";
 
 type Lesson = (typeof TUTORIAL_LESSONS)[number] & { steps?: any[]; comingSoon?: boolean; summary?: string; boss?: boolean; review?: boolean; placementCheck?: boolean };
 type VolumeTitle = { id: string; label: string; detail: string; rank: number };
@@ -867,10 +879,23 @@ function declineReviewOffer() {
 
 /** この画面を開いてから新しく手に入れた巻の称号。章クリアの画面で知らせる。 */
 const newTitle = ref<VolumeTitle | null>(null);
+
+// ===== コツの枚数・使った回数・判子(21-14-3) =====
+/** クリアしたコツのカードの数。全部そろったら、地図の看板に判子。 */
+const tipsClearedCount = computed(() => tipsLessons.filter(({ id }) => lessonRecord(progress.value, id).status === "cleared").length);
+const tipsComplete = computed(() => tipsClearedCount.value === tipsLessons.length);
+/** この画面で最後の1枚を終えた。章クリアの画面で判子を押す。 */
+const tipsStampNew = ref(false);
+const tipsStampShown = computed(() => tipsStampNew.value && clearedChapter.value?.volumeId === "tips");
+/** コツを対局で使った回数(対局画面が残す。教室を開くたびに読む)。 */
+const tipUses = ref<Record<string, number>>(loadTipUses(storage));
+
 function updateProgress(next: typeof progress.value) {
   const before = new Set(earnedVolumeTitles(volumes, lessons, progress.value).map(({ id }: VolumeTitle) => id));
+  const tipsBefore = tipsComplete.value;
   progress.value = next;
   saveTutorialProgress(storage, next);
+  if (!tipsBefore && tipsComplete.value) tipsStampNew.value = true;
   // 巻を終えたら称号を渡す(保存は対局画面の称号に任せる)。
   for (const title of earnedVolumeTitles(volumes, lessons, next) as VolumeTitle[]) {
     if (before.has(title.id)) continue;
@@ -1093,6 +1118,7 @@ function openMap() {
   reviewResult.value = null;
   skipAheadResult.value = null;
   newTitle.value = null;
+  tipsStampNew.value = false;
   mapMessage.value = "";
   view.value = "map";
   // いま進めるマスが見える位置まで、地図をスクロールする。
@@ -1138,6 +1164,7 @@ const skipAheadRun = ref(false);
 const chapterClearMessage = computed(() => {
   const chapter = clearedChapter.value;
   if (!chapter) return "";
+  if (tipsStampShown.value) return `コツを${tipsLessons.length}枚、ぜんぶ覚えたね！ 対局で使うと、カードに回数が残るよ。`;
   const jump = skipAheadResult.value;
   if (jump) {
     const lessonsText = jump.tested ? `この章の${jump.tested}つのレッスンを「修了」にしたよ。` : "";
@@ -1172,7 +1199,8 @@ function showChapterClear(chapterId: string) {
  */
 function continueAfter(lesson: Lesson, stars: number | null) {
   const next = nextLessonInChapter(allLessons, lesson.id) as Lesson | null;
-  if (!next) {
+  // コツの最後の1枚を終えたら、章の途中でも章クリアの画面で判子を押す(21-14-3)。
+  if (!next || tipsStampNew.value) {
     showChapterClear(lesson.chapterId);
     return;
   }
@@ -2857,6 +2885,39 @@ const resultMessage = computed(() => {
 }
 .shogi-game .shogi-tutorial__node-tag--side {
   color: #d7d1fd;
+}
+/* コツを対局で使った回数(21-14-3)。 */
+.shogi-game .shogi-tutorial__node-tag--used {
+  color: #10281b;
+  background: #8fdcaa;
+}
+/* コツを全部そろえた判子。赤い朱肉の丸印。 */
+.shogi-game .shogi-tutorial__tips-seal {
+  display: inline-grid;
+  place-items: center;
+  width: 3.2rem;
+  height: 3.2rem;
+  border: 0.2rem solid #c0392b;
+  border-radius: 50%;
+  color: #c0392b;
+  background: rgba(255, 252, 244, 0.9);
+  font-size: 1.6rem;
+  font-weight: 900;
+  line-height: 1;
+  transform: rotate(-12deg);
+  box-shadow: inset 0 0 0 0.12rem rgba(255, 252, 244, 0.9), inset 0 0 0 0.2rem #c0392b;
+}
+.shogi-game .shogi-tutorial__tips-seal--small {
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-left: 0.35rem;
+  border-width: 0.14rem;
+  font-size: 0.9rem;
+  vertical-align: middle;
+  box-shadow: none;
+}
+.shogi-game .shogi-tutorial__tips-complete {
+  --medal-color: #f6d365;
 }
 .shogi-game .shogi-tutorial__placement-links {
   display: flex;
