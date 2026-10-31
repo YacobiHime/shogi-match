@@ -9,6 +9,7 @@
 //   末尾にnobeliefを付けると、人間らしいCPUの信念の式(見えている駒の損得・大局観の重み・詰めろの見落とし)を外す(例: L21nobelief)。
 //   末尾にsight<±手数>を付けると、相手の詰みに気づく手数をずらす(例: L30sight+3)。校正用。
 //   末尾にprevを付けると、14章の前の版(候補数12・1局の上限は今までの悪手の回数)で指す(例: L21prev)。比べる用。
+//   末尾にk<数>を付けると、候補数だけを差し替える(例: L40k12)。
 //   --deadline-sec 280 で、指定秒数を過ぎたら対局中の局を打ち切り、終わった局だけで集計する。
 //   --opening-plies 12 で、序盤の指定手数まで両者とも評価差の小さい候補からばらして選ぶ。
 //   最上位レベル同士は着手にばらつきがなく、同じ棋譜を繰り返すのを避けるために使う。
@@ -75,6 +76,12 @@ export function strengthForPlayer(spec) {
     if (!base.human) throw new Error("prevは人間らしいCPUのLvだけに付けられます");
     const { limit: _limit, ...human } = base.human;
     return { ...base, human: { ...human, candidates: 12 } };
+  }
+  // k<数>: 人間らしいCPUの候補数(14章のk)だけを差し替える(例: L40k12)。校正用。
+  const candidates = spec.match(/^(.+?)k(\d+)$/);
+  if (candidates) {
+    const base = strengthForPlayer(candidates[1]);
+    return { ...base, human: base.human ? { ...base.human, candidates: Number(candidates[2]) } : base.human };
   }
   // sight<±手数>: 相手の詰みに気づく手数(13-3のc')をずらす。校正用。
   const sight = spec.match(/^(.+?)sight([+-][\d.]+)$/);
