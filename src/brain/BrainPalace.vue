@@ -742,7 +742,7 @@ function startPractice() {
     const label = recallLabel(entry.day, props.day);
     askRecall({ pool: recallPool(seedBase + 5, entry.words), count: entry.words.length, prompt: `「${where.name}」をたどって、${label}を順に押してね。`, label, loci: lociNames }, (answer) => {
       const { score } = scoreRecall(entry.words, answer, lociNames);
-      records.push({ gameId: "recall", value: score.correct, level: 0, text: `${label}${score.correct}個` });
+      records.push({ gameId: "recall", value: score.correct, level: 0, text: `${score.total}個中${score.correct}個を思い出せた` });
       rows.push({ label, value: `${score.total}個中${score.correct}個`, ok: score.accuracy >= 1 });
       showInfo(`${label}を${score.correct}個思い出せたね。${where.id === palace.id ? "思い出したから、同じ宮殿に新しく置こう。" : `今日は「${palace.name}」を使うよ。`}`, "つぎへ", place);
     });
