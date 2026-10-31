@@ -324,7 +324,7 @@
           <dd>{{ item.text }}<small>{{ item.source }}</small></dd>
         </template>
       </dl>
-      <p class="shogi-brain__evidence-note">脳トレで頭全体が良くなるかは、まだ確かめられていません。この道場では、練習した力そのもの（速く見る・速く計算する・順番どおりに覚える）を伸ばします。1回10分ほど、週3〜5回で十分です。</p>
+      <p class="shogi-brain__evidence-note">脳トレで頭全体が良くなるかは、まだ確かめられていません。この道場では、練習した力そのもの（速く見る・速く計算する・順番どおりに覚える）を伸ばします。1回10分ほど。計算力は週3回ほどで十分です（回数を増やすほど伸びるとは限りません）。記憶力のコースは、研究に合わせて週5回ほどが目安です。</p>
       <div class="brain-game__actions">
         <button type="button" class="brain-game__secondary" @click="view = evidenceFrom">戻る</button>
       </div>
@@ -407,7 +407,7 @@ const MEASURE_MINUTES: Record<string, number> = { speed: 1, nback: 2, "glance-sy
 /** 根拠のシートの文。docs/brain-training-design.mdの11-2の「言ってよいこと」の範囲だけ。 */
 const EVIDENCE = [
   { title: "見る速さ（ちらっと見る）", text: "ちらっと見て答える練習を10回して、そのあと追加の練習（おさらい）もした人では、20年という長い期間で良い結果が報告されています。おさらいをしなかった人では差がありませんでした。この道場のおさらい（1か月後・3か月後）は、研究の間隔（約1年後・約3年後）を短くしたものです。", source: "ACTIVE研究（2026年）" },
-  { title: "簡単な計算（スピード計算・色で切り替え）", text: "簡単な計算を速く解く練習で、処理速度や切り替える力が伸びたという小さな研究があります。", source: "Nouchiほか（2012年・2013年・2016年）" },
+  { title: "簡単な計算（スピード計算・色で切り替え）", text: "簡単な計算や音読などを毎日少しずつ練習して、処理速度や切り替える・抑える力が伸びたという小さな研究があります（計算だけの効果を分けて調べたものではありません）。", source: "Nouchiほか（2012年・2013年・2016年）" },
   { title: "N問前の答え", text: "練習した課題と、よく似た課題は伸びます。頭全体が良くなるとは言えません。", source: "Soveriほか（2017年）" },
   { title: "場所法（記憶の宮殿）", text: "場所法は、順番どおりに思い出す力を大きく伸ばすという研究が多くあります（研究の質はまだ高くありません）。毎日練習した人は、4か月たっても覚えたことが長く残りやすかった。", source: "Ondřej（2025年）、Wagnerほか（2021年）" },
   { title: "自分の宮殿", text: "自分のよく知る場所で作るのがいちばん始めやすい。見本の宮殿でも、よく歩いて覚えれば同じように使えます。同じ宮殿にすぐ別のものを置くと混ざるので、日をあけるか、別の宮殿を使いましょう。", source: "Leggeほか（2012年）、De Beni・Cornoldi（1988年）" },
@@ -466,7 +466,7 @@ const backLabel = computed(() => {
 const homeMessage = computed(() => {
   if (stamped(record.value, today, "calc") && stamped(record.value, today, "memory")) return "今日は2つともできたね。また明日！ 日をあけて続けると、長く身につくよ。";
   if (streak.value >= 2) return `続けて${streak.value}日目。今日はどっちをきたえる？`;
-  return "計算力と記憶力、今日はどっちをきたえる？ 1回10分ほど、週3〜5回で十分だよ。";
+  return "計算力と記憶力、今日はどっちをきたえる？ 1回10分ほど、毎日でなくて大丈夫だよ。";
 });
 
 // ===== 計算力 =====
@@ -477,7 +477,7 @@ const calcNote = computed(() => {
   const program = record.value.program.calc;
   if (plan.kind === "measure") return "はじめに、いまの力を測るよ。10回のコースの終わりに、同じ種目でもう一度測ってくらべよう。";
   if (plan.kind === "free" && !plan.counted) return "今日の分はできた！ もう一度やると自由練習（記録は残るよ）。";
-  if (plan.kind === "course" && plan.session === 1) return "週3〜5回で十分。1日に何度やっても、コースは1日1回ぶん進むよ。";
+  if (plan.kind === "course" && plan.session === 1) return "週3回ほどで十分。1日に何度やっても、コースは1日1回ぶん進むよ。";
   if (plan.measure === "after") return "コースの最後。終わりにもう一度測って、最初とくらべよう。";
   if (plan.kind === "free") {
     const next = calcNextBoosterDay(program, today);
@@ -695,7 +695,7 @@ function showSummary() {
 }
 const summaryMessage = computed(() => {
   const best = results.value.find((row) => row.newBest);
-  if (runPlan?.kind === "measure") return "これが「前」の記録。10回のコースのあとに、同じ種目でもう一度測ってくらべよう。週3〜5回で十分だよ。";
+  if (runPlan?.kind === "measure") return "これが「前」の記録。10回のコースのあとに、同じ種目でもう一度測ってくらべよう。週3回ほどで十分だよ。";
   if (runMemoryMeasure === "before") return "これが「前」の記録。次は、自分の宮殿を作って場所法を覚えよう。6週間のあとに、同じテストでくらべるよ。";
   if (summaryCompare.value.length) return "最初の記録とくらべてみよう。続けた分だけ、ちゃんと伸びているよ。";
   if (best) return `${best.label}で自己ベスト！ ${best.text}。`;
