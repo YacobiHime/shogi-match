@@ -18,6 +18,8 @@ const EVENTS = Object.freeze({
   kenshukai: { name: '研修会', title: 'Sクラス' },
   // 団体戦(docs/team-battle-design.md)。大会の名前(pending.eventText)を出す。
   team: { name: '団体戦', title: '優勝' },
+  // 棋士の1年(docs/pro-year-design.md)。棋戦ごとに名前とタイトルが変わる(pending.eventText・pending.titleName)。
+  'pro-year': { name: '棋士の1年', title: 'タイトル' },
 });
 
 /**
@@ -74,14 +76,16 @@ export function seriesStakes({ need, winsUser, winsOpponent, goal, finish, prize
  * 対局を始めるときの舞台。期の保存形式から、対局の札・開幕の札・名札・やこび姫の一言を作る。
  * stakesは、期の画面と同じ「この1局に賭けているもの」(竜王戦はpendingStakes、名人戦はdescribeMeijinSeasonのstakes)。
  * @param {{
- *   event: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai' | 'team', season: any, label?: string, userName?: string,
+ *   event: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai' | 'team' | 'pro-year', season: any, label?: string, userName?: string,
  *   stakes?: { goal?: string, win?: string, text?: string, boss?: boolean } | null,
  * }} input
  */
 export function describeMatchStage({ event, season, label = '', userName = '', stakes = null }) {
   const pending = season?.pending;
   if (!pending) return null;
-  const info = EVENTS[event] ?? EVENTS.ryuo;
+  const info = event === 'pro-year'
+    ? { name: pending.eventText ?? EVENTS['pro-year'].name, title: pending.titleName ?? EVENTS['pro-year'].title }
+    : EVENTS[event] ?? EVENTS.ryuo;
   const opponent = season.players?.[pending.opponentId] ?? null;
   const you = userName || 'あなた';
   const stageLabel = label || pending.label || '';
@@ -124,12 +128,14 @@ export function describeMatchStage({ event, season, label = '', userName = '', s
   return {
     event,
     weight,
-    eventText: event === 'shoreikai' || event === 'kenshukai' || event === 'team' ? pending.eventText ?? info.name : `第${season.no}期 ${info.name}`,
+    eventText: event === 'shoreikai' || event === 'kenshukai' || event === 'team' ? pending.eventText ?? info.name
+      : event === 'pro-year' ? `${season.no}年度 ${info.name}` : `第${season.no}期 ${info.name}`,
     label: stageLabel,
     // 札では、大会の名前と重ねない(「第7期 竜王戦」の下の「七番勝負 第3局」)。
-    shortLabel: stageLabel.startsWith(info.name) ? stageLabel.slice(info.name.length) : stageLabel,
+    shortLabel: stageLabel.startsWith(info.name) ? stageLabel.slice(info.name.length).trim() : stageLabel,
     venue: title ? stageVenue(event, season.no, seriesInfo?.gameNo ?? 1) : '',
-    twoDay: title,
+    // 棋士の1年は、五番勝負のタイトル戦は1日で指す(pending.twoDay)。
+    twoDay: title && (event !== 'pro-year' || Boolean(pending.twoDay)),
     marks: seriesInfo?.marks ?? [],
     need: seriesInfo?.need ?? 0,
     score: seriesInfo && seriesInfo.marks.length ? `${seriesInfo.winsUser}勝${seriesInfo.winsOpponent}敗` : '',
@@ -156,6 +162,8 @@ function stageScenery(event, pending, title) {
   if (event === 'kenshukai') return 'dojo';
   // 団体戦は大会の会場(名人戦と同じ暮れていく空の明かり)。
   if (event === 'team') return 'sky';
+  // 棋士の1年: 予選は将棋会館の対局室(道場)、本戦・リーグ・順位戦は暮れていく空。
+  if (event === 'pro-year') return /予選/.test(pending.label ?? '') ? 'dojo' : 'sky';
   if (event === 'meijin') return 'sky';
   if (pending.kind === 'playoff') return 'snow';
   if (pending.phase === 'main') return 'mid';

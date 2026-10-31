@@ -136,6 +136,8 @@ export const RATED_EVENTS = Object.freeze([
   Object.freeze({ id: 'kenshukai', label: '研修会' }),
   // 団体戦(docs/team-battle-design.md)の自分の局。
   Object.freeze({ id: 'team', label: '団体戦' }),
+  // 棋士の1年(docs/pro-year-design.md)の自分の対局(分身に任せた対局は指していないので数えない)。
+  Object.freeze({ id: 'pro-year', label: '棋士の1年' }),
 ]);
 const RATED_EVENT_IDS = new Set(RATED_EVENTS.map(({ id }) => id));
 

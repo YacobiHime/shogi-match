@@ -138,7 +138,7 @@ function sameRoundGames(event, season) {
   const pending = season?.pending;
   if (!pending) return { games: [], nextFrom: null };
   // 名人戦の順位戦と奨励会(例会・三段リーグ)と研修会(例会)は、同じ回のほかの対局をpending.othersに持つ。
-  if (event === 'meijin' || event === 'shoreikai' || event === 'kenshukai') {
+  if (event === 'meijin' || event === 'shoreikai' || event === 'kenshukai' || event === 'pro-year') {
     const games = (pending.others?.games ?? []).map(({ a, b, winner }) => ({ winner, loser: winner === a ? b : a }));
     const nextOpponent = season.schedule?.[pending.round + 1]?.opponent ?? null;
     return { games, nextOpponent };
@@ -163,7 +163,7 @@ function sameRoundGames(event, season) {
 
 /**
  * 対局中に流す速報(優先順に、多くて4件)。推し → 羽音 → 次に当たるかもしれない試合 → 大番狂わせ → そのほか。
- * @param {{ event?: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team", season?: any, oshiId?: string | null }} [options]
+ * @param {{ event?: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year", season?: any, oshiId?: string | null }} [options]
  * @returns {{ key: string, text: string, tone: "oshi" | "rival" | "peer" | "next" | "upset" | "plain", pair: string[], at?: number }[]}
  */
 export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {}) {

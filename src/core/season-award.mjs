@@ -140,6 +140,20 @@ export function teamAward(run, { playerName = 'あなた', at = Date.now() } = {
   return { ...award, id: `team-${run.id}` };
 }
 
+/**
+ * 棋士の1年(docs/pro-year-design.md)のタイトル獲得・棋戦優勝の賞状。期ごとに1枚。
+ * @param {{ cycle: string, name: string, short: string, title: boolean, fy: number, wins: number, losses: number }} win
+ * @param {{ playerName?: string, at?: number }} [options]
+ */
+export function proYearAward(win, { playerName = 'あなた', at = Date.now() } = {}) {
+  const award = makeAward({
+    tournament: 'pro-year', name: win.name, seal: win.title ? '冠' : '優', no: win.fy, grade: 'gold',
+    prize: win.title ? `${win.short}獲得` : '優勝', notes: [`${win.fy}年度`], entry: win.title ? '番勝負' : '本戦',
+    wins: win.wins, losses: win.losses, playerName, at,
+  });
+  return { ...award, id: `pro-year-${win.cycle}` };
+}
+
 /** @param {{ tournament: string, name: string, seal: string, no: number, grade: string, prize: string, notes: string[], entry: string, wins: number, losses: number, playerName: string, at: number }} fields */
 function makeAward(fields) {
   return {
@@ -202,6 +216,18 @@ export function awardText(award) {
       date: kanjiDate(award.at),
     };
   }
+  if (award.tournament === 'pro-year') {
+    const title = `${award.no}年度 ${award.name}`;
+    return {
+      heading: '賞状',
+      title: kanjiText(title),
+      prize: kanjiText(award.prize),
+      notes: award.notes.map(kanjiText),
+      name: `${award.playerName} 殿`,
+      body: kanjiText(`あなたは${title}において、${record(award.wins, award.losses)}の成績を収め、${award.prize}の栄誉を得られました。よってここに、これを賞します。`),
+      date: kanjiDate(award.at),
+    };
+  }
   const fight = award.grade === 'fight';
   const title = `第${award.no}期${award.name}`;
   const games = record(award.wins, award.losses);
@@ -223,6 +249,7 @@ export function awardText(award) {
 export function awardTalk(award) {
   if (award.tournament === 'shoreikai') return '四段昇段、ほんとうにおめでとう！ 今日から、あなたはプロ棋士だよ';
   if (award.tournament === 'team') return '団体優勝、おめでとう！ 3人で取った優勝だね';
+  if (award.tournament === 'pro-year') return `${award.name.replace(/戦$/, '')}${award.prize}、ほんとうにおめでとう！`;
   if (award.tournament === 'kenshukai') return award.grade === 'gold'
     ? 'Sクラス、研修会のいちばん上！ ほんとうによく頑張ったね'
     : 'A2クラス昇級、おめでとう！ 奨励会への扉が開いたよ';
@@ -240,6 +267,7 @@ export const awardLine = (award) => {
   if (award.tournament === 'shoreikai') return `奨励会 四段昇段（棋士番号${award.no}号）`;
   if (award.tournament === 'kenshukai') return `研修会 ${award.prize}`;
   if (award.tournament === 'team') return `${award.name} ${award.prize}（${award.entry}）`;
+  if (award.tournament === 'pro-year') return `${award.no}年度 ${award.name} ${award.prize}`;
   return `第${award.no}期 ${award.name} ${award.prize}`;
 };
 

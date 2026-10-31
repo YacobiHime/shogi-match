@@ -44,10 +44,10 @@ export function withdrawMeijinSeason(season) {
 
 /**
  * いまやめられる大会(大会の選択の「途中でやめる」の行)。
- * @param {{ ryuoSeason?: any, meijinSeason?: any, shoreikaiRun?: any, kenshukaiRun?: any, teamRun?: any }} state
- * @returns {{ id: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai' | 'team', label: string, action: string, note: string }[]}
+ * @param {{ ryuoSeason?: any, meijinSeason?: any, shoreikaiRun?: any, kenshukaiRun?: any, teamRun?: any, proYear?: any }} state
+ * @returns {{ id: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai' | 'team' | 'pro-year', label: string, action: string, note: string }[]}
  */
-export function withdrawOptions({ ryuoSeason = null, meijinSeason = null, shoreikaiRun = null, kenshukaiRun = null, teamRun = null } = {}) {
+export function withdrawOptions({ ryuoSeason = null, meijinSeason = null, shoreikaiRun = null, kenshukaiRun = null, teamRun = null, proYear = null } = {}) {
   const options = [];
   if (canWithdrawSeason(ryuoSeason)) {
     options.push({
@@ -79,6 +79,13 @@ export function withdrawOptions({ ryuoSeason = null, meijinSeason = null, shorei
     options.push({
       id: 'team', label: '団体戦', action: '棄権する',
       note: 'この大会は、ここで終わります。経歴には「棄権」と残ります。',
+    });
+  }
+  // 棋士の1年(docs/pro-year-design.md)。やめると、今年度と前の年度の記録は消える(賞状帳の賞状は残る)。
+  if (proYear) {
+    options.push({
+      id: 'pro-year', label: '棋士の1年', action: 'やめる',
+      note: 'この1年と、これまでの年度の記録が消えます。次はデビューからです。賞状帳の賞状は残ります。',
     });
   }
   return options;

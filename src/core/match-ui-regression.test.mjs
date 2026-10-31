@@ -335,7 +335,7 @@ describe("match screen regressions", () => {
     // 対局や検討を終えたら、竜王戦の対局なら竜王戦の画面(トーナメント表)へ戻る。明示的な「ホームへ」だけはホームへ。
     expect(source).toMatch(/const backToTournament = !toHome && props\.showHome && Boolean\(ryuoGame\.value\)/);
     // 対局から戻ったときは、竜王への道で前の段から登る動きを見せる(fromGame)。
-    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = backEvent === "meijin" \|\| backEvent === "shoreikai" \|\| backEvent === "kenshukai" \|\| backEvent === "team" \? backEvent : "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
+    expect(source).toMatch(/if \(backToTournament\) \{\s*tournamentStartAt\.value = backEvent === "meijin" \|\| backEvent === "shoreikai" \|\| backEvent === "kenshukai" \|\| backEvent === "team" \|\| backEvent === "pro-year" \? backEvent : "season";\s*tournamentFromGame\.value = true;\s*tournamentOpen\.value = true;/);
     // 名人戦の対局も同じ道を通る(大会の対局のevent: "meijin")。終えたら名人戦の画面へ。
     expect(source).toMatch(/const backEvent = ryuoGame\.value\?\.event;\s*stopGuidedReview\(\);\s*openPregame\(\);/);
     expect(source).toMatch(/function recordRyuoOutcome\(matchResult: MatchResult\) \{\s*if \(ryuoGame\.value\?\.event === "kenshukai"\) \{\s*recordKenshukaiOutcome\(matchResult\);\s*return;\s*\}\s*if \(ryuoGame\.value\?\.event === "shoreikai"\) \{\s*recordShoreikaiOutcome\(matchResult\);\s*return;\s*\}\s*if \(ryuoGame\.value\?\.event === "meijin"\) \{\s*recordMeijinOutcome\(matchResult\);/);
@@ -400,7 +400,7 @@ describe("match screen regressions", () => {
     // 番勝負では「第3局を指す」(docs/ryuo-stages-design.mdの4章)。
     expect(tournament).toMatch(/pending && pending\.kind !== "game" \? `第\$\{pending\.gameNo\}局を指す` : "対局する"/);
     // 期の画面は3つの段階(① 組・② 決勝トーナメント・③ 番勝負)。上の帯は1本で、段階の道のりを押すと、その段階の表を見る。
-    expect(tournament).toMatch(/<header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai' && screen !== 'kenshukai' && screen !== 'team'" class="shogi-dex__header">/);
+    expect(tournament).toMatch(/<header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai' && screen !== 'kenshukai' && screen !== 'team' && screen !== 'pro-year'" class="shogi-dex__header">/);
     // 名人戦は大会の選択の札から入り、大会の画面の中に出す(docs/meijin-design.md)。
     expect(tournament).toMatch(/data-tournament="meijin" @click="chooseMeijin"/);
     expect(tournament).toMatch(/<ShogiMeijin\s+v-(?:else-)?if="screen === 'meijin'"/);
@@ -927,7 +927,7 @@ describe("match screen regressions", () => {
   it('団体戦は大会の画面から入り、自分の局を指して記録し、終わったら団体戦の画面へ戻る(docs/team-battle-design.md)', () => {
     const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
     expect(tournament).toMatch(/data-tournament="team" @click="chooseTeam"/);
-    expect(tournament).toMatch(/<ShogiTeamBattle\s+v-if="screen === 'team'"/);
+    expect(tournament).toMatch(/<ShogiTeamBattle\s+v-else-if="screen === 'team'"/);
     expect(tournament).toMatch(/else if \(screen\.value === "team" && teamEl\.value\?\.goBack\(\)\) return;/);
     expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "team" \};\s*teamResultLine\.value = "";\s*startRyuoMatch\(\);/);
     expect(source).toMatch(/if \(ryuoGame\.value\?\.event === "team"\) \{\s*recordTeamOutcome\(matchResult\);\s*return;\s*\}/);
@@ -938,6 +938,24 @@ describe("match screen regressions", () => {
     // 仲間の局の速報(決めておいた手数で)。
     const presence = readFileSync(new URL("./match-presence.mjs", import.meta.url), "utf8");
     expect(presence).toMatch(/if \(event === 'team'\) return teamNews\(season\);/);
+  });
+
+  it('棋士の1年は大会の画面から入り、自分の対局を指して記録し、終わったら棋士の1年の画面へ戻る(docs/pro-year-design.md)', () => {
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    expect(tournament).toMatch(/data-tournament="pro-year" @click="chooseProYear"/);
+    expect(tournament).toMatch(/<ShogiProYear\s+v-if="screen === 'pro-year'"/);
+    expect(tournament).toMatch(/else if \(screen\.value === "pro-year" && proYearEl\.value\?\.goBack\(\)\) return;/);
+    expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "pro-year" \};\s*proYearResultLine\.value = "";\s*startRyuoMatch\(\);/);
+    expect(source).toMatch(/if \(ryuoGame\.value\?\.event === "pro-year"\) \{\s*recordProYearOutcome\(matchResult\);\s*return;\s*\}/);
+    // 相手のLvは保存の棋士に書かず、期の形(proYearSeason)で付ける。
+    expect(source).toMatch(/if \(game\?\.event === "pro-year"\) return proYearSeason\(proYearState\.value\);/);
+    // 千日手は指し直し。分身に任せた対局はレーティングに数えない(対局しないので記録の道を通らない)。
+    expect(source).toMatch(/if \(!matchResult\.winner\) \{\s*setProYear\(recordProGame\(state, "draw"\)\.state\);/);
+    expect(source).toMatch(/function autoProYearGame\(\) \{[\s\S]{0,600}?recordProGame\(state, "auto"\)/);
+    // 分身に任せるは取り消せないので、はじめに「自分で指す」を選んでおく(UD:5-2)。
+    const year = readFileSync(new URL("../ShogiProYear.vue", import.meta.url), "utf8");
+    expect(year).toMatch(/ref="autoCancel"[^>]*data-pro-auto-cancel/);
+    expect(year).toMatch(/function openAuto\(\) \{\s*autoOpen\.value = true;\s*void nextTick\(\(\) => autoCancel\.value\?\.focus\(\)\);/);
   });
 
   it('ホームのあそぶの行に物語(近日公開)を置き、押すと吹き出しで知らせる(docs/team-battle-design.mdの9章)', () => {

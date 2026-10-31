@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PRO_EVENTS, PRO_USER_ID, PRO_YEAR_KEY, TITLE_EVENTS, addDays, advanceToNextGame, createProYear, dateLabel, dayView, eventView,
-  fiscalYearOf, gameLabel, loadProYear, monthView, packProYear, proYearSeason, proYearView, recordProGame, saveProYear,
+  fiscalYearOf, gameLabel, loadProYear, monthView, packProYear, previewNextGame, proYearSeason, proYearTalk, proYearView, recordProGame, saveProYear,
   startNextYear, unpackProYear, weekdayOf, yearEnd, yearStart,
 } from './pro-year.mjs';
 import { createRoster } from './ryuo-roster.mjs';
@@ -89,6 +89,13 @@ describe('デビュー', () => {
     expect(state.cycles['kio-2026'].withUser).toBe(true);
   });
 
+  it('羽音はデビュー前に始まった期には出ない', () => {
+    const hanane = Object.values(state.players).find((member) => member.story === HANANE);
+    const before = Object.values(state.games).filter((game) => state.cycles[game.cycle]?.base === 2025);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.some((game) => [game.a, game.b].includes(hanane.id))).toBe(false);
+  });
+
   it('同じ種なら同じ1年になる', () => {
     const a = advanceToNextGame(start(3));
     const b = advanceToNextGame(start(3));
@@ -138,6 +145,60 @@ describe('対局', () => {
     expect(auto.state.games[state.pending.gameId].auto).toBe(true);
   });
 
+  it('負けたらその日に「敗退」を残し、やこび姫が結果と次の対局日を言う', () => {
+    let state = start(8);
+    let lost = null;
+    for (let step = 0; step < 40 && !lost; step += 1) {
+      state = advanceToNextGame(state);
+      const def = state.games[state.pending.gameId];
+      const result = recordProGame(state, 'loss');
+      if (def.event !== 'meijin') lost = result;
+      state = result.state;
+    }
+    expect(lost.milestones.some((item) => item.kind === 'out' && /で敗退$/.test(item.text))).toBe(true);
+    const view = proYearView(lost.state);
+    // 棋戦の一覧も、段階の終わりを待たずに「敗退」。
+    const out = view.events.find((event) => event.id === lost.game.event);
+    expect(out.status).toMatchObject({ alive: false, text: expect.stringMatching(/で敗退$/) });
+    expect(view.lastGame).toMatchObject({ won: false, auto: false });
+    expect(proYearTalk(view, previewNextGame(lost.state))).toMatch(/敗退。次は\d+月\d+日の/);
+    // 分身に任せたら、分身の勝ち負けを言う。
+    const next = advanceToNextGame(lost.state);
+    const auto = recordProGame(next, 'auto');
+    const autoView = proYearView(auto.state);
+    expect(autoView.lastGame.auto).toBe(true);
+    if (!auto.milestones.length) expect(proYearTalk(autoView, null)).toMatch(/^分身が(勝った|負けちゃった)よ。/);
+  });
+
+  it('次の対局日の見込みは、進めた結果と同じ', () => {
+    const state = start(6);
+    const preview = previewNextGame(state);
+    const next = advanceToNextGame(state);
+    expect(preview).toMatchObject({ date: next.pending.date, label: next.pending.label });
+    expect(previewNextGame(next)).toBeNull();
+  });
+
+  it('節目と優勝を返し、羽音との通算を数える', () => {
+    let state = start(9);
+    const milestones = [];
+    const champions = [];
+    for (let step = 0; step < 200; step += 1) {
+      state = advanceToNextGame(state);
+      if (state.yearDone) break;
+      const hanane = state.players[state.pending.opponentId].story === HANANE;
+      const before = state.user.vsHanane?.wins ?? 0;
+      const result = recordProGame(state, 'win');
+      if (hanane) expect(result.state.user.vsHanane.wins).toBe(before + 1);
+      milestones.push(...result.milestones);
+      champions.push(...result.champions);
+      state = result.state;
+    }
+    expect(milestones.some((item) => item.kind === 'advance' && /突破/.test(item.text))).toBe(true);
+    expect(champions.map((item) => item.short)).toEqual(expect.arrayContaining(['棋王', '新人王']));
+    expect(champions.find((item) => item.short === '棋王')).toMatchObject({ title: true, fy: 2026 });
+    expect(state.user.vsHanane.wins).toBeGreaterThan(0);
+  });
+
   it('1年の対局は年度の中の平日(NHK杯の本戦は日曜)で、同じ日に2局は指さない', () => {
     const { state, played } = playYear(start(5));
     expect(state.yearDone).toBe(true);
@@ -179,6 +240,7 @@ describe('年度', () => {
   it('次の年度へ: 昇級・シード・成績の持ち越し', () => {
     const next = startNextYear(allWins);
     expect(next.fy).toBe(2027);
+    expect(next.date).toBe('2027-04-01');
     expect(next.yearDone).toBe(false);
     expect(next.user.cls).toBe('C1');
     expect(next.history.at(-1).fy).toBe(2026);
@@ -246,6 +308,9 @@ describe('画面の形', () => {
     const meijin = eventView(state, 'meijin').cycles.find((entry) => entry.id === 'meijin-2025');
     expect(meijin.withUser).toBe(false);
     expect(meijin.stages.at(-1)).toMatchObject({ label: '名人戦七番勝負', period: '4月1日〜6月30日' });
+    // 今年度に始まった期の番勝負は来年度。
+    const next = eventView(state, 'meijin').cycles.find((entry) => entry.id === 'meijin-2026');
+    expect(next.stages.at(-1).period).toBe('来年度 4月1日〜6月30日');
   });
 });
 

@@ -115,6 +115,29 @@
                 <span class="shogi-title__label">団体戦</span>
                 <small class="shogi-title__desc">{{ teamCardNote }}</small>
               </button>
+              <!-- 棋士の1年(docs/pro-year-design.md)。カレンダーの対局日に、12の棋戦を指す。 -->
+              <button type="button" class="shogi-title__tile" data-tournament="pro-year" @click="chooseProYear">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="2" y="3" width="12" height="11" />
+                    <rect x="4" y="1" width="2" height="3" />
+                    <rect x="10" y="1" width="2" height="3" />
+                  </g>
+                  <g fill="#172632">
+                    <rect x="3" y="6" width="10" height="7" />
+                  </g>
+                  <g fill="#fffcf4">
+                    <rect x="4" y="7" width="2" height="2" />
+                    <rect x="7" y="7" width="2" height="2" />
+                    <rect x="10" y="7" width="2" height="2" />
+                    <rect x="4" y="10" width="2" height="2" />
+                    <rect x="7" y="10" width="2" height="2" />
+                  </g>
+                  <rect x="10" y="10" width="2" height="2" fill="#f1948a" />
+                </svg>
+                <span class="shogi-title__label">棋士の1年</span>
+                <small class="shogi-title__desc">{{ proYearCardNote }}</small>
+              </button>
             </div>
           </section>
         </div>
@@ -147,7 +170,7 @@
 
     <template v-else>
       <!-- 期の画面は、上の帯を1本にする(戻るボタンは期の画面の帯に置く。docs/ryuo-stages-design.mdの5章)。 -->
-      <header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai' && screen !== 'kenshukai' && screen !== 'team'" class="shogi-dex__header">
+      <header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai' && screen !== 'kenshukai' && screen !== 'team' && screen !== 'pro-year'" class="shogi-dex__header">
         <button type="button" class="shogi-dex__back" @click="goBack">
           <span aria-hidden="true">←</span> {{ backText }}
         </button>
@@ -180,8 +203,29 @@
         </button>
 
         <div ref="mainEl" class="shogi-tournament__main">
+        <ShogiProYear
+          v-if="screen === 'pro-year'"
+          ref="proYearEl"
+          :state="proYearState"
+          :last-settings="proYearSettings"
+          :default-difficulty="defaultDifficulty"
+          :world="world"
+          :recommended-difficulty="recommendedDifficulty"
+          :user-level="userLevel"
+          :asset-base-url="assetBaseUrl"
+          :player-name="playerName"
+          :suspended-moves="proYearSuspendedMoves"
+          @enter="emit('pro-year-enter', $event)"
+          @advance="emit('pro-year-advance')"
+          @play="emit('pro-year-play')"
+          @resume="emit('pro-year-resume')"
+          @auto="emit('pro-year-auto')"
+          @next-year="emit('pro-year-next-year')"
+          @measure="emit('measure', 'pro-year')"
+          @back="backToSelect"
+        />
         <ShogiTeamBattle
-          v-if="screen === 'team'"
+          v-else-if="screen === 'team'"
           ref="teamEl"
           :view="teamView"
           :career="teamCareer"
@@ -941,6 +985,7 @@ import ShogiMeijin, { type MeijinView } from "./ShogiMeijin.vue";
 import ShogiShoreikai, { type ShoreikaiView } from "./ShogiShoreikai.vue";
 import ShogiKenshukai, { type KenshukaiView } from "./ShogiKenshukai.vue";
 import ShogiTeamBattle from "./ShogiTeamBattle.vue";
+import ShogiProYear from "./ShogiProYear.vue";
 import RelayGameList from "./RelayGameList.vue";
 import RelayViewer from "./RelayViewer.vue";
 import { isFeatured, meijinRelayGames, relayGamesOf, relayRoundNews, ryuoRelayGames } from "./core/relay-games.mjs";
@@ -1079,7 +1124,7 @@ const props = defineProps({
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
   /** 開いたときの画面。ryuoは竜王戦の入口(期の途中なら期の画面)。棋力測定の結果の「竜王戦に出る」から。 */
-  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai" | "team">, default: "select" },
+  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai" | "team" | "pro-year">, default: "select" },
   /** 棋士の世界を最初に戻すボタン(名簿があれば出す。blockedは、戻せない理由「竜王戦の期の途中」など)。 */
   worldReset: { type: Object as PropType<{ available: boolean; blocked: string | null }>, default: () => ({ available: false, blocked: null }) },
   /** いま途中でやめられる大会(docs/tournament-withdraw-design.md。core/tournament-withdraw.mjsのwithdrawOptions)。 */
@@ -1136,6 +1181,11 @@ const props = defineProps({
   teamMyAbilities: { type: Object as PropType<Record<string, number> | null>, default: null },
   teamSuspendedMoves: { type: Number as PropType<number | null>, default: null },
   teamNews: { type: String, default: "" },
+  // ---- 棋士の1年(docs/pro-year-design.md)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  proYearState: { type: Object as PropType<any>, default: null },
+  proYearSettings: { type: Object as PropType<Record<string, any> | null>, default: null },
+  proYearSuspendedMoves: { type: Number as PropType<number | null>, default: null },
   // ---- 対局中継(docs/tournament-relay-design.md)。期の保存の形(見られる対局を集める)と、棋譜を作るエンジン。
   ryuoSeason: { type: Object as PropType<any>, default: null },
   /** 回戦ごとの観戦の保存(観戦の期と、期ごとのめくった数。core/ryuo-watch-store.mjs)。 */
@@ -1162,7 +1212,7 @@ const emit = defineEmits<{
   "watch-progress": [seasonId: string, revealed: number];
   /** 棋士の世界を最初に戻す(確認のあと)。 */
   "world-reset": [];
-  withdraw: [id: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team"];
+  withdraw: [id: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year"];
   /** 観戦の期の、分身の次の一局を決める。 */
   "watch-play": [real?: any, round?: any[]];
   "watch-round": [season: any];
@@ -1200,10 +1250,16 @@ const emit = defineEmits<{
   "team-roster": [];
   "team-scene-seen": [id: string];
   "team-close": [];
+  "pro-year-enter": [payload: { settings: Record<string, unknown> }];
+  "pro-year-advance": [];
+  "pro-year-play": [];
+  "pro-year-resume": [];
+  "pro-year-auto": [];
+  "pro-year-next-year": [];
   /** relayKeyの中継を開いた(対局画面は鍵を消す)。 */
   "relay-shown": [];
   /** 難易度のシートの「棋力を測る」。どの大会から来たかを渡し、測ったあとにそこへ戻す(docs/first-play-design.mdの13章)。 */
-  measure: [from: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team"];
+  measure: [from: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year"];
 }>();
 
 const HOME_STARS = [
@@ -1220,8 +1276,9 @@ const ROAD = [{ id: "kenshukai", label: "研修会" }, { id: "shoreikai", label:
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const inProgress = computed(() => Boolean(props.view && !props.view.result));
-const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin" | "shoreikai" | "kenshukai" | "team">(
-  props.startAt === "team" ? "team"
+const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year">(
+  props.startAt === "pro-year" ? "pro-year"
+  : props.startAt === "team" ? "team"
   : props.startAt === "kenshukai" ? "kenshukai"
   : props.startAt === "shoreikai" ? "shoreikai"
   : props.startAt === "meijin" ? "meijin"
@@ -1265,6 +1322,17 @@ const teamCardNote = computed(() => {
 });
 function chooseTeam() {
   screen.value = "team";
+}
+// ---- 棋士の1年(docs/pro-year-design.md)
+const proYearEl = ref<{ goBack: () => boolean } | null>(null);
+const proYearCardNote = computed(() => {
+  const state = props.proYearState;
+  if (!state) return "新四段として12の棋戦へ";
+  const record = state.year?.records?.user ?? { w: 0, l: 0 };
+  return `${state.fy}年度・${record.w}勝${record.l}敗`;
+});
+function chooseProYear() {
+  screen.value = "pro-year";
 }
 // ---- 研修会(docs/kenshukai-design.md)
 const kenshukaiEl = ref<{ goBack: () => boolean } | null>(null);
@@ -1384,6 +1452,7 @@ function goBack() {
   else if (screen.value === "shoreikai" && shoreikaiEl.value?.goBack()) return;
   else if (screen.value === "kenshukai" && kenshukaiEl.value?.goBack()) return;
   else if (screen.value === "team" && teamEl.value?.goBack()) return;
+  else if (screen.value === "pro-year" && proYearEl.value?.goBack()) return;
   else if (screen.value === "select") emit("close");
   else backToSelect();
 }
@@ -2691,7 +2760,7 @@ function confirmWorldReset() {
   worldResetDone.value = true;
 }
 // ---- 大会を途中でやめる(docs/tournament-withdraw-design.md)
-type WithdrawOption = { id: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team"; label: string; action: string; note: string };
+type WithdrawOption = { id: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year"; label: string; action: string; note: string };
 const withdrawItem = ref<WithdrawOption | null>(null);
 const withdrawDone = ref("");
 const withdrawCancel = ref<HTMLButtonElement | null>(null);

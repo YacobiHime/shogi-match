@@ -41,7 +41,7 @@ const POPULATION_SD = 12;
 /** カルテでレーティングを置き換えるのに要る、勝ち負けの数(テスト・場面・札のどれかがあれば、それだけでよい)。 */
 export const PROFILE_MIN_RESULTS = 5;
 const RATED_SCORES = Object.freeze({ win: 1, draw: 0.5, loss: 0 });
-const TOURNAMENT_EVENTS = new Set(['ryuo', 'meijin', 'shoreikai', 'kenshukai', 'team']);
+const TOURNAMENT_EVENTS = new Set(['ryuo', 'meijin', 'shoreikai', 'kenshukai', 'team', 'pro-year']);
 
 /**
  * 保存するのは、棋力テストの結果と、札・自己申告の幅。勝ち負けはレーティングの履歴、場面採点は対局の中身の記録

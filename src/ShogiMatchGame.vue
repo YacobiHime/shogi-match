@@ -512,6 +512,15 @@
       @team-roster="ensureRyuoRoster"
       @team-scene-seen="teamSceneSeen"
       @team-close="closeTeam"
+      :pro-year-state="proYearState"
+      :pro-year-settings="proYearState?.settings ?? proYearLastSettings"
+      :pro-year-suspended-moves="suspendedProYearMoves"
+      @pro-year-enter="enterProYear"
+      @pro-year-advance="advanceProYear"
+      @pro-year-play="startProYearGame"
+      @pro-year-resume="resumeProYearGame"
+      @pro-year-auto="autoProYearGame"
+      @pro-year-next-year="nextProYear"
       :ryuo-season="playedBoard?.event === 'ryuo' ? playedBoard.before : ryuoSeason"
       :ryuo-watch="ryuoWatch"
       :avatar-profile="avatarProfile"
@@ -2331,6 +2340,8 @@
         </p>
         <!-- 団体戦は、自分の局の勝ち負けのほかに、チームの試合の結果(docs/team-battle-design.mdの3章)。 -->
         <p v-if="!ryuoGame.replay && ryuoGame.event === 'team' && teamResultLine" class="shogi-game__tournament-title" data-result-team>{{ teamResultLine }}</p>
+        <!-- 棋士の1年は、この1局で決まった節目(予選突破・敗退・タイトル獲得。docs/pro-year-design.md)。 -->
+        <p v-if="!ryuoGame.replay && ryuoGame.event === 'pro-year' && proYearResultLine" class="shogi-game__tournament-title" data-result-pro-year>{{ proYearResultLine }}</p>
         <p v-if="ryuoGame.replay" class="shogi-game__tournament-title">千日手になりました。先後を入れ替えて、指し直します。</p>
         <p v-else-if="tournamentResult.done" class="shogi-game__tournament-title">{{ tournamentResult.doneText }}</p>
         <p v-else-if="tournamentResult.next" class="shogi-game__tournament-title">次の対局: {{ tournamentResult.next }}</p>
@@ -2701,11 +2712,14 @@ import {
   saveCareer,
   saveSeason,
 } from "./core/ryuo-career.mjs";
-import { addAward, kenshukaiAward, loadAwards, meijinAward, ryuoAward, shoreikaiAward, teamAward } from "./core/season-award.mjs";
+import { addAward, kenshukaiAward, loadAwards, meijinAward, proYearAward, ryuoAward, shoreikaiAward, teamAward } from "./core/season-award.mjs";
 import {
   USER_TEAM as TEAM_USER_TEAM, chooseTeamPlayer, createTeamRun, currentTeamMatch, draftCandidates, finishTeamRun, hananeNextPlayer,
   loadTeamBattle, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
 } from "./core/team-battle.mjs";
+import {
+  advanceToNextGame as advanceProYearToNextGame, createProYear, fiscalYearOf, loadProYear, proYearSeason, proYearView, recordProGame, saveProYear, startNextYear as startNextProYear,
+} from "./core/pro-year.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
@@ -3208,8 +3222,8 @@ let planSheetFromNote = false;
  * 棋力テストを始めた場所(docs/first-play-design.mdの13章・docs/return-path-design.md)。やめたとき・結果を閉じたときにそこへ戻る。
  * 対局準備の強さのシートからなら、見立てたLvを強さにして戻る。大会の難易度のシートからなら、その大会の入口へ戻る。
  */
-type MeasureOrigin = "" | "note" | "pregame" | "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team";
-const MEASURE_TOURNAMENTS = { ryuo: "竜王戦", meijin: "名人戦", shoreikai: "奨励会", kenshukai: "研修会", team: "団体戦" } as const;
+type MeasureOrigin = "" | "note" | "pregame" | "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year";
+const MEASURE_TOURNAMENTS = { ryuo: "竜王戦", meijin: "名人戦", shoreikai: "奨励会", kenshukai: "研修会", team: "団体戦", "pro-year": "棋士の1年" } as const;
 const skillTestFrom = ref<MeasureOrigin>("");
 const skillTestFromTournament = computed(() => (skillTestFrom.value in MEASURE_TOURNAMENTS ? MEASURE_TOURNAMENTS[skillTestFrom.value as keyof typeof MEASURE_TOURNAMENTS] : ""));
 /** 結果の窓の戻るボタンの言葉。 */
@@ -3365,8 +3379,8 @@ const profileState = ref(loadProfile(browserStorage()));
 // 大会の設定と、進行中の大会。
 // 竜王戦(大会)。キャリア(いま何組か、竜王の期数)と、進行中の期は、1局ごとに端末へ保存する。
 /** 大会の対局。eventは大会(竜王戦・名人戦・奨励会・研修会)。省くと竜王戦。 */
-type TournamentEvent = "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team";
-const TOURNAMENT_EVENTS: readonly TournamentEvent[] = ["ryuo", "meijin", "shoreikai", "kenshukai", "team"];
+type TournamentEvent = "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year";
+const TOURNAMENT_EVENTS: readonly TournamentEvent[] = ["ryuo", "meijin", "shoreikai", "kenshukai", "team", "pro-year"];
 /** 保存や対局から読んだ大会の名前を確かめる(知らない名前は竜王戦)。 */
 const tournamentEventOf = (value: unknown): TournamentEvent => (TOURNAMENT_EVENTS.includes(value as TournamentEvent) ? value as TournamentEvent : "ryuo");
 type MatchStage = NonNullable<ReturnType<typeof describeMatchStage>>;
@@ -3764,6 +3778,7 @@ function tournamentSeasonOf(game: RyuoGame | null) {
   if (game?.event === "shoreikai") return shoreikaiCareer.value.run;
   if (game?.event === "kenshukai") return kenshukaiCareer.value.run;
   if (game?.event === "team") return teamCareer.value.current;
+  if (game?.event === "pro-year") return proYearSeason(proYearState.value);
   return game?.event === "meijin" ? meijinSeason.value : ryuoSeason.value;
 }
 /**
@@ -3774,7 +3789,7 @@ const ryuoCounter = ref<{ opponentId: string; label: string; key: string } | nul
 const ryuoCounterOpponent = computed(() => (ryuoCounter.value ? ryuoSeason.value?.players?.[ryuoCounter.value.opponentId] ?? null : null));
 /** 対策をした次の一局の印(期と次の一局の組)。 */
 const ryuoCounterDoneKey = ref(loadCounterKey(browserStorage()));
-const tournamentStartAt = ref<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai" | "team">("select");
+const tournamentStartAt = ref<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai" | "team" | "pro-year">("select");
 /** いまの竜王(名簿の竜王。プレイヤーが竜王ならnull)。竜王戦の入口の山で、七番勝負に顔を出す。 */
 const ryuoHolder = computed(() => {
   const roster = ryuoRoster.value;
@@ -4841,7 +4856,7 @@ const dayBreakOffer = computed(() => (
   dayBreak.value && titleDay.value && active.value && !result.value && !reviewMode.value && !lunchOffer.value ? dayBreak.value : null
 ));
 /** 舞台の札がない局の観戦記に書く大会の名前。 */
-const TOURNAMENT_EVENT_TEXT: { [event in TournamentEvent]: string } = { ryuo: "竜王戦", meijin: "名人戦", shoreikai: "奨励会", kenshukai: "研修会", team: "団体戦" };
+const TOURNAMENT_EVENT_TEXT: { [event in TournamentEvent]: string } = { ryuo: "竜王戦", meijin: "名人戦", shoreikai: "奨励会", kenshukai: "研修会", team: "団体戦", "pro-year": "棋士の1年" };
 /**
  * 大会の対局の観戦記を書く(やこびノートの「大会」で読み返せる)。タイトル戦(二日制)は1日目のまとめと封じ手つきの観戦記、ほかの対局は短い観戦記
  * (docs/mate-finish-design.md)。詰ませて勝ったら、最後の寄せを書く。
@@ -6774,7 +6789,7 @@ function startRyuoMatch() {
   }
   const game: RyuoGame = ryuoGame.value ?? { opponentId: opponent.id, label: "" };
   const event = tournamentEventOf(game.event);
-  const stakesView = event === "team" ? teamView.value : event === "kenshukai" ? kenshukaiView.value
+  const stakesView = event === "pro-year" ? proYearView(proYearState.value) : event === "team" ? teamView.value : event === "kenshukai" ? kenshukaiView.value
     : event === "shoreikai" ? shoreikaiView.value : event === "meijin" ? meijinView.value : ryuoView.value;
   const stage = describeMatchStage({
     event,
@@ -6878,6 +6893,10 @@ function recordRyuoOutcome(matchResult: MatchResult) {
     recordTeamOutcome(matchResult);
     return;
   }
+  if (ryuoGame.value?.event === "pro-year") {
+    recordProYearOutcome(matchResult);
+    return;
+  }
   const game = ryuoGame.value;
   const season = ryuoSeason.value;
   if (!game || !season?.pending) return;
@@ -6945,6 +6964,9 @@ function markRyuoResultSeen() {
 
 /** 大会の対局の終局画面の文(竜王戦か名人戦)。 */
 const tournamentResult = computed(() => {
+  if (ryuoGame.value?.event === "pro-year") {
+    return { done: false, doneText: "", next: "", back: "棋士の1年へ戻る" };
+  }
   if (ryuoGame.value?.event === "team") {
     const view = teamView.value;
     return {
@@ -7386,6 +7408,122 @@ function recordTeamOutcome(matchResult: MatchResult) {
     }, { playerName: playerDisplayName(playerName.value) }));
   }
 }
+// ---- 棋士の1年(docs/pro-year-design.md)。新四段として4月1日から、カレンダーの対局日に12の棋戦を指す。名簿は読むだけ。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const proYearState = shallowRef<any>(loadProYear(browserStorage(), ryuoRoster.value));
+/** やめたあとの入口の初期値(前の1年の設定)。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const proYearLastSettings = ref<any>(null);
+/** 終局の窓に出す、この1局で決まった節目(「棋聖戦 一次予選を突破」)。 */
+const proYearResultLine = ref("");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setProYear(state: any) {
+  if (proYearState.value?.settings) proYearLastSettings.value = proYearState.value.settings;
+  proYearState.value = state;
+  saveProYear(browserStorage(), state);
+}
+/** 中断した棋士の1年の対局が、いまの次の対局と同じ相手なら、その手数。 */
+const suspendedProYearMoves = computed(() => {
+  const suspended = suspendedMatch.value;
+  const pending = proYearState.value?.pending;
+  return suspended?.event === "pro-year" && suspended.ryuoOpponentId && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
+});
+/** 入口の「デビューする」。今日の年度の4月1日から(名簿がなければ作る)。 */
+function enterProYear({ settings }: { settings: { [key: string]: unknown } }) {
+  ensureRyuoRoster();
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  setProYear(createProYear({
+    seed: Date.now(),
+    fiscalYear: fiscalYearOf(today),
+    roster: ryuoRoster.value,
+    settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(Number(settings.difficulty)) },
+    userLevel: ratingLevel(ratingState.value.rating),
+    userName: playerDisplayName(playerName.value),
+    userGroup: ryuoCareer.value.group,
+  }));
+}
+/** 「次の対局日へ」。次の自分の対局日まで進める(あいだの対局は決まる)。 */
+function advanceProYear() {
+  if (!proYearState.value) return;
+  setProYear(advanceProYearToNextGame(proYearState.value));
+}
+function startProYearGame() {
+  confirmDiscardSuspended(startProYearGameNow);
+}
+function startProYearGameNow() {
+  const state = proYearState.value;
+  const pending = state?.pending;
+  if (!state || !pending) return;
+  tournamentOpen.value = false;
+  openPregame();
+  matchKind.value = "tournament";
+  homeOpen.value = false;
+  void initializeEngine();
+  coachLevel.value = ["off", "encourage", "detailed"].includes(state.settings.coachLevel) ? state.settings.coachLevel : "detailed";
+  ryuoGame.value = { opponentId: pending.opponentId, label: pending.label ?? "", event: "pro-year" };
+  proYearResultLine.value = "";
+  startRyuoMatch();
+}
+function resumeProYearGame() {
+  tournamentOpen.value = false;
+  resumeSuspendedMatch();
+}
+/** 「分身に任せる」(確認は大会の画面で済ませた)。世界の物差しの分身の強さの勝率で決める。レーティングには数えない。 */
+function autoProYearGame() {
+  const state = proYearState.value;
+  if (!state?.pending) return;
+  // 中断しているこの対局は、もう指さないので消す。
+  const suspended = suspendedMatch.value;
+  if (suspended?.event === "pro-year" && suspended.ryuoOpponentId === state.pending.opponentId) {
+    suspendedMatch.value = null;
+    discardPersistedMatch();
+  }
+  const result = recordProGame(state, "auto");
+  setProYear(result.state);
+  awardProYear(result.champions ?? []);
+}
+/** 年度のまとめから「次の年度へ」。 */
+function nextProYear() {
+  if (!proYearState.value?.yearDone) return;
+  setProYear(startNextProYear(proYearState.value));
+}
+/** タイトル獲得・棋戦優勝の賞状を賞状帳に足す。 */
+function awardProYear(champions: { cycle: string; name: string; short: string; title: boolean; fy: number; wins: number; losses: number }[]) {
+  for (const win of champions) {
+    seasonAwards.value = addAward(browserStorage(), proYearAward(win, { playerName: playerDisplayName(playerName.value) }));
+  }
+}
+/** 棋士の1年の終局を記録する。千日手は先後を入れ替えて指し直す。節目(突破・タイトル獲得)は終局の判子でたたえる。 */
+function recordProYearOutcome(matchResult: MatchResult) {
+  const game = ryuoGame.value;
+  const state = proYearState.value;
+  if (!game || !state?.pending) return;
+  if (!matchResult.winner) {
+    setProYear(recordProGame(state, "draw").state);
+    ryuoGame.value = { ...game, replay: true };
+    return;
+  }
+  const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
+  const result = recordProGame(state, outcome);
+  const milestones: { kind: string; text: string; event: string }[] = result.milestones ?? [];
+  const champions = result.champions ?? [];
+  const advanced = milestones.filter((item) => item.kind === "advance");
+  proYearResultLine.value = milestones.map((item) => item.text).join("・");
+  // 判子: タイトル獲得 > 棋戦優勝 > 段階の突破(G:3 出来事の重さ)。
+  const crown = champions.find((item) => item.title);
+  const cup = champions.find((item) => !item.title);
+  finishMilestone = crown
+    ? { kind: "pro-year", weight: "max", seal: "冠", title: `${crown.short}獲得！`, sub: `${crown.fy}年度 ${crown.name}`, line: "" }
+    : cup
+      ? { kind: "pro-year", weight: "big", seal: "優", title: `${cup.name} 優勝！`, sub: `${cup.fy}年度`, line: "" }
+      : advanced.length
+        ? { kind: "pro-year", weight: "mid", seal: "突", title: "突破！", sub: advanced[0].text, line: "" }
+        : null;
+  setProYear(result.state);
+  ryuoGame.value = { ...game, outcome, replay: false };
+  awardProYear(champions);
+}
 /**
  * 棋士の世界を最初に戻す(docs/player-world-note-design.mdの7章)。名簿があれば出し、期・挑戦の途中は戻せない。
  * 戻すと、名簿を作り直し(プレイヤーの竜王・順位戦のクラスはそのまま)、推しを外す。キャリアと賞状帳は変えない。
@@ -7415,6 +7553,7 @@ const tournamentWithdraw = computed(() => withdrawOptions({
   ryuoSeason: ryuoSeason.value, meijinSeason: meijinSeason.value,
   shoreikaiRun: shoreikaiCareer.value?.run ?? null, kenshukaiRun: kenshukaiCareer.value?.run ?? null,
   teamRun: teamCareer.value?.current ?? null,
+  proYear: proYearState.value,
 }));
 function withdrawTournament(id: TournamentEvent) {
   if (!tournamentWithdraw.value.some((item) => item.id === id)) return;
@@ -7440,6 +7579,8 @@ function withdrawTournament(id: TournamentEvent) {
     setShoreikaiCareer(withdrawShoreikaiRun(shoreikaiCareer.value));
   } else if (id === "team") {
     setTeamCareer(withdrawTeamRun(teamCareer.value));
+  } else if (id === "pro-year") {
+    setProYear(null);
   } else {
     setKenshukaiCareer(closeKenshukaiRun(kenshukaiCareer.value));
   }
@@ -7639,7 +7780,7 @@ function openMeasureStart(from: MeasureOrigin | "home") {
   measureStartFrom.value = from || "home";
 }
 /** 大会の難易度のシートの「棋力を測る」。大会の画面を閉じて札を出し、測ったら(やめたら)その大会の入口へ戻る。 */
-function openMeasureFromTournament(from: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team") {
+function openMeasureFromTournament(from: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year") {
   tournamentOpen.value = false;
   openMeasureStart(from);
 }
@@ -7939,7 +8080,7 @@ function openMatchSetup(kind: MatchKind) {
 
 /** タイトル画面の「大会」。大会の画面を開く。 */
 /** 大会の画面を、竜王戦か名人戦の入口で開く(期の途中なら、その期の画面)。 */
-function openTournamentAt(startAt: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team") {
+function openTournamentAt(startAt: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team" | "pro-year") {
   tournamentStartAt.value = startAt;
   tournamentFromGame.value = false;
   tournamentOpen.value = true;
@@ -8275,7 +8416,7 @@ const homeNext = computed<HomeNext>(() => {
 const homeNextMain = computed<HomeNext>(() => {
   if (suspendedMatch.value) {
     const what = suspendedMatch.value.ryuoOpponentId
-      ? ({ meijin: "名人戦の対局", shoreikai: "奨励会の対局", kenshukai: "研修会の対局", team: "団体戦の対局" } as { [key: string]: string })[suspendedMatch.value.event ?? ""] ?? "竜王戦の対局"
+      ? ({ meijin: "名人戦の対局", shoreikai: "奨励会の対局", kenshukai: "研修会の対局", team: "団体戦の対局", "pro-year": "棋士の1年の対局" } as { [key: string]: string })[suspendedMatch.value.event ?? ""] ?? "竜王戦の対局"
       : "対局";
     return { id: "resume", label: "対局を再開", description: `中断した${what}（${suspendedMatch.value.moves}手目まで）` };
   }
@@ -11905,7 +12046,7 @@ function resign() {
 /** 検討を終えるボタンの文字。押すと行く先を書く(completeReview・leaveFinishedMatchと同じ分かれ方)。 */
 const reviewCompleteLabel = computed(() => {
   if (tutorialMatch.value?.report) return "完了して教室へ";
-  if (props.showHome && ryuoGame.value) return ({ meijin: "完了して名人戦へ", shoreikai: "完了して奨励会へ", kenshukai: "完了して研修会へ", team: "完了して団体戦へ" } as { [key: string]: string })[ryuoGame.value.event ?? ""] ?? "完了して竜王戦へ";
+  if (props.showHome && ryuoGame.value) return ({ meijin: "完了して名人戦へ", shoreikai: "完了して奨励会へ", kenshukai: "完了して研修会へ", team: "完了して団体戦へ", "pro-year": "完了して棋士の1年へ" } as { [key: string]: string })[ryuoGame.value.event ?? ""] ?? "完了して竜王戦へ";
   return props.showHome ? "完了してホームへ" : "完了して対局準備へ";
 });
 
@@ -11931,7 +12072,7 @@ function leaveFinishedMatch({ toHome = false }: { toHome?: boolean } = {}) {
   playedBoard.value = backToTournament ? pendingPlayed : null;
   pendingPlayed = null;
   if (backToTournament) {
-    tournamentStartAt.value = backEvent === "meijin" || backEvent === "shoreikai" || backEvent === "kenshukai" || backEvent === "team" ? backEvent : "season";
+    tournamentStartAt.value = backEvent === "meijin" || backEvent === "shoreikai" || backEvent === "kenshukai" || backEvent === "team" || backEvent === "pro-year" ? backEvent : "season";
     tournamentFromGame.value = true;
     tournamentOpen.value = true;
   }
