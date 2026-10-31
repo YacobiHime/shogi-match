@@ -163,10 +163,11 @@ function sameRoundGames(event, season) {
 
 /**
  * 対局中に流す速報(優先順に、多くて4件)。推し → 羽音 → 次に当たるかもしれない試合 → 大番狂わせ → そのほか。
- * @param {{ event?: "ryuo" | "meijin" | "shoreikai" | "kenshukai", season?: any, oshiId?: string | null }} [options]
- * @returns {{ key: string, text: string, tone: "oshi" | "rival" | "peer" | "next" | "upset" | "plain", pair: string[] }[]}
+ * @param {{ event?: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team", season?: any, oshiId?: string | null }} [options]
+ * @returns {{ key: string, text: string, tone: "oshi" | "rival" | "peer" | "next" | "upset" | "plain", pair: string[], at?: number }[]}
  */
 export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {}) {
+  if (event === 'team') return teamNews(season);
   const { games, nextFrom, nextOpponent } = sameRoundGames(event, season);
   const players = season?.players ?? {};
   const name = (pid) => `${players[pid]?.name ?? '？'}さん`;
@@ -205,12 +206,39 @@ export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {})
 }
 
 /**
- * いま出す速報(手数が20の倍数を越えるたびに1件)。出し終わったらnull。
+ * 団体戦の仲間の局の速報(docs/team-battle-design.mdの4章の9)。決めておいた手数(at)で、席と勝ち負けとチームの星を知らせる。
+ * @param {any} run 団体戦の大会(pending.teamBoardsに仲間の局)
+ */
+export function teamNews(run) {
+  const boards = [...(run?.pending?.teamBoards ?? [])].sort((a, b) => a.reveal - b.reveal);
+  const players = run?.players ?? {};
+  let wins = 0;
+  let losses = 0;
+  return boards.map((board) => {
+    const name = board.us === 'user' ? 'あなた' : players[board.us]?.name?.replace(/^天鷺|^桜乃/, '') ?? '仲間';
+    if (board.won) wins += 1;
+    else losses += 1;
+    const tally = wins === 1 && losses === 1 ? '1勝1敗。あなたの局が勝負を決める！'
+      : wins >= 2 ? 'チームの勝ちが決まった！' : losses >= 2 ? 'チームは負け…。あなたの勝ちは個人の成績に' : `チーム${wins}勝${losses}敗`;
+    return {
+      key: `team-${board.seat}`,
+      tone: board.won ? 'peer' : 'plain',
+      text: `速報：${board.seatName}戦、${name}${board.won ? 'が勝った' : 'は負け…'}。${tally}`,
+      pair: [],
+      at: board.reveal,
+    };
+  });
+}
+
+/**
+ * いま出す速報(手数が20の倍数を越えるたびに1件。団体戦は決めておいた手数で)。出し終わったらnull。
  * @param {ReturnType<typeof roundNews>} news
  * @param {number} ply いまの手数
  * @param {number} shownCount もう出した数
  */
 export function newsDue(news, ply, shownCount) {
+  const at = news[shownCount]?.at;
+  if (Number.isFinite(at)) return ply >= at ? news[shownCount] : null;
   const due = Math.floor(ply / NEWS_EVERY_PLIES);
   return shownCount < due && shownCount < news.length ? news[shownCount] : null;
 }

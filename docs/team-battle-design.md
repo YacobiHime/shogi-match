@@ -190,3 +190,17 @@
 
 - 団体戦を先にするのは、ノベルの場面と「仲間」の部品を棋士の1年でも使うため（羽音と同じ棋戦に出る知らせなど）。
 - 段階の途中で設計を変えたら、この文書の該当の章を直す。
+
+## 12. 実装（2026-10-31、実装・自動テスト済み）
+
+段階G1・T1〜T4（11章）。
+
+- **処理**：`src/core/team-battle.mjs`（形式`TEAM_FORMATS`・高校のオーダー`schoolOrder`・ドラフト`draftLeaders`・`draftCandidates`・羽音の選び方`hananeDraftPick`・大会`createTeamRun`・自分の局`recordTeamGame`・プロの次の局`chooseTeamPlayer`・羽音に任せる`hananeNextPlayer`・画面の形`teamRunView`・節目の場面`markTeamScene`・経歴`finishTeamRun`・棄権`withdrawTeamRun`・保存`loadTeamBattle`・`saveTeamBattle`）。テストは`team-battle.test.mjs`（形式・オーダー・48校とスイス方式・7局で優勝・全部負けても最後まで決まる・千日手・決勝点・同じ種で同じ大会・ドラフトとリーダー・1人3局と5勝・羽音に任せる・保存・速報・賞状・棄権）。
+  - 作りながら見つけた不具合：高校の試合の勝ち負けを1局目だけで決めていた（3局とも決まってから決めるように直した）。
+  - 自分の局の前の試合の札は、仲間の局の結果と星を伏せる（`matchView`の`revealAll`）。結果は対局の途中の速報で知らせる。
+- **場面**：`src/NovelScene.vue`と`src/core/team-story.mjs`（`TEAM_SCENES`・`teamScene`・`momentScene`・`portraitUrl`）。テストは`team-story.test.mjs`（12行まで・話す人と表情・羽音の敬語と「！」・呼び方・立ち絵のファイル）。
+- **画面**：`src/ShogiTeamBattle.vue`（入口・ドラフトのシート・設定・大会中・結果）。大会の選択の「ほかの大会」の「団体戦」のタイル（`ShogiTournament.vue`の`chooseTeam`・`teamCardNote`）。
+- **対局画面**：`ShogiMatchGame.vue`の`teamCareer`・`enterTeam`・`startTeamGame`・`chooseTeam`・`recordTeamOutcome`（千日手は指し直し、自分の局で試合を決めたら終局の判子「決勝点！」、優勝で賞状`teamAward`）、終局の窓の`teamResultLine`（「チームは2勝1敗で勝ち（対 ○○高校）」）、名簿がなければ作る`ensureRyuoRoster`。対局の札は`match-stage.mjs`の`team`、速報は`match-presence.mjs`の`teamNews`（決めておいた手数`at`で出す。`newsDue`）、棄権は`tournament-withdraw.mjs`、レーティングは`RATED_EVENTS`の`team`、データリセットは「大会の進み具合」。
+- **ブラウザ**（390×844・820×1180・1366×768）：大会の選択→団体戦→羽音の誘いの場面（1行進めて飛ばす）→入口→出場する→予選の初めの場面→大会中の画面→対局する→投了→終局の窓→団体戦へ戻る（予選2回戦・1勝0敗）まで。プロは、誘いの場面→ドラフトのシート（16人・羽音のおすすめ）→羽音に任せる→出場する→第1局に羽音を出して速報→第2局に自分を出して「対局する（第2局）」まで。どれも横にはみ出さない。
+- **まだ確かめていないこと**：実際に1つの大会を最後まで指して優勝・敗退の場面と賞状を見ること、プロの試合の9局目まで、スマホ横向き、実際に遊んでの手ざわり（未確認）。
+- 保存の大きさは、高校の大会で約150KB（48校の選手の棋風と得意戦法を持つため）。

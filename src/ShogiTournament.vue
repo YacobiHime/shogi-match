@@ -97,6 +97,26 @@
               </button>
             </div>
           </section>
+          <!-- 羽音と組む団体戦(docs/team-battle-design.md)。 -->
+          <section class="shogi-title__group" aria-labelledby="shogi-tournament-more">
+            <h2 id="shogi-tournament-more" class="shogi-title__group-title">ほかの大会</h2>
+            <div class="shogi-title__tiles shogi-tournament__soon-tiles" data-more-tournaments>
+              <button type="button" class="shogi-title__tile" data-tournament="team" @click="chooseTeam">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="2" y="4" width="3" height="3" />
+                    <rect x="6.5" y="2" width="3" height="3" />
+                    <rect x="11" y="4" width="3" height="3" />
+                    <rect x="1" y="8" width="5" height="6" />
+                    <rect x="5.5" y="6" width="5" height="8" />
+                    <rect x="10" y="8" width="5" height="6" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">団体戦</span>
+                <small class="shogi-title__desc">{{ teamCardNote }}</small>
+              </button>
+            </div>
+          </section>
         </div>
         <!--
           大会を途中でやめる(docs/tournament-withdraw-design.md)。進行中の大会ごとに1つ。竜王戦・名人戦は棄権(残りは不戦敗)、
@@ -127,7 +147,7 @@
 
     <template v-else>
       <!-- 期の画面は、上の帯を1本にする(戻るボタンは期の画面の帯に置く。docs/ryuo-stages-design.mdの5章)。 -->
-      <header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai' && screen !== 'kenshukai'" class="shogi-dex__header">
+      <header v-if="screen !== 'season' && screen !== 'meijin' && screen !== 'shoreikai' && screen !== 'kenshukai' && screen !== 'team'" class="shogi-dex__header">
         <button type="button" class="shogi-dex__back" @click="goBack">
           <span aria-hidden="true">←</span> {{ backText }}
         </button>
@@ -160,8 +180,35 @@
         </button>
 
         <div ref="mainEl" class="shogi-tournament__main">
+        <ShogiTeamBattle
+          v-if="screen === 'team'"
+          ref="teamEl"
+          :view="teamView"
+          :career="teamCareer"
+          :draft-members="teamDraftMembers"
+          :my-abilities="teamMyAbilities"
+          :default-difficulty="defaultDifficulty"
+          :world="world"
+          :recommended-difficulty="recommendedDifficulty"
+          :user-level="userLevel"
+          :asset-base-url="assetBaseUrl"
+          :player-name="playerName"
+          :suspended-moves="teamSuspendedMoves"
+          :news="teamNews"
+          @enter="emit('team-enter', $event)"
+          @play="emit('team-play')"
+          @resume="emit('team-resume')"
+          @choose="emit('team-choose', $event)"
+          @invited="emit('team-invited', $event)"
+          @need-roster="emit('team-roster')"
+          @scene-seen="emit('team-scene-seen', $event)"
+          @close-run="emit('team-close')"
+          @measure="emit('measure', 'team')"
+          @ceremony="openCeremony(`team-${teamView?.id ?? ''}`)"
+          @back="backToSelect"
+        />
         <ShogiKenshukai
-          v-if="screen === 'kenshukai'"
+          v-else-if="screen === 'kenshukai'"
           ref="kenshukaiEl"
           :view="kenshukaiView"
           :career="kenshukaiCareer"
@@ -875,7 +922,7 @@
       v-if="awardShown"
       :award="awardShown"
       :ceremony="awardCeremony"
-      :button-text="awardCeremony ? (screen === 'kenshukai' ? '研修会へ' : '大会の選択へ') : '閉じる'"
+      :button-text="awardCeremony ? (screen === 'kenshukai' ? '研修会へ' : screen === 'team' ? '団体戦へ' : '大会の選択へ') : '閉じる'"
       :asset-base-url="assetBaseUrl"
       @done="finishAward"
     />
@@ -893,6 +940,7 @@ import RyuoVersus from "./RyuoVersus.vue";
 import ShogiMeijin, { type MeijinView } from "./ShogiMeijin.vue";
 import ShogiShoreikai, { type ShoreikaiView } from "./ShogiShoreikai.vue";
 import ShogiKenshukai, { type KenshukaiView } from "./ShogiKenshukai.vue";
+import ShogiTeamBattle from "./ShogiTeamBattle.vue";
 import RelayGameList from "./RelayGameList.vue";
 import RelayViewer from "./RelayViewer.vue";
 import { isFeatured, meijinRelayGames, relayGamesOf, relayRoundNews, ryuoRelayGames } from "./core/relay-games.mjs";
@@ -1031,7 +1079,7 @@ const props = defineProps({
   userLevel: { type: Number, default: 20 },
   ratingText: { type: String, default: "" },
   /** 開いたときの画面。ryuoは竜王戦の入口(期の途中なら期の画面)。棋力測定の結果の「竜王戦に出る」から。 */
-  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai">, default: "select" },
+  startAt: { type: String as PropType<"select" | "season" | "meijin" | "ryuo" | "shoreikai" | "kenshukai" | "team">, default: "select" },
   /** 棋士の世界を最初に戻すボタン(名簿があれば出す。blockedは、戻せない理由「竜王戦の期の途中」など)。 */
   worldReset: { type: Object as PropType<{ available: boolean; blocked: string | null }>, default: () => ({ available: false, blocked: null }) },
   /** いま途中でやめられる大会(docs/tournament-withdraw-design.md。core/tournament-withdraw.mjsのwithdrawOptions)。 */
@@ -1076,6 +1124,18 @@ const props = defineProps({
   kenshukaiCareer: { type: Object as PropType<{ history: { result: string; best: string }[]; best: number | null; settings?: Record<string, unknown> }>, default: () => ({ history: [], best: null }) },
   kenshukaiRecommendedClass: { type: Number, default: 0 },
   kenshukaiSuspendedMoves: { type: Number as PropType<number | null>, default: null },
+  // ---- 団体戦(docs/team-battle-design.md)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  teamView: { type: Object as PropType<any>, default: null },
+  teamCareer: {
+    type: Object as PropType<{ invited: { school: boolean; pro: boolean }; history: { format: string; label: string }[]; best: Record<string, { place: number; label: string }>; settings?: Record<string, unknown> }>,
+    default: () => ({ invited: { school: false, pro: false }, history: [], best: {} }),
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  teamDraftMembers: { type: Array as PropType<any[]>, default: () => [] },
+  teamMyAbilities: { type: Object as PropType<Record<string, number> | null>, default: null },
+  teamSuspendedMoves: { type: Number as PropType<number | null>, default: null },
+  teamNews: { type: String, default: "" },
   // ---- 対局中継(docs/tournament-relay-design.md)。期の保存の形(見られる対局を集める)と、棋譜を作るエンジン。
   ryuoSeason: { type: Object as PropType<any>, default: null },
   /** 回戦ごとの観戦の保存(観戦の期と、期ごとのめくった数。core/ryuo-watch-store.mjs)。 */
@@ -1102,7 +1162,7 @@ const emit = defineEmits<{
   "watch-progress": [seasonId: string, revealed: number];
   /** 棋士の世界を最初に戻す(確認のあと)。 */
   "world-reset": [];
-  withdraw: [id: "ryuo" | "meijin" | "shoreikai" | "kenshukai"];
+  withdraw: [id: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team"];
   /** 観戦の期の、分身の次の一局を決める。 */
   "watch-play": [real?: any, round?: any[]];
   "watch-round": [season: any];
@@ -1132,10 +1192,18 @@ const emit = defineEmits<{
   "kenshukai-resume": [];
   "kenshukai-transfer": [];
   "kenshukai-close": [];
+  "team-enter": [payload: { format: "school" | "pro"; settings: Record<string, unknown>; userSeat: number; draftPick: string | null; draftReason: string }];
+  "team-play": [];
+  "team-resume": [];
+  "team-choose": [memberId: string];
+  "team-invited": [format: "school" | "pro"];
+  "team-roster": [];
+  "team-scene-seen": [id: string];
+  "team-close": [];
   /** relayKeyの中継を開いた(対局画面は鍵を消す)。 */
   "relay-shown": [];
   /** 難易度のシートの「棋力を測る」。どの大会から来たかを渡し、測ったあとにそこへ戻す(docs/first-play-design.mdの13章)。 */
-  measure: [from: "ryuo" | "meijin" | "shoreikai" | "kenshukai"];
+  measure: [from: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team"];
 }>();
 
 const HOME_STARS = [
@@ -1152,8 +1220,9 @@ const ROAD = [{ id: "kenshukai", label: "研修会" }, { id: "shoreikai", label:
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const inProgress = computed(() => Boolean(props.view && !props.view.result));
-const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin" | "shoreikai" | "kenshukai">(
-  props.startAt === "kenshukai" ? "kenshukai"
+const screen = ref<"select" | "ryuo" | "season" | "result" | "meijin" | "shoreikai" | "kenshukai" | "team">(
+  props.startAt === "team" ? "team"
+  : props.startAt === "kenshukai" ? "kenshukai"
   : props.startAt === "shoreikai" ? "shoreikai"
   : props.startAt === "meijin" ? "meijin"
     : props.startAt === "season" && props.view ? (props.view.result ? "result" : "season")
@@ -1184,6 +1253,18 @@ function leaveShoreikaiTo(target: "ryuo" | "meijin" | "kenshukai") {
   emit("shoreikai-close");
   if (target === "meijin") chooseMeijin();
   else chooseRyuo();
+}
+// ---- 団体戦(docs/team-battle-design.md)
+const teamEl = ref<{ goBack: () => boolean } | null>(null);
+const teamCardNote = computed(() => {
+  const view = props.teamView;
+  if (view && view.phase !== "done") return `${view.short}・出場中`;
+  const best = props.teamCareer.best ?? {};
+  const top = Object.values(best).sort((a, b) => a.place - b.place)[0];
+  return top ? `最高 ${top.label}` : "羽音と組んで出る";
+});
+function chooseTeam() {
+  screen.value = "team";
 }
 // ---- 研修会(docs/kenshukai-design.md)
 const kenshukaiEl = ref<{ goBack: () => boolean } | null>(null);
@@ -1302,6 +1383,7 @@ function goBack() {
   else if (screen.value === "meijin" && meijinEl.value?.goBack()) return;
   else if (screen.value === "shoreikai" && shoreikaiEl.value?.goBack()) return;
   else if (screen.value === "kenshukai" && kenshukaiEl.value?.goBack()) return;
+  else if (screen.value === "team" && teamEl.value?.goBack()) return;
   else if (screen.value === "select") emit("close");
   else backToSelect();
 }
@@ -2609,7 +2691,7 @@ function confirmWorldReset() {
   worldResetDone.value = true;
 }
 // ---- 大会を途中でやめる(docs/tournament-withdraw-design.md)
-type WithdrawOption = { id: "ryuo" | "meijin" | "shoreikai" | "kenshukai"; label: string; action: string; note: string };
+type WithdrawOption = { id: "ryuo" | "meijin" | "shoreikai" | "kenshukai" | "team"; label: string; action: string; note: string };
 const withdrawItem = ref<WithdrawOption | null>(null);
 const withdrawDone = ref("");
 const withdrawCancel = ref<HTMLButtonElement | null>(null);
@@ -2651,8 +2733,8 @@ function finishAward() {
 }
 /** 表彰式を終えた。期の結果は見終えたことにして、大会の選択へ(次の期は、そこから自分で選ぶ)。 */
 function finishCeremony() {
-  // 研修会の修了証は、受け取ったあとも頂点の画面に戻る(編入するか、終えるかを選ぶ)。
-  if (screen.value === "kenshukai") return;
+  // 研修会の修了証は、受け取ったあとも頂点の画面に戻る(編入するか、終えるかを選ぶ)。団体戦も結果の画面に戻る。
+  if (screen.value === "kenshukai" || screen.value === "team") return;
   if (screen.value === "shoreikai") {
     // 四段の免状を受け取ったら、挑戦を終えて(経歴に残して)大会の選択へ。
     emit("shoreikai-close");

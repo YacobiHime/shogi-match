@@ -126,6 +126,20 @@ export function kenshukaiAward(run, { playerName = 'あなた', at = Date.now() 
   return { ...award, id: `kenshukai-${run.id}-${run.label}` };
 }
 
+/**
+ * 団体戦の優勝の賞状(docs/team-battle-design.mdの4章の12)。チームの名前と仲間の名前を添える。
+ * @param {{ id: string, name: string, team: string, members: string[], wins: number, losses: number }} run 優勝した大会の要約
+ * @param {{ playerName?: string, at?: number }} [options]
+ */
+export function teamAward(run, { playerName = 'あなた', at = Date.now() } = {}) {
+  const award = makeAward({
+    tournament: 'team', name: run.name, seal: '団', no: 1, grade: 'gold', prize: '団体優勝',
+    notes: [run.team, ...run.members.map((member) => `${member}とともに`)].slice(0, 3), entry: run.team,
+    wins: run.wins, losses: run.losses, playerName, at,
+  });
+  return { ...award, id: `team-${run.id}` };
+}
+
 /** @param {{ tournament: string, name: string, seal: string, no: number, grade: string, prize: string, notes: string[], entry: string, wins: number, losses: number, playerName: string, at: number }} fields */
 function makeAward(fields) {
   return {
@@ -177,6 +191,17 @@ export function awardText(award) {
       date: kanjiDate(award.at),
     };
   }
+  if (award.tournament === 'team') {
+    return {
+      heading: '賞状',
+      title: award.name,
+      prize: award.prize,
+      notes: award.notes.map(kanjiText),
+      name: `${award.playerName} 殿`,
+      body: kanjiText(`あなたは${award.name}に${award.entry}の一員として出場し、${record(award.wins, award.losses)}の成績で仲間とともに優勝しました。よってここに、これを賞します。`),
+      date: kanjiDate(award.at),
+    };
+  }
   const fight = award.grade === 'fight';
   const title = `第${award.no}期${award.name}`;
   const games = record(award.wins, award.losses);
@@ -197,6 +222,7 @@ export function awardText(award) {
 /** 表彰式で、やこび姫が言うひとこと(どの格でも、まず「おつかれさま」。負けを責めない)。 */
 export function awardTalk(award) {
   if (award.tournament === 'shoreikai') return '四段昇段、ほんとうにおめでとう！ 今日から、あなたはプロ棋士だよ';
+  if (award.tournament === 'team') return '団体優勝、おめでとう！ 3人で取った優勝だね';
   if (award.tournament === 'kenshukai') return award.grade === 'gold'
     ? 'Sクラス、研修会のいちばん上！ ほんとうによく頑張ったね'
     : 'A2クラス昇級、おめでとう！ 奨励会への扉が開いたよ';
@@ -213,6 +239,7 @@ export function awardTalk(award) {
 export const awardLine = (award) => {
   if (award.tournament === 'shoreikai') return `奨励会 四段昇段（棋士番号${award.no}号）`;
   if (award.tournament === 'kenshukai') return `研修会 ${award.prize}`;
+  if (award.tournament === 'team') return `${award.name} ${award.prize}（${award.entry}）`;
   return `第${award.no}期 ${award.name} ${award.prize}`;
 };
 

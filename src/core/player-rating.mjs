@@ -134,6 +134,8 @@ export const RATED_EVENTS = Object.freeze([
   Object.freeze({ id: 'shoreikai', label: '奨励会' }),
   // 研修会の指導対局は駒落ちなので数えない(平手だけを数える。recordRatedGame)。
   Object.freeze({ id: 'kenshukai', label: '研修会' }),
+  // 団体戦(docs/team-battle-design.md)の自分の局。
+  Object.freeze({ id: 'team', label: '団体戦' }),
 ]);
 const RATED_EVENT_IDS = new Set(RATED_EVENTS.map(({ id }) => id));
 

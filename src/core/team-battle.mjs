@@ -846,9 +846,9 @@ export function recordTeamGame(source, outcome) {
 /**
  * 団体戦の大会を作る。
  * @param {{ format: 'school' | 'pro', seed: number, settings?: any, roster?: any, userName?: string, userLevel?: number,
- *   userSeat?: number, draftPick?: string | null }} options
+ *   userSeat?: number, draftPick?: string | null, draftReason?: string }} options
  */
-export function createTeamRun({ format, seed, settings = {}, roster = null, userName = '', userLevel = 20, userSeat = RECOMMENDED_SCHOOL_SEAT, draftPick = null }) {
+export function createTeamRun({ format, seed, settings = {}, roster = null, userName = '', userLevel = 20, userSeat = RECOMMENDED_SCHOOL_SEAT, draftPick = null, draftReason = '' }) {
   const formatId = TEAM_FORMATS[format] ? format : 'school';
   const rng = createRng(seed);
   const run = {
@@ -870,7 +870,8 @@ export function createTeamRun({ format, seed, settings = {}, roster = null, user
     result: null,
     champion: null,
     order: null,
-    draftReason: '',
+    draftReason: formatId === 'pro' ? draftReason : '',
+    seen: [],
   };
   run.players[TEAM_USER_ID] = userMember(userName, formatId);
   run.players[TEAM_HANANE_ID] = hananeMember(roster, formatId);
@@ -937,13 +938,19 @@ export function matchView(run, match, { revealAll = true } = {}) {
   const side = isUserMatch(match) ? userSide(match) : 'a';
   const us = match[side];
   const them = match[other(side)];
+  // 自分の局の前は、仲間の局の結果を伏せる(対局の途中の速報で知らせる。4章の9)。星の数も見えている局だけ。
+  const shown = (game) => Boolean(game.winner) && (revealAll || game.user);
+  const score = revealAll ? { us: match.score[side], them: match.score[other(side)] } : {
+    us: match.games.filter((game) => shown(game) && game.winner === side).length,
+    them: match.games.filter((game) => shown(game) && game.winner !== side).length,
+  };
   return {
     id: match.id,
     label: match.label,
     stage: match.stage,
     us: teamCard(run, us),
     them: teamCard(run, them),
-    score: { us: match.score[side], them: match.score[other(side)] },
+    score,
     winner: match.winner ? (match[match.winner] === us ? 'us' : 'them') : null,
     need: teamFormat(run.format).winsToTake,
     games: match.games.map((game) => ({
@@ -1002,7 +1009,14 @@ export function teamRunView(run) {
     result: run.result,
     champion: run.champion ? teamCard(run, run.champion) : null,
     draftReason: run.draftReason ?? '',
+    seen: [...(run.seen ?? [])],
   };
+}
+
+/** 見た節目の場面を覚える(同じ大会で2回は出さない。docs/team-battle-design.mdの3章)。 */
+export function markTeamScene(run, id) {
+  if (!run || !id || (run.seen ?? []).includes(id)) return run;
+  return { ...run, seen: [...(run.seen ?? []), id] };
 }
 
 /** 自分のチームのこれまでの試合(新しい順でなく、指した順)。 */
@@ -1025,6 +1039,15 @@ export function finishTeamRun(career, run, at = Date.now()) {
   next.history = [...(next.history ?? []), record].slice(-30);
   const best = next.best?.[run.format];
   next.best = { ...(next.best ?? {}), [run.format]: !best || record.place < best.place ? { place: record.place, label: record.label } : best };
+  return next;
+}
+
+/** 大会を途中でやめる(棄権。docs/tournament-withdraw-design.md)。経歴に「棄権」と残し、いまの大会を外す。 */
+export function withdrawTeamRun(career, at = Date.now()) {
+  const run = career?.current;
+  if (!run) return career;
+  const next = { ...emptyTeamCareer(), ...career, current: null };
+  next.history = [...(next.history ?? []), { format: run.format, place: 99, label: '棄権', at, team: run.teams?.[USER_TEAM]?.name ?? '' }].slice(-30);
   return next;
 }
 

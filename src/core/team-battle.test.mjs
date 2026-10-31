@@ -236,3 +236,31 @@ describe('保存', () => {
     expect(loadTeamBattle(storage)).toEqual(emptyTeamCareer());
   });
 });
+
+describe('対局画面とのつなぎ', () => {
+  it('仲間の局の速報は、決めておいた手数で、席と勝ち負けとチームの星を知らせる', async () => {
+    const { teamNews, newsDue } = await import('./match-presence.mjs');
+    const run = school(3);
+    const news = teamNews(run);
+    expect(news).toHaveLength(2);
+    expect(news[0].at).toBeLessThanOrEqual(news[1].at);
+    expect(news[0].text).toMatch(/^速報：(主将|副将|三将)戦、/);
+    expect(newsDue(news, news[0].at - 1, 0)).toBeNull();
+    expect(newsDue(news, news[0].at, 0)).toBe(news[0]);
+    expect(newsDue(news, 200, 2)).toBeNull();
+  });
+
+  it('優勝の賞状は団体優勝で、仲間の名前を添える。棄権は経歴に残る', async () => {
+    const { teamAward, awardText, awardLine } = await import('./season-award.mjs');
+    const award = teamAward({ id: 'team-school-1', name: '全国高校将棋団体戦', team: SCHOOL_NAME, members: ['天鷺羽音', '桜乃百花'], wins: 7, losses: 0 }, { playerName: 'やこび', at: 0 });
+    expect(award).toMatchObject({ id: 'team-team-school-1', grade: 'gold', prize: '団体優勝' });
+    expect(awardText(award).body).toMatch(/仲間とともに優勝/);
+    expect(awardLine(award)).toBe('全国高校将棋団体戦 団体優勝（燈ヶ丘高校）');
+    const { withdrawOptions } = await import('./tournament-withdraw.mjs');
+    expect(withdrawOptions({ teamRun: school() }).map(({ id }) => id)).toEqual(['team']);
+    const { withdrawTeamRun } = await import('./team-battle.mjs');
+    const career = withdrawTeamRun({ ...emptyTeamCareer(), current: school() }, 5);
+    expect(career.current).toBeNull();
+    expect(career.history.at(-1)).toMatchObject({ label: '棄権', format: 'school' });
+  });
+});

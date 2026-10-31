@@ -44,10 +44,10 @@ export function withdrawMeijinSeason(season) {
 
 /**
  * いまやめられる大会(大会の選択の「途中でやめる」の行)。
- * @param {{ ryuoSeason?: any, meijinSeason?: any, shoreikaiRun?: any, kenshukaiRun?: any }} state
- * @returns {{ id: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai', label: string, action: string, note: string }[]}
+ * @param {{ ryuoSeason?: any, meijinSeason?: any, shoreikaiRun?: any, kenshukaiRun?: any, teamRun?: any }} state
+ * @returns {{ id: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai' | 'team', label: string, action: string, note: string }[]}
  */
-export function withdrawOptions({ ryuoSeason = null, meijinSeason = null, shoreikaiRun = null, kenshukaiRun = null } = {}) {
+export function withdrawOptions({ ryuoSeason = null, meijinSeason = null, shoreikaiRun = null, kenshukaiRun = null, teamRun = null } = {}) {
   const options = [];
   if (canWithdrawSeason(ryuoSeason)) {
     options.push({
@@ -72,6 +72,13 @@ export function withdrawOptions({ ryuoSeason = null, meijinSeason = null, shorei
     options.push({
       id: 'kenshukai', label: '研修会', action: 'やめる',
       note: 'いまのクラスからは続けられません。経歴には、ここまでの成績が残ります。',
+    });
+  }
+  // 団体戦(docs/team-battle-design.md)。終わっていない大会だけ。経歴には「棄権」と残る。
+  if (teamRun && teamRun.phase !== 'done') {
+    options.push({
+      id: 'team', label: '団体戦', action: '棄権する',
+      note: 'この大会は、ここで終わります。経歴には「棄権」と残ります。',
     });
   }
   return options;

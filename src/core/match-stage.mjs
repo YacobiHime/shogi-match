@@ -16,6 +16,8 @@ const EVENTS = Object.freeze({
   shoreikai: { name: '奨励会', title: '四段' },
   // 研修会(docs/kenshukai-design.md)。奨励会と同じく、いまの段階の名前を出す。
   kenshukai: { name: '研修会', title: 'Sクラス' },
+  // 団体戦(docs/team-battle-design.md)。大会の名前(pending.eventText)を出す。
+  team: { name: '団体戦', title: '優勝' },
 });
 
 /**
@@ -72,7 +74,7 @@ export function seriesStakes({ need, winsUser, winsOpponent, goal, finish, prize
  * 対局を始めるときの舞台。期の保存形式から、対局の札・開幕の札・名札・やこび姫の一言を作る。
  * stakesは、期の画面と同じ「この1局に賭けているもの」(竜王戦はpendingStakes、名人戦はdescribeMeijinSeasonのstakes)。
  * @param {{
- *   event: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai', season: any, label?: string, userName?: string,
+ *   event: 'ryuo' | 'meijin' | 'shoreikai' | 'kenshukai' | 'team', season: any, label?: string, userName?: string,
  *   stakes?: { goal?: string, win?: string, text?: string, boss?: boolean } | null,
  * }} input
  */
@@ -122,7 +124,7 @@ export function describeMatchStage({ event, season, label = '', userName = '', s
   return {
     event,
     weight,
-    eventText: event === 'shoreikai' || event === 'kenshukai' ? pending.eventText ?? info.name : `第${season.no}期 ${info.name}`,
+    eventText: event === 'shoreikai' || event === 'kenshukai' || event === 'team' ? pending.eventText ?? info.name : `第${season.no}期 ${info.name}`,
     label: stageLabel,
     // 札では、大会の名前と重ねない(「第7期 竜王戦」の下の「七番勝負 第3局」)。
     shortLabel: stageLabel.startsWith(info.name) ? stageLabel.slice(info.name.length) : stageLabel,
@@ -152,6 +154,8 @@ function stageScenery(event, pending, title) {
   if (title) return 'title';
   if (event === 'shoreikai') return pending.kind === 'league' ? 'sky' : 'dojo';
   if (event === 'kenshukai') return 'dojo';
+  // 団体戦は大会の会場(名人戦と同じ暮れていく空の明かり)。
+  if (event === 'team') return 'sky';
   if (event === 'meijin') return 'sky';
   if (pending.kind === 'playoff') return 'snow';
   if (pending.phase === 'main') return 'mid';
