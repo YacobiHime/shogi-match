@@ -181,6 +181,20 @@ export function teamScene(id, playerName = '') {
   };
 }
 
+/** 身長(cm。ユーザーの指定 2026-11-01)。立ち絵は全身の絵の高さがそろっているので、場面ではこの比で縮める。 */
+export const PORTRAIT_HEIGHT_CM = Object.freeze({ hanane: 147, momoka: 158 });
+
+/**
+ * 場面に出ている人のうち、いちばん背の高い人を1としたときの、その人の絵の縮尺(足元をそろえて身長差を出す)。
+ * @param {string} who
+ * @param {string[]} cast
+ */
+export function portraitScale(who, cast) {
+  const height = (/** @type {string} */ id) => PORTRAIT_HEIGHT_CM[/** @type {keyof typeof PORTRAIT_HEIGHT_CM} */ (id)] ?? 158;
+  const tallest = Math.max(...cast.map(height), height(who));
+  return height(who) / tallest;
+}
+
 /**
  * 立ち絵の画像の幅÷高さ(全身の絵。ノベルの場面で上半身だけを映す大きさを決める。docs/novel-scene-design.mdの7章)。
  * 表情ちがいの絵も同じ大きさ。知らない人は羽音と同じにする。

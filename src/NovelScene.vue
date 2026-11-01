@@ -40,6 +40,7 @@
             'novel__person--enter': entering,
           },
         ]"
+        :style="{ '--scale': person.scale }"
         :src="person.src"
         :srcset="person.srcset"
         sizes="(orientation: portrait) 70vw, 40vw"
@@ -151,7 +152,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { portraitAspect, portraitUrl } from "./core/team-story.mjs";
+import { portraitAspect, portraitScale, portraitUrl } from "./core/team-story.mjs";
 import {
   AUTO_SPEEDS,
   FAST_FORWARD_MS,
@@ -252,6 +253,7 @@ const castView = computed(() => props.scene.cast.map((who) => {
   const face = spoken?.face ?? "neutral";
   return {
     who,
+    scale: portraitScale(who, props.scene.cast),
     src: portraitUrl(props.assetBaseUrl, who, face),
     srcset: `${portraitUrl(props.assetBaseUrl, who, face, { small: true })} 320w, ${portraitUrl(props.assetBaseUrl, who, face)} 800w`,
   };
@@ -655,8 +657,9 @@ defineExpose({ finish, goBack });
 .novel__person {
   --h: min(calc((100cqh - var(--headroom)) / var(--bust)), calc(var(--slot) / var(--aspect, 0.344)));
   position: absolute;
+  /* 足元をそろえ、背の低い人は身長の比(--scale)で縮める(8章) */
   bottom: calc(var(--h) * (var(--bust) - 1));
-  height: var(--h);
+  height: calc(var(--h) * var(--scale, 1));
   width: auto;
   max-width: none;
   object-fit: contain;

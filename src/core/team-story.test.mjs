@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NOVEL_BACKGROUNDS, NOVEL_MAX_LINES, NOVEL_PEOPLE, TEAM_SCENES, momentScene, portraitUrl, sceneText, teamScene } from './team-story.mjs';
+import { NOVEL_BACKGROUNDS, NOVEL_MAX_LINES, NOVEL_PEOPLE, TEAM_SCENES, momentScene, portraitScale, portraitUrl, sceneText, teamScene } from './team-story.mjs';
 
 const KEIGO = /です|ます|ございます|よろしくお願いします|ありがとうございました|負けました/;
 
@@ -58,5 +58,13 @@ describe('団体戦のノベルの場面(docs/team-battle-design.mdの6章)', ()
         if (id) expect(TEAM_SCENES[id]).toBeTruthy();
       }
     }
+  });
+});
+
+describe('立ち絵の身長差(docs/novel-scene-design.mdの8章)', () => {
+  it('羽音147cm・百花158cmの比で縮め、1人のときはそのままの大きさ', () => {
+    expect(portraitScale('momoka', ['hanane', 'momoka'])).toBe(1);
+    expect(portraitScale('hanane', ['hanane', 'momoka'])).toBeCloseTo(147 / 158, 5);
+    expect(portraitScale('hanane', ['hanane'])).toBe(1);
   });
 });
