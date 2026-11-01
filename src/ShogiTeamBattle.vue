@@ -5,69 +5,83 @@
     大会中: チームの3人、次の試合の札、予選の表・トーナメント表。結果: 成績と、終わりの場面。
   -->
   <div class="shoreikai team-battle" data-team-battle>
-    <!-- 入口 -->
-    <div v-if="screen === 'entry'" class="shogi-tournament__stage shogi-tournament__stage--entry shoreikai__framed" data-team-battle-screen="entry">
-      <header class="shogi-tournament__topbar shoreikai__topbar">
-        <button type="button" class="shogi-tournament__topbar-back" :aria-label="backLabel" data-team-back @click="emit('back')">
-          <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">{{ backLabel }}</span>
-        </button>
-        <span class="shogi-tournament__seal" aria-hidden="true">団</span>
-        <div class="shogi-tournament__topbar-title">
-          <h1 id="shogi-tournament-title">団体戦</h1>
-          <p class="shogi-tournament__topbar-sub">{{ careerText }}</p>
+    <!--
+      入口(docs/team-battle-design.mdの17章)。ストーリー選択と同じ枠(PickFrame)で、まず形式のカードを選び、
+      次の出場の画面でチーム・オーダー(ドラフト)・設定を見て「出場する」。
+    -->
+    <div v-if="screen === 'entry'" class="team-battle__entry" data-team-battle-screen="entry" :data-team-entry-step="entryStep">
+      <PickFrame
+        v-if="entryStep === 'format'"
+        heading-id="shogi-tournament-title"
+        title="団体戦"
+        icon="team"
+        :intro="formatIntro"
+        :people="formatPeople"
+        tone="pink"
+        :actions="formatActions"
+        :asset-base-url="assetBaseUrl"
+        @action="onFormatAction"
+      >
+        <ul class="team-battle__pick-list" aria-label="出る大会" data-team-formats>
+          <li v-for="item in formatCards" :key="item.id">
+            <PickCard
+              :id="item.id"
+              :label="item.label"
+              :title="item.name"
+              :sub="item.note"
+              :badge="item.best ? `最高 ${item.best}` : ''"
+              :background="item.background"
+              :selected="item.id === format"
+              @pick="chooseFormat(item.id)"
+              @hover="format = item.id"
+            />
+          </li>
+        </ul>
+      </PickFrame>
+      <PickFrame
+        v-else
+        heading-id="shogi-tournament-title"
+        :title="TEAM_FORMATS[format].name"
+        icon="team"
+        :intro="`羽音「${entryLine}」`"
+        :people="formatPeople"
+        :tone="format === 'pro' ? 'blue' : 'pink'"
+        :actions="entryActions"
+        :asset-base-url="assetBaseUrl"
+        @action="onEntryAction"
+      >
+        <div class="team-battle__entry-body" data-team-entry>
+          <p class="team-battle__entry-goal" data-team-goal><small>目標</small><span>{{ goalText }}</span></p>
+          <section class="team-battle__entry-team" aria-labelledby="team-entry-team">
+            <h2 id="team-entry-team">チーム<small>顔を押すとステータス</small></h2>
+            <ul class="team-battle__entry-members" data-team-members>
+              <li v-for="member in entryMembers" :key="member.id">
+                <button type="button" class="team-battle__entry-member" :data-team-member="member.id" @click="statusId = member.id">
+                  <img v-if="faceOf(member)" class="team-battle__face" :class="`team-battle__face--${faceKind(member)}`" :src="faceOf(member)" alt="" draggable="false">
+                  <span v-else class="team-battle__face team-battle__face--char" aria-hidden="true">{{ member.name.slice(0, 1) }}</span>
+                  <span class="team-battle__entry-member-text">
+                    <small>{{ member.seat || "　" }}</small>
+                    <strong>{{ member.you ? playerName : member.name }}</strong>
+                    <em>{{ member.strength || "ステータス" }}</em>
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </section>
+          <div v-if="format === 'school'" class="team-battle__entry-row">
+            <p><small>オーダー（大会のあいだ変えない）</small><span data-team-order>{{ orderText }}</span></p>
+            <button type="button" class="team-battle__entry-change" data-team-order-change @click="picker = 'seat'">変える</button>
+          </div>
+          <div v-else class="team-battle__entry-row">
+            <p><small>ドラフト（3人目）</small><span data-team-draft>{{ draftText }}</span></p>
+            <button type="button" class="team-battle__entry-change" data-team-draft-open @click="draftOpen = true">選ぶ</button>
+          </div>
+          <div class="team-battle__entry-row">
+            <p><small>設定</small><span data-team-summary>{{ settingsSummary }}</span></p>
+            <button type="button" class="team-battle__entry-change" data-team-change @click="settingsOpen = true">変える</button>
+          </div>
         </div>
-      </header>
-      <div class="shogi-tournament__mapwrap team-battle__mapwrap">
-        <div class="team-battle__formats" role="radiogroup" aria-label="出る大会">
-          <button
-            v-for="item in formatCards"
-            :key="item.id"
-            type="button"
-            role="radio"
-            class="team-battle__format"
-            :class="{ 'team-battle__format--on': format === item.id }"
-            :aria-checked="format === item.id"
-            :data-team-format="item.id"
-            @click="chooseFormat(item.id)"
-          >
-            <span class="team-battle__faces" aria-hidden="true">
-              <img v-for="face in item.faces" :key="face.who" class="team-battle__face" :class="`team-battle__face--${face.kind}`" :src="face.src" alt="" draggable="false">
-            </span>
-            <strong>{{ item.name }}</strong>
-            <small>{{ item.note }}</small>
-            <small v-if="item.best" class="team-battle__best">最高 {{ item.best }}</small>
-          </button>
-        </div>
-      </div>
-      <section class="shogi-tournament__hud" aria-label="出場">
-        <p class="shogi-tournament__goal-box" data-team-goal><small>目標</small><span>{{ format === "school" ? "3人で、全国の頂点へ" : "早指しの団体戦で優勝する" }}</span></p>
-        <p class="shogi-tournament__tip-line shoreikai__tip" data-team-talk>
-          <img class="shogi-tournament__tip-face team-battle__sprite" :src="hananeSprite" alt="" draggable="false">
-          <span class="shogi-tournament__tip-text">{{ entryLine }}</span>
-        </p>
-        <div v-if="format === 'school'" class="shogi-tournament__entry-settings">
-          <p>
-            <small>オーダー（大会のあいだ変えない）</small>
-            <span data-team-order>{{ orderText }}</span>
-          </p>
-          <button type="button" class="shogi-tournament__sub" data-team-order-change @click="picker = 'seat'">変える</button>
-        </div>
-        <div v-else class="shogi-tournament__entry-settings">
-          <p>
-            <small>ドラフト（3人目）</small>
-            <span data-team-draft>{{ draftText }}</span>
-          </p>
-          <button type="button" class="shogi-tournament__sub" data-team-draft-open @click="draftOpen = true">選ぶ</button>
-        </div>
-        <div class="shogi-tournament__entry-settings">
-          <p>
-            <small>設定</small>
-            <span data-team-summary>{{ settingsSummary }}</span>
-          </p>
-          <button type="button" class="shogi-tournament__sub" data-team-change @click="settingsOpen = true">変える</button>
-        </div>
-        <button type="button" class="shogi-tournament__start" data-team-enter @click="enter">出場する</button>
-      </section>
+      </PickFrame>
 
       <!-- ドラフト: 候補の一覧と、選んだ棋士の能力。羽音に任せることもできる。 -->
       <div v-if="draftOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="ドラフト" data-team-draft-sheet @click.self="draftOpen = false">
@@ -154,16 +168,41 @@
           <p v-if="view.champion && view.result?.place !== 1" class="team-battle__result-note">優勝は{{ view.champion.name }}</p>
         </div>
 
-        <!-- チームの3人 -->
+        <!-- 高校の3つの段階の道(地区大会 → 県大会 → 全国大会。15章の9) -->
+        <ol v-if="view.stages" class="team-battle__stages" aria-label="大会の段階" data-team-stages>
+          <li
+            v-for="stage in view.stages"
+            :key="stage.id"
+            class="team-battle__stage"
+            :class="`team-battle__stage--${stage.state}`"
+            :aria-current="stage.state === 'current' ? 'step' : undefined"
+            :data-team-stage="stage.id"
+            :data-team-stage-state="stage.state"
+          >
+            <strong>{{ stage.name }}</strong>
+            <small>{{ stageNote(stage) }}</small>
+          </li>
+        </ol>
+
+        <!-- チームの3人(顔を押すとステータス。16章) -->
         <div class="team-battle__team" data-team-members>
-          <div v-for="member in view.team?.members ?? []" :key="member.id" class="team-battle__member" :class="{ 'team-battle__member--you': member.you }">
+          <button
+            v-for="member in view.team?.members ?? []"
+            :key="member.id"
+            type="button"
+            class="team-battle__member"
+            :class="{ 'team-battle__member--you': member.you }"
+            :aria-label="`${member.seat ? `${member.seat} ` : ''}${member.you ? playerName : member.name}のステータス`"
+            :data-team-member="member.id"
+            @click="statusId = member.id"
+          >
             <img v-if="faceOf(member)" class="team-battle__face" :class="`team-battle__face--${faceKind(member)}`" :src="faceOf(member)" alt="" draggable="false">
             <span v-else class="team-battle__face team-battle__face--char" aria-hidden="true">{{ member.name.slice(0, 1) }}</span>
             <span class="team-battle__member-text">
               <small v-if="member.seat">{{ member.seat }}</small>
               <strong>{{ member.you ? playerName : member.name }}</strong>
             </span>
-          </div>
+          </button>
         </div>
 
         <!-- 次の試合 -->
@@ -186,13 +225,21 @@
           </ul>
         </div>
 
-        <!-- 進み具合: 予選・トーナメント -->
+        <!-- 進み具合: 段階ごとの表(地区大会・県大会・全国予選・決勝T。プロは予選・本戦。15章の9) -->
         <div class="team-battle__tabs" role="tablist" aria-label="表">
-          <button type="button" role="tab" :aria-selected="tab === 'qualify'" data-team-tab="qualify" @click="tab = 'qualify'">予選</button>
-          <button type="button" role="tab" :aria-selected="tab === 'ko'" :disabled="!view.knockout" data-team-tab="ko" @click="tab = 'ko'">{{ view.format === "school" ? "決勝トーナメント" : "本戦" }}</button>
+          <button
+            v-for="item in view.tables.tabs"
+            :key="item.id"
+            type="button"
+            role="tab"
+            :aria-selected="tab === item.id"
+            :disabled="item.disabled"
+            :data-team-tab="item.id"
+            @click="tab = item.id"
+          >{{ item.label }}</button>
         </div>
-        <div v-if="tab === 'qualify'" class="team-battle__table-wrap" data-team-qualify>
-          <table v-if="view.swiss" class="team-battle__table">
+        <div v-if="activeTable?.type === 'swiss' || activeTable?.type === 'leagues'" class="team-battle__table-wrap" data-team-qualify>
+          <table v-if="activeTable.type === 'swiss' && view.swiss" class="team-battle__table">
             <thead><tr><th>学校</th><th>勝敗</th><th>勝ち局</th><th></th></tr></thead>
             <tbody>
               <tr v-for="row in swissRows" :key="row.team.id" :class="{ 'team-battle__row--you': row.team.you }">
@@ -217,8 +264,8 @@
             </table>
           </div>
         </div>
-        <div v-else-if="view.knockout" class="team-battle__table-wrap team-battle__ko" data-team-ko>
-          <section v-for="round in view.knockout.rounds" :key="round.name" class="team-battle__ko-round">
+        <div v-else-if="activeTable?.knockout" class="team-battle__table-wrap team-battle__ko" data-team-ko :data-team-ko-stage="activeTable.id">
+          <section v-for="round in activeTable.knockout.rounds" :key="round.name" class="team-battle__ko-round">
             <h3>{{ round.name }}</h3>
             <ul>
               <li v-for="(match, index) in round.matches" :key="index" :class="{ 'team-battle__row--you': 'bye' in match ? match.bye?.you : match?.us?.you || match?.them?.you }">
@@ -231,7 +278,7 @@
               </li>
             </ul>
           </section>
-          <p v-if="view.knockout.champion" class="team-battle__champion">優勝 {{ view.knockout.champion.name }}</p>
+          <p v-if="activeTable.knockout.champion" class="team-battle__champion">優勝 {{ activeTable.knockout.champion.name }}</p>
         </div>
       </section>
 
@@ -266,14 +313,28 @@
       </section>
     </div>
 
+    <!-- 仲間のステータス(16章)。入口と大会中のどちらでも、チームの顔を押すと開く。 -->
+    <TeamMemberSheet
+      v-if="statusMember"
+      :status="statusMember"
+      :face="faceOf(statusMember)"
+      :face-kind="faceKind(statusMember)"
+      :player-name="playerName"
+      :my-profile="myProfile"
+      @close="statusId = ''"
+    />
+
     <NovelScene v-if="scene" ref="novelEl" :scene="scene" :asset-base-url="assetBaseUrl" @done="closeScene" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, type PropType } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import NovelScene from "./NovelScene.vue";
+import PickCard from "./PickCard.vue";
+import PickFrame from "./PickFrame.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
+import TeamMemberSheet from "./TeamMemberSheet.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
@@ -283,8 +344,9 @@ import { memberAbilityView } from "./core/ryuo-book.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import {
   RECOMMENDED_SCHOOL_SEAT, SCHOOL_BASE, SCHOOL_SEATS, TEAM_FORMATS, TEAM_HANANE_ID, TEAM_MOMOKA_ID, TEAM_USER_ID, hananeDraftPick, schoolOrder,
+  teamEntryMembers,
 } from "./core/team-battle.mjs";
-import { momentScene, portraitUrl, teamScene } from "./core/team-story.mjs";
+import { portraitUrl, teamMomentFor, teamScene } from "./core/team-story.mjs";
 
 type Format = "school" | "pro";
 type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
@@ -299,6 +361,12 @@ const props = defineProps({
   draftMembers: { type: Array as PropType<any[]>, default: () => [] },
   /** プレイヤーの能力(羽音に任せるドラフトの理由に使う。対局が少なければnull)。 */
   myAbilities: { type: Object as PropType<Record<string, number> | null>, default: null },
+  /** 自分の能力の見立て(仲間のステータスの自分。my-abilities.mjsのmyAbilityProfile)。 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  myProfile: { type: Object as PropType<any>, default: null },
+  /** 名簿(出場の画面で羽音とドラフトの棋士のステータスを作る)。なくても羽音は人物の設定から作る。 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  roster: { type: Object as PropType<any>, default: null },
   defaultDifficulty: { type: Number, default: 9 },
   world: { type: Object as PropType<{ level: number; difficulty: number; playerLevel: number; at: number } | null>, default: null },
   recommendedDifficulty: { type: Number as PropType<number | null>, default: null },
@@ -346,45 +414,63 @@ function closeScene() {
 /** はじめて団体戦を開いたら、羽音に誘われる場面から(4章)。 */
 if (!props.view && !props.career.invited?.school) sceneId.value = "invite-school";
 
-/** 大会中の節目の場面(見ていなければ1回だけ)。 */
-function momentFor(view: any): string {
-  if (!view) return "";
-  const seen: string[] = view.seen ?? [];
-  const show = (id: string | null) => (id && !seen.includes(id) ? id : "");
-  if (view.phase === "done") return show(momentScene(view, "end"));
-  if (view.next?.label && /(^|\s)決勝$/.test(view.next.label)) return show(momentScene(view, "final"));
-  if (view.phase === "ko") return show(momentScene(view, "knockout"));
-  const played = (view.next?.games ?? []).some((game: { result: string | null }) => game.result);
-  if (view.format === "school" && view.swiss?.round === 1 && !played) return show(momentScene(view, "start"));
-  return "";
-}
-watch(() => [props.view?.phase, props.view?.next?.id, props.view?.result?.label], () => {
+/** 大会中の節目の場面(見ていなければ1回だけ。地区大会・県大会・全国大会の始めなど。15章の8)。 */
+watch(() => [props.view?.phase, props.view?.stage, props.view?.next?.id, props.view?.result?.label], () => {
   if (sceneId.value) return;
-  const id = momentFor(props.view);
+  const id = teamMomentFor(props.view);
   if (id) sceneId.value = id;
 }, { immediate: true });
 
-// ---- 入口
+// ---- 入口(17章)。形式選び(format)→ 出場の画面(entry)。
 const format = ref<Format>("school");
+const entryStep = ref<"format" | "entry">("format");
+/** 形式のカードを押した: その形式の出場の画面へ(プロのはじめては、先に羽音に誘われる場面)。 */
 function chooseFormat(id: Format) {
   format.value = id;
   if (id === "pro" && !props.draftMembers.length) emit("need-roster");
   if (id === "pro" && !props.career.invited?.pro) sceneId.value = "invite-pro";
+  entryStep.value = "entry";
 }
-const careerText = computed(() => {
-  const best = props.career.best ?? {};
-  const parts = (["school", "pro"] as const).filter((id) => best[id]).map((id) => `${TEAM_FORMATS[id].short} ${best[id].label}`);
-  return parts.length ? `最高 ${parts.join("・")}` : "羽音と組んで出る大会";
-});
+const formatIntro = "出る団体戦を選んでください。羽音と同じチームで出ます。";
+const formatPeople = computed(() => (format.value === "school"
+  ? [{ who: "hanane", face: "neutral" }, { who: "momoka", face: "wry" }]
+  : [{ who: "hanane", face: "smile" }]));
+const formatActions = [
+  { id: "select", label: "選択", key: "▲▼", hint: true },
+  { id: "decide", label: "決定", key: "Enter", primary: true },
+  { id: "back", label: "戻る", key: "Esc" },
+];
+function onFormatAction(id: string) {
+  if (id === "decide") chooseFormat(format.value);
+  else if (id === "back") emit("back");
+}
+const entryActions = [
+  { id: "enter", label: "出場する", key: "Enter", primary: true },
+  { id: "back", label: "戻る", key: "Esc" },
+];
+function onEntryAction(id: string) {
+  if (id === "enter") enter();
+  else if (id === "back") entryStep.value = "format";
+}
+const goalText = computed(() => (format.value === "school" ? "地区大会から勝ち上がり、3人で全国の頂点へ" : "早指しの団体戦で優勝する"));
+/** 出場の画面のチームの3人(大会を作る前のステータス。17章の3)。 */
+const entryMembers = computed(() => teamEntryMembers({
+  format: format.value,
+  roster: props.roster,
+  userSeat: userSeat.value,
+  draftPick: format.value === "pro" ? (draftId.value ?? hananePick.value?.id ?? null) : null,
+  userName: props.playerName,
+  userLevel: Number.isFinite(props.userLevel) ? props.userLevel : 20,
+  world: props.world?.level ?? null,
+}));
 const faceSrc = (who: string, face = "neutral") => portraitUrl(props.assetBaseUrl, who, face, { small: true });
 const formatCards = computed(() => (["school", "pro"] as const).map((id) => ({
   id,
+  label: TEAM_FORMATS[id].short,
   name: TEAM_FORMATS[id].name,
   note: TEAM_FORMATS[id].note,
   best: props.career.best?.[id]?.label ?? "",
-  faces: id === "school"
-    ? [{ who: "hanane", kind: "portrait", src: faceSrc("hanane") }, { who: "momoka", kind: "portrait", src: faceSrc("momoka", "wry") }]
-    : [{ who: "hanane", kind: "portrait", src: faceSrc("hanane", "smile") }],
+  background: id === "school" ? "classroom" : "hall",
 })));
 const userSeat = ref(RECOMMENDED_SCHOOL_SEAT);
 const orderText = computed(() => {
@@ -521,11 +607,31 @@ function enter() {
   });
 }
 
+// ---- 仲間のステータス(16章)
+const statusId = ref("");
+const statusMember = computed(() => {
+  if (!statusId.value) return null;
+  if (props.view) return props.view.members?.[statusId.value] ?? null;
+  return entryMembers.value.find((member) => member?.id === statusId.value) ?? null;
+});
+
 // ---- 大会中
-const tab = ref<"qualify" | "ko">("qualify");
-watch(() => props.view?.phase, (phase) => {
-  if (phase === "ko" || phase === "done") tab.value = props.view?.knockout ? "ko" : "qualify";
+/** 表のタブ(段階が進んだら、いまの段階の表を開く)。 */
+const tab = ref("qualify");
+watch(() => [props.view?.phase, props.view?.stage, props.view?.tables?.current], () => {
+  const current = props.view?.tables?.current;
+  if (current) tab.value = current;
 }, { immediate: true });
+const activeTable = computed(() => {
+  const tabs = props.view?.tables?.tabs ?? [];
+  return tabs.find((item: { id: string }) => item.id === tab.value) ?? tabs[0] ?? null;
+});
+/** 段階の道の下の小さな言葉。 */
+function stageNote(stage: { state: string; label: string }) {
+  if (stage.state === "current") return "いまここ";
+  if (stage.state === "skipped") return "―";
+  return stage.label;
+}
 const next = computed(() => props.view?.next ?? null);
 const scoreMarks = computed(() => {
   const match = next.value;
@@ -546,7 +652,7 @@ const runSub = computed(() => {
   const view = props.view;
   if (!view) return "";
   if (view.phase === "done") return view.result?.label ?? "";
-  if (view.format === "school" && view.phase === "swiss") return `予選${view.swiss.round}回戦・${view.swiss.record.w}勝${view.swiss.record.l}敗`;
+  if (view.format === "school" && view.phase === "swiss") return `全国大会 予選${view.swiss.round}回戦・${view.swiss.record.w}勝${view.swiss.record.l}敗`;
   return view.next?.label ?? "";
 });
 const usedText = (id: string) => {
@@ -566,11 +672,13 @@ const runLine = computed(() => {
   }
   const decided = match.games.filter((game: { result: string | null; user: boolean }) => !game.user && game.result);
   if (decided.length) return "仲間の局は、対局の途中で知らせるね。";
+  if (view.stage === "district") return "地区大会は、決勝まで行けば県大会。目の前の1局に集中して。";
+  if (view.stage === "prefecture") return "県大会は、負けたら終わり。仲間の結果は、君の対局の途中で届くよ。";
   return "仲間の結果は、君の対局の途中で届くよ。目の前の1局に集中して。";
 });
 const lastNews = computed(() => props.news);
 
-// 顔(羽音と百花は立ち絵の顔、ほかは名前の1字)
+// 顔(羽音と百花は立ち絵の顔、自分はやこび姫のドット絵、ほかは名前の1字)
 const faceOf = (member: { id: string; story?: string | null }) => {
   if (member.id === TEAM_HANANE_ID || member.story === "hanane") return faceSrc("hanane");
   if (member.id === TEAM_MOMOKA_ID) return faceSrc("momoka", "wry");
@@ -585,30 +693,96 @@ function goBack() {
   if (sceneId.value) {
     if (!novelEl.value?.goBack()) novelEl.value?.finish();
   }
+  else if (statusId.value) statusId.value = "";
   else if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (draftOpen.value) draftOpen.value = false;
+  else if (!props.view && entryStep.value === "entry") entryStep.value = "format";
   else return false;
   return true;
 }
 defineExpose({ goBack });
+
+// 入口のキー(↑↓で形式を選ぶ・Enterで決定・Escで戻る。ストーリー選択と同じ。docs/story-mode-design.mdの3章の4)。
+function onEntryKeydown(event: KeyboardEvent) {
+  // 仲間のステータスは、大会中でもEscで閉じる。
+  if (statusId.value && event.key === "Escape" && !event.defaultPrevented) {
+    event.preventDefault();
+    statusId.value = "";
+    return;
+  }
+  if (props.view || sceneId.value || statusId.value || picker.value || settingsOpen.value || draftOpen.value) return;
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest?.("input, textarea, select")) return;
+  if (entryStep.value === "format" && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+    event.preventDefault();
+    format.value = format.value === "school" ? "pro" : "school";
+  } else if ((event.key === "Enter" || event.key === " ") && !target?.closest?.("button")) {
+    event.preventDefault();
+    if (entryStep.value === "format") chooseFormat(format.value);
+    else enter();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    if (entryStep.value === "entry") entryStep.value = "format";
+    else emit("back");
+  }
+}
+onMounted(() => window.addEventListener("keydown", onEntryKeydown));
+onBeforeUnmount(() => window.removeEventListener("keydown", onEntryKeydown));
 </script>
 
 <style>
 /* 団体戦: 研修会・奨励会の画面の部品(ShogiShoreikai.vue・ShogiTournament.vue)を使い、団体戦だけのものを足す。 */
-.shogi-game .team-battle__mapwrap { display: grid; place-items: center; padding: 0.6rem; }
-.shogi-game .team-battle__formats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; width: min(100%, 38rem); }
-.shogi-game .team-battle__format {
-  display: grid; justify-items: center; gap: 0.25rem; padding: 0.7rem 0.6rem 0.8rem;
-  border: 0.14rem solid rgba(255, 252, 244, 0.35); border-radius: 0.9rem;
-  color: #fffcf4; background: rgba(43, 70, 91, 0.92); box-shadow: 0 0.25rem 0 rgba(23, 38, 50, 0.85);
-  font: inherit; text-align: center; cursor: pointer;
+/* ---- 入口(17章): ストーリー選択と同じ枠。一覧の板は明るいので、中の文字は焦げ茶。 */
+.shogi-game .team-battle__entry { display: grid; height: 100%; min-height: 0; }
+.shogi-game .team-battle__pick-list { display: grid; gap: inherit; margin: 0; padding: 0; list-style: none; }
+.shogi-game .team-battle__entry-body { display: grid; gap: 0.75rem; padding: 0 clamp(0.4rem, 2vw, 1.4rem); color: #3b2a1c; }
+.shogi-game .team-battle__entry-goal { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin: 0; font-weight: 800; }
+.shogi-game .team-battle__entry-goal small {
+  padding: 0.05rem 0.55rem; border-radius: 999px; color: #fff; background: var(--pick-tone, #ec6584); font-size: 0.75rem;
 }
-.shogi-game .team-battle__format strong { font-size: 1.05rem; }
-.shogi-game .team-battle__format small { color: #cfd8de; font-size: 0.74rem; line-height: 1.35; }
-.shogi-game .team-battle__format--on { border-color: var(--amber, #f1a54c); background: rgba(70, 92, 112, 0.95); }
-.shogi-game .team-battle__best { color: var(--amber, #f1a54c) !important; font-weight: 800; }
-.shogi-game .team-battle__faces { display: flex; gap: 0.3rem; justify-content: center; }
+.shogi-game .team-battle__entry-team h2 { display: flex; align-items: baseline; gap: 0.6rem; margin: 0 0 0.35rem; font-size: 1.05rem; }
+.shogi-game .team-battle__entry-team h2 small { color: #8a6a4c; font-size: 0.75rem; font-weight: 700; }
+.shogi-game .team-battle__entry-members { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .team-battle__entry .team-battle__entry-member {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%; min-height: 44px; margin: 0; padding: 0.4rem 0.5rem;
+  border: 0.16rem solid var(--pick-tone, #ec6584); border-radius: 0.7rem;
+  color: #3b2a1c; background: #fff; box-shadow: 0 0.16rem 0 rgba(120, 70, 30, 0.2);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.shogi-game .team-battle__entry .team-battle__entry-member:not(:disabled):hover { border-color: var(--pick-tone, #ec6584); background: #fff6ec; transform: none; }
+.shogi-game .team-battle__entry-member .team-battle__face { width: 2.8rem; height: 2.8rem; flex: none; border-color: var(--pick-tone, #ec6584); }
+.shogi-game .team-battle__entry-member-text { display: grid; min-width: 0; line-height: 1.25; }
+.shogi-game .team-battle__entry-member-text small { color: var(--pick-tone-deep, #c94a68); font-size: 0.72rem; font-weight: 900; }
+.shogi-game .team-battle__entry-member-text strong { overflow: hidden; font-size: 0.95rem; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .team-battle__entry-member-text em { color: #7a634e; font-size: 0.72rem; font-style: normal; }
+.shogi-game .team-battle__entry-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  padding: 0.45rem 0.7rem; border-radius: 0.7rem; background: #fbf1df;
+}
+.shogi-game .team-battle__entry-row p { display: grid; gap: 0.1rem; min-width: 0; margin: 0; }
+.shogi-game .team-battle__entry-row small { color: #8a6a4c; font-size: 0.72rem; font-weight: 800; }
+.shogi-game .team-battle__entry-row span { font-size: 0.92rem; font-weight: 800; }
+.shogi-game .team-battle__entry .team-battle__entry-change {
+  flex: none; min-height: 44px; margin: 0; padding: 0.3rem 1rem; border: 0.14rem solid var(--pick-tone, #ec6584); border-radius: 999px;
+  color: var(--pick-tone-deep, #c94a68); background: #fff; box-shadow: none; font: inherit; font-weight: 900;
+}
+.shogi-game .team-battle__entry .team-battle__entry-change:not(:disabled):hover { border-color: var(--pick-tone, #ec6584); background: #fff6ec; transform: none; }
+/* ---- 大会中: 高校の3つの段階の道(15章の9) */
+.shogi-game .team-battle__stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .team-battle__stage {
+  position: relative; display: grid; justify-items: center; gap: 0.05rem; padding: 0.3rem 0.4rem 0.3rem 0.9rem;
+  color: #cfd8de; background: rgba(43, 70, 91, 0.6);
+  clip-path: polygon(0 0, calc(100% - 0.7rem) 0, 100% 50%, calc(100% - 0.7rem) 100%, 0 100%, 0.7rem 50%);
+}
+.shogi-game .team-battle__stage:first-child { clip-path: polygon(0 0, calc(100% - 0.7rem) 0, 100% 50%, calc(100% - 0.7rem) 100%, 0 100%); padding-left: 0.4rem; }
+.shogi-game .team-battle__stage strong { font-size: 0.85rem; }
+.shogi-game .team-battle__stage small { min-height: 1em; font-size: 0.7rem; font-weight: 800; }
+.shogi-game .team-battle__stage--done { color: #172632; background: var(--amber, #f1a54c); }
+.shogi-game .team-battle__stage--current { color: #172632; background: #fffcf4; }
+.shogi-game .team-battle__stage--out { color: #fffcf4; background: #6d7c89; }
+.shogi-game .team-battle__stage--skipped, .shogi-game .team-battle__stage--next { opacity: 0.7; }
 .shogi-game .team-battle__face {
   width: 3.4rem; height: 3.4rem; border-radius: 50%; object-fit: cover; object-position: 50% 4%;
   border: 0.12rem solid rgba(255, 252, 244, 0.7); background: #e9eef1;
@@ -629,7 +803,11 @@ defineExpose({ goBack });
 .shogi-game .team-battle__tag { position: absolute; top: 0.3rem; right: 0.4rem; padding: 0 0.4rem; border-radius: 999px; color: #172632; background: #86d4a9; font-size: 0.66rem; font-weight: 900; }
 .shogi-game .team-battle__main { display: grid; align-content: start; gap: 0.6rem; overflow-y: auto; padding: 0.6rem; }
 .shogi-game .team-battle__team { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
-.shogi-game .team-battle__member { display: flex; align-items: center; gap: 0.4rem; min-width: 0; padding: 0.35rem; border-radius: 0.6rem; background: rgba(43, 70, 91, 0.8); }
+.shogi-game .team-battle__member {
+  display: flex; align-items: center; gap: 0.4rem; min-width: 0; min-height: 44px; margin: 0; padding: 0.35rem;
+  border: 0.1rem solid rgba(255, 252, 244, 0.25); border-radius: 0.6rem;
+  color: #fffcf4; background: rgba(43, 70, 91, 0.8); box-shadow: none; font: inherit; text-align: left; cursor: pointer;
+}
 .shogi-game .team-battle__member .team-battle__face { width: 2.4rem; height: 2.4rem; flex: none; }
 .shogi-game .team-battle__member--you { box-shadow: inset 0 0 0 0.12rem var(--amber, #f1a54c); }
 .shogi-game .team-battle__member-text { display: grid; min-width: 0; }
@@ -681,10 +859,10 @@ defineExpose({ goBack });
 .shogi-game .team-battle__choose-btn { display: grid; min-height: 44px; }
 .shogi-game .team-battle__choose-btn small { font-size: 0.68rem; opacity: 0.8; }
 @media (max-width: 520px) {
-  .shogi-game .team-battle__formats { grid-template-columns: minmax(0, 1fr); }
-  .shogi-game .team-battle__format { grid-template-columns: auto minmax(0, 1fr); justify-items: start; text-align: left; }
-  .shogi-game .team-battle__format .team-battle__faces { grid-row: span 3; }
   .shogi-game .team-battle__face { width: 2.8rem; height: 2.8rem; }
+  .shogi-game .team-battle__entry-members { gap: 0.3rem; }
+  .shogi-game .team-battle__entry .team-battle__entry-member { flex-direction: column; text-align: center; padding: 0.35rem 0.2rem; }
+  .shogi-game .team-battle__entry-member-text { justify-items: center; }
   .shogi-game .team-battle__member { flex-direction: column; text-align: center; }
   .shogi-game .team-battle__member-text strong { font-size: 0.78rem; }
 }

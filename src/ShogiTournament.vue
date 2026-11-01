@@ -233,6 +233,8 @@
           :career="teamCareer"
           :draft-members="teamDraftMembers"
           :my-abilities="teamMyAbilities"
+          :my-profile="teamMyProfile"
+          :roster="teamRoster"
           :default-difficulty="defaultDifficulty"
           :world="world"
           :recommended-difficulty="recommendedDifficulty"
@@ -1182,6 +1184,12 @@ const props = defineProps({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   teamDraftMembers: { type: Array as PropType<any[]>, default: () => [] },
   teamMyAbilities: { type: Object as PropType<Record<string, number> | null>, default: null },
+  /** 自分の能力(仲間のステータスの自分。docs/team-battle-design.mdの16章)。 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  teamMyProfile: { type: Object as PropType<any>, default: null },
+  /** 名簿(出場の画面で羽音とドラフトの棋士のステータスを見せる)。 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  teamRoster: { type: Object as PropType<any>, default: null },
   teamSuspendedMoves: { type: Number as PropType<number | null>, default: null },
   teamNews: { type: String, default: "" },
   // ---- 棋士の1年(docs/pro-year-design.md)

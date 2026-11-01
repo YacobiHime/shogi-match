@@ -437,10 +437,10 @@ defineExpose({ revealItem });
   text-shadow: none;
 }
 .shogi-game .pick-frame .pick-frame__key--primary .pick-frame__key-icon { color: #fff; background: var(--pick-bar); }
-.shogi-game .pick-frame__key--hint { display: none; }
+.shogi-game .pick-frame .pick-frame__key--hint { display: none; }
 @media (hover: hover) and (pointer: fine) and (min-width: 560px) {
   .shogi-game .pick-frame__key-icon { display: inline-block; }
-  .shogi-game .pick-frame__key--hint { display: inline-flex; }
+  .shogi-game .pick-frame .pick-frame__key--hint { display: inline-flex; }
 }
 
 /* ---- 縦長の画面: 立ち絵は題名の札の右に胸から上を小さく。一覧は画面の幅いっぱい。 */

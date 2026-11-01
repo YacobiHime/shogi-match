@@ -391,11 +391,13 @@ describe('仲間のステータス(docs/team-battle-design.mdの16章)', () => {
     expect(Object.keys(view.members)).toEqual([TEAM_HANANE_ID, TEAM_USER_ID, TEAM_MOMOKA_ID]);
     const hanane = view.members[TEAM_HANANE_ID];
     expect(hanane).toMatchObject({ seat: '主将', name: '天鷺羽音', you: false, story: 'hanane' });
-    expect(hanane.strength).toMatch(/くらい$/);
+    // 強さは段級位でなく、高校生の中での位置(世界の難易度で羽音が「22級」に見えないように)。
+    expect(hanane.strength).toBe('高校生で飛び抜けて強い');
     expect(hanane.profile.character.abilities).toBeTruthy();
     expect(hanane.line).toMatch(/^百花「羽音ちゃんは/);
     const momoka = view.members[TEAM_MOMOKA_ID];
-    expect(momoka.line).toMatch(/^羽音「百花は/);
+    // 百花は楽しそうに攻める初心者(いちばん得意は寄せ)。どの大会でも同じ。
+    expect(momoka.line).toBe('羽音「百花は寄せがいい。大局観は、これから覚えればいい」');
     expect(momoka.line).not.toMatch(/です|ます|！/);
     const user = view.members[TEAM_USER_ID];
     expect(user).toMatchObject({ seat: '副将', you: true, profile: null, line: '' });
@@ -415,6 +417,8 @@ describe('仲間のステータス(docs/team-battle-design.mdの16章)', () => {
     const view = teamRunView(run);
     const ids = run.teams[USER_TEAM].members;
     expect(view.members[ids[0]].seat).toBe('リーダー');
+    expect(view.members[ids[2]].strength).toMatch(/^竜王戦\d組くらい$/);
+    expect(view.members[ids[0]].strength).toMatch(/くらい$/);
     expect(view.members[ids[2]].line).toMatch(new RegExp(`^羽音「${run.players[ids[2]].name}さんは`));
     expect(view.members[ids[2]].line).not.toMatch(/です|ます|！/);
     expect(view.members[TEAM_HANANE_ID].line).toMatch(/^羽音「私？/);
@@ -426,7 +430,6 @@ describe('仲間のステータス(docs/team-battle-design.mdの16章)', () => {
     expect(preview.every((member) => member.recordText === 'この大会は、まだ指していない')).toBe(true);
     const run = schoolFull(9, { userSeat: 0 });
     const status = teamMemberStatus(run, TEAM_MOMOKA_ID);
-    expect(preview[2].style).toBe(status.style);
     expect(preview[2].repertoire).toBe(status.repertoire);
     expect(preview[2].line).toBe(status.line);
     // 百花は、どの大会でも同じ(種で変わらない)。

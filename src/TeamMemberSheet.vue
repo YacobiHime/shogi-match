@@ -15,9 +15,8 @@
       </header>
       <ul class="team-member__facts">
         <li data-team-member-record>{{ status.recordText }}</li>
-        <li v-if="strengthText">強さ {{ strengthText }}</li>
-        <li v-if="status.style">棋風 {{ status.style }}</li>
-        <li v-if="status.repertoire">{{ status.repertoire }}</li>
+        <li v-if="strengthText">{{ status.you ? `強さ ${strengthText}` : strengthText }}</li>
+        <li v-if="status.repertoire">得意 {{ status.repertoire }}</li>
       </ul>
       <PlayerAbilityPanel v-if="abilityView" :view="abilityView" compact :openings="false" />
       <p v-else-if="status.you" class="team-member__empty">あと{{ myNeed || "少し" }}{{ myNeed ? "手" : "" }}ぶん指すと、能力が見えてくるよ。</p>
@@ -35,7 +34,7 @@ import { teamUserLine } from "./core/team-battle.mjs";
 
 type Status = {
   id: string; name: string; you: boolean; story: string | null; seat: string; dan: string;
-  recordText: string; strength: string; style: string; repertoire: string; line: string;
+  recordText: string; strength: string; repertoire: string; line: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   profile: any;
 };

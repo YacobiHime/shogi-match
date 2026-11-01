@@ -9,7 +9,7 @@ import { createCharacter } from './player-character.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
 import { HANANE, YOSHIHIKO, STORY_PEOPLE, storyCharacter, storyMemberId } from './ryuo-story.mjs';
 import { ABILITIES, abilityValues } from './player-abilities.mjs';
-import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, WORLD_BASE_RATING } from './ryuo-strength.mjs';
+import { GROUP_MEAN_RATING, MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, WORLD_BASE_RATING } from './ryuo-strength.mjs';
 import { levelGradeName } from './tournament-world.mjs';
 
 export const TEAM_BATTLE_KEY = 'yacobihime:shogi-match:team-battle:v1';
@@ -47,7 +47,7 @@ export const TEAM_FORMATS = Object.freeze({
     id: 'school',
     name: '全国高校将棋団体戦',
     short: '高校の団体戦',
-    note: '羽音・百花と3人で。3局のうち2勝で勝ち',
+    note: '羽音・百花と3人で。地区大会から全国へ。3局のうち2勝で勝ち',
     teams: 48,
     games: 3,
     winsToTake: 2,
@@ -201,8 +201,9 @@ function hananeMember(roster, format) {
 
 /**
  * 百花の棋風と得意戦法を決める種。物語の人物なので、どの大会でも同じ百花にする(羽音と同じ。仲間のステータスで毎回違うと人物がぶれる。16章)。
+ * 楽しそうに攻める初心者に合う種を選んだ(いちばん得意は寄せ、次が発想、苦手は大局観。速攻・大舞台に弱い・優勢で緩むの特徴)。
  */
-const MOMOKA_SEED = 20260509;
+const MOMOKA_SEED = 20260500;
 
 /** 百花(高校の団体戦の3人目)。将棋はまだ初心者に近いが、楽しそうに攻める。 */
 function momokaMember() {
@@ -1268,9 +1269,6 @@ export function teamMemberStatus(run, memberId) {
     }
   }
   const you = memberId === TEAM_USER_ID;
-  const world = Number.isFinite(run.settings?.world) ? run.settings.world : recommendedWorldLevel(run.userLevel ?? 20);
-  const base = run.format === 'school' ? SCHOOL_BASE : WORLD_BASE_RATING;
-  const level = you ? (run.userLevel ?? null) : Number.isFinite(member.rating) ? worldCpuLevel(member.rating, world, base) : null;
   return {
     id: memberId,
     name: member.name,
@@ -1280,8 +1278,7 @@ export function teamMemberStatus(run, memberId) {
     dan: member.dan ?? '',
     record: { wins, losses },
     recordText: wins + losses ? `この大会 ${wins}勝${losses}敗` : 'この大会は、まだ指していない',
-    strength: Number.isFinite(level) ? `${levelGradeName(level)}くらい` : '',
-    style: member.style?.label ?? '',
+    strength: you ? (Number.isFinite(run.userLevel) ? `${levelGradeName(run.userLevel)}くらい` : '') : strengthText(run.format, member.rating),
     repertoire: member.repertoire ? repertoireText(member.repertoire) : '',
     line: you ? '' : memberLine(run, member),
     profile: you ? null : {
@@ -1323,6 +1320,26 @@ export function teamEntryMembers({ format, roster = null, userSeat = RECOMMENDED
 }
 
 /**
+ * 仲間の強さの言い方(16章の2)。段級位にすると、世界の難易度で羽音が「22級」のように見えてしまうので、
+ * 高校は高校生の中での位置、プロは竜王戦の組で言う(ドラフトの候補と同じ言い方)。
+ * @param {string} format
+ * @param {number} rating
+ */
+function strengthText(format, rating) {
+  if (!Number.isFinite(rating)) return '';
+  if (format === 'school') {
+    const diff = rating - SCHOOL_BASE;
+    if (diff >= 300) return '高校生で飛び抜けて強い';
+    if (diff >= 100) return '全国の上位校の主将くらい';
+    if (diff >= -20) return '全国大会の学校くらい';
+    if (diff >= -90) return '県大会の学校くらい';
+    return '地区大会の学校くらい';
+  }
+  const groups = Object.entries(GROUP_MEAN_RATING).sort((a, b) => b[1] - a[1]);
+  return `竜王戦${groups.find(([, mean]) => rating >= mean - 40)?.[0] ?? groups.at(-1)?.[0] ?? 6}組くらい`;
+}
+
+/**
  * 自分への羽音の一言(自分の能力のいちばん得意・苦手から。my-abilities.mjsのmyAbilityProfileのbest・worst)。
  * @param {{ best?: { label: string } | null, worst?: { label: string } | null } | null} profile
  */
@@ -1344,7 +1361,7 @@ function memberLine(run, member) {
       ? `百花「羽音ちゃんは${best.label}がすごいんだよ！ ……${worst.label}は、ちょっとだけ苦手みたい」`
       : `羽音「私？ ${best.label}には自信がある。${worst.label}は……まあ、君がいるから」`;
   }
-  if (member.id === TEAM_MOMOKA_ID) return `羽音「百花は${best.label}がいい。${worst.label}で慌てなければ、勝てるよ」`;
+  if (member.id === TEAM_MOMOKA_ID) return `羽音「百花は${best.label}がいい。${worst.label}は、これから覚えればいい」`;
   return `羽音「${member.name}さんは${best.label}が強い。${worst.label}は、ほかの2人で補えばいい」`;
 }
 

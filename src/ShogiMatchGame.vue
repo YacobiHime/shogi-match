@@ -509,6 +509,8 @@
       :team-career="teamCareer"
       :team-draft-members="teamDraftMembers"
       :team-my-abilities="teamMyAbilities"
+      :team-my-profile="avatarProfile"
+      :team-roster="ryuoRoster"
       :team-suspended-moves="suspendedTeamMoves"
       :team-news="teamNews"
       @team-enter="enterTeam"
