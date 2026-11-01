@@ -21,8 +21,8 @@ export const TEAM_MOMOKA_ID = 'momoka';
 export const USER_TEAM = 'T0';
 
 /**
- * 高校の団体戦の、自分たちの学校(羽音と百花が通う)。燈ヶ丘(ともりがおか)高校。ノベルの舞台は使わない約束の例外で、
- * 名前だけをユーザーが選んだ(docs/team-battle-design.mdの13章)。読み仮名は、はじめて出る誘いの場面に添える。
+ * 高校の団体戦の、自分たちの学校(羽音と百花が通う)。燈ヶ丘(ともりがおか)高校(ノベルと同じ舞台。docs/novel-reference.mdの2章)。
+ * 読み仮名は、はじめて出る誘いの場面に添える(docs/team-battle-design.mdの13章)。
  */
 export const SCHOOL_NAME = '燈ヶ丘高校';
 /** 学校の名前の読み。 */

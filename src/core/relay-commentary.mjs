@@ -680,7 +680,7 @@ const THOUGHTS = Object.freeze({
     start: '自分の将棋を指そう', think: 'ここは大事な局面だ', ahead: '良くなった。丁寧にいこう', behind: '苦しいが、何かあるはず',
     byoyomi: '時間がない。落ち着いて', regret: 'しまった……', chance: '今の手は、甘いんじゃないか', resign: '……負けだ', win: '勝てた。いい将棋だった',
   },
-  // 羽音は敬語を使わない。口調は docs/hanane-character.md(ノベルのキャラクター性だけを参考にした羽音の口調)。
+  // 羽音は敬語を使わない。口調は docs/hanane-character.md(ノベルの設定から写した羽音の口調)。
   hanane: {
     start: 'いつも通りでいい', think: 'もう少し、深く読もう', ahead: 'このまま、正確にいこう', behind: 'ふぅん……そう来るんだ',
     byoyomi: '大丈夫。読めてる', regret: 'ああ……今の、甘かった', chance: 'え、見えた', resign: '私の負け、か', win: 'よし、勝った',
