@@ -144,6 +144,7 @@
             <span class="pro-year__mark pro-year__mark--title">★</span>タイトル戦
             <span class="pro-year__mark pro-year__mark--rival">羽音</span>の対局
             <span class="pro-year__mark pro-year__mark--study">研</span>研究会
+            <span class="pro-year__mark pro-year__mark--festival">祭</span>将棋まつり
           </p>
         </div>
 
@@ -197,6 +198,7 @@
                 今年度の獲得 <b>{{ moneyText(view.wallet.earned) }}</b>
                 <small>対局料 {{ moneyText(view.wallet.mine.fee) }}・賞金 {{ moneyText(view.wallet.mine.prize) }}・謝礼 {{ moneyText(view.wallet.mine.gig) }}</small>
               </p>
+              <p class="pro-year__gear-now">ファン：<b data-pro-fans>{{ view.wallet.fans }}人</b><small>将棋まつりの謝礼が増えるよ</small></p>
               <p class="pro-year__gear-now">研究の道具：<b>{{ view.wallet.gearName || "まだない" }}</b><small v-if="view.wallet.gearPrep">{{ view.wallet.gearPrep }}</small></p>
               <div v-if="view.wallet.next" class="pro-year__gear-next" data-pro-gear>
                 <span class="pro-year__gear-name">次は<b>{{ view.wallet.next.name }}</b>（{{ moneyText(view.wallet.next.price) }}）<small>{{ view.wallet.next.prep }}</small></span>
@@ -217,6 +219,12 @@
                 <small>{{ row.rank }}位</small><span>{{ row.you ? `${playerName}（あなた）` : row.name }}</span><b>{{ moneyText(row.amount) }}</b>
               </li>
             </ol>
+            <template v-if="view.kigou.length">
+              <h3 class="pro-year__subhead">揮毫帳<small>（{{ view.kigou.length }}枚）</small></h3>
+              <ul class="pro-year__kigou" data-pro-kigou>
+                <li v-for="(item, index) in view.kigou" :key="index"><b>{{ item.word }}</b><small>{{ shortDate(item.date) }} {{ item.place }}</small></li>
+              </ul>
+            </template>
             <h3 class="pro-year__subhead">できごと</h3>
             <ul class="pro-year__log">
               <li v-if="!view.log.length" class="pro-year__log-empty">まだ何もないよ。最初の対局へ。</li>
@@ -277,16 +285,21 @@
         </template>
         <template v-else-if="view.pending">
           <div class="shogi-tournament__actions shogi-tournament__actions--two">
-            <!-- 研究会の練習対局は、分身に任せない(帰ってもよい。D:9-2) -->
+            <!-- 研究会の練習対局は、分身に任せない(帰ってもよい。D:9-2)。まつりの指導対局は、やめるとまつりへ戻る。 -->
             <button v-if="view.pending.kind === 'study'" type="button" class="shogi-tournament__sub" data-pro-leave-study @click="emit('life', { kind: 'leave-study' })">{{ STUDY_TEXT.leave }}</button>
+            <button v-else-if="view.pending.kind === 'shidou'" type="button" class="shogi-tournament__sub" data-pro-cancel-shidou @click="emit('life', { kind: 'cancel-shidou' })">まつりへ戻る</button>
             <button v-else type="button" class="shogi-tournament__sub" data-pro-auto @click="openAuto">分身に任せる</button>
             <button type="button" class="shogi-tournament__start" data-pro-play @click="suspendedMoves ? emit('resume') : emit('play')">
-              {{ suspendedMoves ? `対局を再開（${suspendedMoves}手目から）` : view.pending.kind === "study" ? "練習対局を指す" : "対局する" }}
+              {{ suspendedMoves ? `対局を再開（${suspendedMoves}手目から）` : view.pending.kind === "study" ? "練習対局を指す" : view.pending.kind === "shidou" ? "指導対局を指す" : "対局する" }}
             </button>
           </div>
         </template>
         <template v-else>
-          <!-- 寄り道(研究会。次の公式戦の前にあれば。行かなくても何も失わない。10-2の5、D:9-2) -->
+          <!-- 寄り道(研究会・将棋まつり。次の公式戦の前にあれば。行かなくても何も失わない。10-2の5・6、D:9-2) -->
+          <div v-if="festivalDetour" class="pro-year__detour pro-year__detour--festival" data-pro-detour="festival">
+            <span class="pro-year__detour-text"><small>{{ STUDY_TEXT.detour }}</small><b>{{ festivalDetour.dateText }}</b> {{ festivalDetour.name }}</span>
+            <button type="button" class="pro-year__detour-go" data-pro-join-festival @click="emit('life', { kind: 'join-festival', date: festivalDetour.date })">行く</button>
+          </div>
           <div v-if="detour" class="pro-year__detour" data-pro-detour>
             <span class="pro-year__detour-text"><small>{{ STUDY_TEXT.detour }}</small><b>{{ detour.dateText }}</b> 研究会<small>対 {{ nameText(detour.opponent) }}</small></span>
             <button type="button" class="pro-year__detour-go" data-pro-join-study @click="emit('life', { kind: 'join-study', date: detour.date })">{{ STUDY_TEXT.join }}</button>
@@ -301,7 +314,12 @@
       <div v-if="dayOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="dayOpen.dateText" data-pro-day-sheet @click.self="dayDate = ''">
         <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
           <h2>{{ dayOpen.dateText }}</h2>
-          <p v-if="!dayOpen.games.length && !dayPlans.length && !dayOpen.study" class="shogi-tournament__text">この日は、見ておきたい対局がないよ。</p>
+          <p v-if="!dayOpen.games.length && !dayPlans.length && !dayOpen.study && !dayOpen.festival" class="shogi-tournament__text">この日は、見ておきたい対局がないよ。</p>
+          <p v-if="dayOpen.festival" class="pro-year__day-study pro-year__day-festival" data-pro-day-festival>
+            <b>{{ dayOpen.festival.name }}</b>{{ dayOpen.festival.place }}
+            <small v-if="dayOpen.festival.fee !== null">謝礼 {{ moneyText(dayOpen.festival.fee) }}・ファン＋{{ dayOpen.festival.fans }}</small>
+            <small v-else>次の公式戦の前なら、「寄り道」から行けるよ。</small>
+          </p>
           <p v-if="dayOpen.study" class="pro-year__day-study" data-pro-day-study>
             <b>研究会</b>{{ dayOpen.study.members.join("・") }}
             <small v-if="dayOpen.study.result">練習対局 {{ dayOpen.study.result.opponent }}に{{ dayOpen.study.result.r === "win" ? "勝ち" : dayOpen.study.result.r === "loss" ? "負け" : "引き分け" }}</small>
@@ -324,6 +342,16 @@
           <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="dayDate = ''">閉じる</button>
         </div>
       </div>
+
+      <!-- 将棋まつりの画面(10-2の6)。行ったら、まつりを終えるまで重ねる(指導対局を指しているあいだは閉じる)。 -->
+      <ProFestival
+        v-if="view.festival && !view.pending"
+        ref="festivalEl"
+        :festival="view.festival"
+        :player-name="playerName"
+        :asset-base-url="assetBaseUrl"
+        @life="emit('life', $event)"
+      />
 
       <!--
         棋戦の画面(10-2の1)。全画面で重ね、期の切り替え・段階のタブ・竜王戦と同じトーナメント表(RyuoBracket)・番勝負の星・リーグ表。
@@ -469,6 +497,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import RyuoBracket from "./RyuoBracket.vue";
+import ProFestival from "./ProFestival.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
@@ -476,7 +505,7 @@ import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import { STUDY_TEXT, moneyText } from "./core/pro-life.mjs";
 import {
-  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, monthView, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, studyOffer, yearEnd, yearStart,
+  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, monthView, previewNextGame, proEvent, festivalOffer, proYearRelayGame, proYearTalk, proYearView, studyOffer, yearEnd, yearStart,
 } from "./core/pro-year.mjs";
 
 type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
@@ -598,8 +627,10 @@ const pendingColor = computed(() => {
   const pending = props.state?.pending;
   return pending ? proEvent(props.state.games[pending.gameId]?.event)?.color ?? "#f1a54c" : "#f1a54c";
 });
-/** 寄り道の研究会(次の公式戦の前にあれば)。 */
+/** 寄り道の研究会と将棋まつり(次の公式戦の前にあれば)。 */
 const detour = computed(() => (props.state ? studyOffer(props.state, nextPreview.value) : null));
+const festivalDetour = computed(() => (props.state ? festivalOffer(props.state, nextPreview.value) : null));
+const festivalEl = ref<{ goBack: () => boolean } | null>(null);
 /** 羽音が話す行(公式戦の前の一言・研究会の誘いと練習対局のあとの一言)。 */
 const hananeTalks = computed(() => Boolean(view.value?.pending?.hananeLine || (!view.value?.pending && view.value?.study?.talk)));
 const talkSprite = computed(() => (hananeTalks.value ? hananeSprite.value : yakobiSprite.value));
@@ -609,6 +640,7 @@ const runLine = computed(() => {
   const pending = current.pending;
   if (pending?.hananeLine) return pending.hananeLine;
   if (pending?.kind === "study") return `研究会の日だよ。今日は${nameText(pending.opponent)}と練習対局。公式戦には数えないから、試したい作戦を指してみよう！`;
+  if (pending?.kind === "shidou") return pending.coachLine ?? "";
   if (pending) return pending.kind === "finals" ? PRO_YEAR_TEXT.titleGame : pending.stakes?.boss ? PRO_YEAR_TEXT.bigGame : PRO_YEAR_TEXT.game;
   if (current.study?.talk) return current.study.talk;
   return proYearTalk(current, nextPreview.value);
@@ -663,7 +695,7 @@ function stepMonth(delta: number) {
 }
 /** マスの印(自分の対局を先に。羽音とタイトル戦は1日に1つ。多くて3つ。くわしくはその日のシートで)。 */
 const cellMarks = (cell: Cell) => {
-  const order: { [kind: string]: number } = { user: 0, title: 1, study: 2, rival: 3, plan: 4 };
+  const order: { [kind: string]: number } = { user: 0, festival: 1, title: 2, study: 3, rival: 4, plan: 5 };
   const seen = new Set<string>();
   return [...cell.items].sort((a, b) => order[a.kind] - order[b.kind]).filter((item) => {
     const key = item.kind === "user" || item.kind === "plan" ? `${item.kind}-${item.event}` : item.kind;
@@ -678,6 +710,7 @@ const markText = (item: any) => {
   if (item.kind === "title") return `★${proEvent(item.event)?.short ?? ""}`;
   if (item.kind === "rival") return "羽音";
   if (item.kind === "study") return item.result ? `${item.result === "win" ? "○" : item.result === "loss" ? "●" : "△"}研` : "研";
+  if (item.kind === "festival") return "祭";
   const short = item.short ?? proEvent(item.event)?.short ?? "";
   if (item.kind === "user" && item.result) return `${item.result === "win" ? "○" : "●"}${short}`;
   return short;
@@ -685,7 +718,7 @@ const markText = (item: any) => {
 const dayAria = (cell: Cell) => {
   if (!cell.inMonth) return "";
   const parts = cell.items.map((item) => (item.kind === "user" ? `自分の対局 ${item.label}` : item.kind === "title" ? `タイトル戦 ${item.label}` : item.kind === "rival" ? `羽音の対局`
-    : item.kind === "study" ? "研究会" : `勝ち残れば ${item.label}`));
+    : item.kind === "study" ? "研究会" : item.kind === "festival" ? item.label : `勝ち残れば ${item.label}`));
   return `${Number(cell.date.slice(5, 7))}月${cell.day}日${cell.today ? "（今日）" : ""}${parts.length ? `。${parts.join("、")}` : ""}`;
 };
 
@@ -764,6 +797,7 @@ function confirmAuto() {
 
 /** 戻る操作。重ねて開いたものを閉じたら真。 */
 function goBack() {
+  if (festivalEl.value?.goBack()) return true;
   if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (autoOpen.value) autoOpen.value = false;
@@ -873,9 +907,10 @@ defineExpose({ goBack });
 .shogi-game .pro-year__money { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
 .shogi-game .pro-year__money small { color: #cfd8de; font-size: 0.72rem; }
 .shogi-game .pro-year__money b { color: #e9c46a; font-size: 1.2rem; }
-.shogi-game .pro-year__money-line { display: grid; font-size: 0.82rem; }
+.shogi-game .pro-year__money-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.3rem; font-size: 0.82rem; }
+.shogi-game .pro-year__money-line small, .shogi-game .pro-year__gear-now small { flex-basis: 100%; }
 .shogi-game .pro-year__money-line small, .shogi-game .pro-year__gear-now small, .shogi-game .pro-year__gear-name small { color: #cfd8de; font-size: 0.7rem; }
-.shogi-game .pro-year__gear-now { display: grid; font-size: 0.82rem; }
+.shogi-game .pro-year__gear-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.3rem; font-size: 0.82rem; }
 .shogi-game .pro-year__gear-next { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name buy" "bar buy"; align-items: center; gap: 0.25rem 0.5rem; }
 .shogi-game .pro-year__gear-name { grid-area: name; display: grid; font-size: 0.8rem; }
 .shogi-game .pro-year__gear-bar { grid-area: bar; display: block; height: 0.45rem; overflow: hidden; border-radius: 999px; background: rgba(23, 38, 50, 0.9); }
@@ -906,6 +941,16 @@ defineExpose({ goBack });
 .shogi-game .pro-year__day-study { display: grid; gap: 0.1rem; margin: 0.3rem 0; padding: 0.35rem 0.5rem; border-left: 0.35rem solid #c9b6e4; border-radius: 0.4rem; background: rgba(201, 182, 228, 0.12); font-size: 0.85rem; }
 .shogi-game .pro-year__day-study b { margin-right: 0.4rem; }
 .shogi-game .pro-year__day-study small { color: #cfd8de; font-size: 0.75rem; }
+/* 将棋まつり */
+.shogi-game .pro-year__mark--festival { color: #fffcf4; background: #c0392b; }
+.shogi-game .pro-year__day-festival { border-left-color: #c0392b; background: rgba(192, 57, 43, 0.14); }
+.shogi-game .pro-year__detour--festival { border-color: #f5b7b1; background: rgba(192, 57, 43, 0.14); }
+.shogi-game .pro-year__detour--festival .pro-year__detour-text small:first-child { background: #f5b7b1; }
+.shogi-game .pro-year__detour--festival .pro-year__detour-go { border-color: #f5b7b1; }
+.shogi-game .pro-year__kigou { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__kigou li { display: grid; padding: 0.3rem 0.45rem; border: 0.12rem solid #d4af37; border-radius: 0.3rem; color: #1b1b1b; background: #fbf8f0; }
+.shogi-game .pro-year__kigou b { font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: 1rem; }
+.shogi-game .pro-year__kigou small { overflow: hidden; color: #5d6d7e; font-size: 0.66rem; text-overflow: ellipsis; white-space: nowrap; }
 /* 寄り道 */
 .shogi-game .pro-year__detour {
   display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.3rem 0.35rem 0.3rem 0.6rem;

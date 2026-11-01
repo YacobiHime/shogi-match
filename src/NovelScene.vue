@@ -2,6 +2,7 @@
   <!--
     ノベルの場面(docs/team-battle-design.mdの6章)。後の物語モードでも使う。
     押す(クリック・Enter・Space・→)と、文の出かけは全部出し、出ていれば次の行。右上の「飛ばす」で最後まで(D:8-2 遊びを止めない)。
+    選択肢のある行(choices)は、文が出きったら答えのボタンを出し、選ぶと返しの行が続く(将棋まつりのトークショー。docs/pro-year-design.mdの10-2の6)。
   -->
   <div
     ref="root"
@@ -35,38 +36,55 @@
     <div class="novel__box">
       <p v-if="line.name" class="novel__name" :class="`novel__name--${line.who}`">{{ line.name }}</p>
       <p class="novel__text" :class="{ 'novel__text--narration': line.who === 'narration' }" aria-live="polite">{{ shown }}</p>
-      <span v-if="complete" class="novel__next" aria-hidden="true">{{ isLast ? "■" : "▼" }}</span>
+      <span v-if="complete && !choosing" class="novel__next" aria-hidden="true">{{ isLast ? "■" : "▼" }}</span>
+    </div>
+    <div v-if="choosing" class="novel__choices" role="group" aria-label="答えを選ぶ" data-novel-choices @click.stop>
+      <button
+        v-for="(choice, at) in line.choices"
+        :key="at"
+        ref="choiceButtons"
+        type="button"
+        class="novel__choice"
+        :data-novel-choice="at"
+        @click.stop="choose(at)"
+      >{{ choice.label }}</button>
     </div>
     <button type="button" class="novel__skip" data-novel-skip @click.stop="finish">飛ばす</button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { portraitUrl } from "./core/team-story.mjs";
 
-type SceneLine = { who: string; face: string; name: string; text: string };
+type SceneChoice = { label: string; value?: string; reply?: SceneLine[] };
+type SceneLine = { who: string; face: string; name: string; text: string; choices?: SceneChoice[] };
 type Scene = { id: string; title: string; background: string; cast: string[]; lines: SceneLine[] };
 
 const props = defineProps<{ scene: Scene; assetBaseUrl: string }>();
-const emit = defineEmits<{ done: [] }>();
+const emit = defineEmits<{ done: []; choose: [payload: { line: number; choice: number; value: string }] }>();
 
 /** 1文字を出す間隔(ミリ秒)。押せば待たずに全部出る。 */
 const CHAR_MS = 30;
 
 const root = ref<HTMLElement | null>(null);
+const choiceButtons = ref<HTMLButtonElement[]>([]);
 const index = ref(0);
 const count = ref(0);
 let timer: ReturnType<typeof setInterval> | null = null;
+/** いま見せている行(選んだ答えの返しを差し込む)。 */
+const lines = ref<SceneLine[]>([...props.scene.lines]);
 
-const line = computed<SceneLine>(() => props.scene.lines[index.value] ?? { who: "narration", face: "neutral", name: "", text: "" });
+const line = computed<SceneLine>(() => lines.value[index.value] ?? { who: "narration", face: "neutral", name: "", text: "" });
 const shown = computed(() => Array.from(line.value.text).slice(0, count.value).join(""));
 const complete = computed(() => count.value >= Array.from(line.value.text).length);
-const isLast = computed(() => index.value >= props.scene.lines.length - 1);
+const isLast = computed(() => index.value >= lines.value.length - 1);
+/** 答えを選ぶところ(文が出きったら、ボタンを出して待つ)。 */
+const choosing = computed(() => complete.value && Boolean(line.value.choices?.length));
 
 /** 登場する人ごとの、いまの表情の立ち絵(最後に話した表情を残す)。 */
 const castView = computed(() => props.scene.cast.map((who) => {
-  const spoken = props.scene.lines.slice(0, index.value + 1).filter((entry) => entry.who === who).at(-1);
+  const spoken = lines.value.slice(0, index.value + 1).filter((entry) => entry.who === who).at(-1);
   const face = spoken?.face ?? "neutral";
   return {
     who,
@@ -107,6 +125,8 @@ function advance() {
     count.value = Array.from(line.value.text).length;
     return;
   }
+  // 答えを選ぶまでは進まない。
+  if (choosing.value) return;
   if (isLast.value) {
     finish();
     return;
@@ -114,7 +134,21 @@ function advance() {
   index.value += 1;
 }
 
+/** 答えを選ぶ: 返しの行を次に差し込んで進む。 */
+function choose(at: number) {
+  const choice = line.value.choices?.[at];
+  if (!choice) return;
+  emit("choose", { line: index.value, choice: at, value: choice.value ?? "" });
+  const next = [...lines.value];
+  next.splice(index.value + 1, 0, ...(choice.reply ?? []));
+  next[index.value] = { ...line.value, choices: undefined };
+  lines.value = next;
+  index.value += 1;
+  root.value?.focus();
+}
+
 function onKeydown(event: KeyboardEvent) {
+  if (choosing.value && (event.target as HTMLElement | null)?.closest?.("[data-novel-choices]")) return;
   if (event.key === "Enter" || event.key === " " || event.key === "ArrowRight") {
     event.preventDefault();
     advance();
@@ -123,8 +157,13 @@ function onKeydown(event: KeyboardEvent) {
 
 watch(index, startTyping);
 watch(() => props.scene.id, () => {
+  lines.value = [...props.scene.lines];
   index.value = 0;
   startTyping();
+});
+// 答えのボタンが出たら、最初のボタンへ(キーボードでも選べる)。
+watch(choosing, (open) => {
+  if (open) void nextTick(() => choiceButtons.value[0]?.focus());
 });
 
 onMounted(() => {
@@ -142,7 +181,7 @@ defineExpose({ finish });
   inset: 0;
   z-index: 200;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   overflow: hidden;
   color: #fffcf4;
   cursor: pointer;
@@ -239,6 +278,29 @@ defineExpose({ finish });
   font-size: 0.8em;
   animation: novel-next 900ms ease-in-out infinite;
 }
+.novel__choices {
+  display: grid;
+  gap: 0.45em;
+  width: min(calc(100% - 1.6em), 46em);
+  margin: 0 auto 0.9em;
+  cursor: default;
+}
+.novel__choice {
+  min-height: 44px;
+  padding: 0.55em 1em;
+  border: 0.12em solid rgba(255, 252, 244, 0.7);
+  border-radius: 0.7em;
+  color: #172632;
+  background: #fffcf4;
+  font: inherit;
+  font-size: 0.98em;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.novel__choice:hover, .novel__choice:focus-visible { background: #ffe7c2; outline: 0.15em solid var(--amber, #f1a54c); }
+.novel__name--you { background: #ffe7c2; }
+.novel__name--host { background: #d6dde3; }
 .novel__skip {
   position: absolute;
   top: 0.55em;

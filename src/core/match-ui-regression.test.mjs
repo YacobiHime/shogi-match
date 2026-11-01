@@ -971,6 +971,10 @@ describe("match screen regressions", () => {
     expect(year).toMatch(/v-if="view\.pending\.kind === 'study'"[^>]*data-pro-leave-study/);
     expect(year).toMatch(/data-pro-detour>[\s\S]{0,600}?data-pro-join-study[\s\S]{0,400}?data-pro-advance/);
     expect(year).toMatch(/data-pro-buy-gear @click="emit\('life', \{ kind: 'buy-gear' \}\)"/);
+    // 将棋まつり: まつりの画面は指導対局のあいだは閉じ、指導対局は対局画面で指してファンを記録する(10-2の6)。
+    expect(year).toMatch(/<ProFestival\s+v-if="view\.festival && !view\.pending"/);
+    expect(source).toMatch(/setProYear\(startProYearShidou\(state\)\);\s*if \(proYearState\.value\?\.pending\?\.kind === "shidou"\) startProYearGame\(\);/);
+    expect(source).toMatch(/if \(state\.pending\.kind === "shidou"\) \{[\s\S]{0,300}?recordProYearShidou\(state, outcome\)/);
   });
 
   it('ホームのあそぶの行に物語(近日公開)を置き、押すと吹き出しで知らせる(docs/team-battle-design.mdの9章)', () => {
@@ -1212,7 +1216,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/function startKenshukaiGame\(\) \{\s*confirmDiscardSuspended\(startKenshukaiGameNow\);/);
     expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "kenshukai" \};/);
     // 指導対局は駒落ちの開始局面(上手のCPUが先に指す)。作戦の指定はしない。平手でないので、レーティングには数えない。
-    expect(source).toMatch(/learningStartPosition\(\{ startType: "handicap", handicapId: pending\.handicap, handicapGiver: "cpu"/);
+    // 棋士の1年の将棋まつりの指導対局だけ、あなたが上手(handicapGiver: "player")。
+    expect(source).toMatch(/learningStartPosition\(\{ startType: "handicap", handicapId: pending\.handicap, handicapGiver: pending\.handicapGiver === "player" \? "player" : "cpu"/);
     expect(source).toMatch(/const gameStyle = handicapStart \? null : pending\.style \?\? opponent\.style;/);
     expect(source).toMatch(/&& matchInitialSfen\.value === STANDARD_SFEN\s*\/\/ Lv0/);
     // 千日手は、駒落ちなら同じ手合いのまま指し直す。

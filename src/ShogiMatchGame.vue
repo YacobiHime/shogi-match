@@ -2719,8 +2719,10 @@ import {
   loadTeamBattle, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
 } from "./core/team-battle.mjs";
 import {
-  advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, createProYear, fiscalYearOf, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy,
-  loadProYear, proYearSeason, proYearView, recordProGame, recordStudyGame as recordProYearStudy, saveProYear, startNextYear as startNextProYear,
+  advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
+  fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
+  recordFestivalEvent as recordProYearFestivalEvent, recordProGame, recordShidou as recordProYearShidou, recordStudyGame as recordProYearStudy, saveProYear,
+  startNextYear as startNextProYear, startShidou as startProYearShidou,
 } from "./core/pro-year.mjs";
 import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
@@ -6769,12 +6771,13 @@ function startRyuoMatch() {
   const opponent = pending ? season.players[pending.opponentId] : null;
   if (!pending || !opponent) return;
   // 研修会の指導対局は駒落ち(上手のCPUが後手の側から先に指す。docs/kenshukai-design.mdの4章)。レーティングには数えない(平手でないため)。
+  // 棋士の1年の将棋まつりの指導対局は、あなたが上手(handicapGiver: "player"。後手で先に指す。docs/pro-year-design.mdの10-2の6)。
   const handicapStart = pending.handicap
-    ? learningStartPosition({ startType: "handicap", handicapId: pending.handicap, handicapGiver: "cpu", standardSfen: props.initialSfen })
+    ? learningStartPosition({ startType: "handicap", handicapId: pending.handicap, handicapGiver: pending.handicapGiver === "player" ? "player" : "cpu", standardSfen: props.initialSfen })
     : null;
   matchInitialSfen.value = handicapStart?.sfen ?? props.initialSfen;
-  selectedPlayerColor.value = handicapStart ? "black" : pending.color;
-  activePlayerColor.value = handicapStart ? "black" : pending.color;
+  selectedPlayerColor.value = handicapStart ? (handicapStart.playerColor === "white" ? "white" : "black") : pending.color;
+  activePlayerColor.value = selectedPlayerColor.value;
   learningStartLabel.value = "";
   selectedStrategy.value = "";
   selectedCastle.value = "";
@@ -7498,14 +7501,25 @@ function proYearLife(action: { kind: string; [key: string]: unknown }) {
     if (bought) setProYear(next);
   } else if (action.kind === "join-study" && typeof action.date === "string") {
     setProYear(joinProYearStudy(state, action.date));
-  } else if (action.kind === "leave-study") {
-    // 中断している練習対局は、もう指さないので消す。
+  } else if (action.kind === "leave-study" || action.kind === "cancel-shidou") {
+    // 中断している練習対局・指導対局は、もう指さないので消す。
     const suspended = suspendedMatch.value;
     if (suspended?.event === "pro-year" && suspended.ryuoOpponentId === state.pending?.opponentId) {
       suspendedMatch.value = null;
       discardPersistedMatch();
     }
-    setProYear(leaveProYearStudy(state));
+    setProYear(action.kind === "leave-study" ? leaveProYearStudy(state) : cancelProYearShidou(state));
+  } else if (action.kind === "join-festival" && typeof action.date === "string") {
+    setProYear(joinProYearFestival(state, action.date));
+  } else if (action.kind === "festival-shidou") {
+    // 将棋まつりの駒落ち指導対局(あなたが上手)。すぐ対局画面で指す。
+    setProYear(startProYearShidou(state));
+    if (proYearState.value?.pending?.kind === "shidou") startProYearGame();
+  } else if (action.kind === "festival-event" && typeof action.id === "string") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setProYear(recordProYearFestivalEvent(state, action.id as "simul" | "talk" | "kigou", (action.result ?? {}) as any).state);
+  } else if (action.kind === "festival-finish") {
+    setProYear(finishProYearFestival(state).state);
   }
 }
 /** 年度のまとめから「次の年度へ」。 */
@@ -7524,6 +7538,16 @@ function recordProYearOutcome(matchResult: MatchResult) {
   const game = ryuoGame.value;
   const state = proYearState.value;
   if (!game || !state?.pending) return;
+  // 将棋まつりの駒落ち指導対局(公式戦でない。勝っても負けてもファンが増える。10-2の6)。
+  if (state.pending.kind === "shidou") {
+    const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";
+    const result = recordProYearShidou(state, outcome);
+    proYearResultLine.value = `指導対局 ${result.text}（ファン＋${result.fans}）`;
+    finishMilestone = null;
+    setProYear(result.state);
+    ryuoGame.value = { ...game, outcome: outcome === "draw" ? undefined : outcome, replay: false };
+    return;
+  }
   // 研究会の練習対局(公式戦でない。千日手は引き分けのまま。10-2の5)。
   if (state.pending.kind === "study") {
     const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";

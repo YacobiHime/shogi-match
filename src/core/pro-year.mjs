@@ -13,6 +13,9 @@ import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, world
 import { CLASS_RULES } from './meijin.mjs';
 import { GEAR, STUDY_SIZE, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, studyDaysBetween, studyDaysOfMonth, studyHananeLine } from './pro-life.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
+import {
+  FESTIVAL_EVENTS, KIGOU_BOOK_MAX, KIGOU_FANS, SHIDOU_FANS, SIMUL_FANS, festivalDays, festivalFee, kigouWords, shidouGuest, simulGuests, talkFans,
+} from './pro-festival.mjs';
 
 export const PRO_YEAR_KEY = 'yacobihime:shogi-match:pro-year:v1';
 /** プレイヤーのid(名簿の'user'と同じ)。 */
@@ -985,7 +988,8 @@ function stakesText(state, cycle, stage, def) {
  */
 export function proYearSeason(state) {
   if (!state?.pending) return state ?? null;
-  const opponent = state.players[state.pending.opponentId];
+  // 将棋まつりの指導対局の相手は、1年の棋士でない(参加者。pending.guest)。
+  const opponent = state.players[state.pending.opponentId] ?? state.pending.guest ?? null;
   return {
     ...state,
     no: state.fy,
@@ -1000,7 +1004,8 @@ export function proYearSeason(state) {
  */
 export function advanceToNextGame(source) {
   const state = structuredClone(source);
-  if (state.pending || state.yearDone) return state;
+  // まつりの途中は進めない(まつりを終えてから)。
+  if (state.pending || state.yearDone || state.festival) return state;
   const rng = createRng(state.rng);
   const stopped = run(state, yearEnd(state.fy), rng);
   if (!stopped) {
@@ -1064,6 +1069,8 @@ export function recordProGame(source, outcome) {
       const event = proEvent(entry.event);
       return { cycle: entry.id, event: entry.event, name: event.name, short: event.short, title: event.kind === 'title', fy: state.fy, wins, losses: mine.length - wins };
     });
+  // タイトル獲得・棋戦優勝の回数(揮毫の言葉が増える。10-2の6)。
+  if (champions.length) state.user.crowns = (state.user.crowns ?? 0) + champions.length;
   return { state, replay: false, won, game: { ...game }, milestones, champions, fee, earned: (state.user.money ?? 0) - moneyBefore };
 }
 
@@ -1179,6 +1186,166 @@ function studyMate(state, id) {
   if (!record) return null;
   const member = state.players[id];
   return { wins: record.w, losses: record.l, draws: record.d ?? 0, repertoire: member?.repertoire ? repertoireText(member.repertoire) : member?.style?.label ?? '' };
+}
+
+// ---- 将棋まつり(10-2の6)
+
+/** 文字列から決まる数(まつりの種)。 */
+function festivalSeed(state, date) {
+  let hash = 2166136261 ^ (state.seed ?? 0);
+  for (const ch of date) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619);
+  return hash >>> 0;
+}
+
+/** その年度のまつりの日(自分の公式戦の日は翌日)。 */
+const yearFestivals = (state) => festivalDays(state.fy, userBusy(state));
+
+/**
+ * 寄り道の将棋まつり(次の公式戦の前にあれば)。行かなくても何も失わない(D:9-2)。
+ * @param {any} state
+ * @param {{ date: string } | null} [preview]
+ */
+export function festivalOffer(state, preview = null) {
+  if (!state || state.pending || state.yearDone || state.festival) return null;
+  const until = preview?.date ?? addDays(yearEnd(state.fy), 1);
+  const visited = new Set((state.festivals ?? []).map((item) => item.date));
+  const festival = yearFestivals(state).find((item) => item.date > state.date && item.date < until && !visited.has(item.date));
+  if (!festival) return null;
+  return { kind: 'festival', id: festival.id, date: festival.date, dateText: dateLabel(festival.date), name: festival.name, place: festival.place };
+}
+
+/**
+ * 将棋まつりに行く: その日まで進めて(あいだの対局は決まる)、まつりの画面(催しを選ぶ)。
+ * @param {any} source
+ * @param {string} date
+ */
+export function joinFestival(source, date) {
+  const state = structuredClone(source);
+  if (state.pending || state.yearDone || state.festival || !date || date <= state.date) return state;
+  const festival = yearFestivals(state).find((item) => item.date === date);
+  if (!festival) return state;
+  const rng = createRng(state.rng);
+  if (run(state, date, rng)) {
+    state.rng = rng.state;
+    return state;
+  }
+  state.rng = rng.state;
+  state.date = date;
+  state.festival = { id: festival.id, name: festival.name, place: festival.place, date, seed: festivalSeed(state, date), done: {}, fans: 0, startFans: state.user.fans ?? 0 };
+  return state;
+}
+
+/** まつりのファンを足す(まつりの記録と、あなたのファン)。 */
+function addFans(state, fans) {
+  state.festival.fans += fans;
+  state.user.fans = (state.user.fans ?? 0) + fans;
+}
+
+/** 駒落ち指導対局を始める(あなたが上手=後手で先に指す。レーティングには数えない)。 */
+export function startShidou(source) {
+  const state = structuredClone(source);
+  const festival = state.festival;
+  if (!festival || state.pending || festival.done.shidou) return state;
+  const guest = shidouGuest(festival, state.userLevel ?? 20);
+  state.pending = {
+    kind: 'shidou', gameId: null, opponentId: guest.id, guest, level: guest.level, color: 'white', style: null,
+    handicap: guest.handicap, handicapGiver: 'player',
+    label: `指導対局（${guest.handicapLabel}）`, eventText: festival.name, titleName: '', twoDay: false, date: festival.date,
+    stakes: { text: '勝ち負けより、楽しんでもらおう', goal: '', win: '', boss: false },
+    coachLine: `${guest.name}との指導対局だよ。あなたが上手で先に指すよ。勝ち負けより、楽しんでもらおう！`,
+    series: null, others: { games: [] },
+  };
+  return state;
+}
+
+/**
+ * 指導対局の結果(あなたから見た勝ち負け)。勝っても負けてもファンが増える(参加者が勝つと大喜び)。
+ * @param {any} source
+ * @param {'win' | 'loss' | 'draw'} outcome
+ */
+export function recordShidou(source, outcome) {
+  const state = structuredClone(source);
+  const pending = state.pending;
+  if (pending?.kind !== 'shidou' || !state.festival) return { state, fans: 0, text: '' };
+  const fans = outcome === 'loss' ? SHIDOU_FANS.guestWon : outcome === 'win' ? SHIDOU_FANS.userWon : SHIDOU_FANS.draw;
+  state.festival.done.shidou = { r: outcome, fans, name: pending.guest?.name ?? '' };
+  addFans(state, fans);
+  state.pending = null;
+  const text = outcome === 'loss' ? `${pending.guest?.name ?? '参加者'}が大喜び` : `${pending.guest?.name ?? '参加者'}と指導対局`;
+  return { state, fans, text };
+}
+
+/** 指導対局をやめる(始める前に戻る)。 */
+export function cancelShidou(source) {
+  const state = structuredClone(source);
+  if (state.pending?.kind === 'shidou') state.pending = null;
+  return state;
+}
+
+/**
+ * まつりの催しの結果(ぐるぐる指導・トークショー・揮毫)。
+ * @param {any} source
+ * @param {'simul' | 'talk' | 'kigou'} id
+ * @param {{ wins?: number, losses?: number, draws?: number, reactions?: string[], word?: string }} result
+ */
+export function recordFestivalEvent(source, id, result) {
+  const state = structuredClone(source);
+  const festival = state.festival;
+  if (!festival || festival.done[id]) return { state, fans: 0 };
+  let fans = 0;
+  if (id === 'simul') {
+    const boards = (result.wins ?? 0) + (result.losses ?? 0) + (result.draws ?? 0);
+    fans = SIMUL_FANS.perBoard * boards + ((result.wins ?? 0) >= 3 ? SIMUL_FANS.sweep : 0);
+    festival.done.simul = { wins: result.wins ?? 0, losses: result.losses ?? 0, draws: result.draws ?? 0, fans };
+  } else if (id === 'talk') {
+    fans = talkFans(result.reactions);
+    festival.done.talk = { reactions: [...(result.reactions ?? [])], fans };
+  } else if (id === 'kigou') {
+    const word = kigouWords(state.user.crowns).find((entry) => entry.open && entry.word === result.word)?.word;
+    if (!word) return { state, fans: 0 };
+    fans = KIGOU_FANS;
+    festival.done.kigou = { word, fans };
+    state.kigou = [...(state.kigou ?? []), { date: festival.date, word, place: festival.name }].slice(-KIGOU_BOOK_MAX);
+  } else {
+    return { state, fans: 0 };
+  }
+  addFans(state, fans);
+  return { state, fans };
+}
+
+/** まつりを終える: 謝礼(基本＋催しごと。ファンが多いほど基本が増える)を受け取り、1年の画面へ戻る。 */
+export function finishFestival(source) {
+  const state = structuredClone(source);
+  const festival = state.festival;
+  if (!festival || state.pending) return { state, fee: 0, fans: 0 };
+  const done = Object.keys(festival.done);
+  const fee = festivalFee(festival.startFans ?? 0, done.length);
+  earn(state, PRO_USER_ID, fee, 'gig');
+  state.festivals = [...(state.festivals ?? []), { date: festival.date, id: festival.id, fee, fans: festival.fans, done }].slice(-30);
+  noteMilestone(state, { event: 'festival', kind: 'plain', text: `${festival.name}（謝礼 ${fee}万円・ファン＋${festival.fans}）` });
+  state.festival = null;
+  return { state, fee, fans: festival.fans };
+}
+
+/** まつりの画面の形(催しの札・いまの謝礼の見込み・参加者・揮毫の言葉)。 */
+function festivalView(state) {
+  const festival = state.festival;
+  if (!festival) return null;
+  const done = Object.keys(festival.done);
+  return {
+    name: festival.name,
+    place: festival.place,
+    date: festival.date,
+    dateText: dateLabel(festival.date),
+    fans: festival.fans,
+    fee: festivalFee(festival.startFans ?? 0, done.length),
+    feePerEvent: 5,
+    events: FESTIVAL_EVENTS.map((entry) => ({ ...entry, done: festival.done[entry.id] ?? null })),
+    guest: shidouGuest(festival, state.userLevel ?? 20),
+    simul: simulGuests(festival),
+    words: kigouWords(state.user.crowns),
+    seed: festival.seed,
+  };
 }
 
 // ---- 年度
@@ -1329,7 +1496,7 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
     players,
     titles,
     junni: junniWorld,
-    user: { cls: userClass, group: clamp(Math.round(userGroup), 1, 6), seeds: {}, money: 0, gear: 0, fans: 0 },
+    user: { cls: userClass, group: clamp(Math.round(userGroup), 1, 6), seeds: {}, money: 0, gear: 0, fans: 0, crowns: 0 },
     cycles: {},
     games: {},
     nextGame: 1,
@@ -1440,6 +1607,8 @@ export function proYearView(state) {
     history: [...(state.history ?? [])].reverse(),
     wallet: walletView(state),
     study: studyView(state),
+    festival: festivalView(state),
+    kigou: [...(state.kigou ?? [])].reverse(),
   };
 }
 
@@ -1597,7 +1766,7 @@ function dayItems(state, date, projected = null) {
   return items;
 }
 
-/** その月の研究会の印(デビューの後。行った日は結果、これからの日は予定)。 */
+/** その月の研究会と将棋まつりの印(デビューの後。行った日は結果、これからの日は予定)。 */
 function studyItems(state, year, month) {
   const byDate = new Map();
   if (!state.study) return byDate;
@@ -1609,6 +1778,15 @@ function studyItems(state, year, month) {
     const today = state.pending?.kind === 'study' && state.pending.date === date;
     if (!done && !today && date <= state.date) continue;
     byDate.set(date, [{ kind: 'study', short: '研', color: '#c9b6e4', label: '研究会', result: done ? done.r : null }]);
+  }
+  // 将棋まつり(行った日と、これからの日)。
+  const visited = new Map((state.festivals ?? []).map((item) => [item.date, item]));
+  const fy = fiscalYearOf(`${year}-${pad(month)}-01`);
+  for (const festival of festivalDays(fy, userBusy(state))) {
+    if (Number(festival.date.slice(5, 7)) !== month || festival.date < state.debut) continue;
+    const went = visited.has(festival.date) || state.festival?.date === festival.date;
+    if (!went && festival.date <= state.date) continue;
+    byDate.set(festival.date, [...(byDate.get(festival.date) ?? []), { kind: 'festival', short: '祭', color: '#f5b7b1', label: festival.name, went }]);
   }
   return byDate;
 }
@@ -1654,13 +1832,21 @@ export function dayView(state, date) {
         twoDay: Boolean(game.twoDay),
       };
     }).sort((x, y) => Number(y.user) - Number(x.user)),
-    // 研究会の日なら、顔ぶれと、行った日は結果(10-2の5)。
+    // 研究会の日なら、顔ぶれと、行った日は結果(10-2の5)。将棋まつりの日なら、名前と会場(10-2の6)。
     study: dayStudy(state, date),
+    festival: dayFestival(state, date),
   };
 }
 
+function dayFestival(state, date) {
+  const item = festivalDays(fiscalYearOf(date), userBusy(state)).find((entry) => entry.date === date);
+  if (!item || date < state.debut) return null;
+  const went = (state.festivals ?? []).find((entry) => entry.date === date) ?? null;
+  return { name: item.name, place: item.place, fee: went?.fee ?? null, fans: went?.fans ?? null };
+}
+
 function dayStudy(state, date) {
-  const item = studyItems(state, Number(date.slice(0, 4)), Number(date.slice(5, 7))).get(date)?.[0];
+  const item = studyItems(state, Number(date.slice(0, 4)), Number(date.slice(5, 7))).get(date)?.find((entry) => entry.kind === 'study');
   if (!item) return null;
   const done = (state.study.log ?? []).find((entry) => entry.date === date) ?? null;
   return {
@@ -1963,7 +2149,7 @@ export function unpackProYear(packed, roster) {
     games[game.id] = game;
   }
   // 暮らしの記録のない前の保存は、0で埋める(版はそのまま。10-2の7)。
-  const user = { money: 0, gear: 0, fans: 0, ...(packed.user ?? {}) };
+  const user = { money: 0, gear: 0, fans: 0, crowns: 0, ...(packed.user ?? {}) };
   const year = { ...emptyYear(), ...(packed.year ?? {}) };
   const restored = { ...packed, players, games, user, year };
   if (!restored.study) restored.study = emptyStudy(restored);

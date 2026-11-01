@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   PRO_EVENTS, PRO_USER_ID, PRO_YEAR_KEY, TITLE_EVENTS, addDays, advanceToNextGame, buyGear, createProYear, dateLabel, dayView, earningsRanking, eventView, joinStudy, leaveStudy, recordStudyGame, studyOffer,
+  festivalOffer, joinFestival, startShidou, recordShidou, cancelShidou, recordFestivalEvent, finishFestival,
   fiscalYearOf, gameLabel, loadProYear, monthView, packProYear, previewNextGame, proYearRelayGame, proYearSeason, proYearTalk, proYearView, recordProGame, saveProYear,
   startNextYear, unpackProYear, weekdayOf, yearEnd, yearStart,
 } from './pro-year.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import { HANANE } from './ryuo-story.mjs';
+import { FESTIVALS, KIGOU_WORDS, REACTIONS, festivalDays, festivalFee, kigouWords, simulGuests, talkFans, talkScene } from './pro-festival.mjs';
 import { GEAR, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, studyDaysBetween, studyDaysOfMonth, studyHananeLine } from './pro-life.mjs';
 
 const roster = createRoster({ seed: 11, userGroup: 6 });
@@ -539,6 +541,109 @@ describe('研究会(10-2の5)', () => {
   it('羽音の一言は、勝ち負けと相手で変わる', () => {
     expect(studyHananeLine({ won: true, vsHanane: true })).not.toBe(studyHananeLine({ won: false, vsHanane: true }));
     expect(studyHananeLine({ won: false, draw: true })).toContain('引き分け');
+  });
+});
+
+describe('将棋まつり(10-2の6)', () => {
+  /** まつりが寄り道に出るまで、公式戦を分身で進める。 */
+  function toFestival(seed = 5) {
+    let state = start(seed);
+    let offer = festivalOffer(state, previewNextGame(state));
+    for (let step = 0; step < 30 && !offer; step += 1) {
+      state = recordProGame(advanceToNextGame(state), 'auto').state;
+      offer = festivalOffer(state, previewNextGame(state));
+    }
+    return { state, offer };
+  }
+
+  it('年3回(5月3日・8月の第1土曜・11月3日)。公式戦の日は翌日', () => {
+    expect(festivalDays(2026).map((item) => item.date)).toEqual(['2026-05-03', '2026-08-01', '2026-11-03']);
+    expect(festivalDays(2027).map((item) => item.date)).toEqual(['2027-05-03', '2027-08-07', '2027-11-03']);
+    expect(festivalDays(2026, new Set(['2026-11-03']))[2].date).toBe('2026-11-04');
+    expect(FESTIVALS).toHaveLength(3);
+    expect(festivalFee(0, 0)).toBe(20);
+    expect(festivalFee(0, 4)).toBe(40);
+    expect(festivalFee(1000, 4)).toBe(60);
+  });
+
+  it('寄り道で行き、4つの催しをして、謝礼とファンをもらう', () => {
+    const { state, offer } = toFestival();
+    expect(offer).toMatchObject({ kind: 'festival' });
+    const [year, month] = offer.date.split('-').map(Number);
+    expect(monthView(state, year, month).weeks.flat().find((cell) => cell.date === offer.date).items.some((item) => item.kind === 'festival')).toBe(true);
+    let current = joinFestival(state, offer.date);
+    expect(current.date).toBe(offer.date);
+    expect(current.festival).toMatchObject({ name: offer.name, fans: 0 });
+    // まつりの途中は、次の対局日へ進めない。
+    expect(advanceToNextGame(current)).toEqual(current);
+    const view = proYearView(current).festival;
+    expect(view.events.map((item) => item.id)).toEqual(['shidou', 'simul', 'talk', 'kigou']);
+    expect(view.fee).toBe(20);
+    expect(view.simul).toHaveLength(3);
+
+    // 駒落ち指導対局: あなたが上手(後手)。相手は1年の棋士でない参加者。
+    current = startShidou(current);
+    expect(current.pending).toMatchObject({ kind: 'shidou', gameId: null, handicapGiver: 'player', color: 'white', opponentId: 'guest' });
+    expect(proYearSeason(current).players.guest).toMatchObject({ kind: 'amateur', level: current.pending.level });
+    expect(cancelShidou(current).pending).toBeNull();
+    const money = current.user.money;
+    const shidou = recordShidou(current, 'loss');
+    expect(shidou.fans).toBeGreaterThan(0);
+    current = shidou.state;
+    expect(current.pending).toBeNull();
+    expect(current.user.money).toBe(money);
+    expect(current.year.records[PRO_USER_ID]).toEqual(state.year.records[PRO_USER_ID]);
+
+    current = recordFestivalEvent(current, 'simul', { wins: 3, losses: 0, draws: 0 }).state;
+    const reactions = ['laugh', 'applause', 'stir'];
+    current = recordFestivalEvent(current, 'talk', { reactions }).state;
+    expect(current.festival.done.talk.fans).toBe(talkFans(reactions));
+    // 開いていない言葉は書けない。
+    expect(recordFestivalEvent(current, 'kigou', { word: '玲瓏' }).fans).toBe(0);
+    current = recordFestivalEvent(current, 'kigou', { word: '平常心' }).state;
+    expect(current.kigou.at(-1)).toMatchObject({ word: '平常心', place: offer.name });
+    // 同じ催しは2回しない。
+    expect(recordFestivalEvent(current, 'simul', { wins: 3 }).fans).toBe(0);
+
+    const finished = finishFestival(current);
+    expect(finished.fee).toBe(festivalFee(0, 4));
+    expect(finished.state.festival).toBeNull();
+    expect(finished.state.user.money).toBe(money + finished.fee);
+    expect(finished.state.year.mine.gig).toBe(finished.fee);
+    expect(finished.state.user.fans).toBe(finished.fans);
+    expect(finished.state.festivals.at(-1)).toMatchObject({ date: offer.date, fee: finished.fee });
+    // 同じまつりはもう寄り道に出ない。日のシートには謝礼。
+    expect(festivalOffer(finished.state, previewNextGame(finished.state))?.date ?? '').not.toBe(offer.date);
+    expect(dayView(finished.state, offer.date).festival).toMatchObject({ name: offer.name, fee: finished.fee });
+    // 揮毫帳は画面の形にも出る。
+    expect(proYearView(finished.state).kigou[0].word).toBe('平常心');
+  });
+
+  it('トークショーは3問で、答えを選ぶと会場の反応と羽音の返しが続く(羽音は敬語と「！」なし)', () => {
+    const scene = talkScene({ seed: 9, name: 'みなと町 将棋まつり' }, 'やこび');
+    const questions = scene.lines.filter((line) => line.choices);
+    expect(questions).toHaveLength(3);
+    for (const question of questions) {
+      expect(question.choices).toHaveLength(3);
+      for (const choice of question.choices) {
+        expect(REACTIONS[choice.value]).toBeTruthy();
+        expect(choice.reply.at(-1).who).toBe('hanane');
+      }
+    }
+    for (const line of scene.lines.flatMap((entry) => [entry, ...(entry.choices ?? []).flatMap((choice) => choice.reply)])) {
+      if (line.who === 'hanane') expect(line.text).not.toMatch(/[！!]|です|ます|ございます/);
+    }
+  });
+
+  it('揮毫の言葉は、タイトル・優勝の回数で増える', () => {
+    expect(kigouWords(0).filter((entry) => entry.open)).toHaveLength(3);
+    expect(kigouWords(KIGOU_WORDS.at(-1).need).every((entry) => entry.open)).toBe(true);
+    expect(kigouWords(1).find((entry) => !entry.open).left).toBeGreaterThan(0);
+  });
+
+  it('ぐるぐる指導の3人は、まつりごとに同じ顔ぶれ', () => {
+    expect(simulGuests({ seed: 3 })).toEqual(simulGuests({ seed: 3 }));
+    expect(simulGuests({ seed: 3 }).map((guest) => guest.handicap)).toEqual(['6pieces', '6pieces', '4pieces']);
   });
 });
 
