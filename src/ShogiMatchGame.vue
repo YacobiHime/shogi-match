@@ -521,6 +521,7 @@
       @pro-year-resume="resumeProYearGame"
       @pro-year-auto="autoProYearGame"
       @pro-year-next-year="nextProYear"
+      @pro-year-life="proYearLife"
       :ryuo-season="playedBoard?.event === 'ryuo' ? playedBoard.before : ryuoSeason"
       :ryuo-watch="ryuoWatch"
       :avatar-profile="avatarProfile"
@@ -2718,8 +2719,10 @@ import {
   loadTeamBattle, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
 } from "./core/team-battle.mjs";
 import {
-  advanceToNextGame as advanceProYearToNextGame, createProYear, fiscalYearOf, loadProYear, proYearSeason, proYearView, recordProGame, saveProYear, startNextYear as startNextProYear,
+  advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, createProYear, fiscalYearOf, loadProYear, proYearSeason, proYearView, recordProGame, saveProYear,
+  startNextYear as startNextProYear,
 } from "./core/pro-year.mjs";
+import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
@@ -7483,6 +7486,15 @@ function autoProYearGame() {
   setProYear(result.state);
   awardProYear(result.champions ?? []);
 }
+/** 棋士の暮らしの操作(docs/pro-year-design.mdの10章)。研究の道具を買う。 */
+function proYearLife(action: { kind: string; [key: string]: unknown }) {
+  const state = proYearState.value;
+  if (!state) return;
+  if (action.kind === "buy-gear") {
+    const { state: next, bought } = buyProYearGear(state);
+    if (bought) setProYear(next);
+  }
+}
 /** 年度のまとめから「次の年度へ」。 */
 function nextProYear() {
   if (!proYearState.value?.yearDone) return;
@@ -7509,7 +7521,8 @@ function recordProYearOutcome(matchResult: MatchResult) {
   const milestones: { kind: string; text: string; event: string }[] = result.milestones ?? [];
   const champions = result.champions ?? [];
   const advanced = milestones.filter((item) => item.kind === "advance");
-  proYearResultLine.value = milestones.map((item) => item.text).join("・");
+  // この1局の対局料(と賞金)も添える(10-2の3)。
+  proYearResultLine.value = [...milestones.map((item) => item.text), result.earned ? `獲得 ${moneyText(result.earned)}` : ""].filter(Boolean).join("・");
   // 判子: タイトル獲得 > 棋戦優勝 > 段階の突破(G:3 出来事の重さ)。
   const crown = champions.find((item) => item.title);
   const cup = champions.find((item) => !item.title);

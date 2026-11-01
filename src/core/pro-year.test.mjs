@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PRO_EVENTS, PRO_USER_ID, PRO_YEAR_KEY, TITLE_EVENTS, addDays, advanceToNextGame, createProYear, dateLabel, dayView, eventView,
+  PRO_EVENTS, PRO_USER_ID, PRO_YEAR_KEY, TITLE_EVENTS, addDays, advanceToNextGame, buyGear, createProYear, dateLabel, dayView, earningsRanking, eventView,
   fiscalYearOf, gameLabel, loadProYear, monthView, packProYear, previewNextGame, proYearRelayGame, proYearSeason, proYearTalk, proYearView, recordProGame, saveProYear,
   startNextYear, unpackProYear, weekdayOf, yearEnd, yearStart,
 } from './pro-year.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import { HANANE } from './ryuo-story.mjs';
+import { GEAR, gameFee, gearPrep, nextGear, prizeOf } from './pro-life.mjs';
 
 const roster = createRoster({ seed: 11, userGroup: 6 });
 const memory = () => {
@@ -377,6 +378,87 @@ describe('棋戦の表と観戦(10章)', () => {
     }
     const tally = series.games.filter((game) => game.winner === 'a').length;
     expect(series.wins[0]).toBe(tally);
+  });
+});
+
+describe('対局料と賞金・研究の道具(10-2の3・4)', () => {
+  it('対局料は段階で決まり、賞金はタイトルと優勝', () => {
+    expect(gameFee({ type: 'blocks' })).toBe(5);
+    expect(gameFee({ type: 'knockout' })).toBe(10);
+    expect(gameFee({ type: 'league' })).toBe(20);
+    expect(gameFee({ type: 'series', need: 1 })).toBe(20);
+    expect(gameFee({ type: 'series', title: true, need: 3 })).toBe(60);
+    expect(gameFee({ type: 'series', title: true, need: 4 })).toBe(100);
+    expect(gameFee({ type: 'junni', cls: 'C2' })).toBe(8);
+    expect(gameFee({ type: 'junni', cls: 'A' })).toBe(40);
+    expect(gameFee({ type: 'groups', group: 1 })).toBeGreaterThan(gameFee({ type: 'groups', group: 6 }));
+    expect(prizeOf('ryuo')).toBe(3000);
+    expect(prizeOf('meijin')).toBe(2000);
+    expect(prizeOf('shinjin')).toBe(150);
+  });
+
+  it('デビューの日は0円で、1局指すと対局料が財布に入る(分身に任せた局も)', () => {
+    const fresh = start(5);
+    expect(fresh.user).toMatchObject({ money: 0, gear: 0, fans: 0 });
+    expect(fresh.year.mine).toEqual({ fee: 0, prize: 0, gig: 0 });
+    const result = recordProGame(advanceToNextGame(fresh), 'auto');
+    expect(result.fee).toBeGreaterThan(0);
+    expect(result.state.user.money).toBe(result.earned);
+    expect(result.state.year.mine.fee).toBeGreaterThanOrEqual(result.fee);
+    expect(result.state.year.earn[PRO_USER_ID]).toBe(result.state.user.money);
+  });
+
+  it('1年の獲得の順位: タイトル保持者が上位で、自分の近くも見える', () => {
+    const { state } = playYear(start(4));
+    const ranking = earningsRanking(state);
+    expect(ranking.top).toHaveLength(10);
+    expect(ranking.top[0].amount).toBeGreaterThanOrEqual(ranking.top[9].amount);
+    const holders = new Set(Object.values(state.titles));
+    expect(ranking.top.slice(0, 3).some((row) => holders.has(row.id))).toBe(true);
+    expect(ranking.rank).toBeGreaterThan(0);
+    if (ranking.rank > 10) expect(ranking.near.some((row) => row.you)).toBe(true);
+    expect(state.summary.money).toMatchObject({ rank: ranking.rank, earned: ranking.amount });
+    expect(state.summary.money.earned).toBe(state.summary.money.fee + state.summary.money.prize + state.summary.money.gig);
+  });
+
+  it('タイトルを取ると賞金が入る', () => {
+    const allWins = playYear(start(9), 'win').state;
+    expect(allWins.year.mine.prize).toBeGreaterThanOrEqual(prizeOf('kio') + prizeOf('shinjin'));
+    expect(allWins.summary.money.rank).toBeLessThanOrEqual(10);
+    expect(allWins.summary.awards).toContain('獲得賞金ランキング10位以内');
+  });
+
+  it('研究の道具: 足りなければ買えず、買うと次の対局の札に事前研究が出る', () => {
+    let state = advanceToNextGame(start(5));
+    expect(buyGear(state).bought).toBeNull();
+    expect(proYearView(state).pending.prep).toBeNull();
+    expect(proYearView(state).wallet.next).toMatchObject({ level: 1, price: 30, need: 30, affordable: false });
+    state = { ...state, user: { ...state.user, money: 400 } };
+    let bought = buyGear(state);
+    expect(bought.bought).toMatchObject({ level: 1 });
+    expect(bought.state.user).toMatchObject({ money: 370, gear: 1 });
+    const one = proYearView(bought.state).pending.prep;
+    expect(one.repertoire).toBeTruthy();
+    expect(one.plan).toBe('');
+    bought = buyGear(buyGear(bought.state).state);
+    expect(bought.state.user).toMatchObject({ gear: 3, money: 400 - GEAR.reduce((sum, item) => sum + item.price, 0) });
+    const three = proYearView(bought.state).pending.prep;
+    expect(three.plan).toBe(state.pending.style?.label ?? '');
+    expect(three.attack).toBeTruthy();
+    expect(nextGear(3, 9999)).toBeNull();
+    expect(gearPrep(0, state.players[state.pending.opponentId], null)).toBeNull();
+  });
+
+  it('前の保存(暮らしの記録なし)は0で埋める', () => {
+    const packed = JSON.parse(JSON.stringify(packProYear(start(5))));
+    delete packed.user.money;
+    delete packed.user.gear;
+    delete packed.year.earn;
+    delete packed.year.mine;
+    const restored = unpackProYear(packed, roster);
+    expect(restored.user).toMatchObject({ money: 0, gear: 0 });
+    expect(restored.year.mine).toEqual({ fee: 0, prize: 0, gig: 0 });
+    expect(proYearView(restored).wallet.money).toBe(0);
   });
 });
 

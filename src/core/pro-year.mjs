@@ -11,6 +11,7 @@ import { pickGameStyle } from './ryuo-repertoire.mjs';
 import { HANANE, YOSHIHIKO, hananeBeforeLine } from './ryuo-story.mjs';
 import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, worldRating } from './ryuo-strength.mjs';
 import { CLASS_RULES } from './meijin.mjs';
+import { gameFee, gearPrep, nextGear, prizeOf, GEAR } from './pro-life.mjs';
 
 export const PRO_YEAR_KEY = 'yacobihime:shogi-match:pro-year:v1';
 /** プレイヤーのid(名簿の'user'と同じ)。 */
@@ -539,7 +540,7 @@ function closeKnockoutRound(state, cycle, stage, rng) {
         } else {
           const aWins = simulateMemberGame(rng, state.players[a], state.players[b]).aWins;
           winner = aWins ? a : b;
-          countRecord(state, winner, aWins ? b : a);
+          countRecord(state, winner, aWins ? b : a, feeOf(cycle, stage, block.group));
         }
         winners.push(winner);
         if (block.track) block.history.push([a, b, winner]);
@@ -647,10 +648,12 @@ function finishStage(state, cycle, stage, rng) {
   if (def.title) {
     state.titles[event.id] = stage.winners[0] ?? cycle.holder;
     closeCycle(cycle, stage.winners[0] ?? cycle.holder);
+    awardPrize(state, cycle);
     return;
   }
   if (stage.index === event.stages.length - 1) {
     closeCycle(cycle, stage.winners[0] ?? null);
+    awardPrize(state, cycle);
     return;
   }
   // 次の段階は、その時期の始めに始める(runが拾う)。番勝負の保持者は、そのときのタイトル保持者。
@@ -732,7 +735,7 @@ function closeJunniRound(state, cycle, stage, rng) {
     const aWins = simulateMemberGame(rng, state.players[a], state.players[b]).aWins;
     stage.wins[aWins ? a : b] += 1;
     stage.losses[aWins ? b : a] += 1;
-    countRecord(state, aWins ? a : b, aWins ? b : a);
+    countRecord(state, aWins ? a : b, aWins ? b : a, gameFee({ type: 'junni', cls: stage.cls }));
   }
   if (round + 1 < stage.dates.length) {
     openJunniRound(state, cycle, stage, rng);
@@ -749,7 +752,8 @@ function closeJunniRound(state, cycle, stage, rng) {
     event: 'meijin', kind: promoted ? 'advance' : 'plain',
     text: `順位戦 ${CLASS_NAMES[stage.cls]} ${stage.wins[PRO_USER_ID]}勝${stage.losses[PRO_USER_ID]}敗（${place}位）${promoted ? '・昇級' : ''}`,
   });
-  stage.winners = [stage.cls === 'A' && place === 1 ? PRO_USER_ID : junniAWinner(state, rng)];
+  // A級の1位が名人戦の挑戦者(プレイヤーがA級なら、そのリーグの1位。ほかのクラスなら、A級を勝率で決める)。
+  stage.winners = [stage.cls === 'A' ? rows[0].id : junniAWinner(state, rng, { count: true })];
   finishStage(state, cycle, stage, rng);
 }
 
@@ -760,14 +764,18 @@ function junniRows(state, stage) {
     .sort((a, b) => b.wins - a.wins || a.order - b.order);
 }
 
-/** A級の1位(プレイヤーのいないA級は、総当たりを勝率で決める)。 */
-function junniAWinner(state, rng) {
+/**
+ * A級の1位(プレイヤーのいないA級は、総当たりを勝率で決める)。count=trueは、その総当たりを年間成績と対局料に数える
+ * (この年度のA級の対局。デビュー前の期は数えない)。
+ */
+function junniAWinner(state, rng, { count = false } = {}) {
   const members = (state.junni.A ?? []).filter((id) => state.players[id]);
   const wins = Object.fromEntries(members.map((id) => [id, 0]));
   for (let i = 0; i < members.length; i += 1) {
     for (let j = i + 1; j < members.length; j += 1) {
       const aWins = simulateMemberGame(rng, state.players[members[i]], state.players[members[j]]).aWins;
       wins[aWins ? members[i] : members[j]] += 1;
+      if (count) countRecord(state, aWins ? members[i] : members[j], aWins ? members[j] : members[i], gameFee({ type: 'junni', cls: 'A' }));
     }
   }
   return members.sort((a, b) => wins[b] - wins[a])[0] ?? null;
@@ -777,7 +785,8 @@ export const CLASS_NAMES = Object.freeze({ A: 'A級', B1: 'B級1組', B2: 'B級2
 
 // ---- 記録
 
-function countRecord(state, winner, loser) {
+/** 年間成績と対局料(1局ごとに両者へ。10-2の3)。 */
+function countRecord(state, winner, loser, fee = 0) {
   for (const [id, won] of [[winner, true], [loser, false]]) {
     const record = (state.year.records[id] ??= { w: 0, l: 0, streak: 0, best: 0 });
     if (won) {
@@ -788,7 +797,37 @@ function countRecord(state, winner, loser) {
       record.l += 1;
       record.streak = 0;
     }
+    if (fee) earn(state, id, fee, 'fee');
   }
+}
+
+/**
+ * 年間の獲得(対局料・賞金・謝礼)を数える。プレイヤーは財布にも入る(研究の道具を買う)。
+ * @param {any} state
+ * @param {string} id
+ * @param {number} amount 万円
+ * @param {'fee' | 'prize' | 'gig'} kind
+ */
+function earn(state, id, amount, kind) {
+  if (!id || !amount) return;
+  const year = state.year;
+  year.earn ??= {};
+  year.earn[id] = (year.earn[id] ?? 0) + amount;
+  if (id !== PRO_USER_ID) return;
+  year.mine ??= { fee: 0, prize: 0, gig: 0 };
+  year.mine[kind] = (year.mine[kind] ?? 0) + amount;
+  state.user.money = (state.user.money ?? 0) + amount;
+}
+
+/** 段階の1局の対局料(竜王戦の組は、ブロックの組。順位戦はクラス)。 */
+function feeOf(cycle, stage, group = null) {
+  const def = proEvent(cycle.event).stages[stage.index];
+  return gameFee({ type: def.type, title: Boolean(def.title), need: def.need, cls: stage.cls ?? null, group });
+}
+
+/** 期の優勝・タイトルの賞金(10-2の3)。 */
+function awardPrize(state, cycle) {
+  if (cycle.champion) earn(state, cycle.champion, prizeOf(cycle.event), 'prize');
 }
 
 function noteMilestone(state, item) {
@@ -841,7 +880,7 @@ function playRound(state, cycle, stage, round, rng) {
     // 観戦(10-2の2)のための、まねの記録(先手・勝ち方・形勢の線。先手から見た値)。
     const sign = result.aColor === 'black' ? 1 : -1;
     game.rec = { b: result.aColor === 'black' ? 'a' : 'b', how: result.how, s: (result.phases ?? []).map((value) => value * sign + 0) };
-    countRecord(state, aWins ? game.a : game.b, aWins ? game.b : game.a);
+    countRecord(state, aWins ? game.a : game.b, aWins ? game.b : game.a, feeOf(cycle, stage, stage.blocks?.[game.k ?? 0]?.group ?? null));
   }
   if (userGame) return userGame;
   closeRound(state, cycle, stage, rng);
@@ -988,7 +1027,12 @@ export function recordProGame(source, outcome) {
     game.auto = true;
   }
   game.winner = (game.a === PRO_USER_ID) === won ? 'a' : 'b';
-  countRecord(state, won ? PRO_USER_ID : pending.opponentId, won ? pending.opponentId : PRO_USER_ID);
+  const gameCycle = state.cycles[game.cycle];
+  const gameStage = gameCycle.stages[game.stage];
+  // 対局料は、分身に任せた局にも出る(棋士として出た局のため。10-2の3)。
+  const fee = feeOf(gameCycle, gameStage, gameStage.blocks?.[game.k ?? 0]?.group ?? null);
+  const moneyBefore = state.user.money ?? 0;
+  countRecord(state, won ? PRO_USER_ID : pending.opponentId, won ? pending.opponentId : PRO_USER_ID, fee);
   // 羽音との通算(年度をまたいで数える。対局前の羽音の一言に使う)。
   if (state.players[pending.opponentId]?.story === HANANE) {
     const vs = state.user.vsHanane ?? { wins: 0, losses: 0 };
@@ -1013,10 +1057,44 @@ export function recordProGame(source, outcome) {
       const event = proEvent(entry.event);
       return { cycle: entry.id, event: entry.event, name: event.name, short: event.short, title: event.kind === 'title', fy: state.fy, wins, losses: mine.length - wins };
     });
-  return { state, replay: false, won, game: { ...game }, milestones, champions };
+  return { state, replay: false, won, game: { ...game }, milestones, champions, fee, earned: (state.user.money ?? 0) - moneyBefore };
 }
 
 // ---- 年度
+
+/** 年度の記録(年間成績・獲得の合計・プレイヤーの獲得の内訳)。 */
+const emptyYear = () => ({ records: {}, earn: {}, mine: { fee: 0, prize: 0, gig: 0 } });
+
+/**
+ * 年間の獲得賞金・対局料の順位(10-2の3)。上位の行と、自分の近く(自分と前後1人。D:5-6 少し上の目標)。
+ * @returns {{ top: any[], near: any[], rank: number, size: number, amount: number }}
+ */
+export function earningsRanking(state, { top = 10 } = {}) {
+  const earn = state?.year?.earn ?? {};
+  const ids = Object.keys(state?.players ?? {}).filter((id) => state.players[id]?.kind === 'pro' || id === PRO_USER_ID);
+  const rows = ids
+    .map((id) => ({ id, name: nameOf(state, id), amount: earn[id] ?? 0, you: id === PRO_USER_ID, story: state.players[id]?.story ?? null }))
+    .sort((a, b) => b.amount - a.amount || Number(b.you) - Number(a.you) || String(a.id).localeCompare(String(b.id)))
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+  const index = rows.findIndex((row) => row.you);
+  const near = index >= top ? rows.slice(Math.max(top, index - 1), index + 2) : [];
+  return { top: rows.slice(0, top), near, rank: index + 1, size: rows.length, amount: earn[PRO_USER_ID] ?? 0 };
+}
+
+/**
+ * 研究の道具を買う(10-2の4)。お金が足りなければ、そのまま返す。
+ * @param {any} source
+ * @returns {{ state: any, bought: any | null }}
+ */
+export function buyGear(source) {
+  const state = structuredClone(source);
+  const item = nextGear(state.user.gear ?? 0, state.user.money ?? 0);
+  if (!item?.affordable) return { state, bought: null };
+  state.user.money -= item.price;
+  state.user.gear = item.level;
+  noteMilestone(state, { event: 'life', kind: 'plain', text: `${item.name}を買った` });
+  return { state, bought: GEAR.find((entry) => entry.level === item.level) ?? null };
+}
 
 /** 年度の期を作る(その年度に始まる期)。 */
 function openYear(state, fy, rng) {
@@ -1053,7 +1131,10 @@ export function yearSummary(state) {
     const won = meetings.filter((game) => (game.winner === 'a') === (game.a === PRO_USER_ID)).length;
     rival = { name: hanane.name, wins: record.w, losses: record.l, meetings: [won, meetings.length - won] };
   }
-  return { fy: state.fy, wins: mine.w, losses: mine.l, rate, best: mine.best, awards, titles, junni: state.user.junniResult ?? null, rival };
+  const ranking = earningsRanking(state);
+  const money = { ...(state.year.mine ?? { fee: 0, prize: 0, gig: 0 }), earned: ranking.amount, rank: ranking.rank, size: ranking.size, top10: ranking.rank <= 10 };
+  if (money.top10 && money.earned > 0) awards.push('獲得賞金ランキング10位以内');
+  return { fy: state.fy, wins: mine.w, losses: mine.l, rate, best: mine.best, awards, titles, junni: state.user.junniResult ?? null, rival, money };
 }
 
 /** 次の年度へ(順位戦のクラス・竜王戦の組・シードを持ち越す)。 */
@@ -1067,7 +1148,7 @@ export function startNextYear(source) {
   state.history = [...(state.history ?? []), state.summary].slice(-20);
   state.fy += 1;
   state.date = yearStart(state.fy);
-  state.year = { records: {} };
+  state.year = emptyYear();
   state.yearDone = false;
   state.summary = null;
   // 終わった期の対局は消す(表の要約は段階に残る)。
@@ -1127,12 +1208,12 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
     players,
     titles,
     junni: junniWorld,
-    user: { cls: userClass, group: clamp(Math.round(userGroup), 1, 6), seeds: {} },
+    user: { cls: userClass, group: clamp(Math.round(userGroup), 1, 6), seeds: {}, money: 0, gear: 0, fans: 0 },
     cycles: {},
     games: {},
     nextGame: 1,
     pending: null,
-    year: { records: {} },
+    year: emptyYear(),
     yearDone: false,
     summary: null,
     history: [],
@@ -1143,7 +1224,8 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
   openYear(state, fiscalYear, rng);
   run(state, addDays(state.debut, -1), rng);
   state.date = state.debut;
-  state.year = { records: {} };
+  state.year = emptyYear();
+  state.user.money = 0;
   state.log = [];
   state.rng = rng.state;
   return state;
@@ -1212,6 +1294,8 @@ export function proYearView(state) {
     opponent: card(state, state.pending.opponentId),
     // 羽音と当たる日は、対局の前に羽音の一言(3章の13)。
     hananeLine: state.players[state.pending.opponentId]?.story === HANANE ? hananeBeforeLine(vsHanane) : '',
+    // 事前研究(研究の道具を持っていれば。10-2の4)。
+    prep: gearPrep(state.user.gear ?? 0, state.players[state.pending.opponentId], state.pending.style),
   } : null;
   const hananeRecord = hanane ? state.year.records[hanane.id] ?? { w: 0, l: 0 } : null;
   return {
@@ -1230,6 +1314,28 @@ export function proYearView(state) {
     rival: hanane ? { id: hanane.id, name: hanane.name, wins: hananeRecord.w, losses: hananeRecord.l, vs: vsHanane } : null,
     lastGame: lastGameView(state),
     history: [...(state.history ?? [])].reverse(),
+    wallet: walletView(state),
+  };
+}
+
+/** 財布(持っているお金・今年度の獲得と内訳・順位・研究の道具と次の道具)。 */
+function walletView(state) {
+  const money = state.user.money ?? 0;
+  const gear = state.user.gear ?? 0;
+  const ranking = earningsRanking(state);
+  return {
+    money,
+    mine: { ...(state.year.mine ?? { fee: 0, prize: 0, gig: 0 }) },
+    earned: ranking.amount,
+    rank: ranking.rank,
+    size: ranking.size,
+    top: ranking.top,
+    near: ranking.near,
+    gear,
+    gearName: GEAR.find((entry) => entry.level === gear)?.name ?? '',
+    gearPrep: GEAR.find((entry) => entry.level === gear)?.prep ?? '',
+    next: nextGear(gear, money),
+    fans: state.user.fans ?? 0,
   };
 }
 
@@ -1687,7 +1793,10 @@ export function unpackProYear(packed, roster) {
     }
     games[game.id] = game;
   }
-  return { ...packed, players, games };
+  // 暮らしの記録のない前の保存は、0で埋める(版はそのまま。10-2の7)。
+  const user = { money: 0, gear: 0, fans: 0, ...(packed.user ?? {}) };
+  const year = { ...emptyYear(), ...(packed.year ?? {}) };
+  return { ...packed, players, games, user, year };
 }
 
 /**

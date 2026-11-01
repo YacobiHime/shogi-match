@@ -221,6 +221,7 @@
           @resume="emit('pro-year-resume')"
           @auto="emit('pro-year-auto')"
           @next-year="emit('pro-year-next-year')"
+          @life="emit('pro-year-life', $event)"
           @watch="relayEntry = $event"
           @measure="emit('measure', 'pro-year')"
           @back="backToSelect"
@@ -1257,6 +1258,8 @@ const emit = defineEmits<{
   "pro-year-resume": [];
   "pro-year-auto": [];
   "pro-year-next-year": [];
+  /** 棋士の暮らしの操作(研究の道具・研究会・将棋まつり。docs/pro-year-design.mdの10章)。 */
+  "pro-year-life": [action: { kind: string; [key: string]: unknown }];
   /** relayKeyの中継を開いた(対局画面は鍵を消す)。 */
   "relay-shown": [];
   /** 難易度のシートの「棋力を測る」。どの大会から来たかを渡し、測ったあとにそこへ戻す(docs/first-play-design.mdの13章)。 */

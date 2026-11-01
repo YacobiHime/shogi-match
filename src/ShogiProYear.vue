@@ -178,6 +178,34 @@
               <img class="pro-year__rival-face pro-year__sprite" :src="hananeSprite" alt="" draggable="false">
               <span>{{ view.rival.name }}　今年度 {{ view.rival.wins }}勝{{ view.rival.losses }}敗<small>あなたとの対戦 {{ view.rival.vs.wins }}勝{{ view.rival.vs.losses }}敗</small></span>
             </p>
+            <!-- お金と研究の道具(10-2の3・4。次の道具まで「あと○万円」が見える。D:5-2) -->
+            <h3 class="pro-year__subhead">お金と研究の道具</h3>
+            <div class="pro-year__wallet" data-pro-wallet>
+              <p class="pro-year__money"><small>持っているお金</small><b data-pro-money>{{ moneyText(view.wallet.money) }}</b></p>
+              <p class="pro-year__money-line">
+                今年度の獲得 <b>{{ moneyText(view.wallet.earned) }}</b>
+                <small>対局料 {{ moneyText(view.wallet.mine.fee) }}・賞金 {{ moneyText(view.wallet.mine.prize) }}・謝礼 {{ moneyText(view.wallet.mine.gig) }}</small>
+              </p>
+              <p class="pro-year__gear-now">研究の道具：<b>{{ view.wallet.gearName || "まだない" }}</b><small v-if="view.wallet.gearPrep">{{ view.wallet.gearPrep }}</small></p>
+              <div v-if="view.wallet.next" class="pro-year__gear-next" data-pro-gear>
+                <span class="pro-year__gear-name">次は<b>{{ view.wallet.next.name }}</b>（{{ moneyText(view.wallet.next.price) }}）<small>{{ view.wallet.next.prep }}</small></span>
+                <span class="pro-year__gear-bar" aria-hidden="true"><i :style="{ width: `${Math.min(100, (view.wallet.money / view.wallet.next.price) * 100)}%` }"></i></span>
+                <button type="button" class="pro-year__gear-buy" :disabled="!view.wallet.next.affordable" data-pro-buy-gear @click="emit('life', { kind: 'buy-gear' })">
+                  {{ view.wallet.next.affordable ? "買う" : `あと${moneyText(view.wallet.next.need)}` }}
+                </button>
+              </div>
+              <p v-else class="pro-year__gear-now"><small>研究の道具は、ぜんぶそろったよ。</small></p>
+            </div>
+            <h3 class="pro-year__subhead">獲得賞金・対局料ランキング<small>（今年度）</small></h3>
+            <ol class="pro-year__ranking" data-pro-ranking>
+              <li v-for="row in view.wallet.top" :key="row.id" :class="{ 'pro-year__ranking--you': row.you, 'pro-year__ranking--rival': row.story === 'hanane' }">
+                <small>{{ row.rank }}位</small><span>{{ row.you ? `${playerName}（あなた）` : row.name }}</span><b>{{ moneyText(row.amount) }}</b>
+              </li>
+              <li v-if="view.wallet.near.length" class="pro-year__ranking-gap" aria-hidden="true">…</li>
+              <li v-for="row in view.wallet.near" :key="`near-${row.id}`" :class="{ 'pro-year__ranking--you': row.you, 'pro-year__ranking--rival': row.story === 'hanane' }">
+                <small>{{ row.rank }}位</small><span>{{ row.you ? `${playerName}（あなた）` : row.name }}</span><b>{{ moneyText(row.amount) }}</b>
+              </li>
+            </ol>
             <h3 class="pro-year__subhead">できごと</h3>
             <ul class="pro-year__log">
               <li v-if="!view.log.length" class="pro-year__log-empty">まだ何もないよ。最初の対局へ。</li>
@@ -188,7 +216,7 @@
             <template v-if="view.history.length">
               <h3 class="pro-year__subhead">これまでの年度</h3>
               <ul class="pro-year__log">
-                <li v-for="item in view.history" :key="item.fy"><small>{{ item.fy }}年度</small><span>{{ item.wins }}勝{{ item.losses }}敗{{ item.titles.length ? `・${item.titles.join("・")}` : "" }}{{ item.awards.length ? `・${item.awards.join("・")}` : "" }}</span></li>
+                <li v-for="item in view.history" :key="item.fy"><small>{{ item.fy }}年度</small><span>{{ item.wins }}勝{{ item.losses }}敗{{ item.titles.length ? `・${item.titles.join("・")}` : "" }}{{ item.money ? `・獲得${moneyText(item.money.earned)}（${item.money.rank}位）` : "" }}{{ item.awards.length ? `・${item.awards.join("・")}` : "" }}</span></li>
               </ul>
             </template>
           </div>
@@ -206,6 +234,7 @@
           </p>
           <p v-if="view.summary.junni" class="pro-year__summary-line">順位戦 {{ CLASS_NAMES[view.summary.junni.cls] }} {{ view.summary.junni.wins }}勝{{ view.summary.junni.losses }}敗（{{ view.summary.junni.place }}位）{{ view.summary.junni.promoted ? "・昇級" : "" }}</p>
           <p v-if="view.summary.rival" class="pro-year__summary-line">{{ view.summary.rival.name }} {{ view.summary.rival.wins }}勝{{ view.summary.rival.losses }}敗・直接対決 {{ view.summary.rival.meetings[0] }}勝{{ view.summary.rival.meetings[1] }}敗</p>
+          <p v-if="view.summary.money" class="pro-year__summary-line" data-pro-summary-money>獲得賞金・対局料 {{ moneyText(view.summary.money.earned) }}（{{ view.summary.money.rank }}位）</p>
         </div>
         <!-- 次の対局 -->
         <div v-else-if="view.pending" class="pro-year__next" :style="{ '--event-color': pendingColor }" data-pro-next>
@@ -213,6 +242,13 @@
           <p class="pro-year__next-vs">
             <span>対 <strong>{{ view.pending.opponent?.name }}</strong><small>{{ view.pending.opponent?.dan }}</small></span>
             <small class="pro-year__next-stakes">{{ view.pending.stakes?.text }}</small>
+          </p>
+          <!-- 事前研究(研究の道具を持っていれば。10-2の4) -->
+          <p v-if="view.pending.prep" class="pro-year__prep" data-pro-prep>
+            <b>事前研究</b>
+            <span>得意：{{ view.pending.prep.repertoire }}</span>
+            <span v-if="view.pending.prep.plan">読み：{{ view.pending.prep.plan }}</span>
+            <span v-if="view.pending.prep.attack">{{ view.pending.prep.attack }}{{ view.pending.prep.abilities.length ? `・${view.pending.prep.abilities.join("・")}` : "" }}</span>
           </p>
         </div>
         <p class="shogi-tournament__tip-line shoreikai__tip" data-pro-run-talk>
@@ -407,6 +443,7 @@ import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
+import { moneyText } from "./core/pro-life.mjs";
 import {
   CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, monthView, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, yearEnd, yearStart,
 } from "./core/pro-year.mjs";
@@ -439,6 +476,8 @@ const emit = defineEmits<{
   resume: [];
   auto: [];
   "next-year": [];
+  /** 暮らしの操作(研究の道具を買う・研究会・将棋まつり。10章)。 */
+  life: [action: { kind: string; [key: string]: unknown }];
   /** 中継で観戦する対局(relay-games.mjsの項目と同じ形)。大会の画面が中継を開く。 */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   watch: [entry: any];
@@ -789,6 +828,35 @@ defineExpose({ goBack });
 .shogi-game .pro-year__log small { color: #cfd8de; }
 .shogi-game .pro-year__log--advance span { color: #86d4a9; font-weight: 800; }
 .shogi-game .pro-year__log-empty { color: #cfd8de; grid-template-columns: 1fr !important; }
+/* お金と研究の道具 */
+.shogi-game .pro-year__wallet { display: grid; gap: 0.3rem; padding: 0.45rem 0.55rem; border-radius: 0.6rem; background: rgba(43, 70, 91, 0.9); }
+.shogi-game .pro-year__wallet p { margin: 0; }
+.shogi-game .pro-year__money { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.shogi-game .pro-year__money small { color: #cfd8de; font-size: 0.72rem; }
+.shogi-game .pro-year__money b { color: #e9c46a; font-size: 1.2rem; }
+.shogi-game .pro-year__money-line { display: grid; font-size: 0.82rem; }
+.shogi-game .pro-year__money-line small, .shogi-game .pro-year__gear-now small, .shogi-game .pro-year__gear-name small { color: #cfd8de; font-size: 0.7rem; }
+.shogi-game .pro-year__gear-now { display: grid; font-size: 0.82rem; }
+.shogi-game .pro-year__gear-next { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name buy" "bar buy"; align-items: center; gap: 0.25rem 0.5rem; }
+.shogi-game .pro-year__gear-name { grid-area: name; display: grid; font-size: 0.8rem; }
+.shogi-game .pro-year__gear-bar { grid-area: bar; display: block; height: 0.45rem; overflow: hidden; border-radius: 999px; background: rgba(23, 38, 50, 0.9); }
+.shogi-game .pro-year__gear-bar i { display: block; height: 100%; border-radius: inherit; background: #e9c46a; }
+.shogi-game .pro-year__gear-buy {
+  grid-area: buy; min-width: 5.5rem; min-height: 44px; padding: 0.2rem 0.7rem; border: 0; border-radius: 999px;
+  color: #172632; background: var(--amber, #f1a54c); font: inherit; font-size: 0.8rem; font-weight: 900; cursor: pointer;
+}
+.shogi-game .pro-year__gear-buy:disabled { color: #cfd8de; background: rgba(23, 38, 50, 0.9); cursor: default; }
+.shogi-game .pro-year__subhead small { margin-left: 0.3rem; color: #cfd8de; font-size: 0.7rem; }
+.shogi-game .pro-year__ranking { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; font-size: 0.8rem; }
+.shogi-game .pro-year__ranking li { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto; gap: 0.4rem; padding: 0.1rem 0.35rem; border-radius: 0.3rem; }
+.shogi-game .pro-year__ranking li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .pro-year__ranking small { color: #cfd8de; }
+.shogi-game .pro-year__ranking--you { color: #172632; background: var(--amber, #f1a54c); font-weight: 900; }
+.shogi-game .pro-year__ranking--you small { color: #172632; }
+.shogi-game .pro-year__ranking--rival { box-shadow: inset 0.2rem 0 0 #86d4a9; }
+.shogi-game .pro-year__ranking-gap { color: #cfd8de; text-align: center; grid-template-columns: 1fr !important; }
+.shogi-game .pro-year__prep { display: flex; flex-wrap: wrap; gap: 0.1rem 0.5rem; align-items: baseline; margin: 0.25rem 0 0; font-size: 0.75rem; }
+.shogi-game .pro-year__prep b { padding: 0 0.4rem; border-radius: 999px; color: #172632; background: #a9c1d9; font-size: 0.68rem; }
 /* 下の欄 */
 .shogi-game .pro-year__next { padding: 0.45rem 0.6rem; border: 0.12rem solid var(--event-color); border-radius: 0.8rem; background: rgba(23, 38, 50, 0.9); }
 .shogi-game .pro-year__next-head { display: flex; flex-wrap: wrap; gap: 0.1rem 0.6rem; align-items: baseline; margin: 0; }
