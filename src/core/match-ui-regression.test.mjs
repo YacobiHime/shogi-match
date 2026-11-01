@@ -945,7 +945,7 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/data-tournament="pro-year" @click="chooseProYear"/);
     expect(tournament).toMatch(/<ShogiProYear\s+v-if="screen === 'pro-year'"/);
     expect(tournament).toMatch(/else if \(screen\.value === "pro-year" && proYearEl\.value\?\.goBack\(\)\) return;/);
-    expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "pro-year" \};\s*proYearResultLine\.value = "";\s*startRyuoMatch\(\);/);
+    expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "pro-year", practice: !pending\.gameId \};\s*proYearResultLine\.value = "";\s*startRyuoMatch\(\);/);
     expect(source).toMatch(/if \(ryuoGame\.value\?\.event === "pro-year"\) \{\s*recordProYearOutcome\(matchResult\);\s*return;\s*\}/);
     // 相手のLvは保存の棋士に書かず、期の形(proYearSeason)で付ける。
     expect(source).toMatch(/if \(game\?\.event === "pro-year"\) return proYearSeason\(proYearState\.value\);/);
@@ -956,6 +956,21 @@ describe("match screen regressions", () => {
     const year = readFileSync(new URL("../ShogiProYear.vue", import.meta.url), "utf8");
     expect(year).toMatch(/ref="autoCancel"[^>]*data-pro-auto-cancel/);
     expect(year).toMatch(/function openAuto\(\) \{\s*autoOpen\.value = true;\s*void nextTick\(\(\) => autoCancel\.value\?\.focus\(\)\);/);
+  });
+
+  it('棋士の暮らし: 研究の道具を買い、研究会の練習対局は公式戦と別に記録し、観戦記を書かない(docs/pro-year-design.mdの10章)', () => {
+    const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
+    expect(tournament).toMatch(/@life="emit\('pro-year-life', \$event\)"/);
+    expect(source).toMatch(/@pro-year-life="proYearLife"/);
+    expect(source).toMatch(/function proYearLife\(action[\s\S]{0,400}?buyProYearGear\(state\)[\s\S]{0,300}?joinProYearStudy\(state, action\.date\)[\s\S]{0,500}?leaveProYearStudy\(state\)/);
+    expect(source).toMatch(/if \(state\.pending\.kind === "study"\) \{[\s\S]{0,300}?recordProYearStudy\(state, outcome\)/);
+    // 中断から戻しても、公式戦でない印は残る。
+    expect(source).toMatch(/practice: savedRyuo\.practice === true,/);
+    const year = readFileSync(new URL("../ShogiProYear.vue", import.meta.url), "utf8");
+    // 研究会の練習対局は分身に任せず、帰ってもよい(D:9-2)。寄り道は「次の対局日へ」の上。
+    expect(year).toMatch(/v-if="view\.pending\.kind === 'study'"[^>]*data-pro-leave-study/);
+    expect(year).toMatch(/data-pro-detour>[\s\S]{0,600}?data-pro-join-study[\s\S]{0,400}?data-pro-advance/);
+    expect(year).toMatch(/data-pro-buy-gear @click="emit\('life', \{ kind: 'buy-gear' \}\)"/);
   });
 
   it('ホームのあそぶの行に物語(近日公開)を置き、押すと吹き出しで知らせる(docs/team-battle-design.mdの9章)', () => {
@@ -1128,7 +1143,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(tournamentFinish\) \{\s*writeTournamentKansenki\(outcome === "win", matchResult\.moveCount\);\s*recordTitleMeal\(outcome === "win"\);/);
     expect(source).toMatch(/v-if="resultKansenki"[^>]*data-kansenki-open/);
     // 舞台の札がない局(前の版で始めた局など)でも、大会の名前と回戦で必ず書く(docs/mate-finish-design.mdの3章)。
-    expect(source).toMatch(/function writeTournamentKansenki\(win: boolean, plies: number\) \{\s*const game = ryuoGame\.value;\s*if \(!game\) return;/);
+    expect(source).toMatch(/function writeTournamentKansenki\(win: boolean, plies: number\) \{\s*const game = ryuoGame\.value;\s*if \(!game \|\| game\.practice\) return;/);
     expect(source).toMatch(/const stage = matchStage\.value \?\? game\.stage \?\? null;\s*const eventText = stage\?\.eventText \|\| TOURNAMENT_EVENT_TEXT\[/);
     // 大会の結果の画面から開いたノートは「大会へ戻る」で、閉じると大会の画面(結果)へ戻る。戻る操作も同じ。
     expect(source).toMatch(/@open-note="openNoteFromTournament"/);

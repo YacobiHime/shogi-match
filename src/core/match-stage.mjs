@@ -146,7 +146,9 @@ export function describeMatchStage({ event, season, label = '', userName = '', s
     userRole,
     scenery: stageScenery(event, pending, title),
     longestDay: event === 'meijin' && pending.kind === 'league' && season.cls === 'A' && pending.round === season.rounds - 1,
-    coachLine: stageCoachLine({ weight, tone, title: info.title, label: stageLabel, stakesText, win: stakes?.win ?? '', first: seriesInfo ? seriesInfo.marks.length === 0 : false, defense: holderIsUser }),
+    // 期が一言を決めている対局(棋士の1年の研究会など)は、その一言。
+    coachLine: pending.coachLine
+      ?? stageCoachLine({ weight, tone, title: info.title, label: stageLabel, stakesText, win: stakes?.win ?? '', first: seriesInfo ? seriesInfo.marks.length === 0 : false, defense: holderIsUser }),
   };
 }
 
@@ -162,8 +164,8 @@ function stageScenery(event, pending, title) {
   if (event === 'kenshukai') return 'dojo';
   // 団体戦は大会の会場(名人戦と同じ暮れていく空の明かり)。
   if (event === 'team') return 'sky';
-  // 棋士の1年: 予選は将棋会館の対局室(道場)、本戦・リーグ・順位戦は暮れていく空。
-  if (event === 'pro-year') return /予選/.test(pending.label ?? '') ? 'dojo' : 'sky';
+  // 棋士の1年: 予選は将棋会館の対局室(道場)、本戦・リーグ・順位戦は暮れていく空。研究会・将棋まつりの対局も道場。
+  if (event === 'pro-year') return /予選/.test(pending.label ?? '') || (pending.kind !== 'game' && pending.kind !== 'finals') ? 'dojo' : 'sky';
   if (event === 'meijin') return 'sky';
   if (pending.kind === 'playoff') return 'snow';
   if (pending.phase === 'main') return 'mid';

@@ -143,6 +143,7 @@
             <span class="pro-year__mark pro-year__mark--plan" style="--event-color: #f5cba7">予定</span>勝ち残れば
             <span class="pro-year__mark pro-year__mark--title">★</span>タイトル戦
             <span class="pro-year__mark pro-year__mark--rival">羽音</span>の対局
+            <span class="pro-year__mark pro-year__mark--study">研</span>研究会
           </p>
         </div>
 
@@ -178,6 +179,16 @@
               <img class="pro-year__rival-face pro-year__sprite" :src="hananeSprite" alt="" draggable="false">
               <span>{{ view.rival.name }}　今年度 {{ view.rival.wins }}勝{{ view.rival.losses }}敗<small>あなたとの対戦 {{ view.rival.vs.wins }}勝{{ view.rival.vs.losses }}敗</small></span>
             </p>
+            <!-- 研究会(10-2の5) -->
+            <template v-if="view.study">
+              <h3 class="pro-year__subhead">研究会<small>（第1・第3水曜）</small></h3>
+              <ul class="pro-year__study" data-pro-study>
+                <li v-for="member in view.study.members" :key="member.id" :class="{ 'pro-year__study--next': member.id === view.study.next?.id }">
+                  <span>{{ member.name }}<small>{{ member.dan }}</small></span>
+                  <b>{{ member.record.w }}勝{{ member.record.l }}敗{{ member.record.d ? `${member.record.d}分` : "" }}</b>
+                </li>
+              </ul>
+            </template>
             <!-- お金と研究の道具(10-2の3・4。次の道具まで「あと○万円」が見える。D:5-2) -->
             <h3 class="pro-year__subhead">お金と研究の道具</h3>
             <div class="pro-year__wallet" data-pro-wallet>
@@ -243,6 +254,12 @@
             <span>対 <strong>{{ view.pending.opponent?.name }}</strong><small>{{ view.pending.opponent?.dan }}</small></span>
             <small class="pro-year__next-stakes">{{ view.pending.stakes?.text }}</small>
           </p>
+          <!-- 研究仲間(研究会で指した相手。道具がなくても。10-2の5) -->
+          <p v-if="view.pending.studyMate" class="pro-year__prep pro-year__prep--mate" data-pro-study-mate>
+            <b>{{ STUDY_TEXT.mate }}</b>
+            <span>研究会で{{ view.pending.studyMate.wins }}勝{{ view.pending.studyMate.losses }}敗</span>
+            <span v-if="view.pending.studyMate.repertoire && !view.pending.prep">得意：{{ view.pending.studyMate.repertoire }}</span>
+          </p>
           <!-- 事前研究(研究の道具を持っていれば。10-2の4) -->
           <p v-if="view.pending.prep" class="pro-year__prep" data-pro-prep>
             <b>事前研究</b>
@@ -260,22 +277,36 @@
         </template>
         <template v-else-if="view.pending">
           <div class="shogi-tournament__actions shogi-tournament__actions--two">
-            <button type="button" class="shogi-tournament__sub" data-pro-auto @click="openAuto">分身に任せる</button>
+            <!-- 研究会の練習対局は、分身に任せない(帰ってもよい。D:9-2) -->
+            <button v-if="view.pending.kind === 'study'" type="button" class="shogi-tournament__sub" data-pro-leave-study @click="emit('life', { kind: 'leave-study' })">{{ STUDY_TEXT.leave }}</button>
+            <button v-else type="button" class="shogi-tournament__sub" data-pro-auto @click="openAuto">分身に任せる</button>
             <button type="button" class="shogi-tournament__start" data-pro-play @click="suspendedMoves ? emit('resume') : emit('play')">
-              {{ suspendedMoves ? `対局を再開（${suspendedMoves}手目から）` : "対局する" }}
+              {{ suspendedMoves ? `対局を再開（${suspendedMoves}手目から）` : view.pending.kind === "study" ? "練習対局を指す" : "対局する" }}
             </button>
           </div>
         </template>
-        <button v-else type="button" class="shogi-tournament__start" data-pro-advance @click="emit('advance')">
-          {{ nextPreview ? `次の対局日へ（${nextPreview.dateText.replace(/\(.\)$/, "")}）` : "年度の終わりへ" }}
-        </button>
+        <template v-else>
+          <!-- 寄り道(研究会。次の公式戦の前にあれば。行かなくても何も失わない。10-2の5、D:9-2) -->
+          <div v-if="detour" class="pro-year__detour" data-pro-detour>
+            <span class="pro-year__detour-text"><small>{{ STUDY_TEXT.detour }}</small><b>{{ detour.dateText }}</b> 研究会<small>対 {{ nameText(detour.opponent) }}</small></span>
+            <button type="button" class="pro-year__detour-go" data-pro-join-study @click="emit('life', { kind: 'join-study', date: detour.date })">{{ STUDY_TEXT.join }}</button>
+          </div>
+          <button type="button" class="shogi-tournament__start" data-pro-advance @click="emit('advance')">
+            {{ nextPreview ? `次の対局日へ（${nextPreview.dateText.replace(/\(.\)$/, "")}）` : "年度の終わりへ" }}
+          </button>
+        </template>
       </section>
 
       <!-- その日の対局 -->
       <div v-if="dayOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="dayOpen.dateText" data-pro-day-sheet @click.self="dayDate = ''">
         <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
           <h2>{{ dayOpen.dateText }}</h2>
-          <p v-if="!dayOpen.games.length && !dayPlans.length" class="shogi-tournament__text">この日は、見ておきたい対局がないよ。</p>
+          <p v-if="!dayOpen.games.length && !dayPlans.length && !dayOpen.study" class="shogi-tournament__text">この日は、見ておきたい対局がないよ。</p>
+          <p v-if="dayOpen.study" class="pro-year__day-study" data-pro-day-study>
+            <b>研究会</b>{{ dayOpen.study.members.join("・") }}
+            <small v-if="dayOpen.study.result">練習対局 {{ dayOpen.study.result.opponent }}に{{ dayOpen.study.result.r === "win" ? "勝ち" : dayOpen.study.result.r === "loss" ? "負け" : "引き分け" }}</small>
+            <small v-else>次の公式戦の前なら、「寄り道」から参加できるよ。</small>
+          </p>
           <ul class="pro-year__day-games">
             <li v-for="game in dayOpen.games" :key="game.id" class="pro-year__day-game" :class="{ 'pro-year__day-game--you': game.user }" :style="{ '--event-color': game.color }">
               <small>{{ game.label }}{{ game.twoDay ? "（2日制）" : "" }}</small>
@@ -443,9 +474,9 @@ import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
-import { moneyText } from "./core/pro-life.mjs";
+import { STUDY_TEXT, moneyText } from "./core/pro-life.mjs";
 import {
-  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, monthView, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, yearEnd, yearStart,
+  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, monthView, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, studyOffer, yearEnd, yearStart,
 } from "./core/pro-year.mjs";
 
 type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
@@ -567,13 +598,19 @@ const pendingColor = computed(() => {
   const pending = props.state?.pending;
   return pending ? proEvent(props.state.games[pending.gameId]?.event)?.color ?? "#f1a54c" : "#f1a54c";
 });
-const talkSprite = computed(() => (view.value?.pending?.hananeLine ? hananeSprite.value : yakobiSprite.value));
+/** 寄り道の研究会(次の公式戦の前にあれば)。 */
+const detour = computed(() => (props.state ? studyOffer(props.state, nextPreview.value) : null));
+/** 羽音が話す行(公式戦の前の一言・研究会の誘いと練習対局のあとの一言)。 */
+const hananeTalks = computed(() => Boolean(view.value?.pending?.hananeLine || (!view.value?.pending && view.value?.study?.talk)));
+const talkSprite = computed(() => (hananeTalks.value ? hananeSprite.value : yakobiSprite.value));
 const runLine = computed(() => {
   const current = view.value;
   if (!current) return "";
   const pending = current.pending;
   if (pending?.hananeLine) return pending.hananeLine;
+  if (pending?.kind === "study") return `研究会の日だよ。今日は${nameText(pending.opponent)}と練習対局。公式戦には数えないから、試したい作戦を指してみよう！`;
   if (pending) return pending.kind === "finals" ? PRO_YEAR_TEXT.titleGame : pending.stakes?.boss ? PRO_YEAR_TEXT.bigGame : PRO_YEAR_TEXT.game;
+  if (current.study?.talk) return current.study.talk;
   return proYearTalk(current, nextPreview.value);
 });
 const rateText = (rate: number) => rate.toFixed(3).replace(/^0/, "");
@@ -626,7 +663,7 @@ function stepMonth(delta: number) {
 }
 /** マスの印(自分の対局を先に。羽音とタイトル戦は1日に1つ。多くて3つ。くわしくはその日のシートで)。 */
 const cellMarks = (cell: Cell) => {
-  const order: { [kind: string]: number } = { user: 0, title: 1, rival: 2, plan: 3 };
+  const order: { [kind: string]: number } = { user: 0, title: 1, study: 2, rival: 3, plan: 4 };
   const seen = new Set<string>();
   return [...cell.items].sort((a, b) => order[a.kind] - order[b.kind]).filter((item) => {
     const key = item.kind === "user" || item.kind === "plan" ? `${item.kind}-${item.event}` : item.kind;
@@ -640,13 +677,15 @@ const markText = (item: any) => {
   // タイトル戦は、どのタイトルか分かるように★のあとに名前(「★名人」)。
   if (item.kind === "title") return `★${proEvent(item.event)?.short ?? ""}`;
   if (item.kind === "rival") return "羽音";
+  if (item.kind === "study") return item.result ? `${item.result === "win" ? "○" : item.result === "loss" ? "●" : "△"}研` : "研";
   const short = item.short ?? proEvent(item.event)?.short ?? "";
   if (item.kind === "user" && item.result) return `${item.result === "win" ? "○" : "●"}${short}`;
   return short;
 };
 const dayAria = (cell: Cell) => {
   if (!cell.inMonth) return "";
-  const parts = cell.items.map((item) => (item.kind === "user" ? `自分の対局 ${item.label}` : item.kind === "title" ? `タイトル戦 ${item.label}` : item.kind === "rival" ? `羽音の対局` : `勝ち残れば ${item.label}`));
+  const parts = cell.items.map((item) => (item.kind === "user" ? `自分の対局 ${item.label}` : item.kind === "title" ? `タイトル戦 ${item.label}` : item.kind === "rival" ? `羽音の対局`
+    : item.kind === "study" ? "研究会" : `勝ち残れば ${item.label}`));
   return `${Number(cell.date.slice(5, 7))}月${cell.day}日${cell.today ? "（今日）" : ""}${parts.length ? `。${parts.join("、")}` : ""}`;
 };
 
@@ -857,6 +896,28 @@ defineExpose({ goBack });
 .shogi-game .pro-year__ranking-gap { color: #cfd8de; text-align: center; grid-template-columns: 1fr !important; }
 .shogi-game .pro-year__prep { display: flex; flex-wrap: wrap; gap: 0.1rem 0.5rem; align-items: baseline; margin: 0.25rem 0 0; font-size: 0.75rem; }
 .shogi-game .pro-year__prep b { padding: 0 0.4rem; border-radius: 999px; color: #172632; background: #a9c1d9; font-size: 0.68rem; }
+/* 研究会 */
+.shogi-game .pro-year__mark--study { color: #172632; background: #c9b6e4; }
+.shogi-game .pro-year__study { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; font-size: 0.82rem; }
+.shogi-game .pro-year__study li { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.15rem 0.4rem; border-radius: 0.35rem; background: rgba(201, 182, 228, 0.12); }
+.shogi-game .pro-year__study small { margin-left: 0.3rem; color: #cfd8de; font-size: 0.7rem; }
+.shogi-game .pro-year__study--next { box-shadow: inset 0.2rem 0 0 #c9b6e4; }
+.shogi-game .pro-year__prep--mate b { background: #c9b6e4; }
+.shogi-game .pro-year__day-study { display: grid; gap: 0.1rem; margin: 0.3rem 0; padding: 0.35rem 0.5rem; border-left: 0.35rem solid #c9b6e4; border-radius: 0.4rem; background: rgba(201, 182, 228, 0.12); font-size: 0.85rem; }
+.shogi-game .pro-year__day-study b { margin-right: 0.4rem; }
+.shogi-game .pro-year__day-study small { color: #cfd8de; font-size: 0.75rem; }
+/* 寄り道 */
+.shogi-game .pro-year__detour {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.3rem 0.35rem 0.3rem 0.6rem;
+  border: 0.1rem dashed #c9b6e4; border-radius: 0.8rem; background: rgba(201, 182, 228, 0.1);
+}
+.shogi-game .pro-year__detour-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.4rem; min-width: 0; font-size: 0.85rem; font-weight: 800; }
+.shogi-game .pro-year__detour-text small { color: #cfd8de; font-size: 0.72rem; }
+.shogi-game .pro-year__detour-text small:first-child { padding: 0 0.4rem; border-radius: 999px; color: #172632; background: #c9b6e4; font-weight: 900; }
+.shogi-game .pro-year__detour-go {
+  flex: none; min-height: 44px; padding: 0.2rem 0.9rem; border: 0.1rem solid #c9b6e4; border-radius: 999px;
+  color: #fffcf4; background: rgba(43, 70, 91, 0.95); font: inherit; font-size: 0.82rem; font-weight: 900; cursor: pointer;
+}
 /* 下の欄 */
 .shogi-game .pro-year__next { padding: 0.45rem 0.6rem; border: 0.12rem solid var(--event-color); border-radius: 0.8rem; background: rgba(23, 38, 50, 0.9); }
 .shogi-game .pro-year__next-head { display: flex; flex-wrap: wrap; gap: 0.1rem 0.6rem; align-items: baseline; margin: 0; }

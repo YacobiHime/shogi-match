@@ -2719,8 +2719,8 @@ import {
   loadTeamBattle, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
 } from "./core/team-battle.mjs";
 import {
-  advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, createProYear, fiscalYearOf, loadProYear, proYearSeason, proYearView, recordProGame, saveProYear,
-  startNextYear as startNextProYear,
+  advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, createProYear, fiscalYearOf, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy,
+  loadProYear, proYearSeason, proYearView, recordProGame, recordStudyGame as recordProYearStudy, saveProYear, startNextYear as startNextProYear,
 } from "./core/pro-year.mjs";
 import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
@@ -3397,6 +3397,8 @@ type RyuoGame = {
   stage?: MatchStage | null;
   /** タイトル戦(二日制)の記録。勝率・考えた時間・勝負メシ・封じ手(docs/title-match-day-design.md)。 */
   day?: ReturnType<typeof emptyDay>;
+  /** 公式戦でない対局(棋士の1年の研究会・将棋まつりの指導対局。docs/pro-year-design.mdの10章)。観戦記は書かない。 */
+  practice?: boolean;
 };
 const ryuoCareer = ref(loadCareer(browserStorage()));
 /** 竜王戦に出る架空の棋士の名簿。期をまたいで残り、期が終わるたびに更新する。最初の期に作る。 */
@@ -4866,7 +4868,7 @@ const TOURNAMENT_EVENT_TEXT: { [event in TournamentEvent]: string } = { ryuo: "�
  */
 function writeTournamentKansenki(win: boolean, plies: number) {
   const game = ryuoGame.value;
-  if (!game) return;
+  if (!game || game.practice) return;
   // 舞台の札がない局(前の版で始めた局・期の途中から戻した局)でも、大会の名前と回戦で必ず書く。
   const stage = matchStage.value ?? game.stage ?? null;
   const eventText = stage?.eventText || TOURNAMENT_EVENT_TEXT[tournamentEventOf(game.event)];
@@ -7464,7 +7466,8 @@ function startProYearGameNow() {
   homeOpen.value = false;
   void initializeEngine();
   coachLevel.value = ["off", "encourage", "detailed"].includes(state.settings.coachLevel) ? state.settings.coachLevel : "detailed";
-  ryuoGame.value = { opponentId: pending.opponentId, label: pending.label ?? "", event: "pro-year" };
+  // 研究会・将棋まつりの対局は公式戦でない(観戦記を書かない。docs/pro-year-design.mdの10章)。
+  ryuoGame.value = { opponentId: pending.opponentId, label: pending.label ?? "", event: "pro-year", practice: !pending.gameId };
   proYearResultLine.value = "";
   startRyuoMatch();
 }
@@ -7486,13 +7489,23 @@ function autoProYearGame() {
   setProYear(result.state);
   awardProYear(result.champions ?? []);
 }
-/** 棋士の暮らしの操作(docs/pro-year-design.mdの10章)。研究の道具を買う。 */
+/** 棋士の暮らしの操作(docs/pro-year-design.mdの10章)。研究の道具を買う・研究会に参加する・帰る。 */
 function proYearLife(action: { kind: string; [key: string]: unknown }) {
   const state = proYearState.value;
   if (!state) return;
   if (action.kind === "buy-gear") {
     const { state: next, bought } = buyProYearGear(state);
     if (bought) setProYear(next);
+  } else if (action.kind === "join-study" && typeof action.date === "string") {
+    setProYear(joinProYearStudy(state, action.date));
+  } else if (action.kind === "leave-study") {
+    // 中断している練習対局は、もう指さないので消す。
+    const suspended = suspendedMatch.value;
+    if (suspended?.event === "pro-year" && suspended.ryuoOpponentId === state.pending?.opponentId) {
+      suspendedMatch.value = null;
+      discardPersistedMatch();
+    }
+    setProYear(leaveProYearStudy(state));
   }
 }
 /** 年度のまとめから「次の年度へ」。 */
@@ -7511,6 +7524,16 @@ function recordProYearOutcome(matchResult: MatchResult) {
   const game = ryuoGame.value;
   const state = proYearState.value;
   if (!game || !state?.pending) return;
+  // 研究会の練習対局(公式戦でない。千日手は引き分けのまま。10-2の5)。
+  if (state.pending.kind === "study") {
+    const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";
+    const result = recordProYearStudy(state, outcome);
+    proYearResultLine.value = `${result.text}（公式戦には数えない）`;
+    finishMilestone = null;
+    setProYear(result.state);
+    ryuoGame.value = { ...game, outcome: outcome === "draw" ? undefined : outcome, replay: false };
+    return;
+  }
   if (!matchResult.winner) {
     setProYear(recordProGame(state, "draw").state);
     ryuoGame.value = { ...game, replay: true };
@@ -9117,6 +9140,7 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
         ? savedRyuo.stage
         : null,
       day: savedRyuo.stage?.twoDay ? normalizeDay(savedRyuo.day) : undefined,
+      practice: savedRyuo.practice === true,
     }
     : null;
   matchKind.value = snapshot.matchKind === "learning" ? "learning" : restoredRyuo ? "tournament" : "normal";

@@ -11,7 +11,8 @@ import { pickGameStyle } from './ryuo-repertoire.mjs';
 import { HANANE, YOSHIHIKO, hananeBeforeLine } from './ryuo-story.mjs';
 import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, worldRating } from './ryuo-strength.mjs';
 import { CLASS_RULES } from './meijin.mjs';
-import { gameFee, gearPrep, nextGear, prizeOf, GEAR } from './pro-life.mjs';
+import { GEAR, STUDY_SIZE, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, studyDaysBetween, studyDaysOfMonth, studyHananeLine } from './pro-life.mjs';
+import { repertoireText } from './ryuo-repertoire.mjs';
 
 export const PRO_YEAR_KEY = 'yacobihime:shogi-match:pro-year:v1';
 /** プレイヤーのid(名簿の'user'と同じ)。 */
@@ -922,13 +923,18 @@ function run(state, until, rng) {
   return false;
 }
 
+/** 相手のLv(大会の世界の物差し。本物の世界の善彦はいつもLv49)。 */
+function levelOf(state, opponent) {
+  const world = Number.isFinite(state.settings?.world) ? state.settings.world : recommendedWorldLevel(state.userLevel ?? 20);
+  return isRealWorld(world) && opponent.story === YOSHIHIKO ? MAX_CPU_LEVEL : worldCpuLevel(opponent.rating, world);
+}
+
 /** プレイヤーの対局の相手・Lv・先後・戦法。 */
 function setPending(state, game, rng) {
   const opponentId = game.a === PRO_USER_ID ? game.b : game.a;
   const opponent = state.players[opponentId];
-  const world = Number.isFinite(state.settings?.world) ? state.settings.world : recommendedWorldLevel(state.userLevel ?? 20);
   // 相手のLv(大会の世界の物差し)は、棋士の写しに書かず、pendingに持つ(保存から戻しても同じ。対局画面は`proYearSeason`で付ける)。
-  const level = isRealWorld(world) && opponent.story === YOSHIHIKO ? MAX_CPU_LEVEL : worldCpuLevel(opponent.rating, world);
+  const level = levelOf(state, opponent);
   // 番勝負は、局ごとに先後を入れ替える(第1局は振り駒)。ほかは振り駒。
   const color = game.a === PRO_USER_ID ? 'black' : 'white';
   const style = opponent.repertoire ? pickGameStyle(rng, opponent.repertoire, { color: color === 'black' ? 'white' : 'black' }) : opponent.style ?? null;
@@ -1014,7 +1020,8 @@ export function advanceToNextGame(source) {
 export function recordProGame(source, outcome) {
   const state = structuredClone(source);
   const pending = state.pending;
-  if (!pending) return { state, replay: false };
+  // 研究会・将棋まつりの対局(公式戦でない)は、それぞれの記録(`recordStudyGame`など)で。
+  if (!pending?.gameId) return { state, replay: false };
   if (outcome === 'draw') {
     state.pending = { ...pending, color: pending.color === 'black' ? 'white' : 'black', replay: true };
     return { state, replay: true };
@@ -1058,6 +1065,120 @@ export function recordProGame(source, outcome) {
       return { cycle: entry.id, event: entry.event, name: event.name, short: event.short, title: event.kind === 'title', fy: state.fy, wins, losses: mine.length - wins };
     });
   return { state, replay: false, won, game: { ...game }, milestones, champions, fee, earned: (state.user.money ?? 0) - moneyBefore };
+}
+
+// ---- 研究会(10-2の5)
+
+/** 研究会の顔ぶれ(羽音と、同期の若手2人。若い四段から)。 */
+function studyMembers(state) {
+  const hanane = Object.values(state.players).find((member) => member.story === HANANE);
+  const young = pros(state).filter((member) => !member.story)
+    .sort((a, b) => Number(isRookie(b)) - Number(isRookie(a)) || (a.age ?? 99) - (b.age ?? 99) || String(a.id).localeCompare(String(b.id)));
+  return [hanane?.id, ...young.map((member) => member.id)].filter(Boolean).slice(0, STUDY_SIZE);
+}
+const emptyStudy = (state) => ({ members: studyMembers(state), turn: 0, records: {}, log: [], last: '', talk: null });
+
+/** 自分の公式戦の日(2日制は1日目も。研究会はこの日を避ける)。 */
+function userBusy(state) {
+  const busy = new Set();
+  for (const game of Object.values(state.games)) {
+    if (!game.user) continue;
+    busy.add(game.date);
+    if (game.twoDay) busy.add(addDays(game.date, -1));
+  }
+  return busy;
+}
+
+/** 次の研究会の相手(順番に回る)。 */
+const studyOpponentId = (state) => {
+  const members = state.study?.members ?? [];
+  return members.length ? members[(state.study.turn ?? 0) % members.length] : null;
+};
+
+/**
+ * 寄り道の研究会(次の公式戦の前にあれば。10-2の5)。行かなくても何も失わない(D:9-2)。
+ * @param {any} state
+ * @param {{ date: string } | null} [preview] 次の公式戦の見込み(`previewNextGame`)。なければ年度の終わりまで
+ */
+export function studyOffer(state, preview = null) {
+  if (!state?.study || state.pending || state.yearDone || state.festival) return null;
+  const until = preview?.date ?? addDays(yearEnd(state.fy), 1);
+  const from = state.study.last > state.date ? state.study.last : state.date;
+  const date = studyDaysBetween(from, until, userBusy(state))[0];
+  const opponentId = studyOpponentId(state);
+  if (!date || !opponentId) return null;
+  return { kind: 'study', date, dateText: dateLabel(date), opponent: card(state, opponentId), members: state.study.members.map((id) => card(state, id)) };
+}
+
+/**
+ * 研究会に参加する: その日まで進めて(あいだの対局は決まる)、研究会の1人と平手の練習対局(公式の成績・対局料には入らない)。
+ * @param {any} source
+ * @param {string} date
+ */
+export function joinStudy(source, date) {
+  const state = structuredClone(source);
+  if (!state.study || state.pending || state.yearDone || !date || date <= state.date) return state;
+  const rng = createRng(state.rng);
+  // その日より前に自分の公式戦があれば、そこで止まる(研究会は次の公式戦の前だけなので、ふつうは起きない)。
+  if (run(state, date, rng)) {
+    state.rng = rng.state;
+    return state;
+  }
+  state.date = date;
+  const opponentId = studyOpponentId(state);
+  const opponent = state.players[opponentId];
+  const color = (state.study.turn ?? 0) % 2 === 0 ? 'black' : 'white';
+  const style = opponent.repertoire ? pickGameStyle(rng, opponent.repertoire, { color: color === 'black' ? 'white' : 'black' }) : opponent.style ?? null;
+  state.pending = {
+    kind: 'study', gameId: null, opponentId, level: levelOf(state, opponent), color, style,
+    label: STUDY_TEXT.label, eventText: STUDY_TEXT.eventText, titleName: '', twoDay: false, date,
+    stakes: { text: STUDY_TEXT.stakes, goal: '', win: '', boss: false }, coachLine: STUDY_TEXT.coach, series: null, others: { games: [] },
+  };
+  state.rng = rng.state;
+  return state;
+}
+
+/** 研究会の練習対局をやめて帰る(その日の研究会は終わり)。 */
+export function leaveStudy(source) {
+  const state = structuredClone(source);
+  if (state.pending?.kind !== 'study') return state;
+  state.study.last = state.pending.date;
+  state.pending = null;
+  return state;
+}
+
+/**
+ * 研究会の練習対局を記録する(公式の成績・対局料には入らない)。千日手は引き分けのまま。
+ * @param {any} source
+ * @param {'win' | 'loss' | 'draw'} outcome
+ */
+export function recordStudyGame(source, outcome) {
+  const state = structuredClone(source);
+  const pending = state.pending;
+  if (pending?.kind !== 'study') return { state, won: false, line: '', text: '' };
+  const id = pending.opponentId;
+  const record = (state.study.records[id] ??= { w: 0, l: 0, d: 0 });
+  if (outcome === 'win') record.w += 1;
+  else if (outcome === 'loss') record.l += 1;
+  else record.d += 1;
+  const count = state.study.turn ?? 0;
+  state.study.turn = count + 1;
+  state.study.last = pending.date;
+  state.study.log = [...(state.study.log ?? []), { date: pending.date, id, r: outcome }].slice(-24);
+  const line = studyHananeLine({ won: outcome === 'win', draw: outcome === 'draw', vsHanane: state.players[id]?.story === HANANE, count });
+  state.study.talk = { date: pending.date, line };
+  state.pending = null;
+  const text = `研究会で${nameOf(state, id)}に${outcome === 'win' ? '勝ち' : outcome === 'loss' ? '負け' : '引き分け'}`;
+  noteMilestone(state, { event: 'study', kind: 'plain', text });
+  return { state, won: outcome === 'win', line, text };
+}
+
+/** 研究仲間の成績(公式戦で当たると、次の対局の札に出す。道具がなくても)。 */
+function studyMate(state, id) {
+  const record = state.study?.records?.[id];
+  if (!record) return null;
+  const member = state.players[id];
+  return { wins: record.w, losses: record.l, draws: record.d ?? 0, repertoire: member?.repertoire ? repertoireText(member.repertoire) : member?.style?.label ?? '' };
 }
 
 // ---- 年度
@@ -1226,6 +1347,7 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
   state.date = state.debut;
   state.year = emptyYear();
   state.user.money = 0;
+  state.study = emptyStudy(state);
   state.log = [];
   state.rng = rng.state;
   return state;
@@ -1288,14 +1410,16 @@ export function proYearView(state) {
   const record = state.year.records[PRO_USER_ID] ?? { w: 0, l: 0, streak: 0, best: 0 };
   const hanane = Object.values(state.players).find((member) => member.story === HANANE) ?? null;
   const vsHanane = state.user.vsHanane ?? { wins: 0, losses: 0 };
+  const official = Boolean(state.pending?.gameId);
   const pending = state.pending ? {
     ...state.pending,
     dateText: dateLabel(state.pending.date),
     opponent: card(state, state.pending.opponentId),
     // 羽音と当たる日は、対局の前に羽音の一言(3章の13)。
-    hananeLine: state.players[state.pending.opponentId]?.story === HANANE ? hananeBeforeLine(vsHanane) : '',
-    // 事前研究(研究の道具を持っていれば。10-2の4)。
-    prep: gearPrep(state.user.gear ?? 0, state.players[state.pending.opponentId], state.pending.style),
+    hananeLine: official && state.players[state.pending.opponentId]?.story === HANANE ? hananeBeforeLine(vsHanane) : '',
+    // 事前研究(研究の道具を持っていれば。10-2の4)と、研究仲間の成績(10-2の5)。公式戦だけ。
+    prep: official ? gearPrep(state.user.gear ?? 0, state.players[state.pending.opponentId], state.pending.style) : null,
+    studyMate: official ? studyMate(state, state.pending.opponentId) : null,
   } : null;
   const hananeRecord = hanane ? state.year.records[hanane.id] ?? { w: 0, l: 0 } : null;
   return {
@@ -1315,6 +1439,22 @@ export function proYearView(state) {
     lastGame: lastGameView(state),
     history: [...(state.history ?? [])].reverse(),
     wallet: walletView(state),
+    study: studyView(state),
+  };
+}
+
+/** 研究会(顔ぶれと成績・今日の羽音の一言・デビューの日の誘い)。 */
+function studyView(state) {
+  const study = state.study;
+  if (!study) return null;
+  const members = study.members.map((id) => ({ ...card(state, id), record: study.records[id] ?? { w: 0, l: 0, d: 0 } }));
+  const names = members.filter((member) => member.story !== HANANE).map((member) => member.name);
+  const invite = !study.turn && !study.last && state.date === state.debut && !state.lastGame ? STUDY_TEXT.invite(names) : '';
+  return {
+    members,
+    games: (study.log ?? []).length,
+    talk: study.talk?.date === state.date ? study.talk.line : invite,
+    next: card(state, studyOpponentId(state)),
   };
 }
 
@@ -1457,6 +1597,22 @@ function dayItems(state, date, projected = null) {
   return items;
 }
 
+/** その月の研究会の印(デビューの後。行った日は結果、これからの日は予定)。 */
+function studyItems(state, year, month) {
+  const byDate = new Map();
+  if (!state.study) return byDate;
+  const log = new Map((state.study.log ?? []).map((item) => [item.date, item]));
+  for (const date of studyDaysOfMonth(year, month, userBusy(state))) {
+    if (date < state.debut) continue;
+    const done = log.get(date);
+    // 寄り道に出せるのは明日から(今日の研究会は、参加したものだけ)。
+    const today = state.pending?.kind === 'study' && state.pending.date === date;
+    if (!done && !today && date <= state.date) continue;
+    byDate.set(date, [{ kind: 'study', short: '研', color: '#c9b6e4', label: '研究会', result: done ? done.r : null }]);
+  }
+  return byDate;
+}
+
 /** 月のカレンダー(週ごとの7マス。日曜はじまり)。 */
 export function monthView(state, year, month) {
   const first = `${year}-${pad(month)}-01`;
@@ -1464,11 +1620,12 @@ export function monthView(state, year, month) {
   const weeks = [];
   let day = start;
   const projected = projectedItems(state);
+  const study = studyItems(state, year, month);
   for (let week = 0; week < 6; week += 1) {
     const row = [];
     for (let index = 0; index < 7; index += 1) {
       const inMonth = day.slice(0, 7) === first.slice(0, 7);
-      row.push({ date: day, day: Number(day.slice(8)), inMonth, today: day === state.date, past: day < state.date, items: inMonth ? dayItems(state, day, projected) : [] });
+      row.push({ date: day, day: Number(day.slice(8)), inMonth, today: day === state.date, past: day < state.date, items: inMonth ? [...dayItems(state, day, projected), ...(study.get(day) ?? [])] : [] });
       day = addDays(day, 1);
     }
     weeks.push(row);
@@ -1497,6 +1654,18 @@ export function dayView(state, date) {
         twoDay: Boolean(game.twoDay),
       };
     }).sort((x, y) => Number(y.user) - Number(x.user)),
+    // 研究会の日なら、顔ぶれと、行った日は結果(10-2の5)。
+    study: dayStudy(state, date),
+  };
+}
+
+function dayStudy(state, date) {
+  const item = studyItems(state, Number(date.slice(0, 4)), Number(date.slice(5, 7))).get(date)?.[0];
+  if (!item) return null;
+  const done = (state.study.log ?? []).find((entry) => entry.date === date) ?? null;
+  return {
+    members: state.study.members.map((id) => nameOf(state, id)),
+    result: done ? { opponent: nameOf(state, done.id), r: done.r } : null,
   };
 }
 
@@ -1796,7 +1965,9 @@ export function unpackProYear(packed, roster) {
   // 暮らしの記録のない前の保存は、0で埋める(版はそのまま。10-2の7)。
   const user = { money: 0, gear: 0, fans: 0, ...(packed.user ?? {}) };
   const year = { ...emptyYear(), ...(packed.year ?? {}) };
-  return { ...packed, players, games, user, year };
+  const restored = { ...packed, players, games, user, year };
+  if (!restored.study) restored.study = emptyStudy(restored);
+  return restored;
 }
 
 /**

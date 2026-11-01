@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PRO_EVENTS, PRO_USER_ID, PRO_YEAR_KEY, TITLE_EVENTS, addDays, advanceToNextGame, buyGear, createProYear, dateLabel, dayView, earningsRanking, eventView,
+  PRO_EVENTS, PRO_USER_ID, PRO_YEAR_KEY, TITLE_EVENTS, addDays, advanceToNextGame, buyGear, createProYear, dateLabel, dayView, earningsRanking, eventView, joinStudy, leaveStudy, recordStudyGame, studyOffer,
   fiscalYearOf, gameLabel, loadProYear, monthView, packProYear, previewNextGame, proYearRelayGame, proYearSeason, proYearTalk, proYearView, recordProGame, saveProYear,
   startNextYear, unpackProYear, weekdayOf, yearEnd, yearStart,
 } from './pro-year.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 import { HANANE } from './ryuo-story.mjs';
-import { GEAR, gameFee, gearPrep, nextGear, prizeOf } from './pro-life.mjs';
+import { GEAR, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, studyDaysBetween, studyDaysOfMonth, studyHananeLine } from './pro-life.mjs';
 
 const roster = createRoster({ seed: 11, userGroup: 6 });
 const memory = () => {
@@ -459,6 +459,86 @@ describe('対局料と賞金・研究の道具(10-2の3・4)', () => {
     expect(restored.user).toMatchObject({ money: 0, gear: 0 });
     expect(restored.year.mine).toEqual({ fee: 0, prize: 0, gig: 0 });
     expect(proYearView(restored).wallet.money).toBe(0);
+  });
+});
+
+describe('研究会(10-2の5)', () => {
+  it('第1・第3水曜。自分の公式戦の日は翌日の木曜', () => {
+    expect(studyDaysOfMonth(2026, 4)).toEqual(['2026-04-01', '2026-04-15']);
+    expect(studyDaysOfMonth(2026, 5)).toEqual(['2026-05-06', '2026-05-20']);
+    expect(studyDaysOfMonth(2026, 4, new Set(['2026-04-15']))).toEqual(['2026-04-01', '2026-04-16']);
+    expect(studyDaysBetween('2026-04-01', '2026-05-07')).toEqual(['2026-04-15', '2026-05-06']);
+    expect(studyDaysBetween('2026-12-20', '2027-01-08')).toEqual(['2027-01-06']);
+  });
+
+  it('デビューの日に羽音が誘い、顔ぶれは羽音と同期の若手2人', () => {
+    const fresh = start(5);
+    const view = proYearView(fresh);
+    expect(view.study.members).toHaveLength(3);
+    expect(view.study.members[0].story).toBe(HANANE);
+    expect(view.study.talk).toContain('研究会やらない？');
+    expect(view.study.talk).not.toMatch(/[！!]|です|ます/);
+    // カレンダーに「研」の印(デビューの日より後)。
+    const april = monthView(fresh, 2026, 4).weeks.flat();
+    expect(april.find((cell) => cell.date === '2026-04-15').items.some((item) => item.kind === 'study')).toBe(true);
+    expect(april.find((cell) => cell.date === '2026-04-01').items.some((item) => item.kind === 'study')).toBe(false);
+  });
+
+  it('次の公式戦の前の研究会は寄り道になり、参加すると羽音と練習対局', () => {
+    // 公式戦を指しながら、最初の研究会が寄り道に出るまで進める(研究会の日は、次の公式戦より前)。
+    let fresh = start(5);
+    let preview = previewNextGame(fresh);
+    let offer = studyOffer(fresh, preview);
+    for (let step = 0; step < 10 && !offer; step += 1) {
+      fresh = recordProGame(advanceToNextGame(fresh), 'auto').state;
+      preview = previewNextGame(fresh);
+      offer = studyOffer(fresh, preview);
+    }
+    expect(offer).toMatchObject({ kind: 'study' });
+    expect(offer.date > fresh.date && offer.date < preview.date).toBe(true);
+    expect(offer.opponent.story).toBe(HANANE);
+    const joined = joinStudy(fresh, offer.date);
+    expect(joined.date).toBe(offer.date);
+    expect(joined.pending).toMatchObject({ kind: 'study', gameId: null, label: STUDY_TEXT.label, opponentId: offer.opponent.id });
+    expect(joined.pending.level).toBeGreaterThan(0);
+    // 公式戦でないので、事前研究も羽音の対局前の一言も出さない。
+    const view = proYearView(joined);
+    expect(view.pending.prep).toBeNull();
+    expect(view.pending.hananeLine).toBe('');
+    // 公式の記録は変わらない。
+    expect(recordProGame(joined, 'win').state.pending).toEqual(joined.pending);
+    const result = recordStudyGame(joined, 'win');
+    expect(result.won).toBe(true);
+    expect(result.line).not.toMatch(/[！!]|です|ます/);
+    expect(result.state.pending).toBeNull();
+    expect(result.state.user.money).toBe(joined.user.money);
+    expect(result.state.year.records[PRO_USER_ID]).toEqual(joined.year.records[PRO_USER_ID]);
+    expect(result.state.study.records[offer.opponent.id]).toEqual({ w: 1, l: 0, d: 0 });
+    expect(proYearView(result.state).study.talk).toBe(result.line);
+    // 次の研究会は次の人。行った日はカレンダーに結果。
+    expect(studyOffer(result.state, previewNextGame(result.state))?.opponent.id ?? result.state.study.members[1]).toBe(result.state.study.members[1]);
+    const [year, month] = offer.date.split('-').map(Number);
+    const cell = monthView(result.state, year, month).weeks.flat().find((entry) => entry.date === offer.date);
+    expect(cell.items.find((item) => item.kind === 'study').result).toBe('win');
+    expect(dayView(result.state, offer.date).study.result).toMatchObject({ r: 'win' });
+    // 帰ると、その日の研究会は終わり。
+    const left = leaveStudy(joined);
+    expect(left.pending).toBeNull();
+    expect(studyOffer(left, previewNextGame(left))?.date ?? '9999').not.toBe(offer.date);
+  });
+
+  it('研究仲間と公式戦で当たると、研究会の成績と得意戦法が札に出る', () => {
+    let state = advanceToNextGame(start(5));
+    const opponentId = state.pending.opponentId;
+    expect(proYearView(state).pending.studyMate).toBeNull();
+    state = { ...state, study: { ...state.study, records: { [opponentId]: { w: 2, l: 1, d: 0 } } } };
+    expect(proYearView(state).pending.studyMate).toMatchObject({ wins: 2, losses: 1 });
+    expect(proYearView(state).pending.studyMate.repertoire).toBeTruthy();
+  });
+
+  it('羽音の一言は、勝ち負けと相手で変わる', () => {
+    expect(studyHananeLine({ won: true, vsHanane: true })).not.toBe(studyHananeLine({ won: false, vsHanane: true }));
+    expect(studyHananeLine({ won: false, draw: true })).toContain('引き分け');
   });
 });
 

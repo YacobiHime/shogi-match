@@ -74,3 +74,79 @@ export function gearPrep(gear, opponent, style) {
   }
   return prep;
 }
+
+// ---- 研究会(10-2の5)
+
+const pad2 = (value) => String(value).padStart(2, '0');
+const dayOfWeek = (text) => new Date(`${text}T00:00:00Z`).getUTCDay();
+const shiftDay = (text, days) => {
+  const date = new Date(`${text}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
+};
+
+/** 研究会の顔ぶれ(羽音と、同期の若手2人)の人数。 */
+export const STUDY_SIZE = 3;
+
+/**
+ * その月の研究会の日(第1・第3水曜。自分の公式戦がある日は、翌日の木曜)。
+ * @param {number} year
+ * @param {number} month 1〜12
+ * @param {Set<string>} [busy] 自分の公式戦の日(2日制の1日目も)
+ * @returns {string[]}
+ */
+export function studyDaysOfMonth(year, month, busy = new Set()) {
+  const first = `${year}-${pad2(month)}-01`;
+  const firstWednesday = shiftDay(first, (3 - dayOfWeek(first) + 7) % 7);
+  return [firstWednesday, shiftDay(firstWednesday, 14)].map((day) => (busy.has(day) ? shiftDay(day, 1) : day));
+}
+
+/**
+ * fromより後、untilより前の研究会の日(多くて月2回)。
+ * @param {string} from この日は含まない
+ * @param {string} until この日は含まない
+ * @param {Set<string>} [busy]
+ */
+export function studyDaysBetween(from, until, busy = new Set()) {
+  const days = [];
+  let year = Number(from.slice(0, 4));
+  let month = Number(from.slice(5, 7));
+  for (let guard = 0; guard < 24; guard += 1) {
+    for (const day of studyDaysOfMonth(year, month, busy)) if (day > from && day < until) days.push(day);
+    if (`${year}-${pad2(month)}-31` >= until) break;
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return days;
+}
+
+/** 研究会の言葉(羽音は敬語と「！」なし。docs/hanane-character.md)。 */
+export const STUDY_TEXT = Object.freeze({
+  label: '研究会 練習対局',
+  eventText: '研究会',
+  stakes: '公式戦には数えない練習対局',
+  /** デビューの日の羽音の誘い(名前は同期の2人)。 */
+  invite: (names) => `ねえ、研究会やらない？ 私と、同期の${names.join('と')}で。第1・第3水曜の「研」の日。気が向いたら来て。`,
+  detour: '寄り道',
+  join: '参加する',
+  leave: '今日は帰る',
+  coach: '研究会の練習対局だよ。公式戦には数えないから、試したい作戦を指してみよう！',
+  mate: '研究仲間',
+});
+
+/** 研究会の対局のあとの羽音の一言(勝ち・負け・引き分け。相手が羽音かどうかで変える)。 */
+export function studyHananeLine({ won, draw = false, vsHanane = false, count = 0 }) {
+  const lines = draw
+    ? ['引き分けか。ここ、あとで並べ直そう。', '決着つかなかったね。続きは次の研究会で。']
+    : won
+      ? vsHanane
+        ? ['……今日は君の勝ちだね。いまの順番、あとで一緒に並べよう。', 'へえ、そう来るんだ。次の研究会までに考えておくよ。', '悔しいけど、いい手だった。次は勝つから。']
+        : ['へえ、勝ったんだ。どこが良かったか、あとで聞かせて。', 'なるほど。その作戦、公式戦でも使えるでしょ。', 'いい内容だったね。私も見てたよ。']
+      : vsHanane
+        ? ['今日は私の勝ち。どこで傾いたか、一緒に見よう。', 'まぁ、研究会だから。公式戦で同じ手を指さなければいいよ。', '惜しかったよ。途中までは君のほうが良かったでしょ。']
+        : ['負けちゃったか。でも、研究会で負けるのは得だよ。公式戦で同じ負け方をしないから。', 'ここで試せてよかったでしょ。次の公式戦で生きるよ。', '気にしなくていいよ。どこを直すか、もう分かってるでしょ。'];
+  return lines[Math.abs(count) % lines.length];
+}
