@@ -730,7 +730,8 @@ defineExpose({ finish, goBack });
   grid-column: 1;
   padding: 1.5em max(1rem, calc((100% - 58rem) / 2)) 0.15em;
   color: var(--novel-paper-ink);
-  background: linear-gradient(180deg, rgba(255, 242, 220, 0) 0, rgba(255, 240, 214, 0.82) 1.6em, rgba(253, 232, 198, 0.94) 50%, rgba(247, 216, 172, 0.97) 100%);
+  /* 参考の写真のように、立ち絵と背景が透けて見える薄さにする(10章)。文は下の光る縁で読めるようにする */
+  background: linear-gradient(180deg, rgba(255, 244, 222, 0) 0, rgba(255, 238, 206, 0.45) 2em, rgba(252, 224, 178, 0.58) 50%, rgba(246, 200, 136, 0.72) 100%);
   box-sizing: border-box;
 }
 /* 細かい点の模様(窓の濃いところだけ) */
@@ -738,7 +739,7 @@ defineExpose({ finish, goBack });
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: radial-gradient(rgba(176, 116, 52, 0.16) 1px, transparent 1.5px) 0 0 / 9px 9px;
+  background: radial-gradient(rgba(176, 116, 52, 0.12) 1px, transparent 1.5px) 0 0 / 9px 9px;
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 2.4em);
   mask-image: linear-gradient(180deg, transparent 0, #000 2.4em);
   content: "";
@@ -796,7 +797,8 @@ defineExpose({ finish, goBack });
   font-weight: 600;
   line-height: 1.7;
   white-space: pre-wrap;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+  /* 透ける帯の上でも読めるよう、字のまわりを明るくぼかす */
+  text-shadow: 0 0 2px rgba(255, 250, 240, 0.95), 0 0 6px rgba(255, 246, 228, 0.9), 0 0 12px rgba(255, 240, 214, 0.7);
 }
 .novel__rest { color: transparent; text-shadow: none; }
 .novel__text--narration { color: #5b4630; }
@@ -821,6 +823,7 @@ defineExpose({ finish, goBack });
   gap: 0.4em;
   margin-right: 0.3em;
   color: #4a321a;
+  text-shadow: 0 0 3px rgba(255, 248, 234, 0.95), 0 0 8px rgba(255, 244, 224, 0.85);
   font-size: calc(var(--novel-text-size) * 0.72);
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -859,7 +862,8 @@ defineExpose({ finish, goBack });
   padding: 0.2em 0.6em;
   border: 0;
   border-radius: 0.5em;
-  color: #6b4f2c;
+  color: #5a3f1f;
+  text-shadow: 0 0 3px rgba(255, 248, 234, 0.95), 0 0 8px rgba(255, 244, 224, 0.85);
   background: transparent;
   font: inherit;
   font-size: 0.82em;
