@@ -677,6 +677,17 @@
           data-match-dex
           @click="openDexShelf"
         ><DexIcon kind="tesuji" class="shogi-game__dex-open-icon" />図鑑</button>
+        <!-- 高校の団体戦は、仲間の盤をのぞく(docs/team-battle-design.mdの14章)。対局のはじめから置き、途中で出たり消えたりしない。 -->
+        <button
+          v-if="teamPeekBoards.length"
+          type="button"
+          class="shogi-game__command shogi-game__dex-open shogi-game__team-peek-open"
+          aria-haspopup="dialog"
+          :aria-expanded="teamPeekOpen"
+          aria-label="仲間の盤"
+          data-team-peek-open
+          @click="openTeamPeek"
+        >仲間</button>
         <button
           type="button"
           class="shogi-game__command shogi-game__menu-toggle"
@@ -1946,6 +1957,18 @@
       </div>
     </div>
 
+    <!-- 仲間の盤(団体戦のチラ見。docs/team-battle-design.mdの14章)。のぞいている間も、自分の対局は止めない。 -->
+    <TeamPeekSheet
+      v-if="teamPeekOpen && teamPeekBoards.length"
+      :boards="teamPeekBoards"
+      :games="teamPeekGames"
+      :user-ply="moveCount"
+      :player-name="playerDisplayName(playerName)"
+      :asset-base-url="assetBaseUrl"
+      @select="teamPeekPrefer"
+      @close="teamPeekOpen = false"
+    />
+
     <!-- 棋力テスト(docs/skill-assessment-design.mdの4章)。札を選んだら、対局の代わりに16問で測る。 -->
     <ShogiSkillTest
       v-if="skillTestOpen"
@@ -2718,6 +2741,7 @@ import {
   USER_TEAM as TEAM_USER_TEAM, chooseTeamPlayer, createTeamRun, currentTeamMatch, draftCandidates, finishTeamRun, hananeNextPlayer,
   loadTeamBattle, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
 } from "./core/team-battle.mjs";
+import { peekBoards } from "./core/team-peek.mjs";
 import {
   advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
   fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
@@ -3000,6 +3024,7 @@ const loadBrainTraining = () => import("./ShogiBrainTraining.vue");
 const loadYakobiNote = () => import("./YakobiNote.vue");
 const loadTournament = () => import("./ShogiTournament.vue");
 const loadSkillTest = () => import("./ShogiSkillTest.vue");
+const TeamPeekSheet = defineAsyncComponent(() => import("./TeamPeekSheet.vue"));
 const ShogiOpeningDex = defineAsyncComponent(loadOpeningDex);
 const ShogiReferenceDex = defineAsyncComponent(loadReferenceDex);
 const ShogiTutorial = defineAsyncComponent(loadTutorial);
@@ -7278,6 +7303,34 @@ const teamCareer = shallowRef<any>(loadTeamBattle(browserStorage()));
 const teamView = computed(() => teamRunView(teamCareer.value.current));
 /** プロの試合で、仲間が指した直前の局の結果(大会の画面の速報の札)。 */
 const teamNews = ref("");
+// ---- 仲間の盤のチラ見(docs/team-battle-design.mdの14章)。高校の団体戦の自分の対局のあいだだけ。
+const teamPeekBoards = computed(() => (matchKind.value === "tournament" && ryuoGame.value?.event === "team" && !reviewMode.value
+  ? peekBoards(teamCareer.value?.current) : []));
+const teamPeekOpen = ref(false);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const teamPeekGames = shallowRef<{ [key: string]: any }>({});
+// 仲間の局の棋譜は、はじめて開いたときに作り始める(押さなければエンジンを動かさない。棋譜を作る処理は開いたときに読み込む)。
+let teamPeek: { games: { [key: string]: unknown }; start: (specs: unknown[], first?: string) => void; stop: () => void } | null = null;
+async function openTeamPeek() {
+  teamPeekOpen.value = true;
+  const specs = teamPeekBoards.value.map((board) => board.spec);
+  if (!teamPeek) {
+    const { useTeamPeek } = await import("./composables/match/useTeamPeek");
+    teamPeek = useTeamPeek({ engineFactory: ensureEngineFactory, storage: browserStorage });
+    teamPeekGames.value = teamPeek.games;
+  }
+  teamPeek.start(specs);
+}
+/** 見ている席の局を先に作る。 */
+function teamPeekPrefer(key: string) {
+  teamPeek?.start(teamPeekBoards.value.map((board) => board.spec), key);
+}
+// 自分の対局が終わったら(仲間の盤の組が変わったら)、作るのを止めて閉じる。
+watch(() => teamPeekBoards.value.map((board) => board.spec.key).join(","), (now, before) => {
+  if (now === before) return;
+  teamPeek?.stop();
+  teamPeekOpen.value = false;
+});
 /** 終局の窓に出す、チームの試合の結果(「チームは2勝1敗で勝ち」)。 */
 const teamResultLine = ref("");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -8786,6 +8839,8 @@ function navigateBack() {
     // ホームが最下段。
   } else if (dexShelfOpen.value) {
     dexShelfOpen.value = false;
+  } else if (teamPeekOpen.value) {
+    teamPeekOpen.value = false;
   } else if (suspendConfirmOpen.value) {
     suspendConfirmOpen.value = false;
   } else if (resignConfirmOpen.value) {

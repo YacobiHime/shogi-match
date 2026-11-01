@@ -230,6 +230,7 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
 .shogi-game .festival-simul__table--draw .festival-simul__state { color: #cfd8de; }
 .shogi-game .festival-simul__stage { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 0.8rem; min-width: 0; min-height: 0; overflow: hidden; }
 .shogi-game .festival-simul__board { flex: none; position: relative; }
+.shogi-game .festival-simul__board .shogi-match-theme-controls { display: none; }
 .shogi-game .festival-simul__panel { display: grid; align-content: center; gap: 0.5rem; flex: 0 1 16rem; min-width: 0; }
 .shogi-game .festival-simul__line { margin: 0; font-weight: 800; line-height: 1.5; }
 .shogi-game .festival-simul__tally { margin: 0; color: #e9c46a; font-size: 1.4rem; font-weight: 900; text-align: center; }

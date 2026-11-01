@@ -977,6 +977,17 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(state\.pending\.kind === "shidou"\) \{[\s\S]{0,300}?recordProYearShidou\(state, outcome\)/);
   });
 
+  it('高校の団体戦は、対局中に仲間の盤をのぞける。棋譜は開いたときに作り始め、対局が終わったら止める(docs/team-battle-design.mdの14章)', () => {
+    expect(source).toMatch(/v-if="teamPeekBoards\.length"[\s\S]{0,300}?data-team-peek-open\s+@click="openTeamPeek"/);
+    expect(source).toMatch(/const teamPeekBoards = computed\(\(\) => \(matchKind\.value === "tournament" && ryuoGame\.value\?\.event === "team" && !reviewMode\.value/);
+    // 棋譜を作る処理は、開いたときに読み込む(最初に読むJSに入れない)。
+    expect(source).toMatch(/const \{ useTeamPeek \} = await import\("\.\/composables\/match\/useTeamPeek"\);/);
+    expect(source).toMatch(/const TeamPeekSheet = defineAsyncComponent\(\(\) => import\("\.\/TeamPeekSheet\.vue"\)\);/);
+    expect(source).toMatch(/teamPeek\?\.stop\(\);\s*teamPeekOpen\.value = false;/);
+    // 戻る操作で閉じる。
+    expect(source).toMatch(/\} else if \(teamPeekOpen\.value\) \{\s*teamPeekOpen\.value = false;/);
+  });
+
   it('ホームのあそぶの行に物語(近日公開)を置き、押すと吹き出しで知らせる(docs/team-battle-design.mdの9章)', () => {
     expect(source).toMatch(/class="shogi-title__tile shogi-title__tile--soon" data-story-tile @click="tapStoryTile"/);
     expect(source).toMatch(/const homeGreeting = computed\(\(\) => \{\s*if \(storyNotice\.value\) return STORY_SOON_TEXT;/);
