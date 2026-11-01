@@ -916,11 +916,14 @@ describe("match screen regressions", () => {
   });
 
   it('データリセットは種類を選んでから、選んだ種類だけ確認して消す(docs/data-reset-design.md)', () => {
-    expect(source).toMatch(/v-if="exhibitResetOpen && !resetChoice"[\s\S]{0,900}?v-for="group in RESET_GROUPS"[\s\S]{0,300}?@click="chooseDataReset\(group\.id\)"/);
+    expect(source).toMatch(/v-if="exhibitResetOpen && !resetChoice && !resetTournamentList"[\s\S]{0,900}?v-for="group in RESET_GROUPS"[\s\S]{0,300}?@click="chooseDataReset\(group\.id\)"/);
     expect(source).toMatch(/v-if="exhibitResetOpen && resetChoiceGroup"[\s\S]{0,200}?role="alertdialog"/);
     // 確認の窓の最初のフォーカスは「戻る」。戻る操作は、確認の窓から種類の札へ、種類の札から閉じる。
-    expect(source).toMatch(/function chooseDataReset\(id: string\) \{\s*resetChoice\.value = id;[\s\S]{0,160}?resetConfirmCancel\.value\?\.focus\(\)/);
-    expect(source).toMatch(/\} else if \(exhibitResetOpen\.value\) \{\s*if \(resetChoice\.value\) resetChoice\.value = "";\s*else exhibitResetOpen\.value = false;/);
+    expect(source).toMatch(/function chooseDataReset\(id: string, confirmNow = false\) \{[\s\S]{0,400}?resetChoice\.value = id;[\s\S]{0,160}?resetConfirmCancel\.value\?\.focus\(\)/);
+    // 大会の進み具合は、まず大会ごとの札(竜王戦・団体戦などと「大会すべて」)を出す(6章)。
+    expect(source).toMatch(/if \(id === "tournament" && !confirmNow\) \{\s*resetTournamentList\.value = true;/);
+    expect(source).toMatch(/v-for="part in TOURNAMENT_PARTS"[\s\S]{0,200}?@click="chooseDataReset\(part\.id\)"/);
+    expect(source).toMatch(/\} else if \(exhibitResetOpen\.value\) \{\s*if \(resetChoice\.value\) resetChoice\.value = "";\s*else if \(resetTournamentList\.value\) resetTournamentList\.value = false;\s*else exhibitResetOpen\.value = false;/);
     expect(source).toMatch(/function acceptExhibitReset\(\) \{\s*const id = resetChoice\.value \|\| "all";\s*resetData\(browserStorage\(\), id\);/);
   });
 

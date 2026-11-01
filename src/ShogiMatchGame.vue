@@ -2067,7 +2067,7 @@
       消すと元に戻せないので、確認の窓の最初のフォーカスは「戻る」(UI_Nintendo_Implementation.mdの3-1)。
     -->
     <div
-      v-if="exhibitResetOpen && !resetChoice"
+      v-if="exhibitResetOpen && !resetChoice && !resetTournamentList"
       class="shogi-game__confirm shogi-game__confirm--over-home"
       role="dialog"
       aria-modal="true"
@@ -2092,6 +2092,36 @@
           </li>
         </ul>
         <button ref="exhibitResetCancel" type="button" class="shogi-welcome__skip" @click="exhibitResetOpen = false">やめる</button>
+      </div>
+    </div>
+    <!-- 大会の進み具合は、大会ごとにも選べる(docs/data-reset-design.mdの6章) -->
+    <div
+      v-if="exhibitResetOpen && resetTournamentList && !resetChoice"
+      class="shogi-game__confirm shogi-game__confirm--over-home"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="data-reset-tournament-title"
+      data-data-reset-tournament
+      @click.self="resetTournamentList = false"
+    >
+      <div class="shogi-game__confirm-panel shogi-welcome shogi-data-reset">
+        <h2 id="data-reset-tournament-title">どの大会を消す？</h2>
+        <p>選んだ大会だけを最初からにするよ。棋士の世界（名簿・順位戦）と賞状は残るよ。</p>
+        <ul class="shogi-welcome__choices shogi-data-reset__parts">
+          <li v-for="part in TOURNAMENT_PARTS" :key="part.id">
+            <button type="button" :data-reset-group="part.id" @click="chooseDataReset(part.id)">
+              <strong>{{ part.label }}</strong>
+              <small>{{ part.summary }}</small>
+            </button>
+          </li>
+          <li class="shogi-data-reset__parts-all">
+            <button type="button" class="shogi-data-reset__all" data-reset-group="tournament" @click="chooseDataReset('tournament', true)">
+              <strong>大会すべて</strong>
+              <small>{{ resetGroup("tournament")?.summary }}（棋士の世界も）</small>
+            </button>
+          </li>
+        </ul>
+        <button ref="resetTournamentBack" type="button" class="shogi-welcome__skip" @click="resetTournamentList = false">戻る</button>
       </div>
     </div>
     <div
@@ -2755,7 +2785,7 @@ import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, reco
 import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoments } from "./core/tip-moments.mjs";
 import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
-import { RESET_GROUPS, resetData, resetGroup } from "./core/data-reset.mjs";
+import { RESET_GROUPS, TOURNAMENT_PARTS, resetData, resetGroup } from "./core/data-reset.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -8421,13 +8451,23 @@ const exhibitResetCancel = ref<HTMLButtonElement | null>(null);
 const resetConfirmCancel = ref<HTMLButtonElement | null>(null);
 /** 選んだ消す種類(確認の窓を出しているあいだ)。空なら種類を選ぶ札。 */
 const resetChoice = ref("");
+/** 「大会の進み具合」を押したときの、大会ごとの選ぶ札(6章)。 */
+const resetTournamentList = ref(false);
+const resetTournamentBack = ref<HTMLButtonElement | null>(null);
 const resetChoiceGroup = computed(() => (resetChoice.value ? resetGroup(resetChoice.value) : null));
 function openExhibitReset() {
   resetChoice.value = "";
+  resetTournamentList.value = false;
   exhibitResetOpen.value = true;
   void nextTick(() => exhibitResetCancel.value?.focus());
 }
-function chooseDataReset(id: string) {
+function chooseDataReset(id: string, confirmNow = false) {
+  // 大会の進み具合は、まず大会ごとの札を出す(大会すべては札の中から選ぶ)。
+  if (id === "tournament" && !confirmNow) {
+    resetTournamentList.value = true;
+    void nextTick(() => resetTournamentBack.value?.focus());
+    return;
+  }
   resetChoice.value = id;
   // 取り消せない操作なので、確認の窓の最初のフォーカスは「戻る」(UI_Nintendo_Implementation.mdの3-1)。
   void nextTick(() => resetConfirmCancel.value?.focus());
@@ -8860,6 +8900,7 @@ function navigateBack() {
     dismissLadderNoticeDialog();
   } else if (exhibitResetOpen.value) {
     if (resetChoice.value) resetChoice.value = "";
+    else if (resetTournamentList.value) resetTournamentList.value = false;
     else exhibitResetOpen.value = false;
   } else if (discardSuspendedPending.value) {
     discardSuspendedPending.value = null;

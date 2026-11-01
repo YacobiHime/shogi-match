@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { RESET_GROUPS, isMatchSnapshotKey, resetData, resetGroup } from "./data-reset.mjs";
+import { RESET_GROUPS, TOURNAMENT_PARTS, isMatchSnapshotKey, resetData, resetGroup } from "./data-reset.mjs";
 import { EXHIBIT_KEEP_KEYS } from "./exhibit-reset.mjs";
 import { matchSnapshotKey } from "./match-persistence.mjs";
 
@@ -115,5 +115,37 @@ describe("データリセットの種類(docs/data-reset-design.md)", () => {
     }
     expect(resetGroup("nothing")).toBeNull();
     expect(resetData(memoryStorage(), "nothing")).toEqual([]);
+  });
+});
+
+describe('大会ごとに消す(docs/data-reset-design.mdの6章)', () => {
+  it('大会ごとの鍵は「大会の進み具合」の鍵の中にあり、名簿と世界は消さない', () => {
+    const tournament = new Set(RESET_GROUPS.find((group) => group.id === 'tournament').keys);
+    expect(TOURNAMENT_PARTS.map(({ label }) => label)).toEqual(['竜王戦', '名人戦', '奨励会', '研修会', '団体戦', '棋士の1年']);
+    for (const part of TOURNAMENT_PARTS) {
+      for (const key of part.keys) expect(tournament.has(key), key).toBe(true);
+      expect(part.keys).not.toContain('yacobihime:shogi-match:ryuo-roster');
+      expect(part.keys).not.toContain('yacobihime:shogi-match:tournament-world:v1');
+      expect(resetGroup(part.id)).toBe(part);
+    }
+  });
+
+  it('団体戦だけ消すと、団体戦と団体戦の中断した対局だけが消え、竜王戦や名簿は残る', () => {
+    const team = matchSnapshotKey({ pathname: '/game.html', matchId: '' });
+    const ryuo = matchSnapshotKey({ pathname: '/ryuo.html', matchId: '' });
+    const storage = memoryStorage({
+      'yacobihime:shogi-match:team-battle:v1': '{}',
+      'yacobihime:shogi-match:ryuo-career': '{}',
+      'yacobihime:shogi-match:ryuo-roster': '{}',
+      [team]: JSON.stringify({ ryuoGame: { opponentId: 'a', event: 'team' } }),
+      [ryuo]: JSON.stringify({ ryuoGame: { opponentId: 'b' } }),
+    });
+    const removed = resetData(storage, 'tournament:team');
+    expect(removed.sort()).toEqual(['yacobihime:shogi-match:team-battle:v1', team].sort());
+    expect(storage.getItem('yacobihime:shogi-match:ryuo-career')).toBe('{}');
+    expect(storage.getItem(ryuo)).not.toBeNull();
+    // 竜王戦だけ消すと、印のない大会の中断(竜王戦)が消える。
+    expect(resetData(storage, 'tournament:ryuo').sort()).toEqual(['yacobihime:shogi-match:ryuo-career', ryuo].sort());
+    expect(storage.getItem('yacobihime:shogi-match:ryuo-roster')).toBe('{}');
   });
 });

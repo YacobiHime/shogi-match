@@ -2432,6 +2432,9 @@
 .shogi-game .shogi-data-reset .shogi-welcome__choices button { gap: 0.1em; padding-block: 0.45em; }
 .shogi-game .shogi-data-reset .shogi-welcome__choices .shogi-data-reset__all { border-color: #d9534f; }
 .shogi-data-reset .shogi-data-reset__all strong { color: #f08a86; }
+/* 大会ごとの札は2列にして1画面に収める。大会すべては横いっぱい */
+.shogi-data-reset .shogi-data-reset__parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shogi-data-reset .shogi-data-reset__parts-all { grid-column: 1 / -1; }
 /* 棋力テストの結果(docs/skill-assessment-design.mdの4-5)。見立てと幅、力ごとの見立ての棒、竜王戦への道。 */
 .shogi-skill-report .shogi-welcome__chara { width: 3.2em; }
 .shogi-skill-report__range {

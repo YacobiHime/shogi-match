@@ -92,17 +92,68 @@ export const RESET_GROUPS = Object.freeze([
   }),
 ]);
 
-/** idから種類。 */
-export const resetGroup = (id) => RESET_GROUPS.find((group) => group.id === id) ?? null;
+/**
+ * 「大会の進み具合」を、大会ごとに分けて消す(docs/data-reset-design.mdの6章)。棋士の世界(名簿・順位戦)・大会の難易度・
+ * 推し・中継の記録はどの大会でも使うので、ここでは消さない(「大会すべて」で消す)。中断した対局は、その大会の対局だけ消す。
+ * @typedef {ResetGroup & { events: readonly string[] }} TournamentPart
+ * @type {readonly TournamentPart[]}
+ */
+const PART_KEEPS = "ほかの大会、棋士の世界（名簿・順位戦）、賞状・観戦記、レーティング・コレクションは残ります。";
+export const TOURNAMENT_PARTS = Object.freeze([
+  Object.freeze({
+    id: "tournament:ryuo", label: "竜王戦", summary: "竜王戦の期と経歴",
+    erases: "竜王戦の期と経歴、期の途中の続き、観戦の記録、勝敗の予想、竜王戦の中断した対局",
+    keeps: PART_KEEPS,
+    keys: Object.freeze([`${Y}ryuo-season`, `${Y}ryuo-career`, `${Y}ryuo-counter:v1`, `${Y}ryuo-watch:v1`, `${Y}ryuo-prediction`, `${Y}engine-game:v1`]),
+    snapshots: "tournament", events: Object.freeze(["ryuo"]),
+  }),
+  Object.freeze({
+    id: "tournament:meijin", label: "名人戦", summary: "名人戦の期と経歴",
+    erases: "名人戦の期と経歴、名人戦の中断した対局",
+    keeps: `${PART_KEEPS}順位戦のクラスは棋士の世界に残ります（最初に戻すには、大会の選択の「棋士の世界を最初に戻す」）。`,
+    keys: Object.freeze([`${Y}meijin-season`, `${Y}meijin-career`, `${Y}engine-game:v1`]),
+    snapshots: "tournament", events: Object.freeze(["meijin"]),
+  }),
+  Object.freeze({
+    id: "tournament:shoreikai", label: "奨励会", summary: "奨励会の挑戦と経歴",
+    erases: "奨励会の挑戦と経歴、奨励会の中断した対局", keeps: PART_KEEPS,
+    keys: Object.freeze([`${Y}shoreikai:v1`]), snapshots: "tournament", events: Object.freeze(["shoreikai"]),
+  }),
+  Object.freeze({
+    id: "tournament:kenshukai", label: "研修会", summary: "研修会の挑戦と経歴",
+    erases: "研修会の挑戦と経歴、研修会の中断した対局", keeps: PART_KEEPS,
+    keys: Object.freeze([`${Y}kenshukai:v1`]), snapshots: "tournament", events: Object.freeze(["kenshukai"]),
+  }),
+  Object.freeze({
+    id: "tournament:team", label: "団体戦", summary: "団体戦の大会と記録",
+    erases: "団体戦の大会と記録（羽音に誘われる場面からやり直し）、団体戦の中断した対局", keeps: PART_KEEPS,
+    keys: Object.freeze([`${Y}team-battle:v1`]), snapshots: "tournament", events: Object.freeze(["team"]),
+  }),
+  Object.freeze({
+    id: "tournament:pro-year", label: "棋士の1年", summary: "棋士の1年の暦と記録",
+    erases: "棋士の1年の暦・対局・賞金と暮らしの記録、棋士の1年の中断した対局", keeps: PART_KEEPS,
+    keys: Object.freeze([`${Y}pro-year:v1`]), snapshots: "tournament", events: Object.freeze(["pro-year"]),
+  }),
+]);
+
+/** idから種類(大会ごとの種類も)。 */
+export const resetGroup = (id) => RESET_GROUPS.find((group) => group.id === id) ?? TOURNAMENT_PARTS.find((part) => part.id === id) ?? null;
 
 /** 中断した対局の保存の鍵か(match-persistence.mjsのmatchSnapshotKey。ページの場所はencodeURIComponentで「%2F」から始まる)。 */
 export const isMatchSnapshotKey = (key) => typeof key === "string" && key.startsWith(`${Y}%2F`);
 
-/** 中断した対局の保存が、大会(竜王戦・名人戦・奨励会・研修会)の対局か。読めない保存は大会の対局とみなさない。 */
-function isTournamentSnapshot(storage, key) {
+/**
+ * 中断した対局の保存が、大会の対局か。eventsを渡すと、その大会の対局だけ(竜王戦は印がないことがある)。
+ * 読めない保存は大会の対局とみなさない。
+ * @param {Storage} storage
+ * @param {string} key
+ * @param {readonly string[]} [events]
+ */
+function isTournamentSnapshot(storage, key, events) {
   try {
     const value = JSON.parse(storage.getItem(key) ?? "null");
-    return Boolean(value?.ryuoGame);
+    if (!value?.ryuoGame) return false;
+    return !events || events.includes(value.ryuoGame.event ?? "ryuo");
   } catch {
     return false;
   }
@@ -124,7 +175,7 @@ export function resetData(storage, id) {
     try {
       for (let index = 0; index < storage.length; index += 1) {
         const key = storage.key(index);
-        if (isMatchSnapshotKey(key) && (group.snapshots === "all" || isTournamentSnapshot(storage, key))) targets.add(/** @type {string} */ (key));
+        if (isMatchSnapshotKey(key) && (group.snapshots === "all" || isTournamentSnapshot(storage, key, /** @type {any} */ (group).events))) targets.add(/** @type {string} */ (key));
       }
     } catch {
       // 一覧が読めない環境では、中断した対局はそのまま。
