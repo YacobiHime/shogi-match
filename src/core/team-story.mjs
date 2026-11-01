@@ -185,14 +185,21 @@ export function teamScene(id, playerName = '') {
 export const PORTRAIT_HEIGHT_CM = Object.freeze({ hanane: 147, momoka: 158 });
 
 /**
+ * 絵で見せる身長差の割合(実際の差のこの割合だけ縮める)。ノベルゲームの立ち絵は、実際の身長差より少し小さく見せる
+ * (差が大きいと背の低い人の顔が小さく遠くなり、並んで話す絵にならないため。ユーザーの指定 2026-11-01。docs/novel-scene-design.mdの9章)。
+ */
+export const PORTRAIT_HEIGHT_DIFF_RATIO = 0.6;
+
+/**
  * 場面に出ている人のうち、いちばん背の高い人を1としたときの、その人の絵の縮尺(足元をそろえて身長差を出す)。
+ * 身長差はPORTRAIT_HEIGHT_DIFF_RATIOの割合に縮めて見せる(羽音147cm・百花158cmなら、実際の0.930ではなく約0.958)。
  * @param {string} who
  * @param {string[]} cast
  */
 export function portraitScale(who, cast) {
   const height = (/** @type {string} */ id) => PORTRAIT_HEIGHT_CM[/** @type {keyof typeof PORTRAIT_HEIGHT_CM} */ (id)] ?? 158;
   const tallest = Math.max(...cast.map(height), height(who));
-  return height(who) / tallest;
+  return 1 - (1 - height(who) / tallest) * PORTRAIT_HEIGHT_DIFF_RATIO;
 }
 
 /**

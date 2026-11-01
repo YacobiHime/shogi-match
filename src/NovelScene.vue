@@ -638,17 +638,17 @@ defineExpose({ finish, goBack });
 .novel--hidden .novel__place { visibility: hidden; }
 
 /*
- * 立ち絵: 上半身を映す(7章)。絵の高さhは「窓の上の高さ÷映す割合(頭から腰まで、絵の47%)」と「1人の幅÷絵の縦横比」の小さいほう。
- * 絵の下の端を窓の後ろへ沈め、腰が窓の上の端に来るようにする。縦横比は出ている人でそろえ、みんな同じ縮尺にする。
+ * 立ち絵: 画面いっぱいに大きく映す(9章)。頭を画面の上の端の近くに置き、絵の高さhは
+ * 「画面の高さ÷映す割合(頭から腰の下まで、絵の48%)」と「1人の幅÷絵の縦横比」の小さいほう。腰から下は文の窓の後ろへ沈む。
+ * 縦横比は出ている人でそろえ、みんな同じ縮尺にする。背の低い人は足元をそろえて縮める(--scale。8章)。
  */
 .novel__stage {
-  --bust: 0.47;
-  --headroom: 2.6rem;
+  --bust: 0.48;
+  --headroom: 6cqh;
   --slot: 84cqw;
-  position: relative;
-  grid-row: 1;
-  grid-column: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   container-type: size;
   transition: filter var(--novel-shift-ms) ease;
 }
@@ -657,8 +657,7 @@ defineExpose({ finish, goBack });
 .novel__person {
   --h: min(calc((100cqh - var(--headroom)) / var(--bust)), calc(var(--slot) / var(--aspect, 0.344)));
   position: absolute;
-  /* 足元をそろえ、背の低い人は身長の比(--scale)で縮める(8章) */
-  bottom: calc(var(--h) * (var(--bust) - 1));
+  top: calc(var(--headroom) + var(--h) * (1 - var(--scale, 1)));
   height: calc(var(--h) * var(--scale, 1));
   width: auto;
   max-width: none;
@@ -1025,16 +1024,18 @@ defineExpose({ finish, goBack });
   to { opacity: 1; }
 }
 @media (max-width: 700px) {
-  .novel__stage { --headroom: 3.2rem; }
-  /* 細い縦の画面は2人を少し重ねて大きく映す */
-  .novel__stage--pair { --slot: 74cqw; }
-  .novel__person--left { left: 27%; }
-  .novel__person--right { left: 73%; }
   .novel__keys { display: none; }
+}
+/* 縦の画面は幅で大きさが決まるので、2人を少し重ねて大きく映す */
+@media (orientation: portrait) {
+  .novel__stage { --slot: 96cqw; }
+  .novel__stage--pair { --slot: 86cqw; }
+  .novel__person--left { left: 25%; }
+  .novel__person--right { left: 75%; }
 }
 /* 横向きの低い画面は、文を2行分にし、窓を低くする */
 @media (orientation: landscape) and (max-height: 500px) {
-  .novel__stage { --headroom: 0.6rem; }
+  .novel__stage { --headroom: 4cqh; }
   .novel__box { padding-top: 1.1em; }
   .novel__name { margin-bottom: 0.15em; padding-top: 0.15em; padding-bottom: 0.15em; }
   .novel__text { min-height: calc(1.6em * 2); line-height: 1.6; }

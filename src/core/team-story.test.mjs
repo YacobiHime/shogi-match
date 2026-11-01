@@ -61,10 +61,12 @@ describe('団体戦のノベルの場面(docs/team-battle-design.mdの6章)', ()
   });
 });
 
-describe('立ち絵の身長差(docs/novel-scene-design.mdの8章)', () => {
-  it('羽音147cm・百花158cmの比で縮め、1人のときはそのままの大きさ', () => {
+describe('立ち絵の身長差(docs/novel-scene-design.mdの8・9章)', () => {
+  it('羽音147cm・百花158cmの差を少し縮めて見せ(実際の差の6割)、1人のときはそのままの大きさ', () => {
     expect(portraitScale('momoka', ['hanane', 'momoka'])).toBe(1);
-    expect(portraitScale('hanane', ['hanane', 'momoka'])).toBeCloseTo(147 / 158, 5);
+    expect(portraitScale('hanane', ['hanane', 'momoka'])).toBeCloseTo(1 - (1 - 147 / 158) * 0.6, 5);
+    expect(portraitScale('hanane', ['hanane', 'momoka'])).toBeGreaterThan(147 / 158);
+    expect(portraitScale('hanane', ['hanane', 'momoka'])).toBeLessThan(1);
     expect(portraitScale('hanane', ['hanane'])).toBe(1);
   });
 });
