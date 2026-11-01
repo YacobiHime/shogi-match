@@ -182,6 +182,15 @@ export function teamScene(id, playerName = '') {
 }
 
 /**
+ * 立ち絵の画像の幅÷高さ(全身の絵。ノベルの場面で上半身だけを映す大きさを決める。docs/novel-scene-design.mdの7章)。
+ * 表情ちがいの絵も同じ大きさ。知らない人は羽音と同じにする。
+ * @param {string} who
+ */
+export function portraitAspect(who) {
+  return who === 'momoka' ? 800 / 2325 : 662 / 2325;
+}
+
+/**
  * 立ち絵の画像(羽音・百花)。smallは小さい画面用の-320。
  * @param {string} assetBaseUrl
  * @param {string} who

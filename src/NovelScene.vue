@@ -25,7 +25,8 @@
     <p class="novel__place" :class="{ 'novel__place--intro': placeIntro }" aria-hidden="true" data-novel-place>
       <span class="novel__place-text">{{ scene.title }}</span>
     </p>
-    <div class="novel__stage" aria-hidden="true">
+    <!-- 立ち絵は上半身を映す: 頭から腰(絵の高さの47%)を窓の上に出し、下は窓の後ろへ(7章) -->
+    <div class="novel__stage" :class="{ 'novel__stage--pair': castView.length > 1 }" :style="{ '--aspect': stageAspect }" aria-hidden="true">
       <img
         v-for="(person, at) in castView"
         :key="person.who"
@@ -41,7 +42,7 @@
         ]"
         :src="person.src"
         :srcset="person.srcset"
-        sizes="(max-width: 700px) 320px, 800px"
+        sizes="(orientation: portrait) 70vw, 40vw"
         alt=""
         draggable="false"
       >
@@ -57,20 +58,22 @@
         @click.stop="choose(at)"
       ><span class="novel__choice-no" aria-hidden="true">{{ at + 1 }}</span>{{ choice.label }}</button>
     </div>
-    <div v-show="!hidden" class="novel__box" :style="{ '--who': whoColor(line.who) }" data-novel-box>
-      <p v-if="line.name" class="novel__name" :class="`novel__name--${line.who}`">{{ line.name }}</p>
+    <!-- 窓は隠しても場所を残す(立ち絵の大きさを変えない) -->
+    <div class="novel__box" :class="{ 'novel__box--hidden': hidden }" :style="{ '--who': tagColor(line.who) }" data-novel-box>
+      <!-- 名前の札: 駒の印と名前。地の文でも行を取っておき、窓の高さを変えない -->
+      <p class="novel__name" :class="[`novel__name--${line.who}`, { 'novel__name--empty': !line.name }]" :aria-hidden="!line.name"><span class="novel__name-piece" aria-hidden="true" />{{ line.name || "　" }}</p>
       <!-- まだ出していない字も透明で先に置き、折り返しを最初から決める(文が動かない。4-1) -->
       <p class="novel__text" :class="{ 'novel__text--narration': line.who === 'narration' }" aria-hidden="true"><span>{{ shown }}</span><span class="novel__rest">{{ rest }}</span></p>
       <p class="novel__sr" aria-live="polite">{{ liveText }}</p>
       <div class="novel__footer">
         <span v-if="autoWaiting" :key="autoKey" class="novel__auto-line" :style="{ animationDuration: `${autoMs}ms` }" aria-hidden="true" />
-        <span class="novel__next" :class="{ 'novel__next--shown': complete && !choosing }" aria-hidden="true">{{ isLast ? "■" : "▼" }}</span>
         <div class="novel__bar" role="toolbar" :aria-label="TEXT.toolsLabel" @click.stop>
           <button type="button" class="novel__tool" data-novel-log @click="openLog">{{ TEXT.log }}</button>
           <button type="button" class="novel__tool" :class="{ 'novel__tool--on': autoOn }" :aria-pressed="autoOn" data-novel-auto @click="toggleAuto">{{ TEXT.auto }}</button>
           <button type="button" class="novel__tool" data-novel-hide @click="toggleHide">{{ TEXT.hide }}</button>
           <button type="button" class="novel__tool" data-novel-settings @click="openSettings">{{ TEXT.settings }}</button>
         </div>
+        <span class="novel__next" :class="{ 'novel__next--shown': complete && !choosing }" aria-hidden="true" data-novel-next><span class="novel__next-piece" />{{ isLast ? TEXT.end : TEXT.next }}</span>
       </div>
     </div>
     <button v-show="!hidden" type="button" class="novel__skip" data-novel-skip @click.stop="requestSkip">{{ TEXT.skip }}</button>
@@ -148,7 +151,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { portraitUrl } from "./core/team-story.mjs";
+import { portraitAspect, portraitUrl } from "./core/team-story.mjs";
 import {
   AUTO_SPEEDS,
   FAST_FORWARD_MS,
@@ -177,9 +180,11 @@ type NovelSettings = ReturnType<typeof loadNovelSettings>;
 const props = defineProps<{ scene: Scene; assetBaseUrl: string }>();
 const emit = defineEmits<{ done: []; choose: [payload: { line: number; choice: number; value: string }] }>();
 
-/** 話す人の色(名前の札の線とログ。4-1)。 */
+/** 話す人の色。ログ(暗い地)は淡い色、名前の札の駒の印と帯(明るい地)は濃い色(4-1・7章)。 */
 const WHO_COLORS: Record<string, string> = { hanane: "#9ed8c0", momoka: "#ffb3c6", you: "#ffd59a", host: "#c3ccd4" };
+const TAG_COLORS: Record<string, string> = { hanane: "#3f8f76", momoka: "#d9577f", you: "#c98523", host: "#6d7c89" };
 const whoColor = (who: string) => WHO_COLORS[who] ?? "#fffcf4";
+const tagColor = (who: string) => TAG_COLORS[who] ?? "#8a6a43";
 /** 表情が変わったときの跳ね(ミリ秒。4-3)。 */
 const HOP_MS = 240;
 /** ホイールを続けて回したときに、1回として数える間(ミリ秒)。 */
@@ -251,6 +256,9 @@ const castView = computed(() => props.scene.cast.map((who) => {
     srcset: `${portraitUrl(props.assetBaseUrl, who, face, { small: true })} 320w, ${portraitUrl(props.assetBaseUrl, who, face)} 800w`,
   };
 }));
+
+/** 立ち絵の大きさをそろえる幅÷高さ(出ている人のうち、いちばん横に広い絵。みんな同じ縮尺にする)。 */
+const stageAspect = computed(() => Math.max(...props.scene.cast.map((who) => portraitAspect(who)), 0.3));
 
 const reducedMotion = () => typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 
@@ -557,17 +565,18 @@ defineExpose({ finish, goBack });
 <style scoped>
 .novel {
   --novel-ink: #fffcf4;
-  --novel-window: rgba(18, 30, 40, 0.86);
-  --novel-window-top: rgba(18, 30, 40, 0.62);
+  --novel-paper-ink: #3b2a1a;
   --novel-line: rgba(255, 252, 244, 0.38);
   --novel-accent: var(--amber, #f1a54c);
   --novel-enter-ms: 240ms;
   --novel-shift-ms: 160ms;
+  /* 文の大きさ: 画面の幅と高さで決める(スマホ縦で約18px、デスクトップで約28px)。7章 */
+  --novel-text-size: clamp(1.12rem, min(2.4vw, 4.2vh) + 0.4rem, 1.8rem);
   position: fixed;
   inset: 0;
   z-index: 200;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
   color: var(--novel-ink);
@@ -600,15 +609,16 @@ defineExpose({ finish, goBack });
 
 /* 場所の札: はじめは大きな帯で出て、少しして左上の小さな札になる(4-3)。押して読むのは止めない。 */
 .novel__place {
-  grid-row: 1;
-  grid-column: 1;
-  justify-self: start;
+  position: absolute;
+  top: 0.6em;
+  left: 0;
+  z-index: 2;
   max-width: calc(100% - 7.5em);
-  margin: 0.6em 0 0;
+  margin: 0;
   padding: 0.3em 1em 0.3em 0.9em;
   border-left: 0.25em solid var(--novel-accent);
   border-radius: 0 999px 999px 0;
-  background: rgba(18, 30, 40, 0.55);
+  background: rgba(18, 30, 40, 0.6);
   color: rgba(255, 252, 244, 0.92);
   font-size: 0.85em;
   font-weight: 800;
@@ -616,6 +626,7 @@ defineExpose({ finish, goBack });
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
   transition: font-size 320ms ease, padding 320ms ease, background 320ms ease;
   animation: novel-place-in 320ms ease-out;
+  pointer-events: none;
 }
 .novel__place--intro {
   padding: 0.55em 1.8em 0.55em 1.1em;
@@ -624,42 +635,53 @@ defineExpose({ finish, goBack });
 }
 .novel--hidden .novel__place { visibility: hidden; }
 
+/*
+ * 立ち絵: 上半身を映す(7章)。絵の高さhは「窓の上の高さ÷映す割合(頭から腰まで、絵の47%)」と「1人の幅÷絵の縦横比」の小さいほう。
+ * 絵の下の端を窓の後ろへ沈め、腰が窓の上の端に来るようにする。縦横比は出ている人でそろえ、みんな同じ縮尺にする。
+ */
 .novel__stage {
+  --bust: 0.47;
+  --headroom: 2.6rem;
+  --slot: 84cqw;
   position: relative;
-  grid-row: 2;
+  grid-row: 1;
   grid-column: 1;
   min-height: 0;
+  container-type: size;
   transition: filter var(--novel-shift-ms) ease;
 }
+.novel__stage--pair { --slot: 64cqw; }
 .novel--choosing .novel__stage { filter: brightness(0.72); }
 .novel__person {
+  --h: min(calc((100cqh - var(--headroom)) / var(--bust)), calc(var(--slot) / var(--aspect, 0.344)));
   position: absolute;
-  bottom: -6%;
-  height: 112%;
-  max-width: 48%;
+  bottom: calc(var(--h) * (var(--bust) - 1));
+  height: var(--h);
+  width: auto;
+  max-width: none;
   object-fit: contain;
-  object-position: bottom;
+  translate: -50% 0;
   transition: filter var(--novel-shift-ms) ease, transform var(--novel-shift-ms) ease;
 }
+.novel__person--center { left: 50%; }
+.novel__person--left { left: 28%; }
+.novel__person--right { left: 72%; }
 .novel__person--enter { animation: novel-person-in var(--novel-enter-ms) ease-out; }
-.novel__person--left { left: 6%; }
-.novel__person--right { right: 6%; }
-.novel__person--center { left: 50%; translate: -50% 0; }
-.novel__person--quiet { filter: brightness(0.6) saturate(0.78); transform: translateY(1.5%); }
-.novel__person--active { filter: none; transform: translateY(-1%); }
+.novel__person--quiet { filter: brightness(0.84) saturate(0.9); transform: translateY(1%); }
+.novel__person--active { filter: none; transform: translateY(-0.6%); }
 .novel__person--hop { animation: novel-hop 240ms ease-out; }
 
 .novel__choices {
   /* 選択肢は立ち絵の段の下のほうに重ねる(立ち絵の段を縮めない) */
   position: relative;
-  z-index: 1;
-  grid-row: 2;
+  z-index: 2;
+  grid-row: 1;
   grid-column: 1;
   align-self: end;
   display: grid;
   gap: 0.5em;
-  width: min(calc(100% - 2.4em), 34em);
-  margin: 0 auto 1em;
+  width: min(calc(100% - 2.4em), 46rem);
+  margin: 0 auto 0.8em;
   cursor: default;
 }
 .novel .novel__choice {
@@ -668,13 +690,13 @@ defineExpose({ finish, goBack });
   gap: 0.7em;
   min-height: 48px;
   padding: 0.55em 1.1em 0.55em 0.6em;
-  border: 0.12em solid rgba(255, 252, 244, 0.8);
-  border-radius: 0.7em;
-  color: #172632;
-  background: rgba(255, 252, 244, 0.96);
+  border: 1px solid rgba(160, 110, 50, 0.45);
+  border-radius: 0.5em;
+  color: var(--novel-paper-ink);
+  background: rgba(255, 249, 236, 0.97);
   box-shadow: 0 0.25em 0.8em rgba(0, 0, 0, 0.3);
   font: inherit;
-  font-size: 1em;
+  font-size: calc(var(--novel-text-size) * 0.85);
   font-weight: 800;
   text-align: left;
   cursor: pointer;
@@ -691,51 +713,91 @@ defineExpose({ finish, goBack });
   height: 1.7em;
   border-radius: 50%;
   color: var(--novel-ink);
-  background: #2b4a5c;
-  font-size: 0.85em;
+  background: #8a5a2b;
+  font-size: 0.8em;
 }
 
-/* 文の窓: 下ほど濃い半透明で、背景と立ち絵が透ける。名前の札は左上に、人ごとの色の線(4-1)。 */
+/*
+ * 文の窓: 画面の下いっぱいの帯。上の端は透明で、下へ行くほど温かい紙の色になり、立ち絵の腰から下が透けて沈む。
+ * 文は大きく、濃い茶色(7章)。中身の幅は読みやすい長さまで。
+ */
 .novel__box {
   position: relative;
-  grid-row: 3;
+  z-index: 1;
+  grid-row: 2;
   grid-column: 1;
-  margin: 0 auto 0.7em;
-  width: min(calc(100% - 1.4em), 50em);
-  padding: 1.15em 1.3em 0.3em;
-  border: 1px solid var(--novel-line);
-  border-radius: 0.9em;
-  background: linear-gradient(180deg, var(--novel-window-top), var(--novel-window) 35%);
-  box-shadow: 0 0.3em 1.2em rgba(0, 0, 0, 0.35);
+  padding: 1.5em max(1rem, calc((100% - 58rem) / 2)) 0.15em;
+  color: var(--novel-paper-ink);
+  background: linear-gradient(180deg, rgba(255, 242, 220, 0) 0, rgba(255, 240, 214, 0.82) 1.6em, rgba(253, 232, 198, 0.94) 50%, rgba(247, 216, 172, 0.97) 100%);
   box-sizing: border-box;
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
 }
-.novel__name {
+/* 細かい点の模様(窓の濃いところだけ) */
+.novel__box::before {
   position: absolute;
-  top: -0.95em;
-  left: 0.9em;
-  margin: 0;
-  padding: 0.18em 0.95em 0.18em 0.7em;
-  border-left: 0.3em solid var(--who, #fffcf4);
-  border-radius: 0.3em 999px 999px 0.3em;
-  color: var(--novel-ink);
-  background: #172632;
-  box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.35);
-  font-size: 0.92em;
-  font-weight: 900;
-  letter-spacing: 0.04em;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(rgba(176, 116, 52, 0.16) 1px, transparent 1.5px) 0 0 / 9px 9px;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 2.4em);
+  mask-image: linear-gradient(180deg, transparent 0, #000 2.4em);
+  content: "";
+  pointer-events: none;
 }
+.novel__box--hidden { visibility: hidden; }
+/* 名前の札: 紙の札に点線の縁、左に話す人の色の駒の印、右に同じ色の帯 */
+.novel__name {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  min-width: 8.5em;
+  margin: 0 0 0.3em;
+  padding: 0.3em 2.1em 0.3em 0.75em;
+  border: 1px solid rgba(150, 100, 45, 0.4);
+  border-radius: 0.2em;
+  color: var(--novel-paper-ink);
+  background: linear-gradient(180deg, #fffaf0, #fff1d8);
+  box-shadow: 0 0.12em 0.4em rgba(90, 60, 20, 0.2);
+  font-size: calc(var(--novel-text-size) * 0.9);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+}
+.novel__name::before {
+  position: absolute;
+  inset: 3px;
+  border: 1.5px dashed rgba(185, 135, 70, 0.6);
+  border-radius: 1px;
+  content: "";
+  pointer-events: none;
+}
+.novel__name::after {
+  position: absolute;
+  top: 0;
+  right: 0.6em;
+  bottom: 0;
+  width: 0.5em;
+  background: var(--who, #8a6a43);
+  content: "";
+}
+.novel__name-piece {
+  flex: none;
+  width: 0.78em;
+  height: 0.95em;
+  background: var(--who, #8a6a43);
+  clip-path: polygon(50% 0, 86% 16%, 100% 100%, 0 100%, 14% 16%);
+}
+.novel__name--empty { visibility: hidden; }
 .novel__text {
-  min-height: calc(1.8em * 3);
-  margin: 0;
-  font-size: 1.08em;
-  line-height: 1.8;
+  min-height: calc(1.7em * 3);
+  margin: 0 0 0 0.5em;
+  font-size: var(--novel-text-size);
+  font-weight: 600;
+  line-height: 1.7;
   white-space: pre-wrap;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 .novel__rest { color: transparent; text-shadow: none; }
-.novel__text--narration { color: #dfe7ea; }
+.novel__text--narration { color: #5b4630; }
 .novel__sr {
   position: absolute;
   width: 1px;
@@ -747,61 +809,77 @@ defineExpose({ finish, goBack });
 .novel__footer {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 0.6em;
 }
+/* 送りの印: 駒の形と「つぎへ」(最後は「おわり」) */
 .novel__next {
-  color: var(--novel-accent);
-  font-size: 0.8em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-right: 0.3em;
+  color: #4a321a;
+  font-size: calc(var(--novel-text-size) * 0.72);
+  font-weight: 900;
+  letter-spacing: 0.12em;
   opacity: 0;
+}
+.novel__next-piece {
+  width: 0.8em;
+  height: 1em;
+  background: #4a321a;
+  clip-path: polygon(50% 0, 86% 16%, 100% 100%, 0 100%, 14% 16%);
 }
 .novel__next--shown {
   opacity: 1;
   animation: novel-next 900ms ease-in-out infinite;
 }
-/* オートの待ちの線: 窓の下の端を左から伸び、伸びきったら次の行(4-1)。 */
+/* オートの待ちの線: 窓の下の端を左から伸び、伸びきったら次の行(4-1) */
 .novel__auto-line {
   position: absolute;
-  left: 0.9em;
-  right: 0.9em;
-  bottom: 0.2em;
-  height: 2px;
-  border-radius: 999px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
   background: var(--novel-accent);
   transform-origin: left center;
   animation: novel-auto-wait linear forwards;
 }
 .novel__bar {
   display: flex;
-  gap: 0.15em;
+  gap: 0.1em;
   cursor: default;
 }
 .novel .novel__tool {
   box-shadow: none;
   min-width: 44px;
   min-height: 44px;
-  padding: 0.2em 0.65em;
+  padding: 0.2em 0.6em;
   border: 0;
   border-radius: 0.5em;
-  color: rgba(255, 252, 244, 0.82);
+  color: #6b4f2c;
   background: transparent;
   font: inherit;
-  font-size: 0.8em;
+  font-size: 0.82em;
   font-weight: 800;
   letter-spacing: 0.05em;
   cursor: pointer;
 }
-.novel .novel__tool:hover, .novel .novel__tool:focus-visible { color: var(--novel-ink); background: rgba(255, 252, 244, 0.12); outline: none; }
+.novel .novel__tool:hover, .novel .novel__tool:focus-visible { color: #3b2a1a; background: rgba(140, 90, 30, 0.14); outline: none; }
 .novel .novel__tool:focus-visible { box-shadow: 0 0 0 0.12em var(--novel-accent); }
 .novel .novel__tool:active { transform: scale(0.94); }
-.novel .novel__tool--on { color: #172632; background: var(--novel-accent); }
-.novel .novel__tool--on:hover, .novel .novel__tool--on:focus-visible { color: #172632; background: #ffc27a; }
+.novel .novel__tool--on { color: #2a1c0e; background: var(--novel-accent); }
+.novel .novel__tool--on:hover, .novel .novel__tool--on:focus-visible { color: #2a1c0e; background: #ffc27a; }
+/* ログ・設定のシートの中の「閉じる」は暗い地なので明るい字 */
+.novel__panel .novel__tool { color: rgba(255, 252, 244, 0.82); }
+.novel__panel .novel__tool:hover, .novel__panel .novel__tool:focus-visible { color: var(--novel-ink); background: rgba(255, 252, 244, 0.12); }
 
 .novel .novel__skip {
   box-shadow: none;
   position: absolute;
   top: 0.55em;
   right: 0.8em;
+  z-index: 2;
   min-height: 44px;
   padding: 0.3em 1.1em;
   border: 0.1em solid rgba(255, 252, 244, 0.6);
@@ -817,6 +895,7 @@ defineExpose({ finish, goBack });
   position: absolute;
   left: 50%;
   bottom: 1em;
+  z-index: 2;
   margin: 0;
   padding: 0.3em 1em;
   border-radius: 999px;
@@ -910,20 +989,20 @@ defineExpose({ finish, goBack });
 
 @keyframes novel-next {
   0%, 100% { transform: translateY(0); opacity: 1; }
-  50% { transform: translateY(0.2em); opacity: 0.6; }
+  50% { transform: translateY(0.2em); opacity: 0.55; }
 }
 @keyframes novel-place-in {
   from { opacity: 0; transform: translateX(-1.2em); }
   to { opacity: 1; transform: none; }
 }
 @keyframes novel-person-in {
-  from { opacity: 0; transform: translateY(4%); }
+  from { opacity: 0; transform: translateY(3%); }
   to { opacity: 1; }
 }
 @keyframes novel-hop {
-  0% { transform: translateY(-1%); }
-  40% { transform: translateY(-3.5%); }
-  100% { transform: translateY(-1%); }
+  0% { transform: translateY(-0.6%); }
+  40% { transform: translateY(-2.2%); }
+  100% { transform: translateY(-0.6%); }
 }
 @keyframes novel-choice-in {
   from { opacity: 0; transform: translateY(0.4em); }
@@ -943,21 +1022,25 @@ defineExpose({ finish, goBack });
   to { opacity: 1; }
 }
 @media (max-width: 700px) {
-  .novel__person { max-width: 62%; height: 104%; }
-  .novel__person--left { left: -4%; }
-  .novel__person--right { right: -4%; }
-  .novel__text { font-size: 1em; }
-  .novel__box { padding: 1.1em 1em 0.2em; }
-  .novel__place--intro { font-size: 1.05em; }
+  .novel__stage { --headroom: 3.2rem; }
+  /* 細い縦の画面は2人を少し重ねて大きく映す */
+  .novel__stage--pair { --slot: 74cqw; }
+  .novel__person--left { left: 27%; }
+  .novel__person--right { left: 73%; }
   .novel__keys { display: none; }
 }
-/* 横向きの低い画面は、立ち絵を左右の端に寄せ、文の窓を少し低く。 */
+/* 横向きの低い画面は、文を2行分にし、窓を低くする */
 @media (orientation: landscape) and (max-height: 500px) {
-  .novel__person { height: 135%; max-width: 30%; }
-  .novel__box { margin-bottom: 0.4em; padding: 0.95em 1em 0.1em; }
-  .novel__text { min-height: calc(1.7em * 2); line-height: 1.7; }
-  .novel__place { margin-top: 0.4em; }
+  .novel__stage { --headroom: 0.6rem; }
+  .novel__box { padding-top: 1.1em; }
+  .novel__name { margin-bottom: 0.15em; padding-top: 0.15em; padding-bottom: 0.15em; }
+  .novel__text { min-height: calc(1.6em * 2); line-height: 1.6; }
+  .novel__place { top: 0.4em; }
   .novel__keys { display: none; }
+}
+/* 広い画面は2行で足りる */
+@media (min-width: 1000px) and (min-height: 600px) {
+  .novel__text { min-height: calc(1.7em * 2); }
 }
 @media (prefers-reduced-motion: reduce) {
   .novel__person, .novel__stage, .novel__place { transition: none; animation: none; }

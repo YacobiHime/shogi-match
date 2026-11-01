@@ -43,6 +43,8 @@ export const NOVEL_UI_TEXT = Object.freeze({
   settings: '設定',
   toolsLabel: '読む操作',
   skip: '飛ばす',
+  next: 'つぎへ',
+  end: 'おわり',
   logTitle: 'これまでの話',
   logEmpty: 'まだ何も話していないよ。',
   close: '閉じる',
