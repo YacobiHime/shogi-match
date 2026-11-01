@@ -4729,3 +4729,48 @@
 /* 見た目は札の行に収め、押せる範囲だけ上下に広げる(44pxに近づける)。 */
 .shogi-game .shogi-game__stage-day--button { position: relative; }
 .shogi-game .shogi-game__stage-day--button::after { position: absolute; inset: -0.6rem -0.3rem; content: ""; }
+
+/* ---- 団体戦の仲間の速報の札(docs/team-battle-design.mdの19章の2)。盤の上の端に重ねる(盤の大きさを変えない) ---- */
+.shogi-game .shogi-game__team-peek-marks { margin-left: 0.15em; font-size: 0.85em; letter-spacing: 0.05em; }
+.shogi-game .shogi-game__team-news {
+  position: fixed; top: max(0.5rem, env(safe-area-inset-top)); left: 50%; z-index: 70; display: flex; align-items: stretch;
+  width: min(calc(100vw - 1rem), 27rem); transform: translateX(-50%);
+  border: 0.12rem solid rgba(255, 252, 244, 0.6); border-radius: 0.9rem; color: #fffcf4; background: #172632;
+  box-shadow: 0 0.5rem 1.4rem rgba(0, 0, 0, 0.45); animation: shogi-team-news-in 260ms ease-out;
+}
+.shogi-game .shogi-game__team-news--win { border-color: #7fc6ff; }
+.shogi-game .shogi-game__team-news--loss { border-color: #ff9c8f; }
+.shogi-game .shogi-game__team-news-main {
+  display: flex; flex: 1; align-items: flex-start; gap: 0.55rem; min-width: 0; padding: 0.5rem 0.2rem 0.5rem 0.6rem;
+  border: 0; color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; box-shadow: none;
+}
+.shogi-game .shogi-game__team-news-main:hover, .shogi-game .shogi-game__team-news-main:focus-visible { background: rgba(255, 252, 244, 0.06); transform: none; }
+.shogi-game .shogi-game__team-news-face {
+  flex: none; width: 2.8rem; height: 2.8rem; border-radius: 50%; object-fit: cover; object-position: 50% 4%;
+  border: 0.12rem solid rgba(255, 252, 244, 0.7); background: #e9eef1;
+}
+.shogi-game .shogi-game__team-news-face--sprite { object-position: 50% 0; image-rendering: pixelated; background: #2b465b; }
+.shogi-game .shogi-game__team-news-face--char { display: inline-grid; place-items: center; color: #172632; font-weight: 900; }
+.shogi-game .shogi-game__team-news-text { display: grid; gap: 0.15rem; min-width: 0; }
+.shogi-game .shogi-game__team-news-text > small { color: var(--amber, #f1a54c); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.2em; }
+.shogi-game .shogi-game__team-news-text > strong { font-size: 1.05rem; }
+.shogi-game .shogi-game__team-news-marks { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.shogi-game .shogi-game__team-news-marks > span {
+  display: inline-flex; align-items: baseline; gap: 0.2rem; padding: 0 0.45rem; border-radius: 999px;
+  background: rgba(43, 70, 91, 0.9); font-size: 0.78rem; font-weight: 800;
+}
+.shogi-game .shogi-game__team-news-marks small { color: #cfd8de; font-size: 0.65rem; }
+.shogi-game .shogi-game__team-news-mark--win { color: #7fc6ff; }
+.shogi-game .shogi-game__team-news-mark--loss { color: #ff9c8f; }
+.shogi-game .shogi-game__team-news-mark--you { color: var(--amber, #f1a54c); }
+.shogi-game .shogi-game__team-news-mark--playing { color: #cfd8de; }
+.shogi-game .shogi-game__team-news-tally { font-size: 0.82rem; font-weight: 800; }
+.shogi-game .shogi-game__team-news-line { color: #e8eef2; font-size: 0.8rem; line-height: 1.4; }
+.shogi-game .shogi-game__team-news-close {
+  flex: none; width: 44px; min-height: 44px; border: 0; border-left: 0.08rem solid rgba(255, 252, 244, 0.2); border-radius: 0 0.8rem 0.8rem 0;
+  color: #fffcf4; background: transparent; font: inherit; font-size: 1.2rem; cursor: pointer; box-shadow: none;
+}
+@keyframes shogi-team-news-in { from { opacity: 0; transform: translate(-50%, -0.6rem); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .shogi-game__team-news { animation: none; }
+}

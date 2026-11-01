@@ -981,7 +981,7 @@ describe("match screen regressions", () => {
   });
 
   it('高校の団体戦は、対局中に仲間の盤をのぞける。棋譜は開いたときに作り始め、対局が終わったら止める(docs/team-battle-design.mdの14章)', () => {
-    expect(source).toMatch(/v-if="teamPeekBoards\.length"[\s\S]{0,300}?data-team-peek-open\s+@click="openTeamPeek"/);
+    expect(source).toMatch(/v-if="teamPeekBoards\.length"[\s\S]{0,300}?data-team-peek-open\s+@click="teamPeekSeat = null; openTeamPeek\(\)"/);
     expect(source).toMatch(/const teamPeekBoards = computed\(\(\) => \(matchKind\.value === "tournament" && ryuoGame\.value\?\.event === "team" && !reviewMode\.value/);
     // 棋譜を作る処理は、開いたときに読み込む(最初に読むJSに入れない)。
     expect(source).toMatch(/const \{ useTeamPeek \} = await import\("\.\/composables\/match\/useTeamPeek"\);/);
@@ -989,6 +989,18 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/teamPeek\?\.stop\(\);\s*teamPeekOpen\.value = false;/);
     // 戻る操作で閉じる。
     expect(source).toMatch(/\} else if \(teamPeekOpen\.value\) \{\s*teamPeekOpen\.value = false;/);
+  });
+
+  it('団体戦の仲間の局は、速報の札で知らせ、仲間のボタンに○●を出す。結果発表がまだなら終局の窓でチームの結果を言わない(docs/team-battle-design.mdの19章)', () => {
+    // 速報は中継の1行ではなく、盤に重ねる札(盤の大きさを変えない)。押すとその席の盤を開く。
+    expect(source).toMatch(/if \(ryuoGame\.value\?\.event === "team" && Number\.isFinite\(\(item as \{ seat\?: number \}\)\.seat\)\) \{\s*showTeamNews\(item\);\s*return;/);
+    expect(source).toMatch(/\.shogi-game \.shogi-game__team-news \{\s*position: fixed;/);
+    expect(source).toMatch(/data-team-news-open @click="openTeamPeekAt\(teamNewsCard\.seat\)"/);
+    // ボタンは対局のはじめからあり、○●は中身だけが変わる。
+    expect(source).toMatch(/>仲間<span v-if="teamPeekMarks" class="shogi-game__team-peek-marks"/);
+    // 自分の局の手数で、仲間の局が先に終わったかを決める。
+    expect(source).toMatch(/recordTeamGame\(run, outcome, \{ ply: teamNewsPly\(\) \}\)/);
+    expect(source).toMatch(/if \(teamFinalePending\.value && !ryuoGame\.value\?\.replay\) return \{ done: false, doneText: "", next: "", back: "チームの結果発表へ" \};/);
   });
 
   it('ホームのあそぶの行の物語は、押すとストーリー選択を開く(docs/story-mode-design.md)', () => {

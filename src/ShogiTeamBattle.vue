@@ -324,6 +324,18 @@
       @close="statusId = ''"
     />
 
+    <!-- 試合の結果発表(19章)。自分が先に終わったら仲間の盤を見守り、3局がそろったら1席ずつ明かす。節目の場面はそのあと。 -->
+    <TeamFinale
+      v-if="finaleView && !scene"
+      :key="finaleView.id"
+      ref="finaleEl"
+      :view="finaleView"
+      :boards="finaleBoardList"
+      :engine-factory="engineFactory"
+      :player-name="playerName === 'あなた' ? '' : playerName"
+      :asset-base-url="assetBaseUrl"
+      @done="emit('finale-seen')"
+    />
     <NovelScene v-if="scene" ref="novelEl" :scene="scene" :asset-base-url="assetBaseUrl" @done="closeScene" />
   </div>
 </template>
@@ -335,6 +347,7 @@ import PickCard from "./PickCard.vue";
 import PickFrame from "./PickFrame.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import TeamMemberSheet from "./TeamMemberSheet.vue";
+import TeamFinale from "./TeamFinale.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
@@ -347,10 +360,13 @@ import {
   teamEntryMembers,
 } from "./core/team-battle.mjs";
 import { portraitUrl, teamMomentFor, teamScene } from "./core/team-story.mjs";
+import { finaleBoards, teamFinaleView } from "./core/team-finale.mjs";
+import type { EngineFactory } from "./composables/match/analysisEngines";
 
 type Format = "school" | "pro";
 type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
-type Career = { invited: { school: boolean; pro: boolean }; history: { format: string; label: string }[]; best: Record<string, { place: number; label: string }>; settings?: Partial<Settings> };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Career = { invited: { school: boolean; pro: boolean }; history: { format: string; label: string }[]; best: Record<string, { place: number; label: string }>; settings?: Partial<Settings>; current?: any };
 
 const props = defineProps({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -377,6 +393,8 @@ const props = defineProps({
   /** プロの試合で、仲間が指した直前の局の結果(「第3局 羽音 勝ち 2-1」)。 */
   news: { type: String, default: "" },
   backLabel: { type: String, default: "大会の選択へ" },
+  /** 結果発表で仲間の盤を見守るときに棋譜を作るエンジン(中継と同じ)。なければ見守らずに結果発表。 */
+  engineFactory: { type: Function as PropType<(() => Promise<EngineFactory>) | null>, default: null },
 });
 const emit = defineEmits<{
   measure: [];
@@ -389,6 +407,8 @@ const emit = defineEmits<{
   /** プロの団体戦を選んだが、ドラフトの候補(名簿)がまだない。名簿を作ってもらう。 */
   "need-roster": [];
   "scene-seen": [id: string];
+  /** 試合の結果発表を見た(19章)。 */
+  "finale-seen": [];
   "close-run": [];
   ceremony: [];
   back: [];
@@ -414,9 +434,14 @@ function closeScene() {
 /** はじめて団体戦を開いたら、羽音に誘われる場面から(4章)。 */
 if (!props.view && !props.career.invited?.school) sceneId.value = "invite-school";
 
-/** 大会中の節目の場面(見ていなければ1回だけ。地区大会・県大会・全国大会の始めなど。15章の8)。 */
-watch(() => [props.view?.phase, props.view?.stage, props.view?.next?.id, props.view?.result?.label], () => {
-  if (sceneId.value) return;
+// ---- 試合の結果発表(19章)。まだ見ていなければ、節目の場面より先に出す。
+const finaleEl = ref<{ goBack: () => boolean } | null>(null);
+const finaleView = computed(() => teamFinaleView(props.career.current, { playerName: props.playerName === "あなた" ? "" : props.playerName }));
+const finaleBoardList = computed(() => finaleBoards(props.career.current));
+
+/** 大会中の節目の場面(見ていなければ1回だけ。地区大会・県大会・全国大会の始めなど。15章の8)。結果発表を見てから。 */
+watch(() => [props.view?.phase, props.view?.stage, props.view?.next?.id, props.view?.result?.label, finaleView.value?.id], () => {
+  if (sceneId.value || finaleView.value) return;
   const id = teamMomentFor(props.view);
   if (id) sceneId.value = id;
 }, { immediate: true });
@@ -693,6 +718,7 @@ function goBack() {
   if (sceneId.value) {
     if (!novelEl.value?.goBack()) novelEl.value?.finish();
   }
+  else if (finaleView.value && finaleEl.value) finaleEl.value.goBack();
   else if (statusId.value) statusId.value = "";
   else if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;

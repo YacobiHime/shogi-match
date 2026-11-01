@@ -243,6 +243,7 @@
           :player-name="playerName"
           :suspended-moves="teamSuspendedMoves"
           :news="teamNews"
+          :engine-factory="relayEngineFactory"
           @enter="emit('team-enter', $event)"
           @play="emit('team-play')"
           @resume="emit('team-resume')"
@@ -250,6 +251,7 @@
           @invited="emit('team-invited', $event)"
           @need-roster="emit('team-roster')"
           @scene-seen="emit('team-scene-seen', $event)"
+          @finale-seen="emit('team-finale-seen')"
           @close-run="emit('team-close')"
           @measure="emit('measure', 'team')"
           @ceremony="openCeremony(`team-${teamView?.id ?? ''}`)"
@@ -1260,6 +1262,7 @@ const emit = defineEmits<{
   "team-invited": [format: "school" | "pro"];
   "team-roster": [];
   "team-scene-seen": [id: string];
+  "team-finale-seen": [];
   "team-close": [];
   "pro-year-enter": [payload: { settings: Record<string, unknown> }];
   "pro-year-advance": [];

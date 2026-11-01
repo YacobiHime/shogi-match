@@ -4,10 +4,10 @@
     盤は触れない。自分の手数に合わせて進み、速報の手数までは終局を見せない。形勢のバーと、仲間と相手の心の声。
     のぞいている間も、自分の対局は止めない(相手は考え続ける)。閉じるボタン・Esc・戻る操作で閉じる。
   -->
-  <div class="team-peek" role="dialog" aria-modal="true" aria-label="仲間の盤" data-team-peek @click.self="emit('close')" @keydown.esc="emit('close')">
+  <div class="team-peek" role="dialog" aria-modal="true" :aria-label="title" data-team-peek @click.self="emit('close')" @keydown.esc="emit('close')">
     <div class="team-peek__panel">
       <header class="team-peek__head">
-        <h2>仲間の盤</h2>
+        <h2>{{ title }}</h2>
         <button ref="closeButton" type="button" class="team-peek__close" aria-label="閉じる" data-team-peek-close @click="emit('close')">×</button>
       </header>
       <div class="team-peek__tabs" role="tablist" aria-label="席">
@@ -65,7 +65,9 @@
             <span class="team-peek__bubble"><small>{{ view.board.themName }}（心の声）</small>{{ view.themThought }}</span>
           </li>
         </ul>
-        <button type="button" class="team-peek__back" data-team-peek-back @click="emit('close')">自分の盤へ戻る</button>
+        <!-- 終局後に見守るときの早送りなど(docs/team-battle-design.mdの19章の6)。 -->
+        <slot name="extra" />
+        <button type="button" class="team-peek__back" data-team-peek-back @click="emit('close')">{{ backLabel }}</button>
       </div>
     </div>
   </div>
@@ -92,10 +94,18 @@ const props = defineProps({
   userPly: { type: Number, default: 0 },
   playerName: { type: String, default: "" },
   assetBaseUrl: { type: String, default: "." },
+  title: { type: String, default: "仲間の盤" },
+  backLabel: { type: String, default: "自分の盤へ戻る" },
+  /** 開く席(速報の札から開いたとき・見守る盤を替えるとき)。nullなら先頭。 */
+  seat: { type: Number as PropType<number | null>, default: null },
 });
 const emit = defineEmits<{ close: []; select: [key: string] }>();
 
-const selected = ref(0);
+const selected = ref(Math.max(0, props.boards.findIndex((board) => board.seat === props.seat)));
+watch(() => props.seat, (seat) => {
+  const index = props.boards.findIndex((board) => board.seat === seat);
+  if (index >= 0) selected.value = index;
+});
 const closeButton = ref<HTMLButtonElement | null>(null);
 const shortName = (name: string) => String(name ?? "").replace(/^天鷺|^桜乃/, "");
 
@@ -198,8 +208,8 @@ onBeforeUnmount(() => observer?.disconnect());
 
 <style>
 .shogi-game .team-peek {
-  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 0.5rem;
-  background: rgba(10, 18, 26, 0.55);
+  position: fixed; inset: 0; z-index: 80; display: grid; grid-template-rows: minmax(0, 1fr); place-items: center; padding: 0.5rem;
+  box-sizing: border-box; background: rgba(10, 18, 26, 0.55);
 }
 .shogi-game .team-peek__panel {
   display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0.4rem;
@@ -252,6 +262,22 @@ onBeforeUnmount(() => observer?.disconnect());
 .shogi-game .team-peek__back {
   min-height: 44px; border: 0; border-radius: 999px; color: #172632; background: var(--amber, #f1a54c);
   font: inherit; font-weight: 900; cursor: pointer;
+}
+/* 横向きの低い画面(スマホの横向き)は、盤を左、タブと説明を右に並べる(盤が小さくなりすぎないように) */
+@media (orientation: landscape) and (max-height: 560px) {
+  .shogi-game .team-peek__panel {
+    grid-template-areas: "head head" "stage tabs" "stage info";
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr);
+    width: min(100%, 52rem); column-gap: 0.7rem;
+  }
+  .shogi-game .team-peek__head { grid-area: head; }
+  .shogi-game .team-peek__head h2 { font-size: 0.95rem; }
+  .shogi-game .team-peek__close { width: 40px; height: 40px; }
+  .shogi-game .team-peek__tabs { grid-area: tabs; }
+  .shogi-game .team-peek__stage { grid-area: stage; }
+  .shogi-game .team-peek__info { grid-area: info; align-content: start; min-height: 0; overflow-y: auto; }
+  .shogi-game .team-peek__face { width: 2rem; height: 2rem; }
+  .shogi-game .team-peek__bubble { padding: 0.25rem 0.5rem; font-size: 0.8rem; line-height: 1.35; }
 }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .team-peek__bar-us { transition: none; }

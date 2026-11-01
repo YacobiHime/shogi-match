@@ -520,6 +520,7 @@
       @team-invited="teamInvited"
       @team-roster="ensureRyuoRoster"
       @team-scene-seen="teamSceneSeen"
+      @team-finale-seen="teamFinaleSeen"
       @team-close="closeTeam"
       :pro-year-state="proYearState"
       :pro-year-settings="proYearState?.settings ?? proYearLastSettings"
@@ -693,10 +694,10 @@
           class="shogi-game__command shogi-game__dex-open shogi-game__team-peek-open"
           aria-haspopup="dialog"
           :aria-expanded="teamPeekOpen"
-          aria-label="仲間の盤"
+          :aria-label="teamPeekLabel"
           data-team-peek-open
-          @click="openTeamPeek"
-        >仲間</button>
+          @click="teamPeekSeat = null; openTeamPeek()"
+        >仲間<span v-if="teamPeekMarks" class="shogi-game__team-peek-marks" aria-hidden="true" data-team-peek-marks>{{ teamPeekMarks }}</span></button>
         <button
           type="button"
           class="shogi-game__command shogi-game__menu-toggle"
@@ -1974,9 +1975,40 @@
       :user-ply="moveCount"
       :player-name="playerDisplayName(playerName)"
       :asset-base-url="assetBaseUrl"
+      :seat="teamPeekSeat"
       @select="teamPeekPrefer"
       @close="teamPeekOpen = false"
     />
+    <!--
+      団体戦の仲間の速報の札(docs/team-battle-design.mdの19章の2)。盤の上の端に重ねて6秒出す(盤の大きさは変えない)。
+      押すとその席の仲間の盤を開く。やこび姫の助言を「なし」にしていても出す(チームの大事な知らせ)。
+    -->
+    <div
+      v-if="teamNewsCard && !teamPeekOpen"
+      :key="teamNewsCard.id"
+      class="shogi-game__team-news"
+      :class="teamNewsCard.won ? 'shogi-game__team-news--win' : 'shogi-game__team-news--loss'"
+      role="status"
+      aria-live="polite"
+      data-team-news
+    >
+      <button type="button" class="shogi-game__team-news-main" data-team-news-open @click="openTeamPeekAt(teamNewsCard.seat)">
+        <img v-if="teamNewsCard.face" class="shogi-game__team-news-face" :class="{ 'shogi-game__team-news-face--sprite': teamNewsCard.sprite }" :src="teamNewsCard.face" alt="" draggable="false">
+        <span v-else class="shogi-game__team-news-face shogi-game__team-news-face--char" aria-hidden="true">{{ teamNewsCard.name.slice(0, 1) }}</span>
+        <span class="shogi-game__team-news-text">
+          <small>速報</small>
+          <strong>{{ teamNewsCard.seatName }}戦 {{ teamNewsCard.name }} {{ teamNewsCard.won ? "勝ち" : "負け" }}</strong>
+          <span class="shogi-game__team-news-marks">
+            <span v-for="mark in teamNewsCard.marks" :key="mark.seat" :class="`shogi-game__team-news-mark--${mark.state}`">
+              <small>{{ TEAM_SEAT_NAMES[mark.seat] }}</small>{{ mark.state === "win" ? "○" : mark.state === "loss" ? "●" : mark.state === "you" ? "あなた" : "対局中" }}
+            </span>
+          </span>
+          <span class="shogi-game__team-news-tally">{{ teamNewsCard.tally }}</span>
+          <span v-if="teamNewsCard.line" class="shogi-game__team-news-line">{{ teamNewsCard.name }}「{{ teamNewsCard.line }}」</span>
+        </span>
+      </button>
+      <button type="button" class="shogi-game__team-news-close" aria-label="速報を閉じる" data-team-news-close @click="teamNewsCard = null">×</button>
+    </div>
 
     <!-- 棋力テスト(docs/skill-assessment-design.mdの4章)。札を選んだら、対局の代わりに16問で測る。 -->
     <ShogiSkillTest
@@ -2777,10 +2809,10 @@ import {
 } from "./core/ryuo-career.mjs";
 import { addAward, kenshukaiAward, loadAwards, meijinAward, proYearAward, ryuoAward, shoreikaiAward, teamAward } from "./core/season-award.mjs";
 import {
-  USER_TEAM as TEAM_USER_TEAM, chooseTeamPlayer, createTeamRun, currentTeamMatch, draftCandidates, finishTeamRun, hananeNextPlayer,
-  loadTeamBattle, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
+  SCHOOL_SEATS, USER_TEAM as TEAM_USER_TEAM, chooseTeamPlayer, createTeamRun, currentTeamMatch, draftCandidates, finishTeamRun, hananeNextPlayer,
+  loadTeamBattle, markTeamFinaleSeen, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
 } from "./core/team-battle.mjs";
-import { peekBoards } from "./core/team-peek.mjs";
+import { peekBoards, peekThought, peekVoice } from "./core/team-peek.mjs";
 import {
   advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
   fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
@@ -3525,6 +3557,18 @@ const ryuoOpponent = computed(() => (ryuoGame.value ? tournamentSeasonOf(ryuoGam
 const PRESENCE_LINE_MS = { speech: 2500, trait: 3500, news: 6000, room: 4000 } as const;
 const presenceScore = ref<EngineEvaluation | null>(null);
 const presenceLine = ref<{ id: number; kind: "speech" | "trait" | "news" | "room"; tone: string; text: string } | null>(null);
+/**
+ * 団体戦の仲間の速報の札(docs/team-battle-design.mdの19章の2)。盤の上の端に重ねて6秒出す(盤の大きさを変えない)。
+ * 押すと、その席の仲間の盤を開く。teamMarksは、知らせた席の○●(「仲間」のボタンに出す)。
+ */
+type TeamNewsCard = {
+  id: number; seat: number; seatName: string; who: string; name: string; won: boolean; tally: string;
+  marks: { seat: number; state: string }[]; line: string; face: string; sprite: boolean;
+};
+const teamNewsCard = ref<TeamNewsCard | null>(null);
+const teamMarks = ref<{ seat: number; state: string }[]>([]);
+const TEAM_NEWS_MS = 6000;
+let teamNewsTimer: ReturnType<typeof setTimeout> | undefined;
 /** 中継(勝率バーと控室の一言)を出すか。設定のメニューで切り替え、端末に覚える。 */
 const BROADCAST_KEY = "yacobihime:shogi-match:broadcast:v1";
 function loadBroadcastEnabled() {
@@ -3605,6 +3649,9 @@ function sayOpponent(moment: "start" | "ahead" | "behind" | "win" | "loss") {
 function resetPresence() {
   clearTimeout(presenceTimer);
   presenceLine.value = null;
+  clearTimeout(teamNewsTimer);
+  teamNewsCard.value = null;
+  teamMarks.value = [];
   presenceScore.value = null;
   opponentSaid = [];
   traitCardsShown = [];
@@ -3803,13 +3850,51 @@ function notePresenceCpuMove(move: { ply: number; kind: string; traits: string[]
   showPresence("trait", card.text, card.tier);
   if (card.coach && coachLevel.value !== "off") showCoachAdvice({ key: `opponent-weakness-${card.id}`, text: card.coach });
 }
-/** プレイヤーの手番が来たら、20手ごとにほかの対局の速報を1件出す。 */
+/** プレイヤーの手番が来たら、20手ごとにほかの対局の速報を1件出す。団体戦の仲間の局は、決めておいた手数で速報の札にする。 */
 function tickPresenceNews() {
   if (!tournamentOpponent.value) return;
   const item = newsDue(matchNews, moveHistory.length, matchNewsShown);
   if (!item) return;
   matchNewsShown += 1;
+  if (ryuoGame.value?.event === "team" && Number.isFinite((item as { seat?: number }).seat)) {
+    showTeamNews(item);
+    return;
+  }
   showPresence("news", item.text, item.tone);
+}
+/** 団体戦の仲間の速報の札を出す(顔・席と勝ち負け・3つの席の○●・チームの星・仲間の一言)。音は名札の「カタン」。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function showTeamNews(item: any) {
+  const player = teamCareer.value.current?.players?.[item.who];
+  const line = peekThought(peekVoice({ ...player, id: item.who }), item.won ? "win" : "loss", { ply: moveHistory.length, playerName: playerDisplayName(playerName.value) });
+  const face = item.who === "hanane" ? `${props.assetBaseUrl}/characters/hanane-mini.webp?v=1`
+    : item.who === "momoka" ? `${props.assetBaseUrl}/characters/sakurano-momoka-320.webp?v=${COACH_EXPRESSION_ASSET_VERSION}` : "";
+  teamNewsCard.value = {
+    id: Date.now(), seat: item.seat, seatName: item.seatName, who: item.who, name: item.name, won: item.won, tally: item.tally,
+    marks: item.marks, line, face, sprite: item.who === "hanane",
+  };
+  teamMarks.value = item.marks;
+  clearTimeout(teamNewsTimer);
+  teamNewsTimer = setTimeout(() => { teamNewsCard.value = null; }, TEAM_NEWS_MS);
+  moveSounds.play("nameplate");
+}
+const TEAM_SEAT_NAMES = ["主将", "副将", "三将"];
+/** 「仲間」のボタンの○●(知らせた席だけ、席の順)。 */
+const teamPeekMarks = computed(() => teamMarks.value.filter((mark) => mark.state === "win" || mark.state === "loss")
+  .map((mark) => (mark.state === "win" ? "○" : "●")).join(""));
+const teamPeekLabel = computed(() => {
+  const told = teamMarks.value.filter((mark) => mark.state === "win" || mark.state === "loss")
+    .map((mark) => `${TEAM_SEAT_NAMES[mark.seat]} ${mark.state === "win" ? "勝ち" : "負け"}`);
+  return told.length ? `仲間の盤（${told.join("、")}）` : "仲間の盤";
+});
+/** 速報の札から、その席の仲間の盤を開く。 */
+function openTeamPeekAt(seat: number) {
+  teamPeekSeat.value = seat;
+  teamNewsCard.value = null;
+  void openTeamPeek().then(() => {
+    const key = teamPeekBoards.value.find((board) => board.seat === seat)?.spec.key;
+    if (key) teamPeekPrefer(key);
+  });
 }
 // 終局したら、相手があいさつする(千日手・持将棋は言わない)。
 watch(result, (value) => {
@@ -7072,6 +7157,8 @@ const tournamentResult = computed(() => {
   }
   if (ryuoGame.value?.event === "team") {
     const view = teamView.value;
+    // 結果発表がまだなら、大会の成績と次の対局も言わない(結果発表で明かす。docs/team-battle-design.mdの19章の5)。
+    if (teamFinalePending.value && !ryuoGame.value?.replay) return { done: false, doneText: "", next: "", back: "チームの結果発表へ" };
     return {
       done: view?.phase === "done",
       doneText: view?.result?.place === 1 ? `${view.name} 優勝！ 3人で取った優勝です！` : `${view?.name ?? "団体戦"}は${view?.result?.label ?? "ここまで"}でした。`,
@@ -7377,6 +7464,8 @@ const teamNews = ref("");
 const teamPeekBoards = computed(() => (matchKind.value === "tournament" && ryuoGame.value?.event === "team" && !reviewMode.value
   ? peekBoards(teamCareer.value?.current) : []));
 const teamPeekOpen = ref(false);
+/** 開く席(速報の札から開いたとき)。 */
+const teamPeekSeat = ref<number | null>(null);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const teamPeekGames = shallowRef<{ [key: string]: any }>({});
 // 仲間の局の棋譜は、はじめて開いたときに作り始める(押さなければエンジンを動かさない。棋譜を作る処理は開いたときに読み込む)。
@@ -7495,6 +7584,26 @@ function teamSceneSeen(id: string) {
   if (!teamCareer.value.current) return;
   setTeamCareer({ ...teamCareer.value, current: markTeamScene(teamCareer.value.current, id) });
 }
+/**
+ * 団体戦の自分の局が終わった手数(19章の4)。速報で伝えた仲間の局は自分より先に、まだ伝えていない局はあとに終わったことにする
+ * (速報はプレイヤーの手番に出すので、終局の手数とは1手ずれることがある)。
+ */
+function teamNewsPly() {
+  let ply = moveHistory.length;
+  const lastShown = matchNews[matchNewsShown - 1]?.at;
+  const nextAt = matchNews[matchNewsShown]?.at;
+  if (Number.isFinite(lastShown) && ply <= (lastShown as number)) ply = (lastShown as number) + 1;
+  if (Number.isFinite(nextAt) && ply > (nextAt as number)) ply = nextAt as number;
+  return ply;
+}
+/** 試合の結果発表を見た(docs/team-battle-design.mdの19章)。 */
+function teamFinaleSeen() {
+  const run = teamCareer.value.current;
+  if (!run?.finale || run.finale.seen) return;
+  setTeamCareer({ ...teamCareer.value, current: markTeamFinaleSeen(run) });
+}
+/** まだ見ていない結果発表があるか(終局の窓で、チームの結果を先に言わない。19章の5)。 */
+const teamFinalePending = computed(() => Boolean(teamCareer.value.current?.finale && !teamCareer.value.current.finale.seen));
 /** 大会を終える(経歴に残して、次は入口から)。 */
 function closeTeam() {
   if (!teamCareer.value.current) return;
@@ -7512,7 +7621,8 @@ function recordTeamOutcome(matchResult: MatchResult) {
     return;
   }
   const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
-  const result = recordTeamGame(run, outcome);
+  // 自分の局の手数で、仲間の局が先に終わったかを決める(決勝点と結果発表の順番。docs/team-battle-design.mdの19章の4)。
+  const result = recordTeamGame(run, outcome, { ply: teamNewsPly() });
   const next = result.run;
   teamNews.value = "";
   const finished = result.match;
@@ -7521,9 +7631,15 @@ function recordTeamOutcome(matchResult: MatchResult) {
     const us = finished.score[side];
     const them = finished.score[side === "a" ? "b" : "a"];
     const rival = next.teams[finished[side === "a" ? "b" : "a"]]?.name ?? "";
-    teamResultLine.value = result.decided
-      ? `チームは${us}勝${them}敗で${result.teamWon ? "勝ち" : "負け"}（対 ${rival}）`
-      : `チームは${us}勝${them}敗（${teamFormat(next.format).winsToTake}勝で勝ち）`;
+    // 高校で、まだ知らせていない仲間の局があれば、チームの結果は言わず、結果発表で明かす(19章の5)。
+    const playing = next.format === "school" && next.finale && !next.finale.seen
+      ? next.finale.rows.filter((row: any) => !row.user && Number.isFinite(row.reveal) && row.reveal >= next.finale.userPly)
+      : [];
+    teamResultLine.value = playing.length
+      ? `${playing.map((row: any) => `${SCHOOL_SEATS[row.seat]}戦（${String(next.players[row.us]?.name ?? "").replace(/^天鷺|^桜乃/, "")}）`).join("と")}は、まだ対局中。チームの結果は、このあと発表します`
+      : result.decided
+        ? `チームは${us}勝${them}敗で${result.teamWon ? "勝ち" : "負け"}（対 ${rival}）`
+        : `チームは${us}勝${them}敗（${teamFormat(next.format).winsToTake}勝で勝ち）`;
   }
   // 自分の局で試合が決まった(決勝点)ら、終局の判子でたたえる。
   finishMilestone = result.clinched
