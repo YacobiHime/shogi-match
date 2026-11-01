@@ -1,6 +1,7 @@
 // 団体戦のノベルの場面(docs/team-battle-design.mdの6章)。羽音に誘われるところから、試合の節目ごとの短い掛け合い。
 // 仮の台本。ノベルのリポジトリはミステリーの部分だけ使わず、人物・舞台は参考にしてよい(docs/novel-reference.md)。物語モードで考え直す(13章)。
-// 台本の形 { id, title, background, lines: [{ who, face, text }] } は、後の物語モードでも使う(NovelScene.vue)。
+// 台本の形 { id, title, summary, background, lines: [{ who, face, text }] } は、後の物語モードでも使う(NovelScene.vue)。
+// summaryは「飛ばす」で見せるあらすじ(docs/novel-scene-design.mdの4-2)。
 // 羽音は敬語と「！」を使わない(docs/hanane-character.md)。百花は明るく、「！」を使う(この依頼で決めた初期値。0章)。
 // 長い場面で遊びを止めない(D:8-2)ので、どの場面も12行まで。
 
@@ -30,6 +31,7 @@ export const TEAM_SCENES = Object.freeze({
   'invite-school': Object.freeze({
     id: 'invite-school',
     title: '放課後の空き教室',
+    summary: '放課後の空き教室で、羽音と百花に夏の団体戦に誘われる。3人で1チーム、3局のうち2つ勝てばいい。こうして燈ヶ丘高校将棋部の団体戦メンバーになった。',
     background: 'classroom',
     cast: ['hanane', 'momoka'],
     lines: [
@@ -47,6 +49,7 @@ export const TEAM_SCENES = Object.freeze({
   'invite-pro': Object.freeze({
     id: 'invite-pro',
     title: '将棋会館の控室',
+    summary: '将棋会館の控室で、羽音に早指しの団体戦に誘われる。リーダーは君で、3人目は君が選ぶ（迷ったら羽音に任せられる）。',
     background: 'hall',
     cast: ['hanane'],
     lines: [
@@ -58,6 +61,7 @@ export const TEAM_SCENES = Object.freeze({
   'school-start': Object.freeze({
     id: 'school-start',
     title: '大会の会場',
+    summary: '大会の会場。緊張する百花に、羽音が「いつもどおり指せばいい」と声をかける。予選は3回勝てば抜け、2回負けたら終わり。',
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
@@ -69,6 +73,7 @@ export const TEAM_SCENES = Object.freeze({
   'school-knockout': Object.freeze({
     id: 'school-knockout',
     title: '決勝トーナメントへ',
+    summary: '予選を抜けて決勝トーナメントへ。ここからは1回負けたら終わり。',
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
@@ -79,6 +84,7 @@ export const TEAM_SCENES = Object.freeze({
   'school-final': Object.freeze({
     id: 'school-final',
     title: '決勝の前',
+    summary: '決勝まで来た。あと1つ、3人で取りに行く。',
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
@@ -89,6 +95,7 @@ export const TEAM_SCENES = Object.freeze({
   'school-champion': Object.freeze({
     id: 'school-champion',
     title: '優勝',
+    summary: '優勝。百花は大喜びし、羽音は「君がいてよかった」と言う。',
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
@@ -100,6 +107,7 @@ export const TEAM_SCENES = Object.freeze({
   'school-end': Object.freeze({
     id: 'school-end',
     title: '大会のあと',
+    summary: '大会が終わった。悔しいけど、いい大会だった。また3人で出ようと約束する。',
     background: 'night',
     cast: ['hanane', 'momoka'],
     lines: [
@@ -111,6 +119,7 @@ export const TEAM_SCENES = Object.freeze({
   'pro-knockout': Object.freeze({
     id: 'pro-knockout',
     title: '本戦へ',
+    summary: '予選を抜けて本戦へ。羽音は「勝負どころは君に回す」と言う。',
     background: 'hall',
     cast: ['hanane'],
     lines: [
@@ -121,6 +130,7 @@ export const TEAM_SCENES = Object.freeze({
   'pro-champion': Object.freeze({
     id: 'pro-champion',
     title: '優勝',
+    summary: '優勝。羽音は「リーダーが君でよかった」と言う。',
     background: 'hall',
     cast: ['hanane'],
     lines: [
@@ -130,6 +140,7 @@ export const TEAM_SCENES = Object.freeze({
   'pro-end': Object.freeze({
     id: 'pro-end',
     title: '大会のあと',
+    summary: '大会が終わった。羽音は「また組もう。君となら、もっと上に行ける」と言う。',
     background: 'night',
     cast: ['hanane'],
     lines: [
@@ -158,6 +169,7 @@ export function teamScene(id, playerName = '') {
   return {
     id: scene.id,
     title: scene.title,
+    summary: scene.summary,
     background: scene.background,
     cast: [...scene.cast],
     lines: scene.lines.map((entry) => ({

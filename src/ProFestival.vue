@@ -64,6 +64,7 @@
 
     <NovelScene
       v-if="screen === 'talk'"
+      ref="talkEl"
       :scene="scene"
       :asset-base-url="assetBaseUrl"
       @choose="reactions.push($event.value)"
@@ -109,6 +110,7 @@ const reactions = ref<string[]>([]);
 const confirmOpen = ref(false);
 const confirmCancel = ref<HTMLButtonElement | null>(null);
 const scene = computed(() => talkScene({ seed: props.festival.seed, name: props.festival.name }, props.playerName));
+const talkEl = ref<{ goBack: () => boolean } | null>(null);
 
 const doneCount = computed(() => props.festival.events.filter((event: { done: unknown }) => event.done).length);
 const coachLine = computed(() => {
@@ -162,6 +164,8 @@ function finish() {
 
 /** 戻る操作(重ねて開いたものを閉じたら真)。 */
 function goBack() {
+  // トークショーのログ・設定・隠した窓を先に閉じる(docs/novel-scene-design.mdの4-2)。
+  if (screen.value === "talk" && talkEl.value?.goBack()) return true;
   if (confirmOpen.value) confirmOpen.value = false;
   else if (screen.value !== "list" && screen.value !== "talk") screen.value = "list";
   else return false;

@@ -207,7 +207,8 @@ export function talkScene(festival, playerName) {
   }
   lines.push({ who: 'host', face: 'neutral', name: '司会', text: 'おふたり、ありがとうございました。もう一度、大きな拍手を。' });
   lines.push({ who: 'hanane', face: 'smile', name: '羽音', text: '……楽しかった。君、話すの上手いね。' });
-  return { id: `talk-${festival.seed}`, title: `${festival.name} トークショー`, background: 'venue', cast: ['hanane'], lines };
+  const summary = `${festival.name}のステージで、羽音とトークショー。司会の質問${TALK_COUNT}つに答え、答え方で客席の盛り上がりが変わる。`;
+  return { id: `talk-${festival.seed}`, title: `${festival.name} トークショー`, summary, background: 'venue', cast: ['hanane'], lines };
 }
 
 /** トークショーのファン(答えの反応の合計。答えなかった質問は0)。 */

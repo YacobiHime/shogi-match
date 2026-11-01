@@ -333,7 +333,7 @@ const screen = computed(() => {
 });
 
 // ---- 場面(ノベル)
-const novelEl = ref<{ finish: () => void } | null>(null);
+const novelEl = ref<{ finish: () => void; goBack: () => boolean } | null>(null);
 const sceneId = ref("");
 const scene = computed(() => (sceneId.value ? teamScene(sceneId.value, props.playerName === "あなた" ? "" : props.playerName) : null));
 function closeScene() {
@@ -581,7 +581,10 @@ const faceKind = (member: { id: string }) => (member.id === TEAM_USER_ID ? "spri
 
 /** 戻る操作。重ねて開いたものを閉じたら真。 */
 function goBack() {
-  if (sceneId.value) novelEl.value?.finish();
+  // 場面のログ・設定・隠した窓を先に閉じ、なければ場面を閉じる(docs/novel-scene-design.mdの4-2)。
+  if (sceneId.value) {
+    if (!novelEl.value?.goBack()) novelEl.value?.finish();
+  }
   else if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (draftOpen.value) draftOpen.value = false;

@@ -27,7 +27,7 @@ const SETTING_KEYS = new Set([
   "yacobihime:shogi-match:note-album-page", "yacobihime:shogi-match:note-tab", "yacobihime:shogi-match:opening-plans-all:v1",
   "yacobihime:shogi-match:opening-plans-seen:v1", "yacobihime:shogi-match:plan-ghosts:v1", "yacobihime:shogi-match:tutorial-voice:v1",
   "yacobihime:shogi-match:welcome:v1", "yacobihime:shogi-match:player-name:v1", "yacobihime:shogi-match:player-profile",
-  "yacobihime:shogi-match:seen-features:v1", "yacobihime:shogi-match:skill-data-anon:v1", "yacobihime:shogi-match:skill-data-consent:v1",
+  "yacobihime:shogi-match:seen-features:v1", "yacobihime:shogi-match:novel-settings:v1", "yacobihime:shogi-match:skill-data-anon:v1", "yacobihime:shogi-match:skill-data-consent:v1",
 ]);
 
 /** ソースに書かれた保存の鍵(「…_KEY = '…'」の形)。 */
