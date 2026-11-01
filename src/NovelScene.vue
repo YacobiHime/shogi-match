@@ -69,7 +69,7 @@
       <p class="novel__sr" aria-live="polite">{{ liveText }}</p>
       <div class="novel__footer">
         <span v-if="autoWaiting" :key="autoKey" class="novel__auto-line" :style="{ animationDuration: `${autoMs}ms` }" aria-hidden="true" />
-        <div class="novel__bar" role="toolbar" :aria-label="TEXT.toolsLabel" @click.stop>
+        <div class="novel__bar" role="toolbar" :aria-label="TEXT.toolsLabel" @click.stop="onBarClick">
           <button type="button" class="novel__tool" data-novel-log @click="openLog">{{ TEXT.log }}</button>
           <button type="button" class="novel__tool" :class="{ 'novel__tool--on': autoOn }" :aria-pressed="autoOn" data-novel-auto @click="toggleAuto">{{ TEXT.auto }}</button>
           <button type="button" class="novel__tool" data-novel-hide @click="toggleHide">{{ TEXT.hide }}</button>
@@ -78,7 +78,7 @@
         <span class="novel__next" :class="{ 'novel__next--shown': complete && !choosing }" aria-hidden="true" data-novel-next><span class="novel__next-piece" />{{ isLast ? TEXT.end : TEXT.next }}</span>
       </div>
     </div>
-    <button v-show="!hidden" type="button" class="novel__skip" data-novel-skip @click.stop="requestSkip">{{ TEXT.skip }}</button>
+    <button v-show="!hidden" type="button" class="novel__skip" data-novel-skip @click.stop="clickSound('tool'); requestSkip()">{{ TEXT.skip }}</button>
     <p v-if="hidden" class="novel__hidden-hint" aria-live="polite">{{ TEXT.hiddenHint }}</p>
 
     <!-- 読み返し(ログ) -->
@@ -132,6 +132,20 @@
             @click="setSetting({ auto: id })"
           >{{ speed.label }}</button>
         </div>
+        <p class="novel__setting-label">{{ TEXT.voice }}</p>
+        <div class="novel__options" role="group" :aria-label="TEXT.voice">
+          <button
+            v-for="(style, id) in VOICE_STYLES"
+            :key="id"
+            type="button"
+            class="novel__option"
+            :class="{ 'novel__option--on': settings.voice === id }"
+            :aria-pressed="settings.voice === id"
+            :data-novel-voice="id"
+            @click="setSetting({ voice: id }); previewVoice()"
+          >{{ style.label }}</button>
+        </div>
+        <p class="novel__note" data-novel-voice-note>{{ TEXT.voiceNote }}</p>
         <p class="novel__keys">{{ TEXT.keysNote }}</p>
       </div>
     </div>
@@ -174,6 +188,8 @@ import {
   saveNovelSettings,
   shouldShowSummary,
 } from "./core/novel-ui.mjs";
+import { VOICE_STYLES, blipPlan, clickPlan } from "./core/novel-sound.mjs";
+import { createNovelAudio } from "./novel-audio";
 
 type SceneChoice = { label: string; value?: string; reply?: SceneLine[] };
 type SceneLine = { who: string; face: string; name: string; text: string; choices?: SceneChoice[] };
@@ -234,6 +250,27 @@ let placeTimer: ReturnType<typeof setTimeout> | null = null;
 let hopTimer: ReturnType<typeof setTimeout> | null = null;
 let enterTimer: ReturnType<typeof setTimeout> | null = null;
 let lastWheel = 0;
+/** 文字の音とクリックの音(11章)。音はその場で作る。 */
+const audio = createNovelAudio();
+let lastBlipAt = -Infinity;
+const nowMs = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+/** 出た1字の音(句読点・空白では黙り、速いときは数字おき。novel-sound.mjsのblipPlan)。 */
+function blipChar(char: string | undefined) {
+  if (!char || fastTimer) return;
+  const now = nowMs();
+  const plan = blipPlan({ char, who: line.value.who, style: settings.value.voice, sinceLastMs: now - lastBlipAt });
+  if (!plan) return;
+  lastBlipAt = now;
+  audio.blip(plan);
+}
+/** 押した音(進む・答え・下の帯のボタン)。文字の音の設定とは別で、効果音のオン/オフだけに従う。 */
+function clickSound(kind: "click" | "choice" | "tool") {
+  audio.click(clickPlan(kind));
+}
+/** 下の帯は、ボタンを押したときだけ鳴らす(帯のすき間では鳴らさない)。 */
+function onBarClick(event: MouseEvent) {
+  if ((event.target as HTMLElement | null)?.closest?.("button")) clickSound("tool");
+}
 
 const line = computed<SceneLine>(() => lines.value[index.value] ?? { who: "narration", face: "neutral", name: "", text: "" });
 const chars = computed(() => Array.from(line.value.text));
@@ -283,6 +320,7 @@ function startTyping() {
   count.value = 0;
   typingTimer = setInterval(() => {
     count.value += 1;
+    blipChar(chars.value[count.value - 1]);
     if (count.value >= total) stopTyping();
   }, delay);
 }
@@ -328,6 +366,7 @@ function advance() {
 function choose(at: number) {
   const choice = line.value.choices?.[at];
   if (!choice) return;
+  clickSound("choice");
   emit("choose", { line: index.value, choice: at, value: choice.value ?? "" });
   picks.value = { ...picks.value, [index.value]: choice.label };
   const next = [...lines.value];
@@ -344,6 +383,12 @@ function onScreenClick() {
     return;
   }
   if (overlayOpen.value) return;
+  userAdvance();
+}
+
+/** 人が押して進む(押した音を鳴らす。オートと早送りでは鳴らさない)。 */
+function userAdvance() {
+  if (!choosing.value) clickSound("click");
   advance();
 }
 
@@ -404,6 +449,15 @@ function toggleHide() {
   stopFastForward();
   hidden.value = !hidden.value;
   if (!hidden.value) void nextTick(() => root.value?.focus());
+}
+
+/** 文字の音を選んだら、いま話している人の声で数字だけ試しに鳴らす。 */
+function previewVoice() {
+  const sample = Array.from("将棋の音");
+  sample.forEach((char, at) => setTimeout(() => {
+    const plan = blipPlan({ char, who: line.value.who, style: settings.value.voice, sinceLastMs: Infinity });
+    if (plan) audio.blip(plan);
+  }, at * 90));
 }
 
 function setSetting(patch: Partial<NovelSettings>) {
@@ -467,7 +521,7 @@ function onKeydown(event: KeyboardEvent) {
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
   if (key === "Enter" || key === " " || key === "ArrowRight" || key === "ArrowDown") {
     event.preventDefault();
-    advance();
+    userAdvance();
   } else if (key === "ArrowUp") {
     event.preventDefault();
     openLog();
@@ -488,7 +542,7 @@ function onWheel(event: WheelEvent) {
   if (now - lastWheel < WHEEL_GAP_MS) return;
   lastWheel = now;
   if (event.deltaY < 0) openLog();
-  else advance();
+  else userAdvance();
 }
 
 /** 戻る操作。開いているシート・隠した窓を先に閉じたら真(4-2)。 */
@@ -555,6 +609,7 @@ onMounted(() => {
   root.value?.focus();
 });
 onBeforeUnmount(() => {
+  audio.close();
   stopTyping();
   stopAutoTimer();
   stopFastForward();
@@ -971,6 +1026,8 @@ defineExpose({ finish, goBack });
 .novel .novel__option--on, .novel .novel__option--go { color: #172632; background: var(--novel-accent); border-color: var(--novel-accent); }
 .novel .novel__option--on:hover, .novel .novel__option--go:hover, .novel .novel__option--go:focus-visible { color: #172632; background: #ffc27a; }
 .novel__keys { margin: 0.4em 0 0; color: rgba(255, 252, 244, 0.62); font-size: 0.75em; line-height: 1.6; }
+/* 効果音の注意書きは、キーの説明と違って、どの画面でも出す(音が鳴らない理由が分かるように。U:5) */
+.novel__note { margin: 0.1em 0 0; color: rgba(255, 252, 244, 0.72); font-size: 0.78em; line-height: 1.5; }
 .novel__summary { margin: 0; line-height: 1.8; }
 .novel__summary-note { margin: 0; color: var(--novel-accent); font-size: 0.9em; font-weight: 800; }
 .novel__panel-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; margin-top: 0.3em; }

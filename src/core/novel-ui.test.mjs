@@ -45,11 +45,11 @@ const SCENE = {
 describe('ノベルの場面の設定(docs/novel-scene-design.mdの4-4・4-5)', () => {
   it('知らない値はふつうに戻し、保存して読み直せる', () => {
     expect(normalizeNovelSettings(null)).toEqual(DEFAULT_NOVEL_SETTINGS);
-    expect(normalizeNovelSettings({ text: 'warp', auto: 'fast' })).toEqual({ text: 'normal', auto: 'fast' });
+    expect(normalizeNovelSettings({ text: 'warp', auto: 'fast' })).toEqual({ text: 'normal', auto: 'fast', voice: 'auto' });
     const storage = memoryStorage();
     saveNovelSettings(storage, { text: 'instant', auto: 'slow' });
-    expect(JSON.parse(storage.data.get(NOVEL_SETTINGS_KEY))).toEqual({ text: 'instant', auto: 'slow' });
-    expect(loadNovelSettings(storage)).toEqual({ text: 'instant', auto: 'slow' });
+    expect(JSON.parse(storage.data.get(NOVEL_SETTINGS_KEY))).toEqual({ text: 'instant', auto: 'slow', voice: 'auto' });
+    expect(loadNovelSettings(storage)).toEqual({ text: 'instant', auto: 'slow', voice: 'auto' });
     expect(loadNovelSettings(memoryStorage({ [NOVEL_SETTINGS_KEY]: '{壊れた' }))).toEqual(DEFAULT_NOVEL_SETTINGS);
     expect(loadNovelSettings(null)).toEqual(DEFAULT_NOVEL_SETTINGS);
   });

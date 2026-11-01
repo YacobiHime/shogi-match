@@ -29,6 +29,7 @@
 |---|---|---|
 | 出来事の段階・止め | `src/core/move-impact.mjs` | 3-1の段階と止めの長さ（`IMPACT_STOP_MS`）、終局の止めと音（`finishImpact`） |
 | 駒音・効果音 | `src/core/move-sound.ts` | 着手は`normal`・`capture`・`drop`・`promote`・`strong`（王手・大駒を取る・詰み）。ほかに`god`・`win`・`lose`・`furigoma`、大会の秒読みの演出の`byoyomi`・`byoyomi-end`。届いている素材は`AVAILABLE_SOUNDS`に書き、ない音は代わりの音を鳴らすか鳴らさない。オン/オフは`yacobihime:shogi-match:sound` |
+| ノベルの場面の文字の音・押した音 | `src/core/novel-sound.mjs`、`src/novel-audio.ts` | 音声ファイルを使わず、Web Audioでその場で作る（話す人ごとの高さ・短い音のため。`docs/novel-scene-design.md`の11章）。効果音のオン/オフに従う |
 | 駒の着地・盤上の動き | `src/renderer/view/primitive/BoardView.vue` | `piece-land`（220ms）、取る（260ms）・打つ（240ms）・成る（320ms、裏返す）の着地、駒台に入った駒の跳ね（300ms）。`prefers-reduced-motion`対応あり |
 | 止めと盤の縁の光り | `src/ShogiMatchGame.vue`の`holdForImpact`・`waitForImpactHold`・`showBoardImpact`、`ShogiMatchGame.css`の`.shogi-game__board-impact` | 止めるのはCPUの応手と結果画面の開始だけ。盤を触ると打ち切る。光りは900ms |
 | 王手の知らせ | `src/ShogiMatchGame.vue`の`checkCallout` | 説明は最初の3回だけ（`CHECK_EXPLAIN_LIMIT`、`shogi-match-check-explained`） |
@@ -94,7 +95,7 @@
 
 - 音量は重要度で決めます。重要度は3-1の段階の順です。同時に鳴るときは、段階の高い音を優先し、低い音は鳴らさないか小さくします [D:3-4]。
 - 音は立ち上がりを強く、余韻を短くします。主な部分は、止めの間に鳴り終わるようにします（桜井氏『アタック強め、残響ほどほど』の応用）。
-- 音の種類を増やすときは、`move-sound.ts`の`MoveSoundKind`と`selectMoveSound`に足し、判定のテストを書きます。音声ファイルは`public/audio/`に置きます。
+- 音の種類を増やすときは、`move-sound.ts`の`MoveSoundKind`と`selectMoveSound`に足し、判定のテストを書きます。音声ファイルは`public/audio/`に置きます。ノベルの場面の文字の音と押した音だけは、ファイルを使わず`novel-sound.mjs`の数字で作ります（短く、話す人ごとに高さを変えるため）。
 - 音だけで意味を伝えません。同じ出来事を、必ず見た目でも伝えます（→U:5）。
 - 安いスピーカーやスマートフォンの内蔵スピーカーでも聞き分けられるか確かめます（桜井氏『色んな環境で聞き比べ』）。
 

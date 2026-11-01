@@ -54,6 +54,8 @@ import {
 } from "./core/story-mode.mjs";
 import { isSceneRead, loadNovelRead } from "./core/novel-ui.mjs";
 import { loadTeamBattle } from "./core/team-battle.mjs";
+import { clickPlan } from "./core/novel-sound.mjs";
+import { createNovelAudio } from "./novel-audio";
 
 type TabId = "main" | "sub";
 type Card = ReturnType<typeof storyCards>[number];
@@ -125,12 +127,17 @@ function remember() {
   progress.value = rememberStoryPlace(progress.value, tab.value, selectedId.value);
   saveStoryProgress(storage, progress.value);
 }
+/** 押した音(ノベルの場面と同じ「ポッ」。docs/novel-scene-design.mdの11章)。 */
+const audio = createNovelAudio();
+const clickSound = (kind: "click" | "choice" | "tool") => audio.click(clickPlan(kind));
+
 function select(id: string) {
   selection[tab.value] = id;
 }
 function chooseTab(id: string) {
   if (id !== "main" && id !== "sub") return;
   if (tab.value !== id) {
+    clickSound("tool");
     tab.value = id;
     notice.value = "";
   }
@@ -139,7 +146,10 @@ function chooseTab(id: string) {
 function onAction(id: string) {
   if (id === "tab") chooseTab(tab.value === "main" ? "sub" : "main");
   else if (id === "decide" && selectedCard.value) pick(selectedCard.value);
-  else if (id === "back") emit("close");
+  else if (id === "back") {
+    clickSound("tool");
+    emit("close");
+  }
 }
 
 // ---- 話を読む
@@ -151,6 +161,7 @@ const scene = computed(() => (sceneId.value ? storyScene(storyEpisode(sceneId.va
 /** カードを押した。読める話は始め、読めない話は理由を知らせる(無反応にしない。D:3-1)。 */
 function pick(card: Card) {
   select(card.id);
+  clickSound(card.state === "open" ? "choice" : "tool");
   if (card.state !== "open") {
     showNotice(storyNotice(card));
     remember();
@@ -214,6 +225,7 @@ function onKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener("keydown", onKeydown));
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
+  audio.close();
   if (noticeTimer) clearTimeout(noticeTimer);
 });
 

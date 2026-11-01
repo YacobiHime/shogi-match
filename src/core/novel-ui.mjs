@@ -1,5 +1,8 @@
 // ノベルの場面のUIの、画面に依存しない処理(docs/novel-scene-design.md)。
 // 文字とオートの速さ、設定と読んだ行の印の保存、読み返し(ログ)の行、操作の言葉。画面はNovelScene.vue。
+// 文字の音とクリックの音の決め方はnovel-sound.mjs(11章)。
+
+import { DEFAULT_VOICE_STYLE, normalizeVoiceStyle } from './novel-sound.mjs';
 
 /** 設定の保存(データリセットでは消さない設定)。 */
 export const NOVEL_SETTINGS_KEY = 'yacobihime:shogi-match:novel-settings:v1';
@@ -30,10 +33,10 @@ export const PLACE_CARD_MS = 1800;
 export const READ_LINES_PER_SCENE = 200;
 export const READ_SCENES_MAX = 120;
 
-/** @typedef {{ text: keyof typeof TEXT_SPEEDS, auto: keyof typeof AUTO_SPEEDS }} NovelSettings */
+/** @typedef {{ text: keyof typeof TEXT_SPEEDS, auto: keyof typeof AUTO_SPEEDS, voice: 'auto' | 'type' | 'signal' | 'off' }} NovelSettings */
 
 /** @type {NovelSettings} */
-export const DEFAULT_NOVEL_SETTINGS = Object.freeze({ text: 'normal', auto: 'normal' });
+export const DEFAULT_NOVEL_SETTINGS = Object.freeze({ text: 'normal', auto: 'normal', voice: /** @type {'auto'} */ (DEFAULT_VOICE_STYLE) });
 
 /**
  * 場面の背景(CSSで描く。画像を足さない)。教室の夕方(壁と床)、会館(畳と障子の色)、会場(明かり)、夜。
@@ -65,6 +68,8 @@ export const NOVEL_UI_TEXT = Object.freeze({
   settingsTitle: '読み方の設定',
   textSpeed: '文字の速さ',
   autoSpeed: 'オートの速さ',
+  voice: '文字の音',
+  voiceNote: '対局画面のメニューの「効果音」がOFFだと、音はぜんぶ鳴らないよ。',
   summaryTitle: 'あらすじ',
   keepReading: '続きを読む',
   skipNow: '飛ばす',
@@ -83,7 +88,8 @@ export const NOVEL_UI_TEXT = Object.freeze({
 export function normalizeNovelSettings(value) {
   const text = value && Object.hasOwn(TEXT_SPEEDS, value.text) ? value.text : DEFAULT_NOVEL_SETTINGS.text;
   const auto = value && Object.hasOwn(AUTO_SPEEDS, value.auto) ? value.auto : DEFAULT_NOVEL_SETTINGS.auto;
-  return { text, auto };
+  const voice = /** @type {NovelSettings['voice']} */ (normalizeVoiceStyle(value?.voice));
+  return { text, auto, voice };
 }
 
 /**
