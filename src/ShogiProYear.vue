@@ -247,6 +247,7 @@
                 <b :class="{ 'pro-year__winner': game.winner?.id === game.a?.id }">{{ nameText(game.a) }}</b>
                 <i>{{ game.winner ? (game.winner.id === game.a?.id ? "○-●" : "●-○") : "対" }}</i>
                 <b :class="{ 'pro-year__winner': game.winner?.id === game.b?.id }">{{ nameText(game.b) }}</b>
+                <button v-if="game.watch" type="button" class="pro-year__watch" :data-pro-watch="game.id" @click="watchGame(game.id)">▶ 観戦</button>
               </span>
             </li>
             <li v-for="(plan, index) in dayPlans" :key="`plan-${index}`" class="pro-year__day-game pro-year__day-game--plan" :style="{ '--event-color': plan.color }">
@@ -257,58 +258,129 @@
         </div>
       </div>
 
-      <!-- 棋戦の表 -->
-      <div v-if="eventOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="eventOpen.name" data-pro-event-sheet @click.self="eventId = ''">
-        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet" :style="{ '--event-color': eventOpen.color }">
-          <h2 class="pro-year__event-title">{{ eventOpen.name }}<small v-if="eventOpen.holder">{{ eventOpen.holder.you ? playerName : eventOpen.holder.name }}</small></h2>
-          <section v-for="cycle in eventOpen.cycles" :key="cycle.id" class="pro-year__cycle">
-            <h3>{{ cycle.label }}<small v-if="!cycle.withUser">（観戦）</small><small v-if="cycle.champion">・{{ cycle.champion.you ? playerName : cycle.champion.name }}が{{ eventKind === "title" ? "獲得" : "優勝" }}</small></h3>
-            <ol class="pro-year__stages">
-              <li v-for="(stage, index) in cycle.stages" :key="index" class="pro-year__stage" :class="{ 'pro-year__stage--done': stage.done, 'pro-year__stage--now': stage.started && !stage.done }">
-                <p class="pro-year__stage-head"><b>{{ stage.label }}</b><small>{{ stage.period }}・{{ stage.done ? "終わり" : stage.started ? "いま" : "これから" }}</small></p>
-                <!-- 番勝負 -->
-                <p v-if="stage.series" class="pro-year__series">
-                  <span>{{ nameText(stage.series.a) }}</span>
-                  <b>{{ stage.series.wins[0] }} - {{ stage.series.wins[1] }}</b>
-                  <span>{{ nameText(stage.series.b) }}</span>
-                </p>
-                <!-- リーグ -->
-                <div v-else-if="stage.groups" class="pro-year__tables">
-                  <table v-for="group in stage.groups" :key="group.name" class="team-battle__table">
-                    <caption v-if="group.name">{{ group.name }}</caption>
-                    <tbody>
-                      <tr v-for="row in group.rows" :key="row.id" :class="{ 'team-battle__row--you': row.you }">
-                        <td>{{ row.rank }}</td><td>{{ nameText(row) }}</td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <!-- 順位戦 -->
-                <table v-else-if="stage.rows" class="team-battle__table">
-                  <caption>{{ stage.cls }}・上位{{ stage.promote }}人が昇級</caption>
-                  <tbody>
-                    <tr v-for="row in stage.rows" :key="row.id" :class="{ 'team-battle__row--you': row.you }">
-                      <td>{{ row.rank }}</td><td>{{ nameText(row) }}</td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <!-- トーナメント・予選のブロック -->
-                <div v-else-if="stage.block" class="pro-year__block">
-                  <small v-if="stage.blockCount > 1">{{ stage.block.name }}（{{ stage.blockCount }}ブロックの1つ）</small>
-                  <ul>
-                    <li v-for="(game, gameIndex) in stage.block.games" :key="gameIndex" :class="{ 'team-battle__row--you': game.a?.you || game.b?.you }">
-                      <span :class="{ 'pro-year__winner': game.winner === 'a' }">{{ nameText(game.a) }}</span>
-                      <i>{{ game.winner ? (game.winner === "a" ? "○-●" : "●-○") : "対" }}</i>
-                      <span :class="{ 'pro-year__winner': game.winner === 'b' }">{{ nameText(game.b) }}</span>
-                    </li>
-                  </ul>
-                </div>
-                <p v-if="stage.done && stage.winners?.length && !stage.series" class="pro-year__winners">勝ち上がり：{{ stage.winners.slice(0, 8).map(nameText).join("・") }}{{ stage.winners.length > 8 ? " ほか" : "" }}</p>
+      <!--
+        棋戦の画面(10-2の1)。全画面で重ね、期の切り替え・段階のタブ・竜王戦と同じトーナメント表(RyuoBracket)・番勝負の星・リーグ表。
+        決着した棋士どうしの対局は、札の▶と星の「観戦」で中継を開く(10-2の2)。
+      -->
+      <div v-if="eventOpen" class="pro-year__event-screen" role="dialog" aria-modal="true" :aria-label="eventOpen.name" data-pro-event-sheet :style="{ '--event-color': eventOpen.color }">
+        <header class="pro-year__event-head">
+          <button type="button" class="shogi-tournament__topbar-back" data-pro-event-close @click="eventId = ''">
+            <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">1年へ</span>
+          </button>
+          <div class="pro-year__event-heading">
+            <h2>{{ eventOpen.name }}</h2>
+            <small>{{ eventOpen.holder ? `${eventOpen.holder.you ? playerName : eventOpen.holder.name}${proEvent(eventOpen.id)?.short ?? ""}` : "一般棋戦" }}{{ shownCycle?.champion ? `・${shownCycle.champion.you ? playerName : shownCycle.champion.name}が${eventKind === "title" ? "獲得" : "優勝"}` : "" }}</small>
+          </div>
+        </header>
+        <div v-if="eventOpen.cycles.length > 1" class="pro-year__tabs pro-year__tabs--small" role="tablist" aria-label="期">
+          <button
+            v-for="(cycle, index) in eventOpen.cycles"
+            :key="cycle.id"
+            type="button"
+            role="tab"
+            :aria-selected="cycleIndex === index"
+            :data-pro-cycle="cycle.id"
+            @click="selectCycle(index)"
+          >{{ cycle.label.replace("に始まった期", "の期") }}{{ cycle.withUser ? "" : "（観戦）" }}</button>
+        </div>
+        <div v-if="shownCycle" class="pro-year__tabs pro-year__tabs--small pro-year__stage-tabs" role="tablist" aria-label="段階">
+          <button
+            v-for="(stage, index) in shownCycle.stages"
+            :key="index"
+            type="button"
+            role="tab"
+            :aria-selected="stageIndex === index"
+            :class="{ 'pro-year__stage-tab--now': stage.started && !stage.done, 'pro-year__stage-tab--you': stage.you }"
+            :data-pro-stage="index"
+            @click="selectStage(index)"
+          >{{ stage.label }}<small>{{ stage.done ? "済" : stage.started ? "いま" : "" }}</small></button>
+        </div>
+        <section v-if="shownStage" class="pro-year__event-body" :aria-label="shownStage.label">
+          <p class="pro-year__stage-info">
+            <span>{{ shownStage.period }}</span>
+            <b v-if="shownStage.you" :class="{ 'pro-year__stage-you--out': shownStage.out }">{{ shownStage.out ? "あなたは敗退" : shownStage.done ? "あなたが出た段階" : "あなたが出ている" }}</b>
+          </p>
+          <p v-if="!shownStage.started" class="pro-year__stage-empty">まだ始まっていないよ。{{ shownStage.period }}に始まるよ。</p>
+          <!-- トーナメント表(竜王戦と同じ)。記録を作るブロックが2つ以上あれば、ブロックのタブ -->
+          <template v-else-if="shownStage.brackets?.length">
+            <div v-if="shownStage.brackets.length > 1" class="pro-year__tabs pro-year__tabs--small" role="tablist" aria-label="ブロック">
+              <button
+                v-for="(bracket, index) in shownStage.brackets"
+                :key="bracket.name"
+                type="button"
+                role="tab"
+                :aria-selected="bracketIndex === index"
+                :data-pro-bracket="bracket.name"
+                @click="bracketIndex = Number(index)"
+              >{{ bracket.name || "トーナメント" }}{{ bracket.you ? "（あなた）" : bracket.rival ? "（羽音）" : "" }}</button>
+            </div>
+            <div class="pro-year__bracket" data-pro-bracket-view>
+              <RyuoBracket
+                :key="`${shownCycle?.id}-${stageIndex}-${bracketIndex}`"
+                :view="shownBracket.view"
+                :rival-id="rivalId"
+                :watchable="true"
+                @watch="watchNode"
+              />
+            </div>
+            <p v-if="shownStage.others?.length" class="pro-year__others">
+              ほかのブロック：<span v-for="other in shownStage.others" :key="other.name">{{ other.name }} {{ other.winner ? nameText(other.winner) : "…" }}</span>
+            </p>
+          </template>
+          <!-- 番勝負の星 -->
+          <div v-else-if="shownStage.series" class="pro-year__series-box" data-pro-series>
+            <p class="pro-year__series">
+              <span :class="{ 'pro-year__winner': shownStage.series.wins[0] >= shownStage.series.need }">{{ nameText(shownStage.series.a) }}</span>
+              <b>{{ shownStage.series.wins[0] }} - {{ shownStage.series.wins[1] }}</b>
+              <span :class="{ 'pro-year__winner': shownStage.series.wins[1] >= shownStage.series.need }">{{ nameText(shownStage.series.b) }}</span>
+            </p>
+            <ol class="pro-year__hoshi">
+              <li v-for="no in shownStage.series.maxGames" :key="no" :class="{ 'pro-year__hoshi--empty': !seriesGame(no) }">
+                <small>第{{ no }}局</small>
+                <template v-if="seriesGame(no)">
+                  <span class="pro-year__hoshi-date">{{ seriesGame(no)!.date }}</span>
+                  <b>{{ seriesGame(no)!.winner ? (seriesGame(no)!.winner === "a" ? "○" : "●") : "…" }}</b>
+                  <span class="pro-year__hoshi-color">{{ seriesGame(no)!.aColor === "black" ? "先" : "後" }}</span>
+                  <button v-if="seriesGame(no)!.watch" type="button" class="pro-year__watch" :data-pro-watch="seriesGame(no)!.id" @click="watchGame(seriesGame(no)!.id)">▶ 観戦</button>
+                </template>
+                <span v-else class="pro-year__hoshi-date">―</span>
               </li>
             </ol>
-          </section>
-          <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="eventId = ''">閉じる</button>
-        </div>
+            <p class="pro-year__note">○●は{{ nameText(shownStage.series.a) }}から見た星。{{ shownStage.series.need }}勝で決まり。</p>
+          </div>
+          <!-- リーグ -->
+          <div v-else-if="shownStage.groups" class="pro-year__tables">
+            <table v-for="group in shownStage.groups" :key="group.name" class="team-battle__table">
+              <caption v-if="group.name">{{ group.name }}</caption>
+              <tbody>
+                <tr v-for="row in group.rows" :key="row.id" :class="{ 'team-battle__row--you': row.you }">
+                  <td>{{ row.rank }}</td><td>{{ nameText(row) }}</td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- 順位戦 -->
+          <table v-else-if="shownStage.rows" class="team-battle__table">
+            <caption>{{ shownStage.cls }}・上位{{ shownStage.promote }}人が昇級</caption>
+            <tbody>
+              <tr v-for="row in shownStage.rows" :key="row.id" :class="{ 'team-battle__row--you': row.you }">
+                <td>{{ row.rank }}</td><td>{{ nameText(row) }}</td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
+              </tr>
+            </tbody>
+          </table>
+          <!-- 前の版の保存(表の最初の並びがない): 対局の並び -->
+          <div v-else-if="shownStage.block" class="pro-year__block">
+            <small v-if="shownStage.blockCount > 1">{{ shownStage.block.name }}（{{ shownStage.blockCount }}ブロックの1つ）</small>
+            <ul>
+              <li v-for="(game, gameIndex) in shownStage.block.games" :key="gameIndex" :class="{ 'team-battle__row--you': game.a?.you || game.b?.you }">
+                <span :class="{ 'pro-year__winner': game.winner === 'a' }">{{ nameText(game.a) }}</span>
+                <i>{{ game.winner ? (game.winner === "a" ? "○-●" : "●-○") : "対" }}</i>
+                <span :class="{ 'pro-year__winner': game.winner === 'b' }">{{ nameText(game.b) }}</span>
+              </li>
+            </ul>
+          </div>
+          <p v-if="shownStage.done && shownStage.winners?.length && !shownStage.series" class="pro-year__winners">勝ち上がり：{{ shownStage.winners.slice(0, 8).map(nameText).join("・") }}{{ shownStage.winners.length > 8 ? " ほか" : "" }}</p>
+        </section>
       </div>
 
       <!-- 分身に任せる確認(UD:5-2。取り消せない。はじめに「自分で指す」を選んでおく) -->
@@ -329,13 +401,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
+import RyuoBracket from "./RyuoBracket.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import {
-  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, monthView, previewNextGame, proEvent, proYearTalk, proYearView, yearEnd, yearStart,
+  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, monthView, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, yearEnd, yearStart,
 } from "./core/pro-year.mjs";
 
 type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
@@ -366,6 +439,9 @@ const emit = defineEmits<{
   resume: [];
   auto: [];
   "next-year": [];
+  /** 中継で観戦する対局(relay-games.mjsの項目と同じ形)。大会の画面が中継を開く。 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  watch: [entry: any];
   back: [];
 }>();
 
@@ -547,8 +623,53 @@ function openDay(date: string) {
 const eventId = ref("");
 const eventOpen = computed(() => (props.state && eventId.value ? eventView(props.state, eventId.value) : null));
 const eventKind = computed(() => proEvent(eventId.value)?.kind ?? "");
+const cycleIndex = ref(0);
+const stageIndex = ref(0);
+const bracketIndex = ref(0);
+const shownCycle = computed(() => eventOpen.value?.cycles[cycleIndex.value] ?? null);
+const shownStage = computed(() => shownCycle.value?.stages[stageIndex.value] ?? null);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const shownBracket = computed<any>(() => shownStage.value?.brackets?.[bracketIndex.value] ?? shownStage.value?.brackets?.[0] ?? null);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const rivalId = computed(() => (Object.values(props.state?.players ?? {}) as any[]).find((member) => member?.story === "hanane")?.id ?? "");
+/** 期のはじめに見せる段階(自分がいま出ている段階 → いま進んでいる段階 → 最後に始まった段階)。 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function defaultStage(cycle: any) {
+  const stages = cycle?.stages ?? [];
+  const pick = [
+    stages.findIndex((stage: any) => stage.started && !stage.done && stage.you),
+    stages.findIndex((stage: any) => stage.started && !stage.done),
+    stages.map((stage: any) => stage.started).lastIndexOf(true),
+  ].find((index) => index >= 0);
+  return pick ?? 0;
+}
+function selectCycle(index: number) {
+  cycleIndex.value = index;
+  stageIndex.value = defaultStage(eventOpen.value?.cycles[index]);
+  bracketIndex.value = 0;
+}
+function selectStage(index: number) {
+  stageIndex.value = index;
+  bracketIndex.value = 0;
+}
 function openEvent(id: string) {
   eventId.value = id;
+  const cycles = eventOpen.value?.cycles ?? [];
+  // 自分がいま出ている期 → 進んでいる期 → 新しい期。
+  const mine = cycles.findIndex((cycle: any) => cycle.stages.some((stage: any) => stage.started && !stage.done && stage.you));
+  const running = cycles.findIndex((cycle: any) => cycle.stages.some((stage: any) => stage.started && !stage.done));
+  selectCycle(mine >= 0 ? mine : running >= 0 ? running : Math.max(0, cycles.length - 1));
+}
+const seriesGame = (no: number) => shownStage.value?.series?.games.find((game: { no: number }) => game.no === no) ?? null;
+/** 対局を観戦する(中継の項目にして、大会の画面へ渡す)。 */
+function watchGame(gameId: string) {
+  const entry = props.state ? proYearRelayGame(props.state, gameId) : null;
+  if (entry) emit("watch", entry);
+}
+/** トーナメント表の札の▶。 */
+function watchNode(nodeId: string) {
+  const gameId = shownBracket.value?.watch?.[nodeId];
+  if (gameId) watchGame(gameId);
 }
 
 // 分身に任せる
@@ -688,6 +809,43 @@ defineExpose({ goBack });
 .shogi-game .pro-year__award { padding: 0.05rem 0.5rem; border-radius: 999px; color: #172632; background: #e9c46a; font-size: 0.75rem; font-weight: 900; }
 /* シート */
 .shogi-game .pro-year__sheet { max-height: min(88vh, 46rem); overflow-y: auto; }
+/* 棋戦の画面(全画面) */
+.shogi-game .pro-year__event-screen {
+  position: fixed; inset: 0; z-index: 60; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 0.4rem;
+  padding: 0.6rem; color: #fffcf4; background: #172632;
+}
+.shogi-game .pro-year__event-head { display: flex; align-items: center; gap: 0.6rem; min-width: 0; padding-left: 0.4rem; border-left: 0.4rem solid var(--event-color); }
+.shogi-game .pro-year__event-heading { display: grid; min-width: 0; }
+.shogi-game .pro-year__event-heading h2 { margin: 0; font-size: 1.15rem; }
+.shogi-game .pro-year__event-heading small { overflow: hidden; color: #cfd8de; font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .pro-year__tabs--small { flex-wrap: wrap; }
+.shogi-game .pro-year__tabs--small button { min-height: 44px; padding: 0.15rem 0.7rem; font-size: 0.8rem; }
+.shogi-game .pro-year__stage-tabs button small { margin-left: 0.3rem; font-size: 0.66rem; opacity: 0.85; }
+.shogi-game .pro-year__stage-tab--you { box-shadow: inset 0 -0.18rem 0 var(--amber, #f1a54c); }
+.shogi-game .pro-year__event-body { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; align-content: start; gap: 0.4rem; min-height: 0; overflow-y: auto; }
+.shogi-game .pro-year__stage-info { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; margin: 0; color: #cfd8de; font-size: 0.8rem; }
+.shogi-game .pro-year__stage-info b { color: var(--amber, #f1a54c); }
+.shogi-game .pro-year__stage-info .pro-year__stage-you--out { color: #8a99a6; }
+.shogi-game .pro-year__event-body > .team-battle__table, .shogi-game .pro-year__event-body .pro-year__tables { max-width: 44rem; }
+.shogi-game .pro-year__stage-empty { margin: 1rem 0; color: #cfd8de; text-align: center; }
+.shogi-game .pro-year__bracket { min-height: min(60vh, 32rem); height: 100%; }
+.shogi-game .pro-year__bracket .ryuo-bracket { height: 100%; }
+.shogi-game .pro-year__others { display: flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; margin: 0; color: #cfd8de; font-size: 0.75rem; }
+.shogi-game .pro-year__series-box { display: grid; align-content: start; gap: 0.5rem; }
+.shogi-game .pro-year__series-box .pro-year__series { font-size: 1rem; }
+.shogi-game .pro-year__hoshi { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__hoshi li { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "no no color" "date mark mark" "watch watch watch"; align-items: center; gap: 0.1rem 0.3rem; padding: 0.35rem 0.5rem; border-radius: 0.5rem; background: rgba(43, 70, 91, 0.7); }
+.shogi-game .pro-year__hoshi li small { grid-area: no; color: #cfd8de; font-size: 0.72rem; }
+.shogi-game .pro-year__hoshi-date { grid-area: date; font-size: 0.78rem; }
+.shogi-game .pro-year__hoshi li b { grid-area: mark; font-size: 1.2rem; text-align: right; }
+.shogi-game .pro-year__hoshi-color { grid-area: color; color: #cfd8de; font-size: 0.72rem; }
+.shogi-game .pro-year__hoshi li .pro-year__watch { grid-area: watch; }
+.shogi-game .pro-year__hoshi--empty { opacity: 0.5; }
+.shogi-game .pro-year__note { margin: 0; color: #cfd8de; font-size: 0.75rem; }
+.shogi-game .pro-year__watch {
+  min-height: 36px; padding: 0.1rem 0.6rem; border: 0.1rem solid rgba(255, 252, 244, 0.45); border-radius: 999px;
+  color: #fffcf4; background: rgba(43, 70, 91, 0.95); font: inherit; font-size: 0.75rem; font-weight: 800; cursor: pointer;
+}
 .shogi-game .pro-year__day-games { display: grid; gap: 0.35rem; margin: 0.4rem 0; padding: 0; list-style: none; }
 .shogi-game .pro-year__day-game { display: grid; gap: 0.1rem; padding: 0.35rem 0.5rem; border-left: 0.35rem solid var(--event-color); border-radius: 0.4rem; background: rgba(43, 70, 91, 0.6); }
 .shogi-game .pro-year__day-game small { color: #cfd8de; font-size: 0.72rem; }

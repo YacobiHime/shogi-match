@@ -221,6 +221,7 @@
           @resume="emit('pro-year-resume')"
           @auto="emit('pro-year-auto')"
           @next-year="emit('pro-year-next-year')"
+          @watch="relayEntry = $event"
           @measure="emit('measure', 'pro-year')"
           @back="backToSelect"
         />
@@ -1581,6 +1582,8 @@ const opponentRelayCount = computed(() => {
 const relayPool = computed(() => {
   const key = relayEntry.value?.key ?? "";
   // 自分の対局は、その大会のいまの期の棋士から解説者を選ぶ(奨励会・研修会は竜王戦の棋士)。
+  // 棋士の1年の観戦(docs/pro-year-design.mdの10-2の2)は、その1年の棋士から解説者を選ぶ。
+  if (key.startsWith("pro-year:")) return Object.values(props.proYearState?.players ?? {});
   const season = key.startsWith("mine:")
     ? (relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason) ?? props.ryuoSeason ?? props.meijinSeason
     : [props.ryuoSeason, props.ryuoWatch?.season, props.meijinSeason]

@@ -901,7 +901,9 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     return gap >= 200 ? 'black' : gap <= -200 ? 'white' : null;
   })();
   /** 記録係の経歴に出すタイトル(この棋戦のタイトルではないもの)。 */
-  const recordTitle = pick(rng, TITLE_NAMES.filter((title) => title !== (spec.event === 'meijin' ? '名人' : '竜王')));
+  // 番勝負のタイトルの名前(棋士の1年は棋戦ごとに違う。spec.titleName)。
+  const seriesTitle = spec.titleName || (spec.event === 'meijin' ? '名人' : '竜王');
+  const recordTitle = pick(rng, TITLE_NAMES.filter((title) => title !== seriesTitle));
   const think = (at, when, side, moment) => {
     if (thoughtCount[side] + thoughtCount[other(side)] >= THOUGHT_LIMIT) return;
     if (!once(`thought:${side}:${moment}`)) return;
@@ -992,7 +994,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     }
     // 格上の棋士の心の声を、視聴者が想像する(27章)。番勝負は肩書(竜王・名人)、ほかは段位。
     if (stronger && !isYou(players[stronger]) && rng.next() < 0.5) {
-      const title = spec.kind === 'finals' ? (spec.event === 'meijin' ? '名人' : '竜王') : (players[stronger]?.dan || '先生');
+      const title = spec.kind === 'finals' ? seriesTitle : (players[stronger]?.dan || '先生');
       comment(0, 'move', 'kimino', { name: fan(stronger), title });
     }
     comment(0, 'move', 'start', {}, 3);

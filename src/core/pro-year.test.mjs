@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PRO_EVENTS, PRO_USER_ID, PRO_YEAR_KEY, TITLE_EVENTS, addDays, advanceToNextGame, createProYear, dateLabel, dayView, eventView,
-  fiscalYearOf, gameLabel, loadProYear, monthView, packProYear, previewNextGame, proYearSeason, proYearTalk, proYearView, recordProGame, saveProYear,
+  fiscalYearOf, gameLabel, loadProYear, monthView, packProYear, previewNextGame, proYearRelayGame, proYearSeason, proYearTalk, proYearView, recordProGame, saveProYear,
   startNextYear, unpackProYear, weekdayOf, yearEnd, yearStart,
 } from './pro-year.mjs';
 import { createRoster } from './ryuo-roster.mjs';
@@ -324,6 +324,59 @@ describe('画面の形', () => {
     // 今年度に始まった期の番勝負は来年度。
     const next = eventView(state, 'meijin').cycles.find((entry) => entry.id === 'meijin-2026');
     expect(next.stages.at(-1).period).toBe('来年度 4月1日〜6月30日');
+  });
+});
+
+describe('棋戦の表と観戦(10章)', () => {
+  // 何局か進めて、自分の予選のブロックと、タイトル戦の番勝負が動いた状態。
+  let state = start(12);
+  for (let step = 0; step < 6; step += 1) {
+    state = advanceToNextGame(state);
+    state = recordProGame(state, 'win').state;
+  }
+
+  it('自分のいるブロックは、竜王戦と同じトーナメント表になる', () => {
+    const kio = eventView(state, 'kio').cycles.find((cycle) => cycle.withUser && cycle.id.endsWith('2026'));
+    const stage = kio.stages.find((entry) => entry.started && entry.brackets?.length);
+    expect(stage).toBeTruthy();
+    const mine = stage.brackets[0];
+    expect(mine.you).toBe(true);
+    expect(mine.view.matches.length).toBeGreaterThan(0);
+    expect(mine.view.rounds.at(-1).label).toBe('ブロック決勝');
+    // 自分の勝った試合は、自分が勝者の札。
+    const userMatch = mine.view.matches.find((match) => match.userIn && match.winner);
+    expect(userMatch.userWon).toBe(true);
+    // 記録を作らないブロックは、名前の行だけ。
+    expect(stage.others.length).toBeGreaterThan(0);
+  });
+
+  it('決着した棋士どうしの対局は、中継の項目になる(自分の対局はならない)', () => {
+    const games = Object.values(state.games);
+    const watchable = games.find((game) => !game.user && game.winner && game.rec);
+    expect(watchable).toBeTruthy();
+    const entry = proYearRelayGame(state, watchable.id);
+    expect(entry).toMatchObject({ event: 'pro-year', label: gameLabel(state, watchable) });
+    expect(entry.black.name && entry.white.name).toBeTruthy();
+    expect(['black', 'white']).toContain(entry.winner);
+    expect(entry.story).toHaveLength(3);
+    const own = games.find((game) => game.user && game.winner);
+    expect(proYearRelayGame(state, own.id)).toBeNull();
+    // 保存しても、観戦の記録は残る。
+    const restored = unpackProYear(JSON.parse(JSON.stringify(packProYear(state))), roster);
+    expect(proYearRelayGame(restored, watchable.id)).toEqual(entry);
+  });
+
+  it('番勝負は、局ごとの星と先後', () => {
+    const meijin = eventView(state, 'meijin').cycles.find((cycle) => cycle.id === 'meijin-2025');
+    const series = meijin.stages.at(-1).series;
+    expect(series.maxGames).toBe(7);
+    expect(series.games.length).toBeGreaterThan(0);
+    for (const game of series.games) {
+      expect(['black', 'white']).toContain(game.aColor);
+      expect(['a', 'b', null]).toContain(game.winner);
+    }
+    const tally = series.games.filter((game) => game.winner === 'a').length;
+    expect(series.wins[0]).toBe(tally);
   });
 });
 

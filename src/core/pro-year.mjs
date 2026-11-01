@@ -5,6 +5,8 @@
 
 import { createRng, pick } from './ryuo-random.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
+import { matchBracket } from './ryuo-stages.mjs';
+import { stageVenue } from './match-stage.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import { HANANE, YOSHIHIKO, hananeBeforeLine } from './ryuo-story.mjs';
 import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, worldRating } from './ryuo-strength.mjs';
@@ -505,6 +507,8 @@ function openKnockoutRound(state, cycle, stage, rng) {
     // 対局の記録を作るのは、プレイヤーと羽音のいるブロックと、本戦(1つの表)だけ。ほかのブロックは、回戦を閉じるときに勝ち負けだけ決める。
     block.track ??= stage.type === 'knockout' || block.alive.some((id) => id === PRO_USER_ID || state.players[id]?.story === HANANE);
     if (!block.track) return;
+    // トーナメント表(10-2の1)のために、最初の並びを残す(記録を作るブロックだけ)。
+    if (round === 0 && !block.slots) block.slots = [...block.alive];
     for (let index = 0; index < block.alive.length; index += 2) {
       const [a, b] = [block.alive[index], block.alive[index + 1]];
       if (a && b) addGame(state, { cycle, stage, round, a, b, date, block: blockIndex });
@@ -831,8 +835,12 @@ function playRound(state, cycle, stage, round, rng) {
       continue;
     }
     const big = stage.type === 'series' && proEvent(cycle.event).stages[stage.index].title;
-    const aWins = simulateMemberGame(rng, state.players[game.a], state.players[game.b], { big }).aWins;
+    const result = simulateMemberGame(rng, state.players[game.a], state.players[game.b], { big });
+    const aWins = result.aWins;
     game.winner = aWins ? 'a' : 'b';
+    // 観戦(10-2の2)のための、まねの記録(先手・勝ち方・形勢の線。先手から見た値)。
+    const sign = result.aColor === 'black' ? 1 : -1;
+    game.rec = { b: result.aColor === 'black' ? 'a' : 'b', how: result.how, s: (result.phases ?? []).map((value) => value * sign + 0) };
     countRecord(state, aWins ? game.a : game.b, aWins ? game.b : game.a);
   }
   if (userGame) return userGame;
@@ -1379,6 +1387,7 @@ export function dayView(state, date) {
         b: card(state, game.b),
         winner: game.winner ? card(state, game.winner === 'a' ? game.a : game.b) : null,
         user: Boolean(game.user),
+        watch: canWatchGame(game),
         twoDay: Boolean(game.twoDay),
       };
     }).sort((x, y) => Number(y.user) - Number(x.user)),
@@ -1406,24 +1415,38 @@ export function eventView(state, eventId) {
         const window = stageWindow(cycle, def);
         // 今年度の外の時期は「前年度」「来年度」を添える(同じ4月が2つ並んでも分かるように)。
         const when = window.start < yearStart(state.fy) ? '前年度 ' : window.start > yearEnd(state.fy) ? '来年度 ' : '';
-        const base = { label: def.label, type: def.type, period: `${when}${dateLabel(window.start).replace(/日\(.\)$/, '日')}〜${dateLabel(window.end).replace(/日\(.\)$/, '日')}`, started: Boolean(stage), done: Boolean(stage?.done) };
+        const base = {
+          label: def.label, type: def.type, title: Boolean(def.title),
+          period: `${when}${dateLabel(window.start).replace(/日\(.\)$/, '日')}〜${dateLabel(window.end).replace(/日\(.\)$/, '日')}`,
+          started: Boolean(stage), done: Boolean(stage?.done), you: Boolean(stage?.user), out: Boolean(stage?.userOut),
+        };
         if (!stage) return base;
-        return { ...base, ...stageDetail(state, stage) };
+        return { ...base, ...stageDetail(state, cycle, stage, def) };
       }),
     })),
   };
 }
 
-function stageDetail(state, stage) {
+function stageDetail(state, cycle, stage, def) {
   if (stage.type === 'series') {
     const games = (stage.rounds ?? []).flat().map((id) => state.games[id]).filter(Boolean);
+    const seriesA = stage.series.a;
     return {
       series: {
         a: card(state, stage.series.a),
         b: card(state, stage.series.b),
         wins: [stage.series.wins[stage.series.a] ?? 0, stage.series.wins[stage.series.b] ?? 0],
         need: stage.series.need,
-        games: games.map((game) => ({ date: dateLabel(game.date), winner: game.winner ? (game.winner === 'a' ? game.a : game.b) === stage.series.a ? 'a' : 'b' : null })),
+        maxGames: stage.series.need * 2 - 1,
+        // 局ごとの星(aから見た○●)・日付・aの先後・観戦できるか。
+        games: games.map((game, index) => ({
+          no: index + 1,
+          id: game.id,
+          date: dateLabel(game.date),
+          winner: game.winner ? ((game.winner === 'a' ? game.a : game.b) === seriesA ? 'a' : 'b') : null,
+          aColor: game.a === seriesA ? 'black' : 'white',
+          watch: canWatchGame(game),
+        })),
       },
       winners: stage.winners.map((id) => card(state, id)),
     };
@@ -1449,8 +1472,17 @@ function stageDetail(state, stage) {
       winners: stage.winners.map((id) => card(state, id)),
     };
   }
-  // トーナメント・ブロック: 自分のいるブロック(なければ1つ目)の対局の歩みと、勝ち上がった人。
+  // トーナメント・ブロック: 竜王戦と同じトーナメント表(記録を作るブロックだけ。自分・羽音のブロックが先)。
   const blocks = stage.blocks ?? [];
+  const brackets = blocks
+    .filter((block) => block.track && block.slots)
+    .map((block) => ({ name: block.name, ...blockBracket(state, cycle, stage, def, block) }))
+    .sort((x, y) => Number(y.you) - Number(x.you) || Number(y.rival) - Number(x.rival));
+  // 記録を作らないブロックは、勝ち上がった人の名前だけ(決まったら)。
+  const advanced = blocks.filter((block) => !block.track).map((block) => {
+    const alive = block.alive.filter(Boolean);
+    return { name: block.name, winner: alive.length === 1 ? card(state, alive[0]) : null };
+  });
   const mineIndex = blocks.findIndex((block) => (block.history ?? []).some((game) => game[0] === PRO_USER_ID || game[1] === PRO_USER_ID) || block.alive.includes(PRO_USER_ID));
   const shown = blocks[mineIndex >= 0 ? mineIndex : 0];
   const pendingRound = (stage.rounds.at(-1) ?? []).map((id) => state.games[id]).filter((game) => game && !game.winner && blocks.indexOf(shown) >= 0
@@ -1464,11 +1496,145 @@ function stageDetail(state, stage) {
       ],
     } : null,
     blockCount: blocks.length,
+    brackets,
+    others: advanced,
     winners: stage.winners.map((id) => card(state, id)),
   };
 }
 
+/** 文字列の種(中継の項目のseed。`relay-game.mjs`の`relaySeed`と同じ考え方の小さなハッシュ。棋譜の処理を読み込まないため)。 */
+function textSeed(text) {
+  let hash = 2166136261;
+  for (const char of String(text)) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+/** 観戦できる対局か(決着した、自分の出ない、まねの記録のある対局)。 */
+const canWatchGame = (game) => Boolean(game && !game.user && game.winner && game.rec);
+
+/**
+ * 記録を作るブロックの、竜王戦と同じ形のトーナメント表(`ryuo-stages.mjs`の`matchBracket`の形。`RyuoBracket.vue`に渡す)。
+ * 最初の並び(slots)と対局の歩み(history)から、試合の札を組み直す。空き(null)は不戦勝で次の回戦へ上がる。
+ * 2人で止める表(新人王戦)の決勝は、次の段階の三番勝負の勝者。
+ */
+function blockBracket(state, cycle, stage, def, block) {
+  const nodes = {};
+  const gameIds = {};
+  let count = 0;
+  let sides = block.slots.map((pid) => (pid ? { pid } : null));
+  let round = 0;
+  const history = block.history ?? [];
+  const games = Object.values(state.games).filter((game) => game.cycle === cycle.id && game.stage === stage.index);
+  const pidOf = (side) => side?.pid ?? nodes[side?.from]?.winner ?? null;
+  while (sides.length > 1) {
+    round += 1;
+    const next = [];
+    for (let index = 0; index < sides.length; index += 2) {
+      const [x, y] = [sides[index], sides[index + 1]];
+      if (x && y) {
+        const id = `${block.name || 'main'}-${round}-${index / 2}`;
+        count += 1;
+        const node = { id, round, a: x, b: y, winner: null, game: null };
+        nodes[id] = node;
+        const [pa, pb] = [pidOf(x), pidOf(y)];
+        if (pa && pb) {
+          const done = history.find(([a, b]) => (a === pa && b === pb) || (a === pb && b === pa));
+          if (done) node.winner = done[2];
+          const game = games.find((entry) => (entry.a === pa && entry.b === pb) || (entry.a === pb && entry.b === pa));
+          if (game) gameIds[id] = game.id;
+        }
+        next.push({ from: id });
+      } else next.push(x ?? y ?? null);
+    }
+    sides = next;
+  }
+  const root = sides[0]?.from ? { from: sides[0].from } : null;
+  // 2人で止めた表は、決勝を次の段階(決勝三番勝負)の勝者で埋める。
+  if (stage.finalists && root && !nodes[root.from].winner) {
+    const final = cycle.stages[stage.index + 1];
+    if (final?.done) nodes[root.from].winner = final.winners[0] ?? null;
+  }
+  const total = round;
+  const roundLabel = (value) => (stage.finalists && value === total ? '決勝三番勝負' : roundName({ type: def.type, finalists: stage.finalists }, value - 1, total - (stage.finalists ? 1 : 0)));
+  const pendingGame = state.pending ? state.games[state.pending.gameId] : null;
+  const pendingNodeId = pendingGame && pendingGame.cycle === cycle.id && pendingGame.stage === stage.index
+    ? Object.keys(gameIds).find((id) => gameIds[id] === pendingGame.id) ?? null
+    : null;
+  const view = root ? matchBracket({ nodes, root, rounds: total }, {
+    brief: (pid) => ({ name: nameOf(state, pid), dan: state.players[pid]?.dan ?? '', story: state.players[pid]?.story ?? null }),
+    roundLabel,
+    pendingNodeId,
+  }) : { rounds: [], matches: [], leafCount: 0, userNext: null };
+  void count;
+  // 観戦できる試合(札の▶)と、その対局のid。
+  const watch = Object.fromEntries(Object.entries(gameIds).filter(([, id]) => canWatchGame(state.games[id])));
+  return {
+    view,
+    watch,
+    you: block.slots.includes(PRO_USER_ID),
+    rival: block.slots.some((pid) => state.players[pid]?.story === HANANE),
+  };
+}
+
+/**
+ * 観戦(10-2の2)の中継の項目(`relay-games.mjs`の項目と同じ形)。決着した、自分の出ない、まねの記録のある対局だけ。
+ * @param {any} state
+ * @param {string} gameId
+ */
+export function proYearRelayGame(state, gameId) {
+  const game = state?.games?.[gameId];
+  if (!canWatchGame(game)) return null;
+  const event = proEvent(game.event);
+  const def = event.stages[game.stage];
+  const stage = state.cycles[game.cycle]?.stages[game.stage];
+  const blackId = game.rec.b === 'a' ? game.a : game.b;
+  const whiteId = blackId === game.a ? game.b : game.a;
+  const winnerId = game.winner === 'a' ? game.a : game.b;
+  const held = (id) => TITLE_EVENTS.filter((eventId) => state.titles[eventId] === id).map((eventId) => proEvent(eventId).short);
+  const relayPlayer = (id) => {
+    const player = state.players[id];
+    return {
+      id, name: player?.name ?? '', dan: player?.dan ?? '', rating: player?.rating ?? 0, level: null, story: player?.story ?? null,
+      kind: 'pro', age: player?.age ?? null, character: player?.character ?? null, repertoire: player?.repertoire ?? null, held: held(id),
+    };
+  };
+  const key = `pro-year:${state.seed}:${game.cycle}:${game.id}`;
+  const series = stage?.series && def.type === 'series' ? (() => {
+    const ids = stage.rounds.flat();
+    const before = ids.slice(0, ids.indexOf(game.id)).map((id) => state.games[id]).filter((entry) => entry?.winner);
+    const wins = { [stage.series.a]: 0, [stage.series.b]: 0 };
+    for (const entry of before) wins[entry.winner === 'a' ? entry.a : entry.b] += 1;
+    return { holder: stage.series.a === blackId ? 'black' : 'white', need: stage.series.need, wins: { black: wins[blackId] ?? 0, white: wins[whiteId] ?? 0 } };
+  })() : null;
+  // 二日制のタイトル戦だけ二日制の持ち時間(中継のfinals)。ほかの番勝負は1日の大一番。
+  const kind = def.title && def.twoDay ? 'finals' : def.type === 'series' ? 'playoff' : 'game';
+  const players = [blackId, whiteId].map((id) => state.players[id]);
+  return {
+    key, event: 'pro-year', kind, label: gameLabel(state, game), section: 'pro-year', order: 0, round: game.round + 1,
+    weight: def.title ? 'title' : def.type === 'series' || /決勝$/.test(gameLabel(state, game)) ? 'big' : 'plain',
+    venue: def.title ? stageVenue('ryuo', state.fy, game.round + 1) : '', gameNo: def.type === 'series' ? game.round + 1 : 0,
+    seed: textSeed(key), series, quality: '', titleName: def.title ? event.short : '',
+    black: relayPlayer(blackId), white: relayPlayer(whiteId),
+    winner: winnerId === blackId ? 'black' : 'white',
+    openings: { black: null, white: null }, castles: { black: null, white: null },
+    story: Array.isArray(game.rec.s) && game.rec.s.length ? game.rec.s : null,
+    how: game.rec.how ?? 'ending',
+    noNews: true,
+    tags: {
+      rival: players.some((player) => player?.story === HANANE),
+      father: players.some((player) => player?.story === YOSHIHIKO),
+      oshi: false, next: false, self: false, current: false,
+    },
+  };
+}
+
 // ---- 保存
+
+/** 勝ち方の短い番号(保存を小さくする)。`ryuo-simulation.mjs`の`classifyWin`の値。 */
+const HOW_CODES = Object.freeze(['opening', 'middle', 'ending', 'comeback', 'recover']);
 
 /**
  * 保存の形(棋士は名前・強さ・段位・組・年齢・人物だけ。棋風と得意戦法は、読むときに名簿から付け直す)。
@@ -1484,6 +1650,8 @@ export function packProYear(state) {
     const row = [Number(String(game.id).slice(1)), game.cycle, game.stage, game.round, game.a, game.b, game.date,
       game.winner === 'a' ? 1 : game.winner === 'b' ? 2 : 0, (game.user ? 1 : 0) | (game.twoDay ? 2 : 0) | (game.auto ? 4 : 0), game.k ?? 0];
     if (game.user) row.push(game.label ?? '');
+    // 観戦のまねの記録: [先手(0=a・1=b), 勝ち方, 形勢の線…]。
+    else if (game.rec) row.push('', [game.rec.b === 'b' ? 1 : 0, HOW_CODES.indexOf(game.rec.how), ...(game.rec.s ?? [])]);
     return row;
   });
   return { ...state, players, games };
@@ -1506,7 +1674,7 @@ export function unpackProYear(packed, roster) {
   const games = {};
   for (const row of Array.isArray(packed.games) ? packed.games : []) {
     if (!Array.isArray(row)) continue;
-    const [number, cycle, stage, round, a, b, date, won, flags, k, label] = row;
+    const [number, cycle, stage, round, a, b, date, won, flags, k, label, rec] = row;
     const game = { id: `g${number}`, cycle, event: String(cycle).split('-')[0], stage, round, a, b, date, winner: won === 1 ? 'a' : won === 2 ? 'b' : null };
     if (k) game.k = k;
     if (flags & 2) game.twoDay = true;
@@ -1514,6 +1682,8 @@ export function unpackProYear(packed, roster) {
     if (flags & 1) {
       game.user = true;
       game.label = label ?? '';
+    } else if (Array.isArray(rec)) {
+      game.rec = { b: rec[0] === 1 ? 'b' : 'a', how: HOW_CODES[rec[1]] ?? 'ending', s: rec.slice(2) };
     }
     games[game.id] = game;
   }
