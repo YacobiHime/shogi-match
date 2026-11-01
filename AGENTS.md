@@ -247,6 +247,7 @@ git diff --check
 - 教室・問題集・図鑑・やこびノート・大会の画面は、`ShogiMatchGame.vue`から`defineAsyncComponent`で開いたときに読み込みます。
   - 入口から静的にたどれるモジュールは、`vite.config.js`の`codeSplitting`で`dist/chunks/runtime-<hash>.js`にまとめます。遅延チャンクが入口の`shogi-match.js`（`?v=`なし）をimportして、同じモジュールが2回読まれるのを防ぐためです。
   - 対局画面から、これらの画面だけが使う重いモジュール（`reference-dex.mjs`・`problem-set.mjs`・`tutorial-curriculum.mjs`など）を静的にimportしないでください。最初に読むJSに入ってしまいます。
+  - 公開し直すと遅延チャンクのファイルが入れ替わり、開いたままのページは古い名前を読んで失敗します。画面は`lazyScreen`、終盤戦などの`import()`は`try`で包み、失敗は`onLazyLoadError`に渡します（1回だけ読み込み直すか、一言で知らせる。`src/core/chunk-reload.mjs`、設計は`docs/chunk-reload-design.md`）。黙って何もしない形にしないでください。
   - ビルドの後でJSの中身を書き換えないでください。チャンクの名前のハッシュが変わらず、長期キャッシュに古い中身が残ります。エンジンの版は`vite.config.js`の`engineVersionPlugin`が埋め込みます。
 
 ## 文書の保守

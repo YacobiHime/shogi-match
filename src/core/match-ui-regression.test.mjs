@@ -819,7 +819,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/saveMissedMatesAsProblems\(guidedReviewScript\);/);
     // 終局まで指した平手の対局を残し、終盤戦の候補に加える。
     expect(source).toMatch(/saveRecentGames\(browserStorage\(\), addRecentGame\(/);
-    expect(source).toMatch(/pickEndgameStart\(\[\.\.\.endgameSources\(\), \.\.\.ownSources\]/);
+    expect(source).toMatch(/pickEndgameStart\(\[\.\.\.endgame\.endgameSources\(\), \.\.\.ownSources\]/);
     // 推しの棋士の組の順位は、名簿を進める前に控える(名簿を進めるのはapplyRyuoWorld。敗退した期は残りの対局を確定してから)。
     const world = source.split("function applyRyuoWorld(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(world.indexOf("oshiStandings")).toBeGreaterThan(-1);
@@ -982,7 +982,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/const teamPeekBoards = computed\(\(\) => \(matchKind\.value === "tournament" && ryuoGame\.value\?\.event === "team" && !reviewMode\.value/);
     // 棋譜を作る処理は、開いたときに読み込む(最初に読むJSに入れない)。
     expect(source).toMatch(/const \{ useTeamPeek \} = await import\("\.\/composables\/match\/useTeamPeek"\);/);
-    expect(source).toMatch(/const TeamPeekSheet = defineAsyncComponent\(\(\) => import\("\.\/TeamPeekSheet\.vue"\)\);/);
+    expect(source).toMatch(/const TeamPeekSheet = lazyScreen\(\(\) => import\("\.\/TeamPeekSheet\.vue"\)\);/);
     expect(source).toMatch(/teamPeek\?\.stop\(\);\s*teamPeekOpen\.value = false;/);
     // 戻る操作で閉じる。
     expect(source).toMatch(/\} else if \(teamPeekOpen\.value\) \{\s*teamPeekOpen\.value = false;/);
@@ -990,7 +990,7 @@ describe("match screen regressions", () => {
 
   it('ホームのあそぶの行に物語(近日公開)を置き、押すと吹き出しで知らせる(docs/team-battle-design.mdの9章)', () => {
     expect(source).toMatch(/class="shogi-title__tile shogi-title__tile--soon" data-story-tile @click="tapStoryTile"/);
-    expect(source).toMatch(/const homeGreeting = computed\(\(\) => \{\s*if \(storyNotice\.value\) return STORY_SOON_TEXT;/);
+    expect(source).toMatch(/const homeGreeting = computed\(\(\) => \{\s*if \(loadNotice\.value\) return loadNotice\.value;\s*if \(storyNotice\.value\) return STORY_SOON_TEXT;/);
     expect(source).toMatch(/<p class="shogi-title__live" role="status">\{\{ storyNotice \? STORY_SOON_TEXT : "" \}\}<\/p>/);
     expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); \}/);
   });
@@ -1041,7 +1041,7 @@ describe("match screen regressions", () => {
   });
   it("まなぶは将棋教室・問題集・脳トレの3枚。脳トレは遅れて読み込み、戻る操作で閉じる", () => {
     expect(source).toMatch(/class="shogi-title__tiles shogi-title__tiles--learn"[\s\S]*?将棋教室[\s\S]*?問題集[\s\S]*?data-brain-tile @click="openBrainTraining"/);
-    expect(source).toMatch(/const ShogiBrainTraining = defineAsyncComponent\(loadBrainTraining\);/);
+    expect(source).toMatch(/const ShogiBrainTraining = lazyScreen\(loadBrainTraining\);/);
     expect(source).toMatch(/canGoBack: \(\) => [^\n]*brainTrainingOpen\.value/);
     expect(source).toMatch(/\} else if \(brainTrainingOpen\.value\) \{\s*if \(brainTrainingView\.value\) brainTrainingView\.value\.goBack\(\);/);
   });
@@ -1267,5 +1267,14 @@ describe("match screen regressions", () => {
     expect(tournament).toMatch(/if \(live\.value\.kind === "played" \|\| live\.value\.kind === "meijin-played"\) void finishLive\(\);/);
     expect(tournament).toMatch(/emit\("played-round", kind === "played" \? round : meijinRound\);[\s\S]{0,120}?arriveFromGame\(\);/);
     expect(tournament).toMatch(/if \(spec\.elsewhere \|\| spec\.ended\) return spec;/);
+  });
+});
+
+describe('遅れて読み込む部分が読めなかったとき(docs/chunk-reload-design.md)', () => {
+  it('画面と終盤戦の読み込みの失敗を黙らずに扱う(1回だけ読み込み直すか、一言で知らせる)', () => {
+    expect(source).toMatch(/const lazyScreen = [\s\S]{0,200}defineAsyncComponent\(\{\s*loader,\s*onError\(error, _retry, fail\) \{\s*onLazyLoadError\(error\);/);
+    expect(source).not.toMatch(/= defineAsyncComponent\(load/);
+    expect(source).toMatch(/isChunkLoadError\(error\) && claimChunkReload\(browserSession\(\)\)[\s\S]{0,80}window\.location\.reload\(\)/);
+    expect(source).toMatch(/async function startEndgameNow[\s\S]{0,400}try \{[\s\S]{0,1600}\} catch \(error\) \{\s*onLazyLoadError\(error\);/);
   });
 });

@@ -3010,6 +3010,7 @@ import { resetRoster, worldResetBlocker } from "./core/world-reset.mjs";
 import { withdrawMeijinSeason, withdrawOptions, withdrawRyuoSeason } from "./core/tournament-withdraw.mjs";
 import { TESUJI_HINTS, TESUJI_NAMES, detectTesuji } from "./core/move-tesuji.mjs";
 import { addRecentGame, loadRecentGames, saveRecentGames } from "./core/recent-games.mjs";
+import { CHUNK_FAIL_TEXT, claimChunkReload, isChunkLoadError } from "./core/chunk-reload.mjs";
 import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
 import { discoveryPlan, loadSeenFeatures, markFeatureSeen, todayPlan } from "./core/home-extras.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
@@ -3024,15 +3025,24 @@ const loadBrainTraining = () => import("./ShogiBrainTraining.vue");
 const loadYakobiNote = () => import("./YakobiNote.vue");
 const loadTournament = () => import("./ShogiTournament.vue");
 const loadSkillTest = () => import("./ShogiSkillTest.vue");
-const TeamPeekSheet = defineAsyncComponent(() => import("./TeamPeekSheet.vue"));
-const ShogiOpeningDex = defineAsyncComponent(loadOpeningDex);
-const ShogiReferenceDex = defineAsyncComponent(loadReferenceDex);
-const ShogiTutorial = defineAsyncComponent(loadTutorial);
-const ShogiProblemSet = defineAsyncComponent(loadProblemSet);
-const ShogiBrainTraining = defineAsyncComponent(loadBrainTraining);
-const YakobiNote = defineAsyncComponent(loadYakobiNote);
-const ShogiTournament = defineAsyncComponent(loadTournament);
-const ShogiSkillTest = defineAsyncComponent(loadSkillTest);
+// 読み込めなかったら(公開し直して古い部分のファイルが無いなど)、黙らずに読み込み直すか一言で知らせる(docs/chunk-reload-design.md)。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const lazyScreen = (loader: () => Promise<any>) => defineAsyncComponent({
+  loader,
+  onError(error, _retry, fail) {
+    onLazyLoadError(error);
+    fail();
+  },
+});
+const TeamPeekSheet = lazyScreen(() => import("./TeamPeekSheet.vue"));
+const ShogiOpeningDex = lazyScreen(loadOpeningDex);
+const ShogiReferenceDex = lazyScreen(loadReferenceDex);
+const ShogiTutorial = lazyScreen(loadTutorial);
+const ShogiProblemSet = lazyScreen(loadProblemSet);
+const ShogiBrainTraining = lazyScreen(loadBrainTraining);
+const YakobiNote = lazyScreen(loadYakobiNote);
+const ShogiTournament = lazyScreen(loadTournament);
+const ShogiSkillTest = lazyScreen(loadSkillTest);
 const SCREEN_LOADERS = [loadTutorial, loadProblemSet, loadBrainTraining, loadOpeningDex, loadReferenceDex, loadYakobiNote, loadTournament];
 
 /** ホームを出したあと、手が空いたときに他の画面を先に読み込み、開くときに待たせないようにする。 */
@@ -8096,12 +8106,33 @@ function startEndgameMatch() {
   confirmDiscardSuspended(() => { void startEndgameNow(); });
 }
 async function startEndgameNow({ excludeSfen = "", ownOnly = false } = {}) {
-  const { endgameIntro, endgameSources, pickEndgameStart, sourceFromRecentGame } = await import("./core/endgame-start.mjs");
-  // 名局に、最近の自分の対局(終局まで指したもの)も加えて選ぶ。弱点の練習(ownOnly)では、自分の対局から選ぶ(選べなければ名局も)。
-  const ownSources = loadRecentGames(browserStorage()).map(sourceFromRecentGame).filter((source) => source !== null);
-  const start = (ownOnly ? pickEndgameStart(ownSources, { excludeSfen }) : null)
-    ?? pickEndgameStart([...endgameSources(), ...ownSources], { excludeSfen });
-  if (!start) return;
+  // 読み込みや局面選びで失敗しても、黙って何もしないことはしない(押しても始まらない不具合。docs/chunk-reload-design.md)。
+  let start;
+  let endgameIntro: (start: { title: string; playerColor: "black" | "white"; winner: "black" | "white" }) => string;
+  try {
+    const endgame = await import("./core/endgame-start.mjs");
+    endgameIntro = endgame.endgameIntro;
+    // 名局に、最近の自分の対局(終局まで指したもの)も加えて選ぶ。弱点の練習(ownOnly)では、自分の対局から選ぶ(選べなければ名局も)。
+    // 自分の対局は1局ずつ読み、読めない対局があっても飛ばす。
+    const ownSources = loadRecentGames(browserStorage()).flatMap((game) => {
+      try {
+        const source = endgame.sourceFromRecentGame(game);
+        return source ? [source] : [];
+      } catch {
+        return [];
+      }
+    });
+    start = (ownOnly ? endgame.pickEndgameStart(ownSources, { excludeSfen }) : null)
+      ?? endgame.pickEndgameStart([...endgame.endgameSources(), ...ownSources], { excludeSfen })
+      ?? endgame.pickEndgameStart(endgame.endgameSources());
+  } catch (error) {
+    onLazyLoadError(error);
+    return;
+  }
+  if (!start) {
+    showLoadNotice(ENDGAME_NONE_TEXT);
+    return;
+  }
   yakobiNoteOpen.value = false;
   stopGuidedReview();
   openPregame();
@@ -8753,6 +8784,35 @@ function startMatchupPractice(rook: "static" | "ranging") {
 const STORY_SOON_TEXT = "物語はただいま準備中！ もうすぐ遊べるよ";
 /** 物語の知らせを吹き出しに出す時間。助言の最低表示(6秒)より短く、読める長さ。 */
 const STORY_NOTICE_MS = 4000;
+/** 読み込めなかったときなどに、ホームのやこび姫が言う一言(押しても無反応にしない。D:3-1)。 */
+const loadNotice = ref("");
+let loadNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+const LOAD_NOTICE_MS = 6000;
+const ENDGAME_NONE_TEXT = "終盤の局面が見つからなかったよ。もう一度押してみてね";
+function showLoadNotice(text: string) {
+  loadNotice.value = text;
+  if (loadNoticeTimer) clearTimeout(loadNoticeTimer);
+  loadNoticeTimer = setTimeout(() => { loadNotice.value = ""; loadNoticeTimer = null; }, LOAD_NOTICE_MS);
+}
+function browserSession(): Storage | null {
+  try {
+    return typeof window !== "undefined" ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
+/**
+ * 遅れて読み込む部分が読めなかったとき。公開し直して古いファイルが無いときは、1回だけ読み込み直して新しい版にする。
+ * 続けて失敗したら、読み込み直しを繰り返さず一言で知らせる(docs/chunk-reload-design.md)。
+ */
+function onLazyLoadError(error: unknown) {
+  console.error(error);
+  if (isChunkLoadError(error) && claimChunkReload(browserSession()) && typeof window !== "undefined") {
+    window.location.reload();
+    return;
+  }
+  showLoadNotice(CHUNK_FAIL_TEXT);
+}
 const storyNotice = ref(false);
 let storyNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 function tapStoryTile() {
@@ -8762,6 +8822,7 @@ function tapStoryTile() {
 }
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
 const homeGreeting = computed(() => {
+  if (loadNotice.value) return loadNotice.value;
   if (storyNotice.value) return STORY_SOON_TEXT;
   if (homeNext.value.id === "resume") return "さっきの対局、続きをしよう！";
   const ryuoName = ryuoView.value?.pending?.opponent?.name ?? "";
