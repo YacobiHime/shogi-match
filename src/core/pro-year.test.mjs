@@ -291,6 +291,19 @@ describe('画面の形', () => {
     expect(view.weeks[0][0].date <= `${year}-${String(month).padStart(2, '0')}-01`).toBe(true);
   });
 
+  it('デビューの日から、自分の予定とタイトル戦の予定がカレンダーに出る', () => {
+    const fresh = start();
+    const april = monthView(fresh, 2026, 4).weeks.flat().flatMap((cell) => cell.items);
+    expect(april.some((item) => item.kind === 'plan' && item.event === 'kio')).toBe(true);
+    expect(april.some((item) => item.kind === 'title' && item.plan)).toBe(true);
+    const june = monthView(fresh, 2026, 6).weeks.flat().flatMap((cell) => cell.items);
+    expect(june.some((item) => item.kind === 'plan' && item.short === '順位')).toBe(true);
+    // 見込みの日は、進めて組まれた日と同じ(棋王戦の予選の1回戦)。
+    const planned = monthView(fresh, 2026, 4).weeks.flat().find((cell) => cell.items.some((item) => item.kind === 'plan' && item.event === 'kio'));
+    const next = advanceToNextGame(fresh);
+    expect(next.pending.date).toBe(planned.date);
+  });
+
   it('その日: 自分の対局が先頭', () => {
     const view = dayView(state, game.date);
     expect(view.games[0]).toMatchObject({ id: game.id, user: true });

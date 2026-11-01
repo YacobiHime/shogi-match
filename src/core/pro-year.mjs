@@ -1262,9 +1262,61 @@ export function previewNextGame(state) {
   return { date: next.pending.date, dateText: dateLabel(next.pending.date), label: next.pending.label };
 }
 
+/**
+ * まだ始まっていない段階の見込みの日(カレンダーの「予定」。デビューの日に何も印がないと、1年の見通しが立たないため。D:2-2)。
+ * プレイヤーが入る段階は回戦の日を「予定」、タイトル戦の番勝負は最低限の局数の日を★(予定)にする。
+ * 日の割り当ては段階を始めるとき(`startStage`)と同じ式なので、始まればほぼ同じ日に組まれる(前の段階が長引けばずれる)。
+ * @returns {Map<string, any[]>} 日付ごとの印
+ */
+function projectedItems(state) {
+  const byDate = new Map();
+  const add = (date, item) => {
+    if (!byDate.has(date)) byDate.set(date, []);
+    byDate.get(date).push(item);
+  };
+  for (const cycle of Object.values(state.cycles)) {
+    if (cycle.done) continue;
+    const current = cycle.stages[cycle.stage];
+    if (current && !current.done) continue;
+    const index = cycle.stage + 1;
+    const event = proEvent(cycle.event);
+    const def = event.stages[index];
+    if (!def) continue;
+    const userEnters = cycle.withUser && cycle.entry === index;
+    if (!def.title && !userEnters) continue;
+    const window = stageWindow(cycle, def);
+    if (window.start <= state.date) {
+      window.start = addDays(state.date, 1);
+      if (window.end <= window.start) window.end = addDays(window.start, 14);
+    }
+    const nextDef = event.stages[index + 1];
+    const finalists = def.type === 'knockout' && nextDef?.type === 'series' && !nextDef.title;
+    let dates;
+    if (def.type === 'series') {
+      const maxGames = def.need * 2 - 1;
+      const span = (toDate(window.end) - toDate(window.start)) / 86400000;
+      dates = roundDates(window, maxGames, { spacing: maxGames > 1 ? Math.max(3, Math.floor(span / maxGames)) : 0 }).slice(0, def.need);
+    } else {
+      const rounds = def.type === 'junni' ? CLASS_RULES[state.user.cls]?.rounds ?? 10
+        : def.type === 'league' ? (def.size % 2 ? def.size : def.size - 1)
+          : Math.max(1, Math.ceil(Math.log2(Math.max(2, def.size))) - (finalists ? 1 : 0));
+      dates = roundDates(window, rounds, { broadcast: Boolean(def.broadcast) });
+    }
+    dates.forEach((day, round) => {
+      if (def.title) {
+        add(day, { kind: 'title', plan: true, event: event.id, color: event.color, label: `${def.label} 第${round + 1}局（予定）` });
+        if (def.twoDay) add(addDays(day, -1), { kind: 'title', plan: true, event: event.id, color: event.color, label: `${def.label} 第${round + 1}局 1日目（予定）` });
+      } else {
+        add(day, { kind: 'plan', event: event.id, short: def.type === 'junni' ? '順位' : event.short, color: event.color, label: `${event.name} ${def.label}（予定）` });
+      }
+    });
+  }
+  return byDate;
+}
+
 /** カレンダーのマスの印(その日の対局)。kind: user(自分の対局)・title(タイトル戦)・rival(羽音)・plan(自分が勝ち残っていれば指す日)。 */
-function dayItems(state, date) {
-  const items = [];
+function dayItems(state, date, projected = null) {
+  const items = [...(projected?.get(date) ?? [])];
   for (const game of Object.values(state.games)) {
     const days = game.twoDay ? [addDays(game.date, -1), game.date] : [game.date];
     if (!days.includes(date)) continue;
@@ -1297,11 +1349,12 @@ export function monthView(state, year, month) {
   const start = addDays(first, -weekdayOf(first));
   const weeks = [];
   let day = start;
+  const projected = projectedItems(state);
   for (let week = 0; week < 6; week += 1) {
     const row = [];
     for (let index = 0; index < 7; index += 1) {
       const inMonth = day.slice(0, 7) === first.slice(0, 7);
-      row.push({ date: day, day: Number(day.slice(8)), inMonth, today: day === state.date, past: day < state.date, items: inMonth ? dayItems(state, day) : [] });
+      row.push({ date: day, day: Number(day.slice(8)), inMonth, today: day === state.date, past: day < state.date, items: inMonth ? dayItems(state, day, projected) : [] });
       day = addDays(day, 1);
     }
     weeks.push(row);

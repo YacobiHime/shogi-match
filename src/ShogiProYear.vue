@@ -142,7 +142,7 @@
             <span class="pro-year__mark pro-year__mark--user" style="--event-color: #f5cba7">対局</span>自分の対局
             <span class="pro-year__mark pro-year__mark--plan" style="--event-color: #f5cba7">予定</span>勝ち残れば
             <span class="pro-year__mark pro-year__mark--title">★</span>タイトル戦
-            <span class="pro-year__mark pro-year__mark--rival">羽</span>羽音
+            <span class="pro-year__mark pro-year__mark--rival">羽音</span>の対局
           </p>
         </div>
 
@@ -250,7 +250,7 @@
               </span>
             </li>
             <li v-for="(plan, index) in dayPlans" :key="`plan-${index}`" class="pro-year__day-game pro-year__day-game--plan" :style="{ '--event-color': plan.color }">
-              <small>{{ plan.label }}</small><span>勝ち残っていれば、この日に指すよ</span>
+              <small>{{ plan.label }}</small><span>{{ plan.kind === "title" ? "この日ごろに指す予定だよ" : "勝ち残っていれば、この日ごろに指すよ" }}</span>
             </li>
           </ul>
           <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="dayDate = ''">閉じる</button>
@@ -522,8 +522,9 @@ const cellMarks = (cell: Cell) => {
 };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const markText = (item: any) => {
-  if (item.kind === "title") return "★";
-  if (item.kind === "rival") return "羽";
+  // タイトル戦は、どのタイトルか分かるように★のあとに名前(「★名人」)。
+  if (item.kind === "title") return `★${proEvent(item.event)?.short ?? ""}`;
+  if (item.kind === "rival") return "羽音";
   const short = item.short ?? proEvent(item.event)?.short ?? "";
   if (item.kind === "user" && item.result) return `${item.result === "win" ? "○" : "●"}${short}`;
   return short;
@@ -537,7 +538,7 @@ const dayAria = (cell: Cell) => {
 // その日
 const dayDate = ref("");
 const dayOpen = computed(() => (props.state && dayDate.value ? dayView(props.state, dayDate.value) : null));
-const dayPlans = computed(() => month.value.weeks.flat().find((cell) => cell.date === dayDate.value)?.items.filter((item) => item.kind === "plan") ?? []);
+const dayPlans = computed(() => month.value.weeks.flat().find((cell) => cell.date === dayDate.value)?.items.filter((item) => item.kind === "plan" || item.plan) ?? []);
 function openDay(date: string) {
   dayDate.value = date;
 }
