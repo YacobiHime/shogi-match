@@ -14,7 +14,7 @@ import { chooseLogicMove } from './logic-ai.mjs';
 import { classifyWin } from './ryuo-simulation.mjs';
 import {
   CP_PER_RATING, ONLY_MOVE_GAP, PLAN_LOSS_LIMIT, RELAY_MAX_PLIES, RELAY_VERSION, THEORY_PLY, createRelayClock, isMateCp,
-  openingPlanMove, openingPlanOf, rankedCandidates, relayPlan, valueToCp,
+  openingPlanMove, openingPlanOf, rankedCandidates, relayPlan, storedPv, valueToCp,
 } from './relay-game.mjs';
 import { winRate } from './move-selection.mjs';
 import { createFormationState, detectFormationSnapshot, updateFormationState } from './formation-tracker.mjs';
@@ -306,7 +306,7 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     const entry = {
       move: usi,
       eval: Math.round(evalCp),
-      pv: (chosen?.pv ?? []).slice(1, 5).join(' '),
+      pv: storedPv(chosen),
       best: best && usi !== best.move ? best.move : '',
       loss: Math.round(loss),
       time: seconds,

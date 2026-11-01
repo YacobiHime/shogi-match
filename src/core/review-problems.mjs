@@ -34,18 +34,19 @@ export function isReviewProblemId(id) {
 
 /**
  * 見逃した詰みの局面から、詰ませる問題を作る。手数が長すぎる・手順を確かめられないときはnull。
- * @param {{ sfen: string, mateLength: number, line?: readonly string[] | null, at?: number }} found
+ * 中継の投了図の詰将棋(docs/tournament-relay-design.mdの47章)も、題・問い・解説を差し替えて同じ棚に残す。
+ * @param {{ sfen: string, mateLength: number, line?: readonly string[] | null, at?: number, title?: string, question?: string, explanation?: string }} found
  *   sfenは詰ませる側の手番の局面、lineは解析の読み筋(詰みまでの手順)
  */
-export function buildReviewProblem({ sfen, mateLength, line = null, at = Date.now() }) {
+export function buildReviewProblem({ sfen, mateLength, line = null, at = Date.now(), title = '', question = '', explanation = '' }) {
   if (!sfen || !Number.isInteger(mateLength) || mateLength < 1) return null;
   const base = {
     id: reviewProblemId(sfen),
     depth: mateLength,
-    title: `あなたの対局から（${mateLength}手詰め）`,
+    title: title || `あなたの対局から（${mateLength}手詰め）`,
     sfen,
-    question: `あなたの対局に出てきた局面だよ。${mateLength}手で詰ませてみよう！`,
-    explanation: '対局では見逃しちゃった詰みだね。もう見つけられるようになったよ！ 本番の大会でも決めよう！',
+    question: question || `あなたの対局に出てきた局面だよ。${mateLength}手で詰ませてみよう！`,
+    explanation: explanation || '対局では見逃しちゃった詰みだね。もう見つけられるようになったよ！ 本番の大会でも決めよう！',
     at,
   };
   const answer = Array.isArray(line) ? line.slice(0, mateLength) : [];

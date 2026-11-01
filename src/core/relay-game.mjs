@@ -196,6 +196,18 @@ export function relayTarget(plan, ply) {
 
 // ---- 評価値の扱い
 
+/** 読み筋を残す手数(ふだんは4手)。詰ます側の詰みの読み筋は、投了図から詰将棋にするため長く残す(47章)。 */
+export const STORED_PV_PLIES = 4;
+export const STORED_MATE_PV_PLIES = 16;
+/**
+ * 棋譜に残す読み筋(指した手のあとの続き)。指した手が詰みの読み筋なら、詰みまで(多くて16手)残す。
+ * @param {{ pv?: string[], score?: { type: string, value: number } } | null | undefined} candidate
+ */
+export function storedPv(candidate) {
+  const mate = candidate?.score?.type === 'mate' && candidate.score.value > 0;
+  return (candidate?.pv ?? []).slice(1, 1 + (mate ? STORED_MATE_PV_PLIES : STORED_PV_PLIES)).join(' ');
+}
+
 /** 詰みの評価値を、保存と比べるための点にする(詰みは±30000から手数を引いた値)。 */
 export const MATE_CP = 30000;
 export function scoreToCp(score) {
@@ -441,7 +453,7 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
     const entry = {
       move: usi,
       eval: Math.round(evalCp),
-      pv: (choice.pv ?? []).slice(1, 5).join(' '),
+      pv: storedPv(choice),
       best: usi === best.move ? '' : best.move,
       loss: Math.round(loss),
       time: seconds,
@@ -513,7 +525,7 @@ export async function replayKifuGame({ spec, search, onMove = () => {}, isCancel
     const entry = {
       move: usi,
       eval: Math.round(valueToCp(value) * signOf(side)),
-      pv: (chosen?.pv ?? []).slice(1, 5).join(' '),
+      pv: storedPv(chosen),
       best: best && best.move !== usi ? best.move : '',
       loss: Math.round(loss),
       time: Math.max(1, Math.round(Number(times[ply]) || 1)),

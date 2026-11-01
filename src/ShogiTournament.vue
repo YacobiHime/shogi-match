@@ -951,6 +951,7 @@
     />
     <RelayViewer
       v-if="relayEntry && relayEngineFactory"
+      ref="relayViewerEl"
       :spec="relayEntry"
       :pool="relayPool"
       :oshi-id="oshi?.id ?? ''"
@@ -1329,6 +1330,7 @@ function chooseTeam() {
 }
 // ---- 棋士の1年(docs/pro-year-design.md)
 const proYearEl = ref<{ goBack: () => boolean } | null>(null);
+const relayViewerEl = ref<{ goBack: () => boolean } | null>(null);
 const proYearCardNote = computed(() => {
   const state = props.proYearState;
   if (!state) return "新四段として12の棋戦へ";
@@ -1418,6 +1420,8 @@ const backText = computed(() => (screen.value === "result" ? "大会選択へ" :
  */
 function goBack() {
   if (relayEntry.value) {
+    // 中継の中で開いたもの(投了図からの詰将棋)を先に閉じる。
+    if (relayViewerEl.value?.goBack()) return;
     relayEntry.value = null;
     return;
   }

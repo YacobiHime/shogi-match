@@ -50,18 +50,19 @@
           <ShogiMatchBoard
             :sfen="boardSfen"
             :last-move="boardLastMove"
-            :allow-move="false"
-            :enable-drag-and-drop="false"
+            :allow-move="tsume?.status === 'play'"
+            :enable-drag-and-drop="tsume?.status === 'play'"
             layout="compact"
             :asset-base-url="assetBaseUrl"
             :black-player-name="`${spec.black.name}${spec.black.dan ? ` ${spec.black.dan}` : ''}`"
             :white-player-name="`${spec.white.name}${spec.white.dan ? ` ${spec.white.dan}` : ''}`"
             :clocks="clocks"
-            :flip="flipped"
+            :flip="tsume ? tsumeFound?.attacker === 'white' : flipped"
+            @usi-move="onTsumeMove"
           />
           <!-- 視聴者のコメント(右から左へ流れる)。押せない飾りで、盤の操作は妨げない。 -->
           <!-- 段は、前のコメントに追いつかない段を上から選ぶ(ニコニコ動画のように重ならない。33章)。 -->
-          <div v-if="commentsOn && !reducedMotion" ref="danmakuEl" class="relay__danmaku" aria-hidden="true">
+          <div v-if="commentsOn && !reducedMotion && !tsume" ref="danmakuEl" class="relay__danmaku" aria-hidden="true">
             <span
               v-for="item in flying"
               :key="item.id"
@@ -71,12 +72,13 @@
             >{{ item.text }}</span>
           </div>
           <!-- 運営のコメント(ニコニコ動画の上コメ)。盤の上の端に3秒止まる。休憩・終局・同じ回戦のほかの結果。 -->
-          <p v-if="commentsOn && banner" :key="banner.id" class="relay__banner" aria-hidden="true" data-relay-banner>{{ banner.text }}</p>
+          <p v-if="commentsOn && banner && !tsume" :key="banner.id" class="relay__banner" aria-hidden="true" data-relay-banner>{{ banner.text }}</p>
           <!-- 下に止まる大きなコメント(下コメ。5秒。見せ場の一言だけ。25章)。 -->
-          <p v-if="commentsOn && under" :key="under.id" class="relay__under" aria-hidden="true" data-relay-under>{{ under.text }}</p>
+          <p v-if="commentsOn && under && !tsume" :key="under.id" class="relay__under" aria-hidden="true" data-relay-under>{{ under.text }}</p>
           <!-- 心の声。対局者の名札の近く(上が後手、下が先手)。 -->
+          <!-- 詰将棋を解いているあいだは、盤に重ねるもの(心の声・札)を出さない(47章)。 -->
           <p
-            v-for="bubble in bubbles"
+            v-for="bubble in (tsume ? [] : bubbles)"
             :key="`${bubble.side}-${bubble.at}`"
             :class="['relay__thought', `relay__thought--${bubble.side}`]"
             data-relay-thought
@@ -89,7 +91,7 @@
           </p>
           <!-- 休憩・封じ手・秒読み・特殊能力・終局の札。押すと消える(再生は止めない)。 -->
           <button
-            v-if="activeCard"
+            v-if="activeCard && !tsume"
             type="button"
             :class="['relay__card', `relay__card--${activeCard.kind}`, activeCard.tier ? `relay__card--${activeCard.tier}` : '']"
             data-relay-card
@@ -117,7 +119,24 @@
           中継の楽しみ(24章)。次の一手クイズ・見どころ再生・大盤解説の札は、欄の切り替えと解説の欄の上に重ねる。
           盤には重ねない(次の一手を考えるのに、盤の全部が見えるように)。
         -->
-        <div v-if="quiz" class="relay__fun relay__fun--quiz" data-relay-quiz-panel>
+        <!-- 投了図から詰将棋(47章)。解いているあいだは、盤が詰将棋の局面になり、勝った側を手前にする。 -->
+        <div v-if="tsume" class="relay__fun relay__fun--tsume" data-relay-tsume-panel>
+          <p class="relay__fun-head"><b>投了図から詰将棋（{{ tsumeFound?.plies }}手詰め）</b><span>{{ players[tsumeFound?.attacker ?? "black"].name }}の側で詰ませよう</span></p>
+          <p :class="['relay__fun-text', tsume.status === 'solved' ? 'relay__fun-text--hit' : '']" aria-live="polite" data-relay-tsume-message>{{ tsume.message }}</p>
+          <div class="relay__tsume-actions">
+            <template v-if="tsume.status === 'play' || tsume.status === 'busy'">
+              <button type="button" :disabled="tsume.status !== 'play'" data-relay-tsume-hint @click="tsumeShowHint">ヒント</button>
+              <button type="button" :disabled="tsume.status !== 'play'" data-relay-tsume-answer @click="tsumeShowAnswer">答えを見る</button>
+            </template>
+            <button v-else-if="!tsume.saved" type="button" data-relay-tsume-save @click="tsumeSave">問題集に残す</button>
+          </div>
+          <button type="button" class="relay__fun-close" data-relay-tsume-close @click="endTsume">{{ tsume.status === "solved" || tsume.status === "answer" ? "閉じる" : "やめる" }}</button>
+        </div>
+        <div v-else-if="tsumeOffer" class="relay__fun relay__fun--tsume" data-relay-tsume-offer>
+          <p class="relay__fun-head"><b>投了図から詰将棋</b><span>{{ tsumeOfferText }}</span></p>
+          <button type="button" class="relay__fun-close relay__fun-go" data-relay-tsume-start @click="startTsume">解いてみる</button>
+        </div>
+        <div v-else-if="quiz" class="relay__fun relay__fun--quiz" data-relay-quiz-panel>
           <p class="relay__fun-head"><b>次の一手</b><span>{{ quiz.at }}手目、{{ players[quizSide].name }}はどう指す？</span></p>
           <div v-if="!quiz.pick" class="relay__quiz-choices">
             <button v-for="choice in quiz.choices" :key="choice.usi" type="button" data-relay-quiz-choice @click="answerQuiz(choice.usi)">{{ choice.text }}</button>
@@ -150,7 +169,8 @@
             </div>
             <button v-if="!talkPinned" type="button" class="relay__talk-latest" data-relay-talk-latest @click="scrollTalkToEnd">▼ 新しい解説へ</button>
             <!-- 次の一手クイズの答えが出るまでは、読み筋(答えの手)を隠す(34章)。 -->
-            <p v-if="readingText && !(quiz && !quiz.result)" class="relay__reading" data-relay-reading><b>AIの読み筋</b>{{ readingText }}</p>
+            <!-- 投了図からの詰将棋の札が出ているあいだも、答えになる読み筋を隠す(47章)。 -->
+            <p v-if="readingText && !(quiz && !quiz.result) && !tsume && !tsumeOffer" class="relay__reading" data-relay-reading><b>AIの読み筋</b>{{ readingText }}</p>
           </div>
           <div v-else-if="tab === 'graph'" class="relay__graph" data-relay-graph>
             <p class="relay__graph-title"><b>形勢</b><span>上(青)ほど☗{{ players.black.name }}、下(赤)ほど☖{{ players.white.name }}が良い</span></p>
@@ -235,6 +255,8 @@ import {
   RELAY_HOST, RELAY_READER, createRelayScript, moveTextOf, pvTextOf, relayAudience, relayCast,
 } from "./core/relay-commentary.mjs";
 import { addNote, highlightPlan, loadNotes, loadQuiz, quizChoices, saveNotes, saveQuiz, scoreQuiz } from "./core/relay-fun.mjs";
+import { judgeTsumeMove, resignTsume, shortestMate, tsumeHint } from "./core/relay-tsume.mjs";
+import { addReviewProblems, buildReviewProblem, loadReviewProblems, saveReviewProblems } from "./core/review-problems.mjs";
 import { loadRelayStore, markRelaySeen, saveRelayStore } from "./core/relay-store.mjs";
 import { DANMAKU_DURATION_MS, DANMAKU_GAP_EM, createDanmaku, estimateTextWidth, placeComment } from "./core/danmaku-lanes.mjs";
 import { createFormationState, detectFormationSnapshot, updateFormationState } from "./core/formation-tracker.mjs";
@@ -526,6 +548,8 @@ function catchUp() {
 }
 
 function onKey(event: KeyboardEvent) {
+  // 詰将棋を解いているあいだは、棋譜を動かさない。
+  if (tsume.value) return;
   if (event.key === "ArrowLeft") seek(cursor.value - 1);
   else if (event.key === "ArrowRight") seek(cursor.value + 1);
   else if (event.key === " ") togglePlay();
@@ -965,11 +989,162 @@ function endVariation() {
   variation.value = null;
 }
 /** 盤に出す局面(大盤解説の間は、変化の局面)。 */
-const boardSfen = computed(() => (variation.value ? variation.value.sfens[variation.value.index] : sfens.value[cursor.value] ?? sfens.value[0]));
+const boardSfen = computed(() => {
+  if (tsume.value) return tsume.value.sfen;
+  return variation.value ? variation.value.sfens[variation.value.index] : sfens.value[cursor.value] ?? sfens.value[0];
+});
 const boardLastMove = computed(() => {
+  if (tsume.value) return tsume.value.lastMove;
   if (variation.value) return variation.value.index ? variation.value.moves[variation.value.index - 1] : "";
   return cursor.value > 0 ? entries.value[cursor.value - 1]?.move ?? "" : "";
 });
+
+// 投了図から詰将棋(47章)。投了した局面まで見たら、投了した側の受け(読み筋の応手)を1手指した局面で、勝った側の詰みを探す。
+// 見つかったときだけ「解いてみる」を出す(見つからない投了図は、何も出さない)。解いた問題は問題集の「あなたの対局」の棚に残せる。
+type TsumeRun = { sfen: string; line: string[]; remaining: number; lastMove: string; message: string; status: "play" | "busy" | "solved" | "answer"; saved: boolean };
+const tsumeFound = shallowRef<ReturnType<typeof resignTsume>>(null);
+const tsume = shallowRef<TsumeRun | null>(null);
+let tsumeSearched = false;
+let tsumeTimer: ReturnType<typeof setTimeout> | undefined;
+const atResignation = computed(() => finished.value && endInfo.value?.reason === "resign" && entries.value.length > 0 && cursor.value >= entries.value.length);
+const tsumeOffer = computed(() => Boolean(tsumeFound.value) && atResignation.value && !tsume.value && !quiz.value && !highlight.value && !variation.value);
+const tsumeDefenseText = computed(() => {
+  const found = tsumeFound.value;
+  return found ? moveTextOf(found.start, found.defense, entries.value.at(-1)?.move ?? "") : "";
+});
+const tsumeOfferText = computed(() => (tsumeFound.value
+  ? `投了図から${tsumeDefenseText.value}と受けたら、${players.value[tsumeFound.value.attacker].name}の${tsumeFound.value.plies}手詰め。解いてみる？`
+  : ""));
+watch(atResignation, (reached) => {
+  if (!reached || tsumeSearched) return;
+  tsumeSearched = true;
+  // 再生の区切りを待ってから探す(詰み探索は画面を止めるので、短い手数から少しずつ。手数ごとに時間の上限)。
+  tsumeTimer = setTimeout(() => {
+    const last = entries.value.at(-1);
+    try {
+      tsumeFound.value = resignTsume({ sfen: sfens.value[entries.value.length], pv: String(last?.pv ?? "") });
+    } catch {
+      tsumeFound.value = null;
+    }
+  }, 800);
+});
+function startTsume() {
+  const found = tsumeFound.value;
+  if (!found) return;
+  quiz.value = null;
+  stopHighlight();
+  endVariation();
+  pausePlayback();
+  activeCard.value = null;
+  tsume.value = {
+    sfen: found.sfen, line: [...found.line], remaining: found.plies, lastMove: found.defense, status: "play", saved: false,
+    message: `${tsumeDefenseText.value}と受けた局面だよ。王手の連続で${found.plies}手で詰ませよう！`,
+  };
+}
+function playTsumeSound(sfen: string, usi: string) {
+  try {
+    const kind = moveSoundForUsi(sfen, usi);
+    if (kind) sounds.play(kind);
+  } catch {
+    // 音が鳴らなくても続ける。
+  }
+}
+function sfenAfterMove(sfen: string, usi: string) {
+  const record = createGameRecord(sfen);
+  return appendUsiMove(record, usi) ? record.position.sfen : sfen;
+}
+function onTsumeMove(usi: string) {
+  const current = tsume.value;
+  if (!current || current.status !== "play") return;
+  tsume.value = { ...current, status: "busy", message: "読んでいます…" };
+  // 判定の探索の前に「読んでいます…」を描く。
+  setTimeout(() => {
+    const verdict = judgeTsumeMove({ sfen: current.sfen, usi, line: current.line, remaining: current.remaining });
+    const text = moveTextOf(current.sfen, usi, current.lastMove);
+    if (verdict.status === "mated") {
+      playTsumeSound(current.sfen, usi);
+      tsume.value = { ...current, sfen: sfenAfterMove(current.sfen, usi), lastMove: usi, status: "solved", message: `${text}で詰み！ ${tsumeFound.value?.plies}手詰めを解いたね！` };
+      return;
+    }
+    if (verdict.status === "continue") {
+      playTsumeSound(current.sfen, usi);
+      const middle = sfenAfterMove(current.sfen, usi);
+      const next = sfenAfterMove(middle, verdict.reply);
+      tsume.value = {
+        ...current, sfen: next, line: verdict.line, remaining: verdict.remaining, lastMove: verdict.reply, status: "play",
+        message: `${text}、${moveTextOf(middle, verdict.reply, usi)}。続けて王手！（残り${verdict.remaining}手）`,
+      };
+      return;
+    }
+    const messages: { [status: string]: string } = {
+      "not-check": "詰将棋は王手の連続だよ。王手をかけよう。",
+      escapes: `${text}だと逃げられちゃう。別の王手を探そう。`,
+      unknown: "その手は読み切れなかったよ。別の王手で試してみて。",
+      illegal: "その手は指せないよ。",
+    };
+    tsume.value = { ...current, status: "play", message: messages[verdict.status] ?? "" };
+  }, 30);
+}
+function tsumeShowHint() {
+  const current = tsume.value;
+  if (!current) return;
+  const hint = tsumeHint(current);
+  tsume.value = { ...current, message: hint ? `ヒント：${moveTextOf(current.sfen, hint, current.lastMove)}から考えてみよう。` : "いまは手が見つからないよ。やめて、もう一度始めてみて。" };
+}
+/** 答えを見る: いまの局面からの詰み手順を、盤で1手ずつ進めて見せる。 */
+function tsumeShowAnswer() {
+  const current = tsume.value;
+  if (!current) return;
+  const line = current.line.length ? current.line : shortestMate(current.sfen, { maxPlies: Math.max(1, current.remaining) }) ?? [];
+  if (!line.length) {
+    tsume.value = { ...current, message: "答えを読み切れなかったよ。" };
+    return;
+  }
+  const text = pvTextOf(current.sfen, line, current.lastMove, line.length);
+  tsume.value = { ...current, status: "answer", message: `答え：${text}` };
+  let sfen = current.sfen;
+  const step = (index: number) => {
+    if (!tsume.value || tsume.value.status !== "answer" || index >= line.length) return;
+    tsumeTimer = setTimeout(() => {
+      if (!tsume.value || tsume.value.status !== "answer") return;
+      playTsumeSound(sfen, line[index]);
+      sfen = sfenAfterMove(sfen, line[index]);
+      tsume.value = { ...tsume.value, sfen, lastMove: line[index] };
+      step(index + 1);
+    }, 900);
+  };
+  step(0);
+}
+/** 問題集の「あなたの対局」の棚に残す(はじめの局面と、読み筋の答え)。 */
+function tsumeSave() {
+  const found = tsumeFound.value;
+  const current = tsume.value;
+  if (!found || !current) return;
+  const storage = browserStorage();
+  const problem = buildReviewProblem({
+    sfen: found.sfen, mateLength: found.plies, line: found.line,
+    title: `観戦から（${found.plies}手詰め）`,
+    question: `${props.spec.label}の投了図から、${tsumeDefenseText.value}と受けた局面だよ。${found.plies}手で詰ませよう！`,
+    explanation: '観戦した対局の投了図の先の詰みだよ。プロの読み筋を見つけられたね！',
+  });
+  if (!problem) return;
+  saveReviewProblems(storage, addReviewProblems(loadReviewProblems(storage), [problem]));
+  tsume.value = { ...current, saved: true };
+  noteToast.value = "問題集の「あなたの対局」に残したよ";
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => { noteToast.value = ""; }, 2600);
+}
+function endTsume() {
+  clearTimeout(tsumeTimer);
+  tsume.value = null;
+}
+/** 戻る操作。中で開いたもの(詰将棋)を閉じたら真。 */
+function goBack() {
+  if (!tsume.value) return false;
+  endTsume();
+  return true;
+}
+defineExpose({ goBack });
 
 // 研究ノート(24-5)。いまの局面を残し、やこびノートの「研究ノート」から開く。
 const noteToast = ref("");
@@ -1053,6 +1228,7 @@ onBeforeUnmount(() => {
   clearTimeout(highlightTimer);
   clearTimeout(variationTimer);
   clearTimeout(noteTimer);
+  clearTimeout(tsumeTimer);
   resizeObserver?.disconnect();
   stopLive?.();
   generator.dispose();
@@ -1426,6 +1602,13 @@ onBeforeUnmount(() => {
   border: 2px solid #f1a54c; border-radius: 0.5rem; color: #fffcf4; background: #142231; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); font-weight: 800;
 }
 .shogi-game .relay__fun--bigboard { border-color: #9fd0ff; }
+.shogi-game .relay__fun--tsume { border-color: #86d4a9; }
+.shogi-game .relay__fun--tsume .relay__fun-head b { color: #86d4a9; }
+.shogi-game .relay__fun-go { color: #172632; background: #86d4a9; border-color: #86d4a9; font-weight: 900; }
+.shogi-game .relay__tsume-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.shogi-game .relay__tsume-actions:empty { display: none; }
+.shogi-game .relay__tsume-actions button { flex: 1 1 6rem; min-height: 44px; padding: 0 0.4rem; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 0.4rem; color: #fffcf4; background: rgba(255, 252, 244, 0.08); font: inherit; font-weight: 900; cursor: pointer; }
+.shogi-game .relay__tsume-actions button:disabled { opacity: 0.5; cursor: default; }
 .shogi-game .relay__fun-head { display: grid; gap: 0.1rem; margin: 0; font-size: 0.86rem; line-height: 1.35; }
 .shogi-game .relay__fun-head b { color: #f1a54c; font-size: 0.8rem; }
 .shogi-game .relay__fun--bigboard .relay__fun-head b { color: #9fd0ff; }

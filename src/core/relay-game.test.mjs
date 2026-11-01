@@ -332,3 +332,14 @@ describe('指し終えた棋譜を読み直す(自分の対局の中継。docs/m
     expect(await replayKifuGame({ spec, search: engine.search, isCancelled: () => true })).toBeNull();
   });
 });
+
+describe('残す読み筋(47章)', async () => {
+  const { storedPv } = await import('./relay-game.mjs');
+  it('ふつうは4手、詰ます側の詰みの読み筋は16手まで残す', () => {
+    const pv = Array.from({ length: 20 }, (_, index) => `m${index}`);
+    expect(storedPv({ pv, score: { type: 'cp', value: 500 } }).split(' ')).toHaveLength(4);
+    expect(storedPv({ pv, score: { type: 'mate', value: 9 } }).split(' ')).toHaveLength(16);
+    expect(storedPv({ pv, score: { type: 'mate', value: -9 } }).split(' ')).toHaveLength(4);
+    expect(storedPv(null)).toBe('');
+  });
+});
