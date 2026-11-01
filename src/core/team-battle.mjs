@@ -477,6 +477,10 @@ function setGameWinner(run, match, game, winner) {
   finishIfDecided(run, match);
 }
 
+/** 仲間の局を知らせる手数(自分の対局の手数。docs/team-battle-design.mdの19章の1)。 */
+export const REVEAL_MIN_PLY = 28;
+export const REVEAL_MAX_PLY = 80;
+
 /** 高校の試合の3局。自分の席はあとで指し、仲間の局は決めておいて対局の途中に知らせる(4章の9)。 */
 function playSchoolMatch(run, rng, match) {
   const a = teamOf(run, 'a', match).members;
@@ -489,8 +493,8 @@ function playSchoolMatch(run, rng, match) {
       game.user = true;
       continue;
     }
-    // 仲間の局は、30〜110手目のどこかで速報にする(種で決める)。
-    if (isUserMatch(match)) game.reveal = 30 + Math.floor(rng.next() * 81);
+    // 仲間の局は、28〜80手目のどこかで速報にする(種で決める。自分の対局のあいだに届くように。19章の1)。
+    if (isUserMatch(match)) game.reveal = REVEAL_MIN_PLY + Math.floor(rng.next() * (REVEAL_MAX_PLY - REVEAL_MIN_PLY + 1));
     setGameWinner(run, match, game, decideGame(run, rng, game.a, game.b, big) ? 'a' : 'b');
   }
 }
@@ -935,7 +939,12 @@ export function chooseTeamPlayer(source, memberId) {
   } else {
     const big = isFinal(match);
     setGameWinner(run, match, game, decideGame(run, rng, game.a, game.b, big) ? 'a' : 'b');
-    if (match.winner) closeUserMatch(run, rng);
+    if (match.winner) {
+      const before = { phase: run.phase, stage: teamStageOf(run) };
+      const finished = { ...match, games: match.games.map((entry) => ({ ...entry })) };
+      closeUserMatch(run, rng);
+      run.finale = finaleRecord(run, finished, { before });
+    }
   }
   run.rng = rng.state;
   return { run, game };
@@ -968,12 +977,95 @@ function closeUserMatch(run, rng) {
 }
 
 /**
+ * 高校の試合の3局が、どの順に終わり、どの局でチームの勝ち負けが決まったか(19章の4)。
+ * 仲間の局は知らせる手数(reveal)、自分の局は終局の手数(userPly)で並べる。知らせる手数が自分の終局より前の局は、
+ * 自分より先に終わった。プロは指した順。
+ * @param {{ user?: boolean, won: boolean, reveal?: number | null }[]} rows 席(局)の順
+ * @param {{ userPly?: number, need?: number, format?: 'school' | 'pro' }} [options] userPlyがなければ、仲間はみな先に終わった
+ * @returns {{ order: number[], decidedBy: number | null, teamWon: boolean | null }}
+ */
+export function decisionOrder(rows, { userPly = Infinity, need = 2, format = 'school' } = {}) {
+  const at = (row, index) => {
+    if (format === 'pro') return index;
+    if (row.user) return userPly - 0.5;
+    return Number.isFinite(row.reveal) ? row.reveal : -1;
+  };
+  const order = rows.map((row, index) => index).sort((x, y) => at(rows[x], x) - at(rows[y], y) || x - y);
+  let wins = 0;
+  let losses = 0;
+  for (const index of order) {
+    if (rows[index].won) wins += 1;
+    else losses += 1;
+    if (wins >= need) return { order, decidedBy: index, teamWon: true };
+    if (losses >= need) return { order, decidedBy: index, teamWon: false };
+  }
+  return { order, decidedBy: null, teamWon: null };
+}
+
+/** 試合のあとに大会がどうなったか(結果発表の最後の一言。19章の7)。 */
+function afterText(run, before) {
+  if (run.phase === 'done') return run.result?.label ?? '';
+  const stage = teamStageOf(run);
+  if (stage && before.stage && stage !== before.stage) {
+    const log = (run.stageLog ?? []).at(-1);
+    return `${schoolStageInfo(before.stage).name}を${log?.label ?? '通過'}。${schoolStageInfo(stage).name}へ進む`;
+  }
+  if (before.phase === 'swiss' && run.phase === 'ko') return '予選を通過。決勝トーナメントへ進む';
+  if (before.phase === 'league' && run.phase === 'ko') return '予選リーグを通過。本戦へ進む';
+  const next = currentTeamMatch(run);
+  return next ? `次は${next.label}` : '';
+}
+
+/**
+ * まだ見ていない結果発表(run.finale。19章の8)。試合が決まったあと(大会を進めたあと)に作る。
+ * @param {any} run 試合を記録して、大会を進めたあとの大会
+ * @param {any} match 決まった試合(写し)
+ * @param {{ before: { phase: string, stage: string | null }, userPly?: number | null }} options
+ */
+function finaleRecord(run, match, { before, userPly = null }) {
+  const side = userSide(match);
+  const need = teamFormat(run.format).winsToTake;
+  const rows = match.games.map((game) => ({
+    seat: game.seat ?? null,
+    no: game.no ?? null,
+    us: side === 'a' ? game.a : game.b,
+    them: side === 'a' ? game.b : game.a,
+    won: game.winner === side,
+    user: Boolean(game.user),
+    reveal: Number.isFinite(game.reveal) ? game.reveal : null,
+  }));
+  const { decidedBy, teamWon } = decisionOrder(rows, { userPly: Number.isFinite(userPly) ? userPly : Infinity, need, format: run.format });
+  return {
+    id: match.id,
+    format: run.format,
+    label: match.label,
+    us: match[side],
+    them: match[other(side)],
+    rows,
+    userPly: run.format === 'school' && Number.isFinite(userPly) ? userPly : null,
+    score: { us: match.score[side], them: match.score[other(side)] },
+    teamWon: teamWon ?? match.winner === side,
+    decidedBy,
+    after: afterText(run, before),
+    seen: false,
+  };
+}
+
+/** 結果発表を見た(団体戦の画面の「団体戦へ」)。 */
+export function markTeamFinaleSeen(source) {
+  if (!source?.finale || source.finale.seen) return source;
+  return { ...source, finale: { ...source.finale, seen: true } };
+}
+
+/**
  * プレイヤーの1局を記録する。引き分け(千日手)は先後を入れ替えて指し直す。
+ * 高校は、自分の局の手数(ply)で、仲間の局が自分より先に終わったかを決める(決勝点と結果発表の順番。19章の4)。
  * @param {any} source
  * @param {'win' | 'loss' | 'draw'} outcome
+ * @param {{ ply?: number }} [options]
  * @returns {{ run: any, replay?: boolean, match: any, decided: boolean, teamWon: boolean | null, clinched: boolean }}
  */
-export function recordTeamGame(source, outcome) {
+export function recordTeamGame(source, outcome, { ply } = {}) {
   const run = structuredClone(source);
   const match = currentTeamMatch(run);
   if (!match || !run.pending) return { run, match, decided: false, teamWon: null, clinched: false };
@@ -985,17 +1077,23 @@ export function recordTeamGame(source, outcome) {
   const side = userSide(match);
   const game = match.games.find((entry) => entry.user && !entry.winner);
   const before = match.winner;
-  // 自分の局で試合が決まったか(決勝点)。高校は、ほかの2局が1勝1敗のときに自分の局が決める。
-  const otherWins = run.format === 'school'
-    ? match.games.filter((entry) => !entry.user && entry.winner === side).length : null;
   setGameWinner(run, match, game, outcome === 'win' ? side : other(side));
   const decided = Boolean(match.winner);
-  const clinched = decided && !before && match.winner === side && outcome === 'win'
-    && (run.format === 'pro' || otherWins === 1);
   const finished = { ...match, games: match.games.map((entry) => ({ ...entry })) };
+  // 自分の局で試合が決まったか(決勝点)。高校は、自分の終局までに知らせた仲間の局と合わせて、2勝目になったとき(19章の4)。
+  const userIndex = match.games.indexOf(game);
+  const order = decided ? decisionOrder(finished.games.map((entry) => ({ user: Boolean(entry.user), won: entry.winner === side, reveal: entry.reveal })), {
+    userPly: Number.isFinite(ply) ? ply : Infinity, need: teamFormat(run.format).winsToTake, format: run.format,
+  }) : null;
+  const clinched = decided && (run.format === 'pro' ? !before && match.winner === side && outcome === 'win'
+    : order?.decidedBy === userIndex && order?.teamWon === true);
   const rng = createRng(run.rng);
+  const stageBefore = { phase: run.phase, stage: teamStageOf(run) };
   run.pending = null;
-  if (decided) closeUserMatch(run, rng);
+  if (decided) {
+    closeUserMatch(run, rng);
+    run.finale = finaleRecord(run, finished, { before: stageBefore, userPly: Number.isFinite(ply) ? ply : null });
+  }
   // 高校は、次の自分の試合が始まっていれば、自分の局の相手をすぐ付ける。
   preparePending(run, rng);
   run.rng = rng.state;

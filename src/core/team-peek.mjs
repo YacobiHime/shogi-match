@@ -28,9 +28,19 @@ const relayPlayer = (player, id) => ({
  */
 export function peekBoards(run) {
   if (run?.format !== 'school') return [];
-  const boards = run?.pending?.teamBoards ?? [];
+  return peekBoardsOf(run, run?.pending?.teamBoards ?? [], run.current ?? '');
+}
+
+/**
+ * 仲間の盤(試合のidと、席ごとの顔ぶれ・勝ち負け・知らせる手数から)。対局中のチラ見と、終局後に見守る盤(19章)で同じ鍵を使い、
+ * 作った棋譜(中継の保存)を使い回す。
+ * @param {any} run 団体戦の大会
+ * @param {{ seat: number, seatName: string, us: string, them: string, won: boolean, reveal?: number | null }[]} boards
+ * @param {string} matchId 試合のid
+ */
+export function peekBoardsOf(run, boards, matchId) {
   return [...boards].sort((a, b) => a.seat - b.seat).map((board) => {
-    const key = `team-peek:${run.id ?? ''}:${run.current ?? ''}:${board.seat}`;
+    const key = `team-peek:${run.id ?? ''}:${matchId}:${board.seat}`;
     const seed = textSeed(key);
     const usColor = seed % 2 === 0 ? 'black' : 'white';
     const us = relayPlayer(run.players?.[board.us], board.us);

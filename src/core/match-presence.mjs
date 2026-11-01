@@ -212,12 +212,17 @@ export function roundNews({ event = 'ryuo', season = null, oshiId = null } = {})
 export function teamNews(run) {
   const boards = [...(run?.pending?.teamBoards ?? [])].sort((a, b) => a.reveal - b.reveal);
   const players = run?.players ?? {};
+  // 3つの席のうち、仲間の局でない席が自分の席(速報の札の○●の並び。19章の2)。
+  const seats = [0, 1, 2];
+  const userSeat = seats.find((seat) => !boards.some((board) => board.seat === seat)) ?? null;
   let wins = 0;
   let losses = 0;
+  const shown = new Map();
   return boards.map((board) => {
     const name = board.us === 'user' ? 'あなた' : players[board.us]?.name?.replace(/^天鷺|^桜乃/, '') ?? '仲間';
     if (board.won) wins += 1;
     else losses += 1;
+    shown.set(board.seat, board.won);
     const tally = wins === 1 && losses === 1 ? '1勝1敗。あなたの局が勝負を決める！'
       : wins >= 2 ? 'チームの勝ちが決まった！' : losses >= 2 ? 'チームは負け…。あなたの勝ちは個人の成績に' : `チーム${wins}勝${losses}敗`;
     return {
@@ -226,6 +231,18 @@ export function teamNews(run) {
       text: `速報：${board.seatName}戦、${name}${board.won ? 'が勝った' : 'は負け…'}。${tally}`,
       pair: [],
       at: board.reveal,
+      // 速報の札(対局画面)の中身。
+      seat: board.seat,
+      seatName: board.seatName,
+      who: board.us,
+      name,
+      won: Boolean(board.won),
+      tally,
+      /** このときの3つの席(win・loss・自分の局・まだ対局中)。 */
+      marks: seats.map((seat) => ({
+        seat,
+        state: seat === userSeat ? 'you' : shown.has(seat) ? (shown.get(seat) ? 'win' : 'loss') : 'playing',
+      })),
     };
   });
 }
