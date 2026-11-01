@@ -4,12 +4,13 @@
 
 import { createRng, gauss, pick } from './ryuo-random.mjs';
 import { newName } from './ryuo-names.mjs';
-import { createRepertoire, pickGameStyle, styleEntry } from './ryuo-repertoire.mjs';
+import { createRepertoire, pickGameStyle, repertoireText, styleEntry } from './ryuo-repertoire.mjs';
 import { createCharacter } from './player-character.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
 import { HANANE, YOSHIHIKO, STORY_PEOPLE, storyCharacter, storyMemberId } from './ryuo-story.mjs';
 import { ABILITIES, abilityValues } from './player-abilities.mjs';
 import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, WORLD_BASE_RATING } from './ryuo-strength.mjs';
+import { levelGradeName } from './tournament-world.mjs';
 
 export const TEAM_BATTLE_KEY = 'yacobihime:shogi-match:team-battle:v1';
 
@@ -73,6 +74,29 @@ export const TEAM_FORMATS = Object.freeze({
 });
 export const TEAM_FORMAT_IDS = Object.freeze(Object.keys(TEAM_FORMATS));
 export const teamFormat = (id) => TEAM_FORMATS[id] ?? TEAM_FORMATS.school;
+
+/**
+ * 高校の団体戦の段階(docs/team-battle-design.mdの15章)。地区大会で決勝に進めば県大会、県大会で優勝すれば全国大会。
+ * meanは、その段階のほかの学校の選手の真ん中(全国より弱い。地区大会は易しく、全国に近づくほど強くなる。D:4-4)。
+ * placeBaseは最高成績の比べ方(小さいほど良い。全国1〜99、県大会100番台、地区大会200番台)。
+ */
+export const SCHOOL_STAGES = Object.freeze([
+  Object.freeze({
+    id: 'district', name: '地区大会', short: '地区', teams: 8, advance: 2, mean: SCHOOL_BASE - 120, spread: 70, placeBase: 200,
+    rounds: Object.freeze(['1回戦', '準決勝', '決勝']), places: Object.freeze(['ベスト8', 'ベスト4', '準優勝']),
+  }),
+  Object.freeze({
+    id: 'prefecture', name: '県大会', short: '県', teams: 8, advance: 1, mean: SCHOOL_BASE - 60, spread: 60, placeBase: 100,
+    rounds: Object.freeze(['準々決勝', '準決勝', '決勝']), places: Object.freeze(['ベスト8', 'ベスト4', '準優勝']),
+  }),
+  Object.freeze({ id: 'national', name: '全国大会', short: '全国', placeBase: 0 }),
+]);
+export const SCHOOL_STAGE_IDS = Object.freeze(SCHOOL_STAGES.map((stage) => stage.id));
+const schoolStageInfo = (id) => SCHOOL_STAGES.find((stage) => stage.id === id) ?? SCHOOL_STAGES[2];
+/** 県の4つの地区(はじめが燈ヶ丘高校の地区)。県の名前は出さない(15章の捨てるもの)。 */
+export const SCHOOL_DISTRICTS = Object.freeze(['中部', '東部', '西部', '北部']);
+/** 大会の段階(高校。前の版の大会は段階を持たないので全国大会)。プロはnull。 */
+export const teamStageOf = (run) => (run?.format === 'school' ? (run.stage ?? 'national') : null);
 
 /** トーナメントの回戦の名前(大きさごと)。 */
 const KO_ROUND_NAMES = Object.freeze({
@@ -175,8 +199,14 @@ function hananeMember(roster, format) {
   return base;
 }
 
+/**
+ * 百花の棋風と得意戦法を決める種。物語の人物なので、どの大会でも同じ百花にする(羽音と同じ。仲間のステータスで毎回違うと人物がぶれる。16章)。
+ */
+const MOMOKA_SEED = 20260509;
+
 /** 百花(高校の団体戦の3人目)。将棋はまだ初心者に近いが、楽しそうに攻める。 */
-function momokaMember(rng) {
+function momokaMember() {
+  const rng = createRng(MOMOKA_SEED);
   const repertoire = createRepertoire(rng, 6);
   const style = styleEntry(repertoire.styles[0]);
   const character = createCharacter(rng, { rating: SCHOOL_MOMOKA_RATING, age: 16, style });
@@ -280,22 +310,93 @@ function schoolName(rng, used) {
   return name;
 }
 
-function buildSchoolTeams(run, rng, order) {
-  const usedNames = new Set();
-  const schoolNames = new Set();
+/** 同じ大会で、選手の名前と学校の名前は重ねない(段階ごとに学校を足すので、いまの大会から集める)。 */
+const usedPlayerNames = (run) => new Set(Object.values(run.players).map((member) => member.name));
+const usedSchoolNames = (run) => new Set(Object.values(run.teams).map((team) => team.name));
+
+/**
+ * 1つの学校を足す。学校の強さは真ん中(mean)のまわりに散らし、選手は学校の強さのまわり。席は実力順(1章)。
+ * @param {any} run
+ * @param {{ next(): number }} rng
+ * @param {{ id: string, area: string, mean: number, spread: number, usedNames: Set<string>, schoolNames: Set<string> }} options
+ */
+function addSchool(run, rng, { id, area, mean, spread, usedNames, schoolNames }) {
+  const center = mean + gauss(rng) * spread;
+  const members = [0, 1, 2]
+    .map(() => createStudent(run, rng, usedNames, center + gauss(rng) * 45))
+    .sort((a, b) => b.rating - a.rating)
+    .map((member) => member.id);
+  run.teams[id] = { id, name: schoolName(rng, schoolNames), area, members };
+  return id;
+}
+
+/** 全国大会のほかの47校(都道府県の代表)。自分たちの学校と合わせて48校。 */
+function buildNationalTeams(run, rng) {
+  const usedNames = usedPlayerNames(run);
+  const schoolNames = usedSchoolNames(run);
   const prefectures = [...PREFECTURES];
-  run.teams[USER_TEAM] = { id: USER_TEAM, name: SCHOOL_NAME, area: '', members: order, you: true };
+  const ids = [USER_TEAM];
   for (let index = 1; index < TEAM_FORMATS.school.teams; index += 1) {
-    const id = `T${index}`;
     const area = prefectures.splice(Math.floor(rng.next() * prefectures.length), 1)[0] ?? '';
-    // 学校の強さは真ん中のまわりに散らし、選手は学校の強さのまわり。席は実力順(1章)。
-    const mean = SCHOOL_BASE + gauss(rng) * 70;
-    const members = [0, 1, 2]
-      .map(() => createStudent(run, rng, usedNames, mean + gauss(rng) * 45))
-      .sort((a, b) => b.rating - a.rating)
-      .map((member) => member.id);
-    run.teams[id] = { id, name: schoolName(rng, schoolNames), area, members };
+    ids.push(addSchool(run, rng, { id: `T${index}`, area, mean: SCHOOL_BASE, spread: 70, usedNames, schoolNames }));
   }
+  return ids;
+}
+
+/** 全国大会の学校のid(前の版の大会は、段階を持たないので全部の学校)。 */
+const nationalIds = (run) => run.stageTeams?.national ?? Object.keys(run.teams);
+
+function shuffleInPlace(rng, list) {
+  for (let index = list.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(rng.next() * (index + 1));
+    [list[index], list[swap]] = [list[swap], list[index]];
+  }
+  return list;
+}
+
+/** 地区大会(15章の2)。同じ地区の8校のトーナメント。組み合わせは無作為。 */
+function startDistrict(run, rng) {
+  const info = schoolStageInfo('district');
+  const usedNames = usedPlayerNames(run);
+  const schoolNames = usedSchoolNames(run);
+  const ids = [USER_TEAM];
+  for (let index = 1; index < info.teams; index += 1) {
+    ids.push(addSchool(run, rng, { id: `D${index}`, area: '', mean: info.mean, spread: info.spread, usedNames, schoolNames }));
+  }
+  shuffleInPlace(rng, ids);
+  run.stage = 'district';
+  run.stageTeams = { ...(run.stageTeams ?? {}), district: [...ids] };
+  startKnockout(run, rng, ids, { paired: true, size: info.teams, stage: 'district' });
+}
+
+/**
+ * 県大会(15章の3)。4つの地区の1位・2位の8校。1回戦は、ある地区の1位と別の地区の2位
+ * (同じ地区の2校は決勝まで当たらない)。first・secondは自分の地区の1位・2位。
+ */
+function startPrefecture(run, rng, first, second) {
+  const info = schoolStageInfo('prefecture');
+  const usedNames = usedPlayerNames(run);
+  const schoolNames = usedSchoolNames(run);
+  const [home, ...others] = SCHOOL_DISTRICTS;
+  for (const id of [first, second]) if (id !== USER_TEAM) run.teams[id].area = `${home}地区`;
+  const pairs = others.map((district, index) => [1, 2]
+    .map((n) => addSchool(run, rng, { id: `P${index * 2 + n}`, area: `${district}地区`, mean: info.mean, spread: info.spread, usedNames, schoolNames }))
+    .sort((x, y) => teamStrength(run, y) - teamStrength(run, x)));
+  const [b, c, d] = pairs;
+  const slots = [first, b[1], c[0], d[1], b[0], second, d[0], c[1]];
+  run.stage = 'prefecture';
+  run.stageTeams = { ...(run.stageTeams ?? {}), prefecture: [...slots] };
+  startKnockout(run, rng, slots, { paired: true, size: info.teams, stage: 'prefecture' });
+}
+
+/** 全国大会(今までの高校の団体戦)。48校のスイス方式4回戦から。 */
+function startNational(run, rng) {
+  const ids = buildNationalTeams(run, rng);
+  run.stage = 'national';
+  run.stageTeams = { ...(run.stageTeams ?? {}), national: ids };
+  run.phase = 'swiss';
+  run.swiss = { round: 0, records: {}, status: Object.fromEntries(ids.map((id) => [id, 'active'])), rounds: [] };
+  startSwissRound(run, rng);
 }
 
 function buildProTeams(run, rng, roster, draftPickId) {
@@ -432,7 +533,7 @@ function swissRecord(run, teamId) {
 }
 
 function swissActive(run) {
-  return Object.keys(run.teams).filter((id) => run.swiss.status[id] === 'active');
+  return nationalIds(run).filter((id) => run.swiss.status[id] === 'active');
 }
 
 /** 同じ成績どうし、まだ当たっていない学校と組む。余ったら下の成績へ。自分の学校の相手は無作為(種)。 */
@@ -520,7 +621,7 @@ function closeSwissRound(run, rng) {
   }
   // 予選の終わり。4回戦で決まらなかった学校は敗退。3勝の学校が16校に足りなければ、2勝の学校から勝ち局の多い順(4章の3)。
   for (const id of active) run.swiss.status[id] = 'out';
-  const ranked = Object.keys(run.teams).sort((x, y) => {
+  const ranked = nationalIds(run).sort((x, y) => {
     const rx = swissRecord(run, x);
     const ry = swissRecord(run, y);
     return ry.w - rx.w || rx.l - ry.l || ry.boards - rx.boards || teamStrength(run, y) - teamStrength(run, x);
@@ -623,18 +724,27 @@ export function leagueTable(run, league) {
 
 // ---- 本戦トーナメント
 
-function startKnockout(run, rng, seeds, { paired = false } = {}) {
-  const size = run.format === 'school' ? TEAM_FORMATS.school.knockout : TEAM_FORMATS.pro.knockout;
-  // pairedは、並び順のまま2つずつ組む(プロの本戦)。そうでなければ種の並び(1位と最下位から)。
-  const slots = paired ? seeds.slice(0, size) : SEED_ORDER[size].map((seed) => seeds[seed - 1] ?? null);
-  run.ko = { size, slots, rounds: [] };
+/**
+ * トーナメントを始める。pairedは、並び順のまま2つずつ組む(プロの本戦・地区大会・県大会)。そうでなければ種の並び(1位と最下位から)。
+ * stageは高校の地区大会・県大会(回戦の名前と、試合の名前の頭「地区大会 1回戦」)。
+ * @param {any} run
+ * @param {{ next(): number }} rng
+ * @param {(string | null)[]} seeds
+ * @param {{ paired?: boolean, size?: number, stage?: 'district' | 'prefecture' | null }} [options]
+ */
+function startKnockout(run, rng, seeds, { paired = false, size = 0, stage = null } = {}) {
+  const koSize = size || (run.format === 'school' ? TEAM_FORMATS.school.knockout : TEAM_FORMATS.pro.knockout);
+  const slots = paired ? seeds.slice(0, koSize) : SEED_ORDER[koSize].map((seed) => seeds[seed - 1] ?? null);
+  const info = stage ? schoolStageInfo(stage) : null;
+  run.ko = { size: koSize, slots, rounds: [], ...(info?.rounds ? { stage, names: [...info.rounds], prefix: info.name } : {}) };
   run.phase = 'ko';
   startKnockoutRound(run, rng, slots);
 }
 
 function startKnockoutRound(run, rng, entrants) {
   const index = run.ko.rounds.length;
-  const name = KO_ROUND_NAMES[run.ko.size][index] ?? `${index + 1}回戦`;
+  const name = (run.ko.names ?? KO_ROUND_NAMES[run.ko.size])[index] ?? `${index + 1}回戦`;
+  const prefix = run.ko.prefix ?? (run.format === 'school' ? '決勝トーナメント' : '本戦');
   const round = [];
   let mine = null;
   for (let slot = 0; slot < entrants.length; slot += 2) {
@@ -644,8 +754,7 @@ function startKnockoutRound(run, rng, entrants) {
       continue;
     }
     const [a, b] = y === USER_TEAM ? [y, x] : [x, y];
-    const match = newMatch(run, { stage: 'ko', round: index + 1, label: `本戦 ${name}`, a, b });
-    if (run.format === 'school') match.label = `決勝トーナメント ${name}`;
+    const match = newMatch(run, { stage: 'ko', round: index + 1, label: `${prefix} ${name}`, a, b });
     round.push({ match: match.id });
     if (isUserMatch(match)) mine = match;
     playMatch(run, rng, match);
@@ -667,11 +776,48 @@ function closeKnockoutRound(run, rng) {
   const round = run.ko.rounds.at(-1);
   const winners = knockoutWinners(run, round);
   if (winners.length <= 1) {
+    if (run.ko.stage) {
+      closeSchoolStage(run, rng);
+      return;
+    }
     run.champion = winners[0] ?? null;
     finishRun(run);
     return;
   }
   startKnockoutRound(run, rng, winners);
+}
+
+/** トーナメントで自分の学校が負けた回戦(負けていなければ-1)。 */
+function koLostAt(run, ko) {
+  return (ko?.rounds ?? []).findIndex((round) => round.some((entry) => {
+    const match = entry.match ? run.matches[entry.match] : null;
+    return match && isUserMatch(match) && match.winner && match[match.winner] !== USER_TEAM;
+  }));
+}
+
+/**
+ * 地区大会・県大会の終わり(15章の2・3)。結果を段階の記録に残し、勝ち抜けば次の段階、負けていれば大会の終わり。
+ * 地区大会は決勝に進んだ2校(決勝で負けても2位で通過)、県大会は優勝の1校が次へ。
+ */
+function closeSchoolStage(run, rng) {
+  const ko = run.ko;
+  const info = schoolStageInfo(ko.stage);
+  const finalEntry = ko.rounds.at(-1)?.[0];
+  const final = finalEntry?.match ? run.matches[finalEntry.match] : null;
+  const champion = final ? final[final.winner] : finalEntry?.bye ?? null;
+  const runnerUp = final ? final[other(final.winner)] : null;
+  const advanced = info.advance >= 2 ? [champion, runnerUp].includes(USER_TEAM) : champion === USER_TEAM;
+  const lostAt = koLostAt(run, ko);
+  const label = advanced
+    ? (info.advance >= 2 ? (champion === USER_TEAM ? '1位で通過' : '2位で通過') : '優勝')
+    : info.places[lostAt] ?? info.places[0];
+  run.stageLog = [...(run.stageLog ?? []), { id: ko.stage, ko, champion, runnerUp, advanced, label }];
+  if (!advanced) {
+    finishRun(run);
+    return;
+  }
+  if (ko.stage === 'district') startPrefecture(run, rng, champion, runnerUp);
+  else startNational(run, rng);
 }
 
 /** 大会の結果(自分のチームの成績)。 */
@@ -684,6 +830,14 @@ function finishRun(run) {
 
 /** 自分のチームの成績の言い方。 */
 export function userPlace(run) {
+  const stage = teamStageOf(run);
+  if (stage === 'district' || stage === 'prefecture') {
+    // 地区大会・県大会で負けて終わった(15章の7)。
+    const info = schoolStageInfo(stage);
+    const lostAt = Math.max(0, koLostAt(run, run.ko));
+    const label = info.places[lostAt] ?? info.places[0];
+    return { place: info.placeBase + (label === '準優勝' ? 2 : 2 ** (info.places.length - lostAt)), label: `${info.name} ${label}` };
+  }
   if (run.champion === USER_TEAM) return { place: 1, label: '優勝' };
   const size = run.ko?.size ?? 0;
   const lostAt = (run.ko?.rounds ?? []).findIndex((round) => round.some((entry) => {
@@ -719,7 +873,8 @@ function setPending(run, rng, match, game) {
   const us = run.teams[USER_TEAM].name;
   const them = run.teams[match[other(side)]].name;
   const seatText = run.format === 'school' ? `${SCHOOL_SEATS[game.seat]}戦` : `第${game.no}局`;
-  const final = isFinal(match);
+  // 大一番は県大会の決勝と全国大会(プロは本戦)の決勝。地区大会の決勝は、負けても県大会に出られるので大一番にしない。
+  const final = isFinal(match) && teamStageOf(run) !== 'district';
   run.pending = {
     kind: 'team',
     opponentId,
@@ -851,9 +1006,9 @@ export function recordTeamGame(source, outcome) {
 /**
  * 団体戦の大会を作る。
  * @param {{ format: 'school' | 'pro', seed: number, settings?: any, roster?: any, userName?: string, userLevel?: number,
- *   userSeat?: number, draftPick?: string | null, draftReason?: string }} options
+ *   userSeat?: number, draftPick?: string | null, draftReason?: string, startStage?: 'district' | 'national' }} options
  */
-export function createTeamRun({ format, seed, settings = {}, roster = null, userName = '', userLevel = 20, userSeat = RECOMMENDED_SCHOOL_SEAT, draftPick = null, draftReason = '' }) {
+export function createTeamRun({ format, seed, settings = {}, roster = null, userName = '', userLevel = 20, userSeat = RECOMMENDED_SCHOOL_SEAT, draftPick = null, draftReason = '', startStage = 'district' }) {
   const formatId = TEAM_FORMATS[format] ? format : 'school';
   const rng = createRng(seed);
   const run = {
@@ -869,7 +1024,7 @@ export function createTeamRun({ format, seed, settings = {}, roster = null, user
     matches: {},
     nextId: 1,
     nextMatch: 1,
-    phase: formatId === 'school' ? 'swiss' : 'league',
+    phase: formatId === 'school' ? 'ko' : 'league',
     current: null,
     pending: null,
     result: null,
@@ -881,11 +1036,13 @@ export function createTeamRun({ format, seed, settings = {}, roster = null, user
   run.players[TEAM_USER_ID] = userMember(userName, formatId);
   run.players[TEAM_HANANE_ID] = hananeMember(roster, formatId);
   if (formatId === 'school') {
-    run.players[TEAM_MOMOKA_ID] = momokaMember(rng);
+    run.players[TEAM_MOMOKA_ID] = momokaMember();
     run.order = schoolOrder(userSeat);
-    buildSchoolTeams(run, rng, run.order);
-    run.swiss = { round: 0, records: {}, status: Object.fromEntries(Object.keys(run.teams).map((id) => [id, 'active'])), rounds: [] };
-    startSwissRound(run, rng);
+    run.teams[USER_TEAM] = { id: USER_TEAM, name: SCHOOL_NAME, area: '', members: run.order, you: true };
+    run.stageLog = [];
+    // 地区大会から(15章の1)。startStageは、全国大会から始める大会(テストと、前の版と同じ形の確かめ)。
+    if (startStage === 'national') startNational(run, rng);
+    else startDistrict(run, rng);
   } else {
     buildProTeams(run, rng, roster, draftPick);
     run.leagueStatus = {};
@@ -971,22 +1128,85 @@ export function matchView(run, match, { revealAll = true } = {}) {
 /** 予選の成績表(高校)。自分の学校と、上の学校。 */
 export function swissTable(run) {
   if (!run.swiss) return [];
-  return Object.keys(run.teams)
+  return nationalIds(run)
     .map((id) => ({ team: teamCard(run, id), ...swissRecord(run, id), status: run.swiss.status[id] }))
     .sort((x, y) => y.w - x.w || x.l - y.l || y.boards - x.boards);
 }
 
-/** トーナメント表の回戦ごとの札。 */
-export function knockoutView(run) {
-  if (!run.ko) return null;
+/** 1つのトーナメントの回戦ごとの札(地区大会・県大会・全国の決勝トーナメント・プロの本戦)。 */
+function knockoutViewOf(run, ko, champion = null) {
+  if (!ko) return null;
+  const names = ko.names ?? KO_ROUND_NAMES[ko.size] ?? [];
   return {
-    size: run.ko.size,
-    rounds: run.ko.rounds.map((round, index) => ({
-      name: KO_ROUND_NAMES[run.ko.size][index] ?? `${index + 1}回戦`,
+    size: ko.size,
+    stage: ko.stage ?? null,
+    rounds: ko.rounds.map((round, index) => ({
+      name: names[index] ?? `${index + 1}回戦`,
       matches: round.map((entry) => entry.bye ? { bye: teamCard(run, entry.bye) } : matchView(run, run.matches[entry.match])),
     })),
-    champion: run.champion ? teamCard(run, run.champion) : null,
+    champion: champion ? teamCard(run, champion) : null,
   };
+}
+
+/** トーナメント表の回戦ごとの札(全国の決勝トーナメントとプロの本戦。地区大会・県大会のあいだはnull)。 */
+export function knockoutView(run) {
+  if (!run.ko || run.ko.stage) return null;
+  return knockoutViewOf(run, run.ko, run.champion);
+}
+
+/**
+ * 高校の3つの段階の道(15章の9)。stateは済んだ(done)・負けて終わった(out)・いまの段階(current)・まだ(next)。
+ * labelは結果(「1位で通過」「ベスト4」)。プロはnull。
+ */
+export function teamStagesView(run) {
+  if (run?.format !== 'school') return null;
+  const stage = teamStageOf(run);
+  const reached = SCHOOL_STAGE_IDS.indexOf(stage);
+  // 前の版の大会(全国大会から始めた)は、地区大会・県大会を通っていない。
+  const legacy = !run.stage;
+  return SCHOOL_STAGES.map((info, index) => {
+    const log = (run.stageLog ?? []).find((entry) => entry.id === info.id);
+    if (log) return { id: info.id, name: info.name, short: info.short, state: log.advanced ? 'done' : 'out', label: log.label };
+    if (index < reached || legacy && index < 2) return { id: info.id, name: info.name, short: info.short, state: 'skipped', label: '' };
+    if (info.id !== stage) return { id: info.id, name: info.name, short: info.short, state: 'next', label: '' };
+    if (run.phase === 'done') {
+      const won = run.champion === USER_TEAM;
+      return { id: info.id, name: info.name, short: info.short, state: won ? 'done' : 'out', label: won ? '優勝' : (run.result?.label ?? '') };
+    }
+    return { id: info.id, name: info.name, short: info.short, state: 'current', label: '' };
+  });
+}
+
+/**
+ * 表のタブ(進んだ段階だけ。15章の9)。typeは、トーナメント(ko)・スイス方式の表(swiss)・リーグ(leagues)。
+ * currentは、はじめに開くタブ(いまの段階)。
+ */
+export function teamTablesView(run) {
+  if (!run) return { tabs: [], current: '' };
+  if (run.format === 'pro') {
+    const knockout = knockoutView(run);
+    return {
+      tabs: [
+        { id: 'qualify', label: '予選', type: 'leagues', knockout: null, disabled: false },
+        { id: 'ko', label: '本戦', type: 'ko', knockout, disabled: !knockout },
+      ],
+      current: knockout ? 'ko' : 'qualify',
+    };
+  }
+  const tabs = [];
+  for (const id of ['district', 'prefecture']) {
+    const log = (run.stageLog ?? []).find((entry) => entry.id === id);
+    const ko = log?.ko ?? (run.ko?.stage === id ? run.ko : null);
+    if (ko) tabs.push({ id, label: schoolStageInfo(id).name, type: 'ko', knockout: knockoutViewOf(run, ko, log?.champion ?? null), disabled: false });
+  }
+  if (run.swiss) {
+    const knockout = knockoutView(run);
+    tabs.push({ id: 'qualify', label: run.stage ? '全国予選' : '予選', type: 'swiss', knockout: null, disabled: false });
+    tabs.push({ id: 'ko', label: run.stage ? '全国決勝T' : '決勝トーナメント', type: 'ko', knockout, disabled: !knockout });
+  }
+  const stage = teamStageOf(run);
+  const current = stage === 'district' || stage === 'prefecture' ? stage : (knockoutView(run) ? 'ko' : 'qualify');
+  return { tabs, current };
 }
 
 /** 大会全体の画面の形。 */
@@ -1011,11 +1231,121 @@ export function teamRunView(run) {
       table: leagueTable(run, league).map((row) => ({ ...row, team: teamCard(run, row.team) })),
     })) : null,
     knockout: knockoutView(run),
+    stage: teamStageOf(run),
+    stageName: run.format === 'school' ? schoolStageInfo(teamStageOf(run)).name : '',
+    stages: teamStagesView(run),
+    tables: teamTablesView(run),
     result: run.result,
     champion: run.champion ? teamCard(run, run.champion) : null,
     draftReason: run.draftReason ?? '',
     seen: [...(run.seen ?? [])],
+    members: Object.fromEntries((run.teams[USER_TEAM]?.members ?? []).map((id) => [id, teamMemberStatus(run, id)])),
   };
+}
+
+/**
+ * 仲間のステータス(docs/team-battle-design.mdの16章)。この大会の成績・強さの目安(段級位)・棋風と得意戦法・一言と、
+ * 能力の形を作るための写し(profile。名鑑と同じmemberAbilityViewに渡す)。自分は強さを持たないので、プレイヤーのLv。
+ * 自分の局の前の高校の試合は、仲間の結果をまだ数えない(対局の途中の速報で知らせる。4章の9)。
+ * @param {any} run
+ * @param {string} memberId
+ */
+export function teamMemberStatus(run, memberId) {
+  const member = run?.players?.[memberId];
+  const team = run?.teams?.[USER_TEAM];
+  if (!member || !team?.members.includes(memberId)) return null;
+  const index = team.members.indexOf(memberId);
+  let wins = 0;
+  let losses = 0;
+  for (const match of Object.values(run.matches)) {
+    if (!isUserMatch(match)) continue;
+    if (run.format === 'school' && match.id === run.current && !match.winner) continue;
+    const side = userSide(match);
+    for (const game of match.games) {
+      if ((side === 'a' ? game.a : game.b) !== memberId || !game.winner) continue;
+      if (game.winner === side) wins += 1;
+      else losses += 1;
+    }
+  }
+  const you = memberId === TEAM_USER_ID;
+  const world = Number.isFinite(run.settings?.world) ? run.settings.world : recommendedWorldLevel(run.userLevel ?? 20);
+  const base = run.format === 'school' ? SCHOOL_BASE : WORLD_BASE_RATING;
+  const level = you ? (run.userLevel ?? null) : Number.isFinite(member.rating) ? worldCpuLevel(member.rating, world, base) : null;
+  return {
+    id: memberId,
+    name: member.name,
+    you,
+    story: member.story ?? null,
+    seat: run.format === 'school' ? SCHOOL_SEATS[index] ?? '' : index === 0 ? 'リーダー' : '',
+    dan: member.dan ?? '',
+    record: { wins, losses },
+    recordText: wins + losses ? `この大会 ${wins}勝${losses}敗` : 'この大会は、まだ指していない',
+    strength: Number.isFinite(level) ? `${levelGradeName(level)}くらい` : '',
+    style: member.style?.label ?? '',
+    repertoire: member.repertoire ? repertoireText(member.repertoire) : '',
+    line: you ? '' : memberLine(run, member),
+    profile: you ? null : {
+      rating: member.rating, kind: member.kind, age: member.age, story: member.story ?? null,
+      character: member.character ?? null, repertoire: member.repertoire ?? null, style: member.style ?? null,
+    },
+  };
+}
+
+/**
+ * 出場の前のチームの3人のステータス(出場の画面で顔を押したとき。docs/team-battle-design.mdの17章の3)。
+ * 大会を作る前なので成績はない。羽音と百花は大会でも同じ人物(羽音は名簿の写し、百花は決まった種)。
+ * @param {{ format: 'school' | 'pro', roster?: any, userSeat?: number, draftPick?: string | null, userName?: string, userLevel?: number, world?: number | null }} options
+ */
+export function teamEntryMembers({ format, roster = null, userSeat = RECOMMENDED_SCHOOL_SEAT, draftPick = null, userName = '', userLevel = 20, world = null }) {
+  const formatId = format === 'pro' ? 'pro' : 'school';
+  const run = {
+    format: formatId, players: {}, teams: {}, matches: {}, current: null, userLevel,
+    settings: Number.isFinite(world) ? { world } : {},
+  };
+  run.players[TEAM_USER_ID] = userMember(userName, formatId);
+  run.players[TEAM_HANANE_ID] = hananeMember(roster, formatId);
+  /** @type {string[]} */
+  let members;
+  if (formatId === 'school') {
+    run.players[TEAM_MOMOKA_ID] = momokaMember();
+    members = schoolOrder(userSeat);
+  } else {
+    members = [TEAM_USER_ID, TEAM_HANANE_ID];
+    const picked = rosterPros(roster).find((member) => member.id === draftPick);
+    if (picked) {
+      const copy = copyRosterMember(picked);
+      run.players[copy.id] = copy;
+      members.push(copy.id);
+    }
+  }
+  run.teams[USER_TEAM] = { id: USER_TEAM, members, you: true };
+  return members.map((id) => teamMemberStatus(run, id)).filter(Boolean);
+}
+
+/**
+ * 自分への羽音の一言(自分の能力のいちばん得意・苦手から。my-abilities.mjsのmyAbilityProfileのbest・worst)。
+ * @param {{ best?: { label: string } | null, worst?: { label: string } | null } | null} profile
+ */
+export function teamUserLine(profile) {
+  if (profile?.best && profile?.worst) return `羽音「君は${profile.best.label}が得意。${profile.worst.label}は、私たちで補うから」`;
+  if (profile?.best) return `羽音「君は${profile.best.label}が得意。そこで勝負すればいい」`;
+  return '羽音「君の将棋は、これから見せてもらう」';
+}
+
+/** 仲間への一言(いちばん高い能力と低い能力から。羽音は敬語と「！」を使わない。羽音自身のことは百花が言う)。 */
+function memberLine(run, member) {
+  if (!member.character?.abilities) return '';
+  const values = abilityValues(member);
+  const sorted = [...ABILITIES].sort((a, b) => values[b.key] - values[a.key]);
+  const best = sorted[0];
+  const worst = sorted.at(-1);
+  if (member.story === HANANE) {
+    return run.format === 'school'
+      ? `百花「羽音ちゃんは${best.label}がすごいんだよ！ ……${worst.label}は、ちょっとだけ苦手みたい」`
+      : `羽音「私？ ${best.label}には自信がある。${worst.label}は……まあ、君がいるから」`;
+  }
+  if (member.id === TEAM_MOMOKA_ID) return `羽音「百花は${best.label}がいい。${worst.label}で慌てなければ、勝てるよ」`;
+  return `羽音「${member.name}さんは${best.label}が強い。${worst.label}は、ほかの2人で補えばいい」`;
 }
 
 /** 見た節目の場面を覚える(同じ大会で2回は出さない。docs/team-battle-design.mdの3章)。 */

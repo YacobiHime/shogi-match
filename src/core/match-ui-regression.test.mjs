@@ -991,10 +991,16 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/\} else if \(teamPeekOpen\.value\) \{\s*teamPeekOpen\.value = false;/);
   });
 
-  it('ホームのあそぶの行に物語(近日公開)を置き、押すと吹き出しで知らせる(docs/team-battle-design.mdの9章)', () => {
-    expect(source).toMatch(/class="shogi-title__tile shogi-title__tile--soon" data-story-tile @click="tapStoryTile"/);
-    expect(source).toMatch(/const homeGreeting = computed\(\(\) => \{\s*if \(loadNotice\.value\) return loadNotice\.value;\s*if \(storyNotice\.value\) return STORY_SOON_TEXT;/);
-    expect(source).toMatch(/<p class="shogi-title__live" role="status">\{\{ storyNotice \? STORY_SOON_TEXT : "" \}\}<\/p>/);
+  it('ホームのあそぶの行の物語は、押すとストーリー選択を開く(docs/story-mode-design.md)', () => {
+    expect(source).toMatch(/class="shogi-title__tile" data-story-tile @click="openStory"/);
+    expect(source).toMatch(/const ShogiStory = lazyScreen\(\(\) => import\("\.\/ShogiStory\.vue"\)\);/);
+    // 戻る操作: 話を読んでいるときは話を閉じ、一覧ならホームへ。
+    expect(source).toMatch(/\} else if \(storyOpen\.value\) \{\s*\/\/[^\n]*\n\s*if \(!storyView\.value\?\.goBack\(\)\) storyOpen\.value = false;/);
+    expect(source).toMatch(/brainTrainingOpen\.value \|\| storyOpen\.value \|\|/);
+    // 団体戦で見た場面は、物語のサブの話として開く(物語の処理は押したときに読み込む)。
+    expect(source).toMatch(/import\("\.\/core\/story-mode\.mjs"\)/);
+    expect(source).toMatch(/unlockStorySceneLater\(format === "school" \? "invite-school" : "invite-pro"\);/);
+    expect(source).toMatch(/<p class="shogi-title__live" role="status">\{\{ loadNotice \}\}<\/p>/);
     expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); \}/);
   });
 

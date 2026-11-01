@@ -118,6 +118,20 @@ describe("データリセットの種類(docs/data-reset-design.md)", () => {
   });
 });
 
+describe('物語(docs/data-reset-design.mdの7章)', () => {
+  it('物語を消すと、物語の進み具合と場面の読んだ印だけが消える。大会を消しても読んだ印は残る', () => {
+    const storage = memoryStorage({
+      'yacobihime:shogi-match:story:v1': '{}',
+      'yacobihime:shogi-match:novel-read:v1': '{}',
+      'yacobihime:shogi-match:novel-settings:v1': '{}',
+      'yacobihime:shogi-match:team-battle:v1': '{}',
+    });
+    expect(resetData(storage, 'tournament')).toEqual(['yacobihime:shogi-match:team-battle:v1']);
+    expect(resetData(storage, 'story').sort()).toEqual(['yacobihime:shogi-match:novel-read:v1', 'yacobihime:shogi-match:story:v1']);
+    expect(storage.keys()).toEqual(['yacobihime:shogi-match:novel-settings:v1']);
+  });
+});
+
 describe('大会ごとに消す(docs/data-reset-design.mdの6章)', () => {
   it('大会ごとの鍵は「大会の進み具合」の鍵の中にあり、名簿と世界は消さない', () => {
     const tournament = new Set(RESET_GROUPS.find((group) => group.id === 'tournament').keys);

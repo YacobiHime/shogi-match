@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NOVEL_BACKGROUNDS, NOVEL_MAX_LINES, NOVEL_PEOPLE, TEAM_SCENES, momentScene, portraitScale, portraitUrl, sceneText, teamScene } from './team-story.mjs';
+import { NOVEL_BACKGROUNDS, NOVEL_MAX_LINES, NOVEL_PEOPLE, TEAM_SCENES, momentScene, portraitScale, portraitUrl, sceneText, teamMomentFor, teamScene } from './team-story.mjs';
 
 const KEIGO = /です|ます|ございます|よろしくお願いします|ありがとうございました|負けました/;
 
@@ -52,12 +52,29 @@ describe('団体戦のノベルの場面(docs/team-battle-design.mdの6章)', ()
     expect(momentScene({ format: 'pro' }, 'start')).toBeNull();
     expect(momentScene({ format: 'school', result: { place: 1 } }, 'end')).toBe('school-champion');
     expect(momentScene({ format: 'pro', result: { place: 8 } }, 'end')).toBe('pro-end');
-    for (const moment of ['start', 'knockout', 'final', 'end']) {
+    for (const moment of ['district', 'prefecture', 'start', 'knockout', 'final', 'end']) {
       for (const format of ['school', 'pro']) {
         const id = momentScene({ format, result: { place: 1 } }, moment);
         if (id) expect(TEAM_SCENES[id]).toBeTruthy();
       }
     }
+  });
+
+  it('高校は地区大会・県大会の始めに場面。決勝トーナメントと決勝の前は全国大会だけ(docs/team-battle-design.mdの15章)', () => {
+    const view = (over) => ({ format: 'school', phase: 'ko', stage: 'district', seen: [], next: { label: '地区大会 1回戦', games: [] }, ...over });
+    expect(teamMomentFor(view())).toBe('school-district');
+    expect(teamMomentFor(view({ seen: ['school-district'] }))).toBe('');
+    // 地区大会の決勝は、決勝の前の場面(全国の決勝)を出さない。
+    expect(teamMomentFor(view({ seen: ['school-district'], next: { label: '地区大会 決勝', games: [] } }))).toBe('');
+    expect(teamMomentFor(view({ stage: 'prefecture', seen: ['school-district'], next: { label: '県大会 準々決勝', games: [] } }))).toBe('school-prefecture');
+    expect(teamMomentFor(view({ stage: 'national', phase: 'swiss', swiss: { round: 1 }, next: { label: '予選1回戦', games: [] } }))).toBe('school-start');
+    expect(teamMomentFor(view({ stage: 'national', seen: ['school-knockout'], next: { label: '決勝トーナメント 決勝', games: [] } }))).toBe('school-final');
+    expect(teamMomentFor(view({ stage: 'national', next: { label: '決勝トーナメント 1回戦', games: [] } }))).toBe('school-knockout');
+    // 前の版の大会(段階がない)は全国大会。
+    expect(teamMomentFor(view({ stage: undefined, phase: 'swiss', swiss: { round: 1 }, next: { label: '予選1回戦', games: [] } }))).toBe('school-start');
+    expect(teamMomentFor(view({ phase: 'done', result: { place: 208 } }))).toBe('school-end');
+    expect(teamMomentFor({ format: 'pro', phase: 'ko', seen: [], next: { label: '本戦 決勝', games: [] } })).toBe('pro-knockout');
+    expect(teamMomentFor(null)).toBe('');
   });
 });
 

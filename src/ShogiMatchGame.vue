@@ -280,11 +280,10 @@
                 <small class="shogi-title__desc">{{ homeTile("endgame").after || "名局の終盤から" }}</small>
               </button>
               <!--
-                物語(近日公開)。大会と並ぶこのゲームの主役なので、あそぶの行に置いて存在だけ見せる(Game 6-1の4)。
-                まだ遊べないので、押すとやこび姫の吹き出しで知らせる(無反応にしない。docs/team-battle-design.mdの9章)。
+                物語。大会と並ぶこのゲームの主役。押すとストーリー選択(メインとサブ。docs/story-mode-design.md)。
+                メインの話はまだ準備中で、話を書いたら目録に足していく。
               -->
-              <button type="button" class="shogi-title__tile shogi-title__tile--soon" data-story-tile @click="tapStoryTile">
-                <span class="shogi-title__tile-badge shogi-title__tile-badge--soon">近日公開</span>
+              <button type="button" class="shogi-title__tile" data-story-tile @click="openStory">
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#fffcf4">
                     <rect x="1" y="3" width="6" height="10" />
@@ -307,7 +306,7 @@
                 <small class="shogi-title__desc">羽音と百花と</small>
               </button>
             </div>
-            <p class="shogi-title__live" role="status">{{ storyNotice ? STORY_SOON_TEXT : "" }}</p>
+            <p class="shogi-title__live" role="status">{{ loadNotice }}</p>
           </section>
           <section class="shogi-title__group shogi-title__group--learn" aria-labelledby="shogi-home-school" data-home-group="learn">
             <h2 id="shogi-home-school" class="shogi-title__group-title">まなぶ</h2>
@@ -416,6 +415,14 @@
       ref="brainTrainingView"
       :asset-base-url="assetBaseUrl"
       @close="brainTrainingOpen = false"
+    />
+    <!-- 物語のストーリー選択(docs/story-mode-design.md)。 -->
+    <ShogiStory
+      v-if="storyOpen"
+      ref="storyView"
+      :asset-base-url="assetBaseUrl"
+      :player-name="playerDisplayName(playerName)"
+      @close="storyOpen = false"
     />
     <ShogiProblemSet
       v-if="problemSetOpen"
@@ -3070,6 +3077,7 @@ const ShogiReferenceDex = lazyScreen(loadReferenceDex);
 const ShogiTutorial = lazyScreen(loadTutorial);
 const ShogiProblemSet = lazyScreen(loadProblemSet);
 const ShogiBrainTraining = lazyScreen(loadBrainTraining);
+const ShogiStory = lazyScreen(() => import("./ShogiStory.vue"));
 const YakobiNote = lazyScreen(loadYakobiNote);
 const ShogiTournament = lazyScreen(loadTournament);
 const ShogiSkillTest = lazyScreen(loadSkillTest);
@@ -3386,6 +3394,26 @@ const problemSetOpen = ref(false);
 const problemSetView = ref<InstanceType<typeof ShogiProblemSetComponent> | null>(null);
 // 脳トレ道場(docs/brain-training-design.md)を開いているか。
 const brainTrainingOpen = ref(false);
+// ---- 物語(docs/story-mode-design.md)。ホームの「物語」から開くストーリー選択。
+const storyOpen = ref(false);
+const storyView = ref<{ goBack: () => boolean } | null>(null);
+function openStory() {
+  storyOpen.value = true;
+}
+/**
+ * 団体戦で見たノベルの場面を、物語のサブの話として開く(docs/story-mode-design.mdの3章の7)。
+ * 物語の処理は押したときに読み込む(最初に読むJSに入れない)。読めなくても、物語の画面を開いたときに拾い直す。
+ */
+function unlockStorySceneLater(sceneId: string) {
+  import("./core/story-mode.mjs")
+    .then(({ loadStoryProgress, saveStoryProgress, unlockStoryScene }) => {
+      const storage = browserStorage();
+      saveStoryProgress(storage, unlockStoryScene(loadStoryProgress(storage), sceneId));
+    })
+    .catch(() => {
+      // 次に物語の画面を開いたときに、読んだ印と団体戦の記録から拾い直す。
+    });
+}
 const brainTrainingView = ref<InstanceType<typeof ShogiBrainTrainingComponent> | null>(null);
 function openBrainTraining() {
   noteFeatureSeen("brain");
@@ -7458,8 +7486,10 @@ function chooseTeam(memberId: string) {
 }
 function teamInvited(format: "school" | "pro") {
   setTeamCareer({ ...teamCareer.value, invited: { ...teamCareer.value.invited, [format]: true } });
+  unlockStorySceneLater(format === "school" ? "invite-school" : "invite-pro");
 }
 function teamSceneSeen(id: string) {
+  unlockStorySceneLater(id);
   if (!teamCareer.value.current) return;
   setTeamCareer({ ...teamCareer.value, current: markTeamScene(teamCareer.value.current, id) });
 }
@@ -8820,10 +8850,6 @@ function startMatchupPractice(rook: "static" | "ranging") {
   beginMatch();
   showFurigoma(toss);
 }
-/** 物語のタイルを押したときの一言。物語はまだ遊べないので、吹き出しで知らせる(docs/team-battle-design.mdの9章)。 */
-const STORY_SOON_TEXT = "物語はただいま準備中！ もうすぐ遊べるよ";
-/** 物語の知らせを吹き出しに出す時間。助言の最低表示(6秒)より短く、読める長さ。 */
-const STORY_NOTICE_MS = 4000;
 /** 読み込めなかったときなどに、ホームのやこび姫が言う一言(押しても無反応にしない。D:3-1)。 */
 const loadNotice = ref("");
 let loadNoticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -8853,17 +8879,9 @@ function onLazyLoadError(error: unknown) {
   }
   showLoadNotice(CHUNK_FAIL_TEXT);
 }
-const storyNotice = ref(false);
-let storyNoticeTimer: ReturnType<typeof setTimeout> | null = null;
-function tapStoryTile() {
-  storyNotice.value = true;
-  if (storyNoticeTimer) clearTimeout(storyNoticeTimer);
-  storyNoticeTimer = setTimeout(() => { storyNotice.value = false; storyNoticeTimer = null; }, STORY_NOTICE_MS);
-}
 /** やこび姫の吹き出し。「つぎはこれ」に合わせて一言かける。 */
 const homeGreeting = computed(() => {
   if (loadNotice.value) return loadNotice.value;
-  if (storyNotice.value) return STORY_SOON_TEXT;
   if (homeNext.value.id === "resume") return "さっきの対局、続きをしよう！";
   const ryuoName = ryuoView.value?.pending?.opponent?.name ?? "";
   if (homeNext.value.id === "ryuo-counter") return `${ryuoName}さんの対策、いっしょにしよう！`;
@@ -8935,6 +8953,9 @@ function navigateBack() {
   } else if (brainTrainingOpen.value) {
     if (brainTrainingView.value) brainTrainingView.value.goBack();
     else brainTrainingOpen.value = false;
+  } else if (storyOpen.value) {
+    // 話を読んでいるときは話(のログ・設定)を閉じ、一覧ならホームへ。
+    if (!storyView.value?.goBack()) storyOpen.value = false;
   } else if (dexShelfOpen.value && dexShelfFrom.value === "home") {
     dexShelfOpen.value = false;
   } else if (homeOpen.value) {
@@ -8967,7 +8988,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 

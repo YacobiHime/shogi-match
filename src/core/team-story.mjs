@@ -58,13 +58,42 @@ export const TEAM_SCENES = Object.freeze({
       line('hanane', 'smile', '迷ったら、私に任せて。君に足りないところを埋められる人を探すから。'),
     ],
   }),
-  'school-start': Object.freeze({
-    id: 'school-start',
-    title: '大会の会場',
-    summary: '大会の会場。緊張する百花に、羽音が「いつもどおり指せばいい」と声をかける。予選は3回勝てば抜け、2回負けたら終わり。',
+  // 地区大会・県大会の始め(docs/team-battle-design.mdの15章)。
+  'school-district': Object.freeze({
+    id: 'school-district',
+    title: '地区大会の会場',
+    summary: '高校の団体戦は地区大会から。全国大会に出られるのは、県で優勝した1校だけ。まずは地区で2位までに入って、県大会へ。',
+    background: 'classroom',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '地区大会の会場は、となりの高校の大きな教室だった。'),
+      line('momoka', 'worried', '最初は地区大会なんだね。いきなり全国じゃないんだ！'),
+      line('hanane', 'neutral', '全国に行けるのは、県で優勝した1校だけ。まずは地区で2位までに入って、県大会に出る。'),
+      line('hanane', 'gentle', '1つずつでいい。君の1局も、ちゃんと数えてるから。'),
+      line('momoka', 'wry', 'よーし、がんばろうね！'),
+    ],
+  }),
+  'school-prefecture': Object.freeze({
+    id: 'school-prefecture',
+    title: '県大会へ',
+    summary: '地区大会を抜けて県大会へ。県で優勝した1校だけが全国大会に出られる。負けたら、そこで終わり。',
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
+      line('momoka', 'wry', '地区大会、抜けたよ！ 次は県大会だね！'),
+      line('hanane', 'neutral', '県で優勝したら全国。負けたら、そこで終わり。'),
+      line('momoka', 'worried', 'う～ん……負けたら終わりかあ。緊張してきた……'),
+      line('hanane', 'smile', 'でも、ここまで3人で来た。次も3人で取りに行こう。'),
+    ],
+  }),
+  'school-start': Object.freeze({
+    id: 'school-start',
+    title: '全国大会の会場',
+    summary: '県の代表として全国大会へ。緊張する百花に、羽音が「いつもどおり指せばいい」と声をかける。予選は3回勝てば抜け、2回負けたら終わり。',
+    background: 'venue',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('momoka', 'wry', '県の代表として、全国大会だよ！'),
       line('momoka', 'worried', 'うう、人がいっぱい……。緊張してきた！'),
       line('hanane', 'gentle', '大丈夫。いつもどおり指せばいいよ。'),
       line('hanane', 'neutral', '予選は3回勝てば抜けられる。2回負けたら終わり。数えるのは私がやるから。'),
@@ -230,10 +259,12 @@ export function portraitUrl(assetBaseUrl, who, face, { small = false } = {}) {
 /**
  * 大会の節目で見せる場面(見たものは経歴に覚え、同じ大会で2回は出さない)。
  * @param {any} run 団体戦の大会
- * @param {'start' | 'knockout' | 'final' | 'end'} moment
+ * @param {'district' | 'prefecture' | 'start' | 'knockout' | 'final' | 'end'} moment
  */
 export function momentScene(run, moment) {
   const school = run?.format === 'school';
+  if (moment === 'district') return school ? 'school-district' : null;
+  if (moment === 'prefecture') return school ? 'school-prefecture' : null;
   if (moment === 'start') return school ? 'school-start' : null;
   if (moment === 'knockout') return school ? 'school-knockout' : 'pro-knockout';
   if (moment === 'final') return school ? 'school-final' : null;
@@ -243,4 +274,29 @@ export function momentScene(run, moment) {
     return won ? 'pro-champion' : 'pro-end';
   }
   return null;
+}
+
+/**
+ * 大会の画面の形(team-battle.mjsのteamRunView)から、いま見せる節目の場面(見たものと、見せないときは空)。
+ * 高校は地区大会・県大会の始め、全国大会の始め・決勝トーナメント・決勝の前、終わり(docs/team-battle-design.mdの15章の8)。
+ * @param {any} view
+ * @returns {string}
+ */
+export function teamMomentFor(view) {
+  if (!view) return '';
+  const seen = view.seen ?? [];
+  const show = (/** @type {string | null} */ id) => (id && !seen.includes(id) ? id : '');
+  if (view.phase === 'done') return show(momentScene(view, 'end'));
+  const played = (view.next?.games ?? []).some((/** @type {{ result: string | null }} */ game) => game.result);
+  if (view.format === 'school') {
+    const stage = view.stage ?? 'national';
+    if (stage === 'district' || stage === 'prefecture') return played ? '' : show(momentScene(view, stage));
+  }
+  if (view.next?.label && /(^|\s)決勝$/.test(view.next.label)) {
+    const final = show(momentScene(view, 'final'));
+    if (final) return final;
+  }
+  if (view.phase === 'ko') return show(momentScene(view, 'knockout'));
+  if (view.format === 'school' && view.swiss?.round === 1 && !played) return show(momentScene(view, 'start'));
+  return '';
 }

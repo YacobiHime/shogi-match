@@ -10,6 +10,7 @@
     ref="root"
     class="novel"
     :class="[`novel--${scene.background}`, { 'novel--hidden': hidden, 'novel--choosing': choosing }]"
+    :style="{ background: novelBackground(scene.background) }"
     role="dialog"
     aria-modal="true"
     :aria-label="scene.title"
@@ -168,6 +169,7 @@ import {
   loadNovelRead,
   loadNovelSettings,
   markLineRead,
+  novelBackground,
   saveNovelRead,
   saveNovelSettings,
   shouldShowSummary,
@@ -587,27 +589,7 @@ defineExpose({ finish, goBack });
   outline: none;
   background: #1d303f;
 }
-/* 背景はCSSで描く。教室の夕方(壁と床)、会館(畳と障子の色)、会場(明かり)、夜。 */
-.novel--classroom {
-  background:
-    repeating-linear-gradient(90deg, rgba(90, 60, 40, 0.25) 0 2px, transparent 2px 120px),
-    linear-gradient(180deg, #ffd9a8 0%, #f4b27a 52%, #8a5a3e 53%, #4a3326 100%);
-}
-.novel--hall {
-  background:
-    repeating-linear-gradient(90deg, rgba(255, 252, 244, 0.18) 0 3px, transparent 3px 90px),
-    linear-gradient(180deg, #e9dcc1 0%, #cdb990 55%, #8c9a5b 56%, #5f6d3c 100%);
-}
-.novel--venue {
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(255, 236, 190, 0.55), transparent 60%),
-    linear-gradient(180deg, #3e4f6a 0%, #2b3850 55%, #5b4632 56%, #3a2c20 100%);
-}
-.novel--night {
-  background:
-    radial-gradient(circle at 80% 18%, rgba(255, 252, 230, 0.9) 0 2.2em, transparent 2.3em),
-    linear-gradient(180deg, #0f1a2e 0%, #1c2b47 60%, #273652 100%);
-}
+/* 背景はCSSで描く(教室の夕方・会館・会場・夜)。色はcore/novel-ui.mjsのNOVEL_BACKGROUND_CSS(ストーリー選択のカードと同じ)。 */
 
 /* 場所の札: はじめは大きな帯で出て、少しして左上の小さな札になる(4-3)。押して読むのは止めない。 */
 .novel__place {

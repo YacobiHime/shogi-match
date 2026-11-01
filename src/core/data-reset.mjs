@@ -1,6 +1,6 @@
 /**
  * データリセットの種類(docs/data-reset-design.md)。すべてを消す「最初から」のほかに、大会・最近の対局・レーティング・
- * 教室・問題集・脳トレ・コレクションを分けて消せる。画面に依存しない。
+ * 教室・問題集・脳トレ・コレクション・物語を分けて消せる。画面に依存しない。
  * 鍵の名前はここに直接書く(各モジュールを読み込むと、ホームの最初に読むJSが重くなるため)。鍵が変わったらここも直す
  * (data-reset.test.mjsが、各モジュールの鍵と食い違っていないかを確かめる)。
  */
@@ -20,13 +20,13 @@ export const RESET_GROUPS = Object.freeze([
     id: "tournament",
     label: "大会の進み具合",
     summary: "竜王戦・名人戦・奨励会・研修会・団体戦・棋士の1年を最初から",
-    erases: "竜王戦・名人戦の期と経歴、奨励会・研修会の挑戦、団体戦、棋士の1年（場面の読んだ印も）、棋士の世界（名簿・順位戦）、大会の難易度、推しと予想、中継の記録、大会の中断した対局",
-    keeps: "賞状・観戦記・勝負メシ帳・研究ノートと、レーティング・コレクションは残ります。",
+    erases: "竜王戦・名人戦の期と経歴、奨励会・研修会の挑戦、団体戦、棋士の1年、棋士の世界（名簿・順位戦）、大会の難易度、推しと予想、中継の記録、大会の中断した対局",
+    keeps: "賞状・観戦記・勝負メシ帳・研究ノート、物語の読んだ話、レーティング・コレクションは残ります。",
     keys: Object.freeze([
       `${Y}ryuo-season`, `${Y}ryuo-career`, `${Y}ryuo-roster`, `${Y}ryuo-counter:v1`, `${Y}ryuo-oshi`, `${Y}ryuo-prediction`,
       `${Y}ryuo-watch:v1`, `${Y}meijin-season`, `${Y}meijin-career`, `${Y}shoreikai:v1`, `${Y}kenshukai:v1`,
       `${Y}tournament-world:v1`, `${Y}engine-game:v1`, `${Y}relay:v1`, `${Y}relay-view:v1`, `${Y}relay-predict:v1`, `${Y}relay-quiz:v1`,
-      `${Y}team-battle:v1`, `${Y}pro-year:v1`, `${Y}novel-read:v1`,
+      `${Y}team-battle:v1`, `${Y}pro-year:v1`,
     ]),
     snapshots: "tournament",
   }),
@@ -80,6 +80,15 @@ export const RESET_GROUPS = Object.freeze([
       `${Y}collection:v1`, `${Y}collection-seen:v1`, `${Y}mate-finish:v1`, `${Y}awards`, `${Y}kansenki:v1`, `${Y}meal-book:v1`,
       `${Y}relay-notes:v1`, `${Y}opening-fortune:v1`, `${Y}coach-plans:v1`,
     ]),
+  }),
+  // 物語(docs/story-mode-design.mdの3章の10)。ノベルの場面の読んだ印(既読)も、ここで消す。
+  Object.freeze({
+    id: "story",
+    label: "物語",
+    summary: "開いた話・読んだ話と、場面の読んだ印",
+    erases: "物語の開いた話・読んだ話、ノベルの場面の読んだ印（既読の早送りと、飛ばす前のあらすじの印）",
+    keeps: "大会の進み具合・名前・場面の文字の速さは残ります。",
+    keys: Object.freeze([`${Y}story:v1`, `${Y}novel-read:v1`]),
   }),
   Object.freeze({
     id: "all",

@@ -35,6 +35,20 @@ export const READ_SCENES_MAX = 120;
 /** @type {NovelSettings} */
 export const DEFAULT_NOVEL_SETTINGS = Object.freeze({ text: 'normal', auto: 'normal' });
 
+/**
+ * 場面の背景(CSSで描く。画像を足さない)。教室の夕方(壁と床)、会館(畳と障子の色)、会場(明かり)、夜。
+ * ノベルの場面(NovelScene.vue)と、ストーリー選択のカードの小さな絵(PickCard.vue)で同じものを使う(docs/story-mode-design.mdの1章)。
+ */
+export const NOVEL_BACKGROUND_CSS = Object.freeze({
+  classroom: 'repeating-linear-gradient(90deg, rgba(90, 60, 40, 0.25) 0 2px, transparent 2px 120px), linear-gradient(180deg, #ffd9a8 0%, #f4b27a 52%, #8a5a3e 53%, #4a3326 100%)',
+  hall: 'repeating-linear-gradient(90deg, rgba(255, 252, 244, 0.18) 0 3px, transparent 3px 90px), linear-gradient(180deg, #e9dcc1 0%, #cdb990 55%, #8c9a5b 56%, #5f6d3c 100%)',
+  venue: 'radial-gradient(ellipse at 50% 0%, rgba(255, 236, 190, 0.55), transparent 60%), linear-gradient(180deg, #3e4f6a 0%, #2b3850 55%, #5b4632 56%, #3a2c20 100%)',
+  night: 'radial-gradient(circle at 80% 18%, rgba(255, 252, 230, 0.9) 0 2.2em, transparent 2.3em), linear-gradient(180deg, #0f1a2e 0%, #1c2b47 60%, #273652 100%)',
+});
+
+/** 背景のCSS(知らない背景は会場)。 */
+export const novelBackground = (id) => NOVEL_BACKGROUND_CSS[/** @type {keyof typeof NOVEL_BACKGROUND_CSS} */ (id)] ?? NOVEL_BACKGROUND_CSS.venue;
+
 /** 画面の言葉(U:4 文言は1か所に)。 */
 export const NOVEL_UI_TEXT = Object.freeze({
   log: 'ログ',
