@@ -817,6 +817,8 @@ function closeSchoolStage(run, rng) {
     ? (info.advance >= 2 ? (champion === USER_TEAM ? '1位で通過' : '2位で通過') : '優勝')
     : info.places[lostAt] ?? info.places[0];
   run.stageLog = [...(run.stageLog ?? []), { id: ko.stage, ko, champion, runnerUp, advanced, label }];
+  // 段階の終わりの表彰式(20章)。試合の結果発表のあと、団体戦の画面で見る。
+  run.ceremony = { stage: ko.stage, seen: false };
   if (!advanced) {
     finishRun(run);
     return;
@@ -831,6 +833,15 @@ function finishRun(run) {
   run.current = null;
   run.pending = null;
   run.result = userPlace(run);
+  // 大会の終わりの表彰式(20章)。地区大会・県大会で終わったときは、その段階の表彰式がもう決まっている。
+  const stage = teamStageOf(run) ?? 'pro';
+  if (!(run.ceremony && !run.ceremony.seen && run.ceremony.stage === stage)) run.ceremony = { stage, seen: false };
+}
+
+/** 表彰式を見た(20章)。 */
+export function markTeamCeremonySeen(source) {
+  if (!source?.ceremony || source.ceremony.seen) return source;
+  return { ...source, ceremony: { ...source.ceremony, seen: true } };
 }
 
 /** 自分のチームの成績の言い方。 */
@@ -1340,6 +1351,74 @@ export function teamRunView(run) {
     seen: [...(run.seen ?? [])],
     members: Object.fromEntries((run.teams[USER_TEAM]?.members ?? []).map((id) => [id, teamMemberStatus(run, id)])),
   };
+}
+
+/**
+ * どの選手のステータスも出す(仲間は16章、相手の学校の選手は20章)。相手は学校の名前・地区と、あなたとの対戦成績、羽音の一言を足す。
+ * 今の自分の試合で、まだ知らせていない局は数えない。
+ * @param {any} run
+ * @param {string} playerId
+ */
+export function teamPlayerStatus(run, playerId) {
+  const team = Object.values(run?.teams ?? {}).find((entry) => entry.members.includes(playerId));
+  if (!team) return null;
+  if (team.id === USER_TEAM) return teamMemberStatus(run, playerId);
+  const member = run.players?.[playerId];
+  if (!member) return null;
+  const index = team.members.indexOf(playerId);
+  let wins = 0;
+  let losses = 0;
+  let vsWins = 0;
+  let vsLosses = 0;
+  for (const match of Object.values(run.matches)) {
+    if (match.a !== team.id && match.b !== team.id) continue;
+    if (run.format === 'school' && match.id === run.current && isUserMatch(match)) continue;
+    const side = match.a === team.id ? 'a' : 'b';
+    for (const game of match.games) {
+      if ((side === 'a' ? game.a : game.b) !== playerId || !game.winner) continue;
+      if (game.winner === side) wins += 1;
+      else losses += 1;
+      if ((side === 'a' ? game.b : game.a) === TEAM_USER_ID) {
+        if (game.winner === side) vsWins += 1;
+        else vsLosses += 1;
+      }
+    }
+  }
+  const next = run.pending?.opponentId === playerId;
+  return {
+    id: playerId,
+    name: member.name,
+    you: false,
+    rival: true,
+    story: member.story ?? null,
+    school: team.name,
+    area: team.area ?? '',
+    seat: run.format === 'school' ? SCHOOL_SEATS[index] ?? '' : index === 0 ? 'リーダー' : '',
+    dan: member.dan ?? '',
+    record: { wins, losses },
+    recordText: wins + losses ? `この大会 ${wins}勝${losses}敗` : 'この大会は、まだ指していない',
+    // vsWinsはこの選手があなたに勝った数。あなたから見た成績で書く。
+    vsText: vsWins + vsLosses ? `あなたとの対局 あなたの${vsLosses}勝${vsWins}敗` : '',
+    strength: strengthText(run.format, member.rating),
+    repertoire: member.repertoire ? repertoireText(member.repertoire) : '',
+    line: rivalLine(member, { next }),
+    profile: {
+      rating: member.rating, kind: member.kind, age: member.age, story: member.story ?? null,
+      character: member.character ?? null, repertoire: member.repertoire ?? null, style: member.style ?? null,
+    },
+  };
+}
+
+/** 相手の選手への羽音の一言(いちばん強い能力と弱い能力から。敬語と「！」なし。20章)。 */
+function rivalLine(member, { next = false } = {}) {
+  if (!member.character?.abilities) return '';
+  const values = abilityValues(member);
+  const sorted = [...ABILITIES].sort((a, b) => values[b.key] - values[a.key]);
+  const best = sorted[0];
+  const worst = sorted.at(-1);
+  const head = next ? '君の次の相手。' : '';
+  if (member.story === YOSHIHIKO) return `羽音「${head}……父さんだね。${best.label}も${worst.label}も、全部が強い。正面からいくしかないでしょ」`;
+  return `羽音「${head}${member.name}さんは${best.label}が強い。${worst.label}が弱いから、そこを突けばいい」`;
 }
 
 /**

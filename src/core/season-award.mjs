@@ -141,6 +141,21 @@ export function teamAward(run, { playerName = 'あなた', at = Date.now() } = {
 }
 
 /**
+ * 団体戦の段階ごとの表彰式(docs/team-battle-design.mdの20章)で渡す賞状。団体の入賞(3位まで)と個人賞。
+ * 全国優勝(プロは優勝)は、今までの団体優勝の賞状(teamAward)。
+ * @param {{ id: string, kind: 'team' | 'player', name: string, stageName: string, prize: string, grade: string, team: string, seat?: string, wins: number, losses: number }} entry
+ * @param {{ playerName?: string, at?: number }} [options]
+ */
+export function teamStageAward(entry, { playerName = 'あなた', at = Date.now() } = {}) {
+  const award = makeAward({
+    tournament: entry.kind === 'player' ? 'team-player' : 'team-stage', name: entry.name, seal: '団', no: 1, grade: entry.grade,
+    prize: entry.prize, notes: [entry.stageName, entry.team, entry.seat ?? ''].filter(Boolean).slice(0, 3), entry: entry.team,
+    wins: entry.wins, losses: entry.losses, playerName, at,
+  });
+  return { ...award, id: entry.id, stageName: entry.stageName, seat: entry.seat ?? '' };
+}
+
+/**
  * 棋士の1年(docs/pro-year-design.md)のタイトル獲得・棋戦優勝の賞状。期ごとに1枚。
  * @param {{ cycle: string, name: string, short: string, title: boolean, fy: number, wins: number, losses: number }} win
  * @param {{ playerName?: string, at?: number }} [options]
@@ -216,6 +231,21 @@ export function awardText(award) {
       date: kanjiDate(award.at),
     };
   }
+  if (award.tournament === 'team-stage' || award.tournament === 'team-player') {
+    const stage = award.stageName ?? '';
+    const where = [award.name, stage].filter(Boolean).join(' ');
+    return {
+      heading: '賞状',
+      title: where,
+      prize: award.prize.replace(`${stage} `, ''),
+      notes: award.notes.map(kanjiText),
+      name: `${award.playerName} 殿`,
+      body: kanjiText(award.tournament === 'team-player'
+        ? `あなたは${where}において${award.entry}の${award.seat || '選手'}として出場し、${record(award.wins, award.losses)}の成績を収め、${award.prize.replace(`${stage} `, '')}に選ばれました。よってここに、これを賞します。`
+        : `あなたは${where}に${award.entry}の一員として出場し、${record(award.wins, award.losses)}の成績で、仲間とともに${award.prize.replace(`${stage} `, '')}に入賞しました。よってここに、これを賞します。`),
+      date: kanjiDate(award.at),
+    };
+  }
   if (award.tournament === 'pro-year') {
     const title = `${award.no}年度 ${award.name}`;
     return {
@@ -249,6 +279,8 @@ export function awardText(award) {
 export function awardTalk(award) {
   if (award.tournament === 'shoreikai') return '四段昇段、ほんとうにおめでとう！ 今日から、あなたはプロ棋士だよ';
   if (award.tournament === 'team') return '団体優勝、おめでとう！ 3人で取った優勝だね';
+  if (award.tournament === 'team-stage') return `${award.prize}、おめでとう！ 3人でつかんだ入賞だね`;
+  if (award.tournament === 'team-player') return `${award.prize}、おめでとう！ あなたの白星がたくさん並んだね`;
   if (award.tournament === 'pro-year') return `${award.name.replace(/戦$/, '')}${award.prize}、ほんとうにおめでとう！`;
   if (award.tournament === 'kenshukai') return award.grade === 'gold'
     ? 'Sクラス、研修会のいちばん上！ ほんとうによく頑張ったね'
@@ -267,6 +299,7 @@ export const awardLine = (award) => {
   if (award.tournament === 'shoreikai') return `奨励会 四段昇段（棋士番号${award.no}号）`;
   if (award.tournament === 'kenshukai') return `研修会 ${award.prize}`;
   if (award.tournament === 'team') return `${award.name} ${award.prize}（${award.entry}）`;
+  if (award.tournament === 'team-stage' || award.tournament === 'team-player') return `${award.name} ${award.prize}（${award.entry}）`;
   if (award.tournament === 'pro-year') return `${award.no}年度 ${award.name} ${award.prize}`;
   return `第${award.no}期 ${award.name} ${award.prize}`;
 };
