@@ -74,7 +74,7 @@
           <!-- 運営のコメント(ニコニコ動画の上コメ)。盤の上の端に3秒止まる。休憩・終局・同じ回戦のほかの結果。 -->
           <p v-if="commentsOn && banner && !tsume" :key="banner.id" class="relay__banner" aria-hidden="true" data-relay-banner>{{ banner.text }}</p>
           <!-- 下に止まる大きなコメント(下コメ。5秒。見せ場の一言だけ。25章)。 -->
-          <p v-if="commentsOn && under && !tsume" :key="under.id" class="relay__under" aria-hidden="true" data-relay-under>{{ under.text }}</p>
+          <p v-if="commentsOn && under && !tsume" :key="under.id" :class="['relay__under', under.tone ? `relay__under--${under.tone}` : '', under.text.length > 14 ? 'relay__under--long' : '']" aria-hidden="true" data-relay-under>{{ under.text }}</p>
           <!-- 心の声。対局者の名札の近く(上が後手、下が先手)。 -->
           <!-- 詰将棋を解いているあいだは、盤に重ねるもの(心の声・札)を出さない(47章)。 -->
           <p
@@ -520,6 +520,7 @@ function seek(target: number) {
   danmaku = createDanmaku();
   banner.value = null;
   under.value = null;
+  clearUnderWaits();
   cursor.value = Math.max(0, Math.min(ready.value, Math.round(target)));
   activeCard.value = cards.value.find((item) => item.at === cursor.value) ?? null;
 }
@@ -652,11 +653,17 @@ function showBanner(text: string) {
   bannerTimer = setTimeout(() => { banner.value = null; }, BANNER_MS / Math.sqrt(speed.value));
 }
 /** 下に止まる大きなコメント(25章)。 */
-const under = shallowRef<{ id: number; text: string } | null>(null);
+const under = shallowRef<{ id: number; text: string; tone: string } | null>(null);
 let underTimer: ReturnType<typeof setTimeout> | undefined;
-function showUnder(text: string) {
+/** 解説の言葉が出てから出す下コメ(lag。49章)の待ち。 */
+let underWaits: ReturnType<typeof setTimeout>[] = [];
+function clearUnderWaits() {
+  underWaits.forEach((wait) => clearTimeout(wait));
+  underWaits = [];
+}
+function showUnder(text: string, tone = "") {
   flyId += 1;
-  under.value = { id: flyId, text };
+  under.value = { id: flyId, text, tone };
   clearTimeout(underTimer);
   underTimer = setTimeout(() => { under.value = null; }, UNDER_MS / Math.sqrt(speed.value));
 }
@@ -667,8 +674,13 @@ function spawn(at: number, when: string) {
   // 運営のコメントは上に止め、見せ場の一言は下に止める(動かないので、動きを減らす設定でも出す)。
   const top = items.filter((item) => item.pos === "top");
   if (top.length) showBanner(top[top.length - 1].text);
+  // 下コメは、lagのないものは最後の1つをすぐ、lagのあるもの(解説の言葉に合わせる。49章)は順に待って出す。
   const bottom = items.filter((item) => item.pos === "bottom");
-  if (bottom.length) showUnder(bottom[bottom.length - 1].text);
+  const now = bottom.filter((item) => !item.lag);
+  if (now.length) showUnder(now[now.length - 1].text, now[now.length - 1].tone ?? "");
+  bottom.filter((item) => item.lag).forEach((item) => {
+    underWaits.push(setTimeout(() => showUnder(item.text, item.tone ?? ""), item.lag / Math.sqrt(speed.value)));
+  });
   if (reducedMotion) return;
   // 解説へのつっこみ・振り駒の結果への反応(lag)は、解説の言葉が出てから流す(27章)。ほかは順に0.38秒ずつ。
   let plain = 0;
@@ -1224,6 +1236,7 @@ onBeforeUnmount(() => {
   clearTimers();
   clearTimeout(bannerTimer);
   clearTimeout(underTimer);
+  clearUnderWaits();
   clearTimeout(quizTimer);
   clearTimeout(highlightTimer);
   clearTimeout(variationTimer);
@@ -1329,6 +1342,7 @@ onBeforeUnmount(() => {
 /* 駒割り勢はオレンジ、海外のファンは薄紫(12-5)。 */
 .shogi-game .relay__comment--orange { color: #ffb36b; }
 .shogi-game .relay__comment--lavender { color: #d9c8ff; }
+.shogi-game .relay__comment--white { color: #fff; }
 .shogi-game .relay__comment--big { font-size: 1.4em; }
 /* 下に止まる大きなコメント(下コメ。25章)。先手の名札の上、盤の下の端に5秒。縁取りの金色の大きな字。 */
 .shogi-game .relay__under {
@@ -1350,6 +1364,22 @@ onBeforeUnmount(() => {
   transform: translateX(-50%);
   pointer-events: none;
 }
+/* 長い下コメ(15字から)は字を小さくし、スマホの幅でも切らない(49章)。 */
+.shogi-game .relay__under--long { font-size: clamp(0.95rem, calc(var(--relay-width, 400px) * 0.042), 2rem); }
+/* 下コメの色(49章)。赤・白と、ゲーミングな虹色(色が流れる。動きを減らす設定では止める)。 */
+.shogi-game .relay__under--red { color: #ff8a7a; }
+.shogi-game .relay__under--white { color: #fff; }
+.shogi-game .relay__under--rainbow {
+  color: transparent;
+  background: linear-gradient(90deg, #ff5a5a, #ffb347, #fff36b, #6bff8a, #5ad8ff, #8a7bff, #ff6bd8, #ff5a5a);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: none;
+  filter: drop-shadow(0 0 2px #000) drop-shadow(0 2px 3px #000);
+  animation: relay-rainbow 1.2s linear infinite;
+}
+@keyframes relay-rainbow { to { background-position: -200% 0; } }
 /* 運営のコメント(上に止まる帯)。後手の名札と時計の下、心の声より上。 */
 .shogi-game .relay__banner {
   position: absolute;
@@ -1638,5 +1668,6 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .relay__thought { animation: none; }
   .shogi-game .relay__rate-bar span { transition: none; }
+  .shogi-game .relay__under--rainbow { animation: none; }
 }
 </style>

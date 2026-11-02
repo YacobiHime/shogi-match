@@ -145,11 +145,11 @@ describe('createRelayScript', () => {
 
 /** 決まった手順で長い1局を作り、台本を通す(コメントの種類を確かめる)。 */
 function longScript({
-  weight = 'plain', news = [], variant = '', venue = '', cast: castOverride = null, white = null, evalOf = null, end = { winner: 'black', reason: 'resign' }, how = 'middle', series = null,
+  weight = 'plain', news = [], variant = '', venue = '', cast: castOverride = null, black = null, white = null, evalOf = null, end = { winner: 'black', reason: 'resign' }, how = 'middle', series = null,
 } = {}) {
   const spec = {
     key: `ryuo:9:main:long-${weight}${variant}`, venue, event: 'ryuo', kind: weight === 'title' ? 'finals' : 'game', label: '決勝トーナメント 準決勝', weight,
-    black: player('a', '中村大輔', { age: 41, character: { attack: 0.4, traits: [{ id: 'demon-reading' }], abilities: {} } }),
+    black: black ?? player('a', '中村大輔', { age: 41, character: { attack: 0.4, traits: [{ id: 'demon-reading' }], abilities: {} } }),
     white: white ?? player('h', '天鷺羽音', { story: HANANE, age: 16 }), winner: end.winner, how, story: [80, 300, 900], news, series,
   };
   const cast = castOverride ?? { id: 'y', name: '天鷺善彦', dan: '竜王', story: YOSHIHIKO, voice: 'yoshihiko' };
@@ -437,7 +437,8 @@ describe('解説の掛け合いと、コメントの例の取り込み(25章)', 
     expect(unders.length).toBeGreaterThan(0);
     expect(unders.every(({ size }) => size === 'big')).toBe(true);
     for (const { comments } of scripts) {
-      const ats = comments.filter(({ pos }) => pos === 'bottom').map(({ at }) => at);
+      // 同じ手の問いと答え(49章)は続けて出る。手が違えば6手あける。
+      const ats = [...new Set(comments.filter(({ pos }) => pos === 'bottom').map(({ at }) => at))].sort((a, b) => a - b);
       for (let i = 1; i < ats.length; i += 1) expect(ats[i] - ats[i - 1]).toBeGreaterThanOrEqual(6);
     }
   });
@@ -492,7 +493,7 @@ describe('コメントの条件と名詞の差し替え、解説との連動(27�
       for (const group of groups) if (group.some((text) => said.includes(text))) expect(group.every((text) => said.includes(text)), group.join('/')).toBe(true);
     }
     // 開始前の「専門家」の4行は、同じ手で少しずつ遅れて流れる(重ならない)。
-    const humble = script.comments.filter(({ at, text }) => at === 0 && /専門家/.test(text)).map(({ lag }) => lag);
+    const humble = script.comments.filter(({ at, text, kind }) => at === 0 && kind === 'cast' && /専門家/.test(text)).map(({ lag }) => lag);
     expect(humble).toHaveLength(4);
     expect(new Set(humble).size).toBe(4);
     // ほかの解説者のときは、今までどおり一部だけ。
@@ -788,5 +789,73 @@ describe('自分の対局と寄せの手数(docs/mate-finish-design.md)', () => 
       const script = longScript({ variant, white: player('user', 'やこび', { kind: 'user' }) });
       expect(script.comments.some(({ text }) => /酷いｗ|明らかにおかしい/.test(text))).toBe(false);
     }
+  });
+});
+
+describe('解説の言葉に合わせたコメント(49章)', () => {
+  const yoshihiko = { id: 'y', name: '天鷺善彦', dan: '名人', title: '名人', story: YOSHIHIKO, voice: 'yoshihiko' };
+  const variants = ['', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+  const scripts = variants.map((variant) => longScript({ variant, cast: yoshihiko, white: player('s', '鈴木蓮', { age: 28 }) }));
+
+  it('善彦の言葉は、言った手で黄色の大きな字(天鷺「…」)になり、解説が出てから流れる', () => {
+    const quotes = scripts.flatMap(({ comments }) => comments.filter(({ kind }) => kind === 'quote'));
+    for (const text of ['天鷺「意地でも（★I★JI★DE★MO★）」', '天鷺「えーーーー、」', '天鷺「まあしょうがないんですね。（？）」', '天鷺「あー…」', '天鷺「どうするんでしょうか？」']) {
+      expect(quotes.map((item) => item.text), text).toContain(text);
+    }
+    for (const { comments, lines } of scripts) {
+      for (const item of comments.filter(({ kind }) => kind === 'quote')) {
+        expect(item.size).toBe('big');
+        expect(item.lag).toBeGreaterThan(0);
+        // 取られた駒の「解せぬ」(白)は、解説の言葉ではない。
+        if (item.tone !== 'white') expect(lines.some(({ at }) => at === item.at), item.text).toBe(true);
+        if (item.text.startsWith('天鷺「')) expect(item.tone).toBe('gold');
+        if (item.text.startsWith('やこび姫「')) expect(item.tone).toBe('red');
+      }
+    }
+    // 聞き手の「なにがなんでも」は、言った人の名前つきの赤い字。
+    const iji = scripts.find(({ lines }) => lines.some(({ text }) => text === 'あ、なにがなんでも……'));
+    expect(iji.comments.some(({ text, tone }) => text === 'やこび姫「あ…何がなんでも…」' && tone === 'red')).toBe(true);
+  });
+
+  it('しょうがないの場面は、赤の「Q.これは…一体？」のあとに黄色の「A.しょうがない」が下に出る', () => {
+    const script = scripts.find(({ lines }) => lines.some(({ text }) => text === 'これは……一体……？'));
+    const q = script.comments.find(({ text }) => text === 'Q.これは…一体？');
+    const a = script.comments.find(({ text }) => text === 'A.しょうがない');
+    expect(q).toMatchObject({ pos: 'bottom', tone: 'red', size: 'big' });
+    expect(a).toMatchObject({ pos: 'bottom', tone: 'gold', at: q.at });
+    expect(a.lag).toBeGreaterThan(q.lag);
+  });
+
+  it('「専門家じゃないんで」には虹色の下コメ。ほかの解説者には出ない', () => {
+    const [script] = scripts;
+    expect(script.comments.some(({ at, text, tone, pos }) => at === 0 && text === '専門家じゃないんで（歴代最多勝利＆永世七冠）' && tone === 'rainbow' && pos === 'bottom')).toBe(true);
+    const plain = longScript({ cast: { id: 'c', name: '佐藤誠', dan: '九段', story: null, voice: 'polite' }, white: player('s', '鈴木蓮') });
+    expect(plain.comments.some(({ tone }) => tone === 'rainbow')).toBe(false);
+    expect(plain.comments.some(({ text }) => /^天鷺「/.test(text))).toBe(false);
+  });
+
+  it('善彦と指す棋士には「たった一人で天鷺善彦に立ち向かった男」(言わない局もある)', () => {
+    const hanane = { id: 'h', name: '天鷺羽音', dan: '四段', title: '四段', story: HANANE, voice: 'hanane' };
+    const facing = variants.map((variant) => longScript({ variant, cast: hanane, white: player('y', '天鷺善彦', { story: YOSHIHIKO }) }));
+    const said = facing.filter(({ comments }) => comments.some(({ text, pos }) => text === 'たった一人で天鷺善彦に立ち向かった男' && pos === 'bottom'));
+    expect(said.length).toBeGreaterThan(0);
+    // 女流棋士とは言わない(「男」と決めつけない)。
+    const women = variants.map((variant) => longScript({
+      variant, cast: hanane, black: player('w', '石田彩', { dan: '女流三段' }), white: player('y', '天鷺善彦', { story: YOSHIHIKO }),
+    }));
+    expect(women.some(({ comments }) => comments.some(({ text }) => /立ち向かった男/.test(text)))).toBe(false);
+  });
+
+  it('解説者が無理気味の仕掛けを「ちょっと無理っぽいような…」と言うと、苗字つきの赤い大きな字', () => {
+    const polite = { id: 'c', name: '佐藤誠', dan: '九段', story: null, voice: 'polite' };
+    const behind = (index) => (index % 2 === 0 ? -900 : 900);
+    const many = variants.map((variant) => longScript({ variant, cast: polite, white: player('s', '鈴木蓮'), evalOf: behind }));
+    const quotes = many.flatMap(({ comments }) => comments.filter(({ text }) => text === '佐藤「ちょっと無理っぽいような…」'));
+    expect(quotes.length).toBeGreaterThan(0);
+    expect(quotes.every(({ tone, size }) => tone === 'red' && size === 'big')).toBe(true);
+  });
+
+  it('穴埋め({at}・{title})が残らない', () => {
+    for (const { comments } of scripts) for (const { text } of comments) expect(text).not.toMatch(/\{\w+\}/);
   });
 });

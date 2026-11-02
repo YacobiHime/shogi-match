@@ -217,7 +217,7 @@ export function moveMeaning(facts, { ply = 99 } = {}) {
 
 const VIEWER = Object.freeze({
   start: ['きたー', '待ってた', 'わこつ', 'よろしくお願いします', 'どっち応援する？', '今日はこの対局', '期待', '深呼吸して、からの～？', 'ワクワク', '興奮してきた', 'これは楽しみ'],
-  opening: ['定跡どおり', '研究会でやってたやつ', 'ここまでは早い', 'この戦型好き', 'まだ定跡', '前例沢山ある', '何か研究ありそうだが', '様子見だな'],
+  opening: ['定跡どおり', '研究会でやってたやつ', 'ここまでは早い', 'この戦型好き', 'まだ定跡', '前例沢山ある', '何か研究ありそうだが', '様子見だな', 'ここまでは普通'],
   formation: ['{name}だ', '{name}きた！', '出た{name}'],
   castle: ['{name}完成', '堅い', '囲い合いだ', 'しっかり囲った'],
   capture: ['取った', 'ここで取るか', 'ふむ'],
@@ -229,7 +229,7 @@ const VIEWER = Object.freeze({
   byoyomi: ['秒読み入った', '1分将棋！', '50秒…', 'がんばれー', '時間ない！'],
   // 秒読みの最中(記録係の読み上げをまねる)。
   byoyomiOn: ['30秒…', '40秒', '50秒…', '1、2、3…', '早く早く', 'ドキドキする', '秒読みの中でよく指す'],
-  swing: ['あれ？', '形勢動いた？', '勝率が…', 'えっ', 'これは痛い？', 'ガクッときた'],
+  swing: ['あれ？', '形勢動いた？', '勝率が…', 'えっ', 'これは痛い？', 'ガクッときた', 'あっ'],
   only: ['すごい', 'うますぎる', 'これは見えない', '!!', '神の一手？', 'さすが', 'これほんとどうやってんだ？ｗ'],
   ending: ['終盤だ', '詰む？', '詰まない？', '手に汗にぎる', 'どっちだ', '見てられない'],
   winning: ['決まった？', 'これは寄った', 'もう勝ちかな', '受けがない？'],
@@ -312,7 +312,7 @@ const VIEWER = Object.freeze({
   kakunari: ['{sq}かくなり～'],
   kiai: ['気合が入ってるんや'],
   // 序盤の端歩。
-  hashi: ['端歩？？？'],
+  hashi: ['端歩？？？', 'まあ端歩は挨拶だからな'],
   // 戦法を判定したとき。予想どおり(得意戦法)なら当然と受け止め、劣勢側なら心配する。{short}は「システム」「四間」など短い呼び方。
   formationSure: ['まぁ{short}ですよね', 'よし{side}{name}だな', '{name}来たな、風呂入ってくる'],
   formationHard: ['{side}{short}は厳しいなｗ'],
@@ -325,7 +325,7 @@ const VIEWER = Object.freeze({
   often: ['{move}はよく指す手ですよ'],
   joban: ['序盤は{name}'],
   // 早く終盤になった。
-  mouEnd: ['もう終盤？'],
+  mouEnd: ['もう終盤？', '試合展開、1話見逃したアニメくらい早い'],
   // 考慮中、読み筋の1手目が香車を上がる手。
   kyosha: ['香車上がるか？'],
   // 振り飛車・相振り飛車。
@@ -355,10 +355,10 @@ const VIEWER = Object.freeze({
   hishaKawaii: ['王より飛車を可愛がり。。。', '飛車可愛がりすぎだろ'],
   // 駒の見せ場。
   knightHonki: ['桂の本気ｗ', '桂跳ねたー', 'つえええええええｗ'],
-  bishopIji: ['角の意地ｗｗｗｗ', '角が働いた'],
-  kakuto: ['角頭歩ｗｗ', '角頭の歩！'],
+  bishopIji: ['角の意地ｗｗｗｗ', '角が働いた', 'ダイヤモンドエッジ'],
+  kakuto: ['角頭歩ｗｗ', '角頭の歩！', '角頭歩！？'],
   ouhisha: ['王手飛車取りｗｗｗ', '王手飛車！', 'ひえええええええええ'],
-  rookTwoStep: ['飛車の二段階右折', '二段階右折ｗｗｗｗ', '二段階右折ﾜﾛﾀ'],
+  rookTwoStep: ['飛車の二段階右折', '二段階右折ｗｗｗｗ', '二段階右折ﾜﾛﾀ', '慣性ドリフト'],
   noPromote: ['成らないの！？', '不成ｗ', '成らない方が強い？', '成らない方が強いだろｗｗｗ'],
   tempo: ['タン！タン！', '早い早い'],
   // 終局のあと。
@@ -366,7 +366,7 @@ const VIEWER = Object.freeze({
   loserVoice: ['（・・・あれ？俺負けたの・・・？）'],
   // 解説への反応(解説者の言い方に、視聴者がつっこむ)。{cast}は解説者の苗字。
   castHumble: ['お前が専門家じゃないなら誰が専門家なんだよｗ', 'あんた以上の専門家いないだろｗｗｗ', '専門家じゃないｗｗｗｗｗ', '振り飛車の専門家とかだろう'],
-  castJudge: ['{cast}さんが言うならしょうがないｗ', 'まてｗｗｗｗｗ', 'よくねえよふざけんなｗｗｗ'],
+  castJudge: ['{cast}さんが言うならしょうがないｗ', 'まてｗｗｗｗｗ', 'よくねえよふざけんなｗｗｗ', '{cast}{title}がそういうなら', '行かざるを得ないｗｗｗｗ'],
   castSo: ['まあ{cast}さんが言うなら…', 'まあお前が言うならｗ'],
   castShikata: ['しょうがないのかｗ', 'しょうがないｗｗ', '{cast}さんが言うならしょうがないｗ'],
   castIji: ['なにがなんでもｗ', 'いじでも！', '意地でもｗ'],
@@ -418,7 +418,7 @@ const VIEWER = Object.freeze({
   shousei: ['{side}勝勢じゃない？'],
   igyoku: ['居玉の弱点を突きにきたということか'],
   unclear: ['あーはっきりしない局面だ'],
-  stillChance: ['捕まらなければ{name}さんまだ勝ちの目ある'],
+  stillChance: ['捕まらなければ{name}さんまだ勝ちの目ある', '（ここから逆転するには…）'],
   aseri: ['{full}焦ってる　なかなか見られへんでこの対局は', '{name}焦っとるな'],
   legend: ['かつての{pair}の激戦を思い起こされる'],
   handOnly: ['持ち駒{piece}だけなのはつらいなあ'],
@@ -444,7 +444,7 @@ const VIEWER = Object.freeze({
   reversal: ['大逆転しすぎ', '二転三転したなあ', 'あの展開で{side}勝てるんだ…', 'あの展開で{side}勝つとか恐ろしい', '大逆転劇'],
   magic: ['マジックありますな', 'ってかこれは形勢もどるのでは', '揺らぐな'],
   wasted: ['いやー{move}すごかったけどなぁ勝ち切れんかったか'],
-  nebare: ['粘ればまだあるぞ', 'まだ全然終わってはない'],
+  nebare: ['粘ればまだあるぞ', 'まだ全然終わってはない', 'いいぞがんばれ'],
   byoMiss: ['1分だからそりゃミスも出るか'],
   byoRisk: ['一分将棋なんで外れる危険はまだありうる'],
   muhon: ['飛車の謀反ｗ'],
@@ -479,9 +479,14 @@ const VIEWER = Object.freeze({
   kyosokuReply: ['強く同{piece}は草'],
   docchi: ['どっち優勢なん？{side}？'],
   leadChain: ['{a}勝ちそう→{b}勝ちそう→{a}勝ちそう→さすがに{b}勝ち'],
-  tataki: ['詰みを探す歩のたたきか'],
+  tataki: ['詰みを探す歩のたたきか', '叩きの歩'],
   jitto: ['じっと{move}かー'],
-  hmm: ['ん？', 'なんか違う手だけど', 'おや', 'おほー', 'あら', 'やっと見えてきた', 'にゃるほど'],
+  hmm: ['ん？', 'なんか違う手だけど', 'おや', 'おほー', 'あら', 'やっと見えてきた', 'にゃるほど', '？？？', '何か策があるのかも知れない'],
+  // 49章: 解説の言葉に合わせて出す視聴者の一言。
+  muri: ['ちょっと無理っぽいｗｗｗ'],
+  ikazaruAt: ['{at}手目で行かざるを得ないってなにｗｗｗｗ'],
+  yuchou: ['行かざるを得ない局面なのに悠長だな'],
+  kachidayona: ['/勝ちだよな…？\\'],
   omoide: ['思い出王手キターーーーーー( ﾉД`)ｼｸｼｸ…'],
   endPraise: ['激闘だった　見応え満点', 'すごい将棋だった', '名局賞щ(ﾟДﾟщ)ｶﾓｰﾝ'],
   endBye: ['お疲れさまでした', 'お疲れ様でした', '８８８８８８', '拍手👏👏👏👏👏', 'おめでとう🎊', 'え、終わりました？', '終了'],
@@ -556,7 +561,7 @@ const POOL_KIND = Object.freeze({
   muhon: 'neta', muzukashii: 'idle', dameDrop: 'play', teban: 'theory', ocha: 'clock', ippute: 'ai', tsumero: 'ai', hisshi: 'ai', tsunderu: 'ai',
   namepu: 'neta', saizen: 'ai', yonaga: 'history', toryoAru: 'idle', nageDokoro: 'theory', nageLine: 'predict', nageNai: 'idle', ryu: 'cheer', boei: 'theory', tanoshi: 'cheer',
   wakaran: 'newbie', wakaranReply: 'idle', owatteta: 'ai', taeru: 'idle', jikan: 'clock', madaka: 'predict', sokuuchi: 'idle', sokuuchiReply: 'idle',
-  seikai: 'hype', kyosoku: 'play', kyosokuReply: 'idle', docchi: 'newbie', leadChain: 'idle', tataki: 'theory', jitto: 'play', hmm: 'idle', omoide: 'hype',
+  seikai: 'hype', muri: 'hype', ikazaruAt: 'hype', yuchou: 'idle', kachidayona: 'cheer', kyosoku: 'play', kyosokuReply: 'idle', docchi: 'newbie', leadChain: 'idle', tataki: 'theory', jitto: 'play', hmm: 'idle', omoide: 'hype',
   endPraise: 'hype', endBye: 'kifu', turning: 'theory', munen: 'cheer', yoseMiss: 'idle', material: 'material', materialEven: 'material',
   kingSolid: 'king', kingThin: 'king', anaguma: 'king', layman: 'layman', laymanReply: 'ai', local: 'local', localKaikan: 'local',
   room: 'room', roomOnly: 'room', roomSwing: 'room', veteran: 'veteran', rookie: 'veteran', overseas: 'overseas', overseasWow: 'overseas', overseasEnd: 'overseas',
@@ -574,6 +579,9 @@ const UNDER = Object.freeze({
   nattoku: ['{cast}も納得の一手'],
   oushou: ['王将「え・・・」'],
   oi: ['おい', '！？'],
+  // 49章: 解説の言葉に合わせて出す下コメ。色はunderの4つめで決める。
+  ikazaru: ['行かざるを得ない（使命感）'],
+  semeru: ['攻めの姿勢'],
 });
 
 /** 書き手の種類の色(盤の升の強調とは別の、縁取りの文字)。 */
@@ -771,6 +779,8 @@ const CASTLE_NEXT = Object.freeze([[/舟囲い/, 'エルモ'], [/片美濃/, '�
 const TITLE_NAMES = Object.freeze(['竜王', '名人', '叡王', '王位', '王座', '棋王', '王将', '棋聖']);
 /** 解説へのつっこみは、解説の言葉が出てから少し遅れて流す(ミリ秒)。 */
 const REACT_LAG = 1600;
+/** 解説の言葉を引く大きな字・下コメの待ち(1つ目の言葉が欄に出るころ。2つ目からは倍数。49章)。 */
+const SAY_LAG = 900;
 /** 手の表記から先手・後手の印を外す(「▲7六歩」→「7六歩」)。 */
 const bareMove = (text) => String(text ?? '').replace(/^[▲△☗☖]/, '');
 /** 数の3桁区切り(「7,500」)。 */
@@ -868,11 +878,26 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   const castTitle = `${cast.name}${cast.dan}`;
   /** 下に止まる大きなコメント(5秒。25章)。見せ場だけで、続けて出さない(6手あける)。 */
   let lastUnder = -99;
-  const under = (at, key, p = 1) => {
+  const under = (at, key, p = 1, tone = 'gold', lag = 0) => {
     if (at - lastUnder < 6 || rng.next() >= p) return;
     lastUnder = at;
-    comments.push({ at, when: 'move', text: fill(pick(rng, UNDER[key]), { cast: castTitle }), tone: 'gold', kind: 'under', size: 'big', pos: 'bottom' });
+    comments.push({ at, when: 'move', text: fill(pick(rng, UNDER[key]), { cast: castTitle }), tone, kind: 'under', size: 'big', pos: 'bottom', ...(lag ? { lag } : {}) });
   };
+  /**
+   * 解説の言葉そのものに合わせる下コメ(49章)。決まった言葉で、同じ手なら続けて出せる(問いと答え)。ほかの手の下コメとは6手あける。
+   * @param {number} at @param {string} text @param {string} tone @param {number} [lag]
+   */
+  const underSay = (at, text, tone, lag = 0) => {
+    if (at !== lastUnder && at - lastUnder < 6) return;
+    lastUnder = at;
+    comments.push({ at, when: 'move', text, tone, kind: 'under', size: 'big', pos: 'bottom', ...(lag ? { lag } : {}) });
+  };
+  /**
+   * 解説の言葉を引いた大きな流れるコメント(49章)。赤は聞き手や解説者の言葉、黄色は善彦の言葉。
+   * lagは、その言葉が解説の欄に出てから流すための待ち。
+   * @param {number} at @param {string} when @param {string} text @param {string} tone @param {number} lag
+   */
+  const shout = (at, when, text, tone, lag) => comments.push({ at, when, text, tone, kind: 'quote', size: 'big', pos: '', lag });
   const shortName = (side) => call(side).replace(/さん$/, '');
   /**
    * 善彦の言い方を、案の中から局ごとに選ぶ(37章)。善彦でないときは1つ目を返し、種も使わない。
@@ -893,7 +918,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   let clockGapSaid = false;
   const line = (at, when, role, text) => lines.push({ at, when, role, text });
   /** 解説への視聴者のつっこみ({cast}は解説者の苗字)。解説の言葉が出てから流す(27章)。 */
-  const react = (at, pool, count = 1) => comment(at, 'move', pool, { cast: castSurname }, count, '', { lag: REACT_LAG });
+  const react = (at, pool, count = 1) => comment(at, 'move', pool, { cast: castSurname, title: cast.title }, count, '', { lag: REACT_LAG });
   /**
    * 善彦の解説への視聴者のつっこみは、その場面の組の行を全部流す(配信の例のとおり。38章)。
    * 順は種で混ぜ、少しずつずらして流す。善彦でなければ、ふだんのreactと同じ数だけ。
@@ -910,7 +935,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       [texts[index], texts[swap]] = [texts[swap], texts[index]];
     }
     texts.forEach((text, index) => comments.push({
-      at, when: 'move', text: fill(text, { cast: castSurname }), tone: KIND_TONE[kind] || '', kind, size: '', pos: '', lag: REACT_LAG + index * 700,
+      at, when: 'move', text: fill(text, { cast: castSurname, title: cast.title }), tone: KIND_TONE[kind] || '', kind, size: '', pos: '', lag: REACT_LAG + index * 700,
     }));
   };
   /** 視聴者の呼び方(苗字。羽音は「羽音」、善彦は「天鷺」。同じ苗字の2人なら名前全部。27章)。 */
@@ -1003,6 +1028,14 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       line(0, 'move', 'commentator', '…そうですね、まあ、あの、専門家じゃないんで。全然、分かんないという感じなんですけど。');
       line(0, 'move', 'host', 'はい、どうもありがとうございました。');
       reactAll(0, 'castHumble', 2);
+      // 「専門家じゃないんで」に、ゲーミングな虹色の下コメ(49章)。
+      underSay(0, '専門家じゃないんで（歴代最多勝利＆永世七冠）', 'rainbow', SAY_LAG);
+    }
+    // 善彦と指す棋士(羽音・女流棋士・あなたを除く)をたたえる下コメ(49章)。
+    const facing = spec.black?.story === YOSHIHIKO ? 'white' : spec.white?.story === YOSHIHIKO ? 'black' : null;
+    if (facing && players[facing]?.story !== HANANE && !isYou(players[facing]) && !String(players[facing]?.dan ?? '').startsWith('女流')
+      && rng.next() < 0.6 * Math.min(1, density + 0.2)) {
+      underSay(0, `たった一人で${players[other(facing)].name}に立ち向かった男`, 'gold', SAY_LAG * 3);
     }
     if (cast.voice === 'yoshihiko') {
       line(0, 'move', 'host', cast.reader ? `それでは棋譜読み上げの${cast.reader}さん、よろしくお願いします。` : 'それでは棋譜読み上げ、よろしくお願いします。');
@@ -1091,6 +1124,9 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   let lastLayman = 0;
   /** 25章: 王手を最後にかけた手数(続けて王手 → 「意地でも」)、飛車を最後に動かした手数(二段階右折)、前の手の考慮時間。 */
   const lastCheckAt = { black: -9, white: -9 };
+  /** 善彦が「行かざるを得ない」と言った仕掛け(その側の次の手で「悠長だな」。49章)。 */
+  /** @type {{ at: number, side: string } | null} */
+  let shikakeAt = null;
   const lastRookAt = { black: -9, white: -9 };
   let previousTime = 999;
   let longThinks = 0;
@@ -1187,6 +1223,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           ? `${shortName(side)}${titleOf(players[side])}の対局中の表情とかは、どうですか？`
           : `${shortName(side)}${players[side]?.dan ?? ''}の対局中の表情とかは、どう？`);
         line(at, 'think', 'commentator', speak(cast, '落ち着いていますね。表情からは何も読めません。', ha('いつも通りだよ。変わらない。', '表情は、見てない。盤を見てるから。'), '変わらない。いつも変わらないですね。'));
+        if (cast.voice === 'yoshihiko') shout(at, 'think', `${castSurname}「変わらないｗｗｗいつも変わらないｗｗｗ」`, 'gold', SAY_LAG * 2);
       }
       comment(at, 'think', 'longThink', {}, 2);
       maybe(0.45, at, 'think', 'neta', { title: recordTitle });
@@ -1284,6 +1321,10 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         if (cast.voice === 'yoshihiko') {
           line(at, 'move', 'commentator', 'やっぱりちょっと、手駒を増やさないことには、仕方がないという…');
           reactAll(at, 'castShikata', 2);
+          // 聞き手の問いと善彦の答えを、下コメの問答に(49章)。
+          underSay(at, 'Q.これは…一体？', 'red', SAY_LAG);
+          shout(at, 'move', `${castSurname}「まあしょうがないんですね。（？）」`, 'gold', SAY_LAG * 2);
+          underSay(at, 'A.しょうがない', 'gold', SAY_LAG * 4);
         }
       }
     } else if (facts?.captured && !MAJOR.has(facts.captured)) {
@@ -1305,6 +1346,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         newbie(at, 'move', 'bishop');
       } else {
         comment(at, 'move', 'major', { piece: PIECE_NAMES[facts.captured] }, 2);
+        // 取られた大駒の一言(白い大きな字。49章)。
+        if (once('kaisenu') && rng.next() < 0.6) shout(at, 'move', `${PIECE_NAMES[facts.captured]}「解せぬ」`, 'white', SAY_LAG);
         if (at > plan.middleEnd && once('uwaa')) {
           // 終盤の大駒の取り(うわぁ！ 25章)。
           line(at, 'move', 'host', 'うわぁ！');
@@ -1312,6 +1355,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           if (cast.voice === 'yoshihiko') {
             line(at, 'move', 'commentator', 'う～ん、どうするんでしょうか……');
             reactAll(at, 'castDousuru');
+            shout(at, 'move', `${castSurname}「どうするんでしょうか？」`, 'gold', SAY_LAG * 3);
           }
         } else if (rng.next() < 0.5) line(at, 'move', 'host', `${PIECE_NAMES[facts.captured]}を取った！`);
       }
@@ -1329,9 +1373,17 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         line(at, 'move', 'host', 'あ、なにがなんでも……');
         line(at, 'move', 'commentator', speak(cast, '攻めを続けますね。手を緩めません。', ha('続けて王手。止まる気はないみたいだね。', '王手の連続。攻めが切れたら、そこで終わりだよ。'), 'え～～～～～～、意地でも。'));
         reactAll(at, 'castIji');
+        // 言った人の名前つきで、聞き手の言葉は赤、善彦の言葉は黄色の大きな字(49章)。
+        shout(at, 'move', `${RELAY_HOST}「あ…何がなんでも…」`, 'red', SAY_LAG);
+        if (cast.voice === 'yoshihiko') {
+          shout(at, 'move', `${castSurname}「えーーーー、」`, 'gold', SAY_LAG * 2);
+          shout(at, 'move', `${castSurname}「意地でも（★I★JI★DE★MO★）」`, 'gold', SAY_LAG * 3);
+        }
       }
       lastCheckAt[side] = at;
       comment(at, 'move', 'check', {}, at > plan.middleEnd ? 2 : 1, 'red');
+      // 中盤からの最初の王手に、赤い下コメ(49章)。
+      if (at > plan.openingEnd && once('semeru')) under(at, 'semeru', 0.4, 'red');
       if (once(`check:${side}`)) line(at, 'move', 'host', `王手！ ${call(side)}が攻めかかったよ。`);
       newbie(at, 'move', 'check', {}, 0.4);
     }
@@ -1501,6 +1553,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         line(at, 'move', 'commentator', 'あぁ～～～～……？');
         line(at, 'move', 'host', 'これは……？');
         line(at, 'move', 'commentator', 'なんか実践的な手ですよね。反則ですけど。');
+        shout(at, 'move', `${castSurname}「あー…」`, 'gold', SAY_LAG);
       } else if (heavy && once('odd')) {
         line(at, 'move', 'host', 'これは……？');
       }
@@ -1525,6 +1578,8 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       const [fromRate, toRate] = [Math.round(moverRate(rateBefore) * 100), Math.round(moverRate(rateAfter) * 100)];
       if (Math.abs(fromRate - toRate) >= 2) line(at, 'move', 'host', `勝率が、${SIDE_NAME[side]}${fromRate}%から${toRate}%に動いたよ。`);
       comment(at, 'move', 'swing', {}, heavy ? 3 : 2);
+      // 勝っていた側の失着(ファンの不安。49章)。
+      if (heavy && moverRate(rateBefore) >= 0.7 && once('kachidayona')) maybe(0.6, at, 'move', 'kachidayona');
       if (rng.next() < 0.6) comment(at, 'move', 'aiBest', { best: bestText });
       // 27章: AIの推奨が駒を打つ手だった(「7一銀打ちてえええ」)。
       if (entry.best.includes('*') && bareMove(bestText).endsWith('打') && once(`utitai:${side}`)) maybe(0.5, at, 'move', 'utitai', { best: bareMove(bestText) });
@@ -1587,11 +1642,32 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         line(at, 'move', 'host', 'はい。');
         line(at, 'move', 'commentator', '決断としては非常に良かったような、えぇ、ええ。感じがありますね、えぇ。');
         reactAll(at, 'castJudge', 2);
-        under(at, 'judge', 0.6);
+        // 解説の言葉を引く大きな字と、言葉に合わせた一言・下コメ(49章)。言った順に流す。
+        shout(at, 'move', `${RELAY_HOST}「ちょっと無理っぽいような…」`, 'red', SAY_LAG);
+        comment(at, 'move', 'muri', {}, 1, '', { lag: SAY_LAG + 700 });
+        shout(at, 'move', `${castSurname}「凄い所から仕掛けたなという印象は、あるんですけど…」`, 'gold', SAY_LAG * 2);
+        shout(at, 'move', `${castSurname}「ただ、もういかざるを得ないという部分もあったんではないか。」`, 'gold', SAY_LAG * 3);
+        underSay(at, '行かざるを得ない（使命感）', 'red', SAY_LAG * 3 + 400);
+        if (at <= 30) comment(at, 'move', 'ikazaruAt', { at }, 1, '', { lag: SAY_LAG * 3 + 900 });
+        shout(at, 'move', `${castSurname}「決断としては非常に良かった、えー、感じがありますね。」`, 'gold', SAY_LAG * 4);
+        if (rng.next() < 0.6) underSay(at, UNDER.judge[0], 'gold', SAY_LAG * 6);
+        shikakeAt = { at, side };
+      } else if ((entry.loss ?? 0) >= 150 || moverRate(rateAfter) < 0.4) {
+        // 無理気味の仕掛けは、解説者が「ちょっと無理っぽい」と言う(49章)。言った人の苗字つきの赤い大きな字。
+        const remark = speak(cast, 'ちょっと無理っぽいような…。少し早い仕掛けかもしれません。', ha('ちょっと無理っぽいかな。少し早いよ。', '無理っぽいね。まだ準備が足りないでしょ。'));
+        line(at, 'move', 'host', 'ここで仕掛けたね！');
+        line(at, 'move', 'commentator', remark);
+        shout(at, 'move', `${castSurname}「${remark.split('。')[0]}」`, 'red', SAY_LAG);
+        comment(at, 'move', 'muri', {}, 1, '', { lag: SAY_LAG + 700 });
       } else {
         line(at, 'move', 'host', 'ここで仕掛けたね！');
         line(at, 'move', 'commentator', speak(cast, 'いよいよ仕掛けました。ここから本格的な戦いですね。', ha('仕掛けたね。悪くない判断だよ。', '仕掛けた。少し早いけど、悪くないよ。')));
       }
+    }
+    // 「行かざるを得ない」と言われた側が、次の手で駒を取らず王手もしない(49章)。
+    if (shikakeAt && side === shikakeAt.side && at === shikakeAt.at + 2) {
+      if (!facts?.captured && !facts?.check) maybe(0.6, at, 'move', 'yuchou');
+      shikakeAt = null;
     }
     // 中盤の互角(1局に1回)。
     // 善彦は、互角に近い局面(55%まで)で必ず一度言い、言葉に詰まる(36章)。
@@ -1611,6 +1687,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
     if (at > plan.middleEnd && swing <= -0.25 && once('taihen')) {
       line(at, 'move', 'host', 'あぁ～……');
       line(at, 'move', 'commentator', speak(cast, '……これは大変な局面になりました。', ha('ああ……大変だね。', 'え、ここ、難しいよ。'), 'うーん……いやぁ、大変です。'));
+      if (cast.voice === 'yoshihiko') shout(at, 'move', `${castSurname}「うーん。いや、大変です。」`, 'gold', SAY_LAG);
     }
 
     // 局面の節目。
