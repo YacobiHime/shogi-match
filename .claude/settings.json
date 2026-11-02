@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash",
       "Bash(npm:*)",
       "Bash(npx:*)",
       "Bash(node:*)",
@@ -21,7 +22,12 @@
       "WebFetch",
       "WebSearch",
       "mcp__claude-code-remote",
-      "mcp__github"
+      "mcp__github",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep"
     ]
   }
 }
