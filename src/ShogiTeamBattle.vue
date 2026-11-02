@@ -480,6 +480,8 @@ const props = defineProps({
   userLevel: { type: Number, default: NaN },
   assetBaseUrl: { type: String, default: "." },
   playerName: { type: String, default: "あなた" },
+  /** 呼びかけに使う名前(名字と名前に分けたときは名字)。空なら名前全体。 */
+  playerCallName: { type: String, default: "" },
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** プロの試合で、仲間が指した直前の局の結果(「第3局 羽音 勝ち 2-1」)。 */
   news: { type: String, default: "" },
@@ -541,7 +543,7 @@ const ceremonyEl = ref<{ goBack: () => boolean } | null>(null);
 const ceremonyView = computed(() => teamCeremonyView(props.career.current, { playerName: props.playerName === "あなた" ? "" : props.playerName }));
 
 // ---- 優勝インタビュー → 号外 → トロフィー棚(21章)。表彰式のあと、節目の場面の前に。
-const callName = computed(() => (props.playerName === "あなた" ? "" : props.playerName));
+const callName = computed(() => props.playerCallName || (props.playerName === "あなた" ? "" : props.playerName));
 const celebrationStage = computed(() => (finaleView.value || ceremonyView.value ? null : pendingCelebration(props.career.current)));
 const interviewEl = ref<{ finish: () => void; goBack: () => boolean } | null>(null);
 const paperEl = ref<{ goBack: () => boolean } | null>(null);
@@ -551,7 +553,7 @@ watch(celebrationStage, () => {
   paperOpen.value = false;
   answers.value = [];
 });
-const interview = computed(() => (celebrationStage.value ? interviewScene(props.career.current, celebrationStage.value, { playerName: callName.value }) : null));
+const interview = computed(() => (celebrationStage.value ? interviewScene(props.career.current, celebrationStage.value, { playerName: props.playerName === "あなた" ? "" : props.playerName, callName: callName.value }) : null));
 /** 選んだ答え(質問の順に)。 */
 function onInterviewChoose({ line, value }: { line: number; value: string }) {
   const asks = (interview.value?.lines ?? []).map((entry: { choices?: unknown }, index: number) => (entry.choices ? index : -1)).filter((index: number) => index >= 0);
@@ -563,7 +565,7 @@ function onInterviewChoose({ line, value }: { line: number; value: string }) {
 }
 const newPaper = computed(() => (celebrationStage.value && paperOpen.value
   ? championNewspaper(props.career.current, celebrationStage.value, {
-    playerName: callName.value, answers: answers.value, streak: teamStreak(props.career, props.career.current?.format),
+    playerName: props.playerName === "あなた" ? "" : props.playerName, answers: answers.value, streak: teamStreak(props.career, props.career.current?.format),
   })
   : null));
 /** 「棚に飾る」: 記録してもらい、トロフィー棚を開いて新しい杯を光らせる。 */

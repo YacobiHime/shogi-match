@@ -228,6 +228,7 @@
         />
         <ShogiTeamBattle
           v-else-if="screen === 'team'"
+          :player-call-name="playerCallName"
           ref="teamEl"
           :view="teamView"
           :career="teamCareer"
@@ -1143,6 +1144,8 @@ const props = defineProps({
   ryuoHolder: { type: Object as PropType<{ id: string; name: string; attack?: number; story?: string | null } | null>, default: null },
   /** プレイヤー名(タイトル画面で入れる。入れていなければ「あなた」)。VS画面に出す。 */
   playerName: { type: String, default: "あなた" },
+  /** 呼びかけに使う名前(名字と名前に分けたときは名字。入れていなければ空)。 */
+  playerCallName: { type: String, default: "" },
   /** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを1回だけ見せる。 */
   fromGame: { type: Boolean, default: false },
   /** 推しの棋士(core/ryuo-oshi.mjs)。やこび姫が、期の中での様子を知らせる。 */

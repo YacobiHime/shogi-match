@@ -2536,6 +2536,40 @@
   font-weight: 700;
 }
 .shogi-game .shogi-game__name-input:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+/* 入れ方の切り替え(そのまま／名字と名前に分ける)。選んでいる方は塗りで見せる(色だけに頼らず、太字と縁も)。 */
+.shogi-game .shogi-game__name-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4em;
+  margin: 0 0 0.8em;
+}
+.shogi-game .shogi-game__name-panel .shogi-game__name-modes button {
+  min-height: 44px;
+  margin: 0;
+  padding: 0.3em 0.4em;
+  border: 2px solid var(--amber);
+  border-radius: 0.5em;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.92em;
+  font-weight: 600;
+}
+.shogi-game .shogi-game__name-panel .shogi-game__name-modes button[aria-checked="true"] {
+  color: #1d303f;
+  background: var(--amber);
+  font-weight: 900;
+}
+.shogi-game .shogi-game__name-panel .shogi-game__name-modes button[aria-checked="true"]::before { content: "✓ "; }
+.shogi-game .shogi-game__name-panel .shogi-game__name-modes button[aria-checked="false"]:hover { color: inherit; background: rgba(241, 165, 76, 0.18); }
+.shogi-game .shogi-game__name-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 0.6em;
+}
+.shogi-game .shogi-game__name-split label { display: grid; gap: 0.2em; font-size: 0.9em; font-weight: 700; }
+.shogi-game .shogi-game__name-split .shogi-game__name-input { margin-bottom: 0.6em; }
+.shogi-game .shogi-game__name-preview { grid-column: 1 / -1; margin: 0 0 1em; font-size: 0.9em; }
 .shogi-game .shogi-game__confirm-danger {
   border-color: var(--rust);
   color: var(--night-deep);

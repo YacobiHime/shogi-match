@@ -69,12 +69,12 @@ function stageLabel(run, stage) {
  * 優勝インタビューの場面(NovelScene.vueの形。答えの行はchoices)。段階の優勝は質問1つ、全国優勝・プロは2つ(21章の3の2)。
  * @param {any} run
  * @param {string} stage
- * @param {{ playerName?: string }} [options]
+ * @param {{ playerName?: string, callName?: string }} [options] callName: 呼びかけの名前(名字と名前に分けたときは名字)
  */
-export function interviewScene(run, stage, { playerName = '' } = {}) {
+export function interviewScene(run, stage, { playerName = '', callName = '' } = {}) {
   const school = run.format === 'school';
   const you = playerName || 'あなた';
-  const call = playerName ? `${playerName}さん` : 'あなた';
+  const call = (callName || playerName) ? `${callName || playerName}さん` : 'あなた';
   const label = stageLabel(run, stage);
   const reporter = school ? '新聞部の記者' : '将棋記者';
   const questions = isGrand(stage) ? INTERVIEW_QUESTIONS : INTERVIEW_QUESTIONS.slice(0, 1);

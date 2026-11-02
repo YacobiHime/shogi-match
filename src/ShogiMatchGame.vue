@@ -460,6 +460,7 @@
       :from-game="tournamentFromGame && playedBoard?.event !== 'ryuo'"
       :ryuo-holder="ryuoHolder"
       :player-name="playerDisplayName(playerName)"
+      :player-call-name="playerCallName(playerProfile)"
       :oshi="ryuoOshi"
       :world-reset="worldResetState"
       :withdraw="tournamentWithdraw"
@@ -2238,7 +2239,24 @@
       <form class="shogi-game__confirm-panel shogi-game__name-panel" @submit.prevent="acceptPlayerName">
         <h2 id="player-name-title">プレイヤー名</h2>
         <p>盤の名札や竜王戦の表に出る名前だよ（{{ PLAYER_NAME_MAX }}文字まで）。空にすると「あなた」になるよ。</p>
+        <div class="shogi-game__name-modes" role="radiogroup" aria-label="名前の入れ方">
+          <button
+            type="button"
+            role="radio"
+            :aria-checked="nameMode === 'single'"
+            data-player-name-mode="single"
+            @click="chooseNameMode('single')"
+          >そのまま入れる</button>
+          <button
+            type="button"
+            role="radio"
+            :aria-checked="nameMode === 'split'"
+            data-player-name-mode="split"
+            @click="chooseNameMode('split')"
+          >名字と名前に分ける</button>
+        </div>
         <input
+          v-if="nameMode === 'single'"
           ref="nameInput"
           v-model="nameDraft"
           class="shogi-game__name-input"
@@ -2251,6 +2269,40 @@
           aria-label="プレイヤー名"
           data-player-name-input
         >
+        <div v-else class="shogi-game__name-split">
+          <label>
+            <span>名字</span>
+            <input
+              ref="familyInput"
+              v-model="familyDraft"
+              class="shogi-game__name-input"
+              type="text"
+              inputmode="text"
+              autocomplete="family-name"
+              enterkeyhint="next"
+              :maxlength="PLAYER_NAME_MAX * 2"
+              placeholder="例: 天鷺"
+              data-player-name-family
+            >
+          </label>
+          <label>
+            <span>名前</span>
+            <input
+              v-model="givenDraft"
+              class="shogi-game__name-input"
+              type="text"
+              inputmode="text"
+              autocomplete="given-name"
+              enterkeyhint="done"
+              :maxlength="PLAYER_NAME_MAX * 2"
+              placeholder="例: 羽音"
+              data-player-name-given
+            >
+          </label>
+          <p class="shogi-game__name-preview" aria-live="polite" data-player-name-preview>
+            名札: <strong>{{ namePreview.name || "あなた" }}</strong><template v-if="namePreview.family">　呼ばれ方: {{ namePreview.family }}さん</template>
+          </p>
+        </div>
         <div>
           <button type="submit" class="shogi-game__confirm-primary" data-player-name-save>この名前にする</button>
           <button type="button" @click="nameDialogOpen = false">やめる</button>
@@ -2819,7 +2871,7 @@ import { loadWatchStore, noteWatchProgress, saveWatchStore } from "./core/ryuo-w
 import { myAbilityProfile, myRepertoire, myStyleAttack, worldRatingFor } from "./core/my-abilities.mjs";
 import { worldRating } from "./core/ryuo-strength.mjs";
 import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
-import { PLAYER_NAME_MAX, loadPlayerName, playerDisplayName, savePlayerName } from "./core/player-name.mjs";
+import { PLAYER_NAME_MAX, loadPlayerProfile, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerProfile } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { abilityRank, abilityValues } from "./core/player-abilities.mjs";
@@ -4342,19 +4394,41 @@ const suspendedMatch = ref<{ moves: number; ryuoOpponentId: string | null; event
 const suspendConfirmOpen = ref(false);
 /** 中断した対局を消して新しく始める前の確認。承諾したら、保留した開始処理を行う。 */
 const discardSuspendedPending = ref<(() => void) | null>(null);
-/** プレイヤー名(core/player-name.mjs)。入れていなければ空。 */
-const playerName = ref(loadPlayerName(browserStorage()));
+/**
+ * プレイヤー名(core/player-name.mjs)。入れていなければ空。
+ * 入れ方は「そのまま」と「名字と名前に分ける」(docs/player-name-design.md の2章)。分けたときは、呼びかけ(「○○さん」)に名字を使う。
+ */
+const playerProfile = ref(loadPlayerProfile(browserStorage()));
+const playerName = computed(() => playerProfile.value.name);
 const nameDialogOpen = ref(false);
+const nameMode = ref<"single" | "split">("single");
 const nameDraft = ref("");
+const familyDraft = ref("");
+const givenDraft = ref("");
 const nameInput = ref<HTMLInputElement | null>(null);
+const familyInput = ref<HTMLInputElement | null>(null);
+/** 決める前の見本(名札に出る名前)。 */
+const namePreview = computed(() => normalizePlayerProfile({ mode: nameMode.value, name: nameDraft.value, family: familyDraft.value, given: givenDraft.value }));
 function openNameDialog() {
-  nameDraft.value = playerName.value;
+  const profile = playerProfile.value;
+  nameMode.value = profile.mode;
+  nameDraft.value = profile.name;
+  familyDraft.value = profile.family;
+  givenDraft.value = profile.given;
   nameDialogOpen.value = true;
-  void nextTick(() => nameInput.value?.focus());
+  void nextTick(() => (profile.mode === "split" ? familyInput.value : nameInput.value)?.focus());
+}
+/** 入れ方を切り替える。入れてあった文字は、もう一方の欄へ引き継ぐ(名字と名前→続けた名前、名前→名字の欄)。 */
+function chooseNameMode(mode: "single" | "split") {
+  if (nameMode.value === mode) return;
+  if (mode === "single") nameDraft.value = normalizePlayerProfile({ mode: "split", family: familyDraft.value, given: givenDraft.value }).name || nameDraft.value;
+  else if (!familyDraft.value && !givenDraft.value) familyDraft.value = nameDraft.value;
+  nameMode.value = mode;
+  void nextTick(() => (mode === "split" ? familyInput.value : nameInput.value)?.focus());
 }
 /** 「この名前にする」。保存し、進めている竜王戦の期の表の名前も替える。 */
 function acceptPlayerName() {
-  playerName.value = savePlayerName(browserStorage(), nameDraft.value);
+  playerProfile.value = savePlayerProfile(browserStorage(), { mode: nameMode.value, name: nameDraft.value, family: familyDraft.value, given: givenDraft.value });
   nameDialogOpen.value = false;
   const season = ryuoSeason.value;
   const user = season?.players?.[USER_ID];
