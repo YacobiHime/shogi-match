@@ -1,8 +1,9 @@
 // 脳トレ「記憶力」の場所法の学校と毎日の練習(docs/brain-training-design.mdの11-6)。
-// 自分の宮殿(palace-builder.mjs)に、覚えたいものを1つずつ「大げさな絵」にして置き、場所をたどって思い出す。
+// 自分の宮殿(palace-builder.mjs)に、覚えたいものを1つずつ「場所とからんで動く絵」にして置き、場所をたどって思い出す。
 // 講1〜9で方法を身につけ、講3を終えると毎日の練習(きのうの言葉・宮殿に置く・数字)が開く。画面に依存しない。
 
 import { MEMORY_PROVERBS, MEMORY_WORDS } from '../data/memory-palace-words.mjs';
+import { LOCUS_ACTS, LOCUS_KIND_BY_NAME, LOCUS_KINDS } from '../data/palace-acts.mjs';
 import { openingFormationSteps, openingStepLabel } from './opening-formation.mjs';
 import { cleanPalaces, palaceReady } from './palace-builder.mjs';
 import { createRng } from './ryuo-random.mjs';
@@ -26,11 +27,11 @@ export const SAMPLE_PALACE = Object.freeze({ id: SAMPLE_PALACE_ID, name: '見本
 
 /**
  * 学校の講。afterは開くために終えておく講(講7は講5のあと、次の日に)。
- * countは置く数、hintsは絵の手がかり(絵文字と大げさな絵の文)を見せるか、backwardは後ろからも思い出すか。
+ * countは置く数、hintsは絵の手がかり(絵文字とからむ絵の文)を見せるか、backwardは後ろからも思い出すか。
  */
 export const PALACE_LESSONS = Object.freeze([
   { id: 'walk', number: 1, title: '宮殿を歩く', goal: '自分の宮殿の場所を、順番・逆順・飛び飛びで言う', kind: 'walk', after: null },
-  { id: 'image', number: 2, title: '絵にする', goal: '覚えたいものを、大げさで動きのある絵にするコツ', kind: 'image', after: 'walk' },
+  { id: 'image', number: 2, title: '絵にする', goal: '覚えたいものを、場所とからんで動く絵にするコツ', kind: 'image', after: 'walk' },
   { id: 'place5', number: 3, title: '5個を置く', goal: '言葉5個を、宮殿の最初の5か所に置く', kind: 'order', count: 5, hints: true, after: 'image' },
   { id: 'ten', number: 4, title: '10個と逆順', goal: '10個。前からと、後ろからも思い出す', kind: 'order', count: 10, hints: true, backward: true, after: 'place5' },
   { id: 'twenty', number: 5, title: '20個', goal: '20個を順番どおりに。次の日にも思い出す', kind: 'order', count: 20, needLoci: 20, keep: true, after: 'ten' },
@@ -53,23 +54,14 @@ export const DIGIT_LESSON_LENGTH = 10;
 export const DIGIT_MIN = 6;
 export const DIGIT_MAX = 40;
 
-/** 大げさな絵にするための動き(場所と言葉に添える)。 */
-const SILLY_ACTIONS = [
-  'が、はみ出すほど大きくなっている！',
-  'が、ぐるぐる回って光っている！',
-  'で、足のふみ場もない！',
-  'が、大声で歌っている！',
-  'が、ドーンと落ちてきた！',
-  'が、ぷかぷか浮かんでいる！',
-  'が、山のように積み上がっている！',
-  'が、ぴょんぴょん跳ねている！',
-];
-
-/** 講2の「絵にするコツ」。 */
+/**
+ * 講2の「絵にするコツ」。いちばん効くのは場所とかかわり合う絵、次に動き。大げさな絵はときどき混ぜるだけ
+ * (docs/brain-training-design.mdの14-3のB25〜B27)。
+ */
 export const IMAGE_TIPS = Object.freeze([
-  { title: '大げさに', text: 'ありえないほど大きく、たくさん' },
-  { title: '動かす', text: '回る・跳ねる・こわれる・歌う' },
   { title: '場所とからめる', text: 'ドアにはさまる・冷蔵庫からあふれる' },
+  { title: '動かす', text: '転がる・跳ねる・泳ぐ・歌う' },
+  { title: 'ときどき大げさに', text: 'ありえないほど大きく、たくさん' },
 ]);
 
 /**
@@ -259,15 +251,41 @@ export function nextDayState(store, day) {
 
 // ===== 覚える組 =====
 
-/** 1つの場所に置く1つの絵(場所・覚えるもの・大げさな絵の文)。 */
-function scene(locus, item, action) {
-  return { locus, item, image: `${locus.name}に${item.word}${action}` };
+/**
+ * 場所の動きの種類(14-9の「からむ絵」)。カードに種類が書いてあればそれ、なければ名前から(並べ替え・名前の変更をしても、
+ * カードに残した種類を使う)。自分で書いたカードは「そのほか」。
+ * @param {{ name: string, kind?: string }} locus
+ */
+export function locusKind(locus) {
+  if (locus?.kind && LOCUS_KINDS.includes(locus.kind)) return locus.kind;
+  return LOCUS_KIND_BY_NAME[locus?.name] ?? 'other';
 }
-/** 大げさな絵の動きを、続けて同じにならないよう混ぜて配る。 */
+
+/**
+ * 場所と覚えるものが、かかわり合って動く絵の文(14-3のB25〜B27)。場所の種類の型を先に、最後に大げさな型を1つ(ときどき混ぜる。B26)。
+ * 覚えるものに絵の手がかり(cue。「{場}」を含む文)があれば、その文を最初に置く(月の和名・格言など、絵にしにくい言葉のため)。
+ * @param {{ name: string, kind?: string }} locus
+ * @param {{ word: string, cue?: string }} item
+ * @returns {string[]}
+ */
+export function sceneImages(locus, item) {
+  const fill = (template) => template.replaceAll('{場}', locus.name).replaceAll('{物}', item.word);
+  const kind = locusKind(locus);
+  const own = LOCUS_ACTS[kind] ?? LOCUS_ACTS.other;
+  const extra = kind === 'other' ? [] : [LOCUS_ACTS.other[0]];
+  const images = [...own, ...extra].map(fill);
+  return item.cue ? [item.cue.replaceAll('{場}', locus.name), ...images] : images;
+}
+
+/** 1つの場所に置く1つの絵(場所・覚えるもの・からむ絵の文と、ほかの絵の文)。variantは最初に見せる文の番号。 */
+function scene(locus, item, variant) {
+  const imageOptions = sceneImages(locus, item);
+  const first = item.cue ? 0 : variant % imageOptions.length;
+  return { locus, item, image: imageOptions[first], imageOptions: [...imageOptions.slice(first), ...imageOptions.slice(0, first)] };
+}
+/** 最初に見せる絵の文の番号を、場所ごとに混ぜて配る(同じ型が続かないように)。 */
 function actionsFor(rng, count) {
-  const list = [];
-  while (list.length < count) list.push(...shuffled(rng, SILLY_ACTIONS));
-  return list.slice(0, count);
+  return Array.from({ length: count }, () => Math.floor(rng.next() * 3));
 }
 
 /**
@@ -340,7 +358,10 @@ export function walkQuiz(seed, loci, count = 10) {
   return { route, forward: names, backward: [...names].reverse(), pool: shuffled(rng, names), jumps };
 }
 
-/** 講2の「どの絵がいちばん覚えやすい？」。大げさで、動きがあって、場所とからむ絵が正解。 */
+/**
+ * 講2の「どの絵がいちばん覚えやすい？」。場所とかかわり合って動く絵が正解(14-3のB25・B27)。
+ * まちがいは、場所のそばに置いただけの絵と、大げさでも場所とからまない絵(奇抜なだけでは効かない。B25)。
+ */
 export function imageQuiz(seed, loci) {
   const rng = createRng(seed);
   const words = shuffled(rng, MEMORY_WORDS).slice(0, 2);
@@ -348,8 +369,8 @@ export function imageQuiz(seed, loci) {
     const locus = loci[(index + 3) % loci.length];
     const options = [
       { text: `${locus.name}のそばに、${item.word}が1つ置いてある。`, good: false },
-      { text: `${locus.name}の上に、${item.word}の絵がかざってある。`, good: false },
-      { text: `${locus.name}から、巨大な${item.word}がドドドッとあふれ出して止まらない！`, good: true },
+      { text: `空いっぱいに、巨大な${item.word}がぷかぷか浮かんでいる！`, good: false },
+      { text: sceneImages(locus, item)[0], good: true },
     ];
     return { locus, item, options: shuffled(rng, options) };
   });

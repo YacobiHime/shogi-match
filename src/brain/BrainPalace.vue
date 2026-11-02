@@ -1,6 +1,6 @@
 <template>
   <!--
-    記憶力の場所法の学校と毎日の練習(docs/brain-training-design.mdの11-6)。自分の宮殿の場所に、覚えるものを大げさな絵にして置き、
+    記憶力の場所法の学校と毎日の練習(docs/brain-training-design.mdの11-6)。自分の宮殿の場所に、覚えるものを場所とからんで動く絵にして置き、
     場所をたどって思い出す。講1〜9で方法を身につけ、講3を終えると毎日の練習(前の回の言葉・宮殿に置く・数字)が開く。
   -->
   <section class="brain-game brain-palace" aria-label="記憶の宮殿" data-brain-palace>
@@ -28,11 +28,14 @@
       </ol>
     </template>
 
-    <!-- 覚える: 場所を1つずつたどる。 -->
+    <!-- 覚える: 場所を1つずつたどる。場所と覚えるものを大きく出し、からむ絵のヒントは隠すのが基本(自分で作る。困ったら出す。14-11)。 -->
     <template v-else-if="phase === 'study' && scenes[studyIndex]">
       <p class="brain-game__status"><span>{{ studyIndex + 1 }} / {{ scenes.length }}</span><span>{{ stageTitle }}</span></p>
+      <ol class="brain-palace__route" aria-hidden="true">
+        <li v-for="(_, index) in scenes" :key="index" :class="{ 'brain-palace__route--done': index < studyIndex, 'brain-palace__route--now': index === studyIndex }"></li>
+      </ol>
       <div class="brain-palace__scene" data-palace-scene>
-        <span class="brain-palace__locus"><span aria-hidden="true">{{ scenes[studyIndex].locus.emoji }}</span>{{ sceneNumber(studyIndex) }}. {{ scenes[studyIndex].locus.name }}</span>
+        <span class="brain-palace__locus"><b aria-hidden="true">{{ scenes[studyIndex].locus.emoji }}</b><span>{{ sceneNumber(studyIndex) }}. {{ scenes[studyIndex].locus.name }}</span></span>
         <template v-if="scenes[studyIndex].images">
           <p class="brain-palace__digits">
             <span v-for="(image, index) in scenes[studyIndex].images" :key="index"><strong>{{ scenes[studyIndex].pair?.[index] }}</strong><span aria-hidden="true">{{ image.emoji }}</span>{{ image.word }}</span>
@@ -40,16 +43,24 @@
           <p class="brain-palace__image">{{ scenes[studyIndex].image }}</p>
         </template>
         <template v-else-if="scenes[studyIndex].item">
+          <span class="brain-palace__plus" aria-hidden="true">＋</span>
           <strong class="brain-palace__item">
-            <span v-if="showHints" aria-hidden="true">{{ scenes[studyIndex].item!.emoji }}</span>{{ scenes[studyIndex].item!.word }}
+            <span v-if="hintOpen" aria-hidden="true">{{ scenes[studyIndex].item!.emoji }}</span>{{ scenes[studyIndex].item!.word }}
           </strong>
-          <p v-if="showHints" class="brain-palace__image">{{ scenes[studyIndex].image }}</p>
+          <p v-if="hintOpen" class="brain-palace__image" data-palace-hint><small>からむ絵のヒント</small>{{ currentImage }}</p>
+          <div class="brain-palace__hint-tools">
+            <button v-if="!hintOpen" type="button" class="brain-palace__hint-button" data-palace-hint-open @click="hintOpen = true"><span aria-hidden="true">💡</span> 絵のヒント</button>
+            <template v-else>
+              <button v-if="imageCount > 1" type="button" class="brain-palace__hint-button" data-palace-other @click="nextImage"><span aria-hidden="true">⟳</span> ほかの絵</button>
+              <button type="button" class="brain-palace__hint-button" data-palace-hint-close @click="hintOpen = false">ヒントを隠す</button>
+            </template>
+          </div>
         </template>
         <small v-if="studyIndex === 0 && studyTip" class="brain-palace__tip">{{ studyTip }}</small>
       </div>
       <div class="brain-game__actions">
         <button v-if="studyIndex > 0" type="button" class="brain-game__secondary" @click="studyIndex -= 1">もどる</button>
-        <button type="button" class="brain-game__primary" data-palace-next @click="nextStudy">{{ studyIndex + 1 >= scenes.length ? studyDoneLabel : "つぎの場所へ" }}</button>
+        <button type="button" class="brain-game__primary" data-palace-next @click="nextStudy">{{ studyIndex + 1 >= scenes.length ? studyDoneLabel : scenes[studyIndex].item ? "思いうかべた → 次へ" : "つぎの場所へ" }}</button>
       </div>
     </template>
 
@@ -63,6 +74,8 @@
       :label="recall.label"
       :loci="recall.loci"
       :backward="recall.backward"
+      :places="recall.places"
+      :expected="recall.expected"
       @sound="emit('sound', 'place')"
       @done="recall.then"
     />
@@ -87,7 +100,7 @@
 
     <!-- 講2: 絵にするコツと見本 -->
     <template v-else-if="phase === 'tips'">
-      <p class="brain-game__prompt">覚えたいものは、場所といっしょに「変な絵」にすると忘れにくいよ。</p>
+      <p class="brain-game__prompt">覚えたいものは、場所とからんで動く絵にすると忘れにくいよ。</p>
       <ul class="brain-palace__tips">
         <li v-for="tip in IMAGE_TIPS" :key="tip.title"><strong>{{ tip.title }}</strong>{{ tip.text }}</li>
       </ul>
@@ -229,7 +242,7 @@ import { openingFormation } from "../core/opening-formation.mjs";
 type Locus = { name: string; emoji: string; group?: string };
 type Palace = { id: string; name: string; place: string; loci: readonly Locus[] };
 type Item = { word: string; emoji: string };
-type Scene = { locus: Locus; item?: Item | null; image: string; pair?: string; images?: Item[] };
+type Scene = { locus: Locus; item?: Item | null; image: string; imageOptions?: string[]; pair?: string; images?: Item[] };
 type Question = { prompt: string; answer: string; options: string[]; label: string; long?: boolean };
 type Store = {
   version: number;
@@ -276,6 +289,10 @@ const runLesson = ref("");
 const scenes = ref<Scene[]>([]);
 const studyIndex = ref(0);
 const showHints = ref(false);
+/** からむ絵のヒントを出しているか(講3・講4・使ってみるは出しておき、講5と毎日の練習は隠しておく。14-11)。 */
+const hintOpen = ref(false);
+/** 場所ごとに、いま見せているほかの絵の番号。 */
+const imageVariant = ref<Record<number, number>>({});
 const stageTitle = ref("");
 const studyTip = ref("");
 const studyDoneLabel = ref("思い出す");
@@ -283,8 +300,8 @@ const sceneOffset = ref(0);
 let afterStudy: () => void = () => {};
 // 順に押す
 const recallKey = ref(0);
-const recall = ref<{ pool: string[]; count: number; prompt: string; label: string; loci: string[]; backward: boolean; then: (answer: string[]) => void }>({
-  pool: [], count: 0, prompt: "", label: "", loci: [], backward: false, then: () => {},
+const recall = ref<{ pool: string[]; count: number; prompt: string; label: string; loci: string[]; backward: boolean; places: Locus[]; expected: string[]; then: (answer: string[]) => void }>({
+  pool: [], count: 0, prompt: "", label: "", loci: [], backward: false, places: [], expected: [], then: () => {},
 });
 // 4択
 const choiceQuestions = ref<Question[]>([]);
@@ -323,6 +340,17 @@ const schoolMessage = computed(() => {
   if (practiceOpen(props.store.lessons)) return "毎日の練習が開いているよ。講は自分のペースで進めよう。";
   return "場所法は、よく知っている場所に、覚えたいものを順に置いていく覚え方。講を順番に受けよう。";
 });
+const imageCount = computed(() => scenes.value[studyIndex.value]?.imageOptions?.length ?? 1);
+const currentImage = computed(() => {
+  const sceneItem = scenes.value[studyIndex.value];
+  if (!sceneItem) return "";
+  const options = sceneItem.imageOptions ?? [sceneItem.image];
+  return options[(imageVariant.value[studyIndex.value] ?? 0) % options.length];
+});
+/** 「ほかの絵」。同じ場所の、ほかのからむ絵の文にする(自分で選ぶ。D:5-8)。 */
+function nextImage() {
+  imageVariant.value = { ...imageVariant.value, [studyIndex.value]: (imageVariant.value[studyIndex.value] ?? 0) + 1 };
+}
 const digitPairs = computed(() => {
   const pairs = [];
   for (let index = 0; index * 2 < digitTarget.value.length; index += 1) pairs.push(digitInput.value.slice(index * 2, index * 2 + 2));
@@ -360,6 +388,8 @@ function startStudy(list: Scene[], options: { title: string; hints?: boolean; ti
   scenes.value = list;
   studyIndex.value = 0;
   showHints.value = Boolean(options.hints);
+  hintOpen.value = Boolean(options.hints);
+  imageVariant.value = {};
   stageTitle.value = options.title;
   studyTip.value = options.tip ?? "";
   studyDoneLabel.value = options.done ?? "思い出す";
@@ -375,9 +405,9 @@ function nextStudy() {
   afterStudy();
 }
 
-function askRecall(input: { pool: string[]; count: number; prompt: string; label: string; loci: string[]; backward?: boolean }, then: (answer: string[]) => void) {
+function askRecall(input: { pool: string[]; count: number; prompt: string; label: string; loci: string[]; backward?: boolean; places?: readonly Locus[]; expected?: string[] }, then: (answer: string[]) => void) {
   recallKey.value += 1;
-  recall.value = { ...input, backward: Boolean(input.backward), then };
+  recall.value = { ...input, backward: Boolean(input.backward), places: [...(input.places ?? [])], expected: input.expected ?? [], then };
   phase.value = "recall";
 }
 
@@ -511,7 +541,7 @@ function startLesson(id: string) {
         phase.value = "think";
         afterInfoStep = () => {
           completeLesson(id);
-          showResult("大げさで、動きがあって、場所とからむ絵。これが場所法のいちばんのコツだよ。次は、5個を置いてみよう。");
+          showResult("場所とからんで、動いている絵。これが場所法のいちばんのコツだよ。大げさな絵は、ときどき混ぜるくらいでいいよ。次は、5個を置いてみよう。");
         };
       });
     };
@@ -524,8 +554,8 @@ function startLesson(id: string) {
     const set = palaceWordSet(seed, count, palace.loci);
     const words = set.scenes.map(({ item }) => item.word);
     const pool = set.pool.map(({ word }) => word);
-    startStudy(set.scenes as Scene[], { title: lesson.title, hints: Boolean(lesson.hints), tip: lesson.hints ? "目をとじて、その場所にそれがある絵を、大げさに思いうかべてね。" : "絵の文は出ないよ。自分で大げさな絵を作ってね。" }, () => {
-      askRecall({ pool, count, prompt: "場所の順に、置いた言葉を押してね。", label: "前から", loci: names }, (answer) => {
+    startStudy(set.scenes as Scene[], { title: lesson.title, hints: Boolean(lesson.hints), tip: lesson.hints ? "目をとじて、場所と言葉がぶつかって動く場面を思いうかべてね。" : "絵の文は隠してあるよ。場所とからむ絵を自分で作ってね（困ったら「絵のヒント」）。" }, () => {
+      askRecall({ pool, count, prompt: "場所の順に、置いた言葉を押してね。", label: "前から", loci: names, places: palace.loci, expected: words }, (answer) => {
         const forward = scoreRecall(words, answer, names);
         const done = (rows: typeof forward.rows) => {
           const extra = lesson.keep ? { lessonWords: { palace: palace.id, words, day: props.day } } : {};
@@ -537,7 +567,7 @@ function startLesson(id: string) {
           done(forward.rows);
           return;
         }
-        askRecall({ pool, count, prompt: "こんどは、いちばん後ろの場所から順に押してね。", label: "後ろから", loci: names, backward: true }, (back) => {
+        askRecall({ pool, count, prompt: "こんどは、いちばん後ろの場所から順に押してね。", label: "後ろから", loci: names, backward: true, places: palace.loci, expected: [...words].reverse() }, (back) => {
           scoreRecall([...words].reverse(), back, names, true);
           done(forward.rows);
         });
@@ -572,7 +602,7 @@ function startLesson(id: string) {
     const entry = props.store.lessonWords!;
     const where = findPalace(props.store, entry.palace) as Palace;
     const lociNames = where.loci.map(({ name }) => name);
-    askRecall({ pool: recallPool(seed, entry.words), count: entry.words.length, prompt: `「${where.name}」をたどって、講5で置いた言葉を順に押してね。`, label: "次の日", loci: lociNames }, (answer) => {
+    askRecall({ pool: recallPool(seed, entry.words), count: entry.words.length, prompt: `「${where.name}」をたどって、講5で置いた言葉を順に押してね。`, label: "次の日", loci: lociNames, places: where.loci, expected: entry.words }, (answer) => {
       const result = scoreRecall(entry.words, answer, lociNames);
       completeLesson(id);
       showResult(`${recallLabel(entry.day, props.day)}を${result.score.correct}個思い出せた！ 日をあけて思い出すほど、記憶は長く残るよ。`, result.rows);
@@ -585,7 +615,7 @@ function startLesson(id: string) {
     const secondWords = second.scenes.map(({ item }) => item.word);
     showInfo("同じ宮殿に、続けて別のものを置くとどうなるか、ためしてみよう。まず5個。", "はじめる", () => {
       startStudy(first.scenes as Scene[], { title: "1回目", hints: true }, () => {
-        askRecall({ pool: first.pool.map(({ word }) => word), count: 5, prompt: "場所の順に押してね。", label: "1回目", loci: names }, (answer) => {
+        askRecall({ pool: first.pool.map(({ word }) => word), count: 5, prompt: "場所の順に押してね。", label: "1回目", loci: names, places: palace.loci, expected: firstWords }, (answer) => {
           scoreRecall(firstWords, answer, names);
           showInfo("同じ場所に、すぐ別の5個を置くよ。", "置く", () => {
             startStudy(second.scenes as Scene[], { title: "2回目", hints: true, done: "置いた" }, () => {
@@ -630,7 +660,7 @@ function startUse(kind: "shopping" | "todo" | "names" | "shogi") {
     const set = listScenes(seed, kind, palace.loci);
     const words = set.scenes.map(({ item }) => item.word);
     startStudy(set.scenes as Scene[], { title: kind === "todo" ? "やること" : "買い物リスト", hints: true }, () => {
-      askRecall({ pool: set.pool, count: words.length, prompt: "場所の順に押してね。", label: "前から", loci: names }, (answer) => {
+      askRecall({ pool: set.pool, count: words.length, prompt: "場所の順に押してね。", label: "前から", loci: names, places: palace.loci, expected: words }, (answer) => {
         const result = scoreRecall(words, answer, names);
         finishUse(kind === "todo" ? "やることを、宮殿にしまえたね。出かける前に、宮殿をひと回りしてみよう。" : "これでメモがなくても買い物できるね。お店で宮殿をたどってみよう。", result.rows);
       });
@@ -702,8 +732,8 @@ function startPractice() {
     const avoid = plan.recall?.words ?? [];
     const set = palaceWordSet(seedBase + 7, plan.count, palace.loci, avoid);
     const words = set.scenes.map(({ item }) => item.word);
-    startStudy(set.scenes as Scene[], { title: `「${palace.name}」に${plan.count}個`, tip: "1か所に1つ。大げさで、動きのある絵にしてね。" }, () => {
-      askRecall({ pool: set.pool.map(({ word }) => word), count: words.length, prompt: "場所の順に、置いた言葉を押してね。", label: "宮殿に置く", loci: names }, (answer) => {
+    startStudy(set.scenes as Scene[], { title: `「${palace.name}」に${plan.count}個`, tip: "1か所に1つ。場所とからんで動く絵にしてね（困ったら「絵のヒント」）。" }, () => {
+      askRecall({ pool: set.pool.map(({ word }) => word), count: words.length, prompt: "場所の順に、置いた言葉を押してね。", label: "宮殿に置く", loci: names, places: palace.loci, expected: words }, (answer) => {
         const { score } = scoreRecall(words, answer, names);
         const nextCount = nextPracticeCount(plan.count, score.accuracy, palace.loci.length);
         records.push({ gameId: "palace", value: practiceValue(score), level: nextCount, text: `宮殿で${score.correct}個を順番どおり` });
@@ -733,14 +763,14 @@ function startPractice() {
     emit("save", patch);
     pending = { kind: "practice", lessonId: "", records, correct: total.correct, total: total.total };
     const all = rows.every(({ ok }) => ok);
-    showResult(all ? "全部、順番どおり！ 宮殿がしっかり働いているね。" : "おつかれさま。思い出せなかった場所は、絵をもっと大げさにしてみよう。", rows);
+    showResult(all ? "全部、順番どおり！ 宮殿がしっかり働いているね。" : "おつかれさま。思い出せなかった場所は、言葉が場所にもっとからむ絵にしてみよう。", rows);
   };
   if (plan.recall) {
     const entry = plan.recall;
     const where = findPalace(props.store, entry.palace) as Palace;
     const lociNames = where.loci.map(({ name }) => name);
     const label = recallLabel(entry.day, props.day);
-    askRecall({ pool: recallPool(seedBase + 5, entry.words), count: entry.words.length, prompt: `「${where.name}」をたどって、${label}を順に押してね。`, label, loci: lociNames }, (answer) => {
+    askRecall({ pool: recallPool(seedBase + 5, entry.words), count: entry.words.length, prompt: `「${where.name}」をたどって、${label}を順に押してね。`, label, loci: lociNames, places: where.loci, expected: entry.words }, (answer) => {
       const { score } = scoreRecall(entry.words, answer, lociNames);
       records.push({ gameId: "recall", value: score.correct, level: 0, text: `${score.total}個中${score.correct}個を思い出せた` });
       rows.push({ label, value: `${score.total}個中${score.correct}個`, ok: score.accuracy >= 1 });
@@ -802,20 +832,52 @@ defineExpose({ goBack });
 .shogi-game .brain-palace__scene {
   display: grid;
   justify-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   width: 100%;
   padding: 1rem;
-  border-radius: 0.9rem;
-  color: #172632;
-  background: #fffcf4;
+  border-radius: var(--dojo-radius, 14px);
+  color: var(--dojo-ink, #172632);
+  background: repeating-linear-gradient(0deg, transparent 0 27px, rgba(160, 130, 80, 0.06) 27px 28px), var(--dojo-paper, #fffcf4);
+  box-shadow: var(--dojo-shadow, none);
   text-align: center;
 }
-.shogi-game .brain-palace__locus { color: #8a4b0f; font-size: 1.15rem; font-weight: 900; }
-.shogi-game .brain-palace__locus span { margin-right: 0.3rem; font-size: 1.6rem; }
+/* 何か所目かの細い道(14-6の6)。 */
+.shogi-game .brain-palace__route { display: flex; justify-content: center; gap: 4px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.shogi-game .brain-palace__route li { flex: 1 1 0; max-width: 26px; height: 6px; border-radius: 3px; background: rgba(255, 252, 244, 0.2); }
+.shogi-game .brain-palace__route .brain-palace__route--done { background: var(--dojo-ai-light, #7f93d6); }
+.shogi-game .brain-palace__route .brain-palace__route--now { background: var(--dojo-now, #f1a54c); }
+.shogi-game .brain-palace__locus { display: grid; justify-items: center; gap: 0.1rem; color: var(--dojo-ai, #34488f); font-size: 1.1rem; font-weight: 900; }
+.shogi-game .brain-palace__locus b { font-size: 2.5rem; line-height: 1; }
+.shogi-game .brain-palace__plus { color: var(--dojo-ink-2, #56636d); font-size: 1.2rem; font-weight: 900; line-height: 1; }
 .shogi-game .brain-palace__item { font-size: 1.9rem; }
 .shogi-game .brain-palace__item span { margin-right: 0.3rem; }
-.shogi-game .brain-palace__image { margin: 0; font-size: 1.05rem; line-height: 1.6; }
-.shogi-game .brain-palace__tip { color: #5d6f7c; }
+.shogi-game .brain-palace__image {
+  width: 100%;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 12px;
+  background: var(--dojo-ai-soft, #dde3f4);
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.6;
+  text-align: left;
+}
+.shogi-game .brain-palace__image small { display: block; color: var(--dojo-ai, #34488f); font-size: 0.74rem; font-weight: 900; letter-spacing: 0.06em; }
+.shogi-game .brain-palace__hint-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
+.shogi-game .brain-palace__hint-button {
+  min-height: 44px;
+  padding: 0 0.9rem;
+  border: 2px solid var(--dojo-rule, #e6dcc6);
+  border-radius: 999px;
+  color: var(--dojo-ink, #172632);
+  background: #fff;
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+.shogi-game .brain-palace__hint-button:focus-visible { outline: 2px solid var(--dojo-now, #f1a54c); outline-offset: 2px; }
+.shogi-game .brain-palace__tip { color: var(--dojo-ink-2, #5d6f7c); }
 .shogi-game .brain-palace__digits { display: flex; gap: 1rem; margin: 0; font-size: 1.2rem; font-weight: 800; }
 .shogi-game .brain-palace__digits strong { margin-right: 0.2rem; color: #8a4b0f; font-size: 1.6rem; }
 .shogi-game .brain-palace__digits span span { margin-right: 0.15rem; }
@@ -917,5 +979,14 @@ defineExpose({ goBack });
 .shogi-game .brain-palace__review--miss { border-left: 4px solid #e58d84; }
 @media (max-width: 420px) {
   .shogi-game .brain-palace__tips { grid-template-columns: minmax(0, 1fr); }
+}
+/* 横向きの低い画面では、場所・＋・覚えるものを1行にし、「思いうかべた」を画面の中に残す(14-11)。 */
+@media (orientation: landscape) and (max-height: 600px) {
+  .shogi-game .brain-palace__scene { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; column-gap: 0.9rem; padding: 0.6rem 1rem; }
+  .shogi-game .brain-palace__scene > :is(.brain-palace__image, .brain-palace__hint-tools, .brain-palace__tip, .brain-palace__digits) { flex-basis: 100%; }
+  .shogi-game .brain-palace__locus { grid-auto-flow: column; align-items: center; gap: 0.4rem; }
+  .shogi-game .brain-palace__locus b { font-size: 1.9rem; }
+  .shogi-game .brain-palace__item { font-size: 1.6rem; }
+  .shogi-game .brain-palace__image { padding: 0.4rem 0.7rem; font-size: 0.95rem; line-height: 1.45; }
 }
 </style>

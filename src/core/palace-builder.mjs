@@ -2,6 +2,7 @@
 // 場所の種類を選び、カードの束から自分の場所にあるものを歩く順番に並べる。名前の変更・入れ替え・消す(取り消せる)。
 // 宮殿は10か所でできあがり、1つ30か所まで、3つまで(使い分けで混ざりを防ぐ。B14)。画面と保存の仕組みに依存しない。
 
+import { LOCUS_KIND_BY_NAME, LOCUS_KINDS } from '../data/palace-acts.mjs';
 import { PLACE_KINDS } from '../data/palace-cards.mjs';
 
 export const PALACE_MAX = 3;
@@ -20,14 +21,18 @@ function cleanName(value, max) {
   return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
-/** 1か所(名前・絵・似た場所の組)。名前が空なら捨てる。 */
+/**
+ * 1か所(名前・絵・似た場所の組・動きの種類)。名前が空なら捨てる。
+ * kindは「その場所でできる動き」の種類(docs/brain-training-design.mdの14-9)。束のカードは名前から決めて残すので、名前を自分の呼び方に変えても変わらない。
+ */
 export function cleanLocus(value) {
   if (!isPlainObject(value)) return null;
   const name = cleanName(value.name, LOCUS_NAME_MAX);
   if (!name) return null;
   const emoji = typeof value.emoji === 'string' && value.emoji.length <= 8 && value.emoji.trim() ? value.emoji : '📍';
   const group = typeof value.group === 'string' && /^[a-z]{1,10}$/.test(value.group) ? value.group : '';
-  return { name, emoji, group };
+  const kind = LOCUS_KINDS.includes(value.kind) ? value.kind : (LOCUS_KIND_BY_NAME[name] ?? '');
+  return kind ? { name, emoji, group, kind } : { name, emoji, group };
 }
 
 /** 1つの宮殿。場所は30か所まで。 */

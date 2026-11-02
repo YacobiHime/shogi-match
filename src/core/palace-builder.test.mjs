@@ -105,7 +105,8 @@ describe('宮殿づくり', () => {
     expect(cleanPalace(null)).toBeNull();
     expect(cleanPalace({ id: 'x1', loci: [] })).toBeNull();
     const palace = cleanPalace({ id: 'p1', name: '', place: 'moon', loci: [{ name: '玄関', emoji: '🚪', group: 'Door!' }, { name: ' ' }, 'x'] });
-    expect(palace).toEqual({ id: 'p1', name: '自分の宮殿', place: 'free', loci: [{ name: '玄関', emoji: '🚪', group: '' }] });
+    // 玄関は見本のお城の場所の名前でもあるので、動きの種類(door)を残す(14-9)。
+    expect(palace).toEqual({ id: 'p1', name: '自分の宮殿', place: 'free', loci: [{ name: '玄関', emoji: '🚪', group: '', kind: 'door' }] });
     expect(cleanPalaces([{ id: 'p1', loci: [] }, { id: 'p1', loci: [] }, { id: 'p2' }, { id: 'p3' }, { id: 'p4' }]).map(({ id }) => id)).toEqual(['p1', 'p2', 'p3']);
   });
 });

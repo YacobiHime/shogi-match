@@ -103,13 +103,14 @@ describe('記憶の宮殿の学校', () => {
     expect(set.scenes).toHaveLength(10);
     set.scenes.forEach((scene, index) => {
       expect(scene.locus).toBe(CASTLE_LOCI[index]);
-      expect(scene.image.startsWith(`${scene.locus.name}に${scene.item.word}`)).toBe(true);
+      // 場所と覚えるものがからむ絵の文(14-9)。
+      expect(scene.image).toContain(scene.locus.name);
+      expect(scene.image).toContain(scene.item.word);
+      expect(scene.imageOptions).toContain(scene.image);
     });
     const words = set.scenes.map(({ item }) => item.word);
     expect(set.pool).toHaveLength(20);
     expect(words.every((word) => set.pool.some((item) => item.word === word))).toBe(true);
-    const actions = set.scenes.map(({ image, locus, item }) => image.slice(`${locus.name}に${item.word}`.length));
-    for (let index = 1; index < actions.length; index += 1) expect(actions[index]).not.toBe(actions[index - 1]);
     expect(palaceWordSet(1, 40).scenes).toHaveLength(30);
     // 前の回の言葉は使わない。
     const avoid = palaceWordSet(4, 10).scenes.map(({ item }) => item.word);

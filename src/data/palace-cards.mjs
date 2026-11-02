@@ -1,12 +1,13 @@
 // 記憶の宮殿の場所カードの束(docs/brain-training-design.mdの11-6)。
 // 自分のよく知っている場所(家・学校・道・お店)にあるものを、歩く順番に並べて宮殿を作る。
+// 家はいちばん作りやすく、通学・通勤の道は家の中より思い出しやすかった(14-3のB28)。
 // groupは見た目の似た場所の組(ドアどうし・流しどうし・棚どうしなど)。となりに同じ組が続くと混ざりやすいので、ひとこと知らせる。
 
 /** 場所の種類。最初は「自分の家」をすすめる(いちばんよく知っている場所。B13)。 */
 export const PLACE_KINDS = Object.freeze([
-  { id: 'home', label: '自分の家', emoji: '🏠', defaultName: 'わが家', hint: 'いちばんよく知っている場所。おすすめ！' },
+  { id: 'home', label: '自分の家', emoji: '🏠', defaultName: 'わが家', hint: 'いちばん作りやすい。おすすめ！' },
   { id: 'school', label: '学校', emoji: '🏫', defaultName: '学校', hint: '毎日通う校舎の道順で' },
-  { id: 'route', label: '通学・通勤の道', emoji: '🚶', defaultName: 'いつもの道', hint: '家を出てから着くまで' },
+  { id: 'route', label: '通学・通勤の道', emoji: '🚶', defaultName: 'いつもの道', hint: '家を出てから着くまで。道は思い出しやすいよ' },
   { id: 'shop', label: 'よく行くお店', emoji: '🏪', defaultName: 'いつものお店', hint: '入口から出口まで' },
   { id: 'free', label: '自由に作る', emoji: '✏️', defaultName: '自分の宮殿', hint: 'どの束のカードも使える' },
 ].map((kind) => Object.freeze(kind)));
