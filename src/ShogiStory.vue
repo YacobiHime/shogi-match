@@ -118,12 +118,8 @@ function showNotice(text: string) {
 }
 const introText = computed(() => notice.value || STORY_TEXT.intro[tab.value]);
 
-const actions = computed(() => [
-  { id: "tab", label: STORY_TEXT.bar.tab, key: "◀▶" },
-  { id: "select", label: STORY_TEXT.bar.select, key: "▲▼", hint: true },
-  { id: "decide", label: STORY_TEXT.bar.decide, key: "Enter", primary: true, disabled: !selectedCard.value },
-  { id: "back", label: STORY_TEXT.bar.back, key: "Esc" },
-]);
+// 決めるボタンは置かない(カードを1回押すと話が始まる)。戻るは枠の左上。キーの操作は残し、案内はしない(7章)。
+const actions: { id: string; label: string; primary?: boolean }[] = [];
 
 function remember() {
   progress.value = rememberStoryPlace(progress.value, tab.value, selectedId.value);

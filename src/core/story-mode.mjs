@@ -28,7 +28,6 @@ export const STORY_TEXT = Object.freeze({
   read: '読んだ',
   readMark: '済',
   isNew: 'NEW',
-  bar: Object.freeze({ tab: 'タブ切り替え', select: '選択', decide: '決定', back: '戻る' }),
 });
 
 /** 押せない話の一言(不可の分類。理由と、どうすれば読めるか。UD:5-3)。 */

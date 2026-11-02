@@ -1,7 +1,8 @@
 <template>
   <!--
     選ぶ画面の枠(docs/story-mode-design.mdの1章。参考の画像は将棋のゲームの「ストーリー選択」)。
-    左上に題名の札、右上に案内の一文、左に選んでいるものの人物の立ち絵、右にタブと白い一覧の板、下に橙の帯(タブ切り替え・決定・戻る)。
+    左上に戻るボタンと題名の札、右上に案内の一文、左に選んでいるものの人物の立ち絵、右にタブと白い一覧の板。
+    決める操作(「出場する」など)があるときだけ、一覧の板の右下にボタンを置く。ゲーム機のような操作の案内の帯は置かない(docs/story-mode-design.mdの7章)。
     縦長の画面では、立ち絵は題名の札の右に胸から上を小さく出し、一覧を画面の幅いっぱいにする。
     物語のストーリー選択(ShogiStory.vue)と、団体戦の形式選び・出場の画面(ShogiTeamBattle.vue)で使う。
   -->
@@ -12,6 +13,9 @@
     data-pick-frame
   >
     <header class="pick-frame__head">
+      <button type="button" class="pick-frame__back" :aria-label="backLabel" data-pick-back data-pick-action="back" @click="emit('action', 'back')">
+        <span aria-hidden="true">←</span><span class="pick-frame__back-text">{{ backLabel }}</span>
+      </button>
       <h1 :id="titleId" class="pick-frame__plate">
         <span class="pick-frame__plate-icon" aria-hidden="true">
           <svg v-if="icon === 'team'" viewBox="0 0 16 16" shape-rendering="crispEdges">
@@ -71,26 +75,21 @@
           <slot />
         </div>
       </div>
-    </div>
-
-    <footer class="pick-frame__bar" data-pick-bar>
-      <template v-for="action in actions" :key="action.id">
-        <span v-if="action.hint" class="pick-frame__key pick-frame__key--hint" aria-hidden="true">
-          <span v-if="action.key" class="pick-frame__key-icon">{{ action.key }}</span>{{ action.label }}
-        </span>
+      <!-- 決める操作のボタン(板の右下。PCのダイアログの「OK」の位置)。キーの印は付けない。 -->
+      <div v-if="primaryActions.length" class="pick-frame__foot" data-pick-foot>
         <button
-          v-else
+          v-for="action in primaryActions"
+          :key="action.id"
           type="button"
-          class="pick-frame__key"
-          :class="{ 'pick-frame__key--primary': action.primary }"
+          class="pick-frame__go"
           :disabled="action.disabled"
           :data-pick-action="action.id"
           @click="emit('action', action.id)"
         >
-          <span v-if="action.key" class="pick-frame__key-icon" aria-hidden="true">{{ action.key }}</span>{{ action.label }}
+          {{ action.label }}
         </button>
-      </template>
-    </footer>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -100,7 +99,7 @@ import { portraitAspect, portraitScale, portraitUrl } from "./core/team-story.mj
 
 type Person = { who: string; face?: string; silhouette?: boolean };
 type Tab = { id: string; label: string; tone: string; badge?: string | number };
-type Action = { id: string; label: string; key?: string; primary?: boolean; disabled?: boolean; hint?: boolean };
+type Action = { id: string; label: string; primary?: boolean; disabled?: boolean };
 
 const props = defineProps({
   title: { type: String, required: true },
@@ -115,13 +114,17 @@ const props = defineProps({
   tabsLabel: { type: String, default: "" },
   /** 一覧の板の色(タブの色。pink・blue)。 */
   tone: { type: String, default: "pink" },
+  /** 決める操作(primaryのものだけ、板の右下のボタンにする)。戻るは左上のボタン(押すとaction 'back')。 */
   actions: { type: Array as PropType<Action[]>, default: () => [] },
+  /** 左上の戻るボタンの言葉(どの画面も「戻る」。docs/return-path-design.mdの4章)。 */
+  backLabel: { type: String, default: "戻る" },
   assetBaseUrl: { type: String, default: "." },
   /** 題名の札のid(外の画面のaria-labelledbyが指すとき)。 */
   headingId: { type: String, default: "" },
 });
 const emit = defineEmits<{ tab: [id: string]; action: [id: string] }>();
 
+const primaryActions = computed(() => props.actions.filter((action) => action.primary && action.id !== "back"));
 const titleId = props.headingId || `pick-frame-title-${Math.random().toString(36).slice(2, 8)}`;
 const listEl = ref<HTMLElement | null>(null);
 
@@ -175,12 +178,11 @@ defineExpose({ revealItem });
   --pick-tone: var(--pick-pink);
   --pick-tone-deep: var(--pick-pink-deep);
   --pick-head-h: 3.6rem;
-  --pick-bar-h: 3.2rem;
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 34fr) minmax(0, 66fr);
-  grid-template-rows: var(--pick-head-h) minmax(0, 1fr) var(--pick-bar-h);
-  grid-template-areas: "head head" "people main" "bar bar";
+  grid-template-rows: var(--pick-head-h) minmax(0, 1fr);
+  grid-template-areas: "head head" "people main";
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -198,7 +200,7 @@ defineExpose({ revealItem });
   --pick-tone-deep: var(--pick-blue-deep);
 }
 
-/* ---- 上: 題名の札と案内の一文 */
+/* ---- 上: 戻るボタン・題名の札・案内の一文 */
 .shogi-game .pick-frame__head {
   grid-area: head;
   position: relative;
@@ -209,6 +211,28 @@ defineExpose({ revealItem });
   min-width: 0;
   padding: 0.45rem clamp(0.6rem, 2vw, 1.4rem) 0;
 }
+.shogi-game .pick-frame .pick-frame__back {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 0.9rem;
+  border: 0.18rem solid var(--pick-plate);
+  border-radius: 999px;
+  color: var(--pick-plate);
+  background: #fffdf8;
+  box-shadow: 0 0.18rem 0 rgba(91, 57, 32, 0.3);
+  font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.1rem);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  transform: none;
+  cursor: pointer;
+}
+.shogi-game .pick-frame .pick-frame__back:hover { border-color: var(--pick-plate); background: #fff3dc; transform: none; }
+.shogi-game .pick-frame .pick-frame__back:focus-visible { outline: 0.2rem solid var(--pick-tone); outline-offset: 0.15rem; }
 .shogi-game .pick-frame__plate {
   display: inline-flex;
   flex: none;
@@ -262,7 +286,6 @@ defineExpose({ revealItem });
   position: relative;
   z-index: 1;
   min-height: 0;
-  margin-bottom: calc(-1 * var(--pick-bar-h));
   overflow: hidden;
   container-type: size;
   --crop: 0.64;
@@ -298,7 +321,9 @@ defineExpose({ revealItem });
   min-height: 0;
   padding: 0.3rem clamp(0.6rem, 2vw, 1.4rem) 0.6rem 0;
 }
+.shogi-game .pick-frame__main:has(> .pick-frame__foot) { grid-template-rows: minmax(0, 1fr) auto; }
 .shogi-game .pick-frame--tabs .pick-frame__main { grid-template-rows: auto minmax(0, 1fr); }
+.shogi-game .pick-frame--tabs .pick-frame__main:has(> .pick-frame__foot) { grid-template-rows: auto minmax(0, 1fr) auto; }
 .shogi-game .pick-frame__tabs {
   display: flex;
   justify-content: flex-end;
@@ -375,89 +400,47 @@ defineExpose({ revealItem });
 .shogi-game .pick-frame__list::-webkit-scrollbar-track { background: #dedad3; border-radius: 999px; }
 .shogi-game .pick-frame__list::-webkit-scrollbar-thumb { background: #f39a2b; border-radius: 999px; }
 
-/* ---- 下: 橙の帯(参考の画像の「タブ切り替え・選択・決定・戻る」) */
-.shogi-game .pick-frame__bar {
-  grid-area: bar;
-  position: relative;
-  z-index: 3;
+/* ---- 板の右下: 決める操作のボタン(橙。押せる大きさ44px以上。U:7-4) */
+.shogi-game .pick-frame__foot {
   display: flex;
-  align-items: center;
   justify-content: flex-end;
-  gap: clamp(0.6rem, 2vw, 2rem);
-  padding: 0 clamp(0.6rem, 2vw, 1.6rem) env(safe-area-inset-bottom);
-  background: linear-gradient(180deg, #f5a03a, var(--pick-bar));
-  box-shadow: 0 -0.15rem 0 rgba(255, 255, 255, 0.45) inset;
+  gap: 0.6rem;
+  padding-top: 0.6rem;
 }
-.shogi-game .pick-frame .pick-frame__key {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 44px;
+.shogi-game .pick-frame .pick-frame__go {
+  min-width: 9rem;
+  min-height: 48px;
   margin: 0;
-  padding: 0.2rem 0.6rem;
+  padding: 0.3rem 1.6rem;
   border: 0;
-  border-radius: 0.6rem;
+  border-radius: 999px;
   color: #fff;
-  background: transparent;
-  box-shadow: none;
-  font-size: clamp(1rem, 0.85rem + 0.5vw, 1.25rem);
+  background: linear-gradient(180deg, #f5a03a, var(--pick-bar));
+  box-shadow: 0 0.22rem 0 rgba(150, 70, 10, 0.45);
+  font-size: clamp(1.05rem, 0.9rem + 0.5vw, 1.3rem);
   font-weight: 900;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-shadow: 0 0.1rem 0 rgba(120, 50, 0, 0.45);
-  white-space: nowrap;
-}
-.shogi-game .pick-frame .pick-frame__key:not(:disabled):hover {
-  border: 0;
-  background: rgba(255, 255, 255, 0.18);
   transform: none;
 }
-.shogi-game .pick-frame .pick-frame__key--primary {
-  padding: 0.2rem 1.1rem;
-  color: var(--pick-ink);
-  background: #fffdf8;
-  box-shadow: 0 0.18rem 0 rgba(120, 50, 0, 0.35);
-  text-shadow: none;
-}
-.shogi-game .pick-frame .pick-frame__key--primary:not(:disabled):hover { background: #fff3dc; }
-.shogi-game .pick-frame .pick-frame__key:disabled { opacity: 0.5; background: transparent; }
-.shogi-game .pick-frame .pick-frame__key--primary:disabled { background: #fffdf8; }
-.shogi-game .pick-frame__key--hint { cursor: default; }
-/* キーの印: マウスとキーボードのある画面だけ(指の画面では、ボタンの言葉だけ。docs/story-mode-design.mdの3章の4)。 */
-.shogi-game .pick-frame__key-icon {
-  display: none;
-  min-width: 1.7rem;
-  height: 1.7rem;
-  padding: 0 0.35rem;
-  border-radius: 999px;
-  color: var(--pick-bar);
-  background: #fff;
-  font-size: 0.78rem;
-  line-height: 1.7rem;
-  text-align: center;
-  text-shadow: none;
-}
-.shogi-game .pick-frame .pick-frame__key--primary .pick-frame__key-icon { color: #fff; background: var(--pick-bar); }
-.shogi-game .pick-frame .pick-frame__key--hint { display: none; }
-@media (hover: hover) and (pointer: fine) and (min-width: 560px) {
-  .shogi-game .pick-frame__key-icon { display: inline-block; }
-  .shogi-game .pick-frame .pick-frame__key--hint { display: inline-flex; }
-}
+.shogi-game .pick-frame .pick-frame__go:not(:disabled):hover { border: 0; background: linear-gradient(180deg, #f7ad52, #f2962f); transform: none; }
+.shogi-game .pick-frame .pick-frame__go:focus-visible { outline: 0.2rem solid var(--pick-plate); outline-offset: 0.15rem; }
+.shogi-game .pick-frame .pick-frame__go:disabled { opacity: 0.5; }
 
 /* ---- 縦長の画面: 立ち絵は題名の札の右に胸から上を小さく。一覧は画面の幅いっぱい。 */
 @media (max-aspect-ratio: 1/1), (max-width: 699px) {
   .shogi-game .pick-frame {
     --pick-head-h: auto;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: auto minmax(0, 1fr) var(--pick-bar-h);
-    grid-template-areas: "head people" "main main" "bar bar";
+    /* 1行目は戻ると題名の札(画面の幅いっぱい)、2行目は案内の一文と立ち絵、3行目に一覧。 */
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: "back plate plate" "intro intro people" "main main main";
   }
-  .shogi-game .pick-frame__head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding: 0.6rem 0.2rem 0.4rem 0.75rem;
-  }
-  .shogi-game .pick-frame__intro { text-align: left; }
+  .shogi-game .pick-frame__head { display: contents; }
+  .shogi-game .pick-frame .pick-frame__back { grid-area: back; z-index: 3; align-self: center; margin: 0.6rem 0.5rem 0 0.75rem; padding: 0 0.7rem; }
+  .shogi-game .pick-frame__plate { grid-area: plate; z-index: 3; justify-self: start; min-width: 0; max-width: calc(100% - 0.75rem); margin: 0.6rem 0.75rem 0 0; padding-right: 1rem; }
+  .shogi-game .pick-frame__plate-text { overflow: hidden; text-overflow: ellipsis; }
+  .shogi-game .pick-frame__intro { grid-area: intro; z-index: 3; align-self: center; padding: 0.4rem 0.3rem 0.4rem 0.75rem; text-align: left; }
   .shogi-game .pick-frame__people {
     width: 7.4rem;
     height: 7.2rem;
@@ -469,7 +452,6 @@ defineExpose({ revealItem });
   .shogi-game .pick-frame--pair .pick-frame__people { width: 10.5rem; }
   .shogi-game .pick-frame__main { padding: 0 0.6rem 0.5rem; }
   .shogi-game .pick-frame__tabs { padding: 0 0.8rem; }
-  .shogi-game .pick-frame__bar { justify-content: space-around; gap: 0.2rem; }
 }
 @media (min-width: 700px) and (max-aspect-ratio: 1/1) {
   .shogi-game .pick-frame__people { width: 11rem; height: 11rem; }
@@ -477,7 +459,9 @@ defineExpose({ revealItem });
 }
 /* 背の低い横長の画面(スマホの横向き): 上と下の帯を細く。 */
 @media (max-height: 520px) and (min-aspect-ratio: 1/1) {
-  .shogi-game .pick-frame { --pick-head-h: 2.9rem; --pick-bar-h: 2.75rem; }
+  .shogi-game .pick-frame { --pick-head-h: 2.9rem; }
+  .shogi-game .pick-frame .pick-frame__go { min-height: 44px; padding-block: 0.15rem; }
+  .shogi-game .pick-frame__foot { padding-top: 0.4rem; }
   .shogi-game .pick-frame__plate { font-size: 1.05rem; padding: 0.1rem 1rem 0.1rem 0.2rem; }
   .shogi-game .pick-frame__plate-icon { width: 2rem; height: 2rem; }
   .shogi-game .pick-frame__plate-icon svg { width: 1.3rem; height: 1.3rem; }

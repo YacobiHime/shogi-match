@@ -620,19 +620,13 @@ const formatIntro = "出る団体戦を選んでください。羽音と同じ�
 const formatPeople = computed(() => (format.value === "school"
   ? [{ who: "hanane", face: "neutral" }, { who: "momoka", face: "neutral" }]
   : [{ who: "hanane", face: "smile" }]));
-const formatActions = [
-  { id: "select", label: "選択", key: "▲▼", hint: true },
-  { id: "decide", label: "決定", key: "Enter", primary: true },
-  { id: "back", label: "戻る", key: "Esc" },
-];
+// 形式はカードを押せば決まる(決めるボタンは置かない)。戻るは枠の左上(docs/story-mode-design.mdの7章)。
+const formatActions: { id: string; label: string; primary?: boolean }[] = [];
 function onFormatAction(id: string) {
   if (id === "decide") chooseFormat(format.value);
   else if (id === "back") emit("back");
 }
-const entryActions = [
-  { id: "enter", label: "出場する", key: "Enter", primary: true },
-  { id: "back", label: "戻る", key: "Esc" },
-];
+const entryActions = [{ id: "enter", label: "出場する", primary: true }];
 function onEntryAction(id: string) {
   if (id === "enter") enter();
   else if (id === "back") entryStep.value = "format";
