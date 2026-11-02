@@ -13,7 +13,7 @@ const stageInfo = (id) => SCHOOL_STAGES.find((stage) => stage.id === id) ?? null
 const shortName = (name) => String(name ?? '').replace(/^天鷺|^桜乃/, '');
 
 /** その段階のトーナメント(地区大会・県大会は記録、全国大会とプロはいまの表)。 */
-function stageKnockout(run, stage) {
+export function stageKnockout(run, stage) {
   if (stage === 'district' || stage === 'prefecture') {
     const log = (run.stageLog ?? []).find((entry) => entry.id === stage);
     return log ? { ko: log.ko, champion: log.champion, log } : null;
@@ -22,7 +22,7 @@ function stageKnockout(run, stage) {
 }
 
 /** その段階の試合のid(地区大会・県大会はトーナメント、全国大会は予選とトーナメント、プロはリーグとトーナメント)。 */
-function stageMatchIds(run, stage, ko) {
+export function stageMatchIds(run, stage, ko) {
   const koIds = (ko?.rounds ?? []).flat().map((entry) => entry.match).filter(Boolean);
   if (stage === 'national') return [...(run.swiss?.rounds ?? []).flat(), ...koIds];
   if (stage === 'pro') return [...(run.leagues ?? []).flatMap((league) => league.matches), ...koIds];
@@ -51,7 +51,7 @@ const teamCard = (run, id) => {
  * 段階の個人の成績(選手ごとの勝ち負けと席)。
  * @returns {Map<string, { id: string, team: string, seat: number | null, wins: number, losses: number }>}
  */
-function stageTallies(run, matchIds) {
+export function stageTallies(run, matchIds) {
   const tallies = new Map();
   for (const id of matchIds) {
     const match = run.matches[id];

@@ -5,6 +5,7 @@
 
 import { SCHOOL_SEATS, TEAM_HANANE_ID, TEAM_MOMOKA_ID } from './team-battle.mjs';
 import { peekBoardsOf } from './team-peek.mjs';
+import { championBanner } from './team-celebration.mjs';
 
 /** 見守る盤の時計: 自分の手数の代わりに、この時間で1つ進む(19章の6)。 */
 export const FINALE_TICK_MS = 1200;
@@ -68,6 +69,8 @@ export function teamFinaleView(run, { playerName = '' } = {}) {
     after: finale.after ?? '',
     userPly: finale.userPly,
     watch: rows.some((row) => row.pending),
+    // 優勝を決めた試合なら、帯の文字(21章の3の1)。
+    champion: finale.champion ? championBanner(run, finale.champion) : '',
     lines: finaleLines({ format: finale.format, teamWon: Boolean(finale.teamWon), rows, decisive, userWon: userRow ? userRow.won : null, playerName }),
   };
 }

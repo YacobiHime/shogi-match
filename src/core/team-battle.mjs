@@ -819,6 +819,8 @@ function closeSchoolStage(run, rng) {
   run.stageLog = [...(run.stageLog ?? []), { id: ko.stage, ko, champion, runnerUp, advanced, label }];
   // 段階の終わりの表彰式(20章)。試合の結果発表のあと、団体戦の画面で見る。
   run.ceremony = { stage: ko.stage, seen: false };
+  // 段階の優勝は、表彰式のあとに優勝インタビューと号外(21章)。
+  if (champion === USER_TEAM) run.celebrations = { ...(run.celebrations ?? {}), [ko.stage]: { seen: false } };
   if (!advanced) {
     finishRun(run);
     return;
@@ -836,6 +838,34 @@ function finishRun(run) {
   // 大会の終わりの表彰式(20章)。地区大会・県大会で終わったときは、その段階の表彰式がもう決まっている。
   const stage = teamStageOf(run) ?? 'pro';
   if (!(run.ceremony && !run.ceremony.seen && run.ceremony.stage === stage)) run.ceremony = { stage, seen: false };
+  if (run.champion === USER_TEAM) run.celebrations = { ...(run.celebrations ?? {}), [stage]: { seen: false } };
+}
+
+/**
+ * 優勝インタビューと号外を見た(21章)。answersは選んだ答えのid。
+ * @param {any} source
+ * @param {string} stage
+ * @param {string[]} [answers]
+ */
+export function markTeamCelebrated(source, stage, answers = []) {
+  if (!source?.celebrations?.[stage] || source.celebrations[stage].seen) return source;
+  return { ...source, celebrations: { ...source.celebrations, [stage]: { seen: true, answers: [...answers] } } };
+}
+
+/**
+ * 決勝に勝って優勝した段階(優勝決定の瞬間。21章)。その段階の決勝でなければnull。
+ * 地区大会・県大会は段階の記録(stageLog)、全国大会とプロはいまのトーナメントで決める。
+ * @param {any} run 試合を記録して、大会を進めたあとの大会
+ * @param {any} match 決まった試合
+ * @returns {string | null}
+ */
+export function championStageOf(run, match) {
+  if (!match?.winner || match[match.winner] !== USER_TEAM || match.stage !== 'ko') return null;
+  const inFinal = (ko) => (ko?.rounds?.at(-1) ?? []).some((entry) => entry.match === match.id);
+  const log = (run.stageLog ?? []).find((entry) => inFinal(entry.ko));
+  if (log) return log.champion === USER_TEAM ? log.id : null;
+  if (inFinal(run.ko) && run.champion === USER_TEAM) return teamStageOf(run) ?? 'pro';
+  return null;
 }
 
 /** 表彰式を見た(20章)。 */
@@ -1058,6 +1088,7 @@ function finaleRecord(run, match, { before, userPly = null }) {
     teamWon: teamWon ?? match.winner === side,
     decidedBy,
     after: afterText(run, before),
+    champion: championStageOf(run, match),
     seen: false,
   };
 }
@@ -1074,7 +1105,7 @@ export function markTeamFinaleSeen(source) {
  * @param {any} source
  * @param {'win' | 'loss' | 'draw'} outcome
  * @param {{ ply?: number }} [options]
- * @returns {{ run: any, replay?: boolean, match: any, decided: boolean, teamWon: boolean | null, clinched: boolean }}
+ * @returns {{ run: any, replay?: boolean, match: any, decided: boolean, teamWon: boolean | null, clinched: boolean, champion?: string | null }}
  */
 export function recordTeamGame(source, outcome, { ply } = {}) {
   const run = structuredClone(source);
@@ -1108,7 +1139,7 @@ export function recordTeamGame(source, outcome, { ply } = {}) {
   // 高校は、次の自分の試合が始まっていれば、自分の局の相手をすぐ付ける。
   preparePending(run, rng);
   run.rng = rng.state;
-  return { run, match: finished, decided, teamWon: decided ? finished.winner === side : null, clinched };
+  return { run, match: finished, decided, teamWon: decided ? finished.winner === side : null, clinched, champion: decided ? championStageOf(run, finished) : null };
 }
 
 // ---- 大会を作る
@@ -1557,7 +1588,21 @@ export function userMatches(run) {
 
 /** 経歴(大会の記録)。 */
 export function emptyTeamCareer() {
-  return { version: 1, current: null, invited: { school: false, pro: false }, history: [], best: {} };
+  return { version: 1, current: null, invited: { school: false, pro: false }, history: [], best: {}, trophies: [] };
+}
+
+/** トロフィー棚に残す優勝の数の上限(21章)。 */
+export const MAX_TEAM_TROPHIES = 60;
+
+/**
+ * トロフィー棚に優勝を1つ足す(同じ大会の同じ段階は重ねない。21章)。
+ * @param {any} career
+ * @param {{ id: string }} trophy
+ */
+export function addTeamTrophy(career, trophy) {
+  const trophies = career?.trophies ?? [];
+  if (trophies.some((entry) => entry.id === trophy.id)) return career;
+  return { ...career, trophies: [...trophies, trophy].slice(-MAX_TEAM_TROPHIES) };
 }
 
 /** 大会の結果を経歴に足す(終わった大会を外す)。 */
