@@ -33,11 +33,11 @@ export const INTERVIEW_QUESTIONS = Object.freeze([
       }),
       Object.freeze({
         id: 'joy', label: '最高にうれしいです', say: '最高にうれしいです！',
-        momoka: ['wry', '私も！ 今日はずっと笑っちゃう！'], hanane: ['smile', '顔に全部出てる。……まぁ、私もだけど。'],
+        momoka: ['neutral', '私も！ 今日はずっと笑っちゃう！'], hanane: ['smile', '顔に全部出てる。……まぁ、私もだけど。'],
       }),
       Object.freeze({
         id: 'unreal', label: 'まだ実感がありません', say: 'まだ実感がありません。夢みたいです。',
-        momoka: ['wry', 'ほっぺ、つねってあげようか！'], hanane: ['neutral', '夢じゃないよ。賞状、ちゃんと君の名前だったでしょ。'],
+        momoka: ['neutral', 'ほっぺ、つねってあげようか！'], hanane: ['neutral', '夢じゃないよ。賞状、ちゃんと君の名前だったでしょ。'],
       }),
     ]),
   }),
@@ -46,7 +46,7 @@ export const INTERVIEW_QUESTIONS = Object.freeze([
     answers: Object.freeze([
       Object.freeze({
         id: 'repeat', label: '次も優勝します', say: '次も、このチームで優勝します。',
-        momoka: ['wry', '連覇だね！ がんばろう！'], hanane: ['smile', '言ったね。……付き合うよ。'],
+        momoka: ['neutral', '連覇だね！ がんばろう！'], hanane: ['smile', '言ったね。……付き合うよ。'],
       }),
       Object.freeze({
         id: 'stronger', label: 'もっと強くなります', say: 'もっと強くなります。まだ勝てない相手がいるので。',
@@ -54,7 +54,7 @@ export const INTERVIEW_QUESTIONS = Object.freeze([
       }),
       Object.freeze({
         id: 'party', label: 'みんなでお祝いがしたいです', say: 'まずは、みんなでお祝いがしたいです。',
-        momoka: ['wry', 'やったー！ ケーキ食べよう、ケーキ！'], hanane: ['gentle', '果物のケーキなら、いいよ。'],
+        momoka: ['neutral', 'やったー！ ケーキ食べよう、ケーキ！'], hanane: ['gentle', '果物のケーキなら、いいよ。'],
       }),
     ]),
   }),

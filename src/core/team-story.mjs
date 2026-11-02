@@ -67,10 +67,10 @@ export const TEAM_SCENES = Object.freeze({
     cast: ['hanane', 'momoka'],
     lines: [
       line('narration', 'neutral', '地区大会の会場は、となりの高校の大きな教室だった。'),
-      line('momoka', 'worried', '最初は地区大会なんだね。いきなり全国じゃないんだ！'),
+      line('momoka', 'neutral', '最初は地区大会なんだね。いきなり全国じゃないんだ！'),
       line('hanane', 'neutral', '全国に行けるのは、県で優勝した1校だけ。まずは地区で2位までに入って、県大会に出る。'),
       line('hanane', 'gentle', '1つずつでいい。君の1局も、ちゃんと数えてるから。'),
-      line('momoka', 'wry', 'よーし、がんばろうね！'),
+      line('momoka', 'neutral', 'よーし、がんばろうね！'),
     ],
   }),
   'school-prefecture': Object.freeze({
@@ -80,7 +80,7 @@ export const TEAM_SCENES = Object.freeze({
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
-      line('momoka', 'wry', '地区大会、抜けたよ！ 次は県大会だね！'),
+      line('momoka', 'neutral', '地区大会、抜けたよ！ 次は県大会だね！'),
       line('hanane', 'neutral', '県で優勝したら全国。負けたら、そこで終わり。'),
       line('momoka', 'worried', 'う～ん……負けたら終わりかあ。緊張してきた……'),
       line('hanane', 'smile', 'でも、ここまで3人で来た。次も3人で取りに行こう。'),
@@ -93,7 +93,7 @@ export const TEAM_SCENES = Object.freeze({
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
-      line('momoka', 'wry', '県の代表として、全国大会だよ！'),
+      line('momoka', 'neutral', '県の代表として、全国大会だよ！'),
       line('momoka', 'worried', 'うう、人がいっぱい……。緊張してきた！'),
       line('hanane', 'gentle', '大丈夫。いつもどおり指せばいいよ。'),
       line('hanane', 'neutral', '予選は3回勝てば抜けられる。2回負けたら終わり。数えるのは私がやるから。'),
@@ -106,7 +106,7 @@ export const TEAM_SCENES = Object.freeze({
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
-      line('momoka', 'wry', 'やった、決勝トーナメントだよ！'),
+      line('momoka', 'neutral', 'やった、決勝トーナメントだよ！'),
       line('hanane', 'smile', 'ここからは1回負けたら終わり。でも、やることは同じでしょ。'),
     ],
   }),
@@ -128,7 +128,7 @@ export const TEAM_SCENES = Object.freeze({
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
-      line('momoka', 'wry', '優勝……！ 私たち、日本一だよ！'),
+      line('momoka', 'neutral', '優勝……！ 私たち、日本一だよ！'),
       line('hanane', 'gentle', '……うん。3人で取った優勝だね。'),
       line('hanane', 'smile', 'ありがとう。君がいてよかった。'),
     ],
@@ -142,7 +142,7 @@ export const TEAM_SCENES = Object.freeze({
     lines: [
       line('momoka', 'worried', '終わっちゃった……。悔しいな。'),
       line('hanane', 'neutral', '悔しいけど、いい大会だった。次は勝つから。'),
-      line('momoka', 'wry', 'また3人で出ようね！'),
+      line('momoka', 'neutral', 'また3人で出ようね！'),
     ],
   }),
   'pro-knockout': Object.freeze({

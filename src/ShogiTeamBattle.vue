@@ -613,7 +613,7 @@ function chooseFormat(id: Format) {
 }
 const formatIntro = "出る団体戦を選んでください。羽音と同じチームで出ます。";
 const formatPeople = computed(() => (format.value === "school"
-  ? [{ who: "hanane", face: "neutral" }, { who: "momoka", face: "wry" }]
+  ? [{ who: "hanane", face: "neutral" }, { who: "momoka", face: "neutral" }]
   : [{ who: "hanane", face: "smile" }]));
 const formatActions = [
   { id: "select", label: "選択", key: "▲▼", hint: true },
@@ -884,7 +884,7 @@ const lastNews = computed(() => props.news);
 // 顔(羽音と百花は立ち絵の顔、自分はやこび姫のドット絵、ほかは名前の1字)
 const faceOf = (member: { id: string; story?: string | null }) => {
   if (member.id === TEAM_HANANE_ID || member.story === "hanane") return faceSrc("hanane");
-  if (member.id === TEAM_MOMOKA_ID) return faceSrc("momoka", "wry");
+  if (member.id === TEAM_MOMOKA_ID) return faceSrc("momoka");
   if (member.id === TEAM_USER_ID) return `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`;
   return "";
 };

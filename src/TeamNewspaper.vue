@@ -71,7 +71,7 @@ const doneButton = ref<HTMLButtonElement | null>(null);
 function close() {
   emit("done");
 }
-const faceOf = (who: string) => portraitUrl(props.assetBaseUrl, who, who === "hanane" ? "smile" : "wry", { small: true });
+const faceOf = (who: string) => portraitUrl(props.assetBaseUrl, who, who === "hanane" ? "smile" : "neutral", { small: true });
 
 /** 戻る操作で閉じる(画面に任せない)。 */
 function goBack() {
