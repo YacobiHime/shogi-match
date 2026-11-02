@@ -5,6 +5,7 @@ import {
   CUE_OPTIONS,
   WEEK_TARGETS,
   calcNextGoal,
+  compareRecord,
   cleanCue,
   cueText,
   memoryNextGoal,
@@ -124,5 +125,21 @@ describe('いつ稽古するかの保存', () => {
     data[BRAIN_TRAINING_KEY] = JSON.stringify({ version: 2, levels: {}, best: {}, days: {}, room: 'calc' });
     expect(loadBrainRecord(storage)).toMatchObject({ cue: '', cueAsked: false, room: 'calc' });
     expect(setBrainCue(emptyBrainRecord(), 'midnight')).toMatchObject({ cue: '', cueAsked: true });
+  });
+});
+
+describe('成績表の前との差', () => {
+  test('スピード計算は速くなった秒数、50ms未満は同じくらい、遅くなったら前の値を並べるだけ', () => {
+    expect(compareRecord('speed-2', 1900, 2200)).toEqual({ kind: 'up', diffSeconds: 0.3 });
+    expect(compareRecord('speed-2', 1980, 2000)).toEqual({ kind: 'same', diffSeconds: 0 });
+    expect(compareRecord('speed-2', 2300, 2000)).toEqual({ kind: 'prev', diffSeconds: 0 });
+    expect(compareRecord('speed-1', 1960, 2010)).toEqual({ kind: 'up', diffSeconds: 0.1 });
+  });
+  test('大きいほど良い記録', () => {
+    expect(compareRecord('nback', 4, 3)).toEqual({ kind: 'up', diffSeconds: 0 });
+    expect(compareRecord('nback', 3, 3)).toEqual({ kind: 'same', diffSeconds: 0 });
+    expect(compareRecord('nback', 2, 3)).toEqual({ kind: 'prev', diffSeconds: 0 });
+    expect(compareRecord('nback', 2, null)).toBeNull();
+    expect(compareRecord('palace', 0, 9)).toBeNull();
   });
 });

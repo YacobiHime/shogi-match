@@ -2,7 +2,7 @@
 // 今週の判子(月曜はじまり)・週の目安・目安に届いた週・今日のおすすめの部屋・いつ稽古するか・次の目標の1行。
 // 毎日の連続は数えない(1日休んでも大丈夫。14-3のB30、D:9-2)。
 
-import { BRAIN_CUE_IDS, stamped } from './brain-training.mjs';
+import { BRAIN_CUE_IDS, lowerIsBetter, stamped } from './brain-training.mjs';
 import { CALC_BOOSTERS, CALC_COURSE_SESSIONS, MEMORY_COURSE_SESSIONS, addDays, calcBoosterDue, calcNextBoosterDay } from './brain-program.mjs';
 
 /** 週の目安(11-2の原則4)。計算力は週3回、記憶力は6週間コースのあいだ週5回、コースのあとは週3回。 */
@@ -163,4 +163,24 @@ function weekGoalText(record, day, room) {
   const counts = weekCounts(record, day)[room];
   const left = counts.target - counts.done;
   return left > 0 ? `今週の目安まで、あと${left}回` : '今週の目安に届いたよ';
+}
+
+/**
+ * 今日の記録を前の日の記録とくらべる(成績表の「前より0.3秒速い」。14-4の柱5)。
+ * kindは'up'(伸びた)・'same'(同じ)・'prev'(前の値を並べるだけ。下がったと責めない。G:6-2)。前の記録がなければnull。
+ * スピード計算(小さいほど良い)は、50ms未満の差を「同じくらい」とし、速くなった秒数(0.1秒単位)をdiffSecondsに入れる。
+ * @param {string} recordId
+ * @param {number} value
+ * @param {number | null | undefined} previous
+ * @returns {{ kind: 'up' | 'same' | 'prev', diffSeconds: number } | null}
+ */
+export function compareRecord(recordId, value, previous) {
+  if (!Number.isFinite(previous) || !Number.isFinite(value) || !value || !previous) return null;
+  if (lowerIsBetter(recordId)) {
+    const diff = /** @type {number} */ (previous) - value;
+    if (Math.abs(diff) < 50) return { kind: 'same', diffSeconds: 0 };
+    return diff > 0 ? { kind: 'up', diffSeconds: Math.max(0.1, Math.round(diff / 100) / 10) } : { kind: 'prev', diffSeconds: 0 };
+  }
+  if (value === previous) return { kind: 'same', diffSeconds: 0 };
+  return value > /** @type {number} */ (previous) ? { kind: 'up', diffSeconds: 0 } : { kind: 'prev', diffSeconds: 0 };
 }
