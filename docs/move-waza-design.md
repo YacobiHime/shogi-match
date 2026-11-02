@@ -94,4 +94,13 @@
 
 ## 5. 実装（2026-11-02、実装・自動テスト済み）
 
-（実装のあとに書く）
+- **処理**：`src/core/move-waza.mjs`（目録`WAZA_TESUJI`・名前`WAZA_TESUJI_NAMES`・一言`WAZA_TESUJI_HINTS`、手筋の判定`detectWazaTesuji`（`detectTesujiShape`と`detectTesuji`をまとめ、垂れ歩・尻金を足す）、囲い・戦法`formationWaza`、選び方`pickWaza`、見せ方`wazaPresentation`、音`wazaChime`、2回目の印`wazaRepeatKey`、切り替えの保存`WAZA_EFFECT_KEY`）。テストは`move-waza.test.mjs`（目録が今までのコレクションと同じID・名前で始まること、垂れ歩の条件（4段目・前に相手の駒がない・ただで取られない）、尻金、ふんどしの桂の段階とねらった駒、王手飛車、頭金は詰ませた手だけ、囲い・戦法の新しい名前と段階、選ぶ順、帯の大きさ・長さ（1.5秒以内）・止め・印、音の数と長さ）。
+- **画面**：
+  - `src/WazaCutin.vue`：帯（種類・名前・★・印）。自分の技は盤の真ん中、相手の技と2回目からは上の端に小さく（相手は朱の縁）。銀・金・虹の色、虹は字の色が流れる。動きを減らす設定では横から入る動きと虹の流れをなくす。
+  - `src/renderer/view/primitive/BoardView.vue`・`src/ShogiMatchBoard.vue`：`wazaGlow`（指した駒のマスの光の輪`waza-burst`と、ねらった駒のマスの赤い輪`waza-target`）。
+  - `src/waza-audio.ts`：段階ごとの上がる音をWeb Audioで作る（効果音のオン/オフに従う）。
+  - `src/ShogiMatchGame.vue`：`syncPosition`で`noteWaza`（自分・相手のどちらの手でも。出したらコツと囲いの札はまとめて出さない）、表示補助の「技の演出」`toggleWazaEffect`（`data-waza-toggle`）、盤を触ると帯を消す、対局の始めに2回目の印を消す（`resetTipMoments`）。コレクションの手筋は`detectWazaTesuji`で数え、名前と一言は`WAZA_TESUJI_NAMES`・`WAZA_TESUJI_HINTS`。
+  - `src/YakobiNote.vue`：コレクションの「手筋」のページを18に。
+- **作りながら決めたこと**：囲いの帯には「完成」を添える（今までの札と同じ言い方）。垂れ歩の赤い輪は、次に成るマス（目標のマス）。
+- **ブラウザ**（390×844・820×1180・1366×768・844×390）：桂を持ち駒にした局面から5三へ打つと「手筋 ふんどしの桂 ★★ はじめて！」の帯、桂のマスの光の輪、ねらった銀と金の赤い輪が出ること。歩を2四に打つと「垂れ歩 ★」。表示補助で消すと出ないこと。どの大きさも横にはみ出さない。
+- **まだ確かめていないこと**：相手の技の小さな帯・2回目の小さな帯・囲いと戦法の帯（処理のテストだけ）、本物の端末での見え方と音、実際の対局での出る回数（うるさくないか）。

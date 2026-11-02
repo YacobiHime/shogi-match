@@ -126,6 +126,26 @@
           :style="risk.style"
           aria-hidden="true"
         ></div>
+        <!-- 技の演出(docs/move-waza-design.mdの4-2)。指した駒のマスに広がる光の輪と、ねらった駒のマスの赤い輪。 -->
+        <template v-if="wazaGlowView">
+          <div
+            v-if="wazaGlowView.burst"
+            :key="'waza-burst-' + wazaGlowView.id"
+            class="waza-burst"
+            :class="[`waza-burst--${wazaGlowView.tier}`, { 'waza-burst--theirs': !wazaGlowView.mine }]"
+            :style="wazaGlowView.burst"
+            aria-hidden="true"
+            data-waza-burst
+          ></div>
+          <div
+            v-for="target in wazaGlowView.targets"
+            :key="'waza-target-' + wazaGlowView.id + '-' + target.id"
+            class="waza-target"
+            :style="target.style"
+            aria-hidden="true"
+            data-waza-target
+          ></div>
+        </template>
       </div>
 
       <!-- 先手の駒台 -->
@@ -517,6 +537,12 @@ const props = defineProps({
     type: Array as PropType<{ file: number; rank: number; tone: string }[]>,
     required: false,
     default: () => [],
+  },
+  // 技の演出(docs/move-waza-design.mdの4-2)。指した駒のマス(USIの升)と、ねらった駒のマス。idが変わるたびに光り直す。
+  wazaGlow: {
+    type: Object as PropType<{ id: number; square: string; tier: string; mine: boolean; targets: string[] } | null>,
+    required: false,
+    default: null,
   },
   flip: {
     type: Boolean,
@@ -1228,6 +1254,20 @@ const USI_HAND_LETTERS: Partial<Record<PieceType, string>> = {
   [PieceType.ROOK]: "R",
 };
 
+const wazaGlowView = computed(() => {
+  const glow = props.wazaGlow;
+  if (!glow) return null;
+  const usiOf = (square: { file: number; rank: number }) => `${square.file}${String.fromCharCode(96 + square.rank)}`;
+  const at = board.value.squares.find((square) => usiOf(square) === glow.square);
+  const targets = new Set(glow.targets);
+  return {
+    id: glow.id,
+    tier: glow.tier,
+    mine: glow.mine,
+    burst: at?.style ?? null,
+    targets: board.value.squares.flatMap((square) => (targets.has(usiOf(square)) ? [{ id: square.id, style: square.style }] : [])),
+  };
+});
 const riskSquareViews = computed(() => {
   // 悪手の理由で「取られちゃう」と言った駒の升(N2)。駒を選んでいなくても出す。
   const fixed = new Set(props.riskSquares);
@@ -1744,6 +1784,52 @@ const whitePlayerTimeSeverity = computed(() => {
   pointer-events: none;
   box-shadow: inset 0 0 0 3px rgba(220, 38, 38, 0.85);
   border-radius: 50%;
+}
+/*
+ * 技の演出(docs/move-waza-design.mdの4-2)。指した駒のマスから光の輪が広がって消える(段階で色を変える。黄色は使わず、
+ * 銀は白、金は橙、虹は紫に暗い縁を重ねる)。ねらった駒は「ねらう駒＝赤」の決まりどおり赤い輪を2回脈打たせる。
+ */
+.waza-burst {
+  pointer-events: none;
+  z-index: 3;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(255, 252, 244, 0.95), 0 0 0 6px rgba(23, 38, 50, 0.7), 0 0 22px 8px rgba(255, 252, 244, 0.75);
+  animation: waza-burst 900ms ease-out both;
+}
+.waza-burst--rare {
+  box-shadow: 0 0 0 3px rgba(241, 165, 76, 0.98), 0 0 0 6px rgba(23, 38, 50, 0.7), 0 0 26px 10px rgba(241, 165, 76, 0.75);
+}
+.waza-burst--legend {
+  box-shadow: 0 0 0 3px rgba(214, 168, 255, 0.98), 0 0 0 6px rgba(23, 38, 50, 0.7), 0 0 30px 12px rgba(214, 168, 255, 0.8);
+}
+.waza-burst--theirs {
+  box-shadow: 0 0 0 3px rgba(226, 85, 59, 0.95), 0 0 0 6px rgba(23, 38, 50, 0.6), 0 0 18px 6px rgba(226, 85, 59, 0.6);
+}
+.waza-target {
+  pointer-events: none;
+  z-index: 3;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 3px rgba(220, 38, 38, 0.9), 0 0 10px 2px rgba(220, 38, 38, 0.55);
+  animation: waza-target 600ms ease-in-out 2 both;
+}
+@keyframes waza-burst {
+  0% { opacity: 0; transform: scale(0.6); }
+  20% { opacity: 1; transform: scale(1); }
+  70% { opacity: 0.9; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+@keyframes waza-target {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .waza-burst { animation: waza-burst-fade 900ms ease-out both; }
+  .waza-target { animation: none; }
+}
+@keyframes waza-burst-fade {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
 }
 /* 対局の「駒の利き」表示。青は先手、赤は後手、紫は両者が利かせている升。 */
 .attack-tint {

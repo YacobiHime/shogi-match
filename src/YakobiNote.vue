@@ -924,7 +924,8 @@ import {
 import { ALL_OPENING_PLANS } from "./core/opening-catalog.mjs";
 import FormationThumb from "./FormationThumb.vue";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
-import { TESUJI_NAMES } from "./core/move-tesuji.mjs";
+// 手筋のページは技の演出と同じ目録(docs/move-waza-design.mdの4-3)。
+import { WAZA_TESUJI_NAMES as TESUJI_NAMES } from "./core/move-waza.mjs";
 import { formationFans } from "./core/ryuo-book.mjs";
 import {
   BOARD_THEMES,
@@ -1121,7 +1122,7 @@ const albumPageLabel = computed(() => ALBUM_PAGES.find(({ id }) => id === albumP
 const tesujiCards = computed(() => TESUJI_IDS.map((id) => {
   const got = collection.value.tesuji?.[id];
   return {
-    id, label: TESUJI_NAMES[id as keyof typeof TESUJI_NAMES], got: Boolean(got), count: got?.count ?? 0,
+    id, label: TESUJI_NAMES[id], got: Boolean(got), count: got?.count ?? 0,
     isNew: Boolean(got && collectionSeenAt && got.firstAt > collectionSeenAt),
   };
 }));

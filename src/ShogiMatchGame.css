@@ -4368,7 +4368,8 @@
 }
 .shogi-game .shogi-game__command--attack[aria-pressed="true"],
 .shogi-game .shogi-game__command--material[aria-pressed="true"],
-.shogi-game .shogi-game__command--sensor[aria-pressed="true"] {
+.shogi-game .shogi-game__command--sensor[aria-pressed="true"],
+.shogi-game .shogi-game__command--waza[aria-pressed="true"] {
   box-shadow: inset 0 0 0 2px var(--amber, #f5a645);
 }
 

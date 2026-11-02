@@ -1191,6 +1191,7 @@
         :mark-squares="boardEscapeMarks"
         :risk-destinations="boardRiskDestinations"
         :risk-squares="boardRiskSquares"
+        :waza-glow="wazaGlow"
         :threat-arrows="boardThreatArrows"
         :ghost-pieces="planGhosts"
         :movement-arrows="matchKind === 'learning' && movementArrowsEnabled && matchStarted && !pregameOpen"
@@ -1331,7 +1332,9 @@
           <i v-for="piece in 14" :key="piece" :style="{ '--piece': piece }"></i>
         </i>
       </div>
-      <!-- 囲い完成の知らせ。教室の「囲いを組もう」と同じく、組み上げた瞬間をほめる。 -->
+      <!-- 技の演出(docs/move-waza-design.md)。手筋・囲い・戦法の名前の帯。押せない(盤の操作を止めない)。 -->
+      <WazaCutin v-if="wazaCutin && !checkCallout && !stageCard" :key="wazaCutin.id" :cutin="wazaCutin" />
+      <!-- 囲い完成の知らせ。教室の「囲いを組もう」と同じく、組み上げた瞬間をほめる(技の演出を消しているとき)。 -->
       <Transition name="shogi-game__callout">
         <div
           v-if="castleCallout && !checkCallout && !furigomaCallout && !stageCard"
@@ -1660,6 +1663,15 @@
             data-danger-sensor
             @click="toggleDangerSensor"
           >危機<wbr>センサー</button>
+          <!-- 技の演出(docs/move-waza-design.md)。手筋・囲い・戦法を使ったら、名前の帯と光を出す(はじめは付いている)。 -->
+          <button
+            type="button"
+            class="shogi-game__assist-toggle shogi-game__command--waza"
+            aria-label="技の演出（手筋・囲い・戦法の名前を出す）"
+            :aria-pressed="wazaEffectEnabled"
+            data-waza-toggle
+            @click="toggleWazaEffect"
+          >技の<wbr>演出</button>
         </div>
       </details>
       <button
@@ -2617,6 +2629,8 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRaw, watch, type Ref } from "vue";
 import { Color, Move, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
+import WazaCutin, { type WazaCutinView } from "./WazaCutin.vue";
+import { createWazaAudio } from "./waza-audio";
 import type ShogiReferenceDexComponent from "./ShogiReferenceDex.vue";
 import type ShogiTutorialComponent from "./ShogiTutorial.vue";
 import type ShogiProblemSetComponent from "./ShogiProblemSet.vue";
@@ -3083,7 +3097,10 @@ import { themeName } from "./core/themes.mjs";
 import { loadOshi, oshiSeasonResultLine, saveOshi } from "./core/ryuo-oshi.mjs";
 import { resetRoster, worldResetBlocker } from "./core/world-reset.mjs";
 import { withdrawMeijinSeason, withdrawOptions, withdrawRyuoSeason } from "./core/tournament-withdraw.mjs";
-import { TESUJI_HINTS, TESUJI_NAMES, detectTesuji } from "./core/move-tesuji.mjs";
+import { detectTesuji } from "./core/move-tesuji.mjs";
+import {
+  WAZA_EFFECT_KEY, WAZA_TESUJI_HINTS, WAZA_TESUJI_NAMES, detectWazaTesuji, formationWaza, pickWaza, wazaChime, wazaPresentation, wazaRepeatKey,
+} from "./core/move-waza.mjs";
 import { addRecentGame, loadRecentGames, saveRecentGames } from "./core/recent-games.mjs";
 import { CHUNK_FAIL_TEXT, claimChunkReload, isChunkLoadError } from "./core/chunk-reload.mjs";
 import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
@@ -4305,7 +4322,7 @@ const {
   sync: syncAssistTools,
 } = useAssistTools(assistActions, uiFontPx, primaryAssistCount);
 const activeDisplayToolCount = computed(() => Number(boardFlipOverride.value) + Number(attackGuideEnabled.value) + Number(materialGuideEnabled.value)
-  + Number(dangerSensorEnabled.value));
+  + Number(dangerSensorEnabled.value) + Number(wazaEffectEnabled.value));
 watch([homeOpen, pregameOpen, reviewMode], () => closeAssistTools());
 
 const resignConfirmOpen = ref(false);
@@ -5824,7 +5841,7 @@ function recordCollection(won: boolean) {
   const recorded = recordMatchCollection(before, {
     formations: [...matchFormationNames],
     tesuji: [...matchTesuji],
-    tesujiNames: TESUJI_NAMES,
+    tesujiNames: WAZA_TESUJI_NAMES,
     wonLevel: won && ratingChange.value && level !== undefined ? level : null,
     godMoves: matchGodMoves,
     catalog: COLLECTION_CATALOG,
@@ -5854,8 +5871,8 @@ function newPlansText(names: string[]) {
 /** 初めて手に入った形の一言。戦法・囲いは定跡図鑑の解説、手筋は手筋の一言から。 */
 function collectionGainDetail(gain: { kind: string; label: string }) {
   if (gain.kind === "tesuji") {
-    const id = Object.entries(TESUJI_NAMES).find(([, name]) => name === gain.label)?.[0];
-    return id ? TESUJI_HINTS[id as keyof typeof TESUJI_HINTS] : "";
+    const id = Object.entries(WAZA_TESUJI_NAMES).find(([, name]) => name === gain.label)?.[0];
+    return id ? WAZA_TESUJI_HINTS[id] ?? "" : "";
   }
   if (gain.kind === "strategy" || gain.kind === "castle") {
     const entry = COLLECTION_CATALOG.find(({ label }) => label === gain.label);
@@ -5954,6 +5971,86 @@ function showCastleCallout(label: string) {
 }
 
 /*
+ * 技の演出(docs/move-waza-design.md)。手筋・囲い・戦法を使った手に、名前の帯と盤の光を出す。
+ * 自分の技は大きく(1局で同じ技の2回目からと相手の技は小さく)。詰ませた手・終局の手では出さない(終局の判子が出る)。
+ * 表示補助の「技の演出」で消せる(はじめは付いている)。
+ */
+const STRATEGY_LABELS = new Set(COLLECTION_CATALOG.filter(({ kind }) => kind === "strategy").map(({ label }) => label));
+const wazaEffectChoice = ref<"on" | "off">((() => {
+  try {
+    return browserStorage()?.getItem(WAZA_EFFECT_KEY) === "off" ? "off" : "on";
+  } catch {
+    return "on";
+  }
+})());
+const wazaEffectEnabled = computed(() => wazaEffectChoice.value !== "off");
+function toggleWazaEffect() {
+  wazaEffectChoice.value = wazaEffectEnabled.value ? "off" : "on";
+  if (!wazaEffectEnabled.value) clearWaza();
+  try {
+    browserStorage()?.setItem(WAZA_EFFECT_KEY, wazaEffectChoice.value);
+  } catch {
+    // 保存できなくても、この画面のあいだは切り替える。
+  }
+}
+const wazaCutin = ref<WazaCutinView | null>(null);
+const wazaGlow = ref<{ id: number; square: string; tier: string; mine: boolean; targets: string[] } | null>(null);
+let wazaSeq = 0;
+let wazaTimer: ReturnType<typeof setTimeout> | undefined;
+let wazaGlowTimer: ReturnType<typeof setTimeout> | undefined;
+/** この対局で出した技(側と技ごと。2回目からは小さく)。 */
+let wazaShown = new Set<string>();
+const wazaAudio = createWazaAudio();
+/** 光の輪と赤い輪は、帯より少し長く残す(どの駒の手だったか見返せる)。 */
+const WAZA_GLOW_MIN_MS = 1200;
+function clearWaza() {
+  clearTimeout(wazaTimer);
+  clearTimeout(wazaGlowTimer);
+  wazaCutin.value = null;
+  wazaGlow.value = null;
+}
+function wazaActive() {
+  return wazaEffectEnabled.value && active.value && matchStarted.value && !reviewMode.value && !tutorialMatch.value && normalizedMode.value === "cpu";
+}
+/**
+ * 指した手の技を1つ選んで出す。出したら真。
+ * @param previous 指す前の局面
+ * @param before その手の前の、自分と相手の囲い・戦法の名前
+ * @param tip 同じ手で教室のコツの形ができたか(帯に「コツどおり！」を添える)
+ */
+function noteWaza(previous: string, usi: string, before: { player: Set<string>; opponent: string[] }, tip: boolean) {
+  if (!wazaActive() || resultAfterMove(record.value)) return false;
+  const mover = previous.split(" ")[1] === "w" ? "white" : "black";
+  const mine = mover === playerColorKey.value;
+  const formations = formationWaza({
+    before: mine ? before.player : before.opponent,
+    after: mine ? matchFormationNames : formationNamesFromState(formationState.value, mover),
+    castles: CASTLE_LABELS,
+    strategies: STRATEGY_LABELS,
+  });
+  const waza = pickWaza([...detectWazaTesuji({ sfenBefore: previous, usi }), ...formations]);
+  if (!waza) return false;
+  const key = wazaRepeatKey(mine ? "player" : "cpu", waza);
+  const repeat = wazaShown.has(key);
+  wazaShown.add(key);
+  const collection = loadCollection(browserStorage());
+  const first = mine && !repeat && (waza.kind === "tesuji" ? !collection.tesuji?.[waza.id] : !collection.formations?.[waza.name]);
+  const view = wazaPresentation(waza, { mine, repeat, first, tip });
+  wazaSeq += 1;
+  clearTimeout(wazaTimer);
+  clearTimeout(wazaGlowTimer);
+  wazaCutin.value = { id: wazaSeq, ...view };
+  wazaGlow.value = { id: wazaSeq, square: usi.slice(2, 4), tier: waza.tier, mine, targets: waza.targets };
+  wazaTimer = setTimeout(() => { wazaCutin.value = null; }, view.ms);
+  wazaGlowTimer = setTimeout(() => { wazaGlow.value = null; }, Math.max(view.ms, WAZA_GLOW_MIN_MS));
+  // 自分の大きな帯のあいだは、CPUの応手を少し待たせる(盤を触れば打ち切る。4-2の7)。
+  if (view.holdMs) impactHoldUntil = Math.max(impactHoldUntil, performance.now() + view.holdMs);
+  // 駒音のあとに鳴らす(駒音を消さない。4-4)。2回目からの自分の技は★の音にする。
+  wazaAudio.play(wazaChime(view.size === "big" ? waza.tier : "normal", { mine }), 90);
+  return true;
+}
+
+/*
  * 対局でコツの形ができた瞬間(docs/nyumon-mode-design.mdの21-14-2と22章)。教室の「すぐ使えるコツ」でクリアしたコツが
  * プレイヤーの手でできたら数え、囲いの札と同じ場所に「コツどおり！」を出す。同じコツは1局に1回。
  * 札は、そのコツを使ったのが3回目までのあいだだけ(慣れたら数えるだけ)。詰ませた手のコツは結果の窓の行にだけ出す。
@@ -5966,6 +6063,8 @@ const matchTipsUsed = ref<{ id: string; short: string }[]>([]);
 /** 札を出した手(指したあとのmoveHistoryの長さ)。その手では、同じ形の手筋のほめ言葉を出さない(22-1)。 */
 let tipCalloutHistoryLength = -1;
 function resetTipMoments() {
+  wazaShown = new Set();
+  clearWaza();
   tipMomentsLearned = learnedTips(loadTutorialProgress(browserStorage()));
   tipMomentsFired = new Set(startTipMoments(currentSfen.value, playerColorKey.value));
   matchTipsUsed.value = [];
@@ -9384,6 +9483,8 @@ function createRecord(): Record {
 function syncPosition(usi = "") {
   const previous = currentSfen.value;
   const formationsBefore = new Set(matchFormationNames);
+  // 相手の囲い・戦法(技の演出で、その手で新しく付いた名前を見る)。
+  const opponentFormationsBefore = usi ? formationNamesFromState(formationState.value, playerColorKey.value === "black" ? "white" : "black") : [];
   currentSfen.value = record.value.position.sfen;
   lastMove.value = usi;
   observeFormations(currentSfen.value);
@@ -9393,6 +9494,8 @@ function syncPosition(usi = "") {
     const castle = [...matchFormationNames].find((name) => !formationsBefore.has(name) && CASTLE_LABELS.has(name));
     // 同じ手で教室のコツの形もできたら、コツの札にまとめる(1つの手に札は1つ。囲いはコレクションの印で残る)。
     const tip = notePlayerTipMoment(previous, usi);
+    // 技の演出(docs/move-waza-design.md)。出したら、コツと囲いの札はまとめて出さない(1つの手に札は1つ。4-2の5)。
+    if (noteWaza(previous, usi, { player: formationsBefore, opponent: opponentFormationsBefore }, Boolean(tip))) return;
     if (tip) showTipCallout(tip);
     else if (castle) showCastleCallout(castle);
   }
@@ -10966,6 +11069,8 @@ function cancelResultReveal() {
 /** 止めの間に盤を触ったら、止めを打ち切る。 */
 function onBoardShellPointerDown() {
   releaseImpactHold();
+  // 盤を触ったら技の帯は消す(光の輪は残す。4-2の6)。
+  wazaCutin.value = null;
   hideStageCard();
 }
 function releaseImpactHold() {
@@ -11533,7 +11638,8 @@ function applyMove(usi: string, actor: "player" | "cpu") {
   if (actor === "player" && !reviewMode.value) holdForImpact(impact.stage);
   // コレクションのために、プレイヤーが指した手筋(手筋図鑑の項目)を控える。
   if (actor === "player" && !reviewMode.value && normalizedMode.value === "cpu") {
-    for (const id of detectTesuji({ sfenBefore: sfenBeforeMove, usi, checkmate: terminalResult?.reason === "checkmate" })) {
+    // 技の演出と同じ目録(docs/move-waza-design.mdの4-3)。垂れ歩・割り打ちの銀なども印になる。
+    for (const { id } of detectWazaTesuji({ sfenBefore: sfenBeforeMove, usi, checkmate: terminalResult?.reason === "checkmate" })) {
       matchTesuji.add(id);
     }
   }

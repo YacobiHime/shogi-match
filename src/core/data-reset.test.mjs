@@ -23,7 +23,7 @@ function memoryStorage(entries = {}) {
 const SETTING_KEYS = new Set([
   "yacobihime:shogi-match:sound", "shogi-match-board-theme", "shogi-match-piece-theme", "shogi-match-analysis-level",
   "shogi-match-check-explained", "shogi-match-guided-review-speed", "shogi-match-opening-book-draft-v1", "shogi-match-opening-book-library-v1",
-  "yacobihime:shogi-match:broadcast:v1", "yacobihime:shogi-match:danger-sensor:v1", "yacobihime:shogi-match:material-guide:v1",
+  "yacobihime:shogi-match:broadcast:v1", "yacobihime:shogi-match:danger-sensor:v1", "yacobihime:shogi-match:waza-effect:v1", "yacobihime:shogi-match:material-guide:v1",
   "yacobihime:shogi-match:note-album-page", "yacobihime:shogi-match:note-tab", "yacobihime:shogi-match:opening-plans-all:v1",
   "yacobihime:shogi-match:opening-plans-seen:v1", "yacobihime:shogi-match:plan-ghosts:v1", "yacobihime:shogi-match:tutorial-voice:v1",
   "yacobihime:shogi-match:welcome:v1", "yacobihime:shogi-match:player-name:v1", "yacobihime:shogi-match:player-profile",

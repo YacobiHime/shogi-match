@@ -11,7 +11,8 @@ const responsiveSource = readFileSync(
 describe("match screen regressions", () => {
   it("shows the tutorial-tip callout only for the player's own move in CPU games, once per game", () => {
     // 教室のコツの形ができた手に「コツどおり！」(docs/nyumon-mode-design.mdの21-14-2)。同じ手の囲いの札はまとめる。
-    expect(source).toMatch(/const tip = notePlayerTipMoment\(previous, usi\);\s*if \(tip\) showTipCallout\(tip\);\s*else if \(castle\) showCastleCallout\(castle\);/);
+    // 技の演出(docs/move-waza-design.mdの4-2の5)を出した手は、コツを数えたうえで帯に「コツどおり！」を添え、札は出さない。
+    expect(source).toMatch(/const tip = notePlayerTipMoment\(previous, usi\);[\s\S]{0,200}?if \(noteWaza\(previous, usi, \{[^}]*\}, Boolean\(tip\)\)\) return;\s*if \(tip\) showTipCallout\(tip\);\s*else if \(castle\) showCastleCallout\(castle\);/);
     expect(source).toMatch(/return !reviewMode\.value && !measureMode\.value && !tutorialMatch\.value && normalizedMode\.value === "cpu";/);
     expect(source).toMatch(/if \(!active\.value \|\| !tipsCounted\(\)\) return null;/);
     // 1つの手でできたコツは全部数え、札はそのコツを使った3回目までのものだけ(docs/nyumon-mode-design.mdの22-1)。
@@ -813,8 +814,8 @@ describe("match screen regressions", () => {
 
   it("connects tesuji, review positions, own games and the oshi's season result to the existing features", () => {
     // 手筋は、プレイヤーの手(検討中は除く)から見分け、終局でコレクションに渡す。
-    expect(source).toMatch(/actor === "player" && !reviewMode\.value && normalizedMode\.value === "cpu"\) \{\s*for \(const id of detectTesuji\(/);
-    expect(source).toMatch(/tesuji: \[\.\.\.matchTesuji\],\s*tesujiNames: TESUJI_NAMES,/);
+    expect(source).toMatch(/actor === "player" && !reviewMode\.value && normalizedMode\.value === "cpu"\) \{[\s\S]{0,120}?for \(const \{ id \} of detectWazaTesuji\(/);
+    expect(source).toMatch(/tesuji: \[\.\.\.matchTesuji\],\s*tesujiNames: WAZA_TESUJI_NAMES,/);
     // 振り返りで見逃した短い詰みを、問題と復習の箱に入れる。
     expect(source).toMatch(/saveMissedMatesAsProblems\(guidedReviewScript\);/);
     // 終局まで指した平手の対局を残し、終盤戦の候補に加える。

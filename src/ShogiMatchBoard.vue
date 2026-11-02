@@ -42,6 +42,7 @@
       :risk-destinations="riskDestinations"
       :risk-squares="riskSquares"
       :mark-squares="markSquares"
+      :waza-glow="wazaGlow"
       :flip="flip"
       :mobile="mobile"
       :allow-move="allowMove"
@@ -127,6 +128,8 @@ const props = defineProps({
   riskDestinations: { type: Function as PropType<((source: string) => string[]) | null>, default: null },
   // 悪手の理由で取られる駒の升(N2)。次の手を指すまで赤い輪を出す。
   riskSquares: { type: Array as PropType<string[]>, default: () => [] },
+  // 技の演出(docs/move-waza-design.mdの4-2)。指した駒のマスの光と、ねらった駒のマスの赤い輪。
+  wazaGlow: { type: Object as PropType<{ id: number; square: string; tier: string; mine: boolean; targets: string[] } | null>, default: null },
   // 相手の狙い(N2)。相手の手を、その側の色の点線の矢印で出す。手番は相手でないので、手番を入れ替えた局面で手を作る。
   threatArrows: { type: Array as PropType<{ usi: string; color: "black" | "white" }[]>, default: () => [] },
   lastMove: { type: String, default: "" },
