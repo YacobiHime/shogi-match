@@ -2076,6 +2076,9 @@ export function proYearRelayGame(state, gameId) {
   return {
     key, event: 'pro-year', kind, label: gameLabel(state, game), section: 'pro-year', order: 0, round: game.round + 1,
     weight: def.title ? 'title' : def.type === 'series' || /決勝$/.test(gameLabel(state, game)) ? 'big' : 'plain',
+    // 大会の規模(docs/tournament-relay-design.mdの48章)。一次予選は小さく、本戦・リーグは大きい。
+    scale: def.title ? 'title' : def.type === 'series' || /決勝$/.test(gameLabel(state, game)) ? 'big'
+      : def.type === 'blocks' ? (def.id === 'q1' ? 'local' : 'small') : def.type === 'junni' ? 'mid' : 'upper',
     venue: def.title ? stageVenue('ryuo', state.fy, game.round + 1) : '', gameNo: def.type === 'series' ? game.round + 1 : 0,
     seed: textSeed(key), series, quality: '', titleName: def.title ? event.short : '',
     black: relayPlayer(blackId), white: relayPlayer(whiteId),

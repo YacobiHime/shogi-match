@@ -579,8 +579,37 @@ const UNDER = Object.freeze({
 /** 書き手の種類の色(盤の升の強調とは別の、縁取りの文字)。 */
 const KIND_TONE = Object.freeze({ ai: 'blue', newbie: 'green', answer: 'green', cheer: 'pink', material: 'orange', overseas: 'lavender' });
 
-/** 対局の重さで、コメントの数を増やす(タイトル戦ほど多い)。 */
-const DENSITY = Object.freeze({ plain: 1, big: 1.3, title: 1.7 });
+/**
+ * 大会の規模(48章)。規模が大きいほど、来場者・コメントの量(density)・コメント数の表示(countRate)が増える。
+ * local: 竜王戦6組・C級2組・予選の一次など、small: 5組・C級1組・予選、mid: ふつう(規模を持たない前の項目のplain)、
+ * upper: 1〜2組・B級1組・本戦、big: 組の決勝・A級・最終局・挑戦者決定戦、title: タイトル戦。
+ */
+export const RELAY_SCALES = Object.freeze({
+  local: Object.freeze({ density: 0.55, audience: 700, countRate: 0.3 }),
+  small: Object.freeze({ density: 0.75, audience: 1500, countRate: 0.6 }),
+  mid: Object.freeze({ density: 1, audience: 2500, countRate: 1 }),
+  upper: Object.freeze({ density: 1.15, audience: 4500, countRate: 1.7 }),
+  big: Object.freeze({ density: 1.3, audience: 9000, countRate: 3 }),
+  title: Object.freeze({ density: 1.7, audience: 60000, countRate: 12 }),
+});
+const SCALE_ORDER = Object.freeze(['local', 'small', 'mid', 'upper', 'big', 'title']);
+
+/** 項目の規模。規模を持たない項目(前の保存・自分の対局・団体戦)は、重さ(weight)から決める。 */
+export function relayScale(spec) {
+  if (spec?.scale && RELAY_SCALES[spec.scale]) return spec.scale;
+  return spec?.weight === 'title' ? 'title' : spec?.weight === 'big' ? 'big' : 'mid';
+}
+
+/** 規模を1つ上げる(組の決勝・最終局など)。 */
+export function bumpScale(scale, steps = 1) {
+  const index = SCALE_ORDER.indexOf(scale);
+  return SCALE_ORDER[Math.min(SCALE_ORDER.length - 1, Math.max(0, (index < 0 ? 2 : index) + steps))];
+}
+
+/** コメント数の表示(画面の「コメント○件」)。見たところまでの手数と、流したコメントの数から、規模に合わせて出す。 */
+export function relayCommentCount(spec, ply, shown = 0) {
+  return Math.round((shown * 37 + Math.max(0, ply) * 11) * RELAY_SCALES[relayScale(spec)].countRate);
+}
 
 /** 振り飛車の名前(対抗形・相振り飛車を見分ける)。 */
 const FURIBISHA = /(四間|三間|中|向かい)飛車|ゴキゲン|石田|振り飛車/;
@@ -790,7 +819,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
   let onlyCount = 0;
   const once = (key) => (said.has(key) ? false : (said.add(key), true));
   const fill = (text, values = {}) => text.replace(/\{(\w+)\}/g, (_, key) => values[key] ?? '');
-  const density = DENSITY[spec.weight] ?? 1;
+  const density = RELAY_SCALES[relayScale(spec)].density;
   /** 同じ書き手の種類で、最近の言い方をくり返さない(残りがなければ、くり返してよい)。 */
   const recent = new Map();
   const pickFresh = (pool) => {
@@ -2002,7 +2031,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
  * @param {number} ply
  */
 export function relayAudience(spec, ply) {
-  const base = spec.weight === 'title' ? 60000 : spec.weight === 'big' ? 9000 : 2500;
+  const base = RELAY_SCALES[relayScale(spec)].audience;
   const stars = [spec.black, spec.white].reduce((sum, player) => sum
     + (player?.story === YOSHIHIKO ? 1.5 : player?.story === HANANE ? 1.2 : Math.max(0, ((player?.rating ?? 1500) - 1500) / 800)), 1);
   const spread = 0.85 + (relaySeed(`${spec.key}:aud`) % 30) / 100;

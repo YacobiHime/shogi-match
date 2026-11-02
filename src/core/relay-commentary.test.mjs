@@ -78,6 +78,20 @@ describe('createRelayScript', () => {
   const moves = ['7g7f', '3c3d', '2g2f', '4c4d', '2f2e', '2b3c', '3i4h', '3a2b'];
   const evals = [40, 40, 50, 40, 60, 400, 410, 420];
 
+  it('大会の規模が大きいほど、同じ棋譜でもコメントが多い(48章)', () => {
+    const long = Array.from({ length: 6 }, () => moves).flat().slice(0, 8);
+    const counts = ['local', 'mid', 'title'].map((scale) => {
+      let total = 0;
+      for (let i = 0; i < 12; i += 1) {
+        const key = `${spec.key}:${scale}:${i}`;
+        total += scriptFor({ ...spec, key, seed: relaySeed(key), scale }, long, { evals }).comments.length;
+      }
+      return total;
+    });
+    expect(counts[0]).toBeLessThan(counts[1]);
+    expect(counts[1]).toBeLessThan(counts[2]);
+  });
+
   it('始めに聞き手と解説者があいさつし、対局者を紹介する', () => {
     const script = scriptFor(spec, moves, { evals });
     const intro = script.lines.filter(({ at }) => at === 0);

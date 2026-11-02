@@ -252,7 +252,7 @@ import {
   blackWinRate, clockText, rateVerdict, relayTimeControl, relayTimeline, remainingText, thinkTimeText, type RelayMoveEntry,
 } from "./core/relay-game.mjs";
 import {
-  RELAY_HOST, RELAY_READER, createRelayScript, moveTextOf, pvTextOf, relayAudience, relayCast,
+  RELAY_HOST, RELAY_READER, createRelayScript, moveTextOf, pvTextOf, relayAudience, relayCast, relayCommentCount,
 } from "./core/relay-commentary.mjs";
 import { addNote, highlightPlan, loadNotes, loadQuiz, quizChoices, saveNotes, saveQuiz, scoreQuiz } from "./core/relay-fun.mjs";
 import { judgeTsumeMove, resignTsume, shortestMate, tsumeHint } from "./core/relay-tsume.mjs";
@@ -830,7 +830,7 @@ function seekGraph(event: MouseEvent) {
 
 const commentPrefix = computed(() => comments.value.filter((item) => item.at <= cursor.value).length);
 const audienceText = computed(() => relayAudience(props.spec, cursor.value).toLocaleString("ja-JP"));
-const commentCountText = computed(() => (commentPrefix.value * 37 + (cursor.value * 11)).toLocaleString("ja-JP"));
+const commentCountText = computed(() => relayCommentCount(props.spec, cursor.value, commentPrefix.value).toLocaleString("ja-JP"));
 
 // ---- 中継の楽しみ(24章)
 /** 再生を止める(考慮中の溜めも)。 */

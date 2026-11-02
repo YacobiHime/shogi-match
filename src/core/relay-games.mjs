@@ -7,6 +7,16 @@ import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { isRealWorld } from './ryuo-strength.mjs';
 import { stageVenue } from './match-stage.mjs';
 import { relaySeed } from './relay-game.mjs';
+import { bumpScale, relayScale } from './relay-commentary.mjs';
+
+/** 竜王戦の組の規模(48章)。6組がいちばん小さく、1組・2組は上。 */
+function groupScale(group) {
+  const n = Number(group) || 6;
+  return n <= 2 ? 'upper' : n <= 4 ? 'mid' : n === 5 ? 'small' : 'local';
+}
+
+/** 順位戦のクラスの規模(48章)。 */
+const MEIJIN_CLASS_SCALE = Object.freeze({ A級: 'big', B級1組: 'upper', B級2組: 'mid', C級1組: 'small', C級2組: 'local' });
 
 /** 一覧の区分(並べる順)。 */
 export const RELAY_SECTIONS = Object.freeze({
@@ -40,7 +50,7 @@ const rootId = (bracket) => bracket?.root?.from ?? null;
  * 1局の項目。aとbは棋士のid、gameは自動対局の記録(先手・戦法・囲い・展開・勝ち方)。先手が記録にない前の保存の局は、種で決める。
  * @returns {any | null}
  */
-function entryOf(season, { key, event, kind, label, section, order, round = 0, weight = 'plain', a, b, winnerId, game, venue = '', gameNo = 0, series = null }, context) {
+function entryOf(season, { key, event, kind, label, section, order, round = 0, weight = 'plain', scale = '', a, b, winnerId, game, venue = '', gameNo = 0, series = null }, context) {
   // 自分の対局は入れない(振り返りと棋譜解析がある)。観戦の期の分身の対局は入れる(13章)。
   if (!a || !b || !winnerId) return null;
   if (!context.includeUser && (a === USER_ID || b === USER_ID)) return null;
@@ -52,7 +62,7 @@ function entryOf(season, { key, event, kind, label, section, order, round = 0, w
   if (!black || !white) return null;
   const ids = [blackId, whiteId];
   return {
-    key, event, kind, label, section, order, round, weight, venue, gameNo, seed,
+    key, event, kind, label, section, order, round, weight, scale: scale || relayScale({ weight }), venue, gameNo, seed,
     // 番勝負のこの局の前の星(holderはタイトル保持者の側。30章の「これで負けたら防衛」)。
     series: series ? {
       holder: series.holderId === blackId ? 'black' : 'white', need: series.need,
@@ -107,13 +117,13 @@ export function ryuoRelayGames(season, { oshiId = null } = {}) {
   const list = [];
   const pending = season.pending?.kind === 'game' ? season.pending : null;
   const tables = [];
-  if (season.ranking) tables.push({ tag: 'ranking', bracket: season.ranking, section: 'own', title: `${season.startGroup}組ランキング戦`, rank: 2, phase: 'ranking' });
-  (season.revival ?? []).forEach((block, index) => tables.push({ tag: `revival-${index}`, bracket: block, section: 'own', title: block.label, rank: 3, phase: 'revival', blockIndex: index }));
+  if (season.ranking) tables.push({ tag: 'ranking', bracket: season.ranking, section: 'own', title: `${season.startGroup}組ランキング戦`, rank: 2, phase: 'ranking', scale: groupScale(season.startGroup) });
+  (season.revival ?? []).forEach((block, index) => tables.push({ tag: `revival-${index}`, bracket: block, section: 'own', title: block.label, rank: 3, phase: 'revival', blockIndex: index, scale: bumpScale(groupScale(season.startGroup), -1) }));
   for (const [tag, bracket] of Object.entries(season.groupBrackets ?? {})) {
     const [group, block] = tag.split('-');
-    tables.push({ tag: `group-${tag}`, bracket, section: 'groups', title: block ? `${group}組 ${bracket.label}` : `${group}組ランキング戦`, rank: 1 });
+    tables.push({ tag: `group-${tag}`, bracket, section: 'groups', title: block ? `${group}組 ${bracket.label}` : `${group}組ランキング戦`, rank: 1, scale: block ? bumpScale(groupScale(Number(group)), -1) : groupScale(Number(group)) });
   }
-  if (season.main) tables.push({ tag: 'main', bracket: season.main, section: 'main', title: '決勝トーナメント', rank: 4, series: true, phase: 'main' });
+  if (season.main) tables.push({ tag: 'main', bracket: season.main, section: 'main', title: '決勝トーナメント', rank: 4, series: true, phase: 'main', scale: 'upper' });
   for (const table of tables) {
     const { bracket } = table;
     const pendingNode = pending && pending.phase === table.phase && (table.blockIndex === undefined || pending.blockIndex === table.blockIndex)
@@ -127,6 +137,8 @@ export function ryuoRelayGames(season, { oshiId = null } = {}) {
         label: `${table.title} ${resultRoundLabel(bracket, node.round, { series: table.series === true })}`,
         section: table.section, order: table.rank * 1000 + node.round * 10, round: node.round,
         weight: node.id === rootId(bracket) || table.series ? 'big' : 'plain',
+        // 組の決勝は、その組の規模を1つ上げる(48章)。
+        scale: node.id === rootId(bracket) ? bumpScale(table.scale) : table.scale,
         a: sidePid(bracket, node.a), b: sidePid(bracket, node.b), winnerId: node.winner, game: node.game,
       }, context);
       if (!entry) continue;
@@ -164,6 +176,8 @@ export function meijinRelayGames(season, { oshiId = null } = {}) {
   const context = { oshiId, nextId: season.pending?.opponentId ?? null, includeUser: spectator, pro: spectator || isRealWorld(season.settings?.world) };
   const id = season.id;
   const classLabel = CLASS_LABELS[season.cls] ?? '';
+  // 順位戦のクラスの規模(48章)。A級がいちばん注目される。
+  const classScale = MEIJIN_CLASS_SCALE[CLASS_LABELS[season.cls]] ?? 'mid';
   const list = [];
   const roundGames = (games, round, current) => {
     for (const game of games ?? []) {
@@ -171,7 +185,7 @@ export function meijinRelayGames(season, { oshiId = null } = {}) {
       const entry = entryOf(season, {
         key: `meijin:${id}:r${round}:${game.a}-${game.b}`, event: 'meijin', kind: 'league',
         label: `${classLabel} ${last ? '最終局' : `${round + 1}回戦`}`, section: 'league', order: 1000 + round * 10, round: round + 1,
-        weight: last ? 'big' : 'plain', a: game.a, b: game.b, winnerId: game.winner, game,
+        weight: last ? 'big' : 'plain', scale: last ? bumpScale(classScale) : classScale, a: game.a, b: game.b, winnerId: game.winner, game,
       }, context);
       if (!entry) continue;
       entry.tags.current = current;
