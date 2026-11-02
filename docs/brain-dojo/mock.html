@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>脳トレ道場のモックアップ</title>
+<!--
+  脳トレ道場の強化(docs/brain-training-design.mdの14章)のモックアップ。
+  スマホ(390×844)8画面とPC(1366×768)2画面。中身は見本の値で、動きは静止画で示す。
+  ?real=1 で枠を縮めずに並べる(写真を撮るため)。
+-->
+<style>
+:root {
+  --page: #0f171f;
+  --page-ink: #dfe7ee;
+  /* 道場の色(実装でも同じ名前のCSS変数にする。UD:7-3、U:7-1) */
+  --dojo-desk: #1c2a36;
+  --dojo-desk-2: #243746;
+  --dojo-desk-3: #2d4456;
+  --dojo-light: #fffcf4;
+  --dojo-light-2: #b9c6d0;
+  --dojo-paper: #fbf7ee;
+  --dojo-paper-2: #f3ecdc;
+  --dojo-rule: #e6dcc6;
+  --dojo-ink: #1f2a33;
+  --dojo-ink-2: #56636d;
+  --dojo-shu: #c4402a;
+  --dojo-shu-deep: #a83420;
+  --dojo-shu-soft: #f6dcd3;
+  --dojo-ai: #34488f;
+  --dojo-ai-soft: #dde3f4;
+  --dojo-good: #2e7d4f;
+  --dojo-good-soft: #d9efe1;
+  --dojo-gold: #8a5f00;
+  --dojo-gold-soft: #f6e7bf;
+  --dojo-radius: 14px;
+  --dojo-shadow: 0 2px 0 rgba(0, 0, 0, 0.18), 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 24px 16px 64px;
+  background: var(--page);
+  color: var(--page-ink);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+  line-height: 1.5;
+}
+.doc { max-width: 1320px; margin: 0 auto; }
+.doc > h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.doc > p { margin: 0 0 8px; color: #aab7c2; max-width: 60rem; }
+.doc > h2 { margin: 40px 0 12px; font-size: 1.15rem; border-left: 4px solid var(--dojo-shu); padding-left: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; padding: 0; list-style: none; color: #c9d4dc; font-size: 0.85rem; }
+.legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; border-radius: 3px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 410px), 1fr)); gap: 28px 20px; }
+.shot { display: grid; gap: 10px; align-content: start; }
+.shot figcaption { color: #c9d4dc; font-size: 0.85rem; }
+.shot figcaption strong { display: block; color: #fff; font-size: 0.95rem; }
+.shot figcaption em { color: #f3b48c; font-style: normal; }
+figure { margin: 0; }
+.fit { width: 100%; overflow: hidden; }
+.fit > .device { transform-origin: top left; }
+.device { position: relative; overflow: hidden; background: var(--dojo-desk); border-radius: 28px; box-shadow: 0 0 0 10px #05090c, 0 0 0 11px #2b3a46, 0 20px 50px rgba(0, 0, 0, 0.5); }
+.device--phone { width: 390px; height: 844px; }
+.device--pc { width: 1366px; height: 768px; border-radius: 10px; }
+
+/* ===== アプリの枠(今の脳トレ道場と同じ見出しの帯) ===== */
+.app { display: grid; grid-template-rows: auto 1fr; height: 100%; color: var(--dojo-light); background:
+  radial-gradient(120% 60% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 60%), var(--dojo-desk); }
+.app__head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid rgba(241, 165, 76, 0.55); background: #17232d; }
+.app__back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 999px; color: var(--dojo-light); background: transparent; font: inherit; font-weight: 800; }
+.app__title { margin: 0; font-size: 1.12rem; font-weight: 900; letter-spacing: 0.04em; }
+.app__help { margin-left: auto; width: 44px; height: 44px; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 50%; color: var(--dojo-light); background: transparent; font: inherit; font-weight: 900; }
+.app__body { display: grid; gap: 12px; align-content: start; padding: 12px 16px 16px; overflow: hidden; }
+.app__body--center { align-content: stretch; }
+
+/* やこび姫の一言 */
+.speech { display: grid; grid-template-columns: 46px 1fr; gap: 10px; align-items: center; }
+.speech img { width: 46px; height: 58px; object-fit: contain; image-rendering: pixelated; }
+.speech p { position: relative; margin: 0; padding: 8px 12px; border-radius: 12px; background: var(--dojo-desk-3); font-size: 0.92rem; font-weight: 700; line-height: 1.45; }
+.speech p::before { content: ""; position: absolute; left: -7px; top: 50%; translate: 0 -50%; border: 7px solid transparent; border-left: 0; border-right-color: var(--dojo-desk-3); }
+
+/* 紙の札 */
+.paper { position: relative; color: var(--dojo-ink); background:
+  repeating-linear-gradient(0deg, transparent 0 27px, rgba(160, 130, 80, 0.06) 27px 28px), var(--dojo-paper);
+  border-radius: var(--dojo-radius); box-shadow: var(--dojo-shadow); }
+
+/* 今日の稽古(入口と部屋の主役) */
+.today { display: grid; gap: 10px; padding: 14px 16px 16px; border-top: 6px solid var(--room); }
+.today--calc { --room: var(--dojo-shu); --room-soft: var(--dojo-shu-soft); --room-deep: var(--dojo-shu-deep); }
+.today--memory { --room: var(--dojo-ai); --room-soft: var(--dojo-ai-soft); --room-deep: var(--dojo-ai); }
+.today__eyebrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; color: var(--dojo-ink-2); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.06em; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; color: var(--room-deep, var(--dojo-ink)); background: var(--room-soft, var(--dojo-paper-2)); font-size: 0.78rem; font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
+.today__title { margin: 0; font-size: 1.32rem; font-weight: 900; line-height: 1.25; }
+.today__title small { margin-left: 6px; color: var(--dojo-ink-2); font-size: 0.82rem; font-weight: 800; }
+.today__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.today__time { color: var(--dojo-ink-2); font-size: 0.86rem; font-weight: 800; }
+.cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; min-width: 9.5rem; padding: 0 22px; border: 0; border-radius: 999px; color: #fff; background: var(--room); box-shadow: 0 3px 0 var(--room-deep), 0 6px 14px rgba(0, 0, 0, 0.18); font: inherit; font-size: 1.12rem; font-weight: 900; letter-spacing: 0.08em; }
+.cta--wide { width: 100%; }
+
+/* 今日の稽古の段取り(飛び石) */
+.stones { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 2px 0 0; padding: 0; list-style: none; counter-reset: stone; }
+.stones li { position: relative; display: grid; justify-items: center; gap: 4px; text-align: center; font-size: 0.78rem; font-weight: 800; line-height: 1.25; }
+.stones li + li::before { content: ""; position: absolute; top: 21px; right: calc(50% + 22px); width: calc(100% - 44px); height: 3px; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--dojo-rule) 0 6px, transparent 6px 10px); }
+.stones b { display: grid; place-items: center; width: 44px; height: 44px; border: 3px solid var(--room); border-radius: 50%; background: #fff; font-size: 1.3rem; }
+.stones small { color: var(--dojo-ink-2); font-weight: 700; }
+
+/* 今週の判子の帯 */
+.week { display: grid; gap: 6px; padding: 10px 12px 12px; border-radius: var(--dojo-radius); background: var(--dojo-desk-2); }
+.week__head { display: flex; justify-content: space-between; align-items: baseline; margin: 0; font-size: 0.82rem; font-weight: 800; color: var(--dojo-light-2); }
+.week__head strong { color: var(--dojo-light); font-size: 0.92rem; }
+.week__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.week__days li { display: grid; justify-items: center; gap: 3px; padding: 5px 0 6px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); font-size: 0.72rem; color: var(--dojo-light-2); }
+.week__days li.is-today { outline: 2px solid #f1a54c; outline-offset: -2px; color: var(--dojo-light); }
+.week__days li.is-future { opacity: 0.45; }
+.week__days strong { font-size: 0.86rem; color: var(--dojo-light); }
+.marks { display: flex; gap: 3px; min-height: 18px; align-items: center; }
+.seal { display: inline-grid; place-items: center; width: 18px; height: 18px; color: #fff; font-size: 0.62rem; font-weight: 900; line-height: 1; }
+.seal--calc { border-radius: 50%; background: var(--dojo-shu); }
+.seal--memory { border-radius: 4px; background: var(--dojo-ai); rotate: 45deg; }
+.seal--memory span { rotate: -45deg; }
+.week__goals { display: flex; gap: 14px; flex-wrap: wrap; margin: 2px 0 0; font-size: 0.8rem; font-weight: 800; color: var(--dojo-light-2); }
+.pips { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: 1px; }
+.pips i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+.pips--calc i.on { background: var(--dojo-shu); }
+.pips--memory i { border-radius: 2px; }
+.pips--memory i.on { background: #7f93d6; }
+
+/* 2つの部屋の扉 */
+.doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.door { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center; min-height: 72px; padding: 10px 12px; border: 2px solid rgba(255, 252, 244, 0.14); border-left: 6px solid var(--room); border-radius: var(--dojo-radius); background: var(--dojo-desk-2); color: var(--dojo-light); text-align: left; }
+.door--calc { --room: var(--dojo-shu); }
+.door--memory { --room: #7f93d6; }
+.door__icon { grid-row: 1 / 3; font-size: 1.7rem; }
+.door strong { font-size: 1.02rem; }
+.door small { color: var(--dojo-light-2); font-size: 0.78rem; font-weight: 700; }
+
+/* いつ稽古するか(実行意図) */
+.cue { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--dojo-light-2); font-size: 0.84rem; font-weight: 700; }
+.cue strong { color: var(--dojo-light); }
+.cue button { margin-left: auto; min-height: 36px; padding: 0 12px; border: 2px solid rgba(255, 252, 244, 0.25); border-radius: 999px; color: var(--dojo-light); background: transparent; font: inherit; font-size: 0.8rem; font-weight: 800; }
+
+/* コースの道 */
+.road { display: grid; gap: 6px; }
+.road__head { display: flex; justify-content: space-between; margin: 0; font-size: 0.82rem; font-weight: 800; color: var(--dojo-light-2); }
+.road__head strong { color: var(--dojo-light); }
+.road__line { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.road__line li { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255, 252, 244, 0.35); }
+.road__line li.done { border-color: var(--dojo-shu); background: var(--dojo-shu); }
+.road__line li.now { border-color: #f1a54c; box-shadow: 0 0 0 4px rgba(241, 165, 76, 0.25); }
+.road__line li.measure { width: 24px; height: 24px; display: grid; place-items: center; font-size: 0.66rem; font-weight: 900; color: var(--dojo-light); }
+.road__line li.gap { width: 14px; height: 3px; border: 0; border-radius: 2px; background: rgba(255, 252, 244, 0.25); }
+.road__line li.booster { border-radius: 6px; display: grid; place-items: center; width: 26px; height: 26px; font-size: 0.72rem; }
+.road__note { margin: 0; font-size: 0.8rem; color: var(--dojo-light-2); }
+
+/* 6週間のマス(記憶力) */
+.weeks6 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.weeks6 li { display: grid; gap: 3px; justify-items: center; font-size: 0.66rem; color: var(--dojo-light-2); }
+.weeks6 .dots { display: grid; grid-template-columns: repeat(5, 8px); gap: 3px; }
+.weeks6 .dots i { width: 8px; height: 8px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); }
+.weeks6 .dots i.on { background: #7f93d6; }
+.weeks6 .dots i.now { outline: 2px solid #f1a54c; outline-offset: 1px; }
+
+/* 自由に練習の小さな札 */
+.section-title { display: flex; justify-content: space-between; align-items: baseline; margin: 4px 0 -2px; font-size: 0.86rem; font-weight: 900; color: var(--dojo-light-2); letter-spacing: 0.06em; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.tile { display: grid; gap: 2px; width: 100%; min-height: 60px; padding: 8px 12px; border: 2px solid rgba(255, 252, 244, 0.12); border-radius: 12px; background: var(--dojo-desk-2); color: var(--dojo-light); text-align: left; font: inherit; }
+.tile strong { font-size: 0.92rem; }
+.tile span { color: #f3c08f; font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rowlinks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rowlinks--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rowlink { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; padding: 0 10px; border: 2px solid rgba(255, 252, 244, 0.25); border-radius: 999px; color: var(--dojo-light); background: transparent; font: inherit; font-size: 0.88rem; font-weight: 800; white-space: nowrap; }
+.rowlink em { font-style: normal; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--dojo-shu); color: #fff; font-size: 0.72rem; }
+
+/* 記憶の道 */
+.path { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+.path li { position: relative; display: grid; justify-items: center; gap: 4px; text-align: center; font-size: 0.72rem; font-weight: 800; line-height: 1.25; color: var(--dojo-light-2); }
+.path li + li::before { content: ""; position: absolute; top: 18px; right: calc(50% + 20px); width: calc(100% - 40px); height: 3px; background: rgba(255, 252, 244, 0.22); }
+.path li.done + li::before, .path li.done + li.now::before { background: #7f93d6; }
+.path b { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 2px solid rgba(255, 252, 244, 0.3); background: var(--dojo-desk-2); font-size: 1.1rem; }
+.path li.done b { border-color: #7f93d6; background: #3a4f8f; }
+.path li.now { color: var(--dojo-light); }
+.path li.now b { border-color: #f1a54c; box-shadow: 0 0 0 4px rgba(241, 165, 76, 0.25); }
+
+.palaces { display: flex; gap: 8px; margin: 0; padding: 0; list-style: none; overflow: hidden; }
+.palace { display: grid; gap: 1px; min-width: 0; padding: 8px 12px; border-radius: 12px; background: var(--dojo-desk-2); border: 2px solid rgba(255, 252, 244, 0.12); font-size: 0.86rem; font-weight: 800; }
+.palace small { color: var(--dojo-light-2); font-size: 0.74rem; }
+.palace--add { place-items: center; min-width: 64px; border-style: dashed; color: var(--dojo-light-2); }
+
+/* 種目の紙 */
+.step { margin: 0; text-align: center; color: var(--dojo-light-2); font-size: 0.82rem; font-weight: 800; letter-spacing: 0.04em; }
+.sheet { display: grid; gap: 6px; padding: 26px 16px 16px; }
+.sheet__bar { position: relative; height: 10px; border-radius: 999px; background: var(--dojo-paper-2); }
+.sheet__bar > span { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--dojo-shu); }
+.ghost { position: absolute; top: -9px; translate: -50% 0; display: grid; justify-items: center; color: var(--dojo-ink-2); font-size: 0.62rem; font-weight: 900; line-height: 1; }
+.ghost::after { content: ""; width: 0; height: 0; border: 6px solid transparent; border-bottom: 0; border-top-color: var(--dojo-ink-2); margin-top: 2px; }
+.ghost--below { top: 12px; }
+.ghost--below::after { order: -1; border-top: 0; border-bottom: 6px solid var(--dojo-ink-2); margin: 0 0 2px; }
+.sheet__status { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 0; color: var(--dojo-ink-2); font-size: 0.82rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.combo { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 10px; border-radius: 999px; background: var(--dojo-shu-soft); color: var(--dojo-shu-deep); font-weight: 900; }
+.combo b { font-size: 1.05rem; }
+.problem { margin: 6px 0 0; text-align: center; font-size: 3.6rem; font-weight: 900; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.answer { position: relative; justify-self: center; display: grid; place-items: center; min-width: 7.5rem; height: 4.2rem; margin: 2px 0 0; border-bottom: 4px solid var(--dojo-ink); font-size: 3rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.answer--ok { color: var(--dojo-good); border-color: var(--dojo-good); }
+.ok-mark { position: absolute; right: -2.4rem; top: -0.4rem; width: 3rem; height: 3rem; border: 6px solid var(--dojo-good); border-radius: 50%; opacity: 0.9; }
+.pad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.key { display: grid; place-items: center; height: 58px; border: 0; border-radius: 14px; color: var(--dojo-ink); background: #fff; box-shadow: 0 4px 0 #c9bfa9; font: inherit; font-size: 1.6rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.key--sub { color: var(--dojo-ink-2); background: var(--dojo-paper-2); font-size: 1rem; }
+.key--down { translate: 0 3px; box-shadow: 0 1px 0 #c9bfa9; background: #fff4e3; }
+
+/* 成績表 */
+.report { display: grid; gap: 10px; padding: 16px 16px 14px; }
+.report__head { display: grid; gap: 2px; padding-right: 88px; }
+.report__date { margin: 0; color: var(--dojo-ink-2); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.08em; }
+.report__title { margin: 0; font-size: 1.2rem; font-weight: 900; }
+.stamp { position: absolute; top: 12px; right: 14px; display: grid; place-items: center; width: 76px; height: 76px; border: 4px double var(--dojo-shu); border-radius: 50%; color: var(--dojo-shu); rotate: -10deg; text-align: center; line-height: 1.05; mix-blend-mode: multiply; }
+.stamp b { font-size: 1.6rem; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+.stamp small { font-size: 0.62rem; font-weight: 900; letter-spacing: 0.04em; }
+.stamp--memory { border-color: var(--dojo-ai); color: var(--dojo-ai); border-radius: 18px; }
+.rows { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; border-top: 2px solid var(--dojo-rule); }
+.rows li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 9px 0; border-bottom: 1px dashed var(--dojo-rule); }
+.rows .name { font-size: 0.86rem; font-weight: 800; color: var(--dojo-ink-2); }
+.rows .value { font-size: 1.06rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.rows .delta { grid-column: 1 / 3; display: flex; gap: 8px; align-items: center; font-size: 0.8rem; font-weight: 800; color: var(--dojo-good); }
+.rows .delta--same { color: var(--dojo-ink-2); }
+.ribbon { display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px; border-radius: 4px; background: var(--dojo-gold-soft); color: var(--dojo-gold); font-size: 0.74rem; font-weight: 900; }
+.goal { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--dojo-paper-2); font-size: 0.86rem; font-weight: 800; }
+.goal b { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #fff; }
+.when { display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--dojo-radius); background: var(--dojo-desk-2); }
+.when p { margin: 0; font-size: 0.86rem; font-weight: 800; }
+.when ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.when li button { min-height: 40px; padding: 0 12px; border: 2px solid rgba(255, 252, 244, 0.25); border-radius: 999px; color: var(--dojo-light); background: transparent; font: inherit; font-size: 0.82rem; font-weight: 800; }
+.when li button.on { border-color: #f1a54c; background: rgba(241, 165, 76, 0.18); }
+.actions { display: flex; gap: 10px; justify-content: center; }
+.btn2 { min-height: 48px; padding: 0 20px; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 999px; color: var(--dojo-light); background: transparent; font: inherit; font-weight: 800; }
+
+/* 宮殿に置く */
+.scene { display: grid; gap: 10px; padding: 14px 16px 16px; justify-items: center; text-align: center; }
+.scene__locus { display: grid; justify-items: center; gap: 2px; }
+.scene__locus b { font-size: 2.6rem; line-height: 1; }
+.scene__locus span { color: var(--dojo-ai); font-size: 1.05rem; font-weight: 900; }
+.scene__plus { color: var(--dojo-ink-2); font-size: 1.2rem; font-weight: 900; }
+.scene__item { display: flex; align-items: center; gap: 8px; font-size: 2rem; font-weight: 900; }
+.scene__image { margin: 2px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--dojo-ai-soft); font-size: 1.02rem; font-weight: 800; line-height: 1.6; text-align: left; }
+.scene__image small { display: block; color: var(--dojo-ai); font-size: 0.74rem; font-weight: 900; letter-spacing: 0.06em; }
+.scene__tools { display: flex; gap: 8px; }
+.smallbtn { min-height: 40px; padding: 0 12px; border: 2px solid var(--dojo-rule); border-radius: 999px; color: var(--dojo-ink); background: #fff; font: inherit; font-size: 0.84rem; font-weight: 800; }
+.mini-route { display: flex; justify-content: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.mini-route li { flex: 1 1 0; max-width: 26px; height: 6px; border-radius: 3px; background: rgba(255, 252, 244, 0.2); }
+.mini-route li.done { background: #7f93d6; }
+.mini-route li.now { background: #f1a54c; }
+
+/* 思い出す(灯籠の道) */
+.lanterns { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 6px; margin: 0; padding: 4px 0; list-style: none; }
+.lantern { display: grid; justify-items: center; gap: 3px; text-align: center; font-size: 0.68rem; font-weight: 800; color: var(--dojo-light-2); line-height: 1.2; }
+.lantern b { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 16px 16px 20px 20px; border: 2px solid rgba(255, 252, 244, 0.22); background: var(--dojo-desk-2); font-size: 1.35rem; }
+.lantern span.word { min-height: 1.2em; color: var(--dojo-light); font-size: 0.74rem; }
+.lantern.lit b { border-color: #f6c46a; background: radial-gradient(circle at 50% 40%, #ffe7a8, #f1a54c 70%); box-shadow: 0 0 18px rgba(246, 196, 106, 0.55); }
+.lantern.now b { border-color: #f1a54c; box-shadow: 0 0 0 4px rgba(241, 165, 76, 0.25); }
+.lantern.dim b { opacity: 0.55; }
+.pool { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pool button { width: 100%; min-height: 44px; padding: 0 6px; border: 0; border-radius: 10px; color: var(--dojo-ink); background: var(--dojo-paper); box-shadow: 0 3px 0 #c9bfa9; font: inherit; font-size: 0.9rem; font-weight: 800; }
+.pool button:disabled { opacity: 0.32; }
+
+/* 思い出しの箱 */
+.boxes { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.box { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 12px; }
+.box__icon { grid-row: 1 / 3; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px; background: var(--dojo-ai-soft); font-size: 1.3rem; }
+.box strong { font-size: 0.98rem; }
+.box small { color: var(--dojo-ink-2); font-size: 0.76rem; font-weight: 700; }
+.box strong, .box small { grid-column: 2; }
+.due { grid-column: 3; grid-row: 1 / 3; padding: 4px 10px; border-radius: 999px; background: var(--dojo-ai); color: #fff; font-size: 0.78rem; font-weight: 900; white-space: nowrap; }
+.due--later { background: var(--dojo-paper-2); color: var(--dojo-ink-2); }
+.ladder { display: inline-flex; gap: 3px; vertical-align: -1px; margin-left: 4px; }
+.ladder i { width: 14px; height: 6px; border-radius: 3px; background: var(--dojo-rule); }
+.ladder i.on { background: var(--dojo-ai); }
+.spacing { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; text-align: center; font-size: 0.72rem; font-weight: 800; color: var(--dojo-light-2); }
+.spacing li { padding: 6px 0; border-radius: 8px; background: var(--dojo-desk-2); }
+.spacing li b { display: block; color: var(--dojo-light); font-size: 0.92rem; }
+.shelf { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.shelf li { padding: 5px 10px; border-radius: 8px; background: var(--dojo-gold-soft); color: var(--dojo-gold); font-size: 0.8rem; font-weight: 900; }
+
+/* 箱で思い出す(めくり札) */
+.trail { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; justify-content: center; }
+.trail li { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; border: 2px solid rgba(255, 252, 244, 0.22); background: var(--dojo-desk-2); font-size: 0.8rem; font-weight: 900; color: var(--dojo-light-2); }
+.trail li.ok { border-color: #f6c46a; background: radial-gradient(circle at 50% 40%, #ffe7a8, #f1a54c 70%); color: #5a3a00; }
+.trail li.miss { color: var(--dojo-light-2); opacity: 0.7; }
+.trail li.now { border-color: #f1a54c; box-shadow: 0 0 0 3px rgba(241, 165, 76, 0.3); color: var(--dojo-light); }
+.flip { display: grid; gap: 10px; padding: 16px; text-align: center; }
+.flip__locus { display: grid; justify-items: center; gap: 2px; }
+.flip__locus b { font-size: 2.4rem; line-height: 1; }
+.flip__locus span { color: var(--dojo-ai); font-size: 1rem; font-weight: 900; }
+.flip__ask { margin: 0; color: var(--dojo-ink-2); font-size: 0.86rem; font-weight: 800; }
+.flip__answer { margin: 0; padding: 12px; border-radius: 12px; border: 2px dashed var(--dojo-ai); background: #fff; font-size: 1.35rem; font-weight: 900; }
+.flip__cue { margin: 0; font-size: 0.92rem; font-weight: 700; line-height: 1.6; color: var(--dojo-ink); text-align: left; }
+.flip__cue small { display: block; color: var(--dojo-ai); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; }
+.grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.grade button { min-height: 56px; border: 0; border-radius: 14px; font: inherit; font-size: 1.05rem; font-weight: 900; }
+.grade .yes { color: #fff; background: var(--dojo-good); box-shadow: 0 3px 0 #1f5a37; }
+.grade .no { color: var(--dojo-ink); background: var(--dojo-paper-2); box-shadow: 0 3px 0 #c9bfa9; }
+
+/* PCの配置(2列) */
+.pc { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; align-content: start; width: min(100%, 1120px); margin: 0 auto; padding: 18px 24px; }
+.pc .col { display: grid; gap: 14px; align-content: start; }
+
+/* 写真用: 縮めない */
+body.real .fit > .device { transform: none !important; }
+body.real .fit { overflow: visible; height: auto !important; }
+</style>
+</head>
+<body>
+<main class="doc">
+  <h1>脳トレ道場：続けたくなる道場（モックアップ）</h1>
+  <p>docs/brain-training-design.md の14章の画面です。夜の机（濃い藍）の上に、和紙の札。計算力は朱、記憶力は藍。判子は形でも分ける（計算力は丸、記憶力は角）。値は見本です。</p>
+  <ul class="legend">
+    <li><i style="background:#c4402a"></i>朱：計算力・判子</li>
+    <li><i style="background:#34488f"></i>藍：記憶力</li>
+    <li><i style="background:#fbf7ee"></i>和紙：問題と結果の面</li>
+    <li><i style="background:#f1a54c"></i>橙：いまの場所（アプリの強調色）</li>
+    <li><i style="background:#8a5f00"></i>金：自己ベスト（1回に1つ）</li>
+  </ul>
+
+  <h2>スマホ（390×844）</h2>
+  <div class="grid">
+
+    <!-- P1 入口 -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p1-entrance"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">脳トレ道場</h1><button class="app__help">?</button></header>
+        <div class="app__body">
+          <div class="speech"><img src="../../public/characters/yakobihime-mini.webp" alt=""><p>思い出しの箱に、3日前の格言が届いてるよ。今日は記憶力の日にしよう！</p></div>
+          <section class="paper today today--memory">
+            <p class="today__eyebrow"><span>今日の稽古</span><span class="chip">🏯 記憶力</span></p>
+            <h2 class="today__title">6週間コース 8回目</h2>
+            <ol class="stones">
+              <li><b>🗃️</b>思い出しの箱<small>格言（3日目）</small></li>
+              <li><b>🏯</b>宮殿に12個<small>わが家</small></li>
+              <li><b>🔢</b>数字<small>8けた</small></li>
+            </ol>
+            <div class="today__foot"><span class="today__time">約9分</span><button class="cta">はじめる ▶</button></div>
+          </section>
+          <section class="week">
+            <p class="week__head"><strong>今週</strong><span>11月2日（日）</span></p>
+            <ol class="week__days">
+              <li><span>月</span><strong>27</strong><span class="marks"><i class="seal seal--calc">計</i></span></li>
+              <li><span>火</span><strong>28</strong><span class="marks"><i class="seal seal--memory"><span>記</span></i></span></li>
+              <li><span>水</span><strong>29</strong><span class="marks"></span></li>
+              <li><span>木</span><strong>30</strong><span class="marks"><i class="seal seal--calc">計</i><i class="seal seal--memory"><span>記</span></i></span></li>
+              <li><span>金</span><strong>31</strong><span class="marks"></span></li>
+              <li><span>土</span><strong>1</strong><span class="marks"><i class="seal seal--memory"><span>記</span></i></span></li>
+              <li class="is-today"><span>日</span><strong>2</strong><span class="marks"></span></li>
+            </ol>
+            <p class="week__goals"><span>計算力 2/3<span class="pips pips--calc"><i class="on"></i><i class="on"></i><i></i></span></span><span>記憶力 3/5<span class="pips pips--memory"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span></span></p>
+          </section>
+          <div class="doors">
+            <button class="door door--calc"><span class="door__icon">🧮</span><strong>計算力</strong><small>コース 4/10</small></button>
+            <button class="door door--memory"><span class="door__icon">🏯</span><strong>記憶力</strong><small>コース 7/30</small></button>
+          </div>
+          <p class="cue">⏰ <span><strong>寝る前</strong>に稽古する</span><button>変える</button></p>
+        </div>
+      </div></div></div>
+      <figcaption><strong>1. 道場の入口</strong>主役は「今日の稽古」1枚（押せばすぐ始まる。<em>UD:4・UD:3-2</em>）。6週間の空のカレンダーをやめ、今週の7日の判子と週の目安（計算力3回・記憶力5回）に（<em>D:9-2・G:6-3</em>）。扉は2つだけ（<em>UD:3-1</em>）。下に「いつ稽古するか」（実行意図）。</figcaption>
+    </figure>
+
+    <!-- P2 計算力の部屋 -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p2-calc-room"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">計算力</h1><button class="app__help">?</button></header>
+        <div class="app__body">
+          <section class="paper today today--calc">
+            <p class="today__eyebrow"><span>今日の稽古</span><span class="chip">コース 5/10</span></p>
+            <ol class="stones">
+              <li><b>⚡</b>スピード計算<small>約2分</small></li>
+              <li><b>👁️</b>ちらっと見る<small>約3分</small></li>
+              <li><b>🔁</b>N問前の答え<small>約3分</small></li>
+            </ol>
+            <div class="today__foot"><span class="today__time">約8分</span><button class="cta">はじめる ▶</button></div>
+          </section>
+          <section class="road">
+            <p class="road__head"><strong>コースの道</strong><span>あと6回で、最初の自分とくらべる</span></p>
+            <ol class="road__line">
+              <li class="done"></li><li class="done"></li><li class="done"></li><li class="done"></li><li class="now"></li><li></li><li></li><li></li><li></li><li class="measure">測</li>
+              <li class="gap"></li><li class="booster">1月</li><li class="gap"></li><li class="booster">3月</li>
+            </ol>
+            <p class="road__note">10回目のあと、1か月後と3か月後に「おさらい」4回ずつ。</p>
+          </section>
+          <p class="section-title"><span>自由に練習</span><span>自己ベスト</span></p>
+          <ul class="tiles">
+            <li><button class="tile"><strong>スピード計算</strong><span>1問1.9秒（段2）</span></button></li>
+            <li><button class="tile"><strong>ちらっと見る</strong><span>0.12秒で見えた</span></button></li>
+            <li><button class="tile"><strong>N問前の答え</strong><span>3つ前まで</span></button></li>
+            <li><button class="tile"><strong>色で切り替え</strong><span>段4</span></button></li>
+          </ul>
+          <div class="rowlinks"><button class="rowlink">☗ 将棋の棚</button><button class="rowlink">📈 記録</button></div>
+        </div>
+      </div></div></div>
+      <figcaption><strong>2. 計算力の部屋</strong>9枚の同じ札を、主役1つ・自由に練習4つ・棚と記録の2つに分ける（<em>UD:3-1</em>）。コースの道で、次の石と「最初の自分とくらべる日」までの残りを見せる（<em>D:5-2 目の前のごほうび</em>）。</figcaption>
+    </figure>
+
+    <!-- P3 スピード計算 -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p3-speed"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">スピード計算</h1></header>
+        <div class="app__body">
+          <p class="step">1 / 3 ・ 今日の稽古</p>
+          <section class="paper sheet">
+            <div class="sheet__bar"><span style="width:42%"></span><i class="ghost" style="left:36%">前のベスト</i></div>
+            <p class="sheet__status"><span>9 / 20</span><span class="combo">れんぞく <b>6</b></span><span>段2 九九も</span></p>
+            <p class="problem">7 × 8</p>
+            <p class="answer answer--ok">56<i class="ok-mark"></i></p>
+          </section>
+          <div class="pad">
+            <button class="key">7</button><button class="key">8</button><button class="key">9</button>
+            <button class="key">4</button><button class="key">5</button><button class="key key--down">6</button>
+            <button class="key">1</button><button class="key">2</button><button class="key">3</button>
+            <button class="key key--sub">消す</button><button class="key">0</button><button class="key key--sub">決定</button>
+          </div>
+        </div>
+      </div></div></div>
+      <figcaption><strong>3. 稽古中（スピード計算）</strong>始めに「よーい…はじめ！」（0.9秒、押せば飛ばす）。正解は○が跳ね、続けて正解すると音が1段ずつ高くなる（<em>D:3-1・D:3-4</em>）。帯の上の▼は前の自己ベストのペース（<em>D:5-2</em>）。まちがいは答えを見せて打ち直すだけ（<em>D:7-1</em>）。</figcaption>
+    </figure>
+
+    <!-- P4 成績表 -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p4-report"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">今日の成績</h1></header>
+        <div class="app__body">
+          <section class="paper report">
+            <div class="report__head"><p class="report__date">11月2日（日）の稽古</p><h2 class="report__title">計算力 コース 5/10</h2></div>
+            <div class="stamp"><b>計</b><small>11.2</small></div>
+            <ul class="rows">
+              <li><span class="name">スピード計算</span><span class="value">1問1.9秒</span><span class="delta">前より0.3秒速い</span></li>
+              <li><span class="name">ちらっと見る</span><span class="value">0.12秒で見えた</span><span class="delta">前より0.02秒速い <span class="ribbon">★ 自己ベスト</span></span></li>
+              <li><span class="name">N問前の答え</span><span class="value">3つ前まで</span><span class="delta delta--same">前と同じ</span></li>
+            </ul>
+            <p class="goal"><b>🎯</b>あと5回で、最初の自分とくらべる日</p>
+          </section>
+          <div class="speech"><img src="../../public/characters/yakobihime-mini.webp" alt=""><p>ちらっと見るで自己ベスト！ 0.12秒で、まわりの印まで見えたね。</p></div>
+          <section class="when">
+            <p>いつ稽古するか決めておくと、続けやすいよ。</p>
+            <ul><li><button>朝ごはんのあと</button></li><li><button>昼休み</button></li><li><button>夕ごはんのあと</button></li><li><button class="on">寝る前</button></li><li><button>対局の前</button></li><li><button>決めない</button></li></ul>
+          </section>
+          <button class="cta cta--wide" style="--room:#c4402a;--room-deep:#a83420">部屋へ戻る</button>
+        </div>
+      </div></div></div>
+      <figcaption><strong>4. 今日の成績</strong>稽古帳の紙に、その日の最初の稽古なら判子をポン（止め0.25秒と音。<em>D:2-2・G:3-1</em>）。前より何が伸びたかを数で（<em>D:5-4・D:5-5</em>）、自己ベストは1回に1つだけ金（<em>UD:5-3</em>）。次の目標を1行（<em>D:5-2</em>）。「いつ稽古する？」は最初の1回だけ。</figcaption>
+    </figure>
+
+    <!-- P5 記憶力の部屋 -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p5-memory-room"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">記憶力</h1><button class="app__help">?</button></header>
+        <div class="app__body">
+          <section class="paper today today--memory">
+            <p class="today__eyebrow"><span>今日の稽古</span><span class="chip">コース 8/30</span></p>
+            <ol class="stones">
+              <li><b>🗃️</b>思い出しの箱<small>約2分</small></li>
+              <li><b>🏯</b>宮殿に12個<small>約5分</small></li>
+              <li><b>🔢</b>数字 8けた<small>約2分</small></li>
+            </ol>
+            <div class="today__foot"><span class="today__time">約9分</span><button class="cta">はじめる ▶</button></div>
+          </section>
+          <section class="road">
+            <p class="road__head"><strong>6週間コース</strong><span>週5回が目安・あと23回</span></p>
+            <ol class="weeks6">
+              <li><span class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span>1週</li>
+              <li><span class="dots"><i class="on"></i><i class="on"></i><i class="now"></i><i></i><i></i></span>2週</li>
+              <li><span class="dots"><i></i><i></i><i></i><i></i><i></i></span>3週</li>
+              <li><span class="dots"><i></i><i></i><i></i><i></i><i></i></span>4週</li>
+              <li><span class="dots"><i></i><i></i><i></i><i></i><i></i></span>5週</li>
+              <li><span class="dots"><i></i><i></i><i></i><i></i><i></i></span>6週</li>
+            </ol>
+          </section>
+          <p class="section-title"><span>記憶の道</span></p>
+          <ol class="path">
+            <li class="done"><b>🏠</b>宮殿づくり</li>
+            <li class="done"><b>🏫</b>学校<br>講9/9</li>
+            <li class="now"><b>📅</b>毎日の練習</li>
+            <li><b>📝</b>記憶テスト<br>（6週間後）</li>
+          </ol>
+          <p class="section-title"><span>わたしの宮殿</span></p>
+          <ul class="palaces">
+            <li class="palace">🏠 わが家<small>14か所・練習</small></li>
+            <li class="palace">🏯 見本のお城<small>30か所・宝物</small></li>
+            <li class="palace palace--add">＋ 作る</li>
+          </ul>
+          <div class="rowlinks rowlinks--3"><button class="rowlink">🗃️ 箱 <em>1</em></button><button class="rowlink">☗ 将棋の棚</button><button class="rowlink">📈 記録</button></div>
+        </div>
+      </div></div></div>
+      <figcaption><strong>5. 記憶力の部屋</strong>押せない灰色の札の代わりに「記憶の道」（宮殿づくり→学校→毎日の練習→記憶テスト）で、今どこかを見せる（<em>D:6-1・UD:3</em>）。6週間コースは週ごとの5つのマス（週5回の目安が見える）。宮殿は役目つき（練習用・宝物用）。</figcaption>
+    </figure>
+
+    <!-- P6 宮殿に置く -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p6-place"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">宮殿に置く</h1></header>
+        <div class="app__body">
+          <p class="step">2 / 3 ・ わが家に12個 ・ 3か所目</p>
+          <ol class="mini-route"><li class="done"></li><li class="done"></li><li class="now"></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li></ol>
+          <section class="paper scene">
+            <div class="scene__locus"><b>🧊</b><span>3. 冷蔵庫</span></div>
+            <div class="scene__plus">＋</div>
+            <div class="scene__item"><span>🐘</span>ぞう</div>
+            <p class="scene__image"><small>からむ絵のヒント</small>冷蔵庫を開けると、ぞうがぎゅうぎゅうにつまっていて、ドアが閉まらない！</p>
+            <div class="scene__tools"><button class="smallbtn">⟳ ほかの絵</button><button class="smallbtn">ヒントを隠す</button></div>
+          </section>
+          <button class="cta cta--wide" style="--room:#34488f;--room-deep:#26356c">思いうかべた → 次の場所へ</button>
+          <div class="speech"><img src="../../public/characters/yakobihime-mini.webp" alt=""><p>場所と言葉がぶつかる場面を、目をとじて2秒。においや音もつけると、もっと残るよ。</p></div>
+        </div>
+      </div></div></div>
+      <figcaption><strong>6. 宮殿に置く（からむ絵）</strong>場所カードごとに「その場所でできる動き」を持たせ、言葉が場所とからむ絵の文を作る（決まった8つの動きの使い回しをやめる）。ヒントは隠して自分で作るのが基本、困ったら出す・別の絵にする（<em>D:4-1・D:5-8 自分で選ぶ</em>）。</figcaption>
+    </figure>
+
+    <!-- P7 思い出す（灯籠の道） -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p7-lanterns"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">思い出す</h1></header>
+        <div class="app__body">
+          <p class="step">わが家をたどって、置いた言葉を順に押してね</p>
+          <ol class="lanterns">
+            <li class="lantern"><b>🚪</b><span>玄関のドア</span><span class="word">りんご</span></li>
+            <li class="lantern"><b>👟</b><span>くつ箱</span><span class="word">ロケット</span></li>
+            <li class="lantern"><b>🧊</b><span>冷蔵庫</span><span class="word">ぞう</span></li>
+            <li class="lantern"><b>🔥</b><span>コンロ</span><span class="word">かさ</span></li>
+            <li class="lantern now"><b>🍽️</b><span>食卓</span><span class="word">？</span></li>
+            <li class="lantern dim"><b>🛋️</b><span>ソファ</span><span class="word"></span></li>
+            <li class="lantern dim"><b>📺</b><span>テレビ</span><span class="word"></span></li>
+            <li class="lantern dim"><b>🕰️</b><span>時計</span><span class="word"></span></li>
+            <li class="lantern dim"><b>📚</b><span>本だな</span><span class="word"></span></li>
+            <li class="lantern dim"><b>🪜</b><span>階段</span><span class="word"></span></li>
+            <li class="lantern dim"><b>🛏️</b><span>ベッド</span><span class="word"></span></li>
+            <li class="lantern dim"><b>🌤️</b><span>ベランダ</span><span class="word"></span></li>
+          </ol>
+          <ul class="pool">
+            <li><button disabled>りんご</button></li><li><button>ペンギン</button></li><li><button>トランペット</button></li>
+            <li><button>ラッパ</button></li><li><button disabled>ぞう</button></li><li><button>おにぎり</button></li>
+            <li><button>たいこ</button></li><li><button disabled>かさ</button></li><li><button>にじ</button></li>
+            <li><button disabled>ロケット</button></li><li><button>サボテン</button></li><li><button>ふくろう</button></li>
+          </ul>
+          <div class="actions"><button class="btn2">1つ消す</button><button class="btn2">とばす</button></div>
+        </div>
+      </div></div></div>
+      <figcaption><strong>7. 思い出す（灯籠の道）</strong>宮殿の場所を灯籠の道として並べ、いまの場所が光る。全部押し終えたら、合った灯籠が1つずつ順に灯る（音の階段つき。<em>D:2-2 溜めと解放</em>）。合わなかった灯籠は消えたまま、正しい言葉を見せる（<em>D:7-2</em>）。</figcaption>
+    </figure>
+
+    <!-- P8 思い出しの箱 -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p8-box"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">思い出しの箱</h1></header>
+        <div class="app__body">
+          <div class="speech"><img src="../../public/characters/yakobihime-mini.webp" alt=""><p>長く覚えたいものは、間をあけて何度か思い出すと残りやすいよ。</p></div>
+          <ol class="spacing"><li><b>1日</b>あと</li><li><b>3日</b>あと</li><li><b>1週</b>あと</li><li><b>2週</b>あと</li><li><b>1か月</b>あと</li></ol>
+          <ul class="boxes">
+            <li class="paper box"><span class="box__icon">📜</span><strong>将棋の格言10</strong><span class="due">今日</span><small>見本のお城 1〜10か所目・3日目<span class="ladder"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></small></li>
+            <li class="paper box"><span class="box__icon">🌿</span><strong>春の七草</strong><span class="due due--later">あと4日</span><small>見本のお城 11〜17か所目・1週間目<span class="ladder"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span></small></li>
+          </ul>
+          <button class="cta cta--wide" style="--room:#34488f;--room-deep:#26356c">＋ 覚えるものを入れる</button>
+          <p class="section-title"><span>宝物の棚（1か月たっても思い出せた）</span></p>
+          <ul class="shelf"><li>🪐 太陽系の惑星</li><li>☗ 四間飛車と美濃囲い</li></ul>
+        </div>
+      </div></div></div>
+      <figcaption><strong>8. 思い出しの箱</strong>覚えたいもの（将棋の格言・作戦の手順・月の和名など）を宝物用の宮殿に置き、1日・3日・1週・2週・1か月あとに思い出す。思い出せたら次の段、半分も出なければ1つ戻して覚え直す。1か月を越えたら宝物の棚へ（<em>D:5-1 使い道・UD:7-4</em>）。</figcaption>
+    </figure>
+
+    <!-- P9 箱で思い出す（めくり札） -->
+    <figure class="shot">
+      <div class="fit"><div class="device device--phone" id="p9-flip"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">思い出しの箱</h1></header>
+        <div class="app__body">
+          <p class="step">将棋の格言10 ・ 1週間ぶり ・ 4か所目</p>
+          <ol class="trail"><li class="ok">1</li><li class="ok">2</li><li class="miss">3</li><li class="now">4</li><li>5</li><li>6</li><li>7</li><li>8</li><li>9</li><li>10</li></ol>
+          <section class="paper flip">
+            <div class="flip__locus"><b>👞</b><span>4. 玄関</span></div>
+            <p class="flip__ask">頭の中で思い出してから、めくったよ</p>
+            <p class="flip__answer">歩のない将棋は負け将棋</p>
+            <p class="flip__cue"><small>置いた絵</small>玄関で、歩が1枚もいなくて、王さまがしょんぼり泣いている！</p>
+          </section>
+          <div class="grade"><button class="yes">○ 思い出せた</button><button class="no">× 出なかった</button></div>
+          <div class="speech"><img src="../../public/characters/yakobihime-mini.webp" alt=""><p>選ぶより、自分で思い出すほうが残るよ。出なくても、ここで絵を見直せば大丈夫。</p></div>
+        </div>
+      </div></div></div>
+      <figcaption><strong>9. 箱で思い出す（めくり札）</strong>札から選ばず、場所を見て頭の中で思い出してから「めくる」。答えと置いた絵を見て、自分で「思い出せた／出なかった」を押す（<em>B24 自分で思い出す・答えを確かめる</em>）。8割以上で次の段、届かなければ出なかった絵を見直して1段戻る（<em>D:7-1</em>）。</figcaption>
+    </figure>
+  </div>
+
+  <h2>PC（1366×768）</h2>
+  <div class="grid" style="grid-template-columns: 1fr;">
+    <figure class="shot">
+      <div class="fit"><div class="device device--pc" id="d1-entrance"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">脳トレ道場</h1><button class="app__help">?</button></header>
+        <div class="pc">
+          <div class="col">
+            <div class="speech"><img src="../../public/characters/yakobihime-mini.webp" alt=""><p>思い出しの箱に、3日前の格言が届いてるよ。今日は記憶力の日にしよう！</p></div>
+            <section class="paper today today--memory">
+              <p class="today__eyebrow"><span>今日の稽古</span><span class="chip">🏯 記憶力</span></p>
+              <h2 class="today__title">6週間コース 8回目</h2>
+              <ol class="stones">
+                <li><b>🗃️</b>思い出しの箱<small>格言（3日目）</small></li>
+                <li><b>🏯</b>宮殿に12個<small>わが家</small></li>
+                <li><b>🔢</b>数字<small>8けた</small></li>
+              </ol>
+              <div class="today__foot"><span class="today__time">約9分</span><button class="cta">はじめる ▶</button></div>
+            </section>
+            <p class="cue">⏰ <span><strong>寝る前</strong>に稽古する</span><button>変える</button></p>
+          </div>
+          <div class="col">
+            <section class="week">
+              <p class="week__head"><strong>今週</strong><span>11月2日（日）</span></p>
+              <ol class="week__days">
+                <li><span>月</span><strong>27</strong><span class="marks"><i class="seal seal--calc">計</i></span></li>
+                <li><span>火</span><strong>28</strong><span class="marks"><i class="seal seal--memory"><span>記</span></i></span></li>
+                <li><span>水</span><strong>29</strong><span class="marks"></span></li>
+                <li><span>木</span><strong>30</strong><span class="marks"><i class="seal seal--calc">計</i><i class="seal seal--memory"><span>記</span></i></span></li>
+                <li><span>金</span><strong>31</strong><span class="marks"></span></li>
+                <li><span>土</span><strong>1</strong><span class="marks"><i class="seal seal--memory"><span>記</span></i></span></li>
+                <li class="is-today"><span>日</span><strong>2</strong><span class="marks"></span></li>
+              </ol>
+              <p class="week__goals"><span>計算力 2/3<span class="pips pips--calc"><i class="on"></i><i class="on"></i><i></i></span></span><span>記憶力 3/5<span class="pips pips--memory"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span></span></p>
+            </section>
+            <div class="doors">
+              <button class="door door--calc"><span class="door__icon">🧮</span><strong>計算力</strong><small>コース 4/10</small></button>
+              <button class="door door--memory"><span class="door__icon">🏯</span><strong>記憶力</strong><small>コース 7/30</small></button>
+            </div>
+          </div>
+        </div>
+      </div></div></div>
+      <figcaption><strong>PC 1. 道場の入口</strong>左に主役（やこび姫・今日の稽古・いつ）、右に今週と扉。横長の画面でも1画面に収め、スクロールさせない（<em>U:7-5</em>）。</figcaption>
+    </figure>
+
+    <figure class="shot">
+      <div class="fit"><div class="device device--pc" id="d2-report"><div class="app">
+        <header class="app__head"><button class="app__back">← 戻る</button><h1 class="app__title">今日の成績</h1></header>
+        <div class="pc">
+          <div class="col">
+            <section class="paper report">
+              <div class="report__head"><p class="report__date">11月2日（日）の稽古</p><h2 class="report__title">計算力 コース 5/10</h2></div>
+              <div class="stamp"><b>計</b><small>11.2</small></div>
+              <ul class="rows">
+                <li><span class="name">スピード計算</span><span class="value">1問1.9秒</span><span class="delta">前より0.3秒速い</span></li>
+                <li><span class="name">ちらっと見る</span><span class="value">0.12秒で見えた</span><span class="delta">前より0.02秒速い <span class="ribbon">★ 自己ベスト</span></span></li>
+                <li><span class="name">N問前の答え</span><span class="value">3つ前まで</span><span class="delta delta--same">前と同じ</span></li>
+              </ul>
+              <p class="goal"><b>🎯</b>あと5回で、最初の自分とくらべる日</p>
+            </section>
+          </div>
+          <div class="col">
+            <div class="speech"><img src="../../public/characters/yakobihime-mini.webp" alt=""><p>ちらっと見るで自己ベスト！ 0.12秒で、まわりの印まで見えたね。</p></div>
+            <section class="when">
+              <p>いつ稽古するか決めておくと、続けやすいよ。</p>
+              <ul><li><button>朝ごはんのあと</button></li><li><button>昼休み</button></li><li><button>夕ごはんのあと</button></li><li><button class="on">寝る前</button></li><li><button>対局の前</button></li><li><button>決めない</button></li></ul>
+            </section>
+            <button class="cta cta--wide" style="--room:#c4402a;--room-deep:#a83420">部屋へ戻る</button>
+          </div>
+        </div>
+      </div></div></div>
+      <figcaption><strong>PC 2. 今日の成績</strong>成績表を左に大きく、やこび姫と次の操作を右に。</figcaption>
+    </figure>
+  </div>
+</main>
+<script>
+  // 枠を、並べた幅に合わせて縮める(写真のときは ?real=1 で縮めない)。
+  const real = new URLSearchParams(location.search).has("real");
+  if (real) document.body.classList.add("real");
+  function fit() {
+    if (real) return;
+    for (const box of document.querySelectorAll(".fit")) {
+      const device = box.firstElementChild;
+      const width = device.offsetWidth + 22;
+      const scale = Math.min(1, box.clientWidth / width);
+      device.style.transform = `translate(11px, 11px) scale(${scale})`;
+      box.style.height = `${(device.offsetHeight + 22) * scale}px`;
+    }
+  }
+  addEventListener("resize", fit);
+  fit();
+</script>
+</body>
+</html>
