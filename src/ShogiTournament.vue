@@ -229,6 +229,7 @@
         <ShogiTeamBattle
           v-else-if="screen === 'team'"
           :player-call-name="playerCallName"
+          :momoka-call="momokaCall"
           ref="teamEl"
           :view="teamView"
           :career="teamCareer"
@@ -1146,6 +1147,8 @@ const props = defineProps({
   playerName: { type: String, default: "あなた" },
   /** 呼びかけに使う名前(名字と名前に分けたときは名字。入れていなければ空)。 */
   playerCallName: { type: String, default: "" },
+  /** 百花の呼び方(player-name.mjsのmomokaCallName。空なら名前に「さん」)。 */
+  momokaCall: { type: String, default: "" },
   /** 竜王戦の対局から戻ったところ。竜王への道で、前の段から登る動きを1回だけ見せる。 */
   fromGame: { type: Boolean, default: false },
   /** 推しの棋士(core/ryuo-oshi.mjs)。やこび姫が、期の中での様子を知らせる。 */

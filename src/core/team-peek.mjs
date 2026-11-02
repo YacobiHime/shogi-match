@@ -149,10 +149,10 @@ export function peekScene({ ply, rate, before = null, done = false, won = false 
  * 心の声の1行(同じ場面でも、手数で言い方を変える)。
  * @param {string} voice `peekVoice`
  * @param {ReturnType<typeof peekScene>} scene
- * @param {{ ply?: number, playerName?: string }} [options]
+ * @param {{ ply?: number, playerName?: string, momokaCall?: string }} [options] momokaCall: 百花の呼び方(なければ名前に「さん」)
  */
-export function peekThought(voice, scene, { ply = 0, playerName = '' } = {}) {
+export function peekThought(voice, scene, { ply = 0, playerName = '', momokaCall = '' } = {}) {
   const lines = PEEK_THOUGHTS[voice]?.[scene] ?? PEEK_THOUGHTS.balance[scene] ?? [];
   const line = lines[Math.floor(ply / 12) % Math.max(1, lines.length)] ?? '';
-  return line.replaceAll('{name}', playerName ? `${playerName}さん` : 'あなた');
+  return line.replaceAll('{name}', momokaCall || (playerName ? `${playerName}さん` : 'あなた'));
 }

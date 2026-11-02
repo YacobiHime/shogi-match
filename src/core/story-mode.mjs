@@ -173,9 +173,9 @@ export function syncStoryUnlocks(progress, { read = null, teamCareer = null, at 
 }
 
 /** 話をノベルの場面の形にする(いまは団体戦の台本)。読めない話はnull。 */
-export function storyScene(episode, playerName = '') {
+export function storyScene(episode, playerName = '', momokaCall = '') {
   if (!episode?.scene) return null;
-  return teamScene(episode.scene, playerName);
+  return teamScene(episode.scene, playerName, momokaCall);
 }
 
 /**

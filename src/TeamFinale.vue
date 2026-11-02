@@ -12,6 +12,7 @@
     :games="games"
     :user-ply="clock"
     :player-name="playerName"
+    :momoka-call="momokaCall"
     :asset-base-url="assetBaseUrl"
     :seat="watchSeat"
     title="仲間の対局"
@@ -114,6 +115,8 @@ const props = defineProps({
   boards: { type: Array as PropType<Board[]>, default: () => [] },
   engineFactory: { type: Function as PropType<(() => Promise<EngineFactory>) | null>, default: null },
   playerName: { type: String, default: "" },
+  /** 百花の呼び方(player-name.mjsのmomokaCallName。空なら名前に「さん」)。 */
+  momokaCall: { type: String, default: "" },
   assetBaseUrl: { type: String, default: "." },
 });
 const emit = defineEmits<{ done: [] }>();

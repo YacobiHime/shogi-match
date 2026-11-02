@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PLAYER_NAME, PLAYER_NAME_KEY, PLAYER_NAME_MAX, loadPlayerName, loadPlayerProfile, normalizePlayerName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerName, savePlayerProfile } from './player-name.mjs';
+import { DEFAULT_PLAYER_NAME, PLAYER_NAME_KEY, PLAYER_NAME_MAX, loadPlayerName, loadPlayerProfile, momokaCallName, normalizePlayerName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerName, savePlayerProfile } from './player-name.mjs';
 
 const memoryStorage = () => {
   const map = new Map();
@@ -43,7 +43,7 @@ describe('名字と名前に分けて入れる', () => {
   };
 
   test('日本語は続けて、ローマ字は空白を入れて名札の名前にする', () => {
-    expect(normalizePlayerProfile({ mode: 'split', family: ' 天鷺 ', given: '羽音' })).toEqual({ mode: 'split', name: '天鷺羽音', family: '天鷺', given: '羽音' });
+    expect(normalizePlayerProfile({ mode: 'split', family: ' 天鷺 ', given: '羽音' })).toMatchObject({ mode: 'split', name: '天鷺羽音', family: '天鷺', given: '羽音' });
     expect(normalizePlayerProfile({ mode: 'split', family: 'Sato', given: 'Mai' }).name).toBe('Sato Mai');
     expect(normalizePlayerProfile({ mode: 'split', family: '', given: '羽音' }).name).toBe('羽音');
   });
@@ -64,11 +64,37 @@ describe('名字と名前に分けて入れる', () => {
   test('保存して読み直せる。前の版の保存(名前だけ)はそのまま入れた形で読む。空なら消す', () => {
     const storage = memory();
     savePlayerProfile(storage, { mode: 'split', family: '天鷺', given: '羽音' });
-    expect(loadPlayerProfile(storage)).toEqual({ mode: 'split', name: '天鷺羽音', family: '天鷺', given: '羽音' });
+    expect(loadPlayerProfile(storage)).toMatchObject({ mode: 'split', name: '天鷺羽音', family: '天鷺', given: '羽音' });
     expect(loadPlayerName(storage)).toBe('天鷺羽音');
     storage.setItem(PLAYER_NAME_KEY, JSON.stringify({ name: 'むかし' }));
-    expect(loadPlayerProfile(storage)).toEqual({ mode: 'single', name: 'むかし', family: '', given: '' });
+    expect(loadPlayerProfile(storage)).toEqual({ mode: 'single', name: 'むかし', family: '', given: '', call: { suffix: '', part: 'family' } });
     savePlayerProfile(storage, { mode: 'split', family: ' ', given: '' });
     expect(storage.getItem(PLAYER_NAME_KEY)).toBeNull();
+  });
+});
+
+describe('百花の呼び方', () => {
+  const test = it;
+  test('選ばなければ「さん」、くん・ちゃん・呼び捨ても選べる。名前がなければ「あなた」', () => {
+    expect(momokaCallName({ mode: 'single', name: 'はるか' })).toBe('はるかさん');
+    expect(momokaCallName({ mode: 'single', name: 'はるか', call: { suffix: 'kun' } })).toBe('はるかくん');
+    expect(momokaCallName({ mode: 'single', name: 'はるか', call: { suffix: 'chan' } })).toBe('はるかちゃん');
+    expect(momokaCallName({ mode: 'single', name: 'はるか', call: { suffix: 'none' } })).toBe('はるか');
+    expect(momokaCallName({ mode: 'single', name: '', call: { suffix: 'chan' } })).toBe('あなた');
+    expect(momokaCallName({ mode: 'single', name: 'はるか', call: { suffix: 'sama' } })).toBe('はるかさん');
+  });
+
+  test('名字と名前に分けたときは、名字か名前のどちらで呼ぶかも選べる', () => {
+    const base = { mode: 'split', family: '天鷺', given: '羽音' };
+    expect(momokaCallName({ ...base, call: { suffix: 'kun' } })).toBe('天鷺くん');
+    expect(momokaCallName({ ...base, call: { suffix: 'chan', part: 'given' } })).toBe('羽音ちゃん');
+    expect(momokaCallName({ ...base, call: { suffix: 'none', part: 'given' } })).toBe('羽音');
+  });
+
+  test('呼び方も保存して読み直せる', () => {
+    const data = new Map();
+    const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: (k) => data.delete(k) };
+    savePlayerProfile(storage, { mode: 'single', name: 'はるか', call: { suffix: 'chan' } });
+    expect(momokaCallName(loadPlayerProfile(storage))).toBe('はるかちゃん');
   });
 });

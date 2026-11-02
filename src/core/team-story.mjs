@@ -24,7 +24,7 @@ export const NOVEL_MAX_LINES = 12;
 const line = (who, face, text) => Object.freeze({ who, face, text });
 
 /**
- * 場面。{name}はプレイヤーの名前(地の文)、{you}は百花の呼び方(名前に「さん」)。
+ * 場面。{name}はプレイヤーの名前(地の文)、{you}は百花の呼び方(名前の札で選んだ呼び方。選ばなければ名前に「さん」)。
  * castは出てくる人(左から)。
  */
 export const TEAM_SCENES = Object.freeze({
@@ -180,10 +180,10 @@ export const TEAM_SCENES = Object.freeze({
 });
 
 /** 呼び方を差し込んだ文(名前がなければ「あなた」)。 */
-export function sceneText(text, playerName = '') {
+export function sceneText(text, playerName = '', momokaCall = '') {
   const name = String(playerName ?? '').trim();
   return String(text)
-    .replaceAll('{you}', name ? `${name}さん` : 'あなた')
+    .replaceAll('{you}', momokaCall || (name ? `${name}さん` : 'あなた'))
     .replaceAll('{name}', name || 'あなた');
 }
 
@@ -192,7 +192,7 @@ export function sceneText(text, playerName = '') {
  * @param {string} id
  * @param {string} [playerName]
  */
-export function teamScene(id, playerName = '') {
+export function teamScene(id, playerName = '', momokaCall = '') {
   const scene = TEAM_SCENES[/** @type {keyof typeof TEAM_SCENES} */ (id)];
   if (!scene) return null;
   return {
@@ -205,7 +205,7 @@ export function teamScene(id, playerName = '') {
       who: entry.who,
       face: entry.face,
       name: NOVEL_PEOPLE[/** @type {keyof typeof NOVEL_PEOPLE} */ (entry.who)]?.name ?? '',
-      text: sceneText(entry.text, playerName),
+      text: sceneText(entry.text, playerName, momokaCall),
     })),
   };
 }

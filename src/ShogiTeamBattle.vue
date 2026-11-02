@@ -361,6 +361,7 @@
       :view="finaleView"
       :boards="finaleBoardList"
       :engine-factory="engineFactory"
+      :momoka-call="momokaCall"
       :player-name="playerName === 'あなた' ? '' : playerName"
       :asset-base-url="assetBaseUrl"
       @done="emit('finale-seen')"
@@ -482,6 +483,8 @@ const props = defineProps({
   playerName: { type: String, default: "あなた" },
   /** 呼びかけに使う名前(名字と名前に分けたときは名字)。空なら名前全体。 */
   playerCallName: { type: String, default: "" },
+  /** 百花の呼び方(player-name.mjsのmomokaCallName。空なら名前に「さん」)。 */
+  momokaCall: { type: String, default: "" },
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** プロの試合で、仲間が指した直前の局の結果(「第3局 羽音 勝ち 2-1」)。 */
   news: { type: String, default: "" },
@@ -522,7 +525,7 @@ const screen = computed(() => {
 // ---- 場面(ノベル)
 const novelEl = ref<{ finish: () => void; goBack: () => boolean } | null>(null);
 const sceneId = ref("");
-const scene = computed(() => (sceneId.value ? teamScene(sceneId.value, props.playerName === "あなた" ? "" : props.playerName) : null));
+const scene = computed(() => (sceneId.value ? teamScene(sceneId.value, props.playerName === "あなた" ? "" : props.playerName, props.momokaCall) : null));
 function closeScene() {
   const id = sceneId.value;
   sceneId.value = "";
@@ -535,7 +538,7 @@ if (!props.view && !props.career.invited?.school) sceneId.value = "invite-school
 
 // ---- 試合の結果発表(19章)。まだ見ていなければ、節目の場面より先に出す。
 const finaleEl = ref<{ goBack: () => boolean } | null>(null);
-const finaleView = computed(() => teamFinaleView(props.career.current, { playerName: props.playerName === "あなた" ? "" : props.playerName }));
+const finaleView = computed(() => teamFinaleView(props.career.current, { playerName: props.playerName === "あなた" ? "" : props.playerName, momokaCall: props.momokaCall }));
 const finaleBoardList = computed(() => finaleBoards(props.career.current));
 
 // ---- 表彰式(20章)。結果発表を見てから、節目の場面の前に。
@@ -553,7 +556,7 @@ watch(celebrationStage, () => {
   paperOpen.value = false;
   answers.value = [];
 });
-const interview = computed(() => (celebrationStage.value ? interviewScene(props.career.current, celebrationStage.value, { playerName: props.playerName === "あなた" ? "" : props.playerName, callName: callName.value }) : null));
+const interview = computed(() => (celebrationStage.value ? interviewScene(props.career.current, celebrationStage.value, { playerName: props.playerName === "あなた" ? "" : props.playerName, callName: callName.value, momokaCall: props.momokaCall }) : null));
 /** 選んだ答え(質問の順に)。 */
 function onInterviewChoose({ line, value }: { line: number; value: string }) {
   const asks = (interview.value?.lines ?? []).map((entry: { choices?: unknown }, index: number) => (entry.choices ? index : -1)).filter((index: number) => index >= 0);

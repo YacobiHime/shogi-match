@@ -36,19 +36,56 @@ function joinParts(family, given) {
 
 /**
  * プレイヤー名のくわしい形に整える。名字と名前に分けたときは、合わせて上限の文字数に収まるよう、名前・名字の順に後ろを切る。
- * @param {{ mode?: unknown, name?: unknown, family?: unknown, given?: unknown } | null | undefined} value
- * @returns {{ mode: 'single' | 'split', name: string, family: string, given: string }}
+ * @param {{ mode?: unknown, name?: unknown, family?: unknown, given?: unknown, call?: unknown } | null | undefined} value
+ * @returns {{ mode: 'single' | 'split', name: string, family: string, given: string, call: { suffix: '' | 'kun' | 'chan' | 'none', part: 'family' | 'given' } }}
  */
 export function normalizePlayerProfile(value) {
   const mode = value?.mode === 'split' ? 'split' : 'single';
-  if (mode === 'single') return { mode, name: normalizePlayerName(value?.name), family: '', given: '' };
+  const call = normalizeMomokaCall(value?.call);
+  if (mode === 'single') return { mode, name: normalizePlayerName(value?.name), family: '', given: '', call };
   let family = normalizePlayerName(value?.family);
   let given = normalizePlayerName(value?.given);
   while (Array.from(joinParts(family, given)).length > PLAYER_NAME_MAX) {
     if (given) given = Array.from(given).slice(0, -1).join('').trim();
     else family = Array.from(family).slice(0, -1).join('').trim();
   }
-  return { mode, name: joinParts(family, given), family, given };
+  return { mode, name: joinParts(family, given), family, given, call };
+}
+
+/**
+ * 百花の呼び方(2026-11-02。docs/player-name-design.md の3章)。百花は「くん」か「ちゃん」で呼び、特に親しい人だけ呼び捨てにする。
+ * 選ばなければ今までどおり「さん」。分けて入れたときは、名字で呼ぶか名前で呼ぶかも選べる。
+ */
+export const MOMOKA_SUFFIXES = Object.freeze([
+  Object.freeze({ id: '', label: 'さん', suffix: 'さん' }),
+  Object.freeze({ id: 'kun', label: 'くん', suffix: 'くん' }),
+  Object.freeze({ id: 'chan', label: 'ちゃん', suffix: 'ちゃん' }),
+  Object.freeze({ id: 'none', label: '呼び捨て', suffix: '' }),
+]);
+
+/**
+ * @param {unknown} value
+ * @returns {{ suffix: '' | 'kun' | 'chan' | 'none', part: 'family' | 'given' }}
+ */
+function normalizeMomokaCall(value) {
+  const raw = /** @type {any} */ (value);
+  const suffix = MOMOKA_SUFFIXES.some((option) => option.id && option.id === raw?.suffix) ? raw.suffix : '';
+  return { suffix, part: raw?.part === 'given' ? 'given' : 'family' };
+}
+
+/**
+ * 百花がプレイヤーを呼ぶ言葉(「天鷺さん」「羽音ちゃん」「羽音」)。名前を入れていなければ「あなた」。
+ * @param {{ mode?: string, name?: string, family?: string, given?: string, call?: any } | null | undefined} profile
+ */
+export function momokaCallName(profile) {
+  const normalized = normalizePlayerProfile(profile);
+  if (!normalized.name) return 'あなた';
+  const split = normalized.mode === 'split';
+  const base = split
+    ? (normalized.call.part === 'given' ? normalized.given || normalized.family : normalized.family || normalized.given)
+    : normalized.name;
+  const option = MOMOKA_SUFFIXES.find((entry) => entry.id === normalized.call.suffix) ?? MOMOKA_SUFFIXES[0];
+  return `${base}${option.suffix}`;
 }
 
 /**
@@ -62,7 +99,7 @@ export function playerCallName(profile) {
 
 /**
  * @param {Storage | null | undefined} storage
- * @returns {{ mode: 'single' | 'split', name: string, family: string, given: string }}
+ * @returns {ReturnType<typeof normalizePlayerProfile>}
  */
 export function loadPlayerProfile(storage) {
   try {
@@ -85,13 +122,13 @@ export function loadPlayerName(storage) {
 /**
  * くわしい形で保存する。名前が空なら保存を消す(入れ方の選びも消え、次はそのまま入れる欄から)。整えた形を返す。
  * @param {Storage | null | undefined} storage
- * @param {{ mode?: unknown, name?: unknown, family?: unknown, given?: unknown }} profile
+ * @param {{ mode?: unknown, name?: unknown, family?: unknown, given?: unknown, call?: unknown }} profile
  */
 export function savePlayerProfile(storage, profile) {
   const normalized = normalizePlayerProfile(profile);
   try {
     if (!normalized.name) storage?.removeItem(PLAYER_NAME_KEY);
-    else storage?.setItem(PLAYER_NAME_KEY, JSON.stringify(normalized.mode === 'split' ? normalized : { mode: 'single', name: normalized.name }));
+    else storage?.setItem(PLAYER_NAME_KEY, JSON.stringify(normalized.mode === 'split' ? normalized : { mode: 'single', name: normalized.name, call: normalized.call }));
   } catch {
     // 保存できなくても、この場では使う。
   }

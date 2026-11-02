@@ -69,9 +69,9 @@ function stageLabel(run, stage) {
  * 優勝インタビューの場面(NovelScene.vueの形。答えの行はchoices)。段階の優勝は質問1つ、全国優勝・プロは2つ(21章の3の2)。
  * @param {any} run
  * @param {string} stage
- * @param {{ playerName?: string, callName?: string }} [options] callName: 呼びかけの名前(名字と名前に分けたときは名字)
+ * @param {{ playerName?: string, callName?: string, momokaCall?: string }} [options] callName: 記者の呼びかけの名前(名字と名前に分けたときは名字)、momokaCall: 百花の呼び方
  */
-export function interviewScene(run, stage, { playerName = '', callName = '' } = {}) {
+export function interviewScene(run, stage, { playerName = '', callName = '', momokaCall = '' } = {}) {
   const school = run.format === 'school';
   const you = playerName || 'あなた';
   const call = (callName || playerName) ? `${callName || playerName}さん` : 'あなた';
@@ -97,7 +97,7 @@ export function interviewScene(run, stage, { playerName = '', callName = '' } = 
         value: answer.id,
         reply: [
           { who: 'you', face: 'neutral', name: you, text: `「${answer.say}」` },
-          ...(school ? [{ who: 'momoka', face: answer.momoka[0], name: '桜乃百花', text: answer.momoka[1].replaceAll('{name}', call) }] : []),
+          ...(school ? [{ who: 'momoka', face: answer.momoka[0], name: '桜乃百花', text: answer.momoka[1].replaceAll('{name}', momokaCall || call) }] : []),
           { who: 'hanane', face: answer.hanane[0], name: '天鷺羽音', text: answer.hanane[1] },
         ],
       })),

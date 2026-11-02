@@ -2569,7 +2569,12 @@
 }
 .shogi-game .shogi-game__name-split label { display: grid; gap: 0.2em; font-size: 0.9em; font-weight: 700; }
 .shogi-game .shogi-game__name-split .shogi-game__name-input { margin-bottom: 0.6em; }
-.shogi-game .shogi-game__name-preview { grid-column: 1 / -1; margin: 0 0 1em; font-size: 0.9em; }
+.shogi-game .shogi-game__name-preview { margin: 0 0 1em; font-size: 0.9em; line-height: 1.6; }
+/* 百花の呼び方(4つのボタンと、分けて入れたときの名字／名前)。 */
+.shogi-game .shogi-game__name-call { margin: 0 0 0.6em; padding: 0; border: 0; }
+.shogi-game .shogi-game__name-call legend { margin: 0 0 0.3em; padding: 0; font-size: 0.9em; font-weight: 700; }
+.shogi-game .shogi-game__name-call .shogi-game__name-modes { margin-bottom: 0.4em; }
+.shogi-game .shogi-game__name-modes--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .shogi-game .shogi-game__confirm-danger {
   border-color: var(--rust);
   color: var(--night-deep);

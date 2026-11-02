@@ -87,3 +87,10 @@ describe('立ち絵の身長差(docs/novel-scene-design.mdの8・9章)', () => {
     expect(portraitScale('hanane', ['hanane'])).toBe(1);
   });
 });
+
+describe('百花の呼び方を台詞に入れる', () => {
+  it('呼び方を渡せばそれを、なければ名前に「さん」を使う', () => {
+    expect(sceneText('{you}がいてくれたら', 'はるか', 'はるかちゃん')).toBe('はるかちゃんがいてくれたら');
+    expect(sceneText('{you}がいてくれたら', 'はるか')).toBe('はるかさんがいてくれたら');
+  });
+});

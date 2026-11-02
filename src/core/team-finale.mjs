@@ -25,9 +25,9 @@ const shortName = (name) => String(name ?? '').replace(/^天鷺|^桜乃/, '');
 /**
  * 結果発表の画面の形。まだ見ていない結果発表がなければnull。
  * @param {any} run 団体戦の大会
- * @param {{ playerName?: string }} [options]
+ * @param {{ playerName?: string, momokaCall?: string }} [options] momokaCall: 百花の呼び方
  */
-export function teamFinaleView(run, { playerName = '' } = {}) {
+export function teamFinaleView(run, { playerName = '', momokaCall = '' } = {}) {
   const finale = run?.finale;
   if (!finale || finale.seen) return null;
   const players = run.players ?? {};
@@ -71,7 +71,7 @@ export function teamFinaleView(run, { playerName = '' } = {}) {
     watch: rows.some((row) => row.pending),
     // 優勝を決めた試合なら、帯の文字(21章の3の1)。
     champion: finale.champion ? championBanner(run, finale.champion) : '',
-    lines: finaleLines({ format: finale.format, teamWon: Boolean(finale.teamWon), rows, decisive, userWon: userRow ? userRow.won : null, playerName }),
+    lines: finaleLines({ format: finale.format, teamWon: Boolean(finale.teamWon), rows, decisive, userWon: userRow ? userRow.won : null, playerName, momokaCall }),
   };
 }
 
@@ -85,11 +85,11 @@ function decisiveText(row, teamWon, school) {
 
 /**
  * 羽音と百花の一言(結果発表の最後。19章の7)。プロは羽音だけ(百花はプロのチームにいない)。
- * @param {{ format: string, teamWon: boolean, rows: any[], decisive: any, userWon: boolean | null, playerName?: string }} options
+ * @param {{ format: string, teamWon: boolean, rows: any[], decisive: any, userWon: boolean | null, playerName?: string, momokaCall?: string }} options momokaCall: 百花の呼び方(player-name.mjsのmomokaCallName。なければ名前に「さん」)
  * @returns {{ who: 'hanane' | 'momoka', text: string }[]}
  */
-export function finaleLines({ format, teamWon, rows, decisive, userWon, playerName = '' }) {
-  const name = playerName ? `${playerName}さん` : 'あなた';
+export function finaleLines({ format, teamWon, rows, decisive, userWon, playerName = '', momokaCall = '' }) {
+  const name = momokaCall || (playerName ? `${playerName}さん` : 'あなた');
   const rowOf = (id) => rows.find((row) => row.us.id === id) ?? null;
   const hanane = rowOf(TEAM_HANANE_ID);
   const momoka = rowOf(TEAM_MOMOKA_ID);

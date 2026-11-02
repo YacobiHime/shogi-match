@@ -93,6 +93,8 @@ const props = defineProps({
   /** 自分の対局の手数。 */
   userPly: { type: Number, default: 0 },
   playerName: { type: String, default: "" },
+  /** 百花の呼び方(player-name.mjsのmomokaCallName。空なら名前に「さん」)。 */
+  momokaCall: { type: String, default: "" },
   assetBaseUrl: { type: String, default: "." },
   title: { type: String, default: "仲間の盤" },
   backLabel: { type: String, default: "自分の盤へ戻る" },
@@ -142,7 +144,7 @@ function boardView(board: Board) {
     status,
     sfen: sfenAt(board.spec.key, entries, shown),
     lastMove: shown > 0 ? entries[shown - 1]?.move ?? "" : "",
-    usThought: peekThought(peekVoice(us), usScene, { ply: shown, playerName: props.playerName }),
+    usThought: peekThought(peekVoice(us), usScene, { ply: shown, playerName: props.playerName, momokaCall: props.momokaCall }),
     themThought: peekThought(peekVoice(them), themScene, { ply: shown }),
   };
 }

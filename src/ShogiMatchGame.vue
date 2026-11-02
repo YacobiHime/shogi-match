@@ -422,6 +422,7 @@
       ref="storyView"
       :asset-base-url="assetBaseUrl"
       :player-name="playerDisplayName(playerName)"
+      :momoka-call="momokaCallName(playerProfile)"
       @close="storyOpen = false"
     />
     <ShogiProblemSet
@@ -461,6 +462,7 @@
       :ryuo-holder="ryuoHolder"
       :player-name="playerDisplayName(playerName)"
       :player-call-name="playerCallName(playerProfile)"
+      :momoka-call="momokaCallName(playerProfile)"
       :oshi="ryuoOshi"
       :world-reset="worldResetState"
       :withdraw="tournamentWithdraw"
@@ -1997,6 +1999,7 @@
       :boards="teamPeekBoards"
       :games="teamPeekGames"
       :user-ply="moveCount"
+      :momoka-call="momokaCallName(playerProfile)"
       :player-name="playerDisplayName(playerName)"
       :asset-base-url="assetBaseUrl"
       :seat="teamPeekSeat"
@@ -2299,10 +2302,29 @@
               data-player-name-given
             >
           </label>
-          <p class="shogi-game__name-preview" aria-live="polite" data-player-name-preview>
-            名札: <strong>{{ namePreview.name || "あなた" }}</strong><template v-if="namePreview.family">　呼ばれ方: {{ namePreview.family }}さん</template>
-          </p>
         </div>
+        <fieldset class="shogi-game__name-call" data-player-name-call>
+          <legend>百花の呼び方</legend>
+          <div class="shogi-game__name-modes shogi-game__name-modes--four" role="radiogroup" aria-label="百花の呼び方">
+            <button
+              v-for="option in MOMOKA_SUFFIXES"
+              :key="option.id || 'san'"
+              type="button"
+              role="radio"
+              :aria-checked="callSuffix === option.id"
+              :data-player-name-suffix="option.id || 'san'"
+              @click="callSuffix = option.id as typeof callSuffix"
+            >{{ option.label }}</button>
+          </div>
+          <div v-if="nameMode === 'split'" class="shogi-game__name-modes" role="radiogroup" aria-label="百花が呼ぶ名前">
+            <button type="button" role="radio" :aria-checked="callPart === 'family'" data-player-name-part="family" @click="callPart = 'family'">名字で呼ぶ</button>
+            <button type="button" role="radio" :aria-checked="callPart === 'given'" data-player-name-part="given" @click="callPart = 'given'">名前で呼ぶ</button>
+          </div>
+        </fieldset>
+        <p class="shogi-game__name-preview" aria-live="polite" data-player-name-preview>
+          名札: <strong>{{ namePreview.name || "あなた" }}</strong><template v-if="nameMode === 'split' && namePreview.family">　呼ばれ方: {{ namePreview.family }}さん</template>
+          <br>百花から: <strong data-player-name-momoka>{{ momokaPreview }}</strong>
+        </p>
         <div>
           <button type="submit" class="shogi-game__confirm-primary" data-player-name-save>この名前にする</button>
           <button type="button" @click="nameDialogOpen = false">やめる</button>
@@ -2871,7 +2893,7 @@ import { loadWatchStore, noteWatchProgress, saveWatchStore } from "./core/ryuo-w
 import { myAbilityProfile, myRepertoire, myStyleAttack, worldRatingFor } from "./core/my-abilities.mjs";
 import { worldRating } from "./core/ryuo-strength.mjs";
 import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
-import { PLAYER_NAME_MAX, loadPlayerProfile, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerProfile } from "./core/player-name.mjs";
+import { MOMOKA_SUFFIXES, PLAYER_NAME_MAX, loadPlayerProfile, momokaCallName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerProfile } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { abilityRank, abilityValues } from "./core/player-abilities.mjs";
@@ -3949,7 +3971,7 @@ function tickPresenceNews() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function showTeamNews(item: any) {
   const player = teamCareer.value.current?.players?.[item.who];
-  const line = peekThought(peekVoice({ ...player, id: item.who }), item.won ? "win" : "loss", { ply: moveHistory.length, playerName: playerDisplayName(playerName.value) });
+  const line = peekThought(peekVoice({ ...player, id: item.who }), item.won ? "win" : "loss", { ply: moveHistory.length, playerName: playerDisplayName(playerName.value), momokaCall: momokaCallName(playerProfile.value) });
   const face = item.who === "hanane" ? `${props.assetBaseUrl}/characters/hanane-mini.webp?v=1`
     : item.who === "momoka" ? `${props.assetBaseUrl}/characters/sakurano-momoka-320.webp?v=${COACH_EXPRESSION_ASSET_VERSION}` : "";
   teamNewsCard.value = {
@@ -4407,14 +4429,21 @@ const familyDraft = ref("");
 const givenDraft = ref("");
 const nameInput = ref<HTMLInputElement | null>(null);
 const familyInput = ref<HTMLInputElement | null>(null);
-/** 決める前の見本(名札に出る名前)。 */
-const namePreview = computed(() => normalizePlayerProfile({ mode: nameMode.value, name: nameDraft.value, family: familyDraft.value, given: givenDraft.value }));
+/** 百花の呼び方(docs/player-name-design.md の3章)。''はさん(選ばない)。 */
+const callSuffix = ref<"" | "kun" | "chan" | "none">("");
+const callPart = ref<"family" | "given">("family");
+const nameDraftProfile = () => ({ mode: nameMode.value, name: nameDraft.value, family: familyDraft.value, given: givenDraft.value, call: { suffix: callSuffix.value, part: callPart.value } });
+/** 決める前の見本(名札に出る名前と、百花の呼び方)。 */
+const namePreview = computed(() => normalizePlayerProfile(nameDraftProfile()));
+const momokaPreview = computed(() => momokaCallName(nameDraftProfile()));
 function openNameDialog() {
   const profile = playerProfile.value;
   nameMode.value = profile.mode;
   nameDraft.value = profile.name;
   familyDraft.value = profile.family;
   givenDraft.value = profile.given;
+  callSuffix.value = profile.call.suffix;
+  callPart.value = profile.call.part;
   nameDialogOpen.value = true;
   void nextTick(() => (profile.mode === "split" ? familyInput.value : nameInput.value)?.focus());
 }
@@ -4428,7 +4457,7 @@ function chooseNameMode(mode: "single" | "split") {
 }
 /** 「この名前にする」。保存し、進めている竜王戦の期の表の名前も替える。 */
 function acceptPlayerName() {
-  playerProfile.value = savePlayerProfile(browserStorage(), { mode: nameMode.value, name: nameDraft.value, family: familyDraft.value, given: givenDraft.value });
+  playerProfile.value = savePlayerProfile(browserStorage(), nameDraftProfile());
   nameDialogOpen.value = false;
   const season = ryuoSeason.value;
   const user = season?.players?.[USER_ID];
