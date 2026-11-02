@@ -11559,6 +11559,8 @@ function recordRatedGame(matchResult: MatchResult) {
     event: tournament ? ryuoGame.value?.event ?? "ryuo" : "free",
     opponent: tournament ? ryuoOpponent.value?.name : undefined,
     stage: tournament ? ryuoGame.value?.label : undefined,
+    // 大会の世界の難易度(やこびノートの「竜王戦（世界難度5）」。docs/tournament-strength-spread-design.mdの10章)。
+    difficulty: tournament ? tournamentSeasonOf(ryuoGame.value)?.settings?.difficulty : undefined,
   });
   ratingState.value = applied.state;
   // 棋力カルテに材料があれば、Eloの代わりにカルテの見立てをレーティングにする(docs/skill-assessment-design.mdの6-3)。

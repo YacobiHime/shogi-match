@@ -897,7 +897,7 @@ import {
 } from "./core/player-rating.mjs";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import { myAbilityProfile, myRepertoire } from "./core/my-abilities.mjs";
-import { difficultyName } from "./core/tournament-world.mjs";
+import { difficultyName, worldDifficultyText } from "./core/tournament-world.mjs";
 import { ABILITIES, abilityRank, abilityValues } from "./core/player-abilities.mjs";
 import { HANANE } from "./core/ryuo-story.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
@@ -975,7 +975,7 @@ type RatingState = {
 };
 /** レーティングの記録。対局の結果には、棋戦・相手・段階も付く(棋戦を記録する前の対局は、自由対局)。 */
 type HistoryRecord = {
-  rating: number; outcome?: string; at?: number; opponentLevel?: number; event?: string; opponent?: string; stage?: string;
+  rating: number; outcome?: string; at?: number; opponentLevel?: number; event?: string; opponent?: string; stage?: string; difficulty?: number;
 };
 
 type ProfileState = {
@@ -1507,6 +1507,11 @@ const eventRows = computed(() => RATED_EVENTS.map(({ id, label }) => {
 }).filter(({ games }) => games > 0));
 
 const EVENT_LABEL: Record<string, string> = Object.fromEntries(RATED_EVENTS.map(({ id, label }) => [id, label]));
+/** 棋戦の名前に世界の難易度を添える(「竜王戦（世界難度5）」。難易度を残す前の記録は名前だけ)。 */
+function eventWithDifficulty(label: string, difficulty: unknown) {
+  const text = worldDifficultyText(difficulty);
+  return text ? `${label}（${text}）` : label;
+}
 /** 最近の対局の数(枠の中で動かして見る)。 */
 const RECENT_GAME_LIMIT = 30;
 /** 最近の対局(新しい順)。棋戦・段階・相手・結果と、終局後のレーティング。 */
@@ -1519,7 +1524,7 @@ const recentGames = computed(() => {
     .reverse()
     .map(({ entry, before }, index) => ({
       key: `${entry.at ?? 0}-${index}`,
-      event: EVENT_LABEL[entry.event ?? "free"] ?? EVENT_LABEL.free,
+      event: eventWithDifficulty(EVENT_LABEL[entry.event ?? "free"] ?? EVENT_LABEL.free, entry.difficulty),
       stage: entry.stage ?? "",
       opponent: [entry.opponent, Number.isFinite(entry.opponentLevel) ? `Lv.${entry.opponentLevel}` : ""].filter(Boolean).join(" "),
       outcome: entry.outcome as GameOutcome,

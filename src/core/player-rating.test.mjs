@@ -292,3 +292,13 @@ describe('player rating', () => {
     expect(createRatingState().deviation).toBeNull();
   });
 });
+
+describe('大会の記録に世界の難易度を残す', () => {
+  it('大会の対局は難易度を残し、自由対局は残さない', async () => {
+    const { applyRatedGame, createRatingState } = await import('./player-rating.mjs');
+    const ryuo = applyRatedGame(createRatingState(), { opponentLevel: 15, outcome: 'win', event: 'ryuo', stage: '6組 1回戦', difficulty: 5 });
+    expect(ryuo.state.history.at(-1)).toMatchObject({ event: 'ryuo', stage: '6組 1回戦', difficulty: 5 });
+    const free = applyRatedGame(createRatingState(), { opponentLevel: 15, outcome: 'win', difficulty: 5 });
+    expect(free.state.history.at(-1).difficulty).toBeUndefined();
+  });
+});

@@ -239,3 +239,20 @@
 - `src/core/ryuo-speech.mjs`：難易度の一言にLvの段級位の名前と、本物の一言。
 - `src/ShogiTournament.vue`・`src/ShogiMeijin.vue`・`src/ShogiShoreikai.vue`・`src/ShogiKenshukai.vue`：難易度のシートの選択肢と、行の値（本物）・説明。`src/YakobiNote.vue`：能力の物差しの難易度の呼び名。
 - テスト：`tournament-world.test.mjs`（本物の換算・選び方・選択肢）、`engine-game.test.mjs`（本物の本局と善彦）、`ryuo.test.mjs`（本物の期の善彦Lv49）、`ryuo-speech.test.mjs`（段級位の名前と本物の一言）。
+
+## 10. 記録に世界の難易度を残す（2026-11-02、ユーザーの依頼「難易度も記録に残して『竜王戦（世界難度5）』というように出すようにして」）
+
+- 一言で：やこびノートの「最近の対局」で、大会の対局は「竜王戦（世界難度5）」のように、その期の世界の難易度を添える。
+- 解く課題：大会の対局の記録には相手のLvと段階しかなく、どの難易度の世界で勝ったのかが分からなかった。
+- 決めたこと：
+  - レーティングの記録（`player-rating.mjs`の`applyRatedGame`の`history`）に、大会の対局だけ`difficulty`（その期の`settings.difficulty`。対局画面の`recordRatedGame`が`tournamentSeasonOf`で期を探す）を残す。自由対局には残さない。
+  - 見せ方は`tournament-world.mjs`の`worldDifficultyText`（「世界難度5」、いちばん上の「本物」は「本物の世界」）。ノートの`eventWithDifficulty`が棋戦の名前のあとに全角の括弧で添える。
+  - 前に残した記録は難易度を持たないので、今までどおり名前だけ（さかのぼって足さない）。
+- 根拠：G:5（ご褒美の記録。どの世界で勝ったかが分かると、上の難易度での白星が誇れる）、UD:2（状態を言葉で見せる）。
+
+### 実装（2026-11-02、実装・自動テスト済み）
+
+- 処理とテスト：`player-rating.mjs`（`difficulty`）、`tournament-world.mjs`（`worldDifficultyText`）、`player-rating.test.mjs`・`tournament-world.test.mjs`。
+- 画面：対局画面の`recordRatedGame`、やこびノートの`recentGames`。
+- ブラウザ（390×844・820×1180・1366×768）：記録を3局入れた保存で、ノートの「成績」の「最近の対局」に「名人戦（世界難度13） C級2組 1回戦」「竜王戦（世界難度5） 6組ランキング戦 1回戦」「自由対局」と出ることを見た。
+- まだ確かめていないこと：実際に大会で指して記録が残るところ（保存の形はテストで、表示はブラウザで確かめた）。

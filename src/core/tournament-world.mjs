@@ -65,6 +65,15 @@ export function levelGradeName(level) {
 }
 
 /** 難易度の番号の呼び名(本物は「本物」)。 */
+/**
+ * 記録に添える世界の難易度(「世界難度5」。本物は「本物の世界」)。難易度のない記録は空。
+ * @param {unknown} difficulty
+ */
+export function worldDifficultyText(difficulty) {
+  if (!Number.isInteger(difficulty)) return '';
+  return difficulty === REAL_DIFFICULTY ? '本物の世界' : `世界難度${difficulty}`;
+}
+
 export function difficultyName(difficulty) {
   return difficulty === REAL_DIFFICULTY ? '本物' : String(difficulty);
 }

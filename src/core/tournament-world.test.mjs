@@ -137,3 +137,13 @@ describe('難易度の目安と本物の世界(docs/tournament-strength-spread-d
     expect(usual.find(({ value }) => value === 7).description).toContain('いつもの世界');
   });
 });
+
+describe('記録に添える世界の難易度', () => {
+  it('「世界難度5」、本物は「本物の世界」、難易度のない記録は空', async () => {
+    const { worldDifficultyText } = await import('./tournament-world.mjs');
+    const { REAL_DIFFICULTY } = await import('./ryuo-strength.mjs');
+    expect(worldDifficultyText(5)).toBe('世界難度5');
+    expect(worldDifficultyText(REAL_DIFFICULTY)).toBe('本物の世界');
+    expect(worldDifficultyText(undefined)).toBe('');
+  });
+});

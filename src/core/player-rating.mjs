@@ -200,12 +200,14 @@ export function levelRatingText(state, level) {
  *   event?: string,
  *   opponent?: string,
  *   stage?: string,
+ *   difficulty?: number,
  *   at?: number,
  * }} game
  * colorはプレイヤーの手番、profileは分類(USAGE_CATEGORIES)ごとの戦型・戦法・囲いの名前。
- * eventは棋戦(RATED_EVENTSのid。省略すると自由対局)、opponentは相手の名前、stageは棋戦の中の段階(「決勝トーナメント 準決勝」など)。
+ * eventは棋戦(RATED_EVENTSのid。省略すると自由対局)、opponentは相手の名前、stageは棋戦の中の段階(「決勝トーナメント 準決勝」など)、
+ * difficultyは大会の世界の難易度(1〜。本物はREAL_DIFFICULTY。docs/tournament-strength-spread-design.mdの10章)。
  */
-export function applyRatedGame(state, { opponentLevel, outcome, color, profile, event = 'free', opponent: opponentName, stage, at = Date.now() }) {
+export function applyRatedGame(state, { opponentLevel, outcome, color, profile, event = 'free', opponent: opponentName, stage, difficulty, at = Date.now() }) {
   const eventId = RATED_EVENT_IDS.has(event) ? event : 'free';
   const score = outcome === 'win' ? 1 : outcome === 'draw' ? 0.5 : 0;
   const opponent = levelRating(opponentLevel);
@@ -240,6 +242,7 @@ export function applyRatedGame(state, { opponentLevel, outcome, color, profile, 
       event: eventId,
       ...(opponentName ? { opponent: String(opponentName) } : {}),
       ...(stage ? { stage: String(stage) } : {}),
+      ...(eventId !== 'free' && Number.isInteger(difficulty) ? { difficulty } : {}),
     }].slice(-MAX_HISTORY),
   };
   return { state: next, before: Math.round(state.rating), after, delta: after - Math.round(state.rating) };
