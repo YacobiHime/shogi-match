@@ -38,3 +38,13 @@ describe("問題集の解いた記録と時間(docs/problem-set-timing-design.md
     expect(loadProblemProgress(storage).solved.a).toEqual({ firstTry: true, bestMs: 5000, lastMs: 5000 });
   });
 });
+
+describe('見出しの時計の数字', () => {
+  it('「0:03」「12:05」「1:02:03」の形にする', async () => {
+    const { clockDigits } = await import('./problem-progress.mjs');
+    expect(clockDigits(3400)).toBe('0:03');
+    expect(clockDigits(725000)).toBe('12:05');
+    expect(clockDigits(3723000)).toBe('1:02:03');
+    expect(clockDigits(-5)).toBe('0:00');
+  });
+});

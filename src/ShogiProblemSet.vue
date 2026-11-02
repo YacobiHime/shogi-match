@@ -6,6 +6,21 @@
         <span aria-hidden="true">←</span> {{ backLabel }}
       </button>
       <h1 id="shogi-problems-title">{{ view === "problem" && currentProblem ? problemHeading(currentProblem) : PROBLEM_SET_TITLE }}</h1>
+      <!--
+        解いている時間の時計(docs/problem-set-timing-design.mdの3章)。見出しの右にいつも同じ場所で大きく出す。
+        正解したら止めて、その時間のまま光らせる。答えを見たら測らないので消す。自己ベストがあれば下に小さく。
+      -->
+      <p
+        v-if="view === 'problem' && currentProblem && !answerSeen"
+        class="shogi-problems__timer"
+        :class="{ 'shogi-problems__timer--done': answered }"
+        role="timer"
+        :aria-label="`解いている時間 ${clockText}`"
+        data-problem-clock
+      >
+        <span class="shogi-problems__timer-digits"><span aria-hidden="true">⏱</span>{{ clockDigitsText }}</span>
+        <small v-if="currentBestText">ベスト {{ currentBestText }}</small>
+      </p>
     </header>
 
     <!-- 問題の一覧 -->
@@ -145,8 +160,6 @@
                 data-solve-time
               >{{ solveResult.text }}</small>
             </p>
-            <!-- 解いている時間(docs/problem-set-timing-design.md)。正解したら止める。答えを見たら測らない。 -->
-            <p v-if="!answered && phase !== 'answer' && !answerSeen" class="shogi-problems__clock" data-problem-clock aria-hidden="true">⏱ {{ clockText }}</p>
             <p v-if="phase === 'solved'" class="shogi-problems__free-note">盤の駒は、先手も後手も自由に動かせるよ。満足するまで確かめてみてね。</p>
             <!-- 答えを見る: 手順を1手ずつ盤に並べる（詰将棋・図巧）。 -->
             <div v-if="phase === 'answer'" class="shogi-tutorial__actions shogi-problems__answer-controls">
@@ -212,7 +225,7 @@ import { formatHintMove } from "./core/match-assists.mjs";
 import { dueReviewId, loadReviewQueue, recordReviewResult, saveReviewQueue } from "./core/review-queue.mjs";
 import { isReviewProblemId, loadReviewProblems, reviewProblemById } from "./core/review-problems.mjs";
 import { loadPlayStreak, recordPlay, savePlayStreak } from "./core/play-streak.mjs";
-import { solveTimeResult, solveTimeText } from "./core/problem-progress.mjs";
+import { clockDigits, solveTimeResult, solveTimeText } from "./core/problem-progress.mjs";
 import { appendUsiMove, createGameRecord, enumerateLegalMoves } from "./game-state";
 import { JISSEN_TSUME_SOURCE } from "./data/jissen-tsume-problems.mjs";
 import { TSUME_PROBLEM_SOURCE } from "./data/tsume-problems.mjs";
@@ -466,6 +479,12 @@ onBeforeUnmount(() => {
   if (clockTimer) clearInterval(clockTimer);
 });
 const clockText = computed(() => solveTimeText(clockMs.value).replace(/\.\d秒$/, "秒"));
+/** 見出しの時計の数字(「0:03」)と、いまの問題の自己ベスト(「0:08」)。 */
+const clockDigitsText = computed(() => clockDigits(clockMs.value));
+const currentBestText = computed(() => {
+  const best = currentProblem.value ? solvedRecord(currentProblem.value)?.bestMs : undefined;
+  return best ? clockDigits(best) : "";
+});
 
 let timers: ReturnType<typeof setTimeout>[] = [];
 function clearTimers() {
@@ -816,13 +835,26 @@ onBeforeUnmount(() => boardBoxObserver?.disconnect());
   color: #fff;
   font-size: 1.05rem;
 }
-/* 解いている時間と、正解の時間(docs/problem-set-timing-design.md)。自己ベストは緑で(盤の色とは別の表示)。 */
-.shogi-game .shogi-problems__clock {
-  margin: 0;
-  color: #cfd8de;
-  font-size: 0.85rem;
+/*
+ * 解いている時間の時計(docs/problem-set-timing-design.mdの3章)。見出しの右に、数字の幅を固定して大きく出す。
+ * 正解したら止めて緑の縁で光らせる(自己ベストの緑と同じ。盤の色とは別の表示)。
+ */
+.shogi-game .shogi-problems__timer {
+  display: grid;
+  justify-items: end;
+  flex: none;
+  margin: 0 0 0 auto;
+  padding: 0.2rem 0.65rem;
+  border: 0.12rem solid rgba(255, 252, 244, 0.35);
+  border-radius: 0.6rem;
+  color: #fffcf4;
+  background: rgba(15, 24, 40, 0.55);
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
+.shogi-game .shogi-problems__timer-digits { display: inline-flex; gap: 0.3rem; align-items: baseline; font-size: 1.35rem; font-weight: 900; letter-spacing: 0.02em; }
+.shogi-game .shogi-problems__timer small { color: #cfd8de; font-size: 0.7rem; font-weight: 700; }
+.shogi-game .shogi-problems__timer--done { border-color: #9fe0b4; color: #9fe0b4; }
 .shogi-game .shogi-problems__solve-time {
   margin-left: 0.6em;
   font-size: 0.85em;

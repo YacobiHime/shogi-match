@@ -52,6 +52,15 @@ function validMs(value) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
+/** 時計の数字(「0:03」「12:05」「1:02:03」)。解いている間に見出しに出す(docs/problem-set-timing-design.mdの3章)。 */
+export function clockDigits(ms) {
+  const total = Math.floor(Math.max(0, Number.isFinite(ms) ? ms : 0) / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = String(total % 60).padStart(2, '0');
+  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
+}
+
 /** 解く時間の言い方(「12.3秒」「1分05秒」)。60分を超えたら「60分以上」。 */
 export function solveTimeText(ms) {
   if (!(typeof ms === "number" && Number.isFinite(ms) && ms >= 0)) return "";
