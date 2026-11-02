@@ -81,3 +81,84 @@ export function estimateTextWidth(text, fontPx) {
   for (const char of String(text ?? '')) units += /[\u0000-ÿ｡-ﾟ]/.test(char) ? 0.55 : 1;
   return units * fontPx;
 }
+
+// ---- コメントの出し方(docs/tournament-relay-design.mdの50章)
+// 画面のコマ数(リフレッシュレート)が少ないと、流れる字は1コマで大きく跳び、ぶれて読みにくい。
+// 1コマに動く幅は速さに比例するので、ゆっくり流すか、動かさずに出す。
+
+/**
+ * 出し方と、1つのコメントを見せる時間(ミリ秒。速さ×1のとき)。
+ * flow: 4秒で流す(ニコニコと同じ)、slow: 8秒で流す(1コマに動く幅が半分。30コマの画面でも60コマで流すのと同じくらい)、
+ * still: 動かさずにその場に3秒出す(字は跳ばない)。
+ */
+export const COMMENT_FLOWS = Object.freeze({
+  flow: Object.freeze({ ms: DANMAKU_DURATION_MS, label: '流す', short: '', note: '右から左へ流す（ふつう）' }),
+  slow: Object.freeze({ ms: DANMAKU_DURATION_MS * 2, label: 'ゆっくり流す', short: 'ゆっくり', note: '速さを半分にする。字がぶれて読みにくい画面に' }),
+  still: Object.freeze({ ms: 3000, label: '止めて出す', short: '止める', note: '動かさずに、その場に3秒出す' }),
+});
+/** @typedef {keyof typeof COMMENT_FLOWS} CommentFlow */
+
+/** 保存した値を出し方にする(知らない値はふつうの「流す」)。 @returns {CommentFlow} */
+export function normalizeCommentFlow(value) {
+  return value === 'slow' || value === 'still' ? value : 'flow';
+}
+
+/**
+ * 1コマの間(ミリ秒)の並びの真ん中の値。少なすぎるときはnull(測れていない)。
+ * 重い処理で1コマだけ長くなっても引きずられないよう、平均ではなく真ん中を使う。
+ * @param {number[]} intervals
+ */
+export function medianFrameInterval(intervals) {
+  const list = intervals.filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+  if (list.length < 20) return null;
+  const middle = Math.floor(list.length / 2);
+  return list.length % 2 ? list[middle] : (list[middle - 1] + list[middle]) / 2;
+}
+
+/**
+ * 測った1コマの間から、合う出し方を選ぶ。45コマ以上なら流す、22コマ以上ならゆっくり流す、それより少なければ止めて出す。
+ * 測れていなければ流す(ふつう)。
+ * @param {number | null} interval 1コマの間(ミリ秒)
+ * @returns {CommentFlow}
+ */
+export function flowForFrameInterval(interval) {
+  if (!interval) return 'flow';
+  if (interval <= 1000 / 45) return 'flow';
+  if (interval <= 1000 / 22) return 'slow';
+  return 'still';
+}
+
+/** @returns {{ placed: { start: number, duration: number, left: number, top: number, width: number, height: number }[] }} */
+export function createStillBoard() {
+  return { placed: [] };
+}
+
+/**
+ * 止めて出すコメントの位置を決める(欄の中の左と上、px)。見せているあいだに重なるコメントを避けて、
+ * 無作為の位置を何度か試す。空きがなければ最後に試した位置に置く(待たない)。
+ * @param {ReturnType<typeof createStillBoard>} state
+ * @param {{ start: number, width: number, height: number, duration: number, areaWidth: number, areaHeight: number,
+ *   gap?: number, random?: () => number, tries?: number }} input
+ * @returns {{ left: number, top: number, crowded: boolean }}
+ */
+export function placeStill(state, { start, width, height, duration, areaWidth, areaHeight, gap = 0, random = Math.random, tries = 24 }) {
+  state.placed = state.placed.filter((item) => item.start + item.duration > start);
+  const near = state.placed.filter((item) => item.start < start + duration);
+  const roomX = Math.max(0, areaWidth - width);
+  const roomY = Math.max(0, areaHeight - height);
+  const overlaps = (left, top) => near.some((item) => left < item.left + item.width + gap && item.left < left + width + gap
+    && top < item.top + item.height && item.top < top + height);
+  let left = 0;
+  let top = 0;
+  let crowded = true;
+  for (let index = 0; index < tries; index += 1) {
+    left = random() * roomX;
+    top = random() * roomY;
+    if (!overlaps(left, top)) {
+      crowded = false;
+      break;
+    }
+  }
+  state.placed.push({ start, duration, left, top, width, height });
+  return { left, top, crowded };
+}

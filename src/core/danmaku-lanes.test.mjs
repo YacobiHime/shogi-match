@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { collides, createDanmaku, estimateTextWidth, placeComment } from './danmaku-lanes.mjs';
+import {
+  COMMENT_FLOWS, collides, createDanmaku, createStillBoard, estimateTextWidth, flowForFrameInterval, medianFrameInterval, normalizeCommentFlow, placeComment, placeStill,
+} from './danmaku-lanes.mjs';
 
 const W = 400;
 
@@ -84,5 +86,55 @@ describe('estimateTextWidth', () => {
   it('全角は1字、半角は0.55字で見積もる', () => {
     expect(estimateTextWidth('角換わり', 20)).toBe(80);
     expect(estimateTextWidth('8888', 20)).toBeCloseTo(44);
+  });
+});
+
+describe('コメントの出し方(50章)', () => {
+  it('ゆっくり流すは、流す時間が倍(1コマに動く幅が半分)。止めて出すは3秒', () => {
+    expect(COMMENT_FLOWS.slow.ms).toBe(COMMENT_FLOWS.flow.ms * 2);
+    expect(COMMENT_FLOWS.still.ms).toBe(3000);
+    expect(normalizeCommentFlow('slow')).toBe('slow');
+    expect(normalizeCommentFlow('bogus')).toBe('flow');
+    expect(normalizeCommentFlow(undefined)).toBe('flow');
+  });
+
+  it('画面のコマ数で出し方を選ぶ(60・120コマは流す、30コマはゆっくり、15コマは止める)。重い1コマには引きずられない', () => {
+    const frames = (ms, count = 40) => Array.from({ length: count }, () => ms);
+    expect(flowForFrameInterval(medianFrameInterval(frames(1000 / 60)))).toBe('flow');
+    expect(flowForFrameInterval(medianFrameInterval(frames(1000 / 120)))).toBe('flow');
+    expect(flowForFrameInterval(medianFrameInterval(frames(1000 / 30)))).toBe('slow');
+    expect(flowForFrameInterval(medianFrameInterval(frames(1000 / 15)))).toBe('still');
+    expect(flowForFrameInterval(medianFrameInterval([...frames(1000 / 60, 36), 300, 400, 500, 250]))).toBe('flow');
+    // 測れていなければ、ふつうに流す。
+    expect(medianFrameInterval(frames(16, 5))).toBeNull();
+    expect(flowForFrameInterval(null)).toBe('flow');
+  });
+
+  it('止めて出すコメントは、見せているあいだ重ならない場所に置き、欄からはみ出さない', () => {
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    const state = createStillBoard();
+    const placed = [];
+    for (let index = 0; index < 8; index += 1) {
+      const spot = placeStill(state, { start: index * 300, width: 120, height: 24, duration: 3000, areaWidth: 600, areaHeight: 400, gap: 8, random });
+      expect(spot.crowded).toBe(false);
+      expect(spot.left).toBeGreaterThanOrEqual(0);
+      expect(spot.left + 120).toBeLessThanOrEqual(600);
+      expect(spot.top + 24).toBeLessThanOrEqual(400);
+      placed.push(spot);
+    }
+    for (let a = 0; a < placed.length; a += 1) {
+      for (let b = a + 1; b < placed.length; b += 1) {
+        const apart = placed[a].left + 128 <= placed[b].left || placed[b].left + 128 <= placed[a].left
+          || placed[a].top + 24 <= placed[b].top || placed[b].top + 24 <= placed[a].top;
+        expect(apart).toBe(true);
+      }
+    }
+    // 見せ終わったコメントは忘れる。
+    placeStill(state, { start: 20000, width: 120, height: 24, duration: 3000, areaWidth: 600, areaHeight: 400, random });
+    expect(state.placed).toHaveLength(1);
   });
 });

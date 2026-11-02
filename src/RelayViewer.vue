@@ -63,11 +63,12 @@
           <!-- 視聴者のコメント(右から左へ流れる)。押せない飾りで、盤の操作は妨げない。 -->
           <!-- 段は、前のコメントに追いつかない段を上から選ぶ(ニコニコ動画のように重ならない。33章)。 -->
           <div v-if="commentsOn && !reducedMotion && !tsume" ref="danmakuEl" class="relay__danmaku" aria-hidden="true">
+            <!-- 止めて出すコメントは、流さずにその場で現れて消える(画面のコマ数が少なくても字が跳ばない。50章)。 -->
             <span
               v-for="item in flying"
               :key="item.id"
-              :class="['relay__comment', item.tone ? `relay__comment--${item.tone}` : '', item.big ? 'relay__comment--big' : '']"
-              :style="{ top: `${item.top}px`, animationDelay: `${item.delay}ms`, animationDuration: `${item.duration}ms` }"
+              :class="['relay__comment', item.tone ? `relay__comment--${item.tone}` : '', item.big ? 'relay__comment--big' : '', item.still ? 'relay__comment--still' : '']"
+              :style="{ top: `${item.top}px`, left: item.still ? `${item.left}px` : undefined, animationDelay: `${item.delay}ms`, animationDuration: `${item.duration}ms` }"
               @animationend="land(item.id)"
             >{{ item.text }}</span>
           </div>
@@ -214,7 +215,19 @@
           <button type="button" aria-label="1手進む" :disabled="cursor >= ready" data-relay-next @click="seek(cursor + 1)">▷</button>
           <button type="button" aria-label="いちばん新しい手へ" :disabled="cursor >= ready" @click="seek(ready)">⏭</button>
           <button type="button" class="relay__toggle" :aria-label="`速さ ×${speed}。押すと変える`" data-relay-speed @click="cycleSpeed">×{{ speed }}</button>
-          <button type="button" class="relay__toggle" :aria-pressed="commentsOn" aria-label="コメントの表示" data-relay-comments @click="commentsOn = !commentsOn">コメ{{ commentsOn ? "" : "✕" }}</button>
+          <!-- コメントの出し方(流す・ゆっくり流す・止めて出す・出さない)を選ぶシートを開く(50章)。 -->
+          <button
+            type="button"
+            class="relay__toggle relay__comment-mode"
+            :aria-label="`コメント：${commentModeLabel}。押すと出し方を選ぶ`"
+            aria-haspopup="dialog"
+            :aria-expanded="flowSheetOpen"
+            :data-comment-flow="commentsOn ? commentFlow : 'off'"
+            data-relay-comments
+            @click="flowSheetOpen = true"
+          >
+            <span>コメ{{ commentsOn ? "" : "✕" }}</span><small v-if="commentsOn && COMMENT_FLOWS[commentFlow].short">{{ COMMENT_FLOWS[commentFlow].short }}</small>
+          </button>
         </div>
         <!-- 中継の楽しみ(24章)。次の一手クイズ・見どころ再生・大盤解説・研究ノート。 -->
         <div class="relay__extras">
@@ -241,6 +254,22 @@
       </section>
     </div>
     <p v-if="errorText" class="relay__error" role="alert">{{ errorText }}</p>
+    <!-- コメントの出し方のシート(50章)。選ぶとすぐ閉じる。外側を押すか、戻る操作でも閉じる。 -->
+    <div v-if="flowSheetOpen" class="relay__flow-sheet" role="dialog" aria-modal="true" aria-label="コメントの出し方" data-relay-flow-sheet @click.self="flowSheetOpen = false">
+      <div class="relay__flow-panel">
+        <h3>コメントの出し方</h3>
+        <button
+          v-for="option in commentModeOptions"
+          :key="option.id"
+          type="button"
+          :aria-pressed="option.current"
+          :data-relay-flow="option.id"
+          @click="chooseCommentMode(option.id)"
+        >
+          <b>{{ option.label }}<span v-if="option.current" aria-hidden="true"> ✓</span></b><small>{{ option.note }}</small>
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -258,7 +287,10 @@ import { addNote, highlightPlan, loadNotes, loadQuiz, quizChoices, saveNotes, sa
 import { judgeTsumeMove, resignTsume, shortestMate, tsumeHint } from "./core/relay-tsume.mjs";
 import { addReviewProblems, buildReviewProblem, loadReviewProblems, saveReviewProblems } from "./core/review-problems.mjs";
 import { loadRelayStore, markRelaySeen, saveRelayStore } from "./core/relay-store.mjs";
-import { DANMAKU_DURATION_MS, DANMAKU_GAP_EM, createDanmaku, estimateTextWidth, placeComment } from "./core/danmaku-lanes.mjs";
+import {
+  COMMENT_FLOWS, DANMAKU_GAP_EM, createDanmaku, createStillBoard, estimateTextWidth, flowForFrameInterval, medianFrameInterval, normalizeCommentFlow,
+  placeComment, placeStill, type CommentFlow,
+} from "./core/danmaku-lanes.mjs";
 import { createFormationState, detectFormationSnapshot, updateFormationState } from "./core/formation-tracker.mjs";
 import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
@@ -313,8 +345,9 @@ const MOVE_BASE_MS = 750;
 const THINK_MAX_MS = 2600;
 /** 札を出しているあいだ、次の手を待つ時間。 */
 const CARD_HOLD_MS = { long: 2200, short: 1100 } as const;
-/** コメントが流れる時間(ニコニコ動画と同じ4秒。45章)。 */
-const COMMENT_MS = DANMAKU_DURATION_MS;
+/** 画面のコマ数を測る時間(ミリ秒)と、開いてから測り始めるまでの待ち(開いた直後の重い処理を避ける。50章)。 */
+const FRAME_PROBE_MS = 1500;
+const FRAME_PROBE_DELAY_MS = 1200;
 /** 1行の高さ(字の大きさに対する倍率)と、コメントを置く範囲(盤の欄の高さに対する割合。下の端は下コメと名札に空ける)。 */
 const LANE_HEIGHT_EM = 1.35;
 const LANE_AREA = { top: 0.03, bottom: 0.8 } as const;
@@ -335,9 +368,14 @@ function browserStorage(): Storage | null {
 function loadView() {
   try {
     const parsed = JSON.parse(browserStorage()?.getItem(VIEW_KEY) ?? "null");
-    return { speed: [1, 2, 4].includes(parsed?.speed) ? parsed.speed : 1, comments: parsed?.comments !== false };
+    return {
+      speed: [1, 2, 4].includes(parsed?.speed) ? parsed.speed : 1,
+      comments: parsed?.comments !== false,
+      // flowは自分で選んだ出し方だけ残す(選んでいなければ、開くたびに画面のコマ数で決める。50章)。
+      flow: parsed?.flow ? normalizeCommentFlow(parsed.flow) : null,
+    };
   } catch {
-    return { speed: 1, comments: true };
+    return { speed: 1, comments: true, flow: null };
   }
 }
 const saved = loadView();
@@ -407,6 +445,26 @@ const cursor = ref(0);
 const playing = ref(true);
 const speed = ref<number>(saved.speed);
 const commentsOn = ref<boolean>(saved.comments);
+/** コメントの出し方(50章)。chosenFlowは自分で選んだもの(なければ画面のコマ数で決めた出し方を使う)。 */
+const chosenFlow = ref<CommentFlow | null>(saved.flow);
+const autoFlow = ref<CommentFlow>("flow");
+const commentFlow = computed<CommentFlow>(() => chosenFlow.value ?? autoFlow.value);
+const flowSheetOpen = ref(false);
+const commentModeLabel = computed(() => (commentsOn.value ? COMMENT_FLOWS[commentFlow.value].label : "出さない"));
+const commentModeOptions = computed(() => [
+  ...(Object.keys(COMMENT_FLOWS) as CommentFlow[]).map((id) => ({
+    id: id as CommentFlow | "off", label: COMMENT_FLOWS[id].label, note: COMMENT_FLOWS[id].note, current: commentsOn.value && commentFlow.value === id,
+  })),
+  { id: "off" as CommentFlow | "off", label: "出さない", note: "コメントを隠す（運営の帯と下の大きな字も）", current: !commentsOn.value },
+]);
+function chooseCommentMode(id: CommentFlow | "off") {
+  if (id === "off") commentsOn.value = false;
+  else {
+    commentsOn.value = true;
+    chosenFlow.value = id;
+  }
+  flowSheetOpen.value = false;
+}
 /**
  * 盤面の反転(32章)。分身が後手の対局は、はじめから分身の側(後手が手前)で見る。ほかは先手が手前。
  * 局ごとに選ぶので保存しない(次の局は、また手前が先手か分身の側から)。
@@ -424,9 +482,9 @@ let frame = 0;
 let thinkStart = 0;
 let thinkDuration = 1;
 
-watch([speed, commentsOn], () => {
+watch([speed, commentsOn, chosenFlow], () => {
   try {
-    browserStorage()?.setItem(VIEW_KEY, JSON.stringify({ speed: speed.value, comments: commentsOn.value }));
+    browserStorage()?.setItem(VIEW_KEY, JSON.stringify({ speed: speed.value, comments: commentsOn.value, ...(chosenFlow.value ? { flow: chosenFlow.value } : {}) }));
   } catch {
     // 保存できなくても、その場では使える。
   }
@@ -518,6 +576,7 @@ function seek(target: number) {
   waiting.value = false;
   flying.value = [];
   danmaku = createDanmaku();
+  stillBoard = createStillBoard();
   banner.value = null;
   under.value = null;
   clearUnderWaits();
@@ -573,11 +632,23 @@ function playSound(ply: number) {
 }
 
 // ---- 流れるコメント
-type Flying = { id: number; text: string; tone: string; big: boolean; top: number; delay: number; duration: number };
+type Flying = { id: number; text: string; tone: string; big: boolean; top: number; left: number; still: boolean; delay: number; duration: number };
 const flying = shallowRef<Flying[]>([]);
 const danmakuEl = ref<HTMLElement | null>(null);
 let flyId = 0;
 let danmaku = createDanmaku();
+let stillBoard = createStillBoard();
+/** 1つのコメントを見せる時間(ミリ秒)。出し方と再生の速さで決める。大きな字の流れるコメントは少し長く(50章)。 */
+function commentMs(big = false) {
+  const flow = commentFlow.value;
+  return (COMMENT_FLOWS[flow].ms * (big && flow !== "still" ? 1.15 : 1)) / Math.sqrt(speed.value);
+}
+// 出し方を変えたら、いま出ているコメントは消して、新しい出し方で出し直す(混ざると重なるため)。
+watch(commentFlow, () => {
+  flying.value = [];
+  danmaku = createDanmaku();
+  stillBoard = createStillBoard();
+});
 let measureContext: CanvasRenderingContext2D | null | undefined;
 /** 字の幅(px)。canvasで測り、測れなければ見積もる。 */
 function textWidth(text: string, fontPx: number, family: string) {
@@ -605,8 +676,26 @@ function launch(list: { text: string; tone: string; big: boolean; delay: number;
   const family = style?.fontFamily || "sans-serif";
   const bounds = laneBounds(area, height);
   const now = performance.now();
+  const still = commentFlow.value === "still";
   const added = list.map((item) => {
     const scale = item.big ? 1.4 : item.tone === "gold" ? 1.12 : 1;
+    if (still) {
+      const width = textWidth(item.text, fontPx * scale, family);
+      const spot = placeStill(stillBoard, {
+        start: now + item.delay,
+        width,
+        height: fontPx * scale * LANE_HEIGHT_EM,
+        duration: item.duration,
+        areaWidth: boardWidth.value,
+        areaHeight: bounds.bottom - bounds.top,
+        gap: fontPx * 0.6,
+      });
+      flyId += 1;
+      return {
+        id: flyId, text: item.text, tone: item.tone, big: item.big, still: true,
+        top: bounds.top + spot.top, left: spot.left, delay: item.delay, duration: item.duration,
+      };
+    }
     const placed = placeComment(danmaku, {
       start: now + item.delay,
       width: textWidth(item.text, fontPx * scale, family),
@@ -618,8 +707,8 @@ function launch(list: { text: string; tone: string; big: boolean; delay: number;
     });
     flyId += 1;
     return {
-      id: flyId, text: item.text, tone: item.tone, big: item.big,
-      top: bounds.top + placed.top, delay: placed.start - now, duration: item.duration,
+      id: flyId, text: item.text, tone: item.tone, big: item.big, still: false,
+      top: bounds.top + placed.top, left: 0, delay: placed.start - now, duration: item.duration,
     };
   });
   flying.value = [...flying.value, ...added].slice(-FLYING_MAX);
@@ -688,7 +777,7 @@ function spawn(at: number, when: string) {
   launch(items.filter((item) => item.pos !== "top" && item.pos !== "bottom").map((item) => ({
     text: item.text, tone: item.tone ?? "", big: item.size === "big",
     delay: item.lag ? item.lag / Math.sqrt(speed.value) + (lagged++) * 450 : (plain++) * 380,
-    duration: (COMMENT_MS * (item.size === "big" ? 1.15 : 1)) / Math.sqrt(speed.value),
+    duration: commentMs(item.size === "big"),
   })));
 }
 function land(id: number) {
@@ -904,7 +993,7 @@ function celebrateQuiz() {
     return;
   }
   const texts = ["次の一手的中！！", "読み筋どおり", "完全に読んでた", "的中おめ", "名人の読み", "8888"];
-  launch(texts.map((text, index) => ({ text, tone: "hit", big: index === 0, delay: index * 260, duration: COMMENT_MS / Math.sqrt(speed.value) })));
+  launch(texts.map((text, index) => ({ text, tone: "hit", big: index === 0, delay: index * 260, duration: commentMs() })));
 }
 
 // 見どころ再生(24-3)。形勢が動いた手・長考・決め手・終局を、短く続けて見る。
@@ -1150,8 +1239,12 @@ function endTsume() {
   clearTimeout(tsumeTimer);
   tsume.value = null;
 }
-/** 戻る操作。中で開いたもの(詰将棋)を閉じたら真。 */
+/** 戻る操作。中で開いたもの(コメントの出し方のシート・詰将棋)を閉じたら真。 */
 function goBack() {
+  if (flowSheetOpen.value) {
+    flowSheetOpen.value = false;
+    return true;
+  }
   if (!tsume.value) return false;
   endTsume();
   return true;
@@ -1181,7 +1274,39 @@ const generator = useRelayGenerator({
   storage: browserStorage,
 });
 
+/**
+ * 画面のコマ数を測り、出し方を自分で選んでいなければ、合う出し方にする(50章)。
+ * 少ない画面(30コマなど)では、流れる字が1コマで大きく跳んでぶれるので、ゆっくり流すか止めて出す。
+ */
+let probeTimer: ReturnType<typeof setTimeout> | undefined;
+let probeFrame = 0;
+function probeFrameRate() {
+  if (typeof requestAnimationFrame !== "function" || typeof document === "undefined") return;
+  const intervals: number[] = [];
+  let last = 0;
+  let begin = 0;
+  const step = (time: number) => {
+    if (document.visibilityState !== "visible") return;
+    if (!begin) begin = time;
+    else intervals.push(time - last);
+    last = time;
+    if (time - begin < FRAME_PROBE_MS) {
+      probeFrame = requestAnimationFrame(step);
+      return;
+    }
+    const flow = flowForFrameInterval(medianFrameInterval(intervals));
+    autoFlow.value = flow;
+    if (flow !== "flow" && !chosenFlow.value && commentsOn.value) {
+      noteToast.value = `画面の動きがなめらかでないので、コメントを「${COMMENT_FLOWS[flow].label}」にしたよ（「コメ」で変えられる）`;
+      clearTimeout(noteTimer);
+      noteTimer = setTimeout(() => { noteToast.value = ""; }, 4000);
+    }
+  };
+  probeFrame = requestAnimationFrame(step);
+}
+
 onMounted(() => {
+  if (!chosenFlow.value && !reducedMotion) probeTimer = setTimeout(probeFrameRate, FRAME_PROBE_DELAY_MS);
   const storage = browserStorage();
   saveRelayStore(storage, markRelaySeen(loadRelayStore(storage), props.spec.key));
   emit("seen", props.spec.key);
@@ -1233,6 +1358,8 @@ onMounted(() => {
   });
 });
 onBeforeUnmount(() => {
+  clearTimeout(probeTimer);
+  if (probeFrame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(probeFrame);
   clearTimers();
   clearTimeout(bannerTimer);
   clearTimeout(underTimer);
@@ -1332,6 +1459,21 @@ onBeforeUnmount(() => {
   animation-name: relay-fly;
   animation-timing-function: linear;
   animation-fill-mode: both;
+  /* 字を1枚の絵にして動かす(動くたびに描き直さない)。 */
+  will-change: transform;
+  backface-visibility: hidden;
+}
+/* 止めて出すコメント(50章)。動かさず、短いフェードで現れて消える。 */
+.shogi-game .relay__comment--still {
+  animation-name: relay-still;
+  animation-timing-function: ease;
+  will-change: opacity;
+}
+@keyframes relay-still {
+  0% { opacity: 0; }
+  8% { opacity: 0.95; }
+  88% { opacity: 0.95; }
+  100% { opacity: 0; }
 }
 .shogi-game .relay__comment--red { color: #ff9c8c; }
 .shogi-game .relay__comment--gold { color: #ffd27a; font-size: 1.12em; }
@@ -1612,6 +1754,20 @@ onBeforeUnmount(() => {
 .shogi-game .relay__controls button:disabled { opacity: 0.4; cursor: default; }
 .shogi-game .relay__play { color: #172632 !important; background: #f1a54c !important; border-color: #f1a54c !important; font-size: 1.05rem; }
 .shogi-game .relay__toggle { font-size: 0.82rem; }
+.shogi-game .relay__controls .relay__comment-mode { display: grid; place-content: center; gap: 0; line-height: 1.1; }
+.shogi-game .relay__comment-mode small { font-size: 0.62rem; font-weight: 800; opacity: 0.85; }
+/* コメントの出し方のシート(50章)。中継の画面の上に重ね、選ぶと閉じる。 */
+.shogi-game .relay__flow-sheet { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 1rem; background: rgba(8, 14, 20, 0.55); }
+.shogi-game .relay__flow-panel { display: grid; gap: 0.4rem; width: min(22rem, 100%); padding: 0.9rem; border: 1px solid rgba(241, 165, 76, 0.6); border-radius: 0.7rem; color: #fffcf4; background: #1d2b38; box-shadow: 0 0.6rem 1.6rem rgba(0, 0, 0, 0.45); }
+.shogi-game .relay__flow-panel h3 { margin: 0 0 0.2rem; font-size: 1rem; }
+.shogi-game .relay__flow-panel button {
+  display: grid; gap: 0.1rem; min-height: 48px; margin: 0; padding: 0.45rem 0.7rem; border: 1px solid rgba(255, 252, 244, 0.25); border-radius: 0.5rem;
+  color: #fffcf4; background: rgba(255, 252, 244, 0.06); font: inherit; text-align: left; cursor: pointer;
+}
+.shogi-game .relay__flow-panel button[aria-pressed="true"] { border-color: #f1a54c; background: rgba(241, 165, 76, 0.18); }
+.shogi-game .relay__flow-panel button:focus-visible { outline: 2px solid #f1a54c; outline-offset: 2px; }
+.shogi-game .relay__flow-panel b { font-size: 0.95rem; }
+.shogi-game .relay__flow-panel small { color: #c8d3de; font-size: 0.78rem; }
 /* 見る手数のつまみ。指で動かすので、高さを44px取る(34章。UI 7-4)。 */
 .shogi-game .relay__seek { width: 100%; min-height: 44px; margin: 0; accent-color: #f1a54c; }
 /* 中継の楽しみ(24章)。次の一手・見どころ・大盤・研究ノートのボタンと、盤の下の端の札。 */
@@ -1669,5 +1825,6 @@ onBeforeUnmount(() => {
   .shogi-game .relay__thought { animation: none; }
   .shogi-game .relay__rate-bar span { transition: none; }
   .shogi-game .relay__under--rainbow { animation: none; }
+  .shogi-game .relay__comment--still { animation-name: none; }
 }
 </style>
