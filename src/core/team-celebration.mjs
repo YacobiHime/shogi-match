@@ -85,6 +85,7 @@ export function interviewScene(run, stage, { playerName = '' } = {}) {
       : `${team}、優勝おめでとうございます。リーダーの${you}さん、今のお気持ちは？`,
     goal: '最後に、次の目標を教えてください。',
   };
+  /** @type {{ who: string, face: string, name: string, text: string, choices?: any[] }[]} */
   const lines = [
     { who: 'narration', face: 'neutral', name: '', text: school ? `表彰式のあと、新聞部の記者がマイクを向けてきた。` : '表彰式のあと、将棋記者たちが集まってきた。' },
   ];
@@ -115,7 +116,7 @@ export function interviewQuotes(answers = []) {
 
 /**
  * 連覇の数(同じ形式の前の大会から続く優勝の数＋今回。21章の3の5)。
- * @param {{ history?: { format: string, place: number }[] }} career
+ * @param {{ history?: { format: string, place?: number, label?: string }[] }} career
  * @param {string} format
  */
 export function teamStreak(career, format) {
@@ -148,7 +149,8 @@ export function championNewspaper(run, stage, { playerName = '', answers = [], s
   const path = mine.map((match) => {
     const side = match.a === USER_TEAM ? 'a' : 'b';
     const other = side === 'a' ? 'b' : 'a';
-    return { label: match.label, rival: run.teams[match[other]]?.name ?? '', score: `${match.score[side]}-${match.score[other]}`, won: match.winner === side };
+    // 段階の名前は見出しにあるので、回戦だけ(「地区大会 決勝」→「決勝」)。
+    return { label: String(match.label ?? '').replace(`${label} `, '').replace('決勝トーナメント ', '決勝T '), rival: run.teams[match[other]]?.name ?? '', score: `${match.score[side]}-${match.score[other]}`, won: match.winner === side };
   });
   const final = path.at(-1) ?? null;
   const wins = path.filter((entry) => entry.won).length;

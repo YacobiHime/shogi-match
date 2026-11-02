@@ -522,6 +522,7 @@
       @team-scene-seen="teamSceneSeen"
       @team-finale-seen="teamFinaleSeen"
       @team-ceremony-seen="teamCeremonySeen"
+      @team-celebrate="teamCelebrated"
       @team-close="closeTeam"
       :pro-year-state="proYearState"
       :pro-year-settings="proYearState?.settings ?? proYearLastSettings"
@@ -2810,10 +2811,11 @@ import {
 } from "./core/ryuo-career.mjs";
 import { addAward, kenshukaiAward, loadAwards, meijinAward, proYearAward, ryuoAward, shoreikaiAward, teamAward, teamStageAward } from "./core/season-award.mjs";
 import {
-  SCHOOL_SEATS, USER_TEAM as TEAM_USER_TEAM, chooseTeamPlayer, createTeamRun, currentTeamMatch, draftCandidates, finishTeamRun, hananeNextPlayer,
-  loadTeamBattle, markTeamCeremonySeen, markTeamFinaleSeen, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
+  SCHOOL_SEATS, USER_TEAM as TEAM_USER_TEAM, addTeamTrophy, chooseTeamPlayer, createTeamRun, currentTeamMatch, draftCandidates, finishTeamRun, hananeNextPlayer,
+  loadTeamBattle, markTeamCelebrated, markTeamCeremonySeen, markTeamFinaleSeen, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
 } from "./core/team-battle.mjs";
 import { teamCeremonyView } from "./core/team-ceremony.mjs";
+import { championBanner, championNewspaper, championTitle, teamStreak, teamTrophy } from "./core/team-celebration.mjs";
 import { peekBoards, peekThought, peekVoice } from "./core/team-peek.mjs";
 import {
   advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
@@ -7612,6 +7614,26 @@ function teamCeremonySeen() {
   setTeamCareer({ ...teamCareer.value, current: markTeamCeremonySeen(run) });
 }
 /**
+ * 優勝インタビューを終えた(21章の3の2〜5)。答えを残し、号外ごとトロフィー棚に飾り、大会の優勝なら称号を渡す。
+ * 号外の中身は、団体戦の画面が見せたものと同じ形(championNewspaper)で作り直す。
+ */
+function teamCelebrated({ stage, answers }: { stage: string; answers: string[] }) {
+  const run = teamCareer.value.current;
+  if (!run?.celebrations?.[stage] || run.celebrations[stage].seen) return;
+  const at = Date.now();
+  const paper = championNewspaper(run, stage, {
+    playerName: playerDisplayName(playerName.value), answers, streak: teamStreak(teamCareer.value, run.format), at,
+  });
+  let career = { ...teamCareer.value, current: markTeamCelebrated(run, stage, answers) };
+  career = addTeamTrophy(career, teamTrophy(run, stage, paper, at));
+  setTeamCareer(career);
+  if (stage === "national" || stage === "pro") {
+    const count = (career.trophies ?? []).filter((trophy: { stage: string }) => trophy.stage === stage).length;
+    profileState.value = grantTitle(profileState.value, championTitle(run.format, count));
+    saveProfile(browserStorage(), profileState.value);
+  }
+}
+/**
  * 表彰式が決まったら、入賞と個人賞の賞状を賞状帳に入れる(表彰式の中で渡す。20章の3の2)。同じ賞状は重ねない。
  * @param {any} run 記録したあとの大会
  */
@@ -7664,8 +7686,11 @@ function recordTeamOutcome(matchResult: MatchResult) {
         : `チームは${us}勝${them}敗（${teamFormat(next.format).winsToTake}勝で勝ち）`;
   }
   // 自分の局で試合が決まった(決勝点)ら、終局の判子でたたえる。
+  // 優勝を決めた決勝点は「優勝決定！」(21章の3の1)。
   finishMilestone = result.clinched
-    ? { kind: "team", weight: "big", seal: "勝", title: "決勝点！", sub: `${next.teams[TEAM_USER_TEAM]?.name ?? ""}の勝ちを決めた`, line: "" }
+    ? result.champion
+      ? { kind: "team", weight: "big", seal: "優", title: "優勝決定！", sub: `${next.teams[TEAM_USER_TEAM]?.name ?? ""} ${championBanner(next, result.champion)}`, line: "" }
+      : { kind: "team", weight: "big", seal: "勝", title: "決勝点！", sub: `${next.teams[TEAM_USER_TEAM]?.name ?? ""}の勝ちを決めた`, line: "" }
     : null;
   setTeamCareer({ ...teamCareer.value, current: next });
   issueTeamCeremonyAwards(next);

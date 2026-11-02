@@ -254,6 +254,7 @@
           @scene-seen="emit('team-scene-seen', $event)"
           @finale-seen="emit('team-finale-seen')"
           @ceremony-seen="emit('team-ceremony-seen')"
+          @celebrate="emit('team-celebrate', $event)"
           @close-run="emit('team-close')"
           @measure="emit('measure', 'team')"
           @ceremony="openCeremony(`team-${teamView?.id ?? ''}`)"
@@ -1266,6 +1267,8 @@ const emit = defineEmits<{
   "team-scene-seen": [id: string];
   "team-finale-seen": [];
   "team-ceremony-seen": [];
+  /** 優勝インタビューと号外を終えた(team-battle-design.mdの21章)。 */
+  "team-celebrate": [payload: { stage: string; answers: string[] }];
   "team-close": [];
   "pro-year-enter": [payload: { settings: Record<string, unknown> }];
   "pro-year-advance": [];

@@ -41,7 +41,11 @@
     data-team-finale
     @click="revealAll"
   >
-    <div class="team-finale__panel" :class="{ 'team-finale__panel--pro': view.format === 'pro' }">
+    <!-- 優勝を決めた試合は、紙吹雪(21章の3の1)。動きを減らす設定では出さない -->
+    <div v-if="championShown" class="team-finale__confetti" aria-hidden="true" data-team-finale-confetti>
+      <i v-for="piece in confetti" :key="piece.id" :style="piece.style" />
+    </div>
+    <div class="team-finale__panel" :class="{ 'team-finale__panel--pro': view.format === 'pro', 'team-finale__panel--champion': championShown }">
       <div class="team-finale__main">
       <p class="team-finale__kicker">結果発表</p>
       <h2 id="team-finale-title">{{ view.label }}</h2>
@@ -63,16 +67,19 @@
           <small v-if="row.decisive && row.index < revealed && resultShown && view.teamWon" class="team-finale__decisive">決勝点</small>
         </li>
       </ol>
+      <p v-if="championShown" class="team-finale__champion" role="status" data-team-finale-champion>
+        <small>優勝決定</small><strong>{{ view.champion }}</strong>
+      </p>
       </div>
       <div class="team-finale__side">
       <div v-if="resultShown" class="team-finale__result" :class="view.teamWon ? 'team-finale__result--win' : 'team-finale__result--loss'" role="status" data-team-finale-result>
         <p class="team-finale__score"><strong>{{ view.scoreText }}</strong><span>{{ view.verdict }}</span></p>
-        <span v-if="view.teamWon" class="team-finale__stamp" aria-hidden="true">勝</span>
+        <span v-if="view.teamWon" class="team-finale__stamp" :class="{ 'team-finale__stamp--champion': view.champion }" aria-hidden="true">{{ view.champion ? "優" : "勝" }}</span>
         <p v-if="view.decisiveText" class="team-finale__decisive-text">{{ view.decisiveText }}</p>
         <p v-if="view.after" class="team-finale__after" data-team-finale-after>{{ view.after }}</p>
       </div>
       <ul v-if="resultShown" class="team-finale__lines" aria-label="仲間の一言">
-        <li v-for="line in view.lines" :key="line.who" class="team-finale__line" :data-team-finale-line="line.who">
+        <li v-for="line in view.lines" :key="line.who" class="team-finale__line" :class="{ 'team-finale__line--jump': championShown }" :data-team-finale-line="line.who">
           <img class="team-finale__face team-finale__face--line" :src="lineFace(line.who)" alt="" draggable="false">
           <span><small>{{ line.who === "hanane" ? "羽音" : "百花" }}</small>{{ line.text }}</span>
         </li>
@@ -224,11 +231,28 @@ function startAnnounce() {
   }
   revealTimers.push(setTimeout(showResult, stepMs.value * (count + 1)));
 }
+/** 優勝を決めた試合か(帯・紙吹雪・判子「優」。21章の3の1)。 */
+const championShown = computed(() => resultShown.value && Boolean(props.view.champion) && props.view.teamWon);
+/** 紙吹雪の紙(位置と遅れは決まった並びで、毎回同じ)。 */
+const CONFETTI_COLORS = ["#f1a54c", "#e2574c", "#7fc6ff", "#fffcf4", "#8fd694", "#f6d55c"];
+const confetti = Array.from({ length: 28 }, (_, index) => ({
+  id: index,
+  style: {
+    left: `${(index * 37) % 100}%`,
+    background: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
+    animationDelay: `${(index * 173) % 1400}ms`,
+    animationDuration: `${2400 + ((index * 97) % 1400)}ms`,
+    transform: `rotate(${(index * 53) % 360}deg)`,
+  },
+}));
+let championTimer: ReturnType<typeof setTimeout> | undefined;
 function showResult() {
   revealed.value = props.view.rows.length;
   if (resultShown.value) return;
   resultShown.value = true;
   sounds.play(props.view.teamWon ? "stamp" : "nameplate");
+  // 優勝は、判子のあとに登る音を重ねる(G:3 出来事の重さと演出)。
+  if (props.view.teamWon && props.view.champion) championTimer = setTimeout(() => sounds.play("climb"), 420);
   void nextTick(() => doneButton.value?.focus());
 }
 /** 押すと、残りの行とチームの結果を一度に出す(UD:7-2 演出は短く飛ばせる)。 */
@@ -277,6 +301,7 @@ onBeforeUnmount(() => {
   clearInterval(tickTimer);
   clearTimeout(switchTimer);
   clearTimeout(announceTimer);
+  clearTimeout(championTimer);
   for (const timer of revealTimers) clearTimeout(timer);
   peek?.stop();
 });
@@ -362,6 +387,22 @@ const lineFace = (who: string) => portraitUrl(props.assetBaseUrl, who, props.vie
   min-height: 44px; border: 0; border-radius: 999px; color: #172632; background: var(--amber, #f1a54c);
   font: inherit; font-weight: 900; cursor: pointer;
 }
+/* 優勝決定(21章の3の1) */
+.shogi-game .team-finale__panel--champion { border-color: var(--amber, #f1a54c); box-shadow: 0 0 0 0.2rem rgba(241, 165, 76, 0.35), 0 0.6rem 1.6rem rgba(0, 0, 0, 0.45); }
+.shogi-game .team-finale__champion {
+  display: grid; gap: 0.05rem; margin: 0; padding: 0.45rem 0.6rem; border-radius: 0.8rem; color: #3a2405;
+  background: linear-gradient(135deg, #f6d55c, #f1a54c 55%, #f6d55c); animation: team-finale-banner 520ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.shogi-game .team-finale__champion small { font-size: 0.8rem; font-weight: 900; letter-spacing: 0.4em; }
+.shogi-game .team-finale__champion strong { font-size: 1.6rem; font-weight: 900; letter-spacing: 0.08em; }
+.shogi-game .team-finale__stamp--champion { border-color: #b8860b; color: #b8860b; }
+.shogi-game .team-finale__line--jump .team-finale__face--line { animation: team-finale-jump 600ms ease-out 2; }
+.shogi-game .team-finale__line--jump:nth-child(2) .team-finale__face--line { animation-delay: 150ms; }
+.shogi-game .team-finale__confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.shogi-game .team-finale__confetti i {
+  position: absolute; top: -1rem; width: 0.55rem; height: 0.9rem; border-radius: 0.1rem; opacity: 0.9;
+  animation-name: team-finale-fall; animation-timing-function: linear; animation-iteration-count: 3; animation-fill-mode: both;
+}
 .shogi-game .team-finale__skip-hint { margin: 0; color: #8fa3b0; font-size: 0.75rem; }
 /* 見守る画面(チラ見のシートの中) */
 .shogi-game .team-finale__board-marks { display: flex; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
@@ -389,12 +430,19 @@ const lineFace = (who: string) => portraitUrl(props.assetBaseUrl, who, props.vie
   .shogi-game .team-finale__panel h2 { font-size: 1rem; }
   .shogi-game .team-finale__row { min-height: 2.2rem; }
   .shogi-game .team-finale__score strong { font-size: 1.4rem; }
+  .shogi-game .team-finale__champion { padding: 0.3rem 0.5rem; }
+  .shogi-game .team-finale__champion strong { font-size: 1.3rem; }
   .shogi-game .team-finale__side { align-content: center; }
 }
+@keyframes team-finale-banner { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes team-finale-jump { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-0.5rem); } }
+@keyframes team-finale-fall { from { translate: 0 0; rotate: 0deg; } to { translate: 2rem 105vh; rotate: 540deg; } }
 @keyframes team-finale-pop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes team-finale-stamp { from { transform: rotate(-12deg) scale(1.6); opacity: 0; } to { transform: rotate(-12deg) scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .team-finale__row { transition: none; }
-  .shogi-game .team-finale__result, .shogi-game .team-finale__stamp { animation: none; }
+  .shogi-game .team-finale__result, .shogi-game .team-finale__stamp, .shogi-game .team-finale__champion,
+  .shogi-game .team-finale__line--jump .team-finale__face--line { animation: none; }
+  .shogi-game .team-finale__confetti { display: none; }
 }
 </style>

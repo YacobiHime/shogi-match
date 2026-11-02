@@ -37,6 +37,10 @@
             />
           </li>
         </ul>
+        <button type="button" class="team-battle__shelf-open" data-team-shelf-open @click="shelfOpen = true">
+          <span class="team-battle__shelf-glyph" aria-hidden="true">杯</span>
+          <span>トロフィー棚<small>{{ shelf.total ? `優勝 ${shelf.total}回` : "まだ空っぽ。最初の優勝杯を目指そう" }}</small></span>
+        </button>
       </PickFrame>
       <PickFrame
         v-else
@@ -297,6 +301,7 @@
         <p v-if="lastNews" class="team-battle__news" role="status" data-team-news>{{ lastNews }}</p>
         <template v-if="screen === 'done'">
           <button v-if="view.result?.place === 1" type="button" class="shogi-tournament__sub" data-team-award @click="emit('ceremony')">賞状を見る</button>
+          <button v-if="shelf.total" type="button" class="shogi-tournament__sub" data-team-shelf-open @click="shelfOpen = true">トロフィー棚</button>
           <button type="button" class="shogi-tournament__start" data-team-close @click="emit('close-run')">大会を終える</button>
         </template>
         <template v-else-if="view.format === 'pro' && !view.pending">
@@ -376,6 +381,52 @@
       @done="emit('ceremony-seen')"
     />
     <NovelScene v-if="scene" ref="novelEl" :scene="scene" :asset-base-url="assetBaseUrl" @done="closeScene" />
+    <!-- 優勝インタビュー(21章の3の2)。表彰式のあと。答えは選択肢で、号外に載る。 -->
+    <NovelScene
+      v-if="interview && !paperOpen"
+      :key="interview.id"
+      ref="interviewEl"
+      :scene="interview"
+      :asset-base-url="assetBaseUrl"
+      @choose="onInterviewChoose"
+      @done="paperOpen = true"
+    />
+    <!-- 号外(21章の3の3)。「棚に飾る」でトロフィー棚へ。 -->
+    <TeamNewspaper v-if="newPaper" ref="paperEl" :key="`paper-${celebrationStage}`" :paper="newPaper" mode="new" :asset-base-url="assetBaseUrl" @done="hangTrophy" />
+
+    <!-- トロフィー棚(21章の3の4)。取った杯と回数、まだの杯は影。杯を押すと号外の一覧。 -->
+    <div v-if="shelfOpen && !readPaper" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="トロフィー棚" data-team-shelf @click.self="closeShelf">
+      <div class="shogi-tournament__sheet-panel shogi-tournament__detail team-battle__shelf">
+        <h2>トロフィー棚<small>優勝 {{ shelf.total }}回</small></h2>
+        <ul class="team-battle__shelf-slots">
+          <li v-for="slot in shelf.slots" :key="slot.stage">
+            <button
+              type="button"
+              class="team-battle__shelf-slot"
+              :class="{ 'team-battle__shelf-slot--empty': !slot.count, 'team-battle__shelf-slot--on': shelfStage === slot.stage, 'team-battle__shelf-slot--new': slot.trophies.some((trophy: any) => trophy.id === newTrophyId) }"
+              :aria-pressed="shelfStage === slot.stage"
+              :disabled="!slot.count"
+              :data-team-shelf-slot="slot.stage"
+              @click="shelfStage = slot.stage"
+            >
+              <span class="team-battle__shelf-cup" aria-hidden="true">{{ slot.glyph }}</span>
+              <small>{{ slot.label }}</small>
+              <b>{{ slot.count ? `×${slot.count}` : "まだ" }}</b>
+            </button>
+          </li>
+        </ul>
+        <ul v-if="shelfPapers.length" class="team-battle__shelf-papers" aria-label="号外" data-team-shelf-papers>
+          <li v-for="trophy in shelfPapers" :key="trophy.id">
+            <button type="button" class="team-battle__shelf-paper" :data-team-shelf-paper="trophy.id" @click="readId = trophy.id">
+              <small>{{ trophy.paper?.date }}</small><span>{{ trophy.paper?.headline ?? trophy.label }}</span>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="team-battle__shelf-note">{{ shelf.total ? "杯を押すと、その優勝の号外を読み返せるよ。" : "まだ優勝杯はない。地区大会の優勝杯から目指そう。" }}</p>
+        <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" data-team-shelf-close @click="closeShelf">閉じる</button>
+      </div>
+    </div>
+    <TeamNewspaper v-if="readPaper" ref="paperEl" :paper="readPaper" mode="read" :asset-base-url="assetBaseUrl" @done="readId = ''" />
   </div>
 </template>
 
@@ -388,6 +439,7 @@ import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import TeamMemberSheet from "./TeamMemberSheet.vue";
 import TeamFinale from "./TeamFinale.vue";
 import TeamCeremony from "./TeamCeremony.vue";
+import TeamNewspaper from "./TeamNewspaper.vue";
 import type { SeasonAwardData } from "./SeasonAward.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
@@ -403,12 +455,13 @@ import {
 import { portraitUrl, teamMomentFor, teamScene } from "./core/team-story.mjs";
 import { finaleBoards, teamFinaleView } from "./core/team-finale.mjs";
 import { teamCeremonyView } from "./core/team-ceremony.mjs";
+import { championNewspaper, interviewScene, pendingCelebration, teamStreak, trophyShelf } from "./core/team-celebration.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
 
 type Format = "school" | "pro";
 type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Career = { invited: { school: boolean; pro: boolean }; history: { format: string; label: string }[]; best: Record<string, { place: number; label: string }>; settings?: Partial<Settings>; current?: any };
+type Career = { invited: { school: boolean; pro: boolean }; history: { format: string; label: string; place?: number }[]; trophies?: any[]; best: Record<string, { place: number; label: string }>; settings?: Partial<Settings>; current?: any };
 
 const props = defineProps({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -455,6 +508,8 @@ const emit = defineEmits<{
   "finale-seen": [];
   /** 表彰式を見た(20章)。 */
   "ceremony-seen": [];
+  /** 優勝インタビューと号外を終えた(21章)。答えのidを渡す。 */
+  celebrate: [payload: { stage: string; answers: string[] }];
   "close-run": [];
   ceremony: [];
   back: [];
@@ -489,9 +544,63 @@ const finaleBoardList = computed(() => finaleBoards(props.career.current));
 const ceremonyEl = ref<{ goBack: () => boolean } | null>(null);
 const ceremonyView = computed(() => teamCeremonyView(props.career.current, { playerName: props.playerName === "あなた" ? "" : props.playerName }));
 
-/** 大会中の節目の場面(見ていなければ1回だけ。地区大会・県大会・全国大会の始めなど。15章の8)。結果発表と表彰式を見てから。 */
-watch(() => [props.view?.phase, props.view?.stage, props.view?.next?.id, props.view?.result?.label, finaleView.value?.id, ceremonyView.value?.id], () => {
-  if (sceneId.value || finaleView.value || ceremonyView.value) return;
+// ---- 優勝インタビュー → 号外 → トロフィー棚(21章)。表彰式のあと、節目の場面の前に。
+const callName = computed(() => (props.playerName === "あなた" ? "" : props.playerName));
+const celebrationStage = computed(() => (finaleView.value || ceremonyView.value ? null : pendingCelebration(props.career.current)));
+const interviewEl = ref<{ finish: () => void; goBack: () => boolean } | null>(null);
+const paperEl = ref<{ goBack: () => boolean } | null>(null);
+const paperOpen = ref(false);
+const answers = ref<string[]>([]);
+watch(celebrationStage, () => {
+  paperOpen.value = false;
+  answers.value = [];
+});
+const interview = computed(() => (celebrationStage.value ? interviewScene(props.career.current, celebrationStage.value, { playerName: callName.value }) : null));
+/** 選んだ答え(質問の順に)。 */
+function onInterviewChoose({ line, value }: { line: number; value: string }) {
+  const asks = (interview.value?.lines ?? []).map((entry: { choices?: unknown }, index: number) => (entry.choices ? index : -1)).filter((index: number) => index >= 0);
+  const at = asks.indexOf(line);
+  if (at < 0) return;
+  const next = [...answers.value];
+  next[at] = value;
+  answers.value = next;
+}
+const newPaper = computed(() => (celebrationStage.value && paperOpen.value
+  ? championNewspaper(props.career.current, celebrationStage.value, {
+    playerName: callName.value, answers: answers.value, streak: teamStreak(props.career, props.career.current?.format),
+  })
+  : null));
+/** 「棚に飾る」: 記録してもらい、トロフィー棚を開いて新しい杯を光らせる。 */
+const newTrophyId = ref("");
+function hangTrophy() {
+  const stage = celebrationStage.value;
+  const run = props.career.current;
+  if (!stage || !run) return;
+  newTrophyId.value = `${run.id}-${stage}`;
+  shelfStage.value = stage;
+  emit("celebrate", { stage, answers: [...answers.value] });
+  paperOpen.value = false;
+  shelfOpen.value = true;
+}
+
+// ---- トロフィー棚
+const shelf = computed(() => trophyShelf(props.career));
+const shelfOpen = ref(false);
+const shelfStage = ref("");
+const readId = ref("");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const shelfPapers = computed(() => (shelf.value.slots.find((slot: any) => slot.stage === shelfStage.value)?.trophies ?? []));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const readPaper = computed(() => (readId.value ? (props.career.trophies ?? []).find((trophy: any) => trophy.id === readId.value)?.paper ?? null : null));
+function closeShelf() {
+  shelfOpen.value = false;
+  shelfStage.value = "";
+  newTrophyId.value = "";
+}
+
+/** 大会中の節目の場面(見ていなければ1回だけ。地区大会・県大会・全国大会の始めなど。15章の8)。結果発表と表彰式と優勝インタビューを見てから。 */
+watch(() => [props.view?.phase, props.view?.stage, props.view?.next?.id, props.view?.result?.label, finaleView.value?.id, ceremonyView.value?.id, celebrationStage.value, shelfOpen.value], () => {
+  if (sceneId.value || finaleView.value || ceremonyView.value || celebrationStage.value || shelfOpen.value) return;
   const id = teamMomentFor(props.view);
   if (id) sceneId.value = id;
 }, { immediate: true });
@@ -790,6 +899,11 @@ function goBack() {
   }
   else if (finaleView.value && finaleEl.value) finaleEl.value.goBack();
   else if (ceremonyView.value && ceremonyEl.value) ceremonyEl.value.goBack();
+  else if (interview.value && !paperOpen.value) {
+    if (!interviewEl.value?.goBack()) interviewEl.value?.finish();
+  }
+  else if ((newPaper.value || readPaper.value) && paperEl.value) paperEl.value.goBack();
+  else if (shelfOpen.value) closeShelf();
   else if (statusId.value) statusId.value = "";
   else if (schoolId.value) schoolId.value = "";
   else if (picker.value) picker.value = "";
@@ -814,7 +928,12 @@ function onEntryKeydown(event: KeyboardEvent) {
     schoolId.value = "";
     return;
   }
-  if (props.view || sceneId.value || statusId.value || picker.value || settingsOpen.value || draftOpen.value) return;
+  if (shelfOpen.value && !readPaper.value && event.key === "Escape" && !event.defaultPrevented) {
+    event.preventDefault();
+    closeShelf();
+    return;
+  }
+  if (props.view || sceneId.value || statusId.value || picker.value || settingsOpen.value || draftOpen.value || shelfOpen.value) return;
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
   const target = event.target as HTMLElement | null;
   if (target?.closest?.("input, textarea, select")) return;
@@ -953,6 +1072,49 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onEntryKeydown));
 .shogi-game .team-battle__school-member-text { display: grid; min-width: 0; }
 .shogi-game .team-battle__school-member-text small { color: var(--amber, #f1a54c); font-size: 0.72rem; font-weight: 900; }
 .shogi-game .team-battle__school-member-text em { color: #cfd8de; font-size: 0.75rem; font-style: normal; }
+/* トロフィー棚(21章の3の4) */
+.shogi-game .team-battle__shelf-open {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: 3rem; margin-top: 0.4rem; padding: 0.3rem 0.7rem; box-sizing: border-box;
+  border: 0.1rem solid rgba(241, 165, 76, 0.7); border-radius: 0.7rem; color: #fffcf4; background: rgba(23, 38, 50, 0.85);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.shogi-game .team-battle__shelf-open > span:last-child { display: grid; font-weight: 900; }
+.shogi-game .team-battle__shelf-open small { color: #cfd8de; font-size: 0.74rem; font-weight: 700; }
+.shogi-game .team-battle__shelf-glyph, .shogi-game .team-battle__shelf-cup {
+  display: grid; flex: none; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 50%; color: #3a2405;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, #f6d55c 45%, #c8901f); font-weight: 900;
+}
+.shogi-game .team-battle__shelf { display: grid; gap: 0.6rem; }
+.shogi-game .team-battle__shelf h2 { display: flex; align-items: baseline; gap: 0.5rem; margin: 0; font-size: 1.15rem; }
+.shogi-game .team-battle__shelf h2 small { color: #cfd8de; font-size: 0.78rem; }
+.shogi-game .team-battle__shelf-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+@media (min-width: 640px) { .shogi-game .team-battle__shelf-slots { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.shogi-game .team-battle__shelf-slot {
+  display: grid; justify-items: center; gap: 0.2rem; width: 100%; min-height: 6.4rem; padding: 0.5rem 0.3rem; box-sizing: border-box;
+  border: 0.1rem solid rgba(241, 165, 76, 0.55); border-radius: 0.8rem; color: #fffcf4; background: rgba(43, 70, 91, 0.7);
+  font: inherit; cursor: pointer;
+}
+.shogi-game .team-battle__shelf-slot .team-battle__shelf-cup { width: 3rem; height: 3rem; font-size: 1.4rem; }
+.shogi-game .team-battle__shelf-slot small { font-size: 0.72rem; font-weight: 800; line-height: 1.3; text-align: center; }
+.shogi-game .team-battle__shelf-slot b { color: var(--amber, #f1a54c); font-size: 0.95rem; }
+.shogi-game .team-battle__shelf-slot--on { outline: 0.15rem solid var(--amber, #f1a54c); }
+.shogi-game .team-battle__shelf-slot--empty { border-style: dashed; border-color: rgba(255, 252, 244, 0.25); background: rgba(23, 38, 50, 0.6); cursor: default; opacity: 1; }
+.shogi-game .team-battle__shelf-slot--empty .team-battle__shelf-cup { color: rgba(255, 252, 244, 0.35); background: rgba(255, 252, 244, 0.1); }
+.shogi-game .team-battle__shelf-slot--empty b { color: #8fa3b0; }
+.shogi-game .team-battle__shelf-slot--new .team-battle__shelf-cup { animation: team-shelf-shine 1.2s ease-in-out 3; }
+.shogi-game .team-battle__shelf-papers { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .team-battle__shelf-paper {
+  display: grid; width: 100%; min-height: 44px; padding: 0.3rem 0.6rem; box-sizing: border-box; border: 0; border-radius: 0.4rem;
+  color: #1d1a16; background: #f4efe2; font: inherit; text-align: left; cursor: pointer;
+}
+.shogi-game .team-battle__shelf-paper small { color: #4a443b; font-size: 0.7rem; }
+.shogi-game .team-battle__shelf-paper span { font-weight: 900; }
+.shogi-game .team-battle__shelf-note { margin: 0; color: #cfd8de; font-size: 0.85rem; }
+@keyframes team-shelf-shine {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(246, 213, 92, 0); transform: scale(1); }
+  50% { box-shadow: 0 0 1rem 0.3rem rgba(246, 213, 92, 0.8); transform: scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) { .shogi-game .team-battle__shelf-slot--new .team-battle__shelf-cup { animation: none; box-shadow: 0 0 0.8rem 0.2rem rgba(246, 213, 92, 0.8); } }
 .shogi-game .team-battle__mark--win { color: #fffcf4; }
 .shogi-game .team-battle__mark--loss { color: #8a99a6; }
 .shogi-game .team-battle__tabs { display: flex; gap: 0.3rem; }
