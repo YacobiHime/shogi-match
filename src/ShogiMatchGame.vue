@@ -521,6 +521,7 @@
       @team-roster="ensureRyuoRoster"
       @team-scene-seen="teamSceneSeen"
       @team-finale-seen="teamFinaleSeen"
+      @team-ceremony-seen="teamCeremonySeen"
       @team-close="closeTeam"
       :pro-year-state="proYearState"
       :pro-year-settings="proYearState?.settings ?? proYearLastSettings"
@@ -2807,11 +2808,12 @@ import {
   saveCareer,
   saveSeason,
 } from "./core/ryuo-career.mjs";
-import { addAward, kenshukaiAward, loadAwards, meijinAward, proYearAward, ryuoAward, shoreikaiAward, teamAward } from "./core/season-award.mjs";
+import { addAward, kenshukaiAward, loadAwards, meijinAward, proYearAward, ryuoAward, shoreikaiAward, teamAward, teamStageAward } from "./core/season-award.mjs";
 import {
   SCHOOL_SEATS, USER_TEAM as TEAM_USER_TEAM, chooseTeamPlayer, createTeamRun, currentTeamMatch, draftCandidates, finishTeamRun, hananeNextPlayer,
-  loadTeamBattle, markTeamFinaleSeen, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
+  loadTeamBattle, markTeamCeremonySeen, markTeamFinaleSeen, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
 } from "./core/team-battle.mjs";
+import { teamCeremonyView } from "./core/team-ceremony.mjs";
 import { peekBoards, peekThought, peekVoice } from "./core/team-peek.mjs";
 import {
   advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
@@ -7574,6 +7576,7 @@ function chooseTeam(memberId: string) {
     teamNews.value = "";
   }
   setTeamCareer({ ...teamCareer.value, current: next });
+  issueTeamCeremonyAwards(next);
 }
 function teamInvited(format: "school" | "pro") {
   setTeamCareer({ ...teamCareer.value, invited: { ...teamCareer.value.invited, [format]: true } });
@@ -7601,6 +7604,25 @@ function teamFinaleSeen() {
   const run = teamCareer.value.current;
   if (!run?.finale || run.finale.seen) return;
   setTeamCareer({ ...teamCareer.value, current: markTeamFinaleSeen(run) });
+}
+/** 表彰式を見た(docs/team-battle-design.mdの20章)。 */
+function teamCeremonySeen() {
+  const run = teamCareer.value.current;
+  if (!run?.ceremony || run.ceremony.seen) return;
+  setTeamCareer({ ...teamCareer.value, current: markTeamCeremonySeen(run) });
+}
+/**
+ * 表彰式が決まったら、入賞と個人賞の賞状を賞状帳に入れる(表彰式の中で渡す。20章の3の2)。同じ賞状は重ねない。
+ * @param {any} run 記録したあとの大会
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function issueTeamCeremonyAwards(run: any) {
+  const view = teamCeremonyView(run, { playerName: playerDisplayName(playerName.value) });
+  // 全国優勝(grand)の賞状は、今までどおり下のteamAwardで作る。
+  for (const entry of view?.awards ?? []) {
+    if (entry.kind === "grand") continue;
+    seasonAwards.value = addAward(browserStorage(), teamStageAward({ ...entry, kind: entry.kind }, { playerName: playerDisplayName(playerName.value) }));
+  }
 }
 /** まだ見ていない結果発表があるか(終局の窓で、チームの結果を先に言わない。19章の5)。 */
 const teamFinalePending = computed(() => Boolean(teamCareer.value.current?.finale && !teamCareer.value.current.finale.seen));
@@ -7646,6 +7668,7 @@ function recordTeamOutcome(matchResult: MatchResult) {
     ? { kind: "team", weight: "big", seal: "勝", title: "決勝点！", sub: `${next.teams[TEAM_USER_TEAM]?.name ?? ""}の勝ちを決めた`, line: "" }
     : null;
   setTeamCareer({ ...teamCareer.value, current: next });
+  issueTeamCeremonyAwards(next);
   ryuoGame.value = { ...game, outcome, replay: false };
   if (next.result?.place === 1) {
     const games = Object.values(next.matches).flatMap((match: any) => match.games.filter((entry: any) => entry.user && entry.winner)

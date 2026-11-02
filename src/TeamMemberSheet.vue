@@ -9,7 +9,7 @@
         <img v-if="face" class="team-member__face" :class="`team-member__face--${faceKind}`" :src="face" alt="" draggable="false">
         <span v-else class="team-member__face team-member__face--char" aria-hidden="true">{{ status.name.slice(0, 1) }}</span>
         <span class="team-member__title">
-          <small v-if="status.seat || status.dan">{{ [status.seat, status.dan].filter(Boolean).join("・") }}</small>
+          <small v-if="status.school || status.seat || status.dan">{{ [status.school, status.seat, status.dan].filter(Boolean).join("・") }}</small>
           <strong>{{ status.you ? playerName : status.name }}</strong>
         </span>
       </header>
@@ -17,6 +17,7 @@
         <li data-team-member-record>{{ status.recordText }}</li>
         <li v-if="strengthText">{{ status.you ? `強さ ${strengthText}` : strengthText }}</li>
         <li v-if="status.repertoire">得意 {{ status.repertoire }}</li>
+        <li v-if="status.vsText" data-team-member-vs>{{ status.vsText }}</li>
       </ul>
       <PlayerAbilityPanel v-if="abilityView" :view="abilityView" compact :openings="false" />
       <p v-else-if="status.you" class="team-member__empty">あと{{ myNeed || "少し" }}{{ myNeed ? "手" : "" }}ぶん指すと、能力が見えてくるよ。</p>
@@ -33,7 +34,7 @@ import { memberAbilityView } from "./core/ryuo-book.mjs";
 import { teamUserLine } from "./core/team-battle.mjs";
 
 type Status = {
-  id: string; name: string; you: boolean; story: string | null; seat: string; dan: string;
+  id: string; name: string; you: boolean; story: string | null; seat: string; dan: string; school?: string; vsText?: string;
   recordText: string; strength: string; repertoire: string; line: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   profile: any;

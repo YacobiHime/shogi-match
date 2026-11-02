@@ -113,6 +113,7 @@ describe('表彰式(20章の3の2)', () => {
     expect(view.trophy).toBe('優勝旗');
     expect(view.you.place).toBe(1);
     expect(view.awards.filter((award) => award.kind === 'team')).toHaveLength(0);
+    expect(view.awards[0]).toMatchObject({ kind: 'grand', id: `team-${run.id}` });
     expect(view.lines[0].text).toMatch(/全国優勝/);
     expect(view.nextLabel).toBe('閉会');
   });

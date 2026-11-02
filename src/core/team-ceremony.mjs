@@ -162,12 +162,14 @@ export function teamCeremonyView(run, { playerName = '' } = {}) {
 
 /**
  * 表彰式で渡す賞状(20章の2の4)。団体の入賞(全国優勝・プロの優勝は今までの団体優勝の賞状なので除く)と個人賞。
- * @returns {{ id: string, kind: 'team' | 'player', name: string, stageName: string, prize: string, grade: string, team: string, seat?: string, wins: number, losses: number }[]}
+ * @returns {{ id: string, kind: 'team' | 'player' | 'grand', name: string, stageName: string, prize: string, grade: string, team: string, seat?: string, wins: number, losses: number }[]}
  */
 function ceremonyAwards(run, { stage, stageName, eventName, userPlace, myPrize, mine, school }) {
   const team = run.teams[USER_TEAM]?.name ?? '';
   const awards = [];
   const grand = userPlace === 1 && (stage === 'national' || stage === 'pro');
+  // 全国優勝(プロは優勝)は、今までの団体優勝の賞状(season-award.mjsのteamAward。対局の記録のときに作る)を表彰式で渡す。
+  if (grand) awards.push({ id: `team-${run.id}`, kind: 'grand', name: eventName, stageName: school ? stageName : '', prize: '団体優勝', grade: 'gold', team, wins: mine.wins, losses: mine.losses });
   if (userPlace && !grand) {
     const label = ['', '優勝', '準優勝', '第3位'][userPlace];
     awards.push({

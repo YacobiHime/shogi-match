@@ -149,7 +149,7 @@ export function teamAward(run, { playerName = 'あなた', at = Date.now() } = {
 export function teamStageAward(entry, { playerName = 'あなた', at = Date.now() } = {}) {
   const award = makeAward({
     tournament: entry.kind === 'player' ? 'team-player' : 'team-stage', name: entry.name, seal: '団', no: 1, grade: entry.grade,
-    prize: entry.prize, notes: [entry.stageName, entry.team, entry.seat ?? ''].filter(Boolean).slice(0, 3), entry: entry.team,
+    prize: entry.prize, notes: [entry.team, entry.seat ?? ''].filter(Boolean), entry: entry.team,
     wins: entry.wins, losses: entry.losses, playerName, at,
   });
   return { ...award, id: entry.id, stageName: entry.stageName, seat: entry.seat ?? '' };
