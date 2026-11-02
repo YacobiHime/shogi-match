@@ -275,20 +275,15 @@
             </table>
           </div>
         </div>
+        <!-- トーナメント表(竜王戦と同じ札の表。22章)。学校の行を押すと学校のシート。高さは山の大きさに合わせ、横にはみ出す回戦は枠の中ですべらせる。 -->
         <div v-else-if="activeTable?.knockout" class="team-battle__table-wrap team-battle__ko" data-team-ko :data-team-ko-stage="activeTable.id">
-          <section v-for="round in activeTable.knockout.rounds" :key="round.name" class="team-battle__ko-round">
-            <h3>{{ round.name }}</h3>
-            <ul>
-              <li v-for="(match, index) in round.matches" :key="index" :class="{ 'team-battle__row--you': 'bye' in match ? match.bye?.you : match?.us?.you || match?.them?.you }">
-                <template v-if="'bye' in match">{{ match.bye?.name }}（不戦勝）</template>
-                <template v-else-if="match">
-                  <button type="button" class="team-battle__school-link" :class="{ 'team-battle__winner': match.winner === 'us' }" :data-team-school="match.us?.id" @click="schoolId = match.us?.id ?? ''">{{ match.us?.name }}</button>
-                  <b>{{ match.winner ? `${match.score.us}-${match.score.them}` : "対" }}</b>
-                  <button type="button" class="team-battle__school-link" :class="{ 'team-battle__winner': match.winner === 'them' }" :data-team-school="match.them?.id" @click="schoolId = match.them?.id ?? ''">{{ match.them?.name }}</button>
-                </template>
-              </li>
-            </ul>
-          </section>
+          <RyuoBracket
+            class="team-battle__bracket"
+            :style="{ height: `${bracketHeight(activeTable.knockout.bracket)}px` }"
+            :view="activeTable.knockout.bracket"
+            pickable
+            @pick="schoolId = $event"
+          />
           <p v-if="activeTable.knockout.champion" class="team-battle__champion">優勝 {{ activeTable.knockout.champion.name }}</p>
         </div>
       </section>
@@ -440,6 +435,7 @@ import TeamMemberSheet from "./TeamMemberSheet.vue";
 import TeamFinale from "./TeamFinale.vue";
 import TeamCeremony from "./TeamCeremony.vue";
 import TeamNewspaper from "./TeamNewspaper.vue";
+import RyuoBracket, { type BracketView } from "./RyuoBracket.vue";
 import type { SeasonAwardData } from "./SeasonAward.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
@@ -830,6 +826,9 @@ const activeTable = computed(() => {
   const tabs = props.view?.tables?.tabs ?? [];
   return tabs.find((item: { id: string }) => item.id === tab.value) ?? tabs[0] ?? null;
 });
+/** トーナメント表の高さ(見出し40px＋1校34px＋下の余白。山の大きさで決め、縦は画面ごとスクロールする。22章)。 */
+const BRACKET_LEAF_PX = 34;
+const bracketHeight = (view: BracketView) => 48 + Math.max(2, view.leafCount) * BRACKET_LEAF_PX;
 /** 段階の道の下の小さな言葉。 */
 function stageNote(stage: { state: string; label: string }) {
   if (stage.state === "current") return "いまここ";
@@ -1058,7 +1057,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onEntryKeydown));
 .shogi-game .team-battle__opponent { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shogi-game .team-battle__opponent:hover, .shogi-game .team-battle__school-link:hover,
 .shogi-game .team-battle__opponent:focus-visible, .shogi-game .team-battle__school-link:focus-visible { color: var(--amber, #f1a54c); transform: none; }
-.shogi-game .team-battle__ko-round li .team-battle__school-link:last-child { text-align: right; }
 .shogi-game .team-battle__school-sheet { display: grid; gap: 0.5rem; }
 .shogi-game .team-battle__school-sheet h2 { display: flex; align-items: baseline; gap: 0.5rem; margin: 0; font-size: 1.15rem; }
 .shogi-game .team-battle__school-sheet h2 small { color: #cfd8de; font-size: 0.75rem; }
@@ -1130,10 +1128,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onEntryKeydown));
 .shogi-game .team-battle__row--you { background: rgba(241, 165, 76, 0.18); font-weight: 800; }
 .shogi-game .team-battle__leagues { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.5rem; }
 .shogi-game .team-battle__ko { display: grid; gap: 0.5rem; }
-.shogi-game .team-battle__ko-round h3 { margin: 0 0 0.2rem; color: var(--amber, #f1a54c); font-size: 0.85rem; }
-.shogi-game .team-battle__ko-round ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
-.shogi-game .team-battle__ko-round li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.3rem; padding: 0.2rem 0.4rem; border-radius: 0.4rem; background: rgba(43, 70, 91, 0.6); font-size: 0.8rem; }
-.shogi-game .team-battle__ko-round li span:last-child { text-align: right; }
+/* トーナメント表(22章)。高さは山の大きさで決める(画面に合わせて縮めない)。回戦の見出しの地の色は表の欄と同じ。 */
+.shogi-game .team-battle__bracket { --ryuo-bracket-bg: #1e2d3d; min-height: 0; }
 .shogi-game .team-battle__winner { color: var(--amber, #f1a54c); font-weight: 900; }
 .shogi-game .team-battle__champion { margin: 0; color: var(--amber, #f1a54c); font-weight: 900; }
 .shogi-game .team-battle__result { display: grid; justify-items: center; gap: 0.2rem; padding: 0.6rem; }

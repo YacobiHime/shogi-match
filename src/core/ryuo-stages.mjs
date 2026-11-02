@@ -71,9 +71,11 @@ export function seasonStages(season) {
  *   roundLabel: (round: number) => string,
  *   labels?: { [pid: string]: string },
  *   pendingNodeId?: string | null,
- * }} options brief: 棋士の札、roundLabel: 回戦の名前、labels: 名前に添える札(例: 1組優勝)
+ *   userId?: string,
+ * }} options brief: 棋士の札、roundLabel: 回戦の名前、labels: 名前に添える札(例: 1組優勝)、
+ *   userId: 「あなた」の印を付けるid(団体戦は自分の学校。docs/team-battle-design.mdの22章)
  */
-export function matchBracket(bracket, { brief, roundLabel, labels = {}, pendingNodeId = null }) {
+export function matchBracket(bracket, { brief, roundLabel, labels = {}, pendingNodeId = null, userId = USER }) {
   if (!bracket?.root?.from) return { rounds: [], matches: [], leafCount: 0, userNext: null };
   const matches = [];
   let leafCount = 0;
@@ -97,7 +99,7 @@ export function matchBracket(bracket, { brief, roundLabel, labels = {}, pendingN
           dan: player?.dan ?? '',
           label: labels[pid] ?? '',
           story: player?.story ?? null,
-          you: pid === USER,
+          you: pid === userId,
           from: child.from ?? null,
           placeholder: '',
         };
@@ -120,7 +122,7 @@ export function matchBracket(bracket, { brief, roundLabel, labels = {}, pendingN
       final: node.id === bracket.root.from,
       userIn: top.you || bottom.you,
       // 勝ち上がりの線を、プレイヤーが通ったか(次の試合へ琥珀の線を引く)。
-      userWon: node.winner === USER,
+      userWon: node.winner === userId,
     });
     return (ya + yb) / 2;
   };

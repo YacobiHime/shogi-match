@@ -11,6 +11,7 @@ import { HANANE, YOSHIHIKO, STORY_PEOPLE, storyCharacter, storyMemberId } from '
 import { ABILITIES, abilityValues } from './player-abilities.mjs';
 import { GROUP_MEAN_RATING, MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, WORLD_BASE_RATING } from './ryuo-strength.mjs';
 import { levelGradeName } from './tournament-world.mjs';
+import { matchBracket } from './ryuo-stages.mjs';
 
 export const TEAM_BATTLE_KEY = 'yacobihime:shogi-match:team-battle:v1';
 
@@ -1274,7 +1275,7 @@ export function swissTable(run) {
     .sort((x, y) => y.w - x.w || x.l - y.l || y.boards - x.boards);
 }
 
-/** 1つのトーナメントの回戦ごとの札(地区大会・県大会・全国の決勝トーナメント・プロの本戦)。 */
+/** 1つのトーナメントの回戦ごとの札(地区大会・県大会・全国の決勝トーナメント・プロの本戦)。bracketはトーナメント表(22章)。 */
 function knockoutViewOf(run, ko, champion = null) {
   if (!ko) return null;
   const names = ko.names ?? KO_ROUND_NAMES[ko.size] ?? [];
@@ -1285,8 +1286,63 @@ function knockoutViewOf(run, ko, champion = null) {
       name: names[index] ?? `${index + 1}回戦`,
       matches: round.map((entry) => entry.bye ? { bye: teamCard(run, entry.bye) } : matchView(run, run.matches[entry.match])),
     })),
+    bracket: teamBracket(run, ko),
     champion: champion ? teamCard(run, champion) : null,
   };
+}
+
+/**
+ * トーナメント表(竜王戦と同じRyuoBracket.vueの形。docs/team-battle-design.mdの22章)。
+ * 初めの組み合わせ(ko.slots)から決勝までの山を全部作り、まだの回戦は「準決勝の勝者」の札で見せる。
+ * 指した回戦の札は試合のid、まだの札は`ko-回戦-番号`。決着した札の右には、その学校の勝ち数を出す。
+ * @param {any} run
+ * @param {any} ko
+ */
+export function teamBracket(run, ko) {
+  const empty = { rounds: [], matches: [], leafCount: 0, userNext: null };
+  if (!ko?.slots?.length) return empty;
+  const names = ko.names ?? KO_ROUND_NAMES[ko.size] ?? [];
+  const total = Math.max(1, Math.round(Math.log2(ko.slots.length)));
+  const nodes = {};
+  let sides = ko.slots.map((team) => (team ? { pid: team } : null));
+  for (let round = 1; sides.length > 1; round += 1) {
+    const played = ko.rounds[round - 1] ?? null;
+    const next = [];
+    for (let index = 0; index < sides.length; index += 2) {
+      const [x, y] = [sides[index], sides[index + 1]];
+      if (!x || !y) {
+        // 不戦勝は札を作らず、そのまま次の回戦へ(組み合わせの番号は進める)。
+        next.push(x ?? y ?? null);
+        continue;
+      }
+      const entry = played?.[index / 2];
+      const match = entry?.match ? run.matches[entry.match] : null;
+      const id = match?.id ?? `ko-${round}-${index / 2}`;
+      nodes[id] = { id, round, a: x, b: y, winner: match?.winner ? match[match.winner] : null, game: null };
+      next.push({ from: id });
+    }
+    sides = next;
+  }
+  const root = sides[0]?.from ? { from: sides[0].from } : null;
+  if (!root) return empty;
+  const pendingNodeId = run.current && nodes[run.current] && !run.matches[run.current]?.winner ? run.current : null;
+  const view = matchBracket({ nodes, root, rounds: total }, {
+    brief: (team) => ({ name: run.teams[team]?.name ?? '', dan: '', story: null }),
+    roundLabel: (round) => names[round - 1] ?? `${round}回戦`,
+    pendingNodeId,
+    userId: USER_TEAM,
+  });
+  // 決着した札は、右に勝ち数(「2」と「1」)。
+  for (const card of view.matches) {
+    const match = run.matches[card.id];
+    if (!match?.winner) continue;
+    for (const side of /** @type {const} */ (['top', 'bottom'])) {
+      const team = card[side].pid;
+      const key = match.a === team ? 'a' : match.b === team ? 'b' : null;
+      if (key) card[side].dan = String(match.score[key]);
+    }
+  }
+  return view;
 }
 
 /** トーナメント表の回戦ごとの札(全国の決勝トーナメントとプロの本戦。地区大会・県大会のあいだはnull)。 */

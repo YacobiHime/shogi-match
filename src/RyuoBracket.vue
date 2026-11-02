@@ -47,6 +47,15 @@
             <!-- 決勝トーナメントは、段位の代わりに組と順位(1組優勝など)を右に出す(名前の幅を残す)。 -->
             <i v-if="match[side].label" class="ryuo-bracket__label">{{ match[side].label }}</i>
             <span v-else class="ryuo-bracket__dan">{{ match[side].dan }}</span>
+            <!-- 行を押すと、その名前のくわしい情報(団体戦の学校のシート。docs/team-battle-design.mdの22章)。 -->
+            <button
+              v-if="pickable && match[side].pid"
+              type="button"
+              class="ryuo-bracket__pick"
+              :aria-label="`${match[side].name}を見る`"
+              :data-bracket-pick="match[side].pid"
+              @click="emit('pick', match[side].pid as string)"
+            />
           </div>
           <!--
             回戦の中継ボード(docs/tournament-relay-design.mdの18章)。何手目・形勢のバー(上の棋士の勝率。色は先後の色)・視聴者数。
@@ -99,8 +108,10 @@ const props = defineProps({
   watchable: { type: Boolean, default: false },
   /** 回戦の中継ボードの、試合ごとのようす(18章)。ある試合は札に1行足し、押すと中継を開く。 */
   live: { type: Object as PropType<Record<string, LiveCard>>, default: () => ({}) },
+  /** 行を押せるようにする(pickを出す。団体戦の表の学校名。docs/team-battle-design.mdの22章)。 */
+  pickable: { type: Boolean, default: false },
 });
-const emit = defineEmits<{ watch: [matchId: string] }>();
+const emit = defineEmits<{ watch: [matchId: string]; pick: [pid: string] }>();
 /** 中継を見られる試合(決着していて、プレイヤーが出ていない)。 */
 const canWatch = (match: Match) => Boolean(match.winner && !match.userIn && match.top.pid && match.bottom.pid);
 
@@ -279,9 +290,24 @@ watch(() => `${props.view.userNext}:${props.view.matches.find((entry) => entry.p
   align-items: center;
   gap: 0.35rem;
   min-width: 0;
+  position: relative;
   padding: 0 0.45rem;
   color: #fffcf4;
 }
+.shogi-game .ryuo-bracket__pick {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.shogi-game .ryuo-bracket__pick:hover { background: rgba(255, 252, 244, 0.08); transform: none; }
+.shogi-game .ryuo-bracket__pick:focus-visible { outline: 2px solid #f1a54c; outline-offset: -2px; }
 .shogi-game .ryuo-bracket__row:first-child { border-radius: 6px 6px 0 0; }
 .shogi-game .ryuo-bracket__row + .ryuo-bracket__row { border-top: 1px solid #3a526e; border-radius: 0 0 6px 6px; }
 .shogi-game .ryuo-bracket__mark { display: grid; place-items: center; width: 1rem; height: 1rem; border-radius: 4px; font-size: 0.7rem; font-weight: 900; }
