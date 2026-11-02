@@ -316,10 +316,7 @@ const nextProblem = computed(() => {
   return list[list.findIndex(({ id }) => id === problem.id) + 1] ?? null;
 });
 
-const backLabel = computed(() => {
-  if (view.value === "problem") return "問題一覧へ";
-  return section.value === "tsume" && tsumeKind.value ? "詰将棋の種類へ" : "タイトルへ戻る";
-});
+const backLabel = computed(() => "戻る");
 function goBack() {
   if (view.value === "problem") {
     clearTimers();

@@ -1067,7 +1067,7 @@ const headerTitle = computed(() => {
   if (view.value === "chapter") return "章クリア！";
   return TUTORIAL_TITLE;
 });
-const backLabel = computed(() => (view.value === "map" ? "タイトルへ戻る" : "地図へ"));
+const backLabel = computed(() => "戻る");
 function goBack() {
   if (view.value === "map") emit("close");
   else openMap();

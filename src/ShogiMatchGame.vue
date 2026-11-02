@@ -448,7 +448,7 @@
       v-if="tournamentOpen"
       ref="tournamentView"
       :asset-base-url="assetBaseUrl"
-      :back-label="tutorialOpen ? '戻る' : 'タイトルへ戻る'"
+      :back-label="'戻る'"
       :career="ryuoCareer"
       :view="playedRyuoView ?? ryuoView"
       :default-difficulty="tournamentEntryDifficulty"
@@ -560,7 +560,7 @@
       v-if="yakobiNoteOpen"
       ref="noteView"
       :asset-base-url="assetBaseUrl"
-      :back-label="noteFromTournament ? '大会へ戻る' : tutorialOpen ? '戻る' : 'タイトルへ戻る'"
+      :back-label="'戻る'"
       :initial-tab="noteInitialTab"
       :state="ratingState"
       :profile="profileState"
@@ -798,7 +798,7 @@
             v-if="showHome"
             type="button"
             class="shogi-game__pregame-back"
-            :aria-label="`${pregameBackLabel}へ戻る`"
+            :aria-label="pregameBackLabel"
             data-pregame-back
             @click="leavePregame"
           >
@@ -3420,7 +3420,8 @@ watch(() => dexOpen.value || Boolean(referenceDexKind.value), (open) => {
 });
 type PregameReturn = { to: "note" } | { to: "dex"; fromNote: boolean } | null;
 const pregameReturn = ref<PregameReturn>(null);
-const pregameBackLabel = computed(() => (pregameReturn.value?.to === "note" ? "ノート" : pregameReturn.value?.to === "dex" ? "図鑑" : "タイトル"));
+/** 対局準備の左上の戻るボタンの言葉(押すと来た場所へ。docs/return-path-design.mdの5章)。 */
+const pregameBackLabel = computed(() => "戻る");
 /** 対局準備の「←」と戻る操作。開いた元(ノート・図鑑)があればそこへ、なければタイトルへ。 */
 function leavePregame() {
   const back = pregameReturn.value;
@@ -3494,10 +3495,21 @@ const dexShelfOpen = ref(false);
 const dexShelfFrom = ref<"home" | "match">("match");
 const dexFromMatch = ref(false);
 const dexOverMatch = computed(() => dexFromMatch.value && (dexOpen.value || Boolean(referenceDexKind.value)));
-const dexBackLabel = computed(() => (
-  tutorialOpen.value ? "戻る" : dexFromMatch.value ? "対局へ戻る" : dexFromNote.value ? "ノートへ戻る" : "タイトルへ戻る"
-));
+const dexBackLabel = computed(() => "戻る");
 watch(() => dexOpen.value || Boolean(referenceDexKind.value), (open) => { if (!open) dexFromMatch.value = false; });
+/*
+ * ホームの図鑑の棚から開いた図鑑は、閉じると棚へ戻る(来た場所へ戻る。docs/return-path-design.mdの5章)。
+ * ほかの図鑑へ移ったとき(開いたまま種類が替わる)は、棚へは戻さない。
+ */
+const dexFromHomeShelf = ref(false);
+watch(() => dexOpen.value || Boolean(referenceDexKind.value), (open) => {
+  if (open || !dexFromHomeShelf.value) return;
+  dexFromHomeShelf.value = false;
+  if (homeOpen.value) {
+    dexShelfFrom.value = "home";
+    showDexShelf();
+  }
+});
 watch(homeOpen, (open) => { if (open) dexShelfOpen.value = false; });
 function openDex(kind: DexKind) {
   openDexFromTutorial({ kind });
@@ -3522,6 +3534,7 @@ function showDexShelf() {
 function openDexFromShelf(kind: DexKind) {
   dexShelfOpen.value = false;
   dexFromMatch.value = dexShelfFrom.value === "match";
+  dexFromHomeShelf.value = dexShelfFrom.value === "home";
   openDex(kind);
 }
 // やこび姫の将棋教室を開いているか。

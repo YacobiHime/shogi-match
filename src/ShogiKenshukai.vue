@@ -330,7 +330,7 @@ const props = defineProps({
   shoreikaiBusy: { type: Boolean, default: false },
   /** 奨励会の入会試験に落ちたところから来た(入口の一言を変える)。 */
   shoreikaiFailed: { type: Boolean, default: false },
-  backLabel: { type: String, default: "大会の選択へ" },
+  backLabel: { type: String, default: "戻る" },
 });
 const emit = defineEmits<{
   /** 難易度のシートの「棋力を測る」(docs/first-play-design.mdの13章)。 */

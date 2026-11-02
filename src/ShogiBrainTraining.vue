@@ -472,12 +472,7 @@ const headerTitle = computed(() => {
     default: return BRAIN_TITLE;
   }
 });
-const backLabel = computed(() => {
-  if (view.value === "home") return "ホームへ戻る";
-  if (view.value === "room") return "道場へ戻る";
-  if (view.value === "evidence") return "戻る";
-  return "部屋へ戻る";
-});
+const backLabel = computed(() => "戻る");
 const homeMessage = computed(() => {
   if (stamped(record.value, today, "calc") && stamped(record.value, today, "memory")) return "今日は2つともできたね。また明日！ 日をあけて続けると、長く身につくよ。";
   if (streak.value >= 2) return `続けて${streak.value}日目。今日はどっちをきたえる？`;

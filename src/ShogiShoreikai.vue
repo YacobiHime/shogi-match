@@ -399,7 +399,7 @@ const props = defineProps({
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** 対局から戻ってきた(判子と最終日の結果発表を出す)。 */
   fromGame: { type: Boolean, default: false },
-  backLabel: { type: String, default: "大会の選択へ" },
+  backLabel: { type: String, default: "戻る" },
 });
 const emit = defineEmits<{
   /** 難易度のシートの「棋力を測る」(docs/first-play-design.mdの13章)。 */

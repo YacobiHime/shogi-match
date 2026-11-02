@@ -995,7 +995,7 @@ type UsageRow = { name: string; wins: number; losses: number; draws: number; gam
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
-  backLabel: { type: String, default: "タイトルへ戻る" },
+  backLabel: { type: String, default: "戻る" },
   /** 開いたときの項目(大会の結果の画面からは「大会」)。空なら最後に開いた項目。覚えている項目は変えない。 */
   initialTab: { type: String, default: "" },
   state: { type: Object as PropType<RatingState>, required: true },

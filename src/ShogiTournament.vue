@@ -1128,7 +1128,7 @@ type View = {
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
-  backLabel: { type: String, default: "タイトルへ戻る" },
+  backLabel: { type: String, default: "戻る" },
   career: { type: Object as PropType<Career>, required: true },
   view: { type: Object as PropType<View | null>, default: null },
   defaultDifficulty: { type: Number, default: 7 },
@@ -1436,7 +1436,8 @@ function chooseRyuo() {
   sheet.value = "";
 }
 
-const backText = computed(() => (screen.value === "result" ? "大会選択へ" : "大会の選択へ"));
+/** 左上の戻るボタンの言葉(どの画面も「戻る」。押すと1つ前の画面へ。docs/return-path-design.mdの5章)。 */
+const backText = computed(() => "戻る");
 /**
  * 戻る操作。重ねて開いたもの(くわしい情報・トーナメント表・説明)があれば、まずそれを閉じる。
  * 結果は見終えたことにして、大会の選択へ。ほかの画面も、大会の選択へ。選択の画面なら、閉じる。

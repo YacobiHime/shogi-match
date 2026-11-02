@@ -413,7 +413,7 @@ const inProgress = computed(() => Boolean(props.view && !props.view.result));
 const screen = ref<"entry" | "season" | "result">(
   props.view?.result && !props.view.resultSeen ? "result" : props.openSeason && props.view && !props.view.result ? "season" : "entry",
 );
-const backLabel = computed(() => (screen.value === "entry" ? "大会の選択へ" : "五重塔へ"));
+const backLabel = computed(() => "戻る");
 /** 左上の戻る。入口なら大会の選択へ、ほかは入口へ。 */
 function topBack() {
   if (screen.value === "entry") {

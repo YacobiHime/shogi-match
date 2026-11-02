@@ -12,7 +12,7 @@
         <small>{{ festival.dateText }}・{{ festival.place }}</small>
       </div>
       <button v-if="screen !== 'list'" type="button" class="shogi-tournament__topbar-back" data-festival-back @click="screen = 'list'">
-        <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">まつりへ</span>
+        <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">戻る</span>
       </button>
     </header>
 

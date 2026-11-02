@@ -235,7 +235,7 @@ const props = defineProps({
   // 教室から開くときに最初に表示する戦法・囲い。囲いのIDなら囲いのタブで開く。
   initialId: { type: String, default: "" },
   // 教室から重ねて開いたときは教室へ戻るため、「戻る」とだけ表示する。
-  backLabel: { type: String, default: "タイトルへ戻る" },
+  backLabel: { type: String, default: "戻る" },
   // 対局中に開いたときは、占いの結果から新しい対局を始めない(指している対局が消えるため)。
   canPlay: { type: Boolean, default: true },
 });

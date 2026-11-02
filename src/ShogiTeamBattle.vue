@@ -488,7 +488,7 @@ const props = defineProps({
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** プロの試合で、仲間が指した直前の局の結果(「第3局 羽音 勝ち 2-1」)。 */
   news: { type: String, default: "" },
-  backLabel: { type: String, default: "大会の選択へ" },
+  backLabel: { type: String, default: "戻る" },
   /** 結果発表で仲間の盤を見守るときに棋譜を作るエンジン(中継と同じ)。なければ見守らずに結果発表。 */
   engineFactory: { type: Function as PropType<(() => Promise<EngineFactory>) | null>, default: null },
   /** 賞状帳(表彰式で渡す賞状を開く。20章)。 */

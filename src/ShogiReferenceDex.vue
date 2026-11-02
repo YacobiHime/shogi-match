@@ -1,7 +1,7 @@
 <template>
   <div class="shogi-dex shogi-dex--catalog" role="dialog" aria-modal="true" aria-labelledby="shogi-reference-dex-title">
     <header class="shogi-dex__header">
-      <button type="button" class="shogi-dex__back" @click="emit('close')">
+      <button type="button" class="shogi-dex__back" data-dex-back @click="goBack">
         <span aria-hidden="true">←</span> {{ backLabel }}
       </button>
       <h1 id="shogi-reference-dex-title">{{ dex.title }}</h1>
@@ -535,7 +535,7 @@ const props = defineProps({
   initialId: { type: String, default: "" },
   assetBaseUrl: { type: String, default: "." },
   // 教室から重ねて開いたときは教室へ戻るため、「戻る」とだけ表示する。
-  backLabel: { type: String, default: "タイトルへ戻る" },
+  backLabel: { type: String, default: "戻る" },
   // 代表局を解析する将棋AI。対局画面のエンジンを1局面ずつ借りる。ないときは解析を出さない。
   analysisEngine: { type: Object as () => AnalysisEngine | null, default: null },
 });

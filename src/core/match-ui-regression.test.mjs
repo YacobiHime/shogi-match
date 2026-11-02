@@ -409,7 +409,8 @@ describe("match screen regressions", () => {
     // 大会の選択から選んだら入口から。対局から戻ったときだけ、期の画面を直接開く。
     const meijin = readFileSync(new URL("../ShogiMeijin.vue", import.meta.url), "utf8");
     expect(meijin.match(/<header class="shogi-tournament__topbar meijin__topbar">/g)).toHaveLength(3);
-    expect(meijin).toMatch(/const backLabel = computed\(\(\) => \(screen\.value === "entry" \? "大会の選択へ" : "五重塔へ"\)\);/);
+    // 左上の戻るボタンは「戻る」で、押すと1つ前の画面へ(docs/return-path-design.mdの5章)。
+    expect(meijin).toMatch(/const backLabel = computed\(\(\) => "戻る"\);/);
     expect(meijin).toMatch(/function topBack\(\) \{\s*if \(screen\.value === "entry"\) \{\s*emit\("back"\);[\s\S]*?screen\.value = "entry";/);
     expect(meijin).toMatch(/props\.openSeason && props\.view && !props\.view\.result \? "season" : "entry"/);
     expect(tournament).toMatch(/const meijinFromGame = ref\(props\.fromGame && props\.startAt === "meijin"\);/);
@@ -1047,7 +1048,7 @@ describe("match screen regressions", () => {
     // 対局のエンジンを借りない。占いから新しい対局を始めない。戻る先は対局。
     expect(source).toMatch(/:analysis-engine="dexFromMatch \? null : dexAnalysisEngine"/);
     expect(source).toMatch(/:can-play="!dexFromMatch"/);
-    expect(source).toMatch(/dexFromMatch\.value \? "対局へ戻る"/);
+    expect(source).toMatch(/const dexBackLabel = computed\(\(\) => "戻る"\);/);
     // 対局は残したまま隠す。
     expect(source).toMatch(/'shogi-game--dex-over-match': dexOverMatch/);
     expect(source).toMatch(/\.shogi-game--dex-over-match > :not\(\.shogi-dex\) \{\s*visibility: hidden;/);
@@ -1184,7 +1185,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/const stage = matchStage\.value \?\? game\.stage \?\? null;\s*const eventText = stage\?\.eventText \|\| TOURNAMENT_EVENT_TEXT\[/);
     // 大会の結果の画面から開いたノートは「大会へ戻る」で、閉じると大会の画面(結果)へ戻る。戻る操作も同じ。
     expect(source).toMatch(/@open-note="openNoteFromTournament"/);
-    expect(source).toMatch(/:back-label="noteFromTournament \? '大会へ戻る' :/);
+    expect(source).toMatch(/function closeYakobiNote\(\) \{[\s\S]*?if \(!noteFromTournament\.value\) return;[\s\S]*?tournamentOpen\.value = true;/);
     expect(source).toMatch(/function closeYakobiNote\(\) \{[\s\S]*?tournamentStartAt\.value = "season";[\s\S]*?tournamentOpen\.value = true;/);
     expect(source).toMatch(/if \(!noteView\.value\?\.goBack\(\)\) closeYakobiNote\(\);/);
   });
@@ -1200,7 +1201,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(planSheetFromNote\) leavePregame\(\);/);
     expect(source).toMatch(/function choosePlan\([^)]*\) \{\s*const context = [^;]*;\s*planSheetFromNote = false;\s*closePlanSheet\(\);/);
     // ノートから開いた図鑑は「ノートへ戻る」で、閉じるとノートへ。
-    expect(source).toMatch(/dexFromNote\.value \? "ノートへ戻る"/);
+    expect(source).toMatch(/const dexFromHomeShelf = ref\(false\);[\s\S]*?showDexShelf\(\);/);
     expect(source).toMatch(/function openDexFromNote\([^)]*\) \{\s*yakobiNoteOpen\.value = false;\s*dexFromNote\.value = true;/);
     // ノートから始めた棋力テストは、やめても結果を閉じてもノートへ。
     expect(source).toMatch(/function openSkillTest\(band: readonly number\[\] \| null, from: MeasureOrigin = yakobiNoteOpen\.value \? "note" : ""\)/);

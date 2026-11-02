@@ -360,7 +360,7 @@
       <div v-if="eventOpen" class="pro-year__event-screen" role="dialog" aria-modal="true" :aria-label="eventOpen.name" data-pro-event-sheet :style="{ '--event-color': eventOpen.color }">
         <header class="pro-year__event-head">
           <button type="button" class="shogi-tournament__topbar-back" data-pro-event-close @click="eventId = ''">
-            <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">1年へ</span>
+            <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">戻る</span>
           </button>
           <div class="pro-year__event-heading">
             <h2>{{ eventOpen.name }}</h2>
@@ -526,7 +526,7 @@ const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   playerName: { type: String, default: "あなた" },
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
-  backLabel: { type: String, default: "大会の選択へ" },
+  backLabel: { type: String, default: "戻る" },
 });
 const emit = defineEmits<{
   measure: [];
