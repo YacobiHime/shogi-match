@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIMUL_RESIGN_GAP, guestMove, legalMovesOf, proGain, sfenAfter, sideToMove, simulStartSfen, simulStatus, simulTally } from './festival-simul.mjs';
+import { EVEN_SFEN, SIMUL_RESIGN_GAP, guestMove, legalMovesOf, partnerMove, pieceOn, proGain, rangingMoveLabel, sfenAfter, sideToMove, simulBoardOf, simulProAt, simulStartSfen, simulStatus, simulTally } from './festival-simul.mjs';
 
 describe('ぐるぐる指導対局の盤(10-2の6)', () => {
   it('駒落ちの始めは上手(後手)の手番で、指すと下手の手番になる', () => {
@@ -33,5 +33,44 @@ describe('ぐるぐる指導対局の盤(10-2の6)', () => {
 
   it('「ここまで」で区切った盤は引き分けに数える', () => {
     expect(simulTally([{ result: 'win' }, { result: 'loss' }, { result: null }])).toEqual({ wins: 1, losses: 1, draws: 1 });
+  });
+});
+
+describe('ほかの棋士と回るぐるぐる指導(11章)', () => {
+  const ranging = { logic: 10, party: 'ranging', rangeSquare: '4b' };
+  const staticPro = { logic: 10, party: 'static', rangeSquare: '' };
+
+  it('3人と3つの盤で、回るたびに1つずつずれる', () => {
+    expect([0, 1, 2].map((round) => simulBoardOf(round, 0, 3))).toEqual([0, 1, 2]);
+    expect([0, 1, 2].map((round) => simulBoardOf(round, 1, 3))).toEqual([1, 2, 0]);
+    for (let round = 0; round < 6; round += 1) {
+      for (let board = 0; board < 3; board += 1) expect(simulBoardOf(round, simulProAt(round, board, 3), 3)).toBe(board);
+    }
+  });
+
+  it('振り飛車党の棋士は、平手の盤で飛車を振る(居飛車党のあなたも、その盤は振り飛車で指し継ぐ)', () => {
+    let sfen = EVEN_SFEN;
+    const moves = [];
+    for (const usi of ['7g7f', '3c3d', '2g2f']) {
+      sfen = sfenAfter(sfen, usi);
+      moves.push(usi);
+    }
+    const usi = partnerMove({ sfen, partner: ranging, moveHistory: moves, random: () => 0.5 });
+    expect(usi).toBe('8b4b');
+    expect(rangingMoveLabel(sfen, usi)).toBe('四間飛車');
+    expect(pieceOn(sfenAfter(sfen, usi), '4b')).toBe('r');
+  });
+
+  it('居飛車党の棋士は、序盤に飛車を横に動かさない', () => {
+    let sfen = EVEN_SFEN;
+    const moves = [];
+    for (const usi of ['7g7f', '3c3d', '2g2f']) {
+      sfen = sfenAfter(sfen, usi);
+      moves.push(usi);
+    }
+    for (let seed = 0; seed < 8; seed += 1) {
+      const usi = partnerMove({ sfen, partner: staticPro, moveHistory: moves, random: () => (seed + 0.5) / 8 });
+      expect(rangingMoveLabel(sfen, usi)).toBe('');
+    }
   });
 });

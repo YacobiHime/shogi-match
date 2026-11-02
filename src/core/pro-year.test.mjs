@@ -643,7 +643,7 @@ describe('将棋まつり(10-2の6)', () => {
 
   it('ぐるぐる指導の3人は、まつりごとに同じ顔ぶれ', () => {
     expect(simulGuests({ seed: 3 })).toEqual(simulGuests({ seed: 3 }));
-    expect(simulGuests({ seed: 3 }).map((guest) => guest.handicap)).toEqual(['6pieces', '6pieces', '4pieces']);
+    expect(simulGuests({ seed: 3 }).map((guest) => guest.handicap)).toEqual(['6pieces', '4pieces', 'even']);
   });
 });
 
@@ -668,5 +668,21 @@ describe('保存', () => {
     expect(loadProYear(storage, roster)).toBeNull();
     storage.setItem(PRO_YEAR_KEY, JSON.stringify({ version: 99 }));
     expect(loadProYear(storage, roster)).toBeNull();
+  });
+});
+
+describe('ぐるぐる指導で一緒に回る棋士(11章)', () => {
+  it('2人を選び、振り飛車党がいれば1人は入れる。振り先は得意戦法から', async () => {
+    const { simulPartners, simulStyleOf } = await import('./pro-festival.mjs');
+    const members = [
+      { id: 'a', name: '居飛車一郎', dan: '八段', repertoire: { party: 'static', styles: ['yagura'] } },
+      { id: 'b', name: '振飛車次郎', dan: '七段', repertoire: { party: 'ranging', styles: ['sangen', 'shiken-mino'] } },
+      { id: 'c', name: '角換三郎', dan: '六段', repertoire: { party: 'static', styles: ['kakugawari'] } },
+    ];
+    const partners = simulPartners({ seed: 9 }, members);
+    expect(partners).toHaveLength(2);
+    expect(partners.some((partner) => partner.id === 'b' && partner.rangeSquare === '3b' && partner.rangeLabel === '三間飛車')).toBe(true);
+    expect(simulStyleOf(members[0])).toMatchObject({ party: 'static', rangeSquare: '' });
+    expect(simulPartners({ seed: 9 }, members)).toEqual(partners);
   });
 });

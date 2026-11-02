@@ -50,6 +50,7 @@
     <section v-else-if="screen === 'simul'" class="pro-festival__body pro-festival__body--board" aria-label="ぐるぐる指導対局">
       <FestivalSimul
         :guests="festival.simul"
+        :partners="festival.simulPartners ?? []"
         :player-name="playerName"
         :asset-base-url="assetBaseUrl"
         :seed="festival.seed"

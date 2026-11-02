@@ -14,7 +14,7 @@ import { CLASS_RULES } from './meijin.mjs';
 import { GEAR, STUDY_SIZE, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, studyDaysBetween, studyDaysOfMonth, studyHananeLine } from './pro-life.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
 import {
-  FESTIVAL_EVENTS, KIGOU_BOOK_MAX, KIGOU_FANS, SHIDOU_FANS, SIMUL_FANS, festivalDays, festivalFee, kigouWords, shidouGuest, simulGuests, talkFans,
+  FESTIVAL_EVENTS, KIGOU_BOOK_MAX, KIGOU_FANS, SHIDOU_FANS, SIMUL_FANS, festivalDays, festivalFee, kigouWords, shidouGuest, simulGuests, simulPartners, talkFans,
 } from './pro-festival.mjs';
 
 export const PRO_YEAR_KEY = 'yacobihime:shogi-match:pro-year:v1';
@@ -1343,6 +1343,8 @@ function festivalView(state) {
     events: FESTIVAL_EVENTS.map((entry) => ({ ...entry, done: festival.done[entry.id] ?? null })),
     guest: shidouGuest(festival, state.userLevel ?? 20),
     simul: simulGuests(festival),
+    // ぐるぐる指導で一緒に回る棋士2人(11章)。
+    simulPartners: simulPartners(festival, Object.values(state.players ?? {}).filter((member) => member?.id !== PRO_USER_ID)),
     words: kigouWords(state.user.crowns),
     seed: festival.seed,
   };

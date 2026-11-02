@@ -4,6 +4,7 @@
 
 import { createRng, pick } from './ryuo-random.mjs';
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
+import { styleEntry } from './ryuo-repertoire.mjs';
 
 const pad2 = (value) => String(value).padStart(2, '0');
 /** 種から決まる並べかえ(フィッシャー–イェーツ)。 */
@@ -48,7 +49,7 @@ export function festivalDays(fy, busy = new Set()) {
 /** 4つの催し(どれをやっても、飛ばしてもよい)。 */
 export const FESTIVAL_EVENTS = Object.freeze([
   { id: 'shidou', label: '駒落ち指導対局', note: 'あなたが上手。勝ち負けより、楽しんでもらおう' },
-  { id: 'simul', label: 'ぐるぐる指導対局', note: '3人を相手に、盤を回りながら1手ずつ' },
+  { id: 'simul', label: 'ぐるぐる指導対局', note: 'ほかの棋士2人と盤を回りながら、1手ずつ指し継ぐ' },
   { id: 'talk', label: 'トークショー', note: '司会の質問に答える。ゲストは羽音' },
   { id: 'kigou', label: '揮毫', note: '色紙に、好きな言葉を書く' },
 ].map((entry) => Object.freeze(entry)));
@@ -90,19 +91,55 @@ export function shidouGuest(festival, userLevel) {
 }
 
 /**
- * ぐるぐる指導対局の3人(まつりごとに決まる)。ロジックAIで指す子どもたち(エンジンを使わない)。
+ * ぐるぐる指導対局の3人(まつりごとに決まる。docs/pro-year-design.mdの11章)。ロジックAIで指す(エンジンを使わない)。
+ * 子ども2人は駒落ち、大人1人は平手(先手のアマチュアから指す。振り飛車党の棋士が振ると、ほかの棋士も振り飛車で指し継ぐ盤)。
  * logicは`chooseLogicMove`のLv(1〜10)。
  * @param {{ seed: number }} festival
  */
 export function simulGuests(festival) {
   const rng = createRng((festival.seed ?? 1) + 202);
-  const names = shuffled(rng, KIDS).slice(0, 3);
+  const names = shuffled(rng, KIDS).slice(0, 2);
   const plans = [
     { logic: 2.4, level: 5, handicap: '6pieces', handicapLabel: '六枚落ち' },
-    { logic: 4.9, level: 7, handicap: '6pieces', handicapLabel: '六枚落ち' },
-    { logic: 9, level: 9, handicap: '4pieces', handicapLabel: '四枚落ち' },
+    { logic: 4.9, level: 7, handicap: '4pieces', handicapLabel: '四枚落ち' },
   ];
-  return plans.map((plan, index) => ({ ...plan, name: `${pick(rng, GRADES)}の${names[index]}さん`, grade: gradeOf(plan.level) }));
+  const kids = plans.map((plan, index) => ({ ...plan, name: `${pick(rng, GRADES)}の${names[index]}さん`, grade: gradeOf(plan.level) }));
+  const adult = { logic: 9, level: 12, handicap: 'even', handicapLabel: '平手', name: pick(rng, ADULTS), grade: gradeOf(12) };
+  return [...kids, adult];
+}
+
+/** 振り飛車の戦法ごとの、上手(後手)の飛車の振り先(USIの升)と名前。 */
+const RANGING_SQUARES = Object.freeze({
+  shiken: { square: '4b', label: '四間飛車' }, 'fujii-system': { square: '4b', label: '四間飛車' },
+  sangen: { square: '3b', label: '三間飛車' }, ishida: { square: '3b', label: '三間飛車' },
+  gokigen: { square: '5b', label: '中飛車' }, mukai: { square: '2b', label: '向かい飛車' },
+});
+
+/** 棋士の、ぐるぐる指導での指し方(振り飛車党なら振り先。オールラウンダーは半分の確率で振る)。 */
+export function simulStyleOf(member) {
+  const repertoire = member?.repertoire;
+  const party = repertoire?.party ?? 'static';
+  const main = (repertoire?.styles ?? []).map((id) => styleEntry(id)).find((style) => style.rook === 'ranging');
+  const ranging = main ? RANGING_SQUARES[main.strategy] ?? RANGING_SQUARES.shiken : RANGING_SQUARES.shiken;
+  return { party, rangeSquare: party === 'static' ? '' : ranging.square, rangeLabel: party === 'static' ? '' : ranging.label };
+}
+
+/**
+ * ぐるぐる指導で一緒に回る棋士2人(まつりごとに決まる)。振り飛車党がいれば1人は入れる(居飛車党のあなたも、
+ * その人が振った盤は振り飛車で指し継ぐことになる)。
+ * @param {{ seed: number }} festival
+ * @param {any[]} members 棋士(あなたを除く)
+ */
+export function simulPartners(festival, members) {
+  const rng = createRng((festival.seed ?? 1) + 404);
+  const pool = shuffled(rng, (members ?? []).filter((member) => member?.name && member.kind !== 'amateur'));
+  const ranging = pool.find((member) => member.repertoire?.party === 'ranging') ?? pool.find((member) => member.repertoire?.party === 'both');
+  const others = pool.filter((member) => member !== ranging);
+  const chosen = [ranging, others[0], others[1]].filter(Boolean).slice(0, 2);
+  return chosen.map((member) => ({
+    id: member.id, name: member.name, short: String(member.name).slice(0, 2), dan: member.dan ?? '',
+    logic: 10, ...simulStyleOf(member),
+  }));
 }
 
 /** 指導対局のファン(勝ち負けより、楽しんでもらう。参加者が勝つと大喜び)。 */
