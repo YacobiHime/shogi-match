@@ -12,6 +12,7 @@ import {
   loadBrainRecord,
   migrateBrainRecordV1,
   nextStair,
+  SPEED_STAIR_UP,
   recordBrainSession,
   rememberRoom,
   saveBrainRecord,
@@ -53,6 +54,18 @@ describe('脳トレの記録', () => {
     expect(state).toEqual({ level: 3, streak: 0, moved: -1 });
     expect(nextStair({ level: 0, streak: 0 }, false, { max: 5 })).toEqual({ level: 0, streak: 0, moved: 0 });
     expect(nextStair({ level: 5, streak: 1 }, true, { max: 5 })).toEqual({ level: 5, streak: 0, moved: 0 });
+  });
+
+  test('速さの種目の階段は3問続けて正解で上がり、1問まちがえで下がる(正答率およそ8割。14-3)', () => {
+    let state = { level: 2, streak: 0 };
+    state = nextStair(state, true, { max: 9, upAfter: SPEED_STAIR_UP });
+    state = nextStair(state, true, { max: 9, upAfter: SPEED_STAIR_UP });
+    expect(state).toEqual({ level: 2, streak: 2, moved: 0 });
+    state = nextStair(state, true, { max: 9, upAfter: SPEED_STAIR_UP });
+    expect(state).toEqual({ level: 3, streak: 0, moved: 1 });
+    state = nextStair(state, false, { max: 9, upAfter: SPEED_STAIR_UP });
+    expect(state).toEqual({ level: 2, streak: 0, moved: -1 });
+    expect(SPEED_STAIR_UP).toBe(3);
   });
 
   test('前の段から少し下げて始める', () => {
@@ -115,7 +128,8 @@ describe('脳トレの記録', () => {
     const weeks = stampCalendar(record, '2026-10-31');
     expect(weeks).toHaveLength(6);
     expect(weeks.every((week) => week.length === 7)).toBe(true);
-    expect(new Date(`${weeks[0][0].day}T12:00:00`).getDay()).toBe(0);
+    // 月曜はじまり(入口の今週の帯とそろえる)。
+    expect(new Date(`${weeks[0][0].day}T12:00:00`).getDay()).toBe(1);
     const today = weeks.flat().find((cell) => cell.today);
     expect(today).toMatchObject({ day: '2026-10-31', calc: true, memory: false, future: false });
     expect(weeks.flat().find((cell) => cell.day === '2026-10-29').memory).toBe(true);

@@ -20,6 +20,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from "vue";
+import { brainAudio } from "../brain-audio";
 
 type Key = { id: string; label: string; aria: string; kind: "digit" | "erase" | "submit" };
 
@@ -46,6 +47,8 @@ const KEYS: Key[] = [
 
 function press(key: Key) {
   if (props.disabled) return;
+  // 押した瞬間に、ごく小さな音(14-8。D:3-1 無反応をなくす)。
+  brainAudio().play("tick");
   if (key.kind === "digit") emit("digit", key.id);
   else if (key.kind === "erase") emit("erase");
   else if (props.showSubmit) emit("submit");
@@ -55,6 +58,7 @@ function onKey(event: KeyboardEvent) {
   if (props.disabled || event.ctrlKey || event.metaKey || event.altKey) return;
   const target = event.target as HTMLElement | null;
   if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+  if (/^[0-9]$/.test(event.key) || event.key === "Backspace" || (event.key === "Enter" && props.showSubmit)) brainAudio().play("tick");
   if (/^[0-9]$/.test(event.key)) emit("digit", event.key);
   else if (event.key === "Backspace") emit("erase");
   else if (event.key === "Enter" && props.showSubmit) emit("submit");

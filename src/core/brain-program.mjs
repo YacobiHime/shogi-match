@@ -83,9 +83,12 @@ export function cleanCalcProgram(value) {
   return program;
 }
 
-/** コースの1回の種目。速さの種目(ちらっと見る・スピード計算)を毎回入れ、N問前の答えと色で切り替えを日替わりで1つ(原則1)。 */
+/**
+ * コースの1回の種目。速さの種目(スピード計算・ちらっと見る)を毎回入れ、N問前の答えと色で切り替えを日替わりで1つ(原則1)。
+ * 短くリズムのよいスピード計算で始め、根拠のいちばん強い見る速さを真ん中に置く(14-10。D:4-4 でこぼこの坂)。
+ */
 export function calcCourseGames(session) {
-  return ['glance-sym', 'speed', session % 2 === 1 ? 'nback' : 'switch'];
+  return ['speed', 'glance-sym', session % 2 === 1 ? 'nback' : 'switch'];
 }
 
 /**

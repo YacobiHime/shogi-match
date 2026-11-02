@@ -12,141 +12,145 @@
       <button v-if="view === 'home' || view === 'room'" type="button" class="shogi-brain__evidence-open" aria-label="脳トレの根拠" data-brain-evidence @click="openEvidence">?</button>
     </header>
 
-    <!-- 入口。前の部屋の「つづき」、2つの部屋の扉、判子のカレンダー。 -->
+    <!-- 入口(docs/brain-training-design.mdの14-4・14-6)。主役は今日の稽古の札1枚。今週の判子、2つの部屋の扉、いつ稽古するか。 -->
     <section v-if="view === 'home'" class="shogi-tutorial__shelf shogi-brain__home" aria-label="脳トレの部屋" data-brain-home>
-      <div class="shogi-dex__speech shogi-tutorial__intro">
-        <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
-        <p>{{ homeMessage }}</p>
+      <div class="shogi-brain__home-main">
+        <div class="shogi-dex__speech shogi-tutorial__intro">
+          <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
+          <p>{{ homeMessage }}</p>
+        </div>
+        <BrainTodayCard
+          v-if="pick"
+          :room="pick"
+          v-bind="pick === 'calc' ? calcCard : memoryCard"
+          data-brain-continue
+          @start="startRoomToday(pick)"
+        />
+        <section v-else class="brain-done" aria-label="今日の稽古はおしまい" data-brain-done>
+          <p class="brain-done__seals" aria-hidden="true"><i class="brain-seal brain-seal--calc">計</i><i class="brain-seal brain-seal--memory"><span>記</span></i></p>
+          <h2>今日の稽古はおしまい</h2>
+          <p>日をあけて続けると、長く身につくよ。</p>
+          <button type="button" class="brain-game__secondary" data-brain-more @click="openRoom((record.room || 'calc') as RoomId)">もう少し練習する</button>
+        </section>
+        <p v-if="cueLine && !cueEditing" class="brain-cue-line" data-brain-cue-line>
+          <span aria-hidden="true">⏰</span><span>{{ cueLine }}</span>
+          <button type="button" class="brain-cue-line__edit" data-brain-cue-edit @click="cueEditing = true">変える</button>
+        </p>
+        <BrainCueChooser v-if="cueEditing" :model-value="record.cue" lead="いつ稽古する？" @choose="chooseCue" />
       </div>
-      <button v-if="record.room" type="button" class="shogi-brain__today" data-brain-continue @click="continueRoom">
-        <span class="shogi-brain__today-eyebrow">つづき</span>
-        <strong>{{ roomLabel(record.room as RoomId) }}の今日のトレーニング</strong>
-        <small>{{ roomProgress(record.room as RoomId).text }}</small>
-      </button>
-      <ul class="shogi-brain__rooms">
-        <li v-for="item in BRAIN_ROOMS" :key="item.id">
-          <button type="button" class="shogi-brain__room-card" :class="`shogi-brain__room-card--${item.id}`" :data-brain-room="item.id" @click="openRoom(item.id as RoomId)">
-            <span class="shogi-brain__room-emoji" aria-hidden="true">{{ item.emoji }}</span>
+      <div class="shogi-brain__home-side">
+        <BrainWeekStrip :strip="week" :counts="weekly" :day-label="todayLabel" />
+        <div class="brain-doors">
+          <button
+            v-for="item in BRAIN_ROOMS"
+            :key="item.id"
+            type="button"
+            class="brain-door"
+            :class="`brain-door--${item.id}`"
+            :data-brain-room="item.id"
+            @click="openRoom(item.id as RoomId)"
+          >
+            <span class="brain-door__icon" aria-hidden="true">{{ item.emoji }}</span>
             <strong>{{ item.label }}</strong>
             <small>{{ roomProgress(item.id as RoomId).text }}</small>
-            <span class="shogi-brain__room-stamp" :class="{ 'shogi-brain__room-stamp--done': stamped(record, today, item.id) }">
-              {{ stamped(record, today, item.id) ? "今日 ✓" : "今日はまだ" }}
-            </span>
+            <i v-if="stamped(record, today, item.id)" class="brain-seal" :class="`brain-seal--${item.id}`" :aria-label="`${item.label}は今日の判子あり`"><span>{{ item.id === 'calc' ? '計' : '記' }}</span></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 計算力の部屋。主役は今日の稽古、コースの道、自由に練習の4つ、将棋の棚と記録(14-6の2)。 -->
+    <section v-else-if="view === 'room' && room === 'calc'" class="shogi-tutorial__shelf shogi-brain__room" aria-label="計算力の部屋" data-brain-room-view="calc">
+      <div class="shogi-brain__room-main">
+        <p v-if="roomMessage" class="shogi-brain__room-message" role="status">{{ roomMessage }}</p>
+        <BrainTodayCard room="calc" v-bind="calcCard" @start="startCalcToday" />
+        <section class="brain-road" aria-label="コースの道" data-brain-road>
+          <p class="brain-road__head"><strong>コースの道</strong><span>{{ calcGoal }}</span></p>
+          <ol class="brain-road__line">
+            <li
+              v-for="stone in calcRoad"
+              :key="stone.key"
+              class="brain-road__stone"
+              :class="[`brain-road__stone--${stone.state}`, { 'brain-road__stone--measure': stone.measure, 'brain-road__stone--booster': stone.booster }]"
+              :aria-label="stone.aria"
+            >{{ stone.label }}</li>
+          </ol>
+        </section>
+      </div>
+      <div class="shogi-brain__room-side">
+        <p class="brain-section-title"><span>自由に練習</span><span>自己ベスト</span></p>
+        <ul class="brain-tiles">
+          <li v-for="game in CALC_GAMES" :key="game.id">
+            <button type="button" class="brain-tile" :data-brain-game="game.id" @click="startSingle(game.id)">
+              <strong><span aria-hidden="true">{{ GAME_ICONS[game.id] }}</span> {{ game.label }}</strong>
+              <span>{{ bestText(game.id) || "まだ記録なし" }}</span>
+            </button>
+          </li>
+        </ul>
+        <div class="brain-rowlinks">
+          <button type="button" class="brain-rowlink" data-brain-shelf @click="openShelf">☗ 将棋の棚</button>
+          <button type="button" class="brain-rowlink" data-brain-records @click="openRecords">📈 記録</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 記憶力の部屋。今日の稽古、6週間コース、記憶の道(押せない札の代わり)、わたしの宮殿、棚と記録(14-6の5)。 -->
+    <section v-else-if="view === 'room' && room === 'memory'" class="shogi-tutorial__shelf shogi-brain__room" aria-label="記憶力の部屋" data-brain-room-view="memory">
+      <div class="shogi-brain__room-main">
+        <p v-if="roomMessage" class="shogi-brain__room-message" role="status">{{ roomMessage }}</p>
+        <BrainTodayCard room="memory" v-bind="memoryCard" @start="startMemoryToday" />
+        <section class="brain-road" aria-label="6週間コース" data-brain-weeks6>
+          <p class="brain-road__head"><strong>6週間コース</strong><span>{{ memoryGoal }}</span></p>
+          <ol class="brain-weeks6">
+            <li v-for="(column, index) in memoryWeeks" :key="index">
+              <span class="brain-weeks6__dots" aria-hidden="true"><i v-for="dot in column" :key="dot.n" :class="`brain-weeks6__dot--${dot.state}`"></i></span>
+              <span>{{ index + 1 }}週</span>
+            </li>
+          </ol>
+        </section>
+      </div>
+      <div class="shogi-brain__room-side">
+        <p class="brain-section-title"><span>記憶の道</span></p>
+        <ol class="brain-path" data-brain-path>
+          <li v-for="node in memoryPath" :key="node.id" :class="`brain-path__node--${node.state}`">
+            <button type="button" class="brain-path__button" :disabled="node.state === 'locked'" :data-brain-path-node="node.id" @click="openPathNode(node.id)">
+              <b aria-hidden="true">{{ node.state === 'locked' ? '🔒' : node.icon }}</b>
+              <span>{{ node.label }}</span>
+              <small>{{ node.sub }}</small>
+            </button>
+          </li>
+        </ol>
+        <p class="brain-section-title"><span>わたしの宮殿</span></p>
+        <ul class="brain-palaces">
+          <li v-for="item in palaceChips" :key="item.id">
+            <button type="button" class="brain-palace-chip" :data-brain-palace-chip="item.id" @click="openBuilder('list')">
+              <strong><span aria-hidden="true">{{ item.emoji }}</span> {{ item.name }}</strong>
+              <small>{{ item.sub }}</small>
+            </button>
+          </li>
+          <li v-if="memory.palaces.length < PALACE_MAX">
+            <button type="button" class="brain-palace-chip brain-palace-chip--add" data-brain-builder-open @click="openBuilder(memory.palaces.length ? 'new' : 'list')">＋ 作る</button>
+          </li>
+        </ul>
+        <div class="brain-rowlinks">
+          <button type="button" class="brain-rowlink" data-brain-shelf @click="openShelf">☗ 将棋の棚</button>
+          <button type="button" class="brain-rowlink" data-brain-records @click="openRecords">📈 記録</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 将棋の棚(部屋ごと)。自由に遊ぶ将棋の種目(11-7・12章)。 -->
+    <section v-else-if="view === 'shelf'" class="shogi-tutorial__shelf shogi-brain__shelf" aria-label="将棋の棚" data-brain-shelf-view>
+      <p class="shogi-brain__shelf-lead">将棋の力を、将棋の盤の上で練習する種目だよ。好きなものを選んでね。</p>
+      <ul class="shogi-brain__cards shogi-brain__cards--grid">
+        <li v-for="game in shelfGames(room)" :key="game.id">
+          <button type="button" class="shogi-brain__card shogi-brain__card--shelf" :data-brain-game="game.id" @click="startSingle(game.id)">
+            <strong>☗ {{ game.label }}</strong>
+            <small>{{ game.desc }}</small>
+            <span v-if="bestText(game.id)" class="shogi-brain__card-best">{{ bestText(game.id) }}</span>
           </button>
         </li>
       </ul>
-      <div class="shogi-brain__calendar" data-brain-calendar>
-        <p class="shogi-brain__calendar-title">
-          <span>判子のカレンダー（6週間）</span>
-          <span class="shogi-brain__legend"><i class="shogi-brain__stamp shogi-brain__stamp--calc" aria-hidden="true"></i>計算力 <i class="shogi-brain__stamp shogi-brain__stamp--memory" aria-hidden="true"></i>記憶力</span>
-        </p>
-        <table>
-          <thead><tr><th v-for="weekday in WEEKDAYS" :key="weekday" scope="col">{{ weekday }}</th></tr></thead>
-          <tbody>
-            <tr v-for="(week, row) in calendar" :key="row">
-              <td
-                v-for="cell in week"
-                :key="cell.day"
-                :class="{ 'shogi-brain__day--today': cell.today, 'shogi-brain__day--future': cell.future }"
-                :aria-label="`${cell.day}${cell.calc ? ' 計算力' : ''}${cell.memory ? ' 記憶力' : ''}`"
-              >
-                <span>{{ cell.date }}</span>
-                <span class="shogi-brain__stamps" aria-hidden="true">
-                  <i v-if="cell.calc" class="shogi-brain__stamp shogi-brain__stamp--calc"></i>
-                  <i v-if="cell.memory" class="shogi-brain__stamp shogi-brain__stamp--memory"></i>
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- 計算力の部屋 -->
-    <section v-else-if="view === 'room' && room === 'calc'" class="shogi-tutorial__shelf shogi-brain__room" aria-label="計算力の部屋" data-brain-room-view="calc">
-      <div class="shogi-brain__room-main">
-        <button type="button" class="shogi-brain__today" data-brain-today @click="startCalcToday">
-          <span class="shogi-brain__today-eyebrow">今日のトレーニング・約{{ calcMinutes }}分</span>
-          <strong>{{ calcPlan.label }}</strong>
-          <small>{{ calcPlan.games.map((game) => gameLabel(game.id)).join(" → ") }}</small>
-          <small v-if="calcNote" class="shogi-brain__today-note">{{ calcNote }}</small>
-        </button>
-        <p v-if="roomMessage" class="shogi-brain__room-message" role="status">{{ roomMessage }}</p>
-        <button type="button" class="brain-game__secondary shogi-brain__records-open" data-brain-records @click="view = 'records'">記録を見る</button>
-      </div>
-      <div class="shogi-brain__room-side">
-        <ul class="shogi-brain__cards shogi-brain__cards--grid">
-          <li v-for="game in CALC_GAMES" :key="game.id">
-            <button type="button" class="shogi-brain__card" :data-brain-game="game.id" @click="startSingle(game.id)">
-              <strong>{{ game.label }}</strong>
-              <small>{{ game.desc }}</small>
-              <span v-if="bestText(game.id)" class="shogi-brain__card-best">{{ bestText(game.id) }}</span>
-            </button>
-          </li>
-        </ul>
-        <h2 class="shogi-brain__shelf-title">将棋の棚</h2>
-        <ul class="shogi-brain__cards shogi-brain__cards--grid">
-          <li v-for="game in shelfGames('calc')" :key="game.id">
-            <button type="button" class="shogi-brain__card shogi-brain__card--shelf" :data-brain-game="game.id" @click="startSingle(game.id)">
-              <strong>☗ {{ game.label }}</strong>
-              <small>{{ game.desc }}</small>
-              <span v-if="bestText(game.id)" class="shogi-brain__card-best">{{ bestText(game.id) }}</span>
-            </button>
-          </li>
-        </ul>
-      </div>
-    </section>
-
-    <!-- 記憶力の部屋 -->
-    <section v-else-if="view === 'room' && room === 'memory'" class="shogi-tutorial__shelf shogi-brain__room" aria-label="記憶力の部屋" data-brain-room-view="memory">
-      <div class="shogi-brain__room-main">
-        <button type="button" class="shogi-brain__today" data-brain-today @click="startMemoryToday">
-          <span class="shogi-brain__today-eyebrow">今日のトレーニング・約10分</span>
-          <strong>{{ memoryTodayTitle }}</strong>
-          <small>{{ memoryTodayDetail }}</small>
-        </button>
-        <p v-if="roomMessage" class="shogi-brain__room-message" role="status">{{ roomMessage }}</p>
-        <button type="button" class="brain-game__secondary shogi-brain__records-open" data-brain-records @click="view = 'records'">記録を見る</button>
-      </div>
-      <div class="shogi-brain__room-side">
-        <ul class="shogi-brain__cards shogi-brain__cards--grid">
-          <li>
-            <button type="button" class="shogi-brain__card" data-brain-builder-open @click="openBuilder('list')">
-              <strong>🏠 自分の宮殿</strong>
-              <small>{{ palaceSummary }}</small>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="shogi-brain__card" :disabled="!memoryHasPalace" data-brain-school @click="openPalace('school')">
-              <strong>🏫 場所法の学校</strong>
-              <small>{{ memoryHasPalace ? `講 ${lessonsDone}/${PALACE_LESSONS.length} を終えた` : "宮殿ができると開くよ" }}</small>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="shogi-brain__card" :disabled="!memoryPracticeOpen" data-brain-practice @click="openPalace('practice')">
-              <strong>📅 毎日の練習</strong>
-              <small>{{ memoryPracticeOpen ? `言葉${memory.practiceCount}個から` : "講3を終えると開くよ" }}</small>
-              <span v-if="bestText('palace')" class="shogi-brain__card-best">{{ bestText("palace") }}</span>
-            </button>
-          </li>
-          <li>
-            <button type="button" class="shogi-brain__card" data-brain-game="memory-test" @click="startMemoryTest">
-              <strong>📝 記憶テスト</strong>
-              <small>{{ record.program.memory.before ? `最初は${record.program.memory.before.total}個中${record.program.memory.before.correct}個` : "15個の言葉を、順番どおりに" }}</small>
-            </button>
-          </li>
-        </ul>
-        <h2 class="shogi-brain__shelf-title">将棋の棚</h2>
-        <ul class="shogi-brain__cards shogi-brain__cards--grid">
-          <li v-for="game in shelfGames('memory')" :key="game.id">
-            <button type="button" class="shogi-brain__card shogi-brain__card--shelf" :data-brain-game="game.id" @click="startSingle(game.id)">
-              <strong>☗ {{ game.label }}</strong>
-              <small>{{ game.desc }}</small>
-              <span v-if="bestText(game.id)" class="shogi-brain__card-best">{{ bestText(game.id) }}</span>
-            </button>
-          </li>
-        </ul>
-      </div>
     </section>
 
     <!-- 種目。今日のトレーニングは続けて遊び、終わると結果を出す。 -->
@@ -158,6 +162,7 @@
         :mode="currentItem.mode === 'measure' ? 'measure' : 'train'"
         :saved-level="record.levels.speed ?? 0"
         :saved-slow="record.levels['speed-slow'] ?? 0"
+        :bests="speedBests"
         :count="currentItem.mode === 'measure' ? 10 : 20"
         @sound="playSound"
         @finish="finishGame($event)"
@@ -264,6 +269,39 @@
 
     <!-- 記録。前と後のくらべと、種目ごとの線。 -->
     <section v-else-if="view === 'records'" class="shogi-tutorial__shelf shogi-brain__records" aria-label="記録" data-brain-records-view>
+      <!-- 記録は3つのタブ(判子・前と後・記録の線)。1つずつ1画面に収める(U:7-5の2)。 -->
+      <div class="brain-tabs" role="tablist" aria-label="記録の切り替え">
+        <button v-for="tab in RECORD_TABS" :key="tab.id" type="button" role="tab" class="brain-tabs__tab" :class="{ 'brain-tabs__tab--on': recordsTab === tab.id }" :aria-selected="recordsTab === tab.id" :data-brain-records-tab="tab.id" @click="recordsTab = tab.id">{{ tab.label }}</button>
+      </div>
+      <template v-if="recordsTab === 'stamps'">
+        <div class="shogi-brain__calendar" data-brain-calendar>
+        <p class="shogi-brain__calendar-title">
+          <span>判子の6週間・目安に届いた週 {{ metWeekCount }}週</span>
+          <span class="shogi-brain__legend"><i class="brain-seal brain-seal--calc" aria-hidden="true">計</i>計算力 <i class="brain-seal brain-seal--memory" aria-hidden="true"><span>記</span></i>記憶力</span>
+        </p>
+        <table>
+          <thead><tr><th v-for="weekday in WEEKDAYS" :key="weekday" scope="col">{{ weekday }}</th></tr></thead>
+          <tbody>
+            <tr v-for="(week, row) in calendar" :key="row">
+              <td
+                v-for="cell in week"
+                :key="cell.day"
+                :class="{ 'shogi-brain__day--today': cell.today, 'shogi-brain__day--future': cell.future }"
+                :aria-label="`${cell.day}${cell.calc ? ' 計算力' : ''}${cell.memory ? ' 記憶力' : ''}`"
+              >
+                <span>{{ cell.date }}</span>
+                <span class="shogi-brain__stamps" aria-hidden="true">
+                  <i v-if="cell.calc" class="brain-seal brain-seal--calc brain-seal--mini"></i>
+                  <i v-if="cell.memory" class="brain-seal brain-seal--memory brain-seal--mini"></i>
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+        <BrainCueChooser :model-value="record.cue" :lead="cueLine ? `いつ稽古する？（いまは「${cueLine}」）` : 'いつ稽古する？ 決めておくと続けやすいよ。'" @choose="chooseCue" />
+      </template>
+      <template v-else-if="recordsTab === 'compare'">
       <div v-if="compareRows.length" class="shogi-brain__compare">
         <h2>前と後</h2>
         <table>
@@ -277,6 +315,8 @@
         </table>
       </div>
       <p v-else class="shogi-brain__records-empty">{{ room === 'calc' ? "最初の測定をすると、ここで「前」と「後」をくらべられるよ。" : "最初の記憶テストをすると、ここで「前」と「後」をくらべられるよ。" }}</p>
+      </template>
+      <template v-else>
       <ul class="shogi-brain__lines">
         <li v-for="line in recordLines" :key="line.id">
           <span class="shogi-brain__line-name">{{ line.label }}</span>
@@ -288,6 +328,7 @@
         </li>
       </ul>
       <p class="shogi-brain__records-note">線は上ほど良い記録（日ごとのいちばん良い記録。最近の20日）。</p>
+      </template>
     </section>
 
     <!-- 結果。種目ごとの記録と、前の日より伸びたもの、測ったときは前と後。 -->
@@ -343,7 +384,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import BrainGlance from "./brain/BrainGlance.vue";
 import BrainBoardMemory from "./brain/BrainBoardMemory.vue";
 import BrainMentalBoard from "./brain/BrainMentalBoard.vue";
@@ -354,6 +395,9 @@ import BrainSwitch from "./brain/BrainSwitch.vue";
 import BrainMemoryTest from "./brain/BrainMemoryTest.vue";
 import BrainPalace from "./brain/BrainPalace.vue";
 import BrainPalaceBuilder from "./brain/BrainPalaceBuilder.vue";
+import BrainTodayCard from "./brain/BrainTodayCard.vue";
+import BrainWeekStrip from "./brain/BrainWeekStrip.vue";
+import BrainCueChooser from "./brain/BrainCueChooser.vue";
 import { glanceLevelLabel } from "./core/brain-glance.mjs";
 import { blindLevelText, intuitionLevelText } from "./core/brain-shogi-sense.mjs";
 import { nbackText, perProblemText, switchLevelText } from "./core/brain-calc.mjs";
@@ -361,7 +405,6 @@ import {
   BRAIN_GAMES,
   BRAIN_ROOMS,
   brainGame,
-  brainStreak,
   dailySeries,
   dayKey,
   growthSince,
@@ -370,13 +413,19 @@ import {
   recordBrainSession,
   rememberRoom,
   saveBrainRecord,
+  setBrainCue,
   stampCalendar,
   stampRoom,
   stamped,
   startLevel,
 } from "./core/brain-training.mjs";
+import { calcNextGoal, cueText, memoryNextGoal, metWeeks, todayPick, weekCounts, weekStrip } from "./core/brain-habit.mjs";
 import {
+  CALC_BOOSTERS,
+  CALC_COURSE_SESSIONS,
   CALC_MEASURE,
+  MEMORY_COURSE_SESSIONS,
+  calcBoosterDue,
   calcNextBoosterDay,
   calcProgress,
   completeCalcPlan,
@@ -390,12 +439,16 @@ import {
   PALACE_LESSONS,
   hasPalace,
   loadMemoryStore,
+  nextDayState,
   nextLesson,
+  planPractice,
   practiceOpen,
   saveMemoryStore,
 } from "./core/memory-palace.mjs";
 import { PALACE_MAX } from "./core/palace-builder.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
+import { comboStep } from "./core/brain-sound.mjs";
+import { brainAudio, closeBrainAudio } from "./brain-audio";
 
 type RoomId = "calc" | "memory";
 type GameId = "speed" | "nback" | "glance-sym" | "switch" | "glance" | "mental" | "intuition" | "einstellung" | "blind" | "memory-test" | "board-memory";
@@ -411,7 +464,10 @@ const props = defineProps({
 const emit = defineEmits(["close"]);
 
 const BRAIN_TITLE = "脳トレ道場";
-const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+const WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"];
+const WEEKDAY_NAMES = ["日", "月", "火", "水", "木", "金", "土"];
+/** 種目の絵(今日の稽古の飛び石・自由に練習の札)。 */
+const GAME_ICONS: Record<string, string> = { speed: "⚡", nback: "🔁", "glance-sym": "👁️", switch: "🎨", "memory-test": "📝", palace: "🏯", recall: "↩️", digits: "🔢" };
 const CALC_GAMES = BRAIN_GAMES.filter((game) => game.room === "calc" && !game.shelf);
 /** 1つの種目のだいたいの時間(分)。今日のトレーニングの「約○分」に使う。 */
 const GAME_MINUTES: Record<string, number> = { speed: 1.5, nback: 3, "glance-sym": 2.5, switch: 1.5 };
@@ -434,7 +490,14 @@ const storage = typeof localStorage === "undefined" ? null : localStorage;
 const record = ref(loadBrainRecord(storage));
 const memory = ref<MemoryStore>(loadMemoryStore(storage));
 const today = dayKey();
-const view = ref<"home" | "room" | "game" | "summary" | "evidence" | "builder" | "palace" | "records">("home");
+const view = ref<"home" | "room" | "game" | "summary" | "evidence" | "builder" | "palace" | "records" | "shelf">("home");
+const cueEditing = ref(false);
+const RECORD_TABS = [
+  { id: "stamps", label: "判子" },
+  { id: "compare", label: "前と後" },
+  { id: "lines", label: "記録の線" },
+] as const;
+const recordsTab = ref<(typeof RECORD_TABS)[number]["id"]>("stamps");
 const room = ref<RoomId>("calc");
 const evidenceFrom = ref<"home" | "room">("home");
 const queue = ref<QueueItem[]>([]);
@@ -459,7 +522,15 @@ let bestInRun = false;
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const calendar = computed(() => stampCalendar(record.value, today));
-const streak = computed(() => brainStreak(record.value, today));
+// ===== 今週の判子・週の目安・今日のおすすめ(14-4の柱1〜3) =====
+const week = computed(() => weekStrip(record.value, today));
+const weekly = computed(() => weekCounts(record.value, today));
+const metWeekCount = computed(() => metWeeks(record.value, today));
+const todayLabel = (() => {
+  const date = new Date(`${today}T12:00:00`);
+  return `${date.getMonth() + 1}月${date.getDate()}日（${WEEKDAY_NAMES[date.getDay()]}）`;
+})();
+const cueLine = computed(() => cueText(record.value.cue));
 const headerTitle = computed(() => {
   switch (view.value) {
     case "room": return roomLabel(room.value);
@@ -467,16 +538,24 @@ const headerTitle = computed(() => {
     case "builder": return "宮殿づくり";
     case "palace": return palaceMode.value === "practice" ? "毎日の練習" : "場所法の学校";
     case "records": return `${roomLabel(room.value)}の記録`;
+    case "shelf": return "将棋の棚";
     case "summary": return "結果";
     case "evidence": return "脳トレの根拠";
     default: return BRAIN_TITLE;
   }
 });
 const backLabel = computed(() => "戻る");
+/** 入口のやこび姫の一言。おすすめの理由を1つだけ言う(14-9)。毎日の連続は数えない(14-3のB30)。 */
 const homeMessage = computed(() => {
-  if (stamped(record.value, today, "calc") && stamped(record.value, today, "memory")) return "今日は2つともできたね。また明日！ 日をあけて続けると、長く身につくよ。";
-  if (streak.value >= 2) return `続けて${streak.value}日目。今日はどっちをきたえる？`;
-  return "計算力と記憶力、今日はどっちをきたえる？ 1回10分ほど、毎日でなくて大丈夫だよ。";
+  const choice = pick.value;
+  if (!choice) return "今日は2つともできたね。また明日！ 日をあけて続けると、長く身につくよ。";
+  if (!record.value.program.calc.before && !record.value.program.memory.before) return "ようこそ、脳トレ道場へ！ はじめに計算力の測定から。5分くらいだよ。";
+  if (choice === "calc" && calcBoosterDue(record.value.program.calc, today)) return "おさらいの時期が来たよ。続けて追加の練習をした人ほど、長い期間で良い結果が出ているんだ。";
+  if (choice === "memory" && memoryDue.value) return "きのう置いた言葉を思い出す日だよ。日をあけて思い出すと、長く残るんだ。";
+  const counts = weekly.value[choice];
+  const left = counts.target - counts.done;
+  const label = roomLabel(choice);
+  return left > 0 ? `今日は${label}がおすすめ。今週の目安まで、あと${left}回だよ。` : `今日は${label}がおすすめ。今週の目安にはもう届いてるよ。`;
 });
 
 // ===== 計算力 =====
@@ -515,24 +594,159 @@ const memoryTodayTitle = computed(() => {
   }
   return plan.label;
 });
-const memoryTodayDetail = computed(() => {
+
+// ===== 今日の稽古の札(14-4の柱1) =====
+type TodayStep = { icon: string; label: string; sub?: string };
+/** 記憶力で時期の来たもの(講7の次の日に思い出す。思い出しの箱は14-9で足す)。 */
+const memoryDue = computed(() => {
+  const lessons = memory.value.lessons;
+  return lessons.includes("twenty") && !lessons.includes("nextday") && nextDayState(memory.value, today) === "ready";
+});
+const pick = computed(() => todayPick({ record: record.value, day: today, memoryDue: memoryDue.value }) as RoomId | null);
+const calcCard = computed(() => {
+  const plan = calcPlan.value;
+  const steps: TodayStep[] = plan.games.map((game) => ({
+    icon: GAME_ICONS[game.id] ?? "・",
+    label: gameLabel(game.id),
+    sub: game.mode === "measure" ? "測定" : `約${Math.max(1, Math.round(GAME_MINUTES[game.id] ?? 1))}分`,
+  }));
+  return {
+    title: plan.kind === "measure" ? "最初の測定" : plan.label,
+    chip: plan.kind === "course" ? `コース ${plan.session}/${plan.total}` : plan.kind === "booster" ? "おさらい" : "計算力",
+    steps,
+    minutes: calcMinutes.value,
+    note: calcNote.value,
+    actionLabel: plan.kind === "free" && !plan.counted ? "もう一度" : "はじめる",
+  };
+});
+const memoryCard = computed(() => {
   const plan = memoryPlan.value;
-  if (plan.kind === "test") return plan.measure === "before" ? "方法を教わる前に、いまの記憶を測ろう（15個の言葉）。" : "6週間のコースの終わり。最初と同じテストでくらべよう。";
-  if (plan.kind === "build") return "自分の家など、よく知っている場所のカードを歩く順に並べよう。";
-  if (plan.kind === "lesson") return "講3まで終えると、毎日の練習が開くよ。";
-  const steps = [];
-  const last = memory.value.lastWords;
-  if (last && last.day < today) steps.push("前の回の言葉");
-  steps.push(`宮殿に${memory.value.practiceCount}個`);
-  if (memory.value.lessons.includes("digits") && Number(today.slice(-2)) % 2 === 1) steps.push("数字");
-  const head = plan.session ? "" : plan.counted ? "" : "今日の分はできた！ ";
-  return `${head}${steps.join(" → ")}`;
+  let steps: TodayStep[] = [];
+  let minutes = 10;
+  if (plan.kind === "test") {
+    steps = [{ icon: "📝", label: "記憶テスト", sub: "15個の言葉" }];
+    minutes = 3;
+  } else if (plan.kind === "build") {
+    steps = [{ icon: "🏠", label: "宮殿づくり", sub: "10か所から" }];
+    minutes = 5;
+  } else if (plan.kind === "lesson") {
+    const lesson = PALACE_LESSONS.find(({ id }) => id === plan.lessonId);
+    steps = [{ icon: "🏫", label: lesson ? lesson.title : "学校", sub: lesson ? `講${lesson.number}` : "" }];
+  } else {
+    const practice = planPractice(memory.value, today);
+    if (practice?.recall) steps.push({ icon: GAME_ICONS.recall, label: "前の回の言葉", sub: `${practice.recall.words.length}個` });
+    if (practice) steps.push({ icon: GAME_ICONS.palace, label: `宮殿に${practice.count}個`, sub: practice.palace.name });
+    if (practice?.digits) steps.push({ icon: GAME_ICONS.digits, label: "数字", sub: `${practice.digitCount}けた` });
+    minutes = Math.max(5, Math.min(12, Math.round((practice?.recall ? 1.5 : 0) + (practice?.count ?? 5) * 0.4 + (practice?.digits ? 2 : 0))));
+  }
+  const title = plan.kind === "practice" && plan.session ? `6週間コース ${plan.session}回目` : memoryTodayTitle.value;
+  return {
+    title,
+    chip: plan.kind === "practice" && plan.session ? `コース ${plan.session}/${MEMORY_COURSE_SESSIONS}` : "記憶力",
+    steps,
+    minutes,
+    note: plan.kind === "practice" && !plan.counted ? "今日の分はできた！ もう一度やると自由練習（記録は残るよ）。" : "",
+    actionLabel: plan.kind === "practice" && !plan.counted ? "もう一度" : "はじめる",
+  };
 });
-const palaceSummary = computed(() => {
-  const own = memory.value.palaces;
-  if (!own.length) return memory.value.sample ? "見本の宮殿（お城）を使っている" : "よく知っている場所で作ろう";
-  return own.map((palace) => `${palace.name}（${palace.loci.length}）`).join("・");
+/** 入口の大きな札から、おすすめの部屋の今日の稽古を始める(2回の操作。UD:3-2)。 */
+function startRoomToday(id: RoomId) {
+  openRoom(id);
+  if (id === "calc") startCalcToday();
+  else startMemoryToday();
+}
+function chooseCue(cue: string) {
+  record.value = setBrainCue(record.value, cue);
+  save();
+  cueEditing.value = false;
+}
+
+// ===== 部屋の道(コースの道・6週間・記憶の道) =====
+const calcGoal = computed(() => calcNextGoal(record.value, today));
+type RoadStone = { key: string; label: string; state: "done" | "now" | "todo"; measure?: boolean; booster?: boolean; aria: string };
+const calcRoad = computed(() => {
+  const program = record.value.program.calc;
+  const stones: RoadStone[] = [];
+  const started = Boolean(program.before);
+  for (let index = 0; index < CALC_COURSE_SESSIONS; index += 1) {
+    const done = index < program.sessions;
+    const now = started && index === program.sessions;
+    const last = index === CALC_COURSE_SESSIONS - 1;
+    stones.push({
+      key: `s${index}`,
+      label: last ? "測" : "",
+      state: done ? "done" : now ? "now" : "todo",
+      measure: last,
+      aria: `${index + 1}回目${done ? "（済み）" : now ? "（次）" : ""}${last ? "・最初の自分とくらべる" : ""}`,
+    });
+  }
+  const due = calcBoosterDue(program, today);
+  CALC_BOOSTERS.forEach((booster, index) => {
+    const done = (program.boosters[index] ?? 0) >= booster.sessions;
+    stones.push({
+      key: `b${index}`,
+      label: booster.afterDays >= 90 ? "3月" : "1月",
+      state: done ? "done" : due?.index === index ? "now" : "todo",
+      booster: true,
+      aria: `${booster.label}${done ? "（済み）" : due?.index === index ? "（いま）" : ""}`,
+    });
+  });
+  return stones;
 });
+const memoryGoal = computed(() => {
+  const next = nextLesson(memory.value.lessons);
+  const lesson = PALACE_LESSONS.find(({ id }) => id === next);
+  return memoryNextGoal(record.value, today, { practiceOpen: memoryPracticeOpen.value, nextLessonTitle: lesson ? `講${lesson.number}「${lesson.title}」` : "" });
+});
+/** 6週間コースの30回を、週ごと5つのマスに(週5回の目安が見える。14-6の5)。 */
+const memoryWeeks = computed(() => {
+  const sessions = record.value.program.memory.sessions;
+  const active = memoryPracticeOpen.value && sessions < MEMORY_COURSE_SESSIONS;
+  return Array.from({ length: 6 }, (_, week) => Array.from({ length: 5 }, (_, slot) => {
+    const n = week * 5 + slot;
+    return { n, state: n < sessions ? "on" : active && n === sessions ? "now" : "off" };
+  }));
+});
+type PathNode = { id: "build" | "school" | "practice" | "test"; icon: string; label: string; sub: string; state: "done" | "now" | "open" | "locked" };
+/** 記憶の道。押せない灰色の札の代わりに、今どこかを道で見せる(14-11)。 */
+const memoryPath = computed<PathNode[]>(() => {
+  const program = record.value.program.memory;
+  const built = memoryHasPalace.value;
+  const open = memoryPracticeOpen.value;
+  const lessonsAll = memory.value.lessons.length >= PALACE_LESSONS.length;
+  const courseDone = program.sessions >= MEMORY_COURSE_SESSIONS;
+  return [
+    { id: "build", icon: "🏠", label: "宮殿づくり", sub: built ? `${memory.value.palaces.length || 1}つ` : program.before ? "ここから" : "テストのあと", state: built ? "done" : program.before ? "now" : "open" },
+    { id: "school", icon: "🏫", label: "学校", sub: `講${lessonsDone.value}/${PALACE_LESSONS.length}`, state: !built ? "locked" : lessonsAll ? "done" : open ? "open" : "now" },
+    { id: "practice", icon: "📅", label: "毎日の練習", sub: open ? `${program.sessions}/${MEMORY_COURSE_SESSIONS}回` : "講3のあと", state: !open ? "locked" : courseDone ? "done" : "now" },
+    { id: "test", icon: "📝", label: "記憶テスト", sub: !program.before ? "はじめに" : program.after.length ? "くらべた" : courseDone ? "いま" : "6週間後", state: program.after.length ? "done" : !program.before || courseDone ? "now" : "open" },
+  ];
+});
+function openPathNode(id: PathNode["id"]) {
+  if (id === "build") openBuilder(memory.value.palaces.length ? "list" : "new");
+  else if (id === "school") openPalace("school");
+  else if (id === "practice") openPalace("practice");
+  else startMemoryTest();
+}
+/** わたしの宮殿(役目つき。練習用は毎日の練習に使う宮殿)。 */
+const palaceChips = computed(() => {
+  const practicePalace = memory.value.lastPalace;
+  const chips = memory.value.palaces.map((palace) => ({
+    id: palace.id,
+    emoji: palace.place === "school" ? "🏫" : palace.place === "route" ? "🚶" : palace.place === "shop" ? "🏪" : palace.place === "free" ? "✏️" : "🏠",
+    name: palace.name,
+    sub: `${palace.loci.length}か所${palace.id === practicePalace ? "・練習" : ""}`,
+  }));
+  if (memory.value.sample) chips.push({ id: "castle", emoji: "🏯", name: "見本のお城", sub: `30か所${practicePalace === "castle" ? "・練習" : ""}` });
+  return chips;
+});
+function openShelf() {
+  view.value = "shelf";
+}
+function openRecords() {
+  recordsTab.value = "stamps";
+  view.value = "records";
+}
 
 function roomLabel(id: RoomId) {
   return BRAIN_ROOMS.find((item) => item.id === id)?.label ?? id;
@@ -583,11 +797,29 @@ function bestText(id: string) {
   return valueText(recordId, record.value.best[recordId]);
 }
 
+/** スピード計算の段ごとの自己ベスト(前の自分の影に使う)。 */
+const speedBests = computed(() => Array.from({ length: 5 }, (_, index) => record.value.best[`speed-${index + 1}`] ?? 0));
+
+// 音(docs/brain-training-design.mdの14-8)。道場の音はその場で作る(brain-audio.ts)。将棋の棚で駒を置く音だけは駒音。
 const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
+const SHOGI_SHELF = new Set(["glance", "mental", "intuition", "einstellung", "blind", "board-memory"]);
+/** 種目の中で続けて正解した数(正解の音の高さに使う。種目が変わると0から)。 */
+let combo = 0;
 onMounted(() => moveSounds.preload());
-function playSound(kind: "correct" | "miss" | "best" | "place") {
-  if (kind === "correct" || kind === "place") moveSounds.play("normal");
-  else if (kind === "best") moveSounds.play("stamp");
+onBeforeUnmount(() => closeBrainAudio());
+function playSound(kind: "correct" | "miss" | "best" | "place" | "finish" | "stamp") {
+  if (kind === "correct") {
+    combo += 1;
+    brainAudio().play("correct", comboStep(combo));
+  } else if (kind === "miss") {
+    combo = 0;
+    brainAudio().play("miss");
+  } else if (kind === "place") {
+    if (currentItem.value && SHOGI_SHELF.has(currentItem.value.id)) moveSounds.play("normal");
+    else brainAudio().play("place");
+  } else {
+    brainAudio().play(kind);
+  }
 }
 
 function save() {
@@ -599,12 +831,6 @@ function openRoom(id: RoomId) {
   record.value = rememberRoom(record.value, id);
   save();
   view.value = "room";
-}
-function continueRoom() {
-  const id = (record.value.room || "calc") as RoomId;
-  openRoom(id);
-  if (id === "calc") startCalcToday();
-  else startMemoryToday();
 }
 function openEvidence() {
   evidenceFrom.value = view.value === "room" ? "room" : "home";
@@ -649,6 +875,7 @@ function startMemoryToday() {
   else openPalace("practice");
 }
 function nextGame() {
+  combo = 0;
   const next = queue.value.shift() ?? null;
   currentItem.value = next;
   runKey.value += 1;
@@ -703,7 +930,8 @@ function finishRun() {
 }
 function showSummary() {
   newStamp.value = !stampedBefore && stamped(record.value, today, room.value);
-  if (newStamp.value || bestInRun) playSound("best");
+  if (newStamp.value) playSound("stamp");
+  if (bestInRun) setTimeout(() => playSound("best"), newStamp.value ? 260 : 0);
   view.value = "summary";
 }
 const summaryMessage = computed(() => {
@@ -838,6 +1066,10 @@ function goBack() {
     view.value = "home";
     return;
   }
+  if (view.value === "shelf") {
+    view.value = "room";
+    return;
+  }
   queue.value = [];
   currentItem.value = null;
   view.value = "room";
@@ -847,6 +1079,33 @@ defineExpose({ goBack });
 </script>
 
 <style>
+/* 道場の色(docs/brain-training-design.mdの14-7)。部品の中に色を直接書かず、ここの変数を使う(U:7-1)。 */
+.shogi-game .shogi-brain {
+  --dojo-desk: #1c2a36;
+  --dojo-desk-2: #243746;
+  --dojo-desk-3: #2d4456;
+  --dojo-light: #fffcf4;
+  --dojo-light-2: #b9c6d0;
+  --dojo-paper: #fbf7ee;
+  --dojo-paper-2: #f3ecdc;
+  --dojo-rule: #e6dcc6;
+  --dojo-ink: #1f2a33;
+  --dojo-ink-2: #56636d;
+  --dojo-shu: #c4402a;
+  --dojo-shu-deep: #a83420;
+  --dojo-shu-soft: #f6dcd3;
+  --dojo-ai: #34488f;
+  --dojo-ai-deep: #26356c;
+  --dojo-ai-soft: #dde3f4;
+  --dojo-ai-light: #7f93d6;
+  --dojo-good: #2e7d4f;
+  --dojo-good-soft: #d9efe1;
+  --dojo-gold: #8a5f00;
+  --dojo-gold-soft: #f6e7bf;
+  --dojo-now: #f1a54c;
+  --dojo-radius: 14px;
+  --dojo-shadow: 0 2px 0 rgba(0, 0, 0, 0.18), 0 10px 24px rgba(0, 0, 0, 0.18);
+}
 .shogi-game .shogi-brain__home,
 .shogi-game .shogi-brain__summary,
 .shogi-game .shogi-brain__evidence,
@@ -867,67 +1126,6 @@ defineExpose({ goBack });
   font-weight: 900;
   cursor: pointer;
 }
-.shogi-game .shogi-brain__today {
-  display: grid;
-  gap: 0.1rem;
-  justify-items: start;
-  width: min(100%, 40rem);
-  margin: 0 auto;
-  padding: 0.8rem 1.1rem;
-  border: 2px solid #f1a54c;
-  border-radius: 0.9rem;
-  color: #fffcf4;
-  background: #2b465b;
-  box-shadow: 0 4px 0 #172632;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.shogi-game .shogi-brain__today strong { font-size: 1.3em; }
-.shogi-game .shogi-brain__today small { color: #cfd8de; }
-.shogi-game .shogi-brain__today .shogi-brain__today-note { color: #9fe0b4; }
-.shogi-game .shogi-brain__today-eyebrow {
-  color: #f1a54c;
-  font-size: 0.8em;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-}
-
-/* 入口の2つの部屋の扉 */
-.shogi-game .shogi-brain__rooms {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
-  width: min(100%, 40rem);
-  margin: 0 auto;
-  padding: 0;
-  list-style: none;
-}
-.shogi-game .shogi-brain__room-card {
-  display: grid;
-  justify-items: center;
-  gap: 0.2rem;
-  width: 100%;
-  min-height: 9rem;
-  padding: 0.8rem 0.6rem;
-  border: 3px solid rgba(255, 252, 244, 0.25);
-  border-radius: 1rem;
-  color: #fffcf4;
-  background: #2b465b;
-  box-shadow: 0 4px 0 #172632;
-  font: inherit;
-  text-align: center;
-  cursor: pointer;
-}
-.shogi-game .shogi-brain__room-card--calc { border-color: #f1a54c; }
-.shogi-game .shogi-brain__room-card--memory { border-color: #b8a8f5; }
-.shogi-game .shogi-brain__room-emoji { font-size: 2.2rem; line-height: 1; }
-.shogi-game .shogi-brain__room-card strong { font-size: 1.35em; }
-.shogi-game .shogi-brain__room-card small { color: #cfd8de; font-size: 0.82em; }
-.shogi-game .shogi-brain__room-stamp { padding: 0.1rem 0.6rem; border-radius: 999px; color: #cfd8de; background: rgba(255, 252, 244, 0.1); font-size: 0.8em; font-weight: 800; }
-.shogi-game .shogi-brain__room-stamp--done { color: #172632; background: #9fe0b4; }
-
-/* 判子のカレンダー。計算力は橙の丸、記憶力は紫の四角(色と形の両方で分ける。U:7-3)。 */
 .shogi-game .shogi-brain__calendar { width: min(100%, 40rem); margin: 0 auto; }
 .shogi-game .shogi-brain__calendar-title {
   display: flex;
@@ -955,9 +1153,241 @@ defineExpose({ goBack });
 .shogi-game .shogi-brain__calendar .shogi-brain__day--today { outline: 2px solid #f1a54c; outline-offset: -2px; color: #fffcf4; }
 .shogi-game .shogi-brain__calendar .shogi-brain__day--future { opacity: 0.35; }
 .shogi-game .shogi-brain__stamps { display: flex; justify-content: center; gap: 0.15rem; margin-top: 0.1rem; }
-.shogi-game .shogi-brain__stamp { display: inline-block; width: 0.7rem; height: 0.7rem; }
-.shogi-game .shogi-brain__stamp--calc { border-radius: 50%; background: #f1a54c; }
-.shogi-game .shogi-brain__stamp--memory { border-radius: 0.1rem; background: #b8a8f5; transform: rotate(45deg) scale(0.85); }
+.shogi-game .brain-seal--mini { width: 0.6rem; height: 0.6rem; }
+.shogi-game .shogi-brain__legend .brain-seal { width: 16px; height: 16px; margin-left: 0.3rem; font-size: 0.56rem; }
+
+/* 入口(14-6の1)。スマホは1列、広い画面は左に主役(一言・今日の稽古・いつ)、右に今週と扉。 */
+.shogi-game .shogi-brain__home {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(100%, 40rem);
+  margin: 0 auto;
+}
+.shogi-game .shogi-brain__home-main,
+.shogi-game .shogi-brain__home-side { display: grid; gap: 0.75rem; align-content: start; min-width: 0; }
+.shogi-game .brain-done {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  padding: 1rem;
+  border-radius: var(--dojo-radius);
+  color: var(--dojo-ink);
+  background: var(--dojo-paper);
+  box-shadow: var(--dojo-shadow);
+  text-align: center;
+}
+.shogi-game .brain-done h2 { margin: 0; font-size: 1.15rem; }
+.shogi-game .brain-done p { margin: 0; color: var(--dojo-ink-2); font-size: 0.86rem; font-weight: 700; }
+.shogi-game .brain-done__seals { display: flex; gap: 0.5rem; }
+.shogi-game .brain-done__seals .brain-seal { width: 30px; height: 30px; font-size: 0.9rem; }
+.shogi-game .brain-done .brain-game__secondary { margin-top: 0.3rem; color: var(--dojo-ink); border-color: var(--dojo-rule); background: #fff; }
+.shogi-game .brain-cue-line { display: flex; align-items: center; gap: 0.5rem; margin: 0; color: var(--dojo-light-2); font-size: 0.86rem; font-weight: 800; }
+.shogi-game .brain-cue-line span:nth-child(2) { color: var(--dojo-light); }
+.shogi-game .brain-cue-line__edit {
+  margin-left: auto;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border: 2px solid rgba(255, 252, 244, 0.25);
+  border-radius: 999px;
+  color: var(--dojo-light);
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+/* 2つの部屋の扉(主役の下に小さく。UD:3-1)。 */
+.shogi-game .brain-doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.shogi-game .brain-door {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 0.6rem;
+  min-height: 72px;
+  padding: 0.6rem 0.75rem;
+  border: 2px solid rgba(255, 252, 244, 0.14);
+  border-left: 6px solid var(--door, var(--dojo-shu));
+  border-radius: var(--dojo-radius);
+  color: var(--dojo-light);
+  background: var(--dojo-desk-2);
+  box-shadow: none;
+  font: inherit;
+  text-align: left;
+}
+.shogi-game .brain-door--memory { --door: var(--dojo-ai-light); }
+.shogi-game .brain-door__icon { grid-row: 1 / 3; font-size: 1.7rem; line-height: 1; }
+.shogi-game .brain-door strong { font-size: 1.02rem; }
+.shogi-game .brain-door small { color: var(--dojo-light-2); font-size: 0.76rem; font-weight: 700; }
+.shogi-game .brain-door .brain-seal { position: absolute; top: 0.45rem; right: 0.5rem; }
+/* 部屋の部品。 */
+.shogi-game .brain-section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 0.15rem 0 -0.2rem;
+  color: var(--dojo-light-2);
+  font-size: 0.84rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+.shogi-game .brain-road { display: grid; gap: 0.35rem; }
+.shogi-game .brain-road__head { display: flex; justify-content: space-between; gap: 0.6rem; margin: 0; color: var(--dojo-light-2); font-size: 0.8rem; font-weight: 800; }
+.shogi-game .brain-road__head strong { color: var(--dojo-light); white-space: nowrap; }
+.shogi-game .brain-road__head span { text-align: right; }
+.shogi-game .brain-road__line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .brain-road__stone {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 252, 244, 0.35);
+  border-radius: 50%;
+  color: var(--dojo-light);
+  font-size: 0.64rem;
+  font-weight: 900;
+}
+.shogi-game .brain-road__stone--done { border-color: var(--dojo-shu); background: var(--dojo-shu); }
+.shogi-game .brain-road__stone--now { border-color: var(--dojo-now); box-shadow: 0 0 0 4px rgba(241, 165, 76, 0.25); }
+.shogi-game .brain-road__stone--measure { width: 24px; height: 24px; }
+.shogi-game .brain-road__stone--booster { width: auto; min-width: 30px; height: 24px; margin-left: 0.5rem; padding: 0 0.3rem; border-radius: 6px; }
+.shogi-game .brain-weeks6 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .brain-weeks6 li { display: grid; justify-items: center; gap: 0.2rem; color: var(--dojo-light-2); font-size: 0.66rem; }
+.shogi-game .brain-weeks6__dots { display: grid; grid-template-columns: repeat(5, 8px); gap: 3px; }
+.shogi-game .brain-weeks6__dots i { width: 8px; height: 8px; border-radius: 2px; background: rgba(255, 255, 255, 0.16); }
+.shogi-game .brain-weeks6__dots .brain-weeks6__dot--on { background: var(--dojo-ai-light); }
+.shogi-game .brain-weeks6__dots .brain-weeks6__dot--now { outline: 2px solid var(--dojo-now); outline-offset: 1px; }
+.shogi-game .brain-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .brain-tile {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  min-height: 60px;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid rgba(255, 252, 244, 0.12);
+  border-radius: 12px;
+  color: var(--dojo-light);
+  background: var(--dojo-desk-2);
+  box-shadow: none;
+  font: inherit;
+  text-align: left;
+}
+.shogi-game .brain-tile strong { font-size: 0.92rem; }
+.shogi-game .brain-tile span { color: #f3c08f; font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.shogi-game .brain-rowlinks { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.5rem; }
+.shogi-game .brain-rowlink {
+  min-height: 48px;
+  padding: 0 0.6rem;
+  border: 2px solid rgba(255, 252, 244, 0.25);
+  border-radius: 999px;
+  color: var(--dojo-light);
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.shogi-game .brain-path { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+.shogi-game .brain-path li { position: relative; }
+.shogi-game .brain-path li + li::before {
+  content: "";
+  position: absolute;
+  top: 25px;
+  right: calc(50% + 21px);
+  width: calc(100% - 42px);
+  height: 3px;
+  background: rgba(255, 252, 244, 0.22);
+}
+.shogi-game .brain-path .brain-path__node--done + li::before { background: var(--dojo-ai-light); }
+.shogi-game .brain-path__button {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  width: 100%;
+  min-height: 0;
+  padding: 0.3rem 0.1rem;
+  border: 0;
+  color: var(--dojo-light-2);
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+}
+.shogi-game .brain-path__button b {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 2px solid rgba(255, 252, 244, 0.3);
+  border-radius: 50%;
+  background: var(--dojo-desk-2);
+  font-size: 1.05rem;
+}
+.shogi-game .brain-path__button small { font-size: 0.66rem; font-weight: 700; }
+.shogi-game .brain-path__node--done .brain-path__button b { border-color: var(--dojo-ai-light); background: #3a4f8f; }
+.shogi-game .brain-path__node--now .brain-path__button { color: var(--dojo-light); }
+.shogi-game .brain-path__node--now .brain-path__button b { border-color: var(--dojo-now); box-shadow: 0 0 0 4px rgba(241, 165, 76, 0.25); }
+.shogi-game .brain-path__button:disabled { opacity: 0.6; background: transparent; cursor: default; }
+.shogi-game .brain-palaces { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .brain-palace-chip {
+  display: grid;
+  gap: 0.05rem;
+  min-height: 52px;
+  padding: 0.4rem 0.75rem;
+  border: 2px solid rgba(255, 252, 244, 0.12);
+  border-radius: 12px;
+  color: var(--dojo-light);
+  background: var(--dojo-desk-2);
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: left;
+}
+.shogi-game .brain-palace-chip small { color: var(--dojo-light-2); font-size: 0.72rem; font-weight: 700; }
+.shogi-game .brain-palace-chip--add { place-items: center; min-width: 4.5rem; border-style: dashed; color: var(--dojo-light-2); }
+.shogi-game .shogi-brain__shelf { display: grid; gap: 0.8rem; align-content: start; width: min(100%, 40rem); margin: 0 auto; }
+/* 記録のタブ(U:7-5の2)。 */
+.shogi-game .brain-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  width: min(100%, 40rem);
+  margin: 0 auto;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: var(--dojo-desk-2);
+}
+.shogi-game .brain-tabs__tab {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--dojo-light-2);
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+.shogi-game .brain-tabs__tab--on { color: var(--dojo-ink); background: var(--dojo-paper); }
+.shogi-game .brain-tabs__tab:focus-visible { outline: 2px solid var(--dojo-now); outline-offset: 2px; }
+.shogi-game .shogi-brain__records > .brain-cue { width: min(100%, 40rem); margin: 0 auto; }
+.shogi-game .shogi-brain__shelf-lead { margin: 0; color: var(--dojo-light-2); font-size: 0.9rem; font-weight: 700; }
+@media (hover: hover) {
+  .shogi-game .brain-door:hover,
+  .shogi-game .brain-tile:hover,
+  .shogi-game .brain-palace-chip:hover,
+  .shogi-game .brain-rowlink:hover { border-color: var(--dojo-now); }
+}
+.shogi-game .brain-door:focus-visible,
+.shogi-game .brain-tile:focus-visible,
+.shogi-game .brain-rowlink:focus-visible,
+.shogi-game .brain-path__button:focus-visible,
+.shogi-game .brain-palace-chip:focus-visible { outline: 3px solid var(--dojo-now); outline-offset: 2px; }
 
 /* 部屋 */
 .shogi-game .shogi-brain__room {
@@ -1024,15 +1454,11 @@ defineExpose({ goBack });
 }
 .shogi-game .shogi-brain__card-best { color: #9fe0b4; font-size: 0.75em; font-weight: 800; }
 @media (hover: hover) {
-  .shogi-game .shogi-brain__today:hover,
-  .shogi-game .shogi-brain__room-card:hover,
   .shogi-game .shogi-brain__card:not(:disabled):hover {
     border-color: #f1a54c;
     transform: translateY(-0.1em);
   }
 }
-.shogi-game .shogi-brain__today:focus-visible,
-.shogi-game .shogi-brain__room-card:focus-visible,
 .shogi-game .shogi-brain__card:focus-visible {
   outline: 3px solid #d7d1fd;
   outline-offset: 2px;
@@ -1144,22 +1570,41 @@ defineExpose({ goBack });
   line-height: 1.6;
 }
 @media (min-width: 900px) {
-  .shogi-game .shogi-brain__room { grid-template-columns: minmax(0, 22rem) minmax(0, 32rem); justify-content: center; }
+  .shogi-game .shogi-brain__room { grid-template-columns: minmax(0, 26rem) minmax(0, 28rem); justify-content: center; gap: 1.2rem; }
   .shogi-game .shogi-brain__room-main,
   .shogi-game .shogi-brain__room-side { margin: 0; }
+  .shogi-game .shogi-brain__home { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.2rem; width: min(100%, 64rem); }
 }
 @media (orientation: landscape) and (max-height: 600px) {
-  .shogi-game .shogi-brain__room { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
-  .shogi-game .shogi-brain__home { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .shogi-game .shogi-brain__home > .shogi-dex__speech { grid-column: 1 / -1; }
-  .shogi-game .shogi-brain__room-card { min-height: 7rem; }
-  /* 横向きのスマホでも、6週間のカレンダーが1画面に収まる高さにする。 */
-  .shogi-game .shogi-brain__home { gap: 0.5rem; }
-  .shogi-game .shogi-brain__calendar td { height: 1.3rem; }
+  .shogi-game .shogi-brain__room { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.8rem; }
+  .shogi-game .shogi-brain__home { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.6rem; width: 100%; }
+  .shogi-game .shogi-brain__home-main,
+  .shogi-game .shogi-brain__home-side,
+  .shogi-game .shogi-brain__room-main,
   .shogi-game .shogi-brain__room-side { gap: 0.45rem; }
-  /* 計算力の部屋は種目が9つあるので、横向きのスマホでは説明の文を省いて1画面に収める(U:7-5の3)。 */
-  .shogi-game [data-brain-room-view="calc"] .shogi-brain__card small { display: none; }
-  .shogi-game .shogi-brain__room .shogi-brain__card { padding: 0.45rem 0.8rem; }
+  .shogi-game .shogi-brain__calendar td { height: 1.3rem; }
+  /* 横向きのスマホでは、今日の稽古の札とやこび姫の一言を詰めて1画面に収める(U:7-5の3)。 */
+  .shogi-game .brain-today { gap: 0.4rem; padding: 0.6rem 0.8rem 0.7rem; }
+  .shogi-game .brain-today__title { font-size: 1.1rem; }
+  .shogi-game .brain-today__note { display: none; }
+  .shogi-game .brain-door { min-height: 60px; }
+  /* 入口: やこび姫の一言は省き(補足の文。U:7-5の3)、左に今日の稽古、右に今週と扉。 */
+  .shogi-game .shogi-brain__home-main > .shogi-dex__speech { display: none; }
+  .shogi-game .brain-today__stones b { width: 36px; height: 36px; font-size: 1.05rem; }
+  .shogi-game .brain-today__stones li + li::before { top: 17px; right: calc(50% + 20px); width: calc(100% - 40px); }
+  .shogi-game .brain-today__go { min-height: 46px; }
+  .shogi-game .brain-week { gap: 0.25rem; padding: 0.45rem 0.6rem 0.5rem; }
+  .shogi-game .brain-week__days li { padding: 0.15rem 0 0.2rem; }
+  /* 記録: 判子のタブはカレンダーと「いつ稽古する？」を左右に、記録の線は2列に。 */
+  .shogi-game .shogi-brain__records { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem 0.8rem; }
+  .shogi-game .shogi-brain__records > .brain-tabs,
+  .shogi-game .shogi-brain__records > .shogi-brain__compare,
+  .shogi-game .shogi-brain__records > .shogi-brain__records-empty,
+  .shogi-game .shogi-brain__records > .shogi-brain__records-note { grid-column: 1 / -1; }
+  .shogi-game .shogi-brain__records > .shogi-brain__lines { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .shogi-game .shogi-brain__records > .shogi-brain__calendar,
+  .shogi-game .shogi-brain__records > .brain-cue { width: 100%; align-self: start; }
+  .shogi-game .shogi-brain__records .shogi-brain__calendar td { height: 1.15rem; }
 }
 
 /* ===== 種目で共通の部品 ===== */
@@ -1223,47 +1668,112 @@ defineExpose({ goBack });
   outline-offset: 2px;
 }
 
-/* 白い紙の面(計算力の種目)。問題を大きく1つ、答えは下の数字キー(11-4)。 */
+/* 和紙の面(計算力の種目)。問題を大きく1つ、答えは下の数字キー(11-4・14-7)。 */
 .shogi-game .brain-calc { gap: 0.8rem; }
 .shogi-game .brain-paper {
   display: grid;
   justify-items: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.6rem 1rem 1rem;
-  border-radius: 1rem;
-  color: #172632;
-  background: #fffcf4;
-  box-shadow: 0 4px 0 #c9c2b0;
+  padding: 0.7rem 1rem 1rem;
+  border-radius: var(--dojo-radius);
+  color: var(--dojo-ink);
+  background: repeating-linear-gradient(0deg, transparent 0 27px, rgba(160, 130, 80, 0.06) 27px 28px), var(--dojo-paper);
+  box-shadow: var(--dojo-shadow);
 }
+.shogi-game .brain-paper--ghost { padding-top: 1.6rem; }
 .shogi-game .brain-paper__bar {
+  position: relative;
   width: 100%;
-  height: 5px;
+  height: 6px;
   border-radius: 3px;
-  background: #ece5d4;
-  overflow: hidden;
+  background: var(--dojo-paper-2);
 }
 .shogi-game .brain-paper__bar span {
   display: block;
   height: 100%;
-  background: #d9822b;
+  border-radius: 3px;
+  background: var(--dojo-shu);
   transform-origin: left;
   transition: transform 200ms;
 }
+/* 前の自己ベストのペース(▼)。帯の上に小さく(14-4の柱4、D:5-2)。追い越したら緑。 */
+.shogi-game .brain-ghost {
+  position: absolute;
+  bottom: 9px;
+  display: grid;
+  justify-items: center;
+  color: var(--dojo-ink-2);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  translate: -50% 0;
+  transition: left 100ms linear, color 200ms;
+  pointer-events: none;
+}
+.shogi-game .brain-ghost::after { content: ""; margin-top: 2px; border: 5px solid transparent; border-bottom: 0; border-top-color: currentColor; }
+.shogi-game .brain-ghost--passed { color: var(--dojo-good); }
+/* 続けて正解した数(3問から)。 */
+.shogi-game .brain-combo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  color: var(--dojo-shu-deep);
+  background: var(--dojo-shu-soft);
+  font-weight: 900;
+  white-space: nowrap;
+}
+.shogi-game .brain-combo b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+/* 正解の○。答えの横に跳ねて出る(D:3-1)。 */
+.shogi-game .brain-ok {
+  position: absolute;
+  top: 50%;
+  right: -2.8rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  margin-top: -1.2rem;
+  border: 5px solid var(--dojo-good);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: brain-ok-pop 220ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes brain-ok-pop {
+  from { transform: scale(0.4); opacity: 0; }
+  to { transform: scale(1); opacity: 0.9; }
+}
+.shogi-game .brain-paper__finish {
+  margin: 0.2rem 0 0;
+  color: var(--dojo-shu);
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  animation: brain-countdown-pop 240ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+/* N問前の答えの見本(式の札を並べ、説明は下の1行。スマホでも折り返して崩れない)。 */
+.shogi-game .brain-nback__sample { display: grid; grid-template-columns: auto auto auto; justify-content: center; align-items: center; gap: 0.35rem 0.6rem; }
+.shogi-game .brain-nback__card { padding: 0.15rem 0.7rem; border: 2px solid var(--dojo-rule); border-radius: 10px; background: #fff; font-size: 1.4rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.shogi-game .brain-nback__card--now { border-color: var(--dojo-shu); }
+.shogi-game .brain-nback__sample p { grid-column: 1 / -1; margin: 0; font-size: 0.9rem; font-weight: 800; line-height: 1.5; text-align: center; }
+.shogi-game .brain-nback__sample strong { color: var(--dojo-good); font-size: 1.2rem; }
 .shogi-game .brain-paper__status {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
   width: 100%;
   margin: 0;
-  color: #5d6f7c;
+  color: var(--dojo-ink-2);
   font-size: 0.8rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 .shogi-game .brain-paper__lead { margin: 0; font-size: 1.02rem; font-weight: 800; line-height: 1.6; text-align: center; }
 .shogi-game .brain-paper__sample { display: flex; align-items: baseline; gap: 0.6rem; margin: 0; font-size: 1.5rem; font-weight: 900; }
-.shogi-game .brain-paper__sample span { padding: 0.05rem 0.5rem; border-radius: 999px; color: #fffcf4; background: #5d6f7c; font-size: 0.75rem; }
-.shogi-game .brain-paper__sample strong { color: #2a8a4a; }
+.shogi-game .brain-paper__sample span { padding: 0.05rem 0.5rem; border-radius: 999px; color: var(--dojo-light); background: var(--dojo-ink-2); font-size: 0.75rem; }
+.shogi-game .brain-paper__sample strong { color: var(--dojo-good); }
 .shogi-game .brain-paper__problem {
   margin: 0.2rem 0 0;
   font-size: clamp(2.6rem, 13vw, 4.4rem);
@@ -1271,20 +1781,23 @@ defineExpose({ goBack });
   line-height: 1.1;
   letter-spacing: 0.04em;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.shogi-game .brain-paper__problem--done { color: #2a8a4a; font-size: clamp(2rem, 9vw, 3rem); }
+.shogi-game .brain-paper__problem--done { color: var(--dojo-good); font-size: clamp(2rem, 9vw, 3rem); }
 .shogi-game .brain-paper__answer {
+  position: relative;
   min-width: 6rem;
   min-height: 3.2rem;
   margin: 0;
   padding: 0.1rem 0.8rem;
-  border-bottom: 4px solid #c9c2b0;
+  border-bottom: 4px solid var(--dojo-rule);
   font-size: 2.4rem;
   font-weight: 900;
   line-height: 1.25;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.shogi-game .brain-paper__answer--ok { border-color: #2a8a4a; color: #2a8a4a; }
+.shogi-game .brain-paper__answer--ok { border-color: var(--dojo-good); color: var(--dojo-good); }
 .shogi-game .brain-paper__answer--miss { border-color: #cf3b30; color: #b2281f; font-size: 1.3rem; animation: brain-shake 260ms; }
 @keyframes brain-shake {
   0%, 100% { transform: translateX(0); }
@@ -1547,10 +2060,11 @@ defineExpose({ goBack });
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .brain-memory__timer span { animation: none; }
   .shogi-game .brain-paper__bar span { transition: none; }
+  .shogi-game .brain-ok,
+  .shogi-game .brain-paper__finish { animation: none; }
+  .shogi-game .brain-ghost { transition: none; }
   .shogi-game .brain-paper__answer--miss { animation: none; }
   .shogi-game .shogi-brain__new-stamp { animation: none; }
-  .shogi-game .shogi-brain__today,
-  .shogi-game .shogi-brain__room-card,
   .shogi-game .shogi-brain__card { transition: none; transform: none !important; }
 }
 </style>

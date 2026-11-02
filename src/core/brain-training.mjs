@@ -56,6 +56,9 @@ export function lowerIsBetter(recordId) {
   return recordId.startsWith('speed');
 }
 
+/** いつ稽古するか(14-4の柱3)。言葉はbrain-habit.mjsのCUE_OPTIONS。 */
+export const BRAIN_CUE_IDS = Object.freeze(['morning', 'lunch', 'evening', 'bed', 'match', 'none']);
+
 export function emptyBrainRecord() {
   return {
     version: 2,
@@ -64,6 +67,10 @@ export function emptyBrainRecord() {
     days: {},
     program: { calc: emptyCalcProgram(), memory: emptyMemoryProgram() },
     room: '',
+    /** いつ稽古するか(''はまだ決めていない)。 */
+    cue: '',
+    /** 成績表で「いつ稽古する？」を1回聞いたか。 */
+    cueAsked: false,
   };
 }
 
@@ -105,6 +112,8 @@ function cleanV2(parsed) {
     record.program = { calc: cleanCalcProgram(parsed.program.calc), memory: cleanMemoryProgram(parsed.program.memory) };
   }
   record.room = ROOM_IDS.has(parsed.room) ? parsed.room : '';
+  record.cue = BRAIN_CUE_IDS.includes(parsed.cue) ? parsed.cue : '';
+  record.cueAsked = parsed.cueAsked === true;
   return record;
 }
 
@@ -160,8 +169,14 @@ export function dayKey(date = new Date()) {
 }
 
 /**
- * 難しさの階段(2-up-1-down)。続けて正解がupAfter回で1段上、1回まちがえで1段下。
- * 正答率およそ7割のところに落ち着く(原則3)。
+ * 問題の数が多い速さの種目(ちらっと見る・ちらっと盤・色で切り替え)の階段。3問続けて正解で1段上、1問まちがえで1段下。
+ * 正答率およそ79%(8割)に落ち着く(docs/brain-training-design.mdの14-3。B19・B20)。
+ */
+export const SPEED_STAIR_UP = 3;
+
+/**
+ * 難しさの階段(upAfter-up-1-down)。続けて正解がupAfter回で1段上、1回まちがえで1段下。
+ * upAfterが2なら正答率およそ71%、3なら約79%のところに落ち着く(原則3、14-3)。問題の少ない種目は2のまま(1回で段が戻らなくなるため)。
  * @param {{ level: number, streak: number }} state
  * @param {boolean} correct
  * @param {{ min?: number, max: number, upAfter?: number }} limits
@@ -280,13 +295,13 @@ export function dailySeries(record, recordId) {
 }
 
 /**
- * 判子のカレンダー。今日の週を最後にして、weeks週ぶん(日曜はじまり)。6週間は記憶力のコースの枠と同じ(11-6)。
+ * 判子のカレンダー。今日の週を最後にして、weeks週ぶん(月曜はじまり。入口の今週の帯とそろえる。14-4の柱2)。6週間は記憶力のコースの枠と同じ(11-6)。
  * @returns {{ day: string, date: number, calc: boolean, memory: boolean, today: boolean, future: boolean }[][]}
  */
 export function stampCalendar(record, day, weeks = 6) {
   const today = new Date(`${day}T12:00:00`);
   const start = new Date(today);
-  start.setDate(start.getDate() - today.getDay() - (weeks - 1) * 7);
+  start.setDate(start.getDate() - ((today.getDay() + 6) % 7) - (weeks - 1) * 7);
   const rows = [];
   for (let week = 0; week < weeks; week += 1) {
     const row = [];
@@ -311,4 +326,9 @@ export function stampCalendar(record, day, weeks = 6) {
 /** 前に選んだ部屋を残す(入口に「つづき」を大きく出す。UD:3-2)。 */
 export function rememberRoom(record, room) {
   return ROOM_IDS.has(room) ? { ...record, room } : record;
+}
+
+/** いつ稽古するかを決める(決めないも1つの答え。聞いたことも残す)。 */
+export function setBrainCue(record, cue) {
+  return { ...record, cue: BRAIN_CUE_IDS.includes(cue) ? cue : '', cueAsked: true };
 }

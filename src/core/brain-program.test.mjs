@@ -60,9 +60,9 @@ describe('計算力のプログラム', () => {
   test('コースは速さの種目を毎回入れ、N問前と色で切り替えを日替わりにする', () => {
     for (let session = 1; session <= CALC_COURSE_SESSIONS; session += 1) {
       const games = calcCourseGames(session);
-      expect(games).toContain('glance-sym');
-      expect(games).toContain('speed');
-      expect(games).toContain(session % 2 ? 'nback' : 'switch');
+      // スピード計算で始め、見る速さを真ん中に(14-10)。
+      expect(games.slice(0, 2)).toEqual(['speed', 'glance-sym']);
+      expect(games[2]).toBe(session % 2 ? 'nback' : 'switch');
     }
   });
 

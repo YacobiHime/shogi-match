@@ -78,7 +78,7 @@ import {
   scoreGlance,
   squareOf,
 } from "../core/brain-glance.mjs";
-import { nextStair } from "../core/brain-training.mjs";
+import { SPEED_STAIR_UP, nextStair } from "../core/brain-training.mjs";
 
 type Problem = ReturnType<typeof glanceProblem>;
 type Trial = { level: number; correct: boolean; counted: boolean };
@@ -93,7 +93,7 @@ const props = defineProps({
 });
 const emit = defineEmits<{
   (event: "finish", result: { value: number; level: number; correct: number; total: number; text: string }): void;
-  (event: "sound", kind: "correct" | "miss"): void;
+  (event: "sound", kind: "correct" | "miss" | "finish"): void;
 }>();
 
 const symbols = props.variant === "symbols";
@@ -218,7 +218,8 @@ function judge() {
   lastCorrect.value = correct;
   emit("sound", correct ? "correct" : "miss");
   // 出ていた時間が約束と違った問題は、段の上げ下げにも使わない(数えない)。
-  if (counted) stair.value = nextStair(stair.value, correct, { max: GLANCE_MAX_LEVEL });
+  // 3問続けて正解で1段上(正答率およそ8割。docs/brain-training-design.mdの14-3)。
+  if (counted) stair.value = nextStair(stair.value, correct, { max: GLANCE_MAX_LEVEL, upAfter: SPEED_STAIR_UP });
   phase.value = "feedback";
   timers.push(setTimeout(advance, correct ? 900 : 1600));
 }
@@ -229,6 +230,7 @@ function advance() {
     phase.value = "done";
     const summary = glanceSummary(trials.value);
     const text = summary.value ? `${glanceLevelLabel(summary.value - 1, symbols ? SYMBOL_NOUN : undefined)}で見えた` : "";
+    emit("sound", "finish");
     emit("finish", { value: summary.value, level: stair.value.level, correct: summary.correct, total: summary.total, text });
     return;
   }

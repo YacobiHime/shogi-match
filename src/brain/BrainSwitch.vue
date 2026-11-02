@@ -1,7 +1,7 @@
 <template>
   <!--
     色で切り替え(docs/brain-training-design.mdの11-5)。数字が色の枠で出る。青の枠なら偶数か奇数か、
-    赤の枠なら5より小さいか大きいかを、2つのボタンで答える。2問続けて正解で段が上がる(色の変わる割合と、答える時間)。
+    赤の枠なら5より小さいか大きいかを、2つのボタンで答える。3問続けて正解で段が上がる(色の変わる割合と、答える時間。正答率およそ8割。14-3)。
     色だけに頼らないよう、枠の形(青は丸い角・赤は角ばった二重線)と、答えのボタンの言葉も変える(U:7-3)。
   -->
   <section class="brain-game brain-calc brain-switch" aria-label="色で切り替え" data-brain-switch>
@@ -9,6 +9,7 @@
       <div class="brain-paper__bar" aria-hidden="true"><span :style="{ transform: `scaleX(${trials.length / count})` }"></span></div>
       <p class="brain-paper__status">
         <span>{{ phase === 'intro' ? "色で切り替え" : `${Math.min(trials.length + 1, count)} / ${count}` }}</span>
+        <span v-if="phase === 'play' && combo >= 3" class="brain-combo" data-brain-combo>れんぞく <b>{{ combo }}</b></span>
         <span>{{ switchLevelText(stair.level) }}</span>
       </p>
       <template v-if="phase === 'intro'">
@@ -17,6 +18,11 @@
           <p class="brain-switch__frame brain-switch__frame--parity"><strong>{{ SWITCH_RULES.parity.label }}の枠</strong>偶数？奇数？</p>
           <p class="brain-switch__frame brain-switch__frame--size"><strong>{{ SWITCH_RULES.size.label }}の枠</strong>5より小さい？大きい？</p>
         </div>
+      </template>
+      <BrainCountdown v-else-if="phase === 'ready'" @done="next" />
+      <template v-else-if="phase === 'done'">
+        <p class="brain-paper__finish" data-brain-finish>そこまで！</p>
+        <p class="brain-paper__problem brain-paper__problem--done">{{ resultText }}</p>
       </template>
       <template v-else-if="trial">
         <div class="brain-switch__frame brain-switch__frame--big" :class="`brain-switch__frame--${trial.rule}`" :data-switch-rule="trial.rule">
@@ -33,9 +39,9 @@
     </div>
     <div class="brain-calc__controls">
       <div v-if="phase === 'intro'" class="brain-game__actions">
-        <button type="button" class="brain-game__primary" data-brain-start @click="next">はじめる</button>
+        <button type="button" class="brain-game__primary" data-brain-start @click="phase = 'ready'">はじめる</button>
       </div>
-      <div v-else-if="trial" class="brain-switch__answers">
+      <div v-else-if="trial && phase === 'play'" class="brain-switch__answers">
         <button
           v-for="option in SWITCH_RULES[trial.rule].options"
           :key="option.id"
@@ -61,7 +67,8 @@ import {
   switchSummary,
   switchTrial,
 } from "../core/brain-calc.mjs";
-import { nextStair } from "../core/brain-training.mjs";
+import { SPEED_STAIR_UP, nextStair } from "../core/brain-training.mjs";
+import BrainCountdown from "./BrainCountdown.vue";
 
 type Trial = ReturnType<typeof switchTrial>;
 
@@ -71,11 +78,13 @@ const props = defineProps({
 });
 const emit = defineEmits<{
   (event: "finish", result: { value: number; level: number; correct: number; total: number; text: string }): void;
-  (event: "sound", kind: "correct" | "miss"): void;
+  (event: "sound", kind: "correct" | "miss" | "finish"): void;
 }>();
 
 const seedBase = Math.floor(Math.random() * 1e9);
-const phase = ref<"intro" | "play" | "done">("intro");
+const phase = ref<"intro" | "ready" | "play" | "done">("intro");
+const combo = ref(0);
+const resultText = ref("");
 const stair = ref({ level: Math.max(0, Math.min(SWITCH_MAX_LEVEL, props.startLevel)), streak: 0 });
 const trial = ref<Trial | null>(null);
 const trials = ref<{ level: number; correct: boolean; ms: number }[]>([]);
@@ -116,7 +125,8 @@ function answer(choice: string) {
   const ms = Math.round(performance.now() - shownAt);
   const { correct, inTime } = scoreSwitch(trial.value, choice, ms);
   trials.value = [...trials.value, { level: trial.value.level, correct, ms }];
-  stair.value = nextStair(stair.value, correct, { max: SWITCH_MAX_LEVEL });
+  stair.value = nextStair(stair.value, correct, { max: SWITCH_MAX_LEVEL, upAfter: SPEED_STAIR_UP });
+  combo.value = correct ? combo.value + 1 : 0;
   feedback.value = correct ? "ok" : inTime ? "miss" : "late";
   emit("sound", correct ? "correct" : "miss");
   if (limitTimer) clearTimeout(limitTimer);
@@ -127,7 +137,12 @@ function answer(choice: string) {
 function finish() {
   phase.value = "done";
   const summary = switchSummary(trials.value);
-  emit("finish", { value: summary.value, level: stair.value.level, correct: summary.correct, total: summary.total, text: switchResultText(summary) });
+  resultText.value = switchResultText(summary);
+  emit("sound", "finish");
+  // 「そこまで！」を少し見せてから結果へ(14-4の柱4)。
+  timer = setTimeout(() => {
+    emit("finish", { value: summary.value, level: stair.value.level, correct: summary.correct, total: summary.total, text: resultText.value });
+  }, 700);
 }
 
 function onKey(event: KeyboardEvent) {

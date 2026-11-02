@@ -8,11 +8,15 @@
       <div class="brain-paper__bar" aria-hidden="true"><span :style="{ transform: `scaleX(${progress})` }"></span></div>
       <p class="brain-paper__status">
         <span>{{ phase === 'play' ? `${Math.max(0, index - n) + (answering ? 1 : 0)} / ${NBACK_ANSWERS}` : modeLabel }}</span>
+        <span v-if="phase === 'play' && combo >= 3" class="brain-combo" data-brain-combo>れんぞく <b>{{ combo }}</b></span>
         <span>{{ n }}つ前<template v-if="rounds > 1">・{{ roundIndex + 1 }}回目</template></span>
       </p>
       <template v-if="phase === 'intro'">
         <p class="brain-paper__lead">式の答えを覚えておいて、<strong>{{ n }}つ前</strong>の式の答えを押してね。はじめの{{ n }}枚は覚えるだけだよ。</p>
-        <p class="brain-paper__sample"><span>見本</span>2+1 → 4−3 → <strong>（1つ前の答え）3</strong></p>
+        <div class="brain-nback__sample" data-nback-sample>
+          <span class="brain-nback__card">2+1</span><span aria-hidden="true">→</span><span class="brain-nback__card brain-nback__card--now">4−3</span>
+          <p>「4−3」が出たら、1つ前の「2+1」の答え <strong>3</strong> を押す</p>
+        </div>
       </template>
       <template v-else-if="phase === 'play'">
         <ol class="brain-nback__trail" aria-hidden="true">
@@ -21,13 +25,14 @@
         <p class="brain-paper__problem">{{ round.items[index].text }}</p>
         <p class="brain-paper__lead brain-nback__ask">{{ answering ? `${n}つ前の式の答えは？` : "この答えを覚えてね" }}</p>
         <p class="brain-paper__answer" :class="{ 'brain-paper__answer--miss': feedback === 'miss', 'brain-paper__answer--ok': feedback === 'ok' }" aria-live="polite">
-          {{ feedback === 'miss' ? `答えは ${round.expected[index]}` : input || "　" }}
+          {{ feedback === 'miss' ? `答えは ${round.expected[index]}` : input || "　" }}<i v-if="feedback === 'ok'" class="brain-ok" aria-hidden="true"></i>
         </p>
       </template>
       <template v-else-if="phase === 'between'">
         <p class="brain-paper__lead">{{ betweenText }}</p>
       </template>
       <template v-else>
+        <p class="brain-paper__finish" data-brain-finish>そこまで！</p>
         <p class="brain-paper__problem brain-paper__problem--done">{{ resultText }}</p>
       </template>
     </div>
@@ -65,7 +70,7 @@ const props = defineProps({
 });
 const emit = defineEmits<{
   (event: "finish", result: { value: number; level: number; correct: number; total: number; text: string }): void;
-  (event: "sound", kind: "correct" | "miss"): void;
+  (event: "sound", kind: "correct" | "miss" | "finish"): void;
 }>();
 
 const seedBase = Math.floor(Math.random() * 1e9);
@@ -79,6 +84,8 @@ const input = ref("");
 const feedback = ref<"" | "ok" | "miss">("");
 const betweenText = ref("");
 const resultText = ref("");
+/** 続けて正解した数(回をまたいで数える。まちがえで0)。 */
+const combo = ref(0);
 let roundCorrect = 0;
 let correctTotal = 0;
 let answeredTotal = 0;
@@ -126,6 +133,7 @@ function answer(digit: string) {
     roundCorrect += 1;
     correctTotal += 1;
   }
+  combo.value = ok ? combo.value + 1 : 0;
   emit("sound", ok ? "correct" : "miss");
   timer = setTimeout(advance, ok ? 350 : 1000);
 }
@@ -157,6 +165,7 @@ function endRound() {
     return;
   }
   phase.value = "done";
+  emit("sound", "finish");
   resultText.value = bestPassed ? nbackText(bestPassed) : `${NBACK_ANSWERS}問中${roundCorrect}問`;
   // 測定で合格したNは、練習を始めるNの目安にもする(1から少しずつ上がるのを待たせない)。
   const level = props.mode === "measure" ? Math.max(NBACK_MIN, props.savedLevel, bestPassed) : next;
