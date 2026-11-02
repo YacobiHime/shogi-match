@@ -1,5 +1,5 @@
 import type { ShogiEngine } from "../../core/engine.js";
-import { completePlayInsight, loadPlayInsight, savePlayInsight, summarizePlayInsight } from "../../core/play-insight.mjs";
+import { completePlayInsight, loadPlayInsight, savePlayInsight, savePlayInsightPartial, summarizePlayInsight } from "../../core/play-insight.mjs";
 import { addReviewProblems, buildReviewProblem, loadReviewProblems, saveReviewProblems } from "../../core/review-problems.mjs";
 import { loadReviewQueue, recordReviewResult, saveReviewQueue } from "../../core/review-queue.mjs";
 import { STANDARD_SFEN } from "../../game-state";
@@ -56,8 +56,12 @@ export function usePlayInsightAnalysis({ storage, engineFactory, compact, paused
         let summary = null;
         if (engine) {
           try {
-            const scanned = await scanGameMoves({ worker: engine, moves: job.moves, compact: compact(), isCancelled: paused });
-            if (scanned.cancelled) break;
+            const scanned = await scanGameMoves({ worker: engine, moves: job.moves, compact: compact(), isCancelled: paused, resume: (job as { partial?: unknown[] }).partial ?? [] });
+            if (scanned.cancelled) {
+              // 途中まで読んだところを残し、次の機会に続きから読む(対局を続けて指しても、いつか読み終える。14章)。
+              savePlayInsight(storage(), savePlayInsightPartial(loadPlayInsight(storage()), job.at, scanned.results));
+              break;
+            }
             summary = summarizePlayInsight({ ...scanned, moves: job.moves, color: job.color, initialSfen: STANDARD_SFEN });
           } catch {
             summary = null;

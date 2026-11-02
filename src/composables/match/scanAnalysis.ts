@@ -26,8 +26,10 @@ export async function createScanEngine(engineFactory: () => Promise<EngineFactor
  * 平手の初期局面からの手順を、1手ずつ浅く読む。pointsは棋譜解析の点、sfensは0手目からの局面。
  * isCancelledが真になったら途中でやめ、cancelledを真にして返す。
  */
-export async function scanGameMoves({ worker, moves, compact, isCancelled = () => false }: {
+export async function scanGameMoves({ worker, moves, compact, isCancelled = () => false, resume = [] }: {
   worker: ShogiEngine; moves: string[]; compact: boolean; isCancelled?: () => boolean;
+  /** 前に途中まで読んだ結果(読み終えた局面は読み直さない。docs/home-next-adaptive-design.mdの14章)。 */
+  resume?: unknown[];
 }) {
   const replay = createGameRecord(STANDARD_SFEN);
   const steps = [{ sfen: replay.position.sfen, lastMove: "", label: "" }];
@@ -41,18 +43,20 @@ export async function scanGameMoves({ worker, moves, compact, isCancelled = () =
   }
   const base = STAGED_ANALYSIS_PLANS[compact ? "mobile" : "desktop"];
   const plan = { ...base, scan: compact ? { nodes: 4000, maxTimeMs: 500, multiPv: 2 } : { nodes: 8000, maxTimeMs: 700, multiPv: 2 } };
-  let results: unknown[] = [];
+  let results: unknown[] = Array.isArray(resume) ? [...resume] : [];
   let contexts: unknown[] = [];
   await analyzeKifuStaged({
     steps,
     lanes: [engineLane(worker, (_sfen, ply) => movesPosition("startpos", moves, ply))],
     plan,
     stages: ["scan"],
+    results,
     isCancelled,
     onResults: (latest: unknown[], latestContexts: unknown[]) => { results = latest; contexts = latestContexts; },
   });
   return {
     cancelled: isCancelled(),
+    results,
     points: analysisPointsFromResults(steps, results, contexts),
     sfens: steps.map((step) => step.sfen),
   };

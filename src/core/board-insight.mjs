@@ -1,7 +1,7 @@
 import { createGameRecord, enumerateLegalMoves } from "../game-state";
 import { attackersOf, applyUsiToBoard, attackedSquares, findKing, opponentOf, parseSfenState, squareXY, xySquare } from "./piece-movement.mjs";
 import { capturePoints } from "./piece-points.mjs";
-import { exchangeGain } from "./exchange-eval.mjs";
+import { captureSwing, exchangeGain } from "./exchange-eval.mjs";
 
 /**
  * 盤の「見える化」のための計算。将棋教室の利きメガネ(取られるマス・玉の逃げ道・取り返し)と、
@@ -41,6 +41,48 @@ export function unsafeDestinations(sfen, source) {
     if (!usi.startsWith(source)) continue;
     const applied = applyUsiToBoard(board, usi, turn);
     if (applied && isPieceLoose(applied.board, applied.moved.to)) result.add(applied.moved.to);
+  }
+  return [...result];
+}
+
+/**
+ * 駒を選んだとき、動かすと駒損になる行き先(悪手のマス。docs/coach-advice-expansion-design.mdの14章)。
+ * 動かした駒がタダで(または損な取り合いで)取られるマスに加えて、その手で守りが外れたり、
+ * 飛び駒の通り道が開いたりして、ほかの自分の駒が新しく取られて損になるマスも数える。
+ * 取った駒の値打ちより、新しく生まれる損(相手の取り合いの得のうち、いちばん大きいもの)が marginを超えたら悪手。
+ * 取り合いの計算はCPUと同じ(exchange-eval.mjs)。玉は数えない(王手放置は合法手にない)。
+ * @param {string} sfen 手番の側が動かす局面
+ * @param {string} source 盤の駒なら"5e"、持ち駒なら"P*"
+ * @param {{ margin?: number }} [options] marginは見逃す損の幅(歩100の点。既定は歩1枚の振れ幅より少し下)
+ * @returns {string[]}
+ */
+export function blunderDestinations(sfen, source, { margin = 150 } = {}) {
+  const { board, turn } = parseSfenState(sfen);
+  const enemy = opponentOf(turn);
+  const lossBefore = new Map();
+  for (const [square, piece] of board) {
+    if (piece.color !== turn || piece.kind === "K") continue;
+    const { gain } = exchangeGain(board, square, enemy, { mode: "full" });
+    if (gain > 0) lossBefore.set(square, gain);
+  }
+  const result = new Set();
+  for (const usi of legalUsis(sfen)) {
+    if (!usi.startsWith(source)) continue;
+    const applied = applyUsiToBoard(board, usi, turn);
+    if (!applied) continue;
+    const { board: after, moved } = applied;
+    const captured = board.get(moved.to);
+    const taken = captured && captured.color === enemy ? captureSwing(captured.kind) : 0;
+    let worst = 0;
+    for (const [square, piece] of after) {
+      if (piece.color !== turn || piece.kind === "K") continue;
+      const { gain } = exchangeGain(after, square, enemy, { mode: "full" });
+      if (!gain) continue;
+      // もともと取られる形だった駒(動かさなかった駒)の損は、この手のせいではないので差し引く。
+      const fresh = square === moved.to ? gain : gain - (lossBefore.get(square) ?? 0);
+      if (fresh > worst) worst = fresh;
+    }
+    if (worst - taken > margin) result.add(moved.to);
   }
   return [...result];
 }

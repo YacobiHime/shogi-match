@@ -130,6 +130,71 @@ const FORMATION_PARENTS_BY_SPECIFIC = new Map([
   ['シン・パックマン', ['パックマン']],
 ]);
 
+/**
+ * 戦型の名前(ひらがなすいしょうの形の名前)を、コレクションの目録(作戦カード)の名前へ寄せる(docs/player-world-note-design.mdの9章)。
+ * 目録にない呼び方(「棒銀」「矢倉」「四間飛車」など)で見つかると、コレクション・使用率・分身の得意戦法に入らなかったため。
+ */
+export const FORMATION_LABEL_ALIASES = Object.freeze(new Map([
+  ['棒銀', '原始棒銀'],
+  ['矢倉', '矢倉戦法'],
+  ['一手損角換わり', '角換わり'],
+  ['角換わり29手目基本図', '角換わり'],
+  ['角換わり37手目基本図', '角換わり'],
+  ['4八金・2九飛車型', '角換わり'],
+  ['4五桂速攻', '角換わり4五桂速攻'],
+  ['横歩取り勇気流', '横歩取り'],
+  ['横歩取り2三歩戦法', '横歩取り'],
+  ['横歩取り3三角戦法', '横歩取り3三角型'],
+  ['横歩取り3三桂戦法', '横歩取り'],
+  ['相横歩取り', '横歩取り'],
+  ['横歩取り4五角戦法', '横歩取り'],
+  ['横歩取り8五飛戦法', '横歩取り'],
+  ['AlphaZero流相掛かり', '相掛かり'],
+  ['6二金・8一飛車型', '相掛かり'],
+  ['相掛かり横歩取らせ', '相掛かり'],
+  ['対矢倉右桂速攻', '矢倉戦法'],
+  ['四間飛車', 'ノーマル四間飛車'],
+  ['角交換四間飛車', 'ノーマル四間飛車'],
+  ['立石流四間飛車', 'ノーマル四間飛車'],
+  ['三間飛車', 'ノーマル三間飛車'],
+  ['角交換三間飛車', 'ノーマル三間飛車'],
+  ['石田流', '早石田'],
+  ['向かい飛車', 'ノーマル向かい飛車'],
+  ['ダイレクト向かい飛車', 'ノーマル向かい飛車'],
+  ['メリケン向かい飛車', 'ノーマル向かい飛車'],
+  ['阪田流向かい飛車', 'ノーマル向かい飛車'],
+  ['菜々河流向かい飛車', 'ノーマル向かい飛車'],
+  ['天彦流向かい飛車', 'ノーマル向かい飛車'],
+  ['中飛車', '原始中飛車'],
+  ['鬼殺し', '原始鬼殺し'],
+  ['角頭歩', '角頭歩戦法'],
+  ['シン・パックマン', 'パックマン'],
+  ['振り飛車ミレニアム', 'ミレニアム'],
+  ['銀冠', '振り飛車銀冠'],
+]));
+
+/**
+ * 1局で見つかった戦型の名前を、コレクション・使用率に数える名前にする。目録の呼び方へ寄せた名前と、
+ * くわしい名前に隠れた親の名前(「一手損角換わり」の「角換わり」)も足す。目録にない名前はそのまま残す(数える側が捨てる)。
+ * @param {Iterable<string>} names
+ * @returns {string[]}
+ */
+export function collectionFormationNames(names) {
+  const out = new Set();
+  for (const name of names) {
+    if (!name) continue;
+    out.add(name);
+    const alias = FORMATION_LABEL_ALIASES.get(name);
+    if (alias) out.add(alias);
+    for (const parent of FORMATION_PARENTS_BY_SPECIFIC.get(name) ?? []) {
+      out.add(parent);
+      const parentAlias = FORMATION_LABEL_ALIASES.get(parent);
+      if (parentAlias) out.add(parentAlias);
+    }
+  }
+  return [...out];
+}
+
 export function preferSpecificFormationNames(names) {
   const unique = [...new Set(names.filter(Boolean))];
   const hiddenParents = new Set();

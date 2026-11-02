@@ -1543,6 +1543,16 @@ function restLine(rest: { count: number; games: number }) {
 }
 /** 自分の戦法: コレクションで組んだ回数からの、くわしい戦法の使用率(なければ振り飛車の戦法の記録)。 */
 const ownStrategies = computed(() => {
+  // 組んだ戦法の勝ち負け(居飛車の戦法も。docs/player-world-note-design.mdの9章)があれば、使用率と勝率を出す。
+  const played = usageTable(props.state, "strategy");
+  if (played.rows.length) {
+    return {
+      rows: played.rows.map((row) => ({ ...row, stat: usageStat(row) })),
+      restText: restLine(played.rest),
+      empty: "",
+      note: "1局で組んだ戦法をそれぞれ数えるので、合わせると100%をこえることがあるよ。",
+    };
+  }
   const repertoire = myRepertoire({ formations: collection.value.formations, catalog: COLLECTION_CATALOG });
   if (repertoire) {
     const table = repertoireTable(openingUsageRows(repertoire.usage), repertoire.games);
@@ -1562,7 +1572,9 @@ const ownStrategies = computed(() => {
   };
 });
 const styleSides = computed(() => {
-  const opponentRook = usageTable(props.state, "opponentRook");
+  // 相手の組んだ戦法(居飛車も)の記録があればそれを、なければ今までの振り飛車の戦法の記録を出す。
+  const opponentStrategy = usageTable(props.state, "opponentStrategy");
+  const opponentRook = opponentStrategy.rows.length ? opponentStrategy : usageTable(props.state, "opponentRook");
   const castles = (category: string) => {
     const table = usageTable(props.state, category);
     return { rows: table.rows.map((row) => ({ ...row, stat: usageStat(row) })), restText: restLine(table.rest) };

@@ -149,15 +149,22 @@ function addToTally(tally = {}, key, outcome) {
   return { ...tally, [key]: { ...current, [OUTCOME_KEY[outcome]]: current[OUTCOME_KEY[outcome]] + 1 } };
 }
 
-/** 成績の分類。battle: 戦型、rook: 戦法、castle: 囲い。opponent*は相手側。 */
-export const USAGE_CATEGORIES = ['battle', 'rook', 'castle', 'opponentRook', 'opponentCastle'];
+/**
+ * 成績の分類。battle: 戦型、rook: 飛車の位置の戦法(振り飛車だけ)、castle: 囲い。
+ * strategy: 組んだ戦法(作戦カードの名前。居飛車の棒銀・早繰り銀なども。1局に複数あれば全部。docs/player-world-note-design.mdの9章)。
+ * opponent*は相手側。
+ */
+export const USAGE_CATEGORIES = ['battle', 'rook', 'castle', 'opponentRook', 'opponentCastle', 'strategy', 'opponentStrategy'];
 
-/** 分類ごとの成績の表に、1局の戦型・戦法・囲いを加える。名前のないものは数えない。 */
+/** 分類ごとの成績の表に、1局の戦型・戦法・囲いを加える。名前のないものは数えない。名前の並び(strategy)は1つずつ数える。 */
 function addUsage(usage = {}, profile = {}, outcome) {
   const next = { ...usage };
   for (const category of USAGE_CATEGORIES) {
-    const name = profile[category];
-    if (typeof name === 'string' && name) next[category] = addToTally(next[category], name, outcome);
+    const value = profile[category];
+    const names = Array.isArray(value) ? [...new Set(value)] : [value];
+    for (const name of names) {
+      if (typeof name === 'string' && name) next[category] = addToTally(next[category], name, outcome);
+    }
   }
   return next;
 }
@@ -189,7 +196,7 @@ export function levelRatingText(state, level) {
  *   opponentLevel: number,
  *   outcome: 'win' | 'loss' | 'draw',
  *   color?: 'black' | 'white',
- *   profile?: { [category: string]: string | undefined },
+ *   profile?: { [category: string]: string | string[] | undefined },
  *   event?: string,
  *   opponent?: string,
  *   stage?: string,

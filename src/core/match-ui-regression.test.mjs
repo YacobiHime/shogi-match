@@ -668,7 +668,7 @@ describe("match screen regressions", () => {
   it("analyzes finished free games in the background and offers practice from their content", () => {
     // 自由対局だけを、終局後に裏の解析の列へ足す(竜王戦は大会の統計で解析する)。対局中は解析を止める。
     const rated = source.split("function recordRatedGame(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
-    expect(rated).toMatch(/if \(!tournament\) \{[\s\S]*?enqueuePlayInsight\([\s\S]*?playInsightAnalysis\.processQueue\(\)/);
+    expect(rated).toMatch(/const ryuoStatsGame = tournament && [\s\S]*?if \(!ryuoStatsGame\) \{[\s\S]*?enqueuePlayInsight\([\s\S]*?playInsightAnalysis\.processQueue\(\)/);
     expect(source).toMatch(/usePlayInsightAnalysis\(\{[\s\S]*?paused: \(\) => active\.value/);
     expect(source).toMatch(/playInsightAnalysis\.dispose\(\)/);
     // 見立ては中身の記録と復習の箱も見る。練習は「つぎはこれ」から始め、始めたことを記録する。

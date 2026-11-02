@@ -17,7 +17,8 @@ export const PLAY_INSIGHT_KEY = 'yacobihime:shogi-match:play-insight:v1';
 /** 覚えておく対局の数。 */
 export const MAX_INSIGHT_GAMES = 20;
 /** 解析を待つ対局の数の上限(解析できない環境で溜まり続けないように)。 */
-const MAX_QUEUE = 5;
+/** 解析を待つ対局の数(大会の対局も数えるので多めに。docs/home-next-adaptive-design.mdの14章)。 */
+const MAX_QUEUE = 30;
 /** 1手の損失の上限と、損を測らない形勢(ryuo-stats.mjs・skill-estimate.mjsと同じ)。 */
 const LOSS_CAP = 1000;
 const DECIDED_STANDING = 1500;
@@ -142,10 +143,22 @@ export function savePlayInsight(storage, insight) {
 /**
  * 終えた対局を、解析を待つ列に足す。
  * @param {ReturnType<typeof createPlayInsight>} insight
- * @param {{ moves: string[], color: 'black' | 'white', outcome: 'win' | 'loss' | 'draw', level: number, at?: number }} game
+ * @param {{ moves: string[], color: 'black' | 'white', outcome: 'win' | 'loss' | 'draw', level: number, event?: string, at?: number }} game
+ *   eventは大会の対局の棋戦(名人戦など。自由対局は省く)。
  */
-export function enqueuePlayInsight(insight, { moves, color, outcome, level, at = Date.now() }) {
-  return { ...insight, queue: [...insight.queue, { at, moves: [...moves], color, outcome, level }].slice(-MAX_QUEUE) };
+export function enqueuePlayInsight(insight, { moves, color, outcome, level, event = undefined, at = Date.now() }) {
+  const job = { at, moves: [...moves], color, outcome, level, ...(event ? { event } : {}) };
+  return { ...insight, queue: [...insight.queue, job].slice(-MAX_QUEUE) };
+}
+
+/**
+ * 途中まで読んだ解析を、その対局の列に残す(対局を始めて止めても、次は続きから読む。14章)。
+ * @param {ReturnType<typeof createPlayInsight>} insight
+ * @param {number} at 対局の時刻(列の印)
+ * @param {unknown[]} partial 解析の途中の結果(kifu-analysis-pipeline.mjsのresults)
+ */
+export function savePlayInsightPartial(insight, at, partial) {
+  return { ...insight, queue: insight.queue.map((job) => (job.at === at ? { ...job, partial } : job)) };
 }
 
 /**
@@ -155,7 +168,7 @@ export function enqueuePlayInsight(insight, { moves, color, outcome, level, at =
  * @param {ReturnType<typeof summarizePlayInsight> | null} summary
  */
 export function completePlayInsight(insight, job, summary) {
-  const game = { at: job.at, level: job.level, outcome: job.outcome, color: job.color, summary };
+  const game = { at: job.at, level: job.level, outcome: job.outcome, color: job.color, ...(job.event ? { event: job.event } : {}), summary };
   return {
     ...insight,
     games: [...insight.games.filter((entry) => entry.at !== job.at), game].sort((a, b) => a.at - b.at).slice(-MAX_INSIGHT_GAMES),

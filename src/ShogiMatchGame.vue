@@ -1672,6 +1672,15 @@
             data-waza-toggle
             @click="toggleWazaEffect"
           >技の<wbr>演出</button>
+          <!-- 危ないマス(docs/coach-advice-expansion-design.mdの14章)。駒を選ぶと、動かすと駒損になる行き先に赤い輪。はじめは消えている。 -->
+          <button
+            type="button"
+            class="shogi-game__assist-toggle shogi-game__command--blunder"
+            aria-label="危ないマス（動かすと駒損になる行き先に印を出す）"
+            :aria-pressed="blunderGuardEnabled"
+            data-blunder-guard
+            @click="toggleBlunderGuard"
+          >危ない<wbr>マス</button>
         </div>
       </details>
       <button
@@ -2842,7 +2851,7 @@ import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } f
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
 import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoments } from "./core/tip-moments.mjs";
-import { kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
+import { blunderDestinations, kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
 import { RESET_GROUPS, TOURNAMENT_PARTS, resetData, resetGroup } from "./core/data-reset.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
@@ -2866,6 +2875,7 @@ import {
   detectFormationSnapshot,
   formationNamesFromSnapshot,
   formationNamesFromState,
+  collectionFormationNames,
   updateFormationState,
 } from "./core/formation-tracker.mjs";
 import {
@@ -4322,7 +4332,7 @@ const {
   sync: syncAssistTools,
 } = useAssistTools(assistActions, uiFontPx, primaryAssistCount);
 const activeDisplayToolCount = computed(() => Number(boardFlipOverride.value) + Number(attackGuideEnabled.value) + Number(materialGuideEnabled.value)
-  + Number(dangerSensorEnabled.value) + Number(wazaEffectEnabled.value));
+  + Number(dangerSensorEnabled.value) + Number(wazaEffectEnabled.value) + Number(blunderGuardEnabled.value));
 watch([homeOpen, pregameOpen, reviewMode], () => closeAssistTools());
 
 const resignConfirmOpen = ref(false);
@@ -5839,7 +5849,8 @@ function recordCollection(won: boolean) {
   const level = cpuStrengthLevel();
   const before = loadCollection(browserStorage());
   const recorded = recordMatchCollection(before, {
-    formations: [...matchFormationNames],
+    // 目録にない呼び方(「棒銀」「矢倉」など)も、目録の名前へ寄せて数える(docs/player-world-note-design.mdの9章)。
+    formations: collectionFormationNames(matchFormationNames),
     tesuji: [...matchTesuji],
     tesujiNames: WAZA_TESUJI_NAMES,
     wonLevel: won && ratingChange.value && level !== undefined ? level : null,
@@ -5935,9 +5946,32 @@ const ownsKikiGlasses = ref(hasKikiGlasses(loadTutorialProgress(browserStorage()
 const attackGuideVisible = computed(() => (
   attackGuideEnabled.value && matchStarted.value && !pregameOpen.value
 ));
+/*
+ * 悪手のマス(docs/coach-advice-expansion-design.mdの14章)。表示補助の「危ないマス」を付けると、駒を選んだり持ったりしたときに、
+ * 動かすと駒損になる行き先(タダで取られる・守りが外れてほかの駒が取られる)に赤い輪を出す。実力によっては邪魔なので、はじめは消えている。
+ */
+const BLUNDER_GUARD_KEY = "yacobihime:shogi-match:blunder-guard:v1";
+const blunderGuardEnabled = ref((() => {
+  try {
+    return browserStorage()?.getItem(BLUNDER_GUARD_KEY) === "on";
+  } catch {
+    return false;
+  }
+})());
+function toggleBlunderGuard() {
+  blunderGuardEnabled.value = !blunderGuardEnabled.value;
+  try {
+    browserStorage()?.setItem(BLUNDER_GUARD_KEY, blunderGuardEnabled.value ? "on" : "off");
+  } catch {
+    // 保存できなくても、この画面のあいだは切り替える。
+  }
+}
 const boardRiskDestinations = computed(() => {
-  if (!attackGuideVisible.value || !ownsKikiGlasses.value || reviewMode.value) return null;
   const sfen = currentSfen.value;
+  if (blunderGuardEnabled.value && matchStarted.value && !pregameOpen.value && !reviewMode.value && !measureMode.value) {
+    return (source: string) => blunderDestinations(sfen, source);
+  }
+  if (!attackGuideVisible.value || !ownsKikiGlasses.value || reviewMode.value) return null;
   return (source: string) => unsafeDestinations(sfen, source);
 });
 const boardEscapeMarks = computed(() => {
@@ -6023,8 +6057,8 @@ function noteWaza(previous: string, usi: string, before: { player: Set<string>; 
   const mover = previous.split(" ")[1] === "w" ? "white" : "black";
   const mine = mover === playerColorKey.value;
   const formations = formationWaza({
-    before: mine ? before.player : before.opponent,
-    after: mine ? matchFormationNames : formationNamesFromState(formationState.value, mover),
+    before: collectionFormationNames(mine ? before.player : before.opponent),
+    after: collectionFormationNames(mine ? matchFormationNames : formationNamesFromState(formationState.value, mover)),
     castles: CASTLE_LABELS,
     strategies: STRATEGY_LABELS,
   });
@@ -11401,6 +11435,10 @@ function recordRatedGame(matchResult: MatchResult) {
       castle: own.castle,
       opponentRook: other.rook,
       opponentCastle: other.castle,
+      // 組んだ戦法(居飛車の棒銀・早繰り銀も。作戦カードの名前に寄せる。docs/player-world-note-design.mdの9章)。
+      strategy: collectionFormationNames(matchFormationNames).filter((name) => STRATEGY_LABELS.has(name)),
+      opponentStrategy: collectionFormationNames(formationNamesFromState(formationState.value, color === "white" ? "black" : "white"))
+        .filter((name) => STRATEGY_LABELS.has(name)),
     },
     event: tournament ? ryuoGame.value?.event ?? "ryuo" : "free",
     opponent: tournament ? ryuoOpponent.value?.name : undefined,
@@ -11415,9 +11453,13 @@ function recordRatedGame(matchResult: MatchResult) {
   sendSkillPayload((anon) => gamePayload({
     anon, app: "web", opponent: level as number, outcome, event: tournament ? ryuoGame.value?.event ?? "ryuo" : "free", plies: moveHistory.length,
   }));
-  // 自由対局は、中身を裏で解析して、見立てと弱点の練習に使う(竜王戦は大会の統計で解析する)。
-  if (!tournament) {
-    const insight = enqueuePlayInsight(loadPlayInsight(browserStorage()), { moves: [...moveHistory], color, outcome, level });
+  // 自由対局と、竜王戦のほかの大会の対局は、中身を裏で解析して、見立て・弱点の練習・自分の能力に使う(竜王戦は大会の統計で解析する)。
+  // 棋譜解析を押さなくても読む。対局を始めたら止め、続きは次の機会に読む(docs/home-next-adaptive-design.mdの14章)。
+  const ryuoStatsGame = tournament && (ryuoGame.value?.event ?? "ryuo") === "ryuo";
+  if (!ryuoStatsGame) {
+    const insight = enqueuePlayInsight(loadPlayInsight(browserStorage()), {
+      moves: [...moveHistory], color, outcome, level, event: tournament ? ryuoGame.value?.event ?? "" : undefined,
+    });
     savePlayInsight(browserStorage(), insight);
     playInsight.value = insight;
     void playInsightAnalysis.processQueue();
