@@ -5,7 +5,7 @@
 import { MEMORY_WORDS } from '../data/memory-palace-words.mjs';
 import { LOCUS_ACTS, LOCUS_KIND_BY_NAME, LOCUS_KINDS } from '../data/palace-acts.mjs';
 import { MOVE_CUES, PROVERB_SET, TREASURE_SETS } from '../data/memory-treasure-sets.mjs';
-import { addBox, applyReview, cleanBoxes, cleanShelf, nextBoxDay, dueBoxes, addBlocker } from './memory-box.mjs';
+import { addBox, applyReview, cleanBoxes, cleanShelf, nextBoxDay, dueBoxes, addBlocker, checkShelfEntry, editBoxWords, repackBoxes, returnShelfToBox } from './memory-box.mjs';
 import { openingFormationSteps, openingStepLabel } from './opening-formation.mjs';
 import { cleanPalaces, palaceReady } from './palace-builder.mjs';
 import { createRng } from './ryuo-random.mjs';
@@ -660,4 +660,69 @@ export function dueTreasureBox(store, day) {
 /** 次に箱の時期が来る日。 */
 export function nextTreasureDay(store, day) {
   return nextBoxDay(store.boxes, day);
+}
+
+// ===== 14-16: 棚の組をめくる・言葉を直す・宝物用の宮殿を選び直す =====
+
+/** 練習に使っている宮殿のid(前に使った宮殿か、最初の宮殿)。 */
+function practiceId(store) {
+  const usable = usablePalaces(store).filter(({ id }) => id !== store.treasurePalace || !store.boxes?.length);
+  return (usable.find(({ id }) => id === store.lastPalace) ?? usable[0])?.id ?? '';
+}
+
+/**
+ * 宝物用の宮殿の候補(自分の宮殿と見本のお城)。練習に使っている宮殿は選べるが、その印(practice)をつける。
+ * fitsは、いま箱にある組がその宮殿に全部置けるか。
+ */
+export function treasureChoices(store) {
+  const practice = practiceId(store);
+  const own = store.palaces.filter(palaceReady);
+  return [...own, SAMPLE_PALACE].map((palace) => ({
+    id: palace.id,
+    name: palace.id === SAMPLE_PALACE_ID ? '見本のお城' : palace.name,
+    loci: palace.loci.length,
+    current: palace.id === chooseTreasurePalace(store),
+    practice: palace.id === practice,
+    fits: Boolean(repackBoxes(store.boxes, palace.loci.length)),
+  }));
+}
+
+/**
+ * 宝物用の宮殿を選び直す。箱の組は新しい宮殿の空いた場所に順に詰め直す(次に思い出す日と段はそのまま)。置けなければnull。
+ * 練習に使っていた宮殿を選んだら、毎日の練習はほかの宮殿を使う(practicePalaces)。
+ */
+export function moveTreasurePalace(store, id) {
+  const palace = resolveTreasure(store, id);
+  if (!palace) return null;
+  const boxes = repackBoxes(store.boxes, palace.loci.length);
+  if (!boxes) return null;
+  return { ...store, boxes, treasurePalace: id };
+}
+
+/** 棚の組の場所(棚に入ったときの宝物用の宮殿の場所。いまは別の組が使っていることもある)。 */
+export function shelfLoci(store, entry) {
+  const loci = treasurePalaceOf(store)?.loci ?? [];
+  return (entry.items ?? []).map((_, index) => loci[entry.start + index] ?? { name: `${entry.start + index + 1}か所目`, emoji: '📍', group: '' });
+}
+
+/** 棚の組を確かめた結果を入れる(段は動かさない)。 */
+export function checkTreasureShelf(store, index, results, day) {
+  const { shelf, check } = checkShelfEntry(store.shelf, index, results, day);
+  return { store: { ...store, shelf }, check };
+}
+
+/** 棚の組を箱にもどす(宝物用の宮殿の空いた場所に置き直し、3日あとから思い出し直す)。 */
+export function returnTreasureShelf(store, index, day) {
+  const treasure = chooseTreasurePalace(store);
+  const palace = resolveTreasure(store, treasure);
+  if (!palace) return { store, box: null, blocker: 'palace' };
+  const result = returnShelfToBox(store.boxes, store.shelf, index, palace.loci.length, day);
+  if (!result.box) return { store, box: null, blocker: result.blocker };
+  return { store: { ...store, boxes: result.boxes, shelf: result.shelf, treasurePalace: treasure }, box: result.box, blocker: '' };
+}
+
+/** 箱の組の言葉を直す。 */
+export function editTreasureBox(store, id, words, title) {
+  const { boxes, error } = editBoxWords(store.boxes, id, words, title);
+  return { store: error ? store : { ...store, boxes }, error };
 }

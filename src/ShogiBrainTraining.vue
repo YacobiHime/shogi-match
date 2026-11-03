@@ -284,6 +284,7 @@
         @save="savePalace"
         @added="stampBox"
         @reviewed="stampBox"
+        @checked="stampBox"
         @next="boxNext"
         @build="openBuilder(memory.palaces.length < PALACE_MAX ? 'new' : 'list')"
       />

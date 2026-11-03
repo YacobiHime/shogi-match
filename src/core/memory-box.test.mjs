@@ -1,23 +1,28 @@
 import { describe, expect, test } from 'vitest';
 import {
   BOX_MAX,
+  RESHELF_STAGE,
   REVIEW_DAYS,
   SHELF_STAGE,
   addBlocker,
   addBox,
   addDays,
   applyReview,
+  checkShelfEntry,
   cleanBoxItems,
   cleanBoxes,
   cleanShelf,
   daysBetween,
   dueBoxes,
   dueText,
+  editBoxWords,
   freeStart,
   intervalText,
   nextBoxDay,
   removeBox,
+  repackBoxes,
   restoreBox,
+  returnShelfToBox,
   reviewOutcome,
   sinceText,
 } from './memory-box.mjs';
@@ -122,7 +127,7 @@ describe('思い出す', () => {
     const result = applyReview(boxes, [], start.box.id, Array(10).fill(true), '2026-12-20');
     expect(result.outcome).toMatchObject({ shelved: true, next: '' });
     expect(result.boxes).toEqual([]);
-    expect(result.shelf).toEqual([{ set: 'custom', title: 'テスト', emoji: '📦', count: 10, day: '2026-12-20' }]);
+    expect(result.shelf).toEqual([{ set: 'custom', title: 'テスト', emoji: '📦', count: 10, day: '2026-12-20', items: start.box.items, start: 0, pics: start.box.pics }]);
   });
 
   test('次の日と言い方', () => {
@@ -150,5 +155,56 @@ describe('保存を整える', () => {
     expect(cleanShelf([{ title: '惑星', count: 8, day: '2026-12-01' }, { title: '', count: 1, day: '2026-12-01' }, 3])).toEqual([
       { set: 'custom', title: '惑星', emoji: '📦', count: 8, day: '2026-12-01' },
     ]);
+  });
+});
+
+describe('棚の組をもう一度めくる・言葉を直す・詰め直す(docs/brain-training-design.mdの14-16)', () => {
+  const { boxes } = addBox([], input(10), 30, '2026-11-02');
+  const shelved = applyReview([{ ...boxes[0], stage: SHELF_STAGE - 1, pics: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0] }], [], boxes[0].id, Array(10).fill(true), '2026-12-20');
+
+  test('棚に入るとき、言葉・置いた場所・選んだ絵を残す。前の版の棚(言葉なし)も読める', () => {
+    const [entry] = shelved.shelf;
+    expect(entry.items.map(({ word }) => word)).toEqual(words(10));
+    expect(entry).toMatchObject({ start: 0, pics: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+    expect(cleanShelf(shelved.shelf)[0].items).toHaveLength(10);
+    expect(cleanShelf([{ title: '惑星', count: 8, day: '2026-12-01' }])[0].items).toBeUndefined();
+  });
+
+  test('確かめは段を動かさず、思い出せた数と日を残す。8割に届かなければ箱にもどすのを勧める', () => {
+    const ok = checkShelfEntry(shelved.shelf, 0, Array(10).fill(true), '2027-03-01');
+    expect(ok.check).toEqual({ correct: 10, total: 10, passed: true });
+    expect(ok.shelf[0]).toMatchObject({ checked: '2027-03-01', score: 10 });
+    expect(checkShelfEntry(shelved.shelf, 0, [...Array(7).fill(true), false, false, false], '2027-03-01').check.passed).toBe(false);
+    expect(checkShelfEntry(cleanShelf([{ title: '惑星', count: 8, day: '2026-12-01' }]), 0, [true], '2027-03-01').check).toBeNull();
+  });
+
+  test('箱にもどすと、空いた場所に置き直して3日あとから思い出し直す', () => {
+    const other = addBox([], input(8, { set: 'b' }), 20, '2027-03-01').boxes;
+    const back = returnShelfToBox(other, shelved.shelf, 0, 20, '2027-03-01');
+    expect(back.blocker).toBe('');
+    expect(back.box).toMatchObject({ start: 8, stage: RESHELF_STAGE, next: addDays('2027-03-01', REVIEW_DAYS[RESHELF_STAGE]), pics: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+    expect(back.shelf).toEqual([]);
+    expect(returnShelfToBox(other, shelved.shelf, 0, 12, '2027-03-01').blocker).toBe('room');
+    // 前の場所(0〜9)が空いていれば、そこへ戻す
+    expect(returnShelfToBox([], shelved.shelf, 0, 20, '2027-03-01').box.start).toBe(0);
+  });
+
+  test('言葉を直す。数は変えず、変えた所は絵の手がかりを外す。空・重なりは直さない', () => {
+    const withCue = [{ ...boxes[0], items: boxes[0].items.map((item, index) => (index === 0 ? { ...item, cue: '{場}で何か', ask: '1月は？' } : item)) }];
+    const next = words(10).map((word, index) => (index === 0 ? 'りんご' : word));
+    const edited = editBoxWords(withCue, boxes[0].id, next, '果物');
+    expect(edited.error).toBe('');
+    expect(edited.boxes[0].items[0]).toEqual({ word: 'りんご', ask: '1月は？' });
+    expect(edited.boxes[0].title).toBe('果物');
+    expect(editBoxWords(withCue, boxes[0].id, words(10), '').boxes[0].items[0].cue).toBe('{場}で何か');
+    expect(editBoxWords(withCue, boxes[0].id, ['', ...words(9)], '').error).toBe('empty');
+    expect(editBoxWords(withCue, boxes[0].id, ['w2', ...words(10).slice(1)], '').error).toBe('duplicate');
+  });
+
+  test('別の宮殿に詰め直す。日と段はそのまま、置けなければnull', () => {
+    const two = addBox(addBox([], input(10), 30, '2026-11-02').boxes, input(7, { set: 'b' }), 30, '2026-11-02').boxes;
+    const moved = removeBox(two, two[0].id).boxes;
+    expect(repackBoxes(moved, 12)?.map(({ start, next }) => [start, next])).toEqual([[0, '2026-11-03']]);
+    expect(repackBoxes(two, 12)).toBeNull();
   });
 });

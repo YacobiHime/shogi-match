@@ -136,13 +136,28 @@ export function cleanShelf(value) {
   if (!Array.isArray(value)) return [];
   return value
     .filter(isPlainObject)
-    .map((entry) => ({
-      set: cleanText(entry.set, 24) || 'custom',
-      title: cleanText(entry.title, 24),
-      emoji: cleanText(entry.emoji, 8) || '📦',
-      count: Number.isInteger(entry.count) && entry.count > 0 ? Math.min(entry.count, BOX_ITEM_MAX) : 0,
-      day: isDay(entry.day) ? entry.day : '',
-    }))
+    .map((entry) => {
+      const shelfEntry = {
+        set: cleanText(entry.set, 24) || 'custom',
+        title: cleanText(entry.title, 24),
+        emoji: cleanText(entry.emoji, 8) || '📦',
+        count: Number.isInteger(entry.count) && entry.count > 0 ? Math.min(entry.count, BOX_ITEM_MAX) : 0,
+        day: isDay(entry.day) ? entry.day : '',
+      };
+      // 14-16: もう一度めくれるように、覚えた言葉と置いた場所を残す(前の版の棚には無い。無ければ記録だけの札)。
+      const items = cleanBoxItems(entry.items);
+      if (items && items.length === shelfEntry.count) {
+        shelfEntry.items = items;
+        shelfEntry.start = Number.isInteger(entry.start) && entry.start >= 0 && entry.start <= 60 ? entry.start : 0;
+        shelfEntry.pics = items.map((_, index) => {
+          const pic = Array.isArray(entry.pics) ? entry.pics[index] : 0;
+          return Number.isInteger(pic) && pic >= 0 && pic < 20 ? pic : 0;
+        });
+        if (isDay(entry.checked)) shelfEntry.checked = entry.checked;
+        if (Number.isInteger(entry.score) && entry.score >= 0 && entry.score <= items.length) shelfEntry.score = entry.score;
+      }
+      return shelfEntry;
+    })
     .filter((entry) => entry.title && entry.count && entry.day)
     .slice(-SHELF_MAX);
 }
@@ -246,7 +261,7 @@ export function applyReview(boxes, shelf, id, results, day) {
   if (!box) return { boxes, shelf, outcome: null };
   const outcome = reviewOutcome(box, results, day);
   if (outcome.shelved) {
-    const entry = { set: box.set, title: box.title, emoji: box.emoji, count: box.items.length, day };
+    const entry = { set: box.set, title: box.title, emoji: box.emoji, count: box.items.length, day, items: box.items, start: box.start, pics: box.pics };
     return { boxes: boxes.filter((item) => item.id !== id), shelf: [...shelf, entry].slice(-SHELF_MAX), outcome };
   }
   const next = { ...box, stage: outcome.stage, next: outcome.next, last: day };
@@ -292,4 +307,73 @@ export function dueText(box, day) {
 /** 段の言い方(いまの段で待っている間隔。「3日目」ではなく「次は3日あと」の意味で使う)。 */
 export function stageText(stage) {
   return stage >= SHELF_STAGE ? '宝物' : `${intervalText(REVIEW_DAYS[stage])}あと`;
+}
+
+// ===== 14-16: 棚の組をもう一度めくる・箱の言葉を直す =====
+
+/** 棚の組を、段を動かさずに確かめたあと。思い出せた数と日を残し、8割に届かなければ箱にもどすのを勧める。 */
+export function checkShelfEntry(shelf, index, results, day) {
+  const entry = shelf[index];
+  if (!entry?.items) return { shelf, check: null };
+  const correct = results.slice(0, entry.items.length).filter(Boolean).length;
+  const check = { correct, total: entry.items.length, passed: correct / entry.items.length >= BOX_PASS };
+  return { shelf: shelf.map((item, at) => (at === index ? { ...item, checked: day, score: correct } : item)), check };
+}
+
+/** 棚にもどしたあと、思い出し直す段(3日あとから)。 */
+export const RESHELF_STAGE = 1;
+
+/**
+ * 棚の組を箱にもどす(忘れかけていたとき)。宮殿の空いた場所に置き直し、段1(3日あと)から思い出し直す。
+ * @returns {{ boxes: any[], shelf: any[], box: any, blocker: string }}
+ */
+export function returnShelfToBox(boxes, shelf, index, lociCount, day) {
+  const entry = shelf[index];
+  if (!entry?.items) return { boxes, shelf, box: null, blocker: 'items' };
+  const added = addBox(boxes, { set: entry.set, title: entry.title, emoji: entry.emoji, items: entry.items, pics: entry.pics }, lociCount, day);
+  if (!added.box) return { boxes, shelf, box: null, blocker: added.blocker };
+  // 前に置いた場所が空いていれば、その場所に戻す(覚えた場所と絵をそのまま使えるように)。
+  const original = { start: entry.start ?? 0, items: entry.items };
+  const start = original.start + entry.items.length <= lociCount && !boxes.some((other) => overlaps(other, original)) ? original.start : added.box.start;
+  const box = { ...added.box, start, stage: RESHELF_STAGE, next: addDays(day, REVIEW_DAYS[RESHELF_STAGE]), last: day };
+  return {
+    boxes: added.boxes.map((item) => (item.id === box.id ? box : item)),
+    shelf: shelf.filter((_, at) => at !== index),
+    box,
+    blocker: '',
+  };
+}
+
+/**
+ * 箱の組の言葉と名前を直す。数は変えない(場所と1つずつ対応しているため)。言葉を変えた所は、絵の手がかり(cue・picture)を外す
+ * (前の言葉の絵のままにしない)。空の言葉・同じ言葉が2つあるときは直さない。
+ * @returns {{ boxes: any[], error: '' | 'empty' | 'duplicate' | 'missing' }}
+ */
+export function editBoxWords(boxes, id, words, title) {
+  const box = boxes.find((item) => item.id === id);
+  if (!box) return { boxes, error: 'missing' };
+  const cleaned = box.items.map((_, index) => cleanText(words[index], 24));
+  if (cleaned.some((word) => !word)) return { boxes, error: 'empty' };
+  if (new Set(cleaned).size !== cleaned.length) return { boxes, error: 'duplicate' };
+  const items = box.items.map((item, index) => {
+    if (item.word === cleaned[index]) return item;
+    const { cue, picture, ...rest } = item;
+    return { ...rest, word: cleaned[index] };
+  });
+  const next = { ...box, items, title: cleanText(title, 24) || box.title };
+  return { boxes: boxes.map((item) => (item.id === id ? next : item)), error: '' };
+}
+
+/**
+ * 箱の組を、別の宮殿(場所の数lociCount)に詰め直す。並び順のまま空いた場所に続けて置き、置けなければnull。
+ * 次に思い出す日と段はそのまま(置き直しは、場所と絵を結び直すだけ)。
+ */
+export function repackBoxes(boxes, lociCount) {
+  const packed = [];
+  for (const box of boxes) {
+    const start = freeStart(packed, lociCount, box.items.length);
+    if (start < 0) return null;
+    packed.push({ ...box, start });
+  }
+  return packed;
 }

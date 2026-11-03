@@ -13,6 +13,12 @@ import {
   SAMPLE_PALACE,
   addTreasureBox,
   boxBlocker,
+  checkTreasureShelf,
+  editTreasureBox,
+  moveTreasurePalace,
+  returnTreasureShelf,
+  shelfLoci,
+  treasureChoices,
   boxLoci,
   chooseTreasurePalace,
   cleanMemoryStore,
@@ -408,5 +414,41 @@ describe('思い出しの箱と宝物用の宮殿(docs/brain-training-design.md�
     // 前の保存(箱の項目なし)はそのまま読め、消えた宮殿は宝物用にしない
     expect(cleanMemoryStore({ version: 1, palaces: [] })).toMatchObject({ boxes: [], shelf: [], treasurePalace: '' });
     expect(cleanMemoryStore({ ...reviewed.store, treasurePalace: 'gone' }).treasurePalace).toBe('');
+  });
+});
+
+describe('宝物用の宮殿を選び直す・棚の組(14-16)', () => {
+  const day = '2026-11-02';
+  test('候補は自分の宮殿と見本のお城。練習に使う宮殿と、組が置けるかの印', () => {
+    let store = { ...emptyMemoryStore(), palaces: [ownPalace('p1', 12), ownPalace('p2', 10)], lastPalace: 'p1', treasurePalace: 'castle' };
+    store = addTreasureBox(store, { set: 'x', title: 'x', emoji: '📦', items: Array.from({ length: 11 }, (_, i) => `w${i}`) }, day).store;
+    expect(store.boxes[0].start).toBe(0);
+    const choices = treasureChoices(store);
+    expect(choices.map(({ id, current, practice, fits }) => [id, current, practice, fits])).toEqual([
+      ['p1', false, true, true],
+      ['p2', false, false, false],
+      ['castle', true, false, true],
+    ]);
+    expect(moveTreasurePalace(store, 'p2')).toBeNull();
+    const moved = moveTreasurePalace(store, 'p1');
+    expect(moved.treasurePalace).toBe('p1');
+    expect(moved.boxes[0].next).toBe(store.boxes[0].next);
+    // 練習に使っていた宮殿を宝物用にしたら、毎日の練習はほかの宮殿を使う
+    expect(planPractice(moved, day).palace.id).toBe('p2');
+  });
+
+  test('棚の組を確かめ、箱にもどし、言葉を直す', () => {
+    let store = { ...emptyMemoryStore(), palaces: [ownPalace('p1', 12)] };
+    store = addTreasureBox(store, { set: 'x', title: 'x', emoji: '📦', items: ['a', 'b', 'c'] }, day).store;
+    store = { ...store, boxes: [{ ...store.boxes[0], stage: 4 }] };
+    store = reviewTreasureBox(store, store.boxes[0].id, [true, true, true], '2026-12-30').store;
+    expect(shelfLoci(store, store.shelf[0]).map(({ name }) => name)).toEqual(CASTLE_LOCI.slice(0, 3).map(({ name }) => name));
+    const checked = checkTreasureShelf(store, 0, [true, false, false], '2027-02-01');
+    expect(checked.check.passed).toBe(false);
+    const back = returnTreasureShelf(checked.store, 0, '2027-02-01');
+    expect(back.store.shelf).toEqual([]);
+    expect(back.store.boxes[0]).toMatchObject({ stage: 1, next: '2027-02-04' });
+    const edited = editTreasureBox(back.store, back.box.id, ['あ', 'b', 'c'], '');
+    expect(edited.store.boxes[0].items[0].word).toBe('あ');
   });
 });

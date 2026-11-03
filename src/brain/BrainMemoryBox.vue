@@ -15,7 +15,11 @@
       <ol class="brain-box__spacing" aria-label="思い出す間隔">
         <li v-for="(days, index) in REVIEW_DAYS" :key="days"><b>{{ intervalText(days) }}</b>{{ index === REVIEW_DAYS.length - 1 ? "で宝物" : "あと" }}</li>
       </ol>
-      <p v-if="treasure" class="brain-box__where">宝物用の宮殿：{{ palaceName }}（毎日の練習には使わない）</p>
+      <p v-if="treasure" class="brain-box__where">
+        <span>宝物用の宮殿：{{ palaceName }}（毎日の練習には使わない）</span>
+        <button type="button" class="brain-box__link" data-box-palace @click="phase = 'palace'">変える</button>
+      </p>
+      <p v-if="notice" class="brain-box__notice" role="status" data-box-notice>{{ notice }}</p>
       <ul v-if="store.boxes.length" class="brain-box__list">
         <li v-for="box in store.boxes" :key="box.id">
           <button
@@ -43,9 +47,14 @@
         <p v-if="store.boxes.length >= BOX_MAX" class="brain-box__note">箱は{{ BOX_MAX }}つまで。どれかが宝物の棚に入ると、また入れられるよ。</p>
       </template>
       <template v-if="store.shelf.length">
-        <p class="brain-section-title"><span>宝物の棚（1か月たっても思い出せた）</span></p>
+        <p class="brain-section-title"><span>宝物の棚（1か月たっても思い出せた。押すと確かめられる）</span></p>
         <ul class="brain-box__shelf" data-box-shelf>
-          <li v-for="(entry, index) in store.shelf" :key="index"><span aria-hidden="true">{{ entry.emoji }}</span> {{ entry.title }}<small>{{ entry.count }}個</small></li>
+          <li v-for="(entry, index) in store.shelf" :key="index">
+            <button v-if="entry.items" type="button" class="brain-box__shelf-item" :data-box-shelf-item="index" @click="startShelfCheck(index)">
+              <span aria-hidden="true">{{ entry.emoji }}</span> {{ entry.title }}<small>{{ entry.checked ? `${entry.count}個中${entry.score}個` : `${entry.count}個` }}</small>
+            </button>
+            <span v-else class="brain-box__shelf-item"><span aria-hidden="true">{{ entry.emoji }}</span> {{ entry.title }}<small>{{ entry.count }}個</small></span>
+          </li>
         </ul>
       </template>
       <p v-if="undo" class="brain-box__toast" role="status">
@@ -66,8 +75,43 @@
       </section>
       <div class="brain-game__actions">
         <button type="button" class="brain-game__secondary" data-box-remove @click="removeSelected">箱から外す</button>
+        <button type="button" class="brain-game__secondary" data-box-edit @click="openEdit">言葉を直す</button>
         <button type="button" class="brain-game__primary" @click="phase = 'list'">箱へ戻る</button>
       </div>
+    </template>
+
+    <!-- 言葉を直す(14-16)。数は変えない(場所と1つずつ対応しているため)。 -->
+    <template v-else-if="phase === 'edit' && selected">
+      <p class="brain-game__prompt">言葉を直す</p>
+      <section class="brain-box__paper brain-box__write">
+        <label class="brain-box__title-input">組の名前<input v-model="editTitle" type="text" maxlength="16" data-box-edit-title></label>
+        <ol>
+          <li v-for="(locus, index) in selectedLoci" :key="index">
+            <span aria-hidden="true">{{ selected.start + index + 1 }}</span>
+            <input v-model="editWords[index]" type="text" maxlength="24" :aria-label="`${locus.name}の言葉`" :data-box-edit-row="index">
+          </li>
+        </ol>
+      </section>
+      <p class="brain-box__muted">{{ editError || "言葉を変えた場所は、絵のヒントがふつうの型になるよ。次に思い出す日は変わらない。" }}</p>
+      <div class="brain-game__actions">
+        <button type="button" class="brain-game__secondary" @click="phase = 'detail'">やめる</button>
+        <button type="button" class="brain-game__primary" data-box-edit-save @click="saveEdit">直す</button>
+      </div>
+    </template>
+
+    <!-- 宝物用の宮殿を選び直す(14-16) -->
+    <template v-else-if="phase === 'palace'">
+      <p class="brain-game__prompt">宝物用の宮殿を選ぶ</p>
+      <p class="brain-box__where">{{ store.boxes.length ? "箱の組は、新しい宮殿の場所に1つずつ置き直すよ。思い出す日は変わらない。" : "次に入れる組から、選んだ宮殿に置くよ。" }}</p>
+      <ul class="brain-box__catalog">
+        <li v-for="choice in palaceChoices" :key="choice.id">
+          <button type="button" class="shogi-brain__card brain-box__set" :disabled="!choice.fits" :data-box-palace-choice="choice.id" @click="choosePalace(choice.id)">
+            <strong>{{ choice.name }}</strong>
+            <small>{{ choice.loci }}か所</small>
+            <span v-if="choice.current || choice.practice || !choice.fits" class="brain-box__set-note">{{ choice.current ? "いまの宝物用" : !choice.fits ? "箱の組が入りきらない" : "毎日の練習に使っている（練習はほかの宮殿へ）" }}</span>
+          </button>
+        </li>
+      </ul>
     </template>
 
     <!-- 目録 -->
@@ -112,13 +156,13 @@
     </template>
 
     <!-- 宮殿に置く(からむ絵のヒントは出しておく。14-11)。入れた日はテストしない。 -->
-    <template v-else-if="(phase === 'place' || phase === 'relearn') && current">
-      <p class="brain-game__status"><span>{{ stepIndex + 1 }} / {{ stepList.length }}</span><span>{{ phase === 'relearn' ? "出なかった絵を見直す" : `${draft?.title}を置く` }}</span></p>
+    <template v-else-if="(phase === 'place' || phase === 'relearn' || phase === 'move') && current">
+      <p class="brain-game__status"><span>{{ stepIndex + 1 }} / {{ stepList.length }}</span><span>{{ phase === 'relearn' ? "出なかった絵を見直す" : phase === 'move' ? `${current.title ?? ""}を置き直す` : `${draft?.title}を置く` }}</span></p>
       <ol class="brain-palace__route" aria-hidden="true">
         <li v-for="(_, index) in stepList" :key="index" :class="{ 'brain-palace__route--done': index < stepIndex, 'brain-palace__route--now': index === stepIndex }"></li>
       </ol>
       <div class="brain-palace__scene" data-box-scene>
-        <span class="brain-palace__locus"><b aria-hidden="true">{{ current.locus.emoji }}</b><span>{{ locusNumber(current.index) }}. {{ current.locus.name }}</span></span>
+        <span class="brain-palace__locus"><b aria-hidden="true">{{ current.locus.emoji }}</b><span>{{ current.number ?? locusNumber(current.index) }}. {{ current.locus.name }}</span></span>
         <span class="brain-palace__plus" aria-hidden="true">＋</span>
         <strong class="brain-palace__item" :class="{ 'brain-box__item--long': current.item.word.length > 7 }"><span aria-hidden="true">{{ current.item.emoji }}</span>{{ current.item.word }}</strong>
         <small v-if="current.ask" class="brain-box__ask-note">{{ current.ask.replace("は？", "") }}</small>
@@ -126,7 +170,7 @@
         <div v-if="phase === 'place' && current.count > 1" class="brain-palace__hint-tools">
           <button type="button" class="brain-palace__hint-button" data-palace-other @click="otherPicture"><span aria-hidden="true">⟳</span> ほかの絵</button>
         </div>
-        <small v-if="stepIndex === 0" class="brain-palace__tip">{{ phase === 'relearn' ? "段には数えないよ。絵をもう一度、場所といっしょに思いうかべよう。" : "絵を思いうかべたら次へ。今日はテストしないよ。" }}</small>
+        <small v-if="stepIndex === 0" class="brain-palace__tip">{{ phase === 'relearn' ? "段には数えないよ。絵をもう一度、場所といっしょに思いうかべよう。" : phase === 'move' ? "新しい宮殿の場所と、同じ絵を結び直そう。思い出す日は変わらないよ。" : "絵を思いうかべたら次へ。今日はテストしないよ。" }}</small>
       </div>
       <div class="brain-game__actions">
         <button v-if="stepIndex > 0" type="button" class="brain-game__secondary" @click="stepIndex -= 1">もどる</button>
@@ -187,6 +231,19 @@
       <p v-if="flipped && reviewIndex === 0" class="brain-box__hint">言葉がだいたい合っていれば「思い出せた」でいいよ。</p>
     </template>
 
+    <!-- 棚の組を確かめた結果(14-16)。段は動かさない。 -->
+    <template v-else-if="phase === 'shelf-result' && shelfCheck && resultBox">
+      <section class="brain-box__paper brain-box__result" data-box-shelf-result>
+        <p class="brain-box__detail-head"><span aria-hidden="true">{{ resultBox.emoji }}</span> {{ resultBox.title }}</p>
+        <p class="brain-box__score"><b>{{ shelfCheck.correct }}</b> / {{ shelfCheck.total }} 思い出せた</p>
+        <p class="brain-box__result-text">{{ shelfText }}</p>
+      </section>
+      <div class="brain-game__actions">
+        <button v-if="!shelfCheck.passed && reshelfOpen" type="button" class="brain-game__secondary" data-box-reshelf @click="reshelf">箱にもどす</button>
+        <button type="button" class="brain-game__primary" data-box-shelf-back @click="finishShelf">箱へ戻る</button>
+      </div>
+    </template>
+
     <!-- 思い出した結果 -->
     <template v-else-if="phase === 'result' && outcome && resultBox">
       <section class="brain-box__paper brain-box__result" data-box-result>
@@ -230,6 +287,12 @@ import {
   addTreasureBox,
   boxBlocker,
   boxLoci,
+  checkTreasureShelf,
+  editTreasureBox,
+  moveTreasurePalace,
+  returnTreasureShelf,
+  shelfLoci,
+  treasureChoices,
   loadMemoryStore,
   reviewTreasureBox,
   treasurePalaceOf,
@@ -260,12 +323,13 @@ const emit = defineEmits<{
   (event: "sound", kind: "correct" | "miss" | "place" | "finish" | "best"): void;
   (event: "added", box: Box): void;
   (event: "reviewed", outcome: Outcome): void;
+  (event: "checked"): void;
   (event: "next"): void;
   (event: "build"): void;
 }>();
 
 const UNDO_MS = 5000;
-const phase = ref<"list" | "detail" | "catalog" | "write" | "place" | "placed" | "review" | "relearn" | "result">("list");
+const phase = ref<"list" | "detail" | "catalog" | "write" | "place" | "placed" | "review" | "relearn" | "result" | "edit" | "palace" | "move" | "shelf-result">("list");
 const sets = treasureSets() as TreasureSet[];
 // 一覧
 const selectedId = ref("");
@@ -286,6 +350,14 @@ const grades = ref<(boolean | undefined)[]>([]);
 const outcome = ref<Outcome | null>(null);
 const resultBox = ref<Box | null>(null);
 const relearnIndexes = ref<number[]>([]);
+// 14-16: 棚の組・言葉を直す・宮殿を選び直す
+const notice = ref("");
+const shelfIndex = ref(-1);
+const shelfCheck = ref<{ correct: number; total: number; passed: boolean } | null>(null);
+const editWords = ref<string[]>([]);
+const editTitle = ref("");
+const editError = ref("");
+const movePending = ref<Store | null>(null);
 
 onBeforeUnmount(() => {
   if (undoTimer) clearTimeout(undoTimer);
@@ -370,10 +442,14 @@ function otherPicture() {
 }
 
 // ===== 置く・覚え直す(同じ画面) =====
-const stepList = computed<number[]>(() => (phase.value === "relearn" ? relearnIndexes.value : placeScenes.value.map((_, index) => index)));
+const stepList = computed<number[]>(() => {
+  if (phase.value === "relearn") return relearnIndexes.value;
+  if (phase.value === "move") return moveScenes.value.map((_, index) => index);
+  return placeScenes.value.map((_, index) => index);
+});
 const currentIndex = computed(() => stepList.value[stepIndex.value] ?? 0);
 const current = computed(() => {
-  const list = phase.value === "relearn" ? reviewScenes.value : placeScenes.value;
+  const list: (Scene & { number?: number; title?: string })[] = phase.value === "relearn" ? reviewScenes.value : phase.value === "move" ? moveScenes.value : placeScenes.value;
   const sceneItem = list[currentIndex.value];
   if (!sceneItem) return null;
   return { ...sceneItem, index: currentIndex.value, count: sceneItem.imageOptions.length };
@@ -381,6 +457,7 @@ const current = computed(() => {
 const stepLabel = computed(() => {
   const last = stepIndex.value + 1 >= stepList.value.length;
   if (phase.value === "relearn") return last ? "見直した" : "見直した → 次へ";
+  if (phase.value === "move") return last ? "置き直した" : "置き直した → 次へ";
   return last ? "箱に入れる" : "思いうかべた → 次へ";
 });
 function locusNumber(index: number) {
@@ -395,7 +472,11 @@ function nextStep() {
     return;
   }
   if (phase.value === "relearn") {
-    phase.value = "result";
+    phase.value = shelfIndex.value >= 0 ? "shelf-result" : "result";
+    return;
+  }
+  if (phase.value === "move") {
+    commitMove();
     return;
   }
   commitPlace();
@@ -414,10 +495,18 @@ function commitPlace() {
 }
 
 // ===== 思い出す =====
-const reviewBox = computed(() => props.store.boxes.find((box) => box.id === reviewBoxId.value) ?? resultBox.value);
+/** 棚の組を、箱の組と同じ形にしたもの(めくり札の画面を共通にする)。 */
+const shelfBox = computed<Box | null>(() => {
+  const entry = props.store.shelf[shelfIndex.value];
+  if (!entry?.items) return null;
+  return { id: `shelf-${shelfIndex.value}`, set: entry.set, title: entry.title, emoji: entry.emoji, items: entry.items, pics: entry.pics ?? [], start: entry.start ?? 0, stage: SHELF_STAGE - 1, added: entry.day, next: entry.day, last: entry.checked ?? entry.day } as Box;
+});
+const reviewBox = computed(() => (shelfIndex.value >= 0 ? shelfBox.value ?? resultBox.value : props.store.boxes.find((box) => box.id === reviewBoxId.value) ?? resultBox.value));
 const reviewScenes = computed<Scene[]>(() => {
   const box = reviewBox.value;
-  return box ? treasureScenes(boxLoci(props.store, box), box.items, box.pics) as Scene[] : [];
+  if (!box) return [];
+  const loci = shelfIndex.value >= 0 ? shelfLoci(props.store, props.store.shelf[shelfIndex.value] ?? box) : boxLoci(props.store, box);
+  return treasureScenes(loci, box.items, box.pics) as Scene[];
 });
 const reviewScene = computed(() => reviewScenes.value[reviewIndex.value] ?? null);
 function openCard(id: string) {
@@ -453,6 +542,10 @@ function grade(ok: boolean) {
   finishReview();
 }
 function finishReview() {
+  if (shelfIndex.value >= 0) {
+    finishShelfCheck();
+    return;
+  }
   const box = reviewBox.value;
   if (!box) return;
   const results = reviewScenes.value.map((_, index) => grades.value[index] === true);
@@ -523,11 +616,131 @@ function rangeText(box: Box) {
 if (props.start === "catalog") phase.value = "catalog";
 else if (props.start === "review" && props.reviewId && props.store.boxes.some((box) => box.id === props.reviewId)) startReview(props.reviewId);
 
+// ===== 14-16: 棚の組を確かめる =====
+function startShelfCheck(index: number) {
+  if (!props.store.shelf[index]?.items) return;
+  notice.value = "";
+  shelfIndex.value = index;
+  shelfCheck.value = null;
+  reviewIndex.value = 0;
+  flipped.value = false;
+  grades.value = [];
+  resultBox.value = null;
+  phase.value = "review";
+}
+function finishShelfCheck() {
+  const box = reviewBox.value;
+  if (!box) return;
+  const results = reviewScenes.value.map((_, index) => grades.value[index] === true);
+  resultBox.value = box;
+  sinceDays.value = Math.max(1, daysBetween(box.last || box.added, props.day));
+  const checked = checkTreasureShelf(props.store, shelfIndex.value, results, props.day);
+  if (!checked.check) return;
+  shelfCheck.value = checked.check;
+  emit("save", { shelf: checked.store.shelf });
+  emit("checked");
+  emit("sound", checked.check.passed ? "finish" : "place");
+  if (!checked.check.passed) {
+    relearnIndexes.value = results.map((ok, index) => (ok ? -1 : index)).filter((index) => index >= 0);
+    stepIndex.value = 0;
+    phase.value = "relearn";
+    return;
+  }
+  phase.value = "shelf-result";
+}
+const reshelfOpen = computed(() => {
+  const entry = props.store.shelf[shelfIndex.value];
+  return Boolean(entry?.items) && boxBlocker(props.store, entry.items.length) === "";
+});
+const shelfText = computed(() => {
+  const check = shelfCheck.value;
+  if (!check) return "";
+  const since = intervalText(sinceDays.value);
+  if (check.passed) return `${since}たっても${check.correct}個思い出せた。宝物のままだね。`;
+  return reshelfOpen.value
+    ? `今日は${check.total}個中${check.correct}個。少し忘れかけているかも。箱にもどすと、3日あとから思い出し直せるよ。`
+    : `今日は${check.total}個中${check.correct}個。出なかった絵を見直したから大丈夫。箱があいたら、もどすこともできるよ。`;
+});
+function reshelf() {
+  const back = returnTreasureShelf(props.store, shelfIndex.value, props.day);
+  if (!back.box) return;
+  emit("save", { boxes: back.store.boxes, shelf: back.store.shelf, treasurePalace: back.store.treasurePalace });
+  notice.value = `「${back.box.title}」を箱にもどしたよ。次は${dateText(back.box.next)}。`;
+  finishShelf();
+}
+function finishShelf() {
+  shelfIndex.value = -1;
+  shelfCheck.value = null;
+  resultBox.value = null;
+  phase.value = "list";
+}
+
+// ===== 14-16: 言葉を直す =====
+function openEdit() {
+  if (!selected.value) return;
+  editWords.value = selected.value.items.map(({ word }) => word);
+  editTitle.value = selected.value.title;
+  editError.value = "";
+  phase.value = "edit";
+}
+function saveEdit() {
+  if (!selected.value) return;
+  const edited = editTreasureBox(props.store, selected.value.id, editWords.value, editTitle.value);
+  if (edited.error) {
+    editError.value = edited.error === "duplicate" ? "同じ言葉が2つあるよ。1つずつ違う言葉にしてね。" : "空の行があるよ。どの場所にも言葉を入れてね。";
+    return;
+  }
+  emit("save", { boxes: edited.store.boxes });
+  phase.value = "detail";
+}
+
+// ===== 14-16: 宝物用の宮殿を選び直す =====
+const palaceChoices = computed(() => treasureChoices(props.store));
+/** 置き直す絵(新しい宮殿の場所に、組を順に)。 */
+const moveScenes = computed<(Scene & { number: number; title: string })[]>(() => {
+  const pending = movePending.value;
+  const loci = pending ? (treasurePalaceOf(pending)?.loci ?? []) as Locus[] : [];
+  return (pending?.boxes ?? []).flatMap((box) => treasureScenes(loci.slice(box.start, box.start + box.items.length), box.items, box.pics)
+    .map((sceneItem, index) => ({ ...(sceneItem as Scene), number: box.start + index + 1, title: box.title })));
+});
+function choosePalace(id: string) {
+  const choice = palaceChoices.value.find((item) => item.id === id);
+  if (!choice || choice.current) {
+    phase.value = "list";
+    return;
+  }
+  const pending = moveTreasurePalace(props.store, id);
+  if (!pending) return;
+  if (!props.store.boxes.length) {
+    emit("save", { treasurePalace: pending.treasurePalace });
+    notice.value = `宝物用の宮殿を「${choice.name}」にしたよ。`;
+    phase.value = "list";
+    return;
+  }
+  movePending.value = pending;
+  stepIndex.value = 0;
+  phase.value = "move";
+}
+function commitMove() {
+  const pending = movePending.value;
+  if (!pending) return;
+  emit("save", { boxes: pending.boxes, treasurePalace: pending.treasurePalace });
+  const name = palaceChoices.value.find((item) => item.id === pending.treasurePalace)?.name ?? "";
+  notice.value = `宝物用の宮殿を「${name}」にして、箱の組を置き直したよ。`;
+  movePending.value = null;
+  phase.value = "list";
+}
+
 /** 戻る操作。箱の中の画面なら一覧へ戻り、一覧(と今日の稽古から始めた思い出し)は道場の画面に任せる。 */
 function goBack() {
   if (phase.value === "list") return false;
   if (props.start === "review" && (phase.value === "review" || phase.value === "relearn" || phase.value === "result")) return false;
   if (phase.value === "write") phase.value = "catalog";
+  else if (phase.value === "edit") phase.value = "detail";
+  else if (phase.value === "move") {
+    movePending.value = null;
+    phase.value = "palace";
+  } else if (shelfIndex.value >= 0) finishShelf();
   else if (phase.value === "place") phase.value = draft.value?.set === "custom" ? "write" : "catalog";
   else phase.value = "list";
   return true;
@@ -553,7 +766,9 @@ defineExpose({ goBack });
 .shogi-game .brain-box__spacing { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; text-align: center; }
 .shogi-game .brain-box__spacing li { padding: 0.35rem 0; border-radius: 8px; color: var(--dojo-light-2, #b9c6d0); background: var(--dojo-desk-2, #243746); font-size: 0.72rem; font-weight: 800; }
 .shogi-game .brain-box__spacing b { display: block; color: var(--dojo-light, #fffcf4); font-size: 0.92rem; }
-.shogi-game .brain-box__where { margin: 0; color: var(--dojo-light-2, #b9c6d0); font-size: 0.8rem; font-weight: 700; text-align: center; }
+.shogi-game .brain-box__where { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.3rem 0.6rem; margin: 0; color: var(--dojo-light-2, #b9c6d0); font-size: 0.8rem; font-weight: 700; text-align: center; }
+.shogi-game .brain-box__link { min-height: 36px; padding: 0 0.8rem; border: 2px solid rgba(255, 252, 244, 0.3); border-radius: 999px; color: var(--dojo-light, #fffcf4); background: transparent; box-shadow: none; font: inherit; font-size: 0.8rem; font-weight: 800; }
+.shogi-game .brain-box__notice { margin: 0; padding: 0.5rem 0.8rem; border-radius: 10px; color: var(--dojo-ink, #1f2a33); background: var(--dojo-good-soft, #d9efe1); font-size: 0.86rem; font-weight: 800; text-align: center; }
 .shogi-game .brain-box__list { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .brain-box__card {
   display: grid;
@@ -586,7 +801,8 @@ defineExpose({ goBack });
 .shogi-game .brain-box__add { --room: var(--dojo-ai, #34488f); --room-deep: var(--dojo-ai-deep, #26356c); width: 100%; }
 .shogi-game .brain-box__add:disabled { opacity: 0.45; }
 .shogi-game .brain-box__shelf { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
-.shogi-game .brain-box__shelf li { display: inline-flex; align-items: baseline; gap: 0.3rem; padding: 0.3rem 0.65rem; border-radius: 8px; color: var(--dojo-gold, #8a5f00); background: var(--dojo-gold-soft, #f6e7bf); font-size: 0.82rem; font-weight: 900; }
+.shogi-game .brain-box__shelf-item { display: inline-flex; align-items: baseline; gap: 0.3rem; min-height: 40px; padding: 0.3rem 0.65rem; border: 2px solid transparent; border-radius: 8px; color: var(--dojo-gold, #8a5f00); background: var(--dojo-gold-soft, #f6e7bf); box-shadow: none; font: inherit; font-size: 0.82rem; font-weight: 900; align-items: center; }
+.shogi-game button.brain-box__shelf-item { cursor: pointer; }
 .shogi-game .brain-box__shelf small { font-size: 0.7rem; font-weight: 700; opacity: 0.8; }
 .shogi-game .brain-box__toast {
   position: sticky;
@@ -705,6 +921,8 @@ defineExpose({ goBack });
   .shogi-game .brain-box__no:not(:disabled):hover { background-color: #f8f2e4; }
   .shogi-game .brain-box__toast button:not(:disabled):hover { background-color: #f6b968; }
   .shogi-game .brain-box__add-row:not(:disabled):hover { background-color: transparent; border-color: var(--dojo-now, #f1a54c); }
+  .shogi-game .brain-box__link:not(:disabled):hover { background-color: transparent; border-color: var(--dojo-now, #f1a54c); }
+  .shogi-game .brain-box__shelf-item:not(:disabled):hover { background-color: var(--dojo-gold-soft, #f6e7bf); border-color: #e0b84a; }
 }
 .shogi-game .brain-box__card:focus-visible { outline: 3px solid var(--dojo-now, #f1a54c); outline-offset: 2px; }
 /* 横向きの低い画面: めくり札を左、めくる・○×を右に並べて1画面に収める。 */
