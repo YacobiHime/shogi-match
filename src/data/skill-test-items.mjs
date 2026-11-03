@@ -6,6 +6,7 @@
 // 生成: CPUどうしの対局480局(seed 20261031〜20261034、各120局)、審判 60000nodes(二度目 400000nodes)、解かせたLv 1,4,7,10,13,16,19,22,25,28,31,34×2回。
 // 足した問題: 作った局面の寄せの手筋（21問、審判 60000nodes・二度目 400000nodes）。
 // 足した問題: 作った局面の腹銀（10-13）（10問、審判 60000nodes・二度目 400000nodes）。
+// 足した問題: 作った局面の寄せの手筋（5問、審判 60000nodes・二度目 400000nodes）。
 
 export const SKILL_TEST_ITEMS = Object.freeze([
  {
@@ -9963,6 +9964,146 @@ export const SKILL_TEST_ITEMS = Object.freeze([
    "3b4c+"
   ],
   "cpuB": 17.25
+ },
+ {
+  "id": "st2-tactic-95",
+  "type": "tactic",
+  "sfen": "ln6l/4+R1g2/6k2/3pppp2/1p5p1/2P3P2/1P1PP2PP/2GSG1+r2/LN1K3N1 b 3SP2bgnl4p 1",
+  "accepted": [
+   "S*4c"
+  ],
+  "best": "S*4c",
+  "pv": [
+   "S*4c",
+   "3h2i",
+   "6h5i",
+   "G*3a",
+   "4c3b",
+   "3a3b",
+   "S*4c"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "3c"
+  ],
+  "line": [
+   "S*4c",
+   "3h2i",
+   "6h5i"
+  ],
+  "cpuB": 48
+ },
+ {
+  "id": "st2-tactic-96",
+  "type": "tactic",
+  "sfen": "ln5n1/6s1+R/4g1k2/p1pppppp1/1p7/P3P4/1PNG1PP2/1SG6/1K7 b 2SN2Pr2bg3l3p 1",
+  "accepted": [
+   "S*2c"
+  ],
+  "best": "S*2c",
+  "pv": [
+   "S*2c",
+   "L*3a",
+   "S*2b",
+   "3c4c",
+   "2b3a",
+   "G*4a",
+   "2c3b"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "3c"
+  ],
+  "line": [
+   "S*2c",
+   "L*3a",
+   "S*2b"
+  ],
+  "cpuB": 33
+ },
+ {
+  "id": "st2-tactic-97",
+  "type": "tactic",
+  "sfen": "ln1+B3nl/1k7/pp1gp1p2/9/9/1P7/P1PPPSPPP/4G1SK1/LN3G1NL b 2S2P2rbg4p 1",
+  "accepted": [
+   "S*7b"
+  ],
+  "best": "S*7b",
+  "pv": [
+   "S*7b",
+   "8b7c",
+   "S*8b",
+   "7c6d",
+   "7b6c+",
+   "6d6c",
+   "8b8a"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "8b"
+  ],
+  "line": [
+   "S*7b",
+   "8b7c",
+   "S*8b"
+  ],
+  "cpuB": 17
+ },
+ {
+  "id": "st2-tactic-98",
+  "type": "tactic",
+  "sfen": "7nl/+R8/2kgg4/p2ppp1p1/1pp5p/4P4/1P3P+rPP/2KS5/LNG1G3L b 3SP2b2nl4p 1",
+  "accepted": [
+   "S*8c"
+  ],
+  "best": "S*8c",
+  "pv": [
+   "S*8c",
+   "N*6f",
+   "7h8h",
+   "N*7f",
+   "8h9h",
+   "L*9e",
+   "P*9g"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "7c"
+  ],
+  "line": [
+   "S*8c",
+   "N*6f",
+   "7h8h"
+  ],
+  "cpuB": 48
+ },
+ {
+  "id": "st2-tactic-99",
+  "type": "tactic",
+  "sfen": "ln6l/5+R3/7k1/p1p1pgp2/1p1b1p1p1/2P2PP2/PPSG3P1/1KG6/8L b SN2Prbg2s2nl3p 1",
+  "accepted": [
+   "S*3c"
+  ],
+  "best": "S*3c",
+  "pv": [
+   "S*3c",
+   "S*9i",
+   "8h9i",
+   "R*2i",
+   "P*5i",
+   "2i5i+",
+   "N*7i"
+  ],
+  "tesuji": "belly-silver",
+  "targets": [
+   "2c"
+  ],
+  "line": [
+   "S*3c",
+   "S*9i",
+   "8h9i"
+  ],
+  "cpuB": 19
  }
 ]);
 
