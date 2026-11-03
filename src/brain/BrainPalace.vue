@@ -234,7 +234,7 @@ import {
   scoreDigits,
   scoreOrder,
   shogiScenes,
-  usablePalaces,
+  practicePalaces,
   walkQuiz,
 } from "../core/memory-palace.mjs";
 import { openingFormation } from "../core/opening-formation.mjs";
@@ -255,6 +255,9 @@ type Store = {
   lastPalace: string;
   practiceCount: number;
   digitCount: number;
+  boxes: unknown[];
+  shelf: unknown[];
+  treasurePalace: string;
 };
 type RecordRow = { gameId: string; value: number; level: number; text: string };
 type FinishResult = { kind: "practice" | "lesson"; lessonId: string; records: RecordRow[]; correct: number; total: number };
@@ -272,6 +275,7 @@ const emit = defineEmits<{
   (event: "build"): void;
   (event: "close"): void;
   (event: "sound", kind: "correct" | "miss" | "place"): void;
+  (event: "box"): void;
 }>();
 
 const USES = [
@@ -279,6 +283,7 @@ const USES = [
   { id: "todo", emoji: "📝", title: "やること", desc: "今日やる5つのことを、順番どおりに" },
   { id: "names", emoji: "👋", title: "人の名前", desc: "名前の音を絵にして、顔と結びつける" },
   { id: "shogi", emoji: "☗", title: "将棋に使う", desc: "四間飛車と美濃囲いの8手と、格言" },
+  { id: "box", emoji: "🗃️", title: "思い出しの箱に入れる", desc: "長く覚えたいものを宝物用の宮殿に置き、間をあけて思い出す" },
 ] as const;
 
 const seedBase = Math.floor(Math.random() * 1e9);
@@ -331,7 +336,7 @@ const resultBuild = ref(false);
 let total = { correct: 0, total: 0 };
 let pending: FinishResult | null = null;
 
-const palaces = computed(() => usablePalaces(props.store) as Palace[]);
+const palaces = computed(() => practicePalaces(props.store) as Palace[]);
 const activePalace = computed(() => (findPalace(props.store, activeId.value) ?? palaces.value[0] ?? null) as Palace | null);
 const formationPieces = computed(() => openingFormation("shiken", "mino").pieces.map(({ square, kind }) => ({ square, kind, color: "black" })));
 const schoolMessage = computed(() => {
@@ -400,6 +405,8 @@ function startStudy(list: Scene[], options: { title: string; hints?: boolean; ti
 function nextStudy() {
   if (studyIndex.value + 1 < scenes.value.length) {
     studyIndex.value += 1;
+    // 場所ごとに、まず自分で絵を作る(講5・毎日の練習はヒントを隠した形に戻す。14-11)。
+    hintOpen.value = showHints.value;
     return;
   }
   afterStudy();
@@ -645,9 +652,15 @@ function startLesson(id: string) {
   }
 }
 
-function startUse(kind: "shopping" | "todo" | "names" | "shogi") {
+function startUse(kind: "shopping" | "todo" | "names" | "shogi" | "box") {
   const palace = activePalace.value;
   if (!palace) return;
+  // 思い出しの箱は道場の画面で開く(講9はここで終えた印をつける。14-11)。
+  if (kind === "box") {
+    completeLesson("use");
+    emit("box");
+    return;
+  }
   total = { correct: 0, total: 0 };
   resultRows.value = [];
   const seed = seedBase + kind.length * 977;
@@ -877,6 +890,9 @@ defineExpose({ goBack });
   font-weight: 800;
 }
 .shogi-game .brain-palace__hint-button:focus-visible { outline: 2px solid var(--dojo-now, #f1a54c); outline-offset: 2px; }
+@media (hover: hover) {
+  .shogi-game .brain-palace__hint-button:not(:disabled):hover { border-color: var(--dojo-now, #f1a54c); background-color: #fff8ea; }
+}
 .shogi-game .brain-palace__tip { color: var(--dojo-ink-2, #5d6f7c); }
 .shogi-game .brain-palace__digits { display: flex; gap: 1rem; margin: 0; font-size: 1.2rem; font-weight: 800; }
 .shogi-game .brain-palace__digits strong { margin-right: 0.2rem; color: #8a4b0f; font-size: 1.6rem; }

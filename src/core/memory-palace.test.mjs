@@ -11,6 +11,10 @@ import {
   PRACTICE_MAX,
   PRACTICE_MIN,
   SAMPLE_PALACE,
+  addTreasureBox,
+  boxBlocker,
+  boxLoci,
+  chooseTreasurePalace,
   cleanMemoryStore,
   defaultDigits,
   digitImage,
@@ -35,14 +39,19 @@ import {
   palaceWordSet,
   planPractice,
   practiceOpen,
+  practicePalaces,
   practiceValue,
   recallLabel,
   recallPool,
+  reviewTreasureBox,
   saveMemoryStore,
   scoreDigits,
   scoreOrder,
   shogiScenes,
   shogiSequence,
+  treasurePalaceOf,
+  treasureScenes,
+  treasureSets,
   usablePalaces,
   walkQuiz,
 } from './memory-palace.mjs';
@@ -307,5 +316,97 @@ describe('保存', () => {
     expect(migrateMemoryStoreV1({ version: 1, palace: { custom: ['玄関'] } }).palaces).toEqual([]);
     const storage = memoryStorage({ 'yacobihime:shogi-match:brain-training:v1': JSON.stringify({ version: 1, palace: { custom } }) });
     expect(loadMemoryStore(storage).palaces).toHaveLength(1);
+  });
+});
+
+describe('思い出しの箱と宝物用の宮殿(docs/brain-training-design.mdの14-9)', () => {
+  const day = '2026-11-02';
+
+  test('宝物用の宮殿: 自分の宮殿が2つ以上なら練習に使っていない方、1つなら見本のお城', () => {
+    const two = { ...emptyMemoryStore(), palaces: [ownPalace('p1', 12), ownPalace('p2', 15)], lastPalace: 'p1' };
+    expect(chooseTreasurePalace(two)).toBe('p2');
+    expect(chooseTreasurePalace({ ...two, lastPalace: 'p2' })).toBe('p1');
+    const one = { ...emptyMemoryStore(), palaces: [ownPalace('p1', 12)] };
+    expect(chooseTreasurePalace(one)).toBe('castle');
+    expect(treasurePalaceOf(one)).toBe(SAMPLE_PALACE);
+    // 練習に見本のお城を使っていて、自分の宮殿もなければ、箱の前に宮殿を作る
+    const castleOnly = { ...emptyMemoryStore(), sample: true, lastPalace: 'castle' };
+    expect(chooseTreasurePalace(castleOnly)).toBe('');
+    expect(boxBlocker(castleOnly, 10)).toBe('palace');
+    expect(chooseTreasurePalace({ ...castleOnly, palaces: [ownPalace('p1', 12)] })).toBe('p1');
+    expect(chooseTreasurePalace(emptyMemoryStore())).toBe('');
+  });
+
+  test('箱に組があるあいだ、毎日の練習と講は宝物用の宮殿を使わない', () => {
+    const store = { ...emptyMemoryStore(), palaces: [ownPalace('p1', 12), ownPalace('p2', 15)], lastPalace: 'p2', lessons: ['walk', 'image', 'place5'] };
+    expect(practicePalaces(store).map(({ id }) => id)).toEqual(['p1', 'p2']);
+    const added = addTreasureBox(store, { set: 'planets', title: '惑星', emoji: '🪐', items: ['水星', '金星', '地球'] }, day);
+    expect(added.store.treasurePalace).toBe('p1');
+    expect(practicePalaces(added.store).map(({ id }) => id)).toEqual(['p2']);
+    expect(lessonPalace({ ...added.store, lastPalace: 'p1' })?.id).toBe('p2');
+    expect(planPractice({ ...added.store, lastPalace: 'p1' }, day)?.palace.id).toBe('p2');
+    // 宝物用の宮殿しかないときは、そのまま使う(遊べなくしない)
+    const single = addTreasureBox({ ...emptyMemoryStore(), palaces: [ownPalace('p1', 12)], sample: true, lastPalace: 'castle' }, { set: 'x', title: 'x', emoji: '📦', items: ['a', 'b', 'c'] }, day);
+    expect(single.store.treasurePalace).toBe('p1');
+    expect(practicePalaces(single.store).map(({ id }) => id)).toEqual(['castle']);
+  });
+
+  test('組は宝物用の宮殿の空いた場所に続けて置き、場所が足りなければ入れない', () => {
+    let store = { ...emptyMemoryStore(), palaces: [ownPalace('p1', 12)] };
+    const sets = treasureSets();
+    const proverbs = sets.find(({ id }) => id === 'proverbs');
+    const months = sets.find(({ id }) => id === 'months');
+    store = addTreasureBox(store, { ...proverbs, set: proverbs.id }, day).store;
+    store = addTreasureBox(store, { ...months, set: months.id }, day).store;
+    expect(store.boxes.map(({ start }) => start)).toEqual([0, 10]);
+    expect(boxLoci(store, store.boxes[1]).map(({ name }) => name)).toEqual(CASTLE_LOCI.slice(10, 22).map(({ name }) => name));
+    // お城の30か所のうち22か所を使った。残りは8か所
+    expect(boxBlocker(store, 12)).toBe('room');
+    expect(boxBlocker(store, 8)).toBe('');
+    const zodiac = sets.find(({ id }) => id === 'zodiac');
+    store = addTreasureBox(store, { ...zodiac, set: zodiac.id }, day).store;
+    expect(store.boxes).toHaveLength(2);
+    expect(boxBlocker(store, 3)).toBe('');
+  });
+
+  test('目録: どの組も3〜12個で、絵の手がかりは場所を含む。作戦の手順は対局と同じ8手', () => {
+    const sets = treasureSets();
+    expect(sets.map(({ id }) => id)).toEqual(['proverbs', 'shiken-mino', 'herbs', 'months', 'planets', 'zodiac']);
+    for (const set of sets) {
+      expect(set.items.length).toBeGreaterThanOrEqual(3);
+      expect(set.items.length).toBeLessThanOrEqual(12);
+      for (const item of set.items) if (item.cue) expect(item.cue).toContain('{場}');
+    }
+    expect(sets[0].items.map(({ word }) => word)).toEqual([...MEMORY_PROVERBS]);
+    const moves = sets[1].items;
+    expect(moves.map(({ word }) => word)).toEqual(shogiSequence().map(({ label }) => label));
+    expect(moves[0]).toMatchObject({ ask: '1手目は？', cue: '{場}で、歩が７六へ、ぐいっと1歩進む！' });
+    const scenes = treasureScenes(CASTLE_LOCI, sets.find(({ id }) => id === 'months').items);
+    expect(scenes[11].image).toBe('門を、先生が大あわてで走っていく！'.replace('門', CASTLE_LOCI[11].name));
+    expect(scenes[0].ask).toBe('1月は？');
+    // 絵にする言葉(picture)があれば、その言葉で絵の文を作る
+    const zodiac = treasureScenes(CASTLE_LOCI, sets.find(({ id }) => id === 'zodiac').items);
+    expect(zodiac[0].item.word).toBe('子（ね）');
+    expect(zodiac[0].image).toContain('ねずみ');
+    // 選んだ絵の番号で、思い出したあとに同じ絵を出す
+    const [first] = treasureScenes(CASTLE_LOCI, [{ word: 'りんご' }], [1]);
+    expect(first.image).toBe(first.imageOptions[0]);
+    expect(treasureScenes(CASTLE_LOCI, [{ word: 'りんご' }])[0].imageOptions[1]).toBe(first.image);
+  });
+
+  test('思い出した結果で段が動き、保存して読み直せる(前の保存には箱がない)', () => {
+    const storage = memoryStorage();
+    let store = { ...emptyMemoryStore(), palaces: [ownPalace('p1', 12)] };
+    store = addTreasureBox(store, { set: 'planets', title: '惑星', emoji: '🪐', items: treasureSets().find(({ id }) => id === 'planets').items, pics: [1, 0, 2] }, day).store;
+    const reviewed = reviewTreasureBox(store, store.boxes[0].id, Array(8).fill(true), '2026-11-03');
+    expect(reviewed.outcome).toMatchObject({ passed: true, stage: 1, next: '2026-11-06' });
+    saveMemoryStore(storage, reviewed.store);
+    const loaded = loadMemoryStore(storage);
+    expect(loaded.boxes).toEqual(reviewed.store.boxes);
+    expect(loaded.treasurePalace).toBe('castle');
+    expect(loaded.boxes[0].pics).toEqual([1, 0, 2, 0, 0, 0, 0, 0]);
+    // 前の保存(箱の項目なし)はそのまま読め、消えた宮殿は宝物用にしない
+    expect(cleanMemoryStore({ version: 1, palaces: [] })).toMatchObject({ boxes: [], shelf: [], treasurePalace: '' });
+    expect(cleanMemoryStore({ ...reviewed.store, treasurePalace: 'gone' }).treasurePalace).toBe('');
   });
 });

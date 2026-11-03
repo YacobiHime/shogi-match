@@ -2,8 +2,10 @@
 // 自分の宮殿(palace-builder.mjs)に、覚えたいものを1つずつ「場所とからんで動く絵」にして置き、場所をたどって思い出す。
 // 講1〜9で方法を身につけ、講3を終えると毎日の練習(きのうの言葉・宮殿に置く・数字)が開く。画面に依存しない。
 
-import { MEMORY_PROVERBS, MEMORY_WORDS } from '../data/memory-palace-words.mjs';
+import { MEMORY_WORDS } from '../data/memory-palace-words.mjs';
 import { LOCUS_ACTS, LOCUS_KIND_BY_NAME, LOCUS_KINDS } from '../data/palace-acts.mjs';
+import { MOVE_CUES, PROVERB_SET, TREASURE_SETS } from '../data/memory-treasure-sets.mjs';
+import { addBox, applyReview, cleanBoxes, cleanShelf, nextBoxDay, dueBoxes, addBlocker } from './memory-box.mjs';
 import { openingFormationSteps, openingStepLabel } from './opening-formation.mjs';
 import { cleanPalaces, palaceReady } from './palace-builder.mjs';
 import { createRng } from './ryuo-random.mjs';
@@ -132,6 +134,12 @@ export function emptyMemoryStore() {
     lastPalace: '',
     practiceCount: PRACTICE_MIN,
     digitCount: DIGIT_LESSON_LENGTH,
+    /** 思い出しの箱の組(memory-box.mjs。14-9)。 */
+    boxes: [],
+    /** 宝物の棚(1か月たっても思い出せた組)。 */
+    shelf: [],
+    /** 宝物用の宮殿のid(箱に組があるあいだ固定する。''はまだ決めていない)。 */
+    treasurePalace: '',
   };
 }
 
@@ -158,6 +166,11 @@ export function cleanMemoryStore(value) {
   store.lastPalace = palaceIds.has(value.lastPalace) ? value.lastPalace : '';
   if (Number.isFinite(value.practiceCount)) store.practiceCount = clamp(Math.floor(value.practiceCount), PRACTICE_MIN, PRACTICE_MAX);
   if (Number.isFinite(value.digitCount)) store.digitCount = clamp(Math.floor(value.digitCount / 2) * 2, DIGIT_MIN, DIGIT_MAX);
+  // 思い出しの箱(足しただけの項目。前の保存にはないので、ないときは空のまま)。
+  store.boxes = cleanBoxes(value.boxes);
+  store.shelf = cleanShelf(value.shelf);
+  const ownReady = new Set(store.palaces.filter(palaceReady).map(({ id }) => id));
+  store.treasurePalace = value.treasurePalace === SAMPLE_PALACE_ID || ownReady.has(value.treasurePalace) ? value.treasurePalace : '';
   return store;
 }
 
@@ -216,9 +229,21 @@ export function findPalace(store, id) {
   return usablePalaces(store).find((palace) => palace.id === id) ?? null;
 }
 
-/** 講で使う宮殿(前に使った宮殿か、最初の宮殿)。 */
+/**
+ * 毎日の練習と講で使える宮殿。箱に組があるあいだは、宝物用の宮殿を使わない(混ざりを防ぐ。14-3のB14)。
+ * 宝物用の宮殿しかなければ、使える宮殿をそのまま返す。
+ */
+export function practicePalaces(store) {
+  const all = usablePalaces(store);
+  const treasure = store.boxes?.length ? store.treasurePalace : '';
+  const list = treasure ? all.filter(({ id }) => id !== treasure) : all;
+  return list.length ? list : all;
+}
+
+/** 講で使う宮殿(前に使った宮殿か、最初の宮殿。宝物用の宮殿は使わない)。 */
 export function lessonPalace(store) {
-  return findPalace(store, store.lastPalace) ?? usablePalaces(store)[0] ?? null;
+  const list = practicePalaces(store);
+  return list.find(({ id }) => id === store.lastPalace) ?? list[0] ?? null;
 }
 
 // ===== 講 =====
@@ -403,11 +428,11 @@ export function practiceValue(score) {
  * @param {string} day
  */
 export function planPractice(store, day) {
-  const palaces = usablePalaces(store);
+  const palaces = practicePalaces(store);
   if (!palaces.length) return null;
   const last = store.lastWords;
   const recall = last && last.day < day && findPalace(store, last.palace) ? last : null;
-  let palace = findPalace(store, store.lastPalace) ?? palaces[0];
+  let palace = palaces.find(({ id }) => id === store.lastPalace) ?? palaces[0];
   if (palaces.length >= 2 && last) palace = palaces.find(({ id }) => id !== last.palace) ?? palace;
   const count = clamp(store.practiceCount, PRACTICE_MIN, Math.min(PRACTICE_MAX, palace.loci.length));
   const digits = store.lessons.includes('digits') && Number(day.slice(-2)) % 2 === 1;
@@ -518,7 +543,121 @@ export function shogiScenes(seed, loci = CASTLE_LOCI, kind = 'moves') {
   const rng = createRng(seed);
   const items = kind === 'moves'
     ? shogiSequence().map(({ label }) => ({ word: label, emoji: '☗' }))
-    : MEMORY_PROVERBS.map((proverb) => ({ word: proverb, emoji: '📜' }));
+    : PROVERB_SET.items;
   const actions = actionsFor(rng, items.length);
   return items.slice(0, loci.length).map((item, index) => scene(loci[index], item, actions[index]));
+}
+
+// ===== 思い出しの箱(14-9) =====
+
+/** 宝物用の宮殿(見本のお城は、選んでいなくても宝物用に使える)。 */
+function resolveTreasure(store, id) {
+  if (id === SAMPLE_PALACE_ID) return SAMPLE_PALACE;
+  return store.palaces.find((palace) => palace.id === id && palaceReady(palace)) ?? null;
+}
+
+/**
+ * 宝物用の宮殿を選ぶ。決めてあればそれ。まだなら、毎日の練習に使っていない宮殿(自分の宮殿が2つ以上あれば練習に使っていない方、
+ * 1つなら見本のお城)。練習に見本のお城を使っていて、自分の宮殿もないときは''(箱の前に宮殿を作る)。
+ * @returns {string}
+ */
+export function chooseTreasurePalace(store) {
+  if (store.treasurePalace && resolveTreasure(store, store.treasurePalace)) return store.treasurePalace;
+  const usable = usablePalaces(store);
+  if (!usable.length) return '';
+  const practiceId = (findPalace(store, store.lastPalace) ?? usable[0]).id;
+  const own = store.palaces.filter(palaceReady);
+  const other = [...own].reverse().find(({ id }) => id !== practiceId);
+  if (other && own.length >= 2) return other.id;
+  if (practiceId !== SAMPLE_PALACE_ID) return SAMPLE_PALACE_ID;
+  return other?.id ?? '';
+}
+
+/** 宝物用の宮殿(決めた宮殿か、これから使う宮殿)。なければnull。 */
+export function treasurePalaceOf(store) {
+  return resolveTreasure(store, chooseTreasurePalace(store));
+}
+
+/**
+ * 箱の目録。作戦の手順(四間飛車と美濃囲い)は、対局の作戦カードと同じ手順から作る。
+ * @returns {{ id: string, title: string, emoji: string, desc: string, items: { word: string, ask?: string, cue?: string, picture?: string, emoji?: string }[] }[]}
+ */
+export function treasureSets() {
+  const moves = shogiSequence().map(({ label }, index) => {
+    const piece = label.slice(-1);
+    const square = label.slice(1, 3);
+    const cue = (MOVE_CUES[piece] ?? '{場}で、駒が{先}へ動く！').replace('{先}', square);
+    return { word: label, ask: `${index + 1}手目は？`, cue, emoji: '☗' };
+  });
+  const [proverbs, ...rest] = TREASURE_SETS;
+  return [
+    proverbs,
+    { id: 'shiken-mino', title: '四間飛車と美濃囲い', emoji: '☗', desc: '作戦カードと同じ8手の手順', items: moves },
+    ...rest,
+  ];
+}
+
+/** 組を宝物用の宮殿に入れられるか(''なら入れられる)。'palace'は宝物用の宮殿がない。 */
+export function boxBlocker(store, size) {
+  const palace = treasurePalaceOf(store);
+  if (!palace) return 'palace';
+  return addBlocker(store.boxes, palace.loci.length, size);
+}
+
+/** 組が置かれた場所(宮殿の場所が減っていたら「○か所目」で補う)。 */
+export function boxLoci(store, box) {
+  const loci = treasurePalaceOf(store)?.loci ?? [];
+  return box.items.map((_, index) => loci[box.start + index] ?? { name: `${box.start + index + 1}か所目`, emoji: '📍', group: '' });
+}
+
+/**
+ * 組を場所に置く絵。絵の文は場所の種類と、覚えるものの手がかり(cue)から(sceneImages)。picsは選んだ絵の番号。
+ * @param {readonly { name: string, emoji: string, kind?: string }[]} loci
+ * @param {{ word: string, ask?: string, cue?: string, picture?: string, emoji?: string }[]} items
+ * @param {number[]} [pics]
+ */
+export function treasureScenes(loci, items, pics = []) {
+  return items.map((item, index) => {
+    const locus = loci[index];
+    const imageOptions = sceneImages(locus, { word: item.picture ?? item.word, cue: item.cue });
+    const pick = (pics[index] ?? 0) % imageOptions.length;
+    return {
+      locus,
+      item: { word: item.word, emoji: item.emoji ?? '📦' },
+      ask: item.ask ?? '',
+      image: imageOptions[pick],
+      imageOptions: [...imageOptions.slice(pick), ...imageOptions.slice(0, pick)],
+    };
+  });
+}
+
+/**
+ * 組を箱に入れる(宝物用の宮殿を決め、空いた場所に続けて置く)。
+ * @param {ReturnType<typeof emptyMemoryStore>} store
+ * @param {{ set: string, title: string, emoji: string, items: unknown[], pics?: number[] }} input
+ * @param {string} day
+ */
+export function addTreasureBox(store, input, day) {
+  const treasure = chooseTreasurePalace(store);
+  const palace = resolveTreasure(store, treasure);
+  if (!palace) return { store, box: null, blocker: 'palace' };
+  const result = addBox(store.boxes, input, palace.loci.length, day);
+  if (!result.box) return { store, box: null, blocker: result.blocker };
+  return { store: { ...store, boxes: result.boxes, treasurePalace: treasure }, box: result.box, blocker: '' };
+}
+
+/** 箱の組を思い出した結果を入れる。 */
+export function reviewTreasureBox(store, id, results, day) {
+  const { boxes, shelf, outcome } = applyReview(store.boxes, store.shelf, id, results, day);
+  return { store: { ...store, boxes, shelf }, outcome };
+}
+
+/** 今日思い出す組(時期の来た組のうち、いちばん早いもの)。 */
+export function dueTreasureBox(store, day) {
+  return dueBoxes(store.boxes, day)[0] ?? null;
+}
+
+/** 次に箱の時期が来る日。 */
+export function nextTreasureDay(store, day) {
+  return nextBoxDay(store.boxes, day);
 }

@@ -133,6 +133,7 @@
           </li>
         </ul>
         <div class="brain-rowlinks">
+          <button type="button" class="brain-rowlink" data-brain-box-open @click="openBox('list')">🗃️ 箱<em v-if="boxDueCount" class="brain-rowlink__badge" :aria-label="`今日${boxDueCount}つ`">{{ boxDueCount }}</em></button>
           <button type="button" class="brain-rowlink" data-brain-shelf @click="openShelf">☗ 将棋の棚</button>
           <button type="button" class="brain-rowlink" data-brain-records @click="openRecords">📈 記録</button>
         </div>
@@ -264,6 +265,27 @@
         @build="openBuilder(memory.palaces.length < PALACE_MAX ? 'new' : 'list')"
         @close="view = 'room'"
         @finish="finishPalace"
+        @box="openBoxFromLesson"
+      />
+    </section>
+
+    <!-- 思い出しの箱(14-6の8・9) -->
+    <section v-else-if="view === 'box'" class="shogi-brain__stage" aria-label="思い出しの箱" data-brain-box-view>
+      <BrainMemoryBox
+        ref="boxView"
+        :key="`box-${runKey}`"
+        :store="memory"
+        :day="today"
+        :chara-url="charaUrl"
+        :start="boxStart"
+        :review-id="boxReviewId"
+        :next-label="boxNextLabel"
+        @sound="playSound"
+        @save="savePalace"
+        @added="stampBox"
+        @reviewed="stampBox"
+        @next="boxNext"
+        @build="openBuilder(memory.palaces.length < PALACE_MAX ? 'new' : 'list')"
       />
     </section>
 
@@ -378,6 +400,7 @@ import BrainSwitch from "./brain/BrainSwitch.vue";
 import BrainMemoryTest from "./brain/BrainMemoryTest.vue";
 import BrainPalace from "./brain/BrainPalace.vue";
 import BrainPalaceBuilder from "./brain/BrainPalaceBuilder.vue";
+import BrainMemoryBox from "./brain/BrainMemoryBox.vue";
 import BrainTodayCard from "./brain/BrainTodayCard.vue";
 import BrainWeekStrip from "./brain/BrainWeekStrip.vue";
 import BrainCueChooser from "./brain/BrainCueChooser.vue";
@@ -421,14 +444,17 @@ import {
 } from "./core/brain-program.mjs";
 import {
   PALACE_LESSONS,
+  dueTreasureBox,
   hasPalace,
   loadMemoryStore,
   nextDayState,
   nextLesson,
+  nextTreasureDay,
   planPractice,
   practiceOpen,
   saveMemoryStore,
 } from "./core/memory-palace.mjs";
+import { daysBetween } from "./core/memory-box.mjs";
 import { PALACE_MAX } from "./core/palace-builder.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
 import { comboStep } from "./core/brain-sound.mjs";
@@ -474,7 +500,7 @@ const storage = typeof localStorage === "undefined" ? null : localStorage;
 const record = ref(loadBrainRecord(storage));
 const memory = ref<MemoryStore>(loadMemoryStore(storage));
 const today = dayKey();
-const view = ref<"home" | "room" | "game" | "summary" | "evidence" | "builder" | "palace" | "records" | "shelf">("home");
+const view = ref<"home" | "room" | "game" | "summary" | "evidence" | "builder" | "palace" | "records" | "shelf" | "box">("home");
 const cueEditing = ref(false);
 const RECORD_TABS = [
   { id: "stamps", label: "判子" },
@@ -527,6 +553,7 @@ const headerTitle = computed(() => {
     case "palace": return palaceMode.value === "practice" ? "毎日の練習" : "場所法の学校";
     case "records": return `${roomLabel(room.value)}の記録`;
     case "shelf": return "将棋の棚";
+    case "box": return "思い出しの箱";
     case "summary": return "今日の成績";
     case "evidence": return "脳トレの根拠";
     default: return BRAIN_TITLE;
@@ -539,6 +566,10 @@ const homeMessage = computed(() => {
   if (!choice) return "今日は2つともできたね。また明日！ 日をあけて続けると、長く身につくよ。";
   if (!record.value.program.calc.before && !record.value.program.memory.before) return "ようこそ、脳トレ道場へ！ はじめに計算力の測定から。5分くらいだよ。";
   if (choice === "calc" && calcBoosterDue(record.value.program.calc, today)) return "おさらいの時期が来たよ。続けて追加の練習をした人ほど、長い期間で良い結果が出ているんだ。";
+  if (choice === "memory" && dueBox.value) {
+    const since = Math.max(1, daysBetween(dueBox.value.last || dueBox.value.added, today));
+    return `思い出しの箱に、${since === 1 ? "きのう" : `${since}日前`}の「${dueBox.value.title}」が届いてるよ。日をあけて思い出すと、長く残るんだ。`;
+  }
   if (choice === "memory" && memoryDue.value) return "きのう置いた言葉を思い出す日だよ。日をあけて思い出すと、長く残るんだ。";
   const counts = weekly.value[choice];
   const left = counts.target - counts.done;
@@ -585,11 +616,16 @@ const memoryTodayTitle = computed(() => {
 
 // ===== 今日の稽古の札(14-4の柱1) =====
 type TodayStep = { icon: string; label: string; sub?: string };
-/** 記憶力で時期の来たもの(講7の次の日に思い出す。思い出しの箱は14-9で足す)。 */
+/** 思い出しの箱で、今日思い出す組(14-9)。 */
+const dueBox = computed(() => dueTreasureBox(memory.value, today));
+/** 記憶力で時期の来たもの(講7の次の日に思い出す・思い出しの箱)。 */
 const memoryDue = computed(() => {
   const lessons = memory.value.lessons;
+  if (dueBox.value) return true;
   return lessons.includes("twenty") && !lessons.includes("nextday") && nextDayState(memory.value, today) === "ready";
 });
+/** 時期の来た箱を、今日の稽古の最初に入れるか(練習か講の日だけ。1つだけ。14-4の柱7)。 */
+const boxFirst = computed(() => Boolean(dueBox.value) && (memoryPlan.value.kind === "practice" || memoryPlan.value.kind === "lesson"));
 const pick = computed(() => todayPick({ record: record.value, day: today, memoryDue: memoryDue.value }) as RoomId | null);
 const calcCard = computed(() => {
   const plan = calcPlan.value;
@@ -626,6 +662,10 @@ const memoryCard = computed(() => {
     if (practice) steps.push({ icon: GAME_ICONS.palace, label: `宮殿に${practice.count}個`, sub: practice.palace.name });
     if (practice?.digits) steps.push({ icon: GAME_ICONS.digits, label: "数字", sub: `${practice.digitCount}けた` });
     minutes = Math.max(5, Math.min(12, Math.round((practice?.recall ? 1.5 : 0) + (practice?.count ?? 5) * 0.4 + (practice?.digits ? 2 : 0))));
+  }
+  if (boxFirst.value && dueBox.value) {
+    steps = [{ icon: "🗃️", label: "思い出しの箱", sub: dueBox.value.title }, ...steps];
+    minutes += 2;
   }
   const title = plan.kind === "practice" && plan.session ? `6週間コース ${plan.session}回目` : memoryTodayTitle.value;
   return {
@@ -715,7 +755,11 @@ const calcRoad = computed(() => {
 const memoryGoal = computed(() => {
   const next = nextLesson(memory.value.lessons);
   const lesson = PALACE_LESSONS.find(({ id }) => id === next);
-  return memoryNextGoal(record.value, today, { practiceOpen: memoryPracticeOpen.value, nextLessonTitle: lesson ? `講${lesson.number}「${lesson.title}」` : "" });
+  return memoryNextGoal(record.value, today, {
+    practiceOpen: memoryPracticeOpen.value,
+    nextLessonTitle: lesson ? `講${lesson.number}「${lesson.title}」` : "",
+    nextBoxDay: dueBox.value ? "" : nextTreasureDay(memory.value, today),
+  });
 });
 /** 6週間コースの30回を、週ごと5つのマスに(週5回の目安が見える。14-6の5)。 */
 const memoryWeeks = computed(() => {
@@ -750,15 +794,19 @@ function openPathNode(id: PathNode["id"]) {
 /** わたしの宮殿(役目つき。練習用は毎日の練習に使う宮殿)。 */
 const palaceChips = computed(() => {
   const practicePalace = memory.value.lastPalace;
+  const treasure = memory.value.boxes.length ? memory.value.treasurePalace : "";
+  const role = (id: string) => (id === treasure ? "・宝物" : id === practicePalace ? "・練習" : "");
   const chips = memory.value.palaces.map((palace) => ({
     id: palace.id,
     emoji: palace.place === "school" ? "🏫" : palace.place === "route" ? "🚶" : palace.place === "shop" ? "🏪" : palace.place === "free" ? "✏️" : "🏠",
     name: palace.name,
-    sub: `${palace.loci.length}か所${palace.id === practicePalace ? "・練習" : ""}`,
+    sub: `${palace.loci.length}か所${role(palace.id)}`,
   }));
-  if (memory.value.sample) chips.push({ id: "castle", emoji: "🏯", name: "見本のお城", sub: `30か所${practicePalace === "castle" ? "・練習" : ""}` });
+  if (memory.value.sample || treasure === "castle") chips.push({ id: "castle", emoji: "🏯", name: "見本のお城", sub: `30か所${role("castle")}` });
   return chips;
 });
+/** 部屋の「箱」の札の数字(今日思い出す組の数)。 */
+const boxDueCount = computed(() => memory.value.boxes.filter((box) => box.next <= today).length);
 function openShelf() {
   view.value = "shelf";
 }
@@ -891,10 +939,18 @@ function startMemoryTest() {
 function startMemoryToday() {
   const plan = memoryPlan.value;
   roomMessage.value = "";
-  if (plan.kind === "test") startMemoryTest();
-  else if (plan.kind === "build") openBuilder(memory.value.palaces.length && memory.value.palaces.length < PALACE_MAX ? "list" : "new");
-  else if (plan.kind === "lesson") openPalace("lesson", plan.lessonId ?? "");
-  else openPalace("practice");
+  const main = () => {
+    if (plan.kind === "test") startMemoryTest();
+    else if (plan.kind === "build") openBuilder(memory.value.palaces.length && memory.value.palaces.length < PALACE_MAX ? "list" : "new");
+    else if (plan.kind === "lesson") openPalace("lesson", plan.lessonId ?? "");
+    else openPalace("practice");
+  };
+  // 時期の来た箱があれば、最初に1つだけ思い出してから続ける(14-4の柱7)。
+  if (boxFirst.value && dueBox.value) {
+    openBox("review", dueBox.value.id, plan.kind === "lesson" ? "つぎへ（学校）" : "つぎへ（毎日の練習）", main);
+    return;
+  }
+  main();
 }
 function nextGame() {
   combo = 0;
@@ -1012,6 +1068,38 @@ function savePalace(patch: Partial<MemoryStore>) {
   memory.value = { ...memory.value, ...patch };
   saveMemoryStore(storage, memory.value);
 }
+
+// ===== 思い出しの箱(14-9) =====
+const boxStart = ref<"list" | "catalog" | "review">("list");
+const boxReviewId = ref("");
+const boxNextLabel = ref("");
+let afterBox: (() => void) | null = null;
+const boxView = ref<InstanceType<typeof BrainMemoryBox> | null>(null);
+function openBox(start: "list" | "catalog" | "review", reviewId = "", nextLabel = "", then: (() => void) | null = null) {
+  room.value = "memory";
+  boxStart.value = start;
+  boxReviewId.value = reviewId;
+  boxNextLabel.value = then ? nextLabel : "";
+  afterBox = then;
+  runKey.value += 1;
+  view.value = "box";
+}
+/** 箱に入れた・思い出したら、記憶力の判子を押す(自由練習の日も数える。14-9)。 */
+function stampBox() {
+  record.value = stampRoom(record.value, "memory", today);
+  save();
+}
+function boxNext() {
+  const then = afterBox;
+  afterBox = null;
+  if (then) then();
+  else view.value = "room";
+}
+/** 講9の「思い出しの箱に入れる」。講を終えた印は学校の画面が残す。 */
+function openBoxFromLesson() {
+  stampBox();
+  openBox("catalog");
+}
 function finishPalace(result: PalaceFinish) {
   record.value = stampRoom(record.value, "memory", today);
   results.value = [];
@@ -1086,6 +1174,12 @@ function sparkPoints(values: number[], low: boolean) {
 function goBack() {
   if (view.value === "palace" && palaceView.value?.goBack()) return;
   if (view.value === "builder" && builderView.value?.goBack()) return;
+  if (view.value === "box" && boxView.value?.goBack()) return;
+  if (view.value === "box") {
+    afterBox = null;
+    view.value = "room";
+    return;
+  }
   if (view.value === "home") {
     emit("close");
     return;
@@ -1319,6 +1413,20 @@ defineExpose({ goBack });
   font-size: 0.88rem;
   font-weight: 800;
   white-space: nowrap;
+}
+.shogi-game .brain-rowlink__badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  margin-left: 0.3rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--dojo-ai);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 900;
 }
 .shogi-game .brain-path { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
 .shogi-game .brain-path li { position: relative; }
