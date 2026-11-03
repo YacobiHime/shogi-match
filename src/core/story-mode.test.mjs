@@ -1,3 +1,4 @@
+import { PRO_YEAR_SCENES } from './pro-year-story.mjs';
 import { describe, expect, it } from 'vitest';
 import {
   STORY_EPISODES, STORY_PROGRESS_KEY, STORY_TABS, emptyStoryProgress, episodeLabel, episodeOfScene, kanjiNumber, loadStoryProgress,
@@ -24,12 +25,14 @@ describe('ストーリー選択の目録(docs/story-mode-design.md)', () => {
     expect(kanjiNumber(25)).toBe('二十五');
   });
 
-  it('サブの話は団体戦の台本の場面で、idと場面は1対1。メインは準備中', () => {
+  it('サブの話は団体戦と棋士の1年の台本の場面で、idと場面は1対1。メインは準備中', () => {
     const ids = STORY_EPISODES.map((episode) => episode.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const episode of STORY_EPISODES.filter((entry) => entry.tab === 'sub')) {
-      expect(TEAM_SCENES[episode.scene]).toBeTruthy();
-      expect(episode.title).toBe(TEAM_SCENES[episode.scene].title);
+      // サブは団体戦の場面と、棋士の1年の場面(pro-year-story.mjs)。
+      const source = TEAM_SCENES[episode.scene] ?? PRO_YEAR_SCENES[episode.scene];
+      expect(source).toBeTruthy();
+      expect(episode.title).toBe(source.title);
       expect(episode.unlock).toMatch(/読めます。$/);
       expect(episodeOfScene(episode.scene)).toBe(episode);
     }

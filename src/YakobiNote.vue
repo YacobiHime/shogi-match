@@ -512,6 +512,33 @@
               </template>
               <p v-else class="shogi-note__hint">まだ受験していません<span class="shogi-note__event-where">（タイトル画面の「大会」の「奨励会」から）</span></p>
             </section>
+
+            <!-- 棋士の1年の歩み(docs/pro-year-design.mdの12章)。いまの年度・今年度の成績・順位戦のクラス・タイトルと、これまでの年度。 -->
+            <section
+              :class="['shogi-note__card', 'shogi-note__event', eventClass('proyear')]"
+              :style="{ order: eventOrder.proyear }"
+              aria-labelledby="shogi-note-proyear"
+              data-note-proyear
+            >
+              <h2 id="shogi-note-proyear">棋士の1年</h2>
+              <template v-if="proYear">
+                <dl class="shogi-note__event-stats">
+                  <div class="shogi-note__event-now"><dt>いま</dt><dd data-note-proyear-now>{{ proYear.fy }}<small>年度</small></dd></div>
+                  <div><dt>今年度</dt><dd>{{ proYear.wins }}勝{{ proYear.losses }}敗</dd></div>
+                  <div><dt>順位戦</dt><dd>{{ proYear.cls || "—" }}</dd></div>
+                </dl>
+                <p v-if="proYear.titles.length" class="shogi-note__hint">タイトル：{{ proYear.titles.join("・") }}</p>
+                <ol v-if="proYear.history.length" v-scroll-more class="shogi-note__history shogi-note__event-history shogi-note__scroll" aria-label="棋士の1年のこれまでの年度" data-note-proyear-history>
+                  <li v-for="entry in proYear.history.slice(0, 5)" :key="entry.fy" :class="`shogi-note__history--${entry.titles.length ? 'crown' : 'keep'}`">
+                    <span class="shogi-note__history-no">{{ entry.fy }}年度</span>
+                    <span class="shogi-note__history-group">{{ entry.titles.length ? entry.titles.join("・") : "—" }}</span>
+                    <span class="shogi-note__history-text">{{ entry.awards[0] ?? "" }}</span>
+                    <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
+                  </li>
+                </ol>
+              </template>
+              <p v-else class="shogi-note__hint">まだデビューしていません<span class="shogi-note__event-where">（タイトル画面の「大会」の「ほかの大会」の「棋士の1年」から）</span></p>
+            </section>
           </div>
 
           <section v-else-if="tournamentView === 'awards'" class="shogi-note__card shogi-note__list-card" aria-labelledby="shogi-note-awards" data-note-awards>
@@ -950,6 +977,7 @@ import { loadNotes, removeNote, saveNotes } from "./core/relay-fun.mjs";
 import { loadRelayStore, recallRelayGame } from "./core/relay-store.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
 import { loadShoreikai, rankLabel } from "./core/shoreikai.mjs";
+import { loadProYearNote } from "./core/pro-year-note.mjs";
 import { classLabel as kenshukaiClassLabel, loadKenshukai } from "./core/kenshukai.mjs";
 
 type Tally = { wins: number; losses: number; draws: number };
@@ -1248,6 +1276,8 @@ const shownAwards = computed(() => [...props.awards].reverse());
 const awardShown = ref<SeasonAwardData | null>(null);
 // ---- 奨励会の歩み(大会の項目)。保存から読む(対局画面と同じキー)。
 const shoreikai = ref(loadShoreikai(typeof localStorage === "undefined" ? null : localStorage));
+/** 棋士の1年(保存をそのまま読む。12章)。始めていなければnull。 */
+const proYear = ref(loadProYearNote(typeof localStorage === "undefined" ? null : localStorage));
 const shoreikaiNow = computed(() => {
   const run = shoreikai.value.run;
   if (run?.phase === "exam" || run?.phase === "failed") return `${rankLabel(run.exam?.rank ?? run.rank)}受験`;
@@ -1626,13 +1656,14 @@ wideMedia?.addEventListener("change", onWideChange);
 onBeforeUnmount(() => wideMedia?.removeEventListener("change", onWideChange));
 
 // ---- 棋戦の札(大会の項目の「棋戦」)。出た棋戦は大きな札を先に、出ていない棋戦は1行の札を後に並べる。
-const EVENT_IDS = ["ryuo", "meijin", "kenshukai", "shoreikai"] as const;
+const EVENT_IDS = ["ryuo", "meijin", "kenshukai", "shoreikai", "proyear"] as const;
 type EventId = typeof EVENT_IDS[number];
 const eventJoined = computed<Record<EventId, boolean>>(() => ({
   ryuo: props.career.seasons > 0 || props.career.history.length > 0,
   meijin: meijinHistory.value.length > 0 || Boolean(meijinNow.value.cls),
   kenshukai: kenshukai.value.history.length > 0 || Boolean(kenshukai.value.run),
   shoreikai: shoreikai.value.history.length > 0 || Boolean(shoreikai.value.run) || Boolean(shoreikai.value.pro),
+  proyear: Boolean(proYear.value),
 }));
 const eventOrder = computed(() => {
   const order = [...EVENT_IDS.filter((id) => eventJoined.value[id]), ...EVENT_IDS.filter((id) => !eventJoined.value[id])];

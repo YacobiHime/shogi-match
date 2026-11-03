@@ -214,6 +214,7 @@
           :user-level="userLevel"
           :asset-base-url="assetBaseUrl"
           :player-name="playerName"
+          :momoka-call="momokaCall"
           :suspended-moves="proYearSuspendedMoves"
           @enter="emit('pro-year-enter', $event)"
           @advance="emit('pro-year-advance')"

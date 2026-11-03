@@ -289,7 +289,7 @@
             <button v-if="view.pending.kind === 'study'" type="button" class="shogi-tournament__sub" data-pro-leave-study @click="emit('life', { kind: 'leave-study' })">{{ STUDY_TEXT.leave }}</button>
             <button v-else-if="view.pending.kind === 'shidou'" type="button" class="shogi-tournament__sub" data-pro-cancel-shidou @click="emit('life', { kind: 'cancel-shidou' })">まつりへ戻る</button>
             <button v-else type="button" class="shogi-tournament__sub" data-pro-auto @click="openAuto">分身に任せる</button>
-            <button type="button" class="shogi-tournament__start" data-pro-play @click="suspendedMoves ? emit('resume') : emit('play')">
+            <button type="button" class="shogi-tournament__start" data-pro-play @click="suspendedMoves ? emit('resume') : playWithScene()">
               {{ suspendedMoves ? `対局を再開（${suspendedMoves}手目から）` : view.pending.kind === "study" ? "練習対局を指す" : view.pending.kind === "shidou" ? "指導対局を指す" : "対局する" }}
             </button>
           </div>
@@ -490,6 +490,15 @@
         </div>
       </div>
     </div>
+    <!-- 物語の場面(デビューの日・羽音との公式戦・タイトル戦の前夜。docs/pro-year-design.mdの12章) -->
+    <NovelScene
+      v-if="storyScene"
+      ref="sceneEl"
+      :scene="storyScene"
+      :asset-base-url="assetBaseUrl"
+      data-pro-scene
+      @done="closeScene"
+    />
   </div>
 </template>
 
@@ -498,6 +507,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropTy
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import RyuoBracket from "./RyuoBracket.vue";
 import ProFestival from "./ProFestival.vue";
+import NovelScene from "./NovelScene.vue";
+import { proYearScene, proYearSceneDue } from "./core/pro-year-story.mjs";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
@@ -525,6 +536,8 @@ const props = defineProps({
   userLevel: { type: Number, default: NaN },
   assetBaseUrl: { type: String, default: "." },
   playerName: { type: String, default: "あなた" },
+  /** 百花の呼び方(player-name.mjsのmomokaCallName。空なら名前に「さん」)。 */
+  momokaCall: { type: String, default: "" },
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
   backLabel: { type: String, default: "戻る" },
 });
@@ -796,7 +809,41 @@ function confirmAuto() {
 }
 
 /** 戻る操作。重ねて開いたものを閉じたら真。 */
+// ---- 物語の場面(12章)。デビューの日はすぐ、羽音との公式戦とタイトル戦の前夜は「対局する」を押したときに1回だけ。
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const storyScene = ref<any>(null);
+let sceneKey = "";
+let afterScene: (() => void) | null = null;
+const sceneEl = ref<{ goBack: () => boolean } | null>(null);
+function openScene(due: { key: string; id: string; vars: Record<string, string> }, then: (() => void) | null) {
+  sceneKey = due.key;
+  afterScene = then;
+  storyScene.value = proYearScene(due.id, { playerName: props.playerName, momokaCall: props.momokaCall, vars: due.vars });
+}
+/** 場面を読み終えた(飛ばしても同じ)。見た印をつけ、物語のサブに開く。 */
+function closeScene() {
+  storyScene.value = null;
+  emit("life", { kind: "scene", key: sceneKey });
+  const then = afterScene;
+  afterScene = null;
+  then?.();
+}
+function playWithScene() {
+  const due = props.state ? proYearSceneDue(props.state) : null;
+  if (due && due.key !== "pro-debut") openScene(due, () => emit("play"));
+  else emit("play");
+}
+watch(() => props.state, (state) => {
+  if (storyScene.value || !state) return;
+  const due = proYearSceneDue(state);
+  if (due?.key === "pro-debut") openScene(due, null);
+}, { immediate: true });
+
 function goBack() {
+  if (storyScene.value) {
+    if (!sceneEl.value?.goBack()) closeScene();
+    return true;
+  }
   if (festivalEl.value?.goBack()) return true;
   if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;

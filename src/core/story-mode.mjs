@@ -3,6 +3,7 @@
 // 話を足すときは、STORY_EPISODESに1行足す(5章)。
 
 import { TEAM_SCENES, teamScene } from './team-story.mjs';
+import { PRO_YEAR_SCENES, proYearScene } from './pro-year-story.mjs';
 import { isSceneRead } from './novel-ui.mjs';
 
 export const STORY_PROGRESS_KEY = 'yacobihime:shogi-match:story:v1';
@@ -48,9 +49,10 @@ export function kanjiNumber(value) {
 }
 
 const sub = (scene, label, unlock) => {
-  const source = TEAM_SCENES[/** @type {keyof typeof TEAM_SCENES} */ (scene)];
+  const pro = scene in PRO_YEAR_SCENES;
+  const source = pro ? PRO_YEAR_SCENES[/** @type {keyof typeof PRO_YEAR_SCENES} */ (scene)] : TEAM_SCENES[/** @type {keyof typeof TEAM_SCENES} */ (scene)];
   return Object.freeze({
-    id: `team:${scene}`,
+    id: `${pro ? 'pro' : 'team'}:${scene}`,
     tab: 'sub',
     label,
     title: source.title,
@@ -81,6 +83,9 @@ export const STORY_EPISODES = Object.freeze([
   sub('pro-knockout', '団体戦（プロ）', '早指し団体戦の予選を抜けると読めます。'),
   sub('pro-champion', '団体戦（プロ）', '早指し団体戦で優勝すると読めます。'),
   sub('pro-end', '団体戦（プロ）', '早指し団体戦を最後まで戦うと読めます。'),
+  sub('pro-debut', '棋士の1年', '棋士の1年でデビューすると読めます。'),
+  sub('pro-hanane', '棋士の1年', '棋士の1年で、羽音と公式戦で当たると読めます。'),
+  sub('pro-title-eve', '棋士の1年', '棋士の1年で、タイトル戦に出ると読めます。'),
 ]);
 
 /** 目録の話(idから)。 */
@@ -174,6 +179,7 @@ export function syncStoryUnlocks(progress, { read = null, teamCareer = null, at 
 /** 話をノベルの場面の形にする(いまは団体戦の台本)。読めない話はnull。 */
 export function storyScene(episode, playerName = '', momokaCall = '') {
   if (!episode?.scene) return null;
+  if (episode.scene in PRO_YEAR_SCENES) return proYearScene(episode.scene, { playerName, momokaCall });
   return teamScene(episode.scene, playerName, momokaCall);
 }
 

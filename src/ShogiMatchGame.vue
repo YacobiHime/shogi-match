@@ -8058,6 +8058,11 @@ function proYearLife(action: { kind: string; [key: string]: unknown }) {
     setProYear(recordProYearFestivalEvent(state, action.id as "simul" | "talk" | "kigou", (action.result ?? {}) as any).state);
   } else if (action.kind === "festival-finish") {
     setProYear(finishProYearFestival(state).state);
+  } else if (action.kind === "scene" && typeof action.key === "string") {
+    // 物語の場面を見た(棋士の1年の12章)。見た印を残し、物語のサブに開く。
+    const seen: string[] = Array.isArray(state.scenes) ? state.scenes : [];
+    if (!seen.includes(action.key)) setProYear({ ...state, scenes: [...seen, action.key] });
+    unlockStorySceneLater(action.key.split(":")[0]);
   }
 }
 /** 年度のまとめから「次の年度へ」。 */
