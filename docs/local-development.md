@@ -57,6 +57,17 @@ npm run opening-editor
 
 開発サーバーはWASMエンジンのpthread動作に必要なCOOP/COEPヘッダーを返します。Workerエンジン疎通確認では、結果が`ok: true`かつ`crossOriginIsolated: true`になり、表示されるWorker URLが`blob:`ではなく`http:`または`https:`であることを確認してください。
 
+## ノベルの台本の試し読みを起動する
+
+```sh
+npm run novel-editor
+```
+
+- 試し読みのページ: <http://127.0.0.1:5173/novel-editor.html>
+- 左に台本を書き、「再生」で本物の場面の画面で読めます。右に検査の結果と演出の早見表が出ます。
+- 台本はファイルに保存しません。「コピー」で写して`src/story/scenes/<id>.md`に貼ります。
+- 書き方は`docs/novel-authoring-guide.md`。コマンドで検査するときは`npm run novel:check`（ファイルを指定してもよい）。
+
 ## 既存の定跡を編集する
 
 1. 「既存データ」から戦法または囲いを選びます。

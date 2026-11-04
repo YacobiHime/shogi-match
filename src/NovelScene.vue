@@ -9,8 +9,7 @@
   <div
     ref="root"
     class="novel"
-    :class="[`novel--${scene.background}`, { 'novel--hidden': hidden, 'novel--choosing': choosing }]"
-    :style="{ background: novelBackground(scene.background) }"
+    :class="[`novel--${scene.background}`, { 'novel--hidden': hidden, 'novel--choosing': choosing, 'novel--quake': screenFx === 'quake' }]"
     role="dialog"
     aria-modal="true"
     :aria-label="scene.title"
@@ -26,29 +25,52 @@
     <p class="novel__place" :class="{ 'novel__place--intro': placeIntro }" aria-hidden="true" data-novel-place>
       <span class="novel__place-text">{{ scene.title }}</span>
     </p>
-    <!-- 立ち絵は上半身を映す: 頭から腰(絵の高さの47%)を窓の上に出し、下は窓の後ろへ(7章) -->
-    <div class="novel__stage" :class="{ 'novel__stage--pair': castView.length > 1 }" :style="{ '--aspect': stageAspect }" aria-hidden="true">
-      <img
-        v-for="(person, at) in castView"
-        :key="person.who"
-        class="novel__person"
-        :class="[
-          `novel__person--${castView.length === 1 ? 'center' : at === 0 ? 'left' : 'right'}`,
-          {
-            'novel__person--active': person.who === line.who,
-            'novel__person--quiet': line.who !== 'narration' && person.who !== line.who,
-            'novel__person--hop': person.who === hopWho,
-            'novel__person--enter': entering,
-          },
-        ]"
-        :style="{ '--scale': person.scale }"
-        :src="person.src"
-        :srcset="person.srcset"
-        sizes="(orientation: portrait) 70vw, 40vw"
-        alt=""
-        draggable="false"
+    <!--
+      背景と立ち絵の層(12章)。背景は重ねて替わり、色(回想・暗く)は層ぜんたいに掛ける。揺れもこの層だけ(文は揺らさない。G:3-2)。
+      立ち絵は上半身を映す: 頭から腰(絵の高さの47%)を窓の上に出し、下は窓の後ろへ(7章)。
+    -->
+    <div class="novel__world" :class="`novel__world--${stage.tone}`" aria-hidden="true">
+      <Transition name="novel-bg">
+        <div :key="stage.bg" class="novel__bg" :style="{ background: novelBackground(stage.bg) }" />
+      </Transition>
+      <div
+        class="novel__stage"
+        :class="{ 'novel__stage--pair': castView.length === 2, 'novel__stage--trio': castView.length >= 3 }"
+        :style="{ '--aspect': stageAspect }"
       >
+        <TransitionGroup name="novel-actor">
+          <div
+            v-for="person in castView"
+            :key="person.who"
+            class="novel__person"
+            :class="[
+              `novel__person--${person.seat}`,
+              {
+                'novel__person--active': person.who === line.who,
+                'novel__person--quiet': line.who !== 'narration' && person.who !== line.who,
+                'novel__person--hop': person.who === hopWho,
+                'novel__person--enter': entering,
+              },
+            ]"
+            :style="{ '--scale': person.scale, '--ratio': person.ratio, '--from-x': person.fromX }"
+            :data-novel-person="person.who"
+          >
+            <img
+              class="novel__figure"
+              :class="actNow[person.who] ? `novel__figure--${actNow[person.who]}` : ''"
+              :src="person.src"
+              :srcset="person.srcset"
+              sizes="(orientation: portrait) 70vw, 40vw"
+              alt=""
+              draggable="false"
+            >
+            <span v-if="emoteNow[person.who]" :key="`${person.who}-${emoteKey}`" class="novel__emote" :class="`novel__emote--${emoteNow[person.who]}`" data-novel-emote>{{ emoteGlyph(emoteNow[person.who]) }}</span>
+          </div>
+        </TransitionGroup>
+      </div>
     </div>
+    <!-- 画面の効果(光る・暗転)。押すのは止めない(pointer-events: none) -->
+    <div v-if="screenFx === 'flash' || screenFx === 'blackout'" :key="fxKey" class="novel__fx" :class="`novel__fx--${screenFx}`" aria-hidden="true" data-novel-fx />
     <div v-if="choosing && !hidden" class="novel__choices" role="group" :aria-label="TEXT.choicesLabel" data-novel-choices @click.stop>
       <button
         v-for="(choice, at) in line.choices"
@@ -65,7 +87,7 @@
       <!-- 名前の札: 駒の印と名前。地の文でも行を取っておき、窓の高さを変えない -->
       <p class="novel__name" :class="[`novel__name--${line.who}`, { 'novel__name--empty': !line.name }]" :aria-hidden="!line.name"><span class="novel__name-piece" aria-hidden="true" />{{ line.name || "　" }}</p>
       <!-- まだ出していない字も透明で先に置き、折り返しを最初から決める(文が動かない。4-1) -->
-      <p class="novel__text" :class="{ 'novel__text--narration': line.who === 'narration' }" aria-hidden="true"><span>{{ shown }}</span><span class="novel__rest">{{ rest }}</span></p>
+      <p class="novel__text" :class="[{ 'novel__text--narration': line.who === 'narration' }, lineStyle.size ? `novel__text--${lineStyle.size}` : '']" aria-hidden="true"><span>{{ shown }}</span><span class="novel__rest">{{ rest }}</span></p>
       <p class="novel__sr" aria-live="polite">{{ liveText }}</p>
       <div class="novel__footer">
         <span v-if="autoWaiting" :key="autoKey" class="novel__auto-line" :style="{ animationDuration: `${autoMs}ms` }" aria-hidden="true" />
@@ -168,6 +190,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { portraitAspect, portraitScale, portraitUrl } from "./core/team-story.mjs";
+import { EMOTE_MS, NOVEL_EMOTES, NOVEL_SCREEN, lineDirection, lineMotionMs, lineStartDelayMs, speedFactor, stageAt } from "./core/novel-direction.mjs";
+import { sfxPlan } from "./core/novel-sound.mjs";
 import {
   AUTO_SPEEDS,
   FAST_FORWARD_MS,
@@ -192,11 +216,13 @@ import { VOICE_STYLES, blipPlan, clickPlan } from "./core/novel-sound.mjs";
 import { createNovelAudio } from "./novel-audio";
 
 type SceneChoice = { label: string; value?: string; reply?: SceneLine[] };
-type SceneLine = { who: string; face: string; name: string; text: string; choices?: SceneChoice[] };
-type Scene = { id: string; title: string; summary?: string; background: string; cast: string[]; lines: SceneLine[] };
+/** 行。演出の欄(act・emote・enter・bgなど)はcore/novel-direction.mjsのDIRECTION_KEYS(12章)。 */
+type SceneLine = { who: string; face: string; name: string; text: string; choices?: SceneChoice[]; [direction: string]: unknown };
+type Scene = { id: string; title: string; summary?: string; background: string; cast: string[]; start?: string[]; lines: SceneLine[] };
 type NovelSettings = ReturnType<typeof loadNovelSettings>;
 
-const props = defineProps<{ scene: Scene; assetBaseUrl: string }>();
+/** startAtは、はじめに見せる行の番号(試し読みのページの「この行から」)。 */
+const props = defineProps<{ scene: Scene; assetBaseUrl: string; startAt?: number }>();
 const emit = defineEmits<{ done: []; choose: [payload: { line: number; choice: number; value: string }] }>();
 
 /** 話す人の色。ログ(暗い地)は淡い色、名前の札の駒の印と帯(明るい地)は濃い色(4-1・7章)。 */
@@ -221,7 +247,7 @@ const root = ref<HTMLElement | null>(null);
 const choiceButtons = ref<HTMLButtonElement[]>([]);
 const sheetClose = ref<HTMLButtonElement | null>(null);
 const logList = ref<HTMLElement | null>(null);
-const index = ref(0);
+const index = ref(Math.max(0, Math.min(props.startAt ?? 0, props.scene.lines.length - 1)));
 const count = ref(0);
 /** いま見せている行(選んだ答えの返しを差し込む)。 */
 const lines = ref<SceneLine[]>([...props.scene.lines]);
@@ -249,6 +275,15 @@ let fastTimer: ReturnType<typeof setInterval> | null = null;
 let placeTimer: ReturnType<typeof setTimeout> | null = null;
 let hopTimer: ReturnType<typeof setTimeout> | null = null;
 let enterTimer: ReturnType<typeof setTimeout> | null = null;
+let waitTimer: ReturnType<typeof setTimeout> | null = null;
+let motionTimer: ReturnType<typeof setTimeout> | null = null;
+let fxTimer: ReturnType<typeof setTimeout> | null = null;
+/** いまの行の演出(12章): 人ごとの動き・漫符、画面の効果。 */
+const actNow = ref<Record<string, string>>({});
+const emoteNow = ref<Record<string, string>>({});
+const emoteKey = ref(0);
+const screenFx = ref("");
+const fxKey = ref(0);
 let lastWheel = 0;
 /** 文字の音とクリックの音(11章)。音はその場で作る。 */
 const audio = createNovelAudio();
@@ -286,17 +321,27 @@ const backlog = computed(() => backlogEntries(lines.value, index.value, complete
 /** オートで次の行を待っているところ(待ちの線を出す)。 */
 const autoWaiting = computed(() => autoOn.value && complete.value && !choosing.value && !overlayOpen.value && !hidden.value);
 
-/** 登場する人ごとの、いまの表情の立ち絵(最後に話した表情を残す)。 */
-const castView = computed(() => props.scene.cast.map((who) => {
-  const spoken = lines.value.slice(0, index.value + 1).filter((entry) => entry.who === who).at(-1);
-  const face = spoken?.face ?? "neutral";
+/** いまの行の舞台(出ている人・席・表情・背景・色。core/novel-direction.mjsのstageAt)。 */
+const stage = computed(() => stageAt(props.scene, lines.value, index.value));
+/** その行の文の見せ方(大きさ)。 */
+const lineStyle = computed(() => lineDirection(line.value));
+/** 登場の向きごとの、入ってくる前の横のずれ。 */
+const FROM_X: Record<string, string> = { left: "-40cqw", right: "40cqw", fade: "0px" };
+
+/** 出ている人ごとの立ち絵(席・表情・大きさ)。 */
+const castView = computed(() => stage.value.onStage.map((who) => {
+  const face = stage.value.faces[who] ?? "neutral";
   return {
     who,
+    seat: stage.value.seats[who] ?? "center",
     scale: portraitScale(who, props.scene.cast),
+    ratio: portraitAspect(who),
+    fromX: FROM_X[stage.value.entering[who] ?? "fade"] ?? "0px",
     src: portraitUrl(props.assetBaseUrl, who, face),
     srcset: `${portraitUrl(props.assetBaseUrl, who, face, { small: true })} 320w, ${portraitUrl(props.assetBaseUrl, who, face)} 800w`,
   };
 }));
+const emoteGlyph = (id: string) => NOVEL_EMOTES[id as keyof typeof NOVEL_EMOTES]?.glyph ?? "";
 
 /** 立ち絵の大きさをそろえる幅÷高さ(出ている人のうち、いちばん横に広い絵。みんな同じ縮尺にする)。 */
 const stageAspect = computed(() => Math.max(...props.scene.cast.map((who) => portraitAspect(who)), 0.3));
@@ -306,23 +351,64 @@ const reducedMotion = () => typeof window !== "undefined" && Boolean(window.matc
 function stopTyping() {
   if (typingTimer) clearInterval(typingTimer);
   typingTimer = null;
+  if (waitTimer) clearTimeout(waitTimer);
+  waitTimer = null;
 }
 
 function startTyping() {
   stopTyping();
   liveText.value = line.value.text;
   const total = chars.value.length;
-  const delay = charDelayMs(settings.value);
+  const delay = Math.round(charDelayMs(settings.value) * speedFactor(line.value));
   if (reducedMotion() || delay <= 0) {
     count.value = total;
     return;
   }
   count.value = 0;
-  typingTimer = setInterval(() => {
-    count.value += 1;
-    blipChar(chars.value[count.value - 1]);
-    if (count.value >= total) stopTyping();
-  }, delay);
+  const run = () => {
+    waitTimer = null;
+    typingTimer = setInterval(() => {
+      count.value += 1;
+      blipChar(chars.value[count.value - 1]);
+      if (count.value >= total) stopTyping();
+    }, delay);
+  };
+  // 間(wait)と暗転の明けを待ってから出す。押せば待たずに全部出る(revealAll)。早送りでは待たない。
+  const wait = fastTimer ? 0 : lineStartDelayMs(line.value);
+  if (wait > 0) waitTimer = setTimeout(run, wait);
+  else run();
+}
+
+/** 行の演出を始める(動き・漫符・画面・効果音)。見た目だけで、押して進むのは止めない(G:3-2)。 */
+async function playDirection() {
+  const dir = lineDirection(line.value);
+  if (motionTimer) clearTimeout(motionTimer);
+  if (fxTimer) clearTimeout(fxTimer);
+  actNow.value = {};
+  emoteNow.value = {};
+  screenFx.value = "";
+  if (!fastTimer) for (const id of dir.sfx) {
+    const plan = sfxPlan(id);
+    if (plan) audio.sfx(plan);
+  }
+  // 同じ動きが続いても、もう一度動かす(一度外して描き直してから付ける)。
+  await nextTick();
+  void root.value?.offsetWidth;
+  const acts: Record<string, string> = {};
+  for (const item of dir.acts) if (item.who && item.act) acts[item.who] = item.act;
+  const emotes: Record<string, string> = {};
+  for (const item of dir.emotes) if (item.who && item.emote) emotes[item.who] = item.emote;
+  if (!reducedMotion()) actNow.value = acts;
+  emoteNow.value = emotes;
+  emoteKey.value += 1;
+  const motionMs = Math.max(lineMotionMs(line.value), Object.keys(emotes).length ? EMOTE_MS : 0);
+  if (motionMs > 0) motionTimer = setTimeout(() => { actNow.value = {}; emoteNow.value = {}; }, motionMs + 40);
+  if (dir.screen && dir.screen in NOVEL_SCREEN) {
+    screenFx.value = dir.screen;
+    fxKey.value += 1;
+    const ms = NOVEL_SCREEN[dir.screen as keyof typeof NOVEL_SCREEN].ms;
+    fxTimer = setTimeout(() => { screenFx.value = ""; }, reducedMotion() ? Math.min(ms, 300) : ms);
+  }
 }
 
 function revealAll() {
@@ -567,8 +653,11 @@ function showPlaceCard() {
 // 行が変わったら文字送りを始め、表情が変わった人を小さく跳ねさせる(4-3)。
 watch(index, (at) => {
   startTyping();
+  void playDirection();
   if (hopTimer) clearTimeout(hopTimer);
-  hopWho.value = !reducedMotion() && faceChangedAt(lines.value, at) ? line.value.who : "";
+  // 台本で動きを書いた人は、表情の跳ねを重ねない。
+  const acted = lineDirection(line.value).acts.some((item) => item.who === line.value.who);
+  hopWho.value = !reducedMotion() && !acted && faceChangedAt(lines.value, at) ? line.value.who : "";
   if (hopWho.value) hopTimer = setTimeout(() => { hopWho.value = ""; }, HOP_MS);
 });
 // 文が出きったら、読んだ印を付ける(Ctrlの早送りと「飛ばす」で使う)。文字の速さが「すぐ」でも付くよう、行の変わり目も見る。
@@ -596,6 +685,7 @@ watch(() => props.scene.id, () => {
   picks.value = {};
   index.value = 0;
   startTyping();
+  void playDirection();
   showPlaceCard();
 });
 // 答えのボタンが出たら、最初のボタンへ(キーボードでも選べる)。
@@ -605,6 +695,7 @@ watch(choosing, (open) => {
 
 onMounted(() => {
   startTyping();
+  void playDirection();
   showPlaceCard();
   root.value?.focus();
 });
@@ -616,6 +707,8 @@ onBeforeUnmount(() => {
   if (placeTimer) clearTimeout(placeTimer);
   if (hopTimer) clearTimeout(hopTimer);
   if (enterTimer) clearTimeout(enterTimer);
+  if (motionTimer) clearTimeout(motionTimer);
+  if (fxTimer) clearTimeout(fxTimer);
 });
 
 defineExpose({ finish, goBack });
@@ -679,6 +772,20 @@ defineExpose({ finish, goBack });
  * 「画面の高さ÷映す割合(頭から腰の下まで、絵の48%)」と「1人の幅÷絵の縦横比」の小さいほう。腰から下は文の窓の後ろへ沈む。
  * 縦横比は出ている人でそろえ、みんな同じ縮尺にする。背の低い人は足元をそろえて縮める(--scale。8章)。
  */
+/* 背景と立ち絵の層(12章)。背景は重ねて替わり(0.5秒)、色(回想・暗く)は層ぜんたいに掛ける */
+.novel__world {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  transition: filter 400ms ease;
+}
+.novel__world--memory { filter: sepia(0.75) saturate(0.8) brightness(0.95); }
+.novel__world--dim { filter: brightness(0.62) saturate(0.85); }
+.novel__bg { position: absolute; inset: 0; }
+.novel-bg-enter-active, .novel-bg-leave-active { transition: opacity 500ms ease; }
+.novel-bg-enter-from, .novel-bg-leave-to { opacity: 0; }
+.novel-bg-leave-active { z-index: 0; }
+.novel--quake .novel__world { animation: novel-quake 400ms ease-out; }
 .novel__stage {
   --bust: 0.48;
   --headroom: 6cqh;
@@ -690,25 +797,80 @@ defineExpose({ finish, goBack });
   transition: filter var(--novel-shift-ms) ease;
 }
 .novel__stage--pair { --slot: 64cqw; }
+.novel__stage--trio { --slot: 46cqw; }
 .novel--choosing .novel__stage { filter: brightness(0.72); }
 .novel__person {
   --h: min(calc((100cqh - var(--headroom)) / var(--bust)), calc(var(--slot) / var(--aspect, 0.344)));
   position: absolute;
   top: calc(var(--headroom) + var(--h) * (1 - var(--scale, 1)));
   height: calc(var(--h) * var(--scale, 1));
-  width: auto;
+  /* 幅は絵の縦横比から決める(人ごとに違う。12章で立ち絵を包みにした) */
+  width: calc(var(--h) * var(--scale, 1) * var(--ratio, 0.344));
+  translate: -50% 0;
+  transition: filter var(--novel-shift-ms) ease, transform var(--novel-shift-ms) ease, left 320ms ease, translate 320ms ease-out, opacity 320ms ease;
+}
+.novel__figure {
+  display: block;
+  width: 100%;
+  height: 100%;
   max-width: none;
   object-fit: contain;
-  translate: -50% 0;
-  transition: filter var(--novel-shift-ms) ease, transform var(--novel-shift-ms) ease;
+  transform-origin: 50% 46%;
 }
+/* 登場(横から・ふわっと)と退場(薄くなって消える)。12-2 */
+.novel-actor-enter-from { opacity: 0; translate: calc(-50% + var(--from-x, 0px)) 3%; }
+.novel-actor-leave-to { opacity: 0; translate: -50% 2%; }
 .novel__person--center { left: 50%; }
 .novel__person--left { left: 28%; }
 .novel__person--right { left: 72%; }
+.novel__stage--trio .novel__person--left { left: 20%; }
+.novel__stage--trio .novel__person--right { left: 80%; }
 .novel__person--enter { animation: novel-person-in var(--novel-enter-ms) ease-out; }
 .novel__person--quiet { filter: brightness(0.84) saturate(0.9); transform: translateY(1%); }
 .novel__person--active { filter: none; transform: translateY(-0.6%); }
 .novel__person--hop { animation: novel-hop 240ms ease-out; }
+
+/* キャラの動き(core/novel-direction.mjsのNOVEL_ACTS。長さはmsと同じ)。絵だけを動かし、席は動かさない */
+.novel__figure--hop { animation: novel-act-hop 260ms ease-out; }
+.novel__figure--jump { animation: novel-act-jump 620ms ease-out; }
+.novel__figure--nod { animation: novel-act-nod 420ms ease-in-out; }
+.novel__figure--shake { animation: novel-act-shake 480ms ease-in-out; }
+.novel__figure--tilt { animation: novel-act-tilt 600ms ease-in-out; }
+.novel__figure--bow { animation: novel-act-bow 700ms ease-in-out; }
+.novel__figure--shiver { animation: novel-act-shiver 500ms linear; }
+.novel__figure--lean { animation: novel-act-lean 420ms ease-out; }
+.novel__figure--recoil { animation: novel-act-recoil 360ms ease-out; }
+.novel__figure--sink { animation: novel-act-sink 700ms ease-in-out; }
+
+/* 漫符: 頭の上にぽんと出て消える(1.1秒) */
+.novel__emote {
+  position: absolute;
+  top: calc(var(--h) * 0.015);
+  left: 68%;
+  display: grid;
+  place-items: center;
+  min-width: 1.7em;
+  height: 1.7em;
+  padding: 0 0.2em;
+  border: 0.12em solid #3b2a1a;
+  border-radius: 999px;
+  background: #fffcf4;
+  color: #3b2a1a;
+  font-size: clamp(1.1rem, 4.2cqh, 2.4rem);
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 0.15em 0.4em rgba(0, 0, 0, 0.3);
+  animation: novel-emote 1100ms ease-out both;
+}
+.novel__emote--surprise, .novel__emote--anger { color: #c4402a; }
+.novel__emote--heart { color: #d9577f; }
+.novel__emote--question, .novel__emote--idea { color: #34488f; }
+.novel__emote--note, .novel__emote--sparkle { color: #2e7d4f; }
+
+/* 画面の効果: 光る・暗転(揺れはnovel__world)。押すのは止めない */
+.novel__fx { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.novel__fx--flash { background: #fffdf6; animation: novel-flash 220ms ease-out both; }
+.novel__fx--blackout { background: #05070a; animation: novel-blackout 900ms ease-in-out both; }
 
 .novel__choices {
   /* 選択肢は立ち絵の段の下のほうに重ねる(立ち絵の段を縮めない) */
@@ -838,6 +1000,9 @@ defineExpose({ finish, goBack });
   text-shadow: 0 0 2px rgba(255, 250, 240, 0.95), 0 0 6px rgba(255, 246, 228, 0.9), 0 0 12px rgba(255, 240, 214, 0.7);
 }
 .novel__rest { color: transparent; text-shadow: none; }
+/* 文の大きさ(その行だけ)。行の高さは変えず、窓の高さを動かさない(4-1) */
+.novel__text--big > span { font-size: 1.3em; line-height: 1; }
+.novel__text--small > span { font-size: 0.82em; line-height: 1; }
 .novel__text--narration { color: #5b4630; }
 .novel__sr {
   position: absolute;
@@ -1049,6 +1214,33 @@ defineExpose({ finish, goBack });
   40% { transform: translateY(-2.2%); }
   100% { transform: translateY(-0.6%); }
 }
+@keyframes novel-act-hop { 0%, 100% { transform: none; } 45% { transform: translateY(-3%); } }
+@keyframes novel-act-jump { 0%, 50%, 100% { transform: none; } 22%, 72% { transform: translateY(-4.5%); } }
+@keyframes novel-act-nod { 0%, 50%, 100% { transform: none; } 25%, 75% { transform: translateY(1.4%); } }
+@keyframes novel-act-shake { 0%, 100% { transform: none; } 20% { transform: translateX(-2.5%); } 45% { transform: translateX(2.5%); } 70% { transform: translateX(-1.5%); } 88% { transform: translateX(0.8%); } }
+@keyframes novel-act-tilt { 0%, 100% { transform: none; } 30%, 72% { transform: rotate(-4deg); } }
+@keyframes novel-act-bow { 0%, 100% { transform: none; } 35%, 60% { transform: translateY(3.5%) scaleY(0.97); } }
+@keyframes novel-act-shiver { 0%, 100% { transform: none; } 10%, 30%, 50%, 70%, 90% { transform: translateX(-0.7%); } 20%, 40%, 60%, 80% { transform: translateX(0.7%); } }
+@keyframes novel-act-lean { 0%, 100% { transform: none; } 40%, 70% { transform: translateY(-1%) scale(1.045); } }
+@keyframes novel-act-recoil { 0%, 100% { transform: none; } 30% { transform: translateY(-1.5%) rotate(3deg) scale(0.97); } }
+@keyframes novel-act-sink { 0%, 100% { transform: none; filter: none; } 35%, 70% { transform: translateY(3%); filter: brightness(0.82); } }
+@keyframes novel-emote {
+  0% { opacity: 0; transform: translateY(0.4em) scale(0.4); }
+  14% { opacity: 1; transform: translateY(-0.1em) scale(1.15); }
+  24% { transform: none; }
+  80% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-0.3em); }
+}
+@keyframes novel-flash { from { opacity: 0.85; } to { opacity: 0; } }
+@keyframes novel-blackout { 0% { opacity: 0; } 40%, 55% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes novel-quake {
+  0%, 100% { transform: none; }
+  12% { transform: translate(-1.2%, 0.6%); }
+  26% { transform: translate(1%, -0.5%); }
+  42% { transform: translate(-0.7%, 0.4%); }
+  60% { transform: translate(0.4%, -0.2%); }
+  80% { transform: translate(-0.2%, 0); }
+}
 @keyframes novel-choice-in {
   from { opacity: 0; transform: translateY(0.4em); }
   to { opacity: 1; transform: none; }
@@ -1075,6 +1267,8 @@ defineExpose({ finish, goBack });
   .novel__stage--pair { --slot: 86cqw; }
   .novel__person--left { left: 25%; }
   .novel__person--right { left: 75%; }
+  /* 縦の画面は絵が画面の端からはみ出すので、漫符を頭の内側に寄せる(右の人の漫符が切れないように) */
+  .novel__emote { left: 40%; }
 }
 /* 横向きの低い画面は、文を2行分にし、窓を低くする */
 @media (orientation: landscape) and (max-height: 500px) {
@@ -1091,6 +1285,12 @@ defineExpose({ finish, goBack });
 }
 @media (prefers-reduced-motion: reduce) {
   .novel__person, .novel__stage, .novel__place { transition: none; animation: none; }
+  /* 動き・揺れ・光りはなくし、漫符と色の変化だけ残す(G:3-2)。暗転は短い明るさの変化にする */
+  .novel__figure, .novel--quake .novel__world { animation: none; }
+  .novel__emote { animation: novel-fade 200ms ease-out both; }
+  .novel__fx--flash { animation: none; opacity: 0; }
+  .novel__fx--blackout { animation: novel-flash 300ms ease-out both; }
+  .novel-bg-enter-active, .novel-bg-leave-active, .novel__world { transition: none; }
   .novel__person--quiet, .novel__person--active { transform: none; }
   .novel__next--shown, .novel .novel__choice, .novel__sheet, .novel__hidden-hint { animation: none; }
   .novel__auto-line { animation-name: none; transform: scaleX(1); opacity: 0.5; }

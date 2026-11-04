@@ -25,6 +25,8 @@
     "build:hosting": "npm run build && node scripts/build-hosting.mjs",
     "import:opening-library": "node scripts/import-opening-library.mjs",
     "opening-editor": "vite --host 127.0.0.1 --open /opening-editor.html",
+    "novel-editor": "vite --host 127.0.0.1 --open /novel-editor.html",
+    "novel:check": "node scripts/novel-check.mjs",
     "optimize:images": "node scripts/optimize-images.mjs",
     "deploy": "npm run build:hosting && npx firebase-tools deploy --only hosting,firestore:rules",
     "test": "vitest run",

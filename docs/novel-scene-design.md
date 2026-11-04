@@ -379,6 +379,20 @@ summary: 4月1日、プロ棋士になった朝。……
 | 検査の道具 | `scripts/novel-check.mjs` |
 | 書き方 | `docs/novel-authoring-guide.md` |
 
+### 12-8. 実装（2026-11-04、実装・自動テスト済み）
+
+- 処理：`src/core/novel-direction.mjs`（人物`NOVEL_CHARACTERS`・表情の呼び名`FACE_LABELS`・動き`NOVEL_ACTS`・漫符`NOVEL_EMOTES`・画面`NOVEL_SCREEN`・色`NOVEL_TONES`・背景の呼び名`BACKGROUND_LABELS`・文`NOVEL_TEXT_STYLES`、行の演出`lineDirection`、舞台`stageAt`・`initialStage`・`stageSlots`、文の待ち`lineStartDelayMs`・速さ`speedFactor`、差し込み`fillScene`、検査`checkScene`）、`src/core/novel-script.mjs`（`parseNovelScript`・`formatProblems`）、`src/core/novel-library.mjs`（`librarySceneIds`・`libraryScene`）、効果音の数字は`novel-sound.mjs`の`SFX`、背景4つは`novel-ui.mjs`の`NOVEL_BACKGROUND_CSS`。
+- 退場は「その行を言い終えてから」にした（「またね！ [exit]」と書ける。登場はその行のはじめ）。castにいて最初の出来事が登場の人は、はじめは出ていない。
+- 画面：`src/NovelScene.vue`に、背景と立ち絵の層`novel__world`（背景は重ねて替わる・色・揺れ）、立ち絵を包む`novel__person`（席・登場と退場の`TransitionGroup`）と絵`novel__figure`（動き`novel__figure--<id>`）、漫符`novel__emote`、画面の効果`novel__fx`。`startAt`で途中の行から始められる。縦の画面では漫符を頭の内側に寄せた（右の人の漫符が画面の端で切れたため）。文の大きさは行の高さを変えずに字だけ大きくする（窓の高さを動かさない。4-1）。効果音は`novel-audio.ts`の`sfx`。
+- 組み込みの場面：`team-story.mjs`・`pro-year-story.mjs`の`line()`に4つめの演出を足し、`teamScene`・`proYearScene`は行をそのまま写す。誘いの百花の「前に出る」、全国大会の百花の「ぶるぶる」と汗、優勝の「大喜び」ときらきら、デビューの日の百花のぴょん、初手合の羽音のおじぎと駒音、前夜の終わりの暗く、などを足した。
+- 物語：`story-mode.mjs`の`episodeState`・`mainEpisodeOpen`。メインの話は台本があれば読め、第二話からは前の話を読むと開く。いまのメインはまだ準備中のまま。
+- 道具：`scripts/novel-check.mjs`（`npm run novel:check`）、試し読みのページ`novel-editor.html`・`src/novel-editor/`（`npm run novel-editor`。下書きはこのページだけの`novel-editor-draft`に残し、ゲームの保存とは別）。
+- 見本の台本：`src/story/scenes/sample-direction.md`（全部の種類の演出を使う。物語の目録には載せない）。書いている途中で、検査が見本のまちがい（百花にない表情`smile`）を見つけた。
+- 確かめたこと：
+  - 自動テスト：`npm test`（197ファイル・2549件）、`npm run typecheck`、`npm run build`、`git diff --check`、`npm run novel:check`（まちがい・注意0件。まちがいを入れた台本で終わりのコードが1になる）。
+  - ブラウザ（ヘッドレスChrome）：試し読みのページで見本の台本を390×844・844×390・1366×768・1920×1080で最後まで読み、各行で動き・漫符・揺れ・回想の色・暗転と背景替え・登場・退場が出て、エラーがなく、横にはみ出さないことを写真で見た。組み込みの`dist/`で、物語のストーリー選択から団体戦の場面（優勝）を390×844・1366×768で開いて読めることを確かめた。
+- まだ確かめていないこと：実際に読んでの演出の手ざわり（動きの大きさ・長さの初期値）、効果音を耳で聞いての確かめ（作業環境に音を聞く手段がない）、動きを減らす設定での見え方（CSSだけ。ブラウザでは切り替えていない）、本物のスマホでの見え方（未確認）。
+
 ## 6. 後の候補
 
 - 場面の回想（やこびノートに、見た場面を並べて読み直せる「思い出」。D:5-1）。物語モードを作るときに。

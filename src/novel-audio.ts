@@ -6,10 +6,16 @@ import { loadSoundEnabled } from "./core/move-sound";
 
 type BlipPlan = { kind: "signal" | "type"; freq: number; ms: number; gain: number };
 type ClickPlan = { from: number; to: number; ms: number; gain: number };
+/** 台本の効果音(core/novel-sound.mjsのSFX。docs/novel-scene-design.mdの12-2)。 */
+type SfxPlan = {
+  tones?: readonly { type: OscillatorType; freq: number; to?: number; at: number; ms: number; gain: number }[];
+  noise?: readonly { at: number; ms: number; gain: number; filter: number }[];
+};
 
 export type NovelAudio = {
   blip: (plan: BlipPlan) => void;
   click: (plan: ClickPlan) => void;
+  sfx: (plan: SfxPlan) => void;
   close: () => void;
 };
 
@@ -121,6 +127,61 @@ export function createNovelAudio(): NovelAudio {
     }
   };
 
+  /** 効果音用の長めの雑音(0.5秒)。 */
+  let longNoise: AudioBuffer | null = null;
+  const longNoiseBuffer = (ctx: AudioContext) => {
+    if (longNoise && longNoise.sampleRate === ctx.sampleRate) return longNoise;
+    const length = Math.floor(ctx.sampleRate * 0.5);
+    longNoise = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = longNoise.getChannelData(0);
+    for (let i = 0; i < length; i += 1) data[i] = Math.random() * 2 - 1;
+    return longNoise;
+  };
+
+  /** 鳴り始めをずらした包み(立ち上がり4ms・指数で消える)。 */
+  const envelopeAt = (ctx: AudioContext, gain: number, atMs: number, ms: number) => {
+    const node = ctx.createGain();
+    const start = ctx.currentTime + atMs / 1000;
+    const end = start + ms / 1000;
+    node.gain.setValueAtTime(0.0001, ctx.currentTime);
+    node.gain.setValueAtTime(0.0001, start);
+    node.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), start + 0.004);
+    node.gain.exponentialRampToValueAtTime(0.0001, end);
+    node.connect(ctx.destination);
+    return { node, start, end };
+  };
+
+  const sfx = (plan: SfxPlan) => {
+    const ctx = ready();
+    if (!ctx) return;
+    try {
+      for (const tone of plan.tones ?? []) {
+        const { node, start, end } = envelopeAt(ctx, tone.gain, tone.at, tone.ms);
+        const osc = ctx.createOscillator();
+        osc.type = tone.type;
+        osc.frequency.setValueAtTime(tone.freq, start);
+        if (tone.to) osc.frequency.exponentialRampToValueAtTime(tone.to, end);
+        osc.connect(node);
+        osc.start(start);
+        osc.stop(end + 0.02);
+      }
+      for (const burst of plan.noise ?? []) {
+        const { node, start, end } = envelopeAt(ctx, burst.gain, burst.at, burst.ms);
+        const source = ctx.createBufferSource();
+        source.buffer = longNoiseBuffer(ctx);
+        const filter = ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(burst.filter, start);
+        source.connect(filter);
+        filter.connect(node);
+        source.start(start);
+        source.stop(end + 0.02);
+      }
+    } catch {
+      // 鳴らせなくても読むのは止めない。
+    }
+  };
+
   /** 閉じる。最後に押した音(「おわり」「戻る」)を切らないよう、少し待ってから閉じる。 */
   const close = () => {
     const ctx = context;
@@ -128,5 +189,5 @@ export function createNovelAudio(): NovelAudio {
     if (ctx) setTimeout(() => void ctx.close().catch(() => undefined), 300);
   };
 
-  return { blip, click, close };
+  return { blip, click, sfx, close };
 }
