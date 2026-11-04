@@ -390,7 +390,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import BrainGlance from "./brain/BrainGlance.vue";
 import BrainBoardMemory from "./brain/BrainBoardMemory.vue";
 import BrainMentalBoard from "./brain/BrainMentalBoard.vue";
@@ -877,12 +877,15 @@ let combo = 0;
 // 大きな画面では道場ぜんたいを拡大する(core/brain-zoom.mjs)。親の枠の大きさで決め、窓の大きさが変わったら測り直す。
 const rootEl = ref<HTMLElement | null>(null);
 let zoomObserver: ResizeObserver | null = null;
+/** メニューの画面（入口・部屋・棚・記録）は大きく拡大し、遊ぶ画面・宮殿・根拠は控えめに(core/brain-zoom.mjs)。 */
+const zoomKind = computed<"menu" | "play">(() => (["home", "room", "shelf", "records"].includes(view.value) ? "menu" : "play"));
 function applyZoom() {
   const root = rootEl.value;
   const parent = root?.parentElement;
   if (!root || !parent) return;
-  root.style.setProperty("--dojo-zoom", String(brainZoom(parent.clientWidth, parent.clientHeight)));
+  root.style.setProperty("--dojo-zoom", String(brainZoom(parent.clientWidth, parent.clientHeight, zoomKind.value)));
 }
+watch(zoomKind, () => applyZoom());
 onMounted(() => {
   moveSounds.preload();
   applyZoom();
@@ -1720,10 +1723,30 @@ defineExpose({ goBack });
   line-height: 1.6;
 }
 @media (min-width: 900px) {
-  .shogi-game .shogi-brain__room { grid-template-columns: minmax(0, 26rem) minmax(0, 28rem); justify-content: center; gap: 1.2rem; }
+  /* 広い画面: 左右の列を同じ幅・同じ高さにそろえ、ブロックの縦横をそろえる(15-2)。幅は64remまで使う。 */
+  .shogi-game .shogi-brain__room { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; width: min(100%, 64rem); margin: 0 auto; align-items: stretch; align-content: start; }
   .shogi-game .shogi-brain__room-main,
-  .shogi-game .shogi-brain__room-side { margin: 0; }
-  .shogi-game .shogi-brain__home { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.2rem; width: min(100%, 64rem); }
+  .shogi-game .shogi-brain__room-side { width: 100%; margin: 0; }
+  .shogi-game .shogi-brain__home { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; width: min(100%, 64rem); align-items: stretch; }
+  /* 左の列: 主役の札を余りの高さいっぱいに(右の列と下の端がそろう) */
+  .shogi-game .shogi-brain__room-main { grid-template-rows: 1fr auto; align-content: stretch; }
+  .shogi-game .shogi-brain__room-main > .brain-today { align-self: stretch; }
+  /* 右の列: 4つの種目の札は同じ大きさで余りを分け合い、2つのボタンは同じ高さで下の端に */
+  .shogi-game .shogi-brain__room-side:has(.brain-tiles) { grid-template-rows: auto 1fr auto; align-content: stretch; }
+  .shogi-game .shogi-brain__room-side .brain-tiles { grid-auto-rows: 1fr; }
+  .shogi-game .shogi-brain__room-side .brain-tile { height: 100%; align-content: center; }
+  /* 入口: 右の列は今週の帯と2つの扉。扉は余りの高さを使って同じ高さに */
+  .shogi-game .shogi-brain__home-main,
+  .shogi-game .shogi-brain__home-side { align-content: stretch; }
+  .shogi-game .shogi-brain__home-main { grid-template-rows: auto 1fr auto; }
+  .shogi-game .shogi-brain__home-main > .brain-today,
+  .shogi-game .shogi-brain__home-main > .brain-done { align-self: stretch; }
+  .shogi-game .shogi-brain__home-side { grid-template-rows: auto 1fr; }
+  .shogi-game .brain-doors { grid-auto-rows: 1fr; }
+  .shogi-game .brain-door { height: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; justify-items: center; align-content: center; row-gap: 0.35rem; text-align: center; }
+  .shogi-game .brain-door__icon { grid-row: auto; font-size: 2.6rem; }
+  .shogi-game .brain-door strong { font-size: 1.15rem; }
+  .shogi-game .brain-door small { font-size: 0.82rem; }
 }
 @media (orientation: landscape) and (max-height: 600px) {
   .shogi-game .shogi-brain__room { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.8rem; }

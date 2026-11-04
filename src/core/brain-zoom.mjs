@@ -14,13 +14,23 @@ export const ZOOM_MAX = 2.2;
 export const ZOOM_STEP = 0.05;
 
 /**
+ * 入口・部屋・棚・記録のような「メニューの画面」は、中身が低く余白が多いので、遊ぶ画面より大きく拡大する(15-2)。
+ * 種目をプレイ中・宮殿づくり・根拠のシートは、縦に長いので「遊ぶ画面」の基準のまま。
+ */
+export const MENU_BASE_WIDTH = 1080;
+export const MENU_BASE_HEIGHT = 540;
+
+/**
  * 画面の大きさ(CSSピクセル)から、道場の拡大率を出す。
  * @param {number} width
  * @param {number} height
+ * @param {'play' | 'menu'} [kind] 画面の種類。menuは入口・部屋・棚・記録。
  */
-export function brainZoom(width, height) {
+export function brainZoom(width, height, kind = 'play') {
   if (!(width >= ZOOM_MIN_WIDTH) || !(height > 0)) return 1;
-  const raw = Math.min(width / ZOOM_BASE_WIDTH, height / ZOOM_BASE_HEIGHT);
+  const baseWidth = kind === 'menu' ? MENU_BASE_WIDTH : ZOOM_BASE_WIDTH;
+  const baseHeight = kind === 'menu' ? MENU_BASE_HEIGHT : ZOOM_BASE_HEIGHT;
+  const raw = Math.min(width / baseWidth, height / baseHeight);
   const stepped = Math.floor(raw / ZOOM_STEP + 1e-9) * ZOOM_STEP;
   const zoom = Math.min(ZOOM_MAX, Math.max(1, stepped));
   return Math.round(zoom * 100) / 100;

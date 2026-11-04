@@ -21,4 +21,13 @@ describe('脳トレ道場の拡大率(brain-training-design.mdの15章)', () => 
     expect(brainZoom(0, 0)).toBe(1);
     expect(brainZoom(NaN, 1080)).toBe(1);
   });
+
+  it('メニューの画面（入口・部屋・棚・記録）は、遊ぶ画面より大きく拡大する。小さい画面は1のまま', () => {
+    expect(brainZoom(1920, 1080, 'menu')).toBe(1.75);
+    expect(brainZoom(1920, 1080, 'menu')).toBeGreaterThan(brainZoom(1920, 1080));
+    expect(brainZoom(1366, 768, 'menu')).toBe(1.25);
+    expect(brainZoom(1180, 820, 'menu')).toBe(1);
+    expect(brainZoom(390, 844, 'menu')).toBe(1);
+    expect(brainZoom(7680, 4320, 'menu')).toBe(ZOOM_MAX);
+  });
 });
