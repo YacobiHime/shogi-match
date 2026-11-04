@@ -86,3 +86,42 @@ export function clickPlan(kind) {
 export function normalizeVoiceStyle(value) {
   return typeof value === 'string' && Object.hasOwn(VOICE_STYLES, value) ? value : DEFAULT_VOICE_STYLE;
 }
+
+/**
+ * 台本の効果音(docs/novel-scene-design.mdの12章)。ファイルを使わず、短い音を数字で作る(src/novel-audio.tsのsfx)。
+ * tonesは音の高さ(freqからtoへ滑らせてもよい)、noiseは雑音(filterの高さで音色を変える)。atは鳴り始め、msは長さ(ミリ秒)。
+ * 立ち上がりを速く、余韻を短く(G:3-3)。大きさは文字の音より少し大きく、押した音より大きくしない程度。
+ * @type {Readonly<Record<string, { label: string, use: string, tones?: { type: OscillatorType, freq: number, to?: number, at: number, ms: number, gain: number }[], noise?: { at: number, ms: number, gain: number, filter: number }[] }>>}
+ */
+export const SFX = Object.freeze({
+  pop: Object.freeze({ label: 'ぽん', use: '何かが出てくる・軽い驚き', tones: [{ type: 'sine', freq: 620, to: 980, at: 0, ms: 110, gain: 0.16 }] }),
+  chime: Object.freeze({
+    label: 'きらり', use: 'ひらめき・うれしい知らせ',
+    tones: [
+      { type: 'triangle', freq: 1320, at: 0, ms: 240, gain: 0.1 },
+      { type: 'triangle', freq: 1760, at: 70, ms: 280, gain: 0.09 },
+      { type: 'triangle', freq: 2640, at: 140, ms: 360, gain: 0.07 },
+    ],
+  }),
+  impact: Object.freeze({
+    label: 'どん', use: '衝撃・決意',
+    tones: [{ type: 'sine', freq: 150, to: 55, at: 0, ms: 280, gain: 0.32 }],
+    noise: [{ at: 0, ms: 80, gain: 0.14, filter: 900 }],
+  }),
+  koma: Object.freeze({
+    label: '駒音', use: '駒を打つ・対局の始まり',
+    tones: [{ type: 'triangle', freq: 460, to: 300, at: 0, ms: 70, gain: 0.14 }],
+    noise: [{ at: 0, ms: 45, gain: 0.3, filter: 2600 }],
+  }),
+  door: Object.freeze({ label: '戸', use: '戸を開ける・人が来る', noise: [{ at: 0, ms: 380, gain: 0.1, filter: 700 }] }),
+  bell: Object.freeze({
+    label: 'チャイム', use: '学校のチャイム・時間の区切り',
+    tones: [
+      { type: 'sine', freq: 784, at: 0, ms: 520, gain: 0.12 },
+      { type: 'sine', freq: 659, at: 430, ms: 720, gain: 0.12 },
+    ],
+  }),
+});
+
+/** 効果音の作り方(知らない名前はnull)。 */
+export const sfxPlan = (id) => SFX[/** @type {keyof typeof SFX} */ (id)] ?? null;

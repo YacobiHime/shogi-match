@@ -47,6 +47,11 @@ export const NOVEL_BACKGROUND_CSS = Object.freeze({
   hall: 'repeating-linear-gradient(90deg, rgba(255, 252, 244, 0.18) 0 3px, transparent 3px 90px), linear-gradient(180deg, #e9dcc1 0%, #cdb990 55%, #8c9a5b 56%, #5f6d3c 100%)',
   venue: 'radial-gradient(ellipse at 50% 0%, rgba(255, 236, 190, 0.55), transparent 60%), linear-gradient(180deg, #3e4f6a 0%, #2b3850 55%, #5b4632 56%, #3a2c20 100%)',
   night: 'radial-gradient(circle at 80% 18%, rgba(255, 252, 230, 0.9) 0 2.2em, transparent 2.3em), linear-gradient(180deg, #0f1a2e 0%, #1c2b47 60%, #273652 100%)',
+  // 12章で足した背景(演出で場面の途中から替えられる)。
+  street: 'radial-gradient(circle at 22% 30%, rgba(255, 214, 150, 0.85) 0 2.6em, transparent 2.8em), linear-gradient(180deg, #f6b37a 0%, #e98a64 40%, #9c6a7a 62%, #5b4a58 63%, #3f3542 100%)',
+  room: 'repeating-linear-gradient(0deg, rgba(120, 90, 60, 0.12) 0 2px, transparent 2px 64px), linear-gradient(180deg, #f3e6cf 0%, #e6d2b0 58%, #b48a62 59%, #8a6646 100%)',
+  black: '#0b0d10',
+  white: 'linear-gradient(180deg, #ffffff 0%, #f2f2ee 100%)',
 });
 
 /** 背景のCSS(知らない背景は会場)。 */

@@ -21,7 +21,8 @@ export const NOVEL_BACKGROUNDS = Object.freeze(['classroom', 'hall', 'venue', 'n
 /** 1つの場面の行の上限(D:8-2)。 */
 export const NOVEL_MAX_LINES = 12;
 
-const line = (who, face, text) => Object.freeze({ who, face, text });
+/** 台本の1行。fxは演出(キャラの動き・漫符・画面の効果など。docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
+const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
 
 /**
  * 場面。{name}はプレイヤーの名前(地の文)、{you}は百花の呼び方(名前の札で選んだ呼び方。選ばなければ名前に「さん」)。
@@ -42,7 +43,7 @@ export const TEAM_SCENES = Object.freeze({
       line('momoka', 'neutral', '{you}がいてくれたら、すっごく心強いな！'),
       line('hanane', 'gentle', '団体戦は、3局のうち2つ勝てばいい。1人で全部勝たなくていいんだよ。'),
       line('hanane', 'neutral', '私が1つ取る。君と百花で、もう1つ。どう？'),
-      line('momoka', 'neutral', 'お願い！ 一緒に出よう！'),
+      line('momoka', 'neutral', 'お願い！ 一緒に出よう！', { act: 'lean' }),
       line('narration', 'neutral', 'こうして{name}は、燈ヶ丘（ともりがおか）高校将棋部の団体戦メンバーになった。'),
     ],
   }),
@@ -82,7 +83,7 @@ export const TEAM_SCENES = Object.freeze({
     lines: [
       line('momoka', 'neutral', '地区大会、抜けたよ！ 次は県大会だね！'),
       line('hanane', 'neutral', '県で優勝したら全国。負けたら、そこで終わり。'),
-      line('momoka', 'worried', 'う～ん……負けたら終わりかあ。緊張してきた……'),
+      line('momoka', 'worried', 'う～ん……負けたら終わりかあ。緊張してきた……', { emote: 'sweat' }),
       line('hanane', 'smile', 'でも、ここまで3人で来た。次も3人で取りに行こう。'),
     ],
   }),
@@ -94,7 +95,7 @@ export const TEAM_SCENES = Object.freeze({
     cast: ['hanane', 'momoka'],
     lines: [
       line('momoka', 'neutral', '県の代表として、全国大会だよ！'),
-      line('momoka', 'worried', 'うう、人がいっぱい……。緊張してきた！'),
+      line('momoka', 'worried', 'うう、人がいっぱい……。緊張してきた！', { act: 'shiver', emote: 'sweat' }),
       line('hanane', 'gentle', '大丈夫。いつもどおり指せばいいよ。'),
       line('hanane', 'neutral', '予選は3回勝てば抜けられる。2回負けたら終わり。数えるのは私がやるから。'),
     ],
@@ -106,7 +107,7 @@ export const TEAM_SCENES = Object.freeze({
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
-      line('momoka', 'neutral', 'やった、決勝トーナメントだよ！'),
+      line('momoka', 'neutral', 'やった、決勝トーナメントだよ！', { act: 'hop' }),
       line('hanane', 'smile', 'ここからは1回負けたら終わり。でも、やることは同じでしょ。'),
     ],
   }),
@@ -128,7 +129,7 @@ export const TEAM_SCENES = Object.freeze({
     background: 'venue',
     cast: ['hanane', 'momoka'],
     lines: [
-      line('momoka', 'neutral', '優勝……！ 私たち、日本一だよ！'),
+      line('momoka', 'neutral', '優勝……！ 私たち、日本一だよ！', { act: 'jump', emote: 'sparkle' }),
       line('hanane', 'gentle', '……うん。3人で取った優勝だね。'),
       line('hanane', 'smile', 'ありがとう。君がいてよかった。'),
     ],
@@ -201,9 +202,9 @@ export function teamScene(id, playerName = '', momokaCall = '') {
     summary: scene.summary,
     background: scene.background,
     cast: [...scene.cast],
+    // 演出の欄(act・emoteなど)もそのまま渡す。
     lines: scene.lines.map((entry) => ({
-      who: entry.who,
-      face: entry.face,
+      ...entry,
       name: NOVEL_PEOPLE[/** @type {keyof typeof NOVEL_PEOPLE} */ (entry.who)]?.name ?? '',
       text: sceneText(entry.text, playerName, momokaCall),
     })),

@@ -6,7 +6,8 @@
 import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
 import { HANANE } from './ryuo-story.mjs';
 
-const line = (who, face, text) => Object.freeze({ who, face, text });
+/** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
+const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
 
 /**
  * 場面。{name}はプレイヤーの名前、{you}は百花の呼び方、{title}はタイトルの名前(棋王など)、{holder}はタイトル保持者の名前、
@@ -23,7 +24,7 @@ export const PRO_YEAR_SCENES = Object.freeze({
       line('narration', 'neutral', '4月1日。{name}は、将棋会館の前に立っていた。今日から四段、プロ棋士だ。'),
       line('hanane', 'neutral', 'おはよう。早いね。'),
       line('hanane', 'neutral', '私も今日から四段。同じ日にスタートだから、勝ち数も負け数も、ここから横に並ぶ。'),
-      line('momoka', 'neutral', '{you}、おめでとう！ 羽音ちゃんも！ 電話でごめんね、学校の前に言いたくて！'),
+      line('momoka', 'neutral', '{you}、おめでとう！ 羽音ちゃんも！ 電話でごめんね、学校の前に言いたくて！', { act: 'hop' }),
       line('hanane', 'gentle', '百花、朝から元気だね。……でも、ありがと。'),
       line('narration', 'neutral', '会館の掲示板には、今年度の棋戦の予定がびっしり並んでいる。どれも予選の一番下からだ。'),
       line('hanane', 'neutral', '上に行けば、タイトル戦がある。父さんもいる。'),
@@ -45,7 +46,7 @@ export const PRO_YEAR_SCENES = Object.freeze({
       line('hanane', 'gentle', '手加減はしない。君も、しないでしょ。'),
       line('narration', 'neutral', '駒を並べる音だけが、静かな部屋に響く。'),
       line('hanane', 'smile', '……楽しみにしてた。どう、君は？'),
-      line('narration', 'neutral', '二人そろって一礼する。対局の始まりだ。'),
+      line('narration', 'neutral', '二人そろって一礼する。対局の始まりだ。', { act: { who: 'hanane', act: 'bow' }, sfx: 'koma' }),
     ],
   }),
   'pro-title-eve': Object.freeze({
@@ -64,7 +65,7 @@ export const PRO_YEAR_SCENES = Object.freeze({
       line('hanane', 'neutral', '番勝負は長いよ。1局目で全部決まるわけじゃない。'),
       line('hanane', 'smile', 'でも、最初の1局を取った人がいちばん楽に指せる。……君なら取れると思う。'),
       line('momoka', 'neutral', 'がんばって！ あったかくして寝てね！'),
-      line('narration', 'neutral', '電話を切ると、部屋は静かになった。明日の朝、対局が始まる。'),
+      line('narration', 'neutral', '電話を切ると、部屋は静かになった。明日の朝、対局が始まる。', { tone: 'dim' }),
     ],
   }),
 });
@@ -88,9 +89,9 @@ export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} }
     summary: fill(scene.summary),
     background: scene.background,
     cast: [...scene.cast],
+    // 演出の欄もそのまま渡す。
     lines: scene.lines.map((entry) => ({
-      who: entry.who,
-      face: entry.face,
+      ...entry,
       name: NOVEL_PEOPLE[/** @type {keyof typeof NOVEL_PEOPLE} */ (entry.who)]?.name ?? '',
       text: fill(entry.text),
     })),

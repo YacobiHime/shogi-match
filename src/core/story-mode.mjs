@@ -1,10 +1,11 @@
 // 物語モードのストーリー選択(docs/story-mode-design.md)。話の目録・カードの状態・進み具合の保存。画面に依存しない。
 // メインは本編(まだ準備中)、サブは大会で見た場面をもう一度読む話(いまは団体戦の場面。team-story.mjs)。
-// 話を足すときは、STORY_EPISODESに1行足す(5章)。
+// 話を足すときは、STORY_EPISODESに1行足す(5章)。メインの話の台本はsrc/story/scenes/<id>.md(docs/novel-authoring-guide.md)。
 
 import { TEAM_SCENES, teamScene } from './team-story.mjs';
 import { PRO_YEAR_SCENES, proYearScene } from './pro-year-story.mjs';
 import { isSceneRead } from './novel-ui.mjs';
+import { hasLibraryScene, libraryScene } from './novel-library.mjs';
 
 export const STORY_PROGRESS_KEY = 'yacobihime:shogi-match:story:v1';
 
@@ -65,7 +66,9 @@ const sub = (scene, label, unlock) => {
 
 /**
  * 話の目録(並びは画面の並び)。
- * メインはno(第○話)と、まだ書いていない話のstatus: 'soon'。サブはscene(台本のid)と、開き方の一言unlock。
+ * メインはno(第○話)と、まだ書いていない話のstatus: 'soon'。台本(src/story/scenes/<scene>.md)ができたら、scene: '<台本のid>'を書き、
+ * status: 'soon'を消すと読める(第一話はいつでも、第二話からは前の話を読むと開く。docs/novel-scene-design.mdの12-6)。
+ * サブはscene(台本のid)と、開き方の一言unlock。
  * @type {readonly { id: string, tab: 'main' | 'sub', no?: number, label?: string, title: string, cast: readonly string[], background: string, scene?: string, status?: 'soon', unlock?: string }[]}
  */
 export const STORY_EPISODES = Object.freeze([
@@ -179,6 +182,7 @@ export function syncStoryUnlocks(progress, { read = null, teamCareer = null, at 
 /** 話をノベルの場面の形にする(いまは団体戦の台本)。読めない話はnull。 */
 export function storyScene(episode, playerName = '', momokaCall = '') {
   if (!episode?.scene) return null;
+  if (hasLibraryScene(episode.scene)) return libraryScene(episode.scene, { playerName, momokaCall });
   if (episode.scene in PRO_YEAR_SCENES) return proYearScene(episode.scene, { playerName, momokaCall });
   return teamScene(episode.scene, playerName, momokaCall);
 }
@@ -192,7 +196,7 @@ export function storyScene(episode, playerName = '', momokaCall = '') {
  */
 export function storyCards(progress, tab, { read = null, playerName = '' } = {}) {
   return STORY_EPISODES.filter((episode) => episode.tab === tab).map((episode) => {
-    const state = episode.status === 'soon' ? 'soon' : episode.scene && progress.unlocked[episode.id] ? 'open' : 'locked';
+    const state = episodeState(episode, progress);
     const scene = state === 'open' ? storyScene(episode, playerName) : null;
     const done = state === 'open' && (Boolean(progress.read[episode.id]) || Boolean(read && scene && isSceneRead(read, scene)));
     return {
@@ -206,10 +210,31 @@ export function storyCards(progress, tab, { read = null, playerName = '' } = {})
       isNew: state === 'open' && !done && !progress.opened[episode.id],
       cast: [...episode.cast],
       background: episode.background,
-      unlock: episode.unlock ?? '',
+      unlock: episode.unlock ?? (episode.tab === 'main' ? '前の話を読むと読めます。' : ''),
       patterned: state === 'locked' || (state === 'soon' && !episode.title),
     };
   });
+}
+
+/** メインの話が開いているか(第一話はいつでも、第二話からは前の話を読んだら)。 */
+export function mainEpisodeOpen(episode, progress, episodes = STORY_EPISODES) {
+  const mains = episodes.filter((entry) => entry.tab === 'main');
+  const at = mains.indexOf(episode);
+  if (at <= 0) return at === 0;
+  return Boolean(progress.read?.[mains[at - 1].id]);
+}
+
+/**
+ * 話の状態。準備中(soon)・読める(open)・未開放(locked)。メインは台本があって前の話を読んだら、サブは大会で場面を見たら読める。
+ * @param {any} episode
+ * @param {any} progress
+ * @param {readonly any[]} [episodes]
+ */
+export function episodeState(episode, progress, episodes = STORY_EPISODES) {
+  if (episode.status === 'soon') return 'soon';
+  if (!episode.scene) return 'locked';
+  if (episode.tab === 'main') return hasLibraryScene(episode.scene) && mainEpisodeOpen(episode, progress, episodes) ? 'open' : 'locked';
+  return progress.unlocked[episode.id] ? 'open' : 'locked';
 }
 
 /** タブのNEWの数(タブの札に小さく出す)。 */
