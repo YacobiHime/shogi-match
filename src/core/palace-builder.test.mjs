@@ -110,3 +110,35 @@ describe('宮殿づくり', () => {
     expect(cleanPalaces([{ id: 'p1', loci: [] }, { id: 'p1', loci: [] }, { id: 'p2' }, { id: 'p3' }, { id: 'p4' }]).map(({ id }) => id)).toEqual(['p1', 'p2', 'p3']);
   });
 });
+
+describe('自分で書いた場所(docs/brain-training-design.mdの15-4)', () => {
+  const start = () => createPalace([], { place: 'home' }).palace;
+
+  test('文字で書いた名前の場所を、歩く順に足せる。前後の空白は取り、16字までに切る', () => {
+    let palace = start();
+    palace = addLocus(palace, { name: '  おばあちゃんの座いす  ', emoji: '🪑' }).palace;
+    palace = addLocus(palace, { name: '裏の物置', emoji: '📦' }).palace;
+    palace = addLocus(palace, { name: 'あ'.repeat(30), emoji: '📍' }).palace;
+    expect(palace.loci.map((locus) => locus.name)).toEqual(['おばあちゃんの座いす', '裏の物置', 'あ'.repeat(16)]);
+    expect(palace.loci.map((locus) => locus.emoji)).toEqual(['🪑', '📦', '📍']);
+  });
+
+  test('空の名前・空白だけの名前は足さない。同じ名前でも足せる(となりなら似ていると知らせる)', () => {
+    const palace = start();
+    expect(addLocus(palace, { name: '   ', emoji: '📍' }).added).toBe(false);
+    const first = addLocus(palace, { name: '物置', emoji: '📦' });
+    const second = addLocus(first.palace, { name: '物置', emoji: '📦' });
+    expect(second.added).toBe(true);
+    expect(second.similar).toBe(true);
+    expect(second.palace.loci).toHaveLength(2);
+  });
+
+  test('書いた場所は動きの種類を持たず(そのほか)、名前を変えても壊れない。30か所を超えては足せない', () => {
+    let palace = addLocus(start(), { name: '裏の物置', emoji: '📦' }).palace;
+    expect(palace.loci[0].kind).toBeUndefined();
+    expect(renameLocus(palace, 0, '倉').loci[0].name).toBe('倉');
+    for (let at = 0; at < LOCI_MAX; at += 1) palace = addLocus(palace, { name: `場所${at}`, emoji: '📍' }).palace;
+    expect(palace.loci).toHaveLength(LOCI_MAX);
+    expect(addLocus(palace, { name: 'あふれ', emoji: '📍' })).toMatchObject({ added: false, full: true });
+  });
+});

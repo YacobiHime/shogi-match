@@ -63,15 +63,40 @@
         <li v-if="!working.loci.length" class="brain-builder__route-empty">下のカードを、歩く順番に押してね</li>
       </ol>
       <p class="brain-builder__say" aria-live="polite">{{ sayLine }}</p>
+      <!-- 自分の場所を文字で書いて足す(束にない場所。15-4)。Enterでも足せ、続けて書ける -->
+      <form class="brain-builder__write" aria-label="自分の場所を書いて足す" data-builder-write @submit.prevent="addWritten">
+        <label class="brain-builder__write-label" for="brain-builder-write-name">自分の場所を書いて足す</label>
+        <div class="brain-builder__write-row">
+          <input
+            id="brain-builder-write-name"
+            v-model="writeName"
+            type="text"
+            class="brain-builder__write-input"
+            :maxlength="LOCUS_NAME_MAX"
+            :disabled="working.loci.length >= LOCI_MAX"
+            placeholder="例：おばあちゃんの座いす"
+            autocomplete="off"
+            data-builder-inline-name
+            @keydown.enter="onWriteEnter"
+          >
+          <button type="submit" class="brain-builder__write-add" :disabled="!writeName.trim() || working.loci.length >= LOCI_MAX" data-builder-inline-add>足す</button>
+        </div>
+        <div class="brain-builder__write-emoji" role="group" aria-label="絵を選ぶ">
+          <button
+            v-for="emoji in CUSTOM_CARD_EMOJI"
+            :key="emoji"
+            type="button"
+            class="brain-builder__write-pick"
+            :aria-pressed="writeEmoji === emoji"
+            :aria-label="`絵 ${emoji}`"
+            @click="writeEmoji = emoji"
+          >{{ emoji }}</button>
+        </div>
+      </form>
       <ul class="brain-builder__tips">
         <li v-for="tip in PALACE_TIPS" :key="tip">{{ tip }}</li>
       </ul>
       <ul class="brain-builder__deck" aria-label="場所カードの束" data-builder-deck>
-        <li>
-          <button type="button" class="brain-builder__card brain-builder__card--write" data-builder-write @click="openWrite">
-            <span aria-hidden="true">✏️</span>カードを書く
-          </button>
-        </li>
         <li v-for="card in deck" :key="card.name">
           <button
             type="button"
@@ -113,7 +138,7 @@
       <p class="brain-game__prompt">{{ editIndex + 1 }}番目の場所</p>
       <label class="brain-builder__field">
         <span>自分の呼び方</span>
-        <input v-model="editName" type="text" :maxlength="LOCUS_NAME_MAX" data-builder-edit-name @keydown.enter="saveEdit">
+        <input v-model="editName" type="text" :maxlength="LOCUS_NAME_MAX" data-builder-edit-name @keydown.enter="onEditEnter">
       </label>
       <div class="brain-builder__moves">
         <button type="button" class="brain-game__secondary" :disabled="editIndex === 0" data-builder-up @click="shift(-1)">← 前へ</button>
@@ -122,29 +147,6 @@
       <div class="brain-game__actions">
         <button type="button" class="brain-game__primary" data-builder-edit-ok @click="saveEdit">できた</button>
         <button type="button" class="brain-game__secondary" data-builder-delete @click="removeAt">この場所を消す</button>
-      </div>
-    </div>
-
-    <!-- カードを書くシート -->
-    <div v-if="writing" class="brain-builder__sheet" role="dialog" aria-modal="true" aria-label="カードを書く" data-builder-write-sheet>
-      <p class="brain-game__prompt">束にない場所を書こう</p>
-      <label class="brain-builder__field">
-        <span>場所の名前</span>
-        <input v-model="writeName" type="text" :maxlength="LOCUS_NAME_MAX" placeholder="例：おばあちゃんの座いす" data-builder-write-name @keydown.enter="addWritten">
-      </label>
-      <div class="brain-builder__emoji" role="group" aria-label="絵">
-        <button
-          v-for="emoji in CUSTOM_CARD_EMOJI"
-          :key="emoji"
-          type="button"
-          class="brain-glance__choice"
-          :aria-pressed="writeEmoji === emoji"
-          @click="writeEmoji = emoji"
-        >{{ emoji }}</button>
-      </div>
-      <div class="brain-game__actions">
-        <button type="button" class="brain-game__primary" :disabled="!writeName.trim()" data-builder-write-add @click="addWritten">足す</button>
-        <button type="button" class="brain-game__secondary" @click="writing = false">やめる</button>
       </div>
     </div>
 
@@ -157,7 +159,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, type PropType } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, type PropType } from "vue";
 import { CUSTOM_CARD_EMOJI, PALACE_TIPS, PLACE_KINDS, placeDeck } from "../data/palace-cards.mjs";
 import {
   LOCI_MAX,
@@ -200,7 +202,6 @@ const phase = ref<"list" | "place" | "cards" | "name">(props.start === "new" && 
 const workingId = ref("");
 const editIndex = ref<number | null>(null);
 const editName = ref("");
-const writing = ref(false);
 const writeName = ref("");
 const writeEmoji = ref(CUSTOM_CARD_EMOJI[0]);
 const nameDraft = ref("");
@@ -266,6 +267,10 @@ function openEdit(index: number) {
   editIndex.value = index;
   editName.value = working.value.loci[index].name;
 }
+function onEditEnter(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229) return;
+  saveEdit();
+}
 function saveEdit() {
   if (!working.value || editIndex.value === null) return;
   update(renameLocus(working.value, editIndex.value, editName.value) as Palace);
@@ -298,15 +303,18 @@ function undoRemove() {
   undo.value = null;
 }
 
-function openWrite() {
-  writeName.value = "";
-  writeEmoji.value = CUSTOM_CARD_EMOJI[0];
-  writing.value = true;
+/** 日本語の変換を確定するEnterでは足さない(isComposing)。 */
+function onWriteEnter(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  addWritten();
 }
+/** 書いた場所を足す。同じ名前がすでにあっても足せる(同じ物を2か所に置くこともある)。続けて書けるよう、名前だけ空にして入力欄に戻る。 */
 function addWritten() {
-  if (!writeName.value.trim()) return;
+  if (!working.value || !writeName.value.trim() || working.value.loci.length >= LOCI_MAX) return;
   add({ name: writeName.value, emoji: writeEmoji.value });
-  writing.value = false;
+  writeName.value = "";
+  void nextTick(() => document.getElementById("brain-builder-write-name")?.focus());
 }
 
 function finishName() {
@@ -341,10 +349,6 @@ function toName() {
 function goBack() {
   if (editIndex.value !== null) {
     editIndex.value = null;
-    return true;
-  }
-  if (writing.value) {
-    writing.value = false;
     return true;
   }
   if (phase.value === "name") {
@@ -451,7 +455,60 @@ defineExpose({ goBack });
 .shogi-game .brain-builder__card span { font-size: 1.5rem; line-height: 1.1; }
 .shogi-game .brain-builder__card small { position: absolute; top: 0.15rem; right: 0.35rem; color: #2a8a4a; }
 .shogi-game .brain-builder__card--used { background: #e7f2e6; border-color: #9fc79b; }
-.shogi-game .brain-builder__card--write { border-style: dashed; background: #f1ece0; }
+/* 自分の場所を書いて足す欄(15-4)。束の上にいつも出す */
+.shogi-game .brain-builder__write {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem 0.6rem;
+  border: 2px dashed rgba(255, 252, 244, 0.35);
+  border-radius: 0.8rem;
+  background: rgba(255, 252, 244, 0.06);
+}
+.shogi-game .brain-builder__write-label { color: #f1a54c; font-size: 0.82rem; font-weight: 900; letter-spacing: 0.06em; }
+.shogi-game .brain-builder__write-row { display: flex; gap: 0.5rem; }
+.shogi-game .brain-builder__write-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 0.8rem;
+  border: 2px solid #cdbf9f;
+  border-radius: 0.6rem;
+  color: #172632;
+  background: #fffcf4;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.shogi-game .brain-builder__write-input:focus-visible,
+.shogi-game .brain-builder__write-add:focus-visible,
+.shogi-game .brain-builder__write-pick:focus-visible { outline: 3px solid #f1a54c; outline-offset: 2px; }
+.shogi-game .brain-builder__write-add {
+  min-width: 4.5rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.6rem;
+  color: #fff;
+  background: #34488f;
+  box-shadow: 0 3px 0 #26356c;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+.shogi-game .brain-builder__write-add:disabled { opacity: 0.45; cursor: default; }
+.shogi-game .brain-builder__write-emoji { display: flex; gap: 0.25rem; overflow-x: auto; padding-bottom: 0.1rem; }
+.shogi-game .brain-builder__write-pick {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 2px solid rgba(255, 252, 244, 0.25);
+  border-radius: 0.5rem;
+  background: transparent;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+.shogi-game .brain-builder__write-pick[aria-pressed="true"] { border-color: #f1a54c; background: rgba(241, 165, 76, 0.25); }
 @media (hover: hover) {
   .shogi-game .brain-builder__card:not(:disabled):hover,
   .shogi-game .brain-builder__locus:not(:disabled):hover { border-color: #d9822b; background-color: #fff3dc; }
