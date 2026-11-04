@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ZOOM_MAX, brainZoom } from './brain-zoom.mjs';
+import { brainZoom } from './brain-zoom.mjs';
 
 describe('脳トレ道場の拡大率(brain-training-design.mdの15章)', () => {
   it('スマホ・タブレット・1366×768のPCは拡大しない', () => {
@@ -9,25 +9,25 @@ describe('脳トレ道場の拡大率(brain-training-design.mdの15章)', () => 
   });
 
   it('広くて高い画面は大きくする。横と縦の小さいほうに合わせる', () => {
-    expect(brainZoom(1920, 1080)).toBe(1.4);
-    expect(brainZoom(2560, 1440)).toBe(1.85);
+    expect(brainZoom(1920, 1080)).toBe(1.1);
+    expect(brainZoom(2560, 1440)).toBe(1.45);
     // 横に長いだけの窓は、縦に合わせる(はみ出さない)。
     expect(brainZoom(2560, 800)).toBe(1.0);
-    expect(brainZoom(1920, 900)).toBe(1.15);
+    expect(brainZoom(1920, 900)).toBe(1);
   });
 
   it('上限を超えない。大きさが分からないときは1', () => {
-    expect(brainZoom(7680, 4320)).toBe(ZOOM_MAX);
+    expect(brainZoom(7680, 4320)).toBe(1.75);
     expect(brainZoom(0, 0)).toBe(1);
     expect(brainZoom(NaN, 1080)).toBe(1);
   });
 
   it('メニューの画面（入口・部屋・棚・記録）は、遊ぶ画面より大きく拡大する。小さい画面は1のまま', () => {
-    expect(brainZoom(1920, 1080, 'menu')).toBe(1.75);
+    expect(brainZoom(1920, 1080, 'menu')).toBe(1.4);
     expect(brainZoom(1920, 1080, 'menu')).toBeGreaterThan(brainZoom(1920, 1080));
-    expect(brainZoom(1366, 768, 'menu')).toBe(1.25);
+    expect(brainZoom(1366, 768, 'menu')).toBe(1);
     expect(brainZoom(1180, 820, 'menu')).toBe(1);
     expect(brainZoom(390, 844, 'menu')).toBe(1);
-    expect(brainZoom(7680, 4320, 'menu')).toBe(ZOOM_MAX);
+    expect(brainZoom(7680, 4320, 'menu')).toBe(1.75);
   });
 });

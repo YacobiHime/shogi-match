@@ -10,6 +10,8 @@ export const ZOOM_BASE_WIDTH = 1100;
 export const ZOOM_BASE_HEIGHT = 768;
 /** 拡大の上限。4Kの画面でも、文字が大きすぎて1画面に収まらなくならないように。 */
 export const ZOOM_MAX = 2.2;
+/** 上の式で出した倍率に掛ける係数。「PCの表示が大きすぎる」というユーザーの指摘(2026-11-04)で、全体を0.8倍にした。 */
+export const ZOOM_SCALE = 0.8;
 /** 倍率の刻み(細かく変えると、窓の大きさを変えている間に文字がちらつく)。 */
 export const ZOOM_STEP = 0.05;
 
@@ -32,6 +34,7 @@ export function brainZoom(width, height, kind = 'play') {
   const baseHeight = kind === 'menu' ? MENU_BASE_HEIGHT : ZOOM_BASE_HEIGHT;
   const raw = Math.min(width / baseWidth, height / baseHeight);
   const stepped = Math.floor(raw / ZOOM_STEP + 1e-9) * ZOOM_STEP;
-  const zoom = Math.min(ZOOM_MAX, Math.max(1, stepped));
+  const full = Math.min(ZOOM_MAX, Math.max(1, stepped)) * ZOOM_SCALE;
+  const zoom = Math.max(1, Math.floor(full / ZOOM_STEP + 1e-9) * ZOOM_STEP);
   return Math.round(zoom * 100) / 100;
 }
