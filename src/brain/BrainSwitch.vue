@@ -191,7 +191,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 .shogi-game .brain-switch__frame--big small { font-size: 0.9rem; font-weight: 800; }
 .shogi-game .brain-switch__frame--big .brain-switch__number {
   color: #172632;
-  font-size: clamp(4rem, 18vw, 6rem);
+  font-size: clamp(4rem, calc(18 * var(--dojo-vw)), 6rem);
   line-height: 1;
 }
 .shogi-game .brain-switch__verdict {

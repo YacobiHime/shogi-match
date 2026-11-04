@@ -977,7 +977,7 @@ defineExpose({ goBack });
   display: grid;
   gap: 0.25rem;
   width: 100%;
-  max-height: 40vh;
+  max-height: calc(40 * var(--dojo-vh));
   margin: 0;
   padding: 0;
   overflow-y: auto;

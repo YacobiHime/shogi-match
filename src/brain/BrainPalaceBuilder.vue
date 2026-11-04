@@ -424,7 +424,7 @@ defineExpose({ goBack });
   gap: 0.35rem;
   width: 100%;
   /* 残りの高さを使い、束は枠の中だけ動かす(U:7-5)。 */
-  max-height: max(12rem, calc(100dvh - 25rem));
+  max-height: max(12rem, calc(100 * var(--dojo-dvh) - 25rem));
   margin: 0;
   padding: 0.2rem;
   overflow-y: auto;

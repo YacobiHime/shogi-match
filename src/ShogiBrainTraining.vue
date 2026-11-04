@@ -3,7 +3,7 @@
     脳トレ道場(docs/brain-training-design.mdの11章)。計算力と記憶力の2つの部屋。
     見た目は将棋教室と同じ枠(shogi-dex・shogi-tutorial)を使い、種目の問題は白い紙のような面に大きく出す。
   -->
-  <div class="shogi-dex shogi-tutorial shogi-brain" role="dialog" aria-modal="true" aria-labelledby="shogi-brain-title" data-brain-training>
+  <div ref="rootEl" class="shogi-dex shogi-tutorial shogi-brain" role="dialog" aria-modal="true" aria-labelledby="shogi-brain-title" data-brain-training>
     <header class="shogi-dex__header">
       <button type="button" class="shogi-dex__back" data-brain-back @click="goBack">
         <span aria-hidden="true">←</span> {{ backLabel }}
@@ -457,6 +457,7 @@ import {
 } from "./core/memory-palace.mjs";
 import { daysBetween } from "./core/memory-box.mjs";
 import { PALACE_MAX } from "./core/palace-builder.mjs";
+import { brainZoom } from "./core/brain-zoom.mjs";
 import { createMoveSoundPlayer } from "./core/move-sound";
 import { comboStep } from "./core/brain-sound.mjs";
 import { brainAudio, closeBrainAudio } from "./brain-audio";
@@ -873,8 +874,28 @@ const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
 const SHOGI_SHELF = new Set(["glance", "mental", "intuition", "einstellung", "blind", "board-memory"]);
 /** 種目の中で続けて正解した数(正解の音の高さに使う。種目が変わると0から)。 */
 let combo = 0;
-onMounted(() => moveSounds.preload());
-onBeforeUnmount(() => closeBrainAudio());
+// 大きな画面では道場ぜんたいを拡大する(core/brain-zoom.mjs)。親の枠の大きさで決め、窓の大きさが変わったら測り直す。
+const rootEl = ref<HTMLElement | null>(null);
+let zoomObserver: ResizeObserver | null = null;
+function applyZoom() {
+  const root = rootEl.value;
+  const parent = root?.parentElement;
+  if (!root || !parent) return;
+  root.style.setProperty("--dojo-zoom", String(brainZoom(parent.clientWidth, parent.clientHeight)));
+}
+onMounted(() => {
+  moveSounds.preload();
+  applyZoom();
+  const parent = rootEl.value?.parentElement;
+  if (parent && typeof ResizeObserver !== "undefined") {
+    zoomObserver = new ResizeObserver(applyZoom);
+    zoomObserver.observe(parent);
+  }
+});
+onBeforeUnmount(() => {
+  zoomObserver?.disconnect();
+  closeBrainAudio();
+});
 function playSound(kind: "correct" | "miss" | "best" | "place" | "finish" | "stamp") {
   if (kind === "correct") {
     combo += 1;
@@ -1232,6 +1253,13 @@ defineExpose({ goBack });
   --dojo-now: #f1a54c;
   --dojo-radius: 14px;
   --dojo-shadow: 0 2px 0 rgba(0, 0, 0, 0.18), 0 10px 24px rgba(0, 0, 0, 0.18);
+  /* 大きな画面では道場ぜんたいを拡大して余白を使う(docs/brain-training-design.mdの15章)。倍率はscreenZoomで決める。
+     拡大するとvh・vwも同じ倍率で大きくなるので、画面に対する長さはこの変数で打ち消す。 */
+  --dojo-zoom: 1;
+  --dojo-vw: calc(1vw / var(--dojo-zoom));
+  --dojo-vh: calc(1vh / var(--dojo-zoom));
+  --dojo-dvh: calc(1dvh / var(--dojo-zoom));
+  zoom: var(--dojo-zoom);
 }
 .shogi-game .shogi-brain__home,
 .shogi-game .shogi-brain__summary,
@@ -1898,14 +1926,14 @@ defineExpose({ goBack });
 .shogi-game .brain-paper__sample strong { color: var(--dojo-good); }
 .shogi-game .brain-paper__problem {
   margin: 0.2rem 0 0;
-  font-size: clamp(2.6rem, 13vw, 4.4rem);
+  font-size: clamp(2.6rem, calc(13 * var(--dojo-vw)), 4.4rem);
   font-weight: 900;
   line-height: 1.1;
   letter-spacing: 0.04em;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.shogi-game .brain-paper__problem--done { color: var(--dojo-good); font-size: clamp(2rem, 9vw, 3rem); }
+.shogi-game .brain-paper__problem--done { color: var(--dojo-good); font-size: clamp(2rem, calc(9 * var(--dojo-vw)), 3rem); }
 .shogi-game .brain-paper__answer {
   position: relative;
   min-width: 6rem;
@@ -1933,7 +1961,7 @@ defineExpose({ goBack });
     align-items: center;
     width: min(100%, 46rem);
   }
-  .shogi-game .brain-paper__problem { font-size: clamp(2rem, 9vh, 3.4rem); }
+  .shogi-game .brain-paper__problem { font-size: clamp(2rem, calc(9 * var(--dojo-vh)), 3.4rem); }
   .shogi-game .brain-pad__key { min-height: 52px; }
   .shogi-game .brain-switch__frame--big { min-height: 8rem; }
 }
@@ -1944,7 +1972,7 @@ defineExpose({ goBack });
   display: grid;
   grid-template-columns: repeat(9, minmax(0, 1fr));
   grid-template-rows: repeat(9, minmax(0, 1fr));
-  width: min(100%, 24rem, 46vh);
+  width: min(100%, 24rem, calc(46 * var(--dojo-vh)));
   aspect-ratio: 1;
   border: 3px solid #6b4423;
   background: #e8c07a;
@@ -1994,7 +2022,7 @@ defineExpose({ goBack });
   inset: 0;
   display: grid;
   place-items: center;
-  font-size: clamp(4rem, 30vw, 9rem);
+  font-size: clamp(4rem, calc(30 * var(--dojo-vw)), 9rem);
   font-weight: 900;
   pointer-events: none;
   text-shadow: 0 0 6px #fffcf4;
@@ -2024,7 +2052,7 @@ defineExpose({ goBack });
   width: 100%;
 }
 .shogi-game .brain-board-wrap--coords {
-  grid-template-columns: min(calc(100% - 1.4rem), 24rem, 46vh) 1.4rem;
+  grid-template-columns: min(calc(100% - 1.4rem), 24rem, calc(46 * var(--dojo-vh))) 1.4rem;
   grid-template-areas: "files ." "board ranks";
   justify-content: center;
 }
@@ -2153,7 +2181,7 @@ defineExpose({ goBack });
   }
   .shogi-game .brain-glance .brain-game__status { grid-area: status; }
   .shogi-game .brain-glance .brain-game__prompt { grid-area: prompt; }
-  .shogi-game .brain-glance .brain-board { grid-area: board; width: min(70vh, 22rem); }
+  .shogi-game .brain-glance .brain-board { grid-area: board; width: min(calc(70 * var(--dojo-vh)), 22rem); }
   .shogi-game .brain-glance .brain-glance__answer,
   .shogi-game .brain-glance .brain-game__actions { grid-area: answer; }
 }
@@ -2171,8 +2199,8 @@ defineExpose({ goBack });
   .shogi-game .brain-mental .brain-game__prompt { grid-area: prompt; }
   .shogi-game .brain-memory .brain-board-wrap,
   .shogi-game .brain-mental .brain-board-wrap { grid-area: board; }
-  .shogi-game .brain-memory .brain-board { width: min(66vh, 20rem); }
-  .shogi-game .brain-mental .brain-board-wrap--coords { grid-template-columns: min(62vh, 19rem) 1.4rem; }
+  .shogi-game .brain-memory .brain-board { width: min(calc(66 * var(--dojo-vh)), 20rem); }
+  .shogi-game .brain-mental .brain-board-wrap--coords { grid-template-columns: min(calc(62 * var(--dojo-vh)), 19rem) 1.4rem; }
   /* 盤面の記憶は、時間のバーとボタンを別の段にする(同じ段だと、バーがボタンの後ろに重なった)。 */
   .shogi-game .brain-memory { grid-template-areas: "status status" "board prompt" "board timer" "board tools"; }
   .shogi-game .brain-memory > .brain-memory__timer { grid-area: timer; align-self: end; width: 100%; }
