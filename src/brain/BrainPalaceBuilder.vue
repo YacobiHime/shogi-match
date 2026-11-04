@@ -74,7 +74,7 @@
             class="brain-builder__write-input"
             :maxlength="LOCUS_NAME_MAX"
             :disabled="working.loci.length >= LOCI_MAX"
-            placeholder="例：おばあちゃんの座いす"
+            placeholder="例：自分の部屋のベッド"
             autocomplete="off"
             data-builder-inline-name
             @keydown.enter="onWriteEnter"
