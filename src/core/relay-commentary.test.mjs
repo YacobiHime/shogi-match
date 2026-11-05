@@ -31,6 +31,29 @@ describe('名前と配役', () => {
   });
 });
 
+describe('解説者の候補が少ない中継', () => {
+  const spec = { key: 'cast-fallback', black: player('h', '天鷺羽音', { story: HANANE }), white: player('x', '鈴木蓮') };
+  it('名簿が空でも仮の役名ではなく、対局者以外の棋士を割り当てる', () => {
+    const cast = relayCast({ spec, pool: [] });
+    expect(cast.name).toBe('天鷺善彦');
+    expect(cast.voice).toBe('yoshihiko');
+    expect(relayCast({ spec, pool: [] })).toEqual(cast);
+  });
+  it('分身・アマ・奨励会員・研修会員・無名の候補を選ばない', () => {
+    const pool = ['avatar', 'amateur', 'shoreikai', 'kenshukai', 'user'].map(kind => player(kind, kind, { kind, rating: 3000 }));
+    pool.push(player('unnamed', ''));pool.push(player('pro', '中村蓮', { kind: 'pro' }));
+    expect(relayCast({ spec, pool, oshiId: 'avatar' }).name).toBe('中村蓮');
+  });
+  it('別IDの同名の対局者も除外し、羽音と善彦の対局には第三者を割り当てる', () => {
+    expect(relayCast({ spec, pool: [player('alias', '天鷺羽音')] }).name).not.toBe('天鷺羽音');
+    const both = { ...spec, white: player('y', '天鷺善彦', { story: YOSHIHIKO }) };
+    const guest = relayCast({ spec: both, pool: [] });
+    expect(guest.id).toMatch(/^relay-guest:professional:/);
+    expect(guest.name).not.toMatch(/解説者|天鷺羽音|天鷺善彦/);
+    expect(guest.dan).toBe('七段');
+  });
+});
+
 describe('手の事実と表記', () => {
   it('「▲7六歩」「△同歩」の形にし、読み筋を矢印でつなぐ', () => {
     expect(moveTextOf(STANDARD_SFEN, '7g7f')).toBe('▲7六歩');

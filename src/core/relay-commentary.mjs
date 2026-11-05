@@ -3,7 +3,7 @@
 // 対局者を責める言葉は使わない(U:4-3, 8)。種(対局の鍵)が同じなら、同じ中継になる。保存はしない。画面に依存しない。
 
 import { createRng, pick } from './ryuo-random.mjs';
-import { HANANE, YOSHIHIKO, crownText } from './ryuo-story.mjs';
+import { HANANE, YOSHIHIKO, YOSHIHIKO_RATING, STORY_PEOPLE, crownText } from './ryuo-story.mjs';
 import { resignStyleOf } from './resign-style.mjs';
 import { opponentVoice } from './match-presence.mjs';
 import {
@@ -78,7 +78,24 @@ export function callName(player, rival = null) {
  */
 export function relayCast({ spec, pool = [], oshiId = null }) {
   const playing = new Set([spec.black?.id, spec.white?.id]);
-  const free = pool.filter((member) => member && !playing.has(member.id) && member.kind !== 'user' && member.id !== 'user' && member.kind !== 'amateur');
+  const playingNames = new Set([spec.black?.name, spec.white?.name]);
+  const eligible = (member) => member && String(member.name ?? '').trim()
+    && !playing.has(member.id) && !playingNames.has(member.name)
+    && member.id !== 'user' && [undefined, 'pro', 'woman', 'teacher'].includes(member.kind);
+  // 期の写しを優先し、共通名簿の同じ棋士を二重に数えない。
+  const seenIds = new Set();
+  const seenNames = new Set();
+  let free = pool.filter(eligible).filter(member => {
+    if (seenIds.has(member.id) || seenNames.has(member.name)) return false;
+    seenIds.add(member.id); seenNames.add(member.name); return true;
+  });
+  // 名簿のない旧棋譜でも、既知の人物かゲスト棋士の名前で解説する。
+  if (!free.length) {
+    free = Object.entries(STORY_PEOPLE).map(([story, person]) => ({
+      id: `relay-guest:${story}`, name: person.name, dan: story === YOSHIHIKO ? '九段' : '四段', rating: story === YOSHIHIKO ? YOSHIHIKO_RATING : 1450, story, kind: 'pro',
+    })).filter(member => eligible(member) && ![spec.black?.story, spec.white?.story].includes(member.story));
+    if (!free.length) free = ['佐藤誠', '中村蓮', '田中翼', '高橋健太', '森本圭'].map((name, index) => ({ id: `relay-guest:professional:${index}`, name, dan: '七段', rating: 1800, story: null, kind: 'pro' })).filter(eligible);
+  }
   const stories = [spec.black?.story, spec.white?.story];
   const byStory = (story) => free.find((member) => member.story === story);
   const chosen = (stories.includes(HANANE) ? byStory(YOSHIHIKO) : null)
@@ -90,7 +107,6 @@ export function relayCast({ spec, pool = [], oshiId = null }) {
   const juniors = free.filter((member) => member !== chosen && !member.story).sort((a, b) => (a.rating ?? 0) - (b.rating ?? 0));
   const readerMember = juniors[relaySeed(`${spec.key}:reader`) % Math.max(1, Math.min(4, juniors.length))] ?? null;
   const reader = readerMember ? surnameOf(readerMember.name ?? '') : '';
-  if (!chosen) return { id: '', name: '解説者', dan: '', title: '', story: null, voice: 'polite', reader };
   return {
     id: chosen.id, name: chosen.name, dan: chosen.dan ?? '', title: titleOf(chosen), story: chosen.story ?? null,
     voice: chosen.story === HANANE ? 'hanane' : chosen.story === YOSHIHIKO ? 'yoshihiko' : 'polite',

@@ -961,6 +961,7 @@
     />
     <RelayViewer
       v-if="relayEntry && relayEngineFactory"
+      :key="relayEntry.key"
       ref="relayViewerEl"
       :spec="relayEntry"
       :pool="relayPool"
@@ -1615,12 +1616,12 @@ const relayPool = computed(() => {
   const key = relayEntry.value?.key ?? "";
   // 自分の対局は、その大会のいまの期の棋士から解説者を選ぶ(奨励会・研修会は竜王戦の棋士)。
   // 棋士の1年の観戦(docs/pro-year-design.mdの10-2の2)は、その1年の棋士から解説者を選ぶ。
-  if (key.startsWith("pro-year:")) return Object.values(props.proYearState?.players ?? {});
+  if (key.startsWith("pro-year:")) return [...Object.values(props.proYearState?.players ?? {}), ...Object.values(props.teamRoster?.players ?? {})];
   const season = key.startsWith("mine:")
     ? (relayEntry.value?.event === "meijin" ? props.meijinSeason : props.ryuoSeason) ?? props.ryuoSeason ?? props.meijinSeason
     : [props.ryuoSeason, props.ryuoWatch?.season, props.meijinSeason]
       .find((item) => item && key.startsWith(`${relayEntry.value?.event}:${item.id}:`));
-  return Object.values(season?.players ?? {});
+  return [...Object.values(season?.players ?? {}), ...Object.values(props.teamRoster?.players ?? {})];
 });
 /** 同じ回戦のほかの結果(中継の運営のコメント)。 */
 const relayNews = computed(() => (relayEntry.value && !relayEntry.value.noNews && !relayEntry.value.tags?.mine

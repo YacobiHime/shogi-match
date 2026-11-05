@@ -340,3 +340,5 @@ git diff --check
   - 棋士の1年の続き: 奨励会から始める道、名鑑への年間成績の書き戻し（`docs/pro-year-design.md`の7章）。ノートの札と節目の場面は12章で済み（2026-11-03）。
   - 棋力テストの腹銀のほかの形は10-14で3問足した（2026-11-03。3段目の玉2問・竜のない腹銀1問。CPUが解けなかった2問はデータに残るが出さない）。
 - 実際に遊んでの確認がまだのもの: 検証記録（`docs/yakobihime-opening-guide-verification.md`）の最近の行のうち「未確認」と書いたもの。
+
+観戦の解説者は`relay-commentary.mjs`の`relayCast`、期と共通名簿の候補は`ShogiTournament.vue`の`relayPool`。候補不足と対局切り替えの仕様は`docs/tournament-relay-design.md`51章。
