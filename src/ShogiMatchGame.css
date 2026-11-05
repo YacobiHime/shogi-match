@@ -4264,6 +4264,17 @@
   gap: 0.15em;
 }
 .shogi-title__tile--dex .shogi-title__dex-icons .shogi-title__icon { width: 1.6em; height: 1.6em; }
+/* 図鑑と研究(docs/research-mode-design.mdの4章)を1行に並べる。図鑑のほうを広く。 */
+.shogi-title__tiles--dex {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 0.45em;
+}
+@media (max-width: 560px) {
+  /* スマホの幅では、研究のタイルの一言をしまい、名前と絵だけにする。 */
+  .shogi-title__tile--research .shogi-title__desc { display: none; }
+  .shogi-game .shogi-title__tile--research { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "icons label go"; }
+}
 .shogi-title__dex-go {
   grid-area: go;
   color: var(--group-color);

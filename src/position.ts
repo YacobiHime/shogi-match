@@ -11,12 +11,14 @@ import {
 
 /** threat-black・threat-white: 相手の狙い(N2)。点線で、その側の利きの色(先手は青、後手は赤)。 */
 export type CandidateGuideKind = "plan" | "unsafe-plan" | "urgent" | "ai" | "move" | "threat-black" | "threat-white";
-export type CandidateInput = { usi: string; score?: number; guideKind?: CandidateGuideKind };
+export type CandidateInput = { usi: string; score?: number; guideKind?: CandidateGuideKind; rank?: number };
 export type CandidateMove = {
   move: Move;
   score?: number;
   promotion?: "成" | "不成";
   guideKind?: CandidateGuideKind;
+  // 研究モードの候補の順位(矢印の先の数字)。
+  rank?: number;
 };
 
 export function positionFromSfen(sfen: string): ImmutablePosition {
@@ -41,7 +43,7 @@ export function candidateMovesFromUsi(
       const promoted = position.createMoveByUSI(`${candidate.usi}+`);
       if (promoted && position.isValidMove(promoted)) promotion = "不成";
     }
-    return [{ move, score, promotion, guideKind: candidate.guideKind }];
+    return [{ move, score, promotion, guideKind: candidate.guideKind, ...(candidate.rank ? { rank: candidate.rank } : {}) }];
   });
 }
 

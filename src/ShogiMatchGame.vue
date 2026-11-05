@@ -376,14 +376,30 @@
           <!-- 図鑑は5つを1枚のタイルにまとめ、押すと棚のシートから選ぶ(docs/brain-training-design.mdの4章)。 -->
           <section class="shogi-title__group shogi-title__group--dex" aria-labelledby="shogi-home-dex" data-home-group="dex">
             <h2 id="shogi-home-dex" class="shogi-title__group-title">しらべる</h2>
-            <button type="button" class="shogi-title__tile shogi-title__tile--dex" data-dex-tile @click="openHomeDexShelf">
-              <span class="shogi-title__dex-icons" aria-hidden="true">
-                <DexIcon v-for="shelf in DEX_SHELF" :key="shelf.kind" class="shogi-title__icon" :kind="shelf.kind" />
-              </span>
-              <span class="shogi-title__label">図鑑</span>
-              <small class="shogi-title__desc">駒・手筋・定跡など</small>
-              <span class="shogi-title__dex-go" aria-hidden="true">›</span>
-            </button>
+            <div class="shogi-title__tiles--dex">
+              <button type="button" class="shogi-title__tile shogi-title__tile--dex" data-dex-tile @click="openHomeDexShelf">
+                <span class="shogi-title__dex-icons" aria-hidden="true">
+                  <DexIcon v-for="shelf in DEX_SHELF" :key="shelf.kind" class="shogi-title__icon" :kind="shelf.kind" />
+                </span>
+                <span class="shogi-title__label">図鑑</span>
+                <small class="shogi-title__desc">駒・手筋・定跡など</small>
+                <span class="shogi-title__dex-go" aria-hidden="true">›</span>
+              </button>
+              <!-- 研究モード(docs/research-mode-design.md)。好きな局面をAIと一緒に調べる。 -->
+              <button type="button" class="shogi-title__tile shogi-title__tile--dex shogi-title__tile--research" data-research-tile @click="openResearch()">
+                <span class="shogi-title__dex-icons" aria-hidden="true">
+                  <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges">
+                    <g fill="#fffcf4"><rect x="1" y="2" width="9" height="9" /></g>
+                    <g fill="#1d303f"><rect x="2" y="3" width="7" height="7" /></g>
+                    <g fill="#fffcf4"><rect x="4" y="5" width="3" height="1" /><rect x="4" y="7" width="3" height="1" /></g>
+                    <g fill="#d7d1fd"><rect x="9" y="9" width="2" height="2" /><rect x="11" y="11" width="2" height="2" /><rect x="13" y="13" width="2" height="2" /></g>
+                  </svg>
+                </span>
+                <span class="shogi-title__label">研究</span>
+                <small class="shogi-title__desc">AIと局面を調べる</small>
+                <span class="shogi-title__dex-go" aria-hidden="true">›</span>
+              </button>
+            </div>
           </section>
         </div>
       </nav>
@@ -415,6 +431,21 @@
       ref="brainTrainingView"
       :asset-base-url="assetBaseUrl"
       @close="brainTrainingOpen = false"
+    />
+    <!-- 研究モード(docs/research-mode-design.md)。ホームの「研究」・検討の「研究で開く」・研究の対局から戻ったときに開く。 -->
+    <ShogiResearch
+      v-if="researchOpen"
+      ref="researchView"
+      :key="researchKey"
+      :asset-base-url="assetBaseUrl"
+      :acquire-engine="acquireResearchEngine"
+      :engine-factory="ensureEngineFactory"
+      :open-request="researchOpenRequest"
+      :match-return="researchMatchReturn"
+      :strength-options="strengthOptions"
+      :strength-value="searchNodes"
+      @close="closeResearch"
+      @start-match="startResearchMatch"
     />
     <!-- 物語のストーリー選択(docs/story-mode-design.md)。 -->
     <ShogiStory
@@ -676,13 +707,22 @@
             @click="requestResign()"
           >投了</button>
           <button
-            v-if="showHome"
+            v-if="showHome && !researchMatch"
             type="button"
             class="shogi-game__command"
             :disabled="!active"
             @click="suspendConfirmOpen = true"
           >中断</button>
         </template>
+        <!-- 研究の対局(docs/research-mode-design.mdの3-6)。対局の途中でも終局後でも、指した手を分岐に入れて研究へ戻る。 -->
+        <button
+          v-if="researchMatch && showHome"
+          type="button"
+          class="shogi-game__command shogi-game__research-return"
+          data-research-return
+          aria-label="研究に戻る"
+          @click="returnToResearch"
+        >研究へ</button>
         <!-- 対局中・検討中に図鑑を開く。画面の幅によらずメニューにしまわない。見終わると対局へ戻る。 -->
         <button
           type="button"
@@ -1859,6 +1899,8 @@
             @click="skillDiagnosisVisible = !skillDiagnosisVisible"
           >棋力診断：{{ skillDiagnosisVisible ? "表示中" : "非表示" }}</button>
           <button v-if="reviewNavigation.branch" type="button" role="menuitem" @click="analysisMenuOpen = false; returnToMainLine()">本筋に戻る</button>
+          <!-- 研究モードで開く(docs/research-mode-design.mdの4章)。この対局の棋譜を、いま見ている手から研究する。 -->
+          <button v-if="showHome" type="button" role="menuitem" data-open-research @click="analysisMenuOpen = false; openResearchFromReview()">研究で開く</button>
           <button
             v-if="result?.reason === 'resignation'"
             type="button"
@@ -2439,7 +2481,12 @@
             強さを1つ下げる・香落ちを同じ大きさで並べる(自動では変えない)。教室と棋力測定の対局には出さない。
           -->
           <!-- 竜王戦の次の相手の対策を終えたら、本番(竜王戦の期の画面)へ。もう一度対策も小さく残す(13-5)。 -->
-          <div v-if="ryuoCounter && !tutorialMatch && !measureSession" class="shogi-game__result-step" data-counter-next>
+          <!-- 研究の対局(docs/research-mode-design.mdの3-6)は、指した手を分岐に入れて研究へ戻るのがいちばん大きいボタン。 -->
+          <div v-if="researchMatch" class="shogi-game__result-step" data-research-result>
+            <p>指した手は、研究の棋譜に分岐で入るよ。</p>
+            <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-research-return @click="returnToResearch">研究に戻る</button>
+          </div>
+          <div v-else-if="ryuoCounter && !tutorialMatch && !measureSession" class="shogi-game__result-step" data-counter-next>
             <p>{{ ryuoCounterOpponent?.name ?? "" }}さんの対策、おつかれさま。本番は{{ ryuoCounter.label }}</p>
             <button type="button" class="shogi-game__rematch shogi-game__rematch--primary" data-counter-go @click="goToRyuoFromCounter">本番へ</button>
             <button type="button" class="shogi-game__result-step-same" data-counter-again @click="startRyuoCounter">もう一度対策</button>
@@ -3217,6 +3264,7 @@ const ShogiTutorial = lazyScreen(loadTutorial);
 const ShogiProblemSet = lazyScreen(loadProblemSet);
 const ShogiBrainTraining = lazyScreen(loadBrainTraining);
 const ShogiStory = lazyScreen(() => import("./ShogiStory.vue"));
+const ShogiResearch = lazyScreen(() => import("./ShogiResearch.vue"));
 const YakobiNote = lazyScreen(loadYakobiNote);
 const ShogiTournament = lazyScreen(loadTournament);
 const ShogiSkillTest = lazyScreen(loadSkillTest);
@@ -3348,6 +3396,8 @@ function isBlackMoveIndex(index: number) {
 }
 
 function matchHintAllowance() {
+  // 研究の対局は、感想戦と同じく閃きを何回でも使える(docs/research-mode-design.mdの3-6)。
+  if (researchMatch.value) return Number.POSITIVE_INFINITY;
   // 棋力測定では、閃き(最善手を教える)を使えない。使うと、その手の損が測れなくなる。
   if (measureMode.value) return 0;
   if (matchKind.value === "tournament") return assistAllowance(Number(tournamentSeasonOf(ryuoGame.value)?.settings?.hintLimit ?? 3));
@@ -3357,6 +3407,7 @@ function matchHintAllowance() {
 }
 
 function matchUndoAllowance() {
+  if (researchMatch.value) return Number.POSITIVE_INFINITY;
   // 棋力測定では、待ったを使えない(指し直した手の損は、本当の読みの損ではない)。
   if (measureMode.value) return 0;
   if (matchKind.value === "tournament") return assistAllowance(Number(tournamentSeasonOf(ryuoGame.value)?.settings?.undoLimit ?? 3));
@@ -3567,6 +3618,72 @@ function unlockStorySceneLater(sceneId: string) {
     });
 }
 const brainTrainingView = ref<InstanceType<typeof ShogiBrainTrainingComponent> | null>(null);
+// ---- 研究モード(docs/research-mode-design.md)。ホームの「研究」・検討の「研究で開く」・研究の対局から戻ったときに開く。
+const researchOpen = ref(false);
+// 開くたびに作り直す(開く研究・戻す手順を、開いたときの値で決めるため)。
+const researchKey = ref(0);
+const researchView = ref<{ goBack: () => boolean } | null>(null);
+const researchOpenRequest = ref<{ sfen: string; moves: string[]; ply: number; name?: string } | null>(null);
+const researchMatchReturn = ref<{ researchId: string; path: number[]; moves: string[] } | null>(null);
+// 研究の対局(3-6)。閃き・待ったは∞、記録には数えない。終わったら指した手を分岐に入れて研究へ戻る。
+const researchMatch = ref<{ researchId: string; path: number[]; startSfen: string } | null>(null);
+let researchStrengthBefore: number | null = null;
+function openResearch(request: { sfen: string; moves: string[]; ply: number; name?: string } | null = null) {
+  researchOpenRequest.value = request;
+  researchMatchReturn.value = null;
+  researchKey.value += 1;
+  researchOpen.value = true;
+}
+function closeResearch() {
+  researchOpen.value = false;
+  researchOpenRequest.value = null;
+  researchMatchReturn.value = null;
+}
+/** 研究の検討に、対局用のエンジンを貸す(図鑑の解析と同じく、助言の探索が終わるのを待ってから)。 */
+async function acquireResearchEngine() {
+  await initializeEngine({ force: true });
+  if (!engine || !engineReady.value) throw new Error("将棋AIを起動できませんでした。");
+  await Promise.all([dedicatedCoachQueue.catch(() => undefined), reviewCoachQueue.catch(() => undefined)]);
+  return engine;
+}
+/** 対局後の検討から、この対局の棋譜を研究で開く(いま見ている手から)。 */
+function openResearchFromReview() {
+  const moves = [...reviewNavigation.value.line];
+  const ply = reviewNavigation.value.cursor;
+  const sfen = matchInitialSfen.value;
+  stopGuidedReview();
+  openPregame();
+  if (props.showHome) openHome();
+  openResearch({ sfen, moves, ply });
+}
+/** この局面から対局(3-6)。局面から始める対局にし、閃き・待ったを∞にする。 */
+function startResearchMatch(request: { sfen: string; playerColor: "black" | "white"; strength: number; researchId: string; path: number[] }) {
+  researchOpen.value = false;
+  yakobiNoteOpen.value = false;
+  stopGuidedReview();
+  openPregame();
+  researchStrengthBefore = searchNodes.value;
+  researchMatch.value = { researchId: request.researchId, path: [...request.path], startSfen: request.sfen };
+  matchKind.value = "normal";
+  searchNodes.value = request.strength;
+  homeOpen.value = false;
+  void initializeEngine();
+  startPositionMatch(request.sfen, request.playerColor, "研究の局面");
+  guideText.value = coachLevel.value === "off" ? "" : "研究の局面から指そう！ 閃きも待ったも、何回でも使えるよ。";
+}
+/** 研究の対局から研究へ戻る。指した手は、始めた局面からの分岐として研究の棋譜に入る。 */
+function returnToResearch() {
+  const match = researchMatch.value;
+  if (!match) return;
+  const moves = [...moveHistory];
+  stopGuidedReview();
+  openPregame();
+  if (props.showHome) openHome();
+  researchOpenRequest.value = null;
+  researchMatchReturn.value = { researchId: match.researchId, path: match.path, moves };
+  researchKey.value += 1;
+  researchOpen.value = true;
+}
 function openBrainTraining() {
   noteFeatureSeen("brain");
   brainTrainingOpen.value = true;
@@ -6234,7 +6351,8 @@ function useTips(moments: { id: string; short: string; title: string; line: stri
   return callout;
 }
 function tipsCounted() {
-  return !reviewMode.value && !measureMode.value && !tutorialMatch.value && normalizedMode.value === "cpu";
+  // 研究の対局は記録に数えない(docs/research-mode-design.mdの3-6)。
+  return !reviewMode.value && !measureMode.value && !tutorialMatch.value && !researchMatch.value && normalizedMode.value === "cpu";
 }
 function notePlayerTipMoment(previous: string, usi: string) {
   if (!active.value || !tipsCounted()) return null;
@@ -9376,6 +9494,10 @@ function navigateBack() {
   } else if (storyOpen.value) {
     // 話を読んでいるときは話(のログ・設定)を閉じ、一覧ならホームへ。
     if (!storyView.value?.goBack()) storyOpen.value = false;
+  } else if (researchOpen.value) {
+    // 研究は、重ねて開いたもの(シート・読み筋・局面編集)から閉じ、最後に研究を閉じる。
+    if (researchView.value) researchView.value.goBack();
+    else closeResearch();
   } else if (dexShelfOpen.value && dexShelfFrom.value === "home") {
     dexShelfOpen.value = false;
   } else if (homeOpen.value) {
@@ -9408,7 +9530,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || researchOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
@@ -9444,6 +9566,10 @@ function openPregame() {
   if (matchKind.value === "tournament") matchKind.value = "normal";
   suspendedMatch.value = null;
   suspendConfirmOpen.value = false;
+  // 研究の対局から離れたら、研究の前の強さに戻す(docs/research-mode-design.mdの3-6)。
+  if (researchMatch.value && researchStrengthBefore !== null) searchNodes.value = researchStrengthBefore;
+  researchMatch.value = null;
+  researchStrengthBefore = null;
   measureMode.value = false;
   measureSession.value = false;
   measureWelcome.value = "";
@@ -9715,6 +9841,8 @@ function persistMatchState() {
       ? { carry: measureCarry.value, welcome: measureWelcome.value, settingsBefore: settingsBeforeMeasure, prior: measurePriorState.value }
       : null,
     moves: [...moveHistory],
+    // 研究の対局は、リロードしても研究の対局のまま(閃き・待ったは∞、記録に数えない、研究へ戻れる)。
+    research: researchMatch.value,
     active: active.value,
     result: result.value,
     activePlayerColor: activePlayerColor.value,
@@ -9809,6 +9937,14 @@ function restoreLearningSettings(snapshot: { [key: string]: any }) {
   measureWelcome.value = measure?.welcome ?? "";
   measurePriorState.value = measure?.prior ?? null;
   settingsBeforeMeasure = measure?.settingsBefore ?? null;
+  researchMatch.value = matchKind.value === "normal" ? restoredResearchMatch(snapshot.research) : null;
+}
+
+function restoredResearchMatch(value: unknown): typeof researchMatch.value {
+  if (!value || typeof value !== "object") return null;
+  const { researchId, path, startSfen } = value as { [key: string]: unknown };
+  if (typeof researchId !== "string" || typeof startSfen !== "string" || !Array.isArray(path) || !path.every(Number.isInteger)) return null;
+  return { researchId, path: path as number[], startSfen };
 }
 
 function restoredTutorialMatch(value: unknown): typeof tutorialMatch.value {
@@ -11600,7 +11736,7 @@ function finish(matchResult: MatchResult) {
   finishInsightLine = finishInsightFor(matchResult);
   result.value = matchResult;
   // 平手・対CPUで終局まで指した対局は、終盤戦の開始局面に使えるよう残す(短い対局は残さない)。
-  if (normalizedMode.value === "cpu" && matchInitialSfen.value === STANDARD_SFEN && matchResult.winner) {
+  if (normalizedMode.value === "cpu" && matchInitialSfen.value === STANDARD_SFEN && matchResult.winner && !researchMatch.value) {
     saveRecentGames(browserStorage(), addRecentGame(loadRecentGames(browserStorage()), {
       moves: [...moveHistory],
       winner: matchResult.winner === Color.BLACK ? "black" : "white",
@@ -11608,7 +11744,7 @@ function finish(matchResult: MatchResult) {
     }));
   }
   // 1局指し終えたら、続けて遊んだ日に数える(すぐ投了した対局は数えない)。
-  if (matchResult.moveCount >= 2) savePlayStreak(browserStorage(), recordPlay(loadPlayStreak(browserStorage())));
+  if (matchResult.moveCount >= 2 && !researchMatch.value) savePlayStreak(browserStorage(), recordPlay(loadPlayStreak(browserStorage())));
   // 詰みで決まったときは、止めてから結果画面を出す。勝ちは長く、負けは短く(core/move-impact.mjs)。
   const outcome = !matchResult.winner
     ? "draw"
@@ -11622,9 +11758,15 @@ function finish(matchResult: MatchResult) {
   } else {
     revealResult();
   }
-  recordRatedGame(matchResult);
-  recordCollection(outcome === "win");
-  if (outcome === "win" && matchResult.reason === "checkmate") noteMateTips();
+  // 研究の対局は、レーティング・コレクション・コツの回数に数えない(docs/research-mode-design.mdの3-6)。
+  if (researchMatch.value) {
+    ratingChange.value = null;
+    collectionResult.value = null;
+  } else {
+    recordRatedGame(matchResult);
+    recordCollection(outcome === "win");
+    if (outcome === "win" && matchResult.reason === "checkmate") noteMateTips();
+  }
   const stageWeight = matchStage.value?.weight ?? "plain";
   const tournamentEvent = ryuoGame.value?.event ?? "ryuo";
   const tournamentFinish = matchKind.value === "tournament" && Boolean(ryuoGame.value) && Boolean(matchResult.winner);

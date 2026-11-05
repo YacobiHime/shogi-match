@@ -46,6 +46,7 @@
       :flip="flip"
       :mobile="mobile"
       :allow-move="allowMove"
+      :allow-edit="allowEdit"
       :enable-drag-and-drop="enableDragAndDrop"
       :black-player-name="blackPlayerName"
       :white-player-name="whitePlayerName"
@@ -59,6 +60,9 @@
       :white-player-byoyomi="clocks?.whiteByoyomi"
       :arrow-image-url="`${normalizedAssetBase}/arrow/arrow.svg`"
       @move="onMove"
+      @edit="(change: PositionChange) => emit('edit', change)"
+      @square-click="(square: string) => emit('square-click', square)"
+      @hand-click="(color: string, type: string) => emit('hand-click', color, type)"
       @resize="onResize"
     />
     <p v-else class="error" role="alert">局面を表示できません。</p>
@@ -94,7 +98,7 @@ import {
   THEME_CHANGE_EVENT,
 } from "./core/themes.mjs";
 import { grantTheme, loadCollection, saveCollection, themeUnlock } from "./core/collection.mjs";
-import { Color, PieceType, type Move } from "tsshogi";
+import { Color, PieceType, type Move, type PositionChange } from "tsshogi";
 
 type AttackMark = { file: number; rank: number; black: number; white: number };
 type SquareMark = { file: number; rank: number; tone: "reach" | "target" | "key" | "covered" | "danger" };
@@ -134,6 +138,8 @@ const props = defineProps({
   threatArrows: { type: Array as PropType<{ usi: string; color: "black" | "white" }[]>, default: () => [] },
   lastMove: { type: String, default: "" },
   allowMove: { type: Boolean, default: true },
+  // 研究モードの局面編集(docs/research-mode-design.mdの3-5)。盤と持ち駒の駒を自由に動かす(editのイベント)。
+  allowEdit: { type: Boolean, default: false },
   enableDragAndDrop: { type: Boolean, default: true },
   flip: { type: Boolean, default: false },
   mobile: { type: Boolean, default: false },
@@ -150,7 +156,7 @@ const props = defineProps({
     default: null,
   },
 });
-const emit = defineEmits(["usi-move", "invalid-sfen", "resize"]);
+const emit = defineEmits(["usi-move", "invalid-sfen", "resize", "edit", "square-click", "hand-click"]);
 const root = ref<HTMLElement | null>(null);
 const maxSize = ref(new RectSize(900, 620));
 let resizeObserver: ResizeObserver | undefined;

@@ -13,7 +13,7 @@ describe("match screen regressions", () => {
     // 教室のコツの形ができた手に「コツどおり！」(docs/nyumon-mode-design.mdの21-14-2)。同じ手の囲いの札はまとめる。
     // 技の演出(docs/move-waza-design.mdの4-2の5)を出した手は、コツを数えたうえで帯に「コツどおり！」を添え、札は出さない。
     expect(source).toMatch(/const tip = notePlayerTipMoment\(previous, usi\);[\s\S]{0,200}?if \(noteWaza\(previous, usi, \{[^}]*\}, Boolean\(tip\)\)\) return;\s*if \(tip\) showTipCallout\(tip\);\s*else if \(castle\) showCastleCallout\(castle\);/);
-    expect(source).toMatch(/return !reviewMode\.value && !measureMode\.value && !tutorialMatch\.value && normalizedMode\.value === "cpu";/);
+    expect(source).toMatch(/return !reviewMode\.value && !measureMode\.value && !tutorialMatch\.value && !researchMatch\.value && normalizedMode\.value === "cpu";/);
     expect(source).toMatch(/if \(!active\.value \|\| !tipsCounted\(\)\) return null;/);
     // 1つの手でできたコツは全部数え、札はそのコツを使った3回目までのものだけ(docs/nyumon-mode-design.mdの22-1)。
     expect(source).toMatch(/const usesBefore = loadTipUses\(store\)\[moment\.id\] \?\? 0;\s*tipMomentsFired\.add\(moment\.id\);\s*noteTipUse\(store, moment\.id\);/);
@@ -119,7 +119,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(!measureMode\.value \|\| reviewMode\.value \|\| !matchStarted\.value\) return null;/);
     expect(source).toMatch(/beginMatch\(\);\s*showStageCard\("measure"\);/);
     expect(source).toMatch(/<template v-if="stageCard\.kind === 'measure'">/);
-    expect(source).toMatch(/function matchHintAllowance\(\) \{[\s\S]{0,120}?if \(measureMode\.value\) return 0;/);
+    expect(source).toMatch(/function matchHintAllowance\(\) \{[\s\S]{0,320}?if \(measureMode\.value\) return 0;/);
     expect(source).toMatch(/function matchUndoAllowance\(\) \{[\s\S]{0,120}?if \(measureMode\.value\) return 0;/);
     expect(source).toMatch(/const openingGuideAvailable = computed\(\(\) => matchInitialSfen\.value === STANDARD_SFEN && !measureMode\.value\);/);
     expect(source).toMatch(/measure: measureMode\.value\s*\? \{ carry: measureCarry\.value, welcome: measureWelcome\.value, settingsBefore: settingsBeforeMeasure, prior: measurePriorState\.value \}/);
@@ -232,7 +232,7 @@ describe("match screen regressions", () => {
 
   it("suspends a match to the home screen and resumes it from the saved state", () => {
     // 中断は、ホームのある表示だけで出す。保存に印を付け、盤の状態を消してホームへ戻る。
-    expect(source).toMatch(/v-if="!menuCollapsed && !reviewMode"[\s\S]*?v-if="showHome"[\s\S]*?suspendConfirmOpen = true[\s\S]*?>中断<\/button>/);
+    expect(source).toMatch(/v-if="!menuCollapsed && !reviewMode"[\s\S]*?v-if="showHome && !researchMatch"[\s\S]*?suspendConfirmOpen = true[\s\S]*?>中断<\/button>/);
     expect(source).toMatch(/v-if="menuCollapsed && !reviewMode"[\s\S]*?v-if="showHome"[\s\S]*?suspendConfirmOpen = true[\s\S]*?>対局を中断する<\/button>/);
     expect(source).toContain("suspended: suspendedMatch.value !== null,");
     expect(source).toMatch(/function suspendMatch\(\)[\s\S]*?persistMatchState\(\);[\s\S]*?matchStarted\.value = false;[\s\S]*?openHome\(\);/);
@@ -700,7 +700,7 @@ describe("match screen regressions", () => {
     const counter = source.split("function startRyuoCounter()")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(counter).toMatch(/confirmDiscardSuspended[\s\S]*?matchKind\.value = "learning";[\s\S]*?selectedPlayerColor\.value = color;[\s\S]*?counterStyle\([\s\S]*?beginMatch\(\);/);
     expect(source).toMatch(/ryuoGame\.value \? ryuoOpponent\.value\?\.character \?\? null : ryuoCounterOpponent\.value\?\.character \?\? null/);
-    expect(source).toMatch(/v-if="ryuoCounter && !tutorialMatch && !measureSession"[\s\S]*?data-counter-go @click="goToRyuoFromCounter"/);
+    expect(source).toMatch(/v-else-if="ryuoCounter && !tutorialMatch && !measureSession"[\s\S]*?data-counter-go @click="goToRyuoFromCounter"/);
     // 段階2(14章): 苦手な戦型の練習は、その戦法を指すCPUとの学習対局。練習で変えたCPUの設定は、離れたら戻す。
     expect(source).toMatch(/practice\.kind === "matchup"[\s\S]*?startMatchupPractice\(/);
     const matchup = source.split("function startMatchupPractice(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
@@ -803,7 +803,7 @@ describe("match screen regressions", () => {
 
   it("counts play days only for shogi actions and never pressures the player", () => {
     // 1局指し終えたら数える(すぐ投了した対局は数えない)。開いただけでは数えない。
-    expect(source).toMatch(/if \(matchResult\.moveCount >= 2\) savePlayStreak\(browserStorage\(\), recordPlay\(loadPlayStreak\(browserStorage\(\)\)\)\)/);
+    expect(source).toMatch(/if \(matchResult\.moveCount >= 2 && !researchMatch\.value\) savePlayStreak\(browserStorage\(\), recordPlay\(loadPlayStreak\(browserStorage\(\)\)\)\)/);
     expect(source).not.toMatch(/onMounted\([^)]*recordPlay/);
     const problemSet = readFileSync(new URL("../ShogiProblemSet.vue", import.meta.url), "utf8");
     expect(problemSet).toMatch(/recordReview\(problem, firstTry\);[\s\S]{0,80}recordPlay\(loadPlayStreak\(storage\)\)/);
@@ -1042,7 +1042,7 @@ describe("match screen regressions", () => {
   });
   it("対局中も見出しの「図鑑」から図鑑を開き、閉じると対局へ戻る(docs/match-dex-design.md)", () => {
     // メニューにしまわず、いつも見出しに出す。
-    expect(source).toMatch(/<template v-if="!menuCollapsed && !reviewMode">[\s\S]*?<\/template>[\s\S]{0,200}?class="shogi-game__command shogi-game__dex-open"[\s\S]{0,120}?data-match-dex\s*@click="openDexShelf"/);
+    expect(source).toMatch(/<template v-if="!menuCollapsed && !reviewMode">[\s\S]*?<\/template>[\s\S]{0,700}?class="shogi-game__command shogi-game__dex-open"[\s\S]{0,120}?data-match-dex\s*@click="openDexShelf"/);
     expect(source).toMatch(/v-for="shelf in DEX_SHELF"[\s\S]{0,200}?@click="openDexFromShelf\(shelf\.kind\)"/);
     expect(source).toMatch(/function openDexFromShelf\(kind: DexKind\) \{\s*dexShelfOpen\.value = false;\s*dexFromMatch\.value = dexShelfFrom\.value === "match";/);
     // 対局のエンジンを借りない。占いから新しい対局を始めない。戻る先は対局。
@@ -1299,5 +1299,26 @@ describe('遅れて読み込む部分が読めなかったとき(docs/chunk-relo
     expect(source).not.toMatch(/= defineAsyncComponent\(load/);
     expect(source).toMatch(/isChunkLoadError\(error\) && claimChunkReload\(browserSession\(\)\)[\s\S]{0,80}window\.location\.reload\(\)/);
     expect(source).toMatch(/async function startEndgameNow[\s\S]{0,400}try \{[\s\S]{0,1600}\} catch \(error\) \{\s*onLazyLoadError\(error\);/);
+  });
+
+  it("研究モード: 研究の対局は閃き・待ったが∞で記録に数えず、研究へ戻れる。研究の画面は開いたときに読む(docs/research-mode-design.md)", () => {
+    const research = readFileSync(new URL("../ShogiResearch.vue", import.meta.url), "utf8");
+    expect(source).toMatch(/const ShogiResearch = lazyScreen\(\(\) => import\("\.\/ShogiResearch\.vue"\)\)/);
+    expect(source).not.toMatch(/import ShogiResearch from/);
+    expect(source).toMatch(/function matchHintAllowance\(\) \{[\s\S]{0,160}if \(researchMatch\.value\) return Number\.POSITIVE_INFINITY;/);
+    expect(source).toMatch(/function matchUndoAllowance\(\) \{\s*if \(researchMatch\.value\) return Number\.POSITIVE_INFINITY;/);
+    // 終局しても、レーティング・コレクション・最近の対局・続けて遊んだ日に数えない。
+    expect(source).toMatch(/if \(researchMatch\.value\) \{\s*ratingChange\.value = null;\s*collectionResult\.value = null;\s*\} else \{\s*recordRatedGame\(matchResult\);/);
+    expect(source).toMatch(/matchResult\.winner && !researchMatch\.value\) \{\s*saveRecentGames/);
+    // 研究へ戻ると、指した手を始めた局面からの分岐として研究に渡す。
+    expect(source).toMatch(/function returnToResearch\(\) \{[\s\S]{0,400}researchMatchReturn\.value = \{ researchId: match\.researchId, path: match\.path, moves \};/);
+    // 対局準備へ戻ると(研究の対局から離れると)、研究の前の強さに戻す。
+    expect(source).toMatch(/if \(researchMatch\.value && researchStrengthBefore !== null\) searchNodes\.value = researchStrengthBefore;\s*researchMatch\.value = null;/);
+    // ブラウザの戻るは、研究の中のシート・読み筋・局面編集から閉じる。
+    expect(source).toMatch(/\} else if \(researchOpen\.value\) \{[\s\S]{0,200}researchView\.value\.goBack\(\)/);
+    expect(source).toMatch(/canGoBack: \(\) => [^\n]*researchOpen\.value/);
+    // 研究の画面: 新しい局面を読む前に前の探索を止め、編集のあいだは読まない。
+    expect(research).toMatch(/if \(!analyzing\.value \|\| editing\.value \|\| kifuAnalysisBlocksEngine\.value\) \{\s*void engine\.stop\(\);/);
+    expect(research).toMatch(/defineExpose\(\{ goBack \}\)/);
   });
 });

@@ -329,7 +329,7 @@ export function restoreBranch(research, undo) {
  * その局面の評価値を残す(検討で読んだ値。深いほうを残す)。先手から見た値。
  * @param {object} research
  * @param {number[]} path
- * @param {{ type: "cp" | "mate", value: number }} score
+ * @param {{ type: string, value: number }} score
  * @param {number} depth
  */
 export function recordScore(research, path, score, depth = 0) {

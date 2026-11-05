@@ -403,6 +403,8 @@ type CandidateMove = {
   score?: number; // 手番側視点の数値スコア（showArrowScore が有効な場合のみ設定）
   promotion?: "成" | "不成";
   guideKind?: "plan" | "unsafe-plan" | "urgent" | "ai" | "move" | "threat-black" | "threat-white";
+  // 研究モードの候補の順位(1から)。矢印の先に順位の数字を出し、1位を太く濃く、2位から細く薄くする。
+  rank?: number;
 };
 
 type State = {
@@ -639,6 +641,9 @@ const emit = defineEmits<{
   resize: [size: RectSize];
   move: [move: Move];
   edit: [change: PositionChange];
+  // 研究モードの局面編集(docs/research-mode-design.mdの3-5)。押したマスと持ち駒を知らせ、駒箱から置く・選んだ駒の操作に使う。
+  squareClick: [square: string];
+  handClick: [color: "black" | "white", type: string];
 }>();
 
 const state = reactive({
@@ -1045,6 +1050,7 @@ const clickSquare = (file: number, rank: number) => {
     return;
   }
   const square = new Square(file, rank);
+  emit("squareClick", square.usi);
   const piece = props.position.board.at(square);
   const empty = !piece;
   updatePointer(square, empty, piece?.color);
@@ -1066,6 +1072,7 @@ const clickHand = (color: Color, type: PieceType) => {
     return;
   }
   const empty = props.position.hand(color).count(type) === 0;
+  emit("handClick", color === Color.BLACK ? "black" : "white", type);
   updatePointer(new Piece(color, type), empty, color);
 };
 
@@ -1415,6 +1422,28 @@ function arrowColor(guideKind: CandidateMove["guideKind"]) {
   return "#fe0000";
 }
 
+/** 研究モードの候補の順位による矢印の太さ(1位を太く)と濃さ(2位から薄く)。順位がなければそのまま。 */
+function rankWidth(rank?: number) {
+  if (!rank) return 1;
+  return rank === 1 ? 1.15 : rank === 2 ? 0.85 : 0.7;
+}
+function rankOpacity(rank?: number) {
+  if (!rank) return 1;
+  return rank === 1 ? 0.92 : rank === 2 ? 0.75 : rank === 3 ? 0.62 : 0.5;
+}
+/** 順位の数字の札。読み筋の表の順位の札と同じ赤い丸にする。 */
+function rankLabelStyle(rank: number) {
+  return {
+    background: "#d8483a",
+    color: "#fff",
+    borderRadius: "999px",
+    minWidth: "1.5em",
+    textAlign: "center" as const,
+    opacity: String(Math.max(0.7, rankOpacity(rank))),
+    boxShadow: "0 0 0 2px #fff",
+  };
+}
+
 /** 矢印の評価の札で、詰みとみなす値(hintScoreForArrowは詰みを±100000から手数を引いた値にする)。 */
 const MATE_ARROW_SCORE = 50000;
 /**
@@ -1512,6 +1541,9 @@ const arrows = computed(() => {
     } else if (candidate.guideKind === "threat-black" || candidate.guideKind === "threat-white") {
       scoreRank = index + 1;
       evaluationLabel = "狙い";
+    } else if (candidate.rank) {
+      scoreRank = candidate.rank;
+      evaluationLabel = String(candidate.rank);
     } else if (candidate.score !== undefined && bestScore !== undefined) {
       scoreRank =
         1 +
@@ -1533,7 +1565,7 @@ const arrows = computed(() => {
       labelText,
       start: shiftedStart,
       shaftEnd,
-      shaftWidth: arrowWidth * 0.36,
+      shaftWidth: arrowWidth * 0.36 * rankWidth(candidate.rank),
       headPoints: [
         shiftedEnd,
         new Point(
@@ -1551,12 +1583,14 @@ const arrows = computed(() => {
         width: main.value.frame.size.width + "px",
         height: main.value.frame.size.height + "px",
         zIndex: 100 + n - scoreRank,
+        opacity: String(rankOpacity(candidate.rank)),
       },
       labelStyle: {
         left: middle.x + "px",
         top: middle.y + labelOffsetY + "px",
         color: candidate.guideKind === "unsafe-plan" ? "#d96b00" : arrowColor(candidate.guideKind),
         zIndex: 100 + 2 * n - scoreRank,
+        ...(candidate.rank ? rankLabelStyle(candidate.rank) : {}),
       },
     };
   });
