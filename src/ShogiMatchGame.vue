@@ -8969,7 +8969,7 @@ function homeTile(id: string) {
 }
 function homeTileClass(id: string) {
   const tile = homeTile(id);
-  return { "shogi-title__tile--later": tile.dim, "shogi-title__tile--recommended": tile.recommended };
+  return { "shogi-title__tile--recommended": tile.recommended };
 }
 
 type HomeNext = {

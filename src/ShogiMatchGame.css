@@ -4216,10 +4216,6 @@
   letter-spacing: 0.06em;
   pointer-events: none;
 }
-/* まだ早い入口。鍵はかけず、薄くして「〇〇のあとに」と添える(押せばそのまま遊べる)。 */
-.shogi-game .shogi-title__tile--later {
-  opacity: 0.5;
-}
 .shogi-title__label {
   grid-area: label;
   font-size: 1.1em;
