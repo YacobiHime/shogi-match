@@ -182,6 +182,27 @@
                 <button type="button" :class="{ on: settings.display === 'rate' }" @click="setSetting('display', 'rate')">勝率</button>
               </span>
             </div>
+            <!-- 相手の手を自動で指す(10章)。いつでも切れるよう、検討の設定の並びに出したままにする。 -->
+            <div class="shogi-research__setting shogi-research__setting--full" data-research-auto>
+              <span>相手の手</span>
+              <span class="shogi-research__switch">
+                <button type="button" :class="{ on: !settings.autoReply }" data-research-auto-off @click="setAutoReply(false)">手で指す</button>
+                <button type="button" :class="{ on: settings.autoReply }" data-research-auto-on @click="setAutoReply(true)">自動で指す</button>
+              </span>
+            </div>
+            <div class="shogi-research__setting">
+              <span>自動の側</span>
+              <span class="shogi-research__switch">
+                <button type="button" :class="{ on: settings.autoSide === 'black' }" @click="setAutoSide('black')">▲</button>
+                <button type="button" :class="{ on: settings.autoSide === 'white' }" @click="setAutoSide('white')">△</button>
+              </span>
+            </div>
+            <div class="shogi-research__setting">
+              <span>考える</span>
+              <span class="shogi-research__switch">
+                <button v-for="item in REPLY_TIMES" :key="item.ms" type="button" :class="{ on: settings.replyMs === item.ms }" @click="setSetting('replyMs', item.ms)">{{ item.label }}</button>
+              </span>
+            </div>
           </div>
           <ol class="shogi-research__pv" data-research-pv>
             <li v-for="row in rows" :key="row.rank" :class="{ 'is-open': preview?.row.rank === row.rank }">
@@ -312,6 +333,7 @@
           <button type="button" class="shogi-research__go" :class="{ 'is-running': engineRunning }" @click="toggleAnalyzing"><span v-if="engineRunning" class="pulse" aria-hidden="true" />{{ engineRunning ? "止める" : "読む" }}</button>
           <button type="button" data-research-edit @click="startEdit">局面編集</button>
           <button type="button" data-research-play @click="openSheet('play')">対局</button>
+          <button type="button" class="shogi-research__auto" :class="{ 'is-on': settings.autoReply }" :aria-pressed="settings.autoReply" data-research-auto-toggle @click="setAutoReply(!settings.autoReply)"><small>相手{{ settings.autoSide === "black" ? "▲" : "△" }}</small>{{ settings.autoReply ? "自動" : "手で" }}</button>
           <button type="button" aria-label="その他" @click="openSheet('more')">…</button>
         </div>
       </section>
@@ -399,6 +421,28 @@
             <button type="button" @click="setSetting('display', settings.display === 'rate' ? 'score' : 'rate')">表示: {{ settings.display === "rate" ? "勝率 → 評価値にする" : "評価値 → 勝率にする" }}</button>
             <button type="button" @click="setSetting('arrows', !settings.arrows)">矢印: {{ settings.arrows ? "あり → なしにする" : "なし → ありにする" }}</button>
           </div>
+          <div class="shogi-research__sheet-auto" data-research-auto-sheet>
+            <div class="shogi-research__setting">
+              <span>相手の手</span>
+              <span class="shogi-research__switch">
+                <button type="button" :class="{ on: !settings.autoReply }" @click="setAutoReply(false)">手で指す</button>
+                <button type="button" :class="{ on: settings.autoReply }" @click="setAutoReply(true)">自動で指す</button>
+              </span>
+            </div>
+            <div class="shogi-research__setting">
+              <span>自動で指す側</span>
+              <span class="shogi-research__switch">
+                <button type="button" :class="{ on: settings.autoSide === 'black' }" @click="setAutoSide('black')">▲先手</button>
+                <button type="button" :class="{ on: settings.autoSide === 'white' }" @click="setAutoSide('white')">△後手</button>
+              </span>
+            </div>
+            <div class="shogi-research__setting">
+              <span>考える長さ</span>
+              <span class="shogi-research__switch">
+                <button v-for="item in REPLY_TIMES" :key="item.ms" type="button" :class="{ on: settings.replyMs === item.ms }" @click="setSetting('replyMs', item.ms)">{{ item.label }}</button>
+              </span>
+            </div>
+          </div>
         </template>
 
         <button type="button" class="shogi-research__sheet-close" aria-label="閉じる" @click="sheet = ''">×</button>
@@ -423,6 +467,7 @@ import {
 import {
   MULTI_PV_MAX,
   MULTI_PV_MIN,
+  REPLY_TIMES,
   STANDARD_SFEN,
   THINK_LIMITS,
   activeLine,
@@ -451,7 +496,7 @@ import {
   sfenAt,
   sideOf,
 } from "./core/research-record.mjs";
-import { blackRateOf, candidateArrows, candidateRows, himeLine, scoreText, statsText, verdictText } from "./core/research-analysis.mjs";
+import { autoReplyDecision, blackRateOf, candidateArrows, candidateRows, himeLine, scoreText, statsText, verdictText } from "./core/research-analysis.mjs";
 import {
   BOX_ORDER,
   EDIT_PRESETS,
@@ -608,12 +653,18 @@ function restoreRemoved() {
 }
 function onBoardMove(usi: string) {
   preview.value = null;
+  const mover = sideOf(currentSfen.value);
   playMove(research.value, usi);
+  // 自動で指す側でない手を指したら、相手が答える(10章)。自動で指す側の手を盤で指したときは、指し直しとして答えない。
+  if (settings.value.autoReply && mover !== settings.value.autoSide) requestAutoReply();
 }
 
 const moveCaption = computed(() => (ply.value === 0 ? "開始局面" : `${ply.value}手目 ${line.value[ply.value - 1]?.label ?? ""}`));
 const moveSub = computed(() => {
   const side = sideOf(currentSfen.value) === "black" ? "▲先手" : "△後手";
+  if (replyPending.value) return `${side}が考えています…`;
+  // スマホの手の行は狭いので、1行に収まる短さにする。
+  if (autoPlayedKey.value === positionKey.value) return `${autoSideMark.value}が自動で指した`;
   return `次は ${side}の番${nextBranches.value.length > 1 ? " ・ 分岐あり" : ""}`;
 });
 
@@ -702,6 +753,8 @@ function stopMateSearch() {
 }
 
 const kifuAnalysisBlocksEngine = ref(false);
+/** いちばん新しい読みを頼んだ時刻(自動で指すとき、止めたあとの古い読みを読み終えたとみなさないため)。 */
+let searchStartedAt = 0;
 function refreshAnalysis() {
   mateRows.value = [];
   if (!analyzing.value || editing.value || kifuAnalysisBlocksEngine.value) {
@@ -715,10 +768,12 @@ function refreshAnalysis() {
     return;
   }
   stopMateSearch();
+  searchStartedAt = Date.now();
   void engine.start(positionCommand(research.value), positionKey.value, { multiPv: settings.value.multiPv, go: { ...limit.value.go } });
 }
+// 1つずつ見る(配列を返す関数で見ると、矢印や表示の設定を変えただけでも読み直してしまう)。
 watch(
-  () => [positionKey.value, settings.value.multiPv, settings.value.limit, editing.value, analyzing.value, kifuAnalysisBlocksEngine.value],
+  [positionKey, () => settings.value.multiPv, () => settings.value.limit, editing, analyzing, kifuAnalysisBlocksEngine],
   refreshAnalysis,
 );
 
@@ -758,6 +813,7 @@ const emptyRowsText = computed(() => {
 });
 const settled = computed(() => (engine.stats.value.depth ?? 0) >= 12 || !engine.running.value);
 const hime = computed(() => {
+  if (replyPending.value) return { text: `${autoSideMark.value}の手を考えているよ。気に入らない手なら、◀で戻して指し直してね。`, tone: "normal" };
   if (engine.error.value) return { text: "将棋AIが起動できなかったよ。もう一度開き直してみてね。", tone: "normal" };
   if (!engineReadyPosition.value && !rows.value.length) return { text: mateSearching.value ? "詰みを探しているよ。" : "この局面は、玉を置くと読めるよ。", tone: "normal" };
   return himeLine(rows.value, { settled: settled.value });
@@ -775,6 +831,60 @@ watch([rows, () => engine.stats.value.depth], () => {
   if (!best?.score || depth < 12 || engine.searchedKey.value !== positionKey.value) return;
   recordScore(research.value, research.value.path, best.score, depth);
 });
+
+// ---- 相手の手を自動で指す(10章)
+// 盤で指したあと、自動で指す側の番なら、考える長さだけ読んで候補の1番を指す。棋譜の手として入るので、◀で戻して指し直せる。
+const replyPending = ref<{ key: string; since: number } | null>(null);
+const replyTick = ref(0);
+/** 自動で指した手のあとの局面の印(手の行に「自動で指しました」と出す)。 */
+const autoPlayedKey = ref("");
+let replyTimer: ReturnType<typeof setTimeout> | null = null;
+const autoSideMark = computed(() => (settings.value.autoSide === "black" ? "▲先手" : "△後手"));
+
+function cancelAutoReply() {
+  if (replyTimer) clearTimeout(replyTimer);
+  replyTimer = null;
+  replyPending.value = null;
+}
+function requestAutoReply() {
+  cancelAutoReply();
+  if (!settings.value.autoReply || editing.value || sideOf(currentSfen.value) !== settings.value.autoSide) return;
+  replyPending.value = { key: positionKey.value, since: Date.now() };
+  // 止めていても、答えるために読む。
+  analyzing.value = true;
+  replyTimer = setTimeout(() => { replyTick.value += 1; }, settings.value.replyMs);
+}
+function checkAutoReply() {
+  const pending = replyPending.value;
+  if (!pending) return;
+  if (pending.key !== positionKey.value || !settings.value.autoReply || editing.value || kifuAnalysisBlocksEngine.value) {
+    cancelAutoReply();
+    return;
+  }
+  // 読み直しの途中(前の読みを止めたところ)は、読み終えたとみなさない。
+  const restarting = engineReadyPosition.value && !engine.error.value && (engine.searchedKey.value !== positionKey.value || pending.since > searchStartedAt);
+  const searching = engineRunning.value || restarting;
+  const decision = autoReplyDecision({ rows: rows.value, searching, waitedMs: Date.now() - pending.since, waitMs: settings.value.replyMs });
+  if (decision.kind === "wait") return;
+  cancelAutoReply();
+  if (decision.kind !== "move") return;
+  preview.value = null;
+  playMove(research.value, decision.usi);
+  autoPlayedKey.value = positionKey.value;
+}
+watch([replyPending, rows, engineRunning, replyTick, () => engine.searchedKey.value, positionKey, editing], checkAutoReply);
+
+/** 相手の手の自動を入れる・切る。入れたときに自動で指す側の番なら、すぐ考え始める。 */
+function setAutoReply(on: boolean) {
+  setSetting("autoReply", on);
+  if (on) requestAutoReply();
+  else cancelAutoReply();
+}
+function setAutoSide(side: "black" | "white") {
+  setSetting("autoSide", side);
+  if (settings.value.autoReply) requestAutoReply();
+  else cancelAutoReply();
+}
 
 // ---- 盤
 const preview = shallowRef<{ row: Row; step: number } | null>(null);
@@ -1043,7 +1153,7 @@ function openSheet(kind: SheetKind) {
   if (kind === "play") playSide.value = sideOf(currentSfen.value);
   sheet.value = kind;
 }
-function setSetting<K extends "multiPv" | "limit" | "arrows" | "display">(key: K, value: (typeof settings.value)[K]) {
+function setSetting<K extends "multiPv" | "limit" | "arrows" | "display" | "autoReply" | "autoSide" | "replyMs">(key: K, value: (typeof settings.value)[K]) {
   settings.value = { ...settings.value, [key]: value };
 }
 function changeMultiPv(delta: number) {
@@ -1190,6 +1300,7 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect();
   if (saveTimer) saveNow();
   if (undoTimer) clearTimeout(undoTimer);
+  cancelAutoReply();
   stopMateSearch();
   kifuCancelled = true;
   releaseEngines(kifuEngines);
@@ -1310,7 +1421,8 @@ defineExpose({ goBack });
 .shogi-game .shogi-research__rate-bar { position: relative; height: 14px; border-radius: 7px; overflow: hidden; background: var(--research-white); }
 .shogi-game .shogi-research__rate-bar i { position: absolute; inset: 0 auto 0 0; background: var(--research-black); transition: width 0.4s ease; }
 .shogi-game .shogi-research__rate-bar span { position: absolute; left: 50%; top: 50%; translate: -50% -50%; padding: 0 8px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 999px; background: #172632; color: #fffcf4; font-size: 0.72rem; line-height: 1.35; white-space: nowrap; }
-.shogi-game .shogi-research__board { position: relative; min-height: 0; min-width: 0; }
+/* 矢印(z-index 100より上)がシートの上に出ないよう、盤の中に閉じ込める。 */
+.shogi-game .shogi-research__board { position: relative; min-height: 0; min-width: 0; isolation: isolate; }
 .shogi-game .shogi-research__board .shogi-match-theme-controls { display: none; }
 .shogi-game .shogi-research__move { display: grid; grid-template-columns: 48px 48px minmax(0, 1fr) 48px 48px; gap: 6px; align-items: center; padding: 0 6px; }
 .shogi-game .shogi-research--wide .shogi-research__move { grid-template-columns: 56px 56px minmax(0, 1fr) 56px 56px; max-width: 600px; width: 100%; justify-self: center; }
@@ -1439,7 +1551,12 @@ defineExpose({ goBack });
   line-height: 1.2;
 }
 .shogi-game .shogi-research .is-primary { border-color: #b57c39; color: #1d303f; background: #f1a54c; box-shadow: 0 3px 0 #b57c39; font-weight: 900; }
-.shogi-game .shogi-research__bar { display: grid; grid-template-columns: 1.2fr 1fr 1fr 52px; gap: 6px; padding: 6px 8px 8px; }
+.shogi-game .shogi-research__bar { display: grid; grid-template-columns: 1.1fr 1fr 0.8fr 0.9fr 44px; gap: 6px; padding: 6px 8px 8px; }
+.shogi-game .shogi-research__bar .shogi-research__auto { display: grid; place-content: center; gap: 1px; }
+.shogi-game .shogi-research__bar .shogi-research__auto small { color: rgba(255, 252, 244, 0.7); font-size: 0.66rem; font-weight: 700; }
+.shogi-game .shogi-research__bar .shogi-research__auto.is-on { border-color: #f1a54c; color: #f1a54c; background: rgba(241, 165, 76, 0.16); }
+.shogi-game .shogi-research__setting--full { grid-column: 1 / -1; }
+.shogi-game .shogi-research__sheet-auto { display: grid; gap: 6px; margin-top: 10px; }
 .shogi-game .shogi-research__bar .shogi-research__go { min-width: 0; }
 .shogi-game .shogi-research__phone-kifu { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; min-height: 0; padding: 6px 8px; overflow: hidden; }
 .shogi-game .shogi-research__phone-kifu .shogi-research__kifu { min-height: 0; border: 1px solid rgba(241, 165, 76, 0.5); background: rgba(23, 38, 50, 0.94); }

@@ -138,6 +138,19 @@ export function himeLine(rows, { settled = true } = {}) {
 }
 
 /**
+ * 相手の手を自動で指すか、まだ待つかを決める(docs/research-mode-design.mdの10章)。
+ * 考える長さが過ぎるか読み終えたら、候補の1番を指す。読み終えても候補がない(詰んでいる・読めない)なら指さない。
+ * @param {{ rows?: { usi: string }[], searching: boolean, waitedMs: number, waitMs: number }} input
+ * @returns {{ kind: "wait" } | { kind: "move", usi: string } | { kind: "none" }}
+ */
+export function autoReplyDecision({ rows, searching, waitedMs, waitMs }) {
+  if (searching && waitedMs < waitMs) return { kind: "wait" };
+  const best = rows?.[0];
+  if (best?.usi) return { kind: "move", usi: best.usi };
+  return searching ? { kind: "wait" } : { kind: "none" };
+}
+
+/**
  * 研究の棋譜の一覧の評価値の列(先手から見た値の短い文字)。
  */
 export function lineScoreText(score) {

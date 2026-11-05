@@ -36,6 +36,8 @@ export function useResearchEngine({ acquire, release }: {
   let engine: ShogiEngine | null = null;
   let current: Promise<unknown> | null = null;
   let generation = 0;
+  /** 頼まれた読みの番号(いちばん新しい頼みだけを始める)。 */
+  let startTicket = 0;
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let pending: { candidates: ResearchCandidate[]; depth?: number; nodes?: number; nps?: number } | null = null;
   let startedAt = 0;
@@ -77,7 +79,11 @@ export function useResearchEngine({ acquire, release }: {
    * goが空ならずっと読む(止めるまで)。
    */
   async function start(position: string, key: string, { multiPv, go }: { multiPv: number; go: ResearchGo }) {
+    // 止めるのを待つあいだに次の読みを頼まれたら、この読みは始めない。
+    // 待ったあとに世代を読むと、続けて頼んだ2つの読みが同じ世代になり、両方がエンジンへ go を送ってしまう(10-4)。
+    const ticket = ++startTicket;
     await stop();
+    if (ticket !== startTicket) return;
     const id = generation;
     error.value = "";
     try {

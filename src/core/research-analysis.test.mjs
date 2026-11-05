@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blackScoreOf, candidateArrows, candidateRows, himeLine, nodeText, scoreText, statsText, verdictText } from "./research-analysis.mjs";
+import { autoReplyDecision, blackScoreOf, candidateArrows, candidateRows, himeLine, nodeText, scoreText, statsText, verdictText } from "./research-analysis.mjs";
 
 const STUDY = "lnsg1gsnl/1k3r1b1/ppppp2pp/5pp2/9/2P1P2P1/PP1P1PP1P/1BK2S1R1/LNSG1G1NL b - 13";
 
@@ -46,5 +46,20 @@ describe("検討の見せ方", () => {
     const mate = candidateRows(STUDY, [{ rank: 1, move: "4i5h", score: { type: "mate", value: 7 } }]);
     expect(himeLine(mate)).toEqual({ text: "7手詰めがあるよ！ ▲5八金右から詰ませられる。", tone: "notice" });
     expect(himeLine([]).text).toBe("いまの局面を読んでいるよ。");
+  });
+});
+
+describe("相手の手を自動で指す", () => {
+  const rows = [{ usi: "3c3d" }, { usi: "8c8d" }];
+  it("考える長さのあいだは待ち、過ぎたら候補の1番を指す", () => {
+    expect(autoReplyDecision({ rows, searching: true, waitedMs: 500, waitMs: 3000 })).toEqual({ kind: "wait" });
+    expect(autoReplyDecision({ rows, searching: true, waitedMs: 3000, waitMs: 3000 })).toEqual({ kind: "move", usi: "3c3d" });
+  });
+  it("読み終えたら、長さを待たずに指す", () => {
+    expect(autoReplyDecision({ rows, searching: false, waitedMs: 100, waitMs: 3000 })).toEqual({ kind: "move", usi: "3c3d" });
+  });
+  it("候補がまだなければ待ち、読み終えても候補がなければ指さない", () => {
+    expect(autoReplyDecision({ rows: [], searching: true, waitedMs: 5000, waitMs: 3000 })).toEqual({ kind: "wait" });
+    expect(autoReplyDecision({ rows: [], searching: false, waitedMs: 5000, waitMs: 3000 })).toEqual({ kind: "none" });
   });
 });

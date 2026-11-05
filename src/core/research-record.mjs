@@ -411,7 +411,26 @@ export const THINK_LIMITS = Object.freeze([
   Object.freeze({ id: "nodes-10m", group: "局面数", label: "1000万局面", go: { nodes: 10000000 } }),
 ]);
 
-export const DEFAULT_RESEARCH_SETTINGS = Object.freeze({ multiPv: 3, limit: "infinite", arrows: true, display: "score", analysisLevel: 1 });
+/** 相手の手を自動で指すとき、考える長さの選択肢(ms。docs/research-mode-design.mdの10章)。 */
+export const REPLY_TIMES = Object.freeze([
+  Object.freeze({ ms: 1000, label: "1秒" }),
+  Object.freeze({ ms: 3000, label: "3秒" }),
+  Object.freeze({ ms: 10000, label: "10秒" }),
+]);
+
+export const DEFAULT_RESEARCH_SETTINGS = Object.freeze({
+  multiPv: 3,
+  limit: "infinite",
+  arrows: true,
+  display: "score",
+  analysisLevel: 1,
+  /** 相手の手を自動で指すか(10章)。 */
+  autoReply: false,
+  /** 自動で指す側。 */
+  autoSide: "white",
+  /** 自動で指す前に考える長さ(ms)。 */
+  replyMs: 3000,
+});
 
 /** 設定を整える(範囲の外や知らない値ははじめの値)。 */
 export function normalizeResearchSettings(raw) {
@@ -423,6 +442,9 @@ export function normalizeResearchSettings(raw) {
     arrows: typeof value.arrows === "boolean" ? value.arrows : DEFAULT_RESEARCH_SETTINGS.arrows,
     display: value.display === "rate" ? "rate" : "score",
     analysisLevel: [0, 1, 2].includes(value.analysisLevel) ? value.analysisLevel : DEFAULT_RESEARCH_SETTINGS.analysisLevel,
+    autoReply: typeof value.autoReply === "boolean" ? value.autoReply : DEFAULT_RESEARCH_SETTINGS.autoReply,
+    autoSide: value.autoSide === "black" ? "black" : "white",
+    replyMs: REPLY_TIMES.some(({ ms }) => ms === value.replyMs) ? value.replyMs : DEFAULT_RESEARCH_SETTINGS.replyMs,
   };
 }
 

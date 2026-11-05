@@ -132,10 +132,15 @@ describe("研究帳の保存", () => {
   });
 
   it("設定は範囲に収め、保存して読める", () => {
-    expect(normalizeResearchSettings({ multiPv: 30, limit: "nope", arrows: false, display: "rate" })).toEqual({ multiPv: 10, limit: "infinite", arrows: false, display: "rate", analysisLevel: 1 });
+    expect(normalizeResearchSettings({ multiPv: 30, limit: "nope", arrows: false, display: "rate" })).toEqual({ multiPv: 10, limit: "infinite", arrows: false, display: "rate", analysisLevel: 1, autoReply: false, autoSide: "white", replyMs: 3000 });
     const storage = memoryStorage();
     saveResearchSettings(storage, { multiPv: 5, limit: "time-3" });
     expect(loadResearchSettings(storage)).toMatchObject({ multiPv: 5, limit: "time-3", arrows: true });
+  });
+
+  it("相手の手の自動は、知らない値をはじめの値に戻す", () => {
+    expect(normalizeResearchSettings({ autoReply: true, autoSide: "black", replyMs: 1000 })).toMatchObject({ autoReply: true, autoSide: "black", replyMs: 1000 });
+    expect(normalizeResearchSettings({ autoReply: "yes", autoSide: "red", replyMs: 2500 })).toMatchObject({ autoReply: false, autoSide: "white", replyMs: 3000 });
   });
 });
 

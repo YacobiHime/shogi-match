@@ -61,6 +61,18 @@ describe("研究の検討(止めるまで読む)", () => {
     vi.useRealTimers();
   });
 
+  it("続けて読みを頼んだら、最後の局面だけを読む(2つの go を送らない)", async () => {
+    const { engine, calls } = fakeEngine();
+    const research = useResearchEngine({ acquire: async () => engine as never });
+    await research.start("startpos", "a", { multiPv: 1, go: {} });
+    const first = research.start("startpos moves 7g7f", "b", { multiPv: 1, go: {} });
+    const second = research.start("startpos moves 7g7f 3c3d", "c", { multiPv: 1, go: {} });
+    await Promise.all([first, second]);
+    expect(calls.filter((call) => call.startsWith("go"))).toHaveLength(2);
+    expect(calls.filter((call) => call.startsWith("position"))).toEqual(["position startpos", "position startpos moves 7g7f 3c3d"]);
+    expect(research.searchedKey.value).toBe("c");
+  });
+
   it("エンジンを借りられなければ、理由を残して読まない", async () => {
     const research = useResearchEngine({ acquire: async () => { throw new Error("起動できません"); } });
     await research.start("startpos", "a", { multiPv: 1, go: {} });
