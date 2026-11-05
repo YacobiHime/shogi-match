@@ -816,6 +816,15 @@
             <small>{{ MATCH_KIND_OPTIONS.find(({ value }) => value === matchKind)?.description }}</small>
           </div>
 
+          <section v-if="matchKind === 'normal'" class="shogi-game__pregame-section" aria-label="対局相手">
+            <div class="shogi-game__pregame-row" data-pregame-row="opponent">
+              <span class="shogi-game__pregame-row-label">対局相手:</span>
+              <span class="shogi-game__pregame-value">{{ freeOpponent === "local" ? "プレイヤー同士" : "CPU" }}</span>
+              <button type="button" class="shogi-game__pregame-change" aria-label="対局相手を変更" @click="pregamePicker = 'opponent'">変更</button>
+            </div>
+            <p v-if="freeOpponent === 'local'" class="shogi-game__pregame-note">同じ端末で、先手・後手を交互に指すよ。盤の向きは「ひふみんアイ」で変えられるよ。</p>
+          </section>
+
           <!-- 開始局面で下に出る項目が変わるため、学習対局では最初に選ばせる。 -->
           <div v-if="matchKind === 'learning'" class="shogi-game__pregame-section shogi-game__pregame-start-type">
             <span id="pregame-start-type" class="shogi-game__pregame-row-label">開始局面</span>
@@ -3218,6 +3227,7 @@ const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error
 type MatchKind = "normal" | "learning" | "tournament";
 type LearningStartType = "standard" | "handicap" | "formation";
 const matchKind = ref<MatchKind>("normal");
+const freeOpponent = ref<GameMode>(props.mode === "local" ? "local" : "cpu");
 const matchInitialSfen = ref(props.initialSfen);
 const learningStartType = ref<LearningStartType>("standard");
 const learningHandicapId = ref("bishop");
@@ -4603,7 +4613,8 @@ function confirmResign() {
   resign();
 }
 
-const normalizedMode = computed<GameMode>(() => props.mode === "local" ? "local" : "cpu");
+const normalizedMode = computed<GameMode>(() => matchKind.value === "normal"
+  ? freeOpponent.value : props.mode === "local" ? "local" : "cpu");
 const humanColor = computed(() => activePlayerColor.value === "white" ? Color.WHITE : Color.BLACK);
 const moveCount = computed(() => record.value.current.ply);
 const flipBoard = computed(() => (
@@ -6843,6 +6854,10 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
   const single = (title: string, value: PickerValue, groups: PickerSection["groups"], note = "") => ({
     title, note, sections: [{ key: id, value, groups }],
   });
+  if (id === "opponent") return single("対局相手", freeOpponent.value, [{ options: [
+    { value: "cpu", label: "CPUと対局" },
+    { value: "local", label: "プレイヤー同士", description: "同じ端末で交互に指す" },
+  ] }]);
   if (id === "strength") {
     // 50個を、はじめの級・級・段・プロの4つに分けて並べる(docs/level-ladder-design.mdの5章・12章)。同じ名前の段は、Rと成績で見分ける。
     const band = (from: number, to: number) => strengthPickerOptions.value.filter((_, level) => level >= from && level <= to);
@@ -6894,7 +6909,11 @@ function openPregameRow(id: string) {
 
 function onPregamePick(key: string, value: PickerValue) {
   const text = String(value);
-  if (key === "strength") searchNodes.value = Number(value);
+  if (key === "opponent") {
+    freeOpponent.value = value === "local" ? "local" : "cpu";
+    if (freeOpponent.value === "cpu") void initializeEngine();
+  }
+  else if (key === "strength") searchNodes.value = Number(value);
   else if (key === "cpuFirstMove") cpuFirstMove.value = text;
   else if (key === "bishop") cpuBishopPreference.value = text;
   else if (key === "rook") cpuRookPreference.value = text;
@@ -9356,6 +9375,7 @@ useBackNavigation({
 });
 
 function openPregame() {
+  freeOpponent.value = props.mode === "local" ? "local" : "cpu";
   matchGeneration += 1;
   cancelResultReveal();
   if (cpuTimer) clearTimeout(cpuTimer);
@@ -9802,6 +9822,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
   const snapshot = loadMatchSnapshot(matchStorage, matchStorageKey, {
     initialSfen: props.initialSfen,
     mode: normalizedMode.value,
+    allowLocal: props.showHome,
   });
   if (!snapshot) return false;
   if (snapshot.suspended === true && props.showHome && !resume) {
@@ -9821,6 +9842,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
       || snapshot.moves.some((move: unknown) => typeof move !== "string" || move.length > 8)
     ) throw new Error("保存棋譜が不正です。");
     const moves = snapshot.moves as string[];
+    freeOpponent.value = snapshot.mode === "local" ? "local" : "cpu";
     restoreLearningSettings(snapshot);
     const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(
       matchInitialSfen.value,
@@ -13006,6 +13028,7 @@ function restart() {
 watch(
   () => [props.initialSfen, props.mode],
   () => {
+    freeOpponent.value = props.mode === "local" ? "local" : "cpu";
     if (matchStarted.value) {
       selectedStrategy.value = "";
       selectedCastle.value = "";

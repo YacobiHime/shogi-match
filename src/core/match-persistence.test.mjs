@@ -139,3 +139,12 @@ describe("match persistence", () => {
       .toThrow("保存された終局結果が棋譜と一致しません。");
   });
 });
+
+it("ホームから選んだ二人対局を復元でき、埋め込みのモード制約は保つ", () => {
+  const data = new Map();
+  const storage = { getItem: k => data.get(k), setItem: (k,v) => data.set(k,v), removeItem: k => data.delete(k) };
+  const snapshot = { initialSfen: STANDARD_SFEN, mode: 'local', moves: ['7g7f','3c3d'] };
+  saveMatchSnapshot(storage, 'test', snapshot);
+  expect(loadMatchSnapshot(storage, 'test', { initialSfen: STANDARD_SFEN, mode: 'cpu', allowLocal: true })?.moves).toEqual(snapshot.moves);
+  expect(loadMatchSnapshot(storage, 'test', { initialSfen: STANDARD_SFEN, mode: 'cpu' })).toBeNull();
+});
