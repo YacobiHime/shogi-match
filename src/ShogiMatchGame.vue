@@ -244,7 +244,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">自由対局</span>
-                <small class="shogi-title__desc">{{ homeTile("match").after || "設定を選んで1局" }}</small>
               </button>
               <button type="button" class="shogi-title__tile" :class="homeTileClass('tournament')" @click="openTournamentScreen">
                 <span v-if="homeTile('tournament').recommended" class="shogi-title__tile-badge">おすすめ</span>
@@ -260,7 +259,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">大会</span>
-                <small class="shogi-title__desc">{{ homeTile("tournament").after || "竜王戦で称号を" }}</small>
               </button>
               <button type="button" class="shogi-title__tile" :class="homeTileClass('endgame')" data-endgame-tile @click="startEndgameMatch">
                 <span v-if="homeTile('endgame').recommended" class="shogi-title__tile-badge">おすすめ</span>
@@ -277,7 +275,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">終盤戦</span>
-                <small class="shogi-title__desc">{{ homeTile("endgame").after || "名局の終盤から" }}</small>
               </button>
               <!--
                 物語。大会と並ぶこのゲームの主役。押すとストーリー選択(メインとサブ。docs/story-mode-design.md)。
@@ -303,7 +300,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">物語</span>
-                <small class="shogi-title__desc">羽音と百花と</small>
               </button>
             </div>
             <p class="shogi-title__live" role="status">{{ loadNotice }}</p>
@@ -329,7 +325,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">将棋教室</span>
-                <small class="shogi-title__desc">基礎とすぐ使えるコツ</small>
               </button>
               <button type="button" class="shogi-title__tile" :class="homeTileClass('problems')" @click="problemSetOpen = true">
                 <span v-if="homeTile('problems').recommended" class="shogi-title__tile-badge">おすすめ</span>
@@ -346,7 +341,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">問題集</span>
-                <small class="shogi-title__desc">{{ homeTile("problems").after || "詰ませ方・逃げ方" }}</small>
               </button>
               <!-- 脳トレ道場(docs/brain-training-design.mdの11章)。計算力と記憶力の2つの部屋。 -->
               <button type="button" class="shogi-title__tile" data-brain-tile @click="openBrainTraining">
@@ -369,7 +363,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">脳トレ</span>
-                <small class="shogi-title__desc">計算力と記憶力</small>
               </button>
             </div>
           </section>
@@ -381,7 +374,6 @@
                 <DexIcon v-for="shelf in DEX_SHELF" :key="shelf.kind" class="shogi-title__icon" :kind="shelf.kind" />
               </span>
               <span class="shogi-title__label">図鑑</span>
-              <small class="shogi-title__desc">駒・手筋・定跡など</small>
               <span class="shogi-title__dex-go" aria-hidden="true">›</span>
             </button>
           </section>
