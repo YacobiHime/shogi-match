@@ -90,6 +90,15 @@ export const RESET_GROUPS = Object.freeze([
     keeps: "大会の進み具合・名前・場面の文字の速さは残ります。",
     keys: Object.freeze([`${Y}story:v1`, `${Y}novel-read:v1`]),
   }),
+  // 研究モード(docs/research-mode-design.mdの3-8)。研究帳の研究を消す。読む長さなどの設定は残す。
+  Object.freeze({
+    id: "research",
+    label: "研究",
+    summary: "研究帳の研究（棋譜と分岐・局面）",
+    erases: "研究帳の研究（棋譜と分岐・編集した局面・読んだ評価値）",
+    keeps: "研究の設定（候補の数・読む長さ）、対局の記録・大会は残ります。",
+    keys: Object.freeze([`${Y}research:v1`]),
+  }),
   Object.freeze({
     id: "all",
     label: "すべて（最初から）",

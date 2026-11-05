@@ -255,6 +255,8 @@ export class ShogiEngine {
    * @param {{
    *   movetime?: number,
    *   nodes?: number,
+   *   depth?: number,
+   *   infinite?: boolean,
    *   maxTimeMs?: number,
    *   searchMoves?: string[],
    *   onUpdate?: (update: {
@@ -294,7 +296,10 @@ export class ShogiEngine {
    */
   async go(goOptions = {}) {
     let cmd = 'go';
+    // 研究モードの検討(docs/research-mode-design.mdの3-3)は、止めるまで読み続ける(infinite)か、深さで区切る。
+    if (goOptions.infinite) cmd += ' infinite';
     if (goOptions.movetime) cmd += ' movetime ' + goOptions.movetime;
+    if (goOptions.depth) cmd += ' depth ' + goOptions.depth;
     if (goOptions.nodes) cmd += ' nodes ' + goOptions.nodes;
     if (goOptions.searchMoves !== undefined) {
       if (!Array.isArray(goOptions.searchMoves) || goOptions.searchMoves.length === 0
