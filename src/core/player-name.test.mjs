@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PLAYER_NAME, PLAYER_NAME_KEY, PLAYER_NAME_MAX, loadPlayerName, loadPlayerProfile, momokaCallName, normalizePlayerName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerName, savePlayerProfile } from './player-name.mjs';
+import { DEFAULT_PLAYER_NAME, PLAYER_NAME_KEY, PLAYER_NAME_MAX, loadPlayerName, loadPlayerProfile, playerAddress, canEnterWomenCareer, momokaCallName, normalizePlayerName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerName, savePlayerProfile } from './player-name.mjs';
 
 const memoryStorage = () => {
   const map = new Map();
@@ -67,34 +67,33 @@ describe('名字と名前に分けて入れる', () => {
     expect(loadPlayerProfile(storage)).toMatchObject({ mode: 'split', name: '天鷺羽音', family: '天鷺', given: '羽音' });
     expect(loadPlayerName(storage)).toBe('天鷺羽音');
     storage.setItem(PLAYER_NAME_KEY, JSON.stringify({ name: 'むかし' }));
-    expect(loadPlayerProfile(storage)).toEqual({ mode: 'single', name: 'むかし', family: '', given: '', call: { suffix: '', part: 'family' } });
+    expect(loadPlayerProfile(storage)).toMatchObject({ mode: 'split', name: 'むかし', family: 'むかし', given: '', gender: '', nickname: '' });
     savePlayerProfile(storage, { mode: 'split', family: ' ', given: '' });
     expect(storage.getItem(PLAYER_NAME_KEY)).toBeNull();
   });
 });
 
-describe('百花の呼び方', () => {
-  const test = it;
-  test('選ばなければ「さん」、くん・ちゃん・呼び捨ても選べる。名前がなければ「あなた」', () => {
-    expect(momokaCallName({ mode: 'single', name: 'はるか' })).toBe('はるかさん');
-    expect(momokaCallName({ mode: 'single', name: 'はるか', call: { suffix: 'kun' } })).toBe('はるかくん');
-    expect(momokaCallName({ mode: 'single', name: 'はるか', call: { suffix: 'chan' } })).toBe('はるかちゃん');
-    expect(momokaCallName({ mode: 'single', name: 'はるか', call: { suffix: 'none' } })).toBe('はるか');
-    expect(momokaCallName({ mode: 'single', name: '', call: { suffix: 'chan' } })).toBe('あなた');
-    expect(momokaCallName({ mode: 'single', name: 'はるか', call: { suffix: 'sama' } })).toBe('はるかさん');
+describe('性別と場面ごとの呼び方', () => {
+  const base = { mode: 'split', family: '天鷺', given: '羽音' };
+  it('未選択なら常にさん。旧来の呼び方は固定指定として引き継がない', () => {
+    expect(playerAddress({ ...base, call: { suffix: 'none', part: 'given' } })).toBe('天鷺さん');
+    expect(playerAddress(base, { part: 'given', style: 'bare' })).toBe('羽音さん');
+    expect(momokaCallName(base)).toBe('天鷺さん');
   });
-
-  test('名字と名前に分けたときは、名字か名前のどちらで呼ぶかも選べる', () => {
-    const base = { mode: 'split', family: '天鷺', given: '羽音' };
-    expect(momokaCallName({ ...base, call: { suffix: 'kun' } })).toBe('天鷺くん');
-    expect(momokaCallName({ ...base, call: { suffix: 'chan', part: 'given' } })).toBe('羽音ちゃん');
-    expect(momokaCallName({ ...base, call: { suffix: 'none', part: 'given' } })).toBe('羽音');
+  it('同じ人物でも、場面の関係により名字・名前と敬称が変わる', () => {
+    const profile = { ...base, gender: 'female' };
+    expect(playerAddress(profile)).toBe('天鷺さん');
+    expect(playerAddress(profile, { part: 'given', style: 'familiar' })).toBe('羽音ちゃん');
+    expect(playerAddress(profile, { part: 'given', style: 'bare' })).toBe('羽音');
+    expect(playerAddress({ ...base, gender: 'male' }, { style: 'familiar' })).toBe('天鷺くん');
   });
-
-  test('呼び方も保存して読み直せる', () => {
-    const data = new Map();
-    const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: (k) => data.delete(k) };
-    savePlayerProfile(storage, { mode: 'single', name: 'はるか', call: { suffix: 'chan' } });
-    expect(momokaCallName(loadPlayerProfile(storage))).toBe('はるかちゃん');
+  it('性別だけでも保存し、ニックネームを正式な名札と分ける', () => {
+    const storage = memoryStorage();
+    savePlayerProfile(storage, { gender: 'female', nickname: ' はねね ' });
+    const p = loadPlayerProfile(storage);
+    expect(p).toMatchObject({ gender: 'female', nickname: 'はねね', name: '' });
+    expect(canEnterWomenCareer(p)).toBe(true);
+    expect(canEnterWomenCareer({ gender: 'male' })).toBe(false);
+    expect(canEnterWomenCareer(null)).toBe(false);
   });
 });

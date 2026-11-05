@@ -197,7 +197,7 @@ export function loadNotes(storage) {
  * @param {{ spec: any, ply: number, sfen: string, moveText: string, savedAt?: number }} note
  */
 export function addNote(notes, { spec, ply, sfen, moveText, savedAt = Date.now() }) {
-  const light = (player) => ({ id: player.id, name: player.name, dan: player.dan ?? '', rating: player.rating ?? 0, level: player.level ?? null, story: player.story ?? null, kind: player.kind ?? 'pro', character: player.character ?? null });
+  const light = (player) => ({ id: player.id, name: player.name, nickname: player.nickname ?? '', dan: player.dan ?? '', rating: player.rating ?? 0, level: player.level ?? null, story: player.story ?? null, kind: player.kind ?? 'pro', character: player.character ?? null });
   const keep = {
     key: spec.key, event: spec.event, kind: spec.kind, label: spec.label, section: spec.section, order: spec.order, round: spec.round,
     weight: spec.weight, scale: spec.scale ?? '', venue: spec.venue ?? '', gameNo: spec.gameNo ?? 0, seed: spec.seed, quality: spec.quality ?? '',

@@ -1,3 +1,4 @@
+import { playerAddress } from './player-name.mjs';
 // ノベルの場面の演出(docs/novel-scene-design.mdの12章)。画面に依存しない。
 // 台本の行に足す演出の語彙(キャラの動き・漫符・画面の効果・背景・色・登場と退場・効果音・文の大きさと速さ・間)、
 // 人物と表情の一覧、行ごとの舞台の状態(誰が出ているか・表情・背景・色)、台本の検査(書きまちがいを教える)。
@@ -286,16 +287,16 @@ export const EMOTE_MS = 1100;
 /**
  * 差し込み({name}・{you}・varsの{title}など)を入れて、画面に出す形にする。行・選択肢・返しのすべて。
  * @param {any} scene
- * @param {{ playerName?: string, momokaCall?: string, vars?: Record<string, string> }} [options]
+ * @param {{ playerName?: string, momokaCall?: string, playerProfile?: any, relationships?: Record<string, { part?: 'family' | 'given', style?: 'polite' | 'familiar' | 'bare' }>, vars?: Record<string, string> }} [options]
  */
-export function fillScene(scene, { playerName = '', momokaCall = '', vars = {} } = {}) {
+export function fillScene(scene, { playerName = '', momokaCall = '', playerProfile = null, relationships = {}, vars = {} } = {}) {
   if (!scene) return null;
   const fill = (text) => sceneText(String(text ?? ''), playerName, momokaCall)
     .replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (whole, key) => (vars[key] !== undefined ? String(vars[key]) : whole));
   const fillLine = (line) => ({
     ...line,
     name: fill(line.name ?? ''),
-    text: fill(line.text),
+    text: fill(playerProfile ? String(line.text).replaceAll('{you}', playerAddress(playerProfile, relationships[line.who] ?? {})) : line.text),
     ...(line.choices ? { choices: line.choices.map((choice) => ({ ...choice, label: fill(choice.label), reply: (choice.reply ?? []).map(fillLine) })) } : {}),
   });
   return { ...scene, summary: fill(scene.summary ?? ''), lines: scene.lines.map(fillLine) };

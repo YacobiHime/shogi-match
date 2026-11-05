@@ -133,3 +133,11 @@ describe('差し込み', () => {
     expect(filled.lines[1].choices[0]).toMatchObject({ label: 'やこびさん', reply: [{ text: 'やこびさん！' }] });
   });
 });
+
+it('人物ごとの呼びかけを場面の関係で替え、百花だけに限定しない', () => {
+  const input = scene([say('hanane', '{you}'), say('momoka', '{you}')]);
+  const playerProfile = { family: '天鷺', given: '羽音', gender: 'female' };
+  const result = fillScene(input, { playerProfile, relationships: { hanane: { part: 'given', style: 'bare' }, momoka: { style: 'familiar' } } });
+  expect(result.lines.map(line => line.text)).toEqual(['羽音', '天鷺ちゃん']);
+  expect(fillScene(input, { playerProfile }).lines[0].text).toBe('天鷺さん');
+});

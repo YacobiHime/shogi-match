@@ -921,7 +921,7 @@ export function asAvatarSeason(season, avatar, { live = true } = {}) {
   season.spectator = true;
   if (live) season.live = true;
   season.players[USER_ID] = {
-    ...season.players[USER_ID], kind: 'avatar', rating: avatar.rating, character: structuredClone(avatar.character ?? { abilities: {}, traits: [] }),
+    ...season.players[USER_ID], kind: 'avatar', nickname: avatar.nickname ?? '', rating: avatar.rating, character: structuredClone(avatar.character ?? { abilities: {}, traits: [] }),
     // 得意戦法(プレイヤーが組んだ戦法から。docs/tournament-relay-design.mdの28章)。なければ、序盤はエンジンに任せる。
     repertoire: avatar.repertoire ? structuredClone(avatar.repertoire) : null,
   };

@@ -418,6 +418,7 @@
     />
     <!-- 物語のストーリー選択(docs/story-mode-design.md)。 -->
     <ShogiStory
+      :player-profile="playerProfile"
       v-if="storyOpen"
       ref="storyView"
       :asset-base-url="assetBaseUrl"
@@ -2242,37 +2243,7 @@
       <form class="shogi-game__confirm-panel shogi-game__name-panel" @submit.prevent="acceptPlayerName">
         <h2 id="player-name-title">プレイヤー名</h2>
         <p>盤の名札や竜王戦の表に出る名前だよ（{{ PLAYER_NAME_MAX }}文字まで）。空にすると「あなた」になるよ。</p>
-        <div class="shogi-game__name-modes" role="radiogroup" aria-label="名前の入れ方">
-          <button
-            type="button"
-            role="radio"
-            :aria-checked="nameMode === 'single'"
-            data-player-name-mode="single"
-            @click="chooseNameMode('single')"
-          >そのまま入れる</button>
-          <button
-            type="button"
-            role="radio"
-            :aria-checked="nameMode === 'split'"
-            data-player-name-mode="split"
-            @click="chooseNameMode('split')"
-          >名字と名前に分ける</button>
-        </div>
-        <input
-          v-if="nameMode === 'single'"
-          ref="nameInput"
-          v-model="nameDraft"
-          class="shogi-game__name-input"
-          type="text"
-          inputmode="text"
-          autocomplete="nickname"
-          enterkeyhint="done"
-          :maxlength="PLAYER_NAME_MAX * 2"
-          placeholder="あなた"
-          aria-label="プレイヤー名"
-          data-player-name-input
-        >
-        <div v-else class="shogi-game__name-split">
+        <div class="shogi-game__name-split">
           <label>
             <span>名字</span>
             <input
@@ -2303,28 +2274,20 @@
             >
           </label>
         </div>
-        <fieldset class="shogi-game__name-call" data-player-name-call>
-          <legend>百花の呼び方</legend>
-          <div class="shogi-game__name-modes shogi-game__name-modes--four" role="radiogroup" aria-label="百花の呼び方">
-            <button
-              v-for="option in MOMOKA_SUFFIXES"
-              :key="option.id || 'san'"
-              type="button"
-              role="radio"
-              :aria-checked="callSuffix === option.id"
-              :data-player-name-suffix="option.id || 'san'"
-              @click="callSuffix = option.id as typeof callSuffix"
-            >{{ option.label }}</button>
+        <fieldset class="shogi-game__name-call">
+          <legend>性別</legend>
+          <div class="shogi-game__name-modes" role="radiogroup" aria-label="性別">
+            <button v-for="option in PLAYER_GENDERS" :key="option.id" type="button" role="radio"
+              :aria-checked="genderDraft === option.id" :data-player-gender="option.id || 'unspecified'"
+              @click="genderDraft = option.id as typeof genderDraft">{{ option.label }}</button>
           </div>
-          <div v-if="nameMode === 'split'" class="shogi-game__name-modes" role="radiogroup" aria-label="百花が呼ぶ名前">
-            <button type="button" role="radio" :aria-checked="callPart === 'family'" data-player-name-part="family" @click="callPart = 'family'">名字で呼ぶ</button>
-            <button type="button" role="radio" :aria-checked="callPart === 'given'" data-player-name-part="given" @click="callPart = 'given'">名前で呼ぶ</button>
-          </div>
+          <p>女性は女流への進路も対象になるよ。選ばない場合、呼びかけは「さん」になるよ。</p>
         </fieldset>
-        <p class="shogi-game__name-preview" aria-live="polite" data-player-name-preview>
-          名札: <strong>{{ namePreview.name || "あなた" }}</strong><template v-if="nameMode === 'split' && namePreview.family">　呼ばれ方: {{ namePreview.family }}さん</template>
-          <br>百花から: <strong data-player-name-momoka>{{ momokaPreview }}</strong>
-        </p>
+        <button type="button" :aria-expanded="nicknameOpen" data-player-nickname-toggle @click="nicknameOpen = !nicknameOpen">ニックネームを設定する</button>
+        <label v-if="nicknameOpen">ニックネーム（観戦コメントで使う）
+          <input v-model="nicknameDraft" class="shogi-game__name-input" autocomplete="nickname" :maxlength="PLAYER_NAME_MAX * 2" data-player-nickname>
+        </label>
+        <p class="shogi-game__name-preview" aria-live="polite" data-player-name-preview>名札: <strong>{{ namePreview.name || "あなた" }}</strong></p>
         <div>
           <button type="submit" class="shogi-game__confirm-primary" data-player-name-save>この名前にする</button>
           <button type="button" @click="nameDialogOpen = false">やめる</button>
@@ -2893,7 +2856,7 @@ import { loadWatchStore, noteWatchProgress, saveWatchStore } from "./core/ryuo-w
 import { myAbilityProfile, myRepertoire, myStyleAttack, worldRatingFor } from "./core/my-abilities.mjs";
 import { worldRating } from "./core/ryuo-strength.mjs";
 import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
-import { MOMOKA_SUFFIXES, PLAYER_NAME_MAX, loadPlayerProfile, momokaCallName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerProfile } from "./core/player-name.mjs";
+import { PLAYER_GENDERS, PLAYER_NAME_MAX, loadPlayerProfile, momokaCallName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerProfile } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { abilityRank, abilityValues } from "./core/player-abilities.mjs";
@@ -4436,37 +4399,23 @@ const discardSuspendedPending = ref<(() => void) | null>(null);
 const playerProfile = ref(loadPlayerProfile(browserStorage()));
 const playerName = computed(() => playerProfile.value.name);
 const nameDialogOpen = ref(false);
-const nameMode = ref<"single" | "split">("single");
-const nameDraft = ref("");
 const familyDraft = ref("");
 const givenDraft = ref("");
-const nameInput = ref<HTMLInputElement | null>(null);
+const genderDraft = ref<"" | "male" | "female">("");
+const nicknameDraft = ref("");
+const nicknameOpen = ref(false);
 const familyInput = ref<HTMLInputElement | null>(null);
-/** 百花の呼び方(docs/player-name-design.md の3章)。''はさん(選ばない)。 */
-const callSuffix = ref<"" | "kun" | "chan" | "none">("");
-const callPart = ref<"family" | "given">("family");
-const nameDraftProfile = () => ({ mode: nameMode.value, name: nameDraft.value, family: familyDraft.value, given: givenDraft.value, call: { suffix: callSuffix.value, part: callPart.value } });
-/** 決める前の見本(名札に出る名前と、百花の呼び方)。 */
+const nameDraftProfile = () => ({ mode: "split", family: familyDraft.value, given: givenDraft.value, gender: genderDraft.value, nickname: nicknameDraft.value });
 const namePreview = computed(() => normalizePlayerProfile(nameDraftProfile()));
-const momokaPreview = computed(() => momokaCallName(nameDraftProfile()));
 function openNameDialog() {
   const profile = playerProfile.value;
-  nameMode.value = profile.mode;
-  nameDraft.value = profile.name;
   familyDraft.value = profile.family;
   givenDraft.value = profile.given;
-  callSuffix.value = profile.call.suffix;
-  callPart.value = profile.call.part;
+  genderDraft.value = profile.gender;
+  nicknameDraft.value = profile.nickname;
+  nicknameOpen.value = false;
   nameDialogOpen.value = true;
-  void nextTick(() => (profile.mode === "split" ? familyInput.value : nameInput.value)?.focus());
-}
-/** 入れ方を切り替える。入れてあった文字は、もう一方の欄へ引き継ぐ(名字と名前→続けた名前、名前→名字の欄)。 */
-function chooseNameMode(mode: "single" | "split") {
-  if (nameMode.value === mode) return;
-  if (mode === "single") nameDraft.value = normalizePlayerProfile({ mode: "split", family: familyDraft.value, given: givenDraft.value }).name || nameDraft.value;
-  else if (!familyDraft.value && !givenDraft.value) familyDraft.value = nameDraft.value;
-  nameMode.value = mode;
-  void nextTick(() => (mode === "split" ? familyInput.value : nameInput.value)?.focus());
+  void nextTick(() => familyInput.value?.focus());
 }
 /** 「この名前にする」。保存し、進めている竜王戦の期の表の名前も替える。 */
 function acceptPlayerName() {
@@ -4475,7 +4424,7 @@ function acceptPlayerName() {
   const season = ryuoSeason.value;
   const user = season?.players?.[USER_ID];
   if (season && user) {
-    const renamed = { ...season, players: { ...season.players, [USER_ID]: { ...user, name: playerDisplayName(playerName.value) } } };
+    const renamed = { ...season, players: { ...season.players, [USER_ID]: { ...user, name: playerDisplayName(playerName.value), nickname: playerProfile.value.nickname } } };
     ryuoSeason.value = renamed;
     saveSeason(browserStorage(), renamed);
   }
@@ -7067,8 +7016,9 @@ function avatarMember(difficulty: number, world: number | null | undefined) {
   const seasonWorld = Number.isFinite(world) ? world as number : null;
   // 強さは、分身を出場させる期の世界の物差しで決める(いつもの世界とは別のことがある)。
   const profile = myAbilityProfile({ games: playInsight.value.games, playerLevel: level, difficulty, world: seasonWorld, repertoire });
-  if (profile.ready) return profile.member;
+  if (profile.ready) return { ...profile.member, nickname: playerProfile.value.nickname };
   return {
+    nickname: playerProfile.value.nickname,
     rating: seasonWorld !== null ? worldRating(level, seasonWorld) : worldRatingFor(level, difficulty),
     character: { abilities: {}, traits: [], attack: myStyleAttack(null, repertoire) },
     ...(repertoire ? { repertoire } : {}),
@@ -8212,6 +8162,7 @@ function enterKenshukai({ settings, entryClass }: { settings: { [key: string]: u
     seed: Date.now(),
     settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(Number(settings.difficulty)) },
     entryClass,
+    userGender: playerProfile.value.gender,
     userName: playerDisplayName(playerName.value),
     userLevel: ratingLevel(ratingState.value.rating),
     roster: ryuoRoster.value,

@@ -859,3 +859,15 @@ describe('解説の言葉に合わせたコメント(49章)', () => {
     for (const { comments } of scripts) for (const { text } of comments) expect(text).not.toMatch(/\{\w+\}/);
   });
 });
+
+
+describe('ニックネームの応援', () => {
+  it('分身のニックネームをコメントだけに使う', () => {
+    const black = player('you', '天鷺羽音', { kind: 'avatar', nickname: 'はねね' });
+    const white = player('other', '佐藤誠');
+    const spec = { key: 'nickname', black, white, moves: [], event: 'ryuo' };
+    const script = createRelayScript({ spec, cast: relayCast({ spec, pool: [black, white] }) });
+    expect(script.comments.some(c => c.text.includes('はねね'))).toBe(true);
+    expect(black.name).toBe('天鷺羽音');
+  });
+});

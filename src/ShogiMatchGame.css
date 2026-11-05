@@ -2520,7 +2520,7 @@
   background: var(--amber);
 }
 /* プレイヤー名の札。入力欄は押せる高さ44px以上(U:7-4)、文字は16px以上(スマホで拡大されないように)。 */
-.shogi-game__name-panel { width: min(26em, 100%); }
+.shogi-game__name-panel { width: min(26em, 100%); max-height: calc(100dvh - 2em); overflow-y: auto; }
 .shogi-game .shogi-game__name-input {
   box-sizing: border-box;
   width: 100%;

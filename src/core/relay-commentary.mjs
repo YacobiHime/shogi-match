@@ -1014,6 +1014,12 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
       line(0, 'move', 'host', `${SIDE_NAME[avatarSide]}は、あなたの分身！ あなたの対局から出した能力で戦うよ。`);
       comment(0, 'move', 'avatar', { name: players[avatarSide].name }, 2, 'pink');
     }
+    for (const side of ['black', 'white']) {
+      const player = players[side];
+      if (isYou(player) && player.nickname) {
+        comments.push({ at: 0, when: 'move', text: `${player.nickname}、応援してる！`, tone: 'pink', kind: 'fan', size: '', pos: '' });
+      }
+    }
     const favorite = favoriteOpening(black);
     if (favorite) {
       if (cast.voice === 'yoshihiko') line(0, 'move', 'host', `${call('black')}の得意な形ですけれども。`);
