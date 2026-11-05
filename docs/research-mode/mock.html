@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>研究モードのモックアップ</title>
+<!--
+  研究モード(docs/research-mode-design.md)のモックアップ。
+  PC(1366×768)3画面とスマホ(390×844)5画面。中身は見本の値で、エンジンは動かない。
+  盤はこのファイルのスクリプトで描く(駒と盤の絵は public/ のものを使う)。
+  ?real=1 で枠を縮めずに並べる(写真を撮るため)。?only=番号 でその画面だけを出す。
+-->
+<style>
+:root {
+  --page: #0f171f;
+  --page-ink: #dfe7ee;
+  /* 対局画面と同じ色の変数(src/ShogiMatchGame.css) */
+  --night: #1d303f;
+  --night-deep: #172632;
+  --slate: #2b465b;
+  --slate-light: #445c6d;
+  --amber: #f1a54c;
+  --amber-shadow: #b57c39;
+  --ivory: #fffcf4;
+  --muted: rgba(255, 252, 244, 0.72);
+  --panel: rgba(23, 38, 50, 0.94);
+  --line: rgba(241, 165, 76, 0.5);
+  /* 研究モードで足す色。候補の順位は盤のAI候補の赤(1位を濃く、2位から薄く) */
+  --cand: #d8483a;
+  --cand-ink: #fff;
+  --black-side: #3b6fd0;
+  --white-side: #d0453b;
+  --ok: #3aa37a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 24px 16px 64px;
+  background: var(--page);
+  color: var(--page-ink);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+  line-height: 1.5;
+}
+.doc { max-width: 1400px; margin: 0 auto; }
+.doc > h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.doc > p { margin: 0 0 8px; color: #aab7c2; max-width: 64rem; }
+.doc > h2 { margin: 40px 0 12px; font-size: 1.15rem; border-left: 4px solid var(--amber); padding-left: 10px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 410px), 1fr)); gap: 28px 20px; }
+.grid--pc { grid-template-columns: 1fr; }
+figure { margin: 0; display: grid; gap: 10px; align-content: start; }
+figcaption { color: #c9d4dc; font-size: 0.85rem; max-width: 64rem; }
+figcaption strong { display: block; color: #fff; font-size: 0.95rem; }
+.fit { width: 100%; overflow: hidden; }
+.fit > .device { transform-origin: top left; }
+.device { position: relative; overflow: hidden; background: var(--night); border-radius: 28px; box-shadow: 0 0 0 10px #05090c, 0 0 0 11px #2b3a46, 0 20px 50px rgba(0, 0, 0, 0.5); }
+.device--phone { width: 390px; height: 844px; }
+.device--pc { width: 1366px; height: 768px; border-radius: 10px; }
+body.real { padding: 0; background: var(--night); }
+body.real .doc > *:not(.grid) , body.real figcaption { display: none; }
+body.real .grid { display: block; }
+body.real figure { display: block; }
+body.real .fit { overflow: visible; }
+body.real .device { border-radius: 0; box-shadow: none; }
+
+/* ===== アプリの共通部品(対局画面の書式に合わせる) ===== */
+.app { position: absolute; inset: 0; color: var(--ivory); font-size: 15px;
+  background: radial-gradient(120% 60% at 50% 0%, rgba(255, 255, 255, 0.04), transparent 60%), var(--night); }
+button { font: inherit; color: inherit; cursor: pointer; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 6px; background: var(--slate); color: var(--ivory); font-weight: 800; white-space: nowrap; }
+.btn--amber { border-color: var(--amber-shadow); background: var(--amber); color: var(--night); box-shadow: 0 3px 0 var(--amber-shadow); }
+.btn--ghost { background: transparent; }
+.btn small { font-size: 0.72em; font-weight: 700; opacity: 0.9; }
+.panel { border-left: 3px solid var(--amber); background: var(--panel); }
+.panel--box { border: 1px solid var(--line); border-left: 3px solid var(--amber); }
+.label { color: var(--amber); font-weight: 900; }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.dim { color: var(--muted); }
+
+/* 盤(対局と同じ木の盤と駒の絵) */
+.board { position: relative; background: url("../../public/board/wood_light.webp") center / cover, #e7c88a; box-shadow: 0 2px 0 #8a6a3a, 0 8px 18px rgba(0, 0, 0, 0.35); }
+.board__inner { position: absolute; display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr); border: 2px solid #33240f; }
+.board__cell { position: relative; border-right: 1px solid #33240f; border-bottom: 1px solid #33240f; }
+.board__cell:nth-child(9n) { border-right: 0; }
+.board__cell:nth-child(n+73) { border-bottom: 0; }
+.board__cell img { position: absolute; inset: 4% 7%; width: 86%; height: 92%; object-fit: contain; }
+.board__cell.is-ghost img { opacity: 0.45; }
+.board__cell.is-last { background: rgba(70, 160, 90, 0.32); }
+.board__cell.is-ring::after { content: ""; position: absolute; inset: 8%; border: 4px solid #d8352b; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6); }
+.board__cell.is-picked { box-shadow: inset 0 0 0 3px #2f6fd6; background: rgba(47, 111, 214, 0.15); }
+.board__cell.is-drop::before { content: ""; position: absolute; left: 50%; top: 50%; width: 22%; height: 20%; translate: -50% -50%; border-radius: 50%; background: rgba(47, 111, 214, 0.55); }
+.board__files, .board__ranks { position: absolute; display: grid; color: #33240f; font-weight: 800; font-size: 12px; text-align: center; }
+.board__files { grid-template-columns: repeat(9, 1fr); }
+.board__ranks { grid-template-rows: repeat(9, 1fr); align-items: center; }
+.board__arrows { position: absolute; pointer-events: none; overflow: visible; }
+.stand { position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 2px; padding: 6px; background: url("../../public/stand/wood_dark.webp") center / cover, #6b4a2a; }
+.stand__piece { position: relative; width: 40px; height: 44px; }
+.stand__piece img { width: 100%; height: 100%; object-fit: contain; }
+.stand__piece b { position: absolute; right: -2px; bottom: -2px; min-width: 18px; padding: 0 4px; border-radius: 9px; background: var(--night); color: var(--ivory); font-size: 11px; text-align: center; line-height: 18px; }
+.stand--row { flex-wrap: nowrap; align-items: center; gap: 4px; padding: 3px 8px; }
+.stand--row .stand__piece { width: 26px; height: 26px; }
+.stand__name { margin-right: auto; padding: 2px 8px; border-radius: 4px; background: rgba(23, 38, 50, 0.85); color: var(--ivory); font-size: 12px; font-weight: 800; white-space: nowrap; }
+
+/* 勝率のバー(中継と同じ形) */
+.rate { position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-weight: 900; }
+.rate__bar { position: relative; height: 14px; border-radius: 7px; overflow: hidden; background: var(--white-side); }
+.rate__bar i { position: absolute; inset: 0 auto 0 0; background: var(--black-side); }
+.rate__bar::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; background: var(--ivory); opacity: 0.8; }
+.rate__side { font-size: 13px; white-space: nowrap; }
+.rate__side--black { color: #9cc0ff; }
+.rate__side--white { color: #ffb0a6; }
+.rate__verdict { position: absolute; left: 50%; top: 50%; translate: -50% -50%; padding: 0 10px; border-radius: 999px; background: var(--night-deep); color: var(--ivory); font-size: 12px; line-height: 20px; white-space: nowrap; border: 1px solid rgba(255, 252, 244, 0.25); }
+
+/* 候補の順位の札 */
+.rank { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--cand); color: var(--cand-ink); font-weight: 900; font-size: 13px; }
+.rank--2 { background: rgba(216, 72, 58, 0.78); }
+.rank--3 { background: rgba(216, 72, 58, 0.62); }
+.rank--4, .rank--5 { background: rgba(216, 72, 58, 0.5); }
+
+/* 検討の欄 */
+.study { display: grid; grid-template-rows: auto auto auto 1fr auto auto; gap: 8px; min-height: 0; }
+.study__run { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; padding: 8px 10px; }
+.study__go { min-width: 92px; min-height: 48px; font-size: 16px; }
+.study__go .pulse { width: 10px; height: 10px; border-radius: 50%; background: #ff7a5c; box-shadow: 0 0 0 4px rgba(255, 122, 92, 0.25); }
+.study__stats { display: grid; gap: 1px; font-size: 12.5px; line-height: 1.35; }
+.study__stats strong { color: var(--ivory); font-size: 13.5px; }
+.study__settings { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.setting { white-space: nowrap; display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 40px; padding: 0 8px; border: 1px solid rgba(255, 252, 244, 0.18); border-radius: 6px; background: var(--night-deep); font-size: 13px; font-weight: 800; }
+.setting em { font-style: normal; color: var(--amber); }
+.stepper { display: inline-flex; align-items: center; gap: 2px; }
+.stepper button { width: 30px; height: 30px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 50%; background: var(--slate); font-weight: 900; line-height: 1; }
+.stepper b { min-width: 22px; text-align: center; font-size: 16px; color: var(--amber); }
+.setting--wide { grid-column: 1 / -1; }
+.switch { display: inline-flex; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 999px; overflow: hidden; }
+.switch span { padding: 3px 10px; font-size: 12px; }
+.switch span.on { background: var(--amber); color: var(--night); font-weight: 900; }
+
+.pv { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; align-content: start; min-height: 0; overflow: hidden; }
+.pv li { display: grid; grid-template-columns: 26px 64px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; background: rgba(255, 252, 244, 0.05); }
+.pv li:first-child .pv__line { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pv li:first-child { background: rgba(216, 72, 58, 0.16); outline: 1px solid rgba(216, 72, 58, 0.55); }
+.pv li.is-open { outline: 2px solid var(--amber); }
+.pv .rank { grid-row: 1 / 3; }
+.pv__score { grid-row: 1 / 3; font-size: 16px; font-weight: 900; text-align: right; }
+.pv__score small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); }
+.pv__move { font-weight: 900; font-size: 15px; }
+.pv__line { overflow: hidden; color: var(--muted); font-size: 12.5px; white-space: nowrap; text-overflow: ellipsis; }
+.pv--compact li { grid-template-columns: 24px 54px auto 1fr; grid-template-rows: auto; padding: 5px 8px; }
+.pv--compact .rank, .pv--compact .pv__score { grid-row: auto; }
+.pv--compact .pv__score { font-size: 14px; }
+
+/* やこび姫の一言 */
+.hime { display: grid; grid-template-columns: 52px 1fr; gap: 8px; align-items: center; }
+.hime__face { width: 52px; height: 52px; border-radius: 50%; overflow: hidden; border: 2px solid var(--amber); background: #e9d8c4; }
+.hime__face img { width: 100%; height: 260%; object-fit: cover; object-position: 50% 0; }
+.hime p { position: relative; margin: 0; padding: 8px 10px; border-left: 3px solid var(--amber); background: var(--panel); font-size: 13.5px; font-weight: 700; line-height: 1.45; }
+.hime p b { color: var(--amber); }
+.hime--ng p { border-left-color: #e0655a; }
+.hime--ng p b { color: #ffb0a6; }
+
+/* 棋譜と分岐 */
+.kifu { margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.kifu li { display: grid; grid-template-columns: 30px 1fr auto 14px; gap: 6px; align-items: center; padding: 3px 8px; border-bottom: 1px solid rgba(255, 252, 244, 0.06); }
+.kifu li .n { color: var(--muted); text-align: right; font-size: 12px; }
+.kifu li .s { font-size: 12px; text-align: right; color: var(--muted); }
+.kifu li .b { color: var(--amber); font-weight: 900; text-align: center; }
+.kifu li.is-current { background: rgba(241, 165, 76, 0.22); outline: 1px solid var(--amber); }
+.kifu li.is-after { opacity: 0.6; }
+.kifu li .mark { font-size: 11px; font-weight: 900; padding: 0 5px; border-radius: 3px; }
+.mark--mistake { background: #f6aa00; color: #3a2800; }
+.mark--good { background: #03af7a; color: #fff; }
+.branches { display: grid; gap: 4px; }
+.branches h4 { margin: 0; font-size: 12.5px; color: var(--amber); }
+.branches button { display: flex; justify-content: space-between; align-items: center; min-height: 36px; padding: 0 10px; border: 1px solid rgba(255, 252, 244, 0.22); border-radius: 6px; background: var(--night-deep); font-weight: 800; font-size: 14px; text-align: left; }
+.branches button.on { border-color: var(--amber); background: rgba(241, 165, 76, 0.16); }
+.branches button small { color: var(--muted); font-weight: 700; font-size: 11.5px; }
+.nav { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.nav button { min-height: 40px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 6px; background: var(--slate); font-size: 15px; font-weight: 900; }
+
+/* 評価値のグラフ(EvaluationGraph.vueと同じ紙の色) */
+.graph { position: relative; background: var(--ivory); border: 1px solid var(--slate); }
+.graph svg { display: block; width: 100%; height: 100%; }
+.graph__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 800; }
+.graph__progress { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.graph__progress i { display: block; width: 90px; height: 6px; border-radius: 3px; background: rgba(255, 252, 244, 0.2); overflow: hidden; }
+.graph__progress i::before { content: ""; display: block; width: var(--p, 50%); height: 100%; background: var(--amber); }
+.legend { display: flex; gap: 8px; color: #2b465b; font-size: 11px; padding: 2px 6px; background: var(--ivory); border: 1px solid var(--slate); border-top: 0; margin-top: -6px; }
+
+/* 下の操作 */
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.actions .btn { min-height: 48px; padding: 0 6px; font-size: 14px; }
+
+/* シート(対局準備の選択シートと同じ紙) */
+.veil { position: absolute; inset: 0; background: rgba(8, 14, 20, 0.62); }
+.sheet { position: absolute; color: #1d303f; background: var(--ivory); border-radius: 12px; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45); }
+.sheet h3 { margin: 0; font-size: 18px; }
+.sheet__rows { display: grid; gap: 8px; }
+.sheet__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 0 12px; border: 1px solid #d9cfba; border-radius: 8px; background: #fff; font-weight: 800; }
+.sheet__row em { font-style: normal; color: #8a5b00; }
+.seg { display: inline-flex; border: 2px solid #2b465b; border-radius: 8px; overflow: hidden; }
+.seg span { padding: 6px 14px; font-weight: 900; }
+.seg span.on { background: #2b465b; color: var(--ivory); }
+.sheet__note { margin: 0; color: #526878; font-size: 13px; font-weight: 700; }
+.sheet .btn--amber { min-height: 52px; font-size: 17px; }
+
+/* 局面編集 */
+.edit-tools { display: grid; gap: 8px; align-content: start; }
+.edit-tools h4 { margin: 0; color: var(--amber); font-size: 13px; }
+.piece-box { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px; border-radius: 8px; background: url("../../public/stand/wood_dark.webp") center / cover, #6b4a2a; }
+.piece-box .stand__piece { width: 100%; height: 48px; }
+.piece-box .stand__piece.is-picked { outline: 3px solid #2f6fd6; outline-offset: -2px; border-radius: 6px; background: rgba(47, 111, 214, 0.25); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { min-height: 38px; padding: 0 12px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 999px; background: var(--night-deep); font-weight: 800; font-size: 13.5px; }
+.chips button.on { background: var(--ivory); color: var(--night); border-color: var(--ivory); }
+.picked-bar { display: grid; gap: 6px; padding: 8px; border: 1px solid #2f6fd6; border-radius: 8px; background: rgba(47, 111, 214, 0.14); font-size: 13px; font-weight: 800; }
+.picked-bar div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.picked-bar .btn { min-height: 38px; font-size: 13px; padding: 0 4px; }
+.edit-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #2f4f7a; border-bottom: 2px solid #6d97d6; font-weight: 900; }
+.edit-head small { font-weight: 700; color: #cfe0ff; }
+
+/* ===== PCの配置 ===== */
+.pc { display: grid; grid-template-columns: 290px 1fr 318px; gap: 10px; height: 100%; padding: 10px; }
+.pc__left, .pc__right { display: grid; gap: 8px; min-height: 0; }
+.pc__left { grid-template-rows: auto minmax(0, 1fr) auto 170px; }
+.pc__right { grid-template-rows: auto auto minmax(0, 1fr); }
+.pc__center { display: grid; grid-template-rows: 30px auto 1fr; gap: 10px; min-height: 0; }
+.pc__move { display: grid; grid-template-columns: 56px 56px 1fr 56px 56px; gap: 8px; align-items: center; width: 560px; justify-self: center; }
+.pc__move button { min-height: 48px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 6px; background: var(--slate); font-size: 17px; font-weight: 900; }
+.pc__move span { text-align: center; font-size: 18px; font-weight: 900; }
+.pc__move span small { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
+.pc__table { display: grid; grid-template-columns: 62px auto 62px; gap: 8px; align-items: stretch; justify-content: center; min-height: 0; }
+.pc__table .stand { width: 62px; }
+.pc__table .stand--black { align-self: end; height: 52%; align-content: flex-end; }
+.pc__table .board { align-self: start; }
+.pc__table .stand--white { align-self: start; height: 52%; }
+.title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; }
+.title-row h3 { margin: 0; font-size: 17px; }
+.title-row h3 small { display: block; color: var(--muted); font-size: 12px; font-weight: 700; }
+.kifu-box { display: grid; grid-template-rows: auto 1fr; min-height: 0; padding: 6px 0 0; }
+.kifu-box h4 { margin: 0 10px 4px; color: var(--amber); font-size: 13.5px; text-align: center; }
+.kifu-box .kifu { overflow: hidden; }
+.back { min-height: 40px; }
+
+/* ===== スマホの配置 ===== */
+.ph { display: grid; grid-template-rows: 52px 30px auto 30px 44px minmax(0, 1fr); height: 100%; }
+.ph__top .rate { flex: 1; gap: 4px; }
+.ph__top .rate__side { font-size: 11.5px; }
+.ph__top .rate__verdict { font-size: 11px; line-height: 18px; padding: 0 6px; }
+.ph__top { display: flex; align-items: center; gap: 8px; padding: 0 8px; background: var(--night-deep); border-bottom: 1px solid var(--line); }
+.ph__top h3 { margin: 0; font-size: 17px; }
+.ph__top .btn { min-height: 40px; padding: 0 12px; }
+.ph__top .right { margin-left: auto; }
+.ph__rate { padding: 6px 10px 0; }
+.ph__rate .rate { gap: 6px; }
+.ph__move { display: grid; grid-template-columns: 44px 44px 1fr 44px 44px; gap: 4px; align-items: center; padding: 0 6px; }
+.ph__move button { height: 38px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 6px; background: var(--slate); font-weight: 900; }
+.ph__move span { text-align: center; font-weight: 900; font-size: 14.5px; }
+.ph__move span small { margin-left: 4px; color: var(--amber); font-size: 11px; }
+.ph__dock { display: grid; grid-template-rows: 36px minmax(0, 1fr) 58px; min-height: 0; border-top: 1px solid var(--line); background: var(--night-deep); }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); }
+.tabs span { display: grid; place-items: center; font-weight: 900; font-size: 14.5px; color: var(--muted); border-bottom: 3px solid transparent; }
+.tabs span.on { color: var(--ivory); border-bottom-color: var(--amber); }
+.ph__pane { min-height: 0; overflow: hidden; padding: 6px 8px; display: grid; gap: 6px; align-content: start; }
+.ph__bar { display: grid; grid-template-columns: 1.2fr 1fr 1fr 52px; gap: 6px; padding: 6px 8px 8px; }
+.ph__bar .btn { min-height: 46px; padding: 0 4px; font-size: 14px; }
+.ph__stats { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ph__stats .stepper button { width: 26px; height: 26px; }
+.ph__stats .setting { min-height: 30px; padding: 0 6px; font-size: 12px; margin-left: auto; }
+.ph__stats .setting + .setting { margin-left: 0; }
+.ph__stats .pulse { width: 8px; height: 8px; border-radius: 50%; background: #ff7a5c; box-shadow: 0 0 0 3px rgba(255, 122, 92, 0.25); }
+.ph__stats strong { color: var(--ivory); }
+.ph__set { display: flex; gap: 6px; }
+.ph__set .setting { flex: 1; min-height: 36px; font-size: 12.5px; }
+.ph__set .stepper button { width: 26px; height: 26px; }
+
+/* スマホの対局画面(研究の対局) */
+.mt { display: grid; grid-template-rows: 54px 58px 34px auto 34px minmax(0, 1fr) 62px; height: 100%; gap: 0; }
+.mt__status { display: flex; gap: 6px; padding: 6px 6px 4px; }
+.mt__status .panel { flex: 1; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-weight: 900; }
+.mt__status .panel em { color: var(--amber); font-style: normal; }
+.mt__card { margin: 0 6px; padding: 5px 10px; font-size: 13px; display: grid; gap: 2px; }
+.mt__card .tag { display: inline-block; margin-right: 6px; padding: 0 8px; border-radius: 4px; background: #2f6f5a; color: #dff7ec; font-size: 12px; font-weight: 900; }
+.mt__dock { display: grid; grid-template-columns: 84px 1fr; gap: 6px; align-items: end; padding: 6px; }
+.mt__dock img { width: 84px; height: 120px; object-fit: cover; object-position: 50% 0; }
+.mt__dock p { margin: 0 0 6px; padding: 10px 12px; border-left: 3px solid var(--amber); background: var(--panel); font-weight: 800; font-size: 14px; }
+.mt__actions { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 6px; padding: 4px 6px 8px; }
+.mt__actions .btn { min-height: 50px; font-size: 15px; }
+</style>
+</head>
+<body>
+<main class="doc">
+  <h1>研究モードのモックアップ</h1>
+  <p>設計は <code>docs/research-mode-design.md</code>。参考画像（ShogiGUIの検討の画面）の情報を、今の対局画面の3列と色に馴染ませた見本です。中身は見本の値で、エンジンは動きません。</p>
+  <p>候補手は、盤の矢印・矢印の先の数字・読み筋の表の順位の札を同じ赤（盤のAI候補の色）にし、1位を濃く・太く、2位から薄く・細くしてつながりを見せます。升の強調に黄色は使いません。</p>
+
+  <h2>PC（1366×768）</h2>
+  <div class="grid grid--pc">
+    <figure data-shot="1">
+      <div class="fit"><div class="device device--pc"><div class="app" id="pc1"></div></div></div>
+      <figcaption><strong>PC 1. 検討</strong>開いたらもう読んでいる。左に棋譜・分岐・グラフ、真ん中に盤と矢印（候補5本）、右に検討の欄（読む／止める・候補の数・読む長さ・読み筋の表・やこび姫の一言・3つの操作）。</figcaption>
+    </figure>
+    <figure data-shot="2">
+      <div class="fit"><div class="device device--pc"><div class="app" id="pc2"></div></div></div>
+      <figcaption><strong>PC 2. 局面編集</strong>盤の大きさと位置はそのまま。右の欄が駒箱と編集の道具になる。2筋の二歩を、赤い輪とやこび姫の一言で柔らかく知らせ、「完了」はまだ押せない。</figcaption>
+    </figure>
+    <figure data-shot="3">
+      <div class="fit"><div class="device device--pc"><div class="app" id="pc3"></div></div></div>
+      <figcaption><strong>PC 3. この局面から対局</strong>持つ側と相手の強さだけを選ぶ小さなシート。閃き・待ったは何回でも、記録には数えない（感想戦と同じ）。</figcaption>
+    </figure>
+  </div>
+
+  <h2>スマホ（390×844）</h2>
+  <div class="grid">
+    <figure data-shot="4">
+      <div class="fit"><div class="device device--phone"><div class="app" id="ph4"></div></div></div>
+      <figcaption><strong>スマホ 4. 検討</strong>盤は幅いっぱいで動かない。下の欄のタブ「検討」に、読みの情報・候補の数・読み筋の表（1行ずつ）。いちばん下に操作の帯。</figcaption>
+    </figure>
+    <figure data-shot="5">
+      <div class="fit"><div class="device device--phone"><div class="app" id="ph5"></div></div></div>
+      <figcaption><strong>スマホ 5. 棋譜と分岐</strong>選んでいる道の棋譜と、次の手の分岐（本譜と変化）。押すと道が替わる。</figcaption>
+    </figure>
+    <figure data-shot="6">
+      <div class="fit"><div class="device device--phone"><div class="app" id="ph6"></div></div></div>
+      <figcaption><strong>スマホ 6. グラフと棋譜解析</strong>棋譜解析の途中。読み終えた手から点と印が付いていく。スマホは検討を止めて読み、終わったら検討に戻る。</figcaption>
+    </figure>
+    <figure data-shot="7">
+      <div class="fit"><div class="device device--phone"><div class="app" id="ph7"></div></div></div>
+      <figcaption><strong>スマホ 7. 局面編集</strong>駒箱の歩を選ぶと、置けるマスに青い点。はじめの形・手番・完了は下に。</figcaption>
+    </figure>
+    <figure data-shot="8">
+      <div class="fit"><div class="device device--phone"><div class="app" id="ph8"></div></div></div>
+      <figcaption><strong>スマホ 8. 研究の対局</strong>今の対局画面のまま。札に「研究の対局」、閃き×∞・待った×∞、「研究に戻る」で指した手を分岐に入れて戻る。</figcaption>
+    </figure>
+  </div>
+</main>
+<script>
+const PIECE_BASE = "../../public/piece/hitomoji_wood/";
+const FACE = "../../public/characters/sakurano-momoka-320.webp";
+const NAMES = { p: "pawn", l: "lance", n: "knight", s: "silver", g: "gold", b: "bishop", r: "rook" };
+const PROMOTED = { p: "prom_pawn", l: "prom_lance", n: "prom_knight", s: "prom_silver", b: "horse", r: "dragon" };
+const HAND_ORDER = ["r", "b", "g", "s", "n", "l", "p"];
+
+function pieceImage(letter, promoted = false) {
+  const black = letter === letter.toUpperCase();
+  const type = letter.toLowerCase();
+  const name = type === "k" ? (black ? "king2" : "king") : promoted ? PROMOTED[type] : NAMES[type];
+  return `${PIECE_BASE}${black ? "black" : "white"}_${name}.webp`;
+}
+
+/** SFENの盤面を9×9の配列にする([row][col]、col 0 が9筋)。 */
+function parseBoard(sfen) {
+  const rows = sfen.split(" ")[0].split("/");
+  return rows.map((row) => {
+    const cells = [];
+    let promoted = false;
+    for (const ch of row) {
+      if (ch === "+") { promoted = true; continue; }
+      if (/\d/.test(ch)) { for (let i = 0; i < Number(ch); i += 1) cells.push(null); continue; }
+      cells.push({ letter: ch, promoted });
+      promoted = false;
+    }
+    return cells;
+  });
+}
+
+function parseHands(text) {
+  const hands = { black: {}, white: {} };
+  if (!text || text === "-") return hands;
+  let count = "";
+  for (const ch of text) {
+    if (/\d/.test(ch)) { count += ch; continue; }
+    const side = ch === ch.toUpperCase() ? "black" : "white";
+    hands[side][ch.toLowerCase()] = Number(count || 1);
+    count = "";
+  }
+  return hands;
+}
+
+const cellIndex = (file, rank) => (rank - 1) * 9 + (9 - file);
+
+/**
+ * 盤を描く。arrows は { from:[筋,段], to:[筋,段], rank }、marks は { [筋段]: クラス名 }。
+ * width は盤の外枠の幅(px)。升は縦長(対局の盤と同じ比)。
+ */
+function board(sfen, { width, arrows = [], marks = {}, ghosts = {} } = {}) {
+  const pad = Math.round(width * 0.035);
+  const innerW = width - pad * 2 - 14;
+  const cellW = innerW / 9;
+  const cellH = cellW * 1.09;
+  const innerH = cellH * 9;
+  const height = innerH + pad * 2;
+  const grid = parseBoard(sfen);
+  let cells = "";
+  for (let r = 0; r < 9; r += 1) {
+    for (let c = 0; c < 9; c += 1) {
+      const key = `${9 - c}${r + 1}`;
+      const ghost = ghosts[key];
+      const piece = ghost || grid[r][c];
+      const classes = ["board__cell", marks[key] || "", ghost ? "is-ghost" : ""].join(" ");
+      cells += `<div class="${classes}">${piece ? `<img src="${pieceImage(piece.letter, piece.promoted)}" alt="">` : ""}</div>`;
+    }
+  }
+  const files = Array.from({ length: 9 }, (_, i) => `<span>${9 - i}</span>`).join("");
+  const kanji = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  const ranks = kanji.map((k) => `<span>${k}</span>`).join("");
+  const center = ([file, rank]) => [(9 - file + 0.5) * cellW, (rank - 0.5) * cellH];
+  const arrowSvg = arrows.slice().reverse().map(({ from, to, rank }) => {
+    const [x1, y1] = center(from);
+    const [x2, y2] = center(to);
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const strength = rank === 1 ? 1 : rank === 2 ? 0.78 : rank === 3 ? 0.62 : 0.5;
+    const stroke = rank === 1 ? cellW * 0.2 : rank === 2 ? cellW * 0.15 : cellW * 0.12;
+    const head = stroke * 2.3;
+    const ex = x2 - Math.cos(angle) * head * 0.9;
+    const ey = y2 - Math.sin(angle) * head * 0.9;
+    const left = [x2 - Math.cos(angle - 0.5) * head * 1.25, y2 - Math.sin(angle - 0.5) * head * 1.25];
+    const right = [x2 - Math.cos(angle + 0.5) * head * 1.25, y2 - Math.sin(angle + 0.5) * head * 1.25];
+    const badgeR = cellW * 0.19;
+    const bx = x2 + Math.cos(angle) * 2 + cellW * 0.28;
+    const by = y2 - cellH * 0.3;
+    return `<g opacity="${strength}">
+      <line x1="${x1}" y1="${y1}" x2="${ex}" y2="${ey}" stroke="#d8483a" stroke-width="${stroke}" stroke-linecap="round"/>
+      <polygon points="${x2},${y2} ${left.join(",")} ${right.join(",")}" fill="#d8483a"/>
+    </g>
+    <g><circle cx="${bx}" cy="${by}" r="${badgeR}" fill="#d8483a" fill-opacity="${strength}" stroke="#fff" stroke-width="2"/>
+    <text x="${bx}" y="${by + badgeR * 0.42}" text-anchor="middle" font-size="${badgeR * 1.3}" font-weight="900" fill="#fff">${rank}</text></g>`;
+  }).join("");
+  return `<div class="board" style="width:${width}px;height:${height}px">
+    <div class="board__files" style="left:${pad}px;top:${pad * 0.05}px;width:${innerW}px;height:${pad}px;line-height:${pad}px">${files}</div>
+    <div class="board__ranks" style="left:${pad + innerW + 3}px;top:${pad}px;width:12px;height:${innerH}px">${ranks}</div>
+    <div class="board__inner" style="left:${pad}px;top:${pad}px;width:${innerW}px;height:${innerH}px">${cells}</div>
+    <svg class="board__arrows" style="left:${pad}px;top:${pad}px" width="${innerW}" height="${innerH}">${arrowSvg}</svg>
+  </div>`;
+}
+
+function stand(counts, side, { row = false, name = "", picked = "" } = {}) {
+  const pieces = HAND_ORDER.filter((t) => counts[t]).map((t) => {
+    const letter = side === "black" ? t.toUpperCase() : t;
+    return `<span class="stand__piece${picked === t ? " is-picked" : ""}"><img src="${pieceImage(letter)}" alt="">${counts[t] > 1 ? `<b>${counts[t]}</b>` : ""}</span>`;
+  }).join("");
+  return `<div class="stand stand--${side}${row ? " stand--row" : ""}">${name ? `<span class="stand__name">${name}</span>` : ""}${pieces}</div>`;
+}
+
+function rateBar(blackPercent, verdict, { compact = false } = {}) {
+  return `<div class="rate">
+    <span class="rate__side rate__side--black">▲先手${compact ? "" : " "}<span class="num">${blackPercent}%</span></span>
+    <span class="rate__bar"><i style="width:${blackPercent}%"></i><span class="rate__verdict">${verdict}</span></span>
+    <span class="rate__side rate__side--white">${compact ? "" : ""}<span class="num">${100 - blackPercent}%</span> △後手</span>
+  </div>`;
+}
+
+// ---- 見本の局面: ▲居飛車 対 △四間飛車(12手目 △8二玉 まで)
+const STUDY_SFEN = "lnsg1gsnl/1k3r1b1/ppppp2pp/5pp2/9/2P1P2P1/PP1P1PP1P/1BK2S1R1/LNSG1G1NL b - 13";
+const CANDIDATES = [
+  { rank: 1, move: "▲5八金右", score: "+86", rate: "54%", line: "△7二銀 ▲9六歩 △9四歩 ▲3六歩 △5四歩 ▲5七銀 △5二金左", from: [4, 9], to: [5, 8] },
+  { rank: 2, move: "▲9六歩", score: "+72", rate: "53%", line: "△9四歩 ▲5八金右 △7二銀 ▲3六歩 △5四歩", from: [9, 7], to: [9, 6] },
+  { rank: 3, move: "▲3六歩", score: "+65", rate: "53%", line: "△7二銀 ▲5八金右 △5四歩 ▲3七桂 △6四歩", from: [3, 7], to: [3, 6] },
+  { rank: 4, move: "▲5七銀", score: "+58", rate: "52%", line: "△7二銀 ▲5八金右 △5四歩 ▲6六歩", from: [4, 8], to: [5, 7] },
+  { rank: 5, move: "▲2五歩", score: "+41", rate: "52%", line: "△3三角 ▲5八金右 △7二銀 ▲9六歩", from: [2, 6], to: [2, 5] },
+];
+const KIFU = [
+  ["▲7六歩", "+40"], ["△3四歩", "+38"], ["▲2六歩", "+52"], ["△4四歩", "+61"], ["▲4八銀", "+55"],
+  ["△4二飛", "+60", "+"], ["▲6八玉", "+64"], ["△6二玉", "+70"], ["▲7八玉", "+66"], ["△7二玉", "+72"],
+  ["▲5六歩", "+79"], ["△8二玉", "+86"], ["▲5八金右", "+83", "+"], ["△7二銀", "+90"], ["▲9六歩", "+88"],
+  ["△9四歩", "+81"], ["▲3六歩", "+95"],
+];
+const CURRENT = 12;
+
+function pvList(compact = false, open = 0) {
+  return `<ul class="pv${compact ? " pv--compact" : ""}">${CANDIDATES.map((c) => compact
+    ? `<li${c.rank === open ? ' class="is-open"' : ""}><span class="rank rank--${c.rank}">${c.rank}</span><span class="pv__score num">${c.score}</span><span class="pv__move">${c.move}</span><span class="pv__line">${c.line}</span></li>`
+    : `<li${c.rank === open ? ' class="is-open"' : ""}><span class="rank rank--${c.rank}">${c.rank}</span><span class="pv__score num">${c.score}<small>勝率 ${c.rate}</small></span><span class="pv__move">${c.move}</span><span class="pv__line">${c.line}</span></li>`).join("")}</ul>`;
+}
+
+function kifuList(from = 0, to = KIFU.length, marks = {}) {
+  return `<ul class="kifu">${KIFU.slice(from, to).map(([move, score, branch], i) => {
+    const n = from + i + 1;
+    const cls = n === CURRENT ? "is-current" : n > CURRENT ? "is-after" : "";
+    const mark = marks[n] ? `<span class="mark ${marks[n][0]}">${marks[n][1]}</span>` : "";
+    return `<li class="${cls}"><span class="n num">${n}</span><span>${move} ${mark}</span><span class="s num">${score}</span><span class="b">${branch || ""}</span></li>`;
+  }).join("")}</ul>`;
+}
+
+function branchList() {
+  return `<div class="branches"><h4>次の手（13手目）</h4>
+    <button class="on">▲5八金右 <small>本譜</small></button>
+    <button>▲3六歩 <small>分岐・7手</small></button>
+  </div>`;
+}
+
+// 評価値のグラフ。values は先手から見た評価値(手ごと)。marks は { 手数: 種類 }。
+function graph(values, { width, height, upto = values.length, marks = {}, current = CURRENT } = {}) {
+  const max = 1200;
+  const n = values.length - 1;
+  const x = (i) => 6 + (i / n) * (width - 12);
+  const y = (v) => height / 2 - (Math.max(-max, Math.min(max, v)) / max) * (height / 2 - 8);
+  const pts = values.slice(0, upto).map((v, i) => `${x(i)},${y(v)}`).join(" ");
+  const colors = { blunder: ["#ff4b00", "#641d00"], mistake: ["#f6aa00", "#714b00"], good: ["#03af7a", "#00583e"], brilliant: ["#990099", "#4d004d"] };
+  const tri = Object.entries(marks).filter(([i]) => Number(i) < upto).map(([i, kind]) => {
+    const cx = x(Number(i));
+    const cy = y(values[i]);
+    const [fill, stroke] = colors[kind];
+    return `<polygon points="${cx},${cy - 7} ${cx - 6},${cy + 5} ${cx + 6},${cy + 5}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`;
+  }).join("");
+  const grid = [0.25, 0.75].map((f) => `<line x1="0" x2="${width}" y1="${height * f}" y2="${height * f}" stroke="#aeb8bd"/>`).join("");
+  return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+    <rect width="${width}" height="${height}" fill="#fffcf4"/>${grid}
+    <line x1="0" x2="${width}" y1="${height / 2}" y2="${height / 2}" stroke="#2b465b" stroke-width="1.25"/>
+    ${upto < values.length ? `<rect x="${x(upto - 1)}" y="0" width="${width - x(upto - 1)}" height="${height}" fill="#2b465b" fill-opacity=".07"/>` : ""}
+    <line x1="${x(current)}" x2="${x(current)}" y1="0" y2="${height}" stroke="#f1a54c" stroke-width="2"/>
+    <polyline points="${pts}" fill="none" stroke="#2b465b" stroke-width="2.5" stroke-linejoin="round"/>${tri}
+  </svg>`;
+}
+const EVALS = [40, 38, 52, 61, 55, 60, 64, 70, 66, 72, 79, 86, 83, 90, 88, 81, 95, 120, 150, 110, 180, 260, 210, -90, -60, 30, 220, 340, 300, 480, 620, 900, 1100];
+const EVAL_MARKS = { 23: "mistake", 26: "good", 30: "brilliant" };
+
+function hime(text, { ng = false } = {}) {
+  return `<div class="hime${ng ? " hime--ng" : ""}"><span class="hime__face"><img src="${FACE}" alt=""></span><p>${text}</p></div>`;
+}
+
+const ARROWS = CANDIDATES.map(({ from, to, rank }) => ({ from, to, rank }));
+const HANDS_EMPTY = { black: {}, white: {} };
+
+// ---- PC 1. 検討
+function pcLayout({ moveRow = PC_MOVE, rate = "", right, centerMarks = {}, sfen = STUDY_SFEN, arrows = ARROWS, verdict = "先手やや有利", percent = 54, left, hands = HANDS_EMPTY, head = "" }) {
+  return `${head}<div class="pc"${head ? ' style="height:calc(100% - 42px)"' : ""}>
+    <div class="pc__left">${left}</div>
+    <div class="pc__center">
+      ${rate || rateBar(percent, verdict)}
+      <div class="pc__table">
+        ${stand(hands.white, "white")}
+        ${board(sfen, { width: 560, arrows, marks: centerMarks })}
+        ${stand(hands.black, "black")}
+      </div>
+      ${moveRow}
+    </div>
+    <div class="pc__right">${right}</div>
+  </div>`;
+}
+
+const PC_MOVE = `<div class="pc__move"><button>⏮</button><button>◀</button><span>12手目 △8二玉<small>次は ▲先手の番 ・ 分岐あり</small></span><button>▶</button><button>⏭</button></div>`;
+const PC_LEFT = `
+  <div class="panel panel--box title-row"><button class="btn btn--ghost back">‹ 戻る</button><h3>研究<small>11月5日 ▲7六歩</small></h3><button class="btn">研究帳</button></div>
+  <div class="panel panel--box kifu-box"><h4>棋譜</h4>${kifuList(4, 17)}</div>
+  ${branchList()}
+  <div style="display:grid;grid-template-rows:auto 1fr;gap:4px;min-height:0">
+    <div class="graph__head"><span class="label">評価値</span><button class="btn" style="min-height:30px;font-size:12.5px;padding:0 10px">棋譜解析</button></div>
+    <div class="graph">${graph(EVALS, { width: 288, height: 120, upto: 18 })}</div>
+  </div>`;
+
+const PC_STUDY = `
+  <div class="panel panel--box study__run">
+    <button class="btn btn--amber study__go"><span class="pulse"></span>止める</button>
+    <div class="study__stats dim"><strong>読んでいます</strong><span class="num">深さ 24 ・ 1,234万局面</span><span class="num">1秒に 85万局面 ・ 14秒</span></div>
+  </div>
+  <div class="study__settings">
+    <div class="setting">候補の数<span class="stepper"><button>−</button><b class="num">5</b><button>＋</button></span></div>
+    <div class="setting">読む長さ <em>ずっと ▾</em></div>
+    <div class="setting">矢印<span class="switch"><span class="on">あり</span><span>なし</span></span></div>
+    <div class="setting">表示<span class="switch"><span class="on">評価値</span><span>勝率</span></span></div>
+  </div>
+  <div style="display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:8px;min-height:0">
+    ${pvList(false)}
+    ${hime("<b>▲5八金右</b>で囲いを固めるのがいちばんだって。先手やや有利だよ。")}
+    <div class="actions"><button class="btn">局面編集</button><button class="btn">この局面から<br>対局</button><button class="btn">棋譜解析</button></div>
+  </div>`;
+
+document.getElementById("pc1").innerHTML = pcLayout({ left: PC_LEFT, right: PC_STUDY, centerMarks: { "82": "is-last", "72": "" } });
+
+// ---- PC 2. 局面編集
+const EDIT_SFEN = "7kl/6g2/7pp/7P1/9/9/7P1/9/4K4 b GS 1";
+const EDIT_HANDS = parseHands("GS");
+const BOX = { r: 2, b: 2, g: 2, s: 3, n: 4, l: 3, p: 14 };
+const PC_EDIT_RIGHT = `
+  <div class="edit-tools">
+    <h4>駒箱 <small class="dim">（盤と持ち駒にない駒）</small></h4>
+    <div class="piece-box">${HAND_ORDER.map((t) => `<span class="stand__piece"><img src="${pieceImage(t.toUpperCase())}" alt="">${BOX[t] > 1 ? `<b>${BOX[t]}</b>` : ""}</span>`).join("")}</div>
+    <div class="setting">置く駒<span class="switch"><span class="on">▲先手</span><span>△後手</span></span></div>
+    <div class="picked-bar">▲歩（2四）を選んでいます<div><button class="btn">成る</button><button class="btn">向きを変える</button><button class="btn">駒箱へ</button></div></div>
+    <h4>はじめの形</h4>
+    <div class="chips"><button>平手</button><button>何もない盤</button><button class="on">詰将棋</button><button>駒落ち…</button></div>
+    <h4>手番</h4>
+    <div class="chips"><button class="on">▲先手番</button><button>△後手番</button></div>
+  </div>
+  <div></div>
+  <div style="display:grid;gap:8px;align-content:end">
+    ${hime("<b>2筋に歩が2枚あるよ（二歩）。</b>どちらかを動かしてね。", { ng: true })}
+    <div class="actions" style="grid-template-columns:1fr 1.3fr"><button class="btn">編集をやめる</button><button class="btn btn--amber" disabled style="opacity:.55">完了</button></div>
+  </div>`;
+const PC_EDIT_LEFT = `
+  <div class="panel panel--box title-row"><button class="btn btn--ghost back">‹ 戻る</button><h3>局面編集<small>完了すると新しい研究になる</small></h3><span></span></div>
+  <div class="panel panel--box" style="padding:12px;font-size:13.5px;line-height:1.7;align-self:start">
+    <b class="label">置き方</b><br>駒箱の駒 → 置くマス<br>盤の駒 → 動かす先（駒箱へも）<br>ドラッグでも動かせる<br><span class="dim">右クリックで「くるっと」（成る・向き）</span>
+  </div>
+  <div></div><div></div>`;
+document.getElementById("pc2").innerHTML = pcLayout({
+  head: `<div class="edit-head">✎ 局面編集中 <small>前の研究は研究帳に残っています</small></div>`,
+  left: PC_EDIT_LEFT, right: PC_EDIT_RIGHT, sfen: EDIT_SFEN, arrows: [], hands: { black: EDIT_HANDS.black, white: {} },
+  centerMarks: { "24": "is-ring", "27": "is-ring" },
+  rate: `<div class="dim" style="display:grid;place-items:center;font-weight:800;font-size:13px">編集のあいだは読みを止めています。「完了」で読み始めます</div>`,
+  moveRow: `<div class="pc__move" style="grid-template-columns:1fr"><span style="font-size:15px">駒箱 <span class="num">30枚</span> ・ 盤と持ち駒 <span class="num">10枚</span><small>いつも40枚。増えも減りもしない</small></span></div>`,
+});
+
+// ---- PC 3. この局面から対局(1の上にシート)
+document.getElementById("pc3").innerHTML = pcLayout({ left: PC_LEFT, right: PC_STUDY, centerMarks: { "82": "is-last" } })
+  + `<div class="veil"></div>
+  <div class="sheet" style="left:483px;top:150px;width:400px;padding:18px;display:grid;gap:14px">
+    <h3>この局面から対局</h3>
+    <div class="sheet__rows">
+      <div class="sheet__row">持つ側<span class="seg"><span class="on">▲先手</span><span>△後手</span></span></div>
+      <div class="sheet__row">相手の強さ<em>Lv19（6級程度） ›</em></div>
+    </div>
+    <p class="sheet__note">閃き・待ったは何回でも使えるよ。記録には数えない。指した手は研究の棋譜に分岐で入る。</p>
+    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px"><button class="btn" style="background:#e9e2d2;color:#1d303f;border-color:#cfc4ad">やめる</button><button class="btn btn--amber">対局開始</button></div>
+  </div>`;
+
+// ---- スマホの共通
+function phone({ pane, tab = 0, sfen = STUDY_SFEN, arrows = ARROWS, marks = { "82": "is-last" }, top, bar, moveRow, hands = HANDS_EMPTY }) {
+  const tabs = ["検討", "棋譜", "グラフ"].map((t, i) => `<span class="${i === tab ? "on" : ""}">${t}</span>`).join("");
+  return `<div class="ph">
+    ${top || `<div class="ph__top"><button class="btn btn--ghost">‹</button>${rateBar(54, "先手やや有利", { compact: true })}<button class="btn">研究帳</button></div>`}
+    ${stand(hands.white, "white", { row: true, name: "△後手" })}
+    <div style="display:grid;place-items:center">${board(sfen, { width: 390, arrows, marks })}</div>
+    ${stand(hands.black, "black", { row: true, name: "▲先手" })}
+    ${moveRow || `<div class="ph__move"><button>⏮</button><button>◀</button><span>12手目 △8二玉<small>分岐あり</small></span><button>▶</button><button>⏭</button></div>`}
+    <div class="ph__dock">
+      <div class="tabs">${tabs}</div>
+      <div class="ph__pane">${pane}</div>
+      ${bar || `<div class="ph__bar"><button class="btn btn--amber"><span class="pulse" style="width:8px;height:8px;border-radius:50%;background:#ff7a5c"></span>止める</button><button class="btn">局面編集</button><button class="btn">対局</button><button class="btn">…</button></div>`}
+    </div>
+  </div>`;
+}
+
+const PH_STUDY = `
+  <div class="ph__stats"><span class="pulse"></span><span class="num">深さ22 ・ 845万</span><span class="setting">候補<span class="stepper"><button>−</button><b class="num">5</b><button>＋</button></span></span><span class="setting"><em>ずっと ▾</em></span></div>
+  ${pvList(true)}`;
+document.getElementById("ph4").innerHTML = phone({ pane: PH_STUDY });
+
+const PH_KIFU = `
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;min-height:0">
+    <div class="panel panel--box" style="overflow:hidden;max-height:178px">${kifuList(7, 17)}</div>
+    ${branchList()}
+  </div>`;
+document.getElementById("ph5").innerHTML = phone({ pane: PH_KIFU, tab: 1 });
+
+const PH_GRAPH = `
+  <div class="graph__head"><span class="label">評価値</span><span class="graph__progress" style="--p:85%">棋譜解析 <i></i> <span class="num">28/33手</span></span></div>
+  <div class="graph" style="height:118px">${graph(EVALS, { width: 370, height: 118, upto: 29, marks: EVAL_MARKS })}</div>
+  <div class="legend"><span style="color:#790079">◆ 神の一手</span><span style="color:#007a55">◆ 好手</span><span style="color:#8a5b00">◆ 悪手</span><span style="margin-left:auto">点を押すとその手へ</span></div>`;
+document.getElementById("ph6").innerHTML = phone({
+  pane: PH_GRAPH, tab: 2, arrows: [],
+  moveRow: `<div class="ph__move"><button>⏮</button><button>◀</button><span>12手目 △8二玉<small>読みはお休み中</small></span><button>▶</button><button>⏭</button></div>`,
+  bar: `<div class="ph__bar"><button class="btn">読む</button><button class="btn">局面編集</button><button class="btn">対局</button><button class="btn">…</button></div>`,
+});
+
+// スマホ 7. 局面編集(駒箱の歩を選んだところ。置けるマスに青い点)
+const dropMarks = { "24": "is-ring" };
+for (let rank = 2; rank <= 9; rank += 1) {
+  for (let file = 1; file <= 9; file += 1) {
+    if (file === 2) continue; // 2筋は歩があるので打てない(二歩)
+    const key = `${file}${rank}`;
+    const occupied = ["21", "11", "32", "23", "13", "24", "27", "59"].includes(key);
+    if (!occupied && !dropMarks[key]) dropMarks[key] = "is-drop";
+  }
+}
+const PH_EDIT = `
+  <div class="hime hime--ng" style="grid-template-columns:30px 1fr"><span class="hime__face" style="width:30px;height:30px"><img src="${FACE}" alt=""></span><p style="padding:3px 8px;font-size:12.5px"><b>2筋に歩が2枚あるよ（二歩）。</b>どちらかを動かしてね</p></div>
+  <div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center">
+    <div class="piece-box" style="grid-template-columns:repeat(7,1fr);padding:4px">${HAND_ORDER.map((t) => `<span class="stand__piece${t === "p" ? " is-picked" : ""}" style="height:38px"><img src="${pieceImage(t.toUpperCase())}" alt="">${BOX[t] > 1 ? `<b>${BOX[t]}</b>` : ""}</span>`).join("")}</div>
+    <span class="switch" style="flex-direction:column;border-radius:8px"><span class="on">▲</span><span>△</span></span>
+  </div>
+  <div class="chips"><button>平手</button><button>何もない盤</button><button class="on">詰将棋</button><button>駒落ち…</button><button class="on">▲先手番</button><button>△後手番</button></div>`;
+document.getElementById("ph7").innerHTML = phone({
+  sfen: EDIT_SFEN, arrows: [], marks: dropMarks, tab: -1, pane: PH_EDIT,
+  hands: { black: EDIT_HANDS.black, white: {} },
+  top: `<div class="ph__top" style="background:#2f4f7a;border-bottom-color:#6d97d6"><h3 style="margin-left:6px">✎ 局面編集</h3><span class="dim" style="font-size:12px;color:#cfe0ff">駒箱の歩 → 置くマス</span></div>`,
+  moveRow: `<div class="ph__move" style="grid-template-columns:1fr"><span class="dim" style="font-size:12.5px">駒箱 <span class="num">30枚</span> ・ 盤と持ち駒 <span class="num">10枚</span></span></div>`,
+  bar: `<div class="ph__bar" style="grid-template-columns:1fr 1.4fr"><button class="btn">編集をやめる</button><button class="btn btn--amber" style="opacity:.55">完了</button></div>`,
+});
+document.querySelector("#ph7 .tabs").innerHTML = '<span class="on" style="grid-column:1/-1">駒箱と道具</span>';
+
+// スマホ 8. 研究の対局(今の対局画面に、研究の札と∞の閃き・待った)
+const PLAY_SFEN = "lnsg1gsnl/1k3r1b1/ppppp2pp/5pp2/9/2P1P2P1/PP1P1PP1P/1BK1GS1R1/LNSG3NL w - 14";
+document.getElementById("ph8").innerHTML = `<div class="mt">
+  <div class="mt__status"><div class="panel panel--box">あいての番です <em class="num">13手目</em></div><button class="btn" style="min-height:44px">研究に戻る</button></div>
+  <div class="panel panel--box mt__card"><span><span class="tag">研究の対局</span>相手 <b>CPU Lv.19</b> <span class="dim">6級程度</span></span><span class="dim" style="font-size:12px">12手目 △8二玉 の局面から ・ 記録には数えません</span></div>
+  ${stand({}, "white", { row: true, name: "△CPU Lv.19" })}
+  <div style="display:grid;place-items:center">${board(PLAY_SFEN, { width: 390, marks: { "58": "is-last", "49": "" } })}</div>
+  ${stand({}, "black", { row: true, name: "▲あなた" })}
+  <div class="mt__dock"><img src="${FACE}" alt=""><p>研究の局面から指そう！ 閃きも待ったも、何回でも使えるよ。</p></div>
+  <div class="mt__actions"><button class="btn btn--amber">閃き <small>×∞</small></button><button class="btn">待った <small>×∞</small></button><button class="btn">表示補助 ▴</button></div>
+</div>`;
+
+// ---- 枠を並べた幅に合わせて縮める(写真のときは ?real=1 で縮めない)
+const params = new URLSearchParams(location.search);
+const real = params.has("real");
+if (params.has("only")) {
+  for (const fig of document.querySelectorAll("figure[data-shot]")) {
+    if (fig.dataset.shot !== params.get("only")) fig.remove();
+  }
+  for (const grid of document.querySelectorAll(".grid")) if (!grid.children.length) grid.remove();
+}
+if (real) document.body.classList.add("real");
+function fit() {
+  if (real) return;
+  for (const box of document.querySelectorAll(".fit")) {
+    const device = box.firstElementChild;
+    const width = device.offsetWidth + 22;
+    const scale = Math.min(1, box.clientWidth / width);
+    device.style.transform = `translate(11px, 11px) scale(${scale})`;
+    box.style.height = `${(device.offsetHeight + 22) * scale}px`;
+  }
+}
+addEventListener("resize", fit);
+fit();
+</script>
+</body>
+</html>
