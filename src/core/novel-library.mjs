@@ -34,7 +34,7 @@ export function libraryParsed(id) {
 /**
  * 台本の場面を、画面に出す形にする(名前と差し込みを入れる)。読めない台本はnull。
  * @param {string} id
- * @param {{ playerName?: string, momokaCall?: string, vars?: Record<string, string> }} [options]
+ * @param {Parameters<typeof fillScene>[1]} [options]
  */
 export function libraryScene(id, options = {}) {
   const result = libraryParsed(id);

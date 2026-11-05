@@ -2520,7 +2520,7 @@
   background: var(--amber);
 }
 /* プレイヤー名の札。入力欄は押せる高さ44px以上(U:7-4)、文字は16px以上(スマホで拡大されないように)。 */
-.shogi-game__name-panel { width: min(26em, 100%); }
+.shogi-game__name-panel { width: min(26em, 100%); max-height: calc(100dvh - 2em); overflow-y: auto; }
 .shogi-game .shogi-game__name-input {
   box-sizing: border-box;
   width: 100%;
@@ -4192,6 +4192,12 @@
   white-space: normal;
 }
 .shogi-title__tile .shogi-title__icon { grid-area: icon; width: 2.6em; height: 2.6em; }
+/* ホームはアイコンとモード名だけの1行にし、削除した補足文の空き行を残さない。 */
+.shogi-game .shogi-home--title .shogi-title__tile {
+  grid-template-areas: "icon label";
+  grid-template-rows: auto;
+  align-content: center;
+}
 /* 強くなる道で、いまの段のおすすめの入口。琥珀の縁と小さな札で示す。 */
 .shogi-game .shogi-title__tile--recommended {
   position: relative;
@@ -4209,10 +4215,6 @@
   font-weight: 900;
   letter-spacing: 0.06em;
   pointer-events: none;
-}
-/* まだ早い入口。鍵はかけず、薄くして「〇〇のあとに」と添える(押せばそのまま遊べる)。 */
-.shogi-game .shogi-title__tile--later {
-  opacity: 0.5;
 }
 .shogi-title__label {
   grid-area: label;
@@ -4239,6 +4241,12 @@
     padding: 0.55em 0.2em 0.5em;
     text-align: center;
   }
+  .shogi-game .shogi-home--title .shogi-title__tiles--play .shogi-title__tile,
+  .shogi-game .shogi-home--title .shogi-title__tiles--learn .shogi-title__tile {
+    grid-template-areas: "icon" "label";
+    grid-template-rows: auto auto;
+    align-content: center;
+  }
   .shogi-title__tiles--play .shogi-title__icon,
   .shogi-title__tiles--learn .shogi-title__icon { width: 2.2em; height: 2.2em; }
   .shogi-title__tiles--play .shogi-title__desc,
@@ -4257,6 +4265,11 @@
   min-height: 0;
   width: 100%;
   padding: 0.45em 0.8em;
+}
+.shogi-game .shogi-home--title .shogi-title__tile--dex {
+  min-height: 44px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "icons label go";
 }
 .shogi-title__dex-icons {
   grid-area: icons;

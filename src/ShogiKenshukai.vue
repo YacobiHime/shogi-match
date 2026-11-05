@@ -118,6 +118,7 @@
 
         <!-- 例会: 編入の札、名札掛けと、昇級までの残り -->
         <template v-else>
+          <p v-if="view.womenQualified" data-women-qualified>女流棋士2級の資格を得たよ。</p>
           <div v-if="view.qualified" class="kenshukai__transfer" data-kenshukai-transfer>
             <p><b>奨励会6級への編入の資格</b><small>{{ shoreikaiBusy ? "奨励会の挑戦を終えたら、編入できるよ" : "試験なしで6級から。研修会でSクラスを目指してもいい" }}</small></p>
             <button type="button" class="shogi-tournament__sub" :disabled="shoreikaiBusy" data-kenshukai-transfer-go @click="emit('transfer')">編入する</button>

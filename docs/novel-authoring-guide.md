@@ -334,3 +334,8 @@ docs/novel-authoring-guide.md のきまりに従って、src/story/scenes/<id>.m
 ```
 
 書けたら、試し読みのページで実際に読んで、気持ちと演出が合っているかを人が確かめます。検査は書きまちがいを見つけますが、面白いかどうかは見つけられません。
+
+
+### プレイヤーの呼び方（2026-11-05）
+
+名前設定では名字・名前と性別だけを基本項目として入力する。台詞の`{you}`の呼び方は、話の目録の`relationships`で人物ごとに指定できる。例：`relationships: { momoka: { part: 'given', style: 'familiar' }, hanane: { part: 'family', style: 'polite' } }`。`part`は`family`か`given`、`style`は`polite`（さん）、`familiar`（男性くん・女性ちゃん）、`bare`（呼び捨て）。指定しない人物は名字＋さん。関係が変わった次の話では、その話の指定を変える。性別が未選択なら呼び捨ての指定でも「さん」になる。ニックネームは観戦コメント用で、正式な名前とは別。

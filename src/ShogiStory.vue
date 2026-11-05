@@ -65,6 +65,7 @@ const props = defineProps({
   playerName: { type: String, default: "あなた" },
   /** 百花の呼び方(player-name.mjsのmomokaCallName。空なら名前に「さん」)。 */
   momokaCall: { type: String, default: "" },
+  playerProfile: { type: Object, default: null },
 });
 const emit = defineEmits<{ close: [] }>();
 
@@ -154,7 +155,7 @@ function onAction(id: string) {
 const frameEl = ref<{ revealItem: (selector: string) => void } | null>(null);
 const novelEl = ref<{ finish: () => void; goBack: () => boolean } | null>(null);
 const sceneId = ref("");
-const scene = computed(() => (sceneId.value ? storyScene(storyEpisode(sceneId.value), sceneName.value, props.momokaCall) : null));
+const scene = computed(() => (sceneId.value ? storyScene(storyEpisode(sceneId.value), sceneName.value, props.momokaCall, props.playerProfile) : null));
 
 /** カードを押した。読める話は始め、読めない話は理由を知らせる(無反応にしない。D:3-1)。 */
 function pick(card: Card) {

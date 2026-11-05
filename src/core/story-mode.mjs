@@ -180,9 +180,9 @@ export function syncStoryUnlocks(progress, { read = null, teamCareer = null, at 
 }
 
 /** 話をノベルの場面の形にする(いまは団体戦の台本)。読めない話はnull。 */
-export function storyScene(episode, playerName = '', momokaCall = '') {
+export function storyScene(episode, playerName = '', momokaCall = '', playerProfile = null) {
   if (!episode?.scene) return null;
-  if (hasLibraryScene(episode.scene)) return libraryScene(episode.scene, { playerName, momokaCall });
+  if (hasLibraryScene(episode.scene)) return libraryScene(episode.scene, { playerName, momokaCall, playerProfile, relationships: episode.relationships ?? { momoka: { style: 'familiar' } } });
   if (episode.scene in PRO_YEAR_SCENES) return proYearScene(episode.scene, { playerName, momokaCall });
   return teamScene(episode.scene, playerName, momokaCall);
 }

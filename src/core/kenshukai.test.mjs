@@ -260,3 +260,12 @@ describe('保存と、挑戦を終える', () => {
     expect(career.history[0].result).toBe('closed');
   });
 });
+
+
+it('女性のB1以上だけ女流の資格を表示し、旧保存から性別を推測しない', () => {
+  const run = createKenshukaiRun({ seed: 42, settings: {}, entryClass: 0, userLevel: 10, userGender: 'female' });
+  expect(describeKenshukai({ ...run, best: 8 }).womenQualified).toBe(false);
+  expect(describeKenshukai({ ...run, best: 9 }).womenQualified).toBe(true);
+  expect(describeKenshukai({ ...run, best: 10, userGender: 'male' }).womenQualified).toBe(false);
+  expect(describeKenshukai({ ...run, best: 10, userGender: undefined }).womenQualified).toBe(false);
+});

@@ -30,6 +30,17 @@ describe('ryuoRelayGames', () => {
     expect(new Set(games.map(({ key }) => key)).size).toBe(games.length);
   });
 
+  it('観戦用の棋士の写しにもニックネームを残す', () => {
+    const copy = structuredClone(season);
+    const id = games[0].black.id;
+    copy.players[id].kind = 'avatar';
+    copy.players[id].nickname = 'はねね';
+    const entries = ryuoRelayGames(copy, { oshiId: null });
+    const entry = entries.find(game => game.black.id === id || game.white.id === id);
+    const member = entry.black.id === id ? entry.black : entry.white;
+    expect(member.nickname).toBe('はねね');
+  });
+
   it('勝者・先手・戦法は、トーナメント表の記録と同じ', () => {
     const entry = games.find((item) => item.key.includes(':ranking:'));
     const nodeId = entry.key.split(':').at(-1);

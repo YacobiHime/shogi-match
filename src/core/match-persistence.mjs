@@ -42,7 +42,8 @@ export function loadMatchSnapshot(storage, key, expected, now = Date.now()) {
       && snapshot.savedAt <= now
       && now - snapshot.savedAt <= MATCH_SNAPSHOT_MAX_AGE_MS
       && snapshot.initialSfen === expected.initialSfen
-      && snapshot.mode === expected.mode;
+      && (snapshot.mode === expected.mode
+        || (expected.allowLocal === true && ["cpu", "local"].includes(snapshot.mode)));
     if (valid) return snapshot;
     storage.removeItem(key);
     return null;

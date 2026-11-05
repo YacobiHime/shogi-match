@@ -493,9 +493,9 @@ function setDayPending(run, rng, userLevel) {
 
 /**
  * 新しい挑戦を始める(入会試験から)。
- * @param {{ seed: number, settings: any, entryClass: number, userName?: string, userLevel: number, roster?: any }} input
+ * @param {{ seed: number, settings: any, entryClass: number, userName?: string, userGender?: string, userLevel: number, roster?: any }} input
  */
-export function createKenshukaiRun({ seed, settings, entryClass, userName = 'あなた', userLevel, roster = null }) {
+export function createKenshukaiRun({ seed, settings, entryClass, userName = 'あなた', userGender = '', userLevel, roster = null }) {
   const rng = createRng(seed);
   const merged = { ...DEFAULT_SETTINGS, ...settings };
   const scale = kenshukaiScale(merged.scale);
@@ -506,6 +506,7 @@ export function createKenshukaiRun({ seed, settings, entryClass, userName = 'あ
     id: seed,
     settings: { ...merged, scale: scale.id },
     userName,
+    userGender: userGender === 'female' || userGender === 'male' ? userGender : '',
     phase: 'exam',
     cls,
     entryClass: cls,
@@ -701,6 +702,7 @@ export function describeKenshukai(run) {
     bestLabel: classLabel(run.best),
     entryLabel: classLabel(run.entryClass),
     qualified: run.qualified,
+    womenQualified: run.userGender === 'female' && run.best >= B1,
     settings: run.settings,
     scale: { id: scale.id, label: scale.label },
     exam: {

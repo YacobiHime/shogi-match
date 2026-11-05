@@ -25,77 +25,55 @@ export function playerDisplayName(name) {
   return normalizePlayerName(name) || DEFAULT_PLAYER_NAME;
 }
 
-/** 入れ方。'single'はそのまま1つの欄、'split'は名字と名前に分けて入れる。 */
-export const PLAYER_NAME_MODES = Object.freeze(['single', 'split']);
+/** 性別は任意。未選択は従来の保存にも使い、呼びかけは「さん」にする。 */
+export const PLAYER_GENDERS = Object.freeze([
+  { id: '', label: '選ばない' }, { id: 'male', label: '男性' }, { id: 'female', label: '女性' },
+]);
 
-/** 名字と名前のどちらかにローマ字・数字などがあれば、あいだに空白を入れて並べる(「Taro Yamada」)。日本語の名前は続けて書く。 */
 function joinParts(family, given) {
   if (!family || !given) return family || given;
   return /[A-Za-z0-9]$/.test(family) || /^[A-Za-z0-9]/.test(given) ? `${family} ${given}` : `${family}${given}`;
 }
 
-/**
- * プレイヤー名のくわしい形に整える。名字と名前に分けたときは、合わせて上限の文字数に収まるよう、名前・名字の順に後ろを切る。
- * @param {{ mode?: unknown, name?: unknown, family?: unknown, given?: unknown, call?: unknown } | null | undefined} value
- * @returns {{ mode: 'single' | 'split', name: string, family: string, given: string, call: { suffix: '' | 'kun' | 'chan' | 'none', part: 'family' | 'given' } }}
+/** 旧来の単一欄の名前は分割を推測せず名字欄へ移す。古い呼び方の固定指定は引き継がない。
+ * @param {{ mode?: unknown, name?: unknown, family?: unknown, given?: unknown, gender?: unknown, nickname?: unknown, call?: unknown } | null | undefined} value
  */
 export function normalizePlayerProfile(value) {
-  const mode = value?.mode === 'split' ? 'split' : 'single';
-  const call = normalizeMomokaCall(value?.call);
-  if (mode === 'single') return { mode, name: normalizePlayerName(value?.name), family: '', given: '', call };
+  /** @type {'' | 'male' | 'female'} */
+  const gender = value?.gender === 'male' || value?.gender === 'female' ? value.gender : '';
   let family = normalizePlayerName(value?.family);
   let given = normalizePlayerName(value?.given);
+  if (!family && !given && value?.mode !== 'split') family = normalizePlayerName(value?.name);
   while (Array.from(joinParts(family, given)).length > PLAYER_NAME_MAX) {
     if (given) given = Array.from(given).slice(0, -1).join('').trim();
     else family = Array.from(family).slice(0, -1).join('').trim();
   }
-  return { mode, name: joinParts(family, given), family, given, call };
+  return { mode: /** @type {'split'} */ ('split'), name: joinParts(family, given), family, given, gender, nickname: normalizePlayerName(value?.nickname) };
 }
 
-/**
- * 百花の呼び方(2026-11-02。docs/player-name-design.md の3章)。百花は「くん」か「ちゃん」で呼び、特に親しい人だけ呼び捨てにする。
- * 選ばなければ今までどおり「さん」。分けて入れたときは、名字で呼ぶか名前で呼ぶかも選べる。
+/** 物語の人物・場面側で指定する呼びかけ。名前設定では関係を固定しない。
+ * @param {Parameters<typeof normalizePlayerProfile>[0]} profile
+ * @param {{ part?: 'family' | 'given', style?: 'polite' | 'familiar' | 'bare' }} [relationship]
  */
-export const MOMOKA_SUFFIXES = Object.freeze([
-  Object.freeze({ id: '', label: 'さん', suffix: 'さん' }),
-  Object.freeze({ id: 'kun', label: 'くん', suffix: 'くん' }),
-  Object.freeze({ id: 'chan', label: 'ちゃん', suffix: 'ちゃん' }),
-  Object.freeze({ id: 'none', label: '呼び捨て', suffix: '' }),
-]);
-
-/**
- * @param {unknown} value
- * @returns {{ suffix: '' | 'kun' | 'chan' | 'none', part: 'family' | 'given' }}
- */
-function normalizeMomokaCall(value) {
-  const raw = /** @type {any} */ (value);
-  const suffix = MOMOKA_SUFFIXES.some((option) => option.id && option.id === raw?.suffix) ? raw.suffix : '';
-  return { suffix, part: raw?.part === 'given' ? 'given' : 'family' };
+export function playerAddress(profile, { part = 'family', style = 'polite' } = {}) {
+  const p = normalizePlayerProfile(profile);
+  if (!p.name) return 'あなた';
+  const base = part === 'given' ? p.given || p.family : p.family || p.given;
+  const suffix = !p.gender || style === 'polite' ? 'さん'
+    : style === 'bare' ? '' : p.gender === 'female' ? 'ちゃん' : 'くん';
+  return `${base}${suffix}`;
 }
 
-/**
- * 百花がプレイヤーを呼ぶ言葉(「天鷺さん」「羽音ちゃん」「羽音」)。名前を入れていなければ「あなた」。
- * @param {{ mode?: string, name?: string, family?: string, given?: string, call?: any } | null | undefined} profile
- */
-export function momokaCallName(profile) {
-  const normalized = normalizePlayerProfile(profile);
-  if (!normalized.name) return 'あなた';
-  const split = normalized.mode === 'split';
-  const base = split
-    ? (normalized.call.part === 'given' ? normalized.given || normalized.family : normalized.family || normalized.given)
-    : normalized.name;
-  const option = MOMOKA_SUFFIXES.find((entry) => entry.id === normalized.call.suffix) ?? MOMOKA_SUFFIXES[0];
-  return `${base}${option.suffix}`;
-}
+/** 既存の百花の親しい場面の互換入口。ほかの人物もplayerAddressで同じ選択を利用できる。 */
+export function momokaCallName(profile) { return playerAddress(profile, { style: 'familiar' }); }
 
-/**
- * 呼びかけに使う名前(「○○さん」の○○)。名字と名前に分けたときは名字、そうでなければ名前全体。入れていなければ空。
- * @param {{ mode?: string, name?: string, family?: string } | null | undefined} profile
- */
 export function playerCallName(profile) {
-  const normalized = normalizePlayerProfile(profile);
-  return normalized.mode === 'split' && normalized.family ? normalized.family : normalized.name;
+  const p = normalizePlayerProfile(profile);
+  return p.family || p.given;
 }
+
+/** 女流への進路を選べる性別。名前や呼び方から性別を推測しない。 */
+export function canEnterWomenCareer(profile) { return normalizePlayerProfile(profile).gender === 'female'; }
 
 /**
  * @param {Storage | null | undefined} storage
@@ -120,15 +98,15 @@ export function loadPlayerName(storage) {
 }
 
 /**
- * くわしい形で保存する。名前が空なら保存を消す(入れ方の選びも消え、次はそのまま入れる欄から)。整えた形を返す。
+ * くわしい形で保存する。名前・性別・ニックネームがすべて空なら保存を消す。整えた形を返す。
  * @param {Storage | null | undefined} storage
- * @param {{ mode?: unknown, name?: unknown, family?: unknown, given?: unknown, call?: unknown }} profile
+ * @param {{ mode?: unknown, name?: unknown, family?: unknown, given?: unknown, call?: unknown, gender?: unknown, nickname?: unknown }} profile
  */
 export function savePlayerProfile(storage, profile) {
   const normalized = normalizePlayerProfile(profile);
   try {
-    if (!normalized.name) storage?.removeItem(PLAYER_NAME_KEY);
-    else storage?.setItem(PLAYER_NAME_KEY, JSON.stringify(normalized.mode === 'split' ? normalized : { mode: 'single', name: normalized.name, call: normalized.call }));
+    if (!normalized.name && !normalized.gender && !normalized.nickname) storage?.removeItem(PLAYER_NAME_KEY);
+    else storage?.setItem(PLAYER_NAME_KEY, JSON.stringify(normalized));
   } catch {
     // 保存できなくても、この場では使う。
   }

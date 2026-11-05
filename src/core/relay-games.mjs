@@ -35,7 +35,7 @@ function relayPlayer(season, id) {
   const player = season.players?.[id];
   if (!player) return null;
   return {
-    id, name: player.name ?? '', dan: player.dan ?? '', rating: player.rating ?? 0, level: player.level ?? null,
+    id, name: player.name ?? '', nickname: player.nickname ?? '', dan: player.dan ?? '', rating: player.rating ?? 0, level: player.level ?? null,
     story: player.story ?? null, kind: player.kind ?? 'pro', age: player.age ?? null,
     character: player.character ?? null, repertoire: player.repertoire ?? null,
     // いま持っているタイトル(解説の「タイトルホルダー同士」と肩書。36章)。

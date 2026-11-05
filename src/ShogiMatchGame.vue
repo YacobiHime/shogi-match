@@ -244,7 +244,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">自由対局</span>
-                <small class="shogi-title__desc">{{ homeTile("match").after || "設定を選んで1局" }}</small>
               </button>
               <button type="button" class="shogi-title__tile" :class="homeTileClass('tournament')" @click="openTournamentScreen">
                 <span v-if="homeTile('tournament').recommended" class="shogi-title__tile-badge">おすすめ</span>
@@ -260,7 +259,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">大会</span>
-                <small class="shogi-title__desc">{{ homeTile("tournament").after || "竜王戦で称号を" }}</small>
               </button>
               <button type="button" class="shogi-title__tile" :class="homeTileClass('endgame')" data-endgame-tile @click="startEndgameMatch">
                 <span v-if="homeTile('endgame').recommended" class="shogi-title__tile-badge">おすすめ</span>
@@ -277,7 +275,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">終盤戦</span>
-                <small class="shogi-title__desc">{{ homeTile("endgame").after || "名局の終盤から" }}</small>
               </button>
               <!--
                 物語。大会と並ぶこのゲームの主役。押すとストーリー選択(メインとサブ。docs/story-mode-design.md)。
@@ -303,7 +300,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">物語</span>
-                <small class="shogi-title__desc">羽音と百花と</small>
               </button>
             </div>
             <p class="shogi-title__live" role="status">{{ loadNotice }}</p>
@@ -329,7 +325,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">将棋教室</span>
-                <small class="shogi-title__desc">基礎とすぐ使えるコツ</small>
               </button>
               <button type="button" class="shogi-title__tile" :class="homeTileClass('problems')" @click="problemSetOpen = true">
                 <span v-if="homeTile('problems').recommended" class="shogi-title__tile-badge">おすすめ</span>
@@ -346,7 +341,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">問題集</span>
-                <small class="shogi-title__desc">{{ homeTile("problems").after || "詰ませ方・逃げ方" }}</small>
               </button>
               <!-- 脳トレ道場(docs/brain-training-design.mdの11章)。計算力と記憶力の2つの部屋。 -->
               <button type="button" class="shogi-title__tile" data-brain-tile @click="openBrainTraining">
@@ -369,7 +363,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">脳トレ</span>
-                <small class="shogi-title__desc">計算力と記憶力</small>
               </button>
             </div>
           </section>
@@ -382,7 +375,6 @@
                   <DexIcon v-for="shelf in DEX_SHELF" :key="shelf.kind" class="shogi-title__icon" :kind="shelf.kind" />
                 </span>
                 <span class="shogi-title__label">図鑑</span>
-                <small class="shogi-title__desc">駒・手筋・定跡など</small>
                 <span class="shogi-title__dex-go" aria-hidden="true">›</span>
               </button>
               <!-- 研究モード(docs/research-mode-design.md)。好きな局面をAIと一緒に調べる。 -->
@@ -396,7 +388,6 @@
                   </svg>
                 </span>
                 <span class="shogi-title__label">研究</span>
-                <small class="shogi-title__desc">AIと局面を調べる</small>
                 <span class="shogi-title__dex-go" aria-hidden="true">›</span>
               </button>
             </div>
@@ -449,6 +440,7 @@
     />
     <!-- 物語のストーリー選択(docs/story-mode-design.md)。 -->
     <ShogiStory
+      :player-profile="playerProfile"
       v-if="storyOpen"
       ref="storyView"
       :asset-base-url="assetBaseUrl"
@@ -862,6 +854,15 @@
             </div>
             <small>{{ MATCH_KIND_OPTIONS.find(({ value }) => value === matchKind)?.description }}</small>
           </div>
+
+          <section v-if="matchKind === 'normal'" class="shogi-game__pregame-section" aria-label="対局相手">
+            <div class="shogi-game__pregame-row" data-pregame-row="opponent">
+              <span class="shogi-game__pregame-row-label">対局相手:</span>
+              <span class="shogi-game__pregame-value">{{ freeOpponent === "local" ? "プレイヤー同士" : "CPU" }}</span>
+              <button type="button" class="shogi-game__pregame-change" aria-label="対局相手を変更" @click="pregamePicker = 'opponent'">変更</button>
+            </div>
+            <p v-if="freeOpponent === 'local'" class="shogi-game__pregame-note">同じ端末で、先手・後手を交互に指すよ。盤の向きは「ひふみんアイ」で変えられるよ。</p>
+          </section>
 
           <!-- 開始局面で下に出る項目が変わるため、学習対局では最初に選ばせる。 -->
           <div v-if="matchKind === 'learning'" class="shogi-game__pregame-section shogi-game__pregame-start-type">
@@ -2284,37 +2285,7 @@
       <form class="shogi-game__confirm-panel shogi-game__name-panel" @submit.prevent="acceptPlayerName">
         <h2 id="player-name-title">プレイヤー名</h2>
         <p>盤の名札や竜王戦の表に出る名前だよ（{{ PLAYER_NAME_MAX }}文字まで）。空にすると「あなた」になるよ。</p>
-        <div class="shogi-game__name-modes" role="radiogroup" aria-label="名前の入れ方">
-          <button
-            type="button"
-            role="radio"
-            :aria-checked="nameMode === 'single'"
-            data-player-name-mode="single"
-            @click="chooseNameMode('single')"
-          >そのまま入れる</button>
-          <button
-            type="button"
-            role="radio"
-            :aria-checked="nameMode === 'split'"
-            data-player-name-mode="split"
-            @click="chooseNameMode('split')"
-          >名字と名前に分ける</button>
-        </div>
-        <input
-          v-if="nameMode === 'single'"
-          ref="nameInput"
-          v-model="nameDraft"
-          class="shogi-game__name-input"
-          type="text"
-          inputmode="text"
-          autocomplete="nickname"
-          enterkeyhint="done"
-          :maxlength="PLAYER_NAME_MAX * 2"
-          placeholder="あなた"
-          aria-label="プレイヤー名"
-          data-player-name-input
-        >
-        <div v-else class="shogi-game__name-split">
+        <div class="shogi-game__name-split">
           <label>
             <span>名字</span>
             <input
@@ -2345,28 +2316,20 @@
             >
           </label>
         </div>
-        <fieldset class="shogi-game__name-call" data-player-name-call>
-          <legend>百花の呼び方</legend>
-          <div class="shogi-game__name-modes shogi-game__name-modes--four" role="radiogroup" aria-label="百花の呼び方">
-            <button
-              v-for="option in MOMOKA_SUFFIXES"
-              :key="option.id || 'san'"
-              type="button"
-              role="radio"
-              :aria-checked="callSuffix === option.id"
-              :data-player-name-suffix="option.id || 'san'"
-              @click="callSuffix = option.id as typeof callSuffix"
-            >{{ option.label }}</button>
+        <fieldset class="shogi-game__name-call">
+          <legend>性別</legend>
+          <div class="shogi-game__name-modes" role="radiogroup" aria-label="性別">
+            <button v-for="option in PLAYER_GENDERS" :key="option.id" type="button" role="radio"
+              :aria-checked="genderDraft === option.id" :data-player-gender="option.id || 'unspecified'"
+              @click="genderDraft = option.id as typeof genderDraft">{{ option.label }}</button>
           </div>
-          <div v-if="nameMode === 'split'" class="shogi-game__name-modes" role="radiogroup" aria-label="百花が呼ぶ名前">
-            <button type="button" role="radio" :aria-checked="callPart === 'family'" data-player-name-part="family" @click="callPart = 'family'">名字で呼ぶ</button>
-            <button type="button" role="radio" :aria-checked="callPart === 'given'" data-player-name-part="given" @click="callPart = 'given'">名前で呼ぶ</button>
-          </div>
+          <p>女性は女流への進路も対象になるよ。選ばない場合、呼びかけは「さん」になるよ。</p>
         </fieldset>
-        <p class="shogi-game__name-preview" aria-live="polite" data-player-name-preview>
-          名札: <strong>{{ namePreview.name || "あなた" }}</strong><template v-if="nameMode === 'split' && namePreview.family">　呼ばれ方: {{ namePreview.family }}さん</template>
-          <br>百花から: <strong data-player-name-momoka>{{ momokaPreview }}</strong>
-        </p>
+        <button type="button" :aria-expanded="nicknameOpen" data-player-nickname-toggle @click="nicknameOpen = !nicknameOpen">ニックネームを設定する</button>
+        <label v-if="nicknameOpen">ニックネーム（観戦コメントで使う）
+          <input v-model="nicknameDraft" class="shogi-game__name-input" autocomplete="nickname" :maxlength="PLAYER_NAME_MAX * 2" data-player-nickname>
+        </label>
+        <p class="shogi-game__name-preview" aria-live="polite" data-player-name-preview>名札: <strong>{{ namePreview.name || "あなた" }}</strong></p>
         <div>
           <button type="submit" class="shogi-game__confirm-primary" data-player-name-save>この名前にする</button>
           <button type="button" @click="nameDialogOpen = false">やめる</button>
@@ -2940,7 +2903,7 @@ import { loadWatchStore, noteWatchProgress, saveWatchStore } from "./core/ryuo-w
 import { myAbilityProfile, myRepertoire, myStyleAttack, worldRatingFor } from "./core/my-abilities.mjs";
 import { worldRating } from "./core/ryuo-strength.mjs";
 import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
-import { MOMOKA_SUFFIXES, PLAYER_NAME_MAX, loadPlayerProfile, momokaCallName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerProfile } from "./core/player-name.mjs";
+import { PLAYER_GENDERS, PLAYER_NAME_MAX, loadPlayerProfile, momokaCallName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerProfile } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { abilityRank, abilityValues } from "./core/player-abilities.mjs";
@@ -3311,6 +3274,7 @@ const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error
 type MatchKind = "normal" | "learning" | "tournament";
 type LearningStartType = "standard" | "handicap" | "formation";
 const matchKind = ref<MatchKind>("normal");
+const freeOpponent = ref<GameMode>(props.mode === "local" ? "local" : "cpu");
 const matchInitialSfen = ref(props.initialSfen);
 const learningStartType = ref<LearningStartType>("standard");
 const learningHandicapId = ref("bishop");
@@ -4553,37 +4517,23 @@ const discardSuspendedPending = ref<(() => void) | null>(null);
 const playerProfile = ref(loadPlayerProfile(browserStorage()));
 const playerName = computed(() => playerProfile.value.name);
 const nameDialogOpen = ref(false);
-const nameMode = ref<"single" | "split">("single");
-const nameDraft = ref("");
 const familyDraft = ref("");
 const givenDraft = ref("");
-const nameInput = ref<HTMLInputElement | null>(null);
+const genderDraft = ref<"" | "male" | "female">("");
+const nicknameDraft = ref("");
+const nicknameOpen = ref(false);
 const familyInput = ref<HTMLInputElement | null>(null);
-/** 百花の呼び方(docs/player-name-design.md の3章)。''はさん(選ばない)。 */
-const callSuffix = ref<"" | "kun" | "chan" | "none">("");
-const callPart = ref<"family" | "given">("family");
-const nameDraftProfile = () => ({ mode: nameMode.value, name: nameDraft.value, family: familyDraft.value, given: givenDraft.value, call: { suffix: callSuffix.value, part: callPart.value } });
-/** 決める前の見本(名札に出る名前と、百花の呼び方)。 */
+const nameDraftProfile = () => ({ mode: "split", family: familyDraft.value, given: givenDraft.value, gender: genderDraft.value, nickname: nicknameDraft.value });
 const namePreview = computed(() => normalizePlayerProfile(nameDraftProfile()));
-const momokaPreview = computed(() => momokaCallName(nameDraftProfile()));
 function openNameDialog() {
   const profile = playerProfile.value;
-  nameMode.value = profile.mode;
-  nameDraft.value = profile.name;
   familyDraft.value = profile.family;
   givenDraft.value = profile.given;
-  callSuffix.value = profile.call.suffix;
-  callPart.value = profile.call.part;
+  genderDraft.value = profile.gender;
+  nicknameDraft.value = profile.nickname;
+  nicknameOpen.value = false;
   nameDialogOpen.value = true;
-  void nextTick(() => (profile.mode === "split" ? familyInput.value : nameInput.value)?.focus());
-}
-/** 入れ方を切り替える。入れてあった文字は、もう一方の欄へ引き継ぐ(名字と名前→続けた名前、名前→名字の欄)。 */
-function chooseNameMode(mode: "single" | "split") {
-  if (nameMode.value === mode) return;
-  if (mode === "single") nameDraft.value = normalizePlayerProfile({ mode: "split", family: familyDraft.value, given: givenDraft.value }).name || nameDraft.value;
-  else if (!familyDraft.value && !givenDraft.value) familyDraft.value = nameDraft.value;
-  nameMode.value = mode;
-  void nextTick(() => (mode === "split" ? familyInput.value : nameInput.value)?.focus());
+  void nextTick(() => familyInput.value?.focus());
 }
 /** 「この名前にする」。保存し、進めている竜王戦の期の表の名前も替える。 */
 function acceptPlayerName() {
@@ -4592,7 +4542,7 @@ function acceptPlayerName() {
   const season = ryuoSeason.value;
   const user = season?.players?.[USER_ID];
   if (season && user) {
-    const renamed = { ...season, players: { ...season.players, [USER_ID]: { ...user, name: playerDisplayName(playerName.value) } } };
+    const renamed = { ...season, players: { ...season.players, [USER_ID]: { ...user, name: playerDisplayName(playerName.value), nickname: playerProfile.value.nickname } } };
     ryuoSeason.value = renamed;
     saveSeason(browserStorage(), renamed);
   }
@@ -4779,7 +4729,8 @@ function confirmResign() {
   resign();
 }
 
-const normalizedMode = computed<GameMode>(() => props.mode === "local" ? "local" : "cpu");
+const normalizedMode = computed<GameMode>(() => matchKind.value === "normal"
+  ? freeOpponent.value : props.mode === "local" ? "local" : "cpu");
 const humanColor = computed(() => activePlayerColor.value === "white" ? Color.WHITE : Color.BLACK);
 const moveCount = computed(() => record.value.current.ply);
 const flipBoard = computed(() => (
@@ -7020,6 +6971,10 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
   const single = (title: string, value: PickerValue, groups: PickerSection["groups"], note = "") => ({
     title, note, sections: [{ key: id, value, groups }],
   });
+  if (id === "opponent") return single("対局相手", freeOpponent.value, [{ options: [
+    { value: "cpu", label: "CPUと対局" },
+    { value: "local", label: "プレイヤー同士", description: "同じ端末で交互に指す" },
+  ] }]);
   if (id === "strength") {
     // 50個を、はじめの級・級・段・プロの4つに分けて並べる(docs/level-ladder-design.mdの5章・12章)。同じ名前の段は、Rと成績で見分ける。
     const band = (from: number, to: number) => strengthPickerOptions.value.filter((_, level) => level >= from && level <= to);
@@ -7071,7 +7026,11 @@ function openPregameRow(id: string) {
 
 function onPregamePick(key: string, value: PickerValue) {
   const text = String(value);
-  if (key === "strength") searchNodes.value = Number(value);
+  if (key === "opponent") {
+    freeOpponent.value = value === "local" ? "local" : "cpu";
+    if (freeOpponent.value === "cpu") void initializeEngine();
+  }
+  else if (key === "strength") searchNodes.value = Number(value);
   else if (key === "cpuFirstMove") cpuFirstMove.value = text;
   else if (key === "bishop") cpuBishopPreference.value = text;
   else if (key === "rook") cpuRookPreference.value = text;
@@ -7185,8 +7144,9 @@ function avatarMember(difficulty: number, world: number | null | undefined) {
   const seasonWorld = Number.isFinite(world) ? world as number : null;
   // 強さは、分身を出場させる期の世界の物差しで決める(いつもの世界とは別のことがある)。
   const profile = myAbilityProfile({ games: playInsight.value.games, playerLevel: level, difficulty, world: seasonWorld, repertoire });
-  if (profile.ready) return profile.member;
+  if (profile.ready) return { ...profile.member, nickname: playerProfile.value.nickname };
   return {
+    nickname: playerProfile.value.nickname,
     rating: seasonWorld !== null ? worldRating(level, seasonWorld) : worldRatingFor(level, difficulty),
     character: { abilities: {}, traits: [], attack: myStyleAttack(null, repertoire) },
     ...(repertoire ? { repertoire } : {}),
@@ -8330,6 +8290,7 @@ function enterKenshukai({ settings, entryClass }: { settings: { [key: string]: u
     seed: Date.now(),
     settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(Number(settings.difficulty)) },
     entryClass,
+    userGender: playerProfile.value.gender,
     userName: playerDisplayName(playerName.value),
     userLevel: ratingLevel(ratingState.value.rating),
     roster: ryuoRoster.value,
@@ -9125,7 +9086,7 @@ function homeTile(id: string) {
 }
 function homeTileClass(id: string) {
   const tile = homeTile(id);
-  return { "shogi-title__tile--later": tile.dim, "shogi-title__tile--recommended": tile.recommended };
+  return { "shogi-title__tile--recommended": tile.recommended };
 }
 
 type HomeNext = {
@@ -9535,6 +9496,7 @@ useBackNavigation({
 });
 
 function openPregame() {
+  freeOpponent.value = props.mode === "local" ? "local" : "cpu";
   matchGeneration += 1;
   cancelResultReveal();
   if (cpuTimer) clearTimeout(cpuTimer);
@@ -9995,6 +9957,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
   const snapshot = loadMatchSnapshot(matchStorage, matchStorageKey, {
     initialSfen: props.initialSfen,
     mode: normalizedMode.value,
+    allowLocal: props.showHome,
   });
   if (!snapshot) return false;
   if (snapshot.suspended === true && props.showHome && !resume) {
@@ -10014,6 +9977,7 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
       || snapshot.moves.some((move: unknown) => typeof move !== "string" || move.length > 8)
     ) throw new Error("保存棋譜が不正です。");
     const moves = snapshot.moves as string[];
+    freeOpponent.value = snapshot.mode === "local" ? "local" : "cpu";
     restoreLearningSettings(snapshot);
     const { nextRecord, nextFormationState } = recordAndFormationsFromMoves(
       matchInitialSfen.value,
@@ -13205,6 +13169,7 @@ function restart() {
 watch(
   () => [props.initialSfen, props.mode],
   () => {
+    freeOpponent.value = props.mode === "local" ? "local" : "cpu";
     if (matchStarted.value) {
       selectedStrategy.value = "";
       selectedCastle.value = "";
