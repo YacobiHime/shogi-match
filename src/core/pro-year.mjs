@@ -9,7 +9,7 @@ import { matchBracket } from './ryuo-stages.mjs';
 import { stageVenue } from './match-stage.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import { HANANE, YOSHIHIKO, hananeBeforeLine } from './ryuo-story.mjs';
-import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, worldRating } from './ryuo-strength.mjs';
+import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, winProbability, worldCpuLevel, worldRating } from './ryuo-strength.mjs';
 import { CLASS_RULES } from './meijin.mjs';
 import { GEAR, STUDY_SIZE, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, studyDaysBetween, studyDaysOfMonth, studyHananeLine } from './pro-life.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
@@ -2057,6 +2057,10 @@ export function proYearView(state) {
     prep: official ? gearPrep(state.user.gear ?? 0, state.players[state.pending.opponentId], state.pending.style) : null,
     // 週の研究で積んだ対策の★と、作戦が当たったか(13-3の3)。
     stars: official ? state.pending.prep?.stars ?? 0 : 0,
+    // 分身に任せたときの勝つ見込み(調子と対策を足した分身の強さ。13-3の5。選ぶ材料で、決めるのは自動対局)。
+    autoChance: official && state.players[PRO_USER_ID] && state.players[state.pending.opponentId]
+      ? winProbability(state.players[PRO_USER_ID].rating + autoRatingBonus(state.condition ?? CONDITION_DEFAULT, state.pending.prep?.stars ?? 0), state.players[state.pending.opponentId].rating)
+      : null,
     starsHit: official ? Boolean(state.pending.prep?.hit) : false,
     studyMate: official ? studyMate(state, state.pending.opponentId) : null,
   } : null;

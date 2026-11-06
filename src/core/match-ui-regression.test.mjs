@@ -1256,7 +1256,9 @@ describe("match screen regressions", () => {
     // 指導対局は駒落ちの開始局面(上手のCPUが先に指す)。作戦の指定はしない。平手でないので、レーティングには数えない。
     // 棋士の1年の将棋まつりの指導対局だけ、あなたが上手(handicapGiver: "player")。
     expect(source).toMatch(/learningStartPosition\(\{ startType: "handicap", handicapId: pending\.handicap, handicapGiver: pending\.handicapGiver === "player" \? "player" : "cpu"/);
-    expect(source).toMatch(/const gameStyle = handicapStart \? null : pending\.style \?\? opponent\.style;/);
+    // 駒落ちと、棋士の1年の勝負どころから(作った局面から指す)は、序盤の作戦を指定しない。
+    expect(source).toMatch(/const gameStyle = handicapStart \|\| cutStart \? null : pending\.style \?\? opponent\.style;/);
+    expect(source).toMatch(/matchInitialSfen\.value = handicapStart\?\.sfen \?\? cutStart\?\.sfen \?\? props\.initialSfen;/);
     expect(source).toMatch(/&& matchInitialSfen\.value === STANDARD_SFEN\s*\/\/ Lv0/);
     // 千日手は、駒落ちなら同じ手合いのまま指し直す。
     expect(source).toMatch(/const color = run\.pending\.handicap \? run\.pending\.color : run\.pending\.color === "black" \? "white" : "black";/);

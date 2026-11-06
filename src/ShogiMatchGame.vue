@@ -553,9 +553,12 @@
       :pro-year-state="proYearState"
       :pro-year-settings="proYearState?.settings ?? proYearLastSettings"
       :pro-year-suspended-moves="suspendedProYearMoves"
+      :pro-year-cut-busy="proYearCutBusy"
       @pro-year-enter="enterProYear"
       @pro-year-advance="advanceProYear"
       @pro-year-play="startProYearGame"
+      @pro-year-cut="startProYearCut"
+      @pro-year-cut-cancel="cancelProYearCut"
       @pro-year-resume="resumeProYearGame"
       @pro-year-auto="autoProYearGame"
       @pro-year-next-year="nextProYear"
@@ -7292,10 +7295,13 @@ function startRyuoMatch() {
   const handicapStart = pending.handicap
     ? learningStartPosition({ startType: "handicap", handicapId: pending.handicap, handicapGiver: pending.handicapGiver === "player" ? "player" : "cpu", standardSfen: props.initialSfen })
     : null;
-  matchInitialSfen.value = handicapStart?.sfen ?? props.initialSfen;
+  // 棋士の1年の「勝負どころから指す」は、作っておいた局面から(docs/pro-year-design.mdの13-3の6)。平手の初期局面でないので、レーティングには数えない。
+  const cutStart = !handicapStart && tournamentEventOf(ryuoGame.value?.event) === "pro-year" ? proYearCutStart : null;
+  proYearCutStart = null;
+  matchInitialSfen.value = handicapStart?.sfen ?? cutStart?.sfen ?? props.initialSfen;
   selectedPlayerColor.value = handicapStart ? (handicapStart.playerColor === "white" ? "white" : "black") : pending.color;
   activePlayerColor.value = selectedPlayerColor.value;
-  learningStartLabel.value = "";
+  learningStartLabel.value = cutStart ? PRO_YEAR_CUT_LABEL : "";
   selectedStrategy.value = "";
   selectedCastle.value = "";
   searchNodes.value = CPU_STRENGTH_PRESETS.find(({ level }) => level === opponent.level)?.value ?? DEFAULT_STRENGTH_VALUE;
@@ -7306,7 +7312,7 @@ function startRyuoMatch() {
   cpuTempoPreference.value = "";
   // 得意戦法と囲いは、詳細の指定として渡す(囲いと一体の戦法は、囲いが空)。
   // この1局の戦法は、シーズンが得意戦法の中から選んでいる(古い期は、いちばんの得意戦法)。
-  const gameStyle = handicapStart ? null : pending.style ?? opponent.style;
+  const gameStyle = handicapStart || cutStart ? null : pending.style ?? opponent.style;
   cpuStrategyDetailsOpen.value = Boolean(gameStyle);
   if (gameStyle) {
     cpuDetailedStrategy.value = gameStyle.strategy;
@@ -7333,7 +7339,8 @@ function startRyuoMatch() {
   startPresence();
   // 大一番とタイトル戦は、開幕の札とやこび姫の一言で始める。ふだんの1局は、相手の棋風と特殊能力から戦い方を一言。
   const opponentLine = opponentStyleAdvice(opponent.character, opponent.name);
-  if (stage?.coachLine && coachLevel.value !== "off") guideText.value = stage.coachLine;
+  if (cutStart && coachLevel.value !== "off") guideText.value = PRO_YEAR_CUT_LINE;
+  else if (stage?.coachLine && coachLevel.value !== "off") guideText.value = stage.coachLine;
   // 最初の形勢の一言に上書きされないよう、助言の順番待ちを通して6秒は見せる。
   else if (opponentLine && coachLevel.value !== "off") showCoachAdvice(opponentLine);
   // 羽音との一局は、ふだんの重さでも開幕の札を出す(ライバル戦だと分かるように)。
@@ -8099,6 +8106,63 @@ function startProYearGameNow() {
 function resumeProYearGame() {
   tournamentOpen.value = false;
   resumeSuspendedMatch();
+}
+// ---- 勝負どころから指す(docs/pro-year-design.mdの13-3の6)
+const PRO_YEAR_CUT_LABEL = "勝負どころから";
+const PRO_YEAR_CUT_LINE = "分身が指した局面から、勝負どころを指そう。ここからが本番だよ！";
+/** 局面を作るのを待つ上限(作れなかったら最初から指す)。 */
+const PRO_YEAR_CUT_TIMEOUT_MS = 30000;
+/** 控室で局面を作っているあいだ(大会の画面に「控室で準備しています」)。 */
+const proYearCutBusy = ref(false);
+let proYearCutStart: { sfen: string } | null = null;
+let proYearCutGenerator: { play: (spec: any, onMove: (entry: any, index: number) => void) => Promise<unknown>; cancel: () => void } | null = null;
+let proYearCutTicket = 0;
+function startProYearCut() {
+  confirmDiscardSuspended(() => void prepareProYearCut());
+}
+/** 分身と相手で40手前後まで指した局面を作り、そこから対局を始める。作れなければ最初から指す。 */
+async function prepareProYearCut() {
+  const state = proYearState.value;
+  if (!state?.pending?.gameId || proYearCutBusy.value) return;
+  const ticket = ++proYearCutTicket;
+  proYearCutBusy.value = true;
+  let sfen: string | null = null;
+  try {
+    const [{ useRelayGenerator }, cut] = await Promise.all([import("./composables/match/useRelayGenerator"), import("./core/pro-cut.mjs")]);
+    const made = cut.cutSpec(state, { userName: playerDisplayName(playerName.value) });
+    if (made && ticket === proYearCutTicket) {
+      proYearCutGenerator ??= useRelayGenerator({ engineFactory: ensureEngineFactory, compact: () => true, storage: () => null });
+      const generator = proYearCutGenerator;
+      const entries: { move: string; eval: number }[] = [];
+      const timer = setTimeout(() => generator.cancel(), PRO_YEAR_CUT_TIMEOUT_MS);
+      try {
+        await generator.play(made.spec, (entry) => {
+          entries.push(entry);
+          if (entries.length >= made.plies) generator.cancel();
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      const ply = cut.pickCutPly(entries, made);
+      sfen = ply ? cut.sfenAfter(entries.slice(0, ply).map((entry) => entry.move)) : null;
+    }
+  } catch (error) {
+    // 読み込みに失敗したとき(公開し直した後など)は知らせる。エンジンが使えないときは、最初から指す。
+    if (error instanceof TypeError && /import|fetch|module/i.test(String(error.message))) onLazyLoadError(error);
+  } finally {
+    if (ticket === proYearCutTicket) proYearCutBusy.value = false;
+  }
+  // やめた・ほかの操作で状態が変わったら始めない。
+  if (ticket !== proYearCutTicket || proYearState.value !== state || !state.pending) return;
+  proYearCutStart = sfen ? { sfen } : null;
+  startProYearGameNow();
+  if (!sfen && coachLevel.value !== "off") guideText.value = "勝負どころの局面を作れなかったから、最初から指そう。";
+}
+/** 「控室で準備しています」の「やめる」。 */
+function cancelProYearCut() {
+  proYearCutTicket += 1;
+  proYearCutBusy.value = false;
+  proYearCutGenerator?.cancel();
 }
 /** 「分身に任せる」(確認は大会の画面で済ませた)。世界の物差しの分身の強さの勝率で決める。レーティングには数えない。 */
 function autoProYearGame() {

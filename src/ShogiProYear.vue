@@ -376,6 +376,14 @@
         <template v-if="view.yearDone">
           <button type="button" class="shogi-tournament__start" data-pro-next-year @click="emit('next-year')">次の年度へ</button>
         </template>
+        <!-- 公式戦の3つの指し方(13-3の5・6)。既定は重さで決め(小は勝負どころから)、その1つだけ琥珀色。分身には勝率の見込み(D:2-1) -->
+        <template v-else-if="view.pending && view.pending.gameId && !suspendedMoves">
+          <div class="pro-year__ways" data-pro-ways>
+            <button type="button" :class="wayClass('full')" data-pro-play @click="playWithScene()">最初から指す<small>レーティングに数える</small></button>
+            <button type="button" :class="wayClass('cut')" data-pro-cut @click="playCut">勝負どころから<small>40手目ごろから</small></button>
+            <button type="button" class="shogi-tournament__sub" data-pro-auto @click="openAuto">分身に任せる<small v-if="autoChance !== null">勝つ見込み {{ autoChance }}%</small></button>
+          </div>
+        </template>
         <template v-else-if="view.pending">
           <div class="shogi-tournament__actions shogi-tournament__actions--two">
             <!-- 研究会の練習対局は、分身に任せない(帰ってもよい。D:9-2)。まつりの指導対局は、やめるとまつりへ戻る。 -->
@@ -397,6 +405,16 @@
           </div>
         </template>
       </section>
+
+      <!-- 勝負どころの局面を作っているあいだ(13-3の6。待つあいだもやめられる。UD:5-3) -->
+      <div v-if="cutBusy" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="控室で準備しています" data-pro-cut-busy>
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet pro-year__cut-busy">
+          <h2>控室で準備しています</h2>
+          <p class="shogi-tournament__text">分身と{{ nameText(view.pending?.opponent) }}が、勝負どころまで指しているよ。数秒〜十数秒かかるよ。</p>
+          <span class="pro-year__cut-spinner" aria-hidden="true"></span>
+          <button type="button" class="shogi-tournament__sub" data-pro-cut-cancel @click="emit('cut-cancel')">やめる</button>
+        </div>
+      </div>
 
       <!-- 行動を選ぶシート(13-3の2。効き目を先に見せる。UD:5-1) -->
       <div v-if="slotSheet !== null && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="行動を選ぶ" data-pro-action-sheet @click.self="slotSheet = null">
@@ -691,6 +709,8 @@ const props = defineProps({
   /** 百花の呼び方(player-name.mjsのmomokaCallName。空なら名前に「さん」)。 */
   momokaCall: { type: String, default: "" },
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
+  /** 「勝負どころから指す」の局面を作っているあいだ。 */
+  cutBusy: { type: Boolean, default: false },
   backLabel: { type: String, default: "戻る" },
 });
 const emit = defineEmits<{
@@ -698,6 +718,9 @@ const emit = defineEmits<{
   enter: [payload: { settings: Settings }];
   advance: [];
   play: [];
+  /** 勝負どころから指す(13-3の6)。 */
+  cut: [];
+  "cut-cancel": [];
   resume: [];
   auto: [];
   "next-year": [];
@@ -816,6 +839,20 @@ function pickAction(id: string | null) {
   if (slotSheet.value === null) return;
   emit("life", { kind: "week-action", slot: slotSheet.value, action: id });
   slotSheet.value = null;
+}
+/** 公式戦の既定の指し方(小の対局は勝負どころから、中と大は最初から)。 */
+const defaultWay = computed(() => WEIGHTS[(view.value?.pending?.weight ?? "mid") as keyof typeof WEIGHTS]?.way ?? "full");
+const wayClass = (way: "full" | "cut") => (defaultWay.value === way ? "shogi-tournament__start" : "shogi-tournament__sub");
+/** 分身が勝つ見込み(世界の物差しの勝率。分身に任せるの材料)。 */
+const autoChance = computed(() => {
+  const value = Number(view.value?.pending?.autoChance);
+  return Number.isFinite(value) ? Math.round(value * 100) : null;
+});
+function playCut() {
+  // 節目の場面(羽音との初手合・タイトル戦の前夜)は、指し方によらず対局の前に見せる。
+  const due = props.state ? proYearSceneDue(props.state) : null;
+  if (due && due.key !== "pro-debut") openScene(due, () => emit("cut"));
+  else emit("cut");
 }
 const STAMP_TEXT = { done: "達成", near: "あと一歩", miss: "届かず" } as const;
 
@@ -1165,6 +1202,19 @@ defineExpose({ goBack });
 .shogi-game .pro-year__goal-seal { display: inline-grid; flex: none; place-items: center; min-width: 2.6rem; padding: 0.05rem 0.3rem; border: 0.12rem solid currentColor; border-radius: 0.3rem; color: #e74c3c; font-size: 0.7rem; font-weight: 900; transform: rotate(-6deg); }
 .shogi-game .pro-year__goal-stamp--near .pro-year__goal-seal { color: #e9c46a; }
 .shogi-game .pro-year__goal-stamp--miss .pro-year__goal-seal { color: #95a5a6; }
+/* 公式戦の3つの指し方(13-3の5・6) */
+.shogi-game .pro-year__ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
+.shogi-game .pro-year__ways button,
+.shogi-game .shogi-tournament__hud .pro-year__ways .shogi-tournament__start,
+.shogi-game .shogi-tournament__hud .pro-year__ways .shogi-tournament__sub {
+  display: grid; align-content: center; gap: 0.05rem; width: auto; min-width: 0; min-height: 3.2rem; margin: 0; padding: 0.3rem 0.35rem;
+  font-size: 0.92rem; letter-spacing: 0; line-height: 1.2; white-space: normal;
+}
+.shogi-game .pro-year__ways small { font-size: 0.66rem; font-weight: 700; opacity: 0.85; }
+.shogi-game .pro-year__cut-busy { display: grid; justify-items: center; gap: 0.6rem; text-align: center; }
+.shogi-game .pro-year__cut-spinner { width: 2.2rem; height: 2.2rem; border: 0.25rem solid rgba(255, 255, 255, 0.2); border-top-color: var(--amber, #f1a54c); border-radius: 50%; animation: pro-year-spin 0.9s linear infinite; }
+@keyframes pro-year-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .shogi-game .pro-year__cut-spinner { animation-duration: 3s; } }
 .shogi-game .pro-year__goal-toast {
   position: absolute; top: 4.5rem; left: 50%; z-index: 30; display: flex; align-items: center; gap: 0.5rem; margin: 0; padding: 0.5rem 0.9rem; border: 0.12rem solid #e74c3c; border-radius: 0.7rem;
   color: #172632; background: #fdf6e3; font-weight: 900; transform: translateX(-50%); animation: pro-year-toast 0.35s ease-out; pointer-events: none;

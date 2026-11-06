@@ -216,9 +216,12 @@
           :player-name="playerName"
           :momoka-call="momokaCall"
           :suspended-moves="proYearSuspendedMoves"
+          :cut-busy="proYearCutBusy"
           @enter="emit('pro-year-enter', $event)"
           @advance="emit('pro-year-advance')"
           @play="emit('pro-year-play')"
+          @cut="emit('pro-year-cut')"
+          @cut-cancel="emit('pro-year-cut-cancel')"
           @resume="emit('pro-year-resume')"
           @auto="emit('pro-year-auto')"
           @next-year="emit('pro-year-next-year')"
@@ -1210,6 +1213,8 @@ const props = defineProps({
   proYearState: { type: Object as PropType<any>, default: null },
   proYearSettings: { type: Object as PropType<Record<string, any> | null>, default: null },
   proYearSuspendedMoves: { type: Number as PropType<number | null>, default: null },
+  /** 「勝負どころから指す」の局面を作っているあいだ(docs/pro-year-design.mdの13-3の6)。 */
+  proYearCutBusy: { type: Boolean, default: false },
   // ---- 対局中継(docs/tournament-relay-design.md)。期の保存の形(見られる対局を集める)と、棋譜を作るエンジン。
   ryuoSeason: { type: Object as PropType<any>, default: null },
   /** 回戦ごとの観戦の保存(観戦の期と、期ごとのめくった数。core/ryuo-watch-store.mjs)。 */
@@ -1281,6 +1286,8 @@ const emit = defineEmits<{
   "pro-year-enter": [payload: { settings: Record<string, unknown> }];
   "pro-year-advance": [];
   "pro-year-play": [];
+  "pro-year-cut": [];
+  "pro-year-cut-cancel": [];
   "pro-year-resume": [];
   "pro-year-auto": [];
   "pro-year-next-year": [];
