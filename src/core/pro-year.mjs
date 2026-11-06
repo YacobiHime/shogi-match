@@ -14,6 +14,10 @@ import { CLASS_RULES } from './meijin.mjs';
 import { GEAR, STUDY_SIZE, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, studyDaysBetween, studyDaysOfMonth, studyHananeLine } from './pro-life.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
 import {
+  CONDITION_DEFAULT, CONDITION_LABELS, WEEK_ACTIONS, autoActions, autoRatingBonus, clampCondition, conditionAfterGame, conditionHintBonus,
+  prepCap, researched, starsFor, weekNumber, weekRange, weekSlots,
+} from './pro-week.mjs';
+import {
   FESTIVAL_EVENTS, KIGOU_BOOK_MAX, KIGOU_FANS, SHIDOU_FANS, SIMUL_FANS, festivalDays, festivalFee, kigouWords, shidouGuest, simulGuests, simulPartners, talkFans,
 } from './pro-festival.mjs';
 
@@ -970,6 +974,12 @@ function setPending(state, game, rng) {
     } : null,
     others: { games: others },
   };
+  // 調子と対策★(13-3の3・4)。研究した戦法を相手が指してきたら「研究どおり」(閃きを1回足す)。
+  const stars = starsFor(state.prep, opponentId);
+  const hit = stars >= 1 && Boolean(style?.label) && Boolean(opponent.repertoire) && repertoireText(opponent.repertoire).includes(style.label);
+  state.pending.prep = { stars, hit };
+  state.pending.condition = clampCondition(state.condition ?? CONDITION_DEFAULT);
+  state.pending.hintBonus = conditionHintBonus(state.pending.condition) + (hit ? 1 : 0);
 }
 
 function stakesText(state, cycle, stage, def) {
@@ -1035,7 +1045,10 @@ export function recordProGame(source, outcome) {
   const game = state.games[pending.gameId];
   let won = outcome === 'win';
   if (outcome === 'auto') {
-    won = simulateMemberGame(rng, state.players[PRO_USER_ID], state.players[pending.opponentId]).aWins;
+    // 分身の強さに、調子と対策を足す(13-3の3・4)。
+    const me = state.players[PRO_USER_ID];
+    const bonus = autoRatingBonus(state.condition ?? CONDITION_DEFAULT, pending.prep?.stars ?? 0);
+    won = simulateMemberGame(rng, { ...me, rating: me.rating + bonus }, state.players[pending.opponentId]).aWins;
     game.auto = true;
   }
   game.winner = (game.a === PRO_USER_ID) === won ? 'a' : 'b';
@@ -1052,6 +1065,12 @@ export function recordProGame(source, outcome) {
   }
   state.pending = null;
   state.lastGame = { id: game.id, won, auto: outcome === 'auto' };
+  // 調子(1局で−1・二日制は−2・勝てば＋1)と対策(同じ相手との番勝負の続きだけ残す)。13-3の3・4。
+  const conditionBefore = clampCondition(state.condition ?? CONDITION_DEFAULT);
+  state.condition = conditionAfterGame(conditionBefore, { won, twoDay: Boolean(game.twoDay) });
+  const seriesGoesOn = Boolean(gameStage.series) && !gameStage.done;
+  if (!seriesGoesOn) state.prep = { id: null, stars: 0 };
+  noteWeek(state, 'game', `${game.label} ${nameOf(state, pending.opponentId)}に${won ? '勝ち' : '負け'}${outcome === 'auto' ? '（分身）' : ''}`);
   const logBefore = state.logSeq ?? 0;
   const doneBefore = new Set(Object.values(state.cycles).filter((cycle) => cycle.done).map((cycle) => cycle.id));
   // その回戦のほかの対局はもう決まっているので、回戦を閉じて先へ。
@@ -1131,6 +1150,13 @@ export function joinStudy(source, date) {
     state.rng = rng.state;
     return state;
   }
+  openStudy(state, date, rng);
+  state.rng = rng.state;
+  return state;
+}
+
+/** 研究会の練習対局を始める(その日まで進めてから)。 */
+function openStudy(state, date, rng) {
   state.date = date;
   const opponentId = studyOpponentId(state);
   const opponent = state.players[opponentId];
@@ -1141,8 +1167,6 @@ export function joinStudy(source, date) {
     label: STUDY_TEXT.label, eventText: STUDY_TEXT.eventText, titleName: '', twoDay: false, date,
     stakes: { text: STUDY_TEXT.stakes, goal: '', win: '', boss: false }, coachLine: STUDY_TEXT.coach, series: null, others: { games: [] },
   };
-  state.rng = rng.state;
-  return state;
 }
 
 /** 研究会の練習対局をやめて帰る(その日の研究会は終わり)。 */
@@ -1177,6 +1201,7 @@ export function recordStudyGame(source, outcome) {
   state.pending = null;
   const text = `研究会で${nameOf(state, id)}に${outcome === 'win' ? '勝ち' : outcome === 'loss' ? '負け' : '引き分け'}`;
   noteMilestone(state, { event: 'study', kind: 'plain', text });
+  noteWeek(state, 'study', text);
   return { state, won: outcome === 'win', line, text };
 }
 
@@ -1230,9 +1255,13 @@ export function joinFestival(source, date) {
     return state;
   }
   state.rng = rng.state;
-  state.date = date;
-  state.festival = { id: festival.id, name: festival.name, place: festival.place, date, seed: festivalSeed(state, date), done: {}, fans: 0, startFans: state.user.fans ?? 0 };
+  openFestival(state, festival);
   return state;
+}
+
+function openFestival(state, festival) {
+  state.date = festival.date;
+  state.festival = { id: festival.id, name: festival.name, place: festival.place, date: festival.date, seed: festivalSeed(state, festival.date), done: {}, fans: 0, startFans: state.user.fans ?? 0 };
 }
 
 /** まつりのファンを足す(まつりの記録と、あなたのファン)。 */
@@ -1324,6 +1353,9 @@ export function finishFestival(source) {
   state.festivals = [...(state.festivals ?? []), { date: festival.date, id: festival.id, fee, fans: festival.fans, done }].slice(-30);
   noteMilestone(state, { event: 'festival', kind: 'plain', text: `${festival.name}（謝礼 ${fee}万円・ファン＋${festival.fans}）` });
   state.festival = null;
+  // 遠出の疲れで調子が1段下がる(13-3の2)。
+  state.condition = clampCondition((state.condition ?? CONDITION_DEFAULT) - 1);
+  noteWeek(state, 'festival', `${festival.name}（謝礼 ${fee}万円）`);
   return { state, fee, fans: festival.fans };
 }
 
@@ -1518,7 +1550,241 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
   state.user.money = 0;
   state.study = emptyStudy(state);
   state.log = [];
+  state.condition = CONDITION_DEFAULT;
+  state.prep = { id: null, stars: 0 };
+  state.week = newWeek(state, state.debut);
   state.rng = rng.state;
+  return state;
+}
+
+// ---- 1週を選んで過ごす(13章)
+
+/** 新しい週(行動はまだ選んでいない)。 */
+function newWeek(state, date) {
+  const range = weekRange(date, state.fy);
+  return { start: range.start, end: range.end, actions: [], applied: false, stops: [], log: [], cond0: clampCondition(state.condition ?? CONDITION_DEFAULT) };
+}
+
+/** 今週の出来事を1行残す(週のまとめ)。 */
+function noteWeek(state, kind, text) {
+  if (!state.week) return;
+  state.week.log = [...(state.week.log ?? []), { kind, text }].slice(-12);
+}
+
+/** 週の中のプレイヤーの公式戦(決まっていないもの。見込みの次の対局も入れる)。 */
+function weekUserGames(state, preview) {
+  const { start, end } = state.week;
+  const games = Object.values(state.games).filter((game) => game.user && !game.winner && game.date >= start && game.date <= end)
+    .map((game) => ({ id: game.id, date: game.date, label: game.label, opponentId: game.a === PRO_USER_ID ? game.b : game.a, twoDay: Boolean(game.twoDay) }));
+  if (preview && preview.date >= start && preview.date <= end && !games.some((game) => game.id === preview.gameId)) {
+    games.push({ id: preview.gameId, date: preview.date, label: preview.label, opponentId: preview.opponentId, twoDay: Boolean(preview.twoDay) });
+  }
+  return games.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** 今週の研究会の日(行けるもの)。 */
+function weekStudyDay(state) {
+  if (!state.study?.members?.length) return null;
+  const { start, end } = state.week;
+  const from = [addDays(start, -1), state.study.last ?? '', addDays(state.date, -1)].sort().pop();
+  return studyDaysBetween(from, addDays(end, 1), userBusy(state)).find((day) => day >= start && day <= end && day >= state.date) ?? null;
+}
+
+/** 今週の将棋まつり(行けるもの)。 */
+function weekFestival(state) {
+  const { start, end } = state.week;
+  const visited = new Set((state.festivals ?? []).map((item) => item.date));
+  return yearFestivals(state).find((item) => item.date >= start && item.date <= end && item.date >= state.date && !visited.has(item.date)) ?? null;
+}
+
+/**
+ * 今週の画面の形(13-3の1・2・9)。
+ * @param {any} state
+ */
+export function weekView(source) {
+  if (!source?.week || source.yearDone) return null;
+  // 前の進め方(次の対局日へ)で週を越えていたら、今の日の週として見る。
+  const state = source.week.end < source.date && !source.pending ? { ...source, week: newWeek(source, source.date) } : source;
+  const week = state.week;
+  const preview = state.pending?.gameId
+    ? { date: state.pending.date, label: state.pending.label, opponentId: state.pending.opponentId, gameId: state.pending.gameId, twoDay: state.pending.twoDay }
+    : previewNextGame(state);
+  const games = weekUserGames(state, preview);
+  const slots = weekSlots(games.reduce((sum, game) => sum + (game.twoDay ? 2 : 1), 0));
+  const study = weekStudyDay(state);
+  const festival = weekFestival(state);
+  const nextOpponent = preview?.opponentId ?? null;
+  const gear = state.user.gear ?? 0;
+  const stars = nextOpponent ? starsFor(state.prep, nextOpponent) : 0;
+  const condition = clampCondition(state.condition ?? CONDITION_DEFAULT);
+  const actions = [];
+  if (nextOpponent) actions.push({ ...WEEK_ACTIONS.research, target: card(state, nextOpponent), effect: stars >= prepCap(gear) ? `対策 ★${stars}（いまの道具では上限）` : `対策 ★${stars} → ★${researched(state.prep, nextOpponent, gear).stars}`, full: stars >= prepCap(gear) });
+  actions.push({ ...WEEK_ACTIONS.rest, effect: condition >= CONDITION_LABELS.length - 1 ? '調子はもういちばん上' : `調子 ${CONDITION_LABELS[condition]} → ${CONDITION_LABELS[clampCondition(condition + 1)]}` });
+  if (study) actions.push({ ...WEEK_ACTIONS.study, date: study, dateText: dateLabel(study), effect: '研究仲間の対策 ★1' });
+  if (festival) actions.push({ ...WEEK_ACTIONS.festival, date: festival.date, dateText: dateLabel(festival.date), name: festival.name, effect: '謝礼とファン・調子−1' });
+  const days = weekRange(week.start, state.fy).days.map((date) => ({
+    date,
+    dow: '日月火水木金土'[weekdayOf(date)],
+    inYear: date >= yearStart(state.fy) && date <= yearEnd(state.fy),
+    past: date < state.date,
+    today: date === state.date,
+    game: games.some((game) => game.date === date || (game.twoDay && addDays(game.date, -1) === date)),
+    study: study === date,
+    festival: festival?.date === date,
+  }));
+  return {
+    number: weekNumber(week.start, state.fy),
+    start: week.start,
+    end: week.end,
+    startText: dateLabel(week.start),
+    endText: dateLabel(week.end),
+    days,
+    games: games.map((game) => ({ ...game, dateText: dateLabel(game.date), opponent: card(state, game.opponentId), stars: starsFor(state.prep, game.opponentId) })),
+    slots,
+    chosen: week.actions.slice(0, slots),
+    applied: Boolean(week.applied),
+    actions,
+    condition,
+    conditionLabel: CONDITION_LABELS[condition],
+    hintBonus: conditionHintBonus(condition),
+    prep: nextOpponent ? { opponent: card(state, nextOpponent), stars, cap: prepCap(gear) } : null,
+    lastWeek: state.lastWeek ?? null,
+  };
+}
+
+/**
+ * 今週の行動を選ぶ(週を進める前なら何度でも選び直せる。13-2の画面の設計メモ)。nullで枠を空ける。
+ * @param {any} source
+ * @param {number} slot
+ * @param {string | null} action
+ */
+export function chooseWeekAction(source, slot, action) {
+  const state = structuredClone(source);
+  if (!state.week || state.week.applied) return state;
+  const view = weekView(state);
+  if (!view || slot < 0 || slot >= view.slots) return state;
+  if (action && !view.actions.some((item) => item.id === action)) return state;
+  // 研究会とまつりは週に1回(同じ日に2つは行けない)。
+  if (action && (action === 'study' || action === 'festival') && state.week.actions.some((item, index) => item === action && index !== slot)) return state;
+  const actions = [...state.week.actions];
+  actions[slot] = action ?? null;
+  state.week.actions = actions.slice(0, view.slots);
+  return state;
+}
+
+/** 週の行動を、週の始めにまとめて効かせる(研究・休む)。研究会とまつりは、その日に止まる。 */
+function applyWeek(state, view) {
+  const week = state.week;
+  week.cond0 = clampCondition(state.condition ?? CONDITION_DEFAULT);
+  const chosen = (week.actions ?? []).slice(0, view.slots).filter(Boolean);
+  const gear = state.user.gear ?? 0;
+  const target = view.prep?.opponent?.id ?? null;
+  for (const action of chosen) {
+    if (action === 'research' && target) {
+      state.prep = researched(state.prep, target, gear);
+      noteWeek(state, 'research', `研究 → ${nameOf(state, target)}の対策 ★${state.prep.stars}`);
+    } else if (action === 'rest') {
+      state.condition = clampCondition((state.condition ?? CONDITION_DEFAULT) + 1);
+      noteWeek(state, 'rest', '休む');
+    } else if (action === 'study') {
+      const item = view.actions.find((entry) => entry.id === 'study');
+      if (item) week.stops.push({ kind: 'study', date: item.date });
+    } else if (action === 'festival') {
+      const item = view.actions.find((entry) => entry.id === 'festival');
+      if (item) week.stops.push({ kind: 'festival', date: item.date });
+    }
+  }
+  week.stops.sort((a, b) => a.date.localeCompare(b.date));
+  week.applied = true;
+}
+
+/** 週を閉じて、まとめを残し、次の週へ(年度の終わりなら年度のまとめ)。 */
+function closeWeek(state) {
+  const week = state.week;
+  const lines = (week.log ?? []).map((item) => item.text);
+  const cond1 = clampCondition(state.condition ?? CONDITION_DEFAULT);
+  if (cond1 !== week.cond0) lines.push(`調子 ${CONDITION_LABELS[week.cond0]} → ${CONDITION_LABELS[cond1]}`);
+  // 羽音とタイトル戦の結果(あれば)。
+  for (const game of Object.values(state.games)) {
+    if (game.user || !game.winner || game.date < week.start || game.date > week.end) continue;
+    const winner = game.winner === 'a' ? game.a : game.b;
+    const hanane = [game.a, game.b].find((id) => state.players[id]?.story === HANANE);
+    if (hanane) lines.push(`羽音 ${game.label ?? proEvent(game.event)?.name ?? ''} ${winner === hanane ? '勝ち' : '負け'}`);
+    else if (proEvent(game.event)?.stages[game.stage]?.title) lines.push(`${proEvent(game.event).name} ${nameOf(state, winner)}の勝ち`);
+  }
+  state.lastWeek = { number: weekNumber(week.start, state.fy), lines: lines.slice(0, 4) };
+  if (week.end >= yearEnd(state.fy)) {
+    state.date = yearEnd(state.fy);
+    state.yearDone = true;
+    state.summary = yearSummary(state);
+    return;
+  }
+  state.date = addDays(week.end, 1);
+  state.week = newWeek(state, state.date);
+}
+
+/**
+ * 今週を進める(13-3の1)。研究会・まつり・自分の公式戦の日で止まり、終わったらもう一度呼ぶと続きから進む。
+ * @param {any} source
+ * @returns {any} 新しい状態(週が終わったら次の週。lastWeekにまとめ)
+ */
+export function advanceWeek(source) {
+  const state = structuredClone(source);
+  if (state.pending || state.yearDone || state.festival) return state;
+  if (!state.week?.start || state.week.end < state.date) state.week = newWeek(state, state.date);
+  const rng = createRng(state.rng);
+  if (!state.week.applied) applyWeek(state, weekView(state));
+  const week = state.week;
+  for (const stop of week.stops) {
+    if (stop.done) continue;
+    if (stop.date < state.date) {
+      stop.done = true;
+      continue;
+    }
+    if (run(state, stop.date, rng)) {
+      state.rng = rng.state;
+      return state;
+    }
+    stop.done = true;
+    if (stop.kind === 'study') openStudy(state, stop.date, rng);
+    else {
+      const festival = yearFestivals(state).find((item) => item.date === stop.date);
+      if (festival) openFestival(state, festival);
+    }
+    state.rng = rng.state;
+    return state;
+  }
+  if (run(state, week.end, rng)) {
+    state.rng = rng.state;
+    return state;
+  }
+  state.rng = rng.state;
+  closeWeek(state);
+  return state;
+}
+
+/**
+ * 次の自分の公式戦の週まで、おまかせで進める(13-3の10)。対局の日で止まる。
+ * @param {any} source
+ */
+export function autoWeeks(source) {
+  let state = source;
+  for (let guard = 0; guard < 60; guard += 1) {
+    if (state.pending || state.yearDone || state.festival) return state;
+    if (!state.week?.applied) {
+      const view = weekView(state);
+      const actions = autoActions({
+        slots: view.slots,
+        condition: view.condition,
+        stars: view.prep?.stars ?? 0,
+        cap: view.prep?.cap ?? 1,
+        canResearch: Boolean(view.prep),
+      });
+      state = structuredClone(state);
+      state.week.actions = actions;
+    }
+    state = advanceWeek(state);
+  }
   return state;
 }
 
@@ -1684,7 +1950,7 @@ export function previewNextGame(state) {
   if (!state || state.pending || state.yearDone) return null;
   const next = advanceToNextGame(state);
   if (!next.pending) return null;
-  return { date: next.pending.date, dateText: dateLabel(next.pending.date), label: next.pending.label };
+  return { date: next.pending.date, dateText: dateLabel(next.pending.date), label: next.pending.label, opponentId: next.pending.opponentId, gameId: next.pending.gameId, twoDay: next.pending.twoDay };
 }
 
 /**
@@ -2158,6 +2424,10 @@ export function unpackProYear(packed, roster) {
   const year = { ...emptyYear(), ...(packed.year ?? {}) };
   const restored = { ...packed, players, games, user, year };
   if (!restored.study) restored.study = emptyStudy(restored);
+  // 週の形のない前の保存は、今の日の週から(13-3の12)。
+  if (!Number.isFinite(restored.condition)) restored.condition = CONDITION_DEFAULT;
+  if (!restored.prep) restored.prep = { id: null, stars: 0 };
+  if (!restored.week?.start) restored.week = newWeek(restored, restored.date);
   return restored;
 }
 
