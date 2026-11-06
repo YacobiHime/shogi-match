@@ -121,3 +121,35 @@ export function autoActions({ slots, condition, stars, cap, canResearch }) {
   }
   return actions;
 }
+
+// ---- 対局の重さと今年の目標(13-3の5・7)
+
+/** 対局の重さ。cutは「勝負どころから」を既定にする。 */
+export const WEIGHTS = Object.freeze({
+  small: Object.freeze({ id: 'small', label: '小の対局', way: 'cut' }),
+  mid: Object.freeze({ id: 'mid', label: '中の対局', way: 'full' }),
+  big: Object.freeze({ id: 'big', label: '大一番', way: 'full' }),
+});
+
+/** 選ぶ目標の数。 */
+export const GOAL_PICK = 3;
+
+/** 目標の名前・説明・難しさ(★の数)。 */
+export const GOAL_DEFS = Object.freeze({
+  junniPromote: Object.freeze({ label: '順位戦で昇級', note: '上位に入る', level: 3 }),
+  junniWinning: Object.freeze({ label: '順位戦で勝ち越す', note: '10局で6勝以上', level: 1 }),
+  shinjinBest4: Object.freeze({ label: '新人王戦 ベスト4', note: '26歳以下の若手のトーナメント', level: 2 }),
+  shinjinWin: Object.freeze({ label: '新人王戦 優勝', note: '決勝三番勝負に勝つ', level: 3 }),
+  mainStage: Object.freeze({ label: 'タイトル戦の本戦入り', note: 'どれか1つの本戦・リーグへ', level: 3 }),
+  challenge: Object.freeze({ label: 'タイトルに挑戦', note: 'どれか1つの番勝負へ', level: 3 }),
+  wins: Object.freeze({ label: '年間15勝', note: '1年度の公式戦で', level: 1 }),
+  rate: Object.freeze({ label: '勝率6割', note: '年度の終わりに10局以上で', level: 2 }),
+  hanane: Object.freeze({ label: '羽音に勝ち越す', note: '今年度の公式戦の直接対決', level: 2 }),
+  money: Object.freeze({ label: '賞金ランキング30位以内', note: '対局料と賞金の合計', level: 2 }),
+});
+
+/**
+ * 年度の終わりの目標の判子(達成・あと一歩・届かず)。
+ * @param {{ done: boolean, ratio: number }} goal
+ */
+export const goalStamp = (goal) => (goal.done ? 'done' : goal.ratio >= 0.75 ? 'near' : 'miss');

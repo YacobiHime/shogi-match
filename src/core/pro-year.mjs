@@ -15,7 +15,7 @@ import { GEAR, STUDY_SIZE, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, stu
 import { repertoireText } from './ryuo-repertoire.mjs';
 import {
   CONDITION_DEFAULT, CONDITION_LABELS, WEEK_ACTIONS, autoActions, autoRatingBonus, clampCondition, conditionAfterGame, conditionHintBonus,
-  prepCap, researched, starsFor, weekNumber, weekRange, weekSlots,
+  GOAL_DEFS, GOAL_PICK, WEIGHTS, goalStamp, prepCap, researched, starsFor, weekNumber, weekRange, weekSlots,
 } from './pro-week.mjs';
 import {
   FESTIVAL_EVENTS, KIGOU_BOOK_MAX, KIGOU_FANS, SHIDOU_FANS, SIMUL_FANS, festivalDays, festivalFee, kigouWords, shidouGuest, simulGuests, simulPartners, talkFans,
@@ -980,6 +980,7 @@ function setPending(state, game, rng) {
   state.pending.prep = { stars, hit };
   state.pending.condition = clampCondition(state.condition ?? CONDITION_DEFAULT);
   state.pending.hintBonus = conditionHintBonus(state.pending.condition) + (hit ? 1 : 0);
+  state.pending.weight = gameWeight(state, game);
 }
 
 function stakesText(state, cycle, stage, def) {
@@ -1090,7 +1091,9 @@ export function recordProGame(source, outcome) {
     });
   // タイトル獲得・棋戦優勝の回数(揮毫の言葉が増える。10-2の6)。
   if (champions.length) state.user.crowns = (state.user.crowns ?? 0) + champions.length;
-  return { state, replay: false, won, game: { ...game }, milestones, champions, fee, earned: (state.user.money ?? 0) - moneyBefore };
+  // この1局で達成した今年の目標(その場で判子。13-3の7)。
+  const goalsDone = markGoals(state);
+  return { state, replay: false, won, game: { ...game }, milestones, champions, fee, earned: (state.user.money ?? 0) - moneyBefore, goalsDone };
 }
 
 // ---- 研究会(10-2の5)
@@ -1456,7 +1459,9 @@ export function yearSummary(state) {
   const ranking = earningsRanking(state);
   const money = { ...(state.year.mine ?? { fee: 0, prize: 0, gig: 0 }), earned: ranking.amount, rank: ranking.rank, size: ranking.size, top10: ranking.rank <= 10 };
   if (money.top10 && money.earned > 0) awards.push('獲得賞金ランキング10位以内');
-  return { fy: state.fy, wins: mine.w, losses: mine.l, rate, best: mine.best, awards, titles, junni: state.user.junniResult ?? null, rival, money };
+  // 今年の目標の判子(達成・あと一歩・届かず)。
+  const goals = state.goals?.ids?.length ? goalProgress({ ...state, yearDone: true }).map((goal) => ({ ...goal, stamp: goalStamp(goal) })) : [];
+  return { fy: state.fy, wins: mine.w, losses: mine.l, rate, best: mine.best, awards, titles, junni: state.user.junniResult ?? null, rival, money, goals };
 }
 
 /** 次の年度へ(順位戦のクラス・竜王戦の組・シードを持ち越す)。 */
@@ -1481,6 +1486,10 @@ export function startNextYear(source) {
     if (cycle.done && cycle.base < state.fy - 1) delete state.cycles[id];
   }
   openYear(state, state.fy, rng);
+  // 新しい年度の週と目標(目標は年度の始めに選び直す。13-3の7)。
+  state.goals = null;
+  state.prep = { id: null, stars: 0 };
+  state.week = newWeek(state, state.date);
   state.rng = rng.state;
   return state;
 }
@@ -1709,7 +1718,7 @@ function closeWeek(state) {
     if (game.user || !game.winner || game.date < week.start || game.date > week.end) continue;
     const winner = game.winner === 'a' ? game.a : game.b;
     const hanane = [game.a, game.b].find((id) => state.players[id]?.story === HANANE);
-    if (hanane) lines.push(`羽音 ${game.label ?? proEvent(game.event)?.name ?? ''} ${winner === hanane ? '勝ち' : '負け'}`);
+    if (hanane) lines.push(`羽音 ${gameLabel(state, game)} ${winner === hanane ? '勝ち' : '負け'}`);
     else if (proEvent(game.event)?.stages[game.stage]?.title) lines.push(`${proEvent(game.event).name} ${nameOf(state, winner)}の勝ち`);
   }
   state.lastWeek = { number: weekNumber(week.start, state.fy), lines: lines.slice(0, 4) };
@@ -1786,6 +1795,198 @@ export function autoWeeks(source) {
     state = advanceWeek(state);
   }
   return state;
+}
+
+// ---- 対局の重さ・今年の目標・次の大一番(13-3の5・7・8)
+
+const opponentOf = (game) => (game.a === PRO_USER_ID ? game.b : game.a);
+
+/**
+ * 対局の重さ(small・mid・big)。大一番は番勝負・挑戦者決定戦・決勝・リーグと順位戦の最終局・羽音との公式戦。
+ * 小は予選のブロックの決勝より前の回戦。
+ * @param {any} state
+ * @param {any} game
+ */
+export function gameWeight(state, game) {
+  const event = proEvent(game?.event ?? String(game?.cycle ?? '').split('-')[0]);
+  const def = event?.stages?.[game.stage];
+  if (!def) return 'mid';
+  if (state.players[opponentOf(game)]?.story === HANANE) return 'big';
+  if (def.title || def.type === 'series' || /決勝$/.test(game.label ?? '')) return 'big';
+  const stage = state.cycles[game.cycle]?.stages?.[game.stage];
+  const rounds = stage?.dates?.length ?? 0;
+  if ((def.type === 'league' || def.type === 'junni') && rounds && game.round >= rounds - 1) return 'big';
+  if (def.type === 'blocks' && game.round < Math.log2(def.size) - 1) return 'small';
+  return 'mid';
+}
+
+/** その期の自分の勝ち数(年度の中の対局)。 */
+function userWinsIn(state, cycleId, stageIndex = null) {
+  return Object.values(state.games).filter((game) => game.user && game.winner && game.cycle === cycleId && (stageIndex === null || game.stage === stageIndex)
+    && (game.winner === 'a') === (game.a === PRO_USER_ID)).length;
+}
+
+/** 今年度の自分の公式戦(決着したもの)。 */
+const yearUserGames = (state) => Object.values(state.games).filter((game) => game.user && game.winner && game.date >= yearStart(state.fy) && game.date <= yearEnd(state.fy));
+
+/** 今年の勝ち数の目標(はじめての年度は15、次の年度からは前の年度より3つ多く。40まで)。 */
+function winsTarget(state) {
+  const last = state.history?.at(-1);
+  return last ? Math.min(40, Math.max(15, (last.wins ?? 0) + 3)) : 15;
+}
+
+/**
+ * 年度の始めに選ぶ目標の候補(13-3の7)。おすすめに印(はじめての年度は易しめ)。
+ * @param {any} state
+ */
+export function goalChoices(state) {
+  if (!state) return [];
+  const shinjin = state.cycles[`shinjin-${state.fy}`];
+  const list = [];
+  const add = (id, extra = {}) => list.push({ id, ...GOAL_DEFS[id], ...extra });
+  add('junniPromote', { note: `${CLASS_NAMES[state.user.cls] ?? ''}で上位に入る` });
+  add('junniWinning');
+  if (shinjin?.withUser) {
+    add('shinjinBest4');
+    add('shinjinWin');
+  }
+  add('mainStage');
+  add('challenge');
+  add('wins', { target: winsTarget(state), label: `年間${winsTarget(state)}勝` });
+  add('rate');
+  if (Object.values(state.players).some((member) => member.story === HANANE)) add('hanane');
+  add('money');
+  const first = !(state.history ?? []).length;
+  const recommended = first ? ['junniPromote', shinjin?.withUser ? 'shinjinBest4' : 'junniWinning', 'wins'] : ['junniPromote', 'mainStage', 'wins'];
+  return list.map((goal) => ({ ...goal, recommended: recommended.includes(goal.id) }));
+}
+
+/**
+ * 今年の目標を決める(3つ。年度の途中では変えない)。
+ * @param {any} source
+ * @param {string[]} ids
+ */
+export function setYearGoals(source, ids) {
+  const state = structuredClone(source);
+  const choices = goalChoices(state);
+  const picked = [...new Set(ids)].filter((id) => choices.some((goal) => goal.id === id)).slice(0, GOAL_PICK);
+  if (picked.length !== GOAL_PICK || state.goals?.fy === state.fy) return state;
+  state.goals = { fy: state.fy, ids: picked, target: { wins: winsTarget(state) }, done: {} };
+  return state;
+}
+
+/**
+ * 目標の進み具合(上の帯と年度のまとめ)。年度の終わりに決まる目標(勝率・羽音・賞金)は、年度の終わりまで達成にしない。
+ * @param {any} state
+ * @returns {{ id: string, label: string, text: string, ratio: number, done: boolean }[]}
+ */
+export function goalProgress(state) {
+  const goals = state?.goals;
+  if (!goals?.ids?.length || goals.fy !== state.fy) return [];
+  const records = state.year?.records?.[PRO_USER_ID] ?? { w: 0, l: 0 };
+  const games = records.w + records.l;
+  const end = Boolean(state.yearDone);
+  const junniStage = state.cycles[`meijin-${state.fy}`]?.stages?.[0] ?? null;
+  const jw = junniStage?.wins?.[PRO_USER_ID] ?? 0;
+  const jl = junniStage?.losses?.[PRO_USER_ID] ?? 0;
+  const shinjin = state.cycles[`shinjin-${state.fy}`];
+  const sw = shinjin ? userWinsIn(state, shinjin.id) : 0;
+  const mine = yearUserGames(state);
+  const reachedMain = mine.some((game) => {
+    const event = proEvent(game.event);
+    const type = event?.stages?.[game.stage]?.type;
+    return event?.kind === 'title' && ['knockout', 'league'].includes(type);
+  }) || Object.values(state.games).some((game) => game.user && !game.winner && proEvent(game.event)?.kind === 'title' && ['knockout', 'league'].includes(proEvent(game.event)?.stages?.[game.stage]?.type));
+  const challenged = Object.values(state.games).some((game) => game.user && game.date >= yearStart(state.fy) && proEvent(game.event)?.stages?.[game.stage]?.title);
+  const hanane = mine.filter((game) => state.players[opponentOf(game)]?.story === HANANE);
+  const hw = hanane.filter((game) => (game.winner === 'a') === (game.a === PRO_USER_ID)).length;
+  const ranking = earningsRanking(state);
+  return goals.ids.map((id) => {
+    const def = GOAL_DEFS[id] ?? { label: id };
+    let text = '';
+    let ratio = 0;
+    let done = Boolean(goals.done?.[id]);
+    if (id === 'junniPromote') {
+      text = `${jw}勝${jl}敗`;
+      ratio = Math.min(1, jw / 8);
+      done ||= Boolean(junniStage?.result?.promoted);
+    } else if (id === 'junniWinning') {
+      text = `${jw}勝${jl}敗`;
+      ratio = Math.min(1, jw / 6);
+      done ||= jw >= 6;
+    } else if (id === 'shinjinBest4' || id === 'shinjinWin') {
+      text = shinjin?.champion === PRO_USER_ID ? '優勝' : sw >= 3 ? '決勝進出' : sw >= 2 ? 'ベスト4' : sw >= 1 ? 'ベスト8' : 'これから';
+      ratio = id === 'shinjinBest4' ? Math.min(1, sw / 2) : shinjin?.champion === PRO_USER_ID ? 1 : Math.min(0.9, sw / 5);
+      done ||= id === 'shinjinBest4' ? sw >= 2 : shinjin?.champion === PRO_USER_ID;
+    } else if (id === 'mainStage') {
+      text = reachedMain ? '本戦・リーグ入り' : 'まだ予選';
+      ratio = reachedMain ? 1 : 0;
+      done ||= reachedMain;
+    } else if (id === 'challenge') {
+      text = challenged ? 'タイトル挑戦' : 'まだ';
+      ratio = challenged ? 1 : reachedMain ? 0.5 : 0;
+      done ||= challenged;
+    } else if (id === 'wins') {
+      const target = goals.target?.wins ?? 15;
+      text = `${records.w}/${target}勝`;
+      ratio = Math.min(1, records.w / target);
+      done ||= records.w >= target;
+    } else if (id === 'rate') {
+      const rate = games ? records.w / games : 0;
+      text = games ? `勝率${rate.toFixed(3).replace(/^0/, '')}（${games}局）` : 'まだ0局';
+      ratio = Math.min(1, rate / 0.6);
+      done ||= end && games >= 10 && rate >= 0.6;
+    } else if (id === 'hanane') {
+      text = `${hw}勝${hanane.length - hw}敗`;
+      ratio = hanane.length ? (hw > hanane.length - hw ? 1 : hw * 2 === hanane.length ? 0.75 : 0.5) : 0;
+      done ||= end && hw > hanane.length - hw;
+    } else if (id === 'money') {
+      text = ranking.rank ? `${ranking.rank}位（${ranking.amount}万円）` : 'まだ';
+      ratio = ranking.rank ? Math.min(1, 30 / ranking.rank) : 0;
+      done ||= end && ranking.rank > 0 && ranking.rank <= 30;
+    }
+    return { id, label: id === 'wins' ? `年間${goals.target?.wins ?? 15}勝` : def.label, text, ratio, done };
+  });
+}
+
+/** 新しく達成した目標に印を付けて返す(その場の判子)。 */
+function markGoals(state) {
+  if (!state.goals?.ids?.length) return [];
+  const fresh = goalProgress(state).filter((goal) => goal.done && !state.goals.done?.[goal.id]);
+  state.goals.done = { ...(state.goals.done ?? {}), ...Object.fromEntries(fresh.map((goal) => [goal.id, state.date])) };
+  return fresh;
+}
+
+/**
+ * 次の大一番(13-3の8)。決まっている大一番がなければ「勝ち進めば」の一言。
+ * @param {any} state
+ */
+export function nextBigGame(state) {
+  if (!state || state.yearDone) return null;
+  const preview = state.pending?.gameId ? state.games[state.pending.gameId] : null;
+  const candidates = Object.values(state.games).filter((game) => game.user && !game.winner && game.date >= state.date);
+  if (preview && !candidates.includes(preview)) candidates.push(preview);
+  const big = candidates.filter((game) => gameWeight(state, game) === 'big').sort((a, b) => a.date.localeCompare(b.date))[0];
+  if (big) {
+    const weeks = weekNumber(big.date, state.fy) - weekNumber(state.date, state.fy);
+    return { kind: 'fixed', label: big.label, opponent: card(state, opponentOf(big)), date: big.date, dateText: dateLabel(big.date), weeks, whenText: weeks <= 0 ? '今週' : `あと${weeks}週` };
+  }
+  // 予選のブロックを勝ち抜けば、次が本戦・リーグ・挑戦者決定戦のもの。
+  let best = null;
+  for (const cycle of Object.values(state.cycles)) {
+    if (cycle.done || !cycle.withUser) continue;
+    const stage = cycle.stages[cycle.stage];
+    const event = proEvent(cycle.event);
+    const def = event.stages[stage?.index ?? -1];
+    if (!stage || stage.done || def?.type !== 'blocks') continue;
+    const block = (stage.blocks ?? []).find((entry) => entry.alive?.includes(PRO_USER_ID));
+    if (!block) continue;
+    const next = event.stages[stage.index + 1];
+    if (!next) continue;
+    const rest = Math.max(1, Math.log2(def.size) - userWinsIn(state, cycle.id, stage.index));
+    if (!best || rest < best.rest) best = { kind: 'reach', rest, text: `${event.short}${next.label}入りまで あと${rest}勝` };
+  }
+  return best;
 }
 
 // ---- 画面の形

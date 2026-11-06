@@ -154,3 +154,78 @@ describe('1週ずつ過ごす', () => {
     expect(PRO_USER_ID).toBe('user');
   });
 });
+
+describe('対局の重さ・今年の目標・次の大一番', () => {
+  it('予選のブロックの序盤は小、番勝負と羽音戦は大一番', async () => {
+    const { gameWeight } = await import('./pro-year.mjs');
+    let state = start();
+    const weights = [];
+    for (let guard = 0; guard < 60 && !state.yearDone; guard += 1) {
+      state = autoWeeks(state);
+      if (!state.pending) continue;
+      const game = state.games[state.pending.gameId];
+      expect(state.pending.weight).toBe(gameWeight(state, game));
+      weights.push(state.pending.weight);
+      const opponent = state.players[state.pending.opponentId];
+      if (opponent.story === 'hanane') expect(state.pending.weight).toBe('big');
+      state = recordProGame(state, 'win').state;
+    }
+    expect(weights).toContain('small');
+    expect(weights).toContain('big');
+  });
+
+  it('目標の候補は状況で変わり、はじめての年度は易しめを3つすすめる', async () => {
+    const { goalChoices } = await import('./pro-year.mjs');
+    const choices = goalChoices(start());
+    expect(choices.filter((goal) => goal.recommended)).toHaveLength(3);
+    expect(choices.map((goal) => goal.id)).toContain('shinjinBest4');
+    expect(choices.find((goal) => goal.id === 'wins').label).toBe('年間15勝');
+  });
+
+  it('目標は3つちょうどで決まり、勝ちを数えて達成したらその場で返す', async () => {
+    const { setYearGoals, goalProgress } = await import('./pro-year.mjs');
+    let state = setYearGoals(start(), ['wins', 'junniPromote']);
+    expect(state.goals ?? null).toBeNull();
+    state = setYearGoals(start(), ['wins', 'junniWinning', 'rate']);
+    expect(goalProgress(state).map((goal) => goal.id)).toEqual(['wins', 'junniWinning', 'rate']);
+    state.goals.target.wins = 2;
+    const done = [];
+    for (let guard = 0; guard < 40 && !state.yearDone; guard += 1) {
+      state = autoWeeks(state);
+      if (!state.pending) continue;
+      const result = recordProGame(state, 'win');
+      state = result.state;
+      done.push(...result.goalsDone.map((goal) => goal.id));
+      if (done.includes('wins')) break;
+    }
+    expect(done).toContain('wins');
+    expect(goalProgress(state).find((goal) => goal.id === 'wins').done).toBe(true);
+    // 勝率は年度の終わりまで達成にしない。
+    expect(goalProgress(state).find((goal) => goal.id === 'rate').done).toBe(false);
+  });
+
+  it('年度のまとめに目標の判子が付く', async () => {
+    const { setYearGoals } = await import('./pro-year.mjs');
+    let state = setYearGoals(start(5), ['wins', 'junniWinning', 'rate']);
+    for (let guard = 0; guard < 200 && !state.yearDone; guard += 1) {
+      state = autoWeeks(state);
+      if (state.pending) state = recordProGame(state, 'win').state;
+      if (state.festival) state = finishFestival(state).state;
+    }
+    expect(state.summary.goals.map((goal) => goal.stamp)).toEqual(['done', 'done', 'done']);
+  });
+
+  it('次の大一番は、決まった大一番か「勝ち進めば」の一言', async () => {
+    const { nextBigGame } = await import('./pro-year.mjs');
+    let state = start();
+    let seen = null;
+    for (let guard = 0; guard < 40 && !seen; guard += 1) {
+      const big = nextBigGame(state);
+      if (big?.kind === 'fixed') seen = big;
+      else if (big) expect(big.text).toMatch(/あと\d勝/);
+      state = autoWeeks(state);
+      if (state.pending) state = recordProGame(state, 'win').state;
+    }
+    expect(seen?.whenText).toMatch(/今週|あと\d+週/);
+  });
+});
