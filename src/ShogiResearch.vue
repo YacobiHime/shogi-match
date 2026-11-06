@@ -504,6 +504,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch,
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
 import FormationThumb from "./FormationThumb.vue";
+import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import { formationChoices, placeFormation } from "./core/edit-formation.mjs";
 import type { ShogiEngine } from "./core/engine.js";
 import { useResearchEngine } from "./composables/useResearchEngine";
@@ -676,7 +677,16 @@ function goTo(target: number) {
   branchMenu.value = -1;
   goToPly(research.value, target);
 }
+// 駒音(12章)。盤で指した手・自動で指した手・▶で1手進めたときに鳴らす(対局・問題集と同じ音)。
+const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
+onMounted(() => moveSounds.preload());
+function playMoveSound(sfen: string, usi: string) {
+  const kind = moveSoundForUsi(sfen, usi);
+  if (kind) moveSounds.play(kind);
+}
 function step(delta: number) {
+  const next = delta === 1 ? line.value[ply.value] as { usi?: string } | undefined : undefined;
+  if (next?.usi) playMoveSound(currentSfen.value, next.usi);
   goTo(ply.value + delta);
 }
 function chooseNext(index: number) {
@@ -705,6 +715,7 @@ function restoreRemoved() {
 function onBoardMove(usi: string) {
   preview.value = null;
   const mover = sideOf(currentSfen.value);
+  playMoveSound(currentSfen.value, usi);
   playMove(research.value, usi);
   // 自動で指す側でない手を指したら、相手が答える(10章)。自動で指す側の手を盤で指したときは、指し直しとして答えない。
   if (settings.value.autoReply && mover !== settings.value.autoSide) requestAutoReply();
@@ -920,6 +931,7 @@ function checkAutoReply() {
   cancelAutoReply();
   if (decision.kind !== "move") return;
   preview.value = null;
+  playMoveSound(currentSfen.value, decision.usi);
   playMove(research.value, decision.usi);
   autoPlayedKey.value = positionKey.value;
 }
