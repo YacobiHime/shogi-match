@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>棋士の1年（第2段階）のモックアップ</title>
+<!--
+  棋士の1年の第2段階(docs/pro-year-design.mdの14章)のモックアップ。ニュース・仕事・分身を育てる。
+  PC(1366×768)2画面とスマホ(390×844)5画面。中身は見本の値で、ボタンは動かない。
+  ?real=1 で枠を縮めずに並べる(写真を撮るため)。?only=番号 でその画面だけを出す。
+-->
+<style>
+:root {
+  --page: #0f171f;
+  --page-ink: #dfe7ee;
+  /* 対局画面・大会の画面と同じ色(src/ShogiMatchGame.css) */
+  --night: #1d303f;
+  --night-deep: #172632;
+  --slate: #2b465b;
+  --amber: #f1a54c;
+  --amber-shadow: #b57c39;
+  --ivory: #fffcf4;
+  --muted: rgba(255, 252, 244, 0.72);
+  --panel: rgba(23, 38, 50, 0.94);
+  --line: rgba(255, 252, 244, 0.18);
+  --gold: #e7c15a;
+  --ok: #3aa37a;
+  --ng: #d8483a;
+  --study: #c9b6f0;
+  --fest: #e0655a;
+  --hanane: #7bd3a8;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 16px 64px; background: var(--page); color: var(--page-ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif; line-height: 1.5; }
+.doc { max-width: 1400px; margin: 0 auto; }
+.doc > h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.doc > p { margin: 0 0 8px; color: #aab7c2; max-width: 64rem; }
+.doc > h2 { margin: 40px 0 12px; font-size: 1.15rem; border-left: 4px solid var(--amber); padding-left: 10px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 410px), 1fr)); gap: 28px 20px; }
+.grid--pc { grid-template-columns: 1fr; }
+figure { margin: 0; display: grid; gap: 10px; align-content: start; }
+figcaption { color: #c9d4dc; font-size: 0.85rem; max-width: 64rem; }
+figcaption strong { display: block; color: #fff; font-size: 0.95rem; }
+.fit { width: 100%; overflow: hidden; }
+.fit > .device { transform-origin: top left; }
+.device { position: relative; overflow: hidden; background: var(--night); color: var(--ivory); border-radius: 28px; box-shadow: 0 0 0 10px #05090c, 0 0 0 11px #2b3a46, 0 20px 50px rgba(0, 0, 0, 0.5); }
+.device--phone { width: 390px; height: 844px; }
+.device--pc { width: 1366px; height: 768px; border-radius: 10px; }
+body.real { padding: 0; background: var(--night); }
+body.real .doc > *:not(.grid), body.real figcaption { display: none; }
+body.real .grid { display: block; }
+body.real figure { display: block; }
+body.real .fit { overflow: visible; }
+body.real .device { border-radius: 0; box-shadow: none; }
+
+/* ---- 部品 ---- */
+.btn { display: inline-grid; place-items: center; min-height: 44px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 8px; color: var(--ivory); background: var(--slate); font: inherit; font-weight: 800; }
+.btn--amber { border-color: var(--amber-shadow); color: #1d303f; background: var(--amber); box-shadow: 0 3px 0 var(--amber-shadow); font-weight: 900; }
+.btn--ghost { background: transparent; }
+.btn small { font-size: 0.7rem; font-weight: 700; opacity: 0.8; }
+.topbar { display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 14px; border-bottom: 1px solid rgba(241, 165, 76, 0.35); background: #13202b; }
+.back { height: 40px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.45); border-radius: 999px; background: transparent; color: var(--ivory); font: inherit; font-weight: 800; }
+.seal { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 6px; background: #c2493a; color: #fff; font-weight: 900; }
+.title h1 { margin: 0; font-size: 1.05rem; }
+.title p { margin: 0; color: var(--muted); font-size: 0.75rem; font-weight: 700; }
+.tabs { display: flex; gap: 6px; margin-left: auto; }
+.tab { height: 36px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 999px; background: transparent; color: var(--ivory); font: inherit; font-size: 0.85rem; font-weight: 800; }
+.tab.on { border-color: var(--amber); color: #1d303f; background: var(--amber); }
+
+/* 目標の帯と次の大一番 */
+.goalbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.25fr); gap: 8px; padding: 8px 14px; background: #162531; border-bottom: 1px solid var(--line); }
+.goal { display: grid; gap: 3px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--night-deep); font-size: 0.78rem; }
+.goal b { font-size: 0.82rem; }
+.goal small { color: var(--muted); font-weight: 700; }
+.bar { position: relative; height: 6px; border-radius: 3px; background: rgba(255, 252, 244, 0.15); overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--amber); }
+.goal.done { border-color: var(--ok); }
+.goal.done .bar i { background: var(--ok); }
+.bigone { display: grid; gap: 2px; padding: 6px 12px; border: 2px solid var(--gold); border-radius: 8px; background: rgba(231, 193, 90, 0.12); font-size: 0.78rem; }
+.bigone b { font-size: 0.88rem; }
+.bigone em { color: var(--gold); font-style: normal; font-size: 1.05rem; font-weight: 900; }
+
+/* 7日の帯 */
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.day { display: grid; align-content: start; gap: 2px; min-height: 64px; padding: 4px 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--night-deep); font-size: 0.72rem; text-align: center; }
+.day b { font-size: 0.95rem; }
+.day small { color: var(--muted); font-weight: 700; }
+.day.today { border-color: var(--amber); }
+.day.game { border: 2px solid var(--amber); background: rgba(241, 165, 76, 0.14); }
+.day.past { opacity: 0.55; }
+.mark { display: block; margin-top: 2px; padding: 0 3px; border-radius: 4px; font-size: 0.66rem; font-weight: 900; color: #1d303f; }
+.mark--game { background: var(--amber); }
+.mark--study { background: var(--study); }
+.mark--fest { background: var(--fest); color: #fff; }
+.mark--title { background: var(--gold); }
+.mark--hanane { background: var(--hanane); }
+
+/* 行動の枠 */
+.slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.slot { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 64px; padding: 8px 10px; border: 2px dashed rgba(255, 252, 244, 0.35); border-radius: 10px; background: transparent; color: var(--ivory); text-align: left; font: inherit; }
+.slot .ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--slate); font-weight: 900; }
+.slot b { display: block; font-size: 0.95rem; }
+.slot small { color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+.slot.set { border-style: solid; border-color: var(--amber); background: rgba(241, 165, 76, 0.1); }
+.slot.set .ico { background: var(--amber); color: #1d303f; }
+.slot.lock { border-style: solid; border-color: rgba(255, 252, 244, 0.25); background: rgba(255, 252, 244, 0.04); }
+.slot.lock .ico { background: var(--amber-shadow); color: #fff; }
+
+/* 対局の札 */
+.game { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.game header { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--muted); font-weight: 800; }
+.weight { padding: 1px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 900; color: #1d303f; background: #9fb3c3; }
+.weight--mid { background: #8fd0e8; }
+.weight--big { background: var(--gold); }
+.vs { display: flex; align-items: center; gap: 10px; }
+.vs b { font-size: 1.1rem; }
+.prep { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.78rem; color: var(--muted); font-weight: 700; }
+.prep em { color: var(--amber); font-style: normal; }
+.stars { color: var(--gold); letter-spacing: 1px; }
+.stars i { color: rgba(255, 252, 244, 0.25); font-style: normal; }
+.ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.way { display: grid; gap: 1px; padding: 6px 4px; min-height: 52px; place-content: center; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 8px; background: var(--slate); color: var(--ivory); font: inherit; font-size: 0.82rem; font-weight: 900; text-align: center; }
+.way small { color: var(--muted); font-size: 0.66rem; font-weight: 700; }
+.way.default { border-color: var(--amber-shadow); background: var(--amber); color: #1d303f; box-shadow: 0 3px 0 var(--amber-shadow); }
+.way.default small { color: #3a2a12; }
+
+/* 自分の札 */
+.me { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.me h3 { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.85rem; font-weight: 800; }
+.cond { display: inline-flex; gap: 3px; }
+.cond i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 252, 244, 0.2); }
+.cond i.on { background: var(--ok); }
+.cond-label { color: var(--ok); }
+.talk { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: center; }
+.talk img { width: 44px; height: 56px; object-fit: contain; image-rendering: pixelated; }
+.talk p { margin: 0; padding: 8px 10px; border-left: 3px solid var(--amber); background: rgba(23, 38, 50, 0.94); font-size: 0.82rem; font-weight: 700; }
+.summary { display: grid; gap: 4px; margin: 0; padding: 10px 12px; list-style: none; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 0.82rem; font-weight: 700; }
+.summary li::before { content: "・"; color: var(--amber); }
+.summary h3 { margin: 0 0 2px; font-size: 0.8rem; color: var(--muted); }
+.up { color: var(--ok); }
+.down { color: #ff9c8f; }
+
+/* これからの3週 */
+.ahead h3 { margin: 0 0 6px; font-size: 0.85rem; color: var(--muted); }
+.ahead ol { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ahead li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--night-deep); font-size: 0.82rem; font-weight: 700; }
+.ahead li b { min-width: 52px; color: var(--muted); }
+.ahead li.is-big { border-color: var(--gold); background: rgba(231, 193, 90, 0.1); }
+.ahead .weight { margin-left: 6px; font-style: normal; }
+
+/* PCの配置 */
+.pc-body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; padding: 14px; height: calc(768px - 60px - 70px); }
+.pc-main { display: grid; align-content: start; gap: 12px; padding: 14px; border: 1px solid rgba(241, 165, 76, 0.35); border-radius: 12px; background: rgba(23, 38, 50, 0.6); }
+.pc-main h2 { margin: 0; font-size: 1rem; }
+.pc-main h2 small { margin-left: 8px; color: var(--muted); font-size: 0.78rem; }
+.pc-side { display: grid; align-content: start; gap: 10px; }
+.advance { display: flex; gap: 8px; }
+.advance .btn--amber { flex: 1; min-height: 52px; font-size: 1.05rem; }
+.pc .day { min-height: 62px; }
+.pc .pc-main { gap: 10px; }
+
+/* スマホの配置 */
+.ph { display: grid; grid-template-rows: 56px auto minmax(0, 1fr) auto; height: 100%; }
+.ph .topbar { height: 56px; }
+.ph .title h1 { font-size: 0.95rem; }
+.ph-strip { display: grid; gap: 6px; padding: 8px 10px; background: #162531; border-bottom: 1px solid var(--line); }
+.ph-goals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.ph-goals .goal { padding: 4px 6px; font-size: 0.68rem; }
+.ph-goals .goal b { font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-strip .bigone { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 4px 10px; }
+.ph-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ph-tabs .tab { height: 32px; padding: 0; font-size: 0.78rem; }
+.ph-main { display: grid; align-content: start; gap: 10px; padding: 10px; overflow: hidden; }
+.ph .day { min-height: 56px; padding: 3px 2px; }
+.ph .day b { font-size: 0.85rem; }
+.ph .slots { grid-template-columns: 1fr; }
+.ph .slot { min-height: 56px; }
+.ph-foot { display: grid; gap: 6px; padding: 8px 10px 14px; border-top: 1px solid var(--line); background: #13202b; }
+.ph-foot .btn--amber { min-height: 52px; font-size: 1rem; }
+.ph-foot .btn--ghost { min-height: 36px; font-size: 0.8rem; }
+.mini { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; font-weight: 800; }
+
+/* シート */
+.veil { position: absolute; inset: 0; display: grid; align-items: end; background: rgba(8, 14, 20, 0.62); }
+.veil--center { place-items: center; padding: 20px; }
+.sheet { display: grid; gap: 10px; padding: 18px 16px 20px; border-radius: 16px 16px 0 0; background: var(--ivory); color: #1d303f; }
+.veil--center .sheet { border-radius: 14px; width: 100%; }
+.sheet h2 { margin: 0; font-size: 1.1rem; }
+.sheet p.note { margin: 0; color: #526878; font-size: 0.82rem; font-weight: 700; }
+.act { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #d9cfba; border-radius: 10px; background: #fff; font-weight: 800; }
+.act .ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #e9e2d2; font-weight: 900; }
+.act small { display: block; color: #526878; font-size: 0.75rem; font-weight: 700; }
+.act .eff { font-size: 0.78rem; text-align: right; }
+.act.on { border: 2px solid var(--amber-shadow); background: #fff4e3; }
+.act.on .ico { background: var(--amber); }
+.act .tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 4px; background: var(--study); font-size: 0.68rem; }
+.sheet .btn { color: #1d303f; background: #e9e2d2; border-color: #cfc4ad; }
+.sheet .btn--amber { background: var(--amber); }
+.sheet-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+
+/* 目標選び */
+.choose { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.cand { position: relative; display: grid; gap: 4px; align-content: start; min-height: 128px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.cand b { font-size: 1rem; }
+.cand small { color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+.cand .lv { color: var(--gold); font-size: 0.8rem; }
+.cand.on { border: 2px solid var(--amber); background: rgba(241, 165, 76, 0.12); }
+.cand .pick { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255, 252, 244, 0.4); font-weight: 900; }
+.cand.on .pick { border-color: var(--amber); background: var(--amber); color: #1d303f; }
+.rec { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--ok); color: #fff; font-size: 0.68rem; font-weight: 900; }
+
+/* 大一番 */
+.big { display: grid; gap: 12px; padding: 18px; border: 3px solid var(--gold); border-radius: 14px; background: linear-gradient(180deg, rgba(231, 193, 90, 0.16), rgba(23, 38, 50, 0.9)); box-shadow: 0 0 0 4px rgba(231, 193, 90, 0.15); }
+.big .kicker { color: var(--gold); font-size: 0.85rem; font-weight: 900; letter-spacing: 2px; }
+.big h2 { margin: 0; font-size: 1.5rem; }
+.big .players { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; }
+.player { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--night-deep); }
+.player b { font-size: 1.15rem; }
+.player small { color: var(--muted); font-weight: 700; }
+.vsmark { font-size: 1.6rem; font-weight: 900; color: var(--gold); }
+.eve { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px dashed var(--gold); border-radius: 10px; font-size: 0.85rem; font-weight: 800; }
+
+/* 判子 */
+.stamp { display: inline-grid; place-items: center; width: 64px; height: 64px; border: 3px solid #c2493a; border-radius: 50%; color: #c2493a; font-size: 0.8rem; font-weight: 900; transform: rotate(-12deg); background: rgba(255, 252, 244, 0.92); text-align: center; line-height: 1.1; }
+.stamp--near { border-color: #b57c39; color: #b57c39; }
+.stamp--miss { border-color: #8a97a3; color: #8a97a3; }
+.result { display: grid; grid-template-columns: minmax(0, 1fr) 70px; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.result b { display: block; }
+.result small { color: var(--muted); font-weight: 700; }
+.fresh { position: absolute; right: 18px; top: 140px; }
+
+/* ---- 第2段階 ---- */
+/* ニュースの札 */
+.news { display: grid; gap: 4px; padding: 10px 12px 10px 14px; border: 1px solid #cbbd9c; border-left: 6px solid #c2493a; border-radius: 8px; background: #f6f0e1; color: #1d303f; }
+.news .mast { display: flex; align-items: baseline; gap: 8px; font-size: 0.7rem; font-weight: 900; color: #8a6a3a; letter-spacing: 2px; }
+.news .mast span { margin-left: auto; letter-spacing: 0; color: #6b7c88; }
+.news h3 { margin: 0; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 1.15rem; line-height: 1.3; }
+.news p { margin: 0; font-size: 0.78rem; font-weight: 700; color: #3c4f5c; }
+.news .more { justify-self: end; font-size: 0.72rem; font-weight: 900; color: #c2493a; }
+/* 取材の札 */
+.interview { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 2px solid #8fd0e8; border-radius: 10px; background: rgba(143, 208, 232, 0.12); font-size: 0.82rem; font-weight: 800; }
+.interview .ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #8fd0e8; color: #1d303f; font-weight: 900; }
+.interview small { display: block; color: var(--muted); font-weight: 700; }
+/* 分身の行 */
+.avatar-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 0.8rem; font-weight: 800; }
+.avatar-row .ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #3d5a70; font-weight: 900; }
+.avatar-row small { display: block; color: var(--muted); font-weight: 700; }
+.avatar-row .lvbar { display: block; width: 100%; height: 6px; margin-top: 4px; border-radius: 3px; background: rgba(255, 252, 244, 0.15); overflow: hidden; }
+.avatar-row .lvbar i { display: block; height: 100%; background: var(--hanane); }
+.gain { color: var(--hanane); font-weight: 900; }
+.work-tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 4px; background: #8fd0e8; color: #1d303f; font-size: 0.68rem; font-weight: 900; }
+.act.lock { opacity: 0.55; }
+.act .grow { display: block; color: #2f7a5a; font-size: 0.72rem; }
+.act .note-line { display: block; color: #8a6a3a; font-size: 0.72rem; }
+.head-row { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 -4px; color: #8a6a3a; font-size: 0.75rem; font-weight: 900; }
+/* 紙面 */
+.paper { display: grid; gap: 10px; padding: 14px 14px 16px; background: #f6f0e1; color: #1d303f; border-radius: 16px 16px 0 0; }
+.paper .mast { display: flex; align-items: baseline; gap: 8px; padding-bottom: 6px; border-bottom: 3px double #1d303f; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-weight: 900; }
+.paper .mast b { font-size: 1.3rem; }
+.paper .mast span { margin-left: auto; font-size: 0.75rem; color: #6b7c88; }
+.paper h2 { margin: 0; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 1.45rem; line-height: 1.3; }
+.paper .lead { margin: 0; font-size: 0.85rem; font-weight: 700; line-height: 1.6; }
+.paper ul { display: grid; gap: 4px; margin: 0; padding: 8px 0 0; list-style: none; border-top: 1px solid #cbbd9c; font-size: 0.8rem; font-weight: 700; }
+.paper ul li::before { content: "■ "; color: #c2493a; }
+.paper .record { padding: 6px 8px; border: 1px solid #cbbd9c; border-radius: 6px; font-size: 0.78rem; font-weight: 800; }
+.letter { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 10px; border: 1px dashed #c2493a; border-radius: 8px; background: #fff; font-size: 0.78rem; font-weight: 700; }
+.letter .env { display: grid; place-items: center; width: 40px; height: 30px; border-radius: 3px; background: #f2c9c2; color: #c2493a; font-weight: 900; }
+.letter small { display: block; color: #6b7c88; }
+.paper .btn { color: #1d303f; background: #e9e2d2; border-color: #cfc4ad; }
+/* 仕事の札 */
+.workcard { display: grid; gap: 8px; padding: 12px; border: 2px solid #8fd0e8; border-radius: 12px; background: var(--panel); }
+.workcard header { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.8rem; font-weight: 800; }
+.workcard h3 { margin: 0; font-size: 1.1rem; }
+.workcard .terms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.workcard .terms div { padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--night-deep); font-size: 0.75rem; font-weight: 800; text-align: center; }
+.workcard .terms b { display: block; font-size: 0.95rem; }
+/* 分身のシート */
+.bars { display: grid; gap: 6px; }
+.abar { display: grid; grid-template-columns: 56px 44px minmax(0, 1fr) 54px; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 800; }
+.abar .track { height: 10px; border-radius: 5px; background: #e1d9c6; overflow: hidden; }
+.abar .track i { display: block; height: 100%; background: #3aa37a; }
+.abar small { color: #526878; font-weight: 700; text-align: right; }
+.abar.up b { color: #2f7a5a; }
+.radar { justify-self: center; }
+/* ランキング */
+.ranks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.rank { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 0.8rem; font-weight: 800; }
+.rank h3 { margin: 0 0 4px; font-size: 0.9rem; color: var(--amber); }
+.rank ol { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.rank li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 6px; }
+.rank li small { color: var(--muted); }
+.rank li.you { color: var(--amber); }
+.rank .near { margin-top: 4px; padding: 4px 8px; border-radius: 6px; background: rgba(241, 165, 76, 0.14); color: var(--amber); font-size: 0.75rem; }
+.letters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.letters .letter { background: #f6f0e1; color: #1d303f; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <h1>棋士の1年（第2段階）のモックアップ</h1>
+  <p>docs/pro-year-design.md の14章（D 世界が反応する・E 棋士の仕事・G 分身を育てる）の見本です。値は見本で、ボタンは動きません。第1段階の画面（mock.html）に足すものだけを描いています。</p>
+
+  <h2>PC（1366×768）</h2>
+  <div class="grid grid--pc">
+    <figure data-shot="1">
+      <figcaption><strong>1. 今週の画面（仕事を選んだ週）</strong>今週の札の上に先週の将棋ニュース（見出しと2行。押すと紙面）。行動の枠の1つに「仕事：詰将棋」。下に分身の1行。右に取材の依頼の札。</figcaption>
+      <div class="fit"><div class="device device--pc pc" id="s1"></div></div>
+    </figure>
+    <figure data-shot="2">
+      <figcaption><strong>2. 成績のタブ（記録のランキングとファンレター）</strong>4部門の上位3人と自分。10位の外なら「10位まで あと○勝」。ファンレターは封筒の札で読み返せる。</figcaption>
+      <div class="fit"><div class="device device--pc pc" id="s2"></div></div>
+    </figure>
+  </div>
+
+  <h2>スマホ縦（390×844）</h2>
+  <div class="grid">
+    <figure data-shot="3">
+      <figcaption><strong>3. 行動のシート（仕事の行）</strong>今週の依頼は2件。解説は鍵つき（ファン300人で開く）。右に効き目、下の行に分身の経験。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s3"></div></div>
+    </figure>
+    <figure data-shot="4">
+      <figcaption><strong>4. 仕事の日の札</strong>週を進めると月曜で止まる。「遊ぶ」で問題集の詰将棋3問、「さっと済ませる」は基本の出来高で記録。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s4"></div></div>
+    </figure>
+    <figure data-shot="5">
+      <figcaption><strong>5. 将棋ニュースの紙面</strong>見出し・記事・記録の1行・ファンレター・羽音の一言。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s5"></div></div>
+    </figure>
+    <figure data-shot="6">
+      <figcaption><strong>6. 取材</strong>記者の質問1つに3つの答え。どれでもファン＋15、答えは次の週のニュースに載る。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s6"></div></div>
+    </figure>
+    <figure data-shot="7">
+      <figcaption><strong>7. 分身のシート</strong>レーダーチャートと8つの能力のLv・経験の棒。今週伸びた能力に印。分身に任せるの勝つ見込みへの効き。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s7"></div></div>
+    </figure>
+  </div>
+</div>
+
+<script>
+const HIME = "../../public/characters/yakobihime-mini.webp";
+const HANANE = "../../public/characters/hanane-mini.webp";
+
+const goals = (compact = false) => `
+  <div class="goal"><b>順位戦で昇級</b>${compact ? "" : "<small>C級2組 5勝1敗（昇級ライン 8勝）</small>"}<div class="bar"><i style="width:62%"></i></div></div>
+  <div class="goal"><b>新人王戦 ベスト4</b>${compact ? "" : "<small>ベスト8まで進出</small>"}<div class="bar"><i style="width:66%"></i></div></div>
+  <div class="goal"><b>年間15勝</b>${compact ? "" : "<small>12/15勝</small>"}<div class="bar"><i style="width:80%"></i></div></div>`;
+const topbar = (sub, tab = "今週", compact = false) => `
+  <header class="topbar">
+    <button class="back">← 戻る</button>
+    ${compact ? "" : '<span class="seal">棋</span>'}
+    <div class="title"><h1>2026年度 棋士の1年</h1><p>${sub}</p></div>
+    ${compact ? "" : `<nav class="tabs">${["今週", "カレンダー", "棋戦", "成績"].map((name) => `<button class="tab ${name === tab ? "on" : ""}">${name}</button>`).join("")}</nav>`}
+  </header>`;
+const week = (days) => `<div class="week">${days.map(([dow, date, marks = "", cls = ""]) => `<div class="day ${cls}"><small>${dow}</small><b>${date}</b>${marks}</div>`).join("")}</div>`;
+const WEEK_WORK = [
+  ["月", "6/1", '<span class="mark" style="background:#8fd0e8">仕事</span>', "today"], ["火", "6/2"],
+  ["水", "6/3", '<span class="mark mark--study">研</span>'], ["木", "6/4", '<span class="mark mark--game">対局</span>', "game"],
+  ["金", "6/5"], ["土", "6/6", '<span class="mark mark--title">★名人</span>'], ["日", "6/7"],
+];
+const newsCard = `
+  <article class="news">
+    <div class="mast">週刊 将棋ニュース<span>第9週（5月25日〜31日）</span></div>
+    <h3>やこび四段、5連勝で新人王戦ベスト8へ</h3>
+    <p>順位戦でも3連勝。「序盤の研究が実ってきた」と語った。</p>
+    <span class="more">紙面を開く ›</span>
+  </article>`;
+const avatarRow = `
+  <div class="avatar-row"><span class="ico">分</span>
+    <span>分身　いちばん高い <b>研究 Lv4</b>・今週 <span class="gain">寄せ ＋3</span><small>寄せ Lv3 まで あと2</small><span class="lvbar"><i style="width:75%"></i></span></span>
+    <button class="btn" style="min-height:36px">くわしく</button>
+  </div>`;
+const interviewCard = `
+  <div class="interview"><span class="ico">記</span><span>取材の依頼<small>将棋新報の記者「5連勝について、ひとこと」</small></span><button class="btn" style="min-height:36px">答える</button></div>`;
+
+// ---- 1. PC 今週
+document.getElementById("s1").innerHTML = `
+  ${topbar("第10週 6月1日(月)〜7日(日)・C級2組・12勝4敗")}
+  <div class="goalbar">${goals()}
+    <div class="bigone"><small>次の大一番</small><b>新人王戦 準々決勝 vs 天鷺羽音四段</b><span>6月17日(水) <em>あと2週</em></span></div>
+  </div>
+  <div class="pc-body">
+    <section class="pc-main">
+      ${newsCard}
+      <h2>今週<small>行動の枠 1つ（対局が1局ある週）</small></h2>
+      ${week(WEEK_WORK)}
+      <article class="game">
+        <header><span class="weight weight--mid">中の対局</span>6月4日(木)・順位戦 C級2組 6回戦</header>
+        <div class="vs"><b>vs 池田翔 五段</b><span class="stars">★<i>★★</i></span></div>
+      </article>
+      <div class="slots">
+        <button class="slot lock"><span class="ico">局</span><span><b>対局</b><small>6月4日 順位戦</small></span></button>
+        <button class="slot set"><span class="ico">詰</span><span><b>仕事：詰将棋（月曜）</b><small>原稿料 最大15万円・ファン＋5・<span class="gain">分身 寄せ＋2 読み＋1</span></small></span></button>
+      </div>
+      ${avatarRow}
+      <div class="advance">
+        <button class="btn btn--ghost">対局の週までおまかせ</button>
+        <button class="btn btn--amber">この週を進める</button>
+      </div>
+    </section>
+    <aside class="pc-side">
+      ${interviewCard}
+      <section class="me">
+        <h3>あなた（四段）</h3>
+        <div class="row"><span>調子</span><span><span class="cond"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span> <span class="cond-label">好調</span></span></div>
+        <div class="row"><span>お金</span><span>142万円</span></div>
+        <div class="row"><span>ファン</span><span>268人 <small style="color:var(--muted)">解説の仕事まで あと32人</small></span></div>
+      </section>
+      <div class="talk"><img src="${HANANE}" alt=""><p>新聞、見たよ。5連勝くらいで浮かれないで。準々決勝で待ってる。</p></div>
+    </aside>
+  </div>`;
+
+// ---- 2. PC 成績のタブ
+const rank = (title, rows, near = "") => `
+  <section class="rank"><h3>${title}</h3><ol>${rows.map(([n, name, value, you]) => `<li class="${you ? "you" : ""}"><small>${n}位</small><span>${name}</span><b>${value}</b></li>`).join("")}</ol>${near ? `<span class="near">${near}</span>` : ""}</section>`;
+document.getElementById("s2").innerHTML = `
+  ${topbar("第10週 6月1日(月)〜7日(日)・C級2組・12勝4敗", "成績")}
+  <div style="display:grid;gap:14px;padding:16px 20px">
+    <h2 style="margin:0;font-size:1.05rem">記録のランキング<small style="margin-left:8px;color:var(--muted);font-size:.8rem">今年度・将棋大賞の記録部門と同じ数え方</small></h2>
+    <div class="ranks">
+      ${rank("勝数", [[1, "天鷺善彦", "15勝"], [2, "高木隼人", "13勝"], [3, "やこび（あなた）", "12勝", true]])}
+      ${rank("勝率（10局以上）", [[1, "天鷺善彦", ".833"], [2, "池田翔", ".786"], [3, "八木悠真", ".778"], [7, "やこび（あなた）", ".750", true]])}
+      ${rank("対局数", [[1, "高木隼人", "21局"], [2, "天鷺羽音", "19局"], [3, "中島健太", "18局"]], "10位まで あと2局")}
+      ${rank("連勝", [[1, "天鷺善彦", "9連勝"], [2, "やこび（あなた）", "5連勝", true], [3, "天鷺羽音", "5連勝"]])}
+    </div>
+    <h2 style="margin:6px 0 0;font-size:1.05rem">ファンレター<small style="margin-left:8px;color:var(--muted);font-size:.8rem">1通</small></h2>
+    <div class="letters">
+      <div class="letter"><span class="env">✉</span><span>テレビで初勝利を見ました。ぼくも将棋教室に通いはじめました。<small>小学3年生 ゆうとより（ファン100人の週）</small></span></div>
+      <div class="letter" style="opacity:.55"><span class="env">？</span><span>ファンが300人になると、次の手紙が届きます。<small>あと32人</small></span></div>
+    </div>
+  </div>`;
+
+// ---- スマホの共通
+const phone = (main, foot, opts = {}) => `
+  <div class="ph">
+    ${topbar(opts.sub || "第10週 6月1日(月)〜7日(日)", "今週", true)}
+    <div class="ph-strip">
+      <div class="ph-goals">${goals(true)}</div>
+      <div class="bigone"><span><small>次の大一番</small> <b>新人王戦 準々決勝</b></span><em>あと2週</em></div>
+      <nav class="ph-tabs"><button class="tab on">今週</button><button class="tab">カレンダー</button><button class="tab">棋戦</button><button class="tab">成績</button></nav>
+    </div>
+    <div class="ph-main">${main}</div>
+    <div class="ph-foot">${foot}</div>
+  </div>`;
+const FOOT = '<button class="btn btn--amber">この週を進める</button><button class="btn btn--ghost">対局の週までおまかせ</button>';
+
+// ---- 3. 行動のシート
+document.getElementById("s3").innerHTML = phone(`
+  ${newsCard}
+  ${week(WEEK_WORK)}`, FOOT) + `
+  <div class="veil">
+    <div class="sheet">
+      <h2>行動を選ぶ<small style="font-size:.8rem;margin-left:6px;color:#526878">（1つめ）</small></h2>
+      <div class="act"><span class="ico">研</span><span>研究：池田五段<small>次の相手の作戦を調べる</small><span class="grow">分身：研究＋2</span></span><span class="eff">対策<br>★1 → ★2</span></div>
+      <div class="act"><span class="ico">休</span><span>休む<small>調子を整える</small><span class="grow">分身：安定感＋1</span></span><span class="eff up">調子<br>＋1</span></div>
+      <div class="act"><span class="ico">会</span><span>研究会<span class="tag">水曜</span><small>研究仲間と練習対局</small><span class="grow">分身：読み＋2・発想＋1</span></span><span class="eff">研究仲間<br>★1</span></div>
+      <div class="head-row">今週の仕事の依頼（1つまで）</div>
+      <div class="act on"><span class="ico">詰</span><span>詰将棋の監修<span class="work-tag">月曜</span><small>将棋新報の詰将棋欄・3問</small><span class="grow">分身：寄せ＋2・読み＋1</span></span><span class="eff">最大15万円<br>ファン＋5</span></div>
+      <div class="act lock"><span class="ico">解</span><span>大盤解説<span class="work-tag">土曜</span><small>名人戦 第3局の大盤解説</small><span class="note-line">ファン300人で開く（あと32人）</span></span><span class="eff">15万円〜<br>ファン＋20〜</span></div>
+      <div class="talk" style="grid-template-columns:36px minmax(0,1fr)"><img src="${HIME}" alt="" style="width:36px;height:46px"><p style="background:#fff;color:#1d303f;border-left-color:var(--amber)">仕事をすると、お金とファンが増えて、分身も育つよ！</p></div>
+      <div class="sheet-actions"><button class="btn">何もしない</button><button class="btn btn--amber">詰将棋の監修にする</button></div>
+    </div>
+  </div>`;
+
+// ---- 4. 仕事の日の札
+document.getElementById("s4").innerHTML = phone(`
+  ${week(WEEK_WORK)}
+  <article class="workcard">
+    <header><span class="work-tag" style="margin:0">仕事</span>6月1日(月)・将棋新報</header>
+    <h3>詰将棋の監修（3問）</h3>
+    <p style="margin:0;color:var(--muted);font-size:.82rem;font-weight:700">今月号の詰将棋欄の3問を、作者の答えどおりに詰むか確かめてほしい。手数は5〜9手。</p>
+    <div class="terms">
+      <div><b>最大15万円</b>1問5万円</div>
+      <div><b>ファン＋5</b>載ると読まれる</div>
+      <div><b class="gain">寄せ＋2</b>読み＋1・解けたら寄せ＋1ずつ</div>
+    </div>
+  </article>
+  <div class="talk"><img src="${HIME}" alt=""><p>詰将棋は寄せの練習にもなるよ。時間がないときは、さっと済ませてもいいからね。</p></div>`,
+  '<button class="btn btn--amber">遊ぶ（詰将棋3問）</button><button class="btn btn--ghost">さっと済ませる（10万円・寄せ＋2 読み＋1）</button>',
+  { sub: "第10週 6月1日(月)・仕事の日" });
+
+// ---- 5. ニュースの紙面
+document.getElementById("s5").innerHTML = phone(`${week(WEEK_WORK)}`, FOOT) + `
+  <div class="veil">
+    <div class="paper">
+      <div class="mast"><b>週刊 将棋ニュース</b><span>第9週 5月25日〜31日</span></div>
+      <h2>やこび四段、5連勝で<br>新人王戦ベスト8へ</h2>
+      <p class="lead">デビュー2か月の新四段・やこびが、新人王戦3回戦で高木隼人六段を破り5連勝。順位戦でも3連勝と好調だ。取材に「序盤の研究が実ってきた。次は羽音さんと当たるまで負けたくない」と語った。</p>
+      <ul>
+        <li>新人王戦 3回戦 やこび四段 ○ 高木六段（勝負どころから）</li>
+        <li>天鷺羽音四段も勝ち、準々決勝で同期対決へ</li>
+        <li>名人戦 第2局 天鷺名人が勝ち、2連勝</li>
+        <li>分身の寄せがLv3に（詰将棋の仕事）</li>
+      </ul>
+      <div class="record">記録：連勝ランキング 2位（5連勝）・勝数 3位（12勝）</div>
+      <div class="letter"><span class="env">✉</span><span>テレビで初勝利を見ました。ぼくも将棋教室に通いはじめました。<small>ファンレター・小学3年生 ゆうとより</small></span></div>
+      <div class="talk" style="grid-template-columns:36px minmax(0,1fr)"><img src="${HANANE}" alt="" style="width:36px;height:46px"><p style="background:#fff;color:#1d303f;border-left-color:var(--hanane)">記事、少し大げさね。準々決勝で決着をつける。</p></div>
+      <button class="btn">閉じる</button>
+    </div>
+  </div>`;
+
+// ---- 6. 取材
+document.getElementById("s6").innerHTML = phone(`${interviewCard}${week(WEEK_WORK)}`, FOOT) + `
+  <div class="veil veil--center">
+    <div class="sheet">
+      <p class="note">将棋新報の記者</p>
+      <h2>「5連勝、おめでとうございます。いまの手ごたえは？」</h2>
+      <div class="act"><span class="ico">強</span><span>次は羽音さんにも勝ちます<small>意気込み</small></span><span class="eff">ファン<br>＋15</span></div>
+      <div class="act"><span class="ico">謝</span><span>研究会の仲間のおかげです<small>感謝</small></span><span class="eff">ファン<br>＋15</span></div>
+      <div class="act"><span class="ico">笑</span><span>連勝中は、毎朝カレーです<small>ひとこと面白く</small></span><span class="eff">ファン<br>＋15</span></div>
+      <p class="note">答えは来週の将棋ニュースに載るよ。</p>
+      <button class="btn">今は答えない</button>
+    </div>
+  </div>`;
+
+// ---- 7. 分身のシート
+const AXES = [["研究", 4, 70, false], ["大局観", 2, 30, false], ["視野", 2, 55, false], ["発想", 1, 50, false], ["読み", 3, 40, true], ["安定感", 2, 20, false], ["寄せ", 3, 10, true], ["受け", 1, 75, false]];
+const radar = (() => {
+  const cx = 110, cy = 105, R = 80;
+  const pt = (i, r) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / 8; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  const ring = (f) => AXES.map((_, i) => pt(i, R * f).join(",")).join(" ");
+  const poly = AXES.map(([, lv], i) => pt(i, R * (0.15 + 0.85 * (lv / 10))).join(",")).join(" ");
+  const before = AXES.map(([, lv, , up], i) => pt(i, R * (0.15 + 0.85 * ((up ? lv - 1 : lv) / 10))).join(",")).join(" ");
+  const labels = AXES.map(([name], i) => { const [x, y] = pt(i, R + 16); return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="800" fill="#1d303f">${name}</text>`; }).join("");
+  return `<svg class="radar" width="220" height="210" viewBox="0 0 220 210">${[1, 0.66, 0.33].map((f) => `<polygon points="${ring(f)}" fill="none" stroke="#cbbd9c"/>`).join("")}<polygon points="${poly}" fill="rgba(58,163,122,.35)" stroke="#3aa37a" stroke-width="2"/><polygon points="${before}" fill="none" stroke="#8a97a3" stroke-dasharray="3 3"/>${labels}</svg>`;
+})();
+document.getElementById("s7").innerHTML = phone(`${week(WEEK_WORK)}${avatarRow}`, FOOT) + `
+  <div class="veil">
+    <div class="sheet">
+      <h2>分身の能力<small style="font-size:.8rem;margin-left:6px;color:#526878">点線は先週</small></h2>
+      ${radar}
+      <div class="bars">
+        ${AXES.map(([name, lv, exp, up]) => `<div class="abar ${up ? "up" : ""}"><span>${name}</span><b>Lv${lv}${up ? " ↑" : ""}</b><span class="track"><i style="width:${exp}%"></i></span><small>次まで ${Math.round((lv * 4) * (1 - exp / 100))}</small></div>`).join("")}
+      </div>
+      <p class="note">分身に任せたときの勝つ見込み：育つ前より <b style="color:#2f7a5a">＋6%</b>。自分で指すときの強さは、あなたの腕のまま。</p>
+      <button class="btn">閉じる</button>
+    </div>
+  </div>`;
+
+const params = new URLSearchParams(location.search);
+const real = params.has("real");
+if (params.has("only")) {
+  for (const fig of document.querySelectorAll("figure[data-shot]")) if (fig.dataset.shot !== params.get("only")) fig.remove();
+  for (const grid of document.querySelectorAll(".grid")) if (!grid.children.length) grid.remove();
+}
+if (real) document.body.classList.add("real");
+function fit() {
+  if (real) return;
+  for (const box of document.querySelectorAll(".fit")) {
+    const device = box.firstElementChild;
+    const width = device.offsetWidth + 22;
+    const scale = Math.min(1, box.clientWidth / width);
+    device.style.transform = `translate(11px, 11px) scale(${scale})`;
+    box.style.height = `${(device.offsetHeight + 22) * scale}px`;
+  }
+}
+addEventListener("resize", fit);
+fit();
+</script>
+</body>
+</html>
