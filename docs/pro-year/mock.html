@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>棋士の1年（週の画面）のモックアップ</title>
+<!--
+  棋士の1年の第1段階(docs/pro-year-design.mdの13章)のモックアップ。
+  PC(1366×768)3画面とスマホ(390×844)5画面。中身は見本の値で、ボタンは動かない。
+  ?real=1 で枠を縮めずに並べる(写真を撮るため)。?only=番号 でその画面だけを出す。
+-->
+<style>
+:root {
+  --page: #0f171f;
+  --page-ink: #dfe7ee;
+  /* 対局画面・大会の画面と同じ色(src/ShogiMatchGame.css) */
+  --night: #1d303f;
+  --night-deep: #172632;
+  --slate: #2b465b;
+  --amber: #f1a54c;
+  --amber-shadow: #b57c39;
+  --ivory: #fffcf4;
+  --muted: rgba(255, 252, 244, 0.72);
+  --panel: rgba(23, 38, 50, 0.94);
+  --line: rgba(255, 252, 244, 0.18);
+  --gold: #e7c15a;
+  --ok: #3aa37a;
+  --ng: #d8483a;
+  --study: #c9b6f0;
+  --fest: #e0655a;
+  --hanane: #7bd3a8;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 16px 64px; background: var(--page); color: var(--page-ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif; line-height: 1.5; }
+.doc { max-width: 1400px; margin: 0 auto; }
+.doc > h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.doc > p { margin: 0 0 8px; color: #aab7c2; max-width: 64rem; }
+.doc > h2 { margin: 40px 0 12px; font-size: 1.15rem; border-left: 4px solid var(--amber); padding-left: 10px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 410px), 1fr)); gap: 28px 20px; }
+.grid--pc { grid-template-columns: 1fr; }
+figure { margin: 0; display: grid; gap: 10px; align-content: start; }
+figcaption { color: #c9d4dc; font-size: 0.85rem; max-width: 64rem; }
+figcaption strong { display: block; color: #fff; font-size: 0.95rem; }
+.fit { width: 100%; overflow: hidden; }
+.fit > .device { transform-origin: top left; }
+.device { position: relative; overflow: hidden; background: var(--night); color: var(--ivory); border-radius: 28px; box-shadow: 0 0 0 10px #05090c, 0 0 0 11px #2b3a46, 0 20px 50px rgba(0, 0, 0, 0.5); }
+.device--phone { width: 390px; height: 844px; }
+.device--pc { width: 1366px; height: 768px; border-radius: 10px; }
+body.real { padding: 0; background: var(--night); }
+body.real .doc > *:not(.grid), body.real figcaption { display: none; }
+body.real .grid { display: block; }
+body.real figure { display: block; }
+body.real .fit { overflow: visible; }
+body.real .device { border-radius: 0; box-shadow: none; }
+
+/* ---- 部品 ---- */
+.btn { display: inline-grid; place-items: center; min-height: 44px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 8px; color: var(--ivory); background: var(--slate); font: inherit; font-weight: 800; }
+.btn--amber { border-color: var(--amber-shadow); color: #1d303f; background: var(--amber); box-shadow: 0 3px 0 var(--amber-shadow); font-weight: 900; }
+.btn--ghost { background: transparent; }
+.btn small { font-size: 0.7rem; font-weight: 700; opacity: 0.8; }
+.topbar { display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 14px; border-bottom: 1px solid rgba(241, 165, 76, 0.35); background: #13202b; }
+.back { height: 40px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.45); border-radius: 999px; background: transparent; color: var(--ivory); font: inherit; font-weight: 800; }
+.seal { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 6px; background: #c2493a; color: #fff; font-weight: 900; }
+.title h1 { margin: 0; font-size: 1.05rem; }
+.title p { margin: 0; color: var(--muted); font-size: 0.75rem; font-weight: 700; }
+.tabs { display: flex; gap: 6px; margin-left: auto; }
+.tab { height: 36px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 999px; background: transparent; color: var(--ivory); font: inherit; font-size: 0.85rem; font-weight: 800; }
+.tab.on { border-color: var(--amber); color: #1d303f; background: var(--amber); }
+
+/* 目標の帯と次の大一番 */
+.goalbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.25fr); gap: 8px; padding: 8px 14px; background: #162531; border-bottom: 1px solid var(--line); }
+.goal { display: grid; gap: 3px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--night-deep); font-size: 0.78rem; }
+.goal b { font-size: 0.82rem; }
+.goal small { color: var(--muted); font-weight: 700; }
+.bar { position: relative; height: 6px; border-radius: 3px; background: rgba(255, 252, 244, 0.15); overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--amber); }
+.goal.done { border-color: var(--ok); }
+.goal.done .bar i { background: var(--ok); }
+.bigone { display: grid; gap: 2px; padding: 6px 12px; border: 2px solid var(--gold); border-radius: 8px; background: rgba(231, 193, 90, 0.12); font-size: 0.78rem; }
+.bigone b { font-size: 0.88rem; }
+.bigone em { color: var(--gold); font-style: normal; font-size: 1.05rem; font-weight: 900; }
+
+/* 7日の帯 */
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.day { display: grid; align-content: start; gap: 2px; min-height: 64px; padding: 4px 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--night-deep); font-size: 0.72rem; text-align: center; }
+.day b { font-size: 0.95rem; }
+.day small { color: var(--muted); font-weight: 700; }
+.day.today { border-color: var(--amber); }
+.day.game { border: 2px solid var(--amber); background: rgba(241, 165, 76, 0.14); }
+.day.past { opacity: 0.55; }
+.mark { display: block; margin-top: 2px; padding: 0 3px; border-radius: 4px; font-size: 0.66rem; font-weight: 900; color: #1d303f; }
+.mark--game { background: var(--amber); }
+.mark--study { background: var(--study); }
+.mark--fest { background: var(--fest); color: #fff; }
+.mark--title { background: var(--gold); }
+.mark--hanane { background: var(--hanane); }
+
+/* 行動の枠 */
+.slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.slot { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 64px; padding: 8px 10px; border: 2px dashed rgba(255, 252, 244, 0.35); border-radius: 10px; background: transparent; color: var(--ivory); text-align: left; font: inherit; }
+.slot .ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--slate); font-weight: 900; }
+.slot b { display: block; font-size: 0.95rem; }
+.slot small { color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+.slot.set { border-style: solid; border-color: var(--amber); background: rgba(241, 165, 76, 0.1); }
+.slot.set .ico { background: var(--amber); color: #1d303f; }
+.slot.lock { border-style: solid; border-color: rgba(255, 252, 244, 0.25); background: rgba(255, 252, 244, 0.04); }
+.slot.lock .ico { background: var(--amber-shadow); color: #fff; }
+
+/* 対局の札 */
+.game { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.game header { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--muted); font-weight: 800; }
+.weight { padding: 1px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 900; color: #1d303f; background: #9fb3c3; }
+.weight--mid { background: #8fd0e8; }
+.weight--big { background: var(--gold); }
+.vs { display: flex; align-items: center; gap: 10px; }
+.vs b { font-size: 1.1rem; }
+.prep { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.78rem; color: var(--muted); font-weight: 700; }
+.prep em { color: var(--amber); font-style: normal; }
+.stars { color: var(--gold); letter-spacing: 1px; }
+.stars i { color: rgba(255, 252, 244, 0.25); font-style: normal; }
+.ways { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.way { display: grid; gap: 1px; padding: 6px 4px; min-height: 52px; place-content: center; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 8px; background: var(--slate); color: var(--ivory); font: inherit; font-size: 0.82rem; font-weight: 900; text-align: center; }
+.way small { color: var(--muted); font-size: 0.66rem; font-weight: 700; }
+.way.default { border-color: var(--amber-shadow); background: var(--amber); color: #1d303f; box-shadow: 0 3px 0 var(--amber-shadow); }
+.way.default small { color: #3a2a12; }
+
+/* 自分の札 */
+.me { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.me h3 { margin: 0; font-size: 0.85rem; color: var(--muted); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.85rem; font-weight: 800; }
+.cond { display: inline-flex; gap: 3px; }
+.cond i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255, 252, 244, 0.2); }
+.cond i.on { background: var(--ok); }
+.cond-label { color: var(--ok); }
+.talk { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: center; }
+.talk img { width: 44px; height: 56px; object-fit: contain; image-rendering: pixelated; }
+.talk p { margin: 0; padding: 8px 10px; border-left: 3px solid var(--amber); background: rgba(23, 38, 50, 0.94); font-size: 0.82rem; font-weight: 700; }
+.summary { display: grid; gap: 4px; margin: 0; padding: 10px 12px; list-style: none; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font-size: 0.82rem; font-weight: 700; }
+.summary li::before { content: "・"; color: var(--amber); }
+.summary h3 { margin: 0 0 2px; font-size: 0.8rem; color: var(--muted); }
+.up { color: var(--ok); }
+.down { color: #ff9c8f; }
+
+/* これからの3週 */
+.ahead h3 { margin: 0 0 6px; font-size: 0.85rem; color: var(--muted); }
+.ahead ol { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ahead li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--night-deep); font-size: 0.82rem; font-weight: 700; }
+.ahead li b { min-width: 52px; color: var(--muted); }
+.ahead li.is-big { border-color: var(--gold); background: rgba(231, 193, 90, 0.1); }
+.ahead .weight { margin-left: 6px; font-style: normal; }
+
+/* PCの配置 */
+.pc-body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 14px; padding: 14px; height: calc(768px - 60px - 70px); }
+.pc-main { display: grid; align-content: start; gap: 12px; padding: 14px; border: 1px solid rgba(241, 165, 76, 0.35); border-radius: 12px; background: rgba(23, 38, 50, 0.6); }
+.pc-main h2 { margin: 0; font-size: 1rem; }
+.pc-main h2 small { margin-left: 8px; color: var(--muted); font-size: 0.78rem; }
+.pc-side { display: grid; align-content: start; gap: 10px; }
+.advance { display: flex; gap: 8px; }
+.advance .btn--amber { flex: 1; min-height: 52px; font-size: 1.05rem; }
+.pc .day { min-height: 62px; }
+.pc .pc-main { gap: 10px; }
+
+/* スマホの配置 */
+.ph { display: grid; grid-template-rows: 56px auto minmax(0, 1fr) auto; height: 100%; }
+.ph .topbar { height: 56px; }
+.ph .title h1 { font-size: 0.95rem; }
+.ph-strip { display: grid; gap: 6px; padding: 8px 10px; background: #162531; border-bottom: 1px solid var(--line); }
+.ph-goals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.ph-goals .goal { padding: 4px 6px; font-size: 0.68rem; }
+.ph-goals .goal b { font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-strip .bigone { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 4px 10px; }
+.ph-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.ph-tabs .tab { height: 32px; padding: 0; font-size: 0.78rem; }
+.ph-main { display: grid; align-content: start; gap: 10px; padding: 10px; overflow: hidden; }
+.ph .day { min-height: 56px; padding: 3px 2px; }
+.ph .day b { font-size: 0.85rem; }
+.ph .slots { grid-template-columns: 1fr; }
+.ph .slot { min-height: 56px; }
+.ph-foot { display: grid; gap: 6px; padding: 8px 10px 14px; border-top: 1px solid var(--line); background: #13202b; }
+.ph-foot .btn--amber { min-height: 52px; font-size: 1rem; }
+.ph-foot .btn--ghost { min-height: 36px; font-size: 0.8rem; }
+.mini { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; font-weight: 800; }
+
+/* シート */
+.veil { position: absolute; inset: 0; display: grid; align-items: end; background: rgba(8, 14, 20, 0.62); }
+.veil--center { place-items: center; padding: 20px; }
+.sheet { display: grid; gap: 10px; padding: 18px 16px 20px; border-radius: 16px 16px 0 0; background: var(--ivory); color: #1d303f; }
+.veil--center .sheet { border-radius: 14px; width: 100%; }
+.sheet h2 { margin: 0; font-size: 1.1rem; }
+.sheet p.note { margin: 0; color: #526878; font-size: 0.82rem; font-weight: 700; }
+.act { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #d9cfba; border-radius: 10px; background: #fff; font-weight: 800; }
+.act .ico { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: #e9e2d2; font-weight: 900; }
+.act small { display: block; color: #526878; font-size: 0.75rem; font-weight: 700; }
+.act .eff { font-size: 0.78rem; text-align: right; }
+.act.on { border: 2px solid var(--amber-shadow); background: #fff4e3; }
+.act.on .ico { background: var(--amber); }
+.act .tag { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 4px; background: var(--study); font-size: 0.68rem; }
+.sheet .btn { color: #1d303f; background: #e9e2d2; border-color: #cfc4ad; }
+.sheet .btn--amber { background: var(--amber); }
+.sheet-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+
+/* 目標選び */
+.choose { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.cand { position: relative; display: grid; gap: 4px; align-content: start; min-height: 128px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.cand b { font-size: 1rem; }
+.cand small { color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+.cand .lv { color: var(--gold); font-size: 0.8rem; }
+.cand.on { border: 2px solid var(--amber); background: rgba(241, 165, 76, 0.12); }
+.cand .pick { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255, 252, 244, 0.4); font-weight: 900; }
+.cand.on .pick { border-color: var(--amber); background: var(--amber); color: #1d303f; }
+.rec { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--ok); color: #fff; font-size: 0.68rem; font-weight: 900; }
+
+/* 大一番 */
+.big { display: grid; gap: 12px; padding: 18px; border: 3px solid var(--gold); border-radius: 14px; background: linear-gradient(180deg, rgba(231, 193, 90, 0.16), rgba(23, 38, 50, 0.9)); box-shadow: 0 0 0 4px rgba(231, 193, 90, 0.15); }
+.big .kicker { color: var(--gold); font-size: 0.85rem; font-weight: 900; letter-spacing: 2px; }
+.big h2 { margin: 0; font-size: 1.5rem; }
+.big .players { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; }
+.player { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--night-deep); }
+.player b { font-size: 1.15rem; }
+.player small { color: var(--muted); font-weight: 700; }
+.vsmark { font-size: 1.6rem; font-weight: 900; color: var(--gold); }
+.eve { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px dashed var(--gold); border-radius: 10px; font-size: 0.85rem; font-weight: 800; }
+
+/* 判子 */
+.stamp { display: inline-grid; place-items: center; width: 64px; height: 64px; border: 3px solid #c2493a; border-radius: 50%; color: #c2493a; font-size: 0.8rem; font-weight: 900; transform: rotate(-12deg); background: rgba(255, 252, 244, 0.92); text-align: center; line-height: 1.1; }
+.stamp--near { border-color: #b57c39; color: #b57c39; }
+.stamp--miss { border-color: #8a97a3; color: #8a97a3; }
+.result { display: grid; grid-template-columns: minmax(0, 1fr) 70px; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.result b { display: block; }
+.result small { color: var(--muted); font-weight: 700; }
+.fresh { position: absolute; right: 18px; top: 140px; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <h1>棋士の1年（週の画面）のモックアップ</h1>
+  <p>docs/pro-year-design.md の13章（第1段階：A 1週を選ぶ・B 対局の重さ・C 今年の目標と山場・I 画面の主役を「今週」に）の見本です。値は見本で、ボタンは動きません。</p>
+
+  <h2>PC（1366×768）</h2>
+  <div class="grid grid--pc">
+    <figure data-shot="1">
+      <figcaption><strong>1. 今週の画面（対局のある週）</strong>上の帯に今年の目標3つと次の大一番。左の大きな欄が今週の札（7日の帯・今週の対局・行動の枠）、右に自分の札（調子・対策・お金）と羽音の一言、先週のまとめ。月のカレンダー・棋戦・成績はタブ。</figcaption>
+      <div class="fit"><div class="device device--pc pc" id="s1"></div></div>
+    </figure>
+    <figure data-shot="2">
+      <figcaption><strong>2. 年度の始めの目標選び</strong>候補8つから3つ。やこび姫のおすすめに印。選んだものは右上の丸に番号。</figcaption>
+      <div class="fit"><div class="device device--pc pc" id="s2"></div></div>
+    </figure>
+    <figure data-shot="3">
+      <figcaption><strong>3. 大一番の札</strong>金の縁、前夜の場面の入口、調子と対策★3。指し方は3つ（既定は最初から）。</figcaption>
+      <div class="fit"><div class="device device--pc pc" id="s3"></div></div>
+    </figure>
+  </div>
+
+  <h2>スマホ縦（390×844）</h2>
+  <div class="grid">
+    <figure data-shot="4">
+      <figcaption><strong>4. 今週の画面（対局のない最初の週）</strong>行動の枠は2つ。最初の週だけ、やこび姫の一言。下に固定の「この週を進める」。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s4"></div></div>
+    </figure>
+    <figure data-shot="5">
+      <figcaption><strong>5. 行動を選ぶシート</strong>研究・休む・研究会（今週ある）・まつり（今週ある）。効き目を右に書く。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s5"></div></div>
+    </figure>
+    <figure data-shot="6">
+      <figcaption><strong>6. 対局の札（小の対局）</strong>予選の1回戦。既定は「勝負どころから」。研究がはまった判子の見本も。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s6"></div></div>
+    </figure>
+    <figure data-shot="7">
+      <figcaption><strong>7. 週のまとめの札</strong>週を進めたあと、あったことだけを4行まで。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s7"></div></div>
+    </figure>
+    <figure data-shot="8">
+      <figcaption><strong>8. 年度のまとめ（目標の判子）</strong>達成・あと一歩・届かず。次の年度の目標の候補へ。</figcaption>
+      <div class="fit"><div class="device device--phone" id="s8"></div></div>
+    </figure>
+  </div>
+</div>
+
+<script>
+const HIME = "../../public/characters/yakobihime-mini.webp";
+const HANANE = "../../public/characters/hanane-mini.webp";
+
+const FRESH = `
+  <div class="goal"><b>順位戦で昇級</b><div class="bar"><i style="width:0%"></i></div></div>
+  <div class="goal"><b>新人王戦 ベスト4</b><div class="bar"><i style="width:0%"></i></div></div>
+  <div class="goal"><b>年間15勝</b><div class="bar"><i style="width:0%"></i></div></div>`;
+const goals = (compact = false) => `
+  <div class="goal"><b>順位戦で昇級</b>${compact ? "" : "<small>C級2組 5勝1敗（昇級ライン 8勝）</small>"}<div class="bar"><i style="width:62%"></i></div></div>
+  <div class="goal"><b>新人王戦 ベスト4</b>${compact ? "" : "<small>ベスト8まで進出</small>"}<div class="bar"><i style="width:66%"></i></div></div>
+  <div class="goal done"><b>年間15勝 ✓</b>${compact ? "" : "<small>16勝（達成）</small>"}<div class="bar"><i style="width:100%"></i></div></div>`;
+
+const topbar = (sub, tabs = true, compact = false) => `
+  <header class="topbar">
+    <button class="back">← 戻る</button>
+    ${compact ? "" : '<span class="seal">棋</span>'}
+    <div class="title"><h1>2026年度 棋士の1年</h1><p>${sub}</p></div>
+    ${tabs && !compact ? '<nav class="tabs"><button class="tab on">今週</button><button class="tab">カレンダー</button><button class="tab">棋戦</button><button class="tab">成績</button></nav>' : ""}
+  </header>`;
+
+const week = (days) => `<div class="week">${days.map(([dow, date, marks = "", cls = ""]) => `<div class="day ${cls}"><small>${dow}</small><b>${date}</b>${marks}</div>`).join("")}</div>`;
+
+const WEEK_GAME = [
+  ["月", "6/8", "", "past"], ["火", "6/9", '<span class="mark mark--hanane">羽音</span>', "today"],
+  ["水", "6/10", '<span class="mark mark--study">研</span>'], ["木", "6/11", '<span class="mark mark--game">対局</span>', "game"],
+  ["金", "6/12", '<span class="mark mark--title">★名人</span>'], ["土", "6/13"], ["日", "6/14"],
+];
+
+// ---- 1. PC 今週の画面
+document.getElementById("s1").innerHTML = `
+  ${topbar("第11週 6月8日(月)〜14日(日)・C級2組・16勝5敗")}
+  <div class="goalbar">${goals()}
+    <div class="bigone"><small>次の大一番</small><b>新人王戦 準決勝 vs 天鷺羽音四段</b><span>6月24日(水) <em>あと2週</em></span></div>
+  </div>
+  <div class="pc-body">
+    <section class="pc-main">
+      <h2>今週<small>行動の枠 1つ（対局が1局ある週）</small></h2>
+      ${week(WEEK_GAME)}
+      <article class="game">
+        <header><span class="weight weight--mid">中の対局</span>6月11日(木)・順位戦 C級2組 7回戦</header>
+        <div class="vs"><b>vs 池田翔 五段</b><span class="stars">★★<i>★</i></span></div>
+        <div class="prep"><span>対策：<em>得意は四間飛車</em>・<em>美濃囲い</em></span><span>研究会で 2勝1敗</span><span>勝てば 昇級ラインまで あと2勝</span></div>
+        <div class="ways">
+          <button class="way default">最初から指す<small>おすすめ・約20分</small></button>
+          <button class="way">勝負どころから<small>40手目から・約10分</small></button>
+          <button class="way">分身に任せる<small>勝率の見込み 58%</small></button>
+        </div>
+      </article>
+      <div class="slots">
+        <button class="slot lock"><span class="ico">局</span><span><b>対局</b><small>6月11日 順位戦</small></span></button>
+        <button class="slot set"><span class="ico">研</span><span><b>研究：池田五段</b><small>対策 ★2 → ★3（特殊能力も分かる）</small></span></button>
+      </div>
+      <div class="advance">
+        <button class="btn btn--ghost">次の対局の週まで、おまかせ</button>
+        <button class="btn btn--amber">この週を進める</button>
+      </div>
+      <div class="ahead">
+        <h3>これからの3週</h3>
+        <ol>
+          <li><b>第12週</b><span>研究会（水）</span><span>王位戦 予選 1回戦（金）<i class="weight">小</i></span></li>
+          <li class="is-big"><b>第13週</b><span>新人王戦 準決勝 vs 羽音（水）<i class="weight weight--big">大一番</i></span></li>
+          <li><b>第14週</b><span>順位戦 8回戦（火）<i class="weight weight--mid">中</i></span><span>港町将棋まつり（土）</span></li>
+        </ol>
+      </div>
+    </section>
+    <aside class="pc-side">
+      <section class="me">
+        <h3>あなた（四段）</h3>
+        <div class="row"><span>調子</span><span><span class="cond"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span> <span class="cond-label">好調</span></span></div>
+        <div class="row"><span>閃き</span><span>3回（設定2 ＋好調1）</span></div>
+        <div class="row"><span>お金</span><span>182万円 <small style="color:var(--muted)">デスクトップまで あと18万</small></span></div>
+      </section>
+      <div class="talk"><img src="${HANANE}" alt=""><p>池田は序盤から飛車を振ってくる。研究会で見たでしょ、あの形。</p></div>
+      <ul class="summary">
+        <h3>先週のまとめ（第10週）</h3>
+        <li>朝日杯 一次予選 2回戦 <span class="up">勝ち</span>（勝負どころから）</li>
+        <li>調子 ふつう → <span class="up">好調</span></li>
+        <li>羽音 新人王戦 準々決勝 勝ち</li>
+        <li>名人戦 第5局 天鷺名人の勝ち（3勝2敗）</li>
+      </ul>
+    </aside>
+  </div>`;
+
+// ---- 2. PC 目標選び
+const cands = [
+  ["順位戦で昇級", "C級2組で上位3人に入る", "★★★", true, 1],
+  ["順位戦で勝ち越す", "10局で6勝以上", "★", false, 0],
+  ["新人王戦 ベスト4", "26歳以下の若手のトーナメント", "★★", true, 2],
+  ["新人王戦 優勝", "決勝三番勝負に勝つ", "★★★", false, 0],
+  ["タイトル戦の本戦入り", "どれか1つの本戦・リーグへ", "★★★", false, 0],
+  ["年間15勝", "1年度の公式戦で", "★", true, 3],
+  ["羽音に勝ち越す", "今年度の公式戦の直接対決", "★★", false, 0],
+  ["賞金ランキング30位以内", "対局料と賞金の合計", "★★", false, 0],
+];
+document.getElementById("s2").innerHTML = `
+  ${topbar("2026年度のはじまり・C級2組", false)}
+  <div style="display:grid;gap:14px;padding:18px 24px">
+    <div class="talk" style="max-width:820px"><img src="${HIME}" alt=""><p>今年の目標を3つ決めよう！ 緑の印は、はじめての年度におすすめの3つだよ。年度の途中では変えられないから、よく選んでね。</p></div>
+    <div class="choose">
+      ${cands.map(([name, note, lv, on, n]) => `<div class="cand ${on ? "on" : ""}"><span class="pick">${n || ""}</span>${on ? '<span class="rec">おすすめ</span>' : '<span style="height:16px"></span>'}<b>${name}</b><small>${note}</small><span class="lv">難しさ ${lv}</span></div>`).join("")}
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center">
+      <span style="color:var(--muted);font-weight:800">3つ選びました</span>
+      <button class="btn btn--amber" style="min-width:280px;min-height:52px">この3つで始める</button>
+    </div>
+  </div>`;
+
+// ---- 3. PC 大一番
+document.getElementById("s3").innerHTML = `
+  ${topbar("第13週 6月22日(月)〜28日(日)・C級2組・18勝5敗")}
+  <div class="goalbar">${goals()}
+    <div class="bigone"><small>大一番の週</small><b>新人王戦 準決勝 vs 天鷺羽音四段</b><span>6月24日(水) <em>今週</em></span></div>
+  </div>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;padding:14px">
+    <article class="big">
+      <span class="kicker">大一番</span>
+      <h2>新人王戦 準決勝</h2>
+      <div class="players">
+        <div class="player"><small>あなた</small><b>四段</b><span>調子 <span class="cond"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span> 絶好調</span><span>閃き 4回</span></div>
+        <span class="vsmark">VS</span>
+        <div class="player"><small>ライバル</small><b>天鷺羽音 四段</b><span class="stars">★★★</span><span style="font-size:.8rem;color:var(--muted);font-weight:700">得意は矢倉・金矢倉／特殊能力「終盤の粘り」</span></div>
+      </div>
+      <div class="eve"><img src="${HANANE}" alt="" style="width:32px;height:40px;image-rendering:pixelated">前夜の場面「準決勝の前夜」<button class="btn" style="margin-left:auto;min-height:36px">見る</button></div>
+      <div class="ways">
+        <button class="way default">最初から指す<small>おすすめ・約25分</small></button>
+        <button class="way">勝負どころから<small>40手目から</small></button>
+        <button class="way">分身に任せる<small>勝率の見込み 61%</small></button>
+      </div>
+    </article>
+    <aside class="pc-side">
+      <ul class="summary">
+        <h3>この週までにしたこと</h3>
+        <li>第11週 研究（羽音 ★1）</li>
+        <li>第12週 研究（羽音 ★3）・休む</li>
+        <li>第13週 休む（調子 好調 → <span class="up">絶好調</span>）</li>
+      </ul>
+      <div class="talk"><img src="${HIME}" alt=""><p>準備は万全だね！ 勝てば「新人王戦 ベスト4」の目標が達成だよ。</p></div>
+    </aside>
+  </div>`;
+
+// ---- スマホの共通
+const phone = (main, foot, opts = {}) => `
+  <div class="ph">
+    ${topbar(opts.sub || "第1週 4月1日(水)〜5日(日)", false, true)}
+    <div class="ph-strip">
+      <div class="ph-goals">${opts.fresh ? FRESH : goals(true)}</div>
+      <div class="bigone"><span><small>次の大一番</small> <b>${opts.big || "新人王戦 1回戦"}</b></span><em>${opts.bigWhen || "あと2週"}</em></div>
+      <nav class="ph-tabs"><button class="tab on">今週</button><button class="tab">カレンダー</button><button class="tab">棋戦</button><button class="tab">成績</button></nav>
+    </div>
+    <div class="ph-main">${main}</div>
+    <div class="ph-foot">${foot}</div>
+  </div>`;
+const FOOT = '<button class="btn btn--amber">この週を進める</button><button class="btn btn--ghost">次の対局の週まで、おまかせ</button>';
+const WEEK1 = [
+  ["月", "3/30", "", "past"], ["火", "3/31", "", "past"], ["水", "4/1", '<span class="mark mark--game" style="background:var(--gold)">初日</span>', "today"],
+  ["木", "4/2"], ["金", "4/3"], ["土", "4/4"], ["日", "4/5"],
+];
+const meRow = (money = "0万円") => `<div class="mini"><span>調子 <span class="cond"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span> ふつう</span><span style="margin-left:auto">お金 ${money}</span></div>`;
+
+// ---- 4. スマホ 今週（最初の週）
+document.getElementById("s4").innerHTML = phone(`
+  ${week(WEEK1)}
+  ${meRow()}
+  <p style="margin:0;color:var(--muted);font-size:.8rem;font-weight:800">今週は対局がありません。行動の枠 2つ</p>
+  <div class="talk"><img src="${HIME}" alt=""><p>最初の対局は再来週の新人王戦。枠を押して、相手を研究しておこう！</p></div>
+  <div class="slots">
+    <button class="slot"><span class="ico">＋</span><span><b>行動を選ぶ</b><small>研究・休む・研究会・まつり</small></span></button>
+    <button class="slot"><span class="ico">＋</span><span><b>行動を選ぶ</b><small>選ばなければ何もしない</small></span></button>
+  </div>`, FOOT, { fresh: true });
+
+// ---- 5. スマホ 行動を選ぶシート
+document.getElementById("s5").innerHTML = phone(`
+  ${week(WEEK_GAME)}
+  ${meRow("182万円")}
+  <div class="slots">
+    <button class="slot set"><span class="ico">研</span><span><b>研究：池田五段</b><small>対策 ★1 → ★2</small></span></button>
+    <button class="slot"><span class="ico">＋</span><span><b>行動を選ぶ</b></span></button>
+  </div>`, FOOT, { sub: "第11週 6月8日(月)〜14日(日)", big: "新人王戦 準決勝", bigWhen: "あと2週" }) + `
+  <div class="veil">
+    <div class="sheet">
+      <h2>2つめの行動</h2>
+      <div class="act on"><span class="ico">研</span><span>研究<small>次の相手：池田五段（6月11日 順位戦）</small></span><span class="eff">対策<br>★2 → ★3</span></div>
+      <div class="act"><span class="ico">休</span><span>休む<small>ゆっくり休んで、調子を整える</small></span><span class="eff up">調子<br>＋1</span></div>
+      <div class="act"><span class="ico">会</span><span>研究会<span class="tag">水曜</span><small>羽音・池田・八木と練習対局</small></span><span class="eff">研究仲間<br>★1</span></div>
+      <div class="act"><span class="ico">祭</span><span>港町将棋まつり<span class="tag" style="background:var(--fest);color:#fff">土曜</span><small>指導対局・トークショー・揮毫</small></span><span class="eff">謝礼<br><span class="down">調子−1</span></span></div>
+      <p class="note">週を進めるまでは、何度でも選び直せるよ。</p>
+      <div class="sheet-actions"><button class="btn">やめる</button><button class="btn btn--amber">研究にする</button></div>
+    </div>
+  </div>`;
+
+// ---- 6. スマホ 小の対局の札
+document.getElementById("s6").innerHTML = phone(`
+  ${week([["月", "5/18", "", "past"], ["火", "5/19", '<span class="mark mark--game">対局</span>', "game today"], ["水", "5/20", '<span class="mark mark--study">研</span>'], ["木", "5/21"], ["金", "5/22"], ["土", "5/23"], ["日", "5/24"]])}
+  <article class="game">
+    <header><span class="weight">小の対局</span>5月19日(火)・棋聖戦 一次予選 1回戦</header>
+    <div class="vs"><b>vs 高木隼人 六段</b><span class="stars">★<i>★★</i></span></div>
+    <div class="prep"><span>対策：<em>得意は角換わり</em></span><span>調子 ふつう</span></div>
+    <div class="ways">
+      <button class="way">最初から<small>約20分</small></button>
+      <button class="way default">勝負どころ<small>40手目から・約10分</small></button>
+      <button class="way">分身に<small>勝率 52%</small></button>
+    </div>
+  </article>
+  <div class="result" style="grid-template-columns:minmax(0,1fr) 72px">
+    <span><b>対局の始まり（見本）</b><small>相手が角換わりを指してきた。研究どおり！ 閃きが1回増えたよ。</small></span>
+    <span class="stamp">研究<br>的中</span>
+  </div>
+  <div class="talk"><img src="${HIME}" alt=""><p>予選の1回戦は、勝負どころからでも大丈夫。大一番に力をとっておこう！</p></div>`,
+  '<button class="btn btn--amber">勝負どころから指す</button><button class="btn btn--ghost">今週の画面に戻る</button>',
+  { sub: "第8週 5月18日(月)〜24日(日)", big: "新人王戦 2回戦", bigWhen: "あと1週" });
+
+// ---- 7. スマホ 週のまとめ
+document.getElementById("s7").innerHTML = phone(`
+  ${week(WEEK_GAME.map(([a, b, c]) => [a, b, c, "past"]))}
+  <ul class="summary" style="font-size:.9rem">
+    <h3>第11週のまとめ</h3>
+    <li>順位戦 7回戦 池田五段に <span class="up">勝ち</span>（6勝1敗）</li>
+    <li>研究 → 池田五段の対策 ★3（はまった）</li>
+    <li>調子 好調 → 好調（対局 −1・勝ち ＋1）</li>
+    <li>羽音 王位戦予選 勝ち・名人戦 第6局 挑戦者の勝ち</li>
+  </ul>
+  <div class="result"><span><b>目標「順位戦で昇級」</b><small>昇級ラインまで あと2勝</small></span><span class="bar" style="height:10px"><i style="width:75%"></i></span></div>
+  <div class="talk"><img src="${HANANE}" alt=""><p>順位戦、いい流れね。次の新人王戦、手加減しないから。</p></div>`,
+  '<button class="btn btn--amber">次の週へ</button>',
+  { sub: "第11週 6月8日(月)〜14日(日)", big: "新人王戦 準決勝", bigWhen: "あと2週" });
+
+// ---- 8. スマホ 年度のまとめ
+document.getElementById("s8").innerHTML = `
+  <div class="ph" style="grid-template-rows:56px minmax(0,1fr) auto">
+    ${topbar("2026年度のまとめ・32勝14敗", false, true)}
+    <div class="ph-main" style="gap:12px;padding:14px">
+      <h2 style="margin:0;font-size:1.1rem">今年の目標</h2>
+      <div class="result"><span><b>順位戦で昇級</b><small>8勝2敗・C級1組へ</small></span><span class="stamp">達成</span></div>
+      <div class="result"><span><b>新人王戦 ベスト4</b><small>準決勝で羽音に勝ち、決勝へ</small></span><span class="stamp">達成</span></div>
+      <div class="result"><span><b>年間15勝</b><small>32勝（4月の目標の2倍以上）</small></span><span class="stamp">達成</span></div>
+      <div class="talk"><img src="${HIME}" alt=""><p>3つとも達成！ 来年は「タイトル戦の本戦入り」に挑戦してみない？</p></div>
+      <div class="result"><span><b>見本：届かなかったとき</b><small>新人王戦 ベスト8（あと1勝）</small></span><span class="stamp stamp--near">あと<br>一歩</span></div>
+    </div>
+    <div class="ph-foot"><button class="btn btn--amber">次の年度の目標を選ぶ</button><button class="btn btn--ghost">年間成績・受賞を見る</button></div>
+  </div>`;
+
+// ---- 枠を並べた幅に合わせて縮める(写真のときは ?real=1 で縮めない)
+const params = new URLSearchParams(location.search);
+const real = params.has("real");
+if (params.has("only")) {
+  for (const fig of document.querySelectorAll("figure[data-shot]")) {
+    if (fig.dataset.shot !== params.get("only")) fig.remove();
+  }
+  for (const grid of document.querySelectorAll(".grid")) if (!grid.children.length) grid.remove();
+}
+if (real) document.body.classList.add("real");
+function fit() {
+  if (real) return;
+  for (const box of document.querySelectorAll(".fit")) {
+    const device = box.firstElementChild;
+    const width = device.offsetWidth + 22;
+    const scale = Math.min(1, box.clientWidth / width);
+    device.style.transform = `translate(11px, 11px) scale(${scale})`;
+    box.style.height = `${(device.offsetHeight + 22) * scale}px`;
+  }
+}
+addEventListener("resize", fit);
+fit();
+</script>
+</body>
+</html>
