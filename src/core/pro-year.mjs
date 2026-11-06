@@ -1648,7 +1648,7 @@ export function weekView(source) {
     startText: dateLabel(week.start),
     endText: dateLabel(week.end),
     days,
-    games: games.map((game) => ({ ...game, dateText: dateLabel(game.date), opponent: card(state, game.opponentId), stars: starsFor(state.prep, game.opponentId) })),
+    games: games.map((game) => ({ ...game, dateText: dateLabel(game.date), opponent: card(state, game.opponentId), stars: starsFor(state.prep, game.opponentId), weight: state.games[game.id] ? gameWeight(state, state.games[game.id]) : 'mid' })),
     slots,
     chosen: week.actions.slice(0, slots),
     applied: Boolean(week.applied),
@@ -2055,6 +2055,9 @@ export function proYearView(state) {
     hananeLine: official && state.players[state.pending.opponentId]?.story === HANANE ? hananeBeforeLine(vsHanane) : '',
     // 事前研究(研究の道具を持っていれば。10-2の4)と、研究仲間の成績(10-2の5)。公式戦だけ。
     prep: official ? gearPrep(state.user.gear ?? 0, state.players[state.pending.opponentId], state.pending.style) : null,
+    // 週の研究で積んだ対策の★と、作戦が当たったか(13-3の3)。
+    stars: official ? state.pending.prep?.stars ?? 0 : 0,
+    starsHit: official ? Boolean(state.pending.prep?.hit) : false,
     studyMate: official ? studyMate(state, state.pending.opponentId) : null,
   } : null;
   const hananeRecord = hanane ? state.year.records[hanane.id] ?? { w: 0, l: 0 } : null;

@@ -91,13 +91,94 @@
         </div>
       </header>
 
-      <section class="shoreikai__main pro-year__main" :class="{ 'pro-year__main--wide': wide }" aria-label="1年">
+      <section class="shoreikai__main pro-year__main" :class="{ 'pro-year__main--wide': wide, 'pro-year__main--goals': goals.length || bigGame }" aria-label="1年">
+        <!-- 今年の目標と次の大一番(13-3の7・8。いつも上に出し、遠くの目当てを見せる。D:5-2) -->
+        <div v-if="goals.length || bigGame" class="pro-year__goalbar" data-pro-goals>
+          <ul v-if="goals.length" class="pro-year__goal-list" aria-label="今年の目標">
+            <li v-for="goal in goals" :key="goal.id" class="pro-year__goal" :class="{ 'pro-year__goal--done': goal.done }" :data-pro-goal="goal.id">
+              <span class="pro-year__goal-mark" aria-hidden="true">{{ goal.done ? "✓" : "◎" }}</span>
+              <span class="pro-year__goal-text"><b>{{ goal.label }}</b><small>{{ goal.done ? "達成" : goal.text }}</small></span>
+              <span class="pro-year__goal-bar" aria-hidden="true"><i :style="{ width: `${Math.round(goal.ratio * 100)}%` }"></i></span>
+            </li>
+          </ul>
+          <p v-if="bigGame" class="pro-year__bigone" data-pro-bigone>
+            <small>{{ bigGame.kind === "fixed" && bigGame.weeks <= 0 ? "大一番の週" : "次の大一番" }}</small>
+            <template v-if="bigGame.kind === 'fixed'"><b>{{ bigGame.label }}<span v-if="bigGame.opponent"> 対 {{ nameText(bigGame.opponent) }}</span></b><em>{{ bigGame.whenText }}</em></template>
+            <b v-else>{{ bigGame.text }}</b>
+          </p>
+        </div>
+
         <div v-if="!wide" class="pro-year__tabs" role="tablist" aria-label="見るもの">
           <button v-for="item in tabs" :key="item.id" type="button" role="tab" :aria-selected="tab === item.id" :data-pro-tab="item.id" @click="tab = item.id">{{ item.label }}</button>
         </div>
 
+        <!-- 今週(13章。画面の主役。1週の行動を選んで進める) -->
+        <div v-show="wide || tab === 'week'" class="pro-year__weekpanel" data-pro-week>
+          <template v-if="week">
+            <div class="pro-year__week-head">
+              <h2>第{{ week.number }}週<small>{{ shortDate(week.start) }}〜{{ shortDate(week.end) }}</small></h2>
+              <p class="pro-year__condition" :data-pro-condition="week.condition">
+                <small>調子</small>
+                <span class="pro-year__cond-dots" aria-hidden="true"><i v-for="n in 5" :key="n" :class="{ on: n <= week.condition + 1 }"></i></span>
+                <b>{{ week.conditionLabel }}</b>
+              </p>
+            </div>
+            <ol class="pro-year__strip" aria-label="今週の7日">
+              <li
+                v-for="day in week.days"
+                :key="day.date"
+                class="pro-year__strip-day"
+                :class="{ 'is-past': day.past, 'is-today': day.today, 'is-out': !day.inYear, 'is-sun': day.dow === '日', 'is-sat': day.dow === '土' }"
+              >
+                <small>{{ day.dow }}</small><b>{{ Number(day.date.slice(8)) }}</b>
+                <span v-if="day.game" class="pro-year__strip-mark pro-year__strip-mark--game">局</span>
+                <span v-else-if="day.festival" class="pro-year__strip-mark pro-year__strip-mark--festival">祭</span>
+                <span v-else-if="day.study" class="pro-year__strip-mark pro-year__strip-mark--study">研</span>
+              </li>
+            </ol>
+            <ul v-if="week.games.length" class="pro-year__week-games" aria-label="今週の対局">
+              <li v-for="game in week.games" :key="game.id" class="pro-year__week-game" :data-pro-week-game="game.id">
+                <span class="pro-year__weight" :class="`pro-year__weight--${game.weight}`">{{ WEIGHTS[game.weight as keyof typeof WEIGHTS]?.label ?? "" }}</span>
+                <span class="pro-year__week-game-text"><b>{{ game.dateText }}</b>{{ game.label }}{{ game.twoDay ? "（2日制）" : "" }}<small>対 {{ nameText(game.opponent) }}</small></span>
+                <span class="pro-year__stars" :aria-label="`対策 ★${game.stars}`">{{ "★".repeat(game.stars) }}<i>{{ "☆".repeat(Math.max(0, (week.prep?.cap ?? 1) - game.stars)) }}</i></span>
+              </li>
+            </ul>
+            <p v-else class="pro-year__week-free">今週は公式戦がないよ。行動を2つ選べるよ。</p>
+            <h3 class="pro-year__subhead">今週の行動<small>{{ week.slots ? `（${week.slots}つ）` : "" }}</small></h3>
+            <p v-if="!week.slots" class="pro-year__week-free">対局が続く週。行動はお休み。</p>
+            <div v-else class="pro-year__slots">
+              <button
+                v-for="index in week.slots"
+                :key="index"
+                type="button"
+                class="pro-year__slot"
+                :class="{ 'pro-year__slot--set': slotAction(index - 1), 'pro-year__slot--lock': week.applied }"
+                :disabled="week.applied"
+                :data-pro-slot="index - 1"
+                @click="slotSheet = index - 1"
+              >
+                <span class="pro-year__slot-icon" aria-hidden="true">{{ slotAction(index - 1)?.icon ?? "＋" }}</span>
+                <span class="pro-year__slot-text">
+                  <b>{{ slotAction(index - 1) ? actionTitle(slotAction(index - 1)) : "行動を選ぶ" }}</b>
+                  <small>{{ slotAction(index - 1)?.effect ?? (index === 1 ? "研究・休む・研究会・まつり" : "選ばなければ何もしない") }}</small>
+                </span>
+              </button>
+            </div>
+            <div v-if="week.lastWeek?.lines?.length" class="pro-year__lastweek" data-pro-lastweek>
+              <h3 class="pro-year__subhead">先週のまとめ<small>（第{{ week.lastWeek.number }}週）</small></h3>
+              <ul><li v-for="(line, index) in week.lastWeek.lines" :key="index">{{ line }}</li></ul>
+            </div>
+          </template>
+          <p v-else class="pro-year__week-free">年度が終わったよ。まとめを見てね。</p>
+        </div>
+
+        <div v-show="wide || tab !== 'week'" class="pro-year__side">
+          <div v-if="wide" class="pro-year__tabs" role="tablist" aria-label="見るもの">
+            <button v-for="item in sideTabs" :key="item.id" type="button" role="tab" :aria-selected="sideTab === item.id" :data-pro-tab="item.id" @click="tab = item.id">{{ item.label }}</button>
+          </div>
+
         <!-- 月のカレンダー -->
-        <div v-show="wide || tab === 'calendar'" class="pro-year__calendar" data-pro-calendar>
+        <div v-show="sideTab === 'calendar'" class="pro-year__calendar" data-pro-calendar>
           <div class="pro-year__month-bar">
             <button type="button" class="pro-year__month-step" aria-label="前の月" data-pro-month="prev" :disabled="!canPrev" @click="stepMonth(-1)">‹</button>
             <h2 class="pro-year__month-title" aria-live="polite">{{ month.title }}</h2>
@@ -147,11 +228,6 @@
             <span class="pro-year__mark pro-year__mark--festival">祭</span>将棋まつり
           </p>
         </div>
-
-        <div v-show="wide || tab !== 'calendar'" class="pro-year__side">
-          <div v-if="wide" class="pro-year__tabs" role="tablist" aria-label="見るもの">
-            <button v-for="item in sideTabs" :key="item.id" type="button" role="tab" :aria-selected="sideTab === item.id" :data-pro-tab="item.id" @click="tab = item.id">{{ item.label }}</button>
-          </div>
 
           <!-- 棋戦の一覧 -->
           <ul v-show="sideTab === 'events'" class="pro-year__events" aria-label="棋戦" data-pro-events>
@@ -254,13 +330,30 @@
           <p v-if="view.summary.junni" class="pro-year__summary-line">順位戦 {{ CLASS_NAMES[view.summary.junni.cls] }} {{ view.summary.junni.wins }}勝{{ view.summary.junni.losses }}敗（{{ view.summary.junni.place }}位）{{ view.summary.junni.promoted ? "・昇級" : "" }}</p>
           <p v-if="view.summary.rival" class="pro-year__summary-line">{{ view.summary.rival.name }} {{ view.summary.rival.wins }}勝{{ view.summary.rival.losses }}敗・直接対決 {{ view.summary.rival.meetings[0] }}勝{{ view.summary.rival.meetings[1] }}敗</p>
           <p v-if="view.summary.money" class="pro-year__summary-line" data-pro-summary-money>獲得賞金・対局料 {{ moneyText(view.summary.money.earned) }}（{{ view.summary.money.rank }}位）</p>
+          <!-- 今年の目標の判子(達成・あと一歩・届かず。13-3の7。G:3) -->
+          <ul v-if="view.summary.goals?.length" class="pro-year__goal-stamps" data-pro-goal-stamps>
+            <li v-for="goal in view.summary.goals" :key="goal.id" :class="`pro-year__goal-stamp--${goal.stamp}`">
+              <span class="pro-year__goal-seal" aria-hidden="true">{{ STAMP_TEXT[goal.stamp as keyof typeof STAMP_TEXT] }}</span>
+              <span>{{ goal.label }}<small>{{ goal.text }}</small></span>
+            </li>
+          </ul>
         </div>
         <!-- 次の対局 -->
         <div v-else-if="view.pending" class="pro-year__next" :style="{ '--event-color': pendingColor }" data-pro-next>
-          <p class="pro-year__next-head"><b>{{ view.pending.dateText }}</b><span>{{ view.pending.label }}</span></p>
+          <p class="pro-year__next-head">
+            <b>{{ view.pending.dateText }}</b><span>{{ view.pending.label }}</span>
+            <span v-if="view.pending.gameId && view.pending.weight" class="pro-year__weight" :class="`pro-year__weight--${view.pending.weight}`">{{ WEIGHTS[view.pending.weight as keyof typeof WEIGHTS]?.label ?? "" }}</span>
+          </p>
           <p class="pro-year__next-vs">
             <span>対 <strong>{{ view.pending.opponent?.name }}</strong><small>{{ view.pending.opponent?.dan }}</small></span>
             <small class="pro-year__next-stakes">{{ view.pending.stakes?.text }}</small>
+          </p>
+          <!-- 週の研究と調子が効くところ(13-3の3。閃きの増減を数字で見せる。D:4-2) -->
+          <p v-if="view.pending.gameId" class="pro-year__prep pro-year__prep--week" data-pro-pending-week>
+            <b>対策 {{ view.pending.stars ? "★".repeat(view.pending.stars) : "なし" }}</b>
+            <span>調子 {{ CONDITION_LABELS[view.pending.condition ?? 2] }}</span>
+            <span v-if="view.pending.starsHit">作戦が当たった！</span>
+            <span v-if="view.pending.hintBonus">閃き {{ view.pending.hintBonus > 0 ? "＋" : "−" }}{{ Math.abs(view.pending.hintBonus) }}</span>
           </p>
           <!-- 研究仲間(研究会で指した相手。道具がなくても。10-2の5) -->
           <p v-if="view.pending.studyMate" class="pro-year__prep pro-year__prep--mate" data-pro-study-mate>
@@ -295,20 +388,77 @@
           </div>
         </template>
         <template v-else>
-          <!-- 寄り道(研究会・将棋まつり。次の公式戦の前にあれば。行かなくても何も失わない。10-2の5・6、D:9-2) -->
-          <div v-if="festivalDetour" class="pro-year__detour pro-year__detour--festival" data-pro-detour="festival">
-            <span class="pro-year__detour-text"><small>{{ STUDY_TEXT.detour }}</small><b>{{ festivalDetour.dateText }}</b> {{ festivalDetour.name }}</span>
-            <button type="button" class="pro-year__detour-go" data-pro-join-festival @click="emit('life', { kind: 'join-festival', date: festivalDetour.date })">行く</button>
+          <!-- 1週ずつ進める(13-3の1)。研究会・まつりは週の行動で選ぶ。急ぐ人は、次の対局の週までおまかせ(13-3の10。D:9-2) -->
+          <div class="shogi-tournament__actions shogi-tournament__actions--two">
+            <button type="button" class="shogi-tournament__sub" data-pro-auto-weeks @click="emit('life', { kind: 'auto-weeks' })">対局の週までおまかせ</button>
+            <button type="button" class="shogi-tournament__start" data-pro-advance @click="emit('life', { kind: 'week-advance' })">
+              {{ week?.applied ? "週の続きを進める" : "この週を進める" }}
+            </button>
           </div>
-          <div v-if="detour" class="pro-year__detour" data-pro-detour>
-            <span class="pro-year__detour-text"><small>{{ STUDY_TEXT.detour }}</small><b>{{ detour.dateText }}</b> 研究会<small>対 {{ nameText(detour.opponent) }}</small></span>
-            <button type="button" class="pro-year__detour-go" data-pro-join-study @click="emit('life', { kind: 'join-study', date: detour.date })">{{ STUDY_TEXT.join }}</button>
-          </div>
-          <button type="button" class="shogi-tournament__start" data-pro-advance @click="emit('advance')">
-            {{ nextPreview ? `次の対局日へ（${nextPreview.dateText.replace(/\(.\)$/, "")}）` : "年度の終わりへ" }}
-          </button>
         </template>
       </section>
+
+      <!-- 行動を選ぶシート(13-3の2。効き目を先に見せる。UD:5-1) -->
+      <div v-if="slotSheet !== null && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="行動を選ぶ" data-pro-action-sheet @click.self="slotSheet = null">
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
+          <h2>行動を選ぶ<small>（{{ slotSheet + 1 }}つめ）</small></h2>
+          <ul class="pro-year__actions">
+            <li v-for="item in week.actions" :key="item.id">
+              <button
+                type="button"
+                class="pro-year__action"
+                :class="{ 'pro-year__action--now': week.chosen[slotSheet] === item.id }"
+                :disabled="actionTaken(item.id)"
+                :data-pro-action="item.id"
+                @click="pickAction(item.id)"
+              >
+                <span class="pro-year__slot-icon" aria-hidden="true">{{ item.icon }}</span>
+                <span class="pro-year__slot-text">
+                  <b>{{ actionTitle(item) }}</b>
+                  <small>{{ item.note }}</small>
+                  <em>{{ actionTaken(item.id) ? "もう1つの枠で選んでいるよ" : item.effect }}</em>
+                </span>
+              </button>
+            </li>
+          </ul>
+          <div class="shogi-tournament__actions shogi-tournament__actions--two">
+            <button type="button" class="shogi-tournament__sub" data-pro-action="none" @click="pickAction(null)">何もしない</button>
+            <button type="button" class="shogi-tournament__sub" @click="slotSheet = null">閉じる</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 今年の目標を選ぶ(13-3の7。おすすめの3つを先に選んでおく。UD:5-2) -->
+      <div v-if="goalSheetOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="今年の目標" data-pro-goal-sheet>
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
+          <h2>{{ view.fy }}年度の目標を3つ選ぼう</h2>
+          <p class="shogi-tournament__text">年度の終わりに、達成した目標に判子を押すよ。◎はやこび姫のおすすめ。</p>
+          <ul class="pro-year__goal-choices">
+            <li v-for="goal in goalChoiceList" :key="goal.id">
+              <button
+                type="button"
+                class="pro-year__goal-choice"
+                :aria-pressed="goalPick.includes(goal.id)"
+                :disabled="!goalPick.includes(goal.id) && goalPick.length >= GOAL_PICK"
+                :data-pro-goal-choice="goal.id"
+                @click="toggleGoal(goal.id)"
+              >
+                <span class="pro-year__goal-check" aria-hidden="true">{{ goalPick.includes(goal.id) ? "✓" : "" }}</span>
+                <span class="pro-year__slot-text"><b>{{ goal.label }}<i v-if="goal.recommended"> ◎</i></b><small>{{ goal.note }}</small></span>
+                <span class="pro-year__goal-level" :aria-label="`難しさ${goal.level}`">{{ "★".repeat(goal.level) }}</span>
+              </button>
+            </li>
+          </ul>
+          <button type="button" class="shogi-tournament__start" :disabled="goalPick.length !== GOAL_PICK" data-pro-goal-start @click="startGoals">
+            {{ goalPick.length === GOAL_PICK ? "この3つで始める" : `あと${GOAL_PICK - goalPick.length}つ選んでね` }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 目標を達成したときの判子(G:3) -->
+      <p v-if="goalToast" class="pro-year__goal-toast" role="status" data-pro-goal-toast>
+        <span class="pro-year__goal-seal" aria-hidden="true">達</span>目標達成！ {{ goalToast }}
+      </p>
 
       <!-- その日の対局 -->
       <div v-if="dayOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="dayOpen.dateText" data-pro-day-sheet @click.self="dayDate = ''">
@@ -516,8 +666,10 @@ import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import { STUDY_TEXT, moneyText } from "./core/pro-life.mjs";
 import {
-  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, monthView, previewNextGame, proEvent, festivalOffer, proYearRelayGame, proYearTalk, proYearView, studyOffer, yearEnd, yearStart,
+  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, weekView,
+  yearEnd, yearStart,
 } from "./core/pro-year.mjs";
+import { CONDITION_LABELS, GOAL_PICK, WEIGHTS } from "./core/pro-week.mjs";
 
 type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
 type Card = { id: string; name: string; dan?: string; you?: boolean } | null | undefined;
@@ -640,9 +792,64 @@ const pendingColor = computed(() => {
   const pending = props.state?.pending;
   return pending ? proEvent(props.state.games[pending.gameId]?.event)?.color ?? "#f1a54c" : "#f1a54c";
 });
-/** 寄り道の研究会と将棋まつり(次の公式戦の前にあれば)。 */
-const detour = computed(() => (props.state ? studyOffer(props.state, nextPreview.value) : null));
-const festivalDetour = computed(() => (props.state ? festivalOffer(props.state, nextPreview.value) : null));
+// ---- 今週(docs/pro-year-design.mdの13章)
+const week = computed(() => (props.state ? weekView(props.state) : null));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type WeekAction = { id: string; label: string; icon: string; note: string; effect: string; target?: Card; name?: string; dateText?: string };
+const slotAction = (index: number): WeekAction | null => {
+  const id = week.value?.chosen?.[index];
+  return id ? (week.value?.actions.find((item: WeekAction) => item.id === id) ?? null) : null;
+};
+/** 行動の名前(研究は相手の名前、研究会・まつりは日付つき)。 */
+const actionTitle = (item: WeekAction | null) => {
+  if (!item) return "";
+  if (item.id === "research") return `研究：${nameText(item.target)}`;
+  if (item.id === "festival") return `${item.name ?? item.label}（${item.dateText ?? ""}）`;
+  if (item.id === "study") return `研究会（${item.dateText ?? ""}）`;
+  return item.label;
+};
+const slotSheet = ref<number | null>(null);
+/** 研究会とまつりは週に1回(もう1つの枠で選んでいたら選べない)。 */
+const actionTaken = (id: string) => (id === "study" || id === "festival")
+  && (week.value?.chosen ?? []).some((item: string | null, index: number) => item === id && index !== slotSheet.value);
+function pickAction(id: string | null) {
+  if (slotSheet.value === null) return;
+  emit("life", { kind: "week-action", slot: slotSheet.value, action: id });
+  slotSheet.value = null;
+}
+const STAMP_TEXT = { done: "達成", near: "あと一歩", miss: "届かず" } as const;
+
+// ---- 今年の目標と次の大一番(13-3の7・8)
+const goals = computed(() => (props.state ? goalProgress(props.state) : []));
+const bigGame = computed(() => (props.state ? nextBigGame(props.state) : null));
+const goalChoiceList = computed(() => (props.state ? goalChoices(props.state) : []));
+const goalSheetOpen = computed(() => Boolean(props.state && !props.state.yearDone && !props.state.pending && !props.state.festival && props.state.goals?.fy !== props.state.fy));
+const goalPick = ref<string[]>([]);
+watch(goalSheetOpen, (open) => {
+  if (open) goalPick.value = goalChoiceList.value.filter((goal: { recommended: boolean }) => goal.recommended).map((goal: { id: string }) => goal.id).slice(0, GOAL_PICK);
+}, { immediate: true });
+function toggleGoal(id: string) {
+  goalPick.value = goalPick.value.includes(id) ? goalPick.value.filter((item) => item !== id) : [...goalPick.value, id].slice(0, GOAL_PICK);
+}
+function startGoals() {
+  if (goalPick.value.length === GOAL_PICK) emit("life", { kind: "set-goals", ids: [...goalPick.value] });
+}
+// 目標を新しく達成したら、判子を少しのあいだ出す(読み込んだときは出さない)。
+const goalToast = ref("");
+let goalToastTimer: ReturnType<typeof setTimeout> | null = null;
+watch(() => goals.value.filter((goal: { done: boolean }) => goal.done).map((goal: { id: string }) => goal.id), (now, before) => {
+  if (!before || props.state?.yearDone) return;
+  const fresh = goals.value.filter((goal: { id: string; done: boolean }) => goal.done && !before.includes(goal.id));
+  if (!fresh.length || !now.length) return;
+  goalToast.value = fresh.map((goal: { label: string }) => `「${goal.label}」`).join("");
+  if (goalToastTimer) clearTimeout(goalToastTimer);
+  goalToastTimer = setTimeout(() => {
+    goalToast.value = "";
+  }, 3200);
+});
+onBeforeUnmount(() => {
+  if (goalToastTimer) clearTimeout(goalToastTimer);
+});
 const festivalEl = ref<{ goBack: () => boolean } | null>(null);
 /** 羽音が話す行(公式戦の前の一言・研究会の誘いと練習対局のあとの一言)。 */
 const hananeTalks = computed(() => Boolean(view.value?.pending?.hananeLine || (!view.value?.pending && view.value?.study?.talk)));
@@ -670,13 +877,14 @@ const statusClass = (status: { alive?: boolean; won?: boolean; waiting?: boolean
 
 // タブ(狭い画面はカレンダー・棋戦・成績。広い画面は、カレンダーを左にいつも出し、右で棋戦と成績を切り替える。U:7-5)
 const tabs = [
+  { id: "week", label: "今週" },
   { id: "calendar", label: "カレンダー" },
   { id: "events", label: "棋戦" },
   { id: "record", label: "成績" },
 ] as const;
-const sideTabs = tabs.filter((item) => item.id !== "calendar");
-const tab = ref<"calendar" | "events" | "record">("calendar");
-const sideTab = computed(() => (tab.value === "calendar" ? "events" : tab.value));
+const sideTabs = tabs.filter((item) => item.id !== "week");
+const tab = ref<"week" | "calendar" | "events" | "record">("week");
+const sideTab = computed(() => (tab.value === "week" ? "calendar" : tab.value));
 const wide = ref(false);
 let wideQuery: MediaQueryList | null = null;
 const syncWide = () => {
@@ -870,7 +1078,99 @@ defineExpose({ goBack });
 .shogi-game .pro-year__chip-dot { width: 0.7rem; height: 0.7rem; flex: none; border-radius: 50%; background: var(--event-color); }
 .shogi-game .pro-year__sprite { image-rendering: pixelated; object-fit: cover; object-position: 50% 0; }
 .shogi-game .pro-year__main { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.5rem; min-height: 0; padding: 0.5rem 0.6rem; overflow: hidden; }
-.shogi-game .pro-year__main--wide { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.shogi-game .pro-year__main--wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); grid-template-rows: minmax(0, 1fr); }
+.shogi-game .pro-year__main--goals { grid-template-rows: auto auto minmax(0, 1fr); }
+.shogi-game .pro-year__main--wide.pro-year__main--goals { grid-template-rows: auto minmax(0, 1fr); }
+.shogi-game .pro-year__main--wide .pro-year__goalbar { grid-column: 1 / -1; }
+/* 今年の目標と次の大一番の帯(13-3の7・8) */
+.shogi-game .pro-year__goalbar { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: stretch; }
+.shogi-game .pro-year__goal-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; flex: 3 1 24rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__goal { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0 0.3rem; padding: 0.2rem 0.4rem; border: 0.08rem solid rgba(255, 255, 255, 0.18); border-radius: 0.5rem; background: rgba(23, 38, 50, 0.85); }
+.shogi-game .pro-year__goal--done { border-color: #86d4a9; background: rgba(39, 174, 96, 0.18); }
+.shogi-game .pro-year__goal-mark { color: var(--amber, #f1a54c); font-weight: 900; }
+.shogi-game .pro-year__goal--done .pro-year__goal-mark { color: #86d4a9; }
+.shogi-game .pro-year__goal-text { display: grid; min-width: 0; line-height: 1.2; }
+.shogi-game .pro-year__goal-text b { overflow: hidden; font-size: 0.74rem; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .pro-year__goal-text small { color: #cfd8de; font-size: 0.66rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shogi-game .pro-year__goal-bar { grid-column: 1 / -1; height: 0.2rem; margin-top: 0.15rem; border-radius: 999px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.shogi-game .pro-year__goal-bar i { display: block; height: 100%; background: var(--amber, #f1a54c); }
+.shogi-game .pro-year__goal--done .pro-year__goal-bar i { background: #86d4a9; }
+.shogi-game .pro-year__bigone { display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem 0.45rem; flex: 1 1 14rem; margin: 0; padding: 0.25rem 0.5rem; border: 0.1rem solid #e9c46a; border-radius: 0.5rem; background: rgba(233, 196, 106, 0.12); font-size: 0.78rem; }
+.shogi-game .pro-year__bigone small { padding: 0 0.4rem; border-radius: 999px; color: #172632; background: #e9c46a; font-size: 0.66rem; font-weight: 900; }
+.shogi-game .pro-year__bigone b { min-width: 0; }
+.shogi-game .pro-year__bigone em { margin-left: auto; color: #e9c46a; font-style: normal; font-weight: 900; }
+/* 今週(13章) */
+.shogi-game .pro-year__weekpanel { display: flex; flex-direction: column; gap: 0.4rem; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.shogi-game .pro-year__week-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.2rem 0.6rem; }
+.shogi-game .pro-year__week-head h2 { margin: 0; color: var(--amber, #f1a54c); font-size: 1.05rem; }
+.shogi-game .pro-year__week-head h2 small { margin-left: 0.4rem; color: #cfd8de; font-size: 0.75rem; }
+.shogi-game .pro-year__condition { display: flex; align-items: center; gap: 0.35rem; margin: 0; font-size: 0.8rem; }
+.shogi-game .pro-year__condition small { color: #cfd8de; }
+.shogi-game .pro-year__cond-dots { display: inline-flex; gap: 0.15rem; }
+.shogi-game .pro-year__cond-dots i { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
+.shogi-game .pro-year__cond-dots i.on { background: #86d4a9; }
+.shogi-game .pro-year__condition[data-pro-condition="0"] .pro-year__cond-dots i.on,
+.shogi-game .pro-year__condition[data-pro-condition="1"] .pro-year__cond-dots i.on { background: #f5b7b1; }
+.shogi-game .pro-year__strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.2rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__strip-day { display: grid; justify-items: center; gap: 0.05rem; padding: 0.2rem 0 0.25rem; border-radius: 0.4rem; background: rgba(255, 255, 255, 0.07); line-height: 1.15; }
+.shogi-game .pro-year__strip-day small { color: #cfd8de; font-size: 0.66rem; }
+.shogi-game .pro-year__strip-day b { font-size: 0.85rem; }
+.shogi-game .pro-year__strip-day.is-sun small { color: #f5b7b1; }
+.shogi-game .pro-year__strip-day.is-sat small { color: #aed6f1; }
+.shogi-game .pro-year__strip-day.is-past { opacity: 0.45; }
+.shogi-game .pro-year__strip-day.is-out { opacity: 0.25; }
+.shogi-game .pro-year__strip-day.is-today { outline: 0.12rem solid var(--amber, #f1a54c); }
+.shogi-game .pro-year__strip-mark { padding: 0 0.25rem; border-radius: 0.25rem; color: #172632; font-size: 0.66rem; font-weight: 900; }
+.shogi-game .pro-year__strip-mark--game { background: var(--amber, #f1a54c); }
+.shogi-game .pro-year__strip-mark--study { background: #c9b6e4; }
+.shogi-game .pro-year__strip-mark--festival { background: #f5b7b1; }
+.shogi-game .pro-year__week-games { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__week-game { display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.45rem; border: 0.08rem solid rgba(241, 165, 76, 0.6); border-radius: 0.5rem; background: rgba(23, 38, 50, 0.85); }
+.shogi-game .pro-year__week-game-text { display: flex; flex-wrap: wrap; gap: 0 0.35rem; align-items: baseline; flex: 1; min-width: 0; font-size: 0.8rem; }
+.shogi-game .pro-year__week-game-text b { color: var(--amber, #f1a54c); }
+.shogi-game .pro-year__week-game-text small { color: #cfd8de; }
+.shogi-game .pro-year__weight { flex: none; padding: 0.05rem 0.4rem; border-radius: 999px; color: #172632; background: #aed6f1; font-size: 0.68rem; font-weight: 900; white-space: nowrap; }
+.shogi-game .pro-year__weight--small { background: #d5dbdf; }
+.shogi-game .pro-year__weight--big { background: #f5b7b1; }
+.shogi-game .pro-year__stars { flex: none; color: #e9c46a; font-size: 0.8rem; letter-spacing: -0.05em; }
+.shogi-game .pro-year__stars i { color: rgba(255, 255, 255, 0.3); font-style: normal; }
+.shogi-game .pro-year__week-free { margin: 0; color: #cfd8de; font-size: 0.8rem; }
+.shogi-game .pro-year__slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.35rem; }
+.shogi-game .pro-year__slot,
+.shogi-game .pro-year__action {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%; min-height: 3rem; padding: 0.35rem 0.55rem; border: 0.1rem dashed rgba(255, 255, 255, 0.4); border-radius: 0.6rem;
+  color: inherit; background: rgba(255, 255, 255, 0.05); text-align: left; cursor: pointer;
+}
+.shogi-game .pro-year__slot--set,
+.shogi-game .pro-year__action--now { border-style: solid; border-color: var(--amber, #f1a54c); background: rgba(241, 165, 76, 0.14); }
+.shogi-game .pro-year__slot--lock { cursor: default; opacity: 0.85; }
+.shogi-game .pro-year__action:disabled { cursor: default; opacity: 0.45; }
+.shogi-game .pro-year__slot-icon { display: grid; flex: none; place-items: center; width: 2rem; height: 2rem; border-radius: 0.4rem; color: #172632; background: var(--amber, #f1a54c); font-weight: 900; }
+.shogi-game .pro-year__slot-text { display: grid; flex: 1; min-width: 0; line-height: 1.25; }
+.shogi-game .pro-year__slot-text b { font-size: 0.85rem; }
+.shogi-game .pro-year__slot-text small { color: #cfd8de; font-size: 0.72rem; }
+.shogi-game .pro-year__slot-text em { color: #86d4a9; font-size: 0.74rem; font-style: normal; font-weight: 800; }
+.shogi-game .pro-year__actions,
+.shogi-game .pro-year__goal-choices { display: grid; gap: 0.35rem; margin: 0 0 0.6rem; padding: 0; list-style: none; }
+.shogi-game .pro-year__lastweek ul { margin: 0; padding-left: 1.1rem; font-size: 0.78rem; }
+.shogi-game .pro-year__goal-choice { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.35rem 0.55rem; border: 0.1rem solid rgba(255, 255, 255, 0.25); border-radius: 0.6rem; color: inherit; background: rgba(255, 255, 255, 0.05); text-align: left; cursor: pointer; }
+.shogi-game .pro-year__goal-choice[aria-pressed="true"] { border-color: var(--amber, #f1a54c); background: rgba(241, 165, 76, 0.16); }
+.shogi-game .pro-year__goal-choice:disabled { cursor: default; opacity: 0.45; }
+.shogi-game .pro-year__goal-choice i { color: var(--amber, #f1a54c); font-style: normal; }
+.shogi-game .pro-year__goal-check { display: grid; flex: none; place-items: center; width: 1.4rem; height: 1.4rem; border: 0.1rem solid var(--amber, #f1a54c); border-radius: 0.3rem; color: var(--amber, #f1a54c); font-weight: 900; }
+.shogi-game .pro-year__goal-level { flex: none; color: #e9c46a; font-size: 0.75rem; }
+.shogi-game .pro-year__goal-stamps { display: grid; gap: 0.2rem; margin: 0.3rem 0 0; padding: 0; list-style: none; font-size: 0.8rem; }
+.shogi-game .pro-year__goal-stamps li { display: flex; align-items: center; gap: 0.4rem; }
+.shogi-game .pro-year__goal-stamps small { margin-left: 0.4rem; color: #cfd8de; }
+.shogi-game .pro-year__goal-seal { display: inline-grid; flex: none; place-items: center; min-width: 2.6rem; padding: 0.05rem 0.3rem; border: 0.12rem solid currentColor; border-radius: 0.3rem; color: #e74c3c; font-size: 0.7rem; font-weight: 900; transform: rotate(-6deg); }
+.shogi-game .pro-year__goal-stamp--near .pro-year__goal-seal { color: #e9c46a; }
+.shogi-game .pro-year__goal-stamp--miss .pro-year__goal-seal { color: #95a5a6; }
+.shogi-game .pro-year__goal-toast {
+  position: absolute; top: 4.5rem; left: 50%; z-index: 30; display: flex; align-items: center; gap: 0.5rem; margin: 0; padding: 0.5rem 0.9rem; border: 0.12rem solid #e74c3c; border-radius: 0.7rem;
+  color: #172632; background: #fdf6e3; font-weight: 900; transform: translateX(-50%); animation: pro-year-toast 0.35s ease-out; pointer-events: none;
+}
+@keyframes pro-year-toast { from { opacity: 0; transform: translate(-50%, -0.6rem) scale(1.1); } }
+@media (prefers-reduced-motion: reduce) { .shogi-game .pro-year__goal-toast { animation: none; } }
 .shogi-game .pro-year__side { display: grid; grid-template-rows: minmax(0, 1fr); min-height: 0; }
 .shogi-game .pro-year__main--wide .pro-year__side { grid-template-rows: auto minmax(0, 1fr); gap: 0.4rem; }
 .shogi-game .pro-year__tabs { display: flex; gap: 0.3rem; }
@@ -991,25 +1291,11 @@ defineExpose({ goBack });
 /* 将棋まつり */
 .shogi-game .pro-year__mark--festival { color: #fffcf4; background: #c0392b; }
 .shogi-game .pro-year__day-festival { border-left-color: #c0392b; background: rgba(192, 57, 43, 0.14); }
-.shogi-game .pro-year__detour--festival { border-color: #f5b7b1; background: rgba(192, 57, 43, 0.14); }
-.shogi-game .pro-year__detour--festival .pro-year__detour-text small:first-child { background: #f5b7b1; }
-.shogi-game .pro-year__detour--festival .pro-year__detour-go { border-color: #f5b7b1; }
 .shogi-game .pro-year__kigou { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .pro-year__kigou li { display: grid; padding: 0.3rem 0.45rem; border: 0.12rem solid #d4af37; border-radius: 0.3rem; color: #1b1b1b; background: #fbf8f0; }
 .shogi-game .pro-year__kigou b { font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: 1rem; }
 .shogi-game .pro-year__kigou small { overflow: hidden; color: #5d6d7e; font-size: 0.66rem; text-overflow: ellipsis; white-space: nowrap; }
 /* 寄り道 */
-.shogi-game .pro-year__detour {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.3rem 0.35rem 0.3rem 0.6rem;
-  border: 0.1rem dashed #c9b6e4; border-radius: 0.8rem; background: rgba(201, 182, 228, 0.1);
-}
-.shogi-game .pro-year__detour-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.4rem; min-width: 0; font-size: 0.85rem; font-weight: 800; }
-.shogi-game .pro-year__detour-text small { color: #cfd8de; font-size: 0.72rem; }
-.shogi-game .pro-year__detour-text small:first-child { padding: 0 0.4rem; border-radius: 999px; color: #172632; background: #c9b6e4; font-weight: 900; }
-.shogi-game .pro-year__detour-go {
-  flex: none; min-height: 44px; padding: 0.2rem 0.9rem; border: 0.1rem solid #c9b6e4; border-radius: 999px;
-  color: #fffcf4; background: rgba(43, 70, 91, 0.95); font: inherit; font-size: 0.82rem; font-weight: 900; cursor: pointer;
-}
 /* 下の欄 */
 .shogi-game .pro-year__next { padding: 0.45rem 0.6rem; border: 0.12rem solid var(--event-color); border-radius: 0.8rem; background: rgba(23, 38, 50, 0.9); }
 .shogi-game .pro-year__next-head { display: flex; flex-wrap: wrap; gap: 0.1rem 0.6rem; align-items: baseline; margin: 0; }

@@ -972,9 +972,13 @@ describe("match screen regressions", () => {
     // 中断から戻しても、公式戦でない印は残る。
     expect(source).toMatch(/practice: savedRyuo\.practice === true,/);
     const year = readFileSync(new URL("../ShogiProYear.vue", import.meta.url), "utf8");
-    // 研究会の練習対局は分身に任せず、帰ってもよい(D:9-2)。寄り道は「次の対局日へ」の上。
+    // 研究会の練習対局は分身に任せず、帰ってもよい(D:9-2)。研究会とまつりは、今週の行動で選ぶ(13-3の2)。
     expect(year).toMatch(/v-if="view\.pending\.kind === 'study'"[^>]*data-pro-leave-study/);
-    expect(year).toMatch(/data-pro-detour>[\s\S]{0,600}?data-pro-join-study[\s\S]{0,400}?data-pro-advance/);
+    expect(year).toMatch(/data-pro-auto-weeks @click="emit\('life', \{ kind: 'auto-weeks' \}\)"[\s\S]{0,300}?data-pro-advance @click="emit\('life', \{ kind: 'week-advance' \}\)"/);
+    expect(year).toMatch(/emit\("life", \{ kind: "week-action", slot: slotSheet\.value, action: id \}\)/);
+    expect(source).toMatch(/action\.kind === "week-advance"\) \{\s*setProYear\(advanceProYearWeek\(state\)\);/);
+    // 閃きは調子と対策の当たりで増減する(13-3の3)。
+    expect(source).toMatch(/proYearState\.value\?\.pending\?\.hintBonus/);
     expect(year).toMatch(/data-pro-buy-gear @click="emit\('life', \{ kind: 'buy-gear' \}\)"/);
     // 将棋まつり: まつりの画面は指導対局のあいだは閉じ、指導対局は対局画面で指してファンを記録する(10-2の6)。
     expect(year).toMatch(/<ProFestival\s+v-if="view\.festival && !view\.pending"/);

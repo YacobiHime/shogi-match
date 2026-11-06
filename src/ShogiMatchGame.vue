@@ -2925,7 +2925,7 @@ import { teamCeremonyView } from "./core/team-ceremony.mjs";
 import { championBanner, championNewspaper, championTitle, teamStreak, teamTrophy } from "./core/team-celebration.mjs";
 import { peekBoards, peekThought, peekVoice } from "./core/team-peek.mjs";
 import {
-  advanceToNextGame as advanceProYearToNextGame, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
+  advanceToNextGame as advanceProYearToNextGame, advanceWeek as advanceProYearWeek, autoWeeks as autoProYearWeeks, chooseWeekAction as chooseProYearWeekAction, setYearGoals as setProYearGoals, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
   fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
   recordFestivalEvent as recordProYearFestivalEvent, recordProGame, recordShidou as recordProYearShidou, recordStudyGame as recordProYearStudy, saveProYear,
   startNextYear as startNextProYear, startShidou as startProYearShidou,
@@ -3364,6 +3364,12 @@ function matchHintAllowance() {
   if (researchMatch.value) return Number.POSITIVE_INFINITY;
   // 棋力測定では、閃き(最善手を教える)を使えない。使うと、その手の損が測れなくなる。
   if (measureMode.value) return 0;
+  // 棋士の1年の公式戦は、調子と対策の当たりで閃きが増減する(docs/pro-year-design.mdの13-3の3)。
+  const proYearBonus = matchKind.value === "tournament" && ryuoGame.value?.event === "pro-year" ? Number(proYearState.value?.pending?.hintBonus ?? 0) : 0;
+  if (proYearBonus) {
+    const base = assistAllowance(Number(tournamentSeasonOf(ryuoGame.value)?.settings?.hintLimit ?? 3));
+    return Number.isFinite(base) ? Math.max(0, base + proYearBonus) : base;
+  }
   if (matchKind.value === "tournament") return assistAllowance(Number(tournamentSeasonOf(ryuoGame.value)?.settings?.hintLimit ?? 3));
   return matchKind.value === "learning"
     ? assistAllowance(learningHintLimit.value)
@@ -8141,6 +8147,15 @@ function proYearLife(action: { kind: string; [key: string]: unknown }) {
     const seen: string[] = Array.isArray(state.scenes) ? state.scenes : [];
     if (!seen.includes(action.key)) setProYear({ ...state, scenes: [...seen, action.key] });
     unlockStorySceneLater(action.key.split(":")[0]);
+  } else if (action.kind === "week-action" && typeof action.slot === "number") {
+    // 今週の行動を選ぶ・週を進める・おまかせ・今年の目標(docs/pro-year-design.mdの13章)。
+    setProYear(chooseProYearWeekAction(state, action.slot, typeof action.action === "string" ? action.action : null));
+  } else if (action.kind === "week-advance") {
+    setProYear(advanceProYearWeek(state));
+  } else if (action.kind === "auto-weeks") {
+    setProYear(autoProYearWeeks(state));
+  } else if (action.kind === "set-goals" && Array.isArray(action.ids)) {
+    setProYear(setProYearGoals(state, action.ids.map(String)));
   }
 }
 /** 年度のまとめから「次の年度へ」。 */
@@ -8190,7 +8205,8 @@ function recordProYearOutcome(matchResult: MatchResult) {
   const champions = result.champions ?? [];
   const advanced = milestones.filter((item) => item.kind === "advance");
   // この1局の対局料(と賞金)も添える(10-2の3)。
-  proYearResultLine.value = [...milestones.map((item) => item.text), result.earned ? `獲得 ${moneyText(result.earned)}` : ""].filter(Boolean).join("・");
+  const goalsDone: { label: string }[] = result.goalsDone ?? [];
+  proYearResultLine.value = [...milestones.map((item) => item.text), result.earned ? `獲得 ${moneyText(result.earned)}` : "", ...goalsDone.map((goal) => `目標達成「${goal.label}」`)].filter(Boolean).join("・");
   // 判子: タイトル獲得 > 棋戦優勝 > 段階の突破(G:3 出来事の重さ)。
   const crown = champions.find((item) => item.title);
   const cup = champions.find((item) => !item.title);
