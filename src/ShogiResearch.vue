@@ -306,6 +306,7 @@
           <div class="shogi-research__chips">
             <button v-for="preset in EDIT_PRESETS" :key="preset.id" type="button" :data-research-preset="preset.id" @click="applyPreset(preset.sfen)">{{ preset.label }}</button>
             <button type="button" :class="{ on: handicapOpen }" @click="handicapOpen = !handicapOpen">駒落ち…</button>
+            <button type="button" data-research-formation-open @click="openFormationSheet">作戦の形…</button>
           </div>
           <div v-if="handicapOpen" class="shogi-research__chips">
             <button v-for="preset in HANDICAP_PRESETS" :key="preset.id" type="button" @click="applyPreset(preset.sfen); handicapOpen = false">{{ preset.label }}</button>
@@ -382,6 +383,53 @@
           </div>
         </template>
 
+        <!-- 定跡補助の戦法・囲いの完成形を、片方の側にまとめて置く(11章)。 -->
+        <template v-else-if="sheet === 'formation'">
+          <div class="shogi-research__sheet-row">
+            <span>置く側</span>
+            <span class="shogi-research__seg">
+              <button type="button" :class="{ on: formationSide === 'black' }" @click="formationSide = 'black'">▲先手</button>
+              <button type="button" :class="{ on: formationSide === 'white' }" @click="formationSide = 'white'">△後手</button>
+            </span>
+          </div>
+          <div v-for="group in formationGroups" :key="group.id" class="shogi-research__sheet-group">
+            <h3>{{ group.label }}</h3>
+            <div class="shogi-research__chips shogi-research__chips--paper">
+              <button
+                v-for="item in group.items"
+                :key="item.id"
+                type="button"
+                :class="{ on: formationPick?.id === item.id }"
+                :data-research-formation="item.id"
+                @click="pickFormation(item)"
+              >{{ item.label }}</button>
+            </div>
+          </div>
+          <div class="shogi-research__formation-pick" data-research-formation-pick>
+            <template v-if="formationPick">
+              <FormationThumb class="shogi-research__formation-thumb" :strategy-id="formationPick.strategyId" :castle-id="formationCastle" />
+              <div class="shogi-research__formation-body">
+                <b>{{ formationTitle }}</b>
+                <div v-if="formationPick.castles.length > 1 && !formationPick.named" class="shogi-research__chips shogi-research__chips--paper">
+                  <button
+                    v-for="(castle, index) in formationPick.castles"
+                    :key="castle.id"
+                    type="button"
+                    :class="{ on: formationCastle === castle.id }"
+                    @click="formationCastle = castle.id"
+                  >{{ index === 0 ? "◎" : "" }}{{ castle.label }}</button>
+                </div>
+                <small>{{ formationSide === "black" ? "▲先手" : "△後手" }}の駒を全部しまって、この形に並べ直すよ。相手の駒はそのまま。</small>
+              </div>
+            </template>
+            <p v-else class="shogi-research__sheet-note">作戦を選ぶと、完成形がここに出るよ。</p>
+            <div class="shogi-research__sheet-actions">
+              <button type="button" @click="sheet = ''">やめる</button>
+              <button type="button" class="is-primary" :disabled="!formationPick" data-research-formation-place @click="placeFormationNow">{{ formationSide === "black" ? "▲先手" : "△後手" }}に置く</button>
+            </div>
+          </div>
+        </template>
+
         <template v-else-if="sheet === 'book'">
           <button type="button" class="shogi-research__sheet-wide" data-research-new @click="newResearch">＋ 新しい研究（平手）</button>
           <ul class="shogi-research__book" data-research-book-list>
@@ -455,6 +503,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, type PropType } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import EvaluationGraph from "./EvaluationGraph.vue";
+import FormationThumb from "./FormationThumb.vue";
+import { formationChoices, placeFormation } from "./core/edit-formation.mjs";
 import type { ShogiEngine } from "./core/engine.js";
 import { useResearchEngine } from "./composables/useResearchEngine";
 import {
@@ -511,6 +561,7 @@ import {
   pieceTotals,
   placeFromBox,
   setTurn,
+  squareName,
   toggleColor,
   togglePromote,
   validateEditedPosition,
@@ -939,6 +990,7 @@ const editProblemSquares = computed(() => (editing.value ? editCheck.value.probl
 const editMessage = computed(() => {
   const problem = editCheck.value.problems[0];
   if (problem) return problem.message;
+  if (formationNotice.value && formationNotice.value.sfen === editSfen.value) return formationNotice.value.text;
   if (!editCheck.value.engineReady) return "玉が片方だけの局面は、詰みを探して読むよ。完了を押してね。";
   return "置けたら「完了」を押してね。この局面から読み始めるよ。";
 });
@@ -999,6 +1051,43 @@ function applyPreset(sfen: string) {
   editSfen.value = sfen;
   boxPick.value = null;
   picked.value = null;
+}
+// 作戦の形を置く(11章)。選んだ側の駒を駒箱へしまい、完成形に並べ直す。相手の駒はそのまま。
+type FormationItem = ReturnType<typeof formationChoices>[number]["items"][number];
+const formationGroups = formationChoices();
+const formationSide = ref<"black" | "white">("black");
+const formationPick = shallowRef<FormationItem | null>(null);
+const formationCastle = ref("");
+const formationNotice = shallowRef<{ sfen: string; text: string } | null>(null);
+const FORMATION_HAND_NAMES: Record<string, string> = { rook: "飛車", bishop: "角", gold: "金", silver: "銀", knight: "桂", lance: "香", pawn: "歩" };
+const formationTitle = computed(() => {
+  const pick = formationPick.value;
+  if (!pick) return "";
+  const castle = pick.named ? "" : pick.castles.find(({ id }) => id === formationCastle.value)?.label ?? "";
+  return castle ? `${pick.label}・${castle}` : pick.label;
+});
+function openFormationSheet() {
+  boxPick.value = null;
+  picked.value = null;
+  formationSide.value = placeSide.value;
+  openSheet("formation");
+}
+function pickFormation(item: FormationItem) {
+  formationPick.value = item;
+  formationCastle.value = item.castles[0]?.id ?? "";
+}
+function placeFormationNow() {
+  const pick = formationPick.value;
+  if (!pick) return;
+  const side = formationSide.value;
+  const result = placeFormation(editSfen.value, { strategyId: pick.strategyId, castleId: formationCastle.value, side });
+  editSfen.value = result.sfen;
+  const mark = side === "black" ? "▲先手" : "△後手";
+  const parts = [`${mark}に${formationTitle.value}を置いたよ。`];
+  if (result.skipped.length) parts.push(`相手の駒がいた${result.skipped.length}マス（${result.skipped.map((square) => squareName(square)).join("・")}）には置けなかったから、駒箱に入れたよ。`);
+  if (result.hand.length) parts.push(`交換した${[...new Set(result.hand)].map((type) => FORMATION_HAND_NAMES[type] ?? "").join("と")}は持ち駒にしたよ。`);
+  formationNotice.value = { sfen: result.sfen, text: parts.join("") };
+  sheet.value = "";
 }
 function setEditTurn(side: "black" | "white") {
   editSfen.value = setTurn(editSfen.value, side);
@@ -1143,9 +1232,9 @@ async function toggleKifuAnalysis() {
 }
 
 // ---- シート
-type SheetKind = "" | "limit" | "play" | "book" | "io" | "more";
+type SheetKind = "" | "limit" | "play" | "book" | "io" | "more" | "formation";
 const sheet = ref<SheetKind>("");
-const SHEET_TITLES: Record<string, string> = { limit: "読む長さ", play: "この局面から対局", book: "研究帳", io: "読み込み・書き出し", more: "その他" };
+const SHEET_TITLES: Record<string, string> = { limit: "読む長さ", play: "この局面から対局", book: "研究帳", io: "読み込み・書き出し", more: "その他", formation: "作戦の形を置く" };
 const sheetTitle = computed(() => SHEET_TITLES[sheet.value] ?? "");
 function openSheet(kind: SheetKind) {
   confirmDropId.value = "";
@@ -1599,6 +1688,13 @@ defineExpose({ goBack });
 .shogi-game .shogi-research__sheet-close { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border: 0; border-radius: 50%; color: #526878; background: transparent; font-size: 1.3rem; }
 .shogi-game .shogi-research__chips--paper button { color: #1d303f; background: #fff; border-color: #cfc4ad; }
 .shogi-game .shogi-research__chips--paper button.on { color: #fffcf4; background: #2b465b; border-color: #2b465b; }
+/* 作戦の形: 選んだ作戦と「置く」を、シートの下にいつも見せる。 */
+.shogi-game .shogi-research__formation-pick { position: sticky; bottom: -16px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; margin: 0 -18px -16px; padding: 10px 18px 14px; border-top: 1px solid #d9cfba; background: #fffcf4; box-shadow: 0 -8px 16px rgba(29, 48, 63, 0.08); }
+.shogi-game .shogi-research__formation-pick > .shogi-research__sheet-note,
+.shogi-game .shogi-research__formation-pick > .shogi-research__sheet-actions { grid-column: 1 / -1; }
+.shogi-game .shogi-research__formation-thumb { width: 108px; height: auto; }
+.shogi-game .shogi-research__formation-body { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.shogi-game .shogi-research__formation-body small { color: #526878; font-size: 0.75rem; font-weight: 700; }
 .shogi-game .shogi-research__sheet-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; padding: 0 12px; border: 1px solid #d9cfba; border-radius: 8px; background: #fff; font-weight: 800; }
 .shogi-game .shogi-research__seg { display: inline-flex; border: 2px solid #2b465b; border-radius: 8px; overflow: hidden; }
 .shogi-game .shogi-research__seg button { min-height: 38px; padding: 0 14px; border: 0; color: #1d303f; background: #fff; font-weight: 900; }
