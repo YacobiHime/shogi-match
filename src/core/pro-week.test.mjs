@@ -28,7 +28,7 @@ describe('週の決まり', () => {
   });
 
   it('対策★は道具で上限と進み方が変わり、相手が変わると0から', () => {
-    expect([0, 1, 2, 3].map(prepCap)).toEqual([1, 2, 3, 3]);
+    expect([0, 1, 2, 3].map((gear) => prepCap(gear))).toEqual([1, 2, 3, 3]);
     expect(researched(null, 'a', 0)).toEqual({ id: 'a', stars: 1 });
     expect(researched({ id: 'a', stars: 1 }, 'a', 0)).toEqual({ id: 'a', stars: 1 });
     expect(researched({ id: 'a', stars: 1 }, 'a', 2)).toEqual({ id: 'a', stars: 2 });

@@ -5,7 +5,7 @@
 import { TEAM_SCENES, teamScene } from './team-story.mjs';
 import { PRO_YEAR_SCENES, proYearScene } from './pro-year-story.mjs';
 import { isSceneRead } from './novel-ui.mjs';
-import { hasLibraryScene, libraryScene } from './novel-library.mjs';
+import { hasLibraryScene, libraryParsed, libraryScene } from './novel-library.mjs';
 
 export const STORY_PROGRESS_KEY = 'yacobihime:shogi-match:story:v1';
 
@@ -64,12 +64,33 @@ const sub = (scene, label, unlock) => {
   });
 };
 
+/** 台本のファイルの場面のサブ(棋士の1年の絆の場面。15-3の4)。物語の画面から読むときの差し込みはvars。 */
+const fileSub = (scene, label, unlock, vars = {}) => {
+  const source = libraryParsed(scene)?.scene;
+  return Object.freeze({
+    id: `pro:${scene}`,
+    tab: 'sub',
+    label,
+    title: source?.title ?? '',
+    cast: Object.freeze([...(source?.cast ?? [])]),
+    background: source?.background ?? 'room',
+    scene,
+    unlock,
+    vars: Object.freeze({ ...vars }),
+  });
+};
+/** 物語の画面から読み直すときの、5人の呼び名(棋士の1年の中では本当の名前が入る)。 */
+const BOND_VARS = Object.freeze({ mentor: '師匠', senior: '兄弟子', peer: '同期の仲間' });
+const BOND_LABELS = Object.freeze({ mentor: '師匠', senior: '兄弟子', hanane: '羽音', peer: '同期' });
+const bondSubs = () => [['mentor', [2, 3, 4, 5]], ['senior', [2, 3, 4, 5]], ['hanane', [2, 3, 4, 5]], ['peer', [3, 5]]]
+  .flatMap(([role, levels]) => levels.map((level) => fileSub(`pro-bond-${role}-${level}`, '棋士の1年', `棋士の1年で、${BOND_LABELS[role]}との絆が段${level}になると読めます。`, BOND_VARS)));
+
 /**
  * 話の目録(並びは画面の並び)。
  * メインはno(第○話)と、まだ書いていない話のstatus: 'soon'。台本(src/story/scenes/<scene>.md)ができたら、scene: '<台本のid>'を書き、
  * status: 'soon'を消すと読める(第一話はいつでも、第二話からは前の話を読むと開く。docs/novel-scene-design.mdの12-6)。
  * サブはscene(台本のid)と、開き方の一言unlock。
- * @type {readonly { id: string, tab: 'main' | 'sub', no?: number, label?: string, title: string, cast: readonly string[], background: string, scene?: string, status?: 'soon', unlock?: string }[]}
+ * @type {readonly { id: string, tab: 'main' | 'sub', no?: number, label?: string, title: string, cast: readonly string[], background: string, scene?: string, status?: 'soon', unlock?: string, vars?: Record<string, string>, relationships?: any }[]}
  */
 export const STORY_EPISODES = Object.freeze([
   Object.freeze({ id: 'main:1', tab: 'main', no: 1, title: 'プロローグ', cast: Object.freeze(['momoka']), background: 'classroom', status: 'soon' }),
@@ -89,6 +110,7 @@ export const STORY_EPISODES = Object.freeze([
   sub('pro-debut', '棋士の1年', '棋士の1年でデビューすると読めます。'),
   sub('pro-hanane', '棋士の1年', '棋士の1年で、羽音と公式戦で当たると読めます。'),
   sub('pro-title-eve', '棋士の1年', '棋士の1年で、タイトル戦に出ると読めます。'),
+  ...bondSubs(),
 ]);
 
 /** 目録の話(idから)。 */
@@ -182,7 +204,7 @@ export function syncStoryUnlocks(progress, { read = null, teamCareer = null, at 
 /** 話をノベルの場面の形にする(いまは団体戦の台本)。読めない話はnull。 */
 export function storyScene(episode, playerName = '', momokaCall = '', playerProfile = null) {
   if (!episode?.scene) return null;
-  if (hasLibraryScene(episode.scene)) return libraryScene(episode.scene, { playerName, momokaCall, playerProfile, relationships: episode.relationships ?? { momoka: { style: 'familiar' } } });
+  if (hasLibraryScene(episode.scene)) return libraryScene(episode.scene, { playerName, momokaCall, playerProfile, relationships: episode.relationships ?? { momoka: { style: 'familiar' } }, vars: episode.vars ?? {} });
   if (episode.scene in PRO_YEAR_SCENES) return proYearScene(episode.scene, { playerName, momokaCall });
   return teamScene(episode.scene, playerName, momokaCall);
 }

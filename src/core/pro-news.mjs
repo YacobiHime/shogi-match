@@ -4,13 +4,13 @@
 
 /** 見出しにする出来事の強さ(大きいほど先)。 */
 export const NEWS_WEIGHT = Object.freeze({
-  crown: 100, champion: 95, challenge: 85, mainStage: 80, promote: 78,
+  crown: 100, champion: 95, challenge: 85, mainStage: 80, danUp: 79, promote: 78,
   streak: 70, hanane: 65, firstWin: 60, winsMark: 55, kaisetsuDebut: 50, fansMark: 48,
   titleDecided: 40, hananeBig: 35, win: 20, loss: 10, work: 8, world: 1,
 });
 
 /** 取材が来る出来事。 */
-export const INTERVIEW_KINDS = Object.freeze(['firstWin', 'streak', 'mainStage', 'challenge', 'promote', 'crown', 'champion', 'kaisetsuDebut']);
+export const INTERVIEW_KINDS = Object.freeze(['firstWin', 'streak', 'mainStage', 'challenge', 'promote', 'danUp', 'crown', 'champion', 'kaisetsuDebut']);
 
 /** ファンレターが届くファンの数。 */
 export const FAN_MARKS = Object.freeze([100, 300, 1000, 3000]);
@@ -34,7 +34,8 @@ export function headlineOf(event, you) {
     case 'champion': return `${you}、${e.name}で優勝`;
     case 'challenge': return `${you}、${e.name}の挑戦者に`;
     case 'mainStage': return `${you}、${e.text}`;
-    case 'promote': return `${you}、順位戦で昇級 ${e.text ?? ''}`.trim();
+    case 'promote': return `${you}、${e.text || '順位戦で昇級'}`;
+    case 'danUp': return `${e.name ?? you}、${e.dan}に昇段`;
     case 'streak': return `${you}、${e.streak}連勝${e.where ? `で${e.where}` : ''}`;
     case 'hanane': return e.won ? `${you}、同期対決を制す 天鷺羽音四段に勝利` : `${you}、天鷺羽音四段に惜敗 次の対局へ`;
     case 'firstWin': return `新四段${you.replace(/四段$/, '')}、公式戦で初勝利`;
@@ -151,6 +152,7 @@ const QUESTIONS = Object.freeze({
   mainStage: '本戦入り、おめでとうございます。目標は？',
   challenge: 'タイトル挑戦、おめでとうございます。番勝負への意気込みを。',
   promote: '昇級、おめでとうございます。来期の目標は？',
+  danUp: '昇段、おめでとうございます。いまの気持ちは？',
   crown: 'タイトル獲得、おめでとうございます。いまの気持ちは？',
   champion: '優勝、おめでとうございます。勝因は？',
   kaisetsuDebut: '大盤解説はいかがでしたか？',

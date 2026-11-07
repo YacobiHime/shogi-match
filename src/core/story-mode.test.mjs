@@ -1,3 +1,4 @@
+import { libraryParsed } from './novel-library.mjs';
 import { PRO_YEAR_SCENES } from './pro-year-story.mjs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -29,8 +30,8 @@ describe('ストーリー選択の目録(docs/story-mode-design.md)', () => {
     const ids = STORY_EPISODES.map((episode) => episode.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const episode of STORY_EPISODES.filter((entry) => entry.tab === 'sub')) {
-      // サブは団体戦の場面と、棋士の1年の場面(pro-year-story.mjs)。
-      const source = TEAM_SCENES[episode.scene] ?? PRO_YEAR_SCENES[episode.scene];
+      // サブは団体戦の場面と、棋士の1年の場面(pro-year-story.mjs と、絆の場面の台本のファイル)。
+      const source = TEAM_SCENES[episode.scene] ?? PRO_YEAR_SCENES[episode.scene] ?? libraryParsed(episode.scene)?.scene;
       expect(source).toBeTruthy();
       expect(episode.title).toBe(source.title);
       expect(episode.unlock).toMatch(/読めます。$/);
@@ -39,6 +40,14 @@ describe('ストーリー選択の目録(docs/story-mode-design.md)', () => {
     // 団体戦の場面はどれもサブで読める。
     for (const sceneId of Object.keys(TEAM_SCENES)) expect(episodeOfScene(sceneId)).toBeTruthy();
     expect(STORY_EPISODES.filter((entry) => entry.tab === 'main').every((entry) => entry.status === 'soon')).toBe(true);
+  });
+
+  it('棋士の1年の絆の場面14本は、物語の画面から呼び名を入れて読める(15-3の4)', () => {
+    const bonds = STORY_EPISODES.filter((entry) => /^pro-bond-/.test(entry.scene ?? ''));
+    expect(bonds).toHaveLength(14);
+    const scene = storyScene(bonds[0], 'やこび');
+    expect(scene.lines.some((line) => line.name === '師匠')).toBe(true);
+    expect(scene.lines.every((line) => !/\{(mentor|senior|peer)\}/.test(`${line.name}${line.text}`))).toBe(true);
   });
 });
 

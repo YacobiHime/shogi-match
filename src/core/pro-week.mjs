@@ -33,7 +33,7 @@ export const conditionHintBonus = (condition) => clampCondition(condition) - CON
 export const autoRatingBonus = (condition, stars = 0) => conditionHintBonus(condition) * CONDITION_RATING + Math.max(0, stars) * PREP_RATING;
 
 /** 研究の道具の段で、対策★の上限(道具なし★1・ノート★2・デスクトップから★3)。 */
-export const prepCap = (gear = 0) => (gear >= 2 ? 3 : gear === 1 ? 2 : 1);
+export const prepCap = (gear = 0, extra = 0) => (gear >= 2 ? 3 : gear === 1 ? 2 : 1) + Math.max(0, extra);
 /** 研究1回で進む★(高性能パソコンは2つ)。 */
 export const prepGain = (gear = 0) => (gear >= 3 ? 2 : 1);
 
@@ -42,10 +42,11 @@ export const prepGain = (gear = 0) => (gear >= 3 ? 2 : 1);
  * @param {{ id: string | null, stars: number } | null | undefined} prep
  * @param {string | null} target 次の公式戦の相手
  * @param {number} gear
+ * @param {number} [extra] 上限の上乗せ(兄弟子の絆の段5。docs/pro-year-design.mdの15-3の3)
  */
-export function researched(prep, target, gear = 0) {
+export function researched(prep, target, gear = 0, extra = 0) {
   const base = prep && prep.id === target ? prep.stars : 0;
-  return { id: target, stars: Math.min(prepCap(gear), base + prepGain(gear)) };
+  return { id: target, stars: Math.min(prepCap(gear, extra), base + prepGain(gear)) };
 }
 
 /** その相手への★(違う相手のための研究は数えない)。 */

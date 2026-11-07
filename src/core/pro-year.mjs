@@ -25,6 +25,10 @@ import { KAISETSU_FANS, WORKS, workDef, workOffers, workReward, workScoreText } 
 import {
   INTERVIEW_FANS, NEWS_WEIGHT, RECORD_KINDS, buildNews, fanLettersBetween, interviewFor, isStreakMark, isWinsMark, nextLetter, recordRanking, recordValueText, yearHeadlines,
 } from './pro-news.mjs';
+import { careerRoad, danFor, nextDanHint, ryuoGroupAfter } from './pro-career.mjs';
+import {
+  BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
+} from './pro-bonds.mjs';
 
 export const PRO_YEAR_KEY = 'yacobihime:shogi-match:pro-year:v1';
 /** プレイヤーのid(名簿の'user'と同じ)。 */
@@ -658,6 +662,16 @@ function finishStage(state, cycle, stage, rng) {
       state.user.seeds = { ...(state.user.seeds ?? {}), [event.id]: Math.max(state.user.seeds?.[event.id] ?? 0, Math.min(stage.index, event.stages.length - 2)) };
     }
   }
+  // 竜王戦の組: ランキング戦で決勝に進めば、次の年度は1つ上の組(15-3の5)。
+  if (def.type === 'groups' && userIn && cycle.withUser) {
+    const block = stage.blocks.find((entry) => (entry.slots ?? []).includes(PRO_USER_ID));
+    const final = block?.history?.at(-1);
+    const group = block?.group ?? state.user.group;
+    const reached = Boolean(final && final.slice(0, 2).includes(PRO_USER_ID) && block.alive.filter(Boolean).length <= 1);
+    const next = ryuoGroupAfter(group, reached);
+    state.user.ryuoResult = { group, next, promoted: next < group, base: cycle.base };
+    if (next < group) noteMilestone(state, { event: event.id, kind: 'advance', text: `竜王戦 ${group}組で昇級（来期は${next}組）` });
+  }
   if (def.title) {
     state.titles[event.id] = stage.winners[0] ?? cycle.holder;
     closeCycle(cycle, stage.winners[0] ?? cycle.holder);
@@ -984,7 +998,11 @@ function setPending(state, game, rng) {
   const hit = stars >= 1 && Boolean(style?.label) && Boolean(opponent.repertoire) && repertoireText(opponent.repertoire).includes(style.label);
   state.pending.prep = { stars, hit };
   state.pending.condition = clampCondition(state.condition ?? CONDITION_DEFAULT);
-  state.pending.hintBonus = conditionHintBonus(state.pending.condition) + (hit ? 1 : 0);
+  // 羽音と会った週の閃き・羽音との絆の段5(15-3の2・3)。
+  const vsHanane = opponent?.story === HANANE;
+  const hananeBonus = vsHanane ? Math.min(1, state.user.hananeHint ?? 0) + (hasPerk(state, 'hanane') ? 1 : 0) : 0;
+  state.pending.hintBonus = conditionHintBonus(state.pending.condition) + (hit ? 1 : 0) + hananeBonus;
+  if (hananeBonus) state.pending.hananeBonus = hananeBonus;
   state.pending.weight = gameWeight(state, game);
 }
 
@@ -1038,6 +1056,31 @@ export function advanceToNextGame(source) {
  * @param {any} source
  * @param {'win' | 'loss' | 'draw' | 'auto'} outcome
  */
+/** 絆を足す(段が上がったら週のまとめの1行。場面は次に今週の画面を開いたとき。15-3の3)。 */
+function bond(state, id, amount) {
+  if (!id || !state.bonds?.[id]) return null;
+  const { bonds, up } = addBond(state.bonds, id, amount);
+  state.bonds = bonds;
+  if (up) noteWeek(state, 'bond', `${nameOf(state, id)}との絆が段${up.to}に`);
+  return up;
+}
+
+/** 自分の段位を実績に合わせる(上がったらニュースと週のまとめ。15-3の5)。 */
+function checkDan(state) {
+  const me = state.players[PRO_USER_ID];
+  if (!me) return null;
+  const before = me.dan ?? '四段';
+  const after = danFor({ dan: before, group: state.user.group, cls: state.user.cls, titles: state.user.titleCounts ?? {}, sinceWins: state.user.sinceWins ?? 0 });
+  if (after === before) return null;
+  me.dan = after;
+  state.user.sinceWins = 0;
+  state.user.danLog = [...(state.user.danLog ?? []), { dan: after, date: state.date, fy: state.fy }].slice(-10);
+  noteEvent(state, { kind: 'danUp', dan: after, name: state.userName || 'あなた' });
+  noteWeek(state, 'dan', `${after}に昇段`);
+  bond(state, state.people?.mentor, BOND_SMALL);
+  return { from: before, to: after };
+}
+
 export function recordProGame(source, outcome, { way = 'full' } = {}) {
   const state = structuredClone(source);
   const pending = state.pending;
@@ -1071,6 +1114,9 @@ export function recordProGame(source, outcome, { way = 'full' } = {}) {
   }
   state.pending = null;
   state.lastGame = { id: game.id, won, auto: outcome === 'auto' };
+  // 公式戦で当たった同期・兄弟子との絆(15-3の2)。羽音と会って足した閃きは、この1局で使い切る。
+  if (roleOf(state.people, pending.opponentId) && roleOf(state.people, pending.opponentId) !== 'mentor') bond(state, pending.opponentId, BOND_SMALL);
+  if (state.players[pending.opponentId]?.story === HANANE) state.user.hananeHint = 0;
   // 調子(1局で−1・二日制は−2・勝てば＋1)と対策(同じ相手との番勝負の続きだけ残す)。13-3の3・4。
   const conditionBefore = clampCondition(state.condition ?? CONDITION_DEFAULT);
   state.condition = conditionAfterGame(conditionBefore, { won, twoDay: Boolean(game.twoDay) });
@@ -1107,13 +1153,19 @@ export function recordProGame(source, outcome, { way = 'full' } = {}) {
     });
   // タイトル獲得・棋戦優勝の回数(揮毫の言葉が増える。10-2の6)。
   if (champions.length) state.user.crowns = (state.user.crowns ?? 0) + champions.length;
+  // 昇段(勝数規定・タイトル。15-3の5)。
+  if (won) state.user.sinceWins = (state.user.sinceWins ?? 0) + 1;
+  for (const champion of champions) if (champion.title) state.user.titleCounts = { ...(state.user.titleCounts ?? {}), [champion.event]: (state.user.titleCounts?.[champion.event] ?? 0) + 1 };
+  checkDan(state);
   // 節目のニュース(優勝・タイトル・挑戦・本戦入り・昇級)。
   for (const champion of champions) noteEvent(state, champion.title ? { kind: 'crown', short: champion.short } : { kind: 'champion', name: champion.name });
+  // 師匠への報告(優勝・タイトル・本戦入り)。
+  if (champions.length || milestones.some((item) => item.kind === 'advance')) bond(state, state.people?.mentor, BOND_SMALL);
   if (!champions.length) {
     if (!challengeBefore && userInTitleSeries(state)) noteEvent(state, { kind: 'challenge', name: proEvent(game.event)?.name ?? '' });
     for (const item of milestones) {
       if (item.kind !== 'advance') continue;
-      if (/昇級/.test(item.text)) noteEvent(state, { kind: 'promote', text: '' });
+      if (/昇級/.test(item.text)) noteEvent(state, { kind: 'promote', text: /竜王戦/.test(item.text) ? item.text.replace(/（.*）$/, '') : '' });
       else if (/突破/.test(item.text)) noteEvent(state, { kind: 'mainStage', text: item.text.replace(/を突破$/, '突破') });
     }
   }
@@ -1231,7 +1283,10 @@ export function recordStudyGame(source, outcome) {
   const text = `研究会で${nameOf(state, id)}に${outcome === 'win' ? '勝ち' : outcome === 'loss' ? '負け' : '引き分け'}`;
   noteMilestone(state, { event: 'study', kind: 'plain', text });
   noteWeek(state, 'study', text);
-  grow(state, mergeGains(AVATAR_GAINS.study, outcome === 'win' ? AVATAR_GAINS.studyWin : {}));
+  // 研究会の経験は、同期との絆の段5で2倍(15-3の3)。指した相手との絆＋1。
+  const studyGains = mergeGains(AVATAR_GAINS.study, outcome === 'win' ? AVATAR_GAINS.studyWin : {});
+  grow(state, peerPerk(state) ? mergeGains(studyGains, studyGains) : studyGains);
+  bond(state, id, BOND_SMALL);
   return { state, won: outcome === 'win', line, text };
 }
 
@@ -1498,8 +1553,25 @@ export function yearSummary(state) {
   // 今年の目標の判子(達成・あと一歩・届かず)。
   const goals = state.goals?.ids?.length ? goalProgress({ ...state, yearDone: true }).map((goal) => ({ ...goal, stamp: goalStamp(goal) })) : [];
   const headlines = yearHeadlines((state.news ?? []).filter((item) => item.fy === state.fy));
-  return { fy: state.fy, wins: mine.w, losses: mine.l, rate, best: mine.best, awards, titles, junni: state.user.junniResult ?? null, rival, money, goals, headlines };
+  // 棋士の歩みの行(15-3の7): 段・クラス・組・優勝した棋戦と、来期に決まる昇段の見込み。
+  const champions = Object.values(state.cycles)
+    .filter((cycle) => cycle.done && cycle.champion === PRO_USER_ID && proEvent(cycle.event)?.kind !== 'title' && Object.values(state.games).some((game) => game.cycle === cycle.id && game.user && game.date >= yearStart(state.fy)))
+    .map((cycle) => proEvent(cycle.event).name);
+  const dan = state.players[PRO_USER_ID]?.dan ?? '四段';
+  const junni = state.user.junniResult ?? null;
+  const ryuo = state.user.ryuoResult ?? null;
+  const nextCls = junni?.promoted ? NEXT_CLASS[junni.cls] ?? junni.cls : state.user.cls;
+  const nextGroup = ryuo?.next ?? state.user.group;
+  const projected = danFor({ dan, group: nextGroup, cls: nextCls, titles: state.user.titleCounts ?? {}, sinceWins: state.user.sinceWins ?? 0 });
+  const startDan = state.user.danAtStart ?? dan;
+  return {
+    fy: state.fy, wins: mine.w, losses: mine.l, rate, best: mine.best, awards, titles, junni, rival, money, goals, headlines,
+    dan: projected, danUp: projected !== startDan ? { from: startDan, to: projected } : null,
+    cls: state.user.cls, clsText: `${CLASS_NAMES[state.user.cls] ?? ''}${junni?.promoted ? ' 昇級' : ''}`, group: ryuo?.group ?? state.user.group, groupUp: Boolean(ryuo?.promoted), champions,
+  };
 }
+
+const NEXT_CLASS = Object.freeze({ C2: 'C1', C1: 'B2', B2: 'B1', B1: 'A', A: 'A' });
 
 /** 次の年度へ(順位戦のクラス・竜王戦の組・シードを持ち越す)。 */
 export function startNextYear(source) {
@@ -1507,8 +1579,11 @@ export function startNextYear(source) {
   if (!state.yearDone) return state;
   const rng = createRng(state.rng);
   const result = state.user.junniResult;
-  if (result?.promoted) state.user.cls = { C2: 'C1', C1: 'B2', B2: 'B1', B1: 'A', A: 'A' }[result.cls] ?? result.cls;
+  if (result?.promoted) state.user.cls = NEXT_CLASS[result.cls] ?? result.cls;
   state.user.junniResult = null;
+  // 竜王戦の組(ランキング戦の結果)と、それで決まる昇段(15-3の5)。
+  if (state.user.ryuoResult) state.user.group = state.user.ryuoResult.next;
+  state.user.ryuoResult = null;
   state.history = [...(state.history ?? []), state.summary].slice(-20);
   state.fy += 1;
   state.date = yearStart(state.fy);
@@ -1529,15 +1604,17 @@ export function startNextYear(source) {
   state.interview = null;
   state.news = [];
   state.week = newWeek(state, state.date);
+  state.user.danAtStart = state.players[PRO_USER_ID]?.dan ?? '四段';
+  checkDan(state);
   state.rng = rng.state;
   return state;
 }
 
 /**
  * 棋士の1年を始める(新四段のデビュー)。
- * @param {{ seed: number, fiscalYear: number, roster: any, settings?: any, userLevel?: number, userName?: string, userGroup?: number }} options
+ * @param {{ seed: number, fiscalYear: number, roster: any, settings?: any, userLevel?: number, userName?: string, userGroup?: number, mentorName?: string }} options
  */
-export function createProYear({ seed, fiscalYear, roster, settings = {}, userLevel = 20, userName = '', userGroup = 6 }) {
+export function createProYear({ seed, fiscalYear, roster, settings = {}, userLevel = 20, userName = '', userGroup = 6, mentorName = '' }) {
   const rng = createRng(seed);
   const players = {};
   for (const member of Object.values(roster?.players ?? {})) {
@@ -1578,7 +1655,7 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
     players,
     titles,
     junni: junniWorld,
-    user: { cls: userClass, group: clamp(Math.round(userGroup), 1, 6), seeds: {}, money: 0, gear: 0, fans: 0, crowns: 0 },
+    user: { cls: userClass, group: clamp(Math.round(userGroup), 1, 6), seeds: {}, money: 0, gear: 0, fans: 0, crowns: 0, sinceWins: 0, titleCounts: {}, danAtStart: '四段' },
     cycles: {},
     games: {},
     nextGame: 1,
@@ -1597,6 +1674,9 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
   state.year = emptyYear();
   state.user.money = 0;
   state.study = emptyStudy(state);
+  // 5人(師匠・兄弟子・同期3人)と絆(15-3の1・3)。
+  state.people = pickPeople(state.players, { seed, mentorName, studyMembers: state.study.members, userId: PRO_USER_ID });
+  state.bonds = emptyBonds(state.people);
   state.log = [];
   state.condition = CONDITION_DEFAULT;
   state.prep = { id: null, stars: 0 };
@@ -1699,6 +1779,35 @@ function weekFestival(state) {
 }
 
 /**
+ * 絆の場面を見た印(15-3の4)。
+ * @param {any} source
+ * @param {string} id 人のid
+ * @param {number} level 段
+ */
+export function seeBondScene(source, id, level) {
+  if (!source?.bonds?.[id]) return source;
+  return { ...source, bonds: markBondScene(source.bonds, id, level) };
+}
+
+/** 5人の札(人の1行とシート。15-3の1・3)。 */
+export function peopleView(state) {
+  return BOND_ROLES.map((role) => {
+    const id = state?.people?.[role];
+    if (!id || !state.players?.[id]) return null;
+    const points = state.bonds?.[id]?.points ?? 0;
+    const level = bondLevel(points);
+    const next = bondNext(points);
+    const def = BOND_DEFS[role];
+    return {
+      role, id, rel: def.rel, name: nameOf(state, id), dan: state.players[id].dan ?? '', story: state.players[id].story ?? null, icon: def.icon || nameOf(state, id).slice(0, 1),
+      level, points, next, perk: def.perk, perkOn: level >= 5, meet: def.meet, effect: def.effect,
+      // 次の場面まで(段2〜5のうち場面のある段)。
+      nextScene: def.scenes.find((at) => at > level) ?? null,
+    };
+  }).filter(Boolean);
+}
+
+/**
  * 今週の画面の形(13-3の1・2・9)。
  * @param {any} state
  */
@@ -1717,11 +1826,12 @@ export function weekView(source) {
   const nextOpponent = preview?.opponentId ?? null;
   const gear = state.user.gear ?? 0;
   const stars = nextOpponent ? starsFor(state.prep, nextOpponent) : 0;
+  const capExtra = hasPerk(state, 'senior') ? 1 : 0;
   const condition = clampCondition(state.condition ?? CONDITION_DEFAULT);
   const actions = [];
   // 右の効き目と、分身の経験(14-3の2)。
   const avatarText = (gains) => (gains ? `分身：${gainsText(gains)}` : '');
-  if (nextOpponent) actions.push({ ...WEEK_ACTIONS.research, target: card(state, nextOpponent), effect: stars >= prepCap(gear) ? `対策 ★${stars}（いまの道具では上限）` : `対策 ★${stars} → ★${researched(state.prep, nextOpponent, gear).stars}`, full: stars >= prepCap(gear), grow: avatarText(AVATAR_GAINS.research) });
+  if (nextOpponent) actions.push({ ...WEEK_ACTIONS.research, target: card(state, nextOpponent), effect: stars >= prepCap(gear, capExtra) ? `対策 ★${stars}（いまの道具では上限）` : `対策 ★${stars} → ★${researched(state.prep, nextOpponent, gear, capExtra).stars}`, full: stars >= prepCap(gear, capExtra), grow: avatarText(AVATAR_GAINS.research) });
   actions.push({ ...WEEK_ACTIONS.rest, effect: condition >= CONDITION_LABELS.length - 1 ? '調子はもういちばん上' : `調子 ${CONDITION_LABELS[condition]} → ${CONDITION_LABELS[clampCondition(condition + 1)]}`, grow: avatarText(AVATAR_GAINS.rest) });
   if (study) actions.push({ ...WEEK_ACTIONS.study, date: study, dateText: dateLabel(study), effect: '研究仲間の対策 ★1', grow: avatarText(AVATAR_GAINS.study) });
   if (festival) actions.push({ ...WEEK_ACTIONS.festival, date: festival.date, dateText: dateLabel(festival.date), name: festival.name, effect: '謝礼とファン・調子−1', grow: avatarText(AVATAR_GAINS.festival) });
@@ -1744,6 +1854,23 @@ export function weekView(source) {
     });
   }
   actions.push(...works);
+  // 人に会う(15-3の2)。週に1人まで。
+  const meets = [];
+  for (const role of BOND_ROLES) {
+    const id = state.people?.[role];
+    if (!id || !state.players[id]) continue;
+    const def = BOND_DEFS[role];
+    const points = state.bonds?.[id]?.points ?? 0;
+    let effect = def.effect;
+    if (role === 'senior') effect = nextOpponent ? `${nameOf(state, nextOpponent)}の対策 ★＋1` : '研究（次の相手が決まっていない）';
+    else if ((role === 'mentor' || role.startsWith('peer')) && condition >= CONDITION_LABELS.length - 1) effect = '調子はもういちばん上';
+    else if (role === 'hanane' && (state.user.hananeHint ?? 0) > 0) effect = '羽音戦の閃き＋1（もう足してある）';
+    meets.push({
+      id: `meet-${role}`, meet: role, person: card(state, id), label: `${def.rel}：${nameOf(state, id)}`, icon: def.icon || nameOf(state, id).slice(0, 1), note: def.meet,
+      effect, grow: `${avatarText(def.gains)}・絆＋${BOND_MEET}`, rel: def.rel, level: bondLevel(points), next: bondNext(points),
+    });
+  }
+  actions.push(...meets);
   // 解説の仕事の鍵(開く前だけ。あと何人で開くか。D:5-2)。
   const lockedWork = !open && offers.length ? { id: 'kaisetsu', label: WORKS.kaisetsu.title, icon: WORKS.kaisetsu.icon, need: KAISETSU_FANS - (state.user.fans ?? 0) } : null;
   const days = weekRange(week.start, state.fy).days.map((date) => ({
@@ -1771,13 +1898,17 @@ export function weekView(source) {
     condition,
     conditionLabel: CONDITION_LABELS[condition],
     hintBonus: conditionHintBonus(condition),
-    prep: nextOpponent ? { opponent: card(state, nextOpponent), stars, cap: prepCap(gear) } : null,
+    prep: nextOpponent ? { opponent: card(state, nextOpponent), stars, cap: prepCap(gear, capExtra) } : null,
     lastWeek: state.lastWeek ?? null,
     lockedWork,
     avatar: avatarView(state.avatar, week.gains ?? {}),
+    people: peopleView(state),
     news: (state.news ?? []).at(-1) ?? null,
     interview: state.interview ?? null,
     work: state.work ?? null,
+    // 自分の公式戦がもう残っていない(年度を締められる。15-3の6)。
+    seasonOver: !preview && !state.pending && !state.festival && !state.work,
+    weeksLeft: Math.max(0, Math.ceil(((toDate(yearEnd(state.fy)) - toDate(week.end)) / 86400000) / 7)),
   };
 }
 
@@ -1797,6 +1928,8 @@ export function chooseWeekAction(source, slot, action) {
   if (action && (action === 'study' || action === 'festival') && state.week.actions.some((item, index) => item === action && index !== slot)) return state;
   // 仕事は週に1つまで(14-3の1)。
   if (action?.startsWith('work-') && state.week.actions.some((item, index) => String(item ?? '').startsWith('work-') && index !== slot)) return state;
+  // 人に会うのは週に1人まで(15-3の2)。
+  if (action?.startsWith('meet-') && state.week.actions.some((item, index) => String(item ?? '').startsWith('meet-') && index !== slot)) return state;
   const actions = [...state.week.actions];
   actions[slot] = action ?? null;
   state.week.actions = actions.slice(0, view.slots);
@@ -1809,10 +1942,27 @@ function applyWeek(state, view) {
   week.cond0 = clampCondition(state.condition ?? CONDITION_DEFAULT);
   const chosen = (week.actions ?? []).slice(0, view.slots).filter(Boolean);
   const gear = state.user.gear ?? 0;
+  const capExtra = hasPerk(state, 'senior') ? 1 : 0;
   const target = view.prep?.opponent?.id ?? null;
+  // 師匠との絆の段5: 大一番の週の始めに、師匠の電話で調子＋1(15-3の3)。
+  if (hasPerk(state, 'mentor') && (view.games ?? []).some((game) => game.weight === 'big')) {
+    state.condition = clampCondition((state.condition ?? CONDITION_DEFAULT) + 1);
+    noteWeek(state, 'bond', `${nameOf(state, state.people.mentor)}から電話（調子＋1）`);
+  }
   for (const action of chosen) {
-    if (action === 'research' && target) {
-      state.prep = researched(state.prep, target, gear);
+    if (String(action).startsWith('meet-')) {
+      const role = String(action).slice(5);
+      const id = state.people?.[role];
+      if (!id) continue;
+      if (role === 'senior') {
+        if (target) state.prep = researched(state.prep, target, gear, capExtra);
+      } else if (role === 'hanane') state.user.hananeHint = 1;
+      else state.condition = clampCondition((state.condition ?? CONDITION_DEFAULT) + 1);
+      noteWeek(state, 'meet', `${BOND_DEFS[role].rel}の${nameOf(state, id)}と会う${role === 'senior' && target ? `（${nameOf(state, target)}の対策 ★${state.prep.stars}）` : ''}`);
+      grow(state, BOND_DEFS[role].gains);
+      bond(state, id, BOND_MEET);
+    } else if (action === 'research' && target) {
+      state.prep = researched(state.prep, target, gear, capExtra);
       noteWeek(state, 'research', `研究 → ${nameOf(state, target)}の対策 ★${state.prep.stars}`);
       grow(state, AVATAR_GAINS.research);
     } else if (action === 'rest') {
@@ -1956,6 +2106,43 @@ export function autoWeeks(source) {
     }
     state = advanceWeek(state);
   }
+  return state;
+}
+
+/**
+ * 年度を締める(15-3の6)。自分の公式戦が残っていないとき、残りの週は世界だけ進めて年度のまとめへ。
+ * ニュースは残りの大きな出来事を1枚(「年度末の将棋界」)にまとめる。
+ * @param {any} source
+ */
+export function closeYearEarly(source) {
+  const view = weekView(source);
+  if (!view?.seasonOver) return source;
+  const state = structuredClone(source);
+  const rng = createRng(state.rng);
+  const from = state.date;
+  if (run(state, yearEnd(state.fy), rng)) {
+    // 念のため(見込みになかった対局が組まれた): そこで止まる。
+    state.rng = rng.state;
+    return state;
+  }
+  const lines = [];
+  for (const cycle of Object.values(state.cycles)) {
+    const event = proEvent(cycle.event);
+    if (!cycle.done || !cycle.champion) continue;
+    const last = Object.values(state.games).filter((game) => game.cycle === cycle.id && game.winner).map((game) => game.date).sort().pop();
+    if (!last || last < from) continue;
+    lines.push(event.kind === 'title' ? `${event.name}、${nameOf(state, cycle.champion)}が${event.short}に` : `${event.name}、${nameOf(state, cycle.champion)}が優勝`);
+  }
+  const number = weekNumber(state.week?.start ?? from, state.fy);
+  state.news = [...(state.news ?? []), {
+    number, start: from, end: yearEnd(state.fy), headline: '年度末の将棋界', lead: `${dateLabel(from)}から年度の終わりまでの、ほかの棋士の結果。`, lines: lines.slice(0, 4),
+    record: '', letter: null, hanane: '', kind: 'world', mine: false, weight: 0, fy: state.fy, closed: true,
+  }].slice(-60);
+  state.interview = null;
+  state.date = yearEnd(state.fy);
+  state.yearDone = true;
+  state.summary = { ...yearSummary(state), closedEarly: from };
+  state.rng = rng.state;
   return state;
 }
 
@@ -2351,6 +2538,16 @@ export function proYearView(state) {
     work: workView(state),
     interview: state.interview ?? null,
     news: [...(state.news ?? [])].filter((item) => item.fy === state.fy).reverse(),
+    // 5人と絆(15-3の1・3)。
+    people: peopleView(state),
+    // 段位と棋士の歩み(15-3の5・7)。
+    dan: state.players[PRO_USER_ID]?.dan ?? '四段',
+    nextDan: nextDanHint({ dan: state.players[PRO_USER_ID]?.dan ?? '四段', group: state.user.group, cls: state.user.cls, sinceWins: state.user.sinceWins ?? 0 }),
+    road: careerRoad(state.history ?? [], state.yearDone ? null : {
+      fy: state.fy, wins: record.w, losses: record.l, dan: state.players[PRO_USER_ID]?.dan ?? '四段', clsText: CLASS_NAMES[state.user.cls] ?? '', group: state.user.group,
+      titles: TITLE_EVENTS.filter((id) => state.titles[id] === PRO_USER_ID).map((id) => proEvent(id).short), champions: [],
+      headlines: yearHeadlines((state.news ?? []).filter((item) => item.fy === state.fy)),
+    }),
   };
 }
 
@@ -2894,10 +3091,16 @@ export function unpackProYear(packed, roster) {
     games[game.id] = game;
   }
   // 暮らしの記録のない前の保存は、0で埋める(版はそのまま。10-2の7)。
-  const user = { money: 0, gear: 0, fans: 0, crowns: 0, ...(packed.user ?? {}) };
+  const user = { money: 0, gear: 0, fans: 0, crowns: 0, sinceWins: 0, titleCounts: {}, ...(packed.user ?? {}) };
+  // 段位の記録のない前の保存(15-3の5): 年度の始めの段は今の段。
+  user.danAtStart ??= players[PRO_USER_ID]?.dan ?? '四段';
   const year = { ...emptyYear(), ...(packed.year ?? {}) };
   const restored = { ...packed, players, games, user, year };
   if (!restored.study) restored.study = emptyStudy(restored);
+  // 5人と絆のない前の保存(15-3の9): 5人を選び、全員段1から。
+  if (!restored.people) restored.people = pickPeople(players, { seed: restored.seed ?? 0, studyMembers: restored.study.members ?? [], userId: PRO_USER_ID });
+  if (!restored.bonds) restored.bonds = emptyBonds(restored.people);
+  for (const id of Object.values(restored.people)) if (id && !restored.bonds[id]) restored.bonds[id] = { points: 0, seen: [] };
   // 週の形のない前の保存は、今の日の週から(13-3の12)。
   if (!Number.isFinite(restored.condition)) restored.condition = CONDITION_DEFAULT;
   if (!restored.prep) restored.prep = { id: null, stars: 0 };
