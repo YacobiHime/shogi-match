@@ -59,8 +59,9 @@ describe('棋士の仕事(14-3の1)', () => {
   });
 
   it('出来高: 詰将棋は解けた数、解説は当たった数で上乗せ。さっと済ませると基本の分', () => {
-    expect(workReward('tsume', { score: 3 })).toMatchObject({ fee: 15, fans: 5, gains: { attack: 5, reading: 1 } });
-    expect(workReward('tsume', { quick: true })).toMatchObject({ fee: 10, gains: { attack: 2, reading: 1 } });
+    expect(workReward('tsume', { score: 3 })).toMatchObject({ fee: 20, fans: 5, gains: { attack: 5, reading: 1 } });
+    expect(workReward('tsume', { quick: true })).toMatchObject({ fee: 15, gains: { attack: 2, reading: 1 } });
+    expect(workReward('tsume', { score: 0 }).fee).toBe(5);
     expect(workReward('kaisetsu', { score: 5 })).toMatchObject({ fee: 30, fans: 45 });
     expect(workReward('shidou', { score: 0 })).toMatchObject({ fee: 10, fans: 10 });
   });

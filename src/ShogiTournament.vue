@@ -976,7 +976,9 @@
       :news="relayNews"
       :start-at="relayEntry.startAt ?? 0"
       :live="relayLive"
+      :job="relayEntry.job ?? null"
       @seen="noteRelaySeen"
+      @job-done="relayJobHits = $event"
       @close="relayEntry = null"
     />
     <SeasonAward
@@ -1569,6 +1571,12 @@ const meijinRelayGameList = computed(() => {
 const relayList = ref<{ event: "ryuo" | "meijin"; playerId: string } | null>(null);
 /** いま見ている中継の対局(relay-games.mjsの項目)。 */
 const relayEntry = ref<any>(null);
+/** 棋士の1年の大盤解説の仕事(中継の次の一手)。閉じたら当たった数で仕事を終える(docs/pro-year-design.mdの14-3の1)。 */
+const relayJobHits = ref(0);
+watch(relayEntry, (now, before) => {
+  if (now?.job) relayJobHits.value = 0;
+  if (before?.job && !now) emit("pro-year-life", { kind: "work-done", score: relayJobHits.value });
+});
 /** 中継で見ている本局(20章)の手の流れ。本局でなければnull(中継の画面が棋譜を作る)。 */
 const relayLive = shallowRef<any>(null);
 const relaySeen = ref<string[]>([]);

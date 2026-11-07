@@ -23,7 +23,7 @@ export const WORKS = Object.freeze({
   tsume: Object.freeze({
     id: 'tsume', label: '詰将棋', title: '詰将棋欄の監修', icon: '詰', day: 0, client: '将棋新報',
     note: '今月号の詰将棋欄の3問を、作者の答えどおりに詰むか確かめる',
-    fee: 0, feePer: 5, fans: 5, fansPer: 0, scoreMax: 3, quick: 2,
+    fee: 5, feePer: 5, fans: 5, fansPer: 0, scoreMax: 3, quick: 2,
     gains: Object.freeze({ attack: 2, reading: 1 }), gainsPer: Object.freeze({ attack: 1 }),
     play: '詰将棋3問を解く',
   }),

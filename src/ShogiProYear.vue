@@ -115,6 +115,19 @@
         <!-- 今週(13章。画面の主役。1週の行動を選んで進める) -->
         <div v-show="wide || tab === 'week'" class="pro-year__weekpanel" data-pro-week>
           <template v-if="week">
+            <!-- 先週の将棋ニュース(14-3の3)。押すと紙面。 -->
+            <button v-if="week.news" type="button" class="pro-year__news" data-pro-news @click="newsOpen = week.news">
+              <span class="pro-year__news-mast">週刊 将棋ニュース<small>第{{ week.news.number }}週</small></span>
+              <b class="pro-year__news-head">{{ week.news.headline }}</b>
+              <span v-if="week.news.lead || week.news.lines[0]" class="pro-year__news-lead">{{ week.news.lead || week.news.lines[0] }}</span>
+              <span class="pro-year__news-more" aria-hidden="true">紙面を開く ›</span>
+            </button>
+            <!-- 取材の依頼(14-3の5)。行動の枠を使わない。 -->
+            <button v-if="week.interview" type="button" class="pro-year__interview" data-pro-interview @click="interviewOpen = true">
+              <span class="pro-year__interview-icon" aria-hidden="true">記</span>
+              <span><b>取材の依頼</b><small>{{ week.interview.reporter }}「{{ week.interview.question }}」</small></span>
+              <span class="pro-year__interview-go">答える</span>
+            </button>
             <div class="pro-year__week-head">
               <h2>第{{ week.number }}週<small>{{ shortDate(week.start) }}〜{{ shortDate(week.end) }}</small></h2>
               <p class="pro-year__condition" :data-pro-condition="week.condition">
@@ -164,7 +177,16 @@
                 </span>
               </button>
             </div>
-            <div v-if="week.lastWeek?.lines?.length" class="pro-year__lastweek" data-pro-lastweek>
+            <!-- 分身の1行(14-3の2)。押すと分身のシート。 -->
+            <button type="button" class="pro-year__avatar-row" data-pro-avatar @click="avatarOpen = true">
+              <span class="pro-year__slot-icon pro-year__avatar-icon" aria-hidden="true">分</span>
+              <span class="pro-year__slot-text">
+                <b>分身　いちばん高い {{ week.avatar.top.label }} Lv{{ week.avatar.top.level }}<template v-if="week.avatar.grew">・今週 <i class="pro-year__gain">{{ week.avatar.grew.label }}＋{{ week.avatar.grew.gain }}</i></template></b>
+                <small v-if="week.avatar.closest">{{ week.avatar.closest.label }} Lv{{ week.avatar.closest.level + 1 }} まで あと{{ week.avatar.closest.need }}</small>
+                <span class="pro-year__avatar-bar" aria-hidden="true"><i :style="{ width: `${Math.round((week.avatar.closest?.ratio ?? 1) * 100)}%` }"></i></span>
+              </span>
+            </button>
+            <div v-if="!week.news && week.lastWeek?.lines?.length" class="pro-year__lastweek" data-pro-lastweek>
               <h3 class="pro-year__subhead">先週のまとめ<small>（第{{ week.lastWeek.number }}週）</small></h3>
               <ul><li v-for="(line, index) in week.lastWeek.lines" :key="index">{{ line }}</li></ul>
             </div>
@@ -266,6 +288,24 @@
                 </li>
               </ul>
             </template>
+            <!-- 記録のランキング(14-3の4)。10位の外なら近い目当て(D:5-6)。 -->
+            <h3 class="pro-year__subhead">記録のランキング<small>（今年度）</small></h3>
+            <div class="pro-year__ranks" data-pro-ranks>
+              <section v-for="kind in view.records" :key="kind.id" class="pro-year__rank">
+                <b>{{ kind.label }}</b>
+                <ol>
+                  <li v-for="row in kind.top" :key="row.id" :class="{ 'pro-year__ranking--you': row.you }"><small>{{ row.rank }}位</small><span>{{ row.you ? `${playerName}（あなた）` : row.name }}</span><b>{{ row.value }}</b></li>
+                  <li v-if="kind.you" class="pro-year__ranking--you"><small>{{ kind.you.rank }}位</small><span>{{ playerName }}（あなた）</span><b>{{ kind.you.value }}</b></li>
+                </ol>
+                <small v-if="kind.near" class="pro-year__rank-near">{{ kind.near }}</small>
+              </section>
+            </div>
+            <!-- ファンレター(14-3の6) -->
+            <h3 class="pro-year__subhead">ファンレター<small>（{{ view.letters.length }}通）</small></h3>
+            <ul class="pro-year__letters" data-pro-letters>
+              <li v-for="(letter, index) in view.letters" :key="index" class="pro-year__letter"><span class="pro-year__letter-env" aria-hidden="true">✉</span><span>{{ letter.text }}<small>{{ letter.from }}より（ファン{{ letter.mark }}人）</small></span></li>
+              <li v-if="view.nextLetter" class="pro-year__letter pro-year__letter--next"><span class="pro-year__letter-env" aria-hidden="true">？</span><span>ファンが{{ view.nextLetter.mark }}人になると、次の手紙が届くよ<small>あと{{ view.nextLetter.need }}人</small></span></li>
+            </ul>
             <!-- お金と研究の道具(10-2の3・4。次の道具まで「あと○万円」が見える。D:5-2) -->
             <h3 class="pro-year__subhead">お金と研究の道具</h3>
             <div class="pro-year__wallet" data-pro-wallet>
@@ -330,6 +370,10 @@
           <p v-if="view.summary.junni" class="pro-year__summary-line">順位戦 {{ CLASS_NAMES[view.summary.junni.cls] }} {{ view.summary.junni.wins }}勝{{ view.summary.junni.losses }}敗（{{ view.summary.junni.place }}位）{{ view.summary.junni.promoted ? "・昇級" : "" }}</p>
           <p v-if="view.summary.rival" class="pro-year__summary-line">{{ view.summary.rival.name }} {{ view.summary.rival.wins }}勝{{ view.summary.rival.losses }}敗・直接対決 {{ view.summary.rival.meetings[0] }}勝{{ view.summary.rival.meetings[1] }}敗</p>
           <p v-if="view.summary.money" class="pro-year__summary-line" data-pro-summary-money>獲得賞金・対局料 {{ moneyText(view.summary.money.earned) }}（{{ view.summary.money.rank }}位）</p>
+          <!-- 今年の見出し(14-3の3) -->
+          <ul v-if="view.summary.headlines?.length" class="pro-year__summary-heads" data-pro-summary-heads>
+            <li v-for="item in view.summary.headlines" :key="item.number"><small>第{{ item.number }}週</small>{{ item.headline }}</li>
+          </ul>
           <!-- 今年の目標の判子(達成・あと一歩・届かず。13-3の7。G:3) -->
           <ul v-if="view.summary.goals?.length" class="pro-year__goal-stamps" data-pro-goal-stamps>
             <li v-for="goal in view.summary.goals" :key="goal.id" :class="`pro-year__goal-stamp--${goal.stamp}`">
@@ -337,6 +381,17 @@
               <span>{{ goal.label }}<small>{{ goal.text }}</small></span>
             </li>
           </ul>
+        </div>
+        <!-- 仕事の日の札(14-3の1)。遊ぶか、さっと済ませる。 -->
+        <div v-else-if="view.work && !view.pending" class="pro-year__workcard" data-pro-workcard>
+          <p class="pro-year__next-head"><b>{{ view.work.dateText }}</b><span>{{ view.work.client }}</span><span class="pro-year__work-tag">仕事</span></p>
+          <p class="pro-year__work-title">{{ view.work.label }}</p>
+          <p class="pro-year__work-note">{{ view.work.note }}<template v-if="view.work.gameLabel">（{{ view.work.gameLabel }}）</template></p>
+          <p class="pro-year__work-terms">
+            <span><b>{{ view.work.best.fee === view.work.quick.fee ? `${view.work.best.fee}万円` : `最大${view.work.best.fee}万円` }}</b></span>
+            <span><b>ファン＋{{ view.work.best.fans }}</b></span>
+            <span><b class="pro-year__gain">{{ view.work.bestGrow }}</b></span>
+          </p>
         </div>
         <!-- 次の対局 -->
         <div v-else-if="view.pending" class="pro-year__next" :style="{ '--event-color': pendingColor }" data-pro-next>
@@ -376,6 +431,12 @@
         <template v-if="view.yearDone">
           <button type="button" class="shogi-tournament__start" data-pro-next-year @click="emit('next-year')">次の年度へ</button>
         </template>
+        <template v-else-if="view.work && !view.pending">
+          <div class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
+            <button type="button" class="shogi-tournament__sub" data-pro-work-quick @click="emit('life', { kind: 'work-quick' })">さっと済ませる<small>{{ view.work.quick.fee }}万円・{{ view.work.quickGrow }}</small></button>
+            <button type="button" class="shogi-tournament__start" data-pro-work-play @click="playWork">{{ view.work.play }}</button>
+          </div>
+        </template>
         <!-- 公式戦の3つの指し方(13-3の5・6)。既定は重さで決め(小は勝負どころから)、その1つだけ琥珀色。分身には勝率の見込み(D:2-1) -->
         <template v-else-if="view.pending && view.pending.gameId && !suspendedMoves">
           <div class="pro-year__ways" data-pro-ways>
@@ -397,7 +458,7 @@
         </template>
         <template v-else>
           <!-- 1週ずつ進める(13-3の1)。研究会・まつりは週の行動で選ぶ。急ぐ人は、次の対局の週までおまかせ(13-3の10。D:9-2) -->
-          <div class="shogi-tournament__actions shogi-tournament__actions--two">
+          <div class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
             <button type="button" class="shogi-tournament__sub" data-pro-auto-weeks @click="emit('life', { kind: 'auto-weeks' })">対局の週までおまかせ</button>
             <button type="button" class="shogi-tournament__start" data-pro-advance @click="emit('life', { kind: 'week-advance' })">
               {{ week?.applied ? "週の続きを進める" : "この週を進める" }}
@@ -405,6 +466,60 @@
           </div>
         </template>
       </section>
+
+      <!-- 将棋ニュースの紙面(14-3の3)。 -->
+      <div v-if="newsOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="将棋ニュース" data-pro-news-sheet @click.self="newsOpen = null">
+        <div class="shogi-tournament__sheet-panel pro-year__paper">
+          <p class="pro-year__paper-mast"><b>週刊 将棋ニュース</b><span>第{{ newsOpen.number }}週 {{ shortDate(newsOpen.start) }}〜{{ shortDate(newsOpen.end) }}</span></p>
+          <h2 class="pro-year__paper-head">{{ newsOpen.headline }}</h2>
+          <p v-if="newsOpen.lead" class="pro-year__paper-lead">{{ newsOpen.lead }}</p>
+          <ul v-if="newsOpen.lines.length" class="pro-year__paper-lines">
+            <li v-for="(line, index) in newsOpen.lines" :key="index">{{ line }}</li>
+          </ul>
+          <p v-if="newsOpen.record" class="pro-year__paper-record">{{ newsOpen.record }}</p>
+          <p v-if="newsOpen.letter" class="pro-year__letter"><span class="pro-year__letter-env" aria-hidden="true">✉</span><span>{{ newsOpen.letter.text }}<small>ファンレター・{{ newsOpen.letter.from }}より</small></span></p>
+          <p v-if="newsOpen.hanane" class="pro-year__paper-hanane"><img class="pro-year__sprite" :src="hananeSprite" alt="" draggable="false"><span>{{ newsOpen.hanane }}</span></p>
+          <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" data-pro-news-close @click="newsOpen = null">閉じる</button>
+        </div>
+      </div>
+
+      <!-- 取材(14-3の5)。どの答えでもファン＋15。 -->
+      <div v-if="interviewOpen && week?.interview" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="取材" data-pro-interview-sheet @click.self="interviewOpen = false">
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
+          <p class="pro-year__interview-reporter">{{ week.interview.reporter }}</p>
+          <h2>「{{ week.interview.question }}」</h2>
+          <ul class="pro-year__actions">
+            <li v-for="answer in week.interview.answers" :key="answer.id">
+              <button type="button" class="pro-year__action" :data-pro-answer="answer.id" @click="answerInterview(answer.id)">
+                <span class="pro-year__slot-icon" aria-hidden="true">{{ answer.icon }}</span>
+                <span class="pro-year__slot-text"><b>{{ answer.text }}</b><small>{{ answer.label }}</small><em>ファン＋{{ INTERVIEW_FANS }}</em></span>
+              </button>
+            </li>
+          </ul>
+          <p class="shogi-tournament__text">答えは来週の将棋ニュースに載るよ。</p>
+          <div class="shogi-tournament__actions shogi-tournament__actions--two">
+            <button type="button" class="shogi-tournament__sub" data-pro-answer="none" @click="answerInterview(null)">今は答えない</button>
+            <button type="button" class="shogi-tournament__sub" @click="interviewOpen = false">閉じる</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分身のシート(14-3の2)。 -->
+      <div v-if="avatarOpen && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="分身の能力" data-pro-avatar-sheet @click.self="avatarOpen = false">
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
+          <h2>分身の能力<small>点線は今週のはじめ</small></h2>
+          <div class="pro-year__radar"><RadarChart :axes="avatarAxes" :compare="avatarBefore" bare /></div>
+          <ul class="pro-year__abars">
+            <li v-for="row in week.avatar.rows" :key="row.key" :class="{ 'pro-year__abar--up': row.up }">
+              <span>{{ row.label }}</span><b>Lv{{ row.level }}{{ row.up ? " ↑" : "" }}</b>
+              <span class="pro-year__abar-track" aria-hidden="true"><i :style="{ width: `${Math.round(row.ratio * 100)}%` }"></i></span>
+              <small>{{ row.level >= 10 ? "最高" : `次まで ${row.need}` }}</small>
+            </li>
+          </ul>
+          <p class="shogi-tournament__text">分身に任せる・勝負どころからの強さ ＋{{ week.avatar.edge }}。自分で指すときの強さは、あなたの腕のまま。任せた対局では育たないよ。</p>
+          <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="avatarOpen = false">閉じる</button>
+        </div>
+      </div>
 
       <!-- 勝負どころの局面を作っているあいだ(13-3の6。待つあいだもやめられる。UD:5-3) -->
       <div v-if="cutBusy" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="控室で準備しています" data-pro-cut-busy>
@@ -422,6 +537,7 @@
           <h2>行動を選ぶ<small>（{{ slotSheet + 1 }}つめ）</small></h2>
           <ul class="pro-year__actions">
             <li v-for="item in week.actions" :key="item.id">
+              <p v-if="item.work && item.id === firstWorkId" class="pro-year__action-head">今週の仕事の依頼（1つまで）</p>
               <button
                 type="button"
                 class="pro-year__action"
@@ -435,10 +551,19 @@
                   <b>{{ actionTitle(item) }}</b>
                   <small>{{ item.note }}</small>
                   <em>{{ actionTaken(item.id) ? "もう1つの枠で選んでいるよ" : item.effect }}</em>
+                  <i v-if="item.grow" class="pro-year__gain">{{ item.grow }}</i>
                 </span>
               </button>
             </li>
+            <li v-if="week.lockedWork">
+              <p v-if="!firstWorkId" class="pro-year__action-head">今週の仕事の依頼</p>
+              <button type="button" class="pro-year__action pro-year__action--lock" disabled data-pro-action-locked>
+                <span class="pro-year__slot-icon" aria-hidden="true">{{ week.lockedWork.icon }}</span>
+                <span class="pro-year__slot-text"><b>{{ week.lockedWork.label }}</b><small>ファン{{ KAISETSU_FANS }}人か、本戦・リーグ入りで開く（あと{{ week.lockedWork.need }}人）</small></span>
+              </button>
+            </li>
           </ul>
+          <p v-if="firstWorkId" class="pro-year__action-tip">仕事をすると、お金とファンが増えて、分身も育つよ！</p>
           <div class="shogi-tournament__actions shogi-tournament__actions--two">
             <button type="button" class="shogi-tournament__sub" data-pro-action="none" @click="pickAction(null)">何もしない</button>
             <button type="button" class="shogi-tournament__sub" @click="slotSheet = null">閉じる</button>
@@ -674,6 +799,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import RyuoBracket from "./RyuoBracket.vue";
+import RadarChart from "./RadarChart.vue";
+import { KAISETSU_FANS } from "./core/pro-work.mjs";
+import { INTERVIEW_FANS } from "./core/pro-news.mjs";
 import ProFestival from "./ProFestival.vue";
 import NovelScene from "./NovelScene.vue";
 import { proYearScene, proYearSceneDue } from "./core/pro-year-story.mjs";
@@ -829,9 +957,37 @@ const actionTitle = (item: WeekAction | null) => {
   if (item.id === "research") return `研究：${nameText(item.target)}`;
   if (item.id === "festival") return `${item.name ?? item.label}（${item.dateText ?? ""}）`;
   if (item.id === "study") return `研究会（${item.dateText ?? ""}）`;
+  if (item.id.startsWith("work-")) return `${item.label}（${item.dateText ?? ""}）`;
   return item.label;
 };
 const slotSheet = ref<number | null>(null);
+/** 行動のシートで、仕事の依頼の見出しを出す最初の行。 */
+const firstWorkId = computed(() => week.value?.actions.find((item: { work?: string }) => item.work)?.id ?? "");
+
+// ---- ニュース・取材・分身・仕事(14章)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const newsOpen = ref<any>(null);
+const interviewOpen = ref(false);
+const avatarOpen = ref(false);
+function answerInterview(id: string | null) {
+  interviewOpen.value = false;
+  emit("life", { kind: "interview", answer: id });
+}
+/** 分身のレーダーチャート(Lv×10)と、今週のはじめの点線。 */
+const avatarAxes = computed(() => (week.value?.avatar.rows ?? []).map((row: { key: string; label: string; level: number }) => ({ key: row.key, label: row.label, value: row.level * 10 })));
+const avatarBefore = computed(() => (week.value?.avatar.rows ?? []).map((row: { before: number }) => row.before * 10));
+/** 仕事を遊ぶ。解説は中継の画面の次の一手で(大会の画面が開く)、指導と詰将棋は対局画面が受け持つ。 */
+function playWork() {
+  const work = view.value?.work;
+  if (!work || !props.state) return;
+  if (work.id === "kaisetsu") {
+    const entry = work.game ? proYearRelayGame(props.state, work.game) : null;
+    if (entry) emit("watch", { ...entry, job: { title: "大盤解説の仕事", quizzes: 5 } });
+    else emit("life", { kind: "work-quick" });
+    return;
+  }
+  emit("life", { kind: "work-play" });
+}
 /** 研究会とまつりは週に1回(もう1つの枠で選んでいたら選べない)。 */
 const actionTaken = (id: string) => (id === "study" || id === "festival")
   && (week.value?.chosen ?? []).some((item: string | null, index: number) => item === id && index !== slotSheet.value);
@@ -860,7 +1016,7 @@ const STAMP_TEXT = { done: "達成", near: "あと一歩", miss: "届かず" } a
 const goals = computed(() => (props.state ? goalProgress(props.state) : []));
 const bigGame = computed(() => (props.state ? nextBigGame(props.state) : null));
 const goalChoiceList = computed(() => (props.state ? goalChoices(props.state) : []));
-const goalSheetOpen = computed(() => Boolean(props.state && !props.state.yearDone && !props.state.pending && !props.state.festival && props.state.goals?.fy !== props.state.fy));
+const goalSheetOpen = computed(() => Boolean(props.state && !props.state.yearDone && !props.state.pending && !props.state.festival && !props.state.work && props.state.goals?.fy !== props.state.fy));
 const goalPick = ref<string[]>([]);
 watch(goalSheetOpen, (open) => {
   if (open) goalPick.value = goalChoiceList.value.filter((goal: { recommended: boolean }) => goal.recommended).map((goal: { id: string }) => goal.id).slice(0, GOAL_PICK);
@@ -1093,6 +1249,10 @@ function goBack() {
   if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (autoOpen.value) autoOpen.value = false;
+  else if (newsOpen.value) newsOpen.value = null;
+  else if (interviewOpen.value) interviewOpen.value = false;
+  else if (avatarOpen.value) avatarOpen.value = false;
+  else if (slotSheet.value !== null) slotSheet.value = null;
   else if (eventId.value) eventId.value = "";
   else if (dayDate.value) dayDate.value = "";
   else return false;
@@ -1202,6 +1362,82 @@ defineExpose({ goBack });
 .shogi-game .pro-year__goal-seal { display: inline-grid; flex: none; place-items: center; min-width: 2.6rem; padding: 0.05rem 0.3rem; border: 0.12rem solid currentColor; border-radius: 0.3rem; color: #e74c3c; font-size: 0.7rem; font-weight: 900; transform: rotate(-6deg); }
 .shogi-game .pro-year__goal-stamp--near .pro-year__goal-seal { color: #e9c46a; }
 .shogi-game .pro-year__goal-stamp--miss .pro-year__goal-seal { color: #95a5a6; }
+/* ニュース・取材・分身・仕事(14章) */
+.shogi-game .pro-year__weekpanel > * { flex: none; }
+.shogi-game .shogi-tournament__hud .pro-year__advance .shogi-tournament__start,
+.shogi-game .shogi-tournament__hud .pro-year__advance .shogi-tournament__sub { min-width: 0; font-size: 0.95rem; letter-spacing: 0; line-height: 1.25; white-space: normal; }
+.shogi-game .pro-year__news {
+  display: grid; gap: 0.15rem; width: 100%; padding: 0.45rem 0.6rem 0.45rem 0.75rem; border: 0.08rem solid #cbbd9c; border-left: 0.35rem solid #c2493a; border-radius: 0.5rem;
+  color: #1d303f; background: #f6f0e1; text-align: left; cursor: pointer;
+}
+.shogi-game .pro-year__news-mast { display: flex; align-items: baseline; gap: 0.4rem; color: #8a6a3a; font-size: 0.66rem; font-weight: 900; letter-spacing: 0.1em; }
+.shogi-game .pro-year__news-mast small { margin-left: auto; color: #6b7c88; letter-spacing: 0; }
+.shogi-game .pro-year__news-head { font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 1rem; line-height: 1.3; }
+.shogi-game .pro-year__news-lead { color: #3c4f5c; font-size: 0.74rem; font-weight: 700; }
+.shogi-game .pro-year__news-more { justify-self: end; color: #c2493a; font-size: 0.68rem; font-weight: 900; }
+.shogi-game .pro-year__interview {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; width: 100%; padding: 0.4rem 0.55rem;
+  border: 0.12rem solid #8fd0e8; border-radius: 0.6rem; color: inherit; background: rgba(143, 208, 232, 0.12); text-align: left; cursor: pointer;
+}
+.shogi-game .pro-year__interview span { display: grid; min-width: 0; font-size: 0.8rem; }
+.shogi-game .pro-year__interview small { overflow: hidden; color: #cfd8de; font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .pro-year__interview-icon { display: grid !important; place-items: center; width: 2rem; height: 2rem; border-radius: 50%; color: #172632; background: #8fd0e8; font-weight: 900; }
+.shogi-game .pro-year__interview-go { padding: 0.2rem 0.6rem; border: 0.08rem solid rgba(255, 255, 255, 0.4); border-radius: 0.4rem; font-weight: 900; }
+.shogi-game .pro-year__interview-reporter { margin: 0; color: #526878; font-size: 0.8rem; font-weight: 800; }
+.shogi-game .pro-year__avatar-row {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.35rem 0.55rem; border: 0.08rem solid rgba(255, 255, 255, 0.18); border-radius: 0.6rem;
+  color: inherit; background: rgba(23, 38, 50, 0.85); text-align: left; cursor: pointer;
+}
+.shogi-game .pro-year__avatar-icon { background: #3d5a70; color: #fffcf4; }
+.shogi-game .pro-year__avatar-bar { display: block; height: 0.3rem; margin-top: 0.2rem; border-radius: 999px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+.shogi-game .pro-year__avatar-bar i { display: block; height: 100%; background: #7bd3a8; }
+.shogi-game .pro-year__gain { color: #7bd3a8; font-style: normal; font-weight: 900; }
+.shogi-game .pro-year__action .pro-year__gain { font-size: 0.72rem; }
+.shogi-game .pro-year__action-head { margin: 0.2rem 0 0.15rem; color: #8a6a3a; font-size: 0.75rem; font-weight: 900; }
+.shogi-game .pro-year__action--lock { opacity: 0.5; }
+.shogi-game .pro-year__action-tip { margin: 0 0 0.5rem; color: #526878; font-size: 0.78rem; font-weight: 800; }
+.shogi-game .pro-year__workcard { display: grid; gap: 0.25rem; padding: 0.45rem 0.6rem; border: 0.12rem solid #8fd0e8; border-radius: 0.8rem; background: rgba(23, 38, 50, 0.9); }
+.shogi-game .pro-year__workcard p { margin: 0; }
+.shogi-game .pro-year__work-tag { padding: 0 0.4rem; border-radius: 0.3rem; color: #172632; background: #8fd0e8; font-size: 0.7rem; font-weight: 900; }
+.shogi-game .pro-year__work-title { font-size: 1.05rem; font-weight: 900; }
+.shogi-game .pro-year__work-note { color: #cfd8de; font-size: 0.78rem; font-weight: 700; }
+.shogi-game .pro-year__work-terms { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; font-size: 0.8rem; }
+.shogi-game .shogi-tournament__hud .pro-year__workcard ~ .shogi-tournament__actions small { display: block; font-size: 0.66rem; font-weight: 700; }
+.shogi-game .pro-year__paper { display: grid; gap: 0.55rem; max-height: 88vh; overflow-y: auto; padding: 0.9rem; color: #1d303f; background: #f6f0e1; }
+.shogi-game .pro-year__paper p { margin: 0; }
+.shogi-game .pro-year__paper-mast { display: flex; align-items: baseline; gap: 0.5rem; padding-bottom: 0.35rem; border-bottom: 0.2rem double #1d303f; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; }
+.shogi-game .pro-year__paper-mast b { font-size: 1.2rem; }
+.shogi-game .pro-year__paper-mast span { margin-left: auto; color: #6b7c88; font-size: 0.72rem; }
+.shogi-game .pro-year__paper-head { margin: 0; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 1.35rem; line-height: 1.3; }
+.shogi-game .pro-year__paper-lead { font-size: 0.85rem; font-weight: 700; line-height: 1.6; }
+.shogi-game .pro-year__paper-lines { display: grid; gap: 0.2rem; margin: 0; padding: 0.4rem 0 0; border-top: 0.06rem solid #cbbd9c; list-style: none; font-size: 0.8rem; font-weight: 700; }
+.shogi-game .pro-year__paper-lines li::before { content: "■ "; color: #c2493a; }
+.shogi-game .pro-year__paper-record { padding: 0.3rem 0.5rem; border: 0.06rem solid #cbbd9c; border-radius: 0.4rem; font-size: 0.78rem; font-weight: 800; }
+.shogi-game .pro-year__paper-hanane { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.5rem; border-left: 0.2rem solid #7bd3a8; background: #fff; font-size: 0.82rem; font-weight: 800; }
+.shogi-game .pro-year__paper-hanane img { width: 2rem; height: 2.6rem; flex: none; }
+.shogi-game .pro-year__paper .shogi-tournament__sub { color: #1d303f; background: #e9e2d2; border-color: #cfc4ad; }
+.shogi-game .pro-year__letter { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.4rem 0.55rem; border: 0.08rem dashed #c2493a; border-radius: 0.5rem; color: #1d303f; background: #fff; font-size: 0.78rem; font-weight: 700; }
+.shogi-game .pro-year__letter small { display: block; color: #6b7c88; font-size: 0.68rem; }
+.shogi-game .pro-year__letter-env { display: grid; flex: none; place-items: center; width: 2rem; height: 1.5rem; border-radius: 0.2rem; color: #c2493a; background: #f2c9c2; font-weight: 900; }
+.shogi-game .pro-year__letter--next { opacity: 0.6; }
+.shogi-game .pro-year__letters { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__ranks { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.4rem; }
+.shogi-game .pro-year__rank { display: grid; gap: 0.15rem; padding: 0.4rem 0.5rem; border: 0.08rem solid rgba(255, 255, 255, 0.18); border-radius: 0.5rem; background: rgba(23, 38, 50, 0.85); font-size: 0.78rem; }
+.shogi-game .pro-year__rank > b { color: var(--amber, #f1a54c); }
+.shogi-game .pro-year__rank ol { display: grid; gap: 0.1rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__rank li { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) auto; gap: 0.3rem; }
+.shogi-game .pro-year__rank li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .pro-year__rank-near { color: var(--amber, #f1a54c); font-weight: 800; }
+.shogi-game .pro-year__radar { display: grid; justify-items: center; }
+.shogi-game .pro-year__radar svg { width: min(100%, 15rem); height: auto; }
+.shogi-game .pro-year__abars { display: grid; gap: 0.3rem; margin: 0 0 0.5rem; padding: 0; list-style: none; }
+.shogi-game .pro-year__abars li { display: grid; grid-template-columns: 3.6rem 3rem minmax(0, 1fr) 4rem; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 800; }
+.shogi-game .pro-year__abar-track { height: 0.55rem; border-radius: 999px; background: #e1d9c6; overflow: hidden; }
+.shogi-game .pro-year__abar-track i { display: block; height: 100%; background: #3aa37a; }
+.shogi-game .pro-year__abars small { color: #526878; text-align: right; }
+.shogi-game .pro-year__abar--up b, .shogi-game .pro-year__abar--up span:first-child { color: #2f7a5a; }
+.shogi-game .pro-year__summary-heads { display: grid; gap: 0.15rem; margin: 0.25rem 0 0; padding: 0; list-style: none; font-size: 0.8rem; font-weight: 800; }
+.shogi-game .pro-year__summary-heads small { margin-right: 0.4rem; color: #cfd8de; }
 /* 公式戦の3つの指し方(13-3の5・6) */
 .shogi-game .pro-year__ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
 .shogi-game .pro-year__ways button,

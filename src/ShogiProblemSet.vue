@@ -145,7 +145,7 @@
           <div class="shogi-dex__explanation">
             <!-- 「つぎはこれ」の練習: 5問で一区切り。 -->
             <p v-if="drill" class="shogi-problems__drill" data-drill-count>
-              練習 <strong>{{ Math.min(drillSolvedIds.length, DRILL_PROBLEMS_PER_ROUND) }}</strong>/{{ DRILL_PROBLEMS_PER_ROUND }}問
+              {{ props.drill?.title ?? "練習" }} <strong>{{ Math.min(drillSolvedIds.length, drillCount) }}</strong>/{{ drillCount }}問
             </p>
             <div class="shogi-dex__speech">
               <img class="shogi-dex__chara" :src="charaUrl" alt="" aria-hidden="true">
@@ -178,7 +178,7 @@
               <button v-if="phase === 'solved' && freeMoves.length" type="button" @click="undoFreeMove">1手戻す</button>
               <button v-if="phase === 'solved' && freeMoves.length" type="button" @click="restoreSolvedPosition">全部戻す</button>
               <template v-if="phase === 'solved' && drill">
-                <button v-if="drillDone" type="button" class="shogi-tutorial__primary" data-drill-done @click="emit('close')">つぎはこれへ戻る</button>
+                <button v-if="drillDone" type="button" class="shogi-tutorial__primary" data-drill-done @click="closeScreen">{{ props.drill?.doneLabel ?? "つぎはこれへ戻る" }}</button>
                 <button v-else-if="drillNext" type="button" class="shogi-tutorial__primary" @click="openProblem(drillNext.id)">次の問題</button>
                 <button type="button" @click="retry">もう一度解く</button>
               </template>
@@ -257,9 +257,13 @@ const props = defineProps({
    * 「つぎはこれ」の弱点の練習(docs/first-play-design.mdの6-1)。5問で一区切りにし、解き終えたら「つぎはこれ」へ戻す。
    * firstProblemIdがあれば、その問題(あなたの対局で逃した詰み)から始める。
    */
-  drill: { type: Object as PropType<{ section: "practice" | "tsume"; kind?: "tsume" | "jissen"; plies?: number | null; firstProblemId?: string } | null>, default: null },
+  drill: {
+    type: Object as PropType<{ section: "practice" | "tsume"; kind?: "tsume" | "jissen"; plies?: number | null; firstProblemId?: string; count?: number; doneLabel?: string; title?: string } | null>,
+    default: null,
+  },
 });
-const emit = defineEmits(["close"]);
+// 練習を閉じるときは、解けた数も知らせる(棋士の1年の詰将棋の仕事。docs/pro-year-design.mdの14-3の1)。
+const emit = defineEmits<{ close: []; "drill-result": [solved: number] }>();
 
 const charaUrl = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const storage = typeof localStorage === "undefined" ? null : localStorage;
@@ -337,8 +341,13 @@ function goBack() {
   } else if (section.value === "tsume" && tsumeKind.value) {
     tsumeKind.value = null;
   } else {
-    emit("close");
+    closeScreen();
   }
+}
+/** 画面を閉じる(練習のときは解けた数も知らせる)。 */
+function closeScreen() {
+  if (drill.value) emit("drill-result", drillSolvedIds.value.length);
+  emit("close");
 }
 function selectSection(id: SectionId) {
   // 詰将棋のタブを押し直したら、種類の選び直しに戻る。
@@ -544,7 +553,9 @@ onMounted(() => {
 const drill = ref(props.drill ? drillProblems(props.drill, Object.keys(progress.value.solved)) as { problems: Problem[]; plies: number | null } : null);
 /** 練習で解いた問題(この画面を開いているあいだ)。 */
 const drillSolvedIds = ref<string[]>([]);
-const drillDone = computed(() => drillSolvedIds.value.length >= DRILL_PROBLEMS_PER_ROUND);
+/** 練習の問題数(ふだんは5問。詰将棋の仕事は3問)。 */
+const drillCount = computed(() => Math.max(1, Number(props.drill?.count) || DRILL_PROBLEMS_PER_ROUND));
+const drillDone = computed(() => drillSolvedIds.value.length >= drillCount.value);
 /** 練習の次の問題。並びの中で、この練習でまだ解いていない次の問題。 */
 const drillNext = computed(() => {
   const list = drill.value?.problems ?? [];
@@ -555,7 +566,7 @@ const drillNext = computed(() => {
 function noteDrillSolved(id: string) {
   if (!drill.value || drillSolvedIds.value.includes(id)) return;
   drillSolvedIds.value = [...drillSolvedIds.value, id];
-  if (drillDone.value) speech.value = `${speech.value} ${DRILL_PROBLEMS_PER_ROUND}問解けたね！ この力で、次の対局も勝ちにいこう！`;
+  if (drillDone.value) speech.value = `${speech.value} ${drillCount.value}問解けたね！ この力で、次の対局も勝ちにいこう！`;
 }
 /** 選んでいる詰将棋の種類から、手数も問わずランダムに出題する。まだ解いていない問題を優先する。 */
 function openRandomProblem() {

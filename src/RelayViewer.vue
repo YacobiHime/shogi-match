@@ -6,7 +6,7 @@
   -->
   <div ref="rootEl" class="relay" role="dialog" aria-modal="true" :aria-label="`対局中継 ${spec.label}`" data-relay tabindex="-1" @keydown="onKey">
     <header class="relay__head">
-      <button type="button" class="relay__close" aria-label="中継を閉じる" data-relay-close @click="emit('close')">
+      <button type="button" class="relay__close" aria-label="中継を閉じる" data-relay-close @click="closeViewer">
         <span aria-hidden="true">←</span><span class="relay__close-text">閉じる</span>
       </button>
       <div class="relay__title">
@@ -136,6 +136,14 @@
         <div v-else-if="tsumeOffer" class="relay__fun relay__fun--tsume" data-relay-tsume-offer>
           <p class="relay__fun-head"><b>投了図から詰将棋</b><span>{{ tsumeOfferText }}</span></p>
           <button type="button" class="relay__fun-close relay__fun-go" data-relay-tsume-start @click="startTsume">解いてみる</button>
+        </div>
+        <!-- 大盤解説の仕事(棋士の1年。docs/pro-year-design.mdの14-3の1)。次の一手をjob.quizzes問当てる。 -->
+        <div v-if="job && !quiz" class="relay__fun relay__fun--job" data-relay-job>
+          <p class="relay__fun-head"><b>{{ job.title }}</b><span>次の一手 {{ jobAnswered }}/{{ job.quizzes }}問・当たり{{ jobHits }}問{{ jobAnswered >= job.quizzes ? "。おつかれさま！" : "。「次の一手」で出題しよう" }}</span></p>
+          <span class="relay__job-actions">
+            <button v-if="jobAnswered < job.quizzes" type="button" class="relay__fun-close relay__fun-go" :disabled="!quizAvailable" data-relay-job-quiz @click="startQuiz">出題する</button>
+            <button type="button" class="relay__fun-close" data-relay-job-done @click="closeViewer">{{ jobAnswered >= job.quizzes ? "解説を終える" : "ここで終える" }}</button>
+          </span>
         </div>
         <div v-else-if="quiz" class="relay__fun relay__fun--quiz" data-relay-quiz-panel>
           <p class="relay__fun-head"><b>次の一手</b><span>{{ quiz.at }}手目、{{ players[quizSide].name }}はどう指す？</span></p>
@@ -331,8 +339,17 @@ const props = defineProps({
     } | null>,
     default: null,
   },
+  /** 大盤解説の仕事(棋士の1年)。次の一手をquizzes問出し、閉じるときに当たった数を知らせる。 */
+  job: { type: Object as PropType<{ title: string; quizzes: number } | null>, default: null },
 });
-const emit = defineEmits<{ close: []; seen: [key: string] }>();
+const emit = defineEmits<{ close: []; seen: [key: string]; "job-done": [hits: number] }>();
+/** 大盤解説の仕事の進み(答えた数と当たった数)。 */
+const jobAnswered = ref(0);
+const jobHits = ref(0);
+function closeViewer() {
+  if (props.job) emit("job-done", jobHits.value);
+  emit("close");
+}
 
 const TABS = [
   { id: "talk", label: "解説" },
@@ -978,6 +995,11 @@ watch(cursor, (value) => {
     quizStore.value = scoreQuiz(quizStore.value, hit);
     saveQuiz(browserStorage(), quizStore.value);
     quiz.value = { ...current, result: hit ? "hit" : "miss", actualText: kifuText(current.at) };
+    if (props.job) {
+      jobAnswered.value += 1;
+      if (hit) jobHits.value += 1;
+      emit("job-done", jobHits.value);
+    }
     if (hit) celebrateQuiz();
     clearTimeout(quizTimer);
     quizTimer = setTimeout(() => { if (quiz.value?.at === current.at) quiz.value = null; }, 3600 / Math.sqrt(speed.value));
@@ -1802,6 +1824,8 @@ onBeforeUnmount(() => {
 .shogi-game .relay__fun-text--hit { color: #ffd27a; font-size: 1.05rem; }
 .shogi-game .relay__fun-text--miss { color: #c9d6e6; }
 .shogi-game .relay__fun-close { grid-row: 1; grid-column: 2; align-self: start; min-height: 44px; padding: 0 0.8rem; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 0.35rem; color: #fffcf4; background: transparent; font: inherit; font-size: 0.8rem; cursor: pointer; }
+.shogi-game .relay__job-actions { grid-row: 1; grid-column: 2; display: flex; gap: 0.3rem; align-self: start; }
+.shogi-game .relay__job-actions .relay__fun-close { grid-row: auto; grid-column: auto; }
 .shogi-game .relay__quiz-choices { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; }
 .shogi-game .relay__quiz-choices button { min-height: 44px; padding: 0 0.2rem; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 0.4rem; color: #fffcf4; background: rgba(255, 252, 244, 0.08); font: inherit; font-weight: 900; cursor: pointer; }
 .shogi-game .relay__toast { position: absolute; left: 50%; top: 0.5rem; z-index: 7; margin: 0; padding: 0.3rem 0.7rem; border-radius: 999px; color: #172632; background: #f1a54c; font-size: 0.8rem; font-weight: 900; width: max-content; max-width: 90%; text-align: center; transform: translateX(-50%); }

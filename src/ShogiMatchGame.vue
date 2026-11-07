@@ -455,6 +455,7 @@
       :start-problem-id="problemSetStart?.id ?? ''"
       :start-review="problemSetStart?.review ?? false"
       :drill="problemSetDrill"
+      @drill-result="onProblemDrillResult"
       @close="problemSetOpen = false"
     />
     <!-- 図鑑は教室の上に重ねて開き、閉じると教室へ戻る。 -->
@@ -2928,7 +2929,8 @@ import { teamCeremonyView } from "./core/team-ceremony.mjs";
 import { championBanner, championNewspaper, championTitle, teamStreak, teamTrophy } from "./core/team-celebration.mjs";
 import { peekBoards, peekThought, peekVoice } from "./core/team-peek.mjs";
 import {
-  advanceToNextGame as advanceProYearToNextGame, advanceWeek as advanceProYearWeek, autoWeeks as autoProYearWeeks, chooseWeekAction as chooseProYearWeekAction, setYearGoals as setProYearGoals, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
+  advanceToNextGame as advanceProYearToNextGame, advanceWeek as advanceProYearWeek, autoWeeks as autoProYearWeeks, answerInterview as answerProYearInterview, finishWork as finishProYearWork,
+  startWorkShidou as startProYearWorkShidou, chooseWeekAction as chooseProYearWeekAction, setYearGoals as setProYearGoals, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
   fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
   recordFestivalEvent as recordProYearFestivalEvent, recordProGame, recordShidou as recordProYearShidou, recordStudyGame as recordProYearStudy, saveProYear,
   startNextYear as startNextProYear, startShidou as startProYearShidou,
@@ -8220,7 +8222,33 @@ function proYearLife(action: { kind: string; [key: string]: unknown }) {
     setProYear(autoProYearWeeks(state));
   } else if (action.kind === "set-goals" && Array.isArray(action.ids)) {
     setProYear(setProYearGoals(state, action.ids.map(String)));
+  } else if (action.kind === "interview") {
+    // 取材に答える(docs/pro-year-design.mdの14-3の5)。答えずに閉じるときはnull。
+    setProYear(answerProYearInterview(state, typeof action.answer === "string" ? action.answer : null));
+  } else if (action.kind === "work-quick" || action.kind === "work-done") {
+    // 仕事を終える(さっと済ませる・遊んだ出来。14-3の1)。
+    if (!state.work) return;
+    setProYear(finishProYearWork(state, action.kind === "work-quick" ? { quick: true } : { score: Number(action.score) || 0 }).state);
+  } else if (action.kind === "work-play" && state.work?.id === "shidou") {
+    // 指導の仕事: 将棋サロンのお客と駒落ちの指導対局(あなたが上手)。
+    setProYear(startProYearWorkShidou(state));
+    if (proYearState.value?.pending?.kind === "shidou") startProYearGame();
+  } else if (action.kind === "work-play" && state.work?.id === "tsume") {
+    // 詰将棋の仕事: 問題集の練習の出し方で3問。閉じたら解けた数で仕事を終え、棋士の1年へ戻る。
+    proYearTsumeJob = true;
+    tournamentOpen.value = false;
+    problemSetDrill.value = { section: "tsume", kind: "tsume", plies: 5, count: 3, title: "詰将棋の監修", doneLabel: "棋士の1年へ戻る" } as PracticeDrill;
+    problemSetOpen.value = true;
   }
+}
+/** 詰将棋の仕事で問題集を開いているか(閉じたら解けた数で仕事を終える)。 */
+let proYearTsumeJob = false;
+function onProblemDrillResult(solved: number) {
+  if (!proYearTsumeJob) return;
+  proYearTsumeJob = false;
+  const state = proYearState.value;
+  if (state?.work?.id === "tsume") setProYear(finishProYearWork(state, { score: solved }).state);
+  openTournamentAt("pro-year");
 }
 /** 年度のまとめから「次の年度へ」。 */
 function nextProYear() {
@@ -8264,7 +8292,8 @@ function recordProYearOutcome(matchResult: MatchResult) {
     return;
   }
   const outcome = matchResult.winner === humanColor.value ? "win" : "loss";
-  const result = recordProGame(state, outcome);
+  // 勝負どころから指した対局は、分身の育ち方が違う(docs/pro-year-design.mdの14-3の2)。
+  const result = recordProGame(state, outcome, { way: learningStartLabel.value === PRO_YEAR_CUT_LABEL ? "cut" : "full" });
   const milestones: { kind: string; text: string; event: string }[] = result.milestones ?? [];
   const champions = result.champions ?? [];
   const advanced = milestones.filter((item) => item.kind === "advance");
