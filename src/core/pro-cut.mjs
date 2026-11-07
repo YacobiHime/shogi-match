@@ -5,6 +5,7 @@
 import { appendUsiMove, createGameRecord, STANDARD_SFEN } from '../game-state';
 import { relaySeed } from './relay-game.mjs';
 import { autoRatingBonus } from './pro-week.mjs';
+import { avatarEdge } from './pro-avatar.mjs';
 
 /** 止める手数の幅(この中で、あなたの手番になる手数)。 */
 export const CUT_PLIES = Object.freeze({ min: 36, max: 44, floor: 20 });
@@ -17,7 +18,7 @@ const PRO_USER_ID = 'you';
 
 /**
  * 局面を作る中継の局の設定(relay-game.mjsのspec)。公式戦の対局待ちでなければnull。
- * 形勢の筋書きは五分から、調子と対策の分だけあなたに寄せる(13-3の3)。止める手数は、あなたの手番になる数。
+ * 形勢の筋書きは五分から、調子と対策と育てた分身の分だけあなたに寄せる(13-3の3・14-3の2)。止める手数は、あなたの手番になる数。
  * @param {any} state 棋士の1年の状態
  * @param {{ userName?: string, userCharacter?: any }} [options]
  * @returns {{ spec: any, plies: number, color: 'black' | 'white' } | null}
@@ -34,7 +35,7 @@ export function cutSpec(state, { userName = 'あなた', userCharacter = null } 
   const span = CUT_PLIES.max - CUT_PLIES.min + 1;
   let plies = CUT_PLIES.min + (seed % span);
   if ((plies % 2 === 0) !== (color === 'black')) plies = plies + 1 > CUT_PLIES.max ? plies - 1 : plies + 1;
-  const bonus = Math.max(-CUT_BONUS_CAP, Math.min(CUT_BONUS_CAP, autoRatingBonus(pending.condition ?? state.condition ?? 2, pending.prep?.stars ?? 0)));
+  const bonus = Math.max(-CUT_BONUS_CAP, Math.min(CUT_BONUS_CAP, autoRatingBonus(pending.condition ?? state.condition ?? 2, pending.prep?.stars ?? 0) + avatarEdge(state.avatar)));
   const sign = color === 'black' ? 1 : -1;
   const lean = Math.round(bonus * sign);
   const player = (side) => (side === color
