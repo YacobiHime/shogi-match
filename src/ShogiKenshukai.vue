@@ -91,6 +91,8 @@
           <h1 id="shogi-tournament-title">{{ runTitle }}</h1>
           <p class="shogi-tournament__topbar-sub" data-kenshukai-sub>{{ runSub }}</p>
         </div>
+        <!-- 途中で難易度を変える(docs/tournament-strength-spread-design.mdの11章) -->
+        <WorldDifficultyChip v-if="worldDifficulty !== null" ref="worldChip" :difficulty="worldDifficulty" :choices="difficultyChoices" @change="emit('world-change', $event)" />
       </header>
 
       <section class="shoreikai__main" :aria-label="runTitle">
@@ -295,6 +297,7 @@ import ShoreikaiNameboard, { type NameboardColumn } from "./ShoreikaiNameboard.v
 import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
+import WorldDifficultyChip from "./WorldDifficultyChip.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { CLASSES, CLASS_RATINGS, DEFAULT_SETTINGS, ENTRY_CLASSES, KENSHUKAI_SCALES, TOP, describeKenshukai, kenshukaiScale } from "./core/kenshukai.mjs";
@@ -309,6 +312,8 @@ type Settings = { difficulty: number; scale: string; shido: boolean; coachLevel:
 type Career = { history: { result: string; best: string }[]; best: number | null; settings?: Partial<Settings> };
 
 const props = defineProps({
+  /** 期・挑戦の途中のいまの難易度の番号(途中で変える札に出す。なければnull。docs/tournament-strength-spread-design.mdの11章)。 */
+  worldDifficulty: { type: Number as PropType<number | null>, default: null },
   view: { type: Object as PropType<KenshukaiView | null>, default: null },
   career: { type: Object as PropType<Career>, required: true },
   recommendedClass: { type: Number, default: 0 },
@@ -333,7 +338,10 @@ const props = defineProps({
   shoreikaiFailed: { type: Boolean, default: false },
   backLabel: { type: String, default: "戻る" },
 });
+const worldChip = ref<{ goBack: () => boolean } | null>(null);
 const emit = defineEmits<{
+  /** 途中で難易度を変えた(番号)。 */
+  "world-change": [difficulty: number];
   /** 難易度のシートの「棋力を測る」(docs/first-play-design.mdの13章)。 */
   measure: [];
   enter: [payload: { settings: Settings; entryClass: number }];
@@ -546,6 +554,8 @@ onMounted(() => {
 
 /** 戻る操作。重ねて開いたものを閉じたら真。何も開いていなければ偽(大会の選択へ戻る)。 */
 function goBack() {
+  // 途中で難易度を変えるシートを先に閉じる(11章)。
+  if (worldChip.value?.goBack()) return true;
   if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (detailOpen.value) detailOpen.value = false;

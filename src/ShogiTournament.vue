@@ -205,6 +205,8 @@
         <div ref="mainEl" class="shogi-tournament__main">
         <ShogiProYear
           v-if="screen === 'pro-year'"
+          :world-difficulty="worldDifficulty?.['pro-year'] ?? null"
+          @world-change="emit('world-change', { event: 'pro-year', difficulty: $event })"
           ref="proYearEl"
           :state="proYearState"
           :last-settings="proYearSettings"
@@ -233,6 +235,8 @@
         />
         <ShogiTeamBattle
           v-else-if="screen === 'team'"
+          :world-difficulty="worldDifficulty?.['team'] ?? null"
+          @world-change="emit('world-change', { event: 'team', difficulty: $event })"
           :player-call-name="playerCallName"
           :momoka-call="momokaCall"
           ref="teamEl"
@@ -269,6 +273,8 @@
         />
         <ShogiKenshukai
           v-else-if="screen === 'kenshukai'"
+          :world-difficulty="worldDifficulty?.['kenshukai'] ?? null"
+          @world-change="emit('world-change', { event: 'kenshukai', difficulty: $event })"
           ref="kenshukaiEl"
           :view="kenshukaiView"
           :career="kenshukaiCareer"
@@ -296,6 +302,8 @@
         />
         <ShogiShoreikai
           v-else-if="screen === 'shoreikai'"
+          :world-difficulty="worldDifficulty?.['shoreikai'] ?? null"
+          @world-change="emit('world-change', { event: 'shoreikai', difficulty: $event })"
           ref="shoreikaiEl"
           :view="shoreikaiView"
           :career="shoreikaiCareer"
@@ -323,6 +331,8 @@
         />
         <ShogiMeijin
           v-else-if="screen === 'meijin'"
+          :world-difficulty="worldDifficulty?.['meijin'] ?? null"
+          @world-change="emit('world-change', { event: 'meijin', difficulty: $event })"
           ref="meijinEl"
           :view="meijinView"
           :career="meijinCareer"
@@ -517,6 +527,8 @@
             <button v-if="predictionOptions" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-prediction-open @click="sheet = 'predict'">予想</button>
             <!-- ほかの棋士の対局の中継(docs/tournament-relay-design.mdの7章)。 -->
             <button v-if="relayEngineFactory" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-relay-open @click="openRelayList('ryuo')">中継</button>
+            <!-- 途中で難易度を変える(docs/tournament-strength-spread-design.mdの11章)。観戦のあとの見届けでは出さない。 -->
+            <WorldDifficultyChip v-if="!afterWatch && (worldDifficulty?.ryuo ?? null) !== null" ref="worldChip" :difficulty="worldDifficulty?.ryuo ?? null" :choices="difficultyChoices" @change="emit('world-change', { event: 'ryuo', difficulty: $event })" />
           </header>
 
           <!--
@@ -1029,6 +1041,7 @@ import YakobiSays from "./YakobiSays.vue";
 import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
+import WorldDifficultyChip from "./WorldDifficultyChip.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { SCALES, entryGoalLine, entryRoad, restOpen, scaleById } from "./core/ryuo.mjs";
 import { meijinRestOpen } from "./core/meijin.mjs";
@@ -1218,6 +1231,8 @@ const props = defineProps({
   proYearSuspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** 「勝負どころから指す」の局面を作っているあいだ(docs/pro-year-design.mdの13-3の6)。 */
   proYearCutBusy: { type: Boolean, default: false },
+  /** 大会ごとの、期・挑戦の途中のいまの難易度の番号(途中で変える札。docs/tournament-strength-spread-design.mdの11章)。 */
+  worldDifficulty: { type: Object as PropType<Record<string, number | null> | null>, default: null },
   /** 年度のまとめの「棋士の世界に残す」の札の中身(docs/pro-year-design.mdの15-3の8)。 */
   proYearWriteBack: { type: Array as PropType<{ ok: boolean; text: string }[] | null>, default: null },
   // ---- 対局中継(docs/tournament-relay-design.md)。期の保存の形(見られる対局を集める)と、棋譜を作るエンジン。
@@ -1288,6 +1303,8 @@ const emit = defineEmits<{
   /** 優勝インタビューと号外を終えた(team-battle-design.mdの21章)。 */
   "team-celebrate": [payload: { stage: string; answers: string[] }];
   "team-close": [];
+  /** 期・挑戦の途中で難易度を変えた(11章)。 */
+  "world-change": [payload: { event: string; difficulty: number }];
   "pro-year-enter": [payload: { settings: Record<string, unknown> }];
   "pro-year-advance": [];
   "pro-year-play": [];
@@ -1456,6 +1473,7 @@ const backText = computed(() => "戻る");
  * 戻る操作。重ねて開いたもの(くわしい情報・トーナメント表・説明)があれば、まずそれを閉じる。
  * 結果は見終えたことにして、大会の選択へ。ほかの画面も、大会の選択へ。選択の画面なら、閉じる。
  */
+const worldChip = ref<{ goBack: () => boolean } | null>(null);
 function goBack() {
   if (relayEntry.value) {
     // 中継の中で開いたもの(投了図からの詰将棋)を先に閉じる。
@@ -1467,6 +1485,7 @@ function goBack() {
     relayList.value = null;
     return;
   }
+  if (worldChip.value?.goBack()) return;
   // 中継ボードの予想のシートは、ボードを終える前に閉じる(34章)。
   if (livePanelEl.value?.closeSheet() || meijinEl.value?.closeLiveSheet()) return;
   if (afterWatch.value) {

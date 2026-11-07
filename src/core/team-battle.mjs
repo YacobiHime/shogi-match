@@ -904,14 +904,33 @@ export function userPlace(run) {
 
 // ---- プレイヤーの1局
 
+/** 相手を指させるLv(世界の物差し。本物の世界の善彦はLv49)。 */
+function teamOpponentLevel(run, opponent) {
+  const world = Number.isFinite(run.settings?.world) ? run.settings.world : recommendedWorldLevel(run.userLevel ?? 20);
+  const base = run.format === 'school' ? SCHOOL_BASE : WORLD_BASE_RATING;
+  return isRealWorld(world) && opponent.story === YOSHIHIKO ? MAX_CPU_LEVEL : worldCpuLevel(opponent.rating, world, base);
+}
+
+/**
+ * 団体戦の途中で難易度(世界)を変える(docs/tournament-strength-spread-design.mdの11章)。次の相手のLvも付け直す。
+ * @param {any} run
+ * @param {{ difficulty: number, world: number }} next
+ */
+export function retuneTeamWorld(run, { difficulty, world }) {
+  if (!run?.settings) return run;
+  const next = JSON.parse(JSON.stringify(run));
+  next.settings = { ...next.settings, difficulty, world };
+  const opponent = next.pending?.opponentId ? next.players?.[next.pending.opponentId] : null;
+  if (opponent) opponent.level = teamOpponentLevel(next, opponent);
+  return next;
+}
+
 /** プレイヤーの次の1局の相手を決め、Lvと戦法と先後を付ける(研修会のsetPendingと同じ形)。 */
 function setPending(run, rng, match, game) {
   const side = userSide(match);
   const opponentId = side === 'a' ? game.b : game.a;
   const opponent = run.players[opponentId];
-  const world = Number.isFinite(run.settings?.world) ? run.settings.world : recommendedWorldLevel(run.userLevel ?? 20);
-  const base = run.format === 'school' ? SCHOOL_BASE : WORLD_BASE_RATING;
-  opponent.level = isRealWorld(world) && opponent.story === YOSHIHIKO ? MAX_CPU_LEVEL : worldCpuLevel(opponent.rating, world, base);
+  opponent.level = teamOpponentLevel(run, opponent);
   const color = rng.next() < 0.5 ? 'black' : 'white';
   const style = opponent.repertoire
     ? pickGameStyle(rng, opponent.repertoire, { color: color === 'black' ? 'white' : 'black' })

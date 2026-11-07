@@ -96,6 +96,8 @@
         </div>
         <!-- ほかの棋士の対局の中継(docs/tournament-relay-design.mdの7章)。 -->
         <button v-if="relayAvailable" type="button" class="shogi-tournament__icon-btn shogi-tournament__icon-btn--wide" data-meijin-relay @click="emit('relay', '')">中継</button>
+        <!-- 途中で難易度を変える(docs/tournament-strength-spread-design.mdの11章) -->
+        <WorldDifficultyChip v-if="worldDifficulty !== null" ref="worldChip" :difficulty="worldDifficulty" :choices="difficultyChoices" @change="emit('world-change', $event)" />
       </header>
 
       <section class="meijin__main" :aria-label="showSeries ? '名人戦七番勝負' : `${view.clsLabel}の順位表`">
@@ -309,6 +311,7 @@ import RyuoSeries, { type SeriesView } from "./RyuoSeries.vue";
 import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
+import WorldDifficultyChip from "./WorldDifficultyChip.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { CLASS_LABELS, CLASS_RULES, MEIJIN_OUTCOME_TEXT, MEIJIN_SCALES, meijinGoalLine, meijinScale } from "./core/meijin.mjs";
@@ -339,6 +342,8 @@ export type MeijinView = {
 type Settings = { recommended?: boolean; difficulty: number; scale: string; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; watch?: boolean };
 
 const props = defineProps({
+  /** 期・挑戦の途中のいまの難易度の番号(途中で変える札に出す。なければnull。docs/tournament-strength-spread-design.mdの11章)。 */
+  worldDifficulty: { type: Number as PropType<number | null>, default: null },
   view: { type: Object as PropType<MeijinView | null>, default: null },
   career: { type: Object as PropType<{ no: number; best: string; titles: number; eternal: boolean; history?: unknown[] }>, required: true },
   /** 次の期(か進行中の期)のプレイヤーのクラス。名人ならmeijin。 */
@@ -377,7 +382,10 @@ const props = defineProps({
   afterCount: { type: Number, default: 0 },
   afterRevealed: { type: Number, default: 0 },
 });
+const worldChip = ref<{ goBack: () => boolean } | null>(null);
 const emit = defineEmits<{
+  /** 途中で難易度を変えた(番号)。 */
+  "world-change": [difficulty: number];
   /** 難易度のシートの「棋力を測る」(docs/first-play-design.mdの13章)。 */
   measure: [];
   enter: [settings: Settings];
@@ -635,6 +643,8 @@ const nextText = computed(() => {
 
 /** 戻る操作。重ねて開いたものを閉じるか、入口へ戻したら真。入口なら偽(大会の選択へ戻る)。 */
 function goBack() {
+  // 途中で難易度を変えるシートを先に閉じる(11章)。
+  if (worldChip.value?.goBack()) return true;
   if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (detailOpen.value) detailOpen.value = false;

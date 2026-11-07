@@ -338,15 +338,40 @@ function teacherPool(roster, rng) {
   }));
 }
 
+/**
+ * 相手を指させるLv。世界の物差しを持つ挑戦は、会の中の差を残す(いちばん下のクラスを基準。docs/tournament-strength-spread-design.mdの4-4)。
+ * @param {any} run
+ * @param {any} opponent
+ * @param {{ kind?: string, handicap?: string, userLevel?: number }} options
+ */
+function kenshukaiOpponentLevel(run, opponent, { kind = '', handicap = '', userLevel = 20 }) {
+  const rating = kind === 'shido' ? CLASS_RATINGS[run.cls] + SHIDO_BONUS[handicap] : opponent.rating;
+  return Number.isFinite(run.settings.world)
+    ? worldCpuLevel(rating, run.settings.world, CLASS_RATINGS[0])
+    : kenshukaiLevel(rating, run.settings.difficulty, userLevel);
+}
+
+/**
+ * 研修会の途中で難易度(世界)を変える(docs/tournament-strength-spread-design.mdの11章)。次の相手のLvも付け直す。
+ * @param {any} run
+ * @param {{ difficulty: number, world: number, userLevel?: number }} next
+ */
+export function retuneKenshukaiWorld(run, { difficulty, world, userLevel = 20 }) {
+  if (!run?.settings) return run;
+  const next = JSON.parse(JSON.stringify({ ...run, players: undefined }));
+  next.settings = { ...next.settings, difficulty, world };
+  link(next);
+  const pending = next.pending;
+  const opponent = pending?.opponentId ? next.players[pending.opponentId] : null;
+  if (opponent) opponent.level = kenshukaiOpponentLevel(next, opponent, { kind: pending.kind, handicap: pending.handicap ?? '', userLevel });
+  return next;
+}
+
 /** プレイヤーの1局の相手を決め、Lvと戦法と先後と手合いを付ける。 */
 function setPending(run, rng, { opponentId, kind, label, eventText, stakes, others = [], userLevel, handicap = '' }) {
   const all = players(run);
   const opponent = all[opponentId];
-  const rating = kind === 'shido' ? CLASS_RATINGS[run.cls] + SHIDO_BONUS[handicap] : opponent.rating;
-  // 世界の物差しを持つ挑戦は、会の中の差を残す(いちばん下のクラスを基準。docs/tournament-strength-spread-design.mdの4-4)。
-  opponent.level = Number.isFinite(run.settings.world)
-    ? worldCpuLevel(rating, run.settings.world, CLASS_RATINGS[0])
-    : kenshukaiLevel(rating, run.settings.difficulty, userLevel);
+  opponent.level = kenshukaiOpponentLevel(run, opponent, { kind, handicap, userLevel });
   // 駒落ちでは、下手(プレイヤー)が先手の側に座り、上手が先に指す。駒落ちの戦法は、CPUにまかせる。
   const color = handicap ? 'black' : rng.next() < 0.5 ? 'black' : 'white';
   const style = handicap ? null : opponent.repertoire

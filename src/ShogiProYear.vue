@@ -89,6 +89,8 @@
           <h1 id="shogi-tournament-title">{{ view.fy }}年度 棋士の1年</h1>
           <p class="shogi-tournament__topbar-sub" data-pro-sub>{{ yearSub }}</p>
         </div>
+        <!-- 途中で難易度を変える(docs/tournament-strength-spread-design.mdの11章) -->
+        <WorldDifficultyChip v-if="worldDifficulty !== null" ref="worldChip" :difficulty="worldDifficulty" :choices="difficultyChoices" @change="emit('world-change', $event)" />
       </header>
 
       <section class="shoreikai__main pro-year__main" :class="{ 'pro-year__main--wide': wide, 'pro-year__main--goals': goals.length || bigGame }" aria-label="1年">
@@ -885,6 +887,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
+import WorldDifficultyChip from "./WorldDifficultyChip.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import RyuoBracket from "./RyuoBracket.vue";
 import RadarChart from "./RadarChart.vue";
@@ -913,6 +916,8 @@ type Card = { id: string; name: string; dan?: string; you?: boolean } | null | u
 type Cell = { date: string; day: number; inMonth: boolean; today: boolean; past: boolean; items: any[] };
 
 const props = defineProps({
+  /** 期・挑戦の途中のいまの難易度の番号(途中で変える札に出す。なければnull。docs/tournament-strength-spread-design.mdの11章)。 */
+  worldDifficulty: { type: Number as PropType<number | null>, default: null },
   /** 棋士の1年の状態(core/pro-year.mjs)。なければ入口。 */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   state: { type: Object as PropType<any>, default: null },
@@ -933,7 +938,10 @@ const props = defineProps({
   writeBack: { type: Array as PropType<{ ok: boolean; text: string }[] | null>, default: null },
   backLabel: { type: String, default: "戻る" },
 });
+const worldChip = ref<{ goBack: () => boolean } | null>(null);
 const emit = defineEmits<{
+  /** 途中で難易度を変えた(番号)。 */
+  "world-change": [difficulty: number];
   measure: [];
   enter: [payload: { settings: Settings }];
   advance: [];
@@ -1374,6 +1382,8 @@ watch(() => props.state, (state) => {
 }, { immediate: true });
 
 function goBack() {
+  // 途中で難易度を変えるシートを先に閉じる(11章)。
+  if (worldChip.value?.goBack()) return true;
   if (storyScene.value) {
     if (!sceneEl.value?.goBack()) closeScene();
     return true;

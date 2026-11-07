@@ -668,14 +668,33 @@ function examSecondOpponents(world, rng, rank) {
   return picked;
 }
 
+/** 相手を指させるLv。世界の物差しを持つ挑戦は、会の中の差を残す(6級を基準。三段リーグがいちばん高い壁。docs/tournament-strength-spread-design.mdの4-4)。 */
+function shoreikaiLevel(run, opponent, userLevel) {
+  return Number.isFinite(run.settings.world)
+    ? worldCpuLevel(opponent.rating, run.settings.world, RANK_RATINGS[0])
+    : tournamentLevel(opponent.rating, run.settings.difficulty, Number.isFinite(userLevel) ? userLevel : 20);
+}
+
+/**
+ * 挑戦の途中で難易度(世界)を変える(docs/tournament-strength-spread-design.mdの11章)。次の相手のLvも付け直す。
+ * @param {any} run
+ * @param {{ difficulty: number, world: number, userLevel?: number }} next
+ */
+export function retuneShoreikaiWorld(run, { difficulty, world, userLevel = 20 }) {
+  if (!run?.settings) return run;
+  const next = JSON.parse(JSON.stringify({ ...run, players: undefined }));
+  next.settings = { ...next.settings, difficulty, world };
+  link(next);
+  const opponent = next.pending?.opponentId ? next.players[next.pending.opponentId] : null;
+  if (opponent) opponent.level = shoreikaiLevel(next, opponent, userLevel);
+  return next;
+}
+
 /** プレイヤーの1局の相手を決め、Lvと戦法と先後を付ける。 */
 function setPending(run, rng, { opponentId, kind, label, eventText, stakes, others = [], userLevel }) {
   const all = players(run);
   const opponent = all[opponentId];
-  // 世界の物差しを持つ挑戦は、会の中の差を残す(6級を基準。三段リーグがいちばん高い壁。docs/tournament-strength-spread-design.mdの4-4)。
-  opponent.level = Number.isFinite(run.settings.world)
-    ? worldCpuLevel(opponent.rating, run.settings.world, RANK_RATINGS[0])
-    : tournamentLevel(opponent.rating, run.settings.difficulty, Number.isFinite(userLevel) ? userLevel : 20);
+  opponent.level = shoreikaiLevel(run, opponent, userLevel);
   const color = rng.next() < 0.5 ? 'black' : 'white';
   const style = opponent.repertoire
     ? pickGameStyle(rng, opponent.repertoire, { color: color === 'black' ? 'white' : 'black' })

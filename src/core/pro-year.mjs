@@ -955,6 +955,22 @@ function levelOf(state, opponent) {
   return isRealWorld(world) && opponent.story === YOSHIHIKO ? MAX_CPU_LEVEL : worldCpuLevel(opponent.rating, world);
 }
 
+/**
+ * 棋士の1年の途中で難易度(世界)を変える(docs/tournament-strength-spread-design.mdの11章)。次の公式戦の相手のLvも付け直す。
+ * 対局料や名簿のレーティングは変えない(強さの物差しだけ)。
+ * @param {any} source
+ * @param {{ difficulty: number, world: number }} next
+ */
+export function retuneProYearWorld(source, { difficulty, world }) {
+  if (!source?.settings) return source;
+  const state = structuredClone(source);
+  state.settings = { ...state.settings, difficulty, world };
+  // 公式戦と研究会の練習対局の相手(まつりの指導対局のお客は、手合いで決まるので変えない)。
+  const opponent = state.pending?.opponentId && state.pending.kind !== 'shidou' ? state.players[state.pending.opponentId] : null;
+  if (opponent) state.pending.level = levelOf(state, opponent);
+  return state;
+}
+
 /** プレイヤーの対局の相手・Lv・先後・戦法。 */
 function setPending(state, game, rng) {
   const opponentId = game.a === PRO_USER_ID ? game.b : game.a;

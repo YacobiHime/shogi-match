@@ -162,6 +162,8 @@
           <h1 id="shogi-tournament-title">{{ view.name }}</h1>
           <p class="shogi-tournament__topbar-sub" data-team-sub>{{ runSub }}</p>
         </div>
+        <!-- 途中で難易度を変える(docs/tournament-strength-spread-design.mdの11章) -->
+        <WorldDifficultyChip v-if="worldDifficulty !== null" ref="worldChip" :difficulty="worldDifficulty" :choices="difficultyChoices" @change="emit('world-change', $event)" />
       </header>
 
       <section class="shoreikai__main team-battle__main" :aria-label="view.name">
@@ -438,6 +440,7 @@ import TeamCeremony from "./TeamCeremony.vue";
 import TeamNewspaper from "./TeamNewspaper.vue";
 import RyuoBracket, { type BracketView } from "./RyuoBracket.vue";
 import type { SeasonAwardData } from "./SeasonAward.vue";
+import WorldDifficultyChip from "./WorldDifficultyChip.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
@@ -461,6 +464,8 @@ type Settings = { difficulty: number; coachLevel: string; hintLimit: number; und
 type Career = { invited: { school: boolean; pro: boolean }; history: { format: string; label: string; place?: number }[]; trophies?: any[]; best: Record<string, { place: number; label: string }>; settings?: Partial<Settings>; current?: any };
 
 const props = defineProps({
+  /** 期・挑戦の途中のいまの難易度の番号(途中で変える札に出す。なければnull。docs/tournament-strength-spread-design.mdの11章)。 */
+  worldDifficulty: { type: Number as PropType<number | null>, default: null },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   view: { type: Object as PropType<any>, default: null },
   career: { type: Object as PropType<Career>, required: true },
@@ -494,7 +499,10 @@ const props = defineProps({
   /** 賞状帳(表彰式で渡す賞状を開く。20章)。 */
   awards: { type: Array as PropType<SeasonAwardData[]>, default: () => [] },
 });
+const worldChip = ref<{ goBack: () => boolean } | null>(null);
 const emit = defineEmits<{
+  /** 途中で難易度を変えた(番号)。 */
+  "world-change": [difficulty: number];
   measure: [];
   enter: [payload: { format: Format; settings: Settings; userSeat: number; draftPick: string | null; draftReason: string }];
   play: [];
@@ -891,6 +899,8 @@ const faceKind = (member: { id: string }) => (member.id === TEAM_USER_ID ? "spri
 
 /** 戻る操作。重ねて開いたものを閉じたら真。 */
 function goBack() {
+  // 途中で難易度を変えるシートを先に閉じる(11章)。
+  if (worldChip.value?.goBack()) return true;
   // 場面のログ・設定・隠した窓を先に閉じ、なければ場面を閉じる(docs/novel-scene-design.mdの4-2)。
   if (sceneId.value) {
     if (!novelEl.value?.goBack()) novelEl.value?.finish();

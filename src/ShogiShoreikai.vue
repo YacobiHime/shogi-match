@@ -91,6 +91,8 @@
           <h1 id="shogi-tournament-title">{{ runTitle }}</h1>
           <p class="shogi-tournament__topbar-sub" data-shoreikai-sub>{{ runSub }}</p>
         </div>
+        <!-- 途中で難易度を変える(docs/tournament-strength-spread-design.mdの11章) -->
+        <WorldDifficultyChip v-if="worldDifficulty !== null" ref="worldChip" :difficulty="worldDifficulty" :choices="difficultyChoices" @change="emit('world-change', $event)" />
       </header>
 
       <section class="shoreikai__main" :aria-label="runTitle">
@@ -360,6 +362,7 @@ import MeijinLeagueTable from "./MeijinLeagueTable.vue";
 import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
+import WorldDifficultyChip from "./WorldDifficultyChip.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { DEFAULT_SETTINGS, EXAM_RANKS, RANKS, RANK_RATINGS, SHOREIKAI_SCALES, describeShoreikai, shoreikaiScale } from "./core/shoreikai.mjs";
@@ -380,6 +383,8 @@ type Career = {
 };
 
 const props = defineProps({
+  /** 期・挑戦の途中のいまの難易度の番号(途中で変える札に出す。なければnull。docs/tournament-strength-spread-design.mdの11章)。 */
+  worldDifficulty: { type: Number as PropType<number | null>, default: null },
   view: { type: Object as PropType<ShoreikaiView | null>, default: null },
   career: { type: Object as PropType<Career>, required: true },
   mentors: { type: Array as PropType<Mentor[]>, default: () => [] },
@@ -401,7 +406,10 @@ const props = defineProps({
   fromGame: { type: Boolean, default: false },
   backLabel: { type: String, default: "戻る" },
 });
+const worldChip = ref<{ goBack: () => boolean } | null>(null);
 const emit = defineEmits<{
+  /** 途中で難易度を変えた(番号)。 */
+  "world-change": [difficulty: number];
   /** 難易度のシートの「棋力を測る」(docs/first-play-design.mdの13章)。 */
   measure: [];
   enter: [payload: { settings: Settings; examRank: number; mentorId: string; transfer?: boolean }];
@@ -727,6 +735,8 @@ const lowerRankLabel = computed(() => RANKS[Math.max(0, (props.view?.exam?.rank 
 
 /** 戻る操作。重ねて開いたものを閉じたら真。何も開いていなければ偽(大会の選択へ戻る)。 */
 function goBack() {
+  // 途中で難易度を変えるシートを先に閉じる(11章)。
+  if (worldChip.value?.goBack()) return true;
   if (revealOpen.value) closeReveal();
   else if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;

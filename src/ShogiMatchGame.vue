@@ -556,6 +556,8 @@
       :pro-year-suspended-moves="suspendedProYearMoves"
       :pro-year-cut-busy="proYearCutBusy"
       :pro-year-write-back="proYearWriteBackItems"
+      :world-difficulty="tournamentWorldDifficulty"
+      @world-change="changeTournamentWorld"
       @pro-year-enter="enterProYear"
       @pro-year-advance="advanceProYear"
       @pro-year-play="startProYearGame"
@@ -2785,6 +2787,7 @@ import {
   recordShoreikaiGame,
   retryExam,
   saveShoreikai,
+  retuneShoreikaiWorld,
 } from "./core/shoreikai.mjs";
 import { eventStamp } from "./core/shoreikai-speech.mjs";
 import {
@@ -2798,6 +2801,7 @@ import {
   recommendedEntryClass,
   recordKenshukaiGame,
   saveKenshukai,
+  retuneKenshukaiWorld,
 } from "./core/kenshukai.mjs";
 import { eventStamp as kenshukaiEventStamp } from "./core/kenshukai-speech.mjs";
 import {
@@ -2925,6 +2929,7 @@ import { addAward, kenshukaiAward, loadAwards, meijinAward, proYearAward, ryuoAw
 import {
   SCHOOL_SEATS, USER_TEAM as TEAM_USER_TEAM, addTeamTrophy, chooseTeamPlayer, createTeamRun, currentTeamMatch, draftCandidates, finishTeamRun, hananeNextPlayer,
   loadTeamBattle, markTeamCelebrated, markTeamCeremonySeen, markTeamFinaleSeen, markTeamScene, recordTeamGame, saveTeamBattle, teamFormat, teamRunView, withdrawTeamRun,
+  retuneTeamWorld,
 } from "./core/team-battle.mjs";
 import { teamCeremonyView } from "./core/team-ceremony.mjs";
 import { championBanner, championNewspaper, championTitle, teamStreak, teamTrophy } from "./core/team-celebration.mjs";
@@ -2934,9 +2939,10 @@ import {
   startWorkShidou as startProYearWorkShidou, chooseWeekAction as chooseProYearWeekAction, setYearGoals as setProYearGoals, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
   fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
   recordFestivalEvent as recordProYearFestivalEvent, recordProGame, recordShidou as recordProYearShidou, recordStudyGame as recordProYearStudy, saveProYear,
-  startNextYear as startNextProYear, startShidou as startProYearShidou, closeYearEarly as closeProYearEarly, seeBondScene as seeProYearBondScene, markWriteBack as markProYearWriteBack,
+  startNextYear as startNextProYear, startShidou as startProYearShidou, retuneProYearWorld, closeYearEarly as closeProYearEarly, seeBondScene as seeProYearBondScene, markWriteBack as markProYearWriteBack,
 } from "./core/pro-year.mjs";
 import { applyWriteBack, writeBackPlan } from "./core/pro-writeback.mjs";
+import { currentDifficulty, retuneSeasonWorld } from "./core/world-change.mjs";
 import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
@@ -8058,6 +8064,55 @@ const proYearLastSettings = ref<any>(null);
 /** 終局の窓に出す、この1局で決まった節目(「棋聖戦 一次予選を突破」)。 */
 const proYearResultLine = ref("");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * 大会ごとの、期・挑戦の途中のいまの難易度の番号(途中で変える札に出す。docs/tournament-strength-spread-design.mdの11章)。
+ * 終わった期・挑戦のない大会はnull(札を出さない)。
+ */
+const tournamentWorldDifficulty = computed<{ [event: string]: number | null }>(() => {
+  const active = (holder: any, done: boolean) => (holder && !done ? currentDifficulty(holder) : null);
+  return {
+    ryuo: active(ryuoSeason.value, ryuoSeason.value?.phase === "done"),
+    meijin: active(meijinSeason.value, meijinSeason.value?.phase === "done"),
+    shoreikai: active(shoreikaiCareer.value?.run, !shoreikaiCareer.value?.run),
+    kenshukai: active(kenshukaiCareer.value?.run, !kenshukaiCareer.value?.run),
+    team: active(teamCareer.value?.run, Boolean(teamCareer.value?.run?.result)),
+    "pro-year": active(proYearState.value, Boolean(proYearState.value?.yearDone)),
+  };
+});
+/**
+ * 期・挑戦の途中で難易度を変える(11章)。世界を決め直し(分身の期は「いつもの世界」を変えない)、
+ * 次の対局から新しい強さで指す。ここまでの勝ち負けはそのまま。
+ */
+function changeTournamentWorld({ event, difficulty }: { event: string; difficulty: number }) {
+  const userLevel = ratingLevel(ratingState.value.rating);
+  if (event === "ryuo" && ryuoSeason.value) {
+    const avatar = Boolean(ryuoSeason.value.spectator);
+    const world = commitTournamentWorld(difficulty, { keep: !avatar });
+    let next = retuneSeasonWorld(ryuoSeason.value, { difficulty, world, userLevel });
+    if (avatar) next = asAvatarSeason(next, avatarMember(difficulty, world), { live: Boolean(next.live) });
+    ryuoSeason.value = next;
+    saveSeason(browserStorage(), next);
+  } else if (event === "meijin" && meijinSeason.value) {
+    const avatar = Boolean(meijinSeason.value.spectator);
+    const world = commitTournamentWorld(difficulty, { keep: !avatar });
+    let next = retuneSeasonWorld(meijinSeason.value, { difficulty, world, userLevel });
+    if (avatar) next = asAvatarMeijinSeason(next, avatarMember(difficulty, world));
+    meijinSeason.value = next;
+    saveMeijinSeason(browserStorage(), next);
+  } else if (event === "shoreikai" && shoreikaiCareer.value?.run) {
+    const world = commitTournamentWorld(difficulty);
+    setShoreikaiCareer({ ...shoreikaiCareer.value, run: retuneShoreikaiWorld(shoreikaiCareer.value.run, { difficulty, world, userLevel }) });
+  } else if (event === "kenshukai" && kenshukaiCareer.value?.run) {
+    const world = commitTournamentWorld(difficulty);
+    setKenshukaiCareer({ ...kenshukaiCareer.value, run: retuneKenshukaiWorld(kenshukaiCareer.value.run, { difficulty, world, userLevel }) });
+  } else if (event === "team" && teamCareer.value?.run) {
+    const world = commitTournamentWorld(difficulty);
+    setTeamCareer({ ...teamCareer.value, run: retuneTeamWorld(teamCareer.value.run, { difficulty, world }) });
+  } else if (event === "pro-year" && proYearState.value) {
+    const world = commitTournamentWorld(difficulty);
+    setProYear(retuneProYearWorld(proYearState.value, { difficulty, world }));
+  }
+}
 function setProYear(state: any) {
   if (proYearState.value?.settings) proYearLastSettings.value = proYearState.value.settings;
   proYearState.value = state;
