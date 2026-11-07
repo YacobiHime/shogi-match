@@ -25,7 +25,7 @@ describe("match screen regressions", () => {
     expect(source.match(/<p v-if="matchTipsUsed\.length" class="shogi-game__result-tips" data-result-tips>/g)?.length).toBe(2);
     // 対局の始めと、復元した局面で、もうできている形の印を作り直す。
     expect(source).toMatch(/syncPosition\(\);\s*resetTipMoments\(\);\s*emit\("match-ready"/);
-    expect(source).toMatch(/startPresence\(\{ greet: false \}\);\s*resetTipMoments\(\);\s*return true;/);
+    expect(source).toMatch(/startPresence\(\{ greet: false \}\);\s*(?:\}\s*else matchClock\.clear\(\);\s*)?resetTipMoments\(\);\s*return true;/);
   });
   it("offers the tips course as the one small entry under the home's next step (21-14-4)", () => {
     // 駒の段を終えてコツに触れていない人だけ。ほかの小さな入口(竜王戦の対策・続き、立て直しの駒落ち)があれば出さない。
@@ -739,7 +739,7 @@ describe("match screen regressions", () => {
 
   it("stops only what happens next for heavy moments, and the board can always cut the stop short", () => {
     // 止めるのはCPUの応手と結果画面の開始だけ。盤を触ると止めを打ち切る。
-    expect(source).toMatch(/await waitForImpactHold\(\);\s*if \(generation !== matchGeneration\) return;\s*if \(applyMove\(usi, "cpu"\)/);
+    expect(source).toMatch(/await waitForImpactHold\(\);\s*if \(generation !== matchGeneration\) return;\s*(?:\/\/[^\n]*\s*await matchClock\.settleCpuThink\(\);\s*if \(generation !== matchGeneration\) return;\s*)?if \(applyMove\(usi, "cpu"\)/);
     expect(source).toMatch(/class="shogi-game__board-shell"[\s\S]*?@pointerdown\.capture="onBoardShellPointerDown"/);
     expect(source).toMatch(/function onBoardShellPointerDown\(\) \{\s*releaseImpactHold\(\);/);
     const finish = source.split("function finish(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
@@ -1119,7 +1119,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/v-if="opponentFace"[\s\S]{0,500}?data-opponent-face/);
     expect(source).toMatch(/class="shogi-game__presence-line"[\s\S]{0,300}?data-presence-line/);
     // 始めのあいさつと速報の準備、CPUの手の特殊能力、手番ごとの速報、評価値での表情。
-    expect(source).toMatch(/restart\(\);\s*startPresence\(\);/);
+    expect(source).toMatch(/restart\(\);\s*(?:\/\/[^\n]*\s*matchClock\.start\([^\n]*\);\s*)?startPresence\(\);/);
     expect(source).toMatch(/ryuoCpuMoves = \[[\s\S]{0,120}?cpuMoveRecord\];\s*notePresenceCpuMove\(cpuMoveRecord\);/);
     expect(source).toMatch(/schedulePlayerIdleAdvice\(\);\s*tickPresenceNews\(\);/);
     // 詳しい助言では、助言の読みの評価値だけを使う(浅いCPUの評価値でバーが跳ねないように)。
@@ -1159,13 +1159,25 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/\.shogi-game\.shogi-game--stage-big \{[\s\S]*?\.shogi-game\.shogi-game--scenery-foot,/);
   });
   it("大会の秒読みの演出は、プレイヤーの手番だけ名札に輪を出し、補助のあいだは止める(docs/tournament-match-presence-design.mdの7章)", () => {
-    expect(source).toMatch(/seconds: \(\) => \(matchKind\.value === "tournament" \? byoyomiSeconds\(tournamentSeasonOf\(ryuoGame\.value\)\?\.settings\) : 0\)/);
+    // 持ち時間を使い切ったら、その大会の秒読みの秒数。持ち時間のあいだは、エントリー設定の秒読みの演出(15章)。
+    expect(source).toMatch(/seconds: \(\) => \(matchKind\.value !== "tournament" \? 0\s*: matchClock\.playerByoyomi\.value && matchClock\.rule\.value \? matchClock\.rule\.value\.byoyomi\s*: byoyomiSeconds\(tournamentSeasonOf\(ryuoGame\.value\)\?\.settings\)\)/);
     expect(source).toMatch(/record\.value\.position\.color === humanColor\.value,\s*paused: \(\) => thinking\.value \|\| guidedMateReplyPending\.value \|\| dexFromMatch\.value/);
     expect(source).toMatch(/turnKey: \(\) => moveCount\.value,/);
     expect(source).toMatch(/:player-countdown="playerCountdown"/);
     // 画面を隠しているあいだは数えない。0秒でも負けにはしない(時間切れの処理を持たない)。
     expect(source).toMatch(/if \(typeof document !== "undefined" && document\.hidden\) return;/);
     expect(source).not.toMatch(/byoyomi[\s\S]{0,80}finish\(/);
+  });
+  it("大会の対局は持ち時間の時計を出し、相手の時計は早送りで減らし、重圧を強さに効かせる(docs/tournament-match-presence-design.mdの15章)", () => {
+    expect(source).toMatch(/matchClock\.start\(tournamentTimeControl\(\{ event, season \}\)/);
+    expect(source).toMatch(/:clocks="matchClocks"/);
+    expect(source).toMatch(/const cpuClock = matchClock\.beginCpuThink\(\);/);
+    expect(source).toMatch(/applyCharacter\(baseStrength, strengthCharacter, \{ \.\.\.cpuSituation, advantage, clock: clockPressure \}/);
+    // 早送りの時計を回し切ってから、相手の手を盤に置く。
+    expect(source).toMatch(/await matchClock\.settleCpuThink\(\);\s*if \(generation !== matchGeneration\) return;\s*if \(applyMove\(usi, "cpu"\)/);
+    expect(source).toMatch(/matchClock: matchKind\.value === "tournament" \? matchClock\.snapshot\(\) : null/);
+    // 時間切れ負けは作らない。
+    expect(source).not.toMatch(/time-?up[\s\S]{0,60}finish\(/i);
   });
   it("タイトル戦の封じ手は、1日目のまとめ・開封の札・勝負メシ・観戦記につなぐ(docs/title-match-day-design.md)", () => {
     // 記録はタイトル戦(二日制)の局だけ。保存と一緒にリロードでも戻す。

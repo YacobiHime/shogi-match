@@ -1236,6 +1236,8 @@
         :black-player-detail="cpuColor === Color.BLACK ? cpuStrengthLabel : ''"
         :white-player-detail="cpuColor === Color.WHITE ? cpuStrengthLabel : ''"
         :player-countdown="playerCountdown"
+        :clocks="matchClocks"
+        :fast-clock="matchClocks?.fast ?? ''"
         :candidates="boardCandidates"
         :attack-marks="boardAttackMarks"
         :float-labels="captureFloatLabels"
@@ -2775,6 +2777,7 @@ import {
   traitCard,
 } from "./core/match-presence.mjs";
 import { byoyomiSeconds } from "./core/byoyomi.mjs";
+import { clockEffect, tournamentTimeControl } from "./core/time-control.mjs";
 import {
   closeShoreikaiRun,
   withdrawShoreikaiRun,
@@ -2865,6 +2868,7 @@ import { useCpuSearchGauge } from "./composables/match/useCpuSearchGauge";
 import { useDexAnalysisEngine } from "./composables/match/useDexAnalysisEngine";
 import { useGuidedReview } from "./composables/match/useGuidedReview";
 import { useByoyomi } from "./composables/match/useByoyomi";
+import { useMatchClock } from "./composables/match/useMatchClock";
 import {
   type PregameRow,
   assistLimitOptions,
@@ -5332,8 +5336,29 @@ onBeforeUnmount(() => clearTimeout(stageCardTimer));
  * 大会の秒読みの演出(エントリー設定の「秒読みの演出」。docs/tournament-match-presence-design.mdの7章)。
  * プレイヤーの手番だけ、自分の名札に残り秒の輪を出す。閃き・図鑑・開幕の札のあいだは止め、0秒でも負けにはしない。
  */
+/*
+ * 大会の対局の持ち時間(docs/tournament-match-presence-design.mdの15章)。名札の横の時計。
+ * プレイヤーの時計は実際の時間で減り、相手の時計は考えているあいだ早送りで減る。相手は残り時間で手が荒くなる。
+ */
+const matchClock = useMatchClock({
+  running: () => active.value && !result.value && !reviewMode.value && normalizedMode.value === "cpu" && matchKind.value === "tournament",
+  humanSide: () => (humanColor.value === Color.BLACK ? "black" : "white"),
+  sideToMove: () => (record.value.position.color === Color.BLACK ? "black" : "white"),
+  moveCount: () => moveCount.value,
+  paused: () => guidedMateReplyPending.value || dexFromMatch.value || dexShelfOpen.value || Boolean(stageCard.value) || daySummaryOpen.value,
+  character: () => (ryuoGame.value ? ryuoOpponent.value?.character ?? null : null),
+});
+const matchClocks = computed(() => (matchKind.value === "tournament" ? matchClock.clocks.value : null));
+/** 相手が秒読みに入ったことを、1局に1回だけ言う。 */
+let cpuByoyomiAnnounced = false;
+const CPU_BYOYOMI_LINE = "相手が秒読みに入ったよ。ここからは手が荒くなりやすいよ！";
+/** 棋風のない相手に、持ち時間の重圧だけを効かせるための空の棋風。 */
+const NO_CHARACTER = { attack: 0, traits: [] };
 const { byoyomiState } = useByoyomi({
-  seconds: () => (matchKind.value === "tournament" ? byoyomiSeconds(tournamentSeasonOf(ryuoGame.value)?.settings) : 0),
+  // 持ち時間を使い切ったら、その大会の秒読みの秒数で輪を出す。持ち時間のあいだは、エントリー設定の「秒読みの演出」。
+  seconds: () => (matchKind.value !== "tournament" ? 0
+    : matchClock.playerByoyomi.value && matchClock.rule.value ? matchClock.rule.value.byoyomi
+      : byoyomiSeconds(tournamentSeasonOf(ryuoGame.value)?.settings)),
   shown: () => active.value && !result.value && !reviewMode.value && normalizedMode.value === "cpu"
     && record.value.position.color === humanColor.value,
   paused: () => thinking.value || guidedMateReplyPending.value || dexFromMatch.value || dexShelfOpen.value || Boolean(stageCard.value)
@@ -7346,6 +7371,8 @@ function startRyuoMatch() {
   pregameOpen.value = false;
   scheduleDeferredCoachPortraitPreload();
   restart();
+  // 持ち時間は、実際の大会の決まり(研究会の練習対局・指導対局はなし)。勝負どころから指すときは、そこまでの分を使ったことにする。
+  matchClock.start(tournamentTimeControl({ event, season }), { usedPlies: cutStart ? PRO_YEAR_CUT_USED_PLIES : 0 });
   startPresence();
   // 大一番とタイトル戦は、開幕の札とやこび姫の一言で始める。ふだんの1局は、相手の棋風と特殊能力から戦い方を一言。
   const opponentLine = opponentStyleAdvice(opponent.character, opponent.name);
@@ -8170,6 +8197,8 @@ function resumeProYearGame() {
 }
 // ---- 勝負どころから指す(docs/pro-year-design.mdの13-3の6)
 const PRO_YEAR_CUT_LABEL = "勝負どころから";
+/** 勝負どころから指すとき、持ち時間をそこまで使ったとみなす手数(勝負どころは36〜44手目。pro-cut.mjs)。 */
+const PRO_YEAR_CUT_USED_PLIES = 40;
 const PRO_YEAR_CUT_LINE = "分身が指した局面から、勝負どころを指そう。ここからが本番だよ！";
 /** 局面を作るのを待つ上限(作れなかったら最初から指す)。 */
 const PRO_YEAR_CUT_TIMEOUT_MS = 30000;
@@ -10027,6 +10056,8 @@ function persistMatchState() {
     cpuBlunderPlies: cpuBlunderPlies.filter((ply) => ply < moveHistory.length),
     cpuHumanBlunders: normalizeHumanBlunders(cpuHumanBlunders, moveHistory.length),
     cpuNotes: normalizeCpuNotes(cpuNotes, moveHistory.length),
+    // 大会の対局の持ち時間(手数ごとの残り。docs/tournament-match-presence-design.mdの15章)。
+    matchClock: matchKind.value === "tournament" ? matchClock.snapshot() : null,
     coachLevel: coachLevel.value,
     selectedStrategy: selectedStrategy.value,
     selectedCastle: selectedCastle.value,
@@ -10257,7 +10288,10 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
     active.value = snapshot.active === true && !restoredResult;
     thinking.value = false;
     guideText.value = coachLevel.value === "off" ? "" : "前の局面から対局を再開したよ！";
-    if (matchKind.value === "tournament" && ryuoGame.value) startPresence({ greet: false });
+    if (matchKind.value === "tournament" && ryuoGame.value) {
+      matchClock.restore(snapshot.matchClock, tournamentTimeControl({ event: tournamentEventOf(ryuoGame.value.event), season: tournamentSeasonOf(ryuoGame.value) }));
+      startPresence({ greet: false });
+    } else matchClock.clear();
     resetTipMoments();
     return true;
   } catch {
@@ -12599,6 +12633,8 @@ async function scheduleCpuMove() {
   if (!engineReady.value && !engineUnavailable.value) return;
   thinking.value = true;
   const generation = matchGeneration;
+  // 大会の対局では、相手がこの手で使う持ち時間を決め、考えているあいだ時計を早送りで減らす(15章)。
+  const cpuClock = matchClock.beginCpuThink();
   cpuTimer = setTimeout(async () => {
     cpuTimer = undefined;
     try {
@@ -12700,11 +12736,14 @@ async function scheduleCpuMove() {
       const baseStrength = getStrengthSearchSettings(searchNodes.value);
       // 対策の練習対局でも、相手の棋風と特徴で指す。
       const cpuCharacter = ryuoGame.value ? ryuoOpponent.value?.character ?? null : ryuoCounterOpponent.value?.character ?? null;
-      const cpuSituation = cpuCharacter
+      // 持ち時間の重圧(残りが少ない・秒読み・長考)も、棋風と同じつまみで効かせる。棋風のない相手は、空の棋風で重圧だけ。
+      const clockPressure = cpuClock ? { pressure: cpuClock.pressure, short: cpuClock.short } : null;
+      const strengthCharacter = cpuCharacter ?? (clockEffect(clockPressure) ? NO_CHARACTER : null);
+      const cpuSituation = strengthCharacter
         ? characterSituation({ sfen: record.value.position.sfen, ply: moveHistory.length })
         : null;
-      const characterStrength = (advantage?: number) => (cpuCharacter && cpuSituation
-        ? applyCharacter(baseStrength, cpuCharacter, { ...cpuSituation, advantage }, { skill: cpuStrengthPreset.value.skill })
+      const characterStrength = (advantage?: number) => (strengthCharacter && cpuSituation
+        ? applyCharacter(baseStrength, strengthCharacter, { ...cpuSituation, advantage, clock: clockPressure }, { skill: cpuStrengthPreset.value.skill })
         : baseStrength);
       const strength = characterStrength();
       const allowedCpuMoveList = allowedCpuMoves.map(({ usi: moveUsi }) => moveUsi);
@@ -12931,6 +12970,9 @@ async function scheduleCpuMove() {
       }
       await waitForImpactHold();
       if (generation !== matchGeneration) return;
+      // 早送りの時計を回し切ってから指す(短い時間)。
+      await matchClock.settleCpuThink();
+      if (generation !== matchGeneration) return;
       if (applyMove(usi, "cpu") && active.value) {
         // 相手のミスは、形勢の一言より先に知らせる(1局にSLIP_MAX_PER_GAME回まで。答えの手は言わない)。
         const slipAdvice = cpuSlip && coachLevel.value !== "off" && opponentSlips < SLIP_MAX_PER_GAME
@@ -12942,6 +12984,11 @@ async function scheduleCpuMove() {
           showCoachAdvice(slipAdvice);
         }
         const scoreAdviceShown = updateCoachAdvice(selectedCpuScore);
+        // 相手が秒読みに入ったら、1局に1回だけ知らせる(ほかの一言が出ていないとき)。
+        if (cpuClock?.pressure === "byoyomi" && !cpuByoyomiAnnounced && !slipAdvice && !scoreAdviceShown && coachLevel.value !== "off") {
+          cpuByoyomiAnnounced = true;
+          showCoachAdvice({ key: "clock-cpu-byoyomi", text: CPU_BYOYOMI_LINE });
+        }
         thinking.value = false;
         schedulePostCpuAssists(selectedCpuScore !== undefined && scoreAdviceShown);
       }
@@ -13275,6 +13322,8 @@ const {
 
 function restart() {
   matchGeneration += 1;
+  matchClock.clear();
+  cpuByoyomiAnnounced = false;
   hideStageCard();
   cancelResultReveal();
   stopGuidedReview();

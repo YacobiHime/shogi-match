@@ -283,8 +283,9 @@
       <div
         v-if="main.blackClock"
         class="clock"
-        :class="blackPlayerTimeSeverity"
+        :class="[blackPlayerTimeSeverity, { 'clock--fast': fastClock === 'black' }]"
         :style="main.blackClock.style"
+        data-match-clock="black"
       >
         <span class="clock-text">{{ blackPlayerTimeText }}</span>
       </div>
@@ -313,8 +314,9 @@
       <div
         v-if="main.whiteClock"
         class="clock"
-        :class="whitePlayerTimeSeverity"
+        :class="[whitePlayerTimeSeverity, { 'clock--fast': fastClock === 'white' }]"
         :style="main.whiteClock.style"
+        data-match-clock="white"
       >
         <span class="clock-text">{{ whitePlayerTimeText }}</span>
       </div>
@@ -599,6 +601,12 @@ const props = defineProps({
     type: Object as PropType<{ color: "black" | "white"; left: number; fraction: number; stage: string; label: string } | null>,
     required: false,
     default: null,
+  },
+  // 早送りで減っている時計(大会の対局で、相手が考えているあいだ。docs/tournament-match-presence-design.mdの15章)。
+  fastClock: {
+    type: String as PropType<"black" | "white" | "">,
+    required: false,
+    default: "",
   },
   blackPlayerTime: {
     type: Number,
@@ -2145,6 +2153,25 @@ const whitePlayerTimeSeverity = computed(() => {
 }
 .clock-text {
   vertical-align: middle;
+}
+/* 相手が考えているあいだ、時計が早送りで減る(▶▶の印と光)。 */
+.clock--fast {
+  color: #fff6dd;
+  background-color: #7a2e12;
+  box-shadow: 0 0 0 2px #f1a54c, 0 0 12px rgba(241, 165, 76, 0.75);
+  animation: clock-fast-glow 0.5s ease-in-out infinite alternate;
+}
+.clock--fast .clock-text::before {
+  content: "▶▶ ";
+  font-size: 0.75em;
+  letter-spacing: -0.15em;
+}
+@keyframes clock-fast-glow {
+  from { box-shadow: 0 0 0 2px #f1a54c, 0 0 6px rgba(241, 165, 76, 0.5); }
+  to { box-shadow: 0 0 0 2px #ffd28a, 0 0 16px rgba(241, 165, 76, 0.95); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clock--fast { animation: none; }
 }
 /* 成・不成は駒の絵だけでなく「成る」「成らない」の文字も添える。成るほうを明るく目立たせる。 */
 .promote,

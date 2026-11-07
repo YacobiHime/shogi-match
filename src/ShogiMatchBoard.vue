@@ -58,6 +58,7 @@
       :white-player-time="clocks?.white"
       :black-player-byoyomi="clocks?.blackByoyomi"
       :white-player-byoyomi="clocks?.whiteByoyomi"
+      :fast-clock="fastClock"
       :arrow-image-url="`${normalizedAssetBase}/arrow/arrow.svg`"
       @move="onMove"
       @edit="(change: PositionChange) => emit('edit', change)"
@@ -150,11 +151,13 @@ const props = defineProps({
   blackPlayerDetail: { type: String, default: "" },
   whitePlayerDetail: { type: String, default: "" },
   playerCountdown: { type: Object as PropType<{ color: "black" | "white"; left: number; fraction: number; stage: string; label: string } | null>, default: null },
-  // 名札の横の時計(残りの持ち時間の秒と、秒読みの残り秒)。中継(RelayViewer.vue)だけで使う。なければ時計を出さない。
+  // 名札の横の時計(残りの持ち時間の秒と、秒読みの残り秒)。中継(RelayViewer.vue)と大会の対局(持ち時間)で使う。なければ時計を出さない。
   clocks: {
     type: Object as PropType<{ black: number; white: number; blackByoyomi?: number; whiteByoyomi?: number } | null>,
     default: null,
   },
+  // 早送りで減っている時計(大会の対局で、相手が考えているあいだ)。
+  fastClock: { type: String as PropType<"black" | "white" | "">, default: "" },
 });
 const emit = defineEmits(["usi-move", "invalid-sfen", "resize", "edit", "square-click", "hand-click"]);
 const root = ref<HTMLElement | null>(null);

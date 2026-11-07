@@ -992,6 +992,9 @@ function setPending(state, game, rng) {
   state.pending = {
     kind: def.title ? 'finals' : 'game',
     gameId: game.id,
+    // 持ち時間の決まり(time-control.mjsのPRO_EVENT_RULES)を引く、棋戦と段階のid。
+    eventId: game.event,
+    stageId: def.id,
     opponentId,
     level,
     color,

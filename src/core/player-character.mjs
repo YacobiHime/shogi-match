@@ -11,6 +11,7 @@
 // 設計は docs/tournament-design.md の「棋風と特徴」。
 
 import { TOP_NODES } from './strength-settings.mjs';
+import { clockEffect } from './time-control.mjs';
 import { characterHuman } from './human-model.mjs';
 import { ABILITY_KEYS, abilityDevs, ageAbilities, createAbilities, styleAttackOf } from './player-abilities.mjs';
 import { attackersOf, findKing, isKingAttacked, opponentOf, parseSfenState, relativeFile, squareXY, xySquare } from './piece-movement.mjs';
@@ -624,7 +625,8 @@ export function abilityEffect(abilities, situation) {
  * 探索の前(advantage未定)に呼べば探索量が、探索のあとに呼べば手の選び方が決まる。
  * @param {object} strength getStrengthSearchSettingsの結果
  * @param {{ attack: number, traits: { id: string, degree: number }[] } | null} character
- * @param {ReturnType<typeof characterSituation> & { advantage?: number }} situation
+ * @param {ReturnType<typeof characterSituation> & { advantage?: number, clock?: { pressure: string, short: boolean } | null }} situation
+ *   clockは、持ち時間の重圧(time-control.mjsのcpuThinkPlan)
  * @param {{ skill: number }} options
  */
 export function applyCharacter(strength, character, situation, { skill }) {
@@ -655,6 +657,12 @@ export function applyCharacter(strength, character, situation, { skill }) {
     style += effect.style ?? 0;
   }
   next.activeTraits = active.map(({ id }) => id);
+  // 持ち時間の重圧(残りが少ない・秒読み・長考)も、同じつまみで効かせる(time-control.mjsのclockEffect。15章)。
+  const clock = clockEffect(situation?.clock);
+  if (clock) {
+    nodes *= clock.nodes;
+    sharpen += clock.sharpen;
+  }
   // 能力の配分(平均からの差)を、同じつまみで効かせる。上下の合計が0に近いので、強さ全体はLvのまま、場面ごとに強弱が出る。
   // 前の項目で保存した配分は、今の項目へ移しかえて読む。
   const devs = abilityDevs(character);

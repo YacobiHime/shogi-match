@@ -37,8 +37,8 @@ export function useByoyomi({ seconds, shown, paused, turnKey, play }: {
     stop();
     if (value) timer = setInterval(tick, 1000);
   });
-  // 手番が来るたび(と、秒読みの局を始めたとき)に、満タンから数え直す。
-  watch([turnKey, enabled], () => {
+  // 手番が来るたび(と、秒読みの局を始めたとき・持ち時間を使い切って秒読みに入ったとき)に、満タンから数え直す。
+  watch([turnKey, enabled, seconds], () => {
     left.value = seconds();
   }, { immediate: true });
   onBeforeUnmount(stop);
