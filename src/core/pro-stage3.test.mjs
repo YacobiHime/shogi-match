@@ -19,7 +19,7 @@ function loseAll(state) {
     if (current.festival) current = { ...current, festival: null };
     if (current.work) current = { ...current, work: null };
     if (current.yearDone) return current;
-    if (weekView(current)?.seasonOver) return current;
+    if (weekView(current)?.closable) return current;
     current = autoWeeks(current);
   }
   return current;
@@ -65,12 +65,12 @@ describe('昇段(15-3の5)', () => {
 });
 
 describe('年度を締める・棋士の歩み(15-3の6・7)', () => {
-  it('公式戦が残っていなければ、年度を早く締めてまとめへ', () => {
+  it('ほかの棋戦で敗退して順位戦だけになったら、年度を早く締めてまとめへ(残りは分身)', () => {
     const state = loseAll(start(3));
     expect(state.yearDone).toBe(false);
     const view = weekView(state);
-    expect(view.seasonOver).toBe(true);
-    expect(view.weeksLeft).toBeGreaterThan(0);
+    expect(['over', 'junni']).toContain(view.closable);
+    expect(view.weeksLeft).toBeGreaterThan(8);
     const closed = closeYearEarly(state);
     expect(closed.yearDone).toBe(true);
     expect(closed.summary.closedEarly).toBe(state.date);
@@ -84,7 +84,7 @@ describe('年度を締める・棋士の歩み(15-3の6・7)', () => {
 
   it('公式戦が残っている週は締められない', () => {
     const state = start(5);
-    expect(weekView(state).seasonOver).toBe(false);
+    expect(weekView(state).closable).toBeNull();
     expect(closeYearEarly(state)).toBe(state);
   });
 
@@ -185,5 +185,46 @@ describe('人との絆(15-3の1〜3)', () => {
     const back = unpackProYear(packed, roster);
     expect(Object.values(back.people).filter(Boolean)).toHaveLength(5);
     expect(Object.values(back.bonds).every((item) => item.points === 0)).toBe(true);
+  });
+});
+
+describe('名簿への書き戻し(15-3の8)', () => {
+  const finished = () => {
+    const state = closeYearEarly(loseAll(start(3)));
+    return { ...state, user: { ...state.user, cls: 'C2', junniResult: { cls: 'C2', promoted: true, place: 1, wins: 9, losses: 1 }, ryuoResult: { group: 6, next: 5, promoted: true } } };
+  };
+
+  it('竜王戦の組・順位戦のクラス・ほかの棋士のタイトルを書く', async () => {
+    const { writeBackPlan, applyWriteBack } = await import('./pro-writeback.mjs');
+    const { createCareer } = await import('./ryuo-career.mjs');
+    const state = finished();
+    const { items, plan } = writeBackPlan(state, { roster });
+    expect(items[0].text).toBe('竜王戦：あなたは5組');
+    expect(items[1].text).toBe('順位戦：あなたはC級2組 → C級1組');
+    const { roster: next, career } = applyWriteBack(roster, createCareer(), plan);
+    expect(career.group).toBe(5);
+    expect(next.junni.classes.C1).toContain(PRO_USER_ID);
+    expect(Object.values(next.junni.classes).flat().filter((id) => id === PRO_USER_ID)).toHaveLength(1);
+    expect(next.junni.userJoined).toBe(true);
+    for (const [id, holder] of Object.entries(plan.titles)) expect(next.titles[id]).toBe(holder);
+    // もとの名簿は変えない。
+    expect(roster.junni.classes.C1 ?? []).not.toContain(PRO_USER_ID);
+  });
+
+  it('期の途中の棋戦は書かない', async () => {
+    const { writeBackPlan } = await import('./pro-writeback.mjs');
+    const { items, plan } = writeBackPlan(finished(), { roster, ryuoBusy: true, meijinBusy: true });
+    expect(plan.ryuo).toBeNull();
+    expect(plan.junni).toBeNull();
+    expect(items.filter((item) => !item.ok).map((item) => item.text).join()).toMatch(/竜王戦の期の途中.*名人戦の期の途中/);
+  });
+
+  it('選んだ印を残し、「毎年残す」を覚える', async () => {
+    const { markWriteBack } = await import('./pro-year.mjs');
+    const state = finished();
+    const kept = markWriteBack(state, { keep: true, always: true, items: [{ ok: true, text: 'x' }] });
+    expect(kept.summary.writeBack).toBe('kept');
+    expect(kept.settings.writeBack).toBe('always');
+    expect(markWriteBack(kept, { keep: false }).settings.writeBack).toBeNull();
   });
 });

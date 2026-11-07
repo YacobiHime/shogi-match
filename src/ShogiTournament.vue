@@ -217,6 +217,7 @@
           :momoka-call="momokaCall"
           :suspended-moves="proYearSuspendedMoves"
           :cut-busy="proYearCutBusy"
+          :write-back="proYearWriteBack"
           @enter="emit('pro-year-enter', $event)"
           @advance="emit('pro-year-advance')"
           @play="emit('pro-year-play')"
@@ -1217,6 +1218,8 @@ const props = defineProps({
   proYearSuspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** 「勝負どころから指す」の局面を作っているあいだ(docs/pro-year-design.mdの13-3の6)。 */
   proYearCutBusy: { type: Boolean, default: false },
+  /** 年度のまとめの「棋士の世界に残す」の札の中身(docs/pro-year-design.mdの15-3の8)。 */
+  proYearWriteBack: { type: Array as PropType<{ ok: boolean; text: string }[] | null>, default: null },
   // ---- 対局中継(docs/tournament-relay-design.md)。期の保存の形(見られる対局を集める)と、棋譜を作るエンジン。
   ryuoSeason: { type: Object as PropType<any>, default: null },
   /** 回戦ごとの観戦の保存(観戦の期と、期ごとのめくった数。core/ryuo-watch-store.mjs)。 */

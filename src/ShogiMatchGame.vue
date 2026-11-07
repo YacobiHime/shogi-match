@@ -555,6 +555,7 @@
       :pro-year-settings="proYearState?.settings ?? proYearLastSettings"
       :pro-year-suspended-moves="suspendedProYearMoves"
       :pro-year-cut-busy="proYearCutBusy"
+      :pro-year-write-back="proYearWriteBackItems"
       @pro-year-enter="enterProYear"
       @pro-year-advance="advanceProYear"
       @pro-year-play="startProYearGame"
@@ -2933,8 +2934,9 @@ import {
   startWorkShidou as startProYearWorkShidou, chooseWeekAction as chooseProYearWeekAction, setYearGoals as setProYearGoals, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
   fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
   recordFestivalEvent as recordProYearFestivalEvent, recordProGame, recordShidou as recordProYearShidou, recordStudyGame as recordProYearStudy, saveProYear,
-  startNextYear as startNextProYear, startShidou as startProYearShidou,
+  startNextYear as startNextProYear, startShidou as startProYearShidou, closeYearEarly as closeProYearEarly, seeBondScene as seeProYearBondScene, markWriteBack as markProYearWriteBack,
 } from "./core/pro-year.mjs";
+import { applyWriteBack, writeBackPlan } from "./core/pro-writeback.mjs";
 import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
@@ -8080,6 +8082,8 @@ function enterProYear({ settings }: { settings: { [key: string]: unknown } }) {
     userLevel: ratingLevel(ratingState.value.rating),
     userName: playerDisplayName(playerName.value),
     userGroup: ryuoCareer.value.group,
+    // 奨励会で選んだ師匠(棋士の1年の師匠。docs/pro-year-design.mdの15-3の1)。
+    mentorName: typeof shoreikaiCareer.value?.pro?.mentor === "string" ? shoreikaiCareer.value.pro.mentor : "",
   }));
 }
 /** 「次の対局日へ」。次の自分の対局日まで進める(あいだの対局は決まる)。 */
@@ -8239,7 +8243,42 @@ function proYearLife(action: { kind: string; [key: string]: unknown }) {
     tournamentOpen.value = false;
     problemSetDrill.value = { section: "tsume", kind: "tsume", plies: 5, count: 3, title: "詰将棋の監修", doneLabel: "棋士の1年へ戻る" } as PracticeDrill;
     problemSetOpen.value = true;
+  } else if (action.kind === "close-year") {
+    // 公式戦が残っていない年度を締める(docs/pro-year-design.mdの15-3の6)。
+    setProYear(closeProYearEarly(state));
+  } else if (action.kind === "bond-scene" && typeof action.id === "string") {
+    // 絆の場面を見た(15-3の4)。見た印を残し、物語のサブに開く。
+    setProYear(seeProYearBondScene(state, action.id, Number(action.level) || 0));
+    if (typeof action.scene === "string") unlockStorySceneLater(action.scene);
+  } else if (action.kind === "writeback") {
+    // 年度の結果を棋士の世界(名簿)に残す・残さない(15-3の8)。
+    writeBackProYear(state, Boolean(action.keep), Boolean(action.always));
   }
+}
+/** 期の途中の棋戦(その部分は書き戻さない)。 */
+const proYearWriteBackBusy = () => ({
+  ryuoBusy: Boolean(ryuoSeason.value && ryuoSeason.value.phase !== "done"),
+  meijinBusy: Boolean(meijinSeason.value && meijinSeason.value.phase !== "done"),
+});
+/** 年度のまとめの「棋士の世界に残す」の札の中身(書く前に見せる)。 */
+const proYearWriteBackItems = computed(() => {
+  const state = proYearState.value;
+  if (!state?.yearDone || !state.summary || state.summary.writeBack || !ryuoRoster.value) return null;
+  return writeBackPlan(state, { roster: ryuoRoster.value, ...proYearWriteBackBusy() }).items;
+});
+function writeBackProYear(state: any, keep: boolean, always: boolean) {
+  if (!state?.yearDone || !state.summary || state.summary.writeBack) return;
+  const { items, plan } = writeBackPlan(state, { roster: ryuoRoster.value, ...proYearWriteBackBusy() });
+  if (keep && ryuoRoster.value) {
+    const result = applyWriteBack(ryuoRoster.value, ryuoCareer.value, plan);
+    ryuoRoster.value = result.roster;
+    saveRoster(browserStorage(), ryuoRoster.value);
+    if (result.career) {
+      ryuoCareer.value = result.career;
+      saveCareer(browserStorage(), ryuoCareer.value);
+    }
+  }
+  setProYear(markProYearWriteBack(state, { keep, always, items }));
 }
 /** 詰将棋の仕事で問題集を開いているか(閉じたら解けた数で仕事を終える)。 */
 let proYearTsumeJob = false;

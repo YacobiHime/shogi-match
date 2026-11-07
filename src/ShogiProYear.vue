@@ -115,6 +115,11 @@
         <!-- 今週(13章。画面の主役。1週の行動を選んで進める) -->
         <div v-show="wide || tab === 'week'" class="pro-year__weekpanel" data-pro-week>
           <template v-if="week">
+            <!-- 公式戦が残っていない(15-3の6)。年度を締めるか、週を過ごすか。 -->
+            <div v-if="week.closable" class="pro-year__season-over" :data-pro-season-over="week.closable">
+              <b>{{ week.closable === "over" ? "今年度の公式戦は、これで終わり" : "ほかの棋戦は敗退。今年度に残るのは順位戦だけ" }}</b>
+              <small>年度の終わりまで、あと{{ week.weeksLeft }}週。{{ week.closable === "junni" ? "締めると、順位戦の残りは分身が指すよ。" : "" }}締めても、絆・分身・段位は次の年度へ持ち越すよ。</small>
+            </div>
             <!-- 先週の将棋ニュース(14-3の3)。押すと紙面。 -->
             <button v-if="week.news" type="button" class="pro-year__news" data-pro-news @click="newsOpen = week.news">
               <span class="pro-year__news-mast">週刊 将棋ニュース<small>第{{ week.news.number }}週</small></span>
@@ -185,6 +190,17 @@
                 <small v-if="week.avatar.closest">{{ week.avatar.closest.label }} Lv{{ week.avatar.closest.level + 1 }} まで あと{{ week.avatar.closest.need }}</small>
                 <span class="pro-year__avatar-bar" aria-hidden="true"><i :style="{ width: `${Math.round((week.avatar.closest?.ratio ?? 1) * 100)}%` }"></i></span>
               </span>
+            </button>
+            <!-- 人の1行(15-3の1・3)。押すと人のシート。 -->
+            <button v-if="week.people?.length" type="button" class="pro-year__avatar-row pro-year__people-row" data-pro-people @click="peopleOpen = true">
+              <span class="pro-year__slot-icon pro-year__avatar-icon" aria-hidden="true">人</span>
+              <span class="pro-year__people-faces">
+                <span v-for="person in week.people" :key="person.id" class="pro-year__person-mini" :data-pro-person="person.role">
+                  <span class="pro-year__face" :class="`pro-year__face--${person.role.startsWith('peer') ? 'peer' : person.role}`" aria-hidden="true">{{ person.icon }}</span>
+                  <span class="pro-year__koma" :aria-label="`${person.name} 絆の段${person.level}`"><i v-for="n in 5" :key="n" :class="{ on: n <= person.level }"></i></span>
+                </span>
+              </span>
+              <small v-if="closestBond" class="pro-year__people-next">{{ closestBond.rel }} 段{{ closestBond.next.level }}まで<br>あと{{ closestBond.next.need }}</small>
             </button>
             <div v-if="!week.news && week.lastWeek?.lines?.length" class="pro-year__lastweek" data-pro-lastweek>
               <h3 class="pro-year__subhead">先週のまとめ<small>（第{{ week.lastWeek.number }}週）</small></h3>
@@ -273,6 +289,24 @@
               <p><small>連勝</small><b>{{ view.record.streak }}<small>（最高 {{ view.record.best }}）</small></b></p>
               <p><small>順位戦</small><b>{{ view.cls }}</b></p>
               <p><small>タイトル</small><b>{{ view.titles.length ? view.titles.join("・") : "なし" }}</b></p>
+            </div>
+            <!-- 棋士の歩み(15-3の5・7)。年度ごとの行と通算、次の昇段まで。 -->
+            <h3 class="pro-year__subhead">棋士の歩み<small>（{{ view.dan }}）</small></h3>
+            <div class="pro-year__road" data-pro-road>
+              <p class="pro-year__road-total">
+                <span>通算 <b>{{ view.road.total.wins }}勝{{ view.road.total.losses }}敗</b></span>
+                <span>タイトル <b>{{ view.road.total.titles }}期</b></span>
+                <span v-if="view.road.total.champions.length">優勝 <b>{{ view.road.total.champions.length }}回</b></span>
+              </p>
+              <p v-if="view.nextDan" class="pro-year__road-next" data-pro-next-dan>次の昇段（{{ view.nextDan.dan }}）：{{ view.nextDan.text }}</p>
+              <ol class="pro-year__road-rows">
+                <li v-for="row in [...view.road.rows].reverse()" :key="row.fy" :class="{ 'pro-year__road-row--now': row.now }">
+                  <b>{{ row.fy }}年度<small v-if="row.now">（いま）</small></b>
+                  <span>{{ row.dan }}・{{ row.wins }}勝{{ row.losses }}敗<template v-if="row.cls">・{{ row.cls }}</template><template v-if="row.group">・竜王戦 {{ row.group }}</template></span>
+                  <span v-if="row.honors" class="pro-year__road-honor">{{ row.honors }}</span>
+                  <small v-if="row.headline">{{ row.headline }}</small>
+                </li>
+              </ol>
             </div>
             <p v-if="view.rival" class="pro-year__rival" data-pro-rival>
               <img class="pro-year__rival-face pro-year__sprite" :src="hananeSprite" alt="" draggable="false">
@@ -363,6 +397,8 @@
         <div v-if="view.yearDone && view.summary" class="pro-year__summary" data-pro-summary-card>
           <p class="pro-year__summary-head">{{ view.summary.fy }}年度のまとめ</p>
           <p class="pro-year__summary-main">{{ view.summary.wins }}勝{{ view.summary.losses }}敗<small>勝率 {{ rateText(view.summary.rate) }}</small></p>
+          <p v-if="view.summary.danUp" class="pro-year__summary-dan" data-pro-summary-dan><span class="pro-year__goal-seal" aria-hidden="true">昇</span>{{ view.summary.danUp.from }} → {{ view.summary.danUp.to }}</p>
+          <p v-if="view.summary.closedEarly" class="pro-year__summary-line">公式戦を終えて、{{ shortDate(view.summary.closedEarly) }}に年度を締めた</p>
           <p v-if="view.summary.titles.length" class="pro-year__summary-title">{{ view.summary.titles.join("・") }} 獲得</p>
           <p v-if="view.summary.awards.length" class="pro-year__awards">
             <span v-for="award in view.summary.awards" :key="award" class="pro-year__award">{{ award }}</span>
@@ -374,6 +410,18 @@
           <ul v-if="view.summary.headlines?.length" class="pro-year__summary-heads" data-pro-summary-heads>
             <li v-for="item in view.summary.headlines" :key="item.number"><small>第{{ item.number }}週</small>{{ item.headline }}</li>
           </ul>
+          <!-- 棋士の世界(名簿)に残す(15-3の8)。書く前に中身を見せ、2択がそのまま確認。 -->
+          <div v-if="writeBack && !view.summary.writeBack" class="pro-year__writeback" data-pro-writeback>
+            <b>この1年を、棋士の世界に残す？</b>
+            <small>竜王戦・名人戦の名簿に、今年度の結果を書くよ。レーティングは変えないよ。</small>
+            <ul><li v-for="(item, index) in writeBack" :key="index" :class="{ 'pro-year__writeback-wait': !item.ok }">{{ item.ok ? "✓" : "…" }} {{ item.text }}</li></ul>
+            <label class="pro-year__writeback-always"><input v-model="writeBackAlways" type="checkbox" data-pro-writeback-always>次から毎年残す</label>
+            <div class="shogi-tournament__actions shogi-tournament__actions--two">
+              <button type="button" class="shogi-tournament__sub" data-pro-writeback-skip @click="emit('life', { kind: 'writeback', keep: false, always: false })">残さない</button>
+              <button type="button" class="shogi-tournament__start" data-pro-writeback-keep @click="emit('life', { kind: 'writeback', keep: true, always: writeBackAlways })">残す</button>
+            </div>
+          </div>
+          <p v-else-if="view.summary.writeBack === 'kept'" class="pro-year__summary-line" data-pro-writeback-done>棋士の世界に残したよ（竜王戦・名人戦の名簿）</p>
           <!-- 今年の目標の判子(達成・あと一歩・届かず。13-3の7。G:3) -->
           <ul v-if="view.summary.goals?.length" class="pro-year__goal-stamps" data-pro-goal-stamps>
             <li v-for="goal in view.summary.goals" :key="goal.id" :class="`pro-year__goal-stamp--${goal.stamp}`">
@@ -429,7 +477,7 @@
           <span class="shogi-tournament__tip-text">{{ runLine }}</span>
         </p>
         <template v-if="view.yearDone">
-          <button type="button" class="shogi-tournament__start" data-pro-next-year @click="emit('next-year')">次の年度へ</button>
+          <button v-if="!(writeBack && !view.summary?.writeBack)" type="button" class="shogi-tournament__start" data-pro-next-year @click="emit('next-year')">次の年度へ</button>
         </template>
         <template v-else-if="view.work && !view.pending">
           <div class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
@@ -458,7 +506,11 @@
         </template>
         <template v-else>
           <!-- 1週ずつ進める(13-3の1)。研究会・まつりは週の行動で選ぶ。急ぐ人は、次の対局の週までおまかせ(13-3の10。D:9-2) -->
-          <div class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
+          <div v-if="week?.closable" class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
+            <button type="button" class="shogi-tournament__sub" data-pro-advance @click="emit('life', { kind: 'week-advance' })">{{ week?.applied ? "週の続きを過ごす" : "週を過ごす" }}<small>仕事・人に会う</small></button>
+            <button type="button" class="shogi-tournament__start" data-pro-close-year @click="closeConfirm = true">年度を締める<small>残り{{ week.weeksLeft }}週</small></button>
+          </div>
+          <div v-else class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
             <button type="button" class="shogi-tournament__sub" data-pro-auto-weeks @click="emit('life', { kind: 'auto-weeks' })">対局の週までおまかせ</button>
             <button type="button" class="shogi-tournament__start" data-pro-advance @click="emit('life', { kind: 'week-advance' })">
               {{ week?.applied ? "週の続きを進める" : "この週を進める" }}
@@ -521,6 +573,40 @@
         </div>
       </div>
 
+      <!-- 人のシート(15-3の1・3)。段の棒・次の場面まで・段5の効き目。 -->
+      <div v-if="peopleOpen && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="人" data-pro-people-sheet @click.self="peopleOpen = false">
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
+          <h2>人<small>（絆は下がらない・年度をまたいで続く）</small></h2>
+          <ul class="pro-year__actions">
+            <li v-for="person in week.people" :key="person.id">
+              <div class="pro-year__action pro-year__person" :data-pro-person-row="person.role">
+                <span class="pro-year__face" :class="`pro-year__face--${person.role.startsWith('peer') ? 'peer' : person.role}`" aria-hidden="true">{{ person.icon }}</span>
+                <span class="pro-year__slot-text">
+                  <b><i class="pro-year__rel">{{ person.rel }}</i>{{ person.name }}<small>{{ person.dan }}</small></b>
+                  <span class="pro-year__bond-bar" aria-hidden="true"><i :style="{ width: `${Math.round((person.next?.ratio ?? 1) * 100)}%` }"></i></span>
+                  <small>絆の段{{ person.level }}<template v-if="person.next">・段{{ person.next.level }}まで あと{{ person.next.need }}</template><template v-if="person.nextScene">・段{{ person.nextScene }}で場面</template></small>
+                  <em :class="{ 'pro-year__perk--on': person.perkOn }">段5：{{ person.perk }}</em>
+                </span>
+              </div>
+            </li>
+          </ul>
+          <p class="pro-year__action-tip">会うのは週の行動の「人に会う」。研究会で指したり、公式戦で当たったりしても絆が深まるよ。</p>
+          <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="peopleOpen = false">閉じる</button>
+        </div>
+      </div>
+
+      <!-- 年度を締める(15-3の6。残りの週を飛ばし、取り消せないので確かめる。UD:5-2) -->
+      <div v-if="closeConfirm && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="年度を締める" data-pro-close-confirm @click.self="closeConfirm = false">
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
+          <h2>{{ view.fy }}年度を締める？</h2>
+          <p class="shogi-tournament__text">残りの{{ week.weeksLeft }}週は、ほかの棋士の対局だけ進めて{{ week.closable === "junni" ? "（順位戦の残りは分身が指して）" : "" }}、年度のまとめへ行くよ。絆・分身・段位・お金は、次の年度へ持ち越すよ。</p>
+          <div class="shogi-tournament__actions shogi-tournament__actions--two">
+            <button type="button" class="shogi-tournament__sub" data-pro-close-cancel @click="closeConfirm = false">週を過ごす</button>
+            <button type="button" class="shogi-tournament__start" data-pro-close-ok @click="closeYear">締める</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 勝負どころの局面を作っているあいだ(13-3の6。待つあいだもやめられる。UD:5-3) -->
       <div v-if="cutBusy" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="控室で準備しています" data-pro-cut-busy>
         <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet pro-year__cut-busy">
@@ -538,6 +624,7 @@
           <ul class="pro-year__actions">
             <li v-for="item in week.actions" :key="item.id">
               <p v-if="item.work && item.id === firstWorkId" class="pro-year__action-head">今週の仕事の依頼（1つまで）</p>
+              <p v-if="item.meet && item.id === firstMeetId" class="pro-year__action-head">人に会う（1人まで）</p>
               <button
                 type="button"
                 class="pro-year__action"
@@ -564,6 +651,7 @@
             </li>
           </ul>
           <p v-if="firstWorkId" class="pro-year__action-tip">仕事をすると、お金とファンが増えて、分身も育つよ！</p>
+          <p v-if="firstMeetId && (week.number ?? 99) <= 3" class="pro-year__action-tip">人に会うと絆が深まって、段が上がると、その人との場面が見られるよ！</p>
           <div class="shogi-tournament__actions shogi-tournament__actions--two">
             <button type="button" class="shogi-tournament__sub" data-pro-action="none" @click="pickAction(null)">何もしない</button>
             <button type="button" class="shogi-tournament__sub" @click="slotSheet = null">閉じる</button>
@@ -805,6 +893,8 @@ import { INTERVIEW_FANS } from "./core/pro-news.mjs";
 import ProFestival from "./ProFestival.vue";
 import NovelScene from "./NovelScene.vue";
 import { proYearScene, proYearSceneDue } from "./core/pro-year-story.mjs";
+import { bondSceneDue } from "./core/pro-bonds.mjs";
+import { libraryScene } from "./core/novel-library.mjs";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
@@ -839,6 +929,8 @@ const props = defineProps({
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** 「勝負どころから指す」の局面を作っているあいだ。 */
   cutBusy: { type: Boolean, default: false },
+  /** 年度のまとめの「棋士の世界に残す」の札の中身(docs/pro-year-design.mdの15-3の8)。nullなら札を出さない。 */
+  writeBack: { type: Array as PropType<{ ok: boolean; text: string }[] | null>, default: null },
   backLabel: { type: String, default: "戻る" },
 });
 const emit = defineEmits<{
@@ -937,7 +1029,7 @@ const nextPreview = computed(() => (props.state ? previewNextGame(props.state) :
 const yearSub = computed(() => {
   const current = view.value;
   if (!current) return "";
-  return `${current.dateText}・${current.record.wins}勝${current.record.losses}敗・${current.cls}`;
+  return `${current.dateText}・${current.dan ?? "四段"}・${current.record.wins}勝${current.record.losses}敗・${current.cls}`;
 });
 const pendingColor = computed(() => {
   const pending = props.state?.pending;
@@ -958,17 +1050,29 @@ const actionTitle = (item: WeekAction | null) => {
   if (item.id === "festival") return `${item.name ?? item.label}（${item.dateText ?? ""}）`;
   if (item.id === "study") return `研究会（${item.dateText ?? ""}）`;
   if (item.id.startsWith("work-")) return `${item.label}（${item.dateText ?? ""}）`;
+  if (item.id.startsWith("meet-")) return `人に会う：${item.label}`;
   return item.label;
 };
 const slotSheet = ref<number | null>(null);
 /** 行動のシートで、仕事の依頼の見出しを出す最初の行。 */
 const firstWorkId = computed(() => week.value?.actions.find((item: { work?: string }) => item.work)?.id ?? "");
+const firstMeetId = computed(() => week.value?.actions.find((item: { meet?: string }) => item.meet)?.id ?? "");
 
 // ---- ニュース・取材・分身・仕事(14章)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const newsOpen = ref<any>(null);
 const interviewOpen = ref(false);
 const avatarOpen = ref(false);
+// ---- 人・年度を締める・棋士の世界に残す(15章)
+const peopleOpen = ref(false);
+const closeConfirm = ref(false);
+const writeBackAlways = ref(false);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const closestBond = computed<any>(() => [...(week.value?.people ?? [])].filter((person: any) => person.next).sort((a: any, b: any) => a.next.need - b.next.need)[0] ?? null);
+function closeYear() {
+  closeConfirm.value = false;
+  emit("life", { kind: "close-year" });
+}
 function answerInterview(id: string | null) {
   interviewOpen.value = false;
   emit("life", { kind: "interview", answer: id });
@@ -1222,8 +1326,28 @@ function openScene(due: { key: string; id: string; vars: Record<string, string> 
   storyScene.value = proYearScene(due.id, { playerName: props.playerName, momokaCall: props.momokaCall, vars: due.vars });
 }
 /** 場面を読み終えた(飛ばしても同じ)。見た印をつけ、物語のサブに開く。 */
+/** 絆の場面(15-3の4。台本のファイル。名前を差し込む)。 */
+let bondDue: { id: string; level: number; scene: string; role: string } | null = null;
+function openBondScene(due: { id: string; level: number; scene: string; role: string }) {
+  const people = (view.value?.people ?? []) as { role: string; id: string; name: string }[];
+  const nameOf = (role: string) => people.find((person) => person.role === role)?.name ?? "";
+  const scene = libraryScene(due.scene, {
+    playerName: props.playerName, momokaCall: props.momokaCall,
+    vars: { mentor: nameOf("mentor"), senior: nameOf("senior"), peer: people.find((person) => person.id === due.id)?.name ?? "" },
+  });
+  bondDue = due;
+  afterScene = null;
+  if (scene) storyScene.value = scene;
+  else closeScene();
+}
 function closeScene() {
   storyScene.value = null;
+  if (bondDue) {
+    const due = bondDue;
+    bondDue = null;
+    emit("life", { kind: "bond-scene", id: due.id, level: due.level, scene: due.scene });
+    return;
+  }
   emit("life", { kind: "scene", key: sceneKey });
   const then = afterScene;
   afterScene = null;
@@ -1238,6 +1362,15 @@ watch(() => props.state, (state) => {
   if (storyScene.value || !state) return;
   const due = proYearSceneDue(state);
   if (due?.key === "pro-debut") openScene(due, null);
+  else if (!state.pending && !state.yearDone && !state.festival && !state.work && state.goals?.fy === state.fy) {
+    // 絆の段が上がったら、次に今週の画面を開いたときに場面(15-3の4)。
+    const bond = bondSceneDue(state);
+    if (bond) openBondScene(bond);
+  }
+  // 「次から毎年残す」を選んでいれば、年度のまとめで自動で残す(15-3の8)。
+  if (state.yearDone && state.summary && !state.summary.writeBack && props.writeBack && state.settings?.writeBack === "always") {
+    emit("life", { kind: "writeback", keep: true, always: true });
+  }
 }, { immediate: true });
 
 function goBack() {
@@ -1252,6 +1385,8 @@ function goBack() {
   else if (newsOpen.value) newsOpen.value = null;
   else if (interviewOpen.value) interviewOpen.value = false;
   else if (avatarOpen.value) avatarOpen.value = false;
+  else if (peopleOpen.value) peopleOpen.value = false;
+  else if (closeConfirm.value) closeConfirm.value = false;
   else if (slotSheet.value !== null) slotSheet.value = null;
   else if (eventId.value) eventId.value = "";
   else if (dayDate.value) dayDate.value = "";
@@ -1389,6 +1524,47 @@ defineExpose({ goBack });
   color: inherit; background: rgba(23, 38, 50, 0.85); text-align: left; cursor: pointer;
 }
 .shogi-game .pro-year__avatar-icon { background: #3d5a70; color: #fffcf4; }
+/* 人・年度を締める・棋士の歩み・棋士の世界に残す(docs/pro-year-design.mdの15章) */
+.shogi-game .pro-year__people-faces { display: flex; flex: 1; flex-wrap: wrap; gap: 0.4rem; min-width: 0; }
+.shogi-game .pro-year__person-mini { display: grid; justify-items: center; gap: 0.1rem; }
+.shogi-game .pro-year__face { display: grid; flex: none; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 50%; color: #fff; background: #55607a; font-size: 0.8rem; font-weight: 900; }
+.shogi-game .pro-year__person .pro-year__face { width: 2.6rem; height: 2.6rem; font-size: 1rem; }
+.shogi-game .pro-year__face--mentor { background: #7a5a3a; }
+.shogi-game .pro-year__face--senior { background: #3a6a7a; }
+.shogi-game .pro-year__face--hanane { background: #2f6a55; }
+.shogi-game .pro-year__koma { display: inline-flex; gap: 0.08rem; }
+.shogi-game .pro-year__koma i { width: 0.45rem; height: 0.55rem; background: rgba(255, 255, 255, 0.22); clip-path: polygon(50% 0, 100% 22%, 100% 100%, 0 100%, 0 22%); }
+.shogi-game .pro-year__koma i.on { background: #e7c15a; }
+.shogi-game .pro-year__people-next { flex: none; color: #e7c15a; font-size: 0.68rem; font-weight: 800; text-align: right; }
+.shogi-game .pro-year__person { cursor: default; }
+.shogi-game .pro-year__rel { margin-right: 0.35rem; padding: 0 0.35rem; border-radius: 0.25rem; background: #e9e2d2; color: #1d303f; font-size: 0.68rem; font-style: normal; }
+.shogi-game .pro-year__person b small { margin-left: 0.3rem; color: rgba(255, 252, 244, 0.72); font-size: 0.7rem; }
+.shogi-game .pro-year__bond-bar { display: block; height: 0.35rem; margin: 0.2rem 0; border-radius: 999px; background: #e1d9c6; overflow: hidden; }
+.shogi-game .pro-year__bond-bar i { display: block; height: 100%; background: #c9962a; }
+.shogi-game .pro-year__person em { color: #8a97a3; font-size: 0.72rem; font-style: normal; font-weight: 800; }
+.shogi-game .pro-year__person em.pro-year__perk--on { color: #8a6a3a; }
+.shogi-game .pro-year__season-over { display: grid; gap: 0.15rem; padding: 0.5rem 0.65rem; border: 0.12rem solid #e7c15a; border-radius: 0.7rem; background: rgba(231, 193, 90, 0.14); }
+.shogi-game .pro-year__season-over b { font-size: 0.95rem; }
+.shogi-game .pro-year__season-over small { color: #cfd8de; font-size: 0.74rem; font-weight: 700; }
+.shogi-game .pro-year__road { display: grid; gap: 0.35rem; }
+.shogi-game .pro-year__road p { margin: 0; }
+.shogi-game .pro-year__road-total { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.8rem; }
+.shogi-game .pro-year__road-next { color: #e7c15a; font-size: 0.76rem; font-weight: 800; }
+.shogi-game .pro-year__road-rows { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__road-rows li { display: grid; gap: 0.1rem; padding: 0.35rem 0.5rem; border-radius: 0.5rem; background: rgba(43, 70, 91, 0.6); font-size: 0.76rem; }
+.shogi-game .pro-year__road-rows li.pro-year__road-row--now { background: rgba(241, 165, 76, 0.16); }
+.shogi-game .pro-year__road-rows small { color: #cfd8de; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 0.72rem; }
+.shogi-game .pro-year__road-honor { color: #e7c15a; font-weight: 900; }
+.shogi-game .pro-year__summary-dan { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1rem; font-weight: 900; }
+.shogi-game .pro-year__writeback { display: grid; gap: 0.3rem; padding: 0.5rem 0.6rem; border-radius: 0.6rem; color: #1d303f; background: #fffcf4; }
+.shogi-game .pro-year__writeback b { font-size: 0.92rem; }
+.shogi-game .pro-year__writeback small { color: #526878; font-size: 0.72rem; font-weight: 700; }
+.shogi-game .pro-year__writeback ul { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; font-size: 0.76rem; font-weight: 700; }
+.shogi-game .pro-year__writeback li { color: #2f7a5a; }
+.shogi-game .pro-year__writeback li.pro-year__writeback-wait { color: #8a6a3a; }
+.shogi-game .pro-year__writeback-always { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; font-weight: 800; }
+.shogi-game .pro-year__writeback .shogi-tournament__sub { color: #1d303f; background: #e9e2d2; border-color: #cfc4ad; }
+.shogi-game .pro-year__advance .shogi-tournament__start small, .shogi-game .pro-year__advance .shogi-tournament__sub small { display: block; font-size: 0.66rem; font-weight: 700; }
 .shogi-game .pro-year__avatar-bar { display: block; height: 0.3rem; margin-top: 0.2rem; border-radius: 999px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
 .shogi-game .pro-year__avatar-bar i { display: block; height: 100%; background: #7bd3a8; }
 .shogi-game .pro-year__gain { color: #7bd3a8; font-style: normal; font-weight: 900; }

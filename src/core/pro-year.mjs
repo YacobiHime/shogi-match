@@ -1906,8 +1906,9 @@ export function weekView(source) {
     news: (state.news ?? []).at(-1) ?? null,
     interview: state.interview ?? null,
     work: state.work ?? null,
-    // 自分の公式戦がもう残っていない(年度を締められる。15-3の6)。
+    // 自分の公式戦がもう残っていない・残りが順位戦だけ(年度を締められる。15-3の6)。
     seasonOver: !preview && !state.pending && !state.festival && !state.work,
+    closable: closableKind(state, preview),
     weeksLeft: Math.max(0, Math.ceil(((toDate(yearEnd(state.fy)) - toDate(week.end)) / 86400000) / 7)),
   };
 }
@@ -2110,21 +2111,46 @@ export function autoWeeks(source) {
 }
 
 /**
- * 年度を締める(15-3の6)。自分の公式戦が残っていないとき、残りの週は世界だけ進めて年度のまとめへ。
+ * 年度を締められるか(15-3の6)。自分の公式戦がもうない('over')か、ほかの棋戦はすべて敗退していて、この年度に残るのが順位戦だけ('junni')。
+ * @param {any} state
+ * @param {any} [preview] 次の自分の対局の見込み(weekViewで出したもの)
+ * @returns {'over' | 'junni' | null}
+ */
+function closableKind(state, preview) {
+  if (!state || state.pending || state.festival || state.work || state.yearDone) return null;
+  if (!preview) return 'over';
+  if (state.games[preview.gameId] && state.games[preview.gameId].event !== 'meijin') return null;
+  const fyEnd = yearEnd(state.fy);
+  for (const cycle of Object.values(state.cycles)) {
+    if (!cycle.withUser || cycle.done || cycle.event === 'meijin') continue;
+    const status = userStatus(state, cycle);
+    if (!status?.alive) continue;
+    if (status.waiting && stageWindow(cycle, proEvent(cycle.event).stages[cycle.entry ?? 0]).start > fyEnd) continue;
+    return null;
+  }
+  return 'junni';
+}
+
+/**
+ * 年度を締める(15-3の6)。残りの週は世界だけ進め(順位戦の残りは分身に任せる)、年度のまとめへ。
  * ニュースは残りの大きな出来事を1枚(「年度末の将棋界」)にまとめる。
  * @param {any} source
  */
 export function closeYearEarly(source) {
   const view = weekView(source);
-  if (!view?.seasonOver) return source;
-  const state = structuredClone(source);
-  const rng = createRng(state.rng);
-  const from = state.date;
-  if (run(state, yearEnd(state.fy), rng)) {
-    // 念のため(見込みになかった対局が組まれた): そこで止まる。
-    state.rng = rng.state;
-    return state;
+  if (!view?.closable) return source;
+  const from = source.date;
+  const number = weekNumber(source.week?.start ?? from, source.fy);
+  let state = source;
+  let auto = 0;
+  for (let guard = 0; guard < 200 && !state.yearDone; guard += 1) {
+    state = advanceToNextGame(state);
+    if (state.pending?.gameId) {
+      state = recordProGame(state, 'auto').state;
+      auto += 1;
+    } else if (state.pending) state = { ...state, pending: null };
   }
+  state = structuredClone(state);
   const lines = [];
   for (const cycle of Object.values(state.cycles)) {
     const event = proEvent(cycle.event);
@@ -2133,17 +2159,30 @@ export function closeYearEarly(source) {
     if (!last || last < from) continue;
     lines.push(event.kind === 'title' ? `${event.name}、${nameOf(state, cycle.champion)}が${event.short}に` : `${event.name}、${nameOf(state, cycle.champion)}が優勝`);
   }
-  const number = weekNumber(state.week?.start ?? from, state.fy);
+  if (auto) lines.unshift(`順位戦の残り${auto}局は分身が指した`);
   state.news = [...(state.news ?? []), {
-    number, start: from, end: yearEnd(state.fy), headline: '年度末の将棋界', lead: `${dateLabel(from)}から年度の終わりまでの、ほかの棋士の結果。`, lines: lines.slice(0, 4),
+    number, start: from, end: yearEnd(state.fy), headline: '年度末の将棋界', lead: `${dateLabel(from)}から年度の終わりまでの、将棋界の結果。`, lines: lines.slice(0, 4),
     record: '', letter: null, hanane: '', kind: 'world', mine: false, weight: 0, fy: state.fy, closed: true,
   }].slice(-60);
   state.interview = null;
   state.date = yearEnd(state.fy);
   state.yearDone = true;
-  state.summary = { ...yearSummary(state), closedEarly: from };
-  state.rng = rng.state;
+  state.summary = { ...yearSummary(state), closedEarly: from, autoGames: auto };
   return state;
+}
+
+/**
+ * 年度のまとめのあとの「棋士の世界に残す」を選んだ印(15-3の8)。名簿を書くのは対局画面(pro-writeback.mjs)。
+ * @param {any} source
+ * @param {{ keep: boolean, always?: boolean, items?: { ok: boolean, text: string }[] }} choice
+ */
+export function markWriteBack(source, { keep, always = false, items = [] }) {
+  if (!source?.yearDone || !source.summary) return source;
+  return {
+    ...source,
+    summary: { ...source.summary, writeBack: keep ? 'kept' : 'skipped', writeBackItems: keep ? items : [] },
+    settings: { ...(source.settings ?? {}), writeBack: always ? 'always' : (source.settings?.writeBack === 'always' && keep ? 'always' : null) },
+  };
 }
 
 // ---- 棋士の仕事(14-3の1)
