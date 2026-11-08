@@ -176,6 +176,7 @@
             <p class="shogi-tournament__hud-chips">
               <span class="shogi-tournament__chip">Lv.{{ opponent?.level }}</span>
               <span v-if="rankTag(opponent?.level ?? NaN, userLevel)" class="shogi-tournament__chip" :class="rankTag(opponent?.level ?? NaN, userLevel) === '格上' ? 'shogi-tournament__chip--rank-up' : 'shogi-tournament__chip--rank-down'" data-rank-tag>{{ rankTag(opponent?.level ?? NaN, userLevel) }}</span>
+              <PowerScouter ref="scouter" :opponent-name="opponent?.name ?? ''" :opponent-level="opponent?.level ?? NaN" :user-level="userLevel" :user-name="playerName || 'あなた'" />
               <span v-if="view.pending.kind === 'shido'" class="shogi-tournament__chip shogi-tournament__chip--opening" data-kenshukai-handicap>{{ view.pending.handicapLabel }}</span>
               <span v-else-if="favorite" class="shogi-tournament__chip shogi-tournament__chip--opening">{{ favorite }}</span>
               <span class="shogi-tournament__chip">{{ colorText }}</span>
@@ -298,6 +299,7 @@ import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
 import WorldDifficultyChip from "./WorldDifficultyChip.vue";
+import PowerScouter from "./PowerScouter.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { CLASSES, CLASS_RATINGS, DEFAULT_SETTINGS, ENTRY_CLASSES, KENSHUKAI_SCALES, TOP, describeKenshukai, kenshukaiScale } from "./core/kenshukai.mjs";
@@ -339,6 +341,8 @@ const props = defineProps({
   backLabel: { type: String, default: "戻る" },
 });
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
+/** 棋力スカウター(docs/power-scouter-design.md)。戻る操作で先に閉じる。 */
+const scouter = ref<{ goBack: () => boolean } | null>(null);
 const emit = defineEmits<{
   /** 途中で難易度を変えた(番号)。 */
   "world-change": [difficulty: number];
@@ -556,6 +560,7 @@ onMounted(() => {
 function goBack() {
   // 途中で難易度を変えるシートを先に閉じる(11章)。
   if (worldChip.value?.goBack()) return true;
+  if (scouter.value?.goBack()) return true;
   if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (detailOpen.value) detailOpen.value = false;

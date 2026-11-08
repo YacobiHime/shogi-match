@@ -177,6 +177,7 @@
             <p class="shogi-tournament__hud-chips">
               <span class="shogi-tournament__chip">Lv.{{ view.pending.opponent.level }}</span>
               <span v-if="rankTag(view.pending.opponent.level ?? NaN, userLevel)" class="shogi-tournament__chip" :class="rankTag(view.pending.opponent.level ?? NaN, userLevel) === '格上' ? 'shogi-tournament__chip--rank-up' : 'shogi-tournament__chip--rank-down'" data-rank-tag>{{ rankTag(view.pending.opponent.level ?? NaN, userLevel) }}</span>
+              <PowerScouter v-if="!view.spectator" ref="scouter" :opponent-name="view.pending.opponent.name" :opponent-level="view.pending.opponent.level ?? NaN" :user-level="userLevel" :user-name="playerName || 'あなた'" />
               <span v-if="favorite" class="shogi-tournament__chip shogi-tournament__chip--opening">{{ favorite }}</span>
               <span v-if="opponentRecord" class="shogi-tournament__chip" data-meijin-opponent-record>{{ opponentRecord }}</span>
               <span class="shogi-tournament__chip">{{ `${view.spectator ? "分身" : "あなた"}が${view.pending.color === "black" ? "先手" : "後手"}` }}</span>
@@ -312,6 +313,7 @@ import RyuoVersus from "./RyuoVersus.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import RadarChart from "./RadarChart.vue";
 import WorldDifficultyChip from "./WorldDifficultyChip.vue";
+import PowerScouter from "./PowerScouter.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { CLASS_LABELS, CLASS_RULES, MEIJIN_OUTCOME_TEXT, MEIJIN_SCALES, meijinGoalLine, meijinScale } from "./core/meijin.mjs";
@@ -383,6 +385,8 @@ const props = defineProps({
   afterRevealed: { type: Number, default: 0 },
 });
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
+/** 棋力スカウター(docs/power-scouter-design.md)。戻る操作で先に閉じる。 */
+const scouter = ref<{ goBack: () => boolean } | null>(null);
 const emit = defineEmits<{
   /** 途中で難易度を変えた(番号)。 */
   "world-change": [difficulty: number];
@@ -645,6 +649,7 @@ const nextText = computed(() => {
 function goBack() {
   // 途中で難易度を変えるシートを先に閉じる(11章)。
   if (worldChip.value?.goBack()) return true;
+  if (scouter.value?.goBack()) return true;
   if (picker.value) picker.value = "";
   else if (settingsOpen.value) settingsOpen.value = false;
   else if (detailOpen.value) detailOpen.value = false;

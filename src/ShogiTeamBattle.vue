@@ -236,6 +236,10 @@
               >{{ game.them.name }}<small v-if="game.them.dan">{{ game.them.dan }}</small></button>
             </li>
           </ul>
+          <!-- 棋力スカウター(docs/power-scouter-design.md)。自分の次の相手の戦闘力を測る。 -->
+          <p v-if="pendingOpponent" class="team-battle__scout">
+            <PowerScouter ref="scouter" :opponent-name="pendingOpponent.name" :opponent-level="pendingOpponent.level" :user-level="userLevel" :user-name="playerName || 'あなた'" />
+          </p>
         </div>
 
         <!-- 進み具合: 段階ごとの表(地区大会・県大会・全国予選・決勝T。プロは予選・本戦。15章の9) -->
@@ -441,6 +445,7 @@ import TeamNewspaper from "./TeamNewspaper.vue";
 import RyuoBracket, { type BracketView } from "./RyuoBracket.vue";
 import type { SeasonAwardData } from "./SeasonAward.vue";
 import WorldDifficultyChip from "./WorldDifficultyChip.vue";
+import PowerScouter from "./PowerScouter.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { difficultyName, difficultyOptions } from "./core/tournament-world.mjs";
@@ -500,6 +505,15 @@ const props = defineProps({
   awards: { type: Array as PropType<SeasonAwardData[]>, default: () => [] },
 });
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
+/** 棋力スカウター(docs/power-scouter-design.md)。戻る操作で先に閉じる。 */
+const scouter = ref<{ goBack: () => boolean } | null>(null);
+/** 自分の次の相手と、そのLv(相手を決めたときに、大会の世界の物差しで付く。team-battle.mjsのteamOpponentLevel)。 */
+const pendingOpponent = computed(() => {
+  const id = props.view?.pending?.opponentId;
+  const member = id ? props.career.current?.players?.[id] : null;
+  const level = member?.level;
+  return member && typeof level === "number" && Number.isFinite(level) ? { name: String(member.name ?? ""), level } : null;
+});
 const emit = defineEmits<{
   /** 途中で難易度を変えた(番号)。 */
   "world-change": [difficulty: number];
@@ -901,6 +915,7 @@ const faceKind = (member: { id: string }) => (member.id === TEAM_USER_ID ? "spri
 function goBack() {
   // 途中で難易度を変えるシートを先に閉じる(11章)。
   if (worldChip.value?.goBack()) return true;
+  if (scouter.value?.goBack()) return true;
   // 場面のログ・設定・隠した窓を先に閉じ、なければ場面を閉じる(docs/novel-scene-design.mdの4-2)。
   if (sceneId.value) {
     if (!novelEl.value?.goBack()) novelEl.value?.finish();
@@ -1059,6 +1074,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onEntryKeydown));
 .shogi-game .team-battle__board b { text-align: center; }
 .shogi-game .team-battle__board--you { background: rgba(241, 165, 76, 0.18); }
 /* 相手の名前と表の学校名は押してステータス・学校のシートを開く(20章)。見た目は文字のまま、下線で押せると分かる */
+.shogi-game .team-battle__scout { display: flex; justify-content: flex-end; margin: 0.4rem 0 0; }
 .shogi-game .team-battle__opponent, .shogi-game .team-battle__school-link {
   min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; color: inherit; background: transparent; box-shadow: none;
   font: inherit; text-align: left; text-decoration: underline dotted rgba(255, 252, 244, 0.55); text-underline-offset: 0.2em; cursor: pointer;

@@ -613,6 +613,7 @@
                 <p class="shogi-tournament__hud-name">{{ view.pending.opponent.name }} <small>{{ view.pending.opponent.dan }}</small></p>
                 <p class="shogi-tournament__hud-chips" data-opponent-ability-line>
                   <span v-for="chip in hudChips" :key="chip.text" :class="`shogi-tournament__chip shogi-tournament__chip--${chip.kind}`">{{ chip.text }}</span>
+                  <PowerScouter v-if="!spectating" ref="scouter" :opponent-name="view.pending.opponent.name" :opponent-level="view.pending.opponent.level ?? NaN" :user-level="userLevel" :user-name="playerName || 'あなた'" />
                 </p>
               </div>
               <div v-if="view.pending.kind !== 'game'" class="shogi-tournament__hud-score" :aria-label="`${view.pending.wins.user}勝${view.pending.wins.opponent}敗`">
@@ -1042,6 +1043,7 @@ import SeasonAward, { type SeasonAwardData } from "./SeasonAward.vue";
 import { awardLine } from "./core/season-award.mjs";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import WorldDifficultyChip from "./WorldDifficultyChip.vue";
+import PowerScouter from "./PowerScouter.vue";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { SCALES, entryGoalLine, entryRoad, restOpen, scaleById } from "./core/ryuo.mjs";
 import { meijinRestOpen } from "./core/meijin.mjs";
@@ -1474,6 +1476,8 @@ const backText = computed(() => "戻る");
  * 結果は見終えたことにして、大会の選択へ。ほかの画面も、大会の選択へ。選択の画面なら、閉じる。
  */
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
+/** 棋力スカウター(docs/power-scouter-design.md)。戻る操作で先に閉じる。 */
+const scouter = ref<{ goBack: () => boolean } | null>(null);
 function goBack() {
   if (relayEntry.value) {
     // 中継の中で開いたもの(投了図からの詰将棋)を先に閉じる。
@@ -1485,7 +1489,7 @@ function goBack() {
     relayList.value = null;
     return;
   }
-  if (worldChip.value?.goBack()) return;
+  if (worldChip.value?.goBack() || scouter.value?.goBack()) return;
   // 中継ボードの予想のシートは、ボードを終える前に閉じる(34章)。
   if (livePanelEl.value?.closeSheet() || meijinEl.value?.closeLiveSheet()) return;
   if (afterWatch.value) {

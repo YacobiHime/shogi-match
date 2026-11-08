@@ -451,6 +451,7 @@
           </p>
           <p class="pro-year__next-vs">
             <span>対 <strong>{{ view.pending.opponent?.name }}</strong><small>{{ view.pending.opponent?.dan }}</small></span>
+            <PowerScouter v-if="view.pending.gameId || view.pending.kind === 'study'" ref="scouter" :opponent-name="view.pending.opponent?.name ?? ''" :opponent-level="view.pending.level ?? NaN" :user-level="userLevel" :user-name="playerName || 'あなた'" />
             <small class="pro-year__next-stakes">{{ view.pending.stakes?.text }}</small>
           </p>
           <!-- 週の研究と調子が効くところ(13-3の3。閃きの増減を数字で見せる。D:4-2) -->
@@ -888,6 +889,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import WorldDifficultyChip from "./WorldDifficultyChip.vue";
+import PowerScouter from "./PowerScouter.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import RyuoBracket from "./RyuoBracket.vue";
 import RadarChart from "./RadarChart.vue";
@@ -939,6 +941,8 @@ const props = defineProps({
   backLabel: { type: String, default: "戻る" },
 });
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
+/** 棋力スカウター(docs/power-scouter-design.md)。戻る操作で先に閉じる。 */
+const scouter = ref<{ goBack: () => boolean } | null>(null);
 const emit = defineEmits<{
   /** 途中で難易度を変えた(番号)。 */
   "world-change": [difficulty: number];
@@ -1384,6 +1388,7 @@ watch(() => props.state, (state) => {
 function goBack() {
   // 途中で難易度を変えるシートを先に閉じる(11章)。
   if (worldChip.value?.goBack()) return true;
+  if (scouter.value?.goBack()) return true;
   if (storyScene.value) {
     if (!sceneEl.value?.goBack()) closeScene();
     return true;
