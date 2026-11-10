@@ -220,6 +220,7 @@
           :suspended-moves="proYearSuspendedMoves"
           :cut-busy="proYearCutBusy"
           :write-back="proYearWriteBack"
+          :my-ability="teamMyProfile?.ready ? teamMyProfile.member?.character ?? null : null"
           @enter="emit('pro-year-enter', $event)"
           @advance="emit('pro-year-advance')"
           @play="emit('pro-year-play')"

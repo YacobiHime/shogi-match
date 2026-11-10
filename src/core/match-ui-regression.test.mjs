@@ -960,7 +960,10 @@ describe("match screen regressions", () => {
     // 分身に任せるは取り消せないので、はじめに「自分で指す」を選んでおく(UD:5-2)。
     const year = readFileSync(new URL("../ShogiProYear.vue", import.meta.url), "utf8");
     expect(year).toMatch(/ref="autoCancel"[^>]*data-pro-auto-cancel/);
-    expect(year).toMatch(/function openAuto\(\) \{\s*autoOpen\.value = true;\s*void nextTick\(\(\) => autoCancel\.value\?\.focus\(\)\);/);
+    expect(year).toMatch(/function openAuto\(\) \{\s*autoOpen\.value = true;\s*confirmShownAt = Date\.now\(\);\s*void nextTick\(\(\) => autoCancel\.value\?\.focus\(\)\);/);
+    // 確認は押した段のその場で答え、出てすぐの2回押しは受けない(docs/pro-year-design.mdの16-3の4)。
+    expect(year).toMatch(/function confirmAuto\(\) \{\s*if \(Date\.now\(\) - confirmShownAt < CONFIRM_GUARD_MS\) return;/);
+    expect(year).not.toMatch(/data-pro-auto-sheet/);
   });
 
   it('棋士の暮らし: 研究の道具を買い、研究会の練習対局は公式戦と別に記録し、観戦記を書かない(docs/pro-year-design.mdの10章)', () => {
@@ -975,7 +978,9 @@ describe("match screen regressions", () => {
     // 研究会の練習対局は分身に任せず、帰ってもよい(D:9-2)。研究会とまつりは、今週の行動で選ぶ(13-3の2)。
     expect(year).toMatch(/v-if="view\.pending\.kind === 'study'"[^>]*data-pro-leave-study/);
     expect(year).toMatch(/data-pro-auto-weeks @click="emit\('life', \{ kind: 'auto-weeks' \}\)"[\s\S]{0,300}?data-pro-advance @click="emit\('life', \{ kind: 'week-advance' \}\)"/);
-    expect(year).toMatch(/emit\("life", \{ kind: "week-action", slot: slotSheet\.value, action: id \}\)/);
+    // 行動は札を1回押して入れる(16-3の2)。
+    expect(year).toMatch(/emit\("life", \{ kind: "week-push", action: id \}\)/);
+    expect(source).toMatch(/action\.kind === "week-push" && typeof action\.action === "string"\) \{[\s\S]{0,200}?pushProYearWeekAction\(state, action\.action\)/);
     expect(source).toMatch(/action\.kind === "week-advance"\) \{\s*setProYear\(advanceProYearWeek\(state\)\);/);
     // 閃きは調子と対策の当たりで増減する(13-3の3)。
     expect(source).toMatch(/proYearState\.value\?\.pending\?\.hintBonus/);

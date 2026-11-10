@@ -112,3 +112,17 @@ export function avatarView(avatar, weekGains = {}) {
   const closest = [...rows].filter((row) => row.level < AVATAR_MAX_LEVEL).sort((a, b) => a.need - b.need)[0] ?? null;
   return { rows, top, grew, closest, edge: avatarEdge(avatar), total: rows.reduce((sum, row) => sum + row.level, 0) };
 }
+
+/**
+ * 分身を名鑑の棋士と同じ形にする(docs/pro-year-design.mdの16-3の6)。能力は「あなたの能力(対局の解析の配分)＋育てた分」。
+ * 名鑑と同じ部品(PlayerAbilityPanel・ryuo-book.mjsのmemberAbilityView)で見せるため。
+ * levelsを渡すと、その能力のLv(今週のはじめなど)で育てた分を数える。
+ * @param {{ rating: number, base?: Record<string, number> | null, traits?: any[] | null, avatar?: any, levels?: Record<string, number> | null }} options
+ */
+export function avatarMember({ rating, base = null, traits = null, avatar = null, levels = null }) {
+  const grown = levels
+    ? Object.fromEntries(ABILITY_KEYS.map((key) => [key, (Math.max(1, Number(levels[key]) || 1) - 1) * AVATAR_DEV_PER_LEVEL]))
+    : avatarDevs(avatar);
+  const abilities = Object.fromEntries(ABILITY_KEYS.map((key) => [key, (Number(base?.[key]) || 0) + grown[key]]));
+  return { rating, character: { abilities, traits: Array.isArray(traits) ? traits : [] } };
+}

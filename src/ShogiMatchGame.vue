@@ -2989,7 +2989,7 @@ import { championBanner, championNewspaper, championTitle, teamStreak, teamTroph
 import { peekBoards, peekThought, peekVoice } from "./core/team-peek.mjs";
 import {
   advanceToNextGame as advanceProYearToNextGame, advanceWeek as advanceProYearWeek, autoWeeks as autoProYearWeeks, answerInterview as answerProYearInterview, finishWork as finishProYearWork,
-  startWorkShidou as startProYearWorkShidou, chooseWeekAction as chooseProYearWeekAction, setYearGoals as setProYearGoals, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
+  startWorkShidou as startProYearWorkShidou, chooseWeekAction as chooseProYearWeekAction, pushWeekAction as pushProYearWeekAction, clearWeekActions as clearProYearWeekActions, setYearGoals as setProYearGoals, buyGear as buyProYearGear, cancelShidou as cancelProYearShidou, createProYear, finishFestival as finishProYearFestival,
   fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
   recordFestivalEvent as recordProYearFestivalEvent, recordProGame, recordShidou as recordProYearShidou, recordStudyGame as recordProYearStudy, saveProYear,
   startNextYear as startNextProYear, startShidou as startProYearShidou, retuneProYearWorld, closeYearEarly as closeProYearEarly, seeBondScene as seeProYearBondScene, markWriteBack as markProYearWriteBack,
@@ -8485,6 +8485,11 @@ function proYearLife(action: { kind: string; [key: string]: unknown }) {
   } else if (action.kind === "week-action" && typeof action.slot === "number") {
     // 今週の行動を選ぶ・週を進める・おまかせ・今年の目標(docs/pro-year-design.mdの13章)。
     setProYear(chooseProYearWeekAction(state, action.slot, typeof action.action === "string" ? action.action : null));
+  } else if (action.kind === "week-push" && typeof action.action === "string") {
+    // 行動の札を押す(16-3の2。いちばん新しい枠に入り、いっぱいなら古い方が押し出される)。
+    setProYear(pushProYearWeekAction(state, action.action));
+  } else if (action.kind === "week-clear") {
+    setProYear(clearProYearWeekActions(state));
   } else if (action.kind === "week-advance") {
     setProYear(advanceProYearWeek(state));
   } else if (action.kind === "auto-weeks") {

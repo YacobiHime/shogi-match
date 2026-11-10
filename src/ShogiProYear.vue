@@ -79,7 +79,7 @@
     </div>
 
     <!-- 1年 -->
-    <div v-else-if="view" class="shogi-tournament__stage shogi-tournament__stage--shoreikai" :data-pro-year-screen="view.yearDone ? 'summary' : 'year'">
+    <div v-else-if="view" class="shogi-tournament__stage shogi-tournament__stage--shoreikai pro-year__stage" :class="{ 'pro-year__stage--wide': wide }" :data-pro-year-screen="view.yearDone ? 'summary' : 'year'" @click="onOutsideConfirm">
       <header class="shogi-tournament__topbar shoreikai__topbar">
         <button type="button" class="shogi-tournament__topbar-back" :aria-label="backLabel" data-pro-back @click="emit('back')">
           <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">{{ backLabel }}</span>
@@ -114,7 +114,7 @@
           <button v-for="item in tabs" :key="item.id" type="button" role="tab" :aria-selected="tab === item.id" :data-pro-tab="item.id" @click="tab = item.id">{{ item.label }}</button>
         </div>
 
-        <!-- 今週(13章。画面の主役。1週の行動を選んで進める) -->
+        <!-- 今週(13章。画面の主役)。選ぶもの(行動の札)と決めるボタン(下の枠)を1枚の札にまとめる(16-3の3)。 -->
         <div v-show="wide || tab === 'week'" class="pro-year__weekpanel" data-pro-week>
           <template v-if="week">
             <!-- 公式戦が残っていない(15-3の6)。年度を締めるか、週を過ごすか。 -->
@@ -122,19 +122,6 @@
               <b>{{ week.closable === "over" ? "今年度の公式戦は、これで終わり" : "ほかの棋戦は敗退。今年度に残るのは順位戦だけ" }}</b>
               <small>年度の終わりまで、あと{{ week.weeksLeft }}週。{{ week.closable === "junni" ? "締めると、順位戦の残りは分身が指すよ。" : "" }}締めても、絆・分身・段位は次の年度へ持ち越すよ。</small>
             </div>
-            <!-- 先週の将棋ニュース(14-3の3)。押すと紙面。 -->
-            <button v-if="week.news" type="button" class="pro-year__news" data-pro-news @click="newsOpen = week.news">
-              <span class="pro-year__news-mast">週刊 将棋ニュース<small>第{{ week.news.number }}週</small></span>
-              <b class="pro-year__news-head">{{ week.news.headline }}</b>
-              <span v-if="week.news.lead || week.news.lines[0]" class="pro-year__news-lead">{{ week.news.lead || week.news.lines[0] }}</span>
-              <span class="pro-year__news-more" aria-hidden="true">紙面を開く ›</span>
-            </button>
-            <!-- 取材の依頼(14-3の5)。行動の枠を使わない。 -->
-            <button v-if="week.interview" type="button" class="pro-year__interview" data-pro-interview @click="interviewOpen = true">
-              <span class="pro-year__interview-icon" aria-hidden="true">記</span>
-              <span><b>取材の依頼</b><small>{{ week.interview.reporter }}「{{ week.interview.question }}」</small></span>
-              <span class="pro-year__interview-go">答える</span>
-            </button>
             <div class="pro-year__week-head">
               <h2>第{{ week.number }}週<small>{{ shortDate(week.start) }}〜{{ shortDate(week.end) }}</small></h2>
               <p class="pro-year__condition" :data-pro-condition="week.condition">
@@ -156,65 +143,85 @@
                 <span v-else-if="day.study" class="pro-year__strip-mark pro-year__strip-mark--study">研</span>
               </li>
             </ol>
-            <ul v-if="week.games.length" class="pro-year__week-games" aria-label="今週の対局">
+            <ul v-if="week.games.length && !view.pending" class="pro-year__week-games" aria-label="今週の対局">
               <li v-for="game in week.games" :key="game.id" class="pro-year__week-game" :data-pro-week-game="game.id">
                 <span class="pro-year__weight" :class="`pro-year__weight--${game.weight}`">{{ WEIGHTS[game.weight as keyof typeof WEIGHTS]?.label ?? "" }}</span>
                 <span class="pro-year__week-game-text"><b>{{ game.dateText }}</b>{{ game.label }}{{ game.twoDay ? "（2日制）" : "" }}<small>対 {{ nameText(game.opponent) }}</small></span>
                 <span class="pro-year__stars" :aria-label="`対策 ★${game.stars}`">{{ "★".repeat(game.stars) }}<i>{{ "☆".repeat(Math.max(0, (week.prep?.cap ?? 1) - game.stars)) }}</i></span>
               </li>
             </ul>
-            <p v-else class="pro-year__week-free">今週は公式戦がないよ。行動を2つ選べるよ。</p>
-            <h3 class="pro-year__subhead">今週の行動<small>{{ week.slots ? `（${week.slots}つ）` : "" }}</small></h3>
-            <p v-if="!week.slots" class="pro-year__week-free">対局が続く週。行動はお休み。</p>
-            <div v-else class="pro-year__slots">
-              <button
-                v-for="index in week.slots"
-                :key="index"
-                type="button"
-                class="pro-year__slot"
-                :class="{ 'pro-year__slot--set': slotAction(index - 1), 'pro-year__slot--lock': week.applied }"
-                :disabled="week.applied"
-                :data-pro-slot="index - 1"
-                @click="slotSheet = index - 1"
-              >
-                <span class="pro-year__slot-icon" aria-hidden="true">{{ slotAction(index - 1)?.icon ?? "＋" }}</span>
-                <span class="pro-year__slot-text">
-                  <b>{{ slotAction(index - 1) ? actionTitle(slotAction(index - 1)) : "行動を選ぶ" }}</b>
-                  <small>{{ slotAction(index - 1)?.effect ?? (index === 1 ? "研究・休む・研究会・まつり" : "選ばなければ何もしない") }}</small>
-                </span>
-              </button>
-            </div>
-            <!-- 分身の1行(14-3の2)。押すと分身のシート。 -->
-            <button type="button" class="pro-year__avatar-row" data-pro-avatar @click="avatarOpen = true">
-              <span class="pro-year__slot-icon pro-year__avatar-icon" aria-hidden="true">分</span>
-              <span class="pro-year__slot-text">
-                <b>分身　いちばん高い {{ week.avatar.top.label }} Lv{{ week.avatar.top.level }}<template v-if="week.avatar.grew">・今週 <i class="pro-year__gain">{{ week.avatar.grew.label }}＋{{ week.avatar.grew.gain }}</i></template></b>
-                <small v-if="week.avatar.closest">{{ week.avatar.closest.label }} Lv{{ week.avatar.closest.level + 1 }} まで あと{{ week.avatar.closest.need }}</small>
-                <span class="pro-year__avatar-bar" aria-hidden="true"><i :style="{ width: `${Math.round((week.avatar.closest?.ratio ?? 1) * 100)}%` }"></i></span>
-              </span>
-            </button>
-            <!-- 人の1行(15-3の1・3)。押すと人のシート。 -->
-            <button v-if="week.people?.length" type="button" class="pro-year__avatar-row pro-year__people-row" data-pro-people @click="peopleOpen = true">
-              <span class="pro-year__slot-icon pro-year__avatar-icon" aria-hidden="true">人</span>
-              <span class="pro-year__people-faces">
-                <span v-for="person in week.people" :key="person.id" class="pro-year__person-mini" :data-pro-person="person.role">
-                  <span class="pro-year__face" :class="`pro-year__face--${person.role.startsWith('peer') ? 'peer' : person.role}`" aria-hidden="true">{{ person.icon }}</span>
-                  <span class="pro-year__koma" :aria-label="`${person.name} 絆の段${person.level}`"><i v-for="n in 5" :key="n" :class="{ on: n <= person.level }"></i></span>
-                </span>
-              </span>
-              <small v-if="closestBond" class="pro-year__people-next">{{ closestBond.rel }} 段{{ closestBond.next.level }}まで<br>あと{{ closestBond.next.need }}</small>
-            </button>
-            <div v-if="!week.news && week.lastWeek?.lines?.length" class="pro-year__lastweek" data-pro-lastweek>
-              <h3 class="pro-year__subhead">先週のまとめ<small>（第{{ week.lastWeek.number }}週）</small></h3>
-              <ul><li v-for="(line, index) in week.lastWeek.lines" :key="index">{{ line }}</li></ul>
-            </div>
+            <!-- 今週の行動。進めたあとは1行にたたむ。 -->
+            <p v-if="week.applied" class="pro-year__done-acts" data-pro-done-acts>今週の行動：{{ doneActsText }}</p>
+            <p v-else-if="!week.slots" class="pro-year__week-free">対局が続く週。行動はお休み。</p>
+            <template v-else>
+              <h3 class="pro-year__subhead">
+                今週の行動<small>（{{ week.slots }}つ{{ week.games.length ? "" : "・公式戦はない週" }}）</small>
+                <span v-if="week.carried" class="pro-year__carry" :data-pro-carry="week.carried">{{ week.carried === "recommend" ? "おすすめ" : "先週と同じ" }}</span>
+              </h3>
+              <!-- 行動の札(16-3の2)。1回押すと、いちばん新しい枠に入る。いっぱいなら①が押し出される。 -->
+              <div class="pro-year__palette" data-pro-palette>
+                <div v-for="row in paletteRows" :key="row.id" class="pro-year__palette-row" :data-pro-palette-row="row.id">
+                  <span class="pro-year__palette-label">{{ row.label }}</span>
+                  <button
+                    v-for="item in row.items"
+                    :key="item.id"
+                    type="button"
+                    class="pro-year__act"
+                    :class="{ 'pro-year__act--on': slotNumbers(item.id).length, 'pro-year__act--open': item.id === 'meet' && meetOpen }"
+                    :aria-pressed="slotNumbers(item.id).length > 0"
+                    :data-pro-act="item.id"
+                    @click="pressAct(item.id)"
+                  >
+                    <span class="pro-year__slot-icon" aria-hidden="true">{{ item.icon }}</span>
+                    <span class="pro-year__slot-text"><b>{{ item.title }}</b><small>{{ item.effect }}</small></span>
+                    <span v-if="slotNumbers(item.id).length" class="pro-year__act-nos" aria-hidden="true"><i v-for="no in slotNumbers(item.id)" :key="no">{{ NUMBER_MARKS[no] }}</i></span>
+                    <span v-if="autoMarked(item.id)" class="pro-year__act-auto">おまかせ</span>
+                    <span v-if="item.id === 'meet'" class="pro-year__act-drop" aria-hidden="true">{{ meetOpen ? "▴" : "▾" }}</span>
+                  </button>
+                  <button v-if="row.id === 'week' && week.lockedWork" type="button" class="pro-year__act pro-year__act--lock" disabled data-pro-action-locked>
+                    <span class="pro-year__slot-icon" aria-hidden="true">{{ week.lockedWork.icon }}</span>
+                    <span class="pro-year__slot-text"><b>{{ week.lockedWork.label }}</b><small>ファン{{ KAISETSU_FANS }}人で開く（あと{{ week.lockedWork.need }}人）</small></span>
+                  </button>
+                </div>
+                <!-- 人に会う(15-3の2)。札のすぐ下に5人を並べる。 -->
+                <div v-if="meetOpen && meetActions.length" class="pro-year__meet-pick" data-pro-meet-pick>
+                  <button
+                    v-for="item in meetActions"
+                    :key="item.id"
+                    type="button"
+                    class="pro-year__meet"
+                    :class="{ 'pro-year__act--on': slotNumbers(item.id).length }"
+                    :data-pro-act="item.id"
+                    @click="pressAct(item.id)"
+                  >
+                    <span class="pro-year__face" :class="`pro-year__face--${item.meet.startsWith('peer') ? 'peer' : item.meet}`" aria-hidden="true">{{ item.icon }}</span>
+                    <span class="pro-year__slot-text"><b>{{ item.label }}</b><small>{{ item.effect }}</small></span>
+                  </button>
+                </div>
+                <p class="pro-year__palette-foot">
+                  <span v-if="firstWeeks" class="pro-year__action-tip">押すと入って、もう一度押すと外れるよ。研究と休むは2回押すと2つ入るよ。</span>
+                  <button type="button" class="pro-year__clear" data-pro-act-clear :disabled="!chosenCount" @click="clearActs">何もしない</button>
+                </p>
+              </div>
+            </template>
+            <ProYearWeekExtras v-if="!wide" :week="week" :closest-bond="closestBond" :avatar-top="avatarTop" @news="newsOpen = week.news" @interview="interviewOpen = true" @avatar="avatarOpen = true" @people="peopleOpen = true" />
           </template>
           <p v-else class="pro-year__week-free">年度が終わったよ。まとめを見てね。</p>
         </div>
 
         <div v-show="wide || tab !== 'week'" class="pro-year__side">
+          <ProYearWeekExtras v-if="wide && week" :week="week" :closest-bond="closestBond" :avatar-top="avatarTop" @news="newsOpen = week.news" @interview="interviewOpen = true" @avatar="avatarOpen = true" @people="peopleOpen = true" />
           <div v-if="wide" class="pro-year__tabs" role="tablist" aria-label="見るもの">
             <button v-for="item in sideTabs" :key="item.id" type="button" role="tab" :aria-selected="sideTab === item.id" :data-pro-tab="item.id" @click="tab = item.id">{{ item.label }}</button>
+          </div>
+          <!-- 次の相手の能力(16-3の5)。名鑑と同じ部品。点線はあなたの分身。 -->
+          <div v-if="opponentAbility" v-show="sideTab === 'opponent'" class="pro-year__opponent" data-pro-opponent>
+            <p class="pro-year__opponent-head"><b>{{ view.pending?.opponent?.name }}の能力</b><small>{{ view.pending?.opponent?.dan }}{{ opponentAbility.type ? `・${opponentAbility.type}` : "" }}</small></p>
+            <div class="pro-year__chips" role="radiogroup" aria-label="比べる">
+              <button type="button" role="radio" class="pro-year__chip" :aria-checked="opponentCompareOn" data-pro-opponent-compare="avatar" @click="opponentCompareOn = true">分身と比べる</button>
+              <button type="button" role="radio" class="pro-year__chip" :aria-checked="!opponentCompareOn" data-pro-opponent-compare="none" @click="opponentCompareOn = false">比べない</button>
+            </div>
+            <PlayerAbilityPanel :view="opponentAbility" :compare="opponentCompareOn ? avatarCompare : null" :own-label="view.pending?.opponent?.name" />
           </div>
 
         <!-- 月のカレンダー -->
@@ -454,6 +461,12 @@
             <PowerScouter v-if="view.pending.gameId || view.pending.kind === 'study'" ref="scouter" :opponent-name="view.pending.opponent?.name ?? ''" :opponent-level="view.pending.level ?? NaN" :user-level="userLevel" :user-name="playerName || 'あなた'" />
             <small class="pro-year__next-stakes">{{ view.pending.stakes?.text }}</small>
           </p>
+          <!-- 相手の8つの能力のランク(16-3の5)。押すと、くわしい能力(広い画面は右の列のタブ、狭い画面はシート)。 -->
+          <button v-if="opponentAbility" type="button" class="pro-year__ranks-mini" :aria-label="`${view.pending.opponent?.name}の能力。押すとくわしく`" data-pro-opponent-open @click="openOpponent">
+            <span class="pro-year__ranks-mini-who">相手</span>
+            <span v-for="item in opponentAbility.abilities" :key="item.key" class="pro-year__ranks-mini-item">{{ item.label }}<b :class="['player-ability__rank', `player-ability__rank--${item.rank}`]">{{ item.rank }}</b></span>
+            <span v-if="!wide" class="pro-year__ranks-mini-more">能力を見る ›</span>
+          </button>
           <!-- 週の研究と調子が効くところ(13-3の3。閃きの増減を数字で見せる。D:4-2) -->
           <p v-if="view.pending.gameId" class="pro-year__prep pro-year__prep--week" data-pro-pending-week>
             <b>対策 {{ view.pending.stars ? "★".repeat(view.pending.stars) : "なし" }}</b>
@@ -490,14 +503,25 @@
         </template>
         <!-- 公式戦の3つの指し方(13-3の5・6)。既定は重さで決め(小は勝負どころから)、その1つだけ琥珀色。分身には勝率の見込み(D:2-1) -->
         <template v-else-if="view.pending && view.pending.gameId && !suspendedMoves">
-          <div class="pro-year__ways" data-pro-ways>
+          <!-- 分身に任せるの確認は、押した段のその場で答える(16-3の4)。「分身に任せる」は押した場所と同じ右の端。 -->
+          <div v-if="autoOpen" class="pro-year__confirm" role="group" aria-label="分身に任せる" data-pro-auto-confirm-row>
+            <p>この対局を分身に任せます。<small>{{ autoChance !== null ? `勝つ見込み ${autoChance}%・` : "" }}レーティングには数えない</small></p>
+            <button ref="autoCancel" type="button" class="shogi-tournament__sub" data-pro-auto-cancel @click="autoOpen = false">自分で指す</button>
+            <button type="button" class="shogi-tournament__start" data-pro-auto-confirm @click="confirmAuto">分身に任せる</button>
+          </div>
+          <div v-else class="pro-year__ways" data-pro-ways>
             <button type="button" :class="wayClass('full')" data-pro-play @click="playWithScene()">最初から指す<small>レーティングに数える</small></button>
             <button type="button" :class="wayClass('cut')" data-pro-cut @click="playCut">勝負どころから<small>40手目ごろから</small></button>
             <button type="button" class="shogi-tournament__sub" data-pro-auto @click="openAuto">分身に任せる<small v-if="autoChance !== null">勝つ見込み {{ autoChance }}%</small></button>
           </div>
         </template>
         <template v-else-if="view.pending">
-          <div class="shogi-tournament__actions shogi-tournament__actions--two">
+          <div v-if="autoOpen" class="pro-year__confirm" role="group" aria-label="分身に任せる" data-pro-auto-confirm-row>
+            <p>この対局を分身に任せます。<small>レーティングには数えない</small></p>
+            <button ref="autoCancel" type="button" class="shogi-tournament__sub" data-pro-auto-cancel @click="autoOpen = false">自分で指す</button>
+            <button type="button" class="shogi-tournament__start" data-pro-auto-confirm @click="confirmAuto">分身に任せる</button>
+          </div>
+          <div v-else class="shogi-tournament__actions shogi-tournament__actions--two">
             <!-- 研究会の練習対局は、分身に任せない(帰ってもよい。D:9-2)。まつりの指導対局は、やめるとまつりへ戻る。 -->
             <button v-if="view.pending.kind === 'study'" type="button" class="shogi-tournament__sub" data-pro-leave-study @click="emit('life', { kind: 'leave-study' })">{{ STUDY_TEXT.leave }}</button>
             <button v-else-if="view.pending.kind === 'shidou'" type="button" class="shogi-tournament__sub" data-pro-cancel-shidou @click="emit('life', { kind: 'cancel-shidou' })">まつりへ戻る</button>
@@ -509,9 +533,14 @@
         </template>
         <template v-else>
           <!-- 1週ずつ進める(13-3の1)。研究会・まつりは週の行動で選ぶ。急ぐ人は、次の対局の週までおまかせ(13-3の10。D:9-2) -->
-          <div v-if="week?.closable" class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
+          <div v-if="week?.closable && closeConfirm" class="pro-year__confirm" role="group" aria-label="年度を締める" data-pro-close-confirm>
+            <p>今年度を締めます。<small>{{ week.closable === "junni" ? "順位戦の残りは分身が指すよ。" : "" }}残り{{ week.weeksLeft }}週は過ごさずに、年度のまとめへ</small></p>
+            <button ref="closeCancel" type="button" class="shogi-tournament__sub" data-pro-close-cancel @click="closeConfirm = false">週を過ごす</button>
+            <button type="button" class="shogi-tournament__start" data-pro-close-ok @click="closeYear">締める</button>
+          </div>
+          <div v-else-if="week?.closable" class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
             <button type="button" class="shogi-tournament__sub" data-pro-advance @click="emit('life', { kind: 'week-advance' })">{{ week?.applied ? "週の続きを過ごす" : "週を過ごす" }}<small>仕事・人に会う</small></button>
-            <button type="button" class="shogi-tournament__start" data-pro-close-year @click="closeConfirm = true">年度を締める<small>残り{{ week.weeksLeft }}週</small></button>
+            <button type="button" class="shogi-tournament__start" data-pro-close-year @click="askClose">年度を締める<small>残り{{ week.weeksLeft }}週</small></button>
           </div>
           <div v-else class="shogi-tournament__actions shogi-tournament__actions--two pro-year__advance">
             <button type="button" class="shogi-tournament__sub" data-pro-auto-weeks @click="emit('life', { kind: 'auto-weeks' })">対局の週までおまかせ</button>
@@ -559,20 +588,42 @@
         </div>
       </div>
 
-      <!-- 分身のシート(14-3の2)。 -->
+      <!-- 分身の能力(14-3の2・16-3の6)。やこびノートの「能力」と同じ部品と並び(広い画面は2列)。 -->
       <div v-if="avatarOpen && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="分身の能力" data-pro-avatar-sheet @click.self="avatarOpen = false">
-        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
-          <h2>分身の能力<small>点線は今週のはじめ</small></h2>
-          <div class="pro-year__radar"><RadarChart :axes="avatarAxes" :compare="avatarBefore" bare /></div>
-          <ul class="pro-year__abars">
-            <li v-for="row in week.avatar.rows" :key="row.key" :class="{ 'pro-year__abar--up': row.up }">
-              <span>{{ row.label }}</span><b>Lv{{ row.level }}{{ row.up ? " ↑" : "" }}</b>
-              <span class="pro-year__abar-track" aria-hidden="true"><i :style="{ width: `${Math.round(row.ratio * 100)}%` }"></i></span>
-              <small>{{ row.level >= 10 ? "最高" : `次まで ${row.need}` }}</small>
-            </li>
-          </ul>
-          <p class="shogi-tournament__text">分身に任せる・勝負どころからの強さ ＋{{ week.avatar.edge }}。自分で指すときの強さは、あなたの腕のまま。任せた対局では育たないよ。</p>
-          <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" @click="avatarOpen = false">閉じる</button>
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet pro-year__ability-sheet" :class="{ 'pro-year__ability-sheet--wide': wide }">
+          <h2>分身の能力<small>あなたの能力＋育てた分</small></h2>
+          <section class="pro-year__ability-chart" aria-label="分身のレーダーチャート">
+            <div class="pro-year__chips" role="radiogroup" aria-label="比べる">
+              <button v-for="option in avatarCompareOptions" :key="option.id" type="button" role="radio" class="pro-year__chip" :aria-checked="avatarCompareId === option.id" :data-pro-avatar-compare="option.id" @click="avatarCompareId = option.id">{{ option.label }}</button>
+            </div>
+            <PlayerAbilityPanel :view="avatarAbility" :compare="avatarSheetCompare" part="chart" own-label="いまの分身" />
+          </section>
+          <section class="pro-year__ability-details" aria-label="ランクと分身の育ち">
+            <p v-if="!myAbilityReady" class="pro-year__action-tip" data-pro-avatar-basis>対局を解析すると、あなたの形になるよ（いまはレーティングの平均の形）。</p>
+            <PlayerAbilityPanel :view="avatarAbility" :compare="avatarSheetCompare" part="details" :openings="false" />
+            <h3 class="pro-year__subhead">分身の育ち<small>任せる・勝負どころからの強さ ＋{{ week.avatar.edge }}</small></h3>
+            <ul class="pro-year__abars pro-year__abars--two">
+              <li v-for="row in week.avatar.rows" :key="row.key" :class="{ 'pro-year__abar--up': row.up }">
+                <span>{{ row.label }}</span><b>Lv{{ row.level }}{{ row.up ? " ↑" : "" }}</b>
+                <span class="pro-year__abar-track" aria-hidden="true"><i :style="{ width: `${Math.round(row.ratio * 100)}%` }"></i></span>
+              </li>
+            </ul>
+            <p class="pro-year__note">自分で指すときの強さは、あなたの腕のまま。任せた対局では育たないよ。</p>
+          </section>
+          <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" data-pro-avatar-close @click="avatarOpen = false">閉じる</button>
+        </div>
+      </div>
+
+      <!-- 相手の能力(16-3の5。狭い画面のシート。広い画面は右の列の「相手」のタブ)。 -->
+      <div v-if="opponentOpen && opponentAbility" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="`${view.pending?.opponent?.name}の能力`" data-pro-opponent-sheet @click.self="opponentOpen = false">
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet pro-year__ability-sheet">
+          <h2>{{ view.pending?.opponent?.name }}の能力<small>{{ view.pending?.opponent?.dan }}</small></h2>
+          <div class="pro-year__chips" role="radiogroup" aria-label="比べる">
+            <button type="button" role="radio" class="pro-year__chip" :aria-checked="opponentCompareOn" @click="opponentCompareOn = true">分身と比べる</button>
+            <button type="button" role="radio" class="pro-year__chip" :aria-checked="!opponentCompareOn" @click="opponentCompareOn = false">比べない</button>
+          </div>
+          <PlayerAbilityPanel :view="opponentAbility" :compare="opponentCompareOn ? avatarCompare : null" :own-label="view.pending?.opponent?.name" />
+          <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" data-pro-opponent-close @click="opponentOpen = false">閉じる</button>
         </div>
       </div>
 
@@ -598,18 +649,6 @@
         </div>
       </div>
 
-      <!-- 年度を締める(15-3の6。残りの週を飛ばし、取り消せないので確かめる。UD:5-2) -->
-      <div v-if="closeConfirm && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="年度を締める" data-pro-close-confirm @click.self="closeConfirm = false">
-        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
-          <h2>{{ view.fy }}年度を締める？</h2>
-          <p class="shogi-tournament__text">残りの{{ week.weeksLeft }}週は、ほかの棋士の対局だけ進めて{{ week.closable === "junni" ? "（順位戦の残りは分身が指して）" : "" }}、年度のまとめへ行くよ。絆・分身・段位・お金は、次の年度へ持ち越すよ。</p>
-          <div class="shogi-tournament__actions shogi-tournament__actions--two">
-            <button type="button" class="shogi-tournament__sub" data-pro-close-cancel @click="closeConfirm = false">週を過ごす</button>
-            <button type="button" class="shogi-tournament__start" data-pro-close-ok @click="closeYear">締める</button>
-          </div>
-        </div>
-      </div>
-
       <!-- 勝負どころの局面を作っているあいだ(13-3の6。待つあいだもやめられる。UD:5-3) -->
       <div v-if="cutBusy" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="控室で準備しています" data-pro-cut-busy>
         <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet pro-year__cut-busy">
@@ -617,48 +656,6 @@
           <p class="shogi-tournament__text">分身と{{ nameText(view.pending?.opponent) }}が、勝負どころまで指しているよ。数秒〜十数秒かかるよ。</p>
           <span class="pro-year__cut-spinner" aria-hidden="true"></span>
           <button type="button" class="shogi-tournament__sub" data-pro-cut-cancel @click="emit('cut-cancel')">やめる</button>
-        </div>
-      </div>
-
-      <!-- 行動を選ぶシート(13-3の2。効き目を先に見せる。UD:5-1) -->
-      <div v-if="slotSheet !== null && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="行動を選ぶ" data-pro-action-sheet @click.self="slotSheet = null">
-        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
-          <h2>行動を選ぶ<small>（{{ slotSheet + 1 }}つめ）</small></h2>
-          <ul class="pro-year__actions">
-            <li v-for="item in week.actions" :key="item.id">
-              <p v-if="item.work && item.id === firstWorkId" class="pro-year__action-head">今週の仕事の依頼（1つまで）</p>
-              <p v-if="item.meet && item.id === firstMeetId" class="pro-year__action-head">人に会う（1人まで）</p>
-              <button
-                type="button"
-                class="pro-year__action"
-                :class="{ 'pro-year__action--now': week.chosen[slotSheet] === item.id }"
-                :disabled="actionTaken(item.id)"
-                :data-pro-action="item.id"
-                @click="pickAction(item.id)"
-              >
-                <span class="pro-year__slot-icon" aria-hidden="true">{{ item.icon }}</span>
-                <span class="pro-year__slot-text">
-                  <b>{{ actionTitle(item) }}</b>
-                  <small>{{ item.note }}</small>
-                  <em>{{ actionTaken(item.id) ? "もう1つの枠で選んでいるよ" : item.effect }}</em>
-                  <i v-if="item.grow" class="pro-year__gain">{{ item.grow }}</i>
-                </span>
-              </button>
-            </li>
-            <li v-if="week.lockedWork">
-              <p v-if="!firstWorkId" class="pro-year__action-head">今週の仕事の依頼</p>
-              <button type="button" class="pro-year__action pro-year__action--lock" disabled data-pro-action-locked>
-                <span class="pro-year__slot-icon" aria-hidden="true">{{ week.lockedWork.icon }}</span>
-                <span class="pro-year__slot-text"><b>{{ week.lockedWork.label }}</b><small>ファン{{ KAISETSU_FANS }}人か、本戦・リーグ入りで開く（あと{{ week.lockedWork.need }}人）</small></span>
-              </button>
-            </li>
-          </ul>
-          <p v-if="firstWorkId" class="pro-year__action-tip">仕事をすると、お金とファンが増えて、分身も育つよ！</p>
-          <p v-if="firstMeetId && (week.number ?? 99) <= 3" class="pro-year__action-tip">人に会うと絆が深まって、段が上がると、その人との場面が見られるよ！</p>
-          <div class="shogi-tournament__actions shogi-tournament__actions--two">
-            <button type="button" class="shogi-tournament__sub" data-pro-action="none" @click="pickAction(null)">何もしない</button>
-            <button type="button" class="shogi-tournament__sub" @click="slotSheet = null">閉じる</button>
-          </div>
         </div>
       </div>
 
@@ -862,17 +859,6 @@
         </section>
       </div>
 
-      <!-- 分身に任せる確認(UD:5-2。取り消せない。はじめに「自分で指す」を選んでおく) -->
-      <div v-if="autoOpen" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="分身に任せる" data-pro-auto-sheet @click.self="autoOpen = false">
-        <div class="shogi-tournament__sheet-panel shogi-tournament__detail">
-          <h2>この対局を分身に任せる？</h2>
-          <p class="shogi-tournament__text">{{ PRO_YEAR_TEXT.autoNote }}</p>
-          <div class="shogi-tournament__actions shogi-tournament__actions--two">
-            <button ref="autoCancel" type="button" class="shogi-tournament__sub" data-pro-auto-cancel @click="autoOpen = false">自分で指す</button>
-            <button type="button" class="shogi-tournament__start" data-pro-auto-confirm @click="confirmAuto">分身に任せる</button>
-          </div>
-        </div>
-      </div>
     </div>
     <!-- 物語の場面(デビューの日・羽音との公式戦・タイトル戦の前夜。docs/pro-year-design.mdの12章) -->
     <NovelScene
@@ -892,7 +878,10 @@ import WorldDifficultyChip from "./WorldDifficultyChip.vue";
 import PowerScouter from "./PowerScouter.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import RyuoBracket from "./RyuoBracket.vue";
-import RadarChart from "./RadarChart.vue";
+import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
+import ProYearWeekExtras from "./ProYearWeekExtras.vue";
+import { avatarMember } from "./core/pro-avatar.mjs";
+import { memberAbilityView } from "./core/ryuo-book.mjs";
 import { KAISETSU_FANS } from "./core/pro-work.mjs";
 import { INTERVIEW_FANS } from "./core/pro-news.mjs";
 import ProFestival from "./ProFestival.vue";
@@ -907,7 +896,7 @@ import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import { STUDY_TEXT, moneyText } from "./core/pro-life.mjs";
 import {
-  CLASS_NAMES, PRO_EVENTS, PRO_YEAR_TEXT, dayView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, weekView,
+  CLASS_NAMES, PRO_EVENTS, PRO_USER_ID, PRO_YEAR_TEXT, dayView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, weekView,
   yearEnd, yearStart,
 } from "./core/pro-year.mjs";
 import { CONDITION_LABELS, GOAL_PICK, WEIGHTS } from "./core/pro-week.mjs";
@@ -939,6 +928,8 @@ const props = defineProps({
   /** 年度のまとめの「棋士の世界に残す」の札の中身(docs/pro-year-design.mdの15-3の8)。nullなら札を出さない。 */
   writeBack: { type: Array as PropType<{ ok: boolean; text: string }[] | null>, default: null },
   backLabel: { type: String, default: "戻る" },
+  /** あなたの能力(やこびノートの「能力」と同じ解析の配分と特殊能力)。解析が足りなければnull(16-3の6)。 */
+  myAbility: { type: Object as PropType<{ abilities: Record<string, number>; traits?: unknown[] } | null>, default: null },
 });
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
 /** 棋力スカウター(docs/power-scouter-design.md)。戻る操作で先に閉じる。 */
@@ -1065,10 +1056,56 @@ const actionTitle = (item: WeekAction | null) => {
   if (item.id.startsWith("meet-")) return `人に会う：${item.label}`;
   return item.label;
 };
-const slotSheet = ref<number | null>(null);
-/** 行動のシートで、仕事の依頼の見出しを出す最初の行。 */
-const firstWorkId = computed(() => week.value?.actions.find((item: { work?: string }) => item.work)?.id ?? "");
-const firstMeetId = computed(() => week.value?.actions.find((item: { meet?: string }) => item.meet)?.id ?? "");
+// ---- 行動の札(16-3の2)。押した行動がいちばん新しい枠に入る(いっぱいなら①が押し出される)。
+const NUMBER_MARKS = ["①", "②", "③"];
+const meetOpen = ref(false);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const meetActions = computed<any[]>(() => (week.value?.actions ?? []).filter((item: { meet?: string }) => item.meet));
+/** 札の並び。「いつでも」(研究・休む・人に会う)と「今週だけ」(研究会・まつり・仕事)。 */
+const paletteRows = computed(() => {
+  const actions = (week.value?.actions ?? []) as (WeekAction & { work?: string; meet?: string })[];
+  const tile = (item: WeekAction) => ({ id: item.id, icon: item.icon, title: actionTitle(item), effect: item.effect });
+  const always = actions.filter((item) => item.id === "research" || item.id === "rest").map(tile);
+  if (meetActions.value.length) {
+    const met = meetActions.value.find((item) => slotNumbers(item.id).length);
+    always.push({ id: "meet", icon: "人", title: met ? actionTitle(met) : "人に会う", effect: met ? met.effect : `${meetActions.value.length}人から1人` });
+  }
+  const weekOnly = actions.filter((item) => item.id === "study" || item.id === "festival" || item.work).map(tile);
+  return [
+    { id: "always", label: "いつでも", items: always },
+    ...(weekOnly.length || week.value?.lockedWork ? [{ id: "week", label: "今週だけ", items: weekOnly }] : []),
+  ];
+});
+/** その行動が入っている枠の番号(0から)。人に会うの札は、だれかに会う枠。 */
+function slotNumbers(id: string) {
+  const chosen: (string | null)[] = week.value?.chosen ?? [];
+  return chosen.flatMap((item, index) => (item && (item === id || (id === "meet" && item.startsWith("meet-"))) ? [index] : []));
+}
+/** おまかせで入れた札(先週の行動が今週は選べなかった枠)。 */
+const autoMarked = (id: string) => slotNumbers(id).some((index) => week.value?.marks?.[index] === "auto");
+const chosenCount = computed(() => (week.value?.chosen ?? []).filter(Boolean).length);
+const firstWeeks = computed(() => (week.value?.number ?? 99) <= 3);
+function pressAct(id: string) {
+  if (id === "meet") {
+    meetOpen.value = !meetOpen.value;
+    return;
+  }
+  if (id.startsWith("meet-")) meetOpen.value = false;
+  emit("life", { kind: "week-push", action: id });
+}
+function clearActs() {
+  meetOpen.value = false;
+  emit("life", { kind: "week-clear" });
+}
+/** 進めたあとの1行(研究：○○（★2）・休む)。 */
+const doneActsText = computed(() => {
+  const chosen: (string | null)[] = week.value?.chosen ?? [];
+  const titles = chosen.filter(Boolean).map((id) => actionTitle(week.value?.actions.find((item: WeekAction) => item.id === id) ?? null) || "");
+  return titles.filter(Boolean).length ? `${titles.filter(Boolean).join("・")}（済み）` : "なし";
+});
+watch(() => week.value?.start, () => {
+  meetOpen.value = false;
+});
 
 // ---- ニュース・取材・分身・仕事(14章)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1082,6 +1119,7 @@ const writeBackAlways = ref(false);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const closestBond = computed<any>(() => [...(week.value?.people ?? [])].filter((person: any) => person.next).sort((a: any, b: any) => a.next.need - b.next.need)[0] ?? null);
 function closeYear() {
+  if (Date.now() - confirmShownAt < CONFIRM_GUARD_MS) return;
   closeConfirm.value = false;
   emit("life", { kind: "close-year" });
 }
@@ -1089,9 +1127,47 @@ function answerInterview(id: string | null) {
   interviewOpen.value = false;
   emit("life", { kind: "interview", answer: id });
 }
-/** 分身のレーダーチャート(Lv×10)と、今週のはじめの点線。 */
-const avatarAxes = computed(() => (week.value?.avatar.rows ?? []).map((row: { key: string; label: string; level: number }) => ({ key: row.key, label: row.label, value: row.level * 10 })));
-const avatarBefore = computed(() => (week.value?.avatar.rows ?? []).map((row: { before: number }) => row.before * 10));
+// ---- 能力(16-3の5・6)。名鑑・やこびノートと同じ部品(PlayerAbilityPanel)で見せる。
+/** 分身の能力の形(あなたの能力＋育てた分)。levelsを渡すと、その時点のLvで。 */
+function avatarViewOf(levels: Record<string, number> | null = null) {
+  const rating = Number(props.state?.players?.[PRO_USER_ID]?.rating) || 1400;
+  const member = avatarMember({ rating, base: props.myAbility?.abilities ?? null, traits: props.myAbility?.traits ?? null, avatar: props.state?.avatar, levels });
+  return memberAbilityView(member)!;
+}
+const avatarAbility = computed(() => avatarViewOf());
+const myAbilityReady = computed(() => Boolean(props.myAbility?.abilities));
+/** いちばん高い能力(分身の1行)。 */
+const avatarTop = computed(() => {
+  const best = [...(avatarAbility.value?.abilities ?? [])].sort((a, b) => b.value - a.value)[0];
+  return best ? { label: best.label, rank: best.rank, value: best.value } : null;
+});
+const compareOf = (label: string, view: { abilities: { key: string; value: number; rank: string }[] } | null) => (view ? { label, abilities: view.abilities.map(({ key, value, rank }) => ({ key, value, rank })) } : null);
+/** 相手の能力と比べるときの分身(点線)。 */
+const avatarCompare = computed(() => compareOf("あなたの分身", avatarAbility.value));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const opponentAbility = computed<any>(() => {
+  const id = props.state?.pending?.opponentId;
+  return id && props.state?.pending?.gameId ? memberAbilityView(props.state.players?.[id]) : null;
+});
+const opponentCompareOn = ref(true);
+const opponentOpen = ref(false);
+function openOpponent() {
+  if (wide.value) tab.value = "opponent";
+  else opponentOpen.value = true;
+}
+// 分身のシートの比べる相手(今週のはじめ・次の相手・比べない)。
+const avatarCompareId = ref<"before" | "opponent" | "none">("before");
+const avatarCompareOptions = computed(() => [
+  { id: "before" as const, label: "今週のはじめ" },
+  ...(opponentAbility.value ? [{ id: "opponent" as const, label: `次の相手 ${props.state?.pending ? nameText(view.value?.pending?.opponent) : ""}` }] : []),
+  { id: "none" as const, label: "比べない" },
+]);
+const avatarSheetCompare = computed(() => {
+  if (avatarCompareId.value === "opponent" && opponentAbility.value) return compareOf(nameText(view.value?.pending?.opponent), opponentAbility.value);
+  if (avatarCompareId.value === "none") return null;
+  const levels = Object.fromEntries((week.value?.avatar.rows ?? []).map((row: { key: string; before: number }) => [row.key, row.before]));
+  return compareOf("今週のはじめ", avatarViewOf(levels));
+});
 /** 仕事を遊ぶ。解説は中継の画面の次の一手で(大会の画面が開く)、指導と詰将棋は対局画面が受け持つ。 */
 function playWork() {
   const work = view.value?.work;
@@ -1103,14 +1179,6 @@ function playWork() {
     return;
   }
   emit("life", { kind: "work-play" });
-}
-/** 研究会とまつりは週に1回(もう1つの枠で選んでいたら選べない)。 */
-const actionTaken = (id: string) => (id === "study" || id === "festival")
-  && (week.value?.chosen ?? []).some((item: string | null, index: number) => item === id && index !== slotSheet.value);
-function pickAction(id: string | null) {
-  if (slotSheet.value === null) return;
-  emit("life", { kind: "week-action", slot: slotSheet.value, action: id });
-  slotSheet.value = null;
 }
 /** 公式戦の既定の指し方(小の対局は勝負どころから、中と大は最初から)。 */
 const defaultWay = computed(() => WEIGHTS[(view.value?.pending?.weight ?? "mid") as keyof typeof WEIGHTS]?.way ?? "full");
@@ -1191,9 +1259,16 @@ const tabs = [
   { id: "events", label: "棋戦" },
   { id: "record", label: "成績" },
 ] as const;
-const sideTabs = tabs.filter((item) => item.id !== "week");
-const tab = ref<"week" | "calendar" | "events" | "record">("week");
-const sideTab = computed(() => (tab.value === "week" ? "calendar" : tab.value));
+// 広い画面の右の列は、対局の日に「相手」のタブ(相手の能力。16-3の5)を先頭に足し、開いておく。
+const sideTabs = computed(() => [
+  ...(opponentAbility.value ? [{ id: "opponent" as const, label: "相手" }] : []),
+  ...tabs.filter((item) => item.id !== "week"),
+]);
+const tab = ref<"week" | "calendar" | "events" | "record" | "opponent">("week");
+const sideTab = computed(() => (tab.value === "week" || (tab.value === "opponent" && !opponentAbility.value) ? "calendar" : tab.value));
+watch(() => (opponentAbility.value ? props.state?.pending?.gameId : null), (gameId) => {
+  if (gameId && wide.value) tab.value = "opponent";
+});
 const wide = ref(false);
 let wideQuery: MediaQueryList | null = null;
 const syncWide = () => {
@@ -1313,16 +1388,35 @@ function watchNode(nodeId: string) {
   if (gameId) watchGame(gameId);
 }
 
-// 分身に任せる
+// 分身に任せる(16-3の4)。押した段がその場で確認の段に変わる。はじめは「自分で指す」。
+// 出てから少しのあいだは「分身に任せる」を押しても反応しない(2回押しの誤り。N:3-4)。
+const CONFIRM_GUARD_MS = 400;
 const autoOpen = ref(false);
 const autoCancel = ref<HTMLButtonElement | null>(null);
+let confirmShownAt = 0;
 function openAuto() {
   autoOpen.value = true;
+  confirmShownAt = Date.now();
   void nextTick(() => autoCancel.value?.focus());
 }
 function confirmAuto() {
+  if (Date.now() - confirmShownAt < CONFIRM_GUARD_MS) return;
   autoOpen.value = false;
   emit("auto");
+}
+const closeCancel = ref<HTMLButtonElement | null>(null);
+function askClose() {
+  closeConfirm.value = true;
+  confirmShownAt = Date.now();
+  void nextTick(() => closeCancel.value?.focus());
+}
+// 確認の段の外を押したら、取り消しと同じ(U:3-1)。
+function onOutsideConfirm(event: Event) {
+  if (!autoOpen.value && !closeConfirm.value) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.closest?.(".pro-year__confirm, [data-pro-auto], [data-pro-close-year]")) return;
+  autoOpen.value = false;
+  closeConfirm.value = false;
 }
 
 /** 戻る操作。重ねて開いたものを閉じたら真。 */
@@ -1402,7 +1496,8 @@ function goBack() {
   else if (avatarOpen.value) avatarOpen.value = false;
   else if (peopleOpen.value) peopleOpen.value = false;
   else if (closeConfirm.value) closeConfirm.value = false;
-  else if (slotSheet.value !== null) slotSheet.value = null;
+  else if (opponentOpen.value) opponentOpen.value = false;
+  else if (meetOpen.value) meetOpen.value = false;
   else if (eventId.value) eventId.value = "";
   else if (dayDate.value) dayDate.value = "";
   else return false;
@@ -1482,7 +1577,6 @@ defineExpose({ goBack });
 .shogi-game .pro-year__stars { flex: none; color: #e9c46a; font-size: 0.8rem; letter-spacing: -0.05em; }
 .shogi-game .pro-year__stars i { color: rgba(255, 255, 255, 0.3); font-style: normal; }
 .shogi-game .pro-year__week-free { margin: 0; color: #cfd8de; font-size: 0.8rem; }
-.shogi-game .pro-year__slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.35rem; }
 .shogi-game .pro-year__slot,
 .shogi-game .pro-year__action {
   display: flex; align-items: center; gap: 0.5rem; width: 100%; min-height: 3rem; padding: 0.35rem 0.55rem; border: 0.1rem dashed rgba(255, 255, 255, 0.4); border-radius: 0.6rem;
@@ -1864,5 +1958,121 @@ defineExpose({ goBack });
 }
 @media (prefers-reduced-motion: reduce) {
   .shogi-game .pro-year__day { transition: none; }
+}
+/* ---- 操作の見直し(docs/pro-year-design.mdの16章) ---- */
+/* 広い画面: 左の列に「今週の札」(上の今週と下の決める枠をつないで1枚)、右の列に見るもの(16-3の3)。 */
+.shogi-game .shogi-tournament__stage.pro-year__stage--wide {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) !important;
+  grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+  grid-template-areas: "top top" "goals goals" "week side" "hud side" !important;
+  column-gap: 0.7rem;
+}
+.shogi-game .pro-year__stage--wide .pro-year__main { display: contents; }
+.shogi-game .pro-year__stage--wide .pro-year__goalbar { grid-area: goals; margin: 0.5rem 0.6rem 0; }
+.shogi-game .pro-year__stage--wide .pro-year__weekpanel {
+  grid-area: week;
+  margin: 0.5rem 0 0 0.6rem;
+  padding: 0.6rem 0.75rem 0.4rem;
+  border: 0.13rem solid rgba(241, 165, 76, 0.55);
+  border-bottom: 0;
+  border-radius: 0.9rem 0.9rem 0 0;
+  background: #172632;
+}
+.shogi-game .pro-year__stage--wide .shogi-tournament__hud {
+  margin: 0 0 0.6rem 0.6rem;
+  padding: 0.5rem 0.75rem 0.7rem;
+  border: 0.13rem solid rgba(241, 165, 76, 0.55);
+  border-top: 0.08rem dashed rgba(255, 252, 244, 0.25);
+  border-radius: 0 0 0.9rem 0.9rem;
+  background: #172632;
+  box-shadow: none;
+}
+.shogi-game .pro-year__stage--wide .pro-year__side { grid-area: side; margin: 0.5rem 0.6rem 0.6rem 0; min-height: 0; grid-template-rows: auto auto minmax(0, 1fr); }
+.shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__calendar,
+.shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__events,
+.shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__record,
+.shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__opponent { min-height: 0; overflow: auto; }
+/* 決めるボタンは主役なので大きく(UD:4、U:7-4)。 */
+.shogi-game .pro-year__stage .pro-year__advance button,
+.shogi-game .pro-year__stage .pro-year__ways button { min-height: 3.25rem; }
+/* 見るものの行(ニュース・取材・分身・人)。 */
+.shogi-game .pro-year__extras { display: flex; flex-direction: column; gap: 0.35rem; }
+.shogi-game .pro-year__extras > * { flex: none; }
+.shogi-game .pro-year__row-more { flex: none; align-self: center; color: var(--amber, #f1a54c); font-size: 0.72rem; font-weight: 800; white-space: nowrap; }
+.shogi-game .pro-year__rank-inline { display: inline-grid !important; width: 1.4em; height: 1.3em !important; font-size: 0.8rem !important; font-style: normal; vertical-align: middle; }
+/* 行動の札(16-3の2)。 */
+.shogi-game .pro-year__carry { margin-left: 0.4rem; padding: 0.02rem 0.5rem; border: 0.08rem solid rgba(134, 212, 169, 0.75); border-radius: 999px; color: #a9e6c6; font-size: 0.68rem; font-weight: 800; }
+.shogi-game .pro-year__carry[data-pro-carry="recommend"] { border-color: rgba(241, 165, 76, 0.75); color: #f7c98d; }
+.shogi-game .pro-year__palette { display: grid; gap: 0.35rem; }
+.shogi-game .pro-year__palette-row { display: grid; grid-template-columns: 4.2rem repeat(3, minmax(0, 1fr)); gap: 0.35rem; align-items: stretch; }
+.shogi-game .pro-year__palette-label { align-self: center; color: #cfd8de; font-size: 0.7rem; font-weight: 800; }
+.shogi-game .pro-year__act,
+.shogi-game .pro-year__meet {
+  position: relative; display: flex; align-items: center; gap: 0.45rem; min-width: 0; min-height: 3.35rem; padding: 0.35rem 0.5rem;
+  border: 0.12rem solid rgba(255, 255, 255, 0.22); border-radius: 0.6rem; color: inherit; background: rgba(255, 255, 255, 0.05); text-align: left; cursor: pointer;
+}
+.shogi-game .pro-year__act .pro-year__slot-icon { background: #2b465b; color: #fffcf4; }
+.shogi-game .pro-year__act--on { border-color: var(--amber, #f1a54c); background: rgba(241, 165, 76, 0.16); }
+.shogi-game .pro-year__act--on .pro-year__slot-icon { color: #172632; background: var(--amber, #f1a54c); }
+.shogi-game .pro-year__act--open { border-style: dashed; }
+.shogi-game .pro-year__act--lock { cursor: default; opacity: 0.45; }
+.shogi-game .pro-year__act .pro-year__slot-text small { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.shogi-game .pro-year__act-nos { position: absolute; top: -0.5rem; right: -0.35rem; display: flex; gap: 0.1rem; }
+.shogi-game .pro-year__act-nos i { display: grid; place-items: center; width: 1.3rem; height: 1.3rem; border: 0.12rem solid #172632; border-radius: 50%; color: #172632; background: var(--amber, #f1a54c); font-size: 0.72rem; font-style: normal; font-weight: 900; animation: pro-year-pop 0.2s ease-out; }
+.shogi-game .pro-year__act-auto { position: absolute; bottom: 0.15rem; right: 0.35rem; padding: 0 0.3rem; border-radius: 0.25rem; color: #172632; background: #a9e6c6; font-size: 0.58rem; font-weight: 900; }
+.shogi-game .pro-year__act-drop { flex: none; color: #cfd8de; font-size: 0.7rem; }
+.shogi-game .pro-year__meet-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 0.3rem; padding: 0.4rem; border: 0.08rem dashed rgba(255, 255, 255, 0.3); border-radius: 0.6rem; }
+.shogi-game .pro-year__meet { min-height: 2.9rem; }
+.shogi-game .pro-year__palette-foot { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+.shogi-game .pro-year__palette-foot .pro-year__action-tip { flex: 1; margin: 0; }
+.shogi-game .pro-year__clear { margin-left: auto; min-height: 2.2rem; padding: 0 0.8rem; border: 0.08rem solid rgba(255, 255, 255, 0.35); border-radius: 999px; color: #cfd8de; background: transparent; font-size: 0.74rem; font-weight: 800; cursor: pointer; }
+.shogi-game .pro-year__clear:disabled { cursor: default; opacity: 0.4; }
+.shogi-game .pro-year__done-acts { margin: 0; color: #cfd8de; font-size: 0.8rem; font-weight: 700; }
+@keyframes pro-year-pop { from { transform: scale(0.4); } to { transform: none; } }
+/* その場の確認(16-3の4)。実行は右・取り消しは左(U:3-1)。 */
+.shogi-game .pro-year__confirm { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.45rem; align-items: center; padding: 0.45rem 0.55rem; border: 0.13rem solid var(--amber, #f1a54c); border-radius: 0.8rem; background: rgba(241, 165, 76, 0.12); }
+.shogi-game .pro-year__confirm p { margin: 0; font-size: 0.86rem; font-weight: 900; }
+.shogi-game .pro-year__confirm p small { display: block; color: #cfd8de; font-size: 0.72rem; font-weight: 700; }
+.shogi-game .pro-year__stage .pro-year__confirm button { min-width: 8.5rem; min-height: 3.25rem; }
+.shogi-game .pro-year__confirm button:focus-visible { outline: 0.18rem solid #fffcf4; outline-offset: 0.12rem; }
+/* 相手のランクの1行(16-3の5)。 */
+.shogi-game .pro-year__ranks-mini { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.55rem; width: 100%; margin-top: 0.35rem; padding: 0.3rem 0.45rem; border: 0.08rem solid rgba(255, 255, 255, 0.2); border-radius: 0.5rem; color: inherit; background: rgba(255, 255, 255, 0.04); font-size: 0.7rem; font-weight: 700; text-align: left; cursor: pointer; }
+.shogi-game .pro-year__ranks-mini-item { display: inline-flex; align-items: center; gap: 0.15rem; }
+.shogi-game .pro-year__ranks-mini .player-ability__rank { width: 1.3em; height: 1.25em; font-size: 0.78rem; }
+.shogi-game .pro-year__ranks-mini-more { margin-left: auto; color: var(--amber, #f1a54c); font-weight: 800; }
+/* 相手のタブ・能力のシート(名鑑・やこびノートと同じ部品)。 */
+.shogi-game .pro-year__opponent { display: grid; align-content: start; gap: 0.45rem; padding: 0.55rem 0.7rem; border: 0.08rem solid rgba(255, 255, 255, 0.18); border-radius: 0.8rem; background: #172632; }
+.shogi-game .pro-year__opponent-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin: 0; }
+.shogi-game .pro-year__opponent-head small { color: #cfd8de; font-size: 0.75rem; }
+.shogi-game .pro-year__chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.shogi-game .pro-year__chip { min-height: 2.2rem; padding: 0 0.75rem; border: 0.08rem solid rgba(255, 252, 244, 0.35); border-radius: 999px; color: #fffcf4; background: transparent; font-size: 0.75rem; font-weight: 800; cursor: pointer; }
+.shogi-game .pro-year__chip[aria-checked="true"] { border-color: #8fc5ff; color: #0f2233; background: #8fc5ff; }
+.shogi-game .pro-year__ability-sheet { width: min(100%, 34rem); }
+.shogi-game .pro-year__ability-sheet--wide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.6rem 0.9rem; width: min(100%, 64rem); }
+.shogi-game .pro-year__ability-sheet--wide > h2,
+.shogi-game .pro-year__ability-sheet--wide > .shogi-tournament__sheet-close { grid-column: 1 / -1; }
+.shogi-game .pro-year__ability-chart,
+.shogi-game .pro-year__ability-details { display: grid; align-content: start; gap: 0.45rem; min-width: 0; }
+.shogi-game .pro-year__ability-sheet--wide .pro-year__ability-chart .player-ability--chart { height: auto; }
+.shogi-game .pro-year__ability-sheet--wide .pro-year__ability-chart .player-ability__radar { height: auto; max-height: 24rem; }
+.shogi-game .pro-year__abars--two { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 1rem; }
+.shogi-game .pro-year__abars--two li { grid-template-columns: 3.6em 3em minmax(2rem, 1fr); }
+.shogi-game .pro-year__note { margin: 0; color: #cfd8de; font-size: 0.74rem; }
+/* 狭い画面: 札は2列、ランクの1行のくわしくは右端。 */
+/* 横向きのスマホ(右の枠が狭い)は、確認の文を上の行に。 */
+@media (max-height: 600px) and (orientation: landscape) {
+  .shogi-game .pro-year__confirm { grid-template-columns: 1fr 1fr; }
+  .shogi-game .pro-year__confirm p { grid-column: 1 / -1; }
+  .shogi-game .pro-year__stage .pro-year__confirm button { min-width: 0; }
+}
+@media (max-width: 640px) {
+  .shogi-game .pro-year__palette-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shogi-game .pro-year__palette-label { grid-column: 1 / -1; }
+  .shogi-game .pro-year__confirm { grid-template-columns: 1fr 1fr; }
+  .shogi-game .pro-year__confirm p { grid-column: 1 / -1; }
+  .shogi-game .pro-year__stage .pro-year__confirm button { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .pro-year__act-nos i { animation: none; }
 }
 </style>

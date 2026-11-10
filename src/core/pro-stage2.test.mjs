@@ -74,7 +74,7 @@ describe('棋士の仕事(14-3の1)', () => {
     expect(next.week.actions[0]).toBe(work.id);
     // 2つめの枠に別の仕事は選べない。
     const other = weekView(next).actions.find((item) => item.work && item.id !== work.id);
-    if (other && weekView(next).slots > 1) expect(chooseWeekAction(next, 1, other.id).week.actions[1] ?? null).toBeNull();
+    if (other && weekView(next).slots > 1) expect(chooseWeekAction(next, 1, other.id).week.actions[1]).toBe(next.week.actions[1]);
     next = advanceWeek(next);
     if (next.pending) return; // 仕事の日の前に対局があった種(仕事は次に進めたとき)。
     expect(next.work?.id).toBe(work.work);
@@ -180,5 +180,18 @@ describe('将棋ニュース・記録・取材・ファンレター(14-3の3〜6
     expect(view.records).toHaveLength(4);
     expect(view.records[0].top.length).toBeGreaterThan(0);
     expect(WORKS.kaisetsu.day).toBe(5);
+  });
+});
+
+describe('分身を名鑑の形に(16-3の6)', () => {
+  it('あなたの能力の配分に育てた分を足し、Lvを渡すとその時点の形', async () => {
+    const { avatarMember } = await import('./pro-avatar.mjs');
+    const avatar = gainAvatar(emptyAvatar(), { opening: 12 }).avatar;
+    const member = avatarMember({ rating: 1500, base: { opening: 5, reading: -4 }, avatar });
+    expect(member.character.abilities.opening).toBe(5 + 2 * 3);
+    expect(member.character.abilities.reading).toBe(-4);
+    const before = avatarMember({ rating: 1500, base: { opening: 5 }, levels: { opening: 1 } });
+    expect(before.character.abilities.opening).toBe(5);
+    expect(avatarMember({ rating: 1500 }).character.abilities.opening).toBe(0);
   });
 });

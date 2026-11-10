@@ -151,7 +151,11 @@ describe('人との絆(15-3の1〜3)', () => {
     expect(meet.person.id).toBe(state.people.mentor);
     expect(view.people).toHaveLength(5);
     state = chooseWeekAction(state, 0, 'meet-mentor');
-    if (view.slots > 1) expect(chooseWeekAction(state, 1, 'meet-hanane').week.actions[1] ?? null).toBeNull();
+    if (view.slots > 1) {
+      // 2人めは選べない(2つめの枠はそのまま)。2つめの枠は空けて、会う効き目だけを見る。
+      expect(chooseWeekAction(state, 1, 'meet-hanane').week.actions[1]).toBe(state.week.actions[1]);
+      state = chooseWeekAction(state, 1, null);
+    }
     const after = advanceWeek(state);
     expect(after.bonds[state.people.mentor].points).toBe(2);
     expect(after.condition).toBe(2);
@@ -226,5 +230,76 @@ describe('名簿への書き戻し(15-3の8)', () => {
     expect(kept.summary.writeBack).toBe('kept');
     expect(kept.settings.writeBack).toBe('always');
     expect(markWriteBack(kept, { keep: false }).settings.writeBack).toBeNull();
+  });
+});
+
+describe('行動の持ち越しと行動の札(16-3の1・2)', () => {
+  /** 公式戦のない週(枠が2つ)まで進める。 */
+  async function freeWeek(seed = 7) {
+    const { advanceWeek, recordProGame, weekView: view } = await import('./pro-year.mjs');
+    let state = start(seed);
+    for (let guard = 0; guard < 30; guard += 1) {
+      if (state.pending) state = recordProGame(state, 'auto').state;
+      if (state.festival) return null;
+      const now = view(state);
+      if (now && !now.applied && now.slots === 2) return state;
+      state = advanceWeek(state);
+    }
+    return null;
+  }
+
+  it('はじめの週はおすすめで埋まり、空の枠がない', () => {
+    const view = weekView(start());
+    expect(view.chosen.length).toBe(view.slots);
+    expect(view.chosen.every((item) => typeof item === 'string')).toBe(true);
+    expect(view.carried).toBe(view.slots ? 'recommend' : null);
+  });
+
+  it('先週選んだ行動を次の週に持ち越す。選べないものはおまかせで埋める', async () => {
+    const { advanceWeek, pushWeekAction, clearWeekActions, recordProGame } = await import('./pro-year.mjs');
+    let state = await freeWeek();
+    expect(state).not.toBeNull();
+    state = clearWeekActions(state);
+    state = pushWeekAction(state, 'rest');
+    state = pushWeekAction(state, 'rest');
+    expect(state.week.actions).toEqual(['rest', 'rest']);
+    let next = advanceWeek(state);
+    for (let guard = 0; guard < 10 && (next.pending || next.festival || next.work); guard += 1) {
+      if (next.pending) next = recordProGame(next, 'auto').state;
+      else break;
+      if (!next.week.applied) break;
+      next = advanceWeek(next);
+    }
+    const view = weekView(next);
+    if (!view || view.applied || !view.slots) return;
+    expect(view.chosen[0]).toBe('rest');
+    expect(view.marks[0]).toBe('carry');
+    expect(view.carried).toBe('carry');
+    // 何もしないも持ち越す。
+    const cleared = clearWeekActions(state);
+    expect(cleared.week.actions).toEqual([null, null]);
+  });
+
+  it('札を押すと新しい枠に入り、いっぱいなら古い方が押し出される。週に1つの行動は入れ替わる', async () => {
+    const { pushWeekAction } = await import('./pro-year.mjs');
+    let state = await freeWeek();
+    expect(state).not.toBeNull();
+    state = pushWeekAction(state, 'rest');
+    state = pushWeekAction(state, 'meet-mentor');
+    expect(state.week.actions).toEqual(['rest', 'meet-mentor']);
+    state = pushWeekAction(state, 'meet-hanane');
+    expect(state.week.actions).toEqual(['rest', 'meet-hanane']);
+    // 研究と休むは2つの枠に入る(古いほかの行動が押し出される)。もう1回押すと外れる。
+    state = pushWeekAction(state, 'rest');
+    expect(state.week.actions).toEqual(['rest', 'rest']);
+    expect(weekView(state).marks).toEqual([null, null]);
+    state = pushWeekAction(state, 'rest');
+    expect(state.week.actions).toEqual([null, null]);
+    // ほかの行動は、もう入っていれば外れる。
+    state = pushWeekAction(pushWeekAction(state, 'meet-mentor'), 'rest');
+    expect(state.week.actions).toEqual(['meet-mentor', 'rest']);
+    expect(pushWeekAction(state, 'meet-mentor').week.actions).toEqual(['rest', null]);
+    // 選べない行動は入らない。
+    expect(pushWeekAction(state, 'festival-x').week.actions).toEqual(['meet-mentor', 'rest']);
   });
 });

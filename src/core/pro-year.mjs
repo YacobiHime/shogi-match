@@ -1712,11 +1712,17 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
 
 // ---- 1週を選んで過ごす(13章)
 
-/** 新しい週(行動はまだ選んでいない)。 */
-function newWeek(state, date) {
+/**
+ * 新しい週。行動は、先週選んだもの(carry)を持ち越して始める(16-3の1)。
+ * 実際の行動は、週を見る・選ぶ・進めるときに`seedWeek`が今週に合わせて入れる。
+ * @param {any} state
+ * @param {string} date
+ * @param {(string | null)[] | null} [carry] 先週の行動(なければ、おすすめで始める)
+ */
+function newWeek(state, date, carry = null) {
   const range = weekRange(date, state.fy);
   return {
-    start: range.start, end: range.end, actions: [], applied: false, stops: [], log: [], cond0: clampCondition(state.condition ?? CONDITION_DEFAULT),
+    start: range.start, end: range.end, actions: [], carry: Array.isArray(carry) ? [...carry] : null, seeded: false, marks: [], applied: false, stops: [], log: [], cond0: clampCondition(state.condition ?? CONDITION_DEFAULT),
     events: [], gains: {}, fans0: state.user?.fans ?? 0, quote: null,
   };
 }
@@ -1833,7 +1839,7 @@ export function peopleView(state) {
 export function weekView(source) {
   if (!source?.week || source.yearDone) return null;
   // 前の進め方(次の対局日へ)で週を越えていたら、今の日の週として見る。
-  const state = source.week.end < source.date && !source.pending ? { ...source, week: newWeek(source, source.date) } : source;
+  const state = source.week.end < source.date && !source.pending ? { ...source, week: newWeek(source, source.date, carryOf(source.week)) } : source;
   const week = state.week;
   const preview = state.pending?.gameId
     ? { date: state.pending.date, label: state.pending.label, opponentId: state.pending.opponentId, gameId: state.pending.gameId, twoDay: state.pending.twoDay }
@@ -1911,7 +1917,8 @@ export function weekView(source) {
     days,
     games: games.map((game) => ({ ...game, dateText: dateLabel(game.date), opponent: card(state, game.opponentId), stars: starsFor(state.prep, game.opponentId), weight: state.games[game.id] ? gameWeight(state, state.games[game.id]) : 'mid' })),
     slots,
-    chosen: week.actions.slice(0, slots),
+    // 今週の行動(まだ選び直していなければ、先週の持ち越しとおまかせで埋めた形。16-3の1)。
+    ...weekChoice(week, { slots, actions, condition, stars, cap: prepCap(gear, capExtra), canResearch: Boolean(nextOpponent) }),
     applied: Boolean(week.applied),
     actions,
     condition,
@@ -1932,6 +1939,122 @@ export function weekView(source) {
   };
 }
 
+/** 週に1つまでの行動の仲間(研究会・まつりはそれぞれ1回、仕事と人に会うは種類で1つ)。同じ仲間ならtrue。 */
+function sameKind(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return a === 'study' || a === 'festival' || a.startsWith('work-') || a.startsWith('meet-');
+  if (a.startsWith('work-') && b.startsWith('work-')) return true;
+  return a.startsWith('meet-') && b.startsWith('meet-');
+}
+
+/**
+ * 今週の行動の形(16-3の1)。選び直していない週は、先週の行動(`carry`。前の保存では週の`actions`)を同じ順に入れ、
+ * 今週に選べないものと足りない枠は、おまかせの決まり(13-3の10)で埋める。
+ * 印は、先週と同じ`carry`・おまかせで入れた`auto`・はじめの週のおすすめ`recommend`・自分で選んだ`null`。
+ * @param {any} week
+ * @param {{ slots: number, actions: { id: string }[], condition: number, stars: number, cap: number, canResearch: boolean }} options
+ * @returns {{ chosen: (string | null)[], marks: (string | null)[], carried: 'carry' | 'recommend' | null }}
+ */
+function weekChoice(week, { slots, actions, condition, stars, cap, canResearch }) {
+  if (week.seeded || week.applied) {
+    const chosen = Array.from({ length: slots }, (_, index) => week.actions?.[index] ?? null);
+    const marks = Array.from({ length: slots }, (_, index) => week.marks?.[index] ?? null);
+    return { chosen, marks, carried: carriedKind(marks) };
+  }
+  const prev = Array.isArray(week.carry) ? week.carry : week.actions?.length ? week.actions : null;
+  const ids = new Set(actions.map((item) => item.id));
+  const chosen = [];
+  const marks = [];
+  for (let index = 0; index < slots; index += 1) {
+    const action = prev ? prev[index] : undefined;
+    if (prev && action === null && index < prev.length) {
+      // 「何もしない」も持ち越す(選んだのは遊ぶ人。N:3-4)。
+      chosen.push(null);
+      marks.push('carry');
+    } else if (action && ids.has(action) && !chosen.some((item) => sameKind(item, action))) {
+      chosen.push(action);
+      marks.push('carry');
+    } else {
+      chosen.push(undefined);
+      marks.push(prev ? 'auto' : 'recommend');
+    }
+  }
+  const auto = autoActions({ slots, condition, stars, cap, canResearch });
+  // 持ち越した行動の効き目を先に数えてから、空いた枠をおまかせで埋める。
+  let cond = condition;
+  let star = stars;
+  for (const action of chosen) {
+    if (action === 'rest') cond += 1;
+    if (action === 'research') star += 1;
+  }
+  for (let index = 0; index < slots; index += 1) {
+    if (chosen[index] !== undefined) continue;
+    const next = autoActions({ slots: 1, condition: cond, stars: star, cap, canResearch })[0] ?? auto[index] ?? 'rest';
+    chosen[index] = ids.has(next) ? next : ids.has('rest') ? 'rest' : null;
+    if (chosen[index] === 'rest') cond += 1;
+    if (chosen[index] === 'research') star += 1;
+  }
+  return { chosen, marks, carried: carriedKind(marks) };
+}
+
+/** 見出しの印(全部が先週と同じなら「先週と同じ」、はじめの週なら「おすすめ」)。 */
+function carriedKind(marks) {
+  if (!marks.length) return null;
+  if (marks.every((mark) => mark === 'recommend')) return 'recommend';
+  if (marks.some((mark) => mark === 'carry' || mark === 'auto')) return 'carry';
+  return null;
+}
+
+/** 今週の行動を、見えている形(持ち越し・おまかせ)のまま決めて書き込む。選ぶ・進める前に呼ぶ。 */
+function seedWeek(state) {
+  const week = state.week;
+  if (!week || week.seeded || week.applied) return;
+  const view = weekView(state);
+  if (!view) return;
+  week.actions = [...view.chosen];
+  week.marks = [...view.marks];
+  week.seeded = true;
+}
+
+/**
+ * 行動の札を押す(16-3の2)。押した行動が新しい枠に入り、枠がいっぱいなら、いちばん古い(①)ほかの行動が押し出される。
+ * 研究と休むは2つの枠に入れられる(2回押すと2つ、もう1回押すと外れる)。ほかの行動は、もう入っていれば外れる。
+ * 研究会・まつり・仕事・人に会うのような週に1つまでの行動は、同じ仲間の前のものと入れ替わる。
+ * @param {any} source
+ * @param {string} action
+ */
+export function pushWeekAction(source, action) {
+  const state = structuredClone(source);
+  if (!state.week || state.week.applied) return state;
+  seedWeek(state);
+  const view = weekView(state);
+  if (!view || !view.slots || !view.actions.some((item) => item.id === action)) return state;
+  const max = action === 'research' || action === 'rest' ? view.slots : 1;
+  let list = state.week.actions.slice(0, view.slots).filter(Boolean);
+  if (list.filter((item) => item === action).length >= max) list = list.filter((item) => item !== action);
+  else {
+    list = list.filter((item) => !sameKind(item, action));
+    if (list.length >= view.slots) list.splice(list.findIndex((item) => item !== action), 1);
+    list.push(action);
+  }
+  state.week.actions = Array.from({ length: view.slots }, (_, index) => list[index] ?? null);
+  state.week.marks = [];
+  return state;
+}
+
+/**
+ * 今週の行動を全部空ける(「何もしない」)。
+ * @param {any} source
+ */
+export function clearWeekActions(source) {
+  const state = structuredClone(source);
+  if (!state.week || state.week.applied) return state;
+  seedWeek(state);
+  state.week.actions = state.week.actions.map(() => null);
+  state.week.marks = [];
+  return state;
+}
+
 /**
  * 今週の行動を選ぶ(週を進める前なら何度でも選び直せる。13-2の画面の設計メモ)。nullで枠を空ける。
  * @param {any} source
@@ -1941,6 +2064,7 @@ export function weekView(source) {
 export function chooseWeekAction(source, slot, action) {
   const state = structuredClone(source);
   if (!state.week || state.week.applied) return state;
+  seedWeek(state);
   const view = weekView(state);
   if (!view || slot < 0 || slot >= view.slots) return state;
   if (action && !view.actions.some((item) => item.id === action)) return state;
@@ -1953,6 +2077,7 @@ export function chooseWeekAction(source, slot, action) {
   const actions = [...state.week.actions];
   actions[slot] = action ?? null;
   state.week.actions = actions.slice(0, view.slots);
+  state.week.marks = [];
   return state;
 }
 
@@ -2060,7 +2185,14 @@ function closeWeek(state) {
     return;
   }
   state.date = addDays(week.end, 1);
-  state.week = newWeek(state, state.date);
+  state.week = newWeek(state, state.date, carryOf(week));
+}
+
+/** 次の週へ持ち越す行動。枠の少ない週(対局のある週)のあとも、その前に選んでいた2つめを覚えておく。 */
+function carryOf(week) {
+  const actions = (week?.actions ?? []).slice();
+  const before = Array.isArray(week?.carry) ? week.carry : [];
+  return [...actions, ...before.slice(actions.length)];
 }
 
 /**
@@ -2071,9 +2203,12 @@ function closeWeek(state) {
 export function advanceWeek(source) {
   const state = structuredClone(source);
   if (state.pending || state.yearDone || state.festival || state.work) return state;
-  if (!state.week?.start || state.week.end < state.date) state.week = newWeek(state, state.date);
+  if (!state.week?.start || state.week.end < state.date) state.week = newWeek(state, state.date, carryOf(state.week));
   const rng = createRng(state.rng);
-  if (!state.week.applied) applyWeek(state, weekView(state));
+  if (!state.week.applied) {
+    seedWeek(state);
+    applyWeek(state, weekView(state));
+  }
   const week = state.week;
   for (const stop of week.stops) {
     if (stop.done) continue;
@@ -2123,6 +2258,8 @@ export function autoWeeks(source) {
       });
       state = structuredClone(state);
       state.week.actions = actions;
+      state.week.marks = [];
+      state.week.seeded = true;
     }
     state = advanceWeek(state);
   }
