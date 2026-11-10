@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>棋士の1年 操作の見直しのモックアップ</title>
+<!--
+  棋士の1年の操作の見直し(docs/pro-year-design.mdの16章)のモックアップ。
+  行動の持ち越し・1回で選ぶ行動の札・決める場所を1か所に・その場の確認・相手と分身の能力をやこびノートの形に。
+  PC(1366×768)4画面とスマホ(390×844)4画面。中身は見本の値で、ボタンは動かない。
+  ?real=1 で枠を縮めずに並べる(写真を撮るため)。?only=番号 でその画面だけを出す。
+-->
+<style>
+:root {
+  --page: #0f171f;
+  --page-ink: #dfe7ee;
+  /* 対局画面・大会の画面と同じ色(src/ShogiMatchGame.css) */
+  --night: #1d303f;
+  --night-deep: #172632;
+  --slate: #2b465b;
+  --amber: #f1a54c;
+  --amber-shadow: #b57c39;
+  --ivory: #fffcf4;
+  --muted: rgba(255, 252, 244, 0.72);
+  --line: rgba(255, 252, 244, 0.18);
+  --gold: #e7c15a;
+  --ok: #3aa37a;
+  --study: #c9b6f0;
+  --fest: #e0655a;
+  --compare: #8fc5ff;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 16px 64px; background: var(--page); color: var(--page-ink); font-family: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif; line-height: 1.5; }
+.doc { max-width: 1400px; margin: 0 auto; }
+.doc > h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.doc > p { margin: 0 0 8px; color: #aab7c2; max-width: 64rem; }
+.doc > h2 { margin: 40px 0 12px; font-size: 1.15rem; border-left: 4px solid var(--amber); padding-left: 10px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 410px), 1fr)); gap: 28px 20px; }
+.grid--pc { grid-template-columns: 1fr; }
+figure { margin: 0; display: grid; gap: 10px; align-content: start; }
+figcaption { color: #c9d4dc; font-size: 0.85rem; max-width: 64rem; }
+figcaption strong { display: block; color: #fff; font-size: 0.95rem; }
+.fit { width: 100%; overflow: hidden; }
+.fit > .device { transform-origin: top left; }
+.device { position: relative; overflow: hidden; background: var(--night); color: var(--ivory); border-radius: 28px; box-shadow: 0 0 0 10px #05090c, 0 0 0 11px #2b3a46, 0 20px 50px rgba(0, 0, 0, 0.5); font-size: 14px; }
+.device--phone { width: 390px; height: 844px; display: flex; flex-direction: column; }
+.device--pc { width: 1366px; height: 768px; border-radius: 10px; display: flex; flex-direction: column; }
+body.real { padding: 0; background: var(--night); }
+body.real .doc > *:not(.grid), body.real figcaption { display: none; }
+body.real .grid { display: block; }
+body.real figure { display: block; }
+body.real .fit { overflow: visible; }
+body.real .device { border-radius: 0; box-shadow: none; }
+
+/* ---- 部品 ---- */
+.btn { display: inline-grid; place-items: center; align-content: center; min-height: 44px; padding: 0 14px; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 10px; color: var(--ivory); background: var(--slate); font: inherit; font-weight: 800; line-height: 1.2; }
+.btn--amber { border-color: var(--amber-shadow); color: #1d303f; background: var(--amber); box-shadow: 0 3px 0 var(--amber-shadow); font-weight: 900; }
+.btn--ghost { background: transparent; }
+.btn small { font-size: 0.7rem; font-weight: 700; opacity: 0.85; }
+.btn--focus { outline: 3px solid #fff; outline-offset: 2px; }
+.topbar { display: flex; align-items: center; gap: 10px; height: 60px; flex: none; padding: 0 14px; border-bottom: 1px solid rgba(241, 165, 76, 0.35); background: #13202b; }
+.back { white-space: nowrap; height: 40px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.45); border-radius: 999px; background: transparent; color: var(--ivory); font: inherit; font-weight: 800; }
+.seal { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 6px; background: #c2493a; color: #fff; font-weight: 900; }
+.title h1 { margin: 0; font-size: 1.05rem; white-space: nowrap; }
+.title p { margin: 0; color: var(--muted); font-size: 0.75rem; font-weight: 700; }
+.diff { white-space: nowrap; margin-left: auto; padding: 6px 12px; border: 1px solid rgba(255, 252, 244, 0.4); border-radius: 999px; font-size: 0.78rem; font-weight: 800; }
+.tabs { display: flex; gap: 6px; }
+.tab { height: 34px; padding: 0 14px; border: 1px solid rgba(255, 252, 244, 0.3); border-radius: 999px; background: transparent; color: var(--ivory); font: inherit; font-size: 0.82rem; font-weight: 800; }
+.tab.on { border-color: var(--amber); color: #1d303f; background: var(--amber); }
+
+/* 目標の帯 */
+.goalbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.3fr); gap: 8px; flex: none; padding: 8px 14px; background: #162531; border-bottom: 1px solid var(--line); }
+.goal { display: grid; gap: 3px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--night-deep); font-size: 0.74rem; }
+.goal b { font-size: 0.8rem; }
+.goal small { color: var(--muted); font-weight: 700; }
+.bar { position: relative; height: 6px; border-radius: 3px; background: rgba(255, 252, 244, 0.15); overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--amber); }
+.bigone { display: grid; gap: 1px; padding: 5px 12px; border: 2px solid var(--gold); border-radius: 8px; background: rgba(231, 193, 90, 0.12); font-size: 0.74rem; }
+.bigone b { font-size: 0.84rem; }
+
+/* 今週の札(主役。選ぶものと決めるボタンを1枚に入れる) */
+.week { display: grid; grid-template-rows: auto auto auto 1fr auto; gap: 10px; min-height: 0; padding: 12px 14px; border: 2px solid rgba(241, 165, 76, 0.55); border-radius: 14px; background: var(--night-deep); }
+.week-head { display: flex; align-items: baseline; gap: 10px; }
+.week-head h2 { margin: 0; color: var(--amber); font-size: 1.2rem; }
+.week-head h2 small { margin-left: 8px; color: var(--muted); font-size: 0.8rem; }
+.cond { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 800; }
+.cond i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 252, 244, 0.2); }
+.cond i.on { background: #7bd3a8; }
+.strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.strip li { display: grid; justify-items: center; padding: 3px 0; border-radius: 7px; background: rgba(255, 252, 244, 0.06); font-size: 0.72rem; }
+.strip li b { font-size: 0.95rem; }
+.strip li.today { outline: 2px solid var(--amber); }
+.strip li.past { opacity: 0.45; }
+.mk { padding: 0 5px; border-radius: 4px; color: #1d303f; font-size: 0.66rem; font-weight: 900; }
+.mk--game { background: var(--amber); }
+.mk--study { background: var(--study); }
+.mk--fest { color: #fff; background: var(--fest); }
+.subhead { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 0.92rem; }
+.subhead small { color: var(--muted); font-size: 0.74rem; font-weight: 700; }
+.carry { padding: 1px 8px; border: 1px solid rgba(123, 211, 168, 0.7); border-radius: 999px; color: #a9e6c6; font-size: 0.68rem; font-weight: 800; }
+
+/* 行動の札(1回押すと入る。番号の印で何番目か) */
+.palette { display: grid; gap: 6px; align-content: start; min-height: 0; }
+.palette-row { display: grid; grid-template-columns: 4.6em repeat(3, minmax(0, 1fr)); gap: 6px; align-items: stretch; }
+.palette-row > span { align-self: center; color: var(--muted); font-size: 0.72rem; font-weight: 800; }
+.act { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 2px 8px; align-items: center; min-height: 54px; padding: 6px 10px; border: 2px solid rgba(255, 252, 244, 0.22); border-radius: 10px; background: rgba(255, 252, 244, 0.05); text-align: left; }
+.act .ic { grid-row: span 2; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: var(--slate); font-weight: 900; }
+.act b { font-size: 0.86rem; }
+.act small { color: var(--muted); font-size: 0.7rem; font-weight: 700; line-height: 1.25; }
+.act em { color: #a9e6c6; font-style: normal; }
+.act.on { border-color: var(--amber); background: rgba(241, 165, 76, 0.16); }
+.act.on .ic { color: #1d303f; background: var(--amber); }
+.act .no { position: absolute; top: -8px; right: -6px; display: grid; place-items: center; width: 22px; height: 22px; border: 2px solid var(--night-deep); border-radius: 50%; color: #1d303f; background: var(--amber); font-size: 0.72rem; font-weight: 900; }
+.act.off { opacity: 0.4; }
+.act .drop { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.7rem; }
+
+/* 決める列(札の下の端。右下に決めるボタン) */
+.decide { display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.decide .talk { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; color: var(--muted); font-size: 0.8rem; font-weight: 700; }
+.face { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #f4e9ff; color: #6a4aa6; font-weight: 900; font-size: 0.8rem; }
+.decide .btn { min-height: 52px; }
+.decide .go { min-width: 13rem; font-size: 1.05rem; }
+
+/* 右の列(見るもの) */
+.side { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; min-height: 0; }
+.side-rows { display: grid; gap: 6px; }
+.row { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--night-deep); font-size: 0.8rem; }
+.row .ic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: var(--slate); font-weight: 900; }
+.row small { color: var(--muted); font-weight: 700; }
+.row .more { margin-left: auto; color: var(--amber); font-weight: 800; font-size: 0.74rem; }
+.news { display: grid; gap: 1px; padding: 6px 12px; border-left: 6px solid #c2493a; border-radius: 8px; color: #2a2116; background: #f6efe0; }
+.news small { color: #8a5a2b; font-size: 0.68rem; font-weight: 800; }
+.news b { font-size: 0.92rem; }
+.pane { min-height: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--night-deep); }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; font-size: 0.7rem; }
+.cal > span { display: grid; align-content: start; height: 46px; padding: 2px 4px; border-radius: 5px; background: rgba(255, 252, 244, 0.05); }
+.cal > span.h { height: auto; background: none; text-align: center; color: var(--muted); font-weight: 800; }
+.cal > span.now { outline: 2px solid var(--amber); }
+.cal i { margin-top: 2px; padding: 0 3px; border-radius: 3px; color: #1d303f; font-style: normal; font-weight: 900; font-size: 0.62rem; }
+.cal i.t { background: #e6c88c; }
+.cal i.g { background: var(--amber); }
+.cal i.s { background: var(--study); }
+
+/* 対局の札(今週の札の中) */
+.game { display: grid; gap: 6px; align-content: start; align-self: start; padding: 10px 12px; border: 2px solid rgba(123, 211, 168, 0.55); border-radius: 12px; background: rgba(123, 211, 168, 0.06); }
+.game-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.86rem; }
+.game-head b:first-child { color: var(--amber); font-size: 1rem; }
+.weight { padding: 1px 8px; border-radius: 999px; color: #1d303f; background: #cfd9e2; font-size: 0.7rem; font-weight: 900; }
+.vs { display: flex; align-items: center; gap: 10px; }
+.vs strong { font-size: 1.25rem; }
+.vs small { color: var(--muted); font-weight: 700; }
+.scouter { margin-left: auto; padding: 4px 12px; border: 2px solid var(--amber); border-radius: 999px; color: #3a1d06; background: linear-gradient(180deg, #ffd38a, #f1a54c); font-size: 0.78rem; font-weight: 900; }
+.prep { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 0.76rem; font-weight: 700; }
+.prep { align-items: center; }
+.prep b { align-self: center; padding: 0 7px; border-radius: 5px; color: #1d303f; background: #cfd9e2; }
+.ranks-mini { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; list-style: none; font-size: 0.72rem; font-weight: 700; }
+.ranks-mini li { display: inline-flex; align-items: center; gap: 3px; }
+.ranks-mini .open { margin-left: auto; color: var(--amber); font-weight: 800; }
+.ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ways .btn { min-height: 54px; }
+.confirm { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 10px; border: 2px solid var(--amber); border-radius: 12px; background: rgba(241, 165, 76, 0.12); }
+.confirm p { margin: 0; font-size: 0.86rem; font-weight: 900; }
+.confirm p small { display: block; color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+.confirm .btn { min-height: 54px; min-width: 9.5rem; }
+.done-acts { margin: 0; color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+
+/* 能力(PlayerAbilityPanelと同じ見た目) */
+.ability { display: grid; gap: 8px; min-height: 0; }
+.ability h3 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 0.95rem; }
+.ability h3 small { color: var(--muted); font-size: 0.74rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { padding: 3px 10px; border: 1px solid rgba(255, 252, 244, 0.35); border-radius: 999px; font-size: 0.72rem; font-weight: 800; }
+.chip.on { border-color: var(--compare); color: #0f2233; background: var(--compare); }
+.radar { display: block; width: 100%; height: auto; }
+.radar .grid polygon { fill: none; stroke: rgba(255, 252, 244, 0.22); stroke-width: 1; }
+.radar .grid line { stroke: rgba(255, 252, 244, 0.22); stroke-width: 1; }
+.radar .area { fill: rgba(241, 165, 76, 0.35); stroke: #f1a54c; stroke-width: 2; stroke-linejoin: round; }
+.radar .cmp { fill: rgba(143, 197, 255, 0.12); stroke: var(--compare); stroke-width: 2.5; stroke-dasharray: 6 4; stroke-linejoin: round; }
+.radar .dot { fill: #f1a54c; stroke: #172632; stroke-width: 1.5; }
+.radar .lb { fill: #fffcf4; font-size: 21px; font-weight: 700; }
+.radar .vl { fill: #f1a54c; font-size: 18px; font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; font-size: 0.74rem; font-weight: 700; }
+.legend span::before { display: inline-block; width: 1.6em; margin-right: 0.35em; vertical-align: middle; border-top: 3px solid #f1a54c; content: ""; }
+.legend span.c::before { border-top: 3px dashed var(--compare); }
+.rk { display: grid; grid-template-columns: repeat(2, max-content); column-gap: 1.4rem; row-gap: 3px; margin: 0; padding: 0; list-style: none; font-size: 0.8rem; }
+.rk li { display: grid; grid-template-columns: 3.6em 1.7em 2em 1.4em; align-items: center; gap: 4px; }
+.rk .lbl { font-weight: 700; font-size: 0.78rem; }
+.rk .val { color: var(--muted); font-size: 0.74rem; text-align: right; }
+.rk .cr { color: var(--compare); font-weight: 900; text-align: center; font-size: 0.78rem; }
+.r { display: inline-grid; place-items: center; width: 1.7em; height: 1.5em; border-radius: 3px; color: #172632; font-weight: 900; font-size: 0.9rem; }
+.r--S { background: #f1a54c; box-shadow: 0 0 0 2px #fff3d6 inset; }
+.r--A { background: #f1a54c; }
+.r--B { background: #e6c88c; }
+.r--C { background: #b9d18e; }
+.r--D { background: #8ec5cf; }
+.r--E { background: #a9b6c4; }
+.r--F, .r--G { color: #fffcf4; background: #55697d; }
+.ranks-mini .r { width: 1.5em; height: 1.35em; font-size: 0.78rem; }
+.type { margin: 0; color: var(--amber); font-size: 0.8rem; font-weight: 800; }
+.phases { display: flex; gap: 12px; margin: 0; font-size: 0.78rem; font-weight: 700; }
+.phases span { display: inline-flex; align-items: center; gap: 4px; }
+.specials { display: flex; flex-wrap: wrap; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.sp { padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 800; }
+.sp--gold { color: #172632; background: linear-gradient(135deg, #ffe29a, #f1a54c); }
+.sp--blue { color: #fffcf4; background: #2f6fa8; }
+.sp--red { color: #fffcf4; background: #a8463f; }
+.usage { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; font-size: 0.74rem; }
+.usage li { display: grid; grid-template-columns: 7.5em minmax(2rem, 1fr) 2.6em; gap: 6px; align-items: center; }
+.usage i { display: block; height: 7px; border-radius: 999px; background: #4d8ac4; }
+.usage i.rg { background: #c56a5f; }
+.grow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 14px; margin: 0; padding: 0; list-style: none; font-size: 0.72rem; }
+.grow li { display: grid; grid-template-columns: 3.6em 2.6em minmax(2rem, 1fr); gap: 5px; align-items: center; }
+.grow li b { color: #a9e6c6; }
+.grow .track { height: 6px; border-radius: 3px; background: rgba(255, 252, 244, 0.15); overflow: hidden; }
+.grow .track i { display: block; height: 100%; background: var(--ok); }
+.note { margin: 0; color: var(--muted); font-size: 0.72rem; font-weight: 700; line-height: 1.5; }
+.card { display: grid; gap: 8px; align-content: start; min-height: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--night-deep); }
+.says { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; color: #1d303f; background: #fffcf4; font-size: 0.8rem; font-weight: 700; }
+
+/* シート(重ねる) */
+.veil { position: absolute; inset: 0; display: grid; place-items: center; padding: 14px; background: rgba(5, 9, 12, 0.6); }
+.sheet { display: grid; gap: 10px; width: 100%; max-height: 100%; overflow: hidden; padding: 14px 16px; border: 2px solid rgba(201, 182, 240, 0.7); border-radius: 14px; background: var(--night); }
+.sheet h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; color: var(--amber); font-size: 1.05rem; }
+.sheet h2 small { color: var(--muted); font-size: 0.74rem; }
+.close { margin-left: auto; display: grid; place-items: center; width: 40px; height: 40px; border: 2px solid rgba(255, 252, 244, 0.4); border-radius: 50%; color: var(--ivory); font-weight: 900; }
+.dim { filter: brightness(0.55); }
+
+/* PCの並び */
+.pc-main { display: grid; grid-template-columns: 790px minmax(0, 1fr); gap: 12px; min-height: 0; flex: 1; padding: 10px 12px; }
+
+/* スマホの並び */
+.ph-goals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; flex: none; padding: 6px 8px; background: #162531; border-bottom: 1px solid var(--line); }
+.ph-goals .goal { padding: 3px 6px; font-size: 0.68rem; }
+.ph-goals .goal b { overflow: hidden; font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
+.ph-big { flex: none; margin: 6px 8px 0; padding: 4px 10px; border: 2px solid var(--gold); border-radius: 8px; background: rgba(231, 193, 90, 0.12); font-size: 0.72rem; font-weight: 800; }
+.ph-tabs { display: flex; gap: 5px; flex: none; padding: 6px 8px; }
+.ph-tabs .tab { height: 32px; padding: 0 11px; font-size: 0.76rem; }
+.ph-body { flex: 1; min-height: 0; overflow: hidden; display: grid; gap: 8px; align-content: start; padding: 0 8px; }
+.ph-body .week { grid-template-rows: none; padding: 10px; border-width: 1px; }
+.ph-body .palette-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ph-body .palette-row > span { grid-column: 1 / -1; }
+.ph-bar { display: grid; gap: 6px; flex: none; padding: 8px 8px 14px; border-top: 1px solid rgba(241, 165, 76, 0.4); background: #13202b; }
+.ph-bar .talk { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.74rem; font-weight: 700; }
+.ph-bar .two { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+.ph-bar .btn { min-height: 52px; }
+.ph-bar .ways .btn { min-height: 56px; font-size: 0.82rem; }
+.ph-bar .confirm { grid-template-columns: 1fr 1fr; }
+.ph-bar .confirm p { grid-column: 1 / -1; }
+.ph-bar .confirm .btn { min-width: 0; }
+</style>
+</head>
+<body>
+<main class="doc">
+  <h1>棋士の1年 操作の見直し（16章）</h1>
+  <p>行動は先週の選び方を持ち越して空けない。行動は1回押せば入る札にする。選ぶものと決めるボタンを今週の札の1枚に入れ、決めるボタンは札の右下に置く。分身に任せるの確認は、押したボタンの場所で答える。相手と分身の能力は、やこびノートの「能力」と同じ部品（レーダーチャート・ランクの文字・比べる点線）で見せる。</p>
+  <p>中身は見本の値で、ボタンは動かない。今の画面との距離は、1366×768で「行動の枠→この週を進める」約1150px、「分身に任せる→確認の分身に任せる」約470px（16-1）。</p>
+
+  <h2>PC（1366×768）</h2>
+  <div class="grid grid--pc" id="pc"></div>
+  <h2>スマホ（390×844）</h2>
+  <div class="grid" id="phone"></div>
+</main>
+
+<script>
+const AX = ["研究", "大局観", "視野", "発想", "読み", "安定感", "寄せ", "受け"];
+const OPP = [62, 55, 48, 71, 58, 44, 67, 51];
+const ME = [60, 52, 57, 49, 61, 63, 54, 58];
+const ME0 = [57, 52, 57, 49, 59, 60, 54, 58];
+const rank = (v) => (v >= 90 ? "S" : v >= 80 ? "A" : v >= 70 ? "B" : v >= 60 ? "C" : v >= 50 ? "D" : v >= 40 ? "E" : v >= 20 ? "F" : "G");
+const R = (v) => `<b class="r r--${rank(v)}">${rank(v)}</b>`;
+
+/** src/RadarChart.vueと同じ形(8軸・輪5つ・半径108・名前と値)。 */
+function radar(values, compare, { width = 300 } = {}) {
+  const size = 360, margin = 60, c = size / 2, rad = 108;
+  const pt = (i, v) => { const a = -Math.PI / 2 + (i / 8) * Math.PI * 2; const r = (rad * v) / 100; return [c + Math.cos(a) * r, c + Math.sin(a) * r]; };
+  const poly = (vals) => vals.map((v, i) => pt(i, v).map((n) => n.toFixed(1)).join(",")).join(" ");
+  const rings = [20, 40, 60, 80, 100].map((g) => `<polygon points="${poly(Array(8).fill(g))}"/>`).join("");
+  const lines = AX.map((_, i) => { const [x, y] = pt(i, 100); return `<line x1="${c}" y1="${c}" x2="${x}" y2="${y}"/>`; }).join("");
+  const labels = AX.map((label, i) => {
+    const [x, y] = pt(i, 128);
+    const anchor = x < c - 4 ? "end" : x > c + 4 ? "start" : "middle";
+    return `<text class="lb" x="${x}" y="${y}" text-anchor="${anchor}" dominant-baseline="middle">${label}</text><text class="vl" x="${x}" y="${y + 20}" text-anchor="${anchor}" dominant-baseline="middle">${values[i]}</text>`;
+  }).join("");
+  const dots = values.map((v, i) => { const [x, y] = pt(i, v); return `<circle class="dot" cx="${x}" cy="${y}" r="3.5"/>`; }).join("");
+  return `<svg class="radar" style="max-width:${width}px;margin:0 auto" viewBox="${-margin} 0 ${size + margin * 2} ${size}"><g class="grid">${rings}${lines}</g>${compare ? `<polygon class="cmp" points="${poly(compare)}"/>` : ""}<polygon class="area" points="${poly(values)}"/>${dots}${labels}</svg>`;
+}
+const ranksGrid = (values, compare) => `<ul class="rk">${AX.map((label, i) => `<li><span class="lbl">${label}</span>${R(values[i])}<span class="val">${values[i]}</span>${compare ? `<span class="cr">${rank(compare[i])}</span>` : ""}</li>`).join("")}</ul>`;
+const ranksMini = (values, open = "能力を見る ›") => `<ul class="ranks-mini"><li>相手</li>${AX.map((label, i) => `<li>${label}${R(values[i])}</li>`).join("")}${open ? `<li class="open">${open}</li>` : ""}</ul>`;
+const legend = (own, cmp) => `<p class="legend"><span>${own}</span><span class="c">${cmp}</span></p>`;
+
+const topbar = (sub = "5月4日(月)・四段・3勝1敗・C級2組") => `
+  <header class="topbar"><button class="back">← 戻る</button><span class="seal">棋</span>
+    <div class="title"><h1>2026年度 棋士の1年</h1><p>${sub}</p></div><span class="diff">難易度 3</span></header>`;
+const goalbar = () => `
+  <div class="goalbar">
+    <div class="goal"><b>◎ 順位戦で昇級</b><small>2勝0敗（昇級ライン 8勝）</small><span class="bar"><i style="width:25%"></i></span></div>
+    <div class="goal"><b>◎ 新人王戦 ベスト4</b><small>2回戦へ</small><span class="bar"><i style="width:30%"></i></span></div>
+    <div class="goal"><b>◎ 年間15勝</b><small>3/15勝</small><span class="bar"><i style="width:20%"></i></span></div>
+    <div class="bigone"><small>次の大一番</small><b>棋王戦 挑戦者決定トーナメント入りまで あと3勝</b></div>
+  </div>`;
+const strip = (days, today) => `<ol class="strip">${days.map(([d, n, mk], i) => `<li class="${i < today ? "past" : i === today ? "today" : ""}"><small>${d}</small><b>${n}</b>${mk || ""}</li>`).join("")}</ol>`;
+const DAYS1 = [["月", 4], ["火", 5], ["水", 6, '<span class="mk mk--study">研</span>'], ["木", 7], ["金", 8], ["土", 9], ["日", 10, '<span class="mk mk--fest">祭</span>']];
+const DAYS2 = [["月", 11], ["火", 12], ["水", 13], ["木", 14, '<span class="mk mk--game">局</span>'], ["金", 15], ["土", 16], ["日", 17]];
+const act = (ic, name, effect, { on = 0, off = false, extra = "" } = {}) => `<button class="act${on ? " on" : ""}${off ? " off" : ""}"><span class="ic">${ic}</span><b>${name}</b><small>${effect}</small>${on ? `<span class="no">${on}</span>` : ""}${extra}</button>`;
+const palette = (phone) => `
+  <div class="palette">
+    <div class="palette-row"><span>いつでも</span>
+      ${act("研", "研究", "次の相手の対策 <em>★1→★2</em>", { on: 1 })}
+      ${act("休", "休む", "調子 <em>ふつう→好調</em>", { on: 2 })}
+      ${phone ? "" : act("人", "人に会う", "師匠・羽音ほか5人", { extra: '<span class="drop">▾</span>' })}
+    </div>
+    <div class="palette-row"><span>今週だけ</span>
+      ${act("会", "研究会（水）", "練習対局・調子は変わらない")}
+      ${act("祭", "将棋まつり（日）", "謝礼とファン・調子−1")}
+      ${phone ? act("人", "人に会う", "師匠・羽音ほか5人", { extra: '<span class="drop">▾</span>' }) : act("解", "解説の仕事", "5万円・ファン＋12")}
+    </div>
+  </div>`;
+const calendar = () => {
+  const head = "日月火水木金土".split("").map((d) => `<span class="h">${d}</span>`).join("");
+  const marks = { 3: '<i class="t">★名人</i>', 6: '<i class="s">研</i>', 14: '<i class="g">対局</i>', 18: '<i class="t">★叡王</i>', 20: '<i class="s">研</i>', 27: '<i class="g">対局</i>' };
+  const cells = [];
+  for (let i = 0; i < 5; i += 1) cells.push("<span></span>");
+  for (let d = 1; d <= 31; d += 1) cells.push(`<span class="${d >= 4 && d <= 10 ? "now" : ""}">${d}${marks[d] ?? ""}</span>`);
+  return `<div class="cal">${head}${cells.join("")}</div>`;
+};
+const sideRows = () => `
+  <div class="side-rows">
+    <div class="news"><small>週刊 将棋ニュース 第4週</small><b>やこび四段、デビューから3連勝</b></div>
+    <div class="row"><span class="ic">分</span><span><b>分身</b>　いちばん高い 安定感 C（63）<br><small>今週 研究＋2・安定感＋1</small></span><span class="more">能力を見る ›</span></div>
+    <div class="row"><span class="ic">人</span><span><b>人</b>　師匠 段2・羽音 段1 ほか<br><small>師匠 段3まで あと2</small></span><span class="more">›</span></div>
+  </div>`;
+const gameCard = ({ confirm = false, phone = false } = {}) => `
+  <div class="game">
+    <p class="game-head" style="margin:0"><b>5月14日(木)</b><b>棋王戦 予選 Gブロック 1回戦</b><span class="weight">小の対局</span></p>
+    <div class="vs"><span>対 <strong>伊藤悠真</strong> <small>四段</small></span><span class="scouter">スカウター</span></div>
+    <p class="prep" style="margin:0"><b>対策 ★★</b><span>調子 好調</span><span>閃き ＋1</span><span>得意：中飛車</span></p>
+    ${ranksMini(OPP, phone ? "能力を見る ›" : "")}
+  </div>`;
+const ways = () => `<div class="ways"><button class="btn">最初から指す<small>レーティングに数える</small></button><button class="btn btn--amber">勝負どころから<small>40手目ごろから</small></button><button class="btn">分身に任せる<small>勝つ見込み 62%</small></button></div>`;
+const confirmRow = () => `<div class="confirm"><p>この対局を分身に任せます。<small>勝つ見込み 62%・レーティングには数えない</small></p><button class="btn btn--focus">自分で指す</button><button class="btn btn--amber">分身に任せる</button></div>`;
+const opponentPane = () => `
+  <div class="pane ability">
+    <h3>伊藤悠真の能力<small>四段・攻め将棋</small></h3>
+    <div class="chips"><span class="chip on">分身と比べる</span><span class="chip">比べない</span></div>
+    ${radar(OPP, ME, { width: 330 })}
+    ${legend("伊藤悠真", "あなたの分身")}
+    ${ranksGrid(OPP, ME)}
+    <p class="phases"><span>序盤${R(60)}</span><span>中盤${R(58)}</span><span>終盤${R(64)}</span></p>
+    <ul class="specials"><li class="sp sp--gold">★中飛車の鬼</li><li class="sp sp--blue">＋逆転力</li><li class="sp sp--red">−ポカ</li></ul>
+  </div>`;
+
+const pc = [
+  {
+    id: "1", title: "1 PC 今週（対局のない週）：行動は先週と同じで始まり、札の右下で決める",
+    note: "行動は先週の「研究・休む」が入った状態で始まる（緑の「先週と同じ」）。押せば1回で入れ替わる（2つ選んであれば、先に選んだほうと入れ替わる）。決めるボタンは同じ札の右下。右の列は見るもの（ニュース・分身・人・カレンダー）だけ。",
+    html: `${topbar()}${goalbar()}
+      <div class="pc-main">
+        <section class="week">
+          <div class="week-head"><h2>第6週<small>5/4〜5/10</small></h2><p class="cond" style="margin:0 0 0 auto">調子 <i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i> ふつう</p></div>
+          ${strip(DAYS1, 0)}
+          <p class="subhead">今週の行動<small>2つ・公式戦はない週</small><span class="carry">先週と同じ</span></p>
+          ${palette(false)}
+          <div class="decide"><span class="talk"><span class="face">姫</span>来週は棋王戦。もう少し研究しておくと安心だよ</span><button class="btn">対局の週まで<br>おまかせ</button><button class="btn btn--amber go">この週を進める ▶</button></div>
+        </section>
+        <aside class="side">
+          ${sideRows()}
+          <div class="tabs"><span class="tab on">カレンダー</span><span class="tab">棋戦</span><span class="tab">成績</span></div>
+          <div class="pane">${calendar()}</div>
+        </aside>
+      </div>`,
+  },
+  {
+    id: "2", title: "2 PC 対局の日：3つの指し方を対局の札の真下に。右の列は「相手」のタブで能力を比べる",
+    note: "対局の日で止まったら、今週の札は対局の札に変わり、指し方の3つが札の下の端に出る。右の列は自動で「相手」のタブ。やこびノートと同じレーダーチャートで、相手（実線）とあなたの分身（青の点線）を重ね、ランクの横に分身のランクを青で添える。",
+    html: `${topbar("5月14日(木)・四段・3勝1敗・C級2組")}${goalbar()}
+      <div class="pc-main">
+        <section class="week">
+          <div class="week-head"><h2>第7週<small>5/11〜5/17</small></h2><p class="cond" style="margin:0 0 0 auto">調子 <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i> 好調</p></div>
+          ${strip(DAYS2, 3)}
+          <p class="done-acts">今週の行動：研究（★1→★2）済み</p>
+          ${gameCard()}
+          <div class="decide" style="display:block">${ways()}</div>
+        </section>
+        <aside class="side" style="grid-template-rows:auto minmax(0,1fr)">
+          <div class="tabs"><span class="tab on">相手</span><span class="tab">カレンダー</span><span class="tab">棋戦</span><span class="tab">成績</span></div>
+          ${opponentPane()}
+        </aside>
+      </div>`,
+  },
+  {
+    id: "3", title: "3 PC 分身に任せる：押したボタンの場所で答える",
+    note: "「分身に任せる」を押すと、3つの指し方の段がその場で確認の段に変わる。「分身に任せる」は押した場所と同じ右の端に残り、左に「自分で指す」（はじめの選択はこちら。Esc・戻る・外を押すと戻る）。出てから0.4秒は押しても反応しない（2回押しの誤り）。",
+    html: `${topbar("5月14日(木)・四段・3勝1敗・C級2組")}${goalbar()}
+      <div class="pc-main">
+        <section class="week">
+          <div class="week-head"><h2>第7週<small>5/11〜5/17</small></h2><p class="cond" style="margin:0 0 0 auto">調子 <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i> 好調</p></div>
+          ${strip(DAYS2, 3)}
+          <p class="done-acts">今週の行動：研究（★1→★2）済み</p>
+          ${gameCard()}
+          <div class="decide" style="display:block">${confirmRow()}</div>
+        </section>
+        <aside class="side" style="grid-template-rows:auto minmax(0,1fr)">
+          <div class="tabs"><span class="tab on">相手</span><span class="tab">カレンダー</span><span class="tab">棋戦</span><span class="tab">成績</span></div>
+          ${opponentPane()}
+        </aside>
+      </div>`,
+  },
+  {
+    id: "4", title: "4 PC 分身の能力：やこびノートの「能力」と同じ2列",
+    note: "左にチャート（比べる相手は札で選ぶ：今週のはじめ・次の相手・同じ組の平均）、右にやこび姫の一言・ランク2列×4行・型・序盤中盤終盤・特殊能力、その下に分身の育ち（Lvと次まで）。分身の能力は「あなたの能力（対局の解析）＋育てた分」。Lv1〜10の小さな図はやめる。",
+    html: `${topbar()}${goalbar()}
+      <div class="pc-main dim"><section class="week"></section><aside class="side"></aside></div>
+      <div class="veil" style="top:60px">
+        <div class="sheet" style="width:1080px;grid-template-columns:1fr 1fr;grid-template-rows:auto minmax(0,1fr);">
+          <h2 style="grid-column:1/-1">分身の能力<small>あなたの能力＋育てた分・四段・R1450</small><span class="close">×</span></h2>
+          <div class="card ability">
+            <div class="chips"><span class="chip on">今週のはじめ</span><span class="chip">次の相手 伊藤悠真</span><span class="chip">同じ組の平均</span></div>
+            ${radar(ME, ME0, { width: 430 })}
+            ${legend("いまの分身", "今週のはじめ")}
+          </div>
+          <div class="card">
+            <div class="says"><span class="face">姫</span>安定感がCになったよ。崩れにくい分身になってきたね</div>
+            ${ranksGrid(ME, ME0)}
+            <p class="type">受け将棋・粘り強い</p>
+            <p class="phases"><span>序盤${R(57)}</span><span>中盤${R(58)}</span><span>終盤${R(57)}</span></p>
+            <ul class="specials"><li class="sp sp--blue">＋粘り</li></ul>
+            <p class="subhead" style="margin-top:4px">分身の育ち<small>任せる・勝負どころからの強さ ＋9</small></p>
+            <ul class="grow">${AX.map((a, i) => `<li><span>${a}</span><b>Lv${[2, 1, 1, 1, 2, 3, 1, 1][i]}</b><span class="track"><i style="width:${[50, 25, 0, 50, 20, 40, 75, 25][i]}%"></i></span></li>`).join("")}</ul>
+            <p class="note">自分で指すときの強さは、あなたの腕のまま。任せた対局では育たないよ。</p>
+          </div>
+        </div>
+      </div>`,
+  },
+];
+
+const phBar = (inner) => `<div class="ph-bar">${inner}</div>`;
+const phHead = (tab = "今週") => `${topbar().replace('<div class="title"><h1>2026年度 棋士の1年</h1><p>5月4日(月)・四段・3勝1敗・C級2組</p></div>', '<div class="title"><h1>棋士の1年</h1><p>5月4日(月)・四段・C級2組</p></div>')}
+  <div class="ph-goals"><div class="goal"><b>順位戦で昇級</b><span class="bar"><i style="width:25%"></i></span></div><div class="goal"><b>新人王戦 ベスト4</b><span class="bar"><i style="width:30%"></i></span></div><div class="goal"><b>年間15勝</b><span class="bar"><i style="width:20%"></i></span></div></div>
+  <div class="ph-tabs">${["今週", "カレンダー", "棋戦", "成績"].map((t) => `<span class="tab${t === tab ? " on" : ""}">${t}</span>`).join("")}</div>`;
+const phone = [
+  {
+    id: "5", title: "5 スマホ 今週：行動は先週と同じ。決めるボタンは親指の届く下の帯",
+    note: "行動の札は2列。人に会うは1枚の札で、押すと5人の顔の小さな選びが出る。下の帯は「おまかせ」と「この週を進める」だけ。",
+    html: `${phHead()}
+      <div class="ph-body">
+        <section class="week">
+          <div class="week-head"><h2>第6週<small>5/4〜5/10</small></h2><p class="cond" style="margin:0 0 0 auto">ふつう</p></div>
+          ${strip(DAYS1, 0)}
+          <p class="subhead">今週の行動<small>2つ</small><span class="carry">先週と同じ</span></p>
+          ${palette(true)}
+        </section>
+        <div class="row"><span class="ic">分</span><span><b>分身</b> 安定感 C（63）<br><small>今週 研究＋2</small></span><span class="more">›</span></div>
+      </div>
+      ${phBar(`<span class="talk"><span class="face">姫</span>来週は棋王戦。もう少し研究しておくと安心だよ</span><div class="two"><button class="btn">対局の週まで<br>おまかせ</button><button class="btn btn--amber">この週を進める ▶</button></div>`)}`,
+  },
+  {
+    id: "6", title: "6 スマホ 対局の日：分身に任せるの確認も下の帯の中で",
+    note: "指し方の3つは下の帯。「分身に任せる」を押すと帯がその場で確認になり、「分身に任せる」は同じ右の位置に残る。相手のランクの1行を押すと能力のシート（7）。",
+    html: `${phHead()}
+      <div class="ph-body">
+        <section class="week">
+          <div class="week-head"><h2>第7週<small>5/11〜5/17</small></h2><p class="cond" style="margin:0 0 0 auto">好調</p></div>
+          ${strip(DAYS2, 3)}
+          <p class="done-acts">今週の行動：研究（★1→★2）済み</p>
+          ${gameCard({ phone: true })}
+        </section>
+      </div>
+      ${phBar(confirmRow())}`,
+  },
+  {
+    id: "7", title: "7 スマホ 相手の能力（シート）",
+    note: "名鑑・竜王戦の次の相手と同じ部品。チャートとランクの下に、特殊能力と得意戦法の使用率。比べる点線はあなたの分身。",
+    html: `${phHead()}
+      <div class="ph-body dim"></div>
+      <div class="veil" style="top:60px;align-items:end;padding:8px">
+        <div class="sheet ability" style="gap:6px">
+          <h2>伊藤悠真の能力<small>四段・攻め将棋</small><span class="close">×</span></h2>
+          <div class="chips"><span class="chip on">分身と比べる</span><span class="chip">比べない</span></div>
+          ${radar(OPP, ME, { width: 300 })}
+          ${legend("伊藤悠真", "あなたの分身")}
+          ${ranksGrid(OPP, ME)}
+          <p class="phases"><span>序盤${R(60)}</span><span>中盤${R(58)}</span><span>終盤${R(64)}</span></p>
+          <ul class="specials"><li class="sp sp--gold">★中飛車の鬼</li><li class="sp sp--blue">＋逆転力</li><li class="sp sp--red">−ポカ</li></ul>
+          <ul class="usage"><li><span>中飛車</span><i class="rg" style="width:62%"></i><span>48%</span></li><li><span>四間飛車</span><i class="rg" style="width:30%"></i><span>22%</span></li><li><span>矢倉</span><i style="width:18%"></i><span>12%</span></li></ul>
+        </div>
+      </div>`,
+  },
+  {
+    id: "8", title: "8 スマホ 分身の能力（シート）：ノートと同じ形を1列に",
+    note: "比べる相手の札・チャート・ランク・型・特殊能力・分身の育ちの順。",
+    html: `${phHead()}
+      <div class="ph-body dim"></div>
+      <div class="veil" style="top:60px;align-items:end;padding:8px">
+        <div class="sheet ability" style="gap:6px">
+          <h2>分身の能力<small>あなた＋育てた分</small><span class="close">×</span></h2>
+          <div class="chips"><span class="chip on">今週のはじめ</span><span class="chip">次の相手</span><span class="chip">組の平均</span></div>
+          ${radar(ME, ME0, { width: 280 })}
+          ${legend("いまの分身", "今週のはじめ")}
+          ${ranksGrid(ME, ME0)}
+          <p class="type">受け将棋・粘り強い</p>
+          <p class="subhead">分身の育ち<small>任せる強さ ＋9</small></p>
+          <ul class="grow">${AX.map((a, i) => `<li><span>${a}</span><b>Lv${[2, 1, 1, 1, 2, 3, 1, 1][i]}</b><span class="track"><i style="width:${[50, 25, 0, 50, 20, 40, 75, 25][i]}%"></i></span></li>`).join("")}</ul>
+        </div>
+      </div>`,
+  },
+];
+
+const figure = (item, kind) => `<figure data-shot="${item.id}"><div class="fit"><div class="device device--${kind}">${item.html}</div></div><figcaption><strong>${item.title}</strong>${item.note}</figcaption></figure>`;
+document.getElementById("pc").innerHTML = pc.map((item) => figure(item, "pc")).join("");
+document.getElementById("phone").innerHTML = phone.map((item) => figure(item, "phone")).join("");
+
+const params = new URLSearchParams(location.search);
+const real = params.has("real");
+if (params.has("only")) {
+  for (const fig of document.querySelectorAll("figure[data-shot]")) if (fig.dataset.shot !== params.get("only")) fig.remove();
+  for (const grid of document.querySelectorAll(".grid")) if (!grid.children.length) grid.remove();
+}
+if (real) document.body.classList.add("real");
+function fit() {
+  if (real) return;
+  for (const box of document.querySelectorAll(".fit")) {
+    const device = box.firstElementChild;
+    const width = device.offsetWidth + 22;
+    const scale = Math.min(1, box.clientWidth / width);
+    device.style.transform = `translate(11px, 11px) scale(${scale})`;
+    box.style.height = `${(device.offsetHeight + 22) * scale}px`;
+  }
+}
+addEventListener("resize", fit);
+fit();
+</script>
+</body>
+</html>
