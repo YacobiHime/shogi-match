@@ -217,3 +217,30 @@ export function stageDay(stage, ply, userColor) {
   if (!stage?.twoDay) return '';
   return ply >= stageSealPly(userColor) ? '2日目' : '1日目';
 }
+
+/** 封じ手の予告を出し始める、プレイヤーの残りの手番の数(docs/seal-break-design.mdの2-1)。 */
+export const SEAL_COUNTDOWN_FROM = 3;
+
+/**
+ * 封じ手の予告。いまの手数plyから、封じ手まであと何回プレイヤーが指すか(封じ手の手を含む)。
+ * nextは、プレイヤーの手番で次の手が封じ手のとき。封じ手のあと(とまだ遠いとき)はnull。
+ * @param {number} ply いまの手数(指した手の数)
+ * @param {'black' | 'white'} userColor
+ * @returns {{ left: number, next: boolean } | null}
+ */
+export function sealCountdown(ply, userColor) {
+  const sealPly = stageSealPly(userColor);
+  if (!Number.isInteger(ply) || ply >= sealPly) return null;
+  const left = Math.ceil((sealPly - ply) / 2);
+  if (left > SEAL_COUNTDOWN_FROM) return null;
+  return { left, next: ply === sealPly - 1 };
+}
+
+/** 対局の札の日付の言葉(1日目・あと2手で封じ手／次の手が封じ手／2日目)。 */
+export function stageDayLabel(stage, ply, userColor) {
+  const day = stageDay(stage, ply, userColor);
+  if (day !== '1日目') return day;
+  const countdown = sealCountdown(ply, userColor);
+  if (!countdown) return day;
+  return countdown.next ? '次の手が封じ手' : `1日目・あと${countdown.left}手で封じ手`;
+}

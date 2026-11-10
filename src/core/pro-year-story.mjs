@@ -68,7 +68,66 @@ export const PRO_YEAR_SCENES = Object.freeze({
       line('narration', 'neutral', '電話を切ると、部屋は静かになった。明日の朝、対局が始まる。', { tone: 'dim' }),
     ],
   }),
+  // 封じ手の夜(docs/seal-break-design.mdの2-5)。二日制の番勝負の1日目のあと。番勝負の星で3通り(リード・タイ・カド番)。
+  'pro-seal-lead': Object.freeze({
+    id: 'pro-seal-lead',
+    title: '封じ手の夜（リード）',
+    summary: '番勝負をリードして迎えた封じ手の夜。宿の夕食のあと、羽音から電話。あと少しだからこそ、いつもどおりに。',
+    background: 'night',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '1日目が終わった。封じ手の封筒は、立会人の手で金庫にしまわれた。'),
+      line('narration', 'neutral', '宿の夕食は、一口ずつがやけに長く感じる。{title}戦は、{name}がリードしている。'),
+      line('hanane', 'neutral', 'もしもし。中継、見てた。封じ手、もう書いたんでしょ。'),
+      line('hanane', 'gentle', 'リードしてる番勝負の夜って、勝ちを数え始めちゃう。数えないほうがいいよ。'),
+      line('momoka', 'neutral', '{you}、ごはん食べた？ 明日もいつもどおりでいいんだよ！'),
+      line('hanane', 'smile', '百花の言うとおり。いつもどおりの1手が、いちばん強い。……おやすみ。'),
+      line('narration', 'neutral', '明かりを消す。明日の朝、封筒が開く。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-seal-tie': Object.freeze({
+    id: 'pro-seal-tie',
+    title: '封じ手の夜',
+    summary: '番勝負の1局の、1日目の夜。宿で羽音と百花から電話。封じ手はもう書いた。あとは明日の朝、盤の前に座るだけ。',
+    background: 'night',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '1日目が終わった。{name}の封じ手は、封筒に入って立会人に渡された。'),
+      line('narration', 'neutral', '宿の部屋に戻ると、静かすぎて自分の心臓の音が聞こえる。'),
+      line('momoka', 'neutral', '{you}、おつかれさま！ 封じ手ってどんな気分？ どきどきする？'),
+      line('hanane', 'neutral', '百花、それは聞いちゃいけないやつ。中身は明日まで秘密。'),
+      line('hanane', 'gentle', '相手も今ごろ、どの手か考えてる。考えさせてる時間も、勝負のうちだよ。'),
+      line('momoka', 'neutral', 'じゃあ、今日はもう寝よう！ 明日の朝、中継の前で待ってるね！'),
+      line('narration', 'neutral', '布団に入っても、盤の局面が目の裏に浮かぶ。……明日の朝が来る。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-seal-kado': Object.freeze({
+    id: 'pro-seal-kado',
+    title: '封じ手の夜（カド番）',
+    summary: 'あと1つ負けたら終わり、カド番の封じ手の夜。羽音は短い言葉で、百花は明るく励ます。',
+    background: 'night',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '1日目が終わった。この1局を落とせば、{title}戦はここで終わる。カド番だ。'),
+      line('narration', 'neutral', '封じ手の封筒が金庫にしまわれる音が、いつまでも耳に残っている。'),
+      line('hanane', 'neutral', '……起きてると思った。'),
+      line('hanane', 'gentle', 'カド番の夜は、負けたあとのことばかり考える。でも、今考えるのは明日の1手目だけでいい。'),
+      line('momoka', 'neutral', '{you}、ここからだよ！ 逆転の番勝負、私は何回も見てきたもん！', { act: 'hop' }),
+      line('hanane', 'smile', '私も、君が盤の前で粘るところ、何回も見てる。……だから大丈夫。'),
+      line('narration', 'neutral', '窓の外は真っ暗だ。それでも、朝はちゃんと来る。', { tone: 'dim' }),
+    ],
+  }),
 });
+
+/**
+ * 封じ手の夜の場面(docs/seal-break-design.mdの2-5)。番勝負の星から、リード・タイ・カド番のどれかの場面のid。
+ * @param {{ winsUser: number, winsOpponent: number, need: number }} series
+ */
+export function proYearSealSceneId({ winsUser = 0, winsOpponent = 0, need = 0 } = {}) {
+  if (need > 0 && winsOpponent >= need - 1 && winsOpponent > winsUser) return 'pro-seal-kado';
+  if (winsUser > winsOpponent) return 'pro-seal-lead';
+  return 'pro-seal-tie';
+}
 
 /** ストーリー選択から読み直すときに、そのときの対局がないので入れる言葉。 */
 const DEFAULT_VARS = Object.freeze({ title: 'タイトル', holder: 'タイトル保持者の', event: '棋戦', round: '本戦' });

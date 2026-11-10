@@ -3,13 +3,27 @@
     タイトル戦の二日制(docs/title-match-day-design.md)。封じ手のあとの「1日目のまとめ」と、終局後の「観戦記」。
     重ねて開くシートで、対局は止めない。背景を押すか「閉じる」で閉じる(戻る操作も同じ)。
   -->
-  <div class="title-day" role="dialog" aria-modal="true" :aria-label="mode === 'summary' ? '1日目のまとめ' : '観戦記'" data-title-day @click.self="emit('close')">
+  <!-- embeddedは、封じ手のあとの休憩の画面(SealBreak.vue)の中に、まとめの本文だけを出すとき(背景・閉じるボタンなし)。 -->
+  <div
+    class="title-day"
+    :class="{ 'title-day--embedded': embedded }"
+    :role="embedded ? undefined : 'dialog'"
+    :aria-modal="embedded ? undefined : 'true'"
+    :aria-label="mode === 'summary' ? '1日目のまとめ' : '観戦記'"
+    data-title-day
+    @click.self="embedded || emit('close')"
+  >
     <section v-if="mode === 'summary' && summary" class="title-day__panel" data-day-summary>
       <header class="title-day__head">
         <small>{{ summary.heading }}</small>
         <h2>{{ summary.title }}</h2>
         <span v-if="summary.venue">{{ summary.venue }}</span>
       </header>
+      <!-- 休憩の画面のやこび姫の助言(docs/seal-break-design.mdの2-4)。総評・2日目の方針・励まし。 -->
+      <div v-if="advice.length" class="title-day__advice" data-day-advice>
+        <b>やこび姫</b>
+        <p v-for="(line, index) in advice" :key="index">{{ line }}</p>
+      </div>
       <div v-if="summary.rate !== null" class="title-day__rate" data-day-rate>
         <p><b>形勢</b><span>あなた <strong>{{ summary.rate }}%</strong></span></p>
         <svg viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="`1日目の勝率の移り変わり。封じ手のときあなた${summary.rate}%`">
@@ -80,7 +94,7 @@
         <span>封じ手</span><b>{{ summary.sealText }}</b>
         <small v-if="summary.predictedText">控室の予想 {{ summary.predictedText }}</small>
       </p>
-      <button type="button" class="title-day__close" data-day-close @click="emit('close')">対局へ戻る</button>
+      <button v-if="!embedded" type="button" class="title-day__close" data-day-close @click="emit('close')">対局へ戻る</button>
     </section>
     <article v-else-if="mode === 'kansenki' && article" class="title-day__panel title-day__paper" data-kansenki>
       <small class="title-day__paper-event">{{ article.eventText }} {{ article.label }}</small>
@@ -126,6 +140,10 @@ const props = defineProps({
   summary: { type: Object as PropType<DaySummaryView | null>, default: null },
   article: { type: Object as PropType<KansenkiView | null>, default: null },
   assetBaseUrl: { type: String, default: "." },
+  /** 休憩の画面の中に出す(背景と閉じるボタンなし)。 */
+  embedded: { type: Boolean, default: false },
+  /** やこび姫の助言の行(休憩の画面だけ)。 */
+  advice: { type: Array as PropType<string[]>, default: () => [] },
 });
 const emit = defineEmits<{ close: [] }>();
 const review = computed(() => props.summary?.review ?? null);
@@ -162,6 +180,25 @@ const cursorX = computed(() => ((cursor.value / Math.max(1, review.value?.moves.
   color: #fffcf4;
   box-shadow: 0 10px 0 rgba(0, 0, 0, 0.35);
 }
+/* 休憩の画面の中に出すとき。枠と背景は休憩の画面のもの。 */
+.shogi-game .title-day.title-day--embedded {
+  position: static;
+  z-index: auto;
+  display: block;
+  padding: 0;
+  background: none;
+}
+.shogi-game .title-day--embedded .title-day__panel { width: 100%; max-height: none; overflow: visible; box-shadow: none; }
+.shogi-game .title-day__advice {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.55rem 0.7rem;
+  border-left: 4px solid #f1a54c;
+  border-radius: 0.4rem;
+  background: rgba(241, 165, 76, 0.12);
+}
+.shogi-game .title-day__advice b { color: #f1a54c; font-size: 0.82em; }
+.shogi-game .title-day__advice p { margin: 0; line-height: 1.55; }
 .shogi-game .title-day__head { display: grid; gap: 0.1rem; }
 .shogi-game .title-day__head small,
 .shogi-game .title-day__head span { color: rgba(255, 252, 244, 0.72); font-size: 0.82em; }

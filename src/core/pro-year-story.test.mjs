@@ -61,3 +61,20 @@ describe('棋士の1年の場面(docs/pro-year-design.mdの12章)', () => {
     expect(eve).not.toBeNull();
   });
 });
+
+describe('封じ手の夜の場面(docs/seal-break-design.mdの2-5)', () => {
+  it('番勝負の星で、リード・タイ・カド番の場面を選ぶ', async () => {
+    const { proYearSealSceneId, proYearScene } = await import('./pro-year-story.mjs');
+    expect(proYearSealSceneId({ winsUser: 2, winsOpponent: 1, need: 4 })).toBe('pro-seal-lead');
+    expect(proYearSealSceneId({ winsUser: 1, winsOpponent: 1, need: 4 })).toBe('pro-seal-tie');
+    expect(proYearSealSceneId({ winsUser: 0, winsOpponent: 0, need: 4 })).toBe('pro-seal-tie');
+    expect(proYearSealSceneId({ winsUser: 1, winsOpponent: 3, need: 4 })).toBe('pro-seal-kado');
+    for (const id of ['pro-seal-lead', 'pro-seal-tie', 'pro-seal-kado']) {
+      const scene = proYearScene(id, { playerName: 'やこび', vars: { title: '竜王' } });
+      expect(scene?.lines.length).toBeGreaterThan(4);
+      expect(scene.lines.every((line) => !/\{(name|you|title)\}/.test(line.text))).toBe(true);
+      // 羽音は敬語と「！」を使わない。
+      for (const line of scene.lines.filter((entry) => entry.who === 'hanane')) expect(line.text).not.toMatch(/！|です|ます/);
+    }
+  });
+});

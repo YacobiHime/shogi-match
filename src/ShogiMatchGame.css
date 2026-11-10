@@ -1315,6 +1315,42 @@
     linear-gradient(to bottom left, transparent calc(50% - 1px), var(--stage-red) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)) right top / 50% 62% no-repeat,
     #fffcf4;
 }
+/* 封じ手の番の帯(docs/seal-break-design.mdの2-1)。盤の上の端に細く出し、盤はふさがない(押しても盤に届く)。 */
+.shogi-game__seal-band {
+  position: absolute;
+  top: 0;
+  /* 名札と時計は左上・中央に並ぶので、右の端に寄せて重ねない。 */
+  right: 0.5rem;
+  z-index: 40;
+  display: inline-flex;
+  gap: 0.45em;
+  align-items: center;
+  margin: 0;
+  padding: 0.2em 0.9em 0.25em;
+  border-radius: 0 0 0.6em 0.6em;
+  color: #fffcf4;
+  background: var(--stage-red);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  font-size: clamp(0.78rem, 2.4vw, 0.95rem);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+  animation: seal-band-pulse 1.6s ease-in-out infinite;
+}
+.shogi-game__seal-band .shogi-game__stage-envelope { width: 1.6em; height: 1.05em; margin: 0; border-width: 1px; }
+@keyframes seal-band-pulse { 50% { filter: brightness(1.18); } }
+/* 2日目の朝の札の朝日。 */
+.shogi-game__stage-sun {
+  width: 2.4em;
+  height: 1.2em;
+  margin-bottom: 0.2em;
+  border-radius: 2.4em 2.4em 0 0;
+  background: radial-gradient(circle at 50% 100%, #ffd27a 0 55%, #f1a54c 56% 100%);
+  box-shadow: 0 0 1.2em rgba(255, 196, 92, 0.75);
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__seal-band { animation: none; }
+}
 /* 囲い完成の知らせ。振り駒と同じ形で、教室のはなまると同じ朱色の縁にする。 */
 .shogi-game__castle-callout {
   position: absolute;

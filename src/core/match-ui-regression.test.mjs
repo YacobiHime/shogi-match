@@ -1183,8 +1183,8 @@ describe("match screen regressions", () => {
     // 記録はタイトル戦(二日制)の局だけ。保存と一緒にリロードでも戻す。
     expect(source).toMatch(/day: stage\?\.twoDay \? emptyDay\(\) : undefined/);
     expect(source).toMatch(/day: savedRyuo\.stage\?\.twoDay \? normalizeDay\(savedRyuo\.day\) : undefined/);
-    // 封じ手の札のあとに開封の札。まとめは「2日目・まとめ」のボタンから開き、自動では開かない。
-    expect(source).toMatch(/if \(sealed && active\.value && unsealView\.value\) showStageCard\("unseal"\);/);
+    // 封じ手のあとは休憩の画面(docs/seal-break-design.md)。2日目の朝の札のあとに開封の札、そのあと封じ手を盤に指す。
+    expect(source).toMatch(/if \(kind === "morning" && active\.value && unsealView\.value\) showStageCard\("unseal"\);\s*else if \(\(kind === "morning" \|\| kind === "unseal"\) && sealMorning\.value\) playSealedMove\(\);/);
     expect(source).toMatch(/v-if="stageDayText && titleDay\?\.meal"[\s\S]{0,200}?@click="daySummaryOpen = true"/);
     // 休憩(昼休み・2日目の朝)は、次に自分が指すまで「ふりかえる」を勧める。押したときだけ開く(9章)。
     expect(source).toMatch(/if \(record\.value\.position\.color !== humanColor\.value\) dayBreak\.value = null;/);
@@ -1226,7 +1226,26 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(skillTestFrom\.value === "note"\) return "ノートへ戻る";/);
     expect(source).toMatch(/data-skill-report-close @click="closeSkillTestReport">\{\{ skillTestBackLabel \}\}/);
     expect(source).toMatch(/(?:\} else )?if \(kansenkiShown\.value\) \{\s*kansenkiShown\.value = null;\s*\} else if \(talkOpen\.value\) \{\s*talkOpen\.value = false;\s*\} else if \(daySummaryOpen\.value\) \{/);
-    expect(source).toMatch(/\|\| daySummaryOpen\.value,/);
+    expect(source).toMatch(/\|\| daySummaryOpen\.value(?: \|\| sealPending\.value \|\| Boolean\(sealConfirm\.value\))?,/);
+  });
+  it("封じ手で1日目を区切る: 予告・帯・確認・盤に出さない・休憩の画面・2日目の朝(docs/seal-break-design.md)", () => {
+    // 予告と帯。封じ手の番は、盤の上の端の帯とやこび姫の一言(助言がなしでも出す)。
+    expect(source).toMatch(/stageDayLabel\(matchStage\.value, moveCount\.value, activePlayerColor\.value\)/);
+    expect(source).toMatch(/<p v-if="sealTurn && !sealConfirm" class="shogi-game__seal-band"[^>]*data-seal-band/);
+    expect(source).toMatch(/if \(coachLevel\.value === "off"\) guideText\.value = SEAL_TURN_LINE;/);
+    // 指すと確認。考え直すで盤は動かない(手は盤に出さず確認だけ)。
+    expect(source).toMatch(/if \(sealTurn\.value\) \{\s*askSeal\(usi\);\s*return;\s*\}\s*if \(!applyMove\(usi, "player"\)\) return;/);
+    expect(source).toMatch(/data-seal-confirm-cancel autofocus @click="sealConfirm = null"/);
+    // 封じると、手はpendingで控え、CPU・助言の読みを止める。盤は動かせず、待ったも時計も止まる。
+    expect(source).toMatch(/seal: \{ ply, move, predicted, material: playerMaterialBalance\(\), black: dayFormation\(Color\.BLACK\), white: dayFormation\(Color\.WHITE\), pending: true \}/);
+    expect(source).toMatch(/function confirmSeal\(\) \{[\s\S]*?matchGeneration \+= 1;[\s\S]*?coachAdviceScheduler\.reset\(\);[\s\S]*?persistMatchState\(\);/);
+    expect(source).toMatch(/!sealPending\.value &&\s*!sealConfirm\.value &&/);
+    // 休憩の画面は、まとめを必ず出し、2日目を始める・中断を選べる。戻る操作は段を進める。
+    expect(source).toMatch(/<SealBreak[\s\S]*?@start="startSecondDay"[\s\S]*?@suspend="suspendAtSealBreak"/);
+    expect(source).toMatch(/\} else if \(sealBreakShown\.value\) \{[\s\S]{0,120}?sealBreakView\.value\?\.goBack\(\);/);
+    // 2日目の朝に、封じ手をpendingから外して盤に指す。リロードはまとめから(④なら④から)。
+    expect(source).toMatch(/function playSealedMove\(\) \{[\s\S]*?pending: false[\s\S]*?onPlayerMove\(seal\.move\);/);
+    expect(source).toMatch(/const step = resumeSealBreakStep\(ryuoGame\.value\.day\.sealBreak\);/);
   });
   it("勝負メシは、選ぶと札と一言が出て、午後のほめ言葉・控室・勝ちメシにつながる(docs/title-match-day-design.mdの8章)", () => {
     // 選んだ瞬間: 札(盤の上に1.8秒)・やこび姫の料理の一言・中継の1行に相手の一言。

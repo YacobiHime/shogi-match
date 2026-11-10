@@ -1222,6 +1222,10 @@
       @pointerdown.capture="onBoardShellPointerDown"
     >
       <span v-if="boardImpact" :key="boardImpact.id" class="shogi-game__board-impact" aria-hidden="true"></span>
+      <!-- 封じ手の番の帯(docs/seal-break-design.mdの2-1)。盤の上の端に細く出し、盤はふさがない。 -->
+      <p v-if="sealTurn && !sealConfirm" class="shogi-game__seal-band" role="status" data-seal-band>
+        <i class="shogi-game__stage-envelope" aria-hidden="true"></i>この手が封じ手
+      </p>
       <ShogiMatchBoard
         :sfen="currentSfen"
         :last-move="lastMove"
@@ -1333,6 +1337,13 @@
             <strong>封じ手</strong>
             <span>この手を封筒にしまって、2日目に開けるよ</span>
             <em v-if="unsealView?.predicted" class="shogi-game__stage-card-predict" data-seal-predict>控室の予想は{{ unsealView.predicted }}</em>
+          </template>
+          <!-- 2日目の朝(docs/seal-break-design.mdの2-6)。このあと開封の札、そして封じ手が盤に指される。 -->
+          <template v-else-if="stageCard.kind === 'morning' && matchStage">
+            <i class="shogi-game__stage-sun" aria-hidden="true"></i>
+            <small>{{ matchStage.eventText }} {{ matchStage.shortLabel ?? matchStage.label }}</small>
+            <strong data-morning-card>2日目の朝</strong>
+            <span>両対局者が盤の前にそろったよ。立会人が封筒を開けるよ</span>
           </template>
           <!-- お昼の休憩(docs/title-match-day-design.mdの8-1)。器の絵と、選んだ勝負メシ・一言・相手の注文。 -->
           <template v-else-if="stageCard.kind === 'lunch' && lunchShown">
@@ -2346,6 +2357,40 @@
       </form>
     </div>
 
+    <!-- 封じ手の記入の確認(docs/seal-break-design.mdの2-2)。記入したあとは取り消せないので、はじめは「考え直す」を選ぶ。 -->
+    <div
+      v-if="sealConfirm"
+      class="shogi-game__confirm"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="seal-confirm-title"
+      data-seal-confirm
+      @click.self="sealConfirm = null"
+    >
+      <div class="shogi-game__confirm-panel">
+        <h2 id="seal-confirm-title"><b data-seal-confirm-move>{{ sealConfirm.text }}</b> を封じ手にしますか？</h2>
+        <p>封筒に入れたら、2日目の朝まで盤に出ないよ。封じたあとは取り消せないよ。</p>
+        <div>
+          <button type="button" data-seal-confirm-ok @click="confirmSeal">封じる</button>
+          <button type="button" data-seal-confirm-cancel autofocus @click="sealConfirm = null">考え直す</button>
+        </div>
+      </div>
+    </div>
+    <!-- 封じ手のあとの休憩(ラウンドの合間)。封じ手の札→1日目のまとめ→(ノベル)→2日目を始める・中断。 -->
+    <SealBreak
+      v-if="sealBreakShown && titleDay"
+      ref="sealBreakView"
+      :step="sealBreakStep"
+      :card="sealBreakCard"
+      :summary="daySummaryView"
+      :advice="sealBreakAdvice"
+      :scene="sealBreakScene"
+      :can-suspend="showHome"
+      :asset-base-url="assetBaseUrl"
+      @step="setSealBreakStep"
+      @start="startSecondDay"
+      @suspend="suspendAtSealBreak"
+    />
     <div
       v-if="resignConfirmOpen"
       class="shogi-game__confirm"
@@ -2740,6 +2785,8 @@ import type ShogiBrainTrainingComponent from "./ShogiBrainTraining.vue";
 import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePicker.vue";
 import OpeningPlanSheet, { type OpeningPlanEntry } from "./OpeningPlanSheet.vue";
 import TitleDaySheet, { type DayReviewView, type DaySummaryView, type KansenkiView } from "./TitleDaySheet.vue";
+import SealBreak from "./SealBreak.vue";
+import { proYearScene, proYearSealSceneId } from "./core/pro-year-story.mjs";
 import FormationThumb from "./FormationThumb.vue";
 import HananePortrait from "./HananePortrait.vue";
 import { ALL_OPENING_PLANS, openingPlanById, openingPlanFor } from "./core/opening-catalog.mjs";
@@ -2837,6 +2884,8 @@ import {
   unsealCard,
   winningMeals,
   writeKansenki,
+  resumeSealBreakStep,
+  sealAdvice,
 } from "./core/title-day.mjs";
 import {
   PLAN_CONFIRM_SEARCH,
@@ -2948,7 +2997,7 @@ import {
 import { applyWriteBack, writeBackPlan } from "./core/pro-writeback.mjs";
 import { currentDifficulty, retuneSeasonWorld } from "./core/world-change.mjs";
 import { moneyText } from "./core/pro-life.mjs";
-import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDay, stageSealPly } from "./core/match-stage.mjs";
+import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDayLabel, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
 import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoments } from "./core/tip-moments.mjs";
@@ -4813,6 +4862,8 @@ const guidedMateReplyPending = ref(false);
 const canMove = computed(() =>
   active.value &&
   !thinking.value &&
+  !sealPending.value &&
+  !sealConfirm.value &&
   !guidedMateReplyPending.value &&
   (reviewMode.value
     ? (!reviewCpuEnabled.value || record.value.position.color === humanColor.value)
@@ -4827,6 +4878,8 @@ const canUseHint = computed(() =>
 const canUndo = computed(() =>
   active.value
   && !thinking.value
+  // 封じ手を記入したら、封じ手より前に戻す手段はない(docs/seal-break-design.mdの2-2)。
+  && !sealPending.value
   && (reviewMode.value || undosRemaining.value > 0)
   && (reviewMode.value
     ? reviewCpuEnabled.value && moveHistory.length - reviewCpuStartedAtPly.value >= 2
@@ -4947,7 +5000,7 @@ watch(moveCount, (ply) => {
  * タイトル戦(二日制)は、1日目の終わりの手数を越えて最初にプレイヤーが指した手を封じ手にし、2日目へ進める。
  * どちらも盤の操作は妨げない(盤を触ると消える)。
  */
-type StageCardKind = "opening" | "seal" | "unseal" | "measure" | "lunch";
+type StageCardKind = "opening" | "seal" | "morning" | "unseal" | "measure" | "lunch";
 const stageCard = ref<{ id: number; kind: StageCardKind } | null>(null);
 let stageCardTimer: ReturnType<typeof setTimeout> | undefined;
 function showStageCard(kind: StageCardKind) {
@@ -4957,12 +5010,16 @@ function showStageCard(kind: StageCardKind) {
 }
 function hideStageCard() {
   clearTimeout(stageCardTimer);
-  const sealed = stageCard.value?.kind === "seal";
+  const kind = stageCard.value?.kind;
   stageCard.value = null;
-  // 封じ手の札のあとは、2日目の朝の「封じ手の開封」へ続ける(盤を触って閉じたときも)。
-  if (sealed && active.value && unsealView.value) showStageCard("unseal");
+  // 2日目の朝(docs/seal-break-design.mdの2-6): 「2日目の朝」の札 → 封じ手の開封の札 → 封じ手の手を盤に指す(盤を触って閉じたときも)。
+  if (kind === "morning" && active.value && unsealView.value) showStageCard("unseal");
+  else if ((kind === "morning" || kind === "unseal") && sealMorning.value) playSealedMove();
 }
-const stageDayText = computed(() => stageDay(matchStage.value, moveCount.value, activePlayerColor.value));
+/** 対局の札の日付。封じ手の3手前から「あと○手で封じ手」、封じ手の番は「次の手が封じ手」(docs/seal-break-design.mdの2-1)。 */
+const stageDayText = computed(() => (titleDay.value?.seal
+  ? stageDayLabel(matchStage.value, Math.max(moveCount.value, stageSealPly(activePlayerColor.value)), activePlayerColor.value)
+  : stageDayLabel(matchStage.value, moveCount.value, activePlayerColor.value)));
 watch(moveCount, (ply, previous) => {
   const stage = matchStage.value;
   if (!stage?.twoDay || reviewMode.value || !active.value) return;
@@ -4970,13 +5027,15 @@ watch(moveCount, (ply, previous) => {
   if (previous !== undefined && ply < previous) updateTitleDay((day) => trimDay(day, ply));
   if (previous === ply - 1) {
     // 指したのがプレイヤーなら(指したあとは相手の手番)、考えた時間を残す。
-    if (thinkStartedAt && record.value.position.color !== humanColor.value) {
+    // 封じ手の手は、記入したときに考えた時間を残している(2日目の朝に盤に出すときは数えない)。
+    if (thinkStartedAt && record.value.position.color !== humanColor.value && titleDay.value?.seal?.ply !== ply) {
       const elapsed = thinkElapsed();
       updateTitleDay((day) => noteDayThink(day, ply, elapsed));
     }
     // 休憩の札は、次に自分が指すまで(指したあとは相手の手番)。
     if (record.value.position.color !== humanColor.value) dayBreak.value = null;
-    if (ply === stageSealPly(activePlayerColor.value)) sealTitleDay(ply);
+    // 封じ手は、盤に出す前に記入する(confirmSeal)。前の版の流れの保存(封じ手のない局)だけ、指したあとで封じ手にする。
+    if (ply === stageSealPly(activePlayerColor.value) && !titleDay.value?.seal) legacySealTitleDay(ply);
     // 勝負メシ(docs/title-match-day-design.mdの8章)。選ばずに指し続けたら「おまかせ」を運び、選んだ少しあとに控室が湧く。
     else if (lunchAutoDue(titleDay.value, ply)) chooseLunch(lunchMenu(stage.venue ?? "")[0], { auto: true });
     else if (lunchRushDue(titleDay.value, ply)) {
@@ -5134,19 +5193,140 @@ const dayFormation = (color: Color) => {
   const text = formationTextForColor(color);
   return text === UNDETERMINED_FORMATION ? "" : text;
 };
-/** 封じ手。予想・駒の損得・戦型をそのときの形で残し、勝負メシを選んでいなければ1品目にする。 */
-function sealTitleDay(ply: number) {
+/**
+ * 封じ手を記入する(docs/seal-break-design.mdの2-2)。手は盤に出さず(moveHistoryに入れず)、pendingで控える。
+ * 予想・駒の損得・戦型は記入の直前の局面で残し、勝負メシを選んでいなければ1品目にする。考えた時間もここで残す。
+ */
+function sealTitleDay(ply: number, move: string) {
+  const predicted = roomPick && roomPick.ply === ply - 1 ? roomPick.move : "";
+  const venue = matchStage.value?.venue ?? "";
+  const elapsed = thinkStartedAt ? thinkElapsed() : 0;
+  updateTitleDay((day) => noteDayThink({
+    ...day,
+    meal: day.meal || lunchMenu(venue)[0],
+    seal: { ply, move, predicted, material: playerMaterialBalance(), black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE), pending: true },
+    sealBreak: "card",
+  }, ply, elapsed));
+}
+/** 前の版の流れで、封じ手の手がもう盤に出ている局(封じ手を記入せずに越えたとき)。休憩はせず、記録だけ残す。 */
+function legacySealTitleDay(ply: number) {
   const move = moveHistory[ply - 1] ?? "";
   const predicted = roomPick && roomPick.ply === ply - 1 ? roomPick.move : "";
   const venue = matchStage.value?.venue ?? "";
   updateTitleDay((day) => ({
     ...day,
     meal: day.meal || lunchMenu(venue)[0],
-    seal: { ply, move, predicted, material: playerMaterialBalance(), black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE) },
+    seal: { ply, move, predicted, material: playerMaterialBalance(), black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE), pending: false },
   }));
-  showStageCard("seal");
-  dayBreak.value = "seal";
 }
+/** 封じ手の番(二日制で、プレイヤーの手番で、次の手が封じ手。docs/seal-break-design.mdの2-1)。 */
+const sealTurn = computed(() => Boolean(
+  matchStage.value?.twoDay && titleDay.value && !titleDay.value.seal && active.value && !result.value && !reviewMode.value
+  && normalizedMode.value === "cpu" && record.value.position.color === humanColor.value
+  && moveCount.value + 1 === stageSealPly(activePlayerColor.value),
+));
+/** 封じ手の記入の確認(指した手を盤に出す前)。 */
+const sealConfirm = ref<{ usi: string; text: string } | null>(null);
+/** 封じ手を記入して、まだ盤に出していない(休憩・2日目の朝のあいだ)。盤は動かさない。 */
+const sealPending = computed(() => Boolean(titleDay.value?.seal?.pending) && active.value && !result.value && !reviewMode.value);
+/** 休憩の画面の段(保存の値。なければ封じ手の札から)。 */
+const sealBreakStep = computed<"card" | "summary" | "novel" | "ready">(() => {
+  const step = titleDay.value?.sealBreak;
+  return step === "summary" || step === "novel" || step === "ready" ? step : "card";
+});
+/** 休憩の画面(戻る操作で段を進める)。 */
+const sealBreakView = ref<{ goBack: () => boolean } | null>(null);
+/** 2日目の朝の札を出しているあいだ(休憩の画面を閉じて、封じ手を盤に出すまで)。 */
+const sealMorning = ref(false);
+/** 休憩の画面を出すとき(封じ手のあと、2日目を始めるまで)。 */
+const sealBreakShown = computed(() => sealPending.value && !sealMorning.value);
+const SEAL_TURN_LINE = "この手は封筒にしまうよ。相手は一晩この局面を考えるから、じっくり選んでね。";
+// 封じ手の番になったら、やこび姫が一言(助言が「なし」でも、進行の知らせなので出す)。
+watch(sealTurn, (now) => {
+  if (!now) return;
+  if (coachLevel.value === "off") guideText.value = SEAL_TURN_LINE;
+  else showCoachAdvice({ key: "seal-turn", text: SEAL_TURN_LINE });
+});
+/** 封じ手の番に盤で指した手は、盤に出す前に確認する。合法でなければ何もしない。 */
+function askSeal(usi: string) {
+  const position = record.value.position.clone();
+  const move = position.createMoveByUSI(usi);
+  if (!move || !position.isValidMove(move)) return;
+  sealConfirm.value = { usi, text: dayMoveText(moveCount.value + 1, usi) || usi };
+}
+/** 封じる。手は盤に出さず、CPU・助言の読み・時計を止めて、休憩の画面へ。 */
+function confirmSeal() {
+  const pending = sealConfirm.value;
+  sealConfirm.value = null;
+  if (!pending || !sealTurn.value) return;
+  sealTitleDay(moveCount.value + 1, pending.usi);
+  matchGeneration += 1;
+  if (cpuTimer) clearTimeout(cpuTimer);
+  cpuTimer = undefined;
+  if (assistSearchControl.interrupt() || cpuSearchRunning) engine?.stop();
+  cancelPlayerIdleAdvice();
+  coachAdviceScheduler.reset();
+  thinking.value = false;
+  dayBreak.value = null;
+  hideStageCard();
+  persistMatchState();
+}
+/** 休憩の画面の段が進んだ(保存して、リロードしてもそこから)。 */
+function setSealBreakStep(step: "card" | "summary" | "novel" | "ready") {
+  if (!titleDay.value?.seal?.pending) return;
+  updateTitleDay((day) => ({ ...day, sealBreak: step }));
+  persistMatchState();
+}
+/** 2日目を始める: 「2日目の朝」の札 → 開封の札 → 封じ手を盤に指す(docs/seal-break-design.mdの2-6)。 */
+function startSecondDay() {
+  if (!sealPending.value) return;
+  setSealBreakStep("ready");
+  sealMorning.value = true;
+  showStageCard("morning");
+}
+/** 封じ手の手を盤に指し、CPUの手番から続ける。 */
+function playSealedMove() {
+  const seal = titleDay.value?.seal;
+  sealMorning.value = false;
+  if (!seal?.pending) return;
+  updateTitleDay((day) => ({ ...day, seal: day.seal ? { ...day.seal, pending: false } : day.seal, sealBreak: "" }));
+  onPlayerMove(seal.move);
+}
+/** 休憩の画面から中断する(休憩の画面ごと保存してホームへ。再開すると④に戻る)。 */
+function suspendAtSealBreak() {
+  setSealBreakStep("ready");
+  suspendMatch();
+}
+/** 休憩の画面のやこび姫の助言(1日目の総評・2日目の方針・励まし)。 */
+const sealBreakAdvice = computed(() => {
+  const day = titleDay.value;
+  const seal = day?.seal;
+  if (!day || !seal?.pending) return [];
+  const rates = day.rates.filter(([ply]) => ply <= seal.ply);
+  const start = rates.find(([ply]) => ply >= 20) ?? rates[0];
+  return sealAdvice({ rate: rates.at(-1)?.[1] ?? null, startRate: start?.[1] ?? null, material: seal.material });
+});
+/**
+ * 休憩の画面にはさむノベルの場面(docs/seal-break-design.mdの2-5)。いまは棋士の1年の二日制の番勝負だけ(星でリード・タイ・カド番)。
+ * 竜王戦・名人戦の大会は、まだ出さない(同じ口で、あとで足せる)。
+ */
+const sealBreakScene = computed(() => {
+  const stage = matchStage.value;
+  if (!sealBreakShown.value || !stage?.twoDay || tournamentEventOf(ryuoGame.value?.event) !== "pro-year") return null;
+  const marks = stage.marks ?? [];
+  const sceneId = proYearSealSceneId({
+    winsUser: marks.filter((mark: string) => mark === "win").length,
+    winsOpponent: marks.filter((mark: string) => mark === "loss").length,
+    need: stage.need ?? 0,
+  });
+  const title = stage.sides?.find((side: { you: boolean; role: string }) => !side.you && side.role !== "挑戦者")?.role
+    ?? stage.sides?.find((side: { you: boolean; role: string }) => side.you)?.role ?? "";
+  return proYearScene(sceneId, { playerName: playerName.value, momokaCall: momokaCallName(playerProfile.value), vars: { title: title === "挑戦者" ? "" : title } });
+});
+/** 休憩の画面の封じ手の札(封筒・控室の予想)。 */
+const sealBreakCard = computed(() => (sealBreakShown.value
+  ? { predicted: unsealView.value?.predicted ?? "", event: `${matchStage.value?.eventText ?? ""} ${matchStage.value?.shortLabel ?? matchStage.value?.label ?? ""}`.trim() }
+  : null));
 /** 控室の顔ぶれ(立会人・解説・観戦記者)。名簿の架空の棋士から選ぶ。 */
 const dayMembers = computed(() => roomMembers({
   roster: ryuoRoster.value,
@@ -5345,7 +5525,8 @@ const matchClock = useMatchClock({
   humanSide: () => (humanColor.value === Color.BLACK ? "black" : "white"),
   sideToMove: () => (record.value.position.color === Color.BLACK ? "black" : "white"),
   moveCount: () => moveCount.value,
-  paused: () => guidedMateReplyPending.value || dexFromMatch.value || dexShelfOpen.value || Boolean(stageCard.value) || daySummaryOpen.value,
+  paused: () => guidedMateReplyPending.value || dexFromMatch.value || dexShelfOpen.value || Boolean(stageCard.value) || daySummaryOpen.value
+    || sealPending.value || Boolean(sealConfirm.value),
   character: () => (ryuoGame.value ? ryuoOpponent.value?.character ?? null : null),
 });
 const matchClocks = computed(() => (matchKind.value === "tournament" ? matchClock.clocks.value : null));
@@ -5362,7 +5543,7 @@ const { byoyomiState } = useByoyomi({
   shown: () => active.value && !result.value && !reviewMode.value && normalizedMode.value === "cpu"
     && record.value.position.color === humanColor.value,
   paused: () => thinking.value || guidedMateReplyPending.value || dexFromMatch.value || dexShelfOpen.value || Boolean(stageCard.value)
-    || daySummaryOpen.value,
+    || daySummaryOpen.value || sealPending.value || Boolean(sealConfirm.value),
   turnKey: () => moveCount.value,
   play: (kind) => moveSounds.play(kind),
 });
@@ -9637,7 +9818,13 @@ const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.l
  * 対局中と振り返り中は、保存を消さないよう対局画面から離れない。ホームでは元のページへ戻る。
  */
 function navigateBack() {
-  if (kansenkiShown.value) {
+  if (sealConfirm.value) {
+    // 封じ手の確認は「考え直す」と同じ。
+    sealConfirm.value = null;
+  } else if (sealBreakShown.value) {
+    // 休憩の画面は、段を進める(対局から離れない。docs/seal-break-design.mdの2-3)。
+    sealBreakView.value?.goBack();
+  } else if (kansenkiShown.value) {
     kansenkiShown.value = null;
   } else if (talkOpen.value) {
     talkOpen.value = false;
@@ -10289,6 +10476,12 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
     thinking.value = false;
     guideText.value = coachLevel.value === "off" ? "" : "前の局面から対局を再開したよ！";
     if (matchKind.value === "tournament" && ryuoGame.value) {
+      // 封じ手の休憩の途中なら、まとめから(④まで進んでいたら④から)出す(docs/seal-break-design.mdの3章)。
+      sealMorning.value = false;
+      if (ryuoGame.value.day?.seal?.pending) {
+        const step = resumeSealBreakStep(ryuoGame.value.day.sealBreak);
+        ryuoGame.value = { ...ryuoGame.value, day: { ...ryuoGame.value.day, sealBreak: step } };
+      }
       matchClock.restore(snapshot.matchClock, tournamentTimeControl({ event: tournamentEventOf(ryuoGame.value.event), season: tournamentSeasonOf(ryuoGame.value) }));
       startPresence({ greet: false });
     } else matchClock.clear();
@@ -10355,6 +10548,8 @@ function showCoachAdvice(
   advice?: { key: string; text: string; reason?: string; reasonDex?: ReasonDex; topic?: string } | null,
   at?: { sfen: string; ply: number },
 ) {
+  // 封じ手のあと(休憩・2日目の朝)は、封じ手の前の局面の助言を出さない(docs/seal-break-design.mdの2-2)。
+  if (advice && sealPending.value) return;
   coachAdviceScheduler.present(advice ? {
     ...advice,
     sfen: at?.sfen ?? currentSfen.value,
@@ -12467,7 +12662,13 @@ function returnToMainLine() {
 }
 
 function onPlayerMove(usi: string) {
-  if (!canMove.value || !applyMove(usi, "player")) return;
+  if (!canMove.value) return;
+  // 封じ手の番は、盤に出す前に確認する(docs/seal-break-design.mdの2-2)。
+  if (sealTurn.value) {
+    askSeal(usi);
+    return;
+  }
+  if (!applyMove(usi, "player")) return;
   cancelPlayerIdleAdvice();
   // プレイヤーが指したら裏の助言探索を中断し、CPU本体へエンジンを明け渡す。
   const assistSearchInterrupted = !reviewMode.value && assistSearchControl.interrupt();
@@ -13323,6 +13524,8 @@ const {
 function restart() {
   matchGeneration += 1;
   matchClock.clear();
+  sealMorning.value = false;
+  sealConfirm.value = null;
   cpuByoyomiAnnounced = false;
   hideStageCard();
   cancelResultReveal();

@@ -267,7 +267,7 @@ export function mealBookView(book) {
  * mealAtは勝負メシを選んだ手数(封じ手で決まったときは0)、powerは午後のパワーを添えたか、rushは控室の注文の声を出したか。
  */
 export function emptyDay() {
-  return { rates: [], think: [], meal: '', mealAt: 0, power: false, rush: false, seal: null };
+  return { rates: [], think: [], meal: '', mealAt: 0, power: false, rush: false, seal: null, sealBreak: '' };
 }
 
 const pairs = (value) => (Array.isArray(value)
@@ -285,6 +285,8 @@ export function normalizeDay(raw) {
       material: Number.isFinite(raw.seal.material) ? raw.seal.material : 0,
       black: typeof raw.seal.black === 'string' ? raw.seal.black : '',
       white: typeof raw.seal.white === 'string' ? raw.seal.white : '',
+      // 記入して、まだ盤に出していない封じ手(docs/seal-break-design.mdの3章)。古い保存にはないので、盤に出たものとして読む。
+      pending: raw.seal.pending === true,
     }
     : null;
   return {
@@ -295,8 +297,15 @@ export function normalizeDay(raw) {
     power: raw.power === true,
     rush: raw.rush === true,
     seal,
+    // 休憩の画面の段(card・summary・novel・ready)。封じ手が盤に出ていなければ使う。
+    sealBreak: seal?.pending && SEAL_BREAK_STEPS.includes(raw.sealBreak) ? raw.sealBreak : '',
   };
 }
+
+/** 休憩の画面の段(docs/seal-break-design.mdの2-3)。 */
+export const SEAL_BREAK_STEPS = Object.freeze(['card', 'summary', 'novel', 'ready']);
+/** リロード・中断から戻ったときに出す段(ready以外はまとめから)。 */
+export const resumeSealBreakStep = (step) => (step === 'ready' ? 'ready' : 'summary');
 
 /** 手番の勝率(%)を記録する。同じ手数は上書き。 */
 export function noteDayRate(day, ply, rate) {
@@ -569,4 +578,56 @@ export function saveKansenki(storage, entry) {
     // 保存できない環境では、この局の観戦記だけ見せる。
   }
   return list;
+}
+
+// ---- 封じ手のあとの休憩(docs/seal-break-design.mdの2-4)
+
+/** 形勢の段(プレイヤーから見た勝率%)。 */
+export function sealGrade(rate) {
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) return 'unknown';
+  if (rate >= 65) return 'good';
+  if (rate >= 55) return 'slight';
+  if (rate > 40) return 'even';
+  return 'hard';
+}
+
+const SEAL_GRADE_TEXT = Object.freeze({
+  good: '良い形だよ', slight: '少し良い形だよ', even: '互角だよ', hard: '少し苦しい形だよ', unknown: '',
+});
+const SEAL_PLAN_TEXT = Object.freeze({
+  good: '2日目は無理に決めに行かず、相手の攻めの芽を先に摘みながら、少しずつ差を広げよう。',
+  slight: '2日目は玉の守りを確かめてから、働いていない駒を戦いに参加させよう。',
+  even: '2日目は、どちらの駒がよく働いているかを比べて、先に働く駒を増やした方が有利になるよ。',
+  hard: '2日目は、相手の玉に近いところで手を作って、粘り強く勝負どころを探そう。',
+  unknown: '2日目は、玉の固さと駒の働きを比べながら、落ち着いて指そう。',
+});
+const SEAL_CHEER_TEXT = Object.freeze({
+  good: 'ここまで本当によく指せているよ。一晩ゆっくり休んで、明日も同じ気持ちでいこう！',
+  slight: 'いい流れだよ。明日もこの調子で、一手ずつ大事にいこう！',
+  even: 'まだまだここからだよ。明日の朝、盤の前に座るのが楽しみだね！',
+  hard: '苦しい時間を耐えてきたのは立派だよ。勝負は最後の一手まで分からないからね！',
+  unknown: '1日目、おつかれさま！ 明日も一緒にがんばろう！',
+});
+
+/**
+ * 休憩の画面のやこび姫の助言(3行)。総評・2日目の方針・励まし。新しい探索はせず、1日目のまとめの数字から作る。
+ * 封じ手の良し悪しと、2日目の最善手は言わない。苦しいときも責めない。
+ * @param {{ rate: number | null, startRate?: number | null, material?: number, policy?: string }} input
+ *   rateは封じ手のときの勝率、startRateは1日目のはじめのほうの勝率、materialはプレイヤーから見た駒の損得、
+ *   policyは作戦の助言の方針の文(あればそれを方針にする)
+ * @returns {string[]}
+ */
+export function sealAdvice({ rate, startRate = null, material = 0, policy = '' }) {
+  const grade = sealGrade(rate);
+  let flow = '';
+  if (grade !== 'unknown' && typeof startRate === 'number' && Number.isFinite(startRate)) {
+    const delta = rate - startRate;
+    flow = delta >= 8 ? '少しずつ形勢を良くしてきたね' : delta <= -8 ? '途中から押し返された1日だったね' : 'ほぼ平らに進んだ1日だったね';
+  }
+  const verdict = grade === 'unknown'
+    ? '1日目はここまで。形勢の読みはまだないけど、ふりかえりで流れを確かめておこう。'
+    : `封じ手の局面は${SEAL_GRADE_TEXT[grade]}。${flow ? `${flow}。` : ''}`;
+  const materialNote = typeof material === 'number' && material <= -3 && grade !== 'good' ? '駒損は、駒の働きで取り返せるよ。' : '';
+  const plan = (policy || SEAL_PLAN_TEXT[grade]) + (materialNote ? ` ${materialNote}` : '');
+  return [verdict, plan, SEAL_CHEER_TEXT[grade]];
 }

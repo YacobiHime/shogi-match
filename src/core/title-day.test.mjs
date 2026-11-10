@@ -119,7 +119,7 @@ describe('1日目の記録', () => {
   it('保存の形が崩れていても空の記録に戻す', () => {
     expect(normalizeDay(null)).toEqual(emptyDay());
     expect(normalizeDay({ rates: [[1, 'x'], [2, 40]], think: 'x', meal: 3, seal: { ply: 'a' } })).toEqual({
-      rates: [[2, 40]], think: [], meal: '', mealAt: 0, power: false, rush: false, seal: null,
+      rates: [[2, 40]], think: [], meal: '', mealAt: 0, power: false, rush: false, seal: null, sealBreak: '',
     });
   });
   it('まとめは封じ手までの勝率と、いちばん長く考えた手', () => {
@@ -230,5 +230,32 @@ describe('観戦記', () => {
     expect(list[0].id).toBe(String(KANSENKI_LIMIT + 2));
     storage.setItem('yacobihime:shogi-match:kansenki:v1', '{');
     expect(loadKansenki(storage)).toEqual([]);
+  });
+});
+
+describe('封じ手のあとの休憩の助言(docs/seal-break-design.mdの2-4)', () => {
+  it('形勢の段ごとに3行(総評・方針・励まし)を返す', async () => {
+    const { sealAdvice, sealGrade } = await import('./title-day.mjs');
+    expect(sealGrade(70)).toBe('good');
+    expect(sealGrade(58)).toBe('slight');
+    expect(sealGrade(50)).toBe('even');
+    expect(sealGrade(30)).toBe('hard');
+    expect(sealGrade(null)).toBe('unknown');
+    for (const rate of [80, 58, 50, 30, null]) {
+      const lines = sealAdvice({ rate, startRate: 50 });
+      expect(lines).toHaveLength(3);
+      for (const line of lines) {
+        expect(line.length).toBeGreaterThan(5);
+        // 封じ手の良し悪しと、2日目の最善手(指し手の言葉)は言わない。
+        expect(line).not.toMatch(/[▲△][1-9１-９]|最善|好手|悪手|封じ手が(良|悪)/);
+      }
+    }
+  });
+
+  it('流れ(はじめとの差)と方針の文を入れる。苦しいときも責めない', async () => {
+    const { sealAdvice } = await import('./title-day.mjs');
+    expect(sealAdvice({ rate: 66, startRate: 50 })[0]).toMatch(/良くしてきた/);
+    expect(sealAdvice({ rate: 50, startRate: 50, policy: '玉を固めてから攻めよう。' })[1]).toBe('玉を固めてから攻めよう。');
+    expect(sealAdvice({ rate: 30, startRate: 55, material: -5 }).join('')).not.toMatch(/ダメ|失敗|ミス/);
   });
 });

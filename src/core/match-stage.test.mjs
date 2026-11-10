@@ -154,3 +154,28 @@ describe('背景の景色(docs/tournament-match-presence-design.mdの5章)', () 
     expect(skyPhase(121)).toBe('midnight');
   });
 });
+
+describe('封じ手の予告(docs/seal-break-design.mdの2-1)', () => {
+  it('先手は3→2→1→次の手が封じ手→空', async () => {
+    const { sealCountdown, stageDayLabel } = await import('./match-stage.mjs');
+    const title = { twoDay: true };
+    expect(sealCountdown(34, 'black')).toBeNull();
+    expect(sealCountdown(35, 'black')).toEqual({ left: 3, next: false });
+    expect(sealCountdown(37, 'black')).toEqual({ left: 2, next: false });
+    expect(sealCountdown(39, 'black')).toEqual({ left: 1, next: false });
+    expect(sealCountdown(40, 'black')).toEqual({ left: 1, next: true });
+    expect(sealCountdown(41, 'black')).toBeNull();
+    expect(stageDayLabel(title, 37, 'black')).toBe('1日目・あと2手で封じ手');
+    expect(stageDayLabel(title, 40, 'black')).toBe('次の手が封じ手');
+    expect(stageDayLabel(title, 41, 'black')).toBe('2日目');
+    expect(stageDayLabel(title, 20, 'black')).toBe('1日目');
+    expect(stageDayLabel({ twoDay: false }, 40, 'black')).toBe('');
+  });
+
+  it('後手も、自分の手番の数で数える', async () => {
+    const { sealCountdown } = await import('./match-stage.mjs');
+    expect(sealCountdown(36, 'white')).toEqual({ left: 3, next: false });
+    expect(sealCountdown(41, 'white')).toEqual({ left: 1, next: true });
+    expect(sealCountdown(42, 'white')).toBeNull();
+  });
+});
