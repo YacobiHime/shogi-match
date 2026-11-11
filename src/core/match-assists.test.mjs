@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { getMoveFeedback } from './coach-advice.mjs';
+import { judgedMoveScores } from './match-assists.mjs';
 import {
   getHintMoves,
   getHintSearchSettings,
@@ -197,5 +199,33 @@ describe('閃きの一言', () => {
   });
   it('負けの詰みでは、いちばん長く粘れる手だと励ます', () => {
     expect(hintMoveText({ moveText: '6八玉', score: mate(-6) })).toContain('諦めずに指し続けよう');
+  });
+});
+
+describe('悪手判定の評価値(閃きの手・読みの最善手)', () => {
+  const cp = (value) => ({ type: 'cp', value });
+  // 着手後を同じ深さで読み直すと、最善手でも続きが読みの外に出て評価が下がって見える(実際に起きた形)。
+  const judged = { before: cp(300), after: cp(-350), beforePv: ['2b8h+', '7i8h'] };
+
+  it('閃きの候補を指したら、閃きの探索の中の評価値で比べ、最善手は悪手にしない', () => {
+    const scored = judgedMoveScores({ judged, hint: { beforeScore: cp(300), afterScore: cp(300) }, playedUsi: '2b8h+' });
+    expect(scored.source).toBe('hint');
+    expect(getMoveFeedback({ level: 'detailed', beforeScore: scored.before, afterScore: scored.after })).toBeNull();
+  });
+
+  it('閃きを見ていなくても、読みの最善手を指したら損は0', () => {
+    const scored = judgedMoveScores({ judged, playedUsi: '2b8h+' });
+    expect(scored.source).toBe('best');
+    expect(getMoveFeedback({ level: 'detailed', beforeScore: scored.before, afterScore: scored.after })).toBeNull();
+  });
+
+  it('ほかの手は、今までどおり前後の読みで悪手を言う', () => {
+    const scored = judgedMoveScores({ judged, playedUsi: '7g7f' });
+    expect(scored.source).toBe('judge');
+    expect(getMoveFeedback({ level: 'detailed', beforeScore: scored.before, afterScore: scored.after })?.key).toMatch(/^move-mistake/);
+    // 閃きの2番手以下を指して本当に損をしたときは、閃きの探索の評価値で悪手を言う。
+    const hint = judgedMoveScores({ judged, hint: { beforeScore: cp(300), afterScore: cp(-400) }, playedUsi: '7g7f' });
+    expect(getMoveFeedback({ level: 'detailed', beforeScore: hint.before, afterScore: hint.after })?.key).toMatch(/^move-mistake/);
+    expect(judgedMoveScores({ judged: null, playedUsi: '7g7f' })).toBeNull();
   });
 });

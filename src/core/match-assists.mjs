@@ -244,6 +244,21 @@ export function hintMoveAssessment(candidates = [], move = '') {
 }
 
 /**
+ * 悪手・見逃しの判定に使う、着手の前後の評価値(どちらもプレイヤー視点)。
+ * 閃きの候補を指したときは、閃きの1回の探索の中の評価値どうしで比べる(深さの違う読みを混ぜると、
+ * 最善手でも「悪手」になる)。悪手判定の読みの最善手(着手前の読み筋の1手目)を指したときは、損は0とする。
+ * 着手後の局面を同じ深さで読み直すと、最善手の続き(捨て駒の後の取り返しなど)が読みの外に出て、評価が下がって見えるため。
+ * @param {{ judged?: { before: any, after: any, beforePv?: string[] } | null, hint?: { beforeScore: any, afterScore: any } | null, playedUsi?: string }} options
+ * @returns {{ before: any, after: any, source: 'hint' | 'best' | 'judge' } | null}
+ */
+export function judgedMoveScores({ judged = null, hint = null, playedUsi = '' }) {
+  if (hint?.beforeScore && hint?.afterScore) return { before: hint.beforeScore, after: hint.afterScore, source: 'hint' };
+  if (!judged?.before || !judged?.after) return null;
+  if (playedUsi && judged.beforePv?.[0] === playedUsi) return { before: judged.before, after: judged.before, source: 'best' };
+  return { before: judged.before, after: judged.after, source: 'judge' };
+}
+
+/**
  * 長考中の助言は閃きと同じ探索条件を使う。
  * 同一局面の解析結果をキャッシュで共有し、推奨する最善手を食い違わせない。
  */

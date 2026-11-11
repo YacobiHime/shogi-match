@@ -532,6 +532,10 @@ describe("match screen regressions", () => {
     const cpuTurn = source.split("async function scheduleCpuMove()")[1]?.split("// 図鑑の棋譜解析")[0] ?? "";
     expect(cpuTurn.indexOf("judged = await judgePlayerMove(")).toBeGreaterThan(-1);
     expect(cpuTurn.indexOf("judged = await judgePlayerMove(")).toBeLessThan(cpuTurn.indexOf("const search = await engine.go({"));
+    // 閃きの候補・読みの最善手を指したときは、深さの違う読みを混ぜずに比べる(悪手と言わない。docs/coach-advice-expansion-design.mdの15章)。
+    expect(cpuTurn).toMatch(/const scored = judgedMoveScores\(\{ judged, hint: reusedHintAssessment, playedUsi: moveFlair\.usi \}\);/);
+    expect(cpuTurn).toMatch(/beforeScore: scored\.before,\s*afterScore: scored\.after,/);
+    expect(cpuTurn).not.toMatch(/beforeScore: judged\.before,\s*afterScore: judged\.after,/);
     expect(cpuTurn).toMatch(/if \(!judged\) \{\s*moveFeedback = getMoveFeedback\(/);
     expect(source).toMatch(/<ruby v-if="segment\.ruby">/);
   });

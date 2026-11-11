@@ -3077,6 +3077,7 @@ import {
   getOpeningGuideSafetySearchSettings,
   getPraiseBaselineSearchSettings,
   hintMoveAssessment,
+  judgedMoveScores,
   hintMoveText,
   hintScoreForArrow,
   settleMultiPvCandidates,
@@ -12885,12 +12886,14 @@ async function scheduleCpuMove() {
           if (cpuSearchGeneration === generation) cpuSearchRunning = false;
         }
         if (generation !== matchGeneration) return;
-        if (judged) {
+        // 閃きの候補・読みの最善手を指したときは、深さの違う読みを混ぜずに比べる(悪手と言わない)。
+        const scored = judgedMoveScores({ judged, hint: reusedHintAssessment, playedUsi: moveFlair.usi });
+        if (judged && scored) {
           // 悪手のときは、相手のいちばんの応手から「なぜ悪いか」を1つ添える。
           moveFeedback = withMistakeReason(getMoveFeedback({
             level: coachLevel.value,
-            beforeScore: judged.before,
-            afterScore: judged.after,
+            beforeScore: scored.before,
+            afterScore: scored.after,
             wasPromotion: moveFlair.wasPromotion,
             wasEnemyCampDrop: moveFlair.wasEnemyCampDrop,
           }), mistakeReason({
@@ -12903,8 +12906,8 @@ async function scheduleCpuMove() {
           moveFeedback = missedChanceAdvice({
             sfenBefore: moveFlair.sfenBefore,
             playedUsi: moveFlair.usi,
-            before: judged.before,
-            after: judged.after,
+            before: scored.before,
+            after: scored.after,
             beforePv: judged.beforePv,
           }) ?? moveFeedback;
           if (moveFeedback) {
