@@ -524,15 +524,25 @@
               <template v-if="proYear">
                 <dl class="shogi-note__event-stats">
                   <div class="shogi-note__event-now"><dt>いま</dt><dd data-note-proyear-now>{{ proYear.fy }}<small>年度</small></dd></div>
+                  <div v-if="proYear.dan"><dt>段位</dt><dd data-note-proyear-dan>{{ proYear.dan }}</dd></div>
                   <div><dt>今年度</dt><dd>{{ proYear.wins }}勝{{ proYear.losses }}敗</dd></div>
+                  <div><dt>通算</dt><dd data-note-proyear-total>{{ proYear.total.wins }}勝{{ proYear.total.losses }}敗</dd></div>
                   <div><dt>順位戦</dt><dd>{{ proYear.cls || "—" }}</dd></div>
                 </dl>
-                <p v-if="proYear.titles.length" class="shogi-note__hint">タイトル：{{ proYear.titles.join("・") }}</p>
+                <!-- タイトルと棋戦優勝(17章)。いま持っているタイトル(冠の数)・タイトルの通算期数・棋戦優勝・将棋大賞。 -->
+                <p v-if="proYear.titles.length" class="shogi-note__proyear-crown" data-note-proyear-titles>
+                  <b>{{ proYear.crown || "タイトル" }}</b>{{ proYear.titles.join("・") }}
+                </p>
+                <ul v-if="proYear.titleRows.length || proYear.cupRows.length || proYear.awards" class="shogi-note__proyear-honors" aria-label="棋士の1年の獲得タイトルと優勝" data-note-proyear-honors>
+                  <li v-for="row in proYear.titleRows" :key="`t-${row.id}`" class="shogi-note__proyear-honor shogi-note__proyear-honor--title" :data-note-proyear-title="row.id">{{ row.short }}<small>{{ row.count }}期</small></li>
+                  <li v-for="row in proYear.cupRows" :key="`c-${row.id}`" class="shogi-note__proyear-honor" :data-note-proyear-cup="row.id">{{ row.name }}優勝<small>{{ row.count }}回</small></li>
+                  <li v-if="proYear.awards" class="shogi-note__proyear-honor">将棋大賞<small>{{ proYear.awards }}</small></li>
+                </ul>
                 <ol v-if="proYear.history.length" v-scroll-more class="shogi-note__history shogi-note__event-history shogi-note__scroll" aria-label="棋士の1年のこれまでの年度" data-note-proyear-history>
-                  <li v-for="entry in proYear.history.slice(0, 5)" :key="entry.fy" :class="`shogi-note__history--${entry.titles.length ? 'crown' : 'keep'}`">
+                  <li v-for="entry in proYear.history.slice(0, 5)" :key="entry.fy" :class="`shogi-note__history--${entry.titles.length || entry.champions.length ? 'crown' : 'keep'}`">
                     <span class="shogi-note__history-no">{{ entry.fy }}年度</span>
-                    <span class="shogi-note__history-group">{{ entry.titles.length ? entry.titles.join("・") : "—" }}</span>
-                    <span class="shogi-note__history-text">{{ entry.awards[0] ?? "" }}</span>
+                    <span class="shogi-note__history-group">{{ entry.titles.length ? entry.titles.join("・") : entry.dan || "—" }}</span>
+                    <span class="shogi-note__history-text">{{ [...entry.champions.map((name) => `${name}優勝`), ...entry.awards].join("・") }}</span>
                     <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>
                   </li>
                 </ol>
@@ -2807,4 +2817,10 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__rank { gap: 0.35rem; }
   .shogi-game .shogi-note__form li { width: 1.45rem; height: 1.45rem; }
 }
+.shogi-game .shogi-note__proyear-crown { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem; margin: 0; font-size: 0.82rem; font-weight: 700; }
+.shogi-game .shogi-note__proyear-crown b { padding: 0.02rem 0.5rem; border-radius: 999px; color: #172632; background: linear-gradient(135deg, #ffe29a, #f1a54c); font-size: 0.78rem; }
+.shogi-game .shogi-note__proyear-honors { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .shogi-note__proyear-honor { display: inline-flex; align-items: baseline; gap: 0.25rem; padding: 0.1rem 0.5rem; border: 0.08rem solid rgba(255, 252, 244, 0.3); border-radius: 999px; font-size: 0.74rem; font-weight: 800; }
+.shogi-game .shogi-note__proyear-honor small { color: #e9c46a; font-size: 0.7rem; }
+.shogi-game .shogi-note__proyear-honor--title { border-color: #e9c46a; }
 </style>

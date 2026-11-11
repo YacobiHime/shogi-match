@@ -2999,6 +2999,7 @@ import { currentDifficulty, retuneSeasonWorld } from "./core/world-change.mjs";
 import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDayLabel, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
+import { proYearProfileTitles } from "./core/pro-year-note.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
 import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoments } from "./core/tip-moments.mjs";
 import { blunderDestinations, kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
@@ -8327,6 +8328,24 @@ function setProYear(state: any) {
   proYearState.value = state;
   saveProYear(browserStorage(), state);
 }
+/**
+ * 棋士の1年のタイトル・冠・棋戦優勝を、やこびノートの「所属と称号」に入れる(docs/pro-year-design.mdの17章)。
+ * 状態が変わるたびに(読み込んだときも)照らし合わせ、新しいか中身(通算期数)が変わった称号だけ書く。
+ */
+function syncProYearTitles(state: any) {
+  let profile = profileState.value;
+  let changed = false;
+  for (const title of proYearProfileTitles(state)) {
+    const current = profile.titles.find((entry: { id: string }) => entry.id === title.id);
+    if (current && current.label === title.label && current.detail === title.detail && current.rank === title.rank) continue;
+    profile = grantTitle(profile, title);
+    changed = true;
+  }
+  if (!changed) return;
+  profileState.value = profile;
+  saveProfile(browserStorage(), profile);
+}
+watch(proYearState, (state) => syncProYearTitles(state), { immediate: true });
 /** 中断した棋士の1年の対局が、いまの次の対局と同じ相手なら、その手数。 */
 const suspendedProYearMoves = computed(() => {
   const suspended = suspendedMatch.value;

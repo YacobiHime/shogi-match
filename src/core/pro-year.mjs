@@ -1175,6 +1175,13 @@ export function recordProGame(source, outcome, { way = 'full' } = {}) {
   // 昇段(勝数規定・タイトル。15-3の5)。
   if (won) state.user.sinceWins = (state.user.sinceWins ?? 0) + 1;
   for (const champion of champions) if (champion.title) state.user.titleCounts = { ...(state.user.titleCounts ?? {}), [champion.event]: (state.user.titleCounts?.[champion.event] ?? 0) + 1 };
+  // 棋戦優勝の回数(やこびノートの札と称号。17章)。
+  // 同時に持ったタイトルの数のいちばん多いとき(称号の「○冠」。17章)。
+  if (champions.some((champion) => champion.title)) {
+    const holding = TITLE_EVENTS.filter((id) => state.titles[id] === PRO_USER_ID).length;
+    state.user.bestCrowns = Math.max(Number(state.user.bestCrowns) || 0, holding);
+  }
+  for (const champion of champions) if (!champion.title) state.user.cupCounts = { ...(state.user.cupCounts ?? {}), [champion.event]: (state.user.cupCounts?.[champion.event] ?? 0) + 1 };
   checkDan(state);
   // 節目のニュース(優勝・タイトル・挑戦・本戦入り・昇級)。
   for (const champion of champions) noteEvent(state, champion.title ? { kind: 'crown', short: champion.short } : { kind: 'champion', name: champion.name });
