@@ -1367,4 +1367,14 @@ describe('遅れて読み込む部分が読めなかったとき(docs/chunk-relo
     expect(research).toMatch(/if \(!analyzing\.value \|\| editing\.value \|\| kifuAnalysisBlocksEngine\.value\) \{\s*void engine\.stop\(\);/);
     expect(research).toMatch(/defineExpose\(\{ goBack \}\)/);
   });
+
+  it("opens the save transfer sheet from home and closes it step by step with back and Escape", () => {
+    // 引き継ぎ(docs/save-transfer-design.mdの4章)。ホームのタイトルの下の「引き継ぎ」から開き、戻る・Escは段を1つ戻す。
+    expect(source).toMatch(/data-save-transfer-open @click="openSaveTransfer"/);
+    expect(source).toMatch(/\} else if \(saveTransferOpen\.value\) \{\s*if \(!saveTransferView\.value\?\.goBack\(\)\) saveTransferOpen\.value = false;/);
+    expect(source).toMatch(/canGoBack: \(\) => [^\n]*saveTransferOpen\.value/);
+    expect(source).toMatch(/if \(saveTransferOpen\.value && !saveTransferView\.value\?\.goBack\(\)\) saveTransferOpen\.value = false;/);
+    // 引き継ぎコードは公式の公開先で、暗号が使えるときだけ。
+    expect(source).toMatch(/canUseSaveCloud\(\{\s*hostname: window\.location\.hostname,[\s\S]{0,160}secure: window\.isSecureContext/);
+  });
 });

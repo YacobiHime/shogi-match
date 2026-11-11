@@ -3848,14 +3848,22 @@
 }
 /* データリセットは通常の配置の末尾に置き、高さを確保してメニューとの重なりを防ぐ。
  * 2列の画面ではタイトルの下(左列)へ置き、右列のメニューは2行分を使う。 */
-.shogi-home--title:has(.shogi-title__exhibit-reset) > .shogi-title__hero { grid-column: 1; grid-row: 1; }
-.shogi-home--title:has(.shogi-title__exhibit-reset) > .shogi-title__menu { grid-column: 2; grid-row: 1 / span 2; }
-.shogi-game .shogi-title__exhibit-reset {
+.shogi-home--title:has(.shogi-title__tools) > .shogi-title__hero { grid-column: 1; grid-row: 1; }
+.shogi-home--title:has(.shogi-title__tools) > .shogi-title__menu { grid-column: 2; grid-row: 1 / span 2; }
+/* 引き継ぎとデータリセットの並び(docs/save-transfer-design.mdの4章)。 */
+.shogi-title__tools {
   position: relative;
   grid-column: 1;
   grid-row: 2;
   align-self: start;
   justify-self: start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  flex: none;
+}
+.shogi-game .shogi-title__exhibit-reset {
+  position: relative;
   flex: none;
   min-width: 3.4em;
   min-height: max(3em, 44px);

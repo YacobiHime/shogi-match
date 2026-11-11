@@ -394,14 +394,20 @@
           </section>
         </div>
       </nav>
-      <!-- exhibit属性で表示するデータリセット。公開ページと展示版で使う(docs/exhibit-design.md)。 -->
-      <button
-        v-if="exhibit"
-        type="button"
-        class="shogi-title__exhibit-reset"
-        data-exhibit-reset
-        @click="openExhibitReset"
-      >データリセット</button>
+      <!--
+        引き継ぎ(docs/save-transfer-design.md)と、exhibit属性で表示するデータリセット(docs/exhibit-design.md)。
+        どちらも記録の出し入れなので、タイトルの下に並べる。
+      -->
+      <div class="shogi-title__tools">
+        <button type="button" class="shogi-title__exhibit-reset" data-save-transfer-open @click="openSaveTransfer">引き継ぎ</button>
+        <button
+          v-if="exhibit"
+          type="button"
+          class="shogi-title__exhibit-reset"
+          data-exhibit-reset
+          @click="openExhibitReset"
+        >データリセット</button>
+      </div>
     </div>
 
     <ShogiTutorial
@@ -2225,6 +2231,7 @@
         <button ref="exhibitResetCancel" type="button" class="shogi-welcome__skip" @click="exhibitResetOpen = false">やめる</button>
       </div>
     </div>
+    <SaveTransferSheet v-if="saveTransferOpen" ref="saveTransferView" :cloud="saveCloudUsable" @close="saveTransferOpen = false" />
     <!-- 大会の進み具合は、大会ごとにも選べる(docs/data-reset-design.mdの6章) -->
     <div
       v-if="exhibitResetOpen && resetTournamentList && !resetChoice"
@@ -3005,6 +3012,7 @@ import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue
 import { blunderDestinations, kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
 import { RESET_GROUPS, TOURNAMENT_PARTS, resetData, resetGroup } from "./core/data-reset.mjs";
+import { canUseSaveCloud } from "./core/save-cloud.mjs";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -3296,6 +3304,7 @@ const ShogiProblemSet = lazyScreen(loadProblemSet);
 const ShogiBrainTraining = lazyScreen(loadBrainTraining);
 const ShogiStory = lazyScreen(() => import("./ShogiStory.vue"));
 const ShogiResearch = lazyScreen(() => import("./ShogiResearch.vue"));
+const SaveTransferSheet = lazyScreen(() => import("./SaveTransferSheet.vue"));
 const YakobiNote = lazyScreen(loadYakobiNote);
 const ShogiTournament = lazyScreen(loadTournament);
 const ShogiSkillTest = lazyScreen(loadSkillTest);
@@ -9412,6 +9421,19 @@ function openHome() {
   homeOpen.value = true;
 }
 
+// ===== 引き継ぎ(別の端末へ記録を運ぶ。docs/save-transfer-design.md) =====
+const saveTransferOpen = ref(false);
+const saveTransferView = ref<{ goBack: () => boolean } | null>(null);
+/** 引き継ぎコードを使えるか(公式の公開先だけ)。ほかではファイルで運ぶ。 */
+const saveCloudUsable = typeof window !== "undefined" && canUseSaveCloud({
+  hostname: window.location.hostname,
+  // 暗号はWeb Crypto(httpsのページだけ)で作る。使えない環境ではファイルで運ぶ。
+  secure: window.isSecureContext && Boolean(globalThis.crypto?.subtle),
+});
+function openSaveTransfer() {
+  saveTransferOpen.value = true;
+}
+
 // ===== データリセット(展示モードの「最初から」と、種類を選んで消す。docs/data-reset-design.md) =====
 const exhibitResetOpen = ref(false);
 const exhibitResetCancel = ref<HTMLButtonElement | null>(null);
@@ -9859,6 +9881,8 @@ function navigateBack() {
     closeAssistTools(true);
   } else if (ladderNoticeOpen.value) {
     dismissLadderNoticeDialog();
+  } else if (saveTransferOpen.value) {
+    if (!saveTransferView.value?.goBack()) saveTransferOpen.value = false;
   } else if (exhibitResetOpen.value) {
     if (resetChoice.value) resetChoice.value = "";
     else if (resetTournamentList.value) resetTournamentList.value = false;
@@ -9935,7 +9959,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || researchOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || saveTransferOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || researchOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 
@@ -13763,6 +13787,8 @@ function handlePageHide() {
 }
 function handleGlobalKeydown(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
+  // 引き継ぎは段を1つ戻し、はじめの段なら閉じる(UI_Nintendo_Implementation.mdの3-1。Escは「戻る」)。
+  if (saveTransferOpen.value && !saveTransferView.value?.goBack()) saveTransferOpen.value = false;
   closeAssistTools();
   exhibitResetOpen.value = false;
   settingsOpen.value = false;

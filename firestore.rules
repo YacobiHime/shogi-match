@@ -25,6 +25,25 @@ service cloud.firestore {
               && !('test' in request.resource.data)));
       allow read, update, delete: if false;
     }
+    // 引き継ぎコード(docs/save-transfer-design.mdの3章)。中身はコードから作った鍵で暗号にしてあり、ここでは読めない。
+    // 作るのは誰でもできるが、項目・大きさ・期限(7日まで)を決める。一覧は出さない(文書の名前はコードを知る人しか分からない)。
+    // 読むのは期限までの1件ずつ。消すのは受け取った人(名前を知る人)。書き換えはできない(同じ名前に上書きされない)。
+    // 送る側は src/core/save-cloud.mjs。
+    match /saveTransfers/{entry} {
+      allow create: if entry.matches('^[0-9a-f]{40}(-[1-5])?$')
+        && request.resource.data.keys().hasOnly(['v', 'part', 'parts', 'data', 'at', 'expireAt'])
+        && request.resource.data.v == 1
+        && request.resource.data.part is int && request.resource.data.part >= 0 && request.resource.data.part <= 5
+        && request.resource.data.parts is int && request.resource.data.parts >= 1 && request.resource.data.parts <= 6
+        && request.resource.data.part < request.resource.data.parts
+        && request.resource.data.data is string && request.resource.data.data.size() <= 700000
+        && request.resource.data.at is timestamp
+        && request.resource.data.expireAt is timestamp
+        && request.resource.data.expireAt <= request.time + duration.value(8, 'd');
+      allow get: if resource.data.expireAt > request.time;
+      allow delete: if true;
+      allow list, update: if false;
+    }
     match /{document=**} {
       allow read, write: if false;
     }
