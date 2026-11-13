@@ -188,7 +188,7 @@ onMounted(() => {
 // 盤の枠を、描かれる盤と同じ大きさにする(脳トレの将棋の種目と同じ方法)。
 const stageEl = ref<HTMLElement | null>(null);
 const boardBoxStyle = ref<Record<string, string>>({});
-const boardAspect = ref(878 / 1168);
+const boardAspect = ref(878 / 1128);
 function onBoardResize({ width, height }: { width: number; height: number }) {
   if (width > 0 && height > 0 && Math.abs(width / height - boardAspect.value) > 0.005) boardAspect.value = width / height;
 }

@@ -314,8 +314,8 @@ export class PortraitHandLayoutBuilder {
         style: {
           left: left + portraitHandParams.leftPiecePadding * this.ratio + "px",
           top: portraitHandParams.topPiecePadding * this.ratio + "px",
-          width: commonParams.piece.width * this.ratio + "px",
-          height: commonParams.piece.height * this.ratio + "px",
+          width: commonParams.piece.width * portraitHandParams.pieceScale * this.ratio + "px",
+          height: commonParams.piece.height * portraitHandParams.pieceScale * this.ratio + "px",
           opacity: type === dragSourceType ? "0.3" : "1",
         },
       });
@@ -328,8 +328,8 @@ export class PortraitHandLayoutBuilder {
           character: hand.count(type).toString(),
           style: {
             left: left + portraitHandParams.squareWidth * x * this.ratio + "px",
-            top: portraitHandParams.squareHeight * 0.5 * this.ratio + "px",
-            "font-size": 40 * this.ratio + "px",
+            top: portraitHandParams.squareHeight * 0.45 * this.ratio + "px",
+            "font-size": 36 * this.ratio + "px",
             "font-weight": "900",
             color: "#fff",
             "text-shadow": `${shadow}px ${shadow}px ${blur}px #000, ${-shadow}px ${shadow}px ${blur}px #000, ${shadow}px ${-shadow}px ${blur}px #000, ${-shadow}px ${-shadow}px ${blur}px #000`,

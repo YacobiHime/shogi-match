@@ -240,31 +240,39 @@ export const compactViewParams = {
   },
 };
 
+/**
+ * スマホ縦の盤の枠(portrait)の持ち駒の台の高さ。盤の目(104)より低くして、そのぶん盤を大きく出す
+ * (docs/stable-board-layout-design.mdの8-2)。台の駒は盤の駒のPORTRAIT_HAND_PIECE_SCALE倍。
+ */
+export const PORTRAIT_HAND_ROW = 84;
+export const PORTRAIT_HAND_PIECE_SCALE = 0.86;
+
 export const portraitHandParams = {
   width: 664,
-  height: 104,
+  height: PORTRAIT_HAND_ROW,
   highlight: {
     selected: { "background-color": "#ff4800", opacity: "0.7" },
   },
   squareWidth: 94.85,
-  squareHeight: 104,
-  leftPiecePadding: 3.4,
-  topPiecePadding: 5.7,
+  squareHeight: PORTRAIT_HAND_ROW,
+  pieceScale: PORTRAIT_HAND_PIECE_SCALE,
+  leftPiecePadding: (94.85 - 88 * PORTRAIT_HAND_PIECE_SCALE) / 2,
+  topPiecePadding: (PORTRAIT_HAND_ROW - 93 * PORTRAIT_HAND_PIECE_SCALE) / 2,
 };
 
 export const portraitViewParams = {
   frame: {
     width: 878,
-    height: 1168,
+    height: 960 + PORTRAIT_HAND_ROW * 2,
   },
   board: {
     x: 0,
-    y: 104,
+    y: PORTRAIT_HAND_ROW,
   },
   hand: {
     black: {
       x: 0,
-      y: 1064,
+      y: PORTRAIT_HAND_ROW + 960,
     },
     white: {
       x: 214,
@@ -274,40 +282,40 @@ export const portraitViewParams = {
   turn: {
     black: {
       x: 664,
-      y: 1068,
+      y: PORTRAIT_HAND_ROW + 960 + 2,
     },
     white: {
       x: 0,
-      y: 54,
+      y: 42,
     },
     width: 214,
-    height: 50,
-    fontSize: 30,
+    height: 40,
+    fontSize: 25,
   },
   playerName: {
     black: {
       x: 664,
-      y: 1116,
+      y: PORTRAIT_HAND_ROW + 960 + 42,
     },
     white: {
       x: 0,
       y: 0,
     },
     width: 214,
-    height: 52,
-    fontSize: 25,
+    height: 42,
+    fontSize: 21,
   },
   clock: {
     black: {
       x: 664,
-      y: 1064,
+      y: PORTRAIT_HAND_ROW + 960,
     },
     white: {
       x: 0,
-      y: 50,
+      y: 42,
     },
     width: 214,
-    height: 52,
-    fontSize: 30,
+    height: 42,
+    fontSize: 26,
   },
 };

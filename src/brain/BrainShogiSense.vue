@@ -352,8 +352,8 @@ onBeforeUnmount(() => narrowMediaQuery?.removeEventListener("change", onNarrowCh
 const stageEl = ref<HTMLElement | null>(null);
 const panelEl = ref<HTMLElement | null>(null);
 const boardBoxStyle = ref<Record<string, string>>({});
-const boardAspect = ref(isNarrow.value ? 878 / 1168 : 1471 / 959);
-watch(isNarrow, (narrow) => { boardAspect.value = narrow ? 878 / 1168 : 1471 / 959; });
+const boardAspect = ref(isNarrow.value ? 878 / 1128 : 1471 / 959);
+watch(isNarrow, (narrow) => { boardAspect.value = narrow ? 878 / 1128 : 1471 / 959; });
 function onBoardResize({ width, height }: { width: number; height: number }) {
   if (width > 0 && height > 0 && Math.abs(width / height - boardAspect.value) > 0.005) boardAspect.value = width / height;
 }

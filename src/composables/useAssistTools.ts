@@ -13,8 +13,9 @@ export function useAssistTools(actions: Ref<HTMLElement | null>, fontSize: Ref<n
     const style = getComputedStyle(element);
     const minimum = parseFloat(style.getPropertyValue("--assist-button-min-em")) || 5.5;
     const gap = parseFloat(style.columnGap) || 0;
-    // 表示補助は4つ(ひふみんアイ・駒の利き・駒の損得・危機センサー)。
-    const count = primaryCount.value + 4;
+    // 表示補助のボタンの数は、並べてあるボタンから数える(足しても数え直さなくてよい。docs/stable-board-layout-design.mdの8-1)。
+    const toolCount = tools.value?.querySelectorAll(".shogi-game__display-tools-buttons > button").length || 6;
+    const count = primaryCount.value + toolCount;
     // Primary buttons can have a slightly larger font than the row itself.
     const buttonFont = parseFloat(getComputedStyle(element.querySelector("button") ?? element).fontSize) || fontSize.value;
     const unit = Math.max(fontSize.value, buttonFont);
@@ -35,8 +36,14 @@ export function useAssistTools(actions: Ref<HTMLElement | null>, fontSize: Ref<n
   watch([fontSize, primaryCount], () => void nextTick(measure));
   onMounted(() => {
     observer = new ResizeObserver(measure);
-    if (actions.value) observer.observe(actions.value);
-    measure();
+    // 操作の列はホームのあとに出るので、出たとき(入れ替わったとき)に見張りを付け直す。
+    watch(actions, (element, previous) => {
+      if (previous) observer?.unobserve(previous);
+      if (element) {
+        observer?.observe(element);
+        void nextTick(measure);
+      }
+    }, { immediate: true });
     window.addEventListener("pointerdown", outside);
   });
   onBeforeUnmount(() => {

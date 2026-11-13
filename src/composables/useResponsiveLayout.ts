@@ -12,12 +12,12 @@ type ResponsiveLayoutOptions = {
 const BOARD_FRAMES = {
   standard: { width: 1471, height: 959 },
   compact: { width: 1088, height: 1071 },
-  portrait: { width: 878, height: 1168 },
+  portrait: { width: 878, height: 1128 },
 } as const;
 type BoardFrameName = keyof typeof BOARD_FRAMES;
 
 // 縦積みで盤以外に要る高さと、横並びの情報欄に要る幅の見積もり。
-const STACK_RESERVED_EM = 19;
+const STACK_RESERVED_EM = 17;
 const STACK_ANALYSIS_RESERVED_EM = 26;
 const SIDE_COLUMN_MIN_EM = 17;
 const WIDE_COLUMNS_MIN_EM = 33;
@@ -132,19 +132,43 @@ export function useResponsiveLayout({ analysisVisible }: ResponsiveLayoutOptions
     }
   }
 
+  // 大きさが変わったら、1コマに1回だけ計算し直す(回している途中の何度もの変化で、盤が行ったり来たりしないように)。
+  // 配置は根の大きさから毎回はじめから決め、前の配置の値を使わない(docs/stable-board-layout-design.mdの8-1)。
+  let frame = 0;
+  let rootChanged = false;
+  function schedule(root: boolean) {
+    rootChanged ||= root;
+    if (frame) return;
+    const run = () => {
+      frame = 0;
+      const wasRoot = rootChanged;
+      rootChanged = false;
+      if (wasRoot) updateUiLayout();
+      else updateStackBoardFrame();
+    };
+    frame = typeof requestAnimationFrame === "function" ? requestAnimationFrame(run) : (setTimeout(run, 16) as unknown as number);
+  }
+
   watch(analysisVisible, () => nextTick(updateUiLayout));
 
   onMounted(() => {
     updateUiLayout();
-    boardResizeObserver = new ResizeObserver((entries) => {
-      if (entries.some(({ target }) => target === gameRoot.value)) updateUiLayout();
-      else updateStackBoardFrame();
-    });
+    boardResizeObserver = new ResizeObserver((entries) => schedule(entries.some(({ target }) => target === gameRoot.value)));
     if (gameRoot.value) boardResizeObserver.observe(gameRoot.value);
-    if (boardShell.value) boardResizeObserver.observe(boardShell.value);
+    // 盤の段はホームのあとに出る(対局を始めたとき・解析の欄の出入り)。出るたびに見張りを付け直す。
+    watch(boardShell, (shell, previous) => {
+      if (previous) boardResizeObserver?.unobserve(previous);
+      if (shell) {
+        boardResizeObserver?.observe(shell);
+        schedule(true);
+      }
+    }, { immediate: true });
   });
 
-  onBeforeUnmount(() => boardResizeObserver?.disconnect());
+  onBeforeUnmount(() => {
+    boardResizeObserver?.disconnect();
+    if (frame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+  });
 
   return {
     boardLayout,

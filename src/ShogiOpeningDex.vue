@@ -955,8 +955,8 @@ watch(stepIndex, async () => {
   .shogi-game .shogi-dex__board {
     flex: 1;
     height: auto;
-    /* 縦長レイアウトの盤の縦横比(878/1168)に合わせ、盤を最大化する。 */
-    aspect-ratio: 878 / 1168;
+    /* 縦長レイアウトの盤の縦横比(878/1128)に合わせ、盤を最大化する。 */
+    aspect-ratio: 878 / 1128;
   }
   .shogi-game .shogi-dex__stage-nav {
     width: 2.75rem;
@@ -1027,7 +1027,7 @@ watch(stepIndex, async () => {
     flex: none;
     width: auto;
     height: var(--dex-board-h);
-    aspect-ratio: 878 / 1168;
+    aspect-ratio: 878 / 1128;
   }
   .shogi-game .shogi-dex--catalog .shogi-reference-dex__board-frame {
     flex: none;

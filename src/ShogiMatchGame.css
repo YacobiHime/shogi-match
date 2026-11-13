@@ -236,11 +236,19 @@
   color: var(--peach) !important;
 }
 .shogi-game__command--complete {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  line-height: 1.1;
   border-color: var(--amber);
   color: var(--night-deep) !important;
   background: var(--amber) !important;
   box-shadow: 0 2px 0 var(--amber-shadow);
 }
+.shogi-game__complete-verb { font-weight: 900; }
+.shogi-game__complete-dest { font-size: 0.68em; font-weight: 700; opacity: 0.85; }
 /* 対局中の図鑑。メニューにしまわず、本の絵と「図鑑」の字で見つけられるようにする。 */
 .shogi-game__dex-open {
   display: inline-flex;
@@ -381,6 +389,27 @@
   margin-left: 0.5em;
   color: var(--muted);
   font-size: 0.92em;
+}
+
+/*
+ * スマホ縦では、ふつうの対局の札を1行にする(相手・先手の戦型・後手の戦型。docs/stable-board-layout-design.mdの8-2)。
+ * 見出しの「対戦相手」と「先手」「後手」の字は印(☗☖の向きと▲△)に替え、行を減らして盤の段に回す。
+ */
+.shogi-game--stack.shogi-game--narrow .shogi-game__summary:has(> .shogi-game__summary-opponent) {
+  flex-wrap: nowrap;
+  gap: 0.6em;
+  padding-block: 0.2em;
+}
+.shogi-game.shogi-game--stack.shogi-game--narrow .shogi-game__summary-opponent {
+  flex: 1 1 auto;
+}
+.shogi-game--stack.shogi-game--narrow .shogi-game__summary-opponent > b,
+.shogi-game--stack.shogi-game--narrow .shogi-game__summary-formation--pending {
+  display: none;
+}
+.shogi-game--stack.shogi-game--narrow .shogi-game__summary-formation {
+  flex: 0 1 auto;
+  max-width: 34%;
 }
 
 /*
@@ -1627,7 +1656,7 @@
   gap: 0.5em;
   min-width: 0;
 }
-/* 押しやすい幅を保つ。表示補助の4つは、実寸が足りなければ折り畳む。 */
+/* 押しやすい幅を保つ。表示補助の6つは、実寸が足りなければ折り畳む(useAssistTools.ts)。 */
 .shogi-game__assist-actions > button,
 .shogi-game__display-tools-summary,
 .shogi-game__display-tools-buttons > button {
@@ -1652,8 +1681,8 @@
 }
 /* 表示補助は、広いときは操作列と一続き、狭いときは上に開く折り畳み。 */
 .shogi-game__display-tools {
-  flex: 4 1 calc(var(--assist-button-min-em) * 4em + 1.5em);
-  min-width: calc(var(--assist-button-min-em) * 4em + 1.5em);
+  flex: 6 1 calc(var(--assist-button-min-em) * 6em + 2.5em);
+  min-width: calc(var(--assist-button-min-em) * 6em + 2.5em);
 }
 .shogi-game__display-tools-summary { display: none; cursor: pointer; list-style: none; }
 .shogi-game__display-tools-summary::-webkit-details-marker { display: none; }
@@ -1984,6 +2013,92 @@
   text-align: left;
 }
 
+/*
+ * 解析の欄を1つの帯にする(docs/stable-board-layout-design.mdの8-3)。スマホ縦と背の低い横画面。
+ * 包み(情報の行・操作の列)を display: contents にして、中身を帯のグリッドに直接並べる。
+ * 上: 振り返り(とじる×)/ まん中: 細い形勢のグラフ(進み具合と分岐の札を重ねる)/ 下: ⏮ ◀ [いまの手] ▶ ⏭ その他。
+ * つまみと凡例と「先手番」はしまう(いつも見るのは、いまの手と進む・戻るだけ。N:2-5)。
+ */
+.shogi-game__analysis--compact {
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+  grid-template-rows: auto auto minmax(2.6em, 3.2em) auto;
+  grid-template-areas:
+    "top top top top top close"
+    "skill skill skill skill skill skill"
+    "graph graph graph graph graph graph"
+    "first prev pick next last more";
+  align-content: start;
+  gap: 0.3em;
+  overflow: hidden;
+}
+.shogi-game__analysis--compact > .shogi-game__guided,
+.shogi-game__analysis--compact > .shogi-game__guided-start {
+  grid-area: top;
+}
+.shogi-game__analysis--compact > .shogi-game__guided {
+  max-height: 7.2em;
+  overflow-y: auto;
+}
+.shogi-game__analysis--compact > .shogi-game__guided-start {
+  min-height: 44px;
+  padding-block: 0.15em;
+}
+.shogi-game__analysis--compact .shogi-game__analysis-info,
+.shogi-game__analysis--compact .shogi-game__analysis-actions,
+.shogi-game__analysis--compact .shogi-game__analysis-nav,
+.shogi-game__analysis--compact .shogi-game__analysis-tools {
+  display: contents;
+}
+.shogi-game__analysis--compact .shogi-game__analysis-info > strong,
+.shogi-game__analysis--compact .shogi-game__analysis-slider,
+.shogi-game__analysis--compact .evaluation-graph__legend {
+  display: none;
+}
+.shogi-game__analysis--compact .shogi-game__analysis-info select {
+  grid-area: pick;
+  max-width: none;
+  font-weight: 700;
+}
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-close { grid-area: close; margin-left: 0; min-width: 44px; }
+.shogi-game__analysis--compact .shogi-game__skill { grid-area: skill; }
+.shogi-game__analysis--compact .evaluation-graph { grid-area: graph; grid-template-rows: minmax(0, 1fr); }
+.shogi-game__analysis--compact .shogi-game__analysis-progress,
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-branch {
+  z-index: 1;
+  grid-area: graph;
+  align-self: start;
+  margin: 0.15em;
+  font-size: 0.78em;
+}
+.shogi-game__analysis--compact .shogi-game__analysis-progress {
+  justify-self: end;
+  padding: 0 0.4em;
+  border-radius: 0.3em;
+  background: rgba(255, 252, 244, 0.9);
+}
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-branch { justify-self: start; min-height: 0; padding-block: 0.1em; }
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-nav > button { min-width: 44px; flex: none; }
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-nav > button:nth-child(1) { grid-area: first; }
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-nav > button:nth-child(2) { grid-area: prev; }
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-nav > button:nth-child(3) { grid-area: next; }
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-nav > button:nth-child(4) { grid-area: last; }
+.shogi-game .shogi-game__analysis--compact .shogi-game__analysis-more { grid-area: more; flex: none; padding-inline: 0.4em; }
+.shogi-game__analysis--compact .shogi-game__analysis-menu { right: 0.5em; bottom: 3.6em; }
+
+/* 横向きの右の列は狭いので、⏮⏭をしまい、◀ [いまの手] ▶ その他 にする(⏮⏭は手の選択でも行ける)。 */
+.shogi-game--side .shogi-game__analysis--compact {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "top top top close"
+    "skill skill skill skill"
+    "graph graph graph graph"
+    "prev pick next more";
+}
+.shogi-game.shogi-game--side .shogi-game__analysis--compact .shogi-game__analysis-nav > button:nth-child(1),
+.shogi-game.shogi-game--side .shogi-game__analysis--compact .shogi-game__analysis-nav > button:nth-child(4) {
+  display: none;
+}
+
 /* ===== レイアウト: 縦積み ===== */
 /*
  * 盤を動かさない縦画面(docs/stable-board-layout-design.md)。5段: 見出し・対局の札・盤・やこび姫の欄・操作列。
@@ -2003,14 +2118,22 @@
 .shogi-game--stack.shogi-game--short {
   --stack-dock-min: 9em;
 }
+/* スマホ縦は、台詞2行と詰めた札1つの高さだけ先に取り、残りを盤へ回す(8-2)。 */
+.shogi-game--stack.shogi-game--narrow {
+  --stack-dock-min: 8.6em;
+}
 /* 解析中は盤が残りを使い、やこび姫の欄は台詞1つ分の決まった高さにする(台詞の長さで盤を動かさない)。 */
 .shogi-game--stack.shogi-game--analysis {
-  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 17em) 4.6em auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto 3.6em auto;
   grid-template-areas: "header" "summary" "board" "analysis" "dock" "actions";
 }
-/* 棋力診断を出したら解析欄を広げ、グラフを潰さずに盤の方を縮める。 */
-.shogi-game--stack.shogi-game--analysis:has(.shogi-game__skill) {
-  grid-template-rows: auto auto minmax(0, 1fr) minmax(0, 23em) 4.6em auto;
+/* スマホ縦の解析では、対局の札(相手と戦型)をしまう。相手の名前は盤の名札にある。空いた高さは盤へ(8-3)。 */
+.shogi-game--stack.shogi-game--narrow.shogi-game--analysis .shogi-game__summary:has(> .shogi-game__summary-opponent) {
+  display: none;
+}
+/* 解析中のやこび姫の一言は2行。長いときは台詞の中でスクロールし、欄の外にはみ出さない(8-3)。 */
+.shogi-game--stack.shogi-game--analysis .shogi-game__dialogue {
+  overflow-y: auto;
 }
 /* やこび姫の欄。台詞が残りの高さ、補助は下に寄せて中身の高さ。補助のボタンは欄の下にそろい、台詞の長さでは動かない。 */
 .shogi-game--stack .shogi-game__dock {
@@ -2210,7 +2333,15 @@
   grid-template-rows: auto auto minmax(0, max-content) minmax(3.8em, 1fr) auto;
 }
 .shogi-game--side.shogi-game--short.shogi-game--analysis {
-  grid-template-rows: auto auto minmax(0, 1fr) minmax(3.8em, auto) auto;
+  grid-template-rows: auto auto auto minmax(3.8em, 1fr) auto;
+}
+/* 横向きの解析は、解析の欄とやこび姫の一言を上下の2段にし、重ねない(8-1)。一言は欄の中でスクロールする。 */
+.shogi-game--side.shogi-game--analysis .shogi-game__coach {
+  min-height: 0;
+  overflow: hidden;
+}
+.shogi-game--side.shogi-game--analysis .shogi-game__dialogue {
+  overflow-y: auto;
 }
 .shogi-game--side.shogi-game--short .shogi-game__opening-guide {
   max-height: none;
@@ -2299,6 +2430,11 @@
 }
 .shogi-game--wide .shogi-game__toolbar > button {
   flex: 1 1 auto;
+  min-width: 0;
+}
+/* 見出しの操作は画面の外へ出さない(docs/stable-board-layout-design.mdの8-1)。 */
+.shogi-game--wide .shogi-game__toolbar {
+  min-width: 0;
 }
 .shogi-game--wide .shogi-game__summary {
   /* 右の見出し（状態と操作の2段）の高さに引き伸ばさず、内容の高さにする。 */

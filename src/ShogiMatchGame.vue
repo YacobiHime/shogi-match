@@ -702,8 +702,10 @@
           class="shogi-game__command shogi-game__command--complete"
           :disabled="!active"
           data-review-complete
+          :aria-label="reviewCompleteLabel"
+          :title="reviewCompleteLabel"
           @click="completeReview()"
-        >{{ reviewCompleteLabel }}</button>
+        ><span class="shogi-game__complete-verb">完了</span><small class="shogi-game__complete-dest" aria-hidden="true">{{ reviewCompleteDest }}</small></button>
         <template v-if="!menuCollapsed && !reviewMode">
           <button
             type="button"
@@ -1226,6 +1228,8 @@
       :class="boardImpact ? `shogi-game__board-shell--impact-${boardImpact.stage}` : ''"
       :data-impact="boardImpact?.stage"
       @pointerdown.capture="onBoardShellPointerDown"
+      @pointerup.capture="onBoardShellPointerUp"
+      @pointercancel.capture="reviewSwipe = null"
     >
       <span v-if="boardImpact" :key="boardImpact.id" class="shogi-game__board-impact" aria-hidden="true"></span>
       <!-- 封じ手の番の帯(docs/seal-break-design.mdの2-1)。盤の上の端に細く出し、盤はふさがない。 -->
@@ -1768,9 +1772,14 @@
       >▶ 対局を振り返る</button>
     </div>
 
+    <!--
+      棋譜解析の欄。スマホ縦と背の低い横画面では「1つの帯」(docs/stable-board-layout-design.mdの8-3)にして、盤を大きく残す:
+      上に振り返り、まん中に細い形勢のグラフ、下に「⏮ ◀ [いまの手] ▶ ⏭ その他」。手の一覧は、いまの手の選択から開く。
+    -->
     <section
       v-if="reviewMode && analysisOpen"
       class="shogi-game__analysis"
+      :class="{ 'shogi-game__analysis--compact': analysisBand }"
       aria-label="棋譜解析"
     >
       <!-- 対局の振り返り。止まる局面では、盤で手を指して答え合わせする。 -->
@@ -4841,7 +4850,9 @@ const cpuDisplayName = computed(() => {
     // タイトル戦では、タイトルを持っている相手に段位の代わりに肩書を付ける(「○○ 竜王」)。
     const role = matchStage.value?.opponentRole;
     const rank = role && role !== "挑戦者" ? role : ryuoOpponent.value.dan;
-    return `${ryuoOpponent.value.name} ${rank} Lv.${ryuoOpponent.value.level}`;
+    // 対局が終わると、棋士の1年の相手のLv(pending.level)は消える。そのときは対局で使った強さのLvを出す(「Lv.undefined」にしない)。
+    const level = ryuoOpponent.value.level ?? cpuStrengthLevel();
+    return level === undefined || level === null ? `${ryuoOpponent.value.name} ${rank}` : `${ryuoOpponent.value.name} ${rank} Lv.${level}`;
   }
   if (ryuoCounterOpponent.value) {
     return `${ryuoCounterOpponent.value.name} ${ryuoCounterOpponent.value.dan}（対策） Lv.${ryuoCounterOpponent.value.level}`;
@@ -11803,7 +11814,31 @@ function cancelResultReveal() {
   impactHoldRelease?.();
 }
 /** 止めの間に盤を触ったら、止めを打ち切る。 */
-function onBoardShellPointerDown() {
+/**
+ * 解析のあいだ、盤を左右にはらうと1手戻る・進む(docs/stable-board-layout-design.mdの8-3。指の届く場所で操作できる。U:7-4)。
+ * 駒を動かす操作とぶつからないよう、はらい終えたときに局面が変わっていない(駒を指していない)ときだけ進める。
+ */
+const reviewSwipe = ref<{ x: number; y: number; at: number; sfen: string } | null>(null);
+const SWIPE_MIN_PX = 48;
+const SWIPE_MAX_MS = 700;
+function onBoardShellPointerUp(event: PointerEvent) {
+  const start = reviewSwipe.value;
+  reviewSwipe.value = null;
+  if (!start || !reviewMode.value || !analysisOpen.value || reviewCpuEnabled.value || guidedReview.value) return;
+  const dx = event.clientX - start.x;
+  const dy = event.clientY - start.y;
+  if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * 2 || performance.now() - start.at > SWIPE_MAX_MS) return;
+  const step = dx < 0 ? 1 : -1;
+  // 盤の上の駒の操作(指した手)が先に終わるのを待ってから、局面が変わっていないことを確かめる。
+  window.setTimeout(() => {
+    if (record.value.position.sfen !== start.sfen) return;
+    navigateAnalysis(step);
+  }, 0);
+}
+function onBoardShellPointerDown(event?: PointerEvent) {
+  if (event && reviewMode.value && analysisOpen.value) {
+    reviewSwipe.value = { x: event.clientX, y: event.clientY, at: performance.now(), sfen: record.value.position.sfen };
+  }
   releaseImpactHold();
   // 盤を触ったら技の帯は消す(光の輪は残す。4-2の6)。
   wazaCutin.value = null;
@@ -13333,6 +13368,11 @@ const reviewCompleteLabel = computed(() => {
   if (props.showHome && ryuoGame.value) return ({ meijin: "完了して名人戦へ", shoreikai: "完了して奨励会へ", kenshukai: "完了して研修会へ", team: "完了して団体戦へ", "pro-year": "完了して棋士の1年へ" } as { [key: string]: string })[ryuoGame.value.event ?? ""] ?? "完了して竜王戦へ";
   return props.showHome ? "完了してホームへ" : "完了して対局準備へ";
 });
+
+/** 「完了して○○へ」の行き先(見出しのボタンの2行目。狭い画面でも手数を押し出さない。docs/stable-board-layout-design.mdの8-4)。 */
+/** 解析の欄を1つの帯に詰めるか(スマホ縦の縦積みと、背の低い横画面)。 */
+const analysisBand = computed(() => uiLayout.value === "stack" || (uiLayout.value === "side" && uiShort.value));
+const reviewCompleteDest = computed(() => reviewCompleteLabel.value.replace(/^完了して/, ""));
 
 function completeReview() {
   if (!reviewMode.value) return;

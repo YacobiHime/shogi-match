@@ -745,7 +745,8 @@ describe("match screen regressions", () => {
     // 止めるのはCPUの応手と結果画面の開始だけ。盤を触ると止めを打ち切る。
     expect(source).toMatch(/await waitForImpactHold\(\);\s*if \(generation !== matchGeneration\) return;\s*(?:\/\/[^\n]*\s*await matchClock\.settleCpuThink\(\);\s*if \(generation !== matchGeneration\) return;\s*)?if \(applyMove\(usi, "cpu"\)/);
     expect(source).toMatch(/class="shogi-game__board-shell"[\s\S]*?@pointerdown\.capture="onBoardShellPointerDown"/);
-    expect(source).toMatch(/function onBoardShellPointerDown\(\) \{\s*releaseImpactHold\(\);/);
+    // 解析のあいだは、はらって1手ずつ進むための始まりを覚えてから、止めを解く(docs/stable-board-layout-design.mdの8-3)。
+    expect(source).toMatch(/function onBoardShellPointerDown\(event\?: PointerEvent\) \{\s*if \(event && reviewMode\.value && analysisOpen\.value\) \{[\s\S]{0,200}?\}\s*releaseImpactHold\(\);/);
     const finish = source.split("function finish(")[1]?.split(/\r?\n\}\r?\n/)[0] ?? "";
     expect(finish).toMatch(/finishImpact\([\s\S]*?setTimeout\(revealResult, finishing\.stopMs\)/);
     // 光りは升の色を変えず、揺れるのは光の枠だけにする。
@@ -1376,5 +1377,19 @@ describe('遅れて読み込む部分が読めなかったとき(docs/chunk-relo
     expect(source).toMatch(/if \(saveTransferOpen\.value && !saveTransferView\.value\?\.goBack\(\)\) saveTransferOpen\.value = false;/);
     // 引き継ぎコードは公式の公開先で、暗号が使えるときだけ。
     expect(source).toMatch(/canUseSaveCloud\(\{\s*hostname: window\.location\.hostname,[\s\S]{0,160}secure: window\.isSecureContext/);
+  });
+
+  it("keeps the layout stable across sizes: re-observes the board, batches updates, and fits the analysis band on phones", () => {
+    // 大きさが変わったら1コマに1回だけ計算し直し、盤の段はあとから出ても見張る(docs/stable-board-layout-design.mdの8-1)。
+    expect(responsiveSource).toMatch(/requestAnimationFrame\(run\)/);
+    expect(responsiveSource).toMatch(/watch\(boardShell, \(shell, previous\) => \{/);
+    // スマホ縦と背の低い横画面の解析は1つの帯(8-3)。盤をはらって1手ずつ進む。
+    expect(source).toMatch(/const analysisBand = computed\(\(\) => uiLayout\.value === "stack" \|\| \(uiLayout\.value === "side" && uiShort\.value\)\);/);
+    expect(source).toMatch(/'shogi-game__analysis--compact': analysisBand/);
+    expect(source).toMatch(/if \(record\.value\.position\.sfen !== start\.sfen\) return;\s*navigateAnalysis\(step\);/);
+    // 完了のボタンは「完了」と行き先の2行にし、見出しの手数を押し出さない(8-4)。
+    expect(source).toMatch(/<span class="shogi-game__complete-verb">完了<\/span><small class="shogi-game__complete-dest" aria-hidden="true">\{\{ reviewCompleteDest \}\}<\/small>/);
+    // 棋士の1年の対局のあとも「Lv.undefined」にしない(8-4)。
+    expect(source).toMatch(/const level = ryuoOpponent\.value\.level \?\? cpuStrengthLevel\(\);/);
   });
 });
