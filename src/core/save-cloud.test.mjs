@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CODE_ALPHABET, CODE_LENGTH, MAX_PARTS, PART_CHARS, SAVE_CLOUD_ENDPOINT, SaveCloudError, canUseSaveCloud, deleteSave, downloadSave,
   formatTransferCode, newTransferCode, normalizeTransferCode, openSaveText, sealSaveText, splitParts, transferDocId, uploadSave,
+  MAX_REMEMBERED_CODES, TRANSFER_CODES_KEY, loadTransferCodes, rememberTransferCode, sweepTransferCodes,
 } from "./save-cloud.mjs";
 
 /** Firestoreのまね。期限はルールと同じく、読むときに断る。 */
@@ -103,5 +104,44 @@ describe("引き継ぎコード", () => {
   it("文字を決まった長さで分ける", () => {
     expect(splitParts("abcdefg", 3)).toEqual(["abc", "def", "g"]);
     expect(splitParts("", 3)).toEqual([""]);
+  });
+});
+
+describe("受け取られなかった預け物の掃除", () => {
+  function memoryStorage() {
+    const map = new Map();
+    return { getItem: (key) => (map.has(key) ? map.get(key) : null), setItem: (key, value) => map.set(key, String(value)), removeItem: (key) => map.delete(key), map };
+  }
+
+  it("作ったコードを新しい順に覚え、上限を超えたら古いものを忘れる", () => {
+    const storage = memoryStorage();
+    for (let index = 0; index < MAX_REMEMBERED_CODES + 2; index += 1) {
+      rememberTransferCode(storage, { code: newTransferCode(), parts: 1, expireAt: index });
+    }
+    const list = loadTransferCodes(storage);
+    expect(list).toHaveLength(MAX_REMEMBERED_CODES);
+    expect(list[0].expireAt).toBe(MAX_REMEMBERED_CODES + 1);
+    storage.setItem(TRANSFER_CODES_KEY, "{broken");
+    expect(loadTransferCodes(storage)).toEqual([]);
+  });
+
+  it("期限を過ぎたコードの文書だけを消して忘れ、通信できなかったものは覚えたまま", async () => {
+    const now = Date.parse("2026-11-20T00:00:00Z");
+    const cloud = fakeFirestore(() => now - 8 * 24 * 60 * 60 * 1000);
+    const storage = memoryStorage();
+    const old = await uploadSave("古い記録", { fetchImpl: cloud.fetchImpl, now: now - 8 * 24 * 60 * 60 * 1000 });
+    const fresh = await uploadSave("新しい記録", { fetchImpl: cloud.fetchImpl, now });
+    rememberTransferCode(storage, old);
+    rememberTransferCode(storage, fresh);
+    expect(cloud.docs.size).toBe(2);
+    const offline = async () => { throw new Error("net"); };
+    expect(await sweepTransferCodes(storage, { now, fetchImpl: offline })).toBe(0);
+    expect(loadTransferCodes(storage)).toHaveLength(2);
+    expect(await sweepTransferCodes(storage, { now, fetchImpl: cloud.fetchImpl })).toBe(1);
+    expect(loadTransferCodes(storage).map((entry) => entry.code)).toEqual([fresh.code]);
+    expect(cloud.docs.size).toBe(1);
+    // 受け取られて消えた文書でも、期限を過ぎたら覚えから外れる。
+    expect(await sweepTransferCodes(storage, { now: now + 8 * 24 * 60 * 60 * 1000, fetchImpl: cloud.fetchImpl })).toBe(1);
+    expect(storage.map.has(TRANSFER_CODES_KEY)).toBe(false);
   });
 });

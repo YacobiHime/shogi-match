@@ -13,7 +13,8 @@ export const SAVE_VERSION = 1;
 const Y = "yacobihime:shogi-match:";
 
 /**
- * 持っていかない鍵。端末ごとの番号と同意(匿名送信。端末が替われば聞き直す)、読み直しの印、画面の覚え書き。
+ * 持っていかない鍵。端末ごとの番号と同意(匿名送信。端末が替われば聞き直す)、読み直しの印、画面の覚え書き、
+ * Googleアカウントの同期の印(cloud-sync.mjs。端末ごとのログイン)、作った引き継ぎコードの覚え(save-cloud.mjs。作った端末が掃除する)。
  * 音と盤・駒の見た目は持っていく(その人の好みなので)。
  */
 export const TRANSFER_SKIP_KEYS = Object.freeze([
@@ -22,6 +23,8 @@ export const TRANSFER_SKIP_KEYS = Object.freeze([
   `${Y}chunk-reload`,
   `${Y}note-tab`,
   `${Y}note-album-page`,
+  `${Y}cloud-sync:v1`,
+  `${Y}transfer-codes:v1`,
 ]);
 
 /** 引き継ぎで運ぶ鍵か。 */

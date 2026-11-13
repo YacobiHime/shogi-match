@@ -399,7 +399,10 @@
         どちらも記録の出し入れなので、タイトルの下に並べる。
       -->
       <div class="shogi-title__tools">
-        <button type="button" class="shogi-title__exhibit-reset" data-save-transfer-open @click="openSaveTransfer">引き継ぎ</button>
+        <button type="button" class="shogi-title__exhibit-reset shogi-title__sync" data-save-transfer-open :data-sync-status="cloudSyncStatus" @click="openSaveTransfer">
+          {{ cloudSync.usable ? "引き継ぎ・同期" : "引き継ぎ" }}
+          <small v-if="cloudSyncStatusText" class="shogi-title__sync-status" data-sync-status-text>{{ cloudSyncStatusText }}</small>
+        </button>
         <button
           v-if="exhibit"
           type="button"
@@ -407,6 +410,7 @@
           data-exhibit-reset
           @click="openExhibitReset"
         >データリセット</button>
+        <p v-if="cloudSyncToast" class="shogi-title__sync-toast" role="status" data-sync-toast>{{ cloudSyncToast }}</p>
       </div>
     </div>
 
@@ -2240,7 +2244,14 @@
         <button ref="exhibitResetCancel" type="button" class="shogi-welcome__skip" @click="exhibitResetOpen = false">やめる</button>
       </div>
     </div>
-    <SaveTransferSheet v-if="saveTransferOpen" ref="saveTransferView" :cloud="saveCloudUsable" @close="saveTransferOpen = false" />
+    <SaveTransferSheet
+      v-if="saveTransferOpen"
+      ref="saveTransferView"
+      :cloud="saveCloudUsable"
+      :sync="cloudSync.usable ? cloudSync : null"
+      :start-step="saveTransferStep"
+      @close="closeSaveTransfer"
+    />
     <!-- 大会の進み具合は、大会ごとにも選べる(docs/data-reset-design.mdの6章) -->
     <div
       v-if="exhibitResetOpen && resetTournamentList && !resetChoice"
@@ -2283,6 +2294,7 @@
       <div class="shogi-game__confirm-panel">
         <h2 id="exhibit-reset-title">{{ resetChoiceGroup.id === "all" ? "記録を消して、最初からにします。" : `${resetChoiceGroup.label}を消します。` }}</h2>
         <p>消えるもの：{{ resetChoiceGroup.erases }}。{{ resetChoiceGroup.keeps }}</p>
+        <p v-if="cloudSyncSignedIn" data-reset-cloud-note>{{ resetChoiceGroup.id === "all" ? CLOUD_SYNC_TEXT.resetAllSignedIn : CLOUD_SYNC_TEXT.resetSynced }}</p>
         <div>
           <button type="button" class="shogi-game__confirm-danger" data-exhibit-reset-accept @click="acceptExhibitReset">{{ resetChoiceGroup.id === "all" ? "最初からにする" : "消す" }}</button>
           <button ref="resetConfirmCancel" type="button" @click="resetChoice = ''">戻る</button>
@@ -3022,6 +3034,8 @@ import { blunderDestinations, kingEscapeMap, unsafeDestinations } from "./core/b
 import { clearExhibitRecords } from "./core/exhibit-reset.mjs";
 import { RESET_GROUPS, TOURNAMENT_PARTS, resetData, resetGroup } from "./core/data-reset.mjs";
 import { canUseSaveCloud } from "./core/save-cloud.mjs";
+import { CLOUD_SYNC_TEXT } from "./core/cloud-sync.mjs";
+import { useCloudSync } from "./composables/useCloudSync";
 import { findTurningPoints, turningPointText } from "./core/turning-points.mjs";
 import {
   ANALYSIS_STAGE_LABELS,
@@ -3354,6 +3368,10 @@ const props = defineProps({
   /** ホームにデータリセットを出す。確認後、記録を消して読み直す。公開game.htmlでは既定で有効。 */
   exhibit: { type: Boolean, default: false },
 });
+// Googleアカウントでの同期(docs/cloud-sync-design.md)。各画面が保存を書く前の記録で「この端末が変わったか」を決めるため、準備の最初に呼ぶ。
+const cloudSync = useCloudSync({ enabled: props.showHome, onChoose: () => openCloudChoice() });
+const { status: cloudSyncStatus, statusText: cloudSyncStatusText, toast: cloudSyncToast, signedIn: cloudSyncSignedIn } = cloudSync;
+
 const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error"]);
 
 // 学習対局では駒落ちや戦型完成局面から始めるため、実際の開始局面を別に持つ。
@@ -9441,9 +9459,27 @@ const saveCloudUsable = typeof window !== "undefined" && canUseSaveCloud({
   // 暗号はWeb Crypto(httpsのページだけ)で作る。使えない環境ではファイルで運ぶ。
   secure: window.isSecureContext && Boolean(globalThis.crypto?.subtle),
 });
+/** シートを開く段(ふつうはメニュー。同期でどちらを使うか聞くときは cloud-choice)。 */
+const saveTransferStep = ref<"menu" | "cloud-choice">("menu");
 function openSaveTransfer() {
+  saveTransferStep.value = cloudSync.status.value === "choose" && cloudSync.choice.value ? "cloud-choice" : "menu";
   saveTransferOpen.value = true;
 }
+function closeSaveTransfer() {
+  saveTransferOpen.value = false;
+}
+/** どちらの記録を使うか聞く(docs/cloud-sync-design.mdの6章)。ホームならすぐ開き、対局中などはホームへ戻ったときに開く。 */
+let cloudChoicePending = false;
+function openCloudChoice() {
+  if (homeOpen.value && !saveTransferOpen.value) openSaveTransfer();
+  else cloudChoicePending = true;
+}
+watch(homeOpen, (open) => {
+  if (open && cloudChoicePending && cloudSync.status.value === "choose") {
+    cloudChoicePending = false;
+    openSaveTransfer();
+  }
+});
 
 // ===== データリセット(展示モードの「最初から」と、種類を選んで消す。docs/data-reset-design.md) =====
 const exhibitResetOpen = ref(false);

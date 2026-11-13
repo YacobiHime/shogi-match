@@ -4013,6 +4013,21 @@
   cursor: pointer;
 }
 .shogi-game .shogi-title__exhibit-reset:focus-visible { outline: 3px solid #f1a54c; outline-offset: 2px; }
+/* 引き継ぎ・同期のボタンの下の小さな状態と、ホームに数秒出す一言(docs/cloud-sync-design.mdの6章)。 */
+.shogi-game .shogi-title__sync { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.25; }
+.shogi-title__sync-status { font-size: 0.72em; font-weight: 700; opacity: 0.92; }
+.shogi-game .shogi-title__sync[data-sync-status="choose"] { border-color: #f1a54c; color: #ffd9a3; }
+.shogi-title__sync-toast {
+  flex-basis: 100%;
+  max-width: 22em;
+  margin: 0;
+  padding: 0.35em 0.8em;
+  border-radius: 0.6em;
+  background: rgba(29, 48, 63, 0.92);
+  color: #fffcf4;
+  font-size: 0.88em;
+  font-weight: 700;
+}
 .shogi-title__hero {
   display: grid;
   grid-template-columns: auto auto;

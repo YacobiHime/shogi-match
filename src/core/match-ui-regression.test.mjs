@@ -1371,7 +1371,11 @@ describe('遅れて読み込む部分が読めなかったとき(docs/chunk-relo
 
   it("opens the save transfer sheet from home and closes it step by step with back and Escape", () => {
     // 引き継ぎ(docs/save-transfer-design.mdの4章)。ホームのタイトルの下の「引き継ぎ」から開き、戻る・Escは段を1つ戻す。
-    expect(source).toMatch(/data-save-transfer-open @click="openSaveTransfer"/);
+    expect(source).toMatch(/data-save-transfer-open[^>]*@click="openSaveTransfer"/);
+    // Googleアカウントの同期(docs/cloud-sync-design.md)。準備の最初に呼び、ホームのボタンの下に状態を出す。どちらを使うか聞くときはシートの段を変えて開く。
+    expect(source).toMatch(/const cloudSync = useCloudSync\(\{ enabled: props\.showHome, onChoose: \(\) => openCloudChoice\(\) \}\);/);
+    expect(source).toMatch(/data-sync-status-text>\{\{ cloudSyncStatusText \}\}/);
+    expect(source).toMatch(/saveTransferStep\.value = cloudSync\.status\.value === "choose" && cloudSync\.choice\.value \? "cloud-choice" : "menu";/);
     expect(source).toMatch(/\} else if \(saveTransferOpen\.value\) \{\s*if \(!saveTransferView\.value\?\.goBack\(\)\) saveTransferOpen\.value = false;/);
     expect(source).toMatch(/canGoBack: \(\) => [^\n]*saveTransferOpen\.value/);
     expect(source).toMatch(/if \(saveTransferOpen\.value && !saveTransferView\.value\?\.goBack\(\)\) saveTransferOpen\.value = false;/);

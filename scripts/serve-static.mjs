@@ -1,6 +1,7 @@
 // ブラウザでの確認用の静的サーバー。WASMエンジンのためのCOOP/COEPを返し、キャッシュさせない。
 // 使い方: node scripts/serve-static.mjs [ポート(既定8766)] [置き場所(既定はリポジトリ)]
 // game.htmlはdist/を読むので、先にnpm run buildする。Viteの開発サーバーと違い、ビルドし直してもすぐ新しいJSが届く。
+// ログインのページ(auth.html)だけは、公開先(firebase.json)と同じく、Googleの窓を開けるゆるい見出しを返す(docs/cloud-sync-design.mdの1章)。
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -35,6 +36,10 @@ createServer(async (request, response) => {
   };
   try {
     const path = normalize(decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname));
+    if (path === '/auth.html') {
+      headers['Cross-Origin-Opener-Policy'] = 'same-origin-allow-popups';
+      headers['Cross-Origin-Embedder-Policy'] = 'unsafe-none';
+    }
     let file = join(root, path);
     if (!file.startsWith(root)) throw new Error('outside');
     if ((await stat(file)).isDirectory()) file = join(file, 'index.html');

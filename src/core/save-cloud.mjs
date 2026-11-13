@@ -120,6 +120,23 @@ export async function sealSaveText(text, code, { subtle = globalThis.crypto.subt
   return mark + toBase64(joined);
 }
 
+/**
+ * 文字をgzipで縮めてbase64にする(暗号にしない。同期の記録はルールで本人だけが読めるため。cloud-sync.mjs)。
+ * 先頭1文字は縮めたか(g=縮めた・p=そのまま)。
+ * @param {string} text
+ */
+export async function packText(text) {
+  if (typeof CompressionStream !== "function") return `p${text}`;
+  return `g${toBase64(await pipe(encoder.encode(text), new CompressionStream("gzip")))}`;
+}
+
+/** packTextの逆。壊れているときは投げる。 */
+export async function unpackText(packed) {
+  if (packed[0] === "p") return packed.slice(1);
+  if (packed[0] !== "g") throw new Error("broken");
+  return new TextDecoder().decode(await pipe(fromBase64(packed.slice(1)), new DecompressionStream("gzip")));
+}
+
 /** sealSaveTextの逆。鍵が違う・壊れているときは投げる。 */
 export async function openSaveText(sealed, code, { subtle = globalThis.crypto.subtle } = {}) {
   const mark = sealed[0];
@@ -248,4 +265,68 @@ export async function deleteSave(code, { fetchImpl = globalThis.fetch, parts = M
       fetchImpl(`${SAVE_CLOUD_ENDPOINT}/${partDocId(docId, part)}`, { method: "DELETE" }).catch(() => null),
     ),
   );
+}
+
+/** 作ったコードの覚え(期限のあとに預けた文書を消すため。docs/save-transfer-design.mdの6章)。引き継ぎでは運ばない。 */
+export const TRANSFER_CODES_KEY = "yacobihime:shogi-match:transfer-codes:v1";
+/** 覚えておくコードの数(新しい順)。 */
+export const MAX_REMEMBERED_CODES = 10;
+
+/**
+ * 覚えたコードを読む。読めない・形の違うものは除く。
+ * @param {Storage | null | undefined} storage
+ * @returns {{ code: string, parts: number, expireAt: number }[]}
+ */
+export function loadTransferCodes(storage) {
+  try {
+    const value = JSON.parse(storage?.getItem(TRANSFER_CODES_KEY) ?? "[]");
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry) => entry && normalizeTransferCode(entry.code) && Number.isInteger(entry.parts) && entry.parts >= 1 && entry.parts <= MAX_PARTS && Number.isFinite(entry.expireAt));
+  } catch {
+    return [];
+  }
+}
+
+function writeTransferCodes(storage, list) {
+  try {
+    if (list.length) storage?.setItem(TRANSFER_CODES_KEY, JSON.stringify(list));
+    else storage?.removeItem(TRANSFER_CODES_KEY);
+  } catch {
+    // 書けない環境では覚えない(掃除しないだけ)。
+  }
+}
+
+/**
+ * 作ったコードを覚える(新しい順にMAX_REMEMBERED_CODESまで)。
+ * @param {Storage | null | undefined} storage
+ * @param {{ code: string, parts: number, expireAt: number }} entry
+ */
+export function rememberTransferCode(storage, { code, parts, expireAt }) {
+  const list = loadTransferCodes(storage).filter((entry) => entry.code !== code);
+  writeTransferCodes(storage, [{ code, parts, expireAt }, ...list].slice(0, MAX_REMEMBERED_CODES));
+}
+
+/**
+ * 期限を過ぎたコードの文書を消し、覚えから外す。消した数を返す。通信できなければ覚えたまま(次に開いたとき)。
+ * 受け取られたコードの文書はもう消えているので、消しても何も起きない。
+ * @param {Storage | null | undefined} storage
+ * @param {{ now?: number, fetchImpl?: typeof fetch, subtle?: SubtleCrypto }} [options]
+ */
+export async function sweepTransferCodes(storage, { now = Date.now(), fetchImpl = globalThis.fetch, subtle = globalThis.crypto.subtle } = {}) {
+  const list = loadTransferCodes(storage);
+  const expired = list.filter((entry) => entry.expireAt <= now);
+  if (!expired.length) return 0;
+  const done = new Set();
+  for (const entry of expired) {
+    const docId = await transferDocId(entry.code, subtle);
+    const results = await Promise.all(
+      Array.from({ length: entry.parts }, (_, part) =>
+        fetchImpl(`${SAVE_CLOUD_ENDPOINT}/${partDocId(docId, part)}`, { method: "DELETE" }).then((response) => response.ok || response.status === 404, () => false),
+      ),
+    );
+    if (results.every(Boolean)) done.add(entry.code);
+  }
+  // 消しているあいだに新しく覚えたコードを消さないよう、読み直してから外す。
+  writeTransferCodes(storage, loadTransferCodes(storage).filter((entry) => !done.has(entry.code)));
+  return done.size;
 }

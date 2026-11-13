@@ -28,6 +28,8 @@ const SETTING_KEYS = new Set([
   "yacobihime:shogi-match:opening-plans-seen:v1", "yacobihime:shogi-match:plan-ghosts:v1", "yacobihime:shogi-match:tutorial-voice:v1",
   "yacobihime:shogi-match:welcome:v1", "yacobihime:shogi-match:player-name:v1", "yacobihime:shogi-match:player-profile",
   "yacobihime:shogi-match:seen-features:v1", "yacobihime:shogi-match:novel-settings:v1", "yacobihime:shogi-match:chunk-reload", "yacobihime:shogi-match:skill-data-anon:v1", "yacobihime:shogi-match:skill-data-consent:v1", "yacobihime:shogi-match:research-settings:v1",
+  // Googleアカウントの同期の印と、作った引き継ぎコードの覚え(どちらも端末ごと。「すべて」で消えるとログアウトになる。docs/cloud-sync-design.mdの7章)。
+  "yacobihime:shogi-match:cloud-sync:v1", "yacobihime:shogi-match:transfer-codes:v1",
 ]);
 
 /** ソースに書かれた保存の鍵(「…_KEY = '…'」の形)。 */

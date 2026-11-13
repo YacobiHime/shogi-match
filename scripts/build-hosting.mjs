@@ -8,6 +8,7 @@ await mkdir(output, { recursive: true });
 
 for (const path of [
   "game.html",
+  "auth.html",
   "dist",
   "vendor",
 ]) {
@@ -40,3 +41,8 @@ const versionedHtml = [...assetVersions].reduce(
 );
 await writeFile(new URL("game.html", output), versionedHtml);
 await writeFile(new URL("index.html", output), versionedHtml);
+
+// ログインのページ(docs/cloud-sync-design.mdの5章)の中身にも内容の版を付ける(JSは長くキャッシュするため)。
+const loginVersion = createHash("sha256").update(await readFile(new URL("dist/auth/login.js", output))).digest("hex").slice(0, 12);
+const authHtml = await readFile(new URL("auth.html", output), "utf8");
+await writeFile(new URL("auth.html", output), authHtml.replace(/(\.\/dist\/auth\/login\.js)(?:\?v=[^"']+)?/g, `$1?v=${loginVersion}`));

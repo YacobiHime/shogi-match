@@ -19,7 +19,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.auth.config.js",
     "prepack": "npm run build",
     "build:exhibit": "npm run build:hosting && node scripts/build-exhibit.mjs",
     "build:hosting": "npm run build && node scripts/build-hosting.mjs",
@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.7",
+    "firebase": "^13.3.0",
     "sharp": "^0.35.3",
     "tsshogi": "^2.3.4",
     "typescript": "^5.9.3",

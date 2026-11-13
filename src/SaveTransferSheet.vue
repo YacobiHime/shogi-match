@@ -4,10 +4,12 @@
     送る(コードを作る・ファイルに書き出す)と受け取る(コードを入れる・ファイルを読み込む)の2組。
     受け取るときは、置き換える前に両方の記録の要約を並べて確かめる。最初のフォーカスは「戻る」(UD:5-2、U:3-1)。
     置き換えたらページを読み直す(データリセットと同じ。どの画面も新しい記録から始まる)。
+    Googleアカウントの同期(docs/cloud-sync-design.mdの6章)：メニューのいちばん上の組(ログイン・状態・今すぐ同期・ログアウト)と、
+    どちらの記録を使うかの段(cloud-choice。初期フォーカスは「あとで決める」)、クラウドの記録を消す段(cloud-delete)。
   -->
   <div
     class="shogi-game__confirm shogi-game__confirm--over-home"
-    :role="step === 'confirm' ? 'alertdialog' : 'dialog'"
+    :role="step === 'confirm' || step === 'cloud-choice' || step === 'cloud-delete' ? 'alertdialog' : 'dialog'"
     aria-modal="true"
     aria-labelledby="save-transfer-title"
     data-save-transfer
@@ -19,6 +21,26 @@
         <h2 id="save-transfer-title">{{ T.title }}</h2>
         <p>{{ T.lead }}</p>
         <div class="save-transfer__groups">
+          <section v-if="sync" class="save-transfer__group save-transfer__sync" data-sync-group>
+            <h3>{{ S.head }}</h3>
+            <template v-if="sync.signedIn.value">
+              <p class="save-transfer__account" data-sync-account>{{ S.signedInAs(accountName) }}</p>
+              <p class="save-transfer__note" data-sync-saved>{{ sync.savedAt.value ? S.lastSaved(formatSaveTime(sync.savedAt.value)) : S.notSavedYet }}</p>
+              <div class="save-transfer__row">
+                <button type="button" data-sync-now :disabled="sync.status.value === 'syncing'" @click="sync.syncNow()">{{ sync.status.value === "syncing" ? sync.statusText.value : S.syncNow }}</button>
+                <button type="button" data-sync-sign-out :disabled="sync.status.value === 'syncing'" @click="sync.signOut()">{{ S.signOut }}</button>
+              </div>
+              <button type="button" class="save-transfer__small" data-sync-delete @click="go('cloud-delete')">{{ S.deleteCloud }}</button>
+            </template>
+            <ul v-else class="shogi-welcome__choices">
+              <li>
+                <button type="button" data-sync-sign-in @click="sync.signIn()">
+                  <strong>{{ S.signIn }}</strong><small>{{ S.signInNote }}</small>
+                </button>
+              </li>
+            </ul>
+            <p v-if="sync.message.value" class="save-transfer__notice" role="status" data-sync-message>{{ sync.message.value }}</p>
+          </section>
           <section class="save-transfer__group">
             <h3>{{ T.sendHead }}</h3>
             <ul class="shogi-welcome__choices">
@@ -99,6 +121,37 @@
         </form>
       </template>
 
+      <template v-else-if="step === 'cloud-choice' && sync && sync.choice.value">
+        <h2 id="save-transfer-title">{{ S.chooseHead }}</h2>
+        <p>{{ sync.choice.value.first ? S.chooseFirst : S.chooseLead }}{{ S.chooseNote }}</p>
+        <div class="save-transfer__compare">
+          <section data-sync-choice-local>
+            <h3>{{ S.local }}</h3>
+            <ul><li v-for="line in sync.choice.value.localLines" :key="line">{{ line }}</li></ul>
+            <button type="button" class="shogi-game__confirm-danger" data-sync-use-local :disabled="sync.status.value === 'syncing'" @click="sync.useLocal()">{{ S.useThis }}</button>
+          </section>
+          <section data-sync-choice-cloud>
+            <h3>{{ S.cloud }}</h3>
+            <ul><li v-for="line in sync.choice.value.cloudLines" :key="line">{{ line }}</li></ul>
+            <button type="button" class="shogi-game__confirm-danger" data-sync-use-cloud :disabled="sync.status.value === 'syncing' || sync.choice.value.cloudBroken" @click="sync.useCloud()">{{ S.useThis }}</button>
+          </section>
+        </div>
+        <button type="button" class="save-transfer__keep" data-sync-keep @click="keepLocal">{{ keptLocal ? S.keptLocal : S.keepLocal }}</button>
+        <p v-if="sync.message.value" class="save-transfer__error" role="alert" data-sync-message>{{ sync.message.value }}</p>
+        <div>
+          <button ref="firstFocus" type="button" data-sync-later @click="emit('close')">{{ S.later }}</button>
+        </div>
+      </template>
+
+      <template v-else-if="step === 'cloud-delete' && sync">
+        <h2 id="save-transfer-title">{{ S.deleteHead }}</h2>
+        <p>{{ S.deleteNote }}</p>
+        <div>
+          <button type="button" class="shogi-game__confirm-danger" data-sync-delete-go :disabled="sync.status.value === 'syncing'" @click="deleteCloud">{{ S.deleteGo }}</button>
+          <button ref="firstFocus" type="button" @click="toMenu">{{ T.back }}</button>
+        </div>
+      </template>
+
       <template v-else-if="step === 'confirm' && incoming">
         <h2 id="save-transfer-title">{{ T.confirmHead }}</h2>
         <p>{{ T.confirmNote }}</p>
@@ -124,22 +177,36 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch, type PropType } from "vue";
 import {
   SAVE_TRANSFER_TEXT as T, applySave, collectSave, decodeSave, encodeSave, formatSaveTime, saveFileName, summarizeSave, summaryLines,
 } from "./core/save-transfer.mjs";
-import { SaveCloudError, deleteSave, downloadSave, formatTransferCode, normalizeTransferCode, uploadSave } from "./core/save-cloud.mjs";
+import { SaveCloudError, deleteSave, downloadSave, formatTransferCode, normalizeTransferCode, rememberTransferCode, uploadSave } from "./core/save-cloud.mjs";
+import { CLOUD_SYNC_TEXT as S } from "./core/cloud-sync.mjs";
+import type { CloudSyncApi } from "./composables/useCloudSync";
 
-defineProps({
+type Step = "menu" | "busy" | "code" | "enter" | "confirm" | "cloud-choice" | "cloud-delete";
+
+const props = defineProps({
   /** 引き継ぎコードを使えるか(公式の公開先だけ。core/save-cloud.mjsのcanUseSaveCloud)。 */
   cloud: { type: Boolean, default: false },
+  /** Googleアカウントの同期(公式の公開先だけ。composables/useCloudSync.ts)。使えないときはnull。 */
+  sync: { type: Object as PropType<CloudSyncApi | null>, default: null },
+  /** 開く段(同期でどちらを使うか聞くときは cloud-choice)。 */
+  startStep: { type: String as PropType<"menu" | "cloud-choice">, default: "menu" },
 });
 const emit = defineEmits<{ close: [] }>();
 
 type Bundle = { format: string; v: number; at: number; entries: Record<string, string> };
-type Step = "menu" | "busy" | "code" | "enter" | "confirm";
 
-const step = ref<Step>("menu");
+const step = ref<Step>(props.startStep === "cloud-choice" && props.sync?.choice.value ? "cloud-choice" : "menu");
+const keptLocal = ref(false);
+/** ログインしている人の名前(メールアドレス。なければ表示名)。 */
+const accountName = computed(() => {
+  const state = props.sync?.state.value;
+  if (!state) return "";
+  return state.email && state.name ? `${state.name}（${state.email}）` : state.email || state.name || "Googleアカウント";
+});
 const busyText = ref("");
 const error = ref("");
 const notice = ref("");
@@ -216,6 +283,8 @@ async function makeCode() {
   go("busy");
   try {
     const made = await uploadSave(encodeSave(collectSave(storage())));
+    // 受け取られなかったら、期限のあとにこの端末が消す(docs/save-transfer-design.mdの6章)。
+    rememberTransferCode(storage(), made);
     madeCode.value = made.code;
     madeUntil.value = made.expireAt;
     copied.value = false;
@@ -293,6 +362,23 @@ async function onFile(event: Event) {
   if (reason) error.value = errorText(reason === "broken" ? "file" : reason);
 }
 
+/** どちらを使うかの段で、この端末の記録をファイルに残す(選ばなかったほうの安全網。D:4-3)。 */
+function keepLocal() {
+  const bundle = collectSave(storage());
+  download(encodeSave(bundle), saveFileName(bundle.at).replace(".json", "-this-device.json"));
+  keptLocal.value = true;
+}
+
+async function deleteCloud() {
+  await props.sync?.deleteCloud();
+  if (!props.sync?.signedIn.value) toMenu();
+}
+
+// どちらを使うかの答えが出たら(クラウドに保存できた)、メニューへ戻す。読み込むときはページを読み直す。
+watch(() => props.sync?.status.value, (status) => {
+  if (step.value === "cloud-choice" && status !== "choose" && status !== "syncing" && !props.sync?.choice.value) toMenu();
+});
+
 function keepCurrent() {
   const bundle = collectSave(storage());
   download(encodeSave(bundle), saveFileName(bundle.at).replace(".json", "-before.json"));
@@ -321,6 +407,8 @@ function onBackdrop() {
 function goBack(): boolean {
   if (step.value === "busy") return true;
   if (step.value === "menu") return false;
+  // どちらを使うかの段は「あとで決める」と同じ(閉じる)。
+  if (step.value === "cloud-choice") return false;
   toMenu();
   return true;
 }
@@ -377,6 +465,11 @@ defineExpose({ goBack });
 .save-transfer__compare section { padding: 0.5em 0.6em; border: 1px solid rgba(255, 252, 244, 0.35); border-radius: 0.5em; }
 .save-transfer__compare ul { margin: 0; padding-left: 1.1em; font-size: 0.88em; }
 .save-transfer__keep { justify-self: center; font-size: 0.9em; }
+.save-transfer__sync { padding: 0.5em 0.6em; border: 1px solid rgba(255, 252, 244, 0.35); border-radius: 0.6em; }
+.save-transfer__account { margin: 0.2em 0; font-weight: 700; overflow-wrap: anywhere; }
+.save-transfer__small { margin-top: 0.4em; font-size: 0.82em; min-height: 44px; }
+.save-transfer__compare section { display: grid; gap: 0.4em; align-content: start; }
+.save-transfer__compare section .shogi-game__confirm-danger { justify-self: center; }
 @media (max-width: 30em) {
   .save-transfer__group .shogi-welcome__choices,
   .save-transfer__compare { grid-template-columns: minmax(0, 1fr); }

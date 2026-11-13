@@ -44,6 +44,33 @@ service cloud.firestore {
       allow delete: if true;
       allow list, update: if false;
     }
+    // Googleアカウントでの同期(docs/cloud-sync-design.mdの4章)。ログインした本人だけが、自分の記録を読み書きできる。
+    // 見出し(cloudSaves/{uid})と、縮めて分けた記録(parts/0〜5)。項目・型・大きさを決め、一覧は出さない。
+    // 送る側は src/core/cloud-sync.mjs(見出しと分けた文書を1回のまとめ書きで書く)。
+    match /cloudSaves/{uid} {
+      allow get, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['v', 'rev', 'at', 'device', 'parts', 'size', 'summary', 'hash'])
+        && request.resource.data.v == 1
+        && request.resource.data.rev is int && request.resource.data.rev >= 1
+        && request.resource.data.at is timestamp
+        && request.resource.data.device is string && request.resource.data.device.size() <= 16
+        && request.resource.data.parts is int && request.resource.data.parts >= 1 && request.resource.data.parts <= 6
+        && request.resource.data.size is int && request.resource.data.size >= 0
+        && request.resource.data.summary is string && request.resource.data.summary.size() <= 2000
+        && request.resource.data.hash is string && request.resource.data.hash.size() <= 40;
+      allow list: if false;
+      match /parts/{part} {
+        allow get, delete: if request.auth != null && request.auth.uid == uid;
+        allow create, update: if request.auth != null && request.auth.uid == uid
+          && part.matches('^[0-5]$')
+          && request.resource.data.keys().hasOnly(['v', 'rev', 'data'])
+          && request.resource.data.v == 1
+          && request.resource.data.rev is int && request.resource.data.rev >= 1
+          && request.resource.data.data is string && request.resource.data.data.size() <= 700000;
+        allow list: if false;
+      }
+    }
     match /{document=**} {
       allow read, write: if false;
     }

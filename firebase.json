@@ -13,7 +13,10 @@
       {
         "source": "/",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, max-age=0, must-revalidate"
+          }
         ]
       },
       {
@@ -79,6 +82,19 @@
           {
             "key": "Referrer-Policy",
             "value": "strict-origin-when-cross-origin"
+          }
+        ]
+      },
+      {
+        "source": "/auth.html",
+        "headers": [
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "same-origin-allow-popups"
+          },
+          {
+            "key": "Cross-Origin-Embedder-Policy",
+            "value": "unsafe-none"
           }
         ]
       }
