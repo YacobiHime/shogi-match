@@ -34,17 +34,24 @@
           勝率バー(15章)。盤のすぐ上に置き、盤から目を離さずに見る。先手は青・後手は赤で、名前の札も同じ色にして、
           どちらの色がどちらの棋士かを、名前で分かるようにする。真ん中は「○○優勢」の一言(色だけで伝えない)。
         -->
-        <div class="relay__rate" role="img" :aria-label="`AIの勝率 先手${players.black.name}${blackPercent}% 後手${players.white.name}${100 - blackPercent}% ${verdictText}`" data-relay-rate>
+        <!-- 形勢当ての問いのあいだは、勝率と形勢の一言を「？」で伏せる(答えたら溜めてから開く。52章)。 -->
+        <div
+          class="relay__rate"
+          role="img"
+          :aria-label="judgeHidden ? 'AIの勝率は、形勢当ての答えのあとに出ます' : `AIの勝率 先手${players.black.name}${blackPercent}% 後手${players.white.name}${100 - blackPercent}% ${verdictText}`"
+          :data-hidden="judgeHidden ? 'true' : undefined"
+          data-relay-rate
+        >
           <p class="relay__rate-names" aria-hidden="true">
             <span class="relay__rate-name relay__rate-name--black" data-relay-rate-black>
-              <i>☗</i><span class="relay__rate-who">{{ players.black.name }}</span><b>{{ blackPercent }}%</b>
+              <i>☗</i><span class="relay__rate-who">{{ players.black.name }}</span><b>{{ judgeHidden ? "？" : blackPercent }}%</b>
             </span>
-            <span :class="['relay__rate-verdict', verdict.side ? `relay__rate-verdict--${verdict.side}` : '']" data-relay-verdict>{{ verdictText }}</span>
+            <span :class="['relay__rate-verdict', !judgeHidden && verdict.side ? `relay__rate-verdict--${verdict.side}` : '']" data-relay-verdict>{{ judgeHidden ? "形勢は？" : verdictText }}</span>
             <span class="relay__rate-name relay__rate-name--white" data-relay-rate-white>
-              <b>{{ 100 - blackPercent }}%</b><span class="relay__rate-who">{{ players.white.name }}</span><i>☖</i>
+              <b>{{ judgeHidden ? "？" : 100 - blackPercent }}%</b><span class="relay__rate-who">{{ players.white.name }}</span><i>☖</i>
             </span>
           </p>
-          <span class="relay__rate-bar" aria-hidden="true"><span :style="{ width: `${blackPercent}%` }" /></span>
+          <span :class="['relay__rate-bar', judgeHidden ? 'relay__rate-bar--hidden' : '']" aria-hidden="true"><span :style="{ width: `${judgeHidden ? 50 : blackPercent}%` }" /></span>
         </div>
         <div ref="boardEl" class="relay__board" :style="{ '--relay-width': `${boardWidth}px` }">
           <ShogiMatchBoard
@@ -79,7 +86,7 @@
           <!-- 心の声。対局者の名札の近く(上が後手、下が先手)。 -->
           <!-- 詰将棋を解いているあいだは、盤に重ねるもの(心の声・札)を出さない(47章)。 -->
           <p
-            v-for="bubble in (tsume ? [] : bubbles)"
+            v-for="bubble in (tsume || judgeHidden ? [] : bubbles)"
             :key="`${bubble.side}-${bubble.at}`"
             :class="['relay__thought', `relay__thought--${bubble.side}`]"
             data-relay-thought
@@ -137,22 +144,40 @@
           <p class="relay__fun-head"><b>投了図から詰将棋</b><span>{{ tsumeOfferText }}</span></p>
           <button type="button" class="relay__fun-close relay__fun-go" data-relay-tsume-start @click="startTsume">解いてみる</button>
         </div>
-        <!-- 大盤解説の仕事(棋士の1年。docs/pro-year-design.mdの14-3の1)。次の一手をjob.quizzes問当てる。 -->
+        <!--
+          大盤解説の仕事(棋士の1年。docs/pro-year-design.mdの14-3の1)。次の一手と形勢当てを半分ずつ、job.quizzes問当てる。
+          問いの局面は解説者が選ぶ(52章)。「次の問いまで進める」で、その局面まで進めて止める。
+        -->
         <div v-if="job && !quiz" class="relay__fun relay__fun--job" data-relay-job>
-          <p class="relay__fun-head"><b>{{ job.title }}</b><span>次の一手 {{ jobAnswered }}/{{ job.quizzes }}問・当たり{{ jobHits }}問{{ jobAnswered >= job.quizzes ? "。おつかれさま！" : "。「次の一手」で出題しよう" }}</span></p>
+          <p class="relay__fun-head">
+            <b>{{ job.title }}</b>
+            <span>当てもの {{ jobAnswered }}/{{ job.quizzes }}問・当たり{{ jobHits }}問（★{{ jobStars }}）{{ jobAnswered >= job.quizzes ? "。おつかれさま！" : nextJobSpot ? "" : "。この対局の問いはここまで" }}</span>
+          </p>
           <span class="relay__job-actions">
-            <button v-if="jobAnswered < job.quizzes" type="button" class="relay__fun-close relay__fun-go" :disabled="!quizAvailable" data-relay-job-quiz @click="startQuiz">出題する</button>
+            <button v-if="jobAnswered < job.quizzes" type="button" class="relay__fun-close relay__fun-go" :disabled="!nextJobSpot" data-relay-job-quiz @click="goNextSpot">次の問いまで進める</button>
             <button type="button" class="relay__fun-close" data-relay-job-done @click="closeViewer">{{ jobAnswered >= job.quizzes ? "解説を終える" : "ここで終える" }}</button>
           </span>
         </div>
-        <div v-else-if="quiz" class="relay__fun relay__fun--quiz" data-relay-quiz-panel>
-          <p class="relay__fun-head"><b>次の一手</b><span>{{ quiz.at }}手目、{{ players[quizSide].name }}はどう指す？</span></p>
+        <!-- 当てものの札(次の一手・形勢当て。52章)。盤には重ねない。 -->
+        <div v-else-if="quiz" :class="['relay__fun', 'relay__fun--quiz', `relay__fun--quiz-${quiz.kind}`]" :data-quiz-kind="quiz.kind" data-relay-quiz-panel>
+          <p class="relay__fun-head">
+            <b>{{ quiz.kind === "judge" ? "形勢当て" : "次の一手" }}<i class="relay__stars" :aria-label="`難しさ 星${quiz.stars}つ`">{{ "★".repeat(quiz.stars) }}{{ "☆".repeat(3 - quiz.stars) }}</i></b>
+            <span>{{ quizQuestion }}</span>
+          </p>
           <div v-if="!quiz.pick" class="relay__quiz-choices">
             <button v-for="choice in quiz.choices" :key="choice.usi" type="button" data-relay-quiz-choice @click="answerQuiz(choice.usi)">{{ choice.text }}</button>
           </div>
-          <p v-else-if="!quiz.result" class="relay__fun-text">予想：{{ quiz.pickText }}。指されるのを待っています…</p>
-          <p v-else :class="['relay__fun-text', `relay__fun-text--${quiz.result}`]" data-relay-quiz-result>{{ quiz.result === "hit" ? `的中！ ${quiz.actualText}` : `はずれ。正解は ${quiz.actualText}` }}</p>
-          <button type="button" class="relay__fun-close" @click="quiz = null">{{ quiz.result ? "閉じる" : "やめる" }}</button>
+          <p v-else-if="!quiz.result" class="relay__fun-text" role="status">{{ quiz.kind === "judge" ? `予想：${quiz.pickText}。AIの勝率を開きます…` : `予想：${quiz.pickText}。指されるのを待っています…` }}</p>
+          <template v-else>
+            <p :class="['relay__fun-text', `relay__fun-text--${quiz.result}`]" role="status" data-relay-quiz-result>
+              {{ quiz.result === "hit" ? `的中！ ${quiz.actualText}（★${quiz.stars}）` : `はずれ。正解は ${quiz.actualText}` }}
+            </p>
+            <p v-if="quiz.reason" class="relay__fun-text relay__quiz-reason" data-relay-quiz-reason>{{ cast.name }}「{{ quiz.reason }}」</p>
+          </template>
+          <span class="relay__job-actions">
+            <button v-if="quiz.result" type="button" class="relay__fun-close relay__fun-go" data-relay-quiz-resume @click="resumeAfterQuiz">続きを見る</button>
+            <button type="button" class="relay__fun-close" data-relay-quiz-close @click="closeQuiz">{{ quiz.result ? "閉じる" : "見送る" }}</button>
+          </span>
         </div>
         <div v-else-if="highlight" class="relay__fun" data-relay-highlight>
           <p class="relay__fun-head"><b>見どころ {{ Math.min(highlight.index + 1, highlight.list.length) }}/{{ highlight.list.length }}</b><span>{{ highlight.caption }}</span></p>
@@ -239,7 +264,8 @@
         </div>
         <!-- 中継の楽しみ(24章)。次の一手クイズ・見どころ再生・大盤解説・研究ノート。 -->
         <div class="relay__extras">
-          <button type="button" :disabled="!quizAvailable" data-relay-quiz @click="startQuiz">次の一手<small>{{ quizStore.hit }}/{{ quizStore.total }}</small></button>
+          <button v-if="quizEnabled" type="button" :disabled="!moveQuizAvailable" data-relay-quiz @click="startQuiz('move')">次の一手<small>★{{ quizStore.move.stars }}</small></button>
+          <button v-if="quizEnabled" type="button" :disabled="!judgeQuizAvailable" data-relay-judge @click="startQuiz('judge')">形勢当て<small>★{{ quizStore.judge.stars }}</small></button>
           <button type="button" :disabled="!highlightAvailable" data-relay-highlights @click="startHighlights">見どころ</button>
           <button type="button" :disabled="!bigBoardAvailable" data-relay-bigboard @click="startBigBoard">大盤</button>
           <button type="button" :disabled="cursor === 0 && !sfens.length" data-relay-note @click="saveNote">☆ノート</button>
@@ -249,6 +275,8 @@
           -->
           <button type="button" :aria-pressed="flipped" aria-label="盤面を反転" data-relay-flip @click="flipped = !flipped">反転</button>
         </div>
+        <!-- 当てものを出せない理由(戻っている・前に見た・序盤)。責めずに、どこで出せるかだけ言う(UD:5-3の不可。52章)。 -->
+        <p v-if="quizLockText" class="relay__quiz-lock" data-relay-quiz-lock>{{ quizLockText }}</p>
         <input
           class="relay__seek"
           type="range"
@@ -291,7 +319,10 @@ import {
 import {
   RELAY_HOST, RELAY_READER, createRelayScript, moveTextOf, pvTextOf, relayAudience, relayCast, relayCommentCount,
 } from "./core/relay-commentary.mjs";
-import { addNote, highlightPlan, loadNotes, loadQuiz, quizChoices, saveNotes, saveQuiz, scoreQuiz } from "./core/relay-fun.mjs";
+import {
+  JUDGE_QUIZ_FROM, MOVE_QUIZ_FROM, addNote, highlightPlan, judgeOf, judgeReason, loadNotes, loadQuiz, markSeen, moveQuizFits, quizChoices,
+  quizSpots, quizStars, saveNotes, saveQuiz, scoreQuiz, seenPly,
+} from "./core/relay-fun.mjs";
 import { judgeTsumeMove, resignTsume, shortestMate, tsumeHint } from "./core/relay-tsume.mjs";
 import { addReviewProblems, buildReviewProblem, loadReviewProblems, saveReviewProblems } from "./core/review-problems.mjs";
 import { loadRelayStore, markRelaySeen, saveRelayStore } from "./core/relay-store.mjs";
@@ -343,9 +374,13 @@ const props = defineProps({
   job: { type: Object as PropType<{ title: string; quizzes: number } | null>, default: null },
 });
 const emit = defineEmits<{ close: []; seen: [key: string]; "job-done": [hits: number] }>();
-/** 大盤解説の仕事の進み(答えた数と当たった数)。 */
+/**
+ * 大盤解説の仕事の進み(答えた数・当たった数・当たりの★)。仕事の出来高(pro-work.mjsの「5問中N問当たり」)は当たった問題の数で返し、
+ * ★は札と記録に出す(★の合計は問題の数より大きくなり、出来高の上限scoreMaxと食い違うため。52-5)。
+ */
 const jobAnswered = ref(0);
 const jobHits = ref(0);
+const jobStars = ref(0);
 function closeViewer() {
   if (props.job) emit("job-done", jobHits.value);
   emit("close");
@@ -559,6 +594,8 @@ function advance() {
   cursor.value += 1;
   playSound(cursor.value);
   spawn(cursor.value, "move");
+  // 解説者が選んだ局面なら、再生を止めて当てものの札を出す(52章)。
+  if (askAtSpot(cursor.value)) return;
   const card = cards.value.find((item) => item.at === cursor.value) ?? null;
   activeCard.value = card;
   const hold = card ? (["lunch", "dinner", "seal", "unseal", "end"].includes(card.kind) ? CARD_HOLD_MS.long : CARD_HOLD_MS.short) : 0;
@@ -815,8 +852,10 @@ const verdict = computed(() => rateVerdict(blackPercent.value));
 const verdictText = computed(() => (verdict.value.side ? `${players.value[verdict.value.side as Side].name}${verdict.value.word}` : verdict.value.word));
 
 /** 見たところまでの解説と聞き手の言葉(欄の中でスクロールして読み返す。16章)。考慮中は、その手の「考慮中」の言葉まで。 */
+// 形勢当ての問いのあいだは、いまの手の解説(形勢を言うことがある)を答えのあとまで伏せる(52章)。
 const visibleLines = computed(() => lines.value
-  .filter((item) => item.at <= cursor.value || (thinkingAt.value && item.at === thinkingAt.value && item.when === "think")));
+  .filter((item) => (judgeHidden.value ? item.at < cursor.value : item.at <= cursor.value)
+    || (thinkingAt.value && item.at === thinkingAt.value && item.when === "think")));
 /** 解説の欄。いちばん下を見ているあいだ(pinned)は、新しい言葉が来たら下まで送る。 */
 const talkEl = ref<HTMLElement | null>(null);
 const talkPinned = ref(true);
@@ -895,9 +934,10 @@ function kifuText(ply: number) {
 }
 /** 見たところまでの手数。グラフと棋譜は、ここまでだけ出す(先の形勢や手数で、結末を先に見せない)。 */
 const revealed = ref(0);
+// すぐに合わせる(当てものは「いまの手が見た一番先の手か」で出題を決めるので、手を進めたその場で数える。52章)。
 watch(cursor, (value) => {
   if (value > revealed.value) revealed.value = value;
-});
+}, { flush: "sync" });
 const kifuRows = computed(() => entries.value.slice(0, revealed.value).map((entry, index) => ({
   no: index + 1, text: kifuText(index + 1), time: thinkTimeText(entry.time),
 })));
@@ -922,12 +962,13 @@ const graphTotal = computed(() => Math.max(40, Math.ceil((revealed.value + 10) /
 const cursorX = computed(() => ((cursor.value / graphTotal.value) * 100).toFixed(2));
 const ratePoints = computed(() => {
   const points = [`0,${(40 - blackWinRate(40) * 40).toFixed(2)}`];
-  entries.value.slice(0, revealed.value).forEach((entry, index) => {
+  // 形勢当ての問いのあいだは、いまの手の点(答え)を描かない(52章)。
+  entries.value.slice(0, judgeHidden.value ? Math.max(0, cursor.value - 1) : revealed.value).forEach((entry, index) => {
     points.push(`${(((index + 1) / graphTotal.value) * 100).toFixed(2)},${(40 - blackWinRate(entry.eval) * 40).toFixed(2)}`);
   });
   return points.join(" ");
 });
-const turningPoints = computed(() => entries.value.slice(0, revealed.value)
+const turningPoints = computed(() => entries.value.slice(0, judgeHidden.value ? Math.max(0, cursor.value - 1) : revealed.value)
   .map((entry, index) => ({ entry, ply: index + 1 }))
   .filter(({ entry }) => entry.mark === "error" || entry.mark === "decisive")
   .map(({ entry, ply }) => ({ ply, x: (ply / graphTotal.value) * 100, y: 40 - blackWinRate(entry.eval) * 40 })));
@@ -959,63 +1000,248 @@ function pausePlayback() {
   waiting.value = false;
 }
 
-// 次の一手クイズ(24-2)。次に指される手を3つから当てる。当たると視聴者が沸く。
-type Quiz = { at: number; choices: { usi: string; text: string }[]; pick: string; pickText: string; result: "hit" | "miss" | null; actualText: string };
+// 大盤解説の当てもの(24-2・52章)。次の一手(次に指される手を3つから当てる)と形勢当て(いまの局面はどちらが良いか)。
+// 出題できるのは、見たことのある一番先の手(revealed)の局面で、前に開いたときに見た手数(seenAtOpen)より先だけ(先を見てから戻って当てない)。
+// 解説者が選んだ局面(quizSpots)に来たら、再生を止めて札を出す。当たると視聴者が沸く。
+type QuizKind = "move" | "judge";
+/**
+ * atは、次の一手なら当てる手の手数(問いの局面の次)、形勢当てなら問いの局面の手数。
+ * truthは形勢当ての答え(先手よし・互角・後手よし)。starsは難しさ(★1〜3。当てたらその数だけ点)。
+ */
+type Quiz = {
+  kind: QuizKind; at: number; choices: { usi: string; text: string }[]; pick: string; pickText: string;
+  result: "hit" | "miss" | null; actualText: string; stars: number; truth: string; reason: string;
+};
+const JUDGE_CHOICES = [
+  { usi: "black", text: "先手よし" },
+  { usi: "even", text: "互角" },
+  { usi: "white", text: "後手よし" },
+] as const;
+/** 形勢当てで、答えてから勝率を開くまでの溜め(D:2-2)。 */
+const JUDGE_REVEAL_MS = 1200;
+/** 連続当たりがこの数ごとに、運営の帯で知らせる。 */
+const STREAK_BANNER = 5;
 const quiz = shallowRef<Quiz | null>(null);
 const quizStore = ref(loadQuiz(browserStorage()));
+/** 前に開いたときに見た手数(ここまでは、もう見たので出題しない)。開いたときに1回だけ読む。 */
+const seenAtOpen = seenPly(quizStore.value, props.spec.key);
+/** 自分の対局は、指した本人が手を知っているので当てものを出さない。 */
+const quizEnabled = !props.spec.tags?.mine;
 const quizSide = computed<Side>(() => ((quiz.value?.at ?? 1) % 2 === 1 ? "black" : "white"));
-const quizAvailable = computed(() => !quiz.value && !catchingUp.value && !(finished.value && cursor.value >= entries.value.length));
 let quizTimer: ReturnType<typeof setTimeout> | undefined;
-function startQuiz() {
+let revealTimer: ReturnType<typeof setTimeout> | undefined;
+/** この中継で出した問い(同じ局面で同じ問いを二度出さない)。 */
+const askedSpots = new Set<string>();
+/** askedSpotsが変わった印(Setは見張れないので、数を見張って出せる問いを計算し直す)。 */
+const askedVersion = ref(0);
+function wasAsked(kind: QuizKind, ply: number) {
+  void askedVersion.value;
+  return askedSpots.has(`${kind}:${ply}`);
+}
+const spotCache = new Map<number, { move: boolean; judge: string }>();
+/** 解説者が選んだ出題の局面(棋譜が届くたびに後ろへ伸びる。前に選んだ局面は変わらない)。 */
+const spots = computed(() => (quizEnabled ? quizSpots({ entries: entries.value, sfens: sfens.value, cache: spotCache }) : []));
+// 見たところまでを残す(閉じて開き直しても、見た手は出題しない)。
+watch(revealed, (value) => {
+  const next = markSeen(quizStore.value, props.spec.key, value);
+  if (next === quizStore.value) return;
+  quizStore.value = next;
+  saveQuiz(browserStorage(), next);
+});
+/** この局面で出題できるか(最新の手・前に見たところより先・終局まで見ていない・ほかの札が出ていない)。 */
+function canAskAt(ply: number) {
+  return quizEnabled && !catchingUp.value && !tsume.value && ply === revealed.value && ply > seenAtOpen
+    && !(finished.value && ply >= entries.value.length);
+}
+function kindFits(kind: QuizKind, ply: number) {
+  if (wasAsked(kind, ply)) return false;
+  if (kind === "judge") {
+    if (ply <= JUDGE_QUIZ_FROM || !entries.value[ply - 1]) return false;
+    const rate = blackWinRate(entries.value[ply - 1].eval);
+    return rate < 0.95 && rate > 0.05;
+  }
+  if (ply < MOVE_QUIZ_FROM) return false;
+  // 次の手がまだ届いていない(本局の最新の手)ときは、取り返しの見分けだけ省く。
+  const answer = entries.value[ply]?.move ?? "";
+  return moveQuizFits(sfens.value[ply], answer || "unknown", answer ? entries.value[ply - 1]?.move ?? "" : "");
+}
+const moveQuizAvailable = computed(() => !quiz.value && canAskAt(cursor.value) && kindFits("move", cursor.value));
+const judgeQuizAvailable = computed(() => !quiz.value && canAskAt(cursor.value) && kindFits("judge", cursor.value));
+/** 当てものを出せない理由(責めずに、どこで出せるかだけ言う)。出せるときと、出さない対局では空。 */
+const quizLockText = computed(() => {
+  if (!quizEnabled || quiz.value || tsume.value || catchingUp.value) return "";
+  if (finished.value && cursor.value >= entries.value.length) return "";
+  if (cursor.value < revealed.value) return "当てものは、最新の手で出題できます";
+  if (cursor.value <= seenAtOpen) return `前に見た${seenAtOpen}手目までは出題しないよ`;
+  if (cursor.value < MOVE_QUIZ_FROM) return `次の一手は${MOVE_QUIZ_FROM + 1}手目から、形勢当ては${JUDGE_QUIZ_FROM + 1}手目から出題できます`;
+  return "";
+});
+const quizQuestion = computed(() => {
+  const current = quiz.value;
+  if (!current) return "";
+  return current.kind === "judge"
+    ? `${current.at}手目。${cast.name}「この局面、どちらが良いと思いますか」`
+    : `${current.at}手目、${players.value[quizSide.value].name}はどう指す？`;
+});
+/** 形勢当ての問いのあいだ(答えを開くまで)、勝率・形勢の一言・グラフのいまの点・読み筋・心の声を伏せる。 */
+const judgeHidden = computed(() => quiz.value?.kind === "judge" && !quiz.value.result);
+
+/** 問いを出す(ボタンからも、解説者が選んだ局面からも)。 */
+function startQuiz(kind: QuizKind) {
+  const ply = cursor.value;
+  if (!canAskAt(ply) || !kindFits(kind, ply)) return;
   // 見どころ・大盤解説を先に終える(見どころは元の手数へ戻るので、その局面で出題する。34章)。
   stopHighlight();
   endVariation();
-  const at = cursor.value + 1;
-  const sfen = sfens.value[cursor.value];
-  const previous = entries.value[cursor.value - 1];
-  const choices = quizChoices({
-    sfen, expected: (previous?.pv ?? "").split(" ")[0] ?? "", actual: entries.value[cursor.value]?.move ?? "", seed: `${props.spec.key}:${at}`,
-  }).map((usi) => ({ usi, text: moveTextOf(sfen, usi, previous?.move ?? "") }));
-  if (!choices.length) return;
   pausePlayback();
-  quiz.value = { at, choices, pick: "", pickText: "", result: null, actualText: "" };
+  clearTimeout(quizTimer);
+  askedSpots.add(`${kind}:${ply}`);
+  askedVersion.value += 1;
+  const sfen = sfens.value[ply];
+  if (kind === "judge") {
+    const truth = judgeOf(blackWinRate(entries.value[ply - 1].eval));
+    // 答えを伏せるので、いまの手のコメント・帯も消す(形勢を言うものがあるため)。
+    flying.value = [];
+    banner.value = null;
+    under.value = null;
+    clearUnderWaits();
+    activeCard.value = null;
+    quiz.value = {
+      kind, at: ply, choices: JUDGE_CHOICES.map((choice) => ({ ...choice })), pick: "", pickText: "", result: null, actualText: "",
+      stars: quizStars({ kind, sfen, judge: truth }), truth, reason: "",
+    };
+    return;
+  }
+  const at = ply + 1;
+  const previous = entries.value[ply - 1];
+  const answer = entries.value[ply] ?? null;
+  const expected = answer?.best || (previous?.pv ?? "").split(" ")[0] || "";
+  const choices = quizChoices({ sfen, expected, actual: answer?.move ?? "", seed: `${props.spec.key}:${at}` })
+    .map((usi) => ({ usi, text: moveTextOf(sfen, usi, previous?.move ?? "") }));
+  if (!choices.length) return;
+  quiz.value = {
+    kind, at, choices, pick: "", pickText: "", result: null, actualText: "",
+    stars: answer ? quizStars({ kind, sfen, answer }) : 1, truth: "", reason: "",
+  };
 }
 function answerQuiz(usi: string) {
   const current = quiz.value;
-  if (!current) return;
-  quiz.value = { ...current, pick: usi, pickText: current.choices.find((choice) => choice.usi === usi)?.text ?? "" };
-  playing.value = true;
-  schedule();
+  if (!current || current.pick) return;
+  const pickText = current.choices.find((choice) => choice.usi === usi)?.text ?? "";
+  quiz.value = { ...current, pick: usi, pickText };
+  if (current.kind === "move") {
+    playing.value = true;
+    schedule();
+    return;
+  }
+  // 形勢当ては、溜めてから勝率を開く(動きを減らす設定でも、待つだけなので同じ)。
+  clearTimeout(revealTimer);
+  revealTimer = setTimeout(() => {
+    const now = quiz.value;
+    if (!now || now.kind !== "judge" || now.at !== current.at || now.result) return;
+    const hit = usi === now.truth;
+    const truthText = JUDGE_CHOICES.find((choice) => choice.usi === now.truth)?.text ?? "";
+    settleQuiz({
+      ...now,
+      result: hit ? "hit" : "miss",
+      actualText: `${truthText}（先手${blackPercent.value}%）`,
+      reason: judgeReason({ sfen: sfens.value[now.at], judge: now.truth, plain: cast.story === HANANE }),
+    });
+  }, JUDGE_REVEAL_MS / Math.sqrt(speed.value));
+}
+/** 答え合わせを記録し、沸かせる。 */
+function settleQuiz(next: Quiz) {
+  const hit = next.result === "hit";
+  quizStore.value = scoreQuiz(quizStore.value, next.kind, hit, next.stars);
+  saveQuiz(browserStorage(), quizStore.value);
+  quiz.value = next;
+  if (props.job) {
+    jobAnswered.value += 1;
+    if (hit) {
+      jobHits.value += 1;
+      jobStars.value += next.stars;
+    }
+    emit("job-done", jobHits.value);
+  }
+  if (hit) celebrateQuiz(next.kind, next.stars, quizStore.value[next.kind].streak);
 }
 watch(cursor, (value) => {
   const current = quiz.value;
   if (!current) return;
+  if (current.kind === "judge") {
+    // 形勢当ては、その局面を離れたら閉じる(答える前なら数えない)。
+    if (value !== current.at) closeQuiz();
+    return;
+  }
   if (value === current.at && current.pick && !current.result) {
     const hit = entries.value[current.at - 1]?.move === current.pick;
-    quizStore.value = scoreQuiz(quizStore.value, hit);
-    saveQuiz(browserStorage(), quizStore.value);
-    quiz.value = { ...current, result: hit ? "hit" : "miss", actualText: kifuText(current.at) };
-    if (props.job) {
-      jobAnswered.value += 1;
-      if (hit) jobHits.value += 1;
-      emit("job-done", jobHits.value);
-    }
-    if (hit) celebrateQuiz();
+    const answer = entries.value[current.at - 1];
+    const stars = answer ? quizStars({ kind: "move", sfen: sfens.value[current.at - 1], answer }) : current.stars;
+    settleQuiz({ ...current, stars, result: hit ? "hit" : "miss", actualText: kifuText(current.at) });
     clearTimeout(quizTimer);
     quizTimer = setTimeout(() => { if (quiz.value?.at === current.at) quiz.value = null; }, 3600 / Math.sqrt(speed.value));
   } else if (value !== current.at - 1 && !(current.result && value === current.at)) {
     quiz.value = null;
   }
 });
-/** 的中したとき、視聴者のコメントが沸く(「予想的中」と同じ。動きを減らす設定では運営の帯で)。 */
-function celebrateQuiz() {
-  if (!commentsOn.value) return;
-  if (reducedMotion) {
-    showBanner("次の一手 的中！");
+function closeQuiz() {
+  clearTimeout(revealTimer);
+  clearTimeout(quizTimer);
+  quiz.value = null;
+}
+/** 答えのあと、再生を続ける。 */
+function resumeAfterQuiz() {
+  closeQuiz();
+  if (playing.value) return;
+  playing.value = true;
+  schedule();
+}
+/** 解説者が選んだ局面に着いたら、再生を止めて問いを出す(advanceから呼ぶ)。出したら真。 */
+function askAtSpot(ply: number) {
+  if (quiz.value || highlight.value || variation.value) return false;
+  const spot = spots.value.find((item) => item.ply === ply);
+  if (!spot || !canAskAt(ply) || !kindFits(spot.kind, ply)) return false;
+  startQuiz(spot.kind);
+  return Boolean(quiz.value);
+}
+/** 大盤解説の仕事の、次の問いの局面(まだ見ていないところ)。棋譜がまだ届いていなければ、再生して待つ。 */
+const nextJobSpot = computed(() => {
+  if (!props.job) return null;
+  // 出題できるのは見た一番先の手からなので、それより前の局面は選ばない。
+  const from = Math.max(revealed.value, seenAtOpen + 1);
+  const spot = spots.value.find((item) => item.ply >= from && !wasAsked(item.kind, item.ply));
+  if (spot) return spot;
+  // まだ選ばれていない局面は、棋譜が届けば選ばれる(終局していなければ、進めれば出会える)。
+  return finished.value ? null : { ply: -1, kind: "move" as QuizKind };
+});
+/** 「次の問いまで進める」。その局面まで進めて止め、問いを出す。まだ棋譜がなければ、再生して着いたところで止まる。 */
+function goNextSpot() {
+  const spot = nextJobSpot.value;
+  if (!spot) return;
+  if (spot.ply > 0 && spot.ply <= ready.value) {
+    seek(spot.ply);
+    startQuiz(spot.kind);
     return;
   }
-  const texts = ["次の一手的中！！", "読み筋どおり", "完全に読んでた", "的中おめ", "名人の読み", "8888"];
-  launch(texts.map((text, index) => ({ text, tone: "hit", big: index === 0, delay: index * 260, duration: commentMs() })));
+  if (cursor.value < ready.value) seek(ready.value);
+  playing.value = true;
+  schedule();
+}
+/** 的中したとき、視聴者のコメントが沸く(★3はもっと。動きを減らす設定では運営の帯で)。連続当たりの節目は運営の帯。 */
+function celebrateQuiz(kind: QuizKind, stars: number, streak: number) {
+  if (!commentsOn.value) return;
+  const label = kind === "judge" ? "形勢当て" : "次の一手";
+  if (streak > 0 && streak % STREAK_BANNER === 0) showBanner(`${label} ${streak}連続的中！`);
+  if (reducedMotion) {
+    if (!(streak > 0 && streak % STREAK_BANNER === 0)) showBanner(`${label} 的中！`);
+    return;
+  }
+  const texts = stars >= 3
+    ? [`${label}的中！！`, "読み切ってる", "解説者より読めてる", "これは見えない", "天才か", "8888"]
+    : kind === "judge"
+      ? [`${label}的中！`, "形勢判断うまい", "大局観ある", "的中おめ", "8888"]
+      : [`${label}的中！！`, "読み筋どおり", "完全に読んでた", "的中おめ", "名人の読み", "8888"];
+  launch(texts.map((text, index) => ({ text, tone: "hit", big: index === 0, delay: index * 260, duration: commentMs(index === 0) })));
 }
 
 // 見どころ再生(24-3)。形勢が動いた手・長考・決め手・終局を、短く続けて見る。
@@ -1387,6 +1613,7 @@ onBeforeUnmount(() => {
   clearTimeout(underTimer);
   clearUnderWaits();
   clearTimeout(quizTimer);
+  clearTimeout(revealTimer);
   clearTimeout(highlightTimer);
   clearTimeout(variationTimer);
   clearTimeout(noteTimer);
@@ -1793,7 +2020,8 @@ onBeforeUnmount(() => {
 /* 見る手数のつまみ。指で動かすので、高さを44px取る(34章。UI 7-4)。 */
 .shogi-game .relay__seek { width: 100%; min-height: 44px; margin: 0; accent-color: #f1a54c; }
 /* 中継の楽しみ(24章)。次の一手・見どころ・大盤・研究ノートのボタンと、盤の下の端の札。 */
-.shogi-game .relay__extras { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.25rem; }
+/* 当てもの(次の一手・形勢当て)を足して6つ。自分の対局は当てものを出さないので4つ。数に合わせて等分する(52章)。 */
+.shogi-game .relay__extras { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0.25rem; }
 .shogi-game .relay__extras button {
   display: grid; place-items: center; min-height: 44px; padding: 0 0.2rem; border: 1px solid rgba(241, 165, 76, 0.5); border-radius: 0.4rem;
   color: #fffcf4; background: rgba(241, 165, 76, 0.1); font: inherit; font-size: 0.82rem; font-weight: 800; line-height: 1.1; cursor: pointer;
@@ -1827,6 +2055,15 @@ onBeforeUnmount(() => {
 .shogi-game .relay__job-actions { grid-row: 1; grid-column: 2; display: flex; gap: 0.3rem; align-self: start; }
 .shogi-game .relay__job-actions .relay__fun-close { grid-row: auto; grid-column: auto; }
 .shogi-game .relay__quiz-choices { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; }
+.shogi-game .relay__stars { margin-left: 0.4rem; color: #ffd27a; font-style: normal; letter-spacing: 0.05em; }
+.shogi-game .relay__quiz-reason { color: #fffcf4; font-size: 0.86rem; font-weight: 700; line-height: 1.45; }
+.shogi-game .relay__quiz-lock { margin: 0; color: rgba(255, 252, 244, 0.75); font-size: 0.76rem; font-weight: 700; text-align: center; }
+/* 形勢当ての問いのあいだの勝率バーは、斜めの縞で「まだ分からない」を見せる(数字は「？」)。 */
+.shogi-game .relay__rate-bar--hidden span { background: repeating-linear-gradient(45deg, #5a6b7c 0 6px, #46576a 6px 12px); }
+.shogi-game .relay__rate-bar--hidden { background: repeating-linear-gradient(45deg, #5a6b7c 0 6px, #46576a 6px 12px); }
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game .relay__rate-bar span { transition: none; }
+}
 .shogi-game .relay__quiz-choices button { min-height: 44px; padding: 0 0.2rem; border: 2px solid rgba(255, 252, 244, 0.35); border-radius: 0.4rem; color: #fffcf4; background: rgba(255, 252, 244, 0.08); font: inherit; font-weight: 900; cursor: pointer; }
 .shogi-game .relay__toast { position: absolute; left: 50%; top: 0.5rem; z-index: 7; margin: 0; padding: 0.3rem 0.7rem; border-radius: 999px; color: #172632; background: #f1a54c; font-size: 0.8rem; font-weight: 900; width: max-content; max-width: 90%; text-align: center; transform: translateX(-50%); }
 .shogi-game .relay__comment--hit { color: #ffd27a; text-shadow: 0 0 6px rgba(241, 165, 76, 0.9), 0 1px 2px #000; }

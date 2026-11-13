@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { STANDARD_SFEN, appendUsiMove, createGameRecord } from '../game-state';
+import { STANDARD_SFEN, appendUsiMove, createGameRecord, enumerateLegalMoves } from '../game-state';
 import {
-  NOTES_LIMIT, PREDICT_UNTIL_PLY, addNote, boardPredictions, highlightPlan, loadNotes, loadPredictions, loadQuiz, pickWinner,
-  quizChoices, removeNote, saveNotes, savePredictions, saveQuiz, scoreQuiz, settlePrediction,
+  JUDGE_QUIZ_FROM, MOVE_QUIZ_FROM, NOTES_LIMIT, PREDICT_UNTIL_PLY, QUIZ_GAP, QUIZ_KEY, SEEN_LIMIT, addNote, boardPredictions, highlightPlan,
+  judgeOf, judgeReason, loadNotes, loadPredictions, loadQuiz, markSeen, moveQuizFits, pickWinner, quizChoices, quizSpots, quizStars,
+  removeNote, saveNotes, savePredictions, saveQuiz, scoreQuiz, seenPly, settlePrediction,
 } from './relay-fun.mjs';
+import { blackWinRate } from './relay-game.mjs';
+import { moveExchange } from './exchange-eval.mjs';
+import { parseSfenState } from './piece-movement.mjs';
 
 function memoryStorage() {
   const map = new Map();
@@ -48,14 +52,135 @@ describe('次の一手クイズ(24-2)', () => {
     expect(quizChoices({ sfen, expected: '4a3b', actual: '8c8d', seed: 'k' })).toEqual(choices);
     // 合法でない手は入れない。
     expect(quizChoices({ sfen, expected: '1a1z', seed: 'k' })).toHaveLength(3);
-    let store = loadQuiz(null);
-    store = scoreQuiz(store, true);
-    store = scoreQuiz(store, true);
-    store = scoreQuiz(store, false);
-    expect(store).toEqual({ total: 3, hit: 2, streak: 0, best: 2 });
+  });
+});
+
+/** 合法手を決まった順で指して、1局ぶんの棋譜(手と局面)を作る。evalAtで手ごとの評価値を決める。 */
+function playedGame(length, evalAt) {
+  const record = createGameRecord(STANDARD_SFEN);
+  const sfens = [record.position.sfen];
+  const entries = [];
+  for (let index = 0; index < length; index += 1) {
+    const legal = enumerateLegalMoves(record.position).map(({ usi }) => usi);
+    if (!legal.length) break;
+    const usi = legal[(index * 7 + 3) % legal.length];
+    appendUsiMove(record, usi);
+    sfens.push(record.position.sfen);
+    entries.push({ move: usi, eval: evalAt(index), pv: '', best: '', loss: 0, time: 30, mark: '' });
+  }
+  return { entries, sfens };
+}
+
+describe('大盤解説の当てもの(52章)', () => {
+  it('記録は次の一手と形勢当てを分け、★の点・連続を数える。前の版は次の一手として読む', () => {
     const storage = memoryStorage();
+    storage.setItem(QUIZ_KEY, JSON.stringify({ total: 5, hit: 3, streak: 1, best: 2 }));
+    let store = loadQuiz(storage);
+    expect(store.move).toEqual({ total: 5, hit: 3, stars: 3, streak: 1, best: 2 });
+    expect(store.judge).toEqual({ total: 0, hit: 0, stars: 0, streak: 0, best: 0 });
+    store = scoreQuiz(store, 'judge', true, 3);
+    store = scoreQuiz(store, 'judge', true, 2);
+    store = scoreQuiz(store, 'judge', false, 3);
+    store = scoreQuiz(store, 'move', true, 1);
+    expect(store.judge).toEqual({ total: 3, hit: 2, stars: 5, streak: 0, best: 2 });
+    expect(store.move).toEqual({ total: 6, hit: 4, stars: 4, streak: 2, best: 2 });
     saveQuiz(storage, store);
     expect(loadQuiz(storage)).toEqual(store);
+  });
+
+  it('見た手数は増えるときだけ残し、新しく見た対局を後ろへ回して上限を超えたら古いものから消す', () => {
+    let store = loadQuiz(null);
+    store = markSeen(store, 'a', 30);
+    store = markSeen(store, 'a', 12);
+    expect(seenPly(store, 'a')).toBe(30);
+    expect(seenPly(store, 'none')).toBe(0);
+    for (let index = 0; index < SEEN_LIMIT; index += 1) store = markSeen(store, `g${index}`, 5);
+    expect(Object.keys(store.seen)).toHaveLength(SEEN_LIMIT);
+    expect(seenPly(store, 'a')).toBe(0);
+    store = markSeen(store, 'g0', 9);
+    expect(Object.keys(store.seen).at(-1)).toBe('g0');
+  });
+
+  it('形勢の段は勝率40〜60%を互角にする', () => {
+    expect(judgeOf(0.5)).toBe('even');
+    expect(judgeOf(0.61)).toBe('black');
+    expect(judgeOf(0.6)).toBe('black');
+    expect(judgeOf(0.39)).toBe('white');
+    expect(judgeOf(0.45)).toBe('even');
+  });
+
+  it('次の一手に向かない局面：王手を逃げるしかない・取り返すだけ・指せる手が3つ以下', () => {
+    expect(moveQuizFits('4k4/9/9/9/4R4/9/9/9/4K4 w - 1', '5a4a')).toBe(false);
+    const record = createGameRecord(STANDARD_SFEN);
+    for (const usi of ['7g7f', '3c3d', '8h2b+']) appendUsiMove(record, usi);
+    expect(moveQuizFits(record.position.sfen, '3a2b', '8h2b+')).toBe(false);
+    expect(moveQuizFits(record.position.sfen, '4a3b', '8h2b+')).toBe(true);
+    expect(moveQuizFits('8k/9/9/9/9/9/9/9/K8 w - 1', '1a1b')).toBe(false);
+  });
+
+  it('出題の局面は25手目より後で10手ずつ空け、次の一手と形勢当てを交互にし、形勢当ての答えを偏らせない', () => {
+    // 評価値を、先手よし・互角・後手よしが入れ替わる形にする。
+    const evalAt = (index) => [900, 0, -900][Math.floor(index / 4) % 3];
+    const { entries, sfens } = playedGame(150, evalAt);
+    const cache = new Map();
+    const spots = quizSpots({ entries, sfens, cache, limit: 20 });
+    expect(spots.length).toBeGreaterThanOrEqual(6);
+    expect(spots.every(({ ply }) => ply >= MOVE_QUIZ_FROM)).toBe(true);
+    spots.slice(1).forEach((spot, index) => expect(spot.ply - spots[index].ply).toBeGreaterThanOrEqual(QUIZ_GAP));
+    const judges = spots.filter(({ kind }) => kind === 'judge');
+    expect(judges.every(({ ply }) => ply > JUDGE_QUIZ_FROM)).toBe(true);
+    const classes = judges.map(({ ply }) => judgeOf(blackWinRate(entries[ply - 1].eval)));
+    const tally = ['black', 'even', 'white'].map((side) => classes.filter((item) => item === side).length);
+    expect(Math.max(...tally) - Math.min(...tally)).toBeLessThanOrEqual(1);
+    expect(spots.some(({ kind }) => kind === 'move')).toBe(true);
+    // 棋譜が伸びても、前に選んだ局面は変わらない(覚えた判定もそのまま使う)。
+    const shorter = quizSpots({ entries: entries.slice(0, 80), sfens: sfens.slice(0, 81), cache });
+    expect(spots.slice(0, shorter.length)).toEqual(shorter);
+    expect(quizSpots({ entries, sfens, limit: 20 })).toEqual(spots);
+  });
+
+  it('次の一手の候補のほかの2つは、駒をただで取られない手', () => {
+    const { entries, sfens } = playedGame(60, () => 0);
+    for (const cursor of [30, 40, 50]) {
+      const sfen = sfens[cursor];
+      const actual = entries[cursor].move;
+      const choices = quizChoices({ sfen, actual, seed: `s${cursor}` });
+      expect(choices).toHaveLength(3);
+      expect(choices).toContain(actual);
+      const state = parseSfenState(sfen);
+      for (const usi of choices.filter((usi) => usi !== actual)) {
+        expect(moveExchange(state, usi, { scope: 'moved' })?.risk ?? 1).toBeLessThanOrEqual(0);
+      }
+    }
+  });
+
+  it('★は、次の一手はAIと違う手が3・取る手が2・静かな手が1。形勢当ては駒の損得と逆が3', () => {
+    const record = createGameRecord(STANDARD_SFEN);
+    for (const usi of ['7g7f', '3c3d']) appendUsiMove(record, usi);
+    const sfen = record.position.sfen;
+    expect(quizStars({ kind: 'move', sfen, answer: { move: '2g2f', best: '6i7h' } })).toBe(3);
+    expect(quizStars({ kind: 'move', sfen, answer: { move: '8h2b+', best: '' } })).toBe(2);
+    expect(quizStars({ kind: 'move', sfen, answer: { move: '2g2f', best: '' } })).toBe(1);
+    appendUsiMove(record, '8h2b+');
+    const ahead = record.position.sfen;
+    expect(quizStars({ kind: 'judge', sfen: ahead, judge: 'black' })).toBe(1);
+    expect(quizStars({ kind: 'judge', sfen: ahead, judge: 'white' })).toBe(3);
+    expect(quizStars({ kind: 'judge', sfen: ahead, judge: 'even' })).toBe(2);
+    expect(quizStars({ kind: 'judge', sfen: STANDARD_SFEN, judge: 'black' })).toBe(2);
+  });
+
+  it('形勢当ての理由は駒の損得と玉の守りから1行。羽音の言い方は敬語と「！」なし', () => {
+    const record = createGameRecord(STANDARD_SFEN);
+    for (const usi of ['7g7f', '3c3d', '8h2b+']) appendUsiMove(record, usi);
+    const sfen = record.position.sfen;
+    expect(judgeReason({ sfen, judge: 'black' })).toMatch(/先手の角得で、先手が良いですね/);
+    expect(judgeReason({ sfen, judge: 'white' })).toMatch(/^駒は先手が得ですが、後手の/);
+    expect(judgeReason({ sfen, judge: 'even' })).toMatch(/互角です$/);
+    for (const judge of ['black', 'even', 'white']) {
+      const plain = judgeReason({ sfen, judge, plain: true });
+      expect(plain).not.toMatch(/です|ます|！/);
+      expect(judgeReason({ sfen: STANDARD_SFEN, judge, plain: true })).not.toMatch(/です|ます|！/);
+    }
   });
 });
 
