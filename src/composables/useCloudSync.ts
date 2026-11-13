@@ -6,11 +6,11 @@
  * 画面(シートの段・ホームの状態)は、返す値を見て描く。
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
-import { applySave, collectSave, decodeSave, encodeSave, summarizeSave, summaryLines } from "../core/save-transfer.mjs";
+import { applySave, collectSave, decodeSave, encodeSave, summarizeSave } from "../core/save-transfer.mjs";
 import {
   CLOUD_SYNC_TEXT, CloudSyncError, HIDDEN_PUSH_INTERVAL_MS, PAUSE_MS, PUSH_INTERVAL_MS, RETURN_CHECK_MS, TICK_MS,
   canUseCloudSync, clearCloudState, decideSync, deleteCloudSave, downloadCloudSave, headSummary, headSummaryLines, isFreshSave,
-  loadCloudState, readCloudHead, refreshSession, saveCloudState, saveFingerprint, syncStatusText, uploadCloudSave,
+  loadCloudState, localSummaryLines, readCloudHead, refreshSession, saveCloudState, saveFingerprint, syncStatusText, uploadCloudSave,
 } from "../core/cloud-sync.mjs";
 import { canUseSaveCloud, sweepTransferCodes } from "../core/save-cloud.mjs";
 import { isLocalHost } from "../core/firebase-config.mjs";
@@ -165,7 +165,7 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
     choice.value = {
       first,
       head,
-      localLines: summaryLines({ ...summarizeSave(local), at: state.value?.changedAt ?? 0 }),
+      localLines: localSummaryLines(summarizeSave(local), state.value?.changedAt ?? 0),
       cloudLines: headSummaryLines(head),
       cloudBroken: false,
     };

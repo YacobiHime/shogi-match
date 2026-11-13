@@ -339,14 +339,22 @@ export function headSummary(summary) {
   return JSON.stringify({ name: summary.name ?? "", rating: summary.rating ?? null, games: summary.games ?? 0, ryuoSeasons: summary.ryuoSeasons ?? 0 }).slice(0, SUMMARY_CHARS);
 }
 
-/** 見出しの要約を、確認の窓の行にする(壊れていれば空)。 */
+/** 見出しの要約を、確認の窓の行にする(壊れていれば保存した日時だけ)。 */
 export function headSummaryLines(head) {
+  let lines = [];
   try {
     const value = JSON.parse(head?.summary ?? "{}");
-    return summaryLines({ name: str(value.name, 100), rating: Number.isFinite(value.rating) ? value.rating : null, games: Number(value.games) || 0, ryuoSeasons: Number(value.ryuoSeasons) || 0, at: head?.at ?? 0 });
+    lines = summaryLines({ name: str(value.name, 100), rating: Number.isFinite(value.rating) ? value.rating : null, games: Number(value.games) || 0, ryuoSeasons: Number(value.ryuoSeasons) || 0, at: 0 });
   } catch {
-    return [];
+    lines = [];
   }
+  return head?.at ? [...lines, CLOUD_SYNC_TEXT.savedAtLine(formatSaveTime(head.at))] : lines;
+}
+
+/** この端末の記録の要約を、確認の窓の行にする(最後に遊んだ日時は、前に合わせたあとに記録が変わった時刻)。 */
+export function localSummaryLines(summary, changedAt) {
+  const lines = summaryLines({ ...summary, at: 0 });
+  return changedAt ? [...lines, CLOUD_SYNC_TEXT.playedAtLine(formatSaveTime(changedAt))] : lines;
 }
 
 /**
@@ -448,6 +456,8 @@ export const CLOUD_SYNC_TEXT = Object.freeze({
   chooseFirst: "クラウドにも、この端末にも記録があるよ。",
   chooseNote: "選ばなかったほうの記録は消えるよ。",
   local: "この端末の記録",
+  savedAtLine: (when) => `保存した日時：${when}`,
+  playedAtLine: (when) => `最後に遊んだ日時：${when}`,
   cloud: "クラウドの記録",
   useThis: "この記録を使う",
   later: "あとで決める",

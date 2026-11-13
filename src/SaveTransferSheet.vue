@@ -24,7 +24,7 @@
           <section v-if="sync" class="save-transfer__group save-transfer__sync" data-sync-group>
             <h3>{{ S.head }}</h3>
             <template v-if="sync.signedIn.value">
-              <p class="save-transfer__account" data-sync-account>{{ S.signedInAs(accountName) }}</p>
+              <p class="save-transfer__account" data-sync-account>{{ S.signedInAs(accountName) }}<small v-if="accountEmail">{{ accountEmail }}</small></p>
               <p class="save-transfer__note" data-sync-saved>{{ sync.savedAt.value ? S.lastSaved(formatSaveTime(sync.savedAt.value)) : S.notSavedYet }}</p>
               <div class="save-transfer__row">
                 <button type="button" data-sync-now :disabled="sync.status.value === 'syncing'" @click="sync.syncNow()">{{ sync.status.value === "syncing" ? sync.statusText.value : S.syncNow }}</button>
@@ -201,11 +201,15 @@ type Bundle = { format: string; v: number; at: number; entries: Record<string, s
 
 const step = ref<Step>(props.startStep === "cloud-choice" && props.sync?.choice.value ? "cloud-choice" : "menu");
 const keptLocal = ref(false);
-/** ログインしている人の名前(メールアドレス。なければ表示名)。 */
+/** ログインしている人の名前(表示名。なければメールアドレス)と、その下に小さく出すメールアドレス。 */
 const accountName = computed(() => {
   const state = props.sync?.state.value;
   if (!state) return "";
-  return state.email && state.name ? `${state.name}（${state.email}）` : state.email || state.name || "Googleアカウント";
+  return state.name || state.email || "Googleアカウント";
+});
+const accountEmail = computed(() => {
+  const state = props.sync?.state.value;
+  return state?.name && state.email ? state.email : "";
 });
 const busyText = ref("");
 const error = ref("");
@@ -418,7 +422,7 @@ defineExpose({ goBack });
 
 <style scoped>
 .save-transfer { max-width: min(40em, 100%); }
-.save-transfer__groups { display: grid; gap: 0.6em; }
+.save-transfer .save-transfer__groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(15em, 100%), 1fr)); gap: 0.6em; }
 .save-transfer__group h3,
 .save-transfer__compare h3 { margin: 0 0 0.3em; font-size: 0.9em; opacity: 0.85; }
 .save-transfer__group .shogi-welcome__choices { grid-template-columns: repeat(auto-fit, minmax(min(11em, 100%), 1fr)); gap: 0.4em; }
@@ -465,8 +469,9 @@ defineExpose({ goBack });
 .save-transfer__compare section { padding: 0.5em 0.6em; border: 1px solid rgba(255, 252, 244, 0.35); border-radius: 0.5em; }
 .save-transfer__compare ul { margin: 0; padding-left: 1.1em; font-size: 0.88em; }
 .save-transfer__keep { justify-self: center; font-size: 0.9em; }
-.save-transfer__sync { padding: 0.5em 0.6em; border: 1px solid rgba(255, 252, 244, 0.35); border-radius: 0.6em; }
+.save-transfer__sync { grid-column: 1 / -1; padding: 0.5em 0.6em; border: 1px solid rgba(255, 252, 244, 0.35); border-radius: 0.6em; }
 .save-transfer__account { margin: 0.2em 0; font-weight: 700; overflow-wrap: anywhere; }
+.save-transfer__account small { display: block; font-size: 0.8em; font-weight: 400; opacity: 0.85; }
 .save-transfer__small { margin-top: 0.4em; font-size: 0.82em; min-height: 44px; }
 .save-transfer__compare section { display: grid; gap: 0.4em; align-content: start; }
 .save-transfer__compare section .shogi-game__confirm-danger { justify-self: center; }

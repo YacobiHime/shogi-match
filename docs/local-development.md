@@ -175,6 +175,8 @@ git diff --check
 
 ビルドした画面をブラウザで見るときは、COOP/COEPを返してキャッシュさせない静的サーバー`node scripts/serve-static.mjs 8766`（<http://127.0.0.1:8766/game.html>）を使えます。ビルドし直してもすぐ新しいJSが届きます。スマホ縦・タブレット縦・デスクトップの3つの大きさで写真とはみ出しを出すには、Playwrightを用意したうえで`node scripts/browser-check.mjs --out <置き場所> --tile 大会`を実行します（使い方はスクリプトの先頭と`AGENTS.md`の「検証」）。
 
+`npm run build`は、対局画面（`dist/shogi-match.js`）のあとに、ログインのページの中身（`dist/auth/login.js`。`vite.auth.config.js`）も作ります。Googleアカウントの同期（`docs/cloud-sync-design.md`）を手元で確かめるときは、FirestoreとAuthenticationのエミュレーター（ポート8080と9099）を起動し、`node scripts/serve-static.mjs 8796`のあと`node scripts/cloud-sync-check.mjs --out <置き場所>`を実行します。2台の端末をまねて、ログイン・送る・受け取る・どちらを使うか・ルール・消すまでを通します。エミュレーターは、`firestore.rules`を指す`firebase.json`（`"emulators": { "auth": { "port": 9099 }, "firestore": { "port": 8080 }, "ui": { "enabled": false } }`）を置いた別のフォルダーで`npx firebase-tools emulators:start --only auth,firestore --project shogi-64125`として起動します（Javaが要ります）。ログインのページは`127.0.0.1`で`auth.html?emulator=1`と開いたときだけエミュレーターにつなぎます。
+
 展示用パッケージ（インターネットのないWindowsのPCで遊ぶフォルダーとzip）は`npm run build:exhibit`で`exhibit/`に作ります（生成物。gitに入れません）。中身と使い方は`docs/exhibit-design.md`と、パッケージの`README.txt`にあります。
 
 ## よくある問題
