@@ -2,6 +2,7 @@
 // 1年を組み立て直さずに、いまの年度・今年度の成績・順位戦のクラス・タイトル・これまでの年度を出す(ノートを軽く保つ)。
 
 import { PRO_EVENTS, PRO_USER_ID as USER_ID, PRO_YEAR_KEY, proEvent } from './pro-year.mjs';
+import { originText } from './pro-year-origin.mjs';
 
 const EVENT_BY_NAME = Object.fromEntries(PRO_EVENTS.map((event) => [event.id, event.name]));
 
@@ -48,6 +49,8 @@ export function proYearNote(packed) {
   const history = (Array.isArray(packed.history) ? packed.history : []).filter(Boolean).map((entry) => ({
     fy: entry.fy, wins: entry.wins ?? 0, losses: entry.losses ?? 0, titles: entry.titles ?? [], awards: entry.awards ?? [],
     champions: Array.isArray(entry.champions) ? entry.champions : [], dan: entry.dan ?? '',
+    // 年度の途中にデビューした半年の年度(18章)。「10月から」。
+    since: entry.half && typeof entry.debut === 'string' ? `${Number(entry.debut.slice(5, 7))}月から` : '',
   })).reverse();
   // 通算(終えた年度と今年度)。
   const total = history.reduce((sum, entry) => ({ wins: sum.wins + entry.wins, losses: sum.losses + entry.losses }), { wins, losses });
@@ -80,6 +83,8 @@ export function proYearNote(packed) {
     awards,
     history,
     money: Number(packed.user?.money) || 0,
+    // 奨励会から四段になってデビューした道(18章。「奨励会から（棋士番号第347号）・10月1日デビュー」)。
+    origin: packed.origin ? originText(packed.origin)?.noteLine ?? '' : '',
   };
 }
 

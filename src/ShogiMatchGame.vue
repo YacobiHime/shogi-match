@@ -3028,6 +3028,7 @@ import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDayLabel, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { proYearProfileTitles } from "./core/pro-year-note.mjs";
+import { originDebut, shoreikaiOrigin } from "./core/pro-year-origin.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
 import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoments } from "./core/tip-moments.mjs";
 import { blunderDestinations, kingEscapeMap, unsafeDestinations } from "./core/board-insight.mjs";
@@ -8390,14 +8391,23 @@ const suspendedProYearMoves = computed(() => {
   const pending = proYearState.value?.pending;
   return suspended?.event === "pro-year" && suspended.ryuoOpponentId && pending && suspended.ryuoOpponentId === pending.opponentId ? suspended.moves : null;
 });
-/** 入口の「デビューする」。今日の年度の4月1日から(名簿がなければ作る)。 */
+/**
+ * 入口の「デビューする」。今日の年度の4月1日から(名簿がなければ作る)。
+ * 「奨励会から」を選んだら、奨励会の四段の記録でデビューの日を決める(後期の三段リーグは4月1日、前期は前の年度の10月1日。
+ * docs/pro-year-design.mdの18章。core/pro-year-origin.mjs)。
+ */
 function enterProYear({ settings }: { settings: { [key: string]: unknown } }) {
   ensureRyuoRoster();
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const origin = settings.origin === "shoreikai" ? shoreikaiOrigin(shoreikaiCareer.value?.pro) : null;
+  const debut = origin ? originDebut(origin, fiscalYearOf(today)) : null;
   setProYear(createProYear({
     seed: Date.now(),
-    fiscalYear: fiscalYearOf(today),
+    fiscalYear: debut?.fiscalYear ?? fiscalYearOf(today),
+    debut: debut?.debut ?? null,
+    rivalDebut: debut?.rivalDebut ?? null,
+    origin,
     roster: ryuoRoster.value,
     settings: { ...settings, recommended: settings.difficulty === ryuoDefaultDifficulty.value, world: commitTournamentWorld(Number(settings.difficulty)) },
     userLevel: ratingLevel(ratingState.value.rating),

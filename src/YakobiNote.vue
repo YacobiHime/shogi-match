@@ -529,6 +529,8 @@
                   <div><dt>通算</dt><dd data-note-proyear-total>{{ proYear.total.wins }}勝{{ proYear.total.losses }}敗</dd></div>
                   <div><dt>順位戦</dt><dd>{{ proYear.cls || "—" }}</dd></div>
                 </dl>
+                <!-- 奨励会から四段になってデビューした道(docs/pro-year-design.mdの18章)。 -->
+                <p v-if="proYear.origin" class="shogi-note__hint" data-note-proyear-origin>{{ proYear.origin }}</p>
                 <!-- タイトルと棋戦優勝(17章)。いま持っているタイトル(冠の数)・タイトルの通算期数・棋戦優勝・将棋大賞。 -->
                 <p v-if="proYear.titles.length" class="shogi-note__proyear-crown" data-note-proyear-titles>
                   <b>{{ proYear.crown || "タイトル" }}</b>{{ proYear.titles.join("・") }}
@@ -540,7 +542,7 @@
                 </ul>
                 <ol v-if="proYear.history.length" v-scroll-more class="shogi-note__history shogi-note__event-history shogi-note__scroll" aria-label="棋士の1年のこれまでの年度" data-note-proyear-history>
                   <li v-for="entry in proYear.history.slice(0, 5)" :key="entry.fy" :class="`shogi-note__history--${entry.titles.length || entry.champions.length ? 'crown' : 'keep'}`">
-                    <span class="shogi-note__history-no">{{ entry.fy }}年度</span>
+                    <span class="shogi-note__history-no">{{ entry.fy }}年度<small v-if="entry.since">（{{ entry.since }}）</small></span>
                     <span class="shogi-note__history-group">{{ entry.titles.length ? entry.titles.join("・") : entry.dan || "—" }}</span>
                     <span class="shogi-note__history-text">{{ [...entry.champions.map((name) => `${name}優勝`), ...entry.awards].join("・") }}</span>
                     <span class="shogi-note__history-record">{{ entry.wins }}勝{{ entry.losses }}敗</span>

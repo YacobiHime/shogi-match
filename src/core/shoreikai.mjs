@@ -1463,7 +1463,31 @@ export function closeShoreikaiRun(career) {
     ...career,
     run: null,
     history: [summary, ...career.history.filter((item) => item.id !== run.id)].slice(0, 20),
-    pro: run.phase === 'pro' ? (career.pro ?? { kishiNumber: run.kishiNumber, entry: summary.entry, games: summary.games, mentor: summary.mentor }) : career.pro,
+    pro: run.phase === 'pro' ? proRecord(run, summary) : career.pro,
+  };
+}
+
+/**
+ * 四段になった挑戦の記録(棋士の1年を奨励会から始めるときに使う。docs/pro-year-design.mdの18章)。
+ * いちばん新しく四段になった挑戦を残す。四段になった三段リーグの期(term)で、デビューの日(春・秋)が決まる。
+ * @param {any} run
+ * @param {{ entry: string, games: number, wins: number, losses: number, mentor: string }} summary
+ */
+function proRecord(run, summary) {
+  const last = run.lastTerm?.promoted ? run.lastTerm : null;
+  return {
+    kishiNumber: run.kishiNumber,
+    entry: summary.entry,
+    games: summary.games,
+    wins: summary.wins,
+    losses: summary.losses,
+    mentor: summary.mentor,
+    term: last?.term ?? null,
+    place: last?.place ?? null,
+    byJiten: Boolean(last?.byJiten),
+    leagueTerms: run.leagueTerms ?? null,
+    // 奨励会の同期(棋士の1年のデビューの場面で名前を出す)。
+    peers: (run.peers ?? []).map((id) => run.world?.members?.[id]?.name).filter(Boolean).slice(0, 2),
   };
 }
 

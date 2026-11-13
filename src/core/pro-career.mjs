@@ -66,6 +66,9 @@ export function careerRoad(history, current = null) {
     group: item.group ? `${item.group}組${item.groupUp ? ' 昇級' : ''}` : '',
     honors: [...(item.titles ?? []), ...(item.champions ?? [])].join('・'),
     headline: item.headlines?.[0]?.headline ?? '',
+    // 年度の途中にデビューした半年の年度(docs/pro-year-design.mdの18章)。「10月から」と添える。
+    half: Boolean(item.half),
+    since: item.half && typeof item.debut === 'string' ? `${Number(item.debut.slice(5, 7))}月から` : '',
   }));
   const done = rows.filter((row) => row.fy !== undefined);
   const wins = done.reduce((sum, row) => sum + row.wins, 0);
