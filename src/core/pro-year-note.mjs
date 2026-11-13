@@ -3,6 +3,7 @@
 
 import { PRO_EVENTS, PRO_USER_ID as USER_ID, PRO_YEAR_KEY, proEvent } from './pro-year.mjs';
 import { originText } from './pro-year-origin.mjs';
+import { ETERNAL_RULES } from './pro-title.mjs';
 
 const EVENT_BY_NAME = Object.fromEntries(PRO_EVENTS.map((event) => [event.id, event.name]));
 
@@ -98,8 +99,17 @@ export function proYearNote(packed) {
 export function proYearProfileTitles(state) {
   if (!state?.user) return [];
   const result = [];
+  // 防衛の数・連覇・永世称号も説明に(docs/pro-year-design.mdの19章)。永世称号は1つずつ称号に。
   for (const row of countRows(state.user.titleCounts)) {
-    result.push({ id: `pro-title-${row.id}`, label: `棋士の1年 ${row.short}`, detail: `棋士の1年で${row.name}を獲得（通算${row.count}期）`, rank: 20 });
+    const record = state.user.titleRecord?.[row.id] ?? null;
+    const holding = state.titles?.[row.id] === USER_ID;
+    const extra = [
+      record?.defenses ? `防衛${record.defenses}回` : '',
+      holding && (record?.streak ?? 0) >= 2 ? `${record.streak}連覇中` : (record?.best ?? 0) >= 2 ? `最長${record.best}連覇` : '',
+    ].filter(Boolean).join('・');
+    result.push({ id: `pro-title-${row.id}`, label: `棋士の1年 ${row.short}`, detail: `棋士の1年で${row.name}・通算${row.count}期${extra ? `（${extra}）` : ''}`, rank: 20 });
+    const eternal = ETERNAL_RULES[row.id];
+    if (record?.eternal && eternal) result.push({ id: `pro-eternal-${row.id}`, label: `棋士の1年 ${eternal.name}`, detail: `棋士の1年で${eternal.name}の資格を得た（${record.eternal}年度）`, rank: 30 });
   }
   const holding = TITLE_ORDER.filter((id) => state.titles?.[id] === USER_ID).length;
   const best = Math.max(holding, Number(state.user.bestCrowns) || 0);

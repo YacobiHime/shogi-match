@@ -3021,6 +3021,7 @@ import {
   fiscalYearOf, joinFestival as joinProYearFestival, joinStudy as joinProYearStudy, leaveStudy as leaveProYearStudy, loadProYear, proYearSeason, proYearView,
   recordFestivalEvent as recordProYearFestivalEvent, recordProGame, recordShidou as recordProYearShidou, recordStudyGame as recordProYearStudy, saveProYear,
   startNextYear as startNextProYear, startShidou as startProYearShidou, retuneProYearWorld, closeYearEarly as closeProYearEarly, seeBondScene as seeProYearBondScene, markWriteBack as markProYearWriteBack,
+  clearProYearResults,
 } from "./core/pro-year.mjs";
 import { applyWriteBack, writeBackPlan } from "./core/pro-writeback.mjs";
 import { currentDifficulty, retuneSeasonWorld } from "./core/world-change.mjs";
@@ -7756,7 +7757,8 @@ function markRyuoResultSeen() {
 /** 大会の対局の終局画面の文(竜王戦か名人戦)。 */
 const tournamentResult = computed(() => {
   if (ryuoGame.value?.event === "pro-year") {
-    return { done: false, doneText: "", next: "", back: "棋士の1年へ戻る" };
+    // 見ていない結果の札があれば、1年の画面でその札から見せる(19-3の7・8)。
+    return { done: false, doneText: "", next: "", back: proYearState.value?.results?.length ? "結果を見る" : "棋士の1年へ戻る" };
   }
   if (ryuoGame.value?.event === "team") {
     const view = teamView.value;
@@ -8558,6 +8560,9 @@ function proYearLife(action: { kind: string; [key: string]: unknown }) {
     setProYear(pushProYearWeekAction(state, action.action));
   } else if (action.kind === "week-clear") {
     setProYear(clearProYearWeekActions(state));
+  } else if (action.kind === "results-seen") {
+    // 結果の札を見終えた(docs/pro-year-design.mdの19-3の7)。
+    setProYear(clearProYearResults(state));
   } else if (action.kind === "week-advance") {
     setProYear(advanceProYearWeek(state));
   } else if (action.kind === "auto-weeks") {
@@ -8676,12 +8681,19 @@ function recordProYearOutcome(matchResult: MatchResult) {
   const advanced = milestones.filter((item) => item.kind === "advance");
   // この1局の対局料(と賞金)も添える(10-2の3)。
   const goalsDone: { label: string }[] = result.goalsDone ?? [];
-  proYearResultLine.value = [...milestones.map((item) => item.text), result.earned ? `獲得 ${moneyText(result.earned)}` : "", ...goalsDone.map((goal) => `目標達成「${goal.label}」`)].filter(Boolean).join("・");
-  // 判子: タイトル獲得 > 棋戦優勝 > 段階の突破(G:3 出来事の重さ)。
+  // 番勝負の途中なら「2勝1敗 防衛まであと1勝」(19-3の8)。
+  const gameItem = (result.state?.results ?? []).find((item: { type: string; gameId?: string }) => item.type === "game" && item.gameId === result.game?.id);
+  const seriesLine = gameItem?.series ? `${gameItem.series.me}勝${gameItem.series.them}敗 ${gameItem.series.status}` : "";
+  proYearResultLine.value = [seriesLine, ...milestones.map((item) => item.text), result.earned ? `獲得 ${moneyText(result.earned)}` : "", ...goalsDone.map((goal) => `目標達成「${goal.label}」`)].filter(Boolean).join("・");
+  // 判子: タイトル(防衛・獲得・奪還) > 棋戦優勝 > 段階の突破(G:3 出来事の重さ)。防衛を「獲得」と言わない(19-3の3)。
   const crown = champions.find((item) => item.title);
   const cup = champions.find((item) => !item.title);
+  const crownWord = crown?.kind === "defend" ? "防衛" : crown?.kind === "retake" ? "奪還" : "獲得";
   finishMilestone = crown
-    ? { kind: "pro-year", weight: "max", seal: "冠", title: `${crown.short}獲得！`, sub: `${crown.fy}年度 ${crown.name}`, line: "" }
+    ? {
+      kind: "pro-year", weight: "max", seal: crown.kind === "defend" ? "防" : "冠", title: `${crown.short}${crownWord}！`,
+      sub: [`${crown.fy}年度 ${crown.name}`, crown.kind === "defend" && (crown.streak ?? 0) >= 2 ? `${crown.streak}連覇` : "", crown.eternal ? `${crown.eternal}` : ""].filter(Boolean).join("・"), line: "",
+    }
     : cup
       ? { kind: "pro-year", weight: "big", seal: "優", title: `${cup.name} 優勝！`, sub: `${cup.fy}年度`, line: "" }
       : advanced.length

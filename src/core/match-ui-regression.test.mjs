@@ -1397,3 +1397,23 @@ describe('遅れて読み込む部分が読めなかったとき(docs/chunk-relo
     expect(source).toMatch(/const level = ryuoOpponent\.value\.level \?\? cpuStrengthLevel\(\);/);
   });
 });
+
+describe('棋士の1年の結果の札と防衛(docs/pro-year-design.mdの19章)', () => {
+  const year = readFileSync(new URL('../ShogiProYear.vue', import.meta.url), 'utf8');
+  const results = readFileSync(new URL('../ProYearResults.vue', import.meta.url), 'utf8');
+
+  it('終局の窓は、見ていない結果の札があれば「結果を見る」、判子は防衛を「獲得」と言わない', () => {
+    expect(source).toMatch(/proYearState\.value\?\.results\?\.length \? "結果を見る" : "棋士の1年へ戻る"/);
+    expect(source).toMatch(/crown\?\.kind === "defend" \? "防衛"/);
+    expect(source).toMatch(/action\.kind === "results-seen"[\s\S]{0,120}clearProYearResults\(state\)/);
+  });
+
+  it('結果の札は物語の場面のあとに出し、戻る操作は1枚前へ。札が出た直後は「次へ」を押せない', () => {
+    expect(year).toMatch(/resultsShown = computed\(\(\) => Boolean\(view\.value\?\.results\?\.length && !storyScene\.value\)\)/);
+    expect(year).toMatch(/if \(resultsShown\.value && resultsEl\.value\) return resultsEl\.value\.goBack\(\);/);
+    expect(year).toMatch(/else if \(!state\.results\?\.length && !state\.pending/);
+    expect(results).toMatch(/:disabled="guarding"/);
+    expect(results).toMatch(/if \(guarding\.value \|\| !page\.value\) return;/);
+    expect(results).not.toMatch(/@click\.self/);
+  });
+});

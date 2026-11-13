@@ -301,7 +301,7 @@
               <p><small>今年度</small><b>{{ view.record.wins }}勝{{ view.record.losses }}敗</b></p>
               <p><small>連勝</small><b>{{ view.record.streak }}<small>（最高 {{ view.record.best }}）</small></b></p>
               <p><small>順位戦</small><b>{{ view.cls }}</b></p>
-              <p><small>タイトル</small><b>{{ view.titles.length ? view.titles.join("・") : "なし" }}</b></p>
+              <p><small>タイトル</small><b>{{ view.titles.length ? `${view.crowns ? `${view.crowns}・` : ""}${view.titles.join("・")}` : "なし" }}</b></p>
             </div>
             <!-- 棋士の歩み(15-3の5・7)。年度ごとの行と通算、次の昇段まで。 -->
             <h3 class="pro-year__subhead">棋士の歩み<small>（{{ view.dan }}）</small></h3>
@@ -404,7 +404,7 @@
             <template v-if="view.history.length">
               <h3 class="pro-year__subhead">これまでの年度</h3>
               <ul class="pro-year__log">
-                <li v-for="item in view.history" :key="item.fy"><small>{{ item.fy }}年度</small><span>{{ item.wins }}勝{{ item.losses }}敗{{ item.titles.length ? `・${item.titles.join("・")}` : "" }}{{ item.money ? `・獲得${moneyText(item.money.earned)}（${item.money.rank}位）` : "" }}{{ item.awards.length ? `・${item.awards.join("・")}` : "" }}</span></li>
+                <li v-for="item in view.history" :key="item.fy"><small>{{ item.fy }}年度</small><span>{{ item.wins }}勝{{ item.losses }}敗{{ item.titleLog?.length ? `・${item.titleLog.map((entry) => entry.text).join("・")}` : item.titles.length ? `・${item.titles.join("・")}` : "" }}{{ item.money ? `・獲得${moneyText(item.money.earned)}（${item.money.rank}位）` : "" }}{{ item.awards.length ? `・${item.awards.join("・")}` : "" }}</span></li>
               </ul>
             </template>
           </div>
@@ -420,7 +420,11 @@
           <p v-if="view.summary.closedEarly" class="pro-year__summary-line">公式戦を終えて、{{ shortDate(view.summary.closedEarly) }}に年度を締めた</p>
           <!-- 秋にデビューした半年の年度(18章)。将棋大賞は次の年度から。 -->
           <p v-if="view.summary.half" class="pro-year__summary-line" data-pro-summary-half>{{ shortDate(view.summary.debut) }}にデビューした半年の年度。次の年度は、順位戦と目標から始まるよ</p>
-          <p v-if="view.summary.titles.length" class="pro-year__summary-title">{{ view.summary.titles.join("・") }} 獲得</p>
+          <!-- この年度の番勝負の結果(防衛・獲得・奪還・失冠・届かず)と、年度の終わりに持っているタイトル(19-3の3)。前の版のまとめはタイトルだけ。 -->
+          <ul v-if="view.summary.titleLog?.length" class="pro-year__summary-titles" data-pro-summary-titles>
+            <li v-for="(entry, index) in view.summary.titleLog" :key="index" :class="`pro-year__summary-titles--${entry.kind}`">{{ entry.text }}</li>
+          </ul>
+          <p v-if="view.summary.titles.length" class="pro-year__summary-title">{{ view.summary.titleLog ? `保持 ${view.summary.crowns ? `${view.summary.crowns}・` : ""}` : "" }}{{ view.summary.titles.join("・") }}{{ view.summary.titleLog ? "" : " 獲得" }}</p>
           <p v-if="view.summary.awards.length" class="pro-year__awards">
             <span v-for="award in view.summary.awards" :key="award" class="pro-year__award">{{ award }}</span>
           </p>
@@ -757,7 +761,10 @@
           </button>
           <div class="pro-year__event-heading">
             <h2>{{ eventOpen.name }}</h2>
-            <small>{{ eventOpen.holder ? `${eventOpen.holder.you ? playerName : eventOpen.holder.name}${proEvent(eventOpen.id)?.short ?? ""}` : "一般棋戦" }}{{ shownCycle?.champion ? `・${shownCycle.champion.you ? playerName : shownCycle.champion.name}が${eventKind === "title" ? "獲得" : "優勝"}` : "" }}</small>
+            <small>{{ eventOpen.holder ? `${eventOpen.holder.you ? playerName : eventOpen.holder.name}${proEvent(eventOpen.id)?.short ?? ""}` : "一般棋戦" }}{{ shownCycle?.champion ? `・${shownCycle.champion.you ? playerName : shownCycle.champion.name}が${eventKind === "title" ? (shownCycle.defended ? "防衛" : "獲得") : "優勝"}` : "" }}</small>
+            <!-- あなたのこのタイトルの記録と、永世称号までの残り(19-3の5)。 -->
+            <small v-if="eventOpen.record" class="pro-year__event-record" data-pro-event-record>あなた 通算{{ eventOpen.record.total }}期{{ eventOpen.record.holding && eventOpen.record.streak >= 2 ? `・${eventOpen.record.streak}連覇中` : "" }}{{ eventOpen.record.defenses ? `・防衛${eventOpen.record.defenses}回` : "" }}・{{ eventOpen.record.eternalText }}</small>
+            <small v-else-if="eventOpen.eternalRule" class="pro-year__event-record">{{ eventOpen.eternalRule }}</small>
           </div>
         </header>
         <div v-if="eventOpen.cycles.length > 1" class="pro-year__tabs pro-year__tabs--small" role="tablist" aria-label="期">
@@ -881,6 +888,16 @@
       data-pro-scene
       @done="closeScene"
     />
+    <!-- 結果の札(19-3の7)。対局から戻ったとき・分身に任せたあと・週を進めたあとに、見ていない結果を1枚ずつ。 -->
+    <ProYearResults
+      v-if="view && resultsShown"
+      ref="resultsEl"
+      :results="view.results"
+      :dropped="view.resultsDropped"
+      :face="yakobiSprite"
+      :asset-base-url="assetBaseUrl"
+      @done="emit('life', { kind: 'results-seen' })"
+    />
   </div>
 </template>
 
@@ -892,6 +909,7 @@ import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePi
 import RyuoBracket from "./RyuoBracket.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import ProYearWeekExtras from "./ProYearWeekExtras.vue";
+import ProYearResults from "./ProYearResults.vue";
 import { avatarMember } from "./core/pro-avatar.mjs";
 import { memberAbilityView } from "./core/ryuo-book.mjs";
 import { KAISETSU_FANS } from "./core/pro-work.mjs";
@@ -1274,6 +1292,9 @@ onBeforeUnmount(() => {
   if (goalToastTimer) clearTimeout(goalToastTimer);
 });
 const festivalEl = ref<{ goBack: () => boolean } | null>(null);
+// 見ていない結果の札(物語の場面のあいだは待つ。19-3の7)。
+const resultsEl = ref<{ goBack: () => boolean } | null>(null);
+const resultsShown = computed(() => Boolean(view.value?.results?.length && !storyScene.value));
 /** 羽音が話す行(公式戦の前の一言・研究会の誘いと練習対局のあとの一言)。 */
 const hananeTalks = computed(() => Boolean(view.value?.pending?.hananeLine || (!view.value?.pending && view.value?.study?.talk)));
 const talkSprite = computed(() => (hananeTalks.value ? hananeSprite.value : yakobiSprite.value));
@@ -1284,7 +1305,7 @@ const runLine = computed(() => {
   if (pending?.hananeLine) return pending.hananeLine;
   if (pending?.kind === "study") return `研究会の日だよ。今日は${nameText(pending.opponent)}と練習対局。公式戦には数えないから、試したい作戦を指してみよう！`;
   if (pending?.kind === "shidou") return pending.coachLine ?? "";
-  if (pending) return pending.kind === "finals" ? PRO_YEAR_TEXT.titleGame : pending.stakes?.boss ? PRO_YEAR_TEXT.bigGame : PRO_YEAR_TEXT.game;
+  if (pending) return pending.kind === "finals" ? (pending.defense ? PRO_YEAR_TEXT.titleDefense : PRO_YEAR_TEXT.titleGame) : pending.stakes?.boss ? PRO_YEAR_TEXT.bigGame : PRO_YEAR_TEXT.game;
   if (current.study?.talk) return current.study.talk;
   return proYearTalk(current, nextPreview.value);
 });
@@ -1514,7 +1535,8 @@ watch(() => props.state, (state) => {
   if (storyScene.value || !state) return;
   const due = proYearSceneDue(state);
   if (due?.key === "pro-debut") openScene(due, null);
-  else if (!state.pending && !state.yearDone && !state.festival && !state.work && state.goals?.fy === state.fy) {
+  // 結果の札があれば、先に札を見せる(見終えると状態が変わり、ここへまた来る。19-3の7)。
+  else if (!state.results?.length && !state.pending && !state.yearDone && !state.festival && !state.work && state.goals?.fy === state.fy) {
     // 絆の段が上がったら、次に今週の画面を開いたときに場面(15-3の4)。
     const bond = bondSceneDue(state);
     if (bond) openBondScene(bond);
@@ -1526,6 +1548,8 @@ watch(() => props.state, (state) => {
 }, { immediate: true });
 
 function goBack() {
+  // 結果の札は1枚前へ(読み飛ばさない。19-3の7)。
+  if (resultsShown.value && resultsEl.value) return resultsEl.value.goBack();
   // 途中で難易度を変えるシートを先に閉じる(11章)。
   if (worldChip.value?.goBack()) return true;
   if (scouter.value?.goBack()) return true;
@@ -1553,6 +1577,11 @@ defineExpose({ goBack });
 </script>
 
 <style>
+/* 年度のまとめの番勝負の結果(19-3の3)。防衛・獲得・奪還は金、失冠・届かずは控えめ。 */
+.shogi-game .pro-year__summary-titles { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__summary-titles li { padding: 0.15rem 0.6rem; border-radius: 999px; color: #3a2405; background: #f6d55c; font-size: 0.85rem; font-weight: 900; }
+.shogi-game .pro-year__summary-titles .pro-year__summary-titles--lost, .shogi-game .pro-year__summary-titles .pro-year__summary-titles--miss { color: #cfd8de; background: rgba(255, 252, 244, 0.12); }
+.shogi-game .pro-year__event-record { display: block; color: var(--amber, #f1a54c); }
 /* 棋士の1年: 研修会・団体戦の画面の部品(ShogiShoreikai.vue・ShogiTeamBattle.vue・ShogiTournament.vue)を使い、カレンダーと棋戦の表を足す。 */
 .shogi-game .pro-year__mapwrap { display: grid; place-items: center; padding: 0.6rem; overflow-y: auto; }
 .shogi-game .pro-year__intro { display: grid; gap: 0.6rem; width: min(100%, 40rem); }

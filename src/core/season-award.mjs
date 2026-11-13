@@ -156,14 +156,19 @@ export function teamStageAward(entry, { playerName = 'あなた', at = Date.now(
 }
 
 /**
- * 棋士の1年(docs/pro-year-design.md)のタイトル獲得・棋戦優勝の賞状。期ごとに1枚。
- * @param {{ cycle: string, name: string, short: string, title: boolean, fy: number, wins: number, losses: number }} win
+ * 棋士の1年(docs/pro-year-design.md)のタイトル獲得・防衛・奪還と棋戦優勝の賞状。期ごとに1枚。
+ * kindは番勝負の結果(19章。防衛は「○○防衛（3連覇）」、永世称号に届いたら注記に足す)。
+ * @param {{ cycle: string, name: string, short: string, title: boolean, fy: number, wins: number, losses: number, kind?: string, streak?: number, total?: number, eternal?: string }} win
  * @param {{ playerName?: string, at?: number }} [options]
  */
 export function proYearAward(win, { playerName = 'あなた', at = Date.now() } = {}) {
+  const prize = !win.title ? '優勝'
+    : win.kind === 'defend' ? `${win.short}防衛${(win.streak ?? 0) >= 2 ? `（${win.streak}連覇）` : ''}`
+      : win.kind === 'retake' ? `${win.short}奪還` : `${win.short}獲得`;
+  const notes = [`${win.fy}年度`, ...(win.title && (win.total ?? 0) >= 2 ? [`通算${win.total}期`] : []), ...(win.eternal ? [`${win.eternal}の資格`] : [])];
   const award = makeAward({
-    tournament: 'pro-year', name: win.name, seal: win.title ? '冠' : '優', no: win.fy, grade: 'gold',
-    prize: win.title ? `${win.short}獲得` : '優勝', notes: [`${win.fy}年度`], entry: win.title ? '番勝負' : '本戦',
+    tournament: 'pro-year', name: win.name, seal: win.title ? (win.kind === 'defend' ? '防' : '冠') : '優', no: win.fy, grade: 'gold',
+    prize, notes, entry: win.title ? '番勝負' : '本戦',
     wins: win.wins, losses: win.losses, playerName, at,
   });
   return { ...award, id: `pro-year-${win.cycle}` };

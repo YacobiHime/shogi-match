@@ -4,13 +4,13 @@
 
 /** 見出しにする出来事の強さ(大きいほど先)。 */
 export const NEWS_WEIGHT = Object.freeze({
-  crown: 100, champion: 95, challenge: 85, mainStage: 80, danUp: 79, promote: 78,
+  eternal: 110, crowns: 105, crown: 100, defend: 100, champion: 95, lostTitle: 90, challenge: 85, mainStage: 80, danUp: 79, promote: 78,
   streak: 70, hanane: 65, firstWin: 60, winsMark: 55, kaisetsuDebut: 50, fansMark: 48,
   titleDecided: 40, hananeBig: 35, win: 20, loss: 10, work: 8, world: 1,
 });
 
 /** 取材が来る出来事。 */
-export const INTERVIEW_KINDS = Object.freeze(['firstWin', 'streak', 'mainStage', 'challenge', 'promote', 'danUp', 'crown', 'champion', 'kaisetsuDebut']);
+export const INTERVIEW_KINDS = Object.freeze(['firstWin', 'streak', 'mainStage', 'challenge', 'promote', 'danUp', 'crown', 'defend', 'eternal', 'crowns', 'champion', 'kaisetsuDebut']);
 
 /** ファンレターが届くファンの数。 */
 export const FAN_MARKS = Object.freeze([100, 300, 1000, 3000]);
@@ -30,7 +30,12 @@ const pickBy = (seed, list) => list[Math.abs(Math.trunc(Number(seed) || 0)) % li
 export function headlineOf(event, you) {
   const e = event;
   switch (e.kind) {
-    case 'crown': return `${you}、${e.short}を獲得`;
+    case 'crown': return `${you}、${e.short}を${e.retake ? '奪還' : '獲得'}`;
+    // 防衛・失冠・永世称号・○冠(docs/pro-year-design.mdの19章)。
+    case 'defend': return `${you}、${e.short}を防衛${e.streak >= 2 ? ` ${e.streak}連覇` : ''}`;
+    case 'lostTitle': return `${e.winner}、${e.short}を奪取 ${you}は失冠`;
+    case 'eternal': return `${you}、${e.name}の資格を得る`;
+    case 'crowns': return e.count >= 8 ? `${you}、全冠制覇 八冠に` : `${you}、${e.text}に`;
     case 'champion': return `${you}、${e.name}で優勝`;
     case 'challenge': return `${you}、${e.name}の挑戦者に`;
     case 'mainStage': return `${you}、${e.text}`;
@@ -154,6 +159,9 @@ const QUESTIONS = Object.freeze({
   promote: '昇級、おめでとうございます。来期の目標は？',
   danUp: '昇段、おめでとうございます。いまの気持ちは？',
   crown: 'タイトル獲得、おめでとうございます。いまの気持ちは？',
+  defend: '防衛、おめでとうございます。挑戦者の印象は？',
+  eternal: '永世称号、おめでとうございます。いまの気持ちは？',
+  crowns: 'タイトルを同時にいくつも持つことになりました。いまの気持ちは？',
   champion: '優勝、おめでとうございます。勝因は？',
   kaisetsuDebut: '大盤解説はいかがでしたか？',
 });
