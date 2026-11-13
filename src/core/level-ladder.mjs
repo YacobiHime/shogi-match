@@ -6,10 +6,17 @@
 
 import { CPU_STRENGTH_PRESETS } from './strength-settings.mjs';
 
+/**
+ * 今の表(v3)を作った日(2026-10-23)の、Lv0〜49のsource。前の表(v1・v2)の保存を移す行き先と、前の換算(世界を持たない期)は、
+ * この割り当てで決める。2026-11-13にLv15〜47のsourceを測り直したが(strength-settings.mjs。1Lvの差をそろえた)、
+ * Lvの番号と段級位の名前の意味は同じなので、前の保存の移しかえの行き先は変えない(docs/difficulty-calibration.mdの2026-11-13の節)。
+ */
+const V3_SOURCES = Object.freeze([0, 0.9, 1.25, 1.65, 2, 2.4, 3.9, 4.9, 5.8, 9, 11.93, 12.08, 12.15, 12.29, 12.47, 12.58, 12.67, 12.79, 12.89, 13.6, 14.9, 20.2, 28.98, 30.78, 31.75, 32.45, 33.05, 33.29, 33.53, 33.76, 34, 34.55, 35.03, 35.24, 35.44, 35.65, 35.85, 36.05, 36.26, 36.47, 36.68, 36.89, 37.16, 37.48, 37.8, 38.11, 38.41, 38.7, 39, 40]);
+
 /** 今の表のLv1〜49(sourceが増える順)。 */
-const LADDER_POINTS = CPU_STRENGTH_PRESETS.slice(1);
+const LADDER_POINTS = Object.freeze(V3_SOURCES.slice(1).map((source, index) => Object.freeze({ level: index + 1, source })));
 /** 今の表のいちばん上のLv(藤井聡太並み)。 */
-const TOP_LEVEL = CPU_STRENGTH_PRESETS.at(-1).level;
+const TOP_LEVEL = V3_SOURCES.length - 1;
 
 /** 今の表の版。保存にこの印があれば、もう移してある。印がなければv1、2ならv2の保存。 */
 export const LADDER_VERSION = 3;
@@ -148,8 +155,8 @@ export function oldLevelFromLadder(level) {
   if (level < 1) return level * 3;
   if (level <= 10) return level + 2;
   const lo = Math.floor(level);
-  const low = CPU_STRENGTH_PRESETS[lo].source;
-  const source = lo === level ? low : low + (CPU_STRENGTH_PRESETS[lo + 1].source - low) * (level - lo);
+  const low = V3_SOURCES[lo];
+  const source = lo === level ? low : low + (V3_SOURCES[lo + 1] - low) * (level - lo);
   if (source >= 25) return source;
   for (let old = 12; old < 25; old += 1) {
     const a = OLD_LOW_BAND_SOURCES[old];
@@ -173,4 +180,33 @@ export function migrateSeasonLevels(season) {
     id, player && Number.isFinite(player.level) ? { ...player, level: move(player.level) } : player,
   ]));
   return /** @type {T} */ ({ ...value, ladder: LADDER_VERSION, players });
+}
+
+/** 今の割り当て(2026-11-13から)で、sourceと同じ強さのLv(小数)。間は直線で逆に引く。 */
+function currentLevelForSource(source) {
+  const presets = CPU_STRENGTH_PRESETS;
+  if (!(source > 0)) return 0;
+  for (let index = 1; index < presets.length; index += 1) {
+    const upper = presets[index];
+    if (source <= upper.source) {
+      const lower = presets[index - 1];
+      return upper.source === lower.source ? upper.level : lower.level + (source - lower.source) / (upper.source - lower.source);
+    }
+  }
+  return presets.at(-1).level;
+}
+
+/**
+ * 2026-10-23〜11-12の割り当て(V3_SOURCES)のLv(小数)で測った値を、同じ強さの今のLv(小数)へ。
+ * CPUのLvで測った表(棋力テストの問題の難しさ・手の損の表・能力の当てはめ)を、今の割り当ての強さにそろえるために使う
+ * (docs/difficulty-calibration.mdの2026-11-13の節)。Lv19以下は同じ。
+ * @param {number} level
+ */
+export function currentLevelFromV3(level) {
+  if (!Number.isFinite(level)) return level;
+  if (level <= 0) return level;
+  if (level >= TOP_LEVEL) return level;
+  const lo = Math.floor(level);
+  const source = lo === level ? V3_SOURCES[lo] : V3_SOURCES[lo] + (V3_SOURCES[lo + 1] - V3_SOURCES[lo]) * (level - lo);
+  return currentLevelForSource(source);
 }

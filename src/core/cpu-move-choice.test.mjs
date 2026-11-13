@@ -210,8 +210,8 @@ describe('CPU着手の共通選択', () => {
     expect(level(5000).engineVision).toBe(0);
     expect(level(250000).engineVision).toBeGreaterThan(level(80000).engineVision);
     expect(level(250000).visionWidth).toBeGreaterThan(level(5000).visionWidth);
-    // 技量0.6以上は視野を狭めず、探索候補から選ぶ。
-    expect(level(320000).visionWidth).toBeUndefined();
+    // 技量0.6以上は視野を狭めず、探索候補から選ぶ(2026-11-13の割り当てでは、アマ四段のLv35から)。
+    expect(level(400000).visionWidth).toBeUndefined();
   });
 
   test('最善手より大きく悪い駒捨ては、探索の2番手以下にあっても選ばない', async () => {

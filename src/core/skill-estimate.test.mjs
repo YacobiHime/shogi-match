@@ -4,6 +4,7 @@ import {
   levelForAverageLoss, measurableMoves, MEASURE_START_CHOICES, measureFollowUp, measurePrior, measureStartChoices, measureStatistics,
   nextMeasureLevel, restoredMeasureState,
 } from './skill-estimate.mjs';
+import { currentLevelFromV3 } from './level-ladder.mjs';
 
 const movesWithLoss = (loss, count, mover = 'black', standing = 0) => (
   Array.from({ length: count }, () => ({ moveMeasure: { mover, loss, standing } }))
@@ -13,9 +14,10 @@ describe('skill estimate', () => {
   it('maps the recent average loss (R内容) to levels monotonically along the measured table', () => {
     // 強さの分かっているCPUの対局から作った表(docs/skill-measure-design.mdの7章)。損が大きいほど弱い。
     expect(levelForAverageLoss(5000)).toBe(0);
-    expect(levelForAverageLoss(1)).toBe(46);
-    expect(levelForAverageLoss(226)).toBeCloseTo(20, 6);
-    expect(levelForAverageLoss(150)).toBeCloseTo(26, 6);
+    // 表のLvは、2026-11-13の割り当ての同じ強さのLvへ引き直してある(測ったときのLv46・20・26)。
+    expect(levelForAverageLoss(1)).toBeCloseTo(currentLevelFromV3(46), 1);
+    expect(levelForAverageLoss(226)).toBeCloseTo(currentLevelFromV3(20), 1);
+    expect(levelForAverageLoss(150)).toBeCloseTo(currentLevelFromV3(26), 1);
     let previous = Infinity;
     for (const loss of [100, 120, 150, 200, 300, 400, 460]) {
       const level = levelForAverageLoss(loss);

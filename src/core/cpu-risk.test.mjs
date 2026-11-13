@@ -151,8 +151,8 @@ describe('危険を見積もって選び直す', () => {
     const level25 = sourceLevelSettings(25);
     const choice = await chooseCpuMove({ strength: level25, sfen: STANDARD_SFEN, legalMoves, search, probe, random });
     expect(choice).toMatchObject({ move: '2g2f', kind: 'safe' });
-    // もとの校正のLv31以上の強さ(アマ初段より上)は危険を気にしない。
-    const level35 = strengthAt(26);
+    // もとの校正のLv31以上の強さは危険を気にしない(2026-11-13の割り当てでは、アマ二段のLv28から)。
+    const level35 = strengthAt(28);
     const strong = await chooseCpuMove({ strength: level35, sfen: STANDARD_SFEN, legalMoves, search, probe, random });
     expect(strong.kind).not.toBe('safe');
   });

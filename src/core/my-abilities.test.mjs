@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AXIS_MODELS, MY_ABILITY_MIN_MOVES, MY_REPERTOIRE_MIN_GAMES, axisLevel, collectAxes, myAbilityProfile, myRepertoire, myStyleAttack, worldRatingFor,
 } from './my-abilities.mjs';
+import { currentLevelFromV3 } from './level-ladder.mjs';
 import { collectionCatalog } from './collection.mjs';
 import { OPENING_CASTLES, OPENING_STRATEGIES } from './opening-guide.mjs';
 import { defaultCastleShares } from './opening-usage.mjs';
@@ -26,7 +27,8 @@ describe('自分の能力', () => {
     for (const key of Object.keys(AXIS_MODELS)) {
       const total = axisAt(key, 20, 1000);
       const value = 'sum' in total ? total.sum / total.n : total.hit / total.n;
-      expect(axisLevel(key, { n: total.n, value })).toBeCloseTo(20, 0);
+      // 当てはめは前の割り当てのLvで測ったので、同じ強さの今のLvに戻る(docs/difficulty-calibration.mdの2026-11-13の節)。
+      expect(axisLevel(key, { n: total.n, value })).toBeCloseTo(currentLevelFromV3(20), 0);
     }
     expect(axisLevel('opening', { n: 0, value: 0 })).toBeNull();
   });

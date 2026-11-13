@@ -11,6 +11,7 @@ import { specialAbilityChips } from './player-character.mjs';
 import { defaultCastleShares, favoriteStyleIds, partyOfUsage, proOpening, staticShare, toPercent, usageRows } from './opening-usage.mjs';
 import { GROUP_MEAN_RATING, TOURNAMENT_TARGET_WIN_RATE, recommendedDifficulty, worldRating } from './ryuo-strength.mjs';
 import { LOSS_AXES, RATE_AXES } from './play-insight.mjs';
+import { currentLevelFromV3 } from './level-ladder.mjs';
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
@@ -70,7 +71,8 @@ export function axisLevel(key, { n, value }) {
   const floor = /** @type {{ floor?: number }} */ (model).floor ?? 0.02;
   const rate = clamp(value, floor, 1 - floor);
   const y = model.kind === 'loss' ? Math.log(Math.max(0, value) + 10) : Math.log(rate / (1 - rate));
-  return clamp((y - model.a) / model.b, MIN_AXIS_LEVEL, MAX_AXIS_LEVEL);
+  // 当てはめはCPU(2026-10-23〜11-12の割り当て)で測ったので、同じ強さの今のLvへ引き直す(docs/difficulty-calibration.mdの2026-11-13の節)。
+  return clamp(currentLevelFromV3(clamp((y - model.a) / model.b, MIN_AXIS_LEVEL, MAX_AXIS_LEVEL)), MIN_AXIS_LEVEL, MAX_AXIS_LEVEL);
 }
 
 /**

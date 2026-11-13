@@ -5,6 +5,7 @@
 import { SKILL_TEST_ITEMS, SKILL_TEST_MATE_CPU_B } from '../data/skill-test-items.mjs';
 import { JISSEN_SET, TSUME_SET } from './problem-set.mjs';
 import { ABILITY_OF_TYPE } from './skill-test.mjs';
+import { currentLevelFromV3 } from './level-ladder.mjs';
 
 /**
  * 詰将棋の手数の目安(Lv)。1手詰め＝17級くらい(Lv8)、3手詰め＝9級くらい(Lv16)、5手詰め＝1級くらい(Lv24)、
@@ -34,6 +35,8 @@ const MATE_PROBLEMS = [...TSUME_SET, ...JISSEN_SET];
  */
 const MAX_CPU_B = 40;
 const measured = (cpuB) => Number.isFinite(cpuB) && cpuB < MAX_CPU_B;
+/** 問題の難しさは、2026-10-23〜11-12の割り当てのCPUで測った。同じ強さの今のLvへ引き直す(docs/difficulty-calibration.mdの2026-11-13の節)。 */
+const currentB = (cpuB) => currentLevelFromV3(cpuB);
 
 /**
  * CPUで測った難しさ(cpuB)を人に合わせる補正(Lv)。CPUは人より読みが正確で、同じLvでも問題を解きやすい。
@@ -43,7 +46,7 @@ const measured = (cpuB) => Number.isFinite(cpuB) && cpuB < MAX_CPU_B;
 export const CPU_TO_HUMAN_OFFSET = (() => {
   const gaps = MATE_PROBLEMS
     .filter(({ id }) => measured(SKILL_TEST_MATE_CPU_B[id]))
-    .map((problem) => mateDifficulty(problem) - SKILL_TEST_MATE_CPU_B[problem.id])
+    .map((problem) => mateDifficulty(problem) - currentB(SKILL_TEST_MATE_CPU_B[problem.id]))
     .sort((a, b) => a - b);
   return gaps.length ? gaps[Math.floor(gaps.length / 2)] : 0;
 })();
@@ -68,7 +71,7 @@ export const SKILL_TEST_BANK = Object.freeze([
   ...SKILL_TEST_ITEMS.filter(({ cpuB }) => measured(cpuB)).map((item) => Object.freeze({
     ...item,
     ability: ABILITY_OF_TYPE[item.type],
-    b: clamp(item.cpuB + (TYPE_OFFSETS[item.type] ?? 0)),
+    b: clamp(currentB(item.cpuB) + (TYPE_OFFSETS[item.type] ?? 0)),
     guess: item.choices ? 1 / 3 : 0,
   })),
   ...MATE_PROBLEMS.map((problem) => Object.freeze({

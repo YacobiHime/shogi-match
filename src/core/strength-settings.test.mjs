@@ -203,8 +203,12 @@ describe('CPU strength settings', () => {
     expect(monotonic('simplicity', -1)).toBe(true);
     const lv15 = getStrengthSearchSettings(presetByLabel('3級程度').value);
     // 以前の三級程度(Lv15)は、見落としで2300、抽選で970まで損をする手を選べた。
-    expect(lv15.moveLossCap).toBeLessThanOrEqual(600);
-    expect(lv15.blunderLimit).toBeLessThanOrEqual(2);
+    // 2026-11-13に1Lvの差をそろえて3級が弱くなった(もとの校正のLv17.15)ので、3級は900まで(飛車・角をただで渡す損より小さい)、
+    // アマ初段から600まで。
+    expect(lv15.moveLossCap).toBeLessThanOrEqual(900);
+    expect(getStrengthSearchSettings(presetByLabel('アマ初段程度').value).moveLossCap).toBeLessThanOrEqual(600);
+    expect(lv15.blunderLimit).toBeLessThanOrEqual(3);
+    expect(getStrengthSearchSettings(presetByLabel('アマ初段程度').value).blunderLimit).toBeLessThanOrEqual(1);
     // 低レベルでも、大駒をただで渡すほどの損は上限で防ぐ。
     expect(getStrengthSearchSettings(CPU_STRENGTH_PRESETS[11].value).moveLossCap).toBeLessThanOrEqual(1300);
     expect(lv15.simplicity).toBeGreaterThan(0.5);
