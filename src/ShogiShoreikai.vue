@@ -292,6 +292,11 @@
           </div>
         </template>
         <template v-else-if="view.phase === 'pro'">
+          <!-- 免状のあとは棋士の1年へ(docs/pro-year-design.mdの18章)。デビューの日は、四段になった三段リーグの期で決まる。 -->
+          <p class="shogi-tournament__tip-line shoreikai__tip" data-shoreikai-debut>
+            <img class="shogi-tournament__tip-face" :src="charaUrl" alt="" draggable="false">
+            <span class="shogi-tournament__tip-text">{{ debutTip }}</span>
+          </p>
           <button type="button" class="shogi-tournament__start" data-shoreikai-ceremony @click="emit('ceremony')">免状を受け取る</button>
           <div class="shoreikai__next">
             <button type="button" class="shogi-tournament__sub" data-shoreikai-go="ryuo" @click="emit('go', 'ryuo')">竜王戦へ</button>
@@ -369,6 +374,7 @@ import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePi
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
 import { DEFAULT_SETTINGS, EXAM_RANKS, RANKS, RANK_RATINGS, SHOREIKAI_SCALES, describeShoreikai, shoreikaiScale } from "./core/shoreikai.mjs";
 import { HANANE_SHOREIKAI_LINES, entryTalk, eventStamp, examRankTalk, mentorLine, mentorMoment, pendingTip } from "./core/shoreikai-speech.mjs";
+import { DEBUT_SEASONS, seasonOfTerm } from "./core/pro-year-origin.mjs";
 import { HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { LEARNING_ASSIST_LIMITS } from "./core/learning-setup.mjs";
 import { BYOYOMI_CHOICES, byoyomiLabel, byoyomiSeconds } from "./core/byoyomi.mjs";
@@ -406,6 +412,8 @@ const props = defineProps({
   suspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** 対局から戻ってきた(判子と最終日の結果発表を出す)。 */
   fromGame: { type: Boolean, default: false },
+  /** 棋士の1年が進行中(四段の免状のあと、新しい1年を始めず大会の選択へ戻る。docs/pro-year-design.mdの18章)。 */
+  proYearBusy: { type: Boolean, default: false },
   backLabel: { type: String, default: "戻る" },
 });
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
@@ -721,6 +729,12 @@ const endSub = computed(() => {
   return `最高 ${RANKS[Math.max(0, Math.min(9, view.rank))]}`;
 });
 const endStamp = computed(() => ({ pro: "四段昇段", failed: "不合格", retired: "退会" } as Record<string, string>)[props.view?.phase ?? ""] ?? "");
+/** 四段の画面のやこび姫の一言。免状のあと棋士の1年へ。前期(9月)なら10月1日、後期(3月)なら4月1日のデビュー(18章)。 */
+const debutTip = computed(() => {
+  if (props.proYearBusy) return "免状を受け取ったら、大会の選択へ戻るよ。棋士の1年は、いまの年度の続きから遊べるよ";
+  const season = DEBUT_SEASONS[seasonOfTerm(props.view?.lastTerm?.term)];
+  return `免状を受け取ったら、棋士の1年へ。${season.term}の三段リーグで上がったから、${season.label}にデビューだよ！`;
+});
 const endHeadline = computed(() => {
   const view = props.view;
   if (!view) return "";

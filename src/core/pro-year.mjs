@@ -26,6 +26,7 @@ import {
   INTERVIEW_FANS, NEWS_WEIGHT, RECORD_KINDS, buildNews, fanLettersBetween, interviewFor, isStreakMark, isWinsMark, nextLetter, recordRanking, recordValueText, yearHeadlines,
 } from './pro-news.mjs';
 import { careerRoad, danFor, nextDanHint, ryuoGroupAfter } from './pro-career.mjs';
+import { originText } from './pro-year-origin.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -144,6 +145,10 @@ export const PRO_YEAR_TEXT = Object.freeze({
   lead: '新四段として、4月1日から1年を過ごすよ。カレンダーの対局日に、12の棋戦を指していこう。',
   goal: '予選を勝ち抜き、タイトル戦の舞台へ',
   hananeEntry: '私も今年から四段。同じ予選から始まるよ。上の舞台で会おう。',
+  // 奨励会から四段になってデビューする入口(18章)。羽音は奨励会で先に四段になっている。
+  entrySubShoreikai: (date) => `奨励会から、${date}にデビュー`,
+  leadShoreikai: '三段リーグを抜けた四段として、棋士の日々を過ごすよ。カレンダーの対局日に、12の棋戦を指していこう。',
+  hananeEntryShoreikai: '三段リーグ、抜けたんだね。先に上で待ってた。ここからは同じ四段だよ。',
   autoNote: '分身が、あなたの強さで指して、勝ち負けを決めるよ。早く進むけれど、この対局は自分では指せなくなるよ。レーティングには数えないよ。',
   game: '目の前の1局に集中しよう。いってらっしゃい！',
   bigGame: '勝てば次の舞台が見えてくる大一番だよ。落ち着いていこう！',
@@ -282,7 +287,8 @@ function stageEntrants(state, cycle, index, previous, rng) {
   const holder = event.kind === 'title' ? cycle.holder : null;
   const userIn = cycle.withUser && cycle.entry === index;
   // 羽音はプレイヤーと同じ日にデビューするので、デビュー前に始まった期には出ない。
-  const beforeDebut = stageWindow(cycle, event.stages[0]).start < state.debut;
+  // 奨励会から秋にデビューするときは、先に四段になった羽音はその年度の4月1日から出る(18章。rivalDebut)。
+  const beforeDebut = stageWindow(cycle, event.stages[0]).start < (state.rivalDebut ?? state.debut);
   const all = pros(state).filter((member) => member.id !== holder && !(beforeDebut && member.story === HANANE));
   if (def.young) {
     const young = all.filter((member) => member.age <= 26 && ['四段', '五段', '六段'].includes(member.dan));
@@ -1576,6 +1582,9 @@ export function yearSummary(state) {
   const ranking = earningsRanking(state);
   const money = { ...(state.year.mine ?? { fee: 0, prize: 0, gig: 0 }), earned: ranking.amount, rank: ranking.rank, size: ranking.size, top10: ranking.rank <= 10 };
   if (money.top10 && money.earned > 0) awards.push('獲得賞金ランキング10位以内');
+  // 年度の途中にデビューした半年の年度は、将棋大賞の記録部門の対象にしない(18章)。
+  const half = halfYear(state);
+  if (half) awards.length = 0;
   // 今年の目標の判子(達成・あと一歩・届かず)。
   const goals = state.goals?.ids?.length ? goalProgress({ ...state, yearDone: true }).map((goal) => ({ ...goal, stamp: goalStamp(goal) })) : [];
   const headlines = yearHeadlines((state.news ?? []).filter((item) => item.fy === state.fy));
@@ -1592,6 +1601,7 @@ export function yearSummary(state) {
   const startDan = state.user.danAtStart ?? dan;
   return {
     fy: state.fy, wins: mine.w, losses: mine.l, rate, best: mine.best, awards, titles, junni, rival, money, goals, headlines,
+    ...(half ? { half: true, debut: state.debut } : {}),
     dan: projected, danUp: projected !== startDan ? { from: startDan, to: projected } : null,
     cls: state.user.cls, clsText: `${CLASS_NAMES[state.user.cls] ?? ''}${junni?.promoted ? ' 昇級' : ''}`, group: ryuo?.group ?? state.user.group, groupUp: Boolean(ryuo?.promoted), champions,
   };
@@ -1638,9 +1648,14 @@ export function startNextYear(source) {
 
 /**
  * 棋士の1年を始める(新四段のデビュー)。
- * @param {{ seed: number, fiscalYear: number, roster: any, settings?: any, userLevel?: number, userName?: string, userGroup?: number, mentorName?: string }} options
+ * debutは年度の途中のデビューの日(奨励会の前期の三段リーグを抜けた秋のデビューは10月1日。なければ4月1日)、
+ * rivalDebutは羽音が棋戦に出始める日(なければdebut)、originは奨励会からの道(pro-year-origin.mjs。18章)。
+ * @param {{
+ *   seed: number, fiscalYear: number, roster: any, settings?: any, userLevel?: number, userName?: string, userGroup?: number, mentorName?: string,
+ *   debut?: string | null, rivalDebut?: string | null, origin?: any,
+ * }} options
  */
-export function createProYear({ seed, fiscalYear, roster, settings = {}, userLevel = 20, userName = '', userGroup = 6, mentorName = '' }) {
+export function createProYear({ seed, fiscalYear, roster, settings = {}, userLevel = 20, userName = '', userGroup = 6, mentorName = '', debut = null, rivalDebut = null, origin = null }) {
   const rng = createRng(seed);
   const players = {};
   for (const member of Object.values(roster?.players ?? {})) {
@@ -1672,7 +1687,9 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
     rng: 0,
     startFy: fiscalYear,
     fy: fiscalYear,
-    debut: yearStart(fiscalYear),
+    debut: debutIn(fiscalYear, debut),
+    rivalDebut: debutIn(fiscalYear, rivalDebut ?? debut),
+    origin: origin ?? null,
     // 準備のあいだは、前の年度の始めから(デビュー前の対局を日付の順に決める)。
     date: yearStart(fiscalYear - 1),
     userName,
@@ -1713,9 +1730,19 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
   state.interview = null;
   state.work = null;
   state.week = newWeek(state, state.debut);
+  // 年度の途中のデビュー(秋)は、1年目が半年。今年の目標は選ばず(順位戦も新人王戦もまだ)、次の年度の4月に選ぶ(18章)。
+  if (halfYear(state)) state.goals = { fy: fiscalYear, ids: [], target: {}, done: {}, half: true };
   state.rng = rng.state;
   return state;
 }
+
+/** デビューの日(年度の中の日だけ。なければ年度の4月1日)。 */
+function debutIn(fy, date) {
+  return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= yearStart(fy) && date <= yearEnd(fy) ? date : yearStart(fy);
+}
+
+/** いまの年度が、年度の途中にデビューした半年の年度か(18章)。 */
+export const halfYear = (state) => Boolean(state?.debut) && state.debut > yearStart(state.fy) && state.debut <= yearEnd(state.fy);
 
 // ---- 1週を選んで過ごす(13章)
 
@@ -2487,8 +2514,12 @@ export function goalChoices(state) {
   const shinjin = state.cycles[`shinjin-${state.fy}`];
   const list = [];
   const add = (id, extra = {}) => list.push({ id, ...GOAL_DEFS[id], ...extra });
-  add('junniPromote', { note: `${CLASS_NAMES[state.user.cls] ?? ''}で上位に入る` });
-  add('junniWinning');
+  // 順位戦は、この年度の順位戦に出ているときだけ(秋のデビューの半年は出ない。18章)。
+  const junni = state.cycles[`meijin-${state.fy}`];
+  if (!junni || junni.withUser) {
+    add('junniPromote', { note: `${CLASS_NAMES[state.user.cls] ?? ''}で上位に入る` });
+    add('junniWinning');
+  }
   if (shinjin?.withUser) {
     add('shinjinBest4');
     add('shinjinWin');
@@ -2499,7 +2530,8 @@ export function goalChoices(state) {
   add('rate');
   if (Object.values(state.players).some((member) => member.story === HANANE)) add('hanane');
   add('money');
-  const first = !(state.history ?? []).length;
+  // はじめての1年度(秋のデビューの半年の年度は数えない)。
+  const first = !(state.history ?? []).some((entry) => !entry?.half);
   const recommended = first ? ['junniPromote', shinjin?.withUser ? 'shinjinBest4' : 'junniWinning', 'wins'] : ['junniPromote', 'mainStage', 'wins'];
   return list.map((goal) => ({ ...goal, recommended: recommended.includes(goal.id) }));
 }
@@ -2745,11 +2777,18 @@ export function proYearView(state) {
     // 段位と棋士の歩み(15-3の5・7)。
     dan: state.players[PRO_USER_ID]?.dan ?? '四段',
     nextDan: nextDanHint({ dan: state.players[PRO_USER_ID]?.dan ?? '四段', group: state.user.group, cls: state.user.cls, sinceWins: state.user.sinceWins ?? 0 }),
-    road: careerRoad(state.history ?? [], state.yearDone ? null : {
-      fy: state.fy, wins: record.w, losses: record.l, dan: state.players[PRO_USER_ID]?.dan ?? '四段', clsText: CLASS_NAMES[state.user.cls] ?? '', group: state.user.group,
-      titles: TITLE_EVENTS.filter((id) => state.titles[id] === PRO_USER_ID).map((id) => proEvent(id).short), champions: [],
-      headlines: yearHeadlines((state.news ?? []).filter((item) => item.fy === state.fy)),
-    }),
+    road: {
+      ...careerRoad(state.history ?? [], state.yearDone ? null : {
+        fy: state.fy, wins: record.w, losses: record.l, dan: state.players[PRO_USER_ID]?.dan ?? '四段', clsText: CLASS_NAMES[state.user.cls] ?? '', group: state.user.group,
+        titles: TITLE_EVENTS.filter((id) => state.titles[id] === PRO_USER_ID).map((id) => proEvent(id).short), champions: [],
+        headlines: yearHeadlines((state.news ?? []).filter((item) => item.fy === state.fy)),
+        ...(halfYear(state) ? { half: true, debut: state.debut } : {}),
+      }),
+      // 奨励会からの道(18章)。歩みのいちばん古い行。
+      origin: state.origin ? originText(state.origin) : null,
+    },
+    // 年度の途中にデビューした半年の年度(18章)。
+    half: halfYear(state),
   };
 }
 

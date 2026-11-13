@@ -5,6 +5,7 @@
 
 import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
 import { HANANE } from './ryuo-story.mjs';
+import { originSceneVars } from './pro-year-origin.mjs';
 
 /** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
 const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
@@ -31,6 +32,28 @@ export const PRO_YEAR_SCENES = Object.freeze({
       line('hanane', 'smile', '上の舞台で会おう。君とは、そこで指したい。'),
       line('momoka', 'neutral', '二人とも、いってらっしゃい！ ずっと応援してるからね！'),
       line('narration', 'neutral', 'こうして{name}の、棋士としての1年が始まった。'),
+    ],
+  }),
+  // 奨励会から四段になってデビューする朝(18章)。羽音は奨励会で先に四段になっている。
+  // {date}はデビューの日、{kishi}は棋士番号の文、{mentor}は師匠、{peers}は奨励会の同期、{half}は秋のデビューの一言(なければ空)。
+  'pro-debut-shoreikai': Object.freeze({
+    id: 'pro-debut-shoreikai',
+    title: '四段の朝（奨励会から）',
+    summary: '三段リーグを抜けて迎えた、デビューの朝。将棋会館の前で、一足先に四段になっていた羽音が待っている。師匠と奨励会の同期からも便りが届く。',
+    background: 'hall',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '{date}。{name}は、将棋会館の前に立っていた。奨励会の例会に通った、いつもの入口だ。'),
+      line('narration', 'neutral', '三段リーグを抜けて、今日から四段。{kishi}'),
+      line('hanane', 'neutral', '来たね。今日は、例会の日じゃないよ。'),
+      line('hanane', 'gentle', '私は一足先に上がっただけ。ここからは同じ四段。勝ち数も負け数も、横に並ぶ。'),
+      line('narration', 'neutral', '{mentor}からは、朝いちばんに短い電話があった。「ここからが本当の勝負だ」'),
+      line('momoka', 'neutral', '{you}、四段おめでとう！ 奨励会、ほんとうにほんとうにおつかれさま！', { act: 'hop' }),
+      line('hanane', 'gentle', '百花、声が大きい。……でも、私からも。おめでとう。'),
+      line('narration', 'neutral', '奨励会の同期の{peers}からも、短い便りが届いていた。「次は、上で会おう」。'),
+      line('narration', 'neutral', '会館の掲示板には、棋戦の予定がびっしり並んでいる。どれも予選の一番下からだ。{half}'),
+      line('hanane', 'smile', '上の舞台で会おう。君とは、そこで指したい。'),
+      line('narration', 'neutral', 'こうして{name}の、棋士としての日々が始まった。'),
     ],
   }),
   'pro-hanane': Object.freeze({
@@ -129,19 +152,25 @@ export function proYearSealSceneId({ winsUser = 0, winsOpponent = 0, need = 0 } 
   return 'pro-seal-tie';
 }
 
-/** ストーリー選択から読み直すときに、そのときの対局がないので入れる言葉。 */
-const DEFAULT_VARS = Object.freeze({ title: 'タイトル', holder: 'タイトル保持者の', event: '棋戦', round: '本戦' });
+/**
+ * ストーリー選択から読み直すときに、そのときの対局がないので入れる言葉。
+ * 奨励会からのデビューの言葉(date・kishi・mentor・peers・half。18章)は、記録がなくても読める既定の言葉か空。
+ */
+const DEFAULT_VARS = Object.freeze({
+  title: 'タイトル', holder: 'タイトル保持者の', event: '棋戦', round: '本戦',
+  date: 'デビューの日', kishi: '', mentor: '師匠', peers: '仲間', half: '',
+});
 
 /**
  * 場面を画面に出す形にする(名前と、棋戦の言葉を差し込む)。
  * @param {string} id
- * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string } }} [options]
+ * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string } }} [options]
  */
 export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} } = {}) {
   const scene = PRO_YEAR_SCENES[/** @type {keyof typeof PRO_YEAR_SCENES} */ (id)];
   if (!scene) return null;
   const words = { ...DEFAULT_VARS, ...Object.fromEntries(Object.entries(vars).filter(([, value]) => value)) };
-  const fill = (text) => sceneText(text, playerName, momokaCall).replace(/\{(title|holder|event|round)\}/g, (_, key) => words[key]);
+  const fill = (text) => sceneText(text, playerName, momokaCall).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half)\}/g, (_, key) => words[key]);
   return {
     id: scene.id,
     title: scene.title,
@@ -176,7 +205,12 @@ export function markProYearScene(state, key) {
 export function proYearSceneDue(state) {
   if (!state) return null;
   const played = Object.values(state.games ?? {}).some((game) => game.user && game.winner);
-  if (!played && !state.pending && !(state.history?.length) && !seenProYearScene(state, 'pro-debut')) return { key: 'pro-debut', id: 'pro-debut', vars: {} };
+  // 奨励会から四段になってデビューしたときは、奨励会からの朝の場面(18章。見た印は同じ'pro-debut')。
+  if (!played && !state.pending && !(state.history?.length) && !seenProYearScene(state, 'pro-debut')) {
+    return state.origin?.kind === 'shoreikai'
+      ? { key: 'pro-debut', id: 'pro-debut-shoreikai', vars: originSceneVars(state.origin) }
+      : { key: 'pro-debut', id: 'pro-debut', vars: {} };
+  }
   const pending = state.pending;
   if (!pending || pending.kind === 'study' || pending.kind === 'shidou') return null;
   const opponent = state.players?.[pending.opponentId];

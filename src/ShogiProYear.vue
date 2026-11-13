@@ -14,12 +14,16 @@
         <span class="shogi-tournament__seal" aria-hidden="true">棋</span>
         <div class="shogi-tournament__topbar-title">
           <h1 id="shogi-tournament-title">棋士の1年</h1>
-          <p class="shogi-tournament__topbar-sub">{{ PRO_YEAR_TEXT.entrySub }}</p>
+          <p class="shogi-tournament__topbar-sub">{{ originShown ? PRO_YEAR_TEXT.entrySubShoreikai(originShown.debut) : PRO_YEAR_TEXT.entrySub }}</p>
         </div>
       </header>
       <div class="shogi-tournament__mapwrap pro-year__mapwrap">
         <div class="pro-year__intro" data-pro-intro>
-          <p class="pro-year__lead">{{ PRO_YEAR_TEXT.lead }}</p>
+          <p class="pro-year__lead">{{ originShown ? PRO_YEAR_TEXT.leadShoreikai : PRO_YEAR_TEXT.lead }}</p>
+          <!-- 奨励会から四段になったデビュー(18章)。棋士番号とデビューの日、秋のデビューは1年目が半年。 -->
+          <p v-if="originShown" class="pro-year__origin" data-pro-origin>
+            <b>{{ originShown.title }}</b><span>{{ originShown.chip }}</span><small>{{ originShown.note }}</small>
+          </p>
           <ul class="pro-year__chips" aria-label="1年の棋戦">
             <li v-for="event in PRO_EVENTS" :key="event.id" class="pro-year__chip" :style="{ '--event-color': event.color }">
               <span class="pro-year__chip-dot" aria-hidden="true"></span>
@@ -33,7 +37,7 @@
         <p class="shogi-tournament__goal-box"><small>目標</small><span>{{ PRO_YEAR_TEXT.goal }}</span></p>
         <p class="shogi-tournament__tip-line shoreikai__tip" data-pro-talk>
           <img class="shogi-tournament__tip-face pro-year__sprite" :src="hananeSprite" alt="" draggable="false">
-          <span class="shogi-tournament__tip-text">{{ PRO_YEAR_TEXT.hananeEntry }}</span>
+          <span class="shogi-tournament__tip-text">{{ originShown ? PRO_YEAR_TEXT.hananeEntryShoreikai : PRO_YEAR_TEXT.hananeEntry }}</span>
         </p>
         <div class="shogi-tournament__entry-settings">
           <p>
@@ -310,10 +314,16 @@
               <p v-if="view.nextDan" class="pro-year__road-next" data-pro-next-dan>次の昇段（{{ view.nextDan.dan }}）：{{ view.nextDan.text }}</p>
               <ol class="pro-year__road-rows">
                 <li v-for="row in [...view.road.rows].reverse()" :key="row.fy" :class="{ 'pro-year__road-row--now': row.now }">
-                  <b>{{ row.fy }}年度<small v-if="row.now">（いま）</small></b>
+                  <b>{{ row.fy }}年度<small v-if="row.since">（{{ row.since }}）</small><small v-if="row.now">（いま）</small></b>
                   <span>{{ row.dan }}・{{ row.wins }}勝{{ row.losses }}敗<template v-if="row.cls">・{{ row.cls }}</template><template v-if="row.group">・竜王戦 {{ row.group }}</template></span>
                   <span v-if="row.honors" class="pro-year__road-honor">{{ row.honors }}</span>
                   <small v-if="row.headline">{{ row.headline }}</small>
+                </li>
+                <!-- 奨励会からの道(18章)。いちばん古い行。 -->
+                <li v-if="view.road.origin" class="pro-year__road-row--origin" data-pro-road-origin>
+                  <b>{{ view.road.origin.title }}</b>
+                  <span>{{ view.road.origin.road }}</span>
+                  <small v-if="view.road.origin.detail">{{ view.road.origin.detail }}</small>
                 </li>
               </ol>
             </div>
@@ -408,6 +418,8 @@
           <p class="pro-year__summary-main">{{ view.summary.wins }}勝{{ view.summary.losses }}敗<small>勝率 {{ rateText(view.summary.rate) }}</small></p>
           <p v-if="view.summary.danUp" class="pro-year__summary-dan" data-pro-summary-dan><span class="pro-year__goal-seal" aria-hidden="true">昇</span>{{ view.summary.danUp.from }} → {{ view.summary.danUp.to }}</p>
           <p v-if="view.summary.closedEarly" class="pro-year__summary-line">公式戦を終えて、{{ shortDate(view.summary.closedEarly) }}に年度を締めた</p>
+          <!-- 秋にデビューした半年の年度(18章)。将棋大賞は次の年度から。 -->
+          <p v-if="view.summary.half" class="pro-year__summary-line" data-pro-summary-half>{{ shortDate(view.summary.debut) }}にデビューした半年の年度。次の年度は、順位戦と目標から始まるよ</p>
           <p v-if="view.summary.titles.length" class="pro-year__summary-title">{{ view.summary.titles.join("・") }} 獲得</p>
           <p v-if="view.summary.awards.length" class="pro-year__awards">
             <span v-for="award in view.summary.awards" :key="award" class="pro-year__award">{{ award }}</span>
@@ -900,8 +912,10 @@ import {
   yearEnd, yearStart,
 } from "./core/pro-year.mjs";
 import { CONDITION_LABELS, GOAL_PICK, WEIGHTS } from "./core/pro-week.mjs";
+import { originText, shoreikaiOrigin } from "./core/pro-year-origin.mjs";
 
-type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number };
+/** originは、奨励会から四段になってデビューするとき'shoreikai'(18章)。 */
+type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; origin?: string };
 type Card = { id: string; name: string; dan?: string; you?: boolean } | null | undefined;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Cell = { date: string; day: number; inMonth: boolean; today: boolean; past: boolean; items: any[] };
@@ -930,6 +944,9 @@ const props = defineProps({
   backLabel: { type: String, default: "戻る" },
   /** あなたの能力(やこびノートの「能力」と同じ解析の配分と特殊能力)。解析が足りなければnull(16-3の6)。 */
   myAbility: { type: Object as PropType<{ abilities: Record<string, number>; traits?: unknown[] } | null>, default: null },
+  /** 奨励会で四段になった記録(shoreikai.mjsのcareer.pro)。あれば入口で「奨励会から」デビューできる(18章)。 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  shoreikaiPro: { type: Object as PropType<any>, default: null },
 });
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
 /** 棋力スカウター(docs/power-scouter-design.md)。戻る操作で先に閉じる。 */
@@ -982,8 +999,26 @@ const difficultyChoices = computed(() => difficultyOptions({
   bottom: { label: "6組", rating: GROUP_MEAN_RATING[6] }, top: { label: "1組", rating: GROUP_MEAN_RATING[1] },
   recommended: props.recommendedDifficulty ?? props.defaultDifficulty,
 }));
-const settingsSummary = computed(() => [`難易度 ${difficultyName(difficulty.value)}`, `秒読み ${byoyomiLabel(byoyomi.value)}`].join("・"));
+// ---- 奨励会からのデビュー(18章)。奨励会で四段になった記録があれば、はじめは「奨励会から」を選んでおく。
+const origin = computed(() => shoreikaiOrigin(props.shoreikaiPro));
+const originInfo = computed(() => originText(origin.value));
+const debutWay = ref<"shoreikai" | "fresh">(origin.value ? "shoreikai" : "fresh");
+watch(origin, (next, previous) => {
+  if (next && !previous) debutWay.value = "shoreikai";
+  if (!next) debutWay.value = "fresh";
+});
+/** 入口に出す奨励会からの道(「新四段として」を選んだらnull)。 */
+const originShown = computed(() => (debutWay.value === "shoreikai" ? originInfo.value : null));
+const settingsSummary = computed(() => [
+  ...(originShown.value ? [`奨励会から（${originShown.value.debut}）`] : []),
+  `難易度 ${difficultyName(difficulty.value)}`, `秒読み ${byoyomiLabel(byoyomi.value)}`,
+].join("・"));
 const settingRows = computed(() => [
+  ...(originInfo.value ? [{
+    id: "debut", label: "デビュー",
+    value: originShown.value ? `奨励会から（${originShown.value.debut}）` : "新四段として（4月1日）",
+    note: originShown.value?.number ?? "",
+  }] : []),
   { id: "difficulty", label: "難易度", value: difficultyName(difficulty.value), note: difficultyChoices.value.find((option) => option.value === difficulty.value)?.description ?? "" },
   { id: "coach", label: "やこび姫の助言", value: COACH_OPTIONS.find((item) => item.value === coachLevel.value)?.label ?? "", note: "" },
   { id: "assist", label: "閃き・待った", value: `閃き${assistText(hintLimit.value)}・待った${assistText(undoLimit.value)}`, note: "" },
@@ -994,6 +1029,11 @@ const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: 
     { title, note, sections: [{ key, value, groups: [{ options }] }] }
   );
   switch (picker.value) {
+    case "debut":
+      return single("デビュー", "debut", debutWay.value, [
+        { value: "shoreikai", label: "奨励会から", description: `${originInfo.value?.chip ?? ""}。${originInfo.value?.note ?? ""}` },
+        { value: "fresh", label: "新四段として", description: "4月1日から。羽音と同じ日にデビューするよ。" },
+      ], "奨励会の三段リーグを抜けた記録で、デビューの日と物語が変わるよ。");
     case "difficulty":
       return single("難易度", "difficulty", difficulty.value, difficultyChoices.value, "数字が大きいほど、相手が強くなるよ。世界は竜王戦・名人戦と同じ。");
     case "coach":
@@ -1014,7 +1054,8 @@ const pickerConfig = computed<{ title: string; sections: PickerSection[]; note: 
   }
 });
 function onPick(key: string, value: PickerValue) {
-  if (key === "difficulty") difficulty.value = Number(value);
+  if (key === "debut") debutWay.value = value === "shoreikai" && origin.value ? "shoreikai" : "fresh";
+  else if (key === "difficulty") difficulty.value = Number(value);
   else if (key === "coach") coachLevel.value = String(value);
   else if (key === "hint") hintLimit.value = Number(value);
   else if (key === "undo") undoLimit.value = Number(value);
@@ -1023,7 +1064,12 @@ function onPick(key: string, value: PickerValue) {
 }
 function enter() {
   settingsOpen.value = false;
-  emit("enter", { settings: { difficulty: difficulty.value, coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value, byoyomi: byoyomi.value } });
+  emit("enter", {
+    settings: {
+      difficulty: difficulty.value, coachLevel: coachLevel.value, hintLimit: hintLimit.value, undoLimit: undoLimit.value, byoyomi: byoyomi.value,
+      ...(originShown.value ? { origin: "shoreikai" } : {}),
+    },
+  });
 }
 
 // ---- 1年
@@ -1511,6 +1557,14 @@ defineExpose({ goBack });
 .shogi-game .pro-year__mapwrap { display: grid; place-items: center; padding: 0.6rem; overflow-y: auto; }
 .shogi-game .pro-year__intro { display: grid; gap: 0.6rem; width: min(100%, 40rem); }
 .shogi-game .pro-year__lead { margin: 0; color: #fffcf4; font-weight: 800; text-align: center; }
+/* 奨励会からのデビュー(18章)。四段の免状と同じ金の縁。 */
+.shogi-game .pro-year__origin {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 0.2rem 0.6rem; margin: 0;
+  padding: 0.45rem 0.7rem; border: 1px solid rgba(231, 193, 90, 0.6); border-radius: 0.6rem; background: rgba(43, 70, 91, 0.55);
+  color: #fffcf4; font-size: 0.82rem; text-align: center;
+}
+.shogi-game .pro-year__origin b { color: #e7c15a; }
+.shogi-game .pro-year__origin small { flex-basis: 100%; color: #cfd8de; font-size: 0.74rem; }
 .shogi-game .pro-year__chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .pro-year__chip {
   display: flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.5rem; border-radius: 0.6rem;
@@ -1662,6 +1716,7 @@ defineExpose({ goBack });
 .shogi-game .pro-year__road-rows { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .pro-year__road-rows li { display: grid; gap: 0.1rem; padding: 0.35rem 0.5rem; border-radius: 0.5rem; background: rgba(43, 70, 91, 0.6); font-size: 0.76rem; }
 .shogi-game .pro-year__road-rows li.pro-year__road-row--now { background: rgba(241, 165, 76, 0.16); }
+.shogi-game .pro-year__road-rows li.pro-year__road-row--origin { border: 1px dashed rgba(231, 193, 90, 0.5); background: rgba(43, 70, 91, 0.35); }
 .shogi-game .pro-year__road-rows small { color: #cfd8de; font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; font-size: 0.72rem; }
 .shogi-game .pro-year__road-honor { color: #e7c15a; font-weight: 900; }
 .shogi-game .pro-year__summary-dan { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1rem; font-weight: 900; }

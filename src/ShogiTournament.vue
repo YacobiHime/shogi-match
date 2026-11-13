@@ -221,6 +221,7 @@
           :cut-busy="proYearCutBusy"
           :write-back="proYearWriteBack"
           :my-ability="teamMyProfile?.ready ? teamMyProfile.member?.character ?? null : null"
+          :shoreikai-pro="shoreikaiCareer?.pro ?? null"
           @enter="emit('pro-year-enter', $event)"
           @advance="emit('pro-year-advance')"
           @play="emit('pro-year-play')"
@@ -320,6 +321,7 @@
           :rating-text="ratingText"
           :suspended-moves="shoreikaiSuspendedMoves"
           :from-game="shoreikaiFromGame"
+          :pro-year-busy="Boolean(proYearState)"
           @enter="emit('shoreikai-enter', $event)"
           @play="emit('shoreikai-play')"
           @resume="emit('shoreikai-resume')"
@@ -2883,9 +2885,10 @@ function finishCeremony() {
   // 研修会の修了証は、受け取ったあとも頂点の画面に戻る(編入するか、終えるかを選ぶ)。団体戦も結果の画面に戻る。
   if (screen.value === "kenshukai" || screen.value === "team") return;
   if (screen.value === "shoreikai") {
-    // 四段の免状を受け取ったら、挑戦を終えて(経歴に残して)大会の選択へ。
+    // 四段の免状を受け取ったら、挑戦を終えて(経歴に残して)棋士の1年の入口へ(奨励会からデビューする。docs/pro-year-design.mdの18章)。
+    // 棋士の1年がもう始まっていれば、前と同じく大会の選択へ(進行中の1年は上書きしない)。
     emit("shoreikai-close");
-    screen.value = "select";
+    screen.value = props.proYearState ? "select" : "pro-year";
     return;
   }
   if (screen.value === "meijin") {

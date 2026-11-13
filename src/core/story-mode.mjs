@@ -108,6 +108,7 @@ export const STORY_EPISODES = Object.freeze([
   sub('pro-champion', '団体戦（プロ）', '早指し団体戦で優勝すると読めます。'),
   sub('pro-end', '団体戦（プロ）', '早指し団体戦を最後まで戦うと読めます。'),
   sub('pro-debut', '棋士の1年', '棋士の1年でデビューすると読めます。'),
+  sub('pro-debut-shoreikai', '棋士の1年', '奨励会で四段になって、棋士の1年でデビューすると読めます。'),
   sub('pro-hanane', '棋士の1年', '棋士の1年で、羽音と公式戦で当たると読めます。'),
   sub('pro-title-eve', '棋士の1年', '棋士の1年で、タイトル戦に出ると読めます。'),
   ...bondSubs(),
