@@ -36,6 +36,8 @@ export const BRAIN_GAMES = Object.freeze([
   { id: 'recall', room: 'memory', label: 'きのうの言葉', desc: '前の回に置いた言葉を思い出す', better: 'high', short: 1, full: 1 },
   { id: 'digits', room: 'memory', label: '数字', desc: '数字を絵にして覚える', better: 'high', short: 1, full: 1 },
   { id: 'board-memory', room: 'memory', shelf: 'shogi', label: '盤面の記憶', desc: '局面を覚えて、並べ直す', better: 'high', short: 3, full: 5 },
+  // 場所法の実用コース「モールス信号」(17章)。値は覚えた文字の数(場所から符号を打てた文字。26まで)。
+  { id: 'morse', room: 'memory', shelf: 'course', label: 'モールス信号', desc: '語呂と場所法で、A〜Zの符号を覚える', better: 'high', short: 1, full: 1 },
   // 数独(16章)。計算力の部屋の自由練習。コースと4つの札には出さない(棚はpuzzle)。記録は段ごとの解いた秒(小さいほど良い)。
   { id: 'sudoku', room: 'calc', shelf: 'puzzle', label: '数独', desc: '縦・横・枠に1つずつ。自動で作る問題', better: 'low', short: 1, full: 1 },
 ].map((game) => Object.freeze(game)));

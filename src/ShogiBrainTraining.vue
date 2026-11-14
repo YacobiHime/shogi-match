@@ -282,6 +282,22 @@
         @close="view = 'room'"
         @finish="finishPalace"
         @box="openBoxFromLesson"
+        @course="openCourse"
+        :course-tag="morseTag"
+      />
+    </section>
+
+    <!-- 場所法の実用コース(docs/brain-training-design.mdの17章) -->
+    <section v-else-if="view === 'course'" class="shogi-brain__stage" aria-label="実用コース" data-brain-course-view>
+      <BrainMorse
+        ref="courseView"
+        :key="`course-${runKey}`"
+        :memory="memory"
+        :courses="courses"
+        :day="today"
+        @save="saveCourses"
+        @finish="finishCourse"
+        @sound="playSound"
       />
     </section>
 
@@ -416,6 +432,8 @@ import BrainNBack from "./brain/BrainNBack.vue";
 import BrainSwitch from "./brain/BrainSwitch.vue";
 import BrainMemoryTest from "./brain/BrainMemoryTest.vue";
 import BrainSudoku from "./brain/BrainSudoku.vue";
+import BrainMorse, { type MorseFinish } from "./brain/BrainMorse.vue";
+import { loadCourseStore, morsePlan, saveCourseStore } from "./core/palace-morse.mjs";
 import BrainPalace from "./brain/BrainPalace.vue";
 import BrainPalaceBuilder from "./brain/BrainPalaceBuilder.vue";
 import BrainMemoryBox from "./brain/BrainMemoryBox.vue";
@@ -509,6 +527,7 @@ const EVIDENCE = [
   { title: "N問前の答え", text: "練習した課題と、よく似た課題は伸びます。頭全体が良くなるとは言えません。", source: "Soveriほか（2017年）" },
   { title: "場所法（記憶の宮殿）", text: "場所法は、順番どおりに思い出す力を大きく伸ばすという研究が多くあります（研究の質はまだ高くありません）。毎日練習した人は、4か月たっても覚えたことが長く残りやすかった。", source: "Ondřej（2025年）、Wagnerほか（2021年）" },
   { title: "自分の宮殿", text: "自分のよく知る場所で作るのがいちばん始めやすい。見本の宮殿でも、よく歩いて覚えれば同じように使えます。同じ宮殿にすぐ別のものを置くと混ざるので、日をあけるか、別の宮殿を使いましょう。", source: "Leggeほか（2012年）、De Beni・Cornoldi（1988年）" },
+  { title: "語呂と場所法（モールス信号）", text: "キーワード法（覚えたいものを、音の似た言葉の絵にしてつなぐ）は、外国語の単語を覚えるのに役立ったという研究があります。語呂は最初の手がかりです。モールス信号を実際に速く聞き取るには、音のリズムのまま聞く練習を重ねます。", source: "Atkinson・Raugh（1975年）" },
   { title: "思い出す・日をあける", text: "読み返すより思い出してみるほうが、同じ時間でも日をあけて練習するほうが、長く覚えていられます。", source: "Roediger・Karpicke（2006年）、Cepedaほか（2006年）" },
   { title: "将棋の棚（局面の記憶）", text: "強い人は、駒を1枚ずつではなく、囲いや形のまとまりで覚えています。", source: "Chase・Simon（1973年）" },
   { title: "直観の一手", text: "プロは次の一手を直観で思いつくときに、脳の尾状核が働きます。将棋を知らない人も、4か月練習すると素早く良い手を思いつく直観が育ちました。将棋の力を、将棋の中で練習します。", source: "理化学研究所（2011年）、電気通信大学・理化学研究所（2012年）" },
@@ -521,7 +540,7 @@ const storage = typeof localStorage === "undefined" ? null : localStorage;
 const record = ref(loadBrainRecord(storage));
 const memory = ref<MemoryStore>(loadMemoryStore(storage));
 const today = dayKey();
-const view = ref<"home" | "room" | "game" | "summary" | "evidence" | "builder" | "palace" | "records" | "shelf" | "box">("home");
+const view = ref<"home" | "room" | "game" | "summary" | "evidence" | "builder" | "palace" | "records" | "shelf" | "box" | "course">("home");
 const cueEditing = ref(false);
 const RECORD_TABS = [
   { id: "stamps", label: "判子" },
@@ -575,6 +594,7 @@ const headerTitle = computed(() => {
     case "records": return `${roomLabel(room.value)}の記録`;
     case "shelf": return "将棋の棚";
     case "box": return "思い出しの箱";
+    case "course": return "実用コース";
     case "summary": return "今日の成績";
     case "evidence": return "脳トレの根拠";
     default: return BRAIN_TITLE;
@@ -870,6 +890,7 @@ function valueText(recordId: string, value: number | undefined) {
     case "recall": return `前の回の言葉${value}個`;
     case "digits": return `数字${value}けた`;
     case "memory-test": return `15個中${value}個`;
+    case "morse": return `覚えた文字 ${value}/26`;
     default: return String(value);
   }
 }
@@ -1151,6 +1172,46 @@ function boxNext() {
   if (then) then();
   else view.value = "room";
 }
+// ===== 場所法の実用コース(17章) =====
+const courses = ref(loadCourseStore(storage));
+const courseView = ref<InstanceType<typeof BrainMorse> | null>(null);
+/** 学校の実用コースの札の一言。 */
+const morseTag = computed(() => {
+  const progress = courses.value.morse;
+  const plan = morsePlan(progress, today);
+  if (plan.kind === "session") return plan.number === 1 ? "" : `回${plan.number}へ`;
+  if (plan.kind === "review" && plan.due) return "おさらいの日";
+  return `覚えた文字 ${progress.known.length}/26`;
+});
+function openCourse() {
+  room.value = "memory";
+  runKey.value += 1;
+  view.value = "course";
+}
+function saveCourses(store: ReturnType<typeof loadCourseStore>) {
+  courses.value = store;
+  saveCourseStore(storage, store);
+}
+/** 回とおさらいを終えたら、記憶力の判子を押し、覚えた文字の数を記録して成績表を出す。 */
+function finishCourse(result: MorseFinish) {
+  stampedBefore = stamped(record.value, today, "memory");
+  bestInRun = false;
+  results.value = [];
+  summaryCompare.value = [];
+  singleGame.value = null;
+  runPlan = null;
+  runMemoryMeasure = null;
+  runTitle.value = `記憶力 ${result.title}`;
+  record.value = stampRoom(record.value, "memory", today);
+  const { record: next, newBest } = recordBrainSession(record.value, "morse", { value: result.known, level: 0 }, today);
+  record.value = next;
+  if (newBest) bestInRun = true;
+  const growth = growthSince(record.value, "morse", today);
+  results.value = [{ label: "モールス信号", text: result.text, correct: 0, total: 0, newBest, grew: Boolean(growth?.grew), measure: false, recordId: "morse", value: result.known, previous: growth?.previous ?? null, sub: result.sub }];
+  save();
+  showSummary();
+}
+
 /** 講9の「思い出しの箱に入れる」。講を終えた印は学校の画面が残す。 */
 function openBoxFromLesson() {
   stampBox();
@@ -1209,7 +1270,7 @@ const compareRows = computed(() => {
 const recordLines = computed(() => {
   const ids = room.value === "calc"
     ? [speedRecordId(), "nback", "glance-sym", "switch", sudokuRecordKey(), "glance", "mental"]
-    : ["palace", "recall", "digits", "memory-test", "board-memory"];
+    : ["palace", "recall", "digits", "memory-test", "morse", "board-memory"];
   return ids.map((id) => {
     const series = dailySeries(record.value, id).slice(-20);
     const label = id.startsWith("speed-") ? `スピード計算（段${id.slice(6)}）` : id.startsWith("sudoku-") ? `数独（${sudokuLevel(Number(id.slice(7)))?.label ?? ""}）` : gameLabel(id);
@@ -1231,6 +1292,13 @@ function goBack() {
   if (view.value === "palace" && palaceView.value?.goBack()) return;
   if (view.value === "builder" && builderView.value?.goBack()) return;
   if (view.value === "box" && boxView.value?.goBack()) return;
+  if (view.value === "course" && courseView.value?.goBack()) return;
+  if (view.value === "course") {
+    // 学校から来たら学校へ。今日の稽古の講(講9)から来たら、講を始めからやり直さないよう部屋へ。
+    runKey.value += 1;
+    view.value = palaceMode.value === "school" ? "palace" : "room";
+    return;
+  }
   if (view.value === "box") {
     afterBox = null;
     view.value = "room";

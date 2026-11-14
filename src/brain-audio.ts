@@ -3,14 +3,20 @@
 
 import { loadSoundEnabled } from "./core/move-sound";
 import { brainSoundPlan } from "./core/brain-sound.mjs";
+import { MORSE_UNIT_MS, morseTimeline } from "./core/palace-morse.mjs";
 
 export type BrainSoundKind = "tick" | "place" | "ready" | "go" | "correct" | "miss" | "finish" | "stamp" | "best" | "lantern";
 type Tone = { wave: "sine" | "triangle" | "noise"; freq: number; to?: number; at: number; ms: number; gain: number };
 
 export type BrainAudio = {
   play: (kind: BrainSoundKind, step?: number) => void;
+  /** モールス信号の符号を鳴らす(docs/brain-training-design.mdの17-4)。鳴らす長さ(ミリ秒)を返す(音を消していても返す)。 */
+  morse: (code: string, unitMs?: number) => number;
   close: () => void;
 };
+/** モールス信号の音の高さと大きさ。やわらかいピー(正弦波)。 */
+const MORSE_FREQ = 700;
+const MORSE_GAIN = 0.16;
 
 function soundOn() {
   try {
@@ -93,6 +99,37 @@ export function createBrainAudio(): BrainAudio {
     }
   };
 
+  /** 符号の1つの音。立ち上がりと終わりを5msでならして、プツッという音を消す。 */
+  const beep = (ctx: AudioContext, atMs: number, ms: number) => {
+    const start = ctx.currentTime + 0.03 + atMs / 1000;
+    const end = start + ms / 1000;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(MORSE_GAIN, start + 0.005);
+    gain.gain.setValueAtTime(MORSE_GAIN, Math.max(start + 0.005, end - 0.005));
+    gain.gain.linearRampToValueAtTime(0, end);
+    gain.connect(ctx.destination);
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(MORSE_FREQ, start);
+    osc.connect(gain);
+    osc.start(start);
+    osc.stop(end + 0.01);
+  };
+
+  const morse = (code: string, unitMs = MORSE_UNIT_MS) => {
+    const timeline = morseTimeline(code, unitMs);
+    const ctx = ready();
+    if (ctx) {
+      try {
+        for (const mark of timeline.marks) beep(ctx, mark.at, mark.ms);
+      } catch {
+        // 鳴らせなくても遊びは止めない。
+      }
+    }
+    return timeline.total;
+  };
+
   /** 閉じる。最後の音を切らないよう、少し待ってから閉じる。 */
   const close = () => {
     const ctx = context;
@@ -100,7 +137,7 @@ export function createBrainAudio(): BrainAudio {
     if (ctx) setTimeout(() => void ctx.close().catch(() => undefined), 400);
   };
 
-  return { play, close };
+  return { play, morse, close };
 }
 
 let shared: BrainAudio | null = null;

@@ -26,6 +26,19 @@
           </button>
         </li>
       </ol>
+      <!-- 実用コース(docs/brain-training-design.mdの17章)。講4のあとに開く。本当に役立つものを最後まで覚えきる。 -->
+      <p class="brain-section-title brain-palace__course-head"><span>実用コース</span></p>
+      <button
+        type="button"
+        class="shogi-brain__card brain-palace__course"
+        :disabled="!courseOpen"
+        data-palace-course="morse"
+        @click="emit('course', 'morse')"
+      >
+        <strong><span aria-hidden="true">📡</span> モールス信号（A〜Z）</strong>
+        <small>{{ courseOpen ? "語呂と場所法で26文字の符号を覚え、SOSとSHOGIを読む" : "講4「10個と逆順」のあとに開くよ" }}</small>
+        <span class="shogi-brain__card-tag">{{ courseOpen ? courseTag : "🔒" }}</span>
+      </button>
     </template>
 
     <!-- 覚える: 場所を1つずつたどる。場所と覚えるものを大きく出し、からむ絵のヒントは隠すのが基本(自分で作る。困ったら出す。14-11)。 -->
@@ -268,6 +281,8 @@ const props = defineProps({
   /** school(学校の入口から)・lesson(今日のトレーニングから講を1つ)・practice(毎日の練習)。 */
   mode: { type: String as PropType<"school" | "lesson" | "practice">, default: "school" },
   lessonId: { type: String, default: "" },
+  /** 実用コースの札の右上の一言(「回2へ」「覚えた文字 9/26」など)。 */
+  courseTag: { type: String, default: "" },
 });
 const emit = defineEmits<{
   (event: "save", patch: Partial<Store>): void;
@@ -276,6 +291,7 @@ const emit = defineEmits<{
   (event: "close"): void;
   (event: "sound", kind: "correct" | "miss" | "place"): void;
   (event: "box"): void;
+  (event: "course", id: "morse"): void;
 }>();
 
 const USES = [
@@ -284,7 +300,10 @@ const USES = [
   { id: "names", emoji: "👋", title: "人の名前", desc: "名前の音を絵にして、顔と結びつける" },
   { id: "shogi", emoji: "☗", title: "将棋に使う", desc: "四間飛車と美濃囲いの8手と、格言" },
   { id: "box", emoji: "🗃️", title: "思い出しの箱に入れる", desc: "長く覚えたいものを宝物用の宮殿に置き、間をあけて思い出す" },
+  { id: "morse", emoji: "📡", title: "モールス信号を覚える", desc: "語呂と場所法で、A〜Zの符号を覚えきる（実用コース）" },
 ] as const;
+/** 実用コースが開く講(17-4。9文字ずつ置くので、10個を置けるようになってから)。 */
+const COURSE_OPENS_AFTER = "ten";
 
 const seedBase = Math.floor(Math.random() * 1e9);
 const phase = ref<"school" | "study" | "recall" | "choice" | "tips" | "think" | "digits-setup" | "digits-recall" | "use-menu" | "board" | "info" | "result">("school");
@@ -337,6 +356,7 @@ let total = { correct: 0, total: 0 };
 let pending: FinishResult | null = null;
 
 const palaces = computed(() => practicePalaces(props.store) as Palace[]);
+const courseOpen = computed(() => props.store.lessons.includes(COURSE_OPENS_AFTER));
 const activePalace = computed(() => (findPalace(props.store, activeId.value) ?? palaces.value[0] ?? null) as Palace | null);
 const formationPieces = computed(() => openingFormation("shiken", "mino").pieces.map(({ square, kind }) => ({ square, kind, color: "black" })));
 const schoolMessage = computed(() => {
@@ -652,9 +672,15 @@ function startLesson(id: string) {
   }
 }
 
-function startUse(kind: "shopping" | "todo" | "names" | "shogi" | "box") {
+function startUse(kind: "shopping" | "todo" | "names" | "shogi" | "box" | "morse") {
   const palace = activePalace.value;
   if (!palace) return;
+  // 実用コースは道場の画面で開く(講9はここで終えた印をつける。17-4)。
+  if (kind === "morse") {
+    completeLesson("use");
+    emit("course", "morse");
+    return;
+  }
   // 思い出しの箱は道場の画面で開く(講9はここで終えた印をつける。14-11)。
   if (kind === "box") {
     completeLesson("use");
@@ -833,6 +859,9 @@ defineExpose({ goBack });
   font-size: 0.9rem;
 }
 .shogi-game button.brain-palace__using { cursor: pointer; }
+/* 実用コースの札(17章)。講の一覧の下に、横いっぱいの1枚。 */
+.shogi-game .brain-palace__course-head { width: 100%; margin: 0.3rem 0 0; }
+.shogi-game .brain-palace__course { width: 100%; }
 .shogi-game .brain-palace__lessons {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
