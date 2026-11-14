@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ホームをスマホで1画面に（モックアップ）</title>
+<!--
+  docs/home-roadmap-design.mdの5章のモックアップ。スマホのブラウザの見える大きさ(375×553・390×664)の枠に、
+  今のホームと案を並べる。絵は今のホームのドット絵の代わりに記号で置いている(並びと高さを見るためのもの)。
+-->
+<style>
+  :root {
+    --navy: #1d303f; --panel: #34546b; --tile: rgba(43, 70, 91, 0.92); --deep: #172632;
+    --amber: #f1a54c; --amber-shadow: #a8652a; --ivory: #fffcf4; --line: rgba(255, 252, 244, 0.3);
+    --play: #f1a54c; --learn: #7fd3a3; --dex: #c8b8ff; --ok: #6fd68a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #0e1820; color: var(--ivory); font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", sans-serif; }
+  h1 { margin: 0 0 6px; font-size: 20px; }
+  .lead { margin: 0 0 20px; color: #cfd8de; font-size: 13px; line-height: 1.6; max-width: 70em; }
+  .row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+  figure { margin: 0; }
+  figcaption { margin-top: 8px; color: #cfd8de; font-size: 12px; line-height: 1.5; max-width: 390px; }
+  figcaption b { color: var(--ivory); }
+
+  /* スマホの枠(見える部分だけ)。中身が溢れたら、赤い帯で溢れた分を見せる。 */
+  .phone { position: relative; overflow: hidden; border: 2px solid #4b6577; border-radius: 14px; background: var(--navy); }
+  .phone--se { width: 375px; height: 553px; --base: 12px; }
+  .phone--14 { width: 390px; height: 664px; --base: 13px; }
+  .phone::after { content: attr(data-size); position: absolute; right: 6px; bottom: 4px; color: rgba(255,255,255,.35); font-size: 10px; }
+  .overflow { position: absolute; left: 0; right: 0; bottom: 0; height: 26px; background: repeating-linear-gradient(135deg, rgba(231,104,92,.85) 0 8px, rgba(231,104,92,.55) 8px 16px); color: #fff; font-size: 11px; font-weight: 900; display: grid; place-items: center; }
+
+  .home { display: flex; flex-direction: column; justify-content: center; gap: calc(var(--base) * .7); height: 100%; padding: calc(var(--base) * .9) 16px; font-size: var(--base); }
+  .home--overflow { justify-content: flex-start; height: auto; }
+
+  .hero { display: grid; grid-template-columns: auto auto; grid-template-areas: "chara logo" "chara bubble"; justify-content: center; align-items: center; column-gap: .6em; row-gap: .3em; }
+  .chara { grid-area: chara; width: 3.8em; height: 5.8em; border-radius: .4em; background: linear-gradient(#3b5a70, #2b465b); display: grid; place-items: center; font-size: 1em; }
+  .logo { grid-area: logo; margin: 0; font-family: "Courier New", monospace; font-size: 2.3em; font-weight: 700; letter-spacing: .02em; text-shadow: .08em .08em 0 var(--deep); white-space: nowrap; }
+  .bubble { grid-area: bubble; justify-self: start; margin: 0; padding: .35em .9em; border-radius: 999px; color: var(--deep); background: var(--ivory); font-size: .85em; font-weight: 700; white-space: nowrap; }
+
+  .menu { display: grid; gap: .65em; }
+  .next-wrap { position: relative; }
+  .next { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "icon eyebrow" "icon label" "icon desc" "go go"; column-gap: .9em; row-gap: .15em; align-items: center; padding: .9em 1em 1em; border: .18em solid var(--amber); border-radius: 1em; background: var(--panel); box-shadow: 0 .35em 0 var(--amber-shadow); }
+  .next-icon { grid-area: icon; width: 4em; height: 4em; border-radius: .6em; background: var(--deep); display: grid; place-items: center; font-size: 1.3em; }
+  .eyebrow { grid-area: eyebrow; display: flex; gap: .5em; align-items: center; color: var(--amber); font-size: .8em; font-weight: 900; letter-spacing: .15em; }
+  .road { display: inline-flex; gap: .2em; letter-spacing: 0; }
+  .road i { display: grid; place-items: center; width: 1.3em; height: 1.3em; border: .12em solid var(--ivory); border-radius: 50%; font-style: normal; font-size: .85em; color: var(--ivory); }
+  .road i.on { background: var(--ivory); color: var(--deep); }
+  .label { grid-area: label; font-size: 1.55em; font-weight: 900; }
+  .desc { grid-area: desc; color: #dfe7ec; font-size: .78em; line-height: 1.4; }
+  .go { grid-area: go; margin-top: .55em; padding: .55em 0; border-radius: 999px; background: var(--amber); color: var(--deep); font-size: 1.15em; font-weight: 900; letter-spacing: .08em; text-align: center; }
+  /* 案: 2つ目の入口があるとき、「はじめる」を縮めて右に入口を重ねて置く(札とは別のボタン)。 */
+  .next-wrap--sub .go { margin-right: 9.2em; }
+  .next-sub-in { position: absolute; right: 1em; bottom: .75em; min-height: 44px; display: grid; place-items: center; padding: 0 .3em; color: var(--ivory); font-size: .85em; font-weight: 700; text-decoration: underline; text-underline-offset: .2em; outline: 1px dashed rgba(241,165,76,.0); }
+  .mark-new { outline: 2px dashed #ff8b7b; outline-offset: 2px; }
+
+  .next-sub { justify-self: end; min-height: 44px; display: grid; place-items: center; margin-block: -.45em; padding: 0 .8em; font-size: .85em; font-weight: 700; text-decoration: underline; }
+
+  .record-row { display: flex; gap: .5em; }
+  .name { display: flex; align-items: center; gap: .3em; min-height: 44px; padding: 0 .8em; border: 2px solid var(--amber); border-radius: .6em; font-weight: 800; white-space: nowrap; }
+  .record { flex: 1; display: flex; align-items: center; gap: .5em; min-width: 0; min-height: 44px; padding: 0 1em; border: .12em solid var(--line); border-radius: 999px; background: rgba(23,38,50,.85); font-weight: 700; white-space: nowrap; }
+  .record b { color: var(--amber); font-size: 1.2em; }
+  .record .note { margin-left: auto; font-size: .8em; }
+  .sync { position: relative; flex: none; display: flex; align-items: center; gap: .3em; min-height: 44px; padding: 0 .85em; border: 2px solid var(--ivory); border-radius: 999px; font-weight: 800; white-space: nowrap; }
+  .sync .dot { position: absolute; top: -.25em; right: -.15em; width: .8em; height: .8em; border: 2px solid var(--navy); border-radius: 50%; background: var(--ok); }
+  .sync .alert { position: absolute; top: -.45em; right: -.35em; display: grid; place-items: center; width: 1.35em; height: 1.35em; border: 2px solid var(--navy); border-radius: 50%; background: var(--amber); color: var(--deep); font-size: .8em; font-weight: 900; }
+  .sync--choose { border-color: var(--amber); color: #ffd9a3; }
+  .toast-wrap { position: relative; }
+  .toast { position: absolute; left: 50%; top: calc(100% + .3em); pointer-events: none; transform: translateX(-50%); z-index: 2; padding: .35em .9em; border-radius: .6em; background: rgba(23,38,50,.96); border: 1px solid var(--line); font-size: .85em; font-weight: 700; white-space: nowrap; box-shadow: 0 .3em .8em rgba(0,0,0,.4); }
+
+  .group { display: grid; gap: .35em; }
+  .gtitle { display: flex; align-items: center; gap: .45em; font-size: .82em; font-weight: 900; letter-spacing: .2em; color: var(--c); }
+  .gtitle::before { content: ""; width: .55em; height: .55em; border-radius: .15em; background: var(--c); }
+  .tiles { display: grid; gap: .5em; }
+  .tiles--4 { grid-template-columns: repeat(4, 1fr); }
+  .tiles--3 { grid-template-columns: repeat(3, 1fr); }
+  .tiles--dex { grid-template-columns: 1.7fr 1fr; }
+  .tile { position: relative; display: grid; justify-items: center; align-content: center; gap: .2em; min-height: 4.4em; padding: .5em .3em; border: .12em solid var(--line); border-radius: .8em; background: var(--tile); box-shadow: 0 .25em 0 rgba(23,38,50,.85); font-weight: 800; font-size: 1em; text-align: center; }
+  .tile--dex { grid-auto-flow: column; justify-content: space-between; padding: 0 .9em; }
+  .tile .ico { font-size: 1.4em; line-height: 1; }
+  .tile--rec { border-color: var(--amber); }
+  .badge { position: absolute; top: -.7em; left: 50%; transform: translateX(-50%); padding: .05em .6em; border-radius: 999px; background: var(--amber); color: var(--deep); font-size: .7em; font-weight: 900; white-space: nowrap; }
+  .tools { display: flex; gap: .5em; }
+  .pill { display: grid; place-items: center; min-height: 44px; padding: 0 1em; border: 2px solid var(--ivory); border-radius: 999px; font-weight: 800; }
+
+  /* 引き継ぎのシートのいちばん下(案) */
+  .sheet { width: 375px; padding: 16px; border-radius: 14px; background: #172632; border: 2px solid #4b6577; font-size: 13px; }
+  .sheet h3 { margin: 0 0 8px; font-size: 15px; }
+  .sheet .grp { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+  .sheet .grp p { margin: 0 0 6px; color: #cfd8de; font-size: 12px; }
+  .sheet .btn { display: inline-grid; place-items: center; min-height: 44px; padding: 0 1em; border: 2px solid var(--ivory); border-radius: 999px; font-weight: 800; margin-right: 6px; }
+  .sheet .danger { border-color: #e7685c; color: #ffb3a8; }
+</style>
+</head>
+<body>
+  <h1>ホームをスマホのブラウザで1画面に（モックアップ）</h1>
+  <p class="lead">
+    docs/home-roadmap-design.mdの5章。スマホのブラウザで見える大きさ（住所の帯とツールバーを除く）の枠に、今と案を並べる。
+    案は「並びを変える」だけで、文字の大きさ・タイルの高さ（44px以上）・やこび姫の吹き出しは変えない。点線の枠が、案で動かしたもの。
+  </p>
+
+  <div class="row">
+    <!-- 今 -->
+    <figure>
+      <div class="phone phone--se" data-size="375×553（今）">
+        <div class="home home--overflow">
+          <div class="hero"><div class="chara">姫</div><h2 class="logo">shogi-match</h2><p class="bubble">駒の動き、覚えたね！ CPUと指してみよう</p></div>
+          <div class="menu">
+            <div class="next"><span class="eyebrow">つぎはこれ <span class="road"><i class="on">✓</i><i>2</i><i>3</i><i>4</i><i>5</i></span></span><span class="next-icon">▦</span><span class="label">はじめての対局</span><span class="desc">Lv.1 24級程度の相手と、振り駒ですぐ始める。困ったら、やこび姫が助言するよ</span><span class="go">▶ はじめる</span></div>
+            <span class="next-sub">すぐ使えるコツ（1枚1分）</span>
+            <div class="record-row"><span class="name">✎ やこび</span><span class="record">▥ <b>R30</b> 24級 <span class="note">ノート ›</span></span></div>
+            <div class="group" style="--c: var(--play)"><span class="gtitle">あそぶ</span><div class="tiles tiles--4"><span class="tile tile--rec"><span class="badge">おすすめ</span><span class="ico">▦</span>自由対局</span><span class="tile"><span class="ico">🏆</span>大会</span><span class="tile"><span class="ico">♜</span>終盤戦</span><span class="tile"><span class="ico">📖</span>物語</span></div></div>
+            <div class="group" style="--c: var(--learn)"><span class="gtitle">まなぶ</span><div class="tiles tiles--3"><span class="tile"><span class="ico">🎓</span>将棋教室</span><span class="tile"><span class="ico">？</span>問題集</span><span class="tile"><span class="ico">🧠</span>脳トレ</span></div></div>
+            <div class="group" style="--c: var(--dex)"><span class="gtitle">しらべる</span><div class="tiles tiles--dex"><span class="tile tile--dex"><span>飛 ▤ ▥ 🏆 ▦</span><span>図鑑 ›</span></span><span class="tile tile--dex"><span>研究</span><span>›</span></span></div></div>
+          </div>
+          <div class="tools"><span class="pill">引き継ぎ</span><span class="pill">データリセット</span></div>
+        </div>
+        <div class="overflow">ここから下は画面の外（スクロールしないと見えない）</div>
+      </div>
+      <figcaption><b>今（375×553・iPhone SEのSafari）</b>：しらべるの途中から下と、引き継ぎ・データリセットが画面の外。コツの入口と引き継ぎの行が、それぞれ1行ずつ使っている。</figcaption>
+    </figure>
+
+    <!-- 案 -->
+    <figure>
+      <div class="phone phone--se" data-size="375×553（案）">
+        <div class="home">
+          <div class="hero"><div class="chara">姫</div><h2 class="logo">shogi-match</h2><p class="bubble">駒の動き、覚えたね！ CPUと指してみよう</p></div>
+          <div class="menu">
+            <div class="next-wrap next-wrap--sub">
+              <div class="next"><span class="eyebrow">つぎはこれ <span class="road"><i class="on">✓</i><i>2</i><i>3</i><i>4</i><i>5</i></span></span><span class="next-icon">▦</span><span class="label">はじめての対局</span><span class="desc">Lv.1 24級程度の相手と、振り駒ですぐ始める。困ったら、やこび姫が助言するよ</span><span class="go">▶ はじめる</span></div>
+              <span class="next-sub-in mark-new">コツ（1枚1分）</span>
+            </div>
+            <div class="record-row"><span class="name">✎ やこび</span><span class="record">▥ <b>R30</b> 24級 <span class="note">ノート ›</span></span><span class="sync mark-new">☁ 引き継ぎ</span></div>
+            <div class="group" style="--c: var(--play)"><span class="gtitle">あそぶ</span><div class="tiles tiles--4"><span class="tile tile--rec"><span class="badge">おすすめ</span><span class="ico">▦</span>自由対局</span><span class="tile"><span class="ico">🏆</span>大会</span><span class="tile"><span class="ico">♜</span>終盤戦</span><span class="tile"><span class="ico">📖</span>物語</span></div></div>
+            <div class="group" style="--c: var(--learn)"><span class="gtitle">まなぶ</span><div class="tiles tiles--3"><span class="tile"><span class="ico">🎓</span>将棋教室</span><span class="tile"><span class="ico">？</span>問題集</span><span class="tile"><span class="ico">🧠</span>脳トレ</span></div></div>
+            <div class="group" style="--c: var(--dex)"><span class="gtitle">しらべる</span><div class="tiles tiles--dex"><span class="tile tile--dex"><span>飛 ▤ ▥ 🏆 ▦</span><span>図鑑 ›</span></span><span class="tile tile--dex"><span>研究</span><span>›</span></span></div></div>
+          </div>
+        </div>
+      </div>
+      <figcaption><b>案（375×553）</b>：コツの入口を、つぎはこれの札の「はじめる」の右へ（札とは別のボタン）。引き継ぎを記録の帯の右へ。データリセットは引き継ぎのシートの中へ。2行ぶん（約90px）浮いて、全部が1画面に入る。</figcaption>
+    </figure>
+  </div>
+
+  <h1 style="margin-top: 32px; font-size: 16px;">案の状態違い（390×664・iPhone 14のSafari）</h1>
+  <div class="row">
+    <figure>
+      <div class="phone phone--14" data-size="390×664">
+        <div class="home">
+          <div class="hero"><div class="chara">姫</div><h2 class="logo">shogi-match</h2><p class="bubble">竜王戦、5組の決勝だよ！</p></div>
+          <div class="menu">
+            <div class="next-wrap next-wrap--sub">
+              <div class="next"><span class="eyebrow">つぎはこれ <span class="road"><i class="on">✓</i><i class="on">✓</i><i class="on">✓</i><i class="on">✓</i><i>5</i></span></span><span class="next-icon">🏆</span><span class="label">竜王戦のつづき</span><span class="desc">5組 決勝 対 天鷺羽音 四段。勝てば決勝トーナメント</span><span class="go">▶ はじめる</span></div>
+              <span class="next-sub-in mark-new">羽音対策</span>
+            </div>
+            <div class="record-row"><span class="name">✎ やこび</span><span class="record">▥ <b>R1650</b> 三段 <span class="note">ノート ›</span></span><span class="sync">☁ 引き継ぎ<span class="dot"></span></span></div>
+            <div class="group" style="--c: var(--play)"><span class="gtitle">あそぶ</span><div class="tiles tiles--4"><span class="tile"><span class="ico">▦</span>自由対局</span><span class="tile tile--rec"><span class="badge">おすすめ</span><span class="ico">🏆</span>大会</span><span class="tile"><span class="ico">♜</span>終盤戦</span><span class="tile"><span class="ico">📖</span>物語</span></div></div>
+            <div class="group" style="--c: var(--learn)"><span class="gtitle">まなぶ</span><div class="tiles tiles--3"><span class="tile"><span class="ico">🎓</span>将棋教室</span><span class="tile"><span class="ico">？</span>問題集</span><span class="tile"><span class="ico">🧠</span>脳トレ</span></div></div>
+            <div class="group" style="--c: var(--dex)"><span class="gtitle">しらべる</span><div class="tiles tiles--dex"><span class="tile tile--dex"><span>飛 ▤ ▥ 🏆 ▦</span><span>図鑑 ›</span></span><span class="tile tile--dex"><span>研究</span><span>›</span></span></div></div>
+          </div>
+        </div>
+      </div>
+      <figcaption><b>竜王戦の期の途中</b>：2つ目の入口（対策か続き）も同じ場所。引き継ぎの右上の緑の点は「同期済み」。</figcaption>
+    </figure>
+
+    <figure>
+      <div class="phone phone--14" data-size="390×664">
+        <div class="home">
+          <div class="hero"><div class="chara">姫</div><h2 class="logo">shogi-match</h2><p class="bubble">おかえり！ 続きから指そう</p></div>
+          <div class="menu">
+            <div class="next-wrap"><div class="next"><span class="eyebrow">つぎはこれ <span class="road"><i class="on">✓</i><i class="on">✓</i><i>3</i><i>4</i><i>5</i></span></span><span class="next-icon">▶</span><span class="label">対局を再開</span><span class="desc">中断した対局（Lv.12 8級・42手目）の続きから</span><span class="go">▶ はじめる</span></div></div>
+            <div class="record-row toast-wrap"><span class="toast mark-new">ほかの端末の記録と違います。どちらを使うか選んでね</span><span class="name">✎ やこび</span><span class="record">▥ <b>R820</b> 6級 <span class="note">ノート ›</span></span><span class="sync sync--choose">☁ 引き継ぎ<span class="alert">!</span></span></div>
+            <div class="group" style="--c: var(--play)"><span class="gtitle">あそぶ</span><div class="tiles tiles--4"><span class="tile"><span class="ico">▦</span>自由対局</span><span class="tile"><span class="ico">🏆</span>大会</span><span class="tile"><span class="ico">♜</span>終盤戦</span><span class="tile"><span class="ico">📖</span>物語</span></div></div>
+            <div class="group" style="--c: var(--learn)"><span class="gtitle">まなぶ</span><div class="tiles tiles--3"><span class="tile"><span class="ico">🎓</span>将棋教室</span><span class="tile tile--rec"><span class="badge">おすすめ</span><span class="ico">？</span>問題集</span><span class="tile"><span class="ico">🧠</span>脳トレ</span></div></div>
+            <div class="group" style="--c: var(--dex)"><span class="gtitle">しらべる</span><div class="tiles tiles--dex"><span class="tile tile--dex"><span>飛 ▤ ▥ 🏆 ▦</span><span>図鑑 ›</span></span><span class="tile tile--dex"><span>研究</span><span>›</span></span></div></div>
+          </div>
+        </div>
+      </div>
+      <figcaption><b>同期の「どちらを使う」と一言</b>：引き継ぎに琥珀の「!」。同期の一言は行を増やさず、記録の帯のすぐ下に数秒重ねて出す（帯の上だと「はじめる」の下の端にかかる。札は押せず、下のタイルはそのまま押せる）。2つ目の入口がないときは「はじめる」が横いっぱい。</figcaption>
+    </figure>
+
+    <figure>
+      <div class="sheet">
+        <h3>引き継ぎ・同期（シートのいちばん下）</h3>
+        <div class="grp"><p>Googleアカウントで同期</p><span class="btn">☁ 同期する</span></div>
+        <div class="grp"><p>別の端末へ記録を運ぶ</p><span class="btn">コードを作る</span><span class="btn">コードで受け取る</span></div>
+        <div class="grp mark-new"><p>この端末の記録を消す（大会・最近の対局・教室…を選んで消す）</p><span class="btn danger">データリセット…</span></div>
+      </div>
+      <figcaption><b>データリセットの行き先</b>：引き継ぎのシートのいちばん下の行。押すと、今のデータリセットの選ぶ窓（8つの種類）を開く。<code>exhibit</code>の属性で出す・出さないは今のまま。</figcaption>
+    </figure>
+  </div>
+</body>
+</html>
