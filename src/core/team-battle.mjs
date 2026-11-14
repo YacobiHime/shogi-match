@@ -195,7 +195,7 @@ function hananeMember(roster, format) {
   base.story = HANANE;
   if (format === 'school') {
     base.rating = SCHOOL_HANANE_RATING;
-    base.dan = '2年';
+    base.dan = '2年・研修会員';
   }
   return base;
 }
