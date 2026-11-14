@@ -31,6 +31,7 @@ import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
   titleCoachLine, titleKind, titleResultText,
 } from './pro-title.mjs';
+import { isStreakSceneMark, queueProYearScene } from './pro-year-story.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -804,10 +805,16 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
       noteMilestone(state, { event: event.id, kind: 'advance', title: 'eternal', text: `${name}の資格を得た` });
       noteEvent(state, { kind: 'eternal', name });
       pushResult(state, { type: 'eternal', event: event.id, name, short: event.short, total: after.total, streak: after.streak, rule: eternalRuleText(event.id) });
+      // 永世称号の夜(20-3の4)。届いた番勝負では、連覇の夜は出さない。
+      queueProYearScene(state, { key: `pro-eternal:${event.id}`, id: 'pro-eternal', vars: { title: event.short, eternal: name } });
+    } else if (kind === 'defend' && isStreakSceneMark(after.streak)) {
+      queueProYearScene(state, { key: `pro-defense-streak:${event.id}:${after.streak}`, id: 'pro-defense-streak', vars: { title: event.short, streak: String(after.streak) } });
     }
   } else if (kind === 'lost') {
     noteEvent(state, { kind: 'lostTitle', short: event.short, winner: opponent });
     seedFormerHolder(state, cycle, event);
+    // 失冠の夜(20-3の4)。棋戦と年度ごとに1回。
+    queueProYearScene(state, { key: `pro-title-lost:${event.id}:${state.fy}`, id: 'pro-title-lost', vars: { title: event.short, challenger: opponent } });
   }
 }
 
@@ -879,6 +886,8 @@ function noteCrowns(state) {
   noteMilestone(state, { event: '', kind: 'advance', title: 'crowns', text: `${crownsLabel(holding.length)}（${holding.map((id) => proEvent(id)?.short ?? id).join('・')}）` });
   noteEvent(state, { kind: 'crowns', count: holding.length, text });
   pushResult(state, { type: 'crowns', count: holding.length, text, label: crownsLabel(holding.length), titles: holding.map((id) => proEvent(id)?.short ?? id) });
+  // 全冠制覇の夜(20-3の4)。
+  if (holding.length >= TITLE_EVENTS.length) queueProYearScene(state, { key: 'pro-all-crowns', id: 'pro-all-crowns', vars: {} });
 }
 
 // ---- 結果の札(19-3の7)
@@ -1213,6 +1222,11 @@ function setPending(state, game, rng) {
     kind: def.title ? 'finals' : 'game',
     // 保持者として指す防衛戦(19-3の9)。
     defense: Boolean(def.title && stage.series?.a === PRO_USER_ID),
+    // 防衛戦の連覇と永世称号までの残り(前夜の場面を選ぶ。20-3の2)。
+    titleStakes: def.title && stage.series?.a === PRO_USER_ID ? (() => {
+      const record = state.user.titleRecord?.[event.id] ?? legacyTitleRecord(state, event.id);
+      return { streak: record.streak, eternal: eternalProgress(event.id, record) };
+    })() : null,
     gameId: game.id,
     // 持ち時間の決まり(time-control.mjsのPRO_EVENT_RULES)を引く、棋戦と段階のid。
     eventId: game.event,
@@ -3009,6 +3023,8 @@ export function proYearView(state) {
     titleRecords: titleRecordsView(state),
     // 見ていない結果の札(19-3の7)。
     results: state.results ?? [],
+    // 見ていない節目の夜(20-3の4)。
+    sceneQueue: state.sceneQueue ?? [],
     resultsDropped: state.resultsDropped ?? 0,
     rival: hanane ? { id: hanane.id, name: hanane.name, wins: hananeRecord.w, losses: hananeRecord.l, vs: vsHanane } : null,
     lastGame: lastGameView(state),

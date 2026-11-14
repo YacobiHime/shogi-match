@@ -5360,6 +5360,8 @@ const sealBreakScene = computed(() => {
     winsUser: marks.filter((mark: string) => mark === "win").length,
     winsOpponent: marks.filter((mark: string) => mark === "loss").length,
     need: stage.need ?? 0,
+    // 保持者として指す防衛戦は、受けて立つ側の夜(docs/pro-year-design.mdの20-3の3)。
+    defense: Boolean(stage.sides?.some((side: { you: boolean; role: string }) => side.you && side.role !== "挑戦者")),
   });
   const title = stage.sides?.find((side: { you: boolean; role: string }) => !side.you && side.role !== "挑戦者")?.role
     ?? stage.sides?.find((side: { you: boolean; role: string }) => side.you)?.role ?? "";

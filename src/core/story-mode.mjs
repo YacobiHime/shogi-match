@@ -111,6 +111,13 @@ export const STORY_EPISODES = Object.freeze([
   sub('pro-debut-shoreikai', '棋士の1年', '奨励会で四段になって、棋士の1年でデビューすると読めます。'),
   sub('pro-hanane', '棋士の1年', '棋士の1年で、羽音と公式戦で当たると読めます。'),
   sub('pro-title-eve', '棋士の1年', '棋士の1年で、タイトル戦に出ると読めます。'),
+  // 防衛戦の夜(docs/pro-year-design.mdの20章)。
+  sub('pro-defense-eve', '棋士の1年', '棋士の1年で、タイトルの防衛戦に出ると読めます。'),
+  sub('pro-defense-eternal', '棋士の1年', '棋士の1年で、永世称号がかかる防衛戦に出ると読めます。'),
+  sub('pro-defense-streak', '棋士の1年', '棋士の1年で、タイトルを3連覇すると読めます。'),
+  sub('pro-eternal', '棋士の1年', '棋士の1年で、永世称号の資格を得ると読めます。'),
+  sub('pro-all-crowns', '棋士の1年', '棋士の1年で、八つのタイトルをすべて持つと読めます。'),
+  sub('pro-title-lost', '棋士の1年', '棋士の1年で、タイトルを失うと読めます。'),
   ...bondSubs(),
 ]);
 

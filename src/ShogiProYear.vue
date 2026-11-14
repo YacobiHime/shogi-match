@@ -916,7 +916,7 @@ import { KAISETSU_FANS } from "./core/pro-work.mjs";
 import { INTERVIEW_FANS } from "./core/pro-news.mjs";
 import ProFestival from "./ProFestival.vue";
 import NovelScene from "./NovelScene.vue";
-import { proYearScene, proYearSceneDue } from "./core/pro-year-story.mjs";
+import { proYearScene, proYearSceneDue, queuedProYearScene } from "./core/pro-year-story.mjs";
 import { bondSceneDue } from "./core/pro-bonds.mjs";
 import { libraryScene } from "./core/novel-library.mjs";
 import { MEASURE_PICKER_ACTION } from "./core/skill-estimate.mjs";
@@ -1537,9 +1537,14 @@ watch(() => props.state, (state) => {
   if (due?.key === "pro-debut") openScene(due, null);
   // 結果の札があれば、先に札を見せる(見終えると状態が変わり、ここへまた来る。19-3の7)。
   else if (!state.results?.length && !state.pending && !state.yearDone && !state.festival && !state.work && state.goals?.fy === state.fy) {
-    // 絆の段が上がったら、次に今週の画面を開いたときに場面(15-3の4)。
-    const bond = bondSceneDue(state);
-    if (bond) openBondScene(bond);
+    // 番勝負のあとの節目の夜(連覇・永世称号・全冠制覇・失冠。20-3の4)を、絆の場面より先に。
+    const queued = queuedProYearScene(state);
+    if (queued) openScene(queued, null);
+    else {
+      // 絆の段が上がったら、次に今週の画面を開いたときに場面(15-3の4)。
+      const bond = bondSceneDue(state);
+      if (bond) openBondScene(bond);
+    }
   }
   // 「次から毎年残す」を選んでいれば、年度のまとめで自動で残す(15-3の8)。
   if (state.yearDone && state.summary && !state.summary.writeBack && props.writeBack && state.settings?.writeBack === "always") {

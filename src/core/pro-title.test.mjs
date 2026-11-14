@@ -276,3 +276,75 @@ describe('結果の札の並び(pro-year-results.mjs)', () => {
     expect(pages[2].facts.map((fact) => fact.value)).toEqual(['R2400', '30勝8敗', '2勝1敗']);
   });
 });
+
+describe('防衛戦の夜(docs/pro-year-design.mdの20章)', async () => {
+  const { proYearSceneDue, proYearSealSceneId, proYearScene, queuedProYearScene, markProYearScene, isStreakSceneMark } = await import('./pro-year-story.mjs');
+  const { storyEpisode } = await import('./story-mode.mjs');
+
+  /** 年度の中で、保持者として指す番勝負の第1局で止まった状態を探す。 */
+  function firstDefenseGame(state) {
+    let current = state;
+    for (let step = 0; step < 400; step += 1) {
+      current = advanceToNextGame(current);
+      if (current.yearDone) return null;
+      const pending = current.pending;
+      if (pending.kind === 'finals' && pending.defense && !(pending.series?.games?.length)) return current;
+      current = clearProYearResults(recordProGame(current, 'win').state);
+    }
+    return null;
+  }
+  const year1 = playYear(start());
+
+  it('防衛戦の第1局は「防衛戦の前夜」で、挑戦者の名前が挑戦者の欄に入る(逆さまの文にしない)', () => {
+    const state = firstDefenseGame(startNextYear(year1.state));
+    expect(state).toBeTruthy();
+    const due = proYearSceneDue(state);
+    expect(due.id).toBe('pro-defense-eve');
+    const challenger = state.players[state.pending.opponentId].name;
+    expect(due.vars.challenger).toBe(challenger);
+    const scene = proYearScene(due.id, { playerName: 'やこび', vars: due.vars });
+    const text = scene.lines.map((entry) => entry.text).join('\n');
+    expect(text).toContain(`${challenger}が挑戦者としてやこびに挑んでくる`);
+    expect(text).not.toMatch(/に挑む。/);
+    // 一度見たら、同じタイトルの防衛戦では出さない。
+    expect(proYearSceneDue(markProYearScene(state, due.key))).toBeNull();
+  });
+
+  it('防衛すれば永世称号に届く番勝負は「記録の前夜」', () => {
+    const state = firstDefenseGame(startNextYear(year1.state));
+    const pending = { ...state.pending, titleStakes: { streak: 4, eternal: { name: '永世棋王', reached: false, left: 1, text: '' } } };
+    const due = proYearSceneDue({ ...state, pending });
+    expect(due).toMatchObject({ id: 'pro-defense-eternal', vars: { eternal: '永世棋王' } });
+  });
+
+  it('封じ手の夜は、防衛戦なら守る側の3本', () => {
+    expect(proYearSealSceneId({ winsUser: 2, winsOpponent: 1, need: 4, defense: true })).toBe('pro-seal-defense-lead');
+    expect(proYearSealSceneId({ winsUser: 1, winsOpponent: 1, need: 4, defense: true })).toBe('pro-seal-defense-tie');
+    expect(proYearSealSceneId({ winsUser: 1, winsOpponent: 3, need: 4, defense: true })).toBe('pro-seal-defense-kado');
+    expect(proYearSealSceneId({ winsUser: 1, winsOpponent: 3, need: 4 })).toBe('pro-seal-kado');
+  });
+
+  it('3連覇で連覇の夜を積み、見たら消える。失冠したら失冠の夜', () => {
+    expect([2, 3, 4, 5, 10, 11].map(isStreakSceneMark)).toEqual([false, true, false, true, true, false]);
+    const year2 = playYear(startNextYear(year1.state));
+    const year3 = playYear(startNextYear(year2.state));
+    const queued = queuedProYearScene(year3.state);
+    expect(queued?.id).toBe('pro-defense-streak');
+    expect(queued.vars.streak).toBe('3');
+    const text = proYearScene(queued.id, { playerName: 'やこび', vars: queued.vars }).lines.map((entry) => entry.text).join('\n');
+    expect(text).toContain('3連覇');
+    let seen = year3.state;
+    while (queuedProYearScene(seen)) seen = markProYearScene(seen, queuedProYearScene(seen).key);
+    expect(queuedProYearScene(seen)).toBeNull();
+    const lostYear = playYear(startNextYear(year1.state), (state) => (state.pending.defense ? 'loss' : 'win'));
+    expect(lostYear.state.sceneQueue.some((item) => item.id === 'pro-title-lost' && item.vars.challenger)).toBe(true);
+  });
+
+  it('物語のサブで読み直せる(差し込みがなくても読める文)', () => {
+    for (const id of ['pro-defense-eve', 'pro-defense-eternal', 'pro-defense-streak', 'pro-eternal', 'pro-all-crowns', 'pro-title-lost']) {
+      expect(storyEpisode(`pro:${id}`)?.scene, id).toBe(id);
+      const text = proYearScene(id, { playerName: 'やこび' }).lines.map((entry) => entry.text).join('');
+      expect(text, id).not.toMatch(/\{[a-z]+\}/);
+    }
+  });
+});

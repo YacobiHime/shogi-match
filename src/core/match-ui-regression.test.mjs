@@ -1417,3 +1417,11 @@ describe('棋士の1年の結果の札と防衛(docs/pro-year-design.mdの19章)
     expect(results).not.toMatch(/@click\.self/);
   });
 });
+
+describe('防衛戦の夜(docs/pro-year-design.mdの20章)', () => {
+  const year = readFileSync(new URL('../ShogiProYear.vue', import.meta.url), 'utf8');
+  it('封じ手の夜は防衛戦を見分け、節目の夜は結果の札のあと・絆の場面より先に出す', () => {
+    expect(source).toMatch(/defense: Boolean\(stage\.sides\?\.some\(\(side: \{ you: boolean; role: string \}\) => side\.you && side\.role !== "挑戦者"\)\)/);
+    expect(year).toMatch(/const queued = queuedProYearScene\(state\);\s*if \(queued\) openScene\(queued, null\);\s*else \{/);
+  });
+});
