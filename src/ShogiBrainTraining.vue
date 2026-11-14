@@ -433,6 +433,7 @@ import BrainSwitch from "./brain/BrainSwitch.vue";
 import BrainMemoryTest from "./brain/BrainMemoryTest.vue";
 import BrainSudoku from "./brain/BrainSudoku.vue";
 import BrainMorse, { type MorseFinish } from "./brain/BrainMorse.vue";
+import type { TalkFinish } from "./brain/BrainMorseTalk.vue";
 import { loadCourseStore, morsePlan, saveCourseStore } from "./core/palace-morse.mjs";
 import BrainPalace from "./brain/BrainPalace.vue";
 import BrainPalaceBuilder from "./brain/BrainPalaceBuilder.vue";
@@ -891,6 +892,7 @@ function valueText(recordId: string, value: number | undefined) {
     case "digits": return `数字${value}けた`;
     case "memory-test": return `15個中${value}個`;
     case "morse": return `覚えた文字 ${value}/26`;
+    case "morse-talk": return `耳だけ ${value}%`;
     default: return String(value);
   }
 }
@@ -1193,7 +1195,7 @@ function saveCourses(store: ReturnType<typeof loadCourseStore>) {
   saveCourseStore(storage, store);
 }
 /** 回とおさらいを終えたら、記憶力の判子を押し、覚えた文字の数を記録して成績表を出す。 */
-function finishCourse(result: MorseFinish) {
+function finishCourse(result: MorseFinish | TalkFinish) {
   stampedBefore = stamped(record.value, today, "memory");
   bestInRun = false;
   results.value = [];
@@ -1203,11 +1205,17 @@ function finishCourse(result: MorseFinish) {
   runMemoryMeasure = null;
   runTitle.value = `記憶力 ${result.title}`;
   record.value = stampRoom(record.value, "memory", today);
-  const { record: next, newBest } = recordBrainSession(record.value, "morse", { value: result.known, level: 0 }, today);
+  // 無線で話す(18章)は「耳だけで読めた割合」、コースは覚えた文字の数を記録する。
+  const talked = result.kind === "talk";
+  const recordId = talked ? "morse-talk" : "morse";
+  const value = talked ? result.percent : result.known;
+  const { record: next, newBest } = recordBrainSession(record.value, recordId, { value, level: 0 }, today);
   record.value = next;
   if (newBest) bestInRun = true;
-  const growth = growthSince(record.value, "morse", today);
-  results.value = [{ label: "モールス信号", text: result.text, correct: 0, total: 0, newBest, grew: Boolean(growth?.grew), measure: false, recordId: "morse", value: result.known, previous: growth?.previous ?? null, sub: result.sub }];
+  const growth = growthSince(record.value, recordId, today);
+  const text = talked ? `耳だけ ${result.ears}/${result.total}` : result.text;
+  const sub = talked ? `送った文字 ${result.sent}` : result.sub;
+  results.value = [{ label: talked ? "無線で話す" : "モールス信号", text, correct: 0, total: 0, newBest, grew: Boolean(growth?.grew), measure: false, recordId, value, previous: growth?.previous ?? null, sub }];
   save();
   showSummary();
 }
@@ -1270,7 +1278,7 @@ const compareRows = computed(() => {
 const recordLines = computed(() => {
   const ids = room.value === "calc"
     ? [speedRecordId(), "nback", "glance-sym", "switch", sudokuRecordKey(), "glance", "mental"]
-    : ["palace", "recall", "digits", "memory-test", "morse", "board-memory"];
+    : ["palace", "recall", "digits", "memory-test", "morse", "morse-talk", "board-memory"];
   return ids.map((id) => {
     const series = dailySeries(record.value, id).slice(-20);
     const label = id.startsWith("speed-") ? `スピード計算（段${id.slice(6)}）` : id.startsWith("sudoku-") ? `数独（${sudokuLevel(Number(id.slice(7)))?.label ?? ""}）` : gameLabel(id);

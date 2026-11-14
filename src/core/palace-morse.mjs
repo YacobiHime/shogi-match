@@ -187,8 +187,51 @@ export function emptyMorseProgress() {
   };
 }
 
+/** 「無線で話す」の設定の値(18-4・18-6)。 */
+export const TALK_SPEED_VALUES = Object.freeze(['slow', 'normal', 'fast']);
+export const TALK_KEY_MODES = Object.freeze(['key', 'buttons']);
+export const TALK_CAPTIONS = Object.freeze(['after', 'live']);
+
+/** 「無線で話す」の進み具合(18-7)。 */
+export function emptyTalkProgress() {
+  return {
+    /** 終えた交信のid。 */
+    done: [],
+    /** 交信ごとのいちばん良い「耳だけで読めた」数({ ears, total })。 */
+    ears: {},
+    /** 送った文字の合計。 */
+    sent: 0,
+    /** 速さ・打ち方・字幕。 */
+    speed: 'slow',
+    keyMode: 'key',
+    caption: 'after',
+  };
+}
+
 export function emptyCourseStore() {
-  return { version: 1, morse: emptyMorseProgress() };
+  return { version: 1, morse: emptyMorseProgress(), talk: emptyTalkProgress() };
+}
+
+const TALK_ID = /^[a-z0-9-]{1,30}$/;
+
+/** 「無線で話す」の保存の値を整える(前の保存にtalkがなければ、はじめの値)。 */
+function cleanTalkProgress(source) {
+  const talk = emptyTalkProgress();
+  if (!isPlainObject(source)) return talk;
+  talk.done = Array.isArray(source.done) ? [...new Set(source.done.filter((id) => typeof id === 'string' && TALK_ID.test(id)))] : [];
+  if (isPlainObject(source.ears)) {
+    for (const [id, value] of Object.entries(source.ears)) {
+      if (!TALK_ID.test(id) || !isPlainObject(value)) continue;
+      const total = Number.isInteger(value.total) ? Math.max(0, Math.min(50, value.total)) : 0;
+      const ears = Number.isInteger(value.ears) ? Math.max(0, Math.min(total, value.ears)) : 0;
+      if (total) talk.ears[id] = { ears, total };
+    }
+  }
+  talk.sent = Number.isInteger(source.sent) ? Math.max(0, Math.min(1e7, source.sent)) : 0;
+  talk.speed = TALK_SPEED_VALUES.includes(source.speed) ? source.speed : 'slow';
+  talk.keyMode = TALK_KEY_MODES.includes(source.keyMode) ? source.keyMode : 'key';
+  talk.caption = TALK_CAPTIONS.includes(source.caption) ? source.caption : 'after';
+  return talk;
 }
 
 function isPlainObject(value) {
@@ -210,6 +253,7 @@ export function cleanCourseStore(value) {
   else if (morse.stage < 0) morse.stage = 0;
   morse.next = typeof source.next === 'string' && DAY.test(source.next) ? source.next : '';
   morse.last = typeof source.last === 'string' && DAY.test(source.last) ? source.last : '';
+  store.talk = cleanTalkProgress(value.talk);
   return store;
 }
 

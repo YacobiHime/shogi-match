@@ -3,7 +3,7 @@
     場所法の実用コース「モールス信号」(docs/brain-training-design.mdの17章)。
     語呂(頭文字がその文字で、拍ごとに言うと符号のリズムになる言葉)を宮殿のA=1か所目…に置き、場所から符号を打つ・音で当てる・言葉を読む。
   -->
-  <section class="brain-game brain-morse" aria-label="モールス信号" data-brain-morse>
+  <section class="brain-game brain-morse" :class="{ 'brain-morse--talk': phase === 'talk' }" aria-label="モールス信号" data-brain-morse>
     <!-- コースの札 -->
     <template v-if="phase === 'home'">
       <div class="brain-morse__card" data-morse-home>
@@ -33,6 +33,10 @@
           <span>置く宮殿：{{ palace.name }}</span>
         </p>
         <p v-if="homeNote" class="brain-morse__note">{{ homeNote }}</p>
+        <button type="button" class="brain-morse__talk" :disabled="!talkOpen" data-morse-talk @click="openTalk">
+          <span aria-hidden="true">📻</span>
+          <span class="brain-morse__talk-body"><strong>無線で話す</strong><small>{{ talkOpen ? "覚えた符号を打って、やこび姫と話そう" : "回3を終えると開く" }}</small></span>
+        </button>
       </div>
       <div class="brain-game__actions">
         <button v-if="plan.kind === 'session'" type="button" class="brain-game__primary" data-morse-start @click="startSession(plan.number)">回{{ plan.number }}をはじめる（{{ plan.letters[0] }}〜{{ plan.letters[plan.letters.length - 1] }}）</button>
@@ -183,6 +187,9 @@
       </div>
     </template>
 
+    <!-- 無線で話す(18章) -->
+    <BrainMorseTalk v-else-if="phase === 'talk'" ref="talkView" :courses="courses" @save="(talk) => emit('save', { ...courses, talk })" @finish="(result) => emit('finish', result)" />
+
     <!-- 符号の表(置いた文字だけ。まだの文字は「？」。D:5-1 存在だけ見せる) -->
     <template v-else-if="phase === 'table'">
       <p class="brain-game__prompt">覚えた文字は、ここでいつでも見返せるよ。</p>
@@ -233,12 +240,15 @@ import {
   placedLetters,
 } from "../core/palace-morse.mjs";
 import { REVIEW_DAYS } from "../core/memory-box.mjs";
+import { talkRoomOpen } from "../core/morse-talk.mjs";
 import { brainAudio } from "../brain-audio";
+import BrainMorseTalk, { type TalkFinish } from "./BrainMorseTalk.vue";
 
 type Locus = { name: string; emoji: string; group?: string };
 type Palace = { id: string; name: string; loci: readonly Locus[] };
 type Progress = { palace: string; done: number; known: string[]; stage: number; next: string; last: string };
-type CourseStore = { version: number; morse: Progress };
+type TalkProgress = { done: string[]; ears: Record<string, { ears: number; total: number }>; sent: number; speed: string; keyMode: string; caption: string };
+type CourseStore = { version: number; morse: Progress; talk: TalkProgress };
 type Scene = ReturnType<typeof morseScenes>[number];
 type Question = { letter: string; code: string; options: string[] };
 type Answer = { letter: string; ok: boolean };
@@ -253,7 +263,7 @@ const props = defineProps({
 });
 const emit = defineEmits<{
   (event: "save", store: CourseStore): void;
-  (event: "finish", result: MorseFinish): void;
+  (event: "finish", result: MorseFinish | TalkFinish): void;
   (event: "sound", kind: "correct" | "miss" | "place" | "finish"): void;
 }>();
 
@@ -262,7 +272,14 @@ const RULE_WORD = morseWord("C")!;
 const OK_NEXT_MS = 1100;
 
 const seedBase = Math.floor(Math.random() * 1e9);
-const phase = ref<"home" | "rule" | "study" | "code" | "listen" | "read" | "result" | "table">("home");
+const phase = ref<"home" | "rule" | "study" | "code" | "listen" | "read" | "result" | "table" | "talk">("home");
+const talkView = ref<InstanceType<typeof BrainMorseTalk> | null>(null);
+const talkOpen = computed(() => talkRoomOpen(props.courses.morse));
+function openTalk() {
+  if (!talkOpen.value) return;
+  brainAudio().play("tick");
+  phase.value = "talk";
+}
 const progress = computed(() => props.courses.morse);
 const palace = computed(() => morsePalace(props.memory, progress.value.palace) as Palace);
 const plan = computed(() => morsePlan(progress.value, props.day));
@@ -635,6 +652,7 @@ onBeforeUnmount(() => {
 /** 見出しの戻る。途中ならコースの札へ(回は始めからやり直し)、札なら道場に任せる。 */
 function goBack() {
   if (phase.value === "home") return false;
+  if (phase.value === "talk" && talkView.value?.goBack()) return true;
   clearTimers();
   phase.value = "home";
   return true;
@@ -841,6 +859,28 @@ defineExpose({ goBack });
 .shogi-game .brain-morse__reveal { margin: 0; color: var(--dojo-good); font-size: 1.05rem; font-weight: 900; text-align: center; }
 .shogi-game .brain-morse__reveal strong { display: block; font-size: 2.2rem; letter-spacing: 0.12em; }
 
+/* 無線で話す(18章)の入口と、会話のあいだの枠(画面の高さいっぱい。吹き出しの列は枠の中だけ動く。U:7-5) */
+.shogi-game .brain-morse__talk {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 52px;
+  padding: 0.45rem 0.8rem;
+  border: 2px solid var(--dojo-ai-light);
+  border-radius: 12px;
+  color: var(--dojo-ink);
+  background: var(--dojo-ai-soft);
+  box-shadow: none;
+  font: inherit;
+  text-align: left;
+}
+.shogi-game .brain-morse__talk > span:first-child { font-size: 1.5rem; }
+.shogi-game .brain-morse__talk-body { display: grid; gap: 0.05rem; }
+.shogi-game .brain-morse__talk-body strong { color: var(--dojo-ai); font-size: 0.98rem; }
+.shogi-game .brain-morse__talk-body small { color: var(--dojo-ink-2); font-size: 0.76rem; font-weight: 700; }
+.shogi-game .brain-morse__talk:disabled { border-color: var(--dojo-rule); background: var(--dojo-paper-2); opacity: 0.7; }
+.shogi-game .brain-game.brain-morse.brain-morse--talk { display: block; width: min(100%, 46rem); height: 100%; }
+
 /* 結果と表 */
 .shogi-game .brain-morse__rows { display: grid; gap: 0.3rem; width: min(100%, 24rem); margin: 0; padding: 0.6rem 0.9rem; border-radius: var(--dojo-radius); color: var(--dojo-ink); background: var(--dojo-paper); list-style: none; }
 .shogi-game .brain-morse__rows li { display: flex; justify-content: space-between; gap: 0.6rem; font-weight: 800; }
@@ -905,6 +945,8 @@ defineExpose({ goBack });
 }
 /* もっと背の低い横向き(小さなスマホの横): 札の中をさらに詰める(U:7-5)。 */
 @media (orientation: landscape) and (max-height: 400px) {
+  /* コースの札の補足の文(決まりの説明)は省く。決まりの1枚と符号の表にある(U:7-5の3)。 */
+  .shogi-game .brain-morse__card .brain-morse__lead { display: none; }
   .shogi-game .brain-morse__scene { gap: 0.15rem; padding: 0.4rem 0.7rem; }
   .shogi-game .brain-morse__rule { font-size: 0.8rem; }
   .shogi-game .brain-morse__letter { font-size: 1.8rem; }
