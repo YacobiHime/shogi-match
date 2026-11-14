@@ -930,8 +930,26 @@ describe("match screen regressions", () => {
     // 大会の進み具合は、まず大会ごとの札(竜王戦・団体戦などと「大会すべて」)を出す(6章)。
     expect(source).toMatch(/if \(id === "tournament" && !confirmNow\) \{\s*resetTournamentList\.value = true;/);
     expect(source).toMatch(/v-for="part in TOURNAMENT_PARTS"[\s\S]{0,200}?@click="chooseDataReset\(part\.id\)"/);
-    expect(source).toMatch(/\} else if \(exhibitResetOpen\.value\) \{\s*if \(resetChoice\.value\) resetChoice\.value = "";\s*else if \(resetTournamentList\.value\) resetTournamentList\.value = false;\s*else exhibitResetOpen\.value = false;/);
+    expect(source).toMatch(/\} else if \(exhibitResetOpen\.value\) \{\s*if \(resetChoice\.value\) resetChoice\.value = "";\s*else if \(resetTournamentList\.value\) resetTournamentList\.value = false;\s*else closeExhibitReset\(\);/);
     expect(source).toMatch(/function acceptExhibitReset\(\) \{\s*const id = resetChoice\.value \|\| "all";\s*resetData\(browserStorage\(\), id\);/);
+  });
+
+  it('ホームはスマホのブラウザで1画面に収める: 引き継ぎは記録の帯の行、データリセットは引き継ぎのシート、2つ目の入口は札の中(docs/home-roadmap-design.mdの5章)', () => {
+    const home = source.slice(source.indexOf('<nav class="shogi-title__menu"'), source.indexOf("</nav>"));
+    // 2つ目の入口は札(ボタン)の外の、同じ包みの中。札のボタンの中にボタンを入れない。
+    expect(home).toMatch(/<div class="shogi-title__next-wrap" :class="\{ 'shogi-title__next-wrap--sub': homeNextHasSub \}">[\s\S]*?<\/button>\s*<!--[\s\S]*?-->\s*<button\s+v-if="homeNextHandicap"[\s\S]*?data-next-sub[\s\S]*?<\/button>\s*<\/div>/);
+    // 引き継ぎのボタンと同期の一言は記録の帯の行の中。タイトルの下の行(shogi-title__tools)はなくした。
+    const row = home.slice(home.indexOf('<div class="shogi-title__record-row">'), home.indexOf('<div class="shogi-title__groups">'));
+    expect(row).toMatch(/data-save-transfer-open[\s\S]*?data-sync-status-text>\{\{ cloudSyncStatusText \}\}/);
+    expect(row).toMatch(/data-sync-toast/);
+    expect(source).not.toMatch(/shogi-title__tools/);
+    // データリセットは引き継ぎのシートから開き、やめたらシートへ戻る。
+    expect(source).toMatch(/:reset="exhibit"[\s\S]{0,80}?@reset="openResetFromTransfer"/);
+    expect(source).toMatch(/function closeExhibitReset\(\) \{\s*exhibitResetOpen\.value = false;\s*if \(resetFromTransfer\) \{/);
+    const sheet = readFileSync(new URL("../SaveTransferSheet.vue", import.meta.url), "utf8");
+    expect(sheet).toMatch(/v-if="reset"[\s\S]{0,300}?data-exhibit-reset @click="emit\('reset'\)"/);
+    // 同期の一言は押せない札(下のタイルを押せるまま)。
+    expect(source).toMatch(/\.shogi-title__sync-toast \{[\s\S]*?pointer-events: none;/);
   });
 
   it('団体戦は大会の画面から入り、自分の局を指して記録し、終わったら団体戦の画面へ戻る(docs/team-battle-design.md)', () => {

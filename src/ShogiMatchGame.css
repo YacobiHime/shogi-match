@@ -3982,51 +3982,88 @@
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
   font-size: var(--title-base);
 }
-/* データリセットは通常の配置の末尾に置き、高さを確保してメニューとの重なりを防ぐ。
- * 2列の画面ではタイトルの下(左列)へ置き、右列のメニューは2行分を使う。 */
-.shogi-home--title:has(.shogi-title__tools) > .shogi-title__hero { grid-column: 1; grid-row: 1; }
-.shogi-home--title:has(.shogi-title__tools) > .shogi-title__menu { grid-column: 2; grid-row: 1 / span 2; }
-/* 引き継ぎとデータリセットの並び(docs/save-transfer-design.mdの4章)。 */
-.shogi-title__tools {
+/*
+ * 引き継ぎ・同期のボタン(記録の帯の右)と、その右上の状態の印。docs/home-roadmap-design.mdの5章。
+ * 前はタイトルの下に引き継ぎとデータリセットの行があったが、スマホのブラウザで溢れるため記録の帯の行へ入れた。
+ */
+.shogi-game .shogi-title__sync {
   position: relative;
-  grid-column: 1;
-  grid-row: 2;
-  align-self: start;
-  justify-self: start;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5em;
   flex: none;
-}
-.shogi-game .shogi-title__exhibit-reset {
-  position: relative;
-  flex: none;
-  min-width: 3.4em;
-  min-height: max(3em, 44px);
-  padding: 0.4em 1em;
+  align-items: center;
+  gap: 0.35em;
+  min-height: 44px;
+  padding: 0.4em 0.85em;
   border: 2px solid #fffcf4;
   border-radius: 999px;
   color: #fffcf4;
   background: rgba(29, 48, 63, 0.85);
   font: inherit;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
 }
-.shogi-game .shogi-title__exhibit-reset:focus-visible { outline: 3px solid #f1a54c; outline-offset: 2px; }
-/* 引き継ぎ・同期のボタンの下の小さな状態と、ホームに数秒出す一言(docs/cloud-sync-design.mdの6章)。 */
-.shogi-game .shogi-title__sync { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.25; }
-.shogi-title__sync-status { font-size: 0.72em; font-weight: 700; opacity: 0.92; }
+.shogi-game .shogi-title__sync:focus-visible { outline: 3px solid #f1a54c; outline-offset: 2px; }
+.shogi-title__sync .shogi-title__icon { flex: none; width: 1.3em; height: 1.3em; }
 .shogi-game .shogi-title__sync[data-sync-status="choose"] { border-color: #f1a54c; color: #ffd9a3; }
+.shogi-title__sync-mark {
+  position: absolute;
+  top: -0.3em;
+  right: -0.15em;
+  width: 0.8em;
+  height: 0.8em;
+  border: 2px solid #1d303f;
+  border-radius: 50%;
+  background: #6fd68a;
+}
+.shogi-title__sync-mark--busy { animation: shogi-title-sync-busy 1s ease-in-out infinite; }
+.shogi-title__sync-mark--off { background: #9aa8b2; }
+.shogi-title__sync-mark--choose {
+  top: -0.5em;
+  right: -0.35em;
+  display: grid;
+  place-items: center;
+  width: 1.35em;
+  height: 1.35em;
+  background: #f1a54c;
+  color: #172632;
+  font-size: 0.8em;
+  font-weight: 900;
+  line-height: 1;
+}
+@keyframes shogi-title-sync-busy {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+/* 読み上げにだけ使う文(同期の状態)。 */
+.shogi-title__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* 同期の一言。行を増やさず、記録の帯のすぐ下に数秒重ねる。押せない札にして、下のタイルを押せるままにする。 */
 .shogi-title__sync-toast {
-  flex-basis: 100%;
-  max-width: 22em;
+  position: absolute;
+  top: calc(100% + 0.3em);
+  left: 50%;
+  z-index: 3;
+  width: max-content;
+  max-width: min(22em, 100%);
   margin: 0;
-  padding: 0.35em 0.8em;
+  padding: 0.35em 0.9em;
+  border: 1px solid rgba(255, 252, 244, 0.3);
   border-radius: 0.6em;
-  background: rgba(29, 48, 63, 0.92);
+  background: rgba(23, 38, 50, 0.96);
+  box-shadow: 0 0.3em 0.8em rgba(0, 0, 0, 0.4);
   color: #fffcf4;
-  font-size: 0.88em;
+  font-size: 0.85em;
   font-weight: 700;
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 .shogi-title__hero {
   display: grid;
@@ -4082,22 +4119,36 @@
 }
 
 /* つぎはこれ */
-/* 立て直しのときの、小さな2つ目の入口(香落ちで挑む)。主役の札より小さく、文字だけにする。 */
+/*
+ * 2つ目の入口(香落ちで挑む・竜王戦の対策と続き・コツ)。主役の札より小さく、文字だけにする。
+ * つぎはこれの札の中の「はじめる」の右に重ねて置き、行を増やさない(docs/home-roadmap-design.mdの5章)。
+ * 札とは別のボタン(札のボタンの中にボタンを入れない)。押せる高さは44px。
+ */
+.shogi-title__next-wrap { position: relative; display: grid; }
 .shogi-game .shogi-title__next-sub {
-  justify-self: end;
+  position: absolute;
+  right: 1.2em;
+  bottom: 1.1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(56% - 1.6em);
   min-height: max(2.75em, 44px);
-  margin-top: -0.3em;
-  padding: 0.3em 0.8em;
+  padding: 0.2em 0.3em;
   border: 0;
   color: var(--ivory, #fffcf4);
   background: transparent;
   font: inherit;
   font-size: 0.85em;
   font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
   text-decoration: underline;
   text-underline-offset: 0.2em;
+  box-shadow: none;
   cursor: pointer;
 }
+.shogi-title__next-wrap--sub .shogi-title__next-go { margin-right: 56%; }
 .shogi-game .shogi-title__next {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -4249,11 +4300,23 @@
 }
 .shogi-title__record .shogi-title__icon { flex: none; width: 1.7em; height: 1.7em; }
 /* 記録の帯と、その左のプレイヤー名。名前は短く、帯が残りの幅を使う。 */
-.shogi-title__record-row { display: flex; gap: 0.5em; align-items: stretch; width: 100%; min-width: 0; }
+.shogi-title__record-row { position: relative; display: flex; gap: 0.5em; align-items: stretch; width: 100%; min-width: 0; container-type: inline-size; }
+/*
+ * 名前・記録の帯・引き継ぎの3つが横に入らないとき(文字が幅のわりに大きいスマホ)は、
+ * 引き継ぎを「絵の下に小さな文字」の形にし、記録の帯の絵を外して、名前と棋力の幅を残す(docs/home-roadmap-design.mdの5章)。
+ * 単位のemは行の文字の大きさで決まるので、文字の大きさと幅の比で切り替わる。
+ */
+@container (max-width: 30em) {
+  .shogi-game .shogi-title__sync { flex-direction: column; justify-content: center; gap: 0.05em; padding: 0.2em 0.6em; border-radius: 0.8em; }
+  .shogi-title__sync .shogi-title__icon { width: 1.2em; height: 1.2em; }
+  .shogi-title__sync-label { font-size: max(0.72em, 10px); line-height: 1.15; }
+  .shogi-title__record-row .shogi-title__record > .shogi-title__icon { display: none; }
+}
 .shogi-title__record-row > .shogi-title__record { flex: 1 1 auto; min-width: 0; }
 .shogi-game .shogi-title__name {
   display: flex;
-  flex: 0 1 auto;
+  /* 名前は縮めない(長い名前は最大の幅で…にする)。記録の帯のほうが札を折り返して縦に伸びる。 */
+  flex: 0 0 auto;
   align-items: center;
   gap: 0.4em;
   min-width: 0;
@@ -4556,6 +4619,9 @@
   .shogi-title__next-label { font-size: 1.9em; }
   .shogi-title__next-desc { font-size: 0.9em; }
   .shogi-title__next-go { margin: 0; padding: 0.7em 1.4em; }
+  /* 「はじめる」が右の列にある配置では、2つ目の入口は札の下の右に置く(高さに余裕がある)。 */
+  .shogi-title__next-wrap--sub .shogi-title__next-go { margin-right: 0; }
+  .shogi-game .shogi-title__next-sub { position: static; justify-self: end; width: auto; margin-top: 0.2em; padding-inline: 0.8em; }
   .shogi-title__groups { gap: 1em; }
   .shogi-game .shogi-title__tile { min-height: 5em; padding: 0.7em 0.8em; }
   .shogi-title__tile .shogi-title__icon { width: 2.8em; height: 2.8em; }
@@ -4564,7 +4630,7 @@
   .shogi-title__tile--dex .shogi-title__dex-icons .shogi-title__icon { width: 1.9em; height: 1.9em; }
 }
 /* 背の低いスマホの縦向き: 基準の文字を少し小さくし、すき間を詰めて、スクロールせずに1画面へ収める。 */
-@media (orientation: portrait) and (max-height: 700px) {
+@media (orientation: portrait) and (max-height: 800px) {
   .shogi-home.shogi-home--title {
     --title-base: clamp(12px, min(4vw, 2.05vh), 19px);
     gap: 0.7em;
@@ -4573,8 +4639,6 @@
   .shogi-title__menu { gap: 0.65em; }
   .shogi-title__groups { gap: 0.6em; }
   .shogi-title__next-go { margin-top: 0.55em; padding: 0.55em 0; }
-  /* 小さな2つ目の入口は押せる高さ(44px)を保ち、上下のすき間に重ねて1画面に収める(7-4・7-5)。 */
-  .shogi-game .shogi-title__next-sub { margin-block: -0.45em -0.45em; }
 }
 /*
  * 背の低い横長の画面(スマホの横向き): 縦に積むと入らないので、広い画面と同じく、
@@ -4609,6 +4673,9 @@
   }
   .shogi-title__next-icon { width: 3.6em; height: 3.6em; }
   .shogi-title__next-go { margin: 0; padding: 0.6em 1.2em; }
+  /* 「はじめる」が右の列にある配置では、2つ目の入口を「はじめる」の下に重ねる(背が低いので行を足さない)。 */
+  .shogi-title__next-wrap--sub .shogi-title__next-go { align-self: start; margin: 0; padding: 0.35em 1.2em; }
+  .shogi-game .shogi-title__next-sub { right: 0.6em; bottom: 0; width: auto; max-width: 14em; min-height: 44px; }
   .shogi-title__groups { gap: 0.5em; }
   .shogi-title__group { gap: 0.2em; }
   /* 基準の文字が小さくなっても、タイルの押せる高さは44px以上にする(7-4)。 */

@@ -45,6 +45,11 @@
         >
       </div>
       <nav class="shogi-title__menu" aria-label="メニュー">
+        <!--
+          つぎはこれの札。2つ目の入口(香落ち・竜王戦の対策と続き・コツ)は札の中の「はじめる」の右に重ねて置く(札のボタンの中にボタンを入れない)。
+          ホームをスマホのブラウザで1画面に収めるため(docs/home-roadmap-design.mdの5章)。
+        -->
+        <div class="shogi-title__next-wrap" :class="{ 'shogi-title__next-wrap--sub': homeNextHasSub }">
         <button
           type="button"
           class="shogi-title__next"
@@ -149,7 +154,7 @@
         </button>
         <!-- 立て直しのときだけ、小さな2つ目の入口(香落ちで、連敗したLvに挑む)。主役は上の1枚(docs/home-next-adaptive-design.mdの6章)。 -->
         <button
-          v-if="homeNext.handicapLevel !== undefined && homeNext.handicapLevel !== null"
+          v-if="homeNextHandicap"
           type="button"
           class="shogi-title__next-sub"
           data-next-handicap
@@ -163,6 +168,7 @@
           :data-next-sub="homeNext.sub.id"
           @click="startHomeNextSub"
         >{{ homeNext.sub.label }}</button>
+        </div>
 
         <!--
           記録の帯の横に、プレイヤー名。押すと名前を入れる札を開く(docs/player-name-design.md)。
@@ -217,6 +223,27 @@
           </span>
           <span class="shogi-title__record-link"><span class="shogi-title__record-link-head">やこび</span>ノート <span aria-hidden="true">›</span></span>
         </button>
+        <!--
+          引き継ぎ・同期(docs/save-transfer-design.md・docs/cloud-sync-design.md)。記録の帯の右に置き、同期の状態は右上の印で見せる
+          (緑の点=同期済み・琥珀の「!」=どちらを使うか選ぶ・灰色=止まっている。docs/home-roadmap-design.mdの5章)。
+          状態の文は読み上げ用に隠して残す。データリセットは引き継ぎのシートのいちばん下から開く。
+        -->
+        <button type="button" class="shogi-title__sync" data-save-transfer-open :data-sync-status="cloudSyncStatus" @click="openSaveTransfer">
+          <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <g fill="#fffcf4">
+              <rect x="5" y="4" width="4" height="1" />
+              <rect x="4" y="5" width="6" height="2" />
+              <rect x="9" y="6" width="3" height="1" />
+              <rect x="2" y="7" width="12" height="4" />
+              <rect x="3" y="11" width="10" height="1" />
+            </g>
+          </svg>
+          <span class="shogi-title__sync-label">引き継ぎ</span>
+          <span v-if="homeSyncMark" class="shogi-title__sync-mark" :class="`shogi-title__sync-mark--${homeSyncMark}`" aria-hidden="true" :data-sync-mark="homeSyncMark">{{ homeSyncMark === "choose" ? "!" : "" }}</span>
+          <span v-if="cloudSyncStatusText" class="shogi-title__sr" data-sync-status-text>{{ cloudSyncStatusText }}</span>
+        </button>
+        <!-- 同期の一言は行を増やさず、記録の帯のすぐ下に重ねて数秒出す(押せない札。下のタイルはそのまま押せる)。 -->
+        <p v-if="cloudSyncToast" class="shogi-title__sync-toast" role="status" data-sync-toast>{{ cloudSyncToast }}</p>
         </div>
 
         <div class="shogi-title__groups">
@@ -394,24 +421,6 @@
           </section>
         </div>
       </nav>
-      <!--
-        引き継ぎ(docs/save-transfer-design.md)と、exhibit属性で表示するデータリセット(docs/exhibit-design.md)。
-        どちらも記録の出し入れなので、タイトルの下に並べる。
-      -->
-      <div class="shogi-title__tools">
-        <button type="button" class="shogi-title__exhibit-reset shogi-title__sync" data-save-transfer-open :data-sync-status="cloudSyncStatus" @click="openSaveTransfer">
-          {{ cloudSync.usable ? "引き継ぎ・同期" : "引き継ぎ" }}
-          <small v-if="cloudSyncStatusText" class="shogi-title__sync-status" data-sync-status-text>{{ cloudSyncStatusText }}</small>
-        </button>
-        <button
-          v-if="exhibit"
-          type="button"
-          class="shogi-title__exhibit-reset"
-          data-exhibit-reset
-          @click="openExhibitReset"
-        >データリセット</button>
-        <p v-if="cloudSyncToast" class="shogi-title__sync-toast" role="status" data-sync-toast>{{ cloudSyncToast }}</p>
-      </div>
     </div>
 
     <ShogiTutorial
@@ -2223,7 +2232,7 @@
       aria-modal="true"
       aria-labelledby="data-reset-title"
       data-data-reset
-      @click.self="exhibitResetOpen = false"
+      @click.self="closeExhibitReset"
     >
       <div class="shogi-game__confirm-panel shogi-welcome shogi-data-reset">
         <h2 id="data-reset-title">消す記録を選んでね</h2>
@@ -2241,7 +2250,7 @@
             </button>
           </li>
         </ul>
-        <button ref="exhibitResetCancel" type="button" class="shogi-welcome__skip" @click="exhibitResetOpen = false">やめる</button>
+        <button ref="exhibitResetCancel" type="button" class="shogi-welcome__skip" @click="closeExhibitReset">やめる</button>
       </div>
     </div>
     <SaveTransferSheet
@@ -2250,7 +2259,9 @@
       :cloud="saveCloudUsable"
       :sync="cloudSync.usable ? cloudSync : null"
       :start-step="saveTransferStep"
+      :reset="exhibit"
       @close="closeSaveTransfer"
+      @reset="openResetFromTransfer"
     />
     <!-- 大会の進み具合は、大会ごとにも選べる(docs/data-reset-design.mdの6章) -->
     <div
@@ -9515,6 +9526,20 @@ const resetChoice = ref("");
 const resetTournamentList = ref(false);
 const resetTournamentBack = ref<HTMLButtonElement | null>(null);
 const resetChoiceGroup = computed(() => (resetChoice.value ? resetGroup(resetChoice.value) : null));
+/** 引き継ぎのシートから開いたデータリセット。やめたらシートへ戻る(来た場所へ戻る。docs/return-path-design.md)。 */
+let resetFromTransfer = false;
+function openResetFromTransfer() {
+  saveTransferOpen.value = false;
+  resetFromTransfer = true;
+  openExhibitReset();
+}
+function closeExhibitReset() {
+  exhibitResetOpen.value = false;
+  if (resetFromTransfer) {
+    resetFromTransfer = false;
+    if (homeOpen.value) openSaveTransfer();
+  }
+}
 function openExhibitReset() {
   resetChoice.value = "";
   resetTournamentList.value = false;
@@ -9648,6 +9673,17 @@ const homeRyuoPlan = computed(() => {
  * すぐ使えるコツの小さな入口(docs/nyumon-mode-design.mdの21-14-4)。強くなる道の1段目(教室で駒の動き)を終え、
  * コツにまだ触れていない人に、「つぎはこれ」の下へ出す。ほかの小さな入口が出ているときは出さない(1つまで)。
  */
+/** つぎはこれの札の中の2つ目の入口(香落ちで挑む)。docs/home-roadmap-design.mdの5章。 */
+const homeNextHandicap = computed(() => homeNext.value.handicapLevel !== undefined && homeNext.value.handicapLevel !== null);
+const homeNextHasSub = computed(() => homeNextHandicap.value || Boolean(homeNext.value.sub));
+/** 引き継ぎのボタンの右上の印(同期の状態)。ログアウト中は出さない。 */
+const homeSyncMark = computed(() => {
+  const status = cloudSyncStatus.value;
+  if (status === "choose") return "choose";
+  if (status === "idle" || status === "syncing") return status === "syncing" ? "busy" : "ok";
+  if (status === "paused" || status === "offline") return "off";
+  return "";
+});
 const homeTipsInvite = computed(() => Boolean(homeRoadmapState.value.steps[0]?.done) && !tipsTouched(homeTutorialProgress.value));
 const homeNext = computed<HomeNext>(() => {
   const main = homeNextMain.value;
@@ -9957,7 +9993,7 @@ function navigateBack() {
   } else if (exhibitResetOpen.value) {
     if (resetChoice.value) resetChoice.value = "";
     else if (resetTournamentList.value) resetTournamentList.value = false;
-    else exhibitResetOpen.value = false;
+    else closeExhibitReset();
   } else if (discardSuspendedPending.value) {
     discardSuspendedPending.value = null;
   } else if (nameDialogOpen.value) {
@@ -13890,7 +13926,7 @@ function handleGlobalKeydown(event: KeyboardEvent) {
   // 引き継ぎは段を1つ戻し、はじめの段なら閉じる(UI_Nintendo_Implementation.mdの3-1。Escは「戻る」)。
   if (saveTransferOpen.value && !saveTransferView.value?.goBack()) saveTransferOpen.value = false;
   closeAssistTools();
-  exhibitResetOpen.value = false;
+  if (exhibitResetOpen.value) closeExhibitReset();
   settingsOpen.value = false;
   resignConfirmOpen.value = false;
   analysisMenuOpen.value = false;

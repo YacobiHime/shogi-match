@@ -35,7 +35,7 @@
     if (!params.has("mode") && !params.has("initial_sfen")) {
       game.setAttribute("show-home", "");
     }
-    // 公開ページでもexhibit属性を既定で付け、ホーム左下にデータリセットを出す。
+    // 公開ページでもexhibit属性を既定で付け、ホームの「引き継ぎ」のシートにデータリセットを出す。
     // ?exhibit=1 は従来の展示用URLとの互換性のため受け付ける。
     if (params.get("exhibit") === "1") game.setAttribute("exhibit", "");
   </script>

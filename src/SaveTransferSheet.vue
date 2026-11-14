@@ -75,6 +75,12 @@
         <p v-if="!cloud" class="save-transfer__note">{{ T.cloudOff }}</p>
         <p v-if="notice" class="save-transfer__notice" role="status" data-transfer-notice>{{ notice }}</p>
         <p v-if="error" class="save-transfer__error" role="alert" data-transfer-error>{{ error }}</p>
+        <!-- データリセット(docs/data-reset-design.md)。ホームの1行を減らすため、記録の出し入れのいちばん下に置く(docs/home-roadmap-design.mdの5章)。 -->
+        <section v-if="reset" class="save-transfer__group save-transfer__reset" data-transfer-reset-group>
+          <h3>{{ T.resetHead }}</h3>
+          <p class="save-transfer__note">{{ T.resetNote }}</p>
+          <button type="button" class="save-transfer__danger" data-exhibit-reset @click="emit('reset')">{{ T.reset }}</button>
+        </section>
         <input ref="fileInput" type="file" accept=".json,application/json" class="save-transfer__file" tabindex="-1" aria-hidden="true" @change="onFile" />
         <button ref="firstFocus" type="button" class="shogi-welcome__skip" data-transfer-close @click="emit('close')">{{ T.close }}</button>
       </template>
@@ -194,8 +200,10 @@ const props = defineProps({
   sync: { type: Object as PropType<CloudSyncApi | null>, default: null },
   /** 開く段(同期でどちらを使うか聞くときは cloud-choice)。 */
   startStep: { type: String as PropType<"menu" | "cloud-choice">, default: "menu" },
+  /** いちばん下にデータリセットの行を出すか(exhibit属性のとき)。押すと reset を出す。 */
+  reset: { type: Boolean, default: false },
 });
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; reset: [] }>();
 
 type Bundle = { format: string; v: number; at: number; entries: Record<string, string> };
 
@@ -473,6 +481,19 @@ defineExpose({ goBack });
 .save-transfer__account { margin: 0.2em 0; font-weight: 700; overflow-wrap: anywhere; }
 .save-transfer__account small { display: block; font-size: 0.8em; font-weight: 400; opacity: 0.85; }
 .save-transfer__small { margin-top: 0.4em; font-size: 0.82em; min-height: 44px; }
+.shogi-game .save-transfer .save-transfer__danger {
+  min-height: 44px;
+  padding: 0.4em 1.1em;
+  border: 2px solid #e7685c;
+  border-radius: 999px;
+  color: #ffb3a8;
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.save-transfer__reset { display: grid; justify-items: center; gap: 0.3em; margin-top: 0.6em; padding-top: 0.6em; border-top: 1px solid rgba(255, 252, 244, 0.2); }
+.save-transfer__reset .save-transfer__note { margin: 0; }
 .save-transfer__compare section { display: grid; gap: 0.4em; align-content: start; }
 .save-transfer__compare section .shogi-game__confirm-danger { justify-self: center; }
 @media (max-width: 30em) {
