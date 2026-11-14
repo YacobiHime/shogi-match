@@ -66,9 +66,9 @@ export const RESET_GROUPS = Object.freeze([
     id: "brain",
     label: "脳トレ",
     summary: "記録・判子のカレンダー・記憶の宮殿",
-    erases: "脳トレの記録と判子のカレンダー、毎日のプログラムの進み具合、記憶の宮殿と場所法の学校",
+    erases: "脳トレの記録と判子のカレンダー、毎日のプログラムの進み具合、記憶の宮殿と場所法の学校、数独の途中の問題",
     keeps: "教室・問題集・対局の記録は残ります。",
-    keys: Object.freeze([`${Y}brain-training:v2`, `${Y}brain-training:v1`, `${Y}memory-palace:v1`]),
+    keys: Object.freeze([`${Y}brain-training:v2`, `${Y}brain-training:v1`, `${Y}memory-palace:v1`, `${Y}brain-sudoku:v1`]),
   }),
   Object.freeze({
     id: "collection",

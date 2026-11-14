@@ -176,6 +176,12 @@ function weekGoalText(record, day, room) {
  */
 export function compareRecord(recordId, value, previous) {
   if (!Number.isFinite(previous) || !Number.isFinite(value) || !value || !previous) return null;
+  // 数独は解いた秒(16-7)。3秒より小さい差は「前と同じくらい」。
+  if (recordId.startsWith('sudoku-')) {
+    const diff = /** @type {number} */ (previous) - value;
+    if (Math.abs(diff) < 3) return { kind: 'same', diffSeconds: 0 };
+    return diff > 0 ? { kind: 'up', diffSeconds: diff } : { kind: 'prev', diffSeconds: 0 };
+  }
   if (lowerIsBetter(recordId)) {
     const diff = /** @type {number} */ (previous) - value;
     if (Math.abs(diff) < 50) return { kind: 'same', diffSeconds: 0 };

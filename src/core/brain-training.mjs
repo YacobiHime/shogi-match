@@ -17,7 +17,7 @@ export const BRAIN_ROOMS = Object.freeze([
 ]);
 
 /**
- * 種目。roomは部屋、shelfが'shogi'なら将棋の棚。betterは記録の比べ方('high'は大きいほど良い、'low'は小さいほど良い)。
+ * 種目。roomは部屋、shelfが'shogi'なら将棋の棚、'puzzle'は部屋の大きな札から入るパズル(数独)。betterは記録の比べ方('high'は大きいほど良い、'low'は小さいほど良い)。
  * shortは測定・プログラムで遊ぶ短い版の問題の数、fullはふつうの1回の問題の数(数えない種目は1)。
  * 種目の中身(問題の作り方)は種目ごとのモジュール(brain-calc.mjs・brain-glance.mjsなど)にある。
  */
@@ -36,13 +36,18 @@ export const BRAIN_GAMES = Object.freeze([
   { id: 'recall', room: 'memory', label: 'きのうの言葉', desc: '前の回に置いた言葉を思い出す', better: 'high', short: 1, full: 1 },
   { id: 'digits', room: 'memory', label: '数字', desc: '数字を絵にして覚える', better: 'high', short: 1, full: 1 },
   { id: 'board-memory', room: 'memory', shelf: 'shogi', label: '盤面の記憶', desc: '局面を覚えて、並べ直す', better: 'high', short: 3, full: 5 },
+  // 数独(16章)。計算力の部屋の自由練習。コースと4つの札には出さない(棚はpuzzle)。記録は段ごとの解いた秒(小さいほど良い)。
+  { id: 'sudoku', room: 'calc', shelf: 'puzzle', label: '数独', desc: '縦・横・枠に1つずつ。自動で作る問題', better: 'low', short: 1, full: 1 },
 ].map((game) => Object.freeze(game)));
 const GAME_IDS = new Set(BRAIN_GAMES.map(({ id }) => id));
 /** スピード計算の記録は段ごとに分ける(段で問題の難しさが違うため)。'speed-1'〜'speed-5'。 */
 export const SPEED_LEVEL_COUNT = 5;
 const SPEED_RECORD_IDS = Array.from({ length: SPEED_LEVEL_COUNT }, (_, index) => `speed-${index + 1}`);
+/** 数独の記録は段ごとに分ける(はじめて・やさしい・ふつう・むずかしい・達人)。'sudoku-1'〜'sudoku-5'。値は解いた秒(16-7)。 */
+export const SUDOKU_LEVEL_COUNT = 5;
+const SUDOKU_RECORD_IDS = Array.from({ length: SUDOKU_LEVEL_COUNT }, (_, index) => `sudoku-${index + 1}`);
 /** 記録(自己ベスト・日ごとの値)に使える鍵。 */
-const RECORD_IDS = new Set([...GAME_IDS, ...SPEED_RECORD_IDS]);
+const RECORD_IDS = new Set([...GAME_IDS, ...SPEED_RECORD_IDS, ...SUDOKU_RECORD_IDS]);
 /** 段(次に始める段の元)に使える鍵。speed-slowはスピード計算の「遅い回が続いた数」。 */
 const LEVEL_IDS = new Set([...GAME_IDS, 'speed-slow']);
 const ROOM_IDS = new Set(BRAIN_ROOMS.map(({ id }) => id));
@@ -51,9 +56,9 @@ export function brainGame(id) {
   return BRAIN_GAMES.find((game) => game.id === id) ?? null;
 }
 
-/** 記録の鍵が、小さいほど良い記録か。 */
+/** 記録の鍵が、小さいほど良い記録か(スピード計算の1問の時間と、数独の解いた時間)。 */
 export function lowerIsBetter(recordId) {
-  return recordId.startsWith('speed');
+  return recordId.startsWith('speed') || recordId.startsWith('sudoku-');
 }
 
 /** いつ稽古するか(14-4の柱3)。言葉はbrain-habit.mjsのCUE_OPTIONS。 */

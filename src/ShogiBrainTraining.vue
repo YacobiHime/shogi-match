@@ -86,8 +86,17 @@
               <span>{{ bestText(game.id) || "まだ記録なし" }}</span>
             </button>
           </li>
+          <!-- 数独(16章)。4つの札の下に横長の1枚。コースには入れない自由練習。 -->
+          <li class="brain-tiles__wide">
+            <button type="button" class="brain-tile brain-tile--wide" data-brain-game="sudoku" @click="startSingle('sudoku')">
+              <strong><span aria-hidden="true">{{ GAME_ICONS.sudoku }}</span> 数独</strong>
+              <span>{{ bestText("sudoku") || "6×6から達人まで・毎回新しい問題" }}</span>
+            </button>
+          </li>
         </ul>
         <div class="brain-rowlinks">
+          <!-- 背の低いスマホ縦では、数独の横長の札の代わりにこの行に置く(部屋を長くしない。U:7-5)。 -->
+          <button type="button" class="brain-rowlink brain-rowlink--sudoku" data-brain-sudoku-link @click="startSingle('sudoku')">{{ GAME_ICONS.sudoku }} 数独</button>
           <button type="button" class="brain-rowlink" data-brain-shelf @click="openShelf">☗ 将棋の棚</button>
           <button type="button" class="brain-rowlink" data-brain-records @click="openRecords">📈 記録</button>
         </div>
@@ -225,6 +234,13 @@
         :start-level="startLevel(record, currentItem.id)"
         :count="currentItem.id === 'intuition' ? 10 : 6"
         :asset-base-url="assetBaseUrl"
+        @sound="playSound"
+        @finish="finishGame($event)"
+      />
+      <BrainSudoku
+        v-else-if="currentItem.id === 'sudoku'"
+        :key="`sudoku-${runKey}`"
+        :bests="record.best"
         @sound="playSound"
         @finish="finishGame($event)"
       />
@@ -399,6 +415,7 @@ import BrainSpeedCalc from "./brain/BrainSpeedCalc.vue";
 import BrainNBack from "./brain/BrainNBack.vue";
 import BrainSwitch from "./brain/BrainSwitch.vue";
 import BrainMemoryTest from "./brain/BrainMemoryTest.vue";
+import BrainSudoku from "./brain/BrainSudoku.vue";
 import BrainPalace from "./brain/BrainPalace.vue";
 import BrainPalaceBuilder from "./brain/BrainPalaceBuilder.vue";
 import BrainMemoryBox from "./brain/BrainMemoryBox.vue";
@@ -409,6 +426,7 @@ import BrainReport, { type ReportRow } from "./brain/BrainReport.vue";
 import { glanceLevelLabel } from "./core/brain-glance.mjs";
 import { blindLevelText, intuitionLevelText } from "./core/brain-shogi-sense.mjs";
 import { nbackText, perProblemText, switchLevelText } from "./core/brain-calc.mjs";
+import { recommendSudokuLevel, sudokuLevel, sudokuTimeText } from "./core/brain-sudoku.mjs";
 import {
   BRAIN_GAMES,
   BRAIN_ROOMS,
@@ -463,10 +481,10 @@ import { comboStep } from "./core/brain-sound.mjs";
 import { brainAudio, closeBrainAudio } from "./brain-audio";
 
 type RoomId = "calc" | "memory";
-type GameId = "speed" | "nback" | "glance-sym" | "switch" | "glance" | "mental" | "intuition" | "einstellung" | "blind" | "memory-test" | "board-memory";
+type GameId = "speed" | "nback" | "glance-sym" | "switch" | "glance" | "mental" | "intuition" | "einstellung" | "blind" | "memory-test" | "board-memory" | "sudoku";
 type QueueItem = { id: GameId; mode: "train" | "measure" | "single"; measure?: "before" | "after" };
-type GameResult = { value: number; level: number; correct: number; total: number; recordId?: string; extraLevels?: Record<string, number>; text?: string };
-type ResultRow = { label: string; text: string; correct: number; total: number; newBest: boolean; grew: boolean; measure: boolean; recordId: string; value: number; previous: number | null };
+type GameResult = { value: number; level: number; correct: number; total: number; recordId?: string; extraLevels?: Record<string, number>; text?: string; sub?: string };
+type ResultRow = { label: string; text: string; correct: number; total: number; newBest: boolean; grew: boolean; measure: boolean; recordId: string; value: number; previous: number | null; sub?: string };
 type PalaceFinish = { kind: "practice" | "lesson"; lessonId: string; records: { gameId: string; value: number; level: number; text: string }[]; correct: number; total: number };
 type MemoryStore = ReturnType<typeof loadMemoryStore>;
 
@@ -479,7 +497,7 @@ const BRAIN_TITLE = "脳トレ道場";
 const WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"];
 const WEEKDAY_NAMES = ["日", "月", "火", "水", "木", "金", "土"];
 /** 種目の絵(今日の稽古の飛び石・自由に練習の札)。 */
-const GAME_ICONS: Record<string, string> = { speed: "⚡", nback: "🔁", "glance-sym": "👁️", switch: "🎨", "memory-test": "📝", palace: "🏯", recall: "↩️", digits: "🔢" };
+const GAME_ICONS: Record<string, string> = { speed: "⚡", nback: "🔁", "glance-sym": "👁️", switch: "🎨", "memory-test": "📝", palace: "🏯", recall: "↩️", digits: "🔢", sudoku: "🧩" };
 const CALC_GAMES = BRAIN_GAMES.filter((game) => game.room === "calc" && !game.shelf);
 /** 1つの種目のだいたいの時間(分)。今日のトレーニングの「約○分」に使う。 */
 const GAME_MINUTES: Record<string, number> = { speed: 1.5, nback: 3, "glance-sym": 2.5, switch: 1.5 };
@@ -496,6 +514,7 @@ const EVIDENCE = [
   { title: "直観の一手", text: "プロは次の一手を直観で思いつくときに、脳の尾状核が働きます。将棋を知らない人も、4か月練習すると素早く良い手を思いつく直観が育ちました。将棋の力を、将棋の中で練習します。", source: "理化学研究所（2011年）、電気通信大学・理化学研究所（2012年）" },
   { title: "思い込み外し", text: "強い人でも、良い手を1つ見つけると、その手のまわりばかり見て、もっと良い手を見落とすことがあります。目に付く手で止まらずに探す練習です。", source: "Bilalićほか（2008年）" },
   { title: "目隠しの詰将棋", text: "頭の中で駒を動かして先を読む練習です。将棋の力を、将棋の中で練習します（頭全体が良くなるとは言えません）。", source: "Sala・Gobet（2017年）" },
+  { title: "数独", text: "50歳以上の約1万9千人の調査で、数独などの数のパズルをよく解く人ほど、記憶や推論のテストの成績が良かったと報告されています。ただし、数独のおかげかどうかは分かっていません。この道場では、数字の入る場所を筋道立てて絞りこむ練習として置いています。", source: "Brookerほか（2019年）" },
 ];
 
 const storage = typeof localStorage === "undefined" ? null : localStorage;
@@ -703,8 +722,9 @@ const reportRows = computed<ReportRow[]>(() => {
   return results.value.map((row) => {
     const compared = compareRecord(row.recordId, row.value, row.previous);
     let delta = "";
-    if (compared?.kind === "up") delta = row.recordId.startsWith("speed") ? `前より${compared.diffSeconds.toFixed(1)}秒速い` : `伸びた！ 前は${valueText(row.recordId, row.previous ?? 0)}`;
-    else if (compared?.kind === "same") delta = row.recordId.startsWith("speed") ? "前と同じくらい" : "前と同じ";
+    const timed = row.recordId.startsWith("speed") || row.recordId.startsWith("sudoku-");
+    if (compared?.kind === "up") delta = row.recordId.startsWith("sudoku-") ? `前より${sudokuTimeText(compared.diffSeconds)}速い` : timed ? `前より${compared.diffSeconds.toFixed(1)}秒速い` : `伸びた！ 前は${valueText(row.recordId, row.previous ?? 0)}`;
+    else if (compared?.kind === "same") delta = timed ? "前と同じくらい" : "前と同じ";
     else if (compared?.kind === "prev") delta = `前は${valueText(row.recordId, row.previous ?? 0)}`;
     const ribbon = row.newBest && !ribbonUsed;
     if (ribbon) ribbonUsed = true;
@@ -716,7 +736,7 @@ const reportRows = computed<ReportRow[]>(() => {
       best: row.newBest,
       ribbon,
       measure: row.measure,
-      sub: row.total ? `${row.total}問中${row.correct}問 正解` : "",
+      sub: row.sub || (row.total ? `${row.total}問中${row.correct}問 正解` : ""),
     };
   });
 });
@@ -835,6 +855,7 @@ function shelfGames(id: RoomId) {
 function valueText(recordId: string, value: number | undefined) {
   if (!value) return "";
   if (recordId.startsWith("speed-")) return `${perProblemText(value)}（段${recordId.slice(6)}）`;
+  if (recordId.startsWith("sudoku-")) return `${sudokuTimeText(value)}（${sudokuLevel(Number(recordId.slice(7)))?.label ?? ""}）`;
   switch (recordId) {
     case "nback": return nbackText(value);
     case "glance-sym": return `${glanceLevelLabel(value - 1, "じゃまの印")}で見えた`;
@@ -861,8 +882,17 @@ function speedRecordId() {
   }
   return `speed-${(record.value.levels.speed ?? 0) + 1}`;
 }
+/** 数独のいま見せる記録の鍵(いちばん新しく解いた段。なければおすすめの段)。 */
+function sudokuRecordKey() {
+  const days = Object.keys(record.value.days).sort().reverse();
+  for (const day of days) {
+    const key = Object.keys(record.value.days[day]).find((id) => id.startsWith("sudoku-"));
+    if (key) return key;
+  }
+  return `sudoku-${recommendSudokuLevel(record.value.best)}`;
+}
 function bestText(id: string) {
-  const recordId = id === "speed" ? speedRecordId() : id;
+  const recordId = id === "speed" ? speedRecordId() : id === "sudoku" ? sudokuRecordKey() : id;
   return valueText(recordId, record.value.best[recordId]);
 }
 
@@ -1007,6 +1037,7 @@ function finishGame(result: GameResult) {
     recordId,
     value: result.value,
     previous: growth?.previous ?? null,
+    sub: result.sub,
   }];
   nextGame();
 }
@@ -1177,11 +1208,11 @@ const compareRows = computed(() => {
 });
 const recordLines = computed(() => {
   const ids = room.value === "calc"
-    ? [speedRecordId(), "nback", "glance-sym", "switch", "glance", "mental"]
+    ? [speedRecordId(), "nback", "glance-sym", "switch", sudokuRecordKey(), "glance", "mental"]
     : ["palace", "recall", "digits", "memory-test", "board-memory"];
   return ids.map((id) => {
     const series = dailySeries(record.value, id).slice(-20);
-    const label = id.startsWith("speed-") ? `スピード計算（段${id.slice(6)}）` : gameLabel(id);
+    const label = id.startsWith("speed-") ? `スピード計算（段${id.slice(6)}）` : id.startsWith("sudoku-") ? `数独（${sudokuLevel(Number(id.slice(7)))?.label ?? ""}）` : gameLabel(id);
     return { id, label, days: series.length, points: sparkPoints(series.map(({ value }) => value), lowerIsBetter(id)), best: valueText(id, record.value.best[id]) || "—" };
   });
 });
@@ -1431,6 +1462,12 @@ defineExpose({ goBack });
   text-align: left;
 }
 .shogi-game .brain-tile strong { font-size: 0.92rem; }
+.shogi-game .brain-tiles__wide { grid-column: 1 / -1; }
+.shogi-game .brain-rowlink--sudoku { display: none; }
+@media (orientation: portrait) and (max-height: 700px) {
+  .shogi-game .brain-tiles__wide { display: none; }
+  .shogi-game .brain-rowlink--sudoku { display: inline-block; }
+}
 .shogi-game .brain-tile span { color: #f3c08f; font-size: 0.78rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .shogi-game .brain-rowlinks { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.5rem; }
 .shogi-game .brain-rowlink {
