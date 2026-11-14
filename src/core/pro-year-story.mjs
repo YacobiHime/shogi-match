@@ -12,6 +12,11 @@ const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...f
 /** 立ち絵のない、声だけの人の台詞(善彦。novel-direction.mjsのEXTRA_WHO。docs/novel-authoring-guide.mdの4-1)。 */
 const voice = (name, text, fx = {}) => Object.freeze({ who: 'extra', face: 'neutral', name, text, ...fx });
 const YOSHIHIKO_NAME = '天鷺善彦';
+/** 羽音との公式戦の場面の、研究会で指したことがあるか(studied)・ないか(fresh)の羽音の1行(23章)。 */
+const STUDY_LINES = Object.freeze({
+  pro: Object.freeze({ studied: '研究会では何度も指したけど、今日のは記録に残る1局。', fresh: '今日のは、記録に残る1局。' }),
+  big: Object.freeze({ studied: '研究会の君とは何度も指した。でも、大一番の君は知らない。', fresh: '公式戦の君は知ってる。でも、大一番の君は知らない。' }),
+});
 
 /**
  * 場面。{name}はプレイヤーの名前、{you}は百花の呼び方、{title}はタイトルの名前(棋王など)、{holder}はタイトル保持者の名前、
@@ -62,13 +67,13 @@ export const PRO_YEAR_SCENES = Object.freeze({
   'pro-hanane': Object.freeze({
     id: 'pro-hanane',
     title: '公式戦の初手合',
-    summary: '羽音と公式戦ではじめて当たる日。研究会では何度も指したが、今日のは記録に残る1局。二人そろって一礼し、対局が始まる。',
+    summary: '羽音と公式戦ではじめて当たる日。今日のは記録に残る1局。二人そろって一礼し、対局が始まる。',
     background: 'venue',
     cast: ['hanane'],
     lines: [
       line('narration', 'neutral', '{event} {round}。対局室に入ると、羽音がもう座っていた。'),
       line('hanane', 'neutral', '公式戦で当たるのは、はじめてだね。'),
-      line('hanane', 'neutral', '研究会では何度も指したけど、今日のは記録に残る1局。'),
+      line('hanane', 'neutral', '{study}'),
       line('hanane', 'gentle', '手加減はしない。君も、しないでしょ。'),
       line('narration', 'neutral', '駒を並べる音だけが、静かな部屋に響く。'),
       line('hanane', 'smile', '……楽しみにしてた。どう、君は？'),
@@ -333,7 +338,7 @@ export const PRO_YEAR_SCENES = Object.freeze({
       line('narration', 'neutral', '{event} {round}。大一番の相手は、羽音だった。'),
       line('narration', 'neutral', '対局室に入ると、羽音はもう座っていた。いつもより、少し早い。'),
       line('hanane', 'neutral', 'ここで当たると思ってた。表を見たときから。'),
-      line('hanane', 'gentle', '研究会の君とは何十局も指した。でも、大一番の君は知らない。'),
+      line('hanane', 'gentle', '{studyBig}'),
       line('hanane', 'neutral', '勝ったほうが、上に行く。分かりやすくて、いいね。'),
       line('hanane', 'smile', 'どう、準備はできてる？'),
       line('narration', 'neutral', '二人そろって一礼する。対局の始まりだ。', { act: { who: 'hanane', act: 'bow' }, sfx: 'koma' }),
@@ -624,6 +629,8 @@ const DEFAULT_VARS = Object.freeze({
   challenger: '若手の棋士', streak: '3', eternal: '永世称号',
   // 相手が羽音・善彦のとき(22-3の6)。recordは空なら行ごと出さない。
   series: '番勝負は、まだ続いている。', result: 'タイトル戦の番勝負が終わった。', record: '',
+  // 研究会で指したことがあるかで変える羽音の1行(23章。研究会に出ていないのに「何度も指した」と言わない)。
+  study: STUDY_LINES.pro.studied, studyBig: STUDY_LINES.big.studied,
 });
 
 /**
@@ -631,14 +638,14 @@ const DEFAULT_VARS = Object.freeze({
  * 棋戦の言葉を先に入れ、名前をあとで入れる(言葉の中に{name}を書けるように。22-3の6)。中身が空になった行は出さない(`{record}`だけの行)。
  * 声だけの人(善彦)の名前の札は、行の名前を使う。
  * @param {string} id
- * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string } }} [options]
+ * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string, study?: string, studyBig?: string } }} [options]
  */
 export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} } = {}) {
   const scene = PRO_YEAR_SCENES[/** @type {keyof typeof PRO_YEAR_SCENES} */ (id)];
   if (!scene) return null;
   const words = { ...DEFAULT_VARS, ...Object.fromEntries(Object.entries(vars).filter(([, value]) => value)) };
   const fill = (text) => sceneText(
-    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record)\}/g, (_, key) => words[key]),
+    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record|study|studyBig)\}/g, (_, key) => words[key]),
     playerName,
     momokaCall,
   );
@@ -694,7 +701,13 @@ export function proYearSceneDue(state) {
   if (!pending || pending.kind === 'study' || pending.kind === 'shidou') return null;
   const opponent = state.players?.[pending.opponentId];
   const rival = proYearRival(opponent);
-  const vars = { title: pending.titleName ?? '', holder: opponent?.name ?? '', event: pending.eventText ?? '', round: pending.label ?? '' };
+  // 研究会でその相手と指したことがあるか(羽音の「研究会では何度も指した」の1行。23章)。
+  const studyRecord = state.study?.records?.[pending.opponentId];
+  const studied = Boolean(studyRecord && (studyRecord.w ?? 0) + (studyRecord.l ?? 0) + (studyRecord.d ?? 0) > 0);
+  const vars = {
+    title: pending.titleName ?? '', holder: opponent?.name ?? '', event: pending.eventText ?? '', round: pending.label ?? '',
+    study: studied ? STUDY_LINES.pro.studied : STUDY_LINES.pro.fresh, studyBig: studied ? STUDY_LINES.big.studied : STUDY_LINES.big.fresh,
+  };
   const event = String(pending.gameId && state.games?.[pending.gameId]?.event || '');
   const firstGame = pending.kind === 'finals' && pending.series && (pending.series.games?.length ?? 0) === 0;
   const due = (key, id, extra = {}) => (seenProYearScene(state, key) ? null : { key, id, vars: { ...vars, ...extra } });
@@ -739,8 +752,28 @@ export function proYearSceneDue(state) {
  * @returns {{ key: string, id: string, vars: Record<string, string> } | null}
  */
 export function queuedProYearScene(state) {
-  const queue = Array.isArray(state?.sceneQueue) ? state.sceneQueue : [];
+  const queue = Array.isArray(state?.sceneQueue) ? state.sceneQueue.map((item) => rivalQueued(state, item)) : [];
   return queue.find((item) => item?.key && item.id in PRO_YEAR_SCENES && !seenProYearScene(state, item.key)) ?? null;
+}
+
+/**
+ * 22章より前の版で積んだ失冠の夜(`pro-title-lost`)のうち、タイトルを取ったのが羽音・善彦のものを、相手ごとの場面に読みかえる
+ * (docs/pro-year-design.mdの23章。羽音に取られた夜に、羽音が慰めの電話をかけてこないように)。見た印の鍵も読みかえる。
+ * @param {any} state
+ * @param {any} item
+ */
+function rivalQueued(state, item) {
+  if (item?.id !== 'pro-title-lost' || !item.vars?.challenger) return item;
+  const winner = Object.values(state?.players ?? {}).find((player) => player?.name === item.vars.challenger);
+  const rival = proYearRival(winner);
+  if (!rival) return item;
+  const id = `pro-lost-${rival}`;
+  const title = item.vars.title ?? '';
+  return {
+    key: `${id}:${String(item.key).split(':').slice(1).join(':')}`,
+    id,
+    vars: { title, result: rivalResultText({ rival, kind: 'lost', title: title || 'タイトル' }) },
+  };
 }
 
 /**

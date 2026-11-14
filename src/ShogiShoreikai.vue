@@ -648,7 +648,10 @@ const talkMentor = computed(() => {
 const hananeTalk = computed(() => {
   const view = props.view;
   if (!view) return "";
-  if (view.phase === "league" && view.league?.round === 0 && view.events.some((event) => event.kind === "league-entry")) return HANANE_SHOREIKAI_LINES.league;
+  if (view.phase === "league" && view.league?.round === 0 && view.events.some((event) => event.kind === "league-entry")) {
+    // 羽音がまだ三段なら、同じリーグのライバルとして(先に抜けた人の言葉を言わない)。
+    return view.hanane?.dan === "三段" ? HANANE_SHOREIKAI_LINES.leagueRival : HANANE_SHOREIKAI_LINES.league;
+  }
   if (view.phase === "reikai" && view.hanane.dan === "三段" && view.games < 4) return HANANE_SHOREIKAI_LINES.first;
   const promoted = view.feed.find((item) => item.tone === "rival");
   if (promoted && view.phase === "reikai" && view.games < 12) return HANANE_SHOREIKAI_LINES.promoted;

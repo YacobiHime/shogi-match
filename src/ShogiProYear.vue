@@ -926,7 +926,7 @@ import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import { STUDY_TEXT, moneyText } from "./core/pro-life.mjs";
 import {
-  CLASS_NAMES, PRO_EVENTS, PRO_USER_ID, PRO_YEAR_TEXT, dayView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, weekView,
+  CLASS_NAMES, PRO_EVENTS, PRO_USER_ID, PRO_YEAR_TEXT, dayView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, seriesRivalIds, weekView,
   yearEnd, yearStart,
 } from "./core/pro-year.mjs";
 import { CONDITION_LABELS, GOAL_PICK, WEIGHTS } from "./core/pro-week.mjs";
@@ -1555,7 +1555,7 @@ watch(() => props.state, (state) => {
     if (queued) openScene(queued, null);
     else {
       // 絆の段が上がったら、次に今週の画面を開いたときに場面(15-3の4)。
-      const bond = bondSceneDue(state);
+      const bond = bondSceneDue(state, { hold: [...seriesRivalIds(state)] });
       if (bond) openBondScene(bond);
     }
   }

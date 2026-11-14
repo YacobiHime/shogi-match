@@ -103,13 +103,15 @@ export const bondSceneId = (role, level) => `pro-bond-${role.startsWith('peer') 
 /**
  * まだ見ていない場面(段が上がった人のうち、いちばん古いもの)。
  * @param {any} state
+ * @param {{ hold?: string[] }} [options]
  * @returns {{ role: string, id: string, level: number, scene: string } | null}
  */
-export function bondSceneDue(state) {
+export function bondSceneDue(state, { hold = [] } = {}) {
   for (const role of BOND_ROLES) {
     const id = state?.people?.[role];
     const bond = id ? state?.bonds?.[id] : null;
-    if (!bond) continue;
+    // holdは番勝負を戦っている相手(docs/pro-year-design.mdの23章)。その人の場面は番勝負が終わるまで後回し。
+    if (!bond || hold.includes(id)) continue;
     const level = bondLevel(bond.points);
     for (const at of BOND_DEFS[role].scenes) {
       if (at <= level && !(bond.seen ?? []).includes(at)) return { role, id, level: at, scene: bondSceneId(role, at) };

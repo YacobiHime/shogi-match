@@ -11423,7 +11423,7 @@ async function updateDedicatedCoachAdvice(
         playerScore: score ?? null,
         previousScore: storyPreviousScore,
         endgame: isEndgame(currentSfen.value, analyzedHistoryLength),
-        opponent: { id: ryuoGame.value?.opponentId, name: ryuoOpponent.value.name, character: ryuoOpponent.value.character },
+        opponent: { id: ryuoGame.value?.opponentId, name: ryuoOpponent.value.name, story: ryuoOpponent.value.story ?? null, character: ryuoOpponent.value.character },
         stakes: stage?.stakes ?? "",
         tone: stage?.tone ?? "",
         said: saidStories,

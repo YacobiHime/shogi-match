@@ -70,6 +70,8 @@ export const HANANE_SHOREIKAI_LINES = Object.freeze({
   first: '三段リーグの天鷺羽音。はじめまして。入ったばかりの人と話すの、珍しいんだけどね',
   promoted: '先に、四段で待ってるよ',
   league: '三段リーグは、一局ずつだよ。私も、そうやって抜けた',
+  // 羽音がまだ三段で、同じ三段リーグを戦うとき(先に抜けた人の言葉を言わない。docs/pro-year-design.mdの23章)。
+  leagueRival: '同じリーグだね。上がれるのは2人だけ。……手加減はしないよ',
   pro: 'やっと来たね。……次は、盤の上で会おう',
 });
 

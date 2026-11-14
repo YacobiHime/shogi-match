@@ -139,7 +139,8 @@ export function lunchOpponentLine(meal, voice) {
   if (voice === 'defense') return `${meal}で、じっくり力をためます`;
   // 羽音は敬語を使わない(ryuo-story.mjsのHANANE_LINESと同じ書き方)。
   if (voice === 'hanane') return `${meal}にした。午後も、負けないよ`;
-  if (voice === 'yoshihiko') return `${meal}か。ここの名物だよ`;
+  // 善彦は丁寧語でやわらかく言う(match-presence.mjsのLINES.yoshihikoと同じ口調)。
+  if (voice === 'yoshihiko') return `${meal}にしました。ここの名物なんですよね`;
   return `${meal}、いただきます`;
 }
 

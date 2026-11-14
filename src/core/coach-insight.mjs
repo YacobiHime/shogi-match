@@ -544,7 +544,7 @@ export function proverbAdvice({ sfen, ply, color, bestMove = '', lastPlayerMove 
 /**
  * 大会の物語(N9)。相手と、この1局に賭けているものに触れる。種類ごとに1局に1回。
  * @param {{ playerScore?: { type: string, value: number } | null, previousScore?: { type: string, value: number } | null,
- *   endgame: boolean, opponent?: { id?: string, name?: string, character?: { traits?: { id: string }[] } } | null,
+ *   endgame: boolean, opponent?: { id?: string, name?: string, story?: string | null, character?: { traits?: { id: string }[] } } | null,
  *   stakes?: string, tone?: string, said?: readonly string[] }} input
  *   stakes: 舞台の「勝てば○○」。tone: 番勝負のfinal・reach・kadoban。
  * @returns {{ key: string, text: string } | null}
@@ -555,7 +555,8 @@ export function storyAdvice({ playerScore = null, previousScore = null, endgame,
   const has = (id) => Boolean(opponent.character?.traits?.some((trait) => trait.id === id));
   const name = opponent.name ?? '相手';
   const fresh = (key) => !said.includes(key);
-  if (opponent.id === 'hanane' && fresh('story-hanane-turn') && previousScore?.type === 'cp' && previousScore.value <= -300 && value >= 300) {
+  // 羽音は名簿のid(r12など)なので、物語の人物の印(story)で見分ける(前はidを'hanane'と比べていて、一度も出なかった)。
+  if ((opponent.story === 'hanane' || opponent.id === 'hanane') && fresh('story-hanane-turn') && previousScore?.type === 'cp' && previousScore.value <= -300 && value >= 300) {
     return { key: 'story-hanane-turn', text: '羽音ちゃん、悔しそう…でもまだ油断しないで！' };
   }
   if (has('comeback') && fresh('story-comeback') && value >= 1000) {

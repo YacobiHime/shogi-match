@@ -1497,10 +1497,39 @@ function userBusy(state) {
   return busy;
 }
 
-/** 次の研究会の相手(順番に回る)。 */
+/**
+ * いまプレイヤーと番勝負(タイトル戦・三番勝負など)を戦っている相手のid(docs/pro-year-design.mdの23章)。
+ * 番勝負のあいだは、その相手と研究会で指さず、会わず、絆の場面も後回しにする(相手に応援・協力されるちぐはぐをなくす)。
+ * @param {any} state
+ * @returns {Set<string>}
+ */
+export function seriesRivalIds(state) {
+  const ids = new Set();
+  for (const cycle of Object.values(state?.cycles ?? {})) {
+    if (cycle.done) continue;
+    for (const stage of cycle.stages ?? []) {
+      const series = stage?.series;
+      if (!series || stage.done || !(series.a === PRO_USER_ID || series.b === PRO_USER_ID)) continue;
+      const need = series.need ?? 1;
+      if ((series.wins?.[series.a] ?? 0) >= need || (series.wins?.[series.b] ?? 0) >= need) continue;
+      const other = series.a === PRO_USER_ID ? series.b : series.a;
+      if (other) ids.add(other);
+    }
+  }
+  return ids;
+}
+
+/** 次の研究会の相手(順番に回る)。番勝負を戦っている相手は飛ばす(23章)。 */
 const studyOpponentId = (state) => {
   const members = state.study?.members ?? [];
-  return members.length ? members[(state.study.turn ?? 0) % members.length] : null;
+  if (!members.length) return null;
+  const held = seriesRivalIds(state);
+  const turn = state.study.turn ?? 0;
+  for (let step = 0; step < members.length; step += 1) {
+    const id = members[(turn + step) % members.length];
+    if (!held.has(id)) return id;
+  }
+  return null;
 };
 
 /**
@@ -2186,9 +2215,11 @@ export function weekView(source) {
   actions.push(...works);
   // 人に会う(15-3の2)。週に1人まで。
   const meets = [];
+  // 番勝負を戦っている相手とは会わない(23章。対局前に相手から閃きをもらうちぐはぐをなくす)。
+  const heldRivals = seriesRivalIds(state);
   for (const role of BOND_ROLES) {
     const id = state.people?.[role];
-    if (!id || !state.players[id]) continue;
+    if (!id || !state.players[id] || heldRivals.has(id)) continue;
     const def = BOND_DEFS[role];
     const points = state.bonds?.[id]?.points ?? 0;
     let effect = def.effect;
@@ -2403,7 +2434,7 @@ function applyWeek(state, view) {
     if (String(action).startsWith('meet-')) {
       const role = String(action).slice(5);
       const id = state.people?.[role];
-      if (!id) continue;
+      if (!id || seriesRivalIds(state).has(id)) continue;
       if (role === 'senior') {
         if (target) state.prep = researched(state.prep, target, gear, capExtra);
       } else if (role === 'hanane') state.user.hananeHint = 1;
